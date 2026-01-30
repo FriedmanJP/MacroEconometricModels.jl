@@ -1,6 +1,6 @@
 [deps]
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
-Macroeconometrics = "12345678-1234-1234-1234-1234567890ab"
+Macroeconometrics = "14a6ec33-bcac-448e-845f-2fb6769698f1"
 
 [compat]
 Documenter = "1.0"
