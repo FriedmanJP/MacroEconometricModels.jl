@@ -1,6 +1,6 @@
 # Manual
 
-This manual provides a comprehensive theoretical background for the macroeconometric methods implemented in **Macroeconometrics.jl**, including precise mathematical formulations and references to the literature.
+This manual provides a comprehensive theoretical background for the macroeconometric methods implemented in **MacroEconometricModels.jl**, including precise mathematical formulations and references to the literature.
 
 ## Vector Autoregression (VAR)
 

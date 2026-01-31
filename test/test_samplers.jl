@@ -1,4 +1,4 @@
-using Macroeconometrics
+using MacroEconometricModels
 using Test
 using Turing
 using LinearAlgebra

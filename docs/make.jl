@@ -1,16 +1,16 @@
-using Macroeconometrics
+using MacroEconometricModels
 using Documenter
 
-DocMeta.setdocmeta!(Macroeconometrics, :DocTestSetup, :(using Macroeconometrics); recursive=true)
+DocMeta.setdocmeta!(MacroEconometricModels, :DocTestSetup, :(using MacroEconometricModels); recursive=true)
 
 makedocs(;
-    modules=[Macroeconometrics],
+    modules=[MacroEconometricModels],
     authors="Wookyung Chung <mirimtl@protonmail.com>",
-    repo="https://github.com/chung9207/Macroeconometrics.jl/blob/{commit}{path}#{line}",
-    sitename="Macroeconometrics.jl",
+    repo="https://github.com/chung9207/MacroEconometricModels.jl/blob/{commit}{path}#{line}",
+    sitename="MacroEconometricModels.jl",
     format=Documenter.HTML(;
         prettyurls=get(ENV, "CI", "false") == "true",
-        canonical="https://chung9207.github.io/Macroeconometrics.jl",
+        canonical="https://chung9207.github.io/MacroEconometricModels.jl",
         edit_link="main",
         assets=String[],
         mathengine=Documenter.MathJax3(),
@@ -30,6 +30,6 @@ makedocs(;
 )
 
 deploydocs(;
-    repo="github.com/chung9207/Macroeconometrics.jl",
+    repo="github.com/chung9207/MacroEconometricModels.jl",
     devbranch="main",
 )

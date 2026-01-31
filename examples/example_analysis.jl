@@ -1,4 +1,4 @@
-using Macroeconometrics
+using MacroEconometricModels
 using CSV
 using DataFrames
 using LinearAlgebra
@@ -11,7 +11,7 @@ using StatsAPI
 # ==========================================
 # 1. Setup & Data Loading
 # ==========================================
-println("Starting Macroeconometrics Example Analysis...")
+println("Starting MacroEconometricModels Example Analysis...")
 
 # Create Synthetic 'Real' Data
 # Variables: GDP Growth, Inflation, Interest Rate

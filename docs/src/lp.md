@@ -68,7 +68,7 @@ with bandwidth typically set to ``h + 1`` or determined automatically.
 ### Julia Implementation
 
 ```julia
-using Macroeconometrics
+using MacroEconometricModels
 
 # Data: Y is T×n matrix of variables
 # shock_var is the index of the shock variable
@@ -135,7 +135,7 @@ When instruments are weak, standard 2SLS inference is unreliable. Options includ
 ### Julia Implementation
 
 ```julia
-using Macroeconometrics
+using MacroEconometricModels
 
 # Y: T×n data matrix
 # shock_var: index of endogenous shock variable
@@ -217,7 +217,7 @@ The smoothing parameter ``\lambda`` can be selected by k-fold cross-validation t
 ### Julia Implementation
 
 ```julia
-using Macroeconometrics
+using MacroEconometricModels
 
 # Smooth LP with cubic splines
 smooth_model = estimate_smooth_lp(Y, shock_var, H;
@@ -311,7 +311,7 @@ t = \frac{\hat{\beta}_E - \hat{\beta}_R}{\sqrt{\text{Var}(\hat{\beta}_E) + \text
 ### Julia Implementation
 
 ```julia
-using Macroeconometrics
+using MacroEconometricModels
 
 # Construct state variable (e.g., 7-quarter MA of GDP growth)
 gdp_growth = diff(log.(Y[:, 1]))
@@ -414,7 +414,7 @@ where ``\mu_d(X_t) = E[y_{t+h} | D_t = d, X_t]`` is the outcome regression.
 ### Julia Implementation
 
 ```julia
-using Macroeconometrics
+using MacroEconometricModels
 
 # treatment: Bool vector of treatment indicators
 # covariates: matrix of selection-relevant covariates

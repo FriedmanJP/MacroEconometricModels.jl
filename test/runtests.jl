@@ -1,6 +1,6 @@
 using Test
 
-@testset "Macroeconometrics Package Tests" begin
+@testset "MacroEconometricModels Package Tests" begin
     @testset "Aqua" begin
         include("test_aqua.jl")
     end

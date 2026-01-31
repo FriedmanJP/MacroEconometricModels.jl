@@ -2,17 +2,17 @@ using Test
 using LinearAlgebra
 using Statistics
 using Random
-using Macroeconometrics
+using MacroEconometricModels
 
-# Use Macroeconometrics versions of StatsAPI functions
-const residuals = Macroeconometrics.residuals
-const r2 = Macroeconometrics.r2
-const predict = Macroeconometrics.predict
-const nobs = Macroeconometrics.nobs
-const dof = Macroeconometrics.dof
-const loglikelihood = Macroeconometrics.loglikelihood
-const aic = Macroeconometrics.aic
-const bic = Macroeconometrics.bic
+# Use MacroEconometricModels versions of StatsAPI functions
+const residuals = MacroEconometricModels.residuals
+const r2 = MacroEconometricModels.r2
+const predict = MacroEconometricModels.predict
+const nobs = MacroEconometricModels.nobs
+const dof = MacroEconometricModels.dof
+const loglikelihood = MacroEconometricModels.loglikelihood
+const aic = MacroEconometricModels.aic
+const bic = MacroEconometricModels.bic
 
 @testset "Dynamic Factor Model Tests" begin
 

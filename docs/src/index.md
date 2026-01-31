@@ -1,10 +1,10 @@
-# Macroeconometrics.jl
+# MacroEconometricModels.jl
 
 *A comprehensive Julia package for macroeconometric research and analysis*
 
 ## Overview
 
-**Macroeconometrics.jl** provides a unified, high-performance framework for estimating and analyzing macroeconometric models in Julia. The package implements state-of-the-art methods for Vector Autoregression (VAR), Bayesian VAR (BVAR), Local Projections (LP), Factor Models, and Generalized Method of Moments (GMM) estimation.
+**MacroEconometricModels.jl** provides a unified, high-performance framework for estimating and analyzing macroeconometric models in Julia. The package implements state-of-the-art methods for Vector Autoregression (VAR), Bayesian VAR (BVAR), Local Projections (LP), Factor Models, and Generalized Method of Moments (GMM) estimation.
 
 ### Key Features
 
@@ -20,13 +20,13 @@
 
 ```julia
 using Pkg
-Pkg.add("Macroeconometrics")
+Pkg.add("MacroEconometricModels")
 ```
 
 Or from the Julia REPL package mode:
 
 ```
-] add Macroeconometrics
+] add MacroEconometricModels
 ```
 
 ## Quick Start
@@ -34,7 +34,7 @@ Or from the Julia REPL package mode:
 ### Basic VAR Estimation
 
 ```julia
-using Macroeconometrics
+using MacroEconometricModels
 using Random
 
 # Generate synthetic macroeconomic data
@@ -58,7 +58,7 @@ decomp = fevd(model, 20; method=:cholesky)
 ### Bayesian VAR with Minnesota Prior
 
 ```julia
-using Macroeconometrics
+using MacroEconometricModels
 
 # Set hyperparameters (or use optimize_hyperparameters)
 hyper = MinnesotaHyperparameters(
@@ -80,7 +80,7 @@ birf = irf(chain, 2, 3, 20; method=:cholesky)
 ### Local Projections
 
 ```julia
-using Macroeconometrics
+using MacroEconometricModels
 
 # Standard Local Projection (Jordà 2005)
 lp_model = estimate_lp(Y, 1, 20; lags=4, cov_type=:newey_west)
@@ -95,7 +95,7 @@ lpiv_irfs = lp_iv_irf(lpiv_model)
 ### Factor Models
 
 ```julia
-using Macroeconometrics
+using MacroEconometricModels
 
 # Large panel: T observations, N variables
 X = randn(200, 100)
@@ -188,7 +188,7 @@ This package is released under the MIT License.
 
 ## Contributing
 
-Contributions are welcome! Please see the [GitHub repository](https://github.com/chung9207/Macroeconometrics.jl) for contribution guidelines.
+Contributions are welcome! Please see the [GitHub repository](https://github.com/chung9207/MacroEconometricModels.jl) for contribution guidelines.
 
 ## Contents
 

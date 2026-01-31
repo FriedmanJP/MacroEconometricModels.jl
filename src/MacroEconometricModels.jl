@@ -1,5 +1,5 @@
 """
-    Macroeconometrics
+    MacroEconometricModels
 
 A Julia package for macroeconomic time series analysis, providing tools for:
 - Vector Autoregression (VAR) estimation
@@ -18,7 +18,7 @@ A Julia package for macroeconomic time series analysis, providing tools for:
 
 # Quick Start
 ```julia
-using Macroeconometrics
+using MacroEconometricModels
 
 # Estimate a VAR model
 Y = randn(100, 3)
@@ -45,7 +45,7 @@ chain = estimate_bvar(Y, 2; prior=:minnesota)
 - Auerbach, A. J., & Gorodnichenko, Y. (2013). Fiscal Multipliers in Recession and Expansion.
 - Angrist, J. D., Jordà, Ò., & Kuersteiner, G. M. (2018). Semiparametric Estimates of Monetary Policy Effects.
 """
-module Macroeconometrics
+module MacroEconometricModels
 
 # =============================================================================
 # Dependencies

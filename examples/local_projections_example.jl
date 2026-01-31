@@ -2,9 +2,9 @@
 # Local Projections Example
 # =============================================================================
 # This example demonstrates Local Projection methods available in
-# Macroeconometrics.jl, following the methodology of Jordà (2005).
+# MacroEconometricModels.jl, following the methodology of Jordà (2005).
 
-using Macroeconometrics
+using MacroEconometricModels
 using LinearAlgebra
 using Statistics
 using Random
@@ -127,7 +127,7 @@ This example demonstrated:
    - Useful for level responses to permanent shocks
 
 For more details, see the documentation at:
-https://chung9207.github.io/Macroeconometrics.jl/dev/
+https://chung9207.github.io/MacroEconometricModels.jl/dev/
 """)
 
 println("Example completed successfully!")

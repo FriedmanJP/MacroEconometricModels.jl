@@ -6,7 +6,7 @@ Forni, Hallin, Lippi, and Reichlin (2000, 2005).
 """
 
 using Test
-using Macroeconometrics
+using MacroEconometricModels
 using LinearAlgebra
 using Statistics
 using Random

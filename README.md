@@ -1,6 +1,6 @@
-# Macroeconometrics.jl
+# MacroEconometricModels.jl
 
-[![](https://img.shields.io/badge/docs-latest-blue.svg)](https://chung9207.github.io/Macroeconometrics.jl/dev/)
+[![](https://img.shields.io/badge/docs-latest-blue.svg)](https://chung9207.github.io/MacroEconometricModels.jl/dev/)
 [![Aqua QA](https://raw.githubusercontent.com/JuliaTesting/Aqua.jl/master/badge.svg)](https://github.com/JuliaTesting/Aqua.jl)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18439170.svg)](https://doi.org/10.5281/zenodo.18439170)
 
@@ -26,13 +26,13 @@ A Julia package for macroeconomic time series analysis.
 
 ```julia
 using Pkg
-Pkg.add("Macroeconometrics")
+Pkg.add("MacroEconometricModels")
 ```
 
 ## Quick Start
 
 ```julia
-using Macroeconometrics
+using MacroEconometricModels
 
 # Estimate a VAR model
 Y = randn(100, 3)

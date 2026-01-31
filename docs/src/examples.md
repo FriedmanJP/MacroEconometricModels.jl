@@ -1,6 +1,6 @@
 # Examples
 
-This chapter provides comprehensive worked examples demonstrating the main functionality of **Macroeconometrics.jl**. Each example includes complete code, economic interpretation, and best practices.
+This chapter provides comprehensive worked examples demonstrating the main functionality of **MacroEconometricModels.jl**. Each example includes complete code, economic interpretation, and best practices.
 
 ## Example 1: Three-Variable VAR Analysis
 
@@ -9,7 +9,7 @@ This example walks through a complete analysis of a macroeconomic VAR with GDP g
 ### Setup and Data Generation
 
 ```julia
-using Macroeconometrics
+using MacroEconometricModels
 using Random
 using LinearAlgebra
 using Statistics
@@ -128,7 +128,7 @@ This example demonstrates Bayesian estimation with automatic hyperparameter opti
 ### Hyperparameter Optimization
 
 ```julia
-using Macroeconometrics
+using MacroEconometricModels
 
 # Find optimal shrinkage using marginal likelihood (Giannone et al. 2015)
 println("Optimizing hyperparameters...")
@@ -204,7 +204,7 @@ This example demonstrates various LP methods for estimating impulse responses.
 ### Standard Local Projection
 
 ```julia
-using Macroeconometrics
+using MacroEconometricModels
 
 # Estimate LP-IRF with Newey-West standard errors
 H = 20
@@ -327,7 +327,7 @@ This example demonstrates factor extraction and selection from a large macroecon
 ### Simulate Large Panel Data
 
 ```julia
-using Macroeconometrics
+using MacroEconometricModels
 using Random
 using Statistics
 
@@ -437,7 +437,7 @@ This example demonstrates GMM estimation of a simple model with moment condition
 ### Define Moment Conditions
 
 ```julia
-using Macroeconometrics
+using MacroEconometricModels
 
 # Example: IV regression via GMM
 # Model: y = x'β + ε
@@ -520,7 +520,7 @@ println("  Reject at 5%: ", j_result.reject_05)
 This example shows a complete empirical workflow combining multiple techniques.
 
 ```julia
-using Macroeconometrics
+using MacroEconometricModels
 using Random
 using Statistics
 

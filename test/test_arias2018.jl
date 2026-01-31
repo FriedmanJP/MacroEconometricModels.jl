@@ -15,7 +15,7 @@ using Test
 using LinearAlgebra
 using Statistics
 using Random
-using Macroeconometrics
+using MacroEconometricModels
 
 @testset "Arias et al. (2018) SVAR Identification" begin
 

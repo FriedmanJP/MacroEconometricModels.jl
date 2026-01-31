@@ -99,7 +99,7 @@ The normalization ``F'F/T = I_r`` and ``\Lambda'\Lambda`` diagonal pins down rot
 ### Julia Implementation
 
 ```julia
-using Macroeconometrics
+using MacroEconometricModels
 
 # X is T×N data matrix
 # Estimate r-factor model
@@ -158,7 +158,7 @@ where:
 ### Julia Implementation
 
 ```julia
-using Macroeconometrics
+using MacroEconometricModels
 
 # Compute IC for r = 1, ..., r_max
 r_max = 10
@@ -202,7 +202,7 @@ where ``\mu_j`` is the ``j``-th largest eigenvalue of ``X'X/T`` (or ``XX'/N``).
 ### Julia Implementation
 
 ```julia
-using Macroeconometrics
+using MacroEconometricModels
 
 model = estimate_factors(X, r)
 
@@ -233,7 +233,7 @@ Variables with low ``R^2`` are mainly driven by idiosyncratic shocks.
 ### Julia Implementation
 
 ```julia
-using Macroeconometrics
+using MacroEconometricModels
 
 model = estimate_factors(X, r)
 
@@ -295,7 +295,7 @@ This allows structural analysis with high-dimensional information sets.
 ### Example: FAVAR Setup
 
 ```julia
-using Macroeconometrics
+using MacroEconometricModels
 
 # Estimate factors from large panel X
 fm = estimate_factors(X, r)
@@ -403,7 +403,7 @@ where:
 ### Julia Implementation
 
 ```julia
-using Macroeconometrics
+using MacroEconometricModels
 
 # Estimate dynamic factor model with r factors and p lags
 model = estimate_dynamic_factors(X, r, p;
@@ -517,7 +517,7 @@ The key insight is that common factors produce **diverging eigenvalues** (growin
 ### Julia Implementation
 
 ```julia
-using Macroeconometrics
+using MacroEconometricModels
 
 # Estimate GDFM with q dynamic factors
 model = estimate_gdfm(X, q;
@@ -611,7 +611,7 @@ fc.factors  # h×q factor forecast
 ### Example: Complete GDFM Workflow
 
 ```julia
-using Macroeconometrics
+using MacroEconometricModels
 
 # Load large macroeconomic panel (e.g., FRED-MD)
 X = load_data()  # T×N matrix

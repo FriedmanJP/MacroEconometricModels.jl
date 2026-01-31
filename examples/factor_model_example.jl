@@ -1,7 +1,7 @@
 # Factor Model Example
 # This script demonstrates how to use the Static Factor Model functionality
 
-using Macroeconometrics
+using MacroEconometricModels
 using LinearAlgebra
 using Statistics
 using Random
@@ -10,7 +10,7 @@ using Random
 Random.seed!(42)
 
 println("="^70)
-println("Factor Model Example - Macroeconometrics Package")
+println("Factor Model Example - MacroEconometricModels Package")
 println("="^70)
 
 # ============================================================================

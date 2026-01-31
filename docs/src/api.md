@@ -1,11 +1,11 @@
 # API Reference
 
-This page provides the complete API documentation for **Macroeconometrics.jl**, organized by functionality.
+This page provides the complete API documentation for **MacroEconometricModels.jl**, organized by functionality.
 
 ## Module
 
 ```@docs
-Macroeconometrics.Macroeconometrics
+MacroEconometricModels.MacroEconometricModels
 ```
 
 ---
@@ -100,7 +100,7 @@ PropensityScoreConfig
 ### Frequentist Estimation
 
 ```@autodocs
-Modules = [Macroeconometrics]
+Modules = [MacroEconometricModels]
 Pages   = ["estimation.jl"]
 Order   = [:function]
 ```
@@ -108,7 +108,7 @@ Order   = [:function]
 ### Bayesian Estimation
 
 ```@autodocs
-Modules = [Macroeconometrics]
+Modules = [MacroEconometricModels]
 Pages   = ["bayesian.jl"]
 Order   = [:function]
 ```
@@ -116,7 +116,7 @@ Order   = [:function]
 ### Prior Specification
 
 ```@autodocs
-Modules = [Macroeconometrics]
+Modules = [MacroEconometricModels]
 Pages   = ["priors.jl"]
 Order   = [:function]
 ```
@@ -128,7 +128,7 @@ Order   = [:function]
 ### Identification Schemes
 
 ```@autodocs
-Modules = [Macroeconometrics]
+Modules = [MacroEconometricModels]
 Pages   = ["identification.jl"]
 Order   = [:function]
 ```
@@ -136,7 +136,7 @@ Order   = [:function]
 ### Impulse Response Functions
 
 ```@autodocs
-Modules = [Macroeconometrics]
+Modules = [MacroEconometricModels]
 Pages   = ["irf.jl"]
 Order   = [:function]
 ```
@@ -144,7 +144,7 @@ Order   = [:function]
 ### Forecast Error Variance Decomposition
 
 ```@autodocs
-Modules = [Macroeconometrics]
+Modules = [MacroEconometricModels]
 Pages   = ["fevd.jl"]
 Order   = [:function]
 ```
@@ -156,7 +156,7 @@ Order   = [:function]
 ### Core LP Estimation
 
 ```@autodocs
-Modules = [Macroeconometrics]
+Modules = [MacroEconometricModels]
 Pages   = ["lp_estimation.jl"]
 Order   = [:function]
 ```
@@ -164,7 +164,7 @@ Order   = [:function]
 ### Covariance Estimation
 
 ```@autodocs
-Modules = [Macroeconometrics]
+Modules = [MacroEconometricModels]
 Pages   = ["lp_covariance.jl"]
 Order   = [:function]
 ```
@@ -172,7 +172,7 @@ Order   = [:function]
 ### LP with Instrumental Variables
 
 ```@autodocs
-Modules = [Macroeconometrics]
+Modules = [MacroEconometricModels]
 Pages   = ["lp_iv.jl"]
 Order   = [:function]
 ```
@@ -180,7 +180,7 @@ Order   = [:function]
 ### Smooth Local Projections
 
 ```@autodocs
-Modules = [Macroeconometrics]
+Modules = [MacroEconometricModels]
 Pages   = ["lp_smooth.jl"]
 Order   = [:function]
 ```
@@ -188,7 +188,7 @@ Order   = [:function]
 ### State-Dependent Local Projections
 
 ```@autodocs
-Modules = [Macroeconometrics]
+Modules = [MacroEconometricModels]
 Pages   = ["lp_state.jl"]
 Order   = [:function]
 ```
@@ -196,7 +196,7 @@ Order   = [:function]
 ### Propensity Score Local Projections
 
 ```@autodocs
-Modules = [Macroeconometrics]
+Modules = [MacroEconometricModels]
 Pages   = ["lp_propensity.jl"]
 Order   = [:function]
 ```
@@ -206,7 +206,7 @@ Order   = [:function]
 ## Factor Models
 
 ```@autodocs
-Modules = [Macroeconometrics]
+Modules = [MacroEconometricModels]
 Pages   = ["factormodels.jl"]
 Order   = [:function]
 ```
@@ -216,7 +216,7 @@ Order   = [:function]
 ## GMM Estimation
 
 ```@autodocs
-Modules = [Macroeconometrics]
+Modules = [MacroEconometricModels]
 Pages   = ["gmm.jl"]
 Order   = [:function]
 ```
@@ -226,7 +226,7 @@ Order   = [:function]
 ## Utility Functions
 
 ```@autodocs
-Modules = [Macroeconometrics]
+Modules = [MacroEconometricModels]
 Pages   = ["utils.jl"]
 Order   = [:function]
 ```

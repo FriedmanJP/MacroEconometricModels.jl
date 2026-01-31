@@ -2,14 +2,14 @@ using Test
 using LinearAlgebra
 using Statistics
 using Random
-using Macroeconometrics
+using MacroEconometricModels
 
-# Use Macroeconometrics versions of StatsAPI functions
-const fm_residuals = Macroeconometrics.residuals
-const fm_r2 = Macroeconometrics.r2
-const fm_predict = Macroeconometrics.predict
-const fm_nobs = Macroeconometrics.nobs
-const fm_dof = Macroeconometrics.dof
+# Use MacroEconometricModels versions of StatsAPI functions
+const fm_residuals = MacroEconometricModels.residuals
+const fm_r2 = MacroEconometricModels.r2
+const fm_predict = MacroEconometricModels.predict
+const fm_nobs = MacroEconometricModels.nobs
+const fm_dof = MacroEconometricModels.dof
 
 @testset "Factor Model Tests" begin
 
