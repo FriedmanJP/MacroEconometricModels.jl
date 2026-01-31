@@ -8,20 +8,31 @@ using Turing, MCMCChains, LinearAlgebra
 # Turing Models
 # =============================================================================
 
-"""Vectorized BVAR model for gradient-based samplers (NUTS, HMC, HMCDA)."""
+"""Vectorized BVAR model for gradient-based samplers (NUTS, HMC, HMCDA).
+Uses diagonal covariance for numerical stability with ForwardDiff AD."""
 @model function var_bayes_vectorized(Y_eff::Matrix{T}, X::Matrix{T}, p::Int, n::Int) where {T<:AbstractFloat}
-    Sigma ~ InverseWishart(n + 2, Matrix{T}(I, n, n))
+    # Diagonal covariance: sigma_i^2 for each variable
+    # This is numerically stable and works well for VAR estimation
+    log_sigma ~ filldist(Normal(T(0), T(1)), n)
+    sigma = exp.(log_sigma)
+
     k = 1 + n * p
     b_vec ~ MvNormal(zeros(T, k * n), T(10) * I)
     B = reshape(b_vec, k, n)
 
     mu = X * B
-    residuals = permutedims(Y_eff) .- permutedims(mu)
-    Turing.@addlogprob! sum(logpdf(MvNormal(zeros(T, n), Sigma), residuals))
+
+    # Independent normal likelihood per variable (diagonal covariance)
+    T_eff = size(Y_eff, 1)
+    for i in 1:n
+        Y_eff[:, i] ~ MvNormal(mu[:, i], sigma[i] * I)
+    end
 end
 
-"""Sequential BVAR model for particle-based samplers (SMC, PG)."""
+"""Sequential BVAR model with full covariance for particle-based samplers (SMC, PG).
+Uses InverseWishart for compatibility with particle samplers (no AD required)."""
 @model function var_bayes_sequential(Y_eff::Matrix{T}, X::Matrix{T}, p::Int, n::Int) where {T<:AbstractFloat}
+    # For particle samplers, InverseWishart works fine (no AD)
     Sigma ~ InverseWishart(n + 2, Matrix{T}(I, n, n))
     k = 1 + n * p
     b_vec ~ MvNormal(zeros(T, k * n), T(10) * I)
@@ -98,8 +109,42 @@ end
 # Chain Parameter Extraction
 # =============================================================================
 
-"""Extract (b_vecs, sigmas_mat) from MCMC chain."""
-extract_chain_parameters(chain::Chains) = (Array(group(chain, :b_vec)), Array(group(chain, :Sigma)))
+"""
+    extract_chain_parameters(chain::Chains) -> (b_vecs, sigmas)
+
+Extract coefficient vectors and covariance matrices from MCMC chain.
+Handles both diagonal (gradient samplers) and InverseWishart (particle samplers) parameterizations.
+"""
+function extract_chain_parameters(chain::Chains)
+    b_vecs = Array(group(chain, :b_vec))
+
+    # Check which parameterization was used
+    param_names = string.(names(chain))
+    has_log_sigma = any(startswith.(param_names, Ref("log_sigma")))
+
+    if has_log_sigma
+        # Diagonal covariance parameterization: reconstruct Sigma from log_sigma
+        log_sigma_arr = Array(group(chain, :log_sigma))
+        sigma_arr = exp.(log_sigma_arr)
+
+        n_samples = size(b_vecs, 1)
+        n_chains = size(b_vecs, 3)
+        n = size(sigma_arr, 2)
+
+        # Construct diagonal covariance matrices
+        sigmas = zeros(n_samples, n * n, n_chains)
+        for c in 1:n_chains
+            for s in 1:n_samples
+                Sigma = Diagonal(sigma_arr[s, :, c] .^ 2)
+                sigmas[s, :, c] = vec(Matrix(Sigma))
+            end
+        end
+        return (b_vecs, sigmas)
+    else
+        # InverseWishart parameterization: Sigma stored directly
+        return (b_vecs, Array(group(chain, :Sigma)))
+    end
+end
 
 """Convert chain parameters to VARModel. Provide `data` for residual computation."""
 function parameters_to_model(b_vec::AbstractVector{T}, sigma_vec::AbstractVector{T},
