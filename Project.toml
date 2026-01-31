@@ -23,7 +23,7 @@ MCMCChains = "6"
 SpecialFunctions = "2"
 StatsAPI = "1"
 Turing = "0.29"
-julia = "1.12"
+julia = "1.12, <2"
 
 [extras]
 Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
