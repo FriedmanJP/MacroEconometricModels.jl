@@ -14,6 +14,7 @@ makedocs(;
         edit_link="main",
         assets=String[],
         mathengine=Documenter.MathJax3(),
+        repolink="https://github.com/chung9207/MacroEconometricModels.jl",
     ),
     pages=[
         "Home" => "index.md",
