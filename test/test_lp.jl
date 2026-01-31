@@ -781,4 +781,297 @@ using Random
         irf_nw = lp_irf(model_nw)
         @test all(isfinite.(irf_nw.se))
     end
+
+    # ==========================================================================
+    # Extended Coverage Tests for lp_core.jl and lp_types.jl
+    # ==========================================================================
+
+    @testset "Long-Run Variance and Covariance" begin
+        Random.seed!(80808)
+
+        # Long-run variance for white noise
+        white_noise = randn(200)
+        lrv_white = MacroEconometricModels.long_run_variance(white_noise; bandwidth=0)
+        @test lrv_white >= 0
+        @test isapprox(lrv_white, var(white_noise), atol=0.5)
+
+        # Long-run variance for persistent series
+        persistent = zeros(200)
+        for t in 2:200
+            persistent[t] = 0.8 * persistent[t-1] + randn()
+        end
+        lrv_pers = MacroEconometricModels.long_run_variance(persistent; bandwidth=10)
+        @test lrv_pers > var(persistent)  # LRV should be larger for persistent series
+
+        # Different kernels
+        for kernel in [:bartlett, :parzen, :quadratic_spectral]
+            lrv = MacroEconometricModels.long_run_variance(white_noise; bandwidth=5, kernel=kernel)
+            @test lrv >= 0
+            @test isfinite(lrv)
+        end
+
+        # Long-run covariance for multivariate data
+        X = randn(200, 3)
+        lrc = MacroEconometricModels.long_run_covariance(X; bandwidth=5)
+        @test size(lrc) == (3, 3)
+        @test lrc ≈ lrc' atol=1e-10  # Symmetric
+        eigvals_lrc = eigvals(lrc)
+        @test all(eigvals_lrc .>= -1e-10)  # Positive semi-definite
+
+        # Small sample edge case
+        small_x = randn(5)
+        lrv_small = MacroEconometricModels.long_run_variance(small_x)
+        @test isfinite(lrv_small)
+    end
+
+    @testset "LP with Cholesky Identification" begin
+        Random.seed!(81818)
+        T_chol = 200
+        n_chol = 3
+
+        # Generate VAR data
+        Y_chol = zeros(T_chol, n_chol)
+        A = [0.5 0.1 0.0; 0.1 0.4 0.1; 0.0 0.1 0.3]
+        for t in 2:T_chol
+            Y_chol[t, :] = A * Y_chol[t-1, :] + randn(n_chol)
+        end
+
+        horizon = 10
+
+        # Estimate LP with Cholesky identification - returns Vector{LPModel}
+        models = MacroEconometricModels.estimate_lp_cholesky(Y_chol, horizon; lags=2)
+
+        @test models isa Vector{LPModel{Float64}}
+        @test length(models) == n_chol
+
+        # Each model should have correct structure
+        for model in models
+            @test model isa LPModel
+            @test model.horizon == horizon
+            irf = lp_irf(model)
+            @test irf isa LPImpulseResponse
+            @test size(irf.values, 1) == horizon + 1
+        end
+    end
+
+    @testset "LP with Multiple Shocks" begin
+        Random.seed!(82828)
+        T_multi = 200
+        n_multi = 3
+
+        Y_multi = zeros(T_multi, n_multi)
+        for t in 2:T_multi
+            Y_multi[t, :] = 0.5 * Y_multi[t-1, :] + randn(n_multi)
+        end
+
+        horizon = 8
+
+        # Estimate LP with multiple shocks - returns Vector{LPModel}
+        shock_vars = [1, 2]
+        models = MacroEconometricModels.estimate_lp_multi(Y_multi, shock_vars, horizon; lags=2)
+
+        @test models isa Vector{LPModel{Float64}}
+        @test length(models) == length(shock_vars)
+
+        # Compare with single-shock estimates
+        model_single = estimate_lp(Y_multi, 1, horizon; lags=2)
+        irf_single = lp_irf(model_single)
+
+        # IRFs from multi should match single-shock estimates
+        irf_multi_first = lp_irf(models[1])
+        @test size(irf_multi_first.values) == size(irf_single.values)
+        # The IRFs should be identical since same shock variable
+        @test irf_multi_first.values ≈ irf_single.values atol=1e-10
+    end
+
+    @testset "Direct Core Function Tests" begin
+        Random.seed!(83838)
+
+        # compute_horizon_bounds
+        t_start, t_end = MacroEconometricModels.compute_horizon_bounds(100, 5, 4)
+        @test t_start == 5  # lags + 1
+        @test t_end == 95   # T_obs - h
+        @test t_end >= t_start
+
+        # Edge case: large horizon
+        t_start_large, t_end_large = MacroEconometricModels.compute_horizon_bounds(100, 90, 4)
+        @test t_end_large >= t_start_large
+
+        # build_response_matrix
+        Y_test = randn(50, 3)
+        Y_h = MacroEconometricModels.build_response_matrix(Y_test, 3, 5, 40, [1, 2])
+        @test size(Y_h) == (36, 2)  # 36 observations, 2 response vars
+
+        # Single response variable
+        Y_h_single = MacroEconometricModels.build_response_matrix(Y_test, 2, 5, 40, [3])
+        @test size(Y_h_single) == (36, 1)
+
+        # create_cov_estimator - all types
+        est_nw = MacroEconometricModels.create_cov_estimator(:newey_west, Float64; bandwidth=5)
+        @test est_nw isa MacroEconometricModels.NeweyWestEstimator{Float64}
+        @test est_nw.bandwidth == 5
+
+        est_white = MacroEconometricModels.create_cov_estimator(:white, Float64)
+        @test est_white isa MacroEconometricModels.WhiteEstimator
+
+        est_dk = MacroEconometricModels.create_cov_estimator(:driscoll_kraay, Float64; bandwidth=3)
+        @test est_dk isa MacroEconometricModels.DriscollKraayEstimator{Float64}
+        @test est_dk.bandwidth == 3
+    end
+
+    @testset "Newey-West Prewhitening" begin
+        Random.seed!(84848)
+        T_pw = 200
+
+        X_pw = hcat(ones(T_pw), randn(T_pw, 2))
+
+        # AR(1) residuals with strong autocorrelation
+        u_pw = zeros(T_pw)
+        rho = 0.7
+        for t in 2:T_pw
+            u_pw[t] = rho * u_pw[t-1] + randn()
+        end
+
+        # Without prewhitening
+        V_no_pw = newey_west(X_pw, u_pw; bandwidth=5, prewhiten=false)
+        @test size(V_no_pw) == (3, 3)
+        @test V_no_pw ≈ V_no_pw' atol=1e-10
+
+        # With prewhitening
+        V_pw = newey_west(X_pw, u_pw; bandwidth=5, prewhiten=true)
+        @test size(V_pw) == (3, 3)
+        @test V_pw ≈ V_pw' atol=1e-10
+        @test all(diag(V_pw) .>= 0)
+
+        # Both should give reasonable (finite) results
+        @test all(isfinite.(V_no_pw))
+        @test all(isfinite.(V_pw))
+    end
+
+    @testset "White Vcov HC Variants" begin
+        Random.seed!(85858)
+        T_hc = 100
+
+        X_hc = hcat(ones(T_hc), randn(T_hc, 2))
+        u_hc = randn(T_hc)
+
+        # Test all HC variants
+        for variant in [:hc0, :hc1, :hc2, :hc3]
+            V = white_vcov(X_hc, u_hc; variant=variant)
+            @test size(V) == (3, 3)
+            @test V ≈ V' atol=1e-10  # Symmetric
+            @test all(diag(V) .>= 0)  # Non-negative diagonal
+        end
+
+        # HC1 should give larger estimates than HC0 (dof correction)
+        V_hc0 = white_vcov(X_hc, u_hc; variant=:hc0)
+        V_hc1 = white_vcov(X_hc, u_hc; variant=:hc1)
+        @test tr(V_hc1) >= tr(V_hc0)
+    end
+
+    @testset "LP Type Accessor Functions" begin
+        Random.seed!(86868)
+        T_acc = 150
+        n_acc = 3
+
+        Y_acc = zeros(T_acc, n_acc)
+        for t in 2:T_acc
+            Y_acc[t, :] = 0.5 * Y_acc[t-1, :] + randn(n_acc)
+        end
+
+        model = estimate_lp(Y_acc, 1, 10; lags=4)
+
+        # Test accessor functions
+        @test MacroEconometricModels.nvars(model) == n_acc
+        @test MacroEconometricModels.nlags(model) == 4
+        @test MacroEconometricModels.nhorizons(model) == 11  # horizon + 1
+        @test MacroEconometricModels.nresponse(model) == n_acc
+
+        # Horizon-specific StatsAPI methods
+        @test coef(model, 0) == model.B[1]
+        @test coef(model, 5) == model.B[6]
+        @test residuals(model, 0) == model.residuals[1]
+        @test vcov(model, 0) == model.vcov[1]
+        @test nobs(model, 0) == model.T_eff[1]
+
+        # dof
+        @test dof(model) == sum(length(b) for b in model.B)
+
+        # LP-IV accessor
+        Z = randn(T_acc, 2)
+        shock = 0.5 * Z[:, 1] + 0.5 * randn(T_acc)
+        Y_iv = zeros(T_acc, 2)
+        Y_iv[:, 1] = shock
+        for t in 2:T_acc
+            Y_iv[t, 2] = 0.3 * Y_iv[t-1, 2] + 0.5 * shock[t] + randn()
+        end
+        model_iv = estimate_lp_iv(Y_iv, 1, Z, 5; lags=2)
+        @test MacroEconometricModels.n_instruments(model_iv) == 2
+
+        # Propensity model accessors
+        X_cov = randn(T_acc, 2)
+        p_true = 1 ./ (1 .+ exp.(-0.5 .* X_cov[:, 1]))
+        treatment = rand(T_acc) .< p_true
+        Y_prop = randn(T_acc, 2)
+        model_prop = estimate_propensity_lp(Y_prop, treatment, X_cov, 5; lags=2)
+        @test MacroEconometricModels.n_treated(model_prop) == sum(treatment)
+        @test MacroEconometricModels.n_control(model_prop) == sum(.!treatment)
+    end
+
+    @testset "DriscollKraay Covariance Estimator" begin
+        # Test DriscollKraayEstimator type construction
+        dk_est = MacroEconometricModels.DriscollKraayEstimator{Float64}(5)
+        @test dk_est.bandwidth == 5
+        @test dk_est.kernel == :bartlett
+
+        # Default constructor
+        dk_default = MacroEconometricModels.DriscollKraayEstimator()
+        @test dk_default.bandwidth == 0
+        @test dk_default.kernel == :bartlett
+
+        # Create via create_cov_estimator
+        dk_via_create = MacroEconometricModels.create_cov_estimator(:driscoll_kraay, Float64; bandwidth=3)
+        @test dk_via_create isa MacroEconometricModels.DriscollKraayEstimator{Float64}
+        @test dk_via_create.bandwidth == 3
+
+        # Invalid bandwidth should throw
+        @test_throws ArgumentError MacroEconometricModels.DriscollKraayEstimator{Float64}(-1)
+
+        # Note: robust_vcov is not yet implemented for DriscollKraayEstimator
+        # Testing that estimate_lp correctly creates the estimator but would need
+        # implementation to actually use it
+    end
+
+    @testset "BSplineBasis Accessor" begin
+        horizons = collect(0:15)
+        basis = MacroEconometricModels.bspline_basis(horizons, 3, 4; T=Float64)
+
+        # Test n_basis accessor
+        @test MacroEconometricModels.n_basis(basis) == 4 + 3 + 1  # n_interior_knots + degree + 1 = 8
+        @test size(basis.basis_matrix, 2) == MacroEconometricModels.n_basis(basis)
+    end
+
+    @testset "LP Estimation Edge Cases" begin
+        Random.seed!(88888)
+
+        # Minimum horizon (h=1) - h=0 should throw error
+        Y_edge = randn(100, 2)
+        @test_throws ArgumentError estimate_lp(Y_edge, 1, 0; lags=2)
+
+        # Minimum valid horizon (h=1)
+        model_h1 = estimate_lp(Y_edge, 1, 1; lags=2)
+        @test model_h1.horizon == 1
+        @test length(model_h1.B) == 2  # h=0 and h=1
+        irf_h1 = lp_irf(model_h1)
+        @test size(irf_h1.values) == (2, 2)
+
+        # Subset of response variables
+        model_subset = estimate_lp(Y_edge, 1, 5; lags=2, response_vars=[2])
+        @test size(model_subset.B[1], 2) == 1
+
+        # Integer input (type conversion)
+        Y_int = rand(1:10, 80, 2)
+        model_int = estimate_lp(Y_int, 1, 5; lags=2)
+        @test eltype(model_int.Y) == Float64
+    end
 end
