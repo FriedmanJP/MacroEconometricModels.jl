@@ -1,5 +1,5 @@
 """
-Type hierarchy for Macroeconometrics.jl - core abstract and concrete types.
+Type hierarchy for MacroEconometricModels.jl - core abstract and concrete types.
 """
 
 using StatsAPI, LinearAlgebra

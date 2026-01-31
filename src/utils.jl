@@ -1,5 +1,5 @@
 """
-Utility functions for Macroeconometrics.jl - numerical routines, matrix operations, helpers.
+Utility functions for MacroEconometricModels.jl - numerical routines, matrix operations, helpers.
 """
 
 using LinearAlgebra

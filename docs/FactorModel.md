@@ -2,7 +2,7 @@
 
 ## Overview
 
-The `Macroeconometrics` package now includes comprehensive support for **Static Factor Models** estimated using Principal Component Analysis (PCA). Factor models are essential tools in macroeconometrics for:
+The `MacroEconometricModels` package now includes comprehensive support for **Static Factor Models** estimated using Principal Component Analysis (PCA). Factor models are essential tools in macroeconometrics for:
 
 - Dimensionality reduction of large datasets
 - Extracting common factors from panels of economic variables
@@ -47,7 +47,7 @@ The model is estimated using the principal components of the sample covariance m
 ### Basic Usage
 
 ```julia
-using Macroeconometrics
+using MacroEconometricModels
 using Random
 
 # Generate synthetic data
