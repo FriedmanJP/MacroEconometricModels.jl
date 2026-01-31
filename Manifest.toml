@@ -2,7 +2,7 @@
 
 julia_version = "1.12.4"
 manifest_format = "2.0"
-project_hash = "25a23d6d27929afb7dc7c02801bcbae841bed0d2"
+project_hash = "979c0bd9827da93448b683838c8dc40bb292636d"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "f7304359109c768cf32dc5fa2d371565bb63b68a"
@@ -836,16 +836,16 @@ git-tree-sha1 = "c275fae2e693206b4527dd9d2382aa15359ef3ed"
 uuid = "e80e1ace-859a-464e-9ed9-23947d8ae3ea"
 version = "1.12.1"
 
-[[deps.MacroTools]]
-git-tree-sha1 = "1e0228a030642014fe5cfe68c2c0a818f9e3f522"
-uuid = "1914dd2f-81c6-5fcd-8719-6d5c9610ff09"
-version = "0.5.16"
-
-[[deps.Macroeconometrics]]
+[[deps.MacroEconometricModels]]
 deps = ["DataFrames", "Distributions", "FFTW", "LinearAlgebra", "MCMCChains", "Random", "SpecialFunctions", "Statistics", "StatsAPI", "Turing"]
 path = "."
 uuid = "14a6ec33-bcac-448e-845f-2fb6769698f1"
 version = "0.1.0"
+
+[[deps.MacroTools]]
+git-tree-sha1 = "1e0228a030642014fe5cfe68c2c0a818f9e3f522"
+uuid = "1914dd2f-81c6-5fcd-8719-6d5c9610ff09"
+version = "0.5.16"
 
 [[deps.MappedArrays]]
 git-tree-sha1 = "0ee4497a4e80dbd29c058fcee6493f5219556f40"
