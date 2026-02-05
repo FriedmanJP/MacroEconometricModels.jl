@@ -2,6 +2,20 @@
 
 This chapter provides comprehensive worked examples demonstrating the main functionality of **MacroEconometricModels.jl**. Each example includes complete code, economic interpretation, and best practices.
 
+### Quick Reference
+
+| # | Example | Key Functions | Description |
+|---|---------|---------------|-------------|
+| 1 | Three-Variable VAR | `estimate_var`, `irf`, `fevd` | Frequentist VAR with Cholesky and sign restriction identification |
+| 2 | Bayesian VAR with Minnesota Prior | `estimate_bvar`, `optimize_hyperparameters` | Minnesota prior, MCMC estimation, credible intervals |
+| 3 | Local Projections | `estimate_lp`, `estimate_lp_iv`, `estimate_smooth_lp` | Standard, IV, smooth, and state-dependent LP |
+| 4 | Factor Model for Large Panels | `estimate_factors`, `ic_criteria` | Large panel factor extraction, Bai-Ng criteria, FAVAR |
+| 5 | GMM Estimation | `estimate_gmm`, `j_test` | IV regression via GMM, overidentification test |
+| 6 | Complete Workflow | Multiple | Lag selection → VAR → BVAR → LP comparison |
+| 7 | Unit Root Testing | `adf_test`, `kpss_test`, `johansen_test` | ADF, KPSS, Zivot-Andrews, Ng-Perron, Johansen |
+
+---
+
 ## Example 1: Three-Variable VAR Analysis
 
 This example walks through a complete analysis of a macroeconomic VAR with GDP growth, inflation, and the federal funds rate.
@@ -62,6 +76,8 @@ println("Max eigenvalue modulus: ", maximum(abs.(eigenvalues)))
 println("Stable: ", maximum(abs.(eigenvalues)) < 1)
 ```
 
+The AIC and BIC values measure the trade-off between fit and parsimony. Lower values indicate a better model. The maximum eigenvalue modulus should be strictly less than 1 for the VAR to be stationary; values close to 1 indicate high persistence, while values near 0 suggest rapid mean-reversion.
+
 ### Cholesky-Identified IRF
 
 ```julia
@@ -100,6 +116,8 @@ println("  GDP response: ", round(irfs_sign.irf[1, 1, 1], digits=3))
 println("  Inflation response: ", round(irfs_sign.irf[1, 2, 1], digits=3))
 ```
 
+The Cholesky identification assumes a recursive causal ordering (GDP → Inflation → Rate), meaning GDP responds only to its own shocks contemporaneously. Sign restrictions provide a theory-based alternative: requiring both GDP and inflation to rise on impact identifies a "demand shock" without imposing a specific causal ordering. If sign restrictions accept many draws, the set-identified IRFs will show wider bands than point-identified Cholesky responses.
+
 ### Forecast Error Variance Decomposition
 
 ```julia
@@ -118,6 +136,8 @@ for h in [1, 4, 20]
     end
 end
 ```
+
+The FEVD shows the proportion of each variable's forecast error variance attributable to each structural shock. At short horizons, own shocks typically dominate. As the horizon increases, cross-variable transmission becomes more important, and the FEVD converges to the unconditional variance decomposition. If shock 1 explains a large share of GDP variance at long horizons, it is the primary driver of GDP fluctuations in the model.
 
 ---
 
@@ -138,6 +158,8 @@ println("Optimal hyperparameters:")
 println("  τ (overall tightness): ", round(best_hyper.tau, digits=4))
 println("  d (lag decay): ", best_hyper.d)
 ```
+
+The optimal `tau` value reflects the degree of shrinkage that maximizes the marginal likelihood. A small `tau` (e.g., 0.05) means strong shrinkage toward the random walk prior, appropriate for large systems or short samples. A larger `tau` (e.g., 0.5-1.0) allows the data more influence, appropriate when the sample is informative relative to the model complexity.
 
 ### BVAR Estimation with MCMC
 
@@ -428,6 +450,8 @@ for j in 1:r_opt
 end
 ```
 
+The Bai-Ng information criteria select the number of factors by balancing fit against complexity. IC2 tends to perform best in simulations. High correlations between estimated and true factors (above 0.9) confirm reliable factor recovery. The R² values show how well the common factors explain each variable; variables with low R² are primarily driven by idiosyncratic shocks and contribute less to the common component.
+
 ---
 
 ## Example 5: GMM Estimation
@@ -512,6 +536,8 @@ println("  Degrees of freedom: ", j_result.df)
 println("  p-value: ", round(j_result.p_value, digits=4))
 println("  Reject at 5%: ", j_result.reject_05)
 ```
+
+The GMM estimates should be close to the true values ``\beta = [1.0, 2.0]`` when instruments are valid and strong. The standard errors from two-step efficient GMM are asymptotically optimal. The Hansen J-test evaluates whether the moment conditions are jointly satisfied: a large p-value (failing to reject) indicates that the instruments are valid and the model is correctly specified. Rejection suggests either invalid instruments or model misspecification.
 
 ---
 
@@ -613,6 +639,8 @@ println("Analysis Complete!")
 println("="^50)
 ```
 
+Comparing VAR and LP impulse responses at the same horizon provides a robustness check. Under correct specification, both estimators are consistent for the same causal parameter (Plagborg-Møller & Wolf, 2021), but LP is less efficient. Large discrepancies suggest potential dynamic misspecification in the VAR. The smooth LP variance reduction ratio measures efficiency gains from B-spline regularization; values well below 1.0 indicate substantial noise reduction from imposing smoothness.
+
 ---
 
 ## Example 7: Unit Root Testing and Pre-Estimation Analysis
@@ -651,6 +679,8 @@ println("\nRandom walk:")
 println("  Statistic: ", round(adf_rw.statistic, digits=3))
 println("  P-value: ", round(adf_rw.pvalue, digits=4))
 ```
+
+The ADF test statistic is compared to non-standard critical values (Dickey-Fuller distribution, not Student-t). For the stationary series, the large negative test statistic yields a small p-value, rejecting the unit root null. For the random walk, the test statistic is close to zero, failing to reject. The number of augmenting lags selected by AIC controls for residual serial correlation.
 
 ### KPSS Complementary Test
 
@@ -792,6 +822,8 @@ if johansen.rank > 0
     end
 end
 ```
+
+The Johansen trace test sequentially tests hypotheses about the cointegration rank. When the trace statistic exceeds the critical value, we reject the null and move to the next rank. The estimated cointegrating vectors ``\beta`` represent long-run equilibrium relationships: deviations from ``\beta' y_t`` are stationary even though the individual series are I(1). The adjustment coefficients ``\alpha`` govern how quickly variables correct back toward equilibrium.
 
 ### Testing All Variables Before VAR
 

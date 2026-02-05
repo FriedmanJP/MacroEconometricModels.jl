@@ -13,6 +13,16 @@ Bayesian VAR (BVAR) estimation addresses the curse of dimensionality in VAR mode
 
 **Key References**: Litterman (1986), Doan, Litterman & Sims (1984), Giannone, Lenza & Primiceri (2015)
 
+## Quick Start
+
+```julia
+hyper = MinnesotaHyperparameters(tau=0.5, decay=2.0, lambda=1.0, mu=1.0, omega=1.0)
+best = optimize_hyperparameters(Y, p; grid_size=20)                 # Optimize tau
+chain = estimate_bvar(Y, 2; n_samples=2000, prior=:minnesota, hyper=best)
+birf = irf(chain, 2, 3, 20; method=:cholesky)                      # Bayesian IRF
+bfevd = fevd(chain, 2, 3, 20)                                      # Bayesian FEVD
+```
+
 ---
 
 ## Bayesian Framework
@@ -88,17 +98,27 @@ using MacroEconometricModels
 
 # Define hyperparameters
 hyper = MinnesotaHyperparameters(
-    τ = 0.5,      # Overall tightness
-    d = 2.0,      # Lag decay
-    ω_own = 1.0,  # Own-lag variance scaling
-    ω_cross = 1.0, # Cross-lag variance scaling
-    ω_det = 1.0   # Deterministic terms scaling
+    tau = 0.5,      # Overall tightness
+    decay = 2.0,    # Lag decay
+    lambda = 1.0,   # Own-lag variance scaling
+    mu = 1.0,       # Cross-lag variance scaling
+    omega = 1.0     # Deterministic terms scaling
 )
 
 # Use in BVAR estimation
 chain = estimate_bvar(Y, 2; n_samples=2000, n_adapts=500,
                       prior=:minnesota, hyper=hyper)
 ```
+
+### MinnesotaHyperparameters Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `tau` | `T` | Overall tightness (lower = more shrinkage toward prior) |
+| `decay` | `T` | Lag decay exponent (higher = faster decay of lag importance) |
+| `lambda` | `T` | Own-lag variance scaling |
+| `mu` | `T` | Cross-lag variance scaling (lower = more penalty on cross-variable lags) |
+| `omega` | `T` | Deterministic terms scaling |
 
 ---
 
@@ -164,7 +184,13 @@ For the Normal-Inverse-Wishart prior with dummy observations, the log marginal l
 \log p(Y | \tau) = c + \frac{T-k}{2} \log|\tilde{S}^{-1}| - \frac{T_d}{2} \log|\tilde{S}_d^{-1}| + \log \frac{\Gamma_n(\frac{T+T_d - k}{2})}{\Gamma_n(\frac{T_d - k}{2})}
 ```
 
-where ``\tilde{S}`` and ``\tilde{S}_d`` are the residual sum of squares from the augmented and dummy-only regressions.
+where
+- ``c`` is a normalization constant
+- ``T`` is the sample size, ``k = 1 + np`` is the number of regressors per equation
+- ``T_d`` is the number of dummy observations
+- ``\tilde{S}`` is the residual sum of squares from the augmented regression ``[Y; Y_d]`` on ``[X; X_d]``
+- ``\tilde{S}_d`` is the residual sum of squares from the dummy-only regression
+- ``\Gamma_n(\cdot)`` is the multivariate gamma function
 
 **Reference**: Giannone, Lenza & Primiceri (2015), Carriero, Clark & Marcellino (2015)
 
@@ -249,6 +275,9 @@ params = extract_chain_parameters(chain)
 # Trace plots for visual inspection
 ```
 
+!!! note "Technical Note"
+    MCMC convergence should be assessed before interpreting results. Key diagnostics include: (1) ``\hat{R}`` (R-hat) statistics should be below 1.05 for all parameters; (2) effective sample size (ESS) should be at least 400 for reliable posterior quantile estimation; (3) trace plots should show good mixing without trends or multimodality. If `n_samples=2000` with `n_adapts=500` shows poor convergence, try increasing both values or switching to a more informative prior (lower `tau`).
+
 **Reference**: Gelman et al. (2013), Hoffman & Gelman (2014)
 
 ---
@@ -284,6 +313,17 @@ for h in [0, 4, 8, 12, 20]
     println("  h=$h: $med [$lo, $hi]")
 end
 ```
+
+### BayesianImpulseResponse Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `quantiles` | `Array{T,4}` | ``(H+1) \times n \times n \times 3``: dim 4 = [16th pctl, median, 84th pctl] |
+| `mean` | `Array{T,3}` | ``(H+1) \times n \times n`` posterior mean IRF |
+| `horizon` | `Int` | Maximum IRF horizon |
+| `variables` | `Vector{String}` | Variable names |
+| `shocks` | `Vector{String}` | Shock names |
+| `quantile_levels` | `Vector{T}` | Quantile levels |
 
 ### Sign Restrictions
 
@@ -332,6 +372,17 @@ for h in [1, 4, 12, 20]
     println("  Shock 1 → Var 1: $med% [$lo%, $hi%]")
 end
 ```
+
+### BayesianFEVD Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `quantiles` | `Array{T,4}` | ``H \times n \times n \times 3``: dim 4 = [16th pctl, median, 84th pctl] |
+| `mean` | `Array{T,3}` | ``H \times n \times n`` posterior mean FEVD proportions |
+| `horizon` | `Int` | Maximum horizon |
+| `variables` | `Vector{String}` | Variable names |
+| `shocks` | `Vector{String}` | Shock names |
+| `quantile_levels` | `Vector{T}` | Quantile levels |
 
 ---
 
@@ -417,11 +468,11 @@ p = 4
 
 # Stronger shrinkage for large systems
 hyper_large = MinnesotaHyperparameters(
-    τ = 0.1,      # Tighter prior
-    d = 2.0,
-    ω_own = 1.0,
-    ω_cross = 0.5, # Penalize cross-variable coefficients
-    ω_det = 1.0
+    tau = 0.1,      # Tighter prior
+    decay = 2.0,
+    lambda = 1.0,
+    mu = 0.5,       # Penalize cross-variable coefficients
+    omega = 1.0
 )
 
 # Or optimize automatically

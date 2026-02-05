@@ -13,6 +13,16 @@ Factor models are fundamental tools in macroeconometrics for extracting common s
 
 **Reference**: Stock & Watson (2002a, 2002b), Bai & Ng (2002)
 
+## Quick Start
+
+```julia
+fm = estimate_factors(X, r; standardize=true)                       # Static factor model via PCA
+ic = ic_criteria(X, 10)                                             # Bai-Ng IC for factor count
+dfm = estimate_dynamic_factors(X, r, p; method=:twostep)            # Dynamic factor model
+gdfm = estimate_gdfm(X, q; kernel=:bartlett)                        # Generalized DFM (spectral)
+fc = forecast(dfm, h)                                               # DFM forecasting
+```
+
 ---
 
 ## The Static Factor Model
@@ -113,6 +123,22 @@ model = estimate_factors(X, r;
 F = model.factors          # T×r estimated factors
 Λ = model.loadings         # N×r estimated loadings
 ```
+
+### FactorModel Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `X` | `Matrix{T}` | Original ``T \times N`` data matrix |
+| `factors` | `Matrix{T}` | ``T \times r`` estimated factor matrix |
+| `loadings` | `Matrix{T}` | ``N \times r`` estimated loading matrix |
+| `eigenvalues` | `Vector{T}` | Eigenvalues from PCA (in descending order) |
+| `explained_variance` | `Vector{T}` | Fraction of variance explained by each factor |
+| `cumulative_variance` | `Vector{T}` | Cumulative fraction of variance explained |
+| `r` | `Int` | Number of factors |
+| `standardized` | `Bool` | Whether data was standardized before estimation |
+
+!!! note "Technical Note"
+    Factor models are identified only up to an ``r \times r`` rotation: if ``(\hat{F}, \hat{\Lambda})`` is a solution, then ``(\hat{F}H, \hat{\Lambda}H^{-1'})`` is equally valid for any invertible ``H``. The normalization ``F'F/T = I_r`` pins down orientation but not sign. Consequently, individual factor loadings should not be interpreted as structural parameters. To compare estimated factors with "true" factors (e.g., in simulations), compute absolute correlations rather than raw correlations.
 
 ---
 
@@ -420,6 +446,28 @@ A = model.A                 # Vector of r×r AR coefficient matrices
 Σ_e = model.Sigma_e         # N×N idiosyncratic covariance
 ```
 
+### DynamicFactorModel Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `X` | `Matrix{T}` | Original ``T \times N`` data matrix |
+| `factors` | `Matrix{T}` | ``T \times r`` estimated factors |
+| `loadings` | `Matrix{T}` | ``N \times r`` loading matrix |
+| `A` | `Vector{Matrix{T}}` | ``r \times r`` autoregressive coefficient matrices |
+| `factor_residuals` | `Matrix{T}` | Factor VAR residuals |
+| `Sigma_eta` | `Matrix{T}` | ``r \times r`` factor innovation covariance |
+| `Sigma_e` | `Matrix{T}` | ``N \times N`` idiosyncratic covariance |
+| `eigenvalues` | `Vector{T}` | Eigenvalues from initial PCA |
+| `explained_variance` | `Vector{T}` | Variance explained by each factor |
+| `cumulative_variance` | `Vector{T}` | Cumulative variance explained |
+| `r` | `Int` | Number of factors |
+| `p` | `Int` | Number of factor VAR lags |
+| `method` | `Symbol` | Estimation method (`:twostep` or `:em`) |
+| `standardized` | `Bool` | Whether data was standardized |
+| `converged` | `Bool` | Convergence status (relevant for `:em`) |
+| `iterations` | `Int` | Number of iterations (relevant for `:em`) |
+| `loglik` | `T` | Log-likelihood value |
+
 ### Model Selection for DFM
 
 Select the number of factors ``r`` and lag order ``p`` using information criteria:
@@ -536,6 +584,26 @@ F = model.factors                 # T×q time-domain factors
 # Variance explained by dynamic factors
 model.variance_explained          # q-vector of variance shares
 ```
+
+### GeneralizedDynamicFactorModel Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `X` | `Matrix{T}` | Original ``T \times N`` data matrix |
+| `factors` | `Matrix{T}` | ``T \times q`` time-domain factors |
+| `common_component` | `Matrix{T}` | ``T \times N`` common component ``\chi_t`` |
+| `idiosyncratic` | `Matrix{T}` | ``T \times N`` idiosyncratic component ``\xi_t`` |
+| `loadings_spectral` | `Array{Complex{T},3}` | ``N \times q \times n_{freq}`` frequency-domain loadings |
+| `spectral_density_X` | `Array{Complex{T},3}` | Spectral density of ``X_t`` |
+| `spectral_density_chi` | `Array{Complex{T},3}` | Spectral density of common component |
+| `eigenvalues_spectral` | `Matrix{T}` | ``N \times n_{freq}`` eigenvalues across frequencies |
+| `frequencies` | `Vector{T}` | Frequency grid (0 to ``\pi``) |
+| `q` | `Int` | Number of dynamic factors |
+| `r` | `Int` | Number of static factors |
+| `bandwidth` | `Int` | Kernel smoothing bandwidth |
+| `kernel` | `Symbol` | Kernel type (`:bartlett`, `:parzen`, `:tukey`) |
+| `standardized` | `Bool` | Whether data was standardized |
+| `variance_explained` | `Vector{T}` | Variance share per dynamic factor |
 
 ### Selecting the Number of Dynamic Factors
 

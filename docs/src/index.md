@@ -33,6 +33,20 @@ Or from the Julia REPL package mode:
 
 ## Quick Start
 
+```julia
+using MacroEconometricModels
+model = estimate_var(Y, 2)                          # VAR(2) via OLS
+irfs = irf(model, 20; method=:cholesky)             # Impulse responses
+chain = estimate_bvar(Y, 2; prior=:minnesota)       # Bayesian VAR
+lp = estimate_lp(Y, 1, 20; cov_type=:newey_west)   # Local Projections
+fm = estimate_factors(X, 3)                         # Factor model
+ar = estimate_ar(y, 2)                              # AR(2)
+adf = adf_test(y)                                   # Unit root test
+gmm = estimate_gmm(g, θ₀, data; weighting=:two_step)  # GMM
+```
+
+### Expanded Examples
+
 ### Basic VAR Estimation
 
 ```julia
@@ -64,11 +78,11 @@ using MacroEconometricModels
 
 # Set hyperparameters (or use optimize_hyperparameters)
 hyper = MinnesotaHyperparameters(
-    τ = 0.5,      # Overall tightness
-    d = 2.0,      # Lag decay
-    ω_own = 1.0,  # Own-lag variance
-    ω_cross = 1.0, # Cross-lag variance
-    ω_det = 1.0   # Deterministic terms
+    tau = 0.5,      # Overall tightness
+    decay = 2.0,    # Lag decay
+    lambda = 1.0,   # Own-lag variance
+    mu = 1.0,       # Cross-lag variance
+    omega = 1.0     # Deterministic terms
 )
 
 # Estimate BVAR with MCMC

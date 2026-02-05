@@ -2,6 +2,19 @@
 
 Innovation accounting refers to the collection of tools for analyzing the dynamic effects of structural shocks in VAR models. This includes Impulse Response Functions (IRF), Forecast Error Variance Decomposition (FEVD), and Historical Decomposition (HD).
 
+## Quick Start
+
+```julia
+irfs = irf(model, 20; method=:cholesky)                          # Frequentist IRF
+irfs_ci = irf(model, 20; ci_type=:bootstrap, reps=1000)          # With bootstrap CI
+birfs = irf(chain, p, n, 20; method=:cholesky)                   # Bayesian IRF
+decomp = fevd(model, 20)                                         # FEVD
+hd = historical_decomposition(model, 198)                        # Historical decomposition
+MacroEconometricModels.summary(irfs)                             # Publication-quality summary
+```
+
+---
+
 ## Impulse Response Functions (IRF)
 
 ### Definition
@@ -67,6 +80,32 @@ sign_constraints = [1 1 0; -1 0 0; 0 0 1]
 irf_sign = irf(model, 20; method=:sign, sign_restrictions=sign_constraints)
 ```
 
+!!! note "Technical Note"
+    The `ci_lower` and `ci_upper` arrays are only populated when `ci_type=:bootstrap` (frequentist) or when using the Bayesian `irf(chain, ...)` method. With `ci_type=:none` (the default), these arrays contain zeros. Always check `irf_result.ci_type` before interpreting confidence bands.
+
+### ImpulseResponse Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `values` | `Array{T,3}` | ``(H+1) \times n \times n`` IRF array: `values[h+1, i, j]` = response of variable ``i`` to shock ``j`` at horizon ``h`` |
+| `ci_lower` | `Array{T,3}` | Lower confidence bound (same shape as `values`) |
+| `ci_upper` | `Array{T,3}` | Upper confidence bound |
+| `horizon` | `Int` | Maximum IRF horizon ``H`` |
+| `variables` | `Vector{String}` | Variable names |
+| `shocks` | `Vector{String}` | Shock names |
+| `ci_type` | `Symbol` | CI method used (`:bootstrap`, `:none`, etc.) |
+
+### BayesianImpulseResponse Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `quantiles` | `Array{T,4}` | ``(H+1) \times n \times n \times 3``: dimension 4 = [16th pctl, median, 84th pctl] |
+| `mean` | `Array{T,3}` | ``(H+1) \times n \times n`` posterior mean IRF |
+| `horizon` | `Int` | Maximum IRF horizon |
+| `variables` | `Vector{String}` | Variable names |
+| `shocks` | `Vector{String}` | Shock names |
+| `quantile_levels` | `Vector{T}` | Quantile levels (e.g., `[0.16, 0.5, 0.84]`) |
+
 **Reference**: Kilian (1998), Lütkepohl (2005, Chapter 3)
 
 ---
@@ -101,6 +140,24 @@ fevd_ci = fevd(model, 20; ci_type=:bootstrap, reps=500)
 # Access decomposition for variable 1
 fevd_var1 = fevd_result.decomposition[:, 1, :]  # horizons × shocks
 ```
+
+### FEVD Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `decomposition` | `Array{T,3}` | ``H \times n \times n`` raw variance contributions |
+| `proportions` | `Array{T,3}` | ``H \times n \times n`` proportion of FEV: `proportions[h, i, j]` = share of variable ``i``'s FEV due to shock ``j`` at horizon ``h`` |
+
+### BayesianFEVD Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `quantiles` | `Array{T,4}` | ``H \times n \times n \times 3``: dimension 4 = [16th pctl, median, 84th pctl] |
+| `mean` | `Array{T,3}` | ``H \times n \times n`` posterior mean FEVD proportions |
+| `horizon` | `Int` | Maximum horizon |
+| `variables` | `Vector{String}` | Variable names |
+| `shocks` | `Vector{String}` | Shock names |
+| `quantile_levels` | `Vector{T}` | Quantile levels |
 
 **Reference**: Lütkepohl (2005, Section 2.3.3)
 
@@ -152,6 +209,35 @@ total = total_shock_contribution(hd, 1)
 hd_sign = historical_decomposition(model, 198; method=:sign,
     sign_restrictions=sign_constraints)
 ```
+
+### HistoricalDecomposition Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `contributions` | `Array{T,3}` | ``T_{eff} \times n \times n`` shock contributions: `contributions[t, i, j]` = contribution of shock ``j`` to variable ``i`` at time ``t`` |
+| `initial_conditions` | `Matrix{T}` | ``T_{eff} \times n`` initial condition component |
+| `actual` | `Matrix{T}` | ``T_{eff} \times n`` actual data values |
+| `shocks` | `Matrix{T}` | ``T_{eff} \times n`` structural shocks |
+| `T_eff` | `Int` | Effective number of time periods |
+| `variables` | `Vector{String}` | Variable names |
+| `shock_names` | `Vector{String}` | Shock names |
+| `method` | `Symbol` | Identification method (`:cholesky`, `:sign`, etc.) |
+
+### BayesianHistoricalDecomposition Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `quantiles` | `Array{T,4}` | ``T_{eff} \times n \times n \times n_q`` contribution quantiles |
+| `mean` | `Array{T,3}` | ``T_{eff} \times n \times n`` mean contributions |
+| `initial_quantiles` | `Array{T,3}` | ``T_{eff} \times n \times n_q`` initial condition quantiles |
+| `initial_mean` | `Matrix{T}` | ``T_{eff} \times n`` mean initial conditions |
+| `shocks_mean` | `Matrix{T}` | ``T_{eff} \times n`` mean structural shocks |
+| `actual` | `Matrix{T}` | ``T_{eff} \times n`` actual data values |
+| `T_eff` | `Int` | Effective number of time periods |
+| `variables` | `Vector{String}` | Variable names |
+| `shock_names` | `Vector{String}` | Shock names |
+| `quantile_levels` | `Vector{T}` | Quantile levels |
+| `method` | `Symbol` | Identification method |
 
 **Reference**: Kilian & Lütkepohl (2017, Chapter 4)
 
@@ -221,6 +307,51 @@ df = table(irf_result, "GDP", "Monetary Shock")
 df = table(fevd_result, "Inflation")
 df = table(hd_result, "Output")
 ```
+
+---
+
+## Complete Example
+
+This example combines IRF, FEVD, and HD for a three-variable VAR.
+
+```julia
+using MacroEconometricModels
+using Random
+
+Random.seed!(42)
+
+# Simulate a 3-variable VAR(2)
+T, n, p = 200, 3, 2
+Y = randn(T, n)
+for t in 2:T
+    Y[t, :] = 0.5 * Y[t-1, :] + 0.3 * randn(n)
+end
+
+model = estimate_var(Y, p)
+
+# IRF with bootstrap confidence intervals
+H = 20
+irfs = irf(model, H; method=:cholesky, ci_type=:bootstrap, reps=500)
+println("Shock 1 → Var 1 at h=0: ", round(irfs.values[1, 1, 1], digits=3))
+println("Shock 1 → Var 1 at h=8: ", round(irfs.values[9, 1, 1], digits=3))
+
+# FEVD
+decomp = fevd(model, H)
+println("\nFEVD for Var 1 at h=1: shock shares = ",
+        round.(decomp.proportions[1, 1, :] .* 100, digits=1), "%")
+println("FEVD for Var 1 at h=20: shock shares = ",
+        round.(decomp.proportions[20, 1, :] .* 100, digits=1), "%")
+
+# Historical decomposition
+hd = historical_decomposition(model, size(model.U, 1))
+println("\nDecomposition identity holds: ", verify_decomposition(hd))
+
+# Summary tables
+df_irf = table(irfs, 1, 1; horizons=[0, 4, 8, 12, 20])
+df_fevd = table(decomp, 1; horizons=[1, 4, 8, 20])
+```
+
+The IRF values show the dynamic propagation of structural shocks through the system. At impact (``h=0``), the Cholesky identification imposes a lower-triangular structure, so shock 1 affects only the first variable contemporaneously. By ``h=8``, cross-variable transmission is visible. The FEVD reveals whether the first variable's forecast uncertainty is dominated by its own shocks or by spillovers from other variables. At short horizons own shocks typically dominate; as ``h \to \infty``, the FEVD converges to the unconditional variance decomposition. The HD passes the verification check, confirming the additive identity ``y_t = \sum_j \text{HD}_j(t) + \text{initial}(t)`` holds to numerical precision.
 
 ---
 

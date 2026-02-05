@@ -15,6 +15,17 @@ Local Projections, introduced by Jordà (2005), estimate impulse responses by ru
 
 **Reference**: Jordà (2005), Plagborg-Møller & Wolf (2021)
 
+## Quick Start
+
+```julia
+lp = estimate_lp(Y, 1, 20; lags=4, cov_type=:newey_west)               # Standard LP
+lpiv = estimate_lp_iv(Y, 3, Z, 20; lags=4)                             # LP-IV
+slp = estimate_smooth_lp(Y, 1, 20; lambda=1.0, n_knots=4)              # Smooth LP
+sdlp = estimate_state_lp(Y, 1, state, 20; gamma=1.5)                   # State-dependent LP
+plp = estimate_propensity_lp(Y, treatment, covariates, 20)              # Propensity LP
+irf_result = lp_irf(lp; conf_level=0.95)                               # Extract IRF
+```
+
 ---
 
 ## Standard Local Projections
@@ -67,6 +78,9 @@ with bandwidth typically set to ``h + 1`` or determined automatically.
 
 ### Julia Implementation
 
+!!! note "Technical Note"
+    LP residuals ``\varepsilon_{t+h}`` are serially correlated at least MA(``h-1``) under the null of correct specification, even when the true DGP has i.i.d. errors. This is because overlapping forecast horizons create mechanical dependence. HAC standard errors (Newey-West) are therefore essential for all horizons ``h > 0``. The default bandwidth is set to ``h + 1`` following standard practice.
+
 ```julia
 using MacroEconometricModels
 
@@ -83,6 +97,35 @@ lp_model = estimate_lp(Y, shock_var, H;
 # Extract IRF with confidence intervals
 irf_result = lp_irf(lp_model; conf_level = 0.95)
 ```
+
+### LPModel Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `Y` | `Matrix{T}` | Original data matrix |
+| `shock_var` | `Int` | Index of the shock variable |
+| `response_vars` | `Vector{Int}` | Indices of response variables |
+| `horizon` | `Int` | Maximum horizon ``H`` |
+| `lags` | `Int` | Number of control lags |
+| `B` | `Vector{Matrix{T}}` | Coefficient matrices (one per horizon) |
+| `residuals` | `Vector{Matrix{T}}` | Residuals at each horizon |
+| `vcov` | `Vector{Matrix{T}}` | Variance-covariance matrices (HAC) |
+| `T_eff` | `Vector{Int}` | Effective sample size at each horizon |
+| `cov_estimator` | `AbstractCovarianceEstimator` | Covariance estimator used |
+
+### LPImpulseResponse Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `values` | `Matrix{T}` | ``(H+1) \times n_{resp}`` IRF point estimates |
+| `ci_lower` | `Matrix{T}` | Lower confidence bounds |
+| `ci_upper` | `Matrix{T}` | Upper confidence bounds |
+| `se` | `Matrix{T}` | Standard errors at each horizon |
+| `horizon` | `Int` | Maximum horizon |
+| `response_vars` | `Vector{String}` | Response variable names |
+| `shock_var` | `String` | Shock variable name |
+| `cov_type` | `Symbol` | Covariance estimator type |
+| `conf_level` | `T` | Confidence level (e.g., 0.95) |
 
 ---
 
@@ -154,6 +197,24 @@ println("All horizons pass: ", weak_test.passes_threshold)
 # Extract IRF
 irf_iv = lp_iv_irf(lpiv_model)
 ```
+
+### LPIVModel Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `Y` | `Matrix{T}` | Original data matrix |
+| `shock_var` | `Int` | Index of the endogenous shock variable |
+| `response_vars` | `Vector{Int}` | Response variable indices |
+| `instruments` | `Matrix{T}` | External instrument matrix |
+| `horizon` | `Int` | Maximum horizon |
+| `lags` | `Int` | Number of control lags |
+| `B` | `Vector{Matrix{T}}` | Second-stage coefficient matrices |
+| `residuals` | `Vector{Matrix{T}}` | Residuals at each horizon |
+| `vcov` | `Vector{Matrix{T}}` | Variance-covariance matrices |
+| `first_stage_F` | `Vector{T}` | First-stage F-statistics by horizon |
+| `first_stage_coef` | `Vector{Vector{T}}` | First-stage instrument coefficients |
+| `T_eff` | `Vector{Int}` | Effective sample sizes |
+| `cov_estimator` | `AbstractCovarianceEstimator` | Covariance estimator used |
 
 ---
 
@@ -237,6 +298,25 @@ optimal_lambda = cross_validate_lambda(Y, shock_var, H;
 comparison = compare_smooth_lp(Y, shock_var, H; lambda = optimal_lambda)
 println("Variance reduction: ", comparison.variance_reduction)
 ```
+
+### SmoothLPModel Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `Y` | `Matrix{T}` | Original data matrix |
+| `shock_var` | `Int` | Shock variable index |
+| `response_vars` | `Vector{Int}` | Response variable indices |
+| `horizon` | `Int` | Maximum horizon |
+| `lags` | `Int` | Number of control lags |
+| `spline_basis` | `BSplineBasis{T}` | B-spline basis (knots, degree, basis matrix) |
+| `theta` | `Matrix{T}` | Spline coefficients |
+| `vcov_theta` | `Matrix{T}` | Variance-covariance of spline coefficients |
+| `lambda` | `T` | Smoothing penalty parameter |
+| `irf_values` | `Matrix{T}` | Smoothed IRF point estimates |
+| `irf_se` | `Matrix{T}` | Standard errors of smoothed IRF |
+| `residuals` | `Matrix{T}` | Regression residuals |
+| `T_eff` | `Int` | Effective sample size |
+| `cov_estimator` | `AbstractCovarianceEstimator` | Covariance estimator used |
 
 ---
 
@@ -333,6 +413,25 @@ irf_recession = state_irf(state_model; regime = :recession)
 # Test for regime differences
 diff_test = test_regime_difference(state_model)
 ```
+
+### StateLPModel Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `Y` | `Matrix{T}` | Original data matrix |
+| `shock_var` | `Int` | Shock variable index |
+| `response_vars` | `Vector{Int}` | Response variable indices |
+| `horizon` | `Int` | Maximum horizon |
+| `lags` | `Int` | Number of control lags |
+| `state` | `StateTransition{T}` | State transition function (``\gamma``, threshold, ``F(z_t)`` values) |
+| `B_expansion` | `Vector{Matrix{T}}` | Expansion regime coefficients |
+| `B_recession` | `Vector{Matrix{T}}` | Recession regime coefficients |
+| `residuals` | `Vector{Matrix{T}}` | Residuals at each horizon |
+| `vcov_expansion` | `Vector{Matrix{T}}` | Expansion regime variance-covariance |
+| `vcov_recession` | `Vector{Matrix{T}}` | Recession regime variance-covariance |
+| `vcov_diff` | `Vector{Matrix{T}}` | Variance-covariance of regime difference |
+| `T_eff` | `Vector{Int}` | Effective sample sizes |
+| `cov_estimator` | `AbstractCovarianceEstimator` | Covariance estimator used |
 
 ---
 
@@ -437,6 +536,26 @@ diagnostics = propensity_diagnostics(prop_model)
 println("Propensity score overlap: ", diagnostics.overlap)
 println("Max covariate imbalance: ", diagnostics.balance.max_weighted)
 ```
+
+### PropensityLPModel Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `Y` | `Matrix{T}` | Original data matrix |
+| `treatment` | `Vector{Bool}` | Binary treatment indicator |
+| `response_vars` | `Vector{Int}` | Response variable indices |
+| `covariates` | `Matrix{T}` | Selection-relevant covariates |
+| `horizon` | `Int` | Maximum horizon |
+| `propensity_scores` | `Vector{T}` | Estimated propensity scores ``\hat{p}(X_t)`` |
+| `ipw_weights` | `Vector{T}` | Inverse propensity weights |
+| `B` | `Vector{Matrix{T}}` | Weighted regression coefficients |
+| `residuals` | `Vector{Matrix{T}}` | Weighted residuals |
+| `vcov` | `Vector{Matrix{T}}` | Variance-covariance matrices |
+| `ate` | `Matrix{T}` | Average treatment effect estimates |
+| `ate_se` | `Matrix{T}` | Standard errors of ATE |
+| `config` | `PropensityScoreConfig{T}` | Configuration (method, trimming, normalize) |
+| `T_eff` | `Vector{Int}` | Effective sample sizes |
+| `cov_estimator` | `AbstractCovarianceEstimator` | Covariance estimator used |
 
 ---
 

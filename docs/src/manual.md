@@ -2,6 +2,19 @@
 
 This manual provides a comprehensive theoretical background for the macroeconometric methods implemented in **MacroEconometricModels.jl**, including precise mathematical formulations and references to the literature.
 
+## Quick Start
+
+```julia
+model = estimate_var(Y, 2)                                 # Estimate VAR(2) via OLS
+sel = select_lag_order(Y, 8)                               # AIC/BIC/HQIC lag selection
+irfs = irf(model, 20; method=:cholesky)                    # Cholesky-identified IRFs
+decomp = fevd(model, 20)                                   # Forecast error variance decomposition
+id = identify_sign(model; check_func=f, n_draws=1000)      # Sign restriction identification
+hd = historical_decomposition(model, 198)                  # Historical decomposition
+```
+
+---
+
 ## Vector Autoregression (VAR)
 
 ### The Reduced-Form VAR Model
@@ -57,6 +70,24 @@ The residual covariance matrix is estimated as:
 where ``\hat{U} = Y - X\hat{B}`` and ``k = 1 + np`` is the number of regressors per equation.
 
 **Reference**: Hamilton (1994, Chapter 11), Lütkepohl (2005, Section 3.2)
+
+### VARModel Return Values
+
+`estimate_var` returns a `VARModel{T}` with the following fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `Y` | `Matrix{T}` | Original ``T \times n`` data matrix |
+| `p` | `Int` | Number of lags |
+| `B` | `Matrix{T}` | ``(1+np) \times n`` coefficient matrix ``[c, A_1, \ldots, A_p]'`` |
+| `U` | `Matrix{T}` | ``(T-p) \times n`` residual matrix |
+| `Sigma` | `Matrix{T}` | ``n \times n`` residual covariance matrix |
+| `aic` | `T` | Akaike Information Criterion |
+| `bic` | `T` | Bayesian Information Criterion |
+| `hqic` | `T` | Hannan-Quinn Information Criterion |
+
+!!! note "Technical Note"
+    The coefficient matrix `B` stores the intercept in the first row, followed by ``A_1, A_2, \ldots, A_p`` stacked vertically. To extract lag-``i`` coefficients: `A_i = model.B[(i-1)*n+2 : i*n+1, :]`. The intercept is `model.B[1, :]`.
 
 ### Stability Condition
 
@@ -289,6 +320,59 @@ where ``\hat{\alpha}`` is estimated from an AR(1) fit to the residuals:
 ```
 
 **Reference**: Newey & West (1987, 1994), Andrews (1991)
+
+---
+
+## Complete Example
+
+This example demonstrates an end-to-end VAR workflow from lag selection through structural analysis.
+
+```julia
+using MacroEconometricModels
+using Random
+
+Random.seed!(42)
+
+# Generate data from a persistent VAR(1) DGP
+T, n = 200, 3
+Y = zeros(T, n)
+A = [0.8 0.1 -0.1; 0.05 0.7 0.0; 0.1 0.2 0.75]
+for t in 2:T
+    Y[t, :] = A * Y[t-1, :] + 0.3 * randn(n)
+end
+
+# Step 1: Select lag order
+sel = select_lag_order(Y, 8)
+println("AIC lag: ", sel.p_aic, "  BIC lag: ", sel.p_bic)
+
+# Step 2: Estimate VAR
+model = estimate_var(Y, sel.p_bic)
+println("AIC: ", round(model.aic, digits=2),
+        "  BIC: ", round(model.bic, digits=2))
+
+# Step 3: Check stability
+stab = is_stationary(model)
+println("Stationary: ", stab.is_stationary,
+        "  Max modulus: ", round(stab.max_modulus, digits=4))
+
+# Step 4: Cholesky IRF with bootstrap CI
+irfs = irf(model, 20; method=:cholesky, ci_type=:bootstrap, reps=500)
+println("Impact of shock 1 on var 1: ", round(irfs.values[1, 1, 1], digits=3))
+println("After 8 periods: ", round(irfs.values[9, 1, 1], digits=3))
+
+# Step 5: FEVD
+decomp = fevd(model, 20)
+println("Var 1 explained by shock 1 at h=1: ",
+        round(decomp.proportions[1, 1, 1] * 100, digits=1), "%")
+println("Var 1 explained by shock 1 at h=20: ",
+        round(decomp.proportions[20, 1, 1] * 100, digits=1), "%")
+
+# Step 6: Historical decomposition
+hd = historical_decomposition(model, size(model.U, 1))
+verify_decomposition(hd)  # Should return true
+```
+
+The lag selection criteria typically agree when the true DGP is low-order; BIC tends to be more conservative and is preferred when parsimony matters. The stability check confirms all companion matrix eigenvalues lie inside the unit circle, validating the use of standard asymptotic inference. The FEVD at long horizons reveals the unconditional variance decomposition, showing which shocks are the dominant drivers of each variable. The historical decomposition identity ``y_t = \sum_j \text{HD}_j(t) + \text{initial}(t)`` should hold exactly up to numerical precision.
 
 ---
 

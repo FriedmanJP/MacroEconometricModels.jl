@@ -13,6 +13,17 @@ Univariate time series models capture temporal dependence through autoregressive
 
 **References**: Box & Jenkins (1976), Hamilton (1994, Chapters 3–5), Brockwell & Davis (1991)
 
+## Quick Start
+
+```julia
+ar = estimate_ar(y, 2)                                    # AR(2) via OLS
+ma = estimate_ma(y, 1; method=:css_mle)                   # MA(1) via CSS-MLE
+arma = estimate_arma(y, 1, 1)                              # ARMA(1,1)
+arima = estimate_arima(y, 1, 1, 0)                         # ARIMA(1,1,0)
+fc = forecast(arma, 12; conf_level=0.95)                   # 12-step forecast with CI
+sel = select_arima_order(y, 4, 4)                          # Grid search for best (p,q)
+```
+
 ---
 
 ## The AR(p) Model
@@ -79,6 +90,24 @@ ar_ols.aic      # Akaike Information Criterion
 ar_ols.bic      # Bayesian Information Criterion
 ```
 
+### ARModel Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `y` | `Vector{T}` | Original time series |
+| `p` | `Int` | AR order |
+| `c` | `T` | Intercept (constant term) |
+| `phi` | `Vector{T}` | AR coefficients ``[\phi_1, \ldots, \phi_p]`` |
+| `sigma2` | `T` | Innovation variance ``\hat{\sigma}^2`` |
+| `residuals` | `Vector{T}` | Estimated residuals |
+| `fitted` | `Vector{T}` | Fitted values |
+| `loglik` | `T` | Log-likelihood |
+| `aic` | `T` | Akaike Information Criterion |
+| `bic` | `T` | Bayesian Information Criterion |
+| `method` | `Symbol` | Estimation method (`:ols` or `:mle`) |
+| `converged` | `Bool` | Convergence indicator |
+| `iterations` | `Int` | Number of optimization iterations |
+
 **Reference**: Hamilton (1994, Section 5.2)
 
 ---
@@ -115,6 +144,24 @@ MA parameters cannot be estimated by OLS. Three methods are available:
 ma_model = estimate_ma(y, 1; method=:css_mle)
 ma_model.theta   # MA coefficient [θ₁]
 ```
+
+### MAModel Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `y` | `Vector{T}` | Original time series |
+| `q` | `Int` | MA order |
+| `c` | `T` | Intercept |
+| `theta` | `Vector{T}` | MA coefficients ``[\theta_1, \ldots, \theta_q]`` |
+| `sigma2` | `T` | Innovation variance |
+| `residuals` | `Vector{T}` | Estimated residuals |
+| `fitted` | `Vector{T}` | Fitted values |
+| `loglik` | `T` | Log-likelihood |
+| `aic` | `T` | AIC |
+| `bic` | `T` | BIC |
+| `method` | `Symbol` | Estimation method (`:css`, `:mle`, `:css_mle`) |
+| `converged` | `Bool` | Convergence indicator |
+| `iterations` | `Int` | Number of optimization iterations |
 
 ---
 
@@ -153,6 +200,29 @@ arma_model.theta   # MA coefficients
 arma_model.loglik  # Log-likelihood
 ```
 
+### ARMAModel Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `y` | `Vector{T}` | Original time series |
+| `p` | `Int` | AR order |
+| `q` | `Int` | MA order |
+| `c` | `T` | Intercept |
+| `phi` | `Vector{T}` | AR coefficients ``[\phi_1, \ldots, \phi_p]`` |
+| `theta` | `Vector{T}` | MA coefficients ``[\theta_1, \ldots, \theta_q]`` |
+| `sigma2` | `T` | Innovation variance |
+| `residuals` | `Vector{T}` | Estimated residuals |
+| `fitted` | `Vector{T}` | Fitted values |
+| `loglik` | `T` | Log-likelihood |
+| `aic` | `T` | AIC |
+| `bic` | `T` | BIC |
+| `method` | `Symbol` | Estimation method |
+| `converged` | `Bool` | Convergence indicator |
+| `iterations` | `Int` | Number of iterations |
+
+!!! note "Technical Note"
+    CSS (Conditional Sum of Squares) is fast but approximate: it conditions on initial residuals being zero, which introduces bias in small samples. MLE via the Kalman filter provides exact inference by properly handling initialization but is computationally more expensive and can be sensitive to starting values. The default `:css_mle` combines both: CSS provides robust starting values, then MLE refines to the exact optimum. For pure AR models, OLS is equivalent to CSS and is preferred for speed.
+
 **Reference**: Hamilton (1994, Chapter 5), Harvey (1993, Chapter 3)
 
 ---
@@ -184,6 +254,28 @@ model = estimate_arima(y, 1, 1, 0)
 model.phi    # AR coefficients on differenced series
 model.d      # Integration order
 ```
+
+### ARIMAModel Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `y` | `Vector{T}` | Original (undifferenced) time series |
+| `y_diff` | `Vector{T}` | ``d``-fold differenced series |
+| `p` | `Int` | AR order |
+| `d` | `Int` | Integration order |
+| `q` | `Int` | MA order |
+| `c` | `T` | Intercept (on differenced series) |
+| `phi` | `Vector{T}` | AR coefficients |
+| `theta` | `Vector{T}` | MA coefficients |
+| `sigma2` | `T` | Innovation variance |
+| `residuals` | `Vector{T}` | Estimated residuals |
+| `fitted` | `Vector{T}` | Fitted values (on differenced scale) |
+| `loglik` | `T` | Log-likelihood |
+| `aic` | `T` | AIC |
+| `bic` | `T` | BIC |
+| `method` | `Symbol` | Estimation method |
+| `converged` | `Bool` | Convergence indicator |
+| `iterations` | `Int` | Number of iterations |
 
 ---
 
@@ -218,7 +310,11 @@ The log-likelihood is computed via the prediction error decomposition:
 \ell(\Theta) = -\frac{n}{2} \log(2\pi) - \frac{1}{2} \sum_{t=1}^n \left( \log f_t + \frac{v_t^2}{f_t} \right)
 ```
 
-where ``v_t = y_t - \hat{y}_{t|t-1}`` is the one-step prediction error and ``f_t = Z P_{t|t-1} Z' + H`` is its variance.
+where
+- ``v_t = y_t - \hat{y}_{t|t-1}`` is the one-step prediction error
+- ``f_t = Z P_{t|t-1} Z' + H`` is its variance
+- ``n`` is the number of observations
+- ``\Theta`` denotes the full parameter vector ``(\phi_1, \ldots, \phi_p, \theta_1, \ldots, \theta_q, \sigma^2)``
 
 **Initialization**: Uses the unconditional (stationary) distribution when the system is stable, falling back to diffuse initialization (``P_0 = 10^6 I``) for non-stationary parameters.
 
@@ -245,6 +341,11 @@ Forecast standard errors are derived from the MA(``\infty``) representation. The
 ```math
 \psi_j = \sum_{i=1}^{\min(p,j)} \phi_i \psi_{j-i} + \theta_j \mathbb{1}(j \leq q), \quad \psi_0 = 1
 ```
+
+where
+- ``\psi_j`` is the ``j``-th coefficient in the MA(``\infty``) representation ``y_t = \sum_{j=0}^{\infty} \psi_j \varepsilon_{t-j}``
+- ``\phi_i`` are the AR coefficients (zero for ``i > p``)
+- ``\theta_j`` are the MA coefficients (zero for ``j > q``)
 
 The ``h``-step ahead forecast variance is:
 
@@ -276,6 +377,17 @@ fc.se          # Standard errors
 fc99 = forecast(model, 12; conf_level=0.99)
 ```
 
+### ARIMAForecast Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `forecast` | `Vector{T}` | Point forecasts ``\hat{y}_{T+1}, \ldots, \hat{y}_{T+h}`` |
+| `ci_lower` | `Vector{T}` | Lower confidence bound |
+| `ci_upper` | `Vector{T}` | Upper confidence bound |
+| `se` | `Vector{T}` | Forecast standard errors (from psi-weights) |
+| `horizon` | `Int` | Forecast horizon ``h`` |
+| `conf_level` | `T` | Confidence level (e.g., 0.95) |
+
 ---
 
 ## Order Selection
@@ -287,10 +399,24 @@ fc99 = forecast(model, 12; conf_level=0.99)
 ```julia
 # Search over p ∈ {0,...,4}, q ∈ {0,...,4}
 selection = select_arima_order(y, 4, 4)
-selection.best_p    # Optimal AR order
-selection.best_q    # Optimal MA order
-selection.best_aic  # Best AIC value
+selection.best_p_bic    # Optimal AR order (BIC)
+selection.best_q_bic    # Optimal MA order (BIC)
+selection.best_p_aic    # Optimal AR order (AIC)
+selection.best_q_aic    # Optimal MA order (AIC)
 ```
+
+### ARIMAOrderSelection Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `best_p_aic` | `Int` | Optimal AR order by AIC |
+| `best_q_aic` | `Int` | Optimal MA order by AIC |
+| `best_p_bic` | `Int` | Optimal AR order by BIC |
+| `best_q_bic` | `Int` | Optimal MA order by BIC |
+| `aic_matrix` | `Matrix{T}` | ``(p_{max}+1) \times (q_{max}+1)`` matrix of AIC values |
+| `bic_matrix` | `Matrix{T}` | ``(p_{max}+1) \times (q_{max}+1)`` matrix of BIC values |
+| `best_model_aic` | `AbstractARIMAModel` | Best model by AIC |
+| `best_model_bic` | `AbstractARIMAModel` | Best model by BIC |
 
 ### Automatic Selection
 
@@ -368,10 +494,10 @@ adf_result = adf_test(y; lags=:aic, regression=:constant)
 
 # Step 2: Select ARMA order
 sel = select_arima_order(y, 4, 4)
-println("Best order: ARMA($(sel.best_p), $(sel.best_q))")
+println("Best order: ARMA($(sel.best_p_bic), $(sel.best_q_bic))")
 
 # Step 3: Estimate the model
-model = estimate_arma(y, sel.best_p, sel.best_q)
+model = estimate_arma(y, sel.best_p_bic, sel.best_q_bic)
 println("φ = $(model.phi), θ = $(model.theta)")
 println("σ² = $(model.sigma2)")
 println("AIC = $(model.aic), BIC = $(model.bic)")

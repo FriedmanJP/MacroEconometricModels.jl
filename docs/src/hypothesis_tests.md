@@ -6,7 +6,17 @@ This chapter covers statistical hypothesis tests for time series analysis, inclu
 
 Before fitting dynamic models like VARs or Local Projections, it is essential to understand the stationarity properties of the data. Non-stationary series (those with unit roots) require different treatment than stationary series, as standard regression methods can lead to spurious results.
 
-**MacroEconometricModels.jl** provides a comprehensive suite of unit root and stationarity tests:
+**MacroEconometricModels.jl** provides a comprehensive suite of unit root and stationarity tests.
+
+## Quick Start
+
+```julia
+adf_result = adf_test(y; lags=:aic, regression=:constant)          # ADF unit root test
+kpss_result = kpss_test(y; regression=:constant)                    # KPSS stationarity test
+pp_result = pp_test(y; regression=:constant)                        # Phillips-Perron test
+za_result = za_test(y; regression=:both, trim=0.15)                 # Zivot-Andrews (structural break)
+johansen_result = johansen_test(Y, 2; deterministic=:constant)      # Johansen cointegration
+```
 
 ### Univariate Tests
 1. **ADF (Augmented Dickey-Fuller)**: Tests the null of a unit root against stationarity
@@ -84,6 +94,17 @@ adf_test
 | `max_lags` | Maximum lags for automatic selection | `floor(12*(T/100)^0.25)` |
 | `regression` | Deterministic terms: `:none`, `:constant`, or `:trend` | `:constant` |
 
+### ADFResult Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `statistic` | `T` | ADF test statistic (``\tau``-ratio) |
+| `pvalue` | `T` | Asymptotic p-value (MacKinnon response surface) |
+| `lags` | `Int` | Number of augmenting lags used |
+| `regression` | `Symbol` | Deterministic specification (`:none`, `:constant`, `:trend`) |
+| `critical_values` | `Dict{Int,T}` | Critical values at 1%, 5%, 10% significance levels |
+| `nobs` | `Int` | Number of observations used |
+
 ### Interpreting Results
 
 - **Reject H₀** (p-value < 0.05): Evidence against unit root; series appears stationary
@@ -145,6 +166,17 @@ kpss_test
 |----------|-------------|---------|
 | `regression` | Stationarity type: `:constant` (level) or `:trend` | `:constant` |
 | `bandwidth` | Bartlett kernel bandwidth, or `:auto` for Newey-West selection | `:auto` |
+
+### KPSSResult Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `statistic` | `T` | KPSS test statistic |
+| `pvalue` | `T` | Asymptotic p-value |
+| `regression` | `Symbol` | Stationarity type (`:constant` or `:trend`) |
+| `critical_values` | `Dict{Int,T}` | Critical values at 1%, 5%, 10% |
+| `bandwidth` | `Int` | Bartlett kernel bandwidth used |
+| `nobs` | `Int` | Number of observations |
 
 ### Interpreting Results
 
@@ -210,6 +242,17 @@ pp_test
 | `regression` | Deterministic terms: `:none`, `:constant`, or `:trend` | `:constant` |
 | `bandwidth` | Newey-West bandwidth, or `:auto` | `:auto` |
 
+### PPResult Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `statistic` | `T` | Phillips-Perron ``Z_t`` test statistic |
+| `pvalue` | `T` | Asymptotic p-value |
+| `regression` | `Symbol` | Deterministic specification |
+| `critical_values` | `Dict{Int,T}` | Critical values at 1%, 5%, 10% |
+| `bandwidth` | `Int` | Newey-West bandwidth used |
+| `nobs` | `Int` | Number of observations |
+
 ---
 
 ## Zivot-Andrews Test
@@ -270,6 +313,19 @@ za_test
 | `trim` | Trimming fraction for break search | `0.15` |
 | `lags` | Augmenting lags, or `:aic`/`:bic` | `:aic` |
 
+### ZAResult Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `statistic` | `T` | Minimum ADF t-statistic over break candidates |
+| `pvalue` | `T` | Asymptotic p-value |
+| `break_index` | `Int` | Estimated break point (observation index) |
+| `break_fraction` | `T` | Break location as fraction of sample (0 to 1) |
+| `regression` | `Symbol` | Break type (`:constant`, `:trend`, `:both`) |
+| `critical_values` | `Dict{Int,T}` | Critical values at 1%, 5%, 10% |
+| `lags` | `Int` | Number of augmenting lags |
+| `nobs` | `Int` | Number of observations |
+
 ---
 
 ## Ng-Perron Tests
@@ -315,6 +371,21 @@ println("MPT: ", result.MPT)
 ```@docs
 ngperron_test
 ```
+
+### NgPerronResult Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `MZa` | `T` | Modified Phillips ``Z_\alpha`` statistic |
+| `MZt` | `T` | Modified Phillips ``Z_t`` statistic (most commonly reported) |
+| `MSB` | `T` | Modified Sargan-Bhargava statistic |
+| `MPT` | `T` | Modified Point-optimal statistic |
+| `regression` | `Symbol` | Deterministic specification |
+| `critical_values` | `Dict{Symbol,Dict{Int,T}}` | Critical values keyed by statistic name (`:MZa`, `:MZt`, `:MSB`, `:MPT`) |
+| `nobs` | `Int` | Number of observations |
+
+!!! note "Technical Note"
+    The Ng-Perron tests use GLS detrending which provides substantially better size properties than the standard ADF test in small samples (``T < 100``). When the ADF test has borderline results, the Ng-Perron MZt statistic is a more reliable indicator. However, ADF remains preferable when the data-generating process has a large negative MA root, as GLS-based tests can be oversized in that case (Perron & Ng, 1996).
 
 ---
 
@@ -386,6 +457,24 @@ johansen_test
 | `p` | Lags in VECM representation | Required |
 | `deterministic` | `:none`, `:constant`, or `:trend` | `:constant` |
 
+### JohansenResult Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `trace_stats` | `Vector{T}` | Trace test statistics for each rank hypothesis |
+| `trace_pvalues` | `Vector{T}` | P-values for trace statistics |
+| `max_eigen_stats` | `Vector{T}` | Maximum eigenvalue test statistics |
+| `max_eigen_pvalues` | `Vector{T}` | P-values for max eigenvalue statistics |
+| `rank` | `Int` | Estimated cointegration rank |
+| `eigenvectors` | `Matrix{T}` | ``n \times n`` matrix of cointegrating vectors (columns) |
+| `adjustment` | `Matrix{T}` | ``n \times n`` adjustment (loading) matrix ``\alpha`` |
+| `eigenvalues` | `Vector{T}` | Ordered eigenvalues from reduced-rank regression |
+| `critical_values_trace` | `Matrix{T}` | ``n \times 3`` critical values for trace test (1%, 5%, 10%) |
+| `critical_values_max` | `Matrix{T}` | ``n \times 3`` critical values for max eigenvalue test |
+| `deterministic` | `Symbol` | Deterministic specification (`:none`, `:constant`, `:trend`) |
+| `lags` | `Int` | Number of VECM lags |
+| `nobs` | `Int` | Number of observations |
+
 ### Interpreting Results
 
 The test sequentially tests:
@@ -444,6 +533,15 @@ end
 ```@docs
 is_stationary
 ```
+
+### VARStationarityResult Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `is_stationary` | `Bool` | `true` if all eigenvalues lie inside unit circle |
+| `eigenvalues` | `Vector{E}` | Eigenvalues of the companion matrix (may be complex) |
+| `max_modulus` | `T` | Maximum eigenvalue modulus (should be ``< 1`` for stability) |
+| `companion_matrix` | `Matrix{T}` | ``np \times np`` companion matrix |
 
 ---
 
