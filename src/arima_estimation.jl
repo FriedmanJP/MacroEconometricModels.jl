@@ -12,6 +12,49 @@ using LinearAlgebra, Statistics, Distributions
 import Optim
 
 # =============================================================================
+# Shared Helpers
+# =============================================================================
+
+"""
+    _pack_arma_params(c, phi, theta; include_intercept=true, log_sigma2=nothing)
+
+Pack ARMA parameters into a single vector for optimization.
+"""
+function _pack_arma_params(c::T, phi::Vector{T}, theta::Vector{T};
+                            include_intercept::Bool=true,
+                            log_sigma2::Union{Nothing,T}=nothing) where {T}
+    params = T[]
+    include_intercept && push!(params, c)
+    append!(params, phi)
+    append!(params, theta)
+    log_sigma2 !== nothing && push!(params, log_sigma2)
+    params
+end
+
+"""
+    _compute_aic_bic(loglik, k, n)
+
+Compute AIC and BIC from log-likelihood, number of parameters k, and sample size n.
+"""
+_compute_aic_bic(loglik::T, k::Int, n::Int) where {T} =
+    (-2 * loglik + 2 * k, -2 * loglik + k * log(T(n)))
+
+"""
+    _white_noise_fit(y; include_intercept=true)
+
+Fit a white-noise (p=0, q=0) model. Returns (c, sigma2, loglik, residuals, fitted).
+"""
+function _white_noise_fit(y::Vector{T}; include_intercept::Bool=true) where {T}
+    n = length(y)
+    c = include_intercept ? mean(y) : zero(T)
+    residuals = y .- c
+    sigma2 = var(residuals; corrected=false)
+    fitted = fill(c, n)
+    loglik = -T(n/2) * log(T(2π)) - T(n/2) * log(sigma2) - T(n/2)
+    (c, sigma2, loglik, residuals, fitted)
+end
+
+# =============================================================================
 # Input Validation
 # =============================================================================
 
@@ -161,19 +204,7 @@ end
 Conditional Sum of Squares objective function.
 """
 function _css_objective(params::Vector{T}, y::Vector{T}, p::Int, q::Int; include_intercept::Bool=true) where {T<:AbstractFloat}
-    # Unpack parameters
-    idx = 1
-    if include_intercept
-        c = params[idx]
-        idx += 1
-    else
-        c = zero(T)
-    end
-
-    phi = p > 0 ? params[idx:idx+p-1] : T[]
-    idx += p
-
-    theta = q > 0 ? params[idx:idx+q-1] : T[]
+    c, phi, theta, _ = _unpack_arma_params(params, p, q; include_intercept=include_intercept)
 
     # Check stationarity/invertibility
     !_is_stationary(phi) && return T(1e10)
@@ -200,11 +231,7 @@ function _estimate_css(y::Vector{T}, p::Int, q::Int; include_intercept::Bool=tru
     phi_init = _yule_walker(y, p)
     theta_init = _innovations_algorithm(y, q)
 
-    # Pack parameters
-    params_init = T[]
-    include_intercept && push!(params_init, c_init)
-    append!(params_init, phi_init)
-    append!(params_init, theta_init)
+    params_init = _pack_arma_params(c_init, phi_init, theta_init; include_intercept=include_intercept)
 
     # Edge case: no parameters to optimize (white noise with given mean)
     if p == 0 && q == 0
@@ -222,12 +249,7 @@ function _estimate_css(y::Vector{T}, p::Int, q::Int; include_intercept::Bool=tru
     converged = Optim.converged(result)
     iterations = Optim.iterations(result)
 
-    # Extract and compute sigma2
-    idx = include_intercept ? 2 : 1
-    phi = p > 0 ? params_opt[idx:idx+p-1] : T[]
-    idx += p
-    theta = q > 0 ? params_opt[idx:idx+q-1] : T[]
-    c = include_intercept ? params_opt[1] : zero(T)
+    c, phi, theta, _ = _unpack_arma_params(params_opt, p, q; include_intercept=include_intercept)
 
     residuals = _compute_arma_residuals(y, c, phi, theta)
     m = max(p, q)
@@ -258,28 +280,19 @@ function _estimate_mle(y::Vector{T}, p::Int, q::Int; include_intercept::Bool=tru
         theta_init = _innovations_algorithm(y, q)
         sigma2_init = var(y; corrected=false)
     else
-        idx = include_intercept ? 2 : 1
-        c_init = include_intercept ? init_params[1] : zero(T)
-        phi_init = p > 0 ? init_params[idx:idx+p-1] : T[]
-        idx += p
-        theta_init = q > 0 ? init_params[idx:idx+q-1] : T[]
+        c_init, phi_init, theta_init, _ = _unpack_arma_params(init_params, p, q;
+                                                               include_intercept=include_intercept)
         sigma2_init = init_sigma2 === nothing ? var(y; corrected=false) : init_sigma2
     end
 
-    # Pack parameters with log(sigma2) for unconstrained optimization
-    params_init = T[]
-    include_intercept && push!(params_init, c_init)
-    append!(params_init, phi_init)
-    append!(params_init, theta_init)
-    push!(params_init, log(max(sigma2_init, T(1e-10))))
+    params_init = _pack_arma_params(c_init, phi_init, theta_init;
+                                     include_intercept=include_intercept,
+                                     log_sigma2=log(max(sigma2_init, T(1e-10))))
 
     # Edge case: white noise
     if p == 0 && q == 0
-        c = include_intercept ? mean(y) : zero(T)
-        residuals = y .- c
-        sigma2 = var(residuals; corrected=false)
-        loglik = -T(n/2) * log(T(2π)) - T(n/2) * log(sigma2) - T(n/2)
-        return c, T[], T[], sigma2, loglik, residuals, fill(c, n), true, 0
+        c, sigma2, loglik, residuals, fitted = _white_noise_fit(y; include_intercept=include_intercept)
+        return c, T[], T[], sigma2, loglik, residuals, fitted, true, 0
     end
 
     # Optimize using LBFGS with numerical gradients
@@ -291,18 +304,9 @@ function _estimate_mle(y::Vector{T}, p::Int, q::Int; include_intercept::Bool=tru
     converged = Optim.converged(result)
     iterations = Optim.iterations(result)
 
-    # Unpack optimized parameters
-    idx = 1
-    c = include_intercept ? params_opt[idx] : zero(T)
-    include_intercept && (idx += 1)
-
-    phi = p > 0 ? params_opt[idx:idx+p-1] : T[]
-    idx += p
-
-    theta = q > 0 ? params_opt[idx:idx+q-1] : T[]
-    idx += q
-
-    sigma2 = exp(params_opt[idx])
+    c, phi, theta, sigma2 = _unpack_arma_params(params_opt, p, q;
+                                                 include_intercept=include_intercept,
+                                                 has_log_sigma2=true)
 
     # Compute final log-likelihood and residuals
     loglik, residuals, fitted = _kalman_filter_arma(y, c, phi, theta, sigma2)
@@ -348,8 +352,7 @@ function estimate_ar(y::AbstractVector{T}, p::Int; method::Symbol=:ols, include_
 
         n_eff = length(residuals)
         k = include_intercept ? p + 2 : p + 1  # intercept, phi, sigma2
-        aic = -2 * loglik + 2 * k
-        bic = -2 * loglik + k * log(n_eff)
+        aic, bic = _compute_aic_bic(loglik, k, n_eff)
 
         return ARModel(y_vec, p, c, phi, sigma2, residuals, fitted, loglik, aic, bic, :mle, converged, iterations)
     else
@@ -400,8 +403,7 @@ function _estimate_ar_ols(y::Vector{T}, p::Int; include_intercept::Bool=true) wh
 
     # Information criteria
     k = length(beta) + 1  # +1 for sigma2
-    aic = -2 * loglik + 2 * k
-    bic = -2 * loglik + k * log(n_eff)
+    aic, bic = _compute_aic_bic(loglik, k, n_eff)
 
     ARModel(y, p, c, phi, sigma2, residuals, fitted, loglik, aic, bic, :ols, true, 0)
 end
@@ -470,8 +472,7 @@ function estimate_ma(y::AbstractVector{T}, q::Int; method::Symbol=:css_mle, incl
 
     n_eff = length(residuals)
     k = include_intercept ? q + 2 : q + 1
-    aic = -2 * loglik + 2 * k
-    bic = -2 * loglik + k * log(n_eff)
+    aic, bic = _compute_aic_bic(loglik, k, n_eff)
 
     MAModel(y_vec, q, c, theta, sigma2, residuals, fitted, loglik, aic, bic, method, converged, iterations)
 end
@@ -513,26 +514,16 @@ function estimate_arma(y::AbstractVector{T}, p::Int, q::Int; method::Symbol=:css
 
     # Handle special cases
     if p == 0 && q == 0
-        # White noise
-        c = include_intercept ? mean(y_vec) : zero(T)
-        residuals = y_vec .- c
-        sigma2 = var(residuals; corrected=false)
-        fitted = fill(c, n)
-        loglik = -T(n/2) * log(T(2π)) - T(n/2) * log(sigma2) - T(n/2)
+        c, sigma2, loglik, residuals, fitted = _white_noise_fit(y_vec; include_intercept=include_intercept)
         k = include_intercept ? 2 : 1
-        aic = -2 * loglik + 2 * k
-        bic = -2 * loglik + k * log(n)
+        aic, bic = _compute_aic_bic(loglik, k, n)
         return ARMAModel(y_vec, 0, 0, c, T[], T[], sigma2, residuals, fitted, loglik, aic, bic, method, true, 0)
     end
 
     if method == :css
         params, sigma2, converged, iterations = _estimate_css(y_vec, p, q; include_intercept=include_intercept, max_iter=max_iter)
 
-        idx = include_intercept ? 2 : 1
-        c = include_intercept ? params[1] : zero(T)
-        phi = p > 0 ? params[idx:idx+p-1] : T[]
-        idx += p
-        theta = q > 0 ? params[idx:end] : T[]
+        c, phi, theta, _ = _unpack_arma_params(params, p, q; include_intercept=include_intercept)
 
         residuals = _compute_arma_residuals(y_vec, c, phi, theta)
         fitted = y_vec - residuals
@@ -560,8 +551,7 @@ function estimate_arma(y::AbstractVector{T}, p::Int, q::Int; method::Symbol=:css
 
     n_eff = length(residuals)
     k = (include_intercept ? 1 : 0) + p + q + 1
-    aic = -2 * loglik + 2 * k
-    bic = -2 * loglik + k * log(n_eff)
+    aic, bic = _compute_aic_bic(loglik, k, n_eff)
 
     ARMAModel(y_vec, p, q, c, phi, theta, sigma2, residuals, fitted, loglik, aic, bic, method, converged, iterations)
 end
@@ -607,16 +597,10 @@ function estimate_arima(y::AbstractVector{T}, p::Int, d::Int, q::Int;
 
     # Fit ARMA to differenced series
     if p == 0 && q == 0
-        # White noise on differences
-        c = include_intercept ? mean(y_diff) : zero(T)
-        residuals = y_diff .- c
-        sigma2 = var(residuals; corrected=false)
-        fitted = fill(c, length(y_diff))
+        c, sigma2, loglik, residuals, fitted = _white_noise_fit(y_diff; include_intercept=include_intercept)
         n_eff = length(residuals)
-        loglik = -T(n_eff/2) * log(T(2π)) - T(n_eff/2) * log(sigma2) - T(n_eff/2)
         k = include_intercept ? 2 : 1
-        aic = -2 * loglik + 2 * k
-        bic = -2 * loglik + k * log(n_eff)
+        aic, bic = _compute_aic_bic(loglik, k, n_eff)
 
         return ARIMAModel(y_vec, y_diff, 0, d, 0, c, T[], T[], sigma2, residuals, fitted,
                          loglik, aic, bic, method, true, 0)

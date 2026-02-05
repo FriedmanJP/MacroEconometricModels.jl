@@ -272,10 +272,7 @@ diff_order(m::ARIMAModel) = m.d
 # =============================================================================
 
 # Number of observations
-StatsAPI.nobs(m::ARModel) = length(m.y)
-StatsAPI.nobs(m::MAModel) = length(m.y)
-StatsAPI.nobs(m::ARMAModel) = length(m.y)
-StatsAPI.nobs(m::ARIMAModel) = length(m.y)
+StatsAPI.nobs(m::AbstractARIMAModel) = length(m.y)
 
 # Coefficients
 StatsAPI.coef(m::ARModel) = vcat(m.c, m.phi)
@@ -295,16 +292,10 @@ StatsAPI.aic(m::AbstractARIMAModel) = m.aic
 StatsAPI.bic(m::AbstractARIMAModel) = m.bic
 
 # Degrees of freedom
-StatsAPI.dof(m::ARModel) = m.p + 2  # c, phi..., sigma2
-StatsAPI.dof(m::MAModel) = m.q + 2
-StatsAPI.dof(m::ARMAModel) = m.p + m.q + 2
-StatsAPI.dof(m::ARIMAModel) = m.p + m.q + 2
+StatsAPI.dof(m::AbstractARIMAModel) = ar_order(m) + ma_order(m) + 2
 
 # Residual degrees of freedom
-StatsAPI.dof_residual(m::ARModel) = length(m.residuals) - dof(m) + 1
-StatsAPI.dof_residual(m::MAModel) = length(m.residuals) - dof(m) + 1
-StatsAPI.dof_residual(m::ARMAModel) = length(m.residuals) - dof(m) + 1
-StatsAPI.dof_residual(m::ARIMAModel) = length(m.residuals) - dof(m) + 1
+StatsAPI.dof_residual(m::AbstractARIMAModel) = length(m.residuals) - dof(m) + 1
 
 # R-squared (proportion of variance explained)
 function StatsAPI.r2(m::AbstractARIMAModel)
@@ -321,47 +312,22 @@ StatsAPI.islinear(::AbstractARIMAModel) = true
 # Display Methods
 # =============================================================================
 
-function Base.show(io::IO, m::ARModel)
-    println(io, "AR($(m.p)) Model")
+function _show_arima_model(io::IO, header::String, m::AbstractARIMAModel;
+                           phi::Vector=Float64[], theta::Vector=Float64[])
+    println(io, header)
     println(io, "  Intercept: $(round(m.c, digits=4))")
-    println(io, "  AR coefficients: $(round.(m.phi, digits=4))")
+    !isempty(phi) && println(io, "  AR coefficients: $(round.(phi, digits=4))")
+    !isempty(theta) && println(io, "  MA coefficients: $(round.(theta, digits=4))")
     println(io, "  σ²: $(round(m.sigma2, digits=4))")
     println(io, "  Log-likelihood: $(round(m.loglik, digits=2))")
     println(io, "  AIC: $(round(m.aic, digits=2)), BIC: $(round(m.bic, digits=2))")
     print(io, "  Method: $(m.method), Converged: $(m.converged)")
 end
 
-function Base.show(io::IO, m::MAModel)
-    println(io, "MA($(m.q)) Model")
-    println(io, "  Intercept: $(round(m.c, digits=4))")
-    println(io, "  MA coefficients: $(round.(m.theta, digits=4))")
-    println(io, "  σ²: $(round(m.sigma2, digits=4))")
-    println(io, "  Log-likelihood: $(round(m.loglik, digits=2))")
-    println(io, "  AIC: $(round(m.aic, digits=2)), BIC: $(round(m.bic, digits=2))")
-    print(io, "  Method: $(m.method), Converged: $(m.converged)")
-end
-
-function Base.show(io::IO, m::ARMAModel)
-    println(io, "ARMA($(m.p),$(m.q)) Model")
-    println(io, "  Intercept: $(round(m.c, digits=4))")
-    m.p > 0 && println(io, "  AR coefficients: $(round.(m.phi, digits=4))")
-    m.q > 0 && println(io, "  MA coefficients: $(round.(m.theta, digits=4))")
-    println(io, "  σ²: $(round(m.sigma2, digits=4))")
-    println(io, "  Log-likelihood: $(round(m.loglik, digits=2))")
-    println(io, "  AIC: $(round(m.aic, digits=2)), BIC: $(round(m.bic, digits=2))")
-    print(io, "  Method: $(m.method), Converged: $(m.converged)")
-end
-
-function Base.show(io::IO, m::ARIMAModel)
-    println(io, "ARIMA($(m.p),$(m.d),$(m.q)) Model")
-    println(io, "  Intercept: $(round(m.c, digits=4))")
-    m.p > 0 && println(io, "  AR coefficients: $(round.(m.phi, digits=4))")
-    m.q > 0 && println(io, "  MA coefficients: $(round.(m.theta, digits=4))")
-    println(io, "  σ²: $(round(m.sigma2, digits=4))")
-    println(io, "  Log-likelihood: $(round(m.loglik, digits=2))")
-    println(io, "  AIC: $(round(m.aic, digits=2)), BIC: $(round(m.bic, digits=2))")
-    print(io, "  Method: $(m.method), Converged: $(m.converged)")
-end
+Base.show(io::IO, m::ARModel) = _show_arima_model(io, "AR($(m.p)) Model", m; phi=m.phi)
+Base.show(io::IO, m::MAModel) = _show_arima_model(io, "MA($(m.q)) Model", m; theta=m.theta)
+Base.show(io::IO, m::ARMAModel) = _show_arima_model(io, "ARMA($(m.p),$(m.q)) Model", m; phi=m.phi, theta=m.theta)
+Base.show(io::IO, m::ARIMAModel) = _show_arima_model(io, "ARIMA($(m.p),$(m.d),$(m.q)) Model", m; phi=m.phi, theta=m.theta)
 
 function Base.show(io::IO, f::ARIMAForecast)
     println(io, "ARIMA Forecast (h=$(f.horizon), $(round(100*f.conf_level, digits=0))% CI)")

@@ -241,17 +241,17 @@ end
 # =============================================================================
 
 """
-    _arma_negloglik(params, y, p, q; include_intercept=true) -> T
+    _unpack_arma_params(params, p, q; include_intercept=true, has_log_sigma2=false)
 
-Compute negative log-likelihood for optimization.
+Unpack a parameter vector into (c, phi, theta, sigma2_or_nothing).
 
-Parameters are packed as [c, φ₁, ..., φₚ, θ₁, ..., θq, log(σ²)].
-Uses log(σ²) for unconstrained optimization of variance.
-
-Returns large penalty for non-stationary/non-invertible parameters.
+When `has_log_sigma2=true`, the last element is treated as log(σ²) and
+the returned fourth element is `exp(log_sigma2)`. Otherwise the fourth
+element is `nothing`.
 """
-function _arma_negloglik(params::Vector{T}, y::Vector{T}, p::Int, q::Int; include_intercept::Bool=true) where {T<:AbstractFloat}
-    # Unpack parameters
+function _unpack_arma_params(params::Vector{T}, p::Int, q::Int;
+                              include_intercept::Bool=true,
+                              has_log_sigma2::Bool=false) where {T}
     idx = 1
     if include_intercept
         c = params[idx]
@@ -266,8 +266,25 @@ function _arma_negloglik(params::Vector{T}, y::Vector{T}, p::Int, q::Int; includ
     theta = q > 0 ? params[idx:idx+q-1] : T[]
     idx += q
 
-    log_sigma2 = params[idx]
-    sigma2 = exp(log_sigma2)
+    sigma2 = has_log_sigma2 ? exp(params[idx]) : nothing
+
+    (c, phi, theta, sigma2)
+end
+
+"""
+    _arma_negloglik(params, y, p, q; include_intercept=true) -> T
+
+Compute negative log-likelihood for optimization.
+
+Parameters are packed as [c, φ₁, ..., φₚ, θ₁, ..., θq, log(σ²)].
+Uses log(σ²) for unconstrained optimization of variance.
+
+Returns large penalty for non-stationary/non-invertible parameters.
+"""
+function _arma_negloglik(params::Vector{T}, y::Vector{T}, p::Int, q::Int; include_intercept::Bool=true) where {T<:AbstractFloat}
+    c, phi, theta, sigma2 = _unpack_arma_params(params, p, q;
+                                                  include_intercept=include_intercept,
+                                                  has_log_sigma2=true)
 
     # Penalty for non-stationarity or non-invertibility
     penalty = T(1e10)

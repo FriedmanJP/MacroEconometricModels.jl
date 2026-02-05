@@ -10,6 +10,21 @@ Implements:
 using LinearAlgebra, Distributions
 
 # =============================================================================
+# Shared Helpers
+# =============================================================================
+
+"""
+    _confidence_band(forecasts, se, conf_level)
+
+Compute symmetric confidence interval bounds from forecasts, standard errors,
+and a confidence level.
+"""
+function _confidence_band(forecasts::Vector{T}, se::Vector{T}, conf_level::T) where {T}
+    z = T(quantile(Normal(), 1 - (1 - conf_level) / 2))
+    (forecasts .- z .* se, forecasts .+ z .* se)
+end
+
+# =============================================================================
 # ψ-Weights (MA Representation Coefficients)
 # =============================================================================
 
@@ -115,10 +130,7 @@ function forecast(model::ARModel{T}, h::Int; conf_level::T=T(0.95)) where {T<:Ab
     var_fc = _forecast_variance(model.sigma2, psi, h)
     se = sqrt.(var_fc)
 
-    # Confidence intervals
-    z = T(quantile(Normal(), 1 - (1 - conf_level) / 2))
-    ci_lower = forecasts .- z .* se
-    ci_upper = forecasts .+ z .* se
+    ci_lower, ci_upper = _confidence_band(forecasts, se, conf_level)
 
     ARIMAForecast(forecasts, ci_lower, ci_upper, se, h, conf_level)
 end
@@ -166,10 +178,7 @@ function forecast(model::MAModel{T}, h::Int; conf_level::T=T(0.95)) where {T<:Ab
     var_fc = _forecast_variance(model.sigma2, psi, h)
     se = sqrt.(var_fc)
 
-    # Confidence intervals
-    z = T(quantile(Normal(), 1 - (1 - conf_level) / 2))
-    ci_lower = forecasts .- z .* se
-    ci_upper = forecasts .+ z .* se
+    ci_lower, ci_upper = _confidence_band(forecasts, se, conf_level)
 
     ARIMAForecast(forecasts, ci_lower, ci_upper, se, h, conf_level)
 end
@@ -227,10 +236,7 @@ function forecast(model::ARMAModel{T}, h::Int; conf_level::T=T(0.95)) where {T<:
     var_fc = _forecast_variance(model.sigma2, psi, h)
     se = sqrt.(var_fc)
 
-    # Confidence intervals
-    z = T(quantile(Normal(), 1 - (1 - conf_level) / 2))
-    ci_lower = forecasts .- z .* se
-    ci_upper = forecasts .+ z .* se
+    ci_lower, ci_upper = _confidence_band(forecasts, se, conf_level)
 
     ARIMAForecast(forecasts, ci_lower, ci_upper, se, h, conf_level)
 end

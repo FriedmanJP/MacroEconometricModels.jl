@@ -21,6 +21,7 @@ docs/build/
 
 # Claude Code settings
 .claude/
+CLAUDE.md
 
 # Julia Manifest files (environment-specific, should be regenerated)
 Manifest.toml
