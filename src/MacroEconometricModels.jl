@@ -95,6 +95,10 @@ include("lp_extensions.jl") # LP-IV, Smooth LP, State LP, Propensity LP
 # IRF and FEVD (after LP types for lp_irf support)
 include("irf.jl")
 include("fevd.jl")
+include("hd.jl")
+
+# Publication-quality summary tables (after all result types defined)
+include("summary.jl")
 
 # =============================================================================
 # Exports - Types
@@ -198,6 +202,21 @@ export irf_percentiles, irf_mean
 
 export irf
 export fevd
+
+# =============================================================================
+# Exports - Historical Decomposition
+# =============================================================================
+
+export AbstractHistoricalDecomposition
+export HistoricalDecomposition, BayesianHistoricalDecomposition
+export historical_decomposition
+export contribution, total_shock_contribution, verify_decomposition
+
+# =============================================================================
+# Exports - Summary Tables
+# =============================================================================
+
+export summary, table, print_table
 
 # =============================================================================
 # Exports - Factor Models

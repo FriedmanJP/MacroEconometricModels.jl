@@ -144,6 +144,8 @@ The package is organized into the following modules:
 | `identification.jl` | Structural identification schemes |
 | `irf.jl` | Impulse response function computation |
 | `fevd.jl` | Forecast error variance decomposition |
+| `hd.jl` | Historical decomposition |
+| `summary.jl` | Publication-quality summary tables |
 | `lp_*.jl` | Local Projections suite |
 | `factormodels.jl` | Static, dynamic, and generalized dynamic factor models |
 | `unitroot.jl` | Unit root and cointegration tests (ADF, KPSS, PP, ZA, Ng-Perron, Johansen) |
@@ -214,6 +216,6 @@ Contributions are welcome! Please see the [GitHub repository](https://github.com
 ## Contents
 
 ```@contents
-Pages = ["manual.md", "lp.md", "factormodels.md", "bayesian.md", "hypothesis_tests.md", "api.md", "examples.md"]
+Pages = ["manual.md", "lp.md", "factormodels.md", "bayesian.md", "innovation_accounting.md", "hypothesis_tests.md", "api.md", "examples.md"]
 Depth = 2
 ```

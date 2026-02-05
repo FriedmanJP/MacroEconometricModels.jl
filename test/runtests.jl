@@ -39,6 +39,14 @@ using Test
         include("test_fevd.jl")
     end
 
+    @testset "Historical Decomposition" begin
+        include("test_hd.jl")
+    end
+
+    @testset "Summary Tables" begin
+        include("test_summary.jl")
+    end
+
     @testset "Factor Model" begin
         include("test_factormodel.jl")
     end

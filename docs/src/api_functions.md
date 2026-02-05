@@ -32,15 +32,17 @@ Order   = [:function]
 
 ---
 
-## Structural Analysis
-
-### Identification Schemes
+## Structural Identification
 
 ```@autodocs
 Modules = [MacroEconometricModels]
 Pages   = ["identification.jl"]
 Order   = [:function]
 ```
+
+---
+
+## Innovation Accounting
 
 ### Impulse Response Functions
 
@@ -55,6 +57,22 @@ Order   = [:function]
 ```@autodocs
 Modules = [MacroEconometricModels]
 Pages   = ["fevd.jl"]
+Order   = [:function]
+```
+
+### Historical Decomposition
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["hd.jl"]
+Order   = [:function]
+```
+
+### Summary Tables
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["summary.jl"]
 Order   = [:function]
 ```
 

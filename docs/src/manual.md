@@ -188,190 +188,25 @@ Then ``B_0 = (I - A(1)) C(1)``.
 
 ---
 
-## Impulse Response Functions (IRF)
+## Innovation Accounting
 
-### Definition
+For detailed coverage of innovation accounting tools, see the dedicated [Innovation Accounting](innovation_accounting.md) chapter. This includes:
 
-The impulse response function ``\Theta_h`` measures the effect of a one-unit structural shock at time ``t`` on the endogenous variables at time ``t+h``:
-
-```math
-\Theta_h = \frac{\partial y_{t+h}}{\partial \varepsilon_t'}
-```
-
-For a VAR, the IRF at horizon ``h`` is computed recursively:
-
-```math
-\Theta_h = \sum_{i=1}^{\min(h,p)} A_i \Theta_{h-i}
-```
-
-with ``\Theta_0 = B_0`` (the structural impact matrix).
-
-### Companion Form Representation
-
-Using the companion form, IRFs can be computed as:
-
-```math
-\Theta_h = J F^h J' B_0
-```
-
-where ``J = [I_n, 0, \ldots, 0]`` is an ``n \times np`` selection matrix and ``F`` is the companion matrix.
-
-### Cumulative IRF
-
-The cumulative impulse response up to horizon ``H`` is:
-
-```math
-\Theta^{cum}_H = \sum_{h=0}^{H} \Theta_h
-```
-
-As ``H \to \infty``, for a stable VAR:
-
-```math
-\Theta^{cum}_\infty = (I_n - A_1 - \cdots - A_p)^{-1} B_0
-```
-
-### Confidence Intervals
-
-**Bootstrap (Frequentist)**: We use the residual bootstrap of Kilian (1998):
-1. Estimate the VAR and save residuals ``\hat{u}_t``
-2. Generate bootstrap sample by resampling residuals with replacement
-3. Re-estimate the VAR and compute IRFs
-4. Repeat ``B`` times to build the distribution
-
-**Credible Intervals (Bayesian)**: For each MCMC draw, compute IRFs and report posterior quantiles (e.g., 16th and 84th percentiles for 68% intervals).
-
-**Reference**: Kilian (1998), Lütkepohl (2005, Chapter 3)
-
----
-
-## Forecast Error Variance Decomposition (FEVD)
-
-### Definition
-
-The FEVD measures the proportion of the ``h``-step ahead forecast error variance of variable ``i`` attributable to structural shock ``j``:
-
-```math
-\text{FEVD}_{ij}(h) = \frac{\sum_{s=0}^{h-1} (\Theta_s)_{ij}^2}{\sum_{s=0}^{h-1} \sum_{k=1}^{n} (\Theta_s)_{ik}^2}
-```
-
-where ``(\Theta_s)_{ij}`` is the ``(i,j)`` element of the impulse response matrix at horizon ``s``.
-
-### Properties
-
-- ``0 \leq \text{FEVD}_{ij}(h) \leq 1`` for all ``i, j, h``
-- ``\sum_{j=1}^{n} \text{FEVD}_{ij}(h) = 1`` for all ``i, h``
-- As ``h \to \infty``, FEVD converges to the unconditional variance decomposition
-
-**Reference**: Lütkepohl (2005, Section 2.3.3)
+- **Impulse Response Functions (IRF)**: Dynamic effects of structural shocks
+- **Forecast Error Variance Decomposition (FEVD)**: Variance contribution of each shock
+- **Historical Decomposition (HD)**: Decompose observed movements into shock contributions
+- **Summary Tables**: Publication-quality output with `summary()`, `table()`, `print_table()`
 
 ---
 
 ## Bayesian VAR (BVAR)
 
-### Bayesian Framework
+For comprehensive coverage of Bayesian VAR estimation, see the dedicated [Bayesian VAR](bayesian.md) chapter. Key topics include:
 
-In the Bayesian approach, we treat the VAR parameters as random variables and update our beliefs using Bayes' theorem:
-
-```math
-p(B, \Sigma | Y) \propto p(Y | B, \Sigma) \cdot p(B, \Sigma)
-```
-
-where:
-- ``p(Y | B, \Sigma)`` is the likelihood
-- ``p(B, \Sigma)`` is the prior
-- ``p(B, \Sigma | Y)`` is the posterior
-
-### The Minnesota Prior
-
-The Minnesota prior (Litterman, 1986; Doan, Litterman & Sims, 1984) shrinks VAR coefficients toward a random walk prior:
-
-**Prior Mean**: Each variable follows a random walk:
-```math
-E[A_{1,ii}] = 1, \quad E[A_{1,ij}] = 0 \text{ for } i \neq j, \quad E[A_l] = 0 \text{ for } l > 1
-```
-
-**Prior Variance**: The prior variance for coefficient ``(i,j)`` at lag ``l`` is:
-
-```math
-\text{Var}(A_{l,ij}) = \begin{cases}
-\frac{\tau^2}{l^d} & \text{if } i = j \text{ (own lag)} \\
-\frac{\tau^2 \omega^2}{l^d} \cdot \frac{\sigma_i^2}{\sigma_j^2} & \text{if } i \neq j \text{ (cross lag)}
-\end{cases}
-```
-
-where:
-- ``\tau`` is the overall tightness (shrinkage intensity)
-- ``d`` is the lag decay (typically ``d = 2``)
-- ``\omega`` controls cross-variable shrinkage (typically ``\omega < 1``)
-- ``\sigma_i^2`` is the residual variance from a univariate AR(1) for variable ``i``
-
-### Dummy Observations Approach
-
-We implement the Minnesota prior using dummy observations (Theil-Goldberger mixed estimation). The augmented data matrices are:
-
-**Prior on coefficients** (tightness dummies):
-```math
-Y_d = \begin{bmatrix}
-\text{diag}(\sigma_1, \ldots, \sigma_n) / \tau \\
-0_{n(p-1) \times n} \\
-\text{diag}(\sigma_1, \ldots, \sigma_n) \\
-0_{1 \times n}
-\end{bmatrix}, \quad
-X_d = \begin{bmatrix}
-0_{n \times 1} & J_p \otimes \text{diag}(\sigma_1, \ldots, \sigma_n) / \tau \\
-0_{n(p-1) \times 1} & I_{p-1} \otimes \text{diag}(\sigma_1, \ldots, \sigma_n) \\
-0_{n \times 1} & 0_{n \times np} \\
-c & 0_{1 \times np}
-\end{bmatrix}
-```
-
-where ``J_p = \text{diag}(1, 2^d, \ldots, p^d)``.
-
-The posterior is then computed as OLS on the augmented data ``[Y; Y_d]`` and ``[X; X_d]``.
-
-**Reference**: Litterman (1986), Kadiyala & Karlsson (1997), Bańbura, Giannone & Reichlin (2010)
-
-### Hyperparameter Optimization (Giannone, Lenza & Primiceri, 2015)
-
-Rather than selecting ``\tau`` subjectively, we can optimize it by maximizing the marginal likelihood:
-
-```math
-p(Y | \tau) = \int p(Y | B, \Sigma) p(B, \Sigma | \tau) \, dB \, d\Sigma
-```
-
-For the Normal-Inverse-Wishart prior with dummy observations, the log marginal likelihood has an analytical form:
-
-```math
-\log p(Y | \tau) = c + \frac{T-k}{2} \log|\tilde{S}^{-1}| - \frac{T_d}{2} \log|\tilde{S}_d^{-1}| + \log \frac{\Gamma_n(\frac{T+T_d - k}{2})}{\Gamma_n(\frac{T_d - k}{2})}
-```
-
-where ``\tilde{S}`` and ``\tilde{S}_d`` are the residual sum of squares from the augmented and dummy-only regressions.
-
-**Reference**: Giannone, Lenza & Primiceri (2015), Carriero, Clark & Marcellino (2015)
-
-### MCMC Estimation with Turing.jl
-
-For more flexible priors or non-conjugate settings, we use MCMC via Turing.jl with the NUTS sampler:
-
-```julia
-@model function bvar_model(Y, X, prior_mean, prior_var, ν₀, S₀)
-    n = size(Y, 2)
-    k = size(X, 2)
-
-    # Prior on error covariance
-    Σ ~ InverseWishart(ν₀, S₀)
-
-    # Prior on coefficients
-    B ~ MatrixNormal(prior_mean, prior_var, Σ)
-
-    # Likelihood
-    for t in axes(Y, 1)
-        Y[t, :] ~ MvNormal(X[t, :]' * B, Σ)
-    end
-end
-```
-
-**Reference**: Gelman et al. (2013), Hoffman & Gelman (2014)
+- Minnesota/Litterman prior specification
+- Hyperparameter optimization via marginal likelihood (Giannone, Lenza & Primiceri, 2015)
+- MCMC estimation with Turing.jl
+- Posterior inference and credible intervals
 
 ---
 

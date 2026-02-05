@@ -32,6 +32,16 @@ AbstractFEVD
 
 ---
 
+## Historical Decomposition
+
+```@docs
+HistoricalDecomposition
+BayesianHistoricalDecomposition
+AbstractHistoricalDecomposition
+```
+
+---
+
 ## Factor Models
 
 ```@docs
@@ -113,6 +123,10 @@ AbstractImpulseResponse
 AbstractFEVD
 ├── FEVD{T}
 └── BayesianFEVD{T}
+
+AbstractHistoricalDecomposition
+├── HistoricalDecomposition{T}
+└── BayesianHistoricalDecomposition{T}
 
 AbstractFactorModel
 ├── FactorModel{T}
