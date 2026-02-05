@@ -280,4 +280,164 @@ using Random
         @test verify_decomposition(hd)
     end
 
+    # =================================================================
+    # Bayesian HD: verify_decomposition, show, accessors
+    # =================================================================
+
+    @testset "BayesianHistoricalDecomposition verify_decomposition" begin
+        # Construct synthetic Bayesian HD where mean contributions + initial ≈ actual
+        T_eff, n = 30, 2
+        actual = randn(T_eff, n)
+
+        # Make mean contributions and initial_mean sum to actual
+        mean_arr = randn(T_eff, n, n)
+        initial_m = zeros(T_eff, n)
+        for i in 1:n
+            total_contrib = vec(sum(mean_arr[:, i, :], dims=2))
+            initial_m[:, i] = actual[:, i] - total_contrib
+        end
+
+        nq = 3
+        quantiles_arr = randn(T_eff, n, n, nq)
+        initial_q = randn(T_eff, n, nq)
+        shocks_m = randn(T_eff, n)
+        q_levels = [0.16, 0.5, 0.84]
+
+        bhd = BayesianHistoricalDecomposition{Float64}(
+            quantiles_arr, mean_arr, initial_q, initial_m,
+            shocks_m, actual, T_eff,
+            ["Var 1", "Var 2"], ["Shock 1", "Shock 2"],
+            q_levels, :cholesky
+        )
+
+        @test verify_decomposition(bhd)
+    end
+
+    @testset "BayesianHistoricalDecomposition show method" begin
+        T_eff, n = 20, 2
+        nq = 3
+        bhd = BayesianHistoricalDecomposition{Float64}(
+            randn(T_eff, n, n, nq), randn(T_eff, n, n),
+            randn(T_eff, n, nq), randn(T_eff, n),
+            randn(T_eff, n), randn(T_eff, n), T_eff,
+            ["Var 1", "Var 2"], ["Shock 1", "Shock 2"],
+            [0.16, 0.5, 0.84], :cholesky
+        )
+
+        io = IOBuffer()
+        show(io, bhd)
+        output = String(take!(io))
+
+        @test occursin("Bayesian Historical Decomposition", output)
+        @test occursin("cholesky", output)
+        @test occursin("Variables", output)
+        @test occursin("Quantiles", output)
+        @test occursin("Posterior Mean", output)
+    end
+
+    @testset "BayesianHD accessor functions" begin
+        T_eff, n = 30, 2
+        nq = 3
+        mean_arr = randn(T_eff, n, n)
+        quantiles_arr = randn(T_eff, n, n, nq)
+
+        bhd = BayesianHistoricalDecomposition{Float64}(
+            quantiles_arr, mean_arr,
+            randn(T_eff, n, nq), randn(T_eff, n),
+            randn(T_eff, n), randn(T_eff, n), T_eff,
+            ["Var 1", "Var 2"], ["Shock 1", "Shock 2"],
+            [0.16, 0.5, 0.84], :cholesky
+        )
+
+        # contribution with mean
+        c_mean = contribution(bhd, 1, 1; stat=:mean)
+        @test length(c_mean) == T_eff
+        @test c_mean == bhd.mean[:, 1, 1]
+
+        # contribution with quantile index
+        c_q1 = contribution(bhd, 1, 1; stat=1)
+        @test c_q1 == bhd.quantiles[:, 1, 1, 1]
+
+        c_q3 = contribution(bhd, 1, 1; stat=3)
+        @test c_q3 == bhd.quantiles[:, 1, 1, 3]
+
+        # contribution with string
+        c_str = contribution(bhd, "Var 1", "Shock 1"; stat=:mean)
+        @test c_str == c_mean
+
+        # Invalid string
+        @test_throws ArgumentError contribution(bhd, "NonExistent", "Shock 1")
+
+        # total_shock_contribution
+        total = total_shock_contribution(bhd, 1)
+        @test length(total) == T_eff
+        expected = vec(sum(bhd.mean[:, 1, :], dims=2))
+        @test isapprox(total, expected, atol=1e-10)
+
+        # total_shock_contribution with string
+        total_str = total_shock_contribution(bhd, "Var 1")
+        @test total_str == total
+
+        # Invalid arguments
+        @test_throws AssertionError contribution(bhd, 10, 1)
+        @test_throws AssertionError contribution(bhd, 1, 10)
+        @test_throws AssertionError contribution(bhd, 1, 1; stat=10)
+        @test_throws ArgumentError contribution(bhd, 1, 1; stat=:invalid)
+    end
+
+    @testset "HD with long_run identification" begin
+        Random.seed!(555)
+        T_obs = 150
+        n = 2
+        p = 1
+
+        Y = randn(T_obs, n)
+        model = estimate_var(Y, p)
+        horizon = T_obs - p
+
+        hd_lr = historical_decomposition(model, horizon; method=:long_run)
+        @test hd_lr.method == :long_run
+        @test verify_decomposition(hd_lr)
+        @test size(hd_lr.contributions) == (T_obs - p, n, n)
+    end
+
+    @testset "HD with truncated horizon" begin
+        Random.seed!(666)
+        T_obs = 100
+        n = 2
+        p = 2
+
+        Y = randn(T_obs, n)
+        model = estimate_var(Y, p)
+
+        # Horizon smaller than T_eff
+        horizon = 20
+        hd = historical_decomposition(model, horizon)
+        @test hd.T_eff == T_obs - p
+        @test verify_decomposition(hd)
+    end
+
+    @testset "HD 3-variable model" begin
+        Random.seed!(777)
+        T_obs = 200
+        n = 3
+        p = 1
+
+        Y = randn(T_obs, n)
+        model = estimate_var(Y, p)
+        hd = historical_decomposition(model, T_obs - p)
+
+        @test size(hd.contributions) == (T_obs - p, n, n)
+        @test size(hd.initial_conditions) == (T_obs - p, n)
+        @test length(hd.variables) == n
+        @test length(hd.shock_names) == n
+        @test verify_decomposition(hd)
+
+        # Check all accessor combos work
+        for i in 1:n, j in 1:n
+            c = contribution(hd, i, j)
+            @test length(c) == T_obs - p
+        end
+    end
+
 end

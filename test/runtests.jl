@@ -83,4 +83,12 @@ using Test
     @testset "Documentation Examples" begin
         include("test_examples.jl")
     end
+
+    @testset "GMM Estimation" begin
+        include("test_gmm.jl")
+    end
+
+    @testset "Covariance Estimators" begin
+        include("test_covariance.jl")
+    end
 end

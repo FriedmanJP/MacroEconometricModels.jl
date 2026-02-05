@@ -569,3 +569,298 @@ end
     arima = fit(ARIMAModel, y_rw, 1, 1, 0)
     @test isa(arima, ARIMAModel)
 end
+
+# =============================================================================
+# StatsAPI Interface Tests for MA, ARMA, ARIMA
+# =============================================================================
+
+@testset "StatsAPI Interface - MA Model" begin
+    Random.seed!(7000)
+    n = 300
+    # Generate MA(1) data
+    eps = randn(n + 1)
+    theta_true = 0.6
+    y = [eps[t] + theta_true * eps[t-1] for t in 2:(n+1)]
+
+    model = estimate_ma(y, 1)
+
+    # nobs
+    @test nobs(model) == n
+    @test nobs(model) == length(model.y)
+
+    # dof: p + q + 2 (intercept + sigma2) = 0 + 1 + 2 = 3
+    @test dof(model) == 3
+
+    # StatsAPI.dof_residual
+    @test StatsAPI.dof_residual(model) == length(model.residuals) - dof(model) + 1
+
+    # coef: [intercept, theta]
+    c = coef(model)
+    @test length(c) == 2
+    @test c[1] ≈ model.c
+    @test c[2] ≈ model.theta[1]
+
+    # residuals
+    r = residuals(model)
+    @test length(r) == length(model.residuals)
+    @test r == model.residuals
+
+    # predict (fitted values)
+    f = predict(model)
+    @test length(f) == length(model.fitted)
+    @test f == model.fitted
+
+    # fitted + residuals ≈ y (for the effective sample)
+    y_eff = model.y[end-length(r)+1:end]
+    @test isapprox(f + r, y_eff, atol=1e-8)
+
+    # loglikelihood
+    ll = loglikelihood(model)
+    @test !isnan(ll)
+    @test isfinite(ll)
+    @test ll == model.loglik
+
+    # aic, bic
+    @test !isnan(aic(model))
+    @test !isnan(bic(model))
+    @test aic(model) == model.aic
+    @test bic(model) == model.bic
+
+    # r2
+    r2_val = r2(model)
+    @test 0 <= r2_val <= 1 || r2_val ≈ 0  # Can be 0 for weak fit
+
+    # islinear
+    @test islinear(model) == true
+
+    # ar_order, ma_order, diff_order
+    @test MacroEconometricModels.ar_order(model) == 0
+    @test MacroEconometricModels.ma_order(model) == 1
+    @test MacroEconometricModels.diff_order(model) == 0
+end
+
+@testset "StatsAPI Interface - MA(2) Model" begin
+    Random.seed!(7100)
+    n = 300
+    eps = randn(n + 2)
+    y = [eps[t] + 0.5 * eps[t-1] - 0.3 * eps[t-2] for t in 3:(n+2)]
+
+    model = estimate_ma(y, 2)
+
+    @test nobs(model) == n
+    @test dof(model) == 4  # 0 + 2 + 2
+    c = coef(model)
+    @test length(c) == 3  # intercept + 2 theta
+    @test islinear(model)
+end
+
+@testset "StatsAPI Interface - ARMA Model" begin
+    Random.seed!(7200)
+    n = 400
+    # Generate ARMA(1,1) data
+    phi_true = 0.5
+    theta_true = 0.3
+    eps = randn(n)
+    y = zeros(n)
+    y[1] = eps[1]
+    for t in 2:n
+        y[t] = phi_true * y[t-1] + eps[t] + theta_true * eps[t-1]
+    end
+
+    model = estimate_arma(y, 1, 1)
+
+    # nobs
+    @test nobs(model) == n
+
+    # dof: p + q + 2 = 1 + 1 + 2 = 4
+    @test dof(model) == 4
+
+    # StatsAPI.dof_residual
+    @test StatsAPI.dof_residual(model) == length(model.residuals) - dof(model) + 1
+
+    # coef: [intercept, phi, theta]
+    c = coef(model)
+    @test length(c) == 3
+
+    # residuals and fitted
+    r = residuals(model)
+    f = predict(model)
+    @test length(r) > 0
+    @test length(f) > 0
+    @test length(r) == length(f)
+    y_eff = model.y[end-length(r)+1:end]
+    @test isapprox(f + r, y_eff, atol=1e-8)
+
+    # loglikelihood, aic, bic
+    @test isfinite(loglikelihood(model))
+    @test isfinite(aic(model))
+    @test isfinite(bic(model))
+
+    # r2
+    r2_val = r2(model)
+    @test r2_val >= 0
+
+    @test islinear(model)
+
+    # ar_order, ma_order, diff_order
+    @test MacroEconometricModels.ar_order(model) == 1
+    @test MacroEconometricModels.ma_order(model) == 1
+    @test MacroEconometricModels.diff_order(model) == 0
+end
+
+@testset "StatsAPI Interface - ARMA(2,1) Model" begin
+    Random.seed!(7300)
+    n = 400
+    eps = randn(n)
+    y = zeros(n)
+    y[1:2] = randn(2)
+    for t in 3:n
+        y[t] = 0.4 * y[t-1] + 0.2 * y[t-2] + eps[t] + 0.3 * eps[t-1]
+    end
+
+    model = estimate_arma(y, 2, 1)
+
+    @test nobs(model) == n
+    @test dof(model) == 5  # 2 + 1 + 2
+    c = coef(model)
+    @test length(c) == 4  # intercept + 2 phi + 1 theta
+end
+
+@testset "StatsAPI Interface - ARIMA Model" begin
+    Random.seed!(7400)
+    n = 300
+    # Generate ARIMA(1,1,1) data
+    eps = randn(n)
+    z = zeros(n)
+    z[1] = eps[1]
+    for t in 2:n
+        z[t] = 0.5 * z[t-1] + eps[t] + 0.3 * eps[t-1]
+    end
+    y = cumsum(z)  # Integration order 1
+
+    model = estimate_arima(y, 1, 1, 1)
+
+    # nobs (on original series)
+    @test nobs(model) == n
+
+    # dof: p + q + 2 = 1 + 1 + 2 = 4
+    @test dof(model) == 4
+
+    # StatsAPI.dof_residual
+    @test StatsAPI.dof_residual(model) == length(model.residuals) - dof(model) + 1
+
+    # coef: [intercept, phi, theta]
+    c = coef(model)
+    @test length(c) == 3
+
+    # residuals and fitted
+    r = residuals(model)
+    f = predict(model)
+    @test length(r) > 0
+    @test length(f) > 0
+
+    # loglikelihood, aic, bic
+    @test isfinite(loglikelihood(model))
+    @test isfinite(aic(model))
+    @test isfinite(bic(model))
+
+    # r2
+    r2_val = r2(model)
+    @test r2_val >= 0
+
+    @test islinear(model)
+
+    # ar_order, ma_order, diff_order
+    @test MacroEconometricModels.ar_order(model) == 1
+    @test MacroEconometricModels.ma_order(model) == 1
+    @test MacroEconometricModels.diff_order(model) == 1
+
+    # ARIMA-specific fields
+    @test length(model.y_diff) == n - 1
+    @test model.d == 1
+    @test model.p == 1
+    @test model.q == 1
+end
+
+@testset "StatsAPI Interface - ARIMA(2,1,0) Model" begin
+    Random.seed!(7500)
+    n = 300
+    z = zeros(n)
+    z[1:2] = randn(2)
+    for t in 3:n
+        z[t] = 0.4 * z[t-1] + 0.2 * z[t-2] + randn()
+    end
+    y = cumsum(z)
+
+    model = estimate_arima(y, 2, 1, 0)
+
+    @test nobs(model) == n
+    @test dof(model) == 4  # 2 + 0 + 2
+    c = coef(model)
+    @test length(c) == 3  # intercept + 2 phi + 0 theta
+    @test MacroEconometricModels.diff_order(model) == 1
+end
+
+@testset "StatsAPI Interface - ARIMA(0,1,2) Model" begin
+    Random.seed!(7600)
+    n = 300
+    eps = randn(n + 2)
+    z = [eps[t] + 0.4 * eps[t-1] - 0.2 * eps[t-2] for t in 3:(n+2)]
+    y = cumsum(z)
+
+    model = estimate_arima(y, 0, 1, 2)
+
+    @test nobs(model) == n
+    @test dof(model) == 4  # 0 + 2 + 2
+    c = coef(model)
+    @test length(c) == 3  # intercept + 0 phi + 2 theta
+end
+
+@testset "StatsAPI consistency checks" begin
+    Random.seed!(7700)
+
+    # For each model type, check StatsAPI.dof_residual == nobs_residuals - dof + 1
+    y = randn(300)
+
+    for (ModelType, args) in [
+        (MAModel, (y, 2)),
+        (ARMAModel, (y, 1, 1)),
+    ]
+        model = fit(ModelType, args...)
+        @test StatsAPI.dof_residual(model) == length(residuals(model)) - dof(model) + 1
+    end
+
+    y_rw = cumsum(randn(300))
+    model_arima = fit(ARIMAModel, y_rw, 1, 1, 1)
+    @test StatsAPI.dof_residual(model_arima) == length(residuals(model_arima)) - dof(model_arima) + 1
+end
+
+@testset "Display methods - MA/ARMA/ARIMA" begin
+    Random.seed!(7800)
+    y = randn(200)
+    y_rw = cumsum(randn(200))
+
+    # MA show
+    ma = estimate_ma(y, 1)
+    io = IOBuffer()
+    show(io, ma)
+    output = String(take!(io))
+    @test occursin("MA(1)", output)
+    @test occursin("MA coefficients", output)
+
+    # ARMA show
+    arma = estimate_arma(y, 1, 1)
+    io = IOBuffer()
+    show(io, arma)
+    output = String(take!(io))
+    @test occursin("ARMA(1,1)", output)
+    @test occursin("AR coefficients", output)
+    @test occursin("MA coefficients", output)
+
+    # ARIMA show
+    arima = estimate_arima(y_rw, 1, 1, 1)
+    io = IOBuffer()
+    show(io, arima)
+    output = String(take!(io))
+    @test occursin("ARIMA(1,1,1)", output)
+end
