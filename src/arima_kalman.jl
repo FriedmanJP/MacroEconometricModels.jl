@@ -67,47 +67,26 @@ end
 # =============================================================================
 
 """
-    _is_stationary(phi) -> Bool
+    _roots_inside_unit_circle(coeffs) -> Bool
 
-Check if AR polynomial is stationary (all roots outside unit circle).
-Uses companion matrix eigenvalue check: |λᵢ| < 1 for all eigenvalues.
+Check if all eigenvalues of the companion matrix have modulus < 1.
+Used for both stationarity (AR) and invertibility (MA) checks.
 """
-function _is_stationary(phi::Vector{T}) where {T<:AbstractFloat}
-    isempty(phi) && return true
-    p = length(phi)
-
-    # Build companion matrix
-    if p == 1
-        return abs(phi[1]) < one(T)
-    end
-
-    F = zeros(T, p, p)
-    F[1, :] = phi
-    F[2:p, 1:p-1] = I(p - 1)
-
+function _roots_inside_unit_circle(coeffs::Vector{T}) where {T<:AbstractFloat}
+    isempty(coeffs) && return true
+    n = length(coeffs)
+    n == 1 && return abs(coeffs[1]) < one(T)
+    F = zeros(T, n, n)
+    F[1, :] = coeffs
+    F[2:n, 1:n-1] = I(n - 1)
     maximum(abs.(eigvals(F))) < one(T)
 end
 
-"""
-    _is_invertible(theta) -> Bool
+"""Check if AR polynomial is stationary (all roots outside unit circle)."""
+_is_stationary(phi::Vector{<:AbstractFloat}) = _roots_inside_unit_circle(phi)
 
-Check if MA polynomial is invertible (all roots outside unit circle).
-"""
-function _is_invertible(theta::Vector{T}) where {T<:AbstractFloat}
-    isempty(theta) && return true
-    q = length(theta)
-
-    if q == 1
-        return abs(theta[1]) < one(T)
-    end
-
-    # Build companion matrix for MA polynomial
-    F = zeros(T, q, q)
-    F[1, :] = theta
-    F[2:q, 1:q-1] = I(q - 1)
-
-    maximum(abs.(eigvals(F))) < one(T)
-end
+"""Check if MA polynomial is invertible (all roots outside unit circle)."""
+_is_invertible(theta::Vector{<:AbstractFloat}) = _roots_inside_unit_circle(theta)
 
 # =============================================================================
 # Kalman Filter for Log-Likelihood

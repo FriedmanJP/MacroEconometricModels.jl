@@ -40,6 +40,14 @@ _compute_aic_bic(loglik::T, k::Int, n::Int) where {T} =
     (-2 * loglik + 2 * k, -2 * loglik + k * log(T(n)))
 
 """
+    _count_params(p, q; include_intercept=true)
+
+Count total number of parameters: intercept + AR + MA + sigma2.
+"""
+_count_params(p::Int, q::Int; include_intercept::Bool=true) =
+    (include_intercept ? 1 : 0) + p + q + 1
+
+"""
     _white_noise_fit(y; include_intercept=true)
 
 Fit a white-noise (p=0, q=0) model. Returns (c, sigma2, loglik, residuals, fitted).
@@ -122,21 +130,21 @@ function _yule_walker(y::Vector{T}, p::Int) where {T<:AbstractFloat}
     end
 end
 
-"""Truncate AR coefficients to ensure stationarity."""
-function _truncate_to_stationary(phi::Vector{T}; max_iter::Int=100) where {T<:AbstractFloat}
-    _is_stationary(phi) && return phi
-
-    # Scale down coefficients until stationary
+"""Scale coefficients until all companion-matrix eigenvalues lie inside the unit circle."""
+function _truncate_to_stable(coeffs::Vector{T}; max_iter::Int=100) where {T<:AbstractFloat}
+    _roots_inside_unit_circle(coeffs) && return coeffs
     scale = T(0.99)
-    phi_new = copy(phi)
+    coeffs_new = copy(coeffs)
     for _ in 1:max_iter
-        phi_new .*= scale
-        _is_stationary(phi_new) && return phi_new
+        coeffs_new .*= scale
+        _roots_inside_unit_circle(coeffs_new) && return coeffs_new
     end
-
-    # Last resort: return zeros
-    return zeros(T, length(phi))
+    return zeros(T, length(coeffs))
 end
+
+"""Truncate AR coefficients to ensure stationarity."""
+_truncate_to_stationary(phi::Vector{T}; kw...) where {T<:AbstractFloat} = _truncate_to_stable(phi; kw...)
+
 
 """
     _innovations_algorithm(y, q) -> theta
@@ -181,18 +189,7 @@ function _innovations_algorithm(y::Vector{T}, q::Int) where {T<:AbstractFloat}
 end
 
 """Truncate MA coefficients to ensure invertibility."""
-function _truncate_to_invertible(theta::Vector{T}; max_iter::Int=100) where {T<:AbstractFloat}
-    _is_invertible(theta) && return theta
-
-    scale = T(0.99)
-    theta_new = copy(theta)
-    for _ in 1:max_iter
-        theta_new .*= scale
-        _is_invertible(theta_new) && return theta_new
-    end
-
-    return zeros(T, length(theta))
-end
+_truncate_to_invertible(theta::Vector{T}; kw...) where {T<:AbstractFloat} = _truncate_to_stable(theta; kw...)
 
 # =============================================================================
 # CSS Estimation
@@ -221,24 +218,25 @@ function _css_objective(params::Vector{T}, y::Vector{T}, p::Int, q::Int; include
 end
 
 """
-    _estimate_css(y, p, q; include_intercept=true, max_iter=500, tol=1e-8) -> (params, converged, iterations)
+    _estimate_css(y, p, q; ...) -> (c, phi, theta, sigma2, loglik, residuals, fitted, converged, iterations)
 
 Estimate ARMA parameters via Conditional Sum of Squares.
+Returns the same 9-tuple as `_estimate_mle` for pipeline consistency.
 """
 function _estimate_css(y::Vector{T}, p::Int, q::Int; include_intercept::Bool=true, max_iter::Int=500, tol::T=T(1e-8)) where {T<:AbstractFloat}
+    n = length(y)
+
+    # Edge case: white noise
+    if p == 0 && q == 0
+        c, sigma2, loglik, residuals, fitted = _white_noise_fit(y; include_intercept=include_intercept)
+        return c, T[], T[], sigma2, loglik, residuals, fitted, true, 0
+    end
+
     # Initial guess
     c_init = include_intercept ? mean(y) : zero(T)
     phi_init = _yule_walker(y, p)
     theta_init = _innovations_algorithm(y, q)
-
     params_init = _pack_arma_params(c_init, phi_init, theta_init; include_intercept=include_intercept)
-
-    # Edge case: no parameters to optimize (white noise with given mean)
-    if p == 0 && q == 0
-        residuals = y .- c_init
-        sigma2 = var(residuals; corrected=false)
-        return params_init, sigma2, true, 0
-    end
 
     # Optimize
     obj = params -> _css_objective(params, y, p, q; include_intercept=include_intercept)
@@ -252,10 +250,16 @@ function _estimate_css(y::Vector{T}, p::Int, q::Int; include_intercept::Bool=tru
     c, phi, theta, _ = _unpack_arma_params(params_opt, p, q; include_intercept=include_intercept)
 
     residuals = _compute_arma_residuals(y, c, phi, theta)
+    fitted = y - residuals
     m = max(p, q)
     sigma2 = var(residuals[m+1:end]; corrected=false)
 
-    params_opt, sigma2, converged, iterations
+    # Approximate log-likelihood (conditional)
+    n_eff = n - m
+    loglik = -T(n_eff/2) * log(T(2π)) - T(n_eff/2) * log(sigma2) -
+             sum(abs2, residuals[m+1:end]) / (2 * sigma2)
+
+    c, phi, theta, sigma2, loglik, residuals, fitted, converged, iterations
 end
 
 # =============================================================================
@@ -315,6 +319,35 @@ function _estimate_mle(y::Vector{T}, p::Int, q::Int; include_intercept::Bool=tru
 end
 
 # =============================================================================
+# Unified Internal Estimation Dispatcher
+# =============================================================================
+
+"""
+    _estimate_arma_internal(y, p, q; method=:css_mle, include_intercept=true, max_iter=500)
+
+Unified estimation dispatcher for ARMA(p,q). Routes to CSS, MLE, or CSS→MLE.
+Returns 9-tuple: (c, phi, theta, sigma2, loglik, residuals, fitted, converged, iterations).
+"""
+function _estimate_arma_internal(y::Vector{T}, p::Int, q::Int;
+                                  method::Symbol=:css_mle,
+                                  include_intercept::Bool=true,
+                                  max_iter::Int=500) where {T<:AbstractFloat}
+    if method == :css
+        return _estimate_css(y, p, q; include_intercept=include_intercept, max_iter=max_iter)
+    elseif method == :mle
+        return _estimate_mle(y, p, q; include_intercept=include_intercept, max_iter=max_iter)
+    elseif method == :css_mle
+        css_c, css_phi, css_theta, css_sigma2, _, _, _, _, _ =
+            _estimate_css(y, p, q; include_intercept=include_intercept)
+        init_params = _pack_arma_params(css_c, css_phi, css_theta; include_intercept=include_intercept)
+        return _estimate_mle(y, p, q; include_intercept=include_intercept,
+                            init_params=init_params, init_sigma2=css_sigma2, max_iter=max_iter)
+    else
+        throw(ArgumentError("Unknown method: $method. Use :css, :mle, or :css_mle."))
+    end
+end
+
+# =============================================================================
 # AR Estimation
 # =============================================================================
 
@@ -342,18 +375,14 @@ println(model.phi)  # AR coefficients
 function estimate_ar(y::AbstractVector{T}, p::Int; method::Symbol=:ols, include_intercept::Bool=true) where {T<:AbstractFloat}
     _validate_arima_inputs(y, p, 0, 0)
     y_vec = Vector{T}(y)
-    n = length(y_vec)
 
     if method == :ols
         return _estimate_ar_ols(y_vec, p; include_intercept=include_intercept)
     elseif method == :mle
         c, phi, _, sigma2, loglik, residuals, fitted, converged, iterations =
-            _estimate_mle(y_vec, p, 0; include_intercept=include_intercept)
-
-        n_eff = length(residuals)
-        k = include_intercept ? p + 2 : p + 1  # intercept, phi, sigma2
-        aic, bic = _compute_aic_bic(loglik, k, n_eff)
-
+            _estimate_arma_internal(y_vec, p, 0; method=:mle, include_intercept=include_intercept)
+        k = _count_params(p, 0; include_intercept=include_intercept)
+        aic, bic = _compute_aic_bic(loglik, k, length(residuals))
         return ARModel(y_vec, p, c, phi, sigma2, residuals, fitted, loglik, aic, bic, :mle, converged, iterations)
     else
         throw(ArgumentError("Unknown method: $method. Use :ols or :mle."))
@@ -402,7 +431,7 @@ function _estimate_ar_ols(y::Vector{T}, p::Int; include_intercept::Bool=true) wh
     loglik = -T(n_eff/2) * log(T(2π)) - T(n_eff/2) * log(sigma2_ml) - T(n_eff/2)
 
     # Information criteria
-    k = length(beta) + 1  # +1 for sigma2
+    k = _count_params(p, 0; include_intercept=include_intercept)
     aic, bic = _compute_aic_bic(loglik, k, n_eff)
 
     ARModel(y, p, c, phi, sigma2, residuals, fitted, loglik, aic, bic, :ols, true, 0)
@@ -437,43 +466,10 @@ println(model.theta)  # MA coefficient
 function estimate_ma(y::AbstractVector{T}, q::Int; method::Symbol=:css_mle, include_intercept::Bool=true, max_iter::Int=500) where {T<:AbstractFloat}
     _validate_arima_inputs(y, 0, 0, q)
     y_vec = Vector{T}(y)
-    n = length(y_vec)
-
-    if method == :css
-        params, sigma2, converged, iterations = _estimate_css(y_vec, 0, q; include_intercept=include_intercept, max_iter=max_iter)
-        c = include_intercept ? params[1] : zero(T)
-        theta = params[include_intercept ? 2 : 1:end]
-
-        residuals = _compute_arma_residuals(y_vec, c, T[], theta)
-        fitted = y_vec - residuals
-
-        # Approximate log-likelihood
-        m = q
-        n_eff = n - m
-        loglik = -T(n_eff/2) * log(T(2π)) - T(n_eff/2) * log(sigma2) -
-                 sum(abs2, residuals[m+1:end]) / (2 * sigma2)
-
-    elseif method == :mle || method == :css_mle
-        # Use CSS for initialization if css_mle
-        init_params = nothing
-        init_sigma2 = nothing
-        if method == :css_mle
-            css_params, css_sigma2, _, _ = _estimate_css(y_vec, 0, q; include_intercept=include_intercept)
-            init_params = css_params
-            init_sigma2 = css_sigma2
-        end
-
-        c, _, theta, sigma2, loglik, residuals, fitted, converged, iterations =
-            _estimate_mle(y_vec, 0, q; include_intercept=include_intercept,
-                         init_params=init_params, init_sigma2=init_sigma2, max_iter=max_iter)
-    else
-        throw(ArgumentError("Unknown method: $method. Use :css, :mle, or :css_mle."))
-    end
-
-    n_eff = length(residuals)
-    k = include_intercept ? q + 2 : q + 1
-    aic, bic = _compute_aic_bic(loglik, k, n_eff)
-
+    c, _, theta, sigma2, loglik, residuals, fitted, converged, iterations =
+        _estimate_arma_internal(y_vec, 0, q; method=method, include_intercept=include_intercept, max_iter=max_iter)
+    k = _count_params(0, q; include_intercept=include_intercept)
+    aic, bic = _compute_aic_bic(loglik, k, length(residuals))
     MAModel(y_vec, q, c, theta, sigma2, residuals, fitted, loglik, aic, bic, method, converged, iterations)
 end
 
@@ -510,49 +506,10 @@ println("AR: ", model.phi, " MA: ", model.theta)
 function estimate_arma(y::AbstractVector{T}, p::Int, q::Int; method::Symbol=:css_mle, include_intercept::Bool=true, max_iter::Int=500) where {T<:AbstractFloat}
     _validate_arima_inputs(y, p, 0, q)
     y_vec = Vector{T}(y)
-    n = length(y_vec)
-
-    # Handle special cases
-    if p == 0 && q == 0
-        c, sigma2, loglik, residuals, fitted = _white_noise_fit(y_vec; include_intercept=include_intercept)
-        k = include_intercept ? 2 : 1
-        aic, bic = _compute_aic_bic(loglik, k, n)
-        return ARMAModel(y_vec, 0, 0, c, T[], T[], sigma2, residuals, fitted, loglik, aic, bic, method, true, 0)
-    end
-
-    if method == :css
-        params, sigma2, converged, iterations = _estimate_css(y_vec, p, q; include_intercept=include_intercept, max_iter=max_iter)
-
-        c, phi, theta, _ = _unpack_arma_params(params, p, q; include_intercept=include_intercept)
-
-        residuals = _compute_arma_residuals(y_vec, c, phi, theta)
-        fitted = y_vec - residuals
-
-        m = max(p, q)
-        n_eff = n - m
-        loglik = -T(n_eff/2) * log(T(2π)) - T(n_eff/2) * log(sigma2) -
-                 sum(abs2, residuals[m+1:end]) / (2 * sigma2)
-
-    elseif method == :mle || method == :css_mle
-        init_params = nothing
-        init_sigma2 = nothing
-        if method == :css_mle
-            css_params, css_sigma2, _, _ = _estimate_css(y_vec, p, q; include_intercept=include_intercept)
-            init_params = css_params
-            init_sigma2 = css_sigma2
-        end
-
-        c, phi, theta, sigma2, loglik, residuals, fitted, converged, iterations =
-            _estimate_mle(y_vec, p, q; include_intercept=include_intercept,
-                         init_params=init_params, init_sigma2=init_sigma2, max_iter=max_iter)
-    else
-        throw(ArgumentError("Unknown method: $method. Use :css, :mle, or :css_mle."))
-    end
-
-    n_eff = length(residuals)
-    k = (include_intercept ? 1 : 0) + p + q + 1
-    aic, bic = _compute_aic_bic(loglik, k, n_eff)
-
+    c, phi, theta, sigma2, loglik, residuals, fitted, converged, iterations =
+        _estimate_arma_internal(y_vec, p, q; method=method, include_intercept=include_intercept, max_iter=max_iter)
+    k = _count_params(p, q; include_intercept=include_intercept)
+    aic, bic = _compute_aic_bic(loglik, k, length(residuals))
     ARMAModel(y_vec, p, q, c, phi, theta, sigma2, residuals, fitted, loglik, aic, bic, method, converged, iterations)
 end
 
@@ -591,27 +548,15 @@ function estimate_arima(y::AbstractVector{T}, p::Int, d::Int, q::Int;
                         max_iter::Int=500) where {T<:AbstractFloat}
     _validate_arima_inputs(y, p, d, q)
     y_vec = Vector{T}(y)
-
-    # Difference the series
     y_diff = _difference(y_vec, d)
 
-    # Fit ARMA to differenced series
-    if p == 0 && q == 0
-        c, sigma2, loglik, residuals, fitted = _white_noise_fit(y_diff; include_intercept=include_intercept)
-        n_eff = length(residuals)
-        k = include_intercept ? 2 : 1
-        aic, bic = _compute_aic_bic(loglik, k, n_eff)
+    c, phi, theta, sigma2, loglik, residuals, fitted, converged, iterations =
+        _estimate_arma_internal(y_diff, p, q; method=method, include_intercept=include_intercept, max_iter=max_iter)
+    k = _count_params(p, q; include_intercept=include_intercept)
+    aic, bic = _compute_aic_bic(loglik, k, length(residuals))
 
-        return ARIMAModel(y_vec, y_diff, 0, d, 0, c, T[], T[], sigma2, residuals, fitted,
-                         loglik, aic, bic, method, true, 0)
-    end
-
-    # Fit ARMA model
-    arma = estimate_arma(y_diff, p, q; method=method, include_intercept=include_intercept, max_iter=max_iter)
-
-    ARIMAModel(y_vec, y_diff, p, d, q, arma.c, arma.phi, arma.theta, arma.sigma2,
-               arma.residuals, arma.fitted, arma.loglik, arma.aic, arma.bic,
-               arma.method, arma.converged, arma.iterations)
+    ARIMAModel(y_vec, y_diff, p, d, q, c, phi, theta, sigma2, residuals, fitted,
+               loglik, aic, bic, method, converged, iterations)
 end
 
 estimate_arima(y::AbstractVector, p::Int, d::Int, q::Int; kwargs...) =

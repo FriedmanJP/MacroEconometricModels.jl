@@ -87,52 +87,62 @@ function _forecast_variance(sigma2::T, psi::Vector{T}, h::Int) where {T<:Abstrac
 end
 
 # =============================================================================
-# ARMA Forecasting
+# Unified ARMA Forecasting
+# =============================================================================
+
+"""
+    _forecast_arma(y, resid, c, phi, theta, sigma2, h, conf_level) -> ARIMAForecast
+
+Unified point forecast + CI computation for any ARMA(p,q) model.
+AR models pass `theta=T[]`, MA models pass `phi=T[]`.
+"""
+function _forecast_arma(y::Vector{T}, resid::Vector{T}, c::T,
+                        phi::Vector{T}, theta::Vector{T},
+                        sigma2::T, h::Int, conf_level::T) where {T<:AbstractFloat}
+    p, q = length(phi), length(theta)
+    n = length(y)
+
+    # Point forecasts via recursion
+    forecasts = zeros(T, h)
+    y_ext = vcat(y, zeros(T, h))
+    eps_ext = vcat(resid, zeros(T, h))
+
+    @inbounds for j in 1:h
+        y_hat = c
+        for i in 1:p
+            y_hat += phi[i] * y_ext[n + j - i]
+        end
+        for i in 1:q
+            idx = n + j - i
+            if idx >= 1 && idx <= n
+                y_hat += theta[i] * eps_ext[idx]
+            end
+        end
+        forecasts[j] = y_hat
+        y_ext[n + j] = y_hat
+    end
+
+    # ψ-weights, variance, and confidence bands
+    psi = _compute_psi_weights(phi, theta, h)
+    var_fc = _forecast_variance(sigma2, psi, h)
+    se = sqrt.(var_fc)
+    ci_lower, ci_upper = _confidence_band(forecasts, se, conf_level)
+
+    ARIMAForecast(forecasts, ci_lower, ci_upper, se, h, conf_level)
+end
+
+# =============================================================================
+# Public Forecast Methods (thin wrappers)
 # =============================================================================
 
 """
     forecast(model::ARModel, h; conf_level=0.95) -> ARIMAForecast
 
 Compute h-step ahead forecasts with confidence intervals for AR model.
-
-# Arguments
-- `model`: Fitted ARModel
-- `h`: Forecast horizon
-- `conf_level`: Confidence level for intervals (default 0.95)
-
-# Returns
-`ARIMAForecast` with point forecasts, confidence intervals, and standard errors.
 """
 function forecast(model::ARModel{T}, h::Int; conf_level::T=T(0.95)) where {T<:AbstractFloat}
     h < 1 && throw(ArgumentError("Forecast horizon h must be positive"))
-
-    y = model.y
-    p = model.p
-    n = length(y)
-
-    # Point forecasts
-    forecasts = zeros(T, h)
-    y_ext = vcat(y, zeros(T, h))  # Extended series for recursive forecasting
-
-    @inbounds for j in 1:h
-        y_hat = model.c
-        for i in 1:p
-            y_hat += model.phi[i] * y_ext[n + j - i]
-        end
-        forecasts[j] = y_hat
-        y_ext[n + j] = y_hat
-    end
-
-    # ψ-weights for AR model (no MA terms)
-    psi = _compute_psi_weights(model.phi, T[], h)
-
-    # Forecast variance and standard errors
-    var_fc = _forecast_variance(model.sigma2, psi, h)
-    se = sqrt.(var_fc)
-
-    ci_lower, ci_upper = _confidence_band(forecasts, se, conf_level)
-
-    ARIMAForecast(forecasts, ci_lower, ci_upper, se, h, conf_level)
+    _forecast_arma(model.y, model.residuals, model.c, model.phi, T[], model.sigma2, h, conf_level)
 end
 
 """
@@ -142,152 +152,37 @@ Compute h-step ahead forecasts with confidence intervals for MA model.
 """
 function forecast(model::MAModel{T}, h::Int; conf_level::T=T(0.95)) where {T<:AbstractFloat}
     h < 1 && throw(ArgumentError("Forecast horizon h must be positive"))
-
-    q = model.q
-    residuals = model.residuals
-    n = length(residuals)
-
-    # Point forecasts
-    # For MA(q), forecasts beyond q steps are just the mean
-    forecasts = zeros(T, h)
-
-    @inbounds for j in 1:h
-        y_hat = model.c
-        for i in 1:min(q, n + j - 1)
-            if j - i >= 1
-                # Future residuals are zero (best linear predictor)
-                continue
-            else
-                # Past residuals
-                idx = n + j - i
-                if idx >= 1 && idx <= n
-                    y_hat += model.theta[i] * residuals[idx]
-                end
-            end
-        end
-        forecasts[j] = y_hat
-    end
-
-    # ψ-weights for pure MA model
-    psi = model.theta[1:min(q, h)]
-    if length(psi) < h
-        psi = vcat(psi, zeros(T, h - length(psi)))
-    end
-
-    # Forecast variance
-    var_fc = _forecast_variance(model.sigma2, psi, h)
-    se = sqrt.(var_fc)
-
-    ci_lower, ci_upper = _confidence_band(forecasts, se, conf_level)
-
-    ARIMAForecast(forecasts, ci_lower, ci_upper, se, h, conf_level)
+    _forecast_arma(model.y, model.residuals, model.c, T[], model.theta, model.sigma2, h, conf_level)
 end
 
 """
     forecast(model::ARMAModel, h; conf_level=0.95) -> ARIMAForecast
 
 Compute h-step ahead forecasts with confidence intervals for ARMA model.
-
-# Arguments
-- `model`: Fitted ARMAModel
-- `h`: Forecast horizon
-- `conf_level`: Confidence level for intervals (default 0.95)
-
-# Returns
-`ARIMAForecast` with point forecasts, confidence intervals, and standard errors.
 """
 function forecast(model::ARMAModel{T}, h::Int; conf_level::T=T(0.95)) where {T<:AbstractFloat}
     h < 1 && throw(ArgumentError("Forecast horizon h must be positive"))
-
-    y = model.y
-    p, q = model.p, model.q
-    residuals = model.residuals
-    n = length(y)
-
-    # Point forecasts via recursion
-    forecasts = zeros(T, h)
-    y_ext = vcat(y, zeros(T, h))
-    eps_ext = vcat(residuals, zeros(T, h))  # Future residuals = 0
-
-    @inbounds for j in 1:h
-        y_hat = model.c
-
-        # AR component
-        for i in 1:p
-            y_hat += model.phi[i] * y_ext[n + j - i]
-        end
-
-        # MA component (only for past residuals, future = 0)
-        for i in 1:q
-            idx = n + j - i
-            if idx >= 1 && idx <= n
-                y_hat += model.theta[i] * eps_ext[idx]
-            end
-        end
-
-        forecasts[j] = y_hat
-        y_ext[n + j] = y_hat
-    end
-
-    # ψ-weights
-    psi = _compute_psi_weights(model.phi, model.theta, h)
-
-    # Forecast variance
-    var_fc = _forecast_variance(model.sigma2, psi, h)
-    se = sqrt.(var_fc)
-
-    ci_lower, ci_upper = _confidence_band(forecasts, se, conf_level)
-
-    ARIMAForecast(forecasts, ci_lower, ci_upper, se, h, conf_level)
+    _forecast_arma(model.y, model.residuals, model.c, model.phi, model.theta, model.sigma2, h, conf_level)
 end
 
 """
     forecast(model::ARIMAModel, h; conf_level=0.95) -> ARIMAForecast
 
 Compute h-step ahead forecasts with confidence intervals for ARIMA model.
-
 Forecasts are computed on the differenced series and then integrated back
 to the original scale.
-
-# Arguments
-- `model`: Fitted ARIMAModel
-- `h`: Forecast horizon
-- `conf_level`: Confidence level for intervals (default 0.95)
-
-# Returns
-`ARIMAForecast` with point forecasts (on original scale), confidence intervals, and standard errors.
 """
 function forecast(model::ARIMAModel{T}, h::Int; conf_level::T=T(0.95)) where {T<:AbstractFloat}
     h < 1 && throw(ArgumentError("Forecast horizon h must be positive"))
 
-    d = model.d
-    y = model.y
-    y_diff = model.y_diff
-    n = length(y)
-    n_diff = length(y_diff)
+    fc_diff = _forecast_arma(model.y_diff, model.residuals, model.c,
+                              model.phi, model.theta, model.sigma2, h, conf_level)
+    model.d == 0 && return fc_diff
 
-    # Build ARMA model for forecasting on differenced series
-    arma_model = ARMAModel(y_diff, model.p, model.q, model.c, model.phi, model.theta,
-                           model.sigma2, model.residuals, model.fitted, model.loglik,
-                           model.aic, model.bic, model.method, model.converged, model.iterations)
-
-    # Forecast differenced series
-    fc_diff = forecast(arma_model, h; conf_level=conf_level)
-
-    # Integrate forecasts back to original scale
-    if d == 0
-        return fc_diff
-    end
-
-    # Recursive integration
-    forecasts = _integrate_forecasts(y, fc_diff.forecast, d)
-    ci_lower = _integrate_forecasts(y, fc_diff.ci_lower, d)
-    ci_upper = _integrate_forecasts(y, fc_diff.ci_upper, d)
-
-    # Standard errors need adjustment for integration
-    # For d=1: Var(yₜ₊ₕ - yₜ) = Var(Σⱼ₌₁ʰ Δyₜ₊ⱼ)
-    # This is a conservative approximation
-    se = _integrate_se(fc_diff.se, d)
+    forecasts = _integrate_forecasts(model.y, fc_diff.forecast, model.d)
+    ci_lower = _integrate_forecasts(model.y, fc_diff.ci_lower, model.d)
+    ci_upper = _integrate_forecasts(model.y, fc_diff.ci_upper, model.d)
+    se = _integrate_se(fc_diff.se, model.d)
 
     ARIMAForecast(forecasts, ci_lower, ci_upper, se, h, conf_level)
 end
