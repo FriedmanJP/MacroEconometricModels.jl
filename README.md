@@ -28,6 +28,7 @@ A comprehensive Julia package for macroeconomic time series analysis. Provides V
   - Static factors via PCA with Bai-Ng information criteria (IC1, IC2, IC3)
   - Dynamic Factor Models (two-step and EM estimation)
   - Generalized Dynamic Factor Models (spectral methods, Forni et al. 2000)
+  - Unified forecasting with theoretical (analytical) and bootstrap confidence intervals for all three factor model types
 - **Generalized Method of Moments (GMM)** - One-step, two-step, and iterated; Hansen J-test
 
 ### Structural Identification
@@ -129,6 +130,25 @@ using MacroEconometricModels
 
 Y = randn(200, 3)
 lp_result = estimate_lp(Y, 1, 20; cov_type=:newey_west)
+```
+
+### Factor Model Forecasting
+
+```julia
+using MacroEconometricModels
+
+X = randn(200, 50)  # 200 observations, 50 variables
+
+# Static factor model with PCA
+fm = estimate_factors(X, 3)
+fc = forecast(fm, 12; ci_method=:theoretical)
+fc.observables       # 12×50 forecasted observables
+fc.observables_lower # lower CI bounds
+fc.observables_upper # upper CI bounds
+
+# Dynamic factor model with bootstrap CIs
+dfm = estimate_dynamic_factors(X, 3, 2)
+fc = forecast(dfm, 12; ci_method=:bootstrap, n_boot=500)
 ```
 
 ## Documentation
