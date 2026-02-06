@@ -558,34 +558,34 @@ println("\nIRF size: ", size(irfs.values))
 
 ### Multivariate Normality Tests
 
-- Jarque, C. M. & Bera, A. K. (1980). "Efficient tests for normality, homoscedasticity and serial independence of regression residuals." *Economics Letters*, 6(3), 255-259.
-- Mardia, K. V. (1970). "Measures of multivariate skewness and kurtosis with applications." *Biometrika*, 57(3), 519-530.
-- Doornik, J. A. & Hansen, H. (2008). "An omnibus test for univariate and multivariate normality." *Oxford Bulletin of Economics and Statistics*, 70, 927-939.
-- Henze, N. & Zirkler, B. (1990). "A class of invariant consistent tests for multivariate normality." *Communications in Statistics - Theory and Methods*, 19(10), 3595-3617.
-- Lütkepohl, H. (2005). *New Introduction to Multiple Time Series Analysis*. Springer.
+- Jarque, Carlos M., and Anil K. Bera. 1980. "Efficient Tests for Normality, Homoscedasticity and Serial Independence of Regression Residuals." *Economics Letters* 6 (3): 255–259. [https://doi.org/10.1016/0165-1765(80)90024-5](https://doi.org/10.1016/0165-1765(80)90024-5)
+- Mardia, Kanti V. 1970. "Measures of Multivariate Skewness and Kurtosis with Applications." *Biometrika* 57 (3): 519–530. [https://doi.org/10.1093/biomet/57.3.519](https://doi.org/10.1093/biomet/57.3.519)
+- Doornik, Jurgen A., and Henrik Hansen. 2008. "An Omnibus Test for Univariate and Multivariate Normality." *Oxford Bulletin of Economics and Statistics* 70: 927–939. [https://doi.org/10.1111/j.1468-0084.2008.00537.x](https://doi.org/10.1111/j.1468-0084.2008.00537.x)
+- Henze, Norbert, and Bernhard Zirkler. 1990. "A Class of Invariant Consistent Tests for Multivariate Normality." *Communications in Statistics - Theory and Methods* 19 (10): 3595–3617. [https://doi.org/10.1080/03610929008830400](https://doi.org/10.1080/03610929008830400)
+- Lütkepohl, Helmut. 2005. *New Introduction to Multiple Time Series Analysis*. Berlin: Springer. ISBN 978-3-540-40172-8.
 
 ### ICA-based Identification
 
-- Hyvärinen, A. (1999). "Fast and robust fixed-point algorithms for independent component analysis." *IEEE Transactions on Neural Networks*, 10(3), 626-634.
-- Cardoso, J.-F. & Souloumiac, A. (1993). "Blind beamforming for non-Gaussian signals." *IEE Proceedings-F*, 140(6), 362-370.
-- Belouchrani, A., Abed-Meraim, K., Cardoso, J.-F. & Moulines, E. (1997). "A blind source separation technique using second-order statistics." *IEEE Transactions on Signal Processing*, 45(2), 434-444.
+- Hyvärinen, Aapo. 1999. "Fast and Robust Fixed-Point Algorithms for Independent Component Analysis." *IEEE Transactions on Neural Networks* 10 (3): 626–634. [https://doi.org/10.1109/72.761722](https://doi.org/10.1109/72.761722)
+- Cardoso, Jean-François, and Antoine Souloumiac. 1993. "Blind Beamforming for Non-Gaussian Signals." *IEE Proceedings-F* 140 (6): 362–370. [https://doi.org/10.1049/ip-f-2.1993.0054](https://doi.org/10.1049/ip-f-2.1993.0054)
+- Belouchrani, Adel, Karim Abed-Meraim, Jean-François Cardoso, and Eric Moulines. 1997. "A Blind Source Separation Technique Using Second-Order Statistics." *IEEE Transactions on Signal Processing* 45 (2): 434–444. [https://doi.org/10.1109/78.554307](https://doi.org/10.1109/78.554307)
 
 ### Non-Gaussian ML
 
-- Lanne, M., Meitz, M. & Saikkonen, P. (2017). "Identification and estimation of non-Gaussian structural vector autoregressions." *Journal of Econometrics*, 196(2), 288-304.
-- Lanne, M. & Lütkepohl, H. (2010). "Structural vector autoregressions with nonnormal residuals." *Journal of Business & Economic Statistics*, 28(1), 159-168.
-- Herwartz, H. (2018). "Hodges-Lehmann detection of structural shocks: An analysis of macroeconomic dynamics in the Euro Area." *Oxford Bulletin of Economics and Statistics*, 80(4), 736-754.
-- Azzalini, A. (1985). "A class of distributions which includes the normal ones." *Scandinavian Journal of Statistics*, 12(2), 171-178.
+- Lanne, Markku, Mika Meitz, and Pentti Saikkonen. 2017. "Identification and Estimation of Non-Gaussian Structural Vector Autoregressions." *Journal of Econometrics* 196 (2): 288–304. [https://doi.org/10.1016/j.jeconom.2016.06.002](https://doi.org/10.1016/j.jeconom.2016.06.002)
+- Lanne, Markku, and Helmut Lütkepohl. 2010. "Structural Vector Autoregressions with Nonnormal Residuals." *Journal of Business & Economic Statistics* 28 (1): 159–168. [https://doi.org/10.1198/jbes.2009.06003](https://doi.org/10.1198/jbes.2009.06003)
+- Herwartz, Helmut. 2018. "Hodges-Lehmann Detection of Structural Shocks: An Analysis of Macroeconomic Dynamics in the Euro Area." *Oxford Bulletin of Economics and Statistics* 80 (4): 736–754. [https://doi.org/10.1111/obes.12237](https://doi.org/10.1111/obes.12237)
+- Azzalini, Adelchi. 1985. "A Class of Distributions Which Includes the Normal Ones." *Scandinavian Journal of Statistics* 12 (2): 171–178. [https://doi.org/10.1111/j.1467-9469.1985.tb01174.x](https://doi.org/10.1111/j.1467-9469.1985.tb01174.x)
 
 ### Heteroskedasticity-based Identification
 
-- Rigobon, R. (2003). "Identification through heteroskedasticity." *Review of Economics and Statistics*, 85(4), 777-792.
-- Lanne, M. & Lütkepohl, H. (2008). "Identifying monetary policy shocks via changes in volatility." *Journal of Money, Credit and Banking*, 40(6), 1131-1149.
-- Normandin, M. & Phaneuf, L. (2004). "Monetary policy shocks: Testing identification conditions under time-varying conditional volatility." *Journal of Monetary Economics*, 51(6), 1217-1243.
-- Lütkepohl, H. & Netšunajev, A. (2017). "Structural vector autoregressions with smooth transition in variances." *Journal of Economic Dynamics and Control*, 84, 43-57.
+- Rigobon, Roberto. 2003. "Identification through Heteroskedasticity." *Review of Economics and Statistics* 85 (4): 777–792. [https://doi.org/10.1162/003465303772815727](https://doi.org/10.1162/003465303772815727)
+- Lanne, Markku, and Helmut Lütkepohl. 2008. "Identifying Monetary Policy Shocks via Changes in Volatility." *Journal of Money, Credit and Banking* 40 (6): 1131–1149. [https://doi.org/10.1111/j.1538-4616.2008.00151.x](https://doi.org/10.1111/j.1538-4616.2008.00151.x)
+- Normandin, Michel, and Louis Phaneuf. 2004. "Monetary Policy Shocks: Testing Identification Conditions under Time-Varying Conditional Volatility." *Journal of Monetary Economics* 51 (6): 1217–1243. [https://doi.org/10.1016/j.jmoneco.2003.11.002](https://doi.org/10.1016/j.jmoneco.2003.11.002)
+- Lütkepohl, Helmut, and Aleksei Netšunajev. 2017. "Structural Vector Autoregressions with Smooth Transition in Variances." *Journal of Economic Dynamics and Control* 84: 43–57. [https://doi.org/10.1016/j.jedc.2017.09.001](https://doi.org/10.1016/j.jedc.2017.09.001)
 
 ### Independence Measures
 
-- Székely, G. J., Rizzo, M. L. & Bakirov, N. K. (2007). "Measuring and testing dependence by correlation of distances." *Annals of Statistics*, 35(6), 2769-2794.
-- Gretton, A., Bousquet, O., Smola, A. & Schölkopf, B. (2005). "Measuring statistical dependence with Hilbert-Schmidt norms." *Algorithmic Learning Theory*, Springer, 63-77.
-- Matteson, D. S. & Tsay, R. S. (2017). "Independent component analysis via distance covariance." *Journal of the American Statistical Association*, 112(518), 623-637.
+- Székely, Gábor J., Maria L. Rizzo, and Nail K. Bakirov. 2007. "Measuring and Testing Dependence by Correlation of Distances." *Annals of Statistics* 35 (6): 2769–2794. [https://doi.org/10.1214/009053607000000505](https://doi.org/10.1214/009053607000000505)
+- Gretton, Arthur, Olivier Bousquet, Alex Smola, and Bernhard Schölkopf. 2005. "Measuring Statistical Dependence with Hilbert-Schmidt Norms." In *Algorithmic Learning Theory*, edited by Sanjay Jain, Hans Ulrich Simon, and Etsuji Tomita, 63–77. Berlin: Springer. [https://doi.org/10.1007/11564089_7](https://doi.org/10.1007/11564089_7)
+- Matteson, David S., and Ruey S. Tsay. 2017. "Independent Component Analysis via Distance Covariance." *Journal of the American Statistical Association* 112 (518): 623–637. [https://doi.org/10.1080/01621459.2016.1150851](https://doi.org/10.1080/01621459.2016.1150851)

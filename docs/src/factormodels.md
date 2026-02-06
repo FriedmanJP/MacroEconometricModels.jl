@@ -825,21 +825,21 @@ idio_driven = findall(shares .< 0.3)
 
 ### Core References
 
-- Bai, J. (2003). "Inferential Theory for Factor Models of Large Dimensions." *Econometrica*, 71(1), 135-171.
-- Bai, J., & Ng, S. (2002). "Determining the Number of Factors in Approximate Factor Models." *Econometrica*, 70(1), 191-221.
-- Bai, J., & Ng, S. (2006). "Confidence Intervals for Diffusion Index Forecasts and Inference for Factor-Augmented Regressions." *Econometrica*, 74(4), 1133-1150.
-- Stock, J. H., & Watson, M. W. (2002a). "Forecasting Using Principal Components from a Large Number of Predictors." *Journal of the American Statistical Association*, 97(460), 1167-1179.
-- Stock, J. H., & Watson, M. W. (2002b). "Macroeconomic Forecasting Using Diffusion Indexes." *Journal of Business & Economic Statistics*, 20(2), 147-162.
+- Bai, Jushan. 2003. "Inferential Theory for Factor Models of Large Dimensions." *Econometrica* 71 (1): 135–171. [https://doi.org/10.1111/1468-0262.00392](https://doi.org/10.1111/1468-0262.00392)
+- Bai, Jushan, and Serena Ng. 2002. "Determining the Number of Factors in Approximate Factor Models." *Econometrica* 70 (1): 191–221. [https://doi.org/10.1111/1468-0262.00273](https://doi.org/10.1111/1468-0262.00273)
+- Bai, Jushan, and Serena Ng. 2006. "Confidence Intervals for Diffusion Index Forecasts and Inference for Factor-Augmented Regressions." *Econometrica* 74 (4): 1133–1150. [https://doi.org/10.1111/j.1468-0262.2006.00696.x](https://doi.org/10.1111/j.1468-0262.2006.00696.x)
+- Stock, James H., and Mark W. Watson. 2002a. "Forecasting Using Principal Components from a Large Number of Predictors." *Journal of the American Statistical Association* 97 (460): 1167–1179. [https://doi.org/10.1198/016214502388618960](https://doi.org/10.1198/016214502388618960)
+- Stock, James H., and Mark W. Watson. 2002b. "Macroeconomic Forecasting Using Diffusion Indexes." *Journal of Business & Economic Statistics* 20 (2): 147–162. [https://doi.org/10.1198/073500102317351921](https://doi.org/10.1198/073500102317351921)
 
 ### Dynamic Factor Models
 
-- Doz, C., Giannone, D., & Reichlin, L. (2011). "A Two-Step Estimator for Large Approximate Dynamic Factor Models Based on Kalman Filtering." *Journal of Econometrics*, 164(1), 188-205.
-- Doz, C., Giannone, D., & Reichlin, L. (2012). "A Quasi-Maximum Likelihood Approach for Large, Approximate Dynamic Factor Models." *Review of Economics and Statistics*, 94(4), 1014-1024.
-- Forni, M., Hallin, M., Lippi, M., & Reichlin, L. (2000). "The Generalized Dynamic-Factor Model: Identification and Estimation." *Review of Economics and Statistics*, 82(4), 540-554.
-- Forni, M., Hallin, M., Lippi, M., & Reichlin, L. (2005). "The Generalized Dynamic Factor Model: One-Sided Estimation and Forecasting." *Journal of the American Statistical Association*, 100(471), 830-840.
-- Hallin, M., & Liška, R. (2007). "Determining the Number of Factors in the General Dynamic Factor Model." *Journal of the American Statistical Association*, 102(478), 603-617.
+- Doz, Catherine, Domenico Giannone, and Lucrezia Reichlin. 2011. "A Two-Step Estimator for Large Approximate Dynamic Factor Models Based on Kalman Filtering." *Journal of Econometrics* 164 (1): 188–205. [https://doi.org/10.1016/j.jeconom.2011.02.012](https://doi.org/10.1016/j.jeconom.2011.02.012)
+- Doz, Catherine, Domenico Giannone, and Lucrezia Reichlin. 2012. "A Quasi-Maximum Likelihood Approach for Large, Approximate Dynamic Factor Models." *Review of Economics and Statistics* 94 (4): 1014–1024. [https://doi.org/10.1162/REST_a_00225](https://doi.org/10.1162/REST_a_00225)
+- Forni, Mario, Marc Hallin, Marco Lippi, and Lucrezia Reichlin. 2000. "The Generalized Dynamic-Factor Model: Identification and Estimation." *Review of Economics and Statistics* 82 (4): 540–554. [https://doi.org/10.1162/003465300559037](https://doi.org/10.1162/003465300559037)
+- Forni, Mario, Marc Hallin, Marco Lippi, and Lucrezia Reichlin. 2005. "The Generalized Dynamic Factor Model: One-Sided Estimation and Forecasting." *Journal of the American Statistical Association* 100 (471): 830–840. [https://doi.org/10.1198/016214504000002050](https://doi.org/10.1198/016214504000002050)
+- Hallin, Marc, and Roman Liška. 2007. "Determining the Number of Factors in the General Dynamic Factor Model." *Journal of the American Statistical Association* 102 (478): 603–617. [https://doi.org/10.1198/016214506000001275](https://doi.org/10.1198/016214506000001275)
 
 ### Applications
 
-- Bernanke, B. S., Boivin, J., & Eliasz, P. (2005). "Measuring the Effects of Monetary Policy: A Factor-Augmented Vector Autoregressive (FAVAR) Approach." *Quarterly Journal of Economics*, 120(1), 387-422.
-- McCracken, M. W., & Ng, S. (2016). "FRED-MD: A Monthly Database for Macroeconomic Research." *Journal of Business & Economic Statistics*, 34(4), 574-589.
+- Bernanke, Ben S., Jean Boivin, and Piotr Eliasz. 2005. "Measuring the Effects of Monetary Policy: A Factor-Augmented Vector Autoregressive (FAVAR) Approach." *Quarterly Journal of Economics* 120 (1): 387–422. [https://doi.org/10.1162/0033553053327452](https://doi.org/10.1162/0033553053327452)
+- McCracken, Michael W., and Serena Ng. 2016. "FRED-MD: A Monthly Database for Macroeconomic Research." *Journal of Business & Economic Statistics* 34 (4): 574–589. [https://doi.org/10.1080/07350015.2015.1086655](https://doi.org/10.1080/07350015.2015.1086655)

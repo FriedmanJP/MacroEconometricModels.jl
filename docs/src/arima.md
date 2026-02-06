@@ -515,8 +515,8 @@ println("Log-likelihood: $(model.loglik)")
 
 ## References
 
-- Box, G. E. P., & Jenkins, G. M. (1976). *Time Series Analysis: Forecasting and Control*. Holden-Day.
-- Brockwell, P. J., & Davis, R. A. (1991). *Time Series: Theory and Methods*. 2nd ed. Springer.
-- Durbin, J., & Koopman, S. J. (2012). *Time Series Analysis by State Space Methods*. 2nd ed. Oxford University Press.
-- Hamilton, J. D. (1994). *Time Series Analysis*. Princeton University Press.
-- Harvey, A. C. (1993). *Time Series Models*. 2nd ed. MIT Press.
+- Box, George E. P., and Gwilym M. Jenkins. 1976. *Time Series Analysis: Forecasting and Control*. San Francisco: Holden-Day. ISBN 978-0-816-21104-3.
+- Brockwell, Peter J., and Richard A. Davis. 1991. *Time Series: Theory and Methods*. 2nd ed. New York: Springer. ISBN 978-1-4419-0319-8.
+- Durbin, James, and Siem Jan Koopman. 2012. *Time Series Analysis by State Space Methods*. 2nd ed. Oxford: Oxford University Press. [https://doi.org/10.1093/acprof:oso/9780199641178.001.0001](https://doi.org/10.1093/acprof:oso/9780199641178.001.0001)
+- Hamilton, James D. 1994. *Time Series Analysis*. Princeton, NJ: Princeton University Press. ISBN 978-0-691-04289-3.
+- Harvey, Andrew C. 1993. *Time Series Models*. 2nd ed. Cambridge, MA: MIT Press. ISBN 978-0-262-08224-2.

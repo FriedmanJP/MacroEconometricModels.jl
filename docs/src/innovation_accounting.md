@@ -357,6 +357,6 @@ The IRF values show the dynamic propagation of structural shocks through the sys
 
 ## References
 
-- Kilian, L. (1998). "Small-Sample Confidence Intervals for Impulse Response Functions." *Review of Economics and Statistics*, 80(2), 218-230.
-- Kilian, L., & Lütkepohl, H. (2017). *Structural Vector Autoregressive Analysis*. Cambridge University Press.
-- Lütkepohl, H. (2005). *New Introduction to Multiple Time Series Analysis*. Springer.
+- Kilian, Lutz. 1998. "Small-Sample Confidence Intervals for Impulse Response Functions." *Review of Economics and Statistics* 80 (2): 218–230. [https://doi.org/10.1162/003465398557465](https://doi.org/10.1162/003465398557465)
+- Kilian, Lutz, and Helmut Lütkepohl. 2017. *Structural Vector Autoregressive Analysis*. Cambridge: Cambridge University Press. [https://doi.org/10.1017/9781108164818](https://doi.org/10.1017/9781108164818)
+- Lütkepohl, Helmut. 2005. *New Introduction to Multiple Time Series Analysis*. Berlin: Springer. ISBN 978-3-540-40172-8.
