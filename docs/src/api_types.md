@@ -72,7 +72,7 @@ AbstractFactorModel
 
 ```@autodocs
 Modules = [MacroEconometricModels]
-Pages   = ["lp_types.jl"]
+Pages   = ["lp/types.jl"]
 Order   = [:type]
 ```
 
@@ -161,7 +161,8 @@ AbstractImpulseResponse
 
 AbstractFEVD
 ├── FEVD{T}
-└── BayesianFEVD{T}
+├── BayesianFEVD{T}
+└── LPFEVD{T}
 
 AbstractHistoricalDecomposition
 ├── HistoricalDecomposition{T}
@@ -180,6 +181,9 @@ AbstractLPModel
 ├── SmoothLPModel{T}
 ├── StateLPModel{T}
 └── PropensityLPModel{T}
+
+StructuralLP{T}
+LPForecast{T}
 
 AbstractCovarianceEstimator
 ├── NeweyWestEstimator{T}

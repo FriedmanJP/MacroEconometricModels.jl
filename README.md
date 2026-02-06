@@ -24,6 +24,8 @@ A comprehensive Julia package for macroeconomic time series analysis. Provides V
   - Smooth IRF via B-splines (Barnichon & Brownlees 2019)
   - State-dependent LP (Auerbach & Gorodnichenko 2013)
   - Propensity Score Matching (Angrist et al. 2018)
+  - Structural LP with multi-shock IRFs (Plagborg-Møller & Wolf 2021)
+  - Direct multi-step forecasting with analytical/bootstrap CIs
 - **Factor Models**
   - Static factors via PCA with Bai-Ng information criteria (IC1, IC2, IC3)
   - Dynamic Factor Models (two-step and EM estimation)
@@ -49,6 +51,7 @@ A comprehensive Julia package for macroeconomic time series analysis. Provides V
 ### Innovation Accounting
 - **Impulse Response Functions (IRF)** - Bootstrap, theoretical, and Bayesian credible intervals
 - **Forecast Error Variance Decomposition (FEVD)** - Frequentist and Bayesian
+- **LP-FEVD** - R², LP-A, LP-B estimators with bootstrap CIs (Gorodnichenko & Lee 2019)
 - **Historical Decomposition (HD)** - Decompose observed movements into structural shock contributions
 - **Summary Tables** - Publication-quality output with `summary()`, `table()`, `print_table()`
 

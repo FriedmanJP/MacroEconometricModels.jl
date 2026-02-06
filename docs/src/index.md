@@ -183,25 +183,16 @@ The package is organized into the following modules:
 
 | Module | Description |
 |--------|-------------|
-| `types.jl` | Core type definitions for VAR, BVAR, IRF, FEVD results |
-| `estimation.jl` | VAR/BVAR estimation via OLS and MCMC |
-| `bayesian.jl` | Bayesian inference with Turing.jl |
-| `priors.jl` | Minnesota prior and hyperparameter optimization |
-| `identification.jl` | Structural identification schemes |
-| `irf.jl` | Impulse response function computation |
-| `fevd.jl` | Forecast error variance decomposition |
-| `hd.jl` | Historical decomposition |
-| `summary.jl` | Publication-quality summary tables |
-| `arima_types.jl` | ARIMA type definitions (AR, MA, ARMA, ARIMA models) |
-| `arima_kalman.jl` | State-space form and Kalman filter for exact MLE |
-| `arima_estimation.jl` | AR/MA/ARMA/ARIMA estimation (OLS, CSS, MLE, CSS-MLE) |
-| `arima_forecast.jl` | Multi-step forecasting with confidence intervals |
-| `arima_selection.jl` | Order selection (`select_arima_order`, `auto_arima`, `ic_table`) |
-| `lp_*.jl` | Local Projections suite |
-| `factormodels.jl` | Static, dynamic, and generalized dynamic factor models with forecasting and CIs |
-| `unitroot.jl` | Unit root and cointegration tests (ADF, KPSS, PP, ZA, Ng-Perron, Johansen) |
-| `gmm.jl` | Generalized Method of Moments |
-| `utils.jl` | Numerical utilities |
+| `var/` | VAR estimation (OLS), structural identification, IRF, FEVD, historical decomposition |
+| `bvar/` | Bayesian VAR: MCMC estimation, Minnesota prior, hyperparameter optimization |
+| `summary.jl` | Publication-quality summary tables for all result types |
+| `arima/` | ARIMA suite: types, Kalman filter, estimation (CSS/MLE), forecasting, order selection |
+| `lp/` | Local Projections: core, IV, smooth, state-dependent, propensity, forecast, FEVD |
+| `factor/` | Static (PCA), dynamic (two-step/EM), generalized (spectral) factor models with forecasting |
+| `unitroot/` | Unit root tests (ADF, KPSS, PP, ZA, Ng-Perron) and Johansen cointegration |
+| `nongaussian/` | Non-Gaussian SVAR: normality tests, ICA, ML, heteroskedastic identification |
+| `gmm/gmm.jl` | Generalized Method of Moments |
+| `core/` | Shared infrastructure: types, utilities, display, covariance estimators |
 
 ## Mathematical Notation
 

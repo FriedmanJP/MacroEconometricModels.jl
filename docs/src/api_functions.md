@@ -19,7 +19,7 @@ estimate_arima
 
 ```@autodocs
 Modules = [MacroEconometricModels]
-Pages   = ["arima_forecast.jl"]
+Pages   = ["arima/forecast.jl"]
 Order   = [:function]
 ```
 
@@ -39,7 +39,7 @@ ic_table
 
 ```@autodocs
 Modules = [MacroEconometricModels]
-Pages   = ["estimation.jl"]
+Pages   = ["var/estimation.jl"]
 Order   = [:function]
 ```
 
@@ -47,7 +47,7 @@ Order   = [:function]
 
 ```@autodocs
 Modules = [MacroEconometricModels]
-Pages   = ["bayesian.jl"]
+Pages   = ["bvar/estimation.jl"]
 Order   = [:function]
 ```
 
@@ -55,7 +55,7 @@ Order   = [:function]
 
 ```@autodocs
 Modules = [MacroEconometricModels]
-Pages   = ["priors.jl"]
+Pages   = ["bvar/priors.jl"]
 Order   = [:function]
 ```
 
@@ -65,7 +65,7 @@ Order   = [:function]
 
 ```@autodocs
 Modules = [MacroEconometricModels]
-Pages   = ["identification.jl"]
+Pages   = ["var/identification.jl"]
 Order   = [:function]
 ```
 
@@ -77,7 +77,7 @@ Order   = [:function]
 
 ```@autodocs
 Modules = [MacroEconometricModels]
-Pages   = ["irf.jl"]
+Pages   = ["var/irf.jl"]
 Order   = [:function]
 ```
 
@@ -85,7 +85,7 @@ Order   = [:function]
 
 ```@autodocs
 Modules = [MacroEconometricModels]
-Pages   = ["fevd.jl"]
+Pages   = ["var/fevd.jl"]
 Order   = [:function]
 ```
 
@@ -93,7 +93,7 @@ Order   = [:function]
 
 ```@autodocs
 Modules = [MacroEconometricModels]
-Pages   = ["hd.jl"]
+Pages   = ["var/hd.jl"]
 Order   = [:function]
 ```
 
@@ -113,15 +113,55 @@ Order   = [:function]
 
 ```@autodocs
 Modules = [MacroEconometricModels]
-Pages   = ["lp_core.jl"]
+Pages   = ["lp/core.jl"]
 Order   = [:function]
 ```
 
-### LP Extensions (IV, Smooth, State-Dependent, Propensity)
+### LP-IV (Stock & Watson 2018)
 
 ```@autodocs
 Modules = [MacroEconometricModels]
-Pages   = ["lp_extensions.jl"]
+Pages   = ["lp/iv.jl"]
+Order   = [:function]
+```
+
+### Smooth LP (Barnichon & Brownlees 2019)
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["lp/smooth.jl"]
+Order   = [:function]
+```
+
+### State-Dependent LP (Auerbach & Gorodnichenko 2013)
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["lp/state.jl"]
+Order   = [:function]
+```
+
+### Propensity Score LP (Angrist et al. 2018)
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["lp/propensity.jl"]
+Order   = [:function]
+```
+
+### LP Forecasting
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["lp/forecast.jl"]
+Order   = [:function]
+```
+
+### LP-FEVD (Gorodnichenko & Lee 2019)
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["lp/fevd.jl"]
 Order   = [:function]
 ```
 
@@ -133,7 +173,7 @@ Order   = [:function]
 
 ```@autodocs
 Modules = [MacroEconometricModels]
-Pages   = ["staticfactor.jl"]
+Pages   = ["factor/static.jl"]
 Order   = [:function]
 ```
 
@@ -141,7 +181,7 @@ Order   = [:function]
 
 ```@autodocs
 Modules = [MacroEconometricModels]
-Pages   = ["dynamicfactor.jl"]
+Pages   = ["factor/dynamic.jl"]
 Order   = [:function]
 ```
 
@@ -149,7 +189,7 @@ Order   = [:function]
 
 ```@autodocs
 Modules = [MacroEconometricModels]
-Pages   = ["generalizedfactor.jl"]
+Pages   = ["factor/generalized.jl"]
 Order   = [:function]
 ```
 
@@ -159,7 +199,7 @@ Order   = [:function]
 
 ```@autodocs
 Modules = [MacroEconometricModels]
-Pages   = ["gmm.jl"]
+Pages   = ["gmm/gmm.jl"]
 Order   = [:function]
 ```
 
@@ -169,7 +209,7 @@ Order   = [:function]
 
 ```@autodocs
 Modules = [MacroEconometricModels]
-Pages   = ["unitroot.jl"]
+Pages   = ["unitroot/adf.jl", "unitroot/kpss.jl", "unitroot/pp.jl", "unitroot/za.jl", "unitroot/ngperron.jl", "unitroot/johansen.jl", "unitroot/stationarity.jl", "unitroot/convenience.jl"]
 Order   = [:function]
 ```
 
@@ -232,6 +272,6 @@ test_overidentification
 
 ```@autodocs
 Modules = [MacroEconometricModels]
-Pages   = ["utils.jl"]
+Pages   = ["core/utils.jl"]
 Order   = [:function]
 ```
