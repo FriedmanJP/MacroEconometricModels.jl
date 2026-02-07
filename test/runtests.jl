@@ -87,7 +87,9 @@ end
 parallel = get(ENV, "MACRO_SERIAL_TESTS", "") != "1"
 
 if parallel && Sys.CPU_THREADS >= 2
+    cov_level = Base.JLOptions().code_coverage
     println("Running $(length(TEST_GROUPS)) test groups in parallel ($(Sys.CPU_THREADS) threads available)")
+    println("Code coverage level: $cov_level (0=none, 1=user, 2=all)")
     println("Set MACRO_SERIAL_TESTS=1 to run sequentially\n")
 
     procs = Pair{String, Base.Process}[]
