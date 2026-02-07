@@ -217,6 +217,101 @@ function report(model::VARModel{T}) where {T}
 end
 
 """
+    report(vecm::VECMModel)
+
+Print comprehensive VECM summary including cointegrating vectors, adjustment
+coefficients, short-run dynamics, and diagnostics.
+"""
+function report(m::VECMModel{T}) where {T}
+    n = nvars(m)
+    r = m.rank
+    p_diff = m.p - 1
+    T_eff = effective_nobs(m)
+
+    # --- Specification ---
+    spec_data = [
+        "Variables" n;
+        "VAR order (p)" m.p;
+        "Lagged differences" p_diff;
+        "Cointegrating rank (r)" r;
+        "Observations (effective)" T_eff;
+        "Deterministic" string(m.deterministic);
+        "Method" string(m.method)
+    ]
+    _pretty_table(stdout, spec_data;
+        title = "Vector Error Correction Model — VECM($p_diff), Rank $r",
+        column_labels = ["Specification", ""],
+        alignment = [:l, :r],
+    )
+
+    # --- Cointegrating vectors (β) ---
+    if r > 0
+        _matrix_table(stdout, m.beta, "Cointegrating Vectors (β)";
+            row_labels=["Var $i" for i in 1:n],
+            col_labels=["β$j" for j in 1:r])
+
+        # --- Adjustment coefficients (α) ---
+        _matrix_table(stdout, m.alpha, "Adjustment Coefficients (α)";
+            row_labels=["Var $i" for i in 1:n],
+            col_labels=["α$j" for j in 1:r])
+
+        # --- Long-run matrix (Π = αβ') ---
+        _matrix_table(stdout, m.Pi, "Long-Run Matrix (Π = αβ')";
+            row_labels=["Var $i" for i in 1:n],
+            col_labels=["Var $j" for j in 1:n])
+    end
+
+    # --- Short-run dynamics ---
+    for (i, Gi) in enumerate(m.Gamma)
+        _matrix_table(stdout, Gi, "Short-Run Dynamics Γ$i";
+            row_labels=["Var $i" for i in 1:n],
+            col_labels=["Var $j" for j in 1:n])
+    end
+
+    # --- Intercept ---
+    mu_data = Matrix{Any}(undef, n, 2)
+    for i in 1:n
+        mu_data[i, 1] = "Var $i"
+        mu_data[i, 2] = _fmt(m.mu[i])
+    end
+    _pretty_table(stdout, mu_data;
+        title = "Intercept (μ)",
+        column_labels = ["Variable", "Value"],
+        alignment = [:l, :r],
+    )
+
+    # --- Information Criteria ---
+    ic_data = ["AIC" _fmt(m.aic; digits=2);
+               "BIC" _fmt(m.bic; digits=2);
+               "HQIC" _fmt(m.hqic; digits=2);
+               "Log-likelihood" _fmt(m.loglik; digits=2)]
+    _pretty_table(stdout, ic_data;
+        title = "Information Criteria",
+        column_labels = ["Criterion", "Value"],
+        alignment = [:l, :r],
+    )
+
+    # --- Residual Covariance ---
+    _matrix_table(stdout, m.Sigma, "Residual Covariance (Σ)";
+        row_labels=["Var $i" for i in 1:n],
+        col_labels=["Var $j" for j in 1:n])
+end
+
+"""
+    report(f::VECMForecast)
+
+Print VECM forecast summary.
+"""
+report(f::VECMForecast) = show(stdout, f)
+
+"""
+    report(g::VECMGrangerResult)
+
+Print VECM Granger causality test results.
+"""
+report(g::VECMGrangerResult) = show(stdout, g)
+
+"""
     report(irf::ImpulseResponse)
     report(irf::BayesianImpulseResponse)
 
@@ -1579,6 +1674,11 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Estimation and Hypothesis Testing of Cointegration Vectors in Gaussian Vector Autoregressive Models",
         journal="Econometrica", volume="59", issue="6", pages="1551--1580",
         doi="10.2307/2938278", isbn="", publisher="", entry_type=:article),
+    :engle_granger1987 => (key=:engle_granger1987,
+        authors="Engle, Robert F. and Granger, Clive W. J.", year=1987,
+        title="Co-Integration and Error Correction: Representation, Estimation, and Testing",
+        journal="Econometrica", volume="55", issue="2", pages="251--276",
+        doi="10.2307/1913236", isbn="", publisher="", entry_type=:article),
     # --- ARIMA ---
     :box_jenkins1970 => (key=:box_jenkins1970,
         authors="Box, George E. P. and Jenkins, Gwilym M.", year=1970,
@@ -1761,6 +1861,12 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :za => [:zivot_andrews1992],
     :ngperron => [:ng_perron2001],
     :johansen => [:johansen1991],
+    # VECM
+    :VECMModel => [:johansen1991, :engle_granger1987, :lutkepohl2005],
+    :VECMForecast => [:johansen1991, :lutkepohl2005],
+    :VECMGrangerResult => [:johansen1991, :lutkepohl2005],
+    :vecm => [:johansen1991, :engle_granger1987, :lutkepohl2005],
+    :engle_granger => [:engle_granger1987],
     # ARIMA
     :ARModel => [:box_jenkins1970],
     :MAModel => [:box_jenkins1970],
@@ -2037,6 +2143,11 @@ refs(io::IO, ::PPResult; kw...) = refs(io, _TYPE_REFS[:PPResult]; kw...)
 refs(io::IO, ::ZAResult; kw...) = refs(io, _TYPE_REFS[:ZAResult]; kw...)
 refs(io::IO, ::NgPerronResult; kw...) = refs(io, _TYPE_REFS[:NgPerronResult]; kw...)
 refs(io::IO, ::JohansenResult; kw...) = refs(io, _TYPE_REFS[:JohansenResult]; kw...)
+
+# VECM
+refs(io::IO, ::VECMModel; kw...) = refs(io, _TYPE_REFS[:VECMModel]; kw...)
+refs(io::IO, ::VECMForecast; kw...) = refs(io, _TYPE_REFS[:VECMForecast]; kw...)
+refs(io::IO, ::VECMGrangerResult; kw...) = refs(io, _TYPE_REFS[:VECMGrangerResult]; kw...)
 
 # ARIMA
 refs(io::IO, ::ARModel; kw...) = refs(io, _TYPE_REFS[:ARModel]; kw...)

@@ -25,6 +25,7 @@ makedocs(;
         ],
         "Frequentist Models" => [
             "VAR" => "manual.md",
+            "VECM" => "vecm.md",
             "Local Projections" => "lp.md",
             "Factor Models" => "factormodels.md",
         ],

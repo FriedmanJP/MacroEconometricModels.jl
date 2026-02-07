@@ -23,6 +23,9 @@ docs/build/
 .claude/
 CLAUDE.md
 
+# Replication files (external data, not part of package)
+replication_files_v5.0/
+
 # Julia Manifest files (environment-specific, should be regenerated)
 Manifest.toml
 **/Manifest.toml

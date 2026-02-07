@@ -39,6 +39,11 @@ The API documentation is organized into the following pages:
 | `estimate_gdfm(X, q; ...)` | Generalized dynamic factor model |
 | `estimate_gmm(moment_fn, theta0, data; ...)` | GMM estimation |
 | `structural_lp(Y, H; method=:cholesky, ...)` | Structural LP with multi-shock IRFs |
+| `estimate_vecm(Y, p; rank=:auto, ...)` | Estimate VECM via Johansen MLE or Engle-Granger |
+| `to_var(vecm)` | Convert VECM to VAR in levels |
+| `select_vecm_rank(Y, p; ...)` | Select cointegrating rank |
+| `granger_causality_vecm(vecm, cause, effect)` | VECM Granger causality test |
+| `forecast(vecm, h; ci_method=:none, ...)` | VECM forecast preserving cointegration |
 
 ### Structural Analysis Functions
 

@@ -33,6 +33,16 @@ AbstractVARModel
 
 ---
 
+## VECM Models
+
+```@docs
+VECMModel
+VECMForecast
+VECMGrangerResult
+```
+
+---
+
 ## Analysis Result Types
 
 ```@docs
@@ -194,7 +204,11 @@ AbstractARIMAModel <: StatsAPI.RegressionModel
 └── ARIMAModel{T}
 
 AbstractVARModel
-└── VARModel{T}
+├── VARModel{T}
+└── VECMModel{T}
+
+VECMForecast{T}
+VECMGrangerResult{T}
 
 AbstractAnalysisResult
 ├── AbstractFrequentistResult

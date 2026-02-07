@@ -11,6 +11,7 @@
 - **ARIMA Models**: AR, MA, ARMA, and ARIMA estimation via OLS, CSS, MLE (Kalman filter), and CSS-MLE; automatic order selection; multi-step forecasting with confidence intervals
 - **Volatility Models**: ARCH (Engle 1982), GARCH (Bollerslev 1986), EGARCH (Nelson 1991), GJR-GARCH (Glosten et al. 1993) via MLE with two-stage optimization; Stochastic Volatility (Taylor 1986) via Kim-Shephard-Chib (1998) Gibbs sampler; news impact curves, ARCH-LM and Ljung-Box diagnostics, multi-step volatility forecasting with simulation-based CIs
 - **Vector Autoregression (VAR)**: OLS estimation with comprehensive diagnostics, impulse response functions (IRFs), and forecast error variance decomposition (FEVD)
+- **Vector Error Correction Models (VECM)**: Johansen MLE and Engle-Granger two-step estimation for cointegrated I(1) systems; automatic rank selection; IRF, FEVD, and historical decomposition via VAR conversion; VECM-specific forecasting preserving cointegrating relationships; VECM Granger causality tests
 - **Structural Identification**: Multiple identification schemes including Cholesky, sign restrictions, long-run (Blanchard-Quah), and narrative restrictions
 - **Bayesian VAR**: Minnesota/Litterman prior with automatic hyperparameter optimization via marginal likelihood (Giannone, Lenza & Primiceri, 2015)
 - **Local Projections**: Jordà (2005) methodology with extensions for IV (Stock & Watson, 2018), smooth LP (Barnichon & Brownlees, 2019), state-dependence (Auerbach & Gorodnichenko, 2013), propensity score methods (Angrist, Jordà & Kuersteiner, 2018), structural LP (Plagborg-Møller & Wolf, 2021), LP forecasting, and LP-FEVD (Gorodnichenko & Lee, 2019)
@@ -42,6 +43,7 @@ using MacroEconometricModels
 model = estimate_var(Y, 2)                          # VAR(2) via OLS
 irfs = irf(model, 20; method=:cholesky)             # Impulse responses
 post = estimate_bvar(Y, 2; prior=:minnesota)        # Bayesian VAR
+vecm = estimate_vecm(Y, 2; rank=1)                  # VECM with rank 1
 lp = estimate_lp(Y, 1, 20; cov_type=:newey_west)   # Local Projections
 fm = estimate_factors(X, 3)                         # Factor model
 ar = estimate_ar(y, 2)                              # AR(2)
@@ -246,6 +248,7 @@ The package is organized into the following modules:
 | `garch/` | GARCH, EGARCH, GJR-GARCH estimation via MLE, news impact curves, forecasting |
 | `sv/` | Stochastic Volatility via KSC (1998) Gibbs sampler, posterior predictive forecasts |
 | `var/` | VAR estimation (OLS), structural identification, IRF, FEVD, historical decomposition |
+| `vecm/` | Vector Error Correction Models: Johansen MLE, Engle-Granger, cointegrating vectors, VECM forecasting, Granger causality |
 | `bvar/` | Bayesian VAR: conjugate NIW posterior sampling, Minnesota prior, hyperparameter optimization |
 | `lp/` | Local Projections: core, IV, smooth, state-dependent, propensity, structural LP, forecast, LP-FEVD |
 | `factor/` | Static (PCA), dynamic (two-step/EM), generalized (spectral) factor models with forecasting |

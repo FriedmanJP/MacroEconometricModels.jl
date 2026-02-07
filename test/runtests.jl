@@ -16,7 +16,7 @@ const TEST_GROUPS = [
         "bvar/test_bgr.jl",
         "core/test_coverage_gaps.jl",
     ]),
-    # Group 2: IRF, FEVD, HD, StatsAPI
+    # Group 2: IRF, FEVD, HD, StatsAPI, VECM
     ("IRF & FEVD" => [
         "var/test_irf.jl",
         "var/test_irf_ci.jl",
@@ -24,6 +24,7 @@ const TEST_GROUPS = [
         "var/test_fevd.jl",
         "var/test_hd.jl",
         "core/test_summary.jl",
+        "vecm/test_vecm.jl",
     ]),
     # Group 3: Factor models
     ("Factor Models" => [
@@ -261,6 +262,10 @@ else
 
         @testset "Volatility Coverage" begin
             include("volatility/test_volatility_coverage.jl")
+        end
+
+        @testset "VECM" begin
+            include("vecm/test_vecm.jl")
         end
     end
 end

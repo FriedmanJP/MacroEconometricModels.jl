@@ -71,6 +71,24 @@ Pages   = ["bvar/priors.jl"]
 Order   = [:function]
 ```
 
+### VECM Estimation
+
+```@docs
+estimate_vecm
+to_var
+select_vecm_rank
+cointegrating_rank
+granger_causality_vecm
+```
+
+### VECM Analysis and Forecasting
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["vecm/analysis.jl", "vecm/forecast.jl"]
+Order   = [:function]
+```
+
 ---
 
 ## Structural Identification

@@ -90,6 +90,11 @@ include("teststat/pp.jl")
 include("teststat/za.jl")
 include("teststat/ngperron.jl")
 include("teststat/johansen.jl")
+
+# VECM types and estimation (after johansen.jl for JohansenResult)
+include("vecm/types.jl")
+include("vecm/estimation.jl")
+
 include("teststat/stationarity.jl")
 include("teststat/convenience.jl")
 include("teststat/show.jl")
@@ -157,6 +162,11 @@ include("var/irf.jl")
 include("var/fevd.jl")
 include("var/hd.jl")
 
+# VECM analysis and forecasting (after irf + fevd + hd)
+include("vecm/forecast.jl")
+include("vecm/analysis.jl")
+include("vecm/granger.jl")
+
 # LP-FEVD (after irf + fevd)
 include("lp/fevd.jl")
 
@@ -216,12 +226,22 @@ export johansen_test
 # Convenience functions
 export unit_root_summary, test_all_variables
 
+# VECM types
+export VECMModel, VECMForecast, VECMGrangerResult
+
 # =============================================================================
 # Exports - VAR Estimation
 # =============================================================================
 
 export estimate_var
 export select_lag_order
+
+# =============================================================================
+# Exports - VECM Estimation
+# =============================================================================
+
+export estimate_vecm, to_var, select_vecm_rank
+export cointegrating_rank, granger_causality_vecm
 
 # =============================================================================
 # Exports - Bayesian Estimation
