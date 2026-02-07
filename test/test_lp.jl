@@ -1121,4 +1121,86 @@ using Random
         model_int = estimate_lp(Y_int, 1, 5; lags=2)
         @test eltype(model_int.Y) == Float64
     end
+
+    @testset "State LP regime returns" begin
+        Random.seed!(88901)
+        Y_st = randn(200, 2)
+        state = randn(200)
+        state_model = estimate_state_lp(Y_st, 1, state, 8; lags=2, gamma=1.5)
+
+        # Single-regime returns have :values key
+        for regime in [:expansion, :recession, :difference]
+            irf_r = state_irf(state_model; regime=regime)
+            @test irf_r isa NamedTuple
+            @test haskey(irf_r, :values)
+        end
+        # :both returns nested NamedTuple with :expansion, :recession, :difference
+        irf_both = state_irf(state_model; regime=:both)
+        @test irf_both isa NamedTuple
+        @test haskey(irf_both, :expansion)
+        @test haskey(irf_both, :recession)
+        @test haskey(irf_both, :difference)
+    end
+
+    @testset "State LP test_regime_difference" begin
+        Random.seed!(88902)
+        Y_st = randn(200, 2)
+        state = randn(200)
+        state_model = estimate_state_lp(Y_st, 1, state, 8; lags=2, gamma=1.5)
+        result = test_regime_difference(state_model)
+        @test result isa NamedTuple
+        @test haskey(result, :p_values)
+    end
+
+    @testset "State LP with explicit gamma" begin
+        Random.seed!(88903)
+        Y_gs = randn(200, 2)
+        state = randn(200)
+        state_model = estimate_state_lp(Y_gs, 1, state, 5; lags=2, gamma=2.0)
+        @test state_model isa StateLPModel
+    end
+
+    @testset "Propensity LP diagnostics" begin
+        Random.seed!(88910)
+        Y_p = randn(200, 2)
+        treatment = randn(200) .> 0  # Bool vector
+        covariates = randn(200, 2)
+        model_p = estimate_propensity_lp(Y_p, treatment, covariates, 5)
+        @test model_p isa PropensityLPModel
+
+        # Propensity diagnostics
+        diag_result = propensity_diagnostics(model_p)
+        @test diag_result isa NamedTuple
+
+        # Propensity IRF
+        irf_p = propensity_irf(model_p)
+        @test irf_p isa LPImpulseResponse
+    end
+
+    @testset "Smooth LP cross_validate_lambda smoke" begin
+        Random.seed!(88920)
+        Y_sm = randn(200, 2)
+        best_lambda = cross_validate_lambda(Y_sm, 1, 8; n_folds=3)
+        @test best_lambda > 0
+    end
+
+    @testset "Smooth LP higher lambda" begin
+        Random.seed!(88921)
+        Y_sm = randn(200, 2)
+        model_sm = estimate_smooth_lp(Y_sm, 1, 8; degree=3, n_knots=4, lambda=10.0)
+        @test model_sm isa SmoothLPModel
+        irf_sm = smooth_lp_irf(model_sm)
+        @test irf_sm isa LPImpulseResponse
+    end
+
+    @testset "BSpline basis value at boundaries" begin
+        knots = Float64[0, 0, 0, 0, 5, 10, 15, 15, 15, 15]
+        degree = 3
+        # At left boundary
+        v0 = MacroEconometricModels.bspline_basis_value(0.0, 1, degree, knots)
+        @test isfinite(v0)
+        # At right boundary
+        v_end = MacroEconometricModels.bspline_basis_value(15.0, 6, degree, knots)
+        @test isfinite(v_end)
+    end
 end

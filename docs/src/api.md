@@ -38,6 +38,7 @@ The API documentation is organized into the following pages:
 | `estimate_dynamic_factors(X, r, p; ...)` | Dynamic factor model |
 | `estimate_gdfm(X, q; ...)` | Generalized dynamic factor model |
 | `estimate_gmm(moment_fn, theta0, data; ...)` | GMM estimation |
+| `structural_lp(Y, H; method=:cholesky, ...)` | Structural LP with multi-shock IRFs |
 
 ### Structural Analysis Functions
 
@@ -49,6 +50,7 @@ The API documentation is organized into the following pages:
 | `identify_sign(model; ...)` | Sign restriction identification |
 | `identify_long_run(model)` | Blanchard-Quah identification |
 | `identify_narrative(model; ...)` | Narrative sign restrictions |
+| `identify_arias(model, restrictions, H; ...)` | Arias et al. (2018) sign + zero restrictions |
 | `identify_fastica(model; ...)` | FastICA SVAR identification |
 | `identify_jade(model; ...)` | JADE SVAR identification |
 | `identify_sobi(model; ...)` | SOBI SVAR identification |
@@ -63,6 +65,16 @@ The API documentation is organized into the following pages:
 | `identify_garch(model; ...)` | GARCH SVAR identification |
 | `identify_smooth_transition(model, s; ...)` | Smooth-transition SVAR identification |
 | `identify_external_volatility(model, regime)` | External volatility SVAR identification |
+| `lp_fevd(slp, H; method=:r2, ...)` | LP-FEVD (Gorodnichenko & Lee 2019) |
+| `cumulative_irf(lp_irfs)` | Cumulative IRF from LP impulse response |
+| `historical_decomposition(slp)` | Historical decomposition from structural LP |
+
+### LP Forecasting Functions
+
+| Function | Description |
+|----------|-------------|
+| `forecast(lp, shock_path; ...)` | Direct multi-step LP forecast |
+| `forecast(slp, shock_idx, shock_path; ...)` | Structural LP conditional forecast |
 
 ### Unit Root Test Functions
 
@@ -110,6 +122,8 @@ The API documentation is organized into the following pages:
 | Function | Description |
 |----------|-------------|
 | `optimize_hyperparameters(Y, p; ...)` | Optimize Minnesota prior |
+| `posterior_mean_model(chain, p, n; ...)` | VARModel from posterior mean |
+| `posterior_median_model(chain, p, n; ...)` | VARModel from posterior median |
 | `weak_instrument_test(model; ...)` | Test for weak instruments |
 | `sargan_test(model, h)` | Overidentification test |
 | `test_regime_difference(model; ...)` | Test regime differences |

@@ -864,3 +864,46 @@ end
     output = String(take!(io))
     @test occursin("ARIMA(1,1,1)", output)
 end
+
+@testset "ARIMA d=2 (double differencing)" begin
+    Random.seed!(6001)
+    # Generate I(2) series
+    y_i2 = cumsum(cumsum(randn(200)))
+    m = estimate_arima(y_i2, 1, 2, 1; method=:css_mle)
+    @test m isa MacroEconometricModels.ARIMAModel{Float64}
+    @test m.d == 2
+    fc = forecast(m, 5)
+    @test length(fc.forecast) == 5
+end
+
+@testset "auto_arima include_intercept=false" begin
+    Random.seed!(6002)
+    y = randn(100)
+    m = auto_arima(y; include_intercept=false, max_p=3, max_q=3)
+    @test m isa MacroEconometricModels.AbstractARIMAModel
+    fc = forecast(m, 3)
+    @test length(fc.forecast) == 3
+end
+
+@testset "select_arima_order larger grid" begin
+    Random.seed!(6003)
+    y = randn(100)
+    result = select_arima_order(y, 3, 3)
+    @test result isa MacroEconometricModels.ARIMAOrderSelection
+    @test result.best_p_aic >= 0
+    @test result.best_q_aic >= 0
+    @test result.best_p_bic >= 0
+    @test result.best_q_bic >= 0
+end
+
+@testset "Forecast with conf_level=0.99" begin
+    Random.seed!(6004)
+    y = randn(100)
+    m = estimate_ar(y, 2)
+    fc = forecast(m, 5; conf_level=0.99)
+    @test length(fc.forecast) == 5
+    @test all(fc.ci_upper .> fc.ci_lower)
+    # 99% CI should be wider than default 95%
+    fc95 = forecast(m, 5; conf_level=0.95)
+    @test all(fc.ci_upper .- fc.ci_lower .>= fc95.ci_upper .- fc95.ci_lower .- 1e-10)
+end

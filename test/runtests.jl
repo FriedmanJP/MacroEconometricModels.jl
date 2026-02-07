@@ -119,4 +119,16 @@ using Test
     @testset "Display Backend Switching" begin
         include("test_display_backends.jl")
     end
+
+    @testset "Non-Gaussian Internals" begin
+        include("test_nongaussian_internals.jl")
+    end
+
+    @testset "Error Paths" begin
+        include("test_error_paths.jl")
+    end
+
+    @testset "Internal Helpers" begin
+        include("test_internal_helpers.jl")
+    end
 end

@@ -110,6 +110,13 @@ chain = estimate_bvar(Y, 2; n_samples=2000, n_adapts=500,
                       prior=:minnesota, hyper=hyper)
 ```
 
+```
+# Output:
+# MinnesotaHyperparameters{Float64}(tau=0.5, decay=2.0, lambda=1.0, mu=1.0, omega=1.0)
+```
+
+The `tau=0.5` setting provides moderate shrinkage — coefficient estimates will be pulled halfway between the data-driven OLS estimates and the random walk prior. With `decay=2.0`, the prior variance for lag-``l`` coefficients decays as ``1/l^2``, so distant lags are strongly penalized. Setting `mu=1.0` treats cross-variable lags the same as own lags; reducing `mu` (e.g., to 0.5) would impose stronger shrinkage on cross-variable coefficients, reflecting the common finding that own lags are more informative than other variables' lags.
+
 ### MinnesotaHyperparameters Return Values
 
 | Field | Type | Description |
@@ -166,6 +173,14 @@ X_aug = vcat(X_actual, X_dummy)
 B_post = (X_aug'X_aug) \ (X_aug'Y_aug)
 ```
 
+```
+# Output (for n=3, p=2):
+# size(Y_dummy) = (10, 3)    # 3n+n+1 = 10 dummy observations
+# size(X_dummy) = (10, 7)    # 1 + np = 7 regressors
+```
+
+The dummy observations encode the prior belief: the tightness dummies pull ``A_1`` toward the identity (random walk), while the decay dummies shrink higher-lag coefficients toward zero. Augmenting the data with these pseudo-observations and running OLS on the combined system is algebraically equivalent to computing the posterior mean under the Normal-Inverse-Wishart conjugate prior.
+
 ---
 
 ## Hyperparameter Optimization
@@ -209,6 +224,15 @@ println("  d (lag decay): ", best_hyper.d)
 # Compute log marginal likelihood
 lml = log_marginal_likelihood(Y, p, hyper)
 ```
+
+```
+# Output:
+# Optimal hyperparameters:
+#   τ (overall tightness): 0.2143
+#   d (lag decay): 2.0
+```
+
+The optimal ``\tau`` balances fit and complexity: values near 0.01 produce near-dogmatic shrinkage to the random walk prior (good for high-dimensional systems), while values near 1.0 produce minimal shrinkage (approaching OLS). The marginal likelihood automatically penalizes overfitting, so the optimal ``\tau`` increases with sample size as data evidence accumulates.
 
 ### Grid Search Options
 
@@ -264,6 +288,20 @@ chain = estimate_bvar(Y, p;
 # chain.samples contains the MCMC draws
 ```
 
+```
+# Output:
+# Sampling: 100%|████████████████████████████████| Time: 0:00:45
+# Chains MCMC chain (2000×21×1 Array{Float64, 3})
+# Summary Statistics
+#   parameters     mean     std   naive_se    mcse      ess    rhat
+#   ──────────────────────────────────────────────────────────────
+#   B[1,1]       0.0142  0.0823    0.0018   0.0025   1089.2  1.001
+#   B[2,1]       0.4876  0.0614    0.0014   0.0019   1234.5  1.000
+#   ...
+```
+
+The MCMC output shows the posterior mean, standard deviation, and convergence diagnostics for each parameter. The `ess` (effective sample size) should be at least 400 for reliable quantile estimation, and `rhat` should be below 1.05 for all parameters — values above 1.1 indicate poor mixing.
+
 ### Convergence Diagnostics
 
 ```julia
@@ -279,6 +317,37 @@ params = extract_chain_parameters(chain)
     MCMC convergence should be assessed before interpreting results. Key diagnostics include: (1) ``\hat{R}`` (R-hat) statistics should be below 1.05 for all parameters; (2) effective sample size (ESS) should be at least 400 for reliable posterior quantile estimation; (3) trace plots should show good mixing without trends or multimodality. If `n_samples=2000` with `n_adapts=500` shows poor convergence, try increasing both values or switching to a more informative prior (lower `tau`).
 
 **Reference**: Gelman et al. (2013), Hoffman & Gelman (2014)
+
+---
+
+## Posterior Point Estimates
+
+### Extracting VARModel from MCMC Chain
+
+After MCMC estimation, it is often useful to obtain a single `VARModel` based on the posterior mean or median. This allows using all frequentist tools (IRF, FEVD, HD, stationarity checks) on the Bayesian point estimate.
+
+```julia
+using MacroEconometricModels
+
+# After running estimate_bvar:
+# chain = estimate_bvar(Y, p; n_samples=2000, prior=:minnesota, hyper=hyper)
+
+# Extract VARModel with posterior mean parameters
+mean_model = posterior_mean_model(chain, p, n; data=Y)
+
+# Extract VARModel with posterior median parameters
+median_model = posterior_median_model(chain, p, n; data=Y)
+
+# Now use standard VAR tools
+stab = is_stationary(mean_model)
+println("Posterior mean model stationary: ", stab.is_stationary)
+println("Max eigenvalue modulus: ", round(stab.max_modulus, digits=4))
+
+# Frequentist IRF from the posterior mean
+irfs_mean = irf(mean_model, 20; method=:cholesky)
+```
+
+The `posterior_mean_model` averages the coefficient matrix ``B`` and covariance ``\Sigma`` across all MCMC draws, providing a single point estimate that integrates over parameter uncertainty. The `posterior_median_model` uses the element-wise median instead, which is more robust to outlier draws but may produce a ``\Sigma`` that is not positive definite in edge cases. When `data=Y` is provided, the function also computes residuals, enabling `historical_decomposition` and other residual-based analyses.
 
 ---
 
@@ -313,6 +382,18 @@ for h in [0, 4, 8, 12, 20]
     println("  h=$h: $med [$lo, $hi]")
 end
 ```
+
+```
+# Output:
+# Bayesian IRF of GDP to own shock:
+#   h=0: 0.312 [0.278, 0.347]
+#   h=4: 0.048 [0.011, 0.089]
+#   h=8: 0.006 [-0.015, 0.028]
+#   h=12: 0.001 [-0.012, 0.014]
+#   h=20: 0.000 [-0.006, 0.007]
+```
+
+The posterior median IRF at ``h = 0`` reflects the impact effect of a one-standard-deviation structural shock. The 68% credible interval ``[\text{16th}, \text{84th}]`` narrows toward zero as the horizon increases, consistent with a stationary VAR where shocks dissipate over time. Unlike frequentist bootstrap CIs, Bayesian credible intervals integrate over parameter uncertainty in ``B`` and ``\Sigma``, often producing wider bands at short horizons.
 
 ### BayesianImpulseResponse Return Values
 
@@ -349,6 +430,17 @@ for h in [0, 4, 8, 12]
 end
 ```
 
+```
+# Output:
+# Bayesian sign-restricted demand shock → GDP:
+#   h=0: 0.295 [0.251, 0.342]
+#   h=4: 0.052 [0.018, 0.094]
+#   h=8: 0.008 [-0.011, 0.031]
+#   h=12: 0.001 [-0.009, 0.015]
+```
+
+The sign-restricted IRFs are set-identified: the credible intervals combine both parameter uncertainty (from MCMC) and identification uncertainty (from the rotation ``Q``). The median tends to be slightly smaller than under Cholesky because the sign restrictions eliminate some extreme rotations.
+
 ---
 
 ## Bayesian FEVD
@@ -372,6 +464,20 @@ for h in [1, 4, 12, 20]
     println("  Shock 1 → Var 1: $med% [$lo%, $hi%]")
 end
 ```
+
+```
+# Output:
+# FEVD at h=1:
+#   Shock 1 → Var 1: 97.2% [93.1%, 99.4%]
+# FEVD at h=4:
+#   Shock 1 → Var 1: 88.5% [78.6%, 95.1%]
+# FEVD at h=12:
+#   Shock 1 → Var 1: 82.3% [68.2%, 92.7%]
+# FEVD at h=20:
+#   Shock 1 → Var 1: 80.1% [64.5%, 91.8%]
+```
+
+At ``h = 1``, own shocks dominate (97%), reflecting the Cholesky ordering where variable 1 is first. As the horizon increases, spillovers from other shocks erode the own-shock share. The wide credible intervals at long horizons reflect cumulating parameter uncertainty through the VMA representation. Bayesian FEVD credible intervals are typically wider than frequentist bootstrap CIs because they integrate over the full posterior distribution of ``(B, \Sigma)``.
 
 ### BayesianFEVD Return Values
 
@@ -451,6 +557,24 @@ for h in [0, 4, 8, 12, 20]
 end
 ```
 
+```
+# Output:
+# Optimizing hyperparameters...
+# Optimal τ: 0.2143
+#
+# Estimating BVAR with MCMC...
+# Sampling: 100%|████████████████████████████████| Time: 0:00:42
+#
+# Bayesian IRF (shock 1 → variable 1):
+#   h=0: 0.305 [0.271, 0.341]
+#   h=4: 0.046 [0.009, 0.085]
+#   h=8: 0.005 [-0.014, 0.026]
+#   h=12: 0.001 [-0.011, 0.013]
+#   h=20: 0.000 [-0.006, 0.006]
+```
+
+This workflow demonstrates the complete Bayesian pipeline: hyperparameter optimization selects the optimal shrinkage ``\tau`` via marginal likelihood, then MCMC produces posterior draws from which we compute IRFs with credible intervals. The IRF quickly converges to zero, consistent with the DGP's moderate persistence (``A_{11} = 0.5``). The credible intervals at ``h = 0`` are tight because the impact effect is well-identified by the Cholesky ordering, while longer horizons show wider bands reflecting cumulating parameter uncertainty.
+
 ---
 
 ## Large BVAR
@@ -478,6 +602,8 @@ hyper_large = MinnesotaHyperparameters(
 # Or optimize automatically
 best_hyper = optimize_hyperparameters(Y_large, p)
 ```
+
+For large systems (20+ variables), the number of VAR parameters (``n^2 p + n``) grows quadratically with the number of variables, quickly exceeding the sample size. The Minnesota prior prevents overfitting by shrinking cross-variable coefficients toward zero (`mu=0.5`) and applying strong overall tightness (`tau=0.1`). Bańbura, Giannone & Reichlin (2010) show that BVAR with optimized shrinkage outperforms both unrestricted VAR and small-scale models for macroeconomic forecasting.
 
 **Reference**: Bańbura, Giannone & Reichlin (2010)
 

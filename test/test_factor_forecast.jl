@@ -253,3 +253,47 @@ end
     @test all(isfinite, fc.observables)
     @test all(isfinite, fc.factors)
 end
+
+@testset "DFM simulation CI method" begin
+    Random.seed!(77730)
+    X = randn(100, 8)
+    dfm = estimate_dynamic_factors(X, 2, 1)
+    fc_sim = forecast(dfm, 5; ci_method=:simulation, n_boot=20)
+    @test fc_sim isa MacroEconometricModels.FactorForecast
+    @test size(fc_sim.factors) == (5, 2)
+    @test size(fc_sim.observables) == (5, 8)
+    if fc_sim.factors_lower !== nothing
+        @test size(fc_sim.factors_lower) == (5, 2)
+        @test size(fc_sim.factors_upper) == (5, 2)
+    end
+end
+
+@testset "DFM legacy ci=true compatibility" begin
+    Random.seed!(77731)
+    X = randn(100, 8)
+    dfm = estimate_dynamic_factors(X, 2, 1)
+    fc_legacy = forecast(dfm, 5; ci=true)
+    @test fc_legacy isa MacroEconometricModels.FactorForecast
+    @test size(fc_legacy.factors) == (5, 2)
+end
+
+@testset "Static FM with p=3 bootstrap CIs" begin
+    Random.seed!(77732)
+    X = randn(100, 8)
+    fm = estimate_factors(X, 2)
+    fc = forecast(fm, 5; p=3, ci_method=:bootstrap, n_boot=20)
+    @test fc isa MacroEconometricModels.FactorForecast
+    @test size(fc.factors) == (5, 2)
+    if fc.factors_lower !== nothing
+        @test size(fc.factors_lower) == (5, 2)
+    end
+end
+
+@testset "GDFM spectral vs ar forecast" begin
+    Random.seed!(77733)
+    X = randn(100, 10)
+    gdfm = estimate_gdfm(X, 2)
+    fc_ar = forecast(gdfm, 5; method=:ar)
+    @test size(fc_ar.factors) == (5, 2)
+    @test all(isfinite, fc_ar.factors)
+end

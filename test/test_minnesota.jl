@@ -92,4 +92,49 @@ Random.seed!(42)
 
         println("Full Hyperparameter Optimization Test Complete.")
     end
+
+    @testset "Marginal likelihood with different hypers" begin
+        Random.seed!(4455)
+        Y_ml = randn(80, 2)
+        p_ml = 2
+
+        hyper1 = MinnesotaHyperparameters(tau=0.1)
+        hyper2 = MinnesotaHyperparameters(tau=1.0)
+        hyper3 = MinnesotaHyperparameters(tau=0.001)
+
+        ml1 = log_marginal_likelihood(Y_ml, p_ml, hyper1)
+        ml2 = log_marginal_likelihood(Y_ml, p_ml, hyper2)
+        ml3 = log_marginal_likelihood(Y_ml, p_ml, hyper3)
+
+        @test isfinite(ml1)
+        @test isfinite(ml2)
+        @test isfinite(ml3)
+        # Different tau values should give different likelihoods
+        @test ml1 != ml2
+    end
+
+    @testset "Extreme hyperparameters" begin
+        Random.seed!(4456)
+        Y_ex = randn(80, 2)
+        p_ex = 1
+
+        # Very tight prior (tau=0.001)
+        hyper_tight = MinnesotaHyperparameters(tau=0.001, decay=2.0, omega=0.5)
+        ml_tight = log_marginal_likelihood(Y_ex, p_ex, hyper_tight)
+        @test isfinite(ml_tight)
+
+        # Very loose prior (tau=100)
+        hyper_loose = MinnesotaHyperparameters(tau=100.0, decay=1.0, omega=1.0)
+        ml_loose = log_marginal_likelihood(Y_ex, p_ex, hyper_loose)
+        @test isfinite(ml_loose)
+    end
+
+    @testset "optimize_hyperparameters returns valid type" begin
+        Random.seed!(4457)
+        Y_opt = randn(80, 2)
+        hyper_opt = optimize_hyperparameters(Y_opt, 1; grid_size=3)
+        @test hyper_opt isa MinnesotaHyperparameters
+        @test hyper_opt.tau > 0
+        @test hyper_opt.decay > 0
+    end
 end

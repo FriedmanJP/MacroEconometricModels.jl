@@ -24,6 +24,9 @@ slp = estimate_smooth_lp(Y, 1, 20; lambda=1.0, n_knots=4)              # Smooth 
 sdlp = estimate_state_lp(Y, 1, state, 20; gamma=1.5)                   # State-dependent LP
 plp = estimate_propensity_lp(Y, treatment, covariates, 20)              # Propensity LP
 irf_result = lp_irf(lp; conf_level=0.95)                               # Extract IRF
+struc = structural_lp(Y, 20; method=:cholesky)                          # Structural LP
+fc = forecast(lp, ones(20); ci_method=:analytical)                      # LP forecast
+lfevd = lp_fevd(struc, 20; method=:r2, bias_correct=true)              # LP-FEVD
 ```
 
 ---
@@ -62,7 +65,11 @@ At each horizon ``h``, OLS yields:
 \hat{\beta}_h = (X'X)^{-1} X'Y_h
 ```
 
-where ``Y_h`` is the matrix of responses at horizon ``h`` and ``X`` contains the shock variable and controls.
+where
+- ``\hat{\beta}_h`` is the ``k \times 1`` OLS coefficient vector at horizon ``h``
+- ``X`` is the ``T_{eff} \times k`` regressor matrix containing the intercept, shock variable, and controls
+- ``Y_h`` is the ``T_{eff} \times 1`` vector of responses at horizon ``h``
+- ``k = 2 + np`` (intercept + shock + ``p`` lags of ``n`` variables)
 
 ### HAC Standard Errors
 
@@ -72,7 +79,10 @@ Since ``\varepsilon_{t+h}`` is serially correlated (at least MA(h-1) under the n
 \hat{V}_{NW} = (X'X)^{-1} \hat{S} (X'X)^{-1}
 ```
 
-with bandwidth typically set to ``h + 1`` or determined automatically.
+where
+- ``\hat{V}_{NW}`` is the HAC variance-covariance matrix of ``\hat{\beta}_h``
+- ``\hat{S} = \hat{\Gamma}_0 + \sum_{j=1}^{m} w_j (\hat{\Gamma}_j + \hat{\Gamma}_j')`` is the long-run covariance
+- ``w_j`` are Bartlett kernel weights, ``m`` is the bandwidth (typically ``h + 1``)
 
 **Reference**: Jordà (2005), Newey & West (1987)
 
@@ -97,6 +107,8 @@ lp_model = estimate_lp(Y, shock_var, H;
 # Extract IRF with confidence intervals
 irf_result = lp_irf(lp_model; conf_level = 0.95)
 ```
+
+The `irf_result.values` matrix has dimension ``(H+1) \times n_{resp}``, where each row gives the response at a particular horizon. At ``h = 0``, the coefficient ``\hat{\beta}_0`` captures the contemporaneous (impact) effect of a one-unit innovation in the shock variable on each response variable. The standard errors in `irf_result.se` widen as ``h`` increases because longer-horizon LP residuals exhibit stronger serial correlation, and the effective sample shrinks by one observation per horizon.
 
 ### LPModel Return Values
 
@@ -164,7 +176,12 @@ The first-stage F-statistic tests instrument relevance:
 F = \frac{(\hat{\pi}_1' \hat{V}_{\pi}^{-1} \hat{\pi}_1)}{q}
 ```
 
-where ``q`` is the number of instruments. A rule of thumb is ``F > 10`` for strong instruments (Stock & Yogo, 2005).
+where
+- ``\hat{\pi}_1`` is the vector of first-stage coefficients on the instruments
+- ``\hat{V}_{\pi}`` is the estimated variance-covariance of ``\hat{\pi}_1``
+- ``q`` is the number of instruments
+
+A rule of thumb is ``F > 10`` for strong instruments (Stock & Yogo, 2005).
 
 ### Weak Instrument Robust Inference
 
@@ -197,6 +214,8 @@ println("All horizons pass: ", weak_test.passes_threshold)
 # Extract IRF
 irf_iv = lp_iv_irf(lpiv_model)
 ```
+
+The `weak_test.min_F` reports the minimum first-stage F-statistic across all horizons. If it exceeds the Stock & Yogo (2005) threshold of 10, instruments are considered strong at every horizon. First-stage strength typically declines at longer horizons because the instrument's predictive power for the endogenous shock weakens. If `weak_test.passes_threshold` is `false`, the IV estimates at affected horizons should be interpreted cautiously — consider Anderson-Rubin confidence sets for robust inference.
 
 ### LPIVModel Return Values
 
@@ -254,6 +273,12 @@ To enforce smoothness, we add a roughness penalty on the second derivative:
 \min_{\theta} \sum_{h=0}^{H} \left( \hat{\beta}_h - B(h)'\theta \right)^2 + \lambda \int \left( \beta''(h) \right)^2 dh
 ```
 
+where
+- ``\hat{\beta}_h`` are the standard LP estimates at horizon ``h``
+- ``B(h)`` is the ``J \times 1`` B-spline basis vector evaluated at ``h``
+- ``\theta`` is the ``J \times 1`` vector of spline coefficients
+- ``\lambda \geq 0`` is the smoothing penalty (``\lambda = 0`` gives unpenalized fit)
+
 The penalty is computed as ``\theta' R \theta`` where:
 
 ```math
@@ -267,7 +292,12 @@ R_{ij} = \int B''_i(x) B''_j(x) dx
 ```math
 \hat{\theta} = \left( B'WB + \lambda R \right)^{-1} B'W \hat{\beta}
 ```
-where ``W = \text{diag}(1/\text{Var}(\hat{\beta}_h))``
+
+where
+- ``B`` is the ``(H+1) \times J`` basis matrix
+- ``W = \text{diag}(1/\text{Var}(\hat{\beta}_h))`` is the precision-weight matrix
+- ``R`` is the ``J \times J`` roughness penalty matrix
+- ``\hat{\beta}`` is the ``(H+1) \times 1`` vector of standard LP estimates
 
 ### Cross-Validation for λ Selection
 
@@ -298,6 +328,8 @@ optimal_lambda = cross_validate_lambda(Y, shock_var, H;
 comparison = compare_smooth_lp(Y, shock_var, H; lambda = optimal_lambda)
 println("Variance reduction: ", comparison.variance_reduction)
 ```
+
+Larger ``\lambda`` values impose more smoothness, shrinking the IRF toward a low-frequency polynomial. When `variance_reduction` is positive, the smooth IRF achieves lower pointwise variance at the cost of some bias — a favorable trade-off in moderate samples where standard LP confidence bands are wide. Cross-validation selects the ``\lambda`` that minimizes out-of-sample prediction error, automatically balancing the bias-variance trade-off.
 
 ### SmoothLPModel Return Values
 
@@ -413,6 +445,8 @@ irf_recession = state_irf(state_model; regime = :recession)
 # Test for regime differences
 diff_test = test_regime_difference(state_model)
 ```
+
+The `irf_expansion` and `irf_recession` objects contain regime-specific impulse responses. Comparing them reveals whether a shock (e.g., fiscal spending) has asymmetric effects across the business cycle — a prediction of many New Keynesian models with binding ZLB or liquidity traps. The `test_regime_difference` function computes a Wald-type test of ``H_0: \beta_E = \beta_R`` at each horizon using HAC standard errors; rejection implies statistically significant state dependence.
 
 ### StateLPModel Return Values
 
@@ -537,6 +571,8 @@ println("Propensity score overlap: ", diagnostics.overlap)
 println("Max covariate imbalance: ", diagnostics.balance.max_weighted)
 ```
 
+The `ate_irf` object contains the estimated Average Treatment Effect at each horizon. The doubly robust estimator is preferred when there is uncertainty about the propensity score or outcome model specification, since it requires only one of the two to be correctly specified for consistency. The diagnostics check two key assumptions: overlap (sufficient common support between treated and control distributions) and balance (covariate means equalized after reweighting, with standardized differences below 0.1).
+
 ### PropensityLPModel Return Values
 
 | Field | Type | Description |
@@ -556,6 +592,300 @@ println("Max covariate imbalance: ", diagnostics.balance.max_weighted)
 | `config` | `PropensityScoreConfig{T}` | Configuration (method, trimming, normalize) |
 | `T_eff` | `Vector{Int}` | Effective sample sizes |
 | `cov_estimator` | `AbstractCovarianceEstimator` | Covariance estimator used |
+
+---
+
+## Structural Local Projections
+
+### Motivation
+
+Standard LP estimates the response to a single shock variable. In multivariate settings, however, we often want to trace the dynamic effects of *orthogonalized structural shocks* — just as in SVAR analysis. **Structural Local Projections** combine VAR-based identification with LP estimation to achieve this.
+
+Plagborg-Møller & Wolf (2021) establish a deep connection: under correct specification, LP and VAR estimate the same impulse responses. Structural LP leverages this equivalence by using the VAR only for shock identification (computing the rotation matrix ``Q``), then estimating the dynamic responses via LP regressions — gaining the robustness of LP while retaining the structural interpretability of SVAR.
+
+### Algorithm
+
+The structural LP procedure proceeds in five steps:
+
+1. **Estimate VAR(p)**: Fit a VAR on the data ``Y`` to obtain the residual covariance ``\hat{\Sigma}`` and reduced-form residuals ``\hat{u}_t``
+2. **Identify structural shocks**: Compute the rotation matrix ``Q`` via the chosen identification method (Cholesky, sign restrictions, long-run, ICA, etc.)
+3. **Recover structural shocks**: Compute ``\hat{\varepsilon}_t = Q'L^{-1}\hat{u}_t`` where ``L = \text{chol}(\hat{\Sigma})``
+4. **Run LP regressions**: For each structural shock ``j``, estimate LP regressions using ``\hat{\varepsilon}_{j,t}`` as the shock variable:
+
+```math
+y_{i,t+h} = \alpha_{i,h}^{(j)} + \beta_{i,h}^{(j)} \hat{\varepsilon}_{j,t} + \gamma_{i,h}^{(j)\prime} w_t + u_{i,t+h}^{(j)}
+```
+
+where
+- ``y_{i,t+h}`` is the response variable ``i`` at horizon ``t+h``
+- ``\hat{\varepsilon}_{j,t}`` is the identified structural shock ``j``
+- ``w_t`` contains lagged values of ``Y`` as controls
+- ``\beta_{i,h}^{(j)}`` is the structural impulse response of variable ``i`` to shock ``j`` at horizon ``h``
+
+5. **Stack into 3D IRF array**: ``\Theta[h, i, j] = \hat{\beta}_{i,h}^{(j)}`` for ``h = 1, \ldots, H``
+
+### Identification Methods
+
+Structural LP supports all identification methods available for SVAR:
+
+| Method | Keyword | Description |
+|--------|---------|-------------|
+| Cholesky | `:cholesky` | Recursive ordering (lower triangular ``B_0``) |
+| Sign restrictions | `:sign` | Constrain signs of responses (Uhlig, 2005) |
+| Long-run | `:long_run` | Blanchard-Quah (1989) zero long-run effect |
+| Narrative | `:narrative` | Historical events + sign restrictions (Antolín-Díaz & Rubio-Ramírez, 2018) |
+| FastICA | `:fastica` | Non-Gaussian ICA (Hyvärinen, 1999) |
+| JADE | `:jade` | Joint Approximate Diagonalization of Eigenmatrices |
+| SOBI | `:sobi` | Second-Order Blind Identification |
+| dCov | `:dcov` | Distance covariance independence criterion |
+| HSIC | `:hsic` | Hilbert-Schmidt independence criterion |
+| Student-t ML | `:student_t` | Maximum likelihood with Student-t errors |
+| Mixture-normal ML | `:mixture_normal` | Gaussian mixture ML |
+| PML | `:pml` | Pseudo maximum likelihood |
+
+### Julia Implementation
+
+```julia
+using MacroEconometricModels
+using Random
+
+Random.seed!(42)
+T, n = 200, 3
+Y = randn(T, n)
+for t in 2:T
+    Y[t, :] = 0.5 * Y[t-1, :] + 0.3 * randn(n)
+end
+
+# Structural LP with Cholesky identification
+slp = structural_lp(Y, 20; method=:cholesky, lags=4)
+
+# Access 3D IRF array: irfs.values[h, i, j]
+println("Shock 1 → Var 1 at h=1: ", round(slp.irf.values[1, 1, 1], digits=4))
+println("Shock 2 → Var 1 at h=8: ", round(slp.irf.values[8, 1, 2], digits=4))
+
+# Standard errors
+println("SE at h=1: ", round(slp.se[1, 1, 1], digits=4))
+
+# With bootstrap CIs
+slp_ci = structural_lp(Y, 20; method=:cholesky, ci_type=:bootstrap, reps=500)
+
+# With sign restrictions
+check_fn(irf) = irf[1, 1, 1] > 0 && irf[1, 2, 1] > 0
+slp_sign = structural_lp(Y, 20; method=:sign, check_func=check_fn)
+
+# Dispatch to IRF, FEVD, HD
+irf_result = irf(slp)           # Returns the ImpulseResponse from StructuralLP
+decomp = fevd(slp, 20)          # LP-FEVD (Gorodnichenko & Lee 2019)
+hd = historical_decomposition(slp)  # LP-based historical decomposition
+```
+
+The `slp.irf.values` array has shape ``H \times n \times n``, where `values[h, i, j]` gives the response of variable ``i`` to structural shock ``j`` at horizon ``h``. Under Cholesky identification, the ordering determines which variables respond contemporaneously to each shock — variable 1 responds only to shock 1 at impact, variable 2 responds to shocks 1 and 2, and so on. The standard errors in `slp.se` are computed from HAC-corrected LP regressions and tend to be wider than VAR-based IRF confidence bands, reflecting the efficiency cost of LP's robustness to dynamic misspecification.
+
+### StructuralLP Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `irf` | `ImpulseResponse{T}` | 3D IRF result (``H \times n \times n``) with optional bootstrap CIs |
+| `structural_shocks` | `Matrix{T}` | ``T_{eff} \times n`` recovered structural shocks |
+| `var_model` | `VARModel{T}` | Underlying VAR model used for identification |
+| `Q` | `Matrix{T}` | ``n \times n`` rotation/identification matrix |
+| `method` | `Symbol` | Identification method used |
+| `lags` | `Int` | Number of LP control lags |
+| `cov_type` | `Symbol` | HAC estimator type (`:newey_west`, `:white`) |
+| `se` | `Array{T,3}` | ``H \times n \times n`` standard errors |
+| `lp_models` | `Vector{LPModel{T}}` | Individual LP model per shock |
+
+**Reference**: Plagborg-Møller & Wolf (2021)
+
+---
+
+## LP Forecasting
+
+### Direct Multi-Step Forecasts
+
+LP-based forecasts use horizon-specific regression coefficients directly — no VAR recursion required. For each horizon ``h = 1, \ldots, H``, the forecast is:
+
+```math
+\hat{y}_{T+h} = \hat{\alpha}_h + \hat{\beta}_h \cdot s_h + \hat{\Gamma}_h w_T
+```
+
+where
+- ``\hat{y}_{T+h}`` is the ``h``-step-ahead point forecast
+- ``\hat{\alpha}_h`` is the horizon-specific intercept
+- ``\hat{\beta}_h`` is the coefficient on the assumed shock path value ``s_h``
+- ``\hat{\Gamma}_h`` is the coefficient vector on controls ``w_T`` (last ``p`` observations of ``Y``)
+
+This "direct" approach has a key advantage over recursive (iterated) VAR forecasts: each horizon uses its own regression, so misspecification in the short-horizon model does not compound into longer horizons.
+
+### Confidence Intervals
+
+Three CI methods are available:
+
+| Method | Description |
+|--------|-------------|
+| `:analytical` | HAC standard errors + normal quantiles: ``\hat{y}_{T+h} \pm z_{\alpha/2} \cdot \hat{\sigma}_h`` |
+| `:bootstrap` | Residual resampling with percentile CIs |
+| `:none` | Point forecasts only (no CIs) |
+
+### Julia Implementation
+
+```julia
+using MacroEconometricModels
+using Random
+
+Random.seed!(42)
+T, n = 200, 3
+Y = randn(T, n)
+for t in 2:T
+    Y[t, :] = 0.5 * Y[t-1, :] + 0.3 * randn(n)
+end
+
+# Estimate LP model
+lp = estimate_lp(Y, 1, 20; lags=4, cov_type=:newey_west)
+
+# Forecast with a unit shock path (1 at all horizons)
+shock_path = ones(20)
+fc = forecast(lp, shock_path; ci_method=:analytical, conf_level=0.95)
+
+println("Forecast at h=1: ", round(fc.forecasts[1, 1], digits=4))
+println("Forecast at h=8: ", round(fc.forecasts[8, 1], digits=4))
+println("95% CI at h=8: [", round(fc.ci_lower[8, 1], digits=4),
+        ", ", round(fc.ci_upper[8, 1], digits=4), "]")
+
+# Structural LP forecast with a specific shock
+slp = structural_lp(Y, 20; method=:cholesky)
+fc_struct = forecast(slp, 1, shock_path;  # shock_idx=1
+                     ci_method=:bootstrap, n_boot=500)
+```
+
+The `fc.forecasts` matrix has shape ``H \times n_{resp}``, where each row gives the point forecast at a given horizon. The analytical CIs widen with the horizon because the LP regression residuals exhibit increasing variance at longer horizons and the effective sample shrinks. The bootstrap CIs are generally more reliable in small samples because they do not rely on the normal approximation; however, they require the LP residuals to be approximately exchangeable, which holds under correct specification.
+
+### LPForecast Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `forecasts` | `Matrix{T}` | ``H \times n_{resp}`` point forecasts |
+| `ci_lower` | `Matrix{T}` | Lower CI bounds |
+| `ci_upper` | `Matrix{T}` | Upper CI bounds |
+| `se` | `Matrix{T}` | Standard errors at each horizon |
+| `horizon` | `Int` | Maximum forecast horizon ``H`` |
+| `response_vars` | `Vector{Int}` | Response variable indices |
+| `shock_var` | `Int` | Shock variable index |
+| `shock_path` | `Vector{T}` | Assumed shock trajectory |
+| `conf_level` | `T` | Confidence level |
+| `ci_method` | `Symbol` | CI method used (`:analytical`, `:bootstrap`, `:none`) |
+
+**Reference**: Jordà (2005), Plagborg-Møller & Wolf (2021)
+
+---
+
+## LP-Based FEVD
+
+### Motivation
+
+Standard FEVD computes the share of forecast error variance attributable to each structural shock using the VMA (Vector Moving Average) representation. However, if the VAR is misspecified, VMA-based FEVD inherits those errors. Gorodnichenko & Lee (2019) propose an **LP-based FEVD** that estimates variance shares directly via R² regressions, inheriting the robustness properties of LP.
+
+### The R² Estimator
+
+At each horizon ``h``, the share of variable ``i``'s forecast error variance due to shock ``j`` is estimated by:
+
+1. Obtain LP forecast error residuals ``\hat{f}_{t+h|t-1}`` from the LP regression
+2. Regress these residuals on structural shock leads ``[\hat{\varepsilon}_{j,t+h}, \hat{\varepsilon}_{j,t+h-1}, \ldots, \hat{\varepsilon}_{j,t}]``
+3. The R² from this regression is the FEVD share:
+
+```math
+\widehat{\text{FEVD}}_{ij}(h) = R^2\left(\hat{f}_{i,t+h|t-1} \sim \hat{\varepsilon}_{j,t+h}, \hat{\varepsilon}_{j,t+h-1}, \ldots, \hat{\varepsilon}_{j,t}\right)
+```
+
+where
+- ``\hat{f}_{i,t+h|t-1}`` are LP forecast error residuals for variable ``i`` at horizon ``h``
+- ``\hat{\varepsilon}_{j,t+k}`` are leads and current values of structural shock ``j``
+- ``R^2`` measures the fraction of forecast error variance explained by shock ``j``
+
+### Alternative Estimators
+
+Two additional estimators are available:
+
+**LP-A Estimator** (Gorodnichenko & Lee 2019, Eq. 9):
+```math
+\hat{s}_{ij}^{A}(h) = \frac{\sum_{k=0}^{h} (\hat{\beta}_{0,ik}^{LP})^2 \hat{\sigma}_{\varepsilon_j}^2}{\text{Var}(\hat{f}_{i,t+h|t-1})}
+```
+
+where
+- ``\hat{\beta}_{0,ik}^{LP}`` is the LP coefficient on shock ``j`` at horizon ``k``
+- ``\hat{\sigma}_{\varepsilon_j}^2`` is the variance of structural shock ``j``
+
+**LP-B Estimator** (Gorodnichenko & Lee 2019, Eq. 10):
+```math
+\hat{s}_{ij}^{B}(h) = \frac{\text{numerator}^A}{\text{numerator}^A + \text{Var}(\tilde{v}_{t+h})}
+```
+
+where ``\tilde{v}_{t+h}`` are the residuals from the R² regression. LP-B replaces the total forecast error variance in the denominator with the sum of explained and unexplained components, which can improve finite-sample performance.
+
+### Bias Correction
+
+LP-FEVD estimates can be biased in finite samples. Following Kilian (1998), the package implements VAR-based bootstrap bias correction:
+
+1. Fit a bivariate VAR(``L``) on ``(z, y)`` with HQIC-selected lag order
+2. Compute the "true" FEVD from this VAR (theoretical benchmark)
+3. Simulate ``B`` bootstrap samples from the VAR
+4. For each simulation, compute LP-FEVD and estimate bias = ``\text{mean}(\text{boot}) - \text{true}``
+5. Bias-corrected estimate = raw - bias
+6. CIs from the centered bootstrap distribution
+
+### Julia Implementation
+
+```julia
+using MacroEconometricModels
+using Random
+
+Random.seed!(42)
+T, n = 200, 3
+Y = randn(T, n)
+for t in 2:T
+    Y[t, :] = 0.5 * Y[t-1, :] + 0.3 * randn(n)
+end
+
+# First estimate structural LP
+slp = structural_lp(Y, 20; method=:cholesky, lags=4)
+
+# R²-based LP-FEVD with bias correction
+lfevd = lp_fevd(slp, 20; method=:r2, bias_correct=true, n_boot=500)
+
+# Access results
+println("FEVD of Var 1 due to Shock 1:")
+for h in [1, 4, 8, 12, 20]
+    raw = round(lfevd.proportions[1, 1, h] * 100, digits=1)
+    bc = round(lfevd.bias_corrected[1, 1, h] * 100, digits=1)
+    println("  h=$h: raw=$(raw)%, bias-corrected=$(bc)%")
+end
+
+# Alternative estimators
+lfevd_a = lp_fevd(slp, 20; method=:lp_a)
+lfevd_b = lp_fevd(slp, 20; method=:lp_b)
+
+# Via dispatch
+decomp = fevd(slp, 20)  # Equivalent to lp_fevd(slp, 20)
+```
+
+The raw FEVD proportions in `lfevd.proportions[i, j, h]` give the R² from regressing variable ``i``'s forecast error on shock ``j``'s leads at horizon ``h``. Bias correction typically matters most at short horizons where finite-sample bias is largest. At long horizons, the R²-based and VMA-based FEVD should converge under correct specification. Comparing the three estimators (`:r2`, `:lp_a`, `:lp_b`) provides a robustness check — substantial disagreement suggests the VAR specification may be unreliable, in which case the LP-based estimates are preferred.
+
+### LPFEVD Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `proportions` | `Array{T,3}` | ``n \times n \times H`` raw FEVD estimates: `proportions[i, j, h]` = share of variable ``i``'s FEV due to shock ``j`` at horizon ``h`` |
+| `bias_corrected` | `Array{T,3}` | ``n \times n \times H`` bias-corrected FEVD |
+| `se` | `Array{T,3}` | Bootstrap standard errors |
+| `ci_lower` | `Array{T,3}` | Lower CI bounds |
+| `ci_upper` | `Array{T,3}` | Upper CI bounds |
+| `method` | `Symbol` | Estimator used (`:r2`, `:lp_a`, `:lp_b`) |
+| `horizon` | `Int` | Maximum FEVD horizon |
+| `n_boot` | `Int` | Number of bootstrap replications |
+| `conf_level` | `T` | Confidence level for CIs |
+| `bias_correction` | `Bool` | Whether bias correction was applied |
+
+**Reference**: Gorodnichenko, Yuriy, and Byoungchan Lee. 2019. "Forecast Error Variance Decompositions with Local Projections." *Journal of Business & Economic Statistics* 38 (4): 921–933. [https://doi.org/10.1080/07350015.2019.1610661](https://doi.org/10.1080/07350015.2019.1610661)
 
 ---
 
@@ -617,6 +947,11 @@ with ``V^{LP} \geq V^{VAR}`` (VAR is weakly more efficient).
 - Auerbach, Alan J., and Yuriy Gorodnichenko. 2012. "Measuring the Output Responses to Fiscal Policy." *American Economic Journal: Economic Policy* 4 (2): 1–27. [https://doi.org/10.1257/pol.4.2.1](https://doi.org/10.1257/pol.4.2.1)
 - Auerbach, Alan J., and Yuriy Gorodnichenko. 2013. "Fiscal Multipliers in Recession and Expansion." In *Fiscal Policy after the Financial Crisis*, edited by Alberto Alesina and Francesco Giavazzi, 63–98. Chicago: University of Chicago Press. [https://doi.org/10.7208/9780226018584-004](https://doi.org/10.7208/9780226018584-004)
 - Ramey, Valerie A., and Sarah Zubairy. 2018. "Government Spending Multipliers in Good Times and in Bad: Evidence from US Historical Data." *Journal of Political Economy* 126 (2): 850–901. [https://doi.org/10.1086/696277](https://doi.org/10.1086/696277)
+
+### Structural LP and LP-FEVD
+
+- Gorodnichenko, Yuriy, and Byoungchan Lee. 2019. "Forecast Error Variance Decompositions with Local Projections." *Journal of Business & Economic Statistics* 38 (4): 921–933. [https://doi.org/10.1080/07350015.2019.1610661](https://doi.org/10.1080/07350015.2019.1610661)
+- Kilian, Lutz. 1998. "Small-Sample Confidence Intervals for Impulse Response Functions." *Review of Economics and Statistics* 80 (2): 218–230. [https://doi.org/10.1162/003465398557465](https://doi.org/10.1162/003465398557465)
 
 ### Propensity Score Methods
 

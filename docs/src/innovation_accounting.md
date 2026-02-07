@@ -25,13 +25,21 @@ The impulse response function ``\Theta_h`` measures the effect of a one-unit str
 \Theta_h = \frac{\partial y_{t+h}}{\partial \varepsilon_t'}
 ```
 
+where
+- ``\Theta_h`` is the ``n \times n`` impulse response matrix at horizon ``h``
+- ``y_{t+h}`` is the ``n \times 1`` vector of endogenous variables at time ``t+h``
+- ``\varepsilon_t`` is the ``n \times 1`` vector of structural shocks at time ``t``
+
 For a VAR, the IRF at horizon ``h`` is computed recursively:
 
 ```math
 \Theta_h = \sum_{i=1}^{\min(h,p)} A_i \Theta_{h-i}
 ```
 
-with ``\Theta_0 = B_0`` (the structural impact matrix).
+where
+- ``A_i`` are the ``n \times n`` VAR coefficient matrices for lag ``i``
+- ``\Theta_0 = B_0`` is the ``n \times n`` structural impact matrix
+- ``p`` is the VAR lag order
 
 ### Companion Form Representation
 
@@ -41,7 +49,10 @@ Using the companion form, IRFs can be computed as:
 \Theta_h = J F^h J' B_0
 ```
 
-where ``J = [I_n, 0, \ldots, 0]`` is an ``n \times np`` selection matrix and ``F`` is the companion matrix.
+where
+- ``J = [I_n, 0, \ldots, 0]`` is the ``n \times np`` selection matrix
+- ``F`` is the ``np \times np`` companion matrix
+- ``B_0`` is the ``n \times n`` structural impact matrix
 
 ### Cumulative IRF
 
@@ -50,6 +61,8 @@ The cumulative impulse response up to horizon ``H`` is:
 ```math
 \Theta^{cum}_H = \sum_{h=0}^{H} \Theta_h
 ```
+
+where ``\Theta^{cum}_H`` accumulates the impulse responses from impact through horizon ``H``, measuring the total cumulative effect of a structural shock. This is particularly relevant for variables in growth rates, where the cumulative IRF represents the effect on the level.
 
 ### Confidence Intervals
 
@@ -79,6 +92,8 @@ irf_ci = irf(model, 20; ci_type=:bootstrap, reps=1000)
 sign_constraints = [1 1 0; -1 0 0; 0 0 1]
 irf_sign = irf(model, 20; method=:sign, sign_restrictions=sign_constraints)
 ```
+
+The basic `irf(model, 20)` call uses Cholesky identification by default. Adding `ci_type=:bootstrap` generates pointwise confidence bands via Kilian's (1998) residual bootstrap — `reps=1000` draws are recommended for publication-quality bands. Sign restrictions produce a set of admissible IRFs satisfying the constraints; the returned values are the median (or a representative draw), with the set-identified nature reflected in wider credible bands.
 
 !!! note "Technical Note"
     The `ci_lower` and `ci_upper` arrays are only populated when `ci_type=:bootstrap` (frequentist) or when using the Bayesian `irf(chain, ...)` method. With `ci_type=:none` (the default), these arrays contain zeros. Always check `irf_result.ci_type` before interpreting confidence bands.
@@ -120,7 +135,11 @@ The FEVD measures the proportion of the ``h``-step ahead forecast error variance
 \text{FEVD}_{ij}(h) = \frac{\sum_{s=0}^{h-1} (\Theta_s)_{ij}^2}{\sum_{s=0}^{h-1} \sum_{k=1}^{n} (\Theta_s)_{ik}^2}
 ```
 
-where ``(\Theta_s)_{ij}`` is the ``(i,j)`` element of the impulse response matrix at horizon ``s``.
+where
+- ``\text{FEVD}_{ij}(h)`` is the share of variable ``i``'s ``h``-step forecast error variance due to shock ``j``
+- ``(\Theta_s)_{ij}`` is the ``(i,j)`` element of the impulse response matrix at horizon ``s``
+- The numerator sums the squared contributions of shock ``j`` through horizon ``h-1``
+- The denominator sums contributions from all ``n`` shocks, ensuring ``\sum_j \text{FEVD}_{ij}(h) = 1``
 
 ### Properties
 
@@ -140,6 +159,8 @@ fevd_ci = fevd(model, 20; ci_type=:bootstrap, reps=500)
 # Access decomposition for variable 1
 fevd_var1 = fevd_result.decomposition[:, 1, :]  # horizons × shocks
 ```
+
+The `proportions` array satisfies ``\sum_j \text{proportions}[h, i, j] = 1`` for all horizons ``h`` and variables ``i``. At short horizons, own shocks typically dominate (large diagonal entries). As ``h \to \infty``, the FEVD converges to the unconditional variance decomposition, revealing which shocks are the dominant long-run drivers of each variable's fluctuations. Adding `ci_type=:bootstrap` produces bootstrap CIs that quantify estimation uncertainty in the FEVD shares.
 
 ### FEVD Return Values
 
@@ -173,16 +194,24 @@ Historical decomposition decomposes observed variable movements into contributio
 y_t = \sum_{s=0}^{t-1} \Theta_s \varepsilon_{t-s} + \text{initial conditions}
 ```
 
-where:
-- ``\Theta_s = \Phi_s P`` are structural moving average (MA) coefficients
-- ``P = L Q`` is the impact matrix (Cholesky factor ``L`` times rotation ``Q``)
-- ``\varepsilon_t = Q' L^{-1} u_t`` are structural shocks
+where
+- ``y_t`` is the ``n \times 1`` vector of observed variables at time ``t``
+- ``\Theta_s = \Phi_s P`` are the ``n \times n`` structural MA coefficients at lag ``s``
+- ``\Phi_s`` are the reduced-form MA coefficients (from the VMA representation)
+- ``P = L Q`` is the ``n \times n`` impact matrix (Cholesky factor ``L`` times rotation ``Q``)
+- ``\varepsilon_t = Q' L^{-1} u_t`` are the ``n \times 1`` structural shocks
+- The initial conditions capture the contribution of pre-sample values
 
 ### Contribution of Shock j to Variable i at Time t
 
 ```math
 \text{HD}_{ij}(t) = \sum_{s=0}^{t-1} (\Theta_s)_{ij} \, \varepsilon_j(t-s)
 ```
+
+where
+- ``\text{HD}_{ij}(t)`` is the contribution of shock ``j`` to variable ``i`` at time ``t``
+- ``(\Theta_s)_{ij}`` is the ``(i,j)`` element of the structural MA coefficient at lag ``s``
+- ``\varepsilon_j(t-s)`` is the realized structural shock ``j`` at time ``t-s``
 
 The decomposition satisfies the identity:
 
@@ -209,6 +238,8 @@ total = total_shock_contribution(hd, 1)
 hd_sign = historical_decomposition(model, 198; method=:sign,
     sign_restrictions=sign_constraints)
 ```
+
+The `contributions[t, i, j]` array gives the contribution of shock ``j`` to variable ``i`` at time ``t``. Summing across shocks plus the initial conditions recovers the actual data: `verify_decomposition(hd)` checks this identity holds to numerical precision. The `total_shock_contribution(hd, i)` function sums all shock contributions for variable ``i``, providing the "shock-driven" component of the series with initial conditions removed.
 
 ### HistoricalDecomposition Return Values
 
@@ -240,6 +271,61 @@ hd_sign = historical_decomposition(model, 198; method=:sign,
 | `method` | `Symbol` | Identification method |
 
 **Reference**: Kilian & Lütkepohl (2017, Chapter 4)
+
+---
+
+## LP-Based Innovation Accounting
+
+Structural Local Projections provide the same innovation accounting tools (IRF, FEVD, HD) as standard VAR, but via LP estimation. This offers robustness to VAR dynamic misspecification at the cost of some efficiency. For full theoretical background, see [Local Projections](lp.md).
+
+### IRF from Structural LP
+
+The `irf()` function dispatches on `StructuralLP` to return the pre-computed 3D impulse response:
+
+```julia
+slp = structural_lp(Y, 20; method=:cholesky, lags=4)
+irf_result = irf(slp)   # Returns ImpulseResponse from the StructuralLP
+
+# Access: irf_result.values[h, i, j] = response of var i to shock j at horizon h
+println("Impact of shock 1 on var 2: ", irf_result.values[1, 2, 1])
+```
+
+The LP-based IRFs are numerically close to VAR-based IRFs under correct specification (Plagborg-Møller & Wolf 2021), but the LP standard errors stored in `slp.se` are wider because each horizon is estimated independently without imposing cross-horizon restrictions.
+
+### FEVD from Structural LP
+
+The `fevd()` method for `StructuralLP` dispatches to the R²-based LP-FEVD of Gorodnichenko & Lee (2019):
+
+```julia
+decomp = fevd(slp, 20)  # Returns LPFEVD
+
+# Bias-corrected shares
+println("Var 1 explained by Shock 1 at h=8: ",
+        round(decomp.bias_corrected[1, 1, 8] * 100, digits=1), "%")
+```
+
+Unlike VMA-based FEVD, LP-FEVD estimates variance shares directly via R² regressions, so they do not depend on the invertibility of the VAR lag polynomial. See [LP-Based FEVD](lp.md#LP-Based-FEVD) for the three estimator variants (R², LP-A, LP-B) and bias correction details.
+
+### Historical Decomposition from Structural LP
+
+```julia
+hd = historical_decomposition(slp)
+verify_decomposition(hd)  # Check additive identity
+```
+
+The LP-based historical decomposition uses the structural shocks recovered from the VAR identification step (``\hat{\varepsilon}_t = Q'L^{-1}\hat{u}_t``) combined with LP-estimated IRF coefficients to decompose observed variable movements into shock contributions.
+
+### Cumulative IRF
+
+For variables measured in growth rates (e.g., log-differenced GDP), the cumulative IRF shows the effect on the level:
+
+```julia
+lp_model = estimate_lp(Y, 1, 20; lags=4)
+lp_irfs = lp_irf(lp_model)
+cum_irfs = cumulative_irf(lp_irfs)
+```
+
+The `cumulative_irf` function sums the pointwise IRF from horizon 0 through ``h``, propagating standard errors via the delta method. This is especially useful for comparing LP and VAR results in levels versus differences.
 
 ---
 

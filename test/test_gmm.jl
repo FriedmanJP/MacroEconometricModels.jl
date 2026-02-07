@@ -476,4 +476,88 @@ using Random
         @test all(diag(V) .>= 0)  # Non-negative diagonal
     end
 
+    @testset "Iterated weighting" begin
+        Random.seed!(3201)
+        n = 100
+        X = hcat(ones(n), randn(n, 2))
+        beta_true = [1.0, -0.5, 0.3]
+        y = X * beta_true + randn(n)
+        data = hcat(y, X)
+
+        moment_fn(theta, d) = begin
+            y_d = d[:, 1]
+            X_d = d[:, 2:4]
+            resid = y_d - X_d * theta
+            X_d .* resid
+        end
+
+        result = estimate_gmm(moment_fn, zeros(3), data; weighting=:iterated, max_iter=20)
+        @test result isa GMMModel
+        @test isfinite(result.J_stat)
+        @test length(result.theta) == 3
+    end
+
+    @testset "Identity weighting (one-step)" begin
+        Random.seed!(3202)
+        n = 100
+        X = hcat(ones(n), randn(n, 2))
+        beta_true = [1.0, -0.5, 0.3]
+        y = X * beta_true + randn(n)
+        data = hcat(y, X)
+
+        moment_fn(theta, d) = begin
+            y_d = d[:, 1]
+            X_d = d[:, 2:4]
+            resid = y_d - X_d * theta
+            X_d .* resid
+        end
+
+        result = estimate_gmm(moment_fn, zeros(3), data; weighting=:identity)
+        @test result isa GMMModel
+        @test length(result.theta) == 3
+    end
+
+    @testset "J-test direct" begin
+        Random.seed!(3203)
+        n = 200
+        X = hcat(ones(n), randn(n, 3))  # 4 instruments for 3 parameters = overid
+        beta_true = [1.0, -0.5, 0.3]
+        y = X[:, 1:3] * beta_true + randn(n)
+        data = hcat(y, X)
+
+        moment_fn(theta, d) = begin
+            y_d = d[:, 1]
+            X_d = d[:, 2:5]
+            resid = y_d - d[:, 2:4] * theta
+            X_d .* resid
+        end
+
+        result = estimate_gmm(moment_fn, zeros(3), data; weighting=:two_step)
+        j = j_test(result)
+        @test j isa NamedTuple
+        @test haskey(j, :J_stat)
+        @test haskey(j, :p_value)
+        @test j.J_stat >= 0
+        @test 0 <= j.p_value <= 1
+    end
+
+    @testset "StatsAPI methods on GMMModel" begin
+        Random.seed!(3204)
+        n = 100
+        X = hcat(ones(n), randn(n))
+        y = X * [1.0, 0.5] + randn(n)
+        data = hcat(y, X)
+
+        moment_fn(theta, d) = begin
+            y_d = d[:, 1]
+            X_d = d[:, 2:3]
+            resid = y_d - X_d * theta
+            X_d .* resid
+        end
+
+        result = estimate_gmm(moment_fn, zeros(2), data; weighting=:two_step)
+        @test StatsAPI.nobs(result) == n
+        @test length(StatsAPI.coef(result)) == 2
+    end
+
 end

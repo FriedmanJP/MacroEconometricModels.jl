@@ -449,4 +449,52 @@ using Statistics
         @test result_pp.critical_values[1] < result_pp.critical_values[5] < result_pp.critical_values[10]
     end
 
+    @testset "PP with trend" begin
+        y = randn(100)
+        result = pp_test(y; regression=:trend)
+        @test result isa MacroEconometricModels.PPResult
+        @test isfinite(result.statistic)
+        @test result.regression == :trend
+    end
+
+    @testset "Ng-Perron with trend" begin
+        y = randn(100)
+        result = ngperron_test(y; regression=:trend)
+        @test result isa MacroEconometricModels.NgPerronResult
+        @test isfinite(result.MZa)
+        @test isfinite(result.MZt)
+        @test isfinite(result.MSB)
+        @test isfinite(result.MPT)
+    end
+
+    @testset "ZA with both regression" begin
+        y = cumsum(randn(100))
+        result = za_test(y; regression=:both)
+        @test result isa MacroEconometricModels.ZAResult
+        @test result.regression == :both
+        @test 1 <= result.break_index <= 100
+    end
+
+    @testset "unit_root_summary with custom test list" begin
+        y = randn(100)
+        summary_result = unit_root_summary(y; tests=[:adf, :pp])
+        @test length(summary_result.results) >= 2
+        @test haskey(summary_result.results, :adf)
+        @test haskey(summary_result.results, :pp)
+
+        summary_full = unit_root_summary(y; tests=[:adf, :kpss, :pp])
+        @test length(summary_full.results) >= 3
+        @test !isempty(summary_full.conclusion)
+    end
+
+    @testset "test_all_variables with pp and za" begin
+        Random.seed!(8801)
+        Y = randn(100, 3)
+        results_pp = test_all_variables(Y; test=:pp)
+        @test length(results_pp) == 3
+
+        results_za = test_all_variables(Y; test=:za)
+        @test length(results_za) == 3
+    end
+
 end

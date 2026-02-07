@@ -217,6 +217,65 @@ Then ``B_0 = (I - A(1)) C(1)``.
 
 **Reference**: Blanchard & Quah (1989), King, Plosser, Stock & Watson (1991)
 
+### Arias et al. (2018) Identification
+
+When sign restrictions alone are insufficient, one can impose **zero restrictions** on specific impulse responses in addition to sign constraints. Arias, Rubio-Ramírez & Waggoner (2018) develop an algorithm that draws orthogonal rotation matrices ``Q`` from a distribution that is uniform over the set satisfying the zero restrictions, then filters for sign satisfaction.
+
+**Restriction Types**:
+
+| Type | Function | Description |
+|------|----------|-------------|
+| Zero | `zero_restriction(var, shock; horizon=0)` | Variable `var` does not respond to `shock` at `horizon` |
+| Sign | `sign_restriction(var, shock, :positive; horizon=0)` | Response has required sign at `horizon` |
+
+**Algorithm**: For ``n`` variables with ``r_j`` zero restrictions on shock ``j``:
+1. Compute MA coefficients ``\Phi_0, \ldots, \Phi_H`` and Cholesky factor ``L``
+2. For each draw, construct ``Q`` column-by-column via QR decomposition in the null space of the zero restriction matrix
+3. Check sign restrictions on the candidate IRF ``\Theta_h = \Phi_h L Q``
+4. Correct non-uniform sampling via importance weights when zero restrictions reduce the dimension
+
+```julia
+using MacroEconometricModels
+using Random
+
+Random.seed!(42)
+Y = randn(200, 3)
+for t in 2:200; Y[t,:] = 0.5*Y[t-1,:] + 0.3*randn(3); end
+model = estimate_var(Y, 2)
+
+# Define restrictions
+restrictions = SVARRestrictions(3;
+    zeros = [zero_restriction(3, 1; horizon=0)],   # Shock 1 has no impact on var 3
+    signs = [sign_restriction(1, 1, :positive),     # Shock 1 → var 1 positive on impact
+             sign_restriction(2, 1, :positive)]     # Shock 1 → var 2 positive on impact
+)
+
+# Identify
+result = identify_arias(model, restrictions, 20; n_draws=1000)
+println("Acceptance rate: ", round(result.acceptance_rate * 100, digits=1), "%")
+
+# Weighted IRF percentiles
+pct = irf_percentiles(result; probs=[0.16, 0.5, 0.84])
+println("Median IRF(1→1, h=0): ", round(pct[1, 1, 1, 2], digits=3))
+
+# Bayesian version
+# bresult = identify_arias_bayesian(chain, p, n, restrictions, 20)
+```
+
+The acceptance rate indicates what fraction of random draws satisfy all restrictions simultaneously. Low rates (below 1%) suggest the restrictions may be nearly contradictory or overly stringent. The importance weights correct for non-uniform sampling induced by zero restrictions — the weighted percentiles provide correctly calibrated credible intervals.
+
+### AriasSVARResult Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `Q_draws` | `Vector{Matrix{T}}` | Accepted rotation matrices |
+| `irf_draws` | `Array{T,4}` | ``n_{draws} \times H \times n \times n`` IRF draws |
+| `weights` | `Vector{T}` | Importance weights (normalized to sum to 1) |
+| `acceptance_rate` | `T` | Fraction of draws satisfying all restrictions |
+| `restrictions` | `SVARRestrictions` | The imposed restrictions |
+
+**Reference**: Arias, Rubio-Ramírez & Waggoner (2018)
+
 ---
 
 ## Innovation Accounting
@@ -319,7 +378,61 @@ where ``\hat{\alpha}`` is estimated from an AR(1) fit to the residuals:
 \hat{\alpha} = \frac{4\hat{\rho}^2}{(1-\hat{\rho})^4}
 ```
 
-**Reference**: Newey & West (1987, 1994), Andrews (1991)
+### White Heteroscedasticity-Robust Estimator (HC0)
+
+When errors are heteroscedastic but serially uncorrelated, the White (1980) estimator provides consistent standard errors without requiring bandwidth selection:
+
+```math
+\hat{V}_{W} = (X'X)^{-1} \left( \sum_{t=1}^{T} \hat{u}_t^2 x_t x_t' \right) (X'X)^{-1}
+```
+
+where
+- ``\hat{u}_t`` are the OLS residuals
+- ``x_t`` is the ``k \times 1`` regressor vector at time ``t``
+
+### Driscoll-Kraay Panel-Robust Estimator
+
+For panel data with both cross-sectional and temporal dependence, the Driscoll & Kraay (1998) estimator applies HAC estimation to the cross-sectional averages of the moment conditions. This produces standard errors robust to both heteroscedasticity, serial correlation, and cross-sectional dependence.
+
+### Julia Implementation
+
+```julia
+using MacroEconometricModels
+
+Y = randn(200, 3)
+for t in 2:200; Y[t,:] = 0.5*Y[t-1,:] + 0.3*randn(3); end
+
+# Construct design matrices
+Y_eff, X = construct_var_matrices(Y, 2)
+residuals = Y_eff - X * ((X'X) \ (X'Y_eff))
+
+# Newey-West HAC (default: Bartlett kernel, automatic bandwidth)
+V_nw = newey_west(X, residuals; bandwidth=0, kernel=:bartlett)
+
+# White heteroscedasticity-robust (HC0)
+V_w = white_vcov(X, residuals)
+
+# Driscoll-Kraay for panel data
+# V_dk = driscoll_kraay(X, residuals; bandwidth=4)
+
+# Automatic bandwidth selection
+bw = optimal_bandwidth_nw(residuals)
+println("Optimal Newey-West bandwidth: ", bw)
+```
+
+The Newey-West estimator is appropriate for time series with heteroscedastic and serially correlated errors — the standard choice for LP and VAR applications. The White estimator is simpler but inconsistent when errors are autocorrelated. The Driscoll-Kraay estimator extends HAC to panel settings where cross-sectional units may be correlated (e.g., country-level macro panels).
+
+### Comparing LP and VAR
+
+The `compare_var_lp` function provides a structured comparison of VAR and LP impulse responses:
+
+```julia
+comparison = compare_var_lp(Y, 1, 20; lags=4)
+```
+
+This estimates both a VAR and LP model on the same data and returns the IRFs from each, facilitating visual and numerical comparison. Under correct specification, the IRFs should be close (Plagborg-Møller & Wolf 2021); substantial disagreement suggests dynamic misspecification in the VAR.
+
+**Reference**: Newey & West (1987, 1994), Andrews (1991), Driscoll & Kraay (1998)
 
 ---
 
@@ -387,6 +500,7 @@ The lag selection criteria typically agree when the true DGP is low-order; BIC t
 
 ### Structural Identification
 
+- Arias, Jonas E., Juan F. Rubio-Ramírez, and Daniel F. Waggoner. 2018. "Inference Based on Structural Vector Autoregressions Identified with Sign and Zero Restrictions: Theory and Applications." *Econometrica* 86 (2): 685–720. [https://doi.org/10.3982/ECTA14468](https://doi.org/10.3982/ECTA14468)
 - Antolín-Díaz, Juan, and Juan F. Rubio-Ramírez. 2018. "Narrative Sign Restrictions for SVARs." *American Economic Review* 108 (10): 2802–2829. [https://doi.org/10.1257/aer.20161852](https://doi.org/10.1257/aer.20161852)
 - Blanchard, Olivier Jean, and Danny Quah. 1989. "The Dynamic Effects of Aggregate Demand and Supply Disturbances." *American Economic Review* 79 (4): 655–673.
 - Faust, Jon. 1998. "The Robustness of Identified VAR Conclusions about Money." *Carnegie-Rochester Conference Series on Public Policy* 49: 207–244. [https://doi.org/10.1016/S0167-2231(99)00009-3](https://doi.org/10.1016/S0167-2231(99)00009-3)
@@ -405,6 +519,7 @@ The lag selection criteria typically agree when the true DGP is low-order; BIC t
 
 ### Inference
 
+- Driscoll, John C., and Aart C. Kraay. 1998. "Consistent Covariance Matrix Estimation with Spatially Dependent Panel Data." *Review of Economics and Statistics* 80 (4): 549–560. [https://doi.org/10.1162/003465398557825](https://doi.org/10.1162/003465398557825)
 - Andrews, Donald W. K. 1991. "Heteroskedasticity and Autocorrelation Consistent Covariance Matrix Estimation." *Econometrica* 59 (3): 817–858. [https://doi.org/10.2307/2938229](https://doi.org/10.2307/2938229)
 - Gelman, Andrew, John B. Carlin, Hal S. Stern, David B. Dunson, Aki Vehtari, and Donald B. Rubin. 2013. *Bayesian Data Analysis*. 3rd ed. Boca Raton, FL: CRC Press. ISBN 978-1-4398-4095-5.
 - Hoffman, Matthew D., and Andrew Gelman. 2014. "The No-U-Turn Sampler: Adaptively Setting Path Lengths in Hamiltonian Monte Carlo." *Journal of Machine Learning Research* 15 (1): 1593–1623.

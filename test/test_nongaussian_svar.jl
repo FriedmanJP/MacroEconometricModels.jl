@@ -343,4 +343,94 @@ using StatsAPI
         ms2 = identify_markov_switching(model2)
         @test size(ms2.B0) == (2, 2)
     end
+
+    @testset "FastICA symmetric + contrasts" begin
+        for contrast in [:exp, :kurtosis]
+            result = identify_fastica(model; approach=:symmetric, contrast=contrast)
+            @test result isa ICASVARResult{Float64}
+            @test norm(result.Q' * result.Q - I) < 1e-6
+        end
+    end
+
+    @testset "SOBI with different lag ranges" begin
+        result_short = identify_sobi(model; lags=1:3)
+        @test result_short isa ICASVARResult{Float64}
+        @test result_short.method == :sobi
+
+        result_long = identify_sobi(model; lags=1:20)
+        @test result_long isa ICASVARResult{Float64}
+    end
+
+    @testset "HSIC with explicit sigma" begin
+        result = identify_hsic(model; sigma=2.0)
+        @test result isa ICASVARResult{Float64}
+        @test result.method == :hsic
+    end
+
+    @testset "Identification strength with jade and sobi" begin
+        for method in [:jade, :sobi]
+            result = test_identification_strength(model; method=method, n_bootstrap=19)
+            @test result isa IdentifiabilityTestResult{Float64}
+            @test result.test_name == :identification_strength
+        end
+    end
+
+    @testset "Gaussian vs non-Gaussian LR with other distributions" begin
+        for dist in [:mixture_normal, :pml, :skew_normal]
+            result = test_gaussian_vs_nongaussian(model; distribution=dist)
+            @test result isa IdentifiabilityTestResult{Float64}
+            @test result.statistic >= 0
+            @test 0 <= result.pvalue <= 1
+        end
+    end
+
+    @testset "Markov-switching with 3 regimes" begin
+        result = identify_markov_switching(model; n_regimes=3, max_iter=50)
+        @test result isa MarkovSwitchingSVARResult{Float64}
+        @test result.n_regimes == 3
+        @test length(result.Sigma_regimes) == 3
+        @test size(result.transition_matrix) == (3, 3)
+    end
+
+    @testset "External volatility with 3 regimes" begin
+        regime3 = vcat(fill(1, 100), fill(2, 100), fill(3, 100))
+        result = identify_external_volatility(model, regime3; regimes=3)
+        @test result isa ExternalVolatilitySVARResult{Float64}
+        @test length(result.Sigma_regimes) == 3
+        @test length(result.Lambda) == 3
+    end
+
+    @testset "External volatility with small regime" begin
+        # Regime 3 has very few observations (fallback to overall cov)
+        regime_small = vcat(fill(1, 148), fill(2, 148), fill(3, 4))
+        result = identify_external_volatility(model, regime_small; regimes=3)
+        @test result isa ExternalVolatilitySVARResult{Float64}
+    end
+
+    @testset "Smooth transition edge cases" begin
+        Random.seed!(99999)
+        # Extreme transition variable (all same sign)
+        s_edge = abs.(randn(n_obs)) .+ 5.0
+        result = identify_smooth_transition(model, s_edge)
+        @test result isa SmoothTransitionSVARResult{Float64}
+        @test result.gamma > 0
+    end
+
+    @testset "GARCH max_iter=1" begin
+        result = identify_garch(model; max_iter=1)
+        @test result isa GARCHSVARResult{Float64}
+        @test result.iterations == 1
+    end
+
+    @testset "4-variable scalability" begin
+        Random.seed!(55555)
+        Y4 = randn(200, 4)
+        model4 = estimate_var(Y4, 1)
+        ica4 = identify_fastica(model4)
+        @test size(ica4.B0) == (4, 4)
+        @test norm(ica4.Q' * ica4.Q - I) < 1e-4
+
+        ml4 = identify_student_t(model4; max_iter=100)
+        @test size(ml4.B0) == (4, 4)
+    end
 end

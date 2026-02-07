@@ -12,7 +12,7 @@
 - **Vector Autoregression (VAR)**: OLS estimation with comprehensive diagnostics, impulse response functions (IRFs), and forecast error variance decomposition (FEVD)
 - **Structural Identification**: Multiple identification schemes including Cholesky, sign restrictions, long-run (Blanchard-Quah), and narrative restrictions
 - **Bayesian VAR**: Minnesota/Litterman prior with automatic hyperparameter optimization via marginal likelihood (Giannone, Lenza & Primiceri, 2015)
-- **Local Projections**: Jordà (2005) methodology with extensions for IV (Stock & Watson, 2018), smooth LP (Barnichon & Brownlees, 2019), state-dependence (Auerbach & Gorodnichenko, 2013), and propensity score methods (Angrist, Jordà & Kuersteiner, 2018)
+- **Local Projections**: Jordà (2005) methodology with extensions for IV (Stock & Watson, 2018), smooth LP (Barnichon & Brownlees, 2019), state-dependence (Auerbach & Gorodnichenko, 2013), propensity score methods (Angrist, Jordà & Kuersteiner, 2018), structural LP (Plagborg-Møller & Wolf, 2021), LP forecasting, and LP-FEVD (Gorodnichenko & Lee, 2019)
 - **Factor Models**: Static, dynamic, and generalized dynamic factor models with Bai & Ng (2002) information criteria; unified forecasting with theoretical (analytical) and bootstrap confidence intervals
 - **Non-Gaussian SVAR**: ICA-based identification (FastICA, JADE, SOBI, dCov, HSIC), non-Gaussian ML (Student-t, mixture-normal, PML, skew-normal), heteroskedasticity-based identification (Markov-switching, GARCH, smooth-transition), multivariate normality tests, identifiability diagnostics
 - **Hypothesis Tests**: Comprehensive unit root tests (ADF, KPSS, Phillips-Perron, Zivot-Andrews, Ng-Perron) and Johansen cointegration test
@@ -107,6 +107,14 @@ lp_irfs = lp_irf(lp_model)
 Z = randn(T, 1)  # External instrument
 lpiv_model = estimate_lp_iv(Y, 1, Z, 20; lags=4)
 lpiv_irfs = lp_iv_irf(lpiv_model)
+
+# Structural LP (Plagborg-Møller & Wolf 2021)
+slp = structural_lp(Y, 20; method=:cholesky, lags=4)
+slp_irfs = irf(slp)       # 3D IRFs: values[h, i, j]
+lfevd = lp_fevd(slp, 20)  # LP-FEVD (Gorodnichenko & Lee 2019)
+
+# LP Forecasting
+fc = forecast(lp_model, ones(20); ci_method=:analytical)
 ```
 
 ### Factor Models
@@ -187,7 +195,7 @@ The package is organized into the following modules:
 | `bvar/` | Bayesian VAR: MCMC estimation, Minnesota prior, hyperparameter optimization |
 | `summary.jl` | Publication-quality summary tables for all result types |
 | `arima/` | ARIMA suite: types, Kalman filter, estimation (CSS/MLE), forecasting, order selection |
-| `lp/` | Local Projections: core, IV, smooth, state-dependent, propensity, forecast, FEVD |
+| `lp/` | Local Projections: core, IV, smooth, state-dependent, propensity, structural LP, forecast, LP-FEVD |
 | `factor/` | Static (PCA), dynamic (two-step/EM), generalized (spectral) factor models with forecasting |
 | `unitroot/` | Unit root tests (ADF, KPSS, PP, ZA, Ng-Perron) and Johansen cointegration |
 | `nongaussian/` | Non-Gaussian SVAR: normality tests, ICA, ML, heteroskedastic identification |
@@ -240,6 +248,8 @@ Throughout this documentation, we use the following notation conventions:
 - Barnichon, Regis, and Christian Brownlees. 2019. "Impulse Response Estimation by Smooth Local Projections." *Review of Economics and Statistics* 101 (3): 522–530. [https://doi.org/10.1162/rest_a_00778](https://doi.org/10.1162/rest_a_00778)
 - Jordà, Òscar. 2005. "Estimation and Inference of Impulse Responses by Local Projections." *American Economic Review* 95 (1): 161–182. [https://doi.org/10.1257/0002828053828518](https://doi.org/10.1257/0002828053828518)
 - Stock, James H., and Mark W. Watson. 2018. "Identification and Estimation of Dynamic Causal Effects in Macroeconomics Using External Instruments." *Economic Journal* 128 (610): 917–948. [https://doi.org/10.1111/ecoj.12593](https://doi.org/10.1111/ecoj.12593)
+- Plagborg-Møller, Mikkel, and Christian K. Wolf. 2021. "Local Projections and VARs Estimate the Same Impulse Responses." *Econometrica* 89 (2): 955–980. [https://doi.org/10.3982/ECTA17813](https://doi.org/10.3982/ECTA17813)
+- Gorodnichenko, Yuriy, and Byoungchan Lee. 2019. "Forecast Error Variance Decompositions with Local Projections." *Journal of Business & Economic Statistics* 38 (4): 921–933. [https://doi.org/10.1080/07350015.2019.1610661](https://doi.org/10.1080/07350015.2019.1610661)
 
 ### Factor Models
 

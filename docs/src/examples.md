@@ -1,702 +1,26 @@
 # Examples
 
-This chapter provides comprehensive worked examples demonstrating the main functionality of **MacroEconometricModels.jl**. Each example includes complete code, economic interpretation, and best practices.
+This chapter provides comprehensive worked examples demonstrating the main functionality of **MacroEconometricModels.jl**. Each example includes complete code, economic interpretation, and best practices. The examples follow the natural empirical workflow: test data properties, estimate models, try alternatives, and report results.
 
 ### Quick Reference
 
 | # | Example | Key Functions | Description |
 |---|---------|---------------|-------------|
-| 1 | Three-Variable VAR | `estimate_var`, `irf`, `fevd` | Frequentist VAR with Cholesky and sign restriction identification |
-| 2 | Bayesian VAR with Minnesota Prior | `estimate_bvar`, `optimize_hyperparameters` | Minnesota prior, MCMC estimation, credible intervals |
-| 3 | Local Projections | `estimate_lp`, `estimate_lp_iv`, `estimate_smooth_lp` | Standard, IV, smooth, and state-dependent LP |
-| 4 | Factor Model for Large Panels | `estimate_factors`, `ic_criteria`, `forecast` | Large panel factor extraction, Bai-Ng criteria, forecasting with CIs |
-| 5 | GMM Estimation | `estimate_gmm`, `j_test` | IV regression via GMM, overidentification test |
-| 6 | Complete Workflow | Multiple | Lag selection → VAR → BVAR → LP comparison |
-| 7 | Unit Root Testing | `adf_test`, `kpss_test`, `johansen_test` | ADF, KPSS, Zivot-Andrews, Ng-Perron, Johansen |
+| 1 | Unit Root Testing | `adf_test`, `kpss_test`, `johansen_test` | ADF, KPSS, Zivot-Andrews, Ng-Perron, Johansen |
+| 2 | Three-Variable VAR | `estimate_var`, `irf`, `fevd` | Frequentist VAR with Cholesky and sign restriction identification |
+| 3 | Non-Gaussian SVAR Identification | `identify_fastica`, `normality_test_suite`, `test_shock_gaussianity` | ICA, ML, heteroskedastic identification |
+| 4 | Bayesian VAR with Minnesota Prior | `estimate_bvar`, `optimize_hyperparameters` | Minnesota prior, MCMC estimation, credible intervals |
+| 5 | Local Projections | `estimate_lp`, `estimate_lp_iv`, `estimate_smooth_lp` | Standard, IV, smooth, and state-dependent LP |
+| 6 | Factor Model for Large Panels | `estimate_factors`, `ic_criteria`, `forecast` | Large panel factor extraction, Bai-Ng criteria, forecasting with CIs |
+| 7 | GMM Estimation | `estimate_gmm`, `j_test` | IV regression via GMM, overidentification test |
+| 8 | Complete Workflow | Multiple | Unit roots → lag selection → VAR → BVAR → LP comparison |
+| 9 | Table Output (LaTeX & HTML) | `set_display_backend`, `print_table`, `table` | Export tables for papers, slides, and web |
 
 ---
 
-## Example 1: Three-Variable VAR Analysis
+## Example 1: Unit Root Testing and Pre-Estimation Analysis
 
-This example walks through a complete analysis of a macroeconomic VAR with GDP growth, inflation, and the federal funds rate.
-
-### Setup and Data Generation
-
-```julia
-using MacroEconometricModels
-using Random
-using LinearAlgebra
-using Statistics
-
-Random.seed!(42)
-
-# Generate realistic macro data from a VAR(1) DGP
-T = 200
-n = 3
-p = 2
-
-# True VAR(1) coefficients (persistent, cross-correlated)
-A_true = [0.85 0.10 -0.15;   # GDP responds to own lag, inflation, rate
-          0.05 0.70  0.00;   # Inflation mainly AR
-          0.10 0.20  0.80]   # Rate responds to GDP and inflation
-
-# Shock covariance (correlated shocks)
-Σ_true = [1.00 0.50 0.20;
-          0.50 0.80 0.10;
-          0.20 0.10 0.60]
-
-# Generate data
-Y = zeros(T, n)
-Y[1, :] = randn(n)
-chol_Σ = cholesky(Σ_true).L
-
-for t in 2:T
-    Y[t, :] = A_true * Y[t-1, :] + chol_Σ * randn(n)
-end
-
-var_names = ["GDP Growth", "Inflation", "Fed Funds Rate"]
-println("Data: T=$T observations, n=$n variables")
-```
-
-### Frequentist VAR Estimation
-
-```julia
-# Estimate VAR(2) model via OLS
-model = fit(VARModel, Y, p)
-
-# Model diagnostics
-println("Log-likelihood: ", loglikelihood(model))
-println("AIC: ", aic(model))
-println("BIC: ", bic(model))
-
-# Check stability (eigenvalues inside unit circle)
-F = companion_matrix(model.B, n, p)
-eigenvalues = eigvals(F)
-println("Max eigenvalue modulus: ", maximum(abs.(eigenvalues)))
-println("Stable: ", maximum(abs.(eigenvalues)) < 1)
-```
-
-The AIC and BIC values measure the trade-off between fit and parsimony. Lower values indicate a better model. The maximum eigenvalue modulus should be strictly less than 1 for the VAR to be stationary; values close to 1 indicate high persistence, while values near 0 suggest rapid mean-reversion.
-
-### Cholesky-Identified IRF
-
-```julia
-# Compute 20-period IRF with Cholesky identification
-# Ordering: GDP → Inflation → Rate (contemporaneous causality)
-H = 20
-irfs = irf(model, H; method=:cholesky)
-
-# Display impact responses (horizon 0)
-println("\nImpact responses (B₀):")
-println("  GDP shock → GDP: ", round(irfs.irf[1, 1, 1], digits=3))
-println("  GDP shock → Inflation: ", round(irfs.irf[1, 2, 1], digits=3))
-println("  GDP shock → Rate: ", round(irfs.irf[1, 3, 1], digits=3))
-
-# Long-run responses (horizon H)
-println("\nLong-run responses (h=$H):")
-println("  GDP shock → GDP: ", round(irfs.irf[H+1, 1, 1], digits=3))
-```
-
-### Sign Restriction Identification
-
-```julia
-# Sign restrictions: Demand shock raises GDP and inflation on impact
-function check_demand_shock(irf_array)
-    # irf_array is (H+1) × n × n
-    # Check: Shock 1 → Variable 1 (GDP) positive
-    #        Shock 1 → Variable 2 (Inflation) positive
-    return irf_array[1, 1, 1] > 0 && irf_array[1, 2, 1] > 0
-end
-
-# Estimate with sign restrictions
-irfs_sign = irf(model, H; method=:sign, check_func=check_demand_shock, n_draws=1000)
-
-println("\nSign-identified demand shock:")
-println("  GDP response: ", round(irfs_sign.irf[1, 1, 1], digits=3))
-println("  Inflation response: ", round(irfs_sign.irf[1, 2, 1], digits=3))
-```
-
-The Cholesky identification assumes a recursive causal ordering (GDP → Inflation → Rate), meaning GDP responds only to its own shocks contemporaneously. Sign restrictions provide a theory-based alternative: requiring both GDP and inflation to rise on impact identifies a "demand shock" without imposing a specific causal ordering. If sign restrictions accept many draws, the set-identified IRFs will show wider bands than point-identified Cholesky responses.
-
-### Forecast Error Variance Decomposition
-
-```julia
-# Compute FEVD
-fevd_result = fevd(model, H; method=:cholesky)
-
-# Variance decomposition at horizon 1, 4, and 20
-for h in [1, 4, 20]
-    println("\nFEVD at horizon $h:")
-    for i in 1:n
-        println("  $(var_names[i]):")
-        for j in 1:n
-            pct = round(fevd_result.fevd[h, i, j] * 100, digits=1)
-            println("    Shock $j: $pct%")
-        end
-    end
-end
-```
-
-The FEVD shows the proportion of each variable's forecast error variance attributable to each structural shock. At short horizons, own shocks typically dominate. As the horizon increases, cross-variable transmission becomes more important, and the FEVD converges to the unconditional variance decomposition. If shock 1 explains a large share of GDP variance at long horizons, it is the primary driver of GDP fluctuations in the model.
-
----
-
-## Example 2: Bayesian VAR with Minnesota Prior
-
-This example demonstrates Bayesian estimation with automatic hyperparameter optimization.
-
-### Hyperparameter Optimization
-
-```julia
-using MacroEconometricModels
-
-# Find optimal shrinkage using marginal likelihood (Giannone et al. 2015)
-println("Optimizing hyperparameters...")
-best_hyper = optimize_hyperparameters(Y, p; grid_size=20)
-
-println("Optimal hyperparameters:")
-println("  τ (overall tightness): ", round(best_hyper.tau, digits=4))
-println("  d (lag decay): ", best_hyper.d)
-```
-
-The optimal `tau` value reflects the degree of shrinkage that maximizes the marginal likelihood. A small `tau` (e.g., 0.05) means strong shrinkage toward the random walk prior, appropriate for large systems or short samples. A larger `tau` (e.g., 0.5-1.0) allows the data more influence, appropriate when the sample is informative relative to the model complexity.
-
-### BVAR Estimation with MCMC
-
-```julia
-# Estimate BVAR with optimized Minnesota prior
-println("\nEstimating BVAR with MCMC...")
-chain = estimate_bvar(Y, p;
-    n_samples = 2000,
-    n_adapts = 500,
-    prior = :minnesota,
-    hyper = best_hyper
-)
-
-# Posterior summary (coefficients from first equation)
-println("\nPosterior summary for GDP equation:")
-# Access posterior draws and compute statistics
-```
-
-### Bayesian IRF with Credible Intervals
-
-```julia
-# Bayesian IRF with Cholesky identification
-birf_chol = irf(chain, p, n, H; method=:cholesky)
-
-# Extract median and 68% credible intervals
-# birf_chol.quantiles is (H+1) × n × n × 3 array
-# [:, :, :, 1] = 16th percentile
-# [:, :, :, 2] = median
-# [:, :, :, 3] = 84th percentile
-
-println("\nBayesian IRF of GDP to own shock:")
-for h in [0, 4, 8, 12, 20]
-    med = round(birf_chol.quantiles[h+1, 1, 1, 2], digits=3)
-    lo = round(birf_chol.quantiles[h+1, 1, 1, 1], digits=3)
-    hi = round(birf_chol.quantiles[h+1, 1, 1, 3], digits=3)
-    println("  h=$h: $med [$lo, $hi]")
-end
-```
-
-### Bayesian Sign Restrictions
-
-```julia
-# Bayesian IRF with sign restrictions
-birf_sign = irf(chain, p, n, H;
-    method = :sign,
-    check_func = check_demand_shock
-)
-
-println("\nBayesian sign-restricted demand shock → GDP:")
-for h in [0, 4, 8, 12]
-    med = round(birf_sign.quantiles[h+1, 1, 1, 2], digits=3)
-    lo = round(birf_sign.quantiles[h+1, 1, 1, 1], digits=3)
-    hi = round(birf_sign.quantiles[h+1, 1, 1, 3], digits=3)
-    println("  h=$h: $med [$lo, $hi]")
-end
-```
-
----
-
-## Example 3: Local Projections
-
-This example demonstrates various LP methods for estimating impulse responses.
-
-### Standard Local Projection
-
-```julia
-using MacroEconometricModels
-
-# Estimate LP-IRF with Newey-West standard errors
-H = 20
-shock_var = 1  # GDP as the shock variable
-
-lp_model = estimate_lp(Y, shock_var, H;
-    lags = 4,
-    cov_type = :newey_west,
-    bandwidth = 0  # Automatic bandwidth selection
-)
-
-# Extract IRF with confidence intervals
-lp_result = lp_irf(lp_model; conf_level = 0.95)
-
-println("LP-IRF of shock to variable 1 → variable 1:")
-for h in 0:4:H
-    val = round(lp_result.values[h+1, 1], digits=3)
-    se = round(lp_result.se[h+1, 1], digits=3)
-    println("  h=$h: $val (SE: $se)")
-end
-```
-
-### LP with Instrumental Variables
-
-```julia
-# Generate external instrument (e.g., monetary policy shock proxy)
-Random.seed!(123)
-Z = 0.5 * Y[:, 3] + randn(T, 1)  # Correlated with rate but exogenous
-
-# Estimate LP-IV
-shock_var = 3  # Instrument for rate shock
-lpiv_model = estimate_lp_iv(Y, shock_var, Z, H;
-    lags = 4,
-    cov_type = :newey_west
-)
-
-# Check instrument strength
-weak_test = weak_instrument_test(lpiv_model; threshold = 10.0)
-println("\nFirst-stage F-statistics by horizon:")
-for h in 0:4:H
-    F = round(weak_test.F_stats[h+1], digits=2)
-    status = F > 10 ? "✓" : "⚠ weak"
-    println("  h=$h: F=$F $status")
-end
-println("All horizons pass F>10: ", weak_test.passes_threshold)
-
-# Extract IRF
-lpiv_result = lp_iv_irf(lpiv_model)
-```
-
-### Smooth Local Projection
-
-```julia
-# Estimate smooth LP with B-splines
-smooth_model = estimate_smooth_lp(Y, 1, H;
-    degree = 3,      # Cubic splines
-    n_knots = 4,     # Interior knots
-    lambda = 1.0,    # Smoothing parameter
-    lags = 4
-)
-
-# Cross-validate lambda
-optimal_lambda = cross_validate_lambda(Y, 1, H;
-    lambda_grid = 10.0 .^ (-4:0.5:2),
-    k_folds = 5
-)
-println("\nOptimal smoothing parameter: ", round(optimal_lambda, digits=4))
-
-# Compare standard vs smooth LP
-comparison = compare_smooth_lp(Y, 1, H; lambda = optimal_lambda)
-println("Variance reduction ratio: ", round(comparison.variance_reduction, digits=3))
-```
-
-### State-Dependent Local Projection
-
-```julia
-# Construct state variable (moving average of GDP growth)
-gdp_level = cumsum(Y[:, 1])  # Integrate growth to get level
-gdp_growth = [NaN; diff(gdp_level)]
-
-# 4-period moving average, standardized
-state_var = zeros(T)
-for t in 4:T
-    state_var[t] = mean(Y[t-3:t, 1])
-end
-state_var = (state_var .- mean(state_var[4:end])) ./ std(state_var[4:end])
-
-# Estimate state-dependent LP
-state_model = estimate_state_lp(Y, 1, state_var, H;
-    gamma = 1.5,           # Transition speed
-    threshold = :median,    # Threshold at median
-    lags = 4
-)
-
-# Extract regime-specific IRFs
-irf_both = state_irf(state_model; regime = :both)
-
-println("\nState-dependent IRFs (shock 1 → variable 1):")
-println("Expansion vs Recession comparison:")
-for h in [0, 4, 8, 12]
-    exp_val = round(irf_both.expansion.values[h+1, 1], digits=3)
-    rec_val = round(irf_both.recession.values[h+1, 1], digits=3)
-    diff = round(exp_val - rec_val, digits=3)
-    println("  h=$h: Expansion=$exp_val, Recession=$rec_val, Diff=$diff")
-end
-
-# Test for regime differences
-diff_test = test_regime_difference(state_model)
-println("\nJoint test for regime differences:")
-println("  Average |t|: ", round(diff_test.joint_test.avg_t_stat, digits=2))
-println("  p-value: ", round(diff_test.joint_test.p_value, digits=4))
-```
-
----
-
-## Example 4: Factor Model for Large Panels
-
-This example demonstrates factor extraction and selection from a large macroeconomic panel.
-
-### Simulate Large Panel Data
-
-```julia
-using MacroEconometricModels
-using Random
-using Statistics
-
-Random.seed!(42)
-
-# Panel dimensions
-T = 150   # Time periods
-N = 50    # Variables
-r_true = 3  # True number of factors
-
-# Generate true factors (with persistence)
-F_true = zeros(T, r_true)
-for j in 1:r_true
-    F_true[1, j] = randn()
-    for t in 2:T
-        F_true[t, j] = 0.8 * F_true[t-1, j] + 0.3 * randn()
-    end
-end
-
-# Factor loadings (sparse structure)
-Λ_true = randn(N, r_true)
-# Make first 15 vars load strongly on factor 1, etc.
-Λ_true[1:15, 1] .*= 2
-Λ_true[16:30, 2] .*= 2
-Λ_true[31:45, 3] .*= 2
-
-# Generate panel
-X = F_true * Λ_true' + 0.5 * randn(T, N)
-
-println("Panel: T=$T, N=$N, true r=$r_true")
-```
-
-### Determine Number of Factors
-
-```julia
-# Bai-Ng information criteria
-r_max = 10
-ic = ic_criteria(X, r_max)
-
-println("\nBai-Ng information criteria:")
-println("  IC1 selects: ", ic.r_IC1, " factors")
-println("  IC2 selects: ", ic.r_IC2, " factors")
-println("  IC3 selects: ", ic.r_IC3, " factors")
-println("  (True: $r_true factors)")
-
-# IC values for each r
-println("\nIC values by number of factors:")
-for r in 1:r_max
-    println("  r=$r: IC1=$(round(ic.IC1[r], digits=4)), IC2=$(round(ic.IC2[r], digits=4))")
-end
-```
-
-### Estimate Factor Model
-
-```julia
-# Use IC2's recommendation
-r_opt = ic.r_IC2
-
-# Estimate factor model
-fm = estimate_factors(X, r_opt; standardize = true)
-
-println("\nEstimated factor model:")
-println("  Number of factors: ", fm.r)
-println("  Factors dimension: ", size(fm.factors))
-println("  Loadings dimension: ", size(fm.loadings))
-
-# Variance explained
-println("\nVariance explained:")
-for j in 1:r_opt
-    pct = round(fm.explained_variance[j] * 100, digits=1)
-    cum = round(fm.cumulative_variance[j] * 100, digits=1)
-    println("  Factor $j: $pct% (cumulative: $cum%)")
-end
-```
-
-### Model Diagnostics
-
-```julia
-# R² for each variable
-r2_vals = r2(fm)
-
-println("\nR² statistics:")
-println("  Mean: ", round(mean(r2_vals), digits=3))
-println("  Median: ", round(median(r2_vals), digits=3))
-println("  Min: ", round(minimum(r2_vals), digits=3))
-println("  Max: ", round(maximum(r2_vals), digits=3))
-
-# Variables well-explained (R² > 0.5)
-well_explained = sum(r2_vals .> 0.5)
-println("  Variables with R² > 0.5: $well_explained / $N")
-
-# Factor-true factor correlation (up to rotation)
-println("\nFactor recovery (correlation with true factors):")
-for j in 1:r_opt
-    cors = [abs(cor(fm.factors[:, j], F_true[:, k])) for k in 1:r_true]
-    best_match = argmax(cors)
-    println("  Estimated factor $j matches true factor $best_match: r=$(round(cors[best_match], digits=3))")
-end
-```
-
-The Bai-Ng information criteria select the number of factors by balancing fit against complexity. IC2 tends to perform best in simulations. High correlations between estimated and true factors (above 0.9) confirm reliable factor recovery. The R² values show how well the common factors explain each variable; variables with low R² are primarily driven by idiosyncratic shocks and contribute less to the common component.
-
-### Factor Model Forecasting
-
-```julia
-# Forecast 12 steps ahead with theoretical (analytical) CIs
-fc = forecast(fm, 12; ci_method=:theoretical, conf_level=0.95)
-
-println("\nFactor forecast with 95% CIs:")
-println("  Factors: ", size(fc.factors))        # 12×r
-println("  Observables: ", size(fc.observables)) # 12×N
-println("  CI method: ", fc.ci_method)
-
-# SEs should increase with horizon (growing uncertainty)
-println("\nFactor 1 SE by horizon:")
-for h in [1, 4, 8, 12]
-    println("  h=$h: SE=$(round(fc.factors_se[h, 1], digits=4))")
-end
-
-# Bootstrap CIs (non-parametric, no Gaussian assumption)
-fc_boot = forecast(fm, 12; ci_method=:bootstrap, n_boot=500, conf_level=0.90)
-
-println("\nBootstrap vs theoretical CI widths (Factor 1, h=12):")
-width_theory = fc.factors_upper[12, 1] - fc.factors_lower[12, 1]
-width_boot = fc_boot.factors_upper[12, 1] - fc_boot.factors_lower[12, 1]
-println("  Theoretical: ", round(width_theory, digits=3))
-println("  Bootstrap: ", round(width_boot, digits=3))
-```
-
-The theoretical SEs grow monotonically with the forecast horizon for stationary factor dynamics, reflecting accumulating forecast uncertainty. Bootstrap CIs are useful when factor innovations may be non-Gaussian or exhibit conditional heteroskedasticity.
-
-### Dynamic Factor Model Forecasting
-
-```julia
-# Estimate DFM with VAR(2) factor dynamics
-dfm = estimate_dynamic_factors(X, r_opt, 2)
-
-# Forecast with all CI methods
-fc_none = forecast(dfm, 12)                                    # Point only
-fc_theo = forecast(dfm, 12; ci_method=:theoretical)            # Analytical CIs
-fc_boot = forecast(dfm, 12; ci_method=:bootstrap, n_boot=500)  # Bootstrap CIs
-fc_sim  = forecast(dfm, 12; ci_method=:simulation, n_boot=500) # Simulation CIs
-
-println("\nDFM forecast comparison (Observable 1, h=12):")
-println("  Point forecast: ", round(fc_none.observables[12, 1], digits=3))
-println("  Theoretical CI: [", round(fc_theo.observables_lower[12, 1], digits=3),
-        ", ", round(fc_theo.observables_upper[12, 1], digits=3), "]")
-println("  Bootstrap CI:   [", round(fc_boot.observables_lower[12, 1], digits=3),
-        ", ", round(fc_boot.observables_upper[12, 1], digits=3), "]")
-```
-
-The DFM supports four CI methods: `:theoretical` (fastest, assumes Gaussian innovations), `:bootstrap` (residual resampling), `:simulation` (full Monte Carlo draws), and the legacy `ci=true` interface which maps to `:simulation`.
-
----
-
-## Example 5: GMM Estimation
-
-This example demonstrates GMM estimation of a simple model with moment conditions.
-
-### Define Moment Conditions
-
-```julia
-using MacroEconometricModels
-
-# Example: IV regression via GMM
-# Model: y = x'β + ε
-# Moment conditions: E[z(y - x'β)] = 0
-
-# Generate data with endogeneity
-Random.seed!(42)
-n_obs = 500
-n_params = 2
-
-# Instruments
-Z = randn(n_obs, 3)
-
-# Endogenous regressor (correlated with error)
-u = randn(n_obs)
-X = hcat(ones(n_obs), Z[:, 1] + 0.5 * u + 0.2 * randn(n_obs))
-
-# Outcome
-β_true = [1.0, 2.0]
-Y = X * β_true + u
-
-# Data bundle
-data = (Y = Y, X = X, Z = hcat(ones(n_obs), Z))
-
-# Moment function: E[Z'(Y - Xβ)] = 0
-function moment_conditions(theta, data)
-    residuals = data.Y - data.X * theta
-    data.Z .* residuals  # n_obs × n_moments matrix
-end
-```
-
-### GMM Estimation
-
-```julia
-# Initial values
-theta0 = zeros(n_params)
-
-# Two-step efficient GMM
-gmm_result = estimate_gmm(moment_conditions, theta0, data;
-    weighting = :two_step,
-    hac = true
-)
-
-println("GMM Estimation Results:")
-println("  True β: ", β_true)
-println("  Estimated β: ", round.(gmm_result.theta, digits=4))
-println("  Converged: ", gmm_result.converged)
-println("  Iterations: ", gmm_result.iterations)
-
-# Standard errors
-se = sqrt.(diag(gmm_result.vcov))
-println("\n  Standard errors: ", round.(se, digits=4))
-
-# Confidence intervals
-z = 1.96
-for i in 1:n_params
-    lo = round(gmm_result.theta[i] - z * se[i], digits=4)
-    hi = round(gmm_result.theta[i] + z * se[i], digits=4)
-    println("  β[$i]: 95% CI = [$lo, $hi]")
-end
-```
-
-### J-Test for Overidentification
-
-```julia
-# Test overidentifying restrictions
-j_result = j_test(gmm_result)
-
-println("\nHansen J-test:")
-println("  J-statistic: ", round(j_result.J_stat, digits=4))
-println("  Degrees of freedom: ", j_result.df)
-println("  p-value: ", round(j_result.p_value, digits=4))
-println("  Reject at 5%: ", j_result.reject_05)
-```
-
-The GMM estimates should be close to the true values ``\beta = [1.0, 2.0]`` when instruments are valid and strong. The standard errors from two-step efficient GMM are asymptotically optimal. The Hansen J-test evaluates whether the moment conditions are jointly satisfied: a large p-value (failing to reject) indicates that the instruments are valid and the model is correctly specified. Rejection suggests either invalid instruments or model misspecification.
-
----
-
-## Example 6: Complete Workflow
-
-This example shows a complete empirical workflow combining multiple techniques.
-
-```julia
-using MacroEconometricModels
-using Random
-using Statistics
-
-Random.seed!(2024)
-
-# === Step 1: Data Preparation ===
-T, n = 200, 4
-Y = randn(T, n)
-for t in 2:T
-    Y[t, :] = 0.6 * Y[t-1, :] + 0.3 * randn(n)
-end
-var_names = ["Output", "Inflation", "Rate", "Exchange Rate"]
-
-# === Step 2: Lag Selection ===
-println("="^50)
-println("Step 1: Lag Selection")
-println("="^50)
-
-aics = Float64[]
-bics = Float64[]
-for p in 1:8
-    m = fit(VARModel, Y, p)
-    push!(aics, aic(m))
-    push!(bics, bic(m))
-end
-p_aic = argmin(aics)
-p_bic = argmin(bics)
-println("AIC selects p=$p_aic, BIC selects p=$p_bic")
-p = p_bic  # Use BIC's conservative choice
-
-# === Step 3: VAR Estimation ===
-println("\n" * "="^50)
-println("Step 2: VAR Estimation")
-println("="^50)
-
-model = fit(VARModel, Y, p)
-println("Estimated VAR($p)")
-println("Log-likelihood: ", round(loglikelihood(model), digits=2))
-
-# === Step 4: Frequentist IRF ===
-println("\n" * "="^50)
-println("Step 3: Impulse Response Analysis")
-println("="^50)
-
-H = 20
-irfs = irf(model, H; method=:cholesky)
-fevd_res = fevd(model, H; method=:cholesky)
-
-# === Step 5: Bayesian Estimation ===
-println("\n" * "="^50)
-println("Step 4: Bayesian Analysis")
-println("="^50)
-
-# Optimize priors
-best_hyper = optimize_hyperparameters(Y, p; grid_size=15)
-println("Optimal τ: ", round(best_hyper.tau, digits=4))
-
-# BVAR with MCMC
-chain = estimate_bvar(Y, p; n_samples=1000, n_adapts=300,
-                      prior=:minnesota, hyper=best_hyper)
-
-# Bayesian IRF
-birf = irf(chain, p, n, H; method=:cholesky)
-
-# === Step 6: Local Projections Comparison ===
-println("\n" * "="^50)
-println("Step 5: LP vs VAR Comparison")
-println("="^50)
-
-lp_model = estimate_lp(Y, 1, H; lags=p, cov_type=:newey_west)
-lp_result = lp_irf(lp_model)
-
-println("IRF(1→1) at h=0:")
-println("  VAR: ", round(irfs.irf[1, 1, 1], digits=3))
-println("  LP: ", round(lp_result.values[1, 1], digits=3))
-
-println("\nIRF(1→1) at h=8:")
-println("  VAR: ", round(irfs.irf[9, 1, 1], digits=3))
-println("  LP: ", round(lp_result.values[9, 1], digits=3))
-
-# === Step 7: Robustness Check with Smooth LP ===
-smooth_lp = estimate_smooth_lp(Y, 1, H; lambda=1.0, lags=p)
-smooth_result = smooth_lp_irf(smooth_lp)
-
-println("\nSmooth LP variance reduction: ",
-        round(mean(smooth_result.se.^2) / mean(lp_result.se.^2), digits=3))
-
-println("\n" * "="^50)
-println("Analysis Complete!")
-println("="^50)
-```
-
-Comparing VAR and LP impulse responses at the same horizon provides a robustness check. Under correct specification, both estimators are consistent for the same causal parameter (Plagborg-Møller & Wolf, 2021), but LP is less efficient. Large discrepancies suggest potential dynamic misspecification in the VAR. The smooth LP variance reduction ratio measures efficiency gains from B-spline regularization; values well below 1.0 indicate substantial noise reduction from imposing smoothness.
-
----
-
-## Example 7: Unit Root Testing and Pre-Estimation Analysis
-
-This example demonstrates comprehensive unit root testing before fitting VAR models.
+This example demonstrates comprehensive unit root testing before fitting VAR models. Pre-estimation analysis is the first step in any empirical macro workflow.
 
 ### Individual Unit Root Tests
 
@@ -994,6 +318,1207 @@ result = pre_estimation_analysis(Y_macro; var_names=var_names)
 
 ---
 
+## Example 2: Three-Variable VAR Analysis
+
+This example walks through a complete analysis of a macroeconomic VAR with GDP growth, inflation, and the federal funds rate.
+
+### Setup and Data Generation
+
+```julia
+using MacroEconometricModels
+using Random
+using LinearAlgebra
+using Statistics
+
+Random.seed!(42)
+
+# Generate realistic macro data from a VAR(1) DGP
+T = 200
+n = 3
+p = 2
+
+# True VAR(1) coefficients (persistent, cross-correlated)
+A_true = [0.85 0.10 -0.15;   # GDP responds to own lag, inflation, rate
+          0.05 0.70  0.00;   # Inflation mainly AR
+          0.10 0.20  0.80]   # Rate responds to GDP and inflation
+
+# Shock covariance (correlated shocks)
+Σ_true = [1.00 0.50 0.20;
+          0.50 0.80 0.10;
+          0.20 0.10 0.60]
+
+# Generate data
+Y = zeros(T, n)
+Y[1, :] = randn(n)
+chol_Σ = cholesky(Σ_true).L
+
+for t in 2:T
+    Y[t, :] = A_true * Y[t-1, :] + chol_Σ * randn(n)
+end
+
+var_names = ["GDP Growth", "Inflation", "Fed Funds Rate"]
+println("Data: T=$T observations, n=$n variables")
+```
+
+### Frequentist VAR Estimation
+
+```julia
+# Estimate VAR(2) model via OLS
+model = fit(VARModel, Y, p)
+
+# Model diagnostics
+println("Log-likelihood: ", loglikelihood(model))
+println("AIC: ", aic(model))
+println("BIC: ", bic(model))
+
+# Check stability (eigenvalues inside unit circle)
+F = companion_matrix(model.B, n, p)
+eigenvalues = eigvals(F)
+println("Max eigenvalue modulus: ", maximum(abs.(eigenvalues)))
+println("Stable: ", maximum(abs.(eigenvalues)) < 1)
+```
+
+The AIC and BIC values measure the trade-off between fit and parsimony. Lower values indicate a better model. The maximum eigenvalue modulus should be strictly less than 1 for the VAR to be stationary; values close to 1 indicate high persistence, while values near 0 suggest rapid mean-reversion.
+
+### Cholesky-Identified IRF
+
+```julia
+# Compute 20-period IRF with Cholesky identification
+# Ordering: GDP → Inflation → Rate (contemporaneous causality)
+H = 20
+irfs = irf(model, H; method=:cholesky)
+
+# Display impact responses (horizon 0)
+println("\nImpact responses (B₀):")
+println("  GDP shock → GDP: ", round(irfs.irf[1, 1, 1], digits=3))
+println("  GDP shock → Inflation: ", round(irfs.irf[1, 2, 1], digits=3))
+println("  GDP shock → Rate: ", round(irfs.irf[1, 3, 1], digits=3))
+
+# Long-run responses (horizon H)
+println("\nLong-run responses (h=$H):")
+println("  GDP shock → GDP: ", round(irfs.irf[H+1, 1, 1], digits=3))
+```
+
+### Sign Restriction Identification
+
+```julia
+# Sign restrictions: Demand shock raises GDP and inflation on impact
+function check_demand_shock(irf_array)
+    # irf_array is (H+1) × n × n
+    # Check: Shock 1 → Variable 1 (GDP) positive
+    #        Shock 1 → Variable 2 (Inflation) positive
+    return irf_array[1, 1, 1] > 0 && irf_array[1, 2, 1] > 0
+end
+
+# Estimate with sign restrictions
+irfs_sign = irf(model, H; method=:sign, check_func=check_demand_shock, n_draws=1000)
+
+println("\nSign-identified demand shock:")
+println("  GDP response: ", round(irfs_sign.irf[1, 1, 1], digits=3))
+println("  Inflation response: ", round(irfs_sign.irf[1, 2, 1], digits=3))
+```
+
+The Cholesky identification assumes a recursive causal ordering (GDP → Inflation → Rate), meaning GDP responds only to its own shocks contemporaneously. Sign restrictions provide a theory-based alternative: requiring both GDP and inflation to rise on impact identifies a "demand shock" without imposing a specific causal ordering. If sign restrictions accept many draws, the set-identified IRFs will show wider bands than point-identified Cholesky responses.
+
+### Forecast Error Variance Decomposition
+
+```julia
+# Compute FEVD
+fevd_result = fevd(model, H; method=:cholesky)
+
+# Variance decomposition at horizon 1, 4, and 20
+for h in [1, 4, 20]
+    println("\nFEVD at horizon $h:")
+    for i in 1:n
+        println("  $(var_names[i]):")
+        for j in 1:n
+            pct = round(fevd_result.fevd[h, i, j] * 100, digits=1)
+            println("    Shock $j: $pct%")
+        end
+    end
+end
+```
+
+The FEVD shows the proportion of each variable's forecast error variance attributable to each structural shock. At short horizons, own shocks typically dominate. As the horizon increases, cross-variable transmission becomes more important, and the FEVD converges to the unconditional variance decomposition. If shock 1 explains a large share of GDP variance at long horizons, it is the primary driver of GDP fluctuations in the model.
+
+---
+
+## Example 3: Non-Gaussian SVAR Identification
+
+When structural shocks are non-Gaussian, statistical independence provides identification without imposing economic restrictions like recursive ordering or sign constraints. This example demonstrates the full non-Gaussian identification workflow: testing for non-Gaussianity, ICA-based and ML-based identification, and post-estimation specification tests.
+
+### Setup: Generate Non-Gaussian Data
+
+```julia
+using MacroEconometricModels
+using Random
+using LinearAlgebra
+using Statistics
+
+Random.seed!(42)
+
+# True structural parameters
+T = 500
+n = 3
+
+# True B₀ (structural impact matrix)
+B0_true = [1.0  0.0  0.0;
+           0.5  1.0  0.0;
+           0.3 -0.2  1.0]
+
+# Non-Gaussian structural shocks (Student-t with 5 df)
+# Heavy tails provide the non-Gaussianity needed for identification
+eps = zeros(T, n)
+for j in 1:n
+    # Standardized t(5): mean 0, variance 1
+    raw = randn(T) ./ sqrt.(rand(Chisq(5), T) ./ 5)
+    eps[:, j] = raw ./ std(raw)
+end
+
+# True VAR(1) dynamics
+A_true = [0.7 0.1 0.0;
+          0.0 0.6 0.1;
+          0.0 0.0 0.5]
+
+# Generate reduced-form data: u_t = B₀ ε_t
+Y = zeros(T, n)
+Y[1, :] = B0_true * eps[1, :]
+for t in 2:T
+    Y[t, :] = A_true * Y[t-1, :] + B0_true * eps[t, :]
+end
+
+println("Data: T=$T, n=$n (non-Gaussian DGP with t(5) shocks)")
+```
+
+### Step 1: Test for Non-Gaussianity
+
+Before using non-Gaussian identification, verify that residuals are indeed non-Gaussian:
+
+```julia
+# Estimate VAR
+model = estimate_var(Y, 1)
+
+# Run the full normality test suite
+suite = normality_test_suite(model)
+
+println("Multivariate Normality Tests (H₀: residuals are Gaussian)")
+println("="^55)
+for r in suite.results
+    stars = r.pvalue < 0.01 ? "***" : r.pvalue < 0.05 ? "**" : r.pvalue < 0.10 ? "*" : ""
+    println("  $(r.test_name): stat=$(round(r.statistic, digits=2)), p=$(round(r.pvalue, digits=4)) $stars")
+end
+```
+
+All four tests (Jarque-Bera, Mardia, Doornik-Hansen, Henze-Zirkler) should reject normality when the true shocks are t-distributed. If normality is not rejected, non-Gaussian identification may lack power and Cholesky or sign restrictions should be preferred.
+
+You can also run individual tests:
+
+```julia
+# Individual tests
+jb = jarque_bera_test(model)
+mardia = mardia_test(model; type=:both)
+dh = doornik_hansen_test(model)
+hz = henze_zirkler_test(model)
+
+println("\nDetailed Mardia test:")
+println("  Skewness stat: ", round(mardia.statistic, digits=2))
+println("  P-value: ", round(mardia.pvalue, digits=4))
+```
+
+### Step 2: ICA-Based Identification
+
+ICA (Independent Component Analysis) recovers structurally independent shocks by maximizing statistical independence:
+
+```julia
+# FastICA identification (default: logcosh contrast)
+ica_result = identify_fastica(model; contrast=:logcosh, approach=:deflation)
+
+println("\nFastICA Identification")
+println("="^40)
+println("  Converged: ", ica_result.converged)
+println("  Iterations: ", ica_result.iterations)
+println("  Objective: ", round(ica_result.objective, digits=6))
+
+# Structural impact matrix B₀
+println("\nEstimated B₀ (structural impact matrix):")
+for i in 1:n
+    println("  ", [round(ica_result.B0[i, j], digits=3) for j in 1:n])
+end
+```
+
+Compare different ICA algorithms:
+
+```julia
+# JADE (Joint Approximate Diagonalization of Eigenmatrices)
+jade_result = identify_jade(model)
+
+# SOBI (Second-Order Blind Identification — exploits temporal structure)
+sobi_result = identify_sobi(model; lags=1:12)
+
+# Distance-covariance ICA
+dcov_result = identify_dcov(model)
+
+println("\nComparison of ICA methods:")
+println("  FastICA converged: ", ica_result.converged, " (iter: ", ica_result.iterations, ")")
+println("  JADE converged:    ", jade_result.converged, " (iter: ", jade_result.iterations, ")")
+println("  SOBI converged:    ", sobi_result.converged, " (iter: ", sobi_result.iterations, ")")
+println("  dCov converged:    ", dcov_result.converged, " (iter: ", dcov_result.iterations, ")")
+```
+
+FastICA is the fastest and most commonly used, but JADE is more robust when multiple shocks have similar kurtosis. SOBI exploits temporal dependence and works even with mildly non-Gaussian shocks.
+
+### Step 3: Compute IRFs with ICA Identification
+
+The rotation matrix `Q` from ICA integrates directly with the standard `irf()` and `fevd()` functions:
+
+```julia
+# IRF using FastICA-identified structure
+irfs_ica = irf(model, 20; method=:fastica)
+
+println("\nFastICA-identified IRF (shock 1 → all variables):")
+for h in [0, 4, 8, 12, 20]
+    vals = [round(irfs_ica.irf[h+1, v, 1], digits=3) for v in 1:n]
+    println("  h=$h: ", vals)
+end
+
+# FEVD using ICA identification
+fevd_ica = fevd(model, 20; method=:fastica)
+
+println("\nFEVD at h=20 (ICA-identified):")
+for v in 1:n
+    shares = [round(fevd_ica.fevd[21, v, s] * 100, digits=1) for s in 1:n]
+    println("  Variable $v: ", shares, "%")
+end
+```
+
+Unlike Cholesky identification, the ICA-based IRFs do not depend on variable ordering. The same data produces the same structural shocks regardless of how the columns of ``Y`` are arranged.
+
+### Step 4: ML-Based Identification
+
+Maximum likelihood methods parameterize the shock distribution and jointly estimate ``B_0`` and the distributional parameters:
+
+```julia
+# Student-t ML identification
+ml_t = identify_student_t(model)
+
+println("\nStudent-t ML Identification")
+println("="^40)
+println("  Converged: ", ml_t.converged)
+println("  Log-likelihood (non-Gaussian): ", round(ml_t.loglik, digits=2))
+println("  Log-likelihood (Gaussian):     ", round(ml_t.loglik_gaussian, digits=2))
+println("  AIC: ", round(ml_t.aic, digits=2))
+println("  BIC: ", round(ml_t.bic, digits=2))
+
+# Estimated degrees of freedom for each shock
+if haskey(ml_t.dist_params, :nu)
+    println("  Estimated ν (df): ", round.(ml_t.dist_params[:nu], digits=2))
+end
+
+# Standard errors for B₀ elements
+println("\nB₀ standard errors:")
+for i in 1:n
+    println("  ", [round(ml_t.se[i, j], digits=4) for j in 1:n])
+end
+```
+
+The Student-t ML approach provides standard errors for ``B_0`` elements, unlike ICA which only gives point estimates. Compare with other distributional assumptions:
+
+```julia
+# Mixture of normals
+ml_mix = identify_mixture_normal(model; n_components=2)
+
+# Pseudo-maximum likelihood (robust, no distributional assumption)
+ml_pml = identify_pml(model)
+
+# Unified interface — select distribution via keyword
+ml_auto = identify_nongaussian_ml(model; distribution=:student_t)
+
+println("\nML method comparison (AIC):")
+println("  Student-t:      AIC = ", round(ml_t.aic, digits=2))
+println("  Mixture normal: AIC = ", round(ml_mix.aic, digits=2))
+println("  PML:            AIC = ", round(ml_pml.aic, digits=2))
+```
+
+Lower AIC indicates a better distributional fit. The PML estimator is semiparametrically efficient and does not require specifying the shock distribution.
+
+### Step 5: Heteroskedasticity-Based Identification
+
+When shocks exhibit time-varying volatility, changes in the covariance structure can identify the structural model:
+
+```julia
+# External volatility regimes (e.g., pre/post Great Moderation)
+regime = vcat(ones(Int, 250), 2 * ones(Int, 250))  # Two regimes
+vol_result = identify_external_volatility(model, regime; regimes=2)
+
+println("\nExternal Volatility Identification")
+println("="^40)
+println("  Regime 1 shock variances: ",
+        [round(vol_result.Lambda_vecs[1][j], digits=3) for j in 1:n])
+println("  Regime 2 shock variances: ",
+        [round(vol_result.Lambda_vecs[2][j], digits=3) for j in 1:n])
+```
+
+### Step 6: Post-Estimation Specification Tests
+
+Verify that the identification assumptions hold:
+
+```julia
+# Test 1: Are recovered shocks non-Gaussian?
+gauss_test = test_shock_gaussianity(ica_result)
+println("\nShock Gaussianity Test (H₀: shocks are Gaussian)")
+println("  Statistic: ", round(gauss_test.statistic, digits=2))
+println("  P-value: ", round(gauss_test.pvalue, digits=4))
+println("  Non-Gaussian: ", gauss_test.identified)
+
+# Test 2: Are recovered shocks independent?
+indep_test = test_shock_independence(ica_result; max_lag=10)
+println("\nShock Independence Test (H₀: shocks are independent)")
+println("  Statistic: ", round(indep_test.statistic, digits=2))
+println("  P-value: ", round(indep_test.pvalue, digits=4))
+println("  Independent: ", indep_test.identified)
+
+# Test 3: Identification strength (bootstrap)
+strength_test = test_identification_strength(model; method=:fastica, n_bootstrap=499)
+println("\nIdentification Strength Test")
+println("  Statistic: ", round(strength_test.statistic, digits=4))
+println("  P-value: ", round(strength_test.pvalue, digits=4))
+println("  Strongly identified: ", strength_test.identified)
+
+# Test 4: Gaussian vs non-Gaussian likelihood ratio
+lr_test = test_gaussian_vs_nongaussian(model; method=:fastica, n_bootstrap=499)
+println("\nLR Test: Gaussian vs Non-Gaussian")
+println("  LR statistic: ", round(lr_test.statistic, digits=2))
+println("  P-value: ", round(lr_test.pvalue, digits=4))
+```
+
+A valid non-Gaussian SVAR requires: (1) rejection of shock Gaussianity (non-Gaussian shocks are needed for identification), (2) failure to reject shock independence (the identified shocks should be independent), and (3) strong identification (the structural parameters are precisely estimated). If the Gaussianity test fails to reject, the data may not contain enough non-Gaussianity to identify the model, and traditional Cholesky or sign restrictions should be used instead.
+
+### Comparing Cholesky vs ICA Identification
+
+```julia
+# Cholesky IRF (ordering-dependent)
+irfs_chol = irf(model, 20; method=:cholesky)
+
+# ICA IRF (ordering-independent)
+irfs_ica = irf(model, 20; method=:fastica)
+
+println("\nCholesky vs FastICA IRF comparison (shock 1 → variable 1):")
+println("  h   Cholesky   FastICA")
+for h in [0, 4, 8, 12, 20]
+    chol_val = round(irfs_chol.irf[h+1, 1, 1], digits=3)
+    ica_val = round(irfs_ica.irf[h+1, 1, 1], digits=3)
+    println("  $h    $chol_val      $ica_val")
+end
+```
+
+When the true DGP is recursive (lower-triangular ``B_0``), Cholesky and ICA should yield similar IRFs. Large discrepancies suggest that the recursive assumption may be misspecified, and the data-driven ICA identification should be preferred.
+
+---
+
+## Example 4: Bayesian VAR with Minnesota Prior
+
+This example demonstrates Bayesian estimation with automatic hyperparameter optimization.
+
+### Hyperparameter Optimization
+
+```julia
+using MacroEconometricModels
+
+# Find optimal shrinkage using marginal likelihood (Giannone et al. 2015)
+println("Optimizing hyperparameters...")
+best_hyper = optimize_hyperparameters(Y, p; grid_size=20)
+
+println("Optimal hyperparameters:")
+println("  τ (overall tightness): ", round(best_hyper.tau, digits=4))
+println("  d (lag decay): ", best_hyper.d)
+```
+
+The optimal `tau` value reflects the degree of shrinkage that maximizes the marginal likelihood. A small `tau` (e.g., 0.05) means strong shrinkage toward the random walk prior, appropriate for large systems or short samples. A larger `tau` (e.g., 0.5-1.0) allows the data more influence, appropriate when the sample is informative relative to the model complexity.
+
+### BVAR Estimation with MCMC
+
+```julia
+# Estimate BVAR with optimized Minnesota prior
+println("\nEstimating BVAR with MCMC...")
+chain = estimate_bvar(Y, p;
+    n_samples = 2000,
+    n_adapts = 500,
+    prior = :minnesota,
+    hyper = best_hyper
+)
+
+# Posterior summary (coefficients from first equation)
+println("\nPosterior summary for GDP equation:")
+# Access posterior draws and compute statistics
+```
+
+### Bayesian IRF with Credible Intervals
+
+```julia
+# Bayesian IRF with Cholesky identification
+birf_chol = irf(chain, p, n, H; method=:cholesky)
+
+# Extract median and 68% credible intervals
+# birf_chol.quantiles is (H+1) × n × n × 3 array
+# [:, :, :, 1] = 16th percentile
+# [:, :, :, 2] = median
+# [:, :, :, 3] = 84th percentile
+
+println("\nBayesian IRF of GDP to own shock:")
+for h in [0, 4, 8, 12, 20]
+    med = round(birf_chol.quantiles[h+1, 1, 1, 2], digits=3)
+    lo = round(birf_chol.quantiles[h+1, 1, 1, 1], digits=3)
+    hi = round(birf_chol.quantiles[h+1, 1, 1, 3], digits=3)
+    println("  h=$h: $med [$lo, $hi]")
+end
+```
+
+### Bayesian Sign Restrictions
+
+```julia
+# Bayesian IRF with sign restrictions
+birf_sign = irf(chain, p, n, H;
+    method = :sign,
+    check_func = check_demand_shock
+)
+
+println("\nBayesian sign-restricted demand shock → GDP:")
+for h in [0, 4, 8, 12]
+    med = round(birf_sign.quantiles[h+1, 1, 1, 2], digits=3)
+    lo = round(birf_sign.quantiles[h+1, 1, 1, 1], digits=3)
+    hi = round(birf_sign.quantiles[h+1, 1, 1, 3], digits=3)
+    println("  h=$h: $med [$lo, $hi]")
+end
+```
+
+---
+
+## Example 5: Local Projections
+
+This example demonstrates various LP methods for estimating impulse responses.
+
+### Standard Local Projection
+
+```julia
+using MacroEconometricModels
+
+# Estimate LP-IRF with Newey-West standard errors
+H = 20
+shock_var = 1  # GDP as the shock variable
+
+lp_model = estimate_lp(Y, shock_var, H;
+    lags = 4,
+    cov_type = :newey_west,
+    bandwidth = 0  # Automatic bandwidth selection
+)
+
+# Extract IRF with confidence intervals
+lp_result = lp_irf(lp_model; conf_level = 0.95)
+
+println("LP-IRF of shock to variable 1 → variable 1:")
+for h in 0:4:H
+    val = round(lp_result.values[h+1, 1], digits=3)
+    se = round(lp_result.se[h+1, 1], digits=3)
+    println("  h=$h: $val (SE: $se)")
+end
+```
+
+### LP with Instrumental Variables
+
+```julia
+# Generate external instrument (e.g., monetary policy shock proxy)
+Random.seed!(123)
+Z = 0.5 * Y[:, 3] + randn(T, 1)  # Correlated with rate but exogenous
+
+# Estimate LP-IV
+shock_var = 3  # Instrument for rate shock
+lpiv_model = estimate_lp_iv(Y, shock_var, Z, H;
+    lags = 4,
+    cov_type = :newey_west
+)
+
+# Check instrument strength
+weak_test = weak_instrument_test(lpiv_model; threshold = 10.0)
+println("\nFirst-stage F-statistics by horizon:")
+for h in 0:4:H
+    F = round(weak_test.F_stats[h+1], digits=2)
+    status = F > 10 ? "✓" : "⚠ weak"
+    println("  h=$h: F=$F $status")
+end
+println("All horizons pass F>10: ", weak_test.passes_threshold)
+
+# Extract IRF
+lpiv_result = lp_iv_irf(lpiv_model)
+```
+
+### Smooth Local Projection
+
+```julia
+# Estimate smooth LP with B-splines
+smooth_model = estimate_smooth_lp(Y, 1, H;
+    degree = 3,      # Cubic splines
+    n_knots = 4,     # Interior knots
+    lambda = 1.0,    # Smoothing parameter
+    lags = 4
+)
+
+# Cross-validate lambda
+optimal_lambda = cross_validate_lambda(Y, 1, H;
+    lambda_grid = 10.0 .^ (-4:0.5:2),
+    k_folds = 5
+)
+println("\nOptimal smoothing parameter: ", round(optimal_lambda, digits=4))
+
+# Compare standard vs smooth LP
+comparison = compare_smooth_lp(Y, 1, H; lambda = optimal_lambda)
+println("Variance reduction ratio: ", round(comparison.variance_reduction, digits=3))
+```
+
+### State-Dependent Local Projection
+
+```julia
+# Construct state variable (moving average of GDP growth)
+gdp_level = cumsum(Y[:, 1])  # Integrate growth to get level
+gdp_growth = [NaN; diff(gdp_level)]
+
+# 4-period moving average, standardized
+state_var = zeros(T)
+for t in 4:T
+    state_var[t] = mean(Y[t-3:t, 1])
+end
+state_var = (state_var .- mean(state_var[4:end])) ./ std(state_var[4:end])
+
+# Estimate state-dependent LP
+state_model = estimate_state_lp(Y, 1, state_var, H;
+    gamma = 1.5,           # Transition speed
+    threshold = :median,    # Threshold at median
+    lags = 4
+)
+
+# Extract regime-specific IRFs
+irf_both = state_irf(state_model; regime = :both)
+
+println("\nState-dependent IRFs (shock 1 → variable 1):")
+println("Expansion vs Recession comparison:")
+for h in [0, 4, 8, 12]
+    exp_val = round(irf_both.expansion.values[h+1, 1], digits=3)
+    rec_val = round(irf_both.recession.values[h+1, 1], digits=3)
+    diff = round(exp_val - rec_val, digits=3)
+    println("  h=$h: Expansion=$exp_val, Recession=$rec_val, Diff=$diff")
+end
+
+# Test for regime differences
+diff_test = test_regime_difference(state_model)
+println("\nJoint test for regime differences:")
+println("  Average |t|: ", round(diff_test.joint_test.avg_t_stat, digits=2))
+println("  p-value: ", round(diff_test.joint_test.p_value, digits=4))
+```
+
+---
+
+## Example 6: Factor Model for Large Panels
+
+This example demonstrates factor extraction and selection from a large macroeconomic panel.
+
+### Simulate Large Panel Data
+
+```julia
+using MacroEconometricModels
+using Random
+using Statistics
+
+Random.seed!(42)
+
+# Panel dimensions
+T = 150   # Time periods
+N = 50    # Variables
+r_true = 3  # True number of factors
+
+# Generate true factors (with persistence)
+F_true = zeros(T, r_true)
+for j in 1:r_true
+    F_true[1, j] = randn()
+    for t in 2:T
+        F_true[t, j] = 0.8 * F_true[t-1, j] + 0.3 * randn()
+    end
+end
+
+# Factor loadings (sparse structure)
+Λ_true = randn(N, r_true)
+# Make first 15 vars load strongly on factor 1, etc.
+Λ_true[1:15, 1] .*= 2
+Λ_true[16:30, 2] .*= 2
+Λ_true[31:45, 3] .*= 2
+
+# Generate panel
+X = F_true * Λ_true' + 0.5 * randn(T, N)
+
+println("Panel: T=$T, N=$N, true r=$r_true")
+```
+
+### Determine Number of Factors
+
+```julia
+# Bai-Ng information criteria
+r_max = 10
+ic = ic_criteria(X, r_max)
+
+println("\nBai-Ng information criteria:")
+println("  IC1 selects: ", ic.r_IC1, " factors")
+println("  IC2 selects: ", ic.r_IC2, " factors")
+println("  IC3 selects: ", ic.r_IC3, " factors")
+println("  (True: $r_true factors)")
+
+# IC values for each r
+println("\nIC values by number of factors:")
+for r in 1:r_max
+    println("  r=$r: IC1=$(round(ic.IC1[r], digits=4)), IC2=$(round(ic.IC2[r], digits=4))")
+end
+```
+
+### Estimate Factor Model
+
+```julia
+# Use IC2's recommendation
+r_opt = ic.r_IC2
+
+# Estimate factor model
+fm = estimate_factors(X, r_opt; standardize = true)
+
+println("\nEstimated factor model:")
+println("  Number of factors: ", fm.r)
+println("  Factors dimension: ", size(fm.factors))
+println("  Loadings dimension: ", size(fm.loadings))
+
+# Variance explained
+println("\nVariance explained:")
+for j in 1:r_opt
+    pct = round(fm.explained_variance[j] * 100, digits=1)
+    cum = round(fm.cumulative_variance[j] * 100, digits=1)
+    println("  Factor $j: $pct% (cumulative: $cum%)")
+end
+```
+
+### Model Diagnostics
+
+```julia
+# R² for each variable
+r2_vals = r2(fm)
+
+println("\nR² statistics:")
+println("  Mean: ", round(mean(r2_vals), digits=3))
+println("  Median: ", round(median(r2_vals), digits=3))
+println("  Min: ", round(minimum(r2_vals), digits=3))
+println("  Max: ", round(maximum(r2_vals), digits=3))
+
+# Variables well-explained (R² > 0.5)
+well_explained = sum(r2_vals .> 0.5)
+println("  Variables with R² > 0.5: $well_explained / $N")
+
+# Factor-true factor correlation (up to rotation)
+println("\nFactor recovery (correlation with true factors):")
+for j in 1:r_opt
+    cors = [abs(cor(fm.factors[:, j], F_true[:, k])) for k in 1:r_true]
+    best_match = argmax(cors)
+    println("  Estimated factor $j matches true factor $best_match: r=$(round(cors[best_match], digits=3))")
+end
+```
+
+The Bai-Ng information criteria select the number of factors by balancing fit against complexity. IC2 tends to perform best in simulations. High correlations between estimated and true factors (above 0.9) confirm reliable factor recovery. The R² values show how well the common factors explain each variable; variables with low R² are primarily driven by idiosyncratic shocks and contribute less to the common component.
+
+### Factor Model Forecasting
+
+```julia
+# Forecast 12 steps ahead with theoretical (analytical) CIs
+fc = forecast(fm, 12; ci_method=:theoretical, conf_level=0.95)
+
+println("\nFactor forecast with 95% CIs:")
+println("  Factors: ", size(fc.factors))        # 12×r
+println("  Observables: ", size(fc.observables)) # 12×N
+println("  CI method: ", fc.ci_method)
+
+# SEs should increase with horizon (growing uncertainty)
+println("\nFactor 1 SE by horizon:")
+for h in [1, 4, 8, 12]
+    println("  h=$h: SE=$(round(fc.factors_se[h, 1], digits=4))")
+end
+
+# Bootstrap CIs (non-parametric, no Gaussian assumption)
+fc_boot = forecast(fm, 12; ci_method=:bootstrap, n_boot=500, conf_level=0.90)
+
+println("\nBootstrap vs theoretical CI widths (Factor 1, h=12):")
+width_theory = fc.factors_upper[12, 1] - fc.factors_lower[12, 1]
+width_boot = fc_boot.factors_upper[12, 1] - fc_boot.factors_lower[12, 1]
+println("  Theoretical: ", round(width_theory, digits=3))
+println("  Bootstrap: ", round(width_boot, digits=3))
+```
+
+The theoretical SEs grow monotonically with the forecast horizon for stationary factor dynamics, reflecting accumulating forecast uncertainty. Bootstrap CIs are useful when factor innovations may be non-Gaussian or exhibit conditional heteroskedasticity.
+
+### Dynamic Factor Model Forecasting
+
+```julia
+# Estimate DFM with VAR(2) factor dynamics
+dfm = estimate_dynamic_factors(X, r_opt, 2)
+
+# Forecast with all CI methods
+fc_none = forecast(dfm, 12)                                    # Point only
+fc_theo = forecast(dfm, 12; ci_method=:theoretical)            # Analytical CIs
+fc_boot = forecast(dfm, 12; ci_method=:bootstrap, n_boot=500)  # Bootstrap CIs
+fc_sim  = forecast(dfm, 12; ci_method=:simulation, n_boot=500) # Simulation CIs
+
+println("\nDFM forecast comparison (Observable 1, h=12):")
+println("  Point forecast: ", round(fc_none.observables[12, 1], digits=3))
+println("  Theoretical CI: [", round(fc_theo.observables_lower[12, 1], digits=3),
+        ", ", round(fc_theo.observables_upper[12, 1], digits=3), "]")
+println("  Bootstrap CI:   [", round(fc_boot.observables_lower[12, 1], digits=3),
+        ", ", round(fc_boot.observables_upper[12, 1], digits=3), "]")
+```
+
+The DFM supports four CI methods: `:theoretical` (fastest, assumes Gaussian innovations), `:bootstrap` (residual resampling), `:simulation` (full Monte Carlo draws), and the legacy `ci=true` interface which maps to `:simulation`.
+
+---
+
+## Example 7: GMM Estimation
+
+This example demonstrates GMM estimation of a simple model with moment conditions.
+
+### Define Moment Conditions
+
+```julia
+using MacroEconometricModels
+
+# Example: IV regression via GMM
+# Model: y = x'β + ε
+# Moment conditions: E[z(y - x'β)] = 0
+
+# Generate data with endogeneity
+Random.seed!(42)
+n_obs = 500
+n_params = 2
+
+# Instruments
+Z = randn(n_obs, 3)
+
+# Endogenous regressor (correlated with error)
+u = randn(n_obs)
+X = hcat(ones(n_obs), Z[:, 1] + 0.5 * u + 0.2 * randn(n_obs))
+
+# Outcome
+β_true = [1.0, 2.0]
+Y = X * β_true + u
+
+# Data bundle
+data = (Y = Y, X = X, Z = hcat(ones(n_obs), Z))
+
+# Moment function: E[Z'(Y - Xβ)] = 0
+function moment_conditions(theta, data)
+    residuals = data.Y - data.X * theta
+    data.Z .* residuals  # n_obs × n_moments matrix
+end
+```
+
+### GMM Estimation
+
+```julia
+# Initial values
+theta0 = zeros(n_params)
+
+# Two-step efficient GMM
+gmm_result = estimate_gmm(moment_conditions, theta0, data;
+    weighting = :two_step,
+    hac = true
+)
+
+println("GMM Estimation Results:")
+println("  True β: ", β_true)
+println("  Estimated β: ", round.(gmm_result.theta, digits=4))
+println("  Converged: ", gmm_result.converged)
+println("  Iterations: ", gmm_result.iterations)
+
+# Standard errors
+se = sqrt.(diag(gmm_result.vcov))
+println("\n  Standard errors: ", round.(se, digits=4))
+
+# Confidence intervals
+z = 1.96
+for i in 1:n_params
+    lo = round(gmm_result.theta[i] - z * se[i], digits=4)
+    hi = round(gmm_result.theta[i] + z * se[i], digits=4)
+    println("  β[$i]: 95% CI = [$lo, $hi]")
+end
+```
+
+### J-Test for Overidentification
+
+```julia
+# Test overidentifying restrictions
+j_result = j_test(gmm_result)
+
+println("\nHansen J-test:")
+println("  J-statistic: ", round(j_result.J_stat, digits=4))
+println("  Degrees of freedom: ", j_result.df)
+println("  p-value: ", round(j_result.p_value, digits=4))
+println("  Reject at 5%: ", j_result.reject_05)
+```
+
+The GMM estimates should be close to the true values ``\beta = [1.0, 2.0]`` when instruments are valid and strong. The standard errors from two-step efficient GMM are asymptotically optimal. The Hansen J-test evaluates whether the moment conditions are jointly satisfied: a large p-value (failing to reject) indicates that the instruments are valid and the model is correctly specified. Rejection suggests either invalid instruments or model misspecification.
+
+---
+
+## Example 8: Complete Workflow
+
+This example shows a complete empirical workflow combining multiple techniques.
+
+```julia
+using MacroEconometricModels
+using Random
+using Statistics
+
+Random.seed!(2024)
+
+# === Step 1: Data Preparation ===
+T, n = 200, 4
+Y = randn(T, n)
+for t in 2:T
+    Y[t, :] = 0.6 * Y[t-1, :] + 0.3 * randn(n)
+end
+var_names = ["Output", "Inflation", "Rate", "Exchange Rate"]
+
+# === Step 2: Lag Selection ===
+println("="^50)
+println("Step 1: Lag Selection")
+println("="^50)
+
+aics = Float64[]
+bics = Float64[]
+for p in 1:8
+    m = fit(VARModel, Y, p)
+    push!(aics, aic(m))
+    push!(bics, bic(m))
+end
+p_aic = argmin(aics)
+p_bic = argmin(bics)
+println("AIC selects p=$p_aic, BIC selects p=$p_bic")
+p = p_bic  # Use BIC's conservative choice
+
+# === Step 3: VAR Estimation ===
+println("\n" * "="^50)
+println("Step 2: VAR Estimation")
+println("="^50)
+
+model = fit(VARModel, Y, p)
+println("Estimated VAR($p)")
+println("Log-likelihood: ", round(loglikelihood(model), digits=2))
+
+# === Step 4: Frequentist IRF ===
+println("\n" * "="^50)
+println("Step 3: Impulse Response Analysis")
+println("="^50)
+
+H = 20
+irfs = irf(model, H; method=:cholesky)
+fevd_res = fevd(model, H; method=:cholesky)
+
+# === Step 5: Bayesian Estimation ===
+println("\n" * "="^50)
+println("Step 4: Bayesian Analysis")
+println("="^50)
+
+# Optimize priors
+best_hyper = optimize_hyperparameters(Y, p; grid_size=15)
+println("Optimal τ: ", round(best_hyper.tau, digits=4))
+
+# BVAR with MCMC
+chain = estimate_bvar(Y, p; n_samples=1000, n_adapts=300,
+                      prior=:minnesota, hyper=best_hyper)
+
+# Bayesian IRF
+birf = irf(chain, p, n, H; method=:cholesky)
+
+# === Step 6: Local Projections Comparison ===
+println("\n" * "="^50)
+println("Step 5: LP vs VAR Comparison")
+println("="^50)
+
+lp_model = estimate_lp(Y, 1, H; lags=p, cov_type=:newey_west)
+lp_result = lp_irf(lp_model)
+
+println("IRF(1→1) at h=0:")
+println("  VAR: ", round(irfs.irf[1, 1, 1], digits=3))
+println("  LP: ", round(lp_result.values[1, 1], digits=3))
+
+println("\nIRF(1→1) at h=8:")
+println("  VAR: ", round(irfs.irf[9, 1, 1], digits=3))
+println("  LP: ", round(lp_result.values[9, 1], digits=3))
+
+# === Step 7: Robustness Check with Smooth LP ===
+smooth_lp = estimate_smooth_lp(Y, 1, H; lambda=1.0, lags=p)
+smooth_result = smooth_lp_irf(smooth_lp)
+
+println("\nSmooth LP variance reduction: ",
+        round(mean(smooth_result.se.^2) / mean(lp_result.se.^2), digits=3))
+
+println("\n" * "="^50)
+println("Analysis Complete!")
+println("="^50)
+```
+
+Comparing VAR and LP impulse responses at the same horizon provides a robustness check. Under correct specification, both estimators are consistent for the same causal parameter (Plagborg-Møller & Wolf, 2021), but LP is less efficient. Large discrepancies suggest potential dynamic misspecification in the VAR. The smooth LP variance reduction ratio measures efficiency gains from B-spline regularization; values well below 1.0 indicate substantial noise reduction from imposing smoothness.
+
+---
+
+## Example 9: Table Output — Text, LaTeX, and HTML
+
+All `show`, `print_table`, and `Base.show` methods in MacroEconometricModels route through a unified PrettyTables backend. Switching from terminal text to LaTeX or HTML output requires a single call to `set_display_backend`. This is useful for embedding results directly into papers (LaTeX), slides (HTML), or reports.
+
+### Setup
+
+```julia
+using MacroEconometricModels
+using Random
+
+Random.seed!(42)
+
+# Estimate a VAR and compute IRFs + FEVD
+Y = randn(200, 3)
+for t in 2:200
+    Y[t, :] = [0.8 0.1 0.0; 0.05 0.7 0.0; 0.1 0.2 0.75] * Y[t-1, :] + 0.3 * randn(3)
+end
+
+model = estimate_var(Y, 2)
+irfs = irf(model, 12; method=:cholesky, ci_type=:bootstrap, n_boot=500)
+fevd_result = fevd(model, 12; method=:cholesky)
+```
+
+### Text Output (Default)
+
+The default backend is `:text`, producing terminal-friendly borderless tables:
+
+```julia
+# Confirm default backend
+get_display_backend()   # :text
+
+# Print IRF table for variable 1, shock 1
+print_table(irfs, 1, 1)
+```
+
+Output:
+
+```
+           IRF: Var 1 ← Shock 1
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      h      IRF    CI_lo    CI_hi
+  ────────────────────────────────
+      1   1.0000   1.0000   1.0000
+      4   0.5765   0.3821   0.7542
+      8   0.2134   0.0512   0.3891
+     12   0.0712  -0.0203   0.1744
+```
+
+```julia
+# Print FEVD table for variable 2
+print_table(fevd_result, 2)
+```
+
+### LaTeX Output for Papers
+
+Switch to LaTeX to get tables ready for `\input{}` in your `.tex` file:
+
+```julia
+# Switch to LaTeX backend
+set_display_backend(:latex)
+
+# Print IRF table — output is now LaTeX
+print_table(irfs, 1, 1)
+```
+
+Output:
+
+```latex
+\begin{table}
+  \caption{IRF: Var 1 ← Shock 1}
+  \begin{tabular}{rrrr}
+    \hline
+    h & IRF & CI\_lo & CI\_hi \\
+    \hline
+    1 & 1.0 & 1.0 & 1.0 \\
+    4 & 0.5765 & 0.3821 & 0.7542 \\
+    8 & 0.2134 & 0.0512 & 0.3891 \\
+    12 & 0.0712 & -0.0203 & 0.1744 \\
+    \hline
+  \end{tabular}
+\end{table}
+```
+
+To save LaTeX output directly to a file:
+
+```julia
+set_display_backend(:latex)
+
+# Write IRF table to file
+open("tables/irf_table.tex", "w") do io
+    print_table(io, irfs, 1, 1)
+end
+
+# Write FEVD table to file
+open("tables/fevd_table.tex", "w") do io
+    print_table(io, fevd_result, 2)
+end
+```
+
+Then in your LaTeX document:
+
+```latex
+\begin{document}
+Table~\ref{tab:irf} reports the impulse responses...
+\input{tables/irf_table.tex}
+\end{document}
+```
+
+### HTML Output for Slides and Web
+
+Switch to HTML for Jupyter notebooks, web dashboards, or HTML-based presentations:
+
+```julia
+# Switch to HTML backend
+set_display_backend(:html)
+
+# Print IRF table — output is now an HTML <table>
+print_table(irfs, 1, 1)
+```
+
+Output:
+
+```html
+<table>
+  <caption>IRF: Var 1 ← Shock 1</caption>
+  <tr><th>h</th><th>IRF</th><th>CI_lo</th><th>CI_hi</th></tr>
+  <tr><td>1</td><td>1.0</td><td>1.0</td><td>1.0</td></tr>
+  <tr><td>4</td><td>0.5765</td><td>0.3821</td><td>0.7542</td></tr>
+  ...
+</table>
+```
+
+To save HTML output to a file:
+
+```julia
+set_display_backend(:html)
+
+open("tables/irf_table.html", "w") do io
+    print_table(io, irfs, 1, 1)
+end
+```
+
+### Switching Backends in a Workflow
+
+You can switch backends freely within a session. A common pattern for a research workflow:
+
+```julia
+using MacroEconometricModels
+using Random
+
+Random.seed!(42)
+
+Y = randn(200, 3)
+for t in 2:200
+    Y[t, :] = [0.8 0.1 0.0; 0.05 0.7 0.0; 0.1 0.2 0.75] * Y[t-1, :] + 0.3 * randn(3)
+end
+
+model = estimate_var(Y, 2)
+H = 20
+irfs = irf(model, H; method=:cholesky, ci_type=:bootstrap, n_boot=500)
+fevd_result = fevd(model, H; method=:cholesky)
+hd_result = historical_decomposition(model)
+
+# === Step 1: Inspect in terminal ===
+set_display_backend(:text)
+print_table(irfs, 1, 1)       # Quick look at IRF
+print_table(fevd_result, 1)    # Quick look at FEVD
+
+# === Step 2: Export LaTeX for the paper ===
+set_display_backend(:latex)
+
+open("tables/irf_gdp.tex", "w") do io
+    print_table(io, irfs, 1, 1; horizons=[1, 4, 8, 12, 20])
+end
+
+open("tables/fevd_gdp.tex", "w") do io
+    print_table(io, fevd_result, 1; horizons=[1, 4, 8, 12, 20])
+end
+
+# === Step 3: Export HTML for slides ===
+set_display_backend(:html)
+
+open("slides/irf_gdp.html", "w") do io
+    print_table(io, irfs, 1, 1)
+end
+
+# === Step 4: Reset to text for continued interactive work ===
+set_display_backend(:text)
+```
+
+### Using `table()` to Extract Raw Data
+
+The `table()` function returns a plain `Matrix` that you can manipulate, pass to DataFrames, or export with CSV:
+
+```julia
+using DataFrames, CSV
+
+# Extract IRF as a matrix: columns are [h, IRF, CI_lo, CI_hi]
+irf_data = table(irfs, 1, 1; horizons=[1, 4, 8, 12, 20])
+
+# Convert to DataFrame
+df = DataFrame(irf_data, [:h, :IRF, :CI_lo, :CI_hi])
+
+# Save as CSV
+CSV.write("tables/irf_data.csv", df)
+
+# Extract FEVD as a matrix: columns are [h, Shock1, Shock2, ..., ShockN]
+fevd_data = table(fevd_result, 1; horizons=[1, 4, 8, 12, 20])
+```
+
+### Backend Affects `show()` Too
+
+The display backend also controls how objects render when printed in the REPL or displayed in Jupyter:
+
+```julia
+set_display_backend(:latex)
+
+# REPL display is now LaTeX
+model    # VARModel show → LaTeX tables
+irfs     # ImpulseResponse show → LaTeX tables
+
+set_display_backend(:text)  # Reset
+```
+
+This means in a Jupyter notebook, you can set the backend to `:html` once at the top:
+
+```julia
+# Top of Jupyter notebook
+using MacroEconometricModels
+set_display_backend(:html)
+
+# All subsequent cells render as formatted HTML tables
+model = estimate_var(Y, 2)
+irfs = irf(model, 12; method=:cholesky)
+irfs   # Displays as an HTML table
+```
+
+### Summary of Output Functions
+
+| Function | Returns | Use Case |
+|---|---|---|
+| `table(result, ...)` | `Matrix` | Raw numeric data for custom processing, CSV export |
+| `print_table([io], result, ...)` | Nothing (prints) | Formatted output via current backend (text/LaTeX/HTML) |
+| `show(io, result)` | Nothing (prints) | REPL display, also respects backend |
+| `set_display_backend(:text)` | Nothing | Terminal output (default) |
+| `set_display_backend(:latex)` | Nothing | LaTeX `\begin{tabular}` output |
+| `set_display_backend(:html)` | Nothing | HTML `<table>` output |
+| `get_display_backend()` | `Symbol` | Check current backend |
+
+---
+
 ## Best Practices
 
 ### Data Preparation
@@ -1019,6 +1544,8 @@ result = pre_estimation_analysis(Y_macro; var_names=var_names)
 1. **Economic theory**: Base restrictions on economic reasoning
 2. **Robustness**: Try multiple identification schemes
 3. **Narrative**: Use historical knowledge when available
+4. **Non-Gaussian**: Test residuals with `normality_test_suite` first; if non-Gaussian, ICA/ML methods provide ordering-free identification
+5. **Specification tests**: Validate non-Gaussian identification with `test_shock_gaussianity` and `test_shock_independence`
 
 ### Inference
 
@@ -1031,3 +1558,6 @@ result = pre_estimation_analysis(Y_macro; var_names=var_names)
 1. **Present both**: VAR and LP estimates as robustness check
 2. **Horizon selection**: Focus on economically meaningful horizons
 3. **FEVD**: Report at multiple horizons (short, medium, long-run)
+4. **LaTeX export**: Use `set_display_backend(:latex)` then `print_table(io, ...)` for paper-ready tables
+5. **HTML export**: Use `set_display_backend(:html)` for Jupyter notebooks and web reports
+6. **Raw data**: Use `table(result, ...)` to extract matrices for custom formatting or CSV export

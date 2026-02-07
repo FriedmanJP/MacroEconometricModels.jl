@@ -142,4 +142,36 @@ using StatsAPI: pvalue
         @test length(suite2.results) == 7
         @test all(r -> r.n_vars == 2, suite2.results)
     end
+
+    @testset "Raw matrix dispatch" begin
+        Random.seed!(5678)
+        U_raw = randn(200, 3)
+        # mardia_test with raw matrix
+        r_mardia = mardia_test(U_raw)
+        @test r_mardia isa MacroEconometricModels.NormalityTestResult
+        @test r_mardia.n_vars == 3
+
+        # doornik_hansen_test with raw matrix
+        r_dh = doornik_hansen_test(U_raw)
+        @test r_dh isa MacroEconometricModels.NormalityTestResult
+        @test r_dh.n_vars == 3
+    end
+
+    @testset "Large k=5 case" begin
+        Random.seed!(5679)
+        U_large = randn(200, 5)
+        r_jb = jarque_bera_test(U_large)
+        @test r_jb.n_vars == 5
+        r_hz = henze_zirkler_test(U_large)
+        @test r_hz.n_vars == 5
+        @test 0 <= r_hz.pvalue <= 1
+    end
+
+    @testset "Univariate k=1 edge" begin
+        Random.seed!(5680)
+        U_uni = randn(200, 1)
+        r_jb = jarque_bera_test(U_uni)
+        @test r_jb.n_vars == 1
+        @test r_jb.statistic >= 0
+    end
 end

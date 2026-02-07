@@ -388,4 +388,37 @@ using Random
         @test size(lrc_short) == (2, 2)
     end
 
+    @testset "precompute_XtX_inv caching pattern" begin
+        Random.seed!(8801)
+        X = randn(80, 4)
+        u = randn(80)
+        XtX_inv = MacroEconometricModels.precompute_XtX_inv(X)
+
+        # Newey-West with cached XtX_inv
+        V_nw = MacroEconometricModels.newey_west(X, u; XtX_inv=XtX_inv)
+        V_nw2 = MacroEconometricModels.newey_west(X, u)
+        @test norm(V_nw - V_nw2) < 1e-10
+
+        # White with cached XtX_inv
+        V_w = MacroEconometricModels.white_vcov(X, u; XtX_inv=XtX_inv)
+        V_w2 = MacroEconometricModels.white_vcov(X, u)
+        @test norm(V_w - V_w2) < 1e-10
+
+        # Driscoll-Kraay with cached XtX_inv
+        V_dk = MacroEconometricModels.driscoll_kraay(X, u; XtX_inv=XtX_inv)
+        V_dk2 = MacroEconometricModels.driscoll_kraay(X, u)
+        @test norm(V_dk - V_dk2) < 1e-10
+    end
+
+    @testset "Newey-West with fixed bandwidth and all kernels" begin
+        Random.seed!(8802)
+        X = randn(80, 3)
+        u = randn(80)
+        for kernel in [:bartlett, :parzen, :quadratic_spectral, :tukey_hanning]
+            V = MacroEconometricModels.newey_west(X, u; bandwidth=5, kernel=kernel)
+            @test size(V) == (3, 3)
+            @test issymmetric(V) || norm(V - V') < 1e-12
+        end
+    end
+
 end

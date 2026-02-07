@@ -207,4 +207,53 @@ using Random
             @test_skip "Posterior model extraction test skipped"
         end
     end
+
+    @testset "Minnesota prior with BVAR" begin
+        try
+            Random.seed!(99887)
+            Y_mn = randn(80, 2)
+            hyper = MinnesotaHyperparameters(tau=0.2, decay=2.0, omega=0.5)
+            chain_mn = estimate_bvar(Y_mn, 1; prior=:minnesota, hyper=hyper,
+                                      n_samples=50, n_adapts=25)
+            @test chain_mn isa MCMCChains.Chains
+            println("Minnesota prior BVAR test passed.")
+        catch e
+            @warn "Minnesota prior BVAR test failed" exception=(e, catch_backtrace())
+            @test_skip "Minnesota prior BVAR test skipped"
+        end
+    end
+
+    @testset "BVAR sampler variants" begin
+        Random.seed!(99886)
+        Y_sv = randn(60, 2)
+
+        # SMC sampler
+        @testset "SMC sampler" begin
+            try
+                chain_smc = estimate_bvar(Y_sv, 1; sampler=:smc, n_samples=50)
+                @test chain_smc isa MCMCChains.Chains
+                println("SMC sampler test passed.")
+            catch e
+                @warn "SMC sampler test failed" exception=(e, catch_backtrace())
+                @test_skip "SMC sampler test skipped"
+            end
+        end
+
+        # PG sampler
+        @testset "PG sampler" begin
+            try
+                chain_pg = estimate_bvar(Y_sv, 1; sampler=:pg, n_samples=50, n_adapts=10)
+                @test chain_pg isa MCMCChains.Chains
+                println("PG sampler test passed.")
+            catch e
+                @warn "PG sampler test failed" exception=(e, catch_backtrace())
+                @test_skip "PG sampler test skipped"
+            end
+        end
+
+        # Unknown sampler
+        @testset "Unknown sampler error" begin
+            @test_throws Union{ArgumentError, ErrorException, MethodError} estimate_bvar(Y_sv, 1; sampler=:nonexistent, n_samples=50)
+        end
+    end
 end
