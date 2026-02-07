@@ -154,12 +154,12 @@ using Random
         set_display_backend(:text)
     end
 
-    @testset "summary() does not error in any backend" begin
+    @testset "report() does not error in any backend" begin
         for be in (:text, :latex, :html)
             set_display_backend(be)
-            # summary(VARModel) prints to stdout — just verify no errors
+            # report(VARModel) prints to stdout — just verify no errors
             @test (redirect_stdout(devnull) do
-                MacroEconometricModels.summary(m)
+                report(m)
             end; true)
         end
         set_display_backend(:text)

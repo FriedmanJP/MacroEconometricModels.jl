@@ -274,12 +274,11 @@ export historical_decomposition
 export contribution, total_shock_contribution, verify_decomposition
 
 # =============================================================================
-# Exports - Summary Tables and Result Interface
+# Exports - Report, Tables, and Result Interface
 # =============================================================================
 
+export report
 export table, print_table
-# NOTE: `summary` is NOT exported to avoid conflict with `Base.summary`.
-# Use `MacroEconometricModels.summary(obj)` or import explicitly.
 export point_estimate, has_uncertainty, uncertainty_bounds
 export set_display_backend, get_display_backend
 

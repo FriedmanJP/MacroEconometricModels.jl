@@ -10,7 +10,7 @@ irfs_ci = irf(model, 20; ci_type=:bootstrap, reps=1000)          # With bootstra
 birfs = irf(chain, p, n, 20; method=:cholesky)                   # Bayesian IRF
 decomp = fevd(model, 20)                                         # FEVD
 hd = historical_decomposition(model, 198)                        # Historical decomposition
-MacroEconometricModels.summary(irfs)                             # Publication-quality summary
+report(irfs)                                                      # Publication-quality summary
 ```
 
 ---
@@ -333,15 +333,12 @@ The `cumulative_irf` function sums the pointwise IRF from horizon 0 through ``h`
 
 The package provides publication-quality summary tables using a unified interface with multiple dispatch.
 
-!!! note "Name conflict with Base.summary"
-    The `summary` function may conflict with `Base.summary`. Use the fully qualified name `MacroEconometricModels.summary(obj)` or import explicitly with `using MacroEconometricModels: summary`.
-
 ### Functions
 
 | Function | Description |
 |----------|-------------|
-| `summary(obj)` | Print comprehensive summary to stdout |
-| `table(obj, ...)` | Extract results as a DataFrame |
+| `report(obj)` | Print comprehensive summary to stdout |
+| `table(obj, ...)` | Extract results as a matrix |
 | `print_table(io, obj, ...)` | Print formatted table to IO stream |
 
 ### Usage Examples
@@ -355,11 +352,11 @@ irf_result = irf(model, 20)
 fevd_result = fevd(model, 20)
 hd_result = historical_decomposition(model, 198)
 
-# Print summaries (use fully qualified name to avoid Base.summary conflict)
-MacroEconometricModels.summary(model)
-MacroEconometricModels.summary(irf_result)
-MacroEconometricModels.summary(fevd_result)
-MacroEconometricModels.summary(hd_result)
+# Print summaries
+report(model)
+report(irf_result)
+report(fevd_result)
+report(hd_result)
 
 # Extract as DataFrames for further analysis
 df_irf = table(irf_result, 1, 1)                    # response of var 1 to shock 1

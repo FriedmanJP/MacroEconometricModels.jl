@@ -1,8 +1,8 @@
 """
-Publication-quality summary tables for VAR results.
+Publication-quality report and summary tables for all model results.
 
 Provides a unified interface using multiple dispatch:
-- `summary(result)` - Print comprehensive summary
+- `report(result)` - Print comprehensive summary
 - `table(result, ...)` - Extract data as matrix
 - `print_table(result, ...)` - Print formatted table
 
@@ -90,16 +90,16 @@ end
 # _fmt, _fmt_pct, _select_horizons are defined in display_utils.jl
 
 # =============================================================================
-# summary() - Comprehensive summaries
+# report() - Comprehensive summaries
 # =============================================================================
 
 """
-    summary(model::VARModel)
+    report(model::VARModel)
 
 Print comprehensive VAR model summary including specification, information
 criteria, residual covariance, and stationarity check.
 """
-function summary(model::VARModel{T}) where {T}
+function report(model::VARModel{T}) where {T}
     n, p = nvars(model), model.p
     T_eff = effective_nobs(model)
 
@@ -149,46 +149,65 @@ function summary(model::VARModel{T}) where {T}
 end
 
 """
-    summary(irf::ImpulseResponse)
-    summary(irf::BayesianImpulseResponse)
+    report(irf::ImpulseResponse)
+    report(irf::BayesianImpulseResponse)
 
 Print IRF summary with values at selected horizons.
 """
-function summary(irf::ImpulseResponse{T}) where {T}
-    show(stdout, irf)
-end
-
-function summary(irf::BayesianImpulseResponse{T}) where {T}
-    show(stdout, irf)
-end
+report(irf::ImpulseResponse) = show(stdout, irf)
+report(irf::BayesianImpulseResponse) = show(stdout, irf)
 
 """
-    summary(f::FEVD)
-    summary(f::BayesianFEVD)
+    report(f::FEVD)
+    report(f::BayesianFEVD)
 
 Print FEVD summary with decomposition at selected horizons.
 """
-function summary(f::FEVD{T}) where {T}
-    show(stdout, f)
-end
-
-function summary(f::BayesianFEVD{T}) where {T}
-    show(stdout, f)
-end
+report(f::FEVD) = show(stdout, f)
+report(f::BayesianFEVD) = show(stdout, f)
 
 """
-    summary(hd::HistoricalDecomposition)
-    summary(hd::BayesianHistoricalDecomposition)
+    report(hd::HistoricalDecomposition)
+    report(hd::BayesianHistoricalDecomposition)
 
 Print HD summary with contribution statistics.
 """
-function summary(hd::HistoricalDecomposition{T}) where {T}
-    show(stdout, hd)
-end
+report(hd::HistoricalDecomposition) = show(stdout, hd)
+report(hd::BayesianHistoricalDecomposition) = show(stdout, hd)
 
-function summary(hd::BayesianHistoricalDecomposition{T}) where {T}
-    show(stdout, hd)
-end
+# =============================================================================
+# report() - Universal coverage for all package types
+# =============================================================================
+
+# --- Models via abstract dispatch ---
+report(x::AbstractARIMAModel) = show(stdout, x)
+report(x::AbstractFactorModel) = show(stdout, x)
+report(x::AbstractVolatilityModel) = show(stdout, x)
+report(x::AbstractLPModel) = show(stdout, x)
+report(x::AbstractGMMModel) = show(stdout, x)
+
+# --- Hypothesis test results ---
+report(x::AbstractUnitRootTest) = show(stdout, x)
+report(x::AbstractNormalityTest) = show(stdout, x)
+report(x::AbstractNonGaussianSVAR) = show(stdout, x)
+
+# --- Types without abstract parents ---
+report(x::ARIMAForecast) = show(stdout, x)
+report(x::ARIMAOrderSelection) = show(stdout, x)
+report(x::FactorForecast) = show(stdout, x)
+report(x::VolatilityForecast) = show(stdout, x)
+report(x::LPForecast) = show(stdout, x)
+report(x::LPImpulseResponse) = show(stdout, x)
+report(x::IdentifiabilityTestResult) = show(stdout, x)
+report(x::NormalityTestSuite) = show(stdout, x)
+
+# --- Auxiliary types ---
+report(x::BSplineBasis) = show(stdout, x)
+report(x::StateTransition) = show(stdout, x)
+report(x::PropensityScoreConfig) = show(stdout, x)
+report(x::MinnesotaHyperparameters) = show(stdout, x)
+report(x::AriasSVARResult) = show(stdout, x)
+report(x::SVARRestrictions) = show(stdout, x)
 
 # =============================================================================
 # table() - Extract data as matrix
@@ -349,6 +368,112 @@ function table(hd::BayesianHistoricalDecomposition{T}, var::Int;
         result[i, end] = stat == :mean ? hd.initial_mean[t, var] : hd.initial_quantiles[t, var, stat]
     end
     result
+end
+
+# --- VolatilityForecast ---
+
+"""
+    table(fc::VolatilityForecast) -> Matrix
+
+Extract volatility forecast data.
+Returns matrix with columns: [Horizon, Forecast, CI_lo, CI_hi, SE].
+"""
+function table(fc::VolatilityForecast{T}) where {T}
+    h = fc.horizon
+    result = Matrix{T}(undef, h, 5)
+    for i in 1:h
+        result[i, 1] = i
+        result[i, 2] = fc.forecast[i]
+        result[i, 3] = fc.ci_lower[i]
+        result[i, 4] = fc.ci_upper[i]
+        result[i, 5] = fc.se[i]
+    end
+    result
+end
+
+# --- ARIMAForecast ---
+
+"""
+    table(fc::ARIMAForecast) -> Matrix
+
+Extract ARIMA forecast data.
+Returns matrix with columns: [Horizon, Forecast, CI_lo, CI_hi, SE].
+"""
+function table(fc::ARIMAForecast{T}) where {T}
+    h = fc.horizon
+    result = Matrix{T}(undef, h, 5)
+    for i in 1:h
+        result[i, 1] = i
+        result[i, 2] = fc.forecast[i]
+        result[i, 3] = fc.ci_lower[i]
+        result[i, 4] = fc.ci_upper[i]
+        result[i, 5] = fc.se[i]
+    end
+    result
+end
+
+# --- FactorForecast ---
+
+"""
+    table(fc::FactorForecast, var_idx::Int; type=:observable) -> Matrix
+
+Extract factor forecast data for a single variable.
+`type=:observable` returns observable forecasts, `type=:factor` returns factor forecasts.
+Returns matrix with columns: [Horizon, Forecast, CI_lo, CI_hi].
+"""
+function table(fc::FactorForecast{T}, var_idx::Int; type::Symbol=:observable) where {T}
+    h = fc.horizon
+    if type == :observable
+        N = size(fc.observables, 2)
+        @assert 1 <= var_idx <= N "Variable index $var_idx out of bounds (1:$N)"
+        result = Matrix{T}(undef, h, 4)
+        for i in 1:h
+            result[i, 1] = i
+            result[i, 2] = fc.observables[i, var_idx]
+            result[i, 3] = fc.observables_lower[i, var_idx]
+            result[i, 4] = fc.observables_upper[i, var_idx]
+        end
+    else
+        r = size(fc.factors, 2)
+        @assert 1 <= var_idx <= r "Factor index $var_idx out of bounds (1:$r)"
+        result = Matrix{T}(undef, h, 4)
+        for i in 1:h
+            result[i, 1] = i
+            result[i, 2] = fc.factors[i, var_idx]
+            result[i, 3] = fc.factors_lower[i, var_idx]
+            result[i, 4] = fc.factors_upper[i, var_idx]
+        end
+    end
+    result
+end
+
+# --- LPImpulseResponse ---
+
+"""
+    table(irf::LPImpulseResponse, var_idx::Int) -> Matrix
+
+Extract LP IRF values for a response variable.
+Returns matrix with columns: [Horizon, IRF, SE, CI_lo, CI_hi].
+"""
+function table(irf::LPImpulseResponse{T}, var_idx::Int) where {T}
+    n_resp = length(irf.response_vars)
+    @assert 1 <= var_idx <= n_resp "Variable index $var_idx out of bounds (1:$n_resp)"
+    H = irf.horizon
+    result = Matrix{T}(undef, H + 1, 5)
+    for i in 0:H
+        result[i + 1, 1] = i
+        result[i + 1, 2] = irf.values[i + 1, var_idx]
+        result[i + 1, 3] = irf.se[i + 1, var_idx]
+        result[i + 1, 4] = irf.ci_lower[i + 1, var_idx]
+        result[i + 1, 5] = irf.ci_upper[i + 1, var_idx]
+    end
+    result
+end
+
+function table(irf::LPImpulseResponse, var_name::String)
+    idx = findfirst(==(var_name), irf.response_vars)
+    isnothing(idx) && throw(ArgumentError("Variable '$var_name' not found in response_vars"))
+    table(irf, idx)
 end
 
 # =============================================================================
@@ -895,6 +1020,123 @@ end
 
 print_table(f::LPFEVD, var_idx::Int; kwargs...) =
     print_table(stdout, f, var_idx; kwargs...)
+
+# --- VolatilityForecast ---
+
+"""
+    print_table([io], fc::VolatilityForecast)
+
+Print formatted volatility forecast table.
+"""
+function print_table(io::IO, fc::VolatilityForecast{T}) where {T}
+    raw = table(fc)
+    data = Matrix{Any}(undef, size(raw)...)
+    for i in axes(raw, 1)
+        data[i, 1] = Int(raw[i, 1])
+        for j in 2:5
+            data[i, j] = _fmt(raw[i, j])
+        end
+    end
+    ci_pct = round(Int, 100 * fc.conf_level)
+    _pretty_table(io, data;
+        title = "Volatility Forecast ($(fc.model_type), $(ci_pct)% CI)",
+        column_labels = ["h", "σ² Forecast", "CI_lo", "CI_hi", "SE"],
+        alignment = fill(:r, 5),
+    )
+end
+
+print_table(fc::VolatilityForecast) = print_table(stdout, fc)
+
+# --- ARIMAForecast ---
+
+"""
+    print_table([io], fc::ARIMAForecast)
+
+Print formatted ARIMA forecast table.
+"""
+function print_table(io::IO, fc::ARIMAForecast{T}) where {T}
+    raw = table(fc)
+    data = Matrix{Any}(undef, size(raw)...)
+    for i in axes(raw, 1)
+        data[i, 1] = Int(raw[i, 1])
+        for j in 2:5
+            data[i, j] = _fmt(raw[i, j])
+        end
+    end
+    ci_pct = round(Int, 100 * fc.conf_level)
+    _pretty_table(io, data;
+        title = "ARIMA Forecast ($(ci_pct)% CI)",
+        column_labels = ["h", "Forecast", "CI_lo", "CI_hi", "SE"],
+        alignment = fill(:r, 5),
+    )
+end
+
+print_table(fc::ARIMAForecast) = print_table(stdout, fc)
+
+# --- FactorForecast ---
+
+"""
+    print_table([io], fc::FactorForecast, var_idx; type=:observable)
+
+Print formatted factor forecast table for a single variable.
+"""
+function print_table(io::IO, fc::FactorForecast{T}, var_idx::Int;
+                     type::Symbol=:observable) where {T}
+    raw = table(fc, var_idx; type=type)
+    data = Matrix{Any}(undef, size(raw)...)
+    for i in axes(raw, 1)
+        data[i, 1] = Int(raw[i, 1])
+        for j in 2:4
+            data[i, j] = _fmt(raw[i, j])
+        end
+    end
+    label = type == :observable ? "Observable $var_idx" : "Factor $var_idx"
+    ci_str = fc.ci_method == :none ? "" : " ($(fc.ci_method))"
+    _pretty_table(io, data;
+        title = "Factor Forecast: $label$ci_str",
+        column_labels = ["h", "Forecast", "CI_lo", "CI_hi"],
+        alignment = fill(:r, 4),
+    )
+end
+
+print_table(fc::FactorForecast, var_idx::Int; kwargs...) =
+    print_table(stdout, fc, var_idx; kwargs...)
+
+# --- LPImpulseResponse ---
+
+"""
+    print_table([io], irf::LPImpulseResponse, var_idx)
+
+Print formatted LP IRF table for a response variable.
+"""
+function print_table(io::IO, irf::LPImpulseResponse{T}, var_idx::Int) where {T}
+    raw = table(irf, var_idx)
+    data = Matrix{Any}(undef, size(raw)...)
+    for i in axes(raw, 1)
+        data[i, 1] = Int(raw[i, 1])
+        for j in 2:5
+            data[i, j] = _fmt(raw[i, j])
+        end
+    end
+    resp_name = irf.response_vars[var_idx]
+    _pretty_table(io, data;
+        title = "LP IRF: $resp_name ← $(irf.shock_var)",
+        column_labels = ["h", "IRF", "SE", "CI_lo", "CI_hi"],
+        alignment = fill(:r, 5),
+    )
+end
+
+print_table(irf::LPImpulseResponse, var_idx::Int) =
+    print_table(stdout, irf, var_idx)
+
+function print_table(io::IO, irf::LPImpulseResponse, var_name::String)
+    idx = findfirst(==(var_name), irf.response_vars)
+    isnothing(idx) && throw(ArgumentError("Variable '$var_name' not found in response_vars"))
+    print_table(io, irf, idx)
+end
+
+print_table(irf::LPImpulseResponse, var_name::String) =
+    print_table(stdout, irf, var_name)
 
 # =============================================================================
 # Base.show Methods for LP Types

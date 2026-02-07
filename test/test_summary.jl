@@ -5,13 +5,13 @@ using Statistics
 
 @testset "Summary Tables Tests" begin
 
-    @testset "summary(VARModel)" begin
+    @testset "report(VARModel)" begin
         Y = randn(100, 2)
         model = estimate_var(Y, 2)
 
-        # summary() should not throw - use devnull
+        # report() should not throw - use devnull
         redirect_stdout(devnull) do
-            MacroEconometricModels.summary(model)
+            report(model)
         end
         @test true
     end
@@ -108,7 +108,7 @@ using Statistics
         @test occursin("Historical Decomposition", output)
     end
 
-    @testset "summary() for all types" begin
+    @testset "report() for all types" begin
         Y = randn(100, 2)
         model = estimate_var(Y, 2)
 
@@ -116,12 +116,12 @@ using Statistics
         fevd_result = fevd(model, 8)
         hd_result = historical_decomposition(model, 98)
 
-        # All summary() calls should work - use devnull
+        # All report() calls should work - use devnull
         redirect_stdout(devnull) do
-            MacroEconometricModels.summary(model)
-            MacroEconometricModels.summary(irf_result)
-            MacroEconometricModels.summary(fevd_result)
-            MacroEconometricModels.summary(hd_result)
+            report(model)
+            report(irf_result)
+            report(fevd_result)
+            report(hd_result)
         end
         @test true
     end
@@ -235,9 +235,9 @@ using Statistics
         @test bounds[1] == birf.quantiles[:, :, :, 1]
         @test bounds[2] == birf.quantiles[:, :, :, nq]
 
-        # summary
+        # report
         redirect_stdout(devnull) do
-            MacroEconometricModels.summary(birf)
+            report(birf)
         end
         @test true
     end
@@ -299,9 +299,9 @@ using Statistics
         @test bounds[1] == bfevd.quantiles[:, :, :, 1]
         @test bounds[2] == bfevd.quantiles[:, :, :, nq]
 
-        # summary
+        # report
         redirect_stdout(devnull) do
-            MacroEconometricModels.summary(bfevd)
+            report(bfevd)
         end
         @test true
     end
@@ -310,7 +310,7 @@ using Statistics
     # Bayesian HD show / table / print_table
     # =================================================================
 
-    @testset "BayesianHistoricalDecomposition summary and table" begin
+    @testset "BayesianHistoricalDecomposition report and table" begin
         # Construct a synthetic BayesianHistoricalDecomposition
         T_eff, n = 50, 2
         nq = 3
@@ -370,11 +370,199 @@ using Statistics
         @test bounds[1] == bhd.quantiles[:, :, :, 1]
         @test bounds[2] == bhd.quantiles[:, :, :, nq]
 
-        # summary
+        # report
         redirect_stdout(devnull) do
-            MacroEconometricModels.summary(bhd)
+            report(bhd)
         end
         @test true
+    end
+
+    # =================================================================
+    # report() coverage for all types
+    # =================================================================
+
+    @testset "report() coverage for models and results" begin
+        # --- ARIMA models ---
+        y = randn(200)
+        ar_model = estimate_ar(y, 2)
+        redirect_stdout(devnull) do
+            report(ar_model)
+        end
+        @test true
+
+        # --- Factor model ---
+        X = randn(100, 10)
+        fm = estimate_factors(X, 3)
+        redirect_stdout(devnull) do
+            report(fm)
+        end
+        @test true
+
+        # --- ARCH model ---
+        arch_m = estimate_arch(randn(200), 1)
+        redirect_stdout(devnull) do
+            report(arch_m)
+        end
+        @test true
+
+        # --- GMM model ---
+        n_obs = 200
+        x_gmm = randn(n_obs, 2)
+        z_gmm = randn(n_obs, 3)
+        g = (theta, x, z) -> z .* (x[:, 1] .- theta[1])
+        gmm_m = estimate_gmm(g, [0.0], x_gmm, z_gmm)
+        redirect_stdout(devnull) do
+            report(gmm_m)
+        end
+        @test true
+
+        # --- Unit root test ---
+        adf_r = adf_test(cumsum(randn(200)))
+        redirect_stdout(devnull) do
+            report(adf_r)
+        end
+        @test true
+
+        # --- LP model ---
+        Y_lp = randn(100, 3)
+        lp_m = estimate_lp(Y_lp, 1, 10)
+        redirect_stdout(devnull) do
+            report(lp_m)
+        end
+        @test true
+
+        # --- Volatility forecast ---
+        vf = forecast(arch_m, 5)
+        redirect_stdout(devnull) do
+            report(vf)
+        end
+        @test true
+
+        # --- ARIMA forecast ---
+        af = forecast(ar_model, 5)
+        redirect_stdout(devnull) do
+            report(af)
+        end
+        @test true
+
+        # --- LP IRF ---
+        lp_irf_r = lp_irf(lp_m)
+        redirect_stdout(devnull) do
+            report(lp_irf_r)
+        end
+        @test true
+
+        # --- Auxiliary types ---
+        redirect_stdout(devnull) do
+            report(MinnesotaHyperparameters())
+        end
+        @test true
+    end
+
+    # =================================================================
+    # table() and print_table() for forecast types
+    # =================================================================
+
+    @testset "table() for VolatilityForecast" begin
+        arch_m = estimate_arch(randn(200), 1)
+        vf = forecast(arch_m, 5)
+        t = table(vf)
+        @test size(t) == (5, 5)
+        @test t[:, 1] == [1.0, 2.0, 3.0, 4.0, 5.0]
+        @test t[:, 2] == vf.forecast
+        @test t[:, 3] == vf.ci_lower
+        @test t[:, 4] == vf.ci_upper
+        @test t[:, 5] == vf.se
+    end
+
+    @testset "print_table() for VolatilityForecast" begin
+        arch_m = estimate_arch(randn(200), 1)
+        vf = forecast(arch_m, 5)
+        io = IOBuffer()
+        print_table(io, vf)
+        output = String(take!(io))
+        @test occursin("Volatility Forecast", output)
+        @test occursin("σ² Forecast", output)
+    end
+
+    @testset "table() for ARIMAForecast" begin
+        y = randn(200)
+        ar_m = estimate_ar(y, 2)
+        af = forecast(ar_m, 5)
+        t = table(af)
+        @test size(t) == (5, 5)
+        @test t[:, 1] == [1.0, 2.0, 3.0, 4.0, 5.0]
+        @test t[:, 2] == af.forecast
+        @test t[:, 3] == af.ci_lower
+        @test t[:, 4] == af.ci_upper
+        @test t[:, 5] == af.se
+    end
+
+    @testset "print_table() for ARIMAForecast" begin
+        y = randn(200)
+        ar_m = estimate_ar(y, 2)
+        af = forecast(ar_m, 5)
+        io = IOBuffer()
+        print_table(io, af)
+        output = String(take!(io))
+        @test occursin("ARIMA Forecast", output)
+        @test occursin("Forecast", output)
+    end
+
+    @testset "table() for FactorForecast" begin
+        X = randn(100, 10)
+        fm = estimate_factors(X, 3)
+        fc = forecast(fm, 5)
+        # Observable table
+        t = table(fc, 1)
+        @test size(t) == (5, 4)
+        @test t[:, 1] == [1.0, 2.0, 3.0, 4.0, 5.0]
+        # Factor table
+        t_f = table(fc, 1; type=:factor)
+        @test size(t_f) == (5, 4)
+        # Bounds check
+        @test_throws AssertionError table(fc, 100)
+    end
+
+    @testset "print_table() for FactorForecast" begin
+        X = randn(100, 10)
+        fm = estimate_factors(X, 3)
+        fc = forecast(fm, 5)
+        io = IOBuffer()
+        print_table(io, fc, 1)
+        output = String(take!(io))
+        @test occursin("Factor Forecast", output)
+        @test occursin("Observable 1", output)
+        # Factor type
+        io2 = IOBuffer()
+        print_table(io2, fc, 1; type=:factor)
+        output2 = String(take!(io2))
+        @test occursin("Factor 1", output2)
+    end
+
+    @testset "table() for LPImpulseResponse" begin
+        Y_lp = randn(100, 3)
+        lp_m = estimate_lp(Y_lp, 1, 8)
+        lp_irf_r = lp_irf(lp_m)
+        t = table(lp_irf_r, 1)
+        @test size(t, 1) == lp_irf_r.horizon + 1
+        @test size(t, 2) == 5  # h, IRF, SE, CI_lo, CI_hi
+        # String indexing
+        t_str = table(lp_irf_r, lp_irf_r.response_vars[1])
+        @test t_str == t
+        # Invalid string
+        @test_throws ArgumentError table(lp_irf_r, "NonExistent")
+    end
+
+    @testset "print_table() for LPImpulseResponse" begin
+        Y_lp = randn(100, 3)
+        lp_m = estimate_lp(Y_lp, 1, 8)
+        lp_irf_r = lp_irf(lp_m)
+        io = IOBuffer()
+        print_table(io, lp_irf_r, 1)
+        output = String(take!(io))
+        @test occursin("LP IRF", output)
+        @test occursin("←", output)
     end
 
 end

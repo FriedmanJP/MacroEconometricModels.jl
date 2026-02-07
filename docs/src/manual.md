@@ -285,7 +285,7 @@ For detailed coverage of innovation accounting tools, see the dedicated [Innovat
 - **Impulse Response Functions (IRF)**: Dynamic effects of structural shocks
 - **Forecast Error Variance Decomposition (FEVD)**: Variance contribution of each shock
 - **Historical Decomposition (HD)**: Decompose observed movements into shock contributions
-- **Summary Tables**: Publication-quality output with `summary()`, `table()`, `print_table()`
+- **Summary Tables**: Publication-quality output with `report()`, `table()`, `print_table()`
 
 ---
 
