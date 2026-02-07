@@ -927,15 +927,17 @@ end
         L = safe_cholesky(model.Sigma)
         Q = MacroEconometricModels._draw_uniform_orthogonal(n, Float64)
 
-        # No zero restrictions - weight should be 1
+        # No zero restrictions - backward-compatible 4-arg form should return 1
         restrictions_no_zeros = SVARRestrictions(ZeroRestriction[], SignRestriction[], n, n)
         w1 = MacroEconometricModels._compute_importance_weight(Q, restrictions_no_zeros, Phi, L)
         @test w1 ≈ 1.0
 
-        # With zero restrictions - weight should be positive
-        zeros = [ZeroRestriction(2, 1, 0)]
-        restrictions_with_zeros = SVARRestrictions(zeros, SignRestriction[], n, n)
-        w2 = MacroEconometricModels._compute_importance_weight(Q, restrictions_with_zeros, Phi, L)
+        # With zero restrictions - new 6-arg form with model and setup
+        zrs = [ZeroRestriction(2, 1, 0)]
+        restrictions_with_zeros = SVARRestrictions(zrs, SignRestriction[], n, n)
+        setup = MacroEconometricModels._AriasSVARSetup(restrictions_with_zeros, n, Float64)
+        Q_zero = MacroEconometricModels._draw_Q_with_zero_restrictions(restrictions_with_zeros, Phi, L)
+        w2 = MacroEconometricModels._compute_importance_weight(Q_zero, model, setup, restrictions_with_zeros, Phi, L)
         @test w2 > 0
         @test isfinite(w2)
     end
@@ -1013,6 +1015,278 @@ end
         @test norm(Q * Q' - I(n)) < 1e-10
     end
 
+end
+
+# ==========================================================================
+# Importance Weight Correctness Tests (Arias et al. 2018, Proposition 4)
+# ==========================================================================
+
+@testset "Draw-Dependent Importance Weight Correctness" begin
+
+    @testset "Weight variability with zero restrictions" begin
+        Random.seed!(42424)
+
+        T_obs, n, p = 200, 3, 1
+        Y = randn(T_obs, n)
+        model = estimate_var(Y, p)
+
+        # Zero restrictions: var 2 and var 3 don't respond to shock 1
+        zrs = [zero_restriction(2, 1), zero_restriction(3, 1)]
+        signs = [sign_restriction(1, 1, :positive)]
+        restrictions = SVARRestrictions(n; zeros=zrs, signs=signs)
+
+        result = identify_arias(model, restrictions, 10; n_draws=30, n_rotations=500)
+
+        # Key test: weights must NOT all be identical (the old bug gave constant weights)
+        unique_weights = length(unique(round.(result.weights, digits=8)))
+        @test unique_weights > 1  # Weights vary per draw
+        @test all(w -> w > 0, result.weights)
+        @test abs(sum(result.weights) - 1.0) < 1e-10
+    end
+
+    @testset "Pure sign restrictions give unit weights" begin
+        Random.seed!(43434)
+
+        T_obs, n, p = 200, 3, 1
+        Y = randn(T_obs, n)
+        model = estimate_var(Y, p)
+
+        signs = [sign_restriction(1, 1, :positive), sign_restriction(2, 2, :positive)]
+        restrictions = SVARRestrictions(n; signs=signs)
+
+        result = identify_arias(model, restrictions, 10; n_draws=20, n_rotations=500)
+
+        # All weights should be equal (1/N)
+        expected_w = 1.0 / length(result.weights)
+        @test all(w -> isapprox(w, expected_w, atol=1e-10), result.weights)
+    end
+
+    @testset "Numerical Jacobian accuracy" begin
+        # Test against known analytical Jacobian: f(x) = [x[1]^2, x[1]*x[2], x[2]^3]
+        f(x) = [x[1]^2, x[1]*x[2], x[2]^3]
+        x0 = [2.0, 3.0]
+
+        J_num = MacroEconometricModels._numerical_jacobian(f, x0)
+
+        # Analytical: [2x1  0; x2  x1; 0  3x2^2]
+        J_exact = [4.0 0.0; 3.0 2.0; 0.0 27.0]
+
+        @test size(J_num) == (3, 2)
+        @test isapprox(J_num, J_exact, atol=1e-5)
+    end
+
+    @testset "Structural param roundtrip" begin
+        Random.seed!(44444)
+
+        T_obs, n, p = 200, 3, 1
+        Y = randn(T_obs, n)
+        model = estimate_var(Y, p)
+
+        L = safe_cholesky(model.Sigma)
+        Q = MacroEconometricModels._draw_uniform_orthogonal(n, Float64)
+
+        # Forward: (B, L, Q) → (A0, Aplus)
+        A0, Aplus = MacroEconometricModels._rf_to_struct(model.B, L, Q)
+
+        # Backward: (A0, Aplus) → (B_rec, Σ_rec)
+        B_rec, Sigma_rec = MacroEconometricModels._struct_to_rf(A0, Aplus)
+
+        # B should recover exactly
+        @test isapprox(B_rec, model.B, atol=1e-8)
+
+        # Σ_rec = inv(A0)*inv(A0)' = Q'*L'*L*Q (rotated Σ), but Σ = L*L'
+        # So Σ_rec ≠ Σ in general. Instead verify that we can recover (A0, Aplus) from (B_rec, L_rec, Q_rec)
+        L_rec = safe_cholesky(Sigma_rec)
+        Q_rec = Matrix{Float64}(L_rec') * A0
+        A0_rec, Aplus_rec = MacroEconometricModels._rf_to_struct(B_rec, L_rec, Q_rec)
+        @test isapprox(A0_rec, A0, atol=1e-8)
+        @test isapprox(Aplus_rec, Aplus, atol=1e-8)
+    end
+
+    @testset "Q ↔ spheres roundtrip" begin
+        Random.seed!(45454)
+
+        T_obs, n, p = 200, 3, 1
+        Y = randn(T_obs, n)
+        model = estimate_var(Y, p)
+
+        zrs = [zero_restriction(2, 1)]
+        restrictions = SVARRestrictions(n; zeros=zrs)
+
+        Phi = MacroEconometricModels._compute_ma_coefficients(model, 1)
+        L = safe_cholesky(model.Sigma)
+        setup = MacroEconometricModels._AriasSVARSetup(restrictions, n, Float64)
+
+        # Draw a valid Q satisfying zero restrictions
+        Q_orig = MacroEconometricModels._draw_Q_with_zero_restrictions(restrictions, Phi, L)
+
+        # Forward: Q → w
+        w = MacroEconometricModels._Q_to_spheres(Q_orig, setup, restrictions, Phi, L)
+
+        # Backward: w → Q
+        Q_rec = MacroEconometricModels._spheres_to_Q(w, setup, restrictions, Phi, L)
+
+        @test isapprox(Q_rec, Q_orig, atol=1e-8)
+    end
+
+    @testset "Volume element sanity checks" begin
+        Random.seed!(46464)
+
+        T_obs, n, p = 200, 3, 1
+        Y = randn(T_obs, n)
+        model = estimate_var(Y, p)
+
+        zrs = [zero_restriction(2, 1), zero_restriction(3, 1)]
+        signs = [sign_restriction(1, 1, :positive)]
+        restrictions = SVARRestrictions(n; zeros=zrs, signs=signs)
+
+        result = identify_arias(model, restrictions, 10; n_draws=15, n_rotations=500)
+
+        # All pre-normalization weights should be positive and finite
+        Phi = MacroEconometricModels._compute_ma_coefficients(model, 10)
+        L = safe_cholesky(model.Sigma)
+        setup = MacroEconometricModels._AriasSVARSetup(restrictions, n, Float64)
+
+        for Q in result.Q_draws
+            w = MacroEconometricModels._compute_importance_weight(Q, model, setup, restrictions, Phi, L)
+            @test w > 0
+            @test isfinite(w)
+        end
+    end
+
+    @testset "Cholesky equivalence: diagonal impact entries match" begin
+        Random.seed!(47474)
+
+        T_obs, n, p = 300, 3, 1
+        Y = randn(T_obs, n)
+        model = estimate_var(Y, p)
+
+        # Full Cholesky zero restrictions (lower triangular impact)
+        zrs = [
+            zero_restriction(2, 1),
+            zero_restriction(3, 1),
+            zero_restriction(3, 2),
+        ]
+        restrictions = SVARRestrictions(n; zeros=zrs)
+
+        result = identify_arias(model, restrictions, 10; n_draws=50, n_rotations=500)
+
+        # Cholesky IRF
+        Q_chol = Matrix{Float64}(I, n, n)
+        irf_chol = MacroEconometricModels.compute_irf(model, Q_chol, 10)
+
+        # With full Cholesky zeros, Q is near-diagonal (±1 entries + small off-diagonal).
+        # The diagonal impact responses should match Cholesky in absolute value.
+        for idx in 1:min(5, size(result.irf_draws, 1))
+            irf_draw = result.irf_draws[idx, :, :, :]
+            for j in 1:n
+                # Diagonal element of impact matrix should match in absolute value
+                @test isapprox(abs(irf_draw[1, j, j]), abs(irf_chol[1, j, j]), rtol=0.02)
+            end
+        end
+    end
+
+    @testset "compute_weights=false gives unit weights" begin
+        Random.seed!(48484)
+
+        T_obs, n, p = 200, 3, 1
+        Y = randn(T_obs, n)
+        model = estimate_var(Y, p)
+
+        zrs = [zero_restriction(2, 1)]
+        signs = [sign_restriction(1, 1, :positive)]
+        restrictions = SVARRestrictions(n; zeros=zrs, signs=signs)
+
+        result = identify_arias(model, restrictions, 5; n_draws=20, n_rotations=500,
+                                compute_weights=false)
+
+        # All weights equal (no volume element computation)
+        expected_w = 1.0 / length(result.weights)
+        @test all(w -> isapprox(w, expected_w, atol=1e-10), result.weights)
+    end
+
+    @testset "_AriasSVARSetup construction" begin
+        n = 3
+        zrs = [zero_restriction(2, 1), zero_restriction(3, 1), zero_restriction(3, 2)]
+        restrictions = SVARRestrictions(n; zeros=zrs)
+
+        setup = MacroEconometricModels._AriasSVARSetup(restrictions, n, Float64)
+
+        # Shock 1: 2 zeros → s_1 = 3 - 0 - 2 = 1
+        # Shock 2: 1 zero  → s_2 = 3 - 1 - 1 = 1
+        # Shock 3: 0 zeros → s_3 = 3 - 2 - 0 = 1
+        @test setup.zeros_per_shock == [2, 1, 0]
+        @test setup.sphere_dims == [1, 1, 1]
+        @test setup.dim == 3
+        @test length(setup.W) == 3
+        for (j, s_j) in enumerate(setup.sphere_dims)
+            @test size(setup.W[j]) == (s_j, n)
+        end
+    end
+
+    @testset "_vech" begin
+        A = [1.0 2.0 3.0; 2.0 4.0 5.0; 3.0 5.0 6.0]
+        v = MacroEconometricModels._vech(A)
+        @test v == [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+
+        B = [1.0 0.0; 0.0 2.0]
+        v2 = MacroEconometricModels._vech(B)
+        @test v2 == [1.0, 0.0, 2.0]
+    end
+
+    @testset "_pack/_unpack_structural roundtrip" begin
+        n, m = 3, 7  # m = 1 + n*p for p=2
+        A0 = randn(n, n)
+        Aplus = randn(m, n)
+
+        x = MacroEconometricModels._pack_structural(A0, Aplus)
+        @test length(x) == n*n + m*n
+
+        A0_rec, Aplus_rec = MacroEconometricModels._unpack_structural(x, n, m)
+        @test A0_rec ≈ A0
+        @test Aplus_rec ≈ Aplus
+    end
+
+    @testset "_log_abs_det" begin
+        A = [2.0 0.0; 0.0 3.0]
+        @test isapprox(MacroEconometricModels._log_abs_det(A), log(6.0), atol=1e-10)
+
+        # Singular matrix
+        B = [1.0 1.0; 1.0 1.0]
+        @test MacroEconometricModels._log_abs_det(B) == -Inf
+    end
+
+    @testset "_log_volume_element" begin
+        # Simple test: f = identity on R^2, h = [x[1] - 1]
+        # df/dx = I, dh/dx = [1, 0]. Null space of dh = [0; 1].
+        # N = I * [0; 1] = [0; 1]. N'N = [1]. log|det| = 0.
+        f_id(x) = x
+        h_constraint(x) = [x[1] - 1.0]
+
+        x0 = [1.0, 2.0]
+        lve = MacroEconometricModels._log_volume_element(f_id, x0, h_constraint)
+        @test isapprox(lve, 0.0, atol=1e-4)
+    end
+
+    @testset "_draw_w" begin
+        Random.seed!(49494)
+
+        n = 3
+        zrs = [zero_restriction(2, 1)]
+        restrictions = SVARRestrictions(n; zeros=zrs)
+        setup = MacroEconometricModels._AriasSVARSetup(restrictions, n, Float64)
+
+        w = MacroEconometricModels._draw_w(setup)
+        @test length(w) == setup.dim
+
+        # Each sub-vector should be on unit sphere
+        offset = 0
+        for s_j in setup.sphere_dims
+            w_j = w[offset+1:offset+s_j]
+            @test isapprox(norm(w_j), 1.0, atol=1e-10)
+            offset += s_j
+        end
+    end
 end
 
 # ==========================================================================

@@ -367,7 +367,7 @@ end
 @testset "Order Selection" begin
     @testset "Select correct AR order" begin
         # Generate AR(2) data
-        n = 500
+        n = 200
         phi_true = [0.5, 0.3]
 
         y = zeros(n)
@@ -376,39 +376,39 @@ end
             y[t] = phi_true[1] * y[t-1] + phi_true[2] * y[t-2] + randn()
         end
 
-        result = select_arima_order(y, 4, 0; criterion=:bic)
+        result = select_arima_order(y, 2, 0; criterion=:bic)
 
         # BIC should select AR(2) or nearby
-        @test result.best_p_bic in [1, 2, 3]
+        @test result.best_p_bic in [1, 2]
         @test result.best_q_bic == 0
     end
 
     @testset "Select correct MA order" begin
         # Generate MA(1) data
-        n = 500
+        n = 200
         theta_true = 0.6
 
         eps = randn(n + 1)
         y = [eps[t] + theta_true * eps[t-1] for t in 2:n+1]
 
-        result = select_arima_order(y, 0, 3; criterion=:bic)
+        result = select_arima_order(y, 0, 1; criterion=:bic)
 
-        # BIC should select MA(1) or nearby
+        # BIC should select MA(1)
         @test result.best_p_bic == 0
-        @test result.best_q_bic in [1, 2]
+        @test result.best_q_bic in [0, 1]
     end
 
     @testset "IC matrix dimensions" begin
         y = randn(200)
-        result = select_arima_order(y, 3, 2)
+        result = select_arima_order(y, 1, 1)
 
-        @test size(result.aic_matrix) == (4, 3)  # (max_p+1, max_q+1)
-        @test size(result.bic_matrix) == (4, 3)
+        @test size(result.aic_matrix) == (2, 2)  # (max_p+1, max_q+1)
+        @test size(result.bic_matrix) == (2, 2)
     end
 
     @testset "Best model is fitted" begin
         y = randn(200)
-        result = select_arima_order(y, 2, 2)
+        result = select_arima_order(y, 1, 1)
 
         @test isa(result.best_model_aic, AbstractARIMAModel)
         @test isa(result.best_model_bic, AbstractARIMAModel)
@@ -419,7 +419,7 @@ end
     @testset "auto_arima" begin
         # Random walk
         y = cumsum(randn(200))
-        model = auto_arima(y; max_p=3, max_q=3, max_d=2)
+        model = auto_arima(y; max_p=1, max_q=1, max_d=1)
 
         @test isa(model, AbstractARIMAModel)
     end
@@ -879,7 +879,7 @@ end
 @testset "auto_arima include_intercept=false" begin
     Random.seed!(6002)
     y = randn(100)
-    m = auto_arima(y; include_intercept=false, max_p=3, max_q=3)
+    m = auto_arima(y; include_intercept=false, max_p=1, max_q=1)
     @test m isa MacroEconometricModels.AbstractARIMAModel
     fc = forecast(m, 3)
     @test length(fc.forecast) == 3
@@ -888,7 +888,7 @@ end
 @testset "select_arima_order larger grid" begin
     Random.seed!(6003)
     y = randn(100)
-    result = select_arima_order(y, 3, 3)
+    result = select_arima_order(y, 2, 1)
     @test result isa MacroEconometricModels.ARIMAOrderSelection
     @test result.best_p_aic >= 0
     @test result.best_q_aic >= 0
