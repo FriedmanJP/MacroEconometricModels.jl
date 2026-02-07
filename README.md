@@ -14,6 +14,11 @@ A comprehensive Julia package for macroeconomic time series analysis. Provides V
 - **ARIMA** - AR, MA, ARMA, ARIMA estimation via CSS, exact MLE (Kalman filter), or CSS-MLE
 - **Automatic order selection** - `auto_arima` with grid search over (p,d,q), AIC/BIC information criteria
 - **Forecasting** - Multi-step ahead with confidence intervals via psi-weight accumulation
+- **ARCH** - Engle (1982) ARCH(q) with MLE, ARCH-LM test, Ljung-Box squared residuals
+- **GARCH** - GARCH(p,q), EGARCH (Nelson 1991), GJR-GARCH (Glosten, Jagannathan & Runkle 1993)
+- **Stochastic Volatility** - Bayesian SV via MCMC (basic, leverage, Student-t variants)
+- **Volatility Forecasting** - Multi-step volatility forecasts with simulation CIs
+- **Volatility Diagnostics** - News impact curves, persistence, half-life, unconditional variance
 
 ### Multivariate Estimation
 - **Vector Autoregression (VAR)** - OLS estimation with lag order selection (AIC, BIC, HQ)
@@ -56,13 +61,6 @@ A comprehensive Julia package for macroeconomic time series analysis. Provides V
 - **Summary Tables** - Publication-quality output with `report()`, `table()`, `print_table()`
 - **Display Backends** - Switch between text, LaTeX, and HTML table output with `set_display_backend()`
 - **Bibliographic References** - `refs(model)` outputs AEA-style citations in text, LaTeX, BibTeX, or HTML
-
-### Volatility Models
-- **ARCH** - Engle (1982) ARCH(q) with MLE, ARCH-LM test, Ljung-Box squared residuals
-- **GARCH** - GARCH(p,q), EGARCH (Nelson 1991), GJR-GARCH (Glosten, Jagannathan & Runkle 1993)
-- **Stochastic Volatility** - Bayesian SV via MCMC (basic, leverage, Student-t variants)
-- **Forecasting** - Multi-step volatility forecasts with simulation CIs
-- **Diagnostics** - News impact curves, persistence, half-life, unconditional variance
 
 ### Hypothesis Tests
 - **Unit Root Tests** - ADF, KPSS, Phillips-Perron, Zivot-Andrews, Ng-Perron
