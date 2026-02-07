@@ -12,11 +12,23 @@ using LinearAlgebra, Statistics, MCMCChains
     fevd(model, horizon; method=:cholesky, ...) -> FEVD
 
 Compute FEVD showing proportion of h-step forecast error variance attributable to each shock.
+
+# Methods
+`:cholesky`, `:sign`, `:narrative`, `:long_run`,
+`:fastica`, `:jade`, `:sobi`, `:dcov`, `:hsic`,
+`:student_t`, `:mixture_normal`, `:pml`, `:skew_normal`, `:nongaussian_ml`,
+`:markov_switching`, `:garch`, `:smooth_transition`, `:external_volatility`
+
+Note: `:smooth_transition` requires `transition_var` kwarg.
+      `:external_volatility` requires `regime_indicator` kwarg.
 """
 function fevd(model::VARModel{T}, horizon::Int;
-    method::Symbol=:cholesky, check_func=nothing, narrative_check=nothing
+    method::Symbol=:cholesky, check_func=nothing, narrative_check=nothing,
+    transition_var::Union{Nothing,AbstractVector}=nothing,
+    regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing
 ) where {T<:AbstractFloat}
-    irf_result = irf(model, horizon; method, check_func, narrative_check)
+    irf_result = irf(model, horizon; method, check_func, narrative_check,
+                     transition_var=transition_var, regime_indicator=regime_indicator)
     decomp, props = _compute_fevd(irf_result.values, nvars(model), horizon)
     FEVD{T}(decomp, props)
 end
@@ -50,6 +62,15 @@ end
 
 Compute Bayesian FEVD from MCMC chain with posterior quantiles.
 
+# Methods
+`:cholesky`, `:sign`, `:narrative`, `:long_run`,
+`:fastica`, `:jade`, `:sobi`, `:dcov`, `:hsic`,
+`:student_t`, `:mixture_normal`, `:pml`, `:skew_normal`, `:nongaussian_ml`,
+`:markov_switching`, `:garch`, `:smooth_transition`, `:external_volatility`
+
+Note: `:smooth_transition` requires `transition_var` kwarg.
+      `:external_volatility` requires `regime_indicator` kwarg.
+
 Uses `process_posterior_samples` and `compute_posterior_quantiles` from bayesian_utils.jl.
 """
 # =============================================================================
@@ -59,7 +80,9 @@ Uses `process_posterior_samples` and `compute_posterior_quantiles` from bayesian
 function fevd(chain::Chains, p::Int, n::Int, horizon::Int;
     method::Symbol=:cholesky, data::AbstractMatrix=Matrix{Float64}(undef, 0, 0),
     check_func=nothing, narrative_check=nothing, quantiles::Vector{<:Real}=[0.16, 0.5, 0.84],
-    threaded::Bool=false
+    threaded::Bool=false,
+    transition_var::Union{Nothing,AbstractVector}=nothing,
+    regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing
 )
     _validate_narrative_data(method, data)
 
@@ -73,7 +96,8 @@ function fevd(chain::Chains, p::Int, n::Int, horizon::Int;
             props  # Returns (n, n, horizon)
         end;
         data=data, method=method, horizon=horizon,
-        check_func=check_func, narrative_check=narrative_check
+        check_func=check_func, narrative_check=narrative_check,
+        transition_var=transition_var, regime_indicator=regime_indicator
     )
 
     # Stack results: samples are (n, n, horizon), need to rearrange to (horizon, n, n) for output

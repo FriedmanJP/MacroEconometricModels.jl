@@ -120,12 +120,40 @@ end
 # =============================================================================
 
 """
-    compute_Q(model, method, horizon, check_func, narrative_check; max_draws=100)
+    compute_Q(model, method, horizon, check_func, narrative_check;
+              max_draws=100, transition_var=nothing, regime_indicator=nothing)
 
-Compute identification matrix Q. Methods: :cholesky, :sign, :narrative, :long_run.
+Compute identification matrix Q for structural VAR analysis.
+
+# Methods
+- `:cholesky` — Cholesky decomposition (recursive ordering)
+- `:sign` — Sign restrictions (requires `check_func`)
+- `:narrative` — Narrative restrictions (requires `check_func` and `narrative_check`)
+- `:long_run` — Long-run restrictions (Blanchard-Quah)
+- `:fastica` — FastICA (Hyvärinen 1999)
+- `:jade` — JADE (Cardoso 1999)
+- `:sobi` — SOBI (Belouchrani et al. 1997)
+- `:dcov` — Distance covariance ICA (Matteson & Tsay 2017)
+- `:hsic` — HSIC independence ICA (Gretton et al. 2005)
+- `:student_t` — Student-t ML (Lanne et al. 2017)
+- `:mixture_normal` — Mixture of normals ML (Lanne et al. 2017)
+- `:pml` — Pseudo-ML (Gouriéroux et al. 2017)
+- `:skew_normal` — Skew-normal ML (Lanne & Luoto 2020)
+- `:nongaussian_ml` — Unified non-Gaussian ML dispatcher (default: Student-t)
+- `:markov_switching` — Markov-switching heteroskedasticity (Lütkepohl & Netšunajev 2017)
+- `:garch` — GARCH-based heteroskedasticity (Normandin & Phaneuf 2004)
+- `:smooth_transition` — Smooth-transition heteroskedasticity (requires `transition_var`)
+- `:external_volatility` — External volatility regimes (requires `regime_indicator`)
+
+# Keyword Arguments
+- `max_draws::Int=100`: Maximum draws for sign/narrative identification
+- `transition_var::Union{Nothing,AbstractVector}=nothing`: Transition variable for `:smooth_transition`
+- `regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing`: Regime indicator for `:external_volatility`
 """
 function compute_Q(model::VARModel{T}, method::Symbol, horizon::Int, check_func, narrative_check;
-                   max_draws::Int=100) where {T<:AbstractFloat}
+                   max_draws::Int=100,
+                   transition_var::Union{Nothing,AbstractVector}=nothing,
+                   regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing) where {T<:AbstractFloat}
     n = nvars(model)
     method == :cholesky && return Matrix{T}(I, n, n)
     method == :sign && (isnothing(check_func) && throw(ArgumentError("Need check_func for sign"));
@@ -147,10 +175,17 @@ function compute_Q(model::VARModel{T}, method::Symbol, horizon::Int, check_func,
     method == :mixture_normal && return identify_mixture_normal(model).Q
     method == :pml            && return identify_pml(model).Q
     method == :skew_normal    && return identify_skew_normal(model).Q
+    method == :nongaussian_ml && return identify_nongaussian_ml(model).Q
 
     # Heteroskedasticity methods (defined in heteroskedastic_id.jl)
     method == :markov_switching && return identify_markov_switching(model).Q
     method == :garch            && return identify_garch(model).Q
+    method == :smooth_transition && (isnothing(transition_var) &&
+        throw(ArgumentError("smooth_transition requires transition_var kwarg"));
+        return identify_smooth_transition(model, transition_var).Q)
+    method == :external_volatility && (isnothing(regime_indicator) &&
+        throw(ArgumentError("external_volatility requires regime_indicator kwarg"));
+        return identify_external_volatility(model, regime_indicator).Q)
 
     throw(ArgumentError("Unknown method: $method"))
 end

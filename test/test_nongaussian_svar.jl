@@ -433,4 +433,112 @@ using StatsAPI
         ml4 = identify_student_t(model4; max_iter=100)
         @test size(ml4.B0) == (4, 4)
     end
+
+    # =================================================================
+    # Integration Tests: Non-Gaussian through FEVD / HD / BVAR / LP
+    # =================================================================
+
+    @testset "Non-Gaussian FEVD Integration" begin
+        for method in [:fastica, :student_t, :markov_switching]
+            f = fevd(model, 10; method=method)
+            @test f isa MacroEconometricModels.FEVD
+            @test size(f.proportions) == (n, n, 10)
+            # Each variable's FEVD proportions sum to ~1 at each horizon
+            for h in 1:10, i in 1:n
+                @test sum(f.proportions[i, :, h]) ≈ 1.0 atol=1e-10
+            end
+        end
+    end
+
+    @testset "Non-Gaussian HD Integration" begin
+        T_eff = n_obs - 2  # p=2
+        for method in [:fastica, :student_t]
+            hd_r = historical_decomposition(model, T_eff; method=method)
+            @test hd_r isa MacroEconometricModels.HistoricalDecomposition
+            @test verify_decomposition(hd_r)
+            @test hd_r.method == method
+        end
+    end
+
+    @testset "compute_Q new methods" begin
+        # :nongaussian_ml
+        Q_ngml = MacroEconometricModels.compute_Q(model, :nongaussian_ml, 10, nothing, nothing)
+        @test size(Q_ngml) == (n, n)
+        @test norm(Q_ngml' * Q_ngml - I) < 1e-4
+
+        # :smooth_transition with transition_var
+        tv = randn(n_obs)
+        Q_st = MacroEconometricModels.compute_Q(model, :smooth_transition, 10, nothing, nothing;
+                                                 transition_var=tv)
+        @test size(Q_st) == (n, n)
+
+        # :external_volatility with regime_indicator
+        ri = vcat(fill(1, 150), fill(2, 150))
+        Q_ev = MacroEconometricModels.compute_Q(model, :external_volatility, 10, nothing, nothing;
+                                                 regime_indicator=ri)
+        @test size(Q_ev) == (n, n)
+
+        # Missing kwargs should error
+        @test_throws ArgumentError MacroEconometricModels.compute_Q(model, :smooth_transition, 10, nothing, nothing)
+        @test_throws ArgumentError MacroEconometricModels.compute_Q(model, :external_volatility, 10, nothing, nothing)
+    end
+
+    @testset "Hetero-ID through irf/fevd/hd" begin
+        tv = randn(n_obs)
+        ri = vcat(fill(1, 150), fill(2, 150))
+        T_eff = n_obs - 2
+
+        irf_st = irf(model, 10; method=:smooth_transition, transition_var=tv)
+        @test irf_st isa MacroEconometricModels.ImpulseResponse
+        @test size(irf_st.values) == (10, n, n)
+
+        fevd_st = fevd(model, 10; method=:smooth_transition, transition_var=tv)
+        @test fevd_st isa MacroEconometricModels.FEVD
+
+        hd_st = historical_decomposition(model, T_eff; method=:smooth_transition, transition_var=tv)
+        @test hd_st isa MacroEconometricModels.HistoricalDecomposition
+        @test verify_decomposition(hd_st)
+
+        irf_ev = irf(model, 10; method=:external_volatility, regime_indicator=ri)
+        @test irf_ev isa MacroEconometricModels.ImpulseResponse
+
+        fevd_ev = fevd(model, 10; method=:external_volatility, regime_indicator=ri)
+        @test fevd_ev isa MacroEconometricModels.FEVD
+
+        hd_ev = historical_decomposition(model, T_eff; method=:external_volatility, regime_indicator=ri)
+        @test hd_ev isa MacroEconometricModels.HistoricalDecomposition
+        @test verify_decomposition(hd_ev)
+    end
+
+    @testset "BVAR Non-Gaussian Identification" begin
+        Random.seed!(77777)
+        chain = estimate_bvar(Y, 2; n_samples=30, n_adapts=20)
+        for method in [:fastica, :student_t]
+            irf_r = irf(chain, 2, n, 10; method=method, data=Y)
+            @test irf_r isa MacroEconometricModels.BayesianImpulseResponse
+
+            f = fevd(chain, 2, n, 10; method=method, data=Y)
+            @test f isa MacroEconometricModels.BayesianFEVD
+
+            hd_r = historical_decomposition(chain, 2, n, n_obs - 2; data=Y, method=method)
+            @test hd_r isa MacroEconometricModels.BayesianHistoricalDecomposition
+        end
+    end
+
+    @testset "Structural LP Non-Gaussian" begin
+        Random.seed!(88888)
+        Y_lp = randn(200, 3)
+        for method in [:fastica, :student_t]
+            slp = structural_lp(Y_lp, 8; method=method, lags=2)
+            @test slp isa MacroEconometricModels.StructuralLP
+            @test slp.method == method
+
+            f = fevd(slp, 8)
+            @test f isa MacroEconometricModels.LPFEVD
+
+            T_eff_lp = size(Y_lp, 1) - 2
+            hd_r = historical_decomposition(slp, T_eff_lp)
+            @test hd_r isa MacroEconometricModels.HistoricalDecomposition
+        end
+    end
 end

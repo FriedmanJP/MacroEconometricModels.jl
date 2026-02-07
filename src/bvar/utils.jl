@@ -18,10 +18,8 @@ using LinearAlgebra, Statistics, MCMCChains
 
 """
     process_posterior_samples(chain::Chains, p::Int, n::Int, compute_func::Function;
-                              data::AbstractMatrix=Matrix{Float64}(undef, 0, 0),
-                              method::Symbol=:cholesky, horizon::Int=20,
-                              check_func=nothing, narrative_check=nothing,
-                              max_draws::Int=100) -> (Vector{Any}, Int)
+                              data, method, horizon, check_func, narrative_check,
+                              max_draws, transition_var, regime_indicator) -> (Vector{Any}, Int)
 
 Generic framework for processing posterior samples from MCMC chain.
 
@@ -39,11 +37,13 @@ Generic framework for processing posterior samples from MCMC chain.
 
 # Keyword Arguments
 - `data::AbstractMatrix`: Original data (required for narrative method and residual computation)
-- `method::Symbol`: Identification method (:cholesky, :sign, :narrative, :long_run)
+- `method::Symbol`: Identification method (see `compute_Q` for full list)
 - `horizon::Int`: IRF/computation horizon
 - `check_func`: Sign restriction check function (for method=:sign or :narrative)
 - `narrative_check`: Narrative restriction check function (for method=:narrative)
 - `max_draws::Int`: Maximum draws for sign/narrative identification
+- `transition_var`: Transition variable (for method=:smooth_transition)
+- `regime_indicator`: Regime indicator (for method=:external_volatility)
 
 # Returns
 - `results::Vector{Any}`: Vector of results from `compute_func` for each sample
@@ -61,7 +61,9 @@ results, n_samples = process_posterior_samples(chain, p, n,
 function process_posterior_samples(chain::Chains, p::Int, n::Int, compute_func::Function;
     data::AbstractMatrix=Matrix{Float64}(undef, 0, 0),
     method::Symbol=:cholesky, horizon::Int=20,
-    check_func=nothing, narrative_check=nothing, max_draws::Int=100
+    check_func=nothing, narrative_check=nothing, max_draws::Int=100,
+    transition_var::Union{Nothing,AbstractVector}=nothing,
+    regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing
 )
     method == :narrative && isempty(data) &&
         throw(ArgumentError("Narrative method requires data"))
@@ -73,7 +75,8 @@ function process_posterior_samples(chain::Chains, p::Int, n::Int, compute_func::
 
     for s in 1:samples
         m = parameters_to_model(b_vecs[s, :], sigmas[s, :], p, n, data)
-        Q = compute_Q(m, method, horizon, check_func, narrative_check; max_draws=max_draws)
+        Q = compute_Q(m, method, horizon, check_func, narrative_check;
+                      max_draws=max_draws, transition_var=transition_var, regime_indicator=regime_indicator)
         results[s] = compute_func(m, Q, horizon)
     end
 

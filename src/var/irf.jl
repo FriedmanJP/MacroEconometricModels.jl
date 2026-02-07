@@ -13,21 +13,34 @@ using LinearAlgebra, Statistics, MCMCChains
 
 Compute IRFs with optional confidence intervals.
 
-Methods: :cholesky, :sign, :narrative, :long_run.
-CI types: :none, :bootstrap, :theoretical.
+# Methods
+`:cholesky`, `:sign`, `:narrative`, `:long_run`,
+`:fastica`, `:jade`, `:sobi`, `:dcov`, `:hsic`,
+`:student_t`, `:mixture_normal`, `:pml`, `:skew_normal`, `:nongaussian_ml`,
+`:markov_switching`, `:garch`, `:smooth_transition`, `:external_volatility`
+
+Note: `:smooth_transition` requires `transition_var` kwarg.
+      `:external_volatility` requires `regime_indicator` kwarg.
+
+# CI types
+`:none`, `:bootstrap`, `:theoretical`
 """
 function irf(model::VARModel{T}, horizon::Int;
     method::Symbol=:cholesky, check_func=nothing, narrative_check=nothing,
-    ci_type::Symbol=:none, reps::Int=200, conf_level::Real=0.95
+    ci_type::Symbol=:none, reps::Int=200, conf_level::Real=0.95,
+    transition_var::Union{Nothing,AbstractVector}=nothing,
+    regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing
 ) where {T<:AbstractFloat}
 
     n = nvars(model)
-    Q = compute_Q(model, method, horizon, check_func, narrative_check)
+    Q = compute_Q(model, method, horizon, check_func, narrative_check;
+                  transition_var=transition_var, regime_indicator=regime_indicator)
     point_irf = compute_irf(model, Q, horizon)
 
     ci_lower, ci_upper = zeros(T, horizon, n, n), zeros(T, horizon, n, n)
     if ci_type != :none
-        sim_irfs = _simulate_irfs(model, method, horizon, check_func, narrative_check, ci_type, reps)
+        sim_irfs = _simulate_irfs(model, method, horizon, check_func, narrative_check, ci_type, reps;
+                                  transition_var=transition_var, regime_indicator=regime_indicator)
         alpha = (1 - T(conf_level)) / 2
         @inbounds for h in 1:horizon, v in 1:n, s in 1:n
             d = @view sim_irfs[:, h, v, s]
@@ -41,7 +54,9 @@ end
 
 """Simulate IRFs for confidence intervals (bootstrap or asymptotic)."""
 function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
-    check_func, narrative_check, ci_type::Symbol, reps::Int
+    check_func, narrative_check, ci_type::Symbol, reps::Int;
+    transition_var::Union{Nothing,AbstractVector}=nothing,
+    regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing
 ) where {T<:AbstractFloat}
     n, p = nvars(model), model.p
     sim_irfs = zeros(T, reps, horizon, n, n)
@@ -54,7 +69,8 @@ function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
             U_boot = U[rand(1:T_eff, T_eff), :]
             Y_boot = _simulate_var(Y_init, model.B, U_boot, T_eff + p)
             m = estimate_var(Y_boot, p)
-            Q = compute_Q(m, method, horizon, check_func, narrative_check)
+            Q = compute_Q(m, method, horizon, check_func, narrative_check;
+                          transition_var=transition_var, regime_indicator=regime_indicator)
             sim_irfs[r, :, :, :] = compute_irf(m, Q, horizon)
         end
     elseif ci_type == :theoretical
@@ -65,7 +81,8 @@ function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
         Threads.@threads for r in 1:reps
             B_star = model.B + L_V * randn(T, k, n) * L_S'
             m = VARModel(zeros(T, 0, n), p, B_star, zeros(T, 0, n), model.Sigma, zero(T), zero(T), zero(T))
-            Q = compute_Q(m, method, horizon, check_func, narrative_check)
+            Q = compute_Q(m, method, horizon, check_func, narrative_check;
+                          transition_var=transition_var, regime_indicator=regime_indicator)
             sim_irfs[r, :, :, :] = compute_irf(m, Q, horizon)
         end
     end
@@ -101,12 +118,23 @@ end
 
 Compute Bayesian IRFs from MCMC chain with posterior quantiles.
 
+# Methods
+`:cholesky`, `:sign`, `:narrative`, `:long_run`,
+`:fastica`, `:jade`, `:sobi`, `:dcov`, `:hsic`,
+`:student_t`, `:mixture_normal`, `:pml`, `:skew_normal`, `:nongaussian_ml`,
+`:markov_switching`, `:garch`, `:smooth_transition`, `:external_volatility`
+
+Note: `:smooth_transition` requires `transition_var` kwarg.
+      `:external_volatility` requires `regime_indicator` kwarg.
+
 Uses `process_posterior_samples` and `compute_posterior_quantiles` from bayesian_utils.jl.
 """
 function irf(chain::Chains, p::Int, n::Int, horizon::Int;
     method::Symbol=:cholesky, data::AbstractMatrix=Matrix{Float64}(undef, 0, 0),
     check_func=nothing, narrative_check=nothing, quantiles::Vector{<:Real}=[0.16, 0.5, 0.84],
-    threaded::Bool=false
+    threaded::Bool=false,
+    transition_var::Union{Nothing,AbstractVector}=nothing,
+    regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing
 )
     _validate_narrative_data(method, data)
 
@@ -116,7 +144,8 @@ function irf(chain::Chains, p::Int, n::Int, horizon::Int;
     results, samples = process_posterior_samples(chain, p, n,
         (m, Q, h) -> compute_irf(m, Q, h);
         data=data, method=method, horizon=horizon,
-        check_func=check_func, narrative_check=narrative_check
+        check_func=check_func, narrative_check=narrative_check,
+        transition_var=transition_var, regime_indicator=regime_indicator
     )
 
     # Stack results into single array

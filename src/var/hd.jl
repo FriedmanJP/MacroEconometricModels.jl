@@ -160,10 +160,21 @@ Decomposes observed data into contributions from each structural shock plus init
 - `horizon::Int`: Maximum horizon for MA coefficient computation (typically T_eff)
 
 # Keyword Arguments
-- `method::Symbol=:cholesky`: Identification method (:cholesky, :sign, :narrative, :long_run)
+- `method::Symbol=:cholesky`: Identification method
 - `check_func=nothing`: Sign restriction check function (for method=:sign or :narrative)
 - `narrative_check=nothing`: Narrative restriction check function (for method=:narrative)
 - `max_draws::Int=1000`: Maximum draws for sign/narrative identification
+- `transition_var=nothing`: Transition variable (for method=:smooth_transition)
+- `regime_indicator=nothing`: Regime indicator (for method=:external_volatility)
+
+# Methods
+`:cholesky`, `:sign`, `:narrative`, `:long_run`,
+`:fastica`, `:jade`, `:sobi`, `:dcov`, `:hsic`,
+`:student_t`, `:mixture_normal`, `:pml`, `:skew_normal`, `:nongaussian_ml`,
+`:markov_switching`, `:garch`, `:smooth_transition`, `:external_volatility`
+
+Note: `:smooth_transition` requires `transition_var` kwarg.
+      `:external_volatility` requires `regime_indicator` kwarg.
 
 # Returns
 `HistoricalDecomposition` containing:
@@ -181,7 +192,9 @@ verify_decomposition(hd)  # Check decomposition identity
 """
 function historical_decomposition(model::VARModel{T}, horizon::Int;
     method::Symbol=:cholesky, check_func=nothing, narrative_check=nothing,
-    max_draws::Int=1000
+    max_draws::Int=1000,
+    transition_var::Union{Nothing,AbstractVector}=nothing,
+    regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing
 ) where {T<:AbstractFloat}
 
     n = nvars(model)
@@ -191,7 +204,8 @@ function historical_decomposition(model::VARModel{T}, horizon::Int;
     horizon = min(horizon, T_eff)
 
     # Get identification matrix Q
-    Q = compute_Q(model, method, horizon, check_func, narrative_check; max_draws=max_draws)
+    Q = compute_Q(model, method, horizon, check_func, narrative_check;
+                  max_draws=max_draws, transition_var=transition_var, regime_indicator=regime_indicator)
 
     # Compute structural shocks: ε_t = Q' L^{-1} u_t
     shocks = compute_structural_shocks(model, Q)
@@ -281,6 +295,17 @@ Compute Bayesian historical decomposition from MCMC chain with posterior quantil
 - `quantiles::Vector{<:Real}=[0.16, 0.5, 0.84]`: Posterior quantile levels
 - `check_func=nothing`: Sign restriction check function
 - `narrative_check=nothing`: Narrative restriction check function
+- `transition_var=nothing`: Transition variable (for method=:smooth_transition)
+- `regime_indicator=nothing`: Regime indicator (for method=:external_volatility)
+
+# Methods
+`:cholesky`, `:sign`, `:narrative`, `:long_run`,
+`:fastica`, `:jade`, `:sobi`, `:dcov`, `:hsic`,
+`:student_t`, `:mixture_normal`, `:pml`, `:skew_normal`, `:nongaussian_ml`,
+`:markov_switching`, `:garch`, `:smooth_transition`, `:external_volatility`
+
+Note: `:smooth_transition` requires `transition_var` kwarg.
+      `:external_volatility` requires `regime_indicator` kwarg.
 
 # Returns
 `BayesianHistoricalDecomposition` with posterior quantiles and means.
@@ -294,7 +319,9 @@ hd = historical_decomposition(chain, 2, 3, 198; data=Y)
 function historical_decomposition(chain::Chains, p::Int, n::Int, horizon::Int;
     data::AbstractMatrix, method::Symbol=:cholesky,
     quantiles::Vector{<:Real}=[0.16, 0.5, 0.84],
-    check_func=nothing, narrative_check=nothing
+    check_func=nothing, narrative_check=nothing,
+    transition_var::Union{Nothing,AbstractVector}=nothing,
+    regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing
 )
     _validate_narrative_data(method, data)
 
@@ -313,7 +340,8 @@ function historical_decomposition(chain::Chains, p::Int, n::Int, horizon::Int;
 
     for s in 1:samples
         m = parameters_to_model(b_vecs[s, :], sigmas[s, :], p, n, data)
-        Q = compute_Q(m, method, horizon, check_func, narrative_check; max_draws=100)
+        Q = compute_Q(m, method, horizon, check_func, narrative_check;
+                      max_draws=100, transition_var=transition_var, regime_indicator=regime_indicator)
 
         shocks = compute_structural_shocks(m, Q)
         Theta = _compute_structural_ma_coefficients(m, Q, horizon)

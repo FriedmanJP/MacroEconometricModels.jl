@@ -407,10 +407,9 @@ using Statistics
 
         # --- GMM model ---
         n_obs = 200
-        x_gmm = randn(n_obs, 2)
-        z_gmm = randn(n_obs, 3)
-        g = (theta, x, z) -> z .* (x[:, 1] .- theta[1])
-        gmm_m = estimate_gmm(g, [0.0], x_gmm, z_gmm)
+        data_gmm = randn(n_obs, 3)
+        g = (theta, data) -> data[:, 2:3] .* (data[:, 1] .- theta[1])
+        gmm_m = estimate_gmm(g, [0.0], data_gmm)
         redirect_stdout(devnull) do
             report(gmm_m)
         end

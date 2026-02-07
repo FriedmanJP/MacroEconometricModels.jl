@@ -299,7 +299,8 @@ end
                   cov_type=:newey_west, conf_level=0.95,
                   ci_type=:none, reps=200,
                   check_func=nothing, narrative_check=nothing,
-                  max_draws=1000) -> StructuralLP{T}
+                  max_draws=1000,
+                  transition_var=nothing, regime_indicator=nothing) -> StructuralLP{T}
 
 Estimate structural LP impulse responses using VAR-based identification with LP estimation.
 
@@ -315,8 +316,7 @@ Algorithm:
 - `horizon`: Maximum IRF horizon H
 
 # Keyword Arguments
-- `method`: Identification method (:cholesky, :sign, :narrative, :long_run,
-            :fastica, :jade, :sobi, :dcov, :hsic, :student_t, :mixture_normal, :pml)
+- `method`: Identification method
 - `lags`: Number of LP control lags (default: 4)
 - `var_lags`: VAR lag order for identification (default: same as `lags`)
 - `cov_type`: HAC estimator (:newey_west, :white)
@@ -326,6 +326,17 @@ Algorithm:
 - `check_func`: Sign restriction check function (for :sign/:narrative)
 - `narrative_check`: Narrative check function (for :narrative)
 - `max_draws`: Maximum draws for sign/narrative identification
+- `transition_var`: Transition variable (for :smooth_transition)
+- `regime_indicator`: Regime indicator (for :external_volatility)
+
+# Methods
+`:cholesky`, `:sign`, `:narrative`, `:long_run`,
+`:fastica`, `:jade`, `:sobi`, `:dcov`, `:hsic`,
+`:student_t`, `:mixture_normal`, `:pml`, `:skew_normal`, `:nongaussian_ml`,
+`:markov_switching`, `:garch`, `:smooth_transition`, `:external_volatility`
+
+Note: `:smooth_transition` requires `transition_var` kwarg.
+      `:external_volatility` requires `regime_indicator` kwarg.
 
 # Returns
 `StructuralLP{T}` with 3D IRFs, structural shocks, VAR model, and individual LP models.
@@ -340,7 +351,9 @@ function structural_lp(Y::AbstractMatrix{T}, horizon::Int;
                        cov_type::Symbol=:newey_west, conf_level::Real=0.95,
                        ci_type::Symbol=:none, reps::Int=200,
                        check_func=nothing, narrative_check=nothing,
-                       max_draws::Int=1000) where {T<:AbstractFloat}
+                       max_draws::Int=1000,
+                       transition_var::Union{Nothing,AbstractVector}=nothing,
+                       regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing) where {T<:AbstractFloat}
     T_obs, n = size(Y)
     p = isnothing(var_lags) ? lags : var_lags
 
@@ -351,7 +364,8 @@ function structural_lp(Y::AbstractMatrix{T}, horizon::Int;
     var_model = estimate_var(Y, p)
 
     # Step 2: Compute identification matrix Q
-    Q = compute_Q(var_model, method, horizon, check_func, narrative_check; max_draws=max_draws)
+    Q = compute_Q(var_model, method, horizon, check_func, narrative_check;
+                  max_draws=max_draws, transition_var=transition_var, regime_indicator=regime_indicator)
 
     # Step 3: Compute structural shocks
     eps = compute_structural_shocks(var_model, Q)
@@ -381,7 +395,9 @@ function structural_lp(Y::AbstractMatrix{T}, horizon::Int;
     if ci_type == :bootstrap
         ci_lower, ci_upper = _structural_lp_bootstrap(Matrix{ET}(Y), horizon, n, p, method,
                                                        lags, cov_type, reps, ET(conf_level),
-                                                       check_func, narrative_check, max_draws)
+                                                       check_func, narrative_check, max_draws;
+                                                       transition_var=transition_var,
+                                                       regime_indicator=regime_indicator)
         ci_sym = :bootstrap
     end
 
@@ -421,7 +437,9 @@ function _structural_lp_bootstrap(Y::AbstractMatrix{T}, horizon::Int, n::Int, p:
                                    method::Symbol, lags::Int, cov_type::Symbol,
                                    reps::Int, conf_level::T,
                                    check_func, narrative_check,
-                                   max_draws::Int) where {T<:AbstractFloat}
+                                   max_draws::Int;
+                                   transition_var::Union{Nothing,AbstractVector}=nothing,
+                                   regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing) where {T<:AbstractFloat}
     T_obs = size(Y, 1)
     sim_irfs = zeros(T, reps, horizon, n, n)
     block_size = max(1, round(Int, T_obs^(1/3)))
@@ -431,7 +449,8 @@ function _structural_lp_bootstrap(Y::AbstractMatrix{T}, horizon::Int, n::Int, p:
         Y_boot = _block_bootstrap(Y, block_size)
         try
             var_m = estimate_var(Y_boot, p)
-            Q_r = compute_Q(var_m, method, horizon, check_func, narrative_check; max_draws=max_draws)
+            Q_r = compute_Q(var_m, method, horizon, check_func, narrative_check;
+                            max_draws=max_draws, transition_var=transition_var, regime_indicator=regime_indicator)
             eps_r = compute_structural_shocks(var_m, Q_r)
 
             Y_eff_r = Y_boot[(p+1):end, :]
