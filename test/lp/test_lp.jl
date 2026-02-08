@@ -258,6 +258,62 @@ using Random
         @test dr_model isa PropensityLPModel
     end
 
+    @testset "IPW vs Doubly Robust LP produce different ATEs" begin
+        # DGP with confounding where outcome regression adjustment matters:
+        # - Propensity model is slightly misspecified (nonlinear treatment assignment)
+        # - Outcome depends strongly on covariates
+        # This makes the DR correction non-trivial, producing different ATEs than IPW alone.
+        rng = Random.MersenneTwister(2024)
+        T_dr = 500
+        n_dr = 2
+
+        # Covariates
+        X_dr = randn(rng, T_dr, 2)
+
+        # Nonlinear propensity: logit misses the X1*X2 interaction and X1^2 term
+        latent = 0.3 .* X_dr[:, 1] .+ 0.2 .* X_dr[:, 2] .+
+                 0.8 .* X_dr[:, 1] .* X_dr[:, 2] .+
+                 0.4 .* X_dr[:, 1].^2
+        p_true = 1.0 ./ (1.0 .+ exp.(-latent))
+        D_dr = rand(rng, T_dr) .< p_true
+
+        # Outcome with strong covariate dependence (confounding)
+        tau = 1.0  # true ATE
+        Y_dr = zeros(T_dr, n_dr)
+        for t in 2:T_dr
+            # Control outcome depends heavily on covariates
+            Y_dr[t, :] = 0.3 .* Y_dr[t-1, :] .+
+                          1.5 .* X_dr[t, 1] .+ 0.8 .* X_dr[t, 2] .+
+                          0.5 .* X_dr[t, 1] .* X_dr[t, 2] .+
+                          D_dr[t] * tau .+
+                          0.5 .* randn(rng, n_dr)
+        end
+
+        h_dr = 4
+
+        # Estimate both
+        ipw_model = estimate_propensity_lp(Y_dr, D_dr, X_dr, h_dr; lags=2)
+        dr_model = doubly_robust_lp(Y_dr, D_dr, X_dr, h_dr; lags=2)
+
+        @test ipw_model isa PropensityLPModel
+        @test dr_model isa PropensityLPModel
+
+        # Both should produce finite ATE estimates
+        @test all(isfinite.(ipw_model.ate))
+        @test all(isfinite.(dr_model.ate))
+
+        # The ATEs should differ: doubly robust adds outcome regression correction
+        # that the pure IPW estimator lacks
+        @test ipw_model.ate != dr_model.ate
+
+        # Also verify the standard errors differ
+        @test ipw_model.ate_se != dr_model.ate_se
+
+        # Both should capture the positive treatment effect direction at h=0
+        @test ipw_model.ate[1, 1] > 0
+        @test dr_model.ate[1, 1] > 0
+    end
+
     @testset "GMM Estimation" begin
         # Simple linear IV example
         T_gmm = 200

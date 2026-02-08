@@ -508,33 +508,54 @@ The IPW estimator weights observations by the inverse of their selection probabi
 
 This reweighting creates a pseudo-population where treatment is independent of covariates.
 
-### IPW-LP Estimation
+### IPW-LP Estimation (`estimate_propensity_lp`)
 
-At each horizon ``h``:
-
-```math
-\hat{\text{ATE}}_h = \frac{1}{n} \sum_{t: D_t=1} \frac{y_{t+h}}{\hat{p}(X_t)} - \frac{1}{n} \sum_{t: D_t=0} \frac{y_{t+h}}{1-\hat{p}(X_t)}
-```
-
-Or via weighted regression:
+The IPW estimator reweights observations so that, in the pseudo-population, treatment is independent of covariates. Estimation proceeds via **weighted least squares** (WLS):
 
 ```math
-y_{t+h} = \alpha_h + \beta_h D_t + \gamma_h' X_t + \varepsilon_{t+h}
+y_{t+h} = \alpha_h + \beta_h D_t + \gamma_h' W_t + \varepsilon_{t+h}
 ```
 
-estimated by WLS with IPW weights.
+where ``W_t`` includes lagged outcomes and covariates, and the weights are ``w_t = 1/\hat{p}(X_t)`` for treated and ``w_t = 1/(1-\hat{p}(X_t))`` for control observations. The ATE estimate is the treatment coefficient ``\hat{\beta}_h`` from the WLS regression. Standard errors are computed from HAC-robust covariance on the weighted residuals.
 
-### Doubly Robust Estimation
+**Consistency requirement**: The propensity score model ``\hat{p}(X_t)`` must be correctly specified. If the logit/probit model misses important nonlinearities or interactions in the true treatment assignment mechanism, the IPW estimator will be biased.
 
-The doubly robust (DR) estimator combines IPW with outcome regression:
+### Doubly Robust LP Estimation (`doubly_robust_lp`)
+
+The doubly robust (DR) estimator, also known as the **augmented IPW (AIPW)** estimator, combines inverse propensity weighting with separate **outcome regressions** for treated and control groups. It first fits:
+
+- ``\hat{\mu}_1(X_t) = E[y_{t+h} | D_t=1, X_t]`` — predicted outcome under treatment
+- ``\hat{\mu}_0(X_t) = E[y_{t+h} | D_t=0, X_t]`` — predicted outcome under control
+
+via OLS on the respective subsamples. Then the ATE is computed from the influence function:
 
 ```math
-\hat{\text{ATE}}^{DR}_h = \frac{1}{n} \sum_t \left[ \frac{D_t(y_{t+h} - \mu_1(X_t))}{\hat{p}(X_t)} + \mu_1(X_t) \right] - \frac{1}{n} \sum_t \left[ \frac{(1-D_t)(y_{t+h} - \mu_0(X_t))}{1-\hat{p}(X_t)} + \mu_0(X_t) \right]
+\hat{\psi}_t = \begin{cases} \displaystyle\frac{D_t(y_{t+h} - \hat{\mu}_1(X_t))}{\hat{p}(X_t)} + \hat{\mu}_1(X_t) - \hat{\mu}_0(X_t), & \text{if } D_t = 1 \\[6pt] \displaystyle\hat{\mu}_1(X_t) - \frac{(1-D_t)(y_{t+h} - \hat{\mu}_0(X_t))}{1-\hat{p}(X_t)} - \hat{\mu}_0(X_t), & \text{if } D_t = 0 \end{cases}
 ```
 
-where ``\mu_d(X_t) = E[y_{t+h} | D_t = d, X_t]`` is the outcome regression.
+```math
+\hat{\text{ATE}}^{DR}_h = \frac{1}{n}\sum_{t=1}^{n} \hat{\psi}_t, \qquad \text{SE}_h = \frac{\text{sd}(\hat{\psi})}{\sqrt{n}}
+```
 
-**Property**: DR is consistent if either the propensity score or the outcome model is correctly specified.
+**Double robustness property**: The DR estimator is consistent if **either** the propensity score model **or** the outcome regression model is correctly specified. This provides insurance against misspecification of one component, making it the safer default choice in applied work.
+
+### When Do the Two Estimators Differ?
+
+| Feature | `estimate_propensity_lp` (IPW) | `doubly_robust_lp` (DR/AIPW) |
+|---------|-------------------------------|------------------------------|
+| **Method** | WLS with inverse propensity weights | Influence function combining IPW + outcome regression |
+| **Consistency requires** | Correct propensity model | Correct propensity **or** outcome model |
+| **ATE computation** | Treatment coefficient from WLS | Mean of doubly robust influence function ``\hat{\psi}_t`` |
+| **Standard errors** | HAC-robust on weighted residuals | ``\text{sd}(\hat{\psi}_t)/\sqrt{n}`` |
+| **Best when** | Propensity model well-specified | Uncertainty about either model |
+
+The two estimators coincide only when the propensity score model is exactly correct and the outcome is truly linear in covariates. In practice, they produce different ATE estimates because:
+
+1. **Outcome model bias correction**: DR subtracts the predicted outcome ``\hat{\mu}_d(X_t)`` from the observed outcome before applying IPW. This correction reduces the sensitivity to propensity score misspecification.
+2. **Different variance estimation**: IPW uses WLS residual-based HAC standard errors; DR uses the cross-sectional standard deviation of the influence function.
+
+!!! note "Recommendation"
+    Use `doubly_robust_lp` as the default. It is never worse than IPW asymptotically, and can be substantially better when the propensity model is misspecified. Use `estimate_propensity_lp` when you have strong confidence in the propensity score specification or want direct WLS coefficients for all regressors.
 
 ### Practical Considerations
 
@@ -542,7 +563,7 @@ where ``\mu_d(X_t) = E[y_{t+h} | D_t = d, X_t]`` is the outcome regression.
 2. **Overlap**: Verify that treated and control groups have overlapping covariate distributions.
 3. **Balance**: Check that covariates are balanced after reweighting (standardized mean differences < 0.1).
 
-**Reference**: Angrist, Jordà & Kuersteiner (2018), Hirano, Imbens & Ridder (2003)
+**Reference**: Angrist, Jordà & Kuersteiner (2018), Hirano, Imbens & Ridder (2003), Robins, Rotnitzky & Zhao (1994)
 
 ### Julia Implementation
 
@@ -552,26 +573,35 @@ using MacroEconometricModels
 # treatment: Bool vector of treatment indicators
 # covariates: matrix of selection-relevant covariates
 
-# IPW estimation
-prop_model = estimate_propensity_lp(Y, treatment, covariates, H;
+# IPW estimation — consistent if propensity model is correct
+ipw_model = estimate_propensity_lp(Y, treatment, covariates, H;
     ps_method = :logit,
     trimming = (0.01, 0.99),
     lags = 4
 )
 
-# Doubly robust estimation
-dr_model = doubly_robust_lp(Y, treatment, covariates, H)
+# Doubly robust estimation — consistent if EITHER model is correct
+dr_model = doubly_robust_lp(Y, treatment, covariates, H;
+    ps_method = :logit,
+    trimming = (0.01, 0.99),
+    lags = 4
+)
+
+# Compare ATE estimates (they will generally differ)
+println("IPW ATE at h=0: ", ipw_model.ate[1, :])
+println("DR  ATE at h=0: ", dr_model.ate[1, :])
 
 # Extract ATE impulse response
-ate_irf = propensity_irf(prop_model)
+ate_irf = propensity_irf(ipw_model)
+dr_irf  = propensity_irf(dr_model)
 
-# Diagnostics
-diagnostics = propensity_diagnostics(prop_model)
+# Diagnostics (works for both model types)
+diagnostics = propensity_diagnostics(ipw_model)
 println("Propensity score overlap: ", diagnostics.overlap)
 println("Max covariate imbalance: ", diagnostics.balance.max_weighted)
 ```
 
-The `ate_irf` object contains the estimated Average Treatment Effect at each horizon. The doubly robust estimator is preferred when there is uncertainty about the propensity score or outcome model specification, since it requires only one of the two to be correctly specified for consistency. The diagnostics check two key assumptions: overlap (sufficient common support between treated and control distributions) and balance (covariate means equalized after reweighting, with standardized differences below 0.1).
+The `ate_irf` object contains the estimated Average Treatment Effect at each horizon. The diagnostics check two key assumptions: overlap (sufficient common support between treated and control distributions) and balance (covariate means equalized after reweighting, with standardized differences below 0.1).
 
 ### PropensityLPModel Return Values
 
