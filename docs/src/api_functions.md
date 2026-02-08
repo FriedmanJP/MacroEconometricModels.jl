@@ -65,7 +65,7 @@ select_lag_order
 MacroEconometricModels.StatsAPI.vcov(::VARModel)
 MacroEconometricModels.StatsAPI.predict
 MacroEconometricModels.StatsAPI.r2(::VARModel)
-MacroEconometricModels.StatsAPI.loglikelihood(::VARModel)
+MacroEconometricModels.StatsAPI.loglikelihood
 MacroEconometricModels.StatsAPI.confint(::VARModel)
 ```
 
@@ -259,6 +259,15 @@ Order   = [:function]
 
 ---
 
+## Model Comparison Tests
+
+```@docs
+lr_test
+lm_test
+```
+
+---
+
 ## Volatility Models
 
 ### ARCH Estimation and Diagnostics
@@ -300,6 +309,43 @@ halflife
 unconditional_variance
 arch_order
 garch_order
+```
+
+### Volatility StatsAPI Interface
+
+```@docs
+MacroEconometricModels.StatsAPI.nobs(::ARCHModel)
+MacroEconometricModels.StatsAPI.coef(::ARCHModel)
+MacroEconometricModels.StatsAPI.residuals(::ARCHModel)
+MacroEconometricModels.StatsAPI.aic(::ARCHModel)
+MacroEconometricModels.StatsAPI.bic(::ARCHModel)
+MacroEconometricModels.StatsAPI.dof(::ARCHModel)
+MacroEconometricModels.StatsAPI.islinear(::ARCHModel)
+MacroEconometricModels.StatsAPI.nobs(::GARCHModel)
+MacroEconometricModels.StatsAPI.coef(::GARCHModel)
+MacroEconometricModels.StatsAPI.residuals(::GARCHModel)
+MacroEconometricModels.StatsAPI.aic(::GARCHModel)
+MacroEconometricModels.StatsAPI.bic(::GARCHModel)
+MacroEconometricModels.StatsAPI.dof(::GARCHModel)
+MacroEconometricModels.StatsAPI.islinear(::GARCHModel)
+MacroEconometricModels.StatsAPI.nobs(::EGARCHModel)
+MacroEconometricModels.StatsAPI.coef(::EGARCHModel)
+MacroEconometricModels.StatsAPI.residuals(::EGARCHModel)
+MacroEconometricModels.StatsAPI.aic(::EGARCHModel)
+MacroEconometricModels.StatsAPI.bic(::EGARCHModel)
+MacroEconometricModels.StatsAPI.dof(::EGARCHModel)
+MacroEconometricModels.StatsAPI.islinear(::EGARCHModel)
+MacroEconometricModels.StatsAPI.nobs(::GJRGARCHModel)
+MacroEconometricModels.StatsAPI.coef(::GJRGARCHModel)
+MacroEconometricModels.StatsAPI.residuals(::GJRGARCHModel)
+MacroEconometricModels.StatsAPI.aic(::GJRGARCHModel)
+MacroEconometricModels.StatsAPI.bic(::GJRGARCHModel)
+MacroEconometricModels.StatsAPI.dof(::GJRGARCHModel)
+MacroEconometricModels.StatsAPI.islinear(::GJRGARCHModel)
+MacroEconometricModels.StatsAPI.nobs(::SVModel)
+MacroEconometricModels.StatsAPI.coef(::SVModel)
+MacroEconometricModels.StatsAPI.residuals(::SVModel)
+MacroEconometricModels.StatsAPI.islinear(::SVModel)
 ```
 
 ---

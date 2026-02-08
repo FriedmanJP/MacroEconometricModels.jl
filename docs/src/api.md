@@ -107,6 +107,13 @@ The API documentation is organized into the following pages:
 | `unit_root_summary(y; ...)` | Run multiple tests with summary |
 | `test_all_variables(Y; ...)` | Apply test to all columns |
 
+### Model Comparison Tests
+
+| Function | Description |
+|----------|-------------|
+| `lr_test(m1, m2)` | Likelihood ratio test for nested models |
+| `lm_test(m1, m2)` | Lagrange multiplier (score) test for nested models |
+
 ### LP IRF Extraction
 
 | Function | Description |
@@ -133,6 +140,13 @@ The API documentation is organized into the following pages:
 | `scree_plot_data(model)` | Data for scree plot |
 | `is_stationary(dfm)` | Check DFM factor VAR stationarity |
 | `common_variance_share(gdfm)` | GDFM common variance share per variable |
+| `predict(fm)` | Fitted values (all factor model types) |
+| `residuals(fm)` | Idiosyncratic residuals (all factor model types) |
+| `r2(fm)` | Per-variable ``R^2`` (all factor model types) |
+| `nobs(fm)` | Number of observations |
+| `dof(fm)` | Degrees of freedom |
+| `loglikelihood(dfm)` | Log-likelihood (DFM only) |
+| `aic(dfm)` / `bic(dfm)` | Information criteria (DFM only) |
 
 ### Diagnostic Functions
 
@@ -186,6 +200,13 @@ The API documentation is organized into the following pages:
 | `unconditional_variance(model)` | Unconditional variance |
 | `arch_order(model)` | ARCH order ``q`` |
 | `garch_order(model)` | GARCH order ``p`` |
+| `predict(m)` | Conditional variance series ``\hat{\sigma}^2_t`` |
+| `residuals(m)` | Raw residuals (ARCH/GARCH) or standardized (SV) |
+| `coef(m)` | Coefficient vector |
+| `nobs(m)` | Number of observations |
+| `loglikelihood(m)` | Maximized log-likelihood (ARCH/GARCH) |
+| `aic(m)` / `bic(m)` | Information criteria (ARCH/GARCH) |
+| `dof(m)` | Number of estimated parameters |
 
 ### Display and Output Functions
 

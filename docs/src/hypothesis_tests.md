@@ -686,6 +686,105 @@ end
 
 ---
 
+## Model Comparison: LR and LM Tests
+
+The **likelihood ratio (LR) test** and **Lagrange multiplier (LM) test** form two legs of the classical "trinity" of specification tests (alongside the Wald test). Both test whether a restricted (simpler) model is adequate relative to an unrestricted (more general) model.
+
+### Theory
+
+Given nested models ``\mathcal{M}_R \subset \mathcal{M}_U`` with log-likelihoods ``\ell_R`` and ``\ell_U``:
+
+**LR test** (Wilks 1938): Evaluate both models at their respective MLEs.
+```math
+\text{LR} = -2(\ell_R - \ell_U) \xrightarrow{d} \chi^2(\text{df})
+```
+
+**LM test** (Rao 1948, Silvey 1959): Evaluate the score of the unrestricted model at the restricted estimates.
+```math
+\text{LM} = \mathbf{s}'(-\mathbf{H})^{-1}\mathbf{s} \xrightarrow{d} \chi^2(\text{df})
+```
+
+where ``\text{df} = k_U - k_R`` is the difference in the number of parameters, ``\mathbf{s}`` is the score vector (gradient of the log-likelihood), and ``\mathbf{H}`` is the Hessian of the log-likelihood, all evaluated at the restricted estimates.
+
+!!! note "Technical Note"
+    The LR test requires estimating both models, while the LM test only requires the restricted model (plus the unrestricted likelihood function). Under the null, LR, LM, and Wald statistics are asymptotically equivalent. In finite samples, the ordering ``\text{Wald} \geq \text{LR} \geq \text{LM}`` typically holds.
+
+### Quick Start
+
+```julia
+using MacroEconometricModels, Random
+Random.seed!(42)
+
+# --- ARIMA: Is AR(2) adequate vs AR(4)? ---
+y = randn(300)
+ar2 = estimate_ar(y, 2; method=:mle)
+ar4 = estimate_ar(y, 4; method=:mle)
+
+lr_result = lr_test(ar2, ar4)   # generic: any model with loglikelihood
+lm_result = lm_test(ar2, ar4)   # score-based: model-family specific
+
+# --- VAR: VAR(1) vs VAR(3) ---
+Y = randn(200, 3)
+var1 = estimate_var(Y, 1)
+var3 = estimate_var(Y, 3)
+lr_test(var1, var3)
+
+# --- Volatility: ARCH(1) vs GARCH(1,1) ---
+y_vol = randn(500)
+arch1 = estimate_arch(y_vol, 1)
+garch11 = estimate_garch(y_vol, 1, 1)
+lr_test(arch1, garch11)     # LR works across ARCH/GARCH
+lm_test(arch1, garch11)     # LM supports ARCH→GARCH nesting
+```
+
+**Interpretation.** If the p-value is below your significance level (e.g., 0.05), reject H₀ and conclude the unrestricted model provides a significantly better fit. If the p-value is large, the restricted model is adequate.
+
+### Supported Model Families
+
+| Test | Supported pairs | Notes |
+|------|----------------|-------|
+| `lr_test` | Any pair with `loglikelihood`, `dof`, `nobs` | Generic — works for VAR, VECM, ARIMA, ARCH, GARCH, EGARCH, GJR-GARCH, DFM |
+| `lm_test` | `AbstractARIMAModel` × `AbstractARIMAModel` | Same differencing order `d` required |
+| `lm_test` | `VARModel` × `VARModel` | Different lag orders, same data |
+| `lm_test` | `ARCHModel` × `ARCHModel` | Different ARCH orders |
+| `lm_test` | `GARCHModel` × `GARCHModel` | Different `p` or `q` |
+| `lm_test` | `ARCHModel` × `GARCHModel` | Cross-type nesting (ARCH ⊂ GARCH) |
+| `lm_test` | `EGARCHModel` × `EGARCHModel` | Different `p` or `q` |
+| `lm_test` | `GJRGARCHModel` × `GJRGARCHModel` | Different `p` or `q` |
+
+### Function Signatures
+
+- [`lr_test(m1, m2)`](@ref lr_test) — Likelihood ratio test
+- [`lm_test(m1, m2)`](@ref lm_test) — Lagrange multiplier (score) test
+
+### Return Values
+
+**`LRTestResult`**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `statistic` | `T` | LR = −2(ℓ_R − ℓ_U) |
+| `pvalue` | `T` | p-value from χ²(df) |
+| `df` | `Int` | Degrees of freedom |
+| `loglik_restricted` | `T` | Log-likelihood of restricted model |
+| `loglik_unrestricted` | `T` | Log-likelihood of unrestricted model |
+| `dof_restricted` | `Int` | Parameters in restricted model |
+| `dof_unrestricted` | `Int` | Parameters in unrestricted model |
+| `nobs_restricted` | `Int` | Observations in restricted model |
+| `nobs_unrestricted` | `Int` | Observations in unrestricted model |
+
+**`LMTestResult`**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `statistic` | `T` | LM = s'(−H)⁻¹s |
+| `pvalue` | `T` | p-value from χ²(df) |
+| `df` | `Int` | Degrees of freedom |
+| `nobs` | `Int` | Number of observations |
+| `score_norm` | `T` | ‖s‖₂ diagnostic |
+
+---
+
 ## References
 
 ### Unit Root Tests
@@ -702,6 +801,13 @@ end
 - Johansen, Søren. 1991. "Estimation and Hypothesis Testing of Cointegration Vectors in Gaussian Vector Autoregressive Models." *Econometrica* 59 (6): 1551–1580. [https://doi.org/10.2307/2938278](https://doi.org/10.2307/2938278)
 - Johansen, Søren. 1995. *Likelihood-Based Inference in Cointegrated Vector Autoregressive Models*. Oxford: Oxford University Press. ISBN 978-0-19-877450-5.
 - Osterwald-Lenum, Michael. 1992. "A Note with Quantiles of the Asymptotic Distribution of the Maximum Likelihood Cointegration Rank Test Statistics." *Oxford Bulletin of Economics and Statistics* 54 (3): 461–472. [https://doi.org/10.1111/j.1468-0084.1992.tb00013.x](https://doi.org/10.1111/j.1468-0084.1992.tb00013.x)
+
+### Model Comparison
+
+- Wilks, Samuel S. 1938. "The Large-Sample Distribution of the Likelihood Ratio for Testing Composite Hypotheses." *Annals of Mathematical Statistics* 9 (1): 60–62. [https://doi.org/10.1214/aoms/1177732360](https://doi.org/10.1214/aoms/1177732360)
+- Neyman, Jerzy, and Egon S. Pearson. 1933. "On the Problem of the Most Efficient Tests of Statistical Hypotheses." *Philosophical Transactions of the Royal Society A* 231 (694–706): 289–337. [https://doi.org/10.1098/rsta.1933.0009](https://doi.org/10.1098/rsta.1933.0009)
+- Rao, C. Radhakrishna. 1948. "Large Sample Tests of Statistical Hypotheses Concerning Several Parameters with Applications to Problems of Estimation." *Mathematical Proceedings of the Cambridge Philosophical Society* 44 (1): 50–57. [https://doi.org/10.1017/S0305004100023987](https://doi.org/10.1017/S0305004100023987)
+- Silvey, S. D. 1959. "The Lagrangian Multiplier Test." *Annals of Mathematical Statistics* 30 (2): 389–407. [https://doi.org/10.1214/aoms/1177706259](https://doi.org/10.1214/aoms/1177706259)
 
 ### Textbooks
 

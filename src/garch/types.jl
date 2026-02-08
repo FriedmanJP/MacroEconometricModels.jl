@@ -165,40 +165,67 @@ end
 # StatsAPI Interface
 # =============================================================================
 
+"""Number of observations."""
 StatsAPI.nobs(m::GARCHModel) = length(m.y)
+"""Number of observations."""
 StatsAPI.nobs(m::EGARCHModel) = length(m.y)
+"""Number of observations."""
 StatsAPI.nobs(m::GJRGARCHModel) = length(m.y)
 
+"""Coefficient vector `[μ, ω, α₁, …, αq, β₁, …, βp]`."""
 StatsAPI.coef(m::GARCHModel) = vcat(m.mu, m.omega, m.alpha, m.beta)
+"""Coefficient vector `[μ, ω, α₁, …, αq, γ₁, …, γq, β₁, …, βp]`."""
 StatsAPI.coef(m::EGARCHModel) = vcat(m.mu, m.omega, m.alpha, m.gamma, m.beta)
+"""Coefficient vector `[μ, ω, α₁, …, αq, γ₁, …, γq, β₁, …, βp]`."""
 StatsAPI.coef(m::GJRGARCHModel) = vcat(m.mu, m.omega, m.alpha, m.gamma, m.beta)
 
+"""Raw residuals ``\\hat{\\varepsilon}_t``."""
 StatsAPI.residuals(m::GARCHModel) = m.residuals
+"""Raw residuals ``\\hat{\\varepsilon}_t``."""
 StatsAPI.residuals(m::EGARCHModel) = m.residuals
+"""Raw residuals ``\\hat{\\varepsilon}_t``."""
 StatsAPI.residuals(m::GJRGARCHModel) = m.residuals
 
+"""Conditional variance series ``\\hat{\\sigma}^2_t``."""
 StatsAPI.predict(m::GARCHModel) = m.conditional_variance
+"""Conditional variance series ``\\hat{\\sigma}^2_t``."""
 StatsAPI.predict(m::EGARCHModel) = m.conditional_variance
+"""Conditional variance series ``\\hat{\\sigma}^2_t``."""
 StatsAPI.predict(m::GJRGARCHModel) = m.conditional_variance
 
+"""Maximized log-likelihood."""
 StatsAPI.loglikelihood(m::GARCHModel) = m.loglik
+"""Maximized log-likelihood."""
 StatsAPI.loglikelihood(m::EGARCHModel) = m.loglik
+"""Maximized log-likelihood."""
 StatsAPI.loglikelihood(m::GJRGARCHModel) = m.loglik
 
+"""Akaike Information Criterion."""
 StatsAPI.aic(m::GARCHModel) = m.aic
+"""Akaike Information Criterion."""
 StatsAPI.aic(m::EGARCHModel) = m.aic
+"""Akaike Information Criterion."""
 StatsAPI.aic(m::GJRGARCHModel) = m.aic
 
+"""Bayesian Information Criterion."""
 StatsAPI.bic(m::GARCHModel) = m.bic
+"""Bayesian Information Criterion."""
 StatsAPI.bic(m::EGARCHModel) = m.bic
+"""Bayesian Information Criterion."""
 StatsAPI.bic(m::GJRGARCHModel) = m.bic
 
+"""Number of estimated parameters: `2 + q + p`."""
 StatsAPI.dof(m::GARCHModel) = 2 + m.q + m.p        # mu + omega + q alphas + p betas
+"""Number of estimated parameters: `2 + 2q + p`."""
 StatsAPI.dof(m::EGARCHModel) = 2 + 2 * m.q + m.p   # mu + omega + q alphas + q gammas + p betas
+"""Number of estimated parameters: `2 + 2q + p`."""
 StatsAPI.dof(m::GJRGARCHModel) = 2 + 2 * m.q + m.p # mu + omega + q alphas + q gammas + p betas
 
+"""`false` — GARCH models are nonlinear."""
 StatsAPI.islinear(::GARCHModel) = false
+"""`false` — EGARCH models are nonlinear."""
 StatsAPI.islinear(::EGARCHModel) = false
+"""`false` — GJR-GARCH models are nonlinear."""
 StatsAPI.islinear(::GJRGARCHModel) = false
 
 # =============================================================================

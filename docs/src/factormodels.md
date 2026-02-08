@@ -821,6 +821,67 @@ idio_driven = findall(shares .< 0.3)
 
 ---
 
+## StatsAPI Interface
+
+All three factor model types implement the standard [StatsAPI](https://github.com/JuliaStats/StatsAPI.jl) interface, enabling uniform access to fitted values, residuals, and model diagnostics.
+
+| Function | `FactorModel` | `DynamicFactorModel` | `GeneralizedDynamicFactorModel` |
+|----------|:---:|:---:|:---:|
+| `predict(m)` | Fitted values ``\hat{X} = F\Lambda'`` | Fitted values ``\hat{X} = F\Lambda'`` | Common component ``\hat{\chi}_t`` |
+| `residuals(m)` | Idiosyncratic residuals | Idiosyncratic residuals | Idiosyncratic component |
+| `r2(m)` | Per-variable ``R^2`` | Per-variable ``R^2`` | Per-variable ``R^2`` |
+| `nobs(m)` | Number of observations | Number of observations | Number of observations |
+| `dof(m)` | Degrees of freedom | Degrees of freedom | Degrees of freedom |
+| `loglikelihood(m)` | — | Log-likelihood | — |
+| `aic(m)` | — | AIC | — |
+| `bic(m)` | — | BIC | — |
+
+!!! note "Technical Note"
+    `loglikelihood`, `aic`, and `bic` are only available for `DynamicFactorModel` since static PCA
+    and spectral GDFM estimation do not produce a well-defined likelihood.
+
+```julia
+using MacroEconometricModels
+using Random, Statistics
+
+Random.seed!(42)
+F = randn(200, 3)
+Λ = randn(10, 3)
+X = F * Λ' + 0.5 * randn(200, 10)
+
+# Static factor model
+fm = estimate_factors(X, 3)
+X_hat = predict(fm)                # T × N fitted values
+resid = residuals(fm)              # T × N residuals
+r2_vals = r2(fm)                   # N-vector of R² values
+println("Static FM — nobs: ", nobs(fm), ", dof: ", dof(fm))
+println("Mean R²: ", round(mean(r2_vals), digits=3))
+
+# Dynamic factor model
+dfm = estimate_dynamic_factors(X, 3, 1; method=:twostep)
+println("\nDFM — nobs: ", nobs(dfm), ", dof: ", dof(dfm))
+println("Log-likelihood: ", round(loglikelihood(dfm), digits=1))
+println("AIC: ", round(aic(dfm), digits=1), ", BIC: ", round(bic(dfm), digits=1))
+println("Mean R²: ", round(mean(r2(dfm)), digits=3))
+
+# GDFM
+gdfm = estimate_gdfm(X, 3)
+println("\nGDFM — nobs: ", nobs(gdfm), ", dof: ", dof(gdfm))
+println("Mean R²: ", round(mean(r2(gdfm)), digits=3))
+```
+
+The interface is useful for model comparison:
+
+```julia
+# Compare DFM specifications via information criteria
+for r in 1:5
+    m = estimate_dynamic_factors(X, r, 1; method=:twostep)
+    println("r=$r: AIC=$(round(aic(m), digits=1)), BIC=$(round(bic(m), digits=1))")
+end
+```
+
+---
+
 ## References
 
 ### Core References

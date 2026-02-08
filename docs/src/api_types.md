@@ -164,6 +164,15 @@ VARStationarityResult
 
 ---
 
+## Model Comparison Types
+
+```@docs
+LRTestResult
+LMTestResult
+```
+
+---
+
 ## SVAR Identification Types
 
 ```@docs

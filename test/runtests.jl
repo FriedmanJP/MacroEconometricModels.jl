@@ -40,7 +40,7 @@ const TEST_GROUPS = [
         "lp/test_lp_forecast.jl",
         "lp/test_lp_fevd.jl",
     ]),
-    # Group 5: ARIMA + Unit Root + GMM + Utilities + Filters
+    # Group 5: ARIMA + Unit Root + GMM + Utilities + Filters + Model Comparison
     ("ARIMA & Utilities" => [
         "teststat/test_unitroot.jl",
         "arima/test_arima.jl",
@@ -51,6 +51,7 @@ const TEST_GROUPS = [
         "gmm/test_gmm.jl",
         "core/test_covariance.jl",
         "filters/test_filters.jl",
+        "teststat/test_model_comparison.jl",
     ]),
     # Group 6: Non-Gaussian + Display + Misc
     ("Non-Gaussian & Display" => [
@@ -128,6 +129,10 @@ else
 
         @testset "Unit Root Tests" begin
             include("teststat/test_unitroot.jl")
+        end
+
+        @testset "Model Comparison Tests" begin
+            include("teststat/test_model_comparison.jl")
         end
 
         @testset "Bayesian Estimation" begin

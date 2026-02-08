@@ -154,6 +154,9 @@ include("sv/types.jl")
 include("sv/estimation.jl")
 include("sv/forecast.jl")
 
+# Model comparison tests (LR, LM)
+include("teststat/model_comparison.jl")
+
 # Covariance estimators
 include("core/covariance.jl")
 
@@ -234,6 +237,10 @@ export johansen_test
 
 # Convenience functions
 export unit_root_summary, test_all_variables
+
+# Model comparison tests
+export LRTestResult, LMTestResult
+export lr_test, lm_test
 
 # VECM types
 export VECMModel, VECMForecast, VECMGrangerResult

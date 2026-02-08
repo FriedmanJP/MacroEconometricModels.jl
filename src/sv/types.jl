@@ -55,10 +55,19 @@ end
 # StatsAPI Interface
 # =============================================================================
 
+"""Number of observations."""
 StatsAPI.nobs(m::SVModel) = length(m.y)
+
+"""Posterior mean coefficients `[μ, φ, σ_η]`."""
 StatsAPI.coef(m::SVModel) = [mean(m.mu_post), mean(m.phi_post), mean(m.sigma_eta_post)]
+
+"""Standardized residuals ``y_t / \\sqrt{\\hat{\\sigma}^2_t}``."""
 StatsAPI.residuals(m::SVModel) = m.y ./ sqrt.(m.volatility_mean)
+
+"""Posterior mean volatility series ``\\hat{\\sigma}^2_t``."""
 StatsAPI.predict(m::SVModel) = m.volatility_mean
+
+"""`false` — SV models are nonlinear."""
 StatsAPI.islinear(::SVModel) = false
 
 # =============================================================================

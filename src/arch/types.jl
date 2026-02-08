@@ -103,14 +103,31 @@ end
 # StatsAPI Interface
 # =============================================================================
 
+"""Number of observations."""
 StatsAPI.nobs(m::ARCHModel) = length(m.y)
+
+"""Coefficient vector `[μ, ω, α₁, …, αq]`."""
 StatsAPI.coef(m::ARCHModel) = vcat(m.mu, m.omega, m.alpha)
+
+"""Raw residuals ``\\hat{\\varepsilon}_t``."""
 StatsAPI.residuals(m::ARCHModel) = m.residuals
+
+"""Conditional variance series ``\\hat{\\sigma}^2_t``."""
 StatsAPI.predict(m::ARCHModel) = m.conditional_variance
+
+"""Maximized log-likelihood."""
 StatsAPI.loglikelihood(m::ARCHModel) = m.loglik
+
+"""Akaike Information Criterion."""
 StatsAPI.aic(m::ARCHModel) = m.aic
+
+"""Bayesian Information Criterion."""
 StatsAPI.bic(m::ARCHModel) = m.bic
+
+"""Number of estimated parameters: `2 + q` (μ + ω + q alphas)."""
 StatsAPI.dof(m::ARCHModel) = 2 + m.q  # mu + omega + q alphas
+
+"""`false` — ARCH models are nonlinear."""
 StatsAPI.islinear(::ARCHModel) = false
 
 # =============================================================================

@@ -292,13 +292,16 @@ end
 # StatsAPI Interface
 # =============================================================================
 
+"""Predicted values: F * Λ'."""
 StatsAPI.predict(m::DynamicFactorModel) = m.factors * m.loadings'
 
+"""Residuals: X - predicted."""
 function StatsAPI.residuals(m::DynamicFactorModel{T}) where {T}
     fitted = predict(m)
     m.standardized ? _standardize(m.X) - fitted : m.X - fitted
 end
 
+"""R² for each variable."""
 function StatsAPI.r2(m::DynamicFactorModel{T}) where {T}
     resid = residuals(m)
     X_ref = m.standardized ? _standardize(m.X) : m.X
@@ -306,15 +309,22 @@ function StatsAPI.r2(m::DynamicFactorModel{T}) where {T}
      for i in 1:size(m.X, 2)]
 end
 
+"""Number of observations."""
 StatsAPI.nobs(m::DynamicFactorModel) = size(m.X, 1)
+
+"""Log-likelihood of the fitted model."""
 StatsAPI.loglikelihood(m::DynamicFactorModel) = m.loglik
 
+"""Degrees of freedom: N*r + r²*p + r(r+1)/2 + N."""
 function StatsAPI.dof(m::DynamicFactorModel)
     _, N = size(m.X)
     N * m.r + m.r^2 * m.p + div(m.r * (m.r + 1), 2) + N
 end
 
+"""Akaike Information Criterion."""
 StatsAPI.aic(m::DynamicFactorModel) = -2m.loglik + 2dof(m)
+
+"""Bayesian Information Criterion."""
 StatsAPI.bic(m::DynamicFactorModel) = -2m.loglik + dof(m) * log(nobs(m))
 
 # =============================================================================

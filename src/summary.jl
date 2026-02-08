@@ -1878,6 +1878,23 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="The boosted HP filter is more general than you might think",
         journal="Journal of Applied Econometrics", volume="39", issue="7", pages="1260--1281",
         doi="10.1002/jae.3086", isbn="", publisher="", entry_type=:article),
+    # --- Model Comparison Tests ---
+    :wilks1938 => (key=:wilks1938, authors="Wilks, Samuel S.", year=1938,
+        title="The Large-Sample Distribution of the Likelihood Ratio for Testing Composite Hypotheses",
+        journal="Annals of Mathematical Statistics", volume="9", issue="1", pages="60--62",
+        doi="10.1214/aoms/1177732360", isbn="", publisher="", entry_type=:article),
+    :neyman_pearson1933 => (key=:neyman_pearson1933, authors="Neyman, Jerzy and Pearson, Egon S.", year=1933,
+        title="On the Problem of the Most Efficient Tests of Statistical Hypotheses",
+        journal="Philosophical Transactions of the Royal Society A", volume="231", issue="694--706", pages="289--337",
+        doi="10.1098/rsta.1933.0009", isbn="", publisher="", entry_type=:article),
+    :rao1948 => (key=:rao1948, authors="Rao, C. Radhakrishna", year=1948,
+        title="Large Sample Tests of Statistical Hypotheses Concerning Several Parameters with Applications to Problems of Estimation",
+        journal="Mathematical Proceedings of the Cambridge Philosophical Society", volume="44", issue="1", pages="50--57",
+        doi="10.1017/S0305004100023987", isbn="", publisher="", entry_type=:article),
+    :silvey1959 => (key=:silvey1959, authors="Silvey, S. D.", year=1959,
+        title="The Lagrangian Multiplier Test",
+        journal="Annals of Mathematical Statistics", volume="30", issue="2", pages="389--407",
+        doi="10.1214/aoms/1177706259", isbn="", publisher="", entry_type=:article),
 )
 
 # --- Type/method → reference keys mapping ---
@@ -2006,6 +2023,11 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :beveridge_nelson => [:beveridge_nelson1981],
     :baxter_king => [:baxter_king1999],
     :boosted_hp => [:phillips_shi2021, :mei_phillips_shi2024],
+    # Model comparison tests
+    :LRTestResult => [:wilks1938, :neyman_pearson1933],
+    :LMTestResult => [:rao1948, :silvey1959],
+    :lr_test => [:wilks1938, :neyman_pearson1933],
+    :lm_test => [:rao1948, :silvey1959],
 )
 
 # ICA method → additional ref keys (appended to ICASVARResult base refs)
@@ -2285,6 +2307,10 @@ refs(io::IO, ::HamiltonFilterResult; kw...) = refs(io, _TYPE_REFS[:HamiltonFilte
 refs(io::IO, ::BeveridgeNelsonResult; kw...) = refs(io, _TYPE_REFS[:BeveridgeNelsonResult]; kw...)
 refs(io::IO, ::BaxterKingResult; kw...) = refs(io, _TYPE_REFS[:BaxterKingResult]; kw...)
 refs(io::IO, ::BoostedHPResult; kw...) = refs(io, _TYPE_REFS[:BoostedHPResult]; kw...)
+
+# Model comparison tests
+refs(io::IO, ::LRTestResult; kw...) = refs(io, _TYPE_REFS[:LRTestResult]; kw...)
+refs(io::IO, ::LMTestResult; kw...) = refs(io, _TYPE_REFS[:LMTestResult]; kw...)
 
 # --- Convenience: stdout fallback ---
 refs(x; kw...) = refs(stdout, x; kw...)
