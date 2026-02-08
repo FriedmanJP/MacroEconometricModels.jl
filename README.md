@@ -18,13 +18,14 @@ A comprehensive Julia package for macroeconomic time series analysis. Provides V
   - Baxter-King band-pass filter
   - Boosted HP filter (Phillips & Shi 2021) with ADF/BIC/fixed stopping
 - **ARIMA** - AR, MA, ARMA, ARIMA estimation via CSS, exact MLE (Kalman filter), or CSS-MLE
-- **Automatic order selection** - `auto_arima` with grid search over (p,d,q), AIC/BIC information criteria
-- **Forecasting** - Multi-step ahead with confidence intervals via psi-weight accumulation
-- **ARCH** - Engle (1982) ARCH(q) with MLE, ARCH-LM test, Ljung-Box squared residuals
-- **GARCH** - GARCH(p,q), EGARCH (Nelson 1991), GJR-GARCH (Glosten, Jagannathan & Runkle 1993)
-- **Stochastic Volatility** - Bayesian SV via MCMC (basic, leverage, Student-t variants)
-- **Volatility Forecasting** - Multi-step volatility forecasts with simulation CIs
-- **Volatility Diagnostics** - News impact curves, persistence, half-life, unconditional variance
+  - Automatic order selection via `auto_arima` with grid search over (p,d,q), AIC/BIC information criteria
+  - Multi-step ahead forecasting with confidence intervals via psi-weight accumulation
+- **Volatility Models**:
+  - ARCH - Engle (1982) ARCH(q) with MLE, ARCH-LM test, Ljung-Box squared residuals
+  - GARCH - GARCH(p,q), EGARCH (Nelson 1991), GJR-GARCH (Glosten, Jagannathan & Runkle 1993)
+  - Stochastic Volatility - Bayesian SV via Kim-Shephard-Chib Gibbs sampler (basic, leverage, Student-t variants)
+  - Multi-step volatility forecasts with simulation CIs
+  - Diagnostics: news impact curves, persistence, half-life, unconditional variance
 
 ### Multivariate Models
 - **Vector Autoregression (VAR)** - OLS estimation with lag order selection (AIC, BIC, HQ)
