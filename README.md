@@ -76,6 +76,7 @@ A comprehensive Julia package for macroeconomic time series analysis. Provides V
 ### Hypothesis Tests
 - **Unit Root Tests** - ADF, KPSS, Phillips-Perron, Zivot-Andrews, Ng-Perron
 - **Cointegration** - Johansen test (trace and max-eigenvalue)
+- **Granger Causality** - Pairwise and block (multivariate) Wald tests for VAR models
 - **Model Comparison** - Likelihood ratio (LR) and Lagrange multiplier (LM/score) tests for nested models
 - **Stationarity diagnostics** - `unit_root_summary()`, `test_all_variables()`
 
@@ -231,6 +232,24 @@ pp_test(y)
 unit_root_summary(y)
 ```
 
+### Granger Causality
+
+```julia
+using MacroEconometricModels
+
+Y = randn(200, 3)
+m = estimate_var(Y, 2)
+
+# Pairwise: does variable 1 Granger-cause variable 2?
+g = granger_test(m, 1, 2)
+
+# Block: do variables 1 and 2 jointly Granger-cause variable 3?
+g_block = granger_test(m, [1, 2], 3)
+
+# All pairwise tests at once (n×n p-value matrix)
+results = granger_test_all(m)
+```
+
 ### Local Projections
 
 ```julia
@@ -356,6 +375,10 @@ Full documentation available at [https://chung9207.github.io/MacroEconometricMod
 - Johansen, Søren. 1991. "Estimation and Hypothesis Testing of Cointegration Vectors in Gaussian Vector Autoregressive Models." *Econometrica* 59 (6): 1551–1580. [https://doi.org/10.2307/2938278](https://doi.org/10.2307/2938278)
 - Kwiatkowski, Denis, Peter C. B. Phillips, Peter Schmidt, and Yongcheol Shin. 1992. "Testing the Null Hypothesis of Stationarity Against the Alternative of a Unit Root." *Journal of Econometrics* 54 (1–3): 159–178. [https://doi.org/10.1016/0304-4076(92)90104-Y](https://doi.org/10.1016/0304-4076(92)90104-Y)
 - Ng, Serena, and Pierre Perron. 2001. "Lag Length Selection and the Construction of Unit Root Tests with Good Size and Power." *Econometrica* 69 (6): 1519–1554. [https://doi.org/10.1111/1468-0262.00256](https://doi.org/10.1111/1468-0262.00256)
+
+### Granger Causality
+
+- Granger, Clive W. J. 1969. "Investigating Causal Relations by Econometric Models and Cross-spectral Methods." *Econometrica* 37 (3): 424–438. [https://doi.org/10.2307/1912791](https://doi.org/10.2307/1912791)
 
 ### Model Comparison Tests
 
