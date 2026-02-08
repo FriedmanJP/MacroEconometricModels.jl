@@ -173,6 +173,14 @@ LMTestResult
 
 ---
 
+## Granger Causality Types
+
+```@docs
+GrangerCausalityResult
+```
+
+---
+
 ## SVAR Identification Types
 
 ```@docs
@@ -292,6 +300,10 @@ AbstractUnitRootTest <: StatsAPI.HypothesisTest
 └── JohansenResult{T}
 
 VARStationarityResult{T}
+
+LRTestResult{T} <: StatsAPI.HypothesisTest
+LMTestResult{T} <: StatsAPI.HypothesisTest
+GrangerCausalityResult{T} <: StatsAPI.HypothesisTest
 
 AbstractNormalityTest <: StatsAPI.HypothesisTest
 └── NormalityTestResult{T}

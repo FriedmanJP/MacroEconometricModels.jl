@@ -213,7 +213,7 @@ function estimate_garch(y::AbstractVector{T}, p::Int=1, q::Int=1; method::Symbol
     alpha_init = fill(T(0.05), q)
     beta_init = fill(T(0.85) / p, p)
 
-    params_init = vcat(mu_init, log(omega_init), log.(alpha_init), log.(beta_init))
+    params_init = _sanitize_init_params(vcat(mu_init, log(omega_init), log.(alpha_init), log.(beta_init)))
 
     # Two-stage optimization
     obj = params -> _garch_negloglik(params, y_vec, p, q)
@@ -280,7 +280,7 @@ function estimate_egarch(y::AbstractVector{T}, p::Int=1, q::Int=1; method::Symbo
     gamma_init = fill(T(-0.05), q)
     beta_init = fill(T(0.9) / p, p)
 
-    params_init = vcat(mu_init, omega_init, alpha_init, gamma_init, beta_init)
+    params_init = _sanitize_init_params(vcat(mu_init, omega_init, alpha_init, gamma_init, beta_init))
 
     obj = params -> _egarch_negloglik(params, y_vec, p, q)
     result1 = Optim.optimize(obj, params_init, Optim.NelderMead(),
@@ -346,7 +346,7 @@ function estimate_gjr_garch(y::AbstractVector{T}, p::Int=1, q::Int=1; method::Sy
     gamma_init = fill(T(0.04), q)
     beta_init = fill(T(0.85) / p, p)
 
-    params_init = vcat(mu_init, log(omega_init), log.(alpha_init), log.(gamma_init), log.(beta_init))
+    params_init = _sanitize_init_params(vcat(mu_init, log(omega_init), log.(alpha_init), log.(gamma_init), log.(beta_init)))
 
     obj = params -> _gjr_negloglik(params, y_vec, p, q)
     result1 = Optim.optimize(obj, params_init, Optim.NelderMead(),

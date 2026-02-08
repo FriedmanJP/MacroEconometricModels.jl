@@ -268,6 +268,15 @@ lm_test
 
 ---
 
+## Granger Causality Tests
+
+```@docs
+granger_test
+granger_test_all
+```
+
+---
+
 ## Volatility Models
 
 ### ARCH Estimation and Diagnostics

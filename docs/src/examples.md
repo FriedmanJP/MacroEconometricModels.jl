@@ -612,6 +612,25 @@ end
 
 The FEVD shows the proportion of each variable's forecast error variance attributable to each structural shock. At short horizons, own shocks typically dominate. As the horizon increases, cross-variable transmission becomes more important, and the FEVD converges to the unconditional variance decomposition. If shock 1 explains a large share of GDP variance at long horizons, it is the primary driver of GDP fluctuations in the model.
 
+### Granger Causality
+
+```julia
+# Pairwise: does GDP Granger-cause Inflation?
+g = granger_test(model, 1, 2)
+println("GDP → Inflation: Wald = ", round(g.statistic, digits=2),
+        ", p = ", round(g.pvalue, digits=4))
+
+# Block: do GDP and Inflation jointly Granger-cause the Fed Funds Rate?
+g_block = granger_test(model, [1, 2], 3)
+println("[GDP, Inflation] → Rate: Wald = ", round(g_block.statistic, digits=2),
+        ", p = ", round(g_block.pvalue, digits=4))
+
+# Full causality table
+results = granger_test_all(model)
+```
+
+The Granger causality test examines whether lagged values of one variable help predict another. A significant result (low p-value) indicates that past values of the cause variable contain predictive information for the effect variable beyond what is captured by the effect variable's own lags and those of other variables. The block test extends this to groups of variables, testing their joint predictive power.
+
 ---
 
 ## Example 7: Non-Gaussian Identification

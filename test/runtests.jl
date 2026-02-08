@@ -52,6 +52,7 @@ const TEST_GROUPS = [
         "core/test_covariance.jl",
         "filters/test_filters.jl",
         "teststat/test_model_comparison.jl",
+        "teststat/test_granger.jl",
     ]),
     # Group 6: Non-Gaussian + Display + Misc
     ("Non-Gaussian & Display" => [
@@ -133,6 +134,10 @@ else
 
         @testset "Model Comparison Tests" begin
             include("teststat/test_model_comparison.jl")
+        end
+
+        @testset "Granger Causality Tests" begin
+            include("teststat/test_granger.jl")
         end
 
         @testset "Bayesian Estimation" begin

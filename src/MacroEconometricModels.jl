@@ -157,6 +157,9 @@ include("sv/forecast.jl")
 # Model comparison tests (LR, LM)
 include("teststat/model_comparison.jl")
 
+# Granger causality tests
+include("teststat/granger.jl")
+
 # Covariance estimators
 include("core/covariance.jl")
 
@@ -241,6 +244,10 @@ export unit_root_summary, test_all_variables
 # Model comparison tests
 export LRTestResult, LMTestResult
 export lr_test, lm_test
+
+# Granger causality tests
+export GrangerCausalityResult
+export granger_test, granger_test_all
 
 # VECM types
 export VECMModel, VECMForecast, VECMGrangerResult

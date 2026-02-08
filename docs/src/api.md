@@ -114,6 +114,13 @@ The API documentation is organized into the following pages:
 | `lr_test(m1, m2)` | Likelihood ratio test for nested models |
 | `lm_test(m1, m2)` | Lagrange multiplier (score) test for nested models |
 
+### Granger Causality Tests
+
+| Function | Description |
+|----------|-------------|
+| `granger_test(model, cause, effect)` | Pairwise or block Granger causality test |
+| `granger_test_all(model)` | All-pairs pairwise Granger causality matrix |
+
 ### LP IRF Extraction
 
 | Function | Description |

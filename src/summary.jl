@@ -1895,6 +1895,11 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="The Lagrangian Multiplier Test",
         journal="Annals of Mathematical Statistics", volume="30", issue="2", pages="389--407",
         doi="10.1214/aoms/1177706259", isbn="", publisher="", entry_type=:article),
+    # --- Granger Causality ---
+    :granger1969 => (key=:granger1969, authors="Granger, C. W. J.", year=1969,
+        title="Investigating Causal Relations by Econometric Models and Cross-spectral Methods",
+        journal="Econometrica", volume="37", issue="3", pages="424--438",
+        doi="10.2307/1912791", isbn="", publisher="", entry_type=:article),
 )
 
 # --- Type/method → reference keys mapping ---
@@ -2028,6 +2033,10 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :LMTestResult => [:rao1948, :silvey1959],
     :lr_test => [:wilks1938, :neyman_pearson1933],
     :lm_test => [:rao1948, :silvey1959],
+    # Granger causality
+    :GrangerCausalityResult => [:granger1969, :lutkepohl2005],
+    :granger => [:granger1969, :lutkepohl2005],
+    :granger_test => [:granger1969, :lutkepohl2005],
 )
 
 # ICA method → additional ref keys (appended to ICASVARResult base refs)
@@ -2311,6 +2320,9 @@ refs(io::IO, ::BoostedHPResult; kw...) = refs(io, _TYPE_REFS[:BoostedHPResult]; 
 # Model comparison tests
 refs(io::IO, ::LRTestResult; kw...) = refs(io, _TYPE_REFS[:LRTestResult]; kw...)
 refs(io::IO, ::LMTestResult; kw...) = refs(io, _TYPE_REFS[:LMTestResult]; kw...)
+
+# Granger causality
+refs(io::IO, ::GrangerCausalityResult; kw...) = refs(io, _TYPE_REFS[:GrangerCausalityResult]; kw...)
 
 # --- Convenience: stdout fallback ---
 refs(x; kw...) = refs(stdout, x; kw...)

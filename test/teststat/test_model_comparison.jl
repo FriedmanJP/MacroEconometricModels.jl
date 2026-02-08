@@ -16,12 +16,12 @@ Y_var = randn(150, 3)
 n_vol = 500
 z_vol = randn(n_vol)
 h_vol = ones(n_vol)
-y_vol = similar(z_vol)
+y_vol = zeros(n_vol)
+y_vol[1] = z_vol[1]
 for t in 2:n_vol
-    h_vol[t] = 0.05 + 0.15 * y_vol[max(t-1, 1)]^2 + 0.75 * h_vol[t-1]
+    h_vol[t] = 0.05 + 0.15 * y_vol[t-1]^2 + 0.75 * h_vol[t-1]
     y_vol[t] = sqrt(h_vol[t]) * z_vol[t]
 end
-y_vol[1] = z_vol[1]  # fix first value
 
 # =============================================================================
 # LR Test — ARIMA Family

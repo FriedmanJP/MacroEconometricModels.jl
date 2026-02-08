@@ -19,6 +19,19 @@ function _validate_volatility_inputs(y::AbstractVector, p::Int, q::Int)
     p < 0 && throw(ArgumentError("GARCH order p must be ≥ 0, got $p"))
 end
 
+"""Sanitize initial parameters for NelderMead: clamp to finite range, replace NaN."""
+function _sanitize_init_params(params::Vector{T}) where {T}
+    out = copy(params)
+    @inbounds for i in eachindex(out)
+        if !isfinite(out[i])
+            out[i] = zero(T)
+        else
+            out[i] = clamp(out[i], T(-30), T(30))
+        end
+    end
+    out
+end
+
 """
     _volatility_negloglik(h, eps_sq, n)
 
@@ -123,7 +136,7 @@ function estimate_arch(y::AbstractVector{T}, q::Int; method::Symbol=:mle) where 
     omega_init = var_init * T(0.05)
     alpha_init = fill(T(0.9) / q, q)
 
-    params_init = vcat(mu_init, log(omega_init), log.(alpha_init))
+    params_init = _sanitize_init_params(vcat(mu_init, log(omega_init), log.(alpha_init)))
 
     # Stage 1: NelderMead
     obj = p -> _arch_negloglik(p, y_vec, q)

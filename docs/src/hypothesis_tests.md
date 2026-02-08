@@ -785,6 +785,103 @@ lm_test(arch1, garch11)     # LM supports ARCH→GARCH nesting
 
 ---
 
+## Granger Causality Tests
+
+The Granger causality test (Granger 1969) examines whether lagged values of one variable help predict another variable in a VAR system.
+
+### Theory
+
+Given a VAR(p) model with n variables, the **pairwise** test examines whether variable j Granger-causes variable i:
+
+```math
+H_0: A_1[i,j] = A_2[i,j] = \cdots = A_p[i,j] = 0
+```
+
+Under ``H_0``, the Wald statistic ``W = \boldsymbol{\theta}'\mathbf{V}^{-1}\boldsymbol{\theta} \sim \chi^2(p)``, where ``\boldsymbol{\theta}`` collects the lag coefficients and ``\mathbf{V} = \sigma_{ii} (\mathbf{X}'\mathbf{X})^{-1}`` is the coefficient covariance.
+
+The **block** (multivariate) test generalizes to groups of cause variables, with ``\text{df} = p \times |\text{cause group}|``.
+
+!!! note "Technical Note"
+    Granger causality is a statistical concept based on predictability, not true causation. Variable j "Granger-causes" variable i if past values of j contain information useful for predicting i beyond what is contained in past values of i and other variables. The test is valid under the assumption that the VAR model is correctly specified and the error terms are white noise.
+
+### Quick Start
+
+```julia
+using MacroEconometricModels, Random
+Random.seed!(42)
+
+Y = randn(200, 3)
+m = estimate_var(Y, 2)
+
+# Pairwise: does variable 1 Granger-cause variable 2?
+g = granger_test(m, 1, 2)
+
+# Block: do variables 1 and 2 jointly Granger-cause variable 3?
+g_block = granger_test(m, [1, 2], 3)
+
+# All pairwise tests at once
+results = granger_test_all(m)
+```
+
+**Interpretation.** If the p-value is below your significance level (e.g., 0.05), reject ``H_0`` and conclude the cause variable(s) Granger-cause the effect variable. The `granger_test_all` function returns an n×n matrix of p-values where entry [i,j] tests whether variable j Granger-causes variable i.
+
+### Function Signatures
+
+- [`granger_test(model, cause, effect)`](@ref granger_test) — Pairwise or block Granger causality test
+- [`granger_test_all(model)`](@ref granger_test_all) — All-pairs pairwise Granger causality matrix
+
+### Return Values
+
+**`GrangerCausalityResult`**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `statistic` | `T` | Wald χ² statistic |
+| `pvalue` | `T` | p-value from χ²(df) |
+| `df` | `Int` | Degrees of freedom (p for pairwise, p×\|cause\| for block) |
+| `cause` | `Vector{Int}` | Indices of causing variable(s) |
+| `effect` | `Int` | Index of effect variable |
+| `n` | `Int` | Number of variables in VAR |
+| `p` | `Int` | Lag order |
+| `nobs` | `Int` | Effective number of observations |
+| `test_type` | `Symbol` | `:pairwise` or `:block` |
+
+### Complete Example
+
+```julia
+using MacroEconometricModels, Random
+Random.seed!(42)
+
+# Generate data with known causal structure:
+# Variable 2 depends on lagged Variable 1
+T_obs = 300
+Y = zeros(T_obs, 3)
+Y[1, :] = randn(3)
+for t in 2:T_obs
+    Y[t, 1] = 0.5 * Y[t-1, 1] + randn()
+    Y[t, 2] = 0.3 * Y[t-1, 1] + 0.2 * Y[t-1, 2] + randn()  # 1 causes 2
+    Y[t, 3] = 0.4 * Y[t-1, 3] + randn()                       # independent
+end
+
+m = estimate_var(Y, 2)
+
+# Test all pairs
+results = granger_test_all(m)
+
+# Variable 1 → 2 should show significant Granger causality
+println("1 → 2: p = ", round(results[2, 1].pvalue, digits=4))
+
+# Variable 3 should be independent
+println("3 → 1: p = ", round(results[1, 3].pvalue, digits=4))
+println("3 → 2: p = ", round(results[2, 3].pvalue, digits=4))
+
+# Block test: do variables 1 and 3 jointly Granger-cause variable 2?
+g_block = granger_test(m, [1, 3], 2)
+println("Block [1,3] → 2: p = ", round(g_block.pvalue, digits=4))
+```
+
+---
+
 ## References
 
 ### Unit Root Tests
@@ -801,6 +898,10 @@ lm_test(arch1, garch11)     # LM supports ARCH→GARCH nesting
 - Johansen, Søren. 1991. "Estimation and Hypothesis Testing of Cointegration Vectors in Gaussian Vector Autoregressive Models." *Econometrica* 59 (6): 1551–1580. [https://doi.org/10.2307/2938278](https://doi.org/10.2307/2938278)
 - Johansen, Søren. 1995. *Likelihood-Based Inference in Cointegrated Vector Autoregressive Models*. Oxford: Oxford University Press. ISBN 978-0-19-877450-5.
 - Osterwald-Lenum, Michael. 1992. "A Note with Quantiles of the Asymptotic Distribution of the Maximum Likelihood Cointegration Rank Test Statistics." *Oxford Bulletin of Economics and Statistics* 54 (3): 461–472. [https://doi.org/10.1111/j.1468-0084.1992.tb00013.x](https://doi.org/10.1111/j.1468-0084.1992.tb00013.x)
+
+### Granger Causality
+
+- Granger, C. W. J. 1969. "Investigating Causal Relations by Econometric Models and Cross-spectral Methods." *Econometrica* 37 (3): 424–438. [https://doi.org/10.2307/1912791](https://doi.org/10.2307/1912791)
 
 ### Model Comparison
 
