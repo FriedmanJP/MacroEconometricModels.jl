@@ -35,9 +35,7 @@ makedocs(;
         ],
         "Innovation Accounting" => "innovation_accounting.md",
         "Non-Gaussian Identification" => "nongaussian.md",
-        "Hypothesis Tests" => [
-            "Unit Root & Cointegration" => "hypothesis_tests.md",
-        ],
+        "Hypothesis Tests" => "hypothesis_tests.md",
         "Examples" => "examples.md",
         "API Reference" => [
             "Overview" => "api.md",
