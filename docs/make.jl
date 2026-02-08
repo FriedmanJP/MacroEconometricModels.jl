@@ -20,20 +20,18 @@ makedocs(;
     pages=[
         "Home" => "index.md",
         "Univariate Models" => [
-            "ARIMA" => "arima.md",
             "Time Series Filters" => "filters.md",
+            "ARIMA" => "arima.md",
             "Volatility Models" => "volatility.md",
         ],
-        "Frequentist Models" => [
+        "Multivariate Models" => [
             "VAR" => "manual.md",
+            "Bayesian VAR" => "bayesian.md",
             "VECM" => "vecm.md",
             "Local Projections" => "lp.md",
             "Factor Models" => "factormodels.md",
+            "Innovation Accounting" => "innovation_accounting.md",
         ],
-        "Bayesian Models" => [
-            "Bayesian VAR" => "bayesian.md",
-        ],
-        "Innovation Accounting" => "innovation_accounting.md",
         "Non-Gaussian Identification" => "nongaussian.md",
         "Hypothesis Tests" => "hypothesis_tests.md",
         "Examples" => "examples.md",

@@ -1,37 +1,57 @@
 # Hypothesis Tests
 
-This chapter covers statistical hypothesis tests for time series analysis, including unit root tests for stationarity detection, cointegration tests for multivariate relationships, and VAR stability diagnostics.
+This chapter covers statistical hypothesis tests for time series analysis: unit root tests for stationarity detection, cointegration tests for multivariate equilibrium relationships, Granger causality tests, model comparison tests, and VAR stability diagnostics.
 
 ## Introduction
 
-Before fitting dynamic models like VARs or Local Projections, it is essential to understand the stationarity properties of the data. Non-stationary series (those with unit roots) require different treatment than stationary series, as standard regression methods can lead to spurious results.
+Before fitting dynamic models like VARs or Local Projections, it is essential to understand the stationarity properties of the data. Non-stationary series (those with unit roots) require different treatment than stationary series, as standard regression methods can lead to spurious results. After estimation, specification tests help validate the model and explore causal relationships.
 
-**MacroEconometricModels.jl** provides a comprehensive suite of unit root and stationarity tests.
+**MacroEconometricModels.jl** provides a comprehensive suite of hypothesis tests organized into three stages of the empirical workflow:
 
 ## Quick Start
 
 ```julia
-adf_result = adf_test(y; lags=:aic, regression=:constant)          # ADF unit root test
-kpss_result = kpss_test(y; regression=:constant)                    # KPSS stationarity test
-pp_result = pp_test(y; regression=:constant)                        # Phillips-Perron test
-za_result = za_test(y; regression=:both, trim=0.15)                 # Zivot-Andrews (structural break)
-johansen_result = johansen_test(Y, 2; deterministic=:constant)      # Johansen cointegration
+using MacroEconometricModels, Random
+Random.seed!(42)
+
+# --- Pre-estimation: Unit root & stationarity ---
+y = cumsum(randn(200))
+adf_result = adf_test(y; lags=:aic, regression=:constant)
+kpss_result = kpss_test(y; regression=:constant)
+pp_result = pp_test(y; regression=:constant)
+
+# --- Pre-estimation: Cointegration ---
+Y = randn(200, 3)
+johansen_result = johansen_test(Y, 2; deterministic=:constant)
+
+# --- Post-estimation: VAR specification tests ---
+m = estimate_var(Y, 2)
+is_stationary(m)                     # VAR stability check
+granger_test(m, 1, 2)               # Granger causality
+granger_test_all(m)                  # all-pairs causality matrix
+
+m1 = estimate_var(Y, 1)
+lr_test(m1, m)                       # likelihood ratio test
 ```
 
-### Univariate Tests
+### Unit Root Tests (Pre-estimation)
 1. **ADF (Augmented Dickey-Fuller)**: Tests the null of a unit root against stationarity
 2. **KPSS**: Tests the null of stationarity against a unit root
 3. **Phillips-Perron**: Non-parametric unit root test with autocorrelation correction
 4. **Zivot-Andrews**: Unit root test allowing for endogenous structural break
 5. **Ng-Perron**: Modified tests with improved size properties
 
-### Multivariate Tests
+### Cointegration Tests (Pre-estimation)
 6. **Johansen Cointegration**: Tests for cointegrating relationships among variables
 
-### Model Diagnostics
+### Specification Tests (Post-estimation)
 7. **VAR Stationarity**: Check if an estimated VAR model is stable
+8. **Granger Causality**: Pairwise and block Wald tests for predictive causality in VARs
+9. **Model Comparison (LR/LM)**: Likelihood ratio and Lagrange multiplier tests for nested models (VAR, ARIMA, ARCH/GARCH, and more)
 
 ---
+
+# Unit Root Tests
 
 ## Augmented Dickey-Fuller Test
 
@@ -389,6 +409,55 @@ ngperron_test
 
 ---
 
+## Convenience Functions
+
+### Summary of Multiple Tests
+
+```julia
+using MacroEconometricModels
+
+y = cumsum(randn(200))
+
+# Run multiple tests and get summary
+summary = unit_root_summary(y; tests=[:adf, :kpss, :pp])
+
+# Access individual results
+summary.results[:adf]
+summary.results[:kpss]
+
+# Overall conclusion
+println(summary.conclusion)
+```
+
+### Test All Variables
+
+```julia
+using MacroEconometricModels
+
+Y = randn(200, 5)
+Y[:, 1] = cumsum(Y[:, 1])  # Make first column non-stationary
+
+# Apply ADF test to all columns
+results = test_all_variables(Y; test=:adf)
+
+# Check which variables have unit roots
+for (i, r) in enumerate(results)
+    status = r.pvalue > 0.05 ? "I(1)" : "I(0)"
+    println("Variable $i: p=$(round(r.pvalue, digits=3)) → $status")
+end
+```
+
+### Function Signatures
+
+```@docs
+unit_root_summary
+test_all_variables
+```
+
+---
+
+# Cointegration Tests
+
 ## Johansen Cointegration Test
 
 ### Theory
@@ -486,6 +555,8 @@ Stop at the first non-rejected hypothesis; that gives the cointegration rank.
 
 ---
 
+# Specification Tests
+
 ## VAR Stationarity Check
 
 ### Theory
@@ -545,143 +616,99 @@ is_stationary
 
 ---
 
-## Convenience Functions
+## Granger Causality Tests
 
-### Summary of Multiple Tests
+The Granger causality test (Granger 1969) examines whether lagged values of one variable help predict another variable in a VAR system.
 
-```julia
-using MacroEconometricModels
+### Theory
 
-y = cumsum(randn(200))
+Given a VAR(p) model with n variables, the **pairwise** test examines whether variable j Granger-causes variable i:
 
-# Run multiple tests and get summary
-summary = unit_root_summary(y; tests=[:adf, :kpss, :pp])
-
-# Access individual results
-summary.results[:adf]
-summary.results[:kpss]
-
-# Overall conclusion
-println(summary.conclusion)
+```math
+H_0: A_1[i,j] = A_2[i,j] = \cdots = A_p[i,j] = 0
 ```
 
-### Test All Variables
+Under ``H_0``, the Wald statistic ``W = \boldsymbol{\theta}'\mathbf{V}^{-1}\boldsymbol{\theta} \sim \chi^2(p)``, where ``\boldsymbol{\theta}`` collects the lag coefficients and ``\mathbf{V} = \sigma_{ii} (\mathbf{X}'\mathbf{X})^{-1}`` is the coefficient covariance.
+
+The **block** (multivariate) test generalizes to groups of cause variables, with ``\text{df} = p \times |\text{cause group}|``.
+
+!!! note "Technical Note"
+    Granger causality is a statistical concept based on predictability, not true causation. Variable j "Granger-causes" variable i if past values of j contain information useful for predicting i beyond what is contained in past values of i and other variables. The test is valid under the assumption that the VAR model is correctly specified and the error terms are white noise.
+
+### Quick Start
 
 ```julia
-using MacroEconometricModels
+using MacroEconometricModels, Random
+Random.seed!(42)
 
-Y = randn(200, 5)
-Y[:, 1] = cumsum(Y[:, 1])  # Make first column non-stationary
+Y = randn(200, 3)
+m = estimate_var(Y, 2)
 
-# Apply ADF test to all columns
-results = test_all_variables(Y; test=:adf)
+# Pairwise: does variable 1 Granger-cause variable 2?
+g = granger_test(m, 1, 2)
 
-# Check which variables have unit roots
-for (i, r) in enumerate(results)
-    status = r.pvalue > 0.05 ? "I(1)" : "I(0)"
-    println("Variable $i: p=$(round(r.pvalue, digits=3)) → $status")
-end
+# Block: do variables 1 and 2 jointly Granger-cause variable 3?
+g_block = granger_test(m, [1, 2], 3)
+
+# All pairwise tests at once
+results = granger_test_all(m)
 ```
+
+**Interpretation.** If the p-value is below your significance level (e.g., 0.05), reject ``H_0`` and conclude the cause variable(s) Granger-cause the effect variable. The `granger_test_all` function returns an n×n matrix of p-values where entry [i,j] tests whether variable j Granger-causes variable i.
 
 ### Function Signatures
 
-```@docs
-unit_root_summary
-test_all_variables
-```
+- [`granger_test(model, cause, effect)`](@ref granger_test) — Pairwise or block Granger causality test
+- [`granger_test_all(model)`](@ref granger_test_all) — All-pairs pairwise Granger causality matrix
 
----
+### Return Values
 
-## Result Types
+**`GrangerCausalityResult`**
 
-All unit root test results inherit from `AbstractUnitRootTest` and implement the StatsAPI interface:
+| Field | Type | Description |
+|-------|------|-------------|
+| `statistic` | `T` | Wald χ² statistic |
+| `pvalue` | `T` | p-value from χ²(df) |
+| `df` | `Int` | Degrees of freedom (p for pairwise, p×\|cause\| for block) |
+| `cause` | `Vector{Int}` | Indices of causing variable(s) |
+| `effect` | `Int` | Index of effect variable |
+| `n` | `Int` | Number of variables in VAR |
+| `p` | `Int` | Lag order |
+| `nobs` | `Int` | Effective number of observations |
+| `test_type` | `Symbol` | `:pairwise` or `:block` |
 
-```julia
-using StatsAPI
-
-result = adf_test(y)
-
-# StatsAPI interface
-nobs(result)    # Number of observations
-dof(result)     # Degrees of freedom
-pvalue(result)  # P-value
-```
-
-### Type Hierarchy
-
-All unit root test results inherit from `AbstractUnitRootTest` and implement the StatsAPI interface. See the [API Reference](@ref) for detailed type documentation.
-
-- `ADFResult` - Augmented Dickey-Fuller test result
-- `KPSSResult` - KPSS stationarity test result
-- `PPResult` - Phillips-Perron test result
-- `ZAResult` - Zivot-Andrews structural break test result
-- `NgPerronResult` - Ng-Perron test result (MZα, MZt, MSB, MPT)
-- `JohansenResult` - Johansen cointegration test result
-- `VARStationarityResult` - VAR model stationarity check result
-
----
-
-## Practical Workflow
-
-### Step-by-Step Unit Root Analysis
+### Complete Example
 
 ```julia
-using MacroEconometricModels
+using MacroEconometricModels, Random
+Random.seed!(42)
 
-# 1. Load/generate data
-y = your_time_series
-
-# 2. Visual inspection (plot the series)
-# Look for trends, structural breaks, etc.
-
-# 3. Test for unit root with ADF
-adf_result = adf_test(y; regression=:constant)
-
-# 4. Confirm with KPSS (opposite null)
-kpss_result = kpss_test(y; regression=:constant)
-
-# 5. If structural break suspected, use Zivot-Andrews
-za_result = za_test(y; regression=:both)
-
-# 6. For small samples, use Ng-Perron
-np_result = ngperron_test(y; regression=:constant)
-
-# 7. Decision matrix
-if pvalue(adf_result) < 0.05 && pvalue(kpss_result) > 0.05
-    println("Series is stationary - proceed with VAR in levels")
-elseif pvalue(adf_result) > 0.05 && pvalue(kpss_result) < 0.05
-    println("Series has unit root - consider differencing or VECM")
-else
-    println("Inconclusive - examine further or use robust methods")
-end
-```
-
-### Pre-VAR Analysis
-
-```julia
-using MacroEconometricModels
-
-# Multi-variable dataset
-Y = your_data_matrix
-
-# 1. Test each variable for unit root
-results = test_all_variables(Y; test=:adf)
-n_nonstationary = sum(r.pvalue > 0.05 for r in results)
-println("Variables with unit roots: $n_nonstationary / $(size(Y, 2))")
-
-# 2. If all I(1), test for cointegration
-if n_nonstationary == size(Y, 2)
-    johansen_result = johansen_test(Y, 2)
-
-    if johansen_result.rank > 0
-        println("Cointegration detected! Use VECM with rank=$(johansen_result.rank)")
-    else
-        println("No cointegration - use VAR in first differences")
-    end
+# Generate data with known causal structure:
+# Variable 2 depends on lagged Variable 1
+T_obs = 300
+Y = zeros(T_obs, 3)
+Y[1, :] = randn(3)
+for t in 2:T_obs
+    Y[t, 1] = 0.5 * Y[t-1, 1] + randn()
+    Y[t, 2] = 0.3 * Y[t-1, 1] + 0.2 * Y[t-1, 2] + randn()  # 1 causes 2
+    Y[t, 3] = 0.4 * Y[t-1, 3] + randn()                       # independent
 end
 
-# 3. If mixed I(0)/I(1), be cautious
-# Consider ARDL bounds test or transform I(1) variables
+m = estimate_var(Y, 2)
+
+# Test all pairs
+results = granger_test_all(m)
+
+# Variable 1 → 2 should show significant Granger causality
+println("1 → 2: p = ", round(results[2, 1].pvalue, digits=4))
+
+# Variable 3 should be independent
+println("3 → 1: p = ", round(results[1, 3].pvalue, digits=4))
+println("3 → 2: p = ", round(results[2, 3].pvalue, digits=4))
+
+# Block test: do variables 1 and 3 jointly Granger-cause variable 2?
+g_block = granger_test(m, [1, 3], 2)
+println("Block [1,3] → 2: p = ", round(g_block.pvalue, digits=4))
 ```
 
 ---
@@ -785,99 +812,126 @@ lm_test(arch1, garch11)     # LM supports ARCH→GARCH nesting
 
 ---
 
-## Granger Causality Tests
+# Reference
 
-The Granger causality test (Granger 1969) examines whether lagged values of one variable help predict another variable in a VAR system.
+## Result Types
 
-### Theory
-
-Given a VAR(p) model with n variables, the **pairwise** test examines whether variable j Granger-causes variable i:
-
-```math
-H_0: A_1[i,j] = A_2[i,j] = \cdots = A_p[i,j] = 0
-```
-
-Under ``H_0``, the Wald statistic ``W = \boldsymbol{\theta}'\mathbf{V}^{-1}\boldsymbol{\theta} \sim \chi^2(p)``, where ``\boldsymbol{\theta}`` collects the lag coefficients and ``\mathbf{V} = \sigma_{ii} (\mathbf{X}'\mathbf{X})^{-1}`` is the coefficient covariance.
-
-The **block** (multivariate) test generalizes to groups of cause variables, with ``\text{df} = p \times |\text{cause group}|``.
-
-!!! note "Technical Note"
-    Granger causality is a statistical concept based on predictability, not true causation. Variable j "Granger-causes" variable i if past values of j contain information useful for predicting i beyond what is contained in past values of i and other variables. The test is valid under the assumption that the VAR model is correctly specified and the error terms are white noise.
-
-### Quick Start
+All test results implement the StatsAPI interface:
 
 ```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
+using StatsAPI
 
-Y = randn(200, 3)
-m = estimate_var(Y, 2)
+result = adf_test(y)
 
-# Pairwise: does variable 1 Granger-cause variable 2?
-g = granger_test(m, 1, 2)
-
-# Block: do variables 1 and 2 jointly Granger-cause variable 3?
-g_block = granger_test(m, [1, 2], 3)
-
-# All pairwise tests at once
-results = granger_test_all(m)
+# StatsAPI interface
+nobs(result)    # Number of observations
+dof(result)     # Degrees of freedom
+pvalue(result)  # P-value
 ```
 
-**Interpretation.** If the p-value is below your significance level (e.g., 0.05), reject ``H_0`` and conclude the cause variable(s) Granger-cause the effect variable. The `granger_test_all` function returns an n×n matrix of p-values where entry [i,j] tests whether variable j Granger-causes variable i.
+### Type Hierarchy
 
-### Function Signatures
+See the [API Reference](@ref) for detailed type documentation.
 
-- [`granger_test(model, cause, effect)`](@ref granger_test) — Pairwise or block Granger causality test
-- [`granger_test_all(model)`](@ref granger_test_all) — All-pairs pairwise Granger causality matrix
+**Unit Root Tests** — inherit from `AbstractUnitRootTest <: StatsAPI.HypothesisTest`:
+- `ADFResult` - Augmented Dickey-Fuller test result
+- `KPSSResult` - KPSS stationarity test result
+- `PPResult` - Phillips-Perron test result
+- `ZAResult` - Zivot-Andrews structural break test result
+- `NgPerronResult` - Ng-Perron test result (MZα, MZt, MSB, MPT)
+- `JohansenResult` - Johansen cointegration test result
+- `VARStationarityResult` - VAR model stationarity check result
 
-### Return Values
+**Specification Tests** — inherit from `StatsAPI.HypothesisTest`:
+- `GrangerCausalityResult` - Granger causality test result (pairwise or block)
+- `LRTestResult` - Likelihood ratio test result
+- `LMTestResult` - Lagrange multiplier (score) test result
 
-**`GrangerCausalityResult`**
+---
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `statistic` | `T` | Wald χ² statistic |
-| `pvalue` | `T` | p-value from χ²(df) |
-| `df` | `Int` | Degrees of freedom (p for pairwise, p×\|cause\| for block) |
-| `cause` | `Vector{Int}` | Indices of causing variable(s) |
-| `effect` | `Int` | Index of effect variable |
-| `n` | `Int` | Number of variables in VAR |
-| `p` | `Int` | Lag order |
-| `nobs` | `Int` | Effective number of observations |
-| `test_type` | `Symbol` | `:pairwise` or `:block` |
+## Practical Workflow
 
-### Complete Example
+### Step-by-Step Unit Root Analysis
 
 ```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
+using MacroEconometricModels
 
-# Generate data with known causal structure:
-# Variable 2 depends on lagged Variable 1
-T_obs = 300
-Y = zeros(T_obs, 3)
-Y[1, :] = randn(3)
-for t in 2:T_obs
-    Y[t, 1] = 0.5 * Y[t-1, 1] + randn()
-    Y[t, 2] = 0.3 * Y[t-1, 1] + 0.2 * Y[t-1, 2] + randn()  # 1 causes 2
-    Y[t, 3] = 0.4 * Y[t-1, 3] + randn()                       # independent
+# 1. Load/generate data
+y = your_time_series
+
+# 2. Visual inspection (plot the series)
+# Look for trends, structural breaks, etc.
+
+# 3. Test for unit root with ADF
+adf_result = adf_test(y; regression=:constant)
+
+# 4. Confirm with KPSS (opposite null)
+kpss_result = kpss_test(y; regression=:constant)
+
+# 5. If structural break suspected, use Zivot-Andrews
+za_result = za_test(y; regression=:both)
+
+# 6. For small samples, use Ng-Perron
+np_result = ngperron_test(y; regression=:constant)
+
+# 7. Decision matrix
+if pvalue(adf_result) < 0.05 && pvalue(kpss_result) > 0.05
+    println("Series is stationary - proceed with VAR in levels")
+elseif pvalue(adf_result) > 0.05 && pvalue(kpss_result) < 0.05
+    println("Series has unit root - consider differencing or VECM")
+else
+    println("Inconclusive - examine further or use robust methods")
+end
+```
+
+### Pre-VAR Analysis
+
+```julia
+using MacroEconometricModels
+
+# Multi-variable dataset
+Y = your_data_matrix
+
+# 1. Test each variable for unit root
+results = test_all_variables(Y; test=:adf)
+n_nonstationary = sum(r.pvalue > 0.05 for r in results)
+println("Variables with unit roots: $n_nonstationary / $(size(Y, 2))")
+
+# 2. If all I(1), test for cointegration
+if n_nonstationary == size(Y, 2)
+    johansen_result = johansen_test(Y, 2)
+
+    if johansen_result.rank > 0
+        println("Cointegration detected! Use VECM with rank=$(johansen_result.rank)")
+    else
+        println("No cointegration - use VAR in first differences")
+    end
 end
 
+# 3. If mixed I(0)/I(1), be cautious
+# Consider ARDL bounds test or transform I(1) variables
+```
+
+### Post-Estimation Diagnostics
+
+```julia
+using MacroEconometricModels
+
+# After estimating VAR
 m = estimate_var(Y, 2)
 
-# Test all pairs
+# 1. Check stability
+stat = is_stationary(m)
+println("Stable: ", stat.is_stationary, " (max modulus: ", round(stat.max_modulus, digits=3), ")")
+
+# 2. Granger causality
 results = granger_test_all(m)
 
-# Variable 1 → 2 should show significant Granger causality
-println("1 → 2: p = ", round(results[2, 1].pvalue, digits=4))
-
-# Variable 3 should be independent
-println("3 → 1: p = ", round(results[1, 3].pvalue, digits=4))
-println("3 → 2: p = ", round(results[2, 3].pvalue, digits=4))
-
-# Block test: do variables 1 and 3 jointly Granger-cause variable 2?
-g_block = granger_test(m, [1, 3], 2)
-println("Block [1,3] → 2: p = ", round(g_block.pvalue, digits=4))
+# 3. Compare lag specifications
+m1 = estimate_var(Y, 1)
+m3 = estimate_var(Y, 3)
+println("VAR(1) vs VAR(2): ", lr_test(m1, m))
+println("VAR(2) vs VAR(3): ", lr_test(m, m3))
 ```
 
 ---
