@@ -1,5 +1,46 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Examples · MacroEconometricModels.jl</title><meta name="title" content="Examples · MacroEconometricModels.jl"/><meta property="og:title" content="Examples · MacroEconometricModels.jl"/><meta property="twitter:title" content="Examples · MacroEconometricModels.jl"/><meta name="description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:description" content="Documentation for MacroEconometricModels.jl."/><meta property="twitter:description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:url" content="https://chung9207.github.io/MacroEconometricModels.jl/examples/"/><meta property="twitter:url" content="https://chung9207.github.io/MacroEconometricModels.jl/examples/"/><link rel="canonical" href="https://chung9207.github.io/MacroEconometricModels.jl/examples/"/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">MacroEconometricModels.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><span class="tocitem">Univariate Models</span><ul><li><a class="tocitem" href="../filters/">Time Series Filters</a></li><li><a class="tocitem" href="../arima/">ARIMA</a></li><li><a class="tocitem" href="../volatility/">Volatility Models</a></li></ul></li><li><span class="tocitem">Multivariate Models</span><ul><li><a class="tocitem" href="../manual/">VAR</a></li><li><a class="tocitem" href="../bayesian/">Bayesian VAR</a></li><li><a class="tocitem" href="../vecm/">VECM</a></li><li><a class="tocitem" href="../lp/">Local Projections</a></li><li><a class="tocitem" href="../factormodels/">Factor Models</a></li></ul></li><li><a class="tocitem" href="../innovation_accounting/">Innovation Accounting</a></li><li><a class="tocitem" href="../nongaussian/">Non-Gaussian Identification</a></li><li><a class="tocitem" href="../hypothesis_tests/">Hypothesis Tests</a></li><li class="is-active"><a class="tocitem" href>Examples</a><ul class="internal"><li><a class="tocitem" href="#Example-1:-ARIMA-Models"><span>Example 1: ARIMA Models</span></a></li><li><a class="tocitem" href="#Example-2:-Volatility-Models"><span>Example 2: Volatility Models</span></a></li><li><a class="tocitem" href="#Example-8:-Unit-Root-Testing-and-Pre-Estimation-Analysis"><span>Example 8: Unit Root Testing and Pre-Estimation Analysis</span></a></li><li><a class="tocitem" href="#Example-3:-Three-Variable-VAR-Analysis"><span>Example 3: Three-Variable VAR Analysis</span></a></li><li><a class="tocitem" href="#Example-7:-Non-Gaussian-Identification"><span>Example 7: Non-Gaussian Identification</span></a></li><li><a class="tocitem" href="#Example-6:-Bayesian-VAR-with-Minnesota-Prior"><span>Example 6: Bayesian VAR with Minnesota Prior</span></a></li><li><a class="tocitem" href="#Example-4:-Local-Projections"><span>Example 4: Local Projections</span></a></li><li><a class="tocitem" href="#Example-5:-Factor-Model-for-Large-Panels"><span>Example 5: Factor Model for Large Panels</span></a></li><li><a class="tocitem" href="#Example-9:-GMM-Estimation"><span>Example 9: GMM Estimation</span></a></li><li><a class="tocitem" href="#Example-10:-Complete-Workflow"><span>Example 10: Complete Workflow</span></a></li><li><a class="tocitem" href="#Example-11:-Table-Output-—-Text,-LaTeX,-and-HTML"><span>Example 11: Table Output — Text, LaTeX, and HTML</span></a></li><li><a class="tocitem" href="#Example-12:-Bibliographic-References"><span>Example 12: Bibliographic References</span></a></li><li><a class="tocitem" href="#Best-Practices"><span>Best Practices</span></a></li></ul></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../api/">Overview</a></li><li><a class="tocitem" href="../api_types/">Types</a></li><li><a class="tocitem" href="../api_functions/">Functions</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Examples</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Examples</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/chung9207/MacroEconometricModels.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/chung9207/MacroEconometricModels.jl/blob/main/docs/src/examples.md#" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Examples"><a class="docs-heading-anchor" href="#Examples">Examples</a><a id="Examples-1"></a><a class="docs-heading-anchor-permalink" href="#Examples" title="Permalink"></a></h1><p>This chapter provides comprehensive worked examples demonstrating the main functionality of <strong>MacroEconometricModels.jl</strong>. Each example includes complete code, economic interpretation, and best practices. The examples follow the natural empirical workflow: test data properties, estimate models, try alternatives, and report results.</p><h3 id="Quick-Reference"><a class="docs-heading-anchor" href="#Quick-Reference">Quick Reference</a><a id="Quick-Reference-1"></a><a class="docs-heading-anchor-permalink" href="#Quick-Reference" title="Permalink"></a></h3><table><tr><th style="text-align: right">#</th><th style="text-align: right">Example</th><th style="text-align: right">Key Functions</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right">1</td><td style="text-align: right">ARIMA Models</td><td style="text-align: right"><code>estimate_ar</code>, <code>estimate_arma</code>, <code>auto_arima</code>, <code>forecast</code></td><td style="text-align: right">AR, MA, ARMA estimation, order selection, forecasting</td></tr><tr><td style="text-align: right">2</td><td style="text-align: right">Volatility Models</td><td style="text-align: right"><code>estimate_garch</code>, <code>estimate_egarch</code>, <code>estimate_sv</code>, <code>news_impact_curve</code></td><td style="text-align: right">ARCH/GARCH/SV estimation, diagnostics, forecasting</td></tr><tr><td style="text-align: right">3</td><td style="text-align: right">Three-Variable VAR</td><td style="text-align: right"><code>estimate_var</code>, <code>irf</code>, <code>fevd</code></td><td style="text-align: right">Frequentist VAR with Cholesky and sign restriction identification</td></tr><tr><td style="text-align: right">4</td><td style="text-align: right">Local Projections</td><td style="text-align: right"><code>estimate_lp</code>, <code>estimate_lp_iv</code>, <code>estimate_smooth_lp</code></td><td style="text-align: right">Standard, IV, smooth, and state-dependent LP</td></tr><tr><td style="text-align: right">5</td><td style="text-align: right">Factor Model for Large Panels</td><td style="text-align: right"><code>estimate_factors</code>, <code>ic_criteria</code>, <code>forecast</code></td><td style="text-align: right">Large panel factor extraction, Bai-Ng criteria, forecasting with CIs</td></tr><tr><td style="text-align: right">6</td><td style="text-align: right">Bayesian VAR with Minnesota Prior</td><td style="text-align: right"><code>estimate_bvar</code>, <code>optimize_hyperparameters</code></td><td style="text-align: right">Minnesota prior, conjugate posterior estimation, credible intervals</td></tr><tr><td style="text-align: right">7</td><td style="text-align: right">Non-Gaussian Identification</td><td style="text-align: right"><code>identify_fastica</code>, <code>normality_test_suite</code>, <code>test_shock_gaussianity</code></td><td style="text-align: right">ICA, ML, heteroskedastic identification</td></tr><tr><td style="text-align: right">8</td><td style="text-align: right">Unit Root Testing</td><td style="text-align: right"><code>adf_test</code>, <code>kpss_test</code>, <code>johansen_test</code></td><td style="text-align: right">ADF, KPSS, Zivot-Andrews, Ng-Perron, Johansen</td></tr><tr><td style="text-align: right">9</td><td style="text-align: right">GMM Estimation</td><td style="text-align: right"><code>estimate_gmm</code>, <code>j_test</code></td><td style="text-align: right">IV regression via GMM, overidentification test</td></tr><tr><td style="text-align: right">10</td><td style="text-align: right">Complete Workflow</td><td style="text-align: right">Multiple</td><td style="text-align: right">Unit roots → lag selection → VAR → BVAR → LP comparison</td></tr><tr><td style="text-align: right">11</td><td style="text-align: right">Table Output (LaTeX &amp; HTML)</td><td style="text-align: right"><code>set_display_backend</code>, <code>print_table</code>, <code>table</code></td><td style="text-align: right">Export tables for papers, slides, and web</td></tr><tr><td style="text-align: right">12</td><td style="text-align: right">Bibliographic References</td><td style="text-align: right"><code>refs</code></td><td style="text-align: right">Multi-format references for models and methods</td></tr></table><hr/><h2 id="Example-1:-ARIMA-Models"><a class="docs-heading-anchor" href="#Example-1:-ARIMA-Models">Example 1: ARIMA Models</a><a id="Example-1:-ARIMA-Models-1"></a><a class="docs-heading-anchor-permalink" href="#Example-1:-ARIMA-Models" title="Permalink"></a></h2><p>This example demonstrates univariate time series modeling with ARIMA models: estimation, order selection, diagnostics, and forecasting.</p><pre><code class="language-julia hljs">using MacroEconometricModels
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Examples · MacroEconometricModels.jl</title><meta name="title" content="Examples · MacroEconometricModels.jl"/><meta property="og:title" content="Examples · MacroEconometricModels.jl"/><meta property="twitter:title" content="Examples · MacroEconometricModels.jl"/><meta name="description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:description" content="Documentation for MacroEconometricModels.jl."/><meta property="twitter:description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:url" content="https://chung9207.github.io/MacroEconometricModels.jl/examples/"/><meta property="twitter:url" content="https://chung9207.github.io/MacroEconometricModels.jl/examples/"/><link rel="canonical" href="https://chung9207.github.io/MacroEconometricModels.jl/examples/"/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">MacroEconometricModels.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><span class="tocitem">Univariate Models</span><ul><li><a class="tocitem" href="../filters/">Time Series Filters</a></li><li><a class="tocitem" href="../arima/">ARIMA</a></li><li><a class="tocitem" href="../volatility/">Volatility Models</a></li></ul></li><li><span class="tocitem">Multivariate Models</span><ul><li><a class="tocitem" href="../manual/">VAR</a></li><li><a class="tocitem" href="../bayesian/">Bayesian VAR</a></li><li><a class="tocitem" href="../vecm/">VECM</a></li><li><a class="tocitem" href="../lp/">Local Projections</a></li><li><a class="tocitem" href="../factormodels/">Factor Models</a></li></ul></li><li><a class="tocitem" href="../innovation_accounting/">Innovation Accounting</a></li><li><a class="tocitem" href="../nongaussian/">Non-Gaussian Identification</a></li><li><a class="tocitem" href="../hypothesis_tests/">Hypothesis Tests</a></li><li class="is-active"><a class="tocitem" href>Examples</a><ul class="internal"><li><a class="tocitem" href="#Example-1:-Time-Series-Filters"><span>Example 1: Time Series Filters</span></a></li><li><a class="tocitem" href="#Example-2:-ARIMA-Models"><span>Example 2: ARIMA Models</span></a></li><li><a class="tocitem" href="#Example-3:-Volatility-Models"><span>Example 3: Volatility Models</span></a></li><li><a class="tocitem" href="#Example-4:-Three-Variable-VAR-Analysis"><span>Example 4: Three-Variable VAR Analysis</span></a></li><li><a class="tocitem" href="#Example-5:-Bayesian-VAR-with-Minnesota-Prior"><span>Example 5: Bayesian VAR with Minnesota Prior</span></a></li><li><a class="tocitem" href="#Example-6:-VECM-Analysis"><span>Example 6: VECM Analysis</span></a></li><li><a class="tocitem" href="#Example-7:-Local-Projections"><span>Example 7: Local Projections</span></a></li><li><a class="tocitem" href="#Example-8:-Factor-Model-for-Large-Panels"><span>Example 8: Factor Model for Large Panels</span></a></li><li><a class="tocitem" href="#Example-9:-GMM-Estimation"><span>Example 9: GMM Estimation</span></a></li><li><a class="tocitem" href="#Example-10:-Non-Gaussian-Identification"><span>Example 10: Non-Gaussian Identification</span></a></li><li><a class="tocitem" href="#Example-11:-Hypothesis-Tests"><span>Example 11: Hypothesis Tests</span></a></li><li><a class="tocitem" href="#Example-12:-Complete-Workflow"><span>Example 12: Complete Workflow</span></a></li><li><a class="tocitem" href="#Example-13:-Table-Output-—-Text,-LaTeX,-and-HTML"><span>Example 13: Table Output — Text, LaTeX, and HTML</span></a></li><li><a class="tocitem" href="#Example-14:-Bibliographic-References"><span>Example 14: Bibliographic References</span></a></li><li><a class="tocitem" href="#Best-Practices"><span>Best Practices</span></a></li></ul></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../api/">Overview</a></li><li><a class="tocitem" href="../api_types/">Types</a></li><li><a class="tocitem" href="../api_functions/">Functions</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Examples</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Examples</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/chung9207/MacroEconometricModels.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/chung9207/MacroEconometricModels.jl/blob/main/docs/src/examples.md#" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Examples"><a class="docs-heading-anchor" href="#Examples">Examples</a><a id="Examples-1"></a><a class="docs-heading-anchor-permalink" href="#Examples" title="Permalink"></a></h1><p>This chapter provides comprehensive worked examples demonstrating the main functionality of <strong>MacroEconometricModels.jl</strong>. Each example includes complete code, economic interpretation, and best practices. The examples follow the natural empirical workflow: test data properties, estimate models, try alternatives, and report results.</p><h3 id="Quick-Reference"><a class="docs-heading-anchor" href="#Quick-Reference">Quick Reference</a><a id="Quick-Reference-1"></a><a class="docs-heading-anchor-permalink" href="#Quick-Reference" title="Permalink"></a></h3><table><tr><th style="text-align: right">#</th><th style="text-align: right">Example</th><th style="text-align: right">Key Functions</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right">1</td><td style="text-align: right">Time Series Filters</td><td style="text-align: right"><code>hp_filter</code>, <code>hamilton_filter</code>, <code>beveridge_nelson</code>, <code>baxter_king</code>, <code>boosted_hp</code></td><td style="text-align: right">All 5 filters compared on simulated GDP</td></tr><tr><td style="text-align: right">2</td><td style="text-align: right">ARIMA Models</td><td style="text-align: right"><code>estimate_ar</code>, <code>estimate_arma</code>, <code>auto_arima</code>, <code>forecast</code></td><td style="text-align: right">AR, MA, ARMA estimation, order selection, forecasting</td></tr><tr><td style="text-align: right">3</td><td style="text-align: right">Volatility Models</td><td style="text-align: right"><code>estimate_garch</code>, <code>estimate_egarch</code>, <code>estimate_sv</code>, <code>news_impact_curve</code></td><td style="text-align: right">ARCH/GARCH/SV estimation, diagnostics, forecasting</td></tr><tr><td style="text-align: right">4</td><td style="text-align: right">Three-Variable VAR</td><td style="text-align: right"><code>estimate_var</code>, <code>irf</code>, <code>fevd</code></td><td style="text-align: right">Frequentist VAR with Cholesky and sign restriction identification</td></tr><tr><td style="text-align: right">5</td><td style="text-align: right">Bayesian VAR with Minnesota Prior</td><td style="text-align: right"><code>estimate_bvar</code>, <code>optimize_hyperparameters</code></td><td style="text-align: right">Minnesota prior, conjugate posterior estimation, credible intervals</td></tr><tr><td style="text-align: right">6</td><td style="text-align: right">VECM Analysis</td><td style="text-align: right"><code>estimate_vecm</code>, <code>johansen_test</code>, <code>to_var</code>, <code>forecast</code></td><td style="text-align: right">Cointegration, VECM estimation, IRF, forecast</td></tr><tr><td style="text-align: right">7</td><td style="text-align: right">Local Projections</td><td style="text-align: right"><code>estimate_lp</code>, <code>estimate_lp_iv</code>, <code>estimate_smooth_lp</code></td><td style="text-align: right">Standard, IV, smooth, and state-dependent LP</td></tr><tr><td style="text-align: right">8</td><td style="text-align: right">Factor Model for Large Panels</td><td style="text-align: right"><code>estimate_factors</code>, <code>ic_criteria</code>, <code>forecast</code></td><td style="text-align: right">Large panel factor extraction, Bai-Ng criteria, forecasting with CIs</td></tr><tr><td style="text-align: right">9</td><td style="text-align: right">GMM Estimation</td><td style="text-align: right"><code>estimate_gmm</code>, <code>j_test</code></td><td style="text-align: right">IV regression via GMM, overidentification test</td></tr><tr><td style="text-align: right">10</td><td style="text-align: right">Non-Gaussian Identification</td><td style="text-align: right"><code>identify_fastica</code>, <code>normality_test_suite</code>, <code>test_shock_gaussianity</code></td><td style="text-align: right">ICA, ML, heteroskedastic identification</td></tr><tr><td style="text-align: right">11</td><td style="text-align: right">Hypothesis Tests</td><td style="text-align: right"><code>adf_test</code>, <code>kpss_test</code>, <code>johansen_test</code>, <code>granger_test</code></td><td style="text-align: right">ADF, KPSS, Zivot-Andrews, Ng-Perron, Johansen, Granger causality</td></tr><tr><td style="text-align: right">12</td><td style="text-align: right">Complete Workflow</td><td style="text-align: right">Multiple</td><td style="text-align: right">Unit roots → lag selection → VAR → BVAR → LP comparison</td></tr><tr><td style="text-align: right">13</td><td style="text-align: right">Table Output (LaTeX &amp; HTML)</td><td style="text-align: right"><code>set_display_backend</code>, <code>print_table</code>, <code>table</code></td><td style="text-align: right">Export tables for papers, slides, and web</td></tr><tr><td style="text-align: right">14</td><td style="text-align: right">Bibliographic References</td><td style="text-align: right"><code>refs</code></td><td style="text-align: right">Multi-format references for models and methods</td></tr></table><hr/><h2 id="Example-1:-Time-Series-Filters"><a class="docs-heading-anchor" href="#Example-1:-Time-Series-Filters">Example 1: Time Series Filters</a><a id="Example-1:-Time-Series-Filters-1"></a><a class="docs-heading-anchor-permalink" href="#Example-1:-Time-Series-Filters" title="Permalink"></a></h2><p>This example compares all five trend-cycle decomposition filters on a simulated quarterly GDP-like series. See <a href="../filters/">Time Series Filters</a> for theory, return values, and individual filter options.</p><pre><code class="language-julia hljs">using MacroEconometricModels, Random, Statistics
+
+Random.seed!(42)
+
+# Simulated quarterly GDP-like series (200 quarters)
+# cumsum with drift produces an I(1) series with a stochastic trend
+y = cumsum(0.5 .+ randn(200))
+
+println(&quot;Simulated GDP series: T=$(length(y)) quarters&quot;)
+println(&quot;  Mean growth: &quot;, round(mean(diff(y)), digits=3))
+
+# === Apply all five filters ===
+
+# Hodrick-Prescott (lambda=1600 for quarterly data)
+hp  = hp_filter(y; lambda=1600.0)
+
+# Hamilton regression filter (h=8, p=4)
+ham = hamilton_filter(y; h=8, p=4)
+
+# Beveridge-Nelson decomposition via ARIMA
+bn  = beveridge_nelson(y; p=2, q=0)
+
+# Baxter-King symmetric band-pass (6-32 quarters, K=12 lead/lag)
+bk  = baxter_king(y; pl=6, pu=32, K=12)
+
+# Boosted HP (iterated HP with BIC stopping)
+bhp = boosted_hp(y; stopping=:BIC)
+
+# === Compare cycle standard deviations ===
+println(&quot;\nCycle standard deviations:&quot;)
+println(&quot;  HP:       &quot;, round(std(cycle(hp)), digits=4))
+println(&quot;  Hamilton: &quot;, round(std(cycle(ham)), digits=4))
+println(&quot;  BN:       &quot;, round(std(cycle(bn)), digits=4))
+println(&quot;  BK:       &quot;, round(std(cycle(bk)), digits=4))
+println(&quot;  bHP:      &quot;, round(std(cycle(bhp)), digits=4))
+
+# === Trend comparison at selected dates ===
+println(&quot;\nTrend values at t=100:&quot;)
+println(&quot;  HP:       &quot;, round(trend(hp)[100], digits=2))
+println(&quot;  Hamilton: &quot;, round(trend(ham)[100], digits=2))
+println(&quot;  BN:       &quot;, round(trend(bn)[100], digits=2))
+println(&quot;  bHP:      &quot;, round(trend(bhp)[100], digits=2))</code></pre><p>The HP filter is the most common choice in macroeconomics, but Hamilton (2018) argues it can induce spurious dynamics. The Hamilton filter uses a regression-based approach that avoids end-of-sample bias. Beveridge-Nelson decomposes the series using its ARIMA representation, while Baxter-King isolates business-cycle frequencies (6–32 quarters) via a symmetric moving average. The boosted HP iteratively re-applies the HP filter, improving trend estimation for series with structural changes. Comparing cycle standard deviations reveals how aggressively each filter extracts the cyclical component.</p><hr/><h2 id="Example-2:-ARIMA-Models"><a class="docs-heading-anchor" href="#Example-2:-ARIMA-Models">Example 2: ARIMA Models</a><a id="Example-2:-ARIMA-Models-1"></a><a class="docs-heading-anchor-permalink" href="#Example-2:-ARIMA-Models" title="Permalink"></a></h2><p>This example demonstrates univariate time series modeling with ARIMA models: estimation, order selection, diagnostics, and forecasting.</p><pre><code class="language-julia hljs">using MacroEconometricModels
 using Random
 using Statistics
 
@@ -45,7 +86,7 @@ fc = forecast(arma, 12; conf_level=0.95)
 println(&quot;\nARMA(1,1) Forecasts:&quot;)
 for h in [1, 4, 8, 12]
     println(&quot;  h=$h: $(round(fc.forecast[h], digits=3)) [$(round(fc.ci_lower[h], digits=3)), $(round(fc.ci_upper[h], digits=3))]&quot;)
-end</code></pre><p>The <code>auto_arima</code> function performs a grid search over (p,d,q) combinations, selecting the model that minimizes AIC. The CSS-MLE estimation method initializes parameters via conditional sum of squares (CSS), then refines via exact maximum likelihood using the Kalman filter. Forecast confidence intervals widen with the horizon, reflecting accumulating prediction uncertainty.</p><hr/><h2 id="Example-2:-Volatility-Models"><a class="docs-heading-anchor" href="#Example-2:-Volatility-Models">Example 2: Volatility Models</a><a id="Example-2:-Volatility-Models-1"></a><a class="docs-heading-anchor-permalink" href="#Example-2:-Volatility-Models" title="Permalink"></a></h2><p>This example estimates ARCH, GARCH, EGARCH, and GJR-GARCH models on the same data, compares their news impact curves, runs diagnostics, and forecasts volatility. See also <a href="../volatility/">Volatility Models</a> for theory and return value tables.</p><pre><code class="language-julia hljs">using MacroEconometricModels
+end</code></pre><p>The <code>auto_arima</code> function performs a grid search over (p,d,q) combinations, selecting the model that minimizes AIC. The CSS-MLE estimation method initializes parameters via conditional sum of squares (CSS), then refines via exact maximum likelihood using the Kalman filter. Forecast confidence intervals widen with the horizon, reflecting accumulating prediction uncertainty.</p><hr/><h2 id="Example-3:-Volatility-Models"><a class="docs-heading-anchor" href="#Example-3:-Volatility-Models">Example 3: Volatility Models</a><a id="Example-3:-Volatility-Models-1"></a><a class="docs-heading-anchor-permalink" href="#Example-3:-Volatility-Models" title="Permalink"></a></h2><p>This example estimates ARCH, GARCH, EGARCH, and GJR-GARCH models on the same data, compares their news impact curves, runs diagnostics, and forecasts volatility. See also <a href="../volatility/">Volatility Models</a> for theory and return value tables.</p><pre><code class="language-julia hljs">using MacroEconometricModels
 using Random
 using Statistics
 
@@ -143,249 +184,7 @@ println(&quot;  sigma_eta: &quot;, round(mean(sv.sigma_eta_post), digits=3))
 
 fc_sv = forecast(sv, H)
 println(&quot;\nSV forecast at h=1:  &quot;, round(fc_sv.forecast[1], digits=4))
-println(&quot;SV forecast at h=20: &quot;, round(fc_sv.forecast[end], digits=4))</code></pre><p>The GJR-GARCH model should provide the best fit (lowest AIC/BIC) since the data was generated from a GJR-GARCH DGP with a leverage effect. The news impact curves reveal the asymmetry: for EGARCH and GJR-GARCH, the variance response to <span>$\varepsilon = -2$</span> exceeds that for <span>$\varepsilon = +2$</span>; for symmetric GARCH, they are equal. All models&#39; standardized residuals should pass the ARCH-LM test after fitting, confirming that the variance dynamics are adequately captured.</p><hr/><h2 id="Example-8:-Unit-Root-Testing-and-Pre-Estimation-Analysis"><a class="docs-heading-anchor" href="#Example-8:-Unit-Root-Testing-and-Pre-Estimation-Analysis">Example 8: Unit Root Testing and Pre-Estimation Analysis</a><a id="Example-8:-Unit-Root-Testing-and-Pre-Estimation-Analysis-1"></a><a class="docs-heading-anchor-permalink" href="#Example-8:-Unit-Root-Testing-and-Pre-Estimation-Analysis" title="Permalink"></a></h2><p>This example demonstrates comprehensive unit root testing before fitting VAR models. Pre-estimation analysis is the first step in any empirical macro workflow. See <a href="../hypothesis_tests/">Hypothesis Tests</a> for theoretical background.</p><h3 id="Individual-Unit-Root-Tests"><a class="docs-heading-anchor" href="#Individual-Unit-Root-Tests">Individual Unit Root Tests</a><a id="Individual-Unit-Root-Tests-1"></a><a class="docs-heading-anchor-permalink" href="#Individual-Unit-Root-Tests" title="Permalink"></a></h3><pre><code class="language-julia hljs">using MacroEconometricModels
-using Random
-using Statistics
-
-Random.seed!(42)
-
-# Generate data: mix of I(0) and I(1) series
-T = 200
-y_stationary = randn(T)                      # I(0): stationary
-y_random_walk = cumsum(randn(T))             # I(1): unit root
-y_trend_stat = 0.1 .* (1:T) .+ randn(T)      # Trend stationary
-y_with_break = vcat(randn(100), randn(100) .+ 2)  # Structural break
-
-# === ADF Test ===
-println(&quot;=&quot;^60)
-println(&quot;ADF Test (H₀: unit root)&quot;)
-println(&quot;=&quot;^60)
-
-adf_stat = adf_test(y_stationary; lags=:aic, regression=:constant)
-println(&quot;\nStationary series:&quot;)
-println(&quot;  Statistic: &quot;, round(adf_stat.statistic, digits=3))
-println(&quot;  P-value: &quot;, round(adf_stat.pvalue, digits=4))
-println(&quot;  Lags: &quot;, adf_stat.lags)
-
-adf_rw = adf_test(y_random_walk; lags=:aic, regression=:constant)
-println(&quot;\nRandom walk:&quot;)
-println(&quot;  Statistic: &quot;, round(adf_rw.statistic, digits=3))
-println(&quot;  P-value: &quot;, round(adf_rw.pvalue, digits=4))</code></pre><p>The ADF test statistic is compared to non-standard critical values (Dickey-Fuller distribution, not Student-t). For the stationary series, the large negative test statistic yields a small p-value, rejecting the unit root null. For the random walk, the test statistic is close to zero, failing to reject. The number of augmenting lags selected by AIC controls for residual serial correlation.</p><h3 id="KPSS-Complementary-Test"><a class="docs-heading-anchor" href="#KPSS-Complementary-Test">KPSS Complementary Test</a><a id="KPSS-Complementary-Test-1"></a><a class="docs-heading-anchor-permalink" href="#KPSS-Complementary-Test" title="Permalink"></a></h3><pre><code class="language-julia hljs"># === KPSS Test ===
-println(&quot;\n&quot; * &quot;=&quot;^60)
-println(&quot;KPSS Test (H₀: stationarity)&quot;)
-println(&quot;=&quot;^60)
-
-kpss_stat = kpss_test(y_stationary; regression=:constant)
-println(&quot;\nStationary series:&quot;)
-println(&quot;  Statistic: &quot;, round(kpss_stat.statistic, digits=4))
-println(&quot;  P-value: &quot;, kpss_stat.pvalue &gt; 0.10 ? &quot;&gt;0.10&quot; : round(kpss_stat.pvalue, digits=4))
-println(&quot;  Bandwidth: &quot;, kpss_stat.bandwidth)
-
-kpss_rw = kpss_test(y_random_walk; regression=:constant)
-println(&quot;\nRandom walk:&quot;)
-println(&quot;  Statistic: &quot;, round(kpss_rw.statistic, digits=4))
-println(&quot;  P-value: &quot;, kpss_rw.pvalue &lt; 0.01 ? &quot;&lt;0.01&quot; : round(kpss_rw.pvalue, digits=4))</code></pre><h3 id="Combining-ADF-and-KPSS-for-Robust-Inference"><a class="docs-heading-anchor" href="#Combining-ADF-and-KPSS-for-Robust-Inference">Combining ADF and KPSS for Robust Inference</a><a id="Combining-ADF-and-KPSS-for-Robust-Inference-1"></a><a class="docs-heading-anchor-permalink" href="#Combining-ADF-and-KPSS-for-Robust-Inference" title="Permalink"></a></h3><pre><code class="language-julia hljs"># === Combined Analysis ===
-println(&quot;\n&quot; * &quot;=&quot;^60)
-println(&quot;Combined ADF + KPSS Analysis&quot;)
-println(&quot;=&quot;^60)
-
-function unit_root_decision(y; name=&quot;Series&quot;)
-    adf = adf_test(y; lags=:aic)
-    kpss = kpss_test(y)
-
-    adf_reject = adf.pvalue &lt; 0.05  # Reject unit root
-    kpss_reject = kpss.pvalue &lt; 0.05  # Reject stationarity
-
-    decision = if adf_reject &amp;&amp; !kpss_reject
-        &quot;I(0) - Stationary&quot;
-    elseif !adf_reject &amp;&amp; kpss_reject
-        &quot;I(1) - Unit root&quot;
-    elseif adf_reject &amp;&amp; kpss_reject
-        &quot;Conflicting (possible structural break)&quot;
-    else
-        &quot;Inconclusive&quot;
-    end
-
-    println(&quot;\n$name:&quot;)
-    println(&quot;  ADF p-value: &quot;, round(adf.pvalue, digits=4))
-    println(&quot;  KPSS p-value: &quot;, round(kpss.pvalue, digits=4))
-    println(&quot;  Decision: $decision&quot;)
-
-    return decision
-end
-
-unit_root_decision(y_stationary; name=&quot;Stationary series&quot;)
-unit_root_decision(y_random_walk; name=&quot;Random walk&quot;)
-unit_root_decision(y_trend_stat; name=&quot;Trend stationary&quot;)</code></pre><h3 id="Testing-for-Structural-Breaks"><a class="docs-heading-anchor" href="#Testing-for-Structural-Breaks">Testing for Structural Breaks</a><a id="Testing-for-Structural-Breaks-1"></a><a class="docs-heading-anchor-permalink" href="#Testing-for-Structural-Breaks" title="Permalink"></a></h3><pre><code class="language-julia hljs"># === Zivot-Andrews Test ===
-println(&quot;\n&quot; * &quot;=&quot;^60)
-println(&quot;Zivot-Andrews Test (H₀: unit root without break)&quot;)
-println(&quot;=&quot;^60)
-
-za_result = za_test(y_with_break; regression=:constant, trim=0.15)
-println(&quot;\nSeries with structural break:&quot;)
-println(&quot;  Minimum t-stat: &quot;, round(za_result.statistic, digits=3))
-println(&quot;  P-value: &quot;, round(za_result.pvalue, digits=4))
-println(&quot;  Break index: &quot;, za_result.break_index)
-println(&quot;  Break at: &quot;, round(za_result.break_fraction * 100, digits=1), &quot;% of sample&quot;)
-
-# Compare with standard ADF
-adf_break = adf_test(y_with_break)
-println(&quot;\n  ADF (ignoring break): p=&quot;, round(adf_break.pvalue, digits=4))
-println(&quot;  ZA (allowing break): p=&quot;, round(za_result.pvalue, digits=4))</code></pre><h3 id="Ng-Perron-Tests-for-Small-Samples"><a class="docs-heading-anchor" href="#Ng-Perron-Tests-for-Small-Samples">Ng-Perron Tests for Small Samples</a><a id="Ng-Perron-Tests-for-Small-Samples-1"></a><a class="docs-heading-anchor-permalink" href="#Ng-Perron-Tests-for-Small-Samples" title="Permalink"></a></h3><pre><code class="language-julia hljs"># === Ng-Perron Tests ===
-println(&quot;\n&quot; * &quot;=&quot;^60)
-println(&quot;Ng-Perron Tests (improved size properties)&quot;)
-println(&quot;=&quot;^60)
-
-# Generate smaller sample
-y_small = cumsum(randn(80))
-np_result = ngperron_test(y_small; regression=:constant)
-
-println(&quot;\nSmall sample (n=80):&quot;)
-println(&quot;  MZα: &quot;, round(np_result.MZa, digits=3),
-        &quot; (5% CV: &quot;, np_result.critical_values[:MZa][5], &quot;)&quot;)
-println(&quot;  MZt: &quot;, round(np_result.MZt, digits=3),
-        &quot; (5% CV: &quot;, np_result.critical_values[:MZt][5], &quot;)&quot;)
-println(&quot;  MSB: &quot;, round(np_result.MSB, digits=4),
-        &quot; (5% CV: &quot;, np_result.critical_values[:MSB][5], &quot;)&quot;)
-println(&quot;  MPT: &quot;, round(np_result.MPT, digits=3),
-        &quot; (5% CV: &quot;, np_result.critical_values[:MPT][5], &quot;)&quot;)</code></pre><h3 id="Johansen-Cointegration-Test"><a class="docs-heading-anchor" href="#Johansen-Cointegration-Test">Johansen Cointegration Test</a><a id="Johansen-Cointegration-Test-1"></a><a class="docs-heading-anchor-permalink" href="#Johansen-Cointegration-Test" title="Permalink"></a></h3><pre><code class="language-julia hljs"># === Johansen Cointegration Test ===
-println(&quot;\n&quot; * &quot;=&quot;^60)
-println(&quot;Johansen Cointegration Test&quot;)
-println(&quot;=&quot;^60)
-
-# Generate cointegrated system
-T_coint = 200
-u1, u2, u3 = cumsum(randn(T_coint)), cumsum(randn(T_coint)), randn(T_coint)
-Y_coint = hcat(
-    u1 + 0.1*randn(T_coint),           # I(1)
-    u1 + 0.5*u2 + 0.1*randn(T_coint),  # Cointegrated with first
-    u2 + 0.1*randn(T_coint)            # I(1)
-)
-
-johansen = johansen_test(Y_coint, 2; deterministic=:constant)
-
-println(&quot;\nCointegrated system (3 variables):&quot;)
-println(&quot;  Estimated rank: &quot;, johansen.rank)
-println(&quot;\n  Trace test:&quot;)
-for r in 0:2
-    stat = round(johansen.trace_stats[r+1], digits=2)
-    cv = round(johansen.critical_values_trace[r+1, 2], digits=2)
-    reject = stat &gt; cv ? &quot;Reject&quot; : &quot;Fail to reject&quot;
-    println(&quot;    H₀: r ≤ $r: stat=$stat, 5% CV=$cv → $reject&quot;)
-end
-
-println(&quot;\n  Eigenvalues: &quot;, round.(johansen.eigenvalues, digits=4))
-
-if johansen.rank &gt; 0
-    println(&quot;\n  Cointegrating vector(s):&quot;)
-    for i in 1:johansen.rank
-        println(&quot;    β$i: &quot;, round.(johansen.eigenvectors[:, i], digits=3))
-    end
-end</code></pre><p>The Johansen trace test sequentially tests hypotheses about the cointegration rank. When the trace statistic exceeds the critical value, we reject the null and move to the next rank. The estimated cointegrating vectors <span>$\beta$</span> represent long-run equilibrium relationships: deviations from <span>$\beta&#39; y_t$</span> are stationary even though the individual series are I(1). The adjustment coefficients <span>$\alpha$</span> govern how quickly variables correct back toward equilibrium.</p><h3 id="Testing-All-Variables-Before-VAR"><a class="docs-heading-anchor" href="#Testing-All-Variables-Before-VAR">Testing All Variables Before VAR</a><a id="Testing-All-Variables-Before-VAR-1"></a><a class="docs-heading-anchor-permalink" href="#Testing-All-Variables-Before-VAR" title="Permalink"></a></h3><pre><code class="language-julia hljs"># === Multi-Variable Pre-VAR Analysis ===
-println(&quot;\n&quot; * &quot;=&quot;^60)
-println(&quot;Pre-VAR Unit Root Analysis&quot;)
-println(&quot;=&quot;^60)
-
-# Typical macro dataset
-Y_macro = hcat(
-    cumsum(randn(T)),           # GDP (I(1))
-    0.8*cumsum(randn(T)[1:T]),  # Inflation (I(1))
-    cumsum(randn(T)),           # Interest rate (I(1))
-    randn(T)                    # Output gap (I(0))
-)
-var_names = [&quot;GDP&quot;, &quot;Inflation&quot;, &quot;Rate&quot;, &quot;Output Gap&quot;]
-
-# Test all variables
-results = test_all_variables(Y_macro; test=:adf)
-
-println(&quot;\nUnit root test results:&quot;)
-println(&quot;-&quot;^50)
-n_i1 = 0
-for (i, r) in enumerate(results)
-    status = r.pvalue &gt; 0.05 ? &quot;I(1)&quot; : &quot;I(0)&quot;
-    n_i1 += r.pvalue &gt; 0.05
-    println(&quot;  $(var_names[i]): p=$(round(r.pvalue, digits=3)) → $status&quot;)
-end
-
-println(&quot;\nSummary: $n_i1 of $(size(Y_macro, 2)) variables appear I(1)&quot;)
-
-# Recommendation
-if n_i1 == size(Y_macro, 2)
-    println(&quot;\nRecommendation: All variables I(1)&quot;)
-    println(&quot;  → Test for cointegration&quot;)
-    println(&quot;  → If cointegrated: use VECM&quot;)
-    println(&quot;  → If not: use VAR in first differences&quot;)
-elseif n_i1 == 0
-    println(&quot;\nRecommendation: All variables I(0)&quot;)
-    println(&quot;  → Use VAR in levels&quot;)
-else
-    println(&quot;\nRecommendation: Mixed I(0)/I(1)&quot;)
-    println(&quot;  → Consider ARDL bounds test&quot;)
-    println(&quot;  → Or difference I(1) variables&quot;)
-end</code></pre><h3 id="Complete-Pre-Estimation-Workflow"><a class="docs-heading-anchor" href="#Complete-Pre-Estimation-Workflow">Complete Pre-Estimation Workflow</a><a id="Complete-Pre-Estimation-Workflow-1"></a><a class="docs-heading-anchor-permalink" href="#Complete-Pre-Estimation-Workflow" title="Permalink"></a></h3><pre><code class="language-julia hljs"># === Complete Workflow ===
-println(&quot;\n&quot; * &quot;=&quot;^60)
-println(&quot;Complete Pre-Estimation Workflow&quot;)
-println(&quot;=&quot;^60)
-
-function pre_estimation_analysis(Y; var_names=nothing, α=0.05)
-    T, n = size(Y)
-    var_names = isnothing(var_names) ? [&quot;Var$i&quot; for i in 1:n] : var_names
-
-    println(&quot;\n1. Individual Unit Root Tests&quot;)
-    println(&quot;-&quot;^40)
-
-    integration_orders = zeros(Int, n)
-    for i in 1:n
-        adf = adf_test(Y[:, i]; lags=:aic)
-        kpss = kpss_test(Y[:, i])
-
-        if adf.pvalue &lt; α &amp;&amp; kpss.pvalue &gt; α
-            integration_orders[i] = 0
-            status = &quot;I(0)&quot;
-        elseif adf.pvalue &gt; α &amp;&amp; kpss.pvalue &lt; α
-            integration_orders[i] = 1
-            status = &quot;I(1)&quot;
-        else
-            integration_orders[i] = -1  # Inconclusive
-            status = &quot;Inconclusive&quot;
-        end
-        println(&quot;  $(var_names[i]): $status (ADF p=$(round(adf.pvalue, digits=3)), KPSS p=$(round(kpss.pvalue, digits=3)))&quot;)
-    end
-
-    n_i1 = sum(integration_orders .== 1)
-    n_i0 = sum(integration_orders .== 0)
-
-    println(&quot;\n2. Summary&quot;)
-    println(&quot;-&quot;^40)
-    println(&quot;  I(0) variables: $n_i0&quot;)
-    println(&quot;  I(1) variables: $n_i1&quot;)
-    println(&quot;  Inconclusive: $(n - n_i0 - n_i1)&quot;)
-
-    # Cointegration test if all I(1)
-    if n_i1 &gt;= 2
-        println(&quot;\n3. Cointegration Test&quot;)
-        println(&quot;-&quot;^40)
-        joh = johansen_test(Y, 2)
-        println(&quot;  Estimated cointegration rank: &quot;, joh.rank)
-
-        if joh.rank &gt; 0
-            println(&quot;  → Cointegration detected&quot;)
-            println(&quot;  → Recommendation: VECM with rank=$(joh.rank)&quot;)
-        else
-            println(&quot;  → No cointegration&quot;)
-            println(&quot;  → Recommendation: VAR in first differences&quot;)
-        end
-    elseif n_i0 == n
-        println(&quot;\n3. Recommendation&quot;)
-        println(&quot;-&quot;^40)
-        println(&quot;  All series stationary → VAR in levels&quot;)
-    end
-
-    return (integration_orders=integration_orders, n_i0=n_i0, n_i1=n_i1)
-end
-
-# Run complete analysis
-result = pre_estimation_analysis(Y_macro; var_names=var_names)</code></pre><hr/><h2 id="Example-3:-Three-Variable-VAR-Analysis"><a class="docs-heading-anchor" href="#Example-3:-Three-Variable-VAR-Analysis">Example 3: Three-Variable VAR Analysis</a><a id="Example-3:-Three-Variable-VAR-Analysis-1"></a><a class="docs-heading-anchor-permalink" href="#Example-3:-Three-Variable-VAR-Analysis" title="Permalink"></a></h2><p>This example walks through a complete analysis of a macroeconomic VAR with GDP growth, inflation, and the federal funds rate.</p><h3 id="Setup-and-Data-Generation"><a class="docs-heading-anchor" href="#Setup-and-Data-Generation">Setup and Data Generation</a><a id="Setup-and-Data-Generation-1"></a><a class="docs-heading-anchor-permalink" href="#Setup-and-Data-Generation" title="Permalink"></a></h3><pre><code class="language-julia hljs">using MacroEconometricModels
+println(&quot;SV forecast at h=20: &quot;, round(fc_sv.forecast[end], digits=4))</code></pre><p>The GJR-GARCH model should provide the best fit (lowest AIC/BIC) since the data was generated from a GJR-GARCH DGP with a leverage effect. The news impact curves reveal the asymmetry: for EGARCH and GJR-GARCH, the variance response to <span>$\varepsilon = -2$</span> exceeds that for <span>$\varepsilon = +2$</span>; for symmetric GARCH, they are equal. All models&#39; standardized residuals should pass the ARCH-LM test after fitting, confirming that the variance dynamics are adequately captured.</p><hr/><h2 id="Example-4:-Three-Variable-VAR-Analysis"><a class="docs-heading-anchor" href="#Example-4:-Three-Variable-VAR-Analysis">Example 4: Three-Variable VAR Analysis</a><a id="Example-4:-Three-Variable-VAR-Analysis-1"></a><a class="docs-heading-anchor-permalink" href="#Example-4:-Three-Variable-VAR-Analysis" title="Permalink"></a></h2><p>This example walks through a complete analysis of a macroeconomic VAR with GDP growth, inflation, and the federal funds rate.</p><h3 id="Setup-and-Data-Generation"><a class="docs-heading-anchor" href="#Setup-and-Data-Generation">Setup and Data Generation</a><a id="Setup-and-Data-Generation-1"></a><a class="docs-heading-anchor-permalink" href="#Setup-and-Data-Generation" title="Permalink"></a></h3><pre><code class="language-julia hljs">using MacroEconometricModels
 using Random
 using LinearAlgebra
 using Statistics
@@ -418,7 +217,7 @@ end
 
 var_names = [&quot;GDP Growth&quot;, &quot;Inflation&quot;, &quot;Fed Funds Rate&quot;]
 println(&quot;Data: T=$T observations, n=$n variables&quot;)</code></pre><h3 id="Frequentist-VAR-Estimation"><a class="docs-heading-anchor" href="#Frequentist-VAR-Estimation">Frequentist VAR Estimation</a><a id="Frequentist-VAR-Estimation-1"></a><a class="docs-heading-anchor-permalink" href="#Frequentist-VAR-Estimation" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Estimate VAR(2) model via OLS
-model = fit(VARModel, Y, p)
+model = estimate_var(Y, p)
 
 # Model diagnostics
 println(&quot;Log-likelihood: &quot;, loglikelihood(model))
@@ -468,194 +267,7 @@ for h in [1, 4, 20]
             println(&quot;    Shock $j: $pct%&quot;)
         end
     end
-end</code></pre><p>The FEVD shows the proportion of each variable&#39;s forecast error variance attributable to each structural shock. At short horizons, own shocks typically dominate. As the horizon increases, cross-variable transmission becomes more important, and the FEVD converges to the unconditional variance decomposition. If shock 1 explains a large share of GDP variance at long horizons, it is the primary driver of GDP fluctuations in the model.</p><h3 id="Granger-Causality"><a class="docs-heading-anchor" href="#Granger-Causality">Granger Causality</a><a id="Granger-Causality-1"></a><a class="docs-heading-anchor-permalink" href="#Granger-Causality" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Pairwise: does GDP Granger-cause Inflation?
-g = granger_test(model, 1, 2)
-println(&quot;GDP → Inflation: Wald = &quot;, round(g.statistic, digits=2),
-        &quot;, p = &quot;, round(g.pvalue, digits=4))
-
-# Block: do GDP and Inflation jointly Granger-cause the Fed Funds Rate?
-g_block = granger_test(model, [1, 2], 3)
-println(&quot;[GDP, Inflation] → Rate: Wald = &quot;, round(g_block.statistic, digits=2),
-        &quot;, p = &quot;, round(g_block.pvalue, digits=4))
-
-# Full causality table
-results = granger_test_all(model)</code></pre><p>The Granger causality test examines whether lagged values of one variable help predict another. A significant result (low p-value) indicates that past values of the cause variable contain predictive information for the effect variable beyond what is captured by the effect variable&#39;s own lags and those of other variables. The block test extends this to groups of variables, testing their joint predictive power.</p><hr/><h2 id="Example-7:-Non-Gaussian-Identification"><a class="docs-heading-anchor" href="#Example-7:-Non-Gaussian-Identification">Example 7: Non-Gaussian Identification</a><a id="Example-7:-Non-Gaussian-Identification-1"></a><a class="docs-heading-anchor-permalink" href="#Example-7:-Non-Gaussian-Identification" title="Permalink"></a></h2><p>When structural shocks are non-Gaussian, statistical independence provides identification without imposing economic restrictions like recursive ordering or sign constraints. This example demonstrates the full non-Gaussian identification workflow: testing for non-Gaussianity, ICA-based and ML-based identification, and post-estimation specification tests.</p><h3 id="Setup:-Generate-Non-Gaussian-Data"><a class="docs-heading-anchor" href="#Setup:-Generate-Non-Gaussian-Data">Setup: Generate Non-Gaussian Data</a><a id="Setup:-Generate-Non-Gaussian-Data-1"></a><a class="docs-heading-anchor-permalink" href="#Setup:-Generate-Non-Gaussian-Data" title="Permalink"></a></h3><pre><code class="language-julia hljs">using MacroEconometricModels
-using Random
-using LinearAlgebra
-using Statistics
-
-Random.seed!(42)
-
-# True structural parameters
-T = 500
-n = 3
-
-# True B₀ (structural impact matrix)
-B0_true = [1.0  0.0  0.0;
-           0.5  1.0  0.0;
-           0.3 -0.2  1.0]
-
-# Non-Gaussian structural shocks (Student-t with 5 df)
-# Heavy tails provide the non-Gaussianity needed for identification
-eps = zeros(T, n)
-for j in 1:n
-    # Standardized t(5): mean 0, variance 1
-    raw = randn(T) ./ sqrt.(rand(Chisq(5), T) ./ 5)
-    eps[:, j] = raw ./ std(raw)
-end
-
-# True VAR(1) dynamics
-A_true = [0.7 0.1 0.0;
-          0.0 0.6 0.1;
-          0.0 0.0 0.5]
-
-# Generate reduced-form data: u_t = B₀ ε_t
-Y = zeros(T, n)
-Y[1, :] = B0_true * eps[1, :]
-for t in 2:T
-    Y[t, :] = A_true * Y[t-1, :] + B0_true * eps[t, :]
-end
-
-println(&quot;Data: T=$T, n=$n (non-Gaussian DGP with t(5) shocks)&quot;)</code></pre><h3 id="Step-1:-Test-for-Non-Gaussianity"><a class="docs-heading-anchor" href="#Step-1:-Test-for-Non-Gaussianity">Step 1: Test for Non-Gaussianity</a><a id="Step-1:-Test-for-Non-Gaussianity-1"></a><a class="docs-heading-anchor-permalink" href="#Step-1:-Test-for-Non-Gaussianity" title="Permalink"></a></h3><p>Before using non-Gaussian identification, verify that residuals are indeed non-Gaussian:</p><pre><code class="language-julia hljs"># Estimate VAR
-model = estimate_var(Y, 1)
-
-# Run the full normality test suite
-suite = normality_test_suite(model)
-
-println(&quot;Multivariate Normality Tests (H₀: residuals are Gaussian)&quot;)
-println(&quot;=&quot;^55)
-for r in suite.results
-    stars = r.pvalue &lt; 0.01 ? &quot;***&quot; : r.pvalue &lt; 0.05 ? &quot;**&quot; : r.pvalue &lt; 0.10 ? &quot;*&quot; : &quot;&quot;
-    println(&quot;  $(r.test_name): stat=$(round(r.statistic, digits=2)), p=$(round(r.pvalue, digits=4)) $stars&quot;)
-end</code></pre><p>All four tests (Jarque-Bera, Mardia, Doornik-Hansen, Henze-Zirkler) should reject normality when the true shocks are t-distributed. If normality is not rejected, non-Gaussian identification may lack power and Cholesky or sign restrictions should be preferred.</p><p>You can also run individual tests:</p><pre><code class="language-julia hljs"># Individual tests
-jb = jarque_bera_test(model)
-mardia = mardia_test(model; type=:both)
-dh = doornik_hansen_test(model)
-hz = henze_zirkler_test(model)
-
-println(&quot;\nDetailed Mardia test:&quot;)
-println(&quot;  Skewness stat: &quot;, round(mardia.statistic, digits=2))
-println(&quot;  P-value: &quot;, round(mardia.pvalue, digits=4))</code></pre><h3 id="Step-2:-ICA-Based-Identification"><a class="docs-heading-anchor" href="#Step-2:-ICA-Based-Identification">Step 2: ICA-Based Identification</a><a id="Step-2:-ICA-Based-Identification-1"></a><a class="docs-heading-anchor-permalink" href="#Step-2:-ICA-Based-Identification" title="Permalink"></a></h3><p>ICA (Independent Component Analysis) recovers structurally independent shocks by maximizing statistical independence:</p><pre><code class="language-julia hljs"># FastICA identification (default: logcosh contrast)
-ica_result = identify_fastica(model; contrast=:logcosh, approach=:deflation)
-
-println(&quot;\nFastICA Identification&quot;)
-println(&quot;=&quot;^40)
-println(&quot;  Converged: &quot;, ica_result.converged)
-println(&quot;  Iterations: &quot;, ica_result.iterations)
-println(&quot;  Objective: &quot;, round(ica_result.objective, digits=6))
-
-# Structural impact matrix B₀
-println(&quot;\nEstimated B₀ (structural impact matrix):&quot;)
-for i in 1:n
-    println(&quot;  &quot;, [round(ica_result.B0[i, j], digits=3) for j in 1:n])
-end</code></pre><p>Compare different ICA algorithms:</p><pre><code class="language-julia hljs"># JADE (Joint Approximate Diagonalization of Eigenmatrices)
-jade_result = identify_jade(model)
-
-# SOBI (Second-Order Blind Identification — exploits temporal structure)
-sobi_result = identify_sobi(model; lags=1:12)
-
-# Distance-covariance ICA
-dcov_result = identify_dcov(model)
-
-println(&quot;\nComparison of ICA methods:&quot;)
-println(&quot;  FastICA converged: &quot;, ica_result.converged, &quot; (iter: &quot;, ica_result.iterations, &quot;)&quot;)
-println(&quot;  JADE converged:    &quot;, jade_result.converged, &quot; (iter: &quot;, jade_result.iterations, &quot;)&quot;)
-println(&quot;  SOBI converged:    &quot;, sobi_result.converged, &quot; (iter: &quot;, sobi_result.iterations, &quot;)&quot;)
-println(&quot;  dCov converged:    &quot;, dcov_result.converged, &quot; (iter: &quot;, dcov_result.iterations, &quot;)&quot;)</code></pre><p>FastICA is the fastest and most commonly used, but JADE is more robust when multiple shocks have similar kurtosis. SOBI exploits temporal dependence and works even with mildly non-Gaussian shocks.</p><h3 id="Step-3:-Compute-IRFs-with-ICA-Identification"><a class="docs-heading-anchor" href="#Step-3:-Compute-IRFs-with-ICA-Identification">Step 3: Compute IRFs with ICA Identification</a><a id="Step-3:-Compute-IRFs-with-ICA-Identification-1"></a><a class="docs-heading-anchor-permalink" href="#Step-3:-Compute-IRFs-with-ICA-Identification" title="Permalink"></a></h3><p>The rotation matrix <code>Q</code> from ICA integrates directly with the standard <code>irf()</code> and <code>fevd()</code> functions:</p><pre><code class="language-julia hljs"># IRF using FastICA-identified structure
-irfs_ica = irf(model, 20; method=:fastica)
-
-println(&quot;\nFastICA-identified IRF (shock 1 → all variables):&quot;)
-for h in [0, 4, 8, 12, 20]
-    vals = [round(irfs_ica.irf[h+1, v, 1], digits=3) for v in 1:n]
-    println(&quot;  h=$h: &quot;, vals)
-end
-
-# FEVD using ICA identification
-fevd_ica = fevd(model, 20; method=:fastica)
-
-println(&quot;\nFEVD at h=20 (ICA-identified):&quot;)
-for v in 1:n
-    shares = [round(fevd_ica.fevd[21, v, s] * 100, digits=1) for s in 1:n]
-    println(&quot;  Variable $v: &quot;, shares, &quot;%&quot;)
-end</code></pre><p>Unlike Cholesky identification, the ICA-based IRFs do not depend on variable ordering. The same data produces the same structural shocks regardless of how the columns of <span>$Y$</span> are arranged.</p><h3 id="Step-4:-ML-Based-Identification"><a class="docs-heading-anchor" href="#Step-4:-ML-Based-Identification">Step 4: ML-Based Identification</a><a id="Step-4:-ML-Based-Identification-1"></a><a class="docs-heading-anchor-permalink" href="#Step-4:-ML-Based-Identification" title="Permalink"></a></h3><p>Maximum likelihood methods parameterize the shock distribution and jointly estimate <span>$B_0$</span> and the distributional parameters:</p><pre><code class="language-julia hljs"># Student-t ML identification
-ml_t = identify_student_t(model)
-
-println(&quot;\nStudent-t ML Identification&quot;)
-println(&quot;=&quot;^40)
-println(&quot;  Converged: &quot;, ml_t.converged)
-println(&quot;  Log-likelihood (non-Gaussian): &quot;, round(ml_t.loglik, digits=2))
-println(&quot;  Log-likelihood (Gaussian):     &quot;, round(ml_t.loglik_gaussian, digits=2))
-println(&quot;  AIC: &quot;, round(ml_t.aic, digits=2))
-println(&quot;  BIC: &quot;, round(ml_t.bic, digits=2))
-
-# Estimated degrees of freedom for each shock
-if haskey(ml_t.dist_params, :nu)
-    println(&quot;  Estimated ν (df): &quot;, round.(ml_t.dist_params[:nu], digits=2))
-end
-
-# Standard errors for B₀ elements
-println(&quot;\nB₀ standard errors:&quot;)
-for i in 1:n
-    println(&quot;  &quot;, [round(ml_t.se[i, j], digits=4) for j in 1:n])
-end</code></pre><p>The Student-t ML approach provides standard errors for <span>$B_0$</span> elements, unlike ICA which only gives point estimates. Compare with other distributional assumptions:</p><pre><code class="language-julia hljs"># Mixture of normals
-ml_mix = identify_mixture_normal(model; n_components=2)
-
-# Pseudo-maximum likelihood (robust, no distributional assumption)
-ml_pml = identify_pml(model)
-
-# Unified interface — select distribution via keyword
-ml_auto = identify_nongaussian_ml(model; distribution=:student_t)
-
-println(&quot;\nML method comparison (AIC):&quot;)
-println(&quot;  Student-t:      AIC = &quot;, round(ml_t.aic, digits=2))
-println(&quot;  Mixture normal: AIC = &quot;, round(ml_mix.aic, digits=2))
-println(&quot;  PML:            AIC = &quot;, round(ml_pml.aic, digits=2))</code></pre><p>Lower AIC indicates a better distributional fit. The PML estimator is semiparametrically efficient and does not require specifying the shock distribution.</p><h3 id="Step-5:-Heteroskedasticity-Based-Identification"><a class="docs-heading-anchor" href="#Step-5:-Heteroskedasticity-Based-Identification">Step 5: Heteroskedasticity-Based Identification</a><a id="Step-5:-Heteroskedasticity-Based-Identification-1"></a><a class="docs-heading-anchor-permalink" href="#Step-5:-Heteroskedasticity-Based-Identification" title="Permalink"></a></h3><p>When shocks exhibit time-varying volatility, changes in the covariance structure can identify the structural model:</p><pre><code class="language-julia hljs"># External volatility regimes (e.g., pre/post Great Moderation)
-regime = vcat(ones(Int, 250), 2 * ones(Int, 250))  # Two regimes
-vol_result = identify_external_volatility(model, regime; regimes=2)
-
-println(&quot;\nExternal Volatility Identification&quot;)
-println(&quot;=&quot;^40)
-println(&quot;  Regime 1 shock variances: &quot;,
-        [round(vol_result.Lambda_vecs[1][j], digits=3) for j in 1:n])
-println(&quot;  Regime 2 shock variances: &quot;,
-        [round(vol_result.Lambda_vecs[2][j], digits=3) for j in 1:n])</code></pre><h3 id="Step-6:-Post-Estimation-Specification-Tests"><a class="docs-heading-anchor" href="#Step-6:-Post-Estimation-Specification-Tests">Step 6: Post-Estimation Specification Tests</a><a id="Step-6:-Post-Estimation-Specification-Tests-1"></a><a class="docs-heading-anchor-permalink" href="#Step-6:-Post-Estimation-Specification-Tests" title="Permalink"></a></h3><p>Verify that the identification assumptions hold:</p><pre><code class="language-julia hljs"># Test 1: Are recovered shocks non-Gaussian?
-gauss_test = test_shock_gaussianity(ica_result)
-println(&quot;\nShock Gaussianity Test (H₀: shocks are Gaussian)&quot;)
-println(&quot;  Statistic: &quot;, round(gauss_test.statistic, digits=2))
-println(&quot;  P-value: &quot;, round(gauss_test.pvalue, digits=4))
-println(&quot;  Non-Gaussian: &quot;, gauss_test.identified)
-
-# Test 2: Are recovered shocks independent?
-indep_test = test_shock_independence(ica_result; max_lag=10)
-println(&quot;\nShock Independence Test (H₀: shocks are independent)&quot;)
-println(&quot;  Statistic: &quot;, round(indep_test.statistic, digits=2))
-println(&quot;  P-value: &quot;, round(indep_test.pvalue, digits=4))
-println(&quot;  Independent: &quot;, indep_test.identified)
-
-# Test 3: Identification strength (bootstrap)
-strength_test = test_identification_strength(model; method=:fastica, n_bootstrap=499)
-println(&quot;\nIdentification Strength Test&quot;)
-println(&quot;  Statistic: &quot;, round(strength_test.statistic, digits=4))
-println(&quot;  P-value: &quot;, round(strength_test.pvalue, digits=4))
-println(&quot;  Strongly identified: &quot;, strength_test.identified)
-
-# Test 4: Gaussian vs non-Gaussian likelihood ratio
-lr_test = test_gaussian_vs_nongaussian(model; method=:fastica, n_bootstrap=499)
-println(&quot;\nLR Test: Gaussian vs Non-Gaussian&quot;)
-println(&quot;  LR statistic: &quot;, round(lr_test.statistic, digits=2))
-println(&quot;  P-value: &quot;, round(lr_test.pvalue, digits=4))</code></pre><p>A valid non-Gaussian SVAR requires: (1) rejection of shock Gaussianity (non-Gaussian shocks are needed for identification), (2) failure to reject shock independence (the identified shocks should be independent), and (3) strong identification (the structural parameters are precisely estimated). If the Gaussianity test fails to reject, the data may not contain enough non-Gaussianity to identify the model, and traditional Cholesky or sign restrictions should be used instead.</p><h3 id="Comparing-Cholesky-vs-ICA-Identification"><a class="docs-heading-anchor" href="#Comparing-Cholesky-vs-ICA-Identification">Comparing Cholesky vs ICA Identification</a><a id="Comparing-Cholesky-vs-ICA-Identification-1"></a><a class="docs-heading-anchor-permalink" href="#Comparing-Cholesky-vs-ICA-Identification" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Cholesky IRF (ordering-dependent)
-irfs_chol = irf(model, 20; method=:cholesky)
-
-# ICA IRF (ordering-independent)
-irfs_ica = irf(model, 20; method=:fastica)
-
-println(&quot;\nCholesky vs FastICA IRF comparison (shock 1 → variable 1):&quot;)
-println(&quot;  h   Cholesky   FastICA&quot;)
-for h in [0, 4, 8, 12, 20]
-    chol_val = round(irfs_chol.irf[h+1, 1, 1], digits=3)
-    ica_val = round(irfs_ica.irf[h+1, 1, 1], digits=3)
-    println(&quot;  $h    $chol_val      $ica_val&quot;)
-end</code></pre><p>When the true DGP is recursive (lower-triangular <span>$B_0$</span>), Cholesky and ICA should yield similar IRFs. Large discrepancies suggest that the recursive assumption may be misspecified, and the data-driven ICA identification should be preferred.</p><hr/><h2 id="Example-6:-Bayesian-VAR-with-Minnesota-Prior"><a class="docs-heading-anchor" href="#Example-6:-Bayesian-VAR-with-Minnesota-Prior">Example 6: Bayesian VAR with Minnesota Prior</a><a id="Example-6:-Bayesian-VAR-with-Minnesota-Prior-1"></a><a class="docs-heading-anchor-permalink" href="#Example-6:-Bayesian-VAR-with-Minnesota-Prior" title="Permalink"></a></h2><p>This example demonstrates Bayesian estimation with automatic hyperparameter optimization.</p><h3 id="Hyperparameter-Optimization"><a class="docs-heading-anchor" href="#Hyperparameter-Optimization">Hyperparameter Optimization</a><a id="Hyperparameter-Optimization-1"></a><a class="docs-heading-anchor-permalink" href="#Hyperparameter-Optimization" title="Permalink"></a></h3><pre><code class="language-julia hljs">using MacroEconometricModels
+end</code></pre><p>The FEVD shows the proportion of each variable&#39;s forecast error variance attributable to each structural shock. At short horizons, own shocks typically dominate. As the horizon increases, cross-variable transmission becomes more important, and the FEVD converges to the unconditional variance decomposition. If shock 1 explains a large share of GDP variance at long horizons, it is the primary driver of GDP fluctuations in the model.</p><hr/><h2 id="Example-5:-Bayesian-VAR-with-Minnesota-Prior"><a class="docs-heading-anchor" href="#Example-5:-Bayesian-VAR-with-Minnesota-Prior">Example 5: Bayesian VAR with Minnesota Prior</a><a id="Example-5:-Bayesian-VAR-with-Minnesota-Prior-1"></a><a class="docs-heading-anchor-permalink" href="#Example-5:-Bayesian-VAR-with-Minnesota-Prior" title="Permalink"></a></h2><p>This example demonstrates Bayesian estimation with automatic hyperparameter optimization.</p><h3 id="Hyperparameter-Optimization"><a class="docs-heading-anchor" href="#Hyperparameter-Optimization">Hyperparameter Optimization</a><a id="Hyperparameter-Optimization-1"></a><a class="docs-heading-anchor-permalink" href="#Hyperparameter-Optimization" title="Permalink"></a></h3><pre><code class="language-julia hljs">using MacroEconometricModels
 
 # Find optimal shrinkage using marginal likelihood (Giannone et al. 2015)
 println(&quot;Optimizing hyperparameters...&quot;)
@@ -700,7 +312,66 @@ for h in [0, 4, 8, 12]
     lo = round(birf_sign.quantiles[h+1, 1, 1, 1], digits=3)
     hi = round(birf_sign.quantiles[h+1, 1, 1, 3], digits=3)
     println(&quot;  h=$h: $med [$lo, $hi]&quot;)
-end</code></pre><hr/><h2 id="Example-4:-Local-Projections"><a class="docs-heading-anchor" href="#Example-4:-Local-Projections">Example 4: Local Projections</a><a id="Example-4:-Local-Projections-1"></a><a class="docs-heading-anchor-permalink" href="#Example-4:-Local-Projections" title="Permalink"></a></h2><p>This example demonstrates various LP methods for estimating impulse responses.</p><h3 id="Standard-Local-Projection"><a class="docs-heading-anchor" href="#Standard-Local-Projection">Standard Local Projection</a><a id="Standard-Local-Projection-1"></a><a class="docs-heading-anchor-permalink" href="#Standard-Local-Projection" title="Permalink"></a></h3><pre><code class="language-julia hljs">using MacroEconometricModels
+end</code></pre><hr/><h2 id="Example-6:-VECM-Analysis"><a class="docs-heading-anchor" href="#Example-6:-VECM-Analysis">Example 6: VECM Analysis</a><a id="Example-6:-VECM-Analysis-1"></a><a class="docs-heading-anchor-permalink" href="#Example-6:-VECM-Analysis" title="Permalink"></a></h2><p>This example demonstrates Vector Error Correction Model (VECM) estimation for cointegrated systems: testing for cointegration rank, estimating the VECM, computing impulse responses via VAR conversion, forecasting, and Granger causality decomposition. See <a href="../vecm/">VECM</a> for theory and return value tables.</p><pre><code class="language-julia hljs">using MacroEconometricModels, Random
+
+Random.seed!(42)
+
+# === Generate cointegrated data ===
+# Two linked variables (sharing a common stochastic trend) + one independent
+T_obs = 200
+Y = cumsum(randn(T_obs, 3), dims=1)
+Y[:, 2] = Y[:, 1] + 0.1 * randn(T_obs)  # Y2 cointegrated with Y1
+
+println(&quot;Data: T=$T_obs, n=3 (Y1 and Y2 cointegrated, Y3 independent)&quot;)
+
+# === Step 1: Test for cointegration ===
+joh = johansen_test(Y, 2)
+println(&quot;\nJohansen test:&quot;)
+println(&quot;  Estimated cointegration rank: &quot;, joh.rank)
+for r in 0:2
+    stat = round(joh.trace_stats[r+1], digits=2)
+    cv = round(joh.critical_values_trace[r+1, 2], digits=2)
+    reject = stat &gt; cv ? &quot;Reject&quot; : &quot;Fail to reject&quot;
+    println(&quot;  H₀: r ≤ $r: stat=$stat, 5% CV=$cv → $reject&quot;)
+end
+
+# === Step 2: Estimate VECM with automatic rank ===
+vecm = estimate_vecm(Y, 2)
+report(vecm)
+
+# === Step 3: Examine cointegrating vectors and adjustment speeds ===
+println(&quot;\nβ (cointegrating vectors):&quot;)
+println(vecm.beta)
+println(&quot;α (adjustment speeds):&quot;)
+println(vecm.alpha)
+
+# === Step 4: Impulse responses via VAR conversion ===
+irfs = irf(vecm, 20; method=:cholesky)
+
+println(&quot;\nIRF of shock 1 → variable 1:&quot;)
+for h in [0, 4, 8, 12, 20]
+    println(&quot;  h=$h: &quot;, round(irfs.irf[h+1, 1, 1], digits=3))
+end
+
+# === Step 5: Forecast with bootstrap CIs ===
+fc = forecast(vecm, 10; ci_method=:bootstrap, reps=200)
+
+println(&quot;\nVECM forecast (variable 1):&quot;)
+for h in [1, 5, 10]
+    println(&quot;  h=$h: &quot;, round(fc.forecast[h, 1], digits=3))
+end
+
+# === Step 6: Granger causality (short-run, long-run, strong) ===
+println(&quot;\nGranger causality (VECM decomposition):&quot;)
+for i in 1:3, j in 1:3
+    i == j &amp;&amp; continue
+    g = granger_causality_vecm(vecm, i, j)
+    println(&quot;  Var $i → Var $j: p=$(round(g.strong_pvalue, digits=4))&quot;)
+end
+
+# === Step 7: Convert to VAR for FEVD ===
+var_model = to_var(vecm)
+decomp = fevd(var_model, 20)</code></pre><p><strong>Interpretation.</strong> The cointegrating vector <span>$\beta$</span> identifies the long-run equilibrium. If <span>$\beta \approx [1, -1, 0]&#39;$</span>, this implies <span>$y_{1,t} - y_{2,t}$</span> is stationary –- variables 1 and 2 share a common stochastic trend. The adjustment coefficients <span>$\alpha$</span> show how each variable responds when the system deviates from equilibrium. A significant <span>$\alpha_i$</span> indicates that variable <span>$i$</span> adjusts to restore the long-run relationship. The VECM-specific Granger causality decomposes predictive power into short-run (lagged differences) and long-run (error correction) channels.</p><hr/><h2 id="Example-7:-Local-Projections"><a class="docs-heading-anchor" href="#Example-7:-Local-Projections">Example 7: Local Projections</a><a id="Example-7:-Local-Projections-1"></a><a class="docs-heading-anchor-permalink" href="#Example-7:-Local-Projections" title="Permalink"></a></h2><p>This example demonstrates various LP methods for estimating impulse responses.</p><h3 id="Standard-Local-Projection"><a class="docs-heading-anchor" href="#Standard-Local-Projection">Standard Local Projection</a><a id="Standard-Local-Projection-1"></a><a class="docs-heading-anchor-permalink" href="#Standard-Local-Projection" title="Permalink"></a></h3><pre><code class="language-julia hljs">using MacroEconometricModels
 
 # Estimate LP-IRF with Newey-West standard errors
 H = 20
@@ -793,7 +464,7 @@ end
 diff_test = test_regime_difference(state_model)
 println(&quot;\nJoint test for regime differences:&quot;)
 println(&quot;  Average |t|: &quot;, round(diff_test.joint_test.avg_t_stat, digits=2))
-println(&quot;  p-value: &quot;, round(diff_test.joint_test.p_value, digits=4))</code></pre><hr/><h2 id="Example-5:-Factor-Model-for-Large-Panels"><a class="docs-heading-anchor" href="#Example-5:-Factor-Model-for-Large-Panels">Example 5: Factor Model for Large Panels</a><a id="Example-5:-Factor-Model-for-Large-Panels-1"></a><a class="docs-heading-anchor-permalink" href="#Example-5:-Factor-Model-for-Large-Panels" title="Permalink"></a></h2><p>This example demonstrates factor extraction and selection from a large macroeconomic panel.</p><h3 id="Simulate-Large-Panel-Data"><a class="docs-heading-anchor" href="#Simulate-Large-Panel-Data">Simulate Large Panel Data</a><a id="Simulate-Large-Panel-Data-1"></a><a class="docs-heading-anchor-permalink" href="#Simulate-Large-Panel-Data" title="Permalink"></a></h3><pre><code class="language-julia hljs">using MacroEconometricModels
+println(&quot;  p-value: &quot;, round(diff_test.joint_test.p_value, digits=4))</code></pre><hr/><h2 id="Example-8:-Factor-Model-for-Large-Panels"><a class="docs-heading-anchor" href="#Example-8:-Factor-Model-for-Large-Panels">Example 8: Factor Model for Large Panels</a><a id="Example-8:-Factor-Model-for-Large-Panels-1"></a><a class="docs-heading-anchor-permalink" href="#Example-8:-Factor-Model-for-Large-Panels" title="Permalink"></a></h2><p>This example demonstrates factor extraction and selection from a large macroeconomic panel.</p><h3 id="Simulate-Large-Panel-Data"><a class="docs-heading-anchor" href="#Simulate-Large-Panel-Data">Simulate Large Panel Data</a><a id="Simulate-Large-Panel-Data-1"></a><a class="docs-heading-anchor-permalink" href="#Simulate-Large-Panel-Data" title="Permalink"></a></h3><pre><code class="language-julia hljs">using MacroEconometricModels
 using Random
 using Statistics
 
@@ -969,7 +640,458 @@ println(&quot;\nHansen J-test:&quot;)
 println(&quot;  J-statistic: &quot;, round(j_result.J_stat, digits=4))
 println(&quot;  Degrees of freedom: &quot;, j_result.df)
 println(&quot;  p-value: &quot;, round(j_result.p_value, digits=4))
-println(&quot;  Reject at 5%: &quot;, j_result.reject_05)</code></pre><p>The GMM estimates should be close to the true values <span>$\beta = [1.0, 2.0]$</span> when instruments are valid and strong. The standard errors from two-step efficient GMM are asymptotically optimal. The Hansen J-test evaluates whether the moment conditions are jointly satisfied: a large p-value (failing to reject) indicates that the instruments are valid and the model is correctly specified. Rejection suggests either invalid instruments or model misspecification.</p><hr/><h2 id="Example-10:-Complete-Workflow"><a class="docs-heading-anchor" href="#Example-10:-Complete-Workflow">Example 10: Complete Workflow</a><a id="Example-10:-Complete-Workflow-1"></a><a class="docs-heading-anchor-permalink" href="#Example-10:-Complete-Workflow" title="Permalink"></a></h2><p>This example shows a complete empirical workflow combining multiple techniques.</p><pre><code class="language-julia hljs">using MacroEconometricModels
+println(&quot;  Reject at 5%: &quot;, j_result.reject_05)</code></pre><p>The GMM estimates should be close to the true values <span>$\beta = [1.0, 2.0]$</span> when instruments are valid and strong. The standard errors from two-step efficient GMM are asymptotically optimal. The Hansen J-test evaluates whether the moment conditions are jointly satisfied: a large p-value (failing to reject) indicates that the instruments are valid and the model is correctly specified. Rejection suggests either invalid instruments or model misspecification.</p><hr/><h2 id="Example-10:-Non-Gaussian-Identification"><a class="docs-heading-anchor" href="#Example-10:-Non-Gaussian-Identification">Example 10: Non-Gaussian Identification</a><a id="Example-10:-Non-Gaussian-Identification-1"></a><a class="docs-heading-anchor-permalink" href="#Example-10:-Non-Gaussian-Identification" title="Permalink"></a></h2><p>When structural shocks are non-Gaussian, statistical independence provides identification without imposing economic restrictions like recursive ordering or sign constraints. This example demonstrates the full non-Gaussian identification workflow: testing for non-Gaussianity, ICA-based and ML-based identification, and post-estimation specification tests.</p><h3 id="Setup:-Generate-Non-Gaussian-Data"><a class="docs-heading-anchor" href="#Setup:-Generate-Non-Gaussian-Data">Setup: Generate Non-Gaussian Data</a><a id="Setup:-Generate-Non-Gaussian-Data-1"></a><a class="docs-heading-anchor-permalink" href="#Setup:-Generate-Non-Gaussian-Data" title="Permalink"></a></h3><pre><code class="language-julia hljs">using MacroEconometricModels
+using Random
+using LinearAlgebra
+using Statistics
+
+Random.seed!(42)
+
+# True structural parameters
+T = 500
+n = 3
+
+# True B₀ (structural impact matrix)
+B0_true = [1.0  0.0  0.0;
+           0.5  1.0  0.0;
+           0.3 -0.2  1.0]
+
+# Non-Gaussian structural shocks (Student-t with 5 df)
+# Heavy tails provide the non-Gaussianity needed for identification
+eps = zeros(T, n)
+for j in 1:n
+    # Standardized t(5): mean 0, variance 1
+    raw = randn(T) ./ sqrt.(rand(Chisq(5), T) ./ 5)
+    eps[:, j] = raw ./ std(raw)
+end
+
+# True VAR(1) dynamics
+A_true = [0.7 0.1 0.0;
+          0.0 0.6 0.1;
+          0.0 0.0 0.5]
+
+# Generate reduced-form data: u_t = B₀ ε_t
+Y = zeros(T, n)
+Y[1, :] = B0_true * eps[1, :]
+for t in 2:T
+    Y[t, :] = A_true * Y[t-1, :] + B0_true * eps[t, :]
+end
+
+println(&quot;Data: T=$T, n=$n (non-Gaussian DGP with t(5) shocks)&quot;)</code></pre><h3 id="Step-1:-Test-for-Non-Gaussianity"><a class="docs-heading-anchor" href="#Step-1:-Test-for-Non-Gaussianity">Step 1: Test for Non-Gaussianity</a><a id="Step-1:-Test-for-Non-Gaussianity-1"></a><a class="docs-heading-anchor-permalink" href="#Step-1:-Test-for-Non-Gaussianity" title="Permalink"></a></h3><p>Before using non-Gaussian identification, verify that residuals are indeed non-Gaussian:</p><pre><code class="language-julia hljs"># Estimate VAR
+model = estimate_var(Y, 1)
+
+# Run the full normality test suite
+suite = normality_test_suite(model)
+
+println(&quot;Multivariate Normality Tests (H₀: residuals are Gaussian)&quot;)
+println(&quot;=&quot;^55)
+for r in suite.results
+    stars = r.pvalue &lt; 0.01 ? &quot;***&quot; : r.pvalue &lt; 0.05 ? &quot;**&quot; : r.pvalue &lt; 0.10 ? &quot;*&quot; : &quot;&quot;
+    println(&quot;  $(r.test_name): stat=$(round(r.statistic, digits=2)), p=$(round(r.pvalue, digits=4)) $stars&quot;)
+end</code></pre><p>All four tests (Jarque-Bera, Mardia, Doornik-Hansen, Henze-Zirkler) should reject normality when the true shocks are t-distributed. If normality is not rejected, non-Gaussian identification may lack power and Cholesky or sign restrictions should be preferred.</p><p>You can also run individual tests:</p><pre><code class="language-julia hljs"># Individual tests
+jb = jarque_bera_test(model)
+mardia = mardia_test(model; type=:both)
+dh = doornik_hansen_test(model)
+hz = henze_zirkler_test(model)
+
+println(&quot;\nDetailed Mardia test:&quot;)
+println(&quot;  Skewness stat: &quot;, round(mardia.statistic, digits=2))
+println(&quot;  P-value: &quot;, round(mardia.pvalue, digits=4))</code></pre><h3 id="Step-2:-ICA-Based-Identification"><a class="docs-heading-anchor" href="#Step-2:-ICA-Based-Identification">Step 2: ICA-Based Identification</a><a id="Step-2:-ICA-Based-Identification-1"></a><a class="docs-heading-anchor-permalink" href="#Step-2:-ICA-Based-Identification" title="Permalink"></a></h3><p>ICA (Independent Component Analysis) recovers structurally independent shocks by maximizing statistical independence:</p><pre><code class="language-julia hljs"># FastICA identification (default: logcosh contrast)
+ica_result = identify_fastica(model; contrast=:logcosh, approach=:deflation)
+
+println(&quot;\nFastICA Identification&quot;)
+println(&quot;=&quot;^40)
+println(&quot;  Converged: &quot;, ica_result.converged)
+println(&quot;  Iterations: &quot;, ica_result.iterations)
+println(&quot;  Objective: &quot;, round(ica_result.objective, digits=6))
+
+# Structural impact matrix B₀
+println(&quot;\nEstimated B₀ (structural impact matrix):&quot;)
+for i in 1:n
+    println(&quot;  &quot;, [round(ica_result.B0[i, j], digits=3) for j in 1:n])
+end</code></pre><p>Compare different ICA algorithms:</p><pre><code class="language-julia hljs"># JADE (Joint Approximate Diagonalization of Eigenmatrices)
+jade_result = identify_jade(model)
+
+# SOBI (Second-Order Blind Identification — exploits temporal structure)
+sobi_result = identify_sobi(model; lags=1:12)
+
+# Distance-covariance ICA
+dcov_result = identify_dcov(model)
+
+println(&quot;\nComparison of ICA methods:&quot;)
+println(&quot;  FastICA converged: &quot;, ica_result.converged, &quot; (iter: &quot;, ica_result.iterations, &quot;)&quot;)
+println(&quot;  JADE converged:    &quot;, jade_result.converged, &quot; (iter: &quot;, jade_result.iterations, &quot;)&quot;)
+println(&quot;  SOBI converged:    &quot;, sobi_result.converged, &quot; (iter: &quot;, sobi_result.iterations, &quot;)&quot;)
+println(&quot;  dCov converged:    &quot;, dcov_result.converged, &quot; (iter: &quot;, dcov_result.iterations, &quot;)&quot;)</code></pre><p>FastICA is the fastest and most commonly used, but JADE is more robust when multiple shocks have similar kurtosis. SOBI exploits temporal dependence and works even with mildly non-Gaussian shocks.</p><h3 id="Step-3:-Compute-IRFs-with-ICA-Identification"><a class="docs-heading-anchor" href="#Step-3:-Compute-IRFs-with-ICA-Identification">Step 3: Compute IRFs with ICA Identification</a><a id="Step-3:-Compute-IRFs-with-ICA-Identification-1"></a><a class="docs-heading-anchor-permalink" href="#Step-3:-Compute-IRFs-with-ICA-Identification" title="Permalink"></a></h3><p>The rotation matrix <code>Q</code> from ICA integrates directly with the standard <code>irf()</code> and <code>fevd()</code> functions:</p><pre><code class="language-julia hljs"># IRF using FastICA-identified structure
+irfs_ica = irf(model, 20; method=:fastica)
+
+println(&quot;\nFastICA-identified IRF (shock 1 → all variables):&quot;)
+for h in [0, 4, 8, 12, 20]
+    vals = [round(irfs_ica.irf[h+1, v, 1], digits=3) for v in 1:n]
+    println(&quot;  h=$h: &quot;, vals)
+end
+
+# FEVD using ICA identification
+fevd_ica = fevd(model, 20; method=:fastica)
+
+println(&quot;\nFEVD at h=20 (ICA-identified):&quot;)
+for v in 1:n
+    shares = [round(fevd_ica.fevd[21, v, s] * 100, digits=1) for s in 1:n]
+    println(&quot;  Variable $v: &quot;, shares, &quot;%&quot;)
+end</code></pre><p>Unlike Cholesky identification, the ICA-based IRFs do not depend on variable ordering. The same data produces the same structural shocks regardless of how the columns of <span>$Y$</span> are arranged.</p><h3 id="Step-4:-ML-Based-Identification"><a class="docs-heading-anchor" href="#Step-4:-ML-Based-Identification">Step 4: ML-Based Identification</a><a id="Step-4:-ML-Based-Identification-1"></a><a class="docs-heading-anchor-permalink" href="#Step-4:-ML-Based-Identification" title="Permalink"></a></h3><p>Maximum likelihood methods parameterize the shock distribution and jointly estimate <span>$B_0$</span> and the distributional parameters:</p><pre><code class="language-julia hljs"># Student-t ML identification
+ml_t = identify_student_t(model)
+
+println(&quot;\nStudent-t ML Identification&quot;)
+println(&quot;=&quot;^40)
+println(&quot;  Converged: &quot;, ml_t.converged)
+println(&quot;  Log-likelihood (non-Gaussian): &quot;, round(ml_t.loglik, digits=2))
+println(&quot;  Log-likelihood (Gaussian):     &quot;, round(ml_t.loglik_gaussian, digits=2))
+println(&quot;  AIC: &quot;, round(ml_t.aic, digits=2))
+println(&quot;  BIC: &quot;, round(ml_t.bic, digits=2))
+
+# Estimated degrees of freedom for each shock
+if haskey(ml_t.dist_params, :nu)
+    println(&quot;  Estimated ν (df): &quot;, round.(ml_t.dist_params[:nu], digits=2))
+end
+
+# Standard errors for B₀ elements
+println(&quot;\nB₀ standard errors:&quot;)
+for i in 1:n
+    println(&quot;  &quot;, [round(ml_t.se[i, j], digits=4) for j in 1:n])
+end</code></pre><p>The Student-t ML approach provides standard errors for <span>$B_0$</span> elements, unlike ICA which only gives point estimates. Compare with other distributional assumptions:</p><pre><code class="language-julia hljs"># Mixture of normals
+ml_mix = identify_mixture_normal(model; n_components=2)
+
+# Pseudo-maximum likelihood (robust, no distributional assumption)
+ml_pml = identify_pml(model)
+
+# Unified interface — select distribution via keyword
+ml_auto = identify_nongaussian_ml(model; distribution=:student_t)
+
+println(&quot;\nML method comparison (AIC):&quot;)
+println(&quot;  Student-t:      AIC = &quot;, round(ml_t.aic, digits=2))
+println(&quot;  Mixture normal: AIC = &quot;, round(ml_mix.aic, digits=2))
+println(&quot;  PML:            AIC = &quot;, round(ml_pml.aic, digits=2))</code></pre><p>Lower AIC indicates a better distributional fit. The PML estimator is semiparametrically efficient and does not require specifying the shock distribution.</p><h3 id="Step-5:-Heteroskedasticity-Based-Identification"><a class="docs-heading-anchor" href="#Step-5:-Heteroskedasticity-Based-Identification">Step 5: Heteroskedasticity-Based Identification</a><a id="Step-5:-Heteroskedasticity-Based-Identification-1"></a><a class="docs-heading-anchor-permalink" href="#Step-5:-Heteroskedasticity-Based-Identification" title="Permalink"></a></h3><p>When shocks exhibit time-varying volatility, changes in the covariance structure can identify the structural model:</p><pre><code class="language-julia hljs"># External volatility regimes (e.g., pre/post Great Moderation)
+regime = vcat(ones(Int, 250), 2 * ones(Int, 250))  # Two regimes
+vol_result = identify_external_volatility(model, regime; regimes=2)
+
+println(&quot;\nExternal Volatility Identification&quot;)
+println(&quot;=&quot;^40)
+println(&quot;  Regime 1 shock variances: &quot;,
+        [round(vol_result.Lambda_vecs[1][j], digits=3) for j in 1:n])
+println(&quot;  Regime 2 shock variances: &quot;,
+        [round(vol_result.Lambda_vecs[2][j], digits=3) for j in 1:n])</code></pre><h3 id="Step-6:-Post-Estimation-Specification-Tests"><a class="docs-heading-anchor" href="#Step-6:-Post-Estimation-Specification-Tests">Step 6: Post-Estimation Specification Tests</a><a id="Step-6:-Post-Estimation-Specification-Tests-1"></a><a class="docs-heading-anchor-permalink" href="#Step-6:-Post-Estimation-Specification-Tests" title="Permalink"></a></h3><p>Verify that the identification assumptions hold:</p><pre><code class="language-julia hljs"># Test 1: Are recovered shocks non-Gaussian?
+gauss_test = test_shock_gaussianity(ica_result)
+println(&quot;\nShock Gaussianity Test (H₀: shocks are Gaussian)&quot;)
+println(&quot;  Statistic: &quot;, round(gauss_test.statistic, digits=2))
+println(&quot;  P-value: &quot;, round(gauss_test.pvalue, digits=4))
+println(&quot;  Non-Gaussian: &quot;, gauss_test.identified)
+
+# Test 2: Are recovered shocks independent?
+indep_test = test_shock_independence(ica_result; max_lag=10)
+println(&quot;\nShock Independence Test (H₀: shocks are independent)&quot;)
+println(&quot;  Statistic: &quot;, round(indep_test.statistic, digits=2))
+println(&quot;  P-value: &quot;, round(indep_test.pvalue, digits=4))
+println(&quot;  Independent: &quot;, indep_test.identified)
+
+# Test 3: Identification strength (bootstrap)
+strength_test = test_identification_strength(model; method=:fastica, n_bootstrap=499)
+println(&quot;\nIdentification Strength Test&quot;)
+println(&quot;  Statistic: &quot;, round(strength_test.statistic, digits=4))
+println(&quot;  P-value: &quot;, round(strength_test.pvalue, digits=4))
+println(&quot;  Strongly identified: &quot;, strength_test.identified)
+
+# Test 4: Gaussian vs non-Gaussian likelihood ratio
+lr_test = test_gaussian_vs_nongaussian(model; method=:fastica, n_bootstrap=499)
+println(&quot;\nLR Test: Gaussian vs Non-Gaussian&quot;)
+println(&quot;  LR statistic: &quot;, round(lr_test.statistic, digits=2))
+println(&quot;  P-value: &quot;, round(lr_test.pvalue, digits=4))</code></pre><p>A valid non-Gaussian SVAR requires: (1) rejection of shock Gaussianity (non-Gaussian shocks are needed for identification), (2) failure to reject shock independence (the identified shocks should be independent), and (3) strong identification (the structural parameters are precisely estimated). If the Gaussianity test fails to reject, the data may not contain enough non-Gaussianity to identify the model, and traditional Cholesky or sign restrictions should be used instead.</p><h3 id="Comparing-Cholesky-vs-ICA-Identification"><a class="docs-heading-anchor" href="#Comparing-Cholesky-vs-ICA-Identification">Comparing Cholesky vs ICA Identification</a><a id="Comparing-Cholesky-vs-ICA-Identification-1"></a><a class="docs-heading-anchor-permalink" href="#Comparing-Cholesky-vs-ICA-Identification" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Cholesky IRF (ordering-dependent)
+irfs_chol = irf(model, 20; method=:cholesky)
+
+# ICA IRF (ordering-independent)
+irfs_ica = irf(model, 20; method=:fastica)
+
+println(&quot;\nCholesky vs FastICA IRF comparison (shock 1 → variable 1):&quot;)
+println(&quot;  h   Cholesky   FastICA&quot;)
+for h in [0, 4, 8, 12, 20]
+    chol_val = round(irfs_chol.irf[h+1, 1, 1], digits=3)
+    ica_val = round(irfs_ica.irf[h+1, 1, 1], digits=3)
+    println(&quot;  $h    $chol_val      $ica_val&quot;)
+end</code></pre><p>When the true DGP is recursive (lower-triangular <span>$B_0$</span>), Cholesky and ICA should yield similar IRFs. Large discrepancies suggest that the recursive assumption may be misspecified, and the data-driven ICA identification should be preferred.</p><hr/><h2 id="Example-11:-Hypothesis-Tests"><a class="docs-heading-anchor" href="#Example-11:-Hypothesis-Tests">Example 11: Hypothesis Tests</a><a id="Example-11:-Hypothesis-Tests-1"></a><a class="docs-heading-anchor-permalink" href="#Example-11:-Hypothesis-Tests" title="Permalink"></a></h2><p>This example demonstrates comprehensive unit root testing before fitting VAR models. Pre-estimation analysis is the first step in any empirical macro workflow. See <a href="../hypothesis_tests/">Hypothesis Tests</a> for theoretical background.</p><h3 id="Individual-Unit-Root-Tests"><a class="docs-heading-anchor" href="#Individual-Unit-Root-Tests">Individual Unit Root Tests</a><a id="Individual-Unit-Root-Tests-1"></a><a class="docs-heading-anchor-permalink" href="#Individual-Unit-Root-Tests" title="Permalink"></a></h3><pre><code class="language-julia hljs">using MacroEconometricModels
+using Random
+using Statistics
+
+Random.seed!(42)
+
+# Generate data: mix of I(0) and I(1) series
+T = 200
+y_stationary = randn(T)                      # I(0): stationary
+y_random_walk = cumsum(randn(T))             # I(1): unit root
+y_trend_stat = 0.1 .* (1:T) .+ randn(T)      # Trend stationary
+y_with_break = vcat(randn(100), randn(100) .+ 2)  # Structural break
+
+# === ADF Test ===
+println(&quot;=&quot;^60)
+println(&quot;ADF Test (H₀: unit root)&quot;)
+println(&quot;=&quot;^60)
+
+adf_stat = adf_test(y_stationary; lags=:aic, regression=:constant)
+println(&quot;\nStationary series:&quot;)
+println(&quot;  Statistic: &quot;, round(adf_stat.statistic, digits=3))
+println(&quot;  P-value: &quot;, round(adf_stat.pvalue, digits=4))
+println(&quot;  Lags: &quot;, adf_stat.lags)
+
+adf_rw = adf_test(y_random_walk; lags=:aic, regression=:constant)
+println(&quot;\nRandom walk:&quot;)
+println(&quot;  Statistic: &quot;, round(adf_rw.statistic, digits=3))
+println(&quot;  P-value: &quot;, round(adf_rw.pvalue, digits=4))</code></pre><p>The ADF test statistic is compared to non-standard critical values (Dickey-Fuller distribution, not Student-t). For the stationary series, the large negative test statistic yields a small p-value, rejecting the unit root null. For the random walk, the test statistic is close to zero, failing to reject. The number of augmenting lags selected by AIC controls for residual serial correlation.</p><h3 id="KPSS-Complementary-Test"><a class="docs-heading-anchor" href="#KPSS-Complementary-Test">KPSS Complementary Test</a><a id="KPSS-Complementary-Test-1"></a><a class="docs-heading-anchor-permalink" href="#KPSS-Complementary-Test" title="Permalink"></a></h3><pre><code class="language-julia hljs"># === KPSS Test ===
+println(&quot;\n&quot; * &quot;=&quot;^60)
+println(&quot;KPSS Test (H₀: stationarity)&quot;)
+println(&quot;=&quot;^60)
+
+kpss_stat = kpss_test(y_stationary; regression=:constant)
+println(&quot;\nStationary series:&quot;)
+println(&quot;  Statistic: &quot;, round(kpss_stat.statistic, digits=4))
+println(&quot;  P-value: &quot;, kpss_stat.pvalue &gt; 0.10 ? &quot;&gt;0.10&quot; : round(kpss_stat.pvalue, digits=4))
+println(&quot;  Bandwidth: &quot;, kpss_stat.bandwidth)
+
+kpss_rw = kpss_test(y_random_walk; regression=:constant)
+println(&quot;\nRandom walk:&quot;)
+println(&quot;  Statistic: &quot;, round(kpss_rw.statistic, digits=4))
+println(&quot;  P-value: &quot;, kpss_rw.pvalue &lt; 0.01 ? &quot;&lt;0.01&quot; : round(kpss_rw.pvalue, digits=4))</code></pre><h3 id="Combining-ADF-and-KPSS-for-Robust-Inference"><a class="docs-heading-anchor" href="#Combining-ADF-and-KPSS-for-Robust-Inference">Combining ADF and KPSS for Robust Inference</a><a id="Combining-ADF-and-KPSS-for-Robust-Inference-1"></a><a class="docs-heading-anchor-permalink" href="#Combining-ADF-and-KPSS-for-Robust-Inference" title="Permalink"></a></h3><pre><code class="language-julia hljs"># === Combined Analysis ===
+println(&quot;\n&quot; * &quot;=&quot;^60)
+println(&quot;Combined ADF + KPSS Analysis&quot;)
+println(&quot;=&quot;^60)
+
+function unit_root_decision(y; name=&quot;Series&quot;)
+    adf = adf_test(y; lags=:aic)
+    kpss = kpss_test(y)
+
+    adf_reject = adf.pvalue &lt; 0.05  # Reject unit root
+    kpss_reject = kpss.pvalue &lt; 0.05  # Reject stationarity
+
+    decision = if adf_reject &amp;&amp; !kpss_reject
+        &quot;I(0) - Stationary&quot;
+    elseif !adf_reject &amp;&amp; kpss_reject
+        &quot;I(1) - Unit root&quot;
+    elseif adf_reject &amp;&amp; kpss_reject
+        &quot;Conflicting (possible structural break)&quot;
+    else
+        &quot;Inconclusive&quot;
+    end
+
+    println(&quot;\n$name:&quot;)
+    println(&quot;  ADF p-value: &quot;, round(adf.pvalue, digits=4))
+    println(&quot;  KPSS p-value: &quot;, round(kpss.pvalue, digits=4))
+    println(&quot;  Decision: $decision&quot;)
+
+    return decision
+end
+
+unit_root_decision(y_stationary; name=&quot;Stationary series&quot;)
+unit_root_decision(y_random_walk; name=&quot;Random walk&quot;)
+unit_root_decision(y_trend_stat; name=&quot;Trend stationary&quot;)</code></pre><h3 id="Testing-for-Structural-Breaks"><a class="docs-heading-anchor" href="#Testing-for-Structural-Breaks">Testing for Structural Breaks</a><a id="Testing-for-Structural-Breaks-1"></a><a class="docs-heading-anchor-permalink" href="#Testing-for-Structural-Breaks" title="Permalink"></a></h3><pre><code class="language-julia hljs"># === Zivot-Andrews Test ===
+println(&quot;\n&quot; * &quot;=&quot;^60)
+println(&quot;Zivot-Andrews Test (H₀: unit root without break)&quot;)
+println(&quot;=&quot;^60)
+
+za_result = za_test(y_with_break; regression=:constant, trim=0.15)
+println(&quot;\nSeries with structural break:&quot;)
+println(&quot;  Minimum t-stat: &quot;, round(za_result.statistic, digits=3))
+println(&quot;  P-value: &quot;, round(za_result.pvalue, digits=4))
+println(&quot;  Break index: &quot;, za_result.break_index)
+println(&quot;  Break at: &quot;, round(za_result.break_fraction * 100, digits=1), &quot;% of sample&quot;)
+
+# Compare with standard ADF
+adf_break = adf_test(y_with_break)
+println(&quot;\n  ADF (ignoring break): p=&quot;, round(adf_break.pvalue, digits=4))
+println(&quot;  ZA (allowing break): p=&quot;, round(za_result.pvalue, digits=4))</code></pre><h3 id="Ng-Perron-Tests-for-Small-Samples"><a class="docs-heading-anchor" href="#Ng-Perron-Tests-for-Small-Samples">Ng-Perron Tests for Small Samples</a><a id="Ng-Perron-Tests-for-Small-Samples-1"></a><a class="docs-heading-anchor-permalink" href="#Ng-Perron-Tests-for-Small-Samples" title="Permalink"></a></h3><pre><code class="language-julia hljs"># === Ng-Perron Tests ===
+println(&quot;\n&quot; * &quot;=&quot;^60)
+println(&quot;Ng-Perron Tests (improved size properties)&quot;)
+println(&quot;=&quot;^60)
+
+# Generate smaller sample
+y_small = cumsum(randn(80))
+np_result = ngperron_test(y_small; regression=:constant)
+
+println(&quot;\nSmall sample (n=80):&quot;)
+println(&quot;  MZα: &quot;, round(np_result.MZa, digits=3),
+        &quot; (5% CV: &quot;, np_result.critical_values[:MZa][5], &quot;)&quot;)
+println(&quot;  MZt: &quot;, round(np_result.MZt, digits=3),
+        &quot; (5% CV: &quot;, np_result.critical_values[:MZt][5], &quot;)&quot;)
+println(&quot;  MSB: &quot;, round(np_result.MSB, digits=4),
+        &quot; (5% CV: &quot;, np_result.critical_values[:MSB][5], &quot;)&quot;)
+println(&quot;  MPT: &quot;, round(np_result.MPT, digits=3),
+        &quot; (5% CV: &quot;, np_result.critical_values[:MPT][5], &quot;)&quot;)</code></pre><h3 id="Johansen-Cointegration-Test"><a class="docs-heading-anchor" href="#Johansen-Cointegration-Test">Johansen Cointegration Test</a><a id="Johansen-Cointegration-Test-1"></a><a class="docs-heading-anchor-permalink" href="#Johansen-Cointegration-Test" title="Permalink"></a></h3><pre><code class="language-julia hljs"># === Johansen Cointegration Test ===
+println(&quot;\n&quot; * &quot;=&quot;^60)
+println(&quot;Johansen Cointegration Test&quot;)
+println(&quot;=&quot;^60)
+
+# Generate cointegrated system
+T_coint = 200
+u1, u2, u3 = cumsum(randn(T_coint)), cumsum(randn(T_coint)), randn(T_coint)
+Y_coint = hcat(
+    u1 + 0.1*randn(T_coint),           # I(1)
+    u1 + 0.5*u2 + 0.1*randn(T_coint),  # Cointegrated with first
+    u2 + 0.1*randn(T_coint)            # I(1)
+)
+
+johansen = johansen_test(Y_coint, 2; deterministic=:constant)
+
+println(&quot;\nCointegrated system (3 variables):&quot;)
+println(&quot;  Estimated rank: &quot;, johansen.rank)
+println(&quot;\n  Trace test:&quot;)
+for r in 0:2
+    stat = round(johansen.trace_stats[r+1], digits=2)
+    cv = round(johansen.critical_values_trace[r+1, 2], digits=2)
+    reject = stat &gt; cv ? &quot;Reject&quot; : &quot;Fail to reject&quot;
+    println(&quot;    H₀: r ≤ $r: stat=$stat, 5% CV=$cv → $reject&quot;)
+end
+
+println(&quot;\n  Eigenvalues: &quot;, round.(johansen.eigenvalues, digits=4))
+
+if johansen.rank &gt; 0
+    println(&quot;\n  Cointegrating vector(s):&quot;)
+    for i in 1:johansen.rank
+        println(&quot;    β$i: &quot;, round.(johansen.eigenvectors[:, i], digits=3))
+    end
+end</code></pre><p>The Johansen trace test sequentially tests hypotheses about the cointegration rank. When the trace statistic exceeds the critical value, we reject the null and move to the next rank. The estimated cointegrating vectors <span>$\beta$</span> represent long-run equilibrium relationships: deviations from <span>$\beta&#39; y_t$</span> are stationary even though the individual series are I(1). The adjustment coefficients <span>$\alpha$</span> govern how quickly variables correct back toward equilibrium.</p><h3 id="Granger-Causality"><a class="docs-heading-anchor" href="#Granger-Causality">Granger Causality</a><a id="Granger-Causality-1"></a><a class="docs-heading-anchor-permalink" href="#Granger-Causality" title="Permalink"></a></h3><pre><code class="language-julia hljs"># === Granger Causality Tests ===
+println(&quot;\n&quot; * &quot;=&quot;^60)
+println(&quot;Granger Causality Tests&quot;)
+println(&quot;=&quot;^60)
+
+# Generate data with known causal structure:
+# Variable 2 depends on lagged Variable 1
+T_obs = 300
+Y_gc = zeros(T_obs, 3)
+Y_gc[1, :] = randn(3)
+for t in 2:T_obs
+    Y_gc[t, 1] = 0.5 * Y_gc[t-1, 1] + randn()
+    Y_gc[t, 2] = 0.3 * Y_gc[t-1, 1] + 0.2 * Y_gc[t-1, 2] + randn()  # 1 causes 2
+    Y_gc[t, 3] = 0.4 * Y_gc[t-1, 3] + randn()                         # independent
+end
+
+m = estimate_var(Y_gc, 2)
+
+# Pairwise test: does variable 1 Granger-cause variable 2?
+g = granger_test(m, 1, 2)
+println(&quot;\n1 → 2: Wald = &quot;, round(g.statistic, digits=2),
+        &quot;, p = &quot;, round(g.pvalue, digits=4))
+
+# Variable 3 should be independent of others
+println(&quot;3 → 1: p = &quot;, round(granger_test(m, 3, 1).pvalue, digits=4))
+println(&quot;3 → 2: p = &quot;, round(granger_test(m, 3, 2).pvalue, digits=4))
+
+# Block test: do variables 1 and 3 jointly Granger-cause variable 2?
+g_block = granger_test(m, [1, 3], 2)
+println(&quot;\nBlock [1,3] → 2: Wald = &quot;, round(g_block.statistic, digits=2),
+        &quot;, p = &quot;, round(g_block.pvalue, digits=4))
+
+# Full causality table (n × n matrix, nothing on diagonal)
+results = granger_test_all(m)</code></pre><p>The Granger causality test examines whether lagged values of one variable help predict another. A significant result (low p-value) indicates that past values of the cause variable contain predictive information for the effect variable beyond what is captured by the effect variable&#39;s own lags and those of other variables. The block test extends this to groups of variables, testing their joint predictive power.</p><h3 id="Testing-All-Variables-Before-VAR"><a class="docs-heading-anchor" href="#Testing-All-Variables-Before-VAR">Testing All Variables Before VAR</a><a id="Testing-All-Variables-Before-VAR-1"></a><a class="docs-heading-anchor-permalink" href="#Testing-All-Variables-Before-VAR" title="Permalink"></a></h3><pre><code class="language-julia hljs"># === Multi-Variable Pre-VAR Analysis ===
+println(&quot;\n&quot; * &quot;=&quot;^60)
+println(&quot;Pre-VAR Unit Root Analysis&quot;)
+println(&quot;=&quot;^60)
+
+# Typical macro dataset
+Y_macro = hcat(
+    cumsum(randn(T)),           # GDP (I(1))
+    0.8*cumsum(randn(T)[1:T]),  # Inflation (I(1))
+    cumsum(randn(T)),           # Interest rate (I(1))
+    randn(T)                    # Output gap (I(0))
+)
+var_names = [&quot;GDP&quot;, &quot;Inflation&quot;, &quot;Rate&quot;, &quot;Output Gap&quot;]
+
+# Test all variables
+results = test_all_variables(Y_macro; test=:adf)
+
+println(&quot;\nUnit root test results:&quot;)
+println(&quot;-&quot;^50)
+n_i1 = 0
+for (i, r) in enumerate(results)
+    status = r.pvalue &gt; 0.05 ? &quot;I(1)&quot; : &quot;I(0)&quot;
+    n_i1 += r.pvalue &gt; 0.05
+    println(&quot;  $(var_names[i]): p=$(round(r.pvalue, digits=3)) → $status&quot;)
+end
+
+println(&quot;\nSummary: $n_i1 of $(size(Y_macro, 2)) variables appear I(1)&quot;)
+
+# Recommendation
+if n_i1 == size(Y_macro, 2)
+    println(&quot;\nRecommendation: All variables I(1)&quot;)
+    println(&quot;  → Test for cointegration&quot;)
+    println(&quot;  → If cointegrated: use VECM&quot;)
+    println(&quot;  → If not: use VAR in first differences&quot;)
+elseif n_i1 == 0
+    println(&quot;\nRecommendation: All variables I(0)&quot;)
+    println(&quot;  → Use VAR in levels&quot;)
+else
+    println(&quot;\nRecommendation: Mixed I(0)/I(1)&quot;)
+    println(&quot;  → Consider ARDL bounds test&quot;)
+    println(&quot;  → Or difference I(1) variables&quot;)
+end</code></pre><h3 id="Complete-Pre-Estimation-Workflow"><a class="docs-heading-anchor" href="#Complete-Pre-Estimation-Workflow">Complete Pre-Estimation Workflow</a><a id="Complete-Pre-Estimation-Workflow-1"></a><a class="docs-heading-anchor-permalink" href="#Complete-Pre-Estimation-Workflow" title="Permalink"></a></h3><pre><code class="language-julia hljs"># === Complete Workflow ===
+println(&quot;\n&quot; * &quot;=&quot;^60)
+println(&quot;Complete Pre-Estimation Workflow&quot;)
+println(&quot;=&quot;^60)
+
+function pre_estimation_analysis(Y; var_names=nothing, α=0.05)
+    T, n = size(Y)
+    var_names = isnothing(var_names) ? [&quot;Var$i&quot; for i in 1:n] : var_names
+
+    println(&quot;\n1. Individual Unit Root Tests&quot;)
+    println(&quot;-&quot;^40)
+
+    integration_orders = zeros(Int, n)
+    for i in 1:n
+        adf = adf_test(Y[:, i]; lags=:aic)
+        kpss = kpss_test(Y[:, i])
+
+        if adf.pvalue &lt; α &amp;&amp; kpss.pvalue &gt; α
+            integration_orders[i] = 0
+            status = &quot;I(0)&quot;
+        elseif adf.pvalue &gt; α &amp;&amp; kpss.pvalue &lt; α
+            integration_orders[i] = 1
+            status = &quot;I(1)&quot;
+        else
+            integration_orders[i] = -1  # Inconclusive
+            status = &quot;Inconclusive&quot;
+        end
+        println(&quot;  $(var_names[i]): $status (ADF p=$(round(adf.pvalue, digits=3)), KPSS p=$(round(kpss.pvalue, digits=3)))&quot;)
+    end
+
+    n_i1 = sum(integration_orders .== 1)
+    n_i0 = sum(integration_orders .== 0)
+
+    println(&quot;\n2. Summary&quot;)
+    println(&quot;-&quot;^40)
+    println(&quot;  I(0) variables: $n_i0&quot;)
+    println(&quot;  I(1) variables: $n_i1&quot;)
+    println(&quot;  Inconclusive: $(n - n_i0 - n_i1)&quot;)
+
+    # Cointegration test if all I(1)
+    if n_i1 &gt;= 2
+        println(&quot;\n3. Cointegration Test&quot;)
+        println(&quot;-&quot;^40)
+        joh = johansen_test(Y, 2)
+        println(&quot;  Estimated cointegration rank: &quot;, joh.rank)
+
+        if joh.rank &gt; 0
+            println(&quot;  → Cointegration detected&quot;)
+            println(&quot;  → Recommendation: VECM with rank=$(joh.rank)&quot;)
+        else
+            println(&quot;  → No cointegration&quot;)
+            println(&quot;  → Recommendation: VAR in first differences&quot;)
+        end
+    elseif n_i0 == n
+        println(&quot;\n3. Recommendation&quot;)
+        println(&quot;-&quot;^40)
+        println(&quot;  All series stationary → VAR in levels&quot;)
+    end
+
+    return (integration_orders=integration_orders, n_i0=n_i0, n_i1=n_i1)
+end
+
+# Run complete analysis
+result = pre_estimation_analysis(Y_macro; var_names=var_names)</code></pre><hr/><h2 id="Example-12:-Complete-Workflow"><a class="docs-heading-anchor" href="#Example-12:-Complete-Workflow">Example 12: Complete Workflow</a><a id="Example-12:-Complete-Workflow-1"></a><a class="docs-heading-anchor-permalink" href="#Example-12:-Complete-Workflow" title="Permalink"></a></h2><p>This example shows a complete empirical workflow combining multiple techniques.</p><pre><code class="language-julia hljs">using MacroEconometricModels
 using Random
 using Statistics
 
@@ -991,7 +1113,7 @@ println(&quot;=&quot;^50)
 aics = Float64[]
 bics = Float64[]
 for p in 1:8
-    m = fit(VARModel, Y, p)
+    m = estimate_var(Y, p)
     push!(aics, aic(m))
     push!(bics, bic(m))
 end
@@ -1005,7 +1127,7 @@ println(&quot;\n&quot; * &quot;=&quot;^50)
 println(&quot;Step 2: VAR Estimation&quot;)
 println(&quot;=&quot;^50)
 
-model = fit(VARModel, Y, p)
+model = estimate_var(Y, p)
 println(&quot;Estimated VAR($p)&quot;)
 println(&quot;Log-likelihood: &quot;, round(loglikelihood(model), digits=2))
 
@@ -1059,7 +1181,7 @@ println(&quot;\nSmooth LP variance reduction: &quot;,
 
 println(&quot;\n&quot; * &quot;=&quot;^50)
 println(&quot;Analysis Complete!&quot;)
-println(&quot;=&quot;^50)</code></pre><p>Comparing VAR and LP impulse responses at the same horizon provides a robustness check. Under correct specification, both estimators are consistent for the same causal parameter (Plagborg-Møller &amp; Wolf, 2021), but LP is less efficient. Large discrepancies suggest potential dynamic misspecification in the VAR. The smooth LP variance reduction ratio measures efficiency gains from B-spline regularization; values well below 1.0 indicate substantial noise reduction from imposing smoothness.</p><hr/><h2 id="Example-11:-Table-Output-—-Text,-LaTeX,-and-HTML"><a class="docs-heading-anchor" href="#Example-11:-Table-Output-—-Text,-LaTeX,-and-HTML">Example 11: Table Output — Text, LaTeX, and HTML</a><a id="Example-11:-Table-Output-—-Text,-LaTeX,-and-HTML-1"></a><a class="docs-heading-anchor-permalink" href="#Example-11:-Table-Output-—-Text,-LaTeX,-and-HTML" title="Permalink"></a></h2><p>All <code>show</code>, <code>print_table</code>, and <code>Base.show</code> methods in MacroEconometricModels route through a unified PrettyTables backend. Switching from terminal text to LaTeX or HTML output requires a single call to <code>set_display_backend</code>. This is useful for embedding results directly into papers (LaTeX), slides (HTML), or reports.</p><h3 id="Setup"><a class="docs-heading-anchor" href="#Setup">Setup</a><a id="Setup-1"></a><a class="docs-heading-anchor-permalink" href="#Setup" title="Permalink"></a></h3><pre><code class="language-julia hljs">using MacroEconometricModels
+println(&quot;=&quot;^50)</code></pre><p>Comparing VAR and LP impulse responses at the same horizon provides a robustness check. Under correct specification, both estimators are consistent for the same causal parameter (Plagborg-Moller &amp; Wolf, 2021), but LP is less efficient. Large discrepancies suggest potential dynamic misspecification in the VAR. The smooth LP variance reduction ratio measures efficiency gains from B-spline regularization; values well below 1.0 indicate substantial noise reduction from imposing smoothness.</p><hr/><h2 id="Example-13:-Table-Output-—-Text,-LaTeX,-and-HTML"><a class="docs-heading-anchor" href="#Example-13:-Table-Output-—-Text,-LaTeX,-and-HTML">Example 13: Table Output — Text, LaTeX, and HTML</a><a id="Example-13:-Table-Output-—-Text,-LaTeX,-and-HTML-1"></a><a class="docs-heading-anchor-permalink" href="#Example-13:-Table-Output-—-Text,-LaTeX,-and-HTML" title="Permalink"></a></h2><p>All <code>show</code>, <code>print_table</code>, and <code>Base.show</code> methods in MacroEconometricModels route through a unified PrettyTables backend. Switching from terminal text to LaTeX or HTML output requires a single call to <code>set_display_backend</code>. This is useful for embedding results directly into papers (LaTeX), slides (HTML), or reports.</p><h3 id="Setup"><a class="docs-heading-anchor" href="#Setup">Setup</a><a id="Setup-1"></a><a class="docs-heading-anchor-permalink" href="#Setup" title="Permalink"></a></h3><pre><code class="language-julia hljs">using MacroEconometricModels
 using Random
 
 Random.seed!(42)
@@ -1192,7 +1314,7 @@ set_display_backend(:html)
 # All subsequent cells render as formatted HTML tables
 model = estimate_var(Y, 2)
 irfs = irf(model, 12; method=:cholesky)
-irfs   # Displays as an HTML table</code></pre><h3 id="Summary-of-Output-Functions"><a class="docs-heading-anchor" href="#Summary-of-Output-Functions">Summary of Output Functions</a><a id="Summary-of-Output-Functions-1"></a><a class="docs-heading-anchor-permalink" href="#Summary-of-Output-Functions" title="Permalink"></a></h3><table><tr><th style="text-align: right">Function</th><th style="text-align: right">Returns</th><th style="text-align: right">Use Case</th></tr><tr><td style="text-align: right"><code>table(result, ...)</code></td><td style="text-align: right"><code>Matrix</code></td><td style="text-align: right">Raw numeric data for custom processing, CSV export</td></tr><tr><td style="text-align: right"><code>print_table([io], result, ...)</code></td><td style="text-align: right">Nothing (prints)</td><td style="text-align: right">Formatted output via current backend (text/LaTeX/HTML)</td></tr><tr><td style="text-align: right"><code>show(io, result)</code></td><td style="text-align: right">Nothing (prints)</td><td style="text-align: right">REPL display, also respects backend</td></tr><tr><td style="text-align: right"><code>set_display_backend(:text)</code></td><td style="text-align: right">Nothing</td><td style="text-align: right">Terminal output (default)</td></tr><tr><td style="text-align: right"><code>set_display_backend(:latex)</code></td><td style="text-align: right">Nothing</td><td style="text-align: right">LaTeX <code>\begin{tabular}</code> output</td></tr><tr><td style="text-align: right"><code>set_display_backend(:html)</code></td><td style="text-align: right">Nothing</td><td style="text-align: right">HTML <code>&lt;table&gt;</code> output</td></tr><tr><td style="text-align: right"><code>get_display_backend()</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right">Check current backend</td></tr></table><hr/><h2 id="Example-12:-Bibliographic-References"><a class="docs-heading-anchor" href="#Example-12:-Bibliographic-References">Example 12: Bibliographic References</a><a id="Example-12:-Bibliographic-References-1"></a><a class="docs-heading-anchor-permalink" href="#Example-12:-Bibliographic-References" title="Permalink"></a></h2><p>The <code>refs()</code> function returns bibliographic references for any model, result type, or identification method. References are available in four formats: AEA text (default), BibTeX, LaTeX <code>\bibitem</code>, and HTML with clickable DOI links.</p><h3 id="Basic-Usage"><a class="docs-heading-anchor" href="#Basic-Usage">Basic Usage</a><a id="Basic-Usage-1"></a><a class="docs-heading-anchor-permalink" href="#Basic-Usage" title="Permalink"></a></h3><pre><code class="language-julia hljs">using MacroEconometricModels
+irfs   # Displays as an HTML table</code></pre><h3 id="Summary-of-Output-Functions"><a class="docs-heading-anchor" href="#Summary-of-Output-Functions">Summary of Output Functions</a><a id="Summary-of-Output-Functions-1"></a><a class="docs-heading-anchor-permalink" href="#Summary-of-Output-Functions" title="Permalink"></a></h3><table><tr><th style="text-align: right">Function</th><th style="text-align: right">Returns</th><th style="text-align: right">Use Case</th></tr><tr><td style="text-align: right"><code>table(result, ...)</code></td><td style="text-align: right"><code>Matrix</code></td><td style="text-align: right">Raw numeric data for custom processing, CSV export</td></tr><tr><td style="text-align: right"><code>print_table([io], result, ...)</code></td><td style="text-align: right">Nothing (prints)</td><td style="text-align: right">Formatted output via current backend (text/LaTeX/HTML)</td></tr><tr><td style="text-align: right"><code>show(io, result)</code></td><td style="text-align: right">Nothing (prints)</td><td style="text-align: right">REPL display, also respects backend</td></tr><tr><td style="text-align: right"><code>set_display_backend(:text)</code></td><td style="text-align: right">Nothing</td><td style="text-align: right">Terminal output (default)</td></tr><tr><td style="text-align: right"><code>set_display_backend(:latex)</code></td><td style="text-align: right">Nothing</td><td style="text-align: right">LaTeX <code>\begin{tabular}</code> output</td></tr><tr><td style="text-align: right"><code>set_display_backend(:html)</code></td><td style="text-align: right">Nothing</td><td style="text-align: right">HTML <code>&lt;table&gt;</code> output</td></tr><tr><td style="text-align: right"><code>get_display_backend()</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right">Check current backend</td></tr></table><hr/><h2 id="Example-14:-Bibliographic-References"><a class="docs-heading-anchor" href="#Example-14:-Bibliographic-References">Example 14: Bibliographic References</a><a id="Example-14:-Bibliographic-References-1"></a><a class="docs-heading-anchor-permalink" href="#Example-14:-Bibliographic-References" title="Permalink"></a></h2><p>The <code>refs()</code> function returns bibliographic references for any model, result type, or identification method. References are available in four formats: AEA text (default), BibTeX, LaTeX <code>\bibitem</code>, and HTML with clickable DOI links.</p><h3 id="Basic-Usage"><a class="docs-heading-anchor" href="#Basic-Usage">Basic Usage</a><a id="Basic-Usage-1"></a><a class="docs-heading-anchor-permalink" href="#Basic-Usage" title="Permalink"></a></h3><pre><code class="language-julia hljs">using MacroEconometricModels
 using Random
 
 Random.seed!(42)
@@ -1232,4 +1354,4 @@ open(&quot;references.bib&quot;, &quot;w&quot;) do io
     refs(io, :fastica; format=:bibtex)
     println(io)
     refs(io, :johansen; format=:bibtex)
-end</code></pre><p>The <code>refs()</code> function covers all 45+ references in the package&#39;s database, including every estimation method, identification scheme, and test. This ensures correct citation of the methods used in your empirical analysis.</p><hr/><h2 id="Best-Practices"><a class="docs-heading-anchor" href="#Best-Practices">Best Practices</a><a id="Best-Practices-1"></a><a class="docs-heading-anchor-permalink" href="#Best-Practices" title="Permalink"></a></h2><h3 id="Data-Preparation"><a class="docs-heading-anchor" href="#Data-Preparation">Data Preparation</a><a id="Data-Preparation-1"></a><a class="docs-heading-anchor-permalink" href="#Data-Preparation" title="Permalink"></a></h3><ol><li><strong>Stationarity</strong>: Test for unit roots using ADF and KPSS together<ul><li>Both fail to reject → inconclusive, consider structural breaks</li><li>ADF rejects, KPSS doesn&#39;t → stationary (I(0))</li><li>ADF doesn&#39;t reject, KPSS rejects → unit root (I(1))</li></ul></li><li><strong>Structural Breaks</strong>: Use Zivot-Andrews test if visual inspection suggests breaks</li><li><strong>Cointegration</strong>: For I(1) variables, test for cointegration before differencing</li><li><strong>Outliers</strong>: Check for and handle outliers</li><li><strong>Missing data</strong>: Factor models can handle some missing data; VARs require complete data</li><li><strong>Scaling</strong>: For factor models, standardize variables</li></ol><h3 id="Model-Selection"><a class="docs-heading-anchor" href="#Model-Selection">Model Selection</a><a id="Model-Selection-1"></a><a class="docs-heading-anchor-permalink" href="#Model-Selection" title="Permalink"></a></h3><ol><li><strong>Lag length</strong>: Use information criteria (BIC is more conservative)</li><li><strong>Number of factors</strong>: Use Bai-Ng criteria; prefer IC2 or IC3</li><li><strong>Prior tightness</strong>: Optimize via marginal likelihood for large models</li></ol><h3 id="Identification"><a class="docs-heading-anchor" href="#Identification">Identification</a><a id="Identification-1"></a><a class="docs-heading-anchor-permalink" href="#Identification" title="Permalink"></a></h3><ol><li><strong>Economic theory</strong>: Base restrictions on economic reasoning</li><li><strong>Robustness</strong>: Try multiple identification schemes</li><li><strong>Narrative</strong>: Use historical knowledge when available</li><li><strong>Non-Gaussian</strong>: Test residuals with <code>normality_test_suite</code> first; if non-Gaussian, ICA/ML methods provide ordering-free identification</li><li><strong>Specification tests</strong>: Validate non-Gaussian identification with <code>test_shock_gaussianity</code> and <code>test_shock_independence</code></li></ol><h3 id="Inference"><a class="docs-heading-anchor" href="#Inference">Inference</a><a id="Inference-1"></a><a class="docs-heading-anchor-permalink" href="#Inference" title="Permalink"></a></h3><ol><li><strong>HAC standard errors</strong>: Always use for LP at horizons &gt; 0</li><li><strong>Credible intervals</strong>: Report 68% and 90% bands for Bayesian</li><li><strong>Bootstrap</strong>: Use for frequentist VAR confidence intervals</li></ol><h3 id="Reporting"><a class="docs-heading-anchor" href="#Reporting">Reporting</a><a id="Reporting-1"></a><a class="docs-heading-anchor-permalink" href="#Reporting" title="Permalink"></a></h3><ol><li><strong>Present both</strong>: VAR and LP estimates as robustness check</li><li><strong>Horizon selection</strong>: Focus on economically meaningful horizons</li><li><strong>FEVD</strong>: Report at multiple horizons (short, medium, long-run)</li><li><strong>LaTeX export</strong>: Use <code>set_display_backend(:latex)</code> then <code>print_table(io, ...)</code> for paper-ready tables</li><li><strong>HTML export</strong>: Use <code>set_display_backend(:html)</code> for Jupyter notebooks and web reports</li><li><strong>Raw data</strong>: Use <code>table(result, ...)</code> to extract matrices for custom formatting or CSV export</li></ol></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../hypothesis_tests/">« Hypothesis Tests</a><a class="docs-footer-nextpage" href="../api/">Overview »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.16.1 on <span class="colophon-date" title="Sunday 8 February 2026 22:22">Sunday 8 February 2026</span>. Using Julia version 1.12.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+end</code></pre><p>The <code>refs()</code> function covers all 45+ references in the package&#39;s database, including every estimation method, identification scheme, and test. This ensures correct citation of the methods used in your empirical analysis.</p><hr/><h2 id="Best-Practices"><a class="docs-heading-anchor" href="#Best-Practices">Best Practices</a><a id="Best-Practices-1"></a><a class="docs-heading-anchor-permalink" href="#Best-Practices" title="Permalink"></a></h2><h3 id="Data-Preparation"><a class="docs-heading-anchor" href="#Data-Preparation">Data Preparation</a><a id="Data-Preparation-1"></a><a class="docs-heading-anchor-permalink" href="#Data-Preparation" title="Permalink"></a></h3><ol><li><strong>Stationarity</strong>: Test for unit roots using ADF and KPSS together<ul><li>Both fail to reject → inconclusive, consider structural breaks</li><li>ADF rejects, KPSS doesn&#39;t → stationary (I(0))</li><li>ADF doesn&#39;t reject, KPSS rejects → unit root (I(1))</li></ul></li><li><strong>Structural Breaks</strong>: Use Zivot-Andrews test if visual inspection suggests breaks</li><li><strong>Cointegration</strong>: For I(1) variables, test for cointegration before differencing</li><li><strong>Outliers</strong>: Check for and handle outliers</li><li><strong>Missing data</strong>: Factor models can handle some missing data; VARs require complete data</li><li><strong>Scaling</strong>: For factor models, standardize variables</li></ol><h3 id="Model-Selection"><a class="docs-heading-anchor" href="#Model-Selection">Model Selection</a><a id="Model-Selection-1"></a><a class="docs-heading-anchor-permalink" href="#Model-Selection" title="Permalink"></a></h3><ol><li><strong>Lag length</strong>: Use information criteria (BIC is more conservative)</li><li><strong>Number of factors</strong>: Use Bai-Ng criteria; prefer IC2 or IC3</li><li><strong>Prior tightness</strong>: Optimize via marginal likelihood for large models</li></ol><h3 id="Identification"><a class="docs-heading-anchor" href="#Identification">Identification</a><a id="Identification-1"></a><a class="docs-heading-anchor-permalink" href="#Identification" title="Permalink"></a></h3><ol><li><strong>Economic theory</strong>: Base restrictions on economic reasoning</li><li><strong>Robustness</strong>: Try multiple identification schemes</li><li><strong>Narrative</strong>: Use historical knowledge when available</li><li><strong>Non-Gaussian</strong>: Test residuals with <code>normality_test_suite</code> first; if non-Gaussian, ICA/ML methods provide ordering-free identification</li><li><strong>Specification tests</strong>: Validate non-Gaussian identification with <code>test_shock_gaussianity</code> and <code>test_shock_independence</code></li></ol><h3 id="Inference"><a class="docs-heading-anchor" href="#Inference">Inference</a><a id="Inference-1"></a><a class="docs-heading-anchor-permalink" href="#Inference" title="Permalink"></a></h3><ol><li><strong>HAC standard errors</strong>: Always use for LP at horizons &gt; 0</li><li><strong>Credible intervals</strong>: Report 68% and 90% bands for Bayesian</li><li><strong>Bootstrap</strong>: Use for frequentist VAR confidence intervals</li></ol><h3 id="Reporting"><a class="docs-heading-anchor" href="#Reporting">Reporting</a><a id="Reporting-1"></a><a class="docs-heading-anchor-permalink" href="#Reporting" title="Permalink"></a></h3><ol><li><strong>Present both</strong>: VAR and LP estimates as robustness check</li><li><strong>Horizon selection</strong>: Focus on economically meaningful horizons</li><li><strong>FEVD</strong>: Report at multiple horizons (short, medium, long-run)</li><li><strong>LaTeX export</strong>: Use <code>set_display_backend(:latex)</code> then <code>print_table(io, ...)</code> for paper-ready tables</li><li><strong>HTML export</strong>: Use <code>set_display_backend(:html)</code> for Jupyter notebooks and web reports</li><li><strong>Raw data</strong>: Use <code>table(result, ...)</code> to extract matrices for custom formatting or CSV export</li></ol></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../hypothesis_tests/">« Hypothesis Tests</a><a class="docs-footer-nextpage" href="../api/">Overview »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.16.1 on <span class="colophon-date" title="Sunday 8 February 2026 22:59">Sunday 8 February 2026</span>. Using Julia version 1.12.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
