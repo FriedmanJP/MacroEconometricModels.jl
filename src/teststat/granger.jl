@@ -282,7 +282,7 @@ function Base.show(io::IO, r::GrangerCausalityResult)
 end
 
 """Display compact p-value matrix for all-pairs Granger causality results."""
-function Base.show(io::IO, ::MIME"text/plain", results::Matrix{Union{GrangerCausalityResult{T}, Nothing}}) where {T}
+function Base.show(io::IO, ::MIME"text/plain", results::Matrix{<:Union{GrangerCausalityResult, Nothing}})
     n = size(results, 1)
     n != size(results, 2) && return show(io, results)
 
