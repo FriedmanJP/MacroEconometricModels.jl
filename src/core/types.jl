@@ -5,6 +5,18 @@ Type hierarchy for MacroEconometricModels.jl - core abstract types.
 using StatsAPI, LinearAlgebra
 
 # =============================================================================
+# Abstract Types - Data Containers
+# =============================================================================
+
+"""
+    AbstractMacroData
+
+Abstract supertype for all MacroEconometricModels data containers.
+Subtypes: `TimeSeriesData`, `PanelData`, `CrossSectionData`.
+"""
+abstract type AbstractMacroData end
+
+# =============================================================================
 # Abstract Types - Base Analysis Results
 # =============================================================================
 

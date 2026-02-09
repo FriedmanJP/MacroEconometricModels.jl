@@ -72,6 +72,14 @@ include("core/utils.jl")
 include("core/types.jl")
 include("core/display.jl")
 
+# Data containers, validation, transforms, panel, summary stats, examples
+include("data/types.jl")
+include("data/validation.jl")
+include("data/transform.jl")
+include("data/panel.jl")
+include("data/summary_stats.jl")
+include("data/examples.jl")
+
 # VAR types and estimation
 include("var/types.jl")
 include("var/estimation.jl")
@@ -187,6 +195,9 @@ include("lp/fevd.jl")
 
 # Display (after all types)
 include("summary.jl")
+
+# Data conversion and estimation dispatch wrappers (after all estimation functions)
+include("data/convert.jl")
 
 # =============================================================================
 # Exports - Types
@@ -504,5 +515,33 @@ export trend, cycle
 export fit, coef, vcov, residuals, predict
 export r2, aic, bic, dof, nobs
 export loglikelihood, confint, stderror, islinear
+
+# =============================================================================
+# Exports - Data Module
+# =============================================================================
+
+# Data types and frequency
+export AbstractMacroData, TimeSeriesData, PanelData, CrossSectionData
+export Frequency, Daily, Monthly, Quarterly, Yearly, Mixed, Other
+
+# Constructors and accessors
+export varnames, frequency, time_index, obs_id, rename_vars!
+export set_time_index!, set_obs_id!
+export xtset, isbalanced, groups, ngroups, group_data, panel_summary
+
+# Validation
+export DataDiagnostic, diagnose, fix, validate_for_model
+
+# Transformations
+export apply_tcode, inverse_tcode
+
+# Summary statistics
+export DataSummary, describe_data
+
+# Conversion
+export to_matrix, to_vector
+
+# Examples
+export load_example
 
 end # module
