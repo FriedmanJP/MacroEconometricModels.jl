@@ -47,6 +47,15 @@
 - Normality: Jarque-Bera, Mardia, Doornik-Hansen, Henze-Zirkler
 - Stationarity diagnostics: `unit_root_summary()`, `test_all_variables()`
 
+**Data Management**
+
+- **Typed Containers**: `TimeSeriesData`, `PanelData`, `CrossSectionData` with metadata (frequency, variable names, transformation codes)
+- **Validation**: `diagnose()` detects NaN/Inf/constant columns; `fix()` repairs via listwise deletion, interpolation, or mean imputation
+- **FRED Transforms**: `apply_tcode()` / `inverse_tcode()` implement all 7 FRED-MD transformation codes (McCracken & Ng 2016)
+- **Panel Support**: Stata-style `xtset()` for panel construction, `group_data()` for per-entity extraction
+- **Summary Statistics**: `describe_data()` with N, Mean, Std, Min, P25, Median, P75, Max, Skewness, Kurtosis
+- **Estimation Dispatch**: All estimation functions accept `TimeSeriesData` directly
+
 **Output and References**
 
 - Display backends: switchable text, LaTeX, and HTML table output via `set_display_backend()`
@@ -255,6 +264,7 @@ The package is organized into the following modules:
 
 | Module | Description |
 |--------|-------------|
+| `data/` | Data containers, validation, FRED transforms, panel support, summary statistics |
 | `core/` | Shared infrastructure: types, utilities, display backends, covariance estimators |
 | `arima/` | ARIMA suite: types, Kalman filter, estimation (CSS/MLE), forecasting, order selection |
 | `filters/` | Time series filters: HP, Hamilton, Beveridge-Nelson, Baxter-King, boosted HP |
@@ -380,6 +390,6 @@ Contributions are welcome! Please see the [GitHub repository](https://github.com
 ## Contents
 
 ```@contents
-Pages = ["filters.md", "arima.md", "volatility.md", "manual.md", "bayesian.md", "vecm.md", "lp.md", "factormodels.md", "innovation_accounting.md", "nongaussian.md", "hypothesis_tests.md", "examples.md", "api.md", "api_types.md", "api_functions.md"]
+Pages = ["data.md", "filters.md", "arima.md", "volatility.md", "manual.md", "bayesian.md", "vecm.md", "lp.md", "factormodels.md", "innovation_accounting.md", "nongaussian.md", "hypothesis_tests.md", "examples.md", "api.md", "api_types.md", "api_functions.md"]
 Depth = 2
 ```

@@ -110,7 +110,10 @@ function apply_tcode(d::TimeSeriesData{T}, tcodes::Vector{Int}) where {T}
                    varnames=copy(d.varnames),
                    frequency=d.frequency,
                    tcode=tcodes,
-                   time_index=new_ti)
+                   time_index=new_ti,
+                   desc=desc(d),
+                   vardesc=copy(d.vardesc),
+                   source_refs=copy(d.source_refs))
 end
 
 """

@@ -1900,6 +1900,17 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Investigating Causal Relations by Econometric Models and Cross-spectral Methods",
         journal="Econometrica", volume="37", issue="3", pages="424--438",
         doi="10.2307/1912791", isbn="", publisher="", entry_type=:article),
+    # --- Data Sources ---
+    :mccracken_ng2016 => (key=:mccracken_ng2016,
+        authors="McCracken, Michael W. and Ng, Serena", year=2016,
+        title="FRED-MD: A Monthly Database for Macroeconomic Research",
+        journal="Journal of Business \\& Economic Statistics", volume="34", issue="4", pages="574--589",
+        doi="10.1080/07350015.2015.1086655", isbn="", publisher="", entry_type=:article),
+    :mccracken_ng2020 => (key=:mccracken_ng2020,
+        authors="McCracken, Michael W. and Ng, Serena", year=2020,
+        title="FRED-QD: A Quarterly Database for Macroeconomic Research",
+        journal="Federal Reserve Bank of St. Louis Working Paper", volume="2020-005", issue="", pages="",
+        doi="10.20955/wp.2020.005", isbn="", publisher="", entry_type=:article),
 )
 
 # --- Type/method → reference keys mapping ---
@@ -2037,6 +2048,9 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :GrangerCausalityResult => [:granger1969, :lutkepohl2005],
     :granger => [:granger1969, :lutkepohl2005],
     :granger_test => [:granger1969, :lutkepohl2005],
+    # Data sources (symbol dispatch)
+    :fred_md => [:mccracken_ng2016],
+    :fred_qd => [:mccracken_ng2020],
 )
 
 # ICA method → additional ref keys (appended to ICASVARResult base refs)
@@ -2323,6 +2337,13 @@ refs(io::IO, ::LMTestResult; kw...) = refs(io, _TYPE_REFS[:LMTestResult]; kw...)
 
 # Granger causality
 refs(io::IO, ::GrangerCausalityResult; kw...) = refs(io, _TYPE_REFS[:GrangerCausalityResult]; kw...)
+
+# Data containers (use source_refs field)
+function refs(io::IO, d::AbstractMacroData; format::Symbol=get_display_backend())
+    isempty(d.source_refs) && throw(ArgumentError(
+        "No source references attached to this data object. Set source_refs at construction or use load_example()."))
+    refs(io, d.source_refs; format=format)
+end
 
 # --- Convenience: stdout fallback ---
 refs(x; kw...) = refs(stdout, x; kw...)

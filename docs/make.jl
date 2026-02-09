@@ -13,12 +13,13 @@ makedocs(;
         canonical="https://chung9207.github.io/MacroEconometricModels.jl",
         edit_link="main",
         assets=String[],
-        size_threshold=400 * 1024,
+        size_threshold=450 * 1024,
         mathengine=Documenter.MathJax3(),
         repolink="https://github.com/chung9207/MacroEconometricModels.jl",
     ),
     pages=[
         "Home" => "index.md",
+        "Data Management" => "data.md",
         "Univariate Models" => [
             "Time Series Filters" => "filters.md",
             "ARIMA" => "arima.md",

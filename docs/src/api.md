@@ -9,6 +9,26 @@ The API documentation is organized into the following pages:
 
 ## Quick Reference Tables
 
+### Data Management
+
+| Function | Description |
+|----------|-------------|
+| `TimeSeriesData(data; varnames, frequency, tcode)` | Typed time series container with metadata |
+| `PanelData` / `CrossSectionData` | Panel and cross-section containers |
+| `diagnose(d)` | Scan for NaN, Inf, constant columns |
+| `fix(d; method=:listwise)` | Clean data (`:listwise`, `:interpolate`, `:mean`) |
+| `validate_for_model(d, :var)` | Check dimensionality for model type |
+| `apply_tcode(y, tcode)` | FRED transformation codes 1--7 |
+| `inverse_tcode(y, tcode; x_prev)` | Undo FRED transformation |
+| `describe_data(d)` | Per-variable summary statistics |
+| `xtset(df, group_col, time_col)` | Stata-style panel construction |
+| `group_data(pd, g)` | Extract single entity from panel |
+| `to_matrix(d)` / `to_vector(d)` | Convert to raw matrix/vector |
+| `desc(d)` / `vardesc(d, name)` | Dataset and per-variable descriptions |
+| `set_desc!(d, text)` / `set_vardesc!(d, name, text)` | Set descriptions |
+| `rename_vars!(d, old => new)` | Rename variables |
+| `load_example(:fred_md)` / `load_example(:fred_qd)` | Load built-in FRED datasets |
+
 ### ARIMA Estimation Functions
 
 | Function | Description |

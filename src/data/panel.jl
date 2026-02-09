@@ -38,7 +38,9 @@ pd = xtset(df, :id, :t)
 function xtset(df::DataFrame, group_col::Symbol, time_col::Symbol;
                varnames::Union{Vector{String},Nothing}=nothing,
                frequency::Frequency=Other,
-               tcode::Union{Vector{Int},Nothing}=nothing)
+               tcode::Union{Vector{Int},Nothing}=nothing,
+               desc::String="",
+               vardesc::Union{Dict{String,String},Nothing}=nothing)
     hasproperty(df, group_col) || throw(ArgumentError("Column :$group_col not found in DataFrame"))
     hasproperty(df, time_col) || throw(ArgumentError("Column :$time_col not found in DataFrame"))
 
@@ -101,8 +103,10 @@ function xtset(df::DataFrame, group_col::Symbol, time_col::Symbol;
     tc = something(tcode, ones(Int, n_vars))
     length(tc) != n_vars && throw(ArgumentError("tcode length must match n_vars"))
 
+    vd = something(vardesc, Dict{String,String}())
     PanelData{Float64}(mat, vn, frequency, tc, group_id, time_id,
-                        group_names, n_groups, n_vars, T_total, balanced)
+                        group_names, n_groups, n_vars, T_total, balanced,
+                        [desc], vd, Symbol[])
 end
 
 # =============================================================================
@@ -152,7 +156,10 @@ function group_data(d::PanelData{T}, g::Int) where {T}
                    varnames=copy(d.varnames),
                    frequency=d.frequency,
                    tcode=copy(d.tcode),
-                   time_index=ti)
+                   time_index=ti,
+                   desc=desc(d),
+                   vardesc=copy(d.vardesc),
+                   source_refs=copy(d.source_refs))
 end
 
 function group_data(d::PanelData{T}, g::String) where {T}

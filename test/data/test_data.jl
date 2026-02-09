@@ -832,11 +832,276 @@ using Statistics
     end
 
     # =========================================================================
-    # 11. Examples stub
+    # 11. Descriptions (desc / vardesc)
     # =========================================================================
-    @testset "Examples" begin
-        @test_throws ArgumentError load_example(:sw2001)
+    @testset "Descriptions" begin
+        @testset "desc at construction" begin
+            d = TimeSeriesData(randn(50, 2);
+                varnames=["GDP", "CPI"],
+                desc="US macro data")
+            @test desc(d) == "US macro data"
+        end
+
+        @testset "desc default empty" begin
+            d = TimeSeriesData(randn(50, 2))
+            @test desc(d) == ""
+        end
+
+        @testset "set_desc!" begin
+            d = TimeSeriesData(randn(50, 2))
+            set_desc!(d, "Updated description")
+            @test desc(d) == "Updated description"
+            set_desc!(d, "")
+            @test desc(d) == ""
+        end
+
+        @testset "vardesc at construction" begin
+            vd = Dict("GDP" => "Real GDP growth", "CPI" => "Consumer prices")
+            d = TimeSeriesData(randn(50, 2);
+                varnames=["GDP", "CPI"], vardesc=vd)
+            @test vardesc(d) == vd
+            @test vardesc(d, "GDP") == "Real GDP growth"
+            @test vardesc(d, "CPI") == "Consumer prices"
+        end
+
+        @testset "vardesc default empty" begin
+            d = TimeSeriesData(randn(50, 2); varnames=["GDP", "CPI"])
+            @test isempty(vardesc(d))
+            @test_throws ArgumentError vardesc(d, "GDP")
+        end
+
+        @testset "set_vardesc! single" begin
+            d = TimeSeriesData(randn(50, 2); varnames=["GDP", "CPI"])
+            set_vardesc!(d, "GDP", "Real GDP")
+            @test vardesc(d, "GDP") == "Real GDP"
+            @test_throws ArgumentError set_vardesc!(d, "NONEXISTENT", "x")
+        end
+
+        @testset "set_vardesc! dict" begin
+            d = TimeSeriesData(randn(50, 2); varnames=["GDP", "CPI"])
+            set_vardesc!(d, Dict("GDP" => "Real GDP", "CPI" => "CPI index"))
+            @test vardesc(d, "GDP") == "Real GDP"
+            @test vardesc(d, "CPI") == "CPI index"
+            @test_throws ArgumentError set_vardesc!(d, Dict("BAD" => "x"))
+        end
+
+        @testset "desc propagates through subsetting" begin
+            vd = Dict("GDP" => "Real GDP", "CPI" => "Consumer prices", "FFR" => "Fed rate")
+            d = TimeSeriesData(randn(50, 3);
+                varnames=["GDP", "CPI", "FFR"],
+                desc="US macro", vardesc=vd)
+            sub = d[:, ["GDP", "FFR"]]
+            @test desc(sub) == "US macro"
+            @test vardesc(sub, "GDP") == "Real GDP"
+            @test vardesc(sub, "FFR") == "Fed rate"
+            @test !haskey(vardesc(sub), "CPI")  # filtered out
+        end
+
+        @testset "desc propagates through apply_tcode" begin
+            vd = Dict("a" => "Variable a", "b" => "Variable b")
+            d = TimeSeriesData(rand(50, 2) .+ 1.0;
+                varnames=["a", "b"], desc="test data", vardesc=vd)
+            d2 = apply_tcode(d, [5, 1])
+            @test desc(d2) == "test data"
+            @test vardesc(d2, "a") == "Variable a"
+            @test vardesc(d2, "b") == "Variable b"
+        end
+
+        @testset "desc propagates through fix" begin
+            mat = [1.0 2.0; NaN 3.0; 4.0 5.0; 6.0 7.0; 8.0 9.0;
+                   10.0 11.0; 12.0 13.0; 14.0 15.0; 16.0 17.0; 18.0 19.0;
+                   20.0 21.0; 22.0 23.0]
+            vd = Dict("x1" => "First var", "x2" => "Second var")
+            d = TimeSeriesData(mat; desc="with desc", vardesc=vd)
+            d_fixed = fix(d; method=:listwise)
+            @test desc(d_fixed) == "with desc"
+            @test vardesc(d_fixed, "x1") == "First var"
+        end
+
+        @testset "desc propagates through group_data" begin
+            df = DataFrame(id=repeat(1:2, inner=10), t=repeat(1:10, 2),
+                          x=randn(20), y=randn(20))
+            vd = Dict("x" => "X variable", "y" => "Y variable")
+            pd = xtset(df, :id, :t; desc="Panel dataset", vardesc=vd)
+            @test desc(pd) == "Panel dataset"
+            @test vardesc(pd, "x") == "X variable"
+
+            g1 = group_data(pd, 1)
+            @test desc(g1) == "Panel dataset"
+            @test vardesc(g1, "x") == "X variable"
+            @test vardesc(g1, "y") == "Y variable"
+        end
+
+        @testset "rename_vars! updates vardesc keys" begin
+            vd = Dict("a" => "Alpha variable", "b" => "Beta variable")
+            d = TimeSeriesData(randn(20, 2); varnames=["a", "b"], vardesc=vd)
+            rename_vars!(d, "a" => "x")
+            @test vardesc(d, "x") == "Alpha variable"
+            @test !haskey(vardesc(d), "a")
+
+            rename_vars!(d, ["p", "q"])
+            @test vardesc(d, "p") == "Alpha variable"
+            @test vardesc(d, "q") == "Beta variable"
+        end
+
+        @testset "CrossSectionData desc/vardesc" begin
+            vd = Dict("inc" => "Income", "age" => "Age in years")
+            d = CrossSectionData(randn(30, 2);
+                varnames=["inc", "age"], desc="Survey data", vardesc=vd)
+            @test desc(d) == "Survey data"
+            @test vardesc(d, "inc") == "Income"
+            set_desc!(d, "Updated survey")
+            @test desc(d) == "Updated survey"
+        end
+
+        @testset "desc in show output" begin
+            d = TimeSeriesData(randn(50, 2);
+                varnames=["GDP", "CPI"], desc="Quarterly US data")
+            io = IOBuffer()
+            show(io, d)
+            s = String(take!(io))
+            @test occursin("Quarterly US data", s)
+        end
+
+        @testset "no desc line when empty" begin
+            d = TimeSeriesData(randn(50, 2); varnames=["GDP", "CPI"])
+            io = IOBuffer()
+            show(io, d)
+            s = String(take!(io))
+            @test !occursin("\n", s)  # single line, no desc
+        end
+
+        @testset "Vector constructor with desc" begin
+            d = TimeSeriesData(randn(50); varname="GDP", desc="GDP series",
+                vardesc=Dict("GDP" => "Real GDP"))
+            @test desc(d) == "GDP series"
+            @test vardesc(d, "GDP") == "Real GDP"
+        end
+
+        @testset "DataFrame constructor with desc" begin
+            df = DataFrame(x=randn(20), y=randn(20))
+            d = TimeSeriesData(df; desc="From DataFrame",
+                vardesc=Dict("x" => "X col", "y" => "Y col"))
+            @test desc(d) == "From DataFrame"
+            @test vardesc(d, "x") == "X col"
+        end
+    end
+
+    # =========================================================================
+    # 12. Example datasets (FRED-MD, FRED-QD)
+    # =========================================================================
+    @testset "Example datasets" begin
         @test_throws ArgumentError load_example(:nonexistent)
+
+        @testset "FRED-MD" begin
+            md = load_example(:fred_md)
+            @test md isa TimeSeriesData{Float64}
+            @test nobs(md) == 804
+            @test nvars(md) == 126
+            @test frequency(md) == Monthly
+            @test desc(md) == "FRED-MD Monthly Database, January 2026 Vintage (McCracken & Ng 2016)"
+            @test length(md.tcode) == 126
+            @test all(t -> 1 <= t <= 7, md.tcode)
+
+            # Variable descriptions
+            @test vardesc(md, "INDPRO") == "IP Index"
+            @test vardesc(md, "RPI") == "Real Personal Income"
+            @test length(vardesc(md)) == 126
+
+            # Source refs
+            @test md.source_refs == [:mccracken_ng2016]
+
+            # refs() works
+            io = IOBuffer()
+            refs(io, md)
+            s = String(take!(io))
+            @test occursin("McCracken", s)
+            @test occursin("FRED-MD", s)
+
+            # refs(:fred_md) symbol dispatch
+            io2 = IOBuffer()
+            refs(io2, :fred_md)
+            s2 = String(take!(io2))
+            @test s == s2
+
+            # Data is numeric and not all NaN
+            @test !all(isnan, md.data[:, 1])
+            @test size(md.data) == (804, 126)
+
+            # Subsetting preserves source_refs
+            sub = md[:, ["INDPRO", "UNRATE"]]
+            @test sub.source_refs == [:mccracken_ng2016]
+            @test nvars(sub) == 2
+        end
+
+        @testset "FRED-QD" begin
+            qd = load_example(:fred_qd)
+            @test qd isa TimeSeriesData{Float64}
+            @test nobs(qd) == 268
+            @test nvars(qd) == 245
+            @test frequency(qd) == Quarterly
+            @test occursin("FRED-QD", desc(qd))
+            @test all(t -> 1 <= t <= 7, qd.tcode)
+
+            # Variable descriptions
+            @test occursin("Gross Domestic Product", vardesc(qd, "GDPC1"))
+            @test length(vardesc(qd)) == 245
+
+            # Source refs
+            @test qd.source_refs == [:mccracken_ng2020]
+
+            # refs() works
+            io = IOBuffer()
+            refs(io, qd)
+            s = String(take!(io))
+            @test occursin("McCracken", s)
+            @test occursin("FRED-QD", s)
+
+            # Data dimensions
+            @test size(qd.data) == (268, 245)
+        end
+    end
+
+    # =========================================================================
+    # 13. source_refs field
+    # =========================================================================
+    @testset "source_refs" begin
+        # Default is empty
+        d = TimeSeriesData(randn(50, 3))
+        @test d.source_refs == Symbol[]
+
+        # Set at construction
+        d2 = TimeSeriesData(randn(50, 2);
+            source_refs=[:mccracken_ng2016])
+        @test d2.source_refs == [:mccracken_ng2016]
+
+        # Propagation through apply_tcode
+        d3 = TimeSeriesData(rand(50, 2) .+ 1.0;
+            source_refs=[:mccracken_ng2016])
+        d3t = apply_tcode(d3, [5, 5])
+        @test d3t.source_refs == [:mccracken_ng2016]
+
+        # Propagation through fix
+        mat = randn(50, 2)
+        mat[3, 1] = NaN
+        d4 = TimeSeriesData(mat; source_refs=[:mccracken_ng2016])
+        d4f = fix(d4)
+        @test d4f.source_refs == [:mccracken_ng2016]
+
+        # Propagation through subsetting
+        d5 = TimeSeriesData(randn(50, 3);
+            varnames=["a", "b", "c"],
+            source_refs=[:mccracken_ng2016])
+        sub = d5[:, ["a", "b"]]
+        @test sub.source_refs == [:mccracken_ng2016]
+
+        # refs() errors on empty source_refs
+        @test_throws ArgumentError refs(d)
+
+        # CrossSectionData with source_refs
+        cs = CrossSectionData(randn(30, 2);
+            source_refs=[:mccracken_ng2016])
+        @test cs.source_refs == [:mccracken_ng2016]
     end
 
 end

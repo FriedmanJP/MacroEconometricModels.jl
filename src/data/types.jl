@@ -33,12 +33,15 @@ Container for time series data with metadata.
 - `time_index::Vector{Int}` — integer time identifiers (default: 1:T)
 - `T_obs::Int` — number of observations
 - `n_vars::Int` — number of variables
+- `desc::Vector{String}` — dataset description (length-1 vector for mutability)
+- `vardesc::Dict{String,String}` — per-variable descriptions keyed by variable name
+- `source_refs::Vector{Symbol}` — reference keys for bibliographic citations (see `refs()`)
 
 # Constructors
 ```julia
-TimeSeriesData(data::Matrix; varnames, frequency=Other, tcode, time_index)
-TimeSeriesData(data::Vector; varname="x1", frequency=Other)
-TimeSeriesData(df::DataFrame; frequency=Other, varnames)
+TimeSeriesData(data::Matrix; varnames, frequency=Other, tcode, time_index, desc, vardesc, source_refs)
+TimeSeriesData(data::Vector; varname="x1", frequency=Other, desc, vardesc, source_refs)
+TimeSeriesData(df::DataFrame; frequency=Other, varnames, desc, vardesc, source_refs)
 ```
 """
 struct TimeSeriesData{T<:AbstractFloat} <: AbstractMacroData
@@ -49,6 +52,9 @@ struct TimeSeriesData{T<:AbstractFloat} <: AbstractMacroData
     time_index::Vector{Int}
     T_obs::Int
     n_vars::Int
+    desc::Vector{String}
+    vardesc::Dict{String,String}
+    source_refs::Vector{Symbol}
 end
 
 # Matrix constructor
@@ -56,7 +62,10 @@ function TimeSeriesData(data::AbstractMatrix{T};
                         varnames::Union{Vector{String},Nothing}=nothing,
                         frequency::Frequency=Other,
                         tcode::Union{Vector{Int},Nothing}=nothing,
-                        time_index::Union{Vector{Int},Nothing}=nothing) where {T<:AbstractFloat}
+                        time_index::Union{Vector{Int},Nothing}=nothing,
+                        desc::String="",
+                        vardesc::Union{Dict{String,String},Nothing}=nothing,
+                        source_refs::Vector{Symbol}=Symbol[]) where {T<:AbstractFloat}
     T_obs, n_vars = size(data)
     T_obs < 1 && throw(ArgumentError("Data must have at least 1 observation, got $T_obs"))
     n_vars < 1 && throw(ArgumentError("Data must have at least 1 variable, got $n_vars"))
@@ -67,7 +76,8 @@ function TimeSeriesData(data::AbstractMatrix{T};
     all(t -> 1 <= t <= 7, tc) || throw(ArgumentError("tcode values must be in 1:7"))
     ti = something(time_index, collect(1:T_obs))
     length(ti) != T_obs && throw(ArgumentError("time_index length ($(length(ti))) must match T_obs ($T_obs)"))
-    TimeSeriesData{T}(Matrix{T}(data), vn, frequency, tc, ti, T_obs, n_vars)
+    vd = something(vardesc, Dict{String,String}())
+    TimeSeriesData{T}(Matrix{T}(data), vn, frequency, tc, ti, T_obs, n_vars, [desc], vd, source_refs)
 end
 
 # Non-float matrix fallback
@@ -80,9 +90,13 @@ function TimeSeriesData(data::AbstractVector{T};
                         varname::String="x1",
                         frequency::Frequency=Other,
                         tcode::Int=1,
-                        time_index::Union{Vector{Int},Nothing}=nothing) where {T<:AbstractFloat}
+                        time_index::Union{Vector{Int},Nothing}=nothing,
+                        desc::String="",
+                        vardesc::Union{Dict{String,String},Nothing}=nothing,
+                        source_refs::Vector{Symbol}=Symbol[]) where {T<:AbstractFloat}
     TimeSeriesData(reshape(data, :, 1); varnames=[varname], frequency=frequency,
-                   tcode=[tcode], time_index=time_index)
+                   tcode=[tcode], time_index=time_index, desc=desc, vardesc=vardesc,
+                   source_refs=source_refs)
 end
 
 # Non-float vector fallback
@@ -95,7 +109,10 @@ function TimeSeriesData(df::DataFrame;
                         frequency::Frequency=Other,
                         varnames::Union{Vector{String},Nothing}=nothing,
                         tcode::Union{Vector{Int},Nothing}=nothing,
-                        time_index::Union{Vector{Int},Nothing}=nothing)
+                        time_index::Union{Vector{Int},Nothing}=nothing,
+                        desc::String="",
+                        vardesc::Union{Dict{String,String},Nothing}=nothing,
+                        source_refs::Vector{Symbol}=Symbol[])
     # Select numeric columns
     num_cols = [n for n in names(df) if eltype(df[!, n]) <: Union{Missing, Number}]
     isempty(num_cols) && throw(ArgumentError("DataFrame has no numeric columns"))
@@ -110,7 +127,9 @@ function TimeSeriesData(df::DataFrame;
     end
 
     vn = something(varnames, num_cols)
-    TimeSeriesData(mat; varnames=vn, frequency=frequency, tcode=tcode, time_index=time_index)
+    TimeSeriesData(mat; varnames=vn, frequency=frequency, tcode=tcode,
+                   time_index=time_index, desc=desc, vardesc=vardesc,
+                   source_refs=source_refs)
 end
 
 # =============================================================================
@@ -134,6 +153,9 @@ Container for panel (longitudinal) data with group and time identifiers.
 - `n_vars::Int` — number of variables
 - `T_obs::Int` — total number of rows
 - `balanced::Bool` — true if all groups have same number of observations
+- `desc::Vector{String}` — dataset description (length-1 vector for mutability)
+- `vardesc::Dict{String,String}` — per-variable descriptions keyed by variable name
+- `source_refs::Vector{Symbol}` — reference keys for bibliographic citations (see `refs()`)
 """
 struct PanelData{T<:AbstractFloat} <: AbstractMacroData
     data::Matrix{T}
@@ -147,6 +169,9 @@ struct PanelData{T<:AbstractFloat} <: AbstractMacroData
     n_vars::Int
     T_obs::Int
     balanced::Bool
+    desc::Vector{String}
+    vardesc::Dict{String,String}
+    source_refs::Vector{Symbol}
 end
 
 # =============================================================================
@@ -164,6 +189,9 @@ Container for cross-sectional data (single time point, multiple observations).
 - `obs_id::Vector{Int}` — observation identifiers
 - `N_obs::Int` — number of observations
 - `n_vars::Int` — number of variables
+- `desc::Vector{String}` — dataset description (length-1 vector for mutability)
+- `vardesc::Dict{String,String}` — per-variable descriptions keyed by variable name
+- `source_refs::Vector{Symbol}` — reference keys for bibliographic citations (see `refs()`)
 """
 struct CrossSectionData{T<:AbstractFloat} <: AbstractMacroData
     data::Matrix{T}
@@ -171,11 +199,17 @@ struct CrossSectionData{T<:AbstractFloat} <: AbstractMacroData
     obs_id::Vector{Int}
     N_obs::Int
     n_vars::Int
+    desc::Vector{String}
+    vardesc::Dict{String,String}
+    source_refs::Vector{Symbol}
 end
 
 function CrossSectionData(data::AbstractMatrix{T};
                           varnames::Union{Vector{String},Nothing}=nothing,
-                          obs_id::Union{Vector{Int},Nothing}=nothing) where {T<:AbstractFloat}
+                          obs_id::Union{Vector{Int},Nothing}=nothing,
+                          desc::String="",
+                          vardesc::Union{Dict{String,String},Nothing}=nothing,
+                          source_refs::Vector{Symbol}=Symbol[]) where {T<:AbstractFloat}
     N_obs, n_vars = size(data)
     N_obs < 1 && throw(ArgumentError("Data must have at least 1 observation"))
     n_vars < 1 && throw(ArgumentError("Data must have at least 1 variable"))
@@ -183,7 +217,8 @@ function CrossSectionData(data::AbstractMatrix{T};
     length(vn) != n_vars && throw(ArgumentError("varnames length must match n_vars"))
     oid = something(obs_id, collect(1:N_obs))
     length(oid) != N_obs && throw(ArgumentError("obs_id length must match N_obs"))
-    CrossSectionData{T}(Matrix{T}(data), vn, oid, N_obs, n_vars)
+    vd = something(vardesc, Dict{String,String}())
+    CrossSectionData{T}(Matrix{T}(data), vn, oid, N_obs, n_vars, [desc], vd, source_refs)
 end
 
 function CrossSectionData(data::AbstractMatrix; kwargs...)
@@ -192,7 +227,10 @@ end
 
 function CrossSectionData(df::DataFrame;
                           varnames::Union{Vector{String},Nothing}=nothing,
-                          obs_id::Union{Vector{Int},Nothing}=nothing)
+                          obs_id::Union{Vector{Int},Nothing}=nothing,
+                          desc::String="",
+                          vardesc::Union{Dict{String,String},Nothing}=nothing,
+                          source_refs::Vector{Symbol}=Symbol[])
     num_cols = [n for n in names(df) if eltype(df[!, n]) <: Union{Missing, Number}]
     isempty(num_cols) && throw(ArgumentError("DataFrame has no numeric columns"))
     mat = Matrix{Float64}(undef, nrow(df), length(num_cols))
@@ -203,7 +241,8 @@ function CrossSectionData(df::DataFrame;
         end
     end
     vn = something(varnames, num_cols)
-    CrossSectionData(mat; varnames=vn, obs_id=obs_id)
+    CrossSectionData(mat; varnames=vn, obs_id=obs_id, desc=desc, vardesc=vardesc,
+                     source_refs=source_refs)
 end
 
 # =============================================================================
@@ -258,6 +297,50 @@ Return the observation identifier vector.
 """
 obs_id(d::CrossSectionData) = d.obs_id
 
+"""
+    desc(d::AbstractMacroData) -> String
+
+Return the dataset description. Returns `""` if no description has been set.
+
+# Examples
+```julia
+d = TimeSeriesData(randn(100, 3); desc="US macro quarterly data")
+desc(d)  # "US macro quarterly data"
+```
+"""
+desc(d::AbstractMacroData) = d.desc[1]
+
+"""
+    vardesc(d::AbstractMacroData) -> Dict{String,String}
+
+Return the dictionary of per-variable descriptions.
+
+# Examples
+```julia
+d = TimeSeriesData(randn(100, 2); varnames=["GDP","CPI"],
+    vardesc=Dict("GDP" => "Real GDP growth", "CPI" => "Consumer prices"))
+vardesc(d)  # Dict("GDP" => "Real GDP growth", "CPI" => "Consumer prices")
+```
+"""
+vardesc(d::AbstractMacroData) = d.vardesc
+
+"""
+    vardesc(d::AbstractMacroData, name::String) -> String
+
+Return the description for variable `name`. Throws `ArgumentError` if no
+description exists for that variable.
+
+# Examples
+```julia
+vardesc(d, "GDP")  # "Real GDP growth"
+```
+"""
+function vardesc(d::AbstractMacroData, name::String)
+    haskey(d.vardesc, name) || throw(ArgumentError(
+        "No description for variable '$name'. Available: $(collect(keys(d.vardesc)))"))
+    d.vardesc[name]
+end
+
 # =============================================================================
 # Matrix/Vector Conversion
 # =============================================================================
@@ -288,8 +371,10 @@ function Base.getindex(d::TimeSeriesData{T}, ::Colon, cols::Vector{String}) wher
         idx === nothing && throw(ArgumentError("Variable '$col' not found. Available: $(d.varnames)"))
         push!(idxs, idx)
     end
+    sub_vd = Dict(k => v for (k, v) in d.vardesc if k in cols)
     TimeSeriesData{T}(d.data[:, idxs], d.varnames[idxs], d.frequency,
-                      d.tcode[idxs], d.time_index, d.T_obs, length(idxs))
+                      d.tcode[idxs], d.time_index, d.T_obs, length(idxs),
+                      copy(d.desc), sub_vd, copy(d.source_refs))
 end
 
 function Base.getindex(d::TimeSeriesData{T}, ::Colon, col::Int) where {T}
@@ -312,17 +397,25 @@ end
     rename_vars!(d::AbstractMacroData, names::Vector{String})
 
 Rename variables in a data container. With a `Pair`, renames a single variable.
-With a `Vector{String}`, replaces all variable names.
+With a `Vector{String}`, replaces all variable names. Also updates `vardesc` keys.
 """
 function rename_vars!(d::TimeSeriesData, pair::Pair{String,String})
     idx = findfirst(==(pair.first), d.varnames)
     idx === nothing && throw(ArgumentError("Variable '$(pair.first)' not found"))
     d.varnames[idx] = pair.second
+    if haskey(d.vardesc, pair.first)
+        d.vardesc[pair.second] = pop!(d.vardesc, pair.first)
+    end
     d
 end
 
 function rename_vars!(d::TimeSeriesData, names::Vector{String})
     length(names) != d.n_vars && throw(ArgumentError("names length must match n_vars"))
+    for (old, new) in zip(d.varnames, names)
+        if old != new && haskey(d.vardesc, old)
+            d.vardesc[new] = pop!(d.vardesc, old)
+        end
+    end
     copy!(d.varnames, names)
     d
 end
@@ -331,11 +424,19 @@ function rename_vars!(d::PanelData, pair::Pair{String,String})
     idx = findfirst(==(pair.first), d.varnames)
     idx === nothing && throw(ArgumentError("Variable '$(pair.first)' not found"))
     d.varnames[idx] = pair.second
+    if haskey(d.vardesc, pair.first)
+        d.vardesc[pair.second] = pop!(d.vardesc, pair.first)
+    end
     d
 end
 
 function rename_vars!(d::PanelData, names::Vector{String})
     length(names) != d.n_vars && throw(ArgumentError("names length must match n_vars"))
+    for (old, new) in zip(d.varnames, names)
+        if old != new && haskey(d.vardesc, old)
+            d.vardesc[new] = pop!(d.vardesc, old)
+        end
+    end
     copy!(d.varnames, names)
     d
 end
@@ -344,11 +445,19 @@ function rename_vars!(d::CrossSectionData, pair::Pair{String,String})
     idx = findfirst(==(pair.first), d.varnames)
     idx === nothing && throw(ArgumentError("Variable '$(pair.first)' not found"))
     d.varnames[idx] = pair.second
+    if haskey(d.vardesc, pair.first)
+        d.vardesc[pair.second] = pop!(d.vardesc, pair.first)
+    end
     d
 end
 
 function rename_vars!(d::CrossSectionData, names::Vector{String})
     length(names) != d.n_vars && throw(ArgumentError("names length must match n_vars"))
+    for (old, new) in zip(d.varnames, names)
+        if old != new && haskey(d.vardesc, old)
+            d.vardesc[new] = pop!(d.vardesc, old)
+        end
+    end
     copy!(d.varnames, names)
     d
 end
@@ -379,6 +488,62 @@ function set_obs_id!(d::CrossSectionData, ids::Vector{Int})
     d
 end
 
+"""
+    set_desc!(d::AbstractMacroData, text::String)
+
+Set the dataset description.
+
+# Examples
+```julia
+d = TimeSeriesData(randn(100, 3))
+set_desc!(d, "US macroeconomic quarterly data 1959-2024")
+desc(d)  # "US macroeconomic quarterly data 1959-2024"
+```
+"""
+function set_desc!(d::AbstractMacroData, text::String)
+    d.desc[1] = text
+    d
+end
+
+"""
+    set_vardesc!(d::AbstractMacroData, name::String, text::String)
+
+Set the description for a single variable. The variable must exist in the data.
+
+# Examples
+```julia
+d = TimeSeriesData(randn(100, 2); varnames=["GDP", "CPI"])
+set_vardesc!(d, "GDP", "Real Gross Domestic Product, seasonally adjusted")
+set_vardesc!(d, "CPI", "Consumer Price Index for All Urban Consumers")
+vardesc(d, "GDP")  # "Real Gross Domestic Product, seasonally adjusted"
+```
+"""
+function set_vardesc!(d::AbstractMacroData, name::String, text::String)
+    name ∈ d.varnames || throw(ArgumentError(
+        "Variable '$name' not found. Available: $(d.varnames)"))
+    d.vardesc[name] = text
+    d
+end
+
+"""
+    set_vardesc!(d::AbstractMacroData, descriptions::Dict{String,String})
+
+Set descriptions for multiple variables at once. All keys must be valid variable names.
+
+# Examples
+```julia
+set_vardesc!(d, Dict("GDP" => "Real GDP", "CPI" => "Consumer prices"))
+```
+"""
+function set_vardesc!(d::AbstractMacroData, descriptions::Dict{String,String})
+    for name in keys(descriptions)
+        name ∈ d.varnames || throw(ArgumentError(
+            "Variable '$name' not found. Available: $(d.varnames)"))
+    end
+    merge!(d.vardesc, descriptions)
+    d
+end
+
 # =============================================================================
 # Display
 # =============================================================================
@@ -390,6 +555,9 @@ function Base.show(io::IO, d::TimeSeriesData{T}) where {T}
     end
     if d.n_vars <= 10
         print(io, " [", join(d.varnames, ", "), "]")
+    end
+    if !isempty(d.desc[1])
+        print(io, "\n  ", d.desc[1])
     end
 end
 
@@ -403,6 +571,9 @@ function Base.show(io::IO, d::PanelData{T}) where {T}
         print(io, " ($(d.frequency))")
     end
     print(io, d.balanced ? " [balanced]" : " [unbalanced]")
+    if !isempty(d.desc[1])
+        print(io, "\n  ", d.desc[1])
+    end
 end
 
 function Base.show(io::IO, ::MIME"text/plain", d::PanelData{T}) where {T}
@@ -413,6 +584,9 @@ function Base.show(io::IO, d::CrossSectionData{T}) where {T}
     print(io, "CrossSectionData{$T}: $(d.N_obs) obs × $(d.n_vars) vars")
     if d.n_vars <= 10
         print(io, " [", join(d.varnames, ", "), "]")
+    end
+    if !isempty(d.desc[1])
+        print(io, "\n  ", d.desc[1])
     end
 end
 

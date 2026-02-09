@@ -526,7 +526,7 @@ export Frequency, Daily, Monthly, Quarterly, Yearly, Mixed, Other
 
 # Constructors and accessors
 export varnames, frequency, time_index, obs_id, rename_vars!
-export set_time_index!, set_obs_id!
+export set_time_index!, set_obs_id!, desc, vardesc, set_desc!, set_vardesc!
 export xtset, isbalanced, groups, ngroups, group_data, panel_summary
 
 # Validation

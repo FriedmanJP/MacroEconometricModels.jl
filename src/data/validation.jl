@@ -185,11 +185,16 @@ function fix(d::TimeSeriesData{T}; method::Symbol=:listwise) where {T}
         throw(ArgumentError("All columns are constant after fixing — no data remaining"))
     end
 
+    kept_names = d.varnames[keep_cols]
+    sub_vd = Dict(k => v for (k, v) in d.vardesc if k in kept_names)
     TimeSeriesData(mat[:, keep_cols];
-                   varnames=d.varnames[keep_cols],
+                   varnames=kept_names,
                    frequency=d.frequency,
                    tcode=d.tcode[keep_cols],
-                   time_index=ti)
+                   time_index=ti,
+                   desc=desc(d),
+                   vardesc=sub_vd,
+                   source_refs=copy(d.source_refs))
 end
 
 """Linear interpolation for interior NaN, forward-fill for edges."""

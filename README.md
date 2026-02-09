@@ -6,7 +6,7 @@
 [![Aqua QA](https://raw.githubusercontent.com/JuliaTesting/Aqua.jl/master/badge.svg)](https://github.com/JuliaTesting/Aqua.jl)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18439170.svg)](https://doi.org/10.5281/zenodo.18439170)
 
-A comprehensive Julia package for macroeconomic time series analysis. Provides VAR, VECM, Bayesian VAR, Local Projections, Factor Models, ARIMA, time series filters, GMM, ARCH/GARCH/Stochastic Volatility estimation, structural identification (including non-Gaussian and heteroskedasticity-based methods), hypothesis testing, and publication-quality output with multi-format bibliographic references.
+A comprehensive Julia package for macroeconomic time series analysis. Provides VAR, VECM, Bayesian VAR, Local Projections, Factor Models, ARIMA, time series filters, GMM, ARCH/GARCH/Stochastic Volatility estimation, structural identification (including non-Gaussian and heteroskedasticity-based methods), hypothesis testing, built-in FRED-MD/QD datasets, typed data containers, and publication-quality output with multi-format bibliographic references.
 
 ## Features
 
@@ -73,6 +73,15 @@ A comprehensive Julia package for macroeconomic time series analysis. Provides V
 - **Multivariate normality tests** - Jarque-Bera, Mardia, Doornik-Hansen, Henze-Zirkler
 - **Identifiability diagnostics** - Shock gaussianity, LR tests, independence tests, bootstrap strength tests
 - Seamless integration: `irf(model, 20; method=:fastica)` works out of the box
+
+### Data Management
+- **Typed containers** - `TimeSeriesData`, `PanelData`, `CrossSectionData` with variable names, frequency, transformation codes, and descriptions
+- **Built-in datasets** - FRED-MD (126 monthly variables) and FRED-QD (245 quarterly variables), January 2026 vintages (McCracken & Ng 2016, 2020)
+- **Data diagnostics** - `diagnose()` scans for NaN/Inf/constant columns; `fix()` cleans via listwise deletion, interpolation, or mean imputation
+- **FRED transformations** - `apply_tcode()` / `inverse_tcode()` for all 7 FRED transformation codes
+- **Panel support** - `xtset()` for Stata-style panel construction; balanced/unbalanced detection
+- **Summary statistics** - `describe_data()` with per-variable N, mean, std, quantiles, skewness, kurtosis
+- **Seamless estimation** - All estimation functions accept `TimeSeriesData` directly
 
 ### Hypothesis Tests
 - **Unit Root Tests** - ADF, KPSS, Phillips-Perron, Zivot-Andrews, Ng-Perron
@@ -300,6 +309,28 @@ g_block = granger_test(m, [1, 2], 3)
 results = granger_test_all(m)
 ```
 
+### Data Management
+
+```julia
+using MacroEconometricModels
+
+# Load built-in FRED-MD dataset (126 monthly macro variables)
+md = load_example(:fred_md)
+desc(md)                            # "FRED-MD Monthly Database, January 2026 Vintage..."
+vardesc(md, "INDPRO")               # "IP Index"
+refs(md)                            # McCracken & Ng (2016)
+
+# Apply recommended FRED transformation codes
+md_transformed = apply_tcode(md, md.tcode)
+
+# Diagnose and clean data
+diag = diagnose(md_transformed)
+clean = fix(md_transformed; method=:listwise)
+
+# Estimate directly from TimeSeriesData
+model = estimate_var(clean[:, ["INDPRO", "UNRATE", "CPIAUCSL"]], 4)
+```
+
 ### Bibliographic References
 
 ```julia
@@ -398,6 +429,11 @@ Full documentation available at [https://chung9207.github.io/MacroEconometricMod
 ### Granger Causality
 
 - Granger, Clive W. J. 1969. "Investigating Causal Relations by Econometric Models and Cross-spectral Methods." *Econometrica* 37 (3): 424–438. [https://doi.org/10.2307/1912791](https://doi.org/10.2307/1912791)
+
+### Data Sources
+
+- McCracken, Michael W., and Serena Ng. 2016. "FRED-MD: A Monthly Database for Macroeconomic Research." *Journal of Business & Economic Statistics* 34 (4): 574–589. [https://doi.org/10.1080/07350015.2015.1086655](https://doi.org/10.1080/07350015.2015.1086655)
+- McCracken, Michael W., and Serena Ng. 2020. "FRED-QD: A Quarterly Database for Macroeconomic Research." *Federal Reserve Bank of St. Louis Working Paper* 2020-005. [https://doi.org/10.20955/wp.2020.005](https://doi.org/10.20955/wp.2020.005)
 
 ### Model Comparison Tests
 

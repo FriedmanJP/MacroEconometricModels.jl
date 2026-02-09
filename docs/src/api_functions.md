@@ -4,6 +4,63 @@ This page documents all functions in **MacroEconometricModels.jl**, organized by
 
 ---
 
+## Data Management
+
+### Validation and Cleaning
+
+```@docs
+diagnose
+fix
+validate_for_model
+```
+
+### FRED Transformations
+
+```@docs
+apply_tcode
+inverse_tcode
+```
+
+### Summary Statistics
+
+```@docs
+describe_data
+```
+
+### Panel Data
+
+```@docs
+xtset
+isbalanced
+groups
+ngroups
+group_data
+panel_summary
+```
+
+### Data Accessors and Conversion
+
+```@docs
+MacroEconometricModels.StatsAPI.nobs(::TimeSeriesData)
+nvars
+varnames
+frequency
+time_index
+obs_id
+desc
+vardesc
+rename_vars!
+set_time_index!
+set_obs_id!
+set_desc!
+set_vardesc!
+to_matrix
+to_vector
+load_example
+```
+
+---
+
 ## Time Series Filters
 
 ```@docs

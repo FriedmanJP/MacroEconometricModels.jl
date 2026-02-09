@@ -10,6 +10,20 @@ MacroEconometricModels.MacroEconometricModels
 
 ---
 
+## Data Containers
+
+```@docs
+AbstractMacroData
+TimeSeriesData
+PanelData
+CrossSectionData
+Frequency
+DataDiagnostic
+DataSummary
+```
+
+---
+
 ## Time Series Filters
 
 ```@docs
@@ -227,6 +241,15 @@ IdentifiabilityTestResult
 ## Type Hierarchy
 
 ```
+AbstractMacroData
+├── TimeSeriesData{T}
+├── PanelData{T}
+└── CrossSectionData{T}
+
+DataDiagnostic
+DataSummary
+Frequency (enum: Daily, Monthly, Quarterly, Yearly, Mixed, Other)
+
 AbstractARIMAModel <: StatsAPI.RegressionModel
 ├── ARModel{T}
 ├── MAModel{T}
