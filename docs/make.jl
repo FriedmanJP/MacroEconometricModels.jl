@@ -5,7 +5,7 @@ DocMeta.setdocmeta!(MacroEconometricModels, :DocTestSetup, :(using MacroEconomet
 
 makedocs(;
     modules=[MacroEconometricModels],
-    authors="Wookyung Chung <mirimtl@protonmail.com>",
+    authors="Wookyung Chung <chung@friedman.jp>",
     repo="https://github.com/chung9207/MacroEconometricModels.jl/blob/{commit}{path}#{line}",
     sitename="MacroEconometricModels.jl",
     format=Documenter.HTML(;
