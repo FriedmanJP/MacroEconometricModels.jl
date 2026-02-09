@@ -2,6 +2,7 @@ using Test
 using Random
 using Statistics
 using LinearAlgebra
+using SparseArrays
 
 @testset "Time Series Filters" begin
 
@@ -419,6 +420,57 @@ using LinearAlgebra
             yi = round.(Int, y .* 10)
             r = boosted_hp(yi; stopping=:fixed, max_iter=3)
             @test r isa BoostedHPResult{Float64}
+        end
+
+        @testset "IC monotonicity at stopping" begin
+            # When BIC stops, the last IC value should be >= the previous one
+            r = boosted_hp(y; stopping=:BIC)
+            if length(r.bic_path) >= 2
+                @test r.bic_path[end] >= r.bic_path[end-1]
+            end
+        end
+
+        @testset "IC formula at iteration 1" begin
+            # IC(1) = var(c₁)/var(c₁) + log(n)/tr(I-S) * tr(B₁)
+            # = 1 + log(n)/tr(I-S) * tr(S)   since B₁ = I - (I-S) = S
+            r = boosted_hp(y; stopping=:fixed, max_iter=1)
+            # Access internal helpers to verify
+            n = length(y)
+            lam = 1600.0
+            A = MacroEconometricModels._hp_penalty(n, lam)
+            eigs_A = eigvals(Matrix(A))
+            eig_ImS = [1.0 - 1.0/e for e in eigs_A]
+            tr_ImS = sum(eig_ImS)
+            tr_S = sum(1.0 ./ eigs_A)
+            expected_ic1 = 1.0 + log(Float64(n)) / tr_ImS * tr_S
+            # Run with BIC to get IC path
+            r2 = boosted_hp(y; stopping=:BIC)
+            @test r2.bic_path[1] ≈ expected_ic1 rtol=1e-10
+        end
+
+        @testset "IC decreasing early iterations" begin
+            # For a random walk, boosting should reduce IC in early iterations
+            r = boosted_hp(y; stopping=:fixed, max_iter=10)
+            # Compute IC path manually
+            n = length(y)
+            lam = 1600.0
+            A = MacroEconometricModels._hp_penalty(n, lam)
+            eigs_A = eigvals(Matrix(A))
+            eig_ImS = [1.0 - 1.0/e for e in eigs_A]
+            F = cholesky(A)
+            yv = Float64.(y)
+            tau = Vector{Float64}(F \ yv)
+            cyc = yv .- tau
+            var_hp = var(cyc)
+            ic_vals = Float64[]
+            for iter in 1:5
+                push!(ic_vals, MacroEconometricModels._phillips_shi_ic(
+                    var(cyc), var_hp, eig_ImS, n, iter))
+                cyc_trend = Vector{Float64}(F \ cyc)
+                cyc = cyc .- cyc_trend
+            end
+            # IC should decrease for at least the first few iterations
+            @test ic_vals[2] < ic_vals[1]
         end
 
         @testset "edge cases" begin
