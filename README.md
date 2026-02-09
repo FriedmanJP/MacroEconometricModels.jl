@@ -6,7 +6,7 @@
 [![Aqua QA](https://raw.githubusercontent.com/JuliaTesting/Aqua.jl/master/badge.svg)](https://github.com/JuliaTesting/Aqua.jl)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18439170.svg)](https://doi.org/10.5281/zenodo.18439170)
 
-A comprehensive Julia package for macroeconomic time series analysis. Provides VAR, VECM, Bayesian VAR, Local Projections, Factor Models, ARIMA, time series filters, GMM, ARCH/GARCH/Stochastic Volatility estimation, structural identification (including non-Gaussian and heteroskedasticity-based methods), hypothesis testing, built-in FRED-MD/QD datasets, typed data containers, and publication-quality output with multi-format bibliographic references.
+A comprehensive Julia package for macroeconomic time series analysis. Provides VAR, VECM, Bayesian VAR, Panel VAR, Local Projections, Factor Models, ARIMA, time series filters, GMM, ARCH/GARCH/Stochastic Volatility estimation, structural identification (including non-Gaussian and heteroskedasticity-based methods), hypothesis testing, typed data containers, and publication-quality output with multi-format bibliographic references.
 
 ## Features
 
@@ -48,7 +48,22 @@ A comprehensive Julia package for macroeconomic time series analysis. Provides V
   - Dynamic Factor Models (two-step and EM estimation)
   - Generalized Dynamic Factor Models (spectral methods, Forni et al. 2000)
   - Unified forecasting with theoretical (analytical) and bootstrap confidence intervals for all three factor model types
-- **Generalized Method of Moments (GMM)** - One-step, two-step, and iterated; Hansen J-test
+
+### Panel Models
+- **Panel VAR (PVAR)** - GMM estimation for dynamic panel data:
+  - First-difference GMM (Arellano & Bond 1991) and System GMM (Blundell & Bond 1998)
+  - Forward orthogonal deviations (Helmert transform) as alternative to first-differencing
+  - Fixed-Effects OLS within estimator
+  - Windmeijer (2005) finite-sample corrected standard errors for two-step GMM
+  - Specification tests: Hansen J-test, Andrews-Lu (2001) MMSC for lag/moment selection
+  - Structural analysis: OIRF, GIRF (Pesaran & Shin 1998), FEVD, stability
+  - Group-level block bootstrap confidence intervals for IRFs
+  - Instrument management: min/max lag truncation, collapse, PCA reduction
+
+### GMM
+- **Generalized Method of Moments** - One-step, two-step, and iterated; Hansen J-test
+- **Linear GMM** - Closed-form solver for panel IV estimation
+- **Sandwich covariance** - Robust GMM variance with Windmeijer correction
 
 ### Structural Identification
 - Cholesky decomposition (recursive)
@@ -74,21 +89,23 @@ A comprehensive Julia package for macroeconomic time series analysis. Provides V
 - **Identifiability diagnostics** - Shock gaussianity, LR tests, independence tests, bootstrap strength tests
 - Seamless integration: `irf(model, 20; method=:fastica)` works out of the box
 
+### Hypothesis Tests
+- **Unit Root Tests** - ADF, KPSS, Phillips-Perron, Zivot-Andrews, Ng-Perron
+- **Cointegration** - Johansen test (trace and max-eigenvalue)
+- **VAR** - Granger causality (pairwise and block Wald tests), stationarity diagnostics
+- **Panel VAR** - Hansen J-test for overidentifying restrictions, Andrews-Lu MMSC for lag/moment selection
+- **Model Comparison** - Likelihood ratio (LR) and Lagrange multiplier (LM/score) tests for nested models
+- **Stationarity diagnostics** - `unit_root_summary()`, `test_all_variables()`
+
 ### Data Management
 - **Typed containers** - `TimeSeriesData`, `PanelData`, `CrossSectionData` with variable names, frequency, transformation codes, and descriptions
 - **Built-in datasets** - FRED-MD (126 monthly variables) and FRED-QD (245 quarterly variables), January 2026 vintages (McCracken & Ng 2016, 2020)
 - **Data diagnostics** - `diagnose()` scans for NaN/Inf/constant columns; `fix()` cleans via listwise deletion, interpolation, or mean imputation
 - **FRED transformations** - `apply_tcode()` / `inverse_tcode()` for all 7 FRED transformation codes
+- **Filtering** - `apply_filter()` applies HP, Hamilton, BN, BK, or boosted HP per-variable to `TimeSeriesData` and `PanelData`
 - **Panel support** - `xtset()` for Stata-style panel construction; balanced/unbalanced detection
 - **Summary statistics** - `describe_data()` with per-variable N, mean, std, quantiles, skewness, kurtosis
 - **Seamless estimation** - All estimation functions accept `TimeSeriesData` directly
-
-### Hypothesis Tests
-- **Unit Root Tests** - ADF, KPSS, Phillips-Perron, Zivot-Andrews, Ng-Perron
-- **Cointegration** - Johansen test (trace and max-eigenvalue)
-- **Granger Causality** - Pairwise and block (multivariate) Wald tests for VAR models
-- **Model Comparison** - Likelihood ratio (LR) and Lagrange multiplier (LM/score) tests for nested models
-- **Stationarity diagnostics** - `unit_root_summary()`, `test_all_variables()`
 
 ## Installation
 
@@ -253,6 +270,38 @@ dfm = estimate_dynamic_factors(X, 3, 2)
 fc = forecast(dfm, 12; ci_method=:bootstrap, n_boot=500)
 ```
 
+### Panel VAR
+
+```julia
+using MacroEconometricModels, DataFrames, Random
+
+Random.seed!(42)
+N, T_total, m = 50, 20, 3
+data = zeros(N * T_total, m)
+for i in 1:N
+    mu_i = randn(m)
+    for t in 2:T_total
+        idx = (i-1)*T_total + t
+        data[idx, :] = mu_i + 0.5 * data[(i-1)*T_total + t - 1, :] + 0.1 * randn(m)
+    end
+end
+df = DataFrame(data, ["y1", "y2", "y3"])
+df.id = repeat(1:N, inner=T_total)
+df.time = repeat(1:T_total, outer=N)
+pd = xtset(df, :id, :time)
+
+# Two-step GMM estimation
+model = estimate_pvar(pd, 2; steps=:twostep)
+
+# Structural analysis
+irfs = pvar_oirf(model, 10)
+fv = pvar_fevd(model, 10)
+
+# Specification tests
+j = pvar_hansen_j(model)
+stab = pvar_stability(model)
+```
+
 ### Non-Gaussian SVAR
 
 ```julia
@@ -322,6 +371,9 @@ refs(md)                            # McCracken & Ng (2016)
 
 # Apply recommended FRED transformation codes
 md_transformed = apply_tcode(md, md.tcode)
+
+# Per-variable filtering (HP, Hamilton, BN, BK, boosted HP)
+cyclical = apply_filter(md_transformed, :hp; component=:cycle)
 
 # Diagnose and clean data
 diag = diagnose(md_transformed)
@@ -406,6 +458,14 @@ Full documentation available at [https://chung9207.github.io/MacroEconometricMod
 - Bai, Jushan, and Serena Ng. 2002. "Determining the Number of Factors in Approximate Factor Models." *Econometrica* 70 (1): 191–221. [https://doi.org/10.1111/1468-0262.00273](https://doi.org/10.1111/1468-0262.00273)
 - Forni, Mario, Marc Hallin, Marco Lippi, and Lucrezia Reichlin. 2000. "The Generalized Dynamic-Factor Model: Identification and Estimation." *Review of Economics and Statistics* 82 (4): 540–554. [https://doi.org/10.1162/003465300559037](https://doi.org/10.1162/003465300559037)
 - Stock, James H., and Mark W. Watson. 2002. "Forecasting Using Principal Components from a Large Number of Predictors." *Journal of the American Statistical Association* 97 (460): 1167–1179. [https://doi.org/10.1198/016214502388618960](https://doi.org/10.1198/016214502388618960)
+
+### Panel VAR
+
+- Andrews, Donald W. K., and Biao Lu. 2001. "Consistent Model and Moment Selection Procedures for GMM Estimation with Application to Dynamic Panel Data Models." *Journal of Econometrics* 101 (1): 123–164. [https://doi.org/10.1016/S0304-4076(00)00077-4](https://doi.org/10.1016/S0304-4076(00)00077-4)
+- Arellano, Manuel, and Stephen Bond. 1991. "Some Tests of Specification for Panel Data: Monte Carlo Evidence and an Application to Employment Equations." *Review of Economic Studies* 58 (2): 277–297. [https://doi.org/10.2307/2297968](https://doi.org/10.2307/2297968)
+- Blundell, Richard, and Stephen Bond. 1998. "Initial Conditions and Moment Restrictions in Dynamic Panel Data Models." *Journal of Econometrics* 87 (1): 115–143. [https://doi.org/10.1016/S0304-4076(98)00009-8](https://doi.org/10.1016/S0304-4076(98)00009-8)
+- Holtz-Eakin, Douglas, Whitney Newey, and Harvey S. Rosen. 1988. "Estimating Vector Autoregressions with Panel Data." *Econometrica* 56 (6): 1371–1395. [https://doi.org/10.2307/1913103](https://doi.org/10.2307/1913103)
+- Windmeijer, Frank. 2005. "A Finite Sample Correction for the Variance of Linear Efficient Two-Step GMM Estimators." *Journal of Econometrics* 126 (1): 25–51. [https://doi.org/10.1016/j.jeconom.2004.02.005](https://doi.org/10.1016/j.jeconom.2004.02.005)
 
 ### GMM and Covariance Estimation
 
