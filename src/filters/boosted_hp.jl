@@ -30,8 +30,8 @@ At each iteration, the cycle is decomposed again and the newly estimated
 # Stopping criteria
 - `:ADF` — Stop when the ADF test rejects the null of a unit root in the cycle
   at significance level `sig_p` (recommended for detecting stationarity)
-- `:BIC` — Stop when the BIC of the cycle's AR(1) regression increases
-  (selects the iteration minimizing information loss)
+- `:BIC` — Stop when the Phillips-Shi information criterion increases
+  (balances variance reduction against effective degrees of freedom)
 - `:fixed` — Run all `max_iter` iterations
 
 # Arguments
@@ -77,6 +77,9 @@ function boosted_hp(y::AbstractVector{T}; lambda::Real=T(1600),
     A = _hp_penalty(T_obs, lam)
     F = cholesky(A)
 
+    # Pre-compute eigenvalues of (I − S) for Phillips-Shi IC
+    eig_ImS = stopping == :BIC ? _eigenvalues_I_minus_S(T_obs, lam) : T[]
+
     # Initial HP decomposition
     tau = Vector{T}(F \ yv)
     cyc = yv .- tau
@@ -87,8 +90,11 @@ function boosted_hp(y::AbstractVector{T}; lambda::Real=T(1600),
     best_tau = copy(tau)
     best_iter = 1
 
+    # Variance of first HP cycle (IC denominator, computed once)
+    var_cyc_hp = stopping == :BIC ? var(cyc) : zero(T)
+
     if stopping == :BIC
-        bic_val = _cycle_bic(cyc)
+        bic_val = _phillips_shi_ic(var(cyc), var_cyc_hp, eig_ImS, T_obs, 1)
         push!(bic_path, bic_val)
         best_bic = bic_val
     elseif stopping == :ADF
@@ -105,7 +111,7 @@ function boosted_hp(y::AbstractVector{T}; lambda::Real=T(1600),
         n_iter = iter
 
         if stopping == :BIC
-            bic_val = _cycle_bic(cyc)
+            bic_val = _phillips_shi_ic(var(cyc), var_cyc_hp, eig_ImS, T_obs, iter)
             push!(bic_path, bic_val)
             if bic_val < best_bic
                 best_bic = bic_val
@@ -113,7 +119,7 @@ function boosted_hp(y::AbstractVector{T}; lambda::Real=T(1600),
                 best_tau = copy(tau)
                 best_iter = iter
             else
-                # BIC increased: stop at previous iteration
+                # IC increased: stop at previous iteration
                 break
             end
         elseif stopping == :ADF
@@ -152,33 +158,45 @@ boosted_hp(y::AbstractVector; kwargs...) = boosted_hp(Float64.(y); kwargs...)
 # Internal helpers
 # =============================================================================
 
-"""BIC for AR(1) fit of cycle: BIC = T ln(σ²) + 2 ln(T)."""
-function _cycle_bic(cyc::Vector{T}) where {T<:AbstractFloat}
-    n = length(cyc)
-    n < 3 && return T(Inf)
+"""
+    _eigenvalues_I_minus_S(T_obs, lam) -> Vector
 
-    # Fit AR(1): c_t = a + b c_{t-1} + e_t
-    y_dep = @view cyc[2:end]
-    y_lag = @view cyc[1:end-1]
-    n_eff = n - 1
-    x_mean = mean(y_lag)
-    y_mean = mean(y_dep)
-    cov_xy = dot(y_dep .- y_mean, y_lag .- x_mean)
-    var_x = dot(y_lag .- x_mean, y_lag .- x_mean)
-    b = var_x > zero(T) ? cov_xy / var_x : zero(T)
-    a = y_mean - b * x_mean
-    resid = y_dep .- a .- b .* y_lag
-    sigma2 = dot(resid, resid) / n_eff
-    sigma2 <= zero(T) && return T(-Inf)
-    T(n_eff) * log(sigma2) + T(2) * log(T(n_eff))
+Compute eigenvalues of (I − S) where S = (I + λD'D)⁻¹.
+Since A = I + λD'D has eigenvalues eᵢ, S has eigenvalues 1/eᵢ,
+and (I − S) has eigenvalues 1 − 1/eᵢ = λμᵢ/(1 + λμᵢ).
+"""
+function _eigenvalues_I_minus_S(T_obs::Int, lam::T) where {T<:AbstractFloat}
+    A = _hp_penalty(T_obs, lam)
+    eigs = eigvals(Matrix(A))
+    return [one(T) - one(T) / e for e in eigs]
+end
+
+"""
+    _phillips_shi_ic(var_r, var_hp, eig_ImS, n, r) -> T
+
+Phillips & Shi (2021) information criterion for boosted HP iteration r:
+
+    IC(r) = Var(cᵣ)/Var(c₁) + log(n)/tr(I−S) · tr(Bᵣ)
+
+where Bᵣ = I − (I−S)^r, tr(I−S) = Σeᵢ, tr((I−S)^r) = Σeᵢʳ,
+and tr(Bᵣ) = n − tr((I−S)^r).
+"""
+function _phillips_shi_ic(var_r::T, var_hp::T, eig_ImS::Vector{T},
+                          n::Int, r::Int) where {T<:AbstractFloat}
+    var_hp <= zero(T) && return T(Inf)
+    tr_ImS = sum(eig_ImS)
+    tr_ImS_r = sum(e^r for e in eig_ImS)
+    tr_Br = T(n) - tr_ImS_r
+    return var_r / var_hp + log(T(n)) / tr_ImS * tr_Br
 end
 
 """Get ADF p-value for cycle stationarity check."""
 function _adf_pvalue(cyc::Vector{T}) where {T<:AbstractFloat}
     n = length(cyc)
     n < 5 && return one(T)  # too short to test
+    lag_count = floor(Int, (n - 1)^(1//3))
     try
-        result = adf_test(cyc; regression=:constant)
+        result = adf_test(cyc; regression=:trend, lags=lag_count)
         return T(result.pvalue)
     catch
         return one(T)  # if test fails, assume non-stationary
