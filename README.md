@@ -99,7 +99,7 @@ A comprehensive Julia package for macroeconomic time series analysis. Provides V
 
 ### Data Management
 - **Typed containers** - `TimeSeriesData`, `PanelData`, `CrossSectionData` with variable names, frequency, transformation codes, and descriptions
-- **Built-in datasets** - FRED-MD (126 monthly variables) and FRED-QD (245 quarterly variables), January 2026 vintages (McCracken & Ng 2016, 2020)
+- **Built-in datasets** - FRED-MD (126 monthly variables), FRED-QD (245 quarterly variables), and Penn World Table (38 OECD countries, 1950–2023 balanced panel)
 - **Data diagnostics** - `diagnose()` scans for NaN/Inf/constant columns; `fix()` cleans via listwise deletion, interpolation, or mean imputation
 - **FRED transformations** - `apply_tcode()` / `inverse_tcode()` for all 7 FRED transformation codes
 - **Filtering** - `apply_filter()` applies HP, Hamilton, BN, BK, or boosted HP per-variable to `TimeSeriesData` and `PanelData`
@@ -381,6 +381,11 @@ clean = fix(md_transformed; method=:listwise)
 
 # Estimate directly from TimeSeriesData
 model = estimate_var(clean[:, ["INDPRO", "UNRATE", "CPIAUCSL"]], 4)
+
+# Load Penn World Table (38 OECD countries, balanced panel)
+pwt = load_example(:pwt)
+usa = group_data(pwt, "USA")        # extract single country
+refs(pwt)                           # Feenstra, Inklaar & Timmer (2015)
 ```
 
 ### Bibliographic References
@@ -492,6 +497,7 @@ Full documentation available at [https://chung9207.github.io/MacroEconometricMod
 
 ### Data Sources
 
+- Feenstra, Robert C., Robert Inklaar, and Marcel P. Timmer. 2015. "The Next Generation of the Penn World Table." *American Economic Review* 105 (10): 3150–3182. [https://doi.org/10.1257/aer.20130954](https://doi.org/10.1257/aer.20130954)
 - McCracken, Michael W., and Serena Ng. 2016. "FRED-MD: A Monthly Database for Macroeconomic Research." *Journal of Business & Economic Statistics* 34 (4): 574–589. [https://doi.org/10.1080/07350015.2015.1086655](https://doi.org/10.1080/07350015.2015.1086655)
 - McCracken, Michael W., and Serena Ng. 2020. "FRED-QD: A Quarterly Database for Macroeconomic Research." *Federal Reserve Bank of St. Louis Working Paper* 2020-005. [https://doi.org/10.20955/wp.2020.005](https://doi.org/10.20955/wp.2020.005)
 
