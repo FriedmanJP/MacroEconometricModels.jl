@@ -1947,6 +1947,11 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="FRED-QD: A Quarterly Database for Macroeconomic Research",
         journal="Federal Reserve Bank of St. Louis Working Paper", volume="2020-005", issue="", pages="",
         doi="10.20955/wp.2020.005", isbn="", publisher="", entry_type=:article),
+    :feenstra_etal2015 => (key=:feenstra_etal2015,
+        authors="Feenstra, Robert C. and Inklaar, Robert and Timmer, Marcel P.", year=2015,
+        title="The Next Generation of the Penn World Table",
+        journal="American Economic Review", volume="105", issue="10", pages="3150--3182",
+        doi="10.1257/aer.20130954", isbn="", publisher="", entry_type=:article),
 )
 
 # --- Type/method → reference keys mapping ---
@@ -2097,6 +2102,7 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     # Data sources (symbol dispatch)
     :fred_md => [:mccracken_ng2016],
     :fred_qd => [:mccracken_ng2020],
+    :pwt => [:feenstra_etal2015],
 )
 
 # ICA method → additional ref keys (appended to ICASVARResult base refs)

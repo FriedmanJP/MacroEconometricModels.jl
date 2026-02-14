@@ -414,14 +414,17 @@ to_vector(d, 2)      # single column by index
 
 ## Example Datasets
 
-Two FRED databases are included as built-in example datasets, stored as TOML files in the `data/` directory:
+Three built-in datasets are included, stored as TOML files in the `data/` directory:
 
-| Dataset | Function | Variables | Observations | Frequency |
-|---------|----------|-----------|--------------|-----------|
-| FRED-MD | `load_example(:fred_md)` | 126 | 804 months (1959--2025) | Monthly |
-| FRED-QD | `load_example(:fred_qd)` | 245 | 268 quarters (1959--2025) | Quarterly |
+| Dataset | Function | Type | Variables | Observations | Frequency |
+|---------|----------|------|-----------|--------------|-----------|
+| FRED-MD | `load_example(:fred_md)` | `TimeSeriesData` | 126 | 804 months (1959--2025) | Monthly |
+| FRED-QD | `load_example(:fred_qd)` | `TimeSeriesData` | 245 | 268 quarters (1959--2025) | Quarterly |
+| PWT | `load_example(:pwt)` | `PanelData` | 42 | 38 countries × 74 years (1950--2023) | Yearly |
 
-Both datasets are January 2026 vintage and include per-variable descriptions and recommended transformation codes from McCracken and Ng.
+FRED-MD and FRED-QD are January 2026 vintage and include per-variable descriptions and recommended transformation codes from McCracken and Ng. PWT 10.01 covers 38 OECD countries with national accounts, productivity, and price level data from Feenstra, Inklaar, and Timmer.
+
+### FRED Databases
 
 ```julia
 # Load FRED-MD
@@ -445,11 +448,40 @@ vardesc(qd, "GDPC1")            # "Real Gross Domestic Product, 3 Decimal ..."
 refs(qd)                        # McCracken & Ng (2020)
 ```
 
+### Penn World Table
+
+The Penn World Table (PWT) 10.01 provides a balanced panel of 38 OECD countries over 1950--2023. It loads as `PanelData`, giving access to panel-specific functions like `group_data`, `groups`, and `panel_summary`.
+
+```julia
+# Load PWT
+pwt = load_example(:pwt)
+nobs(pwt)                       # 2812 (38 × 74)
+nvars(pwt)                      # 42
+ngroups(pwt)                    # 38
+groups(pwt)                     # ["AUS", "AUT", ..., "USA"]
+isbalanced(pwt)                 # true
+vardesc(pwt, "rgdpna")          # "Real GDP at constant 2021 national prices ..."
+refs(pwt)                       # Feenstra, Inklaar & Timmer (2015)
+
+# Extract a single country as TimeSeriesData
+usa = group_data(pwt, "USA")
+nobs(usa)                       # 74 (years 1950–2023)
+
+# Run a VAR on US real GDP, consumption, and investment
+rgdpna = usa[:, "rgdpna"]
+rconna = usa[:, "rconna"]
+# Panel summary
+panel_summary(pwt)
+```
+
+### References
+
 Each loaded dataset carries bibliographic references accessible via `refs()`, supporting `:text`, `:latex`, `:bibtex`, and `:html` output formats:
 
 ```julia
 refs(md; format=:bibtex)   # BibTeX entry for McCracken & Ng (2016)
 refs(:fred_md)             # same via symbol dispatch
+refs(:pwt)                 # Feenstra, Inklaar & Timmer (2015)
 ```
 
 ---

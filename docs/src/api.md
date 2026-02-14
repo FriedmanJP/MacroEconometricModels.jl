@@ -28,7 +28,7 @@ The API documentation is organized into the following pages:
 | `desc(d)` / `vardesc(d, name)` | Dataset and per-variable descriptions |
 | `set_desc!(d, text)` / `set_vardesc!(d, name, text)` | Set descriptions |
 | `rename_vars!(d, old => new)` | Rename variables |
-| `load_example(:fred_md)` / `load_example(:fred_qd)` | Load built-in FRED datasets |
+| `load_example(:fred_md)` / `load_example(:fred_qd)` / `load_example(:pwt)` | Load built-in datasets (FRED-MD, FRED-QD, PWT) |
 
 ### ARIMA Estimation Functions
 

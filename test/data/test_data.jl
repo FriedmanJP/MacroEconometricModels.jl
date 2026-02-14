@@ -1133,6 +1133,80 @@ using Statistics
             # Data dimensions
             @test size(qd.data) == (268, 245)
         end
+
+        @testset "Penn World Table" begin
+            pwt = load_example(:pwt)
+            @test pwt isa PanelData{Float64}
+            @test nobs(pwt) == 2812  # 38 countries × 74 years
+            @test nvars(pwt) == 42
+            @test ngroups(pwt) == 38
+            @test isbalanced(pwt)
+            @test frequency(pwt) == Yearly
+            @test occursin("Penn World Table", desc(pwt))
+
+            # Country groups
+            g = groups(pwt)
+            @test length(g) == 38
+            @test "AUS" ∈ g
+            @test "USA" ∈ g
+            @test "JPN" ∈ g
+            @test "DEU" ∈ g
+
+            # Variable names
+            vn = varnames(pwt)
+            @test "rgdpna" ∈ vn
+            @test "pop" ∈ vn
+            @test "emp" ∈ vn
+            @test "hc" ∈ vn
+            @test "avh" ∈ vn
+            @test "xr" ∈ vn
+
+            # Variable descriptions
+            @test occursin("hours worked", vardesc(pwt, "avh"))
+            @test occursin("GDP", vardesc(pwt, "rgdpna"))
+            @test length(vardesc(pwt)) == 42
+
+            # Source refs
+            @test pwt.source_refs == [:feenstra_etal2015]
+
+            # refs() works
+            io = IOBuffer()
+            refs(io, pwt)
+            s = String(take!(io))
+            @test occursin("Feenstra", s)
+            @test occursin("Penn World Table", s)
+
+            # refs(:pwt) symbol dispatch
+            io2 = IOBuffer()
+            refs(io2, :pwt)
+            s2 = String(take!(io2))
+            @test s == s2
+
+            # Data dimensions
+            @test size(pwt.data) == (2812, 42)
+
+            # Extract single country as TimeSeriesData
+            usa = group_data(pwt, "USA")
+            @test usa isa TimeSeriesData{Float64}
+            @test nobs(usa) == 74
+            @test nvars(usa) == 42
+            @test usa.time_index[1] == 1950
+            @test usa.time_index[end] == 2023
+            @test usa.source_refs == [:feenstra_etal2015]
+
+            # Data is numeric and not all NaN
+            rgdpna_idx = findfirst(==("rgdpna"), varnames(pwt))
+            @test !all(isnan, pwt.data[:, rgdpna_idx])
+
+            # USA GDP should be positive
+            usa_rgdpna = usa[:, "rgdpna"]
+            @test all(x -> !isnan(x) ? x > 0 : true, usa_rgdpna)
+
+            # Extract by index
+            aus = group_data(pwt, 1)
+            @test aus isa TimeSeriesData{Float64}
+            @test nobs(aus) == 74
+        end
     end
 
     # =========================================================================
