@@ -91,6 +91,61 @@ function _select_horizons(H::Int)
     return [1, 4, 8, 12, 24, H]
 end
 
+"""
+    _coef_table(io, title, names, coefs, se; dist=:z, dof_r=0, level=0.95)
+
+Publication-quality 7-column coefficient table (Stata/EViews style).
+
+Columns: Name | Coef. | Std.Err. | z/t | P>|z/t| | [95% CI lower | CI upper] | stars
+"""
+function _coef_table(io::IO, title::String, names::Vector{String},
+                     coefs::Vector{T}, se::Vector{T};
+                     dist::Symbol=:z, dof_r::Int=0, level::Real=0.95) where {T}
+    n = length(names)
+    alpha = 1 - level
+    z_crit = dist == :z ? T(quantile(Normal(), 1 - alpha/2)) :
+                          T(quantile(TDist(dof_r), 1 - alpha/2))
+    stat_label = dist == :z ? "z" : "t"
+    ci_pct = round(Int, 100 * level)
+
+    data = Matrix{Any}(undef, n, 8)
+    for i in 1:n
+        est = coefs[i]
+        se_i = se[i]
+        stat = se_i > 0 ? est / se_i : T(NaN)
+        pval = if isnan(stat)
+            T(NaN)
+        elseif dist == :z
+            T(2) * (one(T) - cdf(Normal(), abs(stat)))
+        else
+            T(2) * (one(T) - cdf(TDist(dof_r), abs(stat)))
+        end
+        ci_lo = est - z_crit * se_i
+        ci_hi = est + z_crit * se_i
+        stars = isnan(pval) ? "" : _significance_stars(pval)
+        data[i, 1] = names[i]
+        data[i, 2] = _fmt(est)
+        data[i, 3] = _fmt(se_i)
+        data[i, 4] = isnan(stat) ? "—" : string(_fmt(stat))
+        data[i, 5] = isnan(pval) ? "—" : _format_pvalue(pval)
+        data[i, 6] = _fmt(ci_lo)
+        data[i, 7] = _fmt(ci_hi)
+        data[i, 8] = stars
+    end
+
+    _pretty_table(io, data;
+        title = title,
+        column_labels = ["", "Coef.", "Std.Err.", stat_label, "P>|$stat_label|", "[$ci_pct%", "CI]", ""],
+        alignment = [:l, :r, :r, :r, :r, :r, :r, :l],
+    )
+end
+
+"""Print significance legend footer."""
+function _sig_legend(io::IO)
+    _pretty_table(io, Any["Significance" "*** p<0.01, ** p<0.05, * p<0.10"];
+        column_labels=["",""], alignment=[:l,:l])
+end
+
 """Print a labeled matrix as a PrettyTables table."""
 function _matrix_table(io::IO, M::AbstractMatrix, title::String;
                        row_labels=nothing, col_labels=nothing, digits::Int=4)

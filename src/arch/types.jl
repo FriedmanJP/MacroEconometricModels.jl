@@ -138,37 +138,53 @@ function _show_volatility_model(io::IO, header::String, m;
                                  alpha::Vector=Float64[],
                                  beta::Vector=Float64[],
                                  gamma::Vector=Float64[])
-    rows = Any[["μ (mean)", _fmt(m.mu)], ["ω (intercept)", _fmt(m.omega)]]
+    # Build parameter names and values
+    T_float = eltype(m.y)
+    param_names = String["μ (mean)", "ω (intercept)"]
+    param_vals = T_float[m.mu, m.omega]
     for (i, a) in enumerate(alpha)
-        push!(rows, ["α[$i]", _fmt(a)])
+        push!(param_names, "α[$i]")
+        push!(param_vals, a)
     end
     for (i, g) in enumerate(gamma)
-        push!(rows, ["γ[$i]", _fmt(g)])
+        push!(param_names, "γ[$i]")
+        push!(param_vals, g)
     end
     for (i, b) in enumerate(beta)
-        push!(rows, ["β[$i]", _fmt(b)])
+        push!(param_names, "β[$i]")
+        push!(param_vals, b)
     end
-    data = reduce(vcat, permutedims.(rows))
-    _pretty_table(io, data;
-        title = header,
-        column_labels = ["Parameter", "Estimate"],
-        alignment = [:l, :r],
-    )
+
+    # Compute standard errors
+    se = try
+        stderror(m)
+    catch
+        fill(T_float(NaN), length(param_vals))
+    end
+    while length(se) < length(param_vals)
+        push!(se, T_float(NaN))
+    end
+
+    # Publication-quality coefficient table
+    _coef_table(io, header, param_names, param_vals, se; dist=:z)
 
     pers = persistence(m)
     uv = unconditional_variance(m)
     fit_data = Any[
-        "Log-likelihood" _fmt(m.loglik; digits=2);
-        "AIC"            _fmt(m.aic; digits=2);
-        "BIC"            _fmt(m.bic; digits=2);
-        "Persistence"    _fmt(pers);
+        "Observations"     length(m.y);
+        "Log-likelihood"   _fmt(m.loglik; digits=4);
+        "AIC"              _fmt(m.aic; digits=4);
+        "BIC"              _fmt(m.bic; digits=4);
+        "Persistence"      _fmt(pers);
         "Unconditional σ²" (isfinite(uv) ? _fmt(uv) : "∞");
-        "Converged"      string(m.converged)
+        "Converged"        string(m.converged)
     ]
     _pretty_table(io, fit_data;
         column_labels = ["Fit", "Value"],
         alignment = [:l, :r],
     )
+
+    _sig_legend(io)
 end
 
 Base.show(io::IO, m::ARCHModel) = _show_volatility_model(io, "ARCH($(m.q)) Model", m; alpha=m.alpha)

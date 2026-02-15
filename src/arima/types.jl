@@ -314,31 +314,48 @@ StatsAPI.islinear(::AbstractARIMAModel) = true
 
 function _show_arima_model(io::IO, header::String, m::AbstractARIMAModel;
                            phi::Vector=Float64[], theta::Vector=Float64[])
-    # Parameters table
-    rows = Any[["Intercept (c)", _fmt(m.c)]]
+    # Build parameter names and values
+    param_names = String["Intercept (c)"]
+    param_vals = eltype(m.y)[m.c]
     for (i, p) in enumerate(phi)
-        push!(rows, ["φ[$i]", _fmt(p)])
+        push!(param_names, "φ[$i]")
+        push!(param_vals, p)
     end
     for (i, t) in enumerate(theta)
-        push!(rows, ["θ[$i]", _fmt(t)])
+        push!(param_names, "θ[$i]")
+        push!(param_vals, t)
     end
-    push!(rows, ["σ²", _fmt(m.sigma2)])
-    data = reduce(vcat, permutedims.(rows))
-    _pretty_table(io, data;
-        title = header,
-        column_labels = ["Parameter", "Estimate"],
+
+    # Compute standard errors
+    T_float = eltype(m.y)
+    se = try
+        stderror(m)
+    catch
+        fill(T_float(NaN), length(param_vals))
+    end
+    # Pad SE if shorter (shouldn't happen, but defensive)
+    while length(se) < length(param_vals)
+        push!(se, T_float(NaN))
+    end
+
+    # Publication-quality coefficient table
+    _coef_table(io, header, param_names, param_vals, se; dist=:z)
+
+    # σ² row (separate — not a regression coefficient)
+    sigma_data = Any["σ²" _fmt(m.sigma2)]
+    _pretty_table(io, sigma_data;
+        column_labels = ["", "Estimate"],
         alignment = [:l, :r],
     )
 
     # Fit statistics table
     n_obs = length(m.y)
-    n_res = length(m.residuals)
     r2_val = r2(m)
     fit_data = Any[
         "Observations"   n_obs;
-        "Log-likelihood" _fmt(m.loglik; digits=2);
-        "AIC"            _fmt(m.aic; digits=2);
-        "BIC"            _fmt(m.bic; digits=2);
+        "Log-likelihood" _fmt(m.loglik; digits=4);
+        "AIC"            _fmt(m.aic; digits=4);
+        "BIC"            _fmt(m.bic; digits=4);
         "R²"             _fmt(r2_val);
         "S.E. of regression" _fmt(sqrt(m.sigma2));
         "Method"         string(m.method);
@@ -348,6 +365,8 @@ function _show_arima_model(io::IO, header::String, m::AbstractARIMAModel;
         column_labels = ["Fit", "Value"],
         alignment = [:l, :r],
     )
+
+    _sig_legend(io)
 end
 
 Base.show(io::IO, m::ARModel) = _show_arima_model(io, "AR($(m.p)) Model", m; phi=m.phi)

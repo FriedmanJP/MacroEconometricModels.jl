@@ -37,3 +37,65 @@ end
 
 Base.size(post::BVARPosterior, dim::Int) = dim == 1 ? post.n_draws : error("BVARPosterior has 1 dimension (n_draws)")
 Base.length(post::BVARPosterior) = post.n_draws
+
+function Base.show(io::IO, post::BVARPosterior{T}) where {T}
+    k = size(post.B_draws, 2)  # parameters per equation
+
+    # Specification table
+    spec_data = Any[
+        "Variables"     post.n;
+        "Lags"          post.p;
+        "Draws"         post.n_draws;
+        "Prior"         string(post.prior);
+        "Sampler"       string(post.sampler);
+        "Parameters/eq" k
+    ]
+    _pretty_table(io, spec_data;
+        title = "Bayesian VAR — BVAR($(post.p))",
+        column_labels = ["Specification", ""],
+        alignment = [:l, :r],
+    )
+
+    # Build coefficient names
+    coef_names = String["const"]
+    for l in 1:post.p
+        for v in 1:post.n
+            push!(coef_names, "Var$(v).L$l")
+        end
+    end
+    while length(coef_names) < k
+        push!(coef_names, "x$(length(coef_names)+1)")
+    end
+
+    # Per-equation posterior summary
+    for eq in 1:post.n
+        draws_eq = post.B_draws[:, :, eq]  # n_draws × k
+        n_show = min(k, size(draws_eq, 2))
+        data = Matrix{Any}(undef, n_show, 6)
+        for i in 1:n_show
+            col_draws = @view draws_eq[:, i]
+            m = mean(col_draws)
+            s = std(col_draws)
+            q025 = T(quantile(col_draws, 0.025))
+            q500 = T(quantile(col_draws, 0.50))
+            q975 = T(quantile(col_draws, 0.975))
+            data[i, 1] = coef_names[i]
+            data[i, 2] = _fmt(m)
+            data[i, 3] = _fmt(s)
+            data[i, 4] = _fmt(q025)
+            data[i, 5] = _fmt(q500)
+            data[i, 6] = _fmt(q975)
+        end
+        _pretty_table(io, data;
+            title = "Equation: Var $eq",
+            column_labels = ["", "Mean", "Std", "2.5%", "50%", "97.5%"],
+            alignment = [:l, :r, :r, :r, :r, :r],
+        )
+    end
+
+    # Posterior mean of Σ
+    Sigma_mean = dropdims(mean(post.Sigma_draws; dims=1); dims=1)
+    _matrix_table(io, Sigma_mean, "Posterior Mean Σ";
+        row_labels=["Var $i" for i in 1:post.n],
+        col_labels=["Var $j" for j in 1:post.n])
+end

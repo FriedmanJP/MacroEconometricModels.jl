@@ -243,6 +243,33 @@ end
 
 estimate_garch(y::AbstractVector, p::Int=1, q::Int=1; kwargs...) = estimate_garch(Float64.(y), p, q; kwargs...)
 
+"""
+    StatsAPI.stderror(m::GARCHModel{T}) -> Vector{T}
+
+MLE standard errors for GARCH model via numerical Hessian + delta method.
+Returns SE vector matching `coef(m)` = [μ, ω, α₁..αq, β₁..βp].
+"""
+function StatsAPI.stderror(m::GARCHModel{T}) where {T}
+    p, q = m.p, m.q
+    params_opt = vcat(m.mu, log(m.omega), log.(m.alpha), log.(m.beta))
+
+    obj = params -> _garch_negloglik(params, m.y, p, q)
+    H = _numerical_hessian(obj, params_opt)
+
+    C_opt = try; robust_inv(H); catch; return fill(T(NaN), 2 + q + p); end
+
+    se = Vector{T}(undef, 2 + q + p)
+    se[1] = sqrt(max(C_opt[1, 1], zero(T)))             # mu
+    se[2] = m.omega * sqrt(max(C_opt[2, 2], zero(T)))   # omega
+    for i in 1:q
+        se[2+i] = m.alpha[i] * sqrt(max(C_opt[2+i, 2+i], zero(T)))
+    end
+    for j in 1:p
+        se[2+q+j] = m.beta[j] * sqrt(max(C_opt[2+q+j, 2+q+j], zero(T)))
+    end
+    se
+end
+
 # =============================================================================
 # EGARCH Estimation
 # =============================================================================
@@ -309,6 +336,28 @@ end
 
 estimate_egarch(y::AbstractVector, p::Int=1, q::Int=1; kwargs...) = estimate_egarch(Float64.(y), p, q; kwargs...)
 
+"""
+    StatsAPI.stderror(m::EGARCHModel{T}) -> Vector{T}
+
+MLE standard errors for EGARCH model via numerical Hessian.
+EGARCH params are unconstrained — no delta method needed.
+Returns SE vector matching `coef(m)` = [μ, ω, α₁..αq, γ₁..γq, β₁..βp].
+"""
+function StatsAPI.stderror(m::EGARCHModel{T}) where {T}
+    p, q = m.p, m.q
+    # EGARCH parameters are all unconstrained in optimization space
+    params_opt = vcat(m.mu, m.omega, m.alpha, m.gamma, m.beta)
+
+    obj = params -> _egarch_negloglik(params, m.y, p, q)
+    H = _numerical_hessian(obj, params_opt)
+
+    n_params = 2 + 2q + p
+    C_opt = try; robust_inv(H); catch; return fill(T(NaN), n_params); end
+
+    se = sqrt.(max.(diag(C_opt), zero(T)))
+    se
+end
+
 # =============================================================================
 # GJR-GARCH Estimation
 # =============================================================================
@@ -374,3 +423,34 @@ function estimate_gjr_garch(y::AbstractVector{T}, p::Int=1, q::Int=1; method::Sy
 end
 
 estimate_gjr_garch(y::AbstractVector, p::Int=1, q::Int=1; kwargs...) = estimate_gjr_garch(Float64.(y), p, q; kwargs...)
+
+"""
+    StatsAPI.stderror(m::GJRGARCHModel{T}) -> Vector{T}
+
+MLE standard errors for GJR-GARCH model via numerical Hessian + delta method.
+Returns SE vector matching `coef(m)` = [μ, ω, α₁..αq, γ₁..γq, β₁..βp].
+"""
+function StatsAPI.stderror(m::GJRGARCHModel{T}) where {T}
+    p, q = m.p, m.q
+    params_opt = vcat(m.mu, log(m.omega), log.(m.alpha), log.(m.gamma), log.(m.beta))
+
+    obj = params -> _gjr_negloglik(params, m.y, p, q)
+    H = _numerical_hessian(obj, params_opt)
+
+    n_params = 2 + 2q + p
+    C_opt = try; robust_inv(H); catch; return fill(T(NaN), n_params); end
+
+    se = Vector{T}(undef, n_params)
+    se[1] = sqrt(max(C_opt[1, 1], zero(T)))                # mu (untransformed)
+    se[2] = m.omega * sqrt(max(C_opt[2, 2], zero(T)))      # omega = exp(log_omega)
+    for i in 1:q
+        se[2+i] = m.alpha[i] * sqrt(max(C_opt[2+i, 2+i], zero(T)))      # alpha
+    end
+    for i in 1:q
+        se[2+q+i] = m.gamma[i] * sqrt(max(C_opt[2+q+i, 2+q+i], zero(T))) # gamma
+    end
+    for j in 1:p
+        se[2+2q+j] = m.beta[j] * sqrt(max(C_opt[2+2q+j, 2+2q+j], zero(T)))  # beta
+    end
+    se
+end
