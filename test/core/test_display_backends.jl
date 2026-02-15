@@ -102,6 +102,10 @@ using Random
             @test occursin("AR", out)
         end
         set_display_backend(:text)
+        # Verify publication-quality columns in text mode
+        buf = IOBuffer(); show(buf, ar); out = String(take!(buf))
+        @test occursin("Std.Err.", out)
+        @test occursin("CI]", out)
     end
 
     @testset "Unit root tests render in all backends" begin

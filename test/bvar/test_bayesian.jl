@@ -215,4 +215,19 @@ using Random
             @test_throws ArgumentError estimate_bvar(Y_sv, 1; sampler=:nonexistent, n_draws=50)
         end
     end
+
+    # 8. BVARPosterior show() method
+    @testset "BVARPosterior show method" begin
+        post = estimate_bvar(Y, 1; n_draws=100, sampler=:direct)
+        io = IOBuffer()
+        show(io, post)
+        out = String(take!(io))
+        @test length(out) > 0
+        @test occursin("Bayesian VAR", out)
+        @test occursin("Mean", out)
+        @test occursin("2.5%", out)
+        @test occursin("97.5%", out)
+        @test occursin("Posterior Mean", out)
+        println("BVARPosterior show test passed.")
+    end
 end

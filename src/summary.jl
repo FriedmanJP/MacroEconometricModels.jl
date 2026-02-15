@@ -137,7 +137,7 @@ function report(model::VARModel{T}) where {T}
         eq_data[j, 3] = _fmt(rmse)
         eq_data[j, 4] = _fmt(r2)
         eq_data[j, 5] = _fmt(adj_r2)
-        eq_data[j, 6] = _fmt(f_stat; digits=2)
+        eq_data[j, 6] = _fmt(f_stat; digits=3)
     end
     _pretty_table(stdout, eq_data;
         title = "Equation Summary",
@@ -153,33 +153,22 @@ function report(model::VARModel{T}) where {T}
         end
     end
 
+    z_crit = T(quantile(TDist(dof_r), T(0.975)))
     for j in 1:n
         se_j = sqrt.(max.(diag(XtX_inv) .* model.Sigma[j, j], zero(T)))
-        coef_data = Matrix{Any}(undef, k, 6)
-        for i in 1:k
-            est = model.B[i, j]
-            se = se_j[i]
-            t_stat = se > 0 ? est / se : T(NaN)
-            pval = isnan(t_stat) ? T(NaN) : T(2) * (one(T) - cdf(TDist(dof_r), abs(t_stat)))
-            stars = isnan(pval) ? "" : _significance_stars(pval)
-            coef_data[i, 1] = coef_names[i]
-            coef_data[i, 2] = _fmt(est)
-            coef_data[i, 3] = _fmt(se)
-            coef_data[i, 4] = isnan(t_stat) ? "—" : string(_fmt(t_stat))
-            coef_data[i, 5] = isnan(pval) ? "—" : _format_pvalue(pval)
-            coef_data[i, 6] = stars
-        end
-        _pretty_table(stdout, coef_data;
-            title = "Equation: Var $j",
-            column_labels = ["", "Coef.", "Std. Err.", "t", "P>|t|", ""],
-            alignment = [:l, :r, :r, :r, :r, :l],
-        )
+        coef_vals = model.B[:, j]
+        _coef_table(stdout, "Equation: Var $j", coef_names, coef_vals, se_j;
+                    dist=:t, dof_r=dof_r)
     end
 
     # --- Information Criteria ---
-    ic_data = ["AIC" _fmt(model.aic; digits=2);
-               "BIC" _fmt(model.bic; digits=2);
-               "HQIC" _fmt(model.hqic; digits=2)]
+    # Compute log-likelihood: -(T_eff*n/2)*log(2π) - (T_eff/2)*logdet(Σ) - T_eff*n/2
+    logdet_Sigma = logdet(model.Sigma)
+    loglik_val = -T(T_eff * n) / 2 * log(T(2π)) - T(T_eff) / 2 * logdet_Sigma - T(T_eff * n) / 2
+    ic_data = ["Log-likelihood" _fmt(loglik_val; digits=4);
+               "AIC" _fmt(model.aic; digits=4);
+               "BIC" _fmt(model.bic; digits=4);
+               "HQIC" _fmt(model.hqic; digits=4)]
     _pretty_table(stdout, ic_data;
         title = "Information Criteria",
         column_labels = ["Criterion", "Value"],
@@ -187,18 +176,16 @@ function report(model::VARModel{T}) where {T}
     )
 
     # --- Residual Covariance ---
-    Sigma_data = Matrix{Any}(undef, n, n + 1)
-    for i in 1:n
-        Sigma_data[i, 1] = "Var $i"
-        for j in 1:n
-            Sigma_data[i, j + 1] = _fmt(model.Sigma[i, j])
-        end
-    end
-    _pretty_table(stdout, Sigma_data;
-        title = "Residual Covariance (Σ)",
-        column_labels = vcat([""], ["Var $j" for j in 1:n]),
-        alignment = vcat([:l], fill(:r, n)),
-    )
+    _matrix_table(stdout, model.Sigma, "Residual Covariance (Σ)";
+        row_labels=["Var $i" for i in 1:n],
+        col_labels=["Var $j" for j in 1:n])
+
+    # --- Residual Correlation ---
+    D_inv = Diagonal(one(T) ./ sqrt.(max.(diag(model.Sigma), eps(T))))
+    corr_mat = D_inv * model.Sigma * D_inv
+    _matrix_table(stdout, corr_mat, "Residual Correlation";
+        row_labels=["Var $i" for i in 1:n],
+        col_labels=["Var $j" for j in 1:n])
 
     # --- Stationarity ---
     F = companion_matrix(model.B, n, p)
@@ -215,6 +202,13 @@ function report(model::VARModel{T}) where {T}
     note_data = Any["Significance" "*** p<0.01, ** p<0.05, * p<0.10"]
     _pretty_table(stdout, note_data; column_labels=["",""], alignment=[:l,:l])
 end
+
+"""
+    report(post::BVARPosterior)
+
+Print comprehensive Bayesian VAR posterior summary.
+"""
+report(post::BVARPosterior) = show(stdout, post)
 
 """
     report(vecm::VECMModel)
@@ -281,10 +275,10 @@ function report(m::VECMModel{T}) where {T}
     )
 
     # --- Information Criteria ---
-    ic_data = ["AIC" _fmt(m.aic; digits=2);
-               "BIC" _fmt(m.bic; digits=2);
-               "HQIC" _fmt(m.hqic; digits=2);
-               "Log-likelihood" _fmt(m.loglik; digits=2)]
+    ic_data = ["Log-likelihood" _fmt(m.loglik; digits=4);
+               "AIC" _fmt(m.aic; digits=4);
+               "BIC" _fmt(m.bic; digits=4);
+               "HQIC" _fmt(m.hqic; digits=4)]
     _pretty_table(stdout, ic_data;
         title = "Information Criteria",
         column_labels = ["Criterion", "Value"],
@@ -295,6 +289,17 @@ function report(m::VECMModel{T}) where {T}
     _matrix_table(stdout, m.Sigma, "Residual Covariance (Σ)";
         row_labels=["Var $i" for i in 1:n],
         col_labels=["Var $j" for j in 1:n])
+
+    # --- Residual Correlation ---
+    D_inv = Diagonal(one(T) ./ sqrt.(max.(diag(m.Sigma), eps(T))))
+    corr_mat = D_inv * m.Sigma * D_inv
+    _matrix_table(stdout, corr_mat, "Residual Correlation";
+        row_labels=["Var $i" for i in 1:n],
+        col_labels=["Var $j" for j in 1:n])
+
+    # --- Notes ---
+    note_data = Any["Note" "Standard errors for α/β not available (asymptotic SEs: future release)"]
+    _pretty_table(stdout, note_data; column_labels=["",""], alignment=[:l,:l])
 end
 
 """

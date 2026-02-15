@@ -464,8 +464,8 @@ function Base.show(io::IO, r::LRTestResult)
     )
 
     results_data = Any[
-        "Log-likelihood (restricted)"    _fmt(r.loglik_restricted; digits=2);
-        "Log-likelihood (unrestricted)"  _fmt(r.loglik_unrestricted; digits=2);
+        "Log-likelihood (restricted)"    _fmt(r.loglik_restricted; digits=4);
+        "Log-likelihood (unrestricted)"  _fmt(r.loglik_unrestricted; digits=4);
         "LR statistic"    string(_fmt(r.statistic), " ", stars);
         "Degrees of freedom"  r.df;
         "P-value"          _format_pvalue(r.pvalue)

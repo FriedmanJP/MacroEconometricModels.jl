@@ -54,7 +54,7 @@ function Base.show(io::IO, r::MarkovSwitchingSVARResult{T}) where {T}
     spec = Any[
         "Variables"  n;
         "Regimes"    r.n_regimes;
-        "Log-likelihood" _fmt(r.loglik; digits=2);
+        "Log-likelihood" _fmt(r.loglik; digits=4);
         "Converged"  r.converged ? "Yes" : "No";
         "Iterations" r.iterations
     ]
@@ -98,7 +98,7 @@ function Base.show(io::IO, r::GARCHSVARResult{T}) where {T}
     n = size(r.B0, 1)
     spec = Any[
         "Variables"      n;
-        "Log-likelihood" _fmt(r.loglik; digits=2);
+        "Log-likelihood" _fmt(r.loglik; digits=4);
         "Converged"      r.converged ? "Yes" : "No";
         "Iterations"     r.iterations
     ]
@@ -163,7 +163,7 @@ function Base.show(io::IO, r::SmoothTransitionSVARResult{T}) where {T}
         "Variables"      n;
         "γ (speed)"      _fmt(r.gamma; digits=2);
         "Threshold"      _fmt(r.threshold; digits=4);
-        "Log-likelihood" _fmt(r.loglik; digits=2);
+        "Log-likelihood" _fmt(r.loglik; digits=4);
         "Converged"      r.converged ? "Yes" : "No";
         "Iterations"     r.iterations
     ]
@@ -205,7 +205,7 @@ function Base.show(io::IO, r::ExternalVolatilitySVARResult{T}) where {T}
     spec = Any[
         "Variables"      n;
         "Regimes"        K;
-        "Log-likelihood" _fmt(r.loglik; digits=2)
+        "Log-likelihood" _fmt(r.loglik; digits=4)
     ]
     _pretty_table(io, spec;
         title = "External Volatility SVAR Identification Result",

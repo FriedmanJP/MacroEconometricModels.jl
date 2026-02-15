@@ -189,24 +189,9 @@ function Base.show(io::IO, model::PVARModel{T}) where {T}
     end
 
     for eq in 1:model.m
-        data = Matrix{Any}(undef, K, 5)
-        for k in 1:K
-            coeff = model.Phi[eq, k]
-            se_val = model.se[eq, k]
-            t_stat = se_val > 0 ? coeff / se_val : T(NaN)
-            pval = model.pvalues[eq, k]
-            stars = isnan(pval) ? "" : _significance_stars(pval)
-            data[k, 1] = regressor_names[k]
-            data[k, 2] = _fmt(coeff)
-            data[k, 3] = _fmt(se_val)
-            data[k, 4] = isnan(pval) ? "—" : _format_pvalue(pval)
-            data[k, 5] = stars
-        end
-        _pretty_table(io, data;
-            title = "Equation: $(model.varnames[eq])",
-            column_labels = ["", "Coef.", "Std.Err.", "P>|z|", ""],
-            alignment = [:l, :r, :r, :r, :l],
-        )
+        coef_vals = T.(model.Phi[eq, :])
+        se_vals = T.(model.se[eq, :])
+        _coef_table(io, "Equation: $(model.varnames[eq])", regressor_names, coef_vals, se_vals; dist=:z)
     end
 end
 

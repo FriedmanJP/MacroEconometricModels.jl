@@ -111,6 +111,25 @@ function Base.show(io::IO, m::FactorModel{T}) where {T}
         column_labels = ["", "Variance", "Cumulative"],
         alignment = [:l, :r, :r],
     )
+    # Top loadings per factor (top 5 for up to 3 factors)
+    n_factors_show = min(m.r, 3)
+    n_top = min(5, N)
+    for f in 1:n_factors_show
+        loadings_f = m.loadings[:, f]
+        sorted_idx = sortperm(abs.(loadings_f); rev=true)
+        top_idx = sorted_idx[1:n_top]
+        load_data = Matrix{Any}(undef, n_top, 3)
+        for (row, idx) in enumerate(top_idx)
+            load_data[row, 1] = "Var $idx"
+            load_data[row, 2] = _fmt(loadings_f[idx])
+            load_data[row, 3] = _fmt(abs(loadings_f[idx]))
+        end
+        _pretty_table(io, load_data;
+            title = "Top Loadings — Factor $f",
+            column_labels = ["Variable", "Loading", "|Loading|"],
+            alignment = [:l, :r, :r],
+        )
+    end
 end
 
 # =============================================================================

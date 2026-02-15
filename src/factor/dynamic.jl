@@ -104,7 +104,7 @@ function Base.show(io::IO, m::DynamicFactorModel{T}) where {T}
         "Variables"      N;
         "Observations"   Tobs;
         "Method"         string(m.method);
-        "Log-likelihood" _fmt(m.loglik; digits=2);
+        "Log-likelihood" _fmt(m.loglik; digits=4);
         "Converged"      m.converged ? "Yes" : "No";
         "Iterations"     m.iterations
     ]

@@ -68,8 +68,8 @@ function Base.show(io::IO, r::NonGaussianMLResult{T}) where {T}
     spec = Any[
         "Distribution"   string(r.distribution);
         "Variables"      n;
-        "Log-likelihood" _fmt(r.loglik; digits=2);
-        "Log-lik (Gaussian)" _fmt(r.loglik_gaussian; digits=2);
+        "Log-likelihood" _fmt(r.loglik; digits=4);
+        "Log-lik (Gaussian)" _fmt(r.loglik_gaussian; digits=4);
         "AIC"            _fmt(r.aic; digits=2);
         "BIC"            _fmt(r.bic; digits=2);
         "Converged"      r.converged ? "Yes" : "No";

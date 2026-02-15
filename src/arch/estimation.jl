@@ -170,3 +170,38 @@ function estimate_arch(y::AbstractVector{T}, q::Int; method::Symbol=:mle) where 
 end
 
 estimate_arch(y::AbstractVector, q::Int; kwargs...) = estimate_arch(Float64.(y), q; kwargs...)
+
+# =============================================================================
+# Standard Errors for ARCH
+# =============================================================================
+
+"""
+    StatsAPI.stderror(m::ARCHModel{T}) -> Vector{T}
+
+MLE standard errors for ARCH model via numerical Hessian.
+Returns SE vector matching `coef(m)` = [μ, ω, α₁, ..., αq].
+"""
+function StatsAPI.stderror(m::ARCHModel{T}) where {T}
+    q = m.q
+    # Reconstruct optimization-space parameters: [mu, log(omega), log(alpha)...]
+    params_opt = vcat(m.mu, log(m.omega), log.(m.alpha))
+
+    obj = p -> _arch_negloglik(p, m.y, q)
+    H = _numerical_hessian(obj, params_opt)
+
+    # Invert Hessian for covariance in optimization space
+    C_opt = try
+        robust_inv(H)
+    catch
+        return fill(T(NaN), 2 + q)
+    end
+
+    # Delta method: SE(exp(x)) = exp(x) * SE(x)
+    se = Vector{T}(undef, 2 + q)
+    se[1] = sqrt(max(C_opt[1, 1], zero(T)))             # mu (untransformed)
+    se[2] = m.omega * sqrt(max(C_opt[2, 2], zero(T)))   # omega = exp(log_omega)
+    for i in 1:q
+        se[2+i] = m.alpha[i] * sqrt(max(C_opt[2+i, 2+i], zero(T)))  # alpha_i = exp(log_alpha_i)
+    end
+    se
+end

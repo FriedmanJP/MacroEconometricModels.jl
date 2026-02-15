@@ -566,6 +566,106 @@ estimate_arima(y::AbstractVector, p::Int, d::Int, q::Int; kwargs...) =
 # StatsAPI fit Interface
 # =============================================================================
 
+# =============================================================================
+# Standard Errors via Hessian / OLS
+# =============================================================================
+
+"""
+    _arima_ols_stderror(m::ARModel{T}) -> Vector{T}
+
+OLS standard errors for AR(p) estimated via OLS.
+Returns SE vector matching `coef(m)` = [c, φ₁, ..., φₚ].
+"""
+function _arima_ols_stderror(m::ARModel{T}) where {T}
+    y = m.y
+    p_order = m.p
+    n = length(y)
+    n_eff = n - p_order
+
+    # Reconstruct design matrix (assume intercept)
+    has_intercept = true
+    X = zeros(T, n_eff, has_intercept ? p_order + 1 : p_order)
+    if has_intercept
+        X[:, 1] .= one(T)
+        for lag in 1:p_order
+            X[:, lag+1] = y[p_order+1-lag:n-lag]
+        end
+    else
+        for lag in 1:p_order
+            X[:, lag] = y[p_order+1-lag:n-lag]
+        end
+    end
+
+    XtX_inv = robust_inv(X' * X)
+    se = sqrt.(max.(diag(XtX_inv) .* m.sigma2, zero(T)))
+    se
+end
+
+"""
+    _arima_mle_stderror(m::AbstractARIMAModel) -> Vector
+
+MLE standard errors via numerical Hessian of the negative log-likelihood.
+Returns SE vector matching `coef(m)` = [c, φ₁, ..., θq].
+Uses delta method for log(σ²) → σ² transformation (not included in output).
+"""
+function _arima_mle_stderror(m::AbstractARIMAModel)
+    T_f = eltype(m.y)
+    p_order = ar_order(m)
+    q_order = ma_order(m)
+
+    # Get the working series (differenced for ARIMA)
+    y_work = m isa ARIMAModel ? m.y_diff : m.y
+
+    # Pack parameters into optimization space
+    phi = p_order > 0 ? (hasproperty(m, :phi) ? m.phi : T_f[]) : T_f[]
+    theta = q_order > 0 ? (hasproperty(m, :theta) ? m.theta : T_f[]) : T_f[]
+    params_opt = _pack_arma_params(m.c, phi, theta;
+                                    include_intercept=true,
+                                    log_sigma2=log(max(m.sigma2, T_f(1e-10))))
+
+    # Negative log-likelihood in optimization space
+    obj = p -> _arma_negloglik(p, y_work, p_order, q_order; include_intercept=true)
+
+    # Compute Hessian and invert for covariance matrix
+    H = _numerical_hessian(obj, params_opt)
+    n_coef = 1 + p_order + q_order  # c + AR + MA (exclude log_sigma2)
+
+    # Extract the sub-Hessian for coefficient parameters only
+    H_coef = H[1:n_coef, 1:n_coef]
+    try
+        C = robust_inv(H_coef)
+        se = sqrt.(max.(diag(C), zero(T_f)))
+        return se
+    catch
+        # Fallback: use full Hessian inverse
+        try
+            C_full = robust_inv(H)
+            se = sqrt.(max.(diag(C_full)[1:n_coef], zero(T_f)))
+            return se
+        catch
+            return fill(T_f(NaN), n_coef)
+        end
+    end
+end
+
+"""Standard errors for AR model coefficients."""
+function StatsAPI.stderror(m::ARModel)
+    m.method == :ols ? _arima_ols_stderror(m) : _arima_mle_stderror(m)
+end
+
+"""Standard errors for MA model coefficients."""
+StatsAPI.stderror(m::MAModel) = _arima_mle_stderror(m)
+
+"""Standard errors for ARMA model coefficients."""
+StatsAPI.stderror(m::ARMAModel) = _arima_mle_stderror(m)
+
+"""Standard errors for ARIMA model coefficients."""
+StatsAPI.stderror(m::ARIMAModel) = _arima_mle_stderror(m)
+
+# =============================================================================
+# StatsAPI fit Interface
+# =============================================================================
+
 StatsAPI.fit(::Type{ARModel}, y::AbstractVector, p::Int; kwargs...) = estimate_ar(y, p; kwargs...)
 StatsAPI.fit(::Type{MAModel}, y::AbstractVector, q::Int; kwargs...) = estimate_ma(y, q; kwargs...)
 StatsAPI.fit(::Type{ARMAModel}, y::AbstractVector, p::Int, q::Int; kwargs...) = estimate_arma(y, p, q; kwargs...)
