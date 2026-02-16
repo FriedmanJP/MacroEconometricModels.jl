@@ -426,7 +426,7 @@ end
 set_display_backend(:text)
 ```
 
-For a comprehensive display backend workflow, see [Example 12: Table Output](examples.md#Example-12:-Table-Output-Text,-LaTeX,-and-HTML).
+For a comprehensive display backend workflow, see [Example 15: Table Output](examples.md#Example-15:-Table-Output-Text,-LaTeX,-and-HTML).
 
 ---
 
@@ -451,7 +451,7 @@ open("references.bib", "w") do io
 end
 ```
 
-For a comprehensive references workflow, see [Example 13: Bibliographic References](examples.md#Example-13:-Bibliographic-References).
+For a comprehensive references workflow, see [Example 16: Bibliographic References](examples.md#Example-16:-Bibliographic-References).
 
 !!! note "Technical Note"
     For non-Gaussian identification methods (ICA, ML, heteroskedasticity-based), see [Non-Gaussian Identification](nongaussian.md). All 18 identification methods work seamlessly with `irf()`, `fevd()`, and `historical_decomposition()` via the `method` keyword.
