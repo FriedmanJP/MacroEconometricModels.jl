@@ -79,7 +79,7 @@ const TEST_GROUPS = [
         "teststat/test_granger.jl",
         "data/test_data.jl",
     ]),
-    # Group 6: Non-Gaussian + Display (~15s)
+    # Group 6: Non-Gaussian + Display + Plotting (~15s)
     ("Non-Gaussian & Display" => [
         "teststat/test_normality.jl",
         "nongaussian/test_nongaussian_svar.jl",
@@ -87,6 +87,7 @@ const TEST_GROUPS = [
         "nongaussian/test_nongaussian_internals.jl",
         "core/test_error_paths.jl",
         "core/test_internal_helpers.jl",
+        "plotting/test_plot_result.jl",
     ]),
     # Group 7: SVAR Identification + Model Comparison (~50s)
     ("SVAR & Model Comparison" => [
@@ -379,6 +380,10 @@ else
 
         @testset "Panel VAR" begin
             include("pvar/test_pvar.jl")
+        end
+
+        @testset "Plotting" begin
+            include("plotting/test_plot_result.jl")
         end
     end
 end

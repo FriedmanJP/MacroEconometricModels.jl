@@ -242,6 +242,18 @@ include("data/convert.jl")
 # Data filtering (after convert.jl, needs to_vector + all filter functions + group_data)
 include("data/filter.jl")
 
+# Plotting (after all types — inline D3.js rendering, no extra dependencies)
+include("plotting/types.jl")
+include("plotting/render.jl")
+include("plotting/helpers.jl")
+include("plotting/irf.jl")
+include("plotting/fevd.jl")
+include("plotting/hd.jl")
+include("plotting/filters.jl")
+include("plotting/forecast.jl")
+include("plotting/models.jl")
+include("plotting/nowcast.jl")
+
 # =============================================================================
 # Exports - Types
 # =============================================================================
@@ -626,5 +638,11 @@ export to_matrix, to_vector
 
 # Examples
 export load_example
+
+# =============================================================================
+# Exports - Plotting
+# =============================================================================
+
+export plot_result, PlotOutput, save_plot, display_plot
 
 end # module
