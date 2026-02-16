@@ -86,7 +86,7 @@ end
 
 # VAR
 estimate_var(d::TimeSeriesData, p::Int; kwargs...) =
-    estimate_var(to_matrix(d), p; kwargs...)
+    estimate_var(to_matrix(d), p; varnames=d.varnames, kwargs...)
 
 # VECM
 estimate_vecm(d::TimeSeriesData, p::Int; kwargs...) =

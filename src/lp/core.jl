@@ -221,6 +221,7 @@ function estimate_lp(Y::AbstractMatrix{T}, shock_var::Int, horizon::Int;
                      lags::Int=4, response_vars::Vector{Int}=collect(1:size(Y, 2)),
                      cov_type::Symbol=:newey_west, bandwidth::Int=0,
                      conf_level::Real=0.95) where {T<:AbstractFloat}
+    _validate_data(Y, "Y")
     T_obs, n = size(Y)
 
     validate_positive(horizon, "horizon")

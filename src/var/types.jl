@@ -29,7 +29,7 @@ Concrete type definitions for VAR models, IRF, FEVD, and priors.
 
 VAR model estimated via OLS.
 
-Fields: Y (data), p (lags), B (coefficients), U (residuals), Sigma (covariance), aic, bic, hqic.
+Fields: Y (data), p (lags), B (coefficients), U (residuals), Sigma (covariance), aic, bic, hqic, varnames.
 """
 struct VARModel{T<:AbstractFloat} <: AbstractVARModel
     Y::Matrix{T}
@@ -40,22 +40,25 @@ struct VARModel{T<:AbstractFloat} <: AbstractVARModel
     aic::T
     bic::T
     hqic::T
+    varnames::Vector{String}
 
     function VARModel(Y::Matrix{T}, p::Int, B::Matrix{T}, U::Matrix{T},
-                      Sigma::Matrix{T}, aic::T, bic::T, hqic::T) where {T<:AbstractFloat}
+                      Sigma::Matrix{T}, aic::T, bic::T, hqic::T,
+                      varnames::Vector{String}=["y$i" for i in 1:size(Y,2)]) where {T<:AbstractFloat}
         n = size(Y, 2)
         @assert size(B, 1) == 1 + n*p && size(B, 2) == n "B dimensions mismatch"
         @assert size(Sigma) == (n, n) "Sigma must be n × n"
-        new{T}(Y, p, B, U, Sigma, aic, bic, hqic)
+        new{T}(Y, p, B, U, Sigma, aic, bic, hqic, varnames)
     end
 end
 
 # Convenience constructor with type promotion
 function VARModel(Y::AbstractMatrix, p::Int, B::AbstractMatrix, U::AbstractMatrix,
-                  Sigma::AbstractMatrix, aic::Real, bic::Real, hqic::Real)
+                  Sigma::AbstractMatrix, aic::Real, bic::Real, hqic::Real,
+                  varnames::Vector{String}=["y$i" for i in 1:size(Y,2)])
     T = promote_type(eltype(Y), eltype(B), eltype(U), eltype(Sigma), typeof(aic))
     VARModel(Matrix{T}(Y), p, Matrix{T}(B), Matrix{T}(U), Matrix{T}(Sigma),
-             T(aic), T(bic), T(hqic))
+             T(aic), T(bic), T(hqic), varnames)
 end
 
 # Accessors
@@ -63,6 +66,7 @@ nvars(model::VARModel) = size(model.Y, 2)
 nlags(model::VARModel) = model.p
 ncoefs(model::VARModel) = 1 + nvars(model) * model.p
 effective_nobs(model::VARModel) = size(model.Y, 1) - model.p
+varnames(model::VARModel) = model.varnames
 
 function Base.show(io::IO, m::VARModel{T}) where {T}
     n = nvars(m)
@@ -160,4 +164,45 @@ function MinnesotaHyperparameters(; tau::Real=3.0, decay::Real=0.5,
                                    lambda::Real=5.0, mu::Real=2.0, omega::Real=2.0)
     T = promote_type(typeof(tau), typeof(decay), typeof(lambda), typeof(mu), typeof(omega))
     MinnesotaHyperparameters{T}(T(tau), T(decay), T(lambda), T(mu), T(omega))
+end
+
+# =============================================================================
+# Sign-Identified Set (Baumeister & Hamilton 2015)
+# =============================================================================
+
+"""
+    SignIdentifiedSet{T} <: AbstractAnalysisResult
+
+Full identified set from sign-restricted SVAR identification.
+
+Stores all accepted rotation matrices and corresponding IRFs, enabling
+characterization of the identified set (Baumeister & Hamilton, 2015).
+
+Fields:
+- `Q_draws::Vector{Matrix{T}}` — accepted rotation matrices
+- `irf_draws::Array{T,4}` — stacked IRFs (n_accepted × horizon × n × n)
+- `n_accepted::Int` — number of accepted draws
+- `n_total::Int` — total draws attempted
+- `acceptance_rate::T` — fraction accepted
+- `variables::Vector{String}` — variable names
+- `shocks::Vector{String}` — shock names
+"""
+struct SignIdentifiedSet{T<:AbstractFloat} <: AbstractAnalysisResult
+    Q_draws::Vector{Matrix{T}}
+    irf_draws::Array{T,4}
+    n_accepted::Int
+    n_total::Int
+    acceptance_rate::T
+    variables::Vector{String}
+    shocks::Vector{String}
+end
+
+function Base.show(io::IO, s::SignIdentifiedSet{T}) where {T}
+    println(io, "Sign-Identified Set")
+    println(io, "  Accepted draws: $(s.n_accepted) / $(s.n_total) ($(round(s.acceptance_rate * 100, digits=1))%)")
+    println(io, "  Variables: $(length(s.variables))")
+    if s.n_accepted > 0
+        H = size(s.irf_draws, 2)
+        println(io, "  IRF horizon: $H")
+    end
 end

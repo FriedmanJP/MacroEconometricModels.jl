@@ -52,10 +52,10 @@ using Test, Random, DataFrames
         check_plot(p2)
 
         # String-based selection
-        p3 = plot_result(r; var="Var 1", shock="Shock 2")
+        p3 = plot_result(r; var="y1", shock="y2")
         check_plot(p3)
-        @test occursin("Var 1", p3.html)
-        @test occursin("Shock 2", p3.html)
+        @test occursin("y1", p3.html)
+        @test occursin("y2", p3.html)
 
         # Custom title
         p4 = plot_result(r; title="My Custom IRF")

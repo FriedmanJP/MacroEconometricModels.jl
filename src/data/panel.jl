@@ -319,5 +319,5 @@ function balance_panel(ts::TimeSeriesData{T}; method::Symbol=:dfm,
 
     TimeSeriesData{T}(dfm_result.X_sm, copy(ts.varnames), ts.frequency,
                       copy(ts.tcode), copy(ts.time_index), ts.T_obs, ts.n_vars,
-                      copy(ts.desc), copy(ts.vardesc), copy(ts.source_refs))
+                      copy(ts.desc), copy(ts.vardesc), copy(ts.source_refs), copy(ts.dates))
 end

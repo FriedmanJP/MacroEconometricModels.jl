@@ -92,7 +92,7 @@ using Random
         @test c11 == hd.contributions[:, 1, 1]
 
         # Test contribution accessor with string names
-        c_str = contribution(hd, "Var 1", "Shock 1")
+        c_str = contribution(hd, "y1", "y1")
         @test c_str == c11
 
         # Test total shock contribution
@@ -101,12 +101,12 @@ using Random
         @test isapprox(total, sum(hd.contributions[:, 1, :], dims=2)[:], atol=1e-10)
 
         # Test total with string name
-        total_str = total_shock_contribution(hd, "Var 1")
+        total_str = total_shock_contribution(hd, "y1")
         @test total_str == total
 
         # Test error handling
-        @test_throws ArgumentError contribution(hd, "NonExistent", "Shock 1")
-        @test_throws ArgumentError contribution(hd, "Var 1", "NonExistent")
+        @test_throws ArgumentError contribution(hd, "NonExistent", "y1")
+        @test_throws ArgumentError contribution(hd, "y1", "NonExistent")
         @test_throws AssertionError contribution(hd, 10, 1)
     end
 
@@ -456,6 +456,29 @@ using Random
             c = contribution(hd, i, j)
             @test length(c) == T_obs - p
         end
+    end
+
+    # =================================================================
+    # Default Horizon (Issue #18)
+    # =================================================================
+    @testset "Default Horizon" begin
+        Random.seed!(42)
+        Y = randn(100, 3)
+        model = estimate_var(Y, 2)
+        T_eff = size(Y, 1) - 2  # effective_nobs
+
+        # Call without specifying horizon — should use effective_nobs
+        hd = historical_decomposition(model)
+
+        @test hd isa HistoricalDecomposition
+        n = 3
+        @test size(hd.contributions) == (T_eff, n, n)
+        @test length(hd.variables) == n
+
+        # With explicit horizon should also work (horizon clamped to T_eff)
+        hd2 = historical_decomposition(model, 50)
+        @test hd2.T_eff == T_eff
+        @test verify_decomposition(hd2)
     end
 
 end

@@ -54,12 +54,13 @@ Container for time series data with metadata.
 - `desc::Vector{String}` — dataset description (length-1 vector for mutability)
 - `vardesc::Dict{String,String}` — per-variable descriptions keyed by variable name
 - `source_refs::Vector{Symbol}` — reference keys for bibliographic citations (see `refs()`)
+- `dates::Vector{String}` — date labels (default: empty; use `set_dates!` to populate)
 
 # Constructors
 ```julia
-TimeSeriesData(data::Matrix; varnames, frequency=Other, tcode, time_index, desc, vardesc, source_refs)
-TimeSeriesData(data::Vector; varname="x1", frequency=Other, desc, vardesc, source_refs)
-TimeSeriesData(df::DataFrame; frequency=Other, varnames, desc, vardesc, source_refs)
+TimeSeriesData(data::Matrix; varnames, frequency=Other, tcode, time_index, desc, vardesc, source_refs, dates)
+TimeSeriesData(data::Vector; varname="x1", frequency=Other, desc, vardesc, source_refs, dates)
+TimeSeriesData(df::DataFrame; frequency=Other, varnames, desc, vardesc, source_refs, dates)
 ```
 """
 struct TimeSeriesData{T<:AbstractFloat} <: AbstractMacroData
@@ -73,6 +74,7 @@ struct TimeSeriesData{T<:AbstractFloat} <: AbstractMacroData
     desc::Vector{String}
     vardesc::Dict{String,String}
     source_refs::Vector{Symbol}
+    dates::Vector{String}
 end
 
 # Matrix constructor
@@ -83,7 +85,8 @@ function TimeSeriesData(data::AbstractMatrix{T};
                         time_index::Union{Vector{Int},Nothing}=nothing,
                         desc::String="",
                         vardesc::Union{Dict{String,String},Nothing}=nothing,
-                        source_refs::Vector{Symbol}=Symbol[]) where {T<:AbstractFloat}
+                        source_refs::Vector{Symbol}=Symbol[],
+                        dates::Union{Vector{String},Nothing}=nothing) where {T<:AbstractFloat}
     T_obs, n_vars = size(data)
     T_obs < 1 && throw(ArgumentError("Data must have at least 1 observation, got $T_obs"))
     n_vars < 1 && throw(ArgumentError("Data must have at least 1 variable, got $n_vars"))
@@ -94,8 +97,10 @@ function TimeSeriesData(data::AbstractMatrix{T};
     all(t -> 1 <= t <= 7, tc) || throw(ArgumentError("tcode values must be in 1:7"))
     ti = something(time_index, collect(1:T_obs))
     length(ti) != T_obs && throw(ArgumentError("time_index length ($(length(ti))) must match T_obs ($T_obs)"))
+    dt = something(dates, String[])
+    !isempty(dt) && length(dt) != T_obs && throw(ArgumentError("dates length ($(length(dt))) must match T_obs ($T_obs)"))
     vd = something(vardesc, Dict{String,String}())
-    TimeSeriesData{T}(Matrix{T}(data), vn, frequency, tc, ti, T_obs, n_vars, [desc], vd, source_refs)
+    TimeSeriesData{T}(Matrix{T}(data), vn, frequency, tc, ti, T_obs, n_vars, [desc], vd, source_refs, dt)
 end
 
 # Non-float matrix fallback
@@ -111,10 +116,11 @@ function TimeSeriesData(data::AbstractVector{T};
                         time_index::Union{Vector{Int},Nothing}=nothing,
                         desc::String="",
                         vardesc::Union{Dict{String,String},Nothing}=nothing,
-                        source_refs::Vector{Symbol}=Symbol[]) where {T<:AbstractFloat}
+                        source_refs::Vector{Symbol}=Symbol[],
+                        dates::Union{Vector{String},Nothing}=nothing) where {T<:AbstractFloat}
     TimeSeriesData(reshape(data, :, 1); varnames=[varname], frequency=frequency,
                    tcode=[tcode], time_index=time_index, desc=desc, vardesc=vardesc,
-                   source_refs=source_refs)
+                   source_refs=source_refs, dates=dates)
 end
 
 # Non-float vector fallback
@@ -130,7 +136,8 @@ function TimeSeriesData(df::DataFrame;
                         time_index::Union{Vector{Int},Nothing}=nothing,
                         desc::String="",
                         vardesc::Union{Dict{String,String},Nothing}=nothing,
-                        source_refs::Vector{Symbol}=Symbol[])
+                        source_refs::Vector{Symbol}=Symbol[],
+                        dates::Union{Vector{String},Nothing}=nothing)
     # Select numeric columns
     num_cols = [n for n in names(df) if eltype(df[!, n]) <: Union{Missing, Number}]
     isempty(num_cols) && throw(ArgumentError("DataFrame has no numeric columns"))
@@ -147,7 +154,7 @@ function TimeSeriesData(df::DataFrame;
     vn = something(varnames, num_cols)
     TimeSeriesData(mat; varnames=vn, frequency=frequency, tcode=tcode,
                    time_index=time_index, desc=desc, vardesc=vardesc,
-                   source_refs=source_refs)
+                   source_refs=source_refs, dates=dates)
 end
 
 # =============================================================================
@@ -309,6 +316,13 @@ Return the integer time index vector.
 time_index(d::TimeSeriesData) = d.time_index
 
 """
+    dates(d::TimeSeriesData) -> Vector{String}
+
+Return the date labels vector. Returns empty vector if no dates are set.
+"""
+dates(d::TimeSeriesData) = d.dates
+
+"""
     obs_id(d::CrossSectionData)
 
 Return the observation identifier vector.
@@ -392,12 +406,34 @@ function Base.getindex(d::TimeSeriesData{T}, ::Colon, cols::Vector{String}) wher
     sub_vd = Dict(k => v for (k, v) in d.vardesc if k in cols)
     TimeSeriesData{T}(d.data[:, idxs], d.varnames[idxs], d.frequency,
                       d.tcode[idxs], d.time_index, d.T_obs, length(idxs),
-                      copy(d.desc), sub_vd, copy(d.source_refs))
+                      copy(d.desc), sub_vd, copy(d.source_refs), copy(d.dates))
 end
 
 function Base.getindex(d::TimeSeriesData{T}, ::Colon, col::Int) where {T}
     1 <= col <= d.n_vars || throw(BoundsError(d, (Colon(), col)))
     d.data[:, col]
+end
+
+"""Row-slice by date string: `d["2020Q1", :]` returns a NamedTuple of values."""
+function Base.getindex(d::TimeSeriesData{T}, date::String, ::Colon) where {T}
+    isempty(d.dates) && throw(ArgumentError("No dates set. Use `set_dates!` first."))
+    idx = findfirst(==(date), d.dates)
+    idx === nothing && throw(ArgumentError("Date '$date' not found. Available: $(d.dates[1]):$(d.dates[end])"))
+    d.data[idx, :]
+end
+
+"""Row-slice by date range: `d["2020Q1":"2020Q4", :]` returns a sub-TimeSeriesData."""
+function Base.getindex(d::TimeSeriesData{T}, dates_range::AbstractVector{String}, ::Colon) where {T}
+    isempty(d.dates) && throw(ArgumentError("No dates set. Use `set_dates!` first."))
+    idxs = Int[]
+    for date in dates_range
+        idx = findfirst(==(date), d.dates)
+        idx === nothing && throw(ArgumentError("Date '$date' not found."))
+        push!(idxs, idx)
+    end
+    TimeSeriesData{T}(d.data[idxs, :], copy(d.varnames), d.frequency,
+                      copy(d.tcode), d.time_index[idxs], length(idxs), d.n_vars,
+                      copy(d.desc), copy(d.vardesc), copy(d.source_refs), d.dates[idxs])
 end
 
 function Base.getindex(d::CrossSectionData{T}, ::Colon, col::String) where {T}
@@ -503,6 +539,32 @@ Set observation identifiers for a CrossSectionData container.
 function set_obs_id!(d::CrossSectionData, ids::Vector{Int})
     length(ids) != d.N_obs && throw(ArgumentError("obs_id length must match N_obs"))
     copy!(d.obs_id, ids)
+    d
+end
+
+"""
+    set_dates!(d::TimeSeriesData, dates::Vector{String})
+
+Set the date labels for a TimeSeriesData container. Length must match T_obs,
+or pass an empty vector to clear dates.
+
+# Examples
+```julia
+d = TimeSeriesData(randn(4, 2))
+set_dates!(d, ["2020Q1", "2020Q2", "2020Q3", "2020Q4"])
+dates(d)  # ["2020Q1", "2020Q2", "2020Q3", "2020Q4"]
+```
+"""
+function set_dates!(d::TimeSeriesData, dt::Vector{String})
+    if !isempty(dt)
+        length(dt) != d.T_obs && throw(ArgumentError("dates length ($(length(dt))) must match T_obs ($(d.T_obs))"))
+    end
+    if isempty(d.dates)
+        append!(d.dates, dt)
+    else
+        resize!(d.dates, length(dt))
+        copy!(d.dates, dt)
+    end
     d
 end
 

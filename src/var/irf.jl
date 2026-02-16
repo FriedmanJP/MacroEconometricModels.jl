@@ -67,7 +67,7 @@ function irf(model::VARModel{T}, horizon::Int;
     end
 
     ImpulseResponse{T}(point_irf, ci_lower, ci_upper, horizon,
-                       default_var_names(n), default_shock_names(n), ci_type)
+                       model.varnames, model.varnames, ci_type)
 end
 
 """Simulate IRFs for confidence intervals (bootstrap or asymptotic)."""
@@ -250,4 +250,29 @@ function cumulative_irf(irf::LPImpulseResponse{T}) where {T<:AbstractFloat}
 
     LPImpulseResponse{T}(cum_values, cum_ci_lower, cum_ci_upper, cum_se, irf.horizon,
                          irf.response_vars, irf.shock_var, irf.cov_type, irf.conf_level)
+end
+
+"""
+    cumulative_irf(irf_result::ImpulseResponse{T}) -> ImpulseResponse{T}
+
+Compute cumulative impulse response for VAR models: Σₛ₌₀ʰ IRF_s.
+"""
+function cumulative_irf(irf_result::ImpulseResponse{T}) where {T<:AbstractFloat}
+    cum_values = cumsum(irf_result.values, dims=1)
+    cum_lower = cumsum(irf_result.ci_lower, dims=1)
+    cum_upper = cumsum(irf_result.ci_upper, dims=1)
+    ImpulseResponse{T}(cum_values, cum_lower, cum_upper, irf_result.horizon,
+                       irf_result.variables, irf_result.shocks, irf_result.ci_type)
+end
+
+"""
+    cumulative_irf(irf_result::BayesianImpulseResponse{T}) -> BayesianImpulseResponse{T}
+
+Compute cumulative Bayesian impulse response: Σₛ₌₀ʰ IRF_s.
+"""
+function cumulative_irf(irf_result::BayesianImpulseResponse{T}) where {T<:AbstractFloat}
+    cum_quantiles = cumsum(irf_result.quantiles, dims=1)
+    cum_mean = cumsum(irf_result.mean, dims=1)
+    BayesianImpulseResponse{T}(cum_quantiles, cum_mean, irf_result.horizon,
+                               irf_result.variables, irf_result.shocks, irf_result.quantile_levels)
 end

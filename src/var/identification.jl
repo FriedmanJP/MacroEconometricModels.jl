@@ -80,19 +80,87 @@ end
 # =============================================================================
 
 """
-    identify_sign(model, horizon, check_func; max_draws=1000) -> (Q, irf)
+    identify_sign(model, horizon, check_func; max_draws=1000, store_all=false)
 
 Find Q satisfying sign restrictions via random draws.
+
+With `store_all=false` (default), returns `(Q, irf)` — the first valid rotation.
+With `store_all=true`, returns a `SignIdentifiedSet` containing ALL accepted
+rotations and their IRFs (Baumeister & Hamilton, 2015).
 """
 function identify_sign(model::VARModel{T}, horizon::Int, check_func::Function;
-                       max_draws::Int=1000) where {T<:AbstractFloat}
+                       max_draws::Int=1000, store_all::Bool=false) where {T<:AbstractFloat}
     n = nvars(model)
+
+    if !store_all
+        # Original behavior: return first valid Q
+        for _ in 1:max_draws
+            Q = generate_Q(n, T)
+            irf_result = compute_irf(model, Q, horizon)
+            check_func(irf_result) && return Q, irf_result
+        end
+        error("No valid Q found after $max_draws draws")
+    end
+
+    # Full identified set: collect ALL valid rotations
+    accepted_Q = Matrix{T}[]
+    accepted_irf_list = Array{T,3}[]
+
     for _ in 1:max_draws
         Q = generate_Q(n, T)
-        irf = compute_irf(model, Q, horizon)
-        check_func(irf) && return Q, irf
+        irf_result = compute_irf(model, Q, horizon)
+        if check_func(irf_result)
+            push!(accepted_Q, Q)
+            push!(accepted_irf_list, irf_result)
+        end
     end
-    error("No valid Q found after $max_draws draws")
+
+    n_accepted = length(accepted_Q)
+    n_accepted == 0 && error("No valid Q found after $max_draws draws")
+
+    # Stack IRFs into 4D array (n_accepted × horizon × n × n)
+    irf_draws = zeros(T, n_accepted, horizon, n, n)
+    for (i, irf_i) in enumerate(accepted_irf_list)
+        irf_draws[i, :, :, :] = irf_i
+    end
+
+    acceptance_rate = T(n_accepted) / T(max_draws)
+
+    SignIdentifiedSet{T}(accepted_Q, irf_draws, n_accepted, max_draws, acceptance_rate,
+                         model.varnames, model.varnames)
+end
+
+"""
+    irf_bounds(s::SignIdentifiedSet{T}; quantiles=[0.16, 0.84]) -> (lower, upper)
+
+Compute pointwise bounds (or quantile bands) over the identified set.
+"""
+function irf_bounds(s::SignIdentifiedSet{T}; quantiles::Vector{<:Real}=T[0.16, 0.84]) where {T}
+    q = T.(quantiles)
+    H, n = size(s.irf_draws, 2), size(s.irf_draws, 3)
+    lower = zeros(T, H, n, n)
+    upper = zeros(T, H, n, n)
+    for h in 1:H, i in 1:n, j in 1:n
+        d = @view s.irf_draws[:, h, i, j]
+        lower[h, i, j] = quantile(d, q[1])
+        upper[h, i, j] = quantile(d, q[2])
+    end
+    (lower, upper)
+end
+
+"""
+    irf_median(s::SignIdentifiedSet{T}) -> Array{T,3}
+
+Compute pointwise median IRF over the identified set.
+"""
+function irf_median(s::SignIdentifiedSet{T}) where {T}
+    H, n = size(s.irf_draws, 2), size(s.irf_draws, 3)
+    med = zeros(T, H, n, n)
+    for h in 1:H, i in 1:n, j in 1:n
+        d = @view s.irf_draws[:, h, i, j]
+        med[h, i, j] = quantile(d, T(0.5))
+    end
+    med
 end
 
 # =============================================================================

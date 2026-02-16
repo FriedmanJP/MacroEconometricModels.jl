@@ -39,7 +39,8 @@ Estimate VAR(p) via OLS: Yₜ = c + A₁Yₜ₋₁ + ... + AₚYₜ₋ₚ + uₜ
 # Returns
 `VARModel` with estimated coefficients, residuals, covariance matrix, and information criteria.
 """
-function estimate_var(Y::AbstractMatrix{T}, p::Int; check_stability::Bool=true) where {T<:AbstractFloat}
+function estimate_var(Y::AbstractMatrix{T}, p::Int; check_stability::Bool=true, varnames::Union{Vector{String},Nothing}=nothing) where {T<:AbstractFloat}
+    _validate_data(Y, "Y")
     T_obs, n = size(Y)
     validate_var_inputs(T_obs, n, p)
 
@@ -62,7 +63,8 @@ function estimate_var(Y::AbstractMatrix{T}, p::Int; check_stability::Bool=true) 
     bic = log_det + k * log(T_eff) / T_eff
     hqic = log_det + 2k * log(log(T_eff)) / T_eff
 
-    model = VARModel(Y, p, B, U, Sigma, aic, bic, hqic)
+    vn = something(varnames, ["y$i" for i in 1:n])
+    model = VARModel(Y, p, B, U, Sigma, aic, bic, hqic, vn)
 
     # Check stationarity via companion matrix eigenvalues
     if check_stability

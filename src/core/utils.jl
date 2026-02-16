@@ -73,6 +73,29 @@ validate_horizon(h::Int; min_val::Int=1) =
 validate_option(value::Symbol, name::String, valid_options::Tuple) =
     value ∉ valid_options && throw(ArgumentError("$name must be one of $valid_options, got :$value"))
 
+"""Validate data contains no NaN or Inf values."""
+function _validate_data(Y::AbstractMatrix, name::String="data")
+    nan_count = count(isnan, Y)
+    inf_count = count(isinf, Y)
+    if nan_count > 0 || inf_count > 0
+        nan_rows = isempty(findall(isnan, Y)) ? Int[] : unique(getindex.(findall(isnan, Y), 1))
+        inf_rows = isempty(findall(isinf, Y)) ? Int[] : unique(getindex.(findall(isinf, Y), 1))
+        bad_rows = sort(unique(vcat(nan_rows, inf_rows)))
+        row_info = length(bad_rows) <= 5 ? " in rows $(bad_rows)" : " in $(length(bad_rows)) rows"
+        throw(ArgumentError("$name contains $nan_count NaN and $inf_count Inf values$row_info. Use `fix()` or remove missing data before estimation."))
+    end
+end
+
+function _validate_data(y::AbstractVector, name::String="data")
+    nan_count = count(isnan, y)
+    inf_count = count(isinf, y)
+    if nan_count > 0 || inf_count > 0
+        throw(ArgumentError(
+            "$name contains $nan_count NaN and $inf_count Inf values. Use `fix()` or remove missing data before estimation."))
+    end
+    return nothing
+end
+
 # =============================================================================
 # Type Conversion Macro
 # =============================================================================
@@ -124,7 +147,9 @@ function safe_cholesky(A::AbstractMatrix{T}; jitter::T=T(1e-8)) where {T<:Abstra
     catch
         for scale in [1, 10, 100, 1000]
             try
-                return cholesky(Hermitian(A + scale * jitter * I)).L
+                result = cholesky(Hermitian(A + scale * jitter * I)).L
+                @warn "Covariance matrix required jitter ($(scale * jitter)) for Cholesky decomposition. Results may be affected by near-collinearity." maxlog=3
+                return result
             catch; continue; end
         end
         error("Failed to compute Cholesky decomposition even with regularization")

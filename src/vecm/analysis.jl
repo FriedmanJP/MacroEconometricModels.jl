@@ -46,6 +46,6 @@ end
 
 Compute historical decomposition for a VECM by converting to VAR representation.
 """
-function historical_decomposition(vecm::VECMModel{T}, horizon::Int; kwargs...) where {T}
+function historical_decomposition(vecm::VECMModel{T}, horizon::Int=effective_nobs(vecm); kwargs...) where {T}
     historical_decomposition(to_var(vecm), horizon; kwargs...)
 end

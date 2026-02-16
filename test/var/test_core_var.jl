@@ -470,4 +470,29 @@ using Random
             @test_skip "Arias identification skipped"
         end
     end
+
+    # =================================================================
+    # VARModel Variable Names (Issue #17)
+    # =================================================================
+    @testset "VARModel Variable Names" begin
+        Random.seed!(42)
+        Y = randn(100, 3)
+
+        # Default variable names
+        m1 = estimate_var(Y, 2)
+        @test m1.varnames == ["y1", "y2", "y3"]
+
+        # Custom variable names
+        m2 = estimate_var(Y, 2; varnames=["GDP", "CPI", "FFR"])
+        @test m2.varnames == ["GDP", "CPI", "FFR"]
+
+        # Variable names propagate to IRF
+        irf_result = irf(m2, 10)
+        @test irf_result.variables == ["GDP", "CPI", "FFR"]
+        @test irf_result.shocks == ["GDP", "CPI", "FFR"]
+
+        # Variable names propagate to FEVD
+        fevd_result = fevd(m2, 10)
+        @test !any(isnan, fevd_result.proportions)
+    end
 end

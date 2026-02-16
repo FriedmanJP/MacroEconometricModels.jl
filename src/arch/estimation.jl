@@ -143,6 +143,7 @@ println("ω = ", model.omega, ", α₁ = ", model.alpha[1])
 ```
 """
 function estimate_arch(y::AbstractVector{T}, q::Int; method::Symbol=:mle) where {T<:AbstractFloat}
+    _validate_data(y, "y")
     _validate_volatility_inputs(y, 0, q)
     y_vec = Vector{T}(y)
     n = length(y_vec)

@@ -398,6 +398,7 @@ function estimate_sv(y::AbstractVector{T};
                      n_samples::Int=2000, burnin::Int=1000,
                      dist::Symbol=:normal, leverage::Bool=false,
                      quantile_levels::Vector{<:Real}=[0.025, 0.5, 0.975]) where {T<:AbstractFloat}
+    _validate_data(y, "y")
     n = length(y)
     n < 20 && throw(ArgumentError("Need at least 20 observations for SV model, got $n"))
     y_vec = Vector{T}(y)

@@ -68,7 +68,7 @@ using Statistics
         @test occursin("IRF:", output)
 
         # String indexing
-        t_str = table(irf_result, "Var 1", "Shock 1")
+        t_str = table(irf_result, "y1", "y1")
         @test t_str == t
     end
 
@@ -580,6 +580,32 @@ using Statistics
         output = String(take!(io))
         @test occursin("LP IRF", output)
         @test occursin("←", output)
+    end
+
+    # =================================================================
+    # refs() Returns String (Issue #16)
+    # =================================================================
+    @testset "refs() Returns String" begin
+        Y = randn(100, 3)
+        model = estimate_var(Y, 2)
+
+        # refs() should return a String, not print to stdout
+        result = refs(model)
+        @test result isa String
+        @test !isempty(result)
+        @test occursin("Sims", result) || occursin("Lütkepohl", result) || length(result) > 10
+
+        # BibTeX format
+        bib = refs(model; format=:bibtex)
+        @test bib isa String
+        @test occursin("@", bib)
+
+        # Multiple formats
+        for fmt in (:text, :bibtex, :html, :latex)
+            r = refs(model; format=fmt)
+            @test r isa String
+            @test !isempty(r)
+        end
     end
 
 end

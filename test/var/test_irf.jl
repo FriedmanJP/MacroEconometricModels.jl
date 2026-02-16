@@ -106,3 +106,97 @@ Random.seed!(42)
         rethrow(e)
     end
 end
+
+# =============================================================================
+# Cumulative IRF (Issue #15)
+# =============================================================================
+@testset "Cumulative IRF" begin
+    Random.seed!(42)
+    Y = randn(200, 3)
+    model = estimate_var(Y, 2)
+    H = 20
+
+    @testset "VAR cumulative IRF" begin
+        irf_result = irf(model, H)
+        cirf = cumulative_irf(irf_result)
+
+        @test cirf isa ImpulseResponse
+        @test size(cirf.values) == size(irf_result.values)
+        @test cirf.horizon == irf_result.horizon
+
+        # Verify cumulative = cumsum along horizon dimension
+        expected = cumsum(irf_result.values, dims=1)
+        @test cirf.values ≈ expected
+
+        # CI bands should also be cumulated
+        @test cirf.ci_lower ≈ cumsum(irf_result.ci_lower, dims=1)
+        @test cirf.ci_upper ≈ cumsum(irf_result.ci_upper, dims=1)
+    end
+
+    @testset "Bayesian cumulative IRF" begin
+        post = estimate_bvar(Y, 2; n_draws=200)
+        birf = irf(post, H)
+        bcirf = cumulative_irf(birf)
+
+        @test bcirf isa BayesianImpulseResponse
+        @test size(bcirf.mean) == size(birf.mean)
+        @test bcirf.mean ≈ cumsum(birf.mean, dims=1)
+        @test bcirf.quantiles ≈ cumsum(birf.quantiles, dims=1)
+    end
+end
+
+# =============================================================================
+# compute_irf exported (Issue #20)
+# =============================================================================
+@testset "compute_irf exported" begin
+    Random.seed!(42)
+    Y = randn(200, 3)
+    model = estimate_var(Y, 2)
+    n = 3
+
+    Q = Matrix{Float64}(I, n, n)
+    result = compute_irf(model, Q, 10)
+    @test size(result) == (10, n, n)
+    @test !any(isnan, result)
+end
+
+# =============================================================================
+# Sign Identified Set (Issue #21)
+# =============================================================================
+@testset "Sign Identified Set" begin
+    Random.seed!(42)
+    Y = randn(200, 3)
+    model = estimate_var(Y, 2)
+    n = 3
+    H = 10
+
+    # Accept-all check function for testing
+    check_all(irf_result) = true
+
+    result = identify_sign(model, H, check_all; max_draws=50, store_all=true)
+
+    @test result isa SignIdentifiedSet
+    @test result.n_accepted == 50
+    @test result.n_total == 50
+    @test result.acceptance_rate ≈ 1.0
+    @test length(result.Q_draws) == 50
+    @test size(result.irf_draws) == (50, H, n, n)
+
+    # irf_bounds
+    lower, upper = irf_bounds(result)
+    @test size(lower) == (H, n, n)
+    @test size(upper) == (H, n, n)
+    @test all(lower .<= upper)
+
+    # irf_median
+    med = irf_median(result)
+    @test size(med) == (H, n, n)
+    @test !any(isnan, med)
+
+    # show method
+    io = IOBuffer()
+    show(io, result)
+    output = String(take!(io))
+    @test occursin("Sign-Identified Set", output)
+    @test occursin("50", output)
+end

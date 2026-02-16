@@ -391,6 +391,7 @@ println(model.phi)  # AR coefficients
 ```
 """
 function estimate_ar(y::AbstractVector{T}, p::Int; method::Symbol=:ols, include_intercept::Bool=true) where {T<:AbstractFloat}
+    _validate_data(y, "y")
     _validate_arima_inputs(y, p, 0, 0)
     y_vec = Vector{T}(y)
 
@@ -482,6 +483,7 @@ println(model.theta)  # MA coefficient
 ```
 """
 function estimate_ma(y::AbstractVector{T}, q::Int; method::Symbol=:css_mle, include_intercept::Bool=true, max_iter::Int=500) where {T<:AbstractFloat}
+    _validate_data(y, "y")
     _validate_arima_inputs(y, 0, 0, q)
     y_vec = Vector{T}(y)
     c, _, theta, sigma2, loglik, residuals, fitted, converged, iterations =
@@ -522,6 +524,7 @@ println("AR: ", model.phi, " MA: ", model.theta)
 ```
 """
 function estimate_arma(y::AbstractVector{T}, p::Int, q::Int; method::Symbol=:css_mle, include_intercept::Bool=true, max_iter::Int=500) where {T<:AbstractFloat}
+    _validate_data(y, "y")
     _validate_arima_inputs(y, p, 0, q)
     y_vec = Vector{T}(y)
     c, phi, theta, sigma2, loglik, residuals, fitted, converged, iterations =
@@ -564,6 +567,7 @@ println(model.phi)
 function estimate_arima(y::AbstractVector{T}, p::Int, d::Int, q::Int;
                         method::Symbol=:css_mle, include_intercept::Bool=true,
                         max_iter::Int=500) where {T<:AbstractFloat}
+    _validate_data(y, "y")
     _validate_arima_inputs(y, p, d, q)
     y_vec = Vector{T}(y)
     y_diff = _difference(y_vec, d)

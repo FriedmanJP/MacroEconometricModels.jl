@@ -124,6 +124,7 @@ function apply_tcode(d::TimeSeriesData{T}, tcodes::Vector{Int}) where {T}
     # Trim time_index to match
     new_ti = d.time_index[(max_lost + 1):end]
 
+    new_dates = isempty(d.dates) ? nothing : d.dates[(max_lost + 1):end]
     TimeSeriesData(new_data;
                    varnames=copy(d.varnames),
                    frequency=d.frequency,
@@ -131,7 +132,8 @@ function apply_tcode(d::TimeSeriesData{T}, tcodes::Vector{Int}) where {T}
                    time_index=new_ti,
                    desc=desc(d),
                    vardesc=copy(d.vardesc),
-                   source_refs=copy(d.source_refs))
+                   source_refs=copy(d.source_refs),
+                   dates=new_dates)
 end
 
 """
@@ -142,6 +144,20 @@ Apply the same FRED transformation code to all variables.
 function apply_tcode(d::TimeSeriesData, tcode::Int)
     apply_tcode(d, fill(tcode, d.n_vars))
 end
+
+"""
+    apply_tcode(d::TimeSeriesData) -> TimeSeriesData
+
+Convenience method: apply the transformation codes stored in `d.tcode`.
+Equivalent to `apply_tcode(d, d.tcode)`.
+
+# Examples
+```julia
+d = load_example(:fred_md)  # tcode already set
+d_transformed = apply_tcode(d)
+```
+"""
+apply_tcode(d::TimeSeriesData) = apply_tcode(d, d.tcode)
 
 # =============================================================================
 # PanelData apply_tcode (group-by-group)

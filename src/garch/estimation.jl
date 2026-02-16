@@ -220,6 +220,7 @@ println("Persistence: ", persistence(model))
 ```
 """
 function estimate_garch(y::AbstractVector{T}, p::Int=1, q::Int=1; method::Symbol=:mle) where {T<:AbstractFloat}
+    _validate_data(y, "y")
     _validate_volatility_inputs(y, p, q)
     y_vec = Vector{T}(y)
     n = length(y_vec)
@@ -314,6 +315,7 @@ println("Leverage: ", model.gamma[1])
 ```
 """
 function estimate_egarch(y::AbstractVector{T}, p::Int=1, q::Int=1; method::Symbol=:mle) where {T<:AbstractFloat}
+    _validate_data(y, "y")
     _validate_volatility_inputs(y, p, q)
     y_vec = Vector{T}(y)
     n = length(y_vec)
@@ -402,6 +404,7 @@ println("Asymmetry: ", model.gamma[1])
 ```
 """
 function estimate_gjr_garch(y::AbstractVector{T}, p::Int=1, q::Int=1; method::Symbol=:mle) where {T<:AbstractFloat}
+    _validate_data(y, "y")
     _validate_volatility_inputs(y, p, q)
     y_vec = Vector{T}(y)
     n = length(y_vec)

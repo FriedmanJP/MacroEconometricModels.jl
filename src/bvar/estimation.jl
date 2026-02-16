@@ -74,6 +74,7 @@ function estimate_bvar(Y::AbstractMatrix{T}, p::Int;
     hyper::Union{Nothing,MinnesotaHyperparameters}=nothing
 ) where {T<:AbstractFloat}
 
+    _validate_data(Y, "Y")
     T_obs, n = size(Y)
     validate_var_inputs(T_obs, n, p)
 

@@ -376,13 +376,16 @@ export identify_sign
 export identify_narrative
 export identify_long_run
 export generate_Q
-export compute_structural_shocks
+export compute_irf, compute_structural_shocks
 
 # Arias et al. (2018) SVAR identification
 export ZeroRestriction, SignRestriction, SVARRestrictions, AriasSVARResult
 export identify_arias, identify_arias_bayesian
 export zero_restriction, sign_restriction
 export irf_percentiles, irf_mean
+
+# Sign restriction identified set (Baumeister & Hamilton 2015)
+export SignIdentifiedSet, irf_bounds, irf_median
 
 # Mountford & Uhlig (2009) penalty function identification
 export UhligSVARResult, identify_uhlig
@@ -621,7 +624,7 @@ export Frequency, Daily, Monthly, Quarterly, Yearly, Mixed, Other
 
 # Constructors and accessors
 export varnames, frequency, time_index, obs_id, rename_vars!
-export set_time_index!, set_obs_id!, desc, vardesc, set_desc!, set_vardesc!
+export set_time_index!, set_obs_id!, desc, vardesc, set_desc!, set_vardesc!, dates, set_dates!
 export xtset, isbalanced, groups, ngroups, group_data, panel_summary
 
 # Validation

@@ -77,6 +77,7 @@ r2(fm)  # R² for each variable
 ```
 """
 function estimate_factors(X::AbstractMatrix{T}, r::Int; standardize::Bool=true) where {T<:AbstractFloat}
+    _validate_data(X, "X")
     T_obs, N = size(X)
     validate_factor_inputs(T_obs, N, r)
 

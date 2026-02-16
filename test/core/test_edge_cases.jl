@@ -118,11 +118,9 @@ Random.seed!(12345)
 
         model = estimate_var(Y, 1)
 
-        # Should still work (with possible warnings about singular matrices)
-        @test_nowarn begin
-            irf_result = irf(model, 10)
-            @test size(irf_result.values) == (10, 3, 3)
-        end
+        # Should still work (may warn about jitter for near-collinear Sigma)
+        irf_result = irf(model, 10)
+        @test size(irf_result.values) == (10, 3, 3)
     end
 
     @testset "Near Unit Root" begin
@@ -139,14 +137,12 @@ Random.seed!(12345)
         max_eig = maximum(abs.(eigvals(companion)))
         @test max_eig < 1.05  # Allow small numerical imprecision
 
-        # FEVD should still work
-        @test_nowarn begin
-            fevd_result = fevd(model_persistent, 20)
-            # Proportions should still sum to 1
-            for h in 1:20
-                for i in 1:2
-                    @test sum(fevd_result.proportions[i, :, h]) ≈ 1.0 atol=1e-8
-                end
+        # FEVD should still work (may warn about jitter)
+        fevd_result = fevd(model_persistent, 20)
+        # Proportions should still sum to 1
+        for h in 1:20
+            for i in 1:2
+                @test sum(fevd_result.proportions[i, :, h]) ≈ 1.0 atol=1e-8
             end
         end
     end
@@ -161,12 +157,10 @@ Random.seed!(12345)
 
         model = estimate_var(Y_det, 1)
 
-        # Should handle near-zero variance gracefully
-        @test_nowarn begin
-            irf_result = irf(model, 10)
-            # IRF should still have reasonable values
-            @test all(isfinite.(irf_result.values))
-        end
+        # Should handle near-zero variance gracefully (may warn about jitter)
+        irf_result = irf(model, 10)
+        # IRF should still have reasonable values
+        @test all(isfinite.(irf_result.values))
     end
 
     # =========================================================================

@@ -199,6 +199,7 @@ function apply_filter(d::TimeSeriesData{T}, specs::AbstractVector;
     # Trim time index
     new_ti = d.time_index[common_start:common_end]
 
+    new_dates = isempty(d.dates) ? nothing : d.dates[common_start:common_end]
     TimeSeriesData(new_data;
                    varnames=copy(d.varnames),
                    frequency=d.frequency,
@@ -206,7 +207,8 @@ function apply_filter(d::TimeSeriesData{T}, specs::AbstractVector;
                    time_index=new_ti,
                    desc=desc(d),
                    vardesc=copy(d.vardesc),
-                   source_refs=copy(d.source_refs))
+                   source_refs=copy(d.source_refs),
+                   dates=new_dates)
 end
 
 # =============================================================================

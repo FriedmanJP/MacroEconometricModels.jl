@@ -465,6 +465,23 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Nowcasting Employment in the Euro Area",
         journal="Working Paper Series", volume="No 2815", issue="", pages="",
         doi="", isbn="", publisher="European Central Bank", entry_type=:techreport),
+    # --- Sign Restriction Identified Set ---
+    :baumeister_hamilton2015 => (key=:baumeister_hamilton2015,
+        authors="Baumeister, Christiane and Hamilton, James D.", year=2015,
+        title="Sign Restrictions, Structural Vector Autoregressions, and Useful Prior Information",
+        journal="Econometrica", volume="83", issue="5", pages="1963--1999",
+        doi="10.3982/ECTA12356", isbn="", publisher="", entry_type=:article),
+    :rubio_ramirez2010 => (key=:rubio_ramirez2010,
+        authors="Rubio-Ram{\\'\\i}rez, Juan F. and Waggoner, Daniel F. and Zha, Tao", year=2010,
+        title="Structural Vector Autoregressions: Theory of Identification and Algorithms for Inference",
+        journal="Review of Economic Studies", volume="77", issue="2", pages="665--696",
+        doi="10.1111/j.1467-937X.2009.00578.x", isbn="", publisher="", entry_type=:article),
+    # --- Morley-Nelson-Zivot UC Model ---
+    :morley_nelson_zivot2003 => (key=:morley_nelson_zivot2003,
+        authors="Morley, James C. and Nelson, Charles R. and Zivot, Eric", year=2003,
+        title="Why Are the Beveridge-Nelson and Unobserved-Components Decompositions of GDP So Different?",
+        journal="Review of Economics and Statistics", volume="85", issue="2", pages="235--243",
+        doi="10.1162/003465303765299882", isbn="", publisher="", entry_type=:article),
 )
 
 # --- Type/method → reference keys mapping ---
@@ -481,6 +498,7 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :AriasSVARResult => [:arias_rubio_ramirez_waggoner2018],
     :UhligSVARResult => [:mountford_uhlig2009, :uhlig2005],
     :SVARRestrictions => [:arias_rubio_ramirez_waggoner2018],
+    :SignIdentifiedSet => [:rubio_ramirez2010, :baumeister_hamilton2015],
     # Bayesian VAR
     :MinnesotaHyperparameters => [:litterman1986, :kadiyala_karlsson1997],
     :BVARPosterior => [:litterman1986, :kadiyala_karlsson1997, :giannone_lenza_primiceri2015],
@@ -586,12 +604,12 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     # Time Series Filters
     :HPFilterResult => [:hodrick_prescott1997],
     :HamiltonFilterResult => [:hamilton2018filter],
-    :BeveridgeNelsonResult => [:beveridge_nelson1981],
+    :BeveridgeNelsonResult => [:beveridge_nelson1981, :morley_nelson_zivot2003],
     :BaxterKingResult => [:baxter_king1999],
     :BoostedHPResult => [:phillips_shi2021, :mei_phillips_shi2024],
     :hp_filter => [:hodrick_prescott1997],
     :hamilton_filter => [:hamilton2018filter],
-    :beveridge_nelson => [:beveridge_nelson1981],
+    :beveridge_nelson => [:beveridge_nelson1981, :morley_nelson_zivot2003],
     :baxter_king => [:baxter_king1999],
     :boosted_hp => [:phillips_shi2021, :mei_phillips_shi2024],
     # Model comparison tests
@@ -820,6 +838,7 @@ refs(io::IO, ::BayesianHistoricalDecomposition; kw...) = refs(io, _TYPE_REFS[:Ba
 refs(io::IO, ::AriasSVARResult; kw...) = refs(io, _TYPE_REFS[:AriasSVARResult]; kw...)
 refs(io::IO, ::UhligSVARResult; kw...) = refs(io, _TYPE_REFS[:UhligSVARResult]; kw...)
 refs(io::IO, ::SVARRestrictions; kw...) = refs(io, _TYPE_REFS[:SVARRestrictions]; kw...)
+refs(io::IO, ::SignIdentifiedSet; kw...) = refs(io, _TYPE_REFS[:SignIdentifiedSet]; kw...)
 refs(io::IO, ::MinnesotaHyperparameters; kw...) = refs(io, _TYPE_REFS[:MinnesotaHyperparameters]; kw...)
 refs(io::IO, ::BVARPosterior; kw...) = refs(io, _TYPE_REFS[:BVARPosterior]; kw...)
 
@@ -936,5 +955,9 @@ refs(io::IO, ::NowcastResult; kw...) = refs(io, _TYPE_REFS[:NowcastResult]; kw..
 refs(io::IO, ::NowcastNews; kw...) = refs(io, _TYPE_REFS[:NowcastNews]; kw...)
 
 # --- Convenience: stdout fallback ---
-refs(x; kw...) = refs(stdout, x; kw...)
+function refs(x; kw...)
+    io = IOBuffer()
+    refs(io, x; kw...)
+    String(take!(io))
+end
 

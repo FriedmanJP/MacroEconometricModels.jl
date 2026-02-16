@@ -1559,4 +1559,58 @@ using Statistics
         @test cs.source_refs == [:mccracken_ng2016]
     end
 
+    # =================================================================
+    # apply_tcode Convenience (Issue #14)
+    # =================================================================
+    @testset "apply_tcode Convenience" begin
+        data = rand(200, 3) .+ 1.0  # strictly positive
+        tcodes = [5, 5, 1]
+        d = TimeSeriesData(data; varnames=["GDP", "CPI", "FFR"], tcode=tcodes)
+
+        # Convenience method: apply_tcode(d) uses d.tcode
+        d2 = apply_tcode(d)
+        @test d2 isa TimeSeriesData
+        @test d2.n_vars == 3
+        @test d2.T_obs < d.T_obs  # rows lost from differencing
+
+        # Should match explicit call
+        d3 = apply_tcode(d, tcodes)
+        @test d2.data ≈ d3.data
+        @test d2.varnames == d3.varnames
+    end
+
+    # =================================================================
+    # TimeSeriesData Dates (Issue #19)
+    # =================================================================
+    @testset "TimeSeriesData Dates" begin
+        data = randn(5, 2)
+        date_strings = ["2020-01", "2020-02", "2020-03", "2020-04", "2020-05"]
+
+        d = TimeSeriesData(data; varnames=["x", "y"], dates=date_strings)
+
+        # dates accessor
+        @test dates(d) == date_strings
+        @test length(dates(d)) == 5
+
+        # Date-based indexing (single date → row vector)
+        row = d["2020-03", :]
+        @test row isa AbstractVector
+        @test row ≈ data[3, :]
+
+        # Date-based indexing (multiple dates)
+        sub = d[["2020-02", "2020-03", "2020-04"], :]
+        @test sub isa TimeSeriesData
+        @test nobs(sub) == 3
+        @test sub.data ≈ data[2:4, :]
+
+        # set_dates!
+        d2 = TimeSeriesData(randn(3, 2))
+        new_dates = ["2021-Q1", "2021-Q2", "2021-Q3"]
+        set_dates!(d2, new_dates)
+        @test dates(d2) == new_dates
+
+        # set_dates! with wrong length should error
+        @test_throws ArgumentError set_dates!(d2, ["a", "b"])
+    end
+
 end

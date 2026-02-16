@@ -541,4 +541,34 @@ using SparseArrays
         @test boosted_hp(y; stopping=:fixed, max_iter=2) isa AbstractFilterResult
     end
 
+    # =================================================================
+    # Beveridge-Nelson State-Space / Morley 2002 (Issue #11)
+    # =================================================================
+    @testset "BN State-Space (Morley 2002)" begin
+        Random.seed!(42)
+        y = cumsum(randn(200)) .+ 0.1 * (1:200)
+
+        # method=:statespace should work
+        result = beveridge_nelson(y; method=:statespace)
+        @test result isa BeveridgeNelsonResult
+        t = trend(result)
+        c = cycle(result)
+        @test length(t) == length(y)
+        @test length(c) == length(y)
+
+        # Trend + cycle should approximately reconstruct original
+        # (state-space smoother estimates are optimal, not exact decompositions)
+        @test maximum(abs.(t .+ c .- y)) < 0.05
+
+        # AR(1) variant
+        result2 = beveridge_nelson(y; method=:statespace, cycle_order=1)
+        @test result2 isa BeveridgeNelsonResult
+        @test length(trend(result2)) == length(y)
+        @test maximum(abs.(trend(result2) .+ cycle(result2) .- y)) < 0.05
+
+        # Default method should still work
+        result_default = beveridge_nelson(y; p=1, q=0)
+        @test result_default isa BeveridgeNelsonResult
+    end
+
 end

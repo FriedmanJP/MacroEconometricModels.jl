@@ -318,4 +318,49 @@ using Random
         @test all(isfinite.(Y_eff_m))
         @test all(isfinite.(X_m))
     end
+
+    # =================================================================
+    # NaN/Inf Validation (Issue #22)
+    # =================================================================
+    @testset "NaN/Inf Validation" begin
+        # Matrix with NaN
+        Y_nan = [1.0 2.0; NaN 4.0; 5.0 6.0]
+        @test_throws ArgumentError MacroEconometricModels._validate_data(Y_nan)
+
+        # Matrix with Inf
+        Y_inf = [1.0 2.0; Inf 4.0; 5.0 6.0]
+        @test_throws ArgumentError MacroEconometricModels._validate_data(Y_inf)
+
+        # Vector with NaN
+        y_nan = [1.0, NaN, 3.0]
+        @test_throws ArgumentError MacroEconometricModels._validate_data(y_nan)
+
+        # Vector with Inf
+        y_inf = [1.0, Inf, 3.0]
+        @test_throws ArgumentError MacroEconometricModels._validate_data(y_inf)
+
+        # Clean data should pass without error
+        Y_clean = randn(10, 3)
+        @test MacroEconometricModels._validate_data(Y_clean) === nothing
+
+        y_clean = randn(10)
+        @test MacroEconometricModels._validate_data(y_clean) === nothing
+    end
+
+    # =================================================================
+    # safe_cholesky Warning (Issue #23)
+    # =================================================================
+    @testset "safe_cholesky Warning" begin
+        # Nearly singular matrix that needs jitter
+        A = [1.0 1.0; 1.0 1.0]  # singular, rank-1
+        L = @test_warn r"required jitter" MacroEconometricModels.safe_cholesky(A)
+        @test size(L) == (2, 2)
+        @test all(isfinite.(L))
+
+        # Well-conditioned matrix — no warning
+        B = [2.0 0.5; 0.5 2.0]
+        L2 = MacroEconometricModels.safe_cholesky(B)
+        @test size(L2) == (2, 2)
+        @test L2 * L2' ≈ B atol=1e-10
+    end
 end

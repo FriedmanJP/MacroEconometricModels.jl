@@ -166,11 +166,13 @@ function fix(d::TimeSeriesData{T}; method::Symbol=:listwise) where {T}
         good_rows = [!any(isnan, @view(mat[i, :])) for i in 1:T_obs]
         mat = mat[good_rows, :]
         ti = d.time_index[good_rows]
+        new_dates = isempty(d.dates) ? nothing : d.dates[good_rows]
     elseif method == :interpolate
         for j in 1:n
             _interpolate_column!(view(mat, :, j))
         end
         ti = copy(d.time_index)
+        new_dates = isempty(d.dates) ? nothing : copy(d.dates)
     elseif method == :mean
         for j in 1:n
             col = @view(mat[:, j])
@@ -185,6 +187,7 @@ function fix(d::TimeSeriesData{T}; method::Symbol=:listwise) where {T}
             end
         end
         ti = copy(d.time_index)
+        new_dates = isempty(d.dates) ? nothing : copy(d.dates)
     end
 
     # Drop constant columns
@@ -212,7 +215,8 @@ function fix(d::TimeSeriesData{T}; method::Symbol=:listwise) where {T}
                    time_index=ti,
                    desc=desc(d),
                    vardesc=sub_vd,
-                   source_refs=copy(d.source_refs))
+                   source_refs=copy(d.source_refs),
+                   dates=new_dates)
 end
 
 """Linear interpolation for interior NaN, forward-fill for edges."""
