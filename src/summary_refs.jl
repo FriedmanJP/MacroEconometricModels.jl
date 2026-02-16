@@ -316,7 +316,7 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         doi="10.1111/iere.12495", isbn="", publisher="", entry_type=:article),
     :mei_phillips_shi2024 => (key=:mei_phillips_shi2024,
         authors="Mei, Ziwei and Phillips, Peter C. B. and Shi, Zhentao", year=2024,
-        title="The boosted HP filter is more general than you might think",
+        title="The boosted Hodrick-Prescott filter is more general than you might think",
         journal="Journal of Applied Econometrics", volume="39", issue="7", pages="1260--1281",
         doi="10.1002/jae.3086", isbn="", publisher="", entry_type=:article),
     # --- Model Comparison Tests ---

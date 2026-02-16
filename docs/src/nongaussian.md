@@ -581,8 +581,8 @@ println("\nIRF size: ", size(irfs.values))
 
 - Lanne, Markku, Mika Meitz, and Pentti Saikkonen. 2017. "Identification and Estimation of Non-Gaussian Structural Vector Autoregressions." *Journal of Econometrics* 196 (2): 288–304. [https://doi.org/10.1016/j.jeconom.2016.06.002](https://doi.org/10.1016/j.jeconom.2016.06.002)
 - Lanne, Markku, and Helmut Lütkepohl. 2010. "Structural Vector Autoregressions with Nonnormal Residuals." *Journal of Business & Economic Statistics* 28 (1): 159–168. [https://doi.org/10.1198/jbes.2009.06003](https://doi.org/10.1198/jbes.2009.06003)
-- Herwartz, Helmut. 2018. "Hodges-Lehmann Detection of Structural Shocks: An Analysis of Macroeconomic Dynamics in the Euro Area." *Oxford Bulletin of Economics and Statistics* 80 (4): 736–754. [https://doi.org/10.1111/obes.12237](https://doi.org/10.1111/obes.12237)
-- Azzalini, Adelchi. 1985. "A Class of Distributions Which Includes the Normal Ones." *Scandinavian Journal of Statistics* 12 (2): 171–178. [https://doi.org/10.1111/j.1467-9469.1985.tb01174.x](https://doi.org/10.1111/j.1467-9469.1985.tb01174.x)
+- Herwartz, Helmut. 2018. "Hodges-Lehmann Detection of Structural Shocks: An Analysis of Macroeconomic Dynamics in the Euro Area." *Oxford Bulletin of Economics and Statistics* 80 (4): 736–754. [https://doi.org/10.1111/obes.12234](https://doi.org/10.1111/obes.12234)
+- Azzalini, Adelchi. 1985. "A Class of Distributions Which Includes the Normal Ones." *Scandinavian Journal of Statistics* 12 (2): 171–178. [https://www.jstor.org/stable/4615982](https://www.jstor.org/stable/4615982)
 
 ### Heteroskedasticity-based Identification
 
