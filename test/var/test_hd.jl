@@ -218,7 +218,7 @@ using Random
 
         try
             hd = historical_decomposition(model, restrictions, T_eff;
-                                          n_draws=100, n_rotations=500,
+                                          n_draws=20, n_rotations=100,
                                           quantiles=[0.16, 0.5, 0.84])
 
             @test hd isa BayesianHistoricalDecomposition

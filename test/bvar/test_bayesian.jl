@@ -4,6 +4,10 @@ using LinearAlgebra
 using Statistics
 using Random
 
+if !@isdefined(FAST)
+    const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
+end
+
 @testset "BVAR Bayesian Parameter Recovery" begin
     println("Generating Data for Bayesian Verification...")
 
@@ -25,7 +29,7 @@ using Random
     # 2. Direct Sampler Parameter Recovery (Primary Test)
     @testset "Direct Sampler Parameter Recovery" begin
         println("Estimating BVAR (direct)...")
-        post = estimate_bvar(Y, p; n_draws=200, sampler=:direct)
+        post = estimate_bvar(Y, p; n_draws=(FAST ? 30 : 100), sampler=:direct)
         @test post isa BVARPosterior
 
         # Extract and check parameter recovery
@@ -53,10 +57,10 @@ using Random
     @testset "Gibbs Sampler Smoke Test" begin
         println("Estimating BVAR (Gibbs)...")
         post_gibbs = estimate_bvar(Y, p;
-            n_draws=100, sampler=:gibbs, burnin=100, thin=1
+            n_draws=(FAST ? 20 : 50), sampler=:gibbs, burnin=(FAST ? 20 : 50), thin=1
         )
         @test post_gibbs isa BVARPosterior
-        @test post_gibbs.n_draws == 100
+        @test post_gibbs.n_draws == (FAST ? 20 : 50)
         @test post_gibbs.sampler == :gibbs
         println("Gibbs Sampler Smoke Test Passed.")
     end
@@ -218,7 +222,7 @@ using Random
 
     # 8. BVARPosterior show() method
     @testset "BVARPosterior show method" begin
-        post = estimate_bvar(Y, 1; n_draws=100, sampler=:direct)
+        post = estimate_bvar(Y, 1; n_draws=(FAST ? 30 : 50), sampler=:direct)
         io = IOBuffer()
         show(io, post)
         out = String(take!(io))

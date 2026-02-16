@@ -516,4 +516,4 @@ Full documentation available at [https://chung9207.github.io/MacroEconometricMod
 
 ## License
 
-MIT
+GPL-3.0-or-later

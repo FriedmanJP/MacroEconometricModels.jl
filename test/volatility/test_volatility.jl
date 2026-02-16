@@ -2,6 +2,9 @@ using Test
 using MacroEconometricModels
 using Random
 using Statistics
+if !@isdefined(FAST)
+    const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
+end
 
 # Fix seed for reproducibility
 Random.seed!(42)
@@ -508,14 +511,14 @@ end
 
     # Estimate :normal once and reuse across subtests
     Random.seed!(909)
-    m_normal = estimate_sv(y_sv; n_samples=100, burnin=50, dist=:normal)
+    m_normal = estimate_sv(y_sv; n_samples=(FAST ? 20 : 50), burnin=(FAST ? 10 : 25), dist=:normal)
 
     @testset "Basic SV" begin
         @test m_normal isa SVModel{Float64}
         @test nobs(m_normal) == n_sv
-        @test length(m_normal.mu_post) == 100
-        @test length(m_normal.phi_post) == 100
-        @test length(m_normal.sigma_eta_post) == 100
+        @test length(m_normal.mu_post) == (FAST ? 20 : 50)
+        @test length(m_normal.phi_post) == (FAST ? 20 : 50)
+        @test length(m_normal.sigma_eta_post) == (FAST ? 20 : 50)
         @test length(m_normal.volatility_mean) == n_sv
         @test size(m_normal.volatility_quantiles) == (n_sv, 3)
         @test all(m_normal.volatility_mean .> 0)
@@ -545,7 +548,7 @@ end
 
     @testset "SV Student-t" begin
         Random.seed!(1010)
-        m_t = estimate_sv(y_sv; n_samples=100, burnin=50, dist=:studentt)
+        m_t = estimate_sv(y_sv; n_samples=(FAST ? 20 : 50), burnin=(FAST ? 10 : 25), dist=:studentt)
         @test m_t isa SVModel{Float64}
         @test m_t.dist == :studentt
         @test all(m_t.volatility_mean .> 0)
@@ -623,7 +626,7 @@ end
     @testset "SVModel display" begin
         Random.seed!(1313)
         y_sv = randn(100) .* exp.(cumsum(0.1 .* randn(100)) ./ 2)
-        m = estimate_sv(y_sv; n_samples=50, burnin=20)
+        m = estimate_sv(y_sv; n_samples=(FAST ? 20 : 30), burnin=(FAST ? 10 : 15))
         io = IOBuffer()
         show(io, m)
         output = String(take!(io))

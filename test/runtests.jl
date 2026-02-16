@@ -1,7 +1,10 @@
 using Test
 
+# FAST mode for development iteration (shared across all test files in threaded mode)
+const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
+
 # =============================================================================
-# Parallel test runner: spawns independent Julia processes per test group
+# Parallel test runner: three modes (threaded > multi-process > sequential)
 # =============================================================================
 
 const TEST_GROUPS = [
@@ -56,7 +59,7 @@ const TEST_GROUPS = [
         "teststat/test_granger.jl",
         "data/test_data.jl",
     ]),
-    # Group 6: Non-Gaussian + Display + Misc
+    # Group 6: Non-Gaussian + Display + Misc (Arias/Uhlig moved to Group 7)
     ("Non-Gaussian & Display" => [
         "teststat/test_normality.jl",
         "nongaussian/test_nongaussian_svar.jl",
@@ -64,16 +67,20 @@ const TEST_GROUPS = [
         "nongaussian/test_nongaussian_internals.jl",
         "core/test_error_paths.jl",
         "core/test_internal_helpers.jl",
+    ]),
+    # Group 7: SVAR Identification (isolated heavy tests)
+    ("SVAR Identification" => [
         "var/test_arias2018.jl",
         "var/test_uhlig.jl",
     ]),
-    # Group 7: Volatility models (ARCH/GARCH/SV — MCMC heavy)
+    # Group 8: Volatility models (ARCH/GARCH/SV — MCMC heavy)
     ("Volatility Models" => [
         "volatility/test_volatility.jl",
         "volatility/test_volatility_coverage.jl",
     ]),
 ]
 
+# Multi-process runner (fallback when threads unavailable)
 function run_test_group(group_name::String, files::Vector{String})
     test_dir = replace(string(@__DIR__), '\\' => '/')  # forward slashes for Windows compat
     includes = join(["include(\"$(test_dir)/$(f)\");" for f in files], "\n    ")
@@ -92,13 +99,63 @@ function run_test_group(group_name::String, files::Vector{String})
     return proc
 end
 
-# Check for PARALLEL_TESTS env var or default to parallel
+# Check for serial mode or default to parallel
 parallel = get(ENV, "MACRO_SERIAL_TESTS", "") != "1"
 
-if parallel && Sys.CPU_THREADS >= 2
+if parallel && Threads.nthreads() > 1
+    # ─────────────────────────────────────────────────────────────────────
+    # Threaded single-process parallel testing
+    # Loads MacroEconometricModels ONCE, then runs groups in tasks.
+    # Eliminates N-1 redundant package loads vs multi-process approach.
+    # Requires: julia --threads=auto or JULIA_NUM_THREADS=auto
+    # ─────────────────────────────────────────────────────────────────────
+    test_dir = replace(string(@__DIR__), '\\' => '/')
+
+    println("Running $(length(TEST_GROUPS)) test groups in $(Threads.nthreads()) threads (single process)")
+    println("Set MACRO_SERIAL_TESTS=1 to run sequentially\n")
+
+    # Load once — all tasks share the compiled code
+    t_load = @elapsed using MacroEconometricModels
+    @info "MacroEconometricModels loaded in $(round(t_load, digits=1))s"
+
+    tasks = Pair{String, Task}[]
+    for (group_name, files) in TEST_GROUPS
+        local gn = group_name
+        local fs = files
+        local td = test_dir
+        t = Threads.@spawn begin
+            @testset "$gn" begin
+                for f in fs
+                    include(joinpath(td, f))
+                end
+            end
+        end
+        push!(tasks, gn => t)
+    end
+
+    # Collect results
+    failed_groups = String[]
+    for (name, task) in tasks
+        try
+            fetch(task)
+            @info "Test group '$name' PASSED"
+        catch e
+            @error "Test group '$name' FAILED" exception=(e, catch_backtrace())
+            push!(failed_groups, name)
+        end
+    end
+
+    isempty(failed_groups) || error("Test groups failed: $(join(failed_groups, ", "))")
+
+elseif parallel && Sys.CPU_THREADS >= 2
+    # ─────────────────────────────────────────────────────────────────────
+    # Multi-process fallback (when Julia started with single thread)
+    # Each group runs in its own julia process — full isolation.
+    # ─────────────────────────────────────────────────────────────────────
     cov_level = Base.JLOptions().code_coverage
-    println("Running $(length(TEST_GROUPS)) test groups in parallel ($(Sys.CPU_THREADS) threads available)")
+    println("Running $(length(TEST_GROUPS)) test groups in parallel processes ($(Sys.CPU_THREADS) CPUs)")
     println("Code coverage level: $cov_level (0=none, 1=user, 2=all)")
+    println("Tip: set JULIA_NUM_THREADS=auto for faster single-process threading")
     println("Set MACRO_SERIAL_TESTS=1 to run sequentially\n")
 
     procs = Pair{String, Base.Process}[]

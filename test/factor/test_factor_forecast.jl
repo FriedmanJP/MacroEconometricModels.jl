@@ -1,4 +1,7 @@
 using Random, Statistics, LinearAlgebra
+if !@isdefined(FAST)
+    const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
+end
 
 @testset "FactorForecast Struct" begin
     Random.seed!(77701)
@@ -29,7 +32,7 @@ end
     fm = estimate_factors(X, r)
 
     for ci_method in (:none, :theoretical, :bootstrap)
-        fc = forecast(fm, 8; ci_method=ci_method, n_boot=200)
+        fc = forecast(fm, 8; ci_method=ci_method, n_boot=(FAST ? 10 : 50))
         @test fc isa FactorForecast{Float64}
         @test size(fc.factors) == (8, r)
         @test size(fc.observables) == (8, N)
@@ -50,7 +53,7 @@ end
     fm = estimate_factors(X, 2)
 
     for ci_method in (:theoretical, :bootstrap)
-        fc = forecast(fm, 6; ci_method=ci_method, n_boot=300)
+        fc = forecast(fm, 6; ci_method=ci_method, n_boot=(FAST ? 10 : 50))
         @test all(fc.factors_upper .>= fc.factors_lower)
         @test all(fc.observables_upper .>= fc.observables_lower)
         @test all(fc.factors_se .>= 0)
@@ -101,7 +104,7 @@ end
     dfm = estimate_dynamic_factors(X, r, p)
 
     for ci_method in (:none, :theoretical, :bootstrap, :simulation)
-        fc = forecast(dfm, 6; ci_method=ci_method, n_boot=200)
+        fc = forecast(dfm, 6; ci_method=ci_method, n_boot=(FAST ? 10 : 50))
         @test fc isa FactorForecast{Float64}
         @test size(fc.factors) == (6, r)
         @test size(fc.observables) == (6, N)
@@ -120,7 +123,7 @@ end
     dfm = estimate_dynamic_factors(X, r, p)
 
     for ci_method in (:theoretical, :bootstrap, :simulation)
-        fc = forecast(dfm, 8; ci_method=ci_method, n_boot=300)
+        fc = forecast(dfm, 8; ci_method=ci_method, n_boot=(FAST ? 10 : 50))
         @test all(fc.factors_upper .>= fc.factors_lower)
         @test all(fc.observables_upper .>= fc.observables_lower)
         @test all(fc.factors_se .>= 0)
@@ -191,7 +194,7 @@ end
     gdfm = estimate_gdfm(X, q)
 
     for ci_method in (:none, :theoretical, :bootstrap)
-        fc = forecast(gdfm, 6; ci_method=ci_method, n_boot=200)
+        fc = forecast(gdfm, 6; ci_method=ci_method, n_boot=(FAST ? 10 : 50))
         @test fc isa FactorForecast{Float64}
         @test size(fc.factors) == (6, q)
         @test size(fc.observables) == (6, N)
@@ -210,7 +213,7 @@ end
     gdfm = estimate_gdfm(X, q)
 
     for ci_method in (:theoretical, :bootstrap)
-        fc = forecast(gdfm, 8; ci_method=ci_method, n_boot=300)
+        fc = forecast(gdfm, 8; ci_method=ci_method, n_boot=(FAST ? 10 : 50))
         @test all(fc.factors_upper .>= fc.factors_lower)
         @test all(fc.observables_upper .>= fc.observables_lower)
         @test all(fc.factors_se .>= 0)

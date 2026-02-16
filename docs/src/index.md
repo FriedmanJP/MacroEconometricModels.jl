@@ -392,7 +392,7 @@ Throughout this documentation, we use the following notation conventions:
 
 ## License
 
-This package is released under the MIT License.
+This package is released under the [GNU General Public License v3.0](https://www.gnu.org/licenses/gpl-3.0.en.html).
 
 ## Contributing
 

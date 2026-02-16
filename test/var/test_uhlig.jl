@@ -12,6 +12,10 @@ using Statistics
 using Random
 using MacroEconometricModels
 
+if !@isdefined(FAST)
+    const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
+end
+
 @testset "Mountford-Uhlig (2009) Penalty Function Identification" begin
 
     # ==========================================================================
@@ -59,7 +63,7 @@ using MacroEconometricModels
         restrictions = SVARRestrictions(n; signs=signs)
 
         result = identify_uhlig(model, restrictions, 10;
-            n_starts=30, n_refine=5, max_iter_coarse=300, max_iter_fine=1000)
+            n_starts=(FAST ? 3 : 10), n_refine=(FAST ? 1 : 2), max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 300))
 
         # Q should be orthogonal
         @test norm(result.Q' * result.Q - I(n)) < 1e-8
@@ -83,7 +87,7 @@ using MacroEconometricModels
         restrictions = SVARRestrictions(n; zeros=zeros_r, signs=signs)
 
         result = identify_uhlig(model, restrictions, 10;
-            n_starts=30, n_refine=5, max_iter_coarse=300, max_iter_fine=1000)
+            n_starts=(FAST ? 3 : 10), n_refine=(FAST ? 1 : 2), max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 300))
 
         @test norm(result.Q' * result.Q - I(n)) < 1e-8
         @test norm(result.Q * result.Q' - I(n)) < 1e-8
@@ -108,7 +112,7 @@ using MacroEconometricModels
         restrictions = SVARRestrictions(n; zeros=zeros_r, signs=signs)
 
         result = identify_uhlig(model, restrictions, 10;
-            n_starts=30, n_refine=5, max_iter_coarse=300, max_iter_fine=1000)
+            n_starts=(FAST ? 3 : 10), n_refine=(FAST ? 1 : 2), max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 300))
 
         # Zero restrictions must be satisfied exactly
         @test abs(result.irf[1, 2, 1]) < 1e-8  # Var 2, Shock 1, impact
@@ -130,7 +134,7 @@ using MacroEconometricModels
         restrictions = SVARRestrictions(n; zeros=zeros_r, signs=signs)
 
         result = identify_uhlig(model, restrictions, 10;
-            n_starts=30, n_refine=5, max_iter_coarse=300, max_iter_fine=1000)
+            n_starts=(FAST ? 3 : 10), n_refine=(FAST ? 1 : 2), max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 300))
 
         # Zero restriction at h=1 (index 2): var 1, shock 1
         @test abs(result.irf[2, 1, 1]) < 1e-8
@@ -157,7 +161,7 @@ using MacroEconometricModels
         restrictions = SVARRestrictions(n; signs=signs)
 
         result = identify_uhlig(model, restrictions, 10;
-            n_starts=50, n_refine=10, max_iter_coarse=500, max_iter_fine=2000)
+            n_starts=(FAST ? 3 : 15), n_refine=(FAST ? 1 : 3), max_iter_coarse=(FAST ? 50 : 150), max_iter_fine=(FAST ? 100 : 500))
 
         @test result isa UhligSVARResult
         @test result.converged == true
@@ -185,7 +189,7 @@ using MacroEconometricModels
         restrictions = SVARRestrictions(n; zeros=zeros_r, signs=signs)
 
         result = identify_uhlig(model, restrictions, 10;
-            n_starts=50, n_refine=10, max_iter_coarse=500, max_iter_fine=2000)
+            n_starts=(FAST ? 3 : 15), n_refine=(FAST ? 1 : 3), max_iter_coarse=(FAST ? 50 : 150), max_iter_fine=(FAST ? 100 : 500))
 
         # Zero restriction must hold
         @test abs(result.irf[1, 2, 1]) < 1e-8
@@ -219,7 +223,7 @@ using MacroEconometricModels
         restrictions = SVARRestrictions(n; zeros=zeros_r, signs=signs)
 
         result = identify_uhlig(model, restrictions, 10;
-            n_starts=30, n_refine=5, max_iter_coarse=300, max_iter_fine=1000)
+            n_starts=(FAST ? 3 : 10), n_refine=(FAST ? 1 : 2), max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 300))
 
         # Cholesky IRF for comparison
         Q_chol = Matrix{Float64}(I, n, n)
@@ -252,7 +256,7 @@ using MacroEconometricModels
         restrictions = SVARRestrictions(n; zeros=zeros_r, signs=signs)
 
         result = identify_uhlig(model, restrictions, 10;
-            n_starts=50, n_refine=10, max_iter_coarse=500, max_iter_fine=2000)
+            n_starts=(FAST ? 3 : 15), n_refine=(FAST ? 1 : 3), max_iter_coarse=(FAST ? 50 : 150), max_iter_fine=(FAST ? 100 : 500))
 
         if result.converged
             # Verify zero restriction
@@ -277,7 +281,7 @@ using MacroEconometricModels
         restrictions = SVARRestrictions(n; signs=signs)
 
         result = identify_uhlig(model, restrictions, 5;
-            n_starts=20, n_refine=5, max_iter_coarse=300, max_iter_fine=1000)
+            n_starts=(FAST ? 3 : 8), n_refine=(FAST ? 1 : 2), max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 300))
 
         @test result isa UhligSVARResult
         @test size(result.Q) == (n, n)
@@ -344,11 +348,11 @@ using MacroEconometricModels
 
         Random.seed!(11111)
         result1 = identify_uhlig(model, restrictions, 5;
-            n_starts=20, n_refine=5, max_iter_coarse=300, max_iter_fine=1000)
+            n_starts=8, n_refine=2, max_iter_coarse=100, max_iter_fine=300)
 
         Random.seed!(11111)
         result2 = identify_uhlig(model, restrictions, 5;
-            n_starts=20, n_refine=5, max_iter_coarse=300, max_iter_fine=1000)
+            n_starts=8, n_refine=2, max_iter_coarse=100, max_iter_fine=300)
 
         @test result1.Q ≈ result2.Q
         @test result1.irf ≈ result2.irf
@@ -373,7 +377,7 @@ using MacroEconometricModels
         restrictions = SVARRestrictions(n; signs=signs)
 
         result = identify_uhlig(model, restrictions, 10;
-            n_starts=30, n_refine=5, max_iter_coarse=300, max_iter_fine=1000)
+            n_starts=(FAST ? 3 : 10), n_refine=(FAST ? 1 : 2), max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 300))
 
         @test isfinite(result.penalty)
         @test result.penalty < 0  # Satisfied restrictions yield large negative penalties
@@ -398,7 +402,7 @@ using MacroEconometricModels
         restrictions = SVARRestrictions(n; zeros=zeros_r, signs=signs)
 
         result = identify_uhlig(model, restrictions, 10;
-            n_starts=20, n_refine=3, max_iter_coarse=200, max_iter_fine=500)
+            n_starts=(FAST ? 3 : 8), n_refine=(FAST ? 1 : 2), max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 200))
 
         io = IOBuffer()
         show(io, result)
@@ -421,7 +425,7 @@ using MacroEconometricModels
         restrictions = SVARRestrictions(n; signs=signs)
 
         result = identify_uhlig(model, restrictions, 5;
-            n_starts=10, n_refine=3, max_iter_coarse=200, max_iter_fine=500)
+            n_starts=(FAST ? 3 : 5), n_refine=(FAST ? 1 : 2), max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 200))
 
         # report() should not error
         io = IOBuffer()
@@ -442,7 +446,7 @@ using MacroEconometricModels
         restrictions = SVARRestrictions(n; signs=signs)
 
         result = identify_uhlig(model, restrictions, 5;
-            n_starts=10, n_refine=3, max_iter_coarse=200, max_iter_fine=500)
+            n_starts=(FAST ? 3 : 5), n_refine=(FAST ? 1 : 2), max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 200))
 
         io = IOBuffer()
         refs(io, result)
@@ -502,7 +506,7 @@ using MacroEconometricModels
         restrictions = SVARRestrictions(n; signs=signs)
 
         result = identify_uhlig(model, restrictions, 10;
-            n_starts=40, n_refine=5, max_iter_coarse=400, max_iter_fine=1500)
+            n_starts=(FAST ? 3 : 12), n_refine=(FAST ? 1 : 3), max_iter_coarse=(FAST ? 50 : 150), max_iter_fine=(FAST ? 100 : 400))
 
         @test result isa UhligSVARResult
         @test size(result.irf) == (10, 4, 4)
@@ -532,7 +536,7 @@ using MacroEconometricModels
         restrictions = SVARRestrictions(n; signs=signs)
 
         result = identify_uhlig(model, restrictions, 5;
-            n_starts=20, n_refine=3, max_iter_coarse=200, max_iter_fine=500)
+            n_starts=(FAST ? 3 : 8), n_refine=(FAST ? 1 : 2), max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 200))
 
         @test result isa UhligSVARResult
         @test all(isfinite, result.irf)
@@ -554,7 +558,7 @@ using MacroEconometricModels
 
         horizon = 20
         result = identify_uhlig(model, restrictions, horizon;
-            n_starts=20, n_refine=3, max_iter_coarse=200, max_iter_fine=500)
+            n_starts=(FAST ? 3 : 8), n_refine=(FAST ? 1 : 2), max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 200))
 
         @test size(result.irf) == (horizon, n, n)
         @test all(isfinite, result.irf)

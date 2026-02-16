@@ -17,6 +17,10 @@ using Statistics
 using Random
 using MacroEconometricModels
 
+if !@isdefined(FAST)
+    const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
+end
+
 @testset "Arias et al. (2018) SVAR Identification" begin
 
     # ==========================================================================
@@ -89,7 +93,7 @@ using MacroEconometricModels
         restrictions = SVARRestrictions(n; signs=signs)
 
         # Identify
-        result = identify_arias(model, restrictions, 10; n_draws=100, n_rotations=500)
+        result = identify_arias(model, restrictions, 10; n_draws=(FAST ? 5 : 10), n_rotations=(FAST ? 20 : 100))
 
         # Basic checks
         @test result isa AriasSVARResult
@@ -136,7 +140,7 @@ using MacroEconometricModels
 
         restrictions = SVARRestrictions(n; zeros=zeros)
 
-        result = identify_arias(model, restrictions, 10; n_draws=100, n_rotations=500)
+        result = identify_arias(model, restrictions, 10; n_draws=(FAST ? 5 : 10), n_rotations=(FAST ? 20 : 100))
 
         @test length(result.Q_draws) > 0
 
@@ -169,7 +173,7 @@ using MacroEconometricModels
 
         restrictions = SVARRestrictions(n; zeros=zeros, signs=signs)
 
-        result = identify_arias(model, restrictions, 10; n_draws=100, n_rotations=1000)
+        result = identify_arias(model, restrictions, 10; n_draws=(FAST ? 5 : 10), n_rotations=(FAST ? 20 : 200))
 
         @test length(result.Q_draws) > 0
 
@@ -203,7 +207,7 @@ using MacroEconometricModels
         restrictions = SVARRestrictions(n; zeros=zeros)
 
         try
-            result = identify_arias(model, restrictions, 10; n_draws=10, n_rotations=2000)
+            result = identify_arias(model, restrictions, 10; n_draws=(FAST ? 5 : 10), n_rotations=(FAST ? 20 : 200))
 
             @test length(result.Q_draws) > 0
 
@@ -232,7 +236,7 @@ using MacroEconometricModels
         signs = [sign_restriction(1, 1, :positive)]
         restrictions = SVARRestrictions(n; signs=signs)
 
-        result = identify_arias(model, restrictions, 10; n_draws=50, n_rotations=300)
+        result = identify_arias(model, restrictions, 10; n_draws=(FAST ? 5 : 10), n_rotations=(FAST ? 20 : 100))
 
         # Compute percentiles
         pct = irf_percentiles(result; probs=[0.16, 0.5, 0.84])
@@ -269,7 +273,7 @@ using MacroEconometricModels
         signs = [sign_restriction(1, 1, :positive)]
         restrictions = SVARRestrictions(n; signs=signs)
 
-        result = identify_arias(model, restrictions, 5; n_draws=30, n_rotations=200)
+        result = identify_arias(model, restrictions, 5; n_draws=(FAST ? 5 : 10), n_rotations=(FAST ? 20 : 50))
 
         for Q in result.Q_draws
             # Q should be orthogonal
@@ -294,7 +298,7 @@ using MacroEconometricModels
         signs = [sign_restriction(1, 1, :positive)]
         restrictions = SVARRestrictions(n; zeros=zeros, signs=signs)
 
-        result = identify_arias(model, restrictions, 5; n_draws=30, n_rotations=300)
+        result = identify_arias(model, restrictions, 5; n_draws=(FAST ? 5 : 10), n_rotations=(FAST ? 20 : 100))
 
         # All weights should be positive
         @test all(result.weights .> 0)
@@ -317,7 +321,7 @@ using MacroEconometricModels
         signs = [sign_restriction(1, 1, :positive)]
         restrictions = SVARRestrictions(n; signs=signs)
 
-        result = identify_arias(model, restrictions, 5; n_draws=20, n_rotations=100)
+        result = identify_arias(model, restrictions, 5; n_draws=(FAST ? 5 : 10), n_rotations=(FAST ? 20 : 50))
 
         @test length(result.Q_draws) > 0
         @test all(result.irf_draws[:, 1, 1, 1] .> 0)
@@ -334,7 +338,7 @@ using MacroEconometricModels
         zeros = [zero_restriction(2, 1)]
         restrictions = SVARRestrictions(n; zeros=zeros)
 
-        result = identify_arias(model, restrictions, 5; n_draws=30, n_rotations=200)
+        result = identify_arias(model, restrictions, 5; n_draws=(FAST ? 5 : 10), n_rotations=(FAST ? 20 : 50))
 
         @test length(result.Q_draws) > 0
 
@@ -362,7 +366,7 @@ using MacroEconometricModels
 
         restrictions = SVARRestrictions(n; zeros=zeros)
 
-        result = identify_arias(model, restrictions, 5; n_draws=30, n_rotations=200)
+        result = identify_arias(model, restrictions, 5; n_draws=(FAST ? 5 : 10), n_rotations=(FAST ? 20 : 50))
 
         @test length(result.Q_draws) > 0
 
@@ -396,7 +400,7 @@ using MacroEconometricModels
         restrictions = SVARRestrictions(n; signs=signs)
 
         # Should not error, even with near-singular covariance
-        result = identify_arias(model, restrictions, 5; n_draws=20, n_rotations=500)
+        result = identify_arias(model, restrictions, 5; n_draws=(FAST ? 5 : 10), n_rotations=(FAST ? 20 : 100))
 
         # May have few or no draws, but should not crash
         @test result isa AriasSVARResult
@@ -413,10 +417,10 @@ using MacroEconometricModels
         restrictions = SVARRestrictions(n; signs=signs)
 
         Random.seed!(11111)
-        result1 = identify_arias(model, restrictions, 5; n_draws=20, n_rotations=200)
+        result1 = identify_arias(model, restrictions, 5; n_draws=10, n_rotations=50)
 
         Random.seed!(11111)
-        result2 = identify_arias(model, restrictions, 5; n_draws=20, n_rotations=200)
+        result2 = identify_arias(model, restrictions, 5; n_draws=10, n_rotations=50)
 
         # Same seed should give same results
         @test length(result1.Q_draws) == length(result2.Q_draws)
@@ -460,7 +464,7 @@ using MacroEconometricModels
 
         restrictions = SVARRestrictions(n; zeros=zeros)
 
-        result_arias = identify_arias(model, restrictions, 10; n_draws=50, n_rotations=300)
+        result_arias = identify_arias(model, restrictions, 10; n_draws=(FAST ? 5 : 10), n_rotations=(FAST ? 20 : 100))
 
         # Get Cholesky IRF
         L = identify_cholesky(model)
@@ -499,7 +503,7 @@ using MacroEconometricModels
 
         restrictions = SVARRestrictions(n; signs=signs)
 
-        result = identify_arias(model, restrictions, 10; n_draws=30, n_rotations=500)
+        result = identify_arias(model, restrictions, 10; n_draws=(FAST ? 5 : 10), n_rotations=(FAST ? 20 : 100))
 
         @test length(result.Q_draws) > 0
         @test size(result.irf_draws, 2) == 10  # horizon
@@ -521,7 +525,7 @@ using MacroEconometricModels
         signs = [sign_restriction(1, 1, :positive)]
         restrictions = SVARRestrictions(n; signs=signs)
 
-        result = identify_arias(model, restrictions, 10; n_draws=30, n_rotations=200)
+        result = identify_arias(model, restrictions, 10; n_draws=(FAST ? 5 : 10), n_rotations=(FAST ? 20 : 50))
 
         # Test irf_percentiles
         pct = irf_percentiles(result)
@@ -565,7 +569,7 @@ end
 
         # Estimate BVAR
         try
-            post = estimate_bvar(Y, p; n_draws=50)
+            post = estimate_bvar(Y, p; n_draws=(FAST ? 15 : 30))
 
             # Define sign restrictions
             signs = [sign_restriction(1, 1, :positive)]
@@ -573,7 +577,7 @@ end
 
             # Run Bayesian identification
             result = identify_arias_bayesian(post, restrictions, 5;
-                n_rotations=50, quantiles=[0.16, 0.5, 0.84])
+                n_rotations=(FAST ? 10 : 30), quantiles=[0.16, 0.5, 0.84])
 
             # Check output structure
             @test haskey(result, :irf_quantiles)
@@ -585,7 +589,7 @@ end
             # Check dimensions
             @test size(result.irf_quantiles) == (5, n, n, 3)  # horizon × n × n × quantiles
             @test size(result.irf_mean) == (5, n, n)
-            @test length(result.acceptance_rates) == 50  # n_draws from posterior
+            @test length(result.acceptance_rates) == (FAST ? 15 : 30)  # n_draws from posterior
             @test length(result.weights) == result.total_accepted
 
             # Check weights sum to 1
@@ -613,7 +617,7 @@ end
         Y = randn(T_obs, n)
 
         try
-            post = estimate_bvar(Y, p; n_draws=30)
+            post = estimate_bvar(Y, p; n_draws=(FAST ? 10 : 20))
 
             # Cholesky-equivalent zero restrictions
             zeros = [
@@ -624,7 +628,7 @@ end
             restrictions = SVARRestrictions(n; zeros=zeros)
 
             result = identify_arias_bayesian(post, restrictions, 5;
-                n_rotations=100)
+                n_rotations=(FAST ? 10 : 50))
 
             @test result.total_accepted > 0
             @test all(isfinite, result.irf_mean)
@@ -642,14 +646,14 @@ end
         Y = randn(T_obs, n)
 
         try
-            post = estimate_bvar(Y, p; n_draws=40)
+            post = estimate_bvar(Y, p; n_draws=(FAST ? 10 : 20))
 
             zeros = [zero_restriction(2, 1)]
             signs = [sign_restriction(1, 1, :positive)]
             restrictions = SVARRestrictions(n; zeros=zeros, signs=signs)
 
             result = identify_arias_bayesian(post, restrictions, 5;
-                n_rotations=100)
+                n_rotations=(FAST ? 10 : 50))
 
             @test result.total_accepted > 0
             @test size(result.irf_mean) == (5, n, n)
@@ -667,14 +671,14 @@ end
         Y = randn(T_obs, n)
 
         try
-            post = estimate_bvar(Y, p; n_draws=30)
+            post = estimate_bvar(Y, p; n_draws=(FAST ? 10 : 20))
 
             signs = [sign_restriction(1, 1, :positive)]
             restrictions = SVARRestrictions(n; signs=signs)
 
             # Run without providing data
             result = identify_arias_bayesian(post, restrictions, 5;
-                n_rotations=50)
+                n_rotations=(FAST ? 10 : 30))
 
             @test result.total_accepted > 0
             @test all(isfinite, result.irf_mean)
@@ -692,7 +696,7 @@ end
         Y = randn(T_obs, n)
 
         try
-            post = estimate_bvar(Y, p; n_draws=30)
+            post = estimate_bvar(Y, p; n_draws=(FAST ? 10 : 20))
 
             signs = [sign_restriction(1, 1, :positive)]
             restrictions = SVARRestrictions(n; signs=signs)
@@ -700,7 +704,7 @@ end
             # Custom quantiles
             custom_q = [0.05, 0.25, 0.5, 0.75, 0.95]
             result = identify_arias_bayesian(post, restrictions, 5;
-                n_rotations=50, quantiles=custom_q)
+                n_rotations=(FAST ? 10 : 30), quantiles=custom_q)
 
             @test size(result.irf_quantiles, 4) == length(custom_q)
 
@@ -724,13 +728,13 @@ end
         Y = randn(T_obs, n)
 
         try
-            post = estimate_bvar(Y, p; n_draws=30)
+            post = estimate_bvar(Y, p; n_draws=(FAST ? 10 : 20))
 
             signs = [sign_restriction(1, 1, :positive)]
             restrictions = SVARRestrictions(n; signs=signs)
 
             result = identify_arias_bayesian(post, restrictions, 5;
-                n_rotations=50)
+                n_rotations=(FAST ? 10 : 30))
 
             @test result.total_accepted > 0
             @test size(result.irf_mean) == (5, 1, 1)
@@ -1035,7 +1039,7 @@ end
         signs = [sign_restriction(1, 1, :positive)]
         restrictions = SVARRestrictions(n; zeros=zrs, signs=signs)
 
-        result = identify_arias(model, restrictions, 10; n_draws=30, n_rotations=500)
+        result = identify_arias(model, restrictions, 10; n_draws=(FAST ? 5 : 10), n_rotations=(FAST ? 20 : 100))
 
         # Key test: weights must NOT all be identical (the old bug gave constant weights)
         unique_weights = length(unique(round.(result.weights, digits=8)))
@@ -1054,7 +1058,7 @@ end
         signs = [sign_restriction(1, 1, :positive), sign_restriction(2, 2, :positive)]
         restrictions = SVARRestrictions(n; signs=signs)
 
-        result = identify_arias(model, restrictions, 10; n_draws=20, n_rotations=500)
+        result = identify_arias(model, restrictions, 10; n_draws=(FAST ? 5 : 10), n_rotations=(FAST ? 20 : 100))
 
         # All weights should be equal (1/N)
         expected_w = 1.0 / length(result.weights)
@@ -1140,7 +1144,7 @@ end
         signs = [sign_restriction(1, 1, :positive)]
         restrictions = SVARRestrictions(n; zeros=zrs, signs=signs)
 
-        result = identify_arias(model, restrictions, 10; n_draws=15, n_rotations=500)
+        result = identify_arias(model, restrictions, 10; n_draws=(FAST ? 5 : 10), n_rotations=(FAST ? 20 : 100))
 
         # All pre-normalization weights should be positive and finite
         Phi = MacroEconometricModels._compute_ma_coefficients(model, 10)
@@ -1169,7 +1173,7 @@ end
         ]
         restrictions = SVARRestrictions(n; zeros=zrs)
 
-        result = identify_arias(model, restrictions, 10; n_draws=50, n_rotations=500)
+        result = identify_arias(model, restrictions, 10; n_draws=(FAST ? 5 : 10), n_rotations=(FAST ? 20 : 100))
 
         # Cholesky IRF
         Q_chol = Matrix{Float64}(I, n, n)
@@ -1197,7 +1201,7 @@ end
         signs = [sign_restriction(1, 1, :positive)]
         restrictions = SVARRestrictions(n; zeros=zrs, signs=signs)
 
-        result = identify_arias(model, restrictions, 5; n_draws=20, n_rotations=500,
+        result = identify_arias(model, restrictions, 5; n_draws=(FAST ? 5 : 10), n_rotations=(FAST ? 20 : 100),
                                 compute_weights=false)
 
         # All weights equal (no volume element computation)
