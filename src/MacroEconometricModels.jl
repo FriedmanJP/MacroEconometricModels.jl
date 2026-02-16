@@ -1,5 +1,5 @@
 # MacroEconometricModels.jl
-# Copyright (C) 2025-2026 Wookyung Chung <wookyung9207@gmail.com>
+# Copyright (C) 2025-2026 Wookyung Chung <chung@friedman.jp>
 #
 # This file is part of MacroEconometricModels.jl.
 #
