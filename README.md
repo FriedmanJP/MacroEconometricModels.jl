@@ -6,7 +6,7 @@
 [![Aqua QA](https://raw.githubusercontent.com/JuliaTesting/Aqua.jl/master/badge.svg)](https://github.com/JuliaTesting/Aqua.jl)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18439170.svg)](https://doi.org/10.5281/zenodo.18439170)
 
-A comprehensive Julia package for macroeconomic time series analysis. Provides VAR, VECM, Bayesian VAR, Panel VAR, Local Projections, Factor Models, ARIMA, time series filters, GMM, ARCH/GARCH/Stochastic Volatility estimation, nowcasting (DFM, BVAR, bridge equations with news decomposition), structural identification (including non-Gaussian and heteroskedasticity-based methods), hypothesis testing, typed data containers, and publication-quality output with multi-format bibliographic references.
+A comprehensive Julia package for macroeconomic time series analysis. Provides VAR, VECM, Bayesian VAR, Panel VAR, Local Projections, Factor Models, ARIMA, time series filters, GMM, ARCH/GARCH/Stochastic Volatility estimation, nowcasting (DFM, BVAR, bridge equations with news decomposition), structural identification (including non-Gaussian and heteroskedasticity-based methods), hypothesis testing, typed data containers, publication-quality output with multi-format bibliographic references, and interactive D3.js visualization.
 
 ## Features
 
@@ -107,6 +107,14 @@ A comprehensive Julia package for macroeconomic time series analysis. Provides V
 - **Panel VAR** - Hansen J-test for overidentifying restrictions, Andrews-Lu MMSC for lag/moment selection
 - **Model Comparison** - Likelihood ratio (LR) and Lagrange multiplier (LM/score) tests for nested models
 - **Stationarity diagnostics** - `unit_root_summary()`, `test_all_variables()`
+
+### Visualization
+- **Interactive D3.js plots** - `plot_result()` renders self-contained HTML with inline D3.js v7 (no additional dependencies)
+  - 31 dispatch methods covering IRF, FEVD, historical decomposition, filters, forecasts, volatility models, factor models, data containers, and nowcasting
+  - Three chart types: line (with confidence bands), stacked area, and bar charts
+  - Interactive tooltips, responsive layout, multi-panel grid figures
+  - `save_plot(p, "file.html")` saves to disk; `display_plot(p)` opens in browser; auto-renders in Jupyter
+  - Common kwargs: `var`, `shock`, `title`, `save_path`, `ncols`
 
 ### Data Management
 - **Typed containers** - `TimeSeriesData`, `PanelData`, `CrossSectionData` with variable names, frequency, transformation codes, and descriptions
@@ -419,6 +427,30 @@ model = estimate_var(clean[:, ["INDPRO", "UNRATE", "CPIAUCSL"]], 4)
 pwt = load_example(:pwt)
 usa = group_data(pwt, "USA")        # extract single country
 refs(pwt)                           # Feenstra, Inklaar & Timmer (2015)
+```
+
+### Visualization
+
+```julia
+using MacroEconometricModels
+
+Y = randn(200, 3)
+m = estimate_var(Y, 2)
+
+# Plot IRFs with bootstrap CIs
+r = irf(m, 20; ci_type=:bootstrap, reps=500)
+p = plot_result(r)                        # Full n×n grid
+p = plot_result(r; var=1, shock=1)        # Single panel
+save_plot(p, "irf.html")                  # Save to file
+display_plot(p)                           # Open in browser
+
+# FEVD (stacked area), HD (stacked bar), filters, forecasts, etc.
+plot_result(fevd(m, 20))
+plot_result(hp_filter(cumsum(randn(200))))
+
+# Volatility model diagnostics
+gm = estimate_garch(randn(500), 1, 1)
+plot_result(gm)                           # 3-panel: returns, cond vol, std resid
 ```
 
 ### Bibliographic References
