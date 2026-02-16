@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Panel Data</title>
+<style>* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+    background: #fff;
+    color: #333;
+    padding: 20px;
+}
+.figure-title {
+    font-size: 18px;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 16px;
+    color: #222;
+}
+.figure-source {
+    font-size: 11px;
+    color: #888;
+    text-align: center;
+    margin-top: 8px;
+}
+.panel-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    justify-content: center;
+}
+.panel {
+    width: calc(100% - 16px);
+    min-width: 300px;
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 12px;
+}
+.panel-title {
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 8px;
+    color: #444;
+}
+.axis text { font-size: 11px; fill: #666; }
+.axis line, .axis path { stroke: #ccc; }
+.grid line { stroke: #f0f0f0; stroke-dasharray: 2,2; }
+.grid .domain { stroke: none; }
+.tooltip {
+    position: absolute;
+    background: rgba(0,0,0,0.8);
+    color: #fff;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 1000;
+}
+.legend { font-size: 11px; }
+.legend rect { rx: 2; }
+svg { overflow: visible; }
+</style>
+</head>
+<body>
+<div class="figure-title">Panel Data</div>
+<div class="panel-grid">
+<div class="panel">
+<div class="panel-title">x</div>
+<div id="pd_92"></div>
+</div>
+<div class="panel">
+<div class="panel-title">y</div>
+<div id="pd_93"></div>
+</div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script>
+// Shared utilities
+const tooltip = d3.select('#tooltip');
+function fmt(v) {
+    if (v === null || v === undefined) return '';
+    return Math.abs(v) >= 1000 ? v.toFixed(1) : (Math.abs(v) >= 1 ? v.toFixed(3) : v.toFixed(4));
+}
+function showTip(evt, html) {
+    tooltip.html(html).style('opacity',1)
+        .style('left',(evt.pageX+12)+'px').style('top',(evt.pageY-28)+'px');
+}
+function hideTip() { tooltip.style('opacity',0); }
+
+(function() {
+    const data = [{"x":1,"g1":-0.02566630570486276,"g2":0.27149493331125124,"g3":0.25323855051435545},
+{"x":2,"g1":0.6578176530778046,"g2":-0.35105594450156663,"g3":0.052884929242910425},
+{"x":3,"g1":1.6977475017188266,"g2":-0.52522884144496,"g3":-1.5224202588793267},
+{"x":4,"g1":-1.0093924507616328,"g2":-0.18133766882415198,"g3":0.8245648784893399},
+{"x":5,"g1":1.591241452055992,"g2":0.5760453020899238,"g3":-1.72332948027369},
+{"x":6,"g1":0.31470205805028745,"g2":0.40866904091270045,"g3":-0.47521999074467997},
+{"x":7,"g1":-0.10068117614565805,"g2":0.7048380890792896,"g3":0.34743727059534313},
+{"x":8,"g1":-0.6573460981043954,"g2":-1.59499111826925,"g3":-1.2738262902398607},
+{"x":9,"g1":-0.8284581881862738,"g2":-0.5237688834541606,"g3":-0.7132927830390886},
+{"x":10,"g1":0.8142385948229556,"g2":-0.8633040821976967,"g3":-0.8687877524554808},
+{"x":11,"g1":-0.5027856220394188,"g2":0.18701356017906637,"g3":1.046433357448071},
+{"x":12,"g1":0.06260457466935236,"g2":-1.271905241919079,"g3":1.207786694242537},
+{"x":13,"g1":-0.6786452994967431,"g2":1.5803142883237598,"g3":-0.918205684434043},
+{"x":14,"g1":-0.43384050193056733,"g2":-0.049309160890638956,"g3":-0.26750850087782324},
+{"x":15,"g1":-0.5159554128250996,"g2":-0.43433692751425323,"g3":-0.79454303446256},
+{"x":16,"g1":0.23574602343524603,"g2":-0.013284852928967493,"g3":-1.7244507659001338},
+{"x":17,"g1":2.311957654061425,"g2":-0.2383950239618282,"g3":-1.4029366477991707},
+{"x":18,"g1":-2.028215738089875,"g2":0.5703321419362173,"g3":-0.2154009212293493},
+{"x":19,"g1":0.5032239915091454,"g2":-0.16980879931720552,"g3":1.439532186106936},
+{"x":20,"g1":-0.22134866871023515,"g2":1.024268025205746,"g3":1.455436390568694}];
+    const series = [{"name":"1","color":"#1f77b4","key":"g1","dash":""},{"name":"2","color":"#ff7f0e","key":"g2","dash":""},{"name":"3","color":"#2ca02c","key":"g3","dash":""}];
+    const bands = [];
+    const refLines = [];
+
+    const container = d3.select('#pd_92');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    // Compute domains
+    const xVals = data.map(d => d.x);
+    const allYVals = [];
+    series.forEach(s => data.forEach(d => { if(d[s.key]!==null) allYVals.push(d[s.key]); }));
+    bands.forEach(b => data.forEach(d => {
+        if(d[b.lo_key]!==null) allYVals.push(d[b.lo_key]);
+        if(d[b.hi_key]!==null) allYVals.push(d[b.hi_key]);
+    }));
+    refLines.forEach(r => allYVals.push(r.value));
+
+    const x = d3.scaleLinear().domain(d3.extent(xVals)).range([0,w]);
+    const yExt = d3.extent(allYVals);
+    const yPad = (yExt[1]-yExt[0])*0.08 || 1;
+    const y = d3.scaleLinear().domain([yExt[0]-yPad, yExt[1]+yPad]).range([h,0]);
+
+    // Grid
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+
+    // Bands
+    bands.forEach(b => {
+        const area = d3.area()
+            .x(d => x(d.x))
+            .y0(d => y(d[b.lo_key]!==null ? d[b.lo_key] : 0))
+            .y1(d => y(d[b.hi_key]!==null ? d[b.hi_key] : 0))
+            .defined(d => d[b.lo_key]!==null && d[b.hi_key]!==null);
+        g.append('path').datum(data).attr('d',area)
+            .attr('fill',b.color).attr('opacity',b.alpha||0.15);
+    });
+
+    // Reference lines
+    refLines.forEach(r => {
+        g.append('line').attr('x1',0).attr('x2',w)
+            .attr('y1',y(r.value)).attr('y2',y(r.value))
+            .attr('stroke',r.color||'#999').attr('stroke-width',1)
+            .attr('stroke-dasharray',r.dash||'4,3');
+    });
+
+    // Lines
+    series.forEach(s => {
+        const line = d3.line().x(d=>x(d.x)).y(d=>y(d[s.key]))
+            .defined(d=>d[s.key]!==null);
+        g.append('path').datum(data).attr('d',line)
+            .attr('fill','none').attr('stroke',s.color).attr('stroke-width',1.8)
+            .attr('stroke-dasharray',s.dash||'');
+    });
+
+    // Axes
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+        .call(d3.axisBottom(x).ticks(Math.min(xVals.length,8)));
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+
+    if('Time') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Time');
+    if('') g.append('text').attr('transform','rotate(-90)')
+        .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('');
+
+    // Legend
+    if(series.length > 1) {
+        const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
+        series.forEach((s,i) => {
+            const gi = leg.append('g').attr('transform','translate('+(i*100)+',0)');
+            gi.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+                .attr('stroke',s.color).attr('stroke-width',2)
+                .attr('stroke-dasharray',s.dash||'');
+            gi.append('text').attr('x',20).attr('y',4).attr('font-size','10px')
+                .attr('fill','#555').text(s.name);
+        });
+    }
+
+    // Tooltip overlay
+    svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g.node());
+            const x0 = x.invert(mx);
+            const idx = d3.minIndex(data, d => Math.abs(d.x - x0));
+            const d = data[idx];
+            let html = '<b>x='+fmt(d.x)+'</b>';
+            series.forEach(s => { if(d[s.key]!==null) html += '<br>'+s.name+': '+fmt(d[s.key]); });
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+
+(function() {
+    const data = [{"x":1,"g1":-1.113179585383507,"g2":1.1280993280466676,"g3":0.477104529241259},
+{"x":2,"g1":-0.3433961328183066,"g2":0.13895573779185208,"g3":-1.0943961797582706},
+{"x":3,"g1":1.4823564194070127,"g2":1.8746112063102365,"g3":-1.8229773703108274},
+{"x":4,"g1":0.17219567565436927,"g2":0.9998294073730715,"g3":-0.4655378442964187},
+{"x":5,"g1":0.5301909448111735,"g2":0.398338909620445,"g3":2.3923390640797257},
+{"x":6,"g1":-1.7637273247578031,"g2":-1.6249545768955533,"g3":0.22412575282899533},
+{"x":7,"g1":-1.5873791292989379,"g2":0.451124562270257,"g3":0.9840066363996771},
+{"x":8,"g1":-0.19605788231061044,"g2":-1.676105215984991,"g3":-0.5764219986541969},
+{"x":9,"g1":-1.6632199632317795,"g2":0.9730983345104381,"g3":1.3334587527012671},
+{"x":10,"g1":1.1440712475805734,"g2":0.09889635607121072,"g3":-0.3161355818966946},
+{"x":11,"g1":0.7701590834636554,"g2":-0.020000281562647566,"g3":-0.5003394658853733},
+{"x":12,"g1":1.6164337757918479,"g2":1.2764571327947194,"g3":0.10638656770381331},
+{"x":13,"g1":0.31649668441095796,"g2":0.1573690391916064,"g3":-0.8316717051087192},
+{"x":14,"g1":0.5651031519975468,"g2":0.7140798837462622,"g3":0.43556393180657227},
+{"x":15,"g1":0.9180823876645247,"g2":-0.14877683410567422,"g3":-1.7071824376524944},
+{"x":16,"g1":0.32035178266277703,"g2":1.4729886690599296,"g3":1.3386416582079548},
+{"x":17,"g1":-0.9735602864026459,"g2":0.35977192446784473,"g3":0.7094529205858485},
+{"x":18,"g1":-0.8693179004152304,"g2":-1.0689984941259598,"g3":-2.4234472958209063},
+{"x":19,"g1":1.2079774496754192,"g2":-1.1009561990308374,"g3":0.022739176997093373},
+{"x":20,"g1":-0.9388805366102818,"g2":-0.6140653798114267,"g3":0.025232930364522885}];
+    const series = [{"name":"1","color":"#1f77b4","key":"g1","dash":""},{"name":"2","color":"#ff7f0e","key":"g2","dash":""},{"name":"3","color":"#2ca02c","key":"g3","dash":""}];
+    const bands = [];
+    const refLines = [];
+
+    const container = d3.select('#pd_93');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    // Compute domains
+    const xVals = data.map(d => d.x);
+    const allYVals = [];
+    series.forEach(s => data.forEach(d => { if(d[s.key]!==null) allYVals.push(d[s.key]); }));
+    bands.forEach(b => data.forEach(d => {
+        if(d[b.lo_key]!==null) allYVals.push(d[b.lo_key]);
+        if(d[b.hi_key]!==null) allYVals.push(d[b.hi_key]);
+    }));
+    refLines.forEach(r => allYVals.push(r.value));
+
+    const x = d3.scaleLinear().domain(d3.extent(xVals)).range([0,w]);
+    const yExt = d3.extent(allYVals);
+    const yPad = (yExt[1]-yExt[0])*0.08 || 1;
+    const y = d3.scaleLinear().domain([yExt[0]-yPad, yExt[1]+yPad]).range([h,0]);
+
+    // Grid
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+
+    // Bands
+    bands.forEach(b => {
+        const area = d3.area()
+            .x(d => x(d.x))
+            .y0(d => y(d[b.lo_key]!==null ? d[b.lo_key] : 0))
+            .y1(d => y(d[b.hi_key]!==null ? d[b.hi_key] : 0))
+            .defined(d => d[b.lo_key]!==null && d[b.hi_key]!==null);
+        g.append('path').datum(data).attr('d',area)
+            .attr('fill',b.color).attr('opacity',b.alpha||0.15);
+    });
+
+    // Reference lines
+    refLines.forEach(r => {
+        g.append('line').attr('x1',0).attr('x2',w)
+            .attr('y1',y(r.value)).attr('y2',y(r.value))
+            .attr('stroke',r.color||'#999').attr('stroke-width',1)
+            .attr('stroke-dasharray',r.dash||'4,3');
+    });
+
+    // Lines
+    series.forEach(s => {
+        const line = d3.line().x(d=>x(d.x)).y(d=>y(d[s.key]))
+            .defined(d=>d[s.key]!==null);
+        g.append('path').datum(data).attr('d',line)
+            .attr('fill','none').attr('stroke',s.color).attr('stroke-width',1.8)
+            .attr('stroke-dasharray',s.dash||'');
+    });
+
+    // Axes
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+        .call(d3.axisBottom(x).ticks(Math.min(xVals.length,8)));
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+
+    if('Time') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Time');
+    if('') g.append('text').attr('transform','rotate(-90)')
+        .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('');
+
+    // Legend
+    if(series.length > 1) {
+        const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
+        series.forEach((s,i) => {
+            const gi = leg.append('g').attr('transform','translate('+(i*100)+',0)');
+            gi.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+                .attr('stroke',s.color).attr('stroke-width',2)
+                .attr('stroke-dasharray',s.dash||'');
+            gi.append('text').attr('x',20).attr('y',4).attr('font-size','10px')
+                .attr('fill','#555').text(s.name);
+        });
+    }
+
+    // Tooltip overlay
+    svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g.node());
+            const x0 = x.invert(mx);
+            const idx = d3.minIndex(data, d => Math.abs(d.x - x0));
+            const d = data[idx];
+            let html = '<b>x='+fmt(d.x)+'</b>';
+            series.forEach(s => { if(d[s.key]!==null) html += '<br>'+s.name+': '+fmt(d[s.key]); });
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+
+</script>
+</body>
+</html>

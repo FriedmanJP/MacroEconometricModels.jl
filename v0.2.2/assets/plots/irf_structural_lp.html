@@ -1,0 +1,1198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Structural LP IRF (cholesky)</title>
+<style>* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+    background: #fff;
+    color: #333;
+    padding: 20px;
+}
+.figure-title {
+    font-size: 18px;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 16px;
+    color: #222;
+}
+.figure-source {
+    font-size: 11px;
+    color: #888;
+    text-align: center;
+    margin-top: 8px;
+}
+.panel-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    justify-content: center;
+}
+.panel {
+    width: calc(33% - 16px);
+    min-width: 300px;
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 12px;
+}
+.panel-title {
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 8px;
+    color: #444;
+}
+.axis text { font-size: 11px; fill: #666; }
+.axis line, .axis path { stroke: #ccc; }
+.grid line { stroke: #f0f0f0; stroke-dasharray: 2,2; }
+.grid .domain { stroke: none; }
+.tooltip {
+    position: absolute;
+    background: rgba(0,0,0,0.8);
+    color: #fff;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 1000;
+}
+.legend { font-size: 11px; }
+.legend rect { rx: 2; }
+svg { overflow: visible; }
+</style>
+</head>
+<body>
+<div class="figure-title">Structural LP IRF (cholesky)</div>
+<div class="panel-grid">
+<div class="panel">
+<div class="panel-title">Var 1 ← Shock 1</div>
+<div id="irf_31"></div>
+</div>
+<div class="panel">
+<div class="panel-title">Var 2 ← Shock 1</div>
+<div id="irf_32"></div>
+</div>
+<div class="panel">
+<div class="panel-title">Var 3 ← Shock 1</div>
+<div id="irf_33"></div>
+</div>
+<div class="panel">
+<div class="panel-title">Var 1 ← Shock 2</div>
+<div id="irf_34"></div>
+</div>
+<div class="panel">
+<div class="panel-title">Var 2 ← Shock 2</div>
+<div id="irf_35"></div>
+</div>
+<div class="panel">
+<div class="panel-title">Var 3 ← Shock 2</div>
+<div id="irf_36"></div>
+</div>
+<div class="panel">
+<div class="panel-title">Var 1 ← Shock 3</div>
+<div id="irf_37"></div>
+</div>
+<div class="panel">
+<div class="panel-title">Var 2 ← Shock 3</div>
+<div id="irf_38"></div>
+</div>
+<div class="panel">
+<div class="panel-title">Var 3 ← Shock 3</div>
+<div id="irf_39"></div>
+</div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script>
+// Shared utilities
+const tooltip = d3.select('#tooltip');
+function fmt(v) {
+    if (v === null || v === undefined) return '';
+    return Math.abs(v) >= 1000 ? v.toFixed(1) : (Math.abs(v) >= 1 ? v.toFixed(3) : v.toFixed(4));
+}
+function showTip(evt, html) {
+    tooltip.html(html).style('opacity',1)
+        .style('left',(evt.pageX+12)+'px').style('top',(evt.pageY-28)+'px');
+}
+function hideTip() { tooltip.style('opacity',0); }
+
+(function() {
+    const data = [{"x":0,"irf":0.07969089836312412,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":0.0018028376557592304,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":-0.049651430556124886,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-0.028395520812923396,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":-0.02103262893785402,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":0.01093652266586864,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":-0.04975041600584059,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":0.09078707877667772,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":0.0418421170845295,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-0.009282208674656076,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":0.057616946894321605,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-0.09555366804051374,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":0.021413035827162016,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-0.04532250271115058,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":-0.07517685680861638,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-0.12300162788771937,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":0.08080118807241898,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":0.10557384396522398,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":0.014805043501975325,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-0.049361972510400066,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
+    const bands = [{"lo_key":"ci_lo","hi_key":"ci_hi","color":"#1f77b4","alpha":0.15}];
+    const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
+
+    const container = d3.select('#irf_31');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    // Compute domains
+    const xVals = data.map(d => d.x);
+    const allYVals = [];
+    series.forEach(s => data.forEach(d => { if(d[s.key]!==null) allYVals.push(d[s.key]); }));
+    bands.forEach(b => data.forEach(d => {
+        if(d[b.lo_key]!==null) allYVals.push(d[b.lo_key]);
+        if(d[b.hi_key]!==null) allYVals.push(d[b.hi_key]);
+    }));
+    refLines.forEach(r => allYVals.push(r.value));
+
+    const x = d3.scaleLinear().domain(d3.extent(xVals)).range([0,w]);
+    const yExt = d3.extent(allYVals);
+    const yPad = (yExt[1]-yExt[0])*0.08 || 1;
+    const y = d3.scaleLinear().domain([yExt[0]-yPad, yExt[1]+yPad]).range([h,0]);
+
+    // Grid
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+
+    // Bands
+    bands.forEach(b => {
+        const area = d3.area()
+            .x(d => x(d.x))
+            .y0(d => y(d[b.lo_key]!==null ? d[b.lo_key] : 0))
+            .y1(d => y(d[b.hi_key]!==null ? d[b.hi_key] : 0))
+            .defined(d => d[b.lo_key]!==null && d[b.hi_key]!==null);
+        g.append('path').datum(data).attr('d',area)
+            .attr('fill',b.color).attr('opacity',b.alpha||0.15);
+    });
+
+    // Reference lines
+    refLines.forEach(r => {
+        g.append('line').attr('x1',0).attr('x2',w)
+            .attr('y1',y(r.value)).attr('y2',y(r.value))
+            .attr('stroke',r.color||'#999').attr('stroke-width',1)
+            .attr('stroke-dasharray',r.dash||'4,3');
+    });
+
+    // Lines
+    series.forEach(s => {
+        const line = d3.line().x(d=>x(d.x)).y(d=>y(d[s.key]))
+            .defined(d=>d[s.key]!==null);
+        g.append('path').datum(data).attr('d',line)
+            .attr('fill','none').attr('stroke',s.color).attr('stroke-width',1.8)
+            .attr('stroke-dasharray',s.dash||'');
+    });
+
+    // Axes
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+        .call(d3.axisBottom(x).ticks(Math.min(xVals.length,8)));
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+
+    if('Horizon') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Horizon');
+    if('Response') g.append('text').attr('transform','rotate(-90)')
+        .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Response');
+
+    // Legend
+    if(series.length > 1) {
+        const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
+        series.forEach((s,i) => {
+            const gi = leg.append('g').attr('transform','translate('+(i*100)+',0)');
+            gi.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+                .attr('stroke',s.color).attr('stroke-width',2)
+                .attr('stroke-dasharray',s.dash||'');
+            gi.append('text').attr('x',20).attr('y',4).attr('font-size','10px')
+                .attr('fill','#555').text(s.name);
+        });
+    }
+
+    // Tooltip overlay
+    svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g.node());
+            const x0 = x.invert(mx);
+            const idx = d3.minIndex(data, d => Math.abs(d.x - x0));
+            const d = data[idx];
+            let html = '<b>x='+fmt(d.x)+'</b>';
+            series.forEach(s => { if(d[s.key]!==null) html += '<br>'+s.name+': '+fmt(d[s.key]); });
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+
+(function() {
+    const data = [{"x":0,"irf":-0.06826595005331462,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":0.027278286206331517,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":-0.06021959019673129,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":0.09896580442354082,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":0.08641134605974889,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":0.006375074628555842,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":0.02568843639496286,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-0.1273863795996858,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":-0.09082365000561166,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-0.1054741101974842,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":0.015059707458873315,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-0.13260762427243894,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":-0.006079295455329009,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":0.016188331032475824,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":0.19495808209124058,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-0.04945823457589791,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":-0.007821657449054147,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-0.06010784584839027,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":-0.054581678508947636,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-0.03124178726042678,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
+    const bands = [{"lo_key":"ci_lo","hi_key":"ci_hi","color":"#1f77b4","alpha":0.15}];
+    const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
+
+    const container = d3.select('#irf_32');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    // Compute domains
+    const xVals = data.map(d => d.x);
+    const allYVals = [];
+    series.forEach(s => data.forEach(d => { if(d[s.key]!==null) allYVals.push(d[s.key]); }));
+    bands.forEach(b => data.forEach(d => {
+        if(d[b.lo_key]!==null) allYVals.push(d[b.lo_key]);
+        if(d[b.hi_key]!==null) allYVals.push(d[b.hi_key]);
+    }));
+    refLines.forEach(r => allYVals.push(r.value));
+
+    const x = d3.scaleLinear().domain(d3.extent(xVals)).range([0,w]);
+    const yExt = d3.extent(allYVals);
+    const yPad = (yExt[1]-yExt[0])*0.08 || 1;
+    const y = d3.scaleLinear().domain([yExt[0]-yPad, yExt[1]+yPad]).range([h,0]);
+
+    // Grid
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+
+    // Bands
+    bands.forEach(b => {
+        const area = d3.area()
+            .x(d => x(d.x))
+            .y0(d => y(d[b.lo_key]!==null ? d[b.lo_key] : 0))
+            .y1(d => y(d[b.hi_key]!==null ? d[b.hi_key] : 0))
+            .defined(d => d[b.lo_key]!==null && d[b.hi_key]!==null);
+        g.append('path').datum(data).attr('d',area)
+            .attr('fill',b.color).attr('opacity',b.alpha||0.15);
+    });
+
+    // Reference lines
+    refLines.forEach(r => {
+        g.append('line').attr('x1',0).attr('x2',w)
+            .attr('y1',y(r.value)).attr('y2',y(r.value))
+            .attr('stroke',r.color||'#999').attr('stroke-width',1)
+            .attr('stroke-dasharray',r.dash||'4,3');
+    });
+
+    // Lines
+    series.forEach(s => {
+        const line = d3.line().x(d=>x(d.x)).y(d=>y(d[s.key]))
+            .defined(d=>d[s.key]!==null);
+        g.append('path').datum(data).attr('d',line)
+            .attr('fill','none').attr('stroke',s.color).attr('stroke-width',1.8)
+            .attr('stroke-dasharray',s.dash||'');
+    });
+
+    // Axes
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+        .call(d3.axisBottom(x).ticks(Math.min(xVals.length,8)));
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+
+    if('Horizon') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Horizon');
+    if('Response') g.append('text').attr('transform','rotate(-90)')
+        .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Response');
+
+    // Legend
+    if(series.length > 1) {
+        const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
+        series.forEach((s,i) => {
+            const gi = leg.append('g').attr('transform','translate('+(i*100)+',0)');
+            gi.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+                .attr('stroke',s.color).attr('stroke-width',2)
+                .attr('stroke-dasharray',s.dash||'');
+            gi.append('text').attr('x',20).attr('y',4).attr('font-size','10px')
+                .attr('fill','#555').text(s.name);
+        });
+    }
+
+    // Tooltip overlay
+    svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g.node());
+            const x0 = x.invert(mx);
+            const idx = d3.minIndex(data, d => Math.abs(d.x - x0));
+            const d = data[idx];
+            let html = '<b>x='+fmt(d.x)+'</b>';
+            series.forEach(s => { if(d[s.key]!==null) html += '<br>'+s.name+': '+fmt(d[s.key]); });
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+
+(function() {
+    const data = [{"x":0,"irf":0.006807264246695168,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":0.05055884000788558,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":-0.06732516500402451,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":0.04605247304343864,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":0.06400474892671595,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-0.012237285714074049,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":-0.06444946125646897,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":0.008190399771405031,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":-0.06749462453937755,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":0.056408717151811644,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":0.0758718823560802,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-0.08387557432646511,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":0.08121787832868914,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":0.026247870579789136,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":0.00805161819324943,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-0.05612933941258031,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":-0.13827214468141247,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":0.0878031414888838,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":-0.029549383178968183,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-0.007875120811539339,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
+    const bands = [{"lo_key":"ci_lo","hi_key":"ci_hi","color":"#1f77b4","alpha":0.15}];
+    const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
+
+    const container = d3.select('#irf_33');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    // Compute domains
+    const xVals = data.map(d => d.x);
+    const allYVals = [];
+    series.forEach(s => data.forEach(d => { if(d[s.key]!==null) allYVals.push(d[s.key]); }));
+    bands.forEach(b => data.forEach(d => {
+        if(d[b.lo_key]!==null) allYVals.push(d[b.lo_key]);
+        if(d[b.hi_key]!==null) allYVals.push(d[b.hi_key]);
+    }));
+    refLines.forEach(r => allYVals.push(r.value));
+
+    const x = d3.scaleLinear().domain(d3.extent(xVals)).range([0,w]);
+    const yExt = d3.extent(allYVals);
+    const yPad = (yExt[1]-yExt[0])*0.08 || 1;
+    const y = d3.scaleLinear().domain([yExt[0]-yPad, yExt[1]+yPad]).range([h,0]);
+
+    // Grid
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+
+    // Bands
+    bands.forEach(b => {
+        const area = d3.area()
+            .x(d => x(d.x))
+            .y0(d => y(d[b.lo_key]!==null ? d[b.lo_key] : 0))
+            .y1(d => y(d[b.hi_key]!==null ? d[b.hi_key] : 0))
+            .defined(d => d[b.lo_key]!==null && d[b.hi_key]!==null);
+        g.append('path').datum(data).attr('d',area)
+            .attr('fill',b.color).attr('opacity',b.alpha||0.15);
+    });
+
+    // Reference lines
+    refLines.forEach(r => {
+        g.append('line').attr('x1',0).attr('x2',w)
+            .attr('y1',y(r.value)).attr('y2',y(r.value))
+            .attr('stroke',r.color||'#999').attr('stroke-width',1)
+            .attr('stroke-dasharray',r.dash||'4,3');
+    });
+
+    // Lines
+    series.forEach(s => {
+        const line = d3.line().x(d=>x(d.x)).y(d=>y(d[s.key]))
+            .defined(d=>d[s.key]!==null);
+        g.append('path').datum(data).attr('d',line)
+            .attr('fill','none').attr('stroke',s.color).attr('stroke-width',1.8)
+            .attr('stroke-dasharray',s.dash||'');
+    });
+
+    // Axes
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+        .call(d3.axisBottom(x).ticks(Math.min(xVals.length,8)));
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+
+    if('Horizon') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Horizon');
+    if('Response') g.append('text').attr('transform','rotate(-90)')
+        .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Response');
+
+    // Legend
+    if(series.length > 1) {
+        const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
+        series.forEach((s,i) => {
+            const gi = leg.append('g').attr('transform','translate('+(i*100)+',0)');
+            gi.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+                .attr('stroke',s.color).attr('stroke-width',2)
+                .attr('stroke-dasharray',s.dash||'');
+            gi.append('text').attr('x',20).attr('y',4).attr('font-size','10px')
+                .attr('fill','#555').text(s.name);
+        });
+    }
+
+    // Tooltip overlay
+    svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g.node());
+            const x0 = x.invert(mx);
+            const idx = d3.minIndex(data, d => Math.abs(d.x - x0));
+            const d = data[idx];
+            let html = '<b>x='+fmt(d.x)+'</b>';
+            series.forEach(s => { if(d[s.key]!==null) html += '<br>'+s.name+': '+fmt(d[s.key]); });
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+
+(function() {
+    const data = [{"x":0,"irf":0.07364248839796797,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":0.18726111836971893,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":0.022982817122193765,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":0.07084645719960206,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":-0.01863764098088804,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-0.05895196128947375,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":0.029993685582009662,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-0.05017818150178789,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":0.010823903530932894,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-0.015287025087325991,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":0.03157548607447185,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-0.04007284229496337,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":-0.027273196324405787,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-0.02717184227146516,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":0.0915468330709085,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":0.09704409213377038,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":-0.0222460076512954,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":0.024089388754236128,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":0.12155472730025839,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-0.06962739788682154,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
+    const bands = [{"lo_key":"ci_lo","hi_key":"ci_hi","color":"#1f77b4","alpha":0.15}];
+    const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
+
+    const container = d3.select('#irf_34');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    // Compute domains
+    const xVals = data.map(d => d.x);
+    const allYVals = [];
+    series.forEach(s => data.forEach(d => { if(d[s.key]!==null) allYVals.push(d[s.key]); }));
+    bands.forEach(b => data.forEach(d => {
+        if(d[b.lo_key]!==null) allYVals.push(d[b.lo_key]);
+        if(d[b.hi_key]!==null) allYVals.push(d[b.hi_key]);
+    }));
+    refLines.forEach(r => allYVals.push(r.value));
+
+    const x = d3.scaleLinear().domain(d3.extent(xVals)).range([0,w]);
+    const yExt = d3.extent(allYVals);
+    const yPad = (yExt[1]-yExt[0])*0.08 || 1;
+    const y = d3.scaleLinear().domain([yExt[0]-yPad, yExt[1]+yPad]).range([h,0]);
+
+    // Grid
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+
+    // Bands
+    bands.forEach(b => {
+        const area = d3.area()
+            .x(d => x(d.x))
+            .y0(d => y(d[b.lo_key]!==null ? d[b.lo_key] : 0))
+            .y1(d => y(d[b.hi_key]!==null ? d[b.hi_key] : 0))
+            .defined(d => d[b.lo_key]!==null && d[b.hi_key]!==null);
+        g.append('path').datum(data).attr('d',area)
+            .attr('fill',b.color).attr('opacity',b.alpha||0.15);
+    });
+
+    // Reference lines
+    refLines.forEach(r => {
+        g.append('line').attr('x1',0).attr('x2',w)
+            .attr('y1',y(r.value)).attr('y2',y(r.value))
+            .attr('stroke',r.color||'#999').attr('stroke-width',1)
+            .attr('stroke-dasharray',r.dash||'4,3');
+    });
+
+    // Lines
+    series.forEach(s => {
+        const line = d3.line().x(d=>x(d.x)).y(d=>y(d[s.key]))
+            .defined(d=>d[s.key]!==null);
+        g.append('path').datum(data).attr('d',line)
+            .attr('fill','none').attr('stroke',s.color).attr('stroke-width',1.8)
+            .attr('stroke-dasharray',s.dash||'');
+    });
+
+    // Axes
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+        .call(d3.axisBottom(x).ticks(Math.min(xVals.length,8)));
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+
+    if('Horizon') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Horizon');
+    if('Response') g.append('text').attr('transform','rotate(-90)')
+        .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Response');
+
+    // Legend
+    if(series.length > 1) {
+        const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
+        series.forEach((s,i) => {
+            const gi = leg.append('g').attr('transform','translate('+(i*100)+',0)');
+            gi.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+                .attr('stroke',s.color).attr('stroke-width',2)
+                .attr('stroke-dasharray',s.dash||'');
+            gi.append('text').attr('x',20).attr('y',4).attr('font-size','10px')
+                .attr('fill','#555').text(s.name);
+        });
+    }
+
+    // Tooltip overlay
+    svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g.node());
+            const x0 = x.invert(mx);
+            const idx = d3.minIndex(data, d => Math.abs(d.x - x0));
+            const d = data[idx];
+            let html = '<b>x='+fmt(d.x)+'</b>';
+            series.forEach(s => { if(d[s.key]!==null) html += '<br>'+s.name+': '+fmt(d[s.key]); });
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+
+(function() {
+    const data = [{"x":0,"irf":0.18129036440710458,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":-0.02241511634309307,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":-0.048323225577357166,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":0.016245734925755578,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":-0.0851158546152181,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":0.07684624641090385,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":0.05085012576524042,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-0.07644502067622824,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":-0.06562562979771541,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-0.038145219411768475,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":-0.020609010365488057,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-0.1290973098877469,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":0.10559704411700793,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":0.06822438334417055,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":-0.021086591583904007,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-0.05123828995323304,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":0.02316778724362029,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-0.07268514573630516,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":-0.02524119229253805,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":0.07921196772083725,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
+    const bands = [{"lo_key":"ci_lo","hi_key":"ci_hi","color":"#1f77b4","alpha":0.15}];
+    const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
+
+    const container = d3.select('#irf_35');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    // Compute domains
+    const xVals = data.map(d => d.x);
+    const allYVals = [];
+    series.forEach(s => data.forEach(d => { if(d[s.key]!==null) allYVals.push(d[s.key]); }));
+    bands.forEach(b => data.forEach(d => {
+        if(d[b.lo_key]!==null) allYVals.push(d[b.lo_key]);
+        if(d[b.hi_key]!==null) allYVals.push(d[b.hi_key]);
+    }));
+    refLines.forEach(r => allYVals.push(r.value));
+
+    const x = d3.scaleLinear().domain(d3.extent(xVals)).range([0,w]);
+    const yExt = d3.extent(allYVals);
+    const yPad = (yExt[1]-yExt[0])*0.08 || 1;
+    const y = d3.scaleLinear().domain([yExt[0]-yPad, yExt[1]+yPad]).range([h,0]);
+
+    // Grid
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+
+    // Bands
+    bands.forEach(b => {
+        const area = d3.area()
+            .x(d => x(d.x))
+            .y0(d => y(d[b.lo_key]!==null ? d[b.lo_key] : 0))
+            .y1(d => y(d[b.hi_key]!==null ? d[b.hi_key] : 0))
+            .defined(d => d[b.lo_key]!==null && d[b.hi_key]!==null);
+        g.append('path').datum(data).attr('d',area)
+            .attr('fill',b.color).attr('opacity',b.alpha||0.15);
+    });
+
+    // Reference lines
+    refLines.forEach(r => {
+        g.append('line').attr('x1',0).attr('x2',w)
+            .attr('y1',y(r.value)).attr('y2',y(r.value))
+            .attr('stroke',r.color||'#999').attr('stroke-width',1)
+            .attr('stroke-dasharray',r.dash||'4,3');
+    });
+
+    // Lines
+    series.forEach(s => {
+        const line = d3.line().x(d=>x(d.x)).y(d=>y(d[s.key]))
+            .defined(d=>d[s.key]!==null);
+        g.append('path').datum(data).attr('d',line)
+            .attr('fill','none').attr('stroke',s.color).attr('stroke-width',1.8)
+            .attr('stroke-dasharray',s.dash||'');
+    });
+
+    // Axes
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+        .call(d3.axisBottom(x).ticks(Math.min(xVals.length,8)));
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+
+    if('Horizon') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Horizon');
+    if('Response') g.append('text').attr('transform','rotate(-90)')
+        .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Response');
+
+    // Legend
+    if(series.length > 1) {
+        const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
+        series.forEach((s,i) => {
+            const gi = leg.append('g').attr('transform','translate('+(i*100)+',0)');
+            gi.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+                .attr('stroke',s.color).attr('stroke-width',2)
+                .attr('stroke-dasharray',s.dash||'');
+            gi.append('text').attr('x',20).attr('y',4).attr('font-size','10px')
+                .attr('fill','#555').text(s.name);
+        });
+    }
+
+    // Tooltip overlay
+    svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g.node());
+            const x0 = x.invert(mx);
+            const idx = d3.minIndex(data, d => Math.abs(d.x - x0));
+            const d = data[idx];
+            let html = '<b>x='+fmt(d.x)+'</b>';
+            series.forEach(s => { if(d[s.key]!==null) html += '<br>'+s.name+': '+fmt(d[s.key]); });
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+
+(function() {
+    const data = [{"x":0,"irf":0.01524918895014743,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":-0.04319970802428459,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":-0.039398145619913366,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-0.18414843033303152,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":0.005033583905816628,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-0.01248537718619366,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":-0.0020914121518454953,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-0.07053562561898877,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":0.0029434760595972095,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-0.06958639912871167,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":0.011847682700019506,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":0.07072866425504362,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":0.04705095309754322,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":0.03586742343394113,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":0.06624532845972286,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":0.12626519327491312,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":0.2005927901903985,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-0.06124316822535168,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":-0.028960203400169592,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-0.003445981090818867,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
+    const bands = [{"lo_key":"ci_lo","hi_key":"ci_hi","color":"#1f77b4","alpha":0.15}];
+    const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
+
+    const container = d3.select('#irf_36');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    // Compute domains
+    const xVals = data.map(d => d.x);
+    const allYVals = [];
+    series.forEach(s => data.forEach(d => { if(d[s.key]!==null) allYVals.push(d[s.key]); }));
+    bands.forEach(b => data.forEach(d => {
+        if(d[b.lo_key]!==null) allYVals.push(d[b.lo_key]);
+        if(d[b.hi_key]!==null) allYVals.push(d[b.hi_key]);
+    }));
+    refLines.forEach(r => allYVals.push(r.value));
+
+    const x = d3.scaleLinear().domain(d3.extent(xVals)).range([0,w]);
+    const yExt = d3.extent(allYVals);
+    const yPad = (yExt[1]-yExt[0])*0.08 || 1;
+    const y = d3.scaleLinear().domain([yExt[0]-yPad, yExt[1]+yPad]).range([h,0]);
+
+    // Grid
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+
+    // Bands
+    bands.forEach(b => {
+        const area = d3.area()
+            .x(d => x(d.x))
+            .y0(d => y(d[b.lo_key]!==null ? d[b.lo_key] : 0))
+            .y1(d => y(d[b.hi_key]!==null ? d[b.hi_key] : 0))
+            .defined(d => d[b.lo_key]!==null && d[b.hi_key]!==null);
+        g.append('path').datum(data).attr('d',area)
+            .attr('fill',b.color).attr('opacity',b.alpha||0.15);
+    });
+
+    // Reference lines
+    refLines.forEach(r => {
+        g.append('line').attr('x1',0).attr('x2',w)
+            .attr('y1',y(r.value)).attr('y2',y(r.value))
+            .attr('stroke',r.color||'#999').attr('stroke-width',1)
+            .attr('stroke-dasharray',r.dash||'4,3');
+    });
+
+    // Lines
+    series.forEach(s => {
+        const line = d3.line().x(d=>x(d.x)).y(d=>y(d[s.key]))
+            .defined(d=>d[s.key]!==null);
+        g.append('path').datum(data).attr('d',line)
+            .attr('fill','none').attr('stroke',s.color).attr('stroke-width',1.8)
+            .attr('stroke-dasharray',s.dash||'');
+    });
+
+    // Axes
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+        .call(d3.axisBottom(x).ticks(Math.min(xVals.length,8)));
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+
+    if('Horizon') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Horizon');
+    if('Response') g.append('text').attr('transform','rotate(-90)')
+        .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Response');
+
+    // Legend
+    if(series.length > 1) {
+        const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
+        series.forEach((s,i) => {
+            const gi = leg.append('g').attr('transform','translate('+(i*100)+',0)');
+            gi.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+                .attr('stroke',s.color).attr('stroke-width',2)
+                .attr('stroke-dasharray',s.dash||'');
+            gi.append('text').attr('x',20).attr('y',4).attr('font-size','10px')
+                .attr('fill','#555').text(s.name);
+        });
+    }
+
+    // Tooltip overlay
+    svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g.node());
+            const x0 = x.invert(mx);
+            const idx = d3.minIndex(data, d => Math.abs(d.x - x0));
+            const d = data[idx];
+            let html = '<b>x='+fmt(d.x)+'</b>';
+            series.forEach(s => { if(d[s.key]!==null) html += '<br>'+s.name+': '+fmt(d[s.key]); });
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+
+(function() {
+    const data = [{"x":0,"irf":-0.021974922289669175,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":0.030056208977940382,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":0.02092139166975036,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":0.07489873238122872,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":0.136263592848775,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":0.044651916420062256,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":0.04265591972123915,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-0.010722712918004342,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":0.004119738943264793,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-0.06237786239143328,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":-0.00884631981668733,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":0.014356044293210206,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":-0.09115502262186552,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-0.1118978825850771,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":0.04189290012971502,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":0.11946119993023142,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":0.06969563678597925,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":0.006047022373164119,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":-0.1555319714835875,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-0.009627415972794755,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
+    const bands = [{"lo_key":"ci_lo","hi_key":"ci_hi","color":"#1f77b4","alpha":0.15}];
+    const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
+
+    const container = d3.select('#irf_37');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    // Compute domains
+    const xVals = data.map(d => d.x);
+    const allYVals = [];
+    series.forEach(s => data.forEach(d => { if(d[s.key]!==null) allYVals.push(d[s.key]); }));
+    bands.forEach(b => data.forEach(d => {
+        if(d[b.lo_key]!==null) allYVals.push(d[b.lo_key]);
+        if(d[b.hi_key]!==null) allYVals.push(d[b.hi_key]);
+    }));
+    refLines.forEach(r => allYVals.push(r.value));
+
+    const x = d3.scaleLinear().domain(d3.extent(xVals)).range([0,w]);
+    const yExt = d3.extent(allYVals);
+    const yPad = (yExt[1]-yExt[0])*0.08 || 1;
+    const y = d3.scaleLinear().domain([yExt[0]-yPad, yExt[1]+yPad]).range([h,0]);
+
+    // Grid
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+
+    // Bands
+    bands.forEach(b => {
+        const area = d3.area()
+            .x(d => x(d.x))
+            .y0(d => y(d[b.lo_key]!==null ? d[b.lo_key] : 0))
+            .y1(d => y(d[b.hi_key]!==null ? d[b.hi_key] : 0))
+            .defined(d => d[b.lo_key]!==null && d[b.hi_key]!==null);
+        g.append('path').datum(data).attr('d',area)
+            .attr('fill',b.color).attr('opacity',b.alpha||0.15);
+    });
+
+    // Reference lines
+    refLines.forEach(r => {
+        g.append('line').attr('x1',0).attr('x2',w)
+            .attr('y1',y(r.value)).attr('y2',y(r.value))
+            .attr('stroke',r.color||'#999').attr('stroke-width',1)
+            .attr('stroke-dasharray',r.dash||'4,3');
+    });
+
+    // Lines
+    series.forEach(s => {
+        const line = d3.line().x(d=>x(d.x)).y(d=>y(d[s.key]))
+            .defined(d=>d[s.key]!==null);
+        g.append('path').datum(data).attr('d',line)
+            .attr('fill','none').attr('stroke',s.color).attr('stroke-width',1.8)
+            .attr('stroke-dasharray',s.dash||'');
+    });
+
+    // Axes
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+        .call(d3.axisBottom(x).ticks(Math.min(xVals.length,8)));
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+
+    if('Horizon') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Horizon');
+    if('Response') g.append('text').attr('transform','rotate(-90)')
+        .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Response');
+
+    // Legend
+    if(series.length > 1) {
+        const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
+        series.forEach((s,i) => {
+            const gi = leg.append('g').attr('transform','translate('+(i*100)+',0)');
+            gi.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+                .attr('stroke',s.color).attr('stroke-width',2)
+                .attr('stroke-dasharray',s.dash||'');
+            gi.append('text').attr('x',20).attr('y',4).attr('font-size','10px')
+                .attr('fill','#555').text(s.name);
+        });
+    }
+
+    // Tooltip overlay
+    svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g.node());
+            const x0 = x.invert(mx);
+            const idx = d3.minIndex(data, d => Math.abs(d.x - x0));
+            const d = data[idx];
+            let html = '<b>x='+fmt(d.x)+'</b>';
+            series.forEach(s => { if(d[s.key]!==null) html += '<br>'+s.name+': '+fmt(d[s.key]); });
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+
+(function() {
+    const data = [{"x":0,"irf":0.05728586768892953,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":-0.10508010134326395,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":0.04853391173139989,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":0.09639812916679934,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":0.16722666279714396,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-0.07900610625978363,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":0.0461455203777096,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-0.14364531905842173,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":-0.08240804435623234,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-0.049261987068306916,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":0.10194484520114294,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-0.07112528515649959,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":-0.056778815168396855,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-0.05119051990856957,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":-0.024605045801496007,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":0.0636262254433412,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":0.03969925001995641,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":0.07824416175568871,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":-0.00487938303819337,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-0.009235718961333057,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
+    const bands = [{"lo_key":"ci_lo","hi_key":"ci_hi","color":"#1f77b4","alpha":0.15}];
+    const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
+
+    const container = d3.select('#irf_38');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    // Compute domains
+    const xVals = data.map(d => d.x);
+    const allYVals = [];
+    series.forEach(s => data.forEach(d => { if(d[s.key]!==null) allYVals.push(d[s.key]); }));
+    bands.forEach(b => data.forEach(d => {
+        if(d[b.lo_key]!==null) allYVals.push(d[b.lo_key]);
+        if(d[b.hi_key]!==null) allYVals.push(d[b.hi_key]);
+    }));
+    refLines.forEach(r => allYVals.push(r.value));
+
+    const x = d3.scaleLinear().domain(d3.extent(xVals)).range([0,w]);
+    const yExt = d3.extent(allYVals);
+    const yPad = (yExt[1]-yExt[0])*0.08 || 1;
+    const y = d3.scaleLinear().domain([yExt[0]-yPad, yExt[1]+yPad]).range([h,0]);
+
+    // Grid
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+
+    // Bands
+    bands.forEach(b => {
+        const area = d3.area()
+            .x(d => x(d.x))
+            .y0(d => y(d[b.lo_key]!==null ? d[b.lo_key] : 0))
+            .y1(d => y(d[b.hi_key]!==null ? d[b.hi_key] : 0))
+            .defined(d => d[b.lo_key]!==null && d[b.hi_key]!==null);
+        g.append('path').datum(data).attr('d',area)
+            .attr('fill',b.color).attr('opacity',b.alpha||0.15);
+    });
+
+    // Reference lines
+    refLines.forEach(r => {
+        g.append('line').attr('x1',0).attr('x2',w)
+            .attr('y1',y(r.value)).attr('y2',y(r.value))
+            .attr('stroke',r.color||'#999').attr('stroke-width',1)
+            .attr('stroke-dasharray',r.dash||'4,3');
+    });
+
+    // Lines
+    series.forEach(s => {
+        const line = d3.line().x(d=>x(d.x)).y(d=>y(d[s.key]))
+            .defined(d=>d[s.key]!==null);
+        g.append('path').datum(data).attr('d',line)
+            .attr('fill','none').attr('stroke',s.color).attr('stroke-width',1.8)
+            .attr('stroke-dasharray',s.dash||'');
+    });
+
+    // Axes
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+        .call(d3.axisBottom(x).ticks(Math.min(xVals.length,8)));
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+
+    if('Horizon') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Horizon');
+    if('Response') g.append('text').attr('transform','rotate(-90)')
+        .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Response');
+
+    // Legend
+    if(series.length > 1) {
+        const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
+        series.forEach((s,i) => {
+            const gi = leg.append('g').attr('transform','translate('+(i*100)+',0)');
+            gi.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+                .attr('stroke',s.color).attr('stroke-width',2)
+                .attr('stroke-dasharray',s.dash||'');
+            gi.append('text').attr('x',20).attr('y',4).attr('font-size','10px')
+                .attr('fill','#555').text(s.name);
+        });
+    }
+
+    // Tooltip overlay
+    svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g.node());
+            const x0 = x.invert(mx);
+            const idx = d3.minIndex(data, d => Math.abs(d.x - x0));
+            const d = data[idx];
+            let html = '<b>x='+fmt(d.x)+'</b>';
+            series.forEach(s => { if(d[s.key]!==null) html += '<br>'+s.name+': '+fmt(d[s.key]); });
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+
+(function() {
+    const data = [{"x":0,"irf":0.027540352150984604,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":0.03921509686718526,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":-0.002549048249729055,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":0.03599777110330754,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":0.004990027622740895,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-0.09617688692065811,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":0.025093867214837667,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-0.008540736479655031,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":-0.1074087979773187,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":0.11179222705390203,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":-0.04299451793645533,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":0.024265830456540544,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":-0.013812075191278361,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-0.009329943404263852,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":-0.07521119060541087,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":0.017091628682256714,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":-0.03364707097984038,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":0.008556654033527594,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":-0.08164585036052857,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":0.03166228297378076,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
+    const bands = [{"lo_key":"ci_lo","hi_key":"ci_hi","color":"#1f77b4","alpha":0.15}];
+    const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
+
+    const container = d3.select('#irf_39');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    // Compute domains
+    const xVals = data.map(d => d.x);
+    const allYVals = [];
+    series.forEach(s => data.forEach(d => { if(d[s.key]!==null) allYVals.push(d[s.key]); }));
+    bands.forEach(b => data.forEach(d => {
+        if(d[b.lo_key]!==null) allYVals.push(d[b.lo_key]);
+        if(d[b.hi_key]!==null) allYVals.push(d[b.hi_key]);
+    }));
+    refLines.forEach(r => allYVals.push(r.value));
+
+    const x = d3.scaleLinear().domain(d3.extent(xVals)).range([0,w]);
+    const yExt = d3.extent(allYVals);
+    const yPad = (yExt[1]-yExt[0])*0.08 || 1;
+    const y = d3.scaleLinear().domain([yExt[0]-yPad, yExt[1]+yPad]).range([h,0]);
+
+    // Grid
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+
+    // Bands
+    bands.forEach(b => {
+        const area = d3.area()
+            .x(d => x(d.x))
+            .y0(d => y(d[b.lo_key]!==null ? d[b.lo_key] : 0))
+            .y1(d => y(d[b.hi_key]!==null ? d[b.hi_key] : 0))
+            .defined(d => d[b.lo_key]!==null && d[b.hi_key]!==null);
+        g.append('path').datum(data).attr('d',area)
+            .attr('fill',b.color).attr('opacity',b.alpha||0.15);
+    });
+
+    // Reference lines
+    refLines.forEach(r => {
+        g.append('line').attr('x1',0).attr('x2',w)
+            .attr('y1',y(r.value)).attr('y2',y(r.value))
+            .attr('stroke',r.color||'#999').attr('stroke-width',1)
+            .attr('stroke-dasharray',r.dash||'4,3');
+    });
+
+    // Lines
+    series.forEach(s => {
+        const line = d3.line().x(d=>x(d.x)).y(d=>y(d[s.key]))
+            .defined(d=>d[s.key]!==null);
+        g.append('path').datum(data).attr('d',line)
+            .attr('fill','none').attr('stroke',s.color).attr('stroke-width',1.8)
+            .attr('stroke-dasharray',s.dash||'');
+    });
+
+    // Axes
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+        .call(d3.axisBottom(x).ticks(Math.min(xVals.length,8)));
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+
+    if('Horizon') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Horizon');
+    if('Response') g.append('text').attr('transform','rotate(-90)')
+        .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Response');
+
+    // Legend
+    if(series.length > 1) {
+        const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
+        series.forEach((s,i) => {
+            const gi = leg.append('g').attr('transform','translate('+(i*100)+',0)');
+            gi.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+                .attr('stroke',s.color).attr('stroke-width',2)
+                .attr('stroke-dasharray',s.dash||'');
+            gi.append('text').attr('x',20).attr('y',4).attr('font-size','10px')
+                .attr('fill','#555').text(s.name);
+        });
+    }
+
+    // Tooltip overlay
+    svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g.node());
+            const x0 = x.invert(mx);
+            const idx = d3.minIndex(data, d => Math.abs(d.x - x0));
+            const d = data[idx];
+            let html = '<b>x='+fmt(d.x)+'</b>';
+            series.forEach(s => { if(d[s.key]!==null) html += '<br>'+s.name+': '+fmt(d[s.key]); });
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+
+</script>
+</body>
+</html>

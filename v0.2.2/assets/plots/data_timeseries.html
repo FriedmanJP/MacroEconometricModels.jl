@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Time Series Data</title>
+<style>* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+    background: #fff;
+    color: #333;
+    padding: 20px;
+}
+.figure-title {
+    font-size: 18px;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 16px;
+    color: #222;
+}
+.figure-source {
+    font-size: 11px;
+    color: #888;
+    text-align: center;
+    margin-top: 8px;
+}
+.panel-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    justify-content: center;
+}
+.panel {
+    width: calc(33% - 16px);
+    min-width: 300px;
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 12px;
+}
+.panel-title {
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 8px;
+    color: #444;
+}
+.axis text { font-size: 11px; fill: #666; }
+.axis line, .axis path { stroke: #ccc; }
+.grid line { stroke: #f0f0f0; stroke-dasharray: 2,2; }
+.grid .domain { stroke: none; }
+.tooltip {
+    position: absolute;
+    background: rgba(0,0,0,0.8);
+    color: #fff;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 1000;
+}
+.legend { font-size: 11px; }
+.legend rect { rx: 2; }
+svg { overflow: visible; }
+</style>
+</head>
+<body>
+<div class="figure-title">Time Series Data</div>
+<div class="panel-grid">
+<div class="panel">
+<div class="panel-title">GDP</div>
+<div id="ts_89"></div>
+</div>
+<div class="panel">
+<div class="panel-title">CPI</div>
+<div id="ts_90"></div>
+</div>
+<div class="panel">
+<div class="panel-title">RATE</div>
+<div id="ts_91"></div>
+</div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script>
+// Shared utilities
+const tooltip = d3.select('#tooltip');
+function fmt(v) {
+    if (v === null || v === undefined) return '';
+    return Math.abs(v) >= 1000 ? v.toFixed(1) : (Math.abs(v) >= 1 ? v.toFixed(3) : v.toFixed(4));
+}
+function showTip(evt, html) {
+    tooltip.html(html).style('opacity',1)
+        .style('left',(evt.pageX+12)+'px').style('top',(evt.pageY-28)+'px');
+}
+function hideTip() { tooltip.style('opacity',0); }
+
+(function() {
+    const data = [{"x":1,"v1":0.7055361121693957},
+{"x":2,"v1":0.7026966225997577},
+{"x":3,"v1":-1.7943151050709278},
+{"x":4,"v1":1.2443781349251855},
+{"x":5,"v1":-0.9537874477599031},
+{"x":6,"v1":0.5414707202536155},
+{"x":7,"v1":0.95984256104302},
+{"x":8,"v1":-0.2720435172675695},
+{"x":9,"v1":-1.0725612256083021},
+{"x":10,"v1":0.3757980204464183},
+{"x":11,"v1":-1.792849558639237},
+{"x":12,"v1":-2.3788414893086416},
+{"x":13,"v1":0.362576164164127},
+{"x":14,"v1":-0.4473897878130881},
+{"x":15,"v1":0.8006818324457826},
+{"x":16,"v1":0.8018665604483993},
+{"x":17,"v1":0.05873001487484206},
+{"x":18,"v1":-0.7631363183437047},
+{"x":19,"v1":-0.2961957388155889},
+{"x":20,"v1":0.39347759044390307},
+{"x":21,"v1":0.21805789482703605},
+{"x":22,"v1":-1.044578812021209},
+{"x":23,"v1":0.9386386578050554},
+{"x":24,"v1":0.4331316633999099},
+{"x":25,"v1":0.6119905858898959},
+{"x":26,"v1":2.2673670111462014},
+{"x":27,"v1":-1.643703775452812},
+{"x":28,"v1":0.01688883022864658},
+{"x":29,"v1":0.9308707503134924},
+{"x":30,"v1":0.3583894888429263},
+{"x":31,"v1":0.3229142159846064},
+{"x":32,"v1":-0.15915280962073325},
+{"x":33,"v1":-0.01988137330928918},
+{"x":34,"v1":-0.6157610399042056},
+{"x":35,"v1":0.4189123869432477},
+{"x":36,"v1":-0.7859256896461487},
+{"x":37,"v1":-2.4521448955784515},
+{"x":38,"v1":1.9350585706811765},
+{"x":39,"v1":-0.20602114872120644},
+{"x":40,"v1":-0.4655748891381423},
+{"x":41,"v1":-1.1888139946545453},
+{"x":42,"v1":0.48671505728085024},
+{"x":43,"v1":-1.7307535954083617},
+{"x":44,"v1":-0.4173074953708237},
+{"x":45,"v1":-0.753346821132465},
+{"x":46,"v1":0.36801347892275804},
+{"x":47,"v1":-0.19580623668024882},
+{"x":48,"v1":-0.7957675152043661},
+{"x":49,"v1":0.5845026510453013},
+{"x":50,"v1":1.293194651212336},
+{"x":51,"v1":-1.4584905479983294},
+{"x":52,"v1":0.6364341703970533},
+{"x":53,"v1":1.9180729602908124},
+{"x":54,"v1":-0.47795729409528687},
+{"x":55,"v1":-1.244269050021944},
+{"x":56,"v1":-1.4465655040465066},
+{"x":57,"v1":-0.45798530637099094},
+{"x":58,"v1":-0.9925885174124158},
+{"x":59,"v1":-1.3390572861485226},
+{"x":60,"v1":-1.2582974268869618},
+{"x":61,"v1":-0.7851958927417921},
+{"x":62,"v1":-0.41766178572940577},
+{"x":63,"v1":0.20510001876412046},
+{"x":64,"v1":0.44441841937750964},
+{"x":65,"v1":0.6699708861974607},
+{"x":66,"v1":-0.16760645302792615},
+{"x":67,"v1":1.0742487591508711},
+{"x":68,"v1":-0.8969056929597241},
+{"x":69,"v1":0.022507789829076846},
+{"x":70,"v1":-1.8003858256535443},
+{"x":71,"v1":-0.12097869388361257},
+{"x":72,"v1":0.7122008246577649},
+{"x":73,"v1":1.3097958532159462},
+{"x":74,"v1":-0.5030718545398508},
+{"x":75,"v1":-0.43757916023744314},
+{"x":76,"v1":-1.1665876875634544},
+{"x":77,"v1":0.6514849088663469},
+{"x":78,"v1":0.35812676678933375},
+{"x":79,"v1":-0.7108870998371543},
+{"x":80,"v1":0.0433506680027459},
+{"x":81,"v1":2.4407400056927835},
+{"x":82,"v1":-0.028161009048807573},
+{"x":83,"v1":-0.5088011302544296},
+{"x":84,"v1":-0.2439551673282507},
+{"x":85,"v1":0.03472543495100633},
+{"x":86,"v1":1.8473781301738512},
+{"x":87,"v1":-0.8116113877548704},
+{"x":88,"v1":-0.033331966282705176},
+{"x":89,"v1":-0.22427685705017558},
+{"x":90,"v1":1.6717536390837768},
+{"x":91,"v1":0.6532481274767455},
+{"x":92,"v1":0.9681774445392358},
+{"x":93,"v1":2.1564150738640215},
+{"x":94,"v1":0.9161665446604021},
+{"x":95,"v1":0.9480205403996286},
+{"x":96,"v1":1.4833797682175773},
+{"x":97,"v1":1.6215932716344208},
+{"x":98,"v1":-0.020898880371803118},
+{"x":99,"v1":-1.2063726497976455},
+{"x":100,"v1":-0.12242402956188357}];
+    const series = [{"name":"GDP","color":"#1f77b4","key":"v1","dash":""}];
+    const bands = [];
+    const refLines = [];
+
+    const container = d3.select('#ts_89');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    // Compute domains
+    const xVals = data.map(d => d.x);
+    const allYVals = [];
+    series.forEach(s => data.forEach(d => { if(d[s.key]!==null) allYVals.push(d[s.key]); }));
+    bands.forEach(b => data.forEach(d => {
+        if(d[b.lo_key]!==null) allYVals.push(d[b.lo_key]);
+        if(d[b.hi_key]!==null) allYVals.push(d[b.hi_key]);
+    }));
+    refLines.forEach(r => allYVals.push(r.value));
+
+    const x = d3.scaleLinear().domain(d3.extent(xVals)).range([0,w]);
+    const yExt = d3.extent(allYVals);
+    const yPad = (yExt[1]-yExt[0])*0.08 || 1;
+    const y = d3.scaleLinear().domain([yExt[0]-yPad, yExt[1]+yPad]).range([h,0]);
+
+    // Grid
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+
+    // Bands
+    bands.forEach(b => {
+        const area = d3.area()
+            .x(d => x(d.x))
+            .y0(d => y(d[b.lo_key]!==null ? d[b.lo_key] : 0))
+            .y1(d => y(d[b.hi_key]!==null ? d[b.hi_key] : 0))
+            .defined(d => d[b.lo_key]!==null && d[b.hi_key]!==null);
+        g.append('path').datum(data).attr('d',area)
+            .attr('fill',b.color).attr('opacity',b.alpha||0.15);
+    });
+
+    // Reference lines
+    refLines.forEach(r => {
+        g.append('line').attr('x1',0).attr('x2',w)
+            .attr('y1',y(r.value)).attr('y2',y(r.value))
+            .attr('stroke',r.color||'#999').attr('stroke-width',1)
+            .attr('stroke-dasharray',r.dash||'4,3');
+    });
+
+    // Lines
+    series.forEach(s => {
+        const line = d3.line().x(d=>x(d.x)).y(d=>y(d[s.key]))
+            .defined(d=>d[s.key]!==null);
+        g.append('path').datum(data).attr('d',line)
+            .attr('fill','none').attr('stroke',s.color).attr('stroke-width',1.8)
+            .attr('stroke-dasharray',s.dash||'');
+    });
+
+    // Axes
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+        .call(d3.axisBottom(x).ticks(Math.min(xVals.length,8)));
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+
+    if('Time') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Time');
+    if('') g.append('text').attr('transform','rotate(-90)')
+        .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('');
+
+    // Legend
+    if(series.length > 1) {
+        const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
+        series.forEach((s,i) => {
+            const gi = leg.append('g').attr('transform','translate('+(i*100)+',0)');
+            gi.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+                .attr('stroke',s.color).attr('stroke-width',2)
+                .attr('stroke-dasharray',s.dash||'');
+            gi.append('text').attr('x',20).attr('y',4).attr('font-size','10px')
+                .attr('fill','#555').text(s.name);
+        });
+    }
+
+    // Tooltip overlay
+    svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g.node());
+            const x0 = x.invert(mx);
+            const idx = d3.minIndex(data, d => Math.abs(d.x - x0));
+            const d = data[idx];
+            let html = '<b>x='+fmt(d.x)+'</b>';
+            series.forEach(s => { if(d[s.key]!==null) html += '<br>'+s.name+': '+fmt(d[s.key]); });
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+
+(function() {
+    const data = [{"x":1,"v1":1.047725216630969},
+{"x":2,"v1":0.31461431295394915},
+{"x":3,"v1":-0.20315658041527668},
+{"x":4,"v1":0.842961601511124},
+{"x":5,"v1":-0.5343650067229411},
+{"x":6,"v1":0.5130295459918592},
+{"x":7,"v1":1.19536022123963},
+{"x":8,"v1":0.1855316863857372},
+{"x":9,"v1":0.11708142353846993},
+{"x":10,"v1":0.8261849506813936},
+{"x":11,"v1":0.4718831789236329},
+{"x":12,"v1":-1.8988197027046927},
+{"x":13,"v1":0.0020135393997896436},
+{"x":14,"v1":-0.26130863486839145},
+{"x":15,"v1":0.12724988190282943},
+{"x":16,"v1":1.11057248281137},
+{"x":17,"v1":0.8320706483079539},
+{"x":18,"v1":0.46043742163018675},
+{"x":19,"v1":0.21554558743145633},
+{"x":20,"v1":0.06521508784344246},
+{"x":21,"v1":-0.2037673302194158},
+{"x":22,"v1":-0.6219783291393918},
+{"x":23,"v1":2.3270959749124134},
+{"x":24,"v1":-1.0622812476282886},
+{"x":25,"v1":1.560265476391869},
+{"x":26,"v1":0.532609306714398},
+{"x":27,"v1":-0.1995706062520694},
+{"x":28,"v1":-0.06110336986772194},
+{"x":29,"v1":0.05598880284780823},
+{"x":30,"v1":-1.2353890605735889},
+{"x":31,"v1":-0.6032233389492075},
+{"x":32,"v1":0.09185282306966236},
+{"x":33,"v1":-0.3343095270593037},
+{"x":34,"v1":0.6816338949621379},
+{"x":35,"v1":0.17907036342899488},
+{"x":36,"v1":0.8058687978247723},
+{"x":37,"v1":0.27788393623332386},
+{"x":38,"v1":0.672374151621323},
+{"x":39,"v1":-0.8483542287637119},
+{"x":40,"v1":1.240358183788807},
+{"x":41,"v1":0.43066754688874564},
+{"x":42,"v1":-1.7114031385826642},
+{"x":43,"v1":0.06664923612671875},
+{"x":44,"v1":-0.07708319547490838},
+{"x":45,"v1":-1.2104162614020213},
+{"x":46,"v1":-0.8124612704518371},
+{"x":47,"v1":1.0997246894733952},
+{"x":48,"v1":1.2509258050042475},
+{"x":49,"v1":0.26104227119312623},
+{"x":50,"v1":1.8746821871500112},
+{"x":51,"v1":1.1393902206618303},
+{"x":52,"v1":-1.4561464457620197},
+{"x":53,"v1":-0.8508208948294834},
+{"x":54,"v1":2.296068376143915},
+{"x":55,"v1":0.3859689855547934},
+{"x":56,"v1":0.8769450352597876},
+{"x":57,"v1":0.4767569235900001},
+{"x":58,"v1":1.6045629719988252},
+{"x":59,"v1":0.3693528413082206},
+{"x":60,"v1":0.5501373682457674},
+{"x":61,"v1":0.03776326239232229},
+{"x":62,"v1":0.8866654639141586},
+{"x":63,"v1":-0.19667529040561704},
+{"x":64,"v1":0.558272025094907},
+{"x":65,"v1":-1.6344266668894851},
+{"x":66,"v1":1.6036425653894537},
+{"x":67,"v1":-1.1257356660904565},
+{"x":68,"v1":0.6122774098895423},
+{"x":69,"v1":-0.7350764435238013},
+{"x":70,"v1":1.6184272128950068},
+{"x":71,"v1":-1.4681405439772675},
+{"x":72,"v1":-0.12086606863954544},
+{"x":73,"v1":0.15222965763061036},
+{"x":74,"v1":-1.050704656375048},
+{"x":75,"v1":-0.12994320651162258},
+{"x":76,"v1":0.977295096158348},
+{"x":77,"v1":0.4629259351051048},
+{"x":78,"v1":-0.09419359461034477},
+{"x":79,"v1":-0.10135610965854815},
+{"x":80,"v1":0.8326574636693589},
+{"x":81,"v1":-1.5602062324479284},
+{"x":82,"v1":-0.31986785708338716},
+{"x":83,"v1":-0.44644374313706114},
+{"x":84,"v1":0.7332407450845178},
+{"x":85,"v1":1.9141191837921945},
+{"x":86,"v1":0.6593395070151824},
+{"x":87,"v1":1.1170395026967919},
+{"x":88,"v1":-1.1146786412064347},
+{"x":89,"v1":-1.0305655322674991},
+{"x":90,"v1":-2.0563030741963586},
+{"x":91,"v1":-0.40854412606475554},
+{"x":92,"v1":-0.8453689006969538},
+{"x":93,"v1":0.08160018779491712},
+{"x":94,"v1":0.9229301151810307},
+{"x":95,"v1":0.38657805973891873},
+{"x":96,"v1":0.34983264764983807},
+{"x":97,"v1":-0.2523469628219167},
+{"x":98,"v1":-0.8218320931778338},
+{"x":99,"v1":-1.2055523495479334},
+{"x":100,"v1":-0.6079539941915834}];
+    const series = [{"name":"CPI","color":"#ff7f0e","key":"v1","dash":""}];
+    const bands = [];
+    const refLines = [];
+
+    const container = d3.select('#ts_90');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    // Compute domains
+    const xVals = data.map(d => d.x);
+    const allYVals = [];
+    series.forEach(s => data.forEach(d => { if(d[s.key]!==null) allYVals.push(d[s.key]); }));
+    bands.forEach(b => data.forEach(d => {
+        if(d[b.lo_key]!==null) allYVals.push(d[b.lo_key]);
+        if(d[b.hi_key]!==null) allYVals.push(d[b.hi_key]);
+    }));
+    refLines.forEach(r => allYVals.push(r.value));
+
+    const x = d3.scaleLinear().domain(d3.extent(xVals)).range([0,w]);
+    const yExt = d3.extent(allYVals);
+    const yPad = (yExt[1]-yExt[0])*0.08 || 1;
+    const y = d3.scaleLinear().domain([yExt[0]-yPad, yExt[1]+yPad]).range([h,0]);
+
+    // Grid
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+
+    // Bands
+    bands.forEach(b => {
+        const area = d3.area()
+            .x(d => x(d.x))
+            .y0(d => y(d[b.lo_key]!==null ? d[b.lo_key] : 0))
+            .y1(d => y(d[b.hi_key]!==null ? d[b.hi_key] : 0))
+            .defined(d => d[b.lo_key]!==null && d[b.hi_key]!==null);
+        g.append('path').datum(data).attr('d',area)
+            .attr('fill',b.color).attr('opacity',b.alpha||0.15);
+    });
+
+    // Reference lines
+    refLines.forEach(r => {
+        g.append('line').attr('x1',0).attr('x2',w)
+            .attr('y1',y(r.value)).attr('y2',y(r.value))
+            .attr('stroke',r.color||'#999').attr('stroke-width',1)
+            .attr('stroke-dasharray',r.dash||'4,3');
+    });
+
+    // Lines
+    series.forEach(s => {
+        const line = d3.line().x(d=>x(d.x)).y(d=>y(d[s.key]))
+            .defined(d=>d[s.key]!==null);
+        g.append('path').datum(data).attr('d',line)
+            .attr('fill','none').attr('stroke',s.color).attr('stroke-width',1.8)
+            .attr('stroke-dasharray',s.dash||'');
+    });
+
+    // Axes
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+        .call(d3.axisBottom(x).ticks(Math.min(xVals.length,8)));
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+
+    if('Time') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Time');
+    if('') g.append('text').attr('transform','rotate(-90)')
+        .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('');
+
+    // Legend
+    if(series.length > 1) {
+        const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
+        series.forEach((s,i) => {
+            const gi = leg.append('g').attr('transform','translate('+(i*100)+',0)');
+            gi.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+                .attr('stroke',s.color).attr('stroke-width',2)
+                .attr('stroke-dasharray',s.dash||'');
+            gi.append('text').attr('x',20).attr('y',4).attr('font-size','10px')
+                .attr('fill','#555').text(s.name);
+        });
+    }
+
+    // Tooltip overlay
+    svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g.node());
+            const x0 = x.invert(mx);
+            const idx = d3.minIndex(data, d => Math.abs(d.x - x0));
+            const d = data[idx];
+            let html = '<b>x='+fmt(d.x)+'</b>';
+            series.forEach(s => { if(d[s.key]!==null) html += '<br>'+s.name+': '+fmt(d[s.key]); });
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+
+(function() {
+    const data = [{"x":1,"v1":0.11811739308716483},
+{"x":2,"v1":-0.42322929242288854},
+{"x":3,"v1":1.064617860341819},
+{"x":4,"v1":0.35857594004715565},
+{"x":5,"v1":0.5920173498698754},
+{"x":6,"v1":-0.796366951498887},
+{"x":7,"v1":0.45833845279954033},
+{"x":8,"v1":1.5136211525478425},
+{"x":9,"v1":0.786188308118882},
+{"x":10,"v1":-1.2713009335341923},
+{"x":11,"v1":2.8185731083288244},
+{"x":12,"v1":0.6035638401870682},
+{"x":13,"v1":0.22124289855794482},
+{"x":14,"v1":0.5139133733557327},
+{"x":15,"v1":-3.1009747593376},
+{"x":16,"v1":0.4093647244593961},
+{"x":17,"v1":-1.0060705119692366},
+{"x":18,"v1":1.5474425753904741},
+{"x":19,"v1":1.5041812397732366},
+{"x":20,"v1":1.7632590700047668},
+{"x":21,"v1":-0.30648014319207634},
+{"x":22,"v1":1.715607446084957},
+{"x":23,"v1":-1.399804866158848},
+{"x":24,"v1":-0.17691658675670402},
+{"x":25,"v1":-0.8392700368459697},
+{"x":26,"v1":1.3740863313168645},
+{"x":27,"v1":-2.010393435638343},
+{"x":28,"v1":-1.6818252495123303},
+{"x":29,"v1":-0.3123863743358452},
+{"x":30,"v1":0.5107598578215756},
+{"x":31,"v1":0.43541187614431537},
+{"x":32,"v1":0.439011882230073},
+{"x":33,"v1":-1.9741367104123675},
+{"x":34,"v1":1.3164890948466923},
+{"x":35,"v1":-0.38508347998791953},
+{"x":36,"v1":-1.5876234717062954},
+{"x":37,"v1":0.13868054997896107},
+{"x":38,"v1":-1.6241009892707647},
+{"x":39,"v1":-0.17440434295133034},
+{"x":40,"v1":0.18722759073171685},
+{"x":41,"v1":2.700561094194466},
+{"x":42,"v1":-0.4967648851950924},
+{"x":43,"v1":0.4861794566504345},
+{"x":44,"v1":0.3617133043521004},
+{"x":45,"v1":-2.3829146651136415},
+{"x":46,"v1":-1.996814501450331},
+{"x":47,"v1":0.684034063216113},
+{"x":48,"v1":-0.3982321759232762},
+{"x":49,"v1":-0.04710345512046582},
+{"x":50,"v1":-0.3853293025452078},
+{"x":51,"v1":-0.21759044344969833},
+{"x":52,"v1":0.23193945290849724},
+{"x":53,"v1":-0.7968420844514003},
+{"x":54,"v1":-0.44158824836440835},
+{"x":55,"v1":-0.15312985460347897},
+{"x":56,"v1":-0.7049945018891618},
+{"x":57,"v1":-0.10244054902228138},
+{"x":58,"v1":-1.4949125664593874},
+{"x":59,"v1":1.010337002300007},
+{"x":60,"v1":-0.32314118074020837},
+{"x":61,"v1":-0.1458964402048877},
+{"x":62,"v1":-0.32074268737229533},
+{"x":63,"v1":1.040714645090683},
+{"x":64,"v1":-1.6398044642011287},
+{"x":65,"v1":-0.10391910784915566},
+{"x":66,"v1":-0.2968377198226913},
+{"x":67,"v1":-0.7604198904963102},
+{"x":68,"v1":-1.3131230780784282},
+{"x":69,"v1":0.8517138161715376},
+{"x":70,"v1":-0.35171105141568426},
+{"x":71,"v1":-0.4336056279565297},
+{"x":72,"v1":-0.442132006011037},
+{"x":73,"v1":0.0017317997245045924},
+{"x":74,"v1":1.2165488926426098},
+{"x":75,"v1":0.5883924263455749},
+{"x":76,"v1":0.9648667140001089},
+{"x":77,"v1":1.7957112613795325},
+{"x":78,"v1":1.6101415348376396},
+{"x":79,"v1":-0.05067812393669536},
+{"x":80,"v1":-0.8584566935157103},
+{"x":81,"v1":1.0099137709079191},
+{"x":82,"v1":-0.047907516161956286},
+{"x":83,"v1":0.2891765332302069},
+{"x":84,"v1":0.659955951129829},
+{"x":85,"v1":0.7744110559295807},
+{"x":86,"v1":-0.6591549499097029},
+{"x":87,"v1":-0.21307641280236206},
+{"x":88,"v1":-0.35985069022646526},
+{"x":89,"v1":-0.8135213409131077},
+{"x":90,"v1":1.9001698942406775},
+{"x":91,"v1":0.34578798425643736},
+{"x":92,"v1":-2.4835533675990176},
+{"x":93,"v1":-1.761896752348199},
+{"x":94,"v1":-1.7268142144145955},
+{"x":95,"v1":1.1630691654861889},
+{"x":96,"v1":0.09457373150395516},
+{"x":97,"v1":0.19792061002094427},
+{"x":98,"v1":0.2108572582727376},
+{"x":99,"v1":-0.1695618461478944},
+{"x":100,"v1":0.06852407028507185}];
+    const series = [{"name":"RATE","color":"#2ca02c","key":"v1","dash":""}];
+    const bands = [];
+    const refLines = [];
+
+    const container = d3.select('#ts_91');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    // Compute domains
+    const xVals = data.map(d => d.x);
+    const allYVals = [];
+    series.forEach(s => data.forEach(d => { if(d[s.key]!==null) allYVals.push(d[s.key]); }));
+    bands.forEach(b => data.forEach(d => {
+        if(d[b.lo_key]!==null) allYVals.push(d[b.lo_key]);
+        if(d[b.hi_key]!==null) allYVals.push(d[b.hi_key]);
+    }));
+    refLines.forEach(r => allYVals.push(r.value));
+
+    const x = d3.scaleLinear().domain(d3.extent(xVals)).range([0,w]);
+    const yExt = d3.extent(allYVals);
+    const yPad = (yExt[1]-yExt[0])*0.08 || 1;
+    const y = d3.scaleLinear().domain([yExt[0]-yPad, yExt[1]+yPad]).range([h,0]);
+
+    // Grid
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+
+    // Bands
+    bands.forEach(b => {
+        const area = d3.area()
+            .x(d => x(d.x))
+            .y0(d => y(d[b.lo_key]!==null ? d[b.lo_key] : 0))
+            .y1(d => y(d[b.hi_key]!==null ? d[b.hi_key] : 0))
+            .defined(d => d[b.lo_key]!==null && d[b.hi_key]!==null);
+        g.append('path').datum(data).attr('d',area)
+            .attr('fill',b.color).attr('opacity',b.alpha||0.15);
+    });
+
+    // Reference lines
+    refLines.forEach(r => {
+        g.append('line').attr('x1',0).attr('x2',w)
+            .attr('y1',y(r.value)).attr('y2',y(r.value))
+            .attr('stroke',r.color||'#999').attr('stroke-width',1)
+            .attr('stroke-dasharray',r.dash||'4,3');
+    });
+
+    // Lines
+    series.forEach(s => {
+        const line = d3.line().x(d=>x(d.x)).y(d=>y(d[s.key]))
+            .defined(d=>d[s.key]!==null);
+        g.append('path').datum(data).attr('d',line)
+            .attr('fill','none').attr('stroke',s.color).attr('stroke-width',1.8)
+            .attr('stroke-dasharray',s.dash||'');
+    });
+
+    // Axes
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+        .call(d3.axisBottom(x).ticks(Math.min(xVals.length,8)));
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+
+    if('Time') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Time');
+    if('') g.append('text').attr('transform','rotate(-90)')
+        .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('');
+
+    // Legend
+    if(series.length > 1) {
+        const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
+        series.forEach((s,i) => {
+            const gi = leg.append('g').attr('transform','translate('+(i*100)+',0)');
+            gi.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+                .attr('stroke',s.color).attr('stroke-width',2)
+                .attr('stroke-dasharray',s.dash||'');
+            gi.append('text').attr('x',20).attr('y',4).attr('font-size','10px')
+                .attr('fill','#555').text(s.name);
+        });
+    }
+
+    // Tooltip overlay
+    svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g.node());
+            const x0 = x.invert(mx);
+            const idx = d3.minIndex(data, d => Math.abs(d.x - x0));
+            const d = data[idx];
+            let html = '<b>x='+fmt(d.x)+'</b>';
+            series.forEach(s => { if(d[s.key]!==null) html += '<br>'+s.name+': '+fmt(d[s.key]); });
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+
+</script>
+</body>
+</html>

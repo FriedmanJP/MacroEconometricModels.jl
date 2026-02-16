@@ -1,0 +1,1106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nowcast Result (dfm)</title>
+<style>* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+    background: #fff;
+    color: #333;
+    padding: 20px;
+}
+.figure-title {
+    font-size: 18px;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 16px;
+    color: #222;
+}
+.figure-source {
+    font-size: 11px;
+    color: #888;
+    text-align: center;
+    margin-top: 8px;
+}
+.panel-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    justify-content: center;
+}
+.panel {
+    width: calc(33% - 16px);
+    min-width: 300px;
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 12px;
+}
+.panel-title {
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 8px;
+    color: #444;
+}
+.axis text { font-size: 11px; fill: #666; }
+.axis line, .axis path { stroke: #ccc; }
+.grid line { stroke: #f0f0f0; stroke-dasharray: 2,2; }
+.grid .domain { stroke: none; }
+.tooltip {
+    position: absolute;
+    background: rgba(0,0,0,0.8);
+    color: #fff;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 1000;
+}
+.legend { font-size: 11px; }
+.legend rect { rx: 2; }
+svg { overflow: visible; }
+</style>
+</head>
+<body>
+<div class="figure-title">Nowcast Result (dfm)</div>
+<div class="panel-grid">
+<div class="panel">
+<div class="panel-title">Target (col 5) — Nowcast: 0.015, Forecast: -0.013</div>
+<div id="nc_target_94"></div>
+</div>
+<div class="panel">
+<div class="panel-title">Variable 1</div>
+<div id="nc_var_95"></div>
+</div>
+<div class="panel">
+<div class="panel-title">Variable 2</div>
+<div id="nc_var_96"></div>
+</div>
+<div class="panel">
+<div class="panel-title">Variable 3</div>
+<div id="nc_var_97"></div>
+</div>
+<div class="panel">
+<div class="panel-title">Variable 4</div>
+<div id="nc_var_98"></div>
+</div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script>
+// Shared utilities
+const tooltip = d3.select('#tooltip');
+function fmt(v) {
+    if (v === null || v === undefined) return '';
+    return Math.abs(v) >= 1000 ? v.toFixed(1) : (Math.abs(v) >= 1 ? v.toFixed(3) : v.toFixed(4));
+}
+function showTip(evt, html) {
+    tooltip.html(html).style('opacity',1)
+        .style('left',(evt.pageX+12)+'px').style('top',(evt.pageY-28)+'px');
+}
+function hideTip() { tooltip.style('opacity',0); }
+
+(function() {
+    const data = [{"x":1,"v1":1.262997690477627},
+{"x":2,"v1":-2.0700274673897576},
+{"x":3,"v1":3.368381526999517},
+{"x":4,"v1":0.9710559237214847},
+{"x":5,"v1":0.5106044493542135},
+{"x":6,"v1":-0.46166052129151547},
+{"x":7,"v1":-0.4075210833875609},
+{"x":8,"v1":-0.05865543400620302},
+{"x":9,"v1":0.1611594911960766},
+{"x":10,"v1":0.1653877482823526},
+{"x":11,"v1":-1.1505409518344387},
+{"x":12,"v1":-2.20110452338896},
+{"x":13,"v1":-0.08124601384602557},
+{"x":14,"v1":-0.08889001870191747},
+{"x":15,"v1":0.8111337920057756},
+{"x":16,"v1":-0.4439776915516172},
+{"x":17,"v1":0.37152008231577377},
+{"x":18,"v1":-1.2152021022325759},
+{"x":19,"v1":-0.14727865740103643},
+{"x":20,"v1":0.4943885436303294},
+{"x":21,"v1":-0.5902139201361597},
+{"x":22,"v1":-0.23882451503208627},
+{"x":23,"v1":-1.608832841594324},
+{"x":24,"v1":0.3085943593432624},
+{"x":25,"v1":-1.903535016684954},
+{"x":26,"v1":-0.11634343191192945},
+{"x":27,"v1":2.3559366975768508},
+{"x":28,"v1":-0.29049004234443},
+{"x":29,"v1":-0.4175357354551101},
+{"x":30,"v1":0.23030223857546925},
+{"x":31,"v1":-1.5815744608176607},
+{"x":32,"v1":-0.29170608731688674},
+{"x":33,"v1":0.8910105614385896},
+{"x":34,"v1":-0.693476967573508},
+{"x":35,"v1":-0.7376848329485595},
+{"x":36,"v1":-0.4585388315418004},
+{"x":37,"v1":0.7339629812925741},
+{"x":38,"v1":-0.4622988010665112},
+{"x":39,"v1":1.2113603461993387},
+{"x":40,"v1":-1.028129773882257},
+{"x":41,"v1":-1.5679027083954602},
+{"x":42,"v1":0.41923291646854904},
+{"x":43,"v1":0.24012228494625945},
+{"x":44,"v1":0.31701836432189107},
+{"x":45,"v1":-0.344985509251992},
+{"x":46,"v1":0.1708217748727849},
+{"x":47,"v1":0.47688071386676556},
+{"x":48,"v1":-0.7806628940142653},
+{"x":49,"v1":-0.06830340891966329},
+{"x":50,"v1":-1.7704956557639215},
+{"x":51,"v1":0.1325566242735294},
+{"x":52,"v1":2.010692063991244},
+{"x":53,"v1":0.9589198529289391},
+{"x":54,"v1":1.686115149253269},
+{"x":55,"v1":0.4746804503293351},
+{"x":56,"v1":0.7656901821663812},
+{"x":57,"v1":-0.1889420043546633},
+{"x":58,"v1":-1.4141975677848515},
+{"x":59,"v1":2.0635680428679875},
+{"x":60,"v1":-0.1850565831254522},
+{"x":61,"v1":0.8018874544508522},
+{"x":62,"v1":1.960212780316822},
+{"x":63,"v1":0.18722191203270908},
+{"x":64,"v1":0.2290350417212993},
+{"x":65,"v1":-0.06350053611437656},
+{"x":66,"v1":0.026687109386442927},
+{"x":67,"v1":0.18102760075360477},
+{"x":68,"v1":-1.2774558962194724},
+{"x":69,"v1":-1.776234537261671},
+{"x":70,"v1":0.04366509937353081},
+{"x":71,"v1":0.6483078592847419},
+{"x":72,"v1":-0.4822296793626537},
+{"x":73,"v1":-1.8645867631117243},
+{"x":74,"v1":-0.7511487844811316},
+{"x":75,"v1":1.0862146872060412},
+{"x":76,"v1":0.18622815453717706},
+{"x":77,"v1":0.9958856134516229},
+{"x":78,"v1":1.5712933286877213},
+{"x":79,"v1":-0.7856310539208229},
+{"x":80,"v1":-0.013410591181725799},
+{"x":81,"v1":0.4056126890495901},
+{"x":82,"v1":-0.3501677646365215},
+{"x":83,"v1":-0.08124009259507659},
+{"x":84,"v1":2.386187595926288},
+{"x":85,"v1":-0.7568458049114236},
+{"x":86,"v1":0.26970627605444725},
+{"x":87,"v1":-0.31021720349673104},
+{"x":88,"v1":0.4158520085530445},
+{"x":89,"v1":0.6851715054800491},
+{"x":90,"v1":0.1127533299241502},
+{"x":91,"v1":-0.6563496225869371},
+{"x":92,"v1":-0.3556990511585267},
+{"x":93,"v1":-0.8748550006071816},
+{"x":94,"v1":-0.8497483740855172},
+{"x":95,"v1":-1.5608833503594386},
+{"x":96,"v1":0.3990017157312104},
+{"x":97,"v1":1.779141332589453},
+{"x":98,"v1":0.5866625838260715},
+{"x":99,"v1":-0.9081156617998631},
+{"x":100,"v1":0.01532873962492991}];
+    const series = [{"name":"Smoothed","color":"#1f77b4","key":"v1","dash":""}];
+    const bands = [];
+    const refLines = [];
+
+    const container = d3.select('#nc_target_94');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    // Compute domains
+    const xVals = data.map(d => d.x);
+    const allYVals = [];
+    series.forEach(s => data.forEach(d => { if(d[s.key]!==null) allYVals.push(d[s.key]); }));
+    bands.forEach(b => data.forEach(d => {
+        if(d[b.lo_key]!==null) allYVals.push(d[b.lo_key]);
+        if(d[b.hi_key]!==null) allYVals.push(d[b.hi_key]);
+    }));
+    refLines.forEach(r => allYVals.push(r.value));
+
+    const x = d3.scaleLinear().domain(d3.extent(xVals)).range([0,w]);
+    const yExt = d3.extent(allYVals);
+    const yPad = (yExt[1]-yExt[0])*0.08 || 1;
+    const y = d3.scaleLinear().domain([yExt[0]-yPad, yExt[1]+yPad]).range([h,0]);
+
+    // Grid
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+
+    // Bands
+    bands.forEach(b => {
+        const area = d3.area()
+            .x(d => x(d.x))
+            .y0(d => y(d[b.lo_key]!==null ? d[b.lo_key] : 0))
+            .y1(d => y(d[b.hi_key]!==null ? d[b.hi_key] : 0))
+            .defined(d => d[b.lo_key]!==null && d[b.hi_key]!==null);
+        g.append('path').datum(data).attr('d',area)
+            .attr('fill',b.color).attr('opacity',b.alpha||0.15);
+    });
+
+    // Reference lines
+    refLines.forEach(r => {
+        g.append('line').attr('x1',0).attr('x2',w)
+            .attr('y1',y(r.value)).attr('y2',y(r.value))
+            .attr('stroke',r.color||'#999').attr('stroke-width',1)
+            .attr('stroke-dasharray',r.dash||'4,3');
+    });
+
+    // Lines
+    series.forEach(s => {
+        const line = d3.line().x(d=>x(d.x)).y(d=>y(d[s.key]))
+            .defined(d=>d[s.key]!==null);
+        g.append('path').datum(data).attr('d',line)
+            .attr('fill','none').attr('stroke',s.color).attr('stroke-width',1.8)
+            .attr('stroke-dasharray',s.dash||'');
+    });
+
+    // Axes
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+        .call(d3.axisBottom(x).ticks(Math.min(xVals.length,8)));
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+
+    if('Period') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Period');
+    if('Value') g.append('text').attr('transform','rotate(-90)')
+        .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Value');
+
+    // Legend
+    if(series.length > 1) {
+        const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
+        series.forEach((s,i) => {
+            const gi = leg.append('g').attr('transform','translate('+(i*100)+',0)');
+            gi.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+                .attr('stroke',s.color).attr('stroke-width',2)
+                .attr('stroke-dasharray',s.dash||'');
+            gi.append('text').attr('x',20).attr('y',4).attr('font-size','10px')
+                .attr('fill','#555').text(s.name);
+        });
+    }
+
+    // Tooltip overlay
+    svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g.node());
+            const x0 = x.invert(mx);
+            const idx = d3.minIndex(data, d => Math.abs(d.x - x0));
+            const d = data[idx];
+            let html = '<b>x='+fmt(d.x)+'</b>';
+            series.forEach(s => { if(d[s.key]!==null) html += '<br>'+s.name+': '+fmt(d[s.key]); });
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+
+(function() {
+    const data = [{"x":1,"v1":-1.320038134028296},
+{"x":2,"v1":-0.2922425699895232},
+{"x":3,"v1":-0.5470427315940124},
+{"x":4,"v1":1.786996042152603},
+{"x":5,"v1":0.35873636604660336},
+{"x":6,"v1":1.2463109984400285},
+{"x":7,"v1":0.9557345817171145},
+{"x":8,"v1":-1.530956241134602},
+{"x":9,"v1":0.974918456347353},
+{"x":10,"v1":-0.9057586181753996},
+{"x":11,"v1":-0.6864107830714545},
+{"x":12,"v1":-0.1474710573900561},
+{"x":13,"v1":1.0849450450286358},
+{"x":14,"v1":0.7241435619242399},
+{"x":15,"v1":-0.4020292562140322},
+{"x":16,"v1":-1.063724922377338},
+{"x":17,"v1":-0.8026370263086858},
+{"x":18,"v1":1.9975656063617817},
+{"x":19,"v1":1.515525990611108},
+{"x":20,"v1":2.732300436037401},
+{"x":21,"v1":0.826541810907299},
+{"x":22,"v1":-0.02656663212910175},
+{"x":23,"v1":-0.05397666953088347},
+{"x":24,"v1":1.3675620399740112},
+{"x":25,"v1":-0.906816022881942},
+{"x":26,"v1":-1.9080351771877382},
+{"x":27,"v1":-0.8598185271916757},
+{"x":28,"v1":-2.2309183852333114},
+{"x":29,"v1":-0.6234189284006696},
+{"x":30,"v1":1.1285544875167675},
+{"x":31,"v1":0.6136790013649155},
+{"x":32,"v1":-2.509240513688663},
+{"x":33,"v1":-0.7069058873388736},
+{"x":34,"v1":-1.2324817603134997},
+{"x":35,"v1":0.6042653974938503},
+{"x":36,"v1":-0.910954838092961},
+{"x":37,"v1":1.7607019760514813},
+{"x":38,"v1":-0.40291598586254046},
+{"x":39,"v1":-1.3081613561527714},
+{"x":40,"v1":0.3726011268198264},
+{"x":41,"v1":2.368709511761324},
+{"x":42,"v1":-2.194890296252613},
+{"x":43,"v1":0.8761214480595645},
+{"x":44,"v1":-1.9158979663492708},
+{"x":45,"v1":-1.3141617357067772},
+{"x":46,"v1":0.3604200867167919},
+{"x":47,"v1":-0.8054243841012394},
+{"x":48,"v1":0.9097349252044006},
+{"x":49,"v1":0.3417362856109511},
+{"x":50,"v1":0.3494366774496215},
+{"x":51,"v1":-1.398213933874705},
+{"x":52,"v1":-0.9315410742179108},
+{"x":53,"v1":1.469290069639013},
+{"x":54,"v1":0.09080949754734895},
+{"x":55,"v1":-0.296455825358468},
+{"x":56,"v1":0.5156446560114691},
+{"x":57,"v1":-0.05468619125838075},
+{"x":58,"v1":0.3450460530023875},
+{"x":59,"v1":-1.4106420590171362},
+{"x":60,"v1":-0.003799306125858509},
+{"x":61,"v1":1.577158814995745},
+{"x":62,"v1":-0.423801290840129},
+{"x":63,"v1":-0.6680742541414765},
+{"x":64,"v1":0.2098572683558732},
+{"x":65,"v1":-0.43242838610231804},
+{"x":66,"v1":0.16095814598911679},
+{"x":67,"v1":-0.10530976450255423},
+{"x":68,"v1":-0.8871552378236793},
+{"x":69,"v1":-0.1626171164589941},
+{"x":70,"v1":0.27622236408961187},
+{"x":71,"v1":-0.9949391813193069},
+{"x":72,"v1":-0.6644844159416688},
+{"x":73,"v1":1.1815358870233321},
+{"x":74,"v1":1.4348688354548689},
+{"x":75,"v1":-0.2904031597394331},
+{"x":76,"v1":1.4585185200513302},
+{"x":77,"v1":0.6798437923480397},
+{"x":78,"v1":2.05826641797509},
+{"x":79,"v1":1.0378057529037332},
+{"x":80,"v1":0.07964786660497833},
+{"x":81,"v1":-1.0718845070993597},
+{"x":82,"v1":-1.6895578870227739},
+{"x":83,"v1":-0.8696462091903121},
+{"x":84,"v1":-1.5125036719805878},
+{"x":85,"v1":0.28304586601096343},
+{"x":86,"v1":-1.5086342453856714},
+{"x":87,"v1":2.324931221913559},
+{"x":88,"v1":-0.04508175644847812},
+{"x":89,"v1":-0.4575263382285574},
+{"x":90,"v1":-0.022966260695654623},
+{"x":91,"v1":0.692525855686036},
+{"x":92,"v1":1.5577852763818625},
+{"x":93,"v1":-0.5313213813907197},
+{"x":94,"v1":0.7903066796229631},
+{"x":95,"v1":-0.45249976516726426},
+{"x":96,"v1":0.8931804043659372},
+{"x":97,"v1":0.7466551834915496},
+{"x":98,"v1":1.2323440715475429},
+{"x":99,"v1":1.2488776943893163},
+{"x":100,"v1":-0.5389347338234056}];
+    const series = [{"name":"Smoothed var 1","color":"#1f77b4","key":"v1","dash":""}];
+    const bands = [];
+    const refLines = [];
+
+    const container = d3.select('#nc_var_95');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    // Compute domains
+    const xVals = data.map(d => d.x);
+    const allYVals = [];
+    series.forEach(s => data.forEach(d => { if(d[s.key]!==null) allYVals.push(d[s.key]); }));
+    bands.forEach(b => data.forEach(d => {
+        if(d[b.lo_key]!==null) allYVals.push(d[b.lo_key]);
+        if(d[b.hi_key]!==null) allYVals.push(d[b.hi_key]);
+    }));
+    refLines.forEach(r => allYVals.push(r.value));
+
+    const x = d3.scaleLinear().domain(d3.extent(xVals)).range([0,w]);
+    const yExt = d3.extent(allYVals);
+    const yPad = (yExt[1]-yExt[0])*0.08 || 1;
+    const y = d3.scaleLinear().domain([yExt[0]-yPad, yExt[1]+yPad]).range([h,0]);
+
+    // Grid
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+
+    // Bands
+    bands.forEach(b => {
+        const area = d3.area()
+            .x(d => x(d.x))
+            .y0(d => y(d[b.lo_key]!==null ? d[b.lo_key] : 0))
+            .y1(d => y(d[b.hi_key]!==null ? d[b.hi_key] : 0))
+            .defined(d => d[b.lo_key]!==null && d[b.hi_key]!==null);
+        g.append('path').datum(data).attr('d',area)
+            .attr('fill',b.color).attr('opacity',b.alpha||0.15);
+    });
+
+    // Reference lines
+    refLines.forEach(r => {
+        g.append('line').attr('x1',0).attr('x2',w)
+            .attr('y1',y(r.value)).attr('y2',y(r.value))
+            .attr('stroke',r.color||'#999').attr('stroke-width',1)
+            .attr('stroke-dasharray',r.dash||'4,3');
+    });
+
+    // Lines
+    series.forEach(s => {
+        const line = d3.line().x(d=>x(d.x)).y(d=>y(d[s.key]))
+            .defined(d=>d[s.key]!==null);
+        g.append('path').datum(data).attr('d',line)
+            .attr('fill','none').attr('stroke',s.color).attr('stroke-width',1.8)
+            .attr('stroke-dasharray',s.dash||'');
+    });
+
+    // Axes
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+        .call(d3.axisBottom(x).ticks(Math.min(xVals.length,8)));
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+
+    if('Period') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Period');
+    if('') g.append('text').attr('transform','rotate(-90)')
+        .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('');
+
+    // Legend
+    if(series.length > 1) {
+        const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
+        series.forEach((s,i) => {
+            const gi = leg.append('g').attr('transform','translate('+(i*100)+',0)');
+            gi.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+                .attr('stroke',s.color).attr('stroke-width',2)
+                .attr('stroke-dasharray',s.dash||'');
+            gi.append('text').attr('x',20).attr('y',4).attr('font-size','10px')
+                .attr('fill','#555').text(s.name);
+        });
+    }
+
+    // Tooltip overlay
+    svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g.node());
+            const x0 = x.invert(mx);
+            const idx = d3.minIndex(data, d => Math.abs(d.x - x0));
+            const d = data[idx];
+            let html = '<b>x='+fmt(d.x)+'</b>';
+            series.forEach(s => { if(d[s.key]!==null) html += '<br>'+s.name+': '+fmt(d[s.key]); });
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+
+(function() {
+    const data = [{"x":1,"v1":-0.6566161307218101},
+{"x":2,"v1":-0.3531777815729897},
+{"x":3,"v1":1.0371016179808745},
+{"x":4,"v1":-0.24146199445407232},
+{"x":5,"v1":0.07445608616576177},
+{"x":6,"v1":-0.6535794367682358},
+{"x":7,"v1":1.2767192883872553},
+{"x":8,"v1":-0.3920115981898306},
+{"x":9,"v1":-0.8683946907288933},
+{"x":10,"v1":-0.025012043734963674},
+{"x":11,"v1":-0.6364947091500446},
+{"x":12,"v1":-0.28655780057895236},
+{"x":13,"v1":1.0673777032982954},
+{"x":14,"v1":-1.0054537209650214},
+{"x":15,"v1":-0.2568644066626888},
+{"x":16,"v1":0.441883057191008},
+{"x":17,"v1":-1.018742547002689},
+{"x":18,"v1":-1.6322478896703982},
+{"x":19,"v1":-0.5126389819453953},
+{"x":20,"v1":-1.8629011087334695},
+{"x":21,"v1":-0.1443988419935341},
+{"x":22,"v1":1.8819426747260908},
+{"x":23,"v1":0.7044329769458025},
+{"x":24,"v1":-0.27277069111951346},
+{"x":25,"v1":0.6798169470322232},
+{"x":26,"v1":-0.5027011126729983},
+{"x":27,"v1":1.0789913735949295},
+{"x":28,"v1":1.0407317403534058},
+{"x":29,"v1":0.49991186253752484},
+{"x":30,"v1":2.1114859281921023},
+{"x":31,"v1":-0.5243023712375929},
+{"x":32,"v1":0.17465542415152174},
+{"x":33,"v1":-0.18814405947087984},
+{"x":34,"v1":-0.8971595177426406},
+{"x":35,"v1":-0.7992711278120916},
+{"x":36,"v1":0.40683582789720857},
+{"x":37,"v1":3.0521664753163016},
+{"x":38,"v1":0.6920039093782436},
+{"x":39,"v1":0.8475867653910231},
+{"x":40,"v1":-1.1602071509415766},
+{"x":41,"v1":-0.004377128960542296},
+{"x":42,"v1":0.46447579727276095},
+{"x":43,"v1":1.0501526734953448},
+{"x":44,"v1":-0.24393464591320513},
+{"x":45,"v1":0.2359630185901097},
+{"x":46,"v1":2.0311227948842934},
+{"x":47,"v1":0.3323149553237695},
+{"x":48,"v1":-1.1483602128619301},
+{"x":49,"v1":-1.044778371445057},
+{"x":50,"v1":-0.921920288904578},
+{"x":51,"v1":1.1405251253956392},
+{"x":52,"v1":-1.326755827887698},
+{"x":53,"v1":0.7626623016774006},
+{"x":54,"v1":-0.28482998777175605},
+{"x":55,"v1":-1.3129694918852532},
+{"x":56,"v1":-0.3914947979365006},
+{"x":57,"v1":0.63183522778919},
+{"x":58,"v1":-0.17135576731041188},
+{"x":59,"v1":0.5453682653986451},
+{"x":60,"v1":-0.46440041081835387},
+{"x":61,"v1":-1.3601457513396866},
+{"x":62,"v1":-0.37352009276033654},
+{"x":63,"v1":-1.914179047396482},
+{"x":64,"v1":-1.1189100936455547},
+{"x":65,"v1":-0.011982944199625952},
+{"x":66,"v1":0.41047817085167465},
+{"x":67,"v1":1.0707168023970766},
+{"x":68,"v1":0.5465961320490819},
+{"x":69,"v1":0.8221268730154565},
+{"x":70,"v1":0.09832726373321454},
+{"x":71,"v1":0.26340515611525667},
+{"x":72,"v1":0.1468373283469202},
+{"x":73,"v1":-1.2037328461118377},
+{"x":74,"v1":0.048425226102120966},
+{"x":75,"v1":-0.04453334446914644},
+{"x":76,"v1":0.935204140429573},
+{"x":77,"v1":-0.26379335922145986},
+{"x":78,"v1":0.36960714133028066},
+{"x":79,"v1":1.0099944230958127},
+{"x":80,"v1":-1.2878318110475642},
+{"x":81,"v1":1.7092373020823124},
+{"x":82,"v1":-1.3629007735980057},
+{"x":83,"v1":0.8546815656778142},
+{"x":84,"v1":-1.094711362644069},
+{"x":85,"v1":1.0455872252786895},
+{"x":86,"v1":0.04052386923423461},
+{"x":87,"v1":-1.3799707293378625},
+{"x":88,"v1":-0.4308492630426285},
+{"x":89,"v1":2.0641672280881522},
+{"x":90,"v1":0.7710123267536624},
+{"x":91,"v1":-1.1289534073255896},
+{"x":92,"v1":0.846638258014275},
+{"x":93,"v1":-0.9163884594493461},
+{"x":94,"v1":0.27306448784240167},
+{"x":95,"v1":0.6477559633911409},
+{"x":96,"v1":-0.5734043840592826},
+{"x":97,"v1":0.7608080750462777},
+{"x":98,"v1":0.3103134440085744},
+{"x":99,"v1":0.412886649934417},
+{"x":100,"v1":-0.4787741067136702}];
+    const series = [{"name":"Smoothed var 2","color":"#ff7f0e","key":"v1","dash":""}];
+    const bands = [];
+    const refLines = [];
+
+    const container = d3.select('#nc_var_96');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    // Compute domains
+    const xVals = data.map(d => d.x);
+    const allYVals = [];
+    series.forEach(s => data.forEach(d => { if(d[s.key]!==null) allYVals.push(d[s.key]); }));
+    bands.forEach(b => data.forEach(d => {
+        if(d[b.lo_key]!==null) allYVals.push(d[b.lo_key]);
+        if(d[b.hi_key]!==null) allYVals.push(d[b.hi_key]);
+    }));
+    refLines.forEach(r => allYVals.push(r.value));
+
+    const x = d3.scaleLinear().domain(d3.extent(xVals)).range([0,w]);
+    const yExt = d3.extent(allYVals);
+    const yPad = (yExt[1]-yExt[0])*0.08 || 1;
+    const y = d3.scaleLinear().domain([yExt[0]-yPad, yExt[1]+yPad]).range([h,0]);
+
+    // Grid
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+
+    // Bands
+    bands.forEach(b => {
+        const area = d3.area()
+            .x(d => x(d.x))
+            .y0(d => y(d[b.lo_key]!==null ? d[b.lo_key] : 0))
+            .y1(d => y(d[b.hi_key]!==null ? d[b.hi_key] : 0))
+            .defined(d => d[b.lo_key]!==null && d[b.hi_key]!==null);
+        g.append('path').datum(data).attr('d',area)
+            .attr('fill',b.color).attr('opacity',b.alpha||0.15);
+    });
+
+    // Reference lines
+    refLines.forEach(r => {
+        g.append('line').attr('x1',0).attr('x2',w)
+            .attr('y1',y(r.value)).attr('y2',y(r.value))
+            .attr('stroke',r.color||'#999').attr('stroke-width',1)
+            .attr('stroke-dasharray',r.dash||'4,3');
+    });
+
+    // Lines
+    series.forEach(s => {
+        const line = d3.line().x(d=>x(d.x)).y(d=>y(d[s.key]))
+            .defined(d=>d[s.key]!==null);
+        g.append('path').datum(data).attr('d',line)
+            .attr('fill','none').attr('stroke',s.color).attr('stroke-width',1.8)
+            .attr('stroke-dasharray',s.dash||'');
+    });
+
+    // Axes
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+        .call(d3.axisBottom(x).ticks(Math.min(xVals.length,8)));
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+
+    if('Period') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Period');
+    if('') g.append('text').attr('transform','rotate(-90)')
+        .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('');
+
+    // Legend
+    if(series.length > 1) {
+        const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
+        series.forEach((s,i) => {
+            const gi = leg.append('g').attr('transform','translate('+(i*100)+',0)');
+            gi.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+                .attr('stroke',s.color).attr('stroke-width',2)
+                .attr('stroke-dasharray',s.dash||'');
+            gi.append('text').attr('x',20).attr('y',4).attr('font-size','10px')
+                .attr('fill','#555').text(s.name);
+        });
+    }
+
+    // Tooltip overlay
+    svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g.node());
+            const x0 = x.invert(mx);
+            const idx = d3.minIndex(data, d => Math.abs(d.x - x0));
+            const d = data[idx];
+            let html = '<b>x='+fmt(d.x)+'</b>';
+            series.forEach(s => { if(d[s.key]!==null) html += '<br>'+s.name+': '+fmt(d[s.key]); });
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+
+(function() {
+    const data = [{"x":1,"v1":-0.18896695791385576},
+{"x":2,"v1":0.2582505079750064},
+{"x":3,"v1":0.028364806255882745},
+{"x":4,"v1":0.2296541284239773},
+{"x":5,"v1":1.4267812109893638},
+{"x":6,"v1":-0.04150452680559812},
+{"x":7,"v1":-0.8994932486359335},
+{"x":8,"v1":1.0419232401823892},
+{"x":9,"v1":-0.5164421825612128},
+{"x":10,"v1":0.8690031051820244},
+{"x":11,"v1":0.03189587735908184},
+{"x":12,"v1":0.8403706820084638},
+{"x":13,"v1":0.8907476683077985},
+{"x":14,"v1":-1.082612538086875},
+{"x":15,"v1":0.12452505686486556},
+{"x":16,"v1":-0.3516927186507143},
+{"x":17,"v1":0.5557110682595647},
+{"x":18,"v1":0.13843764631786137},
+{"x":19,"v1":-1.0000377827190707},
+{"x":20,"v1":0.39469285943305377},
+{"x":21,"v1":-0.11653565429638796},
+{"x":22,"v1":-0.41464745948097376},
+{"x":23,"v1":-1.5613276199060393},
+{"x":24,"v1":-0.7242897957968469},
+{"x":25,"v1":0.5487179552178922},
+{"x":26,"v1":-1.6521826833462183},
+{"x":27,"v1":-0.10699250362176438},
+{"x":28,"v1":-3.3945777385089153},
+{"x":29,"v1":1.437827600516729},
+{"x":30,"v1":-0.41678746640747055},
+{"x":31,"v1":-2.2032285606618727},
+{"x":32,"v1":1.622285224744185},
+{"x":33,"v1":0.9793758356063234},
+{"x":34,"v1":0.528335368199904},
+{"x":35,"v1":0.6315744178653447},
+{"x":36,"v1":0.9252978005615466},
+{"x":37,"v1":1.9937697263020964},
+{"x":38,"v1":1.6137538794350057},
+{"x":39,"v1":-1.389442445694098},
+{"x":40,"v1":0.8803419475000513},
+{"x":41,"v1":0.3362599072977154},
+{"x":42,"v1":-0.7192177025007287},
+{"x":43,"v1":0.4498531696877029},
+{"x":44,"v1":-0.6984831421903758},
+{"x":45,"v1":-0.5813347777291186},
+{"x":46,"v1":-0.09818526661503094},
+{"x":47,"v1":0.3577940974677588},
+{"x":48,"v1":-0.44220727280343625},
+{"x":49,"v1":-0.4428389739777502},
+{"x":50,"v1":-1.6266604335350272},
+{"x":51,"v1":-2.5001824301736475},
+{"x":52,"v1":1.3076328410951954},
+{"x":53,"v1":0.6583269255893519},
+{"x":54,"v1":-0.40402049346057894},
+{"x":55,"v1":-0.793291534202253},
+{"x":56,"v1":0.2902689105906202},
+{"x":57,"v1":-0.04964486846309165},
+{"x":58,"v1":2.355529505946277},
+{"x":59,"v1":0.48976815669507595},
+{"x":60,"v1":0.8577634123282631},
+{"x":61,"v1":0.6953766398756154},
+{"x":62,"v1":-1.5072851931218498},
+{"x":63,"v1":-0.1943067885301926},
+{"x":64,"v1":-0.16789884636462812},
+{"x":65,"v1":-0.653170754235316},
+{"x":66,"v1":1.236083110211294},
+{"x":67,"v1":-0.2273765212397072},
+{"x":68,"v1":0.10203350742694152},
+{"x":69,"v1":0.18648882444640355},
+{"x":70,"v1":-1.2530459060774681},
+{"x":71,"v1":-0.11004298912955879},
+{"x":72,"v1":0.3438785855286148},
+{"x":73,"v1":1.2076370600111954},
+{"x":74,"v1":-0.182698094468128},
+{"x":75,"v1":1.511731700841349},
+{"x":76,"v1":-0.3781501444148578},
+{"x":77,"v1":0.6208036002241676},
+{"x":78,"v1":-0.875209066567849},
+{"x":79,"v1":-0.877741470811757},
+{"x":80,"v1":-0.12814365152134746},
+{"x":81,"v1":0.17462508360893716},
+{"x":82,"v1":-1.1286373048989153},
+{"x":83,"v1":1.538323620676073},
+{"x":84,"v1":-1.671199421857552},
+{"x":85,"v1":0.16033204495752532},
+{"x":86,"v1":0.9105820964676749},
+{"x":87,"v1":-0.9978093147948308},
+{"x":88,"v1":-0.3242402794479136},
+{"x":89,"v1":0.444748312222855},
+{"x":90,"v1":-0.32141654918461515},
+{"x":91,"v1":-1.0617344616913256},
+{"x":92,"v1":-1.2505305244221891},
+{"x":93,"v1":-0.5035575713284814},
+{"x":94,"v1":1.3674476864929992},
+{"x":95,"v1":1.631350472580056},
+{"x":96,"v1":1.1223847088002414},
+{"x":97,"v1":0.4511934777729951},
+{"x":98,"v1":-1.2648086157186695},
+{"x":99,"v1":-1.3201797012562697},
+{"x":100,"v1":0.7548887574140676}];
+    const series = [{"name":"Smoothed var 3","color":"#2ca02c","key":"v1","dash":""}];
+    const bands = [];
+    const refLines = [];
+
+    const container = d3.select('#nc_var_97');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    // Compute domains
+    const xVals = data.map(d => d.x);
+    const allYVals = [];
+    series.forEach(s => data.forEach(d => { if(d[s.key]!==null) allYVals.push(d[s.key]); }));
+    bands.forEach(b => data.forEach(d => {
+        if(d[b.lo_key]!==null) allYVals.push(d[b.lo_key]);
+        if(d[b.hi_key]!==null) allYVals.push(d[b.hi_key]);
+    }));
+    refLines.forEach(r => allYVals.push(r.value));
+
+    const x = d3.scaleLinear().domain(d3.extent(xVals)).range([0,w]);
+    const yExt = d3.extent(allYVals);
+    const yPad = (yExt[1]-yExt[0])*0.08 || 1;
+    const y = d3.scaleLinear().domain([yExt[0]-yPad, yExt[1]+yPad]).range([h,0]);
+
+    // Grid
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+
+    // Bands
+    bands.forEach(b => {
+        const area = d3.area()
+            .x(d => x(d.x))
+            .y0(d => y(d[b.lo_key]!==null ? d[b.lo_key] : 0))
+            .y1(d => y(d[b.hi_key]!==null ? d[b.hi_key] : 0))
+            .defined(d => d[b.lo_key]!==null && d[b.hi_key]!==null);
+        g.append('path').datum(data).attr('d',area)
+            .attr('fill',b.color).attr('opacity',b.alpha||0.15);
+    });
+
+    // Reference lines
+    refLines.forEach(r => {
+        g.append('line').attr('x1',0).attr('x2',w)
+            .attr('y1',y(r.value)).attr('y2',y(r.value))
+            .attr('stroke',r.color||'#999').attr('stroke-width',1)
+            .attr('stroke-dasharray',r.dash||'4,3');
+    });
+
+    // Lines
+    series.forEach(s => {
+        const line = d3.line().x(d=>x(d.x)).y(d=>y(d[s.key]))
+            .defined(d=>d[s.key]!==null);
+        g.append('path').datum(data).attr('d',line)
+            .attr('fill','none').attr('stroke',s.color).attr('stroke-width',1.8)
+            .attr('stroke-dasharray',s.dash||'');
+    });
+
+    // Axes
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+        .call(d3.axisBottom(x).ticks(Math.min(xVals.length,8)));
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+
+    if('Period') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Period');
+    if('') g.append('text').attr('transform','rotate(-90)')
+        .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('');
+
+    // Legend
+    if(series.length > 1) {
+        const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
+        series.forEach((s,i) => {
+            const gi = leg.append('g').attr('transform','translate('+(i*100)+',0)');
+            gi.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+                .attr('stroke',s.color).attr('stroke-width',2)
+                .attr('stroke-dasharray',s.dash||'');
+            gi.append('text').attr('x',20).attr('y',4).attr('font-size','10px')
+                .attr('fill','#555').text(s.name);
+        });
+    }
+
+    // Tooltip overlay
+    svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g.node());
+            const x0 = x.invert(mx);
+            const idx = d3.minIndex(data, d => Math.abs(d.x - x0));
+            const d = data[idx];
+            let html = '<b>x='+fmt(d.x)+'</b>';
+            series.forEach(s => { if(d[s.key]!==null) html += '<br>'+s.name+': '+fmt(d[s.key]); });
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+
+(function() {
+    const data = [{"x":1,"v1":-0.8639343259525274},
+{"x":2,"v1":0.020113521326966078},
+{"x":3,"v1":-0.23434422507674124},
+{"x":4,"v1":-0.6405238030203388},
+{"x":5,"v1":0.08583895161734989},
+{"x":6,"v1":0.6476483721788332},
+{"x":7,"v1":0.1458115959662573},
+{"x":8,"v1":1.1973414501116855},
+{"x":9,"v1":0.6830066046652926},
+{"x":10,"v1":-0.6866473093104547},
+{"x":11,"v1":0.9262329342988574},
+{"x":12,"v1":0.6035809962137981},
+{"x":13,"v1":1.265058934748073},
+{"x":14,"v1":-0.15466485580137632},
+{"x":15,"v1":-1.9597351303397725},
+{"x":16,"v1":1.1137649287115379},
+{"x":17,"v1":1.4119979216988683},
+{"x":18,"v1":-0.5484041961931648},
+{"x":19,"v1":-2.020605525245719},
+{"x":20,"v1":0.3290747931143585},
+{"x":21,"v1":1.219794581958935},
+{"x":22,"v1":0.3290242128588584},
+{"x":23,"v1":-0.7269977459276397},
+{"x":24,"v1":0.08779943693828267},
+{"x":25,"v1":-0.18876139604968556},
+{"x":26,"v1":-0.13410849482326725},
+{"x":27,"v1":1.3590361416807373},
+{"x":28,"v1":0.014285157274257757},
+{"x":29,"v1":0.673694758589595},
+{"x":30,"v1":1.4628902021069685},
+{"x":31,"v1":0.14241989176517525},
+{"x":32,"v1":-0.9023854930522935},
+{"x":33,"v1":-0.04763632368120351},
+{"x":34,"v1":1.9721105086235116},
+{"x":35,"v1":-2.197104810488193},
+{"x":36,"v1":-0.34951744160599835},
+{"x":37,"v1":-0.7989313878635602},
+{"x":38,"v1":-0.1482521905897711},
+{"x":39,"v1":1.4215947458069969},
+{"x":40,"v1":-1.1359288737275304},
+{"x":41,"v1":-1.089114960577527},
+{"x":42,"v1":1.6102190497041848},
+{"x":43,"v1":-0.012533055890463014},
+{"x":44,"v1":-1.9540960157027603},
+{"x":45,"v1":-0.3519077922314556},
+{"x":46,"v1":-0.920100537876409},
+{"x":47,"v1":-1.1803549925587358},
+{"x":48,"v1":1.6170626338456333},
+{"x":49,"v1":1.2053347596087134},
+{"x":50,"v1":0.5824339404502041},
+{"x":51,"v1":0.2784314344583768},
+{"x":52,"v1":0.5387931012802561},
+{"x":53,"v1":-1.3957875701374507},
+{"x":54,"v1":-0.10686731915318048},
+{"x":55,"v1":-1.7162182284156682},
+{"x":56,"v1":-0.8177037272704336},
+{"x":57,"v1":-0.49594984318174323},
+{"x":58,"v1":-1.2730843953005284},
+{"x":59,"v1":1.03767102149115},
+{"x":60,"v1":-0.7378980414530334},
+{"x":61,"v1":-0.3211259440218826},
+{"x":62,"v1":0.07871799833890751},
+{"x":63,"v1":-1.4418298786735322},
+{"x":64,"v1":0.7325415660448233},
+{"x":65,"v1":1.8335604941331896},
+{"x":66,"v1":1.286530576262714},
+{"x":67,"v1":-0.741624049122178},
+{"x":68,"v1":-0.5621752155344433},
+{"x":69,"v1":0.5186690846043079},
+{"x":70,"v1":-0.20000115210243086},
+{"x":71,"v1":0.29692256527011945},
+{"x":72,"v1":0.7376073737438098},
+{"x":73,"v1":-1.394960226647818},
+{"x":74,"v1":0.43070532963992875},
+{"x":75,"v1":-1.1142790250746013},
+{"x":76,"v1":0.36205598097446917},
+{"x":77,"v1":1.2184533910360904},
+{"x":78,"v1":1.1637381643282858},
+{"x":79,"v1":-0.009155859410197836},
+{"x":80,"v1":0.5804319751420427},
+{"x":81,"v1":0.3975249150683325},
+{"x":82,"v1":1.1862115294794227},
+{"x":83,"v1":-1.1748601280916717},
+{"x":84,"v1":0.28072171410797886},
+{"x":85,"v1":-0.49291335971391953},
+{"x":86,"v1":0.49155012474660126},
+{"x":87,"v1":-2.197200260853017},
+{"x":88,"v1":0.8239666903604365},
+{"x":89,"v1":0.557504129810946},
+{"x":90,"v1":-0.5046008467300392},
+{"x":91,"v1":0.1758883237570564},
+{"x":92,"v1":0.5050410794196037},
+{"x":93,"v1":-0.28520056930531495},
+{"x":94,"v1":0.5480396208679958},
+{"x":95,"v1":-1.4733902012265527},
+{"x":96,"v1":0.4774965341050109},
+{"x":97,"v1":0.16406872918050125},
+{"x":98,"v1":-0.3650775849281385},
+{"x":99,"v1":-0.4053093915421011},
+{"x":100,"v1":0.4214089096986811}];
+    const series = [{"name":"Smoothed var 4","color":"#d62728","key":"v1","dash":""}];
+    const bands = [];
+    const refLines = [];
+
+    const container = d3.select('#nc_var_98');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    // Compute domains
+    const xVals = data.map(d => d.x);
+    const allYVals = [];
+    series.forEach(s => data.forEach(d => { if(d[s.key]!==null) allYVals.push(d[s.key]); }));
+    bands.forEach(b => data.forEach(d => {
+        if(d[b.lo_key]!==null) allYVals.push(d[b.lo_key]);
+        if(d[b.hi_key]!==null) allYVals.push(d[b.hi_key]);
+    }));
+    refLines.forEach(r => allYVals.push(r.value));
+
+    const x = d3.scaleLinear().domain(d3.extent(xVals)).range([0,w]);
+    const yExt = d3.extent(allYVals);
+    const yPad = (yExt[1]-yExt[0])*0.08 || 1;
+    const y = d3.scaleLinear().domain([yExt[0]-yPad, yExt[1]+yPad]).range([h,0]);
+
+    // Grid
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+
+    // Bands
+    bands.forEach(b => {
+        const area = d3.area()
+            .x(d => x(d.x))
+            .y0(d => y(d[b.lo_key]!==null ? d[b.lo_key] : 0))
+            .y1(d => y(d[b.hi_key]!==null ? d[b.hi_key] : 0))
+            .defined(d => d[b.lo_key]!==null && d[b.hi_key]!==null);
+        g.append('path').datum(data).attr('d',area)
+            .attr('fill',b.color).attr('opacity',b.alpha||0.15);
+    });
+
+    // Reference lines
+    refLines.forEach(r => {
+        g.append('line').attr('x1',0).attr('x2',w)
+            .attr('y1',y(r.value)).attr('y2',y(r.value))
+            .attr('stroke',r.color||'#999').attr('stroke-width',1)
+            .attr('stroke-dasharray',r.dash||'4,3');
+    });
+
+    // Lines
+    series.forEach(s => {
+        const line = d3.line().x(d=>x(d.x)).y(d=>y(d[s.key]))
+            .defined(d=>d[s.key]!==null);
+        g.append('path').datum(data).attr('d',line)
+            .attr('fill','none').attr('stroke',s.color).attr('stroke-width',1.8)
+            .attr('stroke-dasharray',s.dash||'');
+    });
+
+    // Axes
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+        .call(d3.axisBottom(x).ticks(Math.min(xVals.length,8)));
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+
+    if('Period') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Period');
+    if('') g.append('text').attr('transform','rotate(-90)')
+        .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('');
+
+    // Legend
+    if(series.length > 1) {
+        const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
+        series.forEach((s,i) => {
+            const gi = leg.append('g').attr('transform','translate('+(i*100)+',0)');
+            gi.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+                .attr('stroke',s.color).attr('stroke-width',2)
+                .attr('stroke-dasharray',s.dash||'');
+            gi.append('text').attr('x',20).attr('y',4).attr('font-size','10px')
+                .attr('fill','#555').text(s.name);
+        });
+    }
+
+    // Tooltip overlay
+    svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g.node());
+            const x0 = x.invert(mx);
+            const idx = d3.minIndex(data, d => Math.abs(d.x - x0));
+            const d = data[idx];
+            let html = '<b>x='+fmt(d.x)+'</b>';
+            series.forEach(s => { if(d[s.key]!==null) html += '<br>'+s.name+': '+fmt(d[s.key]); });
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+
+</script>
+</body>
+</html>
