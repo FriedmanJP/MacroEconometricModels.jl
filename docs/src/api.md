@@ -277,6 +277,20 @@ ARCH, GARCH, EGARCH, GJR-GARCH, and Stochastic Volatility estimation, forecastin
 | `aic(m)` / `bic(m)` | Information criteria (ARCH/GARCH) |
 | `dof(m)` | Number of estimated parameters |
 
+Mixed-frequency nowcasting via DFM, BVAR, and bridge equations with news decomposition. See [Nowcasting](nowcast.md) for theory and examples.
+
+### Nowcasting Functions
+
+| Function | Description |
+|----------|-------------|
+| `nowcast_dfm(Y, nM, nQ; r=2, p=1, ...)` | DFM nowcasting via EM + Kalman smoother (Banbura & Modugno 2014) |
+| `nowcast_bvar(Y, nM, nQ; lags=5, ...)` | Large BVAR nowcasting with GLP priors (Cimadomo et al. 2022) |
+| `nowcast_bridge(Y, nM, nQ; lagM=1, ...)` | Bridge equation combination nowcasting (Banbura et al. 2023) |
+| `nowcast(model)` | Extract current-quarter nowcast and next-quarter forecast |
+| `forecast(dfm_or_bvar, h; ...)` | Multi-step ahead forecast from nowcasting model |
+| `nowcast_news(X_new, X_old, dfm, t; ...)` | News decomposition: attribute revision to data releases |
+| `balance_panel(d; r=2, method=:dfm)` | Fill NaN in TimeSeriesData/PanelData via DFM |
+
 Publication-quality tables, display backend switching, and bibliographic references. See [Examples](examples.md) for LaTeX and HTML export workflows.
 
 ### Display and Output Functions

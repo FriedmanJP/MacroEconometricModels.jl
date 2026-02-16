@@ -128,6 +128,15 @@ include("factor/static.jl")
 include("factor/dynamic.jl")
 include("factor/generalized.jl")
 
+# Nowcasting (after factor models for Kalman filter reuse)
+include("nowcast/types.jl")
+include("nowcast/kalman_missing.jl")
+include("nowcast/dfm.jl")
+include("nowcast/bvar_nowcast.jl")
+include("nowcast/bridge.jl")
+include("nowcast/news.jl")
+include("nowcast/forecast.jl")
+
 # GMM
 include("gmm/gmm.jl")
 
@@ -236,6 +245,22 @@ export MinnesotaHyperparameters
 
 # Factor model types
 export AbstractFactorModel, FactorModel, DynamicFactorModel, GeneralizedDynamicFactorModel, FactorForecast
+
+# Nowcasting types
+export AbstractNowcastModel
+export NowcastDFM, NowcastBVAR, NowcastBridge, NowcastResult, NowcastNews
+
+# Nowcasting estimation
+export nowcast_dfm, nowcast_bvar, nowcast_bridge
+
+# News decomposition
+export nowcast_news
+
+# Nowcast/forecast dispatch
+export nowcast
+
+# Panel balancing
+export balance_panel
 
 # Local Projection types
 export AbstractLPModel, AbstractLPImpulseResponse, AbstractCovarianceEstimator

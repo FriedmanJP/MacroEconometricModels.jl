@@ -471,6 +471,42 @@ MacroEconometricModels.StatsAPI.islinear(::SVModel)
 
 ---
 
+## Nowcasting
+
+### Estimation
+
+```@docs
+nowcast_dfm
+nowcast_bvar
+nowcast_bridge
+```
+
+### Nowcast and Forecast
+
+```@docs
+nowcast
+```
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["nowcast/forecast.jl"]
+Order   = [:function]
+```
+
+### News Decomposition
+
+```@docs
+nowcast_news
+```
+
+### Panel Balancing
+
+```@docs
+balance_panel
+```
+
+---
+
 ## Display and References
 
 ```@autodocs

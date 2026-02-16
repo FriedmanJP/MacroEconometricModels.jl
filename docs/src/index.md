@@ -39,6 +39,14 @@
 - Heteroskedasticity-based: Markov-switching, GARCH, smooth-transition, external volatility
 - Identifiability diagnostics: gaussianity tests, independence tests, bootstrap strength tests
 
+**Nowcasting**
+
+- **Dynamic Factor Model (DFM)**: EM algorithm with Kalman smoother for mixed-frequency data with arbitrary missing patterns (Banbura & Modugno 2014); Mariano-Murasawa temporal aggregation; block factor structure; AR(1)/IID idiosyncratic components
+- **Large Bayesian VAR**: GLP-style Normal-Inverse-Wishart prior with hyperparameter optimization via marginal likelihood (Cimadomo et al. 2022); Minnesota shrinkage with sum-of-coefficients and co-persistence priors
+- **Bridge Equations**: OLS bridge regressions combining pairs of monthly indicators via median (Banbura et al. 2023); transparent and fast baseline
+- **News Decomposition**: Attribute nowcast revisions to individual data releases via Kalman gain weights
+- **Panel Balancing**: `balance_panel()` fills NaN in `TimeSeriesData`/`PanelData` using DFM imputation
+
 **Hypothesis Tests**
 
 - Unit root: ADF, KPSS, Phillips-Perron, Zivot-Andrews, Ng-Perron
@@ -246,6 +254,21 @@ ml = identify_student_t(model)               # ML identification
 irfs = irf(model, 20; method=:fastica)       # IRF with ICA-identified shocks
 ```
 
+### Nowcasting
+
+```julia
+using MacroEconometricModels
+
+# Mixed-frequency data: nM monthly + nQ quarterly variables (NaN for missing)
+dfm = nowcast_dfm(Y, nM, nQ; r=2, p=1)          # DFM (EM + Kalman)
+bvar = nowcast_bvar(Y, nM, nQ; lags=5)           # Large BVAR
+bridge = nowcast_bridge(Y, nM, nQ)                # Bridge equations
+
+result = nowcast(dfm)                              # Current-quarter nowcast
+fc = forecast(dfm, 6)                              # 6-step forecast
+news = nowcast_news(X_new, X_old, dfm, T)          # News decomposition
+```
+
 ### Output and References
 
 ```julia
@@ -281,6 +304,7 @@ The package is organized into the following modules:
 | `teststat/` | Statistical tests: unit root, Johansen, normality, Granger causality, LR/LM, ARCH diagnostics |
 | `pvar/` | Panel VAR: types, transforms, instruments, estimation (GMM/FE-OLS), analysis, bootstrap, tests |
 | `gmm/` | Generalized Method of Moments |
+| `nowcast/` | Nowcasting: DFM (EM + Kalman), large BVAR, bridge equations, news decomposition |
 | `summary.jl` | Publication-quality summary tables and `refs()` bibliographic references |
 
 ## Mathematical Notation
@@ -390,6 +414,12 @@ Throughout this documentation, we use the following notation conventions:
 - Granger, Clive W. J. 1969. "Investigating Causal Relations by Econometric Models and Cross-spectral Methods." *Econometrica* 37 (3): 424--438. [https://doi.org/10.2307/1912791](https://doi.org/10.2307/1912791)
 - Wilks, Samuel S. 1938. "The Large-Sample Distribution of the Likelihood Ratio for Testing Composite Hypotheses." *Annals of Mathematical Statistics* 9 (1): 60--62. [https://doi.org/10.1214/aoms/1177732360](https://doi.org/10.1214/aoms/1177732360)
 
+### Nowcasting
+
+- Banbura, Marta, and Michele Modugno. 2014. "Maximum Likelihood Estimation of Factor Models on Datasets with Arbitrary Pattern of Missing Data." *Journal of Applied Econometrics* 29 (1): 133--160. [https://doi.org/10.1002/jae.2306](https://doi.org/10.1002/jae.2306)
+- Cimadomo, Jacopo, Domenico Giannone, Michele Lenza, Francesca Monti, and Andrej Sokol. 2022. "Nowcasting with Large Bayesian Vector Autoregressions." *ECB Working Paper* No. 2696.
+- Banbura, Marta, Irina Belousova, Katalin Bodnar, and Mate Barnabas Toth. 2023. "Nowcasting Employment in the Euro Area." *ECB Working Paper* No. 2815.
+
 ## License
 
 This package is released under the [GNU General Public License v3.0](https://www.gnu.org/licenses/gpl-3.0.en.html).
@@ -401,6 +431,6 @@ Contributions are welcome! Please see the [GitHub repository](https://github.com
 ## Contents
 
 ```@contents
-Pages = ["data.md", "filters.md", "arima.md", "volatility.md", "manual.md", "bayesian.md", "vecm.md", "pvar.md", "lp.md", "factormodels.md", "innovation_accounting.md", "nongaussian.md", "hypothesis_tests.md", "examples.md", "api.md", "api_types.md", "api_functions.md"]
+Pages = ["data.md", "filters.md", "arima.md", "volatility.md", "manual.md", "bayesian.md", "vecm.md", "pvar.md", "lp.md", "factormodels.md", "innovation_accounting.md", "nowcast.md", "nongaussian.md", "hypothesis_tests.md", "examples.md", "api.md", "api_types.md", "api_functions.md"]
 Depth = 2
 ```

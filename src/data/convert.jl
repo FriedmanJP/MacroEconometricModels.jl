@@ -172,3 +172,16 @@ za_test(d::TimeSeriesData; kwargs...) =
 
 ngperron_test(d::TimeSeriesData; kwargs...) =
     ngperron_test(to_vector(d); kwargs...)
+
+# =============================================================================
+# Nowcast dispatch wrappers (TimeSeriesData → Matrix)
+# =============================================================================
+
+nowcast_dfm(d::TimeSeriesData, nM::Int, nQ::Int; kwargs...) =
+    nowcast_dfm(to_matrix(d), nM, nQ; kwargs...)
+
+nowcast_bvar(d::TimeSeriesData, nM::Int, nQ::Int; kwargs...) =
+    nowcast_bvar(to_matrix(d), nM, nQ; kwargs...)
+
+nowcast_bridge(d::TimeSeriesData, nM::Int, nQ::Int; kwargs...) =
+    nowcast_bridge(to_matrix(d), nM, nQ; kwargs...)

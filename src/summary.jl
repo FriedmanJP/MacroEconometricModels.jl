@@ -1998,6 +1998,27 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="The Next Generation of the Penn World Table",
         journal="American Economic Review", volume="105", issue="10", pages="3150--3182",
         doi="10.1257/aer.20130954", isbn="", publisher="", entry_type=:article),
+    # --- Nowcasting ---
+    :banbura_modugno2014 => (key=:banbura_modugno2014,
+        authors="Ba{\\'n}bura, Marta and Modugno, Michele", year=2014,
+        title="Maximum Likelihood Estimation of Factor Models on Datasets with Arbitrary Pattern of Missing Data",
+        journal="Journal of Applied Econometrics", volume="29", issue="1", pages="133--160",
+        doi="10.1002/jae.2306", isbn="", publisher="", entry_type=:article),
+    :delle_chiaie2022 => (key=:delle_chiaie2022,
+        authors="Delle Chiaie, Simona and Ferrara, Laurent and Giannone, Domenico", year=2022,
+        title="Common Factors of Commodity Prices",
+        journal="Journal of Applied Econometrics", volume="37", issue="3", pages="461--476",
+        doi="10.1002/jae.2887", isbn="", publisher="", entry_type=:article),
+    :cimadomo2022 => (key=:cimadomo2022,
+        authors="Cimadomo, Jacopo and Giannone, Domenico and Lenza, Michele and Monti, Francesca and Sokol, Andrej", year=2022,
+        title="Nowcasting with Large Bayesian Vector Autoregressions",
+        journal="Journal of Econometrics", volume="231", issue="2", pages="500--519",
+        doi="10.1016/j.jeconom.2021.04.012", isbn="", publisher="", entry_type=:article),
+    :banbura2023 => (key=:banbura2023,
+        authors="Ba{\\'n}bura, Marta and Belousova, Irina and Bodn\\'ar, Katalin and T\\'oth, M\\'at\\'e Barnab\\'as", year=2023,
+        title="Nowcasting Employment in the Euro Area",
+        journal="Working Paper Series", volume="No 2815", issue="", pages="",
+        doi="", isbn="", publisher="European Central Bank", entry_type=:techreport),
 )
 
 # --- Type/method → reference keys mapping ---
@@ -2146,6 +2167,17 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :windmeijer => [:windmeijer2005],
     :andrews_lu => [:andrews_lu2001],
     :girf => [:pesaran_shin1998],
+    # Nowcasting
+    :NowcastDFM => [:banbura_modugno2014, :delle_chiaie2022],
+    :NowcastBVAR => [:cimadomo2022],
+    :NowcastBridge => [:banbura2023],
+    :NowcastResult => [:banbura_modugno2014],
+    :NowcastNews => [:banbura_modugno2014],
+    :nowcast_dfm => [:banbura_modugno2014, :delle_chiaie2022],
+    :nowcast_bvar => [:cimadomo2022],
+    :nowcast_bridge => [:banbura2023],
+    :nowcast_news => [:banbura_modugno2014],
+    :balance_panel => [:banbura_modugno2014],
     # Data sources (symbol dispatch)
     :fred_md => [:mccracken_ng2016],
     :fred_qd => [:mccracken_ng2020],
@@ -2450,5 +2482,146 @@ function refs(io::IO, d::AbstractMacroData; format::Symbol=get_display_backend()
     refs(io, d.source_refs; format=format)
 end
 
+# Nowcasting types
+refs(io::IO, ::NowcastDFM; kw...) = refs(io, _TYPE_REFS[:NowcastDFM]; kw...)
+refs(io::IO, ::NowcastBVAR; kw...) = refs(io, _TYPE_REFS[:NowcastBVAR]; kw...)
+refs(io::IO, ::NowcastBridge; kw...) = refs(io, _TYPE_REFS[:NowcastBridge]; kw...)
+refs(io::IO, ::NowcastResult; kw...) = refs(io, _TYPE_REFS[:NowcastResult]; kw...)
+refs(io::IO, ::NowcastNews; kw...) = refs(io, _TYPE_REFS[:NowcastNews]; kw...)
+
 # --- Convenience: stdout fallback ---
 refs(x; kw...) = refs(stdout, x; kw...)
+
+# =============================================================================
+# Nowcasting Display Methods
+# =============================================================================
+
+function Base.show(io::IO, m::NowcastDFM{T}) where {T}
+    T_obs, N = size(m.data)
+    n_nan = count(isnan, m.data)
+    n_filled = count(isnan, m.data) - count(isnan, m.X_sm)
+
+    spec_data = Any[
+        "Method"        "Dynamic Factor Model (EM)";
+        "Variables"     "$N ($(m.nM) monthly, $(m.nQ) quarterly)";
+        "Observations"  T_obs;
+        "Factors"       m.r;
+        "Factor lags"   m.p;
+        "Idiosyncratic" string(m.idio);
+        "Blocks"        size(m.blocks, 2);
+        "EM iterations" m.n_iter;
+        "Log-likelihood" _fmt(m.loglik);
+        "Missing values" n_nan;
+    ]
+    _pretty_table(io, spec_data;
+        title = "DFM Nowcasting",
+        column_labels = ["", ""],
+        alignment = [:l, :r],
+    )
+end
+
+function Base.show(io::IO, m::NowcastBVAR{T}) where {T}
+    T_obs, N = size(m.data)
+    n_nan = count(isnan, m.data)
+
+    spec_data = Any[
+        "Method"           "Large BVAR (GLP prior)";
+        "Variables"        "$N ($(m.nM) monthly, $(m.nQ) quarterly)";
+        "Observations"     T_obs;
+        "Lags"             m.lags;
+        "Log-likelihood"   _fmt(m.loglik);
+        "Lambda (shrinkage)" _fmt(m.lambda);
+        "Theta (cross-var)"  _fmt(m.theta);
+        "Miu (unit root)"    _fmt(m.miu);
+        "Alpha (co-persist)" _fmt(m.alpha);
+        "Missing values"   n_nan;
+    ]
+    _pretty_table(io, spec_data;
+        title = "BVAR Nowcasting",
+        column_labels = ["", ""],
+        alignment = [:l, :r],
+    )
+end
+
+function Base.show(io::IO, m::NowcastBridge{T}) where {T}
+    T_obs, N = size(m.data)
+    n_quarters = length(m.Y_nowcast)
+    last_nowcast = m.Y_nowcast[n_quarters]
+
+    spec_data = Any[
+        "Method"            "Bridge Equation Combination";
+        "Variables"         "$N ($(m.nM) monthly, $(m.nQ) quarterly)";
+        "Observations"      T_obs;
+        "Bridge equations"  m.n_equations;
+        "Monthly lags"      m.lagM;
+        "Quarterly lags"    m.lagQ;
+        "AR lags"           m.lagY;
+        "Current nowcast"   isnan(last_nowcast) ? "N/A" : string(_fmt(last_nowcast));
+    ]
+    _pretty_table(io, spec_data;
+        title = "Bridge Equation Nowcasting",
+        column_labels = ["", ""],
+        alignment = [:l, :r],
+    )
+end
+
+function Base.show(io::IO, r::NowcastResult{T}) where {T}
+    method_str = r.method == :dfm ? "DFM" : r.method == :bvar ? "BVAR" : "Bridge"
+
+    spec_data = Any[
+        "Method"           method_str;
+        "Target variable"  r.target_index;
+        "Current nowcast"  _fmt(r.nowcast);
+        "Next forecast"    _fmt(r.forecast);
+    ]
+    _pretty_table(io, spec_data;
+        title = "Nowcast Result",
+        column_labels = ["", ""],
+        alignment = [:l, :r],
+    )
+end
+
+function Base.show(io::IO, n::NowcastNews{T}) where {T}
+    total = n.new_nowcast - n.old_nowcast
+    n_releases = length(n.impact_news)
+
+    spec_data = Any[
+        "Old nowcast"       _fmt(n.old_nowcast);
+        "New nowcast"       _fmt(n.new_nowcast);
+        "Total revision"    _fmt(total);
+        "News impact"       _fmt(sum(n.impact_news));
+        "Revision impact"   _fmt(n.impact_revision);
+        "Reestimation"      _fmt(n.impact_reestimation);
+        "New releases"      n_releases;
+    ]
+    _pretty_table(io, spec_data;
+        title = "Nowcast News Decomposition",
+        column_labels = ["", ""],
+        alignment = [:l, :r],
+    )
+
+    # Show top contributors if there are releases
+    if n_releases > 0
+        n_show = min(n_releases, 10)
+        sorted_idx = sortperm(abs.(n.impact_news), rev=true)[1:n_show]
+        contrib_data = Matrix{Any}(undef, n_show, 2)
+        for (i, idx) in enumerate(sorted_idx)
+            contrib_data[i, 1] = idx <= length(n.variable_names) ? n.variable_names[idx] : "Release $idx"
+            contrib_data[i, 2] = _fmt(n.impact_news[idx])
+        end
+        _pretty_table(io, contrib_data;
+            title = "Top Contributors",
+            column_labels = ["Release", "Impact"],
+            alignment = [:l, :r],
+        )
+    end
+end
+
+"""
+    report(m::AbstractNowcastModel)
+
+Print comprehensive nowcasting model summary.
+"""
+report(m::AbstractNowcastModel) = show(stdout, m)
+report(r::NowcastResult) = show(stdout, r)
+report(n::NowcastNews) = show(stdout, n)

@@ -30,12 +30,13 @@ const TEST_GROUPS = [
         "vecm/test_vecm.jl",
         "pvar/test_pvar.jl",
     ]),
-    # Group 3: Factor models
-    ("Factor Models" => [
+    # Group 3: Factor models + Nowcasting
+    ("Factor Models & Nowcasting" => [
         "factor/test_factormodel.jl",
         "factor/test_dynamicfactormodel.jl",
         "factor/test_gdfm.jl",
         "factor/test_factor_forecast.jl",
+        "nowcast/test_nowcast.jl",
     ]),
     # Group 4: Local Projections
     ("Local Projections" => [
@@ -253,6 +254,10 @@ else
 
         @testset "Factor Model Forecasting" begin
             include("factor/test_factor_forecast.jl")
+        end
+
+        @testset "Nowcasting" begin
+            include("nowcast/test_nowcast.jl")
         end
 
         @testset "Arias et al. (2018) SVAR Identification" begin

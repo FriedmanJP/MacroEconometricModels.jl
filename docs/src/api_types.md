@@ -205,6 +205,19 @@ GrangerCausalityResult
 
 ---
 
+## Nowcasting Types
+
+```@docs
+AbstractNowcastModel
+NowcastDFM
+NowcastBVAR
+NowcastBridge
+NowcastResult
+NowcastNews
+```
+
+---
+
 ## SVAR Identification Types
 
 ```@docs
@@ -366,4 +379,12 @@ AbstractVolatilityModel <: StatsAPI.RegressionModel
 └── SVModel{T}
 
 VolatilityForecast{T}
+
+AbstractNowcastModel
+├── NowcastDFM{T}
+├── NowcastBVAR{T}
+└── NowcastBridge{T}
+
+NowcastResult{T}
+NowcastNews{T}
 ```

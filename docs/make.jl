@@ -36,6 +36,7 @@ makedocs(;
             "Panel VAR" => "pvar.md",
         ],
         "Innovation Accounting" => "innovation_accounting.md",
+        "Nowcasting" => "nowcast.md",
         "Non-Gaussian Identification" => "nongaussian.md",
         "Hypothesis Tests" => "hypothesis_tests.md",
         "Examples" => "examples.md",

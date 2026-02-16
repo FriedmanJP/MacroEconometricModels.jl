@@ -22,6 +22,7 @@ This chapter provides comprehensive worked examples demonstrating the main funct
 | 14 | Complete Workflow | Multiple | Unit roots → lag selection → VAR → BVAR → LP comparison |
 | 15 | Table Output (LaTeX & HTML) | `set_display_backend`, `print_table`, `table` | Export tables for papers, slides, and web |
 | 16 | Bibliographic References | `refs` | Multi-format references for models and methods |
+| 17 | Nowcasting | `nowcast_dfm`, `nowcast_bvar`, `nowcast_bridge`, `nowcast_news` | DFM, BVAR, bridge equation nowcasting with news decomposition |
 
 ---
 
@@ -2168,6 +2169,174 @@ end
 ```
 
 The `refs()` function covers all 45+ references in the package's database, including every estimation method, identification scheme, and test. This ensures correct citation of the methods used in your empirical analysis.
+
+---
+
+## Example 17: Nowcasting
+
+This example demonstrates the full nowcasting workflow: constructing mixed-frequency data, estimating three nowcasting models, comparing results, and decomposing forecast revisions into data release contributions. See [Nowcasting](nowcast.md) for model specifications and theory.
+
+### Simulate Mixed-Frequency Data
+
+```julia
+using MacroEconometricModels, Random
+
+Random.seed!(42)
+
+# Panel dimensions: 120 months, 8 monthly + 2 quarterly variables
+T_obs = 120
+nM, nQ = 8, 2
+N = nM + nQ
+
+# Generate data with common factor structure
+F = zeros(T_obs)
+for t in 2:T_obs
+    F[t] = 0.9 * F[t-1] + randn()
+end
+
+Y = zeros(T_obs, N)
+for j in 1:N
+    loading = 0.5 + 0.5 * randn()
+    for t in 1:T_obs
+        Y[t, j] = loading * F[t] + 0.3 * randn()
+    end
+end
+
+# Quarterly variables: observed every 3rd month only
+for j in (nM+1):N
+    for t in 1:T_obs
+        if mod(t, 3) != 0
+            Y[t, j] = NaN
+        end
+    end
+end
+
+# Ragged edge: last months missing for slow-release variables
+Y[end, 5:8] .= NaN
+Y[end-1, 7:8] .= NaN
+
+println("Data: T=$T_obs, nM=$nM monthly, nQ=$nQ quarterly")
+println("Missing: ", sum(isnan.(Y)), " / ", length(Y), " entries")
+```
+
+**Interpretation.** The data matrix has the standard nowcasting layout: monthly indicators in the first 8 columns, quarterly targets in the last 2. Quarterly values appear every 3rd row (months 3, 6, 9, ...) with `NaN` elsewhere. The ragged edge mimics real-world publication lags where some monthly series release earlier than others.
+
+### DFM Nowcasting
+
+```julia
+# Estimate DFM with 2 factors and AR(1) idiosyncratic dynamics
+dfm = nowcast_dfm(Y, nM, nQ; r=2, p=1, idio=:ar1, max_iter=100)
+
+println("DFM estimation:")
+println("  Factors: ", dfm.r)
+println("  EM iterations: ", dfm.n_iter)
+println("  Log-likelihood: ", round(dfm.loglik, digits=2))
+
+# Extract nowcast
+r_dfm = nowcast(dfm)
+println("  Nowcast: ", round(r_dfm.nowcast, digits=3))
+println("  Forecast: ", round(r_dfm.forecast, digits=3))
+```
+
+### BVAR Nowcasting
+
+```julia
+# Estimate large BVAR with optimized hyperparameters
+bvar = nowcast_bvar(Y, nM, nQ; lags=5)
+
+println("\nBVAR estimation:")
+println("  Lags: ", bvar.lags)
+println("  Optimized λ: ", round(bvar.lambda, digits=4))
+println("  Optimized θ: ", round(bvar.theta, digits=4))
+println("  Marginal loglik: ", round(bvar.loglik, digits=2))
+
+r_bvar = nowcast(bvar)
+println("  Nowcast: ", round(r_bvar.nowcast, digits=3))
+```
+
+### Bridge Equation Nowcasting
+
+```julia
+# Estimate bridge equations (all pairs of monthly indicators)
+bridge = nowcast_bridge(Y, nM, nQ; lagM=1, lagQ=1, lagY=1)
+
+println("\nBridge estimation:")
+println("  Equations: ", bridge.n_equations)
+
+r_bridge = nowcast(bridge)
+println("  Nowcast: ", round(r_bridge.nowcast, digits=3))
+```
+
+### Method Comparison
+
+```julia
+println("\n=== Nowcast Comparison ===")
+println("  DFM:    ", round(r_dfm.nowcast, digits=3))
+println("  BVAR:   ", round(r_bvar.nowcast, digits=3))
+println("  Bridge: ", round(r_bridge.nowcast, digits=3))
+```
+
+**Interpretation.** Comparing nowcasts across methods provides a robustness check. The DFM is best for large cross-sections (it summarizes information via factors), the BVAR captures direct cross-variable dynamics, and bridge equations give a transparent baseline. In practice, central banks often report a range or average across methods.
+
+### Forecasting
+
+```julia
+# Multi-step DFM forecast
+fc_dfm = forecast(dfm, 6; target_var=N)
+println("\nDFM 6-step forecast:")
+for h in 1:6
+    println("  h=$h: ", round(fc_dfm[h], digits=3))
+end
+
+# Multi-step BVAR forecast
+fc_bvar = forecast(bvar, 6; target_var=N)
+println("\nBVAR 6-step forecast:")
+for h in 1:6
+    println("  h=$h: ", round(fc_bvar[h], digits=3))
+end
+```
+
+### News Decomposition
+
+The news decomposition attributes nowcast revisions to individual data releases:
+
+```julia
+# Create two data vintages
+X_old = copy(Y)
+X_new = copy(Y)
+# Simulate that variables 1-3 were just released for the last month
+X_old[end, 1:3] .= NaN
+
+# Compute news decomposition
+news = nowcast_news(X_new, X_old, dfm, T_obs; target_var=N)
+
+println("\nNews Decomposition:")
+println("  Old nowcast: ", round(news.old_nowcast, digits=3))
+println("  New nowcast: ", round(news.new_nowcast, digits=3))
+println("  Revision:    ", round(news.new_nowcast - news.old_nowcast, digits=3))
+
+println("\nRelease impacts (sorted by |impact|):")
+sorted_idx = sortperm(abs.(news.impact_news), rev=true)
+for k in 1:min(5, length(sorted_idx))
+    j = sorted_idx[k]
+    println("  ", news.variable_names[j], ": ",
+            round(news.impact_news[j], digits=4))
+end
+```
+
+**Interpretation.** The news decomposition answers the key question for real-time forecasters: *Why did the nowcast change?* Each `impact_news[j]` shows how much release ``j`` contributed to the revision. A positive impact means the actual value was higher than expected, revising the nowcast upward. This is the standard communication tool used by central banks to explain forecast revisions.
+
+### Balancing a Panel
+
+```julia
+# Fill NaN in a TimeSeriesData container using DFM
+varnames = ["m" * string(i) for i in 1:nM]
+append!(varnames, ["q" * string(i) for i in 1:nQ])
+ts = TimeSeriesData(Y; varnames=varnames, frequency=Monthly)
+
+ts_balanced = balance_panel(ts; r=2, p=1)
+println("\nBalanced panel: ", sum(isnan.(to_matrix(ts_balanced))), " NaN remaining")
+```
 
 ---
 

@@ -202,3 +202,104 @@ function panel_summary(io::IO, d::PanelData)
         println(io, "  Frequency: $(d.frequency)")
     end
 end
+
+# =============================================================================
+# balance_panel — Fill missing data using DFM-based nowcasting
+# =============================================================================
+
+"""
+    balance_panel(pd::PanelData; method=:dfm, r=3, p=2) -> PanelData
+
+Balance a panel dataset by filling missing values (NaN) using DFM-based
+nowcasting to estimate missing observations.
+
+For each group with missing data, runs `nowcast_dfm` treating all variables
+as monthly (nM = n_vars, nQ = 0) to obtain Kalman-smoothed estimates.
+
+# Arguments
+- `pd::PanelData` — input panel data (may be unbalanced or have NaN)
+
+# Keyword Arguments
+- `method::Symbol=:dfm` — fill method (currently only `:dfm`)
+- `r::Int=3` — number of factors for DFM
+- `p::Int=2` — VAR lags in DFM factor dynamics
+
+# Returns
+New `PanelData` with NaN filled and `balanced=true` if applicable.
+
+# Examples
+```julia
+pd = xtset(df, :id, :t)
+pd_bal = balance_panel(pd; r=2, p=1)
+isbalanced(pd_bal)
+```
+"""
+function balance_panel(pd::PanelData{T}; method::Symbol=:dfm,
+                       r::Int=3, p::Int=2) where {T}
+    method == :dfm || throw(ArgumentError("method must be :dfm, got :$method"))
+
+    new_data = copy(pd.data)
+    has_nan = false
+
+    for g in 1:pd.n_groups
+        mask = pd.group_id .== g
+        gdata = pd.data[mask, :]
+
+        if any(isnan, gdata)
+            has_nan = true
+            n_vars = size(gdata, 2)
+            # Use DFM to fill NaN (all monthly, no quarterly)
+            r_use = min(r, n_vars - 1, size(gdata, 1) - 1)
+            r_use = max(r_use, 1)
+            p_use = min(p, size(gdata, 1) ÷ 3)
+            p_use = max(p_use, 1)
+
+            dfm_result = nowcast_dfm(gdata, n_vars, 0; r=r_use, p=p_use,
+                                      max_iter=50, thresh=T(1e-3))
+            new_data[mask, :] = dfm_result.X_sm
+        end
+    end
+
+    # Recompute balance status
+    obs_per_group = [count(==(g), pd.group_id) for g in 1:pd.n_groups]
+    balanced = all(==(obs_per_group[1]), obs_per_group)
+
+    PanelData{T}(new_data, copy(pd.varnames), pd.frequency, copy(pd.tcode),
+                 copy(pd.group_id), copy(pd.time_id), copy(pd.group_names),
+                 pd.n_groups, pd.n_vars, pd.T_obs, balanced,
+                 copy(pd.desc), copy(pd.vardesc), copy(pd.source_refs))
+end
+
+"""
+    balance_panel(ts::TimeSeriesData; method=:dfm, r=3, p=2) -> TimeSeriesData
+
+Fill missing values (NaN) in a TimeSeriesData container using DFM nowcasting.
+
+# Examples
+```julia
+ts = TimeSeriesData(randn(100, 3))
+ts.data[95:100, 2] .= NaN
+ts_bal = balance_panel(ts; r=2)
+```
+"""
+function balance_panel(ts::TimeSeriesData{T}; method::Symbol=:dfm,
+                       r::Int=3, p::Int=2) where {T}
+    method == :dfm || throw(ArgumentError("method must be :dfm, got :$method"))
+
+    if !any(isnan, ts.data)
+        return ts  # already balanced
+    end
+
+    n_vars = ts.n_vars
+    r_use = min(r, n_vars - 1, ts.T_obs - 1)
+    r_use = max(r_use, 1)
+    p_use = min(p, ts.T_obs ÷ 3)
+    p_use = max(p_use, 1)
+
+    dfm_result = nowcast_dfm(ts.data, n_vars, 0; r=r_use, p=p_use,
+                              max_iter=50, thresh=T(1e-3))
+
+    TimeSeriesData{T}(dfm_result.X_sm, copy(ts.varnames), ts.frequency,
+                      copy(ts.tcode), copy(ts.time_index), ts.T_obs, ts.n_vars,
+                      copy(ts.desc), copy(ts.vardesc), copy(ts.source_refs))
+end

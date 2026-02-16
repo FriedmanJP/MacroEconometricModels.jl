@@ -6,7 +6,7 @@
 [![Aqua QA](https://raw.githubusercontent.com/JuliaTesting/Aqua.jl/master/badge.svg)](https://github.com/JuliaTesting/Aqua.jl)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18439170.svg)](https://doi.org/10.5281/zenodo.18439170)
 
-A comprehensive Julia package for macroeconomic time series analysis. Provides VAR, VECM, Bayesian VAR, Panel VAR, Local Projections, Factor Models, ARIMA, time series filters, GMM, ARCH/GARCH/Stochastic Volatility estimation, structural identification (including non-Gaussian and heteroskedasticity-based methods), hypothesis testing, typed data containers, and publication-quality output with multi-format bibliographic references.
+A comprehensive Julia package for macroeconomic time series analysis. Provides VAR, VECM, Bayesian VAR, Panel VAR, Local Projections, Factor Models, ARIMA, time series filters, GMM, ARCH/GARCH/Stochastic Volatility estimation, nowcasting (DFM, BVAR, bridge equations with news decomposition), structural identification (including non-Gaussian and heteroskedasticity-based methods), hypothesis testing, typed data containers, and publication-quality output with multi-format bibliographic references.
 
 ## Features
 
@@ -64,6 +64,18 @@ A comprehensive Julia package for macroeconomic time series analysis. Provides V
 - **Generalized Method of Moments** - One-step, two-step, and iterated; Hansen J-test
 - **Linear GMM** - Closed-form solver for panel IV estimation
 - **Sandwich covariance** - Robust GMM variance with Windmeijer correction
+
+### Nowcasting
+- **Dynamic Factor Model (DFM)** - EM algorithm with Kalman smoother for mixed-frequency data (Banbura & Modugno 2014)
+  - Arbitrary missing patterns and ragged edges
+  - Mariano-Murasawa [1 2 3 2 1] temporal aggregation for quarterly variables
+  - Block factor structure, AR(1)/IID idiosyncratic components
+- **Large Bayesian VAR** - GLP-style Normal-Inverse-Wishart prior (Cimadomo et al. 2022)
+  - Hyperparameter optimization via marginal log-likelihood maximization
+  - Minnesota shrinkage with sum-of-coefficients and co-persistence priors
+- **Bridge Equations** - OLS regressions combining pairs of monthly indicators via median (Banbura et al. 2023)
+- **News Decomposition** - Attribute nowcast revisions to individual data releases
+- **Panel Balancing** - `balance_panel()` fills NaN in TimeSeriesData/PanelData using DFM imputation
 
 ### Structural Identification (18+ methods)
 - **Traditional**: Cholesky (recursive), sign restrictions (Rubio-Ramirez et al. 2010), narrative restrictions (Antolin-Diaz & Rubio-Ramirez 2018), long-run (Blanchard & Quah 1989), zero+sign (Arias et al. 2018), penalty function (Mountford & Uhlig 2009)
@@ -307,6 +319,22 @@ j = pvar_hansen_j(model)
 stab = pvar_stability(model)
 ```
 
+### Nowcasting
+
+```julia
+using MacroEconometricModels
+
+# Mixed-frequency data: nM monthly + nQ quarterly variables (NaN for missing)
+dfm = nowcast_dfm(Y, nM, nQ; r=2, p=1)          # DFM (EM + Kalman)
+bvar = nowcast_bvar(Y, nM, nQ; lags=5)           # Large BVAR
+bridge = nowcast_bridge(Y, nM, nQ)                # Bridge equations
+
+result = nowcast(dfm)                              # Current-quarter nowcast
+fc = forecast(dfm, 6)                              # 6-step forecast
+news = nowcast_news(X_new, X_old, dfm, T)          # News decomposition
+balanced = balance_panel(ts; r=2)                   # Fill NaN via DFM
+```
+
 ### Non-Gaussian SVAR
 
 ```julia
@@ -506,6 +534,12 @@ Full documentation available at [https://chung9207.github.io/MacroEconometricMod
 - Feenstra, Robert C., Robert Inklaar, and Marcel P. Timmer. 2015. "The Next Generation of the Penn World Table." *American Economic Review* 105 (10): 3150–3182. [https://doi.org/10.1257/aer.20130954](https://doi.org/10.1257/aer.20130954)
 - McCracken, Michael W., and Serena Ng. 2016. "FRED-MD: A Monthly Database for Macroeconomic Research." *Journal of Business & Economic Statistics* 34 (4): 574–589. [https://doi.org/10.1080/07350015.2015.1086655](https://doi.org/10.1080/07350015.2015.1086655)
 - McCracken, Michael W., and Serena Ng. 2020. "FRED-QD: A Quarterly Database for Macroeconomic Research." *Federal Reserve Bank of St. Louis Working Paper* 2020-005. [https://doi.org/10.20955/wp.2020.005](https://doi.org/10.20955/wp.2020.005)
+
+### Nowcasting
+
+- Bańbura, Marta, and Michele Modugno. 2014. "Maximum Likelihood Estimation of Factor Models on Datasets with Arbitrary Pattern of Missing Data." *Journal of Applied Econometrics* 29 (1): 133–160. [https://doi.org/10.1002/jae.2306](https://doi.org/10.1002/jae.2306)
+- Cimadomo, Jacopo, Domenico Giannone, Michele Lenza, Francesca Monti, and Andrej Sokol. 2022. "Nowcasting with Large Bayesian Vector Autoregressions." *ECB Working Paper* No. 2696.
+- Bańbura, Marta, Irina Belousova, Katalin Bodnár, and Máté Barnabás Tóth. 2023. "Nowcasting Employment in the Euro Area." *ECB Working Paper* No. 2815.
 
 ### Model Comparison Tests
 
