@@ -1,3 +1,21 @@
+# MacroEconometricModels.jl
+# Copyright (C) 2025-2026 Wookyung Chung <wookyung9207@gmail.com>
+#
+# This file is part of MacroEconometricModels.jl.
+#
+# MacroEconometricModels.jl is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# MacroEconometricModels.jl is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with MacroEconometricModels.jl. If not, see <https://www.gnu.org/licenses/>.
+
 """
 Type definitions and StatsAPI interface for ARCH models.
 """
@@ -64,7 +82,7 @@ Forecast result from a volatility model.
 - `conf_level::T`: Confidence level (e.g., 0.95)
 - `model_type::Symbol`: Source model type (:arch, :garch, :egarch, :gjr_garch, :sv)
 """
-struct VolatilityForecast{T<:AbstractFloat}
+struct VolatilityForecast{T<:AbstractFloat} <: AbstractForecastResult{T}
     forecast::Vector{T}
     ci_lower::Vector{T}
     ci_upper::Vector{T}
@@ -129,6 +147,28 @@ StatsAPI.dof(m::ARCHModel) = 2 + m.q  # mu + omega + q alphas
 
 """`false` — ARCH models are nonlinear."""
 StatsAPI.islinear(::ARCHModel) = false
+
+"""Residual degrees of freedom."""
+StatsAPI.dof_residual(m::ARCHModel) = length(m.residuals) - dof(m)
+
+# =============================================================================
+# Shared StatsAPI methods for all volatility models
+# =============================================================================
+
+"""Variance-covariance matrix (diagonal from stderror)."""
+function StatsAPI.vcov(m::AbstractVolatilityModel)
+    se = stderror(m)
+    Diagonal(se .^ 2)
+end
+
+"""Confidence intervals for volatility model parameters."""
+function StatsAPI.confint(m::AbstractVolatilityModel; level::Real=0.95)
+    T = eltype(m.y)
+    se = stderror(m)
+    z = T(quantile(Normal(), (1 + level) / 2))
+    c = coef(m)
+    hcat(c .- z .* se, c .+ z .* se)
+end
 
 # =============================================================================
 # Display

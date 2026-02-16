@@ -1,3 +1,21 @@
+# MacroEconometricModels.jl
+# Copyright (C) 2025-2026 Wookyung Chung <wookyung9207@gmail.com>
+#
+# This file is part of MacroEconometricModels.jl.
+#
+# MacroEconometricModels.jl is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# MacroEconometricModels.jl is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with MacroEconometricModels.jl. If not, see <https://www.gnu.org/licenses/>.
+
 """
 ICA-based SVAR identification: FastICA, JADE, SOBI, dCov, HSIC.
 
@@ -63,71 +81,6 @@ function Base.show(io::IO, r::ICASVARResult{T}) where {T}
     _matrix_table(io, r.B0, "Structural Impact Matrix (B₀)";
         row_labels=["Var $i" for i in 1:n],
         col_labels=["Shock $j" for j in 1:n])
-end
-
-# =============================================================================
-# Whitening
-# =============================================================================
-
-"""Pre-whiten data via PCA: Z = W_white * U' such that Cov(Z) = I."""
-function _whiten(U::Matrix{T}) where {T<:AbstractFloat}
-    mu = mean(U, dims=1)
-    Uc = U .- mu
-    Sigma = Symmetric(Uc' * Uc / size(Uc, 1))
-    E = eigen(Sigma)
-    idx = sortperm(E.values, rev=true)
-    vals = E.values[idx]
-    vecs = E.vectors[:, idx]
-
-    # Only keep components with positive eigenvalues
-    k = sum(vals .> eps(T) * maximum(vals) * 100)
-    D_inv_sqrt = Diagonal(T(1) ./ sqrt.(vals[1:k]))
-    W_white = D_inv_sqrt * vecs[:, 1:k]'
-    dewhiten = vecs[:, 1:k] * Diagonal(sqrt.(vals[1:k]))
-
-    Z = Matrix{T}((W_white * Uc')')  # T × k
-    (Z, Matrix{T}(W_white), Matrix{T}(dewhiten))
-end
-
-# =============================================================================
-# Givens Rotation Parameterization
-# =============================================================================
-
-"""Convert n(n-1)/2 Givens angles to n × n orthogonal matrix."""
-function _givens_to_orthogonal(angles::AbstractVector{T}, n::Int) where {T<:AbstractFloat}
-    Q = Matrix{T}(I, n, n)
-    idx = 1
-    for i in 1:n-1
-        for j in (i+1):n
-            c, s = cos(angles[idx]), sin(angles[idx])
-            G = Matrix{T}(I, n, n)
-            G[i, i], G[j, j] = c, c
-            G[i, j], G[j, i] = -s, s
-            Q = Q * G
-            idx += 1
-        end
-    end
-    Q
-end
-
-"""Extract n(n-1)/2 Givens angles from orthogonal matrix (approximate)."""
-function _orthogonal_to_givens(Q::AbstractMatrix{T}, n::Int) where {T<:AbstractFloat}
-    n_angles = n * (n - 1) ÷ 2
-    angles = zeros(T, n_angles)
-    R = copy(Q)
-    idx = n_angles
-    for i in (n-1):-1:1
-        for j in n:-1:(i+1)
-            angles[idx] = atan(R[j, i], R[i, i])
-            c, s = cos(angles[idx]), sin(angles[idx])
-            G = Matrix{T}(I, n, n)
-            G[i, i], G[j, j] = c, c
-            G[i, j], G[j, i] = s, -s
-            R = G * R
-            idx -= 1
-        end
-    end
-    angles
 end
 
 # =============================================================================
@@ -238,49 +191,6 @@ function _fastica_symmetric(Z::Matrix{T}, n::Int; contrast::Symbol=:logcosh,
         max_change < tol && break
     end
     W, total_iter
-end
-
-# =============================================================================
-# ICA to SVAR Conversion
-# =============================================================================
-
-"""Convert ICA unmixing matrix to SVAR representation: B₀, Q, shocks."""
-function _ica_to_svar(W_ica::Matrix{T}, model::VARModel{T}) where {T<:AbstractFloat}
-    n = nvars(model)
-    L = safe_cholesky(model.Sigma)
-
-    # Full unmixing: W_full * u_t = ε_t, so B₀ = W_full⁻¹
-    # From whitened: W_ica * W_white * u_t = ε_t
-    # W_full = W_ica * W_white (if Z = W_white * U')
-    # But we want B₀ = L * Q where Q is orthogonal
-
-    # Compute B₀ = W_full⁻¹
-    B0_raw = robust_inv(W_ica)
-
-    # Extract Q: Q = L⁻¹ B₀
-    L_inv = robust_inv(Matrix(L))
-    Q_raw = L_inv * B0_raw
-
-    # Enforce orthogonality via polar decomposition
-    F = svd(Q_raw)
-    Q = F.U * F.Vt
-
-    # Recompute B₀ from L and Q for consistency
-    B0 = Matrix(L) * Q
-
-    # Structural shocks
-    shocks = (robust_inv(B0) * model.U')'
-
-    # Normalize: make diagonal of B₀ positive (sign convention)
-    for j in 1:n
-        if B0[j, j] < 0
-            B0[:, j] *= -one(T)
-            Q[:, j] *= -one(T)
-            shocks[:, j] *= -one(T)
-        end
-    end
-
-    (B0, Q, shocks)
 end
 
 # =============================================================================

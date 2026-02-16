@@ -1,3 +1,21 @@
+# MacroEconometricModels.jl
+# Copyright (C) 2025-2026 Wookyung Chung <wookyung9207@gmail.com>
+#
+# This file is part of MacroEconometricModels.jl.
+#
+# MacroEconometricModels.jl is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# MacroEconometricModels.jl is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with MacroEconometricModels.jl. If not, see <https://www.gnu.org/licenses/>.
+
 """
 Dynamic Factor Model with State-Space Representation.
 
@@ -226,17 +244,17 @@ function _em_mstep(Y::AbstractMatrix{T}, F_smooth::AbstractMatrix{T}, P_smooth::
     state_dim = r * p
 
     # Update loadings: Λ = (Σ Y_t F_t') * (Σ F_t F_t' + P_t)^{-1}
-    sum_yF = sum(Y[t, :] * F_smooth[t, 1:r]' for t in 1:T_obs)
-    sum_FF = sum(F_smooth[t, 1:r] * F_smooth[t, 1:r]' + P_smooth[t, 1:r, 1:r] for t in 1:T_obs)
+    sum_yF = sum(@view(Y[t, :]) * @view(F_smooth[t, 1:r])' for t in 1:T_obs)
+    sum_FF = sum(@view(F_smooth[t, 1:r]) * @view(F_smooth[t, 1:r])' + @view(P_smooth[t, 1:r, 1:r]) for t in 1:T_obs)
     Λ = sum_yF * robust_inv(sum_FF)
 
     # Update VAR coefficients
     sum_F_Fminus = zeros(T, r, state_dim)
     sum_Fminus_Fminus = zeros(T, state_dim, state_dim)
     for t in (p+1):T_obs
-        sum_F_Fminus .+= F_smooth[t, 1:r] * F_smooth[t-1, :]'
-        t > p + 1 && (sum_F_Fminus[1:r, 1:state_dim] .+= Pt_smooth[t-1, 1:r, :])
-        sum_Fminus_Fminus .+= F_smooth[t-1, :] * F_smooth[t-1, :]' + P_smooth[t-1, :, :]
+        sum_F_Fminus .+= @view(F_smooth[t, 1:r]) * @view(F_smooth[t-1, :])'
+        t > p + 1 && (sum_F_Fminus[1:r, 1:state_dim] .+= @view(Pt_smooth[t-1, 1:r, :]))
+        sum_Fminus_Fminus .+= @view(F_smooth[t-1, :]) * @view(F_smooth[t-1, :])' + @view(P_smooth[t-1, :, :])
     end
     A_stacked = sum_F_Fminus * robust_inv(sum_Fminus_Fminus)
     A = [A_stacked[:, ((lag-1)*r+1):(lag*r)] for lag in 1:p]
@@ -245,10 +263,10 @@ function _em_mstep(Y::AbstractMatrix{T}, F_smooth::AbstractMatrix{T}, P_smooth::
     T_eff = T_obs - p
     sum_eta = zeros(T, r, r)
     for t in (p+1):T_obs
-        eta = F_smooth[t, 1:r] - sum(A[lag] * F_smooth[t-lag, 1:r] for lag in 1:p)
-        sum_eta .+= eta * eta' + P_smooth[t, 1:r, 1:r]
+        eta = F_smooth[t, 1:r] - sum(A[lag] * @view(F_smooth[t-lag, 1:r]) for lag in 1:p)
+        sum_eta .+= eta * eta' + @view(P_smooth[t, 1:r, 1:r])
         for lag in 1:p
-            cross = A[lag] * Pt_smooth[min(t-1, T_obs-1), 1:r, 1:r]'
+            cross = A[lag] * @view(Pt_smooth[min(t-1, T_obs-1), 1:r, 1:r])'
             sum_eta .-= cross .+ cross'
         end
     end
@@ -259,8 +277,8 @@ function _em_mstep(Y::AbstractMatrix{T}, F_smooth::AbstractMatrix{T}, P_smooth::
     # Update idiosyncratic covariance
     sum_ee = zeros(T, N, N)
     for t in 1:T_obs
-        e = Y[t, :] - Λ * F_smooth[t, 1:r]
-        sum_ee .+= e * e' + Λ * P_smooth[t, 1:r, 1:r] * Λ'
+        e = @view(Y[t, :]) - Λ * @view(F_smooth[t, 1:r])
+        sum_ee .+= e * e' + Λ * @view(P_smooth[t, 1:r, 1:r]) * Λ'
     end
     Sigma_e = diagonal_idio ? diagm(diag(sum_ee / T_obs)) : (sum_ee + sum_ee') / (2 * T_obs)
     min_eig = minimum(eigvals(Symmetric(Sigma_e)))
@@ -359,14 +377,13 @@ fc.observables_lower # h×N lower CI bounds
 """
 function forecast(m::DynamicFactorModel{T}, h::Int; ci_method::Symbol=:none,
     conf_level::Real=0.95, n_boot::Int=1000,
-    ci::Bool=false, ci_level::Real=0.95) where {T}
+    ci::Bool=false) where {T}
 
     h < 1 && throw(ArgumentError("h must be ≥ 1"))
 
     # Legacy compat: ci=true maps to :simulation
     if ci && ci_method == :none
         ci_method = :simulation
-        conf_level = ci_level
     end
     ci_method ∈ (:none, :theoretical, :bootstrap, :simulation) || throw(ArgumentError("ci_method must be :none, :theoretical, :bootstrap, or :simulation"))
 

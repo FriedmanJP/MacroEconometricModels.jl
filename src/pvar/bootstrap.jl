@@ -1,3 +1,21 @@
+# MacroEconometricModels.jl
+# Copyright (C) 2025-2026 Wookyung Chung <wookyung9207@gmail.com>
+#
+# This file is part of MacroEconometricModels.jl.
+#
+# MacroEconometricModels.jl is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# MacroEconometricModels.jl is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with MacroEconometricModels.jl. If not, see <https://www.gnu.org/licenses/>.
+
 """
 Group-level (block) bootstrap for Panel VAR impulse response confidence intervals.
 
@@ -115,8 +133,8 @@ function pvar_bootstrap_irf(model::PVARModel{T}, H::Int;
     lower = Array{T}(undef, H + 1, m_dim, m_dim)
     upper = Array{T}(undef, H + 1, m_dim, m_dim)
 
-    for h in 1:(H+1), i in 1:m_dim, j in 1:m_dim
-        vals = sort(draws[:, h, i, j])
+    @inbounds for h in 1:(H+1), i in 1:m_dim, j in 1:m_dim
+        vals = sort(@view draws[:, h, i, j])
         lower[h, i, j] = quantile(vals, alpha / 2)
         upper[h, i, j] = quantile(vals, 1 - alpha / 2)
     end

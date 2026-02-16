@@ -1,3 +1,21 @@
+# MacroEconometricModels.jl
+# Copyright (C) 2025-2026 Wookyung Chung <wookyung9207@gmail.com>
+#
+# This file is part of MacroEconometricModels.jl.
+#
+# MacroEconometricModels.jl is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# MacroEconometricModels.jl is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with MacroEconometricModels.jl. If not, see <https://www.gnu.org/licenses/>.
+
 """
 Utility functions for MacroEconometricModels.jl - numerical routines, matrix operations, helpers.
 """
@@ -38,6 +56,18 @@ validate_positive(value::Real, name::String) =
 """Validate lo ≤ value ≤ hi."""
 validate_in_range(value::Real, name::String, lo::Real, hi::Real) =
     (value < lo || value > hi) && throw(ArgumentError("$name must be in [$lo, $hi], got $value"))
+
+"""Validate value ≥ 0."""
+validate_nonnegative(value::Real, name::String) =
+    value < 0 && throw(ArgumentError("$name must be non-negative, got $value"))
+
+"""Validate lag order: p ≥ 1."""
+validate_lags(p::Int; name::String="p") =
+    p < 1 && throw(ArgumentError("Number of lags $name must be ≥ 1, got $p"))
+
+"""Validate horizon: h ≥ min_val (default 1)."""
+validate_horizon(h::Int; min_val::Int=1) =
+    h < min_val && throw(ArgumentError("Horizon must be ≥ $min_val, got $h"))
 
 """Validate symbol is in valid_options."""
 validate_option(value::Symbol, name::String, valid_options::Tuple) =

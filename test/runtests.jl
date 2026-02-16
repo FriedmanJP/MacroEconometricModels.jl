@@ -1,7 +1,28 @@
+# MacroEconometricModels.jl
+# Copyright (C) 2025-2026 Wookyung Chung <wookyung9207@gmail.com>
+#
+# This file is part of MacroEconometricModels.jl.
+#
+# MacroEconometricModels.jl is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# MacroEconometricModels.jl is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with MacroEconometricModels.jl. If not, see <https://www.gnu.org/licenses/>.
+
 using Test
 
 # FAST mode for development iteration (shared across all test files in threaded mode)
 const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
+
+# Shared test data generators (available to all test files)
+include("fixtures.jl")
 
 # =============================================================================
 # Parallel test runner: three modes (threaded > multi-process > sequential)
@@ -45,7 +66,7 @@ const TEST_GROUPS = [
         "lp/test_lp_forecast.jl",
         "lp/test_lp_fevd.jl",
     ]),
-    # Group 5: ARIMA + Unit Root + GMM + Utilities + Filters + Model Comparison + Data
+    # Group 5: ARIMA + Unit Root + GMM + Utilities + Data (~50s)
     ("ARIMA & Utilities" => [
         "teststat/test_unitroot.jl",
         "arima/test_arima.jl",
@@ -55,12 +76,10 @@ const TEST_GROUPS = [
         "core/test_examples.jl",
         "gmm/test_gmm.jl",
         "core/test_covariance.jl",
-        "filters/test_filters.jl",
-        "teststat/test_model_comparison.jl",
         "teststat/test_granger.jl",
         "data/test_data.jl",
     ]),
-    # Group 6: Non-Gaussian + Display + Misc (Arias/Uhlig moved to Group 7)
+    # Group 6: Non-Gaussian + Display (~15s)
     ("Non-Gaussian & Display" => [
         "teststat/test_normality.jl",
         "nongaussian/test_nongaussian_svar.jl",
@@ -69,15 +88,17 @@ const TEST_GROUPS = [
         "core/test_error_paths.jl",
         "core/test_internal_helpers.jl",
     ]),
-    # Group 7: SVAR Identification (isolated heavy tests)
-    ("SVAR Identification" => [
+    # Group 7: SVAR Identification + Model Comparison (~50s)
+    ("SVAR & Model Comparison" => [
         "var/test_arias2018.jl",
         "var/test_uhlig.jl",
+        "teststat/test_model_comparison.jl",
     ]),
-    # Group 8: Volatility models (ARCH/GARCH/SV — MCMC heavy)
-    ("Volatility Models" => [
+    # Group 8: Volatility + Filters (~47s)
+    ("Volatility & Filters" => [
         "volatility/test_volatility.jl",
         "volatility/test_volatility_coverage.jl",
+        "filters/test_filters.jl",
     ]),
 ]
 
