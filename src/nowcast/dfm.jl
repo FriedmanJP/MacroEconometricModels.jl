@@ -1,3 +1,21 @@
+# MacroEconometricModels.jl
+# Copyright (C) 2025-2026 Wookyung Chung <wookyung9207@gmail.com>
+#
+# This file is part of MacroEconometricModels.jl.
+#
+# MacroEconometricModels.jl is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# MacroEconometricModels.jl is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with MacroEconometricModels.jl. If not, see <https://www.gnu.org/licenses/>.
+
 """
 DFM-based nowcasting via EM algorithm (Bańbura & Modugno 2014).
 
@@ -352,10 +370,10 @@ function _dfm_em_step(xNaN::Matrix{T}, A::Matrix{T}, C::Matrix{T},
     EZZ_prev = zeros(T, state_dim, state_dim)
 
     for t in 1:T_obs
-        EZZ += P_smooth[:, :, t] + x_smooth[:, t] * x_smooth[:, t]'
+        EZZ += @view(P_smooth[:, :, t]) + @view(x_smooth[:, t]) * @view(x_smooth[:, t])'
         if t > 1
-            EZZ_lag += PP_smooth[:, :, t]
-            EZZ_prev += P_smooth[:, :, t - 1] + x_smooth[:, t - 1] * x_smooth[:, t - 1]'
+            EZZ_lag += @view(PP_smooth[:, :, t])
+            EZZ_prev += @view(P_smooth[:, :, t - 1]) + @view(x_smooth[:, t - 1]) * @view(x_smooth[:, t - 1])'
         end
     end
 

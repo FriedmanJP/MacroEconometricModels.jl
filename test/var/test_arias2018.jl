@@ -1,3 +1,21 @@
+# MacroEconometricModels.jl
+# Copyright (C) 2025-2026 Wookyung Chung <wookyung9207@gmail.com>
+#
+# This file is part of MacroEconometricModels.jl.
+#
+# MacroEconometricModels.jl is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# MacroEconometricModels.jl is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with MacroEconometricModels.jl. If not, see <https://www.gnu.org/licenses/>.
+
 """
     Tests for Arias, Rubio-Ramírez, and Waggoner (2018) SVAR Identification
 
@@ -239,7 +257,7 @@ end
         result = identify_arias(model, restrictions, 10; n_draws=(FAST ? 5 : 10), n_rotations=(FAST ? 20 : 100))
 
         # Compute percentiles
-        pct = irf_percentiles(result; probs=[0.16, 0.5, 0.84])
+        pct = irf_percentiles(result; quantiles=[0.16, 0.5, 0.84])
         mean_irf = irf_mean(result)
 
         @test size(pct) == (10, 2, 2, 3)
@@ -531,7 +549,7 @@ end
         pct = irf_percentiles(result)
         @test size(pct) == (10, 2, 2, 3)  # default 3 quantiles
 
-        pct5 = irf_percentiles(result; probs=[0.05, 0.5, 0.95])
+        pct5 = irf_percentiles(result; quantiles=[0.05, 0.5, 0.95])
         @test size(pct5) == (10, 2, 2, 3)
 
         # Test irf_mean

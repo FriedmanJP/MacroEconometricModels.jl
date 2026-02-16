@@ -1,3 +1,21 @@
+# MacroEconometricModels.jl
+# Copyright (C) 2025-2026 Wookyung Chung <wookyung9207@gmail.com>
+#
+# This file is part of MacroEconometricModels.jl.
+#
+# MacroEconometricModels.jl is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# MacroEconometricModels.jl is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with MacroEconometricModels.jl. If not, see <https://www.gnu.org/licenses/>.
+
 """
 Type definitions for AR, MA, ARMA, and ARIMA models.
 """
@@ -9,11 +27,12 @@ using LinearAlgebra, Statistics
 # =============================================================================
 
 """
-    AbstractARIMAModel <: StatsAPI.RegressionModel
+    AbstractARIMAModel{T<:AbstractFloat} <: StatsAPI.RegressionModel
 
-Abstract supertype for all univariate ARIMA-class models.
+Abstract supertype for all univariate ARIMA-class models, parametric on
+the floating-point element type `T`.
 """
-abstract type AbstractARIMAModel <: StatsAPI.RegressionModel end
+abstract type AbstractARIMAModel{T<:AbstractFloat} <: StatsAPI.RegressionModel end
 
 # =============================================================================
 # AR Model
@@ -39,7 +58,7 @@ Autoregressive AR(p) model: yₜ = c + φ₁yₜ₋₁ + ... + φₚyₜ₋ₚ +
 - `converged::Bool`: Whether optimization converged
 - `iterations::Int`: Number of iterations (0 for OLS)
 """
-struct ARModel{T<:AbstractFloat} <: AbstractARIMAModel
+struct ARModel{T<:AbstractFloat} <: AbstractARIMAModel{T}
     y::Vector{T}
     p::Int
     c::T
@@ -79,7 +98,7 @@ Moving average MA(q) model: yₜ = c + εₜ + θ₁εₜ₋₁ + ... + θqεₜ
 - `converged::Bool`: Whether optimization converged
 - `iterations::Int`: Number of iterations
 """
-struct MAModel{T<:AbstractFloat} <: AbstractARIMAModel
+struct MAModel{T<:AbstractFloat} <: AbstractARIMAModel{T}
     y::Vector{T}
     q::Int
     c::T
@@ -122,7 +141,7 @@ yₜ = c + φ₁yₜ₋₁ + ... + φₚyₜ₋ₚ + εₜ + θ₁εₜ₋₁ + 
 - `converged::Bool`: Whether optimization converged
 - `iterations::Int`: Number of iterations
 """
-struct ARMAModel{T<:AbstractFloat} <: AbstractARIMAModel
+struct ARMAModel{T<:AbstractFloat} <: AbstractARIMAModel{T}
     y::Vector{T}
     p::Int
     q::Int
@@ -169,7 +188,7 @@ The model is fit to the d-times differenced series as ARMA(p,q).
 - `converged::Bool`: Whether optimization converged
 - `iterations::Int`: Number of iterations
 """
-struct ARIMAModel{T<:AbstractFloat} <: AbstractARIMAModel
+struct ARIMAModel{T<:AbstractFloat} <: AbstractARIMAModel{T}
     y::Vector{T}
     y_diff::Vector{T}
     p::Int
@@ -206,7 +225,7 @@ Forecast result from an ARIMA-class model.
 - `horizon::Int`: Forecast horizon
 - `conf_level::T`: Confidence level (e.g., 0.95)
 """
-struct ARIMAForecast{T<:AbstractFloat}
+struct ARIMAForecast{T<:AbstractFloat} <: AbstractForecastResult{T}
     forecast::Vector{T}
     ci_lower::Vector{T}
     ci_upper::Vector{T}
@@ -303,6 +322,21 @@ function StatsAPI.r2(m::AbstractARIMAModel)
     ss_tot = sum(abs2, y_centered)
     ss_res = sum(abs2, m.residuals)
     max(1 - ss_res / ss_tot, zero(eltype(m.residuals)))
+end
+
+# Variance-covariance matrix (diagonal from stderror)
+function StatsAPI.vcov(m::AbstractARIMAModel)
+    se = stderror(m)
+    Diagonal(se .^ 2)
+end
+
+# Confidence intervals
+function StatsAPI.confint(m::AbstractARIMAModel; level::Real=0.95)
+    T = eltype(m.y)
+    se = stderror(m)
+    z = T(quantile(Normal(), (1 + level) / 2))
+    c = coef(m)
+    hcat(c .- z .* se, c .+ z .* se)
 end
 
 # Model is linear

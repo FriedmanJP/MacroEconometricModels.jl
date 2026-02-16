@@ -1,3 +1,21 @@
+# MacroEconometricModels.jl
+# Copyright (C) 2025-2026 Wookyung Chung <wookyung9207@gmail.com>
+#
+# This file is part of MacroEconometricModels.jl.
+#
+# MacroEconometricModels.jl is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# MacroEconometricModels.jl is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with MacroEconometricModels.jl. If not, see <https://www.gnu.org/licenses/>.
+
 """
 Stochastic Volatility model estimation via Kim-Shephard-Chib (1998) Gibbs sampler
 with Omori et al. (2007) 10-component mixture approximation.
@@ -456,9 +474,9 @@ function estimate_sv(y::AbstractVector{T};
     vol_quantiles = Matrix{T}(undef, n, length(ql))
 
     for t in 1:n
-        vol_draws_t = exp.(h_draws[:, t])
+        vol_draws_t = exp.(@view h_draws[:, t])
         vol_mean[t] = mean(vol_draws_t)
-        for (j, q) in enumerate(ql)
+        @inbounds for (j, q) in enumerate(ql)
             vol_quantiles[t, j] = quantile(vol_draws_t, q)
         end
     end
