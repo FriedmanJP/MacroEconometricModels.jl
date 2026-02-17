@@ -12,7 +12,7 @@ makedocs(;
         prettyurls=get(ENV, "CI", "false") == "true",
         canonical="https://chung9207.github.io/MacroEconometricModels.jl",
         edit_link="main",
-        assets=String[],
+        assets=["assets/custom.css", "assets/theme-toggle.js"],
         size_threshold=500 * 1024,
         mathengine=Documenter.MathJax3(),
         repolink="https://github.com/chung9207/MacroEconometricModels.jl",
