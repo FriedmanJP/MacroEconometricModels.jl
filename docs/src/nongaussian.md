@@ -94,9 +94,12 @@ where
 Estimates regime-specific covariance matrices via the Hamilton (1989) filter with EM algorithm:
 
 ```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-Y = randn(300, 3)
+using MacroEconometricModels
+
+# Load FRED-MD monetary policy model
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
 model = estimate_var(Y, 2)
 
 ms = identify_markov_switching(model; n_regimes=2)
@@ -426,9 +429,12 @@ JB = T \cdot \frac{b_{1,k}}{6} + T \cdot \frac{(b_{2,k} - k(k+2))^2}{24k}
 where ``b_{1,k}`` is the multivariate skewness measure and ``b_{2,k}`` is the multivariate kurtosis measure (Lütkepohl 2005, §4.5).
 
 ```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-Y = randn(300, 3)
+using MacroEconometricModels
+
+# Load FRED-MD monetary policy model
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
 model = estimate_var(Y, 2)
 
 # Joint test
@@ -440,7 +446,7 @@ jb_comp = jarque_bera_test(model; method=:component)
 println("Component p-values: ", round.(jb_comp.component_pvalues, digits=4))
 ```
 
-With Gaussian data, we expect p-values above 0.05 — failure to reject normality.
+With macroeconomic data, non-normality is common — rejecting the null supports using non-Gaussian SVAR methods below.
 
 ### Mardia's Tests
 
@@ -618,18 +624,15 @@ See Lewis (2025, Section 6.4) for a thorough discussion of the labeling problem.
 ## Complete Example
 
 ```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
+using MacroEconometricModels
 
-# Generate VAR data
-T_obs, n = 300, 3
-Y = randn(T_obs, n)
-for t in 3:T_obs
-    Y[t, :] = 0.5 * Y[t-1, :] + 0.2 * Y[t-2, :] + 0.8 * randn(n)
-end
+# Load FRED-MD monetary policy model
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
 model = estimate_var(Y, 2)
 
-# Step 1: Test for non-Gaussianity
+# Step 1: Test for non-Gaussianity of VAR residuals
 suite = normality_test_suite(model)
 println(suite)
 

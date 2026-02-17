@@ -159,6 +159,86 @@ end
 # Model Selection
 # =============================================================================
 
+# =============================================================================
+# Forecasting
+# =============================================================================
+
+"""
+    forecast(model::VARModel, h; ci_method=:none, reps=500, conf_level=0.95) -> Matrix{T}
+
+Point forecast from VAR model for `h` steps ahead.
+
+Iterates the VAR recursion forward using the estimated coefficients and the
+last `p` observations as initial conditions. Equivalent to `predict(model, h)`.
+
+# Arguments
+- `model`: Estimated VAR model
+- `h`: Forecast horizon (number of steps ahead)
+- `ci_method`: `:none` (default) or `:bootstrap` for confidence intervals
+- `reps`: Number of bootstrap replications (default 500)
+- `conf_level`: Confidence level for intervals (default 0.95)
+
+# Returns
+`Matrix{T}` of size h × n with point forecasts. When `ci_method=:bootstrap`,
+returns a NamedTuple `(forecast, lower, upper)`.
+
+# Example
+```julia
+model = estimate_var(Y, 4)
+fc = forecast(model, 12)  # 12-step ahead forecast, h × n matrix
+```
+"""
+function forecast(model::VARModel{T}, h::Int;
+                  ci_method::Symbol=:none,
+                  reps::Int=500,
+                  conf_level::Real=0.95) where {T}
+    h < 1 && throw(ArgumentError("Forecast horizon must be positive"))
+
+    point = predict(model, h)
+
+    if ci_method == :none
+        return point
+    elseif ci_method == :bootstrap
+        n = nvars(model)
+        T_eff = effective_nobs(model)
+        sim = Array{T,3}(undef, reps, h, n)
+
+        for rep in 1:reps
+            # Resample residuals with replacement
+            idx = rand(1:T_eff, h)
+            shocks = model.U[idx, :]
+
+            p_lag = model.p
+            A = extract_ar_coefficients(model.B, n, p_lag)
+            intercept = @view model.B[1, :]
+            history = copy(model.Y[(end - p_lag + 1):end, :])
+
+            @inbounds for step in 1:h
+                y_hat = copy(intercept)
+                for lag in 1:p_lag
+                    y_hat .+= A[lag] * @view(history[end - lag + 1, :])
+                end
+                y_hat .+= shocks[step, :]
+                sim[rep, step, :] = y_hat
+                history = vcat(@view(history[2:end, :]), y_hat')
+            end
+        end
+
+        alpha_half = (1 - T(conf_level)) / 2
+        lower = Matrix{T}(undef, h, n)
+        upper = Matrix{T}(undef, h, n)
+        for hi in 1:h, j in 1:n
+            d = @view sim[:, hi, j]
+            lower[hi, j] = quantile(d, alpha_half)
+            upper[hi, j] = quantile(d, 1 - alpha_half)
+        end
+
+        return (forecast=point, lower=lower, upper=upper)
+    else
+        throw(ArgumentError("ci_method must be :none or :bootstrap"))
+    end
+end
+
 """Select optimal lag order via information criterion (:aic, :bic, :hqic)."""
 function select_lag_order(Y::AbstractMatrix{T}, max_p::Int; criterion::Symbol=:bic) where {T<:AbstractFloat}
     max_p < 1 && throw(ArgumentError("max_p must be positive"))

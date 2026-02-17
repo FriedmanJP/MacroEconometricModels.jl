@@ -79,7 +79,10 @@ where ``\Theta^{cum}_H`` accumulates the impulse responses from impact through h
 ```julia
 using MacroEconometricModels
 
-Y = randn(200, 3)
+# Load FRED-MD: industrial production, CPI inflation, federal funds rate
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
 model = estimate_var(Y, 2)
 
 # Basic IRF (Cholesky identification)
@@ -93,7 +96,7 @@ sign_constraints = [1 1 0; -1 0 0; 0 0 1]
 irf_sign = irf(model, 20; method=:sign, sign_restrictions=sign_constraints)
 ```
 
-The basic `irf(model, 20)` call uses Cholesky identification by default. Adding `ci_type=:bootstrap` generates pointwise confidence bands via Kilian's (1998) residual bootstrap — `reps=1000` draws are recommended for publication-quality bands. Sign restrictions produce a set of admissible IRFs satisfying the constraints; the returned values are the median (or a representative draw), with the set-identified nature reflected in wider credible bands.
+The basic `irf(model, 20)` call uses Cholesky identification by default, with the ordering INDPRO → CPIAUCSL → FEDFUNDS implying that monetary policy (FFR) shocks do not contemporaneously affect output or prices. Adding `ci_type=:bootstrap` generates pointwise confidence bands via Kilian's (1998) residual bootstrap — `reps=1000` draws are recommended for publication-quality bands. Sign restrictions produce a set of admissible IRFs satisfying the constraints; the returned values are the median (or a representative draw), with the set-identified nature reflected in wider credible bands.
 
 !!! note "Technical Note"
     The `ci_lower` and `ci_upper` arrays are only populated when `ci_type=:bootstrap` (frequentist) or when using the Bayesian `irf(post, ...)` method. With `ci_type=:none` (the default), these arrays contain zeros. Always check `irf_result.ci_type` before interpreting confidence bands.
@@ -346,11 +349,14 @@ The package provides publication-quality summary tables using a unified interfac
 ```julia
 using MacroEconometricModels
 
-Y = randn(200, 3)
+# Load FRED-MD monetary policy model
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
 model = estimate_var(Y, 2)
 irf_result = irf(model, 20)
 fevd_result = fevd(model, 20)
-hd_result = historical_decomposition(model, 198)
+hd_result = historical_decomposition(model, size(model.U, 1))
 
 # Print summaries
 report(model)
@@ -385,10 +391,10 @@ end
 Variables and shocks can be indexed by name:
 
 ```julia
-# If variable names are set
-df = table(irf_result, "GDP", "Monetary Shock")
-df = table(fevd_result, "Inflation")
-df = table(hd_result, "Output")
+# Using FRED-MD variable names
+df = table(irf_result, "INDPRO", "FEDFUNDS")
+df = table(fevd_result, "INDPRO")
+df = table(hd_result, "INDPRO")
 ```
 
 ---
@@ -460,46 +466,45 @@ For a comprehensive references workflow, see [Example 16: Bibliographic Referenc
 
 ## Complete Example
 
-This example combines IRF, FEVD, and HD for a three-variable VAR.
+This example combines IRF, FEVD, and HD for a three-variable monetary policy VAR using FRED-MD data: industrial production (INDPRO), CPI inflation (CPIAUCSL), and the federal funds rate (FEDFUNDS).
 
 ```julia
 using MacroEconometricModels
 using Random
 
-Random.seed!(42)
-
-# Simulate a 3-variable VAR(2)
-T, n, p = 200, 3, 2
-Y = randn(T, n)
-for t in 2:T
-    Y[t, :] = 0.5 * Y[t-1, :] + 0.3 * randn(n)
-end
-
-model = estimate_var(Y, p)
+# Load FRED-MD: industrial production, CPI inflation, federal funds rate
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+model = estimate_var(Y, 2)
 
 # IRF with bootstrap confidence intervals
+# Response of industrial production to a monetary policy (FFR) shock
 H = 20
+Random.seed!(42)
 irfs = irf(model, H; method=:cholesky, ci_type=:bootstrap, reps=500)
-println("Shock 1 → Var 1 at h=0: ", round(irfs.values[1, 1, 1], digits=3))
-println("Shock 1 → Var 1 at h=8: ", round(irfs.values[9, 1, 1], digits=3))
+println("FFR → INDPRO at h=0: ", round(irfs.values[1, 1, 3], digits=3))
+println("FFR → INDPRO at h=8: ", round(irfs.values[9, 1, 3], digits=3))
 
 # FEVD
+# Fraction of INDPRO forecast variance explained by each shock
 decomp = fevd(model, H)
-println("\nFEVD for Var 1 at h=1: shock shares = ",
+println("\nFEVD for INDPRO at h=1: shock shares = ",
         round.(decomp.proportions[1, 1, :] .* 100, digits=1), "%")
-println("FEVD for Var 1 at h=20: shock shares = ",
+println("FEVD for INDPRO at h=20: shock shares = ",
         round.(decomp.proportions[20, 1, :] .* 100, digits=1), "%")
 
 # Historical decomposition
+# Contribution of monetary shocks to industrial production fluctuations
 hd = historical_decomposition(model, size(model.U, 1))
 println("\nDecomposition identity holds: ", verify_decomposition(hd))
 
 # Summary tables
-df_irf = table(irfs, 1, 1; horizons=[0, 4, 8, 12, 20])
-df_fevd = table(decomp, 1; horizons=[1, 4, 8, 20])
+df_irf = table(irfs, "INDPRO", "FEDFUNDS"; horizons=[0, 4, 8, 12, 20])
+df_fevd = table(decomp, "INDPRO"; horizons=[1, 4, 8, 20])
 ```
 
-The IRF values show the dynamic propagation of structural shocks through the system. At impact (``h=0``), the Cholesky identification imposes a lower-triangular structure, so shock 1 affects only the first variable contemporaneously. By ``h=8``, cross-variable transmission is visible. The FEVD reveals whether the first variable's forecast uncertainty is dominated by its own shocks or by spillovers from other variables. At short horizons own shocks typically dominate; as ``h \to \infty``, the FEVD converges to the unconditional variance decomposition. The HD passes the verification check, confirming the additive identity ``y_t = \sum_j \text{HD}_j(t) + \text{initial}(t)`` holds to numerical precision.
+The IRF traces the dynamic response of industrial production to a one-standard-deviation federal funds rate shock identified via Cholesky ordering (INDPRO, CPIAUCSL, FEDFUNDS). At impact (``h=0``), the recursive identification ensures the FFR shock does not contemporaneously affect INDPRO or CPIAUCSL. By ``h=8``, the monetary transmission mechanism is visible in the INDPRO response. The FEVD reveals what fraction of INDPRO forecast uncertainty is attributable to each structural shock — monetary policy shocks versus own shocks and price shocks. The HD passes the verification check, confirming the additive identity ``y_t = \sum_j \text{HD}_j(t) + \text{initial}(t)`` holds to numerical precision.
 
 ---
 

@@ -130,6 +130,43 @@ function compute_block_robust_vcov(X::AbstractMatrix{T}, U::AbstractMatrix{T},
 end
 
 """
+    _lp_robust_vcov(X_h, U_h, cov_estimator, h)
+
+Horizon-aware robust variance-covariance for LP regressions.
+
+LP residuals at horizon h have MA(h-1) serial correlation (Jordà 2005),
+so the Newey-West bandwidth must be at least h+1. When automatic bandwidth
+selection (`bandwidth == 0`) yields a smaller value, this function enforces
+the floor `max(m̂_NW, h+1)`.
+
+For non-NW estimators (White, Driscoll-Kraay), falls through to the
+standard `compute_block_robust_vcov`.
+"""
+function _lp_robust_vcov(X_h::AbstractMatrix{T}, U_h::AbstractMatrix{T},
+                          cov_estimator::NeweyWestEstimator{T}, h::Int) where {T}
+    if cov_estimator.bandwidth == 0 && h > 0
+        n_eq, k = size(U_h, 2), size(X_h, 2)
+        V = zeros(T, k * n_eq, k * n_eq)
+        for eq in 1:n_eq
+            resid_eq = @view(U_h[:, eq])
+            auto_bw = optimal_bandwidth_nw(resid_eq)
+            effective_bw = max(auto_bw, h + 1)
+            V_eq = newey_west(X_h, resid_eq; bandwidth=effective_bw,
+                             kernel=cov_estimator.kernel, prewhiten=cov_estimator.prewhiten)
+            idx = ((eq-1)*k + 1):(eq*k)
+            V[idx, idx] .= V_eq
+        end
+        return V
+    end
+    compute_block_robust_vcov(X_h, U_h, cov_estimator)
+end
+
+# Passthrough for White/DriscollKraay
+_lp_robust_vcov(X_h::AbstractMatrix{T}, U_h::AbstractMatrix{T},
+                cov::AbstractCovarianceEstimator, h::Int) where {T} =
+    compute_block_robust_vcov(X_h, U_h, cov)
+
+"""
     extract_shock_irf(B::Vector{Matrix{T}}, vcov::Vector{Matrix{T}},
                       response_vars::Vector{Int}, shock_coef_idx::Int;
                       conf_level::Real=0.95) where T
@@ -249,7 +286,7 @@ function estimate_lp(Y::AbstractMatrix{T}, shock_var::Int, horizon::Int;
 
         B[h + 1] = B_h
         residuals[h + 1] = U_h
-        vcov[h + 1] = compute_block_robust_vcov(X_h, U_h, cov_estimator)
+        vcov[h + 1] = _lp_robust_vcov(X_h, U_h, cov_estimator, h)
     end
 
     LPModel(Matrix{T}(Y), shock_var, response_vars, horizon, lags,

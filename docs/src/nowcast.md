@@ -5,26 +5,23 @@ This page documents the nowcasting module in **MacroEconometricModels.jl**, impl
 ## Quick Start
 
 ```julia
-using MacroEconometricModels, Random
+using MacroEconometricModels
 
-Random.seed!(42)
+# Load FRED-MD monthly indicators and prepare mixed-frequency panel
+fred = load_example(:fred_md)
+nc_md = fred[:, ["INDPRO", "UNRATE", "CPIAUCSL", "M2SL", "FEDFUNDS"]]
+Y = to_matrix(apply_tcode(nc_md))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+Y = Y[end-99:end, :]   # last 100 observations
 
-# Simulate mixed-frequency panel: 8 monthly + 2 quarterly variables
-T_obs, nM, nQ = 120, 8, 2
-Y = randn(T_obs, nM + nQ)
-
-# Quarterly variables observed every 3rd month (NaN otherwise)
-for j in (nM+1):(nM+nQ)
-    for t in 1:T_obs
-        if mod(t, 3) != 0
-            Y[t, j] = NaN
-        end
+# Convert last column (FEDFUNDS) to "quarterly" by masking non-quarter months
+nM, nQ = 4, 1
+for t in 1:size(Y, 1)
+    if mod(t, 3) != 0
+        Y[t, end] = NaN
     end
 end
-
-# Introduce ragged edge (last few months missing for some monthly series)
-Y[end, 6:8] .= NaN
-Y[end-1, 7:8] .= NaN
+Y[end, end] = NaN       # simulate missing latest observation (ragged edge)
 
 # DFM nowcasting (Bańbura & Modugno 2014)
 dfm = nowcast_dfm(Y, nM, nQ; r=2, p=1, idio=:ar1)
@@ -329,41 +326,25 @@ bridge = nowcast_bridge(ts, nM, nQ)
 ## Complete Example
 
 ```julia
-using MacroEconometricModels, Random
+using MacroEconometricModels
 
-Random.seed!(42)
+# === Step 1: Prepare FRED-MD mixed-frequency panel ===
+fred = load_example(:fred_md)
+nc_md = fred[:, ["INDPRO", "UNRATE", "CPIAUCSL", "M2SL", "FEDFUNDS"]]
+Y = to_matrix(apply_tcode(nc_md))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+Y = Y[end-99:end, :]   # last 100 observations
+T_obs = size(Y, 1)
 
-# === Step 1: Simulate mixed-frequency panel ===
-T_obs = 120
-nM, nQ = 8, 2
+# Convert last column (FEDFUNDS) to "quarterly" target
+nM, nQ = 4, 1
 N = nM + nQ
-
-# Generate correlated monthly data with common factor structure
-F = zeros(T_obs)
-for t in 2:T_obs
-    F[t] = 0.9 * F[t-1] + randn()
-end
-
-Y = zeros(T_obs, N)
-for j in 1:N
-    loading = 0.5 + 0.5 * randn()
-    for t in 1:T_obs
-        Y[t, j] = loading * F[t] + 0.3 * randn()
+for t in 1:T_obs
+    if mod(t, 3) != 0
+        Y[t, end] = NaN
     end
 end
-
-# Quarterly variables: observed every 3rd month
-for j in (nM+1):N
-    for t in 1:T_obs
-        if mod(t, 3) != 0
-            Y[t, j] = NaN
-        end
-    end
-end
-
-# Ragged edge: last 2 months missing for some monthly variables
-Y[end, 5:8] .= NaN
-Y[end-1, 7:8] .= NaN
+Y[end, end] = NaN       # simulate missing latest observation (ragged edge)
 
 println("Data: T=$T_obs, nM=$nM monthly, nQ=$nQ quarterly")
 println("Missing: ", sum(isnan.(Y)), " / ", length(Y), " entries")
@@ -378,7 +359,7 @@ r_dfm = nowcast(dfm)
 r_bvar = nowcast(bvar)
 r_bridge = nowcast(bridge)
 
-println("\nNowcast comparison (target: last quarterly variable):")
+println("\nNowcast comparison (target: FEDFUNDS quarterly):")
 println("  DFM:    nowcast = ", round(r_dfm.nowcast, digits=3),
         ", forecast = ", round(r_dfm.forecast, digits=3))
 println("  BVAR:   nowcast = ", round(r_bvar.nowcast, digits=3),
@@ -394,9 +375,9 @@ for h in 1:6
 end
 
 # === Step 5: News decomposition ===
+# Simulate that INDPRO, UNRATE, CPIAUCSL were just released for the latest month
 X_old = copy(Y)
 X_new = copy(Y)
-# Simulate that variables 1-3 were just released for last month
 X_old[end, 1:3] .= NaN
 
 news = nowcast_news(X_new, X_old, dfm, T_obs; target_var=N)
@@ -412,7 +393,7 @@ for k in 1:min(3, length(sorted_idx))
 end
 ```
 
-**Interpretation.** The DFM extracts common factors from the 8 monthly and 2 quarterly variables, filling the ragged edge via the Kalman smoother. The BVAR estimates all cross-variable dynamics directly with informative priors. Bridge equations provide a simple, transparent baseline. The news decomposition shows which data releases drove the most recent nowcast revision --- this is the key tool for central bank communication ("GDP was revised up because industrial production surprised on the upside").
+**Interpretation.** The DFM extracts common factors from the 4 monthly FRED-MD indicators (INDPRO, UNRATE, CPIAUCSL, M2SL) and the quarterly FEDFUNDS target, filling the ragged edge via the Kalman smoother. The BVAR estimates all cross-variable dynamics directly with informative priors. Bridge equations provide a simple, transparent baseline. The news decomposition shows which data releases drove the most recent nowcast revision --- for example, a surprise in industrial production or unemployment may revise the quarterly target estimate.
 
 ---
 

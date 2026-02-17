@@ -7,11 +7,14 @@ The unified `plot_result()` function dispatches on 31 result types, producing se
 ## Quick Start
 
 ```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
+using MacroEconometricModels
+
+# Load FRED-MD and prepare stationary 3-variable monetary system
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "UNRATE", "CPIAUCSL"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
 
 # Estimate a VAR and plot IRFs
-Y = randn(200, 3)
 m = estimate_var(Y, 2)
 r = irf(m, 20; ci_type=:bootstrap, reps=500)
 p = plot_result(r)
@@ -66,7 +69,11 @@ println(length(p.html), " bytes")
 ### Frequentist IRF
 
 ```julia
-Y = randn(200, 3)
+# Stationary 3-variable system from FRED-MD
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "UNRATE", "CPIAUCSL"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+
 m = estimate_var(Y, 2)
 r = irf(m, 20; ci_type=:bootstrap, reps=500)
 
@@ -75,9 +82,6 @@ p = plot_result(r)
 
 # Single response variable and shock
 p = plot_result(r; var=1, shock=1)
-
-# String-based selection (uses variable names)
-p = plot_result(r; var="Var 1", shock="Shock 2")
 
 # Custom title
 p = plot_result(r; title="Monetary Policy Shock")
@@ -92,7 +96,7 @@ p = plot_result(r; title="Monetary Policy Shock")
 ### Bayesian IRF
 
 ```julia
-post = estimate_bvar(Y, 2; n_draws=1000)
+post = estimate_bvar(Y, 2; n_draws=1000, varnames=["INDPRO", "UNRATE", "CPI"])
 r = irf(post, 20)
 p = plot_result(r)                    # Full grid
 p = plot_result(r; var=1, shock=1)    # Single panel
@@ -107,8 +111,8 @@ Displays posterior median with credible band from the widest quantile interval.
 ### Local Projection IRF
 
 ```julia
-lp = estimate_lp(Y, 1, 20; lags=2)
-r = lp_irf(lp)
+lp_m = estimate_lp(Y, 1, 20; lags=2)
+r = lp_irf(lp_m)
 p = plot_result(r)          # All response variables
 p = plot_result(r; var=1)   # Single variable
 ```
@@ -135,7 +139,6 @@ p = plot_result(slp)
 ### Frequentist FEVD
 
 ```julia
-m = estimate_var(Y, 2)
 f = fevd(m, 20)
 p = plot_result(f)          # All variables (stacked area)
 p = plot_result(f; var=1)   # Single variable
@@ -150,7 +153,6 @@ Rendered as stacked area charts with proportions summing to 1.0.
 ### Bayesian FEVD
 
 ```julia
-post = estimate_bvar(Y, 2; n_draws=1000)
 f = fevd(post, 20)
 p = plot_result(f)
 p = plot_result(f; stat=:mean)  # Default: posterior mean
@@ -163,7 +165,6 @@ p = plot_result(f; stat=:mean)  # Default: posterior mean
 ### LP-FEVD
 
 ```julia
-slp = structural_lp(Y, 20; method=:cholesky, lags=2)
 f = lp_fevd(slp, 20)
 p = plot_result(f)
 p = plot_result(f; bias_corrected=true)  # Default
@@ -180,9 +181,7 @@ p = plot_result(f; bias_corrected=true)  # Default
 ### Frequentist HD
 
 ```julia
-m = estimate_var(Y, 2)
-T_eff = size(m.Y, 1) - m.p
-hd = historical_decomposition(m, T_eff)
+hd = historical_decomposition(m)
 p = plot_result(hd)          # All variables
 p = plot_result(hd; var=1)   # Single variable
 ```
@@ -196,9 +195,7 @@ Each variable produces two panels: stacked bar chart of shock contributions and 
 ### Bayesian HD
 
 ```julia
-post = estimate_bvar(Y, 2; n_draws=1000)
-T_eff = size(Y, 1) - 2
-hd = historical_decomposition(post, T_eff)
+hd = historical_decomposition(post)
 p = plot_result(hd)
 ```
 
@@ -215,7 +212,10 @@ All five filter types produce a two-panel figure: trend vs. original series and 
 ### Hodrick-Prescott
 
 ```julia
-y = cumsum(randn(200))
+# Log industrial production from FRED-MD (monthly, I(1))
+fred = load_example(:fred_md)
+y = filter(isfinite, log.(fred[:, "INDPRO"]))
+
 p = plot_result(hp_filter(y))
 ```
 
@@ -273,15 +273,18 @@ p = plot_result(boosted_hp(y))
 ### ARIMA Forecast
 
 ```julia
-y = randn(200)
-ar = estimate_ar(y, 2)
+# IP growth rate (log first difference) from FRED-MD
+fred = load_example(:fred_md)
+y1 = filter(isfinite, apply_tcode(fred[:, "INDPRO"], 5))
+
+ar = estimate_ar(y1, 2)
 fc = forecast(ar, 20)
 
 # Forecast only
 p = plot_result(fc)
 
 # With recent history
-p = plot_result(fc; history=y, n_history=30)
+p = plot_result(fc; history=y1, n_history=30)
 ```
 
 ```@raw html
@@ -291,7 +294,12 @@ p = plot_result(fc; history=y, n_history=30)
 ### Volatility Forecast
 
 ```julia
-gm = estimate_garch(y, 1, 1)
+# S&P 500 returns from FRED-MD (falls back to INDPRO growth)
+sp_idx = findfirst(v -> occursin("S&P", v) && occursin("500", v), varnames(fred))
+y_vol = sp_idx !== nothing ?
+    filter(isfinite, apply_tcode(fred[:, varnames(fred)[sp_idx]], 5)) : y1
+
+gm = estimate_garch(y_vol, 1, 1)
 fc = forecast(gm, 10)
 p = plot_result(fc)
 p = plot_result(fc; history=gm.conditional_variance)
@@ -304,8 +312,12 @@ p = plot_result(fc; history=gm.conditional_variance)
 ### VECM Forecast
 
 ```julia
-Y = cumsum(randn(150, 3), dims=1)
-vecm = estimate_vecm(Y, 2; rank=1)
+# Cointegrated quarterly I(1) system from FRED-QD
+qd = load_example(:fred_qd)
+Y_ci = log.(to_matrix(qd[:, ["GDPC1", "PCECC96", "GPDIC1"]]))
+Y_ci = Y_ci[all.(isfinite, eachrow(Y_ci)), :]
+
+vecm = estimate_vecm(Y_ci, 2; rank=1)
 fc = forecast(vecm, 10)
 p = plot_result(fc)          # All variables
 p = plot_result(fc; var=1)   # Single variable
@@ -318,7 +330,14 @@ p = plot_result(fc; var=1)   # Single variable
 ### Factor Forecast
 
 ```julia
-X = randn(200, 20)
+# Large panel from FRED-MD (safe variables only, first 20 columns)
+fred = load_example(:fred_md)
+safe_idx = [i for i in 1:nvars(fred)
+            if fred.tcode[i] < 4 || all(x -> isfinite(x) && x > 0, fred.data[:, i])]
+fred_safe = fred[:, varnames(fred)[safe_idx]]
+X = to_matrix(apply_tcode(fred_safe))
+X = X[all.(isfinite, eachrow(X)), 1:min(20, size(X, 2))]
+
 fm = estimate_dynamic_factors(X, 2, 1)
 fc = forecast(fm, 10)
 
@@ -333,10 +352,11 @@ p = plot_result(fc; type=:observable, var=1) # Observable forecast
 ### LP Forecast
 
 ```julia
-Y = randn(100, 3)
-lp = estimate_lp(Y, 1, 10; lags=2)
+# Use last 100 rows of the 3-variable FRED-MD data
+Y_lp = Y[end-99:end, :]
+lp_fc = estimate_lp(Y_lp, 1, 10; lags=2)
 shock_path = zeros(10); shock_path[1] = 1.0
-fc = forecast(lp, shock_path)
+fc = forecast(lp_fc, shock_path)
 p = plot_result(fc)
 ```
 
@@ -351,12 +371,11 @@ p = plot_result(fc)
 ARCH, GARCH, EGARCH, and GJR-GARCH models produce a three-panel diagnostic figure: return series, conditional volatility, and standardized residuals with +/-2 standard deviation bounds.
 
 ```julia
-y = randn(500)
-
-p = plot_result(estimate_arch(y, 2))
-p = plot_result(estimate_garch(y, 1, 1))
-p = plot_result(estimate_egarch(y, 1, 1))
-p = plot_result(estimate_gjr_garch(y, 1, 1))
+# S&P 500 returns (or INDPRO growth as fallback)
+p = plot_result(estimate_arch(y_vol, 2))
+p = plot_result(estimate_garch(y_vol, 1, 1))
+p = plot_result(estimate_egarch(y_vol, 1, 1))
+p = plot_result(estimate_gjr_garch(y_vol, 1, 1))
 ```
 
 ```@raw html
@@ -368,7 +387,7 @@ p = plot_result(estimate_gjr_garch(y, 1, 1))
 The SV model shows posterior volatility with quantile credible bands:
 
 ```julia
-m = estimate_sv(y; n_samples=2000, burnin=1000)
+m = estimate_sv(y_vol; n_samples=2000, burnin=1000)
 p = plot_result(m)
 ```
 
@@ -383,9 +402,7 @@ p = plot_result(m)
 Factor models display a scree plot of eigenvalues and the extracted factor time series:
 
 ```julia
-X = randn(200, 20)
-
-# Static factors
+# Static factors (reusing X from factor forecast above)
 p = plot_result(estimate_factors(X, 3))
 
 # Dynamic factors
@@ -403,9 +420,11 @@ p = plot_result(estimate_dynamic_factors(X, 2, 1))
 ### TimeSeriesData
 
 ```julia
-d = TimeSeriesData(randn(100, 3); varnames=["GDP", "CPI", "RATE"])
-p = plot_result(d)                      # All variables
-p = plot_result(d; vars=["GDP", "CPI"]) # Subset
+# Plot raw FRED-MD series
+fred = load_example(:fred_md)
+d = fred[:, ["INDPRO", "UNRATE", "CPIAUCSL"]]
+p = plot_result(d)                               # All variables
+p = plot_result(d; vars=["INDPRO", "CPIAUCSL"])  # Subset
 ```
 
 ```@raw html
@@ -415,11 +434,9 @@ p = plot_result(d; vars=["GDP", "CPI"]) # Subset
 ### PanelData
 
 ```julia
-using DataFrames
-df = DataFrame(group=repeat(1:3, inner=20), time=repeat(1:20, 3),
-    x=randn(60), y=randn(60))
-pd = xtset(df, :group, :time)
-p = plot_result(pd)
+# Penn World Table: real GDP, population, employment, human capital
+pwt = load_example(:pwt)
+p = plot_result(pwt; vars=["rgdpna", "pop", "emp", "hc"])
 ```
 
 ```@raw html
@@ -435,10 +452,16 @@ Panel data plots show each variable in a separate panel with one line per group.
 ### Nowcast Result
 
 ```julia
-Y = randn(100, 5)
-Y[end, end] = NaN  # Missing quarterly observation
-dfm = nowcast_dfm(Y, 4, 1; r=2, p=1)
-nr = nowcast(dfm)
+# Mixed-frequency panel from FRED-MD
+fred = load_example(:fred_md)
+nc_sub = fred[:, ["INDPRO", "UNRATE", "CPIAUCSL", "M2SL", "FEDFUNDS"]]
+Y_nc = to_matrix(apply_tcode(nc_sub))
+Y_nc = Y_nc[all.(isfinite, eachrow(Y_nc)), :]
+Y_nc = Y_nc[end-99:end, :]
+Y_nc[end, end] = NaN  # Simulate missing observation
+
+dfm_nc = nowcast_dfm(Y_nc, 4, 1; r=2, p=1)
+nr = nowcast(dfm_nc)
 p = plot_result(nr)
 ```
 
@@ -451,10 +474,10 @@ Displays smoothed target variable with nowcast and forecast values annotated in 
 ### Nowcast News
 
 ```julia
-X_old = randn(100, 5); X_old[end, end] = NaN
-X_new = copy(X_old); X_new[end, end] = 0.5
-dfm = nowcast_dfm(X_old, 4, 1; r=2, p=1)
-nn = nowcast_news(X_new, X_old, dfm, 5)
+X_old = copy(Y_nc)
+X_new = copy(X_old); X_new[end, end] = X_old[end-1, end]  # Fill with previous value
+dfm_news = nowcast_dfm(X_old, 4, 1; r=2, p=1)
+nn = nowcast_news(X_new, X_old, dfm_news, 5)
 p = plot_result(nn)
 ```
 

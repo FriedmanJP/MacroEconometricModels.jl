@@ -16,13 +16,23 @@ Factor models are fundamental tools in macroeconometrics for extracting common s
 ## Quick Start
 
 ```julia
-fm = estimate_factors(X, r; standardize=true)                       # Static factor model via PCA
-ic = ic_criteria(X, 10)                                             # Bai-Ng IC for factor count
-dfm = estimate_dynamic_factors(X, r, p; method=:twostep)            # Dynamic factor model
-gdfm = estimate_gdfm(X, q; kernel=:bartlett)                        # Generalized DFM (spectral)
-fc = forecast(fm, h; ci_method=:theoretical)                        # Static FM forecast with analytical CIs
-fc = forecast(dfm, h; ci_method=:bootstrap, n_boot=1000)            # DFM forecast with bootstrap CIs
-fc = forecast(gdfm, h; ci_method=:theoretical)                      # GDFM forecast with analytical CIs
+using MacroEconometricModels
+
+# Load FRED-MD and prepare a transformed panel of macro indicators
+fred = load_example(:fred_md)
+safe_idx = [i for i in 1:nvars(fred)
+            if fred.tcode[i] < 4 || all(x -> isfinite(x) && x > 0, fred.data[:, i])]
+fred_safe = fred[:, varnames(fred)[safe_idx]]
+X = to_matrix(apply_tcode(fred_safe))
+X = X[all.(isfinite, eachrow(X)), 1:min(20, size(X, 2))]
+
+fm = estimate_factors(X, 3; standardize=true)                      # Static factor model via PCA
+ic = ic_criteria(X, 10)                                            # Bai-Ng IC for factor count
+dfm = estimate_dynamic_factors(X, 3, 1; method=:twostep)           # Dynamic factor model
+gdfm = estimate_gdfm(X, 2; kernel=:bartlett)                       # Generalized DFM (spectral)
+fc = forecast(fm, 12; ci_method=:theoretical)                      # Static FM forecast with analytical CIs
+fc = forecast(dfm, 12; ci_method=:bootstrap, n_boot=1000)          # DFM forecast with bootstrap CIs
+fc = forecast(gdfm, 12; ci_method=:theoretical)                    # GDFM forecast with analytical CIs
 ```
 
 ---
@@ -113,17 +123,23 @@ The normalization ``F'F/T = I_r`` and ``\Lambda'\Lambda`` diagonal pins down rot
 ```julia
 using MacroEconometricModels
 
-# X is T×N data matrix
-# Estimate r-factor model
+# Load FRED-MD and prepare transformed panel
+fred = load_example(:fred_md)
+safe_idx = [i for i in 1:nvars(fred)
+            if fred.tcode[i] < 4 || all(x -> isfinite(x) && x > 0, fred.data[:, i])]
+fred_safe = fred[:, varnames(fred)[safe_idx]]
+X = to_matrix(apply_tcode(fred_safe))
+X = X[all.(isfinite, eachrow(X)), 1:min(20, size(X, 2))]
 
-model = estimate_factors(X, r;
+# Estimate 3-factor model from FRED-MD indicators
+model = estimate_factors(X, 3;
     standardize = true,    # Standardize data
     method = :pca          # Principal components
 )
 
 # Access results
-F = model.factors          # T×r estimated factors
-Λ = model.loadings         # N×r estimated loadings
+F = model.factors          # T×3 estimated factors
+Λ = model.loadings         # 20×3 estimated loadings
 ```
 
 ### FactorModel Return Values
@@ -188,7 +204,15 @@ where:
 ```julia
 using MacroEconometricModels
 
-# Compute IC for r = 1, ..., r_max
+# Load and transform FRED-MD panel
+fred = load_example(:fred_md)
+safe_idx = [i for i in 1:nvars(fred)
+            if fred.tcode[i] < 4 || all(x -> isfinite(x) && x > 0, fred.data[:, i])]
+fred_safe = fred[:, varnames(fred)[safe_idx]]
+X = to_matrix(apply_tcode(fred_safe))
+X = X[all.(isfinite, eachrow(X)), 1:min(20, size(X, 2))]
+
+# Bai-Ng information criteria select the number of factors from FRED-MD indicators
 r_max = 10
 ic = ic_criteria(X, r_max)
 
@@ -232,13 +256,14 @@ where ``\mu_j`` is the ``j``-th largest eigenvalue of ``X'X/T`` (or ``XX'/N``).
 ```julia
 using MacroEconometricModels
 
-model = estimate_factors(X, r)
+# Estimate factor model from FRED-MD panel (using X from above)
+model = estimate_factors(X, 5)
 
 # Get scree plot data
 scree = scree_plot_data(model)
 
-# Variance explained
-for j in 1:min(10, length(scree.factors))
+# Variance explained by each factor
+for j in 1:min(5, length(scree.factors))
     println("Factor $j: $(round(scree.explained_variance[j]*100, digits=2))% ",
             "(cumulative: $(round(scree.cumulative_variance[j]*100, digits=2))%)")
 end
@@ -263,9 +288,10 @@ Variables with low ``R^2`` are mainly driven by idiosyncratic shocks.
 ```julia
 using MacroEconometricModels
 
-model = estimate_factors(X, r)
+# Estimate 3-factor model from FRED-MD panel (using X from above)
+model = estimate_factors(X, 3)
 
-# R² for each variable
+# R² for each variable — how much of each FRED-MD indicator is driven by common factors
 r2_values = r2(model)
 
 # Summary statistics
@@ -325,19 +351,24 @@ This allows structural analysis with high-dimensional information sets.
 ```julia
 using MacroEconometricModels
 
-# Estimate factors from large panel X
-fm = estimate_factors(X, r)
+# Estimate factors from FRED-MD panel (using X from above)
+fm = estimate_factors(X, 3)
 F = fm.factors
 
-# Combine with key observables (e.g., FFR, GDP, inflation)
-Y_key = Matrix(data[:, [:FFR, :GDP, :CPI]])
-Y_favar = hcat(Y_key, F)
+# Load key monetary policy observables
+fred = load_example(:fred_md)
+Y_key = to_matrix(apply_tcode(fred[:, ["FEDFUNDS", "INDPRO", "CPIAUCSL"]]))
+Y_key = Y_key[all.(isfinite, eachrow(Y_key)), :]
 
-# Estimate FAVAR
-favar_model = estimate_var(Y_favar, p)
+# Align lengths and combine factors with key observables
+T_min = min(size(F, 1), size(Y_key, 1))
+Y_favar = hcat(Y_key[end-T_min+1:end, :], F[end-T_min+1:end, :])
 
-# Structural analysis
-irf_favar = irf(favar_model, H; method=:cholesky)
+# Estimate FAVAR: 6 variables (3 observables + 3 factors)
+favar_model = estimate_var(Y_favar, 4)
+
+# Structural analysis: monetary policy shock via Cholesky
+irf_favar = irf(favar_model, 20; method=:cholesky)
 ```
 
 ---
@@ -375,7 +406,7 @@ where ``\Psi_j = J C^j`` are the VMA coefficient matrices from the companion for
 ```julia
 using MacroEconometricModels
 
-# Estimate static factor model
+# Estimate static factor model from FRED-MD panel (using X from above)
 fm = estimate_factors(X, 3)
 
 # Point forecast (fits VAR(1) on factors internally)
@@ -390,6 +421,7 @@ fc.factors_upper   # 12×3 upper CI for factors
 fc.observables_se  # 12×N standard errors for observables
 
 # Forecast with bootstrap CIs
+using Random; Random.seed!(42)
 fc = forecast(fm, 12; ci_method=:bootstrap, n_boot=1000, conf_level=0.90)
 
 # Use higher-order VAR for factor dynamics
@@ -493,18 +525,19 @@ where:
 ```julia
 using MacroEconometricModels
 
-# Estimate dynamic factor model with r factors and p lags
-model = estimate_dynamic_factors(X, r, p;
+# Estimate dynamic factor model from FRED-MD panel (using X from above)
+# 3 factors with VAR(1) dynamics
+model = estimate_dynamic_factors(X, 3, 1;
     method = :twostep,      # or :em
     standardize = true,
     diagonal_idio = true    # Diagonal idiosyncratic covariance
 )
 
 # Access results
-F = model.factors           # T×r estimated factors
-Λ = model.loadings          # N×r loadings
-A = model.A                 # Vector of r×r AR coefficient matrices
-Σ_η = model.Sigma_eta       # r×r factor innovation covariance
+F = model.factors           # T×3 estimated factors
+Λ = model.loadings          # N×3 loadings
+A = model.A                 # Vector of 3×3 AR coefficient matrices
+Σ_η = model.Sigma_eta       # 3×3 factor innovation covariance
 Σ_e = model.Sigma_e         # N×N idiosyncratic covariance
 ```
 
@@ -664,8 +697,9 @@ The key insight is that common factors produce **diverging eigenvalues** (growin
 ```julia
 using MacroEconometricModels
 
-# Estimate GDFM with q dynamic factors
-model = estimate_gdfm(X, q;
+# Estimate GDFM from FRED-MD panel (using X from above)
+# 2 dynamic factors via spectral analysis
+model = estimate_gdfm(X, 2;
     standardize = true,
     bandwidth = 0,           # Auto-select: T^(1/3)
     kernel = :bartlett,      # :bartlett, :parzen, or :tukey
@@ -673,13 +707,13 @@ model = estimate_gdfm(X, q;
 )
 
 # Access results
-F = model.factors                 # T×q time-domain factors
+F = model.factors                 # T×2 time-domain factors
 χ = model.common_component        # T×N common component
 ξ = model.idiosyncratic           # T×N idiosyncratic component
-Λ = model.loadings_spectral       # N×q×n_freq frequency-domain loadings
+Λ = model.loadings_spectral       # N×2×n_freq frequency-domain loadings
 
 # Variance explained by dynamic factors
-model.variance_explained          # q-vector of variance shares
+model.variance_explained          # 2-vector of variance shares
 ```
 
 ### GeneralizedDynamicFactorModel Return Values
@@ -790,8 +824,13 @@ The theoretical CIs use the closed-form AR(1) forecast variance: ``\text{Var}(\h
 ```julia
 using MacroEconometricModels
 
-# Load large macroeconomic panel (e.g., FRED-MD)
-X = load_data()  # T×N matrix
+# Load and transform FRED-MD panel
+fred = load_example(:fred_md)
+safe_idx = [i for i in 1:nvars(fred)
+            if fred.tcode[i] < 4 || all(x -> isfinite(x) && x > 0, fred.data[:, i])]
+fred_safe = fred[:, varnames(fred)[safe_idx]]
+X = to_matrix(apply_tcode(fred_safe))
+X = X[all.(isfinite, eachrow(X)), 1:min(20, size(X, 2))]
 
 # Step 1: Select number of factors
 ic = ic_criteria_gdfm(X, 10)
@@ -842,12 +881,8 @@ All three factor model types implement the standard [StatsAPI](https://github.co
 
 ```julia
 using MacroEconometricModels
-using Random, Statistics
 
-Random.seed!(42)
-F = randn(200, 3)
-Λ = randn(10, 3)
-X = F * Λ' + 0.5 * randn(200, 10)
+# Load and transform FRED-MD panel (using X from above)
 
 # Static factor model
 fm = estimate_factors(X, 3)
@@ -873,7 +908,7 @@ println("Mean R²: ", round(mean(r2(gdfm)), digits=3))
 The interface is useful for model comparison:
 
 ```julia
-# Compare DFM specifications via information criteria
+# Compare DFM specifications via information criteria on FRED-MD data
 for r in 1:5
     m = estimate_dynamic_factors(X, r, 1; method=:twostep)
     println("r=$r: AIC=$(round(aic(m), digits=1)), BIC=$(round(bic(m), digits=1))")

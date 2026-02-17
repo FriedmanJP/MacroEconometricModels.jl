@@ -197,6 +197,15 @@ struct PanelData{T<:AbstractFloat} <: AbstractMacroData
     desc::Vector{String}
     vardesc::Dict{String,String}
     source_refs::Vector{Symbol}
+
+    function PanelData{T}(data, varnames, frequency, tcode, group_id, time_id,
+                          group_names, n_groups, n_vars, T_obs, balanced,
+                          desc, vardesc, source_refs) where {T<:AbstractFloat}
+        all(t -> 1 <= t <= 7, tcode) || throw(ArgumentError("tcode values must be in 1:7"))
+        new{T}(data, varnames, frequency, tcode, group_id, time_id,
+               group_names, n_groups, n_vars, T_obs, balanced,
+               desc, vardesc, source_refs)
+    end
 end
 
 # =============================================================================

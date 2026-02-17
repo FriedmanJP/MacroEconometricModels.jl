@@ -71,7 +71,8 @@ function estimate_bvar(Y::AbstractMatrix{T}, p::Int;
     n_draws::Int=1000, sampler::Symbol=:direct,
     burnin::Int=0, thin::Int=1,
     prior::Symbol=:normal,
-    hyper::Union{Nothing,MinnesotaHyperparameters}=nothing
+    hyper::Union{Nothing,MinnesotaHyperparameters}=nothing,
+    varnames::Union{Vector{String},Nothing}=nothing
 ) where {T<:AbstractFloat}
 
     _validate_data(Y, "Y")
@@ -113,12 +114,14 @@ function estimate_bvar(Y::AbstractMatrix{T}, p::Int;
     S_post = S0 + Y_data' * Y_data + B0' * V0_inv * B0 - B_post' * V_post_inv * B_post
     S_post = T(0.5) * (S_post + S_post')  # Ensure symmetry
 
+    vn = something(varnames, ["y$i" for i in 1:n])
+
     if sampler == :direct
-        return _sample_direct(Y, p, n, k, n_draws, B_post, V_post, ν_post, S_post, prior)
+        return _sample_direct(Y, p, n, k, n_draws, B_post, V_post, ν_post, S_post, prior, vn)
     elseif sampler == :gibbs
         eff_burnin = burnin == 0 ? 200 : burnin
         return _sample_gibbs(Y, p, n, k, n_draws, eff_burnin, thin,
-                             Y_data, X_data, V0_inv, B0, ν0, S0, prior)
+                             Y_data, X_data, V0_inv, B0, ν0, S0, prior, vn)
     else
         throw(ArgumentError("Unknown sampler: $sampler. Use :direct or :gibbs"))
     end
@@ -133,7 +136,8 @@ end
 """Draw i.i.d. samples from the conjugate Normal-Inverse-Wishart posterior."""
 function _sample_direct(Y::Matrix{T}, p::Int, n::Int, k::Int, n_draws::Int,
                         B_post::Matrix{T}, V_post::Matrix{T},
-                        ν_post::Int, S_post::Matrix{T}, prior::Symbol) where {T<:AbstractFloat}
+                        ν_post::Int, S_post::Matrix{T}, prior::Symbol,
+                        varnames::Vector{String}) where {T<:AbstractFloat}
 
     B_draws = Array{T,3}(undef, n_draws, k, n)
     Sigma_draws = Array{T,3}(undef, n_draws, n, n)
@@ -156,7 +160,7 @@ function _sample_direct(Y::Matrix{T}, p::Int, n::Int, k::Int, n_draws::Int,
         Sigma_draws[s, :, :] = Sigma
     end
 
-    BVARPosterior{T}(B_draws, Sigma_draws, n_draws, p, n, Matrix{T}(Y), prior, :direct)
+    BVARPosterior{T}(B_draws, Sigma_draws, n_draws, p, n, Matrix{T}(Y), prior, :direct, varnames)
 end
 
 # =============================================================================
@@ -168,7 +172,8 @@ function _sample_gibbs(Y::Matrix{T}, p::Int, n::Int, k::Int,
                        n_draws::Int, burnin::Int, thin::Int,
                        Y_data::Matrix{T}, X_data::Matrix{T},
                        V0_inv::Matrix{T}, B0::Matrix{T},
-                       ν0::Int, S0::Matrix{T}, prior::Symbol) where {T<:AbstractFloat}
+                       ν0::Int, S0::Matrix{T}, prior::Symbol,
+                       varnames::Vector{String}) where {T<:AbstractFloat}
 
     B_draws = Array{T,3}(undef, n_draws, k, n)
     Sigma_draws = Array{T,3}(undef, n_draws, n, n)
@@ -212,7 +217,7 @@ function _sample_gibbs(Y::Matrix{T}, p::Int, n::Int, k::Int,
         end
     end
 
-    BVARPosterior{T}(B_draws, Sigma_draws, n_draws, p, n, Matrix{T}(Y), prior, :gibbs)
+    BVARPosterior{T}(B_draws, Sigma_draws, n_draws, p, n, Matrix{T}(Y), prior, :gibbs, varnames)
 end
 
 # =============================================================================
@@ -275,7 +280,8 @@ end
 
 """Convert chain parameters to VARModel. Provide `data` for residual computation."""
 function parameters_to_model(b_vec::AbstractVector{T}, sigma_vec::AbstractVector{T},
-                             p::Int, n::Int, data::AbstractMatrix{T}=Matrix{T}(undef, 0, 0)) where {T<:AbstractFloat}
+                             p::Int, n::Int, data::AbstractMatrix{T}=Matrix{T}(undef, 0, 0);
+                             varnames::Vector{String}=["y$i" for i in 1:n]) where {T<:AbstractFloat}
     k = 1 + n * p
     B, Sigma = reshape(b_vec, k, n), reshape(sigma_vec, n, n)
 
@@ -286,12 +292,13 @@ function parameters_to_model(b_vec::AbstractVector{T}, sigma_vec::AbstractVector
         Matrix{T}(undef, 0, n)
     end
 
-    VARModel(isempty(data) ? zeros(T, 0, n) : data, p, B, U, Sigma, zero(T), zero(T), zero(T))
+    VARModel(isempty(data) ? zeros(T, 0, n) : data, p, B, U, Sigma, zero(T), zero(T), zero(T), varnames)
 end
 
-function parameters_to_model(b_vec, sigma_vec, p::Int, n::Int, data::AbstractMatrix=Matrix{Float64}(undef, 0, 0))
+function parameters_to_model(b_vec, sigma_vec, p::Int, n::Int, data::AbstractMatrix=Matrix{Float64}(undef, 0, 0);
+                             varnames::Vector{String}=["y$i" for i in 1:n])
     T = promote_type(eltype(b_vec), eltype(sigma_vec))
-    parameters_to_model(Vector{T}(b_vec), Vector{T}(sigma_vec), p, n, Matrix{T}(data))
+    parameters_to_model(Vector{T}(b_vec), Vector{T}(sigma_vec), p, n, Matrix{T}(data); varnames=varnames)
 end
 
 # =============================================================================
@@ -302,14 +309,16 @@ end
 function posterior_mean_model(post::BVARPosterior{T}; data::AbstractMatrix=Matrix{T}(undef, 0, 0)) where {T}
     use_data = isempty(data) ? post.data : Matrix{T}(data)
     b, s = extract_chain_parameters(post)
-    parameters_to_model(vec(mean(b, dims=1)), vec(mean(s, dims=1)), post.p, post.n, use_data)
+    parameters_to_model(vec(mean(b, dims=1)), vec(mean(s, dims=1)), post.p, post.n, use_data;
+                        varnames=post.varnames)
 end
 
 """VARModel with posterior median parameters."""
 function posterior_median_model(post::BVARPosterior{T}; data::AbstractMatrix=Matrix{T}(undef, 0, 0)) where {T}
     use_data = isempty(data) ? post.data : Matrix{T}(data)
     b, s = extract_chain_parameters(post)
-    parameters_to_model(vec(median(b, dims=1)), vec(median(s, dims=1)), post.p, post.n, use_data)
+    parameters_to_model(vec(median(b, dims=1)), vec(median(s, dims=1)), post.p, post.n, use_data;
+                        varnames=post.varnames)
 end
 
 # Deprecated wrappers (old Chains-based signatures)
@@ -320,3 +329,6 @@ end
 function posterior_median_model(post::BVARPosterior, p::Int, n::Int; data::AbstractMatrix=Matrix{Float64}(undef, 0, 0))
     posterior_median_model(post; data=data)
 end
+
+# Accessor
+varnames(post::BVARPosterior) = post.varnames

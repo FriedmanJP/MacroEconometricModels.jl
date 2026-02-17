@@ -18,15 +18,21 @@ Local Projections, introduced by Jordà (2005), estimate impulse responses by ru
 ## Quick Start
 
 ```julia
-lp = estimate_lp(Y, 1, 20; lags=4, cov_type=:newey_west)               # Standard LP
-lpiv = estimate_lp_iv(Y, 3, Z, 20; lags=4)                             # LP-IV
-slp = estimate_smooth_lp(Y, 1, 20; lambda=1.0, n_knots=4)              # Smooth LP
-sdlp = estimate_state_lp(Y, 1, state, 20; gamma=1.5)                   # State-dependent LP
-plp = estimate_propensity_lp(Y, treatment, covariates, 20)              # Propensity LP
-irf_result = lp_irf(lp; conf_level=0.95)                               # Extract IRF
-struc = structural_lp(Y, 20; method=:cholesky)                          # Structural LP
-fc = forecast(lp, ones(20); ci_method=:analytical)                      # LP forecast
-lfevd = lp_fevd(struc, 20; method=:r2, bias_correct=true)              # LP-FEVD
+using MacroEconometricModels
+
+# Load FRED-MD monetary policy dataset: industrial production, CPI, federal funds rate
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+
+lp = estimate_lp(Y, 3, 20; lags=4, cov_type=:newey_west)              # Standard LP
+Z = reshape([zeros(1); diff(Y[:, 3])], :, 1)                           # Instrument: lagged FFR changes
+lpiv = estimate_lp_iv(Y, 3, Z, 20; lags=4)                            # LP-IV
+slp = estimate_smooth_lp(Y, 3, 20; lambda=1.0, n_knots=4)             # Smooth LP
+irf_result = lp_irf(lp; conf_level=0.95)                              # Extract IRF
+struc = structural_lp(Y, 20; method=:cholesky)                         # Structural LP
+fc = forecast(lp, ones(20); ci_method=:analytical)                     # LP forecast
+lfevd = lp_fevd(struc, 20; method=:r2, bias_correct=true)             # LP-FEVD
 ```
 
 ---
@@ -89,26 +95,28 @@ where
 ### Julia Implementation
 
 !!! note "Technical Note"
-    LP residuals ``\varepsilon_{t+h}`` are serially correlated at least MA(``h-1``) under the null of correct specification, even when the true DGP has i.i.d. errors. This is because overlapping forecast horizons create mechanical dependence. HAC standard errors (Newey-West) are therefore essential for all horizons ``h > 0``. The default bandwidth is set to ``h + 1`` following standard practice.
+    LP residuals ``\varepsilon_{t+h}`` are serially correlated at least MA(``h-1``) under the null of correct specification, even when the true DGP has i.i.d. errors. This is because overlapping forecast horizons create mechanical dependence. HAC standard errors (Newey-West) are therefore essential for all horizons ``h > 0``. When using automatic bandwidth selection (`bandwidth=0`, the default), the effective bandwidth at each horizon ``h`` is `max(m̂_NW, h+1)` where `m̂_NW` is the Newey-West (1994) data-driven selection. This ensures the bandwidth always accounts for the MA(``h-1``) structure.
 
 ```julia
 using MacroEconometricModels
 
-# Data: Y is T×n matrix of variables
-# shock_var is the index of the shock variable
-# Estimate LP-IRF up to horizon H
+# Load FRED-MD monetary policy dataset
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
 
-lp_model = estimate_lp(Y, shock_var, H;
-    lags = 4,                  # Control lags
-    cov_type = :newey_west,    # HAC standard errors
-    bandwidth = 0              # 0 = automatic bandwidth
+# Estimate LP-IRF of a federal funds rate shock up to horizon 20
+lp_model = estimate_lp(Y, 3, 20;       # shock_var=3 (FEDFUNDS)
+    lags = 4,                           # Control lags
+    cov_type = :newey_west,             # HAC standard errors
+    bandwidth = 0                       # 0 = automatic bandwidth
 )
 
 # Extract IRF with confidence intervals
 irf_result = lp_irf(lp_model; conf_level = 0.95)
 ```
 
-The `irf_result.values` matrix has dimension ``(H+1) \times n_{resp}``, where each row gives the response at a particular horizon. At ``h = 0``, the coefficient ``\hat{\beta}_0`` captures the contemporaneous (impact) effect of a one-unit innovation in the shock variable on each response variable. The standard errors in `irf_result.se` widen as ``h`` increases because longer-horizon LP residuals exhibit stronger serial correlation, and the effective sample shrinks by one observation per horizon.
+The `irf_result.values` matrix has dimension ``(H+1) \times n_{resp}``, where each row gives the response at a particular horizon. At ``h = 0``, the coefficient ``\hat{\beta}_0`` captures the contemporaneous (impact) effect of a one-unit innovation in the federal funds rate on industrial production and CPI. The standard errors in `irf_result.se` widen as ``h`` increases because longer-horizon LP residuals exhibit stronger serial correlation, and the effective sample shrinks by one observation per horizon.
 
 ### LPModel Return Values
 
@@ -197,11 +205,16 @@ When instruments are weak, standard 2SLS inference is unreliable. Options includ
 ```julia
 using MacroEconometricModels
 
-# Y: T×n data matrix
-# shock_var: index of endogenous shock variable
-# Z: T×q matrix of external instruments
+# Load FRED-MD monetary policy dataset
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
 
-lpiv_model = estimate_lp_iv(Y, shock_var, Z, H;
+# Construct instrument: lagged changes in the federal funds rate
+Z = reshape([zeros(1); diff(Y[:, 3])], :, 1)
+
+# LP-IV: instrument FFR with its own lagged changes
+lpiv_model = estimate_lp_iv(Y, 3, Z, 20;    # shock_var=3 (FEDFUNDS)
     lags = 4,
     cov_type = :newey_west
 )
@@ -215,7 +228,7 @@ println("All horizons pass: ", weak_test.passes_threshold)
 irf_iv = lp_iv_irf(lpiv_model)
 ```
 
-The `weak_test.min_F` reports the minimum first-stage F-statistic across all horizons. If it exceeds the Stock & Yogo (2005) threshold of 10, instruments are considered strong at every horizon. First-stage strength typically declines at longer horizons because the instrument's predictive power for the endogenous shock weakens. If `weak_test.passes_threshold` is `false`, the IV estimates at affected horizons should be interpreted cautiously — consider Anderson-Rubin confidence sets for robust inference.
+The `weak_test.min_F` reports the minimum first-stage F-statistic across all horizons. If it exceeds the Stock & Yogo (2005) threshold of 10, the lagged FFR changes are a strong instrument at every horizon. First-stage strength typically declines at longer horizons because the instrument's predictive power for the endogenous shock weakens. If `weak_test.passes_threshold` is `false`, the IV estimates at affected horizons should be interpreted cautiously — consider Anderson-Rubin confidence sets for robust inference.
 
 ### LPIVModel Return Values
 
@@ -310,8 +323,13 @@ The smoothing parameter ``\lambda`` can be selected by k-fold cross-validation t
 ```julia
 using MacroEconometricModels
 
-# Smooth LP with cubic splines
-smooth_model = estimate_smooth_lp(Y, shock_var, H;
+# Load FRED-MD monetary policy dataset
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+
+# Smooth LP with cubic splines — smoothing the FFR shock IRF
+smooth_model = estimate_smooth_lp(Y, 3, 20;   # shock_var=3 (FEDFUNDS)
     degree = 3,           # Cubic splines
     n_knots = 4,          # Interior knots
     lambda = 1.0,         # Smoothing penalty
@@ -319,13 +337,13 @@ smooth_model = estimate_smooth_lp(Y, shock_var, H;
 )
 
 # Automatic lambda selection via CV
-optimal_lambda = cross_validate_lambda(Y, shock_var, H;
+optimal_lambda = cross_validate_lambda(Y, 3, 20;
     lambda_grid = 10.0 .^ (-4:0.5:2),
     k_folds = 5
 )
 
 # Compare smooth vs standard LP
-comparison = compare_smooth_lp(Y, shock_var, H; lambda = optimal_lambda)
+comparison = compare_smooth_lp(Y, 3, 20; lambda = optimal_lambda)
 println("Variance reduction: ", comparison.variance_reduction)
 ```
 
@@ -423,17 +441,22 @@ t = \frac{\hat{\beta}_E - \hat{\beta}_R}{\sqrt{\text{Var}(\hat{\beta}_E) + \text
 ### Julia Implementation
 
 ```julia
-using MacroEconometricModels
+using MacroEconometricModels, Statistics
 
-# Construct state variable (e.g., 7-quarter MA of GDP growth)
-gdp_growth = diff(log.(Y[:, 1]))
-state_var = [mean(gdp_growth[max(1, t-6):t]) for t in 1:length(gdp_growth)]
-state_var = (state_var .- mean(state_var)) ./ std(state_var)
+# Load FRED-MD monetary policy dataset
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
 
-# Estimate state-dependent LP
-state_model = estimate_state_lp(Y, shock_var, state_var, H;
+# Construct state variable: 7-month MA of industrial production growth (recession proxy)
+ip_growth = Y[:, 1]  # INDPRO already transformed to growth rate by tcode
+state_var = [mean(ip_growth[max(1, t-6):t]) for t in 1:length(ip_growth)]
+state_var = Float64.((state_var .- mean(state_var)) ./ std(state_var))
+
+# Estimate state-dependent LP: FFR shock with IP growth as state
+state_model = estimate_state_lp(Y, 3, state_var, 20;   # shock_var=3 (FEDFUNDS)
     gamma = :estimate,      # Estimate transition speed
-    threshold = :median,    # Set threshold at median
+    threshold = :estimate,  # Estimate threshold
     lags = 4
 )
 
@@ -446,7 +469,7 @@ irf_recession = state_irf(state_model; regime = :recession)
 diff_test = test_regime_difference(state_model)
 ```
 
-The `irf_expansion` and `irf_recession` objects contain regime-specific impulse responses. Comparing them reveals whether a shock (e.g., fiscal spending) has asymmetric effects across the business cycle — a prediction of many New Keynesian models with binding ZLB or liquidity traps. The `test_regime_difference` function computes a Wald-type test of ``H_0: \beta_E = \beta_R`` at each horizon using HAC standard errors; rejection implies statistically significant state dependence.
+The `irf_expansion` and `irf_recession` objects contain regime-specific impulse responses. Comparing them reveals whether a monetary policy shock has asymmetric effects across the business cycle — a prediction of many New Keynesian models with binding ZLB or liquidity traps. The `test_regime_difference` function computes a Wald-type test of ``H_0: \beta_E = \beta_R`` at each horizon using HAC standard errors; rejection implies statistically significant state dependence.
 
 ### StateLPModel Return Values
 
@@ -570,18 +593,28 @@ The two estimators coincide only when the propensity score model is exactly corr
 ```julia
 using MacroEconometricModels
 
-# treatment: Bool vector of treatment indicators
-# covariates: matrix of selection-relevant covariates
+# Load FRED-MD monetary policy dataset
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+
+# Construct binary treatment: large absolute FFR changes (top quartile)
+ffr_changes = abs.(diff(Y[:, 3]))
+treatment = Bool.(ffr_changes .> quantile(ffr_changes, 0.75))
+Y_trim = Y[2:end, :]  # align with diff
+
+# Covariates: lagged INDPRO and CPI growth
+covariates = Y_trim[:, 1:2]
 
 # IPW estimation — consistent if propensity model is correct
-ipw_model = estimate_propensity_lp(Y, treatment, covariates, H;
+ipw_model = estimate_propensity_lp(Y_trim, treatment, covariates, 20;
     ps_method = :logit,
     trimming = (0.01, 0.99),
     lags = 4
 )
 
 # Doubly robust estimation — consistent if EITHER model is correct
-dr_model = doubly_robust_lp(Y, treatment, covariates, H;
+dr_model = doubly_robust_lp(Y_trim, treatment, covariates, 20;
     ps_method = :logit,
     trimming = (0.01, 0.99),
     lags = 4
@@ -601,7 +634,7 @@ println("Propensity score overlap: ", diagnostics.overlap)
 println("Max covariate imbalance: ", diagnostics.balance.max_weighted)
 ```
 
-The `ate_irf` object contains the estimated Average Treatment Effect at each horizon. The diagnostics check two key assumptions: overlap (sufficient common support between treated and control distributions) and balance (covariate means equalized after reweighting, with standardized differences below 0.1).
+The `ate_irf` object contains the estimated Average Treatment Effect of large FFR changes at each horizon. The diagnostics check two key assumptions: overlap (sufficient common support between treated and control distributions) and balance (covariate means equalized after reweighting, with standardized differences below 0.1).
 
 ### PropensityLPModel Return Values
 
@@ -677,30 +710,30 @@ Structural LP supports all identification methods available for SVAR:
 
 ```julia
 using MacroEconometricModels
-using Random
 
-Random.seed!(42)
-T, n = 200, 3
-Y = randn(T, n)
-for t in 2:T
-    Y[t, :] = 0.5 * Y[t-1, :] + 0.3 * randn(n)
-end
+# Load FRED-MD monetary policy dataset: [INDPRO, CPI, FFR]
+# Cholesky ordering: output → prices → monetary policy
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
 
 # Structural LP with Cholesky identification
 slp = structural_lp(Y, 20; method=:cholesky, lags=4)
 
 # Access 3D IRF array: irfs.values[h, i, j]
-println("Shock 1 → Var 1 at h=1: ", round(slp.irf.values[1, 1, 1], digits=4))
-println("Shock 2 → Var 1 at h=8: ", round(slp.irf.values[8, 1, 2], digits=4))
+# Shock 3 = monetary policy shock (FFR), Var 1 = INDPRO
+println("FFR shock → INDPRO at h=1: ", round(slp.irf.values[1, 1, 3], digits=4))
+println("FFR shock → CPI at h=8: ", round(slp.irf.values[8, 2, 3], digits=4))
 
 # Standard errors
-println("SE at h=1: ", round(slp.se[1, 1, 1], digits=4))
+println("SE at h=1: ", round(slp.se[1, 1, 3], digits=4))
 
 # With bootstrap CIs
+using Random; Random.seed!(42)
 slp_ci = structural_lp(Y, 20; method=:cholesky, ci_type=:bootstrap, reps=500)
 
-# With sign restrictions
-check_fn(irf) = irf[1, 1, 1] > 0 && irf[1, 2, 1] > 0
+# With sign restrictions: positive supply shock raises output and lowers prices
+check_fn(irf) = irf[1, 1, 1] > 0 && irf[1, 2, 1] < 0
 slp_sign = structural_lp(Y, 20; method=:sign, check_func=check_fn)
 
 # Dispatch to IRF, FEVD, HD
@@ -709,7 +742,7 @@ decomp = fevd(slp, 20)          # LP-FEVD (Gorodnichenko & Lee 2019)
 hd = historical_decomposition(slp)  # LP-based historical decomposition
 ```
 
-The `slp.irf.values` array has shape ``H \times n \times n``, where `values[h, i, j]` gives the response of variable ``i`` to structural shock ``j`` at horizon ``h``. Under Cholesky identification, the ordering determines which variables respond contemporaneously to each shock — variable 1 responds only to shock 1 at impact, variable 2 responds to shocks 1 and 2, and so on. The standard errors in `slp.se` are computed from HAC-corrected LP regressions and tend to be wider than VAR-based IRF confidence bands, reflecting the efficiency cost of LP's robustness to dynamic misspecification.
+The `slp.irf.values` array has shape ``H \times n \times n``, where `values[h, i, j]` gives the response of variable ``i`` to structural shock ``j`` at horizon ``h``. Under Cholesky identification with ordering [INDPRO, CPI, FFR], the monetary policy shock (shock 3) can affect all three variables contemporaneously, but the federal funds rate does not respond to output or price shocks within the period. The standard errors in `slp.se` are computed from HAC-corrected LP regressions and tend to be wider than VAR-based IRF confidence bands, reflecting the efficiency cost of LP's robustness to dynamic misspecification.
 
 ### StructuralLP Return Values
 
@@ -761,30 +794,28 @@ Three CI methods are available:
 
 ```julia
 using MacroEconometricModels
-using Random
 
-Random.seed!(42)
-T, n = 200, 3
-Y = randn(T, n)
-for t in 2:T
-    Y[t, :] = 0.5 * Y[t-1, :] + 0.3 * randn(n)
-end
+# Load FRED-MD monetary policy dataset
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
 
-# Estimate LP model
-lp = estimate_lp(Y, 1, 20; lags=4, cov_type=:newey_west)
+# Estimate LP model: FFR shock
+lp = estimate_lp(Y, 3, 20; lags=4, cov_type=:newey_west)
 
 # Forecast with a unit shock path (1 at all horizons)
 shock_path = ones(20)
 fc = forecast(lp, shock_path; ci_method=:analytical, conf_level=0.95)
 
-println("Forecast at h=1: ", round(fc.forecasts[1, 1], digits=4))
-println("Forecast at h=8: ", round(fc.forecasts[8, 1], digits=4))
+println("INDPRO forecast at h=1: ", round(fc.forecasts[1, 1], digits=4))
+println("INDPRO forecast at h=8: ", round(fc.forecasts[8, 1], digits=4))
 println("95% CI at h=8: [", round(fc.ci_lower[8, 1], digits=4),
         ", ", round(fc.ci_upper[8, 1], digits=4), "]")
 
-# Structural LP forecast with a specific shock
+# Structural LP forecast with monetary policy shock
 slp = structural_lp(Y, 20; method=:cholesky)
-fc_struct = forecast(slp, 1, shock_path;  # shock_idx=1
+using Random; Random.seed!(42)
+fc_struct = forecast(slp, 3, shock_path;  # shock_idx=3 (monetary policy)
                      ci_method=:bootstrap, n_boot=500)
 ```
 
@@ -867,26 +898,24 @@ LP-FEVD estimates can be biased in finite samples. Following Kilian (1998), the 
 
 ```julia
 using MacroEconometricModels
-using Random
 
-Random.seed!(42)
-T, n = 200, 3
-Y = randn(T, n)
-for t in 2:T
-    Y[t, :] = 0.5 * Y[t-1, :] + 0.3 * randn(n)
-end
+# Load FRED-MD monetary policy dataset
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
 
-# First estimate structural LP
+# First estimate structural LP with Cholesky ordering [INDPRO, CPI, FFR]
 slp = structural_lp(Y, 20; method=:cholesky, lags=4)
 
 # R²-based LP-FEVD with bias correction
+using Random; Random.seed!(42)
 lfevd = lp_fevd(slp, 20; method=:r2, bias_correct=true, n_boot=500)
 
-# Access results
-println("FEVD of Var 1 due to Shock 1:")
+# Access results: how much of INDPRO variance is due to the monetary policy shock?
+println("FEVD of INDPRO due to FFR shock:")
 for h in [1, 4, 8, 12, 20]
-    raw = round(lfevd.proportions[1, 1, h] * 100, digits=1)
-    bc = round(lfevd.bias_corrected[1, 1, h] * 100, digits=1)
+    raw = round(lfevd.proportions[1, 3, h] * 100, digits=1)
+    bc = round(lfevd.bias_corrected[1, 3, h] * 100, digits=1)
     println("  h=$h: raw=$(raw)%, bias-corrected=$(bc)%")
 end
 

@@ -7,6 +7,11 @@ This page documents the Vector Error Correction Model (VECM) implementation in *
 ```julia
 using MacroEconometricModels
 
+# Load FRED-QD: log GDP, Consumption, Investment (I(1), cointegrated)
+qd = load_example(:fred_qd)
+Y = log.(to_matrix(qd[:, ["GDPC1", "PCECC96", "GPDIC1"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+
 # Estimate VECM with automatic rank selection
 vecm = estimate_vecm(Y, 2)
 
@@ -73,6 +78,13 @@ The Johansen (1991) reduced-rank regression procedure estimates ``\alpha`` and `
 4. **Extract** ``\beta`` from the first ``r`` eigenvectors and compute ``\alpha = S_{01} \beta (\beta' S_{11} \beta)^{-1}``
 
 ```julia
+using MacroEconometricModels
+
+# Load FRED-QD: log GDP, Consumption, Investment
+qd = load_example(:fred_qd)
+Y = log.(to_matrix(qd[:, ["GDPC1", "PCECC96", "GPDIC1"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+
 # Automatic rank selection via Johansen trace test
 vecm = estimate_vecm(Y, 2)
 
@@ -217,14 +229,12 @@ Each test reports a Wald ``\chi^2`` statistic, degrees of freedom, and p-value.
 ## Complete Example
 
 ```julia
-using MacroEconometricModels, Random
+using MacroEconometricModels
 
-Random.seed!(42)
-
-# Generate cointegrated data
-T_obs = 200
-Y = cumsum(randn(T_obs, 3), dims=1)
-Y[:, 2] = Y[:, 1] + 0.1 * randn(T_obs)  # Y2 cointegrated with Y1
+# Load FRED-QD: log GDP, Consumption, Investment (quarterly, I(1))
+qd = load_example(:fred_qd)
+Y = log.(to_matrix(qd[:, ["GDPC1", "PCECC96", "GPDIC1"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
 
 # Step 1: Test for cointegration
 joh = johansen_test(Y, 2)
@@ -246,11 +256,12 @@ irfs = irf(vecm, 20; method=:cholesky)
 # Step 5: Forecast
 fc = forecast(vecm, 10; ci_method=:bootstrap, reps=200)
 
-# Step 6: Granger causality
+# Step 6: Granger causality — does GDP Granger-cause Consumption?
+names = ["GDP", "Consumption", "Investment"]
 for i in 1:3, j in 1:3
     i == j && continue
     g = granger_causality_vecm(vecm, i, j)
-    println("Var $i → Var $j: p=$(round(g.strong_pvalue, digits=4))")
+    println("$(names[i]) → $(names[j]): p=$(round(g.strong_pvalue, digits=4))")
 end
 
 # Step 7: Convert to VAR for further analysis
@@ -258,7 +269,7 @@ var_model = to_var(vecm)
 decomp = fevd(var_model, 20)
 ```
 
-**Interpretation.** The cointegrating vector ``\beta`` identifies the long-run equilibrium. If ``\beta \approx [1, -1, 0]'``, this implies ``y_{1,t} - y_{2,t}`` is stationary --- variables 1 and 2 share a common stochastic trend. The adjustment coefficients ``\alpha`` show how each variable responds when the system deviates from equilibrium. A significant ``\alpha_i`` indicates that variable ``i`` adjusts to restore the long-run relationship.
+**Interpretation.** The cointegrating vector ``\beta`` identifies the long-run equilibrium between GDP, consumption, and investment. A cointegrating relationship of the form ``\beta' y_t \sim I(0)`` implies these variables share common stochastic trends, consistent with balanced growth path theory. The adjustment coefficients ``\alpha`` show how each variable responds when the system deviates from this long-run equilibrium — for instance, if consumption overshoots relative to GDP, a negative ``\alpha`` for consumption would pull it back toward the equilibrium ratio. The Granger causality test decomposes into short-run (through lagged differences ``\Gamma``) and long-run (through the error correction term ``\alpha\beta'y_{t-1}``) channels.
 
 ---
 

@@ -6,8 +6,12 @@ This page covers univariate volatility modeling: ARCH, GARCH (including EGARCH a
 
 ```julia
 using MacroEconometricModels
+using Random
 
-y = randn(500)  # Replace with your returns data
+# S&P 500 monthly returns (FRED-MD)
+fred = load_example(:fred_md)
+sp_idx = findfirst(v -> occursin("S&P", v) && occursin("500", v), varnames(fred))
+y = filter(isfinite, apply_tcode(fred[:, varnames(fred)[sp_idx]], 5))
 
 # ARCH(5) — Engle (1982)
 arch = estimate_arch(y, 5)
@@ -22,6 +26,7 @@ egarch = estimate_egarch(y, 1, 1)
 gjr = estimate_gjr_garch(y, 1, 1)
 
 # Stochastic Volatility — Taylor (1986), Kim-Shephard-Chib (1998)
+Random.seed!(42)
 sv = estimate_sv(y; n_samples=2000, burnin=1000)
 
 # Diagnostics
@@ -517,22 +522,12 @@ using MacroEconometricModels
 using Random
 using Statistics
 
-Random.seed!(42)
+# S&P 500 monthly returns (FRED-MD)
+fred = load_example(:fred_md)
+sp_idx = findfirst(v -> occursin("S&P", v) && occursin("500", v), varnames(fred))
+y = filter(isfinite, apply_tcode(fred[:, varnames(fred)[sp_idx]], 5))
 
-# === Generate GARCH(1,1) data with leverage ===
-T = 1000
-y = zeros(T)
-h = zeros(T)
-h[1] = 1.0
-
-for t in 2:T
-    z = randn()
-    h[t] = 0.01 + 0.08 * y[t-1]^2 + 0.12 * (y[t-1] < 0 ? 1 : 0) * y[t-1]^2 + 0.85 * h[t-1]
-    y[t] = sqrt(h[t]) * z
-end
-
-println("Simulated T=$T observations from GJR-GARCH(1,1)")
-println("Sample kurtosis: ", round(kurtosis(y), digits=2))
+println("S&P 500 returns: T=$(length(y))")
 
 # === Step 1: Test for ARCH effects ===
 stat, pval, q = arch_lm_test(y, 5)
@@ -606,6 +601,7 @@ end
 
 # === Step 6: Stochastic volatility for comparison ===
 println("\nEstimating SV model via KSC Gibbs sampler...")
+Random.seed!(42)
 sv = estimate_sv(y; n_samples=2000, burnin=1000)
 
 println("SV posterior summary:")
@@ -625,7 +621,7 @@ println("\nSV forecast at h=1: ", round(fc_sv.forecast[1], digits=4))
 println("SV forecast at h=20: ", round(fc_sv.forecast[end], digits=4))
 ```
 
-In this example, the GJR-GARCH model should provide the best fit (lowest AIC/BIC) since the data was generated from a GJR-GARCH DGP with a leverage effect. The news impact curves reveal the asymmetry: for EGARCH and GJR-GARCH, ``\sigma^2(-2)`` exceeds ``\sigma^2(+2)``; for symmetric GARCH, they are equal. All models' standardized residuals should pass the ARCH-LM test after fitting, confirming that the conditional variance dynamics are adequately captured. The SV model provides an independent, Bayesian assessment of the volatility dynamics via the Kim-Shephard-Chib (1998) Gibbs sampler.
+The S&P 500 returns exhibit strong ARCH effects, confirming the need for volatility modeling. The GARCH(1,1) persistence is typically close to 0.95 for equity returns, meaning volatility shocks are highly persistent. The news impact curves reveal asymmetry: for EGARCH and GJR-GARCH, a negative leverage parameter confirms that bad news increases volatility more than good news of equal magnitude — for symmetric GARCH, the NIC is symmetric by construction. All models' standardized residuals should pass the ARCH-LM test after fitting, confirming that the conditional variance dynamics are adequately captured. The SV model provides an independent, Bayesian assessment of the volatility dynamics via the Kim-Shephard-Chib (1998) Gibbs sampler.
 
 ---
 

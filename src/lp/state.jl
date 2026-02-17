@@ -197,7 +197,7 @@ function estimate_state_lp(Y::AbstractMatrix{T}, shock_var::Int, state_var::Abst
         B_recession[h + 1] = B_h[(k_per_regime + 1):end, :]
         residuals_store[h + 1] = U_h
 
-        V_h = compute_block_robust_vcov(X_h, U_h, cov_estimator)
+        V_h = _lp_robust_vcov(X_h, U_h, cov_estimator, h)
 
         # Extract regime-specific covariances
         V_exp = zeros(T, k_per_regime * n_response, k_per_regime * n_response)

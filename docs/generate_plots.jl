@@ -105,7 +105,7 @@ function main()
     # -------------------------------------------------------------------
     # 3. Bayesian IRF
     # -------------------------------------------------------------------
-    post = estimate_bvar(Y3, 2; n_draws=1000)
+    post = estimate_bvar(Y3, 2; n_draws=1000, varnames=["INDPRO", "UNRATE", "CPI"])
     r_birf = irf(post, 20)
     save("irf_bayesian.html", plot_result(r_birf))
 

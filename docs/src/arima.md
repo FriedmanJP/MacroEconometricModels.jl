@@ -16,12 +16,21 @@ Univariate time series models capture temporal dependence through autoregressive
 ## Quick Start
 
 ```julia
-ar = estimate_ar(y, 2)                                    # AR(2) via OLS
-ma = estimate_ma(y, 1; method=:css_mle)                   # MA(1) via CSS-MLE
-arma = estimate_arma(y, 1, 1)                              # ARMA(1,1)
-arima = estimate_arima(y, 1, 1, 0)                         # ARIMA(1,1,0)
-fc = forecast(arma, 12; conf_level=0.95)                   # 12-step forecast with CI
-sel = select_arima_order(y, 4, 4)                          # Grid search for best (p,q)
+using MacroEconometricModels
+
+# Industrial production growth (monthly, FRED-MD)
+fred = load_example(:fred_md)
+y = filter(isfinite, apply_tcode(fred[:, "INDPRO"], 5))    # log first difference
+
+ar = estimate_ar(y, 2)                                      # AR(2) via OLS
+ma = estimate_ma(y, 1; method=:css_mle)                     # MA(1) via CSS-MLE
+arma = estimate_arma(y, 1, 1)                                # ARMA(1,1)
+fc = forecast(arma, 12; conf_level=0.95)                     # Forecast IP growth 12 months ahead
+sel = select_arima_order(y, 4, 4)                            # Grid search for best (p,q)
+
+# For I(1) level modeling
+y_level = filter(isfinite, log.(fred[:, "INDPRO"]))
+arima = estimate_arima(y_level, 1, 1, 0)                    # ARIMA(1,1,0) on log IP
 ```
 
 ---
@@ -75,7 +84,9 @@ and apply ordinary least squares. This is consistent and asymptotically efficien
 ```julia
 using MacroEconometricModels
 
-y = randn(200)
+# Industrial production growth (monthly, FRED-MD)
+fred = load_example(:fred_md)
+y = filter(isfinite, apply_tcode(fred[:, "INDPRO"], 5))
 
 # OLS estimation (default)
 ar_ols = estimate_ar(y, 2)
@@ -246,11 +257,12 @@ where ``(1-L)^d y_t`` denotes the ``d``-th difference of ``y_t``. Common cases:
 The implementation differences the series ``d`` times, then estimates ARMA(p,q) on the differenced series using the unified estimation pipeline.
 
 ```julia
-# Random walk with drift
-y = cumsum(randn(200))
+# Log industrial production — an I(1) series
+fred = load_example(:fred_md)
+y_level = filter(isfinite, log.(fred[:, "INDPRO"]))
 
 # Fit ARIMA(1,1,0) — differenced once, then AR(1)
-model = estimate_arima(y, 1, 1, 0)
+model = estimate_arima(y_level, 1, 1, 0)
 model.phi    # AR coefficients on differenced series
 model.d      # Integration order
 ```
@@ -475,22 +487,14 @@ yhat = predict(model, 12)  # 12-step point forecasts
 
 ```julia
 using MacroEconometricModels
-using Random
 
-Random.seed!(123)
-
-# Generate an ARMA(1,1) process
-n = 300
-ε = randn(n)
-y = zeros(n)
-ϕ, θ = 0.7, -0.4
-for t in 2:n
-    y[t] = ϕ * y[t-1] + ε[t] + θ * ε[t-1]
-end
+# Industrial production growth (monthly, FRED-MD)
+fred = load_example(:fred_md)
+y = filter(isfinite, apply_tcode(fred[:, "INDPRO"], 5))
 
 # Step 1: Check for unit root
 adf_result = adf_test(y; lags=:aic, regression=:constant)
-# (Should reject → stationary, no differencing needed)
+# IP growth should be stationary — no differencing needed
 
 # Step 2: Select ARMA order
 sel = select_arima_order(y, 4, 4)
@@ -502,8 +506,8 @@ println("φ = $(model.phi), θ = $(model.theta)")
 println("σ² = $(model.sigma2)")
 println("AIC = $(model.aic), BIC = $(model.bic)")
 
-# Step 4: Forecast
-fc = forecast(model, 20; conf_level=0.95)
+# Step 4: Forecast IP growth 12 months ahead
+fc = forecast(model, 12; conf_level=0.95)
 println("1-step forecast: $(fc.forecast[1]) ± $(1.96 * fc.se[1])")
 
 # Step 5: Diagnostics

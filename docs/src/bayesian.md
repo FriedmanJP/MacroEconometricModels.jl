@@ -16,9 +16,17 @@ Bayesian VAR (BVAR) estimation addresses the curse of dimensionality in VAR mode
 ## Quick Start
 
 ```julia
+using MacroEconometricModels
+
+# Load FRED-MD: standard monetary VAR (slow-to-fast ordering)
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+
 hyper = MinnesotaHyperparameters(tau=0.5, decay=2.0, lambda=1.0, mu=1.0, omega=1.0)
-best = optimize_hyperparameters(Y, p; grid_size=20)                 # Optimize tau
-post = estimate_bvar(Y, 2; n_draws=1000, prior=:minnesota, hyper=best)
+best = optimize_hyperparameters(Y, 2; grid_size=20)                  # Optimize tau
+post = estimate_bvar(Y, 2; n_draws=1000, prior=:minnesota, hyper=best,
+                     varnames=["INDPRO", "CPI", "FFR"])
 birf = irf(post, 20; method=:cholesky)                              # Bayesian IRF
 bfevd = fevd(post, 20)                                              # Bayesian FEVD
 ```
@@ -96,6 +104,11 @@ where:
 ```julia
 using MacroEconometricModels
 
+# Load FRED-MD monetary policy variables
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+
 # Define hyperparameters
 hyper = MinnesotaHyperparameters(
     tau = 0.5,      # Overall tightness
@@ -107,12 +120,8 @@ hyper = MinnesotaHyperparameters(
 
 # Use in BVAR estimation
 post = estimate_bvar(Y, 2; n_draws=1000,
-                     prior=:minnesota, hyper=hyper)
-```
-
-```
-# Output:
-# MinnesotaHyperparameters{Float64}(tau=0.5, decay=2.0, lambda=1.0, mu=1.0, omega=1.0)
+                     prior=:minnesota, hyper=hyper,
+                     varnames=["INDPRO", "CPI", "FFR"])
 ```
 
 The `tau=0.5` setting provides moderate shrinkage — coefficient estimates will be pulled halfway between the data-driven OLS estimates and the random walk prior. With `decay=2.0`, the prior variance for lag-``l`` coefficients decays as ``1/l^2``, so distant lags are strongly penalized. Setting `mu=1.0` treats cross-variable lags the same as own lags; reducing `mu` (e.g., to 0.5) would impose stronger shrinkage on cross-variable coefficients, reflecting the common finding that own lags are more informative than other variables' lags.
@@ -214,6 +223,12 @@ where
 ```julia
 using MacroEconometricModels
 
+# Load FRED-MD monetary policy variables
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+p = 2
+
 # Find optimal shrinkage using marginal likelihood
 best_hyper = optimize_hyperparameters(Y, p; grid_size=20)
 
@@ -223,13 +238,6 @@ println("  d (lag decay): ", best_hyper.d)
 
 # Compute log marginal likelihood
 lml = log_marginal_likelihood(Y, p, hyper)
-```
-
-```
-# Output:
-# Optimal hyperparameters:
-#   τ (overall tightness): 0.2143
-#   d (lag decay): 2.0
 ```
 
 The optimal ``\tau`` balances fit and complexity: values near 0.01 produce near-dogmatic shrinkage to the random walk prior (good for high-dimensional systems), while values near 1.0 produce minimal shrinkage (approaching OLS). The marginal likelihood automatically penalizes overfitting, so the optimal ``\tau`` increases with sample size as data evidence accumulates.
@@ -277,12 +285,13 @@ The result of `estimate_bvar` is a `BVARPosterior{T}` struct containing:
 ```julia
 using MacroEconometricModels
 
-# Estimate BVAR with conjugate NIW sampler
-post = estimate_bvar(Y, p;
+# Estimate BVAR with conjugate NIW sampler (using Y from Quick Start)
+post = estimate_bvar(Y, 2;
     n_draws = 1000,       # Posterior draws
     prior = :minnesota,   # Prior type
     hyper = best_hyper,   # Hyperparameters
-    sampler = :direct     # i.i.d. draws (default)
+    sampler = :direct,    # i.i.d. draws (default)
+    varnames = ["INDPRO", "CPI", "FFR"]
 )
 
 # Access posterior draws
@@ -310,8 +319,9 @@ After estimation, it is often useful to obtain a single `VARModel` based on the 
 ```julia
 using MacroEconometricModels
 
-# After running estimate_bvar:
-# post = estimate_bvar(Y, p; n_draws=1000, prior=:minnesota, hyper=hyper)
+# After estimating the BVAR on FRED-MD [INDPRO, CPI, FFR]:
+# post = estimate_bvar(Y, 2; n_draws=1000, prior=:minnesota, hyper=best_hyper,
+#                      varnames=["INDPRO", "CPI", "FFR"])
 
 # Extract VARModel with posterior mean parameters
 mean_model = posterior_mean_model(post)
@@ -355,26 +365,17 @@ birf_chol = irf(post, H; method=:cholesky)
 # [:, :, :, 2] = median
 # [:, :, :, 3] = 84th percentile
 
-println("Bayesian IRF of GDP to own shock:")
+# Response of INDPRO to a monetary policy shock (shock 3 = FFR)
+println("Bayesian IRF of INDPRO to monetary policy shock:")
 for h in [0, 4, 8, 12, 20]
-    med = round(birf_chol.quantiles[h+1, 1, 1, 2], digits=3)
-    lo = round(birf_chol.quantiles[h+1, 1, 1, 1], digits=3)
-    hi = round(birf_chol.quantiles[h+1, 1, 1, 3], digits=3)
+    med = round(birf_chol.quantiles[h+1, 1, 3, 2], digits=3)
+    lo = round(birf_chol.quantiles[h+1, 1, 3, 1], digits=3)
+    hi = round(birf_chol.quantiles[h+1, 1, 3, 3], digits=3)
     println("  h=$h: $med [$lo, $hi]")
 end
 ```
 
-```
-# Output:
-# Bayesian IRF of GDP to own shock:
-#   h=0: 0.312 [0.278, 0.347]
-#   h=4: 0.048 [0.011, 0.089]
-#   h=8: 0.006 [-0.015, 0.028]
-#   h=12: 0.001 [-0.012, 0.014]
-#   h=20: 0.000 [-0.006, 0.007]
-```
-
-The posterior median IRF at ``h = 0`` reflects the impact effect of a one-standard-deviation structural shock. The 68% credible interval ``[\text{16th}, \text{84th}]`` narrows toward zero as the horizon increases, consistent with a stationary VAR where shocks dissipate over time. Unlike frequentist bootstrap CIs, Bayesian credible intervals integrate over parameter uncertainty in ``B`` and ``\Sigma`` across all posterior draws, often producing wider bands at short horizons.
+The posterior median IRF at ``h = 0`` is zero by construction (INDPRO is ordered first, so it does not respond to the monetary shock on impact). The credible interval narrows toward zero at long horizons, consistent with a stationary system. Unlike frequentist bootstrap CIs, Bayesian credible intervals integrate over parameter uncertainty in ``B`` and ``\Sigma`` across all posterior draws, providing a complete characterization of the uncertainty around the response of industrial production to a monetary policy shock.
 
 ### BayesianImpulseResponse Return Values
 
@@ -390,37 +391,30 @@ The posterior median IRF at ``h = 0`` reflects the impact effect of a one-standa
 ### Sign Restrictions
 
 ```julia
-# Define sign restriction check function
-function check_demand_shock(irf_array)
-    # Demand shock: positive GDP and inflation on impact
-    return irf_array[1, 1, 1] > 0 && irf_array[1, 2, 1] > 0
+# Define sign restriction: contractionary monetary shock
+# raises FFR, lowers INDPRO and CPI on impact
+function check_monetary_shock(irf_array)
+    return irf_array[1, 3, 3] > 0 &&   # FFR rises
+           irf_array[1, 1, 3] < 0 &&   # INDPRO falls
+           irf_array[1, 2, 3] < 0       # CPI falls
 end
 
 # Bayesian IRF with sign restrictions
 birf_sign = irf(post, H;
     method = :sign,
-    check_func = check_demand_shock
+    check_func = check_monetary_shock
 )
 
-println("Bayesian sign-restricted demand shock → GDP:")
+println("Bayesian sign-restricted monetary shock → INDPRO:")
 for h in [0, 4, 8, 12]
-    med = round(birf_sign.quantiles[h+1, 1, 1, 2], digits=3)
-    lo = round(birf_sign.quantiles[h+1, 1, 1, 1], digits=3)
-    hi = round(birf_sign.quantiles[h+1, 1, 1, 3], digits=3)
+    med = round(birf_sign.quantiles[h+1, 1, 3, 2], digits=3)
+    lo = round(birf_sign.quantiles[h+1, 1, 3, 1], digits=3)
+    hi = round(birf_sign.quantiles[h+1, 1, 3, 3], digits=3)
     println("  h=$h: $med [$lo, $hi]")
 end
 ```
 
-```
-# Output:
-# Bayesian sign-restricted demand shock → GDP:
-#   h=0: 0.295 [0.251, 0.342]
-#   h=4: 0.052 [0.018, 0.094]
-#   h=8: 0.008 [-0.011, 0.031]
-#   h=12: 0.001 [-0.009, 0.015]
-```
-
-The sign-restricted IRFs are set-identified: the credible intervals combine both parameter uncertainty (from the posterior draws) and identification uncertainty (from the rotation ``Q``). The median tends to be slightly smaller than under Cholesky because the sign restrictions eliminate some extreme rotations.
+The sign-restricted IRFs are set-identified: the credible intervals combine both parameter uncertainty (from the posterior draws) and identification uncertainty (from the rotation ``Q``). The sign restrictions ensure that a contractionary monetary shock raises the federal funds rate and lowers output and prices on impact, consistent with conventional monetary transmission.
 
 ---
 
@@ -436,29 +430,17 @@ using MacroEconometricModels
 # Bayesian FEVD
 bfevd = fevd(post, H; method=:cholesky)
 
-# Report median and credible intervals
+# How much of INDPRO forecast error is due to the monetary shock (shock 3)?
 for h in [1, 4, 12, 20]
     println("FEVD at h=$h:")
-    med = round(bfevd.quantiles[h, 1, 1, 2] * 100, digits=1)
-    lo = round(bfevd.quantiles[h, 1, 1, 1] * 100, digits=1)
-    hi = round(bfevd.quantiles[h, 1, 1, 3] * 100, digits=1)
-    println("  Shock 1 → Var 1: $med% [$lo%, $hi%]")
+    med = round(bfevd.quantiles[h, 1, 3, 2] * 100, digits=1)
+    lo = round(bfevd.quantiles[h, 1, 3, 1] * 100, digits=1)
+    hi = round(bfevd.quantiles[h, 1, 3, 3] * 100, digits=1)
+    println("  Monetary shock → INDPRO: $med% [$lo%, $hi%]")
 end
 ```
 
-```
-# Output:
-# FEVD at h=1:
-#   Shock 1 → Var 1: 97.2% [93.1%, 99.4%]
-# FEVD at h=4:
-#   Shock 1 → Var 1: 88.5% [78.6%, 95.1%]
-# FEVD at h=12:
-#   Shock 1 → Var 1: 82.3% [68.2%, 92.7%]
-# FEVD at h=20:
-#   Shock 1 → Var 1: 80.1% [64.5%, 91.8%]
-```
-
-At ``h = 1``, own shocks dominate (97%), reflecting the Cholesky ordering where variable 1 is first. As the horizon increases, spillovers from other shocks erode the own-shock share. The wide credible intervals at long horizons reflect cumulating parameter uncertainty through the VMA representation. Bayesian FEVD credible intervals are typically wider than frequentist bootstrap CIs because they integrate over the full posterior distribution of ``(B, \Sigma)``.
+At short horizons, monetary shocks explain a small fraction of INDPRO forecast error variance — consistent with the Cholesky ordering where INDPRO is first and does not respond to the monetary shock on impact. As the horizon increases, the monetary transmission mechanism operates through lagged effects, and the monetary shock's contribution grows. The wide credible intervals at long horizons reflect cumulating parameter uncertainty through the VMA representation. Bayesian FEVD credible intervals are typically wider than frequentist bootstrap CIs because they integrate over the full posterior distribution of ``(B, \Sigma)``.
 
 ### BayesianFEVD Return Values
 
@@ -501,14 +483,11 @@ Models with higher marginal likelihood better balance fit and complexity.
 using MacroEconometricModels
 using Random
 
-Random.seed!(42)
-
-# Generate data
-T, n, p = 200, 3, 2
-Y = randn(T, n)
-for t in 2:T
-    Y[t, :] = 0.5 * Y[t-1, :] + 0.3 * randn(n)
-end
+# Load FRED-MD: industrial production, CPI, federal funds rate
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+p = 2
 
 # Step 1: Optimize hyperparameters
 println("Optimizing hyperparameters...")
@@ -517,42 +496,29 @@ println("Optimal τ: ", round(best_hyper.tau, digits=4))
 
 # Step 2: Estimate BVAR
 println("\nEstimating BVAR with conjugate NIW sampler...")
+Random.seed!(42)  # Reproducible posterior draws
 post = estimate_bvar(Y, p;
     n_draws = 1000,
     prior = :minnesota,
-    hyper = best_hyper
+    hyper = best_hyper,
+    varnames = ["INDPRO", "CPI", "FFR"]
 )
 
-# Step 3: Compute Bayesian IRF
+# Step 3: Compute Bayesian IRF — response to monetary policy shock
 H = 20
 birf = irf(post, H; method=:cholesky)
 
-# Step 4: Report results
-println("\nBayesian IRF (shock 1 → variable 1):")
+# Step 4: Report results — INDPRO response to monetary shock (shock 3)
+println("\nBayesian IRF (monetary shock → INDPRO):")
 for h in [0, 4, 8, 12, 20]
-    med = round(birf.quantiles[h+1, 1, 1, 2], digits=3)
-    lo = round(birf.quantiles[h+1, 1, 1, 1], digits=3)
-    hi = round(birf.quantiles[h+1, 1, 1, 3], digits=3)
+    med = round(birf.quantiles[h+1, 1, 3, 2], digits=3)
+    lo = round(birf.quantiles[h+1, 1, 3, 1], digits=3)
+    hi = round(birf.quantiles[h+1, 1, 3, 3], digits=3)
     println("  h=$h: $med [$lo, $hi]")
 end
 ```
 
-```
-# Output:
-# Optimizing hyperparameters...
-# Optimal τ: 0.2143
-#
-# Estimating BVAR with conjugate NIW sampler...
-#
-# Bayesian IRF (shock 1 → variable 1):
-#   h=0: 0.305 [0.271, 0.341]
-#   h=4: 0.046 [0.009, 0.085]
-#   h=8: 0.005 [-0.014, 0.026]
-#   h=12: 0.001 [-0.011, 0.013]
-#   h=20: 0.000 [-0.006, 0.006]
-```
-
-This workflow demonstrates the complete Bayesian pipeline: hyperparameter optimization selects the optimal shrinkage ``\tau`` via marginal likelihood, then the conjugate NIW sampler produces posterior draws from which we compute IRFs with credible intervals. The IRF quickly converges to zero, consistent with the DGP's moderate persistence (``A_{11} = 0.5``). The credible intervals at ``h = 0`` are tight because the impact effect is well-identified by the Cholesky ordering, while longer horizons show wider bands reflecting cumulating parameter uncertainty.
+This workflow demonstrates the complete Bayesian pipeline using FRED-MD data: hyperparameter optimization selects the optimal shrinkage ``\tau`` via marginal likelihood, then the conjugate NIW sampler produces posterior draws from which we compute IRFs with credible intervals. The Cholesky ordering [INDPRO, CPI, FFR] identifies a monetary policy shock that raises the federal funds rate, and the credible intervals for the INDPRO response characterize the uncertainty around the output effects of monetary policy.
 
 ---
 
@@ -565,8 +531,16 @@ For large VAR systems (many variables), the Minnesota prior becomes essential:
 ```julia
 using MacroEconometricModels
 
-# Large system: 20 variables
-n = 20
+# Load full FRED-MD dataset (100+ variables)
+fred = load_example(:fred_md)
+
+# Select variables with safe transformations (avoid log of non-positive values)
+safe_idx = [i for i in 1:nvars(fred)
+            if fred.tcode[i] < 4 || all(x -> isfinite(x) && x > 0, fred.data[:, i])]
+fred_safe = fred[:, varnames(fred)[safe_idx]]
+X = to_matrix(apply_tcode(fred_safe))
+X = X[all.(isfinite, eachrow(X)), 1:min(20, size(X, 2))]
+
 p = 4
 
 # Stronger shrinkage for large systems
@@ -579,7 +553,7 @@ hyper_large = MinnesotaHyperparameters(
 )
 
 # Or optimize automatically
-best_hyper = optimize_hyperparameters(Y_large, p)
+best_hyper = optimize_hyperparameters(X, p)
 ```
 
 For large systems (20+ variables), the number of VAR parameters (``n^2 p + n``) grows quadratically with the number of variables, quickly exceeding the sample size. The Minnesota prior prevents overfitting by shrinking cross-variable coefficients toward zero (`mu=0.5`) and applying strong overall tightness (`tau=0.1`). Bańbura, Giannone & Reichlin (2010) show that BVAR with optimized shrinkage outperforms both unrestricted VAR and small-scale models for macroeconomic forecasting.

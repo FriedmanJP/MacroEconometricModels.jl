@@ -7,23 +7,28 @@ Before fitting dynamic models like VARs or Local Projections, it is essential to
 ## Quick Start
 
 ```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
+using MacroEconometricModels
 
 # --- Pre-estimation: Unit root & stationarity ---
-y = cumsum(randn(200))
-adf_result = adf_test(y; lags=:aic, regression=:constant)
-kpss_result = kpss_test(y; regression=:constant)
-pp_result = pp_test(y; regression=:constant)
+fred = load_example(:fred_md)
+cpi = to_vector(fred[:, "CPIAUCSL"])
+cpi_clean = filter(isfinite, cpi)                         # CPI price level (I(1))
+adf_result = adf_test(cpi_clean; lags=:aic, regression=:constant)
+kpss_result = kpss_test(cpi_clean; regression=:constant)
+pp_result = pp_test(cpi_clean; regression=:constant)
 
 # --- Pre-estimation: Cointegration ---
-Y = randn(200, 3)
-johansen_result = johansen_test(Y, 2; deterministic=:constant)
+qd = load_example(:fred_qd)
+Y_coint = log.(to_matrix(qd[:, ["GDPC1", "PCECC96"]]))
+Y_coint = Y_coint[all.(isfinite, eachrow(Y_coint)), :]
+johansen_result = johansen_test(Y_coint, 2; deterministic=:constant)
 
 # --- Post-estimation: VAR specification tests ---
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
 m = estimate_var(Y, 2)
 is_stationary(m)                     # VAR stability check
-granger_test(m, 1, 2)               # Granger causality
+granger_test(m, 3, 1)               # Does FFR Granger-cause INDPRO?
 granger_test_all(m)                  # all-pairs causality matrix
 
 # --- Post-estimation: Model comparison ---
@@ -100,16 +105,17 @@ The ADF statistic is the t-ratio ``\tau = \hat{\gamma} / \text{se}(\hat{\gamma})
 ```julia
 using MacroEconometricModels
 
-# Generate a random walk (has unit root)
-y = cumsum(randn(200))
+# CPI price level — expected to have a unit root
+fred = load_example(:fred_md)
+cpi = filter(isfinite, to_vector(fred[:, "CPIAUCSL"]))
 
 # ADF test with automatic lag selection via AIC
-result = adf_test(y; lags=:aic, regression=:constant)
+result = adf_test(cpi; lags=:aic, regression=:constant)
 
 # The result displays with publication-quality formatting:
 # - Test statistic and significance stars
 # - Critical values at 1%, 5%, 10% levels
-# - Automatic conclusion
+# - Automatic conclusion (expect: fail to reject unit root)
 ```
 
 #### Function Signature
@@ -178,12 +184,13 @@ where ``S_t = \sum_{s=1}^t \hat{e}_s`` are partial sums of residuals and ``\hat{
 ```julia
 using MacroEconometricModels
 
-# Stationary series
-y = randn(200)
-result = kpss_test(y; regression=:constant)
+# CPI inflation rate (Δlog CPI) — expected stationary
+fred = load_example(:fred_md)
+cpi_growth = diff(log.(filter(isfinite, to_vector(fred[:, "CPIAUCSL"]))))
+result = kpss_test(cpi_growth; regression=:constant)
 
 # For trend stationarity
-result_trend = kpss_test(y; regression=:trend)
+result_trend = kpss_test(cpi_growth; regression=:trend)
 ```
 
 #### Function Signature
@@ -257,8 +264,10 @@ where ``\hat{\gamma}_0`` is the short-run variance and ``\hat{\lambda}^2`` is th
 ```julia
 using MacroEconometricModels
 
-y = cumsum(randn(200))
-result = pp_test(y; regression=:constant)
+# CPI price level — non-parametric unit root test
+fred = load_example(:fred_md)
+cpi = filter(isfinite, to_vector(fred[:, "CPIAUCSL"]))
+result = pp_test(cpi; regression=:constant)
 ```
 
 #### Function Signature
@@ -322,9 +331,10 @@ where:
 ```julia
 using MacroEconometricModels
 
-# Series with structural break
-y = vcat(randn(100), randn(100) .+ 2)  # Level shift at t=100
-result = za_test(y; regression=:constant)
+# CPI price level — test for unit root allowing a structural break
+fred = load_example(:fred_md)
+cpi = filter(isfinite, to_vector(fred[:, "CPIAUCSL"]))
+result = za_test(cpi; regression=:constant)
 
 # Access break point
 println("Break detected at observation: ", result.break_index)
@@ -388,8 +398,10 @@ where ``\bar{c} = -7`` (constant) or ``\bar{c} = -13.5`` (trend).
 ```julia
 using MacroEconometricModels
 
-y = cumsum(randn(100))
-result = ngperron_test(y; regression=:constant)
+# CPI price level — GLS-detrended unit root tests
+fred = load_example(:fred_md)
+cpi = filter(isfinite, to_vector(fred[:, "CPIAUCSL"]))
+result = ngperron_test(cpi; regression=:constant)
 
 # All four statistics are reported
 println("MZα: ", result.MZa)
@@ -428,10 +440,12 @@ ngperron_test
 ```julia
 using MacroEconometricModels
 
-y = cumsum(randn(200))
+# CPI price level — comprehensive unit root summary
+fred = load_example(:fred_md)
+cpi = filter(isfinite, to_vector(fred[:, "CPIAUCSL"]))
 
 # Run multiple tests and get summary
-summary = unit_root_summary(y; tests=[:adf, :kpss, :pp])
+summary = unit_root_summary(cpi; tests=[:adf, :kpss, :pp])
 
 # Access individual results
 summary.results[:adf]
@@ -446,16 +460,20 @@ println(summary.conclusion)
 ```julia
 using MacroEconometricModels
 
-Y = randn(200, 5)
-Y[:, 1] = cumsum(Y[:, 1])  # Make first column non-stationary
+# Test all FRED-MD variables in a subset for unit roots
+fred = load_example(:fred_md)
+vars = fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS", "UNRATE", "M2SL"]]
+Y = to_matrix(vars)
+Y = Y[all.(isfinite, eachrow(Y)), :]
 
 # Apply ADF test to all columns
 results = test_all_variables(Y; test=:adf)
 
 # Check which variables have unit roots
+varnames = ["INDPRO", "CPIAUCSL", "FEDFUNDS", "UNRATE", "M2SL"]
 for (i, r) in enumerate(results)
     status = r.pvalue > 0.05 ? "I(1)" : "I(0)"
-    println("Variable $i: p=$(round(r.pvalue, digits=3)) → $status")
+    println("$(varnames[i]): p=$(round(r.pvalue, digits=3)) → $status")
 end
 ```
 
@@ -510,11 +528,10 @@ Two test statistics are computed:
 ```julia
 using MacroEconometricModels
 
-# Generate cointegrated system
-T, n = 200, 3
-Y = randn(T, n)
-Y[:, 2] = Y[:, 1] + 0.1 * randn(T)  # Y2 cointegrated with Y1
-Y[:, 3] = cumsum(randn(T))           # Y3 independent I(1)
+# Test cointegration between log real GDP and log real consumption (FRED-QD)
+qd = load_example(:fred_qd)
+Y = log.(to_matrix(qd[:, ["GDPC1", "PCECC96"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
 
 # Johansen test with 2 lags in VECM
 result = johansen_test(Y, 2; deterministic=:constant)
@@ -594,8 +611,10 @@ If violated, the VAR is explosive or contains unit roots, and standard asymptoti
 ```julia
 using MacroEconometricModels
 
-# Estimate VAR
-Y = randn(200, 3)
+# Estimate VAR on stationary-transformed FRED-MD data
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
 model = estimate_var(Y, 2)
 
 # Check stationarity
@@ -650,23 +669,25 @@ The **block** (multivariate) test generalizes to groups of cause variables, with
 #### Quick Start
 
 ```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
+using MacroEconometricModels
 
-Y = randn(200, 3)
+# FRED-MD monetary policy VAR: INDPRO, CPIAUCSL, FEDFUNDS
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
 m = estimate_var(Y, 2)
 
-# Pairwise: does variable 1 Granger-cause variable 2?
-g = granger_test(m, 1, 2)
+# Pairwise: does the federal funds rate Granger-cause industrial production?
+g = granger_test(m, 3, 1)
 
-# Block: do variables 1 and 2 jointly Granger-cause variable 3?
-g_block = granger_test(m, [1, 2], 3)
+# Block: do CPIAUCSL and FEDFUNDS jointly Granger-cause INDPRO?
+g_block = granger_test(m, [2, 3], 1)
 
 # All pairwise tests at once
 results = granger_test_all(m)
 ```
 
-**Interpretation.** If the p-value is below your significance level (e.g., 0.05), reject ``H_0`` and conclude the cause variable(s) Granger-cause the effect variable. The `granger_test_all` function returns an n×n matrix of p-values where entry [i,j] tests whether variable j Granger-causes variable i.
+**Interpretation.** If the p-value is below your significance level (e.g., 0.05), reject ``H_0`` and conclude the cause variable(s) Granger-cause the effect variable. The `granger_test_all` function returns an n×n matrix where entry [i,j] tests whether variable j Granger-causes variable i.
 
 #### Function Signatures
 
@@ -692,35 +713,29 @@ results = granger_test_all(m)
 #### Complete Example
 
 ```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
+using MacroEconometricModels
 
-# Generate data with known causal structure:
-# Variable 2 depends on lagged Variable 1
-T_obs = 300
-Y = zeros(T_obs, 3)
-Y[1, :] = randn(3)
-for t in 2:T_obs
-    Y[t, 1] = 0.5 * Y[t-1, 1] + randn()
-    Y[t, 2] = 0.3 * Y[t-1, 1] + 0.2 * Y[t-1, 2] + randn()  # 1 causes 2
-    Y[t, 3] = 0.4 * Y[t-1, 3] + randn()                       # independent
-end
-
+# FRED-MD monetary policy VAR: INDPRO (1), CPIAUCSL (2), FEDFUNDS (3)
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
 m = estimate_var(Y, 2)
 
 # Test all pairs
 results = granger_test_all(m)
 
-# Variable 1 → 2 should show significant Granger causality
-println("1 → 2: p = ", round(results[2, 1].pvalue, digits=4))
+# Does FFR Granger-cause industrial production?
+println("FEDFUNDS → INDPRO:   p = ", round(results[1, 3].pvalue, digits=4))
 
-# Variable 3 should be independent
-println("3 → 1: p = ", round(results[1, 3].pvalue, digits=4))
-println("3 → 2: p = ", round(results[2, 3].pvalue, digits=4))
+# Does industrial production Granger-cause CPI?
+println("INDPRO → CPIAUCSL:   p = ", round(results[2, 1].pvalue, digits=4))
 
-# Block test: do variables 1 and 3 jointly Granger-cause variable 2?
-g_block = granger_test(m, [1, 3], 2)
-println("Block [1,3] → 2: p = ", round(g_block.pvalue, digits=4))
+# Does CPI Granger-cause the federal funds rate?
+println("CPIAUCSL → FEDFUNDS: p = ", round(results[3, 2].pvalue, digits=4))
+
+# Block test: do INDPRO and CPIAUCSL jointly Granger-cause FEDFUNDS?
+g_block = granger_test(m, [1, 2], 3)
+println("Block [INDPRO,CPIAUCSL] → FEDFUNDS: p = ", round(g_block.pvalue, digits=4))
 ```
 
 ---
@@ -860,27 +875,28 @@ where ``\text{df} = k_U - k_R`` is the difference in the number of parameters, `
 ### Quick Start
 
 ```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
+using MacroEconometricModels
 
-# --- ARIMA: Is AR(2) adequate vs AR(4)? ---
-y = randn(300)
-ar2 = estimate_ar(y, 2; method=:mle)
-ar4 = estimate_ar(y, 4; method=:mle)
+# --- ARIMA: Is AR(2) adequate vs AR(4) for CPI inflation? ---
+fred = load_example(:fred_md)
+cpi_growth = diff(log.(filter(isfinite, to_vector(fred[:, "CPIAUCSL"]))))
+ar2 = estimate_ar(cpi_growth, 2; method=:mle)
+ar4 = estimate_ar(cpi_growth, 4; method=:mle)
 
 lr_result = lr_test(ar2, ar4)   # generic: any model with loglikelihood
 lm_result = lm_test(ar2, ar4)   # score-based: model-family specific
 
-# --- VAR: VAR(1) vs VAR(3) ---
-Y = randn(200, 3)
+# --- VAR: VAR(1) vs VAR(2) for monetary policy model ---
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
 var1 = estimate_var(Y, 1)
-var3 = estimate_var(Y, 3)
-lr_test(var1, var3)
+var2 = estimate_var(Y, 2)
+lr_test(var1, var2)
 
-# --- Volatility: ARCH(1) vs GARCH(1,1) ---
-y_vol = randn(500)
-arch1 = estimate_arch(y_vol, 1)
-garch11 = estimate_garch(y_vol, 1, 1)
+# --- Volatility: ARCH(1) vs GARCH(1,1) for INDPRO growth ---
+indpro_growth = diff(log.(filter(isfinite, to_vector(fred[:, "INDPRO"]))))
+arch1 = estimate_arch(indpro_growth, 1)
+garch11 = estimate_garch(indpro_growth, 1, 1)
 lr_test(arch1, garch11)     # LR works across ARCH/GARCH
 lm_test(arch1, garch11)     # LM supports ARCH→GARCH nesting
 ```
@@ -1046,7 +1062,10 @@ end
 ```julia
 using MacroEconometricModels
 
-# After estimating VAR
+# After estimating VAR on FRED-MD data
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
 m = estimate_var(Y, 2)
 
 # 1. Check stability

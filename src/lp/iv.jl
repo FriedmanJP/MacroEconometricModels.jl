@@ -61,7 +61,8 @@ Second-stage regression using fitted values from first stage.
 """
 function tsls_regression(Y::AbstractMatrix{T}, endog::AbstractVector{T},
                          endog_fitted::AbstractVector{T}, controls::AbstractMatrix{T};
-                         cov_estimator::AbstractCovarianceEstimator=NeweyWestEstimator{T}()) where {T<:AbstractFloat}
+                         cov_estimator::AbstractCovarianceEstimator=NeweyWestEstimator{T}(),
+                         h::Int=0) where {T<:AbstractFloat}
     n, n_resp = size(Y)
 
     X_2s = hcat(ones(T, n), endog_fitted, controls)
@@ -74,7 +75,7 @@ function tsls_regression(Y::AbstractMatrix{T}, endog::AbstractVector{T},
     X_actual = hcat(ones(T, n), endog, controls)
     residuals = Y - X_actual * beta
 
-    V = compute_block_robust_vcov(X_2s, residuals, cov_estimator)
+    V = _lp_robust_vcov(X_2s, residuals, cov_estimator, h)
 
     (coefficients=beta, residuals=residuals, vcov=V, n_obs=n, n_regressors=k)
 end
@@ -135,7 +136,7 @@ function estimate_lp_iv(Y::AbstractMatrix{T}, shock_var::Int, instruments::Abstr
         first_stage_F[h + 1] = fs.F_stat
         first_stage_coef[h + 1] = fs.coefficients[2:(n_inst + 1)]
 
-        ss = tsls_regression(Y_h, endog, fs.fitted, controls; cov_estimator=cov_estimator)
+        ss = tsls_regression(Y_h, endog, fs.fitted, controls; cov_estimator=cov_estimator, h=h)
         B[h + 1] = ss.coefficients
         residuals_store[h + 1] = ss.residuals
         vcov[h + 1] = ss.vcov

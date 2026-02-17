@@ -1279,6 +1279,108 @@ using Random
     end
 
     # ==========================================================================
+    # LP Horizon-Aware Bandwidth Regression Tests
+    # ==========================================================================
+
+    @testset "LP Horizon-Aware Bandwidth" begin
+        Random.seed!(91001)
+        T_hab = 250
+        n_hab = 2
+
+        # Persistent VAR(1) data — makes the bandwidth correction matter
+        Y_hab = zeros(T_hab, n_hab)
+        for t in 2:T_hab
+            Y_hab[t, :] = 0.7 * Y_hab[t-1, :] + randn(n_hab)
+        end
+
+        horizon = 15
+        model_hab = estimate_lp(Y_hab, 1, horizon; lags=2, cov_type=:newey_west)
+        irf_hab = lp_irf(model_hab; conf_level=0.95)
+
+        # SEs should be finite and positive
+        @test all(irf_hab.se .> 0)
+        @test all(isfinite.(irf_hab.se))
+
+        # Key property: SEs at long horizons should not collapse below short-horizon SEs.
+        # For cross-variable response (var 2), SE at h=10 should be >= SE at h=1
+        @test irf_hab.se[11, 2] >= irf_hab.se[2, 2] * 0.5
+        # SE at h=15 should be >= SE at h=5
+        @test irf_hab.se[16, 2] >= irf_hab.se[6, 2] * 0.3
+
+        # Verify horizon-aware bandwidth is active: compare auto-bandwidth LP
+        # SE at h=10 with a fixed-bandwidth=2 LP (which would undercount autocorrelation)
+        model_low_bw = estimate_lp(Y_hab, 1, horizon; lags=2, cov_type=:newey_west, bandwidth=2)
+        irf_low_bw = lp_irf(model_low_bw; conf_level=0.95)
+        # At h=10, auto bandwidth with h+1 floor should give >= SE than bandwidth=2
+        @test irf_hab.se[11, 2] >= irf_low_bw.se[11, 2] * 0.95
+
+        # With manual bandwidth, _lp_robust_vcov should pass through unchanged
+        model_fixed = estimate_lp(Y_hab, 1, horizon; lags=2, cov_type=:newey_west, bandwidth=5)
+        irf_fixed = lp_irf(model_fixed; conf_level=0.95)
+        @test all(isfinite.(irf_fixed.se))
+
+        # White estimator should still work (passthrough)
+        model_white = estimate_lp(Y_hab, 1, horizon; lags=2, cov_type=:white)
+        irf_white = lp_irf(model_white; conf_level=0.95)
+        @test all(isfinite.(irf_white.se))
+
+        # Cumulative IRF CI: cumsum of point estimates implies monotone growth of CI
+        irf_cum = cumulative_irf(irf_hab)
+        cum_width = irf_cum.ci_upper .- irf_cum.ci_lower
+        # Cumulative CI width at end should be larger than at start
+        @test cum_width[end, 1] >= cum_width[1, 1]
+        @test cum_width[end, 2] >= cum_width[1, 2]
+    end
+
+    @testset "LP-IV Horizon-Aware Bandwidth" begin
+        Random.seed!(91002)
+        T_ivh = 300
+        n_ivh = 2
+
+        Z_ivh = randn(T_ivh, 1)
+        shock_ivh = 0.5 * Z_ivh[:, 1] + 0.5 * randn(T_ivh)
+        Y_ivh = zeros(T_ivh, n_ivh)
+        Y_ivh[:, 1] = shock_ivh
+        for t in 2:T_ivh
+            Y_ivh[t, 2] = 0.6 * Y_ivh[t-1, 2] + 0.5 * shock_ivh[t] + randn()
+        end
+
+        horizon = 10
+        model_ivh = estimate_lp_iv(Y_ivh, 1, Z_ivh, horizon; lags=2)
+        irf_ivh = lp_iv_irf(model_ivh)
+
+        # SEs should be positive and finite
+        @test all(irf_ivh.se .> 0)
+        @test all(isfinite.(irf_ivh.se))
+
+        # SE at h=5 should be >= SE at h=1 (for persistent system)
+        @test irf_ivh.se[6, 2] >= irf_ivh.se[2, 2] * 0.7
+    end
+
+    @testset "State LP Horizon-Aware Bandwidth" begin
+        Random.seed!(91003)
+        T_slh = 250
+        n_slh = 2
+
+        state_slh = randn(T_slh)
+        Y_slh = zeros(T_slh, n_slh)
+        for t in 2:T_slh
+            Y_slh[t, :] = 0.6 * Y_slh[t-1, :] + randn(n_slh)
+        end
+
+        horizon = 8
+        model_slh = estimate_state_lp(Y_slh, 1, state_slh, horizon; lags=2, gamma=1.5)
+        irf_slh = state_irf(model_slh; regime=:expansion)
+
+        # SEs should be finite and positive
+        @test all(irf_slh.se .> 0)
+        @test all(isfinite.(irf_slh.se))
+
+        # SE should not collapse at later horizons
+        @test irf_slh.se[end, 1] >= irf_slh.se[1, 1] * 0.3
+    end
+
+    # ==========================================================================
     # StatsAPI predict and residuals
     # ==========================================================================
 

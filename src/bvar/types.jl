@@ -41,6 +41,7 @@ Normal-Inverse-Wishart posterior directly.
 - `data::Matrix{T}`: Original Y matrix (for residual computation downstream)
 - `prior::Symbol`: Prior used (:normal or :minnesota)
 - `sampler::Symbol`: Sampler used (:direct or :gibbs)
+- `varnames::Vector{String}`: Variable names
 """
 struct BVARPosterior{T<:AbstractFloat}
     B_draws::Array{T,3}       # n_draws × k × n
@@ -51,6 +52,7 @@ struct BVARPosterior{T<:AbstractFloat}
     data::Matrix{T}
     prior::Symbol
     sampler::Symbol
+    varnames::Vector{String}
 end
 
 Base.size(post::BVARPosterior, dim::Int) = dim == 1 ? post.n_draws : error("BVARPosterior has 1 dimension (n_draws)")
@@ -86,6 +88,7 @@ function Base.show(io::IO, post::BVARPosterior{T}) where {T}
     end
 
     # Per-equation posterior summary
+    vn = post.varnames
     for eq in 1:post.n
         draws_eq = post.B_draws[:, :, eq]  # n_draws × k
         n_show = min(k, size(draws_eq, 2))
@@ -105,7 +108,7 @@ function Base.show(io::IO, post::BVARPosterior{T}) where {T}
             data[i, 6] = _fmt(q975)
         end
         _pretty_table(io, data;
-            title = "Equation: Var $eq",
+            title = "Equation: $(vn[eq])",
             column_labels = ["", "Mean", "Std", "2.5%", "50%", "97.5%"],
             alignment = [:l, :r, :r, :r, :r, :r],
         )
@@ -114,6 +117,6 @@ function Base.show(io::IO, post::BVARPosterior{T}) where {T}
     # Posterior mean of Σ
     Sigma_mean = dropdims(mean(post.Sigma_draws; dims=1); dims=1)
     _matrix_table(io, Sigma_mean, "Posterior Mean Σ";
-        row_labels=["Var $i" for i in 1:post.n],
-        col_labels=["Var $j" for j in 1:post.n])
+        row_labels=vn,
+        col_labels=vn)
 end

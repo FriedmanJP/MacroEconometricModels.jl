@@ -15,22 +15,24 @@ Macroeconomic time series are often decomposed into trend and cyclical component
 ```julia
 using MacroEconometricModels
 
-y = cumsum(randn(200))  # simulated I(1) process
+# Log industrial production — a trending I(1) monthly series
+fred = load_example(:fred_md)
+y = filter(isfinite, log.(fred[:, "INDPRO"]))
 
-# Hodrick-Prescott filter (quarterly data)
-hp = hp_filter(y; lambda=1600.0)
+# Hodrick-Prescott filter (monthly data)
+hp = hp_filter(y; lambda=129600.0)
 
-# Hamilton (2018) regression filter
-ham = hamilton_filter(y; h=8, p=4)
+# Hamilton (2018) regression filter (monthly: h=24, p=12)
+ham = hamilton_filter(y; h=24, p=12)
 
 # Beveridge-Nelson decomposition
-bn = beveridge_nelson(y; p=2, q=1)
+bn = beveridge_nelson(y)
 
-# Baxter-King band-pass filter
-bk = baxter_king(y; pl=6, pu=32, K=12)
+# Baxter-King band-pass filter (monthly: 18–96 month band, K=36)
+bk = baxter_king(y; pl=18, pu=96, K=36)
 
 # Boosted HP filter
-bhp = boosted_hp(y; stopping=:BIC)
+bhp = boosted_hp(y; lambda=129600.0, stopping=:BIC)
 
 # Unified accessors
 trend(hp)   # trend component
@@ -64,18 +66,17 @@ The quarterly value of 1,600 proposed by Hodrick and Prescott has become standar
 The solution is ``\tau = (I + \lambda D'D)^{-1} y`` where ``D`` is the ``(T-2) \times T`` second-difference matrix. The implementation builds a sparse pentadiagonal system and solves via Cholesky factorization, giving ``O(T)`` computational cost.
 
 ```julia
-y = cumsum(randn(200))
+# Log industrial production (monthly)
+fred = load_example(:fred_md)
+y = filter(isfinite, log.(fred[:, "INDPRO"]))
 
-# Standard quarterly filter
-hp = hp_filter(y)
+# Monthly filter (lambda=129600)
+hp = hp_filter(y; lambda=129600.0)
 hp.trend   # smooth trend
-hp.cycle   # cyclical deviations
+hp.cycle   # cyclical deviations — the HP cycle captures business cycle fluctuations
 
-# Annual data
+# Annual data would use lambda=6.25
 hp_annual = hp_filter(y; lambda=6.25)
-
-# No smoothing (trend = data)
-hp0 = hp_filter(y; lambda=0.0)
 ```
 
 !!! note "Technical Note"
@@ -103,21 +104,20 @@ The fitted values form the trend and the residuals form the cycle. The default p
 ### Implementation
 
 ```julia
-y = cumsum(randn(200))
+# Log industrial production (monthly)
+fred = load_example(:fred_md)
+y = filter(isfinite, log.(fred[:, "INDPRO"]))
 
-# Quarterly defaults (h=8, p=4)
-ham = hamilton_filter(y)
+# Monthly parameters (h=24, p=12): 2-year horizon, 12 monthly lags
+ham = hamilton_filter(y; h=24, p=12)
 ham.trend       # fitted values (length T - h - p + 1)
-ham.cycle       # residuals
+ham.cycle       # residuals — the Hamilton filter avoids endpoint bias
 ham.beta        # OLS coefficients
 ham.valid_range # indices into original series
-
-# Monthly data (2-year horizon, 12 lags)
-ham_monthly = hamilton_filter(y; h=24, p=12)
 ```
 
 !!! warning
-    The Hamilton filter loses `h + p - 1` observations at the start of the sample. For quarterly data with defaults, this is 11 observations. Plan accordingly with short samples.
+    The Hamilton filter loses `h + p - 1` observations at the start of the sample. For monthly data with `h=24, p=12`, this is 35 observations. Plan accordingly with short samples.
 
 ---
 
@@ -142,8 +142,9 @@ where ``\tau_t`` is a random walk with drift ``\mu \cdot \psi(1)`` (permanent co
 The function fits an ARMA model to ``\Delta y_t``, computes the ``\psi``-weights from the MA(``\infty``) representation, and constructs the transitory component.
 
 ```julia
-# Random walk plus stationary cycle
-y = cumsum(randn(200)) + 0.3 * sin.(2π * (1:200) / 20)
+# Log industrial production — an I(1) series suitable for BN decomposition
+fred = load_example(:fred_md)
+y = filter(isfinite, log.(fred[:, "INDPRO"]))
 
 # Automatic ARMA order selection for Δy
 bn = beveridge_nelson(y)
@@ -190,17 +191,16 @@ c_t = a_0 y_t + \sum_{j=1}^K a_j (y_{t-j} + y_{t+j})
 ### Implementation
 
 ```julia
-y = cumsum(randn(200))
+# Log industrial production (monthly)
+fred = load_example(:fred_md)
+y = filter(isfinite, log.(fred[:, "INDPRO"]))
 
-# Quarterly defaults: 6–32 quarter band, K=12
-bk = baxter_king(y)
+# Monthly business cycle band: 18–96 months (1.5–8 years), K=36
+bk = baxter_king(y; pl=18, pu=96, K=36)
 bk.cycle       # band-pass filtered (business cycle component)
 bk.trend       # residual (low + high frequency)
 bk.weights     # [a_0, a_1, ..., a_K]
 bk.valid_range # K+1 : T-K
-
-# Annual data: 2–8 year band
-bk_annual = baxter_king(y; pl=2, pu=8, K=6)
 ```
 
 The filter weights sum to zero by construction:
@@ -210,7 +210,7 @@ total = w[1] + 2 * sum(w[2:end])  # ≈ 0
 ```
 
 !!! warning
-    The BK filter loses ``K`` observations at each end (``2K`` total). With the default ``K = 12`` and quarterly data, this is 6 years of data at the boundaries.
+    The BK filter loses ``K`` observations at each end (``2K`` total). With ``K = 36`` and monthly data, this is 6 years of data at the boundaries.
 
 ---
 
@@ -238,21 +238,23 @@ Three stopping rules are available:
 ### Implementation
 
 ```julia
-y = cumsum(randn(200))
+# Log industrial production (monthly)
+fred = load_example(:fred_md)
+y = filter(isfinite, log.(fred[:, "INDPRO"]))
 
-# BIC stopping (default)
-bhp = boosted_hp(y)
+# BIC stopping (default), monthly lambda
+bhp = boosted_hp(y; lambda=129600.0)
 bhp.trend       # boosted trend
 bhp.cycle       # boosted cycle
 bhp.iterations  # number of iterations used
 bhp.bic_path    # BIC at each iteration
 
 # ADF stopping
-bhp_adf = boosted_hp(y; stopping=:ADF, sig_p=0.05)
+bhp_adf = boosted_hp(y; lambda=129600.0, stopping=:ADF, sig_p=0.05)
 bhp_adf.adf_pvalues  # p-values at each iteration
 
 # Fixed iterations
-bhp_fixed = boosted_hp(y; stopping=:fixed, max_iter=5)
+bhp_fixed = boosted_hp(y; lambda=129600.0, stopping=:fixed, max_iter=5)
 ```
 
 ---
@@ -276,18 +278,19 @@ For `BeveridgeNelsonResult`, `trend()` returns the permanent component and `cycl
 ## Comparison Example
 
 ```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
+using MacroEconometricModels
+using Statistics
 
-# Simulated quarterly GDP-like series (200 quarters)
-y = cumsum(0.5 .+ randn(200))
+# Log industrial production (monthly, FRED-MD)
+fred = load_example(:fred_md)
+y = filter(isfinite, log.(fred[:, "INDPRO"]))
 
-# Apply all five filters
-hp  = hp_filter(y; lambda=1600.0)
-ham = hamilton_filter(y; h=8, p=4)
-bn  = beveridge_nelson(y; p=2, q=0)
-bk  = baxter_king(y; pl=6, pu=32, K=12)
-bhp = boosted_hp(y; stopping=:BIC)
+# Apply all five filters with monthly parameters
+hp  = hp_filter(y; lambda=129600.0)
+ham = hamilton_filter(y; h=24, p=12)
+bn  = beveridge_nelson(y)
+bk  = baxter_king(y; pl=18, pu=96, K=36)
+bhp = boosted_hp(y; lambda=129600.0, stopping=:BIC)
 
 # Compare cycle standard deviations
 println("Cycle standard deviations:")

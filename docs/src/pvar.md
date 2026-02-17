@@ -5,33 +5,23 @@ This page documents the Panel VAR (PVAR) implementation in **MacroEconometricMod
 ## Quick Start
 
 ```julia
-using MacroEconometricModels, DataFrames, Random
+using MacroEconometricModels
 
-Random.seed!(42)
+# Load Penn World Table: 38 OECD countries, 1950–2023
+pwt = load_example(:pwt)
 
-# Construct panel data
-N, T_total, m = 50, 20, 3
-data = zeros(N * T_total, m)
-for i in 1:N
-    mu = randn(m) * 0.5
-    for t in 2:T_total
-        idx = (i-1)*T_total + t
-        data[idx, :] = mu + 0.5 * data[(i-1)*T_total + t - 1, :] + 0.2 * randn(m)
-    end
-end
-df = DataFrame(data, ["y1", "y2", "y3"])
-df.id = repeat(1:N, inner=T_total)
-df.time = repeat(1:T_total, outer=N)
-pd = xtset(df, :id, :time)
+# Convert to growth rates (log first difference) for stationarity
+pd = apply_tcode(pwt, 5)
 
-# FD-GMM (Arellano-Bond)
-model = estimate_pvar(pd, 2; steps=:twostep)
+# FD-GMM (Arellano-Bond) — GDP, employment, human capital growth spillovers
+model = estimate_pvar(pd, 2; dependent_vars=["rgdpna", "emp", "hc"], steps=:twostep)
 
 # System GMM (Blundell-Bond)
-model_sys = estimate_pvar(pd, 2; system_instruments=true, steps=:twostep)
+model_sys = estimate_pvar(pd, 2; dependent_vars=["rgdpna", "emp", "hc"],
+                          system_instruments=true, steps=:twostep)
 
 # Fixed-effects OLS
-model_fe = estimate_pvar_feols(pd, 2)
+model_fe = estimate_pvar_feols(pd, 2; dependent_vars=["rgdpna", "emp", "hc"])
 ```
 
 ---
@@ -62,24 +52,23 @@ The key econometric challenge is that ``\boldsymbol{\mu}_i`` is correlated with 
 
 ## Panel Data Preparation
 
-Panel VAR estimation requires a `PanelData` object. Use `xtset()` to convert a DataFrame:
+Panel VAR estimation requires a `PanelData` object. The built-in Penn World Table provides a balanced panel of 38 OECD countries:
 
 ```julia
-using MacroEconometricModels, DataFrames
+using MacroEconometricModels
 
-# DataFrame with group and time identifiers
-df = DataFrame(
-    gdp = randn(200), inflation = randn(200), rate = randn(200),
-    country = repeat(1:10, inner=20),
-    year = repeat(1:20, outer=10)
-)
-pd = xtset(df, :country, :year)
+# Load PWT — already a PanelData object
+pwt = load_example(:pwt)
+println(ngroups(pwt), " countries × ", nvars(pwt), " variables")
+
+# Convert to growth rates for stationarity
+pd = apply_tcode(pwt, 5)  # tcode 5 = log first difference
 ```
 
-All numeric columns (excluding the group and time identifiers) are treated as potential endogenous variables. Use the `dependent_vars` keyword to select a subset:
+All numeric columns are treated as potential endogenous variables. Use the `dependent_vars` keyword to select a subset:
 
 ```julia
-model = estimate_pvar(pd, 2; dependent_vars=["gdp", "inflation"])
+model = estimate_pvar(pd, 2; dependent_vars=["rgdpna", "emp", "hc"])
 ```
 
 ---
@@ -98,13 +87,14 @@ Lagged **levels** ``\mathbf{y}_{i,t-2}, \mathbf{y}_{i,t-3}, \ldots`` serve as in
 
 ```julia
 # One-step GMM (heteroskedasticity-robust SEs)
-m1 = estimate_pvar(pd, 2; steps=:onestep)
+m1 = estimate_pvar(pd, 2; dependent_vars=["rgdpna", "emp", "hc"], steps=:onestep)
 
 # Two-step GMM (Windmeijer-corrected SEs)
-m2 = estimate_pvar(pd, 2; steps=:twostep)
+m2 = estimate_pvar(pd, 2; dependent_vars=["rgdpna", "emp", "hc"], steps=:twostep)
 
 # Forward orthogonal deviations (Arellano & Bover, 1995)
-m3 = estimate_pvar(pd, 2; transformation=:fod, steps=:twostep)
+m3 = estimate_pvar(pd, 2; dependent_vars=["rgdpna", "emp", "hc"],
+                   transformation=:fod, steps=:twostep)
 ```
 
 !!! note "One-Step vs Two-Step"
@@ -115,7 +105,8 @@ m3 = estimate_pvar(pd, 2; transformation=:fod, steps=:twostep)
 System GMM adds level equations instrumented by lagged **differences**, improving efficiency when the data are persistent (Blundell & Bond, 1998):
 
 ```julia
-m_sys = estimate_pvar(pd, 2; system_instruments=true, steps=:twostep)
+m_sys = estimate_pvar(pd, 2; dependent_vars=["rgdpna", "emp", "hc"],
+                      system_instruments=true, steps=:twostep)
 ```
 
 The system estimator stacks transformed equations (instrumented by lagged levels) with level equations (instrumented by lagged differences). This exploits additional moment conditions but requires the assumption that first differences are uncorrelated with fixed effects.
@@ -126,13 +117,14 @@ When the number of instruments is large relative to ``N``, standard errors can b
 
 ```julia
 # Restrict instrument lags
-m = estimate_pvar(pd, 2; min_lag_endo=2, max_lag_endo=4)
+m = estimate_pvar(pd, 2; dependent_vars=["rgdpna", "emp", "hc"],
+                  min_lag_endo=2, max_lag_endo=4)
 
 # Collapse instruments (one column per lag distance)
-m = estimate_pvar(pd, 2; collapse=true)
+m = estimate_pvar(pd, 2; dependent_vars=["rgdpna", "emp", "hc"], collapse=true)
 
 # PCA instrument reduction
-m = estimate_pvar(pd, 2; pca_instruments=true)
+m = estimate_pvar(pd, 2; dependent_vars=["rgdpna", "emp", "hc"], pca_instruments=true)
 ```
 
 !!! warning "Instrument Proliferation"
@@ -145,10 +137,10 @@ m = estimate_pvar(pd, 2; pca_instruments=true)
 For panels with large ``T``, the within (FE-OLS) estimator provides a simpler alternative:
 
 ```julia
-m_fe = estimate_pvar_feols(pd, 2)
+m_fe = estimate_pvar_feols(pd, 2; dependent_vars=["rgdpna", "emp", "hc"])
 ```
 
-The estimator demeans each entity's data (removing ``\boldsymbol{\mu}_i``) and runs pooled OLS on the stacked system. Standard errors are clustered at the group level.
+The estimator demeans each country's data (removing ``\boldsymbol{\mu}_i``) and runs pooled OLS on the stacked system. Standard errors are clustered at the group level.
 
 ---
 
@@ -264,7 +256,7 @@ where ``c`` = number of instruments, ``b`` = number of parameters, ``n`` = obser
 Select the optimal lag order by comparing MMSC criteria across candidate models:
 
 ```julia
-sel = pvar_lag_selection(pd, 4)
+sel = pvar_lag_selection(pd, 4; dependent_vars=["rgdpna", "emp", "hc"])
 sel.best_bic    # optimal lag by BIC
 sel.best_aic    # optimal lag by AIC
 sel.best_hqic   # optimal lag by HQIC
@@ -276,29 +268,15 @@ sel.table       # comparison table
 ## Complete Example
 
 ```julia
-using MacroEconometricModels, DataFrames, Random
+using MacroEconometricModels
 
-Random.seed!(123)
+# Load Penn World Table and convert to growth rates
+pwt = load_example(:pwt)
+pd = apply_tcode(pwt, 5)  # log first difference → growth rates
+dep_vars = ["rgdpna", "emp", "hc"]
 
-# Generate panel with known VAR(1) structure
-N, T_total, m = 30, 25, 2
-A_true = [0.5 0.1; 0.2 0.4]
-data = zeros(N * T_total, m)
-for i in 1:N
-    mu = randn(m)
-    for t in 2:T_total
-        idx = (i-1)*T_total + t
-        prev = (i-1)*T_total + t - 1
-        data[idx, :] = mu + A_true * data[prev, :] + 0.3 * randn(m)
-    end
-end
-df = DataFrame(data, ["y1", "y2"])
-df.id = repeat(1:N, inner=T_total)
-df.time = repeat(1:T_total, outer=N)
-pd = xtset(df, :id, :time)
-
-# Estimate via two-step FD-GMM
-model = estimate_pvar(pd, 1; steps=:twostep)
+# Estimate via two-step FD-GMM: cross-country growth spillovers
+model = estimate_pvar(pd, 1; dependent_vars=dep_vars, steps=:twostep)
 
 # Specification tests
 j = pvar_hansen_j(model)
@@ -308,15 +286,16 @@ println("Hansen J: stat=$(round(j.statistic, digits=3)), p=$(round(j.pvalue, dig
 stab = pvar_stability(model)
 println("Stable: $(stab.is_stable)")
 
-# Structural analysis
+# Structural analysis: orthogonalized IRFs for GDP → employment → human capital
 irfs = pvar_oirf(model, 10)
 decomp = pvar_fevd(model, 10)
 
 # Bootstrap confidence intervals
+using Random; Random.seed!(42)
 boot = pvar_bootstrap_irf(model, 10; n_draws=200, ci=0.90)
 
 # Lag selection
-sel = pvar_lag_selection(pd, 3)
+sel = pvar_lag_selection(pd, 3; dependent_vars=dep_vars)
 println("Best lag (BIC): $(sel.best_bic)")
 
 # References

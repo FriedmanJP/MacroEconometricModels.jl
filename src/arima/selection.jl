@@ -99,6 +99,14 @@ function select_arima_order(y::AbstractVector{T}, max_p::Int, max_q::Int;
         end
     end
 
+    # Guard: if no models fitted successfully, throw informative error
+    if isempty(models)
+        throw(ArgumentError(
+            "All ARMA(p,q) fits failed for p ∈ 0:$max_p, q ∈ 0:$max_q. " *
+            "Check that the input series has sufficient length, no NaN/Inf values, " *
+            "and adequate variation."))
+    end
+
     # Find best orders
     aic_idx = argmin(aic_matrix)
     bic_idx = argmin(bic_matrix)

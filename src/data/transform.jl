@@ -112,10 +112,23 @@ function apply_tcode(d::TimeSeriesData{T}, tcodes::Vector{Int}) where {T}
     new_T = d.T_obs - max_lost
     new_T < 1 && throw(ArgumentError("Not enough observations after transformation"))
 
-    # Transform each column and align to common length
+    # Transform each column and align to common length; fall back to tcode 1
+    # if a column has non-positive values incompatible with log-based tcodes
+    effective_tcodes = copy(tcodes)
     new_data = Matrix{Float64}(undef, new_T, n)
     for j in 1:n
-        col_transformed = apply_tcode(d.data[:, j], tcodes[j])
+        col_transformed = try
+            apply_tcode(d.data[:, j], tcodes[j])
+        catch e
+            if e isa ArgumentError && tcodes[j] >= 4
+                @warn "Variable '$(d.varnames[j])' (tcode=$(tcodes[j])): $(e.msg). " *
+                      "Falling back to tcode 2 (first difference)." maxlog=5
+                effective_tcodes[j] = 2
+                apply_tcode(d.data[:, j], 2)
+            else
+                rethrow(e)
+            end
+        end
         # Take the last new_T elements (align to end)
         offset = length(col_transformed) - new_T
         new_data[:, j] = col_transformed[(offset + 1):end]
@@ -128,7 +141,7 @@ function apply_tcode(d::TimeSeriesData{T}, tcodes::Vector{Int}) where {T}
     TimeSeriesData(new_data;
                    varnames=copy(d.varnames),
                    frequency=d.frequency,
-                   tcode=tcodes,
+                   tcode=effective_tcodes,
                    time_index=new_ti,
                    desc=desc(d),
                    vardesc=copy(d.vardesc),

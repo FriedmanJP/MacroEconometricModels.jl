@@ -123,13 +123,15 @@ set_display_backend(:latex)                            # Switch to LaTeX tables
 ```julia
 using MacroEconometricModels
 
-y = cumsum(0.5 .+ randn(200))  # Simulated I(1) quarterly GDP
+# Log industrial production from FRED-MD (monthly, I(1))
+fred = load_example(:fred_md)
+y = filter(isfinite, log.(fred[:, "INDPRO"]))
 
-hp  = hp_filter(y; lambda=1600.0)     # Hodrick-Prescott
-ham = hamilton_filter(y; h=8, p=4)    # Hamilton (2018)
-bn  = beveridge_nelson(y; p=2, q=0)  # Beveridge-Nelson
-bk  = baxter_king(y; pl=6, pu=32)    # Baxter-King band-pass
-bhp = boosted_hp(y; stopping=:BIC)   # Boosted HP
+hp  = hp_filter(y; lambda=129600.0)        # Hodrick-Prescott (monthly)
+ham = hamilton_filter(y; h=24, p=12)        # Hamilton (2018)
+bn  = beveridge_nelson(y)                   # Beveridge-Nelson
+bk  = baxter_king(y; pl=18, pu=96, K=36)  # Baxter-King band-pass (monthly)
+bhp = boosted_hp(y; stopping=:BIC)          # Boosted HP
 
 trend(hp)  # trend component
 cycle(hp)  # cyclical component
@@ -140,6 +142,10 @@ cycle(hp)  # cyclical component
 ```julia
 using MacroEconometricModels
 
+# IP growth rate (log first difference) from FRED-MD
+fred = load_example(:fred_md)
+y = filter(isfinite, apply_tcode(fred[:, "INDPRO"], 5))
+
 best = auto_arima(y)                        # Automatic order selection
 arma = estimate_arma(y, 1, 1)              # ARMA(1,1) via CSS-MLE
 fc = forecast(arma, 12; conf_level=0.95)   # 12-step forecast with CIs
@@ -149,6 +155,11 @@ fc = forecast(arma, 12; conf_level=0.95)   # 12-step forecast with CIs
 
 ```julia
 using MacroEconometricModels
+
+# S&P 500 returns from FRED-MD
+fred = load_example(:fred_md)
+sp_idx = findfirst(v -> occursin("S&P", v) && occursin("500", v), varnames(fred))
+y = filter(isfinite, apply_tcode(fred[:, varnames(fred)[sp_idx]], 5))
 
 garch  = estimate_garch(y, 1, 1)                    # GARCH(1,1)
 egarch = estimate_egarch(y, 1, 1)                    # EGARCH(1,1)
@@ -163,13 +174,12 @@ persistence(garch)                  # Volatility persistence
 ### VAR and Structural Identification
 
 ```julia
-using MacroEconometricModels, Random
+using MacroEconometricModels
 
-Random.seed!(42)
-Y = randn(200, 3)
-for t in 2:200
-    Y[t, :] = 0.5 * Y[t-1, :] + 0.3 * randn(3)
-end
+# Stationary 3-variable monetary VAR (IP, CPI, Fed Funds) from FRED-MD
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
 
 model = estimate_var(Y, 2)                          # OLS estimation
 irfs = irf(model, 20; method=:cholesky)             # Cholesky IRF
@@ -180,8 +190,14 @@ hd = historical_decomposition(model)                # Historical decomposition
 ### Bayesian VAR
 
 ```julia
-using MacroEconometricModels
+using MacroEconometricModels, Random
 
+# Same 3-variable monetary VAR data as above
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+
+Random.seed!(42)  # for reproducible MCMC draws
 best_hyper = optimize_hyperparameters(Y, 2; grid_size=20)
 post = estimate_bvar(Y, 2; n_draws=1000,
                      prior=:minnesota, hyper=best_hyper)
@@ -192,6 +208,11 @@ birf = irf(post, 20; method=:cholesky)   # Bayesian IRF with credible intervals
 
 ```julia
 using MacroEconometricModels
+
+# Cointegrated quarterly I(1) system: log GDP, consumption, investment from FRED-QD
+qd = load_example(:fred_qd)
+Y = log.(to_matrix(qd[:, ["GDPC1", "PCECC96", "GPDIC1"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
 
 joh = johansen_test(Y, 2)                          # Cointegration test
 vecm = estimate_vecm(Y, 2; rank=:auto)             # VECM estimation
@@ -205,16 +226,28 @@ gc = granger_causality_vecm(vecm, 1, 2)            # VECM Granger causality
 ```julia
 using MacroEconometricModels
 
+# 3-variable monetary VAR data
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+
 lp = estimate_lp(Y, 1, 20; lags=4, cov_type=:newey_west)   # Standard LP
-lpiv = estimate_lp_iv(Y, 1, Z, 20; lags=4)                  # LP-IV
 slp = structural_lp(Y, 20; method=:cholesky, lags=4)        # Structural LP
-lfevd = lp_fevd(slp, 20)                                     # LP-FEVD
+lfevd = lp_fevd(slp)                                         # LP-FEVD
 ```
 
 ### Factor Models
 
 ```julia
 using MacroEconometricModels
+
+# Large panel from FRED-MD (safe variables only, first 20 columns)
+fred = load_example(:fred_md)
+safe_idx = [i for i in 1:nvars(fred)
+            if fred.tcode[i] < 4 || all(x -> isfinite(x) && x > 0, fred.data[:, i])]
+fred_safe = fred[:, varnames(fred)[safe_idx]]
+X = to_matrix(apply_tcode(fred_safe))
+X = X[all.(isfinite, eachrow(X)), 1:min(20, size(X, 2))]
 
 ic = ic_criteria(X, 10)                                # Bai-Ng criteria
 fm = estimate_factors(X, ic.r_IC2; standardize=true)   # Static PCA
@@ -227,12 +260,17 @@ fc = forecast(fm, 12; ci_method=:theoretical)           # Forecast with CIs
 ```julia
 using MacroEconometricModels
 
-# Unit root tests
-adf = adf_test(y; lags=:aic)
-kpss = kpss_test(y)
-unit_root_summary(y)                  # Combined ADF + KPSS
+# Unit root tests on CPI inflation
+fred = load_example(:fred_md)
+y_cpi = filter(isfinite, apply_tcode(fred[:, "CPIAUCSL"], 5))
+adf = adf_test(y_cpi; lags=:aic)
+kpss = kpss_test(y_cpi)
+unit_root_summary(y_cpi)                  # Combined ADF + KPSS
 
-# Granger causality
+# Granger causality on 3-variable monetary VAR
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+model = estimate_var(Y, 2)
 g = granger_test(model, 1, 2)        # Pairwise
 g_block = granger_test(model, [1,2], 3)  # Block
 results = granger_test_all(model)    # All pairs
@@ -247,6 +285,11 @@ lm = lm_test(restricted, unrestricted)   # Lagrange multiplier
 ```julia
 using MacroEconometricModels
 
+# 3-variable monetary VAR
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+
 model = estimate_var(Y, 2)
 suite = normality_test_suite(model)          # Test for non-Gaussianity
 ica = identify_fastica(model)                # ICA identification
@@ -259,14 +302,19 @@ irfs = irf(model, 20; method=:fastica)       # IRF with ICA-identified shocks
 ```julia
 using MacroEconometricModels
 
-# Mixed-frequency data: nM monthly + nQ quarterly variables (NaN for missing)
-dfm = nowcast_dfm(Y, nM, nQ; r=2, p=1)          # DFM (EM + Kalman)
+# Mixed-frequency panel from FRED-MD
+fred = load_example(:fred_md)
+sub = fred[:, ["INDPRO", "UNRATE", "CPIAUCSL", "FEDFUNDS"]]
+Y = to_matrix(apply_tcode(sub))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+nM = 3; nQ = 1  # 3 monthly indicators + 1 quarterly target
+
+dfm_model = nowcast_dfm(Y, nM, nQ; r=2, p=1)    # DFM (EM + Kalman)
 bvar = nowcast_bvar(Y, nM, nQ; lags=5)           # Large BVAR
 bridge = nowcast_bridge(Y, nM, nQ)                # Bridge equations
 
-result = nowcast(dfm)                              # Current-quarter nowcast
-fc = forecast(dfm, 6)                              # 6-step forecast
-news = nowcast_news(X_new, X_old, dfm, T)          # News decomposition
+result = nowcast(dfm_model)                        # Current-quarter nowcast
+fc = forecast(dfm_model, 6)                        # 6-step forecast
 ```
 
 ### Output and References

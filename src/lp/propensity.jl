@@ -158,12 +158,19 @@ function estimate_propensity_lp(Y::AbstractMatrix{T}, treatment::AbstractVector{
             ate[h + 1, j] = B_h[2, j]
         end
 
-        # Robust covariance with weights
+        # Robust covariance with weights (horizon-aware for NW)
         V_h = zeros(T, k * n_response, k * n_response)
         for eq in 1:n_response
             weighted_u = sqrt.(w_h) .* @view(U_h[:, eq])
             weighted_X = sqrt.(w_h) .* X_h
-            V_eq = robust_vcov(weighted_X, weighted_u, cov_estimator)
+            V_eq = if cov_estimator isa NeweyWestEstimator && cov_estimator.bandwidth == 0 && h > 0
+                auto_bw = optimal_bandwidth_nw(weighted_u)
+                effective_bw = max(auto_bw, h + 1)
+                newey_west(weighted_X, weighted_u; bandwidth=effective_bw,
+                          kernel=cov_estimator.kernel, prewhiten=cov_estimator.prewhiten)
+            else
+                robust_vcov(weighted_X, weighted_u, cov_estimator)
+            end
             idx = ((eq-1)*k + 1):(eq*k)
             V_h[idx, idx] .= V_eq
         end

@@ -113,10 +113,15 @@ function nowcast_bridge(Y::AbstractMatrix, nM::Int, nQ::Int;
             continue
         end
 
-        # OLS
+        # OLS with robust inversion to handle near-singular designs
         XtX = X_eq' * X_eq
-        XtX_reg = XtX + Tf(1e-8) * I(size(X_eq, 2))
-        b = XtX_reg \ (X_eq' * y_eq)
+        b = try
+            XtX_reg = XtX + Tf(1e-6) * I(size(X_eq, 2))
+            XtX_reg \ (X_eq' * y_eq)
+        catch
+            # Fall back to robust_inv for numerically difficult cases
+            robust_inv(XtX + Tf(1e-4) * I(size(X_eq, 2))) * (X_eq' * y_eq)
+        end
         coefficients[eq] = b
 
         # In-sample and out-of-sample predictions

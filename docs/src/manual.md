@@ -5,12 +5,19 @@ This manual provides a comprehensive theoretical background for the macroeconome
 ## Quick Start
 
 ```julia
+using MacroEconometricModels
+
+# Load FRED-MD: industrial production, CPI, federal funds rate
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+
 model = estimate_var(Y, 2)                                 # Estimate VAR(2) via OLS
 sel = select_lag_order(Y, 8)                               # AIC/BIC/HQIC lag selection
 irfs = irf(model, 20; method=:cholesky)                    # Cholesky-identified IRFs
 decomp = fevd(model, 20)                                   # Forecast error variance decomposition
 id = identify_sign(model; check_func=f, n_draws=1000)      # Sign restriction identification
-hd = historical_decomposition(model, 198)                  # Historical decomposition
+hd = historical_decomposition(model, size(model.U, 1))     # Historical decomposition
 ```
 
 ---
@@ -236,18 +243,20 @@ When sign restrictions alone are insufficient, one can impose **zero restriction
 
 ```julia
 using MacroEconometricModels
-using Random
 
-Random.seed!(42)
-Y = randn(200, 3)
-for t in 2:200; Y[t,:] = 0.5*Y[t-1,:] + 0.3*randn(3); end
+# Load FRED-MD monetary policy variables
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
 model = estimate_var(Y, 2)
 
-# Define restrictions
+# Define restrictions: monetary policy shock (shock 3)
+# Zero: INDPRO does not respond to monetary shock on impact
+# Sign: FFR rises, CPI falls after a contractionary monetary shock
 restrictions = SVARRestrictions(3;
-    zeros = [zero_restriction(3, 1; horizon=0)],   # Shock 1 has no impact on var 3
-    signs = [sign_restriction(1, 1, :positive),     # Shock 1 → var 1 positive on impact
-             sign_restriction(2, 1, :positive)]     # Shock 1 → var 2 positive on impact
+    zeros = [zero_restriction(1, 3; horizon=0)],        # No impact on INDPRO on impact
+    signs = [sign_restriction(3, 3, :positive),          # FFR rises on impact
+             sign_restriction(2, 3, :negative; horizon=1)] # CPI falls at h=1
 )
 
 # Identify
@@ -256,7 +265,7 @@ println("Acceptance rate: ", round(result.acceptance_rate * 100, digits=1), "%")
 
 # Weighted IRF percentiles
 pct = irf_percentiles(result; probs=[0.16, 0.5, 0.84])
-println("Median IRF(1→1, h=0): ", round(pct[1, 1, 1, 2], digits=3))
+println("Median IRF(FFR→INDPRO, h=0): ", round(pct[1, 1, 3, 2], digits=3))
 
 # Bayesian version
 # bresult = identify_arias_bayesian(post, restrictions, 20)
@@ -289,25 +298,27 @@ When you want a **single best rotation** rather than a distribution of draws, Mo
 
 ```julia
 using MacroEconometricModels
-using Random
 
-Random.seed!(42)
-Y = randn(200, 3)
-for t in 2:200; Y[t,:] = 0.5*Y[t-1,:] + 0.3*randn(3); end
+# Load FRED-MD monetary policy variables
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
 model = estimate_var(Y, 2)
 
-# Define restrictions (same types as Arias)
+# Mountford-Uhlig: separate fiscal vs monetary shocks
+# Shock 1 (fiscal): no impact on FFR, positive on INDPRO
+# Shock 3 (monetary): positive FFR on impact
 restrictions = SVARRestrictions(3;
-    zeros = [zero_restriction(3, 1; horizon=0)],
-    signs = [sign_restriction(1, 1, :positive),
-             sign_restriction(2, 1, :positive)]
+    zeros = [zero_restriction(3, 1; horizon=0)],   # Fiscal shock has no impact on FFR
+    signs = [sign_restriction(1, 1, :positive),     # Fiscal shock → INDPRO positive
+             sign_restriction(3, 3, :positive)]     # Monetary shock → FFR positive
 )
 
 # Find optimal Q
 result = identify_uhlig(model, restrictions, 20)
 println("Converged: ", result.converged)
 println("Penalty: ", round(result.penalty, digits=2))
-println("Impact IRF(1→1): ", round(result.irf[1, 1, 1], digits=3))
+println("Impact IRF(fiscal→INDPRO): ", round(result.irf[1, 1, 1], digits=3))
 ```
 
 ### UhligSVARResult Return Values
@@ -446,8 +457,10 @@ For panel data with both cross-sectional and temporal dependence, the Driscoll &
 ```julia
 using MacroEconometricModels
 
-Y = randn(200, 3)
-for t in 2:200; Y[t,:] = 0.5*Y[t-1,:] + 0.3*randn(3); end
+# Load FRED-MD monetary policy variables
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
 
 # Construct design matrices
 Y_eff, X = construct_var_matrices(Y, 2)
@@ -474,10 +487,11 @@ The Newey-West estimator is appropriate for time series with heteroscedastic and
 The `compare_var_lp` function provides a structured comparison of VAR and LP impulse responses:
 
 ```julia
-comparison = compare_var_lp(Y, 1, 20; lags=4)
+# Compare VAR and LP impulse responses for the monetary policy shock (variable 3)
+comparison = compare_var_lp(Y, 3, 20; lags=4)
 ```
 
-This estimates both a VAR and LP model on the same data and returns the IRFs from each, facilitating visual and numerical comparison. Under correct specification, the IRFs should be close (Plagborg-Møller & Wolf 2021); substantial disagreement suggests dynamic misspecification in the VAR.
+This estimates both a VAR and LP model on the same FRED-MD data and returns the IRFs from each, facilitating visual and numerical comparison. Under correct specification, the IRFs should be close (Plagborg-Møller & Wolf 2021); substantial disagreement suggests dynamic misspecification in the VAR.
 
 **Reference**: Newey & West (1987, 1994), Andrews (1991), Driscoll & Kraay (1998)
 
@@ -489,17 +503,11 @@ This example demonstrates an end-to-end VAR workflow from lag selection through 
 
 ```julia
 using MacroEconometricModels
-using Random
 
-Random.seed!(42)
-
-# Generate data from a persistent VAR(1) DGP
-T, n = 200, 3
-Y = zeros(T, n)
-A = [0.8 0.1 -0.1; 0.05 0.7 0.0; 0.1 0.2 0.75]
-for t in 2:T
-    Y[t, :] = A * Y[t-1, :] + 0.3 * randn(n)
-end
+# Load FRED-MD: standard monetary VAR ordering (slow to fast)
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
 
 # Step 1: Select lag order
 sel = select_lag_order(Y, 8)
@@ -516,23 +524,24 @@ println("Stationary: ", stab.is_stationary,
         "  Max modulus: ", round(stab.max_modulus, digits=4))
 
 # Step 4: Cholesky IRF with bootstrap CI
+# Ordering: [INDPRO, CPI, FFR] — a monetary policy shock raises FFR
 irfs = irf(model, 20; method=:cholesky, ci_type=:bootstrap, reps=500)
-println("Impact of shock 1 on var 1: ", round(irfs.values[1, 1, 1], digits=3))
-println("After 8 periods: ", round(irfs.values[9, 1, 1], digits=3))
+println("Impact of monetary shock on FFR: ", round(irfs.values[1, 3, 3], digits=3))
+println("Response of INDPRO at h=8: ", round(irfs.values[9, 1, 3], digits=3))
 
 # Step 5: FEVD
 decomp = fevd(model, 20)
-println("Var 1 explained by shock 1 at h=1: ",
-        round(decomp.proportions[1, 1, 1] * 100, digits=1), "%")
-println("Var 1 explained by shock 1 at h=20: ",
-        round(decomp.proportions[20, 1, 1] * 100, digits=1), "%")
+println("INDPRO explained by monetary shock at h=1: ",
+        round(decomp.proportions[1, 1, 3] * 100, digits=1), "%")
+println("INDPRO explained by monetary shock at h=20: ",
+        round(decomp.proportions[20, 1, 3] * 100, digits=1), "%")
 
 # Step 6: Historical decomposition
 hd = historical_decomposition(model, size(model.U, 1))
 verify_decomposition(hd)  # Should return true
 ```
 
-The lag selection criteria typically agree when the true DGP is low-order; BIC tends to be more conservative and is preferred when parsimony matters. The stability check confirms all companion matrix eigenvalues lie inside the unit circle, validating the use of standard asymptotic inference. The FEVD at long horizons reveals the unconditional variance decomposition, showing which shocks are the dominant drivers of each variable. The historical decomposition identity ``y_t = \sum_j \text{HD}_j(t) + \text{initial}(t)`` should hold exactly up to numerical precision.
+The lag selection criteria typically agree for well-specified systems; BIC tends to be more conservative and is preferred when parsimony matters. The Cholesky ordering [INDPRO, CPI, FFR] implies that a monetary policy shock (shock 3) raises the federal funds rate on impact, while output and prices respond with a lag — the standard recursive identification following Christiano, Eichenbaum & Evans (1999). The FEVD reveals how much of the forecast error variance in industrial production is attributable to monetary shocks at different horizons. The historical decomposition identity ``y_t = \sum_j \text{HD}_j(t) + \text{initial}(t)`` should hold exactly up to numerical precision.
 
 ---
 
