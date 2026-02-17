@@ -23,7 +23,7 @@ using Statistics
 using Random
 
 @testset "FEVD Tests with Theoretical Verification" begin
-    println("Generating Data for FEVD Verification...")
+    _tprint("Generating Data for FEVD Verification...")
     # FEVD Verification DGP:
     # Diagonal VAR(1) with Identity Error Covariance.
     # Means shocks are orthogonal and variables don't interact.
@@ -48,12 +48,12 @@ using Random
     end
 
     model = fit(VARModel, Y, p)
-    println("Frequentist Estimation Done.")
+    _tprint("Frequentist Estimation Done.")
 
     horizon = 5
 
     # 1. Frequentist FEVD
-    println("Testing Frequentist FEVD...")
+    _tprint("Testing Frequentist FEVD...")
     fevd_freq = fevd(model, horizon; method=:cholesky)
 
     # Note: FEVD struct uses lowercase 'proportions'
@@ -74,7 +74,7 @@ using Random
     end
 
     # 2. Bayesian FEVD
-    println("Testing Bayesian FEVD...")
+    _tprint("Testing Bayesian FEVD...")
     try
         post = estimate_bvar(Y, p; n_draws=50)
 
@@ -102,7 +102,7 @@ using Random
         @test_skip "Bayesian FEVD skipped due to error"
     end
 
-    println("FEVD Verification Passed.")
+    _tprint("FEVD Verification Passed.")
 end
 
 @testset "FEVD Basic Functionality" begin

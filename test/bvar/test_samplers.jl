@@ -22,7 +22,7 @@ using LinearAlgebra
 using Random
 
 @testset "Bayesian Samplers Tests" begin
-    println("Testing BVAR samplers...")
+    _tprint("Testing BVAR samplers...")
 
     # Generate small synthetic data for speed
     T = 50
@@ -40,7 +40,7 @@ using Random
 
     # Test Direct sampler (default, most commonly used)
     @testset "Direct Sampler" begin
-        println("Testing sampler: direct")
+        _tprint("Testing sampler: direct")
         post = estimate_bvar(Y, p; n_draws=100, sampler=:direct)
         @test post isa BVARPosterior
         @test post.sampler == :direct
@@ -51,57 +51,57 @@ using Random
         @test size(post.Sigma_draws) == (100, n, n)
         @test all(isfinite.(post.B_draws))
         @test all(isfinite.(post.Sigma_draws))
-        println("  -> Passed")
+        _tprint("  -> Passed")
     end
 
     # Test Gibbs sampler
     @testset "Gibbs Sampler" begin
-        println("Testing sampler: gibbs")
+        _tprint("Testing sampler: gibbs")
         post = estimate_bvar(Y, p; n_draws=50, sampler=:gibbs, burnin=50, thin=1)
         @test post isa BVARPosterior
         @test post.sampler == :gibbs
         @test post.n_draws == 50
         @test all(isfinite.(post.B_draws))
         @test all(isfinite.(post.Sigma_draws))
-        println("  -> Passed")
+        _tprint("  -> Passed")
     end
 
     # Test Gibbs with thinning
     @testset "Gibbs with Thinning" begin
-        println("Testing sampler: gibbs with thin=2")
+        _tprint("Testing sampler: gibbs with thin=2")
         post = estimate_bvar(Y, p; n_draws=30, sampler=:gibbs, burnin=50, thin=2)
         @test post isa BVARPosterior
         @test post.n_draws == 30
-        println("  -> Passed")
+        _tprint("  -> Passed")
     end
 
     # Test default burnin for Gibbs
     @testset "Gibbs Default Burnin" begin
-        println("Testing gibbs default burnin (200 when not specified)")
+        _tprint("Testing gibbs default burnin (200 when not specified)")
         post = estimate_bvar(Y, p; n_draws=30, sampler=:gibbs)
         @test post isa BVARPosterior
         @test post.n_draws == 30
-        println("  -> Passed")
+        _tprint("  -> Passed")
     end
 
     # Test with Minnesota prior
     @testset "Direct with Minnesota Prior" begin
-        println("Testing direct sampler with Minnesota prior")
+        _tprint("Testing direct sampler with Minnesota prior")
         hyper = MinnesotaHyperparameters(tau=0.5)
         post = estimate_bvar(Y, p; n_draws=50, sampler=:direct, prior=:minnesota, hyper=hyper)
         @test post isa BVARPosterior
         @test post.prior == :minnesota
-        println("  -> Passed")
+        _tprint("  -> Passed")
     end
 
     @testset "Gibbs with Minnesota Prior" begin
-        println("Testing gibbs sampler with Minnesota prior")
+        _tprint("Testing gibbs sampler with Minnesota prior")
         hyper = MinnesotaHyperparameters(tau=0.5)
         post = estimate_bvar(Y, p; n_draws=30, sampler=:gibbs, burnin=30,
                              prior=:minnesota, hyper=hyper)
         @test post isa BVARPosterior
         @test post.prior == :minnesota
-        println("  -> Passed")
+        _tprint("  -> Passed")
     end
 
     # Test error for unknown sampler

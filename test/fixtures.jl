@@ -25,6 +25,16 @@ for reproducibility across threaded test groups.
 
 using Random, LinearAlgebra
 
+# Safe println that silently catches IOError when stdout pipe is closed
+# (happens in threaded parallel test execution on macOS CI)
+function _tprint(args...)
+    try
+        println(args...)
+    catch e
+        e isa Base.IOError || rethrow()
+    end
+end
+
 # =============================================================================
 # VAR DGP generators
 # =============================================================================

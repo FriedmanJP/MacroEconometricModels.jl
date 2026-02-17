@@ -46,44 +46,44 @@ using Random
     @test size(StatsAPI.coef(model)) == (1 + n * p, n)
 
     # 2. Test dof, nobs
-    println("Testing dof/nobs...")
+    _tprint("Testing dof/nobs...")
     @test StatsAPI.nobs(model) == T
     @test StatsAPI.dof(model) == (1 + n * p) * n
 
     # 3. Test vcov
-    println("Testing vcov()...")
+    _tprint("Testing vcov()...")
     V = StatsAPI.vcov(model)
     @test size(V) == ((1 + n * p) * n, (1 + n * p) * n)
     @test issymmetric(V) || norm(V - V') < 1e-10  # Should be symmetric
 
     # 4. Test predict (in-sample)
-    println("Testing predict() in-sample...")
+    _tprint("Testing predict() in-sample...")
     y_hat = StatsAPI.predict(model)
     @test size(y_hat) == (T - p, n) # Effective sample size
     @test all(isfinite, y_hat)
 
     # 5. Test predict (forecast)
-    println("Testing predict() forecast...")
+    _tprint("Testing predict() forecast...")
     steps = 5
     y_fcast = StatsAPI.predict(model, steps)
     @test size(y_fcast) == (steps, n)
     @test all(isfinite, y_fcast)
 
     # 6. Test loglikelihood
-    println("Testing loglikelihood...")
+    _tprint("Testing loglikelihood...")
     ll = StatsAPI.loglikelihood(model)
     @test ll isa Float64
     @test isfinite(ll)
 
     # 7. Test stderror
-    println("Testing stderror...")
+    _tprint("Testing stderror...")
     se = StatsAPI.stderror(model)
     @test length(se) == length(vec(StatsAPI.coef(model)))
     @test all(se .> 0)
     @test all(isfinite, se)
 
     # 8. Test confint
-    println("Testing confint...")
+    _tprint("Testing confint...")
     ci = StatsAPI.confint(model; level=0.95)
     @test size(ci) == (length(se), 2)
     @test all(ci[:, 1] .< ci[:, 2])  # Lower < Upper
@@ -99,10 +99,10 @@ using Random
     @test all(ci_widths .< 10)  # Reasonable upper bound
 
     # 9. Test islinear
-    println("Testing islinear...")
+    _tprint("Testing islinear...")
     @test StatsAPI.islinear(model)
 
-    println("StatsAPI Tests Passed.")
+    _tprint("StatsAPI Tests Passed.")
 end
 
 @testset "StatsAPI r2 for VARModel" begin
@@ -116,7 +116,7 @@ end
     try
         r2_val = StatsAPI.r2(model)
         @test r2_val isa Number || r2_val isa Vector
-        println("r2 for VAR: ", r2_val)
+        _tprint("r2 for VAR: ", r2_val)
     catch e
         if e isa MethodError
             @test_skip "r2 not implemented for VARModel"

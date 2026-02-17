@@ -23,7 +23,7 @@ using Statistics
 using Random
 
 @testset "BGR 2010 Optimization" begin
-    println("Testing BGR 2010 Hyperparameter Optimization...")
+    _tprint("Testing BGR 2010 Hyperparameter Optimization...")
 
     # Generate synthetic data (VAR(1))
     T = 60
@@ -38,17 +38,17 @@ using Random
     end
 
     # 1. Test Log Marginal Likelihood
-    println("Testing Marginal Likelihood...")
+    _tprint("Testing Marginal Likelihood...")
     hyper = MinnesotaHyperparameters(tau=0.2)
     ml = log_marginal_likelihood(Y, p, hyper)
-    println("ML (tau=0.2): ", ml)
+    _tprint("ML (tau=0.2): ", ml)
     @test ml isa Float64
     @test !isnan(ml)
 
     # 2. Test Optimization matching
-    println("Testing Optimization...")
+    _tprint("Testing Optimization...")
     best_hyper = optimize_hyperparameters(Y, p; grid_size=10)
-    println("Optimal Tau: ", best_hyper.tau)
+    _tprint("Optimal Tau: ", best_hyper.tau)
 
     @test best_hyper.tau > 0
     @test best_hyper isa MinnesotaHyperparameters
@@ -59,15 +59,15 @@ using Random
     ml_opt = log_marginal_likelihood(Y, p, best_hyper)
     ml_bad = log_marginal_likelihood(Y, p, MinnesotaHyperparameters(tau=100.0))
 
-    println("ML Optimal: ", ml_opt)
-    println("ML Loose:   ", ml_bad)
+    _tprint("ML Optimal: ", ml_opt)
+    _tprint("ML Loose:   ", ml_bad)
 
     # Ideally optimization found a peak.
     @test ml_opt >= ml_bad
 end
 
 @testset "BGR 2010: Large Sparse VAR" begin
-    println("\nTesting Large Sparse VAR (N=20)...")
+    _tprint("\nTesting Large Sparse VAR (N=20)...")
 
     # 3. Large Sparse DGP
     # Replicating BGR style environment: Many vars, short T relative to params
@@ -92,11 +92,11 @@ end
     end
 
     # Optimize Hyperparameters
-    println("Optimizing Hyperparameters for Large VAR...")
+    _tprint("Optimizing Hyperparameters for Large VAR...")
     # This might take a moment due to larger matrix inversions
     @time best_hyper_large = optimize_hyperparameters(Y_large, p_large; grid_size=10)
 
-    println("Optimal Tau (Large): ", best_hyper_large.tau)
+    _tprint("Optimal Tau (Large): ", best_hyper_large.tau)
 
     # For Large VARs, we expect tighter priors (smaller tau) to prevent overfitting
     # compared to loose priors, especially if N is very large.
@@ -105,8 +105,8 @@ end
     ml_opt = log_marginal_likelihood(Y_large, p_large, best_hyper_large)
     ml_loose = log_marginal_likelihood(Y_large, p_large, MinnesotaHyperparameters(tau=10.0))
 
-    println("ML Optimal (Large): ", ml_opt)
-    println("ML Loose (Large):   ", ml_loose)
+    _tprint("ML Optimal (Large): ", ml_opt)
+    _tprint("ML Loose (Large):   ", ml_loose)
 
     @test ml_opt > ml_loose
     @test !isnan(ml_opt)

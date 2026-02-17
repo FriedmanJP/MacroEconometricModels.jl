@@ -589,4 +589,4 @@ end
 
 end
 
-println("Mountford-Uhlig (2009) tests completed.")
+_tprint("Mountford-Uhlig (2009) tests completed.")

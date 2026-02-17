@@ -1350,4 +1350,4 @@ end
 
 end
 
-println("Arias et al. (2018) tests completed.")
+_tprint("Arias et al. (2018) tests completed.")

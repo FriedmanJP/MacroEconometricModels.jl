@@ -25,7 +25,7 @@ using Random
 Random.seed!(42)
 
 @testset "Minnesota Prior Tests" begin
-    println("Generating Data for Minnesota Test...")
+    _tprint("Generating Data for Minnesota Test...")
     T = 50
     n = 2
     p = 1
@@ -53,10 +53,10 @@ Random.seed!(42)
     @test size(X_d, 1) == 7
     @test size(X_d, 2) == 3 # 1 + 2*1
 
-    println("Dummy Observations Generated.")
+    _tprint("Dummy Observations Generated.")
 
     # 2. Test Estimation with Minnesota Prior
-    println("Estimating BVAR with Minnesota...")
+    _tprint("Estimating BVAR with Minnesota...")
     post = estimate_bvar(Y, p; n_draws=100, prior=:minnesota, hyper=hyper)
 
     @test post isa BVARPosterior
@@ -64,11 +64,11 @@ Random.seed!(42)
     @test post.prior == :minnesota
 
     # Basic check: posterior mean should be somewhat reasonable (within bounds)
-    println("Estimation Complete.")
+    _tprint("Estimation Complete.")
 
     # 3. Test optimize_hyperparameters_full
     @testset "Full Hyperparameter Optimization" begin
-        println("Testing optimize_hyperparameters_full...")
+        _tprint("Testing optimize_hyperparameters_full...")
 
         # Generate data with clear VAR structure
         T_full = 100
@@ -107,7 +107,7 @@ Random.seed!(42)
         @test isfinite(ml_full)
         @test isfinite(ml_simple)
 
-        println("Full Hyperparameter Optimization Test Complete.")
+        _tprint("Full Hyperparameter Optimization Test Complete.")
     end
 
     @testset "Marginal likelihood with different hypers" begin

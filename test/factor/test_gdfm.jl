@@ -698,4 +698,4 @@ using Random
 end
 
 # Run all tests
-println("Running GDFM tests...")
+_tprint("Running GDFM tests...")

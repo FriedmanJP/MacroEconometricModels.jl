@@ -25,7 +25,7 @@ using Random
 Random.seed!(42)
 
 @testset "IRF Tests with Theoretical Verification" begin
-    println("Generating Data for IRF Verification...")
+    _tprint("Generating Data for IRF Verification...")
     # 1. Setup Data with Known DGP
     # VAR(1): Y_t = A Y_{t-1} + u_t, u_t ~ N(0, I)
     # A = 0.5 * I
@@ -44,10 +44,10 @@ Random.seed!(42)
     end
 
     model = estimate_var(Y, p)
-    println("Frequentist Estimation Done.")
+    _tprint("Frequentist Estimation Done.")
 
     # 2. Frequentist IRF (Cholesky) vs Theoretical
-    println("Testing Frequentist IRF (Cholesky)...")
+    _tprint("Testing Frequentist IRF (Cholesky)...")
     irf_freq = irf(model, 6; method=:cholesky) # Horizon 6 (lags 0 to 5)
 
     # Theoretical IRF: Phi_h * P
@@ -71,20 +71,20 @@ Random.seed!(42)
     end
 
     # 3. Frequentist IRF (Sign) - Basic check logic remains
-    println("Testing Frequentist IRF (Sign)...")
+    _tprint("Testing Frequentist IRF (Sign)...")
     check_func(irf) = irf[1, 1, 1] > 0
     irf_sign_res = irf(model, 6; method=:sign, check_func=check_func)
     @test irf_sign_res.values[1, 1, 1] > 0
 
     # 4. Bayesian IRF
-    println("Testing Bayesian Estimation...")
+    _tprint("Testing Bayesian Estimation...")
     try
         post = estimate_bvar(Y, p; n_draws=50)
-        println("Bayesian Estimation Done.")
+        _tprint("Bayesian Estimation Done.")
 
-        println("Testing Bayesian IRF...")
+        _tprint("Testing Bayesian IRF...")
         irf_bayes = irf(post, 6; method=:cholesky)
-        println("Bayesian IRF Done.")
+        _tprint("Bayesian IRF Done.")
 
         @test irf_bayes isa BayesianImpulseResponse
 
@@ -100,9 +100,9 @@ Random.seed!(42)
         end
 
     catch e
-        println("ERROR CAUGHT:")
+        _tprint("ERROR CAUGHT:")
         showerror(stdout, e)
-        println()
+        _tprint()
         rethrow(e)
     end
 end
