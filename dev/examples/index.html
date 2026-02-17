@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Examples · MacroEconometricModels.jl</title><meta name="title" content="Examples · MacroEconometricModels.jl"/><meta property="og:title" content="Examples · MacroEconometricModels.jl"/><meta property="twitter:title" content="Examples · MacroEconometricModels.jl"/><meta name="description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:description" content="Documentation for MacroEconometricModels.jl."/><meta property="twitter:description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:url" content="https://chung9207.github.io/MacroEconometricModels.jl/examples/"/><meta property="twitter:url" content="https://chung9207.github.io/MacroEconometricModels.jl/examples/"/><link rel="canonical" href="https://chung9207.github.io/MacroEconometricModels.jl/examples/"/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">MacroEconometricModels.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><a class="tocitem" href="../data/">Data Management</a></li><li><span class="tocitem">Univariate Models</span><ul><li><a class="tocitem" href="../filters/">Time Series Filters</a></li><li><a class="tocitem" href="../arima/">ARIMA</a></li><li><a class="tocitem" href="../volatility/">Volatility Models</a></li></ul></li><li><span class="tocitem">Multivariate Models</span><ul><li><a class="tocitem" href="../manual/">VAR</a></li><li><a class="tocitem" href="../bayesian/">Bayesian VAR</a></li><li><a class="tocitem" href="../vecm/">VECM</a></li><li><a class="tocitem" href="../lp/">Local Projections</a></li><li><a class="tocitem" href="../factormodels/">Factor Models</a></li></ul></li><li><span class="tocitem">Panel Models</span><ul><li><a class="tocitem" href="../pvar/">Panel VAR</a></li></ul></li><li><a class="tocitem" href="../innovation_accounting/">Innovation Accounting</a></li><li><a class="tocitem" href="../nowcast/">Nowcasting</a></li><li><a class="tocitem" href="../nongaussian/">Non-Gaussian Identification</a></li><li><a class="tocitem" href="../hypothesis_tests/">Hypothesis Tests</a></li><li><a class="tocitem" href="../plotting/">Visualization</a></li><li class="is-active"><a class="tocitem" href>Examples</a><ul class="internal"><li><a class="tocitem" href="#Example-1:-FRED-MD-Data-Pipeline"><span>Example 1: FRED-MD Data Pipeline</span></a></li><li><a class="tocitem" href="#Example-2:-Hypothesis-Tests"><span>Example 2: Hypothesis Tests</span></a></li><li><a class="tocitem" href="#Example-3:-Time-Series-Filters"><span>Example 3: Time Series Filters</span></a></li><li><a class="tocitem" href="#Example-4:-ARIMA-Models"><span>Example 4: ARIMA Models</span></a></li><li><a class="tocitem" href="#Example-5:-Volatility-Models"><span>Example 5: Volatility Models</span></a></li><li><a class="tocitem" href="#Example-6:-Three-Variable-VAR-Analysis"><span>Example 6: Three-Variable VAR Analysis</span></a></li><li><a class="tocitem" href="#Example-7:-Bayesian-VAR-with-Minnesota-Prior"><span>Example 7: Bayesian VAR with Minnesota Prior</span></a></li><li><a class="tocitem" href="#Example-8:-VECM-Analysis"><span>Example 8: VECM Analysis</span></a></li><li><a class="tocitem" href="#Example-9:-Local-Projections"><span>Example 9: Local Projections</span></a></li><li><a class="tocitem" href="#Example-10:-Factor-Model-for-Large-Panels"><span>Example 10: Factor Model for Large Panels</span></a></li><li><a class="tocitem" href="#Example-11:-Panel-VAR-Analysis"><span>Example 11: Panel VAR Analysis</span></a></li><li><a class="tocitem" href="#Example-12:-GMM-Estimation"><span>Example 12: GMM Estimation</span></a></li><li><a class="tocitem" href="#Example-13:-Non-Gaussian-Identification"><span>Example 13: Non-Gaussian Identification</span></a></li><li><a class="tocitem" href="#Example-14:-Complete-Workflow"><span>Example 14: Complete Workflow</span></a></li><li><a class="tocitem" href="#Example-15:-Table-Output-—-Text,-LaTeX,-and-HTML"><span>Example 15: Table Output — Text, LaTeX, and HTML</span></a></li><li><a class="tocitem" href="#Example-16:-Bibliographic-References"><span>Example 16: Bibliographic References</span></a></li><li><a class="tocitem" href="#Example-17:-Nowcasting"><span>Example 17: Nowcasting</span></a></li><li><a class="tocitem" href="#Best-Practices"><span>Best Practices</span></a></li></ul></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../api/">Overview</a></li><li><a class="tocitem" href="../api_types/">Types</a></li><li><a class="tocitem" href="../api_functions/">Functions</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Examples</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Examples</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/chung9207/MacroEconometricModels.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/chung9207/MacroEconometricModels.jl/blob/main/docs/src/examples.md#" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Examples"><a class="docs-heading-anchor" href="#Examples">Examples</a><a id="Examples-1"></a><a class="docs-heading-anchor-permalink" href="#Examples" title="Permalink"></a></h1><p>This chapter provides comprehensive worked examples demonstrating the main functionality of <strong>MacroEconometricModels.jl</strong>. Each example includes complete code, economic interpretation, and best practices. The examples follow the natural empirical workflow: load and prepare data, test properties, estimate univariate and multivariate models, and report results.</p><h3 id="Quick-Reference"><a class="docs-heading-anchor" href="#Quick-Reference">Quick Reference</a><a id="Quick-Reference-1"></a><a class="docs-heading-anchor-permalink" href="#Quick-Reference" title="Permalink"></a></h3><table><tr><th style="text-align: right">#</th><th style="text-align: right">Example</th><th style="text-align: right">Key Functions</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right">1</td><td style="text-align: right">FRED-MD Data Pipeline</td><td style="text-align: right"><code>load_example</code>, <code>apply_tcode</code>, <code>diagnose</code>, <code>estimate_var</code></td><td style="text-align: right">Real data workflow from FRED-MD to VAR estimation</td></tr><tr><td style="text-align: right">2</td><td style="text-align: right">Hypothesis Tests</td><td style="text-align: right"><code>adf_test</code>, <code>kpss_test</code>, <code>johansen_test</code>, <code>granger_test</code></td><td style="text-align: right">ADF, KPSS, Zivot-Andrews, Ng-Perron, Johansen, Granger causality</td></tr><tr><td style="text-align: right">3</td><td style="text-align: right">Time Series Filters</td><td style="text-align: right"><code>hp_filter</code>, <code>hamilton_filter</code>, <code>beveridge_nelson</code>, <code>baxter_king</code>, <code>boosted_hp</code></td><td style="text-align: right">All 5 filters compared on simulated GDP</td></tr><tr><td style="text-align: right">4</td><td style="text-align: right">ARIMA Models</td><td style="text-align: right"><code>estimate_ar</code>, <code>estimate_arma</code>, <code>auto_arima</code>, <code>forecast</code></td><td style="text-align: right">AR, MA, ARMA estimation, order selection, forecasting</td></tr><tr><td style="text-align: right">5</td><td style="text-align: right">Volatility Models</td><td style="text-align: right"><code>estimate_garch</code>, <code>estimate_egarch</code>, <code>estimate_sv</code>, <code>news_impact_curve</code></td><td style="text-align: right">ARCH/GARCH/SV estimation, diagnostics, forecasting</td></tr><tr><td style="text-align: right">6</td><td style="text-align: right">Three-Variable VAR</td><td style="text-align: right"><code>estimate_var</code>, <code>irf</code>, <code>fevd</code>, <code>identify_arias</code></td><td style="text-align: right">Frequentist VAR with Cholesky, sign, long-run, and Arias (2018) identification</td></tr><tr><td style="text-align: right">7</td><td style="text-align: right">Bayesian VAR with Minnesota Prior</td><td style="text-align: right"><code>estimate_bvar</code>, <code>optimize_hyperparameters</code></td><td style="text-align: right">Minnesota prior, conjugate posterior estimation, credible intervals</td></tr><tr><td style="text-align: right">8</td><td style="text-align: right">VECM Analysis</td><td style="text-align: right"><code>estimate_vecm</code>, <code>johansen_test</code>, <code>to_var</code>, <code>forecast</code></td><td style="text-align: right">Cointegration, VECM estimation, IRF, forecast</td></tr><tr><td style="text-align: right">9</td><td style="text-align: right">Local Projections</td><td style="text-align: right"><code>estimate_lp</code>, <code>estimate_lp_iv</code>, <code>structural_lp</code>, <code>lp_fevd</code></td><td style="text-align: right">Standard, IV, smooth, state-dependent, structural LP, and LP-FEVD</td></tr><tr><td style="text-align: right">10</td><td style="text-align: right">Factor Model for Large Panels</td><td style="text-align: right"><code>estimate_factors</code>, <code>ic_criteria</code>, <code>forecast</code></td><td style="text-align: right">Large panel factor extraction, Bai-Ng criteria, forecasting with CIs</td></tr><tr><td style="text-align: right">11</td><td style="text-align: right">Panel VAR Analysis</td><td style="text-align: right"><code>estimate_pvar</code>, <code>pvar_oirf</code>, <code>pvar_fevd</code>, <code>pvar_bootstrap_irf</code></td><td style="text-align: right">Full PVAR workflow: GMM, specification tests, structural analysis</td></tr><tr><td style="text-align: right">12</td><td style="text-align: right">GMM Estimation</td><td style="text-align: right"><code>estimate_gmm</code>, <code>j_test</code></td><td style="text-align: right">IV regression via GMM, overidentification test</td></tr><tr><td style="text-align: right">13</td><td style="text-align: right">Non-Gaussian Identification</td><td style="text-align: right"><code>identify_fastica</code>, <code>normality_test_suite</code>, <code>test_shock_gaussianity</code></td><td style="text-align: right">ICA, ML, heteroskedastic identification</td></tr><tr><td style="text-align: right">14</td><td style="text-align: right">Complete Workflow</td><td style="text-align: right">Multiple</td><td style="text-align: right">Unit roots → lag selection → VAR → BVAR → LP comparison</td></tr><tr><td style="text-align: right">15</td><td style="text-align: right">Table Output (LaTeX &amp; HTML)</td><td style="text-align: right"><code>set_display_backend</code>, <code>print_table</code>, <code>table</code></td><td style="text-align: right">Export tables for papers, slides, and web</td></tr><tr><td style="text-align: right">16</td><td style="text-align: right">Bibliographic References</td><td style="text-align: right"><code>refs</code></td><td style="text-align: right">Multi-format references for models and methods</td></tr><tr><td style="text-align: right">17</td><td style="text-align: right">Nowcasting</td><td style="text-align: right"><code>nowcast_dfm</code>, <code>nowcast_bvar</code>, <code>nowcast_bridge</code>, <code>nowcast_news</code></td><td style="text-align: right">DFM, BVAR, bridge equation nowcasting with news decomposition</td></tr></table><hr/><h2 id="Example-1:-FRED-MD-Data-Pipeline"><a class="docs-heading-anchor" href="#Example-1:-FRED-MD-Data-Pipeline">Example 1: FRED-MD Data Pipeline</a><a id="Example-1:-FRED-MD-Data-Pipeline-1"></a><a class="docs-heading-anchor-permalink" href="#Example-1:-FRED-MD-Data-Pipeline" title="Permalink"></a></h2><p>This example demonstrates a complete empirical workflow using the built-in FRED-MD dataset: loading data, applying transformations, data cleaning, and VAR estimation. See <a href="../data/">Data Management</a> for data container details and <a href>Examples</a> for additional workflows.</p><pre><code class="language-julia hljs">using MacroEconometricModels, Random
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Examples · MacroEconometricModels.jl</title><meta name="title" content="Examples · MacroEconometricModels.jl"/><meta property="og:title" content="Examples · MacroEconometricModels.jl"/><meta property="twitter:title" content="Examples · MacroEconometricModels.jl"/><meta name="description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:description" content="Documentation for MacroEconometricModels.jl."/><meta property="twitter:description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:url" content="https://FriedmanJP.github.io/MacroEconometricModels.jl/examples/"/><meta property="twitter:url" content="https://FriedmanJP.github.io/MacroEconometricModels.jl/examples/"/><link rel="canonical" href="https://FriedmanJP.github.io/MacroEconometricModels.jl/examples/"/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script><link href="../assets/custom.css" rel="stylesheet" type="text/css"/><script src="../assets/theme-toggle.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">MacroEconometricModels.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><a class="tocitem" href="../data/">Data Management</a></li><li><span class="tocitem">Univariate Models</span><ul><li><a class="tocitem" href="../filters/">Time Series Filters</a></li><li><a class="tocitem" href="../arima/">ARIMA</a></li><li><a class="tocitem" href="../volatility/">Volatility Models</a></li></ul></li><li><span class="tocitem">Multivariate Models</span><ul><li><a class="tocitem" href="../manual/">VAR</a></li><li><a class="tocitem" href="../bayesian/">Bayesian VAR</a></li><li><a class="tocitem" href="../vecm/">VECM</a></li><li><a class="tocitem" href="../lp/">Local Projections</a></li><li><a class="tocitem" href="../factormodels/">Factor Models</a></li></ul></li><li><span class="tocitem">Panel Models</span><ul><li><a class="tocitem" href="../pvar/">Panel VAR</a></li></ul></li><li><a class="tocitem" href="../innovation_accounting/">Innovation Accounting</a></li><li><a class="tocitem" href="../nowcast/">Nowcasting</a></li><li><a class="tocitem" href="../nongaussian/">Statistical Identification</a></li><li><a class="tocitem" href="../hypothesis_tests/">Hypothesis Tests</a></li><li><a class="tocitem" href="../plotting/">Visualization</a></li><li class="is-active"><a class="tocitem" href>Examples</a><ul class="internal"><li><a class="tocitem" href="#Example-1:-FRED-MD-Data-Pipeline"><span>Example 1: FRED-MD Data Pipeline</span></a></li><li><a class="tocitem" href="#Example-2:-Hypothesis-Tests"><span>Example 2: Hypothesis Tests</span></a></li><li><a class="tocitem" href="#Example-3:-Time-Series-Filters"><span>Example 3: Time Series Filters</span></a></li><li><a class="tocitem" href="#Example-4:-ARIMA-Models"><span>Example 4: ARIMA Models</span></a></li><li><a class="tocitem" href="#Example-5:-Volatility-Models"><span>Example 5: Volatility Models</span></a></li><li><a class="tocitem" href="#Example-6:-Three-Variable-VAR-Analysis"><span>Example 6: Three-Variable VAR Analysis</span></a></li><li><a class="tocitem" href="#Example-7:-Bayesian-VAR-with-Minnesota-Prior"><span>Example 7: Bayesian VAR with Minnesota Prior</span></a></li><li><a class="tocitem" href="#Example-8:-VECM-Analysis"><span>Example 8: VECM Analysis</span></a></li><li><a class="tocitem" href="#Example-9:-Local-Projections"><span>Example 9: Local Projections</span></a></li><li><a class="tocitem" href="#Example-10:-Factor-Model-for-Large-Panels"><span>Example 10: Factor Model for Large Panels</span></a></li><li><a class="tocitem" href="#Example-11:-Panel-VAR-Analysis"><span>Example 11: Panel VAR Analysis</span></a></li><li><a class="tocitem" href="#Example-12:-GMM-Estimation"><span>Example 12: GMM Estimation</span></a></li><li><a class="tocitem" href="#Example-13:-Non-Gaussian-Identification"><span>Example 13: Non-Gaussian Identification</span></a></li><li><a class="tocitem" href="#Example-14:-Complete-Workflow"><span>Example 14: Complete Workflow</span></a></li><li><a class="tocitem" href="#Example-15:-Table-Output-—-Text,-LaTeX,-and-HTML"><span>Example 15: Table Output — Text, LaTeX, and HTML</span></a></li><li><a class="tocitem" href="#Example-16:-Bibliographic-References"><span>Example 16: Bibliographic References</span></a></li><li><a class="tocitem" href="#Example-17:-Nowcasting"><span>Example 17: Nowcasting</span></a></li><li><a class="tocitem" href="#Best-Practices"><span>Best Practices</span></a></li></ul></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../api/">Overview</a></li><li><a class="tocitem" href="../api_types/">Types</a></li><li><a class="tocitem" href="../api_functions/">Functions</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Examples</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Examples</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/FriedmanJP/MacroEconometricModels.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/FriedmanJP/MacroEconometricModels.jl/blob/main/docs/src/examples.md#" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Examples"><a class="docs-heading-anchor" href="#Examples">Examples</a><a id="Examples-1"></a><a class="docs-heading-anchor-permalink" href="#Examples" title="Permalink"></a></h1><p>This chapter provides comprehensive worked examples demonstrating the main functionality of <strong>MacroEconometricModels.jl</strong>. Each example includes complete code, economic interpretation, and best practices. The examples follow the natural empirical workflow: load and prepare data, test properties, estimate univariate and multivariate models, and report results. All examples use built-in datasets (FRED-MD, FRED-QD, Penn World Table) –- no simulated data.</p><h3 id="Quick-Reference"><a class="docs-heading-anchor" href="#Quick-Reference">Quick Reference</a><a id="Quick-Reference-1"></a><a class="docs-heading-anchor-permalink" href="#Quick-Reference" title="Permalink"></a></h3><table><tr><th style="text-align: right">#</th><th style="text-align: right">Example</th><th style="text-align: right">Key Functions</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right">1</td><td style="text-align: right">FRED-MD Data Pipeline</td><td style="text-align: right"><code>load_example</code>, <code>apply_tcode</code>, <code>diagnose</code>, <code>estimate_var</code></td><td style="text-align: right">Real data workflow from FRED-MD to VAR estimation</td></tr><tr><td style="text-align: right">2</td><td style="text-align: right">Hypothesis Tests</td><td style="text-align: right"><code>adf_test</code>, <code>kpss_test</code>, <code>johansen_test</code>, <code>granger_test</code></td><td style="text-align: right">Unit root, cointegration, and Granger causality on FRED data</td></tr><tr><td style="text-align: right">3</td><td style="text-align: right">Time Series Filters</td><td style="text-align: right"><code>hp_filter</code>, <code>hamilton_filter</code>, <code>beveridge_nelson</code>, <code>baxter_king</code>, <code>boosted_hp</code></td><td style="text-align: right">All 5 filters compared on FRED-MD Industrial Production</td></tr><tr><td style="text-align: right">4</td><td style="text-align: right">ARIMA Models</td><td style="text-align: right"><code>estimate_ar</code>, <code>estimate_arma</code>, <code>auto_arima</code>, <code>forecast</code></td><td style="text-align: right">ARIMA estimation and forecasting on INDPRO growth</td></tr><tr><td style="text-align: right">5</td><td style="text-align: right">Volatility Models</td><td style="text-align: right"><code>estimate_garch</code>, <code>estimate_egarch</code>, <code>estimate_sv</code>, <code>news_impact_curve</code></td><td style="text-align: right">GARCH/SV estimation on S&amp;P 500 returns</td></tr><tr><td style="text-align: right">6</td><td style="text-align: right">Three-Variable VAR</td><td style="text-align: right"><code>estimate_var</code>, <code>irf</code>, <code>fevd</code>, <code>identify_arias</code></td><td style="text-align: right">Monetary policy VAR with Cholesky, sign, long-run, and Arias (2018) identification</td></tr><tr><td style="text-align: right">7</td><td style="text-align: right">Bayesian VAR with Minnesota Prior</td><td style="text-align: right"><code>estimate_bvar</code>, <code>optimize_hyperparameters</code></td><td style="text-align: right">Minnesota prior, conjugate posterior estimation, credible intervals</td></tr><tr><td style="text-align: right">8</td><td style="text-align: right">VECM Analysis</td><td style="text-align: right"><code>estimate_vecm</code>, <code>johansen_test</code>, <code>to_var</code>, <code>forecast</code></td><td style="text-align: right">Cointegration in FRED-QD macro aggregates</td></tr><tr><td style="text-align: right">9</td><td style="text-align: right">Local Projections</td><td style="text-align: right"><code>estimate_lp</code>, <code>estimate_lp_iv</code>, <code>structural_lp</code>, <code>lp_fevd</code></td><td style="text-align: right">Standard, IV, smooth, state-dependent, structural LP, and LP-FEVD</td></tr><tr><td style="text-align: right">10</td><td style="text-align: right">Factor Model for Large Panels</td><td style="text-align: right"><code>estimate_factors</code>, <code>ic_criteria</code>, <code>forecast</code></td><td style="text-align: right">Large panel factor extraction from FRED-MD</td></tr><tr><td style="text-align: right">11</td><td style="text-align: right">Panel VAR Analysis</td><td style="text-align: right"><code>estimate_pvar</code>, <code>pvar_oirf</code>, <code>pvar_fevd</code>, <code>pvar_bootstrap_irf</code></td><td style="text-align: right">Cross-country dynamics from Penn World Table</td></tr><tr><td style="text-align: right">12</td><td style="text-align: right">GMM Estimation</td><td style="text-align: right"><code>estimate_gmm</code>, <code>j_test</code></td><td style="text-align: right">IV regression via GMM with FRED-MD instruments</td></tr><tr><td style="text-align: right">13</td><td style="text-align: right">Non-Gaussian Identification</td><td style="text-align: right"><code>identify_fastica</code>, <code>normality_test_suite</code>, <code>test_shock_gaussianity</code></td><td style="text-align: right">ICA, ML, heteroskedastic identification on monetary policy VAR</td></tr><tr><td style="text-align: right">14</td><td style="text-align: right">Complete Workflow</td><td style="text-align: right">Multiple</td><td style="text-align: right">FRED-MD pipeline: unit roots → lag selection → VAR → BVAR → LP</td></tr><tr><td style="text-align: right">15</td><td style="text-align: right">Table Output (LaTeX &amp; HTML)</td><td style="text-align: right"><code>set_display_backend</code>, <code>print_table</code>, <code>table</code></td><td style="text-align: right">Export tables for papers, slides, and web</td></tr><tr><td style="text-align: right">16</td><td style="text-align: right">Bibliographic References</td><td style="text-align: right"><code>refs</code></td><td style="text-align: right">Multi-format references for models and methods</td></tr><tr><td style="text-align: right">17</td><td style="text-align: right">Nowcasting</td><td style="text-align: right"><code>nowcast_dfm</code>, <code>nowcast_bvar</code>, <code>nowcast_bridge</code>, <code>nowcast_news</code></td><td style="text-align: right">DFM, BVAR, bridge equation nowcasting with FRED-MD data</td></tr></table><hr/><h2 id="Example-1:-FRED-MD-Data-Pipeline"><a class="docs-heading-anchor" href="#Example-1:-FRED-MD-Data-Pipeline">Example 1: FRED-MD Data Pipeline</a><a id="Example-1:-FRED-MD-Data-Pipeline-1"></a><a class="docs-heading-anchor-permalink" href="#Example-1:-FRED-MD-Data-Pipeline" title="Permalink"></a></h2><p>This example demonstrates a complete empirical workflow using the built-in FRED-MD dataset: loading data, applying transformations, data cleaning, and VAR estimation. See <a href="../data/">Data Management</a> for data container details and <a href>Examples</a> for additional workflows.</p><pre><code class="language-julia hljs">using MacroEconometricModels, Random
 
 Random.seed!(42)
 
@@ -29,48 +29,47 @@ model = estimate_var(subset, 4)
 
 # Structural analysis
 irfs = irf(model, 24; method=:cholesky)     # 24-month horizon
-fvd = fevd(model, 24)</code></pre><p><strong>Interpretation.</strong> The four-variable system captures industrial production, unemployment, inflation, and monetary policy –- the core variables for monetary VAR analysis. With monthly data, 4 lags covers one quarter of dynamics. The Cholesky ordering places slow-moving real variables first and the policy rate last, consistent with the standard recursive identification in monetary economics. The impulse responses trace the transmission of a monetary policy shock through output, unemployment, and prices.</p><h2 id="Example-2:-Hypothesis-Tests"><a class="docs-heading-anchor" href="#Example-2:-Hypothesis-Tests">Example 2: Hypothesis Tests</a><a id="Example-2:-Hypothesis-Tests-1"></a><a class="docs-heading-anchor-permalink" href="#Example-2:-Hypothesis-Tests" title="Permalink"></a></h2><p>This example demonstrates comprehensive unit root testing before fitting VAR models. Pre-estimation analysis is the first step in any empirical macro workflow. See <a href="../hypothesis_tests/">Hypothesis Tests</a> for theoretical background.</p><h3 id="Individual-Unit-Root-Tests"><a class="docs-heading-anchor" href="#Individual-Unit-Root-Tests">Individual Unit Root Tests</a><a id="Individual-Unit-Root-Tests-1"></a><a class="docs-heading-anchor-permalink" href="#Individual-Unit-Root-Tests" title="Permalink"></a></h3><pre><code class="language-julia hljs">using MacroEconometricModels
-using Random
+fvd = fevd(model, 24)</code></pre><p><strong>Interpretation.</strong> The four-variable system captures industrial production, unemployment, inflation, and monetary policy –- the core variables for monetary VAR analysis. With monthly data, 4 lags covers one quarter of dynamics. The Cholesky ordering places slow-moving real variables first and the policy rate last, consistent with the standard recursive identification in monetary economics. The impulse responses trace the transmission of a monetary policy shock through output, unemployment, and prices.</p><h2 id="Example-2:-Hypothesis-Tests"><a class="docs-heading-anchor" href="#Example-2:-Hypothesis-Tests">Example 2: Hypothesis Tests</a><a id="Example-2:-Hypothesis-Tests-1"></a><a class="docs-heading-anchor-permalink" href="#Example-2:-Hypothesis-Tests" title="Permalink"></a></h2><p>This example demonstrates comprehensive pre-estimation testing using real macroeconomic data. Pre-estimation analysis is the first step in any empirical macro workflow. See <a href="../hypothesis_tests/">Hypothesis Tests</a> for theoretical background.</p><h3 id="Individual-Unit-Root-Tests"><a class="docs-heading-anchor" href="#Individual-Unit-Root-Tests">Individual Unit Root Tests</a><a id="Individual-Unit-Root-Tests-1"></a><a class="docs-heading-anchor-permalink" href="#Individual-Unit-Root-Tests" title="Permalink"></a></h3><pre><code class="language-julia hljs">using MacroEconometricModels
 using Statistics
 
-Random.seed!(42)
+# Load FRED-MD data
+fred = load_example(:fred_md)
 
-# Generate data: mix of I(0) and I(1) series
-T = 200
-y_stationary = randn(T)                      # I(0): stationary
-y_random_walk = cumsum(randn(T))             # I(1): unit root
-y_trend_stat = 0.1 .* (1:T) .+ randn(T)      # Trend stationary
-y_with_break = vcat(randn(100), randn(100) .+ 2)  # Structural break
+# CPI level — should be I(1) (non-stationary price level)
+cpi_level = fred[:, &quot;CPIAUCSL&quot;]
+
+# CPI inflation (log first difference) — should be I(0) (stationary)
+cpi_infl = filter(isfinite, apply_tcode(fred[:, &quot;CPIAUCSL&quot;], 5))
 
 # === ADF Test ===
 println(&quot;=&quot;^60)
 println(&quot;ADF Test (H₀: unit root)&quot;)
 println(&quot;=&quot;^60)
 
-adf_stat = adf_test(y_stationary; lags=:aic, regression=:constant)
-println(&quot;\nStationary series:&quot;)
-println(&quot;  Statistic: &quot;, round(adf_stat.statistic, digits=3))
-println(&quot;  P-value: &quot;, round(adf_stat.pvalue, digits=4))
-println(&quot;  Lags: &quot;, adf_stat.lags)
+adf_infl = adf_test(cpi_infl; lags=:aic, regression=:constant)
+println(&quot;\nCPI Inflation (log Δ):&quot;)
+println(&quot;  Statistic: &quot;, round(adf_infl.statistic, digits=3))
+println(&quot;  P-value: &quot;, round(adf_infl.pvalue, digits=4))
+println(&quot;  Lags: &quot;, adf_infl.lags)
 
-adf_rw = adf_test(y_random_walk; lags=:aic, regression=:constant)
-println(&quot;\nRandom walk:&quot;)
-println(&quot;  Statistic: &quot;, round(adf_rw.statistic, digits=3))
-println(&quot;  P-value: &quot;, round(adf_rw.pvalue, digits=4))</code></pre><p>The ADF test statistic is compared to non-standard critical values (Dickey-Fuller distribution, not Student-t). For the stationary series, the large negative test statistic yields a small p-value, rejecting the unit root null. For the random walk, the test statistic is close to zero, failing to reject. The number of augmenting lags selected by AIC controls for residual serial correlation.</p><h3 id="KPSS-Complementary-Test"><a class="docs-heading-anchor" href="#KPSS-Complementary-Test">KPSS Complementary Test</a><a id="KPSS-Complementary-Test-1"></a><a class="docs-heading-anchor-permalink" href="#KPSS-Complementary-Test" title="Permalink"></a></h3><pre><code class="language-julia hljs"># === KPSS Test ===
+adf_level = adf_test(cpi_level; lags=:aic, regression=:constant)
+println(&quot;\nCPI Level:&quot;)
+println(&quot;  Statistic: &quot;, round(adf_level.statistic, digits=3))
+println(&quot;  P-value: &quot;, round(adf_level.pvalue, digits=4))</code></pre><p>The ADF test statistic is compared to non-standard critical values (Dickey-Fuller distribution, not Student-t). For CPI inflation, the large negative test statistic yields a small p-value, rejecting the unit root null. For the CPI level, the test fails to reject, consistent with a unit root in the price level. The number of augmenting lags selected by AIC controls for residual serial correlation.</p><h3 id="KPSS-Complementary-Test"><a class="docs-heading-anchor" href="#KPSS-Complementary-Test">KPSS Complementary Test</a><a id="KPSS-Complementary-Test-1"></a><a class="docs-heading-anchor-permalink" href="#KPSS-Complementary-Test" title="Permalink"></a></h3><pre><code class="language-julia hljs"># === KPSS Test ===
 println(&quot;\n&quot; * &quot;=&quot;^60)
 println(&quot;KPSS Test (H₀: stationarity)&quot;)
 println(&quot;=&quot;^60)
 
-kpss_stat = kpss_test(y_stationary; regression=:constant)
-println(&quot;\nStationary series:&quot;)
-println(&quot;  Statistic: &quot;, round(kpss_stat.statistic, digits=4))
-println(&quot;  P-value: &quot;, kpss_stat.pvalue &gt; 0.10 ? &quot;&gt;0.10&quot; : round(kpss_stat.pvalue, digits=4))
-println(&quot;  Bandwidth: &quot;, kpss_stat.bandwidth)
+kpss_infl = kpss_test(cpi_infl; regression=:constant)
+println(&quot;\nCPI Inflation:&quot;)
+println(&quot;  Statistic: &quot;, round(kpss_infl.statistic, digits=4))
+println(&quot;  P-value: &quot;, kpss_infl.pvalue &gt; 0.10 ? &quot;&gt;0.10&quot; : round(kpss_infl.pvalue, digits=4))
+println(&quot;  Bandwidth: &quot;, kpss_infl.bandwidth)
 
-kpss_rw = kpss_test(y_random_walk; regression=:constant)
-println(&quot;\nRandom walk:&quot;)
-println(&quot;  Statistic: &quot;, round(kpss_rw.statistic, digits=4))
-println(&quot;  P-value: &quot;, kpss_rw.pvalue &lt; 0.01 ? &quot;&lt;0.01&quot; : round(kpss_rw.pvalue, digits=4))</code></pre><h3 id="Combining-ADF-and-KPSS-for-Robust-Inference"><a class="docs-heading-anchor" href="#Combining-ADF-and-KPSS-for-Robust-Inference">Combining ADF and KPSS for Robust Inference</a><a id="Combining-ADF-and-KPSS-for-Robust-Inference-1"></a><a class="docs-heading-anchor-permalink" href="#Combining-ADF-and-KPSS-for-Robust-Inference" title="Permalink"></a></h3><pre><code class="language-julia hljs"># === Combined Analysis ===
+kpss_level = kpss_test(cpi_level; regression=:constant)
+println(&quot;\nCPI Level:&quot;)
+println(&quot;  Statistic: &quot;, round(kpss_level.statistic, digits=4))
+println(&quot;  P-value: &quot;, kpss_level.pvalue &lt; 0.01 ? &quot;&lt;0.01&quot; : round(kpss_level.pvalue, digits=4))</code></pre><h3 id="Combining-ADF-and-KPSS-for-Robust-Inference"><a class="docs-heading-anchor" href="#Combining-ADF-and-KPSS-for-Robust-Inference">Combining ADF and KPSS for Robust Inference</a><a id="Combining-ADF-and-KPSS-for-Robust-Inference-1"></a><a class="docs-heading-anchor-permalink" href="#Combining-ADF-and-KPSS-for-Robust-Inference" title="Permalink"></a></h3><pre><code class="language-julia hljs"># === Combined Analysis ===
 println(&quot;\n&quot; * &quot;=&quot;^60)
 println(&quot;Combined ADF + KPSS Analysis&quot;)
 println(&quot;=&quot;^60)
@@ -100,33 +99,37 @@ function unit_root_decision(y; name=&quot;Series&quot;)
     return decision
 end
 
-unit_root_decision(y_stationary; name=&quot;Stationary series&quot;)
-unit_root_decision(y_random_walk; name=&quot;Random walk&quot;)
-unit_root_decision(y_trend_stat; name=&quot;Trend stationary&quot;)</code></pre><h3 id="Testing-for-Structural-Breaks"><a class="docs-heading-anchor" href="#Testing-for-Structural-Breaks">Testing for Structural Breaks</a><a id="Testing-for-Structural-Breaks-1"></a><a class="docs-heading-anchor-permalink" href="#Testing-for-Structural-Breaks" title="Permalink"></a></h3><pre><code class="language-julia hljs"># === Zivot-Andrews Test ===
+# Test key FRED-MD variables
+indpro = fred[:, &quot;INDPRO&quot;]
+fedfunds = fred[:, &quot;FEDFUNDS&quot;]
+
+unit_root_decision(cpi_level; name=&quot;CPI Level&quot;)
+unit_root_decision(cpi_infl; name=&quot;CPI Inflation&quot;)
+unit_root_decision(indpro; name=&quot;Industrial Production (level)&quot;)
+unit_root_decision(fedfunds; name=&quot;Federal Funds Rate&quot;)</code></pre><h3 id="Testing-for-Structural-Breaks"><a class="docs-heading-anchor" href="#Testing-for-Structural-Breaks">Testing for Structural Breaks</a><a id="Testing-for-Structural-Breaks-1"></a><a class="docs-heading-anchor-permalink" href="#Testing-for-Structural-Breaks" title="Permalink"></a></h3><pre><code class="language-julia hljs"># === Zivot-Andrews Test ===
 println(&quot;\n&quot; * &quot;=&quot;^60)
 println(&quot;Zivot-Andrews Test (H₀: unit root without break)&quot;)
 println(&quot;=&quot;^60)
 
-za_result = za_test(y_with_break; regression=:constant, trim=0.15)
-println(&quot;\nSeries with structural break:&quot;)
+# Industrial production may exhibit structural breaks (recessions)
+za_result = za_test(indpro; regression=:constant, trim=0.15)
+println(&quot;\nIndustrial Production:&quot;)
 println(&quot;  Minimum t-stat: &quot;, round(za_result.statistic, digits=3))
 println(&quot;  P-value: &quot;, round(za_result.pvalue, digits=4))
 println(&quot;  Break index: &quot;, za_result.break_index)
 println(&quot;  Break at: &quot;, round(za_result.break_fraction * 100, digits=1), &quot;% of sample&quot;)
 
 # Compare with standard ADF
-adf_break = adf_test(y_with_break)
-println(&quot;\n  ADF (ignoring break): p=&quot;, round(adf_break.pvalue, digits=4))
-println(&quot;  ZA (allowing break): p=&quot;, round(za_result.pvalue, digits=4))</code></pre><h3 id="Ng-Perron-Tests-for-Small-Samples"><a class="docs-heading-anchor" href="#Ng-Perron-Tests-for-Small-Samples">Ng-Perron Tests for Small Samples</a><a id="Ng-Perron-Tests-for-Small-Samples-1"></a><a class="docs-heading-anchor-permalink" href="#Ng-Perron-Tests-for-Small-Samples" title="Permalink"></a></h3><pre><code class="language-julia hljs"># === Ng-Perron Tests ===
+adf_indpro = adf_test(indpro)
+println(&quot;\n  ADF (ignoring break): p=&quot;, round(adf_indpro.pvalue, digits=4))
+println(&quot;  ZA (allowing break): p=&quot;, round(za_result.pvalue, digits=4))</code></pre><h3 id="Ng-Perron-Tests-for-Size-Control"><a class="docs-heading-anchor" href="#Ng-Perron-Tests-for-Size-Control">Ng-Perron Tests for Size Control</a><a id="Ng-Perron-Tests-for-Size-Control-1"></a><a class="docs-heading-anchor-permalink" href="#Ng-Perron-Tests-for-Size-Control" title="Permalink"></a></h3><pre><code class="language-julia hljs"># === Ng-Perron Tests ===
 println(&quot;\n&quot; * &quot;=&quot;^60)
 println(&quot;Ng-Perron Tests (improved size properties)&quot;)
 println(&quot;=&quot;^60)
 
-# Generate smaller sample
-y_small = cumsum(randn(80))
-np_result = ngperron_test(y_small; regression=:constant)
+np_result = ngperron_test(fedfunds; regression=:constant)
 
-println(&quot;\nSmall sample (n=80):&quot;)
+println(&quot;\nFederal Funds Rate:&quot;)
 println(&quot;  MZα: &quot;, round(np_result.MZa, digits=3),
         &quot; (5% CV: &quot;, np_result.critical_values[:MZa][5], &quot;)&quot;)
 println(&quot;  MZt: &quot;, round(np_result.MZt, digits=3),
@@ -139,18 +142,14 @@ println(&quot;\n&quot; * &quot;=&quot;^60)
 println(&quot;Johansen Cointegration Test&quot;)
 println(&quot;=&quot;^60)
 
-# Generate cointegrated system
-T_coint = 200
-u1, u2, u3 = cumsum(randn(T_coint)), cumsum(randn(T_coint)), randn(T_coint)
-Y_coint = hcat(
-    u1 + 0.1*randn(T_coint),           # I(1)
-    u1 + 0.5*u2 + 0.1*randn(T_coint),  # Cointegrated with first
-    u2 + 0.1*randn(T_coint)            # I(1)
-)
+# Load FRED-QD: log GDP, Consumption, Investment are I(1) and potentially cointegrated
+qd = load_example(:fred_qd)
+Y_coint = log.(to_matrix(qd[:, [&quot;GDPC1&quot;, &quot;PCECC96&quot;, &quot;GPDIC1&quot;]]))
+Y_coint = Y_coint[all.(isfinite, eachrow(Y_coint)), :]
 
 johansen = johansen_test(Y_coint, 2; deterministic=:constant)
 
-println(&quot;\nCointegrated system (3 variables):&quot;)
+println(&quot;\nCointegrated system (GDP, Consumption, Investment):&quot;)
 println(&quot;  Estimated rank: &quot;, johansen.rank)
 println(&quot;\n  Trace test:&quot;)
 for r in 0:2
@@ -167,36 +166,30 @@ if johansen.rank &gt; 0
     for i in 1:johansen.rank
         println(&quot;    β$i: &quot;, round.(johansen.eigenvectors[:, i], digits=3))
     end
-end</code></pre><p>The Johansen trace test sequentially tests hypotheses about the cointegration rank. When the trace statistic exceeds the critical value, we reject the null and move to the next rank. The estimated cointegrating vectors <span>$\beta$</span> represent long-run equilibrium relationships: deviations from <span>$\beta&#39; y_t$</span> are stationary even though the individual series are I(1). The adjustment coefficients <span>$\alpha$</span> govern how quickly variables correct back toward equilibrium.</p><h3 id="Granger-Causality"><a class="docs-heading-anchor" href="#Granger-Causality">Granger Causality</a><a id="Granger-Causality-1"></a><a class="docs-heading-anchor-permalink" href="#Granger-Causality" title="Permalink"></a></h3><pre><code class="language-julia hljs"># === Granger Causality Tests ===
+end</code></pre><p>The Johansen trace test sequentially tests hypotheses about the cointegration rank. When the trace statistic exceeds the critical value, we reject the null and move to the next rank. The estimated cointegrating vectors <span>$\beta$</span> represent long-run equilibrium relationships among real GDP, personal consumption, and gross private domestic investment: deviations from <span>$\beta&#39; y_t$</span> are stationary even though the individual series are I(1). The adjustment coefficients <span>$\alpha$</span> govern how quickly variables correct back toward equilibrium.</p><h3 id="Granger-Causality"><a class="docs-heading-anchor" href="#Granger-Causality">Granger Causality</a><a id="Granger-Causality-1"></a><a class="docs-heading-anchor-permalink" href="#Granger-Causality" title="Permalink"></a></h3><pre><code class="language-julia hljs"># === Granger Causality Tests ===
 println(&quot;\n&quot; * &quot;=&quot;^60)
 println(&quot;Granger Causality Tests&quot;)
 println(&quot;=&quot;^60)
 
-# Generate data with known causal structure:
-# Variable 2 depends on lagged Variable 1
-T_obs = 300
-Y_gc = zeros(T_obs, 3)
-Y_gc[1, :] = randn(3)
-for t in 2:T_obs
-    Y_gc[t, 1] = 0.5 * Y_gc[t-1, 1] + randn()
-    Y_gc[t, 2] = 0.3 * Y_gc[t-1, 1] + 0.2 * Y_gc[t-1, 2] + randn()  # 1 causes 2
-    Y_gc[t, 3] = 0.4 * Y_gc[t-1, 3] + randn()                         # independent
-end
+# Monetary policy VAR: INDPRO, CPIAUCSL, FEDFUNDS (transformed to stationarity)
+Y_gc = to_matrix(apply_tcode(fred[:, [&quot;INDPRO&quot;, &quot;CPIAUCSL&quot;, &quot;FEDFUNDS&quot;]]))
+Y_gc = Y_gc[all.(isfinite, eachrow(Y_gc)), :]
 
-m = estimate_var(Y_gc, 2)
+m = estimate_var(Y_gc, 4)
 
-# Pairwise test: does variable 1 Granger-cause variable 2?
-g = granger_test(m, 1, 2)
-println(&quot;\n1 → 2: Wald = &quot;, round(g.statistic, digits=2),
+# Does inflation Granger-cause the fed funds rate?
+g = granger_test(m, 2, 3)
+println(&quot;\nInflation → Fed Funds: Wald = &quot;, round(g.statistic, digits=2),
         &quot;, p = &quot;, round(g.pvalue, digits=4))
 
-# Variable 3 should be independent of others
-println(&quot;3 → 1: p = &quot;, round(granger_test(m, 3, 1).pvalue, digits=4))
-println(&quot;3 → 2: p = &quot;, round(granger_test(m, 3, 2).pvalue, digits=4))
+# Does the fed funds rate Granger-cause output?
+g2 = granger_test(m, 3, 1)
+println(&quot;Fed Funds → Output: Wald = &quot;, round(g2.statistic, digits=2),
+        &quot;, p = &quot;, round(g2.pvalue, digits=4))
 
-# Block test: do variables 1 and 3 jointly Granger-cause variable 2?
-g_block = granger_test(m, [1, 3], 2)
-println(&quot;\nBlock [1,3] → 2: Wald = &quot;, round(g_block.statistic, digits=2),
+# Block test: do inflation and fed funds jointly Granger-cause output?
+g_block = granger_test(m, [2, 3], 1)
+println(&quot;\nBlock [Inflation, Rate] → Output: Wald = &quot;, round(g_block.statistic, digits=2),
         &quot;, p = &quot;, round(g_block.pvalue, digits=4))
 
 # Full causality table (n × n matrix, nothing on diagonal)
@@ -205,14 +198,10 @@ println(&quot;\n&quot; * &quot;=&quot;^60)
 println(&quot;Pre-VAR Unit Root Analysis&quot;)
 println(&quot;=&quot;^60)
 
-# Typical macro dataset
-Y_macro = hcat(
-    cumsum(randn(T)),           # GDP (I(1))
-    0.8*cumsum(randn(T)[1:T]),  # Inflation (I(1))
-    cumsum(randn(T)),           # Interest rate (I(1))
-    randn(T)                    # Output gap (I(0))
-)
-var_names = [&quot;GDP&quot;, &quot;Inflation&quot;, &quot;Rate&quot;, &quot;Output Gap&quot;]
+# Select key macro variables (in levels) for unit root testing
+var_list = [&quot;INDPRO&quot;, &quot;CPIAUCSL&quot;, &quot;FEDFUNDS&quot;, &quot;UNRATE&quot;]
+Y_macro = to_matrix(fred[:, var_list])
+Y_macro = Y_macro[all.(isfinite, eachrow(Y_macro)), :]
 
 # Test all variables
 results = test_all_variables(Y_macro; test=:adf)
@@ -223,7 +212,7 @@ n_i1 = 0
 for (i, r) in enumerate(results)
     status = r.pvalue &gt; 0.05 ? &quot;I(1)&quot; : &quot;I(0)&quot;
     n_i1 += r.pvalue &gt; 0.05
-    println(&quot;  $(var_names[i]): p=$(round(r.pvalue, digits=3)) → $status&quot;)
+    println(&quot;  $(var_list[i]): p=$(round(r.pvalue, digits=3)) → $status&quot;)
 end
 
 println(&quot;\nSummary: $n_i1 of $(size(Y_macro, 2)) variables appear I(1)&quot;)
@@ -303,31 +292,29 @@ function pre_estimation_analysis(Y; var_names=nothing, α=0.05)
     return (integration_orders=integration_orders, n_i0=n_i0, n_i1=n_i1)
 end
 
-# Run complete analysis
-result = pre_estimation_analysis(Y_macro; var_names=var_names)</code></pre><hr/><h2 id="Example-3:-Time-Series-Filters"><a class="docs-heading-anchor" href="#Example-3:-Time-Series-Filters">Example 3: Time Series Filters</a><a id="Example-3:-Time-Series-Filters-1"></a><a class="docs-heading-anchor-permalink" href="#Example-3:-Time-Series-Filters" title="Permalink"></a></h2><p>This example compares all five trend-cycle decomposition filters on a simulated quarterly GDP-like series. See <a href="../filters/">Time Series Filters</a> for theory, return values, and individual filter options.</p><pre><code class="language-julia hljs">using MacroEconometricModels, Random, Statistics
+# Run complete analysis on FRED-MD macro variables (in levels)
+result = pre_estimation_analysis(Y_macro; var_names=var_list)</code></pre><hr/><h2 id="Example-3:-Time-Series-Filters"><a class="docs-heading-anchor" href="#Example-3:-Time-Series-Filters">Example 3: Time Series Filters</a><a id="Example-3:-Time-Series-Filters-1"></a><a class="docs-heading-anchor-permalink" href="#Example-3:-Time-Series-Filters" title="Permalink"></a></h2><p>This example compares all five trend-cycle decomposition filters on real U.S. industrial production. See <a href="../filters/">Time Series Filters</a> for theory, return values, and individual filter options.</p><pre><code class="language-julia hljs">using MacroEconometricModels, Statistics
 
-Random.seed!(42)
+# Load FRED-MD and extract log of Industrial Production
+fred = load_example(:fred_md)
+y = filter(isfinite, log.(fred[:, &quot;INDPRO&quot;]))
 
-# Simulated quarterly GDP-like series (200 quarters)
-# cumsum with drift produces an I(1) series with a stochastic trend
-y = cumsum(0.5 .+ randn(200))
-
-println(&quot;Simulated GDP series: T=$(length(y)) quarters&quot;)
-println(&quot;  Mean growth: &quot;, round(mean(diff(y)), digits=3))
+println(&quot;Industrial Production (log): T=$(length(y)) months&quot;)
+println(&quot;  Mean growth: &quot;, round(mean(diff(y)), digits=5))
 
 # === Apply all five filters ===
 
-# Hodrick-Prescott (lambda=1600 for quarterly data)
-hp  = hp_filter(y; lambda=1600.0)
+# Hodrick-Prescott (lambda=129600 for monthly data)
+hp  = hp_filter(y; lambda=129600.0)
 
-# Hamilton regression filter (h=8, p=4)
-ham = hamilton_filter(y; h=8, p=4)
+# Hamilton regression filter (h=24 months, p=12)
+ham = hamilton_filter(y; h=24, p=12)
 
 # Beveridge-Nelson decomposition via ARIMA
 bn  = beveridge_nelson(y; p=2, q=0)
 
-# Baxter-King symmetric band-pass (6-32 quarters, K=12 lead/lag)
-bk  = baxter_king(y; pl=6, pu=32, K=12)
+# Baxter-King symmetric band-pass (18-96 months, K=12 lead/lag)
+bk  = baxter_king(y; pl=18, pu=96, K=12)
 
 # Boosted HP (iterated HP with BIC stopping)
 bhp = boosted_hp(y; stopping=:BIC)
@@ -341,27 +328,25 @@ println(&quot;  BK:       &quot;, round(std(cycle(bk)), digits=4))
 println(&quot;  bHP:      &quot;, round(std(cycle(bhp)), digits=4))
 
 # === Trend comparison at selected dates ===
-println(&quot;\nTrend values at t=100:&quot;)
-println(&quot;  HP:       &quot;, round(trend(hp)[100], digits=2))
-println(&quot;  Hamilton: &quot;, round(trend(ham)[100], digits=2))
-println(&quot;  BN:       &quot;, round(trend(bn)[100], digits=2))
-println(&quot;  bHP:      &quot;, round(trend(bhp)[100], digits=2))</code></pre><p>The HP filter is the most common choice in macroeconomics, but Hamilton (2018) argues it can induce spurious dynamics. The Hamilton filter uses a regression-based approach that avoids end-of-sample bias. Beveridge-Nelson decomposes the series using its ARIMA representation, while Baxter-King isolates business-cycle frequencies (6–32 quarters) via a symmetric moving average. The boosted HP iteratively re-applies the HP filter, improving trend estimation for series with structural changes. Comparing cycle standard deviations reveals how aggressively each filter extracts the cyclical component.</p><hr/><h2 id="Example-4:-ARIMA-Models"><a class="docs-heading-anchor" href="#Example-4:-ARIMA-Models">Example 4: ARIMA Models</a><a id="Example-4:-ARIMA-Models-1"></a><a class="docs-heading-anchor-permalink" href="#Example-4:-ARIMA-Models" title="Permalink"></a></h2><p>This example demonstrates univariate time series modeling with ARIMA models: estimation, order selection, diagnostics, and forecasting.</p><pre><code class="language-julia hljs">using MacroEconometricModels
-using Random
+t_mid = length(y) ÷ 2
+println(&quot;\nTrend values at t=$t_mid:&quot;)
+println(&quot;  HP:       &quot;, round(trend(hp)[t_mid], digits=4))
+println(&quot;  Hamilton: &quot;, round(trend(ham)[t_mid], digits=4))
+println(&quot;  BN:       &quot;, round(trend(bn)[t_mid], digits=4))
+println(&quot;  bHP:      &quot;, round(trend(bhp)[t_mid], digits=4))</code></pre><p>The HP filter is the most common choice in macroeconomics, but Hamilton (2018) argues it can induce spurious dynamics. The Hamilton filter uses a regression-based approach that avoids end-of-sample bias. Beveridge-Nelson decomposes the series using its ARIMA representation, while Baxter-King isolates business-cycle frequencies (18–96 months for monthly data) via a symmetric moving average. The boosted HP iteratively re-applies the HP filter, improving trend estimation for series with structural changes. Comparing cycle standard deviations reveals how aggressively each filter extracts the cyclical component. Note that filter parameters are set for monthly data: <span>$\lambda = 129{,}600$</span> (HP), <span>$h = 24$</span> months ahead (Hamilton), and <span>$pl/pu = 18/96$</span> months (BK business-cycle band).</p><hr/><h2 id="Example-4:-ARIMA-Models"><a class="docs-heading-anchor" href="#Example-4:-ARIMA-Models">Example 4: ARIMA Models</a><a id="Example-4:-ARIMA-Models-1"></a><a class="docs-heading-anchor-permalink" href="#Example-4:-ARIMA-Models" title="Permalink"></a></h2><p>This example demonstrates univariate time series modeling with ARIMA models on U.S. industrial production growth: estimation, order selection, diagnostics, and forecasting.</p><pre><code class="language-julia hljs">using MacroEconometricModels
 using Statistics
 
-Random.seed!(42)
+# Load FRED-MD and compute INDPRO growth (log first difference, tcode=5)
+fred = load_example(:fred_md)
+y = filter(isfinite, apply_tcode(fred[:, &quot;INDPRO&quot;], 5))
 
-# Generate ARMA(1,1) data
-T = 300
-y = zeros(T)
-e = randn(T)
-for t in 2:T
-    y[t] = 0.7 * y[t-1] + e[t] + 0.3 * e[t-1]
-end
+println(&quot;INDPRO growth: T=$(length(y)) observations&quot;)
+println(&quot;  Mean: &quot;, round(mean(y), digits=5))
+println(&quot;  Std:  &quot;, round(std(y), digits=5))
 
 # === AR(2) via OLS ===
 ar = estimate_ar(y, 2)
-println(&quot;AR(2) Estimation&quot;)
+println(&quot;\nAR(2) Estimation&quot;)
 println(&quot;  Coefficients: &quot;, round.(coef(ar), digits=4))
 println(&quot;  AIC: &quot;, round(aic(ar), digits=2))
 println(&quot;  BIC: &quot;, round(bic(ar), digits=2))
@@ -374,7 +359,7 @@ println(&quot;  MA coef: &quot;, round(arma.ma_coefs[1], digits=4))
 println(&quot;  AIC: &quot;, round(aic(arma), digits=2))
 
 # === Automatic order selection ===
-best = auto_arima(y)
+best = auto_arima(y; max_d=0)
 println(&quot;\nauto_arima selection:&quot;)
 println(&quot;  Best model: ARIMA($(best.p),$(best.d),$(best.q))&quot;)
 println(&quot;  AIC: &quot;, round(aic(best), digits=2))
@@ -390,27 +375,19 @@ end
 fc = forecast(arma, 12; conf_level=0.95)
 println(&quot;\nARMA(1,1) Forecasts:&quot;)
 for h in [1, 4, 8, 12]
-    println(&quot;  h=$h: $(round(fc.forecast[h], digits=3)) [$(round(fc.ci_lower[h], digits=3)), $(round(fc.ci_upper[h], digits=3))]&quot;)
-end</code></pre><p>The <code>auto_arima</code> function performs a grid search over (p,d,q) combinations, selecting the model that minimizes AIC. The CSS-MLE estimation method initializes parameters via conditional sum of squares (CSS), then refines via exact maximum likelihood using the Kalman filter. Forecast confidence intervals widen with the horizon, reflecting accumulating prediction uncertainty.</p><hr/><h2 id="Example-5:-Volatility-Models"><a class="docs-heading-anchor" href="#Example-5:-Volatility-Models">Example 5: Volatility Models</a><a id="Example-5:-Volatility-Models-1"></a><a class="docs-heading-anchor-permalink" href="#Example-5:-Volatility-Models" title="Permalink"></a></h2><p>This example estimates ARCH, GARCH, EGARCH, and GJR-GARCH models on the same data, compares their news impact curves, runs diagnostics, and forecasts volatility. See also <a href="../volatility/">Volatility Models</a> for theory and return value tables.</p><pre><code class="language-julia hljs">using MacroEconometricModels
+    println(&quot;  h=$h: $(round(fc.forecast[h], digits=5)) [$(round(fc.ci_lower[h], digits=5)), $(round(fc.ci_upper[h], digits=5))]&quot;)
+end</code></pre><p>The <code>auto_arima</code> function performs a grid search over (p,d,q) combinations, selecting the model that minimizes AIC. We pass <code>max_d=0</code> since INDPRO growth (log first difference) is already stationary. The CSS-MLE estimation method initializes parameters via conditional sum of squares (CSS), then refines via exact maximum likelihood using the Kalman filter. Forecast confidence intervals widen with the horizon, reflecting accumulating prediction uncertainty.</p><hr/><h2 id="Example-5:-Volatility-Models"><a class="docs-heading-anchor" href="#Example-5:-Volatility-Models">Example 5: Volatility Models</a><a id="Example-5:-Volatility-Models-1"></a><a class="docs-heading-anchor-permalink" href="#Example-5:-Volatility-Models" title="Permalink"></a></h2><p>This example estimates ARCH, GARCH, EGARCH, and GJR-GARCH models on S&amp;P 500 returns from FRED-MD, compares their news impact curves, runs diagnostics, and forecasts volatility. See also <a href="../volatility/">Volatility Models</a> for theory and return value tables.</p><pre><code class="language-julia hljs">using MacroEconometricModels
 using Random
 using Statistics
 
-Random.seed!(42)
+# Load S&amp;P 500 returns from FRED-MD (log first difference, tcode=5)
+fred = load_example(:fred_md)
+sp_idx = findfirst(v -&gt; occursin(&quot;S&amp;P&quot;, v) &amp;&amp; occursin(&quot;500&quot;, v), varnames(fred))
+y = filter(isfinite, apply_tcode(fred[:, varnames(fred)[sp_idx]], 5))
 
-# === Generate GARCH(1,1) data with leverage effect ===
-T = 1000
-y = zeros(T)
-h = zeros(T)
-h[1] = 1.0
-
-for t in 2:T
-    z = randn()
-    h[t] = 0.01 + 0.08 * y[t-1]^2 + 0.12 * (y[t-1] &lt; 0 ? 1 : 0) * y[t-1]^2 + 0.85 * h[t-1]
-    y[t] = sqrt(h[t]) * z
-end
-
-println(&quot;Simulated T=$T observations from GJR-GARCH(1,1)&quot;)
-println(&quot;Sample kurtosis: &quot;, round(kurtosis(y), digits=2))
+println(&quot;S&amp;P 500 monthly returns: T=$(length(y)) observations&quot;)
+println(&quot;  Mean: &quot;, round(mean(y), digits=5))
+println(&quot;  Std:  &quot;, round(std(y), digits=5))
 
 # === Step 1: Test for ARCH effects ===
 stat, pval, q = arch_lm_test(y, 5)
@@ -479,6 +456,7 @@ for h_idx in [1, 5, 10, 20]
 end
 
 # === Step 6: Stochastic Volatility ===
+Random.seed!(42)
 println(&quot;\nEstimating SV model via KSC Gibbs sampler...&quot;)
 sv = estimate_sv(y; n_samples=2000, burnin=1000)
 
@@ -489,39 +467,22 @@ println(&quot;  sigma_eta: &quot;, round(mean(sv.sigma_eta_post), digits=3))
 
 fc_sv = forecast(sv, H)
 println(&quot;\nSV forecast at h=1:  &quot;, round(fc_sv.forecast[1], digits=4))
-println(&quot;SV forecast at h=20: &quot;, round(fc_sv.forecast[end], digits=4))</code></pre><p>The GJR-GARCH model should provide the best fit (lowest AIC/BIC) since the data was generated from a GJR-GARCH DGP with a leverage effect. The news impact curves reveal the asymmetry: for EGARCH and GJR-GARCH, the variance response to <span>$\varepsilon = -2$</span> exceeds that for <span>$\varepsilon = +2$</span>; for symmetric GARCH, they are equal. All models&#39; standardized residuals should pass the ARCH-LM test after fitting, confirming that the variance dynamics are adequately captured.</p><hr/><h2 id="Example-6:-Three-Variable-VAR-Analysis"><a class="docs-heading-anchor" href="#Example-6:-Three-Variable-VAR-Analysis">Example 6: Three-Variable VAR Analysis</a><a id="Example-6:-Three-Variable-VAR-Analysis-1"></a><a class="docs-heading-anchor-permalink" href="#Example-6:-Three-Variable-VAR-Analysis" title="Permalink"></a></h2><p>This example walks through a complete analysis of a macroeconomic VAR with GDP growth, inflation, and the federal funds rate.</p><h3 id="Setup-and-Data-Generation"><a class="docs-heading-anchor" href="#Setup-and-Data-Generation">Setup and Data Generation</a><a id="Setup-and-Data-Generation-1"></a><a class="docs-heading-anchor-permalink" href="#Setup-and-Data-Generation" title="Permalink"></a></h3><pre><code class="language-julia hljs">using MacroEconometricModels
+println(&quot;SV forecast at h=20: &quot;, round(fc_sv.forecast[end], digits=4))</code></pre><p>Equity returns typically exhibit volatility clustering and a leverage effect (negative returns increase volatility more than positive returns of the same magnitude). The EGARCH and GJR-GARCH models capture this asymmetry, while the symmetric GARCH treats positive and negative shocks equally. The news impact curves reveal this: for EGARCH and GJR-GARCH, the variance response to <span>$\varepsilon = -2$</span> exceeds that for <span>$\varepsilon = +2$</span>; for symmetric GARCH, they are equal. All models&#39; standardized residuals should pass the ARCH-LM test after fitting, confirming that the variance dynamics are adequately captured.</p><hr/><h2 id="Example-6:-Three-Variable-VAR-Analysis"><a class="docs-heading-anchor" href="#Example-6:-Three-Variable-VAR-Analysis">Example 6: Three-Variable VAR Analysis</a><a id="Example-6:-Three-Variable-VAR-Analysis-1"></a><a class="docs-heading-anchor-permalink" href="#Example-6:-Three-Variable-VAR-Analysis" title="Permalink"></a></h2><p>This example walks through a complete analysis of a monetary policy VAR using FRED-MD data: industrial production growth, CPI inflation, and the federal funds rate.</p><h3 id="Setup-and-Data-Preparation"><a class="docs-heading-anchor" href="#Setup-and-Data-Preparation">Setup and Data Preparation</a><a id="Setup-and-Data-Preparation-1"></a><a class="docs-heading-anchor-permalink" href="#Setup-and-Data-Preparation" title="Permalink"></a></h3><pre><code class="language-julia hljs">using MacroEconometricModels
 using Random
 using LinearAlgebra
 using Statistics
 
-Random.seed!(42)
+# Load FRED-MD and construct the 3-variable monetary policy dataset
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, [&quot;INDPRO&quot;, &quot;CPIAUCSL&quot;, &quot;FEDFUNDS&quot;]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
 
-# Generate realistic macro data from a VAR(1) DGP
-T = 200
-n = 3
-p = 2
+var_names = [&quot;Output Growth&quot;, &quot;Inflation&quot;, &quot;Fed Funds Rate&quot;]
+T, n = size(Y)
+p = 4  # Monthly data: 4 lags = one quarter
 
-# True VAR(1) coefficients (persistent, cross-correlated)
-A_true = [0.85 0.10 -0.15;   # GDP responds to own lag, inflation, rate
-          0.05 0.70  0.00;   # Inflation mainly AR
-          0.10 0.20  0.80]   # Rate responds to GDP and inflation
-
-# Shock covariance (correlated shocks)
-Σ_true = [1.00 0.50 0.20;
-          0.50 0.80 0.10;
-          0.20 0.10 0.60]
-
-# Generate data
-Y = zeros(T, n)
-Y[1, :] = randn(n)
-chol_Σ = cholesky(Σ_true).L
-
-for t in 2:T
-    Y[t, :] = A_true * Y[t-1, :] + chol_Σ * randn(n)
-end
-
-var_names = [&quot;GDP Growth&quot;, &quot;Inflation&quot;, &quot;Fed Funds Rate&quot;]
-println(&quot;Data: T=$T observations, n=$n variables&quot;)</code></pre><h3 id="Frequentist-VAR-Estimation"><a class="docs-heading-anchor" href="#Frequentist-VAR-Estimation">Frequentist VAR Estimation</a><a id="Frequentist-VAR-Estimation-1"></a><a class="docs-heading-anchor-permalink" href="#Frequentist-VAR-Estimation" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Estimate VAR(2) model via OLS
+println(&quot;Data: T=$T observations, n=$n variables&quot;)
+println(&quot;  Variables: &quot;, join(var_names, &quot;, &quot;))</code></pre><h3 id="Frequentist-VAR-Estimation"><a class="docs-heading-anchor" href="#Frequentist-VAR-Estimation">Frequentist VAR Estimation</a><a id="Frequentist-VAR-Estimation-1"></a><a class="docs-heading-anchor-permalink" href="#Frequentist-VAR-Estimation" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Estimate VAR(4) model via OLS
 model = estimate_var(Y, p)
 
 # Model diagnostics
@@ -534,22 +495,24 @@ F = companion_matrix(model.B, n, p)
 eigenvalues = eigvals(F)
 println(&quot;Max eigenvalue modulus: &quot;, maximum(abs.(eigenvalues)))
 println(&quot;Stable: &quot;, maximum(abs.(eigenvalues)) &lt; 1)</code></pre><p>The AIC and BIC values measure the trade-off between fit and parsimony. Lower values indicate a better model. The maximum eigenvalue modulus should be strictly less than 1 for the VAR to be stationary; values close to 1 indicate high persistence, while values near 0 suggest rapid mean-reversion.</p><h3 id="Cholesky-Identified-IRF"><a class="docs-heading-anchor" href="#Cholesky-Identified-IRF">Cholesky-Identified IRF</a><a id="Cholesky-Identified-IRF-1"></a><a class="docs-heading-anchor-permalink" href="#Cholesky-Identified-IRF" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Compute 20-period IRF with Cholesky identification
-# Ordering: GDP → Inflation → Rate (contemporaneous causality)
+# Ordering: Output → Inflation → Rate (contemporaneous causality)
 H = 20
 irfs = irf(model, H; method=:cholesky)
 
 # Display impact responses (horizon 0)
 println(&quot;\nImpact responses (B₀):&quot;)
-println(&quot;  GDP shock → GDP: &quot;, round(irfs.irf[1, 1, 1], digits=3))
-println(&quot;  GDP shock → Inflation: &quot;, round(irfs.irf[1, 2, 1], digits=3))
-println(&quot;  GDP shock → Rate: &quot;, round(irfs.irf[1, 3, 1], digits=3))
+println(&quot;  Output shock → Output: &quot;, round(irfs.irf[1, 1, 1], digits=3))
+println(&quot;  Output shock → Inflation: &quot;, round(irfs.irf[1, 2, 1], digits=3))
+println(&quot;  Output shock → Rate: &quot;, round(irfs.irf[1, 3, 1], digits=3))
 
 # Long-run responses (horizon H)
 println(&quot;\nLong-run responses (h=$H):&quot;)
-println(&quot;  GDP shock → GDP: &quot;, round(irfs.irf[H+1, 1, 1], digits=3))</code></pre><h3 id="Sign-Restriction-Identification"><a class="docs-heading-anchor" href="#Sign-Restriction-Identification">Sign Restriction Identification</a><a id="Sign-Restriction-Identification-1"></a><a class="docs-heading-anchor-permalink" href="#Sign-Restriction-Identification" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Sign restrictions: Demand shock raises GDP and inflation on impact
+println(&quot;  Output shock → Output: &quot;, round(irfs.irf[H+1, 1, 1], digits=3))</code></pre><h3 id="Sign-Restriction-Identification"><a class="docs-heading-anchor" href="#Sign-Restriction-Identification">Sign Restriction Identification</a><a id="Sign-Restriction-Identification-1"></a><a class="docs-heading-anchor-permalink" href="#Sign-Restriction-Identification" title="Permalink"></a></h3><pre><code class="language-julia hljs">Random.seed!(42)
+
+# Sign restrictions: Demand shock raises output and inflation on impact
 function check_demand_shock(irf_array)
     # irf_array is (H+1) × n × n
-    # Check: Shock 1 → Variable 1 (GDP) positive
+    # Check: Shock 1 → Variable 1 (Output) positive
     #        Shock 1 → Variable 2 (Inflation) positive
     return irf_array[1, 1, 1] &gt; 0 &amp;&amp; irf_array[1, 2, 1] &gt; 0
 end
@@ -558,8 +521,8 @@ end
 irfs_sign = irf(model, H; method=:sign, check_func=check_demand_shock, n_draws=1000)
 
 println(&quot;\nSign-identified demand shock:&quot;)
-println(&quot;  GDP response: &quot;, round(irfs_sign.irf[1, 1, 1], digits=3))
-println(&quot;  Inflation response: &quot;, round(irfs_sign.irf[1, 2, 1], digits=3))</code></pre><p>The Cholesky identification assumes a recursive causal ordering (GDP → Inflation → Rate), meaning GDP responds only to its own shocks contemporaneously. Sign restrictions provide a theory-based alternative: requiring both GDP and inflation to rise on impact identifies a &quot;demand shock&quot; without imposing a specific causal ordering. If sign restrictions accept many draws, the set-identified IRFs will show wider bands than point-identified Cholesky responses.</p><h3 id="Forecast-Error-Variance-Decomposition"><a class="docs-heading-anchor" href="#Forecast-Error-Variance-Decomposition">Forecast Error Variance Decomposition</a><a id="Forecast-Error-Variance-Decomposition-1"></a><a class="docs-heading-anchor-permalink" href="#Forecast-Error-Variance-Decomposition" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Compute FEVD
+println(&quot;  Output response: &quot;, round(irfs_sign.irf[1, 1, 1], digits=3))
+println(&quot;  Inflation response: &quot;, round(irfs_sign.irf[1, 2, 1], digits=3))</code></pre><p>The Cholesky identification assumes a recursive causal ordering (Output → Inflation → Rate), meaning output responds only to its own shocks contemporaneously. Sign restrictions provide a theory-based alternative: requiring both output and inflation to rise on impact identifies a &quot;demand shock&quot; without imposing a specific causal ordering. If sign restrictions accept many draws, the set-identified IRFs will show wider bands than point-identified Cholesky responses.</p><h3 id="Forecast-Error-Variance-Decomposition"><a class="docs-heading-anchor" href="#Forecast-Error-Variance-Decomposition">Forecast Error Variance Decomposition</a><a id="Forecast-Error-Variance-Decomposition-1"></a><a class="docs-heading-anchor-permalink" href="#Forecast-Error-Variance-Decomposition" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Compute FEVD
 fevd_result = fevd(model, H; method=:cholesky)
 
 # Variance decomposition at horizon 1, 4, and 20
@@ -572,18 +535,8 @@ for h in [1, 4, 20]
             println(&quot;    Shock $j: $pct%&quot;)
         end
     end
-end</code></pre><p>The FEVD shows the proportion of each variable&#39;s forecast error variance attributable to each structural shock. At short horizons, own shocks typically dominate. As the horizon increases, cross-variable transmission becomes more important, and the FEVD converges to the unconditional variance decomposition. If shock 1 explains a large share of GDP variance at long horizons, it is the primary driver of GDP fluctuations in the model.</p><h3 id="Long-Run-(Blanchard-Quah)-Identification"><a class="docs-heading-anchor" href="#Long-Run-(Blanchard-Quah)-Identification">Long-Run (Blanchard-Quah) Identification</a><a id="Long-Run-(Blanchard-Quah)-Identification-1"></a><a class="docs-heading-anchor-permalink" href="#Long-Run-(Blanchard-Quah)-Identification" title="Permalink"></a></h3><p>Long-run restrictions identify shocks by constraining their cumulative effects. The classic application distinguishes supply and demand shocks where demand shocks have no long-run effect on output.</p><pre><code class="language-julia hljs">using MacroEconometricModels, Random
-
-Random.seed!(42)
-Y = randn(200, 3)
-model = estimate_var(Y, 2)
-
-# Blanchard-Quah long-run identification
-irfs_lr = irf(model, 20; method=:long_run)</code></pre><p><strong>Interpretation.</strong> The long-run restriction forces the cumulative IRF of shock 1 on variable 2 to zero at the infinite horizon. This is implemented via the Blanchard-Quah decomposition of the long-run multiplier matrix. The method is particularly useful for bivariate supply-demand identification.</p><h3 id="Arias-et-al.-(2018)-Zero-and-Sign-Restrictions"><a class="docs-heading-anchor" href="#Arias-et-al.-(2018)-Zero-and-Sign-Restrictions">Arias et al. (2018) Zero and Sign Restrictions</a><a id="Arias-et-al.-(2018)-Zero-and-Sign-Restrictions-1"></a><a class="docs-heading-anchor-permalink" href="#Arias-et-al.-(2018)-Zero-and-Sign-Restrictions" title="Permalink"></a></h3><p>The Arias et al. (2018) algorithm provides a unified framework for imposing both zero and sign restrictions on impulse responses. It draws orthogonal rotation matrices uniformly conditional on the restrictions.</p><pre><code class="language-julia hljs">using MacroEconometricModels, Random
-
-Random.seed!(42)
-Y = randn(200, 3)
-model = estimate_var(Y, 2)
+end</code></pre><p>The FEVD shows the proportion of each variable&#39;s forecast error variance attributable to each structural shock. At short horizons, own shocks typically dominate. As the horizon increases, cross-variable transmission becomes more important, and the FEVD converges to the unconditional variance decomposition. If monetary policy shocks explain a large share of output variance at long horizons, it suggests that interest rate movements are a primary driver of real activity fluctuations.</p><h3 id="Long-Run-(Blanchard-Quah)-Identification"><a class="docs-heading-anchor" href="#Long-Run-(Blanchard-Quah)-Identification">Long-Run (Blanchard-Quah) Identification</a><a id="Long-Run-(Blanchard-Quah)-Identification-1"></a><a class="docs-heading-anchor-permalink" href="#Long-Run-(Blanchard-Quah)-Identification" title="Permalink"></a></h3><p>Long-run restrictions identify shocks by constraining their cumulative effects. The classic application distinguishes supply and demand shocks where demand shocks have no long-run effect on output.</p><pre><code class="language-julia hljs"># Blanchard-Quah long-run identification
+irfs_lr = irf(model, 20; method=:long_run)</code></pre><p><strong>Interpretation.</strong> The long-run restriction forces the cumulative IRF of shock 1 on variable 2 to zero at the infinite horizon. This is implemented via the Blanchard-Quah decomposition of the long-run multiplier matrix. The method is particularly useful for bivariate supply-demand identification.</p><h3 id="Arias-et-al.-(2018)-Zero-and-Sign-Restrictions"><a class="docs-heading-anchor" href="#Arias-et-al.-(2018)-Zero-and-Sign-Restrictions">Arias et al. (2018) Zero and Sign Restrictions</a><a id="Arias-et-al.-(2018)-Zero-and-Sign-Restrictions-1"></a><a class="docs-heading-anchor-permalink" href="#Arias-et-al.-(2018)-Zero-and-Sign-Restrictions" title="Permalink"></a></h3><p>The Arias et al. (2018) algorithm provides a unified framework for imposing both zero and sign restrictions on impulse responses. It draws orthogonal rotation matrices uniformly conditional on the restrictions.</p><pre><code class="language-julia hljs">Random.seed!(42)
 
 # Define restrictions: shock 1 has positive effect on var 1, zero on var 3
 restrictions = SVARRestrictions(3)
@@ -592,7 +545,13 @@ add_zero_restriction!(restrictions, 1, 3, 0)               # shock 1 → var 3 z
 
 # Arias identification (draws uniform rotations conditional on restrictions)
 result = identify_arias(model, restrictions, 20; n_draws=500)
-irfs_arias = irf(model, 20; method=:arias, restrictions=restrictions, n_draws=500)</code></pre><p><strong>Interpretation.</strong> The Arias algorithm guarantees draws from the correct posterior over the identified set, unlike accept-reject approaches. The zero restriction imposes exact equality while sign restrictions constrain the sign at specified horizons. Report the median and pointwise credible bands from the accepted draws.</p><hr/><h2 id="Example-7:-Bayesian-VAR-with-Minnesota-Prior"><a class="docs-heading-anchor" href="#Example-7:-Bayesian-VAR-with-Minnesota-Prior">Example 7: Bayesian VAR with Minnesota Prior</a><a id="Example-7:-Bayesian-VAR-with-Minnesota-Prior-1"></a><a class="docs-heading-anchor-permalink" href="#Example-7:-Bayesian-VAR-with-Minnesota-Prior" title="Permalink"></a></h2><p>This example demonstrates Bayesian estimation with automatic hyperparameter optimization.</p><h3 id="Hyperparameter-Optimization"><a class="docs-heading-anchor" href="#Hyperparameter-Optimization">Hyperparameter Optimization</a><a id="Hyperparameter-Optimization-1"></a><a class="docs-heading-anchor-permalink" href="#Hyperparameter-Optimization" title="Permalink"></a></h3><pre><code class="language-julia hljs">using MacroEconometricModels
+irfs_arias = irf(model, 20; method=:arias, restrictions=restrictions, n_draws=500)</code></pre><p><strong>Interpretation.</strong> The Arias algorithm guarantees draws from the correct posterior over the identified set, unlike accept-reject approaches. The zero restriction imposes exact equality while sign restrictions constrain the sign at specified horizons. Report the median and pointwise credible bands from the accepted draws.</p><hr/><h2 id="Example-7:-Bayesian-VAR-with-Minnesota-Prior"><a class="docs-heading-anchor" href="#Example-7:-Bayesian-VAR-with-Minnesota-Prior">Example 7: Bayesian VAR with Minnesota Prior</a><a id="Example-7:-Bayesian-VAR-with-Minnesota-Prior-1"></a><a class="docs-heading-anchor-permalink" href="#Example-7:-Bayesian-VAR-with-Minnesota-Prior" title="Permalink"></a></h2><p>This example demonstrates Bayesian estimation with automatic hyperparameter optimization using the same monetary policy dataset.</p><h3 id="Hyperparameter-Optimization"><a class="docs-heading-anchor" href="#Hyperparameter-Optimization">Hyperparameter Optimization</a><a id="Hyperparameter-Optimization-1"></a><a class="docs-heading-anchor-permalink" href="#Hyperparameter-Optimization" title="Permalink"></a></h3><pre><code class="language-julia hljs">using MacroEconometricModels
+
+# Load FRED-MD monetary policy dataset
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, [&quot;INDPRO&quot;, &quot;CPIAUCSL&quot;, &quot;FEDFUNDS&quot;]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+p = 4
 
 # Find optimal shrinkage using marginal likelihood (Giannone et al. 2015)
 println(&quot;Optimizing hyperparameters...&quot;)
@@ -605,12 +564,14 @@ println(&quot;\nEstimating BVAR with conjugate NIW sampler...&quot;)
 post = estimate_bvar(Y, p;
     n_draws = 1000,
     prior = :minnesota,
-    hyper = best_hyper
+    hyper = best_hyper,
+    varnames = [&quot;INDPRO&quot;, &quot;CPIAUCSL&quot;, &quot;FEDFUNDS&quot;]
 )
 
 # Posterior summary (coefficients from first equation)
-println(&quot;\nPosterior summary for GDP equation:&quot;)
+println(&quot;\nPosterior summary for Output equation:&quot;)
 # Access posterior draws: post.B_draws, post.Sigma_draws</code></pre><h3 id="Bayesian-IRF-with-Credible-Intervals"><a class="docs-heading-anchor" href="#Bayesian-IRF-with-Credible-Intervals">Bayesian IRF with Credible Intervals</a><a id="Bayesian-IRF-with-Credible-Intervals-1"></a><a class="docs-heading-anchor-permalink" href="#Bayesian-IRF-with-Credible-Intervals" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Bayesian IRF with Cholesky identification
+H = 20
 birf_chol = irf(post, H; method=:cholesky)
 
 # Extract median and 68% credible intervals
@@ -619,35 +580,50 @@ birf_chol = irf(post, H; method=:cholesky)
 # [:, :, :, 2] = median
 # [:, :, :, 3] = 84th percentile
 
-println(&quot;\nBayesian IRF of GDP to own shock:&quot;)
+println(&quot;\nBayesian IRF of Output to own shock:&quot;)
 for h in [0, 4, 8, 12, 20]
     med = round(birf_chol.quantiles[h+1, 1, 1, 2], digits=3)
     lo = round(birf_chol.quantiles[h+1, 1, 1, 1], digits=3)
     hi = round(birf_chol.quantiles[h+1, 1, 1, 3], digits=3)
     println(&quot;  h=$h: $med [$lo, $hi]&quot;)
 end</code></pre><h3 id="Bayesian-Sign-Restrictions"><a class="docs-heading-anchor" href="#Bayesian-Sign-Restrictions">Bayesian Sign Restrictions</a><a id="Bayesian-Sign-Restrictions-1"></a><a class="docs-heading-anchor-permalink" href="#Bayesian-Sign-Restrictions" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Bayesian IRF with sign restrictions
+function check_demand_shock(irf_array)
+    return irf_array[1, 1, 1] &gt; 0 &amp;&amp; irf_array[1, 2, 1] &gt; 0
+end
+
 birf_sign = irf(post, H;
     method = :sign,
     check_func = check_demand_shock
 )
 
-println(&quot;\nBayesian sign-restricted demand shock → GDP:&quot;)
+println(&quot;\nBayesian sign-restricted demand shock → Output:&quot;)
 for h in [0, 4, 8, 12]
     med = round(birf_sign.quantiles[h+1, 1, 1, 2], digits=3)
     lo = round(birf_sign.quantiles[h+1, 1, 1, 1], digits=3)
     hi = round(birf_sign.quantiles[h+1, 1, 1, 3], digits=3)
     println(&quot;  h=$h: $med [$lo, $hi]&quot;)
-end</code></pre><hr/><h2 id="Example-8:-VECM-Analysis"><a class="docs-heading-anchor" href="#Example-8:-VECM-Analysis">Example 8: VECM Analysis</a><a id="Example-8:-VECM-Analysis-1"></a><a class="docs-heading-anchor-permalink" href="#Example-8:-VECM-Analysis" title="Permalink"></a></h2><p>This example demonstrates Vector Error Correction Model (VECM) estimation for cointegrated systems: testing for cointegration rank, estimating the VECM, computing impulse responses via VAR conversion, forecasting, and Granger causality decomposition. See <a href="../vecm/">VECM</a> for theory and return value tables.</p><pre><code class="language-julia hljs">using MacroEconometricModels, Random
+end</code></pre><h3 id="Large-BVAR-with-Many-Variables"><a class="docs-heading-anchor" href="#Large-BVAR-with-Many-Variables">Large BVAR with Many Variables</a><a id="Large-BVAR-with-Many-Variables-1"></a><a class="docs-heading-anchor-permalink" href="#Large-BVAR-with-Many-Variables" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Estimate a larger BVAR using 20 FRED-MD variables
+fred_sub = apply_tcode(fred[:, varnames(fred)[1:20]])
+X_large = to_matrix(fred_sub)
+X_large = X_large[all.(isfinite, eachrow(X_large)), :]
 
-Random.seed!(42)
+println(&quot;\nLarge BVAR: T=$(size(X_large,1)), n=$(size(X_large,2))&quot;)
+hyper_large = optimize_hyperparameters(X_large, 4; grid_size=10)
+println(&quot;Optimal τ for large system: &quot;, round(hyper_large.tau, digits=4))
 
-# === Generate cointegrated data ===
-# Two linked variables (sharing a common stochastic trend) + one independent
-T_obs = 200
-Y = cumsum(randn(T_obs, 3), dims=1)
-Y[:, 2] = Y[:, 1] + 0.1 * randn(T_obs)  # Y2 cointegrated with Y1
+post_large = estimate_bvar(X_large, 4;
+    n_draws = 500,
+    prior = :minnesota,
+    hyper = hyper_large
+)</code></pre><p><strong>Interpretation.</strong> Large BVARs with Minnesota priors shrink coefficients toward zero (or a random walk), preventing overfitting in high-dimensional systems. The marginal likelihood-based hyperparameter optimization (Giannone et al. 2015) automatically selects the degree of shrinkage. For a 20-variable system, optimal <span>$\tau$</span> is typically much smaller than for the 3-variable system, reflecting the greater need for regularization.</p><hr/><h2 id="Example-8:-VECM-Analysis"><a class="docs-heading-anchor" href="#Example-8:-VECM-Analysis">Example 8: VECM Analysis</a><a id="Example-8:-VECM-Analysis-1"></a><a class="docs-heading-anchor-permalink" href="#Example-8:-VECM-Analysis" title="Permalink"></a></h2><p>This example demonstrates Vector Error Correction Model (VECM) estimation for cointegrated macroeconomic aggregates using FRED-QD data: testing for cointegration rank, estimating the VECM, computing impulse responses via VAR conversion, forecasting, and Granger causality decomposition. See <a href="../vecm/">VECM</a> for theory and return value tables.</p><pre><code class="language-julia hljs">using MacroEconometricModels, Random
 
-println(&quot;Data: T=$T_obs, n=3 (Y1 and Y2 cointegrated, Y3 independent)&quot;)
+# Load FRED-QD: log GDP, Consumption, Investment (I(1) series)
+qd = load_example(:fred_qd)
+Y = log.(to_matrix(qd[:, [&quot;GDPC1&quot;, &quot;PCECC96&quot;, &quot;GPDIC1&quot;]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+
+var_names = [&quot;GDP&quot;, &quot;Consumption&quot;, &quot;Investment&quot;]
+println(&quot;Data: T=$(size(Y,1)) quarters, n=$(size(Y,2)) ($(join(var_names, &quot;, &quot;)))&quot;)
 
 # === Step 1: Test for cointegration ===
 joh = johansen_test(Y, 2)
@@ -673,15 +649,16 @@ println(vecm.alpha)
 # === Step 4: Impulse responses via VAR conversion ===
 irfs = irf(vecm, 20; method=:cholesky)
 
-println(&quot;\nIRF of shock 1 → variable 1:&quot;)
+println(&quot;\nIRF of GDP shock → GDP:&quot;)
 for h in [0, 4, 8, 12, 20]
     println(&quot;  h=$h: &quot;, round(irfs.irf[h+1, 1, 1], digits=3))
 end
 
 # === Step 5: Forecast with bootstrap CIs ===
+Random.seed!(42)
 fc = forecast(vecm, 10; ci_method=:bootstrap, reps=200)
 
-println(&quot;\nVECM forecast (variable 1):&quot;)
+println(&quot;\nVECM forecast (GDP):&quot;)
 for h in [1, 5, 10]
     println(&quot;  h=$h: &quot;, round(fc.forecast[h, 1], digits=3))
 end
@@ -691,16 +668,24 @@ println(&quot;\nGranger causality (VECM decomposition):&quot;)
 for i in 1:3, j in 1:3
     i == j &amp;&amp; continue
     g = granger_causality_vecm(vecm, i, j)
-    println(&quot;  Var $i → Var $j: p=$(round(g.strong_pvalue, digits=4))&quot;)
+    println(&quot;  $(var_names[i]) → $(var_names[j]): p=$(round(g.strong_pvalue, digits=4))&quot;)
 end
 
 # === Step 7: Convert to VAR for FEVD ===
 var_model = to_var(vecm)
-decomp = fevd(var_model, 20)</code></pre><p><strong>Interpretation.</strong> The cointegrating vector <span>$\beta$</span> identifies the long-run equilibrium. If <span>$\beta \approx [1, -1, 0]&#39;$</span>, this implies <span>$y_{1,t} - y_{2,t}$</span> is stationary –- variables 1 and 2 share a common stochastic trend. The adjustment coefficients <span>$\alpha$</span> show how each variable responds when the system deviates from equilibrium. A significant <span>$\alpha_i$</span> indicates that variable <span>$i$</span> adjusts to restore the long-run relationship. The VECM-specific Granger causality decomposes predictive power into short-run (lagged differences) and long-run (error correction) channels.</p><hr/><h2 id="Example-9:-Local-Projections"><a class="docs-heading-anchor" href="#Example-9:-Local-Projections">Example 9: Local Projections</a><a id="Example-9:-Local-Projections-1"></a><a class="docs-heading-anchor-permalink" href="#Example-9:-Local-Projections" title="Permalink"></a></h2><p>This example demonstrates various LP methods for estimating impulse responses.</p><h3 id="Standard-Local-Projection"><a class="docs-heading-anchor" href="#Standard-Local-Projection">Standard Local Projection</a><a id="Standard-Local-Projection-1"></a><a class="docs-heading-anchor-permalink" href="#Standard-Local-Projection" title="Permalink"></a></h3><pre><code class="language-julia hljs">using MacroEconometricModels
+decomp = fevd(var_model, 20)</code></pre><p><strong>Interpretation.</strong> The cointegrating vector <span>$\beta$</span> identifies the long-run equilibrium relationship among real GDP, consumption, and investment. If <span>$\beta \approx [1, -a, -b]&#39;$</span>, this implies a linear combination of the three variables is stationary –- they share common stochastic trends. The adjustment coefficients <span>$\alpha$</span> show how each variable responds when the system deviates from equilibrium. A significant <span>$\alpha_i$</span> indicates that variable <span>$i$</span> adjusts to restore the long-run relationship. The VECM-specific Granger causality decomposes predictive power into short-run (lagged differences) and long-run (error correction) channels.</p><hr/><h2 id="Example-9:-Local-Projections"><a class="docs-heading-anchor" href="#Example-9:-Local-Projections">Example 9: Local Projections</a><a id="Example-9:-Local-Projections-1"></a><a class="docs-heading-anchor-permalink" href="#Example-9:-Local-Projections" title="Permalink"></a></h2><p>This example demonstrates various LP methods for estimating impulse responses using the FRED-MD monetary policy dataset.</p><h3 id="Standard-Local-Projection"><a class="docs-heading-anchor" href="#Standard-Local-Projection">Standard Local Projection</a><a id="Standard-Local-Projection-1"></a><a class="docs-heading-anchor-permalink" href="#Standard-Local-Projection" title="Permalink"></a></h3><pre><code class="language-julia hljs">using MacroEconometricModels
+using Random
+using Statistics
+
+# Load FRED-MD monetary policy dataset
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, [&quot;INDPRO&quot;, &quot;CPIAUCSL&quot;, &quot;FEDFUNDS&quot;]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+T = size(Y, 1)
 
 # Estimate LP-IRF with Newey-West standard errors
 H = 20
-shock_var = 1  # GDP as the shock variable
+shock_var = 3  # Fed funds rate as the shock variable
 
 lp_model = estimate_lp(Y, shock_var, H;
     lags = 4,
@@ -711,7 +696,7 @@ lp_model = estimate_lp(Y, shock_var, H;
 # Extract IRF with confidence intervals
 lp_result = lp_irf(lp_model; conf_level = 0.95)
 
-println(&quot;LP-IRF of shock to variable 1 → variable 1:&quot;)
+println(&quot;LP-IRF of monetary policy shock → Output:&quot;)
 for h in 0:4:H
     val = round(lp_result.values[h+1, 1], digits=3)
     se = round(lp_result.se[h+1, 1], digits=3)
@@ -732,8 +717,8 @@ weak_test = weak_instrument_test(lpiv_model; threshold = 10.0)
 println(&quot;\nFirst-stage F-statistics by horizon:&quot;)
 for h in 0:4:H
     F = round(weak_test.F_stats[h+1], digits=2)
-    status = F &gt; 10 ? &quot;✓&quot; : &quot;⚠ weak&quot;
-    println(&quot;  h=$h: F=$F $status&quot;)
+    status = F &gt; 10 ? &quot;strong&quot; : &quot;weak&quot;
+    println(&quot;  h=$h: F=$F ($status)&quot;)
 end
 println(&quot;All horizons pass F&gt;10: &quot;, weak_test.passes_threshold)
 
@@ -755,18 +740,14 @@ println(&quot;\nOptimal smoothing parameter: &quot;, round(optimal_lambda, digit
 
 # Compare standard vs smooth LP
 comparison = compare_smooth_lp(Y, 1, H; lambda = optimal_lambda)
-println(&quot;Variance reduction ratio: &quot;, round(comparison.variance_reduction, digits=3))</code></pre><h3 id="State-Dependent-Local-Projection"><a class="docs-heading-anchor" href="#State-Dependent-Local-Projection">State-Dependent Local Projection</a><a id="State-Dependent-Local-Projection-1"></a><a class="docs-heading-anchor-permalink" href="#State-Dependent-Local-Projection" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Construct state variable (moving average of GDP growth)
-gdp_level = cumsum(Y[:, 1])  # Integrate growth to get level
-gdp_growth = [NaN; diff(gdp_level)]
-
-# 4-period moving average, standardized
+println(&quot;Variance reduction ratio: &quot;, round(comparison.variance_reduction, digits=3))</code></pre><h3 id="State-Dependent-Local-Projection"><a class="docs-heading-anchor" href="#State-Dependent-Local-Projection">State-Dependent Local Projection</a><a id="State-Dependent-Local-Projection-1"></a><a class="docs-heading-anchor-permalink" href="#State-Dependent-Local-Projection" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Construct state variable from output growth (moving average)
 state_var = zeros(T)
 for t in 4:T
     state_var[t] = mean(Y[t-3:t, 1])
 end
 state_var = (state_var .- mean(state_var[4:end])) ./ std(state_var[4:end])
 
-# Estimate state-dependent LP
+# Estimate state-dependent LP (Auerbach &amp; Gorodnichenko 2013)
 state_model = estimate_state_lp(Y, 1, state_var, H;
     gamma = 1.5,           # Transition speed
     threshold = :median,    # Threshold at median
@@ -776,74 +757,46 @@ state_model = estimate_state_lp(Y, 1, state_var, H;
 # Extract regime-specific IRFs
 irf_both = state_irf(state_model; regime = :both)
 
-println(&quot;\nState-dependent IRFs (shock 1 → variable 1):&quot;)
+println(&quot;\nState-dependent IRFs (output shock → output):&quot;)
 println(&quot;Expansion vs Recession comparison:&quot;)
 for h in [0, 4, 8, 12]
     exp_val = round(irf_both.expansion.values[h+1, 1], digits=3)
     rec_val = round(irf_both.recession.values[h+1, 1], digits=3)
-    diff = round(exp_val - rec_val, digits=3)
-    println(&quot;  h=$h: Expansion=$exp_val, Recession=$rec_val, Diff=$diff&quot;)
+    diff_val = round(exp_val - rec_val, digits=3)
+    println(&quot;  h=$h: Expansion=$exp_val, Recession=$rec_val, Diff=$diff_val&quot;)
 end
 
 # Test for regime differences
 diff_test = test_regime_difference(state_model)
 println(&quot;\nJoint test for regime differences:&quot;)
 println(&quot;  Average |t|: &quot;, round(diff_test.joint_test.avg_t_stat, digits=2))
-println(&quot;  p-value: &quot;, round(diff_test.joint_test.p_value, digits=4))</code></pre><h3 id="Structural-LP-(Plagborg-Moller-and-Wolf-2021)"><a class="docs-heading-anchor" href="#Structural-LP-(Plagborg-Moller-and-Wolf-2021)">Structural LP (Plagborg-Moller &amp; Wolf 2021)</a><a id="Structural-LP-(Plagborg-Moller-and-Wolf-2021)-1"></a><a class="docs-heading-anchor-permalink" href="#Structural-LP-(Plagborg-Moller-and-Wolf-2021)" title="Permalink"></a></h3><p>Structural LP extends standard LP to jointly identify multiple shocks, enabling direct comparison with VAR-based IRFs. The <code>structural_lp</code> function estimates impulse responses for all shocks simultaneously.</p><pre><code class="language-julia hljs">using MacroEconometricModels, Random
-
-Random.seed!(42)
-Y = randn(200, 3)
-
-# Structural LP with Cholesky identification
+println(&quot;  p-value: &quot;, round(diff_test.joint_test.p_value, digits=4))</code></pre><h3 id="Structural-LP-(Plagborg-Moller-and-Wolf-2021)"><a class="docs-heading-anchor" href="#Structural-LP-(Plagborg-Moller-and-Wolf-2021)">Structural LP (Plagborg-Moller &amp; Wolf 2021)</a><a id="Structural-LP-(Plagborg-Moller-and-Wolf-2021)-1"></a><a class="docs-heading-anchor-permalink" href="#Structural-LP-(Plagborg-Moller-and-Wolf-2021)" title="Permalink"></a></h3><p>Structural LP extends standard LP to jointly identify multiple shocks, enabling direct comparison with VAR-based IRFs. The <code>structural_lp</code> function estimates impulse responses for all shocks simultaneously.</p><pre><code class="language-julia hljs"># Structural LP with Cholesky identification
 slp = structural_lp(Y, 20; method=:cholesky, lags=4)
 
-# Multi-shock IRFs: response of variable 2 to shock 1
+# Multi-shock IRFs: response of inflation to output shock
 slp.irfs[1, 2, :]  # H+1 vector of responses
 
 # Historical decomposition from structural LP
-hd = historical_decomposition(slp)</code></pre><p><strong>Interpretation.</strong> Structural LP produces IRFs that are asymptotically equivalent to VAR-based IRFs under correct specification (Plagborg-Moller and Wolf 2021). The key advantage is robustness to lag length misspecification. Use <code>structural_lp</code> when you want multi-shock identification without committing to a specific VAR lag order.</p><h3 id="LP-FEVD-(Gorodnichenko-and-Lee-2019)"><a class="docs-heading-anchor" href="#LP-FEVD-(Gorodnichenko-and-Lee-2019)">LP-FEVD (Gorodnichenko &amp; Lee 2019)</a><a id="LP-FEVD-(Gorodnichenko-and-Lee-2019)-1"></a><a class="docs-heading-anchor-permalink" href="#LP-FEVD-(Gorodnichenko-and-Lee-2019)" title="Permalink"></a></h3><p>LP-FEVD decomposes forecast error variance using local projection methods, providing a model-free alternative to VAR-based FEVD.</p><pre><code class="language-julia hljs">using MacroEconometricModels, Random
-
-Random.seed!(42)
-Y = randn(200, 3)
-
-# First estimate structural LP
-slp = structural_lp(Y, 20; method=:cholesky, lags=4)
-
-# LP-FEVD with R² estimator
+hd = historical_decomposition(slp)</code></pre><p><strong>Interpretation.</strong> Structural LP produces IRFs that are asymptotically equivalent to VAR-based IRFs under correct specification (Plagborg-Moller and Wolf 2021). The key advantage is robustness to lag length misspecification. Use <code>structural_lp</code> when you want multi-shock identification without committing to a specific VAR lag order.</p><h3 id="LP-FEVD-(Gorodnichenko-and-Lee-2019)"><a class="docs-heading-anchor" href="#LP-FEVD-(Gorodnichenko-and-Lee-2019)">LP-FEVD (Gorodnichenko &amp; Lee 2019)</a><a id="LP-FEVD-(Gorodnichenko-and-Lee-2019)-1"></a><a class="docs-heading-anchor-permalink" href="#LP-FEVD-(Gorodnichenko-and-Lee-2019)" title="Permalink"></a></h3><p>LP-FEVD decomposes forecast error variance using local projection methods, providing a model-free alternative to VAR-based FEVD.</p><pre><code class="language-julia hljs"># LP-FEVD with R² estimator
 lfevd = lp_fevd(slp; estimator=:r2)
 
 # Decomposition at horizon h: fraction of variable j&#39;s forecast error due to shock i
-lfevd.decomposition  # (H+1) × n_shocks × n_vars array</code></pre><p><strong>Interpretation.</strong> The R² estimator measures the fraction of h-step-ahead forecast error variance attributable to each structural shock. Unlike VAR-FEVD, LP-FEVD does not require invertibility of the MA representation and is robust to lag truncation. The decomposition should sum to approximately 1 across shocks at each horizon. See <a href="../innovation_accounting/">Innovation Accounting</a> for a detailed comparison of VAR-FEVD and LP-FEVD.</p><hr/><h2 id="Example-10:-Factor-Model-for-Large-Panels"><a class="docs-heading-anchor" href="#Example-10:-Factor-Model-for-Large-Panels">Example 10: Factor Model for Large Panels</a><a id="Example-10:-Factor-Model-for-Large-Panels-1"></a><a class="docs-heading-anchor-permalink" href="#Example-10:-Factor-Model-for-Large-Panels" title="Permalink"></a></h2><p>This example demonstrates factor extraction and selection from a large macroeconomic panel.</p><h3 id="Simulate-Large-Panel-Data"><a class="docs-heading-anchor" href="#Simulate-Large-Panel-Data">Simulate Large Panel Data</a><a id="Simulate-Large-Panel-Data-1"></a><a class="docs-heading-anchor-permalink" href="#Simulate-Large-Panel-Data" title="Permalink"></a></h3><pre><code class="language-julia hljs">using MacroEconometricModels
+lfevd.decomposition  # (H+1) × n_shocks × n_vars array</code></pre><p><strong>Interpretation.</strong> The R² estimator measures the fraction of h-step-ahead forecast error variance attributable to each structural shock. Unlike VAR-FEVD, LP-FEVD does not require invertibility of the MA representation and is robust to lag truncation. The decomposition should sum to approximately 1 across shocks at each horizon. See <a href="../innovation_accounting/">Innovation Accounting</a> for a detailed comparison of VAR-FEVD and LP-FEVD.</p><hr/><h2 id="Example-10:-Factor-Model-for-Large-Panels"><a class="docs-heading-anchor" href="#Example-10:-Factor-Model-for-Large-Panels">Example 10: Factor Model for Large Panels</a><a id="Example-10:-Factor-Model-for-Large-Panels-1"></a><a class="docs-heading-anchor-permalink" href="#Example-10:-Factor-Model-for-Large-Panels" title="Permalink"></a></h2><p>This example demonstrates factor extraction and selection from a large macroeconomic panel using FRED-MD data.</p><h3 id="Load-and-Prepare-FRED-MD-Panel"><a class="docs-heading-anchor" href="#Load-and-Prepare-FRED-MD-Panel">Load and Prepare FRED-MD Panel</a><a id="Load-and-Prepare-FRED-MD-Panel-1"></a><a class="docs-heading-anchor-permalink" href="#Load-and-Prepare-FRED-MD-Panel" title="Permalink"></a></h3><pre><code class="language-julia hljs">using MacroEconometricModels
 using Random
 using Statistics
 
-Random.seed!(42)
+# Load FRED-MD and select first 20 variables for a manageable panel
+fred = load_example(:fred_md)
+selected_vars = varnames(fred)[1:20]
 
-# Panel dimensions
-T = 150   # Time periods
-N = 50    # Variables
-r_true = 3  # True number of factors
+# Apply FRED transformation codes and clean
+fred_sub = apply_tcode(fred[:, selected_vars])
+X = to_matrix(fred_sub)
+X = X[all.(isfinite, eachrow(X)), :]
 
-# Generate true factors (with persistence)
-F_true = zeros(T, r_true)
-for j in 1:r_true
-    F_true[1, j] = randn()
-    for t in 2:T
-        F_true[t, j] = 0.8 * F_true[t-1, j] + 0.3 * randn()
-    end
-end
-
-# Factor loadings (sparse structure)
-Λ_true = randn(N, r_true)
-# Make first 15 vars load strongly on factor 1, etc.
-Λ_true[1:15, 1] .*= 2
-Λ_true[16:30, 2] .*= 2
-Λ_true[31:45, 3] .*= 2
-
-# Generate panel
-X = F_true * Λ_true&#39; + 0.5 * randn(T, N)
-
-println(&quot;Panel: T=$T, N=$N, true r=$r_true&quot;)</code></pre><h3 id="Determine-Number-of-Factors"><a class="docs-heading-anchor" href="#Determine-Number-of-Factors">Determine Number of Factors</a><a id="Determine-Number-of-Factors-1"></a><a class="docs-heading-anchor-permalink" href="#Determine-Number-of-Factors" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Bai-Ng information criteria
+T, N = size(X)
+println(&quot;FRED-MD panel: T=$T, N=$N&quot;)
+println(&quot;  Variables: &quot;, join(selected_vars[1:5], &quot;, &quot;), &quot;, ...&quot;)</code></pre><h3 id="Determine-Number-of-Factors"><a class="docs-heading-anchor" href="#Determine-Number-of-Factors">Determine Number of Factors</a><a id="Determine-Number-of-Factors-1"></a><a class="docs-heading-anchor-permalink" href="#Determine-Number-of-Factors" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Bai-Ng information criteria
 r_max = 10
 ic = ic_criteria(X, r_max)
 
@@ -851,7 +804,6 @@ println(&quot;\nBai-Ng information criteria:&quot;)
 println(&quot;  IC1 selects: &quot;, ic.r_IC1, &quot; factors&quot;)
 println(&quot;  IC2 selects: &quot;, ic.r_IC2, &quot; factors&quot;)
 println(&quot;  IC3 selects: &quot;, ic.r_IC3, &quot; factors&quot;)
-println(&quot;  (True: $r_true factors)&quot;)
 
 # IC values for each r
 println(&quot;\nIC values by number of factors:&quot;)
@@ -887,13 +839,15 @@ println(&quot;  Max: &quot;, round(maximum(r2_vals), digits=3))
 well_explained = sum(r2_vals .&gt; 0.5)
 println(&quot;  Variables with R² &gt; 0.5: $well_explained / $N&quot;)
 
-# Factor-true factor correlation (up to rotation)
-println(&quot;\nFactor recovery (correlation with true factors):&quot;)
+# Top-loaded variables for each factor
+println(&quot;\nTop-loaded variables per factor:&quot;)
 for j in 1:r_opt
-    cors = [abs(cor(fm.factors[:, j], F_true[:, k])) for k in 1:r_true]
-    best_match = argmax(cors)
-    println(&quot;  Estimated factor $j matches true factor $best_match: r=$(round(cors[best_match], digits=3))&quot;)
-end</code></pre><p>The Bai-Ng information criteria select the number of factors by balancing fit against complexity. IC2 tends to perform best in simulations. High correlations between estimated and true factors (above 0.9) confirm reliable factor recovery. The R² values show how well the common factors explain each variable; variables with low R² are primarily driven by idiosyncratic shocks and contribute less to the common component.</p><h3 id="Factor-Model-Forecasting"><a class="docs-heading-anchor" href="#Factor-Model-Forecasting">Factor Model Forecasting</a><a id="Factor-Model-Forecasting-1"></a><a class="docs-heading-anchor-permalink" href="#Factor-Model-Forecasting" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Forecast 12 steps ahead with theoretical (analytical) CIs
+    loadings_j = abs.(fm.loadings[:, j])
+    top_idx = sortperm(loadings_j, rev=true)[1:min(5, N)]
+    println(&quot;  Factor $j: &quot;, join([selected_vars[i] for i in top_idx], &quot;, &quot;))
+end</code></pre><p>The Bai-Ng information criteria select the number of factors by balancing fit against complexity. IC2 tends to perform best in simulations. The R² values show how well the common factors explain each variable; variables with low R² are primarily driven by idiosyncratic shocks and contribute less to the common component. Examining the top-loaded variables for each factor reveals the economic interpretation: the first factor typically corresponds to real activity, the second to price dynamics.</p><h3 id="Factor-Model-Forecasting"><a class="docs-heading-anchor" href="#Factor-Model-Forecasting">Factor Model Forecasting</a><a id="Factor-Model-Forecasting-1"></a><a class="docs-heading-anchor-permalink" href="#Factor-Model-Forecasting" title="Permalink"></a></h3><pre><code class="language-julia hljs">Random.seed!(42)
+
+# Forecast 12 steps ahead with theoretical (analytical) CIs
 fc = forecast(fm, 12; ci_method=:theoretical, conf_level=0.95)
 
 println(&quot;\nFactor forecast with 95% CIs:&quot;)
@@ -914,7 +868,9 @@ println(&quot;\nBootstrap vs theoretical CI widths (Factor 1, h=12):&quot;)
 width_theory = fc.factors_upper[12, 1] - fc.factors_lower[12, 1]
 width_boot = fc_boot.factors_upper[12, 1] - fc_boot.factors_lower[12, 1]
 println(&quot;  Theoretical: &quot;, round(width_theory, digits=3))
-println(&quot;  Bootstrap: &quot;, round(width_boot, digits=3))</code></pre><p>The theoretical SEs grow monotonically with the forecast horizon for stationary factor dynamics, reflecting accumulating forecast uncertainty. Bootstrap CIs are useful when factor innovations may be non-Gaussian or exhibit conditional heteroskedasticity.</p><h3 id="Dynamic-Factor-Model-Forecasting"><a class="docs-heading-anchor" href="#Dynamic-Factor-Model-Forecasting">Dynamic Factor Model Forecasting</a><a id="Dynamic-Factor-Model-Forecasting-1"></a><a class="docs-heading-anchor-permalink" href="#Dynamic-Factor-Model-Forecasting" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Estimate DFM with VAR(2) factor dynamics
+println(&quot;  Bootstrap: &quot;, round(width_boot, digits=3))</code></pre><p>The theoretical SEs grow monotonically with the forecast horizon for stationary factor dynamics, reflecting accumulating forecast uncertainty. Bootstrap CIs are useful when factor innovations may be non-Gaussian or exhibit conditional heteroskedasticity.</p><h3 id="Dynamic-Factor-Model-Forecasting"><a class="docs-heading-anchor" href="#Dynamic-Factor-Model-Forecasting">Dynamic Factor Model Forecasting</a><a id="Dynamic-Factor-Model-Forecasting-1"></a><a class="docs-heading-anchor-permalink" href="#Dynamic-Factor-Model-Forecasting" title="Permalink"></a></h3><pre><code class="language-julia hljs">Random.seed!(42)
+
+# Estimate DFM with VAR(2) factor dynamics
 dfm = estimate_dynamic_factors(X, r_opt, 2)
 
 # Forecast with all CI methods
@@ -928,26 +884,19 @@ println(&quot;  Point forecast: &quot;, round(fc_none.observables[12, 1], digits
 println(&quot;  Theoretical CI: [&quot;, round(fc_theo.observables_lower[12, 1], digits=3),
         &quot;, &quot;, round(fc_theo.observables_upper[12, 1], digits=3), &quot;]&quot;)
 println(&quot;  Bootstrap CI:   [&quot;, round(fc_boot.observables_lower[12, 1], digits=3),
-        &quot;, &quot;, round(fc_boot.observables_upper[12, 1], digits=3), &quot;]&quot;)</code></pre><p>The DFM supports four CI methods: <code>:theoretical</code> (fastest, assumes Gaussian innovations), <code>:bootstrap</code> (residual resampling), <code>:simulation</code> (full Monte Carlo draws), and the legacy <code>ci=true</code> interface which maps to <code>:simulation</code>.</p><hr/><h2 id="Example-11:-Panel-VAR-Analysis"><a class="docs-heading-anchor" href="#Example-11:-Panel-VAR-Analysis">Example 11: Panel VAR Analysis</a><a id="Example-11:-Panel-VAR-Analysis-1"></a><a class="docs-heading-anchor-permalink" href="#Example-11:-Panel-VAR-Analysis" title="Permalink"></a></h2><p>This example demonstrates the full Panel VAR workflow: data construction, lag selection, GMM estimation, specification tests, structural analysis, and bootstrap confidence intervals. See <a href="../pvar/">Panel VAR</a> for theory and method details.</p><pre><code class="language-julia hljs">using MacroEconometricModels, DataFrames, Random
+        &quot;, &quot;, round(fc_boot.observables_upper[12, 1], digits=3), &quot;]&quot;)</code></pre><p>The DFM supports four CI methods: <code>:theoretical</code> (fastest, assumes Gaussian innovations), <code>:bootstrap</code> (residual resampling), <code>:simulation</code> (full Monte Carlo draws), and the legacy <code>ci=true</code> interface which maps to <code>:simulation</code>.</p><hr/><h2 id="Example-11:-Panel-VAR-Analysis"><a class="docs-heading-anchor" href="#Example-11:-Panel-VAR-Analysis">Example 11: Panel VAR Analysis</a><a id="Example-11:-Panel-VAR-Analysis-1"></a><a class="docs-heading-anchor-permalink" href="#Example-11:-Panel-VAR-Analysis" title="Permalink"></a></h2><p>This example demonstrates the full Panel VAR workflow using the Penn World Table: data preparation, lag selection, GMM estimation, specification tests, structural analysis, and bootstrap confidence intervals. See <a href="../pvar/">Panel VAR</a> for theory and method details.</p><pre><code class="language-julia hljs">using MacroEconometricModels, DataFrames, Random
 
-Random.seed!(42)
+# Load Penn World Table (38 OECD countries, 74 years, 42 variables)
+pwt = load_example(:pwt)
+println(&quot;PWT: &quot;, length(unique(pwt.group_id)), &quot; countries, &quot;,
+        length(unique(pwt.time_id)), &quot; years, &quot;,
+        pwt.n_vars, &quot; variables&quot;)
 
-# --- Step 1: Construct panel data ---
-N, T_total, m = 50, 20, 3
-data = zeros(N * T_total, m)
-for i in 1:N
-    mu_i = randn(m)
-    for t in 2:T_total
-        idx = (i-1)*T_total + t
-        data[idx, :] = mu_i + 0.5 * data[(i-1)*T_total + t - 1, :] + 0.1 * randn(m)
-    end
-end
-df = DataFrame(data, [&quot;y1&quot;, &quot;y2&quot;, &quot;y3&quot;])
-df.id = repeat(1:N, inner=T_total)
-df.time = repeat(1:T_total, outer=N)
-pd = xtset(df, :id, :time)</code></pre><h3 id="Lag-Selection"><a class="docs-heading-anchor" href="#Lag-Selection">Lag Selection</a><a id="Lag-Selection-1"></a><a class="docs-heading-anchor-permalink" href="#Lag-Selection" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Andrews-Lu MMSC-based lag selection (max 4 lags)
-lag_result = pvar_lag_selection(pd, 4)</code></pre><p><strong>Interpretation.</strong> The lag selection procedure computes MMSC-AIC, MMSC-BIC, and MMSC-HQIC for each candidate lag length. Lower values indicate better fit-complexity trade-off. Choose the lag minimizing BIC for a conservative choice.</p><h3 id="Two-Step-GMM-Estimation"><a class="docs-heading-anchor" href="#Two-Step-GMM-Estimation">Two-Step GMM Estimation</a><a id="Two-Step-GMM-Estimation-1"></a><a class="docs-heading-anchor-permalink" href="#Two-Step-GMM-Estimation" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Estimate PVAR with two-step GMM and Windmeijer correction
-model = estimate_pvar(pd, 2; steps=:twostep)</code></pre><h3 id="Specification-Tests"><a class="docs-heading-anchor" href="#Specification-Tests">Specification Tests</a><a id="Specification-Tests-1"></a><a class="docs-heading-anchor-permalink" href="#Specification-Tests" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Hansen J-test for overidentifying restrictions
+# Use the full PanelData object; select dependent variables via kwarg
+# Key variables: rgdpna (real GDP), rkna (capital stock), hc (human capital)
+dep_vars = [&quot;rgdpna&quot;, &quot;rkna&quot;, &quot;hc&quot;]</code></pre><h3 id="Lag-Selection"><a class="docs-heading-anchor" href="#Lag-Selection">Lag Selection</a><a id="Lag-Selection-1"></a><a class="docs-heading-anchor-permalink" href="#Lag-Selection" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Andrews-Lu MMSC-based lag selection (max 4 lags)
+lag_result = pvar_lag_selection(pwt, 4; dependent_vars=dep_vars)</code></pre><p><strong>Interpretation.</strong> The lag selection procedure computes MMSC-AIC, MMSC-BIC, and MMSC-HQIC for each candidate lag length. Lower values indicate better fit-complexity trade-off. Choose the lag minimizing BIC for a conservative choice.</p><h3 id="Two-Step-GMM-Estimation"><a class="docs-heading-anchor" href="#Two-Step-GMM-Estimation">Two-Step GMM Estimation</a><a id="Two-Step-GMM-Estimation-1"></a><a class="docs-heading-anchor-permalink" href="#Two-Step-GMM-Estimation" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Estimate PVAR with two-step GMM and Windmeijer correction
+model = estimate_pvar(pwt, 2; steps=:twostep, dependent_vars=dep_vars)</code></pre><h3 id="Specification-Tests"><a class="docs-heading-anchor" href="#Specification-Tests">Specification Tests</a><a id="Specification-Tests-1"></a><a class="docs-heading-anchor-permalink" href="#Specification-Tests" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Hansen J-test for overidentifying restrictions
 j = pvar_hansen_j(model)
 
 # Andrews-Lu MMSC for moment selection
@@ -961,35 +910,35 @@ irfs = pvar_oirf(model, 10)
 girfs = pvar_girf(model, 10)
 
 # Forecast error variance decomposition
-fv = pvar_fevd(model, 10)</code></pre><h3 id="Bootstrap-Confidence-Intervals"><a class="docs-heading-anchor" href="#Bootstrap-Confidence-Intervals">Bootstrap Confidence Intervals</a><a id="Bootstrap-Confidence-Intervals-1"></a><a class="docs-heading-anchor-permalink" href="#Bootstrap-Confidence-Intervals" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Group-level block bootstrap for IRF confidence intervals
-boot_irfs = pvar_bootstrap_irf(model, 10; n_draws=200)</code></pre><p><strong>Interpretation.</strong> The bootstrap resamples entire cross-sectional units (groups) to preserve within-unit dependence. With N=50 groups and 200 draws, the resulting confidence intervals account for both estimation uncertainty and cross-sectional heterogeneity. Report median IRFs with 90% bootstrap bands.</p><h3 id="Alternative-Estimators"><a class="docs-heading-anchor" href="#Alternative-Estimators">Alternative Estimators</a><a id="Alternative-Estimators-1"></a><a class="docs-heading-anchor-permalink" href="#Alternative-Estimators" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Fixed-Effects OLS (within estimator)
-fe_model = estimate_pvar_feols(pd, 2)
+fv = pvar_fevd(model, 10)</code></pre><h3 id="Bootstrap-Confidence-Intervals"><a class="docs-heading-anchor" href="#Bootstrap-Confidence-Intervals">Bootstrap Confidence Intervals</a><a id="Bootstrap-Confidence-Intervals-1"></a><a class="docs-heading-anchor-permalink" href="#Bootstrap-Confidence-Intervals" title="Permalink"></a></h3><pre><code class="language-julia hljs">Random.seed!(42)
+
+# Group-level block bootstrap for IRF confidence intervals
+boot_irfs = pvar_bootstrap_irf(model, 10; n_draws=200)</code></pre><p><strong>Interpretation.</strong> The bootstrap resamples entire cross-sectional units (countries) to preserve within-country dependence. With 38 OECD countries and 200 draws, the resulting confidence intervals account for both estimation uncertainty and cross-country heterogeneity. Report median IRFs with 90% bootstrap bands.</p><h3 id="Alternative-Estimators"><a class="docs-heading-anchor" href="#Alternative-Estimators">Alternative Estimators</a><a id="Alternative-Estimators-1"></a><a class="docs-heading-anchor-permalink" href="#Alternative-Estimators" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Fixed-Effects OLS (within estimator)
+fe_model = estimate_pvar_feols(pwt, 2; dependent_vars=dep_vars)
 
 # System GMM (Blundell &amp; Bond 1998)
-sys_model = estimate_pvar(pd, 2; steps=:twostep, system_instruments=true)</code></pre><p><strong>Interpretation.</strong> FE-OLS is consistent when T is large relative to N but suffers from Nickell bias in short panels. System GMM adds level equations with lagged differences as instruments, improving efficiency when the first-difference instruments are weak (near unit root). Compare coefficient estimates across estimators as a robustness check.</p><hr/><h2 id="Example-12:-GMM-Estimation"><a class="docs-heading-anchor" href="#Example-12:-GMM-Estimation">Example 12: GMM Estimation</a><a id="Example-12:-GMM-Estimation-1"></a><a class="docs-heading-anchor-permalink" href="#Example-12:-GMM-Estimation" title="Permalink"></a></h2><p>This example demonstrates GMM estimation of a simple model with moment conditions.</p><h3 id="Define-Moment-Conditions"><a class="docs-heading-anchor" href="#Define-Moment-Conditions">Define Moment Conditions</a><a id="Define-Moment-Conditions-1"></a><a class="docs-heading-anchor-permalink" href="#Define-Moment-Conditions" title="Permalink"></a></h3><pre><code class="language-julia hljs">using MacroEconometricModels
+sys_model = estimate_pvar(pwt, 2; steps=:twostep, system_instruments=true, dependent_vars=dep_vars)</code></pre><p><strong>Interpretation.</strong> FE-OLS is consistent when T is large relative to N but suffers from Nickell bias in short panels. System GMM adds level equations with lagged differences as instruments, improving efficiency when the first-difference instruments are weak (near unit root). Compare coefficient estimates across estimators as a robustness check.</p><hr/><h2 id="Example-12:-GMM-Estimation"><a class="docs-heading-anchor" href="#Example-12:-GMM-Estimation">Example 12: GMM Estimation</a><a id="Example-12:-GMM-Estimation-1"></a><a class="docs-heading-anchor-permalink" href="#Example-12:-GMM-Estimation" title="Permalink"></a></h2><p>This example demonstrates GMM estimation of a simple IV regression using FRED-MD data.</p><h3 id="Define-Moment-Conditions"><a class="docs-heading-anchor" href="#Define-Moment-Conditions">Define Moment Conditions</a><a id="Define-Moment-Conditions-1"></a><a class="docs-heading-anchor-permalink" href="#Define-Moment-Conditions" title="Permalink"></a></h3><pre><code class="language-julia hljs">using MacroEconometricModels
+using Random
+using LinearAlgebra
 
-# Example: IV regression via GMM
-# Model: y = x&#39;β + ε
-# Moment conditions: E[z(y - x&#39;β)] = 0
+# Load FRED-MD and construct variables for IV estimation
+fred = load_example(:fred_md)
+Y_all = to_matrix(apply_tcode(fred[:, [&quot;INDPRO&quot;, &quot;CPIAUCSL&quot;, &quot;FEDFUNDS&quot;, &quot;UNRATE&quot;]]))
+Y_all = Y_all[all.(isfinite, eachrow(Y_all)), :]
 
-# Generate data with endogeneity
-Random.seed!(42)
-n_obs = 500
+# IV regression: Output growth on inflation, instrumented by fed funds and unemployment
+# Model: INDPRO_growth = β₁ + β₂ * CPIAUCSL_growth + ε
+# Instruments: FEDFUNDS, UNRATE (correlated with inflation, excluded from output eq.)
+
+y_dep = Y_all[:, 1]                               # Output growth
+X_endo = hcat(ones(size(Y_all, 1)), Y_all[:, 2])  # Constant + inflation
+Z_inst = hcat(ones(size(Y_all, 1)), Y_all[:, 3:4]) # Constant + rate + unemployment
+
+n_obs = length(y_dep)
 n_params = 2
 
-# Instruments
-Z = randn(n_obs, 3)
-
-# Endogenous regressor (correlated with error)
-u = randn(n_obs)
-X = hcat(ones(n_obs), Z[:, 1] + 0.5 * u + 0.2 * randn(n_obs))
-
-# Outcome
-β_true = [1.0, 2.0]
-Y = X * β_true + u
-
 # Data bundle
-data = (Y = Y, X = X, Z = hcat(ones(n_obs), Z))
+data = (Y = y_dep, X = X_endo, Z = Z_inst)
 
 # Moment function: E[Z&#39;(Y - Xβ)] = 0
 function moment_conditions(theta, data)
@@ -1005,7 +954,6 @@ gmm_result = estimate_gmm(moment_conditions, theta0, data;
 )
 
 println(&quot;GMM Estimation Results:&quot;)
-println(&quot;  True β: &quot;, β_true)
 println(&quot;  Estimated β: &quot;, round.(gmm_result.theta, digits=4))
 println(&quot;  Converged: &quot;, gmm_result.converged)
 println(&quot;  Iterations: &quot;, gmm_result.iterations)
@@ -1027,45 +975,19 @@ println(&quot;\nHansen J-test:&quot;)
 println(&quot;  J-statistic: &quot;, round(j_result.J_stat, digits=4))
 println(&quot;  Degrees of freedom: &quot;, j_result.df)
 println(&quot;  p-value: &quot;, round(j_result.p_value, digits=4))
-println(&quot;  Reject at 5%: &quot;, j_result.reject_05)</code></pre><p>The GMM estimates should be close to the true values <span>$\beta = [1.0, 2.0]$</span> when instruments are valid and strong. The standard errors from two-step efficient GMM are asymptotically optimal. The Hansen J-test evaluates whether the moment conditions are jointly satisfied: a large p-value (failing to reject) indicates that the instruments are valid and the model is correctly specified. Rejection suggests either invalid instruments or model misspecification.</p><hr/><h2 id="Example-13:-Non-Gaussian-Identification"><a class="docs-heading-anchor" href="#Example-13:-Non-Gaussian-Identification">Example 13: Non-Gaussian Identification</a><a id="Example-13:-Non-Gaussian-Identification-1"></a><a class="docs-heading-anchor-permalink" href="#Example-13:-Non-Gaussian-Identification" title="Permalink"></a></h2><p>When structural shocks are non-Gaussian, statistical independence provides identification without imposing economic restrictions like recursive ordering or sign constraints. This example demonstrates the full non-Gaussian identification workflow: testing for non-Gaussianity, ICA-based and ML-based identification, and post-estimation specification tests.</p><h3 id="Setup:-Generate-Non-Gaussian-Data"><a class="docs-heading-anchor" href="#Setup:-Generate-Non-Gaussian-Data">Setup: Generate Non-Gaussian Data</a><a id="Setup:-Generate-Non-Gaussian-Data-1"></a><a class="docs-heading-anchor-permalink" href="#Setup:-Generate-Non-Gaussian-Data" title="Permalink"></a></h3><pre><code class="language-julia hljs">using MacroEconometricModels
+println(&quot;  Reject at 5%: &quot;, j_result.reject_05)</code></pre><p>The GMM estimate of the inflation coefficient captures the partial correlation of CPI inflation with output growth, after instrumenting with the federal funds rate and unemployment rate. The standard errors from two-step efficient GMM are asymptotically optimal. The Hansen J-test evaluates whether the moment conditions are jointly satisfied: a large p-value (failing to reject) indicates that the instruments are valid and the model is correctly specified. Rejection suggests either invalid instruments or model misspecification.</p><hr/><h2 id="Example-13:-Non-Gaussian-Identification"><a class="docs-heading-anchor" href="#Example-13:-Non-Gaussian-Identification">Example 13: Non-Gaussian Identification</a><a id="Example-13:-Non-Gaussian-Identification-1"></a><a class="docs-heading-anchor-permalink" href="#Example-13:-Non-Gaussian-Identification" title="Permalink"></a></h2><p>When structural shocks are non-Gaussian, statistical independence provides identification without imposing economic restrictions like recursive ordering or sign constraints. This example demonstrates the full non-Gaussian identification workflow on a monetary policy VAR: testing for non-Gaussianity, ICA-based and ML-based identification, and post-estimation specification tests.</p><h3 id="Setup:-Monetary-Policy-VAR"><a class="docs-heading-anchor" href="#Setup:-Monetary-Policy-VAR">Setup: Monetary Policy VAR</a><a id="Setup:-Monetary-Policy-VAR-1"></a><a class="docs-heading-anchor-permalink" href="#Setup:-Monetary-Policy-VAR" title="Permalink"></a></h3><pre><code class="language-julia hljs">using MacroEconometricModels
 using Random
 using LinearAlgebra
 using Statistics
 
-Random.seed!(42)
+# Load FRED-MD monetary policy dataset
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, [&quot;INDPRO&quot;, &quot;CPIAUCSL&quot;, &quot;FEDFUNDS&quot;]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
 
-# True structural parameters
-T = 500
-n = 3
-
-# True B₀ (structural impact matrix)
-B0_true = [1.0  0.0  0.0;
-           0.5  1.0  0.0;
-           0.3 -0.2  1.0]
-
-# Non-Gaussian structural shocks (Student-t with 5 df)
-# Heavy tails provide the non-Gaussianity needed for identification
-eps = zeros(T, n)
-for j in 1:n
-    # Standardized t(5): mean 0, variance 1
-    raw = randn(T) ./ sqrt.(rand(Chisq(5), T) ./ 5)
-    eps[:, j] = raw ./ std(raw)
-end
-
-# True VAR(1) dynamics
-A_true = [0.7 0.1 0.0;
-          0.0 0.6 0.1;
-          0.0 0.0 0.5]
-
-# Generate reduced-form data: u_t = B₀ ε_t
-Y = zeros(T, n)
-Y[1, :] = B0_true * eps[1, :]
-for t in 2:T
-    Y[t, :] = A_true * Y[t-1, :] + B0_true * eps[t, :]
-end
-
-println(&quot;Data: T=$T, n=$n (non-Gaussian DGP with t(5) shocks)&quot;)</code></pre><h3 id="Step-1:-Test-for-Non-Gaussianity"><a class="docs-heading-anchor" href="#Step-1:-Test-for-Non-Gaussianity">Step 1: Test for Non-Gaussianity</a><a id="Step-1:-Test-for-Non-Gaussianity-1"></a><a class="docs-heading-anchor-permalink" href="#Step-1:-Test-for-Non-Gaussianity" title="Permalink"></a></h3><p>Before using non-Gaussian identification, verify that residuals are indeed non-Gaussian:</p><pre><code class="language-julia hljs"># Estimate VAR
-model = estimate_var(Y, 1)
+T, n = size(Y)
+println(&quot;Data: T=$T, n=$n (INDPRO, CPIAUCSL, FEDFUNDS)&quot;)</code></pre><h3 id="Step-1:-Test-for-Non-Gaussianity"><a class="docs-heading-anchor" href="#Step-1:-Test-for-Non-Gaussianity">Step 1: Test for Non-Gaussianity</a><a id="Step-1:-Test-for-Non-Gaussianity-1"></a><a class="docs-heading-anchor-permalink" href="#Step-1:-Test-for-Non-Gaussianity" title="Permalink"></a></h3><p>Before using non-Gaussian identification, verify that residuals are indeed non-Gaussian:</p><pre><code class="language-julia hljs"># Estimate VAR
+model = estimate_var(Y, 4)
 
 # Run the full normality test suite
 suite = normality_test_suite(model)
@@ -1075,7 +997,7 @@ println(&quot;=&quot;^55)
 for r in suite.results
     stars = r.pvalue &lt; 0.01 ? &quot;***&quot; : r.pvalue &lt; 0.05 ? &quot;**&quot; : r.pvalue &lt; 0.10 ? &quot;*&quot; : &quot;&quot;
     println(&quot;  $(r.test_name): stat=$(round(r.statistic, digits=2)), p=$(round(r.pvalue, digits=4)) $stars&quot;)
-end</code></pre><p>All four tests (Jarque-Bera, Mardia, Doornik-Hansen, Henze-Zirkler) should reject normality when the true shocks are t-distributed. If normality is not rejected, non-Gaussian identification may lack power and Cholesky or sign restrictions should be preferred.</p><p>You can also run individual tests:</p><pre><code class="language-julia hljs"># Individual tests
+end</code></pre><p>All four tests (Jarque-Bera, Mardia, Doornik-Hansen, Henze-Zirkler) should reject normality for macroeconomic data, which typically exhibits heavy tails and skewness. If normality is not rejected, non-Gaussian identification may lack power and Cholesky or sign restrictions should be preferred.</p><p>You can also run individual tests:</p><pre><code class="language-julia hljs"># Individual tests
 jb = jarque_bera_test(model)
 mardia = mardia_test(model; type=:both)
 dh = doornik_hansen_test(model)
@@ -1158,7 +1080,9 @@ println(&quot;\nML method comparison (AIC):&quot;)
 println(&quot;  Student-t:      AIC = &quot;, round(ml_t.aic, digits=2))
 println(&quot;  Mixture normal: AIC = &quot;, round(ml_mix.aic, digits=2))
 println(&quot;  PML:            AIC = &quot;, round(ml_pml.aic, digits=2))</code></pre><p>Lower AIC indicates a better distributional fit. The PML estimator is semiparametrically efficient and does not require specifying the shock distribution.</p><h3 id="Step-5:-Heteroskedasticity-Based-Identification"><a class="docs-heading-anchor" href="#Step-5:-Heteroskedasticity-Based-Identification">Step 5: Heteroskedasticity-Based Identification</a><a id="Step-5:-Heteroskedasticity-Based-Identification-1"></a><a class="docs-heading-anchor-permalink" href="#Step-5:-Heteroskedasticity-Based-Identification" title="Permalink"></a></h3><p>When shocks exhibit time-varying volatility, changes in the covariance structure can identify the structural model:</p><pre><code class="language-julia hljs"># External volatility regimes (e.g., pre/post Great Moderation)
-regime = vcat(ones(Int, 250), 2 * ones(Int, 250))  # Two regimes
+# Split sample roughly in half
+T_half = T ÷ 2
+regime = vcat(ones(Int, T_half), 2 * ones(Int, T - T_half))
 vol_result = identify_external_volatility(model, regime; regimes=2)
 
 println(&quot;\nExternal Volatility Identification&quot;)
@@ -1166,7 +1090,9 @@ println(&quot;=&quot;^40)
 println(&quot;  Regime 1 shock variances: &quot;,
         [round(vol_result.Lambda_vecs[1][j], digits=3) for j in 1:n])
 println(&quot;  Regime 2 shock variances: &quot;,
-        [round(vol_result.Lambda_vecs[2][j], digits=3) for j in 1:n])</code></pre><h3 id="Step-6:-Post-Estimation-Specification-Tests"><a class="docs-heading-anchor" href="#Step-6:-Post-Estimation-Specification-Tests">Step 6: Post-Estimation Specification Tests</a><a id="Step-6:-Post-Estimation-Specification-Tests-1"></a><a class="docs-heading-anchor-permalink" href="#Step-6:-Post-Estimation-Specification-Tests" title="Permalink"></a></h3><p>Verify that the identification assumptions hold:</p><pre><code class="language-julia hljs"># Test 1: Are recovered shocks non-Gaussian?
+        [round(vol_result.Lambda_vecs[2][j], digits=3) for j in 1:n])</code></pre><h3 id="Step-6:-Post-Estimation-Specification-Tests"><a class="docs-heading-anchor" href="#Step-6:-Post-Estimation-Specification-Tests">Step 6: Post-Estimation Specification Tests</a><a id="Step-6:-Post-Estimation-Specification-Tests-1"></a><a class="docs-heading-anchor-permalink" href="#Step-6:-Post-Estimation-Specification-Tests" title="Permalink"></a></h3><p>Verify that the identification assumptions hold:</p><pre><code class="language-julia hljs">Random.seed!(42)
+
+# Test 1: Are recovered shocks non-Gaussian?
 gauss_test = test_shock_gaussianity(ica_result)
 println(&quot;\nShock Gaussianity Test (H₀: shocks are Gaussian)&quot;)
 println(&quot;  Statistic: &quot;, round(gauss_test.statistic, digits=2))
@@ -1203,19 +1129,19 @@ for h in [0, 4, 8, 12, 20]
     chol_val = round(irfs_chol.irf[h+1, 1, 1], digits=3)
     ica_val = round(irfs_ica.irf[h+1, 1, 1], digits=3)
     println(&quot;  $h    $chol_val      $ica_val&quot;)
-end</code></pre><p>When the true DGP is recursive (lower-triangular <span>$B_0$</span>), Cholesky and ICA should yield similar IRFs. Large discrepancies suggest that the recursive assumption may be misspecified, and the data-driven ICA identification should be preferred.</p><hr/><h2 id="Example-14:-Complete-Workflow"><a class="docs-heading-anchor" href="#Example-14:-Complete-Workflow">Example 14: Complete Workflow</a><a id="Example-14:-Complete-Workflow-1"></a><a class="docs-heading-anchor-permalink" href="#Example-14:-Complete-Workflow" title="Permalink"></a></h2><p>This example shows a complete empirical workflow combining multiple techniques.</p><pre><code class="language-julia hljs">using MacroEconometricModels
+end</code></pre><p>When the true structural ordering happens to be recursive, Cholesky and ICA should yield similar IRFs. Large discrepancies suggest that the recursive assumption may be misspecified, and the data-driven ICA identification should be preferred.</p><hr/><h2 id="Example-14:-Complete-Workflow"><a class="docs-heading-anchor" href="#Example-14:-Complete-Workflow">Example 14: Complete Workflow</a><a id="Example-14:-Complete-Workflow-1"></a><a class="docs-heading-anchor-permalink" href="#Example-14:-Complete-Workflow" title="Permalink"></a></h2><p>This example shows a complete empirical workflow using FRED-MD data, combining multiple techniques for a thorough monetary policy analysis.</p><pre><code class="language-julia hljs">using MacroEconometricModels
 using Random
 using Statistics
 
-Random.seed!(2024)
-
 # === Step 1: Data Preparation ===
-T, n = 200, 4
-Y = randn(T, n)
-for t in 2:T
-    Y[t, :] = 0.6 * Y[t-1, :] + 0.3 * randn(n)
-end
-var_names = [&quot;Output&quot;, &quot;Inflation&quot;, &quot;Rate&quot;, &quot;Exchange Rate&quot;]
+fred = load_example(:fred_md)
+
+# Core monetary policy variables
+Y = to_matrix(apply_tcode(fred[:, [&quot;INDPRO&quot;, &quot;CPIAUCSL&quot;, &quot;FEDFUNDS&quot;, &quot;M2SL&quot;]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+T, n = size(Y)
+var_names = [&quot;Output&quot;, &quot;Inflation&quot;, &quot;Rate&quot;, &quot;Money&quot;]
+println(&quot;Data: T=$T, n=$n ($(join(var_names, &quot;, &quot;)))&quot;)
 
 # === Step 2: Lag Selection ===
 println(&quot;=&quot;^50)
@@ -1276,11 +1202,11 @@ println(&quot;=&quot;^50)
 lp_model = estimate_lp(Y, 1, H; lags=p, cov_type=:newey_west)
 lp_result = lp_irf(lp_model)
 
-println(&quot;IRF(1→1) at h=0:&quot;)
+println(&quot;IRF(Output→Output) at h=0:&quot;)
 println(&quot;  VAR: &quot;, round(irfs.irf[1, 1, 1], digits=3))
 println(&quot;  LP: &quot;, round(lp_result.values[1, 1], digits=3))
 
-println(&quot;\nIRF(1→1) at h=8:&quot;)
+println(&quot;\nIRF(Output→Output) at h=8:&quot;)
 println(&quot;  VAR: &quot;, round(irfs.irf[9, 1, 1], digits=3))
 println(&quot;  LP: &quot;, round(lp_result.values[9, 1], digits=3))
 
@@ -1296,15 +1222,14 @@ println(&quot;Analysis Complete!&quot;)
 println(&quot;=&quot;^50)</code></pre><p>Comparing VAR and LP impulse responses at the same horizon provides a robustness check. Under correct specification, both estimators are consistent for the same causal parameter (Plagborg-Moller &amp; Wolf, 2021), but LP is less efficient. Large discrepancies suggest potential dynamic misspecification in the VAR. The smooth LP variance reduction ratio measures efficiency gains from B-spline regularization; values well below 1.0 indicate substantial noise reduction from imposing smoothness.</p><hr/><h2 id="Example-15:-Table-Output-—-Text,-LaTeX,-and-HTML"><a class="docs-heading-anchor" href="#Example-15:-Table-Output-—-Text,-LaTeX,-and-HTML">Example 15: Table Output — Text, LaTeX, and HTML</a><a id="Example-15:-Table-Output-—-Text,-LaTeX,-and-HTML-1"></a><a class="docs-heading-anchor-permalink" href="#Example-15:-Table-Output-—-Text,-LaTeX,-and-HTML" title="Permalink"></a></h2><p>All <code>show</code>, <code>print_table</code>, and <code>Base.show</code> methods in MacroEconometricModels route through a unified PrettyTables backend. Switching from terminal text to LaTeX or HTML output requires a single call to <code>set_display_backend</code>. This is useful for embedding results directly into papers (LaTeX), slides (HTML), or reports.</p><h3 id="Setup"><a class="docs-heading-anchor" href="#Setup">Setup</a><a id="Setup-1"></a><a class="docs-heading-anchor-permalink" href="#Setup" title="Permalink"></a></h3><pre><code class="language-julia hljs">using MacroEconometricModels
 using Random
 
+# Estimate a monetary policy VAR and compute IRFs + FEVD
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, [&quot;INDPRO&quot;, &quot;CPIAUCSL&quot;, &quot;FEDFUNDS&quot;]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+
+model = estimate_var(Y, 4)
+
 Random.seed!(42)
-
-# Estimate a VAR and compute IRFs + FEVD
-Y = randn(200, 3)
-for t in 2:200
-    Y[t, :] = [0.8 0.1 0.0; 0.05 0.7 0.0; 0.1 0.2 0.75] * Y[t-1, :] + 0.3 * randn(3)
-end
-
-model = estimate_var(Y, 2)
 irfs = irf(model, 12; method=:cholesky, ci_type=:bootstrap, n_boot=500)
 fevd_result = fevd(model, 12; method=:cholesky)</code></pre><h3 id="Text-Output-(Default)"><a class="docs-heading-anchor" href="#Text-Output-(Default)">Text Output (Default)</a><a id="Text-Output-(Default)-1"></a><a class="docs-heading-anchor-permalink" href="#Text-Output-(Default)" title="Permalink"></a></h3><p>The default backend is <code>:text</code>, producing terminal-friendly borderless tables:</p><pre><code class="language-julia hljs"># Confirm default backend
 get_display_backend()   # :text
@@ -1364,15 +1289,15 @@ open(&quot;tables/irf_table.html&quot;, &quot;w&quot;) do io
 end</code></pre><h3 id="Switching-Backends-in-a-Workflow"><a class="docs-heading-anchor" href="#Switching-Backends-in-a-Workflow">Switching Backends in a Workflow</a><a id="Switching-Backends-in-a-Workflow-1"></a><a class="docs-heading-anchor-permalink" href="#Switching-Backends-in-a-Workflow" title="Permalink"></a></h3><p>You can switch backends freely within a session. A common pattern for a research workflow:</p><pre><code class="language-julia hljs">using MacroEconometricModels
 using Random
 
-Random.seed!(42)
+# Use the monetary policy VAR from Example 6
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, [&quot;INDPRO&quot;, &quot;CPIAUCSL&quot;, &quot;FEDFUNDS&quot;]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
 
-Y = randn(200, 3)
-for t in 2:200
-    Y[t, :] = [0.8 0.1 0.0; 0.05 0.7 0.0; 0.1 0.2 0.75] * Y[t-1, :] + 0.3 * randn(3)
-end
-
-model = estimate_var(Y, 2)
+model = estimate_var(Y, 4)
 H = 20
+
+Random.seed!(42)
 irfs = irf(model, H; method=:cholesky, ci_type=:bootstrap, n_boot=500)
 fevd_result = fevd(model, H; method=:cholesky)
 hd_result = historical_decomposition(model)
@@ -1424,19 +1349,15 @@ using MacroEconometricModels
 set_display_backend(:html)
 
 # All subsequent cells render as formatted HTML tables
-model = estimate_var(Y, 2)
+model = estimate_var(Y, 4)
 irfs = irf(model, 12; method=:cholesky)
-irfs   # Displays as an HTML table</code></pre><h3 id="Summary-of-Output-Functions"><a class="docs-heading-anchor" href="#Summary-of-Output-Functions">Summary of Output Functions</a><a id="Summary-of-Output-Functions-1"></a><a class="docs-heading-anchor-permalink" href="#Summary-of-Output-Functions" title="Permalink"></a></h3><table><tr><th style="text-align: right">Function</th><th style="text-align: right">Returns</th><th style="text-align: right">Use Case</th></tr><tr><td style="text-align: right"><code>table(result, ...)</code></td><td style="text-align: right"><code>Matrix</code></td><td style="text-align: right">Raw numeric data for custom processing, CSV export</td></tr><tr><td style="text-align: right"><code>print_table([io], result, ...)</code></td><td style="text-align: right">Nothing (prints)</td><td style="text-align: right">Formatted output via current backend (text/LaTeX/HTML)</td></tr><tr><td style="text-align: right"><code>show(io, result)</code></td><td style="text-align: right">Nothing (prints)</td><td style="text-align: right">REPL display, also respects backend</td></tr><tr><td style="text-align: right"><code>set_display_backend(:text)</code></td><td style="text-align: right">Nothing</td><td style="text-align: right">Terminal output (default)</td></tr><tr><td style="text-align: right"><code>set_display_backend(:latex)</code></td><td style="text-align: right">Nothing</td><td style="text-align: right">LaTeX <code>\begin{tabular}</code> output</td></tr><tr><td style="text-align: right"><code>set_display_backend(:html)</code></td><td style="text-align: right">Nothing</td><td style="text-align: right">HTML <code>&lt;table&gt;</code> output</td></tr><tr><td style="text-align: right"><code>get_display_backend()</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right">Check current backend</td></tr></table><hr/><h2 id="Example-16:-Bibliographic-References"><a class="docs-heading-anchor" href="#Example-16:-Bibliographic-References">Example 16: Bibliographic References</a><a id="Example-16:-Bibliographic-References-1"></a><a class="docs-heading-anchor-permalink" href="#Example-16:-Bibliographic-References" title="Permalink"></a></h2><p>The <code>refs()</code> function returns bibliographic references for any model, result type, or identification method. References are available in four formats: AEA text (default), BibTeX, LaTeX <code>\bibitem</code>, and HTML with clickable DOI links.</p><h3 id="Basic-Usage"><a class="docs-heading-anchor" href="#Basic-Usage">Basic Usage</a><a id="Basic-Usage-1"></a><a class="docs-heading-anchor-permalink" href="#Basic-Usage" title="Permalink"></a></h3><pre><code class="language-julia hljs">using MacroEconometricModels
-using Random
-
-Random.seed!(42)
+irfs   # Displays as an HTML table</code></pre><h3 id="Summary-of-Output-Functions"><a class="docs-heading-anchor" href="#Summary-of-Output-Functions">Summary of Output Functions</a><a id="Summary-of-Output-Functions-1"></a><a class="docs-heading-anchor-permalink" href="#Summary-of-Output-Functions" title="Permalink"></a></h3><table><tr><th style="text-align: right">Function</th><th style="text-align: right">Returns</th><th style="text-align: right">Use Case</th></tr><tr><td style="text-align: right"><code>table(result, ...)</code></td><td style="text-align: right"><code>Matrix</code></td><td style="text-align: right">Raw numeric data for custom processing, CSV export</td></tr><tr><td style="text-align: right"><code>print_table([io], result, ...)</code></td><td style="text-align: right">Nothing (prints)</td><td style="text-align: right">Formatted output via current backend (text/LaTeX/HTML)</td></tr><tr><td style="text-align: right"><code>show(io, result)</code></td><td style="text-align: right">Nothing (prints)</td><td style="text-align: right">REPL display, also respects backend</td></tr><tr><td style="text-align: right"><code>set_display_backend(:text)</code></td><td style="text-align: right">Nothing</td><td style="text-align: right">Terminal output (default)</td></tr><tr><td style="text-align: right"><code>set_display_backend(:latex)</code></td><td style="text-align: right">Nothing</td><td style="text-align: right">LaTeX <code>\begin{tabular}</code> output</td></tr><tr><td style="text-align: right"><code>set_display_backend(:html)</code></td><td style="text-align: right">Nothing</td><td style="text-align: right">HTML <code>&lt;table&gt;</code> output</td></tr><tr><td style="text-align: right"><code>get_display_backend()</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right">Check current backend</td></tr></table><hr/><h2 id="Example-16:-Bibliographic-References"><a class="docs-heading-anchor" href="#Example-16:-Bibliographic-References">Example 16: Bibliographic References</a><a id="Example-16:-Bibliographic-References-1"></a><a class="docs-heading-anchor-permalink" href="#Example-16:-Bibliographic-References" title="Permalink"></a></h2><p>The <code>refs()</code> function returns bibliographic references for any model, result type, or identification method. References are available in four formats: AEA text (default), BibTeX, LaTeX <code>\bibitem</code>, and HTML with clickable DOI links.</p><h3 id="Basic-Usage"><a class="docs-heading-anchor" href="#Basic-Usage">Basic Usage</a><a id="Basic-Usage-1"></a><a class="docs-heading-anchor-permalink" href="#Basic-Usage" title="Permalink"></a></h3><pre><code class="language-julia hljs">using MacroEconometricModels, Random
 
 # Estimate a model
-Y = randn(200, 3)
-for t in 2:200
-    Y[t, :] = 0.5 * Y[t-1, :] + 0.3 * randn(3)
-end
-model = estimate_var(Y, 2)
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, [&quot;INDPRO&quot;, &quot;CPIAUCSL&quot;, &quot;FEDFUNDS&quot;]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+model = estimate_var(Y, 4)
 
 # Get references for this model type (AEA text format)
 refs(model)</code></pre><p>Output:</p><pre><code class="nohighlight hljs">Sims, Christopher A. 1980. &quot;Macroeconomics and Reality.&quot; Econometrica 48 (1): 1-48.
@@ -1455,10 +1376,12 @@ refs(:johansen)       # Johansen cointegration
 refs(:garch)          # GARCH models
 
 # References for specific result types
-garch = estimate_garch(randn(500), 1, 1)
+indpro_growth = filter(isfinite, apply_tcode(fred[:, &quot;INDPRO&quot;], 5))
+garch = estimate_garch(indpro_growth, 1, 1)
 refs(garch)           # Bollerslev (1986)
 
-sv = estimate_sv(randn(500); n_samples=500, burnin=200)
+Random.seed!(42)
+sv = estimate_sv(indpro_growth; n_samples=500, burnin=200)
 refs(sv)              # Taylor (1986), Kim et al. (1998), Omori et al. (2007)</code></pre><h3 id="Export-to-.bib-File"><a class="docs-heading-anchor" href="#Export-to-.bib-File">Export to .bib File</a><a id="Export-to-.bib-File-1"></a><a class="docs-heading-anchor-permalink" href="#Export-to-.bib-File" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Write BibTeX entries for all models used in your analysis
 open(&quot;references.bib&quot;, &quot;w&quot;) do io
     refs(io, model; format=:bibtex)
@@ -1466,44 +1389,53 @@ open(&quot;references.bib&quot;, &quot;w&quot;) do io
     refs(io, :fastica; format=:bibtex)
     println(io)
     refs(io, :johansen; format=:bibtex)
-end</code></pre><p>The <code>refs()</code> function covers all 45+ references in the package&#39;s database, including every estimation method, identification scheme, and test. This ensures correct citation of the methods used in your empirical analysis.</p><hr/><h2 id="Example-17:-Nowcasting"><a class="docs-heading-anchor" href="#Example-17:-Nowcasting">Example 17: Nowcasting</a><a id="Example-17:-Nowcasting-1"></a><a class="docs-heading-anchor-permalink" href="#Example-17:-Nowcasting" title="Permalink"></a></h2><p>This example demonstrates the full nowcasting workflow: constructing mixed-frequency data, estimating three nowcasting models, comparing results, and decomposing forecast revisions into data release contributions. See <a href="../nowcast/">Nowcasting</a> for model specifications and theory.</p><h3 id="Simulate-Mixed-Frequency-Data"><a class="docs-heading-anchor" href="#Simulate-Mixed-Frequency-Data">Simulate Mixed-Frequency Data</a><a id="Simulate-Mixed-Frequency-Data-1"></a><a class="docs-heading-anchor-permalink" href="#Simulate-Mixed-Frequency-Data" title="Permalink"></a></h3><pre><code class="language-julia hljs">using MacroEconometricModels, Random
+end</code></pre><p>The <code>refs()</code> function covers all 45+ references in the package&#39;s database, including every estimation method, identification scheme, and test. This ensures correct citation of the methods used in your empirical analysis.</p><hr/><h2 id="Example-17:-Nowcasting"><a class="docs-heading-anchor" href="#Example-17:-Nowcasting">Example 17: Nowcasting</a><a id="Example-17:-Nowcasting-1"></a><a class="docs-heading-anchor-permalink" href="#Example-17:-Nowcasting" title="Permalink"></a></h2><p>This example demonstrates the full nowcasting workflow using FRED-MD data: constructing mixed-frequency data, estimating three nowcasting models, comparing results, and decomposing forecast revisions into data release contributions. See <a href="../nowcast/">Nowcasting</a> for model specifications and theory.</p><h3 id="Construct-Mixed-Frequency-Data"><a class="docs-heading-anchor" href="#Construct-Mixed-Frequency-Data">Construct Mixed-Frequency Data</a><a id="Construct-Mixed-Frequency-Data-1"></a><a class="docs-heading-anchor-permalink" href="#Construct-Mixed-Frequency-Data" title="Permalink"></a></h3><pre><code class="language-julia hljs">using MacroEconometricModels, Random
 
-Random.seed!(42)
+# Load FRED-MD and select a mixed-frequency panel
+fred = load_example(:fred_md)
 
-# Panel dimensions: 120 months, 8 monthly + 2 quarterly variables
-T_obs = 120
-nM, nQ = 8, 2
+# Monthly indicators (first 8 variables, transformed)
+monthly_vars = varnames(fred)[1:8]
+fred_sub = apply_tcode(fred[:, monthly_vars])
+Y_m = to_matrix(fred_sub)
+
+# Construct quarterly GDP proxy: aggregate 3 monthly INDPRO observations
+# In practice, quarterly variables come from FRED-QD; here we create a simple
+# mixed-frequency layout by treating every 3rd row as quarterly observations
+T_obs = size(Y_m, 1)
+nM = size(Y_m, 2)
+nQ = 2  # Two quarterly targets
+
+# Build mixed-frequency matrix: monthly indicators + quarterly targets
+Y = hcat(Y_m, fill(NaN, T_obs, nQ))
+
+# Quarterly targets: observed every 3rd month only
+qd = load_example(:fred_qd)
+gdp_growth = diff(log.(qd[:, &quot;GDPC1&quot;]))
+pce_growth = diff(log.(qd[:, &quot;PCECC96&quot;]))
+
+# Map quarterly observations to monthly grid (every 3rd month)
+n_quarters = min(T_obs ÷ 3, length(gdp_growth))
+for q in 1:n_quarters
+    t_month = 3 * q
+    if t_month &lt;= T_obs
+        Y[t_month, nM+1] = gdp_growth[min(q, length(gdp_growth))]
+        Y[t_month, nM+2] = pce_growth[min(q, length(pce_growth))]
+    end
+end
+
+# Clean: keep only rows where monthly data is available
+valid_rows = all.(isfinite, eachrow(Y[:, 1:nM]))
+Y = Y[valid_rows, :]
+T_obs = size(Y, 1)
+
+# Ragged edge: remove last observations for slow-release variables
+Y[end, 5:nM] .= NaN
+Y[end-1, 7:nM] .= NaN
+
 N = nM + nQ
-
-# Generate data with common factor structure
-F = zeros(T_obs)
-for t in 2:T_obs
-    F[t] = 0.9 * F[t-1] + randn()
-end
-
-Y = zeros(T_obs, N)
-for j in 1:N
-    loading = 0.5 + 0.5 * randn()
-    for t in 1:T_obs
-        Y[t, j] = loading * F[t] + 0.3 * randn()
-    end
-end
-
-# Quarterly variables: observed every 3rd month only
-for j in (nM+1):N
-    for t in 1:T_obs
-        if mod(t, 3) != 0
-            Y[t, j] = NaN
-        end
-    end
-end
-
-# Ragged edge: last months missing for slow-release variables
-Y[end, 5:8] .= NaN
-Y[end-1, 7:8] .= NaN
-
 println(&quot;Data: T=$T_obs, nM=$nM monthly, nQ=$nQ quarterly&quot;)
-println(&quot;Missing: &quot;, sum(isnan.(Y)), &quot; / &quot;, length(Y), &quot; entries&quot;)</code></pre><p><strong>Interpretation.</strong> The data matrix has the standard nowcasting layout: monthly indicators in the first 8 columns, quarterly targets in the last 2. Quarterly values appear every 3rd row (months 3, 6, 9, ...) with <code>NaN</code> elsewhere. The ragged edge mimics real-world publication lags where some monthly series release earlier than others.</p><h3 id="DFM-Nowcasting"><a class="docs-heading-anchor" href="#DFM-Nowcasting">DFM Nowcasting</a><a id="DFM-Nowcasting-1"></a><a class="docs-heading-anchor-permalink" href="#DFM-Nowcasting" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Estimate DFM with 2 factors and AR(1) idiosyncratic dynamics
+println(&quot;Missing: &quot;, sum(isnan.(Y)), &quot; / &quot;, length(Y), &quot; entries&quot;)</code></pre><p><strong>Interpretation.</strong> The data matrix has the standard nowcasting layout: monthly indicators in the first columns, quarterly targets in the last columns. Quarterly values appear every 3rd row (months 3, 6, 9, ...) with <code>NaN</code> elsewhere. The ragged edge mimics real-world publication lags where some monthly series release earlier than others.</p><h3 id="DFM-Nowcasting"><a class="docs-heading-anchor" href="#DFM-Nowcasting">DFM Nowcasting</a><a id="DFM-Nowcasting-1"></a><a class="docs-heading-anchor-permalink" href="#DFM-Nowcasting" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Estimate DFM with 2 factors and AR(1) idiosyncratic dynamics
 dfm = nowcast_dfm(Y, nM, nQ; r=2, p=1, idio=:ar1, max_iter=100)
 
 println(&quot;DFM estimation:&quot;)
@@ -1567,9 +1499,8 @@ for k in 1:min(5, length(sorted_idx))
     println(&quot;  &quot;, news.variable_names[j], &quot;: &quot;,
             round(news.impact_news[j], digits=4))
 end</code></pre><p><strong>Interpretation.</strong> The news decomposition answers the key question for real-time forecasters: <em>Why did the nowcast change?</em> Each <code>impact_news[j]</code> shows how much release <span>$j$</span> contributed to the revision. A positive impact means the actual value was higher than expected, revising the nowcast upward. This is the standard communication tool used by central banks to explain forecast revisions.</p><h3 id="Balancing-a-Panel"><a class="docs-heading-anchor" href="#Balancing-a-Panel">Balancing a Panel</a><a id="Balancing-a-Panel-1"></a><a class="docs-heading-anchor-permalink" href="#Balancing-a-Panel" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Fill NaN in a TimeSeriesData container using DFM
-varnames = [&quot;m&quot; * string(i) for i in 1:nM]
-append!(varnames, [&quot;q&quot; * string(i) for i in 1:nQ])
-ts = TimeSeriesData(Y; varnames=varnames, frequency=Monthly)
+all_varnames = vcat(monthly_vars, [&quot;GDP_growth&quot;, &quot;PCE_growth&quot;])
+ts = TimeSeriesData(Y; varnames=all_varnames, frequency=Monthly)
 
 ts_balanced = balance_panel(ts; r=2, p=1)
-println(&quot;\nBalanced panel: &quot;, sum(isnan.(to_matrix(ts_balanced))), &quot; NaN remaining&quot;)</code></pre><hr/><h2 id="Best-Practices"><a class="docs-heading-anchor" href="#Best-Practices">Best Practices</a><a id="Best-Practices-1"></a><a class="docs-heading-anchor-permalink" href="#Best-Practices" title="Permalink"></a></h2><h3 id="Data-Preparation"><a class="docs-heading-anchor" href="#Data-Preparation">Data Preparation</a><a id="Data-Preparation-1"></a><a class="docs-heading-anchor-permalink" href="#Data-Preparation" title="Permalink"></a></h3><ol><li><strong>Stationarity</strong>: Test for unit roots using ADF and KPSS together<ul><li>Both fail to reject → inconclusive, consider structural breaks</li><li>ADF rejects, KPSS doesn&#39;t → stationary (I(0))</li><li>ADF doesn&#39;t reject, KPSS rejects → unit root (I(1))</li></ul></li><li><strong>Structural Breaks</strong>: Use Zivot-Andrews test if visual inspection suggests breaks</li><li><strong>Cointegration</strong>: For I(1) variables, test for cointegration before differencing</li><li><strong>Outliers</strong>: Check for and handle outliers</li><li><strong>Missing data</strong>: Factor models can handle some missing data; VARs require complete data</li><li><strong>Scaling</strong>: For factor models, standardize variables</li></ol><h3 id="Model-Selection"><a class="docs-heading-anchor" href="#Model-Selection">Model Selection</a><a id="Model-Selection-1"></a><a class="docs-heading-anchor-permalink" href="#Model-Selection" title="Permalink"></a></h3><ol><li><strong>Lag length</strong>: Use information criteria (BIC is more conservative)</li><li><strong>Number of factors</strong>: Use Bai-Ng criteria; prefer IC2 or IC3</li><li><strong>Prior tightness</strong>: Optimize via marginal likelihood for large models</li></ol><h3 id="Identification"><a class="docs-heading-anchor" href="#Identification">Identification</a><a id="Identification-1"></a><a class="docs-heading-anchor-permalink" href="#Identification" title="Permalink"></a></h3><ol><li><strong>Economic theory</strong>: Base restrictions on economic reasoning</li><li><strong>Robustness</strong>: Try multiple identification schemes</li><li><strong>Narrative</strong>: Use historical knowledge when available</li><li><strong>Non-Gaussian</strong>: Test residuals with <code>normality_test_suite</code> first; if non-Gaussian, ICA/ML methods provide ordering-free identification</li><li><strong>Specification tests</strong>: Validate non-Gaussian identification with <code>test_shock_gaussianity</code> and <code>test_shock_independence</code></li></ol><h3 id="Inference"><a class="docs-heading-anchor" href="#Inference">Inference</a><a id="Inference-1"></a><a class="docs-heading-anchor-permalink" href="#Inference" title="Permalink"></a></h3><ol><li><strong>HAC standard errors</strong>: Always use for LP at horizons &gt; 0</li><li><strong>Credible intervals</strong>: Report 68% and 90% bands for Bayesian</li><li><strong>Bootstrap</strong>: Use for frequentist VAR confidence intervals</li></ol><h3 id="Reporting"><a class="docs-heading-anchor" href="#Reporting">Reporting</a><a id="Reporting-1"></a><a class="docs-heading-anchor-permalink" href="#Reporting" title="Permalink"></a></h3><ol><li><strong>Present both</strong>: VAR and LP estimates as robustness check</li><li><strong>Horizon selection</strong>: Focus on economically meaningful horizons</li><li><strong>FEVD</strong>: Report at multiple horizons (short, medium, long-run)</li><li><strong>LaTeX export</strong>: Use <code>set_display_backend(:latex)</code> then <code>print_table(io, ...)</code> for paper-ready tables</li><li><strong>HTML export</strong>: Use <code>set_display_backend(:html)</code> for Jupyter notebooks and web reports</li><li><strong>Raw data</strong>: Use <code>table(result, ...)</code> to extract matrices for custom formatting or CSV export</li></ol><hr/></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../plotting/">« Visualization</a><a class="docs-footer-nextpage" href="../api/">Overview »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.16.1 on <span class="colophon-date" title="Monday 16 February 2026 06:58">Monday 16 February 2026</span>. Using Julia version 1.12.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+println(&quot;\nBalanced panel: &quot;, sum(isnan.(to_matrix(ts_balanced))), &quot; NaN remaining&quot;)</code></pre><hr/><h2 id="Best-Practices"><a class="docs-heading-anchor" href="#Best-Practices">Best Practices</a><a id="Best-Practices-1"></a><a class="docs-heading-anchor-permalink" href="#Best-Practices" title="Permalink"></a></h2><h3 id="Data-Preparation"><a class="docs-heading-anchor" href="#Data-Preparation">Data Preparation</a><a id="Data-Preparation-1"></a><a class="docs-heading-anchor-permalink" href="#Data-Preparation" title="Permalink"></a></h3><ol><li><strong>Stationarity</strong>: Test for unit roots using ADF and KPSS together<ul><li>Both fail to reject → inconclusive, consider structural breaks</li><li>ADF rejects, KPSS doesn&#39;t → stationary (I(0))</li><li>ADF doesn&#39;t reject, KPSS rejects → unit root (I(1))</li></ul></li><li><strong>Structural Breaks</strong>: Use Zivot-Andrews test if visual inspection suggests breaks</li><li><strong>Cointegration</strong>: For I(1) variables, test for cointegration before differencing</li><li><strong>Outliers</strong>: Check for and handle outliers</li><li><strong>Missing data</strong>: Factor models can handle some missing data; VARs require complete data</li><li><strong>Scaling</strong>: For factor models, standardize variables</li></ol><h3 id="Model-Selection"><a class="docs-heading-anchor" href="#Model-Selection">Model Selection</a><a id="Model-Selection-1"></a><a class="docs-heading-anchor-permalink" href="#Model-Selection" title="Permalink"></a></h3><ol><li><strong>Lag length</strong>: Use information criteria (BIC is more conservative)</li><li><strong>Number of factors</strong>: Use Bai-Ng criteria; prefer IC2 or IC3</li><li><strong>Prior tightness</strong>: Optimize via marginal likelihood for large models</li></ol><h3 id="Identification"><a class="docs-heading-anchor" href="#Identification">Identification</a><a id="Identification-1"></a><a class="docs-heading-anchor-permalink" href="#Identification" title="Permalink"></a></h3><ol><li><strong>Economic theory</strong>: Base restrictions on economic reasoning</li><li><strong>Robustness</strong>: Try multiple identification schemes</li><li><strong>Narrative</strong>: Use historical knowledge when available</li><li><strong>Non-Gaussian</strong>: Test residuals with <code>normality_test_suite</code> first; if non-Gaussian, ICA/ML methods provide ordering-free identification</li><li><strong>Specification tests</strong>: Validate non-Gaussian identification with <code>test_shock_gaussianity</code> and <code>test_shock_independence</code></li></ol><h3 id="Inference"><a class="docs-heading-anchor" href="#Inference">Inference</a><a id="Inference-1"></a><a class="docs-heading-anchor-permalink" href="#Inference" title="Permalink"></a></h3><ol><li><strong>HAC standard errors</strong>: Always use for LP at horizons &gt; 0</li><li><strong>Credible intervals</strong>: Report 68% and 90% bands for Bayesian</li><li><strong>Bootstrap</strong>: Use for frequentist VAR confidence intervals</li></ol><h3 id="Reporting"><a class="docs-heading-anchor" href="#Reporting">Reporting</a><a id="Reporting-1"></a><a class="docs-heading-anchor-permalink" href="#Reporting" title="Permalink"></a></h3><ol><li><strong>Present both</strong>: VAR and LP estimates as robustness check</li><li><strong>Horizon selection</strong>: Focus on economically meaningful horizons</li><li><strong>FEVD</strong>: Report at multiple horizons (short, medium, long-run)</li><li><strong>LaTeX export</strong>: Use <code>set_display_backend(:latex)</code> then <code>print_table(io, ...)</code> for paper-ready tables</li><li><strong>HTML export</strong>: Use <code>set_display_backend(:html)</code> for Jupyter notebooks and web reports</li><li><strong>Raw data</strong>: Use <code>table(result, ...)</code> to extract matrices for custom formatting or CSV export</li></ol><hr/></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../plotting/">« Visualization</a><a class="docs-footer-nextpage" href="../api/">Overview »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.16.1 on <span class="colophon-date" title="Tuesday 17 February 2026 01:19">Tuesday 17 February 2026</span>. Using Julia version 1.12.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
