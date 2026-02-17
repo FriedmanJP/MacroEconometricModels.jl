@@ -1,7 +1,7 @@
 # MacroEconometricModels.jl
 
 [![CI](https://github.com/FriedmanJP/MacroEconometricModels.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/FriedmanJP/MacroEconometricModels.jl/actions/workflows/CI.yml)
-[![codecov](https://codecov.io/gh/FriedmanJP/MacroEconometricModels.jl/graph/badge.svg?token=PB8UPGDJIY)](https://codecov.io/gh/FriedmanJP/MacroEconometricModels.jl)
+[![codecov](https://codecov.io/gh/FriedmanJP/MacroEconometricModels.jl/graph/badge.svg)](https://codecov.io/gh/FriedmanJP/MacroEconometricModels.jl)
 [![](https://img.shields.io/badge/docs-stable-blue.svg)](https://FriedmanJP.github.io/MacroEconometricModels.jl/stable/)
 [![Aqua QA](https://raw.githubusercontent.com/JuliaTesting/Aqua.jl/master/badge.svg)](https://github.com/JuliaTesting/Aqua.jl)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18439170.svg)](https://doi.org/10.5281/zenodo.18439170)
