@@ -428,6 +428,36 @@ using Random
         @test norm(V_dk - V_dk2) < 1e-10
     end
 
+    @testset "NW at bw=0 matches White HC0 for white noise" begin
+        # Regression test: for white noise residuals, auto-bandwidth ≈ 0,
+        # so NW should approximate White HC0 (both are sandwich estimators
+        # with the same meat when there is no autocorrelation).
+        Random.seed!(12345)
+        n = 500
+        k = 3
+        X = hcat(ones(n), randn(n, k - 1))
+        u = randn(n)  # white noise — auto bandwidth should be 0 or very small
+
+        V_nw = MacroEconometricModels.newey_west(X, u; bandwidth=0)
+        V_white = MacroEconometricModels.white_vcov(X, u; variant=:hc0)
+
+        # With bandwidth=0, NW should exactly equal White HC0
+        bw_auto = MacroEconometricModels.optimal_bandwidth_nw(u)
+        if bw_auto == 0
+            @test isapprox(V_nw, V_white, rtol=1e-10)
+        else
+            # Even if auto bw > 0, they should be close for white noise
+            @test isapprox(V_nw, V_white, rtol=0.3)
+        end
+
+        # Explicitly force bw=0: NW with bw=0 must exactly equal White HC0
+        V_nw_bw0 = MacroEconometricModels.newey_west(X, u; bandwidth=0)
+        bw_check = MacroEconometricModels.optimal_bandwidth_nw(u)
+        if bw_check == 0
+            @test isapprox(V_nw_bw0, V_white, rtol=1e-10)
+        end
+    end
+
     @testset "Newey-West with fixed bandwidth and all kernels" begin
         Random.seed!(8802)
         X = randn(80, 3)

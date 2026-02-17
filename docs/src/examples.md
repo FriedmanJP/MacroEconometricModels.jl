@@ -1702,7 +1702,7 @@ println("="^50)
 
 aics = Float64[]
 bics = Float64[]
-for p in 1:8
+for p in 1:13
     m = estimate_var(Y, p)
     push!(aics, aic(m))
     push!(bics, bic(m))

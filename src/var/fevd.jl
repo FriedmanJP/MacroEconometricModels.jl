@@ -48,7 +48,7 @@ function fevd(model::VARModel{T}, horizon::Int;
     irf_result = irf(model, horizon; method, check_func, narrative_check,
                      transition_var=transition_var, regime_indicator=regime_indicator)
     decomp, props = _compute_fevd(irf_result.values, nvars(model), horizon)
-    FEVD{T}(decomp, props)
+    FEVD{T}(decomp, props, model.varnames, model.varnames)
 end
 
 """Compute FEVD from IRF array: decomposition[i,j,h] = cumulative MSE contribution."""
@@ -133,7 +133,7 @@ function fevd(post::BVARPosterior, horizon::Int;
     use_threaded = threaded || (samples * horizon * n * n > 100000)
     fevd_q, fevd_m = compute_posterior_quantiles(all_fevds, q_vec; threaded=use_threaded)
 
-    BayesianFEVD{ET}(fevd_q, fevd_m, horizon, default_var_names(n), default_shock_names(n), q_vec)
+    BayesianFEVD{ET}(fevd_q, fevd_m, horizon, post.varnames, post.varnames, q_vec)
 end
 
 # Deprecated wrapper for old (chain, p, n, horizon) signature

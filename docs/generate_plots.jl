@@ -93,7 +93,7 @@ function main()
     # -------------------------------------------------------------------
     # 1. Quick Start IRF
     # -------------------------------------------------------------------
-    m_var = estimate_var(Y3, 2)
+    m_var = estimate_var(Y3, 4)
     r_qs  = irf(m_var, 20; ci_type=:bootstrap, reps=500)
     save("quickstart_irf.html", plot_result(r_qs))
 
@@ -105,21 +105,21 @@ function main()
     # -------------------------------------------------------------------
     # 3. Bayesian IRF
     # -------------------------------------------------------------------
-    post = estimate_bvar(Y3, 2; n_draws=1000, varnames=["INDPRO", "UNRATE", "CPI"])
+    post = estimate_bvar(Y3, 4; n_draws=1000, varnames=["INDPRO", "UNRATE", "CPI"])
     r_birf = irf(post, 20)
     save("irf_bayesian.html", plot_result(r_birf))
 
     # -------------------------------------------------------------------
     # 4. LP IRF
     # -------------------------------------------------------------------
-    lp_m = estimate_lp(Y3, 1, 20; lags=2)
+    lp_m = estimate_lp(Y3, 1, 20; lags=4)
     r_lp = lp_irf(lp_m)
     save("irf_lp.html", plot_result(r_lp))
 
     # -------------------------------------------------------------------
     # 5. Structural LP IRF
     # -------------------------------------------------------------------
-    slp = structural_lp(Y3, 20; method=:cholesky, lags=2)
+    slp = structural_lp(Y3, 20; method=:cholesky, lags=4)
     save("irf_structural_lp.html", plot_result(slp))
 
     # -------------------------------------------------------------------
@@ -201,7 +201,7 @@ function main()
     # 20. LP Forecast
     # -------------------------------------------------------------------
     Y_lp = Y3[end-99:end, :]
-    lp_fc_m = estimate_lp(Y_lp, 1, 10; lags=2)
+    lp_fc_m = estimate_lp(Y_lp, 1, 10; lags=4)
     shock_path = zeros(10); shock_path[1] = 1.0
     fc_lp = forecast(lp_fc_m, shock_path)
     save("forecast_lp.html", plot_result(fc_lp))

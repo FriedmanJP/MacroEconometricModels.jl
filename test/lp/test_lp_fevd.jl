@@ -191,7 +191,7 @@ using Statistics
         print_table(buf, f, 1)
         output = String(take!(buf))
         @test occursin("LP-FEVD", output)
-        @test occursin("Variable 1", output)
+        @test occursin("y1", output)
     end
 
     # =========================================================================

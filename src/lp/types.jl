@@ -292,6 +292,8 @@ struct LPFEVD{T<:AbstractFloat} <: AbstractFEVD
     n_boot::Int
     conf_level::T
     bias_correction::Bool
+    variables::Vector{String}
+    shocks::Vector{String}
 end
 
 # =============================================================================

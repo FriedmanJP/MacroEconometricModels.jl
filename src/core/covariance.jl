@@ -228,14 +228,14 @@ function newey_west(X::AbstractMatrix{T}, residuals::AbstractVector{T};
     # Pre-compute X .* u for vectorized access
     Xu = X_use .* u  # n × k matrix
 
-    # Lag-0 autocovariance: Γ₀ = (1/n) Σₜ (xₜuₜ)(xₜuₜ)'
+    # Lag-0 autocovariance: Γ₀ = Σₜ (xₜuₜ)(xₜuₜ)'
     S = (Xu' * Xu)  # k × k, more efficient than loop
 
     # Add weighted lag autocovariances using BLAS
     @inbounds for j in 1:bw
         w = kernel_weight(j, bw, kernel, T)
         w == 0 && continue
-        # Γⱼ = (1/n) Σₜ (xₜuₜ)(xₜ₋ⱼuₜ₋ⱼ)'
+        # Γⱼ = Σₜ (xₜuₜ)(xₜ₋ⱼuₜ₋ⱼ)'
         Xu_t = @view Xu[(j+1):n, :]
         Xu_tj = @view Xu[1:(n-j), :]
         Gamma_j = Xu_t' * Xu_tj  # k × k
@@ -250,7 +250,6 @@ function newey_west(X::AbstractMatrix{T}, residuals::AbstractVector{T};
         S ./= (1 - rho)^2
     end
 
-    S ./= n
     V = XtX_inv_use * S * XtX_inv_use
     # Ensure symmetry (may have tiny floating-point differences from BLAS)
     (V + V') / 2

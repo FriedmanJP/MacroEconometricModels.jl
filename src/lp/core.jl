@@ -458,7 +458,7 @@ function structural_lp(Y::AbstractMatrix{T}, horizon::Int;
     end
 
     irf_result = ImpulseResponse{ET}(irfs, ci_lower, ci_upper, horizon,
-                                      default_var_names(n), default_shock_names(n), ci_sym)
+                                      var_model.varnames, var_model.varnames, ci_sym)
 
     StructuralLP{ET}(irf_result, Matrix{ET}(eps), var_model, Matrix{ET}(Q), method,
                      lags, cov_type, se_arr, lp_models)

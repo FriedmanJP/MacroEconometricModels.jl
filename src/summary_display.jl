@@ -82,9 +82,9 @@ function print_table(io::IO, f::FEVD{T}, var::Int;
         end
     end
 
-    col_labels = vcat(["h"], ["Shock $j" for j in 1:n_shocks])
+    col_labels = vcat(["h"], f.shocks)
     _pretty_table(io, data;
-        title = "FEVD: Variable $var",
+        title = "FEVD: $(f.variables[var])",
         column_labels = col_labels,
         alignment = fill(:r, size(data, 2)),
     )
@@ -279,7 +279,7 @@ function Base.show(io::IO, f::FEVD{T}) where {T}
     for h in _select_horizons(H)
         data = Matrix{Any}(undef, n_vars, n_shocks + 1)
         for i in 1:n_vars
-            data[i, 1] = "Var $i"
+            data[i, 1] = f.variables[i]
             for j in 1:n_shocks
                 data[i, j + 1] = _fmt_pct(f.proportions[i, j, h])
             end
@@ -287,7 +287,7 @@ function Base.show(io::IO, f::FEVD{T}) where {T}
 
         _pretty_table(io, data;
             title = "h = $h",
-            column_labels = vcat([""], ["Shock $j" for j in 1:n_shocks]),
+            column_labels = vcat([""], f.shocks),
             alignment = vcat([:l], fill(:r, n_shocks)),
         )
     end
@@ -487,7 +487,7 @@ function Base.show(io::IO, f::LPFEVD{T}) where {T}
     for h in _select_horizons(H)
         data = Matrix{Any}(undef, n_vars, n_shocks + 1)
         for i in 1:n_vars
-            data[i, 1] = "Var $i"
+            data[i, 1] = f.variables[i]
             for j in 1:n_shocks
                 v = vals[i, j, h]
                 if f.n_boot > 0
@@ -501,7 +501,7 @@ function Base.show(io::IO, f::LPFEVD{T}) where {T}
 
         _pretty_table(io, data;
             title = "h = $h",
-            column_labels = vcat([""], ["Shock $j" for j in 1:n_shocks]),
+            column_labels = vcat([""], f.shocks),
             alignment = vcat([:l], fill(:r, n_shocks)),
         )
     end
@@ -518,13 +518,14 @@ function print_table(io::IO, f::LPFEVD{T}, var_idx::Int;
     H_sel = filter(h -> h <= f.horizon, horizons)
 
     vals = f.bias_correction ? f.bias_corrected : f.proportions
-    header = vcat(["h"], ["Shock $j" for j in 1:n_shocks])
+    header = vcat(["h"], f.shocks)
 
+    var_label = f.variables[var_idx]
     if f.n_boot > 0
         # Include CIs
         header_full = String["h"]
         for j in 1:n_shocks
-            push!(header_full, "Shock $j")
+            push!(header_full, f.shocks[j])
             push!(header_full, "Lower")
             push!(header_full, "Upper")
         end
@@ -539,7 +540,7 @@ function print_table(io::IO, f::LPFEVD{T}, var_idx::Int;
             end
         end
         _pretty_table(io, data;
-            title = "LP-FEVD: Variable $var_idx",
+            title = "LP-FEVD: $var_label",
             column_labels = header_full,
             alignment = fill(:r, length(header_full)),
         )
@@ -552,7 +553,7 @@ function print_table(io::IO, f::LPFEVD{T}, var_idx::Int;
             end
         end
         _pretty_table(io, data;
-            title = "LP-FEVD: Variable $var_idx",
+            title = "LP-FEVD: $var_label",
             column_labels = header,
             alignment = fill(:r, length(header)),
         )

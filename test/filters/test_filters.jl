@@ -529,6 +529,30 @@ using SparseArrays
     end
 
     # =============================================================================
+    # Filter Non-Mutation (Issue #25)
+    # =============================================================================
+    @testset "filter non-mutation" begin
+        Random.seed!(42)
+        y = cumsum(randn(200))
+        y_copy = copy(y)
+
+        hp_filter(y)
+        @test y == y_copy
+
+        hamilton_filter(y)
+        @test y == y_copy
+
+        beveridge_nelson(y; p=1, q=0)
+        @test y == y_copy
+
+        baxter_king(y)
+        @test y == y_copy
+
+        boosted_hp(y; stopping=:fixed, max_iter=3)
+        @test y == y_copy
+    end
+
+    # =============================================================================
     # AbstractFilterResult type hierarchy
     # =============================================================================
     @testset "Type hierarchy" begin

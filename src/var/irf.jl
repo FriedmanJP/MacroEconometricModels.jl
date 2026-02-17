@@ -180,7 +180,7 @@ function irf(post::BVARPosterior, horizon::Int;
     use_threaded = threaded || (samples * horizon * n * n > 100000)
     irf_q, irf_m = compute_posterior_quantiles(all_irfs, q_vec; threaded=use_threaded)
 
-    BayesianImpulseResponse{ET}(irf_q, irf_m, horizon, default_var_names(n), default_shock_names(n), q_vec)
+    BayesianImpulseResponse{ET}(irf_q, irf_m, horizon, post.varnames, post.varnames, q_vec)
 end
 
 # Deprecated wrapper for old (chain, p, n, horizon) signature

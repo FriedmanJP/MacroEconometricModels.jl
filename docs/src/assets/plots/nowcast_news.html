@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Nowcast News: -0.158 → -0.158 (Δ = 0.0)</title>
+<title>Nowcast News: 0.012 → 0.012 (Δ = 0.0)</title>
 <style>* { margin: 0; padding: 0; box-sizing: border-box; }
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
@@ -67,10 +67,10 @@ svg { overflow: visible; }
 </style>
 </head>
 <body>
-<div class="figure-title">Nowcast News: -0.158 → -0.158 (Δ = 0.0)</div>
+<div class="figure-title">Nowcast News: 0.012 → 0.012 (Δ = 0.0)</div>
 <div class="panel">
 <div class="panel-title">Per-Release Impact</div>
-<div id="news_99"></div>
+<div id="news_101"></div>
 </div>
 <div class="tooltip" id="tooltip"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
@@ -88,11 +88,11 @@ function showTip(evt, html) {
 function hideTip() { tooltip.style('opacity',0); }
 
 (function() {
-    const data = [{"x":"Var5_t100","impact":0.10975584301069519}];
+    const data = [{"x":"Var5_t100","impact":-0.008719927026115582}];
     const series = [{"name":"News Impact","color":"#1f77b4","key":"impact","dash":""}];
     const mode = 'grouped';
 
-    const container = d3.select('#news_99');
+    const container = d3.select('#news_101');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;

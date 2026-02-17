@@ -404,7 +404,7 @@ function historical_decomposition(post::BVARPosterior, horizon::Int=0;
 
     BayesianHistoricalDecomposition{ET}(
         contrib_q, contrib_m, initial_q, initial_m, shocks_m, actual, T_eff,
-        default_var_names(n), default_shock_names(n), q_vec, method
+        post.varnames, post.varnames, q_vec, method
     )
 end
 

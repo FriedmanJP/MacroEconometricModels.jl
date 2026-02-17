@@ -126,10 +126,12 @@ end
 # FEVD
 # =============================================================================
 
-"""FEVD results: decomposition (n×n×H) and proportions."""
+"""FEVD results: decomposition (n×n×H), proportions, variable/shock names."""
 struct FEVD{T<:AbstractFloat} <: AbstractFEVD
     decomposition::Array{T,3}
     proportions::Array{T,3}
+    variables::Vector{String}
+    shocks::Vector{String}
 end
 
 """Bayesian FEVD with posterior quantiles."""

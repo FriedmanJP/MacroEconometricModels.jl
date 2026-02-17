@@ -36,20 +36,18 @@ function plot_result(f::FEVD{T};
                      ncols::Int=0, title::String="",
                      save_path::Union{String,Nothing}=nothing) where {T}
     n_vars, n_shocks, H = size(f.proportions)
-    shock_names = ["Shock $j" for j in 1:n_shocks]
-    var_names = ["Variable $i" for i in 1:n_vars]
 
     vars_to_plot = var === nothing ? (1:n_vars) : [var]
 
     panels = _PanelSpec[]
     for vi in vars_to_plot
         id = _next_plot_id("fevd")
-        ptitle = var_names[vi]
+        ptitle = f.variables[vi]
 
         # proportions[vi, :, :] → transpose to H × n_shocks
         props = permutedims(f.proportions[vi, :, :])  # H × n_shocks
-        data_json = _fevd_data_json(props, shock_names, H)
-        s_json = _series_json(shock_names, _PLOT_COLORS[1:n_shocks];
+        data_json = _fevd_data_json(props, f.shocks, H)
+        s_json = _series_json(f.shocks, _PLOT_COLORS[1:n_shocks];
                               keys=["s$j" for j in 1:n_shocks])
 
         js = _render_area_js(id, data_json, s_json;
@@ -133,15 +131,13 @@ function plot_result(f::LPFEVD{T};
                      save_path::Union{String,Nothing}=nothing) where {T}
     source = bias_corrected && f.bias_correction ? f.bias_corrected : f.proportions
     n_vars, n_shocks, H = size(source)
-    shock_names = ["Shock $j" for j in 1:n_shocks]
-    var_names = ["Variable $i" for i in 1:n_vars]
 
     vars_to_plot = var === nothing ? (1:n_vars) : [var]
 
     panels = _PanelSpec[]
     for vi in vars_to_plot
         id = _next_plot_id("lpfevd")
-        ptitle = var_names[vi]
+        ptitle = f.variables[vi]
 
         props = permutedims(source[vi, :, :])  # H × n_shocks
         # Clamp and normalize
@@ -149,8 +145,8 @@ function plot_result(f::LPFEVD{T};
         row_sums = sum(props, dims=2)
         props = props ./ max.(row_sums, eps(T))
 
-        data_json = _fevd_data_json(props, shock_names, H)
-        s_json = _series_json(shock_names, _PLOT_COLORS[1:n_shocks];
+        data_json = _fevd_data_json(props, f.shocks, H)
+        s_json = _series_json(f.shocks, _PLOT_COLORS[1:n_shocks];
                               keys=["s$j" for j in 1:n_shocks])
 
         js = _render_area_js(id, data_json, s_json;

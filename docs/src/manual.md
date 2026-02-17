@@ -12,8 +12,8 @@ fred = load_example(:fred_md)
 Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
 Y = Y[all.(isfinite, eachrow(Y)), :]
 
-model = estimate_var(Y, 2)                                 # Estimate VAR(2) via OLS
-sel = select_lag_order(Y, 8)                               # AIC/BIC/HQIC lag selection
+model = estimate_var(Y, 4)                                 # Estimate VAR(4) via OLS
+sel = select_lag_order(Y, 13)                              # AIC/BIC/HQIC lag selection
 irfs = irf(model, 20; method=:cholesky)                    # Cholesky-identified IRFs
 decomp = fevd(model, 20)                                   # Forecast error variance decomposition
 id = identify_sign(model; check_func=f, n_draws=1000)      # Sign restriction identification
@@ -248,7 +248,7 @@ using MacroEconometricModels
 fred = load_example(:fred_md)
 Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
 Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
+model = estimate_var(Y, 4)
 
 # Define restrictions: monetary policy shock (shock 3)
 # Zero: INDPRO does not respond to monetary shock on impact
@@ -303,7 +303,7 @@ using MacroEconometricModels
 fred = load_example(:fred_md)
 Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
 Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
+model = estimate_var(Y, 4)
 
 # Mountford-Uhlig: separate fiscal vs monetary shocks
 # Shock 1 (fiscal): no impact on FFR, positive on INDPRO
@@ -510,7 +510,7 @@ Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
 Y = Y[all.(isfinite, eachrow(Y)), :]
 
 # Step 1: Select lag order
-sel = select_lag_order(Y, 8)
+sel = select_lag_order(Y, 13)
 println("AIC lag: ", sel.p_aic, "  BIC lag: ", sel.p_bic)
 
 # Step 2: Estimate VAR

@@ -15,7 +15,7 @@ Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "UNRATE", "CPIAUCSL"]]))
 Y = Y[all.(isfinite, eachrow(Y)), :]
 
 # Estimate a VAR and plot IRFs
-m = estimate_var(Y, 2)
+m = estimate_var(Y, 4)
 r = irf(m, 20; ci_type=:bootstrap, reps=500)
 p = plot_result(r)
 
@@ -74,7 +74,7 @@ fred = load_example(:fred_md)
 Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "UNRATE", "CPIAUCSL"]]))
 Y = Y[all.(isfinite, eachrow(Y)), :]
 
-m = estimate_var(Y, 2)
+m = estimate_var(Y, 4)
 r = irf(m, 20; ci_type=:bootstrap, reps=500)
 
 # Full n_vars x n_shocks grid
@@ -96,7 +96,7 @@ p = plot_result(r; title="Monetary Policy Shock")
 ### Bayesian IRF
 
 ```julia
-post = estimate_bvar(Y, 2; n_draws=1000, varnames=["INDPRO", "UNRATE", "CPI"])
+post = estimate_bvar(Y, 4; n_draws=1000, varnames=["INDPRO", "UNRATE", "CPI"])
 r = irf(post, 20)
 p = plot_result(r)                    # Full grid
 p = plot_result(r; var=1, shock=1)    # Single panel
@@ -111,7 +111,7 @@ Displays posterior median with credible band from the widest quantile interval.
 ### Local Projection IRF
 
 ```julia
-lp_m = estimate_lp(Y, 1, 20; lags=2)
+lp_m = estimate_lp(Y, 1, 20; lags=4)
 r = lp_irf(lp_m)
 p = plot_result(r)          # All response variables
 p = plot_result(r; var=1)   # Single variable
@@ -124,7 +124,7 @@ p = plot_result(r; var=1)   # Single variable
 ### Structural LP
 
 ```julia
-slp = structural_lp(Y, 20; method=:cholesky, lags=2)
+slp = structural_lp(Y, 20; method=:cholesky, lags=4)
 p = plot_result(slp)
 ```
 
@@ -354,7 +354,7 @@ p = plot_result(fc; type=:observable, var=1) # Observable forecast
 ```julia
 # Use last 100 rows of the 3-variable FRED-MD data
 Y_lp = Y[end-99:end, :]
-lp_fc = estimate_lp(Y_lp, 1, 10; lags=2)
+lp_fc = estimate_lp(Y_lp, 1, 10; lags=4)
 shock_path = zeros(10); shock_path[1] = 1.0
 fc = forecast(lp_fc, shock_path)
 p = plot_result(fc)
