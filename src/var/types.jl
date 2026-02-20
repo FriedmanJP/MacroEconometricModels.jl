@@ -68,6 +68,63 @@ ncoefs(model::VARModel) = 1 + nvars(model) * model.p
 effective_nobs(model::VARModel) = size(model.Y, 1) - model.p
 varnames(model::VARModel) = model.varnames
 
+"""
+    VARForecast{T} <: AbstractForecastResult{T}
+
+VAR model forecast with optional bootstrap confidence intervals.
+
+Fields: forecast (h×n), ci_lower (h×n), ci_upper (h×n), horizon, ci_method, conf_level, varnames.
+"""
+struct VARForecast{T<:AbstractFloat} <: AbstractForecastResult{T}
+    forecast::Matrix{T}
+    ci_lower::Matrix{T}
+    ci_upper::Matrix{T}
+    horizon::Int
+    ci_method::Symbol
+    conf_level::T
+    varnames::Vector{String}
+end
+
+function Base.show(io::IO, fc::VARForecast{T}) where {T}
+    n_vars = length(fc.varnames)
+    has_ci = fc.ci_method != :none
+    ci_pct = has_ci ? round(Int, 100 * fc.conf_level) : 0
+
+    spec = Any[
+        "Horizon"     fc.horizon;
+        "Variables"   n_vars;
+        "CI method"   string(fc.ci_method);
+        "Conf. level" has_ci ? "$(ci_pct)%" : "—"
+    ]
+    _pretty_table(io, spec;
+        title = "VAR Forecast",
+        column_labels = ["Specification", ""],
+        alignment = [:l, :r],
+    )
+
+    # Per-variable forecast table
+    for vi in 1:n_vars
+        data = Matrix{Any}(undef, fc.horizon, has_ci ? 4 : 2)
+        for h in 1:fc.horizon
+            data[h, 1] = h
+            data[h, 2] = _fmt(fc.forecast[h, vi])
+            if has_ci
+                data[h, 3] = _fmt(fc.ci_lower[h, vi])
+                data[h, 4] = _fmt(fc.ci_upper[h, vi])
+            end
+        end
+        labels = has_ci ?
+            ["h", "Forecast", "Lower $(ci_pct)%", "Upper $(ci_pct)%"] :
+            ["h", "Forecast"]
+        align = has_ci ? [:r, :r, :r, :r] : [:r, :r]
+        _pretty_table(io, data;
+            title = "$(fc.varnames[vi])",
+            column_labels = labels,
+            alignment = align,
+        )
+    end
+end
+
 function Base.show(io::IO, m::VARModel{T}) where {T}
     n = nvars(m)
     spec = Any[

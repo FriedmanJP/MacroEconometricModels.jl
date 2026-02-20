@@ -184,7 +184,20 @@ function main()
     save("forecast_volatility.html", plot_result(fc_vol; history=gm.conditional_variance))
 
     # -------------------------------------------------------------------
-    # 18. VECM Forecast
+    # 18. VAR Forecast
+    # -------------------------------------------------------------------
+    # Use same 3-variable macro data; bootstrap CIs show forecast uncertainty
+    fc_var = forecast(m_var, 12; ci_method=:bootstrap, reps=500)
+    save("forecast_var.html", plot_result(fc_var))
+
+    # -------------------------------------------------------------------
+    # 19. BVAR Forecast
+    # -------------------------------------------------------------------
+    fc_bvar = forecast(post, 12)
+    save("forecast_bvar.html", plot_result(fc_bvar))
+
+    # -------------------------------------------------------------------
+    # 20. VECM Forecast
     # -------------------------------------------------------------------
     try
         vecm_m  = estimate_vecm(Y_ci, 2; rank=1, varnames=["GDP", "PCE", "Investment"])
@@ -199,7 +212,7 @@ function main()
     end
 
     # -------------------------------------------------------------------
-    # 19. Factor Forecast
+    # 21. Factor Forecast
     # -------------------------------------------------------------------
     # Use raw-level FRED-MD interest rate/spread panel (no tcode transform)
     # for visually meaningful factor forecasts with non-zero magnitudes
@@ -214,7 +227,7 @@ function main()
     save("forecast_factor.html", plot_result(fc_fm; n_obs=4))
 
     # -------------------------------------------------------------------
-    # 20. LP Forecast
+    # 22. LP Forecast
     # -------------------------------------------------------------------
     # Use raw-level FRED-MD macro data (no tcode transform) for meaningful
     # LP forecasts: 1pp fed funds rate shock → unemployment + 10y yield
@@ -230,24 +243,24 @@ function main()
     save("forecast_lp.html", plot_result(fc_lp))
 
     # -------------------------------------------------------------------
-    # 21. GARCH diagnostic
+    # 23. GARCH diagnostic
     # -------------------------------------------------------------------
     save("model_garch.html", plot_result(gm))
 
     # -------------------------------------------------------------------
-    # 22. SV posterior volatility
+    # 24. SV posterior volatility
     # -------------------------------------------------------------------
     sv_m = estimate_sv(y_vol; n_samples=500, burnin=200)
     save("model_sv.html", plot_result(sv_m))
 
     # -------------------------------------------------------------------
-    # 23. Static factor model
+    # 25. Static factor model
     # -------------------------------------------------------------------
     fm_static = estimate_factors(X20, 3)
     save("model_factor_static.html", plot_result(fm_static))
 
     # -------------------------------------------------------------------
-    # 24. TimeSeriesData
+    # 26. TimeSeriesData
     # -------------------------------------------------------------------
     if use_real
         d_ts = fred_gm[:, ["INDPRO", "UNRATE", "CPIAUCSL"]]
@@ -257,7 +270,7 @@ function main()
     save("data_timeseries.html", plot_result(d_ts))
 
     # -------------------------------------------------------------------
-    # 25. PanelData
+    # 27. PanelData
     # -------------------------------------------------------------------
     if use_real
         save("data_panel.html", plot_result(pwt; vars=["rgdpna", "pop", "emp", "hc"]))
@@ -269,7 +282,7 @@ function main()
     end
 
     # -------------------------------------------------------------------
-    # 26. Nowcast result
+    # 28. Nowcast result
     # -------------------------------------------------------------------
     if use_real
         nc_md  = fred_gm[:, ["INDPRO", "UNRATE", "CPIAUCSL", "M2SL", "FEDFUNDS"]]
@@ -284,7 +297,7 @@ function main()
     save("nowcast_result.html", plot_result(nr))
 
     # -------------------------------------------------------------------
-    # 27. Nowcast news
+    # 29. Nowcast news
     # -------------------------------------------------------------------
     X_old = copy(Y_nc)
     X_new = copy(X_old); X_new[end, end] = X_old[end-1, end]

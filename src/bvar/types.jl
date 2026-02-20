@@ -55,6 +55,56 @@ struct BVARPosterior{T<:AbstractFloat}
     varnames::Vector{String}
 end
 
+"""
+    BVARForecast{T} <: AbstractForecastResult{T}
+
+Bayesian VAR forecast with posterior credible intervals.
+
+Fields: forecast (h×n posterior mean), ci_lower (h×n), ci_upper (h×n), horizon, conf_level, varnames.
+"""
+struct BVARForecast{T<:AbstractFloat} <: AbstractForecastResult{T}
+    forecast::Matrix{T}
+    ci_lower::Matrix{T}
+    ci_upper::Matrix{T}
+    horizon::Int
+    conf_level::T
+    varnames::Vector{String}
+end
+
+function Base.show(io::IO, fc::BVARForecast{T}) where {T}
+    n_vars = length(fc.varnames)
+    ci_pct = round(Int, 100 * fc.conf_level)
+
+    spec = Any[
+        "Horizon"     fc.horizon;
+        "Variables"   n_vars;
+        "Credibility" "$(ci_pct)%"
+    ]
+    _pretty_table(io, spec;
+        title = "Bayesian VAR Forecast",
+        column_labels = ["Specification", ""],
+        alignment = [:l, :r],
+    )
+
+    # Per-variable forecast table
+    lo_pct = round(Int, 100 * (1 - fc.conf_level) / 2)
+    hi_pct = 100 - lo_pct
+    for vi in 1:n_vars
+        data = Matrix{Any}(undef, fc.horizon, 4)
+        for h in 1:fc.horizon
+            data[h, 1] = h
+            data[h, 2] = _fmt(fc.forecast[h, vi])
+            data[h, 3] = _fmt(fc.ci_lower[h, vi])
+            data[h, 4] = _fmt(fc.ci_upper[h, vi])
+        end
+        _pretty_table(io, data;
+            title = "$(fc.varnames[vi])",
+            column_labels = ["h", "Post. Mean", "$(lo_pct)%", "$(hi_pct)%"],
+            alignment = [:r, :r, :r, :r],
+        )
+    end
+end
+
 Base.size(post::BVARPosterior, dim::Int) = dim == 1 ? post.n_draws : error("BVARPosterior has 1 dimension (n_draws)")
 Base.length(post::BVARPosterior) = post.n_draws
 

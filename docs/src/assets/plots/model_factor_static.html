@@ -71,11 +71,11 @@ svg { overflow: visible; }
 <div class="panel-grid">
 <div class="panel">
 <div class="panel-title">Scree Plot</div>
-<div id="fm_scree_92"></div>
+<div id="fm_scree_98"></div>
 </div>
 <div class="panel">
 <div class="panel-title">Extracted Factors</div>
-<div id="fm_fac_93"></div>
+<div id="fm_fac_99"></div>
 </div>
 </div>
 
@@ -108,7 +108,7 @@ function hideTip() { tooltip.style('opacity',0); }
     const series = [{"name":"Eigenvalue","color":"#1f77b4","key":"eig","dash":""}];
     const mode = 'grouped';
 
-    const container = d3.select('#fm_scree_92');
+    const container = d3.select('#fm_scree_98');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;
@@ -467,7 +467,7 @@ function hideTip() { tooltip.style('opacity',0); }
     const bands = [];
     const refLines = [];
 
-    const container = d3.select('#fm_fac_93');
+    const container = d3.select('#fm_fac_99');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;

@@ -264,7 +264,7 @@ export AbstractVARModel, AbstractImpulseResponse, AbstractFEVD, AbstractPrior
 export AbstractForecastResult
 
 # VAR types
-export VARModel
+export VARModel, VARForecast
 
 # IRF types
 export ImpulseResponse, BayesianImpulseResponse
@@ -353,7 +353,7 @@ export cointegrating_rank, granger_causality_vecm
 # Exports - Bayesian Estimation
 # =============================================================================
 
-export BVARPosterior
+export BVARPosterior, BVARForecast
 export estimate_bvar
 export posterior_mean_model
 export posterior_median_model

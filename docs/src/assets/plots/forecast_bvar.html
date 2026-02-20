@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>LP Forecast (h=10, 95% CI)</title>
+<title>Bayesian VAR Forecast (95% credible interval)</title>
 <style>* { margin: 0; padding: 0; box-sizing: border-box; }
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
@@ -67,19 +67,19 @@ svg { overflow: visible; }
 </style>
 </head>
 <body>
-<div class="figure-title">LP Forecast (h=10, 95% CI)</div>
+<div class="figure-title">Bayesian VAR Forecast (95% credible interval)</div>
 <div class="panel-grid">
 <div class="panel">
-<div class="panel-title">FEDFUNDS</div>
-<div id="lp_fc_89"></div>
+<div class="panel-title">INDPRO</div>
+<div id="bvar_fc_76"></div>
 </div>
 <div class="panel">
 <div class="panel-title">UNRATE</div>
-<div id="lp_fc_90"></div>
+<div id="bvar_fc_77"></div>
 </div>
 <div class="panel">
-<div class="panel-title">GS10</div>
-<div id="lp_fc_91"></div>
+<div class="panel-title">CPI</div>
+<div id="bvar_fc_78"></div>
 </div>
 </div>
 
@@ -99,21 +99,23 @@ function showTip(evt, html) {
 function hideTip() { tooltip.style('opacity',0); }
 
 (function() {
-    const data = [{"x":1,"hist":null,"fc":-0.63491886775055,"ci_lo":-1.4012990526383928,"ci_hi":0.13146131713729292},
-{"x":2,"hist":null,"fc":-3.049403736964506,"ci_lo":-5.1394413971608826,"ci_hi":-0.9593660767681298},
-{"x":3,"hist":null,"fc":-4.41428348046286,"ci_lo":-7.199674726105741,"ci_hi":-1.6288922348199795},
-{"x":4,"hist":null,"fc":-5.932697500131926,"ci_lo":-9.150330519394982,"ci_hi":-2.71506448086887},
-{"x":5,"hist":null,"fc":-7.303488146750516,"ci_lo":-10.821087627162031,"ci_hi":-3.785888666339002},
-{"x":6,"hist":null,"fc":-8.099465418190197,"ci_lo":-11.796684331129496,"ci_hi":-4.402246505250899},
-{"x":7,"hist":null,"fc":-8.495139637775592,"ci_lo":-12.486190724830236,"ci_hi":-4.504088550720949},
-{"x":8,"hist":null,"fc":-9.217926575822133,"ci_lo":-12.956841553166656,"ci_hi":-5.47901159847761},
-{"x":9,"hist":null,"fc":-9.515508059395627,"ci_lo":-13.65192936061362,"ci_hi":-5.379086758177634},
-{"x":10,"hist":null,"fc":-9.161225568846614,"ci_lo":-13.616364124787097,"ci_hi":-4.706087012906131}];
-    const series = [{"name":"LP Forecast","color":"#1f77b4","key":"fc","dash":""}];
+    const data = [{"x":1,"hist":null,"fc":0.01216867278445444,"ci_lo":-0.07870950287074972,"ci_hi":0.09681434287200374},
+{"x":2,"hist":null,"fc":0.016716678915080073,"ci_lo":-0.09678401084352,"ci_hi":0.11843408637197973},
+{"x":3,"hist":null,"fc":0.012783351096510544,"ci_lo":-0.1270084142230479,"ci_hi":0.17817923956345685},
+{"x":4,"hist":null,"fc":-0.0020845789789694525,"ci_lo":-0.20189606878929792,"ci_hi":0.15559761366007324},
+{"x":5,"hist":null,"fc":0.03154539002018053,"ci_lo":-0.14353231797680963,"ci_hi":0.18331535103573177},
+{"x":6,"hist":null,"fc":0.023081128248826105,"ci_lo":-0.15965897248093977,"ci_hi":0.17763506675936974},
+{"x":7,"hist":null,"fc":0.019285330449443243,"ci_lo":-0.14951993508195732,"ci_hi":0.21255704014789206},
+{"x":8,"hist":null,"fc":0.0053628454366304685,"ci_lo":-0.18639475175946985,"ci_hi":0.18066469701573523},
+{"x":9,"hist":null,"fc":0.002404583635586997,"ci_lo":-0.18756051083466063,"ci_hi":0.2107087239070651},
+{"x":10,"hist":null,"fc":0.023774365421194245,"ci_lo":-0.17856159042742883,"ci_hi":0.19452964139978465},
+{"x":11,"hist":null,"fc":0.0022218016121761637,"ci_lo":-0.22879889356503377,"ci_hi":0.21567802835084773},
+{"x":12,"hist":null,"fc":0.009185752025277624,"ci_lo":-0.1989126724363553,"ci_hi":0.22312271258101563}];
+    const series = [{"name":"Posterior mean","color":"#1f77b4","key":"fc","dash":""}];
     const bands = [{"lo_key":"ci_lo","hi_key":"ci_hi","color":"#1f77b4","alpha":0.15}];
     const refLines = [];
 
-    const container = d3.select('#lp_fc_89');
+    const container = d3.select('#bvar_fc_76');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;
@@ -208,21 +210,23 @@ function hideTip() { tooltip.style('opacity',0); }
 })();
 
 (function() {
-    const data = [{"x":1,"hist":null,"fc":5.827009483486117,"ci_lo":4.925817669318212,"ci_hi":6.728201297654023},
-{"x":2,"hist":null,"fc":5.792265315851752,"ci_lo":4.381114461376105,"ci_hi":7.2034161703274},
-{"x":3,"hist":null,"fc":6.201258863559336,"ci_lo":4.577429986005822,"ci_hi":7.82508774111285},
-{"x":4,"hist":null,"fc":6.160807542925214,"ci_lo":4.718356708581423,"ci_hi":7.603258377269006},
-{"x":5,"hist":null,"fc":6.821773789774765,"ci_lo":5.146250430718643,"ci_hi":8.497297148830887},
-{"x":6,"hist":null,"fc":8.067181177595655,"ci_lo":6.6661427000782805,"ci_hi":9.46821965511303},
-{"x":7,"hist":null,"fc":8.592387404367908,"ci_lo":6.885766276781034,"ci_hi":10.299008531954783},
-{"x":8,"hist":null,"fc":9.21026693141137,"ci_lo":7.687256599924025,"ci_hi":10.733277262898715},
-{"x":9,"hist":null,"fc":8.546218826258265,"ci_lo":7.210737247746204,"ci_hi":9.881700404770326},
-{"x":10,"hist":null,"fc":9.030461253294167,"ci_lo":7.572767562944666,"ci_hi":10.488154943643668}];
-    const series = [{"name":"LP Forecast","color":"#1f77b4","key":"fc","dash":""}];
+    const data = [{"x":1,"hist":null,"fc":-0.04924760607232565,"ci_lo":-0.270243285222122,"ci_hi":0.2141269564996542},
+{"x":2,"hist":null,"fc":-0.013262915891342259,"ci_lo":-0.37967106235104137,"ci_hi":0.31531276269605324},
+{"x":3,"hist":null,"fc":0.05964671814920134,"ci_lo":-0.32682902403640973,"ci_hi":0.4112600351137375},
+{"x":4,"hist":null,"fc":-0.10003728310897717,"ci_lo":-0.5724904004653519,"ci_hi":0.7071079174708376},
+{"x":5,"hist":null,"fc":-0.0667457943154489,"ci_lo":-0.8226149779335233,"ci_hi":0.41143373652040266},
+{"x":6,"hist":null,"fc":-0.024468020507363825,"ci_lo":-0.8635093005964236,"ci_hi":0.7479016563872317},
+{"x":7,"hist":null,"fc":-0.15816675120460186,"ci_lo":-0.8519696960600206,"ci_hi":0.7747708464589322},
+{"x":8,"hist":null,"fc":-0.0617083607850463,"ci_lo":-0.9798259636839282,"ci_hi":0.636080185706548},
+{"x":9,"hist":null,"fc":-0.10427339680298361,"ci_lo":-1.4224613787803024,"ci_hi":0.6029200264031616},
+{"x":10,"hist":null,"fc":-0.06639203550077968,"ci_lo":-0.8984776763540202,"ci_hi":0.4771747521263595},
+{"x":11,"hist":null,"fc":-0.1097107728859635,"ci_lo":-1.0501711427882443,"ci_hi":0.680438142409308},
+{"x":12,"hist":null,"fc":-0.05287436311627094,"ci_lo":-1.650884198856867,"ci_hi":0.9747347855504412}];
+    const series = [{"name":"Posterior mean","color":"#1f77b4","key":"fc","dash":""}];
     const bands = [{"lo_key":"ci_lo","hi_key":"ci_hi","color":"#1f77b4","alpha":0.15}];
     const refLines = [];
 
-    const container = d3.select('#lp_fc_90');
+    const container = d3.select('#bvar_fc_77');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;
@@ -317,21 +321,23 @@ function hideTip() { tooltip.style('opacity',0); }
 })();
 
 (function() {
-    const data = [{"x":1,"hist":null,"fc":3.347482244934291,"ci_lo":1.7794779768152196,"ci_hi":4.915486513053362},
-{"x":2,"hist":null,"fc":3.3310160110824376,"ci_lo":1.4878106196432472,"ci_hi":5.174221402521628},
-{"x":3,"hist":null,"fc":3.3246964031631916,"ci_lo":1.2107908874404978,"ci_hi":5.438601918885885},
-{"x":4,"hist":null,"fc":2.281468673268301,"ci_lo":-0.10800682854629251,"ci_hi":4.670944175082894},
-{"x":5,"hist":null,"fc":3.428198512086656,"ci_lo":1.1927530241653481,"ci_hi":5.663644000007963},
-{"x":6,"hist":null,"fc":3.650442079078157,"ci_lo":1.607440208887886,"ci_hi":5.693443949268428},
-{"x":7,"hist":null,"fc":4.270655451241242,"ci_lo":1.1969536260105946,"ci_hi":7.344357276471889},
-{"x":8,"hist":null,"fc":5.304117167230209,"ci_lo":2.472611848638639,"ci_hi":8.135622485821779},
-{"x":9,"hist":null,"fc":5.303760102249588,"ci_lo":2.6525857277288436,"ci_hi":7.954934476770332},
-{"x":10,"hist":null,"fc":5.126976058980101,"ci_lo":3.459915317731979,"ci_hi":6.7940368002282225}];
-    const series = [{"name":"LP Forecast","color":"#1f77b4","key":"fc","dash":""}];
+    const data = [{"x":1,"hist":null,"fc":-0.00259776921676075,"ci_lo":-0.11843688495962118,"ci_hi":0.1474975410787579},
+{"x":2,"hist":null,"fc":0.018948188844173534,"ci_lo":-0.10780717305905133,"ci_hi":0.12432773904003681},
+{"x":3,"hist":null,"fc":-0.013246171247793075,"ci_lo":-0.14218729207206557,"ci_hi":0.14892203961496647},
+{"x":4,"hist":null,"fc":-0.022085767446331336,"ci_lo":-0.16891104001659063,"ci_hi":0.1593478595138343},
+{"x":5,"hist":null,"fc":-0.009541684590732302,"ci_lo":-0.13638042049646387,"ci_hi":0.15949450138510204},
+{"x":6,"hist":null,"fc":0.011754752614215441,"ci_lo":-0.1907577172010359,"ci_hi":0.1784190369010697},
+{"x":7,"hist":null,"fc":0.006867889344182915,"ci_lo":-0.1690607056751438,"ci_hi":0.22763707014732296},
+{"x":8,"hist":null,"fc":-0.009345921986377926,"ci_lo":-0.189791846629954,"ci_hi":0.17170809818574534},
+{"x":9,"hist":null,"fc":-0.010130280113755667,"ci_lo":-0.24365117669881092,"ci_hi":0.17635447945852115},
+{"x":10,"hist":null,"fc":-0.01804121982405678,"ci_lo":-0.30046853598916695,"ci_hi":0.1820602622142676},
+{"x":11,"hist":null,"fc":-0.00860089260650831,"ci_lo":-0.2149096573177579,"ci_hi":0.17088995862638584},
+{"x":12,"hist":null,"fc":-0.022242352241537283,"ci_lo":-0.29093754405976546,"ci_hi":0.15473967300842975}];
+    const series = [{"name":"Posterior mean","color":"#1f77b4","key":"fc","dash":""}];
     const bands = [{"lo_key":"ci_lo","hi_key":"ci_hi","color":"#1f77b4","alpha":0.15}];
     const refLines = [];
 
-    const container = d3.select('#lp_fc_91');
+    const container = d3.select('#bvar_fc_78');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;

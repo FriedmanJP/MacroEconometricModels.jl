@@ -112,6 +112,92 @@ function plot_result(fc::VolatilityForecast{T};
 end
 
 # =============================================================================
+# VARForecast
+# =============================================================================
+
+"""
+    plot_result(fc::VARForecast; var=nothing, ncols=0, title="", save_path=nothing)
+
+Plot VAR forecast with bootstrap CI bands.
+"""
+function plot_result(fc::VARForecast{T};
+                     var::Union{Int,Nothing}=nothing,
+                     ncols::Int=0, title::String="",
+                     save_path::Union{String,Nothing}=nothing) where {T}
+    h, n_vars = size(fc.forecast)
+    vars_to_plot = var === nothing ? (1:n_vars) : [var]
+
+    panels = _PanelSpec[]
+    for vi in vars_to_plot
+        id = _next_plot_id("var_fc")
+        ptitle = fc.varnames[vi]
+
+        data_json = _forecast_data_json(fc.forecast[:, vi], fc.ci_lower[:, vi],
+                                         fc.ci_upper[:, vi])
+
+        s_json = _series_json(["Forecast"], [_PLOT_COLORS[1]]; keys=["fc"])
+        has_ci = fc.ci_method != :none
+        bands = has_ci ?
+            "[{\"lo_key\":\"ci_lo\",\"hi_key\":\"ci_hi\",\"color\":\"$(_PLOT_COLORS[1])\",\"alpha\":$(_PLOT_CI_ALPHA)}]" : "[]"
+
+        js = _render_line_js(id, data_json, s_json;
+                             bands_json=bands, xlabel="Horizon", ylabel="Forecast")
+        push!(panels, _PanelSpec(id, ptitle, js))
+    end
+
+    if isempty(title)
+        title = fc.ci_method == :none ? "VAR Forecast" :
+                "VAR Forecast ($(fc.ci_method) CI)"
+    end
+
+    p = _make_plot(panels; title=title, ncols=ncols)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+# =============================================================================
+# BVARForecast
+# =============================================================================
+
+"""
+    plot_result(fc::BVARForecast; var=nothing, ncols=0, title="", save_path=nothing)
+
+Plot Bayesian VAR forecast with posterior credible bands.
+"""
+function plot_result(fc::BVARForecast{T};
+                     var::Union{Int,Nothing}=nothing,
+                     ncols::Int=0, title::String="",
+                     save_path::Union{String,Nothing}=nothing) where {T}
+    h, n_vars = size(fc.forecast)
+    vars_to_plot = var === nothing ? (1:n_vars) : [var]
+
+    panels = _PanelSpec[]
+    for vi in vars_to_plot
+        id = _next_plot_id("bvar_fc")
+        ptitle = fc.varnames[vi]
+
+        data_json = _forecast_data_json(fc.forecast[:, vi], fc.ci_lower[:, vi],
+                                         fc.ci_upper[:, vi])
+
+        s_json = _series_json(["Posterior mean"], [_PLOT_COLORS[1]]; keys=["fc"])
+        bands = "[{\"lo_key\":\"ci_lo\",\"hi_key\":\"ci_hi\",\"color\":\"$(_PLOT_COLORS[1])\",\"alpha\":$(_PLOT_CI_ALPHA)}]"
+
+        js = _render_line_js(id, data_json, s_json;
+                             bands_json=bands, xlabel="Horizon", ylabel="Forecast")
+        push!(panels, _PanelSpec(id, ptitle, js))
+    end
+
+    if isempty(title)
+        ci_pct = round(Int, 100 * fc.conf_level)
+        title = "Bayesian VAR Forecast ($(ci_pct)% credible interval)"
+    end
+
+    p = _make_plot(panels; title=title, ncols=ncols)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+# =============================================================================
 # VECMForecast
 # =============================================================================
 

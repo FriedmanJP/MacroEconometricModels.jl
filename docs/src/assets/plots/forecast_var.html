@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>LP Forecast (h=10, 95% CI)</title>
+<title>VAR Forecast (bootstrap CI)</title>
 <style>* { margin: 0; padding: 0; box-sizing: border-box; }
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
@@ -67,19 +67,19 @@ svg { overflow: visible; }
 </style>
 </head>
 <body>
-<div class="figure-title">LP Forecast (h=10, 95% CI)</div>
+<div class="figure-title">VAR Forecast (bootstrap CI)</div>
 <div class="panel-grid">
 <div class="panel">
-<div class="panel-title">FEDFUNDS</div>
-<div id="lp_fc_89"></div>
+<div class="panel-title">INDPRO</div>
+<div id="var_fc_73"></div>
 </div>
 <div class="panel">
 <div class="panel-title">UNRATE</div>
-<div id="lp_fc_90"></div>
+<div id="var_fc_74"></div>
 </div>
 <div class="panel">
-<div class="panel-title">GS10</div>
-<div id="lp_fc_91"></div>
+<div class="panel-title">CPI</div>
+<div id="var_fc_75"></div>
 </div>
 </div>
 
@@ -99,21 +99,23 @@ function showTip(evt, html) {
 function hideTip() { tooltip.style('opacity',0); }
 
 (function() {
-    const data = [{"x":1,"hist":null,"fc":-0.63491886775055,"ci_lo":-1.4012990526383928,"ci_hi":0.13146131713729292},
-{"x":2,"hist":null,"fc":-3.049403736964506,"ci_lo":-5.1394413971608826,"ci_hi":-0.9593660767681298},
-{"x":3,"hist":null,"fc":-4.41428348046286,"ci_lo":-7.199674726105741,"ci_hi":-1.6288922348199795},
-{"x":4,"hist":null,"fc":-5.932697500131926,"ci_lo":-9.150330519394982,"ci_hi":-2.71506448086887},
-{"x":5,"hist":null,"fc":-7.303488146750516,"ci_lo":-10.821087627162031,"ci_hi":-3.785888666339002},
-{"x":6,"hist":null,"fc":-8.099465418190197,"ci_lo":-11.796684331129496,"ci_hi":-4.402246505250899},
-{"x":7,"hist":null,"fc":-8.495139637775592,"ci_lo":-12.486190724830236,"ci_hi":-4.504088550720949},
-{"x":8,"hist":null,"fc":-9.217926575822133,"ci_lo":-12.956841553166656,"ci_hi":-5.47901159847761},
-{"x":9,"hist":null,"fc":-9.515508059395627,"ci_lo":-13.65192936061362,"ci_hi":-5.379086758177634},
-{"x":10,"hist":null,"fc":-9.161225568846614,"ci_lo":-13.616364124787097,"ci_hi":-4.706087012906131}];
-    const series = [{"name":"LP Forecast","color":"#1f77b4","key":"fc","dash":""}];
+    const data = [{"x":1,"hist":null,"fc":0.003071816398027386,"ci_lo":-0.005625196371282562,"ci_hi":0.01239912157312778},
+{"x":2,"hist":null,"fc":0.001660840271757642,"ci_lo":-0.006641116275297655,"ci_hi":0.010712293477653336},
+{"x":3,"hist":null,"fc":0.0026470960066924745,"ci_lo":-0.0064379213239563506,"ci_hi":0.012293765485781361},
+{"x":4,"hist":null,"fc":0.00031087033096470484,"ci_lo":-0.008804084853136808,"ci_hi":0.009797136568857426},
+{"x":5,"hist":null,"fc":0.0023055991516130244,"ci_lo":-0.006497053681088312,"ci_hi":0.013379912448360003},
+{"x":6,"hist":null,"fc":0.0021712650273562695,"ci_lo":-0.007144851986333665,"ci_hi":0.01258669786066959},
+{"x":7,"hist":null,"fc":0.0019783684778054687,"ci_lo":-0.0074966031394874105,"ci_hi":0.011317124888376622},
+{"x":8,"hist":null,"fc":0.0022333167975689587,"ci_lo":-0.006626222709941676,"ci_hi":0.011857369762353926},
+{"x":9,"hist":null,"fc":0.001909528764912234,"ci_lo":-0.0069766316047500465,"ci_hi":0.011603126331718493},
+{"x":10,"hist":null,"fc":0.002153720735856648,"ci_lo":-0.007292921587307613,"ci_hi":0.012919524217553045},
+{"x":11,"hist":null,"fc":0.0022684881216240346,"ci_lo":-0.0063491125420334985,"ci_hi":0.012703603481396956},
+{"x":12,"hist":null,"fc":0.0022020422173080053,"ci_lo":-0.006159579085220851,"ci_hi":0.011945342113390243}];
+    const series = [{"name":"Forecast","color":"#1f77b4","key":"fc","dash":""}];
     const bands = [{"lo_key":"ci_lo","hi_key":"ci_hi","color":"#1f77b4","alpha":0.15}];
     const refLines = [];
 
-    const container = d3.select('#lp_fc_89');
+    const container = d3.select('#var_fc_73');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;
@@ -208,21 +210,23 @@ function hideTip() { tooltip.style('opacity',0); }
 })();
 
 (function() {
-    const data = [{"x":1,"hist":null,"fc":5.827009483486117,"ci_lo":4.925817669318212,"ci_hi":6.728201297654023},
-{"x":2,"hist":null,"fc":5.792265315851752,"ci_lo":4.381114461376105,"ci_hi":7.2034161703274},
-{"x":3,"hist":null,"fc":6.201258863559336,"ci_lo":4.577429986005822,"ci_hi":7.82508774111285},
-{"x":4,"hist":null,"fc":6.160807542925214,"ci_lo":4.718356708581423,"ci_hi":7.603258377269006},
-{"x":5,"hist":null,"fc":6.821773789774765,"ci_lo":5.146250430718643,"ci_hi":8.497297148830887},
-{"x":6,"hist":null,"fc":8.067181177595655,"ci_lo":6.6661427000782805,"ci_hi":9.46821965511303},
-{"x":7,"hist":null,"fc":8.592387404367908,"ci_lo":6.885766276781034,"ci_hi":10.299008531954783},
-{"x":8,"hist":null,"fc":9.21026693141137,"ci_lo":7.687256599924025,"ci_hi":10.733277262898715},
-{"x":9,"hist":null,"fc":8.546218826258265,"ci_lo":7.210737247746204,"ci_hi":9.881700404770326},
-{"x":10,"hist":null,"fc":9.030461253294167,"ci_lo":7.572767562944666,"ci_hi":10.488154943643668}];
-    const series = [{"name":"LP Forecast","color":"#1f77b4","key":"fc","dash":""}];
+    const data = [{"x":1,"hist":null,"fc":-0.07127058398898142,"ci_lo":-0.2955686708097484,"ci_hi":0.16174112640607813},
+{"x":2,"hist":null,"fc":0.006495320916183477,"ci_lo":-0.21579786462121936,"ci_hi":0.23250047141851382},
+{"x":3,"hist":null,"fc":0.0347071085539894,"ci_lo":-0.18407776534032785,"ci_hi":0.281978961340402},
+{"x":4,"hist":null,"fc":-0.01217328272028852,"ci_lo":-0.24939810623984532,"ci_hi":0.25116572955152106},
+{"x":5,"hist":null,"fc":0.009222578434671728,"ci_lo":-0.22995898547484622,"ci_hi":0.24932625163280545},
+{"x":6,"hist":null,"fc":0.011179047132002523,"ci_lo":-0.20784858198779094,"ci_hi":0.28528928692399047},
+{"x":7,"hist":null,"fc":-0.004097130414847193,"ci_lo":-0.2733028296872698,"ci_hi":0.30102875432619464},
+{"x":8,"hist":null,"fc":0.0004111773554481148,"ci_lo":-0.24740856820339904,"ci_hi":0.24938967701132833},
+{"x":9,"hist":null,"fc":0.0009802900436967203,"ci_lo":-0.2730917777373615,"ci_hi":0.2502696568455295},
+{"x":10,"hist":null,"fc":-0.000580954053647908,"ci_lo":-0.26498875349223555,"ci_hi":0.26876264424791263},
+{"x":11,"hist":null,"fc":-0.0009839277688413499,"ci_lo":-0.23240228827929915,"ci_hi":0.27571384002041877},
+{"x":12,"hist":null,"fc":-0.0025012304072278197,"ci_lo":-0.2598233990181748,"ci_hi":0.25889615812563704}];
+    const series = [{"name":"Forecast","color":"#1f77b4","key":"fc","dash":""}];
     const bands = [{"lo_key":"ci_lo","hi_key":"ci_hi","color":"#1f77b4","alpha":0.15}];
     const refLines = [];
 
-    const container = d3.select('#lp_fc_90');
+    const container = d3.select('#var_fc_74');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;
@@ -317,21 +321,23 @@ function hideTip() { tooltip.style('opacity',0); }
 })();
 
 (function() {
-    const data = [{"x":1,"hist":null,"fc":3.347482244934291,"ci_lo":1.7794779768152196,"ci_hi":4.915486513053362},
-{"x":2,"hist":null,"fc":3.3310160110824376,"ci_lo":1.4878106196432472,"ci_hi":5.174221402521628},
-{"x":3,"hist":null,"fc":3.3246964031631916,"ci_lo":1.2107908874404978,"ci_hi":5.438601918885885},
-{"x":4,"hist":null,"fc":2.281468673268301,"ci_lo":-0.10800682854629251,"ci_hi":4.670944175082894},
-{"x":5,"hist":null,"fc":3.428198512086656,"ci_lo":1.1927530241653481,"ci_hi":5.663644000007963},
-{"x":6,"hist":null,"fc":3.650442079078157,"ci_lo":1.607440208887886,"ci_hi":5.693443949268428},
-{"x":7,"hist":null,"fc":4.270655451241242,"ci_lo":1.1969536260105946,"ci_hi":7.344357276471889},
-{"x":8,"hist":null,"fc":5.304117167230209,"ci_lo":2.472611848638639,"ci_hi":8.135622485821779},
-{"x":9,"hist":null,"fc":5.303760102249588,"ci_lo":2.6525857277288436,"ci_hi":7.954934476770332},
-{"x":10,"hist":null,"fc":5.126976058980101,"ci_lo":3.459915317731979,"ci_hi":6.7940368002282225}];
-    const series = [{"name":"LP Forecast","color":"#1f77b4","key":"fc","dash":""}];
+    const data = [{"x":1,"hist":null,"fc":-0.0005562547820918162,"ci_lo":-0.005756209373257345,"ci_hi":0.004047033167125431},
+{"x":2,"hist":null,"fc":0.0015163893238150212,"ci_lo":-0.0025365039209959525,"ci_hi":0.006627183957754989},
+{"x":3,"hist":null,"fc":-7.266520260882205e-5,"ci_lo":-0.005284166837097298,"ci_hi":0.004735763492036249},
+{"x":4,"hist":null,"fc":0.00029605598538087264,"ci_lo":-0.004939558977884709,"ci_hi":0.0051970633568126845},
+{"x":5,"hist":null,"fc":-0.0006516163253897437,"ci_lo":-0.005333591566320349,"ci_hi":0.004177342378712701},
+{"x":6,"hist":null,"fc":-0.00019286564237666254,"ci_lo":-0.004992118670609922,"ci_hi":0.006000599805165914},
+{"x":7,"hist":null,"fc":0.00036353199410054087,"ci_lo":-0.005337167460009687,"ci_hi":0.005589215119928314},
+{"x":8,"hist":null,"fc":0.00011445776062872437,"ci_lo":-0.005890132040097808,"ci_hi":0.005345490051633459},
+{"x":9,"hist":null,"fc":-0.00012178900126080035,"ci_lo":-0.004821704137574479,"ci_hi":0.004822855498117017},
+{"x":10,"hist":null,"fc":-0.00012295008154737078,"ci_lo":-0.005944486904177888,"ci_hi":0.0050459306423058445},
+{"x":11,"hist":null,"fc":1.5372803776489636e-6,"ci_lo":-0.0046821319932639615,"ci_hi":0.005068618281138698},
+{"x":12,"hist":null,"fc":7.250094409381944e-5,"ci_lo":-0.004462761842773523,"ci_hi":0.005676827957353001}];
+    const series = [{"name":"Forecast","color":"#1f77b4","key":"fc","dash":""}];
     const bands = [{"lo_key":"ci_lo","hi_key":"ci_hi","color":"#1f77b4","alpha":0.15}];
     const refLines = [];
 
-    const container = d3.select('#lp_fc_91');
+    const container = d3.select('#var_fc_75');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;

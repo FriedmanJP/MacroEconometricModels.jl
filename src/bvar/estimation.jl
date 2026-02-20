@@ -336,3 +336,99 @@ end
 
 # Accessor
 varnames(post::BVARPosterior) = post.varnames
+
+# =============================================================================
+# BVAR Forecasting
+# =============================================================================
+
+"""
+    forecast(post::BVARPosterior, h; reps=nothing, conf_level=0.95) -> BVARForecast{T}
+
+Forecast from Bayesian VAR using posterior draws.
+
+For each posterior draw, iterates the VAR recursion forward `h` steps.
+Returns posterior mean forecast with credible intervals from the
+distribution of forecast paths across draws.
+
+# Arguments
+- `post`: BVAR posterior
+- `h`: Forecast horizon
+
+# Keyword Arguments
+- `reps`: Number of posterior draws to use (default: all)
+- `conf_level`: Credible interval level (default: 0.95)
+
+# Returns
+`BVARForecast{T}` with posterior mean forecast and credible intervals.
+
+# Example
+```julia
+post = estimate_bvar(Y, 4; n_draws=1000)
+fc = forecast(post, 12)
+```
+"""
+function forecast(post::BVARPosterior{T}, h::Int;
+                  reps::Union{Nothing,Int}=nothing,
+                  conf_level::Real=0.95) where {T}
+    h < 1 && throw(ArgumentError("Forecast horizon must be positive"))
+
+    n, p = post.n, post.p
+    n_use = reps === nothing ? post.n_draws : min(reps, post.n_draws)
+
+    sim = Array{T,3}(undef, n_use, h, n)
+    valid = 0
+
+    for s in 1:n_use
+        B_s = post.B_draws[s, :, :]   # k × n
+        Sigma_s = post.Sigma_draws[s, :, :]  # n × n
+
+        # Skip non-stationary draws
+        A_list = extract_ar_coefficients(B_s, n, p)
+        companion = zeros(T, n * p, n * p)
+        for lag in 1:p
+            companion[1:n, (lag-1)*n+1:lag*n] = A_list[lag]
+        end
+        if p > 1
+            companion[n+1:end, 1:n*(p-1)] = Matrix{T}(I, n*(p-1), n*(p-1))
+        end
+        max_eig = maximum(abs.(eigvals(companion)))
+        max_eig >= one(T) && continue
+
+        valid += 1
+        intercept = @view B_s[1, :]
+        history = copy(post.data[(end - p + 1):end, :])
+
+        # Draw shocks from posterior covariance
+        L = safe_cholesky(Sigma_s)
+
+        @inbounds for step in 1:h
+            y_hat = copy(intercept)
+            for lag in 1:p
+                y_hat .+= A_list[lag] * @view(history[end - lag + 1, :])
+            end
+            y_hat .+= L * randn(T, n)
+            sim[valid, step, :] = y_hat
+            history = vcat(@view(history[2:end, :]), y_hat')
+        end
+    end
+
+    valid == 0 && error("All posterior draws are non-stationary")
+    valid < n_use ÷ 2 && @warn "$(n_use - valid)/$n_use posterior draws non-stationary, skipped"
+
+    # Compute posterior mean and credible intervals from valid draws
+    sim_valid = @view sim[1:valid, :, :]
+    alpha_half = (1 - T(conf_level)) / 2
+
+    point = Matrix{T}(undef, h, n)
+    ci_lower = Matrix{T}(undef, h, n)
+    ci_upper = Matrix{T}(undef, h, n)
+
+    @inbounds for hi in 1:h, j in 1:n
+        d = @view sim_valid[:, hi, j]
+        point[hi, j] = mean(d)
+        ci_lower[hi, j] = quantile(d, alpha_half)
+        ci_upper[hi, j] = quantile(d, 1 - alpha_half)
+    end
+
+    BVARForecast{T}(point, ci_lower, ci_upper, h, T(conf_level), post.varnames)
+end
