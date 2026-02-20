@@ -98,7 +98,7 @@ Uses `process_posterior_samples` and `compute_posterior_quantiles` from bayesian
 function fevd(post::BVARPosterior, horizon::Int;
     method::Symbol=:cholesky, data::AbstractMatrix=Matrix{Float64}(undef, 0, 0),
     check_func=nothing, narrative_check=nothing, quantiles::Vector{<:Real}=[0.16, 0.5, 0.84],
-    threaded::Bool=false,
+    threaded::Bool=false, point_estimate::Symbol=:median,
     transition_var::Union{Nothing,AbstractVector}=nothing,
     regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing
 )
@@ -131,7 +131,7 @@ function fevd(post::BVARPosterior, horizon::Int;
     # Compute quantiles using shared utility
     q_vec = ET.(quantiles)
     use_threaded = threaded || (samples * horizon * n * n > 100000)
-    fevd_q, fevd_m = compute_posterior_quantiles(all_fevds, q_vec; threaded=use_threaded)
+    fevd_q, fevd_m = compute_posterior_quantiles(all_fevds, q_vec; threaded=use_threaded, central=point_estimate)
 
     BayesianFEVD{ET}(fevd_q, fevd_m, horizon, post.varnames, post.varnames, q_vec)
 end

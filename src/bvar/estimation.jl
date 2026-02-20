@@ -342,12 +342,12 @@ varnames(post::BVARPosterior) = post.varnames
 # =============================================================================
 
 """
-    forecast(post::BVARPosterior, h; reps=nothing, conf_level=0.95) -> BVARForecast{T}
+    forecast(post::BVARPosterior, h; reps=nothing, conf_level=0.95, point_estimate=:median) -> BVARForecast{T}
 
 Forecast from Bayesian VAR using posterior draws.
 
 For each posterior draw, iterates the VAR recursion forward `h` steps.
-Returns posterior mean forecast with credible intervals from the
+Returns posterior median forecast with credible intervals from the
 distribution of forecast paths across draws.
 
 # Arguments
@@ -357,6 +357,7 @@ distribution of forecast paths across draws.
 # Keyword Arguments
 - `reps`: Number of posterior draws to use (default: all)
 - `conf_level`: Credible interval level (default: 0.95)
+- `point_estimate`: `:median` (default) or `:mean` for central tendency
 
 # Returns
 `BVARForecast{T}` with posterior mean forecast and credible intervals.
@@ -369,7 +370,8 @@ fc = forecast(post, 12)
 """
 function forecast(post::BVARPosterior{T}, h::Int;
                   reps::Union{Nothing,Int}=nothing,
-                  conf_level::Real=0.95) where {T}
+                  conf_level::Real=0.95,
+                  point_estimate::Symbol=:median) where {T}
     h < 1 && throw(ArgumentError("Forecast horizon must be positive"))
 
     n, p = post.n, post.p
@@ -415,9 +417,10 @@ function forecast(post::BVARPosterior{T}, h::Int;
     valid == 0 && error("All posterior draws are non-stationary")
     valid < n_use ÷ 2 && @warn "$(n_use - valid)/$n_use posterior draws non-stationary, skipped"
 
-    # Compute posterior mean and credible intervals from valid draws
+    # Compute posterior central tendency and credible intervals from valid draws
     sim_valid = @view sim[1:valid, :, :]
     alpha_half = (1 - T(conf_level)) / 2
+    _central = point_estimate == :median ? median : mean
 
     point = Matrix{T}(undef, h, n)
     ci_lower = Matrix{T}(undef, h, n)
@@ -425,10 +428,10 @@ function forecast(post::BVARPosterior{T}, h::Int;
 
     @inbounds for hi in 1:h, j in 1:n
         d = @view sim_valid[:, hi, j]
-        point[hi, j] = mean(d)
+        point[hi, j] = _central(d)
         ci_lower[hi, j] = quantile(d, alpha_half)
         ci_upper[hi, j] = quantile(d, 1 - alpha_half)
     end
 
-    BVARForecast{T}(point, ci_lower, ci_upper, h, T(conf_level), post.varnames)
+    BVARForecast{T}(point, ci_lower, ci_upper, h, T(conf_level), point_estimate, post.varnames)
 end

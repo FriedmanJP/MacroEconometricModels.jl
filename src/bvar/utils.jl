@@ -141,7 +141,8 @@ compute_posterior_quantiles!(q_out, m_out, samples, [0.16, 0.5, 0.84])
 ```
 """
 function compute_posterior_quantiles!(quantile_out::AbstractArray{T}, mean_out::AbstractArray{T},
-                                       samples::AbstractArray{T}, q_vec::AbstractVector) where {T<:AbstractFloat}
+                                       samples::AbstractArray{T}, q_vec::AbstractVector;
+                                       central::Symbol=:mean) where {T<:AbstractFloat}
     other_dims = size(samples)[2:end]
     n_q = length(q_vec)
 
@@ -150,7 +151,7 @@ function compute_posterior_quantiles!(quantile_out::AbstractArray{T}, mean_out::
 
     @inbounds for idx in CartesianIndices(other_dims)
         d = @view samples[:, idx]
-        mean_out[idx] = mean(d)
+        mean_out[idx] = central == :median ? median(d) : mean(d)
         for (qi, q) in enumerate(q_vec)
             quantile_out[idx, qi] = quantile(d, q)
         end
@@ -169,7 +170,8 @@ Uses `Threads.@threads` to parallelize over the index space.
 Recommended when `prod(size(samples)[2:end]) > 1000`.
 """
 function compute_posterior_quantiles_threaded!(quantile_out::AbstractArray{T}, mean_out::AbstractArray{T},
-                                                samples::AbstractArray{T}, q_vec::AbstractVector) where {T<:AbstractFloat}
+                                                samples::AbstractArray{T}, q_vec::AbstractVector;
+                                                central::Symbol=:mean) where {T<:AbstractFloat}
     other_dims = size(samples)[2:end]
     n_q = length(q_vec)
 
@@ -182,7 +184,7 @@ function compute_posterior_quantiles_threaded!(quantile_out::AbstractArray{T}, m
     Threads.@threads for idx in indices
         @inbounds begin
             d = @view samples[:, idx]
-            mean_out[idx] = mean(d)
+            mean_out[idx] = central == :median ? median(d) : mean(d)
             for (qi, q) in enumerate(q_vec)
                 quantile_out[idx, qi] = quantile(d, q)
             end
@@ -208,7 +210,8 @@ Compute quantiles and means from posterior samples (allocating version).
 - `means`: Array of shape (other_dims...)
 """
 function compute_posterior_quantiles(samples::AbstractArray{T}, q_vec::AbstractVector;
-                                      threaded::Bool=false) where {T<:AbstractFloat}
+                                      threaded::Bool=false,
+                                      central::Symbol=:mean) where {T<:AbstractFloat}
     other_dims = size(samples)[2:end]
     n_q = length(q_vec)
     q_vec_T = T.(q_vec)
@@ -217,9 +220,9 @@ function compute_posterior_quantiles(samples::AbstractArray{T}, q_vec::AbstractV
     mean_out = zeros(T, other_dims...)
 
     if threaded && prod(other_dims) > 1000
-        compute_posterior_quantiles_threaded!(quantile_out, mean_out, samples, q_vec_T)
+        compute_posterior_quantiles_threaded!(quantile_out, mean_out, samples, q_vec_T; central=central)
     else
-        compute_posterior_quantiles!(quantile_out, mean_out, samples, q_vec_T)
+        compute_posterior_quantiles!(quantile_out, mean_out, samples, q_vec_T; central=central)
     end
 
     quantile_out, mean_out

@@ -201,9 +201,10 @@ end
 # =============================================================================
 
 """
-    irf(post::BVARPosterior, horizon; method=:cholesky, quantiles=[0.16, 0.5, 0.84], ...)
+    irf(post::BVARPosterior, horizon; method=:cholesky, quantiles=[0.16, 0.5, 0.84], point_estimate=:median, ...)
 
 Compute Bayesian IRFs from posterior draws with posterior quantiles.
+Uses posterior median as central tendency by default (pass `point_estimate=:mean` for mean).
 
 # Methods
 `:cholesky`, `:sign`, `:narrative`, `:long_run`,
@@ -219,7 +220,7 @@ Uses `process_posterior_samples` and `compute_posterior_quantiles` from bayesian
 function irf(post::BVARPosterior, horizon::Int;
     method::Symbol=:cholesky, data::AbstractMatrix=Matrix{Float64}(undef, 0, 0),
     check_func=nothing, narrative_check=nothing, quantiles::Vector{<:Real}=[0.16, 0.5, 0.84],
-    threaded::Bool=false,
+    threaded::Bool=false, point_estimate::Symbol=:median,
     transition_var::Union{Nothing,AbstractVector}=nothing,
     regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing
 )
@@ -243,7 +244,7 @@ function irf(post::BVARPosterior, horizon::Int;
     # Compute quantiles using shared utility (threaded for large arrays)
     q_vec = ET.(quantiles)
     use_threaded = threaded || (samples * horizon * n * n > 100000)
-    irf_q, irf_m = compute_posterior_quantiles(all_irfs, q_vec; threaded=use_threaded)
+    irf_q, irf_m = compute_posterior_quantiles(all_irfs, q_vec; threaded=use_threaded, central=point_estimate)
 
     BayesianImpulseResponse{ET}(irf_q, irf_m, horizon, post.varnames, post.varnames, q_vec, all_irfs)
 end

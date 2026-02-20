@@ -60,7 +60,7 @@ end
 
 Bayesian VAR forecast with posterior credible intervals.
 
-Fields: forecast (h×n posterior mean), ci_lower (h×n), ci_upper (h×n), horizon, conf_level, varnames.
+Fields: forecast (h×n), ci_lower (h×n), ci_upper (h×n), horizon, conf_level, point_estimate, varnames.
 """
 struct BVARForecast{T<:AbstractFloat} <: AbstractForecastResult{T}
     forecast::Matrix{T}
@@ -68,6 +68,7 @@ struct BVARForecast{T<:AbstractFloat} <: AbstractForecastResult{T}
     ci_upper::Matrix{T}
     horizon::Int
     conf_level::T
+    point_estimate::Symbol
     varnames::Vector{String}
 end
 
@@ -99,7 +100,7 @@ function Base.show(io::IO, fc::BVARForecast{T}) where {T}
         end
         _pretty_table(io, data;
             title = "$(fc.varnames[vi])",
-            column_labels = ["h", "Post. Mean", "$(lo_pct)%", "$(hi_pct)%"],
+            column_labels = ["h", fc.point_estimate == :median ? "Post. Median" : "Post. Mean", "$(lo_pct)%", "$(hi_pct)%"],
             alignment = [:r, :r, :r, :r],
         )
     end

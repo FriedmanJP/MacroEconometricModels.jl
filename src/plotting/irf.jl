@@ -112,7 +112,7 @@ function plot_result(r::BayesianImpulseResponse{T};
             id = _next_plot_id("birf")
             ptitle = "$(r.variables[vi]) ← $(r.shocks[si])"
 
-            # Use mean as main line; widest quantile pair as band
+            # Use central tendency as main line; widest quantile pair as band
             vals = r.mean[1:H, vi, si]
             ci_lo = r.quantiles[1:H, vi, si, 1]      # lowest quantile
             ci_hi = r.quantiles[1:H, vi, si, nq]      # highest quantile
@@ -120,7 +120,7 @@ function plot_result(r::BayesianImpulseResponse{T};
 
             lo_q = round(Int, 100 * r.quantile_levels[1])
             hi_q = round(Int, 100 * r.quantile_levels[nq])
-            s_json = _series_json(["Posterior mean"], [_PLOT_COLORS[1]]; keys=["irf"])
+            s_json = _series_json(["Posterior median"], [_PLOT_COLORS[1]]; keys=["irf"])
             bands = "[{\"lo_key\":\"ci_lo\",\"hi_key\":\"ci_hi\",\"color\":\"$(_PLOT_COLORS[1])\",\"alpha\":$(_PLOT_CI_ALPHA)}]"
             refs = "[{\"value\":0,\"color\":\"#999\",\"dash\":\"4,3\"}]"
 

@@ -179,7 +179,8 @@ function plot_result(fc::BVARForecast{T};
         data_json = _forecast_data_json(fc.forecast[:, vi], fc.ci_lower[:, vi],
                                          fc.ci_upper[:, vi])
 
-        s_json = _series_json(["Posterior mean"], [_PLOT_COLORS[1]]; keys=["fc"])
+        pe_label = fc.point_estimate == :median ? "Posterior median" : "Posterior mean"
+        s_json = _series_json([pe_label], [_PLOT_COLORS[1]]; keys=["fc"])
         bands = "[{\"lo_key\":\"ci_lo\",\"hi_key\":\"ci_hi\",\"color\":\"$(_PLOT_COLORS[1])\",\"alpha\":$(_PLOT_CI_ALPHA)}]"
 
         js = _render_line_js(id, data_json, s_json;

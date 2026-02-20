@@ -334,7 +334,7 @@ hd = historical_decomposition(post, 198)
 """
 function historical_decomposition(post::BVARPosterior, horizon::Int=0;
     data::AbstractMatrix=Matrix{Float64}(undef, 0, 0), method::Symbol=:cholesky,
-    quantiles::Vector{<:Real}=[0.16, 0.5, 0.84],
+    quantiles::Vector{<:Real}=[0.16, 0.5, 0.84], point_estimate::Symbol=:median,
     check_func=nothing, narrative_check=nothing,
     transition_var::Union{Nothing,AbstractVector}=nothing,
     regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing
@@ -390,21 +390,22 @@ function historical_decomposition(post::BVARPosterior, horizon::Int=0;
     initial_m = zeros(ET, T_eff, n)
     shocks_m = zeros(ET, T_eff, n)
 
+    _central = point_estimate == :median ? median : mean
     @inbounds for t in 1:T_eff
         for i in 1:n
             # Initial conditions
             d_init = @view all_initial[1:valid_count, t, i]
             initial_q[t, i, :] = quantile(d_init, q_vec)
-            initial_m[t, i] = mean(d_init)
+            initial_m[t, i] = _central(d_init)
 
             # Shocks
             d_shock = @view all_shocks[1:valid_count, t, i]
-            shocks_m[t, i] = mean(d_shock)
+            shocks_m[t, i] = _central(d_shock)
 
             for j in 1:n
                 d = @view all_contributions[1:valid_count, t, i, j]
                 contrib_q[t, i, j, :] = quantile(d, q_vec)
-                contrib_m[t, i, j] = mean(d)
+                contrib_m[t, i, j] = _central(d)
             end
         end
     end
