@@ -71,15 +71,15 @@ svg { overflow: visible; }
 <div class="panel-grid">
 <div class="panel">
 <div class="panel-title">Returns</div>
-<div id="vol_ret_81"></div>
+<div id="vol_ret_87"></div>
 </div>
 <div class="panel">
 <div class="panel-title">Conditional Volatility</div>
-<div id="vol_sig_82"></div>
+<div id="vol_sig_88"></div>
 </div>
 <div class="panel">
 <div class="panel-title">Standardized Residuals</div>
-<div id="vol_zr_83"></div>
+<div id="vol_zr_89"></div>
 </div>
 </div>
 
@@ -354,7 +354,7 @@ function hideTip() { tooltip.style('opacity',0); }
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
 
-    const container = d3.select('#vol_ret_81');
+    const container = d3.select('#vol_ret_87');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;
@@ -704,7 +704,7 @@ function hideTip() { tooltip.style('opacity',0); }
     const bands = [];
     const refLines = [];
 
-    const container = d3.select('#vol_sig_82');
+    const container = d3.select('#vol_sig_88');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;
@@ -1054,7 +1054,7 @@ function hideTip() { tooltip.style('opacity',0); }
     const bands = [];
     const refLines = [{"value":2,"color":"#d62728","dash":"4,3"},{"value":-2,"color":"#d62728","dash":"4,3"},{"value":0,"color":"#999","dash":"4,3"}];
 
-    const container = d3.select('#vol_zr_83');
+    const container = d3.select('#vol_zr_89');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;
