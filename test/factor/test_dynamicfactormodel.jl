@@ -22,15 +22,7 @@ using Statistics
 using Random
 using MacroEconometricModels
 
-# Use MacroEconometricModels versions of StatsAPI functions
-const residuals = MacroEconometricModels.residuals
-const r2 = MacroEconometricModels.r2
-const predict = MacroEconometricModels.predict
-const nobs = MacroEconometricModels.nobs
-const dof = MacroEconometricModels.dof
-const loglikelihood = MacroEconometricModels.loglikelihood
-const aic = MacroEconometricModels.aic
-const bic = MacroEconometricModels.bic
+# StatsAPI functions are exported by MacroEconometricModels via `using`
 
 @testset "Dynamic Factor Model Tests" begin
 

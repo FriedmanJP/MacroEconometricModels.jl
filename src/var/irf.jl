@@ -112,7 +112,7 @@ function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
                     sim_irfs[idx, :, :, :] = compute_irf(m, Q, horizon)
                 end
             end
-            n_valid = valid[]
+            n_valid = min(valid[], reps)
             n_valid < reps && @warn "Only $n_valid/$reps stationary bootstrap draws obtained after $(iter[]) iterations"
             return sim_irfs[1:max(n_valid, 1), :, :, :]
         else
@@ -157,7 +157,7 @@ function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
                     sim_irfs[idx, :, :, :] = compute_irf(m, Q, horizon)
                 end
             end
-            n_valid = valid[]
+            n_valid = min(valid[], reps)
             n_valid < reps && @warn "Only $n_valid/$reps stationary theoretical draws obtained after $(iter[]) iterations"
             return sim_irfs[1:max(n_valid, 1), :, :, :]
         else
