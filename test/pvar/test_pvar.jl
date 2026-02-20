@@ -411,9 +411,9 @@ end
     end
 
     @testset "stability from DGP" begin
-        # Use a larger panel so GMM estimates are close to the true (stationary) DGP
+        # Use FE-OLS (more numerically stable than GMM) on a large panel
         dgp_large = _make_panel_dgp(N=100, T_total=50, m=3, p=1, rng=MersenneTwister(999))
-        model_large = estimate_pvar(dgp_large.pd, 1; steps=:onestep)
+        model_large = estimate_pvar_feols(dgp_large.pd, 1)
         stab = pvar_stability(model_large)
         @test maximum(stab.moduli) < 1.0
     end
