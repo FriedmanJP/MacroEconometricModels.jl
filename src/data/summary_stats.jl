@@ -121,8 +121,12 @@ end
 
 function describe_data(d::PanelData)
     s = _compute_summary(d.data, d.varnames, d.T_obs, d.n_vars, d.frequency)
-    # Also show panel summary
-    panel_summary(stdout, d)
+    # Show panel summary (catch IOError for threaded test environments)
+    try
+        panel_summary(stdout, d)
+    catch e
+        e isa Base.IOError || rethrow()
+    end
     s
 end
 

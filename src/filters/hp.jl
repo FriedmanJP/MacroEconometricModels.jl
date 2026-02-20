@@ -126,8 +126,9 @@ function hp_filter(y::AbstractVector{T}; lambda::Real=T(1600)) where {T<:Abstrac
     end
 
     # Build and solve (I + λ D'D) τ = y via sparse Cholesky
-    A = _hp_penalty(T_obs, lam)
-    tau = Vector{T}(A \ Vector{T}(y))
+    # CHOLMOD (SuiteSparse) only supports Float64 — promote for Julia 1.10 LTS compatibility
+    A64 = _hp_penalty(T_obs, Float64(lam))
+    tau = Vector{T}(A64 \ Vector{Float64}(y))
     cyc = Vector{T}(y) .- tau
 
     HPFilterResult(tau, cyc, lam, T_obs)
