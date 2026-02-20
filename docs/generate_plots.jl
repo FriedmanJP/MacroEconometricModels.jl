@@ -201,9 +201,17 @@ function main()
     # -------------------------------------------------------------------
     # 19. Factor Forecast
     # -------------------------------------------------------------------
-    fm = estimate_dynamic_factors(X20, 2, 1)
-    fc_fm = forecast(fm, 10)
-    save("forecast_factor.html", plot_result(fc_fm))
+    # Use raw-level FRED-MD interest rate/spread panel (no tcode transform)
+    # for visually meaningful factor forecasts with non-zero magnitudes
+    _fac_vars = ["FEDFUNDS", "GS1", "GS10", "AAA", "BAA",
+                 "T5YFFM", "T10YFFM", "AAAFFM", "BAAFFM"]
+    _fac_avail = [v for v in _fac_vars if v in varnames(fred_gm)]
+    _X_fac = to_matrix(fred_gm[:, _fac_avail])
+    _fac_good = [j for j in 1:size(_X_fac,2) if !any(isnan, _X_fac[:,j])]
+    _X_fac = _X_fac[:, _fac_good]
+    fm = estimate_dynamic_factors(_X_fac, 3, 2; standardize=true)
+    fc_fm = forecast(fm, 12)
+    save("forecast_factor.html", plot_result(fc_fm; n_obs=4))
 
     # -------------------------------------------------------------------
     # 20. LP Forecast
