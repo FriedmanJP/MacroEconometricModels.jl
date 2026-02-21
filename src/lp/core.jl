@@ -39,18 +39,20 @@ using LinearAlgebra, Statistics, Distributions
 """
     create_cov_estimator(cov_type::Symbol, ::Type{T}; bandwidth::Int=0) where T
 
-Create covariance estimator from symbol specification.
-Eliminates repeated if/else patterns across LP variants.
+Create covariance estimator from symbol specification using the global registry.
 """
 function create_cov_estimator(cov_type::Symbol, ::Type{T}; bandwidth::Int=0) where {T<:AbstractFloat}
-    if cov_type == :newey_west
+    EstType = get(_COV_REGISTRY, cov_type, nothing)
+    if EstType === nothing
+        valid = join(sort(collect(keys(_COV_REGISTRY))), ", ")
+        throw(ArgumentError("Unknown cov_type :$cov_type. Available: $valid"))
+    end
+    if EstType <: NeweyWestEstimator
         NeweyWestEstimator{T}(bandwidth, :bartlett, false)
-    elseif cov_type == :white
-        WhiteEstimator()
-    elseif cov_type == :driscoll_kraay
+    elseif EstType <: DriscollKraayEstimator
         DriscollKraayEstimator{T}(bandwidth, :bartlett)
     else
-        throw(ArgumentError("cov_type must be :newey_west, :white, or :driscoll_kraay"))
+        EstType()
     end
 end
 

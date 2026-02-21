@@ -597,3 +597,34 @@ function long_run_covariance(X::AbstractMatrix{T}; bandwidth::Int=0,
 
     Matrix(S)
 end
+
+# =============================================================================
+# Covariance Estimator Registry
+# =============================================================================
+
+"""
+    _COV_REGISTRY
+
+Registry mapping Symbol names to covariance estimator types.
+Use `register_cov_estimator!` to add custom estimators.
+"""
+const _COV_REGISTRY = Dict{Symbol, Type}(
+    :newey_west => NeweyWestEstimator,
+    :white => WhiteEstimator,
+    :driscoll_kraay => DriscollKraayEstimator,
+)
+
+"""
+    register_cov_estimator!(name::Symbol, ::Type{T}) where {T<:AbstractCovarianceEstimator}
+
+Register a custom covariance estimator type for use in LP and other estimators.
+
+# Example
+```julia
+struct MyCovEstimator <: AbstractCovarianceEstimator end
+register_cov_estimator!(:my_cov, MyCovEstimator)
+```
+"""
+function register_cov_estimator!(name::Symbol, ::Type{E}) where {E<:AbstractCovarianceEstimator}
+    _COV_REGISTRY[name] = E
+end

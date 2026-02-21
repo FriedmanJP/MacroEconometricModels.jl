@@ -1559,4 +1559,22 @@ using Random
             @test pred + res ≈ Y_pooled
         end
     end
+
+    @testset "Covariance estimator registry" begin
+        # Built-in estimators work through registry
+        est_nw = MacroEconometricModels.create_cov_estimator(:newey_west, Float64)
+        @test est_nw isa NeweyWestEstimator
+        est_w = MacroEconometricModels.create_cov_estimator(:white, Float64)
+        @test est_w isa WhiteEstimator
+        est_dk = MacroEconometricModels.create_cov_estimator(:driscoll_kraay, Float64)
+        @test est_dk isa DriscollKraayEstimator
+
+        # Unknown estimator gives informative error
+        @test_throws ArgumentError MacroEconometricModels.create_cov_estimator(:unknown, Float64)
+
+        # Custom estimator can be registered and cleaned up
+        register_cov_estimator!(:newey_west_test, NeweyWestEstimator)
+        @test haskey(MacroEconometricModels._COV_REGISTRY, :newey_west_test)
+        delete!(MacroEconometricModels._COV_REGISTRY, :newey_west_test)
+    end
 end

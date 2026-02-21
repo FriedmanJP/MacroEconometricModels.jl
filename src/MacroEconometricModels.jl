@@ -462,6 +462,7 @@ export structural_lp
 # HAC covariance estimators
 export newey_west, white_vcov, driscoll_kraay, optimal_bandwidth_nw
 export robust_vcov, long_run_variance, long_run_covariance
+export register_cov_estimator!
 
 # LP-IV (Stock & Watson 2018)
 export estimate_lp_iv, lp_iv_irf
