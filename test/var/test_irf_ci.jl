@@ -44,7 +44,7 @@ using Statistics
 
     @testset "Cholesky - Bootstrap CI" begin
         Random.seed!(12346)
-        irf_boot = irf(model, H; method=:cholesky, ci_type=:bootstrap, reps=200, conf_level=0.90)
+        irf_boot = irf(model, H; method=:cholesky, ci_type=:bootstrap, reps=(FAST ? 100 : 200), conf_level=0.90)
 
         @test irf_boot isa ImpulseResponse
         @test irf_boot.ci_type == :bootstrap
@@ -60,7 +60,7 @@ using Statistics
 
     @testset "Cholesky - Theoretical CI" begin
         Random.seed!(12347)
-        irf_theo = irf(model, H; method=:cholesky, ci_type=:theoretical, reps=500, conf_level=0.90)
+        irf_theo = irf(model, H; method=:cholesky, ci_type=:theoretical, reps=(FAST ? 200 : 500), conf_level=0.90)
 
         @test irf_theo isa ImpulseResponse
         @test irf_theo.ci_type == :theoretical
@@ -82,8 +82,8 @@ using Statistics
 
     @testset "Cholesky - Theoretical vs Bootstrap consistency" begin
         Random.seed!(12348)
-        irf_boot = irf(model, H; method=:cholesky, ci_type=:bootstrap, reps=500, conf_level=0.90)
-        irf_theo = irf(model, H; method=:cholesky, ci_type=:theoretical, reps=500, conf_level=0.90)
+        irf_boot = irf(model, H; method=:cholesky, ci_type=:bootstrap, reps=(FAST ? 200 : 500), conf_level=0.90)
+        irf_theo = irf(model, H; method=:cholesky, ci_type=:theoretical, reps=(FAST ? 200 : 500), conf_level=0.90)
 
         # Point estimates should be identical (same model, same Q)
         @test irf_boot.values ≈ irf_theo.values
@@ -97,8 +97,8 @@ using Statistics
 
     @testset "Cholesky - Confidence level affects width" begin
         Random.seed!(12349)
-        irf_90 = irf(model, H; method=:cholesky, ci_type=:bootstrap, reps=200, conf_level=0.90)
-        irf_68 = irf(model, H; method=:cholesky, ci_type=:bootstrap, reps=200, conf_level=0.68)
+        irf_90 = irf(model, H; method=:cholesky, ci_type=:bootstrap, reps=(FAST ? 100 : 200), conf_level=0.90)
+        irf_68 = irf(model, H; method=:cholesky, ci_type=:bootstrap, reps=(FAST ? 100 : 200), conf_level=0.68)
 
         width_90 = mean(irf_90.ci_upper .- irf_90.ci_lower)
         width_68 = mean(irf_68.ci_upper .- irf_68.ci_lower)
@@ -120,7 +120,7 @@ using Statistics
 
     @testset "Long-run - Bootstrap CI" begin
         Random.seed!(12350)
-        irf_lr = irf(model, H; method=:long_run, ci_type=:bootstrap, reps=100, conf_level=0.90)
+        irf_lr = irf(model, H; method=:long_run, ci_type=:bootstrap, reps=(FAST ? 50 : 100), conf_level=0.90)
 
         @test irf_lr isa ImpulseResponse
         @test size(irf_lr.values) == (H, n, n)
@@ -129,7 +129,7 @@ using Statistics
 
     @testset "Long-run - Theoretical CI" begin
         Random.seed!(12351)
-        irf_lr_theo = irf(model, H; method=:long_run, ci_type=:theoretical, reps=300, conf_level=0.90)
+        irf_lr_theo = irf(model, H; method=:long_run, ci_type=:theoretical, reps=(FAST ? 100 : 300), conf_level=0.90)
 
         @test irf_lr_theo isa ImpulseResponse
         @test all(irf_lr_theo.ci_lower .<= irf_lr_theo.ci_upper)
@@ -154,7 +154,7 @@ using Statistics
         # Sign restriction: shock 1 has positive impact on variable 1 at horizon 1
         check_fn = irf_vals -> irf_vals[1, 1, 1] > 0
 
-        irf_sign = irf(model, H; method=:sign, ci_type=:bootstrap, reps=50,
+        irf_sign = irf(model, H; method=:sign, ci_type=:bootstrap, reps=(FAST ? 20 : 50),
                        conf_level=0.90, check_func=check_fn)
 
         @test irf_sign isa ImpulseResponse
@@ -166,7 +166,7 @@ using Statistics
         Random.seed!(12353)
         check_fn = irf_vals -> irf_vals[1, 1, 1] > 0
 
-        irf_sign_theo = irf(model, H; method=:sign, ci_type=:theoretical, reps=100,
+        irf_sign_theo = irf(model, H; method=:sign, ci_type=:theoretical, reps=(FAST ? 50 : 100),
                             conf_level=0.90, check_func=check_fn)
 
         @test irf_sign_theo isa ImpulseResponse
@@ -179,7 +179,7 @@ using Statistics
 
     @testset "FastICA - Bootstrap CI" begin
         Random.seed!(12354)
-        irf_ica = irf(model, H; method=:fastica, ci_type=:bootstrap, reps=50, conf_level=0.90)
+        irf_ica = irf(model, H; method=:fastica, ci_type=:bootstrap, reps=(FAST ? 20 : 50), conf_level=0.90)
 
         @test irf_ica isa ImpulseResponse
         @test size(irf_ica.values) == (H, n, n)
@@ -190,7 +190,7 @@ using Statistics
         Random.seed!(12355)
         # FastICA + theoretical CI can fail on perturbed matrices (NaN in whiten/eigen)
         try
-            irf_ica_theo = irf(model, H; method=:fastica, ci_type=:theoretical, reps=300, conf_level=0.90)
+            irf_ica_theo = irf(model, H; method=:fastica, ci_type=:theoretical, reps=(FAST ? 100 : 300), conf_level=0.90)
 
             @test irf_ica_theo isa ImpulseResponse
             @test all(irf_ica_theo.ci_lower .<= irf_ica_theo.ci_upper)
@@ -215,7 +215,7 @@ using Statistics
 
     @testset "JADE - Bootstrap CI" begin
         Random.seed!(12356)
-        irf_jade = irf(model, H; method=:jade, ci_type=:bootstrap, reps=50, conf_level=0.90)
+        irf_jade = irf(model, H; method=:jade, ci_type=:bootstrap, reps=(FAST ? 20 : 50), conf_level=0.90)
 
         @test irf_jade isa ImpulseResponse
         @test size(irf_jade.values) == (H, n, n)
@@ -245,7 +245,7 @@ using Statistics
     @testset "Theoretical CI symmetry - $method" for method in [:cholesky, :long_run]
         Random.seed!(12358 + hash(method))
 
-        ir = irf(model, H; method=method, ci_type=:theoretical, reps=500, conf_level=0.90)
+        ir = irf(model, H; method=method, ci_type=:theoretical, reps=(FAST ? 200 : 500), conf_level=0.90)
         @test ir isa ImpulseResponse
 
         # Symmetry check
@@ -267,7 +267,7 @@ using Statistics
     @testset "stationary_only - Bootstrap" begin
         Random.seed!(12361)
         # Standard model should have most draws stationary
-        irf_stat = irf(model, H; method=:cholesky, ci_type=:bootstrap, reps=50,
+        irf_stat = irf(model, H; method=:cholesky, ci_type=:bootstrap, reps=(FAST ? 20 : 50),
                        conf_level=0.90, stationary_only=true)
         @test irf_stat isa ImpulseResponse
         @test size(irf_stat.values) == (H, n, n)
@@ -280,7 +280,7 @@ using Statistics
 
     @testset "stationary_only - Theoretical" begin
         Random.seed!(12362)
-        irf_stat_theo = irf(model, H; method=:cholesky, ci_type=:theoretical, reps=50,
+        irf_stat_theo = irf(model, H; method=:cholesky, ci_type=:theoretical, reps=(FAST ? 20 : 50),
                             conf_level=0.90, stationary_only=true)
         @test irf_stat_theo isa ImpulseResponse
         @test all(irf_stat_theo.ci_lower .<= irf_stat_theo.ci_upper)
@@ -288,11 +288,11 @@ using Statistics
 
     @testset "stationary_only=false is default" begin
         Random.seed!(12363)
-        irf_default = irf(model, H; method=:cholesky, ci_type=:bootstrap, reps=50, conf_level=0.90)
+        irf_default = irf(model, H; method=:cholesky, ci_type=:bootstrap, reps=(FAST ? 20 : 50), conf_level=0.90)
         @test irf_default isa ImpulseResponse
         # Default behavior should work as before
         @test irf_default._draws !== nothing
-        @test size(irf_default._draws, 1) == 50
+        @test size(irf_default._draws, 1) == (FAST ? 20 : 50)
     end
 
     # =========================================================================
@@ -302,7 +302,7 @@ using Statistics
     @testset "Bayesian IRF - Credible Intervals" begin
         Random.seed!(12360)
         try
-            post = estimate_bvar(Y, p; n_draws=50)
+            post = estimate_bvar(Y, p; n_draws=(FAST ? 25 : 50))
             irf_bayes = irf(post, H)
 
             @test size(irf_bayes.quantiles, 4) == 3  # [16th, 50th, 84th percentile]

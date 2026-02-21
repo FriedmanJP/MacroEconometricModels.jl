@@ -296,7 +296,7 @@ using StatsAPI
         end
 
         @testset "Overidentification" begin
-            result = test_overidentification(model, ica; n_bootstrap=99)
+            result = test_overidentification(model, ica; n_bootstrap=(FAST ? 49 : 99))
             @test result isa IdentifiabilityTestResult{Float64}
             @test result.test_name == :overidentification
             @test result.statistic >= 0
@@ -304,7 +304,7 @@ using StatsAPI
         end
 
         @testset "Identification strength" begin
-            result = test_identification_strength(model; method=:fastica, n_bootstrap=49)
+            result = test_identification_strength(model; method=:fastica, n_bootstrap=(FAST ? 19 : 49))
             @test result isa IdentifiabilityTestResult{Float64}
             @test result.test_name == :identification_strength
             @test result.statistic >= 0
@@ -402,7 +402,7 @@ using StatsAPI
 
     @testset "Identification strength with jade and sobi" begin
         for method in [:jade, :sobi]
-            result = test_identification_strength(model; method=method, n_bootstrap=19)
+            result = test_identification_strength(model; method=method, n_bootstrap=(FAST ? 9 : 19))
             @test result isa IdentifiabilityTestResult{Float64}
             @test result.test_name == :identification_strength
         end
@@ -418,7 +418,7 @@ using StatsAPI
     end
 
     @testset "Markov-switching with 3 regimes" begin
-        result = identify_markov_switching(model; n_regimes=3, max_iter=50)
+        result = identify_markov_switching(model; n_regimes=3, max_iter=(FAST ? 20 : 50))
         @test result isa MarkovSwitchingSVARResult{Float64}
         @test result.n_regimes == 3
         @test length(result.Sigma_regimes) == 3
@@ -463,7 +463,7 @@ using StatsAPI
         @test size(ica4.B0) == (4, 4)
         @test norm(ica4.Q' * ica4.Q - I) < 1e-4
 
-        ml4 = identify_student_t(model4; max_iter=100)
+        ml4 = identify_student_t(model4; max_iter=(FAST ? 30 : 100))
         @test size(ml4.B0) == (4, 4)
     end
 
@@ -545,7 +545,7 @@ using StatsAPI
 
     @testset "BVAR Non-Gaussian Identification" begin
         Random.seed!(77777)
-        post = estimate_bvar(Y, 2; n_draws=30)
+        post = estimate_bvar(Y, 2; n_draws=(FAST ? 15 : 30))
         for method in [:fastica, :student_t]
             irf_r = irf(post, 10; method=method)
             @test irf_r isa MacroEconometricModels.BayesianImpulseResponse

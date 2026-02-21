@@ -86,7 +86,7 @@ using Statistics
     # =========================================================================
     @testset "Forecast with bootstrap CIs" begin
         shock_path = ones(H)
-        fc = forecast(lp, shock_path; ci_method=:bootstrap, n_boot=100)
+        fc = forecast(lp, shock_path; ci_method=:bootstrap, n_boot=(FAST ? 50 : 100))
 
         @test fc.ci_method == :bootstrap
         @test all(isfinite, fc.ci_lower)
@@ -146,7 +146,7 @@ using Statistics
         slp = structural_lp(Y, H; method=:cholesky, lags=4)
 
         shock_path = ones(H)
-        fc = forecast(slp, 1, shock_path; ci_method=:bootstrap, n_boot=50)
+        fc = forecast(slp, 1, shock_path; ci_method=:bootstrap, n_boot=(FAST ? 25 : 50))
 
         @test fc.ci_method == :bootstrap
         @test all(isfinite, fc.ci_lower)

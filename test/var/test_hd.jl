@@ -185,7 +185,7 @@ using Random
         T_eff = T_obs - p
 
         try
-            post = estimate_bvar(Y, p; n_draws=50)
+            post = estimate_bvar(Y, p; n_draws=(FAST ? 25 : 50))
 
             hd = historical_decomposition(post, T_eff;
                                           data=Y, method=:cholesky,
@@ -236,7 +236,7 @@ using Random
 
         try
             hd = historical_decomposition(model, restrictions, T_eff;
-                                          n_draws=20, n_rotations=100,
+                                          n_draws=(FAST ? 10 : 20), n_rotations=(FAST ? 50 : 100),
                                           quantiles=[0.16, 0.5, 0.84])
 
             @test hd isa BayesianHistoricalDecomposition

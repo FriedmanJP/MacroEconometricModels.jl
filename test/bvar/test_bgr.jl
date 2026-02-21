@@ -47,7 +47,7 @@ using Random
 
     # 2. Test Optimization matching
     _tprint("Testing Optimization...")
-    best_hyper = optimize_hyperparameters(Y, p; grid_size=10)
+    best_hyper = optimize_hyperparameters(Y, p; grid_size=(FAST ? 5 : 10))
     _tprint("Optimal Tau: ", best_hyper.tau)
 
     @test best_hyper.tau > 0
@@ -94,7 +94,7 @@ end
     # Optimize Hyperparameters
     _tprint("Optimizing Hyperparameters for Large VAR...")
     # This might take a moment due to larger matrix inversions
-    @time best_hyper_large = optimize_hyperparameters(Y_large, p_large; grid_size=10)
+    @time best_hyper_large = optimize_hyperparameters(Y_large, p_large; grid_size=(FAST ? 5 : 10))
 
     _tprint("Optimal Tau (Large): ", best_hyper_large.tau)
 

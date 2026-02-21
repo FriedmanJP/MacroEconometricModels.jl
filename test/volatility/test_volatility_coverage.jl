@@ -43,16 +43,16 @@ using StatsAPI
     n = 100
     y = randn(n) .* exp.(cumsum(0.15 .* randn(n)) ./ 2)
 
-    m = estimate_sv(y; n_samples=40, burnin=20, leverage=true)
+    m = estimate_sv(y; n_samples=(FAST ? 20 : 40), burnin=(FAST ? 10 : 20), leverage=true)
 
     @test m isa SVModel{Float64}
     @test m.leverage == true
     @test m.dist == :normal
     @test nobs(m) == n
-    @test length(m.mu_post) == 40
-    @test length(m.phi_post) == 40
-    @test length(m.sigma_eta_post) == 40
-    @test size(m.h_draws) == (40, n)
+    @test length(m.mu_post) == (FAST ? 20 : 40)
+    @test length(m.phi_post) == (FAST ? 20 : 40)
+    @test length(m.sigma_eta_post) == (FAST ? 20 : 40)
+    @test size(m.h_draws) == ((FAST ? 20 : 40), n)
     @test all(m.volatility_mean .> 0)
     @test all(isfinite.(m.mu_post))
     @test all(isfinite.(m.phi_post))
@@ -73,7 +73,7 @@ end
     n = 100
     y = randn(n) .* exp.(cumsum(0.1 .* randn(n)) ./ 2)
 
-    m = estimate_sv(y; n_samples=40, burnin=20, dist=:studentt)
+    m = estimate_sv(y; n_samples=(FAST ? 20 : 40), burnin=(FAST ? 10 : 20), dist=:studentt)
 
     @test m isa SVModel{Float64}
     @test m.dist == :studentt
@@ -104,7 +104,7 @@ end
     n = 100
     y = randn(n) .* exp.(cumsum(0.12 .* randn(n)) ./ 2)
 
-    m = estimate_sv(y; n_samples=30, burnin=15, dist=:studentt, leverage=true)
+    m = estimate_sv(y; n_samples=(FAST ? 15 : 30), burnin=(FAST ? 8 : 15), dist=:studentt, leverage=true)
 
     @test m.leverage == true
     @test m.dist == :studentt

@@ -482,7 +482,7 @@ end
     model = estimate_pvar(dgp.pd, 1; steps=:onestep, collapse=true)
 
     @testset "bootstrap OIRF" begin
-        result = pvar_bootstrap_irf(model, 5; n_draws=20, rng=MersenneTwister(55))
+        result = pvar_bootstrap_irf(model, 5; n_draws=(FAST ? 10 : 20), rng=MersenneTwister(55))
         @test size(result.irf) == (6, 2, 2)
         @test size(result.lower) == (6, 2, 2)
         @test size(result.upper) == (6, 2, 2)
@@ -490,12 +490,12 @@ end
     end
 
     @testset "bootstrap CI ordering" begin
-        result = pvar_bootstrap_irf(model, 3; n_draws=20, rng=MersenneTwister(66))
+        result = pvar_bootstrap_irf(model, 3; n_draws=(FAST ? 10 : 20), rng=MersenneTwister(66))
         @test all(result.lower .<= result.upper)
     end
 
     @testset "bootstrap GIRF" begin
-        result = pvar_bootstrap_irf(model, 3; irf_type=:girf, n_draws=10, rng=MersenneTwister(77))
+        result = pvar_bootstrap_irf(model, 3; irf_type=:girf, n_draws=(FAST ? 5 : 10), rng=MersenneTwister(77))
         @test size(result.irf) == (4, 2, 2)
     end
 

@@ -107,7 +107,7 @@ using Statistics
     # =========================================================================
     @testset "structural_lp with bootstrap CIs" begin
         slp = structural_lp(Y, 8; method=:cholesky, lags=4,
-                            ci_type=:bootstrap, reps=50)
+                            ci_type=:bootstrap, reps=(FAST ? 20 : 50))
 
         @test slp.irf.ci_type == :bootstrap
         @test size(slp.irf.ci_lower) == (8, n, n)
@@ -253,7 +253,7 @@ using Statistics
 
         # With bootstrap
         slp_ci = structural_lp(Y, 8; method=:cholesky, lags=4,
-                               ci_type=:bootstrap, reps=30)
+                               ci_type=:bootstrap, reps=(FAST ? 15 : 30))
         @test has_uncertainty(slp_ci) == true
         bounds_boot = uncertainty_bounds(slp_ci)
         @test bounds_boot isa Tuple

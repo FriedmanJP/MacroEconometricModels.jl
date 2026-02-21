@@ -57,7 +57,7 @@ Random.seed!(42)
 
     # 2. Test Estimation with Minnesota Prior
     _tprint("Estimating BVAR with Minnesota...")
-    post = estimate_bvar(Y, p; n_draws=100, prior=:minnesota, hyper=hyper)
+    post = estimate_bvar(Y, p; n_draws=(FAST ? 50 : 100), prior=:minnesota, hyper=hyper)
 
     @test post isa BVARPosterior
     @test post.n_draws == 100
@@ -97,7 +97,7 @@ Random.seed!(42)
         @test best_hyper.mu in [1.0, 2.0]
 
         # Compare with single-parameter optimization
-        simple_hyper = optimize_hyperparameters(Y_full, p; grid_size=5)
+        simple_hyper = optimize_hyperparameters(Y_full, p; grid_size=(FAST ? 3 : 5))
         @test simple_hyper isa MinnesotaHyperparameters
 
         # Full optimization should find at least as good (or better) marginal likelihood
@@ -149,7 +149,7 @@ Random.seed!(42)
     @testset "optimize_hyperparameters returns valid type" begin
         Random.seed!(4457)
         Y_opt = randn(80, 2)
-        hyper_opt = optimize_hyperparameters(Y_opt, 1; grid_size=3)
+        hyper_opt = optimize_hyperparameters(Y_opt, 1; grid_size=(FAST ? 2 : 3))
         @test hyper_opt isa MinnesotaHyperparameters
         @test hyper_opt.tau > 0
         @test hyper_opt.decay > 0

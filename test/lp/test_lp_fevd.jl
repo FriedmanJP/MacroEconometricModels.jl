@@ -61,7 +61,7 @@ using Statistics
 
     # =========================================================================
     @testset "R² estimator — with bootstrap" begin
-        f = lp_fevd(slp, H; method=:r2, n_boot=50, bias_correct=true, conf_level=0.90)
+        f = lp_fevd(slp, H; method=:r2, n_boot=(FAST ? 25 : 50), bias_correct=true, conf_level=0.90)
 
         @test f isa LPFEVD{Float64}
         @test f.n_boot == 50
@@ -82,7 +82,7 @@ using Statistics
 
     # =========================================================================
     @testset "No bias correction with bootstrap" begin
-        f = lp_fevd(slp, H; bias_correct=false, n_boot=50)
+        f = lp_fevd(slp, H; bias_correct=false, n_boot=(FAST ? 25 : 50))
 
         @test f.bias_correction == false
         # bias_corrected should equal proportions when no correction
@@ -157,7 +157,7 @@ using Statistics
 
     # =========================================================================
     @testset "Bootstrap with explicit var_lags" begin
-        f = lp_fevd(slp, 8; n_boot=30, var_lags=2)
+        f = lp_fevd(slp, 8; n_boot=(FAST ? 15 : 30), var_lags=2)
 
         @test f.n_boot == 30
         @test all(isfinite, f.bias_corrected)
@@ -176,7 +176,7 @@ using Statistics
 
     # =========================================================================
     @testset "show method with bootstrap" begin
-        f = lp_fevd(slp, H; n_boot=30)
+        f = lp_fevd(slp, H; n_boot=(FAST ? 15 : 30))
         buf = IOBuffer()
         show(buf, f)
         output = String(take!(buf))
@@ -196,7 +196,7 @@ using Statistics
 
     # =========================================================================
     @testset "print_table with bootstrap CIs" begin
-        f = lp_fevd(slp, H; n_boot=30)
+        f = lp_fevd(slp, H; n_boot=(FAST ? 15 : 30))
         buf = IOBuffer()
         print_table(buf, f, 1)
         output = String(take!(buf))
@@ -215,8 +215,8 @@ using Statistics
 
     # =========================================================================
     @testset "Confidence levels affect CI width" begin
-        f_90 = lp_fevd(slp, 8; n_boot=50, conf_level=0.90)
-        f_99 = lp_fevd(slp, 8; n_boot=50, conf_level=0.99)
+        f_90 = lp_fevd(slp, 8; n_boot=(FAST ? 25 : 50), conf_level=0.90)
+        f_99 = lp_fevd(slp, 8; n_boot=(FAST ? 25 : 50), conf_level=0.99)
 
         # 99% CIs should generally be at least as wide as 90% CIs
         # (check on average due to bootstrap randomness)

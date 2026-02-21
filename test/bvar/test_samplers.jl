@@ -41,14 +41,14 @@ using Random
     # Test Direct sampler (default, most commonly used)
     @testset "Direct Sampler" begin
         _tprint("Testing sampler: direct")
-        post = estimate_bvar(Y, p; n_draws=100, sampler=:direct)
+        post = estimate_bvar(Y, p; n_draws=(FAST ? 50 : 100), sampler=:direct)
         @test post isa BVARPosterior
         @test post.sampler == :direct
-        @test post.n_draws == 100
+        @test post.n_draws == (FAST ? 50 : 100)
         @test post.p == p
         @test post.n == n
-        @test size(post.B_draws) == (100, 1 + n*p, n)
-        @test size(post.Sigma_draws) == (100, n, n)
+        @test size(post.B_draws) == ((FAST ? 50 : 100), 1 + n*p, n)
+        @test size(post.Sigma_draws) == ((FAST ? 50 : 100), n, n)
         @test all(isfinite.(post.B_draws))
         @test all(isfinite.(post.Sigma_draws))
         _tprint("  -> Passed")
@@ -57,10 +57,10 @@ using Random
     # Test Gibbs sampler
     @testset "Gibbs Sampler" begin
         _tprint("Testing sampler: gibbs")
-        post = estimate_bvar(Y, p; n_draws=50, sampler=:gibbs, burnin=50, thin=1)
+        post = estimate_bvar(Y, p; n_draws=(FAST ? 25 : 50), sampler=:gibbs, burnin=(FAST ? 25 : 50), thin=1)
         @test post isa BVARPosterior
         @test post.sampler == :gibbs
-        @test post.n_draws == 50
+        @test post.n_draws == (FAST ? 25 : 50)
         @test all(isfinite.(post.B_draws))
         @test all(isfinite.(post.Sigma_draws))
         _tprint("  -> Passed")
@@ -69,18 +69,18 @@ using Random
     # Test Gibbs with thinning
     @testset "Gibbs with Thinning" begin
         _tprint("Testing sampler: gibbs with thin=2")
-        post = estimate_bvar(Y, p; n_draws=30, sampler=:gibbs, burnin=50, thin=2)
+        post = estimate_bvar(Y, p; n_draws=(FAST ? 15 : 30), sampler=:gibbs, burnin=(FAST ? 25 : 50), thin=2)
         @test post isa BVARPosterior
-        @test post.n_draws == 30
+        @test post.n_draws == (FAST ? 15 : 30)
         _tprint("  -> Passed")
     end
 
     # Test default burnin for Gibbs
     @testset "Gibbs Default Burnin" begin
         _tprint("Testing gibbs default burnin (200 when not specified)")
-        post = estimate_bvar(Y, p; n_draws=30, sampler=:gibbs)
+        post = estimate_bvar(Y, p; n_draws=(FAST ? 15 : 30), sampler=:gibbs)
         @test post isa BVARPosterior
-        @test post.n_draws == 30
+        @test post.n_draws == (FAST ? 15 : 30)
         _tprint("  -> Passed")
     end
 
@@ -88,7 +88,7 @@ using Random
     @testset "Direct with Minnesota Prior" begin
         _tprint("Testing direct sampler with Minnesota prior")
         hyper = MinnesotaHyperparameters(tau=0.5)
-        post = estimate_bvar(Y, p; n_draws=50, sampler=:direct, prior=:minnesota, hyper=hyper)
+        post = estimate_bvar(Y, p; n_draws=(FAST ? 25 : 50), sampler=:direct, prior=:minnesota, hyper=hyper)
         @test post isa BVARPosterior
         @test post.prior == :minnesota
         _tprint("  -> Passed")
@@ -97,7 +97,7 @@ using Random
     @testset "Gibbs with Minnesota Prior" begin
         _tprint("Testing gibbs sampler with Minnesota prior")
         hyper = MinnesotaHyperparameters(tau=0.5)
-        post = estimate_bvar(Y, p; n_draws=30, sampler=:gibbs, burnin=30,
+        post = estimate_bvar(Y, p; n_draws=(FAST ? 15 : 30), sampler=:gibbs, burnin=(FAST ? 15 : 30),
                              prior=:minnesota, hyper=hyper)
         @test post isa BVARPosterior
         @test post.prior == :minnesota
@@ -111,7 +111,7 @@ using Random
 
     # Test Sigma positive definiteness
     @testset "Sigma Positive Definiteness" begin
-        post = estimate_bvar(Y, p; n_draws=50, sampler=:direct)
+        post = estimate_bvar(Y, p; n_draws=(FAST ? 25 : 50), sampler=:direct)
         for s in 1:post.n_draws
             S = post.Sigma_draws[s, :, :]
             @test isapprox(S, S', atol=1e-10)  # Symmetric

@@ -76,7 +76,7 @@ using Random
     # 2. Bayesian FEVD
     _tprint("Testing Bayesian FEVD...")
     try
-        post = estimate_bvar(Y, p; n_draws=50)
+        post = estimate_bvar(Y, p; n_draws=(FAST ? 25 : 50))
 
         # Compute Bayesian FEVD
         fevd_bayes = fevd(post, horizon; method=:cholesky)
