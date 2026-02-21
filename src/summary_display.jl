@@ -423,7 +423,7 @@ function Base.show(io::IO, fc::LPForecast{T}) where {T}
             push!(col_labels, "Var $rv")
             for h in 1:H
                 data[h, 1] = h
-                data[h, 1 + j] = _fmt(fc.forecasts[h, j])
+                data[h, 1 + j] = _fmt(fc.forecast[h, j])
             end
         else
             push!(col_labels, "Var $rv")
@@ -432,7 +432,7 @@ function Base.show(io::IO, fc::LPForecast{T}) where {T}
             col_offset = 1 + (j - 1) * 3
             for h in 1:H
                 data[h, 1] = h
-                data[h, col_offset + 1] = _fmt(fc.forecasts[h, j])
+                data[h, col_offset + 1] = _fmt(fc.forecast[h, j])
                 data[h, col_offset + 2] = _fmt(fc.ci_lower[h, j])
                 data[h, col_offset + 3] = _fmt(fc.ci_upper[h, j])
             end

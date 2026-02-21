@@ -331,7 +331,7 @@ function plot_result(fc::LPForecast{T};
                      var::Union{Int,Nothing}=nothing,
                      ncols::Int=0, title::String="",
                      save_path::Union{String,Nothing}=nothing) where {T}
-    h, n_resp = size(fc.forecasts)
+    h, n_resp = size(fc.forecast)
     vars_to_plot = var === nothing ? (1:n_resp) : [var]
 
     panels = _PanelSpec[]
@@ -339,7 +339,7 @@ function plot_result(fc::LPForecast{T};
         id = _next_plot_id("lp_fc")
         ptitle = fc.varnames[fc.response_vars[vi]]
 
-        data_json = _forecast_data_json(fc.forecasts[:, vi], fc.ci_lower[:, vi],
+        data_json = _forecast_data_json(fc.forecast[:, vi], fc.ci_lower[:, vi],
                                          fc.ci_upper[:, vi])
 
         s_json = _series_json(["LP Forecast"], [_PLOT_COLORS[1]]; keys=["fc"])

@@ -216,7 +216,7 @@ Each horizon h uses its own regression coefficients directly (no recursion),
 producing ŷ_{T+h} = α_h + β_h·shock_h + Γ_h·controls_T.
 
 Fields:
-- `forecasts`: Point forecasts (H × n_response)
+- `forecast`: Point forecasts (H × n_response)
 - `ci_lower`: Lower CI bounds (H × n_response)
 - `ci_upper`: Upper CI bounds (H × n_response)
 - `se`: Standard errors (H × n_response)
@@ -228,7 +228,7 @@ Fields:
 - `ci_method`: CI method (:analytical, :bootstrap, :none)
 """
 struct LPForecast{T<:AbstractFloat} <: AbstractForecastResult{T}
-    forecasts::Matrix{T}
+    forecast::Matrix{T}
     ci_lower::Matrix{T}
     ci_upper::Matrix{T}
     se::Matrix{T}
@@ -240,17 +240,17 @@ struct LPForecast{T<:AbstractFloat} <: AbstractForecastResult{T}
     ci_method::Symbol
     varnames::Vector{String}
 
-    function LPForecast(forecasts::Matrix{T}, ci_lower::Matrix{T}, ci_upper::Matrix{T},
+    function LPForecast(forecast::Matrix{T}, ci_lower::Matrix{T}, ci_upper::Matrix{T},
                         se::Matrix{T}, horizon::Int, response_vars::Vector{Int},
                         shock_var::Int, shock_path::Vector{T}, conf_level::T,
                         ci_method::Symbol, varnames::Vector{String}=["y$i" for i in 1:max(maximum(response_vars), shock_var)]) where {T<:AbstractFloat}
-        @assert size(forecasts) == size(ci_lower) == size(ci_upper) == size(se)
-        @assert size(forecasts, 1) == horizon
-        @assert size(forecasts, 2) == length(response_vars)
+        @assert size(forecast) == size(ci_lower) == size(ci_upper) == size(se)
+        @assert size(forecast, 1) == horizon
+        @assert size(forecast, 2) == length(response_vars)
         @assert length(shock_path) == horizon
         @assert 0 < conf_level < 1
         @assert ci_method ∈ (:analytical, :bootstrap, :none)
-        new{T}(forecasts, ci_lower, ci_upper, se, horizon, response_vars,
+        new{T}(forecast, ci_lower, ci_upper, se, horizon, response_vars,
                shock_var, shock_path, conf_level, ci_method, varnames)
     end
 end

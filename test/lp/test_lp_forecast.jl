@@ -43,7 +43,7 @@ using Statistics
         fc = forecast(lp, shock_path; ci_method=:analytical)
 
         @test fc isa LPForecast{Float64}
-        @test size(fc.forecasts) == (H, n)
+        @test size(fc.forecast) == (H, n)
         @test size(fc.ci_lower) == (H, n)
         @test size(fc.ci_upper) == (H, n)
         @test size(fc.se) == (H, n)
@@ -53,7 +53,7 @@ using Statistics
         @test fc.conf_level ≈ 0.95
 
         # All values finite
-        @test all(isfinite, fc.forecasts)
+        @test all(isfinite, fc.forecast)
         @test all(isfinite, fc.ci_lower)
         @test all(isfinite, fc.ci_upper)
         @test all(isfinite, fc.se)
@@ -64,8 +64,8 @@ using Statistics
         # CI lower < forecast < CI upper (for analytical with positive SE)
         for h in 1:H, j in 1:n
             if fc.se[h, j] > 0
-                @test fc.ci_lower[h, j] < fc.forecasts[h, j]
-                @test fc.forecasts[h, j] < fc.ci_upper[h, j]
+                @test fc.ci_lower[h, j] < fc.forecast[h, j]
+                @test fc.forecast[h, j] < fc.ci_upper[h, j]
             end
         end
     end
@@ -77,10 +77,10 @@ using Statistics
 
         @test fc.ci_method == :none
         # ci_lower == ci_upper == forecasts when no CIs
-        @test fc.ci_lower == fc.forecasts
-        @test fc.ci_upper == fc.forecasts
+        @test fc.ci_lower == fc.forecast
+        @test fc.ci_upper == fc.forecast
 
-        @test all(isfinite, fc.forecasts)
+        @test all(isfinite, fc.forecast)
     end
 
     # =========================================================================
@@ -108,7 +108,7 @@ using Statistics
         fc_nonzero = forecast(lp, nonzero_path; ci_method=:none)
 
         # Forecasts should differ when shock path differs
-        @test fc_zero.forecasts != fc_nonzero.forecasts
+        @test fc_zero.forecast != fc_nonzero.forecast
     end
 
     # =========================================================================
@@ -120,7 +120,7 @@ using Statistics
         fc2 = forecast(lp, path2; ci_method=:none)
 
         # fc2 forecasts should differ from fc1 (linearity in shock)
-        @test fc1.forecasts != fc2.forecasts
+        @test fc1.forecast != fc2.forecast
     end
 
     # =========================================================================
@@ -131,13 +131,13 @@ using Statistics
         fc = forecast(slp, 1, shock_path; ci_method=:analytical)
 
         @test fc isa LPForecast{Float64}
-        @test size(fc.forecasts) == (H, n)
-        @test all(isfinite, fc.forecasts)
+        @test size(fc.forecast) == (H, n)
+        @test all(isfinite, fc.forecast)
 
         # Test different shock indices
         for j in 1:n
             fc_j = forecast(slp, j, shock_path; ci_method=:none)
-            @test size(fc_j.forecasts) == (H, n)
+            @test size(fc_j.forecast) == (H, n)
         end
     end
 
@@ -210,7 +210,7 @@ using Statistics
         fc_99 = forecast(lp, shock_path; ci_method=:analytical, conf_level=0.99)
 
         # Same point forecasts
-        @test fc_90.forecasts ≈ fc_99.forecasts
+        @test fc_90.forecast ≈ fc_99.forecast
 
         # 99% CI should be wider than 90% CI
         for h in 1:H, j in 1:n
@@ -229,6 +229,6 @@ using Statistics
         fc = forecast(lp_h1, shock_path; ci_method=:analytical)
 
         @test fc.horizon == 1
-        @test size(fc.forecasts) == (1, n)
+        @test size(fc.forecast) == (1, n)
     end
 end
