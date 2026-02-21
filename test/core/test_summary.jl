@@ -608,4 +608,495 @@ using Statistics
         end
     end
 
+    # =================================================================
+    # report() for VECM
+    # =================================================================
+    @testset "report(VECMModel)" begin
+        Y = cumsum(randn(150, 3), dims=1)
+        vecm = estimate_vecm(Y, 2; rank=1)
+        redirect_stdout(devnull) do
+            report(vecm)
+        end
+        @test true
+    end
+
+    # =================================================================
+    # report() for all 5 filter types
+    # =================================================================
+    @testset "report() for filter types" begin
+        y = cumsum(randn(200))
+        redirect_stdout(devnull) do
+            report(hp_filter(y))
+            report(hamilton_filter(y))
+            report(beveridge_nelson(y))
+            report(baxter_king(y))
+            report(boosted_hp(y))
+        end
+        @test true
+    end
+
+    # =================================================================
+    # report() for VARForecast and BVARForecast
+    # =================================================================
+    @testset "report() for VARForecast and BVARForecast" begin
+        Y = randn(100, 3)
+        m = estimate_var(Y, 2)
+        fc = forecast(m, 5)
+        redirect_stdout(devnull) do
+            report(fc)
+        end
+        @test true
+
+        post = estimate_bvar(Y, 2; n_draws=50)
+        bfc = forecast(post, 5)
+        redirect_stdout(devnull) do
+            report(bfc)
+        end
+        @test true
+    end
+
+    # =================================================================
+    # report() for LP variants
+    # =================================================================
+    @testset "report() for LP variants" begin
+        Y = randn(100, 3)
+
+        # LPIVModel
+        Z = randn(100, 1)
+        lp_iv = estimate_lp_iv(Y, 1, Z, 8; lags=2)
+        redirect_stdout(devnull) do
+            report(lp_iv)
+        end
+        @test true
+
+        # SmoothLPModel
+        slp = estimate_smooth_lp(Y, 1, 8; lags=2, degree=3, n_knots=3)
+        redirect_stdout(devnull) do
+            report(slp)
+        end
+        @test true
+
+        # StateLPModel
+        state_var = Y[:, 2]
+        state_lp = estimate_state_lp(Y, 1, state_var, 8; lags=2)
+        redirect_stdout(devnull) do
+            report(state_lp)
+        end
+        @test true
+
+        # PropensityLPModel
+        treatment = Float64.(randn(100) .> 0)
+        covariates = randn(100, 2)
+        prop_lp = estimate_propensity_lp(Y, treatment, covariates, 8)
+        redirect_stdout(devnull) do
+            report(prop_lp)
+        end
+        @test true
+    end
+
+    # =================================================================
+    # report() for StructuralLP, LPForecast, LPFEVD
+    # =================================================================
+    @testset "show/report for StructuralLP, LPForecast, LPFEVD" begin
+        Y = randn(100, 3)
+        slp = structural_lp(Y, 8; method=:cholesky, lags=2)
+        # StructuralLP has show() but no report() — use show() directly
+        io = IOBuffer()
+        show(io, slp)
+        @test length(String(take!(io))) > 0
+
+        lp = estimate_lp(Y, 1, 8; lags=2)
+        shock_path = zeros(8); shock_path[1] = 1.0
+        lp_fc = forecast(lp, shock_path)
+        redirect_stdout(devnull) do
+            report(lp_fc)
+        end
+        @test true
+
+        lp_f = lp_fevd(slp, 8; n_boot=0)
+        # LPFEVD has show() but no report() — use show() directly
+        io = IOBuffer()
+        show(io, lp_f)
+        @test length(String(take!(io))) > 0
+    end
+
+    # =================================================================
+    # show() for LP model types
+    # =================================================================
+    @testset "show() for LP model types" begin
+        Y = randn(100, 3)
+
+        # LPModel
+        lp = estimate_lp(Y, 1, 8; lags=2)
+        io = IOBuffer()
+        show(io, lp)
+        out = String(take!(io))
+        @test occursin("Local Projection", out)
+        @test occursin("Newey-West", out) || occursin("Jordà", out)
+
+        # LPIVModel
+        Z = randn(100, 1)
+        lp_iv = estimate_lp_iv(Y, 1, Z, 8; lags=2)
+        io = IOBuffer()
+        show(io, lp_iv)
+        out = String(take!(io))
+        @test occursin("LP-IV", out) || occursin("Stock", out)
+
+        # SmoothLPModel
+        slp = estimate_smooth_lp(Y, 1, 8; lags=2, degree=3, n_knots=3)
+        io = IOBuffer()
+        show(io, slp)
+        out = String(take!(io))
+        @test occursin("Smooth LP", out) || occursin("Barnichon", out)
+
+        # StateLPModel
+        state_var = Y[:, 2]
+        state_lp = estimate_state_lp(Y, 1, state_var, 8; lags=2)
+        io = IOBuffer()
+        show(io, state_lp)
+        out = String(take!(io))
+        @test occursin("State-Dependent", out) || occursin("Auerbach", out)
+
+        # PropensityLPModel
+        treatment = Float64.(randn(100) .> 0)
+        covariates = randn(100, 2)
+        prop_lp = estimate_propensity_lp(Y, treatment, covariates, 8)
+        io = IOBuffer()
+        show(io, prop_lp)
+        out = String(take!(io))
+        @test occursin("Propensity", out) || occursin("Angrist", out)
+    end
+
+    # =================================================================
+    # show() for supporting types
+    # =================================================================
+    @testset "show() for supporting types" begin
+        # ZeroRestriction
+        zr = ZeroRestriction(1, 2, 0)
+        io = IOBuffer()
+        show(io, zr)
+        out = String(take!(io))
+        @test occursin("ZeroRestriction", out)
+
+        # SignRestriction
+        sr = SignRestriction(1, 1, 0, 1)
+        io = IOBuffer()
+        show(io, sr)
+        out = String(take!(io))
+        @test occursin("SignRestriction", out)
+        @test occursin("+", out)
+
+        # SignRestriction negative
+        sr_neg = SignRestriction(1, 1, 0, -1)
+        io = IOBuffer()
+        show(io, sr_neg)
+        out = String(take!(io))
+        @test occursin("-", out)
+
+        # SVARRestrictions
+        restrictions = SVARRestrictions(
+            [zr], [sr], 3, 3
+        )
+        io = IOBuffer()
+        show(io, restrictions)
+        out = String(take!(io))
+        @test occursin("SVAR Restrictions", out)
+
+        # NeweyWestEstimator (positional args: bandwidth, kernel, prewhiten)
+        nw = NeweyWestEstimator{Float64}(0, :bartlett, false)
+        io = IOBuffer()
+        show(io, nw)
+        out = String(take!(io))
+        @test occursin("NeweyWest", out)
+        @test occursin("automatic", out)
+
+        # WhiteEstimator
+        we = WhiteEstimator()
+        io = IOBuffer()
+        show(io, we)
+        out = String(take!(io))
+        @test occursin("White", out)
+
+        # DriscollKraayEstimator (positional args: bandwidth, kernel)
+        dk = DriscollKraayEstimator{Float64}(5, :bartlett)
+        io = IOBuffer()
+        show(io, dk)
+        out = String(take!(io))
+        @test occursin("DriscollKraay", out)
+        @test occursin("5", out)
+
+        # GMMWeighting (positional args: method, max_iter, tol)
+        gw = GMMWeighting{Float64}(:two_step, 100, 1e-6)
+        io = IOBuffer()
+        show(io, gw)
+        out = String(take!(io))
+        @test occursin("GMMWeighting", out)
+        @test occursin("two_step", out)
+    end
+
+    # =================================================================
+    # show() for BSplineBasis, StateTransition, PropensityScoreConfig
+    # =================================================================
+    @testset "show() for BSplineBasis, StateTransition, PropensityScoreConfig" begin
+        Y = randn(100, 3)
+
+        # BSplineBasis - from smooth LP
+        slp = estimate_smooth_lp(Y, 1, 8; lags=2, degree=3, n_knots=3)
+        io = IOBuffer()
+        show(io, slp.spline_basis)
+        out = String(take!(io))
+        @test occursin("B-Spline", out)
+
+        # StateTransition - from state LP
+        state_var = Y[:, 2]
+        state_lp = estimate_state_lp(Y, 1, state_var, 8; lags=2)
+        io = IOBuffer()
+        show(io, state_lp.state)
+        out = String(take!(io))
+        @test occursin("State Transition", out)
+
+        # PropensityScoreConfig - from propensity LP
+        treatment = Float64.(randn(100) .> 0)
+        covariates = randn(100, 2)
+        prop_lp = estimate_propensity_lp(Y, treatment, covariates, 8)
+        io = IOBuffer()
+        show(io, prop_lp.config)
+        out = String(take!(io))
+        @test occursin("Propensity Score", out)
+    end
+
+    # =================================================================
+    # refs() comprehensive format and dispatch
+    # =================================================================
+    @testset "refs() comprehensive format and dispatch" begin
+        # Symbol dispatch
+        r = refs(:johansen)
+        @test r isa String
+        @test !isempty(r)
+
+        # All four formats for various types
+        Y = randn(100, 3)
+        lp = estimate_lp(Y, 1, 8)
+        for fmt in (:text, :latex, :bibtex, :html)
+            r = refs(lp; format=fmt)
+            @test r isa String
+            @test !isempty(r)
+        end
+
+        # refs for BVAR posterior
+        post = estimate_bvar(Y, 2; n_draws=50)
+        r = refs(post)
+        @test r isa String
+        @test !isempty(r)
+
+        # refs for filter types
+        y = cumsum(randn(200))
+        for f in [hp_filter(y), hamilton_filter(y)]
+            r = refs(f)
+            @test r isa String
+            @test !isempty(r)
+        end
+
+        # LaTeX format should have \bibitem
+        r_latex = refs(Y |> x -> estimate_var(x, 2); format=:latex)
+        @test occursin("\\bibitem", r_latex)
+
+        # BibTeX format should have @article or @book
+        r_bib = refs(estimate_var(Y, 2); format=:bibtex)
+        @test occursin("@article", r_bib) || occursin("@book", r_bib)
+
+        # HTML format should have <p> tags
+        r_html = refs(estimate_var(Y, 2); format=:html)
+        @test occursin("<p>", r_html)
+
+        # refs for ARIMA models
+        ar = estimate_ar(randn(200), 2)
+        r = refs(ar; format=:bibtex)
+        @test r isa String
+        @test !isempty(r)
+
+        # refs for volatility models
+        gm = estimate_garch(randn(300), 1, 1)
+        r = refs(gm)
+        @test r isa String
+        @test !isempty(r)
+
+        # refs for unit root tests
+        adf_r = adf_test(randn(200))
+        r = refs(adf_r)
+        @test r isa String
+    end
+
+    # =================================================================
+    # _delatex() Unicode replacements
+    # =================================================================
+    @testset "_delatex() Unicode replacements" begin
+        @test MacroEconometricModels._delatex("L\\\"utkepohl") == "Lütkepohl"
+        @test MacroEconometricModels._delatex("Jord\\'e") == "Jordé"
+        @test MacroEconometricModels._delatex("em---dash") == "em\u2014dash"
+        @test MacroEconometricModels._delatex("en--dash") == "en\u2013dash"
+        @test MacroEconometricModels._delatex("\\&") == "&"
+        @test MacroEconometricModels._delatex("{braces}") == "braces"
+    end
+
+    # =================================================================
+    # Nowcast show() and report()
+    # =================================================================
+    @testset "Nowcast show() and report()" begin
+        nM = 4; nQ = 1
+        Y_nc = randn(100, nM + nQ)
+        Y_nc[end, end] = NaN
+
+        # NowcastDFM show
+        dfm = nowcast_dfm(Y_nc, nM, nQ; r=2, p=1)
+        io = IOBuffer()
+        show(io, dfm)
+        out = String(take!(io))
+        @test occursin("DFM", out) || occursin("Dynamic Factor", out)
+
+        # NowcastResult show
+        nr = nowcast(dfm)
+        io = IOBuffer()
+        show(io, nr)
+        out = String(take!(io))
+        @test occursin("Nowcast", out)
+
+        # report() for nowcast model and result
+        redirect_stdout(devnull) do
+            report(dfm)
+            report(nr)
+        end
+        @test true
+
+        # NowcastNews show
+        X_old = randn(100, 5)
+        X_old[end, end] = NaN
+        X_new = copy(X_old)
+        X_new[end, end] = 0.5
+        dfm2 = nowcast_dfm(X_old, 4, 1; r=2, p=1)
+        nn = nowcast_news(X_new, X_old, dfm2, 5)
+        io = IOBuffer()
+        show(io, nn)
+        out = String(take!(io))
+        @test occursin("News", out) || occursin("Revision", out)
+        redirect_stdout(devnull) do
+            report(nn)
+        end
+        @test true
+    end
+
+    # =================================================================
+    # show() and print_table() for StructuralLP
+    # =================================================================
+    @testset "show() and print_table() for StructuralLP" begin
+        Y = randn(100, 3)
+        slp = structural_lp(Y, 8; method=:cholesky, lags=2)
+        io = IOBuffer()
+        show(io, slp)
+        out = String(take!(io))
+        @test occursin("Structural Local Projections", out) || occursin("Structural LP", out)
+
+        # print_table
+        io = IOBuffer()
+        print_table(io, slp, 1, 1)
+        out = String(take!(io))
+        @test length(out) > 0
+    end
+
+    # =================================================================
+    # show() and print_table() for LPForecast
+    # =================================================================
+    @testset "show() and print_table() for LPForecast" begin
+        Y = randn(100, 3)
+        lp = estimate_lp(Y, 1, 8; lags=2)
+        shock_path = zeros(8); shock_path[1] = 1.0
+        fc = forecast(lp, shock_path)
+        io = IOBuffer()
+        show(io, fc)
+        out = String(take!(io))
+        @test occursin("LP Forecast", out)
+
+        io = IOBuffer()
+        print_table(io, fc)
+        out = String(take!(io))
+        @test length(out) > 0
+    end
+
+    # =================================================================
+    # show() and print_table() for LPFEVD
+    # =================================================================
+    @testset "show() and print_table() for LPFEVD" begin
+        Y = randn(100, 3)
+        slp = structural_lp(Y, 8; method=:cholesky, lags=2)
+        f = lp_fevd(slp, 8; n_boot=0)
+        io = IOBuffer()
+        show(io, f)
+        out = String(take!(io))
+        @test occursin("LP-FEVD", out) || occursin("Gorodnichenko", out)
+
+        # print_table for LPFEVD (no bootstrap)
+        io = IOBuffer()
+        print_table(io, f, 1)
+        out = String(take!(io))
+        @test length(out) > 0
+
+        # Also test with n_boot>0 for CI columns
+        f2 = lp_fevd(slp, 8; n_boot=20)
+        io = IOBuffer()
+        print_table(io, f2, 1)
+        out = String(take!(io))
+        @test length(out) > 0
+    end
+
+    # =================================================================
+    # show() for AriasSVARResult and UhligSVARResult
+    # =================================================================
+    @testset "show() for AriasSVARResult and UhligSVARResult" begin
+        Y = randn(100, 3)
+        m = estimate_var(Y, 2)
+
+        # Uhlig
+        restrictions = SVARRestrictions(
+            [ZeroRestriction(1, 2, 0)],
+            [SignRestriction(1, 1, 0, 1)],
+            3, 3
+        )
+        uhlig_r = identify_uhlig(m, restrictions, 10)
+        io = IOBuffer()
+        show(io, uhlig_r)
+        out = String(take!(io))
+        @test occursin("Mountford-Uhlig", out) || occursin("Uhlig", out)
+
+        # Arias
+        restrictions2 = SVARRestrictions(
+            ZeroRestriction[],
+            [SignRestriction(1, 1, 0, 1)],
+            3, 3
+        )
+        arias_r = identify_arias(m, restrictions2, 10; n_draws=20)
+        io = IOBuffer()
+        show(io, arias_r)
+        out = String(take!(io))
+        @test occursin("Arias", out)
+    end
+
+    # =================================================================
+    # table() for BayesianFEVD with stat=1
+    # =================================================================
+    @testset "table() for BayesianFEVD quantile stat" begin
+        H, n = 8, 2
+        nq = 3
+        quantiles_arr = abs.(randn(H, n, n, nq))
+        mean_arr = abs.(randn(H, n, n))
+        vars = ["Var 1", "Var 2"]
+        shocks = ["Shock 1", "Shock 2"]
+        q_levels = [0.16, 0.5, 0.84]
+        bfevd = BayesianFEVD{Float64}(quantiles_arr, mean_arr, H, vars, shocks, q_levels)
+
+        # stat=1 uses first quantile
+        t = table(bfevd, 1; stat=1)
+        @test size(t, 1) == H
+        @test size(t, 2) == n + 1
+    end
+
 end

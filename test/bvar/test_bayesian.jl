@@ -252,4 +252,249 @@ end
         @test occursin("Posterior Mean", out)
         _tprint("BVARPosterior show test passed.")
     end
+
+    # ==========================================================================
+    # Additional Coverage Tests
+    # ==========================================================================
+
+    @testset "forecast(BVARPosterior, h)" begin
+        Random.seed!(50001)
+        post = estimate_bvar(Y, 1; n_draws=(FAST ? 30 : 80), sampler=:direct)
+
+        # Basic forecast
+        fc = forecast(post, 4)
+        @test fc isa BVARForecast
+        @test fc.horizon == 4
+        @test size(fc.forecast) == (4, 2)
+        @test size(fc.ci_lower) == (4, 2)
+        @test size(fc.ci_upper) == (4, 2)
+        @test all(isfinite.(fc.forecast))
+        @test all(fc.ci_lower .<= fc.forecast)
+        @test all(fc.forecast .<= fc.ci_upper)
+        @test fc.point_estimate == :median  # default
+        @test fc.conf_level == 0.95
+
+        # point_estimate=:mean
+        fc_mean = forecast(post, 4; point_estimate=:mean)
+        @test fc_mean isa BVARForecast
+        @test fc_mean.point_estimate == :mean
+        @test all(isfinite.(fc_mean.forecast))
+
+        # Negative horizon error
+        @test_throws ArgumentError forecast(post, 0)
+        @test_throws ArgumentError forecast(post, -1)
+
+        # Custom conf_level and reps
+        fc_90 = forecast(post, 3; conf_level=0.90, reps=10)
+        @test fc_90 isa BVARForecast
+        @test fc_90.conf_level == Float64(0.90)
+        @test fc_90.horizon == 3
+
+        _tprint("forecast(BVARPosterior, h) tests passed.")
+    end
+
+    @testset "BVARForecast show method" begin
+        Random.seed!(50002)
+        post = estimate_bvar(Y, 1; n_draws=(FAST ? 30 : 60), sampler=:direct)
+
+        # Show with :median (default)
+        fc_med = forecast(post, 3; point_estimate=:median)
+        io = IOBuffer()
+        show(io, fc_med)
+        out_med = String(take!(io))
+        @test length(out_med) > 0
+        @test occursin("Bayesian VAR Forecast", out_med)
+        @test occursin("Horizon", out_med)
+        @test occursin("Post. Median", out_med)
+
+        # Show with :mean
+        fc_mn = forecast(post, 3; point_estimate=:mean)
+        io2 = IOBuffer()
+        show(io2, fc_mn)
+        out_mn = String(take!(io2))
+        @test occursin("Post. Mean", out_mn)
+        @test occursin("Credibility", out_mn)
+
+        _tprint("BVARForecast show method tests passed.")
+    end
+
+    @testset "BVARPosterior show with varnames" begin
+        Random.seed!(50003)
+        post_vn = estimate_bvar(Y, 1; n_draws=(FAST ? 30 : 50), sampler=:direct,
+                                varnames=["GDP", "Inflation"])
+        io = IOBuffer()
+        show(io, post_vn)
+        out = String(take!(io))
+        @test occursin("GDP", out)
+        @test occursin("Inflation", out)
+
+        # Verify varnames stored correctly
+        @test post_vn.varnames == ["GDP", "Inflation"]
+
+        _tprint("BVARPosterior show with varnames test passed.")
+    end
+
+    @testset "posterior_mean_model and posterior_median_model (default data)" begin
+        Random.seed!(50004)
+        post = estimate_bvar(Y, 1; n_draws=(FAST ? 30 : 50), sampler=:direct)
+
+        # Without explicit data kwarg — should use post.data
+        mean_m = posterior_mean_model(post)
+        @test mean_m isa VARModel
+        @test all(isfinite.(mean_m.B))
+        @test all(isfinite.(mean_m.Sigma))
+
+        med_m = posterior_median_model(post)
+        @test med_m isa VARModel
+        @test all(isfinite.(med_m.B))
+        @test all(isfinite.(med_m.Sigma))
+
+        # Mean and median should generally differ (but both valid)
+        @test size(mean_m.B) == size(med_m.B)
+        @test size(mean_m.Sigma) == size(med_m.Sigma)
+
+        _tprint("posterior_mean_model / posterior_median_model (default data) tests passed.")
+    end
+
+    @testset "Deprecated wrapper process_posterior_samples(post, p, n, func)" begin
+        Random.seed!(50005)
+        post = estimate_bvar(Y, 1; n_draws=(FAST ? 20 : 40), sampler=:direct)
+
+        # The 4-arg deprecated wrapper should delegate to the 2-arg version
+        results, n_samples = MacroEconometricModels.process_posterior_samples(
+            post, post.p, post.n,
+            (m, Q, h) -> MacroEconometricModels.compute_irf(m, Q, h);
+            horizon=5, method=:cholesky
+        )
+        @test n_samples > 0
+        @test length(results) == n_samples
+
+        _tprint("Deprecated process_posterior_samples wrapper test passed.")
+    end
+
+    @testset "Base.size and Base.length for BVARPosterior" begin
+        Random.seed!(50006)
+        post = estimate_bvar(Y, 1; n_draws=(FAST ? 25 : 50), sampler=:direct)
+
+        # length
+        @test length(post) == post.n_draws
+
+        # size(post, 1) == n_draws
+        @test size(post, 1) == post.n_draws
+
+        # size(post, 2) should error
+        @test_throws ErrorException size(post, 2)
+
+        _tprint("Base.size / Base.length tests passed.")
+    end
+
+    @testset "varnames() accessor" begin
+        Random.seed!(50007)
+        # Default varnames
+        post_def = estimate_bvar(Y, 1; n_draws=(FAST ? 20 : 40), sampler=:direct)
+        vn = varnames(post_def)
+        @test vn isa Vector{String}
+        @test length(vn) == 2
+
+        # Custom varnames
+        post_custom = estimate_bvar(Y, 1; n_draws=(FAST ? 20 : 40), sampler=:direct,
+                                    varnames=["X1", "X2"])
+        @test varnames(post_custom) == ["X1", "X2"]
+
+        _tprint("varnames() accessor tests passed.")
+    end
+
+    @testset "compute_posterior_quantiles with central=:median" begin
+        Random.seed!(50008)
+        # Create synthetic samples array: n_samples x dim1 x dim2
+        samples = randn(Float64, 100, 5, 3)
+
+        q_vec = [0.16, 0.5, 0.84]
+        q_out, m_out = MacroEconometricModels.compute_posterior_quantiles(
+            samples, q_vec; central=:median
+        )
+
+        # Check output shapes
+        @test size(q_out) == (5, 3, 3)   # (dim1, dim2, n_quantiles)
+        @test size(m_out) == (5, 3)       # (dim1, dim2)
+
+        # m_out should be median (not mean) of each slice
+        for i in 1:5, j in 1:3
+            @test m_out[i, j] ≈ median(samples[:, i, j])
+        end
+
+        # Quantiles should be ordered
+        for i in 1:5, j in 1:3
+            @test q_out[i, j, 1] <= q_out[i, j, 2] <= q_out[i, j, 3]
+        end
+
+        # Compare with central=:mean
+        q_out2, m_out2 = MacroEconometricModels.compute_posterior_quantiles(
+            samples, q_vec; central=:mean
+        )
+        for i in 1:5, j in 1:3
+            @test m_out2[i, j] ≈ mean(samples[:, i, j])
+        end
+
+        _tprint("compute_posterior_quantiles central=:median tests passed.")
+    end
+
+    @testset "Minnesota prior edge cases" begin
+        Random.seed!(50009)
+        Y_mn = randn(80, 2)
+
+        # lambda=0 and mu=0: these disable sum-of-coefficients and co-persistence priors
+        hyper_no_soc = MinnesotaHyperparameters(tau=0.5, decay=2.0, lambda=0.0, mu=0.0, omega=0.5)
+        post_no_soc = estimate_bvar(Y_mn, 1; prior=:minnesota, hyper=hyper_no_soc, n_draws=50)
+        @test post_no_soc isa BVARPosterior
+        @test all(isfinite.(post_no_soc.B_draws))
+
+        # Very tight prior (small tau)
+        hyper_tight = MinnesotaHyperparameters(tau=0.01, decay=2.0, omega=0.5)
+        post_tight = estimate_bvar(Y_mn, 1; prior=:minnesota, hyper=hyper_tight, n_draws=50)
+        @test post_tight isa BVARPosterior
+        @test all(isfinite.(post_tight.B_draws))
+
+        # Very loose prior (large tau)
+        hyper_loose = MinnesotaHyperparameters(tau=10.0, decay=1.0, omega=1.0)
+        post_loose = estimate_bvar(Y_mn, 1; prior=:minnesota, hyper=hyper_loose, n_draws=50)
+        @test post_loose isa BVARPosterior
+        @test all(isfinite.(post_loose.B_draws))
+
+        _tprint("Minnesota prior edge cases tests passed.")
+    end
+
+    @testset "log_marginal_likelihood" begin
+        Random.seed!(50010)
+        Y_lml = randn(80, 2)
+
+        # Standard hyper
+        hyper = MinnesotaHyperparameters(tau=0.5, decay=2.0, omega=0.5)
+        ml = log_marginal_likelihood(Y_lml, 1, hyper)
+        @test isfinite(ml)
+        @test ml isa Float64
+
+        # Different tau should give different marginal likelihoods
+        hyper2 = MinnesotaHyperparameters(tau=5.0, decay=2.0, omega=0.5)
+        ml2 = log_marginal_likelihood(Y_lml, 1, hyper2)
+        @test isfinite(ml2)
+        @test ml != ml2  # different hyperparameters should yield different values
+
+        # optimize_hyperparameters should return valid result
+        best_hyper = MacroEconometricModels.optimize_hyperparameters(Y_lml, 1; grid_size=5)
+        @test best_hyper isa MinnesotaHyperparameters
+        @test best_hyper.tau > 0
+
+        # Full grid optimization
+        best_full, best_ml = MacroEconometricModels.optimize_hyperparameters_full(
+            Y_lml, 1;
+            tau_grid=range(0.1, 2.0, length=3),
+            lambda_grid=[1.0, 5.0],
+            mu_grid=[1.0, 2.0]
+        )
+        @test best_full isa MinnesotaHyperparameters
+        @test isfinite(best_ml)
+
+        _tprint("log_marginal_likelihood tests passed.")
+    end
 end

@@ -411,6 +411,101 @@ using Test, Random, DataFrames
         @test occursin("PlotOutput", s3)
     end
 
+    # =========================================================================
+    # Coverage — internal helpers and edge cases
+    # =========================================================================
+    @testset "_json edge cases" begin
+        @test MacroEconometricModels._json(NaN) == "null"
+        @test MacroEconometricModels._json(Inf) == "null"
+        @test MacroEconometricModels._json(-Inf) == "null"
+        @test MacroEconometricModels._json(nothing) == "null"
+        @test MacroEconometricModels._json(missing) == "null"
+        @test MacroEconometricModels._json(true) == "true"
+        @test MacroEconometricModels._json(false) == "false"
+        @test MacroEconometricModels._json(:test) == "\"test\""
+        @test MacroEconometricModels._json(42) == "42"
+        @test MacroEconometricModels._json(3.14) == "3.14"
+        @test MacroEconometricModels._json("hello") == "\"hello\""
+        @test MacroEconometricModels._json("he\"llo") == "\"he\\\"llo\""
+        @test MacroEconometricModels._json("line\nnewline") == "\"line\\nnewline\""
+        @test MacroEconometricModels._json([1,2,3]) == "[1,2,3]"
+    end
+
+    @testset "_json_obj and _json_array_of_objects" begin
+        obj = MacroEconometricModels._json_obj([Pair("a","1"), Pair("b","\"x\"")])
+        @test occursin("\"a\":1", obj)
+        rows = [
+            [Pair("x","1")],
+            [Pair("x","2")]
+        ]
+        arr = MacroEconometricModels._json_array_of_objects(rows)
+        @test startswith(arr, "[")
+        @test endswith(arr, "]")
+    end
+
+    @testset "VARForecast plot" begin
+        Y = randn(100, 3)
+        m = estimate_var(Y, 2)
+        fc = forecast(m, 10)
+        p = plot_result(fc)
+        check_plot(p)
+        # With specific var
+        p2 = plot_result(fc; var=1)
+        check_plot(p2)
+    end
+
+    @testset "BVARForecast plot with point_estimate=:mean" begin
+        Y = randn(100, 3)
+        post = estimate_bvar(Y, 2; n_draws=100)
+        fc = forecast(post, 10; point_estimate=:mean)
+        p = plot_result(fc)
+        check_plot(p)
+        @test occursin("Posterior mean", p.html) || occursin("mean", p.html)
+    end
+
+    @testset "FactorForecast type=:factor plot" begin
+        X = randn(200, 20)
+        fm = estimate_dynamic_factors(X, 2, 1)
+        fc = forecast(fm, 10)
+        p = plot_result(fc; type=:factor)
+        check_plot(p)
+        @test occursin("Factor", p.html)
+    end
+
+    @testset "_resolve_var edge cases" begin
+        names = ["GDP", "CPI", "RATE"]
+        @test MacroEconometricModels._resolve_var(nothing, names) == 1
+        @test MacroEconometricModels._resolve_var(2, names) == 2
+        @test MacroEconometricModels._resolve_var("CPI", names) == 2
+        @test_throws ArgumentError MacroEconometricModels._resolve_var("INVALID", names)
+    end
+
+    @testset "Hamilton and BaxterKing filters without original=" begin
+        y = cumsum(randn(200))
+        r = hamilton_filter(y)
+        p_no_orig = plot_result(r)
+        check_plot(p_no_orig)
+
+        r2 = baxter_king(y)
+        p_bk = plot_result(r2)
+        check_plot(p_bk)
+    end
+
+    @testset "_make_plot with source and note" begin
+        panel = MacroEconometricModels._PanelSpec("test_id", "Test Title", "// js code")
+        p = MacroEconometricModels._make_plot([panel, panel]; title="Test", source="Source: Author", note="Note: test")
+        @test occursin("Source: Author", p.html)
+        @test occursin("Note: test", p.html)
+    end
+
+    @testset "IRF with ci_type=:none" begin
+        Y = randn(100, 3)
+        m = estimate_var(Y, 2)
+        r = irf(m, 10; ci_type=:none)
+        p = plot_result(r; var=1, shock=1)
+        check_plot(p)
+    end
+
     @testset "PlotOutput type" begin
         p = PlotOutput("<html></html>")
         @test p isa PlotOutput
