@@ -813,8 +813,8 @@ lp = estimate_lp(Y, 3, 20; lags=4, cov_type=:newey_west)
 shock_path = ones(20)
 fc = forecast(lp, shock_path; ci_method=:analytical, conf_level=0.95)
 
-println("INDPRO forecast at h=1: ", round(fc.forecasts[1, 1], digits=4))
-println("INDPRO forecast at h=8: ", round(fc.forecasts[8, 1], digits=4))
+println("INDPRO forecast at h=1: ", round(fc.forecast[1, 1], digits=4))
+println("INDPRO forecast at h=8: ", round(fc.forecast[8, 1], digits=4))
 println("95% CI at h=8: [", round(fc.ci_lower[8, 1], digits=4),
         ", ", round(fc.ci_upper[8, 1], digits=4), "]")
 
@@ -825,13 +825,13 @@ fc_struct = forecast(slp, 3, shock_path;  # shock_idx=3 (monetary policy)
                      ci_method=:bootstrap, n_boot=500)
 ```
 
-The `fc.forecasts` matrix has shape ``H \times n_{resp}``, where each row gives the point forecast at a given horizon. The analytical CIs widen with the horizon because the LP regression residuals exhibit increasing variance at longer horizons and the effective sample shrinks. The bootstrap CIs are generally more reliable in small samples because they do not rely on the normal approximation; however, they require the LP residuals to be approximately exchangeable, which holds under correct specification.
+The `fc.forecast` matrix has shape ``H \times n_{resp}``, where each row gives the point forecast at a given horizon. The analytical CIs widen with the horizon because the LP regression residuals exhibit increasing variance at longer horizons and the effective sample shrinks. The bootstrap CIs are generally more reliable in small samples because they do not rely on the normal approximation; however, they require the LP residuals to be approximately exchangeable, which holds under correct specification.
 
 ### LPForecast Return Values
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `forecasts` | `Matrix{T}` | ``H \times n_{resp}`` point forecasts |
+| `forecast` | `Matrix{T}` | ``H \times n_{resp}`` point forecasts |
 | `ci_lower` | `Matrix{T}` | Lower CI bounds |
 | `ci_upper` | `Matrix{T}` | Upper CI bounds |
 | `se` | `Matrix{T}` | Standard errors at each horizon |
