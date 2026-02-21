@@ -925,3 +925,14 @@ end
     fc95 = forecast(m, 5; conf_level=0.95)
     @test all(fc.ci_upper .- fc.ci_lower .>= fc95.ci_upper .- fc95.ci_lower .- 1e-10)
 end
+
+@testset "conf_level accepts Real" begin
+    Random.seed!(42)
+    y = cumsum(randn(100))
+    m = estimate_ar(y, 2)
+    # Should accept Float64 and Float32 without error
+    fc1 = forecast(m, 5; conf_level=0.9)
+    @test fc1.conf_level ≈ 0.9
+    fc2 = forecast(m, 5; conf_level=Float32(0.9))
+    @test fc2.conf_level ≈ Float32(0.9) atol=1e-6
+end

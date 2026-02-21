@@ -33,7 +33,8 @@ h_{T+1}, ..., h_{T+h} and returns quantiles of exp(hₜ).
 - `h`: Forecast horizon
 - `conf_level`: Confidence level for intervals (default 0.95)
 """
-function forecast(m::SVModel{T}, h::Int; conf_level::T=T(0.95)) where {T}
+function forecast(m::SVModel{T}, h::Int; conf_level::Real=0.95) where {T}
+    conf_level = T(conf_level)
     h < 1 && throw(ArgumentError("Forecast horizon must be ≥ 1"))
 
     n_draws = m.n_samples

@@ -32,7 +32,8 @@ Forecast conditional variance from a GARCH(p,q) model.
 Uses analytical iteration for point forecasts and simulation for CIs.
 Point forecasts converge to unconditional variance as h → ∞.
 """
-function forecast(m::GARCHModel{T}, h::Int; conf_level::T=T(0.95), n_sim::Int=10000) where {T}
+function forecast(m::GARCHModel{T}, h::Int; conf_level::Real=0.95, n_sim::Int=10000) where {T}
+    conf_level = T(conf_level)
     h < 1 && throw(ArgumentError("Forecast horizon must be ≥ 1"))
 
     q = m.q
@@ -79,7 +80,8 @@ end
 
 Forecast conditional variance from an EGARCH(p,q) model via simulation.
 """
-function forecast(m::EGARCHModel{T}, h::Int; conf_level::T=T(0.95), n_sim::Int=10000) where {T}
+function forecast(m::EGARCHModel{T}, h::Int; conf_level::Real=0.95, n_sim::Int=10000) where {T}
+    conf_level = T(conf_level)
     h < 1 && throw(ArgumentError("Forecast horizon must be ≥ 1"))
 
     q = m.q
@@ -125,7 +127,8 @@ end
 
 Forecast conditional variance from a GJR-GARCH(p,q) model via simulation.
 """
-function forecast(m::GJRGARCHModel{T}, h::Int; conf_level::T=T(0.95), n_sim::Int=10000) where {T}
+function forecast(m::GJRGARCHModel{T}, h::Int; conf_level::Real=0.95, n_sim::Int=10000) where {T}
+    conf_level = T(conf_level)
     h < 1 && throw(ArgumentError("Forecast horizon must be ≥ 1"))
 
     q = m.q

@@ -158,7 +158,8 @@ end
 
 Compute h-step ahead forecasts with confidence intervals for AR model.
 """
-function forecast(model::ARModel{T}, h::Int; conf_level::T=T(0.95)) where {T<:AbstractFloat}
+function forecast(model::ARModel{T}, h::Int; conf_level::Real=0.95) where {T<:AbstractFloat}
+    conf_level = T(conf_level)
     h < 1 && throw(ArgumentError("Forecast horizon h must be positive"))
     _forecast_arma(model.y, model.residuals, model.c, model.phi, T[], model.sigma2, h, conf_level)
 end
@@ -168,7 +169,8 @@ end
 
 Compute h-step ahead forecasts with confidence intervals for MA model.
 """
-function forecast(model::MAModel{T}, h::Int; conf_level::T=T(0.95)) where {T<:AbstractFloat}
+function forecast(model::MAModel{T}, h::Int; conf_level::Real=0.95) where {T<:AbstractFloat}
+    conf_level = T(conf_level)
     h < 1 && throw(ArgumentError("Forecast horizon h must be positive"))
     _forecast_arma(model.y, model.residuals, model.c, T[], model.theta, model.sigma2, h, conf_level)
 end
@@ -178,7 +180,8 @@ end
 
 Compute h-step ahead forecasts with confidence intervals for ARMA model.
 """
-function forecast(model::ARMAModel{T}, h::Int; conf_level::T=T(0.95)) where {T<:AbstractFloat}
+function forecast(model::ARMAModel{T}, h::Int; conf_level::Real=0.95) where {T<:AbstractFloat}
+    conf_level = T(conf_level)
     h < 1 && throw(ArgumentError("Forecast horizon h must be positive"))
     _forecast_arma(model.y, model.residuals, model.c, model.phi, model.theta, model.sigma2, h, conf_level)
 end
@@ -190,7 +193,8 @@ Compute h-step ahead forecasts with confidence intervals for ARIMA model.
 Forecasts are computed on the differenced series and then integrated back
 to the original scale.
 """
-function forecast(model::ARIMAModel{T}, h::Int; conf_level::T=T(0.95)) where {T<:AbstractFloat}
+function forecast(model::ARIMAModel{T}, h::Int; conf_level::Real=0.95) where {T<:AbstractFloat}
+    conf_level = T(conf_level)
     h < 1 && throw(ArgumentError("Forecast horizon h must be positive"))
 
     fc_diff = _forecast_arma(model.y_diff, model.residuals, model.c,
