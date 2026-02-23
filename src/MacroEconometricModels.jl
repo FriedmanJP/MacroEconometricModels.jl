@@ -158,6 +158,7 @@ include("nowcast/forecast.jl")
 
 # DSGE models
 include("dsge/types.jl")
+include("dsge/parser.jl")
 
 # GMM
 include("gmm/gmm.jl")
@@ -307,6 +308,9 @@ export AbstractDSGEModel
 
 # Types
 export DSGESpec, LinearDSGE, DSGESolution, PerfectForesightPath, DSGEEstimation
+
+# Macro
+export @dsge
 
 # Accessors
 export nshocks, is_determined, is_stable

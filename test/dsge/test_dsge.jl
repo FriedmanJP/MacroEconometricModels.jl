@@ -362,4 +362,86 @@ end
     @test report(est) === nothing
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 2: Parser
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "Parser: simple AR(1)" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+    end
+    @test spec isa DSGESpec{Float64}
+    @test spec.endog == [:y]
+    @test spec.exog == [:ε]
+    @test spec.params == [:ρ, :σ]
+    @test spec.param_values[:ρ] ≈ 0.9
+    @test spec.param_values[:σ] ≈ 0.01
+    @test spec.n_endog == 1
+    @test spec.n_exog == 1
+    @test spec.n_expect == 0  # no forward-looking
+end
+
+@testset "Parser: multi-variable" begin
+    spec = @dsge begin
+        parameters: α = 0.33, ρ = 0.9
+        endogenous: y, k, a
+        exogenous: ε_a
+        y[t] = k[t-1]^α
+        k[t] = y[t] - 0.5 * y[t]
+        a[t] = ρ * a[t-1] + ε_a[t]
+    end
+    @test spec.n_endog == 3
+    @test spec.n_exog == 1
+    @test spec.n_params == 2
+end
+
+@testset "Parser: forward-looking / E[t]" begin
+    spec = @dsge begin
+        parameters: β = 0.5
+        endogenous: x
+        exogenous: ε
+        x[t] = β * E[t](x[t+1]) + ε[t]
+    end
+    @test spec.n_expect == 1  # one forward-looking variable
+end
+
+@testset "Parser: implicit forward (no E[t])" begin
+    spec = @dsge begin
+        parameters: β = 0.5
+        endogenous: x
+        exogenous: ε
+        x[t] = β * x[t+1] + ε[t]
+    end
+    @test spec.n_expect == 1
+end
+
+@testset "Parser: residual functions" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 1.0
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+    end
+    fn = spec.residual_fns[1]
+    # At SS (y=0, ε=0): residual = 0 - 0.9*0 - 1.0*0 = 0
+    @test fn([0.0], [0.0], [0.0], [0.0], spec.param_values) ≈ 0.0 atol=1e-12
+    # y_t=1, y_lag=0, ε=0: residual = 1 - 0.9*0 - 1.0*0 = 1
+    @test fn([1.0], [0.0], [0.0], [0.0], spec.param_values) ≈ 1.0 atol=1e-12
+    # y_t=0.9, y_lag=1.0, ε=0: residual = 0.9 - 0.9*1.0 = 0
+    @test fn([0.9], [1.0], [0.0], [0.0], spec.param_values) ≈ 0.0 atol=1e-12
+end
+
+@testset "Parser: equation count mismatch" begin
+    # Macro errors occur at expansion time; use eval to catch them
+    @test_throws LoadError eval(:(@dsge begin
+        parameters: ρ = 0.9
+        endogenous: x, y
+        exogenous: ε
+        x[t] = ρ * x[t-1] + ε[t]
+    end))
+end
+
 end # top-level @testset
