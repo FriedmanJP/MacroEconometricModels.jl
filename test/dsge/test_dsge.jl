@@ -1965,4 +1965,165 @@ end
     @test occursin("e", output)
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 21: OccBin Edge Cases
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "OccBin: explicit alternative spec" begin
+    spec = @dsge begin
+        parameters: rho = 0.9, phi = 1.5
+        endogenous: y, i
+        exogenous: e
+        y[t] = rho * y[t-1] + e[t]
+        i[t] = phi * y[t]
+    end
+    spec = compute_steady_state(spec)
+
+    # Explicit alternative: i[t] = 0 (ZLB)
+    alt_spec = @dsge begin
+        parameters: rho = 0.9, phi = 1.5
+        endogenous: y, i
+        exogenous: e
+        y[t] = rho * y[t-1] + e[t]
+        i[t] = 0.0
+    end
+    alt_spec = compute_steady_state(alt_spec)
+
+    constraint = parse_constraint(:(i[t] >= 0), spec)
+
+    shock_path = zeros(30, 1)
+    shock_path[1, 1] = -2.0
+    sol = occbin_solve(spec, constraint, alt_spec; shock_path=shock_path, nperiods=30)
+    @test sol.converged
+    @test minimum(sol.piecewise_path[:, 2]) >= -1e-8
+end
+
+@testset "OccBin: <= constraint direction" begin
+    spec = @dsge begin
+        parameters: rho = 0.5
+        endogenous: y, debt
+        exogenous: e
+        y[t] = rho * y[t-1] + e[t]
+        debt[t] = 0.8 * y[t]
+    end
+    spec = compute_steady_state(spec)
+
+    constraint = parse_constraint(:(debt[t] <= 1.0), spec)
+    @test constraint.direction == :leq
+    @test constraint.bound == 1.0
+
+    shock_path = zeros(20, 1)
+    shock_path[1, 1] = 3.0  # positive shock pushes debt above bound
+
+    sol = occbin_solve(spec, constraint; shock_path=shock_path, nperiods=20)
+    @test sol.converged
+    debt_idx = 2
+    @test maximum(sol.piecewise_path[:, debt_idx]) <= 1.0 + 1e-8
+end
+
+@testset "OccBin: maxiter warning" begin
+    spec = @dsge begin
+        parameters: rho = 0.99
+        endogenous: y, i
+        exogenous: e
+        y[t] = rho * y[t-1] + e[t]
+        i[t] = 1.5 * y[t]
+    end
+    spec = compute_steady_state(spec)
+
+    constraint = parse_constraint(:(i[t] >= 0), spec)
+    shock_path = zeros(5, 1)
+    shock_path[1, 1] = -5.0
+
+    # With maxiter=1, should warn about not converging
+    sol = @test_warn r"did not converge" occbin_solve(spec, constraint;
+        shock_path=shock_path, nperiods=5, maxiter=1)
+    @test !sol.converged
+end
+
+@testset "OccBin: show/report for OccBinSolution" begin
+    spec = @dsge begin
+        parameters: rho = 0.9, phi = 1.5
+        endogenous: y, i
+        exogenous: e
+        y[t] = rho * y[t-1] + e[t]
+        i[t] = phi * y[t]
+    end
+    spec = compute_steady_state(spec)
+    constraint = parse_constraint(:(i[t] >= 0), spec)
+    shock_path = zeros(20, 1)
+    shock_path[1, 1] = -2.0
+    sol = occbin_solve(spec, constraint; shock_path=shock_path, nperiods=20)
+
+    io = IOBuffer()
+    show(io, sol)
+    output = String(take!(io))
+    @test occursin("OccBin", output)
+    @test occursin("Converged", output)
+    @test occursin("Yes", output)
+
+    # report should not error
+    report(sol)
+end
+
+@testset "OccBin: constraint parsing edge cases" begin
+    spec = @dsge begin
+        parameters: rho = 0.5
+        endogenous: y, z
+        exogenous: e
+        y[t] = rho * y[t-1] + e[t]
+        z[t] = y[t]
+    end
+
+    # Invalid variable
+    @test_throws ArgumentError parse_constraint(:(w[t] >= 0), spec)
+
+    # Invalid operator
+    @test_throws ArgumentError parse_constraint(:(y[t] > 0), spec)
+
+    # Missing time index
+    @test_throws ArgumentError parse_constraint(:(y >= 0), spec)
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 22: OccBin Plotting
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "OccBin: plot_result OccBinIRF" begin
+    spec = @dsge begin
+        parameters: rho = 0.9, phi = 1.5
+        endogenous: y, i
+        exogenous: e
+        y[t] = rho * y[t-1] + e[t]
+        i[t] = phi * y[t]
+    end
+    spec = compute_steady_state(spec)
+    constraint = parse_constraint(:(i[t] >= 0), spec)
+    oirf = occbin_irf(spec, constraint, 1, 30; magnitude=-2.0)
+
+    p = plot_result(oirf)
+    @test isa(p, PlotOutput)
+    @test occursin("OccBin", p.html)
+    @test occursin("d3", p.html)
+end
+
+@testset "OccBin: plot_result OccBinSolution" begin
+    spec = @dsge begin
+        parameters: rho = 0.9, phi = 1.5
+        endogenous: y, i
+        exogenous: e
+        y[t] = rho * y[t-1] + e[t]
+        i[t] = phi * y[t]
+    end
+    spec = compute_steady_state(spec)
+    constraint = parse_constraint(:(i[t] >= 0), spec)
+    shock_path = zeros(30, 1)
+    shock_path[1, 1] = -2.0
+    sol = occbin_solve(spec, constraint; shock_path=shock_path, nperiods=30)
+
+    p = plot_result(sol)
+    @test isa(p, PlotOutput)
+    @test occursin("OccBin", p.html)
+end
+
 end # top-level @testset
