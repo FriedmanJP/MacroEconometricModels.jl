@@ -245,6 +245,9 @@ include("lp/fevd.jl")
 # DSGE simulation, IRF/FEVD bridge (after var/irf.jl, var/fevd.jl, lp/fevd.jl)
 include("dsge/simulation.jl")
 
+# DSGE estimation (after estimate_var, irf, estimate_gmm)
+include("dsge/estimation.jl")
+
 # Display (after all types)
 include("summary.jl")
 
@@ -322,7 +325,7 @@ export @dsge
 
 # Functions
 export compute_steady_state, linearize, solve, gensys, blanchard_kahn
-export simulate
+export simulate, estimate_dsge
 
 # Accessors
 export nshocks, is_determined, is_stable
