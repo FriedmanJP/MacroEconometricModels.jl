@@ -1098,4 +1098,49 @@ end
     @test occursin("@article{sims2002", r_bib)
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 12: SMM Estimation
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "DSGE SMM Estimation" begin
+    # Simple AR(1): y_t = rho * y_{t-1} + sigma * e_t
+    rng = Random.MersenneTwister(42)
+    spec = @dsge begin
+        parameters: rho = 0.7, sigma = 1.0
+        endogenous: y
+        exogenous: e
+        y[t] = rho * y[t-1] + sigma * e[t]
+    end
+    spec = compute_steady_state(spec)
+
+    # Simulate data from the model
+    sol = solve(spec; method=:gensys)
+    sim_data = simulate(sol, 500; rng=rng)
+
+    # Estimate via SMM (only rho, hold sigma fixed)
+    # Use bounds to keep rho in stationary region (-1, 1)
+    bounds = ParameterTransform([-0.99], [0.99])
+    est = estimate_dsge(spec, sim_data, [:rho];
+                        method=:smm, sim_ratio=5, burn=100,
+                        bounds=bounds,
+                        rng=Random.MersenneTwister(123))
+
+    @test est isa DSGEEstimation{Float64}
+    @test est.method == :smm
+    @test est.converged
+    @test abs(est.theta[1] - 0.7) < 0.25  # reasonable recovery
+    @test is_determined(est.solution)
+end
+
+@testset "DSGE SMM: invalid method still errors" begin
+    spec = @dsge begin
+        parameters: rho = 0.5
+        endogenous: y
+        exogenous: e
+        y[t] = rho * y[t-1] + e[t]
+    end
+    Y = randn(100, 1)
+    @test_throws ArgumentError estimate_dsge(spec, Y, [:rho]; method=:invalid)
+end
+
 end # top-level @testset

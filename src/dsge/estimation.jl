@@ -54,7 +54,11 @@ function estimate_dsge(spec::DSGESpec{T}, data::AbstractMatrix,
                         target_irfs::Union{Nothing,ImpulseResponse}=nothing,
                         var_lags::Int=4, irf_horizon::Int=20,
                         weighting::Symbol=:two_step,
-                        n_lags_instruments::Int=4) where {T<:AbstractFloat}
+                        n_lags_instruments::Int=4,
+                        sim_ratio::Int=5, burn::Int=100,
+                        moments_fn::Function=d -> autocovariance_moments(d; lags=1),
+                        bounds::Union{Nothing,ParameterTransform}=nothing,
+                        rng=Random.default_rng()) where {T<:AbstractFloat}
     data_T = Matrix{T}(data)
 
     if method == :irf_matching
@@ -67,8 +71,13 @@ function estimate_dsge(spec::DSGESpec{T}, data::AbstractMatrix,
         return _estimate_euler_gmm(spec, data_T, param_names;
                                     n_lags=n_lags_instruments,
                                     weighting=weighting)
+    elseif method == :smm
+        return _estimate_dsge_smm(spec, data_T, param_names;
+                                    sim_ratio=sim_ratio, burn=burn,
+                                    weighting=weighting, moments_fn=moments_fn,
+                                    bounds=bounds, rng=rng)
     else
-        throw(ArgumentError("method must be :irf_matching or :euler_gmm"))
+        throw(ArgumentError("method must be :irf_matching, :euler_gmm, or :smm"))
     end
 end
 
@@ -267,5 +276,82 @@ function _estimate_euler_gmm(spec::DSGESpec{T}, data::Matrix{T},
         gmm_result.theta, gmm_result.vcov, param_names,
         :euler_gmm, gmm_result.J_stat, gmm_result.J_pvalue,
         final_sol, gmm_result.converged, final_spec
+    )
+end
+
+# =============================================================================
+# SMM Estimation (Ruge-Murcia 2012)
+# =============================================================================
+
+"""
+    _estimate_dsge_smm(spec, data, param_names; ...) -> DSGEEstimation
+
+Internal: SMM estimation of DSGE parameters.
+
+Builds a simulator from the DSGE spec: for each candidate θ, updates spec
+parameters, solves the model, and simulates data.
+"""
+function _estimate_dsge_smm(spec::DSGESpec{T}, data::Matrix{T},
+                              param_names::Vector{Symbol};
+                              sim_ratio=5, burn=100, weighting=:two_step,
+                              moments_fn=d -> autocovariance_moments(d; lags=1),
+                              bounds=nothing, rng=Random.default_rng()) where {T}
+    theta0 = T[spec.param_values[p] for p in param_names]
+
+    # Build DSGE simulator: for each candidate theta, update spec, solve, simulate.
+    # The burn-in is handled here (using the captured `burn` kwarg from the outer
+    # scope), so we pass burn=0 to estimate_smm below.
+    #
+    # When the model does not solve (e.g. explosive parameters), return a large-
+    # variance random matrix instead of NaN.  NaN moments cause NaN objective
+    # values which break Nelder-Mead simplex comparisons.  A large-variance draw
+    # produces moments far from the data, yielding a high (but finite) objective
+    # that the optimizer can move away from.
+    dsge_burn = burn
+    function dsge_simulator(theta, T_periods, _burn_in; rng=Random.default_rng())
+        new_pv = copy(spec.param_values)
+        for (i, pn) in enumerate(param_names)
+            new_pv[pn] = theta[i]
+        end
+        new_spec = DSGESpec{T}(
+            spec.endog, spec.exog, spec.params, new_pv,
+            spec.equations, spec.residual_fns,
+            spec.n_expect, spec.forward_indices, T[]
+        )
+        try
+            new_spec = compute_steady_state(new_spec)
+            sol = solve(new_spec; method=:gensys)
+            if !is_determined(sol)
+                # Return large-variance noise so objective is finite but penalized
+                return T(1e4) .* randn(copy(rng), T, T_periods, spec.n_endog)
+            end
+            sim_full = simulate(sol, T_periods + dsge_burn; rng=rng)
+            sim_full[(dsge_burn+1):end, :]
+        catch
+            T(1e4) .* randn(copy(rng), T, T_periods, spec.n_endog)
+        end
+    end
+
+    smm_result = estimate_smm(dsge_simulator, moments_fn, theta0, data;
+                               sim_ratio=sim_ratio, burn=0,  # burn handled inside simulator
+                               weighting=weighting, bounds=bounds, rng=rng)
+
+    # Build solution at estimated parameters
+    final_pv = copy(spec.param_values)
+    for (i, pn) in enumerate(param_names)
+        final_pv[pn] = smm_result.theta[i]
+    end
+    final_spec = DSGESpec{T}(
+        spec.endog, spec.exog, spec.params, final_pv,
+        spec.equations, spec.residual_fns,
+        spec.n_expect, spec.forward_indices, T[]
+    )
+    final_spec = compute_steady_state(final_spec)
+    final_sol = solve(final_spec; method=:gensys)
+
+    DSGEEstimation{T}(
+        smm_result.theta, smm_result.vcov, param_names,
+        :smm, smm_result.J_stat, smm_result.J_pvalue,
+        final_sol, smm_result.converged, final_spec
     )
 end
