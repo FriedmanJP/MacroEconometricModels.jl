@@ -444,4 +444,50 @@ end
     end))
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 3: Steady State
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "Steady state: AR(1)" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+    end
+    spec2 = compute_steady_state(spec)
+    @test spec2 isa DSGESpec
+    @test length(spec2.steady_state) == 1
+    @test spec2.steady_state[1] ≈ 0.0 atol=1e-6  # AR(1) SS = 0
+end
+
+@testset "Steady state: simple production" begin
+    # y = k^α, k = s*y → SS: y = (s*y)^α → y^(1-α) = s^α
+    spec = @dsge begin
+        parameters: α = 0.33, s = 0.3
+        endogenous: y, k
+        exogenous: ε
+        y[t] = k[t-1]^α + ε[t]
+        k[t] = s * y[t]
+    end
+    spec2 = compute_steady_state(spec; initial_guess=[1.0, 0.3])
+    @test length(spec2.steady_state) == 2
+    # Check SS satisfies equations
+    y_ss, k_ss = spec2.steady_state
+    @test y_ss ≈ k_ss^0.33 atol=1e-4
+    @test k_ss ≈ 0.3 * y_ss atol=1e-4
+end
+
+@testset "Steady state: analytical" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + ε[t]
+    end
+    ss_fn = (θ) -> [0.0]  # Known: y_ss = 0 for zero-mean AR
+    spec2 = compute_steady_state(spec; method=:analytical, ss_fn=ss_fn)
+    @test spec2.steady_state[1] ≈ 0.0
+end
+
 end # top-level @testset
