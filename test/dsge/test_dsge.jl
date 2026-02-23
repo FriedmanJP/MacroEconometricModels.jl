@@ -490,4 +490,54 @@ end
     @test spec2.steady_state[1] ≈ 0.0
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 4: Linearization
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "Linearize: AR(1)" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 1.0
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+    end
+    spec = compute_steady_state(spec)
+    ld = linearize(spec)
+    @test ld isa LinearDSGE{Float64}
+    # For y_t = ρ*y_{t-1} + σ*ε_t → Γ₀ = [1], Γ₁ = [ρ], Ψ = [σ], Π = empty
+    @test ld.Gamma0[1,1] ≈ 1.0 atol=1e-4
+    @test ld.Gamma1[1,1] ≈ 0.9 atol=1e-4
+    @test ld.Psi[1,1] ≈ 1.0 atol=1e-4
+    @test size(ld.Pi, 2) == 0  # no forward-looking variables
+end
+
+@testset "Linearize: forward-looking" begin
+    # x_t = 0.5 * E_t[x_{t+1}] + ε_t
+    spec = @dsge begin
+        parameters: β = 0.5
+        endogenous: x
+        exogenous: ε
+        x[t] = β * E[t](x[t+1]) + ε[t]
+    end
+    spec = compute_steady_state(spec)
+    ld = linearize(spec)
+    @test size(ld.Pi, 2) == 1  # 1 expectation error
+    @test abs(ld.Pi[1,1]) > 0.1  # non-zero Π entry
+end
+
+@testset "LinearDSGE show from linearize" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + ε[t]
+    end
+    spec = compute_steady_state(spec)
+    ld = linearize(spec)
+    io = IOBuffer()
+    show(io, ld)
+    s = String(take!(io))
+    @test occursin("Linearized DSGE", s)
+end
+
 end # top-level @testset
