@@ -127,7 +127,7 @@ function _estimate_irf_matching(spec::DSGESpec{T}, data::Matrix{T},
         new_spec = DSGESpec{T}(
             spec.endog, spec.exog, spec.params, new_pv,
             spec.equations, spec.residual_fns,
-            spec.n_expect, spec.forward_indices, T[]
+            spec.n_expect, spec.forward_indices, T[], spec.ss_fn
         )
         try
             new_spec = compute_steady_state(new_spec)
@@ -185,7 +185,7 @@ function _estimate_irf_matching(spec::DSGESpec{T}, data::Matrix{T},
     final_spec = DSGESpec{T}(
         spec.endog, spec.exog, spec.params, final_pv,
         spec.equations, spec.residual_fns,
-        spec.n_expect, spec.forward_indices, T[]
+        spec.n_expect, spec.forward_indices, T[], spec.ss_fn
     )
     final_spec = compute_steady_state(final_spec)
     final_sol = solve(final_spec; method=:gensys)
@@ -267,7 +267,7 @@ function _estimate_euler_gmm(spec::DSGESpec{T}, data::Matrix{T},
     final_spec = DSGESpec{T}(
         spec.endog, spec.exog, spec.params, final_pv,
         spec.equations, spec.residual_fns,
-        spec.n_expect, spec.forward_indices, T[]
+        spec.n_expect, spec.forward_indices, T[], spec.ss_fn
     )
     final_spec = compute_steady_state(final_spec)
     final_sol = solve(final_spec; method=:gensys)
@@ -316,7 +316,7 @@ function _estimate_dsge_smm(spec::DSGESpec{T}, data::Matrix{T},
         new_spec = DSGESpec{T}(
             spec.endog, spec.exog, spec.params, new_pv,
             spec.equations, spec.residual_fns,
-            spec.n_expect, spec.forward_indices, T[]
+            spec.n_expect, spec.forward_indices, T[], spec.ss_fn
         )
         try
             new_spec = compute_steady_state(new_spec)
@@ -344,7 +344,7 @@ function _estimate_dsge_smm(spec::DSGESpec{T}, data::Matrix{T},
     final_spec = DSGESpec{T}(
         spec.endog, spec.exog, spec.params, final_pv,
         spec.equations, spec.residual_fns,
-        spec.n_expect, spec.forward_indices, T[]
+        spec.n_expect, spec.forward_indices, T[], spec.ss_fn
     )
     final_spec = compute_steady_state(final_spec)
     final_sol = solve(final_spec; method=:gensys)

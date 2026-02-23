@@ -45,6 +45,7 @@ Fields:
 - `forward_indices::Vector{Int}` — indices of equations with `[t+1]` terms
 - `steady_state::Vector{T}` — steady state values
 - `varnames::Vector{String}` — display names
+- `ss_fn::Union{Nothing, Function}` — optional analytical steady-state function `θ → y_ss`
 """
 struct DSGESpec{T<:AbstractFloat}
     endog::Vector{Symbol}
@@ -60,9 +61,11 @@ struct DSGESpec{T<:AbstractFloat}
     forward_indices::Vector{Int}
     steady_state::Vector{T}
     varnames::Vector{String}
+    ss_fn::Union{Nothing, Function}
 
     function DSGESpec{T}(endog, exog, params, param_values, equations, residual_fns,
-                         n_expect, forward_indices, steady_state) where {T<:AbstractFloat}
+                         n_expect, forward_indices, steady_state,
+                         ss_fn::Union{Nothing, Function}=nothing) where {T<:AbstractFloat}
         n_endog = length(endog)
         n_exog = length(exog)
         n_params = length(params)
@@ -71,7 +74,7 @@ struct DSGESpec{T<:AbstractFloat}
         @assert length(forward_indices) == n_expect
         varnames = [string(s) for s in endog]
         new{T}(endog, exog, params, param_values, equations, residual_fns,
-               n_endog, n_exog, n_params, n_expect, forward_indices, steady_state, varnames)
+               n_endog, n_exog, n_params, n_expect, forward_indices, steady_state, varnames, ss_fn)
     end
 end
 
