@@ -482,6 +482,26 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Why Are the Beveridge-Nelson and Unobserved-Components Decompositions of GDP So Different?",
         journal="Review of Economics and Statistics", volume="85", issue="2", pages="235--243",
         doi="10.1162/003465303765299882", isbn="", publisher="", entry_type=:article),
+    # --- DSGE ---
+    :sims2002 => (key=:sims2002, authors="Sims, Christopher A.", year=2002,
+        title="Solving Linear Rational Expectations Models",
+        journal="Computational Economics", volume="20", issue="1--2", pages="1--20",
+        doi="10.1023/A:1020517101123", isbn="", publisher="", entry_type=:article),
+    :blanchard_kahn1980 => (key=:blanchard_kahn1980,
+        authors="Blanchard, Olivier Jean and Kahn, Charles M.", year=1980,
+        title="The Solution of Linear Difference Models Under Rational Expectations",
+        journal="Econometrica", volume="48", issue="5", pages="1305--1311",
+        doi="10.2307/1912186", isbn="", publisher="", entry_type=:article),
+    :christiano_eichenbaum_evans2005 => (key=:christiano_eichenbaum_evans2005,
+        authors="Christiano, Lawrence J. and Eichenbaum, Martin and Evans, Charles L.", year=2005,
+        title="Nominal Rigidities and the Dynamic Effects of a Shock to Monetary Policy",
+        journal="Journal of Political Economy", volume="113", issue="1", pages="1--45",
+        doi="10.1086/426038", isbn="", publisher="", entry_type=:article),
+    :hansen_singleton1982 => (key=:hansen_singleton1982,
+        authors="Hansen, Lars Peter and Singleton, Kenneth J.", year=1982,
+        title="Generalized Instrumental Variables Estimation of Nonlinear Rational Expectations Models",
+        journal="Econometrica", volume="50", issue="5", pages="1269--1286",
+        doi="10.2307/1911873", isbn="", publisher="", entry_type=:article),
 )
 
 # --- Type/method → reference keys mapping ---
@@ -642,6 +662,16 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :nowcast_bridge => [:banbura2023],
     :nowcast_news => [:banbura_modugno2014],
     :balance_panel => [:banbura_modugno2014],
+    # DSGE
+    :DSGESolution => [:sims2002, :blanchard_kahn1980],
+    :DSGEEstimation => [:sims2002, :christiano_eichenbaum_evans2005, :hansen_singleton1982],
+    :PerfectForesightPath => [:sims2002],
+    :DSGESpec => [:sims2002],
+    :gensys => [:sims2002],
+    :blanchard_kahn => [:blanchard_kahn1980],
+    :perfect_foresight => [:sims2002],
+    :irf_matching => [:christiano_eichenbaum_evans2005],
+    :euler_gmm => [:hansen_singleton1982, :hansen1982],
     # Data sources (symbol dispatch)
     :fred_md => [:mccracken_ng2016],
     :fred_qd => [:mccracken_ng2020],
@@ -953,6 +983,12 @@ refs(io::IO, ::NowcastBVAR; kw...) = refs(io, _TYPE_REFS[:NowcastBVAR]; kw...)
 refs(io::IO, ::NowcastBridge; kw...) = refs(io, _TYPE_REFS[:NowcastBridge]; kw...)
 refs(io::IO, ::NowcastResult; kw...) = refs(io, _TYPE_REFS[:NowcastResult]; kw...)
 refs(io::IO, ::NowcastNews; kw...) = refs(io, _TYPE_REFS[:NowcastNews]; kw...)
+
+# DSGE types
+refs(io::IO, ::DSGESolution; kw...) = refs(io, _TYPE_REFS[:DSGESolution]; kw...)
+refs(io::IO, ::DSGEEstimation; kw...) = refs(io, _TYPE_REFS[:DSGEEstimation]; kw...)
+refs(io::IO, ::PerfectForesightPath; kw...) = refs(io, _TYPE_REFS[:PerfectForesightPath]; kw...)
+refs(io::IO, ::DSGESpec; kw...) = refs(io, _TYPE_REFS[:DSGESpec]; kw...)
 
 # --- Convenience: stdout fallback ---
 function refs(x; kw...)

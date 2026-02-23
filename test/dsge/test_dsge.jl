@@ -1032,4 +1032,37 @@ end
     @test pf.converged
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 11: refs() for DSGE
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "refs() for DSGE" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + ε[t]
+    end
+    sol = solve(spec)
+
+    # refs for DSGESolution
+    r = refs(sol)
+    @test occursin("Sims", r)
+    @test occursin("Blanchard", r)
+
+    # refs for DSGESpec
+    r_spec = refs(spec)
+    @test occursin("Sims", r_spec)
+
+    # Symbol dispatch
+    r_sym = refs(:gensys)
+    @test occursin("Sims", r_sym)
+    r_bk = refs(:blanchard_kahn)
+    @test occursin("Blanchard", r_bk)
+
+    # BibTeX format
+    r_bib = refs(sol; format=:bibtex)
+    @test occursin("@article{sims2002", r_bib)
+end
+
 end # top-level @testset
