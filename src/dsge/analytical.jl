@@ -38,8 +38,8 @@ Throws `ArgumentError` if G1 is not stable (max |eigenvalue| >= 1).
 """
 function solve_lyapunov(G1::AbstractMatrix{T}, impact::AbstractMatrix{T}) where {T<:AbstractFloat}
     n = size(G1, 1)
-    @assert size(G1) == (n, n) "G1 must be square"
-    @assert size(impact, 1) == n "impact must have n rows"
+    size(G1) == (n, n) || throw(ArgumentError("G1 must be square, got $(size(G1))"))
+    size(impact, 1) == n || throw(ArgumentError("impact must have $n rows, got $(size(impact, 1))"))
 
     # Check stability
     max_eig = maximum(abs.(eigvals(G1)))
