@@ -175,6 +175,19 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Large Sample Properties of Generalized Method of Moments Estimators",
         journal="Econometrica", volume="50", issue="4", pages="1029--1054",
         doi="10.2307/1912775", isbn="", publisher="", entry_type=:article),
+    # --- SMM ---
+    :ruge_murcia2012 => (key=:ruge_murcia2012, authors="Ruge-Murcia, Francisco J.", year=2012,
+        title="Estimating Nonlinear DSGE Models by the Simulated Method of Moments",
+        journal="Journal of Economic Dynamics and Control", volume="36", issue="6", pages="914--938",
+        doi="10.1016/j.jedc.2012.01.008", isbn="", publisher="", entry_type=:article),
+    :lee_ingram1991 => (key=:lee_ingram1991, authors="Lee, Bong-Soo and Ingram, Beth Fisher", year=1991,
+        title="Simulation Estimation of Time-Series Models",
+        journal="Journal of Econometrics", volume="47", issue="2--3", pages="197--205",
+        doi="10.1016/0304-4076(91)90098-X", isbn="", publisher="", entry_type=:article),
+    :duffie_singleton1993 => (key=:duffie_singleton1993, authors="Duffie, Darrell and Singleton, Kenneth J.", year=1993,
+        title="Simulated Moments Estimation of Markov Models of Asset Prices",
+        journal="Econometrica", volume="61", issue="4", pages="929--952",
+        doi="10.2307/2951768", isbn="", publisher="", entry_type=:article),
     # --- Statistical Identification — Survey ---
     :lewis2025 => (key=:lewis2025,
         authors="Lewis, Daniel J.", year=2025,
@@ -574,6 +587,10 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     # GMM
     :GMMModel => [:hansen1982],
     :gmm => [:hansen1982],
+    # SMM
+    :SMMModel => [:ruge_murcia2012, :lee_ingram1991, :hansen1982],
+    :ParameterTransform => [:hansen1982],
+    :smm => [:ruge_murcia2012, :lee_ingram1991, :hansen1982],
     # Non-Gaussian ICA methods (symbol dispatch)
     :fastica => [:hyvarinen1999, :lewis2025],
     :jade => [:cardoso_souloumiac1993, :lewis2025],
@@ -912,6 +929,9 @@ refs(io::IO, ::ARIMAOrderSelection; kw...) = refs(io, _TYPE_REFS[:ARIMAOrderSele
 
 # GMM
 refs(io::IO, ::GMMModel; kw...) = refs(io, _TYPE_REFS[:GMMModel]; kw...)
+
+# SMM
+refs(io::IO, ::SMMModel; kw...) = refs(io, _TYPE_REFS[:SMMModel]; kw...)
 
 # Volatility models
 refs(io::IO, ::ARCHModel; kw...) = refs(io, _TYPE_REFS[:ARCHModel]; kw...)

@@ -362,4 +362,27 @@ end
     report(result)  # should not error
 end
 
+@testset "SMM refs()" begin
+    rng = Random.MersenneTwister(42)
+    y = zeros(200)
+    for t in 2:200; y[t] = 0.7 * y[t-1] + randn(rng); end
+    data = reshape(y, :, 1)
+
+    function sim_fn_refs(theta, T_periods, burn; rng=Random.default_rng())
+        rho = theta[1]
+        sim = zeros(T_periods + burn)
+        for t in 2:(T_periods + burn); sim[t] = rho * sim[t-1] + randn(rng); end
+        reshape(sim[(burn+1):end], :, 1)
+    end
+
+    result = estimate_smm(sim_fn_refs, d -> autocovariance_moments(d; lags=1),
+                          [0.5], data; sim_ratio=3, burn=50,
+                          rng=Random.MersenneTwister(42))
+
+    io = IOBuffer()
+    refs(io, result)
+    str = String(take!(io))
+    @test occursin("Ruge-Murcia", str) || occursin("Lee", str) || occursin("Hansen", str)
+end
+
 end  # outer testset
