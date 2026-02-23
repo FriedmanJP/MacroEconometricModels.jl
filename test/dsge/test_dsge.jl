@@ -1686,4 +1686,156 @@ end
     @test report(sol) === nothing
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 18: OccBin Two-Constraint Solver
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "OccBin: two-constraint" begin
+    spec = @dsge begin
+        parameters: rho = 0.8, phi = 1.5
+        endogenous: y, i, c
+        exogenous: e
+        y[t] = rho * y[t-1] + e[t]
+        i[t] = phi * y[t]
+        c[t] = 0.5 * y[t]
+    end
+    spec = compute_steady_state(spec)
+
+    c1 = parse_constraint(:(i[t] >= 0), spec)
+    c2 = parse_constraint(:(c[t] >= 0), spec)
+
+    shock_path = zeros(30, 1)
+    shock_path[1, 1] = -3.0
+
+    sol = occbin_solve(spec, c1, c2; shock_path=shock_path, nperiods=30)
+    @test isa(sol, OccBinSolution{Float64})
+    @test sol.converged
+    @test size(sol.regime_history, 2) == 2
+
+    # Both constraints should bind for some periods
+    @test sum(sol.regime_history[:, 1]) > 0
+    @test sum(sol.regime_history[:, 2]) > 0
+
+    # Piecewise should respect both constraints
+    i_idx = findfirst(==(:i), spec.endog)
+    c_idx = findfirst(==(:c), spec.endog)
+    @test minimum(sol.piecewise_path[:, i_idx]) >= -1e-8
+    @test minimum(sol.piecewise_path[:, c_idx]) >= -1e-8
+end
+
+@testset "OccBin: two-constraint no-binding" begin
+    spec = @dsge begin
+        parameters: rho = 0.5
+        endogenous: y, i, c
+        exogenous: e
+        y[t] = rho * y[t-1] + e[t]
+        i[t] = 0.5 * y[t]
+        c[t] = 0.3 * y[t]
+    end
+    spec = compute_steady_state(spec)
+
+    c1 = parse_constraint(:(i[t] >= -100.0), spec)
+    c2 = parse_constraint(:(c[t] >= -100.0), spec)
+
+    shock_path = zeros(20, 1)
+    shock_path[1, 1] = 0.01
+
+    sol = occbin_solve(spec, c1, c2; shock_path=shock_path, nperiods=20)
+    @test sol.converged
+    @test sum(sol.regime_history) == 0
+    @test sol.piecewise_path ≈ sol.linear_path atol=1e-10
+end
+
+@testset "OccBin: two-constraint with explicit alt_specs" begin
+    spec = @dsge begin
+        parameters: rho = 0.8, phi = 1.5
+        endogenous: y, i, c
+        exogenous: e
+        y[t] = rho * y[t-1] + e[t]
+        i[t] = phi * y[t]
+        c[t] = 0.5 * y[t]
+    end
+    spec = compute_steady_state(spec)
+
+    c1 = parse_constraint(:(i[t] >= 0), spec)
+    c2 = parse_constraint(:(c[t] >= 0), spec)
+
+    alt1 = MacroEconometricModels._derive_alternative_regime(spec, c1)
+    alt2 = MacroEconometricModels._derive_alternative_regime(spec, c2)
+    alt12 = MacroEconometricModels._derive_alternative_regime(alt1, c2)
+
+    alt_specs = Dict((1, 0) => alt1, (0, 1) => alt2, (1, 1) => alt12)
+
+    shock_path = zeros(30, 1)
+    shock_path[1, 1] = -3.0
+
+    sol = occbin_solve(spec, c1, c2, alt_specs; shock_path=shock_path, nperiods=30)
+    @test isa(sol, OccBinSolution{Float64})
+    @test sol.converged
+    @test size(sol.regime_history, 2) == 2
+end
+
+@testset "OccBin: two-constraint curb_retrench" begin
+    spec = @dsge begin
+        parameters: rho = 0.8, phi = 1.5
+        endogenous: y, i, c
+        exogenous: e
+        y[t] = rho * y[t-1] + e[t]
+        i[t] = phi * y[t]
+        c[t] = 0.5 * y[t]
+    end
+    spec = compute_steady_state(spec)
+
+    c1 = parse_constraint(:(i[t] >= 0), spec)
+    c2 = parse_constraint(:(c[t] >= 0), spec)
+
+    shock_path = zeros(30, 1)
+    shock_path[1, 1] = -3.0
+
+    sol = occbin_solve(spec, c1, c2; shock_path=shock_path, nperiods=30,
+                       curb_retrench=true)
+    @test isa(sol, OccBinSolution{Float64})
+    @test sol.converged
+end
+
+@testset "OccBin: _find_last_binding_two" begin
+    violvec = falses(10, 2)
+    @test MacroEconometricModels._find_last_binding_two(violvec) == 0
+
+    violvec[3, 1] = true
+    @test MacroEconometricModels._find_last_binding_two(violvec) == 3
+
+    violvec[7, 2] = true
+    @test MacroEconometricModels._find_last_binding_two(violvec) == 7
+
+    violvec[10, 1] = true
+    @test MacroEconometricModels._find_last_binding_two(violvec) == 10
+end
+
+@testset "OccBin: two-constraint show/report" begin
+    spec = @dsge begin
+        parameters: rho = 0.5
+        endogenous: y, i, c
+        exogenous: e
+        y[t] = rho * y[t-1] + e[t]
+        i[t] = 0.5 * y[t]
+        c[t] = 0.3 * y[t]
+    end
+    spec = compute_steady_state(spec)
+
+    c1 = parse_constraint(:(i[t] >= -100.0), spec)
+    c2 = parse_constraint(:(c[t] >= -100.0), spec)
+
+    shock_path = zeros(10, 1)
+    shock_path[1, 1] = 0.1
+    sol = occbin_solve(spec, c1, c2; shock_path=shock_path, nperiods=10)
+
+    io = IOBuffer()
+    show(io, sol)
+    str = String(take!(io))
+    @test occursin("OccBin Piecewise-Linear Solution", str)
+    @test occursin("Converged", str)
+    @test report(sol) === nothing
+end
+
 end # top-level @testset
