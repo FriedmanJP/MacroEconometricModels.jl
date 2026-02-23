@@ -668,6 +668,401 @@ function occbin_solve(spec::DSGESpec{T}, constraint::OccBinConstraint{T},
     )
 end
 
+# =============================================================================
+# Two-Constraint OccBin Solver (Guerrieri & Iacoviello 2015)
+# =============================================================================
+
+"""
+    _find_last_binding_two(violvec::BitMatrix) → Int
+
+Find the last period where either constraint binds in a two-constraint setting.
+
+# Returns
+- The index of the last period where `violvec[t, 1]` or `violvec[t, 2]` is true,
+  or 0 if no constraint ever binds.
+"""
+function _find_last_binding_two(violvec::BitMatrix)
+    nperiods = size(violvec, 1)
+    for t in nperiods:-1:1
+        if violvec[t, 1] || violvec[t, 2]
+            return t
+        end
+    end
+    return 0
+end
+
+"""
+    _backward_iteration_two(ref, alt1, alt2, alt12,
+                             d_ref, d_alt1, d_alt2, d_alt12,
+                             P, Q, violvec::BitMatrix, shock_path)
+
+Compute time-varying decision rules by backward iteration for the two-constraint
+case, following Guerrieri & Iacoviello (2015).
+
+For each period t, the regime is selected based on (violvec[t,1], violvec[t,2]):
+- (false, false) → reference regime (ref, d_ref)
+- (true,  false) → alternative 1 (alt1, d_alt1)  — constraint 1 binding
+- (false, true)  → alternative 2 (alt2, d_alt2)  — constraint 2 binding
+- (true,  true)  → alternative 12 (alt12, d_alt12) — both constraints binding
+
+# Returns
+- `P_tv` — n × n × T_max array of time-varying transition matrices
+- `D_tv` — n × T_max matrix of time-varying constants
+- `E` — n × n_shocks impact matrix (for API compatibility)
+"""
+function _backward_iteration_two(ref::OccBinRegime{T}, alt1::OccBinRegime{T},
+                                  alt2::OccBinRegime{T}, alt12::OccBinRegime{T},
+                                  d_ref::Vector{T}, d_alt1::Vector{T},
+                                  d_alt2::Vector{T}, d_alt12::Vector{T},
+                                  P::Matrix{T}, Q::Matrix{T},
+                                  violvec::BitMatrix, shock_path::Matrix{T}) where {T}
+    n = size(P, 1)
+    n_shocks = size(Q, 2)
+
+    # Find the last binding period (either constraint)
+    T_max = _find_last_binding_two(violvec)
+
+    # If no binding periods, return trivially
+    if T_max == 0
+        return (zeros(T, n, n, 0), zeros(T, n, 0), Q)
+    end
+
+    # Allocate time-varying decision rules
+    P_tv = zeros(T, n, n, T_max)
+    D_tv = zeros(T, n, T_max)
+
+    # Start at T_max: the next period uses the unconstrained P
+    P_next = P
+
+    # Backward iteration from T_max down to 1
+    for t in T_max:-1:1
+        # Select regime for period t based on (c1_binding, c2_binding)
+        c1 = violvec[t, 1]
+        c2 = violvec[t, 2]
+
+        if c1 && c2
+            rgm = alt12
+            d = d_alt12
+        elseif c1
+            rgm = alt1
+            d = d_alt1
+        elseif c2
+            rgm = alt2
+            d = d_alt2
+        else
+            rgm = ref
+            d = d_ref
+        end
+
+        # (B + C · P_next) · ŷ_t = -A · ŷ_{t-1} - D · ε_t - d - C · D_next
+        invmat = robust_inv(rgm.B + rgm.C * P_next)
+        P_tv[:, :, t] = -invmat * rgm.A
+
+        # Constant: D_tv_t = -invmat * (D · ε_t + d + C · D_tv_{t+1})
+        if t == T_max
+            D_tv[:, t] = -invmat * (rgm.D * shock_path[t, :] + d)
+        else
+            D_tv[:, t] = -invmat * (rgm.D * shock_path[t, :] + d + rgm.C * D_tv[:, t + 1])
+        end
+
+        P_next = P_tv[:, :, t]
+    end
+
+    return (P_tv, D_tv, Q)
+end
+
+"""
+    _guess_verify_two(ref, alt1, alt2, alt12,
+                       d_ref, d_alt1, d_alt2, d_alt12,
+                       P, Q, spec, c1, c2, shock_path, nperiods;
+                       maxiter=100, curb_retrench=false)
+
+Run the guess-and-verify loop for two occasionally binding constraints.
+
+1. Initial guess: violvec = falses(nperiods, 2)
+2. Backward iteration (4 regimes) → time-varying decision rules
+3. Simulate piecewise-linear path
+4. Evaluate both constraints independently → new violvec
+5. Repeat until violvec converges or maxiter reached
+
+When `curb_retrench=true`, each constraint can only relax (switch from binding
+to non-binding) by one period per iteration, which helps prevent oscillation.
+
+# Returns
+- `path` — nperiods × n simulated piecewise-linear path (deviations from SS)
+- `regime_history` — nperiods × 2 matrix of regime indicators (0=slack, 1=binding)
+- `converged` — whether the guess-and-verify loop converged
+- `iterations` — number of iterations used
+"""
+function _guess_verify_two(ref::OccBinRegime{T}, alt1::OccBinRegime{T},
+                            alt2::OccBinRegime{T}, alt12::OccBinRegime{T},
+                            d_ref::Vector{T}, d_alt1::Vector{T},
+                            d_alt2::Vector{T}, d_alt12::Vector{T},
+                            P::Matrix{T}, Q::Matrix{T},
+                            spec::DSGESpec{T}, c1::OccBinConstraint{T},
+                            c2::OccBinConstraint{T},
+                            shock_path::Matrix{T}, nperiods::Int;
+                            maxiter::Int=100, curb_retrench::Bool=false) where {T}
+    n = size(P, 1)
+    init = zeros(T, n)
+
+    # Initial guess: no violations for either constraint
+    violvec = falses(nperiods, 2)
+    path = zeros(T, nperiods, n)
+    converged = false
+    iterations = 0
+
+    for iter in 1:maxiter
+        iterations = iter
+        violvec_old = copy(violvec)
+
+        # Backward iteration with 4 regimes
+        P_tv, D_tv, _ = _backward_iteration_two(ref, alt1, alt2, alt12,
+                                                  d_ref, d_alt1, d_alt2, d_alt12,
+                                                  P, Q, violvec, shock_path)
+
+        T_max = _find_last_binding_two(violvec)
+
+        if T_max == 0
+            # No binding periods: simulate linear path
+            path = _simulate_linear(P, Q, init, shock_path, nperiods)
+        else
+            # Simulate piecewise-linear path
+            path = _simulate_piecewise(P_tv, D_tv, P, init, nperiods, T_max)
+        end
+
+        # Evaluate each constraint independently
+        violvec_c1_old = BitVector(violvec_old[:, 1])
+        violvec_c2_old = BitVector(violvec_old[:, 2])
+
+        violvec_c1_new = _evaluate_constraint(path, P, Q, shock_path, spec, c1, violvec_c1_old)
+        violvec_c2_new = _evaluate_constraint(path, P, Q, shock_path, spec, c2, violvec_c2_old)
+
+        # Apply curb_retrench: limit relaxation to one period per constraint per iteration
+        if curb_retrench
+            for j in 1:2
+                old_col = j == 1 ? violvec_c1_old : violvec_c2_old
+                new_col = j == 1 ? violvec_c1_new : violvec_c2_new
+                relaxed = false
+                for t in 1:nperiods
+                    if old_col[t] && !new_col[t]
+                        if relaxed
+                            # Already relaxed one period for this constraint; keep binding
+                            new_col[t] = true
+                        else
+                            relaxed = true
+                        end
+                    end
+                end
+                if j == 1
+                    violvec_c1_new = new_col
+                else
+                    violvec_c2_new = new_col
+                end
+            end
+        end
+
+        # Assemble new violvec
+        violvec_new = falses(nperiods, 2)
+        violvec_new[:, 1] = violvec_c1_new
+        violvec_new[:, 2] = violvec_c2_new
+
+        # Check convergence: violvec hasn't changed
+        if violvec_new == violvec_old
+            violvec = violvec_new
+            converged = true
+            break
+        end
+
+        violvec = violvec_new
+    end
+
+    if !converged
+        @warn "OccBin two-constraint guess-and-verify did not converge after $maxiter iterations"
+    end
+
+    # Check if either constraint is binding at the terminal period
+    if violvec[end, 1] || violvec[end, 2]
+        @warn "OccBin: constraint is binding at the terminal period ($nperiods). " *
+              "Consider increasing nperiods."
+    end
+
+    regime_history = Matrix{Int}(violvec)
+
+    return (path, regime_history, converged, iterations)
+end
+
+"""
+    occbin_solve(spec::DSGESpec{T}, c1::OccBinConstraint{T}, c2::OccBinConstraint{T};
+                 shock_path, nperiods, maxiter, curb_retrench) → OccBinSolution{T}
+
+Solve a DSGE model with two occasionally binding constraints using the
+piecewise-linear algorithm of Guerrieri & Iacoviello (2015).
+
+The algorithm generalizes the one-constraint solver to 4 regimes:
+1. Neither constraint binds (reference)
+2. Only constraint 1 binds (alt1)
+3. Only constraint 2 binds (alt2)
+4. Both constraints bind (alt12)
+
+# Arguments
+- `spec` — DSGE model specification (must have steady state computed)
+- `c1` — first occasionally binding constraint
+- `c2` — second occasionally binding constraint
+
+# Keyword Arguments
+- `shock_path` — T_periods × n_exog matrix of shock realizations
+- `nperiods` — number of periods to simulate (default: rows of shock_path)
+- `maxiter` — maximum guess-and-verify iterations (default: 100)
+- `curb_retrench` — limit constraint relaxation to one period per iteration (default: false)
+
+# Returns
+An `OccBinSolution{T}` with linear and piecewise-linear paths and a
+nperiods × 2 regime history matrix.
+"""
+function occbin_solve(spec::DSGESpec{T}, c1::OccBinConstraint{T}, c2::OccBinConstraint{T};
+                      shock_path::Matrix{T}=zeros(T, 40, spec.n_exog),
+                      nperiods::Int=size(shock_path, 1),
+                      maxiter::Int=100,
+                      curb_retrench::Bool=false) where {T<:AbstractFloat}
+    # Ensure steady state is computed
+    if isempty(spec.steady_state)
+        spec = compute_steady_state(spec)
+    end
+
+    # Solve reference (unconstrained) model
+    sol = solve(spec; method=:gensys)
+    is_determined(sol) || @warn "Reference model solution is not determined (eu=$(sol.eu))"
+
+    P = sol.G1       # n × n state transition
+    Q = sol.impact    # n × n_shocks impact
+
+    # Derive 3 alternative regime specifications
+    alt1_spec = _derive_alternative_regime(spec, c1)      # only c1 binding
+    alt2_spec = _derive_alternative_regime(spec, c2)      # only c2 binding
+    alt12_spec = _derive_alternative_regime(alt1_spec, c2) # both binding (c1 first, then c2)
+
+    # Extract linearized coefficient matrices for all 4 regimes
+    ref_regime = _extract_regime(spec)
+    alt1_regime = _extract_regime(alt1_spec)
+    alt2_regime = _extract_regime(alt2_spec)
+    alt12_regime = _extract_regime(alt12_spec)
+
+    # Compute regime constants
+    d_ref = _regime_constant(spec)
+    d_alt1 = _regime_constant(alt1_spec)
+    d_alt2 = _regime_constant(alt2_spec)
+    d_alt12 = _regime_constant(alt12_spec)
+
+    # Pad shock_path if needed
+    if size(shock_path, 1) < nperiods
+        padded = zeros(T, nperiods, size(shock_path, 2))
+        padded[1:size(shock_path, 1), :] = shock_path
+        shock_path = padded
+    end
+
+    # Simulate linear (unconstrained) path
+    init = zeros(T, spec.n_endog)
+    linear_path = _simulate_linear(P, Q, init, shock_path, nperiods)
+
+    # Run guess-and-verify loop with 4 regimes
+    pw_path, regime_history, converged, iterations =
+        _guess_verify_two(ref_regime, alt1_regime, alt2_regime, alt12_regime,
+                          d_ref, d_alt1, d_alt2, d_alt12,
+                          P, Q, spec, c1, c2, shock_path, nperiods;
+                          maxiter=maxiter, curb_retrench=curb_retrench)
+
+    OccBinSolution{T}(
+        linear_path, pw_path, spec.steady_state,
+        regime_history, converged, iterations,
+        spec, spec.varnames
+    )
+end
+
+"""
+    occbin_solve(spec::DSGESpec{T}, c1::OccBinConstraint{T}, c2::OccBinConstraint{T},
+                 alt_specs::Dict; kwargs...) → OccBinSolution{T}
+
+Variant that accepts explicit alternative regime specifications as a Dict mapping
+regime indicators to DSGESpec:
+- `(1,0)` → alt1_spec (constraint 1 binding only)
+- `(0,1)` → alt2_spec (constraint 2 binding only)
+- `(1,1)` → alt12_spec (both constraints binding)
+"""
+function occbin_solve(spec::DSGESpec{T}, c1::OccBinConstraint{T}, c2::OccBinConstraint{T},
+                      alt_specs::Dict;
+                      shock_path::Matrix{T}=zeros(T, 40, spec.n_exog),
+                      nperiods::Int=size(shock_path, 1),
+                      maxiter::Int=100,
+                      curb_retrench::Bool=false) where {T<:AbstractFloat}
+    # Ensure steady state is computed
+    if isempty(spec.steady_state)
+        spec = compute_steady_state(spec)
+    end
+
+    # Extract alternative specs from dict
+    haskey(alt_specs, (1, 0)) || throw(ArgumentError("alt_specs must contain key (1,0) for constraint 1 binding"))
+    haskey(alt_specs, (0, 1)) || throw(ArgumentError("alt_specs must contain key (0,1) for constraint 2 binding"))
+    haskey(alt_specs, (1, 1)) || throw(ArgumentError("alt_specs must contain key (1,1) for both constraints binding"))
+
+    alt1_spec = alt_specs[(1, 0)]
+    alt2_spec = alt_specs[(0, 1)]
+    alt12_spec = alt_specs[(1, 1)]
+
+    # Ensure steady states
+    if isempty(alt1_spec.steady_state)
+        alt1_spec = compute_steady_state(alt1_spec)
+    end
+    if isempty(alt2_spec.steady_state)
+        alt2_spec = compute_steady_state(alt2_spec)
+    end
+    if isempty(alt12_spec.steady_state)
+        alt12_spec = compute_steady_state(alt12_spec)
+    end
+
+    # Solve reference model
+    sol = solve(spec; method=:gensys)
+    is_determined(sol) || @warn "Reference model solution is not determined (eu=$(sol.eu))"
+
+    P = sol.G1
+    Q = sol.impact
+
+    # Extract regimes and constants
+    ref_regime = _extract_regime(spec)
+    alt1_regime = _extract_regime(alt1_spec)
+    alt2_regime = _extract_regime(alt2_spec)
+    alt12_regime = _extract_regime(alt12_spec)
+
+    d_ref = _regime_constant(spec)
+    d_alt1 = _regime_constant(alt1_spec)
+    d_alt2 = _regime_constant(alt2_spec)
+    d_alt12 = _regime_constant(alt12_spec)
+
+    # Pad shock_path if needed
+    if size(shock_path, 1) < nperiods
+        padded = zeros(T, nperiods, size(shock_path, 2))
+        padded[1:size(shock_path, 1), :] = shock_path
+        shock_path = padded
+    end
+
+    # Linear path
+    init = zeros(T, spec.n_endog)
+    linear_path = _simulate_linear(P, Q, init, shock_path, nperiods)
+
+    # Piecewise-linear path
+    pw_path, regime_history, converged, iterations =
+        _guess_verify_two(ref_regime, alt1_regime, alt2_regime, alt12_regime,
+                          d_ref, d_alt1, d_alt2, d_alt12,
+                          P, Q, spec, c1, c2, shock_path, nperiods;
+                          maxiter=maxiter, curb_retrench=curb_retrench)
+
+    OccBinSolution{T}(
+        linear_path, pw_path, spec.steady_state,
+        regime_history, converged, iterations,
+        spec, spec.varnames
+    )
+end
+
 """
     occbin_irf(sol, constraints, H, shock_idx; kwargs...) → OccBinIRF{T}
 
