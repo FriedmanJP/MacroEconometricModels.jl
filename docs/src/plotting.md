@@ -497,7 +497,15 @@ result = irf(sol, 40)
 p = plot_result(result)
 ```
 
-Standard multi-panel IRF and FEVD plots are generated automatically.
+```@raw html
+<iframe src="../assets/plots/dsge_irf.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+Standard multi-panel IRF and FEVD plots are generated automatically. FEVD uses `fevd(sol, H)` → `plot_result()`:
+
+```@raw html
+<iframe src="../assets/plots/dsge_fevd.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
 
 ### OccBin IRF Comparison
 
@@ -507,6 +515,10 @@ Standard multi-panel IRF and FEVD plots are generated automatically.
 constraint = parse_constraint(:(R[t] >= 0), spec)
 oirf = occbin_irf(spec, constraint, 1, 40; magnitude=3.0)
 p = plot_result(oirf)
+```
+
+```@raw html
+<iframe src="../assets/plots/occbin_irf.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
 Each variable gets a panel with two lines: dashed blue (linear) and solid red (piecewise). Shaded orange regions mark periods when the constraint is binding.
@@ -520,6 +532,10 @@ shocks = zeros(40, spec.n_exog)
 shocks[1, 1] = -3.0
 occ_sol = occbin_solve(spec, constraint; shock_path=shocks)
 p = plot_result(occ_sol)
+```
+
+```@raw html
+<iframe src="../assets/plots/occbin_solution.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
 ---

@@ -305,6 +305,63 @@ function main()
     nn = nowcast_news(X_new, X_old, dfm_news, 5)
     save("nowcast_news.html", plot_result(nn))
 
+    # -------------------------------------------------------------------
+    # 30. DSGE IRF
+    # -------------------------------------------------------------------
+    dsge_spec = @dsge begin
+        parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.9, σ = 0.01
+        endogenous: Y, C, K, A
+        exogenous: ε_A
+
+        Y[t] = A[t] * K[t-1]^α
+        C[t] + K[t] = Y[t] + (1 - δ) * K[t-1]
+        1 = β * (C[t] / C[t+1]) * (α * A[t+1] * K[t]^(α - 1) + 1 - δ)
+        A[t] = ρ * A[t-1] + σ * ε_A[t]
+
+        steady_state = begin
+            A_ss = 1.0
+            K_ss = (α * β / (1 - β * (1 - δ)))^(1 / (1 - α))
+            Y_ss = K_ss^α
+            C_ss = Y_ss - δ * K_ss
+            [Y_ss, C_ss, K_ss, A_ss]
+        end
+    end
+    dsge_sol = solve(dsge_spec)
+    dsge_irf = irf(dsge_sol, 40)
+    save("dsge_irf.html", plot_result(dsge_irf))
+
+    # -------------------------------------------------------------------
+    # 31. DSGE FEVD
+    # -------------------------------------------------------------------
+    dsge_fevd = fevd(dsge_sol, 40)
+    save("dsge_fevd.html", plot_result(dsge_fevd))
+
+    # -------------------------------------------------------------------
+    # 32. OccBin IRF comparison
+    # -------------------------------------------------------------------
+    nk_spec = @dsge begin
+        parameters: β = 0.99, σ_c = 1.0, κ = 0.3, φ_π = 1.5, φ_y = 0.5,
+                    ρ_d = 0.8, σ_d = 0.01
+        endogenous: y, π, R, d
+        exogenous: ε_d
+
+        y[t] = y[t+1] - (1 / σ_c) * (R[t] - π[t+1]) + d[t]
+        π[t] = β * π[t+1] + κ * y[t]
+        R[t] = φ_π * π[t] + φ_y * y[t]
+        d[t] = ρ_d * d[t-1] + σ_d * ε_d[t]
+    end
+    nk_constraint = parse_constraint(:(R[t] >= 0), nk_spec)
+    oirf = occbin_irf(nk_spec, nk_constraint, 1, 40; magnitude=3.0)
+    save("occbin_irf.html", plot_result(oirf))
+
+    # -------------------------------------------------------------------
+    # 33. OccBin solution path
+    # -------------------------------------------------------------------
+    occ_shocks = zeros(40, 1)
+    occ_shocks[1, 1] = -3.0
+    occ_sol = occbin_solve(nk_spec, nk_constraint; shock_path=occ_shocks)
+    save("occbin_solution.html", plot_result(occ_sol))
+
     println("\nDone! Generated $(length(readdir(PLOT_DIR))) HTML files in $PLOT_DIR")
 end
 
