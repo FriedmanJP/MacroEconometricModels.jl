@@ -491,6 +491,40 @@ end
     @test spec2.steady_state[1] ≈ 0.0
 end
 
+@testset "Steady state: ss_fn field on DSGESpec" begin
+    # DSGESpec with ss_fn=nothing (backward compat)
+    spec = DSGESpec{Float64}(
+        [:y], [:ε], [:ρ],
+        Dict(:ρ => 0.9),
+        [:(y[t])], [identity],
+        0, Int[], Float64[]
+    )
+    @test spec.ss_fn === nothing
+
+    # DSGESpec with explicit ss_fn
+    my_ss = (θ) -> [0.0]
+    spec2 = DSGESpec{Float64}(
+        [:y], [:ε], [:ρ],
+        Dict(:ρ => 0.9),
+        [:(y[t])], [identity],
+        0, Int[], Float64[], my_ss
+    )
+    @test spec2.ss_fn === my_ss
+    @test spec2.ss_fn(spec2.param_values) == [0.0]
+end
+
+@testset "Steady state: auto-detect ss_fn on spec" begin
+    spec = DSGESpec{Float64}(
+        [:y], [:ε], [:ρ],
+        Dict(:ρ => 0.9),
+        [:(y[t])], [identity],
+        0, Int[], Float64[], (θ) -> [0.0]
+    )
+    spec2 = compute_steady_state(spec)
+    @test spec2.steady_state[1] ≈ 0.0
+    @test spec2.ss_fn !== nothing  # ss_fn propagated
+end
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Section 4: Linearization
 # ─────────────────────────────────────────────────────────────────────────────

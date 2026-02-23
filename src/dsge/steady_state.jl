@@ -41,6 +41,13 @@ function compute_steady_state(spec::DSGESpec{T};
     n = spec.n_endog
     θ = spec.param_values
 
+    # Auto-detect: if spec has an analytical ss_fn, use it
+    if method == :auto && spec.ss_fn !== nothing
+        y_ss = T.(spec.ss_fn(θ))
+        @assert length(y_ss) == n "ss_fn must return vector of length $n"
+        return _update_steady_state(spec, y_ss)
+    end
+
     if method == :analytical
         ss_fn === nothing && throw(ArgumentError("method=:analytical requires ss_fn"))
         y_ss = T.(ss_fn(θ))
@@ -90,6 +97,6 @@ function _update_steady_state(spec::DSGESpec{T}, y_ss::Vector{T}) where {T}
     DSGESpec{T}(
         spec.endog, spec.exog, spec.params, spec.param_values,
         spec.equations, spec.residual_fns,
-        spec.n_expect, spec.forward_indices, y_ss
+        spec.n_expect, spec.forward_indices, y_ss, spec.ss_fn
     )
 end
