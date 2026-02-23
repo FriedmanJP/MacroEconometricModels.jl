@@ -2301,11 +2301,12 @@ spec = @dsge begin
     1 = β * (C[t] / C[t+1]) * (α * A[t+1] * K[t]^(α - 1) + 1 - δ)
     A[t] = ρ * A[t-1] + σ * ε_A[t]
 
-    steady_state: begin
+    steady_state = begin
         A_ss = 1.0
         K_ss = (α * β / (1 - β * (1 - δ)))^(1 / (1 - α))
         Y_ss = K_ss^α
         C_ss = Y_ss - δ * K_ss
+        [Y_ss, C_ss, K_ss, A_ss]
     end
 end
 ```
