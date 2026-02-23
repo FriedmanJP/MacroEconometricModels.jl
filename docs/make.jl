@@ -35,6 +35,7 @@ makedocs(;
         "Panel Models" => [
             "Panel VAR" => "pvar.md",
         ],
+        "DSGE Models" => "dsge.md",
         "Innovation Accounting" => "innovation_accounting.md",
         "Nowcasting" => "nowcast.md",
         "Statistical Identification" => "nongaussian.md",
