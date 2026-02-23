@@ -156,6 +156,9 @@ include("nowcast/bridge.jl")
 include("nowcast/news.jl")
 include("nowcast/forecast.jl")
 
+# DSGE models
+include("dsge/types.jl")
+
 # GMM
 include("gmm/gmm.jl")
 
@@ -294,6 +297,19 @@ export nowcast
 
 # Panel balancing
 export balance_panel
+
+# =============================================================================
+# Exports - DSGE Models
+# =============================================================================
+
+# Abstract type
+export AbstractDSGEModel
+
+# Types
+export DSGESpec, LinearDSGE, DSGESolution, PerfectForesightPath, DSGEEstimation
+
+# Accessors
+export nshocks, is_determined, is_stable
 
 # Local Projection types
 export AbstractLPModel, AbstractLPImpulseResponse, AbstractCovarianceEstimator
