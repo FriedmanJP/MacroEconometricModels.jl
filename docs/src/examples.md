@@ -23,6 +23,7 @@ This chapter provides comprehensive worked examples demonstrating the main funct
 | 15 | Table Output (LaTeX & HTML) | `set_display_backend`, `print_table`, `table` | Export tables for papers, slides, and web |
 | 16 | Bibliographic References | `refs` | Multi-format references for models and methods |
 | 17 | Nowcasting | `nowcast_dfm`, `nowcast_bvar`, `nowcast_bridge`, `nowcast_news` | DFM, BVAR, bridge equation nowcasting with FRED-MD data |
+| 18 | DSGE Models | `@dsge`, `solve`, `irf`, `estimate_dsge`, `occbin_solve` | RBC model: specify, solve, simulate, IRFs, moments, estimation, OccBin ZLB |
 
 ---
 
@@ -2276,6 +2277,130 @@ ts = TimeSeriesData(Y; varnames=all_varnames, frequency=Monthly)
 ts_balanced = balance_panel(ts; r=2, p=1)
 println("\nBalanced panel: ", sum(isnan.(to_matrix(ts_balanced))), " NaN remaining")
 ```
+
+---
+
+## Example 18: DSGE Models
+
+This example demonstrates the complete DSGE workflow: model specification, solution, simulation, impulse responses, analytical moments, and occasionally binding constraints.
+
+### RBC Model
+
+```julia
+using MacroEconometricModels, Random
+Random.seed!(42)
+
+# Specify a Real Business Cycle model
+spec = @dsge begin
+    parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.9, σ = 0.01
+    endogenous: Y, C, K, A
+    exogenous: ε_A
+
+    Y[t] = A[t] * K[t-1]^α
+    C[t] + K[t] = Y[t] + (1 - δ) * K[t-1]
+    1 = β * (C[t] / C[t+1]) * (α * A[t+1] * K[t]^(α - 1) + 1 - δ)
+    A[t] = ρ * A[t-1] + σ * ε_A[t]
+
+    steady_state: begin
+        A_ss = 1.0
+        K_ss = (α * β / (1 - β * (1 - δ)))^(1 / (1 - α))
+        Y_ss = K_ss^α
+        C_ss = Y_ss - δ * K_ss
+    end
+end
+```
+
+**Solve and check determinacy:**
+
+```julia
+sol = solve(spec)
+println("Determined: ", is_determined(sol))
+println("Stable: ", is_stable(sol))
+println("Method: ", sol.method)
+```
+
+The Gensys solver uses QZ decomposition (Sims 2002) to find the unique stable rational expectations solution. `is_determined` confirms existence and uniqueness; `is_stable` confirms all eigenvalues of the transition matrix lie inside the unit circle.
+
+**Impulse responses:**
+
+```julia
+# Analytical IRFs to a technology shock
+irf_result = irf(sol, 40)
+plot_result(irf_result)
+```
+
+A positive technology shock raises output and consumption on impact. Capital accumulates gradually as higher productivity raises the return to investment. The persistence of the response is governed by the AR(1) coefficient ``ρ = 0.9``.
+
+**Simulation and moments:**
+
+```julia
+# Stochastic simulation
+Y_sim = simulate(sol, 200; rng=Random.MersenneTwister(42))
+println("Simulated output mean: ", round(mean(Y_sim[:, 1]); digits=4))
+
+# Analytical unconditional covariance
+Sigma = solve_lyapunov(sol.G1, sol.impact)
+println("Unconditional std(Y): ", round(sqrt(Sigma[1, 1]); digits=6))
+
+# Analytical moments (variance + autocovariances)
+m = analytical_moments(sol; lags=2)
+```
+
+The Lyapunov equation ``Σ = G_1 Σ G_1' + \text{impact} \cdot \text{impact}'`` gives the model-implied unconditional covariance matrix without simulation noise.
+
+**FEVD:**
+
+```julia
+fevd_result = fevd(sol, 40)
+plot_result(fevd_result)
+```
+
+With a single shock, the FEVD assigns 100% of forecast variance to the technology shock at all horizons.
+
+### New Keynesian Model with ZLB (OccBin)
+
+```julia
+# 3-equation NK model
+nk = @dsge begin
+    parameters: β = 0.99, σ_c = 1.0, κ = 0.3, φ_π = 1.5, φ_y = 0.5,
+                ρ_d = 0.8, σ_d = 0.01
+    endogenous: y, π, R, d
+    exogenous: ε_d
+
+    y[t] = y[t+1] - (1 / σ_c) * (R[t] - π[t+1]) + d[t]
+    π[t] = β * π[t+1] + κ * y[t]
+    R[t] = φ_π * π[t] + φ_y * y[t]
+    d[t] = ρ_d * d[t-1] + σ_d * ε_d[t]
+end
+
+nk_sol = solve(nk)
+```
+
+**Apply the zero lower bound:**
+
+```julia
+# Parse the ZLB constraint
+constraint = parse_constraint(:(R[t] >= 0), nk)
+
+# Large negative demand shock
+shocks = zeros(40, 1)
+shocks[1, 1] = -3.0
+
+# Solve with and without the constraint
+occ_sol = occbin_solve(nk, constraint; shock_path=shocks)
+println(occ_sol)
+```
+
+The `OccBinSolution` shows which periods the ZLB binds (regime_history = 1) and how many guess-and-verify iterations were needed for convergence.
+
+**Compare IRFs:**
+
+```julia
+occ_irf = occbin_irf(nk, constraint, 1, 40; magnitude=3.0)
+plot_result(occ_irf)
+```
+
+The constrained IRF (piecewise path) shows deeper output declines than the linear path because the interest rate is clamped at zero — the central bank cannot provide additional stimulus. This is the "ZLB amplification" mechanism studied by Guerrieri & Iacoviello (2015).
 
 ---
 
