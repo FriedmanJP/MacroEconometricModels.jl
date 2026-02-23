@@ -487,6 +487,41 @@ p = plot_result(nn)
 
 Bar chart showing per-release impact on the nowcast revision.
 
+### DSGE Models
+
+DSGE impulse responses and FEVD use the same `plot_result()` methods as VAR models:
+
+```julia
+sol = solve(spec)
+result = irf(sol, 40)
+p = plot_result(result)
+```
+
+Standard multi-panel IRF and FEVD plots are generated automatically.
+
+### OccBin IRF Comparison
+
+`plot_result(::OccBinIRF)` shows side-by-side linear (unconstrained) vs piecewise-linear (constrained) impulse responses, with shaded regions indicating periods when the constraint binds:
+
+```julia
+constraint = parse_constraint(:(R[t] >= 0), spec)
+oirf = occbin_irf(spec, constraint, 1, 40; magnitude=3.0)
+p = plot_result(oirf)
+```
+
+Each variable gets a panel with two lines: dashed blue (linear) and solid red (piecewise). Shaded orange regions mark periods when the constraint is binding.
+
+### OccBin Solution Path
+
+`plot_result(::OccBinSolution)` displays the piecewise-linear path for each variable with regime shading:
+
+```julia
+shocks = zeros(40, spec.n_exog)
+shocks[1, 1] = -3.0
+occ_sol = occbin_solve(spec, constraint; shock_path=shocks)
+p = plot_result(occ_sol)
+```
+
 ---
 
 ## Common Options
