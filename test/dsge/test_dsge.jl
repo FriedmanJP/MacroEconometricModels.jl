@@ -829,6 +829,38 @@ end
     end
 end
 
+@testset "FEVD with n_endog > n_shocks" begin
+    # 2 endogenous variables, 1 shock — tests non-square FEVD
+    spec = @dsge begin
+        parameters: ρ = 0.8, α = 0.5
+        endogenous: y, c
+        exogenous: ε
+        y[t] = ρ * y[t-1] + ε[t]
+        c[t] = α * y[t]
+    end
+    sol = solve(spec)
+    @test nvars(sol) == 2
+    @test nshocks(sol) == 1
+
+    # IRF shape: (horizon, n_endog, n_exog)
+    irf_result = irf(sol, 10)
+    @test size(irf_result.values) == (10, 2, 1)
+
+    # FEVD should not error with non-square dimensions
+    fevd_result = fevd(sol, 10)
+    @test fevd_result isa FEVD{Float64}
+    @test size(fevd_result.proportions) == (2, 1, 10)
+    # Single shock → 100% variance for both variables
+    for h in 1:10, i in 1:2
+        @test fevd_result.proportions[i, 1, h] ≈ 1.0 atol=1e-6
+    end
+
+    # Simulate also works
+    Random.seed!(42)
+    sim = simulate(sol, 50)
+    @test size(sim) == (50, 2)
+end
+
 @testset "plot_result works with DSGE IRF" begin
     spec = @dsge begin
         parameters: ρ = 0.9

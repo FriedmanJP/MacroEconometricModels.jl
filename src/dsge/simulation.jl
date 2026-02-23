@@ -20,6 +20,8 @@
 Stochastic simulation and IRF/FEVD bridge for DSGE solutions.
 """
 
+using Random
+
 """
     simulate(sol::DSGESolution{T}, T_periods::Int;
              shock_draws=nothing, rng=Random.default_rng()) -> Matrix{T}
@@ -119,7 +121,22 @@ function fevd(sol::DSGESolution{T}, horizon::Int) where {T<:AbstractFloat}
     irf_result = irf(sol, horizon)
     n = nvars(sol)
     n_e = nshocks(sol)
-    decomp, props = _compute_fevd(irf_result.values, n, horizon)
+
+    # Compute FEVD directly — _compute_fevd assumes n_vars == n_shocks
+    decomp = zeros(T, n, n_e, horizon)
+    props  = zeros(T, n, n_e, horizon)
+
+    @inbounds for h in 1:horizon
+        for i in 1:n
+            total = zero(T)
+            for j in 1:n_e
+                prev = h == 1 ? zero(T) : decomp[i, j, h-1]
+                decomp[i, j, h] = prev + irf_result.values[h, i, j]^2
+                total += decomp[i, j, h]
+            end
+            total > 0 && (props[i, :, h] = decomp[i, :, h] ./ total)
+        end
+    end
 
     var_names = sol.spec.varnames
     shock_names = [string(s) for s in sol.spec.exog]
