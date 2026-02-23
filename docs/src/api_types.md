@@ -387,4 +387,33 @@ AbstractNowcastModel
 
 NowcastResult{T}
 NowcastNews{T}
+
+DSGESpec{T}
+LinearDSGE{T}
+DSGESolution{T}
+PerfectForesightPath{T}
+
+AbstractDSGEModel
+└── DSGEEstimation{T}
+
+OccBinConstraint{T}
+OccBinRegime{T}
+OccBinSolution{T}
+OccBinIRF{T}
+```
+
+---
+
+## DSGE Models
+
+```@docs
+DSGESpec
+LinearDSGE
+DSGESolution
+PerfectForesightPath
+DSGEEstimation
+OccBinConstraint
+OccBinRegime
+OccBinSolution
+OccBinIRF
 ```
