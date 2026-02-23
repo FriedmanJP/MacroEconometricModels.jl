@@ -360,6 +360,7 @@ end
     )
     # report() writes to stdout — just verify no error
     @test report(est) === nothing
+    @test report(sol) === nothing
 end
 
 # ─────────────────────────────────────────────────────────────────────────────

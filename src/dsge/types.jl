@@ -309,8 +309,3 @@ function Base.show(io::IO, est::DSGEEstimation{T}) where {T}
     _sig_legend(io)
 end
 
-function report(est::DSGEEstimation{T}) where {T}
-    show(stdout, est)
-    println(stdout)
-    show(stdout, est.solution)
-end
