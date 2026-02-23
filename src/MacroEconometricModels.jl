@@ -167,6 +167,7 @@ include("dsge/perfect_foresight.jl")
 
 # GMM
 include("gmm/gmm.jl")
+include("gmm/transforms.jl")
 
 # ARIMA
 include("arima/types.jl")
@@ -527,6 +528,7 @@ export optimal_weighting_matrix, identity_weighting
 export j_test, numerical_gradient
 export estimate_lp_gmm, lp_gmm_moments
 export linear_gmm_solve, gmm_sandwich_vcov, andrews_lu_mmsc
+export ParameterTransform, to_unconstrained, to_constrained, transform_jacobian
 
 # =============================================================================
 # Exports - Panel VAR
