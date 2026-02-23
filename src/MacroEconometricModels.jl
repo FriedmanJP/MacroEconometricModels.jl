@@ -164,6 +164,7 @@ include("dsge/linearize.jl")
 include("dsge/gensys.jl")
 include("dsge/blanchard_kahn.jl")
 include("dsge/perfect_foresight.jl")
+include("dsge/occbin.jl")
 
 # GMM
 include("gmm/transforms.jl")
@@ -333,6 +334,10 @@ export solve_lyapunov, analytical_moments
 
 # Accessors
 export nshocks, is_determined, is_stable
+
+# OccBin types and functions
+export OccBinConstraint, OccBinRegime, OccBinSolution, OccBinIRF
+export parse_constraint, occbin_solve, occbin_irf
 
 # Local Projection types
 export AbstractLPModel, AbstractLPImpulseResponse, AbstractCovarianceEstimator

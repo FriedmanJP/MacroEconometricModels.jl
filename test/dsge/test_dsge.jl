@@ -1466,4 +1466,71 @@ end
     @test occursin("Binding periods", str3)
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 16: OccBin Constraint Parsing & Regime Derivation
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "OccBin: parse_constraint" begin
+    spec = @dsge begin
+        parameters: rho = 0.5, phi = 1.5, sigma = 0.01
+        endogenous: y, pi_var, i
+        exogenous: e
+        y[t] = rho * y[t-1] + e[t]
+        pi_var[t] = 0.5 * y[t]
+        i[t] = phi * pi_var[t]
+    end
+
+    c = parse_constraint(:(i[t] >= 0), spec)
+    @test c.variable == :i
+    @test c.bound == 0.0
+    @test c.direction == :geq
+
+    c2 = parse_constraint(:(y[t] <= 1.0), spec)
+    @test c2.variable == :y
+    @test c2.bound == 1.0
+    @test c2.direction == :leq
+
+    @test_throws ArgumentError parse_constraint(:(z[t] >= 0), spec)
+end
+
+@testset "OccBin: _derive_alternative_regime" begin
+    spec = @dsge begin
+        parameters: rho = 0.5, phi = 1.5
+        endogenous: y, i
+        exogenous: e
+        y[t] = rho * y[t-1] + e[t]
+        i[t] = phi * y[t]
+    end
+    spec = compute_steady_state(spec)
+
+    c = parse_constraint(:(i[t] >= 0), spec)
+    alt_spec = MacroEconometricModels._derive_alternative_regime(spec, c)
+
+    @test alt_spec.n_endog == spec.n_endog
+    @test alt_spec.endog == spec.endog
+
+    y_ss = alt_spec.steady_state
+    theta = alt_spec.param_values
+    eps_zero = zeros(spec.n_exog)
+    resid = alt_spec.residual_fns[2](y_ss, y_ss, y_ss, eps_zero, theta)
+    @test abs(resid) < 1e-10
+end
+
+@testset "OccBin: _extract_regime" begin
+    spec = @dsge begin
+        parameters: rho = 0.5
+        endogenous: y
+        exogenous: e
+        y[t] = rho * y[t-1] + e[t]
+    end
+    spec = compute_steady_state(spec)
+
+    regime = MacroEconometricModels._extract_regime(spec)
+    @test isa(regime, OccBinRegime{Float64})
+    @test size(regime.A) == (1, 1)
+    @test size(regime.B) == (1, 1)
+    @test size(regime.C) == (1, 1)
+    @test size(regime.D) == (1, 1)
+end
+
 end # top-level @testset
