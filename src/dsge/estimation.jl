@@ -58,6 +58,7 @@ function estimate_dsge(spec::DSGESpec{T}, data::AbstractMatrix,
                         sim_ratio::Int=5, burn::Int=100,
                         moments_fn::Function=d -> autocovariance_moments(d; lags=1),
                         bounds::Union{Nothing,ParameterTransform}=nothing,
+                        lags::Int=1,
                         rng=Random.default_rng()) where {T<:AbstractFloat}
     data_T = Matrix{T}(data)
 
@@ -76,8 +77,12 @@ function estimate_dsge(spec::DSGESpec{T}, data::AbstractMatrix,
                                     sim_ratio=sim_ratio, burn=burn,
                                     weighting=weighting, moments_fn=moments_fn,
                                     bounds=bounds, rng=rng)
+    elseif method == :analytical_gmm
+        return _estimate_dsge_analytical_gmm(spec, data_T, param_names;
+                                              lags=lags,
+                                              bounds=bounds)
     else
-        throw(ArgumentError("method must be :irf_matching, :euler_gmm, or :smm"))
+        throw(ArgumentError("method must be :irf_matching, :euler_gmm, :smm, or :analytical_gmm"))
     end
 end
 
@@ -353,5 +358,77 @@ function _estimate_dsge_smm(spec::DSGESpec{T}, data::Matrix{T},
         smm_result.theta, smm_result.vcov, param_names,
         :smm, smm_result.J_stat, smm_result.J_pvalue,
         final_sol, smm_result.converged, final_spec
+    )
+end
+
+# =============================================================================
+# Analytical GMM Estimation (Lyapunov equation moments)
+# =============================================================================
+
+"""
+    _estimate_dsge_analytical_gmm(spec, data, param_names; ...) -> DSGEEstimation
+
+Internal: Analytical GMM estimation using Lyapunov equation moments.
+
+Matches model-implied analytical moments (from `analytical_moments`) to data moments
+(from `autocovariance_moments`). No simulation required — uses the discrete Lyapunov
+equation to compute unconditional covariances exactly.
+"""
+function _estimate_dsge_analytical_gmm(spec::DSGESpec{T}, data::Matrix{T},
+                                         param_names::Vector{Symbol};
+                                         lags=1, weighting=:identity,
+                                         bounds=nothing) where {T}
+    theta0 = T[spec.param_values[p] for p in param_names]
+
+    # Data moments
+    m_data = autocovariance_moments(data; lags=lags)
+    n_moments = length(m_data)
+
+    # GMM moment function: returns 1 × n_moments matrix
+    # Analytical moments are deterministic given θ — single "observation"
+    function analytical_moment_fn(theta, _data)
+        new_pv = copy(spec.param_values)
+        for (i, pn) in enumerate(param_names)
+            new_pv[pn] = theta[i]
+        end
+        new_spec = DSGESpec{T}(
+            spec.endog, spec.exog, spec.params, new_pv,
+            spec.equations, spec.residual_fns,
+            spec.n_expect, spec.forward_indices, T[], spec.ss_fn
+        )
+        try
+            new_spec = compute_steady_state(new_spec)
+            sol = solve(new_spec; method=:gensys)
+            if !is_determined(sol) || !is_stable(sol)
+                return fill(T(1e6), 1, n_moments)
+            end
+            m_model = analytical_moments(sol; lags=lags)
+            g = reshape(m_data .- m_model, 1, n_moments)
+            return g
+        catch
+            return fill(T(1e6), 1, n_moments)
+        end
+    end
+
+    gmm_result = estimate_gmm(analytical_moment_fn, theta0, data;
+                                weighting=weighting, bounds=bounds)
+
+    # Build solution at estimated parameters
+    final_pv = copy(spec.param_values)
+    for (i, pn) in enumerate(param_names)
+        final_pv[pn] = gmm_result.theta[i]
+    end
+    final_spec = DSGESpec{T}(
+        spec.endog, spec.exog, spec.params, final_pv,
+        spec.equations, spec.residual_fns,
+        spec.n_expect, spec.forward_indices, T[], spec.ss_fn
+    )
+    final_spec = compute_steady_state(final_spec)
+    final_sol = solve(final_spec; method=:gensys)
+
+    DSGEEstimation{T}(
+        gmm_result.theta, gmm_result.vcov, param_names,
+        :analytical_gmm, gmm_result.J_stat, gmm_result.J_pvalue,
+        final_sol, gmm_result.converged, final_spec
     )
 end

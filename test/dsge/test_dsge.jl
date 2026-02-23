@@ -1322,4 +1322,63 @@ end
     @test m[1] ≈ 1.0 / (1 - 0.25) atol=1e-10
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 14: Analytical GMM Estimation
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "DSGE Analytical GMM Estimation" begin
+    rng = Random.MersenneTwister(42)
+    spec = @dsge begin
+        parameters: rho = 0.7, sigma = 1.0
+        endogenous: y
+        exogenous: e
+        y[t] = rho * y[t-1] + sigma * e[t]
+    end
+    spec = compute_steady_state(spec)
+
+    # Simulate data
+    sol = solve(spec; method=:gensys)
+    sim_data = simulate(sol, 500; rng=rng)
+
+    # Estimate rho via analytical GMM
+    bounds = ParameterTransform([-0.99], [0.99])
+    est = estimate_dsge(spec, sim_data, [:rho];
+                        method=:analytical_gmm,
+                        bounds=bounds)
+
+    @test est isa DSGEEstimation{Float64}
+    @test est.method == :analytical_gmm
+    @test est.converged
+    @test abs(est.theta[1] - 0.7) < 0.2  # reasonable recovery
+    @test is_determined(est.solution)
+end
+
+@testset "DSGE Analytical GMM: lags kwarg" begin
+    spec = @dsge begin
+        parameters: rho = 0.8
+        endogenous: y
+        exogenous: e
+        y[t] = rho * y[t-1] + e[t]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:gensys)
+    sim_data = simulate(sol, 300; rng=Random.MersenneTwister(99))
+
+    est = estimate_dsge(spec, sim_data, [:rho];
+                        method=:analytical_gmm, lags=2)
+    @test est isa DSGEEstimation{Float64}
+    @test est.method == :analytical_gmm
+end
+
+@testset "DSGE estimate_dsge: invalid method error includes analytical_gmm" begin
+    spec = @dsge begin
+        parameters: rho = 0.5
+        endogenous: y
+        exogenous: e
+        y[t] = rho * y[t-1] + e[t]
+    end
+    Y = randn(100, 1)
+    @test_throws ArgumentError estimate_dsge(spec, Y, [:rho]; method=:invalid)
+end
+
 end # top-level @testset
