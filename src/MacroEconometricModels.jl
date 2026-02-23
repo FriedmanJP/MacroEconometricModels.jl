@@ -242,6 +242,9 @@ include("vecm/granger.jl")
 # LP-FEVD (after irf + fevd)
 include("lp/fevd.jl")
 
+# DSGE simulation, IRF/FEVD bridge (after var/irf.jl, var/fevd.jl, lp/fevd.jl)
+include("dsge/simulation.jl")
+
 # Display (after all types)
 include("summary.jl")
 
@@ -319,6 +322,7 @@ export @dsge
 
 # Functions
 export compute_steady_state, linearize, solve, gensys, blanchard_kahn
+export simulate
 
 # Accessors
 export nshocks, is_determined, is_stable

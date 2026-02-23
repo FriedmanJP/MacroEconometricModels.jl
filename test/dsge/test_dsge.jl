@@ -761,4 +761,84 @@ end
     @test occursin("Converged", s)
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 8: Simulation & IRF/FEVD Bridge
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "Simulate: stochastic" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+    end
+    sol = solve(spec)
+    Random.seed!(42)
+    sim = simulate(sol, 200)
+    @test size(sim) == (200, 1)
+    @test std(sim[:, 1]) > 0  # not all zeros
+    @test std(sim[:, 1]) < 1  # bounded
+end
+
+@testset "Simulate: deterministic (given shocks)" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 1.0
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+    end
+    sol = solve(spec)
+    shocks = zeros(10, 1)
+    shocks[1, 1] = 1.0
+    sim = simulate(sol, 10; shock_draws=shocks)
+    @test sim[1, 1] ≈ 1.0 atol=1e-4
+    @test sim[2, 1] ≈ 0.9 atol=1e-4
+end
+
+@testset "IRF bridge to ImpulseResponse" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 1.0
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+    end
+    sol = solve(spec)
+    irf_result = irf(sol, 20)
+    @test irf_result isa ImpulseResponse{Float64}
+    @test irf_result.horizon == 20
+    @test irf_result.values[1, 1, 1] ≈ 1.0 atol=1e-4  # impact
+    @test irf_result.values[2, 1, 1] ≈ 0.9 atol=1e-4  # h=2
+    @test length(irf_result.variables) == 1
+    @test length(irf_result.shocks) == 1
+end
+
+@testset "FEVD bridge to FEVD type" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 1.0
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+    end
+    sol = solve(spec)
+    fevd_result = fevd(sol, 20)
+    @test fevd_result isa FEVD{Float64}
+    # Single shock -> 100% variance explained at all horizons
+    for h in 1:20
+        @test fevd_result.proportions[1, 1, h] ≈ 1.0 atol=1e-6
+    end
+end
+
+@testset "plot_result works with DSGE IRF" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + ε[t]
+    end
+    sol = solve(spec)
+    irf_result = irf(sol, 20)
+    p = plot_result(irf_result)
+    @test p isa PlotOutput
+end
+
 end # top-level @testset
