@@ -520,6 +520,12 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Generalized Instrumental Variables Estimation of Nonlinear Rational Expectations Models",
         journal="Econometrica", volume="50", issue="5", pages="1269--1286",
         doi="10.2307/1911873", isbn="", publisher="", entry_type=:article),
+    # --- OccBin ---
+    :guerrieri_iacoviello2015 => (key=:guerrieri_iacoviello2015,
+        authors="Guerrieri, Luca and Iacoviello, Matteo", year=2015,
+        title="OccBin: A Toolkit for Solving Dynamic Models with Occasionally Binding Constraints Easily",
+        journal="Journal of Monetary Economics", volume="70", issue="", pages="22--38",
+        doi="10.1016/j.jmoneco.2014.08.005", isbn="", publisher="", entry_type=:article),
 )
 
 # --- Type/method → reference keys mapping ---
@@ -696,6 +702,12 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :perfect_foresight => [:sims2002],
     :irf_matching => [:christiano_eichenbaum_evans2005],
     :euler_gmm => [:hansen_singleton1982, :hansen1982],
+    # OccBin
+    :OccBinSolution => [:guerrieri_iacoviello2015],
+    :OccBinIRF => [:guerrieri_iacoviello2015],
+    :occbin => [:guerrieri_iacoviello2015],
+    :occbin_solve => [:guerrieri_iacoviello2015],
+    :occbin_irf => [:guerrieri_iacoviello2015],
     # Data sources (symbol dispatch)
     :fred_md => [:mccracken_ng2016],
     :fred_qd => [:mccracken_ng2020],
@@ -1016,6 +1028,10 @@ refs(io::IO, ::DSGESolution; kw...) = refs(io, _TYPE_REFS[:DSGESolution]; kw...)
 refs(io::IO, ::DSGEEstimation; kw...) = refs(io, _TYPE_REFS[:DSGEEstimation]; kw...)
 refs(io::IO, ::PerfectForesightPath; kw...) = refs(io, _TYPE_REFS[:PerfectForesightPath]; kw...)
 refs(io::IO, ::DSGESpec; kw...) = refs(io, _TYPE_REFS[:DSGESpec]; kw...)
+
+# OccBin types
+refs(io::IO, ::OccBinSolution; kw...) = refs(io, _TYPE_REFS[:OccBinSolution]; kw...)
+refs(io::IO, ::OccBinIRF; kw...) = refs(io, _TYPE_REFS[:OccBinIRF]; kw...)
 
 # --- Convenience: stdout fallback ---
 function refs(x; kw...)

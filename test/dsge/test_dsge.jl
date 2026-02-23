@@ -1838,4 +1838,131 @@ end
     @test report(sol) === nothing
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 19: OccBin refs()
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "OccBin: refs()" begin
+    spec = @dsge begin
+        parameters: rho = 0.9, phi = 1.5
+        endogenous: y, i
+        exogenous: e
+        y[t] = rho * y[t-1] + e[t]
+        i[t] = phi * y[t]
+    end
+    spec = compute_steady_state(spec)
+    constraint = parse_constraint(:(i[t] >= 0), spec)
+    shock_path = zeros(20, 1)
+    shock_path[1, 1] = -1.0
+    sol = occbin_solve(spec, constraint; shock_path=shock_path, nperiods=20)
+
+    r = refs(sol)
+    @test occursin("Guerrieri", r)
+    @test occursin("Iacoviello", r)
+    @test occursin("2015", r)
+
+    # Symbol dispatch
+    r2 = refs(:occbin)
+    @test occursin("Guerrieri", r2)
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 20: OccBin IRF
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "OccBin: occbin_irf one-constraint" begin
+    spec = @dsge begin
+        parameters: rho = 0.9, phi = 1.5
+        endogenous: y, i
+        exogenous: e
+        y[t] = rho * y[t-1] + e[t]
+        i[t] = phi * y[t]
+    end
+    spec = compute_steady_state(spec)
+    constraint = parse_constraint(:(i[t] >= 0), spec)
+
+    # Large negative shock triggers ZLB
+    oirf = occbin_irf(spec, constraint, 1, 30; magnitude=-2.0)
+    @test isa(oirf, OccBinIRF{Float64})
+    @test size(oirf.linear, 1) == 30
+    @test size(oirf.piecewise, 1) == 30
+    @test oirf.shock_name == "e"
+
+    # Linear should go negative for i, piecewise should be clamped
+    i_idx = 2
+    @test minimum(oirf.linear[:, i_idx]) < 0.0
+    @test minimum(oirf.piecewise[:, i_idx]) >= -1e-8
+
+    # Some binding periods
+    @test sum(oirf.regime_history) > 0
+end
+
+@testset "OccBin: occbin_irf no-binding" begin
+    spec = @dsge begin
+        parameters: rho = 0.5, phi = 1.0
+        endogenous: y, i
+        exogenous: e
+        y[t] = rho * y[t-1] + e[t]
+        i[t] = phi * y[t]
+    end
+    spec = compute_steady_state(spec)
+    constraint = parse_constraint(:(i[t] >= -100.0), spec)
+
+    oirf = occbin_irf(spec, constraint, 1, 20; magnitude=0.5)
+    @test oirf.linear ≈ oirf.piecewise atol=1e-10
+    @test sum(oirf.regime_history) == 0
+end
+
+@testset "OccBin: occbin_irf two-constraint" begin
+    spec = @dsge begin
+        parameters: rho = 0.8, phi = 1.5
+        endogenous: y, i, c
+        exogenous: e
+        y[t] = rho * y[t-1] + e[t]
+        i[t] = phi * y[t]
+        c[t] = 0.5 * y[t]
+    end
+    spec = compute_steady_state(spec)
+    c1 = parse_constraint(:(i[t] >= 0), spec)
+    c2 = parse_constraint(:(c[t] >= 0), spec)
+
+    oirf = occbin_irf(spec, c1, c2, 1, 30; magnitude=-3.0)
+    @test isa(oirf, OccBinIRF{Float64})
+    @test size(oirf.regime_history, 2) == 2
+    @test oirf.shock_name == "e"
+end
+
+@testset "OccBin: occbin_irf invalid shock_idx" begin
+    spec = @dsge begin
+        parameters: rho = 0.5
+        endogenous: y
+        exogenous: e
+        y[t] = rho * y[t-1] + e[t]
+    end
+    spec = compute_steady_state(spec)
+    constraint = parse_constraint(:(y[t] >= -10.0), spec)
+
+    @test_throws ArgumentError occbin_irf(spec, constraint, 0, 20)
+    @test_throws ArgumentError occbin_irf(spec, constraint, 2, 20)
+end
+
+@testset "OccBin: occbin_irf show" begin
+    spec = @dsge begin
+        parameters: rho = 0.9, phi = 1.5
+        endogenous: y, i
+        exogenous: e
+        y[t] = rho * y[t-1] + e[t]
+        i[t] = phi * y[t]
+    end
+    spec = compute_steady_state(spec)
+    constraint = parse_constraint(:(i[t] >= 0), spec)
+    oirf = occbin_irf(spec, constraint, 1, 20; magnitude=-2.0)
+
+    io = IOBuffer()
+    show(io, oirf)
+    output = String(take!(io))
+    @test occursin("OccBin IRF", output)
+    @test occursin("e", output)
+end
+
 end # top-level @testset
