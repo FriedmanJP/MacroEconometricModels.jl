@@ -1233,4 +1233,93 @@ end
     @test_throws ArgumentError estimate_dsge(spec, Y, [:rho]; method=:invalid)
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 13: Analytical Moments
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "solve_lyapunov: 1D AR(1)" begin
+    # y_t = rho * y_{t-1} + sigma * e_t => Sigma = sigma^2 / (1 - rho^2)
+    rho = 0.9
+    sigma = 1.0
+    G1 = fill(rho, 1, 1)
+    impact = fill(sigma, 1, 1)
+    Sigma = solve_lyapunov(G1, impact)
+    @test size(Sigma) == (1, 1)
+    @test Sigma[1, 1] ≈ sigma^2 / (1 - rho^2) atol=1e-10
+end
+
+@testset "solve_lyapunov: 2D VAR(1)" begin
+    G1 = [0.8 0.1; 0.0 0.5]
+    impact = [1.0 0.0; 0.0 1.0]
+    Sigma = solve_lyapunov(G1, impact)
+    @test size(Sigma) == (2, 2)
+    @test issymmetric(Sigma)
+    @test all(eigvals(Sigma) .> 0)
+    # Verify Sigma = G1 * Sigma * G1' + impact * impact'
+    residual = Sigma - G1 * Sigma * G1' - impact * impact'
+    @test norm(residual) < 1e-10
+end
+
+@testset "solve_lyapunov: unstable system errors" begin
+    G1 = fill(1.5, 1, 1)
+    impact = fill(1.0, 1, 1)
+    @test_throws ArgumentError solve_lyapunov(G1, impact)
+end
+
+@testset "analytical_moments: AR(1) matches theory" begin
+    spec = @dsge begin
+        parameters: rho = 0.9, sigma = 1.0
+        endogenous: y
+        exogenous: e
+        y[t] = rho * y[t-1] + sigma * e[t]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:gensys)
+
+    m = analytical_moments(sol; lags=1)
+    expected_var = 1.0 / (1 - 0.81)
+    expected_autocov = 0.9 * expected_var
+    @test length(m) == 2
+    @test m[1] ≈ expected_var atol=1e-10
+    @test m[2] ≈ expected_autocov atol=1e-10
+end
+
+@testset "analytical_moments: 2D matches simulation" begin
+    spec = @dsge begin
+        parameters: rho = 0.8, sigma = 1.0
+        endogenous: y, x
+        exogenous: e_y, e_x
+        y[t] = rho * y[t-1] + sigma * e_y[t]
+        x[t] = 0.5 * y[t-1] + 0.5 * x[t-1] + e_x[t]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:gensys)
+
+    m_analytical = analytical_moments(sol; lags=2)
+    # k=2, lags=2: k*(k+1)/2 + k*lags = 3 + 4 = 7 moments
+    @test length(m_analytical) == 7
+
+    # Cross-check with long simulation
+    rng = Random.MersenneTwister(42)
+    sim_data = simulate(sol, 100_000; rng=rng)
+    m_simulated = autocovariance_moments(sim_data; lags=2)
+    for i in eachindex(m_analytical)
+        @test m_analytical[i] ≈ m_simulated[i] rtol=0.05
+    end
+end
+
+@testset "analytical_moments: lags=0" begin
+    spec = @dsge begin
+        parameters: rho = 0.5
+        endogenous: y
+        exogenous: e
+        y[t] = rho * y[t-1] + e[t]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:gensys)
+    m = analytical_moments(sol; lags=0)
+    @test length(m) == 1
+    @test m[1] ≈ 1.0 / (1 - 0.25) atol=1e-10
+end
+
 end # top-level @testset
