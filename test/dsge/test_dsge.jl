@@ -540,4 +540,66 @@ end
     @test occursin("Linearized DSGE", s)
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 5: Gensys Solver
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "Gensys: AR(1) model" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 1.0
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:gensys)
+    @test sol isa DSGESolution{Float64}
+    @test is_determined(sol)
+    @test sol.G1[1,1] ≈ 0.9 atol=1e-4
+    @test sol.impact[1,1] ≈ 1.0 atol=1e-4
+end
+
+@testset "Gensys: forward-looking model" begin
+    # x_t = 0.5 * E_t[x_{t+1}] + ε_t
+    # Forward iteration (iid shock): x_t = Σ_{j=0}^∞ 0.5^j E_t[ε_{t+j}] = ε_t
+    # So G1 = 0 (no state persistence), impact = 1.0
+    spec = @dsge begin
+        parameters: β = 0.5
+        endogenous: x
+        exogenous: ε
+        x[t] = β * E[t](x[t+1]) + ε[t]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:gensys)
+    @test is_determined(sol)
+    # G1 should be 0 (no state persistence), impact should be 1.0
+    @test abs(sol.G1[1,1]) < 0.1
+    @test sol.impact[1,1] ≈ 1.0 atol=0.1
+end
+
+@testset "Gensys: existence/uniqueness flags" begin
+    spec = @dsge begin
+        parameters: ρ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + ε[t]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:gensys)
+    @test sol.eu[1] == 1  # exists
+    @test sol.eu[2] == 1  # unique
+end
+
+@testset "Gensys: default method" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + ε[t]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec)  # should default to :gensys
+    @test sol.method == :gensys
+end
+
 end # top-level @testset
