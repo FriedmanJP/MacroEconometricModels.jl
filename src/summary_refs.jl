@@ -188,6 +188,11 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Simulated Moments Estimation of Markov Models of Asset Prices",
         journal="Econometrica", volume="61", issue="4", pages="929--952",
         doi="10.2307/2951768", isbn="", publisher="", entry_type=:article),
+    # --- Analytical Moments ---
+    :hamilton1994 => (key=:hamilton1994, authors="Hamilton, James D.", year=1994,
+        title="Time Series Analysis",
+        journal="", volume="", issue="", pages="",
+        doi="", isbn="0-691-04289-6", publisher="Princeton University Press", entry_type=:book),
     # --- Statistical Identification — Survey ---
     :lewis2025 => (key=:lewis2025,
         authors="Lewis, Daniel J.", year=2025,
@@ -591,6 +596,8 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :SMMModel => [:ruge_murcia2012, :lee_ingram1991, :hansen1982],
     :ParameterTransform => [:hansen1982],
     :smm => [:ruge_murcia2012, :lee_ingram1991, :hansen1982],
+    # Analytical GMM
+    :analytical_gmm => [:hamilton1994, :hansen1982],
     # Non-Gaussian ICA methods (symbol dispatch)
     :fastica => [:hyvarinen1999, :lewis2025],
     :jade => [:cardoso_souloumiac1993, :lewis2025],
