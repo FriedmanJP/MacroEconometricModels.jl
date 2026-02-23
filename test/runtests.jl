@@ -85,6 +85,7 @@ const TEST_GROUPS = [
         "teststat/test_model_comparison.jl",
         "teststat/test_normality.jl",
         "gmm/test_gmm.jl",
+        "gmm/test_smm.jl",
         "data/test_data.jl",
         "pvar/test_pvar.jl",
     ]),
@@ -272,6 +273,7 @@ else
         @testset "Model Comparison Tests" begin include("teststat/test_model_comparison.jl") end
         @testset "Multivariate Normality Tests" begin include("teststat/test_normality.jl") end
         @testset "GMM Estimation" begin include("gmm/test_gmm.jl") end
+        @testset "SMM Estimation" begin include("gmm/test_smm.jl") end
         @testset "Data Module" begin include("data/test_data.jl") end
         @testset "Panel VAR" begin include("pvar/test_pvar.jl") end
 
