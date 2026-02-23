@@ -507,6 +507,48 @@ balance_panel
 
 ---
 
+## DSGE Models
+
+### Specification and Steady State
+
+```@docs
+compute_steady_state
+linearize
+```
+
+### Solution Methods
+
+```@docs
+solve
+gensys
+blanchard_kahn
+perfect_foresight
+```
+
+### Simulation and Analysis
+
+```@docs
+simulate
+solve_lyapunov
+analytical_moments
+```
+
+### Estimation
+
+```@docs
+estimate_dsge
+```
+
+### Occasionally Binding Constraints
+
+```@docs
+parse_constraint
+occbin_solve
+occbin_irf
+```
+
+---
+
 ## Display and References
 
 ```@autodocs

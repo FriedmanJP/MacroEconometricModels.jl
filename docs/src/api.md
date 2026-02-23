@@ -329,3 +329,47 @@ Low-level matrix construction and numerical utilities used internally.
 | `companion_matrix(B, n, p)` | VAR companion form |
 | `robust_inv(A)` | Robust matrix inverse |
 | `safe_cholesky(A; ...)` | Stable Cholesky decomposition |
+
+---
+
+## DSGE Models
+
+Specify, solve, simulate, and estimate Dynamic Stochastic General Equilibrium models. See [DSGE Models](dsge.md) for the full guide.
+
+### DSGE Specification and Solution
+
+| Function | Description |
+|----------|-------------|
+| `@dsge begin ... end` | Parse DSGE model specification |
+| `compute_steady_state(spec)` | Compute deterministic steady state |
+| `linearize(spec)` | Linearize around steady state (Sims canonical form) |
+| `solve(spec; method=:gensys)` | Solve rational expectations model |
+| `gensys(Γ₀, Γ₁, C, Ψ, Π)` | Sims (2002) QZ decomposition solver |
+| `blanchard_kahn(ld, spec)` | Blanchard-Kahn (1980) eigenvalue counting |
+| `is_determined(sol)` | Check existence and uniqueness |
+| `is_stable(sol)` | Check stability of solution |
+
+### DSGE Simulation and Analysis
+
+| Function | Description |
+|----------|-------------|
+| `simulate(sol, T)` | Stochastic simulation |
+| `irf(sol, H)` | Analytical impulse responses |
+| `fevd(sol, H)` | Forecast error variance decomposition |
+| `solve_lyapunov(G1, impact)` | Unconditional covariance (Lyapunov equation) |
+| `analytical_moments(sol; lags)` | Analytical variance and autocovariances |
+| `perfect_foresight(spec; T_periods, shock_path)` | Deterministic transition path |
+
+### DSGE Estimation
+
+| Function | Description |
+|----------|-------------|
+| `estimate_dsge(spec, data, params; method)` | GMM estimation (IRF matching, Euler, SMM, analytical) |
+
+### Occasionally Binding Constraints (OccBin)
+
+| Function | Description |
+|----------|-------------|
+| `parse_constraint(expr, spec)` | Parse constraint expression |
+| `occbin_solve(spec, constraint; ...)` | Piecewise-linear OccBin solution (1 or 2 constraints) |
+| `occbin_irf(spec, constraint, shock_idx, H; ...)` | OccBin impulse responses |
