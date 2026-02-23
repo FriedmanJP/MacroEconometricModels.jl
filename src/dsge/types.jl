@@ -312,3 +312,130 @@ function Base.show(io::IO, est::DSGEEstimation{T}) where {T}
     _sig_legend(io)
 end
 
+# =============================================================================
+# OccBin types — occasionally binding constraint solver
+# =============================================================================
+
+"""
+    OccBinConstraint{T}
+
+A single occasionally binding constraint for OccBin piecewise-linear solution.
+
+Fields:
+- `expr::Expr` — full constraint expression (e.g., `:(R >= 0)`)
+- `variable::Symbol` — constrained variable name
+- `bound::T` — constraint bound value
+- `direction::Symbol` — `:geq` or `:leq`
+- `bind_expr::Expr` — expression substituted when the constraint binds
+"""
+struct OccBinConstraint{T<:AbstractFloat}
+    expr::Expr
+    variable::Symbol
+    bound::T
+    direction::Symbol
+    bind_expr::Expr
+end
+
+"""
+    OccBinRegime{T}
+
+Linearized coefficient matrices for one regime (binding or slack).
+
+Fields:
+- `A::Matrix{T}` — coefficient on `y[t+1]` (expectation terms)
+- `B::Matrix{T}` — coefficient on `y[t]` (contemporaneous terms)
+- `C::Matrix{T}` — coefficient on `y[t-1]` (lagged terms)
+- `D::Matrix{T}` — coefficient on `ε[t]` (shock impact)
+"""
+struct OccBinRegime{T<:AbstractFloat}
+    A::Matrix{T}
+    B::Matrix{T}
+    C::Matrix{T}
+    D::Matrix{T}
+end
+
+"""
+    OccBinSolution{T}
+
+Piecewise-linear solution from the OccBin algorithm (Guerrieri & Iacoviello 2015).
+
+Fields:
+- `linear_path::Matrix{T}` — T_periods × n_endog unconstrained linear path
+- `piecewise_path::Matrix{T}` — T_periods × n_endog piecewise-linear path
+- `steady_state::Vector{T}` — steady state values
+- `regime_history::Matrix{Int}` — T_periods × n_constraints regime indicators (0 = slack, 1+ = binding)
+- `converged::Bool` — convergence flag
+- `iterations::Int` — number of guess-and-verify iterations
+- `spec::DSGESpec{T}` — model specification
+- `varnames::Vector{String}` — variable display names
+"""
+struct OccBinSolution{T<:AbstractFloat}
+    linear_path::Matrix{T}
+    piecewise_path::Matrix{T}
+    steady_state::Vector{T}
+    regime_history::Matrix{Int}
+    converged::Bool
+    iterations::Int
+    spec::DSGESpec{T}
+    varnames::Vector{String}
+end
+
+function Base.show(io::IO, sol::OccBinSolution{T}) where {T}
+    n_constraints = size(sol.regime_history, 2)
+    binding_periods = sum(sol.regime_history .> 0)
+    spec_data = Any[
+        "Variables"       sol.spec.n_endog;
+        "Periods"         size(sol.piecewise_path, 1);
+        "Constraints"     n_constraints;
+        "Binding periods" binding_periods;
+        "Converged"       sol.converged ? "Yes" : "No";
+        "Iterations"      sol.iterations;
+    ]
+    _pretty_table(io, spec_data;
+        title = "OccBin Piecewise-Linear Solution",
+        column_labels = ["", ""],
+        alignment = [:l, :r],
+    )
+end
+
+report(sol::OccBinSolution) = show(stdout, sol)
+
+"""
+    OccBinIRF{T}
+
+Impulse response comparison between unconstrained linear and OccBin piecewise-linear paths.
+
+Fields:
+- `linear::Matrix{T}` — H × n_endog linear IRF
+- `piecewise::Matrix{T}` — H × n_endog piecewise-linear IRF
+- `regime_history::Matrix{Int}` — H × n_constraints regime indicators
+- `varnames::Vector{String}` — variable display names
+- `shock_name::String` — name of the shocked variable
+"""
+struct OccBinIRF{T<:AbstractFloat}
+    linear::Matrix{T}
+    piecewise::Matrix{T}
+    regime_history::Matrix{Int}
+    varnames::Vector{String}
+    shock_name::String
+end
+
+function Base.show(io::IO, oirf::OccBinIRF{T}) where {T}
+    binding_periods = sum(oirf.regime_history .> 0)
+    max_dev = maximum(abs.(oirf.piecewise .- oirf.linear))
+    spec_data = Any[
+        "Shock"           oirf.shock_name;
+        "Variables"       size(oirf.piecewise, 2);
+        "Horizon"         size(oirf.piecewise, 1);
+        "Binding periods" binding_periods;
+        "Max deviation"   round(max_dev; digits=6);
+    ]
+    _pretty_table(io, spec_data;
+        title = "OccBin IRF Comparison",
+        column_labels = ["", ""],
+        alignment = [:l, :r],
+    )
+end
+
+report(oirf::OccBinIRF) = show(stdout, oirf)
+
