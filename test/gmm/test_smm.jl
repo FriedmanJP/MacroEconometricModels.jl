@@ -86,4 +86,22 @@ using Statistics
     end
 end
 
+@testset "GMM with Parameter Transforms" begin
+    rng = Random.MersenneTwister(42)
+    true_mu = 0.7
+    data = true_mu .+ 0.1 .* randn(rng, 200, 1)
+
+    function mean_moments(theta, data)
+        data .- theta[1]
+    end
+
+    bounds = ParameterTransform([0.0], [1.0])
+    result = estimate_gmm(mean_moments, [0.5], data;
+                          weighting=:identity, bounds=bounds)
+    @test result.converged
+    @test abs(result.theta[1] - true_mu) < 0.05
+    @test result.theta[1] > 0.0
+    @test result.theta[1] < 1.0
+end
+
 end  # outer testset

@@ -166,8 +166,8 @@ include("dsge/blanchard_kahn.jl")
 include("dsge/perfect_foresight.jl")
 
 # GMM
-include("gmm/gmm.jl")
 include("gmm/transforms.jl")
+include("gmm/gmm.jl")
 
 # ARIMA
 include("arima/types.jl")
