@@ -54,6 +54,7 @@ function _dsge_impl(block::Expr)
     endog = Symbol[]
     exog = Symbol[]
     raw_equations = Expr[]
+    ss_body = nothing  # steady_state block body (Expr or nothing)
 
     stmts = filter(a -> !(a isa LineNumberNode), block.args)
 
@@ -65,9 +66,16 @@ function _dsge_impl(block::Expr)
             append!(endog, _extract_names(stmt))
         elseif label === :exogenous
             append!(exog, _extract_names(stmt))
+        elseif label === :steady_state
+            # Single-line: steady_state: [expr]
+            # AST: (call : steady_state <body_expr>)
+            ss_body = stmt.args[3]  # the expression after the colon
         elseif label === nothing
-            # Must be an equation (head == :(=) with ref-based LHS)
-            if stmt isa Expr && stmt.head == :(=)
+            # Check for multi-line: steady_state = begin...end
+            # AST: (= :steady_state (block ...))
+            if stmt isa Expr && stmt.head == :(=) && stmt.args[1] === :steady_state
+                ss_body = stmt.args[2]
+            elseif stmt isa Expr && stmt.head == :(=)
                 push!(raw_equations, stmt)
             else
                 error("@dsge: unrecognized statement: $stmt")
@@ -123,13 +131,30 @@ function _dsge_impl(block::Expr)
     # Build the vector of residual functions
     fn_vec_expr = Expr(:ref, :Function, residual_fn_exprs...)
 
+    # Build ss_fn expression if steady_state block was provided
+    ss_fn_expr = if ss_body !== nothing
+        # Build: (_ss_θ_) -> begin <param unpacking>; <ss_body> end
+        param_unpack = [:($(p) = _ss_θ_[$(QuoteNode(p))]) for p in params]
+        if ss_body isa Expr && ss_body.head == :block
+            # Multi-line: insert param unpacking at the start of the block
+            inner = filter(a -> !(a isa LineNumberNode), ss_body.args)
+            body = Expr(:block, param_unpack..., inner...)
+        else
+            # Single-line: wrap in block with param unpacking
+            body = Expr(:block, param_unpack..., ss_body)
+        end
+        Expr(:->, :_ss_θ_, body)
+    else
+        :nothing
+    end
+
     result = quote
         DSGESpec{Float64}(
             $endog_expr, $exog_expr, $params_expr,
             $param_vals_expr,
             $eq_vec_expr,
             $fn_vec_expr,
-            $n_expect, $fwd_expr, Float64[]
+            $n_expect, $fwd_expr, Float64[], $ss_fn_expr
         )
     end
 

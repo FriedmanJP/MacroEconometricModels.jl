@@ -445,6 +445,62 @@ end
     end))
 end
 
+@testset "Parser: steady_state single-line" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 1.0
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    @test spec isa DSGESpec{Float64}
+    @test spec.ss_fn !== nothing
+    @test spec.ss_fn(spec.param_values) == [0.0]
+    @test spec.n_endog == 1
+    @test spec.n_expect == 0
+end
+
+@testset "Parser: steady_state multi-line begin...end" begin
+    spec = @dsge begin
+        parameters: α = 0.33, δ = 0.025
+        endogenous: y, k
+        exogenous: ε
+        y[t] = k[t-1]^α + ε[t]
+        k[t] = y[t] - δ * k[t-1]
+        steady_state = begin
+            k_ss = (1.0 / δ)^(1 / (1 - α))
+            y_ss = k_ss^α
+            [y_ss, k_ss]
+        end
+    end
+    @test spec.ss_fn !== nothing
+    ss = spec.ss_fn(spec.param_values)
+    @test length(ss) == 2
+    @test ss[2] ≈ (1.0 / 0.025)^(1 / (1 - 0.33)) atol=1e-6
+end
+
+@testset "Parser: steady_state auto-detected by compute_steady_state" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + ε[t]
+        steady_state: [0.0]
+    end
+    spec2 = compute_steady_state(spec)
+    @test spec2.steady_state[1] ≈ 0.0
+end
+
+@testset "Parser: no steady_state block → ss_fn is nothing" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + ε[t]
+    end
+    @test spec.ss_fn === nothing
+end
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Section 3: Steady State
 # ─────────────────────────────────────────────────────────────────────────────
