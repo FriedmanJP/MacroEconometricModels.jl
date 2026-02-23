@@ -1533,4 +1533,157 @@ end
     @test size(regime.D) == (1, 1)
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 17: OccBin One-Constraint Solver
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "OccBin: _map_regime" begin
+    violvec = BitVector([0, 0, 1, 1, 1, 0, 0, 1, 0, 0])
+    regimes, starts = MacroEconometricModels._map_regime(violvec)
+    @test regimes == [0, 1, 0, 1, 0]
+    @test starts == [1, 3, 6, 8, 9]
+
+    # All zeros
+    v0 = falses(5)
+    r0, s0 = MacroEconometricModels._map_regime(v0)
+    @test r0 == [0]
+    @test s0 == [1]
+
+    # All ones
+    v1 = trues(4)
+    r1, s1 = MacroEconometricModels._map_regime(v1)
+    @test r1 == [1]
+    @test s1 == [1]
+
+    # Empty
+    ve = BitVector([])
+    re, se = MacroEconometricModels._map_regime(ve)
+    @test isempty(re)
+    @test isempty(se)
+
+    # Single element
+    vs = BitVector([1])
+    rs, ss = MacroEconometricModels._map_regime(vs)
+    @test rs == [1]
+    @test ss == [1]
+end
+
+@testset "OccBin: one-constraint ZLB" begin
+    spec = @dsge begin
+        parameters: rho = 0.9, phi = 1.5
+        endogenous: y, i
+        exogenous: e
+        y[t] = rho * y[t-1] + e[t]
+        i[t] = phi * y[t]
+    end
+    spec = compute_steady_state(spec)
+    constraint = parse_constraint(:(i[t] >= 0), spec)
+
+    shock_path = zeros(40, spec.n_exog)
+    shock_path[1, 1] = -2.0
+
+    sol = occbin_solve(spec, constraint; shock_path=shock_path, nperiods=40)
+    @test isa(sol, OccBinSolution{Float64})
+    @test sol.converged
+    @test size(sol.piecewise_path) == (40, 2)
+    @test size(sol.linear_path) == (40, 2)
+
+    # The linear path should violate the ZLB (i goes negative)
+    i_idx = 2
+    @test minimum(sol.linear_path[:, i_idx]) < 0.0
+
+    # The piecewise path should respect the ZLB (i >= 0, up to numerical tolerance)
+    @test minimum(sol.piecewise_path[:, i_idx]) >= -1e-8
+
+    # There should be some binding periods
+    @test sum(sol.regime_history[:, 1]) > 0
+end
+
+@testset "OccBin: no-binding case" begin
+    spec = @dsge begin
+        parameters: rho = 0.5
+        endogenous: y, i
+        exogenous: e
+        y[t] = rho * y[t-1] + e[t]
+        i[t] = 0.5 * y[t]
+    end
+    spec = compute_steady_state(spec)
+    constraint = parse_constraint(:(i[t] >= -100.0), spec)
+
+    shock_path = zeros(20, 1)
+    shock_path[1, 1] = 0.01
+    sol = occbin_solve(spec, constraint; shock_path=shock_path, nperiods=20)
+    @test sol.converged
+    @test sum(sol.regime_history) == 0
+    # When no binding, piecewise should equal linear
+    @test sol.piecewise_path ≈ sol.linear_path atol=1e-10
+end
+
+@testset "OccBin: explicit alt_spec variant" begin
+    spec = @dsge begin
+        parameters: rho = 0.9, phi = 1.5
+        endogenous: y, i
+        exogenous: e
+        y[t] = rho * y[t-1] + e[t]
+        i[t] = phi * y[t]
+    end
+    spec = compute_steady_state(spec)
+    constraint = parse_constraint(:(i[t] >= 0), spec)
+    alt_spec = MacroEconometricModels._derive_alternative_regime(spec, constraint)
+
+    shock_path = zeros(40, spec.n_exog)
+    shock_path[1, 1] = -2.0
+
+    sol = occbin_solve(spec, constraint, alt_spec;
+                       shock_path=shock_path, nperiods=40)
+    @test isa(sol, OccBinSolution{Float64})
+    @test sol.converged
+end
+
+@testset "OccBin: leq constraint" begin
+    spec = @dsge begin
+        parameters: rho = 0.9
+        endogenous: y, cap
+        exogenous: e
+        y[t] = rho * y[t-1] + e[t]
+        cap[t] = y[t]
+    end
+    spec = compute_steady_state(spec)
+    constraint = parse_constraint(:(cap[t] <= 0.5), spec)
+
+    shock_path = zeros(30, 1)
+    shock_path[1, 1] = 2.0  # large positive shock pushes above cap
+
+    sol = occbin_solve(spec, constraint; shock_path=shock_path, nperiods=30)
+    @test sol.converged
+    cap_idx = 2
+    ss_cap = spec.steady_state[cap_idx]
+    # Linear path should violate the cap (in levels)
+    @test maximum(sol.linear_path[:, cap_idx] .+ ss_cap) > 0.5
+    # Piecewise path should respect the cap in levels (up to numerical tolerance)
+    @test maximum(sol.piecewise_path[:, cap_idx] .+ ss_cap) <= 0.5 + 1e-4
+end
+
+@testset "OccBin: show and report on solution" begin
+    spec = @dsge begin
+        parameters: rho = 0.5
+        endogenous: y, i
+        exogenous: e
+        y[t] = rho * y[t-1] + e[t]
+        i[t] = 0.5 * y[t]
+    end
+    spec = compute_steady_state(spec)
+    constraint = parse_constraint(:(i[t] >= -100.0), spec)
+    shock_path = zeros(10, 1)
+    shock_path[1, 1] = 0.1
+    sol = occbin_solve(spec, constraint; shock_path=shock_path, nperiods=10)
+
+    io = IOBuffer()
+    show(io, sol)
+    str = String(take!(io))
+    @test occursin("OccBin Piecewise-Linear Solution", str)
+    @test occursin("Converged", str)
+    @test report(sol) === nothing
+end
+
 end # top-level @testset
