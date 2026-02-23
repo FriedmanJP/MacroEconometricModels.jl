@@ -301,7 +301,7 @@ end
     minimize_gmm(moment_fn::Function, theta0::AbstractVector{T}, data,
                  W::AbstractMatrix{T}; max_iter::Int=100, tol::T=T(1e-8)) -> NamedTuple
 
-Minimize GMM objective using gradient descent with BFGS-like updates.
+Minimize GMM objective using Optim.jl (LBFGS with NelderMead fallback).
 
 Returns:
 - theta: Minimizer
@@ -311,73 +311,23 @@ Returns:
 """
 function minimize_gmm(moment_fn::Function, theta0::AbstractVector{T}, data,
                       W::AbstractMatrix{T}; max_iter::Int=100, tol::T=T(1e-8)) where {T<:AbstractFloat}
-    n_params = length(theta0)
-    theta = copy(theta0)
+    obj(t) = gmm_objective(t, moment_fn, data, W)
 
-    # Objective function wrapper
-    function obj(t)
-        gmm_objective(t, moment_fn, data, W)
+    # Primary: LBFGS
+    result = Optim.optimize(obj, theta0, Optim.LBFGS(),
+                            Optim.Options(iterations=max_iter, f_reltol=tol))
+
+    if !Optim.converged(result)
+        # Fallback: NelderMead
+        result_nm = Optim.optimize(obj, theta0, Optim.NelderMead(),
+                                    Optim.Options(iterations=max_iter * 10, f_reltol=tol))
+        if Optim.minimum(result_nm) < Optim.minimum(result)
+            result = result_nm
+        end
     end
 
-    # Gradient of objective
-    function grad(t)
-        G = moment_fn(t, data)
-        g_bar = vec(mean(G, dims=1))
-
-        # ∂Q/∂θ = 2 * (∂g/∂θ)' * W * g
-        dg_dtheta = numerical_gradient(t_ -> vec(mean(moment_fn(t_, data), dims=1)), t)
-        2 * dg_dtheta' * W * g_bar
-    end
-
-    # Simple gradient descent with line search
-    H_inv = Matrix{T}(I, n_params, n_params)  # Approximate inverse Hessian
-    obj_prev = obj(theta)
-
-    for iter in 1:max_iter
-        g = grad(theta)
-
-        # Check convergence
-        if norm(g) < tol
-            return (theta=theta, objective=obj_prev, converged=true, iterations=iter)
-        end
-
-        # Search direction
-        d = -H_inv * g
-
-        # Line search (backtracking)
-        alpha = one(T)
-        c1 = T(1e-4)
-        rho = T(0.5)
-
-        obj_new = obj(theta + alpha * d)
-        while obj_new > obj_prev + c1 * alpha * dot(g, d) && alpha > T(1e-10)
-            alpha *= rho
-            obj_new = obj(theta + alpha * d)
-        end
-
-        if alpha < T(1e-10)
-            return (theta=theta, objective=obj_prev, converged=false, iterations=iter)
-        end
-
-        # Update
-        s = alpha * d
-        theta_new = theta + s
-        g_new = grad(theta_new)
-        y = g_new - g
-
-        # BFGS update of inverse Hessian
-        if dot(s, y) > T(1e-10)
-            rho_bfgs = one(T) / dot(s, y)
-            I_mat = Matrix{T}(I, n_params, n_params)
-            H_inv = (I_mat - rho_bfgs * s * y') * H_inv * (I_mat - rho_bfgs * y * s') +
-                    rho_bfgs * s * s'
-        end
-
-        theta = theta_new
-        obj_prev = obj_new
-    end
-
-    (theta=theta, objective=obj_prev, converged=false, iterations=max_iter)
+    (theta=Optim.minimizer(result), objective=Optim.minimum(result),
+     converged=Optim.converged(result), iterations=Optim.iterations(result))
 end
 
 # =============================================================================
@@ -387,7 +337,8 @@ end
 """
     estimate_gmm(moment_fn::Function, theta0::AbstractVector{T}, data;
                  weighting::Symbol=:two_step, max_iter::Int=100,
-                 tol::T=T(1e-8), hac::Bool=true, bandwidth::Int=0) -> GMMModel{T}
+                 tol::T=T(1e-8), hac::Bool=true, bandwidth::Int=0,
+                 bounds::Union{Nothing,ParameterTransform}=nothing) -> GMMModel{T}
 
 Estimate parameters via Generalized Method of Moments.
 
@@ -402,13 +353,17 @@ Arguments:
 - tol: Convergence tolerance
 - hac: Use HAC correction for optimal weighting
 - bandwidth: HAC bandwidth (0 = automatic)
+- bounds: Parameter bounds via `ParameterTransform` (default: nothing = unconstrained).
+  When provided, optimization is performed in unconstrained space via bijective transforms,
+  and standard errors are corrected via the delta method.
 
 Returns:
 - GMMModel with estimates, covariance, and J-test results
 """
 function estimate_gmm(moment_fn::Function, theta0::AbstractVector{T}, data;
                       weighting::Symbol=:two_step, max_iter::Int=100,
-                      tol::T=T(1e-8), hac::Bool=true, bandwidth::Int=0) where {T<:AbstractFloat}
+                      tol::T=T(1e-8), hac::Bool=true, bandwidth::Int=0,
+                      bounds::Union{Nothing,ParameterTransform}=nothing) where {T<:AbstractFloat}
     n_params = length(theta0)
 
     # Get dimensions from initial moment evaluation
@@ -417,6 +372,17 @@ function estimate_gmm(moment_fn::Function, theta0::AbstractVector{T}, data;
 
     @assert n_moments >= n_params "GMM requires at least as many moments as parameters"
 
+    # Set up parameter transform
+    has_bounds = bounds !== nothing
+    if has_bounds
+        working_theta0 = to_unconstrained(bounds, theta0)
+        # Wrap moment function to work in unconstrained space
+        working_fn = (phi, d) -> moment_fn(to_constrained(bounds, phi), d)
+    else
+        working_fn = moment_fn
+        working_theta0 = theta0
+    end
+
     # Weighting specification
     weighting_spec = GMMWeighting{T}(weighting, max_iter, tol)
 
@@ -424,7 +390,7 @@ function estimate_gmm(moment_fn::Function, theta0::AbstractVector{T}, data;
     if weighting == :identity
         # One-step GMM with identity weighting
         W = identity_weighting(n_moments, T)
-        result = minimize_gmm(moment_fn, theta0, data, W; max_iter=max_iter, tol=tol)
+        result = minimize_gmm(working_fn, working_theta0, data, W; max_iter=max_iter, tol=tol)
         theta_hat = result.theta
         W_final = W
         converged = result.converged
@@ -432,8 +398,8 @@ function estimate_gmm(moment_fn::Function, theta0::AbstractVector{T}, data;
 
     elseif weighting == :optimal
         # Optimal GMM assuming consistent initial estimate available
-        W = optimal_weighting_matrix(moment_fn, theta0, data; hac=hac, bandwidth=bandwidth)
-        result = minimize_gmm(moment_fn, theta0, data, W; max_iter=max_iter, tol=tol)
+        W = optimal_weighting_matrix(working_fn, working_theta0, data; hac=hac, bandwidth=bandwidth)
+        result = minimize_gmm(working_fn, working_theta0, data, W; max_iter=max_iter, tol=tol)
         theta_hat = result.theta
         W_final = W
         converged = result.converged
@@ -443,11 +409,11 @@ function estimate_gmm(moment_fn::Function, theta0::AbstractVector{T}, data;
         # Two-step efficient GMM
         # Step 1: Identity weighting
         W1 = identity_weighting(n_moments, T)
-        result1 = minimize_gmm(moment_fn, theta0, data, W1; max_iter=max_iter, tol=tol)
+        result1 = minimize_gmm(working_fn, working_theta0, data, W1; max_iter=max_iter, tol=tol)
 
         # Step 2: Optimal weighting based on step 1
-        W2 = optimal_weighting_matrix(moment_fn, result1.theta, data; hac=hac, bandwidth=bandwidth)
-        result2 = minimize_gmm(moment_fn, result1.theta, data, W2; max_iter=max_iter, tol=tol)
+        W2 = optimal_weighting_matrix(working_fn, result1.theta, data; hac=hac, bandwidth=bandwidth)
+        result2 = minimize_gmm(working_fn, result1.theta, data, W2; max_iter=max_iter, tol=tol)
 
         theta_hat = result2.theta
         W_final = W2
@@ -456,13 +422,13 @@ function estimate_gmm(moment_fn::Function, theta0::AbstractVector{T}, data;
 
     elseif weighting == :iterated
         # Continuously updated GMM (iterate until convergence)
-        theta_curr = copy(theta0)
+        theta_curr = copy(working_theta0)
         converged = false
         total_iter = 0
 
         for iter in 1:max_iter
-            W_curr = optimal_weighting_matrix(moment_fn, theta_curr, data; hac=hac, bandwidth=bandwidth)
-            result = minimize_gmm(moment_fn, theta_curr, data, W_curr; max_iter=max_iter, tol=tol)
+            W_curr = optimal_weighting_matrix(working_fn, theta_curr, data; hac=hac, bandwidth=bandwidth)
+            result = minimize_gmm(working_fn, theta_curr, data, W_curr; max_iter=max_iter, tol=tol)
 
             total_iter += result.iterations
 
@@ -484,7 +450,13 @@ function estimate_gmm(moment_fn::Function, theta0::AbstractVector{T}, data;
         throw(ArgumentError("weighting must be :identity, :optimal, :two_step, or :iterated"))
     end
 
-    # Compute final moment conditions
+    # Map back to constrained space if bounded
+    if has_bounds
+        phi_hat = theta_hat
+        theta_hat = to_constrained(bounds, phi_hat)
+    end
+
+    # Compute final moment conditions (using original moment_fn with constrained theta)
     G_final = moment_fn(theta_hat, data)
     g_bar = vec(mean(G_final, dims=1))
 
@@ -492,8 +464,9 @@ function estimate_gmm(moment_fn::Function, theta0::AbstractVector{T}, data;
     # V = (G'WG)^{-1} * G'W * Ω * W * G * (G'WG)^{-1}
     # where G is the Jacobian of g w.r.t. theta and Ω is the moment covariance
 
-    # Jacobian
-    dg_dtheta = numerical_gradient(t -> vec(mean(moment_fn(t, data), dims=1)), theta_hat)
+    # Jacobian (in unconstrained space for numerical stability)
+    dg_dtheta = numerical_gradient(t -> vec(mean(working_fn(t, data), dims=1)),
+                                   has_bounds ? phi_hat : theta_hat)
 
     # Sandwich formula
     bread = dg_dtheta' * W_final * dg_dtheta
@@ -508,6 +481,12 @@ function estimate_gmm(moment_fn::Function, theta0::AbstractVector{T}, data;
                                      bandwidth=bandwidth, kernel=:bartlett)
         meat = dg_dtheta' * W_final * Omega * W_final * dg_dtheta
         vcov = (bread_inv * meat * bread_inv) / n_obs
+    end
+
+    # Delta method SE correction for transforms
+    if has_bounds
+        J_transform = transform_jacobian(bounds, phi_hat)
+        vcov = J_transform * vcov * J_transform'
     end
 
     # Hansen's J-test for overidentification
