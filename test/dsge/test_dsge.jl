@@ -841,4 +841,116 @@ end
     @test p isa PlotOutput
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 9: GMM Estimation
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "IRF matching: recover AR(1) parameter" begin
+    # True model: y_t = 0.8 * y_{t-1} + ε_t
+    rng = Random.MersenneTwister(42)
+    T_obs = FAST ? 300 : 500
+    y_true = zeros(T_obs)
+    for t in 2:T_obs
+        y_true[t] = 0.8 * y_true[t-1] + randn(rng)
+    end
+    Y = reshape(y_true, :, 1)
+
+    spec = @dsge begin
+        parameters: ρ = 0.5  # starting guess
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + ε[t]
+    end
+
+    est = estimate_dsge(spec, Y, [:ρ]; method=:irf_matching, irf_horizon=10)
+    @test est isa DSGEEstimation{Float64}
+    @test est.converged
+    @test est.theta[1] ≈ 0.8 atol=0.15
+    @test est.method == :irf_matching
+    @test is_determined(est.solution)
+end
+
+@testset "Euler GMM: basic" begin
+    rng = Random.MersenneTwister(123)
+    T_obs = FAST ? 200 : 300
+    y_true = zeros(T_obs)
+    for t in 2:T_obs
+        y_true[t] = 0.7 * y_true[t-1] + randn(rng)
+    end
+    Y = reshape(y_true, :, 1)
+
+    spec = @dsge begin
+        parameters: ρ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + ε[t]
+    end
+
+    est = estimate_dsge(spec, Y, [:ρ]; method=:euler_gmm, n_lags_instruments=4)
+    @test est isa DSGEEstimation{Float64}
+    @test est.method == :euler_gmm
+    @test est.theta[1] ≈ 0.7 atol=0.2
+end
+
+@testset "estimate_dsge: invalid method" begin
+    spec = @dsge begin
+        parameters: ρ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + ε[t]
+    end
+    Y = randn(100, 1)
+    @test_throws ArgumentError estimate_dsge(spec, Y, [:ρ]; method=:invalid)
+end
+
+@testset "IRF matching: pre-computed target IRFs" begin
+    rng = Random.MersenneTwister(99)
+    T_obs = FAST ? 200 : 400
+    y_true = zeros(T_obs)
+    for t in 2:T_obs
+        y_true[t] = 0.85 * y_true[t-1] + randn(rng)
+    end
+    Y = reshape(y_true, :, 1)
+
+    # Pre-compute target IRFs from VAR
+    var_model = estimate_var(Y, 2)
+    target = irf(var_model, 10; method=:cholesky)
+
+    spec = @dsge begin
+        parameters: ρ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + ε[t]
+    end
+
+    est = estimate_dsge(spec, Y, [:ρ]; method=:irf_matching,
+                         target_irfs=target, irf_horizon=10)
+    @test est isa DSGEEstimation{Float64}
+    @test est.converged
+end
+
+@testset "DSGEEstimation show and report" begin
+    rng = Random.MersenneTwister(42)
+    y_true = zeros(200)
+    for t in 2:200
+        y_true[t] = 0.8 * y_true[t-1] + randn(rng)
+    end
+    Y = reshape(y_true, :, 1)
+
+    spec = @dsge begin
+        parameters: ρ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + ε[t]
+    end
+
+    est = estimate_dsge(spec, Y, [:ρ]; method=:irf_matching, irf_horizon=10)
+    io = IOBuffer()
+    show(io, est)
+    s = String(take!(io))
+    @test occursin("DSGE Estimation", s)
+    @test occursin("Estimated Parameters", s)
+    @test occursin("irf_matching", s)
+end
+
 end # top-level @testset
