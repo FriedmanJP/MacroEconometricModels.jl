@@ -1064,11 +1064,64 @@ function occbin_solve(spec::DSGESpec{T}, c1::OccBinConstraint{T}, c2::OccBinCons
 end
 
 """
-    occbin_irf(sol, constraints, H, shock_idx; kwargs...) → OccBinIRF{T}
+    occbin_irf(spec::DSGESpec{T}, constraint::OccBinConstraint{T},
+               shock_idx::Int, horizon::Int;
+               magnitude::Real=one(T), maxiter::Int=100) → OccBinIRF{T}
 
-Compute impulse responses under occasionally binding constraints, comparing
-the unconstrained linear path with the piecewise-linear OccBin path.
+Compute impulse response functions under an occasionally binding constraint.
 
-(Full implementation in a subsequent task.)
+Compares the unconstrained linear IRF with the piecewise-linear OccBin IRF.
+
+# Arguments
+- `spec` — DSGE model specification
+- `constraint` — the occasionally binding constraint
+- `shock_idx` — index of the shock to perturb (1-based)
+- `horizon` — number of periods for the IRF
+
+# Keyword Arguments
+- `magnitude` — size of the shock (default: 1.0)
+- `maxiter` — max guess-and-verify iterations (default: 100)
 """
-function occbin_irf end
+function occbin_irf(spec::DSGESpec{T}, constraint::OccBinConstraint{T},
+                    shock_idx::Int, horizon::Int;
+                    magnitude::Real=one(T), maxiter::Int=100) where {T<:AbstractFloat}
+    1 <= shock_idx <= spec.n_exog || throw(ArgumentError(
+        "shock_idx=$shock_idx out of range [1, $(spec.n_exog)]"))
+
+    shock_path = zeros(T, horizon, spec.n_exog)
+    shock_path[1, shock_idx] = T(magnitude)
+
+    sol = occbin_solve(spec, constraint; shock_path=shock_path,
+                       nperiods=horizon, maxiter=maxiter)
+
+    shock_name = string(spec.exog[shock_idx])
+    OccBinIRF{T}(sol.linear_path, sol.piecewise_path, sol.regime_history,
+                  sol.varnames, shock_name)
+end
+
+"""
+    occbin_irf(spec::DSGESpec{T}, c1::OccBinConstraint{T}, c2::OccBinConstraint{T},
+               shock_idx::Int, horizon::Int;
+               magnitude::Real=one(T), maxiter::Int=100,
+               curb_retrench::Bool=false) → OccBinIRF{T}
+
+Two-constraint variant of OccBin IRF.
+"""
+function occbin_irf(spec::DSGESpec{T}, c1::OccBinConstraint{T}, c2::OccBinConstraint{T},
+                    shock_idx::Int, horizon::Int;
+                    magnitude::Real=one(T), maxiter::Int=100,
+                    curb_retrench::Bool=false) where {T<:AbstractFloat}
+    1 <= shock_idx <= spec.n_exog || throw(ArgumentError(
+        "shock_idx=$shock_idx out of range [1, $(spec.n_exog)]"))
+
+    shock_path = zeros(T, horizon, spec.n_exog)
+    shock_path[1, shock_idx] = T(magnitude)
+
+    sol = occbin_solve(spec, c1, c2; shock_path=shock_path,
+                       nperiods=horizon, maxiter=maxiter,
+                       curb_retrench=curb_retrench)
+
+    shock_name = string(spec.exog[shock_idx])
+    OccBinIRF{T}(sol.linear_path, sol.piecewise_path, sol.regime_history,
+                  sol.varnames, shock_name)
+end
