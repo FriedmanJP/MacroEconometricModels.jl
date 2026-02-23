@@ -602,4 +602,37 @@ end
     @test sol.method == :gensys
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 6: Blanchard-Kahn
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "BK: AR(1) model" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 1.0
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:blanchard_kahn)
+    @test sol isa DSGESolution{Float64}
+    @test is_determined(sol)
+    @test sol.G1[1,1] ≈ 0.9 atol=1e-4
+    @test sol.method == :blanchard_kahn
+end
+
+@testset "BK: agrees with gensys" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 1.0
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+    end
+    spec = compute_steady_state(spec)
+    sol_g = solve(spec; method=:gensys)
+    sol_bk = solve(spec; method=:blanchard_kahn)
+    @test sol_g.G1 ≈ sol_bk.G1 atol=1e-4
+    @test sol_g.impact ≈ sol_bk.impact atol=1e-4
+end
+
 end # top-level @testset
