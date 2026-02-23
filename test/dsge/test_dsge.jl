@@ -635,4 +635,130 @@ end
     @test sol_g.impact ≈ sol_bk.impact atol=1e-4
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 7: Perfect Foresight
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "Perfect foresight: AR(1) impulse" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 1.0
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+    end
+    spec = compute_steady_state(spec)
+    T_periods = 50
+    shocks = zeros(T_periods, 1)
+    shocks[1, 1] = 1.0  # unit shock at t=1
+    pf = solve(spec; method=:perfect_foresight, T_periods=T_periods, shock_path=shocks)
+    @test pf isa PerfectForesightPath{Float64}
+    @test pf.converged
+    @test size(pf.path) == (T_periods, 1)
+    # y_1 = 0.9*0 + 1.0*1.0 = 1.0
+    @test pf.deviations[1, 1] ≈ 1.0 atol=0.1
+    # y_2 = 0.9*1.0 = 0.9
+    @test pf.deviations[2, 1] ≈ 0.9 atol=0.1
+    # Converges to SS
+    @test abs(pf.deviations[end, 1]) < 0.01
+end
+
+@testset "Perfect foresight: zero shocks = steady state" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 1.0
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+    end
+    spec = compute_steady_state(spec)
+    T_periods = 20
+    pf = solve(spec; method=:perfect_foresight, T_periods=T_periods)
+    @test pf.converged
+    # With no shocks, path should stay at steady state
+    @test all(abs.(pf.deviations) .< 1e-6)
+end
+
+@testset "Perfect foresight: multi-variable" begin
+    spec = @dsge begin
+        parameters: ρ = 0.8, σ_y = 1.0, σ_k = 0.5
+        endogenous: y, k
+        exogenous: ε_y, ε_k
+        y[t] = ρ * y[t-1] + σ_y * ε_y[t]
+        k[t] = 0.5 * y[t] + σ_k * ε_k[t]
+    end
+    spec = compute_steady_state(spec)
+    T_periods = 30
+    shocks = zeros(T_periods, 2)
+    shocks[1, 1] = 1.0  # shock to y only
+    pf = solve(spec; method=:perfect_foresight, T_periods=T_periods, shock_path=shocks)
+    @test pf isa PerfectForesightPath{Float64}
+    @test pf.converged
+    @test size(pf.path) == (T_periods, 2)
+    @test size(pf.deviations) == (T_periods, 2)
+    # y responds, k responds through y
+    @test abs(pf.deviations[1, 1]) > 0.5
+    @test abs(pf.deviations[1, 2]) > 0.1  # k = 0.5*y
+end
+
+@testset "Perfect foresight: convergence diagnostics" begin
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 1.0
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+    end
+    spec = compute_steady_state(spec)
+    shocks = zeros(20, 1)
+    shocks[1, 1] = 1.0
+    pf = solve(spec; method=:perfect_foresight, T_periods=20, shock_path=shocks)
+    @test pf.converged
+    @test pf.iterations >= 1
+    @test pf.iterations <= 100
+end
+
+@testset "Perfect foresight: persistent shocks" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 1.0
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+    end
+    spec = compute_steady_state(spec)
+    T_periods = 40
+    shocks = zeros(T_periods, 1)
+    shocks[1:5, 1] .= 1.0  # sustained shock for 5 periods
+    pf = solve(spec; method=:perfect_foresight, T_periods=T_periods, shock_path=shocks)
+    @test pf.converged
+    # After persistent shocks, deviation should be larger than single-period
+    @test abs(pf.deviations[5, 1]) > abs(pf.deviations[1, 1]) * 0.5
+end
+
+@testset "Perfect foresight: requires steady state" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 1.0
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+    end
+    # solve() auto-computes SS, so this should work
+    pf = solve(spec; method=:perfect_foresight, T_periods=10)
+    @test pf isa PerfectForesightPath{Float64}
+    @test pf.converged
+end
+
+@testset "Perfect foresight: show method" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 1.0
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+    end
+    spec = compute_steady_state(spec)
+    pf = solve(spec; method=:perfect_foresight, T_periods=10)
+    io = IOBuffer()
+    show(io, pf)
+    s = String(take!(io))
+    @test occursin("Perfect Foresight Path", s)
+    @test occursin("Converged", s)
+end
+
 end # top-level @testset
