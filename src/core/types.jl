@@ -93,6 +93,9 @@ abstract type AbstractFilterResult end
 """Abstract supertype for nowcasting models (DFM, BVAR, Bridge)."""
 abstract type AbstractNowcastModel <: StatsAPI.StatisticalModel end
 
+"""Abstract supertype for DSGE models."""
+abstract type AbstractDSGEModel <: StatsAPI.StatisticalModel end
+
 """
     AbstractForecastResult{T<:AbstractFloat}
 
