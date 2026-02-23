@@ -437,6 +437,16 @@ report(x::AriasSVARResult) = show(stdout, x)
 report(x::UhligSVARResult) = show(stdout, x)
 report(x::SVARRestrictions) = show(stdout, x)
 
+# DSGE
+report(x::DSGESolution) = show(stdout, x)
+report(x::PerfectForesightPath) = show(stdout, x)
+report(x::DSGESpec) = show(stdout, x)
+function report(x::DSGEEstimation)
+    show(stdout, x)
+    println(stdout)
+    show(stdout, x.solution)
+end
+
 
 # =============================================================================
 # Split Files (table extraction, display, references, nowcasting)
