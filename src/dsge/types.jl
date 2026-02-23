@@ -276,7 +276,7 @@ struct DSGEEstimation{T<:AbstractFloat} <: AbstractDSGEModel
                                 solution, converged, spec) where {T<:AbstractFloat}
         @assert length(theta) == length(param_names)
         @assert size(vcov) == (length(theta), length(theta))
-        @assert method ∈ (:irf_matching, :euler_gmm)
+        @assert method ∈ (:irf_matching, :euler_gmm, :smm)
         new{T}(theta, vcov, param_names, method, J_stat, J_pvalue, solution, converged, spec)
     end
 end
