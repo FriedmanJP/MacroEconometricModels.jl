@@ -97,6 +97,10 @@ const TEST_GROUPS = [
         "plotting/test_plot_result.jl",
         "filters/test_filters.jl",
     ]),
+    # Group 7: DSGE Models
+    ("DSGE Models" => [
+        "dsge/test_dsge.jl",
+    ]),
 ]
 
 # Multi-process runner (fallback when threads unavailable)
@@ -278,5 +282,8 @@ else
         @testset "Non-Gaussian Internals" begin include("nongaussian/test_nongaussian_internals.jl") end
         @testset "Plotting" begin include("plotting/test_plot_result.jl") end
         @testset "Time Series Filters" begin include("filters/test_filters.jl") end
+
+        # Group 7: DSGE Models
+        @testset "DSGE Models" begin include("dsge/test_dsge.jl") end
     end
 end
