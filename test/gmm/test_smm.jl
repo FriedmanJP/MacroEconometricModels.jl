@@ -104,4 +104,115 @@ end
     @test result.theta[1] < 1.0
 end
 
+@testset "autocovariance_moments" begin
+    rng = Random.MersenneTwister(123)
+    data = randn(rng, 500, 2)
+    m = autocovariance_moments(data; lags=1)
+    # k=2, lags=1: k*(k+1)/2 + k*lags = 3 + 2 = 5 moments
+    @test length(m) == 5
+    # First element: var(y1) — using 1/n divisor
+    @test m[1] ≈ sum((data[:,1] .- mean(data[:,1])).^2) / 500 atol=1e-10
+end
+
+@testset "SMMModel construction and interface" begin
+    theta = [0.5, 0.3]
+    vcov_mat = [0.01 0.0; 0.0 0.02]
+    n_moments = 5
+    W = Matrix{Float64}(I, n_moments, n_moments)
+    g_bar = zeros(n_moments)
+    weighting = MacroEconometricModels.GMMWeighting{Float64}(:two_step, 100, 1e-8)
+
+    smm = MacroEconometricModels.SMMModel{Float64}(
+        theta, vcov_mat, n_moments, 2, 200, weighting, W, g_bar,
+        0.5, 0.48, true, 10, 5
+    )
+
+    @test coef(smm) == theta
+    @test nobs(smm) == 200
+    @test stderror(smm) ≈ sqrt.(diag(vcov_mat))
+    @test smm.sim_ratio == 5
+
+    io = IOBuffer()
+    show(io, smm)
+    str = String(take!(io))
+    @test occursin("SMM", str)
+end
+
+@testset "SMMModel j_test" begin
+    theta = [0.5, 0.3]
+    vcov_mat = [0.01 0.0; 0.0 0.02]
+    n_moments = 5
+    W = Matrix{Float64}(I, n_moments, n_moments)
+    g_bar = zeros(n_moments)
+    weighting = MacroEconometricModels.GMMWeighting{Float64}(:two_step, 100, 1e-8)
+
+    # Overidentified case
+    smm = MacroEconometricModels.SMMModel{Float64}(
+        theta, vcov_mat, n_moments, 2, 200, weighting, W, g_bar,
+        2.5, 0.47, true, 10, 5
+    )
+    jt = j_test(smm)
+    @test jt.df == 3  # 5 moments - 2 params
+    @test jt.J_stat == 2.5
+    @test jt.p_value == 0.47
+
+    # Just-identified case
+    smm_just = MacroEconometricModels.SMMModel{Float64}(
+        theta, vcov_mat, 2, 2, 200, weighting,
+        Matrix{Float64}(I, 2, 2), zeros(2),
+        0.0, 1.0, true, 10, 5
+    )
+    jt_just = j_test(smm_just)
+    @test jt_just.df == 0
+    @test jt_just.J_stat == 0.0
+end
+
+@testset "SMMModel is_overidentified and overid_df" begin
+    theta = [0.5]
+    vcov_mat = reshape([0.01], 1, 1)
+    W = Matrix{Float64}(I, 3, 3)
+    g_bar = zeros(3)
+    weighting = MacroEconometricModels.GMMWeighting{Float64}(:identity, 100, 1e-8)
+
+    smm = MacroEconometricModels.SMMModel{Float64}(
+        theta, vcov_mat, 3, 1, 100, weighting, W, g_bar,
+        1.0, 0.6, true, 5, 3
+    )
+    @test MacroEconometricModels.is_overidentified(smm) == true
+    @test MacroEconometricModels.overid_df(smm) == 2
+end
+
+@testset "SMMModel confint" begin
+    theta = [0.5, 0.3]
+    vcov_mat = [0.01 0.0; 0.0 0.04]
+    n_moments = 5
+    W = Matrix{Float64}(I, n_moments, n_moments)
+    g_bar = zeros(n_moments)
+    weighting = MacroEconometricModels.GMMWeighting{Float64}(:two_step, 100, 1e-8)
+
+    smm = MacroEconometricModels.SMMModel{Float64}(
+        theta, vcov_mat, n_moments, 2, 200, weighting, W, g_bar,
+        0.5, 0.48, true, 10, 5
+    )
+    ci = confint(smm)
+    @test size(ci) == (2, 2)
+    @test ci[1, 1] < 0.5 < ci[1, 2]  # CI contains point estimate
+    @test ci[2, 1] < 0.3 < ci[2, 2]
+end
+
+@testset "smm_weighting_matrix" begin
+    rng = Random.MersenneTwister(42)
+    data = randn(rng, 200, 2)
+    # Use hac=false to avoid bandwidth estimation issues with per-observation
+    # moment contributions from autocovariance_moments (which are degenerate for
+    # single observations)
+    W = MacroEconometricModels.smm_weighting_matrix(data, d -> autocovariance_moments(d; lags=1); hac=false)
+    @test size(W) == (5, 5)
+    @test issymmetric(round.(W, digits=10))  # approximately symmetric
+
+    # With explicit bandwidth (avoids automatic bandwidth NaN issue)
+    W2 = MacroEconometricModels.smm_weighting_matrix(data, d -> autocovariance_moments(d; lags=1); hac=true, bandwidth=5)
+    @test size(W2) == (5, 5)
+end
+
 end  # outer testset
