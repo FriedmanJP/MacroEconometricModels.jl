@@ -113,7 +113,7 @@ function Base.show(io::IO, m::SMMModel{T}) where {T}
         "Parameters"    m.n_params;
         "Moments"       m.n_moments;
         "Observations"  m.n_obs;
-        "Sim ratio (tau)" m.sim_ratio;
+        "Sim ratio (τ)" m.sim_ratio;
         "Weighting"     string(m.weighting.method);
         "Converged"     m.converged ? "Yes" : "No";
         "Iterations"    m.iterations
@@ -124,7 +124,7 @@ function Base.show(io::IO, m::SMMModel{T}) where {T}
         alignment = [:l, :r],
     )
     se = stderror(m)
-    param_names = ["theta[$i]" for i in 1:m.n_params]
+    param_names = ["θ[$i]" for i in 1:m.n_params]
     _coef_table(io, "Coefficients", param_names, m.theta, se; dist=:z)
     if is_overidentified(m)
         j_data = Any[
@@ -217,73 +217,17 @@ autocovariance_moments(data::AbstractMatrix{<:Real}; kwargs...) =
 # =============================================================================
 
 """
-    smm_weighting_matrix(data::AbstractMatrix{T}, moments_fn::Function;
-                          hac::Bool=true, bandwidth::Int=0) -> Matrix{T}
+    _moment_covariance(data, moments_fn; hac, bandwidth) -> Matrix{T}
 
-Compute optimal SMM weighting matrix from data moment contributions.
-Centers the per-observation moment contributions and applies HAC with Bartlett kernel.
-
-# Arguments
-- `data` --- T_obs x k data matrix
-- `moments_fn` --- function computing moment vector from data
-- `hac` --- use HAC correction (default: true)
-- `bandwidth` --- HAC bandwidth, 0 = automatic: `floor(4*(n/100)^(2/9))`
+Internal: Compute long-run covariance of per-observation moment contributions.
+Shared by `smm_weighting_matrix` (inverted) and `smm_data_covariance` (raw).
 """
-function smm_weighting_matrix(data::AbstractMatrix{T}, moments_fn::Function;
-                               hac::Bool=true, bandwidth::Int=0) where {T<:AbstractFloat}
+function _moment_covariance(data::AbstractMatrix{T}, moments_fn::Function;
+                             hac::Bool=true, bandwidth::Int=0) where {T<:AbstractFloat}
     n = size(data, 1)
     m_full = moments_fn(data)
     q = length(m_full)
 
-    # Compute per-observation moment contributions
-    G = Matrix{T}(undef, n, q)
-    for t in 1:n
-        G[t, :] = moments_fn(data[t:t, :])
-    end
-    G_demean = G .- mean(G, dims=1)
-
-    if hac
-        Omega = long_run_covariance(G_demean; bandwidth=bandwidth, kernel=:bartlett)
-    else
-        Omega = (G_demean' * G_demean) / n
-    end
-
-    Omega_sym = Hermitian((Omega + Omega') / 2)
-    eigvals_O = eigvals(Omega_sym)
-    if minimum(eigvals_O) < eps(T)
-        Omega_reg = Omega_sym + T(1e-8) * I
-        return Matrix{T}(inv(Omega_reg))
-    end
-
-    robust_inv(Matrix(Omega_sym))
-end
-
-# =============================================================================
-# Data Covariance for Sandwich Formula
-# =============================================================================
-
-"""
-    smm_data_covariance(data::AbstractMatrix{T}, moments_fn::Function;
-                          hac::Bool=true, bandwidth::Int=0) -> Matrix{T}
-
-Compute long-run covariance Omega of data moment contributions for sandwich SE formula.
-
-Uses per-observation moment contributions, demeaned and estimated via HAC (Bartlett kernel)
-or simple sample covariance.
-
-# Arguments
-- `data` --- T_obs x k data matrix
-- `moments_fn` --- function computing moment vector from data
-- `hac` --- use HAC correction (default: true)
-- `bandwidth` --- HAC bandwidth, 0 = automatic
-"""
-function smm_data_covariance(data::AbstractMatrix{T}, moments_fn::Function;
-                              hac::Bool=true, bandwidth::Int=0) where {T<:AbstractFloat}
-    n = size(data, 1)
-    m_full = moments_fn(data)
-    q = length(m_full)
-
-    # Compute per-observation moment contributions
     G = Matrix{T}(undef, n, q)
     for t in 1:n
         G[t, :] = moments_fn(data[t:t, :])
@@ -295,6 +239,42 @@ function smm_data_covariance(data::AbstractMatrix{T}, moments_fn::Function;
     else
         (G_demean' * G_demean) / n
     end
+end
+
+"""
+    smm_weighting_matrix(data::AbstractMatrix{T}, moments_fn::Function;
+                          hac::Bool=true, bandwidth::Int=0) -> Matrix{T}
+
+Compute optimal SMM weighting matrix from data moment contributions.
+Centers the per-observation moment contributions and applies HAC with Bartlett kernel.
+
+# Arguments
+- `data` — T_obs × k data matrix
+- `moments_fn` — function computing moment vector from data
+- `hac` — use HAC correction (default: true)
+- `bandwidth` — HAC bandwidth, 0 = automatic: `floor(4*(n/100)^(2/9))`
+"""
+function smm_weighting_matrix(data::AbstractMatrix{T}, moments_fn::Function;
+                               hac::Bool=true, bandwidth::Int=0) where {T<:AbstractFloat}
+    Omega = _moment_covariance(data, moments_fn; hac=hac, bandwidth=bandwidth)
+    Omega_sym = Hermitian((Omega + Omega') / 2)
+    eigvals_O = eigvals(Omega_sym)
+    if minimum(eigvals_O) < eps(T)
+        Omega_reg = Omega_sym + T(1e-8) * I
+        return Matrix{T}(inv(Omega_reg))
+    end
+    robust_inv(Matrix(Omega_sym))
+end
+
+"""
+    smm_data_covariance(data::AbstractMatrix{T}, moments_fn::Function;
+                          hac::Bool=true, bandwidth::Int=0) -> Matrix{T}
+
+Compute long-run covariance Ω of data moment contributions for sandwich SE formula.
+"""
+function smm_data_covariance(data::AbstractMatrix{T}, moments_fn::Function;
+                              hac::Bool=true, bandwidth::Int=0) where {T<:AbstractFloat}
+    _moment_covariance(data, moments_fn; hac=hac, bandwidth=bandwidth)
 end
 
 # =============================================================================
