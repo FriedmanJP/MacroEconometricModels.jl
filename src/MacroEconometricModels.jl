@@ -162,6 +162,7 @@ include("dsge/parser.jl")
 include("dsge/steady_state.jl")
 include("dsge/linearize.jl")
 include("dsge/gensys.jl")
+include("dsge/blanchard_kahn.jl")
 
 # GMM
 include("gmm/gmm.jl")
@@ -316,7 +317,7 @@ export DSGESpec, LinearDSGE, DSGESolution, PerfectForesightPath, DSGEEstimation
 export @dsge
 
 # Functions
-export compute_steady_state, linearize, solve, gensys
+export compute_steady_state, linearize, solve, gensys, blanchard_kahn
 
 # Accessors
 export nshocks, is_determined, is_stable
