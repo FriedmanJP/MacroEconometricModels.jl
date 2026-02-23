@@ -1381,4 +1381,89 @@ end
     @test_throws ArgumentError estimate_dsge(spec, Y, [:rho]; method=:invalid)
 end
 
+# Section 15: OccBin Types
+@testset "OccBin: types" begin
+    # OccBinConstraint
+    oc = MacroEconometricModels.OccBinConstraint{Float64}(
+        :(R >= 0.0), :R, 0.0, :geq, :(R = 0.0)
+    )
+    @test oc.variable == :R
+    @test oc.bound == 0.0
+    @test oc.direction == :geq
+    @test oc.expr == :(R >= 0.0)
+    @test oc.bind_expr == :(R = 0.0)
+
+    # OccBinRegime
+    A = [1.0 0.0; 0.0 1.0]
+    B = [0.5 0.1; 0.2 0.6]
+    C = [0.3 0.0; 0.0 0.4]
+    D = [1.0 0.0; 0.0 1.0]
+    regime = MacroEconometricModels.OccBinRegime{Float64}(A, B, C, D)
+    @test size(regime.A) == (2, 2)
+    @test size(regime.B) == (2, 2)
+    @test size(regime.C) == (2, 2)
+    @test size(regime.D) == (2, 2)
+    @test regime.B[1, 1] == 0.5
+
+    # OccBinSolution
+    spec = @dsge begin
+        parameters: rho = 0.5
+        endogenous: y
+        exogenous: e
+        y[t] = rho * y[t-1] + e[t]
+    end
+    spec = compute_steady_state(spec)
+
+    T_periods = 20
+    n_endog = 1
+    n_constraints = 1
+    linear_path = randn(T_periods, n_endog)
+    piecewise_path = randn(T_periods, n_endog)
+    ss = zeros(n_endog)
+    regime_hist = zeros(Int, T_periods, n_constraints)
+    regime_hist[5:8, 1] .= 1  # binding in periods 5-8
+
+    sol = MacroEconometricModels.OccBinSolution{Float64}(
+        linear_path, piecewise_path, ss, regime_hist,
+        true, 7, spec, ["y"]
+    )
+    @test sol.converged == true
+    @test sol.iterations == 7
+    @test size(sol.piecewise_path) == (20, 1)
+    @test sum(sol.regime_history .> 0) == 4
+
+    # show method
+    io = IOBuffer()
+    show(io, sol)
+    str = String(take!(io))
+    @test occursin("OccBin Piecewise-Linear Solution", str)
+    @test occursin("Converged", str)
+    @test occursin("Yes", str)
+
+    # report dispatches to show (test that it doesn't error)
+    @test report(sol) === nothing
+
+    # OccBinIRF
+    H = 20
+    linear_irf = randn(H, n_endog)
+    pw_irf = randn(H, n_endog)
+    regime_irf = zeros(Int, H, n_constraints)
+    regime_irf[1:3, 1] .= 1
+
+    oirf = MacroEconometricModels.OccBinIRF{Float64}(
+        linear_irf, pw_irf, regime_irf, ["y"], "e"
+    )
+    @test oirf.shock_name == "e"
+    @test size(oirf.piecewise) == (20, 1)
+    @test size(oirf.linear) == (20, 1)
+
+    # show method
+    io3 = IOBuffer()
+    show(io3, oirf)
+    str3 = String(take!(io3))
+    @test occursin("OccBin IRF Comparison", str3)
+    @test occursin("e", str3)
+    @test occursin("Binding periods", str3)
+end
+
 end # top-level @testset
