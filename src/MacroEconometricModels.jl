@@ -163,6 +163,7 @@ include("dsge/steady_state.jl")
 include("dsge/linearize.jl")
 include("dsge/gensys.jl")
 include("dsge/blanchard_kahn.jl")
+include("dsge/perfect_foresight.jl")
 
 # GMM
 include("gmm/gmm.jl")
