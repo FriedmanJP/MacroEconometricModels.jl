@@ -276,8 +276,14 @@ function _compute_state_bounds(spec::DSGESpec{T}, linear::LinearDSGE{T},
     bounds = zeros(T, nx, 2)
     for (i, si) in enumerate(state_idx)
         sigma_i = sqrt(max(Var_y[si, si], zero(T)))
-        bounds[i, 1] = ss[si] - T(scale) * sigma_i
-        bounds[i, 2] = ss[si] + T(scale) * sigma_i
+        half_width = T(scale) * sigma_i
+        # Minimum bound width: 10% of |SS| or 0.1 (whichever is larger)
+        # This prevents degenerate zero-width bounds when the linearized
+        # variance is near zero (e.g., poorly conditioned level models)
+        min_half = max(T(0.1) * abs(ss[si]), T(0.1))
+        half_width = max(half_width, min_half)
+        bounds[i, 1] = ss[si] - half_width
+        bounds[i, 2] = ss[si] + half_width
     end
 
     return bounds
@@ -360,10 +366,25 @@ function _collocation_residual(coeffs_vec::AbstractVector{T},
             y_lead_expected .+= quad_weights[q] .* y_next_level
         end
 
-        # Evaluate equilibrium residuals
+        # Evaluate equilibrium residuals (with domain error protection)
         ε_zero = zeros(T, n_eps)
         for i in 1:n_eq
-            R[(j - 1) * n_eq + i] = spec.residual_fns[i](y_t, y_lag, y_lead_expected, ε_zero, θ)
+            try
+                R[(j - 1) * n_eq + i] = spec.residual_fns[i](y_t, y_lag, y_lead_expected, ε_zero, θ)
+            catch e
+                if e isa DomainError || e isa InexactError
+                    R[(j - 1) * n_eq + i] = T(1e10)  # large penalty
+                else
+                    rethrow(e)
+                end
+            end
+        end
+    end
+
+    # Replace NaN/Inf with large penalty for robustness
+    for i in eachindex(R)
+        if !isfinite(R[i])
+            R[i] = T(1e10)
         end
     end
 
@@ -680,8 +701,20 @@ function max_euler_error(sol::ProjectionSolution{T}; n_test::Int=1000,
 
         ε_zero = zeros(T, n_eps)
         for i in 1:n_eq
-            err = abs(spec.residual_fns[i](y_t, y_lag, y_lead_exp, ε_zero, θ))
-            max_err = max(max_err, err)
+            try
+                err = abs(spec.residual_fns[i](y_t, y_lag, y_lead_exp, ε_zero, θ))
+                if isfinite(err)
+                    max_err = max(max_err, err)
+                else
+                    max_err = max(max_err, T(1e10))
+                end
+            catch e
+                if e isa DomainError || e isa InexactError
+                    max_err = max(max_err, T(1e10))
+                else
+                    rethrow(e)
+                end
+            end
         end
     end
 

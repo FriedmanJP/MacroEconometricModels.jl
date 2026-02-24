@@ -3896,6 +3896,85 @@ end
     end
 end
 
+@testset "Nonlinear growth model" begin
+    # Neoclassical growth model (standard timing: k[t-1] is beginning-of-period capital)
+    # Euler: c[t]^(-γ) = β * c[t+1]^(-γ) * (α * k[t]^(α-1) + 1 - δ)
+    # Resource: k[t] = k[t-1]^α + (1-δ)*k[t-1] - c[t] + σ_e*ε[t]
+    spec = @dsge begin
+        parameters: α = 0.36, β = 0.99, δ = 0.025, γ = 2.0, σ_e = 0.01
+        endogenous: k, c
+        exogenous: ε
+        c[t]^(-γ) - β * c[t+1]^(-γ) * (α * k[t]^(α - 1) + 1 - δ) = 0
+        k[t] - k[t-1]^α - (1 - δ) * k[t-1] + c[t] - σ_e * ε[t] = 0
+        steady_state = begin
+            k_ss = (α / (1/β - 1 + δ))^(1 / (1 - α))
+            c_ss = k_ss^α - δ * k_ss
+            [k_ss, c_ss]
+        end
+    end
+    spec = compute_steady_state(spec)
+    k_ss = spec.steady_state[1]
+    c_ss = spec.steady_state[2]
+
+    sol = solve(spec; method=:projection, degree=5, scale=3.0, verbose=false, tol=1e-3)
+
+    @test sol isa ProjectionSolution
+    @test sol.converged
+    @test sol.residual_norm < 1e-3
+
+    # Policy at SS should return approximately SS
+    y_at_ss = evaluate_policy(sol, [k_ss])
+    @test abs(y_at_ss[1] - k_ss) / k_ss < 0.01  # within 1%
+    @test abs(y_at_ss[2] - c_ss) / c_ss < 0.01
+
+    # Euler error check
+    euler_err = max_euler_error(sol; n_test=200, rng=Random.MersenneTwister(123))
+    @test euler_err < 1e-2
+end
+
+@testset "Projection vs perturbation accuracy" begin
+    spec = @dsge begin
+        parameters: α = 0.36, β = 0.99, δ = 0.025, γ = 2.0, σ_e = 0.05
+        endogenous: k, c
+        exogenous: ε
+        c[t]^(-γ) - β * c[t+1]^(-γ) * (α * k[t]^(α - 1) + 1 - δ) = 0
+        k[t] - k[t-1]^α - (1 - δ) * k[t-1] + c[t] - σ_e * ε[t] = 0
+        steady_state = begin
+            k_ss = (α / (1/β - 1 + δ))^(1 / (1 - α))
+            c_ss = k_ss^α - δ * k_ss
+            [k_ss, c_ss]
+        end
+    end
+    spec = compute_steady_state(spec)
+
+    sol_proj = solve(spec; method=:projection, degree=5, scale=3.0, verbose=false, tol=1e-3)
+    sol_pert = solve(spec; method=:gensys)
+
+    k_ss = spec.steady_state[1]
+    c_ss = spec.steady_state[2]
+
+    # Both agree near steady state
+    y_proj_ss = evaluate_policy(sol_proj, [k_ss])
+    @test abs(y_proj_ss[1] - k_ss) / k_ss < 0.01
+    @test abs(y_proj_ss[2] - c_ss) / c_ss < 0.01
+
+    # At state bounds, projection and perturbation should both produce valid values
+    k_low = sol_proj.state_bounds[1, 1]
+    y_proj_low = evaluate_policy(sol_proj, [k_low])
+
+    # Perturbation: G1 maps full y_{t-1} deviations to y_t deviations
+    state_idx = sol_proj.state_indices
+    y_lag_dev = zeros(spec.n_endog)
+    y_lag_dev[state_idx[1]] = k_low - k_ss
+    y_pert_low = sol_pert.G1 * y_lag_dev .+ [k_ss, c_ss]
+
+    # Both should produce valid (finite) values
+    @test all(isfinite.(y_proj_low))
+    @test all(isfinite.(y_pert_low))
+    @test length(y_proj_low) == 2
+    @test length(y_pert_low) == 2
+end
+
 end # Projection Methods
 
 end # top-level @testset
