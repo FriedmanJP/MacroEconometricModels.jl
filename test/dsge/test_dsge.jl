@@ -2802,4 +2802,82 @@ end
     end
 end
 
+@testset "Higher-Order Perturbation (#48)" begin
+    @testset "Order 1 equivalence with gensys" begin
+        spec = @dsge begin
+            parameters: ρ = 0.9, σ = 1.0
+            endogenous: y
+            exogenous: ε
+            y[t] = ρ * y[t-1] + σ * ε[t]
+        end
+        spec = compute_steady_state(spec)
+
+        sol_g = solve(spec; method=:gensys)
+        sol_p = solve(spec; method=:perturbation, order=1)
+
+        @test sol_p isa MacroEconometricModels.PerturbationSolution
+        @test sol_p.order == 1
+        @test sol_p.method == :perturbation
+        @test is_determined(sol_p)
+        # First-order coefficients should match gensys
+        # gensys G1[1,1] should equal hx[1,1] (state transition)
+        @test sol_p.hx[1,1] ≈ sol_g.G1[1,1] atol=1e-6
+    end
+
+    @testset "Second-order AR(1)" begin
+        spec = @dsge begin
+            parameters: ρ = 0.9, σ = 0.01
+            endogenous: y
+            exogenous: ε
+            y[t] = ρ * y[t-1] + σ * ε[t]
+        end
+        spec = compute_steady_state(spec)
+
+        sol2 = solve(spec; method=:perturbation, order=2)
+
+        @test sol2.order == 2
+        @test is_determined(sol2)
+        @test sol2.gxx !== nothing || sol2.hxx !== nothing
+        @test sol2.hσσ !== nothing
+        # For linear AR(1), second-order terms should be ~zero
+        if sol2.hxx !== nothing
+            @test maximum(abs.(sol2.hxx)) < 0.01
+        end
+    end
+
+    @testset "State/control partition" begin
+        spec = @dsge begin
+            parameters: β = 0.99, κ = 0.3, φ_π = 1.5, φ_y = 0.125, ρ_v = 0.5, σ_v = 0.25
+            endogenous: π, y, i
+            exogenous: ε_v
+            π[t] = β * π[t+1] + κ * y[t]
+            y[t] = y[t+1] - (i[t] - π[t+1]) + σ_v * ε_v[t]
+            i[t] = φ_π * π[t] + φ_y * y[t] + ρ_v * ε_v[t]
+            steady_state = [0.0, 0.0, 0.0]
+        end
+        spec = compute_steady_state(spec)
+        ld = linearize(spec)
+        s_idx, c_idx = MacroEconometricModels._state_control_indices(ld)
+        # NK model: no predetermined variables (all forward-looking)
+        @test length(s_idx) == 0
+        @test length(c_idx) == 3
+    end
+
+    @testset "Display" begin
+        spec = @dsge begin
+            parameters: ρ = 0.9, σ = 0.01
+            endogenous: y
+            exogenous: ε
+            y[t] = ρ * y[t-1] + σ * ε[t]
+        end
+        spec = compute_steady_state(spec)
+        sol = solve(spec; method=:perturbation, order=2)
+        io = IOBuffer()
+        show(io, sol)
+        output = String(take!(io))
+        @test occursin("Perturbation", output) || occursin("perturbation", output)
+        @test occursin("2", output)  # order 2
+    end
+end
+
 end # top-level @testset

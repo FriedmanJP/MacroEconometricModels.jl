@@ -165,6 +165,8 @@ include("dsge/linearize.jl")
 include("dsge/gensys.jl")
 include("dsge/blanchard_kahn.jl")
 include("dsge/klein.jl")
+include("dsge/derivatives.jl")
+include("dsge/perturbation.jl")
 include("dsge/perfect_foresight.jl")
 include("dsge/occbin.jl")
 
@@ -324,13 +326,13 @@ export balance_panel
 export AbstractDSGEModel
 
 # Types
-export DSGESpec, LinearDSGE, DSGESolution, PerfectForesightPath, DSGEEstimation
+export DSGESpec, LinearDSGE, DSGESolution, PerturbationSolution, PerfectForesightPath, DSGEEstimation
 
 # Macro
 export @dsge
 
 # Functions
-export compute_steady_state, linearize, solve, gensys, blanchard_kahn, klein
+export compute_steady_state, linearize, solve, gensys, blanchard_kahn, klein, perturbation_solver
 export simulate, estimate_dsge
 export solve_lyapunov, analytical_moments
 

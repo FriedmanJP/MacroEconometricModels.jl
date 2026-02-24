@@ -137,7 +137,7 @@ function gensys(Gamma0::AbstractMatrix{T}, Gamma1::AbstractMatrix{T},
 end
 
 """
-    solve(spec::DSGESpec{T}; method=:gensys, kwargs...) -> DSGESolution or PerfectForesightPath
+    solve(spec::DSGESpec{T}; method=:gensys, kwargs...) -> DSGESolution or PerfectForesightPath or PerturbationSolution
 
 Solve a DSGE model.
 
@@ -145,6 +145,7 @@ Solve a DSGE model.
 - `:gensys` -- Sims (2002) QZ decomposition (default)
 - `:blanchard_kahn` -- Blanchard-Kahn (1980) eigenvalue counting
 - `:klein` -- Klein (2000) generalized Schur decomposition
+- `:perturbation` -- Higher-order perturbation (Schmitt-Grohe & Uribe 2004); pass `order=2` for second-order
 - `:perfect_foresight` -- deterministic Newton solver
 """
 function solve(spec::DSGESpec{T}; method::Symbol=:gensys, kwargs...) where {T<:AbstractFloat}
@@ -173,7 +174,10 @@ function solve(spec::DSGESpec{T}; method::Symbol=:gensys, kwargs...) where {T<:A
             result.G1, result.impact, result.C_sol, result.eu,
             :klein, result.eigenvalues, spec, ld
         )
+    elseif method == :perturbation
+        order = get(kwargs, :order, 2)
+        return perturbation_solver(spec; order=order)
     else
-        throw(ArgumentError("method must be :gensys, :blanchard_kahn, :klein, or :perfect_foresight"))
+        throw(ArgumentError("method must be :gensys, :blanchard_kahn, :klein, :perturbation, or :perfect_foresight"))
     end
 end
