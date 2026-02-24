@@ -4155,4 +4155,80 @@ end
 
 end # Policy Function Iteration
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Section: DSGE Constraint Types
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "DSGE Constraint Types" begin
+
+@testset "VariableBound" begin
+    vb = variable_bound(:i, lower=0.0)
+    @test vb isa VariableBound{Float64}
+    @test vb.var_name == :i
+    @test vb.lower == 0.0
+    @test vb.upper === nothing
+
+    vb2 = variable_bound(:h, lower=0.0, upper=1.0)
+    @test vb2.lower == 0.0
+    @test vb2.upper == 1.0
+
+    vb3 = variable_bound(:c, upper=10.0)
+    @test vb3.lower === nothing
+    @test vb3.upper == 10.0
+
+    # Error: no bounds specified
+    @test_throws ArgumentError variable_bound(:x)
+
+    # Error: lower > upper
+    @test_throws ArgumentError variable_bound(:x, lower=2.0, upper=1.0)
+end
+
+@testset "NonlinearConstraint" begin
+    fn = (y, y_lag, y_lead, e, theta) -> y[1] - 0.8
+    nc = nonlinear_constraint(fn; label="test")
+    @test nc isa NonlinearConstraint{Float64}
+    @test nc.label == "test"
+    @test nc.fn([1.0], [1.0], [1.0], [0.0], Dict()) == 0.2
+
+    nc2 = nonlinear_constraint(fn)
+    @test nc2.label == "constraint"
+end
+
+@testset "Constraint validation" begin
+    spec = @dsge begin
+        parameters: rho = 0.9, sigma = 0.01
+        endogenous: y
+        exogenous: e
+        y[t] = rho * y[t-1] + sigma * e[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    # Valid constraint
+    MacroEconometricModels._validate_constraints(spec, [variable_bound(:y, lower=-1.0)])
+
+    # Invalid variable name
+    @test_throws ArgumentError MacroEconometricModels._validate_constraints(
+        spec, [variable_bound(:z, lower=0.0)])
+end
+
+@testset "Backward compatibility" begin
+    spec = @dsge begin
+        parameters: rho = 0.9, sigma = 0.01
+        endogenous: y
+        exogenous: e
+        y[t] = rho * y[t-1] + sigma * e[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+    @test length(spec.steady_state) == 1
+    @test abs(spec.steady_state[1]) < 1e-6
+
+    pf = solve(spec; method=:perfect_foresight, T_periods=10)
+    @test pf isa PerfectForesightPath
+    @test pf.converged
+end
+
+end # DSGE Constraint Types
+
 end # top-level @testset

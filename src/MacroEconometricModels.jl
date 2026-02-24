@@ -158,6 +158,7 @@ include("nowcast/forecast.jl")
 
 # DSGE models
 include("dsge/types.jl")
+include("dsge/constraints.jl")
 include("dsge/display.jl")
 include("dsge/parser.jl")
 include("dsge/steady_state.jl")
@@ -347,6 +348,10 @@ export nshocks, is_determined, is_stable
 # OccBin types and functions
 export OccBinConstraint, OccBinRegime, OccBinSolution, OccBinIRF
 export parse_constraint, occbin_solve, occbin_irf
+
+# Constraint types and helpers
+export DSGEConstraint, VariableBound, NonlinearConstraint
+export variable_bound, nonlinear_constraint
 
 # Local Projection types
 export AbstractLPModel, AbstractLPImpulseResponse, AbstractCovarianceEstimator
