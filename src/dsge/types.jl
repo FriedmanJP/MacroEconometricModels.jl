@@ -378,7 +378,7 @@ Fields:
 - `method::Symbol` — `:irf_matching` or `:euler_gmm`
 - `J_stat::T` — Hansen J-test statistic
 - `J_pvalue::T` — J-test p-value
-- `solution::DSGESolution{T}` — solution at estimated parameters
+- `solution::Union{DSGESolution{T}, PerturbationSolution{T}}` — solution at estimated parameters
 - `converged::Bool` — optimization convergence
 - `spec::DSGESpec{T}` — model specification
 """
@@ -389,7 +389,7 @@ struct DSGEEstimation{T<:AbstractFloat} <: AbstractDSGEModel
     method::Symbol
     J_stat::T
     J_pvalue::T
-    solution::DSGESolution{T}
+    solution::Union{DSGESolution{T}, PerturbationSolution{T}}
     converged::Bool
     spec::DSGESpec{T}
 

@@ -3255,4 +3255,35 @@ end
     end
 end
 
+@testset "GMM Higher-Order Moments" begin
+
+    @testset "DSGEEstimation with PerturbationSolution" begin
+        spec = @dsge begin
+            parameters: ρ = 0.9, σ = 0.01
+            endogenous: y
+            exogenous: ε
+            y[t] = ρ * y[t-1] + σ * ε[t]
+        end
+        spec = compute_steady_state(spec)
+        sol_p = solve(spec; method=:perturbation, order=2)
+
+        # Should be able to construct DSGEEstimation with PerturbationSolution
+        est = MacroEconometricModels.DSGEEstimation{Float64}(
+            [0.9], [0.01;;], [:ρ], :analytical_gmm,
+            0.0, 1.0, sol_p, true, spec
+        )
+        @test est.theta == [0.9]
+        @test est.method == :analytical_gmm
+        @test est.solution isa MacroEconometricModels.PerturbationSolution
+
+        # show() should work without error
+        io = IOBuffer()
+        show(io, est)
+        output = String(take!(io))
+        @test occursin("DSGE Estimation", output)
+        @test occursin("analytical_gmm", output)
+    end
+
+end
+
 end # top-level @testset
