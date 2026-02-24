@@ -22,7 +22,7 @@ Klein (2000) generalized Schur decomposition solver for linear RE models.
 Solves: Gamma0 * y_t = Gamma1 * y_{t-1} + C + Psi * eps_t + Pi * eta_t
 Returns: y_t = G1 * y_{t-1} + impact * eps_t + C_sol
 
-Uses the QZ decomposition of the pencil (Gamma1, Gamma0) with eigenvalue
+Uses the QZ decomposition of the pencil (Gamma0, Gamma1) with eigenvalue
 reordering and the Blanchard-Kahn counting condition on predetermined variables.
 
 Reference:
@@ -51,7 +51,7 @@ Solve the linear RE system via the Klein (2000) QZ decomposition method.
 The system is in Sims canonical form:
 `Gamma0 * y_t = Gamma1 * y_{t-1} + C + Psi * eps_t + Pi * eta_t`
 
-Klein computes the generalized Schur decomposition of the pencil `(Gamma1, Gamma0)`,
+Klein computes the generalized Schur decomposition of the pencil `(Gamma0, Gamma1)`,
 reorders eigenvalues so stable roots (|λ| < div) come first, and checks the
 Blanchard-Kahn condition: n_stable == n_predetermined.
 
@@ -78,13 +78,12 @@ function klein(Gamma0::AbstractMatrix{T}, Gamma1::AbstractMatrix{T},
                n_predetermined::Int;
                div::Real=1.0) where {T<:AbstractFloat}
     n = size(Gamma0, 1)
-    n_jump = n - n_predetermined
     eu = [0, 0]
 
-    # QZ decomposition of pencil (Gamma1, Gamma0)
-    # Generalized eigenvalues: λ_i = T_ii / S_ii
-    # where Q' * Gamma1 * Z = T_mat, Q' * Gamma0 * Z = S_mat
-    F = schur(complex(Gamma1), complex(Gamma0))
+    # QZ decomposition of pencil (Gamma0, Gamma1)
+    # Q * Gamma0 * Z = S, Q * Gamma1 * Z = T (upper triangular)
+    # Transition eigenvalues: λ_i = T_ii / S_ii (eigenvalues of Gamma0^{-1} * Gamma1)
+    F = schur(complex(Gamma0), complex(Gamma1))
 
     # Compute generalized eigenvalue magnitudes
     gev_mag = zeros(n)
