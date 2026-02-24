@@ -2335,4 +2335,57 @@ end
     @test spec.max_lead == 2
 end
 
+@testset "Augmentation: solve and simulate AR(2) (#54)" begin
+    spec = @dsge begin
+        parameters: a1 = 0.5, a2 = 0.3, σ = 1.0
+        endogenous: y
+        exogenous: ε
+        y[t] = a1 * y[t-1] + a2 * y[t-2] + σ * ε[t]
+    end
+    spec = compute_steady_state(spec; initial_guess=zeros(spec.n_endog))
+    sol = solve(spec; method=:gensys)
+
+    @test is_determined(sol)
+
+    # IRF should only show original variable 'y'
+    ir = irf(sol, 20)
+    @test length(ir.variables) == 1
+    @test ir.variables == ["y"]
+    @test size(ir.values, 2) == 1  # only 1 variable
+
+    # FEVD should only show original variable
+    fv = fevd(sol, 20)
+    @test length(fv.variables) == 1
+    @test fv.variables == ["y"]
+
+    # Simulate should return only original variable
+    sim = simulate(sol, 100; shock_draws=zeros(100, 1))
+    @test size(sim, 2) == 1  # only 'y' column
+end
+
+@testset "Augmentation: news shock IRF timing (#54)" begin
+    # Pure news shock model: y[t] = σ_0 * ε[t] + σ_3 * ε[t-3]
+    # No persistence (no y[t-1] term), so shock effects are isolated
+    spec = @dsge begin
+        parameters: σ_0 = 1.0, σ_3 = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = σ_0 * ε[t] + σ_3 * ε[t-3]
+    end
+    spec = compute_steady_state(spec; initial_guess=zeros(spec.n_endog))
+    sol = solve(spec; method=:gensys)
+
+    @test is_determined(sol)
+
+    ir = irf(sol, 10)
+    @test length(ir.variables) == 1  # only 'y'
+    @test ir.variables == ["y"]
+
+    # At h=1: immediate impact σ_0 = 1.0
+    @test abs(ir.values[1, 1, 1] - 1.0) < 0.05
+    # At h=4: delayed news impact σ_3 = 0.5
+    # ε drawn at t=1 feeds __news_ε_3 at t=4, which enters y via the lag chain
+    @test abs(ir.values[4, 1, 1] - 0.5) < 0.05
+end
+
 end # top-level @testset

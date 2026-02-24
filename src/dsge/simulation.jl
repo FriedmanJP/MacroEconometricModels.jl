@@ -62,6 +62,13 @@ function simulate(sol::DSGESolution{T}, T_periods::Int;
 
     # Return levels (steady state + deviations)
     levels = dev .+ y_ss'
+
+    # Filter to original variables if augmented
+    if sol.spec.augmented
+        orig_idx = _original_var_indices(sol.spec)
+        return levels[:, orig_idx]
+    end
+
     return levels
 end
 
@@ -97,11 +104,20 @@ function irf(sol::DSGESolution{T}, horizon::Int;
         G1_power = G1_power * sol.G1
     end
 
-    var_names = sol.spec.varnames
+    # Filter to original variables if augmented
+    if sol.spec.augmented
+        orig_idx = _original_var_indices(sol.spec)
+        point_irf = point_irf[:, orig_idx, :]
+        var_names = [string(s) for s in sol.spec.original_endog]
+        n_out = length(orig_idx)
+    else
+        var_names = sol.spec.varnames
+        n_out = n
+    end
     shock_names = [string(s) for s in sol.spec.exog]
 
-    ci_lower = zeros(T, horizon, n, n_e)
-    ci_upper = zeros(T, horizon, n, n_e)
+    ci_lower = zeros(T, horizon, n_out, n_e)
+    ci_upper = zeros(T, horizon, n_out, n_e)
 
     ImpulseResponse{T}(point_irf, ci_lower, ci_upper, horizon,
                         var_names, shock_names, ci_type)
@@ -119,15 +135,15 @@ Returns a `FEVD{T}` compatible with `plot_result()`.
 """
 function fevd(sol::DSGESolution{T}, horizon::Int) where {T<:AbstractFloat}
     irf_result = irf(sol, horizon)
-    n = nvars(sol)
+    n_vars = length(irf_result.variables)
     n_e = nshocks(sol)
 
     # Compute FEVD directly — _compute_fevd assumes n_vars == n_shocks
-    decomp = zeros(T, n, n_e, horizon)
-    props  = zeros(T, n, n_e, horizon)
+    decomp = zeros(T, n_vars, n_e, horizon)
+    props  = zeros(T, n_vars, n_e, horizon)
 
     @inbounds for h in 1:horizon
-        for i in 1:n
+        for i in 1:n_vars
             total = zero(T)
             for j in 1:n_e
                 prev = h == 1 ? zero(T) : decomp[i, j, h-1]
@@ -138,8 +154,8 @@ function fevd(sol::DSGESolution{T}, horizon::Int) where {T<:AbstractFloat}
         end
     end
 
-    var_names = sol.spec.varnames
-    shock_names = [string(s) for s in sol.spec.exog]
+    var_names = irf_result.variables
+    shock_names = irf_result.shocks
 
     FEVD{T}(decomp, props, var_names, shock_names)
 end
