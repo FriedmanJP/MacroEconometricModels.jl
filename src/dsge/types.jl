@@ -32,13 +32,13 @@ using LinearAlgebra
 Parsed DSGE model specification. Created by the `@dsge` macro.
 
 Fields:
-- `endog::Vector{Symbol}` — endogenous variable names
+- `endog::Vector{Symbol}` — endogenous variable names (possibly augmented)
 - `exog::Vector{Symbol}` — exogenous shock names
 - `params::Vector{Symbol}` — parameter names
 - `param_values::Dict{Symbol,T}` — calibrated parameter values
-- `equations::Vector{Expr}` — raw Julia equation expressions
+- `equations::Vector{Expr}` — raw Julia equation expressions (possibly augmented)
 - `residual_fns::Vector{Function}` — callable `f(y_t, y_lag, y_lead, ε, θ) → scalar`
-- `n_endog::Int` — number of endogenous variables
+- `n_endog::Int` — number of endogenous variables (including auxiliaries)
 - `n_exog::Int` — number of exogenous shocks
 - `n_params::Int` — number of parameters
 - `n_expect::Int` — number of expectation errors (forward-looking variables)
@@ -46,6 +46,13 @@ Fields:
 - `steady_state::Vector{T}` — steady state values
 - `varnames::Vector{String}` — display names
 - `ss_fn::Union{Nothing, Function}` — optional analytical steady-state function `θ → y_ss`
+- `original_endog::Vector{Symbol}` — pre-augmentation endogenous variable names
+- `original_equations::Vector{Expr}` — pre-augmentation equation expressions
+- `n_original_endog::Int` — number of original endogenous variables
+- `n_original_eq::Int` — number of original equations
+- `augmented::Bool` — whether model was augmented with auxiliary variables
+- `max_lag::Int` — maximum lag order in the model (1 for standard, >1 if augmented)
+- `max_lead::Int` — maximum lead order in the model (1 for standard, >1 if augmented)
 """
 struct DSGESpec{T<:AbstractFloat}
     endog::Vector{Symbol}
@@ -62,20 +69,48 @@ struct DSGESpec{T<:AbstractFloat}
     steady_state::Vector{T}
     varnames::Vector{String}
     ss_fn::Union{Nothing, Function}
+    original_endog::Vector{Symbol}
+    original_equations::Vector{Expr}
+    n_original_endog::Int
+    n_original_eq::Int
+    augmented::Bool
+    max_lag::Int
+    max_lead::Int
 
     function DSGESpec{T}(endog, exog, params, param_values, equations, residual_fns,
                          n_expect, forward_indices, steady_state,
-                         ss_fn::Union{Nothing, Function}=nothing) where {T<:AbstractFloat}
+                         ss_fn::Union{Nothing, Function}=nothing;
+                         original_endog::Vector{Symbol}=endog,
+                         original_equations::Vector{Expr}=equations,
+                         augmented::Bool=false,
+                         max_lag::Int=1,
+                         max_lead::Int=1) where {T<:AbstractFloat}
         n_endog = length(endog)
         n_exog = length(exog)
         n_params = length(params)
+        n_original_endog = length(original_endog)
+        n_original_eq = length(original_equations)
         @assert length(equations) == n_endog "Need as many equations as endogenous variables"
         @assert length(residual_fns) == n_endog
         @assert length(forward_indices) == n_expect
         varnames = [string(s) for s in endog]
         new{T}(endog, exog, params, param_values, equations, residual_fns,
-               n_endog, n_exog, n_params, n_expect, forward_indices, steady_state, varnames, ss_fn)
+               n_endog, n_exog, n_params, n_expect, forward_indices, steady_state,
+               varnames, ss_fn, original_endog, original_equations,
+               n_original_endog, n_original_eq, augmented, max_lag, max_lead)
     end
+end
+
+"""
+    _original_var_indices(spec::DSGESpec) → Vector{Int}
+
+Return indices of original endogenous variables in the (possibly augmented) state vector.
+"""
+function _original_var_indices(spec::DSGESpec)
+    if !spec.augmented
+        return collect(1:spec.n_endog)
+    end
+    return [findfirst(==(v), spec.endog) for v in spec.original_endog]
 end
 
 # show(io, DSGESpec) is defined in dsge/display.jl

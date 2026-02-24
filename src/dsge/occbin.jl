@@ -170,7 +170,12 @@ function _derive_alternative_regime(spec::DSGESpec{T}, constraint::OccBinConstra
 
     DSGESpec{T}(spec.endog, spec.exog, spec.params, spec.param_values,
                 new_equations, new_residual_fns,
-                n_expect_new, new_forward_indices, spec.steady_state, spec.ss_fn)
+                n_expect_new, new_forward_indices, spec.steady_state, spec.ss_fn;
+                original_endog=spec.original_endog,
+                original_equations=spec.original_equations,
+                augmented=spec.augmented,
+                max_lag=spec.max_lag,
+                max_lead=spec.max_lead)
 end
 
 # =============================================================================

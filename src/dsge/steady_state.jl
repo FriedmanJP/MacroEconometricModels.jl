@@ -97,6 +97,11 @@ function _update_steady_state(spec::DSGESpec{T}, y_ss::Vector{T}) where {T}
     DSGESpec{T}(
         spec.endog, spec.exog, spec.params, spec.param_values,
         spec.equations, spec.residual_fns,
-        spec.n_expect, spec.forward_indices, y_ss, spec.ss_fn
+        spec.n_expect, spec.forward_indices, y_ss, spec.ss_fn;
+        original_endog=spec.original_endog,
+        original_equations=spec.original_equations,
+        augmented=spec.augmented,
+        max_lag=spec.max_lag,
+        max_lead=spec.max_lead
     )
 end
