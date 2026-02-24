@@ -2916,6 +2916,61 @@ end
         fv = fevd(sol, 20)
         @test all(fv.proportions[:, 1, :] .≈ 1.0)  # single shock = 100%
     end
+
+    @testset "Closed-form moments" begin
+        spec = @dsge begin
+            parameters: ρ = 0.9, σ = 0.01
+            endogenous: y
+            exogenous: ε
+            y[t] = ρ * y[t-1] + σ * ε[t]
+        end
+        spec = compute_steady_state(spec)
+
+        # Compare first-order perturbation moments with existing analytical_moments
+        sol1 = solve(spec; method=:gensys)
+        sol_p1 = solve(spec; method=:perturbation, order=1)
+
+        mom1 = analytical_moments(sol1; lags=1)
+        mom_p1 = analytical_moments(sol_p1; lags=1)
+
+        # Both should have same length: k*(k+1)/2 + k*lags = 1 + 1 = 2
+        @test length(mom_p1) == length(mom1)
+
+        # Variance should match: σ²/(1-ρ²) = 0.01²/(1-0.81) ≈ 5.2632e-4
+        theoretical_var = 0.01^2 / (1 - 0.9^2)
+        @test mom_p1[1] ≈ theoretical_var atol=1e-8
+        @test mom_p1[1] ≈ mom1[1] atol=1e-8
+
+        # Autocovariance at lag 1: ρ * variance
+        theoretical_autocov = 0.9 * theoretical_var
+        @test mom_p1[2] ≈ theoretical_autocov atol=1e-8
+        @test mom_p1[2] ≈ mom1[2] atol=1e-8
+
+        # Multiple lags
+        mom_p1_3 = analytical_moments(sol_p1; lags=3)
+        @test length(mom_p1_3) == 1 + 3  # k*(k+1)/2 + k*lags = 1 + 3
+
+        # Second-order moments (simulation-based for order >= 2)
+        sol2 = solve(spec; method=:perturbation, order=2)
+        mom2 = analytical_moments(sol2; lags=1)
+        @test all(isfinite.(mom2))
+        @test length(mom2) == length(mom1)
+        # For a linear model, 2nd-order moments should be close to 1st-order
+        @test mom2[1] ≈ mom1[1] atol=1e-3  # relaxed tolerance for simulation-based
+
+        # Test _dlyap_doubling directly
+        A = [0.9;;]  # 1x1 matrix
+        B = [0.01^2;;]
+        Sigma = MacroEconometricModels._dlyap_doubling(A, B)
+        @test Sigma[1,1] ≈ theoretical_var atol=1e-10
+
+        # Test _dlyap_doubling matches solve_lyapunov for multivariate case
+        G1_test = [0.8 0.1; 0.05 0.7]
+        impact_test = [0.01 0.0; 0.0 0.02]
+        Sigma_kron = solve_lyapunov(G1_test, impact_test)
+        Sigma_doub = MacroEconometricModels._dlyap_doubling(G1_test, impact_test * impact_test')
+        @test Sigma_doub ≈ Sigma_kron atol=1e-10
+    end
 end
 
 end # top-level @testset

@@ -394,3 +394,211 @@ function fevd(sol::PerturbationSolution{T}, horizon::Int) where {T<:AbstractFloa
 
     FEVD{T}(decomp, props, var_names, shock_names)
 end
+
+
+# =============================================================================
+# _dlyap_doubling — iterative doubling Lyapunov solver
+# =============================================================================
+
+"""
+    _dlyap_doubling(A::AbstractMatrix{T}, B::AbstractMatrix{T};
+                    tol::Real=1e-12, maxiter::Int=500) -> Matrix{T}
+
+Solve the discrete Lyapunov equation `Σ = A·Σ·A' + B` via the doubling algorithm.
+
+More numerically stable than Kronecker vectorization for large systems (O(n³) per
+iteration vs O(n⁶) for the direct solve), and typically converges in O(log(1/ρ(A)))
+iterations where ρ(A) is the spectral radius.
+
+Algorithm (Smith 1991):
+```
+Aₖ = A,  Bₖ = B
+repeat:
+    Bₖ₊₁ = Aₖ · Bₖ · Aₖ' + Bₖ
+    Aₖ₊₁ = Aₖ · Aₖ
+until converged
+return (Bₖ₊₁ + Bₖ₊₁') / 2
+```
+
+Convergence is declared when `maximum(abs.(Bₖ₊₁ - Bₖ)) < tol` or `norm(Aₖ) < tol`.
+"""
+function _dlyap_doubling(A::AbstractMatrix{T}, B::AbstractMatrix{T};
+                         tol::Real=1e-12, maxiter::Int=500) where {T<:AbstractFloat}
+    n = size(A, 1)
+    size(A) == (n, n) || throw(ArgumentError("A must be square, got $(size(A))"))
+    size(B) == (n, n) || throw(ArgumentError("B must be n×n, got $(size(B))"))
+
+    Ak = Matrix{T}(A)
+    Bk = Matrix{T}(B)
+
+    for iter in 1:maxiter
+        Bk_new = Ak * Bk * Ak' + Bk
+        Ak_new = Ak * Ak
+
+        # Check convergence: either Bk stabilized or Ak → 0
+        if maximum(abs.(Bk_new - Bk)) < tol || opnorm(Ak_new, 1) < tol
+            # Enforce exact symmetry
+            return (Bk_new + Bk_new') / 2
+        end
+
+        Ak = Ak_new
+        Bk = Bk_new
+    end
+
+    @warn "Lyapunov doubling did not converge in $maxiter iterations"
+    return (Bk + Bk') / 2
+end
+
+
+# =============================================================================
+# analytical_moments — closed-form moments for PerturbationSolution
+# =============================================================================
+
+"""
+    analytical_moments(sol::PerturbationSolution{T}; lags::Int=1) -> Vector{T}
+
+Compute analytical moment vector from a perturbation solution.
+
+For **order 1**, uses the doubling Lyapunov solver (`_dlyap_doubling`) to compute
+the unconditional covariance of states, then derives the full variable covariance
+and autocovariances analytically.
+
+For **order ≥ 2**, uses simulation-based moment estimation (T=100,000 draws with
+Kim et al. 2008 pruning) since the augmented-state Lyapunov approach for
+second-order is complex. This provides accurate moments with a fixed RNG seed
+for reproducibility.
+
+Returns a `Vector{T}` in the same format as `analytical_moments(::DSGESolution)`:
+1. Upper-triangle of variance-covariance matrix: k*(k+1)/2 elements
+2. Diagonal autocovariances at each lag: k elements per lag
+"""
+function analytical_moments(sol::PerturbationSolution{T}; lags::Int=1) where {T<:AbstractFloat}
+    # For order >= 2: simulation-based moments via pruned simulation
+    if sol.order >= 2
+        return _simulation_moments(sol; lags=lags)
+    end
+
+    # Order 1: closed-form Lyapunov approach
+    nx = nstates(sol)
+    ny = ncontrols(sol)
+    n  = nvars(sol)
+    n_eps = nshocks(sol)
+    nv = nx + n_eps
+
+    # Extract first-order blocks
+    hx_state = nx > 0 ? sol.hx[:, 1:nx] : zeros(T, 0, 0)          # nx × nx
+    eta_x    = nx > 0 ? sol.hx[:, nx+1:nv] : zeros(T, 0, n_eps)   # nx × n_eps
+    gx_state = ny > 0 ? sol.gx[:, 1:nx] : zeros(T, 0, nx)         # ny × nx
+    eta_y    = ny > 0 ? sol.gx[:, nx+1:nv] : zeros(T, 0, n_eps)   # ny × n_eps
+
+    # State covariance via Lyapunov: Σ_x = hx_state · Σ_x · hx_state' + η_x · η_x'
+    if nx > 0
+        Sigma_x = _dlyap_doubling(hx_state, eta_x * eta_x')
+    else
+        Sigma_x = zeros(T, 0, 0)
+    end
+
+    # Build full n×n covariance in original variable ordering
+    Sigma = zeros(T, n, n)
+    if nx > 0
+        Sigma[sol.state_indices, sol.state_indices] = Sigma_x
+        if ny > 0
+            Sigma_xy = Sigma_x * gx_state'
+            Sigma[sol.state_indices, sol.control_indices] = Sigma_xy
+            Sigma[sol.control_indices, sol.state_indices] = Sigma_xy'
+            Sigma[sol.control_indices, sol.control_indices] = gx_state * Sigma_x * gx_state' + eta_y * eta_y'
+        end
+    elseif ny > 0
+        # Pure forward-looking model: only contemporaneous shock variance
+        Sigma[sol.control_indices, sol.control_indices] = eta_y * eta_y'
+    end
+
+    # Handle augmented models: filter to original variables
+    if sol.spec.augmented
+        orig_idx = _original_var_indices(sol.spec)
+        Sigma = Sigma[orig_idx, orig_idx]
+        k = length(orig_idx)
+    else
+        k = n
+    end
+
+    # Build G1-equivalent transition matrix for autocovariances
+    G1_equiv = zeros(T, n, n)
+    if nx > 0
+        G1_equiv[sol.state_indices, sol.state_indices] = hx_state
+        if ny > 0
+            G1_equiv[sol.control_indices, sol.state_indices] = gx_state * hx_state
+        end
+    end
+    if sol.spec.augmented
+        orig_idx = _original_var_indices(sol.spec)
+        G1_equiv = G1_equiv[orig_idx, orig_idx]
+    end
+
+    # Extract moments in same format as DSGESolution version
+    moments = T[]
+
+    # Upper triangle of variance-covariance matrix
+    for i in 1:k
+        for j in i:k
+            push!(moments, Sigma[i, j])
+        end
+    end
+
+    # Autocovariances at each lag: Gamma_h = G1^h * Sigma, extract diagonal
+    G1_power = copy(G1_equiv)
+    for lag in 1:lags
+        Gamma_h = G1_power * Sigma
+        for i in 1:k
+            push!(moments, Gamma_h[i, i])
+        end
+        G1_power = G1_power * G1_equiv
+    end
+
+    return moments
+end
+
+
+"""
+    _simulation_moments(sol::PerturbationSolution{T}; lags::Int=1) -> Vector{T}
+
+Compute moments via pruned simulation for higher-order perturbation solutions.
+
+Uses a fixed RNG seed (12345) for reproducibility and T=100,000 simulation periods.
+"""
+function _simulation_moments(sol::PerturbationSolution{T}; lags::Int=1) where {T<:AbstractFloat}
+    T_sim = 100_000
+    sim = simulate(sol, T_sim; rng=Random.MersenneTwister(12345))
+
+    k = size(sim, 2)
+
+    # Compute sample mean and center
+    mu = vec(sum(sim; dims=1)) / T_sim
+    centered = sim .- mu'
+
+    # Sample covariance (unbiased)
+    Sigma = (centered' * centered) / (T_sim - 1)
+
+    moments = T[]
+
+    # Upper triangle of variance-covariance matrix
+    for i in 1:k
+        for j in i:k
+            push!(moments, Sigma[i, j])
+        end
+    end
+
+    # Diagonal autocovariances at each lag
+    for lag in 1:lags
+        for i in 1:k
+            autocov = zero(T)
+            for t in 1:(T_sim - lag)
+                autocov += centered[t, i] * centered[t + lag, i]
+            end
+            autocov /= (T_sim - lag)
+            push!(moments, autocov)
+        end
+    end
+
+    return moments
+end
