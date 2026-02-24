@@ -22,7 +22,7 @@ Numerical steady-state computation for DSGE models via Optim.jl.
 
 """
     compute_steady_state(spec::DSGESpec{T}; initial_guess=nothing, method=:auto,
-                          ss_fn=nothing) → DSGESpec{T}
+                          ss_fn=nothing, constraints=DSGEConstraint[]) → DSGESpec{T}
 
 Compute the deterministic steady state: f(y_ss, y_ss, y_ss, 0, θ) = 0.
 
@@ -32,13 +32,25 @@ Returns a new `DSGESpec` with the `steady_state` field filled.
 - `initial_guess::Vector{T}` — starting point (default: ones)
 - `method::Symbol` — `:auto` (NelderMead → LBFGS), `:analytical`
 - `ss_fn::Function` — for `:analytical`, a function `θ → y_ss::Vector`
+- `constraints::Vector{<:DSGEConstraint}` — variable bounds and nonlinear inequalities (requires JuMP + Ipopt)
 """
 function compute_steady_state(spec::DSGESpec{T};
         initial_guess::Union{Nothing,AbstractVector}=nothing,
         method::Symbol=:auto,
-        ss_fn::Union{Nothing,Function}=nothing) where {T<:AbstractFloat}
+        ss_fn::Union{Nothing,Function}=nothing,
+        constraints::Vector=DSGEConstraint[]) where {T<:AbstractFloat}
 
     n = spec.n_endog
+
+    # If constraints are provided, dispatch to JuMP extension
+    if !isempty(constraints)
+        _check_jump_loaded()
+        _validate_constraints(spec, constraints)
+        y_ss = _jump_compute_steady_state(spec, constraints;
+                    initial_guess=initial_guess)
+        return _update_steady_state(spec, Vector{T}(y_ss))
+    end
+
     θ = spec.param_values
 
     # Auto-detect: if spec has an analytical ss_fn, use it
