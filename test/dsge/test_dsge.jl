@@ -3586,6 +3586,83 @@ end
     @test ProjectionSolution <: Any
 end
 
+@testset "Quadrature" begin
+    @testset "Gauss-Hermite nodes and weights" begin
+        for n in [3, 5, 7]
+            nodes, weights = MacroEconometricModels._gauss_hermite_nodes_weights(n)
+            @test length(nodes) == n
+            @test length(weights) == n
+            # Weights sum to √π
+            @test sum(weights) ≈ sqrt(π) atol=1e-12
+            # Nodes are symmetric around 0
+            @test sort(nodes) ≈ sort(-reverse(nodes)) atol=1e-12
+        end
+        # Error for n < 1
+        @test_throws ArgumentError MacroEconometricModels._gauss_hermite_nodes_weights(0)
+    end
+
+    @testset "Gauss-Hermite polynomial exactness" begin
+        nodes5, w5 = MacroEconometricModels._gauss_hermite_nodes_weights(5)
+        # ∫ exp(-x²) dx = √π
+        @test dot(w5, ones(5)) ≈ sqrt(π) atol=1e-12
+        # ∫ x² exp(-x²) dx = √π/2
+        @test dot(w5, nodes5.^2) ≈ sqrt(π) / 2 atol=1e-12
+        # ∫ x⁴ exp(-x²) dx = 3√π/4
+        @test dot(w5, nodes5.^4) ≈ 3 * sqrt(π) / 4 atol=1e-12
+        # ∫ x⁸ exp(-x²) dx = 105√π/16 (degree 8 ≤ 2*5-1=9)
+        @test dot(w5, nodes5.^8) ≈ 105 * sqrt(π) / 16 atol=1e-10
+    end
+
+    @testset "Gauss-Hermite scaled" begin
+        Σ = [1.0 0.0; 0.0 1.0]
+        nodes, weights = MacroEconometricModels._gauss_hermite_scaled(3, Σ)
+        @test size(nodes) == (9, 2)
+        @test length(weights) == 9
+        # Weights sum to 1 (probability measure)
+        @test sum(weights) ≈ 1.0 atol=1e-12
+        # E[x_i] = 0
+        for j in 1:2
+            @test abs(dot(weights, nodes[:, j])) < 1e-12
+        end
+        # E[x_i²] = 1 (unit variance)
+        for j in 1:2
+            @test dot(weights, nodes[:, j].^2) ≈ 1.0 atol=1e-10
+        end
+
+        # Non-identity covariance
+        Σ2 = [2.0 0.5; 0.5 1.0]
+        nodes2, w2 = MacroEconometricModels._gauss_hermite_scaled(3, Σ2)
+        @test sum(w2) ≈ 1.0 atol=1e-12
+        # E[x₁²] = Σ₁₁ = 2
+        @test dot(w2, nodes2[:, 1].^2) ≈ 2.0 atol=1e-10
+        # E[x₂²] = Σ₂₂ = 1
+        @test dot(w2, nodes2[:, 2].^2) ≈ 1.0 atol=1e-10
+        # E[x₁ x₂] = Σ₁₂ = 0.5
+        @test dot(w2, nodes2[:, 1] .* nodes2[:, 2]) ≈ 0.5 atol=1e-10
+    end
+
+    @testset "Monomial rule" begin
+        for n_eps in [1, 2, 3, 5]
+            nodes, weights = MacroEconometricModels._monomial_nodes_weights(n_eps)
+            @test size(nodes, 1) == 2 * n_eps + 1
+            @test size(nodes, 2) == n_eps
+            @test length(weights) == 2 * n_eps + 1
+            # Weights sum to 1
+            @test sum(weights) ≈ 1.0 atol=1e-12
+            # E[x_j] = 0
+            for j in 1:n_eps
+                @test dot(weights, nodes[:, j]) ≈ 0.0 atol=1e-12
+            end
+            # E[x_j²] = 1
+            for j in 1:n_eps
+                @test dot(weights, nodes[:, j].^2) ≈ 1.0 atol=1e-12
+            end
+        end
+        # Error for n_eps < 1
+        @test_throws ArgumentError MacroEconometricModels._monomial_nodes_weights(0)
+    end
+end
+
 end # Projection Methods
 
 end # top-level @testset

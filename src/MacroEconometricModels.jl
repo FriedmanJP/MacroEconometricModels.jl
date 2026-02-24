@@ -167,6 +167,7 @@ include("dsge/blanchard_kahn.jl")
 include("dsge/klein.jl")
 include("dsge/derivatives.jl")
 include("dsge/perturbation.jl")
+include("dsge/quadrature.jl")
 include("dsge/perfect_foresight.jl")
 include("dsge/occbin.jl")
 
