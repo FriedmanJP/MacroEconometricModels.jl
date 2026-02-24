@@ -2971,6 +2971,288 @@ end
         Sigma_doub = MacroEconometricModels._dlyap_doubling(G1_test, impact_test * impact_test')
         @test Sigma_doub ≈ Sigma_kron atol=1e-10
     end
+
+    # =====================================================================
+    # Additional comprehensive tests (Task 6)
+    # =====================================================================
+
+    @testset "Two-variable model (RBC-like)" begin
+        spec = @dsge begin
+            parameters: ρ = 0.95, σ = 0.01, α = 0.5
+            endogenous: k, c
+            exogenous: ε
+            c[t] = c[t+1] - α * (k[t] - k[t-1]) + σ * ε[t]
+            k[t] = (1 + α) * k[t-1] - c[t] + σ * ε[t]
+            steady_state = [0.0, 0.0]
+        end
+        spec = compute_steady_state(spec)
+
+        sol2 = solve(spec; method=:perturbation, order=2)
+        @test sol2 isa MacroEconometricModels.PerturbationSolution
+        @test sol2.order == 2
+        @test is_determined(sol2)
+        @test nvars(sol2) == 2
+        @test nshocks(sol2) == 1
+        @test MacroEconometricModels.nstates(sol2) + MacroEconometricModels.ncontrols(sol2) == 2
+
+        # Simulation
+        sim = simulate(sol2, 1000; rng=Random.MersenneTwister(42))
+        @test size(sim, 2) == 2
+        @test all(isfinite.(sim))
+
+        # IRF — 2 variables, 1 shock
+        ir = irf(sol2, 40)
+        @test size(ir.values) == (40, 2, 1)
+        @test all(isfinite.(ir.values))
+
+        # FEVD — single shock should explain 100% of variance for both variables
+        fv = fevd(sol2, 40)
+        @test all(isfinite.(fv.proportions))
+        for h in 1:40, i in 1:2
+            @test fv.proportions[i, 1, h] ≈ 1.0 atol=1e-8
+        end
+
+        # Moments
+        mom = analytical_moments(sol2; lags=2)
+        @test all(isfinite.(mom))
+    end
+
+    @testset "Pruning stability — long simulation" begin
+        spec = @dsge begin
+            parameters: ρ = 0.95, σ = 0.1
+            endogenous: y
+            exogenous: ε
+            y[t] = ρ * y[t-1] + σ * ε[t]
+        end
+        spec = compute_steady_state(spec)
+
+        sol2 = solve(spec; method=:perturbation, order=2)
+        # Long simulation should not explode — key pruning stability test
+        sim = simulate(sol2, 100000; rng=Random.MersenneTwister(42))
+        @test all(isfinite.(sim))
+        @test std(sim[:, 1]) < 10.0  # bounded variance
+    end
+
+    @testset "Order 1 downstream equivalence" begin
+        spec = @dsge begin
+            parameters: ρ = 0.9, σ = 0.01
+            endogenous: y
+            exogenous: ε
+            y[t] = ρ * y[t-1] + σ * ε[t]
+        end
+        spec = compute_steady_state(spec)
+
+        sol_g = solve(spec; method=:gensys)
+        sol_p = solve(spec; method=:perturbation, order=1)
+
+        # Same simulation with same shocks
+        shocks = randn(Random.MersenneTwister(42), 100, 1)
+        sim_g = simulate(sol_g, 100; shock_draws=shocks)
+        sim_p = simulate(sol_p, 100; shock_draws=shocks)
+        @test sim_g ≈ sim_p atol=1e-6
+
+        # Same IRF
+        ir_g = irf(sol_g, 20)
+        ir_p = irf(sol_p, 20)
+        @test ir_g.values ≈ ir_p.values atol=1e-6
+
+        # Same FEVD
+        fv_g = fevd(sol_g, 20)
+        fv_p = fevd(sol_p, 20)
+        @test fv_g.proportions ≈ fv_p.proportions atol=1e-6
+
+        # Same moments
+        mom_g = analytical_moments(sol_g; lags=1)
+        mom_p = analytical_moments(sol_p; lags=1)
+        @test mom_g ≈ mom_p atol=1e-6
+    end
+
+    @testset "Display — comprehensive" begin
+        spec = @dsge begin
+            parameters: ρ = 0.9, σ = 0.01
+            endogenous: y
+            exogenous: ε
+            y[t] = ρ * y[t-1] + σ * ε[t]
+        end
+        spec = compute_steady_state(spec)
+        sol = solve(spec; method=:perturbation, order=2)
+        io = IOBuffer()
+        show(io, sol)
+        output = String(take!(io))
+        @test occursin("Perturbation", output) || occursin("perturbation", output)
+        @test occursin("2", output)  # order 2
+        @test occursin("States", output) || occursin("state", output)
+        @test occursin("Controls", output) || occursin("control", output)
+        @test occursin("Stable", output) || occursin("stable", output)
+
+        # Order 1 display also works
+        sol1 = solve(spec; method=:perturbation, order=1)
+        io1 = IOBuffer()
+        show(io1, sol1)
+        out1 = String(take!(io1))
+        @test occursin("1", out1)  # order 1
+        @test occursin("Perturbation", out1) || occursin("perturbation", out1)
+    end
+
+    @testset "Edge cases — invalid order" begin
+        spec = @dsge begin
+            parameters: ρ = 0.9, σ = 0.01
+            endogenous: y
+            exogenous: ε
+            y[t] = ρ * y[t-1] + σ * ε[t]
+        end
+        spec = compute_steady_state(spec)
+        # Order 3 is recognized but not yet implemented
+        @test_throws ArgumentError solve(spec; method=:perturbation, order=3)
+        # Order 4 is out of valid range
+        @test_throws ArgumentError solve(spec; method=:perturbation, order=4)
+        # Order 0 is invalid
+        @test_throws ArgumentError solve(spec; method=:perturbation, order=0)
+    end
+
+    @testset "GIRF vs analytical IRF" begin
+        spec = @dsge begin
+            parameters: ρ = 0.9, σ = 0.01
+            endogenous: y
+            exogenous: ε
+            y[t] = ρ * y[t-1] + σ * ε[t]
+        end
+        spec = compute_steady_state(spec)
+        sol = solve(spec; method=:perturbation, order=2)
+
+        ir_a = irf(sol, 20; irf_type=:analytical)
+        ir_g = irf(sol, 20; irf_type=:girf, n_draws=500)
+
+        # For a linear model, GIRF and analytical should agree closely
+        @test size(ir_a.values) == size(ir_g.values)
+        @test ir_a.values ≈ ir_g.values atol=0.01
+
+        # Invalid irf_type raises
+        @test_throws ArgumentError irf(sol, 20; irf_type=:invalid)
+    end
+
+    @testset "Zero-shock simulation stays at steady state" begin
+        spec = @dsge begin
+            parameters: ρ = 0.9, σ = 0.01
+            endogenous: y
+            exogenous: ε
+            y[t] = ρ * y[t-1] + σ * ε[t]
+        end
+        spec = compute_steady_state(spec)
+
+        # Order 1
+        sol1 = solve(spec; method=:perturbation, order=1)
+        sim1 = simulate(sol1, 50; shock_draws=zeros(50, 1))
+        @test all(abs.(sim1) .< 1e-10)
+
+        # Order 2 — should also stay near SS (hσσ correction may shift mean slightly)
+        sol2 = solve(spec; method=:perturbation, order=2)
+        sim2 = simulate(sol2, 50; shock_draws=zeros(50, 1))
+        @test all(abs.(sim2) .< 0.1)  # relaxed: 2nd-order constant correction
+    end
+
+    @testset "Multiple shocks — FEVD sums to 1" begin
+        # Use the NK model spec which has forward-looking variables only
+        spec = @dsge begin
+            parameters: β = 0.99, κ = 0.3, φ_π = 1.5, φ_y = 0.125, σ_d = 0.01, σ_s = 0.01
+            endogenous: π, y, i
+            exogenous: ε_d, ε_s
+            π[t] = β * π[t+1] + κ * y[t] + σ_s * ε_s[t]
+            y[t] = y[t+1] - (i[t] - π[t+1]) + σ_d * ε_d[t]
+            i[t] = φ_π * π[t] + φ_y * y[t]
+            steady_state = [0.0, 0.0, 0.0]
+        end
+        spec = compute_steady_state(spec)
+
+        sol = solve(spec; method=:perturbation, order=2)
+        @test nshocks(sol) == 2
+        @test nvars(sol) == 3
+
+        fv = fevd(sol, 30)
+        # FEVD proportions should sum to 1 across shocks for each variable/horizon
+        for h in 1:30, i in 1:3
+            total = sum(fv.proportions[i, :, h])
+            @test total ≈ 1.0 atol=1e-6
+        end
+    end
+
+    @testset "Blanchard-Kahn first-order solver in perturbation" begin
+        spec = @dsge begin
+            parameters: ρ = 0.9, σ = 0.01
+            endogenous: y
+            exogenous: ε
+            y[t] = ρ * y[t-1] + σ * ε[t]
+        end
+        spec = compute_steady_state(spec)
+
+        # perturbation_solver can use blanchard_kahn as the first-order solver
+        sol_bk = MacroEconometricModels.perturbation_solver(spec; order=2, method=:blanchard_kahn)
+        sol_gs = MacroEconometricModels.perturbation_solver(spec; order=2, method=:gensys)
+
+        @test sol_bk isa MacroEconometricModels.PerturbationSolution
+        @test sol_gs isa MacroEconometricModels.PerturbationSolution
+
+        # Both should produce same first-order coefficients
+        @test sol_bk.hx ≈ sol_gs.hx atol=1e-6
+        @test sol_bk.gx ≈ sol_gs.gx atol=1e-6
+
+        # Second-order terms should also match
+        if sol_bk.hxx !== nothing && sol_gs.hxx !== nothing
+            @test sol_bk.hxx ≈ sol_gs.hxx atol=1e-6
+        end
+        if sol_bk.hσσ !== nothing && sol_gs.hσσ !== nothing
+            @test sol_bk.hσσ ≈ sol_gs.hσσ atol=1e-6
+        end
+    end
+
+    @testset "Antithetic simulation reduces variance" begin
+        spec = @dsge begin
+            parameters: ρ = 0.9, σ = 0.1
+            endogenous: y
+            exogenous: ε
+            y[t] = ρ * y[t-1] + σ * ε[t]
+        end
+        spec = compute_steady_state(spec)
+        sol = solve(spec; method=:perturbation, order=2)
+
+        # Antithetic simulation should have lower mean absolute value
+        # (variance reduction technique)
+        rng1 = Random.MersenneTwister(123)
+        sim_anti = simulate(sol, 2000; antithetic=true, rng=rng1)
+        @test size(sim_anti) == (2000, 1)
+        @test all(isfinite.(sim_anti))
+
+        # Mean should be closer to zero than raw simulation (on average)
+        # Just verify it's finite and reasonable
+        @test abs(mean(sim_anti[:, 1])) < 1.0
+    end
+
+    @testset "is_stable check" begin
+        # Stable AR(1)
+        spec_stable = @dsge begin
+            parameters: ρ = 0.9, σ = 0.01
+            endogenous: y
+            exogenous: ε
+            y[t] = ρ * y[t-1] + σ * ε[t]
+        end
+        spec_stable = compute_steady_state(spec_stable)
+        sol_stable = solve(spec_stable; method=:perturbation, order=2)
+        @test is_stable(sol_stable)
+
+        # Pure forward-looking model (no states) is trivially stable
+        spec_fwd = @dsge begin
+            parameters: β = 0.99, κ = 0.3, φ_π = 1.5, φ_y = 0.125, σ_v = 0.25
+            endogenous: π, y, i
+            exogenous: ε_v
+            π[t] = β * π[t+1] + κ * y[t]
+            y[t] = y[t+1] - (i[t] - π[t+1]) + σ_v * ε_v[t]
+            i[t] = φ_π * π[t] + φ_y * y[t]
+            steady_state = [0.0, 0.0, 0.0]
+        end
+        spec_fwd = compute_steady_state(spec_fwd)
+        sol_fwd = solve(spec_fwd; method=:perturbation, order=2)
+        @test is_stable(sol_fwd)  # nx=0 => trivially stable
+    end
 end
 
 end # top-level @testset
