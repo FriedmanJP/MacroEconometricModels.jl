@@ -2441,4 +2441,169 @@ end
     @test !occursin("Augmented state dim", output2)
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Section: Full Integration Tests for News Shocks and Augmentation (#54)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "News Shocks: Full Pipeline (#54)" begin
+    # Beaudry-Portier style: technology with news component
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ_0 = 0.01, σ_4 = 0.007
+        endogenous: A, Y
+        exogenous: ε_A
+        A[t] = ρ * A[t-1] + σ_0 * ε_A[t] + σ_4 * ε_A[t-4]
+        Y[t] = A[t]
+        steady_state = begin
+            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # A, Y + 4 news aux
+        end
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:gensys)
+
+    @test is_determined(sol)
+    @test sol.spec.augmented
+    @test sol.spec.n_original_endog == 2
+
+    # IRF: only A and Y shown
+    ir = irf(sol, 20)
+    @test length(ir.variables) == 2
+    @test ir.variables == ["A", "Y"]
+
+    # News shock timing: impact at h=1 from σ_0
+    @test abs(ir.values[1, 1, 1]) > 0  # immediate impact on A
+
+    # FEVD
+    fv = fevd(sol, 20)
+    @test length(fv.variables) == 2
+
+    # Simulate
+    sim = simulate(sol, 50; shock_draws=zeros(50, 1))
+    @test size(sim, 2) == 2
+
+    # Display
+    io = IOBuffer()
+    show(io, spec)
+    output = String(take!(io))
+    @test occursin("Augmented state dim", output)
+    @test !occursin("__news", output)
+end
+
+@testset "Higher-Order Lead: y[t+2] (#54)" begin
+    spec = @dsge begin
+        parameters: a = 0.3, σ = 1.0
+        endogenous: y
+        exogenous: ε
+        y[t] = a * y[t+2] + σ * ε[t]
+        steady_state = [0.0, 0.0]  # y + 1 fwd auxiliary
+    end
+    spec = compute_steady_state(spec)
+    @test spec.augmented
+    @test spec.max_lead == 2
+    @test spec.n_endog == 2
+
+    # y[t] = a*y[t+2] may be indeterminate — test what gensys reports
+    sol = solve(spec; method=:gensys)
+
+    # Whether determined or not, IRF filtering should work
+    ir = irf(sol, 10)
+    @test length(ir.variables) == 1
+    @test ir.variables == ["y"]
+end
+
+@testset "Mixed: deep lag + news shock (#54)" begin
+    spec = @dsge begin
+        parameters: a1 = 0.4, a2 = 0.2, σ_0 = 1.0, σ_2 = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = a1 * y[t-1] + a2 * y[t-2] + σ_0 * ε[t] + σ_2 * ε[t-2]
+        steady_state = begin
+            zeros(4)  # y + 1 lag aux + 2 news aux
+        end
+    end
+    spec = compute_steady_state(spec)
+    @test spec.augmented
+    @test spec.n_original_endog == 1
+    @test spec.n_endog == 4  # y + __lag_y_1 + __news_ε_1 + __news_ε_2
+
+    sol = solve(spec; method=:gensys)
+    @test is_determined(sol)
+
+    ir = irf(sol, 20)
+    @test length(ir.variables) == 1
+end
+
+@testset "Augmentation: analytical_moments with news (#54)" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ_0 = 0.01, σ_2 = 0.005
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ_0 * ε[t] + σ_2 * ε[t-2]
+        steady_state = [0.0, 0.0, 0.0]  # y + 2 news aux
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:gensys)
+
+    @test is_determined(sol)
+
+    # analytical_moments should work on augmented system (uses Lyapunov)
+    # Returns Vector{T} — length = k*(k+1)/2 + k*lags where k = n_endog (augmented)
+    moments = analytical_moments(sol)
+    k = sol.spec.n_endog  # 3 (augmented)
+    expected_len = div(k * (k + 1), 2) + k  # upper-tri variance + 1 lag autocov
+    @test length(moments) == expected_len
+    @test all(isfinite, moments)
+end
+
+@testset "Augmentation: metadata correctness (#54)" begin
+    # No augmentation needed
+    spec1 = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+    end
+    @test !spec1.augmented
+    @test spec1.n_original_endog == spec1.n_endog
+    @test spec1.original_endog == spec1.endog
+    @test spec1.max_lag == 1
+    @test spec1.max_lead == 1
+
+    # Deep lag only
+    spec2 = @dsge begin
+        parameters: a1 = 0.5, a2 = 0.3, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = a1 * y[t-1] + a2 * y[t-2] + σ * ε[t]
+    end
+    @test spec2.augmented
+    @test spec2.max_lag == 2
+    @test spec2.max_lead == 1
+    @test spec2.n_original_endog == 1
+    @test spec2.n_endog == 2
+
+    # News shock only
+    spec3 = @dsge begin
+        parameters: σ_0 = 0.01, σ_3 = 0.007
+        endogenous: y
+        exogenous: ε
+        y[t] = σ_0 * ε[t] + σ_3 * ε[t-3]
+        steady_state = [0.0, 0.0, 0.0, 0.0]
+    end
+    @test spec3.augmented
+    @test spec3.max_lag == 3
+    @test spec3.n_original_endog == 1
+    @test spec3.n_endog == 4  # y + 3 news aux
+
+    # Deep lead only
+    spec4 = @dsge begin
+        parameters: a = 0.3, σ = 1.0
+        endogenous: y
+        exogenous: ε
+        y[t] = a * y[t+2] + σ * ε[t]
+    end
+    @test spec4.augmented
+    @test spec4.max_lead == 2
+    @test spec4.n_endog == 2  # y + 1 fwd aux
+end
+
 end # top-level @testset
