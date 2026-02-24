@@ -3765,6 +3765,42 @@ end
     end
 end
 
+@testset "Linear AR(1) projection" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    sol = solve(spec; method=:projection, degree=5, verbose=false)
+
+    @test sol isa MacroEconometricModels.ProjectionSolution
+    @test sol.converged
+    @test sol.residual_norm < 1e-8
+    @test sol.method == :projection
+    @test sol.iterations <= 10
+
+    # evaluate_policy at steady state should return steady state
+    y_ss = evaluate_policy(sol, [0.0])
+    @test length(y_ss) == 1
+    @test abs(y_ss[1]) < 1e-6
+
+    # Linear model: projection should recover linear policy
+    pert_sol = solve(spec; method=:gensys)
+    for x_val in [-0.02, -0.01, 0.0, 0.01, 0.02]
+        y_proj = evaluate_policy(sol, [x_val])
+        y_pert = pert_sol.G1[1, 1] * x_val  # linear: y = G1 * x (deviation)
+        @test abs(y_proj[1] - y_pert) < 1e-4
+    end
+
+    # max_euler_error should be small
+    euler_err = max_euler_error(sol; n_test=100, rng=Random.MersenneTwister(42))
+    @test euler_err < 1e-6
+end
+
 end # Projection Methods
 
 end # top-level @testset

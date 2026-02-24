@@ -338,6 +338,7 @@ export @dsge
 export compute_steady_state, linearize, solve, gensys, blanchard_kahn, klein, perturbation_solver
 export simulate, estimate_dsge
 export solve_lyapunov, analytical_moments
+export evaluate_policy, max_euler_error
 
 # Accessors
 export nshocks, is_determined, is_stable
