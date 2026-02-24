@@ -359,7 +359,7 @@ end
     str = String(take!(io))
     @test occursin("SMM", str)
     @test occursin("Sim ratio", str)
-    report(result)  # should not error
+    @test redirect_stdout(devnull) do; report(result) end === nothing  # should not error
 end
 
 @testset "SMM refs()" begin

@@ -358,9 +358,9 @@ end
         [0.85, 0.02], [0.01 0.0; 0.0 0.001], [:ρ, :σ],
         :euler_gmm, 2.1, 0.35, sol, true, spec
     )
-    # report() writes to stdout — just verify no error
-    @test report(est) === nothing
-    @test report(sol) === nothing
+    # report() writes to stdout — redirect to devnull, just verify no error
+    @test redirect_stdout(devnull) do; report(est) end === nothing
+    @test redirect_stdout(devnull) do; report(sol) end === nothing
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1441,7 +1441,7 @@ end
     @test occursin("Yes", str)
 
     # report dispatches to show (test that it doesn't error)
-    @test report(sol) === nothing
+    @test redirect_stdout(devnull) do; report(sol) end === nothing
 
     # OccBinIRF
     H = 20
@@ -1683,7 +1683,7 @@ end
     str = String(take!(io))
     @test occursin("OccBin Piecewise-Linear Solution", str)
     @test occursin("Converged", str)
-    @test report(sol) === nothing
+    @test redirect_stdout(devnull) do; report(sol) end === nothing
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1835,7 +1835,7 @@ end
     str = String(take!(io))
     @test occursin("OccBin Piecewise-Linear Solution", str)
     @test occursin("Converged", str)
-    @test report(sol) === nothing
+    @test redirect_stdout(devnull) do; report(sol) end === nothing
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2063,7 +2063,7 @@ end
     @test occursin("Yes", output)
 
     # report should not error
-    report(sol)
+    @test redirect_stdout(devnull) do; report(sol) end === nothing
 end
 
 @testset "OccBin: constraint parsing edge cases" begin

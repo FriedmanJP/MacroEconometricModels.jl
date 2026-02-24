@@ -526,6 +526,15 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="OccBin: A Toolkit for Solving Dynamic Models with Occasionally Binding Constraints Easily",
         journal="Journal of Monetary Economics", volume="70", issue="", pages="22--38",
         doi="10.1016/j.jmoneco.2014.08.005", isbn="", publisher="", entry_type=:article),
+    # --- DSGE analytical ---
+    :fernandez_villaverde_rubio_schorfheide2016 => (
+        key=:fernandez_villaverde_rubio_schorfheide2016,
+        authors="Fernández-Villaverde, Jesús and Rubio-Ramírez, Juan F. and Schorfheide, Frank",
+        year=2016,
+        title="Solution and Estimation Methods for DSGE Models",
+        journal="Handbook of Macroeconomics", volume="2", issue="", pages="527--724",
+        doi="10.1016/bs.hesmac.2016.03.006", isbn="", publisher="Elsevier",
+        entry_type=:incollection),
 )
 
 # --- Type/method → reference keys mapping ---
@@ -696,7 +705,7 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :DSGESolution => [:sims2002, :blanchard_kahn1980],
     :DSGEEstimation => [:sims2002, :christiano_eichenbaum_evans2005, :hansen_singleton1982],
     :PerfectForesightPath => [:sims2002],
-    :DSGESpec => [:sims2002],
+    :DSGESpec => [:sims2002, :fernandez_villaverde_rubio_schorfheide2016],
     :gensys => [:sims2002],
     :blanchard_kahn => [:blanchard_kahn1980],
     :perfect_foresight => [:sims2002],
@@ -708,6 +717,9 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :occbin => [:guerrieri_iacoviello2015],
     :occbin_solve => [:guerrieri_iacoviello2015],
     :occbin_irf => [:guerrieri_iacoviello2015],
+    # Analytical moments
+    :analytical_moments => [:hamilton1994, :fernandez_villaverde_rubio_schorfheide2016],
+    :solve_lyapunov => [:hamilton1994, :fernandez_villaverde_rubio_schorfheide2016],
     # Data sources (symbol dispatch)
     :fred_md => [:mccracken_ng2016],
     :fred_qd => [:mccracken_ng2020],

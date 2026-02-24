@@ -20,7 +20,9 @@
 Analytical moment computation for linear DSGE models via discrete Lyapunov equation.
 
 References:
-- Hamilton, J. D. (1994). Time Series Analysis. Princeton University Press. Ch. 10.
+- Hamilton, J. D. (1994). Time Series Analysis. Princeton University Press. Ch. 10, §10.2.
+- Fernández-Villaverde, J., Rubio-Ramírez, J. F., & Schorfheide, F. (2016). Solution and
+  Estimation Methods for DSGE Models. Handbook of Macroeconomics, 2, 527--724.
 """
 
 using LinearAlgebra
