@@ -4,9 +4,7 @@ using MacroEconometricModels
 using JuMP
 using Ipopt
 
-function __init__()
-    MacroEconometricModels._JUMP_LOADED[] = true
-end
+# Extension loaded — methods override the stubs in constraints.jl
 
 # =============================================================================
 # Helper: build a ForwardDiff-compatible steady-state objective
@@ -26,7 +24,7 @@ function _build_ss_objective(residual_fns, n_ε, θ)
                 r = fn(y, y, y, ε_z, θ)
                 total += r^2
             catch e
-                (e isa DomainError || e isa InexactError) && return S(1e20)
+                (e isa DomainError || e isa InexactError) && return S(NaN)
                 rethrow(e)
             end
         end
@@ -65,7 +63,7 @@ function _build_pf_equation(fn, n, n_ε, θ)
         try
             return fn(y_t, y_lag, y_lead, ε_t, θ)
         catch e
-            (e isa DomainError || e isa InexactError) && return S(1e20)
+            (e isa DomainError || e isa InexactError) && return S(NaN)
             rethrow(e)
         end
     end
@@ -261,10 +259,10 @@ function MacroEconometricModels._jump_perfect_foresight(
         deviations = Matrix{FT}(deviations_full)
     end
 
-    iter = 0
-    try
-        iter = JuMP.barrier_iterations_count(model)
+    iter = try
+        Int(JuMP.solve_time(model) > 0)  # basic iteration count proxy
     catch
+        0
     end
 
     MacroEconometricModels.PerfectForesightPath{FT}(path, deviations, converged, iter, spec)

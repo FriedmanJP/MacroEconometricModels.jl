@@ -4321,6 +4321,68 @@ end
     @test all(pf_upper.path[:, 1] .<= 5.0 + 1e-4)
 end
 
+@testset "Binding Steady-State Constraint (JuMP)" begin
+    # AR(1) SS is 0.  Add binding lower bound y >= 0.5 → constrained SS at bound.
+    # SS objective: min (y - 0.9y)² = (0.1y)² subject to y >= 0.5  →  y* = 0.5
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+    @test abs(spec.steady_state[1]) < 1e-8  # unconstrained SS = 0
+
+    spec_bound = compute_steady_state(spec; constraints=[variable_bound(:y, lower=0.5)])
+    @test spec_bound.steady_state[1] ≈ 0.5 atol=0.01  # bound binds
+
+    # Binding PF: conflicting constraint → solver reports infeasibility
+    shocks = zeros(10, 1)
+    shocks[1, 1] = -3.0
+    pf = solve(spec; method=:perfect_foresight, T_periods=10, shock_path=shocks,
+                constraints=[variable_bound(:y, lower=0.0)])
+    @test pf isa PerfectForesightPath
+    @test !pf.converged  # infeasible: equality constraints + binding bound conflict
+end
+
+@testset "NonlinearConstraint Integration (JuMP)" begin
+    # AR(1) with nonlinear constraint on SS: y - 0.5 <= 0 (caps y at 0.5)
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    # Non-binding NL constraint: SS=0 < 1.5
+    nlc_nb = nonlinear_constraint(
+        (y, y_lag, y_lead, e, theta) -> y[1] - 1.5;
+        label="cap_y"
+    )
+    spec_c = compute_steady_state(spec; constraints=[nlc_nb])
+    @test abs(spec_c.steady_state[1]) < 0.01
+
+    # Binding NL constraint: SS=0 but force y >= 0.3 via -(y - 0.3) <= 0 → y >= 0.3
+    nlc_bind = nonlinear_constraint(
+        (y, y_lag, y_lead, e, theta) -> -(y[1] - 0.3);
+        label="floor_y"
+    )
+    spec_floor = compute_steady_state(spec; constraints=[nlc_bind])
+    @test spec_floor.steady_state[1] ≈ 0.3 atol=0.01
+
+    # Non-binding NL constraint in PF
+    shocks = zeros(20, 1)
+    shocks[1, 1] = 1.0
+    pf = solve(spec; method=:perfect_foresight, T_periods=20, shock_path=shocks,
+                constraints=[nlc_nb])
+    @test pf isa PerfectForesightPath
+    @test pf.converged
+    @test all(pf.path[:, 1] .<= 1.5 + 1e-3)
+end
+
 end # _jump_available
 
 end # DSGE Constraint Types

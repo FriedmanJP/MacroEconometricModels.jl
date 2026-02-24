@@ -84,34 +84,48 @@ function nonlinear_constraint(fn::Function; label::String="constraint")
 end
 
 # =============================================================================
-# Dispatch stubs — JuMP extension provides actual implementations
+# Dispatch stubs — JuMP extension overrides these methods
 # =============================================================================
 
-const _JUMP_LOADED = Ref(false)
+const _JUMP_INSTALL_MSG = "Constrained solving requires JuMP and Ipopt. Install with:\n" *
+    "  using Pkg; Pkg.add(\"JuMP\"); Pkg.add(\"Ipopt\")\n" *
+    "Then load: import JuMP, Ipopt"
 
-function _check_jump_loaded()
-    _JUMP_LOADED[] && return nothing
-    throw(ArgumentError(
-        "Constrained solving requires JuMP and Ipopt. Install with:\n" *
-        "  using Pkg; Pkg.add(\"JuMP\"); Pkg.add(\"Ipopt\")\n" *
-        "Then load: using JuMP, Ipopt"))
-end
-
-# These are overridden by the JuMP extension
+# Function declarations — JuMP extension adds methods to these.
+# Without the extension loaded, calling these gives MethodError; callers check first.
 function _jump_compute_steady_state end
 function _jump_perfect_foresight end
+
+function _check_jump_loaded()
+    if !hasmethod(_jump_compute_steady_state, Tuple{DSGESpec, Vector})
+        throw(ArgumentError(_JUMP_INSTALL_MSG))
+    end
+    return nothing
+end
 
 """
     _validate_constraints(spec, constraints)
 
 Check that all variable names in constraints exist in `spec.endog`.
 """
-function _validate_constraints(spec::DSGESpec, constraints::Vector)
+function _validate_constraints(spec::DSGESpec{T}, constraints::Vector) where {T}
     for c in constraints
         if c isa VariableBound
             idx = findfirst(==(c.var_name), spec.endog)
             idx === nothing && throw(ArgumentError(
                 "Variable :$(c.var_name) not found in endogenous variables $(spec.endog)"))
+        elseif c isa NonlinearConstraint
+            try
+                y_test = ones(T, spec.n_endog)
+                ε_test = zeros(T, spec.n_exog)
+                val = c.fn(y_test, y_test, y_test, ε_test, spec.param_values)
+                val isa Real || throw(ArgumentError(
+                    "Constraint '$(c.label)' fn must return a scalar, got $(typeof(val))"))
+            catch e
+                e isa ArgumentError && rethrow(e)
+                throw(ArgumentError(
+                    "Constraint '$(c.label)' fn failed validation: $e"))
+            end
         end
     end
     return nothing
