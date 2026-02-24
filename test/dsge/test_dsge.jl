@@ -4113,6 +4113,46 @@ end
     end
 end
 
+@testset "Nonlinear growth model PFI" begin
+    spec = @dsge begin
+        parameters: alpha = 0.36, beta_disc = 0.99, delta = 0.025, gamma = 2.0, sigma_e = 0.01
+        endogenous: k, c
+        exogenous: epsilon
+        steady_state = begin
+            k_ss = (alpha / (1/beta_disc - 1 + delta))^(1 / (1 - alpha))
+            c_ss = k_ss^alpha - delta * k_ss
+            [k_ss, c_ss]
+        end
+        c[t]^(-gamma) - beta_disc * c[t+1]^(-gamma) * (alpha * k[t]^(alpha - 1) + 1 - delta) = 0
+        k[t] - k[t-1]^alpha - (1 - delta) * k[t-1] + c[t] - sigma_e * epsilon[t] = 0
+    end
+    spec = compute_steady_state(spec)
+
+    k_ss = spec.steady_state[1]
+    c_ss = spec.steady_state[2]
+
+    sol = solve(spec; method=:pfi, degree=5, scale=3.0, verbose=false, tol=1e-3, max_iter=500)
+
+    @test sol isa ProjectionSolution
+    @test sol.method == :pfi
+    @test sol.converged
+
+    # Policy at SS should return approximately SS
+    y_at_ss = evaluate_policy(sol, [k_ss])
+    @test abs(y_at_ss[1] - k_ss) / k_ss < 0.02
+    @test abs(y_at_ss[2] - c_ss) / c_ss < 0.02
+
+    # Euler error check
+    euler_err = max_euler_error(sol; n_test=200, rng=Random.MersenneTwister(123))
+    @test euler_err < 1e-2
+
+    # Simulation should produce bounded values
+    Random.seed!(42)
+    Y_sim = simulate(sol, 100)
+    @test size(Y_sim) == (100, 2)
+    @test all(isfinite.(Y_sim))
+end
+
 end # Policy Function Iteration
 
 end # top-level @testset
