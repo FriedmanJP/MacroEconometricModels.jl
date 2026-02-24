@@ -4019,6 +4019,100 @@ end # Projection Methods
     @test euler_err < 1e-6
 end
 
+@testset "PFI vs projection agreement" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    sol_pfi = solve(spec; method=:pfi, degree=5, verbose=false)
+    sol_proj = solve(spec; method=:projection, degree=5, verbose=false)
+
+    @test sol_pfi.converged
+    @test sol_proj.converged
+
+    # Policy functions should agree on a linear model
+    for x_val in [-0.02, 0.0, 0.02]
+        y_pfi = evaluate_policy(sol_pfi, [x_val])
+        y_proj = evaluate_policy(sol_proj, [x_val])
+        @test abs(y_pfi[1] - y_proj[1]) < 1e-4
+    end
+end
+
+@testset "PFI damping" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    # damping=1.0 (no damping) should converge
+    sol1 = solve(spec; method=:pfi, degree=5, damping=1.0, verbose=false)
+    @test sol1.converged
+
+    # damping=0.5 should also converge (possibly more iterations)
+    sol05 = solve(spec; method=:pfi, degree=5, damping=0.5, verbose=false)
+    @test sol05.converged
+
+    # Both should give same policy
+    y1 = evaluate_policy(sol1, [0.01])
+    y05 = evaluate_policy(sol05, [0.01])
+    @test abs(y1[1] - y05[1]) < 1e-4
+end
+
+@testset "PFI API integration" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    @testset "show() displays pfi" begin
+        sol = solve(spec; method=:pfi, degree=3, verbose=false)
+        io = IOBuffer()
+        show(io, sol)
+        output = String(take!(io))
+        @test occursin("Projection", output) || occursin("projection", lowercase(output))
+        @test occursin("Converged", output)
+    end
+
+    @testset "Grid auto-selection" begin
+        sol = solve(spec; method=:pfi, degree=3, grid=:auto, verbose=false)
+        @test sol.grid_type == :tensor  # 1 state → tensor
+    end
+
+    @testset "Quadrature auto-selection" begin
+        sol = solve(spec; method=:pfi, degree=3, quadrature=:auto, verbose=false)
+        @test sol.quadrature == :gauss_hermite  # 1 shock → GH
+    end
+
+    @testset "Accessors" begin
+        sol = solve(spec; method=:pfi, degree=3, verbose=false)
+        @test nvars(sol) == 1
+        @test nshocks(sol) == 1
+        @test MacroEconometricModels.nstates(sol) >= 1
+        @test is_determined(sol) == sol.converged
+    end
+
+    @testset "Backward compatibility" begin
+        sol_gensys = solve(spec; method=:gensys)
+        @test sol_gensys isa DSGESolution
+        sol_proj = solve(spec; method=:projection, degree=3, verbose=false)
+        @test sol_proj isa ProjectionSolution
+        @test sol_proj.method == :projection
+    end
+end
+
 end # Policy Function Iteration
 
 end # top-level @testset
