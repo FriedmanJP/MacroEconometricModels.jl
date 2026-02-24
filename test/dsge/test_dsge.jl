@@ -2682,6 +2682,8 @@ end
         # because BK counting flags indeterminacy, but gensys resolves it via Pi.
         # The solution matrices still match.
         @test sol_k.eu[1] == 1  # existence
+        @test !is_determined(sol_k)  # Klein BK counting flags indeterminacy
+        @test is_determined(sol_g)   # gensys resolves it via Pi rank check
         @test sol_k.G1 ≈ sol_g.G1 atol=1e-8
         @test sol_k.impact ≈ sol_g.impact atol=1e-8
     end
@@ -2751,7 +2753,7 @@ end
         ir = irf(sol, 20)
         @test length(ir.variables) == 1
         @test ir.variables == ["y"]
-        @test abs(ir.values[1, 1, 1] - 1.0) < 0.01  # σ=1 impact
+        @test ir.values[1, 1, 1] ≈ 1.0 atol=0.01  # σ=1 impact
 
         # FEVD
         fv = fevd(sol, 20)
@@ -2775,6 +2777,7 @@ end
 
         @test is_determined(sol_k)
         @test sol_k.G1 ≈ sol_g.G1 atol=1e-8
+        @test sol_k.impact ≈ sol_g.impact atol=1e-8
 
         # IRF should show only original variable
         ir = irf(sol_k, 20)
