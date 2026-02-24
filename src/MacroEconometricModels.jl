@@ -330,7 +330,7 @@ export DSGESpec, LinearDSGE, DSGESolution, PerfectForesightPath, DSGEEstimation
 export @dsge
 
 # Functions
-export compute_steady_state, linearize, solve, gensys, blanchard_kahn
+export compute_steady_state, linearize, solve, gensys, blanchard_kahn, klein
 export simulate, estimate_dsge
 export solve_lyapunov, analytical_moments
 
