@@ -164,6 +164,7 @@ include("dsge/steady_state.jl")
 include("dsge/linearize.jl")
 include("dsge/gensys.jl")
 include("dsge/blanchard_kahn.jl")
+include("dsge/klein.jl")
 include("dsge/perfect_foresight.jl")
 include("dsge/occbin.jl")
 

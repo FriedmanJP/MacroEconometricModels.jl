@@ -144,6 +144,7 @@ Solve a DSGE model.
 # Methods
 - `:gensys` -- Sims (2002) QZ decomposition (default)
 - `:blanchard_kahn` -- Blanchard-Kahn (1980) eigenvalue counting
+- `:klein` -- Klein (2000) generalized Schur decomposition
 - `:perfect_foresight` -- deterministic Newton solver
 """
 function solve(spec::DSGESpec{T}; method::Symbol=:gensys, kwargs...) where {T<:AbstractFloat}
@@ -164,7 +165,15 @@ function solve(spec::DSGESpec{T}; method::Symbol=:gensys, kwargs...) where {T<:A
         return blanchard_kahn(ld, spec)
     elseif method == :perfect_foresight
         return perfect_foresight(spec; kwargs...)
+    elseif method == :klein
+        ld = linearize(spec)
+        n_pre = _count_predetermined(ld)
+        result = klein(ld.Gamma0, ld.Gamma1, ld.C, ld.Psi, n_pre)
+        return DSGESolution{T}(
+            result.G1, result.impact, result.C_sol, result.eu,
+            :klein, result.eigenvalues, spec, ld
+        )
     else
-        throw(ArgumentError("method must be :gensys, :blanchard_kahn, or :perfect_foresight"))
+        throw(ArgumentError("method must be :gensys, :blanchard_kahn, :klein, or :perfect_foresight"))
     end
 end
