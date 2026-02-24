@@ -3834,6 +3834,68 @@ end
     @test abs(irfs.values[20, 1, 1]) < abs(irfs.values[1, 1, 1])
 end
 
+@testset "API integration" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    @testset "show() works" begin
+        sol = solve(spec; method=:projection, degree=3, verbose=false)
+        io = IOBuffer()
+        show(io, sol)
+        output = String(take!(io))
+        @test occursin("Projection", output)
+        @test occursin("Chebyshev", output) || occursin("projection", lowercase(output))
+        @test occursin("Converged", output)
+    end
+
+    @testset "Grid auto-selection" begin
+        sol = solve(spec; method=:projection, degree=3, grid=:auto, verbose=false)
+        @test sol.grid_type == :tensor  # 1 state → tensor
+    end
+
+    @testset "Quadrature auto-selection" begin
+        sol = solve(spec; method=:projection, degree=3, quadrature=:auto, verbose=false)
+        @test sol.quadrature == :gauss_hermite  # 1 shock → GH
+    end
+
+    @testset "Accessors" begin
+        sol = solve(spec; method=:projection, degree=3, verbose=false)
+        @test nvars(sol) == 1
+        @test nshocks(sol) == 1
+        @test MacroEconometricModels.nstates(sol) >= 1
+        @test MacroEconometricModels.ncontrols(sol) >= 0
+        @test is_determined(sol) == sol.converged
+        @test is_stable(sol) == sol.converged
+    end
+
+    @testset "evaluate_policy matrix input" begin
+        sol = solve(spec; method=:projection, degree=3, verbose=false)
+        X_mat = reshape([-0.02, -0.01, 0.0, 0.01, 0.02], 5, 1)
+        Y = evaluate_policy(sol, X_mat)
+        @test size(Y) == (5, 1)
+        # Each row should match single-point evaluation
+        for i in 1:5
+            y_single = evaluate_policy(sol, [X_mat[i, 1]])
+            @test Y[i, 1] ≈ y_single[1] atol=1e-14
+        end
+    end
+
+    @testset "Backward compatibility" begin
+        sol_gensys = solve(spec; method=:gensys)
+        @test sol_gensys isa DSGESolution
+        sol_bk = solve(spec; method=:blanchard_kahn)
+        @test sol_bk isa DSGESolution
+        sol_pert = solve(spec; method=:perturbation, order=2)
+        @test sol_pert isa PerturbationSolution
+    end
+end
+
 end # Projection Methods
 
 end # top-level @testset
