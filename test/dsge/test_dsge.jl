@@ -4188,7 +4188,7 @@ end
     nc = nonlinear_constraint(fn; label="test")
     @test nc isa NonlinearConstraint{Float64}
     @test nc.label == "test"
-    @test nc.fn([1.0], [1.0], [1.0], [0.0], Dict()) == 0.2
+    @test nc.fn([1.0], [1.0], [1.0], [0.0], Dict()) ≈ 0.2
 
     nc2 = nonlinear_constraint(fn)
     @test nc2.label == "constraint"
@@ -4231,8 +4231,8 @@ end
 
 # JuMP integration tests — only run if JuMP + Ipopt are available
 _jump_available = try
-    @eval using JuMP
-    @eval using Ipopt
+    @eval import JuMP
+    @eval import Ipopt
     true
 catch
     false
