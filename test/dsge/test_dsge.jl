@@ -4229,6 +4229,100 @@ end
     @test pf.converged
 end
 
+# JuMP integration tests — only run if JuMP + Ipopt are available
+_jump_available = try
+    @eval using JuMP
+    @eval using Ipopt
+    true
+catch
+    false
+end
+
+if _jump_available
+
+@testset "Constrained Steady State (JuMP)" begin
+    # Simple AR(1) with non-binding constraint
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    # Non-binding: SS is 0, lower=-1 doesn't bind
+    spec_c = compute_steady_state(spec; constraints=[variable_bound(:y, lower=-1.0)])
+    @test abs(spec_c.steady_state[1]) < 0.01
+
+    # Growth model with positivity constraints (non-binding at true SS)
+    spec2 = @dsge begin
+        parameters: alpha = 0.36, beta_disc = 0.99, delta = 0.025, gamma = 2.0, sigma_e = 0.01
+        endogenous: k, c
+        exogenous: epsilon
+        steady_state = begin
+            k_ss = (alpha / (1/beta_disc - 1 + delta))^(1 / (1 - alpha))
+            c_ss = k_ss^alpha - delta * k_ss
+            [k_ss, c_ss]
+        end
+        c[t]^(-gamma) - beta_disc * c[t+1]^(-gamma) * (alpha * k[t]^(alpha - 1) + 1 - delta) = 0
+        k[t] - k[t-1]^alpha - (1 - delta) * k[t-1] + c[t] - sigma_e * epsilon[t] = 0
+    end
+    spec2 = compute_steady_state(spec2)
+    k_ss = spec2.steady_state[1]
+    c_ss = spec2.steady_state[2]
+
+    spec2_c = compute_steady_state(spec2;
+        constraints=[variable_bound(:k, lower=0.1), variable_bound(:c, lower=0.1)])
+    @test abs(spec2_c.steady_state[1] - k_ss) / k_ss < 0.05
+    @test abs(spec2_c.steady_state[2] - c_ss) / c_ss < 0.05
+end
+
+@testset "Constrained Perfect Foresight (JuMP)" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 1.0
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    # Moderate shock: unconstrained path stays above -2
+    shocks = zeros(20, 1)
+    shocks[1, 1] = -1.0
+
+    pf_unc = solve(spec; method=:perfect_foresight, T_periods=20, shock_path=shocks)
+    @test pf_unc.converged
+
+    # Non-binding lower bound: constraint doesn't alter the path
+    pf_con = solve(spec; method=:perfect_foresight, T_periods=20, shock_path=shocks,
+                    constraints=[variable_bound(:y, lower=-5.0)])
+    @test pf_con isa PerfectForesightPath
+    @test pf_con.converged
+    @test all(pf_con.path[:, 1] .>= -5.0 - 1e-4)  # bound respected
+
+    # Path dimensions
+    @test size(pf_con.path) == (20, 1)
+
+    # Constrained path matches unconstrained when bound is non-binding
+    @test maximum(abs.(pf_con.path .- pf_unc.path)) < 0.01
+
+    # Terminal convergence to SS
+    @test abs(pf_con.path[end, 1]) < 0.5
+
+    # Upper bound test: constrain y <= 5 (non-binding)
+    shocks2 = zeros(20, 1)
+    shocks2[1, 1] = 2.0
+    pf_upper = solve(spec; method=:perfect_foresight, T_periods=20, shock_path=shocks2,
+                      constraints=[variable_bound(:y, upper=5.0)])
+    @test pf_upper isa PerfectForesightPath
+    @test pf_upper.converged
+    @test all(pf_upper.path[:, 1] .<= 5.0 + 1e-4)
+end
+
+end # _jump_available
+
 end # DSGE Constraint Types
 
 end # top-level @testset
