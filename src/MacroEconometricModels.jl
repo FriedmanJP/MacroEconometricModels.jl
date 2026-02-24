@@ -168,6 +168,7 @@ include("dsge/klein.jl")
 include("dsge/derivatives.jl")
 include("dsge/perturbation.jl")
 include("dsge/quadrature.jl")
+include("dsge/projection.jl")
 include("dsge/perfect_foresight.jl")
 include("dsge/occbin.jl")
 

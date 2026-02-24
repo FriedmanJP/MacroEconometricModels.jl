@@ -3663,6 +3663,108 @@ end
     end
 end
 
+@testset "Chebyshev basis" begin
+    @testset "Chebyshev nodes" begin
+        nodes = MacroEconometricModels._chebyshev_nodes(5)
+        @test length(nodes) == 5
+        @test nodes[1] ≈ 1.0 atol=1e-14
+        @test nodes[5] ≈ -1.0 atol=1e-14
+        @test nodes[3] ≈ 0.0 atol=1e-14
+        @test all(-1 .<= nodes .<= 1)
+        # Error for n < 2
+        @test_throws ArgumentError MacroEconometricModels._chebyshev_nodes(1)
+    end
+
+    @testset "Chebyshev polynomial evaluation" begin
+        x = 0.5
+        vals = MacroEconometricModels._chebyshev_eval(x, 4)
+        @test vals[1] ≈ 1.0 atol=1e-14       # T_0
+        @test vals[2] ≈ 0.5 atol=1e-14       # T_1
+        @test vals[3] ≈ 2*0.25 - 1 atol=1e-14 # T_2 = -0.5
+        @test vals[4] ≈ 4*0.125 - 3*0.5 atol=1e-14  # T_3 = 4x^3-3x
+        @test length(vals) == 5  # T_0 through T_4
+
+        # Boundary values: T_n(1) = 1 for all n
+        vals1 = MacroEconometricModels._chebyshev_eval(1.0, 5)
+        @test all(v -> v ≈ 1.0, vals1)
+
+        # Boundary values: T_n(-1) = (-1)^n
+        valsm1 = MacroEconometricModels._chebyshev_eval(-1.0, 5)
+        for k in 0:5
+            @test valsm1[k + 1] ≈ (-1.0)^k atol=1e-14
+        end
+    end
+
+    @testset "Scale/unscale round-trip" begin
+        bounds = [1.0 5.0; -2.0 3.0]
+        x_phys = [3.0, 0.5]
+        z = MacroEconometricModels._scale_to_unit(x_phys, bounds)
+        @test all(-1 .<= z .<= 1)
+        x_back = MacroEconometricModels._scale_from_unit(z, bounds)
+        @test x_back ≈ x_phys atol=1e-14
+
+        # Boundary checks
+        x_lo = [1.0, -2.0]
+        @test MacroEconometricModels._scale_to_unit(x_lo, bounds) ≈ [-1.0, -1.0] atol=1e-14
+        x_hi = [5.0, 3.0]
+        @test MacroEconometricModels._scale_to_unit(x_hi, bounds) ≈ [1.0, 1.0] atol=1e-14
+
+        # Matrix versions
+        X_phys = [3.0 0.5; 1.0 -2.0; 5.0 3.0]
+        Z = MacroEconometricModels._scale_to_unit(X_phys, bounds)
+        @test size(Z) == (3, 2)
+        X_back = MacroEconometricModels._scale_from_unit(Z, bounds)
+        @test X_back ≈ X_phys atol=1e-14
+    end
+
+    @testset "Tensor-product basis matrix" begin
+        nodes1d = MacroEconometricModels._chebyshev_nodes(3)
+        X = reshape(nodes1d, 3, 1)
+        mi = reshape([0; 1; 2], 3, 1)
+        B = MacroEconometricModels._chebyshev_basis_multi(X, mi)
+        @test size(B) == (3, 3)
+        @test cond(B) < 100
+
+        # 2D test
+        nodes2d, mi2d = MacroEconometricModels._tensor_grid(2, 2)
+        B2d = MacroEconometricModels._chebyshev_basis_multi(nodes2d, mi2d)
+        @test size(B2d) == (9, 9)
+        @test cond(B2d) < 1e6  # should be reasonably conditioned
+    end
+end
+
+@testset "Grid construction" begin
+    @testset "Tensor grid" begin
+        for nx in [1, 2, 3]
+            degree = 3
+            nodes, mi = MacroEconometricModels._tensor_grid(nx, degree)
+            expected_nodes = (degree + 1)^nx
+            @test size(nodes, 1) == expected_nodes
+            @test size(nodes, 2) == nx
+            @test size(mi, 1) == expected_nodes
+            @test size(mi, 2) == nx
+            @test all(-1 .<= nodes .<= 1)
+            @test all(0 .<= mi .<= degree)
+        end
+    end
+
+    @testset "Smolyak grid" begin
+        for (nx, mu) in [(2, 2), (2, 3), (3, 2)]
+            nodes, mi = MacroEconometricModels._smolyak_grid(nx, mu)
+            tensor_nodes, _ = MacroEconometricModels._tensor_grid(nx, mu + nx)
+            # Smolyak grid should have fewer points than the full tensor grid
+            @test size(nodes, 1) < size(tensor_nodes, 1)
+            @test size(nodes, 2) == nx
+            @test all(-1 .<= nodes .<= 1)
+        end
+
+        # 2D mu=1: known node count
+        nodes_21, mi_21 = MacroEconometricModels._smolyak_grid(2, 1)
+        @test size(nodes_21, 2) == 2
+        @test size(nodes_21, 1) >= 5  # at least the cross pattern
+    end
+end
+
 end # Projection Methods
 
 end # top-level @testset
