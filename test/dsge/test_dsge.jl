@@ -3376,6 +3376,203 @@ end
         @test 0.0 <= est.J_pvalue <= 1.0
     end
 
+    @testset "Innovation variance 2nd order" begin
+        hx_s = [0.9;;]
+        eta_x = [0.01;;]
+        Var_xf = MacroEconometricModels._dlyap_doubling(hx_s, eta_x * eta_x')
+
+        Var_inov = MacroEconometricModels._innovation_variance_2nd(
+            hx_s, eta_x, Var_xf, 1, 1)
+
+        # nz = 2*1 + 1 = 3
+        @test size(Var_inov) == (3, 3)
+        # Block (1,1) = eta_x * eta_x' = 0.0001
+        @test Var_inov[1, 1] ≈ 0.01^2 atol=1e-12
+        # Symmetric
+        @test Var_inov ≈ Var_inov' atol=1e-15
+        # Positive semi-definite
+        @test all(eigvals(Symmetric(Var_inov)) .>= -1e-12)
+    end
+
+    @testset "Extract xx block" begin
+        # nx=2, n_eps=1, nv=3 → nv²=9, nx²=4
+        M = reshape(collect(1.0:18.0), 2, 9)
+        Mxx = MacroEconometricModels._extract_xx_block(M, 2, 3)
+        @test size(Mxx) == (2, 4)
+        # Column (1,1) of v⊗v = column 1 of M → column 1 of Mxx
+        @test Mxx[:, 1] == M[:, 1]
+        # Column (1,2) of v⊗v = column 2 of M → column 2 of Mxx
+        @test Mxx[:, 2] == M[:, 2]
+        # Column (2,1) of v⊗v = column 4 of M (=(2-1)*3+1) → column 3 of Mxx
+        @test Mxx[:, 3] == M[:, 4]
+        # Column (2,2) of v⊗v = column 5 of M (=(2-1)*3+2) → column 4 of Mxx
+        @test Mxx[:, 4] == M[:, 5]
+    end
+
+    @testset "2nd-order risk correction: non-zero mean" begin
+        spec = @dsge begin
+            parameters: ρ = 0.9, σ = 0.1
+            endogenous: y
+            exogenous: ε
+            y[t] = ρ * y[t-1] + σ * ε[t]
+        end
+        spec = compute_steady_state(spec)
+        sol2 = solve(spec; method=:perturbation, order=2)
+
+        result = MacroEconometricModels._augmented_moments_2nd(sol2; lags=[1])
+
+        # Mean exists and is finite
+        @test all(isfinite.(result[:E_y]))
+        # Variance is positive
+        @test all(diag(result[:Var_y]) .> 0)
+    end
+
+    @testset "Data moments match analytical for generated data" begin
+        Random.seed!(123)
+        spec = @dsge begin
+            parameters: ρ = 0.9, σ = 0.01
+            endogenous: y
+            exogenous: ε
+            y[t] = ρ * y[t-1] + σ * ε[t]
+        end
+        spec = compute_steady_state(spec)
+        sol1 = solve(spec; method=:perturbation, order=1)
+
+        # Generate long simulation
+        data = simulate(sol1, 100_000; rng=Random.MersenneTwister(123))
+
+        # Data moments should converge to model moments
+        m_model = analytical_moments(sol1; lags=1, format=:gmm)
+        m_data = MacroEconometricModels._compute_data_moments(data; lags=[1])
+
+        @test length(m_model) == length(m_data)
+        # Mean ≈ 0 for order 1
+        @test abs(m_data[1]) < 0.01
+        # Product moment ≈ theoretical variance
+        theoretical_var = 0.01^2 / (1 - 0.9^2)
+        @test m_data[2] ≈ theoretical_var atol=0.05 * theoretical_var
+    end
+
+    @testset "Closed-form 2nd-order matches simulation" begin
+        spec = @dsge begin
+            parameters: ρ = 0.9, σ = 0.01
+            endogenous: y
+            exogenous: ε
+            y[t] = ρ * y[t-1] + σ * ε[t]
+        end
+        spec = compute_steady_state(spec)
+        sol2 = solve(spec; method=:perturbation, order=2)
+
+        # Closed-form moments
+        mom_cf = analytical_moments(sol2; lags=1, format=:gmm)
+
+        # Simulation-based moments (long run)
+        sim = simulate(sol2, 500_000; rng=Random.MersenneTwister(99))
+        m_sim = MacroEconometricModels._compute_data_moments(sim; lags=[1])
+
+        @test length(mom_cf) == length(m_sim)
+        # Should match within sampling error (generous tolerance for mean near zero)
+        for i in eachindex(mom_cf)
+            @test mom_cf[i] ≈ m_sim[i] atol=max(abs(m_sim[i]) * 0.15, 1e-4)
+        end
+    end
+
+    @testset "Multi-variable model moments" begin
+        spec = @dsge begin
+            parameters: ρ₁ = 0.8, ρ₂ = 0.7, σ₁ = 0.01, σ₂ = 0.02
+            endogenous: x, y
+            exogenous: ε₁, ε₂
+            x[t] = ρ₁ * x[t-1] + σ₁ * ε₁[t]
+            y[t] = ρ₂ * y[t-1] + σ₂ * ε₂[t]
+        end
+        spec = compute_steady_state(spec)
+        sol2 = solve(spec; method=:perturbation, order=2)
+
+        mom = analytical_moments(sol2; lags=2, format=:gmm)
+        # ny=2: 2 means + 3 product moments + 2*2 autocov = 2 + 3 + 4 = 9
+        @test length(mom) == 9
+        @test all(isfinite.(mom))
+    end
+
+    @testset "Backward compatibility: default format unchanged" begin
+        spec = @dsge begin
+            parameters: ρ = 0.9, σ = 0.01
+            endogenous: y
+            exogenous: ε
+            y[t] = ρ * y[t-1] + σ * ε[t]
+        end
+        spec = compute_steady_state(spec)
+
+        # Order 1: default format matches existing behavior
+        sol1 = solve(spec; method=:perturbation, order=1)
+        sol_g = solve(spec; method=:gensys)
+        mom_p = analytical_moments(sol1; lags=1)
+        mom_g = analytical_moments(sol_g; lags=1)
+        @test length(mom_p) == length(mom_g)
+        @test mom_p ≈ mom_g atol=1e-8
+
+        # Order 2: default format uses simulation (backward compatible)
+        sol2 = solve(spec; method=:perturbation, order=2)
+        mom_sim = analytical_moments(sol2; lags=1)
+        @test length(mom_sim) == length(mom_g)  # same format
+    end
+
+    @testset "Existing analytical_gmm still works" begin
+        spec = @dsge begin
+            parameters: ρ = 0.85, σ = 0.01
+            endogenous: y
+            exogenous: ε
+            y[t] = ρ * y[t-1] + σ * ε[t]
+        end
+        spec = compute_steady_state(spec)
+        sol = solve(spec; method=:gensys)
+        Random.seed!(42)
+        data = simulate(sol, 200; rng=Random.MersenneTwister(42))
+
+        # Old API: estimate_dsge with analytical_gmm, no perturbation kwargs
+        bounds = ParameterTransform{Float64}([0.01], [0.999])
+        est = estimate_dsge(spec, data, [:ρ];
+                             method=:analytical_gmm,
+                             bounds=bounds)
+        @test est.converged
+        @test est.method == :analytical_gmm
+        @test est.solution isa MacroEconometricModels.DSGESolution
+    end
+
+    @testset "Round-trip perturbation GMM estimation" begin
+        spec = @dsge begin
+            parameters: ρ = 0.85, σ = 0.01
+            endogenous: y
+            exogenous: ε
+            y[t] = ρ * y[t-1] + σ * ε[t]
+        end
+        spec = compute_steady_state(spec)
+
+        # Generate data from known model
+        sol_true = solve(spec; method=:perturbation, order=2)
+        Random.seed!(7777)
+        data = simulate(sol_true, 1000; rng=Random.MersenneTwister(7777))
+
+        # Estimate ρ with perturbation order 2, multiple autocov lags
+        bounds = ParameterTransform{Float64}([0.01], [0.999])
+        est = estimate_dsge(spec, data, [:ρ];
+                             method=:analytical_gmm,
+                             solve_method=:perturbation,
+                             solve_order=2,
+                             auto_lags=[1, 3],
+                             bounds=bounds)
+
+        @test est.converged
+        @test abs(est.theta[1] - 0.85) < 0.2
+        @test est.J_stat >= 0.0
+
+        # Show works
+        io = IOBuffer()
+        show(io, est)
+        output = String(take!(io))
+        @test occursin("analytical_gmm", output)
+    end
+
 end
 
 end # top-level @testset

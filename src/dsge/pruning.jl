@@ -723,13 +723,24 @@ function _augmented_moments_2nd(sol::PerturbationSolution{T};
     Var_y = C_full * Var_z * C_full' + noise_full * noise_full'
     Var_y = (Var_y + Var_y') / 2  # enforce symmetry
 
-    # Autocovariances: Cov(w(t), w(t-k)) = C · A^k · Var_z · C'
+    # Autocovariances: Cov(y_t, y_{t-k})
+    # Since y(t) = C·z(t) + noise·ε(t) + d, and z(t) depends on ε(t-1)
+    # through the transition, we need the cross-term:
+    #   Cov(y_t, y_{t-k}) = C·A^k·Var_z·C' + C·A^{k-1}·M·noise'
+    # where M = E[u(t)·ε(t)'] is the cross-covariance of the augmented
+    # state innovation with the shock. For Gaussian shocks (3rd moment=0),
+    # only the xf block contributes: M = [eta_x; 0; 0].
+    M = zeros(T, nz, n_eps)
+    M[1:nx, :] = eta_x
+
     max_lag = maximum(lags)
     Cov_y = zeros(T, n, n, max_lag)
     A_power = copy(A)
+    A_power_prev = Matrix{T}(I, nz, nz)
     for lag in 1:max_lag
-        Cov_z_lag = A_power * Var_z
-        Cov_y[:, :, lag] = C_full * Cov_z_lag * C_full'
+        Cov_y[:, :, lag] = C_full * A_power * Var_z * C_full' +
+                           C_full * A_power_prev * M * noise_full'
+        A_power_prev = A_power
         A_power = A_power * A
     end
 
