@@ -89,7 +89,49 @@ function _dsge_impl(block::Expr)
     length(raw_equations) != length(endog) &&
         error("@dsge: expected $(length(endog)) equations (one per endogenous variable), got $(length(raw_equations))")
 
-    # Classify forward-looking equations
+    # ── Augmentation for deep lags, deep leads, and news shocks (#54) ──
+    original_endog = copy(endog)
+    original_raw_equations = deepcopy(raw_equations)
+
+    # Scan offsets on residual-form equations (so we see all var[t±k] refs)
+    scan_eqs = Expr[_strip_expectation_operator(_equation_to_residual(eq)) for eq in raw_equations]
+    offsets = _scan_offsets(scan_eqs, endog, exog)
+
+    # Determine if augmentation is needed
+    has_deep_offset = any(v -> v.max_lag > 1 || v.max_lead > 1, values(offsets))
+    has_exog_lag = false
+    for v in exog
+        if haskey(offsets, v) && offsets[v].max_lag > 0
+            has_exog_lag = true
+            break
+        end
+    end
+    needs_augmentation = has_deep_offset || has_exog_lag
+
+    if needs_augmentation
+        aux_endog, aux_equations, sub_map = _generate_augmentation(offsets, endog, exog)
+
+        # Apply substitutions to raw user equations
+        for i in eachindex(raw_equations)
+            raw_equations[i] = _apply_augmentation_subs(raw_equations[i], sub_map)
+        end
+
+        # Extend endogenous variables and append auxiliary equations
+        append!(endog, aux_endog)
+        append!(raw_equations, aux_equations)
+
+        # Revalidate counts after augmentation
+        length(raw_equations) != length(endog) &&
+            error("@dsge: augmentation error — $(length(endog)) endogenous but $(length(raw_equations)) equations")
+    end
+
+    aug_flag = needs_augmentation
+    max_lag_val = maximum((get(offsets, v, (max_lag=0, max_lead=0)).max_lag for v in vcat(original_endog, exog)); init=1)
+    max_lag_val = max(max_lag_val, 1)
+    max_lead_val = maximum((get(offsets, v, (max_lag=0, max_lead=0)).max_lead for v in original_endog); init=1)
+    max_lead_val = max(max_lead_val, 1)
+
+    # ── Classify forward-looking equations (on augmented set) ──
     forward_indices = Int[]
     for (i, eq) in enumerate(raw_equations)
         if _has_forward_looking(eq, endog, exog)
@@ -115,6 +157,14 @@ function _dsge_impl(block::Expr)
         push!(residual_fn_exprs, fn_expr)
     end
 
+    # ── Build original equations (pre-augmentation residual form) for display ──
+    orig_eq_exprs = Expr[]
+    for eq in original_raw_equations
+        resid = _equation_to_residual(eq)
+        resid = _strip_expectation_operator(resid)
+        push!(orig_eq_exprs, resid)
+    end
+
     # Build the constructor call as a quoted expression
     param_vals_expr = Expr(:call, :Dict,
         [Expr(:call, :(=>), QuoteNode(p), param_defaults[p]) for p in params]...)
@@ -130,6 +180,10 @@ function _dsge_impl(block::Expr)
 
     # Build the vector of residual functions
     fn_vec_expr = Expr(:ref, :Function, residual_fn_exprs...)
+
+    # Build original_endog and original_equations expressions
+    original_endog_expr = Expr(:vect, [QuoteNode(s) for s in original_endog]...)
+    orig_eq_vec_expr = Expr(:ref, :Expr, [QuoteNode(eq) for eq in orig_eq_exprs]...)
 
     # Build ss_fn expression if steady_state block was provided
     ss_fn_expr = if ss_body !== nothing
@@ -154,7 +208,12 @@ function _dsge_impl(block::Expr)
             $param_vals_expr,
             $eq_vec_expr,
             $fn_vec_expr,
-            $n_expect, $fwd_expr, Float64[], $ss_fn_expr
+            $n_expect, $fwd_expr, Float64[], $ss_fn_expr;
+            original_endog=$original_endog_expr,
+            original_equations=$orig_eq_vec_expr,
+            augmented=$aug_flag,
+            max_lag=$max_lag_val,
+            max_lead=$max_lead_val
         )
     end
 
@@ -479,6 +538,172 @@ function _substitute_vars(ex, endog::Vector{Symbol}, exog::Vector{Symbol}, param
         return ex
     else
         # Literal values (numbers, etc.)
+        return ex
+    end
+end
+
+# =============================================================================
+# Augmentation functions for deep lags, deep leads, and news shocks (#54)
+# =============================================================================
+
+"""
+    _scan_offsets(equations, endog, exog)
+
+Walk equation expression trees and record the maximum lag and lead offset
+for each endogenous/exogenous variable referenced as `var[t±k]`.
+Returns `Dict{Symbol, @NamedTuple{max_lag::Int, max_lead::Int}}`.
+"""
+function _scan_offsets(equations::Vector{Expr}, endog::Vector{Symbol}, exog::Vector{Symbol})
+    offsets = Dict{Symbol, @NamedTuple{max_lag::Int, max_lead::Int}}()
+    all_vars = vcat(endog, exog)
+    for eq in equations
+        _walk_expr(eq) do ex
+            if ex isa Expr && ex.head == :ref && length(ex.args) == 2 && ex.args[1] isa Symbol
+                varname = ex.args[1]::Symbol
+                if varname ∈ all_vars
+                    offset = _parse_time_index(ex.args[2])
+                    prev = get(offsets, varname, (max_lag=0, max_lead=0))
+                    lag = max(prev.max_lag, offset < 0 ? -offset : 0)
+                    lead = max(prev.max_lead, offset > 0 ? offset : 0)
+                    offsets[varname] = (max_lag=lag, max_lead=lead)
+                end
+            end
+        end
+    end
+    offsets
+end
+
+"""
+    _generate_augmentation(offsets, endog, exog)
+
+Generate auxiliary endogenous variables and identity equations for deep lags,
+deep leads, and exogenous news shocks.
+
+Returns `(aux_endog, aux_equations, sub_map)` where:
+- `aux_endog::Vector{Symbol}` — new auxiliary variable names
+- `aux_equations::Vector{Expr}` — identity equations in `LHS = RHS` form
+- `sub_map::Dict{Tuple{Symbol,Int}, Tuple{Symbol,Int}}` — substitution map
+"""
+function _generate_augmentation(offsets::Dict{Symbol, @NamedTuple{max_lag::Int, max_lead::Int}},
+                                 endog::Vector{Symbol}, exog::Vector{Symbol})
+    aux_endog = Symbol[]
+    aux_equations = Expr[]
+    sub_map = Dict{Tuple{Symbol,Int}, Tuple{Symbol,Int}}()
+
+    for (var, info) in offsets
+        if var ∈ endog
+            # --- Deep endogenous lags: var[t-k] where k > 1 ---
+            if info.max_lag > 1
+                for j in 1:(info.max_lag - 1)
+                    aux_name = Symbol("__lag_", var, "_", j)
+                    push!(aux_endog, aux_name)
+                    if j == 1
+                        # __lag_var_1[t] = var[t-1]
+                        eq = Expr(:(=),
+                            Expr(:ref, aux_name, :t),
+                            Expr(:ref, var, Expr(:call, :(-), :t, 1)))
+                        push!(aux_equations, eq)
+                    else
+                        # __lag_var_j[t] = __lag_var_{j-1}[t-1]
+                        prev_name = Symbol("__lag_", var, "_", j - 1)
+                        eq = Expr(:(=),
+                            Expr(:ref, aux_name, :t),
+                            Expr(:ref, prev_name, Expr(:call, :(-), :t, 1)))
+                        push!(aux_equations, eq)
+                    end
+                    # Sub: (var, -(j+1)) → (__lag_var_j, -1)
+                    sub_map[(var, -(j + 1))] = (aux_name, -1)
+                end
+            end
+
+            # --- Deep endogenous leads: var[t+k] where k > 1 ---
+            if info.max_lead > 1
+                for j in 1:(info.max_lead - 1)
+                    aux_name = Symbol("__fwd_", var, "_", j)
+                    push!(aux_endog, aux_name)
+                    if j == 1
+                        # __fwd_var_1[t] = var[t+1]
+                        eq = Expr(:(=),
+                            Expr(:ref, aux_name, :t),
+                            Expr(:ref, var, Expr(:call, :(+), :t, 1)))
+                        push!(aux_equations, eq)
+                    else
+                        # __fwd_var_j[t] = __fwd_var_{j-1}[t+1]
+                        prev_name = Symbol("__fwd_", var, "_", j - 1)
+                        eq = Expr(:(=),
+                            Expr(:ref, aux_name, :t),
+                            Expr(:ref, prev_name, Expr(:call, :(+), :t, 1)))
+                        push!(aux_equations, eq)
+                    end
+                    # Sub: (var, j+1) → (__fwd_var_j, 1)
+                    sub_map[(var, j + 1)] = (aux_name, 1)
+                end
+            end
+
+        elseif var ∈ exog
+            # --- Exogenous news shocks: ε[t-k] where k > 0 ---
+            if info.max_lag > 0
+                for j in 1:info.max_lag
+                    aux_name = Symbol("__news_", var, "_", j)
+                    push!(aux_endog, aux_name)
+                    if j == 1
+                        # __news_ε_1[t] = ε[t]
+                        eq = Expr(:(=),
+                            Expr(:ref, aux_name, :t),
+                            Expr(:ref, var, :t))
+                        push!(aux_equations, eq)
+                    else
+                        # __news_ε_j[t] = __news_ε_{j-1}[t-1]
+                        prev_name = Symbol("__news_", var, "_", j - 1)
+                        eq = Expr(:(=),
+                            Expr(:ref, aux_name, :t),
+                            Expr(:ref, prev_name, Expr(:call, :(-), :t, 1)))
+                        push!(aux_equations, eq)
+                    end
+                    # Sub: (ε, -j) → (__news_ε_j, -1)
+                    sub_map[(var, -j)] = (aux_name, -1)
+                end
+            end
+        end
+    end
+
+    return aux_endog, aux_equations, sub_map
+end
+
+"""
+    _apply_augmentation_subs(ex, sub_map)
+
+Walk an expression tree and replace `var[t±k]` references according to `sub_map`.
+When `(varname, offset)` is found in `sub_map`, replaces with `(new_var, new_offset)`.
+"""
+function _apply_augmentation_subs(ex, sub_map::Dict{Tuple{Symbol,Int}, Tuple{Symbol,Int}})
+    if ex isa Expr
+        if ex.head == :ref && length(ex.args) == 2 && ex.args[1] isa Symbol
+            varname = ex.args[1]::Symbol
+            offset = try
+                _parse_time_index(ex.args[2])
+            catch
+                nothing
+            end
+            if offset !== nothing
+                key = (varname, offset)
+                if haskey(sub_map, key)
+                    new_var, new_offset = sub_map[key]
+                    if new_offset == 0
+                        new_time = :t
+                    elseif new_offset > 0
+                        new_time = Expr(:call, :(+), :t, new_offset)
+                    else
+                        new_time = Expr(:call, :(-), :t, -new_offset)
+                    end
+                    return Expr(:ref, new_var, new_time)
+                end
+            end
+        end
+        # Recurse into children
+        new_args = Any[_apply_augmentation_subs(a, sub_map) for a in ex.args]
+        return Expr(ex.head, new_args...)
+    else
         return ex
     end
 end

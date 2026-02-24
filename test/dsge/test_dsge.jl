@@ -2275,4 +2275,64 @@ end
     end
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 23: Augmentation — Deep Lags, Deep Leads, News Shocks (#54)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "Augmentation: @dsge with news shock (#54)" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ_0 = 0.01, σ_3 = 0.007
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ_0 * ε[t] + σ_3 * ε[t-3]
+    end
+    @test spec.augmented == true
+    @test spec.n_original_endog == 1
+    @test spec.original_endog == [:y]
+    @test spec.n_endog == 4  # y + 3 news auxiliaries
+    @test spec.max_lag == 3
+    @test length(spec.original_equations) == 1
+    @test length(spec.equations) == 4  # 1 user + 3 identity
+end
+
+@testset "Augmentation: @dsge with deep endogenous lag (#54)" begin
+    spec = @dsge begin
+        parameters: a1 = 0.5, a2 = 0.3, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = a1 * y[t-1] + a2 * y[t-2] + σ * ε[t]
+    end
+    @test spec.augmented == true
+    @test spec.n_original_endog == 1
+    @test spec.n_endog == 2  # y + 1 lag auxiliary
+    @test spec.max_lag == 2
+end
+
+@testset "Augmentation: backward compat — no augmentation needed (#54)" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+    end
+    @test spec.augmented == false
+    @test spec.n_original_endog == spec.n_endog
+    @test spec.original_endog == spec.endog
+    @test spec.max_lag == 1
+    @test spec.max_lead == 1
+end
+
+@testset "Augmentation: @dsge with deep lead (#54)" begin
+    spec = @dsge begin
+        parameters: a = 0.3, σ = 1.0
+        endogenous: y
+        exogenous: ε
+        y[t] = a * y[t+2] + σ * ε[t]
+    end
+    @test spec.augmented == true
+    @test spec.n_original_endog == 1
+    @test spec.n_endog == 2  # y + 1 fwd auxiliary
+    @test spec.max_lead == 2
+end
+
 end # top-level @testset
