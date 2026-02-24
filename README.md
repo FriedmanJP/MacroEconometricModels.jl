@@ -6,7 +6,7 @@
 [![Aqua QA](https://raw.githubusercontent.com/JuliaTesting/Aqua.jl/master/badge.svg)](https://github.com/JuliaTesting/Aqua.jl)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18439170.svg)](https://doi.org/10.5281/zenodo.18439170)
 
-A comprehensive Julia package for macroeconomic time series analysis. Provides VAR, VECM, Bayesian VAR, Panel VAR, Local Projections, Factor Models, ARIMA, time series filters, GMM, ARCH/GARCH/Stochastic Volatility estimation, nowcasting (DFM, BVAR, bridge equations with news decomposition), structural identification (including non-Gaussian and heteroskedasticity-based methods), hypothesis testing, typed data containers, publication-quality output with multi-format bibliographic references, and interactive D3.js visualization.
+A comprehensive Julia package for macroeconomic time series analysis. Provides VAR, VECM, Bayesian VAR, Panel VAR, Local Projections, Factor Models, DSGE, ARIMA, time series filters, GMM/SMM, ARCH/GARCH/Stochastic Volatility estimation, nowcasting (DFM, BVAR, bridge equations with news decomposition), structural identification (Cholesky, sign, zero, narrative, long-run, and penalty function), statistical identification via higher moments (non-Gaussian and heteroskedasticity-based methods), hypothesis testing, typed data containers, publication-quality output with multi-format bibliographic references, and interactive D3.js visualization.
 
 ## Features
 
@@ -60,16 +60,31 @@ A comprehensive Julia package for macroeconomic time series analysis. Provides V
   - Group-level block bootstrap confidence intervals for IRFs
   - Instrument management: min/max lag truncation, collapse, PCA reduction
 
+### DSGE
+- **Model specification** - `@dsge` macro with declarative syntax for parameters, variables, shocks, and equilibrium equations
+- **Steady state** - Numerical solver (Newton's method) or analytical closed-form via `steady_state` block in `@dsge` or `ss_fn` kwarg
+- **Solution** - Gensys (Sims 2002) and Blanchard-Kahn linearization around steady state
+- **Simulation & IRF** - `simulate`, `irf`, `fevd` for solved DSGE models; perfect foresight transition paths
+- **Analytical moments** - Discrete Lyapunov equation `solve_lyapunov` for unconditional covariance; `analytical_moments` for theoretical autocovariance structure (Hamilton 1994)
+- **Estimation** - Four methods via `estimate_dsge`:
+  - IRF matching (minimum distance between model and empirical IRFs)
+  - Euler equation GMM (moment conditions from first-order conditions)
+  - Simulated Method of Moments (SMM with HAC-optimal weighting)
+  - Analytical GMM (Lyapunov-based moments, no simulation noise)
+
 ### GMM
 - **Generalized Method of Moments** - One-step, two-step, and iterated; Hansen J-test
+- **Simulated Method of Moments (SMM)** - Simulation-based estimation with HAC-optimal weighting, two-step and iterated
 - **Linear GMM** - Closed-form solver for panel IV estimation
 - **Sandwich covariance** - Robust GMM variance with Windmeijer correction
 
 ### Structural Identification
-- **Traditional**: Cholesky (recursive), sign restrictions (Rubio-Ramirez et al. 2010), narrative restrictions (Antolin-Diaz & Rubio-Ramirez 2018), long-run (Blanchard & Quah 1989), zero+sign (Arias et al. 2018), penalty function (Mountford & Uhlig 2009)
-- **Heteroskedasticity-based**: Markov-switching, GARCH, smooth-transition, external volatility (Rigobon 2003, Lewis 2021)
-- **Non-Gaussian ICA**: FastICA, JADE, SOBI, distance covariance, HSIC (Hyvärinen et al. 2010)
-- **Non-Gaussian ML**: Student-t, mixture-normal, pseudo-ML, skew-normal (Lanne et al. 2017)
+- **Cholesky** (recursive) - Wold causal ordering (Sims 1980)
+- **Sign restrictions** - Rotation-based identification (Rubio-Ramirez et al. 2010)
+- **Narrative restrictions** - Historical event constraints on shocks (Antolin-Diaz & Rubio-Ramirez 2018)
+- **Long-run restrictions** - Permanent/transitory decomposition (Blanchard & Quah 1989)
+- **Zero and sign restrictions** - Joint zero+sign with importance sampling (Arias et al. 2018)
+- **Penalty function** - Frequentist sign and zero restrictions via constrained optimization (Mountford & Uhlig 2009)
 
 ### Innovation Accounting
 - **Impulse Response Functions (IRF)** - Bootstrap, theoretical, and Bayesian credible intervals
@@ -538,6 +553,12 @@ Full documentation available at [https://FriedmanJP.github.io/MacroEconometricMo
 - Blundell, Richard, and Stephen Bond. 1998. "Initial Conditions and Moment Restrictions in Dynamic Panel Data Models." *Journal of Econometrics* 87 (1): 115–143. [https://doi.org/10.1016/S0304-4076(98)00009-8](https://doi.org/10.1016/S0304-4076(98)00009-8)
 - Holtz-Eakin, Douglas, Whitney Newey, and Harvey S. Rosen. 1988. "Estimating Vector Autoregressions with Panel Data." *Econometrica* 56 (6): 1371–1395. [https://doi.org/10.2307/1913103](https://doi.org/10.2307/1913103)
 - Windmeijer, Frank. 2005. "A Finite Sample Correction for the Variance of Linear Efficient Two-Step GMM Estimators." *Journal of Econometrics* 126 (1): 25–51. [https://doi.org/10.1016/j.jeconom.2004.02.005](https://doi.org/10.1016/j.jeconom.2004.02.005)
+
+### DSGE
+
+- Blanchard, Olivier Jean, and Charles M. Kahn. 1980. "The Solution of Linear Difference Models Under Rational Expectations." *Econometrica* 48 (5): 1305–1311. [https://doi.org/10.2307/1912186](https://doi.org/10.2307/1912186)
+- Hamilton, James D. 1994. *Time Series Analysis*. Princeton: Princeton University Press. ISBN 978-0-691-04289-3.
+- Sims, Christopher A. 2002. "Solving Linear Rational Expectations Models." *Computational Economics* 20 (1): 1–20. [https://doi.org/10.1023/A:1020517101123](https://doi.org/10.1023/A:1020517101123)
 
 ### GMM and Covariance Estimation
 
