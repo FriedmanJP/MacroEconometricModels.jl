@@ -194,8 +194,10 @@ function _ref_to_text(ex::Expr, endog::Vector{Symbol})
     base, sub = _split_var_name(vstr)
     if !isempty(sub)
         display_str = base * "_{" * sub * "," * tsub * "}"
+    elseif offset == 0
+        display_str = vstr * "_t"
     else
-        display_str = vstr * "_" * tsub
+        display_str = vstr * "_{" * tsub * "}"
     end
 
     # Wrap forward-looking endogenous in E_t[...]

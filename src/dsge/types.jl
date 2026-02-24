@@ -78,21 +78,7 @@ struct DSGESpec{T<:AbstractFloat}
     end
 end
 
-function Base.show(io::IO, spec::DSGESpec{T}) where {T}
-    spec_data = Any[
-        "Endogenous"    spec.n_endog;
-        "Exogenous"     spec.n_exog;
-        "Parameters"    spec.n_params;
-        "Equations"     length(spec.equations);
-        "Forward-looking" spec.n_expect;
-        "Steady state"  isempty(spec.steady_state) ? "Not computed" : "Computed"
-    ]
-    _pretty_table(io, spec_data;
-        title = "DSGE Model Specification",
-        column_labels = ["", ""],
-        alignment = [:l, :r],
-    )
-end
+# show(io, DSGESpec) is defined in dsge/display.jl
 
 # =============================================================================
 # LinearDSGE — canonical form Γ₀·y_t = Γ₁·y_{t-1} + C + Ψ·ε_t + Π·η_t

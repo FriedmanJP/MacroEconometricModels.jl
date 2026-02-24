@@ -158,6 +158,7 @@ include("nowcast/forecast.jl")
 
 # DSGE models
 include("dsge/types.jl")
+include("dsge/display.jl")
 include("dsge/parser.jl")
 include("dsge/steady_state.jl")
 include("dsge/linearize.jl")
