@@ -2126,4 +2126,153 @@ end
     @test occursin("OccBin", p.html)
 end
 
+@testset "DSGE Display (#57)" begin
+    spec = @dsge begin
+        parameters: β = 0.99, σ = 1.0, κ = 0.3, φ_π = 1.5, φ_y = 0.5, ρ = 0.8
+        endogenous: y, π, R, d
+        exogenous: ε_d
+
+        y[t] = y[t+1] - (1 / σ) * (R[t] - π[t+1]) + d[t]
+        π[t] = β * π[t+1] + κ * y[t]
+        R[t] = φ_π * π[t] + φ_y * y[t]
+        d[t] = ρ * d[t-1] + σ * ε_d[t]
+    end
+
+    # ── _sym_to_latex ──
+    @testset "_sym_to_latex" begin
+        @test MacroEconometricModels._sym_to_latex(:β) == "\\beta"
+        @test MacroEconometricModels._sym_to_latex(:σ) == "\\sigma"
+        @test MacroEconometricModels._sym_to_latex(:φ_π) == "\\phi_{\\pi}"
+        @test MacroEconometricModels._sym_to_latex(:σ_c) == "\\sigma_{c}"
+        @test MacroEconometricModels._sym_to_latex(:A) == "A"
+        @test MacroEconometricModels._sym_to_latex(:ρ_d) == "\\rho_{d}"
+    end
+
+    # ── _format_num_display ──
+    @testset "_format_num_display" begin
+        @test MacroEconometricModels._format_num_display(1) == "1"
+        @test MacroEconometricModels._format_num_display(1.0) == "1"
+        @test MacroEconometricModels._format_num_display(0.99) == "0.99"
+        @test MacroEconometricModels._format_num_display(0.3) == "0.3"
+    end
+
+    # ── _expr_to_text ──
+    @testset "_expr_to_text" begin
+        endog = [:y, :π, :R, :d]
+        exog = [:ε_d]
+        params = [:β, :σ, :κ, :φ_π, :φ_y, :ρ]
+
+        # Simple ref
+        @test MacroEconometricModels._expr_to_text(:(y[t]), endog, exog, params) == "y_t"
+        @test occursin("t-1", MacroEconometricModels._expr_to_text(:(y[t-1]), endog, exog, params))
+
+        # Forward-looking → E_t
+        txt = MacroEconometricModels._expr_to_text(:(y[t+1]), endog, exog, params)
+        @test occursin("E_t", txt)
+        @test occursin("t+1", txt)
+
+        # Shock with subscript
+        txt_shock = MacroEconometricModels._expr_to_text(:(ε_d[t]), endog, exog, params)
+        @test occursin("ε", txt_shock)
+        @test occursin("d", txt_shock)
+
+        # Full equation (RHS only — = sign rendered by _equation_to_display)
+        eq_text = MacroEconometricModels._expr_to_text(spec.equations[2], endog, exog, params)
+        @test occursin("β", eq_text) || occursin("π", eq_text)
+        @test occursin("κ", eq_text)
+    end
+
+    # ── _expr_to_latex ──
+    @testset "_expr_to_latex" begin
+        endog = [:y, :π, :R, :d]
+        exog = [:ε_d]
+        params = [:β, :σ, :κ, :φ_π, :φ_y, :ρ]
+
+        @test MacroEconometricModels._expr_to_latex(:(y[t]), endog, exog, params) == "y_{t}"
+
+        # Forward-looking → \mathbb{E}_t
+        latex = MacroEconometricModels._expr_to_latex(:(y[t+1]), endog, exog, params)
+        @test occursin("\\mathbb{E}_t", latex)
+
+        # Greek parameter
+        @test MacroEconometricModels._expr_to_latex(:β, endog, exog, params) == "\\beta"
+
+        # Division → \frac
+        latex_div = MacroEconometricModels._expr_to_latex(:(1 / σ), endog, exog, params)
+        @test occursin("\\frac", latex_div)
+
+        # Subscripted shock
+        eq_latex = MacroEconometricModels._expr_to_latex(spec.equations[4], endog, exog, params)
+        @test occursin("\\rho", eq_latex)
+        @test occursin("\\varepsilon", eq_latex)
+    end
+
+    # ── show() text backend ──
+    @testset "show text backend" begin
+        set_display_backend(:text)
+        io = IOBuffer()
+        show(io, spec)
+        output = String(take!(io))
+
+        @test occursin("DSGE Model", output)
+        @test occursin("4", output)  # 4 equations
+        @test occursin("Calibration", output)
+        @test occursin("β", output)
+        @test occursin("Equations", output)
+        @test occursin("(1)", output)
+        @test occursin("(4)", output)
+        @test occursin("E_t", output)
+
+        # report() should not error
+        @test redirect_stdout(devnull) do; report(spec) end === nothing
+    end
+
+    # ── show() LaTeX backend ──
+    @testset "show latex backend" begin
+        set_display_backend(:latex)
+        io = IOBuffer()
+        show(io, spec)
+        output = String(take!(io))
+
+        @test occursin("\\begin{align}", output)
+        @test occursin("\\end{align}", output)
+        @test occursin("\\mathbb{E}_t", output)
+        @test occursin("\\beta", output)
+        @test occursin("\\frac", output)
+        @test occursin("\\begin{tabular}", output)
+
+        set_display_backend(:text)  # restore
+    end
+
+    # ── show() HTML backend ──
+    @testset "show html backend" begin
+        set_display_backend(:html)
+        io = IOBuffer()
+        show(io, spec)
+        output = String(take!(io))
+
+        @test occursin("<div", output)
+        @test occursin("\\begin{align}", output)
+        @test occursin("<table>", output)
+        @test occursin("\\mathbb{E}_t", output)
+
+        set_display_backend(:text)  # restore
+    end
+
+    # ── Spec without steady state ──
+    @testset "show without steady state" begin
+        spec_noss = @dsge begin
+            parameters: ρ = 0.9, σ = 0.01
+            endogenous: y
+            exogenous: ε
+            y[t] = ρ * y[t-1] + σ * ε[t]
+        end
+        io = IOBuffer()
+        show(io, spec_noss)
+        output = String(take!(io))
+        @test occursin("1", output)  # 1 equation
+        @test !occursin("Steady State", output)
+    end
+end
+
 end # top-level @testset
