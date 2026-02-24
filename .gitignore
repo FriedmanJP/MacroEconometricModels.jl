@@ -23,6 +23,9 @@ docs/build/
 .claude/
 CLAUDE.md
 
+# Implementation plans (local only)
+docs/plans/
+
 # Replication files (external data, not part of package)
 replication_files_v5.0/
 
