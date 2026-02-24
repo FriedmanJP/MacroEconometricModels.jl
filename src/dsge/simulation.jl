@@ -159,3 +159,149 @@ function fevd(sol::DSGESolution{T}, horizon::Int) where {T<:AbstractFloat}
 
     FEVD{T}(decomp, props, var_names, shock_names)
 end
+
+# =============================================================================
+# ProjectionSolution simulation and IRF
+# =============================================================================
+
+"""
+    simulate(sol::ProjectionSolution{T}, T_periods::Int; kwargs...) -> Matrix{T}
+
+Simulate using the global policy function from projection solution.
+Returns `T_periods x n_vars` matrix of levels.
+
+# Arguments
+- `sol`: projection solution from Chebyshev collocation
+- `T_periods`: number of periods to simulate
+
+# Keyword Arguments
+- `shock_draws`: `T_periods x n_shocks` matrix of pre-drawn shocks (default: `nothing`, draws from N(0,1))
+- `rng`: random number generator (default: `Random.default_rng()`)
+"""
+function simulate(sol::ProjectionSolution{T}, T_periods::Int;
+                  shock_draws::Union{Nothing,AbstractMatrix}=nothing,
+                  rng=Random.default_rng()) where {T<:AbstractFloat}
+    n = nvars(sol)
+    n_eps = nshocks(sol)
+    nx = nstates(sol)
+    ss = sol.steady_state
+
+    if shock_draws !== nothing
+        @assert size(shock_draws) == (T_periods, n_eps) "shock_draws must be ($T_periods, $n_eps)"
+        e = T.(shock_draws)
+    else
+        e = randn(rng, T, T_periods, n_eps)
+    end
+
+    levels = zeros(T, T_periods, n)
+    x_state = copy(ss[sol.state_indices])
+
+    # Get linear impact matrix for shock propagation
+    result_lin = gensys(sol.linear.Gamma0, sol.linear.Gamma1,
+                        sol.linear.C, sol.linear.Psi, sol.linear.Pi)
+    impact = result_lin.impact
+
+    for t in 1:T_periods
+        # Evaluate policy at current state
+        y_t = evaluate_policy(sol, x_state)
+        levels[t, :] = y_t
+
+        # Next-period state: policy state components + linear shock propagation
+        x_next = y_t[sol.state_indices]
+        # Add shock effect through the impact matrix (state rows)
+        for (ii, si) in enumerate(sol.state_indices)
+            for k in 1:n_eps
+                x_next[ii] += impact[si, k] * e[t, k]
+            end
+        end
+
+        # Clamp to state bounds for stability
+        for d in 1:nx
+            x_next[d] = clamp(x_next[d], sol.state_bounds[d, 1], sol.state_bounds[d, 2])
+        end
+
+        x_state = x_next
+    end
+
+    return levels
+end
+
+"""
+    irf(sol::ProjectionSolution{T}, horizon::Int; kwargs...) -> ImpulseResponse{T}
+
+Monte Carlo IRF: compare paths with/without initial shock.
+
+# Arguments
+- `sol`: projection solution from Chebyshev collocation
+- `horizon`: number of IRF periods
+
+# Keyword Arguments
+- `n_sim::Int=500`: number of simulation paths for averaging
+- `shock_size::Real=1.0`: impulse size in standard deviations
+- `ci_type::Symbol=:none`: confidence interval type
+"""
+function irf(sol::ProjectionSolution{T}, horizon::Int;
+             n_sim::Int=500, shock_size::Real=1.0,
+             ci_type::Symbol=:none, kwargs...) where {T<:AbstractFloat}
+    n = nvars(sol)
+    n_eps = nshocks(sol)
+    nx = nstates(sol)
+    ss = sol.steady_state
+
+    # Get linear impact matrix for shock propagation
+    result_lin = gensys(sol.linear.Gamma0, sol.linear.Gamma1,
+                        sol.linear.C, sol.linear.Psi, sol.linear.Pi)
+    impact = result_lin.impact
+
+    point_irf = zeros(T, horizon, n, n_eps)
+
+    for j in 1:n_eps
+        irf_sum = zeros(T, horizon, n)
+
+        for s in 1:n_sim
+            # Baseline path (from steady state, no shocks)
+            x_base = copy(ss[sol.state_indices])
+            path_base = zeros(T, horizon, n)
+            for t in 1:horizon
+                y = evaluate_policy(sol, x_base)
+                path_base[t, :] = y
+                x_base = y[sol.state_indices]
+                # Clamp
+                for d in 1:nx
+                    x_base[d] = clamp(x_base[d], sol.state_bounds[d, 1], sol.state_bounds[d, 2])
+                end
+            end
+
+            # Shocked path: initial shock to shock j
+            x_shock = copy(ss[sol.state_indices])
+            for (ii, si) in enumerate(sol.state_indices)
+                x_shock[ii] += impact[si, j] * T(shock_size)
+            end
+            for d in 1:nx
+                x_shock[d] = clamp(x_shock[d], sol.state_bounds[d, 1], sol.state_bounds[d, 2])
+            end
+
+            path_shock = zeros(T, horizon, n)
+            for t in 1:horizon
+                y = evaluate_policy(sol, x_shock)
+                path_shock[t, :] = y
+                x_shock = y[sol.state_indices]
+                for d in 1:nx
+                    x_shock[d] = clamp(x_shock[d], sol.state_bounds[d, 1], sol.state_bounds[d, 2])
+                end
+            end
+
+            irf_sum .+= (path_shock .- path_base)
+        end
+
+        point_irf[:, :, j] = irf_sum ./ n_sim
+    end
+
+    var_names = sol.spec.varnames
+    shock_names = [string(s) for s in sol.spec.exog]
+    ci_lower = zeros(T, horizon, n, n_eps)
+    ci_upper = zeros(T, horizon, n, n_eps)
+
+    ImpulseResponse{T}(point_irf, ci_lower, ci_upper, horizon,
+                        var_names, shock_names, ci_type)
+end

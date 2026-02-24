@@ -3801,6 +3801,39 @@ end
     @test euler_err < 1e-6
 end
 
+@testset "Projection simulate and irf" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:projection, degree=5, verbose=false)
+
+    # simulate returns T × n matrix
+    Random.seed!(42)
+    Y_sim = simulate(sol, 100)
+    @test size(Y_sim) == (100, 1)
+    @test all(abs.(Y_sim) .< 1.0)
+
+    # simulate with explicit shock_draws
+    shocks = zeros(50, 1)
+    shocks[1, 1] = 1.0
+    Y_det = simulate(sol, 50; shock_draws=shocks)
+    @test size(Y_det) == (50, 1)
+
+    # irf returns ImpulseResponse
+    irfs = irf(sol, 20; n_sim=200)
+    @test irfs isa ImpulseResponse
+    @test size(irfs.values) == (20, 1, 1)
+    # First period: should be close to σ = 0.01 (impact of unit shock)
+    @test abs(irfs.values[1, 1, 1] - 0.01) < 0.005
+    # IRF should decay
+    @test abs(irfs.values[20, 1, 1]) < abs(irfs.values[1, 1, 1])
+end
+
 end # Projection Methods
 
 end # top-level @testset
