@@ -331,15 +331,28 @@ function main()
     save("dsge_irf.html", plot_result(dsge_irf))
 
     # -------------------------------------------------------------------
-    # 31. DSGE FEVD
+    # 31. DSGE FEVD (NK model with demand + supply shocks)
     # -------------------------------------------------------------------
-    dsge_fevd = fevd(dsge_sol, 40)
+    nk_fevd_spec = @dsge begin
+        parameters: β = 0.99, σ_c = 1.0, κ = 0.3, φ_π = 1.5, φ_y = 0.5,
+                    ρ_d = 0.8, ρ_s = 0.7, σ_d = 0.01, σ_s = 0.01
+        endogenous: y, π, R, d, s
+        exogenous: ε_d, ε_s
+
+        y[t] = y[t+1] - (1 / σ_c) * (R[t] - π[t+1]) + d[t]
+        π[t] = β * π[t+1] + κ * y[t] + s[t]
+        R[t] = φ_π * π[t] + φ_y * y[t]
+        d[t] = ρ_d * d[t-1] + σ_d * ε_d[t]
+        s[t] = ρ_s * s[t-1] + σ_s * ε_s[t]
+    end
+    nk_fevd_sol = solve(nk_fevd_spec)
+    dsge_fevd = fevd(nk_fevd_sol, 40)
     save("dsge_fevd.html", plot_result(dsge_fevd))
 
     # -------------------------------------------------------------------
-    # 32. OccBin IRF comparison
+    # 32. OccBin IRF comparison (large negative demand shock hits ZLB)
     # -------------------------------------------------------------------
-    nk_spec = @dsge begin
+    nk_occ_spec = @dsge begin
         parameters: β = 0.99, σ_c = 1.0, κ = 0.3, φ_π = 1.5, φ_y = 0.5,
                     ρ_d = 0.8, σ_d = 0.01
         endogenous: y, π, R, d
@@ -350,16 +363,16 @@ function main()
         R[t] = φ_π * π[t] + φ_y * y[t]
         d[t] = ρ_d * d[t-1] + σ_d * ε_d[t]
     end
-    nk_constraint = parse_constraint(:(R[t] >= 0), nk_spec)
-    oirf = occbin_irf(nk_spec, nk_constraint, 1, 40; magnitude=3.0)
+    nk_occ_constraint = parse_constraint(:(R[t] >= 0), nk_occ_spec)
+    oirf = occbin_irf(nk_occ_spec, nk_occ_constraint, 1, 80; magnitude=8.0)
     save("occbin_irf.html", plot_result(oirf))
 
     # -------------------------------------------------------------------
     # 33. OccBin solution path
     # -------------------------------------------------------------------
-    occ_shocks = zeros(40, 1)
-    occ_shocks[1, 1] = -3.0
-    occ_sol = occbin_solve(nk_spec, nk_constraint; shock_path=occ_shocks)
+    occ_shocks = zeros(80, 1)
+    occ_shocks[1, 1] = -8.0
+    occ_sol = occbin_solve(nk_occ_spec, nk_occ_constraint; shock_path=occ_shocks)
     save("occbin_solution.html", plot_result(occ_sol))
 
     println("\nDone! Generated $(length(readdir(PLOT_DIR))) HTML files in $PLOT_DIR")

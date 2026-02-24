@@ -469,7 +469,7 @@ p = plot_result(nr)
 <iframe src="../assets/plots/nowcast_result.html" width="100%" height="400" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-Displays smoothed target variable with nowcast and forecast values annotated in the title.
+The target panel shows the Kalman-smoothed series (blue) with the nowcast and next-quarter forecast (orange) extending beyond the observed sample. Additional panels show other smoothed variables in the model.
 
 ### Nowcast News
 
@@ -485,35 +485,46 @@ p = plot_result(nn)
 <iframe src="../assets/plots/nowcast_news.html" width="100%" height="400" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-Bar chart showing per-release impact on the nowcast revision.
+Each bar shows how much a single data release shifted the nowcast. Positive bars mean the release pushed the nowcast up; negative bars mean it pushed it down. The title shows the old → new nowcast with the total revision (Δ). Bar labels come from variable names in the model.
 
 ### DSGE Models
 
-DSGE impulse responses and FEVD use the same `plot_result()` methods as VAR models:
+DSGE impulse responses and FEVD use the same `plot_result()` methods as VAR models, producing identical multi-panel grid layouts:
 
 ```julia
 sol = solve(spec)
 result = irf(sol, 40)
 p = plot_result(result)
+
+# Select specific variables or shocks
+p = plot_result(result; var=1, shock=1)
+p = plot_result(result; var="y", shock="ε_d")  # by name if varnames set
 ```
 
 ```@raw html
 <iframe src="../assets/plots/dsge_irf.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-Standard multi-panel IRF and FEVD plots are generated automatically. FEVD uses `fevd(sol, H)` → `plot_result()`:
+**FEVD** shows variance shares per shock. With multiple shocks, the stacked areas reveal which shock dominates each variable at different horizons:
+
+```julia
+result = fevd(sol, 40)
+p = plot_result(result)
+```
 
 ```@raw html
 <iframe src="../assets/plots/dsge_fevd.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
+For a model with only one shock, FEVD is trivially 100% --- use a multi-shock model for informative FEVD plots.
+
 ### OccBin IRF Comparison
 
-`plot_result(::OccBinIRF)` shows side-by-side linear (unconstrained) vs piecewise-linear (constrained) impulse responses, with shaded regions indicating periods when the constraint binds:
+`plot_result(::OccBinIRF)` shows side-by-side linear (unconstrained) vs piecewise-linear (constrained) impulse responses. Shaded red regions mark periods when the constraint binds:
 
 ```julia
 constraint = parse_constraint(:(R[t] >= 0), spec)
-oirf = occbin_irf(spec, constraint, 1, 40; magnitude=3.0)
+oirf = occbin_irf(spec, constraint, 1, 80; magnitude=8.0)
 p = plot_result(oirf)
 ```
 
@@ -521,15 +532,15 @@ p = plot_result(oirf)
 <iframe src="../assets/plots/occbin_irf.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-Each variable gets a panel with two lines: dashed blue (linear) and solid red (piecewise). Shaded orange regions mark periods when the constraint is binding.
+Each variable gets a panel with two lines: dashed green (linear/unconstrained) and solid blue (piecewise/constrained). The divergence between the two lines shows the amplification effect of the binding constraint --- for example, output falls more under the ZLB because the central bank cannot lower rates further.
 
 ### OccBin Solution Path
 
-`plot_result(::OccBinSolution)` displays the piecewise-linear path for each variable with regime shading:
+`plot_result(::OccBinSolution)` displays the piecewise-linear simulation path with regime shading:
 
 ```julia
-shocks = zeros(40, spec.n_exog)
-shocks[1, 1] = -3.0
+shocks = zeros(60, spec.n_exog)
+shocks[1, 1] = -8.0
 occ_sol = occbin_solve(spec, constraint; shock_path=shocks)
 p = plot_result(occ_sol)
 ```

@@ -221,6 +221,19 @@ sol = solve(spec; method=:gensys)
 
 `solve` automatically calls `compute_steady_state` and `linearize` if they have not been called already.
 
+### Choosing a Solver
+
+| | Gensys (QZ) | Blanchard-Kahn |
+|---|---|---|
+| **Algorithm** | QZ (generalized Schur) decomposition | Eigenvalue decomposition of ``\Gamma_0^{-1}\Gamma_1`` |
+| **Determinacy** | Reports `eu = [existence, uniqueness]` | Requires ``n_{unstable} = n_{forward}`` exactly |
+| **Sunspot solutions** | Can construct sunspot representations (`eu[2] = 0`) | Fails if condition violated |
+| **Singularity** | Handles singular ``\Gamma_0`` via QZ | Requires ``\Gamma_0`` invertible |
+| **Speed** | Slightly slower (QZ is O(n³) with larger constant) | Faster for small models |
+| **Recommended** | General-purpose default | Simple models with invertible ``\Gamma_0`` |
+
+Use `:gensys` (the default) unless you have a specific reason to prefer Blanchard-Kahn. The Gensys solver is more robust and provides richer diagnostic output.
+
 ### Gensys
 
 The Gensys algorithm (Sims 2002) solves the linearized system via QZ (generalized Schur) decomposition. It separates stable and unstable eigenvalues to construct the state-space solution:
@@ -250,6 +263,35 @@ sol = solve(spec; method=:blanchard_kahn)
 
 !!! warning
     The Blanchard-Kahn method requires exactly `n_unstable == n_forward_looking`. If this condition fails, the model is either indeterminate (too few unstable roots) or has no stable solution (too many).
+
+### Diagnosing Indeterminacy
+
+When a model fails the Blanchard-Kahn condition or Gensys reports `eu[2] = 0`, inspect the eigenvalues:
+
+```julia
+sol = solve(spec; method=:gensys)
+println("Eigenvalues: ", abs.(sol.eigenvalues))
+println("EU: ", sol.eu)
+
+# Count stable vs unstable roots
+n_stable = count(abs.(sol.eigenvalues) .< 1.0)
+n_unstable = count(abs.(sol.eigenvalues) .>= 1.0)
+n_forward = spec.n_expect
+
+println("Stable: $n_stable, Unstable: $n_unstable, Forward-looking: $n_forward")
+
+# Determinacy requires n_unstable == n_forward
+if n_unstable < n_forward
+    println("INDETERMINATE: too few unstable roots — sunspot equilibria exist")
+elseif n_unstable > n_forward
+    println("NO STABLE SOLUTION: too many unstable roots")
+else
+    println("DETERMINATE: unique stable solution")
+end
+```
+
+!!! warning "Common cause of indeterminacy"
+    The Taylor principle requires ``\phi_\pi > 1`` in the Taylor rule. With ``\phi_\pi < 1``, the NK model is typically indeterminate (too few unstable roots).
 
 ### Determinacy and Stability
 
@@ -380,6 +422,8 @@ Estimates parameters by minimizing the distance between model-implied and data-i
 
 where ``\Phi^{data}`` is estimated from a VAR on the data and ``W`` is the GMM weighting matrix.
 
+**When to use:** When you have a VAR-identified structural shock and want to match the DSGE model's propagation mechanism to the data. This is the most common method for medium-scale DSGE models.
+
 ```julia
 est = estimate_dsge(spec, Y_data, [:β, :α, :ρ];
                     method=:irf_matching,
@@ -388,9 +432,37 @@ est = estimate_dsge(spec, Y_data, [:β, :α, :ρ];
                     weighting=:two_step)
 ```
 
+```julia
+# Worked example: estimate NK parameters from simulated data
+using MacroEconometricModels, Random
+Random.seed!(42)
+
+spec = @dsge begin
+    parameters: β = 0.99, σ_c = 1.0, κ = 0.3, φ_π = 1.5, φ_y = 0.5,
+                ρ_d = 0.8, σ_d = 0.01
+    endogenous: y, π, R, d
+    exogenous: ε_d
+
+    y[t] = y[t+1] - (1 / σ_c) * (R[t] - π[t+1]) + d[t]
+    π[t] = β * π[t+1] + κ * y[t]
+    R[t] = φ_π * π[t] + φ_y * y[t]
+    d[t] = ρ_d * d[t-1] + σ_d * ε_d[t]
+end
+
+sol = solve(spec)
+Y_sim = simulate(sol, 500; rng=Random.MersenneTwister(42))
+
+est = estimate_dsge(spec, Y_sim, [:κ, :ρ_d];
+                    method=:irf_matching, var_lags=4, irf_horizon=20,
+                    weighting=:two_step)
+report(est)
+```
+
 ### Euler Equation GMM
 
 Uses Euler equation residuals as moment conditions with lagged variables as instruments:
+
+**When to use:** When the model has a well-defined Euler equation and you want to avoid the computational cost of repeatedly solving the model during optimization. Works directly with first-order conditions.
 
 ```julia
 est = estimate_dsge(spec, Y_data, [:β, :ρ];
@@ -409,9 +481,14 @@ est = estimate_dsge(spec, Y_data, [:β, :ρ, :σ];
                     burn=100)
 ```
 
+!!! note "Simulation noise"
+    SMM estimates are noisier than analytical GMM due to simulation error. Increase `sim_ratio` to reduce this noise. The asymptotic variance correction factor is ``(1 + 1/\text{sim\_ratio})``.
+
 ### Analytical GMM
 
 Uses Lyapunov-equation-based moments (no simulation noise):
+
+**When to use:** This is the most efficient method when the model is linear and you want to match second-moment properties. No simulation noise.
 
 ```julia
 est = estimate_dsge(spec, Y_data, [:β, :ρ];
@@ -544,6 +621,47 @@ plot_result(occ_sol)
     5. Check whether the constraint is satisfied --- update the regime guess
     6. Repeat until the regime sequence converges
 
+### Step-by-Step Walkthrough
+
+To understand the guess-and-verify algorithm, trace through a ZLB example:
+
+```julia
+using MacroEconometricModels
+
+spec = @dsge begin
+    parameters: β = 0.99, σ_c = 1.0, κ = 0.3, φ_π = 1.5, φ_y = 0.5,
+                ρ_d = 0.8, σ_d = 0.01
+    endogenous: y, π, R, d
+    exogenous: ε_d
+
+    y[t] = y[t+1] - (1 / σ_c) * (R[t] - π[t+1]) + d[t]
+    π[t] = β * π[t+1] + κ * y[t]
+    R[t] = φ_π * π[t] + φ_y * y[t]
+    d[t] = ρ_d * d[t-1] + σ_d * ε_d[t]
+end
+
+constraint = parse_constraint(:(R[t] >= 0), spec)
+
+# Large negative demand shock pushes economy to ZLB
+shocks = zeros(60, 1)
+shocks[1, 1] = -8.0
+
+occ_sol = occbin_solve(spec, constraint; shock_path=shocks)
+
+# Inspect convergence
+println("Converged: ", occ_sol.converged)
+println("Iterations: ", occ_sol.iterations)
+
+# Regime history: 0 = slack, 1 = binding
+println("Binding periods: ", findall(vec(occ_sol.regime_history[:, 1]) .== 1))
+
+# Compare linear vs piecewise paths for the interest rate (variable 3)
+println("Linear R (first 10):     ", round.(occ_sol.linear_path[1:10, 3], digits=4))
+println("Piecewise R (first 10):  ", round.(occ_sol.piecewise_path[1:10, 3], digits=4))
+```
+
+The piecewise path clamps `R` at zero during binding periods, while the linear path allows it to go negative. The output amplification in `y` and `π` during binding periods reflects the inability of monetary policy to respond.
+
 ### Two Constraints
 
 For models with two occasionally binding constraints (4 possible regime combinations):
@@ -670,6 +788,37 @@ plot_result(occ_irf)
 ```
 
 The OccBin IRF plot shows how the ZLB amplifies the output decline: the constrained path (red) drops further than the linear path (blue) because the interest rate cannot go below zero to stimulate the economy.
+
+---
+
+## Common Pitfalls
+
+### Wrong Steady State
+
+If the numerical solver converges to the wrong steady state, the linearization will be incorrect. Prefer analytical steady states via the `steady_state = begin ... end` block when possible.
+
+```julia
+# Check that residuals are near zero
+spec = compute_steady_state(spec)
+println("Steady state: ", spec.steady_state)
+```
+
+### Indeterminate Model
+
+If `is_determined(sol)` returns `false`, the model has sunspot equilibria. Common fix: ensure the Taylor principle holds (``\phi_\pi > 1``).
+
+### Non-Convergence in Estimation
+
+If `estimate_dsge` doesn't converge:
+
+- **Narrow the parameter space** with `bounds` via `ParameterTransform`
+- **Try different starting values** --- the optimizer may be stuck in a local minimum
+- **Check identification** --- some parameters may not be identified from your chosen moments
+- **Increase horizon** --- for IRF matching, a longer `irf_horizon` may help
+
+### Equation Count Mismatch
+
+The `@dsge` macro requires exactly one equation per endogenous variable. If you need an interest rate smoothing rule, combine the Taylor rule and smoothing into one equation rather than writing two equations for `R`.
 
 ---
 

@@ -37,7 +37,7 @@ function plot_result(nr::NowcastResult{T};
 
     panels = _PanelSpec[]
 
-    # Target variable panel (with nowcast annotation in title)
+    # Target variable panel with nowcast/forecast extension
     ti = nr.target_index
     id = _next_plot_id("nc_target")
     ptitle = "Target (col $ti) — Nowcast: $(round(nr.nowcast, digits=3)), Forecast: $(round(nr.forecast, digits=3))"
@@ -46,11 +46,24 @@ function plot_result(nr::NowcastResult{T};
     for t in 1:T_obs
         push!(rows, [
             "x" => _json(t),
-            "v1" => _json(nr.X_sm[t, ti])
+            "v1" => _json(nr.X_sm[t, ti]),
+            "v2" => _json(t == T_obs ? nr.X_sm[t, ti] : NaN)
         ])
     end
+    # Extend with nowcast (T+1) and forecast (T+2) as separate series
+    push!(rows, [
+        "x" => _json(T_obs + 1),
+        "v1" => "null",
+        "v2" => _json(nr.nowcast)
+    ])
+    push!(rows, [
+        "x" => _json(T_obs + 2),
+        "v1" => "null",
+        "v2" => _json(nr.forecast)
+    ])
     data_json = _json_array_of_objects(rows)
-    s_json = _series_json(["Smoothed"], [_PLOT_COLORS[1]]; keys=["v1"])
+    s_json = _series_json(["Smoothed", "Nowcast/Forecast"],
+                          [_PLOT_COLORS[1], _PLOT_COLORS[2]]; keys=["v1", "v2"])
     js = _render_line_js(id, data_json, s_json; xlabel="Period", ylabel="Value")
     push!(panels, _PanelSpec(id, ptitle, js))
 
