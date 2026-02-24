@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OccBin Piecewise-Linear Solution</title>
+<style>* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+    background: #fff;
+    color: #333;
+    padding: 20px;
+}
+.figure-title {
+    font-size: 18px;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 16px;
+    color: #222;
+}
+.figure-source {
+    font-size: 11px;
+    color: #888;
+    text-align: center;
+    margin-top: 8px;
+}
+.panel-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    justify-content: center;
+}
+.panel {
+    width: calc(33% - 16px);
+    min-width: 300px;
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 12px;
+}
+.panel-title {
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 8px;
+    color: #444;
+}
+.axis text { font-size: 11px; fill: #666; }
+.axis line, .axis path { stroke: #ccc; }
+.grid line { stroke: #f0f0f0; stroke-dasharray: 2,2; }
+.grid .domain { stroke: none; }
+.tooltip {
+    position: absolute;
+    background: rgba(0,0,0,0.8);
+    color: #fff;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 1000;
+}
+.legend { font-size: 11px; }
+.legend rect { rx: 2; }
+svg { overflow: visible; }
+</style>
+</head>
+<body>
+<div class="figure-title">OccBin Piecewise-Linear Solution</div>
+<div class="panel-grid">
+<div class="panel">
+<div class="panel-title">y</div>
+<div id="osol_125"></div>
+</div>
+<div class="panel">
+<div class="panel-title">π</div>
+<div id="osol_126"></div>
+</div>
+<div class="panel">
+<div class="panel-title">R</div>
+<div id="osol_127"></div>
+</div>
+<div class="panel">
+<div class="panel-title">d</div>
+<div id="osol_128"></div>
+</div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script>
+// Shared utilities
+const tooltip = d3.select('#tooltip');
+function fmt(v) {
+    if (v === null || v === undefined) return '';
+    return Math.abs(v) >= 1000 ? v.toFixed(1) : (Math.abs(v) >= 1 ? v.toFixed(3) : v.toFixed(4));
+}
+function showTip(evt, html) {
+    tooltip.html(html).style('opacity',1)
+        .style('left',(evt.pageX+12)+'px').style('top',(evt.pageY-28)+'px');
+}
+function hideTip() { tooltip.style('opacity',0); }
+
+(function() {
+    const data_osol_125 = [{"h":1,"lin":-0.015384615384615387,"pw":-17728.751165216116,"bind":1},
+{"h":2,"lin":-0.01230769230769231,"pw":-10358.048653768454,"bind":1},
+{"h":3,"lin":-0.009846153846153848,"pw":-6051.703527185495,"bind":1},
+{"h":4,"lin":-0.00787692307692308,"pw":-3535.7145610973034,"bind":1},
+{"h":5,"lin":-0.006301538461538464,"pw":-2065.7442538659884,"bind":1},
+{"h":6,"lin":-0.005041230769230771,"pw":-1206.9120960967778,"bind":1},
+{"h":7,"lin":-0.004032984615384617,"pw":-705.1383859592252,"bind":1},
+{"h":8,"lin":-0.003226387692307694,"pw":-411.9766186596441,"bind":1},
+{"h":9,"lin":-0.0025811101538461556,"pw":-240.6966732827472,"bind":1},
+{"h":10,"lin":-0.0020648881230769245,"pw":-140.62633513201527,"bind":1},
+{"h":11,"lin":-0.00165191049846154,"pw":-82.16028390691531,"bind":1},
+{"h":12,"lin":-0.001321528398769232,"pw":-48.00156821559949,"bind":1},
+{"h":13,"lin":-0.0010572227190153857,"pw":-28.044421537076463,"bind":1},
+{"h":14,"lin":-0.0008457781752123086,"pw":-16.384538501236513,"bind":1},
+{"h":15,"lin":-0.0006766225401698469,"pw":-9.572323677060593,"bind":1},
+{"h":16,"lin":-0.0005412980321358776,"pw":-5.592349259454657,"bind":1},
+{"h":17,"lin":-0.0004330384257087021,"pw":-3.267101581002896,"bind":1},
+{"h":18,"lin":-0.0003464307405669617,"pw":-1.908619102549301,"bind":1},
+{"h":19,"lin":-0.00027714459245356933,"pw":-1.114961418404516,"bind":1},
+{"h":20,"lin":-0.00022171567396285548,"pw":-0.6512960180862771,"bind":1},
+{"h":21,"lin":-0.0001773725391702844,"pw":-0.3804231038987455,"bind":1},
+{"h":22,"lin":-0.00014189803133622753,"pw":-0.2221846643628378,"bind":1},
+{"h":23,"lin":-0.00011351842506898201,"pw":-0.1297492119131722,"bind":1},
+{"h":24,"lin":-9.081474005518562e-5,"pw":-0.07575614622205712,"bind":1},
+{"h":25,"lin":-7.26517920441485e-5,"pw":-0.044220612129845044,"bind":1},
+{"h":26,"lin":-5.81214336353188e-5,"pw":-0.02580392930692364,"bind":1},
+{"h":27,"lin":-4.649714690825505e-5,"pw":-0.015050357121073938,"bind":1},
+{"h":28,"lin":-3.719771752660404e-5,"pw":-0.008772689448301178,"bind":1},
+{"h":29,"lin":-2.9758174021283232e-5,"pw":-0.005109051473052271,"bind":1},
+{"h":30,"lin":-2.380653921702659e-5,"pw":-0.0029718442618356733,"bind":1},
+{"h":31,"lin":-1.9045231373621273e-5,"pw":-0.0017257997999337938,"bind":1},
+{"h":32,"lin":-1.523618509889702e-5,"pw":-0.0009998921336557011,"bind":1},
+{"h":33,"lin":-1.2188948079117616e-5,"pw":-0.0005774524565483907,"bind":1},
+{"h":34,"lin":-9.751158463294094e-6,"pw":-0.0003319735237537672,"bind":1},
+{"h":35,"lin":-7.800926770635276e-6,"pw":-0.00018960681837235349,"bind":1},
+{"h":36,"lin":-6.240741416508221e-6,"pw":-0.00010725369716327076,"bind":1},
+{"h":37,"lin":-4.992593133206578e-6,"pw":-5.976586265627258e-5,"bind":1},
+{"h":38,"lin":-3.994074506565262e-6,"pw":-3.2466033371851354e-5,"bind":1},
+{"h":39,"lin":-3.1952596052522096e-6,"pw":-1.6774090444544685e-5,"bind":1},
+{"h":40,"lin":-2.556207684201768e-6,"pw":-7.643060975780282e-6,"bind":1}];
+    const container_osol_125 = d3.select('#osol_125');
+    const W_osol_125 = Math.max(container_osol_125.node().clientWidth - 24, 280);
+    const margin_osol_125 = {top:10, right:15, bottom:35, left:55};
+    const w_osol_125 = W_osol_125 - margin_osol_125.left - margin_osol_125.right;
+    const h_osol_125 = Math.min(w_osol_125 * 0.6, 250);
+
+    const svg_osol_125 = container_osol_125.append('svg')
+        .attr('width', W_osol_125)
+        .attr('height', h_osol_125 + margin_osol_125.top + margin_osol_125.bottom);
+    const g_osol_125 = svg_osol_125.append('g')
+        .attr('transform', 'translate('+margin_osol_125.left+','+margin_osol_125.top+')');
+
+    // Compute domains
+    const xVals_osol_125 = data_osol_125.map(d => d.h);
+    const allY_osol_125 = [];
+    data_osol_125.forEach(d => {
+        if(d.lin!==null) allY_osol_125.push(d.lin);
+        if(d.pw!==null) allY_osol_125.push(d.pw);
+    });
+    allY_osol_125.push(0);
+
+    const x_osol_125 = d3.scaleLinear().domain(d3.extent(xVals_osol_125)).range([0, w_osol_125]);
+    const yExt_osol_125 = d3.extent(allY_osol_125);
+    const yPad_osol_125 = (yExt_osol_125[1] - yExt_osol_125[0]) * 0.08 || 0.1;
+    const y_osol_125 = d3.scaleLinear()
+        .domain([yExt_osol_125[0] - yPad_osol_125, yExt_osol_125[1] + yPad_osol_125])
+        .range([h_osol_125, 0]);
+
+    // Grid
+    g_osol_125.append('g').attr('class','grid')
+        .call(d3.axisLeft(y_osol_125).tickSize(-w_osol_125).tickFormat(''));
+
+    // Binding-period shaded rectangles
+    const xStep_osol_125 = w_osol_125 / Math.max(xVals_osol_125.length - 1, 1);
+    data_osol_125.forEach((d, i) => {
+        if(d.bind === 1) {
+            const x0_osol_125 = x_osol_125(d.h) - xStep_osol_125 * 0.5;
+            const x1_osol_125 = x_osol_125(d.h) + xStep_osol_125 * 0.5;
+            g_osol_125.append('rect')
+                .attr('x', Math.max(0, x0_osol_125))
+                .attr('y', 0)
+                .attr('width', Math.min(x1_osol_125, w_osol_125) - Math.max(0, x0_osol_125))
+                .attr('height', h_osol_125)
+                .attr('fill', '#d62728')
+                .attr('opacity', 0.08);
+        }
+    });
+
+    // Zero reference line
+    g_osol_125.append('line')
+        .attr('x1', 0).attr('x2', w_osol_125)
+        .attr('y1', y_osol_125(0)).attr('y2', y_osol_125(0))
+        .attr('stroke', '#999').attr('stroke-width', 1)
+        .attr('stroke-dasharray', '4,3');
+
+    // Linear line (dashed)
+    const linLine_osol_125 = d3.line().x(d => x_osol_125(d.h)).y(d => y_osol_125(d.lin))
+        .defined(d => d.lin !== null);
+    g_osol_125.append('path').datum(data_osol_125).attr('d', linLine_osol_125)
+        .attr('fill', 'none').attr('stroke', '#2ca02c')
+        .attr('stroke-width', 1.8).attr('stroke-dasharray', '6,3');
+
+    // Piecewise line (solid)
+    const pwLine_osol_125 = d3.line().x(d => x_osol_125(d.h)).y(d => y_osol_125(d.pw))
+        .defined(d => d.pw !== null);
+    g_osol_125.append('path').datum(data_osol_125).attr('d', pwLine_osol_125)
+        .attr('fill', 'none').attr('stroke', '#1f77b4')
+        .attr('stroke-width', 1.8);
+
+    // Axes
+    g_osol_125.append('g').attr('class','axis')
+        .attr('transform', 'translate(0,'+h_osol_125+')')
+        .call(d3.axisBottom(x_osol_125).ticks(Math.min(xVals_osol_125.length, 8)));
+    g_osol_125.append('g').attr('class','axis')
+        .call(d3.axisLeft(y_osol_125).ticks(6));
+
+    if('Period') g_osol_125.append('text')
+        .attr('x', w_osol_125/2).attr('y', h_osol_125+30)
+        .attr('text-anchor','middle').attr('font-size','11px')
+        .attr('fill','#666').text('Period');
+    if('y') g_osol_125.append('text')
+        .attr('transform','rotate(-90)')
+        .attr('x', -h_osol_125/2).attr('y', -42)
+        .attr('text-anchor','middle').attr('font-size','11px')
+        .attr('fill','#666').text('y');
+
+    // Legend
+    const leg_osol_125 = g_osol_125.append('g').attr('class','legend')
+        .attr('transform','translate(5,-5)');
+    // Linear (dashed)
+    const g1_osol_125 = leg_osol_125.append('g').attr('transform','translate(0,0)');
+    g1_osol_125.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+        .attr('stroke','#2ca02c').attr('stroke-width',2)
+        .attr('stroke-dasharray','6,3');
+    g1_osol_125.append('text').attr('x',20).attr('y',4)
+        .attr('font-size','10px').attr('fill','#555').text('Linear');
+    // Piecewise (solid)
+    const g2_osol_125 = leg_osol_125.append('g').attr('transform','translate(80,0)');
+    g2_osol_125.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+        .attr('stroke','#1f77b4').attr('stroke-width',2);
+    g2_osol_125.append('text').attr('x',20).attr('y',4)
+        .attr('font-size','10px').attr('fill','#555').text('Piecewise');
+    // Binding
+    const g3_osol_125 = leg_osol_125.append('g').attr('transform','translate(175,0)');
+    g3_osol_125.append('rect').attr('width',12).attr('height',10).attr('y',-5)
+        .attr('fill','#d62728').attr('opacity',0.15);
+    g3_osol_125.append('text').attr('x',16).attr('y',4)
+        .attr('font-size','10px').attr('fill','#555').text('Binding');
+
+    // Tooltip
+    svg_osol_125.append('rect')
+        .attr('width', W_osol_125)
+        .attr('height', h_osol_125 + margin_osol_125.top + margin_osol_125.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g_osol_125.node());
+            const x0 = x_osol_125.invert(mx);
+            const idx = d3.minIndex(data_osol_125, d => Math.abs(d.h - x0));
+            const d = data_osol_125[idx];
+            let html = '<b>h='+d.h+'</b>';
+            if(d.lin!==null) html += '<br>Linear: '+fmt(d.lin);
+            if(d.pw!==null) html += '<br>Piecewise: '+fmt(d.pw);
+            if(d.bind===1) html += '<br><span style="color:#d62728">Binding</span>';
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+
+(function() {
+    const data_osol_126 = [{"h":1,"lin":-0.004615384615384615,"pw":-12615.591135898021,"bind":1},
+{"h":2,"lin":-0.003692307692307692,"pw":-7370.672511447663,"bind":1},
+{"h":3,"lin":-0.0029538461538461537,"pw":-4306.321126582959,"bind":1},
+{"h":4,"lin":-0.002363076923076923,"pw":-2515.969766088192,"bind":1},
+{"h":5,"lin":-0.0018904615384615386,"pw":-1469.9549472313147,"bind":1},
+{"h":6,"lin":-0.001512369230769231,"pw":-858.8198697692104,"bind":1},
+{"h":7,"lin":-0.001209895384615385,"pw":-501.7638797375528,"bind":1},
+{"h":8,"lin":-0.000967916307692308,"pw":-293.1539029795811,"bind":1},
+{"h":9,"lin":-0.0007743330461538465,"pw":-171.27365392089683,"bind":1},
+{"h":10,"lin":-0.0006194664369230772,"pw":-100.06530498593196,"bind":1},
+{"h":11,"lin":-0.0004955731495384618,"pw":-58.46202469325997,"bind":1},
+{"h":12,"lin":-0.0003964585196307695,"pw":-34.155494465843816,"bind":1},
+{"h":13,"lin":-0.00031716681570461563,"pw":-19.954569698145427,"bind":1},
+{"h":14,"lin":-0.0002537334525636925,"pw":-11.657821451537869,"bind":1},
+{"h":15,"lin":-0.00020298676205095402,"pw":-6.810565556734257,"bind":1},
+{"h":16,"lin":-0.0001623894096407632,"pw":-3.9786550036526043,"bind":1},
+{"h":17,"lin":-0.00012991152771261059,"pw":-2.324192147289097,"bind":1},
+{"h":18,"lin":-0.00010392922217008848,"pw":-1.3576380535234631,"bind":1},
+{"h":19,"lin":-8.314337773607078e-5,"pw":-0.7929821442006794,"bind":1},
+{"h":20,"lin":-6.651470218885663e-5,"pw":-0.4631249683629542,"bind":1},
+{"h":21,"lin":-5.32117617510853e-5,"pw":-0.27044056862330407,"bind":1},
+{"h":22,"lin":-4.2569409400868246e-5,"pw":-0.15789256308452565,"bind":1},
+{"h":23,"lin":-3.40555275206946e-5,"pw":-0.09215875128855991,"bind":1},
+{"h":24,"lin":-2.7244422016555675e-5,"pw":-0.053771704762230546,"bind":1},
+{"h":25,"lin":-2.1795537613244545e-5,"pw":-0.03135844534910445,"bind":1},
+{"h":26,"lin":-1.7436430090595635e-5,"pw":-0.018275011828435297,"bind":1},
+{"h":27,"lin":-1.394914407247651e-5,"pw":-0.010640235390260813,"bind":1},
+{"h":28,"lin":-1.1159315257981209e-5,"pw":-0.006186998236301646,"bind":1},
+{"h":29,"lin":-8.927452206384967e-6,"pw":-0.0035911024260720102,"bind":1},
+{"h":30,"lin":-7.141961765107974e-6,"pw":-0.0020791787718750765,"bind":1},
+{"h":31,"lin":-5.71356941208638e-6,"pw":-0.0011996217104286578,"bind":1},
+{"h":32,"lin":-4.570855529669105e-6,"pw":-0.0006887694650995117,"bind":1},
+{"h":33,"lin":-3.656684423735284e-6,"pw":-0.00039272911616444213,"bind":1},
+{"h":34,"lin":-2.9253475389882275e-6,"pw":-0.00022171048404032482,"bind":1},
+{"h":35,"lin":-2.3402780311905823e-6,"pw":-0.00012335194637797095,"bind":1},
+{"h":36,"lin":-1.8722224249524658e-6,"pw":-6.714131400632467e-5,"bind":1},
+{"h":37,"lin":-1.4977779399619728e-6,"pw":-3.531838874478789e-5,"bind":1},
+{"h":38,"lin":-1.1982223519695782e-6,"pw":-1.7564272674649163e-5,"bind":1},
+{"h":39,"lin":-9.585778815756626e-7,"pw":-7.903497639485165e-6,"bind":1},
+{"h":40,"lin":-7.668623052605302e-7,"pw":-2.900273238503352e-6,"bind":1}];
+    const container_osol_126 = d3.select('#osol_126');
+    const W_osol_126 = Math.max(container_osol_126.node().clientWidth - 24, 280);
+    const margin_osol_126 = {top:10, right:15, bottom:35, left:55};
+    const w_osol_126 = W_osol_126 - margin_osol_126.left - margin_osol_126.right;
+    const h_osol_126 = Math.min(w_osol_126 * 0.6, 250);
+
+    const svg_osol_126 = container_osol_126.append('svg')
+        .attr('width', W_osol_126)
+        .attr('height', h_osol_126 + margin_osol_126.top + margin_osol_126.bottom);
+    const g_osol_126 = svg_osol_126.append('g')
+        .attr('transform', 'translate('+margin_osol_126.left+','+margin_osol_126.top+')');
+
+    // Compute domains
+    const xVals_osol_126 = data_osol_126.map(d => d.h);
+    const allY_osol_126 = [];
+    data_osol_126.forEach(d => {
+        if(d.lin!==null) allY_osol_126.push(d.lin);
+        if(d.pw!==null) allY_osol_126.push(d.pw);
+    });
+    allY_osol_126.push(0);
+
+    const x_osol_126 = d3.scaleLinear().domain(d3.extent(xVals_osol_126)).range([0, w_osol_126]);
+    const yExt_osol_126 = d3.extent(allY_osol_126);
+    const yPad_osol_126 = (yExt_osol_126[1] - yExt_osol_126[0]) * 0.08 || 0.1;
+    const y_osol_126 = d3.scaleLinear()
+        .domain([yExt_osol_126[0] - yPad_osol_126, yExt_osol_126[1] + yPad_osol_126])
+        .range([h_osol_126, 0]);
+
+    // Grid
+    g_osol_126.append('g').attr('class','grid')
+        .call(d3.axisLeft(y_osol_126).tickSize(-w_osol_126).tickFormat(''));
+
+    // Binding-period shaded rectangles
+    const xStep_osol_126 = w_osol_126 / Math.max(xVals_osol_126.length - 1, 1);
+    data_osol_126.forEach((d, i) => {
+        if(d.bind === 1) {
+            const x0_osol_126 = x_osol_126(d.h) - xStep_osol_126 * 0.5;
+            const x1_osol_126 = x_osol_126(d.h) + xStep_osol_126 * 0.5;
+            g_osol_126.append('rect')
+                .attr('x', Math.max(0, x0_osol_126))
+                .attr('y', 0)
+                .attr('width', Math.min(x1_osol_126, w_osol_126) - Math.max(0, x0_osol_126))
+                .attr('height', h_osol_126)
+                .attr('fill', '#d62728')
+                .attr('opacity', 0.08);
+        }
+    });
+
+    // Zero reference line
+    g_osol_126.append('line')
+        .attr('x1', 0).attr('x2', w_osol_126)
+        .attr('y1', y_osol_126(0)).attr('y2', y_osol_126(0))
+        .attr('stroke', '#999').attr('stroke-width', 1)
+        .attr('stroke-dasharray', '4,3');
+
+    // Linear line (dashed)
+    const linLine_osol_126 = d3.line().x(d => x_osol_126(d.h)).y(d => y_osol_126(d.lin))
+        .defined(d => d.lin !== null);
+    g_osol_126.append('path').datum(data_osol_126).attr('d', linLine_osol_126)
+        .attr('fill', 'none').attr('stroke', '#2ca02c')
+        .attr('stroke-width', 1.8).attr('stroke-dasharray', '6,3');
+
+    // Piecewise line (solid)
+    const pwLine_osol_126 = d3.line().x(d => x_osol_126(d.h)).y(d => y_osol_126(d.pw))
+        .defined(d => d.pw !== null);
+    g_osol_126.append('path').datum(data_osol_126).attr('d', pwLine_osol_126)
+        .attr('fill', 'none').attr('stroke', '#1f77b4')
+        .attr('stroke-width', 1.8);
+
+    // Axes
+    g_osol_126.append('g').attr('class','axis')
+        .attr('transform', 'translate(0,'+h_osol_126+')')
+        .call(d3.axisBottom(x_osol_126).ticks(Math.min(xVals_osol_126.length, 8)));
+    g_osol_126.append('g').attr('class','axis')
+        .call(d3.axisLeft(y_osol_126).ticks(6));
+
+    if('Period') g_osol_126.append('text')
+        .attr('x', w_osol_126/2).attr('y', h_osol_126+30)
+        .attr('text-anchor','middle').attr('font-size','11px')
+        .attr('fill','#666').text('Period');
+    if('π') g_osol_126.append('text')
+        .attr('transform','rotate(-90)')
+        .attr('x', -h_osol_126/2).attr('y', -42)
+        .attr('text-anchor','middle').attr('font-size','11px')
+        .attr('fill','#666').text('π');
+
+    // Legend
+    const leg_osol_126 = g_osol_126.append('g').attr('class','legend')
+        .attr('transform','translate(5,-5)');
+    // Linear (dashed)
+    const g1_osol_126 = leg_osol_126.append('g').attr('transform','translate(0,0)');
+    g1_osol_126.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+        .attr('stroke','#2ca02c').attr('stroke-width',2)
+        .attr('stroke-dasharray','6,3');
+    g1_osol_126.append('text').attr('x',20).attr('y',4)
+        .attr('font-size','10px').attr('fill','#555').text('Linear');
+    // Piecewise (solid)
+    const g2_osol_126 = leg_osol_126.append('g').attr('transform','translate(80,0)');
+    g2_osol_126.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+        .attr('stroke','#1f77b4').attr('stroke-width',2);
+    g2_osol_126.append('text').attr('x',20).attr('y',4)
+        .attr('font-size','10px').attr('fill','#555').text('Piecewise');
+    // Binding
+    const g3_osol_126 = leg_osol_126.append('g').attr('transform','translate(175,0)');
+    g3_osol_126.append('rect').attr('width',12).attr('height',10).attr('y',-5)
+        .attr('fill','#d62728').attr('opacity',0.15);
+    g3_osol_126.append('text').attr('x',16).attr('y',4)
+        .attr('font-size','10px').attr('fill','#555').text('Binding');
+
+    // Tooltip
+    svg_osol_126.append('rect')
+        .attr('width', W_osol_126)
+        .attr('height', h_osol_126 + margin_osol_126.top + margin_osol_126.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g_osol_126.node());
+            const x0 = x_osol_126.invert(mx);
+            const idx = d3.minIndex(data_osol_126, d => Math.abs(d.h - x0));
+            const d = data_osol_126[idx];
+            let html = '<b>h='+d.h+'</b>';
+            if(d.lin!==null) html += '<br>Linear: '+fmt(d.lin);
+            if(d.pw!==null) html += '<br>Piecewise: '+fmt(d.pw);
+            if(d.bind===1) html += '<br><span style="color:#d62728">Binding</span>';
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+
+(function() {
+    const data_osol_127 = [{"h":1,"lin":-0.014615384615384617,"pw":-1.566672139241554e-17,"bind":1},
+{"h":2,"lin":-0.011692307692307693,"pw":-1.566672139241554e-17,"bind":1},
+{"h":3,"lin":-0.009353846153846155,"pw":-1.566672139241554e-17,"bind":1},
+{"h":4,"lin":-0.007483076923076925,"pw":-1.566672139241554e-17,"bind":1},
+{"h":5,"lin":-0.00598646153846154,"pw":-1.566672139241554e-17,"bind":1},
+{"h":6,"lin":-0.004789169230769232,"pw":-1.566672139241554e-17,"bind":1},
+{"h":7,"lin":-0.0038313353846153864,"pw":-1.566672139241554e-17,"bind":1},
+{"h":8,"lin":-0.0030650683076923094,"pw":-1.566672139241554e-17,"bind":1},
+{"h":9,"lin":-0.0024520546461538474,"pw":-1.566672139241554e-17,"bind":1},
+{"h":10,"lin":-0.001961643716923078,"pw":-1.566672139241554e-17,"bind":1},
+{"h":11,"lin":-0.0015693149735384628,"pw":-1.566672139241554e-17,"bind":1},
+{"h":12,"lin":-0.0012554519788307702,"pw":-1.566672139241554e-17,"bind":1},
+{"h":13,"lin":-0.0010043615830646164,"pw":-1.566672139241554e-17,"bind":1},
+{"h":14,"lin":-0.0008034892664516931,"pw":-1.566672139241554e-17,"bind":1},
+{"h":15,"lin":-0.0006427914131613545,"pw":-1.566672139241554e-17,"bind":1},
+{"h":16,"lin":-0.0005142331305290836,"pw":-1.566672139241554e-17,"bind":1},
+{"h":17,"lin":-0.00041138650442326696,"pw":-1.566672139241554e-17,"bind":1},
+{"h":18,"lin":-0.0003291092035386136,"pw":-1.566672139241554e-17,"bind":1},
+{"h":19,"lin":-0.0002632873628308909,"pw":-1.566672139241554e-17,"bind":1},
+{"h":20,"lin":-0.0002106298902647127,"pw":-1.566672139241554e-17,"bind":1},
+{"h":21,"lin":-0.00016850391221177015,"pw":-1.566672139241554e-17,"bind":1},
+{"h":22,"lin":-0.00013480312976941615,"pw":-1.566672139241554e-17,"bind":1},
+{"h":23,"lin":-0.0001078425038155329,"pw":-1.566672139241554e-17,"bind":1},
+{"h":24,"lin":-8.627400305242633e-5,"pw":-1.566672139241554e-17,"bind":1},
+{"h":25,"lin":-6.901920244194107e-5,"pw":-1.566672139241554e-17,"bind":1},
+{"h":26,"lin":-5.5215361953552856e-5,"pw":-1.566672139241554e-17,"bind":1},
+{"h":27,"lin":-4.4172289562842294e-5,"pw":-1.566672139241554e-17,"bind":1},
+{"h":28,"lin":-3.533783165027383e-5,"pw":-1.566672139241554e-17,"bind":1},
+{"h":29,"lin":-2.8270265320219068e-5,"pw":-1.566672139241554e-17,"bind":1},
+{"h":30,"lin":-2.2616212256175257e-5,"pw":-1.566672139241554e-17,"bind":1},
+{"h":31,"lin":-1.8092969804940207e-5,"pw":-1.566672139241554e-17,"bind":1},
+{"h":32,"lin":-1.4474375843952168e-5,"pw":-1.566672139241554e-17,"bind":1},
+{"h":33,"lin":-1.1579500675161734e-5,"pw":-1.566672139241554e-17,"bind":1},
+{"h":34,"lin":-9.263600540129389e-6,"pw":-1.566672139241554e-17,"bind":1},
+{"h":35,"lin":-7.4108804321035115e-6,"pw":-1.566672139241554e-17,"bind":1},
+{"h":36,"lin":-5.92870434568281e-6,"pw":-1.566672139241554e-17,"bind":1},
+{"h":37,"lin":-4.742963476546248e-6,"pw":-1.566672139241554e-17,"bind":1},
+{"h":38,"lin":-3.7943707812369984e-6,"pw":-1.566672139241554e-17,"bind":1},
+{"h":39,"lin":-3.0354966249895988e-6,"pw":-1.566672139241554e-17,"bind":1},
+{"h":40,"lin":-2.4283972999916794e-6,"pw":-1.566672139241554e-17,"bind":1}];
+    const container_osol_127 = d3.select('#osol_127');
+    const W_osol_127 = Math.max(container_osol_127.node().clientWidth - 24, 280);
+    const margin_osol_127 = {top:10, right:15, bottom:35, left:55};
+    const w_osol_127 = W_osol_127 - margin_osol_127.left - margin_osol_127.right;
+    const h_osol_127 = Math.min(w_osol_127 * 0.6, 250);
+
+    const svg_osol_127 = container_osol_127.append('svg')
+        .attr('width', W_osol_127)
+        .attr('height', h_osol_127 + margin_osol_127.top + margin_osol_127.bottom);
+    const g_osol_127 = svg_osol_127.append('g')
+        .attr('transform', 'translate('+margin_osol_127.left+','+margin_osol_127.top+')');
+
+    // Compute domains
+    const xVals_osol_127 = data_osol_127.map(d => d.h);
+    const allY_osol_127 = [];
+    data_osol_127.forEach(d => {
+        if(d.lin!==null) allY_osol_127.push(d.lin);
+        if(d.pw!==null) allY_osol_127.push(d.pw);
+    });
+    allY_osol_127.push(0);
+
+    const x_osol_127 = d3.scaleLinear().domain(d3.extent(xVals_osol_127)).range([0, w_osol_127]);
+    const yExt_osol_127 = d3.extent(allY_osol_127);
+    const yPad_osol_127 = (yExt_osol_127[1] - yExt_osol_127[0]) * 0.08 || 0.1;
+    const y_osol_127 = d3.scaleLinear()
+        .domain([yExt_osol_127[0] - yPad_osol_127, yExt_osol_127[1] + yPad_osol_127])
+        .range([h_osol_127, 0]);
+
+    // Grid
+    g_osol_127.append('g').attr('class','grid')
+        .call(d3.axisLeft(y_osol_127).tickSize(-w_osol_127).tickFormat(''));
+
+    // Binding-period shaded rectangles
+    const xStep_osol_127 = w_osol_127 / Math.max(xVals_osol_127.length - 1, 1);
+    data_osol_127.forEach((d, i) => {
+        if(d.bind === 1) {
+            const x0_osol_127 = x_osol_127(d.h) - xStep_osol_127 * 0.5;
+            const x1_osol_127 = x_osol_127(d.h) + xStep_osol_127 * 0.5;
+            g_osol_127.append('rect')
+                .attr('x', Math.max(0, x0_osol_127))
+                .attr('y', 0)
+                .attr('width', Math.min(x1_osol_127, w_osol_127) - Math.max(0, x0_osol_127))
+                .attr('height', h_osol_127)
+                .attr('fill', '#d62728')
+                .attr('opacity', 0.08);
+        }
+    });
+
+    // Zero reference line
+    g_osol_127.append('line')
+        .attr('x1', 0).attr('x2', w_osol_127)
+        .attr('y1', y_osol_127(0)).attr('y2', y_osol_127(0))
+        .attr('stroke', '#999').attr('stroke-width', 1)
+        .attr('stroke-dasharray', '4,3');
+
+    // Linear line (dashed)
+    const linLine_osol_127 = d3.line().x(d => x_osol_127(d.h)).y(d => y_osol_127(d.lin))
+        .defined(d => d.lin !== null);
+    g_osol_127.append('path').datum(data_osol_127).attr('d', linLine_osol_127)
+        .attr('fill', 'none').attr('stroke', '#2ca02c')
+        .attr('stroke-width', 1.8).attr('stroke-dasharray', '6,3');
+
+    // Piecewise line (solid)
+    const pwLine_osol_127 = d3.line().x(d => x_osol_127(d.h)).y(d => y_osol_127(d.pw))
+        .defined(d => d.pw !== null);
+    g_osol_127.append('path').datum(data_osol_127).attr('d', pwLine_osol_127)
+        .attr('fill', 'none').attr('stroke', '#1f77b4')
+        .attr('stroke-width', 1.8);
+
+    // Axes
+    g_osol_127.append('g').attr('class','axis')
+        .attr('transform', 'translate(0,'+h_osol_127+')')
+        .call(d3.axisBottom(x_osol_127).ticks(Math.min(xVals_osol_127.length, 8)));
+    g_osol_127.append('g').attr('class','axis')
+        .call(d3.axisLeft(y_osol_127).ticks(6));
+
+    if('Period') g_osol_127.append('text')
+        .attr('x', w_osol_127/2).attr('y', h_osol_127+30)
+        .attr('text-anchor','middle').attr('font-size','11px')
+        .attr('fill','#666').text('Period');
+    if('R') g_osol_127.append('text')
+        .attr('transform','rotate(-90)')
+        .attr('x', -h_osol_127/2).attr('y', -42)
+        .attr('text-anchor','middle').attr('font-size','11px')
+        .attr('fill','#666').text('R');
+
+    // Legend
+    const leg_osol_127 = g_osol_127.append('g').attr('class','legend')
+        .attr('transform','translate(5,-5)');
+    // Linear (dashed)
+    const g1_osol_127 = leg_osol_127.append('g').attr('transform','translate(0,0)');
+    g1_osol_127.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+        .attr('stroke','#2ca02c').attr('stroke-width',2)
+        .attr('stroke-dasharray','6,3');
+    g1_osol_127.append('text').attr('x',20).attr('y',4)
+        .attr('font-size','10px').attr('fill','#555').text('Linear');
+    // Piecewise (solid)
+    const g2_osol_127 = leg_osol_127.append('g').attr('transform','translate(80,0)');
+    g2_osol_127.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+        .attr('stroke','#1f77b4').attr('stroke-width',2);
+    g2_osol_127.append('text').attr('x',20).attr('y',4)
+        .attr('font-size','10px').attr('fill','#555').text('Piecewise');
+    // Binding
+    const g3_osol_127 = leg_osol_127.append('g').attr('transform','translate(175,0)');
+    g3_osol_127.append('rect').attr('width',12).attr('height',10).attr('y',-5)
+        .attr('fill','#d62728').attr('opacity',0.15);
+    g3_osol_127.append('text').attr('x',16).attr('y',4)
+        .attr('font-size','10px').attr('fill','#555').text('Binding');
+
+    // Tooltip
+    svg_osol_127.append('rect')
+        .attr('width', W_osol_127)
+        .attr('height', h_osol_127 + margin_osol_127.top + margin_osol_127.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g_osol_127.node());
+            const x0 = x_osol_127.invert(mx);
+            const idx = d3.minIndex(data_osol_127, d => Math.abs(d.h - x0));
+            const d = data_osol_127[idx];
+            let html = '<b>h='+d.h+'</b>';
+            if(d.lin!==null) html += '<br>Linear: '+fmt(d.lin);
+            if(d.pw!==null) html += '<br>Piecewise: '+fmt(d.pw);
+            if(d.bind===1) html += '<br><span style="color:#d62728">Binding</span>';
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+
+(function() {
+    const data_osol_128 = [{"h":1,"lin":-0.03,"pw":-0.03,"bind":1},
+{"h":2,"lin":-0.024,"pw":-0.024,"bind":1},
+{"h":3,"lin":-0.019200000000000002,"pw":-0.019200000000000002,"bind":1},
+{"h":4,"lin":-0.015360000000000002,"pw":-0.015360000000000002,"bind":1},
+{"h":5,"lin":-0.012288000000000002,"pw":-0.012288000000000002,"bind":1},
+{"h":6,"lin":-0.009830400000000003,"pw":-0.009830400000000003,"bind":1},
+{"h":7,"lin":-0.007864320000000003,"pw":-0.007864320000000003,"bind":1},
+{"h":8,"lin":-0.0062914560000000026,"pw":-0.006291456000000002,"bind":1},
+{"h":9,"lin":-0.005033164800000003,"pw":-0.005033164800000001,"bind":1},
+{"h":10,"lin":-0.004026531840000003,"pw":-0.00402653184,"bind":1},
+{"h":11,"lin":-0.0032212254720000023,"pw":-0.0032212254719999993,"bind":1},
+{"h":12,"lin":-0.002576980377600002,"pw":-0.0025769803775999986,"bind":1},
+{"h":13,"lin":-0.0020615843020800016,"pw":-0.002061584302079998,"bind":1},
+{"h":14,"lin":-0.0016492674416640014,"pw":-0.0016492674416639977,"bind":1},
+{"h":15,"lin":-0.0013194139533312013,"pw":-0.0013194139533311974,"bind":1},
+{"h":16,"lin":-0.001055531162664961,"pw":-0.001055531162664957,"bind":1},
+{"h":17,"lin":-0.0008444249301319689,"pw":-0.0008444249301319648,"bind":1},
+{"h":18,"lin":-0.0006755399441055751,"pw":-0.000675539944105571,"bind":1},
+{"h":19,"lin":-0.0005404319552844601,"pw":-0.000540431955284456,"bind":1},
+{"h":20,"lin":-0.0004323455642275681,"pw":-0.00043234556422756397,"bind":1},
+{"h":21,"lin":-0.0003458764513820545,"pw":-0.00034587645138205034,"bind":1},
+{"h":22,"lin":-0.0002767011611056436,"pw":-0.00027670116110563943,"bind":1},
+{"h":23,"lin":-0.0002213609288845149,"pw":-0.0002213609288845107,"bind":1},
+{"h":24,"lin":-0.00017708874310761193,"pw":-0.00017708874310760775,"bind":1},
+{"h":25,"lin":-0.00014167099448608955,"pw":-0.00014167099448608538,"bind":1},
+{"h":26,"lin":-0.00011333679558887165,"pw":-0.00011333679558886746,"bind":1},
+{"h":27,"lin":-9.066943647109732e-5,"pw":-9.066943647109314e-5,"bind":1},
+{"h":28,"lin":-7.253554917687786e-5,"pw":-7.253554917687368e-5,"bind":1},
+{"h":29,"lin":-5.802843934150229e-5,"pw":-5.8028439341498106e-5,"bind":1},
+{"h":30,"lin":-4.642275147320184e-5,"pw":-4.6422751473197644e-5,"bind":1},
+{"h":31,"lin":-3.7138201178561476e-5,"pw":-3.7138201178557275e-5,"bind":1},
+{"h":32,"lin":-2.9710560942849182e-5,"pw":-2.9710560942844978e-5,"bind":1},
+{"h":33,"lin":-2.376844875427935e-5,"pw":-2.376844875427514e-5,"bind":1},
+{"h":34,"lin":-1.901475900342348e-5,"pw":-1.901475900341927e-5,"bind":1},
+{"h":35,"lin":-1.5211807202738786e-5,"pw":-1.5211807202734573e-5,"bind":1},
+{"h":36,"lin":-1.216944576219103e-5,"pw":-1.2169445762186814e-5,"bind":1},
+{"h":37,"lin":-9.735556609752823e-6,"pw":-9.735556609748609e-6,"bind":1},
+{"h":38,"lin":-7.788445287802259e-6,"pw":-7.788445287798044e-6,"bind":1},
+{"h":39,"lin":-6.230756230241808e-6,"pw":-6.230756230237593e-6,"bind":1},
+{"h":40,"lin":-4.984604984193447e-6,"pw":-4.984604984189232e-6,"bind":1}];
+    const container_osol_128 = d3.select('#osol_128');
+    const W_osol_128 = Math.max(container_osol_128.node().clientWidth - 24, 280);
+    const margin_osol_128 = {top:10, right:15, bottom:35, left:55};
+    const w_osol_128 = W_osol_128 - margin_osol_128.left - margin_osol_128.right;
+    const h_osol_128 = Math.min(w_osol_128 * 0.6, 250);
+
+    const svg_osol_128 = container_osol_128.append('svg')
+        .attr('width', W_osol_128)
+        .attr('height', h_osol_128 + margin_osol_128.top + margin_osol_128.bottom);
+    const g_osol_128 = svg_osol_128.append('g')
+        .attr('transform', 'translate('+margin_osol_128.left+','+margin_osol_128.top+')');
+
+    // Compute domains
+    const xVals_osol_128 = data_osol_128.map(d => d.h);
+    const allY_osol_128 = [];
+    data_osol_128.forEach(d => {
+        if(d.lin!==null) allY_osol_128.push(d.lin);
+        if(d.pw!==null) allY_osol_128.push(d.pw);
+    });
+    allY_osol_128.push(0);
+
+    const x_osol_128 = d3.scaleLinear().domain(d3.extent(xVals_osol_128)).range([0, w_osol_128]);
+    const yExt_osol_128 = d3.extent(allY_osol_128);
+    const yPad_osol_128 = (yExt_osol_128[1] - yExt_osol_128[0]) * 0.08 || 0.1;
+    const y_osol_128 = d3.scaleLinear()
+        .domain([yExt_osol_128[0] - yPad_osol_128, yExt_osol_128[1] + yPad_osol_128])
+        .range([h_osol_128, 0]);
+
+    // Grid
+    g_osol_128.append('g').attr('class','grid')
+        .call(d3.axisLeft(y_osol_128).tickSize(-w_osol_128).tickFormat(''));
+
+    // Binding-period shaded rectangles
+    const xStep_osol_128 = w_osol_128 / Math.max(xVals_osol_128.length - 1, 1);
+    data_osol_128.forEach((d, i) => {
+        if(d.bind === 1) {
+            const x0_osol_128 = x_osol_128(d.h) - xStep_osol_128 * 0.5;
+            const x1_osol_128 = x_osol_128(d.h) + xStep_osol_128 * 0.5;
+            g_osol_128.append('rect')
+                .attr('x', Math.max(0, x0_osol_128))
+                .attr('y', 0)
+                .attr('width', Math.min(x1_osol_128, w_osol_128) - Math.max(0, x0_osol_128))
+                .attr('height', h_osol_128)
+                .attr('fill', '#d62728')
+                .attr('opacity', 0.08);
+        }
+    });
+
+    // Zero reference line
+    g_osol_128.append('line')
+        .attr('x1', 0).attr('x2', w_osol_128)
+        .attr('y1', y_osol_128(0)).attr('y2', y_osol_128(0))
+        .attr('stroke', '#999').attr('stroke-width', 1)
+        .attr('stroke-dasharray', '4,3');
+
+    // Linear line (dashed)
+    const linLine_osol_128 = d3.line().x(d => x_osol_128(d.h)).y(d => y_osol_128(d.lin))
+        .defined(d => d.lin !== null);
+    g_osol_128.append('path').datum(data_osol_128).attr('d', linLine_osol_128)
+        .attr('fill', 'none').attr('stroke', '#2ca02c')
+        .attr('stroke-width', 1.8).attr('stroke-dasharray', '6,3');
+
+    // Piecewise line (solid)
+    const pwLine_osol_128 = d3.line().x(d => x_osol_128(d.h)).y(d => y_osol_128(d.pw))
+        .defined(d => d.pw !== null);
+    g_osol_128.append('path').datum(data_osol_128).attr('d', pwLine_osol_128)
+        .attr('fill', 'none').attr('stroke', '#1f77b4')
+        .attr('stroke-width', 1.8);
+
+    // Axes
+    g_osol_128.append('g').attr('class','axis')
+        .attr('transform', 'translate(0,'+h_osol_128+')')
+        .call(d3.axisBottom(x_osol_128).ticks(Math.min(xVals_osol_128.length, 8)));
+    g_osol_128.append('g').attr('class','axis')
+        .call(d3.axisLeft(y_osol_128).ticks(6));
+
+    if('Period') g_osol_128.append('text')
+        .attr('x', w_osol_128/2).attr('y', h_osol_128+30)
+        .attr('text-anchor','middle').attr('font-size','11px')
+        .attr('fill','#666').text('Period');
+    if('d') g_osol_128.append('text')
+        .attr('transform','rotate(-90)')
+        .attr('x', -h_osol_128/2).attr('y', -42)
+        .attr('text-anchor','middle').attr('font-size','11px')
+        .attr('fill','#666').text('d');
+
+    // Legend
+    const leg_osol_128 = g_osol_128.append('g').attr('class','legend')
+        .attr('transform','translate(5,-5)');
+    // Linear (dashed)
+    const g1_osol_128 = leg_osol_128.append('g').attr('transform','translate(0,0)');
+    g1_osol_128.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+        .attr('stroke','#2ca02c').attr('stroke-width',2)
+        .attr('stroke-dasharray','6,3');
+    g1_osol_128.append('text').attr('x',20).attr('y',4)
+        .attr('font-size','10px').attr('fill','#555').text('Linear');
+    // Piecewise (solid)
+    const g2_osol_128 = leg_osol_128.append('g').attr('transform','translate(80,0)');
+    g2_osol_128.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+        .attr('stroke','#1f77b4').attr('stroke-width',2);
+    g2_osol_128.append('text').attr('x',20).attr('y',4)
+        .attr('font-size','10px').attr('fill','#555').text('Piecewise');
+    // Binding
+    const g3_osol_128 = leg_osol_128.append('g').attr('transform','translate(175,0)');
+    g3_osol_128.append('rect').attr('width',12).attr('height',10).attr('y',-5)
+        .attr('fill','#d62728').attr('opacity',0.15);
+    g3_osol_128.append('text').attr('x',16).attr('y',4)
+        .attr('font-size','10px').attr('fill','#555').text('Binding');
+
+    // Tooltip
+    svg_osol_128.append('rect')
+        .attr('width', W_osol_128)
+        .attr('height', h_osol_128 + margin_osol_128.top + margin_osol_128.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g_osol_128.node());
+            const x0 = x_osol_128.invert(mx);
+            const idx = d3.minIndex(data_osol_128, d => Math.abs(d.h - x0));
+            const d = data_osol_128[idx];
+            let html = '<b>h='+d.h+'</b>';
+            if(d.lin!==null) html += '<br>Linear: '+fmt(d.lin);
+            if(d.pw!==null) html += '<br>Piecewise: '+fmt(d.pw);
+            if(d.bind===1) html += '<br><span style="color:#d62728">Binding</span>';
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+
+</script>
+</body>
+</html>
