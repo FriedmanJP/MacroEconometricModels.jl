@@ -3344,6 +3344,38 @@ end
         @test length(m_sub) == 7
     end
 
+    @testset "Perturbation-order analytical GMM" begin
+        spec = @dsge begin
+            parameters: ρ = 0.85, σ = 0.01
+            endogenous: y
+            exogenous: ε
+            y[t] = ρ * y[t-1] + σ * ε[t]
+        end
+        spec = compute_steady_state(spec)
+
+        # Generate data from known parameters
+        Random.seed!(42)
+        sol_true = solve(spec; method=:perturbation, order=2)
+        data = simulate(sol_true, 500; rng=Random.MersenneTwister(42))
+
+        # Estimate with perturbation order 2
+        bounds = ParameterTransform{Float64}([0.01], [0.999])
+        est = estimate_dsge(spec, data, [:ρ];
+                             method=:analytical_gmm,
+                             solve_method=:perturbation,
+                             solve_order=2,
+                             auto_lags=[1],
+                             bounds=bounds)
+
+        @test est.converged
+        @test est.method == :analytical_gmm
+        @test est.solution isa MacroEconometricModels.PerturbationSolution
+        # Parameter should be recovered within CI
+        @test abs(est.theta[1] - 0.85) < 0.15
+        @test est.J_stat >= 0.0
+        @test 0.0 <= est.J_pvalue <= 1.0
+    end
+
 end
 
 end # top-level @testset

@@ -59,7 +59,12 @@ function estimate_dsge(spec::DSGESpec{T}, data::AbstractMatrix,
                         moments_fn::Function=d -> autocovariance_moments(d; lags=1),
                         bounds::Union{Nothing,ParameterTransform}=nothing,
                         lags::Int=1,
-                        rng=Random.default_rng()) where {T<:AbstractFloat}
+                        rng=Random.default_rng(),
+                        # Perturbation-order GMM kwargs
+                        solve_method::Symbol=:gensys,
+                        solve_order::Int=1,
+                        auto_lags::Vector{Int}=[1],
+                        observable_indices::Union{Nothing,Vector{Int}}=nothing) where {T<:AbstractFloat}
     data_T = Matrix{T}(data)
 
     if method == :irf_matching
@@ -78,9 +83,15 @@ function estimate_dsge(spec::DSGESpec{T}, data::AbstractMatrix,
                                     weighting=weighting, moments_fn=moments_fn,
                                     bounds=bounds, rng=rng)
     elseif method == :analytical_gmm
+        # Note: analytical GMM uses identity weighting (deterministic moment
+        # function with single "observation" — HAC weighting is meaningless)
         return _estimate_dsge_analytical_gmm(spec, data_T, param_names;
                                               lags=lags,
-                                              bounds=bounds)
+                                              bounds=bounds,
+                                              solve_method=solve_method,
+                                              solve_order=solve_order,
+                                              auto_lags=auto_lags,
+                                              observable_indices=observable_indices)
     else
         throw(ArgumentError("method must be :irf_matching, :euler_gmm, :smm, or :analytical_gmm"))
     end
@@ -418,22 +429,42 @@ end
 
 Internal: Analytical GMM estimation using Lyapunov equation moments.
 
-Matches model-implied analytical moments (from `analytical_moments`) to data moments
-(from `autocovariance_moments`). No simulation required — uses the discrete Lyapunov
-equation to compute unconditional covariances exactly.
+Matches model-implied analytical moments to data moments. For first-order
+solutions (gensys), uses covariance + autocovariance matching. For higher-order
+perturbation solutions, uses the richer GMM format with means + product moments +
+autocovariances.
+
+# Keywords
+- `lags=1` — autocovariance lags (used when solve_method=:gensys)
+- `weighting=:identity` — GMM weighting
+- `bounds=nothing` — parameter bounds
+- `solve_method=:gensys` — solver (:gensys or :perturbation)
+- `solve_order=1` — perturbation order (1, 2, or 3)
+- `auto_lags=[1]` — autocovariance lags for GMM format
+- `observable_indices=nothing` — which data columns to match
 """
 function _estimate_dsge_analytical_gmm(spec::DSGESpec{T}, data::Matrix{T},
                                          param_names::Vector{Symbol};
                                          lags=1, weighting=:identity,
-                                         bounds=nothing) where {T}
+                                         bounds=nothing,
+                                         solve_method=:gensys,
+                                         solve_order=1,
+                                         auto_lags=[1],
+                                         observable_indices=nothing) where {T}
     theta0 = T[spec.param_values[p] for p in param_names]
 
+    use_perturbation = (solve_method == :perturbation && solve_order >= 2)
+
     # Data moments
-    m_data = autocovariance_moments(data; lags=lags)
+    if use_perturbation
+        m_data = _compute_data_moments(data; lags=auto_lags,
+                                        observable_indices=observable_indices)
+    else
+        m_data = autocovariance_moments(data; lags=lags)
+    end
     n_moments = length(m_data)
 
     # GMM moment function: returns 1 × n_moments matrix
-    # Analytical moments are deterministic given θ — single "observation"
     function analytical_moment_fn(theta, _data)
         new_pv = copy(spec.param_values)
         for (i, pn) in enumerate(param_names)
@@ -446,11 +477,19 @@ function _estimate_dsge_analytical_gmm(spec::DSGESpec{T}, data::Matrix{T},
         )
         try
             new_spec = compute_steady_state(new_spec)
-            sol = solve(new_spec; method=:gensys)
-            if !is_determined(sol) || !is_stable(sol)
-                return fill(T(1e6), 1, n_moments)
+            if use_perturbation
+                sol = solve(new_spec; method=:perturbation, order=solve_order)
+                if !is_determined(sol) || !is_stable(sol)
+                    return fill(T(1e6), 1, n_moments)
+                end
+                m_model = analytical_moments(sol; lags=maximum(auto_lags), format=:gmm)
+            else
+                sol = solve(new_spec; method=solve_method)
+                if !is_determined(sol) || !is_stable(sol)
+                    return fill(T(1e6), 1, n_moments)
+                end
+                m_model = analytical_moments(sol; lags=lags)
             end
-            m_model = analytical_moments(sol; lags=lags)
             g = reshape(m_data .- m_model, 1, n_moments)
             return g
         catch
@@ -472,7 +511,11 @@ function _estimate_dsge_analytical_gmm(spec::DSGESpec{T}, data::Matrix{T},
         spec.n_expect, spec.forward_indices, T[], spec.ss_fn
     )
     final_spec = compute_steady_state(final_spec)
-    final_sol = solve(final_spec; method=:gensys)
+    if use_perturbation
+        final_sol = solve(final_spec; method=:perturbation, order=solve_order)
+    else
+        final_sol = solve(final_spec; method=solve_method)
+    end
 
     DSGEEstimation{T}(
         gmm_result.theta, gmm_result.vcov, param_names,
