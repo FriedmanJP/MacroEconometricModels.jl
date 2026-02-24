@@ -252,6 +252,7 @@ include("lp/fevd.jl")
 # DSGE simulation, IRF/FEVD bridge (after var/irf.jl, var/fevd.jl, lp/fevd.jl)
 include("dsge/simulation.jl")
 include("dsge/analytical.jl")
+include("dsge/pruning.jl")
 
 # DSGE estimation (after estimate_var, irf, estimate_gmm)
 include("dsge/estimation.jl")

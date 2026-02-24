@@ -2878,6 +2878,44 @@ end
         @test occursin("Perturbation", output) || occursin("perturbation", output)
         @test occursin("2", output)  # order 2
     end
+
+    @testset "Pruned simulation" begin
+        spec = @dsge begin
+            parameters: ρ = 0.9, σ = 0.01
+            endogenous: y
+            exogenous: ε
+            y[t] = ρ * y[t-1] + σ * ε[t]
+        end
+        spec = compute_steady_state(spec)
+        sol = solve(spec; method=:perturbation, order=2)
+
+        # Zero-shock simulation stays near SS
+        sim = simulate(sol, 100; shock_draws=zeros(100, 1))
+        @test size(sim) == (100, 1)
+
+        # Stochastic simulation doesn't explode
+        sim2 = simulate(sol, 10000; rng=Random.MersenneTwister(42))
+        @test all(isfinite.(sim2))
+        @test std(sim2[:, 1]) < 1.0
+
+        # Antithetic shocks
+        sim_anti = simulate(sol, 1000; antithetic=true, rng=Random.MersenneTwister(42))
+        @test size(sim_anti) == (1000, 1)
+        @test all(isfinite.(sim_anti))
+
+        # IRF works
+        ir = irf(sol, 20)
+        @test length(ir.variables) == 1
+        @test size(ir.values) == (20, 1, 1)
+
+        # GIRF
+        ir_g = irf(sol, 20; irf_type=:girf, n_draws=100)
+        @test size(ir_g.values) == (20, 1, 1)
+
+        # FEVD works
+        fv = fevd(sol, 20)
+        @test all(fv.proportions[:, 1, :] .≈ 1.0)  # single shock = 100%
+    end
 end
 
 end # top-level @testset
