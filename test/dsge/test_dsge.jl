@@ -3284,6 +3284,66 @@ end
         @test occursin("analytical_gmm", output)
     end
 
+    @testset "GMM moment format" begin
+        spec = @dsge begin
+            parameters: ρ = 0.9, σ = 0.01
+            endogenous: y
+            exogenous: ε
+            y[t] = ρ * y[t-1] + σ * ε[t]
+        end
+        spec = compute_steady_state(spec)
+
+        # Order 1: GMM format includes means (should be zero)
+        sol1 = solve(spec; method=:perturbation, order=1)
+        mom_gmm1 = analytical_moments(sol1; lags=1, format=:gmm)
+        # ny=1: 1 mean + 1 product moment + 1 autocov = 3
+        @test length(mom_gmm1) == 3
+        @test abs(mom_gmm1[1]) < 1e-10  # mean ≈ 0 for order 1
+
+        # Product moment E[y²] = Var(y) + E[y]² ≈ Var(y)
+        theoretical_var = 0.01^2 / (1 - 0.9^2)
+        @test mom_gmm1[2] ≈ theoretical_var atol=1e-8
+
+        # Autocov: E[y_t * y_{t-1}] = Cov(y_t,y_{t-1}) + E[y]²
+        # For AR(1): Cov(lag=1) = ρ * Var(y)
+        @test mom_gmm1[3] ≈ 0.9 * theoretical_var atol=1e-8
+
+        # Order 2: GMM format — mean may be non-zero
+        sol2 = solve(spec; method=:perturbation, order=2)
+        mom_gmm2 = analytical_moments(sol2; lags=1, format=:gmm)
+        @test length(mom_gmm2) == 3
+        @test all(isfinite.(mom_gmm2))
+
+        # Default format (:covariance) still works and is backward-compatible
+        mom_cov = analytical_moments(sol1; lags=1)
+        @test length(mom_cov) == 2  # k*(k+1)/2 + k*lags = 1 + 1
+
+        # Invalid format throws
+        @test_throws ArgumentError analytical_moments(sol1; format=:invalid)
+    end
+
+    @testset "Data moments computation" begin
+        Random.seed!(42)
+        data = randn(500, 1)
+        m_data = MacroEconometricModels._compute_data_moments(data; lags=[1])
+        # 1 mean + 1 product moment + 1 autocov = 3
+        @test length(m_data) == 3
+        @test m_data[1] ≈ sum(data[:, 1]) / 500 atol=1e-10
+        @test m_data[2] ≈ dot(data[:, 1], data[:, 1]) / 500 atol=1e-10
+
+        # Multi-variable data moments
+        data2 = randn(500, 2)
+        m_data2 = MacroEconometricModels._compute_data_moments(data2; lags=[1, 3])
+        # ny=2: 2 means + 3 product moments + 2*2 autocov = 2 + 3 + 4 = 9
+        @test length(m_data2) == 9
+
+        # observable_indices filtering
+        data3 = randn(500, 3)
+        m_sub = MacroEconometricModels._compute_data_moments(data3; lags=[1], observable_indices=[1, 3])
+        # 2 means + 3 product moments + 2 autocov = 7
+        @test length(m_sub) == 7
+    end
+
 end
 
 end # top-level @testset

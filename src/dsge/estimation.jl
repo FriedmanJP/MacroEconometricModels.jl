@@ -362,6 +362,54 @@ function _estimate_dsge_smm(spec::DSGESpec{T}, data::Matrix{T},
 end
 
 # =============================================================================
+# Data moment computation for GMM format
+# =============================================================================
+
+"""
+    _compute_data_moments(data::Matrix{T}; lags::Vector{Int}=[1],
+                           observable_indices::Union{Nothing,Vector{Int}}=nothing) → Vector{T}
+
+Compute data moment vector matching the GMM format from model moments:
+1. Means: E[y_i]
+2. Product moments: E[y_i * y_j] for i ≤ j (upper triangle)
+3. Diagonal autocovariances: E[y_i,t * y_i,t-k] for each lag k
+
+This matches the moment ordering in `analytical_moments(...; format=:gmm)`.
+"""
+function _compute_data_moments(data::Matrix{T};
+                                lags::Vector{Int}=[1],
+                                observable_indices::Union{Nothing,Vector{Int}}=nothing) where {T}
+    Y = observable_indices === nothing ? data : data[:, observable_indices]
+    T_obs, ny = size(Y)
+
+    moments = T[]
+
+    # 1. Means
+    Ey = vec(sum(Y; dims=1)) / T_obs
+    append!(moments, Ey)
+
+    # 2. Product moments (upper triangle of Y'Y/T)
+    Eyy = Y' * Y / T_obs
+    for i in 1:ny
+        for j in i:ny
+            push!(moments, Eyy[i, j])
+        end
+    end
+
+    # 3. Diagonal autocovariances at each lag
+    num_lags = length(lags)
+    for k in 1:num_lags
+        lag = lags[k]
+        autoEyy = Y[1+lag:T_obs, :]' * Y[1:T_obs-lag, :] / (T_obs - lag)
+        for i in 1:ny
+            push!(moments, autoEyy[i, i])
+        end
+    end
+
+    return moments
+end
+
+# =============================================================================
 # Analytical GMM Estimation (Lyapunov equation moments)
 # =============================================================================
 

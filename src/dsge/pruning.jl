@@ -756,24 +756,35 @@ end
 # =============================================================================
 
 """
-    analytical_moments(sol::PerturbationSolution{T}; lags::Int=1) -> Vector{T}
+    analytical_moments(sol::PerturbationSolution{T}; lags::Int=1,
+                       format::Symbol=:covariance) -> Vector{T}
 
 Compute analytical moment vector from a perturbation solution.
 
-For **order 1**, uses the doubling Lyapunov solver (`_dlyap_doubling`) to compute
-the unconditional covariance of states, then derives the full variable covariance
-and autocovariances analytically.
+# Keyword Arguments
+- `lags::Int=1` — number of autocovariance lags
+- `format::Symbol=:covariance` — moment format:
+  - `:covariance` (default): upper-triangle of var-cov + diagonal autocov
+    (backward compatible with DSGESolution format)
+  - `:gmm`: means + upper-triangle product moments + diagonal autocov
+    (for GMM estimation with higher-order perturbation)
 
-For **order ≥ 2**, uses simulation-based moment estimation (T=100,000 draws with
-Kim et al. 2008 pruning) since the augmented-state Lyapunov approach for
-second-order is complex. This provides accurate moments with a fixed RNG seed
-for reproducibility.
-
-Returns a `Vector{T}` in the same format as `analytical_moments(::DSGESolution)`:
-1. Upper-triangle of variance-covariance matrix: k*(k+1)/2 elements
-2. Diagonal autocovariances at each lag: k elements per lag
+For **order 1** with `:covariance` format, uses the doubling Lyapunov solver.
+For **order ≥ 2** with `:covariance` format, uses simulation-based moments.
+For `:gmm` format at any order, uses closed-form augmented Lyapunov (order ≥ 2)
+or standard Lyapunov (order 1).
 """
-function analytical_moments(sol::PerturbationSolution{T}; lags::Int=1) where {T<:AbstractFloat}
+function analytical_moments(sol::PerturbationSolution{T};
+                              lags::Int=1,
+                              format::Symbol=:covariance) where {T<:AbstractFloat}
+    format in (:covariance, :gmm) ||
+        throw(ArgumentError("format must be :covariance or :gmm; got $format"))
+
+    if format == :gmm
+        return _analytical_moments_gmm(sol; lags=lags)
+    end
+
+    # Default :covariance format — backward compatible
     # For order >= 2: simulation-based moments via pruned simulation
     if sol.order >= 2
         return _simulation_moments(sol; lags=lags)
@@ -854,6 +865,102 @@ function analytical_moments(sol::PerturbationSolution{T}; lags::Int=1) where {T<
             push!(moments, Gamma_h[i, i])
         end
         G1_power = G1_power * G1_equiv
+    end
+
+    return moments
+end
+
+
+"""
+    _analytical_moments_gmm(sol::PerturbationSolution{T}; lags::Int=1) → Vector{T}
+
+Compute GMM-format moment vector: means + product moments + diagonal autocovariances.
+
+For order >= 2, uses closed-form augmented Lyapunov.
+For order 1, uses standard Lyapunov (means are zero).
+"""
+function _analytical_moments_gmm(sol::PerturbationSolution{T}; lags::Int=1) where {T}
+    lag_vec = collect(1:lags)
+
+    if sol.order >= 2
+        result = _augmented_moments_2nd(sol; lags=lag_vec)
+        E_y = result[:E_y]
+        Var_y = result[:Var_y]
+        Cov_y = result[:Cov_y]
+    else
+        # Order 1: standard Lyapunov, means are zero
+        nx = nstates(sol)
+        ny = ncontrols(sol)
+        n  = nvars(sol)
+        n_eps = nshocks(sol)
+        nv = nx + n_eps
+
+        hx_state = nx > 0 ? sol.hx[:, 1:nx] : zeros(T, 0, 0)
+        eta_x    = nx > 0 ? sol.hx[:, nx+1:nv] : zeros(T, 0, n_eps)
+        gx_state = ny > 0 ? sol.gx[:, 1:nx] : zeros(T, 0, nx)
+        eta_y    = ny > 0 ? sol.gx[:, nx+1:nv] : zeros(T, 0, n_eps)
+
+        Var_xf = nx > 0 ? _dlyap_doubling(hx_state, eta_x * eta_x') : zeros(T, 0, 0)
+
+        E_y = zeros(T, n)
+        Var_y = zeros(T, n, n)
+        if nx > 0
+            Var_y[sol.state_indices, sol.state_indices] = Var_xf
+            if ny > 0
+                Var_y[sol.state_indices, sol.control_indices] = Var_xf * gx_state'
+                Var_y[sol.control_indices, sol.state_indices] = gx_state * Var_xf
+                Var_y[sol.control_indices, sol.control_indices] = gx_state * Var_xf * gx_state' + eta_y * eta_y'
+            end
+        elseif ny > 0
+            Var_y[sol.control_indices, sol.control_indices] = eta_y * eta_y'
+        end
+
+        # Autocovariances
+        G1_equiv = zeros(T, n, n)
+        if nx > 0
+            G1_equiv[sol.state_indices, sol.state_indices] = hx_state
+            if ny > 0
+                G1_equiv[sol.control_indices, sol.state_indices] = gx_state * hx_state
+            end
+        end
+
+        max_lag = lags
+        Cov_y = zeros(T, n, n, max_lag)
+        G1_power = copy(G1_equiv)
+        for lag in 1:max_lag
+            Cov_y[:, :, lag] = G1_power * Var_y
+            G1_power = G1_power * G1_equiv
+        end
+
+        # Handle augmented models
+        if sol.spec.augmented
+            orig_idx = _original_var_indices(sol.spec)
+            E_y = E_y[orig_idx]
+            Var_y = Var_y[orig_idx, orig_idx]
+            Cov_y = Cov_y[orig_idx, orig_idx, :]
+        end
+    end
+
+    ny_out = length(E_y)
+
+    # Collect moments: means, product moments, diagonal autocov
+    moments = T[]
+
+    # 1. Means: E[y_i]
+    append!(moments, E_y)
+
+    # 2. Product moments: E[y_i * y_j] = Var_y[i,j] + E_y[i]*E_y[j], upper triangle
+    for i in 1:ny_out
+        for j in i:ny_out
+            push!(moments, Var_y[i, j] + E_y[i] * E_y[j])
+        end
+    end
+
+    # 3. Diagonal autocovariances at each lag: E[y_i,t * y_i,t-k]
+    for lag in 1:lags
+        for i in 1:ny_out
+            push!(moments, Cov_y[i, i, lag] + E_y[i]^2)
+        end
     end
 
     return moments
