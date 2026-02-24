@@ -44,6 +44,27 @@ function _count_predetermined(ld::LinearDSGE{T}) where {T}
 end
 
 """
+    _state_control_indices(ld::LinearDSGE{T}) → (state_idx::Vector{Int}, control_idx::Vector{Int})
+
+Partition variables into state (predetermined) and control (jump) indices.
+State variables have non-zero columns in Γ₁; the rest are controls.
+"""
+function _state_control_indices(ld::LinearDSGE{T}) where {T}
+    n = size(ld.Gamma1, 2)
+    tol = eps(T) * T(100)
+    state_idx = Int[]
+    control_idx = Int[]
+    for j in 1:n
+        if any(x -> abs(x) > tol, @view(ld.Gamma1[:, j]))
+            push!(state_idx, j)
+        else
+            push!(control_idx, j)
+        end
+    end
+    (state_idx, control_idx)
+end
+
+"""
     klein(Gamma0, Gamma1, C, Psi, n_predetermined; div=1.0) → NamedTuple
 
 Solve the linear RE system via the Klein (2000) QZ decomposition method.

@@ -228,6 +228,103 @@ function Base.show(io::IO, sol::DSGESolution{T}) where {T}
 end
 
 # =============================================================================
+# PerturbationSolution — higher-order perturbation with pruning
+# =============================================================================
+
+"""
+    PerturbationSolution{T}
+
+Higher-order perturbation solution with Kim et al. (2008) pruning.
+
+For order k, the decision rule is:
+- Order 1: `z_t = z̄ + g_x·x̂_t`
+- Order 2: `+ (1/2)·g_xx·(x̂_t ⊗ x̂_t) + (1/2)·g_σσ·σ²`
+- Order 3: `+ (1/6)·g_xxx·(x̂_t ⊗ x̂_t ⊗ x̂_t) + (3/6)·g_σσx·σ²·x̂_t`
+
+Fields:
+- `order` — perturbation order (1, 2, or 3)
+- `gx, hx` — first-order coefficients (controls: ny×nv, states: nx×nv)
+- `gxx, hxx, gσσ, hσσ` — second-order (nothing if order < 2)
+- `gxxx, hxxx, gσσx, hσσx, gσσσ, hσσσ` — third-order (nothing if order < 3)
+- `eta` — shock loading matrix (nv × nu)
+- `steady_state` — full steady state vector
+- `state_indices, control_indices` — variable partition
+- `eu` — [existence, uniqueness] from first-order
+- `method` — `:perturbation`
+- `spec` — model specification
+- `linear` — linearized form
+"""
+struct PerturbationSolution{T<:AbstractFloat}
+    order::Int
+
+    # First-order (always present) — in terms of v = [x; ε]
+    gx::Matrix{T}                         # ny × nv
+    hx::Matrix{T}                         # nx × nv
+
+    # Second-order (order ≥ 2)
+    gxx::Union{Nothing, Matrix{T}}        # ny × nv² (flattened tensor)
+    hxx::Union{Nothing, Matrix{T}}        # nx × nv² (flattened tensor)
+    gσσ::Union{Nothing, Vector{T}}        # ny
+    hσσ::Union{Nothing, Vector{T}}        # nx
+
+    # Third-order (order == 3)
+    gxxx::Union{Nothing, Matrix{T}}       # ny × nv³ (flattened tensor)
+    hxxx::Union{Nothing, Matrix{T}}       # nx × nv³ (flattened tensor)
+    gσσx::Union{Nothing, Matrix{T}}       # ny × nv
+    hσσx::Union{Nothing, Matrix{T}}       # nx × nv
+    gσσσ::Union{Nothing, Vector{T}}       # ny
+    hσσσ::Union{Nothing, Vector{T}}       # nx
+
+    # Shock loading & metadata
+    eta::Matrix{T}                        # nv × nu — [0; I] block
+    steady_state::Vector{T}
+    state_indices::Vector{Int}
+    control_indices::Vector{Int}
+
+    eu::Vector{Int}
+    method::Symbol
+    spec::DSGESpec{T}
+    linear::LinearDSGE{T}
+end
+
+# Accessors
+nvars(sol::PerturbationSolution) = sol.spec.n_endog
+nshocks(sol::PerturbationSolution) = sol.spec.n_exog
+nstates(sol::PerturbationSolution) = length(sol.state_indices)
+ncontrols(sol::PerturbationSolution) = length(sol.control_indices)
+is_determined(sol::PerturbationSolution) = sol.eu[1] == 1 && sol.eu[2] == 1
+function is_stable(sol::PerturbationSolution{T}) where {T}
+    nx = nstates(sol)
+    nx == 0 && return true
+    hx_state = sol.hx[:, 1:nx]  # state-to-state block
+    maximum(abs.(eigvals(hx_state))) < one(T)
+end
+
+function Base.show(io::IO, sol::PerturbationSolution{T}) where {T}
+    nx = nstates(sol)
+    ny = ncontrols(sol)
+    exist_str = sol.eu[1] == 1 ? "Yes" : "No"
+    unique_str = sol.eu[2] == 1 ? "Yes" : "No"
+    stable_str = is_stable(sol) ? "Yes" : "No"
+
+    spec_data = Any[
+        "Variables"     nvars(sol);
+        "States"        nx;
+        "Controls"      ny;
+        "Shocks"        nshocks(sol);
+        "Order"         sol.order;
+        "Existence"     exist_str;
+        "Uniqueness"    unique_str;
+        "Stable"        stable_str;
+    ]
+    _pretty_table(io, spec_data;
+        title = "DSGE Perturbation Solution (order $(sol.order))",
+        column_labels = ["", ""],
+        alignment = [:l, :r],
+    )
+end
+
+# =============================================================================
 # PerfectForesightPath
 # =============================================================================
 
