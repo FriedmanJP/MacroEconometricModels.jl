@@ -327,7 +327,7 @@ export balance_panel
 export AbstractDSGEModel
 
 # Types
-export DSGESpec, LinearDSGE, DSGESolution, PerturbationSolution, PerfectForesightPath, DSGEEstimation
+export DSGESpec, LinearDSGE, DSGESolution, PerturbationSolution, ProjectionSolution, PerfectForesightPath, DSGEEstimation
 
 # Macro
 export @dsge

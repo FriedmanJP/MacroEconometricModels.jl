@@ -363,6 +363,89 @@ function Base.show(io::IO, pf::PerfectForesightPath{T}) where {T}
 end
 
 # =============================================================================
+# ProjectionSolution — Chebyshev collocation global policy approximation
+# =============================================================================
+
+"""
+    ProjectionSolution{T}
+
+Global policy function approximation via Chebyshev collocation.
+
+The policy function is `y = Σ_k coefficients[k] * T_k(x_scaled)` where T_k are
+Chebyshev polynomials evaluated at states mapped to [-1,1].
+
+Fields:
+- `coefficients` — `n_vars × n_basis` Chebyshev coefficients
+- `state_bounds` — `nx × 2` domain bounds `[lower upper]` per state
+- `grid_type` — `:tensor` or `:smolyak`
+- `degree` — polynomial degree (tensor) or Smolyak level μ
+- `collocation_nodes` — `n_nodes × nx` grid points
+- `residual_norm` — final `||R||`
+- `n_basis` — number of basis functions
+- `multi_indices` — `n_basis × nx` multi-index matrix
+- `quadrature` — `:gauss_hermite` or `:monomial`
+- `spec` — model specification
+- `linear` — linearized form
+- `steady_state` — cached steady state vector
+- `state_indices, control_indices` — variable partition
+- `converged` — Newton convergence flag
+- `iterations` — Newton iterations used
+- `method` — `:projection`
+"""
+struct ProjectionSolution{T<:AbstractFloat}
+    coefficients::Matrix{T}         # n_vars × n_basis
+    state_bounds::Matrix{T}         # nx × 2 ([lower upper] per state)
+    grid_type::Symbol               # :tensor or :smolyak
+    degree::Int                     # polynomial degree (tensor) or Smolyak level μ
+    collocation_nodes::Matrix{T}    # n_nodes × nx
+    residual_norm::T                # final ||R||
+    n_basis::Int
+    multi_indices::Matrix{Int}      # n_basis × nx
+    quadrature::Symbol              # :gauss_hermite or :monomial
+    spec::DSGESpec{T}
+    linear::LinearDSGE{T}
+    steady_state::Vector{T}
+    state_indices::Vector{Int}
+    control_indices::Vector{Int}
+    converged::Bool
+    iterations::Int
+    method::Symbol                  # :projection
+end
+
+nvars(sol::ProjectionSolution) = sol.spec.n_endog
+nshocks(sol::ProjectionSolution) = sol.spec.n_exog
+nstates(sol::ProjectionSolution) = length(sol.state_indices)
+ncontrols(sol::ProjectionSolution) = length(sol.control_indices)
+is_determined(sol::ProjectionSolution) = sol.converged
+is_stable(sol::ProjectionSolution) = sol.converged
+
+function Base.show(io::IO, sol::ProjectionSolution{T}) where {T}
+    nx = nstates(sol)
+    ny = ncontrols(sol)
+    conv_str = sol.converged ? "Yes" : "No"
+
+    spec_data = Any[
+        "Variables"       nvars(sol);
+        "States"          nx;
+        "Controls"        ny;
+        "Shocks"          nshocks(sol);
+        "Grid type"       sol.grid_type;
+        "Degree"          sol.degree;
+        "Basis functions" sol.n_basis;
+        "Grid points"     size(sol.collocation_nodes, 1);
+        "Quadrature"      sol.quadrature;
+        "Residual norm"   string(round(sol.residual_norm; sigdigits=3));
+        "Converged"       conv_str;
+        "Iterations"      sol.iterations;
+    ]
+    _pretty_table(io, spec_data;
+        title = "DSGE Projection Solution (Chebyshev Collocation)",
+        column_labels = ["", ""],
+        alignment = [:l, :r],
+    )
+end
+
+# =============================================================================
 # DSGEEstimation — GMM estimation result
 # =============================================================================
 
@@ -389,7 +472,7 @@ struct DSGEEstimation{T<:AbstractFloat} <: AbstractDSGEModel
     method::Symbol
     J_stat::T
     J_pvalue::T
-    solution::Union{DSGESolution{T}, PerturbationSolution{T}}
+    solution::Union{DSGESolution{T}, PerturbationSolution{T}, ProjectionSolution{T}}
     converged::Bool
     spec::DSGESpec{T}
 

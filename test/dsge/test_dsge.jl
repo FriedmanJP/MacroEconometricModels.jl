@@ -3575,4 +3575,17 @@ end
 
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Section: Projection Methods (Chebyshev Collocation)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "Projection Methods" begin
+
+@testset "ProjectionSolution type" begin
+    @test isdefined(MacroEconometricModels, :ProjectionSolution)
+    @test ProjectionSolution <: Any
+end
+
+end # Projection Methods
+
 end # top-level @testset
