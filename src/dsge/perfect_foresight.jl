@@ -101,10 +101,20 @@ function perfect_foresight(spec::DSGESpec{FT};
     end
 
     # Reshape solution into T_periods × n matrix
-    path = reshape(copy(x), n, T_periods)'  # T_periods × n
-    deviations = path .- y_ss'
+    path_full = reshape(copy(x), n, T_periods)'  # T_periods × n
+    deviations_full = path_full .- y_ss'
 
-    PerfectForesightPath{FT}(Matrix{FT}(path), Matrix{FT}(deviations), converged, iter, spec)
+    # Filter to original variables if augmented
+    if spec.augmented
+        orig_idx = _original_var_indices(spec)
+        path = Matrix{FT}(path_full[:, orig_idx])
+        deviations = Matrix{FT}(deviations_full[:, orig_idx])
+    else
+        path = Matrix{FT}(path_full)
+        deviations = Matrix{FT}(deviations_full)
+    end
+
+    PerfectForesightPath{FT}(path, deviations, converged, iter, spec)
 end
 
 # =============================================================================

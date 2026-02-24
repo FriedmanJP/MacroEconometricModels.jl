@@ -610,11 +610,22 @@ function occbin_solve(spec::DSGESpec{T}, constraint::OccBinConstraint{T};
         _guess_verify_one(ref_regime, alt_regime, d_ref, d_alt, P, Q,
                           spec, constraint, shock_path, nperiods; maxiter=maxiter)
 
-    OccBinSolution{T}(
-        linear_path, pw_path, spec.steady_state,
-        regime_history, converged, iterations,
-        spec, spec.varnames
-    )
+    # Filter output to original variables if augmented
+    if spec.augmented
+        orig_idx = _original_var_indices(spec)
+        vnames = [string(s) for s in spec.original_endog]
+        OccBinSolution{T}(
+            linear_path[:, orig_idx], pw_path[:, orig_idx], spec.steady_state[orig_idx],
+            regime_history, converged, iterations,
+            spec, vnames
+        )
+    else
+        OccBinSolution{T}(
+            linear_path, pw_path, spec.steady_state,
+            regime_history, converged, iterations,
+            spec, spec.varnames
+        )
+    end
 end
 
 """
@@ -666,11 +677,22 @@ function occbin_solve(spec::DSGESpec{T}, constraint::OccBinConstraint{T},
         _guess_verify_one(ref_regime, alt_regime, d_ref, d_alt, P, Q,
                           spec, constraint, shock_path, nperiods; maxiter=maxiter)
 
-    OccBinSolution{T}(
-        linear_path, pw_path, spec.steady_state,
-        regime_history, converged, iterations,
-        spec, spec.varnames
-    )
+    # Filter output to original variables if augmented
+    if spec.augmented
+        orig_idx = _original_var_indices(spec)
+        vnames = [string(s) for s in spec.original_endog]
+        OccBinSolution{T}(
+            linear_path[:, orig_idx], pw_path[:, orig_idx], spec.steady_state[orig_idx],
+            regime_history, converged, iterations,
+            spec, vnames
+        )
+    else
+        OccBinSolution{T}(
+            linear_path, pw_path, spec.steady_state,
+            regime_history, converged, iterations,
+            spec, spec.varnames
+        )
+    end
 end
 
 # =============================================================================
@@ -977,11 +999,22 @@ function occbin_solve(spec::DSGESpec{T}, c1::OccBinConstraint{T}, c2::OccBinCons
                           P, Q, spec, c1, c2, shock_path, nperiods;
                           maxiter=maxiter, curb_retrench=curb_retrench)
 
-    OccBinSolution{T}(
-        linear_path, pw_path, spec.steady_state,
-        regime_history, converged, iterations,
-        spec, spec.varnames
-    )
+    # Filter output to original variables if augmented
+    if spec.augmented
+        orig_idx = _original_var_indices(spec)
+        vnames = [string(s) for s in spec.original_endog]
+        OccBinSolution{T}(
+            linear_path[:, orig_idx], pw_path[:, orig_idx], spec.steady_state[orig_idx],
+            regime_history, converged, iterations,
+            spec, vnames
+        )
+    else
+        OccBinSolution{T}(
+            linear_path, pw_path, spec.steady_state,
+            regime_history, converged, iterations,
+            spec, spec.varnames
+        )
+    end
 end
 
 """
@@ -1061,11 +1094,22 @@ function occbin_solve(spec::DSGESpec{T}, c1::OccBinConstraint{T}, c2::OccBinCons
                           P, Q, spec, c1, c2, shock_path, nperiods;
                           maxiter=maxiter, curb_retrench=curb_retrench)
 
-    OccBinSolution{T}(
-        linear_path, pw_path, spec.steady_state,
-        regime_history, converged, iterations,
-        spec, spec.varnames
-    )
+    # Filter output to original variables if augmented
+    if spec.augmented
+        orig_idx = _original_var_indices(spec)
+        vnames = [string(s) for s in spec.original_endog]
+        OccBinSolution{T}(
+            linear_path[:, orig_idx], pw_path[:, orig_idx], spec.steady_state[orig_idx],
+            regime_history, converged, iterations,
+            spec, vnames
+        )
+    else
+        OccBinSolution{T}(
+            linear_path, pw_path, spec.steady_state,
+            regime_history, converged, iterations,
+            spec, spec.varnames
+        )
+    end
 end
 
 """
