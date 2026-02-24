@@ -628,13 +628,20 @@ function _show_dsge_text(io::IO, spec::DSGESpec{T}) where {T}
     # --- Header ---
     println(io, "DSGE Model Specification")
     println(io, repeat("=", 50))
-    println(io, "  Endogenous variables:  ", spec.n_endog,
-            "  (", join(string.(spec.endog), ", "), ")")
+    disp_endog = spec.augmented ? spec.original_endog : spec.endog
+    n_disp = length(disp_endog)
+    disp_eq = spec.augmented ? spec.original_equations : spec.equations
+    println(io, "  Endogenous variables:  ", n_disp,
+            "  (", join(string.(disp_endog), ", "), ")")
     println(io, "  Exogenous shocks:      ", spec.n_exog,
             "  (", join(string.(spec.exog), ", "), ")")
     println(io, "  Parameters:            ", spec.n_params)
-    println(io, "  Equations:             ", length(spec.equations))
+    println(io, "  Equations:             ", length(disp_eq))
     println(io, "  Forward-looking:       ", spec.n_expect)
+    if spec.augmented
+        println(io, "  Augmented state dim:   ", spec.n_endog,
+                "  (max lag: ", spec.max_lag, ", max lead: ", spec.max_lead, ")")
+    end
     println(io)
 
     # --- Calibration ---
@@ -646,20 +653,25 @@ function _show_dsge_text(io::IO, spec::DSGESpec{T}) where {T}
     end
     println(io)
 
-    # --- Equations ---
+    # --- Equations (original only for augmented models) ---
     println(io, "Model Equations")
     println(io, repeat("-", 50))
-    for (i, eq) in enumerate(spec.equations)
-        eq_str = _equation_to_display(eq, spec.endog, spec.exog, spec.params; mode=:text)
+    for (i, eq) in enumerate(disp_eq)
+        eq_str = _equation_to_display(eq, spec.original_endog, spec.exog, spec.params; mode=:text)
         println(io, "  ($i)  ", eq_str)
     end
 
-    # --- Steady state ---
+    # --- Steady state (original variables only) ---
     if !isempty(spec.steady_state)
         println(io)
         println(io, "Steady State")
         println(io, repeat("-", 50))
-        println(io, _steady_state_text(spec.endog, spec.steady_state))
+        if spec.augmented
+            orig_idx = _original_var_indices(spec)
+            println(io, _steady_state_text(spec.original_endog, spec.steady_state[orig_idx]))
+        else
+            println(io, _steady_state_text(spec.endog, spec.steady_state))
+        end
     end
 end
 
@@ -674,24 +686,31 @@ LaTeX-mode display for `DSGESpec`: model equations in `align` environment,
 calibration in `tabular`, and steady state with `\\bar{}` notation.
 """
 function _show_dsge_latex(io::IO, spec::DSGESpec{T}) where {T}
+    disp_endog = spec.augmented ? spec.original_endog : spec.endog
+    disp_eq = spec.augmented ? spec.original_equations : spec.equations
+
     # --- Header comment ---
     println(io, "% DSGE Model Specification")
-    println(io, "% Endogenous: ", join(string.(spec.endog), ", "))
+    println(io, "% Endogenous: ", join(string.(disp_endog), ", "))
     println(io, "% Exogenous: ", join(string.(spec.exog), ", "))
+    if spec.augmented
+        println(io, "% Augmented state dimension: ", spec.n_endog,
+                " (max lag: ", spec.max_lag, ", max lead: ", spec.max_lead, ")")
+    end
     println(io)
 
-    # --- Equations ---
+    # --- Equations (original only for augmented models) ---
     println(io, "\\begin{align}")
-    for (i, eq) in enumerate(spec.equations)
-        eq_str = _equation_to_display(eq, spec.endog, spec.exog, spec.params; mode=:latex)
+    for (i, eq) in enumerate(disp_eq)
+        eq_str = _equation_to_display(eq, spec.original_endog, spec.exog, spec.params; mode=:latex)
         label = "\\label{eq:dsge_$i}"
-        trailing = i < length(spec.equations) ? " \\\\" : ""
+        trailing = i < length(disp_eq) ? " \\\\" : ""
         println(io, "  ", eq_str, " ", label, trailing)
     end
     println(io, "\\end{align}")
     println(io)
 
-    # --- Calibration ---
+    # --- Calibration (unchanged) ---
     println(io, "\\begin{tabular}{ll}")
     println(io, "\\hline")
     println(io, "Parameter & Value \\\\")
@@ -704,11 +723,16 @@ function _show_dsge_latex(io::IO, spec::DSGESpec{T}) where {T}
     println(io, "\\hline")
     println(io, "\\end{tabular}")
 
-    # --- Steady state ---
+    # --- Steady state (original variables only) ---
     if !isempty(spec.steady_state)
         println(io)
         println(io, "\\begin{align}")
-        print(io, _steady_state_latex(spec.endog, spec.steady_state))
+        if spec.augmented
+            orig_idx = _original_var_indices(spec)
+            print(io, _steady_state_latex(spec.original_endog, spec.steady_state[orig_idx]))
+        else
+            print(io, _steady_state_latex(spec.endog, spec.steady_state))
+        end
         println(io)
         println(io, "\\end{align}")
     end
@@ -725,26 +749,34 @@ HTML-mode display for `DSGESpec`: MathJax-rendered equations, HTML table
 for calibration, and steady state values.
 """
 function _show_dsge_html(io::IO, spec::DSGESpec{T}) where {T}
+    disp_endog = spec.augmented ? spec.original_endog : spec.endog
+    disp_eq = spec.augmented ? spec.original_equations : spec.equations
+
     # --- Header ---
     println(io, "<div class=\"dsge-spec\">")
     println(io, "<h3>DSGE Model Specification</h3>")
-    println(io, "<p>Endogenous: ", join(string.(spec.endog), ", "),
+    println(io, "<p>Endogenous: ", join(string.(disp_endog), ", "),
             " | Exogenous: ", join(string.(spec.exog), ", "),
             " | Parameters: ", spec.n_params,
-            " | Forward-looking: ", spec.n_expect, "</p>")
+            " | Forward-looking: ", spec.n_expect)
+    if spec.augmented
+        println(io, " | Augmented state dim: ", spec.n_endog, "</p>")
+    else
+        println(io, "</p>")
+    end
 
-    # --- Equations (MathJax) ---
+    # --- Equations (MathJax, original only for augmented models) ---
     println(io, "<h4>Model Equations</h4>")
     println(io, "\$\$\\begin{align}")
-    for (i, eq) in enumerate(spec.equations)
-        eq_str = _equation_to_display(eq, spec.endog, spec.exog, spec.params; mode=:latex)
+    for (i, eq) in enumerate(disp_eq)
+        eq_str = _equation_to_display(eq, spec.original_endog, spec.exog, spec.params; mode=:latex)
         tag = "\\tag{" * string(i) * "}"
-        trailing = i < length(spec.equations) ? " \\\\" : ""
+        trailing = i < length(disp_eq) ? " \\\\" : ""
         println(io, "  ", eq_str, " ", tag, trailing)
     end
     println(io, "\\end{align}\$\$")
 
-    # --- Calibration (HTML table) ---
+    # --- Calibration (HTML table, unchanged) ---
     println(io, "<h4>Calibration</h4>")
     println(io, "<table>")
     println(io, "<tr><th>Parameter</th><th>Value</th></tr>")
@@ -756,11 +788,16 @@ function _show_dsge_html(io::IO, spec::DSGESpec{T}) where {T}
     end
     println(io, "</table>")
 
-    # --- Steady state ---
+    # --- Steady state (original variables only) ---
     if !isempty(spec.steady_state)
         println(io, "<h4>Steady State</h4>")
         println(io, "\$\$\\begin{align}")
-        print(io, _steady_state_latex(spec.endog, spec.steady_state))
+        if spec.augmented
+            orig_idx = _original_var_indices(spec)
+            print(io, _steady_state_latex(spec.original_endog, spec.steady_state[orig_idx]))
+        else
+            print(io, _steady_state_latex(spec.endog, spec.steady_state))
+        end
         println(io)
         println(io, "\\end{align}\$\$")
     end

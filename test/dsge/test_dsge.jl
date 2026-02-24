@@ -2388,4 +2388,57 @@ end
     @test abs(ir.values[4, 1, 1] - 0.5) < 0.05
 end
 
+@testset "Augmentation: display shows original equations (#54)" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ_0 = 0.01, σ_3 = 0.007
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ_0 * ε[t] + σ_3 * ε[t-3]
+    end
+
+    # Text display
+    io = IOBuffer()
+    show(io, spec)
+    output = String(take!(io))
+
+    # Should show original equation count (1), not augmented (4)
+    @test occursin("Equations:             1", output)
+    # Should show original variable (y), not auxiliaries
+    @test occursin("(y)", output)
+    @test !occursin("__news", output)
+    # Should show augmented state dim
+    @test occursin("Augmented state dim", output)
+
+    # LaTeX display
+    set_display_backend(:latex)
+    io2 = IOBuffer()
+    show(io2, spec)
+    latex_output = String(take!(io2))
+    @test occursin("Augmented state dimension", latex_output)
+    @test !occursin("__news", latex_output)
+
+    # HTML display
+    set_display_backend(:html)
+    io3 = IOBuffer()
+    show(io3, spec)
+    html_output = String(take!(io3))
+    @test occursin("Augmented state dim", html_output)
+    @test !occursin("__news", html_output)
+
+    # Reset
+    set_display_backend(:text)
+
+    # Non-augmented model should NOT show augmented state dim
+    spec2 = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+    end
+    io4 = IOBuffer()
+    show(io4, spec2)
+    output2 = String(take!(io4))
+    @test !occursin("Augmented state dim", output2)
+end
+
 end # top-level @testset
