@@ -33,7 +33,8 @@ using SparseArrays
 
 """
     perfect_foresight(spec::DSGESpec{FT}; T_periods=100, shock_path=nothing,
-                       max_iter=100, tol=1e-8, constraints=DSGEConstraint[]) → PerfectForesightPath{FT}
+                       max_iter=100, tol=1e-8, constraints=DSGEConstraint[],
+                       solver=nothing) → PerfectForesightPath{FT}
 
 Solve for the deterministic perfect foresight path given a sequence of shocks.
 
@@ -43,13 +44,15 @@ Solve for the deterministic perfect foresight path given a sequence of shocks.
 - `max_iter::Int=100` — Newton iteration limit
 - `tol::Real=1e-8` — convergence tolerance (max abs residual)
 - `constraints::Vector{<:DSGEConstraint}` — variable bounds and nonlinear inequalities (requires JuMP + Ipopt)
+- `solver::Symbol` — `:ipopt` (NLP) or `:path` (MCP); auto-detected if not specified
 """
 function perfect_foresight(spec::DSGESpec{FT};
         T_periods::Int=100,
         shock_path::Union{Nothing,AbstractMatrix}=nothing,
         max_iter::Int=100,
         tol::Real=1e-8,
-        constraints::Vector=DSGEConstraint[]) where {FT<:AbstractFloat}
+        constraints::Vector=DSGEConstraint[],
+        solver::Union{Nothing,Symbol}=nothing) where {FT<:AbstractFloat}
 
     n = spec.n_endog
     n_ε = spec.n_exog
@@ -72,7 +75,12 @@ function perfect_foresight(spec::DSGESpec{FT};
     if !isempty(constraints)
         _check_jump_loaded()
         _validate_constraints(spec, constraints)
-        return _jump_perfect_foresight(spec, T_periods, shocks, constraints)
+        chosen = _select_solver(constraints, solver)
+        if chosen == :path
+            return _path_perfect_foresight(spec, T_periods, shocks, constraints)
+        else
+            return _jump_perfect_foresight(spec, T_periods, shocks, constraints)
+        end
     end
 
     # Initialize: all periods at steady state

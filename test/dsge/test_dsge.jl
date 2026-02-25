@@ -4229,6 +4229,19 @@ end
     @test pf.converged
 end
 
+@testset "Solver auto-detection" begin
+    bounds_only = [variable_bound(:y, lower=0.0)]
+    mixed = [variable_bound(:y, lower=0.0),
+             nonlinear_constraint((y, yl, yld, e, th) -> y[1] - 1.0; label="test")]
+
+    # With NonlinearConstraints → always :ipopt
+    @test MacroEconometricModels._select_solver(mixed, nothing) == :ipopt
+
+    # User override always wins
+    @test MacroEconometricModels._select_solver(bounds_only, :ipopt) == :ipopt
+    @test MacroEconometricModels._select_solver(mixed, :path) == :path
+end
+
 # JuMP integration tests — only run if JuMP + Ipopt are available
 _jump_available = try
     @eval import JuMP

@@ -95,12 +95,32 @@ const _JUMP_INSTALL_MSG = "Constrained solving requires JuMP and Ipopt. Install 
 # Without the extension loaded, calling these gives MethodError; callers check first.
 function _jump_compute_steady_state end
 function _jump_perfect_foresight end
+function _path_compute_steady_state end
+function _path_perfect_foresight end
 
 function _check_jump_loaded()
     if !hasmethod(_jump_compute_steady_state, Tuple{DSGESpec, Vector})
         throw(ArgumentError(_JUMP_INSTALL_MSG))
     end
     return nothing
+end
+
+"""Check if PATHSolver is loaded (extension adds method to `_path_compute_steady_state`)."""
+function _path_available()
+    return hasmethod(_path_compute_steady_state, Tuple{DSGESpec, Vector})
+end
+
+"""
+    _select_solver(constraints, solver_override) -> Symbol
+
+Auto-detect solver: VariableBounds-only → :path (if available), NonlinearConstraints → :ipopt.
+User override always wins.
+"""
+function _select_solver(constraints::Vector, solver_override::Union{Nothing,Symbol})
+    solver_override !== nothing && return solver_override
+    has_nlcon = any(c -> c isa NonlinearConstraint, constraints)
+    has_nlcon && return :ipopt
+    return _path_available() ? :path : :ipopt
 end
 
 """
