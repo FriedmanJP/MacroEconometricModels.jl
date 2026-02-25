@@ -535,6 +535,57 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         journal="Handbook of Macroeconomics", volume="2", issue="", pages="527--724",
         doi="10.1016/bs.hesmac.2016.03.006", isbn="", publisher="Elsevier",
         entry_type=:incollection),
+    # --- DSGE solvers ---
+    :klein2000 => (key=:klein2000, authors="Klein, Paul", year=2000,
+        title="Using the Generalized Schur Form to Solve a Multivariate Linear Rational Expectations Model",
+        journal="Journal of Economic Dynamics and Control", volume="24", issue="10", pages="1405--1423",
+        doi="10.1016/S0165-1889(99)00045-7", isbn="", publisher="", entry_type=:article),
+    :schmitt_grohe_uribe2004 => (key=:schmitt_grohe_uribe2004,
+        authors="Schmitt-Groh{\\'e}, Stephanie and Uribe, Mart{\\'\\i}n", year=2004,
+        title="Solving Dynamic General Equilibrium Models Using a Second-Order Approximation to the Policy Function",
+        journal="Journal of Economic Dynamics and Control", volume="28", issue="4", pages="755--775",
+        doi="10.1016/S0165-1889(03)00043-5", isbn="", publisher="", entry_type=:article),
+    :kim_kim_schaumburg_sims2008 => (key=:kim_kim_schaumburg_sims2008,
+        authors="Kim, Jinill and Kim, Sunghyun Henry and Schaumburg, Ernst and Sims, Christopher A.", year=2008,
+        title="Calculating and Using Second-Order Accurate Solutions of Discrete Time Dynamic Equilibrium Models",
+        journal="Journal of Economic Dynamics and Control", volume="32", issue="11", pages="3397--3414",
+        doi="10.1016/j.jedc.2008.02.003", isbn="", publisher="", entry_type=:article),
+    :andreasen_etal2018 => (key=:andreasen_etal2018,
+        authors="Andreasen, Martin M. and Fern{\\'a}ndez-Villaverde, Jes{\\'u}s and Rubio-Ram{\\'\\i}rez, Juan F.",
+        year=2018,
+        title="The Pruned State-Space System for Non-Linear DSGE Models: Theory and Empirical Applications",
+        journal="Review of Economic Studies", volume="85", issue="1", pages="1--49",
+        doi="10.1093/restud/rdx037", isbn="", publisher="", entry_type=:article),
+    # --- DSGE projection/PFI ---
+    :coleman1990 => (key=:coleman1990, authors="Coleman, Wilbur John, II", year=1990,
+        title="Solving the Stochastic Growth Model by Policy-Function Iteration",
+        journal="Journal of Business \\& Economic Statistics", volume="8", issue="1", pages="27--29",
+        doi="10.1080/07350015.1990.10509769", isbn="", publisher="", entry_type=:article),
+    :judd1992 => (key=:judd1992, authors="Judd, Kenneth L.", year=1992,
+        title="Projection Methods for Solving Aggregate Growth Models",
+        journal="Journal of Economic Theory", volume="58", issue="2", pages="410--452",
+        doi="10.1016/0022-0531(92)90061-L", isbn="", publisher="", entry_type=:article),
+    :judd1998 => (key=:judd1998, authors="Judd, Kenneth L.", year=1998,
+        title="Numerical Methods in Economics",
+        journal="", volume="", issue="", pages="",
+        doi="", isbn="0-262-10071-1", publisher="MIT Press", entry_type=:book),
+    :judd_maliar_maliar_valero2014 => (key=:judd_maliar_maliar_valero2014,
+        authors="Judd, Kenneth L. and Maliar, Lilia and Maliar, Serguei and Valero, Rafael", year=2014,
+        title="Smolyak Method for Solving Dynamic Economic Models: Lagrange Interpolation, Anisotropic Grid and Adaptive Domain",
+        journal="Journal of Economic Dynamics and Control", volume="44", issue="", pages="92--123",
+        doi="10.1016/j.jedc.2014.03.003", isbn="", publisher="", entry_type=:article),
+    # --- DSGE GIRF ---
+    :koop_pesaran_potter1996 => (key=:koop_pesaran_potter1996,
+        authors="Koop, Gary and Pesaran, M. Hashem and Potter, Simon M.", year=1996,
+        title="Impulse Response Analysis in Nonlinear Multivariate Models",
+        journal="Journal of Econometrics", volume="74", issue="1", pages="119--147",
+        doi="10.1016/0304-4076(95)01753-4", isbn="", publisher="", entry_type=:article),
+    # --- DSGE estimation ---
+    :smets_wouters2007 => (key=:smets_wouters2007,
+        authors="Smets, Frank and Wouters, Rafael", year=2007,
+        title="Shocks and Frictions in US Business Cycles: A Bayesian DSGE Approach",
+        journal="American Economic Review", volume="97", issue="3", pages="586--606",
+        doi="10.1257/aer.97.3.586", isbn="", publisher="", entry_type=:article),
 )
 
 # --- Type/method → reference keys mapping ---
@@ -703,7 +754,7 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :balance_panel => [:banbura_modugno2014],
     # DSGE
     :DSGESolution => [:sims2002, :blanchard_kahn1980],
-    :DSGEEstimation => [:sims2002, :christiano_eichenbaum_evans2005, :hansen_singleton1982],
+    :DSGEEstimation => [:sims2002, :christiano_eichenbaum_evans2005, :hansen_singleton1982, :smets_wouters2007],
     :PerfectForesightPath => [:sims2002],
     :DSGESpec => [:sims2002, :fernandez_villaverde_rubio_schorfheide2016],
     :gensys => [:sims2002],
@@ -717,6 +768,15 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :occbin => [:guerrieri_iacoviello2015],
     :occbin_solve => [:guerrieri_iacoviello2015],
     :occbin_irf => [:guerrieri_iacoviello2015],
+    # DSGE solver methods
+    :klein => [:klein2000],
+    :perturbation_solver => [:schmitt_grohe_uribe2004, :kim_kim_schaumburg_sims2008],
+    :collocation_solver => [:judd1998, :judd_maliar_maliar_valero2014],
+    :pfi_solver => [:coleman1990, :judd1998],
+    # DSGE solution types
+    :PerturbationSolution => [:schmitt_grohe_uribe2004, :kim_kim_schaumburg_sims2008],
+    :ProjectionSolution => [:judd1998, :judd_maliar_maliar_valero2014],
+    :LinearDSGE => [:sims2002],
     # Analytical moments
     :analytical_moments => [:hamilton1994, :fernandez_villaverde_rubio_schorfheide2016],
     :solve_lyapunov => [:hamilton1994, :fernandez_villaverde_rubio_schorfheide2016],
@@ -1040,6 +1100,9 @@ refs(io::IO, ::DSGESolution; kw...) = refs(io, _TYPE_REFS[:DSGESolution]; kw...)
 refs(io::IO, ::DSGEEstimation; kw...) = refs(io, _TYPE_REFS[:DSGEEstimation]; kw...)
 refs(io::IO, ::PerfectForesightPath; kw...) = refs(io, _TYPE_REFS[:PerfectForesightPath]; kw...)
 refs(io::IO, ::DSGESpec; kw...) = refs(io, _TYPE_REFS[:DSGESpec]; kw...)
+refs(io::IO, ::PerturbationSolution; kw...) = refs(io, _TYPE_REFS[:PerturbationSolution]; kw...)
+refs(io::IO, ::ProjectionSolution; kw...) = refs(io, _TYPE_REFS[:ProjectionSolution]; kw...)
+refs(io::IO, ::LinearDSGE; kw...) = refs(io, _TYPE_REFS[:LinearDSGE]; kw...)
 
 # OccBin types
 refs(io::IO, ::OccBinSolution; kw...) = refs(io, _TYPE_REFS[:OccBinSolution]; kw...)
