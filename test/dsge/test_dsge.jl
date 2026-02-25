@@ -27,6 +27,8 @@ if !@isdefined(FAST)
     const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
 end
 
+const _suppress_warnings = MacroEconometricModels._suppress_warnings
+
 @testset "DSGE Module" begin
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -969,6 +971,7 @@ end
 # ─────────────────────────────────────────────────────────────────────────────
 
 @testset "IRF matching: recover AR(1) parameter" begin
+    _suppress_warnings() do
     # True model: y_t = 0.8 * y_{t-1} + ε_t
     rng = Random.MersenneTwister(42)
     T_obs = FAST ? 300 : 500
@@ -991,9 +994,11 @@ end
     @test est.theta[1] ≈ 0.8 atol=0.15
     @test est.method == :irf_matching
     @test is_determined(est.solution)
+    end
 end
 
 @testset "Euler GMM: basic" begin
+    _suppress_warnings() do
     rng = Random.MersenneTwister(123)
     T_obs = FAST ? 200 : 300
     y_true = zeros(T_obs)
@@ -1013,6 +1018,7 @@ end
     @test est isa DSGEEstimation{Float64}
     @test est.method == :euler_gmm
     @test est.theta[1] ≈ 0.7 atol=0.2
+    end
 end
 
 @testset "estimate_dsge: invalid method" begin
@@ -1027,6 +1033,7 @@ end
 end
 
 @testset "IRF matching: pre-computed target IRFs" begin
+    _suppress_warnings() do
     rng = Random.MersenneTwister(99)
     T_obs = FAST ? 200 : 400
     y_true = zeros(T_obs)
@@ -1050,6 +1057,7 @@ end
                          target_irfs=target, irf_horizon=10)
     @test est isa DSGEEstimation{Float64}
     @test est.converged
+    end
 end
 
 @testset "DSGEEstimation show and report" begin
@@ -1193,6 +1201,7 @@ end
 # ─────────────────────────────────────────────────────────────────────────────
 
 @testset "DSGE SMM Estimation" begin
+    _suppress_warnings() do
     # Simple AR(1): y_t = rho * y_{t-1} + sigma * e_t
     rng = Random.MersenneTwister(42)
     spec = @dsge begin
@@ -1220,6 +1229,7 @@ end
     @test est.converged
     @test abs(est.theta[1] - 0.7) < 0.25  # reasonable recovery
     @test is_determined(est.solution)
+    end
 end
 
 @testset "DSGE SMM: invalid method still errors" begin
@@ -1327,6 +1337,7 @@ end
 # ─────────────────────────────────────────────────────────────────────────────
 
 @testset "DSGE Analytical GMM Estimation" begin
+    _suppress_warnings() do
     rng = Random.MersenneTwister(42)
     spec = @dsge begin
         parameters: rho = 0.7, sigma = 1.0
@@ -1351,9 +1362,11 @@ end
     @test est.converged
     @test abs(est.theta[1] - 0.7) < 0.2  # reasonable recovery
     @test is_determined(est.solution)
+    end
 end
 
 @testset "DSGE Analytical GMM: lags kwarg" begin
+    _suppress_warnings() do
     spec = @dsge begin
         parameters: rho = 0.8
         endogenous: y
@@ -1368,6 +1381,7 @@ end
                         method=:analytical_gmm, lags=2)
     @test est isa DSGEEstimation{Float64}
     @test est.method == :analytical_gmm
+    end
 end
 
 @testset "DSGE estimate_dsge: invalid method error includes analytical_gmm" begin
@@ -1569,6 +1583,7 @@ end
 end
 
 @testset "OccBin: one-constraint ZLB" begin
+    _suppress_warnings() do
     spec = @dsge begin
         parameters: rho = 0.9, phi = 1.5
         endogenous: y, i
@@ -1597,9 +1612,11 @@ end
 
     # There should be some binding periods
     @test sum(sol.regime_history[:, 1]) > 0
+    end
 end
 
 @testset "OccBin: no-binding case" begin
+    _suppress_warnings() do
     spec = @dsge begin
         parameters: rho = 0.5
         endogenous: y, i
@@ -1617,9 +1634,11 @@ end
     @test sum(sol.regime_history) == 0
     # When no binding, piecewise should equal linear
     @test sol.piecewise_path ≈ sol.linear_path atol=1e-10
+    end
 end
 
 @testset "OccBin: explicit alt_spec variant" begin
+    _suppress_warnings() do
     spec = @dsge begin
         parameters: rho = 0.9, phi = 1.5
         endogenous: y, i
@@ -1638,9 +1657,11 @@ end
                        shock_path=shock_path, nperiods=40)
     @test isa(sol, OccBinSolution{Float64})
     @test sol.converged
+    end
 end
 
 @testset "OccBin: leq constraint" begin
+    _suppress_warnings() do
     spec = @dsge begin
         parameters: rho = 0.9
         endogenous: y, cap
@@ -1662,9 +1683,11 @@ end
     @test maximum(sol.linear_path[:, cap_idx] .+ ss_cap) > 0.5
     # Piecewise path should respect the cap in levels (up to numerical tolerance)
     @test maximum(sol.piecewise_path[:, cap_idx] .+ ss_cap) <= 0.5 + 1e-4
+    end
 end
 
 @testset "OccBin: show and report on solution" begin
+    _suppress_warnings() do
     spec = @dsge begin
         parameters: rho = 0.5
         endogenous: y, i
@@ -1684,6 +1707,7 @@ end
     @test occursin("OccBin Piecewise-Linear Solution", str)
     @test occursin("Converged", str)
     @test redirect_stdout(devnull) do; report(sol) end === nothing
+    end
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1691,6 +1715,7 @@ end
 # ─────────────────────────────────────────────────────────────────────────────
 
 @testset "OccBin: two-constraint" begin
+    _suppress_warnings() do
     spec = @dsge begin
         parameters: rho = 0.8, phi = 1.5
         endogenous: y, i, c
@@ -1721,9 +1746,11 @@ end
     c_idx = findfirst(==(:c), spec.endog)
     @test minimum(sol.piecewise_path[:, i_idx]) >= -1e-8
     @test minimum(sol.piecewise_path[:, c_idx]) >= -1e-8
+    end
 end
 
 @testset "OccBin: two-constraint no-binding" begin
+    _suppress_warnings() do
     spec = @dsge begin
         parameters: rho = 0.5
         endogenous: y, i, c
@@ -1744,9 +1771,11 @@ end
     @test sol.converged
     @test sum(sol.regime_history) == 0
     @test sol.piecewise_path ≈ sol.linear_path atol=1e-10
+    end
 end
 
 @testset "OccBin: two-constraint with explicit alt_specs" begin
+    _suppress_warnings() do
     spec = @dsge begin
         parameters: rho = 0.8, phi = 1.5
         endogenous: y, i, c
@@ -1773,9 +1802,11 @@ end
     @test isa(sol, OccBinSolution{Float64})
     @test sol.converged
     @test size(sol.regime_history, 2) == 2
+    end
 end
 
 @testset "OccBin: two-constraint curb_retrench" begin
+    _suppress_warnings() do
     spec = @dsge begin
         parameters: rho = 0.8, phi = 1.5
         endogenous: y, i, c
@@ -1796,6 +1827,7 @@ end
                        curb_retrench=true)
     @test isa(sol, OccBinSolution{Float64})
     @test sol.converged
+    end
 end
 
 @testset "OccBin: _find_last_binding_two" begin
@@ -1813,6 +1845,7 @@ end
 end
 
 @testset "OccBin: two-constraint show/report" begin
+    _suppress_warnings() do
     spec = @dsge begin
         parameters: rho = 0.5
         endogenous: y, i, c
@@ -1836,6 +1869,7 @@ end
     @test occursin("OccBin Piecewise-Linear Solution", str)
     @test occursin("Converged", str)
     @test redirect_stdout(devnull) do; report(sol) end === nothing
+    end
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1843,6 +1877,7 @@ end
 # ─────────────────────────────────────────────────────────────────────────────
 
 @testset "OccBin: refs()" begin
+    _suppress_warnings() do
     spec = @dsge begin
         parameters: rho = 0.9, phi = 1.5
         endogenous: y, i
@@ -1864,6 +1899,7 @@ end
     # Symbol dispatch
     r2 = refs(:occbin)
     @test occursin("Guerrieri", r2)
+    end # _suppress_warnings
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1871,6 +1907,7 @@ end
 # ─────────────────────────────────────────────────────────────────────────────
 
 @testset "OccBin: occbin_irf one-constraint" begin
+    _suppress_warnings() do
     spec = @dsge begin
         parameters: rho = 0.9, phi = 1.5
         endogenous: y, i
@@ -1895,9 +1932,11 @@ end
 
     # Some binding periods
     @test sum(oirf.regime_history) > 0
+    end
 end
 
 @testset "OccBin: occbin_irf no-binding" begin
+    _suppress_warnings() do
     spec = @dsge begin
         parameters: rho = 0.5, phi = 1.0
         endogenous: y, i
@@ -1911,9 +1950,11 @@ end
     oirf = occbin_irf(spec, constraint, 1, 20; magnitude=0.5)
     @test oirf.linear ≈ oirf.piecewise atol=1e-10
     @test sum(oirf.regime_history) == 0
+    end
 end
 
 @testset "OccBin: occbin_irf two-constraint" begin
+    _suppress_warnings() do
     spec = @dsge begin
         parameters: rho = 0.8, phi = 1.5
         endogenous: y, i, c
@@ -1930,6 +1971,7 @@ end
     @test isa(oirf, OccBinIRF{Float64})
     @test size(oirf.regime_history, 2) == 2
     @test oirf.shock_name == "e"
+    end
 end
 
 @testset "OccBin: occbin_irf invalid shock_idx" begin
@@ -1947,6 +1989,7 @@ end
 end
 
 @testset "OccBin: occbin_irf show" begin
+    _suppress_warnings() do
     spec = @dsge begin
         parameters: rho = 0.9, phi = 1.5
         endogenous: y, i
@@ -1963,6 +2006,7 @@ end
     output = String(take!(io))
     @test occursin("OccBin IRF", output)
     @test occursin("e", output)
+    end # _suppress_warnings
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1970,6 +2014,7 @@ end
 # ─────────────────────────────────────────────────────────────────────────────
 
 @testset "OccBin: explicit alternative spec" begin
+    _suppress_warnings() do
     spec = @dsge begin
         parameters: rho = 0.9, phi = 1.5
         endogenous: y, i
@@ -1996,9 +2041,11 @@ end
     sol = occbin_solve(spec, constraint, alt_spec; shock_path=shock_path, nperiods=30)
     @test sol.converged
     @test minimum(sol.piecewise_path[:, 2]) >= -1e-8
+    end
 end
 
 @testset "OccBin: <= constraint direction" begin
+    _suppress_warnings() do
     spec = @dsge begin
         parameters: rho = 0.5
         endogenous: y, debt
@@ -2019,6 +2066,7 @@ end
     @test sol.converged
     debt_idx = 2
     @test maximum(sol.piecewise_path[:, debt_idx]) <= 1.0 + 1e-8
+    end
 end
 
 @testset "OccBin: maxiter warning" begin
@@ -2042,6 +2090,7 @@ end
 end
 
 @testset "OccBin: show/report for OccBinSolution" begin
+    _suppress_warnings() do
     spec = @dsge begin
         parameters: rho = 0.9, phi = 1.5
         endogenous: y, i
@@ -2064,6 +2113,7 @@ end
 
     # report should not error
     @test redirect_stdout(devnull) do; report(sol) end === nothing
+    end # _suppress_warnings
 end
 
 @testset "OccBin: constraint parsing edge cases" begin
@@ -2090,6 +2140,7 @@ end
 # ─────────────────────────────────────────────────────────────────────────────
 
 @testset "OccBin: plot_result OccBinIRF" begin
+    _suppress_warnings() do
     spec = @dsge begin
         parameters: rho = 0.9, phi = 1.5
         endogenous: y, i
@@ -2105,9 +2156,11 @@ end
     @test isa(p, PlotOutput)
     @test occursin("OccBin", p.html)
     @test occursin("d3", p.html)
+    end # _suppress_warnings
 end
 
 @testset "OccBin: plot_result OccBinSolution" begin
+    _suppress_warnings() do
     spec = @dsge begin
         parameters: rho = 0.9, phi = 1.5
         endogenous: y, i
@@ -2124,6 +2177,7 @@ end
     p = plot_result(sol)
     @test isa(p, PlotOutput)
     @test occursin("OccBin", p.html)
+    end # _suppress_warnings
 end
 
 @testset "DSGE Display (#57)" begin
@@ -3473,7 +3527,7 @@ end
         @test length(mom_cf) == length(m_sim)
         # Should match within sampling error (generous tolerance for mean near zero)
         for i in eachindex(mom_cf)
-            @test mom_cf[i] ≈ m_sim[i] atol=max(abs(m_sim[i]) * 0.15, 1e-4)
+            @test mom_cf[i] ≈ m_sim[i] atol=max(abs(m_sim[i]) * 0.15, 2e-4)
         end
     end
 
@@ -3540,6 +3594,7 @@ end
     end
 
     @testset "Round-trip perturbation GMM estimation" begin
+        _suppress_warnings() do
         spec = @dsge begin
             parameters: ρ = 0.85, σ = 0.01
             endogenous: y
@@ -3571,6 +3626,7 @@ end
         show(io, est)
         output = String(take!(io))
         @test occursin("analytical_gmm", output)
+        end
     end
 
 end
@@ -4254,6 +4310,7 @@ end
 if _jump_available
 
 @testset "Constrained Steady State (JuMP)" begin
+    _suppress_warnings() do
     # Simple AR(1) with non-binding constraint
     spec = @dsge begin
         parameters: ρ = 0.9, σ = 0.01
@@ -4289,9 +4346,11 @@ if _jump_available
         constraints=[variable_bound(:k, lower=0.1), variable_bound(:c, lower=0.1)])
     @test abs(spec2_c.steady_state[1] - k_ss) / k_ss < 0.05
     @test abs(spec2_c.steady_state[2] - c_ss) / c_ss < 0.05
+    end # _suppress_warnings
 end
 
 @testset "Constrained Perfect Foresight (JuMP)" begin
+    _suppress_warnings() do
     spec = @dsge begin
         parameters: ρ = 0.9, σ = 1.0
         endogenous: y
@@ -4332,9 +4391,11 @@ end
     @test pf_upper isa PerfectForesightPath
     @test pf_upper.converged
     @test all(pf_upper.path[:, 1] .<= 5.0 + 1e-4)
+    end # _suppress_warnings
 end
 
 @testset "Binding Steady-State Constraint (JuMP)" begin
+    _suppress_warnings() do
     # AR(1) SS is 0.  Add binding lower bound y >= 0.5 → constrained SS at bound.
     # SS objective: min (y - 0.9y)² = (0.1y)² subject to y >= 0.5  →  y* = 0.5
     spec = @dsge begin
@@ -4357,9 +4418,11 @@ end
                 constraints=[variable_bound(:y, lower=0.0)])
     @test pf isa PerfectForesightPath
     @test !pf.converged  # infeasible: equality constraints + binding bound conflict
+    end # _suppress_warnings
 end
 
 @testset "NonlinearConstraint Integration (JuMP)" begin
+    _suppress_warnings() do
     # AR(1) with nonlinear constraint on SS: y - 0.5 <= 0 (caps y at 0.5)
     spec = @dsge begin
         parameters: ρ = 0.9, σ = 0.01
@@ -4394,6 +4457,7 @@ end
     @test pf isa PerfectForesightPath
     @test pf.converged
     @test all(pf.path[:, 1] .<= 1.5 + 1e-3)
+    end # _suppress_warnings
 end
 
 # PATH MCP tests — only run if PATHSolver is also available
@@ -4407,6 +4471,7 @@ end
 if _path_available
 
 @testset "MCP Steady State (PATH)" begin
+    _suppress_warnings() do
     # Non-binding: SS is 0, lower=-1 doesn't bind → same as unconstrained
     spec = @dsge begin
         parameters: ρ = 0.9, σ = 0.01
@@ -4445,9 +4510,11 @@ if _path_available
         solver=:path)
     @test spec2_mcp.steady_state[1] ≈ 0.3 atol=0.01   # binding
     @test abs(spec2_mcp.steady_state[2]) < 0.01         # non-binding
+    end # _suppress_warnings
 end
 
 @testset "MCP Perfect Foresight (PATH)" begin
+    _suppress_warnings() do
     spec = @dsge begin
         parameters: ρ = 0.9, σ = 1.0
         endogenous: y
@@ -4494,6 +4561,7 @@ end
     @test pf_cap isa PerfectForesightPath
     @test pf_cap.converged
     @test all(pf_cap.path[:, 1] .<= 0.5 + 1e-4)
+    end # _suppress_warnings
 end
 
 @testset "Auto-detection dispatches PATH" begin

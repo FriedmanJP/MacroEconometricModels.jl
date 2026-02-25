@@ -10,11 +10,17 @@
 
 A comprehensive Julia package for macroeconomic time series analysis.
 
-**Models:** VAR, VECM, Bayesian VAR, Panel VAR, Local Projections, Factor Models, DSGE, ARIMA, ARCH/GARCH, Stochastic Volatility
+**Univariate:** ARIMA, ARCH/GARCH, Stochastic Volatility, HP/Hamilton/BN/BK/Boosted HP filters
+
+**Multivariate:** VAR, VECM, Bayesian VAR, Local Projections, Factor Models
+
+**Panel:** Panel VAR (FD-GMM, System GMM, FE-OLS)
+
+**DSGE:** 6 solvers (Gensys, Blanchard-Kahn, Klein, higher-order perturbation with pruning, Chebyshev projection, PFI), constrained solvers (Ipopt NLP, PATH MCP for ZLB/binding bounds), OccBin, GMM/SMM estimation
 
 **Estimation:** OLS, MLE, GMM, SMM, Bayesian (Gibbs/conjugate), Kalman filter/smoother
 
-**Features:** IRF, FEVD, historical decomposition, 18+ structural identification schemes, nowcasting, hypothesis testing, time series filters, interactive D3.js visualization
+**Features:** IRF, FEVD, historical decomposition, structural identification, nowcasting, hypothesis testing, interactive D3.js visualization
 
 ## Installation
 
@@ -77,15 +83,16 @@ Pkg.add("MacroEconometricModels")
 
 ### DSGE
 - **Model specification** - `@dsge` macro with declarative syntax for parameters, variables, shocks, and equilibrium equations
-- **Steady state** - Numerical solver (Newton's method) or analytical closed-form via `steady_state` block in `@dsge` or `ss_fn` kwarg
-- **Solution** - Gensys (Sims 2002) and Blanchard-Kahn linearization around steady state
-- **Simulation & IRF** - `simulate`, `irf`, `fevd` for solved DSGE models; perfect foresight transition paths
-- **Analytical moments** - Discrete Lyapunov equation `solve_lyapunov` for unconditional covariance; `analytical_moments` for theoretical autocovariance structure (Hamilton 1994)
-- **Estimation** - Four methods via `estimate_dsge`:
-  - IRF matching (minimum distance between model and empirical IRFs)
-  - Euler equation GMM (moment conditions from first-order conditions)
-  - Simulated Method of Moments (SMM with HAC-optimal weighting)
-  - Analytical GMM (Lyapunov-based moments, no simulation noise)
+- **Steady state** - Numerical solver (Newton's method) or analytical closed-form; optional JuMP constraints (`variable_bound`, `nonlinear_constraint`)
+- **Linear solvers** - Gensys (Sims 2002), Blanchard-Kahn (1980), Klein (2000) via unified `solve(spec; method=...)` interface
+- **Higher-order perturbation** - 2nd/3rd order (Schmitt-Grohe & Uribe 2004) with Kim et al. (2008) pruning for stable simulation
+- **Global methods** - Chebyshev collocation (tensor/Smolyak grids, Gauss-Hermite quadrature; Judd 1998); Policy Function Iteration (Coleman 1990, Rendahl 2017)
+- **Constrained solvers** - Auto-detect PATH (MCP, binding bounds/ZLB; Ferris & Munson 1999) or Ipopt (NLP, nonlinear inequalities) via JuMP extensions
+- **Perfect foresight** - Newton solver on stacked system with block-tridiagonal Jacobian; optional PATH/Ipopt constraints
+- **OccBin** - Occasionally binding constraints via piecewise-linear regime switching (Guerrieri & Iacoviello 2015)
+- **Simulation & IRF** - `simulate`, `irf`, `fevd` for linear, pruned higher-order, and projection solutions
+- **Analytical moments** - Lyapunov equation for unconditional covariance; `analytical_moments` for theoretical autocovariance
+- **Estimation** - IRF matching, Euler equation GMM, SMM, analytical GMM via `estimate_dsge`
 
 ### GMM
 - **Generalized Method of Moments** - One-step, two-step, and iterated; Hansen J-test

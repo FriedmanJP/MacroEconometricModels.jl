@@ -22,6 +22,8 @@ using Random
 using DataFrames
 using Statistics
 
+const _suppress_warnings = MacroEconometricModels._suppress_warnings
+
 @testset "Data Module" begin
 
     # =========================================================================
@@ -425,11 +427,13 @@ using Statistics
         end
 
         @testset "fix drops constant columns" begin
-            mat = hcat(ones(20), randn(20))
-            d = TimeSeriesData(mat; varnames=["const_col", "good_col"])
-            d_fixed = fix(d)
-            @test nvars(d_fixed) == 1
-            @test varnames(d_fixed) == ["good_col"]
+            _suppress_warnings() do
+                mat = hcat(ones(20), randn(20))
+                d = TimeSeriesData(mat; varnames=["const_col", "good_col"])
+                d_fixed = fix(d)
+                @test nvars(d_fixed) == 1
+                @test varnames(d_fixed) == ["good_col"]
+            end
         end
 
         @testset "fix invalid method" begin
@@ -727,14 +731,14 @@ using Statistics
         end
 
         @testset "describe_data PanelData" begin
-            df = DataFrame(id=repeat(1:2, inner=30), t=repeat(1:30, 2),
-                          x=randn(60), y=randn(60))
-            pd = xtset(df, :id, :t)
-            io = IOBuffer()
-            # Redirect stdout to capture panel_summary output
-            s = describe_data(pd)
-            @test s isa DataSummary
-            @test s.n_vars == 2
+            redirect_stdout(devnull) do
+                df = DataFrame(id=repeat(1:2, inner=30), t=repeat(1:30, 2),
+                              x=randn(60), y=randn(60))
+                pd = xtset(df, :id, :t)
+                s = describe_data(pd)
+                @test s isa DataSummary
+                @test s.n_vars == 2
+            end
         end
 
         @testset "quantile edge cases" begin
@@ -846,9 +850,11 @@ using Statistics
         end
 
         @testset "fix all constant" begin
-            mat = hcat(ones(20), 2.0 .* ones(20))
-            d = TimeSeriesData(mat)
-            @test_throws ArgumentError fix(d)
+            _suppress_warnings() do
+                mat = hcat(ones(20), 2.0 .* ones(20))
+                d = TimeSeriesData(mat)
+                @test_throws ArgumentError fix(d)
+            end
         end
 
         @testset "Transform too short" begin
@@ -859,11 +865,13 @@ using Statistics
         end
 
         @testset "Interpolate all NaN column" begin
-            mat = fill(NaN, 20, 1)
-            d = TimeSeriesData(mat)
-            # All NaN → constant after interpolation → error
-            @test_throws ArgumentError fix(d; method=:interpolate)
-            @test_throws ArgumentError fix(d; method=:mean)
+            _suppress_warnings() do
+                mat = fill(NaN, 20, 1)
+                d = TimeSeriesData(mat)
+                # All NaN → constant after interpolation → error
+                @test_throws ArgumentError fix(d; method=:interpolate)
+                @test_throws ArgumentError fix(d; method=:mean)
+            end
         end
     end
 

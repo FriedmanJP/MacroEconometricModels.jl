@@ -31,7 +31,15 @@
 - **Historical Decomposition**: Decompose observed movements into structural shock contributions
 - **LP-FEVD**: R-squared, LP-A, and LP-B estimators (Gorodnichenko & Lee 2019)
 
-**Structural Identification** (18+ methods)
+**DSGE Models**
+
+- **Specification**: `@dsge` macro for domain-specific model specification with time-indexed variables, analytical or numerical steady state, and automatic Jacobian computation
+- **Solution Methods**: Gensys (Sims 2002), Blanchard-Kahn (1980), Klein (2000), second-order perturbation (Schmitt-Grohe & Uribe 2004) with Kim et al. (2008) pruning, Chebyshev collocation projection, policy function iteration
+- **Simulation and IRFs**: Stochastic simulation, pruned higher-order simulation, analytical and generalized IRFs, FEVD, Lyapunov-based unconditional moments
+- **Estimation**: IRF matching, Euler equation GMM, Simulated Method of Moments, analytical GMM via Lyapunov equation
+- **Nonlinear Methods**: Perfect foresight (Newton solver), OccBin occasionally binding constraints (Guerrieri & Iacoviello 2015), constrained steady state and perfect foresight via JuMP/Ipopt (NLP) and PATH (MCP)
+
+**Structural Identification**
 
 - Cholesky, sign restrictions, long-run (Blanchard-Quah), narrative restrictions, Arias et al. (2018), Mountford-Uhlig (2009) penalty function
 - Non-Gaussian ICA: FastICA, JADE, SOBI, dCov, HSIC
@@ -479,6 +487,6 @@ Contributions are welcome! Please see the [GitHub repository](https://github.com
 ## Contents
 
 ```@contents
-Pages = ["data.md", "filters.md", "arima.md", "volatility.md", "manual.md", "bayesian.md", "vecm.md", "pvar.md", "lp.md", "factormodels.md", "innovation_accounting.md", "nowcast.md", "nongaussian.md", "hypothesis_tests.md", "examples.md", "api.md", "api_types.md", "api_functions.md"]
+Pages = ["data.md", "filters.md", "arima.md", "volatility.md", "manual.md", "bayesian.md", "vecm.md", "pvar.md", "lp.md", "factormodels.md", "dsge.md", "innovation_accounting.md", "nowcast.md", "nongaussian.md", "hypothesis_tests.md", "examples.md", "api.md", "api_types.md", "api_functions.md"]
 Depth = 2
 ```
