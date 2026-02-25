@@ -76,7 +76,13 @@ function perfect_foresight(spec::DSGESpec{FT};
         _check_jump_loaded()
         _validate_constraints(spec, constraints)
         chosen = _select_solver(constraints, solver)
+        chosen ∉ (:path, :ipopt) &&
+            throw(ArgumentError("Unknown solver :$chosen. Valid options: :path, :ipopt"))
         if chosen == :path
+            any(c -> c isa NonlinearConstraint, constraints) &&
+                throw(ArgumentError(
+                    "PATH solver cannot handle NonlinearConstraint. " *
+                    "Use solver=:ipopt or remove nonlinear constraints."))
             return _path_perfect_foresight(spec, T_periods, shocks, constraints)
         else
             return _jump_perfect_foresight(spec, T_periods, shocks, constraints)

@@ -4503,6 +4503,25 @@ end
     @test MacroEconometricModels._select_solver(bounds_only, nothing) == :path
 end
 
+@testset "PATH rejects NonlinearConstraint" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    mixed = [variable_bound(:y, lower=0.0),
+             nonlinear_constraint((y, yl, yld, e, th) -> y[1] - 1.0; label="cap")]
+    @test_throws ArgumentError compute_steady_state(spec; constraints=mixed, solver=:path)
+
+    shocks = zeros(10, 1)
+    @test_throws ArgumentError solve(spec; method=:perfect_foresight,
+        T_periods=10, shock_path=shocks, constraints=mixed, solver=:path)
+end
+
 end # _path_available
 
 end # _jump_available

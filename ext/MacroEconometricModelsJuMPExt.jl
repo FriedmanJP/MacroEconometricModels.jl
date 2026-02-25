@@ -5,85 +5,10 @@ using JuMP
 using Ipopt
 
 # Extension loaded — methods override the stubs in constraints.jl
-
-# =============================================================================
-# Helper: build a ForwardDiff-compatible steady-state objective
-# =============================================================================
-
-"""
-Build a callable for the steady-state objective that works with ForwardDiff Dual numbers.
-JuMP passes Dual numbers for AD — we must avoid collect(T, ...) and use the input type.
-"""
-function _build_ss_objective(residual_fns, n_ε, θ)
-    function ss_obj(args::S...) where {S<:Real}
-        y = collect(args)
-        ε_z = zeros(S, n_ε)
-        total = zero(S)
-        for fn in residual_fns
-            try
-                r = fn(y, y, y, ε_z, θ)
-                total += r^2
-            catch e
-                (e isa DomainError || e isa InexactError) && return S(NaN)
-                rethrow(e)
-            end
-        end
-        return total
-    end
-    return ss_obj
-end
-
-"""
-Build a callable for a nonlinear constraint at steady state.
-"""
-function _build_ss_nlcon(cfn, n_ε, θ)
-    function ss_nlcon(args::S...) where {S<:Real}
-        y = collect(args)
-        ε_z = zeros(S, n_ε)
-        cfn(y, y, y, ε_z, θ)
-    end
-    return ss_nlcon
-end
-
-# =============================================================================
-# Helper: build ForwardDiff-compatible equation and constraint wrappers for PF
-# =============================================================================
-
-"""
-Build a callable for one equilibrium equation in the perfect foresight system.
-Takes 3n + n_ε scalar args: [y_t; y_lag; y_lead; ε_t].
-"""
-function _build_pf_equation(fn, n, n_ε, θ)
-    function pf_eq(args::S...) where {S<:Real}
-        a = collect(args)
-        y_t    = a[1:n]
-        y_lag  = a[n+1:2n]
-        y_lead = a[2n+1:3n]
-        ε_t    = a[3n+1:3n+n_ε]
-        try
-            return fn(y_t, y_lag, y_lead, ε_t, θ)
-        catch e
-            (e isa DomainError || e isa InexactError) && return S(NaN)
-            rethrow(e)
-        end
-    end
-    return pf_eq
-end
-
-"""
-Build a callable for a nonlinear inequality constraint in the perfect foresight system.
-"""
-function _build_pf_nlcon(cfn, n, n_ε, θ)
-    function pf_nlcon(args::S...) where {S<:Real}
-        a = collect(args)
-        y_t    = a[1:n]
-        y_lag  = a[n+1:2n]
-        y_lead = a[2n+1:3n]
-        ε_t    = a[3n+1:3n+n_ε]
-        cfn(y_t, y_lag, y_lead, ε_t, θ)
-    end
-    return pf_nlcon
-end
+# Shared helpers (_build_ss_objective, _build_pf_equation, etc.) defined in
+# MacroEconometricModels.src/dsge/constraints.jl — imported via `using`.
+import MacroEconometricModels: _build_ss_objective, _build_ss_nlcon,
+    _build_pf_equation, _build_pf_nlcon
 
 # =============================================================================
 # Constrained Steady State via JuMP + Ipopt

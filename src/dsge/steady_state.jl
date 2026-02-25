@@ -50,7 +50,13 @@ function compute_steady_state(spec::DSGESpec{T};
         _check_jump_loaded()
         _validate_constraints(spec, constraints)
         chosen = _select_solver(constraints, solver)
+        chosen ∉ (:path, :ipopt) &&
+            throw(ArgumentError("Unknown solver :$chosen. Valid options: :path, :ipopt"))
         if chosen == :path
+            any(c -> c isa NonlinearConstraint, constraints) &&
+                throw(ArgumentError(
+                    "PATH solver cannot handle NonlinearConstraint. " *
+                    "Use solver=:ipopt or remove nonlinear constraints."))
             y_ss = _path_compute_steady_state(spec, constraints;
                         initial_guess=initial_guess)
         else

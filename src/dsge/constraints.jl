@@ -150,3 +150,112 @@ function _validate_constraints(spec::DSGESpec{T}, constraints::Vector) where {T}
     end
     return nothing
 end
+
+# =============================================================================
+# Shared helpers for JuMP extensions (no JuMP dependency, just closures)
+# =============================================================================
+
+"""
+Build a callable for the steady-state objective (sum of squared residuals).
+Takes n scalar args. Returns scalar. ForwardDiff-compatible via `S<:Real`.
+"""
+function _build_ss_objective(residual_fns, n_ε, θ)
+    function ss_obj(args::S...) where {S<:Real}
+        y = collect(args)
+        ε_z = zeros(S, n_ε)
+        total = zero(S)
+        for fn in residual_fns
+            try
+                r = fn(y, y, y, ε_z, θ)
+                total += r^2
+            catch e
+                (e isa DomainError || e isa InexactError) && return S(NaN)
+                rethrow(e)
+            end
+        end
+        return total
+    end
+    return ss_obj
+end
+
+"""
+Build a callable for a single residual equation i at steady state.
+Takes n scalar args (the SS values). Returns scalar residual.
+"""
+function _build_ss_residual_i(residual_fn, n_ε, θ)
+    function ss_res(args::S...) where {S<:Real}
+        y = collect(args)
+        ε_z = zeros(S, n_ε)
+        try
+            return residual_fn(y, y, y, ε_z, θ)
+        catch e
+            (e isa DomainError || e isa InexactError) && return S(NaN)
+            rethrow(e)
+        end
+    end
+    return ss_res
+end
+
+"""
+Build a callable for a nonlinear constraint at steady state.
+"""
+function _build_ss_nlcon(cfn, n_ε, θ)
+    function ss_nlcon(args::S...) where {S<:Real}
+        y = collect(args)
+        ε_z = zeros(S, n_ε)
+        cfn(y, y, y, ε_z, θ)
+    end
+    return ss_nlcon
+end
+
+"""
+Build a callable for one equilibrium equation in the perfect foresight system.
+Takes 3n + n_ε scalar args: [y_t; y_lag; y_lead; ε_t].
+"""
+function _build_pf_equation(fn, n, n_ε, θ)
+    function pf_eq(args::S...) where {S<:Real}
+        a = collect(args)
+        y_t    = a[1:n]
+        y_lag  = a[n+1:2n]
+        y_lead = a[2n+1:3n]
+        ε_t    = a[3n+1:3n+n_ε]
+        try
+            return fn(y_t, y_lag, y_lead, ε_t, θ)
+        catch e
+            (e isa DomainError || e isa InexactError) && return S(NaN)
+            rethrow(e)
+        end
+    end
+    return pf_eq
+end
+
+"""
+Build a callable for a nonlinear inequality constraint in the perfect foresight system.
+"""
+function _build_pf_nlcon(cfn, n, n_ε, θ)
+    function pf_nlcon(args::S...) where {S<:Real}
+        a = collect(args)
+        y_t    = a[1:n]
+        y_lag  = a[n+1:2n]
+        y_lead = a[2n+1:3n]
+        ε_t    = a[3n+1:3n+n_ε]
+        cfn(y_t, y_lag, y_lead, ε_t, θ)
+    end
+    return pf_nlcon
+end
+
+"""Extract variable bounds from constraints as lower/upper vectors."""
+function _extract_bounds(spec::DSGESpec{T}, constraints::Vector) where {T}
+    n = spec.n_endog
+    FT = isempty(spec.steady_state) ? Float64 : eltype(spec.steady_state)
+    lower = fill(FT(-Inf), n)
+    upper = fill(FT(Inf), n)
+    for c in constraints
+        if c isa VariableBound
+            idx = findfirst(==(c.var_name), spec.endog)
+            c.lower !== nothing && (lower[idx] = FT(c.lower))
+            c.upper !== nothing && (upper[idx] = FT(c.upper))
+        end
+    end
+    return lower, upper
+end

@@ -6,71 +6,8 @@ using PATHSolver
 
 # Extension loaded when JuMP + PATHSolver are available.
 # Adds PATH-based MCP solvers for constrained SS and PF.
-
-# =============================================================================
-# Helper: extract variable bounds as vectors
-# =============================================================================
-
-function _extract_bounds(spec, constraints)
-    FT = eltype(spec.steady_state)
-    if isempty(spec.steady_state)
-        FT = Float64
-    end
-    n = spec.n_endog
-    lower = fill(FT(-Inf), n)
-    upper = fill(FT(Inf), n)
-    for c in constraints
-        if c isa MacroEconometricModels.VariableBound
-            idx = findfirst(==(c.var_name), spec.endog)
-            c.lower !== nothing && (lower[idx] = FT(c.lower))
-            c.upper !== nothing && (upper[idx] = FT(c.upper))
-        end
-    end
-    return lower, upper
-end
-
-# =============================================================================
-# Helper: build ForwardDiff-compatible residual wrappers
-# =============================================================================
-
-"""
-Build a callable for a single residual equation i at steady state.
-Takes n scalar args (the SS values). Returns scalar residual.
-"""
-function _build_ss_residual_i(residual_fn, n_ε, θ)
-    function ss_res(args::S...) where {S<:Real}
-        y = collect(args)
-        ε_z = zeros(S, n_ε)
-        try
-            return residual_fn(y, y, y, ε_z, θ)
-        catch e
-            (e isa DomainError || e isa InexactError) && return S(NaN)
-            rethrow(e)
-        end
-    end
-    return ss_res
-end
-
-"""
-Build a callable for one equilibrium equation in the perfect foresight system.
-Takes 3n + n_ε scalar args: [y_t; y_lag; y_lead; ε_t].
-"""
-function _build_pf_equation(fn, n, n_ε, θ)
-    function pf_eq(args::S...) where {S<:Real}
-        a = collect(args)
-        y_t    = a[1:n]
-        y_lag  = a[n+1:2n]
-        y_lead = a[2n+1:3n]
-        ε_t    = a[3n+1:3n+n_ε]
-        try
-            return fn(y_t, y_lag, y_lead, ε_t, θ)
-        catch e
-            (e isa DomainError || e isa InexactError) && return S(NaN)
-            rethrow(e)
-        end
-    end
-    return pf_eq
-end
+# Shared helpers defined in MacroEconometricModels.src/dsge/constraints.jl.
+import MacroEconometricModels: _build_ss_residual_i, _build_pf_equation, _extract_bounds
 
 # =============================================================================
 # MCP Steady State via JuMP + PATHSolver
