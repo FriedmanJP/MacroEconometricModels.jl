@@ -24,6 +24,11 @@ struct VariableBound{T} <: DSGEConstraint{T}
     var_name::Symbol
     lower::Union{T, Nothing}
     upper::Union{T, Nothing}
+    # Inner constructor only — suppresses auto outer constructor with unbound T
+    function VariableBound{T}(var_name::Symbol, lower::Union{T, Nothing},
+                               upper::Union{T, Nothing}) where {T}
+        new{T}(var_name, lower, upper)
+    end
 end
 
 """
@@ -160,8 +165,9 @@ Build a callable for the steady-state objective (sum of squared residuals).
 Takes n scalar args. Returns scalar. ForwardDiff-compatible via `S<:Real`.
 """
 function _build_ss_objective(residual_fns, n_ε, θ)
-    function ss_obj(args::S...) where {S<:Real}
-        y = collect(args)
+    function ss_obj(args::Real...)
+        S = promote_type(typeof.(args)...)
+        y = S[args...]
         ε_z = zeros(S, n_ε)
         total = zero(S)
         for fn in residual_fns
@@ -183,8 +189,9 @@ Build a callable for a single residual equation i at steady state.
 Takes n scalar args (the SS values). Returns scalar residual.
 """
 function _build_ss_residual_i(residual_fn, n_ε, θ)
-    function ss_res(args::S...) where {S<:Real}
-        y = collect(args)
+    function ss_res(args::Real...)
+        S = promote_type(typeof.(args)...)
+        y = S[args...]
         ε_z = zeros(S, n_ε)
         try
             return residual_fn(y, y, y, ε_z, θ)
@@ -200,8 +207,9 @@ end
 Build a callable for a nonlinear constraint at steady state.
 """
 function _build_ss_nlcon(cfn, n_ε, θ)
-    function ss_nlcon(args::S...) where {S<:Real}
-        y = collect(args)
+    function ss_nlcon(args::Real...)
+        S = promote_type(typeof.(args)...)
+        y = S[args...]
         ε_z = zeros(S, n_ε)
         cfn(y, y, y, ε_z, θ)
     end
@@ -213,8 +221,9 @@ Build a callable for one equilibrium equation in the perfect foresight system.
 Takes 3n + n_ε scalar args: [y_t; y_lag; y_lead; ε_t].
 """
 function _build_pf_equation(fn, n, n_ε, θ)
-    function pf_eq(args::S...) where {S<:Real}
-        a = collect(args)
+    function pf_eq(args::Real...)
+        S = promote_type(typeof.(args)...)
+        a = S[args...]
         y_t    = a[1:n]
         y_lag  = a[n+1:2n]
         y_lead = a[2n+1:3n]
@@ -233,8 +242,9 @@ end
 Build a callable for a nonlinear inequality constraint in the perfect foresight system.
 """
 function _build_pf_nlcon(cfn, n, n_ε, θ)
-    function pf_nlcon(args::S...) where {S<:Real}
-        a = collect(args)
+    function pf_nlcon(args::Real...)
+        S = promote_type(typeof.(args)...)
+        a = S[args...]
         y_t    = a[1:n]
         y_lag  = a[n+1:2n]
         y_lead = a[2n+1:3n]
