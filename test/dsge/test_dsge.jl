@@ -4396,6 +4396,115 @@ end
     @test all(pf.path[:, 1] .<= 1.5 + 1e-3)
 end
 
+# PATH MCP tests — only run if PATHSolver is also available
+_path_available = try
+    @eval import PATHSolver
+    true
+catch
+    false
+end
+
+if _path_available
+
+@testset "MCP Steady State (PATH)" begin
+    # Non-binding: SS is 0, lower=-1 doesn't bind → same as unconstrained
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+    spec_mcp = compute_steady_state(spec; constraints=[variable_bound(:y, lower=-1.0)],
+                                     solver=:path)
+    @test abs(spec_mcp.steady_state[1]) < 0.01
+
+    # Binding lower bound: SS=0 but lower=0.5 → MCP finds y=0.5 at bound
+    spec_bind = compute_steady_state(spec; constraints=[variable_bound(:y, lower=0.5)],
+                                      solver=:path)
+    @test spec_bind.steady_state[1] ≈ 0.5 atol=0.01
+
+    # Binding upper bound: SS=0 but upper=-0.5 → MCP finds y=-0.5 at bound
+    spec_upper = compute_steady_state(spec; constraints=[variable_bound(:y, upper=-0.5)],
+                                       solver=:path)
+    @test spec_upper.steady_state[1] ≈ -0.5 atol=0.01
+
+    # Multiple variables, mixed binding/non-binding
+    spec2 = @dsge begin
+        parameters: ρ1 = 0.9, ρ2 = 0.9, σ1 = 0.01, σ2 = 0.01
+        endogenous: y1, y2
+        exogenous: ε1, ε2
+        y1[t] = ρ1 * y1[t-1] + σ1 * ε1[t]
+        y2[t] = ρ2 * y2[t-1] + σ2 * ε2[t]
+        steady_state: [0.0, 0.0]
+    end
+    spec2 = compute_steady_state(spec2)
+    spec2_mcp = compute_steady_state(spec2;
+        constraints=[variable_bound(:y1, lower=0.3), variable_bound(:y2, lower=-1.0)],
+        solver=:path)
+    @test spec2_mcp.steady_state[1] ≈ 0.3 atol=0.01   # binding
+    @test abs(spec2_mcp.steady_state[2]) < 0.01         # non-binding
+end
+
+@testset "MCP Perfect Foresight (PATH)" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 1.0
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    # Non-binding lower bound: path not affected
+    shocks = zeros(20, 1)
+    shocks[1, 1] = -1.0
+    pf_unc = solve(spec; method=:perfect_foresight, T_periods=20, shock_path=shocks)
+    pf_mcp = solve(spec; method=:perfect_foresight, T_periods=20, shock_path=shocks,
+                    constraints=[variable_bound(:y, lower=-5.0)], solver=:path)
+    @test pf_mcp isa PerfectForesightPath
+    @test pf_mcp.converged
+    @test maximum(abs.(pf_mcp.path .- pf_unc.path)) < 0.1
+
+    # ZLB BINDING: large negative shock + y >= 0 → y clamped at 0
+    shocks_big = zeros(30, 1)
+    shocks_big[1, 1] = -3.0
+    pf_unc2 = solve(spec; method=:perfect_foresight, T_periods=30, shock_path=shocks_big)
+    @test minimum(pf_unc2.path[:, 1]) < -0.5  # unconstrained goes negative
+
+    pf_zlb = solve(spec; method=:perfect_foresight, T_periods=30, shock_path=shocks_big,
+                    constraints=[variable_bound(:y, lower=0.0)], solver=:path)
+    @test pf_zlb isa PerfectForesightPath
+    @test pf_zlb.converged
+    @test all(pf_zlb.path[:, 1] .>= -1e-6)     # bound respected
+    @test pf_zlb.path[1, 1] ≈ 0.0 atol=1e-3    # bound binds at impact
+
+    # Path dimensions
+    @test size(pf_zlb.path) == (30, 1)
+
+    # Terminal convergence to SS
+    @test abs(pf_zlb.path[end, 1]) < 0.5
+
+    # Upper bound binding
+    shocks_pos = zeros(20, 1)
+    shocks_pos[1, 1] = 3.0
+    pf_cap = solve(spec; method=:perfect_foresight, T_periods=20, shock_path=shocks_pos,
+                    constraints=[variable_bound(:y, upper=0.5)], solver=:path)
+    @test pf_cap isa PerfectForesightPath
+    @test pf_cap.converged
+    @test all(pf_cap.path[:, 1] .<= 0.5 + 1e-4)
+end
+
+@testset "Auto-detection dispatches PATH" begin
+    # When PATHSolver is loaded and only VariableBounds, auto-detection picks PATH
+    @test MacroEconometricModels._path_available()
+    bounds_only = [variable_bound(:y, lower=0.0)]
+    @test MacroEconometricModels._select_solver(bounds_only, nothing) == :path
+end
+
+end # _path_available
+
 end # _jump_available
 
 end # DSGE Constraint Types
