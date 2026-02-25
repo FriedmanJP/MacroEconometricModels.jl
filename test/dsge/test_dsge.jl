@@ -1194,6 +1194,29 @@ end
     # BibTeX format
     r_bib = refs(sol; format=:bibtex)
     @test occursin("@article{sims2002", r_bib)
+
+    # Symbol dispatch for solver methods
+    r_klein = refs(:klein)
+    @test occursin("Klein", r_klein)
+    @test occursin("2000", r_klein)
+    r_pert = refs(:perturbation_solver)
+    @test occursin("Schmitt", r_pert)
+    @test occursin("Kim", r_pert)
+    r_coll = refs(:collocation_solver)
+    @test occursin("Judd", r_coll)
+    r_pfi = refs(:pfi_solver)
+    @test occursin("Coleman", r_pfi)
+    @test occursin("Judd", r_pfi)
+
+    # LinearDSGE refs
+    spec_ss = compute_steady_state(spec)
+    lin = linearize(spec_ss)
+    r_lin = refs(lin)
+    @test occursin("Sims", r_lin)
+
+    # DSGEEstimation includes Smets-Wouters
+    r_est = refs(:irf_matching)
+    @test occursin("Christiano", r_est)
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
