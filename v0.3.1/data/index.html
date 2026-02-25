@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Data Management · MacroEconometricModels.jl</title><meta name="title" content="Data Management · MacroEconometricModels.jl"/><meta property="og:title" content="Data Management · MacroEconometricModels.jl"/><meta property="twitter:title" content="Data Management · MacroEconometricModels.jl"/><meta name="description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:description" content="Documentation for MacroEconometricModels.jl."/><meta property="twitter:description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:url" content="https://FriedmanJP.github.io/MacroEconometricModels.jl/data/"/><meta property="twitter:url" content="https://FriedmanJP.github.io/MacroEconometricModels.jl/data/"/><link rel="canonical" href="https://FriedmanJP.github.io/MacroEconometricModels.jl/data/"/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script><link href="../assets/custom.css" rel="stylesheet" type="text/css"/><script src="../assets/theme-toggle.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">MacroEconometricModels.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li class="is-active"><a class="tocitem" href>Data Management</a><ul class="internal"><li><a class="tocitem" href="#Quick-Start"><span>Quick Start</span></a></li><li><a class="tocitem" href="#Data-Containers"><span>Data Containers</span></a></li><li><a class="tocitem" href="#Descriptions"><span>Descriptions</span></a></li><li><a class="tocitem" href="#Accessors-and-Indexing"><span>Accessors and Indexing</span></a></li><li><a class="tocitem" href="#Validation"><span>Validation</span></a></li><li><a class="tocitem" href="#FRED-Transformation-Codes"><span>FRED Transformation Codes</span></a></li><li><a class="tocitem" href="#Panel-Data"><span>Panel Data</span></a></li><li><a class="tocitem" href="#Summary-Statistics"><span>Summary Statistics</span></a></li><li><a class="tocitem" href="#Estimation-Dispatch"><span>Estimation Dispatch</span></a></li><li><a class="tocitem" href="#Example-Datasets"><span>Example Datasets</span></a></li><li><a class="tocitem" href="#Filtering"><span>Filtering</span></a></li><li><a class="tocitem" href="#Complete-Example"><span>Complete Example</span></a></li><li><a class="tocitem" href="#References-2"><span>References</span></a></li></ul></li><li><span class="tocitem">Univariate Models</span><ul><li><a class="tocitem" href="../filters/">Time Series Filters</a></li><li><a class="tocitem" href="../arima/">ARIMA</a></li><li><a class="tocitem" href="../volatility/">Volatility Models</a></li></ul></li><li><span class="tocitem">Multivariate Models</span><ul><li><a class="tocitem" href="../manual/">VAR</a></li><li><a class="tocitem" href="../bayesian/">Bayesian VAR</a></li><li><a class="tocitem" href="../vecm/">VECM</a></li><li><a class="tocitem" href="../lp/">Local Projections</a></li><li><a class="tocitem" href="../factormodels/">Factor Models</a></li></ul></li><li><span class="tocitem">Panel Models</span><ul><li><a class="tocitem" href="../pvar/">Panel VAR</a></li></ul></li><li><a class="tocitem" href="../dsge/">DSGE Models</a></li><li><a class="tocitem" href="../innovation_accounting/">Innovation Accounting</a></li><li><a class="tocitem" href="../nowcast/">Nowcasting</a></li><li><a class="tocitem" href="../nongaussian/">Statistical Identification</a></li><li><a class="tocitem" href="../hypothesis_tests/">Hypothesis Tests</a></li><li><a class="tocitem" href="../plotting/">Visualization</a></li><li><a class="tocitem" href="../examples/">Examples</a></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../api/">Overview</a></li><li><a class="tocitem" href="../api_types/">Types</a></li><li><a class="tocitem" href="../api_functions/">Functions</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Data Management</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Data Management</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/FriedmanJP/MacroEconometricModels.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/FriedmanJP/MacroEconometricModels.jl/blob/main/docs/src/data.md#" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Data-Management"><a class="docs-heading-anchor" href="#Data-Management">Data Management</a><a id="Data-Management-1"></a><a class="docs-heading-anchor-permalink" href="#Data-Management" title="Permalink"></a></h1><p>Applied macroeconometric research begins with data. This module provides typed data containers that track metadata (frequency, variable names, panel structure, transformation codes), validate inputs, compute summary statistics, and guarantee clean data for estimation.</p><table><tr><th style="text-align: right">Feature</th><th style="text-align: right">Function</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><strong>Containers</strong></td><td style="text-align: right"><code>TimeSeriesData</code>, <code>PanelData</code>, <code>CrossSectionData</code></td><td style="text-align: right">Typed wrappers with metadata</td></tr><tr><td style="text-align: right"><strong>Validation</strong></td><td style="text-align: right"><code>diagnose</code>, <code>fix</code></td><td style="text-align: right">Detect and repair NaN, Inf, constant columns</td></tr><tr><td style="text-align: right"><strong>Transforms</strong></td><td style="text-align: right"><code>apply_tcode</code>, <code>inverse_tcode</code></td><td style="text-align: right">FRED transformation codes 1–7</td></tr><tr><td style="text-align: right"><strong>Filtering</strong></td><td style="text-align: right"><code>apply_filter</code></td><td style="text-align: right">Apply HP/Hamilton/BN/BK/Boosted HP per-variable</td></tr><tr><td style="text-align: right"><strong>Panel</strong></td><td style="text-align: right"><code>xtset</code>, <code>group_data</code></td><td style="text-align: right">Stata-style panel setup and slicing</td></tr><tr><td style="text-align: right"><strong>Summary</strong></td><td style="text-align: right"><code>describe_data</code></td><td style="text-align: right">Per-variable descriptive statistics</td></tr><tr><td style="text-align: right"><strong>Dispatch</strong></td><td style="text-align: right"><code>estimate_var(d, p)</code></td><td style="text-align: right">All estimators accept <code>TimeSeriesData</code> directly</td></tr></table><h2 id="Quick-Start"><a class="docs-heading-anchor" href="#Quick-Start">Quick Start</a><a id="Quick-Start-1"></a><a class="docs-heading-anchor-permalink" href="#Quick-Start" title="Permalink"></a></h2><pre><code class="language-julia hljs">using MacroEconometricModels
+
+# Load FRED-MD and select key macro variables
+fred = load_example(:fred_md)
+sub = fred[:, [&quot;INDPRO&quot;, &quot;CPIAUCSL&quot;, &quot;FEDFUNDS&quot;]]
+
+# Apply FRED transformation codes to achieve stationarity
+d = apply_tcode(sub)
+
+# Diagnose — apply_tcode introduces NaN from differencing
+diag = diagnose(d)
+
+# Fix by dropping NaN rows
+d_clean = fix(d)
+
+# Summary statistics
+describe_data(d_clean)
+
+# Estimate directly from data container
+model = estimate_var(d_clean, 2)
+
+# Panel data — Penn World Table
+pwt = load_example(:pwt)
+panel_summary(pwt)
+usa = group_data(pwt, &quot;USA&quot;)   # extract single country</code></pre><hr/><h2 id="Data-Containers"><a class="docs-heading-anchor" href="#Data-Containers">Data Containers</a><a id="Data-Containers-1"></a><a class="docs-heading-anchor-permalink" href="#Data-Containers" title="Permalink"></a></h2><p>All containers inherit from <code>AbstractMacroData</code> and carry metadata alongside the numeric data matrix.</p><h3 id="TimeSeriesData"><a class="docs-heading-anchor" href="#TimeSeriesData">TimeSeriesData</a><a id="TimeSeriesData-1"></a><a class="docs-heading-anchor-permalink" href="#TimeSeriesData" title="Permalink"></a></h3><p><code>TimeSeriesData{T}</code> is the primary container for single-entity time series:</p><pre><code class="language-julia hljs"># Load built-in dataset (recommended)
+fred = load_example(:fred_md)   # 804 obs × 126 vars (Monthly)
+sub = fred[:, [&quot;INDPRO&quot;, &quot;CPIAUCSL&quot;, &quot;FEDFUNDS&quot;]]
+
+# From matrix with metadata
+d = TimeSeriesData(randn(200, 3);
+    varnames=[&quot;GDP&quot;, &quot;CPI&quot;, &quot;FFR&quot;],
+    frequency=Quarterly,
+    tcode=[5, 5, 1],
+    time_index=collect(1959:2158))
+
+# From vector (univariate)
+d = TimeSeriesData(randn(200); varname=&quot;GDP&quot;, frequency=Monthly)
+
+# From DataFrame (auto-selects numeric columns)
+using DataFrames
+df = DataFrame(gdp=randn(100), cpi=randn(100), date=1:100)
+d = TimeSeriesData(df; frequency=Quarterly)</code></pre><p>Non-float inputs are automatically converted to <code>Float64</code>. Missing values in DataFrames become <code>NaN</code>.</p><h3 id="Frequency-Enum"><a class="docs-heading-anchor" href="#Frequency-Enum">Frequency Enum</a><a id="Frequency-Enum-1"></a><a class="docs-heading-anchor-permalink" href="#Frequency-Enum" title="Permalink"></a></h3><pre><code class="language-julia hljs">@enum Frequency Daily Monthly Quarterly Yearly Mixed Other</code></pre><p>The <code>frequency</code> field is informational metadata used in summary displays. It does not affect estimation.</p><h3 id="PanelData"><a class="docs-heading-anchor" href="#PanelData">PanelData</a><a id="PanelData-1"></a><a class="docs-heading-anchor-permalink" href="#PanelData" title="Permalink"></a></h3><p><code>PanelData{T}</code> stores stacked panel (longitudinal) data with group and time identifiers. Constructed via <code>xtset()</code>:</p><pre><code class="language-julia hljs"># Load Penn World Table (balanced panel, 38 OECD countries × 74 years)
+pwt = load_example(:pwt)
+
+# Or construct from a DataFrame via xtset
+using DataFrames
+df = DataFrame(
+    country = repeat([&quot;US&quot;, &quot;UK&quot;, &quot;JP&quot;], inner=50),
+    quarter = repeat(1:50, 3),
+    gdp = randn(150),
+    cpi = randn(150)
+)
+pd = xtset(df, :country, :quarter; frequency=Quarterly)</code></pre><h3 id="CrossSectionData"><a class="docs-heading-anchor" href="#CrossSectionData">CrossSectionData</a><a id="CrossSectionData-1"></a><a class="docs-heading-anchor-permalink" href="#CrossSectionData" title="Permalink"></a></h3><p><code>CrossSectionData{T}</code> stores cross-sectional observations (single time point):</p><pre><code class="language-julia hljs">d = CrossSectionData(randn(500, 4);
+    varnames=[&quot;income&quot;, &quot;education&quot;, &quot;age&quot;, &quot;hours&quot;])</code></pre><hr/><h2 id="Descriptions"><a class="docs-heading-anchor" href="#Descriptions">Descriptions</a><a id="Descriptions-1"></a><a class="docs-heading-anchor-permalink" href="#Descriptions" title="Permalink"></a></h2><p>Data containers carry optional metadata descriptions — one for the dataset itself, and per-variable descriptions accessible by name. These are empty by default and only populated if the user provides them.</p><h3 id="Setting-at-Construction"><a class="docs-heading-anchor" href="#Setting-at-Construction">Setting at Construction</a><a id="Setting-at-Construction-1"></a><a class="docs-heading-anchor-permalink" href="#Setting-at-Construction" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Built-in datasets already carry descriptions
+fred = load_example(:fred_md)
+desc(fred)              # &quot;FRED-MD Monthly Database, January 2026 Vintage ...&quot;
+vardesc(fred, &quot;INDPRO&quot;)  # &quot;IP Index&quot;
+
+# Or set manually at construction
+d = TimeSeriesData(randn(200, 3);
+    varnames=[&quot;GDP&quot;, &quot;CPI&quot;, &quot;FFR&quot;],
+    frequency=Quarterly,
+    desc=&quot;US macroeconomic quarterly data 1959-2024&quot;,
+    vardesc=Dict(
+        &quot;GDP&quot; =&gt; &quot;Real Gross Domestic Product, seasonally adjusted annual rate&quot;,
+        &quot;CPI&quot; =&gt; &quot;Consumer Price Index for All Urban Consumers&quot;,
+        &quot;FFR&quot; =&gt; &quot;Effective Federal Funds Rate&quot;))</code></pre><h3 id="Accessing-Descriptions"><a class="docs-heading-anchor" href="#Accessing-Descriptions">Accessing Descriptions</a><a id="Accessing-Descriptions-1"></a><a class="docs-heading-anchor-permalink" href="#Accessing-Descriptions" title="Permalink"></a></h3><pre><code class="language-julia hljs">fred = load_example(:fred_md)
+desc(fred)              # &quot;FRED-MD Monthly Database, January 2026 Vintage ...&quot;
+vardesc(fred, &quot;INDPRO&quot;)  # &quot;IP Index&quot;
+vardesc(fred)            # Dict with all variable descriptions</code></pre><h3 id="Setting-After-Construction"><a class="docs-heading-anchor" href="#Setting-After-Construction">Setting After Construction</a><a id="Setting-After-Construction-1"></a><a class="docs-heading-anchor-permalink" href="#Setting-After-Construction" title="Permalink"></a></h3><pre><code class="language-julia hljs">d = TimeSeriesData(randn(100, 2); varnames=[&quot;GDP&quot;, &quot;CPI&quot;])
+set_desc!(d, &quot;Updated dataset description&quot;)
+set_vardesc!(d, &quot;GDP&quot;, &quot;Real GDP growth rate&quot;)
+set_vardesc!(d, Dict(&quot;GDP&quot; =&gt; &quot;Real GDP&quot;, &quot;CPI&quot; =&gt; &quot;Consumer prices&quot;))</code></pre><p>Descriptions propagate through subsetting (<code>d[:, [&quot;GDP&quot;]]</code>), transformations (<code>apply_tcode</code>), cleaning (<code>fix</code>), and panel extraction (<code>group_data</code>). Renaming variables (<code>rename_vars!</code>) automatically updates <code>vardesc</code> keys.</p><hr/><h2 id="Accessors-and-Indexing"><a class="docs-heading-anchor" href="#Accessors-and-Indexing">Accessors and Indexing</a><a id="Accessors-and-Indexing-1"></a><a class="docs-heading-anchor-permalink" href="#Accessors-and-Indexing" title="Permalink"></a></h2><p>All data types support a common interface:</p><pre><code class="language-julia hljs">fred = load_example(:fred_md)
+
+# Dimensions
+nobs(fred)      # 804
+nvars(fred)     # 126
+size(fred)      # (804, 126)
+
+# Metadata
+varnames(fred)     # [&quot;RPI&quot;, &quot;W875RX1&quot;, ..., &quot;CONSPI&quot;]
+frequency(fred)    # Monthly
+time_index(fred)   # 1:804
+
+# Column extraction
+ip = fred[:, &quot;INDPRO&quot;]                          # Vector{Float64}
+sub = fred[:, [&quot;INDPRO&quot;, &quot;CPIAUCSL&quot;, &quot;FEDFUNDS&quot;]]  # new TimeSeriesData with 3 variables
+
+# Conversion
+to_matrix(sub)    # raw T x n matrix
+to_vector(fred[:, [&quot;INDPRO&quot;]])   # raw vector (univariate only)</code></pre><h3 id="Renaming-Variables"><a class="docs-heading-anchor" href="#Renaming-Variables">Renaming Variables</a><a id="Renaming-Variables-1"></a><a class="docs-heading-anchor-permalink" href="#Renaming-Variables" title="Permalink"></a></h3><pre><code class="language-julia hljs">d = TimeSeriesData(randn(50, 2); varnames=[&quot;a&quot;, &quot;b&quot;])
+rename_vars!(d, &quot;a&quot; =&gt; &quot;GDP&quot;)
+rename_vars!(d, [&quot;output&quot;, &quot;prices&quot;])</code></pre><h3 id="Time-Index"><a class="docs-heading-anchor" href="#Time-Index">Time Index</a><a id="Time-Index-1"></a><a class="docs-heading-anchor-permalink" href="#Time-Index" title="Permalink"></a></h3><pre><code class="language-julia hljs">d = TimeSeriesData(randn(50, 1))
+set_time_index!(d, collect(1970:2019))
+time_index(d)  # [1970, 1971, ..., 2019]</code></pre><hr/><h2 id="Validation"><a class="docs-heading-anchor" href="#Validation">Validation</a><a id="Validation-1"></a><a class="docs-heading-anchor-permalink" href="#Validation" title="Permalink"></a></h2><h3 id="Diagnosing-Issues"><a class="docs-heading-anchor" href="#Diagnosing-Issues">Diagnosing Issues</a><a id="Diagnosing-Issues-1"></a><a class="docs-heading-anchor-permalink" href="#Diagnosing-Issues" title="Permalink"></a></h3><p><code>diagnose()</code> scans for NaN, Inf, constant columns, and very short series:</p><pre><code class="language-julia hljs"># Transforming FRED-MD introduces NaN from differencing and log of non-positive values
+fred = load_example(:fred_md)
+d = apply_tcode(fred[:, [&quot;INDPRO&quot;, &quot;CPIAUCSL&quot;, &quot;FEDFUNDS&quot;]])
+
+diag = diagnose(d)
+diag.is_clean     # false — NaN rows from differencing
+diag.n_nan        # number of NaN per variable
+diag.is_constant  # [false, false, false]
+diag.is_short     # false</code></pre><h3 id="Fixing-Issues"><a class="docs-heading-anchor" href="#Fixing-Issues">Fixing Issues</a><a id="Fixing-Issues-1"></a><a class="docs-heading-anchor-permalink" href="#Fixing-Issues" title="Permalink"></a></h3><p><code>fix()</code> returns a clean copy using one of three methods:</p><pre><code class="language-julia hljs"># Drop rows with any NaN/Inf (default)
+d_clean = fix(d; method=:listwise)
+
+# Linear interpolation for interior NaN, forward-fill edges
+d_clean = fix(d; method=:interpolate)
+
+# Replace NaN with column mean of finite values
+d_clean = fix(d; method=:mean)</code></pre><p>All methods replace Inf with NaN first, then apply the chosen method. Constant columns are dropped automatically with a warning.</p><div class="admonition is-info" id="Technical-Note-da4ac681a5ea1319"><header class="admonition-header">Technical Note<a class="admonition-anchor" href="#Technical-Note-da4ac681a5ea1319" title="Permalink"></a></header><div class="admonition-body"><p><code>fix()</code> always returns a new <code>TimeSeriesData</code> object. The original is never modified. After fixing, <code>diagnose(d_clean).is_clean</code> is guaranteed to be <code>true</code> (unless all columns are constant).</p></div></div><h3 id="Model-Compatibility"><a class="docs-heading-anchor" href="#Model-Compatibility">Model Compatibility</a><a id="Model-Compatibility-1"></a><a class="docs-heading-anchor-permalink" href="#Model-Compatibility" title="Permalink"></a></h3><p><code>validate_for_model()</code> checks dimensionality requirements:</p><pre><code class="language-julia hljs">d_multi = TimeSeriesData(randn(100, 3))
+d_uni = TimeSeriesData(randn(100))
+
+validate_for_model(d_multi, :var)    # OK
+validate_for_model(d_uni, :arima)    # OK
+validate_for_model(d_uni, :var)      # throws ArgumentError
+validate_for_model(d_multi, :garch)  # throws ArgumentError</code></pre><table><tr><th style="text-align: right">Model Category</th><th style="text-align: right">Requirement</th><th style="text-align: right">Model Types</th></tr><tr><td style="text-align: right">Multivariate</td><td style="text-align: right"><span>$n \geq 2$</span></td><td style="text-align: right"><code>:var</code>, <code>:vecm</code>, <code>:bvar</code>, <code>:factors</code>, <code>:dynamic_factors</code>, <code>:gdfm</code></td></tr><tr><td style="text-align: right">Univariate</td><td style="text-align: right"><span>$n = 1$</span></td><td style="text-align: right"><code>:arima</code>, <code>:ar</code>, <code>:ma</code>, <code>:arma</code>, <code>:arch</code>, <code>:garch</code>, <code>:egarch</code>, <code>:gjr_garch</code>, <code>:sv</code>, <code>:hp_filter</code>, <code>:hamilton_filter</code>, <code>:beveridge_nelson</code>, <code>:baxter_king</code>, <code>:boosted_hp</code>, <code>:adf</code>, <code>:kpss</code>, <code>:pp</code>, <code>:za</code>, <code>:ngperron</code></td></tr><tr><td style="text-align: right">Flexible</td><td style="text-align: right">any</td><td style="text-align: right"><code>:lp</code>, <code>:lp_iv</code>, <code>:smooth_lp</code>, <code>:state_lp</code>, <code>:propensity_lp</code>, <code>:gmm</code></td></tr></table><hr/><h2 id="FRED-Transformation-Codes"><a class="docs-heading-anchor" href="#FRED-Transformation-Codes">FRED Transformation Codes</a><a id="FRED-Transformation-Codes-1"></a><a class="docs-heading-anchor-permalink" href="#FRED-Transformation-Codes" title="Permalink"></a></h2><p>The FRED-MD database uses integer codes to specify how each series should be transformed to achieve stationarity. <code>apply_tcode()</code> implements all seven codes:</p><table><tr><th style="text-align: right">Code</th><th style="text-align: right">Transformation</th><th style="text-align: right">Formula</th><th style="text-align: right">Observations Lost</th></tr><tr><td style="text-align: right">1</td><td style="text-align: right">Level</td><td style="text-align: right"><span>$x_t$</span></td><td style="text-align: right">0</td></tr><tr><td style="text-align: right">2</td><td style="text-align: right">First difference</td><td style="text-align: right"><span>$\Delta x_t$</span></td><td style="text-align: right">1</td></tr><tr><td style="text-align: right">3</td><td style="text-align: right">Second difference</td><td style="text-align: right"><span>$\Delta^2 x_t$</span></td><td style="text-align: right">2</td></tr><tr><td style="text-align: right">4</td><td style="text-align: right">Log</td><td style="text-align: right"><span>$\ln x_t$</span></td><td style="text-align: right">0</td></tr><tr><td style="text-align: right">5</td><td style="text-align: right">Log first difference</td><td style="text-align: right"><span>$\Delta \ln x_t$</span></td><td style="text-align: right">1</td></tr><tr><td style="text-align: right">6</td><td style="text-align: right">Log second difference</td><td style="text-align: right"><span>$\Delta^2 \ln x_t$</span></td><td style="text-align: right">2</td></tr><tr><td style="text-align: right">7</td><td style="text-align: right">Delta percent change</td><td style="text-align: right"><span>$\Delta(x_t / x_{t-1} - 1)$</span></td><td style="text-align: right">2</td></tr></table><p>Codes 4–7 require strictly positive data.</p><h3 id="Applying-Transformations"><a class="docs-heading-anchor" href="#Applying-Transformations">Applying Transformations</a><a id="Applying-Transformations-1"></a><a class="docs-heading-anchor-permalink" href="#Applying-Transformations" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Univariate
+y = [100.0, 105.0, 110.0, 108.0, 115.0]
+growth = apply_tcode(y, 5)   # log first differences
+
+# Apply recommended FRED codes to data container
+fred = load_example(:fred_md)
+sub = fred[:, [&quot;INDPRO&quot;, &quot;CPIAUCSL&quot;, &quot;FEDFUNDS&quot;]]
+d = apply_tcode(sub)   # uses per-variable tcode from metadata
+
+# Or specify codes explicitly
+d2 = apply_tcode(sub, [5, 5, 1])   # log-diff IP and CPI, level FFR
+
+# Same code for all variables
+d3 = apply_tcode(sub, 5)</code></pre><p>When applying per-variable codes to a <code>TimeSeriesData</code>, rows are trimmed consistently to the shortest transformed series, aligning to the end of the sample.</p><h3 id="Inverse-Transformations"><a class="docs-heading-anchor" href="#Inverse-Transformations">Inverse Transformations</a><a id="Inverse-Transformations-1"></a><a class="docs-heading-anchor-permalink" href="#Inverse-Transformations" title="Permalink"></a></h3><p><code>inverse_tcode()</code> undoes a transformation given initial values:</p><pre><code class="language-julia hljs">y = [100.0, 105.0, 110.0, 108.0]
+yd = apply_tcode(y, 5)
+
+# Recover original levels
+recovered = inverse_tcode(yd, 5; x_prev=[y[1]])
+# recovered ≈ [105.0, 110.0, 108.0]</code></pre><p>The <code>x_prev</code> argument provides the initial values needed to anchor the reconstruction:</p><table><tr><th style="text-align: right">Code</th><th style="text-align: right">Required <code>x_prev</code></th></tr><tr><td style="text-align: right">1, 4</td><td style="text-align: right">None</td></tr><tr><td style="text-align: right">2, 5</td><td style="text-align: right">1 value (last pre-sample level)</td></tr><tr><td style="text-align: right">3, 6, 7</td><td style="text-align: right">2 values (last two pre-sample levels)</td></tr></table><div class="admonition is-info" id="Technical-Note-b0e9ad640dd3b5d5"><header class="admonition-header">Technical Note<a class="admonition-anchor" href="#Technical-Note-b0e9ad640dd3b5d5" title="Permalink"></a></header><div class="admonition-body"><p>Round-trip accuracy (<code>inverse_tcode(apply_tcode(y, c), c; x_prev=...)</code>) is exact to machine precision for all codes.</p></div></div><hr/><h2 id="Panel-Data"><a class="docs-heading-anchor" href="#Panel-Data">Panel Data</a><a id="Panel-Data-1"></a><a class="docs-heading-anchor-permalink" href="#Panel-Data" title="Permalink"></a></h2><h3 id="Stata-style-xtset"><a class="docs-heading-anchor" href="#Stata-style-xtset">Stata-style xtset</a><a id="Stata-style-xtset-1"></a><a class="docs-heading-anchor-permalink" href="#Stata-style-xtset" title="Permalink"></a></h3><p><code>xtset()</code> converts a DataFrame into a <code>PanelData</code> container, analogous to Stata&#39;s <code>xtset</code> command:</p><pre><code class="language-julia hljs"># The preferred way to get panel data is load_example(:pwt)
+# For custom DataFrames, use xtset:
+using DataFrames
+
+df = DataFrame(
+    firm = repeat(1:50, inner=20),
+    year = repeat(2001:2020, 50),
+    investment = randn(1000),
+    output = randn(1000)
+)
+
+pd = xtset(df, :firm, :year; frequency=Yearly)</code></pre><p>The function:</p><ul><li>Extracts all numeric columns (excluding group and time columns)</li><li>Sorts by (group, time)</li><li>Validates no duplicate (group, time) pairs</li><li>Detects balanced vs unbalanced panels</li></ul><h3 id="Panel-Operations"><a class="docs-heading-anchor" href="#Panel-Operations">Panel Operations</a><a id="Panel-Operations-1"></a><a class="docs-heading-anchor-permalink" href="#Panel-Operations" title="Permalink"></a></h3><pre><code class="language-julia hljs">pwt = load_example(:pwt)
+
+# Structure summary
+isbalanced(pwt)       # true
+ngroups(pwt)          # 38
+groups(pwt)           # [&quot;AUS&quot;, &quot;AUT&quot;, ..., &quot;USA&quot;]
+panel_summary(pwt)    # printed summary table
+
+# Extract single entity as TimeSeriesData
+usa = group_data(pwt, &quot;USA&quot;)       # by name
+usa = group_data(pwt, 38)          # by index</code></pre><hr/><h2 id="Summary-Statistics"><a class="docs-heading-anchor" href="#Summary-Statistics">Summary Statistics</a><a id="Summary-Statistics-1"></a><a class="docs-heading-anchor-permalink" href="#Summary-Statistics" title="Permalink"></a></h2><p><code>describe_data()</code> computes per-variable descriptive statistics displayed via PrettyTables:</p><pre><code class="language-julia hljs">fred = load_example(:fred_md)
+d = fix(apply_tcode(fred[:, [&quot;INDPRO&quot;, &quot;CPIAUCSL&quot;, &quot;FEDFUNDS&quot;]]))
+s = describe_data(d)</code></pre><p>The returned <code>DataSummary</code> object contains fields: <code>varnames</code>, <code>n</code>, <code>mean</code>, <code>std</code>, <code>min</code>, <code>p25</code>, <code>median</code>, <code>p75</code>, <code>max</code>, <code>skewness</code>, <code>kurtosis</code>.</p><p>For <code>PanelData</code>, <code>describe_data()</code> additionally prints panel dimensions.</p><hr/><h2 id="Estimation-Dispatch"><a class="docs-heading-anchor" href="#Estimation-Dispatch">Estimation Dispatch</a><a id="Estimation-Dispatch-1"></a><a class="docs-heading-anchor-permalink" href="#Estimation-Dispatch" title="Permalink"></a></h2><p>All estimation functions accept <code>TimeSeriesData</code> directly via thin dispatch wrappers. This avoids manual conversion:</p><pre><code class="language-julia hljs">fred = load_example(:fred_md)
+d = fix(apply_tcode(fred[:, [&quot;INDPRO&quot;, &quot;CPIAUCSL&quot;, &quot;FEDFUNDS&quot;]]))
+
+# Multivariate — automatically calls to_matrix(d)
+model = estimate_var(d, 2)
+post = estimate_bvar(d, 2)
+fm = estimate_factors(d, 2)
+lp = estimate_lp(d, 1, 20)
+
+# Univariate — automatically calls to_vector(d) (requires n_vars == 1)
+d_uni = d[:, [&quot;INDPRO&quot;]]  # select single variable
+ar = estimate_ar(d_uni, 2)
+adf = adf_test(d_uni)</code></pre><p>Explicit conversion is also available:</p><pre><code class="language-julia hljs">to_matrix(d)             # Matrix{Float64}
+to_vector(d)             # Vector{Float64} (n_vars == 1 only)
+to_vector(d, &quot;INDPRO&quot;)   # single column by name
+to_vector(d, 2)          # single column by index</code></pre><hr/><h2 id="Example-Datasets"><a class="docs-heading-anchor" href="#Example-Datasets">Example Datasets</a><a id="Example-Datasets-1"></a><a class="docs-heading-anchor-permalink" href="#Example-Datasets" title="Permalink"></a></h2><p>Three built-in datasets are included, stored as TOML files in the <code>data/</code> directory:</p><table><tr><th style="text-align: right">Dataset</th><th style="text-align: right">Function</th><th style="text-align: right">Type</th><th style="text-align: right">Variables</th><th style="text-align: right">Observations</th><th style="text-align: right">Frequency</th></tr><tr><td style="text-align: right">FRED-MD</td><td style="text-align: right"><code>load_example(:fred_md)</code></td><td style="text-align: right"><code>TimeSeriesData</code></td><td style="text-align: right">126</td><td style="text-align: right">804 months (1959–2025)</td><td style="text-align: right">Monthly</td></tr><tr><td style="text-align: right">FRED-QD</td><td style="text-align: right"><code>load_example(:fred_qd)</code></td><td style="text-align: right"><code>TimeSeriesData</code></td><td style="text-align: right">245</td><td style="text-align: right">268 quarters (1959–2025)</td><td style="text-align: right">Quarterly</td></tr><tr><td style="text-align: right">PWT</td><td style="text-align: right"><code>load_example(:pwt)</code></td><td style="text-align: right"><code>PanelData</code></td><td style="text-align: right">42</td><td style="text-align: right">38 countries × 74 years (1950–2023)</td><td style="text-align: right">Yearly</td></tr></table><p>FRED-MD and FRED-QD are January 2026 vintage and include per-variable descriptions and recommended transformation codes from McCracken and Ng. PWT 10.01 covers 38 OECD countries with national accounts, productivity, and price level data from Feenstra, Inklaar, and Timmer.</p><h3 id="FRED-Databases"><a class="docs-heading-anchor" href="#FRED-Databases">FRED Databases</a><a id="FRED-Databases-1"></a><a class="docs-heading-anchor-permalink" href="#FRED-Databases" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Load FRED-MD
+md = load_example(:fred_md)
+md                              # 804 obs × 126 vars (Monthly)
+desc(md)                        # &quot;FRED-MD Monthly Database, January 2026 Vintage ...&quot;
+vardesc(md, &quot;INDPRO&quot;)           # &quot;IP Index&quot;
+refs(md)                        # McCracken &amp; Ng (2016)
+
+# Apply recommended FRED transformations to achieve stationarity
+md_stationary = apply_tcode(md, md.tcode)
+
+# Estimate a VAR on a subset
+sub = md_stationary[:, [&quot;INDPRO&quot;, &quot;UNRATE&quot;, &quot;CPIAUCSL&quot;, &quot;FEDFUNDS&quot;]]
+model = estimate_var(sub, 4)
+
+# Load FRED-QD
+qd = load_example(:fred_qd)
+desc(qd)                        # &quot;FRED-QD Quarterly Database, January 2026 Vintage ...&quot;
+vardesc(qd, &quot;GDPC1&quot;)            # &quot;Real Gross Domestic Product, 3 Decimal ...&quot;
+refs(qd)                        # McCracken &amp; Ng (2020)</code></pre><h3 id="Penn-World-Table"><a class="docs-heading-anchor" href="#Penn-World-Table">Penn World Table</a><a id="Penn-World-Table-1"></a><a class="docs-heading-anchor-permalink" href="#Penn-World-Table" title="Permalink"></a></h3><p>The Penn World Table (PWT) 10.01 provides a balanced panel of 38 OECD countries over 1950–2023. It loads as <code>PanelData</code>, giving access to panel-specific functions like <code>group_data</code>, <code>groups</code>, and <code>panel_summary</code>.</p><pre><code class="language-julia hljs"># Load PWT
+pwt = load_example(:pwt)
+nobs(pwt)                       # 2812 (38 × 74)
+nvars(pwt)                      # 42
+ngroups(pwt)                    # 38
+groups(pwt)                     # [&quot;AUS&quot;, &quot;AUT&quot;, ..., &quot;USA&quot;]
+isbalanced(pwt)                 # true
+vardesc(pwt, &quot;rgdpna&quot;)          # &quot;Real GDP at constant 2021 national prices ...&quot;
+refs(pwt)                       # Feenstra, Inklaar &amp; Timmer (2015)
+
+# Extract a single country as TimeSeriesData
+usa = group_data(pwt, &quot;USA&quot;)
+nobs(usa)                       # 74 (years 1950–2023)
+
+# Run a VAR on US real GDP, consumption, and investment
+rgdpna = usa[:, &quot;rgdpna&quot;]
+rconna = usa[:, &quot;rconna&quot;]
+# Panel summary
+panel_summary(pwt)</code></pre><h3 id="References"><a class="docs-heading-anchor" href="#References">References</a><a id="References-1"></a><a class="docs-heading-anchor-permalink" href="#References" title="Permalink"></a></h3><p>Each loaded dataset carries bibliographic references accessible via <code>refs()</code>, supporting <code>:text</code>, <code>:latex</code>, <code>:bibtex</code>, and <code>:html</code> output formats:</p><pre><code class="language-julia hljs">refs(md; format=:bibtex)   # BibTeX entry for McCracken &amp; Ng (2016)
+refs(:fred_md)             # same via symbol dispatch
+refs(:pwt)                 # Feenstra, Inklaar &amp; Timmer (2015)</code></pre><hr/><h2 id="Filtering"><a class="docs-heading-anchor" href="#Filtering">Filtering</a><a id="Filtering-1"></a><a class="docs-heading-anchor-permalink" href="#Filtering" title="Permalink"></a></h2><p><code>apply_filter()</code> applies time series filters (HP, Hamilton, BN, BK, Boosted HP) to variables in a <code>TimeSeriesData</code> or <code>PanelData</code>, extracting trend or cycle components. When filters produce different-length outputs (e.g., Hamilton drops initial observations), the result is trimmed to the common valid range.</p><h3 id="Basic-Usage"><a class="docs-heading-anchor" href="#Basic-Usage">Basic Usage</a><a id="Basic-Usage-1"></a><a class="docs-heading-anchor-permalink" href="#Basic-Usage" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Log levels from FRED-MD (I(1) series, suitable for trend-cycle decomposition)
+fred = load_example(:fred_md)
+d = TimeSeriesData(
+    log.(to_matrix(fred[:, [&quot;INDPRO&quot;, &quot;PAYEMS&quot;, &quot;HOUST&quot;]]));
+    varnames=[&quot;INDPRO&quot;, &quot;PAYEMS&quot;, &quot;HOUST&quot;], frequency=Monthly)
+# Drop any NaN from log of non-positive values
+d = fix(d)
+
+# HP cycle for all variables (monthly lambda)
+d_hp = apply_filter(d, :hp; component=:cycle, lambda=129600.0)
+
+# HP trend for all variables
+d_trend = apply_filter(d, :hp; component=:trend, lambda=129600.0)
+
+# Hamilton filter (output is shorter — drops initial observations)
+d_ham = apply_filter(d, :hamilton; component=:cycle, h=24, p=12)</code></pre><p>Available filter symbols: <code>:hp</code>, <code>:hamilton</code>, <code>:bn</code>, <code>:bk</code>, <code>:boosted_hp</code>.</p><h3 id="Per-Variable-Specifications"><a class="docs-heading-anchor" href="#Per-Variable-Specifications">Per-Variable Specifications</a><a id="Per-Variable-Specifications-1"></a><a class="docs-heading-anchor-permalink" href="#Per-Variable-Specifications" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Different filters per variable (nothing = pass-through)
+d2 = apply_filter(d, [:hp, :hamilton, nothing]; component=:cycle)
+
+# Per-variable component overrides via tuples
+d3 = apply_filter(d, [(:hp, :trend), (:hamilton, :cycle), nothing])</code></pre><h3 id="Selective-Filtering"><a class="docs-heading-anchor" href="#Selective-Filtering">Selective Filtering</a><a id="Selective-Filtering-1"></a><a class="docs-heading-anchor-permalink" href="#Selective-Filtering" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Filter only selected variables (others pass through unchanged)
+d_sel = apply_filter(d, :hp; vars=[&quot;INDPRO&quot;, &quot;PAYEMS&quot;], component=:cycle)
+d_sel = apply_filter(d, :hp; vars=[1, 2], component=:cycle)  # by index</code></pre><h3 id="Pre-Computed-Results"><a class="docs-heading-anchor" href="#Pre-Computed-Results">Pre-Computed Results</a><a id="Pre-Computed-Results-1"></a><a class="docs-heading-anchor-permalink" href="#Pre-Computed-Results" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Use a pre-computed filter result
+r = hp_filter(d[:, &quot;INDPRO&quot;]; lambda=129600.0)
+d2 = apply_filter(d, [r, :hp, nothing]; component=:cycle)</code></pre><h3 id="Forwarding-Filter-Parameters"><a class="docs-heading-anchor" href="#Forwarding-Filter-Parameters">Forwarding Filter Parameters</a><a id="Forwarding-Filter-Parameters-1"></a><a class="docs-heading-anchor-permalink" href="#Forwarding-Filter-Parameters" title="Permalink"></a></h3><p>Additional keyword arguments are forwarded to the filter functions:</p><pre><code class="language-julia hljs"># Custom HP lambda
+d_smooth = apply_filter(d, :hp; component=:cycle, lambda=100.0)
+
+# Custom Hamilton horizon and lags
+d_ham = apply_filter(d, :hamilton; component=:cycle, h=24, p=12)</code></pre><h3 id="Panel-Data-2"><a class="docs-heading-anchor" href="#Panel-Data-2">Panel Data</a><a class="docs-heading-anchor-permalink" href="#Panel-Data-2" title="Permalink"></a></h3><p><code>apply_filter</code> applies filters group-by-group to <code>PanelData</code>, reassembling the results:</p><pre><code class="language-julia hljs"># Penn World Table — real GDP and consumption for 38 OECD countries
+pwt = load_example(:pwt)
+
+# HP cycle for all variables, applied per-group
+pd_hp = apply_filter(pwt[:, [&quot;rgdpna&quot;, &quot;rconna&quot;]], :hp; component=:cycle)
+
+# Filter only rgdpna, pass through rconna
+pd_sel = apply_filter(pwt[:, [&quot;rgdpna&quot;, &quot;rconna&quot;]], :hp; vars=[&quot;rgdpna&quot;], component=:cycle)</code></pre><div class="admonition is-info" id="Technical-Note-c189644981f21d1f"><header class="admonition-header">Technical Note<a class="admonition-anchor" href="#Technical-Note-c189644981f21d1f" title="Permalink"></a></header><div class="admonition-body"><p>Filters that produce shorter output (Hamilton, Baxter-King) trim each group independently. If groups have different lengths, the resulting panel may become unbalanced.</p></div></div><hr/><h2 id="Complete-Example"><a class="docs-heading-anchor" href="#Complete-Example">Complete Example</a><a id="Complete-Example-1"></a><a class="docs-heading-anchor-permalink" href="#Complete-Example" title="Permalink"></a></h2><pre><code class="language-julia hljs">using MacroEconometricModels
+
+# === Step 1: Load FRED-MD and select variables ===
+fred = load_example(:fred_md)
+sub = fred[:, [&quot;INDPRO&quot;, &quot;CPIAUCSL&quot;, &quot;FEDFUNDS&quot;]]
+
+# === Step 2: Apply FRED transformation codes ===
+d = apply_tcode(sub)
+
+# === Step 3: Diagnose — differencing introduces NaN ===
+diag = diagnose(d)
+println(&quot;Clean: &quot;, diag.is_clean)   # false
+
+# === Step 4: Fix by dropping NaN rows ===
+d_clean = fix(d)
+println(&quot;Clean: &quot;, diagnose(d_clean).is_clean)   # true
+
+# === Step 5: Summary statistics ===
+describe_data(d_clean)
+
+# === Step 6: Validate for VAR ===
+validate_for_model(d_clean, :var)   # OK — multivariate
+
+# === Step 7: Estimate VAR directly from container ===
+model = estimate_var(d_clean, 2)
+
+# === Step 8: Structural analysis ===
+irfs = irf(model, 20; method=:cholesky)
+
+# === Step 9: Panel workflow with Penn World Table ===
+pwt = load_example(:pwt)
+panel_summary(pwt)
+
+# Extract and estimate per country
+for country in [&quot;USA&quot;, &quot;GBR&quot;, &quot;JPN&quot;]
+    gd = group_data(pwt, country)
+    y = filter(isfinite, log.(gd[:, &quot;rgdpna&quot;]))
+    hp = hp_filter(y)
+    println(&quot;$country: trend length = &quot;, length(trend(hp)))
+end</code></pre><h3 id="See-Also"><a class="docs-heading-anchor" href="#See-Also">See Also</a><a id="See-Also-1"></a><a class="docs-heading-anchor-permalink" href="#See-Also" title="Permalink"></a></h3><ul><li><a href="../filters/">Time Series Filters</a> – HP, Hamilton, BN, BK, and boosted HP filters used by <code>apply_filter</code></li><li><a href="../examples/">Examples</a> – Complete worked examples including FRED-MD data pipeline</li><li><a href="../api_functions/">API Reference</a> – Complete function signatures</li></ul><h2 id="References-2"><a class="docs-heading-anchor" href="#References-2">References</a><a class="docs-heading-anchor-permalink" href="#References-2" title="Permalink"></a></h2><ul><li>McCracken, Michael W., and Serena Ng. 2016. &quot;FRED-MD: A Monthly Database for Macroeconomic Research.&quot; <em>Journal of Business &amp; Economic Statistics</em> 34 (4): 574–589. <a href="https://doi.org/10.1080/07350015.2015.1086655">https://doi.org/10.1080/07350015.2015.1086655</a></li><li>McCracken, Michael W., and Serena Ng. 2020. &quot;FRED-QD: A Quarterly Database for Macroeconomic Research.&quot; <em>Federal Reserve Bank of St. Louis Working Paper</em> 2020-005. <a href="https://doi.org/10.20955/wp.2020.005">https://doi.org/10.20955/wp.2020.005</a></li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« Home</a><a class="docs-footer-nextpage" href="../filters/">Time Series Filters »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Wednesday 25 February 2026 02:03">Wednesday 25 February 2026</span>. Using Julia version 1.10.10.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
