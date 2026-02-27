@@ -1,4 +1,4 @@
-<img width="1280" height="640" alt="スクリーンショット 2026-02-24 7 24 13" src="https://github.com/user-attachments/assets/df3c7772-f647-49ad-aae8-d23d8fc595b9" />
+<img width="1760" height="600" alt="mems" src="https://github.com/user-attachments/assets/075ec2ce-3d7d-45db-bc78-062965e26c55" />
 
 # MacroEconometricModels.jl
 
