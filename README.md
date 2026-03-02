@@ -14,7 +14,7 @@ A comprehensive Julia package for macroeconomic time series analysis.
 
 **Multivariate:** VAR, VECM, Bayesian VAR, Local Projections, Factor Models
 
-**Panel:** Panel VAR (FD-GMM, System GMM, FE-OLS)
+**Panel:** Panel VAR (FD-GMM, System GMM, FE-OLS), Difference-in-Differences (TWFE, Callaway-Sant'Anna, Sun-Abraham, BJS, dCDH, HonestDiD), Event Study LP
 
 **DSGE:** 6 solvers (Gensys, Blanchard-Kahn, Klein, higher-order perturbation with pruning, Chebyshev projection, PFI), constrained solvers (Ipopt NLP, PATH MCP for ZLB/binding bounds), OccBin, GMM/SMM estimation
 
@@ -80,6 +80,18 @@ Pkg.add("MacroEconometricModels")
   - Structural analysis: OIRF, GIRF (Pesaran & Shin 1998), FEVD, stability
   - Group-level block bootstrap confidence intervals for IRFs
   - Instrument management: min/max lag truncation, collapse, PCA reduction
+- **Difference-in-Differences (DiD)** - Unified `estimate_did()` dispatcher for staggered treatment designs:
+  - TWFE event-study regression with double-demeaned panel fixed effects
+  - Callaway & Sant'Anna (2021) group-time ATT with doubly robust estimation
+  - Sun & Abraham (2021) interaction-weighted estimator with cohort-specific regressions
+  - Borusyak, Jaravel & Spiess (2024) imputation estimator via counterfactual prediction
+  - de Chaisemartin & D'Haultfoeuille (2020) first-difference DID with bootstrap SEs
+  - Diagnostics: Bacon decomposition (Goodman-Bacon 2021), pre-trend testing, negative weight checks
+  - HonestDiD sensitivity analysis with relative magnitudes bounds and breakdown values (Rambachan & Roth 2023)
+- **Event Study LP** - Local projection event study for panel data:
+  - LP-DiD clean-control estimator (Dube et al. 2023) with panel fixed effects
+  - Flexible lead/lag window specification with clustered standard errors
+  - Interactive D3.js event-study plots with confidence bands
 
 ### DSGE
 - **Model specification** - `@dsge` macro with declarative syntax for parameters, variables, shocks, and equilibrium equations
@@ -148,7 +160,7 @@ Pkg.add("MacroEconometricModels")
 
 ### Visualization
 - **Interactive D3.js plots** - `plot_result()` renders self-contained HTML with inline D3.js v7 (no additional dependencies)
-  - 31 dispatch methods covering IRF, FEVD, historical decomposition, filters, forecasts, volatility models, factor models, data containers, and nowcasting
+  - 38 dispatch methods covering IRF, FEVD, historical decomposition, filters, forecasts, volatility models, factor models, data containers, nowcasting, and difference-in-differences
   - Three chart types: line (with confidence bands), stacked area, and bar charts
   - Interactive tooltips, responsive layout, multi-panel grid figures
   - `save_plot(p, "file.html")` saves to disk; `display_plot(p)` opens in browser; auto-renders in Jupyter
@@ -234,6 +246,16 @@ Full documentation available at [https://FriedmanJP.github.io/MacroEconometricMo
 - Blundell, Richard, and Stephen Bond. 1998. "Initial Conditions and Moment Restrictions in Dynamic Panel Data Models." *Journal of Econometrics* 87 (1): 115–143. [https://doi.org/10.1016/S0304-4076(98)00009-8](https://doi.org/10.1016/S0304-4076(98)00009-8)
 - Holtz-Eakin, Douglas, Whitney Newey, and Harvey S. Rosen. 1988. "Estimating Vector Autoregressions with Panel Data." *Econometrica* 56 (6): 1371–1395. [https://doi.org/10.2307/1913103](https://doi.org/10.2307/1913103)
 - Windmeijer, Frank. 2005. "A Finite Sample Correction for the Variance of Linear Efficient Two-Step GMM Estimators." *Journal of Econometrics* 126 (1): 25–51. [https://doi.org/10.1016/j.jeconom.2004.02.005](https://doi.org/10.1016/j.jeconom.2004.02.005)
+
+### Difference-in-Differences
+
+- Borusyak, Kirill, Xavier Jaravel, and Jann Spiess. 2024. "Revisiting Event-Study Designs: Robust and Efficient Estimation." *Review of Economic Studies* 91 (6): 3253–3285. [https://doi.org/10.1093/restud/rdae007](https://doi.org/10.1093/restud/rdae007)
+- Callaway, Brantly, and Pedro H. C. Sant'Anna. 2021. "Difference-in-Differences with Multiple Time Periods." *Journal of Econometrics* 225 (2): 200–230. [https://doi.org/10.1016/j.jeconom.2020.12.001](https://doi.org/10.1016/j.jeconom.2020.12.001)
+- de Chaisemartin, Clement, and Xavier D'Haultfoeuille. 2020. "Two-Way Fixed Effects Estimators with Heterogeneous Treatment Effects." *American Economic Review* 110 (9): 2964–2996. [https://doi.org/10.1257/aer.20181169](https://doi.org/10.1257/aer.20181169)
+- Goodman-Bacon, Andrew. 2021. "Difference-in-Differences with Variation in Treatment Timing." *Journal of Econometrics* 225 (2): 254–277. [https://doi.org/10.1016/j.jeconom.2021.03.014](https://doi.org/10.1016/j.jeconom.2021.03.014)
+- Rambachan, Ashesh, and Jonathan Roth. 2023. "A More Credible Approach to Parallel Trends." *Review of Economic Studies* 90 (5): 2555–2591. [https://doi.org/10.1093/restud/rdad018](https://doi.org/10.1093/restud/rdad018)
+- Roth, Jonathan. 2022. "Pretest with Caution: Event-Study Estimates after Testing for Parallel Trends." *American Economic Review: Insights* 4 (3): 305–322. [https://doi.org/10.1257/aeri.20210236](https://doi.org/10.1257/aeri.20210236)
+- Sun, Liyang, and Sarah Abraham. 2021. "Estimating Dynamic Treatment Effects in Event Studies with Heterogeneous Treatment Effects." *Journal of Econometrics* 225 (2): 175–199. [https://doi.org/10.1016/j.jeconom.2020.09.006](https://doi.org/10.1016/j.jeconom.2020.09.006)
 
 ### DSGE
 
