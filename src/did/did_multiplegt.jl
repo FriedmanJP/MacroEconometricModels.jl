@@ -207,6 +207,15 @@ function _estimate_did_multiplegt(pd::PanelData{T}, outcome_col::Int, treat_col:
                                    n_boot::Int=200) where {T<:AbstractFloat}
 
     timing = _extract_treatment_timing(pd, treat_col)
+
+    # Override timing with cohort_id if present
+    if pd.cohort_id !== nothing
+        for g in 1:pd.n_groups
+            mask = pd.group_id .== g
+            timing[g] = pd.cohort_id[findfirst(mask)]
+        end
+    end
+
     all_times = sort(unique(pd.time_id))
 
     # Identify cohorts and control groups

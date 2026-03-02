@@ -72,6 +72,15 @@ function _estimate_bjs(pd::PanelData{T}, outcome_col::Int, treat_col::Int;
                         conf_level::Real=0.95) where {T<:AbstractFloat}
 
     timing = _extract_treatment_timing(pd, treat_col)
+
+    # Override timing with cohort_id if present
+    if pd.cohort_id !== nothing
+        for g in 1:pd.n_groups
+            mask = pd.group_id .== g
+            timing[g] = pd.cohort_id[findfirst(mask)]
+        end
+    end
+
     all_times = sort(unique(pd.time_id))
     n_times = length(all_times)
 

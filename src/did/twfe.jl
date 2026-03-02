@@ -90,6 +90,14 @@ function _estimate_twfe(pd::PanelData{T}, outcome_col::Int, treat_col::Int;
     N_obs = pd.T_obs
     timing = _extract_treatment_timing(pd, treat_col)
 
+    # Override timing with cohort_id if present
+    if pd.cohort_id !== nothing
+        for g in 1:pd.n_groups
+            mask = pd.group_id .== g
+            timing[g] = pd.cohort_id[findfirst(mask)]
+        end
+    end
+
     # Identify treated/control groups
     treated_groups = [g for (g, t) in timing if t > 0]
     control_groups = [g for (g, t) in timing if t == 0]

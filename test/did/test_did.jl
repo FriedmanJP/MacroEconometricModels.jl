@@ -61,7 +61,7 @@ function _make_did_panel(; n_units=50, n_periods=20, treat_effect=2.0,
     group_names = ["unit_$i" for i in 1:n_units]
     pd = PanelData{T_type}(data, ["outcome", "treat_time", "covariate"],
                             Quarterly, [1, 1, 1], group_id, time_id,
-                            group_names, n_units, 3, N_obs, true,
+                            nothing, group_names, n_units, 3, N_obs, true,
                             ["DiD test panel"], Dict{String,String}(), Symbol[])
     pd, treat_effect
 end
@@ -513,7 +513,7 @@ end
         end
         pd_all = PanelData{Float64}(data_all, ["y", "tt"],
                                      Quarterly, [1, 1], gid_all, tid_all,
-                                     ["u$i" for i in 1:n_u], n_u, 2, N_all, true,
+                                     nothing, ["u$i" for i in 1:n_u], n_u, 2, N_all, true,
                                      ["all treated"], Dict{String,String}(), Symbol[])
         @test_throws ArgumentError estimate_did(pd_all, "y", "tt";
                                                 method=:callaway_santanna,

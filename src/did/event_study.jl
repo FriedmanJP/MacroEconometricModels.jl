@@ -109,6 +109,15 @@ function _event_study_lp_internal(pd::PanelData{T}, outcome::Union{String,Symbol
     cov_cols = [_resolve_varindex(pd, c) for c in covariates]
 
     timing = _extract_treatment_timing(pd, treat_col)
+
+    # Override timing with cohort_id if present
+    if pd.cohort_id !== nothing
+        for g in 1:pd.n_groups
+            mask = pd.group_id .== g
+            timing[g] = pd.cohort_id[findfirst(mask)]
+        end
+    end
+
     all_times = sort(unique(pd.time_id))
 
     # Build panel lookup: group -> time -> row_index

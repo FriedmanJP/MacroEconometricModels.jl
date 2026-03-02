@@ -50,6 +50,15 @@ function bacon_decomposition(pd::PanelData{T}, outcome::Union{String,Symbol},
     outcome_col = _resolve_varindex(pd, outcome)
     treat_col = _resolve_varindex(pd, treatment)
     timing = _extract_treatment_timing(pd, treat_col)
+
+    # Override timing with cohort_id if present
+    if pd.cohort_id !== nothing
+        for g in 1:pd.n_groups
+            mask = pd.group_id .== g
+            timing[g] = pd.cohort_id[findfirst(mask)]
+        end
+    end
+
     all_times = sort(unique(pd.time_id))
     n_times = length(all_times)
 
@@ -344,6 +353,15 @@ de Chaisemartin, C. & D'Haultfoeuille, X. (2020). *AER* 110(9), 2964-2996.
 function negative_weight_check(pd::PanelData{T}, treatment::Union{String,Symbol}) where {T<:AbstractFloat}
     treat_col = _resolve_varindex(pd, treatment)
     timing = _extract_treatment_timing(pd, treat_col)
+
+    # Override timing with cohort_id if present
+    if pd.cohort_id !== nothing
+        for g in 1:pd.n_groups
+            mask = pd.group_id .== g
+            timing[g] = pd.cohort_id[findfirst(mask)]
+        end
+    end
+
     all_times = sort(unique(pd.time_id))
 
     # Compute TWFE weights for each (g, t) cell
