@@ -173,6 +173,7 @@ Container for panel (longitudinal) data with group and time identifiers.
 - `tcode::Vector{Int}` — FRED transformation codes per variable
 - `group_id::Vector{Int}` — group identifier per row
 - `time_id::Vector{Int}` — time identifier per row
+- `cohort_id::Union{Vector{Int}, Nothing}` — treatment cohort per row (`nothing` if unused)
 - `group_names::Vector{String}` — unique group labels
 - `n_groups::Int` — number of groups
 - `n_vars::Int` — number of variables
@@ -189,6 +190,7 @@ struct PanelData{T<:AbstractFloat} <: AbstractMacroData
     tcode::Vector{Int}
     group_id::Vector{Int}
     time_id::Vector{Int}
+    cohort_id::Union{Vector{Int}, Nothing}
     group_names::Vector{String}
     n_groups::Int
     n_vars::Int
@@ -199,11 +201,11 @@ struct PanelData{T<:AbstractFloat} <: AbstractMacroData
     source_refs::Vector{Symbol}
 
     function PanelData{T}(data, varnames, frequency, tcode, group_id, time_id,
-                          group_names, n_groups, n_vars, T_obs, balanced,
+                          cohort_id, group_names, n_groups, n_vars, T_obs, balanced,
                           desc, vardesc, source_refs) where {T<:AbstractFloat}
         all(t -> 1 <= t <= 7, tcode) || throw(ArgumentError("tcode values must be in 1:7"))
         new{T}(data, varnames, frequency, tcode, group_id, time_id,
-               group_names, n_groups, n_vars, T_obs, balanced,
+               cohort_id, group_names, n_groups, n_vars, T_obs, balanced,
                desc, vardesc, source_refs)
     end
 end
@@ -660,6 +662,10 @@ function Base.show(io::IO, d::PanelData{T}) where {T}
         print(io, " ($(d.frequency))")
     end
     print(io, d.balanced ? " [balanced]" : " [unbalanced]")
+    if d.cohort_id !== nothing
+        n_cohorts = length(unique(d.cohort_id))
+        print(io, ", $n_cohorts cohorts")
+    end
     if !isempty(d.desc[1])
         print(io, "\n  ", d.desc[1])
     end

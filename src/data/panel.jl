@@ -123,7 +123,7 @@ function xtset(df::DataFrame, group_col::Symbol, time_col::Symbol;
 
     vd = something(vardesc, Dict{String,String}())
     PanelData{Float64}(mat, vn, frequency, tc, group_id, time_id,
-                        group_names, n_groups, n_vars, T_total, balanced,
+                        nothing, group_names, n_groups, n_vars, T_total, balanced,
                         [desc], vd, Symbol[])
 end
 
@@ -283,7 +283,9 @@ function balance_panel(pd::PanelData{T}; method::Symbol=:dfm,
     balanced = all(==(obs_per_group[1]), obs_per_group)
 
     PanelData{T}(new_data, copy(pd.varnames), pd.frequency, copy(pd.tcode),
-                 copy(pd.group_id), copy(pd.time_id), copy(pd.group_names),
+                 copy(pd.group_id), copy(pd.time_id),
+                 pd.cohort_id !== nothing ? copy(pd.cohort_id) : nothing,
+                 copy(pd.group_names),
                  pd.n_groups, pd.n_vars, pd.T_obs, balanced,
                  copy(pd.desc), copy(pd.vardesc), copy(pd.source_refs))
 end

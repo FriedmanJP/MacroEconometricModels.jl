@@ -337,8 +337,25 @@ function apply_filter(d::PanelData{T}, spec;
     obs_per_group = [nobs(gd) for gd in group_datas]
     balanced = all(==(obs_per_group[1]), obs_per_group)
 
+    new_cohort_id = if d.cohort_id !== nothing
+        group_cohort = Dict{Int, Int}()
+        for i in 1:d.T_obs
+            group_cohort[d.group_id[i]] = d.cohort_id[i]
+        end
+        cid = Vector{Int}(undef, total_rows)
+        r = 1
+        for g in 1:d.n_groups
+            nr = nobs(group_datas[g])
+            cid[r:r+nr-1] .= group_cohort[g]
+            r += nr
+        end
+        cid
+    else
+        nothing
+    end
+
     PanelData{Float64}(new_data, copy(d.varnames), d.frequency, copy(d.tcode),
-                        new_group_id, new_time_id, copy(d.group_names),
+                        new_group_id, new_time_id, new_cohort_id, copy(d.group_names),
                         d.n_groups, n_v, total_rows, balanced,
                         copy(d.desc), copy(d.vardesc), copy(d.source_refs))
 end

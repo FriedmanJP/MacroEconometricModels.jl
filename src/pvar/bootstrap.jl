@@ -105,7 +105,7 @@ function pvar_bootstrap_irf(model::PVARModel{T}, H::Int;
 
         d_boot = PanelData{T}(
             new_data, copy(d.varnames), d.frequency, copy(d.tcode),
-            new_gid, new_tid, [string(i) for i in 1:N],
+            new_gid, new_tid, nothing, [string(i) for i in 1:N],
             N, d.n_vars, size(new_data, 1),
             d.balanced, copy(d.desc), copy(d.vardesc), copy(d.source_refs)
         )

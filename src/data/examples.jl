@@ -184,7 +184,7 @@ function _load_panel_example(d::Dict)
     ds = get(meta, "desc", "")
 
     PanelData{Float64}(mat, varnames, freq, ones(Int, n_vars),
-                        group_id, time_id, country_codes,
+                        group_id, time_id, nothing, country_codes,
                         n_countries, n_vars, n_total, true,
                         [ds], vardesc_dict, sr)
 end
