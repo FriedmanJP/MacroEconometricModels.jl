@@ -100,6 +100,15 @@ df = DataFrame(
     cpi = randn(150)
 )
 pd = xtset(df, :country, :quarter; frequency=Quarterly)
+
+# With cohort specification for DiD
+df_did = DataFrame(
+    firm = repeat(1:6, inner=10),
+    year = repeat(2001:2010, 6),
+    revenue = randn(60),
+    treatment_cohort = repeat([1, 1, 2, 2, 0, 0], inner=10)
+)
+pd_did = xtset(df_did, :firm, :year; cohort=:treatment_cohort)
 ```
 
 ### CrossSectionData
@@ -351,6 +360,7 @@ The function:
 - Sorts by (group, time)
 - Validates no duplicate (group, time) pairs
 - Detects balanced vs unbalanced panels
+- Optionally assigns cohort membership via `cohort` kwarg (for DiD methods)
 
 ### Panel Operations
 

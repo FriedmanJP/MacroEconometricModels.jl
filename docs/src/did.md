@@ -99,6 +99,21 @@ pd = xtset(df, :group, :time)
 
 The `xtset` function creates a `PanelData` object (Stata-style panel declaration). All DiD functions accept `PanelData` directly.
 
+### Custom Cohort Specification
+
+By default, DiD methods derive cohorts from the treatment timing column. For custom cohort definitions (e.g., geographic clusters, pre-treatment characteristics), specify a `cohort` column in `xtset`:
+
+```julia
+df = DataFrame(group=group_id, time=time_id, gdp=y, reform=treat_col,
+               region_cohort=[g <= 60 ? 1 : g <= 140 ? 2 : 0 for g in group_id])
+pd = xtset(df, :group, :time; cohort=:region_cohort)
+
+# DiD methods will use region_cohort instead of deriving from reform timing
+did = estimate_did(pd, :gdp, :reform; method=:callaway_santanna)
+```
+
+When `cohort_id` is `nothing` (the default), behavior is unchanged --- cohorts are inferred from the treatment column.
+
 !!! warning "Binary vs Timing Encoding"
     Do **not** pass a binary treatment indicator (0/1) as the treatment variable. The treatment column must contain the **period number** when treatment first occurs. The package internally constructs event-time dummies from this timing information.
 
