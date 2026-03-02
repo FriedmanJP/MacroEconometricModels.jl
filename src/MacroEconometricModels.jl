@@ -247,6 +247,10 @@ include("did/twfe.jl")
 include("did/callaway_santanna.jl")
 include("did/event_study.jl")
 include("did/diagnostics.jl")
+include("did/sun_abraham.jl")
+include("did/bjs.jl")
+include("did/did_multiplegt.jl")
+include("did/honest_did.jl")
 include("did/estimation.jl")
 
 # Innovation accounting (after LP types for lp_irf support)
@@ -588,10 +592,13 @@ export pvar_hansen_j, pvar_mmsc, pvar_lag_selection
 
 # Types
 export DIDResult, EventStudyLP, BaconDecomposition
-export PretrendTestResult, NegativeWeightResult
+export PretrendTestResult, NegativeWeightResult, HonestDiDResult
 
 # Estimation
 export estimate_did, estimate_event_study_lp, estimate_lp_did
+
+# Sensitivity analysis
+export honest_did
 
 # Diagnostics
 export bacon_decomposition, pretrend_test, negative_weight_check

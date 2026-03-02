@@ -250,12 +250,53 @@ struct NegativeWeightResult{T<:AbstractFloat}
 end
 
 # =============================================================================
+# HonestDiD Sensitivity Analysis
+# =============================================================================
+
+"""
+    HonestDiDResult{T<:AbstractFloat}
+
+Rambachan & Roth (2023) HonestDiD sensitivity analysis result.
+
+Provides robust confidence sets under bounded violations of parallel trends.
+The `Mbar` parameter controls the maximum allowed violation magnitude.
+
+# Fields
+- `Mbar::T` — violation bound used
+- `robust_ci_lower::Vector{T}` — robust CI lower bounds per post-period
+- `robust_ci_upper::Vector{T}` — robust CI upper bounds per post-period
+- `original_ci_lower::Vector{T}` — original CIs for comparison
+- `original_ci_upper::Vector{T}`
+- `breakdown_value::T` — smallest Mbar making result insignificant
+- `post_event_times::Vector{Int}` — post-treatment event-time grid
+- `post_att::Vector{T}` — post-treatment point estimates
+- `conf_level::T`
+
+# Reference
+Rambachan, A. & Roth, J. (2023). *RES* 90(5), 2555-2591.
+"""
+struct HonestDiDResult{T<:AbstractFloat}
+    Mbar::T
+    robust_ci_lower::Vector{T}
+    robust_ci_upper::Vector{T}
+    original_ci_lower::Vector{T}
+    original_ci_upper::Vector{T}
+    breakdown_value::T
+    post_event_times::Vector{Int}
+    post_att::Vector{T}
+    conf_level::T
+end
+
+# =============================================================================
 # Display
 # =============================================================================
 
 function Base.show(io::IO, r::DIDResult{T}) where {T}
     method_str = r.method == :twfe ? "Two-Way Fixed Effects" :
                  r.method == :callaway_santanna ? "Callaway-Sant'Anna (2021)" :
+                 r.method == :sun_abraham ? "Sun-Abraham (2021)" :
+                 r.method == :bjs ? "Borusyak-Jaravel-Spiess (2024)" :
+                 r.method == :did_multiplegt ? "de Chaisemartin-D'Haultfoeuille (2020)" :
                  string(r.method)
     cluster_str = r.cluster == :twoway ? "Two-way (unit + time)" :
                   r.cluster == :unit ? "Unit-clustered" : "Time-clustered"
@@ -374,6 +415,34 @@ function Base.show(io::IO, r::NegativeWeightResult{T}) where {T}
     ]
     _pretty_table(io, data;
         title = "Negative Weight Diagnostic (de Chaisemartin-D'Haultfoeuille 2020)",
+        column_labels = ["", ""],
+        alignment = [:l, :r],
+    )
+end
+
+function Base.show(io::IO, r::HonestDiDResult{T}) where {T}
+    n = length(r.post_event_times)
+    data = Matrix{Any}(undef, n, 5)
+    for i in 1:n
+        data[i, 1] = "e=$(r.post_event_times[i])"
+        data[i, 2] = _fmt(r.post_att[i])
+        data[i, 3] = "[$(_fmt(r.original_ci_lower[i])), $(_fmt(r.original_ci_upper[i]))]"
+        data[i, 4] = "[$(_fmt(r.robust_ci_lower[i])), $(_fmt(r.robust_ci_upper[i]))]"
+        data[i, 5] = (r.robust_ci_lower[i] > 0 || r.robust_ci_upper[i] < 0) ? "***" : ""
+    end
+    _pretty_table(io, data;
+        title = "HonestDiD Sensitivity Analysis (Mbar = $(_fmt(r.Mbar)))",
+        column_labels = ["Period", "ATT", "Original CI", "Robust CI", "Sig"],
+        alignment = [:l, :r, :r, :r, :c],
+    )
+    println(io)
+    summary_data = Any[
+        "Mbar"              _fmt(r.Mbar);
+        "Breakdown value"   _fmt(r.breakdown_value);
+        "Conf. level"       _fmt(r.conf_level);
+    ]
+    _pretty_table(io, summary_data;
+        title = "Sensitivity Summary",
         column_labels = ["", ""],
         alignment = [:l, :r],
     )

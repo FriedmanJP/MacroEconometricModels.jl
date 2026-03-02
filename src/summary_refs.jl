@@ -607,6 +607,21 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         year=2023, title="A Local Projections Approach to Difference-in-Differences Event Studies",
         journal="NBER Working Paper", volume="31184", issue="", pages="",
         doi="10.3386/w31184", isbn="", publisher="NBER", entry_type=:techreport),
+    :sun_abraham2021 => (key=:sun_abraham2021,
+        authors="Sun, Liyang and Abraham, Sarah", year=2021,
+        title="Estimating Dynamic Treatment Effects in Event Studies with Heterogeneous Treatment Effects",
+        journal="Journal of Econometrics", volume="225", issue="2", pages="175--199",
+        doi="10.1016/j.jeconom.2020.09.006", isbn="", publisher="", entry_type=:article),
+    :borusyak_jaravel_spiess2024 => (key=:borusyak_jaravel_spiess2024,
+        authors="Borusyak, Kirill and Jaravel, Xavier and Spiess, Jann", year=2024,
+        title="Revisiting Event-Study Designs: Robust and Efficient Estimation",
+        journal="Review of Economic Studies", volume="91", issue="6", pages="3253--3285",
+        doi="10.1093/restud/rdae007", isbn="", publisher="", entry_type=:article),
+    :rambachan_roth2023 => (key=:rambachan_roth2023,
+        authors="Rambachan, Ashesh and Roth, Jonathan", year=2023,
+        title="A More Credible Approach to Parallel Trends",
+        journal="Review of Economic Studies", volume="90", issue="5", pages="2555--2591",
+        doi="10.1093/restud/rdad018", isbn="", publisher="", entry_type=:article),
     :cameron_gelbach_miller2011 => (key=:cameron_gelbach_miller2011,
         authors="Cameron, A. Colin and Gelbach, Jonah B. and Miller, Douglas L.", year=2011,
         title="Robust Inference with Multiway Clustering",
@@ -813,8 +828,12 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :BaconDecomposition => [:goodman_bacon2021],
     :PretrendTestResult => [:callaway_santanna2021],
     :NegativeWeightResult => [:dechaisemartin_dhaultfoeuille2020],
+    :HonestDiDResult => [:rambachan_roth2023],
     :callaway_santanna => [:callaway_santanna2021],
     :twfe => [:goodman_bacon2021],
+    :sun_abraham => [:sun_abraham2021],
+    :bjs => [:borusyak_jaravel_spiess2024],
+    :did_multiplegt => [:dechaisemartin_dhaultfoeuille2020],
     :lp_did => [:dube_girardi_jorda_taylor2023, :jorda2005],
     # Data sources (symbol dispatch)
     :fred_md => [:mccracken_ng2016],
@@ -1123,6 +1142,7 @@ refs(io::IO, ::EventStudyLP; kw...) = refs(io, _TYPE_REFS[:EventStudyLP]; kw...)
 refs(io::IO, ::BaconDecomposition; kw...) = refs(io, _TYPE_REFS[:BaconDecomposition]; kw...)
 refs(io::IO, ::PretrendTestResult; kw...) = refs(io, _TYPE_REFS[:PretrendTestResult]; kw...)
 refs(io::IO, ::NegativeWeightResult; kw...) = refs(io, _TYPE_REFS[:NegativeWeightResult]; kw...)
+refs(io::IO, ::HonestDiDResult; kw...) = refs(io, _TYPE_REFS[:HonestDiDResult]; kw...)
 
 # Data containers (use source_refs field)
 function refs(io::IO, d::AbstractMacroData; format::Symbol=get_display_backend())

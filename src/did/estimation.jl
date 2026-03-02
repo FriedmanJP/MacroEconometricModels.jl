@@ -42,6 +42,9 @@ Estimate a Difference-in-Differences model.
 - `method`: Estimation method
   - `:twfe` -- Two-Way Fixed Effects event-study regression (default)
   - `:callaway_santanna` -- Callaway & Sant'Anna (2021) group-time ATT
+  - `:sun_abraham` -- Sun & Abraham (2021) interaction-weighted estimator
+  - `:bjs` -- Borusyak, Jaravel & Spiess (2024) imputation estimator
+  - `:did_multiplegt` -- de Chaisemartin & D'Haultfoeuille (2020)
 
 # Keyword Arguments
 - `leads`: Number of pre-treatment periods to estimate (default: 0)
@@ -50,6 +53,7 @@ Estimate a Difference-in-Differences model.
 - `control_group`: `:never_treated` (default) or `:not_yet_treated`
 - `cluster`: SE clustering: `:unit` (default), `:time`, `:twoway`
 - `conf_level`: Confidence level (default: 0.95)
+- `n_boot`: Number of bootstrap replications for `:did_multiplegt` (default: 200)
 
 # Returns
 `DIDResult{T}` -- unified result type for all methods.
@@ -75,7 +79,8 @@ function estimate_did(pd::PanelData{T}, outcome::Union{String,Symbol},
                       covariates::Vector{String}=String[],
                       control_group::Symbol=:never_treated,
                       cluster::Symbol=:unit,
-                      conf_level::Real=0.95) where {T<:AbstractFloat}
+                      conf_level::Real=0.95,
+                      n_boot::Int=200) where {T<:AbstractFloat}
     # Validate inputs
     outcome_col = _resolve_varindex(pd, outcome)
     treat_col = _resolve_varindex(pd, treatment)
@@ -99,8 +104,24 @@ function estimate_did(pd::PanelData{T}, outcome::Union{String,Symbol},
                                     leads=leads, horizon=horizon,
                                     control_group=control_group,
                                     cluster=cluster, conf_level=conf_level)
+    elseif method == :sun_abraham
+        _estimate_sun_abraham(pd, outcome_col, treat_col;
+                              leads=leads, horizon=horizon,
+                              control_group=control_group,
+                              cluster=cluster, conf_level=conf_level)
+    elseif method == :bjs
+        _estimate_bjs(pd, outcome_col, treat_col;
+                      leads=leads, horizon=horizon,
+                      control_group=control_group,
+                      cluster=cluster, conf_level=conf_level)
+    elseif method == :did_multiplegt
+        _estimate_did_multiplegt(pd, outcome_col, treat_col;
+                                 leads=leads, horizon=horizon,
+                                 control_group=control_group,
+                                 conf_level=conf_level, n_boot=n_boot)
     else
-        throw(ArgumentError("Unknown DiD method :$method. Available: :twfe, :callaway_santanna"))
+        throw(ArgumentError("Unknown DiD method :$method. " *
+            "Available: :twfe, :callaway_santanna, :sun_abraham, :bjs, :did_multiplegt"))
     end
 end
 

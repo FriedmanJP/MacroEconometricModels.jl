@@ -202,6 +202,9 @@ function plot_result(did::DIDResult{T};
     if isempty(title)
         method_str = did.method == :twfe ? "TWFE" :
                      did.method == :callaway_santanna ? "Callaway-Sant'Anna" :
+                     did.method == :sun_abraham ? "Sun-Abraham" :
+                     did.method == :bjs ? "BJS" :
+                     did.method == :did_multiplegt ? "dCDH" :
                      string(did.method)
         title = "DiD Event Study: $(did.outcome_var) ($method_str)"
     end
@@ -341,6 +344,60 @@ function plot_result(bd::BaconDecomposition{T};
 
     if isempty(title)
         title = "Bacon Decomposition (TWFE = $(_json(bd.overall_att)))"
+    end
+
+    p = _make_plot([panel]; title=title, ncols=1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+# =============================================================================
+# HonestDiDResult — Dual CI Band Plot
+# =============================================================================
+
+"""
+    plot_result(hd::HonestDiDResult; title="", save_path=nothing)
+
+Plot HonestDiD sensitivity analysis with dual CI bands.
+
+Shows original confidence intervals (narrow) and robust confidence intervals
+(wide, accounting for parallel trends violations), with breakdown value
+annotated.
+"""
+function plot_result(hd::HonestDiDResult{T};
+                     title::String="", save_path::Union{String,Nothing}=nothing) where {T}
+    n_evt = length(hd.post_event_times)
+    id = _next_plot_id("honest_did")
+
+    # Build data JSON
+    rows = Vector{Pair{String,String}}[]
+    for i in 1:n_evt
+        push!(rows, [
+            "x" => _json(hd.post_event_times[i]),
+            "att" => _json(hd.post_att[i]),
+            "orig_lo" => _json(hd.original_ci_lower[i]),
+            "orig_hi" => _json(hd.original_ci_upper[i]),
+            "robust_lo" => _json(hd.robust_ci_lower[i]),
+            "robust_hi" => _json(hd.robust_ci_upper[i]),
+            "zero" => "0"
+        ])
+    end
+    data_json = _json_array_of_objects(rows)
+
+    s_json = _series_json(["ATT"], [_PLOT_COLORS[1]]; keys=["att"])
+    bands = "[{\"lo_key\":\"robust_lo\",\"hi_key\":\"robust_hi\",\"color\":\"$(_PLOT_COLORS[2])\",\"alpha\":0.15}," *
+            "{\"lo_key\":\"orig_lo\",\"hi_key\":\"orig_hi\",\"color\":\"$(_PLOT_COLORS[1])\",\"alpha\":$(_PLOT_CI_ALPHA)}]"
+    refs = "[{\"value\":0,\"color\":\"#999\",\"dash\":\"4,3\"}]"
+
+    js = _render_line_js(id, data_json, s_json;
+                         bands_json=bands, ref_lines_json=refs,
+                         xlabel="Event Time", ylabel="ATT")
+
+    ptitle = "HonestDiD Sensitivity (M\u0305 = $(_json(hd.Mbar)))"
+    panel = _PanelSpec(id, ptitle, js)
+
+    if isempty(title)
+        title = "HonestDiD: Robust CI (breakdown = $(_json(hd.breakdown_value)))"
     end
 
     p = _make_plot([panel]; title=title, ncols=1)

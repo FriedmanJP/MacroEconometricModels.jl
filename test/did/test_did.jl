@@ -618,4 +618,426 @@ end
         @test length(String(take!(io))) > 0
     end
 
+    # =========================================================================
+    # Phase 2: Sun-Abraham (2021)
+    # =========================================================================
+    @testset "Sun-Abraham" begin
+        pd, te = _make_did_panel(seed=2100, n_units=150, n_periods=25)
+
+        sa = estimate_did(pd, "outcome", "treat_time";
+                          method=:sun_abraham, leads=3, horizon=5,
+                          cluster=:unit)
+
+        @test sa isa DIDResult{Float64}
+        @test sa.method == :sun_abraham
+        @test sa.outcome_var == "outcome"
+        @test sa.treatment_var == "treat_time"
+
+        # Event-time grid
+        @test sa.event_times == collect(-3:5)
+        @test sa.reference_period == -1
+        @test length(sa.att) == length(sa.event_times)
+        @test length(sa.se) == length(sa.event_times)
+
+        # Reference period zeros
+        ref_idx = findfirst(==(-1), sa.event_times)
+        @test sa.att[ref_idx] == 0.0
+        @test sa.se[ref_idx] == 0.0
+
+        # Group-time ATT matrix should be populated
+        @test sa.group_time_att !== nothing
+        @test sa.cohorts !== nothing
+        @test length(sa.cohorts) >= 1
+        @test size(sa.group_time_att, 1) == length(sa.cohorts)
+
+        # Post-treatment ATTs should be mostly positive (large true effect)
+        post_mask = sa.event_times .>= 0
+        @test any(sa.att[post_mask] .> 0)
+
+        # Overall ATT should be finite and positive
+        @test isfinite(sa.overall_att)
+        @test sa.overall_att > 0
+
+        # SEs non-negative
+        @test all(sa.se .>= 0)
+
+        # CIs bracket point estimates
+        @test all(sa.ci_lower .<= sa.att)
+        @test all(sa.ci_upper .>= sa.att)
+
+        # Display
+        io = IOBuffer()
+        show(io, sa)
+        s = String(take!(io))
+        @test occursin("Sun-Abraham", s)
+
+        # Symbol interface
+        sa_sym = estimate_did(pd, :outcome, :treat_time;
+                              method=:sun_abraham, leads=2, horizon=3)
+        @test sa_sym isa DIDResult{Float64}
+    end
+
+    # =========================================================================
+    # Phase 2: Sun-Abraham with not_yet_treated
+    # =========================================================================
+    @testset "Sun-Abraham not_yet_treated" begin
+        pd, te = _make_did_panel(seed=2150, n_units=60, n_periods=20)
+
+        sa_nyt = estimate_did(pd, "outcome", "treat_time";
+                              method=:sun_abraham, leads=2, horizon=4,
+                              control_group=:not_yet_treated)
+
+        @test sa_nyt isa DIDResult{Float64}
+        @test sa_nyt.method == :sun_abraham
+        @test length(sa_nyt.att) == length(sa_nyt.event_times)
+        @test all(sa_nyt.se .>= 0)
+    end
+
+    # =========================================================================
+    # Phase 2: BJS (2024) Imputation
+    # =========================================================================
+    @testset "BJS Imputation" begin
+        pd, te = _make_did_panel(seed=2200, n_units=60, n_periods=20)
+
+        bjs = estimate_did(pd, "outcome", "treat_time";
+                           method=:bjs, leads=3, horizon=5,
+                           cluster=:unit)
+
+        @test bjs isa DIDResult{Float64}
+        @test bjs.method == :bjs
+        @test bjs.outcome_var == "outcome"
+        @test bjs.treatment_var == "treat_time"
+
+        # Event-time grid
+        @test bjs.event_times == collect(-3:5)
+        @test bjs.reference_period == -1
+        @test length(bjs.att) == length(bjs.event_times)
+        @test length(bjs.se) == length(bjs.event_times)
+
+        # Reference period zeros
+        ref_idx = findfirst(==(-1), bjs.event_times)
+        @test bjs.att[ref_idx] == 0.0
+        @test bjs.se[ref_idx] == 0.0
+
+        # Group-time ATT matrix should be populated
+        @test bjs.group_time_att !== nothing
+        @test bjs.cohorts !== nothing
+
+        # Post-treatment ATTs should be mostly positive
+        post_mask = bjs.event_times .>= 0
+        @test any(bjs.att[post_mask] .> 0)
+
+        # Overall ATT positive
+        @test isfinite(bjs.overall_att)
+        @test bjs.overall_att > 0
+
+        # SEs non-negative
+        @test all(bjs.se .>= 0)
+
+        # CIs bracket point estimates
+        @test all(bjs.ci_lower .<= bjs.att)
+        @test all(bjs.ci_upper .>= bjs.att)
+
+        # Display
+        io = IOBuffer()
+        show(io, bjs)
+        s = String(take!(io))
+        @test occursin("Borusyak", s)
+    end
+
+    # =========================================================================
+    # Phase 2: BJS with not_yet_treated
+    # =========================================================================
+    @testset "BJS not_yet_treated" begin
+        pd, te = _make_did_panel(seed=2250, n_units=60, n_periods=20)
+
+        bjs_nyt = estimate_did(pd, "outcome", "treat_time";
+                               method=:bjs, leads=2, horizon=4,
+                               control_group=:not_yet_treated)
+
+        @test bjs_nyt isa DIDResult{Float64}
+        @test bjs_nyt.method == :bjs
+        @test length(bjs_nyt.att) == length(bjs_nyt.event_times)
+        @test all(bjs_nyt.se .>= 0)
+    end
+
+    # =========================================================================
+    # Phase 2: de Chaisemartin-D'Haultfoeuille (2020) did_multiplegt
+    # =========================================================================
+    @testset "dCDH did_multiplegt" begin
+        pd, te = _make_did_panel(seed=2300, n_units=60, n_periods=20)
+
+        dcdh = estimate_did(pd, "outcome", "treat_time";
+                            method=:did_multiplegt, leads=3, horizon=5,
+                            n_boot=50)
+
+        @test dcdh isa DIDResult{Float64}
+        @test dcdh.method == :did_multiplegt
+        @test dcdh.outcome_var == "outcome"
+        @test dcdh.treatment_var == "treat_time"
+
+        # Event-time grid
+        @test dcdh.event_times == collect(-3:5)
+        @test dcdh.reference_period == -1
+        @test length(dcdh.att) == length(dcdh.event_times)
+        @test length(dcdh.se) == length(dcdh.event_times)
+
+        # Reference period zeros
+        ref_idx = findfirst(==(-1), dcdh.event_times)
+        @test dcdh.att[ref_idx] == 0.0
+        @test dcdh.se[ref_idx] == 0.0
+
+        # Group-time ATT matrix should be populated
+        @test dcdh.group_time_att !== nothing
+        @test dcdh.cohorts !== nothing
+
+        # Post-treatment ATTs should be mostly positive
+        post_mask = dcdh.event_times .>= 0
+        @test any(dcdh.att[post_mask] .> 0)
+
+        # Overall ATT positive
+        @test isfinite(dcdh.overall_att)
+        @test dcdh.overall_att > 0
+
+        # SEs non-negative (bootstrap)
+        @test all(dcdh.se .>= 0)
+
+        # CIs bracket point estimates
+        @test all(dcdh.ci_lower .<= dcdh.att)
+        @test all(dcdh.ci_upper .>= dcdh.att)
+
+        # Display
+        io = IOBuffer()
+        show(io, dcdh)
+        s = String(take!(io))
+        @test occursin("Chaisemartin", s)
+    end
+
+    # =========================================================================
+    # Phase 2: dCDH with not_yet_treated
+    # =========================================================================
+    @testset "dCDH not_yet_treated" begin
+        pd, te = _make_did_panel(seed=2350, n_units=60, n_periods=20)
+
+        dcdh_nyt = estimate_did(pd, "outcome", "treat_time";
+                                method=:did_multiplegt, leads=2, horizon=4,
+                                control_group=:not_yet_treated, n_boot=30)
+
+        @test dcdh_nyt isa DIDResult{Float64}
+        @test dcdh_nyt.method == :did_multiplegt
+        @test length(dcdh_nyt.att) == length(dcdh_nyt.event_times)
+        @test all(dcdh_nyt.se .>= 0)
+    end
+
+    # =========================================================================
+    # Phase 2: HonestDiD sensitivity analysis
+    # =========================================================================
+    @testset "HonestDiD" begin
+        pd, te = _make_did_panel(seed=2400, n_units=60, n_periods=20)
+
+        # Test with DIDResult
+        did = estimate_did(pd, "outcome", "treat_time";
+                           method=:callaway_santanna, leads=3, horizon=5)
+        hd = honest_did(did; Mbar=1.0, conf_level=0.95)
+
+        @test hd isa HonestDiDResult{Float64}
+        @test hd.Mbar == 1.0
+        @test hd.conf_level == 0.95
+        @test hd.breakdown_value >= 0
+
+        # Post-event times should be non-negative
+        @test all(hd.post_event_times .>= 0)
+        @test length(hd.post_event_times) >= 1
+
+        # Consistent lengths
+        n_post = length(hd.post_event_times)
+        @test length(hd.robust_ci_lower) == n_post
+        @test length(hd.robust_ci_upper) == n_post
+        @test length(hd.original_ci_lower) == n_post
+        @test length(hd.original_ci_upper) == n_post
+        @test length(hd.post_att) == n_post
+
+        # Robust CIs should be at least as wide as original CIs
+        for i in 1:n_post
+            @test hd.robust_ci_lower[i] <= hd.original_ci_lower[i] + 1e-10
+            @test hd.robust_ci_upper[i] >= hd.original_ci_upper[i] - 1e-10
+        end
+
+        # CIs bracket point estimates
+        @test all(hd.robust_ci_lower .<= hd.post_att)
+        @test all(hd.robust_ci_upper .>= hd.post_att)
+
+        # With Mbar=0, robust CIs should equal original CIs
+        hd0 = honest_did(did; Mbar=0.0)
+        for i in 1:length(hd0.post_event_times)
+            @test isapprox(hd0.robust_ci_lower[i], hd0.original_ci_lower[i]; atol=1e-10)
+            @test isapprox(hd0.robust_ci_upper[i], hd0.original_ci_upper[i]; atol=1e-10)
+        end
+
+        # Display
+        io = IOBuffer()
+        show(io, hd)
+        s = String(take!(io))
+        @test occursin("HonestDiD", s)
+        @test occursin("Breakdown", s)
+    end
+
+    # =========================================================================
+    # Phase 2: HonestDiD with EventStudyLP
+    # =========================================================================
+    @testset "HonestDiD with EventStudyLP" begin
+        pd, te = _make_did_panel(seed=2500, n_units=60, n_periods=25)
+
+        eslp = estimate_event_study_lp(pd, "outcome", "treat_time", 5;
+                                        leads=3, lags=2)
+        hd_lp = honest_did(eslp; Mbar=0.5)
+
+        @test hd_lp isa HonestDiDResult{Float64}
+        @test hd_lp.Mbar == 0.5
+        @test length(hd_lp.post_event_times) >= 1
+        @test hd_lp.breakdown_value >= 0
+
+        # Robust CIs wider than original
+        for i in 1:length(hd_lp.post_event_times)
+            @test hd_lp.robust_ci_lower[i] <= hd_lp.original_ci_lower[i] + 1e-10
+            @test hd_lp.robust_ci_upper[i] >= hd_lp.original_ci_upper[i] - 1e-10
+        end
+    end
+
+    # =========================================================================
+    # Phase 2: Cross-method consistency
+    # =========================================================================
+    @testset "Cross-method consistency" begin
+        pd, te = _make_did_panel(seed=2600, n_units=150, n_periods=25,
+                                 treat_effect=3.0)
+
+        # All methods should produce positive overall ATT for a large effect
+        for meth in (:callaway_santanna, :sun_abraham, :bjs, :did_multiplegt)
+            kwargs = meth == :did_multiplegt ? (; n_boot=30) : (;)
+            did = estimate_did(pd, "outcome", "treat_time";
+                               method=meth, leads=2, horizon=4, kwargs...)
+            @test did.overall_att > 0
+            @test did.method == meth
+        end
+    end
+
+    # =========================================================================
+    # Phase 2: Pre-trend test on new methods
+    # =========================================================================
+    @testset "Pre-trend test Phase 2" begin
+        pd, te = _make_did_panel(seed=2700, n_units=60, n_periods=20)
+
+        for meth in (:sun_abraham, :bjs, :did_multiplegt)
+            kwargs = meth == :did_multiplegt ? (; n_boot=30) : (;)
+            did = estimate_did(pd, "outcome", "treat_time";
+                               method=meth, leads=3, horizon=5, kwargs...)
+            pt = pretrend_test(did)
+            @test pt isa PretrendTestResult{Float64}
+            @test pt.statistic >= 0
+            @test 0 <= pt.pvalue <= 1
+        end
+    end
+
+    # =========================================================================
+    # Phase 2: Plotting
+    # =========================================================================
+    @testset "Phase 2 Plotting" begin
+        pd, te = _make_did_panel(seed=2800)
+
+        # Sun-Abraham plot
+        sa = estimate_did(pd, "outcome", "treat_time";
+                          method=:sun_abraham, leads=2, horizon=3)
+        p_sa = plot_result(sa)
+        @test p_sa isa PlotOutput
+        @test occursin("Sun-Abraham", p_sa.html)
+
+        # BJS plot
+        bjs = estimate_did(pd, "outcome", "treat_time";
+                           method=:bjs, leads=2, horizon=3)
+        p_bjs = plot_result(bjs)
+        @test p_bjs isa PlotOutput
+        @test occursin("BJS", p_bjs.html)
+
+        # dCDH plot
+        dcdh = estimate_did(pd, "outcome", "treat_time";
+                            method=:did_multiplegt, leads=2, horizon=3, n_boot=30)
+        p_dcdh = plot_result(dcdh)
+        @test p_dcdh isa PlotOutput
+        @test occursin("dCDH", p_dcdh.html)
+
+        # HonestDiD plot
+        hd = honest_did(sa; Mbar=1.0)
+        p_hd = plot_result(hd)
+        @test p_hd isa PlotOutput
+        @test occursin("HonestDiD", p_hd.html)
+    end
+
+    # =========================================================================
+    # Phase 2: References
+    # =========================================================================
+    @testset "Phase 2 References" begin
+        pd, te = _make_did_panel(seed=2900)
+
+        # HonestDiDResult refs
+        sa = estimate_did(pd, "outcome", "treat_time";
+                          method=:sun_abraham, leads=2, horizon=3)
+        hd = honest_did(sa; Mbar=1.0)
+        io = IOBuffer()
+        refs(io, hd)
+        s = String(take!(io))
+        @test occursin("Rambachan", s) || occursin("Roth", s)
+    end
+
+    # =========================================================================
+    # Phase 2: Edge cases
+    # =========================================================================
+    @testset "Phase 2 Edge Cases" begin
+        # Single cohort with Phase 2 methods
+        pd_single, _ = _make_did_panel(seed=3000, n_cohorts=1, n_units=30)
+
+        sa_single = estimate_did(pd_single, "outcome", "treat_time";
+                                 method=:sun_abraham, leads=2, horizon=3)
+        @test sa_single isa DIDResult{Float64}
+
+        bjs_single = estimate_did(pd_single, "outcome", "treat_time";
+                                  method=:bjs, leads=2, horizon=3)
+        @test bjs_single isa DIDResult{Float64}
+
+        dcdh_single = estimate_did(pd_single, "outcome", "treat_time";
+                                   method=:did_multiplegt, leads=2, horizon=3, n_boot=20)
+        @test dcdh_single isa DIDResult{Float64}
+
+        # Updated error message includes new methods
+        pd, _ = _make_did_panel(seed=3100)
+        try
+            estimate_did(pd, "outcome", "treat_time"; method=:nonexistent)
+            @test false  # should not reach here
+        catch e
+            @test e isa ArgumentError
+            @test occursin("sun_abraham", e.msg)
+            @test occursin("bjs", e.msg)
+            @test occursin("did_multiplegt", e.msg)
+        end
+    end
+
+    # =========================================================================
+    # Phase 2: StatsAPI for new methods
+    # =========================================================================
+    @testset "Phase 2 StatsAPI" begin
+        pd, te = _make_did_panel(seed=3200, n_units=60, n_periods=20)
+
+        for meth in (:sun_abraham, :bjs, :did_multiplegt)
+            kwargs = meth == :did_multiplegt ? (; n_boot=30) : (;)
+            did = estimate_did(pd, "outcome", "treat_time";
+                               method=meth, leads=2, horizon=3, kwargs...)
+            @test nobs(did) == did.n_obs
+            @test coef(did) === did.att
+            @test stderror(did) === did.se
+            ci = confint(did)
+            @test size(ci) == (length(did.att), 2)
+            @test ci[:, 1] == did.ci_lower
+            @test ci[:, 2] == did.ci_upper
+        end
+    end
+
 end  # @testset "Difference-in-Differences"
