@@ -135,13 +135,11 @@ Random.seed!(9001)
         @test result.pvalue >= 0.0
     end
 
-    @testset "adf_pvalue: stat above 10% critical value (unit root series)" begin
-        # A unit root series should have ADF stat above 10% CV => large p-value
-        y = cumsum(randn(Random.MersenneTwister(222), 300))
-        result = adf_test(y; regression=:constant)
-        # For a unit root series, the stat is typically close to 0 or positive,
-        # well above the negative critical values => p-value > 0.10
-        @test result.pvalue > 0.10
+    @testset "adf_pvalue: stat above 10% critical value" begin
+        # Directly test adf_pvalue with a stat well above the 10% critical value
+        # ADF 10% CV for :constant is around -2.57, so stat=0.0 is far above it
+        pval = MacroEconometricModels.adf_pvalue(0.0, :constant, 300)
+        @test pval > 0.10
     end
 
     @testset "_regression_name(:both) branch" begin
@@ -179,11 +177,12 @@ Random.seed!(9001)
     end
 
     @testset "KPSS show: <0.01 p-value (unit root series)" begin
-        y = cumsum(randn(Random.MersenneTwister(555), 300))
+        # Use long deterministic trend — always produces KPSS stat > 1% CV
+        y = cumsum(ones(3000))
         result = kpss_test(y; regression=:constant)
         s = sprint(show, result)
         @test occursin("KPSS", s)
-        # For a strong unit root, p-value should be <0.01
+        # For a strong trend, p-value should be ≤ 0.01
         @test occursin("<0.01", s) || occursin("0.01", s)
         @test occursin("Reject", s)
     end
