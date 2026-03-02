@@ -240,6 +240,15 @@ include("lp/state.jl")
 include("lp/propensity.jl")
 include("lp/forecast.jl")
 
+# Difference-in-Differences / Event Study LP
+include("did/types.jl")
+include("did/cluster.jl")
+include("did/twfe.jl")
+include("did/callaway_santanna.jl")
+include("did/event_study.jl")
+include("did/diagnostics.jl")
+include("did/estimation.jl")
+
 # Innovation accounting (after LP types for lp_irf support)
 include("core/irf.jl")
 include("core/fevd.jl")
@@ -571,6 +580,20 @@ export pvar_bootstrap_irf
 
 # Specification tests
 export pvar_hansen_j, pvar_mmsc, pvar_lag_selection
+
+# =============================================================================
+# Exports - Difference-in-Differences / Event Study
+# =============================================================================
+
+# Types
+export DIDResult, EventStudyLP, BaconDecomposition
+export PretrendTestResult, NegativeWeightResult
+
+# Estimation
+export estimate_did, estimate_event_study_lp, estimate_lp_did
+
+# Diagnostics
+export bacon_decomposition, pretrend_test, negative_weight_check
 
 # =============================================================================
 # Exports - ARIMA Models

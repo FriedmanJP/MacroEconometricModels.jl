@@ -586,6 +586,33 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Shocks and Frictions in US Business Cycles: A Bayesian DSGE Approach",
         journal="American Economic Review", volume="97", issue="3", pages="586--606",
         doi="10.1257/aer.97.3.586", isbn="", publisher="", entry_type=:article),
+    # --- Difference-in-Differences ---
+    :callaway_santanna2021 => (key=:callaway_santanna2021,
+        authors="Callaway, Brantly and Sant'Anna, Pedro H. C.", year=2021,
+        title="Difference-in-Differences with Multiple Time Periods",
+        journal="Journal of Econometrics", volume="225", issue="2", pages="200--230",
+        doi="10.1016/j.jeconom.2020.12.001", isbn="", publisher="", entry_type=:article),
+    :goodman_bacon2021 => (key=:goodman_bacon2021,
+        authors="Goodman-Bacon, Andrew", year=2021,
+        title="Difference-in-Differences with Variation in Treatment Timing",
+        journal="Journal of Econometrics", volume="225", issue="2", pages="254--277",
+        doi="10.1016/j.jeconom.2021.03.014", isbn="", publisher="", entry_type=:article),
+    :dechaisemartin_dhaultfoeuille2020 => (key=:dechaisemartin_dhaultfoeuille2020,
+        authors="de Chaisemartin, Cl\u00e9ment and D'Haultf\u0153uille, Xavier", year=2020,
+        title="Two-Way Fixed Effects Estimators with Heterogeneous Treatment Effects",
+        journal="American Economic Review", volume="110", issue="9", pages="2964--2996",
+        doi="10.1257/aer.20181169", isbn="", publisher="", entry_type=:article),
+    :dube_girardi_jorda_taylor2023 => (key=:dube_girardi_jorda_taylor2023,
+        authors="Dube, Arindrajit and Girardi, Daniele and Jord\u00e0, \u00d2scar and Taylor, Alan M.",
+        year=2023, title="A Local Projections Approach to Difference-in-Differences Event Studies",
+        journal="NBER Working Paper", volume="31184", issue="", pages="",
+        doi="10.3386/w31184", isbn="", publisher="NBER", entry_type=:techreport),
+    :cameron_gelbach_miller2011 => (key=:cameron_gelbach_miller2011,
+        authors="Cameron, A. Colin and Gelbach, Jonah B. and Miller, Douglas L.", year=2011,
+        title="Robust Inference with Multiway Clustering",
+        journal="Journal of Business \\& Economic Statistics", volume="29", issue="2",
+        pages="238--249", doi="10.1198/jbes.2010.07136", isbn="", publisher="",
+        entry_type=:article),
 )
 
 # --- Type/method → reference keys mapping ---
@@ -780,6 +807,15 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     # Analytical moments
     :analytical_moments => [:hamilton1994, :fernandez_villaverde_rubio_schorfheide2016],
     :solve_lyapunov => [:hamilton1994, :fernandez_villaverde_rubio_schorfheide2016],
+    # DiD / Event Study
+    :DIDResult => [:callaway_santanna2021, :goodman_bacon2021],
+    :EventStudyLP => [:jorda2005, :dube_girardi_jorda_taylor2023],
+    :BaconDecomposition => [:goodman_bacon2021],
+    :PretrendTestResult => [:callaway_santanna2021],
+    :NegativeWeightResult => [:dechaisemartin_dhaultfoeuille2020],
+    :callaway_santanna => [:callaway_santanna2021],
+    :twfe => [:goodman_bacon2021],
+    :lp_did => [:dube_girardi_jorda_taylor2023, :jorda2005],
     # Data sources (symbol dispatch)
     :fred_md => [:mccracken_ng2016],
     :fred_qd => [:mccracken_ng2020],
@@ -1080,6 +1116,13 @@ refs(io::IO, ::GrangerCausalityResult; kw...) = refs(io, _TYPE_REFS[:GrangerCaus
 refs(io::IO, ::PVARModel; kw...) = refs(io, _TYPE_REFS[:PVARModel]; kw...)
 refs(io::IO, ::PVARStability; kw...) = refs(io, _TYPE_REFS[:PVARStability]; kw...)
 refs(io::IO, ::PVARTestResult; kw...) = refs(io, _TYPE_REFS[:PVARTestResult]; kw...)
+
+# DiD / Event Study
+refs(io::IO, ::DIDResult; kw...) = refs(io, _TYPE_REFS[:DIDResult]; kw...)
+refs(io::IO, ::EventStudyLP; kw...) = refs(io, _TYPE_REFS[:EventStudyLP]; kw...)
+refs(io::IO, ::BaconDecomposition; kw...) = refs(io, _TYPE_REFS[:BaconDecomposition]; kw...)
+refs(io::IO, ::PretrendTestResult; kw...) = refs(io, _TYPE_REFS[:PretrendTestResult]; kw...)
+refs(io::IO, ::NegativeWeightResult; kw...) = refs(io, _TYPE_REFS[:NegativeWeightResult]; kw...)
 
 # Data containers (use source_refs field)
 function refs(io::IO, d::AbstractMacroData; format::Symbol=get_display_backend())
