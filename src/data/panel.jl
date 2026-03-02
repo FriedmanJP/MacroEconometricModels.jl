@@ -27,13 +27,14 @@ balanced/unbalanced detection, group extraction.
 
 """
     xtset(df::DataFrame, group_col::Symbol, time_col::Symbol;
-          varnames=nothing, frequency=Other, tcode=nothing) -> PanelData{Float64}
+          varnames=nothing, frequency=Other, tcode=nothing,
+          cohort=nothing) -> PanelData{Float64}
 
 Construct a `PanelData` container from a DataFrame, analogous to Stata's `xtset`.
 
-Extracts all numeric columns (excluding `group_col` and `time_col`), sorts by
-(group, time), validates no duplicate (group, time) pairs, and detects whether
-the panel is balanced.
+Extracts all numeric columns (excluding `group_col`, `time_col`, and `cohort`),
+sorts by (group, time), validates no duplicate (group, time) pairs, and detects
+whether the panel is balanced.
 
 # Arguments
 - `df::DataFrame` — input data
@@ -44,6 +45,7 @@ the panel is balanced.
 - `varnames::Union{Vector{String},Nothing}` — override variable names (default: column names)
 - `frequency::Frequency` — data frequency (default: `Other`)
 - `tcode::Union{Vector{Int},Nothing}` — transformation codes per variable
+- `cohort::Union{Symbol,Nothing}` — column name identifying cohort membership (default: `nothing`)
 
 # Examples
 ```julia
@@ -58,15 +60,24 @@ function xtset(df::DataFrame, group_col::Symbol, time_col::Symbol;
                frequency::Frequency=Other,
                tcode::Union{Vector{Int},Nothing}=nothing,
                desc::String="",
-               vardesc::Union{Dict{String,String},Nothing}=nothing)
+               vardesc::Union{Dict{String,String},Nothing}=nothing,
+               cohort::Union{Symbol,Nothing}=nothing)
     hasproperty(df, group_col) || throw(ArgumentError("Column :$group_col not found in DataFrame"))
     hasproperty(df, time_col) || throw(ArgumentError("Column :$time_col not found in DataFrame"))
 
     # Sort by (group, time)
     sorted = sort(df, [group_col, time_col])
 
-    # Extract numeric columns excluding group and time
+    # Validate cohort column if specified
+    if cohort !== nothing
+        hasproperty(df, cohort) || throw(ArgumentError("Column :$cohort not found in DataFrame"))
+    end
+
+    # Extract numeric columns excluding group, time, and cohort
     exclude = Set([string(group_col), string(time_col)])
+    if cohort !== nothing
+        push!(exclude, string(cohort))
+    end
     num_cols = [n for n in names(sorted)
                 if n ∉ exclude && eltype(sorted[!, n]) <: Union{Missing, Number}]
     isempty(num_cols) && throw(ArgumentError("No numeric variable columns found"))
@@ -122,8 +133,19 @@ function xtset(df::DataFrame, group_col::Symbol, time_col::Symbol;
     length(tc) != n_vars && throw(ArgumentError("tcode length must match n_vars"))
 
     vd = something(vardesc, Dict{String,String}())
+
+    # Extract cohort IDs if specified
+    cohort_id_vec = if cohort !== nothing
+        raw_cohorts = sorted[!, cohort]
+        unique_cohorts = sort(unique(raw_cohorts))
+        cohort_map = Dict(c => i for (i, c) in enumerate(unique_cohorts))
+        [cohort_map[c] for c in raw_cohorts]
+    else
+        nothing
+    end
+
     PanelData{Float64}(mat, vn, frequency, tc, group_id, time_id,
-                        nothing, group_names, n_groups, n_vars, T_total, balanced,
+                        cohort_id_vec, group_names, n_groups, n_vars, T_total, balanced,
                         [desc], vd, Symbol[])
 end
 
@@ -216,6 +238,10 @@ function panel_summary(io::IO, d::PanelData)
     println(io, "  Balance: ", d.balanced ? "balanced" : "unbalanced")
     println(io, "  Obs/group: min=$min_obs, avg=$avg_obs, max=$max_obs")
     println(io, "  Variables: ", join(d.varnames, ", "))
+    if d.cohort_id !== nothing
+        n_cohorts = length(unique(d.cohort_id))
+        println(io, "  Cohorts: $n_cohorts")
+    end
     if d.frequency != Other
         println(io, "  Frequency: $(d.frequency)")
     end

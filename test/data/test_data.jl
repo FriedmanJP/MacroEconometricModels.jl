@@ -164,6 +164,34 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
             @test_throws ArgumentError xtset(df, :id, :t)
         end
 
+        @testset "xtset with cohort" begin
+            df = DataFrame(
+                id = repeat(1:6, inner=10),
+                t = repeat(1:10, 6),
+                y = randn(60),
+                cohort = repeat([1, 1, 2, 2, 0, 0], inner=10)
+            )
+            pd = xtset(df, :id, :t; cohort=:cohort)
+            @test pd.cohort_id !== nothing
+            @test length(pd.cohort_id) == 60
+            @test length(unique(pd.cohort_id)) == 3
+            # cohort column should be excluded from data
+            @test nvars(pd) == 1
+            @test varnames(pd) == ["y"]
+            # Without cohort kwarg -> nothing
+            pd2 = xtset(df, :id, :t)
+            @test pd2.cohort_id === nothing
+            # cohort column included as numeric variable when not specified
+            @test nvars(pd2) == 2
+            # Invalid cohort column
+            @test_throws ArgumentError xtset(df, :id, :t; cohort=:nonexistent)
+            # panel_summary shows cohort info
+            buf = IOBuffer()
+            panel_summary(buf, pd)
+            summary_str = String(take!(buf))
+            @test occursin("Cohorts: 3", summary_str)
+        end
+
         @testset "group_data extraction" begin
             df = DataFrame(id=repeat(1:3, inner=20), t=repeat(1:20, 3),
                           x=randn(60), y=randn(60))
