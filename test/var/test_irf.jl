@@ -92,7 +92,7 @@ Random.seed!(42)
         for h in 1:6
             lag = h - 1
             theoretical_impact = (0.5^lag) * I(2)
-            bayes_mean = irf_bayes.mean[h, :, :]
+            bayes_mean = irf_bayes.point_estimate[h, :, :]
 
             # Allow larger tolerance for smaller chain
             @test isapprox(bayes_mean[1, 1], theoretical_impact[1, 1], atol=0.3)
@@ -174,10 +174,10 @@ end
         bcirf = cumulative_irf(birf)
 
         @test bcirf isa BayesianImpulseResponse
-        @test size(bcirf.mean) == size(birf.mean)
+        @test size(bcirf.point_estimate) == size(birf.point_estimate)
 
         # Mean is additive, so cumsum of mean should equal mean of cumsum
-        @test bcirf.mean ≈ cumsum(birf.mean, dims=1)
+        @test bcirf.point_estimate ≈ cumsum(birf.point_estimate, dims=1)
 
         # Quantiles should be properly ordered
         for qi in 1:(length(birf.quantile_levels)-1)

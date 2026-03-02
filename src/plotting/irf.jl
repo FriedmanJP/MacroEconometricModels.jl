@@ -113,7 +113,7 @@ function plot_result(r::BayesianImpulseResponse{T};
             ptitle = "$(r.variables[vi]) ← $(r.shocks[si])"
 
             # Use central tendency as main line; widest quantile pair as band
-            vals = r.mean[1:H, vi, si]
+            vals = r.point_estimate[1:H, vi, si]
             ci_lo = r.quantiles[1:H, vi, si, 1]      # lowest quantile
             ci_hi = r.quantiles[1:H, vi, si, nq]      # highest quantile
             data_json = _irf_data_json(vals, ci_lo, ci_hi, H)

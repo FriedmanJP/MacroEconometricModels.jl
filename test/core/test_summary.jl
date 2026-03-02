@@ -247,7 +247,7 @@ using Statistics
 
         # point_estimate / has_uncertainty / uncertainty_bounds
         pe = MacroEconometricModels.point_estimate(birf)
-        @test pe == birf.mean
+        @test pe == birf.point_estimate
         @test MacroEconometricModels.has_uncertainty(birf) == true
         bounds = MacroEconometricModels.uncertainty_bounds(birf)
         @test bounds[1] == birf.quantiles[:, :, :, 1]
@@ -311,7 +311,7 @@ using Statistics
 
         # point_estimate / has_uncertainty / uncertainty_bounds
         pe = MacroEconometricModels.point_estimate(bfevd)
-        @test pe == bfevd.mean
+        @test pe == bfevd.point_estimate
         @test MacroEconometricModels.has_uncertainty(bfevd) == true
         bounds = MacroEconometricModels.uncertainty_bounds(bfevd)
         @test bounds[1] == bfevd.quantiles[:, :, :, 1]
@@ -382,7 +382,7 @@ using Statistics
 
         # point_estimate / has_uncertainty / uncertainty_bounds
         pe = MacroEconometricModels.point_estimate(bhd)
-        @test pe == bhd.mean
+        @test pe == bhd.point_estimate
         @test MacroEconometricModels.has_uncertainty(bhd) == true
         bounds = MacroEconometricModels.uncertainty_bounds(bhd)
         @test bounds[1] == bhd.quantiles[:, :, :, 1]

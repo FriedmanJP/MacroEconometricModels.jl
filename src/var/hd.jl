@@ -70,10 +70,10 @@ Bayesian historical decomposition with posterior quantiles.
 
 Fields:
 - `quantiles`: Contribution quantiles (T_eff × n_vars × n_shocks × n_quantiles)
-- `mean`: Mean contributions (T_eff × n_vars × n_shocks)
+- `point_estimate`: Mean contributions (T_eff × n_vars × n_shocks)
 - `initial_quantiles`: Initial condition quantiles (T_eff × n_vars × n_quantiles)
-- `initial_mean`: Mean initial conditions (T_eff × n_vars)
-- `shocks_mean`: Mean structural shocks (T_eff × n_shocks)
+- `initial_point_estimate`: Mean initial conditions (T_eff × n_vars)
+- `shocks_point_estimate`: Mean structural shocks (T_eff × n_shocks)
 - `actual`: Actual data values (T_eff × n_vars)
 - `T_eff`: Effective number of time periods
 - `variables`: Variable names
@@ -83,10 +83,10 @@ Fields:
 """
 struct BayesianHistoricalDecomposition{T<:AbstractFloat} <: AbstractHistoricalDecomposition
     quantiles::Array{T,4}           # T_eff × n_vars × n_shocks × n_quantiles
-    mean::Array{T,3}                # T_eff × n_vars × n_shocks
+    point_estimate::Array{T,3}                # T_eff × n_vars × n_shocks
     initial_quantiles::Array{T,3}   # T_eff × n_vars × n_quantiles
-    initial_mean::Matrix{T}         # T_eff × n_vars
-    shocks_mean::Matrix{T}          # T_eff × n_shocks
+    initial_point_estimate::Matrix{T}         # T_eff × n_vars
+    shocks_point_estimate::Matrix{T}          # T_eff × n_shocks
     actual::Matrix{T}               # T_eff × n_vars
     T_eff::Int
     variables::Vector{String}
@@ -573,7 +573,7 @@ function contribution(hd::BayesianHistoricalDecomposition{T}, var::Int, shock::I
     @assert 1 <= shock <= length(hd.shock_names) "Shock index out of bounds"
 
     if stat == :mean
-        return hd.mean[:, var, shock]
+        return hd.point_estimate[:, var, shock]
     elseif stat isa Int
         @assert 1 <= stat <= length(hd.quantile_levels) "Quantile index out of bounds"
         return hd.quantiles[:, var, shock, stat]
@@ -608,7 +608,7 @@ end
 
 function total_shock_contribution(hd::BayesianHistoricalDecomposition{T}, var::Int) where {T}
     @assert 1 <= var <= length(hd.variables) "Variable index out of bounds"
-    vec(sum(hd.mean[:, var, :], dims=2))
+    vec(sum(hd.point_estimate[:, var, :], dims=2))
 end
 
 function total_shock_contribution(hd::BayesianHistoricalDecomposition, var::String)
@@ -648,7 +648,7 @@ function verify_decomposition(hd::BayesianHistoricalDecomposition{T}; tol::T=T(1
     n_vars = length(hd.variables)
     for i in 1:n_vars
         total_contrib = total_shock_contribution(hd, i)
-        reconstructed = total_contrib .+ hd.initial_mean[:, i]
+        reconstructed = total_contrib .+ hd.initial_point_estimate[:, i]
         max_diff = maximum(abs.(reconstructed .- hd.actual[:, i]))
         max_diff > tol && return false
     end
@@ -730,9 +730,9 @@ function Base.show(io::IO, hd::BayesianHistoricalDecomposition{T}) where {T}
     for i in 1:n_vars
         summary_data[i, 1] = hd.variables[i]
         for j in 1:n_shocks
-            summary_data[i, j + 1] = round(mean(abs.(hd.mean[:, i, j])), digits=4)
+            summary_data[i, j + 1] = round(mean(abs.(hd.point_estimate[:, i, j])), digits=4)
         end
-        summary_data[i, end] = round(mean(abs.(hd.initial_mean[:, i])), digits=4)
+        summary_data[i, end] = round(mean(abs.(hd.initial_point_estimate[:, i])), digits=4)
     end
 
     col_labels = vcat(["Variable"], hd.shock_names, ["Initial"])

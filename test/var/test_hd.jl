@@ -194,16 +194,16 @@ using Random
             @test hd isa BayesianHistoricalDecomposition
             @test hd.T_eff == T_eff
             @test size(hd.quantiles) == (T_eff, n, n, 3)
-            @test size(hd.mean) == (T_eff, n, n)
+            @test size(hd.point_estimate) == (T_eff, n, n)
             @test size(hd.initial_quantiles) == (T_eff, n, 3)
-            @test size(hd.initial_mean) == (T_eff, n)
+            @test size(hd.initial_point_estimate) == (T_eff, n)
             @test length(hd.quantile_levels) == 3
             @test hd.method == :cholesky
 
             # Test accessor for Bayesian HD
             c_mean = contribution(hd, 1, 1; stat=:mean)
             @test length(c_mean) == T_eff
-            @test c_mean == hd.mean[:, 1, 1]
+            @test c_mean == hd.point_estimate[:, 1, 1]
 
             c_median = contribution(hd, 1, 1; stat=2)  # Median is 2nd quantile
             @test c_median == hd.quantiles[:, 1, 1, 2]
@@ -245,7 +245,7 @@ using Random
 
             # Check structures
             @test size(hd.quantiles) == (T_eff, n, n, 3)
-            @test size(hd.mean) == (T_eff, n, n)
+            @test size(hd.point_estimate) == (T_eff, n, n)
 
         catch e
             @warn "Arias HD test failed (may need more draws)" exception=e
@@ -307,7 +307,7 @@ using Random
         T_eff, n = 30, 2
         actual = randn(T_eff, n)
 
-        # Make mean contributions and initial_mean sum to actual
+        # Make point_estimate contributions and initial_point_estimate sum to actual
         mean_arr = randn(T_eff, n, n)
         initial_m = zeros(T_eff, n)
         for i in 1:n
@@ -370,7 +370,7 @@ using Random
         # contribution with mean
         c_mean = contribution(bhd, 1, 1; stat=:mean)
         @test length(c_mean) == T_eff
-        @test c_mean == bhd.mean[:, 1, 1]
+        @test c_mean == bhd.point_estimate[:, 1, 1]
 
         # contribution with quantile index
         c_q1 = contribution(bhd, 1, 1; stat=1)
@@ -389,7 +389,7 @@ using Random
         # total_shock_contribution
         total = total_shock_contribution(bhd, 1)
         @test length(total) == T_eff
-        expected = vec(sum(bhd.mean[:, 1, :], dims=2))
+        expected = vec(sum(bhd.point_estimate[:, 1, :], dims=2))
         @test isapprox(total, expected, atol=1e-10)
 
         # total_shock_contribution with string

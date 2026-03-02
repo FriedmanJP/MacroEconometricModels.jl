@@ -126,7 +126,7 @@ The basic `irf(model, 20)` call uses Cholesky identification by default, with th
 | Field | Type | Description |
 |-------|------|-------------|
 | `quantiles` | `Array{T,4}` | ``(H+1) \times n \times n \times 3``: dimension 4 = [16th pctl, median, 84th pctl] |
-| `mean` | `Array{T,3}` | ``(H+1) \times n \times n`` posterior mean IRF |
+| `point_estimate` | `Array{T,3}` | ``(H+1) \times n \times n`` posterior point estimate IRF (median by default) |
 | `horizon` | `Int` | Maximum IRF horizon |
 | `variables` | `Vector{String}` | Variable names |
 | `shocks` | `Vector{String}` | Shock names |
@@ -185,7 +185,7 @@ The `proportions` array satisfies ``\sum_j \text{proportions}[h, i, j] = 1`` for
 | Field | Type | Description |
 |-------|------|-------------|
 | `quantiles` | `Array{T,4}` | ``H \times n \times n \times 3``: dimension 4 = [16th pctl, median, 84th pctl] |
-| `mean` | `Array{T,3}` | ``H \times n \times n`` posterior mean FEVD proportions |
+| `point_estimate` | `Array{T,3}` | ``H \times n \times n`` posterior point estimate FEVD proportions (median by default) |
 | `horizon` | `Int` | Maximum horizon |
 | `variables` | `Vector{String}` | Variable names |
 | `shocks` | `Vector{String}` | Shock names |
@@ -270,10 +270,10 @@ The `contributions[t, i, j]` array gives the contribution of shock ``j`` to vari
 | Field | Type | Description |
 |-------|------|-------------|
 | `quantiles` | `Array{T,4}` | ``T_{eff} \times n \times n \times n_q`` contribution quantiles |
-| `mean` | `Array{T,3}` | ``T_{eff} \times n \times n`` mean contributions |
+| `point_estimate` | `Array{T,3}` | ``T_{eff} \times n \times n`` point estimate contributions (median by default) |
 | `initial_quantiles` | `Array{T,3}` | ``T_{eff} \times n \times n_q`` initial condition quantiles |
-| `initial_mean` | `Matrix{T}` | ``T_{eff} \times n`` mean initial conditions |
-| `shocks_mean` | `Matrix{T}` | ``T_{eff} \times n`` mean structural shocks |
+| `initial_point_estimate` | `Matrix{T}` | ``T_{eff} \times n`` point estimate initial conditions |
+| `shocks_point_estimate` | `Matrix{T}` | ``T_{eff} \times n`` point estimate structural shocks |
 | `actual` | `Matrix{T}` | ``T_{eff} \times n`` actual data values |
 | `T_eff` | `Int` | Effective number of time periods |
 | `variables` | `Vector{String}` | Variable names |

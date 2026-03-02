@@ -68,7 +68,7 @@ function uncertainty_bounds(r::ImpulseResponse)
     (r.ci_lower, r.ci_upper)
 end
 
-point_estimate(r::BayesianImpulseResponse) = r.mean
+point_estimate(r::BayesianImpulseResponse) = r.point_estimate
 has_uncertainty(r::BayesianImpulseResponse) = true
 function uncertainty_bounds(r::BayesianImpulseResponse)
     nq = length(r.quantile_levels)
@@ -81,7 +81,7 @@ point_estimate(r::FEVD) = r.proportions
 has_uncertainty(r::FEVD) = false
 uncertainty_bounds(r::FEVD) = nothing
 
-point_estimate(r::BayesianFEVD) = r.mean
+point_estimate(r::BayesianFEVD) = r.point_estimate
 has_uncertainty(r::BayesianFEVD) = true
 function uncertainty_bounds(r::BayesianFEVD)
     nq = length(r.quantile_levels)
@@ -94,7 +94,7 @@ point_estimate(r::HistoricalDecomposition) = r.contributions
 has_uncertainty(r::HistoricalDecomposition) = false
 uncertainty_bounds(r::HistoricalDecomposition) = nothing
 
-point_estimate(r::BayesianHistoricalDecomposition) = r.mean
+point_estimate(r::BayesianHistoricalDecomposition) = r.point_estimate
 has_uncertainty(r::BayesianHistoricalDecomposition) = true
 function uncertainty_bounds(r::BayesianHistoricalDecomposition)
     nq = length(r.quantile_levels)

@@ -395,8 +395,11 @@ The `posterior_mean_model` averages the coefficient matrix ``B`` and covariance 
 
 For each posterior draw, we compute impulse responses, yielding a posterior distribution over IRFs. We report:
 
-- **Posterior median**: Point estimate
+- **Posterior median**: Point estimate (default)
 - **Credible intervals**: 68% (16th-84th percentile) or 90% (5th-95th percentile)
+
+!!! note "Point Estimate"
+    By default, `irf`, `fevd`, and `historical_decomposition` use the **posterior median** as the central tendency (`point_estimate=:median`). Pass `point_estimate=:mean` to use the posterior mean instead. The result's `.point_estimate` field stores whichever was selected.
 
 ### Cholesky Identification
 
@@ -429,7 +432,7 @@ The posterior median IRF at ``h = 0`` is zero by construction (INDPRO is ordered
 | Field | Type | Description |
 |-------|------|-------------|
 | `quantiles` | `Array{T,4}` | ``(H+1) \times n \times n \times 3``: dim 4 = [16th pctl, median, 84th pctl] |
-| `mean` | `Array{T,3}` | ``(H+1) \times n \times n`` posterior mean IRF |
+| `point_estimate` | `Array{T,3}` | ``(H+1) \times n \times n`` posterior point estimate IRF (median by default) |
 | `horizon` | `Int` | Maximum IRF horizon |
 | `variables` | `Vector{String}` | Variable names |
 | `shocks` | `Vector{String}` | Shock names |
@@ -494,7 +497,7 @@ At short horizons, monetary shocks explain a small fraction of INDPRO forecast e
 | Field | Type | Description |
 |-------|------|-------------|
 | `quantiles` | `Array{T,4}` | ``H \times n \times n \times 3``: dim 4 = [16th pctl, median, 84th pctl] |
-| `mean` | `Array{T,3}` | ``H \times n \times n`` posterior mean FEVD proportions |
+| `point_estimate` | `Array{T,3}` | ``H \times n \times n`` posterior point estimate FEVD proportions (median by default) |
 | `horizon` | `Int` | Maximum horizon |
 | `variables` | `Vector{String}` | Variable names |
 | `shocks` | `Vector{String}` | Shock names |

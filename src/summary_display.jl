@@ -317,7 +317,7 @@ function Base.show(io::IO, f::BayesianFEVD{T}) where {T}
         for i in 1:n_vars
             data[i, 1] = f.variables[i]
             for j in 1:n_shocks
-                data[i, j + 1] = _fmt_pct(f.mean[h, i, j])
+                data[i, j + 1] = _fmt_pct(f.point_estimate[h, i, j])
             end
         end
 

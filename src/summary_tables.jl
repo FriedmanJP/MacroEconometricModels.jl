@@ -69,7 +69,7 @@ function table(irf::BayesianImpulseResponse{T}, var::Int, shock::Int;
     result = Matrix{T}(undef, length(hs), 2 + nq)
     for (i, h) in enumerate(hs)
         result[i, 1] = h
-        result[i, 2] = irf.mean[h, var, shock]
+        result[i, 2] = irf.point_estimate[h, var, shock]
         for q in 1:nq
             result[i, 2 + q] = irf.quantiles[h, var, shock, q]
         end
@@ -121,7 +121,7 @@ function table(f::BayesianFEVD{T}, var::Int;
     for (i, h) in enumerate(hs)
         result[i, 1] = h
         for j in 1:n_shocks
-            result[i, j + 1] = stat == :mean ? f.mean[h, var, j] : f.quantiles[h, var, j, stat]
+            result[i, j + 1] = stat == :mean ? f.point_estimate[h, var, j] : f.quantiles[h, var, j, stat]
         end
     end
     result
@@ -170,9 +170,9 @@ function table(hd::BayesianHistoricalDecomposition{T}, var::Int;
         result[i, 1] = t
         result[i, 2] = hd.actual[t, var]
         for j in 1:n_shocks
-            result[i, j + 2] = stat == :mean ? hd.mean[t, var, j] : hd.quantiles[t, var, j, stat]
+            result[i, j + 2] = stat == :mean ? hd.point_estimate[t, var, j] : hd.quantiles[t, var, j, stat]
         end
-        result[i, end] = stat == :mean ? hd.initial_mean[t, var] : hd.initial_quantiles[t, var, stat]
+        result[i, end] = stat == :mean ? hd.initial_point_estimate[t, var] : hd.initial_quantiles[t, var, stat]
     end
     result
 end

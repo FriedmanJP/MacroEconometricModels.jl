@@ -361,13 +361,13 @@ When raw posterior draws are available, cumulates each draw first then
 extracts quantiles — the statistically correct approach.
 """
 function cumulative_irf(irf_result::BayesianImpulseResponse{T}) where {T<:AbstractFloat}
-    cum_mean = cumsum(irf_result.mean, dims=1)
+    cum_pe = cumsum(irf_result.point_estimate, dims=1)
 
     if irf_result._draws !== nothing
         # Correct approach: cumulate each draw, then extract quantiles
         cum_draws = cumsum(irf_result._draws, dims=2)
         q_vec = irf_result.quantile_levels
-        horizon, nv, ns = size(cum_mean)
+        horizon, nv, ns = size(cum_pe)
         nq = length(q_vec)
         cum_quantiles = zeros(T, horizon, nv, ns, nq)
         @inbounds for h in 1:horizon, v in 1:nv, s in 1:ns
@@ -380,6 +380,6 @@ function cumulative_irf(irf_result::BayesianImpulseResponse{T}) where {T<:Abstra
         cum_quantiles = cumsum(irf_result.quantiles, dims=1)
     end
 
-    BayesianImpulseResponse{T}(cum_quantiles, cum_mean, irf_result.horizon,
+    BayesianImpulseResponse{T}(cum_quantiles, cum_pe, irf_result.horizon,
                                irf_result.variables, irf_result.shocks, irf_result.quantile_levels)
 end

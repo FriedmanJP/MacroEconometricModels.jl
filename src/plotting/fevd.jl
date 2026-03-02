@@ -73,7 +73,7 @@ end
 
 Plot Bayesian FEVD (uses posterior mean by default).
 
-`f.mean` is H × n_vars × n_shocks.
+`f.point_estimate` is H × n_vars × n_shocks.
 """
 function plot_result(f::BayesianFEVD{T};
                      var::Union{Int,String,Nothing}=nothing,
@@ -90,8 +90,8 @@ function plot_result(f::BayesianFEVD{T};
         id = _next_plot_id("bfevd")
         ptitle = f.variables[vi]
 
-        # f.mean is H × n_vars × n_shocks → extract H × n_shocks for variable vi
-        props = f.mean[1:H, vi, :]  # H × n_shocks
+        # f.point_estimate is H × n_vars × n_shocks → extract H × n_shocks for variable vi
+        props = f.point_estimate[1:H, vi, :]  # H × n_shocks
         # Normalize rows to sum to 1
         row_sums = sum(props, dims=2)
         props = props ./ max.(row_sums, eps(T))

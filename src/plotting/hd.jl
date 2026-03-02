@@ -112,7 +112,7 @@ function plot_result(hd::BayesianHistoricalDecomposition{T};
     for vi in vars_to_plot
         # Stacked bar from posterior mean
         id_bar = _next_plot_id("bhd_bar")
-        contributions = hd.mean[:, vi, :]  # T_eff × n_shocks
+        contributions = hd.point_estimate[:, vi, :]  # T_eff × n_shocks
         data_bar = _hd_data_json(contributions, hd.shock_names, T_eff)
         s_bar = _series_json(hd.shock_names, _PLOT_COLORS[1:n_shocks];
                              keys=["s$j" for j in 1:n_shocks])
@@ -124,7 +124,7 @@ function plot_result(hd::BayesianHistoricalDecomposition{T};
         # Actual vs decomposition
         id_line = _next_plot_id("bhd_line")
         actual = hd.actual[:, vi]
-        total = vec(sum(contributions, dims=2)) .+ hd.initial_mean[:, vi]
+        total = vec(sum(contributions, dims=2)) .+ hd.initial_point_estimate[:, vi]
 
         rows = Vector{Pair{String,String}}[]
         for t in 1:T_eff

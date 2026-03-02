@@ -175,12 +175,12 @@ ImpulseResponse{T}(values, ci_lower, ci_upper, horizon, variables, shocks, ci_ty
 
 Bayesian IRF with posterior quantiles.
 
-Fields: quantiles (H×n×n×q), mean (H×n×n), horizon, variables, shocks, quantile_levels.
+Fields: quantiles (H×n×n×q), point_estimate (H×n×n), horizon, variables, shocks, quantile_levels.
 Internal: _draws (raw posterior draws for correct cumulative IRF).
 """
 struct BayesianImpulseResponse{T<:AbstractFloat} <: AbstractImpulseResponse
     quantiles::Array{T,4}
-    mean::Array{T,3}
+    point_estimate::Array{T,3}
     horizon::Int
     variables::Vector{String}
     shocks::Vector{String}
@@ -189,8 +189,8 @@ struct BayesianImpulseResponse{T<:AbstractFloat} <: AbstractImpulseResponse
 end
 
 # Backward-compatible constructor (no draws)
-BayesianImpulseResponse{T}(quantiles, mean, horizon, variables, shocks, quantile_levels) where {T} =
-    BayesianImpulseResponse{T}(quantiles, mean, horizon, variables, shocks, quantile_levels, nothing)
+BayesianImpulseResponse{T}(quantiles, point_estimate, horizon, variables, shocks, quantile_levels) where {T} =
+    BayesianImpulseResponse{T}(quantiles, point_estimate, horizon, variables, shocks, quantile_levels, nothing)
 
 # =============================================================================
 # FEVD
@@ -207,7 +207,7 @@ end
 """Bayesian FEVD with posterior quantiles."""
 struct BayesianFEVD{T<:AbstractFloat} <: AbstractFEVD
     quantiles::Array{T,4}
-    mean::Array{T,3}
+    point_estimate::Array{T,3}
     horizon::Int
     variables::Vector{String}
     shocks::Vector{String}
