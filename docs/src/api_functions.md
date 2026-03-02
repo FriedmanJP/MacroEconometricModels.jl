@@ -60,6 +60,8 @@ set_time_index!
 set_obs_id!
 set_desc!
 set_vardesc!
+dates
+set_dates!
 to_matrix
 to_vector
 load_example
@@ -116,6 +118,15 @@ ma_order
 diff_order
 ```
 
+### ARIMA StatsAPI Interface
+
+```@docs
+MacroEconometricModels.StatsAPI.stderror(::ARModel)
+MacroEconometricModels.StatsAPI.stderror(::MAModel)
+MacroEconometricModels.StatsAPI.stderror(::ARMAModel)
+MacroEconometricModels.StatsAPI.stderror(::ARIMAModel)
+```
+
 ---
 
 ## VAR Estimation
@@ -138,6 +149,23 @@ MacroEconometricModels.StatsAPI.confint(::VARModel)
 estimate_bvar
 posterior_mean_model
 posterior_median_model
+```
+
+### VAR/BVAR Forecasting
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["var/estimation.jl", "bvar/estimation.jl"]
+Order   = [:function]
+```
+
+### Forecast Accessors
+
+```@docs
+point_forecast
+forecast_horizon
+lower_bound
+upper_bound
 ```
 
 ### Prior Specification
@@ -176,10 +204,27 @@ Pages   = ["core/identification.jl"]
 Order   = [:function]
 ```
 
+### Arias et al. (2018) Sign/Zero Restrictions
+
+```@docs
+identify_arias
+identify_arias_bayesian
+zero_restriction
+sign_restriction
+```
+
+### Sign-Identified Set
+
+```@docs
+irf_bounds
+irf_median
+irf_mean
+irf_percentiles
+```
+
 ### Mountford-Uhlig (2009) Penalty Function
 
 ```@docs
-UhligSVARResult
 identify_uhlig
 ```
 
@@ -385,6 +430,22 @@ Pages   = ["gmm/gmm.jl"]
 Order   = [:function]
 ```
 
+### Simulated Method of Moments
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["gmm/smm.jl"]
+Order   = [:function]
+```
+
+### Parameter Transforms
+
+```@docs
+to_unconstrained
+to_constrained
+transform_jacobian
+```
+
 ---
 
 ## Unit Root and Cointegration Tests
@@ -493,6 +554,8 @@ MacroEconometricModels.StatsAPI.nobs(::SVModel)
 MacroEconometricModels.StatsAPI.coef(::SVModel)
 MacroEconometricModels.StatsAPI.residuals(::SVModel)
 MacroEconometricModels.StatsAPI.islinear(::SVModel)
+MacroEconometricModels.StatsAPI.stderror(m::GJRGARCHModel)
+MacroEconometricModels.StatsAPI.confint(m::AbstractVolatilityModel)
 ```
 
 ---
@@ -531,11 +594,25 @@ nowcast_news
 balance_panel
 ```
 
+### Nowcast Display
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["summary_nowcast.jl"]
+Order   = [:function]
+```
+
 ---
 
 ## DSGE Models
 
-### Specification and Steady State
+### Specification
+
+```@docs
+MacroEconometricModels.@dsge
+```
+
+### Steady State
 
 ```@docs
 compute_steady_state
@@ -548,7 +625,21 @@ linearize
 solve
 gensys
 blanchard_kahn
-perfect_foresight
+klein
+perturbation_solver
+MacroEconometricModels.collocation_solver
+MacroEconometricModels.pfi_solver
+MacroEconometricModels.perfect_foresight
+evaluate_policy
+max_euler_error
+```
+
+### DSGE IRF and FEVD
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["dsge/simulation.jl", "dsge/pruning.jl"]
+Order   = [:function]
 ```
 
 ### Simulation and Analysis
@@ -573,6 +664,13 @@ occbin_solve
 occbin_irf
 ```
 
+### Constraint Constructors
+
+```@docs
+variable_bound
+nonlinear_constraint
+```
+
 ---
 
 ## Display and References
@@ -585,6 +683,13 @@ Order   = [:function]
 
 ```@docs
 refs
+```
+
+### Output Tables
+
+```@docs
+table
+print_table
 ```
 
 ---
@@ -652,6 +757,26 @@ robust_vcov
 long_run_variance
 long_run_covariance
 optimal_bandwidth_nw
+register_cov_estimator!
+```
+
+---
+
+## Plotting
+
+### Core Plot Functions
+
+```@docs
+save_plot
+display_plot
+```
+
+### Plot Dispatches
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["plotting/irf.jl", "plotting/fevd.jl", "plotting/hd.jl", "plotting/filters.jl", "plotting/forecast.jl", "plotting/models.jl", "plotting/nowcast.jl", "plotting/did.jl"]
+Order   = [:function]
 ```
 
 ---

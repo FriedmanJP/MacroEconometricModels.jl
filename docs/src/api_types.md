@@ -123,6 +123,12 @@ Pages   = ["lp/types.jl"]
 Order   = [:type]
 ```
 
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["lp/types_variants.jl"]
+Order   = [:type]
+```
+
 ---
 
 ## Panel VAR Types
@@ -153,6 +159,7 @@ HonestDiDResult
 ```@docs
 AbstractGMMModel
 GMMModel
+SMMModel
 GMMWeighting
 ```
 
@@ -171,6 +178,16 @@ AbstractPrior
 
 ```@docs
 BVARPosterior
+```
+
+---
+
+## Forecast Types
+
+```@docs
+AbstractForecastResult
+VARForecast
+BVARForecast
 ```
 
 ---
@@ -237,6 +254,7 @@ NowcastNews
 ZeroRestriction
 SignRestriction
 SVARRestrictions
+SignIdentifiedSet
 AriasSVARResult
 UhligSVARResult
 ```
@@ -271,6 +289,14 @@ GARCHSVARResult
 SmoothTransitionSVARResult
 ExternalVolatilitySVARResult
 IdentifiabilityTestResult
+```
+
+---
+
+## Plotting Types
+
+```@docs
+PlotOutput
 ```
 
 ---
@@ -427,11 +453,18 @@ OccBinIRF{T}
 ## DSGE Models
 
 ```@docs
+AbstractDSGEModel
 DSGESpec
 LinearDSGE
 DSGESolution
+PerturbationSolution
+ProjectionSolution
 PerfectForesightPath
 DSGEEstimation
+DSGEConstraint
+VariableBound
+NonlinearConstraint
+ParameterTransform
 OccBinConstraint
 OccBinRegime
 OccBinSolution
