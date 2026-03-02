@@ -128,8 +128,8 @@ include("teststat/show.jl")
 include("teststat/normality.jl")
 
 # Structural identification
-include("var/identification.jl")
-include("var/uhlig.jl")
+include("core/identification.jl")
+include("core/uhlig.jl")
 
 # Non-Gaussian identification (shared helpers first)
 include("nongaussian/shared.jl")
@@ -241,9 +241,9 @@ include("lp/propensity.jl")
 include("lp/forecast.jl")
 
 # Innovation accounting (after LP types for lp_irf support)
-include("var/irf.jl")
-include("var/fevd.jl")
-include("var/hd.jl")
+include("core/irf.jl")
+include("core/fevd.jl")
+include("core/hd.jl")
 
 # VECM analysis and forecasting (after irf + fevd + hd)
 include("vecm/forecast.jl")

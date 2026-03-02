@@ -172,7 +172,7 @@ Order   = [:function]
 
 ```@autodocs
 Modules = [MacroEconometricModels]
-Pages   = ["var/identification.jl"]
+Pages   = ["core/identification.jl"]
 Order   = [:function]
 ```
 
@@ -191,7 +191,7 @@ identify_uhlig
 
 ```@autodocs
 Modules = [MacroEconometricModels]
-Pages   = ["var/irf.jl"]
+Pages   = ["core/irf.jl"]
 Order   = [:function]
 ```
 
@@ -199,7 +199,7 @@ Order   = [:function]
 
 ```@autodocs
 Modules = [MacroEconometricModels]
-Pages   = ["var/fevd.jl"]
+Pages   = ["core/fevd.jl"]
 Order   = [:function]
 ```
 
@@ -207,7 +207,7 @@ Order   = [:function]
 
 ```@autodocs
 Modules = [MacroEconometricModels]
-Pages   = ["var/hd.jl"]
+Pages   = ["core/hd.jl"]
 Order   = [:function]
 ```
 
