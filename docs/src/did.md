@@ -360,9 +360,8 @@ did = estimate_did(pd, :gdp, :reform; method=:callaway_santanna, leads=3, horizo
 plot_result(did)
 ```
 
-```@raw html
-<iframe src="../assets/plots/did_event_study.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
-```
+@raw html
+<iframe src="../assets/plots/did_event_study.html" style="width:100%;height:420px;border:1px solid #eee;border-radius:8px;" loading="lazy"></iframe>
 
 ### Bacon Decomposition Plot
 
@@ -371,9 +370,8 @@ bd = bacon_decomposition(pd, :gdp, :reform)
 plot_result(bd)
 ```
 
-```@raw html
-<iframe src="../assets/plots/did_bacon.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
-```
+@raw html
+<iframe src="../assets/plots/did_bacon.html" style="width:100%;height:420px;border:1px solid #eee;border-radius:8px;" loading="lazy"></iframe>
 
 ### HonestDiD Sensitivity Plot
 
@@ -382,9 +380,8 @@ h = honest_did(did; Mbar=1.0)
 plot_result(h)
 ```
 
-```@raw html
-<iframe src="../assets/plots/did_honest.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
-```
+@raw html
+<iframe src="../assets/plots/did_honest.html" style="width:100%;height:420px;border:1px solid #eee;border-radius:8px;" loading="lazy"></iframe>
 
 ---
 
