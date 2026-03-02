@@ -11,10 +11,15 @@
 A comprehensive Julia package for macroeconomic time series analysis.
 
 **Univariate:** ARIMA, ARCH/GARCH, Stochastic Volatility, HP/Hamilton/BN/BK/Boosted HP filters
+
 **Multivariate:** VAR, VECM, Bayesian VAR, Local Projections, Factor Models
+
 **Panel:** Panel VAR (FD-GMM, System GMM, FE-OLS), Difference-in-Differences (TWFE, Callaway-Sant'Anna, Sun-Abraham, BJS, dCDH, HonestDiD), Event Study LP
+
 **DSGE:** 6 solvers (Gensys, Blanchard-Kahn, Klein, higher-order perturbation with pruning, Chebyshev projection, PFI), constrained solvers (Ipopt NLP, PATH MCP for ZLB/binding bounds), OccBin, GMM/SMM estimation
+
 **Estimation:** OLS, MLE, GMM, SMM, Bayesian (Gibbs/conjugate), Kalman filter/smoother
+
 **Features:** IRF, FEVD, historical decomposition, structural identification, nowcasting, hypothesis testing, interactive D3.js visualization
 
 ## Installation
