@@ -1,4 +1,4 @@
-<img width="1760" height="600" alt="mems" src="https://github.com/user-attachments/assets/075ec2ce-3d7d-45db-bc78-062965e26c55" />
+<img width="1760" height="600" alt="MacroEconometricModels.jl" src="https://raw.githubusercontent.com/FriedmanJP/MacroEconometricModels.jl/main/banner.png" />
 
 # MacroEconometricModels.jl
 
