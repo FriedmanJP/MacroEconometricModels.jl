@@ -102,6 +102,15 @@ const TEST_GROUPS = [
     ("DSGE Models" => [
         "dsge/test_dsge.jl",
     ]),
+    # Group 8: Coverage gap tests (lightweight, fast)
+    ("Coverage" => [
+        "coverage/test_vecm_teststat_coverage.jl",
+        "coverage/test_nowcast_coverage.jl",
+        "coverage/test_dsge_coverage.jl",
+        "coverage/test_pvar_nongaussian_coverage.jl",
+        "coverage/test_gmm_ext_coverage.jl",
+        "coverage/test_misc_coverage.jl",
+    ]),
 ]
 
 # Multi-process runner (fallback when threads unavailable)
@@ -287,5 +296,13 @@ else
 
         # Group 7: DSGE Models
         @testset "DSGE Models" begin include("dsge/test_dsge.jl") end
+
+        # Group 8: Coverage gap tests
+        @testset "VECM & Teststat Coverage" begin include("coverage/test_vecm_teststat_coverage.jl") end
+        @testset "Nowcast Coverage" begin include("coverage/test_nowcast_coverage.jl") end
+        @testset "DSGE Coverage" begin include("coverage/test_dsge_coverage.jl") end
+        @testset "PVAR & Non-Gaussian Coverage" begin include("coverage/test_pvar_nongaussian_coverage.jl") end
+        @testset "GMM & Extension Coverage" begin include("coverage/test_gmm_ext_coverage.jl") end
+        @testset "Misc Coverage" begin include("coverage/test_misc_coverage.jl") end
     end
 end
