@@ -34,6 +34,8 @@ makedocs(;
         ],
         "Panel Models" => [
             "Panel VAR" => "pvar.md",
+            "Difference-in-Differences" => "did.md",
+            "Event Study LP" => "event_study.md",
         ],
         "DSGE Models" => "dsge.md",
         "Innovation Accounting" => "innovation_accounting.md",

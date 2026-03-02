@@ -135,6 +135,19 @@ PVARTestResult
 
 ---
 
+## Difference-in-Differences Types
+
+```@docs
+DIDResult
+EventStudyLP
+BaconDecomposition
+PretrendTestResult
+NegativeWeightResult
+HonestDiDResult
+```
+
+---
+
 ## GMM Types
 
 ```@docs
@@ -290,6 +303,13 @@ VECMGrangerResult{T}
 PVARModel{T} <: StatsAPI.RegressionModel
 PVARStability{T}
 PVARTestResult{T} <: StatsAPI.HypothesisTest
+
+DIDResult{T} <: AbstractFrequentistResult
+EventStudyLP{T}
+BaconDecomposition{T}
+PretrendTestResult{T}
+NegativeWeightResult{T}
+HonestDiDResult{T}
 
 AbstractAnalysisResult
 ├── AbstractFrequentistResult

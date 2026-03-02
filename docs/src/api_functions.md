@@ -351,6 +351,32 @@ andrews_lu_mmsc
 
 ---
 
+## Difference-in-Differences
+
+### Estimation
+
+```@docs
+estimate_did
+estimate_event_study_lp
+estimate_lp_did
+```
+
+### Diagnostics
+
+```@docs
+bacon_decomposition
+pretrend_test
+negative_weight_check
+```
+
+### Sensitivity Analysis
+
+```@docs
+honest_did
+```
+
+---
+
 ## GMM Estimation
 
 ```@autodocs

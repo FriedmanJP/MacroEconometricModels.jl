@@ -375,6 +375,54 @@ function main()
     occ_sol = occbin_solve(nk_occ_spec, nk_occ_constraint; shock_path=occ_shocks)
     save("occbin_solution.html", plot_result(occ_sol))
 
+    # -------------------------------------------------------------------
+    # 34. DiD Event Study (DIDResult)
+    # -------------------------------------------------------------------
+    begin
+        # Synthetic staggered DiD panel: 30 units, 20 periods, 3 cohorts
+        n_units_did = 30; n_times_did = 20
+        did_rows = []
+        for i in 1:n_units_did
+            g_time = i <= 10 ? 0 : (i <= 20 ? 8 : 14)
+            for t in 1:n_times_did
+                treat_effect = (g_time > 0 && t >= g_time) ? 2.0 + 0.3 * (t - g_time) : 0.0
+                push!(did_rows, (group=i, time=t,
+                                 y=randn() + treat_effect,
+                                 treat_timing=Float64(g_time),
+                                 x=randn()))
+            end
+        end
+        did_df = DataFrame(did_rows)
+        pd_did = xtset(did_df, :group, :time)
+        did_result = estimate_did(pd_did, :y, :treat_timing;
+                                  method=:callaway_santanna, leads=3, horizon=5)
+        save("did_event_study.html", plot_result(did_result))
+    end
+
+    # -------------------------------------------------------------------
+    # 35. Bacon Decomposition (BaconDecomposition)
+    # -------------------------------------------------------------------
+    begin
+        bd = bacon_decomposition(pd_did, :y, :treat_timing)
+        save("did_bacon.html", plot_result(bd))
+    end
+
+    # -------------------------------------------------------------------
+    # 36. HonestDiD Sensitivity (HonestDiDResult)
+    # -------------------------------------------------------------------
+    begin
+        hd = honest_did(did_result; Mbar=1.0)
+        save("did_honest.html", plot_result(hd))
+    end
+
+    # -------------------------------------------------------------------
+    # 37. Event Study LP (EventStudyLP)
+    # -------------------------------------------------------------------
+    begin
+        eslp = estimate_event_study_lp(pd_did, :y, :treat_timing, 5; leads=3, lags=2)
+        save("eslp_event_study.html", plot_result(eslp))
+    end
+
     println("\nDone! Generated $(length(readdir(PLOT_DIR))) HTML files in $PLOT_DIR")
 end
 
