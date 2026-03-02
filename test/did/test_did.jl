@@ -1040,4 +1040,93 @@ end
         end
     end
 
+    # =========================================================================
+    # Cohort ID Override
+    # =========================================================================
+    @testset "Cohort ID Override" begin
+        # Create panel with explicit cohort_id that differs from treatment timing
+        rng = Random.MersenneTwister(999)
+        n_units = 30
+        n_periods = 15
+        N_obs = n_units * n_periods
+        data = Matrix{Float64}(undef, N_obs, 2)
+        group_id = Vector{Int}(undef, N_obs)
+        time_id = Vector{Int}(undef, N_obs)
+        cohort_vec = Vector{Int}(undef, N_obs)
+
+        # 3 groups: cohort 1 (units 1-10, treated at t=5),
+        #           cohort 2 (units 11-20, treated at t=8),
+        #           never-treated (units 21-30, cohort=0)
+        treat_times = vcat(fill(5, 10), fill(8, 10), fill(0, 10))
+        cohort_labels = vcat(fill(1, 10), fill(2, 10), fill(0, 10))
+
+        row = 1
+        for i in 1:n_units
+            for t in 1:n_periods
+                te = (treat_times[i] > 0 && t >= treat_times[i]) ? 2.0 : 0.0
+                data[row, 1] = randn(rng) + te
+                data[row, 2] = Float64(treat_times[i])
+                group_id[row] = i
+                time_id[row] = t
+                cohort_vec[row] = cohort_labels[i]
+                row += 1
+            end
+        end
+
+        # With cohort_id
+        pd_c = PanelData{Float64}(data, ["y", "tt"],
+                                   Quarterly, [1, 1], group_id, time_id,
+                                   cohort_vec,
+                                   ["u$i" for i in 1:n_units], n_units, 2, N_obs, true,
+                                   ["cohort test"], Dict{String,String}(), Symbol[])
+
+        # Without cohort_id (same data)
+        pd_nc = PanelData{Float64}(data, ["y", "tt"],
+                                    Quarterly, [1, 1], group_id, time_id,
+                                    nothing,
+                                    ["u$i" for i in 1:n_units], n_units, 2, N_obs, true,
+                                    ["cohort test"], Dict{String,String}(), Symbol[])
+
+        # Both should work for all methods
+        for method in [:twfe, :callaway_santanna, :sun_abraham, :bjs]
+            did_c = estimate_did(pd_c, "y", "tt"; method=method, leads=2, horizon=3)
+            did_nc = estimate_did(pd_nc, "y", "tt"; method=method, leads=2, horizon=3)
+            @test did_c isa DIDResult{Float64}
+            @test did_nc isa DIDResult{Float64}
+            @test did_c.method == method
+        end
+
+        # dCDH (uses bootstrap, test it runs)
+        did_dcdh = estimate_did(pd_c, "y", "tt"; method=:did_multiplegt,
+                                leads=1, horizon=2, n_boot=20)
+        @test did_dcdh isa DIDResult{Float64}
+
+        # Event study LP
+        eslp = estimate_event_study_lp(pd_c, "y", "tt", 3; leads=2)
+        @test eslp isa EventStudyLP{Float64}
+
+        # LP-DiD
+        lpdid = estimate_lp_did(pd_c, "y", "tt", 3)
+        @test lpdid isa EventStudyLP{Float64}
+
+        # Diagnostics
+        bacon = bacon_decomposition(pd_c, "y", "tt")
+        @test bacon isa BaconDecomposition{Float64}
+
+        nw = negative_weight_check(pd_c, "tt")
+        @test nw isa NegativeWeightResult{Float64}
+
+        # show with cohort info
+        io = IOBuffer()
+        show(io, pd_c)
+        s = String(take!(io))
+        @test occursin("cohort", s)
+
+        # panel_summary with cohort info
+        io2 = IOBuffer()
+        panel_summary(io2, pd_c)
+        s2 = String(take!(io2))
+        @test occursin("Cohort", s2)
+    end
+
 end  # @testset "Difference-in-Differences"
