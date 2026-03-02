@@ -70,6 +70,7 @@ end
 """
     _estimate_twfe(pd::PanelData{T}, outcome_col::Int, treat_col::Int;
                    leads::Int=0, horizon::Int=5, covariate_cols::Vector{Int}=Int[],
+                   control_group::Symbol=:never_treated,
                    cluster::Symbol=:unit, conf_level::Real=0.95) where {T}
 
 Internal TWFE event-study regression.
@@ -83,6 +84,7 @@ Algorithm:
 function _estimate_twfe(pd::PanelData{T}, outcome_col::Int, treat_col::Int;
                         leads::Int=0, horizon::Int=5,
                         covariate_cols::Vector{Int}=Int[],
+                        control_group::Symbol=:never_treated,
                         cluster::Symbol=:unit,
                         conf_level::Real=0.95) where {T<:AbstractFloat}
     N_obs = pd.T_obs
@@ -171,8 +173,7 @@ function _estimate_twfe(pd::PanelData{T}, outcome_col::Int, treat_col::Int;
                  nothing, nothing, overall_att, overall_se,
                  N_obs, pd.n_groups, n_treated, n_control,
                  :twfe, pd.varnames[outcome_col], pd.varnames[treat_col],
-                 n_control > 0 ? :never_treated : :not_yet_treated,
-                 cluster, T(conf_level))
+                 control_group, cluster, T(conf_level))
 end
 
 # =============================================================================
@@ -192,7 +193,7 @@ function _double_demean(y::Vector{T}, group_id::Vector{Int},
     groups = unique(group_id)
     times = unique(time_id)
 
-    for _ in 1:max_iter
+    for iter in 1:max_iter
         y_prev = copy(y_dm)
 
         # Demean by unit
@@ -210,6 +211,9 @@ function _double_demean(y::Vector{T}, group_id::Vector{Int},
         # Check convergence
         if maximum(abs.(y_dm .- y_prev)) < tol
             break
+        end
+        if iter == max_iter
+            @warn "Double-demeaning did not converge in $max_iter iterations" maxlog=1
         end
     end
     y_dm

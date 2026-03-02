@@ -162,16 +162,11 @@ function _event_study_lp_internal(pd::PanelData{T}, outcome::Union{String,Symbol
                 haskey(panel_idx[g], t + h) || continue
                 haskey(panel_idx[g], t - 1) || continue
 
-                # For LP-DiD: skip observations where unit is already treated
-                # at time t but not the unit whose treatment we are studying
-                if clean_controls && g_time > 0 && g_time <= t + h && g_time != 0
-                    # This unit's treatment started at or before t+h
-                    # Only include if treatment starts exactly at t (this is the event)
-                    if t < g_time
-                        # Pre-treatment observation for this unit: skip as it would
-                        # use a not-yet-treated period but the unit IS treated at t+h
-                        continue
-                    end
+                # For LP-DiD (Dube et al. 2023): exclude contaminated controls.
+                # A unit is a contaminated control if it becomes treated between
+                # t and t+h (not-yet-treated at t, but treated at t+h).
+                if clean_controls && g_time > 0 && g_time > t && g_time <= t + h
+                    continue
                 end
 
                 row_h = panel_idx[g][t + h]

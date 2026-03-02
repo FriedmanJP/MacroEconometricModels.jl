@@ -64,7 +64,7 @@ const TEST_GROUPS = [
         "var/test_hd.jl",
         "vecm/test_vecm.jl",
     ]),
-    # Group 4: LP & Factor Models & Nowcasting
+    # Group 4: LP & Factor Models & Nowcasting & DiD
     ("LP & Factor & Nowcast" => [
         "lp/test_lp.jl",
         "lp/test_lp_structural.jl",
@@ -75,6 +75,7 @@ const TEST_GROUPS = [
         "factor/test_gdfm.jl",
         "factor/test_factor_forecast.jl",
         "nowcast/test_nowcast.jl",
+        "did/test_did.jl",
     ]),
     # Group 5: ARIMA & Statistical Tests & Data & PVAR
     ("ARIMA & Tests & Data" => [
@@ -273,6 +274,7 @@ else
         @testset "Generalized Dynamic Factor Model" begin include("factor/test_gdfm.jl") end
         @testset "Factor Model Forecasting" begin include("factor/test_factor_forecast.jl") end
         @testset "Nowcasting" begin include("nowcast/test_nowcast.jl") end
+        @testset "Difference-in-Differences" begin include("did/test_did.jl") end
 
         # Group 5: ARIMA & Tests & Data
         @testset "Unit Root Tests" begin include("teststat/test_unitroot.jl") end

@@ -290,6 +290,7 @@ include("plotting/filters.jl")
 include("plotting/forecast.jl")
 include("plotting/models.jl")
 include("plotting/nowcast.jl")
+include("plotting/did.jl")
 
 # =============================================================================
 # Exports - Types

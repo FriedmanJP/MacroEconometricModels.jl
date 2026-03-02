@@ -92,6 +92,7 @@ function estimate_did(pd::PanelData{T}, outcome::Union{String,Symbol},
         _estimate_twfe(pd, outcome_col, treat_col;
                        leads=leads, horizon=horizon,
                        covariate_cols=cov_cols,
+                       control_group=control_group,
                        cluster=cluster, conf_level=conf_level)
     elseif method == :callaway_santanna
         _estimate_callaway_santanna(pd, outcome_col, treat_col;
@@ -102,4 +103,5 @@ function estimate_did(pd::PanelData{T}, outcome::Union{String,Symbol},
         throw(ArgumentError("Unknown DiD method :$method. Available: :twfe, :callaway_santanna"))
     end
 end
+
 

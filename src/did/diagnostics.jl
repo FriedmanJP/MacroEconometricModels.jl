@@ -108,6 +108,18 @@ function bacon_decomposition(pd::PanelData{T}, outcome::Union{String,Symbol},
                     push!(c_i, g_k)
                     push!(c_j, g_l)
                 end
+
+                # Later treated (l) vs Earlier treated (k) -- post-k period
+                # where k is already treated and l is newly treated
+                dd2, w2 = _bacon_2x2_later_vs_earlier(panel, units_l, units_k,
+                                                       g_l, g_k, all_times, n_total)
+                if !isnan(dd2)
+                    push!(estimates, dd2)
+                    push!(weights, w2)
+                    push!(comp_types, :later_vs_earlier)
+                    push!(c_i, g_l)
+                    push!(c_j, g_k)
+                end
             end
         end
     end
@@ -159,8 +171,8 @@ function _bacon_2x2(panel, treated, control, g_time, all_times, n_total)
     dd = (mean(post_treat) - mean(pre_treat)) - (mean(post_ctrl) - mean(pre_ctrl))
 
     # Weight proportional to subsample size x variance of treatment
-    n_k = length(unique([u for u in keys(panel) if u in treated]))
-    n_u = length(unique([u for u in keys(panel) if u in control]))
+    n_k = length(treated)
+    n_u = length(control)
     n_sub = n_k + n_u
     p_k = n_k / n_sub
     w = T_type(n_sub) / T_type(n_total) * p_k * (1 - p_k)
@@ -211,6 +223,54 @@ function _bacon_2x2_timing(panel, early_units, late_units, g_early, g_late,
     n_sub = n_e + n_l
     p_e = n_e / n_sub
     w = T_type(n_sub) / T_type(n_total) * p_e * (1 - p_e)
+
+    dd, w
+end
+
+"""2x2 DiD: later vs earlier treated groups (post-early period)."""
+function _bacon_2x2_later_vs_earlier(panel, late_units, early_units, g_late, g_early,
+                                      all_times, n_total)
+    T_type = eltype(first(values(first(values(panel)))))
+
+    # Use the period [g_early, end) where early is already treated
+    # Late group becomes treated at g_late; pre = [g_early, g_late), post = [g_late, end)
+    pre_late = T_type[]
+    post_late = T_type[]
+    pre_early = T_type[]
+    post_early = T_type[]
+
+    for t in all_times
+        t < g_early && continue  # Only use post-early period
+
+        for u in late_units
+            haskey(panel[u], t) || continue
+            if t < g_late
+                push!(pre_late, panel[u][t])
+            else
+                push!(post_late, panel[u][t])
+            end
+        end
+        for u in early_units
+            haskey(panel[u], t) || continue
+            if t < g_late
+                push!(pre_early, panel[u][t])
+            else
+                push!(post_early, panel[u][t])
+            end
+        end
+    end
+
+    if isempty(pre_late) || isempty(pre_early) || isempty(post_late) || isempty(post_early)
+        return T_type(NaN), zero(T_type)
+    end
+
+    dd = (mean(post_late) - mean(pre_late)) - (mean(post_early) - mean(pre_early))
+
+    n_l = length(late_units)
+    n_e = length(early_units)
+    n_sub = n_l + n_e
+    p_l = n_l / n_sub
+    w = T_type(n_sub) / T_type(n_total) * p_l * (1 - p_l)
 
     dd, w
 end

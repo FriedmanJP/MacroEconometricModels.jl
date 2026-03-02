@@ -115,8 +115,10 @@ function _estimate_callaway_santanna(pd::PanelData{T}, outcome_col::Int, treat_c
 
             att_gt = mean(dy_treated) - mean(dy_control)
             # SE: sqrt(var_treated/n_treated + var_control/n_control)
-            se_gt = sqrt(var(dy_treated) / length(dy_treated) +
-                        var(dy_control) / length(dy_control))
+            # Guard single-observation case where var() returns NaN (Bessel n-1=0)
+            v_treat = length(dy_treated) > 1 ? var(dy_treated) / length(dy_treated) : zero(T)
+            v_ctrl = length(dy_control) > 1 ? var(dy_control) / length(dy_control) : zero(T)
+            se_gt = sqrt(v_treat + v_ctrl)
 
             group_time_att[ci, ti] = att_gt
             group_time_se[ci, ti] = se_gt
