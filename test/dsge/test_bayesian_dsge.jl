@@ -1521,4 +1521,33 @@ end
     end
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 9: TimeSeriesData Dispatch
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "estimate_dsge_bayes with TimeSeriesData" begin
+    _suppress_warnings() do
+    rng = Random.MersenneTwister(42)
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:gensys)
+    sim = simulate(sol, 100; rng=rng)
+
+    # Wrap in TimeSeriesData
+    ts = TimeSeriesData(sim; varnames=["y"], frequency=Quarterly)
+
+    priors = Dict(:ρ => Beta(2, 2))
+    result = estimate_dsge_bayes(spec, ts, [0.5];
+        priors=priors, method=:smc, observables=[:y],
+        n_smc=100, rng=Random.MersenneTwister(1))
+    @test result isa BayesianDSGE{Float64}
+    end
+end
+
 end  # @testset "Bayesian DSGE"
