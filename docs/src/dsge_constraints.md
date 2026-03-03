@@ -298,6 +298,43 @@ occ_irf = occbin_irf(spec, zlb, borrow, 1, 40; magnitude=-3.0)
 
 ---
 
+## Complete Example
+
+This example combines perfect foresight and OccBin to analyze a New Keynesian model at the zero lower bound:
+
+```julia
+using MacroEconometricModels, Random
+Random.seed!(42)
+
+# Specify a 3-equation NK model
+nk_spec = @dsge begin
+    parameters: β = 0.99, σ_c = 1.0, κ = 0.024, ϕ_π = 1.5, ϕ_y = 0.125,
+                ρ_d = 0.9, σ_d = 0.01
+    endogenous: y, π, R, d
+    exogenous: ε_d
+
+    y[t] = y[t+1] - σ_c * (R[t] - π[t+1]) + d[t]
+    π[t] = β * π[t+1] + κ * y[t]
+    R[t] = ϕ_π * π[t] + ϕ_y * y[t]
+    d[t] = ρ_d * d[t-1] + σ_d * ε_d[t]
+end
+
+# Unconstrained solution for comparison
+sol = solve(nk_spec)
+result_unc = irf(sol, 40)
+
+# OccBin with ZLB: R >= 0
+constraint = parse_constraint(:(R[t] >= 0), nk_spec)
+
+# Large negative demand shock pushes economy to ZLB
+occ_irf = occbin_irf(nk_spec, constraint, 1, 40; magnitude=-3.0)
+plot_result(occ_irf)
+```
+
+The unconstrained IRF shows the linear response to a demand shock. The OccBin IRF reveals that when the ZLB binds, the interest rate remains at zero for several periods, amplifying the output and inflation responses relative to the linear solution. The `regime_history` field tracks which periods the constraint binds.
+
+---
+
 ## Common Pitfalls
 
 1. **Non-convergence in perfect foresight**: Increase `T_periods` or reduce the shock magnitude. The terminal condition assumes return to steady state --- if the shock is too persistent or too large, the horizon must be long enough for the economy to converge back.

@@ -298,6 +298,66 @@ The matrix pair ``(\Gamma_0, \Gamma_1)`` defines a generalized eigenvalue proble
 
 ---
 
+## Complete Example
+
+This example specifies, solves, and analyzes a full RBC model using the core functions covered on this page:
+
+```julia
+using MacroEconometricModels, Random
+Random.seed!(42)
+
+# Specify the RBC model with analytical steady state
+spec = @dsge begin
+    parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.9, σ = 0.01
+    endogenous: Y, C, K, A
+    exogenous: ε_A
+
+    Y[t] = A[t] * K[t-1]^α
+    C[t] + K[t] = Y[t] + (1 - δ) * K[t-1]
+    1 = β * (C[t] / C[t+1]) * (α * A[t+1] * K[t]^(α - 1) + 1 - δ)
+    A[t] = ρ * A[t-1] + σ * ε_A[t]
+
+    steady_state = begin
+        A_ss = 1.0
+        K_ss = (α * β / (1 - β * (1 - δ)))^(1 / (1 - α))
+        Y_ss = K_ss^α
+        C_ss = Y_ss - δ * K_ss
+        [Y_ss, C_ss, K_ss, A_ss]
+    end
+end
+
+# Verify steady state
+report(spec)
+
+# Linearize and inspect the canonical form matrices
+ld = linearize(spec)
+
+# Solve with default Gensys method
+sol = solve(spec)
+
+# IRFs and FEVD
+result = irf(sol, 40)
+plot_result(result)
+```
+
+The `spec` object stores the parsed model. `linearize` produces the Sims (2002) canonical form ``(\Gamma_0, \Gamma_1, C, \Psi, \Pi)``. `solve` dispatches to the Gensys algorithm and returns a `DSGESolution` with the state-space representation ``y_t = G_1 y_{t-1} + C + \text{impact} \cdot \varepsilon_t``. The IRF and FEVD functions operate on this solution. For higher-order or global solutions, see [Nonlinear Methods](@ref dsge_nonlinear).
+
+---
+
+## Common Pitfalls
+
+1. **Steady-state validation failure**: When providing an analytical `steady_state` block, the validator checks ``\|f(\bar{y})\| < 10^{-10}``. A common cause of failure is mismatched variable ordering --- the returned vector must match the `endogenous:` declaration order exactly.
+
+2. **Equation count mismatch**: The number of equations must equal the number of endogenous variables. Missing an equilibrium condition or double-counting a definition produces `DimensionMismatch`. Each equation is written as `LHS = RHS`; the parser rearranges to residual form automatically.
+
+3. **Timing convention confusion**: ``K_t`` chosen at time ``t`` is written `K[t]`. Beginning-of-period capital (predetermined) is `K[t-1]`. A forward-looking Euler equation uses `C[t+1]`. Misplacing a time subscript silently changes the ``\Gamma_0``/``\Gamma_1`` structure and can cause indeterminacy.
+
+4. **Numerical steady state converges to wrong equilibrium**: For models with multiple equilibria, the default initial guess (vector of ones) may converge to an economically irrelevant solution. Provide `initial_guess` close to the desired equilibrium, or use the analytical `steady_state` block.
+
+5. **Constrained steady state requires JuMP**: Calling `compute_steady_state(spec, [bound])` requires `import JuMP, Ipopt` (for NLP) or `import JuMP, PATHSolver` (for MCP) before the call. Without these imports, the package raises an `ArgumentError`.
+
+---
+
 ## References
 
 - Sims, C. A. (2002). Solving Linear Rational Expectations Models.

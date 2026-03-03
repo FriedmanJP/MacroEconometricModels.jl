@@ -306,6 +306,8 @@ plot_result(result)
 
 The return type is `ImpulseResponse{T}` with field `.values` (``H \times n \times n_\varepsilon``), `.variables` (variable names), and `.shocks` (shock names). The result is directly compatible with `plot_result()` for interactive D3.js visualization.
 
+---
+
 ## Forecast Error Variance Decomposition
 
 **FEVD** decomposes the ``h``-step-ahead forecast error variance of each variable into the contribution of each structural shock:
@@ -327,6 +329,8 @@ plot_result(decomp)
 ```
 
 The return type is `FEVD{T}` with fields `.decomposition` (raw cumulative squared IRFs) and `.proportions` (normalized shares). Compatible with `plot_result()`.
+
+In the RBC model, the technology shock ``\varepsilon_A`` is the sole source of fluctuations, so ``\text{FEVD}_{i,A}(h) = 1`` for all variables and horizons. In multi-shock models (e.g., Smets & Wouters 2007), the FEVD reveals which shocks dominate business cycle fluctuations at different frequencies --- demand shocks typically dominate output at short horizons, while supply shocks dominate at longer horizons.
 
 ---
 
@@ -365,6 +369,71 @@ The moment vector contains:
 
 !!! note "Technical Note"
     `analytical_moments` extracts the upper triangle of ``\Sigma`` (``k(k+1)/2`` elements) followed by diagonal autocovariances at each lag. This format matches `autocovariance_moments(data, lags)`, enabling direct comparison between model-implied and data moments for GMM estimation (see [Estimation](@ref dsge_estimation)).
+
+---
+
+## Complete Example
+
+This example combines all the linear solution tools: specification, solving with three methods, simulation, IRFs, FEVD, and unconditional moments.
+
+```julia
+using MacroEconometricModels, Random
+Random.seed!(42)
+
+# Specify the RBC model
+spec = @dsge begin
+    parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.9, σ = 0.01
+    endogenous: Y, C, K, A
+    exogenous: ε_A
+
+    Y[t] = A[t] * K[t-1]^α
+    C[t] + K[t] = Y[t] + (1 - δ) * K[t-1]
+    1 = β * (C[t] / C[t+1]) * (α * A[t+1] * K[t]^(α - 1) + 1 - δ)
+    A[t] = ρ * A[t-1] + σ * ε_A[t]
+
+    steady_state = begin
+        A_ss = 1.0
+        K_ss = (α * β / (1 - β * (1 - δ)))^(1 / (1 - α))
+        Y_ss = K_ss^α
+        C_ss = Y_ss - δ * K_ss
+        [Y_ss, C_ss, K_ss, A_ss]
+    end
+end
+
+# Solve with all three linear methods
+sol_g = solve(spec; method=:gensys)
+sol_bk = solve(spec; method=:blanchard_kahn)
+sol_k = solve(spec; method=:klein)
+
+# Simulate 200 periods
+Y_sim = simulate(sol_g, 200)
+
+# IRFs and FEVD
+result = irf(sol_g, 40)
+decomp = fevd(sol_g, 40)
+plot_result(result)
+plot_result(decomp)
+
+# Unconditional moments
+Σ = solve_lyapunov(sol_g.G1, sol_g.impact)
+m = analytical_moments(sol_g; lags=2)
+```
+
+All three solvers produce identical state-space representations for a well-specified, determinate model. The Gensys solver handles singularity in ``\Gamma_0`` most robustly; Blanchard-Kahn and Klein are faster for smaller models. The simulation, IRF, FEVD, and moment functions all operate on the common `DSGESolution` type returned by any solver.
+
+---
+
+## Common Pitfalls
+
+1. **Indeterminacy (too many stable eigenvalues)**: The Blanchard-Kahn condition requires the number of unstable eigenvalues to equal the number of forward-looking variables. In New Keynesian models, the Taylor principle ``\phi_\pi > 1`` is necessary for determinacy. With ``\phi_\pi < 1``, the model is typically indeterminate and all three solvers report an error.
+
+2. **Non-existence (too few stable eigenvalues)**: If the model has more unstable eigenvalues than forward-looking variables, no bounded solution exists. Check parameter calibration --- this often indicates economically implausible values (e.g., ``\beta > 1``).
+
+3. **Singular ``\Gamma_0``**: The Blanchard-Kahn and Klein solvers require ``\Gamma_0`` to be nonsingular. If ``\Gamma_0`` is singular (e.g., static equations with no current-period variables on the left), use Gensys which handles this case via the QZ decomposition.
+
+4. **Explosive simulation paths**: `simulate` does not check stability during simulation. If the model is on the boundary of determinacy, numerical errors can produce slowly diverging paths. Verify `is_stable(sol)` returns `true` before long simulations.
+
+5. **Steady-state not computed**: Calling `solve(spec)` without a `steady_state` block or prior `compute_steady_state(spec)` call uses a default guess. For nonlinear models, this can produce incorrect linearization. Always verify the steady state with `report(spec)` before solving.
 
 ---
 
