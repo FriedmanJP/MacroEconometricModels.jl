@@ -104,6 +104,10 @@ SMC², or Random-Walk Metropolis-Hastings (RWMH).
 - `likelihood::Symbol=:auto` — likelihood evaluation method (currently auto = Kalman)
 - `solver::Symbol=:gensys` — DSGE solver method
 - `solver_kwargs::NamedTuple=NamedTuple()` — additional solver keyword arguments
+- `delayed_acceptance::Bool=false` — enable two-stage delayed acceptance MH for `:smc2`
+  (Christen & Fox 2005). Pre-screens proposals with a cheap bootstrap PF to avoid
+  expensive CSMC evaluations on proposals that would be rejected. Exact posterior.
+- `n_screen::Int=200` — particles for screening PF (only used when `delayed_acceptance=true`)
 - `rng::AbstractRNG=Random.default_rng()` — random number generator
 
 # Returns
