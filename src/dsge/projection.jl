@@ -410,6 +410,7 @@ Solve DSGE model via Chebyshev collocation (projection method).
 - `tol::Real=1e-8`: Newton convergence tolerance
 - `max_iter::Int=100`: maximum Newton iterations
 - `verbose::Bool=false`: print iteration info
+- `initial_coeffs::Union{Nothing,AbstractMatrix{<:Real}}=nothing`: warm-start coefficients (n_vars x n_basis)
 """
 function collocation_solver(spec::DSGESpec{T};
                             degree::Int=5,
@@ -420,7 +421,8 @@ function collocation_solver(spec::DSGESpec{T};
                             scale::Real=3.0,
                             tol::Real=1e-8,
                             max_iter::Int=100,
-                            verbose::Bool=false) where {T<:AbstractFloat}
+                            verbose::Bool=false,
+                            initial_coeffs::Union{Nothing,AbstractMatrix{<:Real}}=nothing) where {T<:AbstractFloat}
 
     n_eq = spec.n_endog
     n_eps = spec.n_exog
@@ -481,18 +483,22 @@ function collocation_solver(spec::DSGESpec{T};
     quad_nodes = Matrix{T}(quad_nodes)
     quad_weights = Vector{T}(quad_weights)
 
-    # Step 5: Initial guess from first-order perturbation
-    result_1st = gensys(ld.Gamma0, ld.Gamma1, ld.C, ld.Psi, ld.Pi)
-    G1 = result_1st.G1
+    # Step 5: Initial guess — warm-start or first-order perturbation
+    if initial_coeffs !== nothing && size(initial_coeffs) == (n_vars, n_basis)
+        coeffs = Matrix{T}(initial_coeffs)
+    else
+        result_1st = gensys(ld.Gamma0, ld.Gamma1, ld.C, ld.Psi, ld.Pi)
+        G1 = result_1st.G1
 
-    coeffs = zeros(T, n_vars, n_basis)
-    for v in 1:n_vars
-        y_nodes = zeros(T, n_nodes)
-        for j in 1:n_nodes
-            x_dev = nodes_phys[j, :] .- ss[state_idx]
-            y_nodes[j] = dot(G1[v, state_idx], x_dev)
+        coeffs = zeros(T, n_vars, n_basis)
+        for v in 1:n_vars
+            y_nodes = zeros(T, n_nodes)
+            for j in 1:n_nodes
+                x_dev = nodes_phys[j, :] .- ss[state_idx]
+                y_nodes[j] = dot(G1[v, state_idx], x_dev)
+            end
+            coeffs[v, :] = basis_matrix \ y_nodes
         end
-        coeffs[v, :] = basis_matrix \ y_nodes
     end
 
     # Step 6: Newton iteration

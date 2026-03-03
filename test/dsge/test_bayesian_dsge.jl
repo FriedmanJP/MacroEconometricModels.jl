@@ -2369,4 +2369,41 @@ end
     end
 end
 
+@testset "Collocation solver warm-starting with initial_coeffs" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    # Solve once to get reference coefficients
+    sol1 = solve(spec; method=:projection, degree=3, scale=5.0)
+    coeffs1 = sol1.coefficients
+
+    # Solve again with warm-starting — should produce same result
+    sol2 = solve(spec; method=:projection, degree=3, scale=5.0,
+                 initial_coeffs=copy(coeffs1))
+    @test sol2 isa MacroEconometricModels.ProjectionSolution
+    @test isapprox(sol2.coefficients, coeffs1, atol=1e-6)
+
+    # Solve at slightly different parameter — warm-start should still converge
+    spec2 = @dsge begin
+        parameters: ρ = 0.85, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec2 = compute_steady_state(spec2)
+    sol3 = solve(spec2; method=:projection, degree=3, scale=5.0,
+                 initial_coeffs=copy(coeffs1))
+    @test sol3 isa MacroEconometricModels.ProjectionSolution
+    @test isfinite(MacroEconometricModels.max_euler_error(sol3))
+    end
+end
+
 end  # @testset "Bayesian DSGE"
