@@ -277,6 +277,7 @@ include("dsge/estimation.jl")
 # DSGE Bayesian estimation (after estimation.jl, needs DSGESpec, solve, ParameterTransform)
 include("dsge/bayes_types.jl")
 include("dsge/kalman_dsge.jl")
+include("dsge/particle_filter.jl")
 
 # Display (after all types)
 include("summary.jl")

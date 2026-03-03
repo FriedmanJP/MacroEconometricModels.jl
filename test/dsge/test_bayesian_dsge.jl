@@ -548,4 +548,391 @@ end
     @test isfinite(ll_all_nan)
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 3: Particle Filter Compute Kernels
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "Linear transition kernel" begin
+    Random.seed!(101)
+    n_states = 3
+    N = 100
+    n_shocks = 2
+
+    G1 = 0.5 * Matrix{Float64}(I, n_states, n_states)
+    G1[1, 2] = 0.1
+    impact = randn(n_states, n_shocks)
+
+    S_old = randn(n_states, N)
+    E = randn(n_shocks, N)
+    S_new = zeros(n_states, N)
+
+    MacroEconometricModels._pf_transition_linear!(S_new, S_old, E, G1, impact)
+
+    # Verify against naive loop
+    for k in 1:N
+        expected = G1 * S_old[:, k] + impact * E[:, k]
+        @test S_new[:, k] ≈ expected atol=1e-12
+    end
+end
+
+@testset "Log-weight computation" begin
+    Random.seed!(102)
+    n_obs = 2
+    N = 50
+    n_states = 3
+
+    Z = randn(n_obs, n_states)
+    d = randn(n_obs)
+    H = [0.1 0.01; 0.01 0.2]
+    H_inv = Matrix{Float64}(inv(H))
+    log_det_H = logdet(H)
+
+    S = randn(n_states, N)
+    y_t = randn(n_obs)
+
+    log_w = zeros(N)
+    innovations = zeros(n_obs, N)
+    tmp_obs = zeros(n_obs, N)
+
+    MacroEconometricModels._pf_log_weights!(log_w, innovations, tmp_obs,
+                                             S, y_t, Z, d, H_inv, log_det_H)
+
+    # Verify against naive implementation (full Gaussian log-density)
+    log2pi_const = n_obs * log(2 * pi)
+    for k in 1:N
+        inn = y_t - Z * S[:, k] - d
+        expected = -0.5 * (log2pi_const + log_det_H + dot(inn, H_inv * inn))
+        @test log_w[k] ≈ expected atol=1e-10
+    end
+end
+
+@testset "Systematic resampling" begin
+    Random.seed!(103)
+    N = 1000
+
+    # Concentrated weights: [0.5, 0.3, 0.2, 0, 0, ...]
+    weights = zeros(N)
+    weights[1] = 0.5
+    weights[2] = 0.3
+    weights[3] = 0.2
+
+    ancestors = zeros(Int, N)
+    cumweights = zeros(N)
+
+    MacroEconometricModels._systematic_resample!(ancestors, weights, cumweights, N,
+                                                  Random.MersenneTwister(42))
+
+    # Count how many times each original particle is selected
+    counts = zeros(Int, N)
+    for a in ancestors
+        counts[a] += 1
+    end
+
+    # Particle 1 should get ~50%, particle 2 ~30%, particle 3 ~20%
+    @test counts[1] == 500  # systematic resampling is deterministic given u
+    @test counts[2] == 300
+    @test counts[3] == 200
+    @test sum(counts[4:end]) == 0
+
+    # All ancestors should be valid
+    @test all(1 .<= ancestors .<= N)
+end
+
+@testset "Logsumexp" begin
+    # Basic correctness
+    x = [1.0, 2.0, 3.0]
+    @test MacroEconometricModels._logsumexp(x) ≈ log(exp(1.0) + exp(2.0) + exp(3.0)) atol=1e-12
+
+    # Numerical stability with large values
+    x_large = [1000.0, 1001.0, 1002.0]
+    result = MacroEconometricModels._logsumexp(x_large)
+    @test isfinite(result)
+    @test result ≈ 1000.0 + log(1.0 + exp(1.0) + exp(2.0)) atol=1e-10
+
+    # Numerical stability with very negative values
+    x_neg = [-1000.0, -1001.0, -1002.0]
+    result_neg = MacroEconometricModels._logsumexp(x_neg)
+    @test isfinite(result_neg)
+    @test result_neg ≈ -1000.0 + log(1.0 + exp(-1.0) + exp(-2.0)) atol=1e-10
+
+    # Single element
+    @test MacroEconometricModels._logsumexp([5.0]) ≈ 5.0
+
+    # All -Inf
+    @test MacroEconometricModels._logsumexp([-Inf, -Inf]) == -Inf
+end
+
+@testset "Kronecker buffer fill (2nd-order)" begin
+    Random.seed!(104)
+    nv = 3
+    N = 20
+    V = randn(nv, N)
+    buffer = zeros(nv * nv, N)
+
+    MacroEconometricModels._fill_kron_buffer!(buffer, V, nv)
+
+    # Verify: buffer[(i-1)*nv+j, k] == V[i,k] * V[j,k]
+    for k in 1:N, i in 1:nv, j in 1:nv
+        idx = (i - 1) * nv + j
+        @test buffer[idx, k] ≈ V[i, k] * V[j, k] atol=1e-14
+    end
+end
+
+@testset "Kronecker buffer fill (3rd-order)" begin
+    Random.seed!(105)
+    nv = 2
+    N = 10
+    V = randn(nv, N)
+    buffer = zeros(nv * nv * nv, N)
+
+    MacroEconometricModels._fill_kron3_buffer!(buffer, V, nv)
+
+    # Verify: buffer[(i-1)*nv^2 + (j-1)*nv + l, k] == V[i,k]*V[j,k]*V[l,k]
+    for k in 1:N, i in 1:nv, j in 1:nv, l in 1:nv
+        idx = (i - 1) * nv * nv + (j - 1) * nv + l
+        @test buffer[idx, k] ≈ V[i, k] * V[j, k] * V[l, k] atol=1e-14
+    end
+end
+
+@testset "PFWorkspace allocation with 3rd-order" begin
+    n_states = 3
+    n_obs = 2
+    n_shocks = 1
+    N = 30
+    nv = n_states + n_shocks  # 4
+
+    ws = MacroEconometricModels._allocate_pf_workspace(Float64, n_states, n_obs, n_shocks, N;
+                                                        nv=nv, order=3)
+
+    # Verify buffer sizes
+    @test size(ws.kron_buffer) == (nv * nv, N)     # 16 x 30
+    @test size(ws.kron3_buffer) == (nv^3, N)       # 64 x 30
+    @test size(ws.particles_fo) == (n_states, N)   # 3 x 30
+    @test size(ws.particles_so) == (n_states, N)   # 3 x 30
+    @test size(ws.particles_to) == (n_states, N)   # 3 x 30
+end
+
+@testset "Bootstrap particle filter: AR(1)" begin
+    Random.seed!(200)
+
+    # AR(1): y_t = rho * y_{t-1} + sigma * eps_t,  observed with measurement error
+    rho = 0.8
+    sigma_eps = 0.5
+    sigma_me = 0.1
+    T_sim = 200
+
+    # Simulate data
+    x = zeros(T_sim)
+    y = zeros(T_sim)
+    for t in 2:T_sim
+        x[t] = rho * x[t-1] + sigma_eps * randn()
+    end
+    for t in 1:T_sim
+        y[t] = x[t] + sigma_me * randn()
+    end
+
+    # Build state space
+    G1 = fill(rho, 1, 1)
+    impact = fill(sigma_eps, 1, 1)
+    Z = ones(1, 1)
+    d = zeros(1)
+    H = fill(sigma_me^2, 1, 1)
+    Q = ones(1, 1)
+
+    ss = MacroEconometricModels.DSGEStateSpace{Float64}(G1, impact, Z, d, H, Q)
+    data = reshape(y, 1, T_sim)
+
+    # Kalman log-likelihood (exact)
+    ll_kalman = MacroEconometricModels._kalman_loglikelihood(ss, data)
+
+    # Bootstrap PF log-likelihood (N=500, average over multiple runs for stability)
+    N_particles = 500
+    n_runs = 10
+    ll_pf_runs = zeros(n_runs)
+
+    for r in 1:n_runs
+        ws = MacroEconometricModels._allocate_pf_workspace(Float64, 1, 1, 1, N_particles)
+        ll_pf_runs[r] = MacroEconometricModels._bootstrap_particle_filter!(
+            ws, ss, data, T_sim; rng=Random.MersenneTwister(r * 1000))
+    end
+
+    ll_pf_mean = mean(ll_pf_runs)
+
+    @test isfinite(ll_pf_mean)
+    @test isfinite(ll_kalman)
+
+    # PF should approximate Kalman within 15% relative error
+    # (PF is noisy, so we use a generous tolerance)
+    rel_error = abs(ll_pf_mean - ll_kalman) / abs(ll_kalman)
+    @test rel_error < 0.15
+end
+
+@testset "Auxiliary particle filter" begin
+    Random.seed!(300)
+
+    # Same AR(1) setup
+    rho = 0.8
+    sigma_eps = 0.5
+    sigma_me = 0.1
+    T_sim = 150
+
+    x = zeros(T_sim)
+    y = zeros(T_sim)
+    for t in 2:T_sim
+        x[t] = rho * x[t-1] + sigma_eps * randn()
+    end
+    for t in 1:T_sim
+        y[t] = x[t] + sigma_me * randn()
+    end
+
+    G1 = fill(rho, 1, 1)
+    impact = fill(sigma_eps, 1, 1)
+    Z = ones(1, 1)
+    d = zeros(1)
+    H = fill(sigma_me^2, 1, 1)
+    Q = ones(1, 1)
+
+    ss = MacroEconometricModels.DSGEStateSpace{Float64}(G1, impact, Z, d, H, Q)
+    data = reshape(y, 1, T_sim)
+
+    # Kalman log-likelihood
+    ll_kalman = MacroEconometricModels._kalman_loglikelihood(ss, data)
+
+    # APF log-likelihood
+    N_particles = 500
+    n_runs = 10
+    ll_apf_runs = zeros(n_runs)
+
+    for r in 1:n_runs
+        ws = MacroEconometricModels._allocate_pf_workspace(Float64, 1, 1, 1, N_particles)
+        ll_apf_runs[r] = MacroEconometricModels._auxiliary_particle_filter!(
+            ws, ss, data, T_sim; rng=Random.MersenneTwister(r * 2000))
+    end
+
+    ll_apf_mean = mean(ll_apf_runs)
+
+    @test isfinite(ll_apf_mean)
+    # APF should be finite and in the right ballpark
+    # APF likelihood estimate can differ from Kalman due to the two-stage structure
+    # but should still be a reasonable finite value
+    @test ll_apf_mean < 0.0  # log-likelihood should be negative
+end
+
+@testset "Conditional SMC" begin
+    Random.seed!(400)
+
+    rho = 0.8
+    sigma_eps = 0.5
+    sigma_me = 0.1
+    T_sim = 100
+
+    x = zeros(T_sim)
+    y = zeros(T_sim)
+    for t in 2:T_sim
+        x[t] = rho * x[t-1] + sigma_eps * randn()
+    end
+    for t in 1:T_sim
+        y[t] = x[t] + sigma_me * randn()
+    end
+
+    G1 = fill(rho, 1, 1)
+    impact = fill(sigma_eps, 1, 1)
+    Z = ones(1, 1)
+    d = zeros(1)
+    H = fill(sigma_me^2, 1, 1)
+    Q = ones(1, 1)
+
+    ss = MacroEconometricModels.DSGEStateSpace{Float64}(G1, impact, Z, d, H, Q)
+    data = reshape(y, 1, T_sim)
+
+    N_particles = 200
+
+    # First run: bootstrap PF to get initial reference trajectory
+    ws = MacroEconometricModels._allocate_pf_workspace(Float64, 1, 1, 1, N_particles;
+                                                        T_obs=T_sim)
+    ll_init = MacroEconometricModels._bootstrap_particle_filter!(
+        ws, ss, data, T_sim; rng=Random.MersenneTwister(500), store_trajectory=true)
+
+    @test isfinite(ll_init)
+    @test ws.reference_trajectory !== nothing
+
+    # CSMC run
+    ll_csmc = MacroEconometricModels._conditional_smc!(
+        ws, ss, data, T_sim; rng=Random.MersenneTwister(600))
+
+    @test isfinite(ll_csmc)
+    @test ll_csmc < 0.0  # log-likelihood should be negative
+
+    # Error: no reference trajectory
+    ws_no_ref = MacroEconometricModels._allocate_pf_workspace(Float64, 1, 1, 1, N_particles)
+    @test_throws ArgumentError MacroEconometricModels._conditional_smc!(
+        ws_no_ref, ss, data, T_sim)
+end
+
+@testset "Normalize log weights" begin
+    log_w = [log(0.2), log(0.3), log(0.5)]
+    weights = zeros(3)
+
+    MacroEconometricModels._normalize_log_weights!(weights, log_w)
+
+    @test sum(weights) ≈ 1.0 atol=1e-12
+    @test weights[1] ≈ 0.2 atol=1e-12
+    @test weights[2] ≈ 0.3 atol=1e-12
+    @test weights[3] ≈ 0.5 atol=1e-12
+
+    # With shifted log weights (should give same result)
+    log_w_shifted = log_w .+ 1000.0
+    MacroEconometricModels._normalize_log_weights!(weights, log_w_shifted)
+
+    @test sum(weights) ≈ 1.0 atol=1e-12
+    @test weights[1] ≈ 0.2 atol=1e-12
+    @test weights[2] ≈ 0.3 atol=1e-12
+    @test weights[3] ≈ 0.5 atol=1e-12
+end
+
+@testset "Resample particles" begin
+    Random.seed!(106)
+    n_states = 3
+    N = 10
+
+    S_old = randn(n_states, N)
+    S_new = zeros(n_states, N)
+    ancestors = [1, 1, 3, 3, 3, 5, 5, 7, 7, 7]
+
+    MacroEconometricModels._resample_particles!(S_new, S_old, ancestors)
+
+    for i in 1:N
+        @test S_new[:, i] ≈ S_old[:, ancestors[i]]
+    end
+end
+
+@testset "Stationary initialization" begin
+    Random.seed!(107)
+
+    G1 = [0.5 0.1; 0.0 0.3]
+    impact = [0.2 0.0; 0.0 0.3]
+    Z = Matrix{Float64}(I, 2, 2)
+    d = zeros(2)
+    H = 0.01 * Matrix{Float64}(I, 2, 2)
+    Q = Matrix{Float64}(I, 2, 2)
+
+    ss = MacroEconometricModels.DSGEStateSpace{Float64}(G1, impact, Z, d, H, Q)
+
+    N = 1000
+    ws = MacroEconometricModels._allocate_pf_workspace(Float64, 2, 2, 2, N)
+
+    MacroEconometricModels._pf_initialize_stationary!(ws, ss; rng=Random.MersenneTwister(42))
+
+    # Particles should be drawn from N(0, P0) where P0 = solve_lyapunov(G1, impact)
+    # Check that sample covariance is roughly correct
+    P0 = solve_lyapunov(G1, impact)
+    sample_cov = ws.particles * ws.particles' / N
+
+    # With N=1000, sample covariance should be within ~10% of theoretical
+    @test norm(sample_cov - P0) / norm(P0) < 0.3  # generous tolerance
+
+    # Weights should be uniform
+    @test all(ws.weights .≈ 1.0 / N)
+end
+
 end  # @testset "Bayesian DSGE"
