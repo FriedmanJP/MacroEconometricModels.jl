@@ -2342,4 +2342,31 @@ end
     end
 end
 
+@testset "MH mutation dispatch for projection solver" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    data_obs = randn(MersenneTwister(42), 1, 30) .* 0.02
+    priors = Dict(:ρ => Normal(0.5, 0.2))
+    θ0 = [0.5]
+
+    result = estimate_dsge_bayes(
+        spec, data_obs, θ0;
+        priors=priors, method=:smc2, observables=[:y],
+        n_smc=20, n_particles=50, n_mh_steps=3,
+        ess_target=0.5, measurement_error=[0.005],
+        solver=:projection, solver_kwargs=(degree=3, scale=5.0),
+        rng=MersenneTwister(123))
+    @test result isa MacroEconometricModels.BayesianDSGE
+    @test isfinite(result.log_marginal_likelihood)
+    @test any(r -> r > 0, result.ess_history)
+    end
+end
+
 end  # @testset "Bayesian DSGE"

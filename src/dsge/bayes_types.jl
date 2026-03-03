@@ -545,8 +545,8 @@ struct BayesianDSGE{T<:AbstractFloat} <: AbstractDSGEModel
     ess_history::Vector{T}
     phi_schedule::Vector{T}
     spec::DSGESpec{T}
-    solution::Union{DSGESolution{T}, PerturbationSolution{T}}
-    state_space::Union{DSGEStateSpace{T}, NonlinearStateSpace{T}}
+    solution::Union{DSGESolution{T}, PerturbationSolution{T}, ProjectionSolution{T}}
+    state_space::Union{DSGEStateSpace{T}, NonlinearStateSpace{T}, ProjectionStateSpace{T}}
 
     function BayesianDSGE{T}(theta_draws, log_posterior, param_names, priors,
                               log_marginal_likelihood, method, acceptance_rate,

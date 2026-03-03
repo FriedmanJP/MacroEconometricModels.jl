@@ -744,14 +744,98 @@ function _adapt_n_particles(N_x::Int, var_ll::Real, threshold::Real)
 end
 
 """
+    _solve_and_run_pf(spec, param_names, theta, observables, measurement_error,
+                       solver, solver_kwargs, ws, data, T_obs, rng;
+                       use_csmc=false, store_trajectory=false, return_solution=false)
+
+Shared helper: update parameters → solve → dispatch state space → run PF/CSMC.
+
+Creates a new `DSGESpec` with updated parameters, computes steady state, solves
+the model, builds the correct state space type based on solution dispatch, and
+runs either `_bootstrap_particle_filter!` or `_conditional_smc!`.
+
+Returns the log-likelihood `T` (or `T(-Inf)` on failure). When
+`return_solution=true`, returns `(ll, solution)` tuple instead.
+"""
+function _solve_and_run_pf(spec::DSGESpec{T}, param_names::Vector{Symbol},
+                            theta::AbstractVector{T},
+                            observables::Vector{Symbol},
+                            measurement_error,
+                            solver::Symbol,
+                            solver_kwargs::NamedTuple,
+                            ws::PFWorkspace{T},
+                            data::Matrix{T}, T_obs::Int,
+                            rng::AbstractRNG;
+                            use_csmc::Bool=false,
+                            store_trajectory::Bool=false,
+                            return_solution::Bool=false) where {T<:AbstractFloat}
+    fail = return_solution ? (T(-Inf), nothing) : T(-Inf)
+    try
+        # Update parameter values
+        new_pv = copy(spec.param_values)
+        for (i, pn) in enumerate(param_names)
+            new_pv[pn] = theta[i]
+        end
+
+        # Create new spec with updated parameters
+        new_spec = DSGESpec{T}(
+            spec.endog, spec.exog, spec.params, new_pv,
+            spec.equations, spec.residual_fns,
+            spec.n_expect, spec.forward_indices, T[], spec.ss_fn;
+            original_endog=spec.original_endog,
+            original_equations=spec.original_equations,
+            augmented=spec.augmented,
+            max_lag=spec.max_lag,
+            max_lead=spec.max_lead
+        )
+
+        # Compute steady state and solve
+        new_spec = compute_steady_state(new_spec)
+        sol = solve(new_spec; method=solver, solver_kwargs...)
+        if !is_determined(sol)
+            return fail
+        end
+
+        # Build observation equation
+        Z, d_vec, H_mat = _build_observation_equation(new_spec, observables, measurement_error)
+
+        # Dispatch: PerturbationSolution → NonlinearStateSpace,
+        #           ProjectionSolution → ProjectionStateSpace,
+        #           else → DSGEStateSpace
+        if sol isa PerturbationSolution
+            ss = _build_nonlinear_state_space(sol, Z, d_vec, H_mat)
+        elseif sol isa ProjectionSolution
+            ss = _build_projection_state_space(sol, Z, d_vec, H_mat)
+        else
+            ss = _build_state_space(sol, Z, d_vec, H_mat)
+        end
+
+        # Run particle filter or conditional SMC
+        if use_csmc
+            ll = _conditional_smc!(ws, ss, data, T_obs; rng=rng)
+        else
+            ll = _bootstrap_particle_filter!(ws, ss, data, T_obs;
+                                              store_trajectory=store_trajectory, rng=rng)
+        end
+
+        ll = isfinite(ll) ? ll : T(-Inf)
+        return return_solution ? (ll, sol) : ll
+    catch
+        return fail
+    end
+end
+
+"""
     _build_pf_likelihood_fn(spec, param_names, data, observables, measurement_error,
                              solver, solver_kwargs, n_particles)
 
 Build a closure `(θ_vec, ws, rng) → log p(Y|θ)` that evaluates the likelihood
 via bootstrap particle filter instead of the Kalman filter.
 
-The closure updates spec parameters, solves the model, builds a `DSGEStateSpace`,
-and runs `_bootstrap_particle_filter!`. Returns `-Inf` on any failure.
+The closure updates spec parameters, solves the model, builds the correct state
+space type (dispatching on `PerturbationSolution`, `ProjectionSolution`, or
+`DSGESolution`), and runs `_bootstrap_particle_filter!`. Returns `-Inf` on any
+failure.
 
 # Arguments
 - `spec::DSGESpec{T}` — model specification (template)
@@ -775,58 +859,10 @@ function _build_pf_likelihood_fn(spec::DSGESpec{T}, param_names::Vector{Symbol},
     T_obs = size(data, 2)
 
     function pf_ll_fn(theta::Vector{T}, ws::PFWorkspace{T}, rng::AbstractRNG)
-        try
-            # Update parameter values
-            new_pv = copy(spec.param_values)
-            for (i, pn) in enumerate(param_names)
-                new_pv[pn] = theta[i]
-            end
-
-            # Create new spec with updated parameters
-            new_spec = DSGESpec{T}(
-                spec.endog, spec.exog, spec.params, new_pv,
-                spec.equations, spec.residual_fns,
-                spec.n_expect, spec.forward_indices, T[], spec.ss_fn;
-                original_endog=spec.original_endog,
-                original_equations=spec.original_equations,
-                augmented=spec.augmented,
-                max_lag=spec.max_lag,
-                max_lead=spec.max_lead
-            )
-
-            # Compute steady state
-            new_spec = compute_steady_state(new_spec)
-
-            # Solve model
-            sol = solve(new_spec; method=solver, solver_kwargs...)
-            if !is_determined(sol)
-                return T(-Inf)
-            end
-
-            # Build observation equation and state space
-            Z, d, H = _build_observation_equation(new_spec, observables, measurement_error)
-
-            # Dispatch: PerturbationSolution → NonlinearStateSpace,
-            #           ProjectionSolution → ProjectionStateSpace,
-            #           else → DSGEStateSpace
-            if sol isa PerturbationSolution
-                nlss = _build_nonlinear_state_space(sol, Z, d, H)
-                ll = _bootstrap_particle_filter!(ws, nlss, data, T_obs;
-                                                  store_trajectory=true, rng=rng)
-            elseif sol isa ProjectionSolution
-                pss = _build_projection_state_space(sol, Z, d, H)
-                ll = _bootstrap_particle_filter!(ws, pss, data, T_obs;
-                                                  store_trajectory=true, rng=rng)
-            else
-                ss = _build_state_space(sol, Z, d, H)
-                ll = _bootstrap_particle_filter!(ws, ss, data, T_obs;
-                                                  store_trajectory=true, rng=rng)
-            end
-
-            return isfinite(ll) ? ll : T(-Inf)
-        catch
-            return T(-Inf)
-        end
+        return _solve_and_run_pf(spec, param_names, theta, observables,
+                                  measurement_error, solver, solver_kwargs,
+                                  ws, data, T_obs, rng;
+                                  store_trajectory=true)
     end
 
     return pf_ll_fn
@@ -1102,33 +1138,11 @@ function _smc2_sample(spec::DSGESpec{T}, data::AbstractMatrix,
                 end
 
                 # Build state space for proposed parameters and run CSMC
-                ll_star = try
-                    new_pv = copy(spec.param_values)
-                    for (i, pn) in enumerate(param_names)
-                        new_pv[pn] = theta_star[i]
-                    end
-                    new_spec = DSGESpec{T}(
-                        spec.endog, spec.exog, spec.params, new_pv,
-                        spec.equations, spec.residual_fns,
-                        spec.n_expect, spec.forward_indices, T[], spec.ss_fn;
-                        original_endog=spec.original_endog,
-                        original_equations=spec.original_equations,
-                        augmented=spec.augmented,
-                        max_lag=spec.max_lag,
-                        max_lead=spec.max_lead
-                    )
-                    new_spec = compute_steady_state(new_spec)
-                    sol_star = solve(new_spec; method=solver, solver_kwargs...)
-                    if !is_determined(sol_star)
-                        T(-Inf)
-                    else
-                        Z, d, H_mat = _build_observation_equation(new_spec, observables, measurement_error)
-                        ss_star = _build_state_space(sol_star, Z, d, H_mat)
-                        _conditional_smc!(ws, ss_star, data, T_obs; rng=thread_rng)
-                    end
-                catch
-                    T(-Inf)
-                end
+                # Dispatches on solution type (DSGESolution/PerturbationSolution/ProjectionSolution)
+                ll_star = _solve_and_run_pf(spec, param_names, theta_star, observables,
+                                             measurement_error, solver, solver_kwargs,
+                                             ws, data, T_obs, thread_rng;
+                                             use_csmc=true)
 
                 if ll_star == T(-Inf)
                     Threads.atomic_add!(total_proposed, 1)
