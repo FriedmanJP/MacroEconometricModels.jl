@@ -1636,4 +1636,394 @@ end
     end
 end
 
+# =============================================================================
+# Nonlinear Particle Filter Tests
+# =============================================================================
+
+@testset "PFWorkspace allocation — augmented_buffer and kron_cross_buffer" begin
+    n_states = 3
+    n_obs = 2
+    n_shocks = 1
+    N = 30
+    nv = n_states + n_shocks
+
+    # Order 2: augmented_buffer allocated, kron_cross_buffer not
+    ws2 = MacroEconometricModels._allocate_pf_workspace(Float64, n_states, n_obs, n_shocks, N;
+                                                          nv=nv, order=2)
+    @test ws2.augmented_buffer !== nothing
+    @test size(ws2.augmented_buffer) == (nv, N)
+    @test ws2.kron_cross_buffer === nothing
+
+    # Order 3: both allocated
+    ws3 = MacroEconometricModels._allocate_pf_workspace(Float64, n_states, n_obs, n_shocks, N;
+                                                          nv=nv, order=3)
+    @test ws3.augmented_buffer !== nothing
+    @test size(ws3.augmented_buffer) == (nv, N)
+    @test ws3.kron_cross_buffer !== nothing
+    @test size(ws3.kron_cross_buffer) == (nv * nv, N)
+end
+
+@testset "PFWorkspace allocation — nx parameter" begin
+    n_states = 5  # n_endog
+    n_obs = 2
+    n_shocks = 1
+    N = 20
+    nx = 2  # only 2 state variables out of 5 endogenous
+    nv = nx + n_shocks
+
+    ws = MacroEconometricModels._allocate_pf_workspace(Float64, n_states, n_obs, n_shocks, N;
+                                                         nv=nv, nx=nx, order=2)
+    @test size(ws.particles) == (n_states, N)       # full endogenous
+    @test size(ws.particles_fo) == (nx, N)           # state variables only
+    @test size(ws.particles_so) == (nx, N)
+    @test ws.particles_to === nothing
+    @test size(ws.augmented_buffer) == (nv, N)       # nx + n_shocks
+    @test size(ws.kron_buffer) == (nv * nv, N)
+end
+
+@testset "PFWorkspace resize — augmented_buffer and kron_cross_buffer" begin
+    n_states = 3
+    n_obs = 2
+    n_shocks = 1
+    N = 30
+    nv = n_states + n_shocks
+
+    ws = MacroEconometricModels._allocate_pf_workspace(Float64, n_states, n_obs, n_shocks, N;
+                                                         nv=nv, order=3)
+    N_new = 60
+    MacroEconometricModels._resize_pf_workspace!(ws, N_new)
+
+    @test size(ws.augmented_buffer) == (nv, N_new)
+    @test size(ws.kron_cross_buffer) == (nv * nv, N_new)
+    @test size(ws.particles_fo) == (n_states, N_new)
+    @test size(ws.particles_so) == (n_states, N_new)
+    @test size(ws.particles_to) == (n_states, N_new)
+end
+
+@testset "Nonlinear PF: _fill_kron_cross_buffer!" begin
+    nv = 3
+    N = 4
+    V1 = Float64[1.0 2.0 3.0 4.0; 5.0 6.0 7.0 8.0; 9.0 10.0 11.0 12.0]
+    V2 = Float64[0.1 0.2 0.3 0.4; 0.5 0.6 0.7 0.8; 0.9 1.0 1.1 1.2]
+    buffer = zeros(Float64, nv * nv, N)
+
+    MacroEconometricModels._fill_kron_cross_buffer!(buffer, V1, V2, nv)
+
+    # Check: buffer[(i-1)*nv+j, k] = V1[i,k] * V2[j,k]
+    for k in 1:N, i in 1:nv, j in 1:nv
+        idx = (i - 1) * nv + j
+        @test buffer[idx, k] ≈ V1[i, k] * V2[j, k]
+    end
+end
+
+@testset "Nonlinear PF: _pf_initialize_nonlinear!" begin
+    _suppress_warnings() do
+    rng = Random.MersenneTwister(42)
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:perturbation, order=2)
+    Z, d, H = MacroEconometricModels._build_observation_equation(spec, [:y], nothing)
+    nlss = MacroEconometricModels._build_nonlinear_state_space(sol, Z, d, H)
+
+    nx = length(sol.state_indices)
+    ny = length(sol.control_indices)
+    n_endog = spec.n_endog
+    n_eps = spec.n_exog
+    nv = nx + n_eps
+    N = 100
+
+    ws = MacroEconometricModels._allocate_pf_workspace(Float64, n_endog, 1, n_eps, N;
+                                                         nv=nv, nx=nx, order=2)
+    MacroEconometricModels._pf_initialize_nonlinear!(ws, nlss; rng=rng)
+
+    # particles_fo should have non-zero dispersion from Lyapunov
+    @test any(ws.particles_fo .!= 0.0)
+    # particles_so should be all zeros (steady state correction)
+    @test all(ws.particles_so .== 0.0)
+    # particles should have values at state indices
+    for (si_idx, si) in enumerate(sol.state_indices)
+        @test all(ws.particles[si, :] .== ws.particles_fo[si_idx, :])
+    end
+    # weights should be uniform
+    @test all(ws.weights .≈ 1.0 / N)
+    end
+end
+
+@testset "Nonlinear PF: _pf_transition_pruned! matches pruning.jl" begin
+    _suppress_warnings() do
+    rng = Random.MersenneTwister(42)
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:perturbation, order=2)
+
+    # Simulate with pruning.jl for reference
+    rng_ref = Random.MersenneTwister(99)
+    ref_data = simulate(sol, 5; rng=rng_ref)
+
+    # Now replicate using the PF transition kernel on a single particle
+    Z, d, H = MacroEconometricModels._build_observation_equation(spec, [:y], nothing)
+    nlss = MacroEconometricModels._build_nonlinear_state_space(sol, Z, d, H)
+
+    nx = length(sol.state_indices)
+    n_endog = spec.n_endog
+    n_eps = spec.n_exog
+    nv = nx + n_eps
+    N = 1  # single particle for exact comparison
+
+    ws = MacroEconometricModels._allocate_pf_workspace(Float64, n_endog, 1, n_eps, N;
+                                                         nv=nv, nx=nx, order=2)
+    # Initialize to zero state (matching pruning.jl initial conditions)
+    fill!(ws.particles_fo, 0.0)
+    fill!(ws.particles_so, 0.0)
+    fill!(ws.particles, 0.0)
+
+    # Replay same shocks as simulate()
+    rng_replay = Random.MersenneTwister(99)
+    T_periods = 5
+    e = randn(rng_replay, T_periods, n_eps)
+
+    for t in 1:T_periods
+        # Set shocks in workspace
+        ws.shocks[:, 1] .= e[t, :]
+        MacroEconometricModels._pf_transition_pruned!(ws, nlss)
+
+        # Check that particles match simulate() output (in deviations from SS)
+        for (si_idx, si) in enumerate(sol.state_indices)
+            ref_val = ref_data[t, si] - sol.steady_state[si]
+            @test ws.particles[si, 1] ≈ ref_val atol=1e-10
+        end
+        for (ci_idx, ci) in enumerate(sol.control_indices)
+            ref_val = ref_data[t, ci] - sol.steady_state[ci]
+            @test ws.particles[ci, 1] ≈ ref_val atol=1e-10
+        end
+    end
+    end
+end
+
+@testset "Nonlinear PF: _pf_resample_pruned!" begin
+    nx = 2
+    N = 5
+    n_endog = 3
+    n_obs = 1
+    n_shocks = 1
+    nv = nx + n_shocks
+
+    ws = MacroEconometricModels._allocate_pf_workspace(Float64, n_endog, n_obs, n_shocks, N;
+                                                         nv=nv, nx=nx, order=2)
+    # Set up known particles_fo and particles_so
+    ws.particles_fo .= reshape(1.0:Float64(nx * N), nx, N)
+    ws.particles_so .= reshape(100.0:Float64(99 + nx * N), nx, N)
+
+    # Ancestors: all pick particle 3
+    ws.ancestors .= 3
+
+    MacroEconometricModels._pf_resample_pruned!(ws, N, nx, 2)
+
+    # After resampling, all columns of particles_fo and particles_so should equal column 3
+    for k in 1:N
+        @test ws.particles_fo[:, k] == ws.particles_fo[:, 1]  # all same
+    end
+    # Verify they came from the original column 3
+    expected_fo = Float64[(3 - 1) * nx + i for i in 1:nx] .+ 1.0 .- 1.0
+    # Original column 3: indices (2*nx+1):(3*nx) in the 1:nx*N range
+    for i in 1:nx
+        @test ws.particles_fo[i, 1] ≈ Float64((3 - 1) * nx + i)
+    end
+end
+
+@testset "Nonlinear bootstrap PF: finite log-likelihood (order 2)" begin
+    _suppress_warnings() do
+    rng = Random.MersenneTwister(42)
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:perturbation, order=2)
+
+    # Generate data
+    data_sim = simulate(sol, 50; rng=Random.MersenneTwister(1))
+    data = Matrix{Float64}(data_sim')  # n_obs x T_obs
+
+    Z, d, H = MacroEconometricModels._build_observation_equation(spec, [:y], nothing)
+    nlss = MacroEconometricModels._build_nonlinear_state_space(sol, Z, d, H)
+
+    nx = length(sol.state_indices)
+    n_endog = spec.n_endog
+    n_eps = spec.n_exog
+    nv = nx + n_eps
+    N = 200
+
+    ws = MacroEconometricModels._allocate_pf_workspace(Float64, n_endog, 1, n_eps, N;
+                                                         nv=nv, nx=nx, order=2)
+    ll = MacroEconometricModels._bootstrap_particle_filter!(ws, nlss, data, 50;
+                                                              rng=Random.MersenneTwister(42))
+
+    @test isfinite(ll)
+    @test ll > -1e6  # not absurdly large negative
+    end
+end
+
+@testset "Nonlinear CSMC: finite log-likelihood (order 2)" begin
+    _suppress_warnings() do
+    rng = Random.MersenneTwister(42)
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:perturbation, order=2)
+
+    T_obs = 30
+    data_sim = simulate(sol, T_obs; rng=Random.MersenneTwister(1))
+    data = Matrix{Float64}(data_sim')
+
+    Z, d, H = MacroEconometricModels._build_observation_equation(spec, [:y], nothing)
+    nlss = MacroEconometricModels._build_nonlinear_state_space(sol, Z, d, H)
+
+    nx = length(sol.state_indices)
+    n_endog = spec.n_endog
+    n_eps = spec.n_exog
+    nv = nx + n_eps
+    N = 100
+
+    ws = MacroEconometricModels._allocate_pf_workspace(Float64, n_endog, 1, n_eps, N;
+                                                         nv=nv, nx=nx, order=2, T_obs=T_obs)
+    # Initialize reference trajectory via a bootstrap PF run
+    ll1 = MacroEconometricModels._bootstrap_particle_filter!(ws, nlss, data, T_obs;
+                                                               store_trajectory=true,
+                                                               rng=Random.MersenneTwister(10))
+    @test isfinite(ll1)
+
+    # Now run CSMC using the stored reference trajectory
+    ll2 = MacroEconometricModels._conditional_smc!(ws, nlss, data, T_obs;
+                                                      rng=Random.MersenneTwister(20))
+    @test isfinite(ll2)
+    @test ll2 > -1e6
+    end
+end
+
+@testset "Nonlinear PF vs Kalman: order 1 comparison" begin
+    _suppress_warnings() do
+    # For a linear (order=1) model, the nonlinear PF should give similar results
+    # to the exact Kalman filter (within Monte Carlo noise)
+    rng = Random.MersenneTwister(42)
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.1
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    # Solve both ways
+    sol_lin = solve(spec; method=:gensys)
+    sol_pert = solve(spec; method=:perturbation, order=1)
+
+    T_obs = 50
+    data_sim = simulate(sol_lin, T_obs; rng=Random.MersenneTwister(1))
+    data = Matrix{Float64}(data_sim')
+
+    # Kalman log-likelihood
+    Z, d, H = MacroEconometricModels._build_observation_equation(spec, [:y], nothing)
+    ss = MacroEconometricModels._build_state_space(sol_lin, Z, d, H)
+    ll_kalman = MacroEconometricModels._kalman_loglikelihood(ss, data)
+
+    # Nonlinear PF log-likelihood (should approximate Kalman)
+    nlss = MacroEconometricModels._build_nonlinear_state_space(sol_pert, Z, d, H)
+    nx = length(sol_pert.state_indices)
+    n_endog = spec.n_endog
+    n_eps = spec.n_exog
+    nv = nx + n_eps
+    N = 2000  # many particles for accuracy
+
+    # Average over multiple runs for stability
+    ll_pf_runs = Float64[]
+    for seed in 1:5
+        ws = MacroEconometricModels._allocate_pf_workspace(Float64, n_endog, 1, n_eps, N;
+                                                             nv=nv, nx=nx, order=1)
+        ll = MacroEconometricModels._bootstrap_particle_filter!(ws, nlss, data, T_obs;
+                                                                   rng=Random.MersenneTwister(seed))
+        push!(ll_pf_runs, ll)
+    end
+    ll_pf_mean = mean(ll_pf_runs)
+
+    # PF should approximate Kalman — within 10% relative error
+    @test isfinite(ll_kalman)
+    @test isfinite(ll_pf_mean)
+    rel_error = abs(ll_pf_mean - ll_kalman) / abs(ll_kalman)
+    @test rel_error < 0.1
+    end
+end
+
+@testset "Kalman guard: PerturbationSolution order >= 2 returns -Inf" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    # Generate data
+    sol = solve(spec; method=:gensys)
+    data_sim = simulate(sol, 20; rng=Random.MersenneTwister(1))
+    data = Matrix{Float64}(data_sim')
+
+    # Build Kalman likelihood function with perturbation solver (order=2)
+    ll_fn = MacroEconometricModels._build_likelihood_fn(
+        spec, [:ρ], data, [:y], nothing, :perturbation, (order=2,))
+    ll = ll_fn([0.9])
+
+    # Should return -Inf since Kalman can't handle order >= 2
+    @test ll == -Inf
+    end
+end
+
+@testset "_build_solution_at_theta dispatches on PerturbationSolution" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    # Linear solver → DSGEStateSpace
+    sol_lin, ss_lin = MacroEconometricModels._build_solution_at_theta(
+        spec, [:ρ], [0.9], [:y], nothing, :gensys, NamedTuple())
+    @test sol_lin isa MacroEconometricModels.DSGESolution
+    @test ss_lin isa MacroEconometricModels.DSGEStateSpace
+
+    # Perturbation solver → NonlinearStateSpace
+    sol_pert, ss_pert = MacroEconometricModels._build_solution_at_theta(
+        spec, [:ρ], [0.9], [:y], nothing, :perturbation, (order=2,))
+    @test sol_pert isa MacroEconometricModels.PerturbationSolution
+    @test ss_pert isa MacroEconometricModels.NonlinearStateSpace
+    end
+end
+
 end  # @testset "Bayesian DSGE"

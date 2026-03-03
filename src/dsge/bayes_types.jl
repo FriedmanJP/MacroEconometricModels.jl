@@ -222,8 +222,11 @@ Core particle buffers:
 Higher-order (pruning) buffers:
 - `kron_buffer` — nv^2 x N for 2nd-order Kronecker products (nothing if order < 2)
 - `kron3_buffer` — nv^3 x N for 3rd-order (nothing if order < 3)
-- `particles_fo, particles_so` — 1st/2nd-order pruned particles (nothing if order < 2)
-- `particles_to` — 3rd-order pruned particles (nothing if order < 3)
+- `kron_cross_buffer` — nv^2 x N for cross-Kronecker kron(vf,vs), 3rd-order (nothing if order < 3)
+- `augmented_buffer` — nv x N for building [xf; eps] vectors (nothing if order < 2)
+- `transition_scratch` — 3*nx x N scratch for xf_new/xs_new/xt_new in pruned transition (nothing if not nonlinear)
+- `particles_fo, particles_so` — 1st/2nd-order pruned state particles, nx x N (nothing if order < 2)
+- `particles_to` — 3rd-order pruned state particles, nx x N (nothing if order < 3)
 
 Conditional SMC (CSMC):
 - `reference_trajectory` — n_states x T_obs reference path (nothing if no CSMC)
@@ -244,6 +247,9 @@ mutable struct PFWorkspace{T<:AbstractFloat}
     # Higher-order
     kron_buffer::Union{Nothing, Matrix{T}}
     kron3_buffer::Union{Nothing, Matrix{T}}
+    kron_cross_buffer::Union{Nothing, Matrix{T}}
+    augmented_buffer::Union{Nothing, Matrix{T}}
+    transition_scratch::Union{Nothing, Matrix{T}}
     particles_fo::Union{Nothing, Matrix{T}}
     particles_so::Union{Nothing, Matrix{T}}
     particles_to::Union{Nothing, Matrix{T}}
@@ -255,22 +261,24 @@ end
 
 """
     _allocate_pf_workspace(::Type{T}, n_states, n_obs, n_shocks, N;
-                           nv=0, order=1, T_obs=0) where {T}
+                           nv=0, nx=0, order=1, T_obs=0) where {T}
 
 Allocate a PFWorkspace with all required buffers.
 
 Arguments:
-- `n_states` — state dimension
+- `n_states` — state dimension (n_endog for full endogenous vector)
 - `n_obs` — observation dimension
 - `n_shocks` — number of structural shocks
 - `N` — number of particles
-- `nv` — augmented state dimension for Kronecker products (states + shocks)
+- `nv` — augmented state dimension for Kronecker products (nx + n_shocks)
+- `nx` — number of perturbation state variables (for pruning buffers)
 - `order` — perturbation order (1, 2, or 3)
 - `T_obs` — number of time periods (>0 enables CSMC reference trajectory)
 """
 function _allocate_pf_workspace(::Type{T}, n_states::Int, n_obs::Int,
                                  n_shocks::Int, N::Int;
-                                 nv::Int=0, order::Int=1, T_obs::Int=0) where {T<:AbstractFloat}
+                                 nv::Int=0, nx::Int=0, order::Int=1,
+                                 T_obs::Int=0) where {T<:AbstractFloat}
     particles = zeros(T, n_states, N)
     particles_new = zeros(T, n_states, N)
     log_weights = zeros(T, N)
@@ -281,12 +289,20 @@ function _allocate_pf_workspace(::Type{T}, n_states::Int, n_obs::Int,
     innovations = zeros(T, n_obs, N)
     tmp_obs = zeros(T, n_obs, N)
 
-    # Higher-order buffers
+    # Higher-order buffers — pruning components are nx x N (state variables only)
+    # When nx > 0 (nonlinear mode), always allocate particles_fo for state tracking
+    nx_eff = nx > 0 ? nx : n_states  # fallback to n_states if nx not specified
+    nonlinear = nx > 0
     kron_buffer = order >= 2 && nv > 0 ? zeros(T, nv * nv, N) : nothing
     kron3_buffer = order >= 3 && nv > 0 ? zeros(T, nv * nv * nv, N) : nothing
-    particles_fo = order >= 2 ? zeros(T, n_states, N) : nothing
-    particles_so = order >= 2 ? zeros(T, n_states, N) : nothing
-    particles_to = order >= 3 ? zeros(T, n_states, N) : nothing
+    kron_cross_buffer = order >= 3 && nv > 0 ? zeros(T, nv * nv, N) : nothing
+    augmented_buffer = (order >= 2 || nonlinear) && nv > 0 ? zeros(T, nv, N) : nothing
+    # transition_scratch: 3*nx rows for xf_new/xs_new/xt_new in pruned transition
+    scratch_rows = nonlinear ? 3 * nx_eff : 0
+    transition_scratch = nonlinear ? zeros(T, scratch_rows, N) : nothing
+    particles_fo = (order >= 2 || nonlinear) ? zeros(T, nx_eff, N) : nothing
+    particles_so = order >= 2 ? zeros(T, nx_eff, N) : nothing
+    particles_to = order >= 3 ? zeros(T, nx_eff, N) : nothing
 
     # CSMC
     ref_traj = T_obs > 0 ? zeros(T, n_states, T_obs) : nothing
@@ -294,7 +310,8 @@ function _allocate_pf_workspace(::Type{T}, n_states::Int, n_obs::Int,
 
     PFWorkspace{T}(particles, particles_new, log_weights, weights,
                    ancestors, cumweights, shocks, innovations, tmp_obs,
-                   kron_buffer, kron3_buffer,
+                   kron_buffer, kron3_buffer, kron_cross_buffer,
+                   augmented_buffer, transition_scratch,
                    particles_fo, particles_so, particles_to,
                    ref_traj, ref_anc)
 end
@@ -327,14 +344,29 @@ function _resize_pf_workspace!(ws::PFWorkspace{T}, N_new::Int) where {T}
         nv3 = size(ws.kron3_buffer, 1)
         ws.kron3_buffer = zeros(T, nv3, N_new)
     end
+    if ws.kron_cross_buffer !== nothing
+        nv2 = size(ws.kron_cross_buffer, 1)
+        ws.kron_cross_buffer = zeros(T, nv2, N_new)
+    end
+    if ws.augmented_buffer !== nothing
+        nv = size(ws.augmented_buffer, 1)
+        ws.augmented_buffer = zeros(T, nv, N_new)
+    end
+    if ws.transition_scratch !== nothing
+        sr = size(ws.transition_scratch, 1)
+        ws.transition_scratch = zeros(T, sr, N_new)
+    end
     if ws.particles_fo !== nothing
-        ws.particles_fo = zeros(T, n_states, N_new)
+        nx = size(ws.particles_fo, 1)
+        ws.particles_fo = zeros(T, nx, N_new)
     end
     if ws.particles_so !== nothing
-        ws.particles_so = zeros(T, n_states, N_new)
+        nx = size(ws.particles_so, 1)
+        ws.particles_so = zeros(T, nx, N_new)
     end
     if ws.particles_to !== nothing
-        ws.particles_to = zeros(T, n_states, N_new)
+        nx = size(ws.particles_to, 1)
+        ws.particles_to = zeros(T, nx, N_new)
     end
     return ws
 end

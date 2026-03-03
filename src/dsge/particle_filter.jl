@@ -546,3 +546,568 @@ function _conditional_smc!(ws::PFWorkspace{T}, ss::DSGEStateSpace{T},
 
     return log_lik
 end
+
+# =============================================================================
+# Nonlinear particle filter — pruned state transitions (Kim et al. 2008,
+# Andreasen, Fernandez-Villaverde & Rubio-Ramirez 2018)
+# =============================================================================
+
+"""
+    _fill_kron_cross_buffer!(buffer, V1, V2, nv)
+
+Fill the nv^2 x N cross-Kronecker buffer: buffer[(i-1)*nv+j, k] = V1[i,k] * V2[j,k].
+Used for kron(vf, vs) in 3rd-order pruning.
+"""
+function _fill_kron_cross_buffer!(buffer::Matrix{T}, V1::Matrix{T}, V2::Matrix{T},
+                                    nv::Int) where {T<:AbstractFloat}
+    N = size(V1, 2)
+    @inbounds for i in 1:nv, j in 1:nv
+        idx = (i - 1) * nv + j
+        @simd for k in 1:N
+            buffer[idx, k] = V1[i, k] * V2[j, k]
+        end
+    end
+    return nothing
+end
+
+"""
+    _pf_initialize_nonlinear!(ws, nlss; rng)
+
+Initialize particles for nonlinear state space (perturbation solution).
+
+Uses the first-order Lyapunov equation P0 = solve_lyapunov(hx_state, eta_x) to set
+the initial dispersion of first-order state particles. Second/third-order corrections
+are initialized to zero (at steady state).
+
+The full endogenous vector is assembled from states + controls for observation.
+"""
+function _pf_initialize_nonlinear!(ws::PFWorkspace{T},
+                                     nlss::NonlinearStateSpace{T};
+                                     rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    nx = length(nlss.state_indices)
+    ny = length(nlss.control_indices)
+    n_eps = size(nlss.eta, 2)
+    nv = nx + n_eps
+    N = size(ws.particles, 2)
+
+    # Extract first-order blocks
+    hx_state = nx > 0 ? nlss.hx[:, 1:nx] : zeros(T, 0, 0)
+    eta_x = nx > 0 ? nlss.hx[:, nx+1:nv] : zeros(T, 0, n_eps)
+    gx_state = ny > 0 ? nlss.gx[:, 1:nx] : zeros(T, 0, nx)
+
+    # Compute P0 from first-order Lyapunov equation
+    P0 = try
+        solve_lyapunov(hx_state, eta_x)
+    catch
+        T(10) * Matrix{T}(I, nx, nx)
+    end
+    P0 = (P0 + P0') / 2
+    C = cholesky(Hermitian(P0); check=false)
+    if !issuccess(C)
+        P0 += T(1e-6) * I
+        C = cholesky(Hermitian(P0))
+    end
+    L = C.L
+
+    # Draw first-order state particles: particles_fo[:, k] = L * randn(nx)
+    randn!(rng, ws.particles_fo)
+    temp = L * ws.particles_fo  # single allocation at init (not hot loop)
+    copyto!(ws.particles_fo, temp)
+
+    # Initialize second-order correction to zero (if allocated)
+    if ws.particles_so !== nothing
+        fill!(ws.particles_so, zero(T))
+    end
+
+    # Initialize third-order correction to zero (if allocated)
+    if ws.particles_to !== nothing
+        fill!(ws.particles_to, zero(T))
+    end
+
+    # Assemble initial full endogenous vector
+    # States at state_indices, controls (gx_state * xf) at control_indices
+    fill!(ws.particles, zero(T))
+    @inbounds for k in 1:N
+        for (si_idx, si) in enumerate(nlss.state_indices)
+            ws.particles[si, k] = ws.particles_fo[si_idx, k]
+        end
+    end
+    if ny > 0
+        # controls = gx_state * particles_fo (first-order, no shocks at init)
+        ctrl = gx_state * ws.particles_fo  # single allocation at init
+        @inbounds for k in 1:N
+            for (ci_idx, ci) in enumerate(nlss.control_indices)
+                ws.particles[ci, k] = ctrl[ci_idx, k]
+            end
+        end
+    end
+
+    # Initialize weights uniformly
+    inv_N = one(T) / N
+    fill!(ws.weights, inv_N)
+    fill!(ws.log_weights, -log(T(N)))
+
+    return nothing
+end
+
+"""
+    _pf_transition_pruned!(ws, nlss)
+
+Propagate all N particles through the pruned nonlinear transition.
+
+Order 1: standard linear first-order transition.
+Order 2: Kim et al. (2008) pruning — tracks xf (1st-order) and xs (2nd-order correction).
+Order 3: Andreasen et al. (2018) — additionally tracks xt (3rd-order correction).
+
+After transition, assembles the full endogenous vector (states + controls) into
+`ws.particles` for use by `_pf_log_weights!`.
+
+Zero allocation in hot loop (all computation uses pre-allocated workspace buffers).
+"""
+function _pf_transition_pruned!(ws::PFWorkspace{T},
+                                  nlss::NonlinearStateSpace{T}) where {T<:AbstractFloat}
+    nx = length(nlss.state_indices)
+    ny = length(nlss.control_indices)
+    n_endog = nx + ny
+    n_eps = size(nlss.eta, 2)
+    nv = nx + n_eps
+    N = size(ws.particles_fo, 2)
+
+    # Extract policy function sub-matrices (views, no allocation)
+    hx_state = @view nlss.hx[:, 1:nx]       # nx x nx
+    eta_x = @view nlss.hx[:, nx+1:nv]       # nx x n_eps
+    gx_state = @view nlss.gx[:, 1:nx]       # ny x nx
+    eta_y = @view nlss.gx[:, nx+1:nv]       # ny x n_eps
+
+    # --- First-order state: XF_new = hx_state * XF + eta_x * E ---
+    # Store XF_new in transition_scratch[1:nx, :]
+    xf_new = @view ws.transition_scratch[1:nx, :]
+    mul!(xf_new, hx_state, ws.particles_fo)
+    mul!(xf_new, eta_x, ws.shocks, one(T), one(T))
+
+    if nlss.order >= 2 && nlss.hxx !== nothing
+        # --- Build augmented vector V = [XF; E] ---
+        @inbounds for k in 1:N
+            @simd for i in 1:nx
+                ws.augmented_buffer[i, k] = ws.particles_fo[i, k]
+            end
+            @simd for i in 1:n_eps
+                ws.augmented_buffer[nx + i, k] = ws.shocks[i, k]
+            end
+        end
+
+        # --- Fill kron(V, V) buffer ---
+        _fill_kron_buffer!(ws.kron_buffer, ws.augmented_buffer, nv)
+
+        # --- Second-order state: XS_new = hx_state * XS + 0.5 * Hxx * kron + 0.5 * hσσ ---
+        xs_new = @view ws.transition_scratch[nx+1:2*nx, :]
+
+        mul!(xs_new, hx_state, ws.particles_so)
+        mul!(xs_new, nlss.hxx, ws.kron_buffer, T(0.5), one(T))
+        if nlss.hsigmasigma !== nothing
+            @inbounds for k in 1:N
+                @simd for i in 1:nx
+                    xs_new[i, k] += T(0.5) * nlss.hsigmasigma[i]
+                end
+            end
+        end
+
+        if nlss.order >= 3 && nlss.hxxx !== nothing && ws.particles_to !== nothing
+            # --- 3rd-order: compute kron(vf, vs) where vs = [xs; 0] ---
+            @inbounds for i in 1:nv, j in 1:nv
+                idx = (i - 1) * nv + j
+                @simd for k in 1:N
+                    vf_i = ws.augmented_buffer[i, k]
+                    vs_j = j <= nx ? ws.particles_so[j, k] : zero(T)
+                    ws.kron_cross_buffer[idx, k] = vf_i * vs_j
+                end
+            end
+
+            # Fill kron3(vf, vf, vf)
+            _fill_kron3_buffer!(ws.kron3_buffer, ws.augmented_buffer, nv)
+
+            # --- 3rd-order state: XT_new ---
+            xt_new = @view ws.transition_scratch[2*nx+1:3*nx, :]
+
+            mul!(xt_new, hx_state, ws.particles_to)
+            # + hxx * kron(vf, vs)
+            mul!(xt_new, nlss.hxx, ws.kron_cross_buffer, one(T), one(T))
+            # + (1/6) * hxxx * kron3(vf)
+            mul!(xt_new, nlss.hxxx, ws.kron3_buffer, T(1) / T(6), one(T))
+            # + (1/2) * hσσx * vf
+            if nlss.hsigmax !== nothing
+                mul!(xt_new, nlss.hsigmax, ws.augmented_buffer, T(0.5), one(T))
+            end
+            # + (1/6) * hσσσ
+            if nlss.hsigmasigmasigma !== nothing
+                @inbounds for k in 1:N
+                    @simd for i in 1:nx
+                        xt_new[i, k] += nlss.hsigmasigmasigma[i] / T(6)
+                    end
+                end
+            end
+
+            # Copy pruned components to their buffers
+            copyto!(ws.particles_to, xt_new)
+        end
+
+        # Update pruned component buffers
+        copyto!(ws.particles_so, xs_new)
+    end
+
+    # Copy xf_new to particles_fo
+    copyto!(ws.particles_fo, @view ws.transition_scratch[1:nx, :])
+
+    # --- Compute total state and controls, assemble full endogenous ---
+
+    # Build x_total in the state_indices of particles
+    @inbounds for k in 1:N
+        for (si_idx, si) in enumerate(nlss.state_indices)
+            x_total = ws.particles_fo[si_idx, k]  # xf_new
+            if nlss.order >= 2 && ws.particles_so !== nothing
+                x_total += ws.particles_so[si_idx, k]
+            end
+            if nlss.order >= 3 && ws.particles_to !== nothing
+                x_total += ws.particles_to[si_idx, k]
+            end
+            ws.particles[si, k] = x_total
+        end
+    end
+
+    # Compute controls: use particles_new[1:ny, :] as scratch for ctrl
+    if ny > 0
+        ctrl = @view ws.particles_new[1:ny, :]
+
+        # Build x_total contiguous matrix in augmented_buffer[1:nx, :]
+        @inbounds for k in 1:N
+            @simd for i in 1:nx
+                ws.augmented_buffer[i, k] = ws.particles_fo[i, k]
+                if nlss.order >= 2 && ws.particles_so !== nothing
+                    ws.augmented_buffer[i, k] += ws.particles_so[i, k]
+                end
+                if nlss.order >= 3 && ws.particles_to !== nothing
+                    ws.augmented_buffer[i, k] += ws.particles_to[i, k]
+                end
+            end
+        end
+        x_total_mat = @view ws.augmented_buffer[1:nx, :]
+
+        # Base: Y = gx_state * x_total + eta_y * E
+        mul!(ctrl, gx_state, x_total_mat)
+        mul!(ctrl, eta_y, ws.shocks, one(T), one(T))
+
+        # 2nd-order control terms
+        if nlss.order >= 2 && nlss.gxx !== nothing
+            # Rebuild augmented V = [xf; eps] for Kronecker
+            @inbounds for k in 1:N
+                @simd for i in 1:nx
+                    ws.augmented_buffer[i, k] = ws.particles_fo[i, k]
+                end
+                @simd for i in 1:n_eps
+                    ws.augmented_buffer[nx + i, k] = ws.shocks[i, k]
+                end
+            end
+            _fill_kron_buffer!(ws.kron_buffer, ws.augmented_buffer, nv)
+
+            # + 0.5 * Gxx * kron(vf, vf)
+            mul!(ctrl, nlss.gxx, ws.kron_buffer, T(0.5), one(T))
+            # + 0.5 * gσσ
+            if nlss.gsigmasigma !== nothing
+                @inbounds for k in 1:N
+                    @simd for i in 1:ny
+                        ctrl[i, k] += T(0.5) * nlss.gsigmasigma[i]
+                    end
+                end
+            end
+
+            # 3rd-order control terms
+            if nlss.order >= 3 && nlss.gxxx !== nothing
+                # kron(vf, vs) — recompute
+                @inbounds for i in 1:nv, j in 1:nv
+                    idx = (i - 1) * nv + j
+                    @simd for k in 1:N
+                        vf_i = ws.augmented_buffer[i, k]
+                        vs_j = j <= nx ? ws.particles_so[j, k] : zero(T)
+                        ws.kron_cross_buffer[idx, k] = vf_i * vs_j
+                    end
+                end
+                # kron3(vf, vf, vf)
+                _fill_kron3_buffer!(ws.kron3_buffer, ws.augmented_buffer, nv)
+
+                # + gxx * kron(vf, vs)
+                mul!(ctrl, nlss.gxx, ws.kron_cross_buffer, one(T), one(T))
+                # + (1/6) * gxxx * kron3(vf)
+                mul!(ctrl, nlss.gxxx, ws.kron3_buffer, T(1) / T(6), one(T))
+                # + (1/2) * gσσx * vf
+                if nlss.gsigmax !== nothing
+                    mul!(ctrl, nlss.gsigmax, ws.augmented_buffer, T(0.5), one(T))
+                end
+                # + (1/6) * gσσσ
+                if nlss.gsigmasigmasigma !== nothing
+                    @inbounds for k in 1:N
+                        @simd for i in 1:ny
+                            ctrl[i, k] += nlss.gsigmasigmasigma[i] / T(6)
+                        end
+                    end
+                end
+            end
+        end
+
+        # Place controls at control_indices in particles
+        @inbounds for k in 1:N
+            for (ci_idx, ci) in enumerate(nlss.control_indices)
+                ws.particles[ci, k] = ctrl[ci_idx, k]
+            end
+        end
+    end
+
+    return nothing
+end
+
+"""
+    _pf_resample_pruned!(ws, N, nx, order)
+
+Resample pruned state components (particles_fo, particles_so, particles_to)
+alongside the main particles using the same ancestor indices.
+
+Uses `particles_new[1:nx, :]` as scratch buffer — zero allocation.
+"""
+function _pf_resample_pruned!(ws::PFWorkspace{T}, N::Int, nx::Int,
+                                order::Int) where {T<:AbstractFloat}
+    # Resample particles_fo
+    @inbounds for k in 1:N
+        a = ws.ancestors[k]
+        @simd for i in 1:nx
+            ws.particles_new[i, k] = ws.particles_fo[i, a]
+        end
+    end
+    @inbounds for k in 1:N
+        @simd for i in 1:nx
+            ws.particles_fo[i, k] = ws.particles_new[i, k]
+        end
+    end
+
+    # Resample particles_so
+    if order >= 2 && ws.particles_so !== nothing
+        @inbounds for k in 1:N
+            a = ws.ancestors[k]
+            @simd for i in 1:nx
+                ws.particles_new[i, k] = ws.particles_so[i, a]
+            end
+        end
+        @inbounds for k in 1:N
+            @simd for i in 1:nx
+                ws.particles_so[i, k] = ws.particles_new[i, k]
+            end
+        end
+    end
+
+    # Resample particles_to
+    if order >= 3 && ws.particles_to !== nothing
+        @inbounds for k in 1:N
+            a = ws.ancestors[k]
+            @simd for i in 1:nx
+                ws.particles_new[i, k] = ws.particles_to[i, a]
+            end
+        end
+        @inbounds for k in 1:N
+            @simd for i in 1:nx
+                ws.particles_to[i, k] = ws.particles_new[i, k]
+            end
+        end
+    end
+
+    return nothing
+end
+
+# =============================================================================
+# Bootstrap Particle Filter — Nonlinear (pruned perturbation)
+# =============================================================================
+
+"""
+    _bootstrap_particle_filter!(ws, nlss::NonlinearStateSpace, data, T_obs; ...)
+
+Bootstrap particle filter for nonlinear state space (perturbation solutions).
+
+Uses Kim et al. (2008) pruned state transitions for order 2 and Andreasen,
+Fernandez-Villaverde & Rubio-Ramirez (2018) for order 3, avoiding the explosive
+paths that arise from naive higher-order simulation.
+
+Returns log marginal likelihood estimate.
+"""
+function _bootstrap_particle_filter!(ws::PFWorkspace{T}, nlss::NonlinearStateSpace{T},
+                                       data::Matrix{T}, T_obs::Int;
+                                       threshold::Real=0.5,
+                                       rng::AbstractRNG=Random.default_rng(),
+                                       store_trajectory::Bool=false) where {T<:AbstractFloat}
+    N = size(ws.particles, 2)
+    n_obs = size(data, 1)
+    n_endog = size(ws.particles, 1)
+    nx = length(nlss.state_indices)
+    log_N = log(T(N))
+    inv_N = one(T) / N
+
+    # Initialize from first-order stationary distribution
+    _pf_initialize_nonlinear!(ws, nlss; rng=rng)
+
+    log_lik = zero(T)
+
+    @inbounds for t in 1:T_obs
+        # Draw shocks
+        randn!(rng, ws.shocks)
+
+        # Propagate through pruned nonlinear transition
+        _pf_transition_pruned!(ws, nlss)
+
+        # Compute log weights using full endogenous particles
+        y_t = @view data[:, t]
+        _pf_log_weights!(ws.log_weights, ws.innovations, ws.tmp_obs,
+                          ws.particles, y_t, nlss.Z, nlss.d, nlss.H_inv, nlss.log_det_H)
+
+        # Accumulate log-likelihood
+        log_lik += _logsumexp(ws.log_weights) - log_N
+
+        # Normalize weights
+        _normalize_log_weights!(ws.weights, ws.log_weights)
+
+        # ESS-based adaptive resampling
+        ess = zero(T)
+        @simd for k in 1:N
+            ess += ws.weights[k] * ws.weights[k]
+        end
+        ess = one(T) / ess
+
+        if ess < threshold * N
+            _systematic_resample!(ws.ancestors, ws.weights, ws.cumweights, N, rng)
+            # Resample main particles
+            _resample_particles!(ws.particles_new, ws.particles, ws.ancestors)
+            ws.particles, ws.particles_new = ws.particles_new, ws.particles
+            # Resample pruned components
+            _pf_resample_pruned!(ws, N, nx, nlss.order)
+            fill!(ws.weights, inv_N)
+            fill!(ws.log_weights, -log_N)
+        end
+
+        # Store trajectory if requested (for CSMC initialization)
+        if store_trajectory && ws.reference_trajectory !== nothing
+            @simd for s in 1:n_endog
+                ws.reference_trajectory[s, t] = ws.particles[s, N]
+            end
+        end
+    end
+
+    return log_lik
+end
+
+# =============================================================================
+# Conditional SMC — Nonlinear (pruned perturbation)
+# =============================================================================
+
+"""
+    _conditional_smc!(ws, nlss::NonlinearStateSpace, data, T_obs; ...)
+
+Conditional SMC for nonlinear state space (particle Gibbs with pruned transitions).
+
+Same as bootstrap PF but particle N is forced to follow the reference trajectory.
+Reference trajectory stores the full endogenous vector; pruned components for the
+reference particle are approximated (xf = total state, xs = 0, xt = 0).
+
+Returns log marginal likelihood estimate.
+"""
+function _conditional_smc!(ws::PFWorkspace{T}, nlss::NonlinearStateSpace{T},
+                             data::Matrix{T}, T_obs::Int;
+                             threshold::Real=0.5,
+                             rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    N = size(ws.particles, 2)
+    n_obs = size(data, 1)
+    n_endog = size(ws.particles, 1)
+    nx = length(nlss.state_indices)
+    log_N = log(T(N))
+    inv_N = one(T) / N
+
+    ws.reference_trajectory !== nothing || throw(ArgumentError(
+        "reference_trajectory must be set before calling _conditional_smc!"))
+    size(ws.reference_trajectory, 2) >= T_obs || throw(ArgumentError(
+        "reference_trajectory must have at least T_obs=$T_obs columns"))
+
+    # Initialize from first-order stationary distribution
+    _pf_initialize_nonlinear!(ws, nlss; rng=rng)
+
+    log_lik = zero(T)
+
+    @inbounds for t in 1:T_obs
+        # Draw shocks
+        randn!(rng, ws.shocks)
+
+        # Propagate through pruned nonlinear transition
+        _pf_transition_pruned!(ws, nlss)
+
+        # --- CSMC: force particle N to reference trajectory ---
+        @simd for s in 1:n_endog
+            ws.particles[s, N] = ws.reference_trajectory[s, t]
+        end
+        # Approximate pruned components for reference particle:
+        # xf = total state from reference, xs = 0, xt = 0
+        for (si_idx, si) in enumerate(nlss.state_indices)
+            ws.particles_fo[si_idx, N] = ws.reference_trajectory[si, t]
+        end
+        if ws.particles_so !== nothing
+            @simd for i in 1:nx
+                ws.particles_so[i, N] = zero(T)
+            end
+        end
+        if ws.particles_to !== nothing
+            @simd for i in 1:nx
+                ws.particles_to[i, N] = zero(T)
+            end
+        end
+
+        # Compute log weights
+        y_t = @view data[:, t]
+        _pf_log_weights!(ws.log_weights, ws.innovations, ws.tmp_obs,
+                          ws.particles, y_t, nlss.Z, nlss.d, nlss.H_inv, nlss.log_det_H)
+
+        # Accumulate log-likelihood
+        log_lik += _logsumexp(ws.log_weights) - log_N
+
+        # Normalize weights
+        _normalize_log_weights!(ws.weights, ws.log_weights)
+
+        # ESS-based adaptive resampling
+        ess = zero(T)
+        @simd for k in 1:N
+            ess += ws.weights[k] * ws.weights[k]
+        end
+        ess = one(T) / ess
+
+        if ess < threshold * N
+            _systematic_resample!(ws.ancestors, ws.weights, ws.cumweights, N, rng)
+            # CSMC: ensure particle N always survives
+            ws.ancestors[N] = N
+            # Resample main particles
+            _resample_particles!(ws.particles_new, ws.particles, ws.ancestors)
+            ws.particles, ws.particles_new = ws.particles_new, ws.particles
+            # Resample pruned components
+            _pf_resample_pruned!(ws, N, nx, nlss.order)
+            fill!(ws.weights, inv_N)
+            fill!(ws.log_weights, -log_N)
+        end
+    end
+
+    # Sample new reference trajectory from final particle cloud
+    u = rand(rng, T)
+    cumw = zero(T)
+    chosen = N
+    @inbounds for k in 1:N
+        cumw += ws.weights[k]
+        if cumw >= u
+            chosen = k
+            break
+        end
+    end
+    @inbounds @simd for s in 1:n_endog
+        ws.reference_trajectory[s, T_obs] = ws.particles[s, chosen]
+    end
+
+    return log_lik
+end

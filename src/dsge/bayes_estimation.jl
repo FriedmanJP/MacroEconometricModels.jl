@@ -351,7 +351,13 @@ function _build_solution_at_theta(spec::DSGESpec{T}, param_names::Vector{Symbol}
 
     # Build observation equation and state space
     Z, d, H = _build_observation_equation(new_spec, observables, measurement_error)
-    ss = _build_state_space(sol, Z, d, H)
+
+    # Dispatch: PerturbationSolution → NonlinearStateSpace, else → DSGEStateSpace
+    if sol isa PerturbationSolution
+        ss = _build_nonlinear_state_space(sol, Z, d, H)
+    else
+        ss = _build_state_space(sol, Z, d, H)
+    end
 
     return sol, ss
 end

@@ -104,6 +104,11 @@ function _build_likelihood_fn(spec::DSGESpec{T}, param_names::Vector{Symbol},
                 return T(-Inf)
             end
 
+            # Guard: Kalman filter only valid for linear (1st-order) solutions
+            if sol isa PerturbationSolution && sol.order >= 2
+                return T(-Inf)  # use :smc2 method for nonlinear models
+            end
+
             # Build observation equation and state space
             Z, d, H = _build_observation_equation(new_spec, observables, measurement_error)
             ss = _build_state_space(sol, Z, d, H)
@@ -800,11 +805,17 @@ function _build_pf_likelihood_fn(spec::DSGESpec{T}, param_names::Vector{Symbol},
 
             # Build observation equation and state space
             Z, d, H = _build_observation_equation(new_spec, observables, measurement_error)
-            ss = _build_state_space(sol, Z, d, H)
 
-            # Run bootstrap particle filter
-            ll = _bootstrap_particle_filter!(ws, ss, data, T_obs;
-                                              store_trajectory=true, rng=rng)
+            # Dispatch: PerturbationSolution → NonlinearStateSpace, else → DSGEStateSpace
+            if sol isa PerturbationSolution
+                nlss = _build_nonlinear_state_space(sol, Z, d, H)
+                ll = _bootstrap_particle_filter!(ws, nlss, data, T_obs;
+                                                  store_trajectory=true, rng=rng)
+            else
+                ss = _build_state_space(sol, Z, d, H)
+                ll = _bootstrap_particle_filter!(ws, ss, data, T_obs;
+                                                  store_trajectory=true, rng=rng)
+            end
 
             return isfinite(ll) ? ll : T(-Inf)
         catch
@@ -882,13 +893,37 @@ function _smc2_sample(spec::DSGESpec{T}, data::AbstractMatrix,
     n_states = spec.n_endog
     n_shocks = spec.n_exog
 
+    # Detect perturbation order for pruning buffer allocation
+    pf_nv = 0
+    pf_nx = 0
+    pf_order = 1
+    if solver == :perturbation
+        # Extract order from solver_kwargs (default 2)
+        pf_order = get(solver_kwargs, :order, 2)
+        # Trial solve to get nx, nv dimensions
+        try
+            trial_spec = compute_steady_state(spec)
+            trial_sol = solve(trial_spec; method=solver, solver_kwargs...)
+            if trial_sol isa PerturbationSolution
+                pf_nx = length(trial_sol.state_indices)
+                pf_nv = pf_nx + n_shocks
+                pf_order = trial_sol.order
+            end
+        catch
+            # If trial solve fails, estimate nx from spec
+            pf_nx = n_states
+            pf_nv = pf_nx + n_shocks
+        end
+    end
+
     # Build PF likelihood function
     pf_ll_fn = _build_pf_likelihood_fn(spec, param_names, data, observables,
                                         measurement_error, solver, solver_kwargs, N_x)
 
     # Create workspace pool (one per thread for parallelism)
     n_pool = max(Threads.nthreads(), 1)
-    pool = [_allocate_pf_workspace(T, n_states, n_obs, n_shocks, N_x; T_obs=T_obs)
+    pool = [_allocate_pf_workspace(T, n_states, n_obs, n_shocks, N_x;
+                                    nv=pf_nv, nx=pf_nx, order=pf_order, T_obs=T_obs)
             for _ in 1:n_pool]
 
     # Initialize θ-particles from prior
