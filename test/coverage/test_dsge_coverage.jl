@@ -388,7 +388,7 @@ end
     @test sol.gxx !== nothing || sol.hxx !== nothing
 end
 
-@testset "perturbation.jl: order=3 throws" begin
+@testset "perturbation.jl: order=3 works" begin
     spec = @dsge begin
         parameters: rho = 0.9
         endogenous: y
@@ -396,7 +396,8 @@ end
         y[t] = rho * y[t-1] + e[t]
     end
     spec = compute_steady_state(spec)
-    @test_throws ArgumentError perturbation_solver(spec; order=3)
+    sol = perturbation_solver(spec; order=3)
+    @test sol.order == 3
 end
 
 @testset "perturbation.jl: multi-variable 2nd order" begin

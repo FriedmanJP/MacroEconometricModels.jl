@@ -114,7 +114,7 @@ function simulate(sol::PerturbationSolution{T}, T_periods::Int;
             end
             xf = xf_new
         end
-    elseif sol.order >= 2
+    elseif sol.order == 2
         # Pruned second-order simulation (Kim et al. 2008)
         Hxx = sol.hxx   # nx x nv^2
         Gxx = sol.gxx   # ny x nv^2
@@ -169,6 +169,119 @@ function simulate(sol::PerturbationSolution{T}, T_periods::Int;
 
             xf = xf_new
             xs = xs_new
+        end
+
+    elseif sol.order >= 3
+        # Pruned third-order simulation (Andreasen et al. 2018)
+        Hxx = sol.hxx   # nx x nv²
+        Gxx = sol.gxx   # ny x nv²
+        h_ss = sol.hσσ  # nx
+        g_ss = sol.gσσ  # ny
+        Hxxx = sol.hxxx  # nx x nv³
+        Gxxx = sol.gxxx  # ny x nv³
+        h_ssx = sol.hσσx  # nx x nv
+        g_ssx = sol.gσσx  # ny x nv
+        h_sss = sol.hσσσ  # nx
+        g_sss = sol.gσσσ  # ny
+
+        xf = zeros(T, nx)
+        xs = zeros(T, nx)
+        xrd = zeros(T, nx)  # 3rd-order correction
+
+        for t in 1:T_periods
+            eps_t = e[t, :]
+
+            # First-order state update
+            xf_new = hx_state * xf + eta_x * eps_t
+
+            # Build v = [xf; eps] for Kronecker products
+            vf = zeros(T, nv)
+            if nx > 0
+                vf[1:nx] = xf
+            end
+            vf[nx+1:nv] = eps_t
+            kron_vf = kron(vf, vf)     # nv²
+            kron3_vf = kron(vf, kron_vf)  # nv³
+
+            # Second-order state correction
+            xs_new = hx_state * xs
+            if Hxx !== nothing && !isempty(kron_vf)
+                xs_new += T(0.5) * Hxx * kron_vf
+            end
+            if h_ss !== nothing
+                xs_new += T(0.5) * h_ss
+            end
+
+            # Third-order state correction
+            vs = zeros(T, nv)
+            if nx > 0
+                vs[1:nx] = xs
+            end
+            kron_vf_vs = kron(vf, vs)  # nv²
+
+            xrd_new = hx_state * xrd
+            if Hxx !== nothing && !isempty(kron_vf_vs)
+                xrd_new += Hxx * kron_vf_vs  # no 0.5 factor
+            end
+            if Hxxx !== nothing && !isempty(kron3_vf)
+                xrd_new += (one(T) / T(6)) * Hxxx * kron3_vf
+            end
+            if h_ssx !== nothing
+                xrd_new += T(0.5) * h_ssx * vf
+            end
+            if h_sss !== nothing
+                xrd_new += (one(T) / T(6)) * h_sss
+            end
+
+            # Total state
+            x_total = xf_new + xs_new + xrd_new
+
+            # Control output using updated states
+            y_t = gx_state * x_total + eta_y * eps_t
+
+            # Build vf/vs from new states for control Kronecker products
+            vf_new = zeros(T, nv)
+            if nx > 0
+                vf_new[1:nx] = xf_new
+            end
+            vf_new[nx+1:nv] = eps_t
+
+            vs_new = zeros(T, nv)
+            if nx > 0
+                vs_new[1:nx] = xs_new
+            end
+
+            kron_vf_new = kron(vf_new, vf_new)
+            kron_vfvs_new = kron(vf_new, vs_new)
+            kron3_vf_new = kron(vf_new, kron_vf_new)
+
+            if Gxx !== nothing && !isempty(kron_vf_new)
+                y_t += T(0.5) * Gxx * (kron_vf_new + T(2) * kron_vfvs_new)
+            end
+            if g_ss !== nothing
+                y_t += T(0.5) * g_ss
+            end
+            if Gxxx !== nothing && !isempty(kron3_vf_new)
+                y_t += (one(T) / T(6)) * Gxxx * kron3_vf_new
+            end
+            if g_ssx !== nothing
+                y_t += T(0.5) * g_ssx * vf_new
+            end
+            if g_sss !== nothing
+                y_t += (one(T) / T(6)) * g_sss
+            end
+
+            # Store
+            for (k, si) in enumerate(sol.state_indices)
+                dev[t, si] = x_total[k]
+            end
+            for (k, ci) in enumerate(sol.control_indices)
+                dev[t, ci] = y_t[k]
+            end
+
+            xf = xf_new
+            xs = xs_new
+            xrd = xrd_new
         end
     end
 
@@ -476,6 +589,33 @@ end
 
 
 # =============================================================================
+# _extract_xxx_block — extract state×state×state block from v⊗v⊗v Kronecker
+# =============================================================================
+
+"""
+    _extract_xxx_block(Mvvv::Matrix{T}, nx::Int, nv::Int) → Matrix{T}
+
+Extract the `(xf⊗xf⊗xf)` sub-block from a matrix with `nv³` columns (Kronecker
+ordering of `v = [x; ε]`).  Returns a matrix with `nx³` columns corresponding
+to the state×state×state indices only.
+"""
+function _extract_xxx_block(Mvvv::Matrix{T}, nx::Int, nv::Int) where {T}
+    nrows = size(Mvvv, 1)
+    Mxxx = zeros(T, nrows, nx^3)
+    for a in 1:nx
+        for b in 1:nx
+            for c in 1:nx
+                col_vvv = ((a - 1) * nv + b - 1) * nv + c
+                col_xxx = ((a - 1) * nx + b - 1) * nx + c
+                @inbounds Mxxx[:, col_xxx] = Mvvv[:, col_vvv]
+            end
+        end
+    end
+    return Mxxx
+end
+
+
+# =============================================================================
 # _innovation_variance_2nd — compute Var(innovations) for augmented state
 # =============================================================================
 
@@ -589,6 +729,108 @@ function _innovation_variance_2nd(hx_state::Matrix{T}, eta_x::Matrix{T},
         kron(sigeta, sigeta) * (E_eps2_eps2 - vec_I_ne * vec_I_ne') * kron(sigeta, sigeta)'
 
     # Enforce symmetry
+    Var_inov = (Var_inov + Var_inov') / 2
+
+    return Var_inov
+end
+
+
+# =============================================================================
+# _innovation_variance_3rd_sim — MC estimate of Var(innovations) for 3rd-order
+# =============================================================================
+
+"""
+    _innovation_variance_3rd_sim(A, c, hx_state, hxx_xx, eta_x, hσσ, Var_xf,
+                                   nx, n_eps, nz, r1, r2, r3, r4, r5, r6;
+                                   n_sim=500_000) → Matrix{T}
+
+Compute the innovation covariance for the 3rd-order augmented state system
+via Monte Carlo simulation.  This avoids the complex analytical Gaussian moment
+formulas (which involve up to 6th moments) while providing accurate results.
+
+The innovation `u(t) = z(t+1) - A·z(t) - c` is computed from simulated paths
+of the first-order state xf and shocks ε, then `Var_inov = E[u·u']`.
+"""
+function _innovation_variance_3rd_sim(A::Matrix{T}, c::Vector{T},
+                                        hx_state::Matrix{T}, hxx_xx::Matrix{T},
+                                        eta_x::Matrix{T}, hσσ::Union{Nothing,Vector{T}},
+                                        Var_xf::Matrix{T},
+                                        nx::Int, n_eps::Int, nz::Int,
+                                        r1, r2, r3, r4, r5, r6;
+                                        n_sim::Int=500_000) where {T}
+    rng = Random.MersenneTwister(54321)
+
+    # Cholesky of Var_xf for stationary draws
+    if nx > 0 && all(isfinite.(Var_xf))
+        L_xf = try
+            cholesky(Symmetric(Var_xf + T(1e-12) * I)).L
+        catch
+            zeros(T, nx, nx)
+        end
+    else
+        L_xf = zeros(T, nx, nx)
+    end
+
+    h_ss = hσσ !== nothing ? hσσ : zeros(T, nx)
+
+    # Accumulator
+    Var_inov = zeros(T, nz, nz)
+
+    # Pre-allocate work vectors
+    xf = zeros(T, nx)
+    xs = zeros(T, nx)
+
+    n_burn = 1000
+    z     = zeros(T, nz)
+    z_next = zeros(T, nz)
+    u     = zeros(T, nz)
+    Az_c  = zeros(T, nz)
+
+    for t in 1:(n_sim + n_burn)
+        eps_t = randn(rng, T, n_eps)
+
+        # First-order transition
+        xf_new = hx_state * xf + eta_x * eps_t
+
+        # Second-order transition
+        kron_xf = kron(xf, xf)
+        xs_new = hx_state * xs + T(0.5) * hxx_xx * kron_xf + T(0.5) * h_ss
+
+        # Build z(t) from current state
+        z[r1] .= xf
+        z[r2] .= xs
+        z[r3] .= kron_xf
+        for k in eachindex(r4); z[r4[k]] = zero(T); end  # xrd ≈ 0 (not tracked here)
+        z[r5] .= kron(xf, xs)
+        z[r6] .= kron(xf, kron_xf)
+
+        # Build z(t+1) from actual transitions
+        kron_xf_new = kron(xf_new, xf_new)
+        z_next[r1] .= xf_new
+        z_next[r2] .= xs_new
+        z_next[r3] .= kron_xf_new
+        for k in eachindex(r4); z_next[r4[k]] = zero(T); end
+        z_next[r5] .= kron(xf_new, xs_new)
+        z_next[r6] .= kron(xf_new, kron_xf_new)
+
+        # Innovation: u = z_next - A*z - c
+        mul!(Az_c, A, z)
+        Az_c .+= c
+        u .= z_next .- Az_c
+
+        if t > n_burn
+            @inbounds for i in 1:nz
+                for j in 1:nz
+                    Var_inov[i, j] += u[i] * u[j]
+                end
+            end
+        end
+
+        xf = copy(xf_new)
+        xs = copy(xs_new)
+    end
+
+    Var_inov ./= n_sim
     Var_inov = (Var_inov + Var_inov') / 2
 
     return Var_inov
@@ -763,6 +1005,203 @@ end
 
 
 # =============================================================================
+# _augmented_moments_3rd — closed-form 3rd-order moments
+# =============================================================================
+
+"""
+    _augmented_moments_3rd(sol::PerturbationSolution{T};
+                             lags::Vector{Int}=[1]) → Dict{Symbol, Any}
+
+Compute closed-form unconditional moments for a 3rd-order perturbation solution
+using the augmented-state Lyapunov approach (Andreasen et al. 2018).
+
+The augmented state is `z = [xf; xs; vec(xf⊗xf); xrd; vec(xf⊗xs); vec(xf⊗xf⊗xf)]`
+of dimension `3nx + 2nx² + nx³`.  The system is `z(t+1) = A·z(t) + c + u(t)`.
+
+Returns a Dict with keys:
+- `:E_y` — n-vector of unconditional means (deviations from SS)
+- `:Var_y` — n×n unconditional variance-covariance
+- `:Cov_y` — n×n×max_lag autocovariance tensor
+- `:E_z`, `:Var_z` — augmented state moments (for diagnostics)
+"""
+function _augmented_moments_3rd(sol::PerturbationSolution{T};
+                                  lags::Vector{Int}=[1]) where {T}
+    nx = nstates(sol)
+    ny = ncontrols(sol)
+    n  = nvars(sol)
+    n_eps = nshocks(sol)
+    nv = nx + n_eps
+
+    # Extract first-order blocks
+    hx_state = nx > 0 ? sol.hx[:, 1:nx] : zeros(T, 0, 0)
+    eta_x    = nx > 0 ? sol.hx[:, nx+1:nv] : zeros(T, 0, n_eps)
+    gx_state = ny > 0 ? sol.gx[:, 1:nx] : zeros(T, 0, nx)
+    eta_y    = ny > 0 ? sol.gx[:, nx+1:nv] : zeros(T, 0, n_eps)
+
+    # Extract state×state blocks from hxx, gxx (nv² → nx²)
+    hxx_xx = sol.hxx !== nothing ? _extract_xx_block(sol.hxx, nx, nv) : zeros(T, nx, nx^2)
+    gxx_xx = sol.gxx !== nothing ? _extract_xx_block(sol.gxx, nx, nv) : zeros(T, ny, nx^2)
+
+    # Extract xxx block from hxxx/gxxx (nv³ → nx³)
+    hxxx_xxx = sol.hxxx !== nothing ? _extract_xxx_block(sol.hxxx, nx, nv) : zeros(T, nx, nx^3)
+    gxxx_xxx = sol.gxxx !== nothing ? _extract_xxx_block(sol.gxxx, nx, nv) : zeros(T, ny, nx^3)
+
+    # Extract xx block from hσσx/gσσx (nv → nx)
+    hssx_xx = sol.hσσx !== nothing ? sol.hσσx[:, 1:nx] : zeros(T, nx, nx)
+    gssx_xx = sol.gσσx !== nothing ? sol.gσσx[:, 1:nx] : zeros(T, ny, nx)
+
+    nz = 3 * nx + 2 * nx^2 + nx^3
+
+    # Handle nx == 0
+    if nx == 0
+        E_y = zeros(T, n)
+        Var_y = zeros(T, n, n)
+        max_lag = maximum(lags)
+        Cov_y = zeros(T, n, n, max_lag)
+        if ny > 0
+            Var_y[sol.control_indices, sol.control_indices] = eta_y * eta_y'
+        end
+        return Dict{Symbol, Any}(:E_y => E_y, :Var_y => Var_y, :Cov_y => Cov_y,
+                                  :E_z => zeros(T, 0), :Var_z => zeros(T, 0, 0))
+    end
+
+    # ---- Block ranges for the augmented state z ----
+    r1 = 1:nx                                # xf
+    r2 = nx+1:2*nx                           # xs
+    r3 = 2*nx+1:2*nx+nx^2                    # kron(xf,xf)
+    r4 = 2*nx+nx^2+1:3*nx+nx^2              # xrd
+    r5 = 3*nx+nx^2+1:3*nx+2*nx^2            # kron(xf,xs)
+    r6 = 3*nx+2*nx^2+1:nz                   # kron(xf,xf,xf)
+
+    # ---- Build 6-block transition matrix A (nz × nz) ----
+    A = zeros(T, nz, nz)
+    A[r1, r1] = hx_state                                        # (1,1)
+    A[r2, r2] = hx_state                                        # (2,2)
+    A[r2, r3] = T(0.5) * hxx_xx                                 # (2,3)
+    A[r3, r3] = kron(hx_state, hx_state)                        # (3,3)
+    A[r4, r1] = T(0.5) * hssx_xx                                # (4,1)
+    A[r4, r4] = hx_state                                        # (4,4)
+    A[r4, r5] = hxx_xx                                           # (4,5)
+    A[r4, r6] = (one(T) / T(6)) * hxxx_xxx                      # (4,6)
+    # (5,1): kron(hx*xf, 0.5*hσσ) → matrix: kron(hx, reshape(0.5*hσσ, nx, 1))
+    h_ss = sol.hσσ !== nothing ? sol.hσσ : zeros(T, nx)
+    A[r5, r1] = kron(hx_state, reshape(T(0.5) * h_ss, nx, 1))  # (5,1)
+    A[r5, r5] = kron(hx_state, hx_state)                        # (5,5)
+    A[r5, r6] = kron(hx_state, T(0.5) * hxx_xx)                 # (5,6)
+    A[r6, r6] = kron(hx_state, kron(hx_state, hx_state))        # (6,6)
+
+    # ---- Build constant vector c (nz) ----
+    I_ne = Matrix{T}(I, n_eps, n_eps)
+    c = zeros(T, nz)
+    c[r2] = T(0.5) * h_ss
+    c[r3] = kron(eta_x, eta_x) * vec(I_ne)
+    if sol.hσσσ !== nothing
+        c[r4] = (one(T) / T(6)) * sol.hσσσ
+    end
+
+    # ---- Unconditional mean ----
+    E_z = (Matrix{T}(I, nz, nz) - A) \ c
+
+    # ---- Innovation variance via MC simulation ----
+    Var_xf = _dlyap_doubling(hx_state, eta_x * eta_x')
+    Var_inov = _innovation_variance_3rd_sim(A, c, hx_state, hxx_xx, eta_x,
+                                              sol.hσσ, Var_xf,
+                                              nx, n_eps, nz, r1, r2, r3, r4, r5, r6)
+
+    # ---- Solve augmented Lyapunov ----
+    Var_z = _dlyap_doubling(A, Var_inov)
+
+    # ---- Observation mapping ----
+    # Use transition-based convention (consistent with _augmented_moments_2nd):
+    # state_obs(t) = C_state · z(t-1) + d_state + noise_state · ε(t)
+    C_state = zeros(T, nx, nz)
+    C_state[:, r1] = hx_state + T(0.5) * hssx_xx
+    C_state[:, r2] = hx_state
+    C_state[:, r3] = T(0.5) * hxx_xx
+    C_state[:, r4] = hx_state
+    C_state[:, r5] = hxx_xx
+    C_state[:, r6] = (one(T) / T(6)) * hxxx_xxx
+    noise_state = eta_x
+    d_state = T(0.5) * h_ss
+    if sol.hσσσ !== nothing
+        d_state = d_state + (one(T) / T(6)) * sol.hσσσ
+    end
+
+    # Control observation: ctrl = gx · state_obs + direct Kron terms
+    C_ctrl = zeros(T, ny, nz)
+    if ny > 0 && nx > 0
+        C_ctrl = gx_state * C_state
+        C_ctrl[:, r3] += T(0.5) * gxx_xx
+        C_ctrl[:, r5] += gxx_xx
+        C_ctrl[:, r6] += (one(T) / T(6)) * gxxx_xxx
+        C_ctrl[:, r1] += T(0.5) * gssx_xx
+    end
+    noise_ctrl = ny > 0 ? gx_state * eta_x + eta_y : zeros(T, 0, n_eps)
+    d_ctrl = zeros(T, ny)
+    if ny > 0 && nx > 0
+        d_ctrl = gx_state * d_state
+    end
+    if sol.gσσ !== nothing && ny > 0
+        d_ctrl += T(0.5) * sol.gσσ
+    end
+    if sol.gσσσ !== nothing && ny > 0
+        d_ctrl += (one(T) / T(6)) * sol.gσσσ
+    end
+
+    # Assemble into full n-vector in original variable ordering
+    C_full = zeros(T, n, nz)
+    noise_full = zeros(T, n, n_eps)
+    d_full = zeros(T, n)
+    for (k, si) in enumerate(sol.state_indices)
+        C_full[si, :] = C_state[k, :]
+        noise_full[si, :] = noise_state[k, :]
+        d_full[si] = d_state[k]
+    end
+    for (k, ci) in enumerate(sol.control_indices)
+        C_full[ci, :] = C_ctrl[k, :]
+        noise_full[ci, :] = noise_ctrl[k, :]
+        d_full[ci] = d_ctrl[k]
+    end
+
+    # Output moments
+    E_y = C_full * E_z + d_full
+    Var_y = C_full * Var_z * C_full' + noise_full * noise_full'
+    Var_y = (Var_y + Var_y') / 2  # enforce symmetry
+
+    # Autocovariances
+    M_cross = zeros(T, nz, n_eps)
+    M_cross[r1, :] = eta_x
+
+    max_lag = maximum(lags)
+    Cov_y = zeros(T, n, n, max_lag)
+    A_power = copy(A)
+    A_power_prev = Matrix{T}(I, nz, nz)
+    for lag in 1:max_lag
+        Cov_y[:, :, lag] = C_full * A_power * Var_z * C_full' +
+                            C_full * A_power_prev * M_cross * noise_full'
+        A_power_prev = A_power
+        A_power = A_power * A
+    end
+
+    # Handle augmented models
+    if sol.spec.augmented
+        orig_idx = _original_var_indices(sol.spec)
+        E_y = E_y[orig_idx]
+        Var_y = Var_y[orig_idx, orig_idx]
+        Cov_y = Cov_y[orig_idx, orig_idx, :]
+    end
+
+    Dict{Symbol, Any}(
+        :E_y => E_y,
+        :Var_y => Var_y,
+        :Cov_y => Cov_y,
+        :E_z => E_z,
+        :Var_z => Var_z,
+    )
+end
+
+
+# =============================================================================
 # analytical_moments — closed-form moments for PerturbationSolution
 # =============================================================================
 
@@ -893,7 +1332,12 @@ For order 1, uses standard Lyapunov (means are zero).
 function _analytical_moments_gmm(sol::PerturbationSolution{T}; lags::Int=1) where {T}
     lag_vec = collect(1:lags)
 
-    if sol.order >= 2
+    if sol.order >= 3
+        result = _augmented_moments_3rd(sol; lags=lag_vec)
+        E_y = result[:E_y]
+        Var_y = result[:Var_y]
+        Cov_y = result[:Cov_y]
+    elseif sol.order >= 2
         result = _augmented_moments_2nd(sol; lags=lag_vec)
         E_y = result[:E_y]
         Var_y = result[:Var_y]
