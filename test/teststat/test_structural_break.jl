@@ -238,3 +238,53 @@ end
         @test result isa AndrewsResult{Float64}
     end
 end
+
+@testset "Factor Break Tests" begin
+    Random.seed!(42)
+
+    @testset "Breitung-Eickmeier" begin
+        # Panel with stable loadings
+        T_obs, N = 100, 20
+        X = randn(T_obs, N)
+        result = factor_break_test(X, 2; method=:breitung_eickmeier)
+        @test result isa FactorBreakResult{Float64}
+        @test result.method == :breitung_eickmeier
+        @test result.n_factors == 2
+        @test result.nobs == T_obs
+        @test result.n_vars == N
+        @test 0.0 <= result.pvalue <= 1.0
+        @test result.break_date isa Int
+    end
+
+    @testset "FactorModel dispatch" begin
+        X = randn(80, 15)
+        fm = estimate_factors(X, 2)
+        result = factor_break_test(fm; method=:breitung_eickmeier)
+        @test result isa FactorBreakResult{Float64}
+    end
+
+    @testset "Chen-Dolado-Gonzalo" begin
+        X = randn(100, 20)
+        result = factor_break_test(X; method=:chen_dolado_gonzalo)
+        @test result isa FactorBreakResult{Float64}
+        @test result.method == :chen_dolado_gonzalo
+    end
+
+    @testset "Han-Inoue" begin
+        X = randn(100, 20)
+        result = factor_break_test(X, 2; method=:han_inoue)
+        @test result isa FactorBreakResult{Float64}
+        @test result.method == :han_inoue
+        @test result.break_date isa Int
+    end
+
+    @testset "Error handling" begin
+        @test_throws ArgumentError factor_break_test(randn(10, 5), 2)  # too short
+        @test_throws ArgumentError factor_break_test(randn(100, 20), 2; method=:invalid)
+    end
+
+    @testset "Float64 fallback" begin
+        result = factor_break_test(round.(Int, randn(80, 15) .* 10), 2)
+        @test result isa FactorBreakResult{Float64}
+    end
+end
