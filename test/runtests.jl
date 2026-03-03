@@ -102,6 +102,7 @@ const TEST_GROUPS = [
     # Group 7: DSGE Models
     ("DSGE Models" => [
         "dsge/test_dsge.jl",
+        "dsge/test_bayesian_dsge.jl",
     ]),
     # Group 8: Coverage gap tests (lightweight, fast)
     ("Coverage" => [
@@ -297,7 +298,10 @@ else
         @testset "Time Series Filters" begin include("filters/test_filters.jl") end
 
         # Group 7: DSGE Models
-        @testset "DSGE Models" begin include("dsge/test_dsge.jl") end
+        @testset "DSGE Models" begin
+            include("dsge/test_dsge.jl")
+            include("dsge/test_bayesian_dsge.jl")
+        end
 
         # Group 8: Coverage gap tests
         @testset "VECM & Teststat Coverage" begin include("coverage/test_vecm_teststat_coverage.jl") end
