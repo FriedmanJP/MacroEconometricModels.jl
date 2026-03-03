@@ -244,7 +244,7 @@ function _event_study_lp_internal(pd::PanelData{T}, outcome::Union{String,Symbol
         X_dm = _double_demean_matrix(X_full, unit_ids_h, time_ids_h)
 
         # OLS
-        XtX_inv = robust_inv(X_dm' * X_dm)
+        XtX_inv = robust_inv(X_dm' * X_dm; silent=true)
         beta = XtX_inv * (X_dm' * y_dm)
         resid = y_dm - X_dm * beta
 
