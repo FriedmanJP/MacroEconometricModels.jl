@@ -352,4 +352,200 @@ end
     @test size(state.proposal_cov) == (n_params, n_params)
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 2: Observation Equation Builder & DSGE Kalman Filter
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "Build observation equation" begin
+    # Create a simple 3-variable DSGE spec
+    spec = _suppress_warnings() do
+        @dsge begin
+            parameters: rho_y = 0.8, rho_pi = 0.5, rho_r = 0.6
+            endogenous: y, pi_var, r
+            exogenous: eps_y, eps_pi, eps_r
+            y[t] = rho_y * y[t-1] + eps_y[t]
+            pi_var[t] = rho_pi * pi_var[t-1] + eps_pi[t]
+            r[t] = rho_r * r[t-1] + eps_r[t]
+        end
+    end
+
+    # Build observation equation for 2 observables (y and r)
+    observables = [:y, :r]
+    Z, d, H = MacroEconometricModels._build_observation_equation(spec, observables, nothing)
+
+    @test size(Z) == (2, 3)  # 2 observables, 3 states
+    # Z should select y (index 1) and r (index 3)
+    @test Z[1, 1] == 1.0
+    @test Z[1, 2] == 0.0
+    @test Z[1, 3] == 0.0
+    @test Z[2, 1] == 0.0
+    @test Z[2, 2] == 0.0
+    @test Z[2, 3] == 1.0
+
+    # d should be steady-state values at observable indices
+    # (zeros when steady_state not yet computed)
+    @test length(d) == 2
+    @test d[1] == 0.0  # y steady state (default zero)
+    @test d[2] == 0.0  # r steady state (default zero)
+
+    # Verify with computed steady state
+    spec_ss = compute_steady_state(spec)
+    Z2, d2, _ = MacroEconometricModels._build_observation_equation(spec_ss, observables, nothing)
+    @test d2[1] == spec_ss.steady_state[1]
+    @test d2[2] == spec_ss.steady_state[3]
+
+    # H should be positive definite (default 1e-4 * I)
+    @test size(H) == (2, 2)
+    @test H[1, 1] > 0.0
+    @test H[2, 2] > 0.0
+    @test H[1, 2] == 0.0
+    @test H ≈ 1e-4 * I(2)
+
+    # Error: unknown observable
+    @test_throws ArgumentError MacroEconometricModels._build_observation_equation(
+        spec, [:y, :nonexistent], nothing)
+
+    # Error: empty observables
+    @test_throws ArgumentError MacroEconometricModels._build_observation_equation(
+        spec, Symbol[], nothing)
+end
+
+@testset "Build observation equation with measurement error" begin
+    spec = _suppress_warnings() do
+        @dsge begin
+            parameters: rho = 0.8
+            endogenous: y, c
+            exogenous: eps_y, eps_c
+            y[t] = rho * y[t-1] + eps_y[t]
+            c[t] = rho * c[t-1] + eps_c[t]
+        end
+    end
+
+    me = [0.1, 0.2]
+    Z, d, H = MacroEconometricModels._build_observation_equation(spec, [:y, :c], me)
+
+    @test H ≈ diagm([0.01, 0.04])  # diag(me.^2)
+    @test H[1, 1] ≈ 0.01
+    @test H[2, 2] ≈ 0.04
+    @test H[1, 2] ≈ 0.0
+
+    # Wrong length measurement error
+    @test_throws ArgumentError MacroEconometricModels._build_observation_equation(
+        spec, [:y, :c], [0.1])
+end
+
+@testset "Build state space from DSGESolution" begin
+    spec = _suppress_warnings() do
+        @dsge begin
+            parameters: rho = 0.9
+            endogenous: y
+            exogenous: eps_y
+            y[t] = rho * y[t-1] + eps_y[t]
+        end
+    end
+
+    sol = _suppress_warnings() do
+        solve(spec; method=:gensys)
+    end
+
+    Z, d, H = MacroEconometricModels._build_observation_equation(spec, [:y], nothing)
+    ss = MacroEconometricModels._build_state_space(sol, Z, d, H)
+
+    @test ss isa MacroEconometricModels.DSGEStateSpace{Float64}
+    @test ss.G1 == sol.G1
+    @test ss.impact == sol.impact
+    @test ss.Z == Z
+    @test ss.d == d
+    @test ss.H == H
+    @test ss.Q ≈ I(size(sol.impact, 2))
+end
+
+@testset "Kalman loglikelihood: AR(1)" begin
+    Random.seed!(42)
+
+    # AR(1): y_t = rho * y_{t-1} + eps_t
+    rho_true = 0.8
+    sigma_eps = 0.5
+    T_sim = 200
+
+    # Simulate data
+    y = zeros(T_sim)
+    for t in 2:T_sim
+        y[t] = rho_true * y[t-1] + sigma_eps * randn()
+    end
+
+    # Build state space for correct model
+    n_states = 1
+    n_obs = 1
+    n_shocks = 1
+    G1 = fill(rho_true, 1, 1)
+    impact = fill(sigma_eps, 1, 1)
+    Z = ones(1, 1)
+    d = zeros(1)
+    H_me = fill(1e-6, 1, 1)  # tiny measurement error
+    Q = ones(1, 1)
+
+    ss_correct = MacroEconometricModels.DSGEStateSpace{Float64}(G1, impact, Z, d, H_me, Q)
+
+    # Data as n_obs x T_obs
+    data = reshape(y, 1, T_sim)
+
+    ll_correct = MacroEconometricModels._kalman_loglikelihood(ss_correct, data)
+
+    @test isfinite(ll_correct)
+    @test ll_correct < 0.0  # log-likelihood should be negative
+
+    # Misspecified model: wrong rho
+    G1_wrong = fill(0.2, 1, 1)
+    ss_wrong = MacroEconometricModels.DSGEStateSpace{Float64}(G1_wrong, impact, Z, d, H_me, Q)
+    ll_wrong = MacroEconometricModels._kalman_loglikelihood(ss_wrong, data)
+
+    @test isfinite(ll_wrong)
+    @test ll_correct > ll_wrong  # correct model should have higher log-likelihood
+end
+
+@testset "Kalman loglikelihood: 2D with missing data" begin
+    Random.seed!(123)
+
+    # 2D VAR(1): x_t = G1 * x_{t-1} + eps_t
+    G1 = [0.7 0.1; 0.0 0.5]
+    impact = [0.3 0.0; 0.0 0.4]
+    T_sim = 150
+
+    # Simulate
+    x = zeros(2, T_sim)
+    for t in 2:T_sim
+        x[:, t] = G1 * x[:, t-1] + impact * randn(2)
+    end
+
+    Z = Matrix{Float64}(I, 2, 2)
+    d = zeros(2)
+    H_me = 1e-4 * Matrix{Float64}(I, 2, 2)
+    Q = Matrix{Float64}(I, 2, 2)
+
+    ss = MacroEconometricModels.DSGEStateSpace{Float64}(G1, impact, Z, d, H_me, Q)
+
+    # Complete data log-likelihood
+    ll_complete = MacroEconometricModels._kalman_loglikelihood(ss, x)
+    @test isfinite(ll_complete)
+    @test ll_complete < 0.0
+
+    # Add NaN at specific positions
+    x_missing = copy(x)
+    x_missing[1, 10] = NaN   # first variable missing at t=10
+    x_missing[2, 25] = NaN   # second variable missing at t=25
+    x_missing[1, 50] = NaN   # first variable missing at t=50
+    x_missing[2, 50] = NaN   # both missing at t=50
+
+    ll_missing = MacroEconometricModels._kalman_loglikelihood(ss, x_missing)
+    @test isfinite(ll_missing)
+    @test ll_missing != ll_complete  # should differ from complete data
+
+    # All NaN for one period should still produce finite result
+    x_all_nan = copy(x)
+    x_all_nan[:, 30] .= NaN
+    ll_all_nan = MacroEconometricModels._kalman_loglikelihood(ss, x_all_nan)
+    @test isfinite(ll_all_nan)
+end
+
 end  # @testset "Bayesian DSGE"
