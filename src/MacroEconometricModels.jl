@@ -279,6 +279,7 @@ include("dsge/bayes_types.jl")
 include("dsge/kalman_dsge.jl")
 include("dsge/particle_filter.jl")
 include("dsge/smc.jl")
+include("dsge/bayes_estimation.jl")
 
 # Display (after all types)
 include("summary.jl")
@@ -355,6 +356,8 @@ export DSGESpec, LinearDSGE, DSGESolution, PerturbationSolution, ProjectionSolut
 
 # Bayesian DSGE
 export BayesianDSGE
+export estimate_dsge_bayes, posterior_summary, marginal_likelihood, bayes_factor
+export prior_posterior_table, posterior_predictive
 
 # Macro
 export @dsge

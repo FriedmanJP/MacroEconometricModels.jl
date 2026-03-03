@@ -1181,4 +1181,196 @@ end
     end
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 6: Public API — estimate_dsge_bayes
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "estimate_dsge_bayes: SMC + Kalman" begin
+    _suppress_warnings() do
+    rng = Random.MersenneTwister(42)
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    true_spec = @dsge begin
+        parameters: ρ = 0.8, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    true_spec = compute_steady_state(true_spec)
+    sol_true = solve(true_spec; method=:gensys)
+    sim_data = simulate(sol_true, 200; rng=rng)
+
+    priors = Dict(:ρ => Beta(2, 2))
+    result = estimate_dsge_bayes(spec, sim_data, [0.5];
+        priors=priors, method=:smc, observables=[:y],
+        n_smc=200, n_mh_steps=1,
+        rng=Random.MersenneTwister(123))
+
+    @test result isa BayesianDSGE{Float64}
+    @test result.method == :smc
+    @test size(result.theta_draws, 2) == 1
+    @test length(result.param_names) == 1
+    @test result.param_names[1] == :ρ
+    @test isfinite(result.log_marginal_likelihood)
+    @test 0.0 < result.acceptance_rate <= 1.0
+    @test result.phi_schedule[end] ≈ 1.0
+    end
+end
+
+@testset "estimate_dsge_bayes: MH" begin
+    _suppress_warnings() do
+    rng = Random.MersenneTwister(42)
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:gensys)
+    sim_data = simulate(sol, 200; rng=rng)
+
+    priors = Dict(:ρ => Beta(2, 2))
+    result = estimate_dsge_bayes(spec, sim_data, [0.5];
+        priors=priors, method=:mh, observables=[:y],
+        n_draws=1000, burnin=200,
+        rng=Random.MersenneTwister(123))
+
+    @test result isa BayesianDSGE{Float64}
+    @test result.method == :rwmh
+    @test size(result.theta_draws, 1) == 1000
+    end
+end
+
+@testset "estimate_dsge_bayes: auto data transpose" begin
+    _suppress_warnings() do
+    rng = Random.MersenneTwister(42)
+    spec = @dsge begin
+        parameters: ρ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:gensys)
+    sim_data = simulate(sol, 100; rng=rng)  # Returns T × 1
+
+    priors = Dict(:ρ => Beta(2, 2))
+    result = estimate_dsge_bayes(spec, sim_data, [0.5];
+        priors=priors, method=:smc, observables=[:y],
+        n_smc=100, rng=Random.MersenneTwister(1))
+    @test result isa BayesianDSGE{Float64}
+    end
+end
+
+@testset "estimate_dsge_bayes: invalid method" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sim_data = randn(1, 100)
+    priors = Dict(:ρ => Beta(2, 2))
+    @test_throws ArgumentError estimate_dsge_bayes(spec, sim_data, [0.5];
+        priors=priors, method=:invalid, observables=[:y])
+    end
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 7: Posterior Analysis
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "posterior_summary" begin
+    _suppress_warnings() do
+    rng = Random.MersenneTwister(42)
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:gensys)
+    sim_data = simulate(sol, 200; rng=rng)
+
+    priors = Dict(:ρ => Beta(2, 2))
+    result = estimate_dsge_bayes(spec, sim_data, [0.5];
+        priors=priors, method=:smc, observables=[:y],
+        n_smc=100, rng=Random.MersenneTwister(1))
+
+    ps = posterior_summary(result)
+    @test haskey(ps, :ρ)
+    @test haskey(ps[:ρ], :mean)
+    @test haskey(ps[:ρ], :median)
+    @test haskey(ps[:ρ], :std)
+    @test haskey(ps[:ρ], :ci_lower)
+    @test haskey(ps[:ρ], :ci_upper)
+    @test ps[:ρ][:ci_lower] < ps[:ρ][:mean] < ps[:ρ][:ci_upper]
+    end
+end
+
+@testset "marginal_likelihood" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:gensys)
+    sim_data = simulate(sol, 100; rng=Random.MersenneTwister(42))
+
+    priors = Dict(:ρ => Beta(2, 2))
+    result = estimate_dsge_bayes(spec, sim_data, [0.5];
+        priors=priors, method=:smc, observables=[:y],
+        n_smc=100, rng=Random.MersenneTwister(1))
+
+    ml = marginal_likelihood(result)
+    @test isfinite(ml)
+    @test ml < 0
+    end
+end
+
+@testset "bayes_factor" begin
+    _suppress_warnings() do
+    rng = Random.MersenneTwister(42)
+    spec = @dsge begin
+        parameters: ρ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:gensys)
+    sim_data = simulate(sol, 100; rng=rng)
+
+    priors = Dict(:ρ => Beta(2, 2))
+    r1 = estimate_dsge_bayes(spec, sim_data, [0.5]; priors=priors, method=:smc,
+        observables=[:y], n_smc=100, rng=Random.MersenneTwister(1))
+    r2 = estimate_dsge_bayes(spec, sim_data, [0.5]; priors=priors, method=:smc,
+        observables=[:y], n_smc=100, rng=Random.MersenneTwister(2))
+
+    bf = bayes_factor(r1, r2)
+    @test isfinite(bf)
+    end
+end
+
 end  # @testset "Bayesian DSGE"
