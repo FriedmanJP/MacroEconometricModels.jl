@@ -239,6 +239,117 @@ end
     end
 end
 
+@testset "Bai-Perron Multiple Break Tests" begin
+    Random.seed!(123)
+
+    @testset "Two known breaks" begin
+        T_obs = 150
+        X = hcat(ones(T_obs), collect(1:T_obs) ./ T_obs)
+        y = zeros(T_obs)
+        y[1:50] = X[1:50, :] * [1.0, 2.0] + randn(50) * 0.3
+        y[51:100] = X[51:100, :] * [3.0, -1.0] + randn(50) * 0.3
+        y[101:150] = X[101:150, :] * [0.0, 4.0] + randn(50) * 0.3
+
+        result = bai_perron_test(y, X; max_breaks=3, trimming=0.15)
+        @test result isa BaiPerronResult{Float64}
+        @test result.nobs == T_obs
+        @test 1 <= result.n_breaks <= 3
+        @test length(result.break_dates) == result.n_breaks
+        @test length(result.break_cis) == result.n_breaks
+        @test length(result.regime_coefs) == result.n_breaks + 1
+        @test length(result.supf_stats) <= 3
+        @test length(result.bic_values) >= 2
+    end
+
+    @testset "No breaks" begin
+        T_obs = 100
+        X = ones(T_obs, 1)
+        y = 2.0 .+ randn(T_obs) * 0.5
+        result = bai_perron_test(y, X; max_breaks=3)
+        @test result isa BaiPerronResult{Float64}
+        @test result.n_breaks >= 0
+    end
+
+    @testset "Float64 fallback" begin
+        result = bai_perron_test(round.(Int, randn(100) .* 10), round.(Int, randn(100, 1) .* 10))
+        @test result isa BaiPerronResult{Float64}
+    end
+
+    @testset "Single known break" begin
+        Random.seed!(456)
+        T_obs = 200
+        X = ones(T_obs, 1)
+        y = vcat(fill(1.0, 100), fill(5.0, 100)) + randn(T_obs) * 0.3
+        result = bai_perron_test(y, X; max_breaks=3, trimming=0.15)
+        @test result isa BaiPerronResult{Float64}
+        @test result.n_breaks >= 1
+        # Break should be near observation 100
+        if result.n_breaks >= 1
+            @test abs(result.break_dates[1] - 100) <= 20
+        end
+    end
+
+    @testset "LWZ criterion" begin
+        Random.seed!(789)
+        T_obs = 100
+        X = ones(T_obs, 1)
+        y = vcat(fill(2.0, 50), fill(4.0, 50)) + randn(T_obs) * 0.5
+        result = bai_perron_test(y, X; max_breaks=3, criterion=:lwz)
+        @test result isa BaiPerronResult{Float64}
+        @test length(result.lwz_values) >= 2
+    end
+
+    @testset "Error handling" begin
+        @test_throws ArgumentError bai_perron_test(randn(10), ones(10, 1))  # too short
+        @test_throws ArgumentError bai_perron_test(randn(100), ones(50, 1))  # size mismatch
+        @test_throws ArgumentError bai_perron_test(randn(100), ones(100, 1); criterion=:invalid)
+    end
+
+    @testset "Regime coefficients and SEs" begin
+        Random.seed!(111)
+        T_obs = 120
+        X = ones(T_obs, 1)
+        y = vcat(fill(3.0, 60), fill(7.0, 60)) + randn(T_obs) * 0.2
+        result = bai_perron_test(y, X; max_breaks=2, trimming=0.15)
+        @test result isa BaiPerronResult{Float64}
+        # Each regime should have 1 coefficient (intercept only)
+        for coefs in result.regime_coefs
+            @test length(coefs) == 1
+        end
+        for ses in result.regime_ses
+            @test length(ses) == 1
+            @test all(ses .>= 0)
+        end
+    end
+
+    @testset "sup-F and sequential statistics" begin
+        Random.seed!(222)
+        T_obs = 150
+        X = ones(T_obs, 1)
+        y = vcat(fill(1.0, 50), fill(4.0, 50), fill(2.0, 50)) + randn(T_obs) * 0.3
+        result = bai_perron_test(y, X; max_breaks=4, trimming=0.15)
+        @test all(result.supf_stats .>= 0)
+        @test all(0 .<= result.supf_pvalues .<= 1)
+        if !isempty(result.sequential_stats)
+            @test all(result.sequential_stats .>= 0)
+            @test all(0 .<= result.sequential_pvalues .<= 1)
+        end
+    end
+
+    @testset "Display method" begin
+        Random.seed!(333)
+        T_obs = 100
+        X = ones(T_obs, 1)
+        y = vcat(fill(2.0, 50), fill(5.0, 50)) + randn(T_obs) * 0.5
+        result = bai_perron_test(y, X; max_breaks=2)
+        io = IOBuffer()
+        show(io, result)
+        output = String(take!(io))
+        @test occursin("Bai-Perron", output)
+        @test occursin("Observations", output)
+    end
+end
+
 @testset "Factor Break Tests" begin
     Random.seed!(42)
 
@@ -286,5 +397,107 @@ end
     @testset "Float64 fallback" begin
         result = factor_break_test(round.(Int, randn(80, 15) .* 10), 2)
         @test result isa FactorBreakResult{Float64}
+    end
+end
+
+@testset "PANIC Panel Unit Root" begin
+    Random.seed!(42)
+
+    @testset "Basic PANIC" begin
+        T_obs, N = 100, 20
+        F = cumsum(randn(T_obs))
+        Lambda = randn(N)
+        e = randn(T_obs, N)
+        X = F * Lambda' + e
+
+        result = panic_test(X; r=1, method=:pooled)
+        @test result isa PANICResult{Float64}
+        @test result.n_factors == 1
+        @test result.method == :pooled
+        @test result.nobs == T_obs
+        @test result.n_units == N
+        @test length(result.factor_adf_stats) == 1
+        @test length(result.individual_stats) == N
+        @test 0.0 <= result.pooled_pvalue <= 1.0
+    end
+
+    @testset "Auto factor selection" begin
+        X = randn(80, 15)
+        result = panic_test(X; r=:auto)
+        @test result isa PANICResult{Float64}
+        @test result.n_factors >= 1
+    end
+
+    @testset "Individual method" begin
+        X = randn(60, 10)
+        result = panic_test(X; r=1, method=:individual)
+        @test result.method == :individual
+        @test length(result.individual_pvalues) == 10
+    end
+
+    @testset "PanelData dispatch" begin
+        using DataFrames
+        df = DataFrame(group=repeat(1:5, inner=20), time=repeat(1:20, 5), y=randn(100))
+        pd = xtset(df, :group, :time)
+        result = panic_test(pd; r=1)
+        @test result isa PANICResult{Float64}
+        @test result.n_units == 5
+    end
+
+    @testset "Error handling" begin
+        @test_throws ArgumentError panic_test(randn(5, 2); r=1)
+        @test_throws ArgumentError panic_test(randn(50, 3); r=0)
+    end
+end
+
+@testset "Pesaran CIPS" begin
+    Random.seed!(42)
+
+    @testset "Stationary panel" begin
+        X = randn(50, 20)
+        result = pesaran_cips_test(X; lags=1, deterministic=:constant)
+        @test result isa PesaranCIPSResult{Float64}
+        @test result.nobs == 50
+        @test result.n_units == 20
+        @test length(result.individual_cadf_stats) == 20
+        @test 0.0 <= result.pvalue <= 1.0
+    end
+
+    @testset "Deterministic variants" begin
+        X = randn(50, 10)
+        for det in [:none, :constant, :trend]
+            result = pesaran_cips_test(X; lags=1, deterministic=det)
+            @test result.deterministic == det
+        end
+    end
+
+    @testset "Error handling" begin
+        @test_throws ArgumentError pesaran_cips_test(randn(5, 2); lags=1)
+        @test_throws ArgumentError pesaran_cips_test(randn(50, 3); deterministic=:invalid)
+    end
+end
+
+@testset "Moon-Perron" begin
+    Random.seed!(42)
+
+    @testset "Basic test" begin
+        X = randn(80, 15)
+        result = moon_perron_test(X; r=1)
+        @test result isa MoonPerronResult{Float64}
+        @test result.n_factors == 1
+        @test result.nobs == 80
+        @test result.n_units == 15
+        @test 0.0 <= result.pvalue_a <= 1.0
+        @test 0.0 <= result.pvalue_b <= 1.0
+    end
+
+    @testset "Auto factor selection" begin
+        X = randn(60, 10)
+        result = moon_perron_test(X; r=:auto)
+        @test result isa MoonPerronResult{Float64}
+    end
+
+    @testset "Error handling" begin
+        @test_throws ArgumentError moon_perron_test(randn(5, 2); r=1)
     end
 end
