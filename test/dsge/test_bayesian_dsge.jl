@@ -935,4 +935,166 @@ end
     @test all(ws.weights .≈ 1.0 / N)
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 4: SMC & MH Samplers
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "Adaptive tempering bisection" begin
+    N = 100
+    log_liks = randn(N)
+    phi_old = 0.0
+    ess_target = 0.5
+
+    phi_new = MacroEconometricModels._adaptive_tempering(log_liks, phi_old, ess_target, N)
+    @test phi_new > phi_old
+    @test phi_new <= 1.0
+
+    # Check ESS at this phi
+    delta_phi = phi_new - phi_old
+    inc_log_w = delta_phi .* log_liks
+    inc_log_w .-= MacroEconometricModels._logsumexp(inc_log_w) - log(N)
+    w = exp.(inc_log_w)
+    w ./= sum(w)
+    ess = 1.0 / sum(abs2, w)
+    @test abs(ess - ess_target * N) < 5.0
+end
+
+@testset "Log prior evaluation" begin
+    priors = Dict(:ρ => Beta(2, 2), :σ => InverseGamma(2.0, 0.5))
+    prior = MacroEconometricModels.DSGEPrior(priors;
+        lower=Dict(:ρ => 0.0, :σ => 0.0),
+        upper=Dict(:ρ => 1.0))
+
+    # Valid parameter vector (sorted order: ρ, σ)
+    θ_valid = [0.5, 0.3]
+    lp = MacroEconometricModels._log_prior(θ_valid, prior)
+    @test isfinite(lp)
+    @test lp ≈ logpdf(Beta(2, 2), 0.5) + logpdf(InverseGamma(2.0, 0.5), 0.3)
+
+    # Out of bounds
+    θ_oob = [-0.1, 0.3]
+    lp_oob = MacroEconometricModels._log_prior(θ_oob, prior)
+    @test lp_oob == -Inf
+
+    θ_oob2 = [0.5, -0.1]
+    lp_oob2 = MacroEconometricModels._log_prior(θ_oob2, prior)
+    @test lp_oob2 == -Inf
+end
+
+@testset "Build likelihood function" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    sol = solve(spec; method=:gensys)
+    data_mat = simulate(sol, 100; rng=Random.MersenneTwister(42))'  # n_obs × T
+
+    ll_fn = MacroEconometricModels._build_likelihood_fn(spec, [:ρ], data_mat,
+        [:y], nothing, :gensys, NamedTuple())
+
+    # Should return finite log-likelihood at valid parameter
+    ll = ll_fn([0.8])
+    @test isfinite(ll)
+    @test ll < 0.0
+
+    # Should return -Inf for explosive parameter
+    ll_bad = ll_fn([1.5])
+    @test ll_bad == -Inf
+    end
+end
+
+@testset "SMC with Kalman: AR(1) recovery" begin
+    _suppress_warnings() do
+    rng = Random.MersenneTwister(42)
+
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    true_spec = @dsge begin
+        parameters: ρ = 0.8, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    true_spec = compute_steady_state(true_spec)
+    sol_true = solve(true_spec; method=:gensys)
+    data = simulate(sol_true, 200; rng=rng)'
+
+    priors = Dict(:ρ => Beta(2, 2))
+    result = MacroEconometricModels._smc_sample(spec, data, [:ρ],
+        MacroEconometricModels.DSGEPrior(priors; lower=Dict(:ρ => 0.01), upper=Dict(:ρ => 0.99)),
+        [0.5];
+        n_smc=200, n_mh_steps=1, ess_target=0.5,
+        observables=[:y], measurement_error=nothing,
+        solver=:gensys, solver_kwargs=NamedTuple(),
+        rng=Random.MersenneTwister(123))
+
+    @test length(result.phi_schedule) > 1
+    @test result.phi_schedule[end] ≈ 1.0
+    @test isfinite(result.log_marginal_likelihood)
+
+    # Posterior mean should be close to true value
+    w = exp.(result.log_weights .- MacroEconometricModels._logsumexp(result.log_weights))
+    post_mean = sum(result.theta_particles[1, :] .* w)
+    @test abs(post_mean - 0.8) < 0.3
+    end
+end
+
+@testset "Adaptive RWMH: AR(1) recovery" begin
+    _suppress_warnings() do
+    rng = Random.MersenneTwister(42)
+
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    true_spec = @dsge begin
+        parameters: ρ = 0.8, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    true_spec = compute_steady_state(true_spec)
+    sol_true = solve(true_spec; method=:gensys)
+    data = simulate(sol_true, 200; rng=rng)'
+
+    priors = Dict(:ρ => Beta(2, 2))
+    draws, log_post, acc_rate = MacroEconometricModels._mh_sample(spec, data, [:ρ],
+        MacroEconometricModels.DSGEPrior(priors; lower=Dict(:ρ => 0.01), upper=Dict(:ρ => 0.99)),
+        [0.5];
+        n_draws=2000, burnin=500, adapt_interval=100,
+        observables=[:y], measurement_error=nothing,
+        solver=:gensys, solver_kwargs=NamedTuple(),
+        rng=Random.MersenneTwister(123))
+
+    @test size(draws, 1) == 2000
+    @test size(draws, 2) == 1
+    @test length(log_post) == 2000
+    @test 0.0 < acc_rate < 1.0
+
+    # Posterior mean (after burnin) should be near truth
+    post_draws = draws[501:end, 1]
+    @test abs(mean(post_draws) - 0.8) < 0.3
+    end
+end
+
 end  # @testset "Bayesian DSGE"

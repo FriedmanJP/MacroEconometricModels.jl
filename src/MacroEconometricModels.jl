@@ -278,6 +278,7 @@ include("dsge/estimation.jl")
 include("dsge/bayes_types.jl")
 include("dsge/kalman_dsge.jl")
 include("dsge/particle_filter.jl")
+include("dsge/smc.jl")
 
 # Display (after all types)
 include("summary.jl")
