@@ -1,6 +1,7 @@
 using Test
 using MacroEconometricModels
 using StatsAPI
+using Random
 
 @testset "Structural Break & Panel Unit Root Types" begin
     @testset "AndrewsResult construction" begin
@@ -129,7 +130,7 @@ using StatsAPI
         @test r2 isa MoonPerronResult{Float32}
     end
 
-    @testset "Critical value tables exist" begin
+    @testset "Critical value tables exist (original)" begin
         # Hansen/Andrews sup-Wald
         @test haskey(MacroEconometricModels.HANSEN_ANDREWS_CV, 1)
         @test haskey(MacroEconometricModels.HANSEN_ANDREWS_CV, 5)
@@ -182,5 +183,58 @@ using StatsAPI
                 end
             end
         end
+    end
+end
+
+@testset "Andrews Structural Break Tests" begin
+    Random.seed!(42)
+
+    @testset "Known structural break" begin
+        T_obs = 100
+        X = hcat(ones(T_obs), randn(T_obs))
+        y = X * [1.0, 2.0] + randn(T_obs) * 0.5
+        y[51:end] .+= X[51:end, 2] .* 3.0  # break at t=50
+
+        result = andrews_test(y, X; test=:supwald, trimming=0.15)
+        @test result isa AndrewsResult{Float64}
+        @test result.test_type == :supwald
+        @test result.nobs == T_obs
+        @test result.n_params == 2
+        @test result.trimming == 0.15
+        @test length(result.stat_sequence) > 0
+        @test 0.0 <= result.pvalue <= 1.0
+        @test 1 <= result.break_index <= T_obs
+        @test result.pvalue < 0.10  # strong break should reject
+    end
+
+    @testset "No break (stable series)" begin
+        T_obs = 200
+        X = hcat(ones(T_obs), randn(T_obs))
+        y = X * [1.0, 2.0] + randn(T_obs) * 0.5
+        result = andrews_test(y, X; test=:supwald)
+        @test result isa AndrewsResult{Float64}
+        @test result.pvalue >= 0.0
+    end
+
+    @testset "All 9 test variants" begin
+        T_obs = 100
+        X = hcat(ones(T_obs), randn(T_obs))
+        y = X * [1.0, 2.0] + randn(T_obs)
+        for test_type in [:supwald, :suplr, :suplm, :expwald, :explr, :explm, :meanwald, :meanlr, :meanlm]
+            result = andrews_test(y, X; test=test_type)
+            @test result.test_type == test_type
+            @test result.statistic >= 0
+            @test 0.0 <= result.pvalue <= 1.0
+        end
+    end
+
+    @testset "Error handling" begin
+        @test_throws ArgumentError andrews_test(randn(100), ones(100, 1); test=:invalid)
+        @test_throws ArgumentError andrews_test(randn(10), ones(5, 1))
+    end
+
+    @testset "Float64 fallback" begin
+        result = andrews_test(round.(Int, randn(100) .* 10), round.(Int, randn(100, 2) .* 10))
+        @test result isa AndrewsResult{Float64}
     end
 end
