@@ -37,7 +37,7 @@ using LinearAlgebra, Statistics, StatsAPI
 
 Static factor model via PCA: Xₜ = Λ Fₜ + eₜ.
 
-Fields: X, factors, loadings, eigenvalues, explained_variance, cumulative_variance, r, standardized.
+Fields: X, factors, loadings, eigenvalues, explained_variance, cumulative_variance, r, standardized, block_names.
 """
 struct FactorModel{T<:AbstractFloat} <: AbstractFactorModel
     X::Matrix{T}
@@ -48,6 +48,7 @@ struct FactorModel{T<:AbstractFloat} <: AbstractFactorModel
     cumulative_variance::Vector{T}
     r::Int
     standardized::Bool
+    block_names::Union{Vector{Symbol}, Nothing}
 end
 
 # =============================================================================
@@ -55,9 +56,10 @@ end
 # =============================================================================
 
 """
-    estimate_factors(X, r; standardize=true) -> FactorModel
+    estimate_factors(X, r; standardize=true, blocks=nothing) -> FactorModel
 
-Estimate static factor model X_t = Λ F_t + e_t via Principal Component Analysis.
+Estimate static factor model X_t = Λ F_t + e_t via Principal Component Analysis,
+or via block-restricted EM when `blocks` is provided.
 
 # Arguments
 - `X`: Data matrix (T × N), observations × variables
@@ -65,21 +67,37 @@ Estimate static factor model X_t = Λ F_t + e_t via Principal Component Analysis
 
 # Keyword Arguments
 - `standardize::Bool=true`: Standardize data before estimation
+- `blocks::Union{Nothing, Dict{Symbol, Vector{Int}}}=nothing`: Block restriction map.
+  When provided, each key is a block (factor) name and the value is a vector of variable
+  indices that load on that factor. Variables not in a block have zero loadings on that
+  factor. The number of blocks must equal `r`.
 
 # Returns
 `FactorModel` containing factors, loadings, eigenvalues, and explained variance.
+When `blocks` is provided, `block_names` is set on the returned model.
 
 # Example
 ```julia
 X = randn(200, 50)  # 200 observations, 50 variables
-fm = estimate_factors(X, 3)  # Extract 3 factors
+fm = estimate_factors(X, 3)  # Extract 3 factors via PCA
 r2(fm)  # R² for each variable
+
+# Block-restricted estimation
+blocks = Dict(:real => [1,2,3,4,5], :nominal => [6,7,8,9,10])
+fm_restricted = estimate_factors(X, 2; blocks=blocks)
 ```
 """
-function estimate_factors(X::AbstractMatrix{T}, r::Int; standardize::Bool=true) where {T<:AbstractFloat}
+function estimate_factors(X::AbstractMatrix{T}, r::Int;
+        standardize::Bool=true,
+        blocks::Union{Nothing, Dict{Symbol, Vector{Int}}}=nothing) where {T<:AbstractFloat}
     _validate_data(X, "X")
     T_obs, N = size(X)
     validate_factor_inputs(T_obs, N, r)
+
+    # Route to block-restricted EM if blocks provided
+    if blocks !== nothing
+        return _estimate_restricted_em(X, r, blocks, standardize)
+    end
 
     X_orig = copy(X)
     X_proc = standardize ? _standardize(X) : X
@@ -99,18 +117,143 @@ function estimate_factors(X::AbstractMatrix{T}, r::Int; standardize::Bool=true) 
     expl = λ / total
     cumul = cumsum(expl)
 
-    FactorModel{T}(X_orig, factors, loadings, λ, expl, cumul, r, standardize)
+    FactorModel{T}(X_orig, factors, loadings, λ, expl, cumul, r, standardize, nothing)
 end
 
 @float_fallback estimate_factors X
 
+# =============================================================================
+# Block-Restricted Factor Estimation via EM
+# =============================================================================
+
+"""
+    _estimate_restricted_em(X, r, blocks, standardize; max_iter=500, tol=1e-6) -> FactorModel
+
+Estimate block-restricted factor model via EM algorithm.
+
+Each factor loads only on its assigned block of variables. The restriction mask R
+enforces zero loadings outside each block.
+
+# Algorithm
+1. Validate block structure (count, overlap, range, minimum size)
+2. Build N × r restriction mask R from block assignments
+3. Initialize Λ via block-wise PCA (first eigenvector per block)
+4. EM iteration:
+   - E-step: F = X Λ (Λ'Λ)⁻¹ (posterior mean of factors given loadings)
+   - M-step: Λ_new = (F'F)⁻¹ F'X, masked by R (zero out restricted entries)
+5. Convergence when max absolute change in Λ < tol
+"""
+function _estimate_restricted_em(X::AbstractMatrix{T}, r::Int,
+        blocks::Dict{Symbol, Vector{Int}}, standardize::Bool;
+        max_iter::Int=500, tol::T=T(1e-6)) where {T<:AbstractFloat}
+    T_obs, N = size(X)
+
+    # --- Validate blocks ---
+    block_names = collect(keys(blocks))
+    block_indices = collect(values(blocks))
+
+    length(blocks) == r || throw(ArgumentError(
+        "Number of blocks ($(length(blocks))) must equal number of factors r=$r"))
+
+    # Check for overlapping indices
+    all_idx = Int[]
+    for (name, idx) in blocks
+        for i in idx
+            i in all_idx && throw(ArgumentError(
+                "Variable index $i appears in multiple blocks"))
+            push!(all_idx, i)
+        end
+    end
+
+    # Check index range and minimum block size
+    for (name, idx) in blocks
+        length(idx) < 2 && throw(ArgumentError(
+            "Block :$name has $(length(idx)) variable(s); minimum is 2"))
+        for i in idx
+            (1 <= i <= N) || throw(ArgumentError(
+                "Variable index $i in block :$name is out of range [1, $N]"))
+        end
+    end
+
+    X_orig = copy(X)
+    X_proc = standardize ? _standardize(X) : X
+
+    # --- Build restriction mask R (N × r): 1 where loading is allowed, 0 otherwise ---
+    R = zeros(T, N, r)
+    for (f, name) in enumerate(block_names)
+        idx = blocks[name]
+        for i in idx
+            R[i, f] = one(T)
+        end
+    end
+
+    # --- Initialize Λ via block-wise PCA ---
+    Λ = zeros(T, N, r)
+    for (f, name) in enumerate(block_names)
+        idx = blocks[name]
+        X_block = X_proc[:, idx]
+        Σ_block = (X_block'X_block) / T_obs
+        eig_block = eigen(Symmetric(Σ_block))
+        # First eigenvector (largest eigenvalue)
+        max_idx = argmax(eig_block.values)
+        v1 = eig_block.vectors[:, max_idx]
+        scale = sqrt(eig_block.values[max_idx])
+        for (row, i) in enumerate(idx)
+            Λ[i, f] = v1[row] * scale
+        end
+    end
+
+    # --- EM iteration ---
+    factors = zeros(T, T_obs, r)
+    for iter in 1:max_iter
+        # E-step: compute factors given loadings
+        # F = X_proc * Λ * inv(Λ'Λ)
+        ΛtΛ = Λ' * Λ
+        ΛtΛ_inv = Matrix{T}(robust_inv(ΛtΛ))
+        factors .= X_proc * Λ * ΛtΛ_inv
+
+        # M-step: update loadings, respecting block restrictions
+        # Λ_new = (F'F)⁻¹ * F'X_proc  (transposed: each column = factor loadings)
+        FtF = factors' * factors
+        FtF_inv = Matrix{T}(robust_inv(FtF))
+        Λ_new = (FtF_inv * (factors' * X_proc))'  # N × r
+
+        # Apply restriction mask
+        Λ_new .*= R
+
+        # Check convergence
+        max_change = maximum(abs.(Λ_new .- Λ))
+        Λ .= Λ_new
+        max_change < tol && break
+    end
+
+    # Final factor estimates
+    ΛtΛ = Λ' * Λ
+    ΛtΛ_inv = Matrix{T}(robust_inv(ΛtΛ))
+    factors .= X_proc * Λ * ΛtΛ_inv
+
+    # Compute eigenvalues from factor covariance (for variance explained)
+    Σ_full = (X_proc'X_proc) / T_obs
+    eig_full = eigen(Symmetric(Σ_full))
+    idx_sort = sortperm(eig_full.values, rev=true)
+    λ_all = eig_full.values[idx_sort]
+
+    total_var = sum(λ_all)
+    expl = λ_all / total_var
+    cumul = cumsum(expl)
+
+    FactorModel{T}(X_orig, factors, Λ, λ_all, expl, cumul, r, standardize, block_names)
+end
+
 function Base.show(io::IO, m::FactorModel{T}) where {T}
     Tobs, N = size(m.X)
+    estimation_type = m.block_names !== nothing ? "Block-Restricted" : "PCA"
     spec = Any[
         "Factors"       m.r;
         "Variables"     N;
         "Observations"  Tobs;
-        "Standardized"  m.standardized ? "Yes" : "No"
+        "Standardized"  m.standardized ? "Yes" : "No";
+        "Estimation"    estimation_type
     ]
     _pretty_table(io, spec;
         title = "Static Factor Model (r=$(m.r))",
@@ -121,7 +264,8 @@ function Base.show(io::IO, m::FactorModel{T}) where {T}
     n_show = min(m.r, 5)
     var_data = Matrix{Any}(undef, n_show, 3)
     for i in 1:n_show
-        var_data[i, 1] = "Factor $i"
+        fname = m.block_names !== nothing ? string(m.block_names[i]) : "Factor $i"
+        var_data[i, 1] = fname
         var_data[i, 2] = _fmt_pct(m.explained_variance[i])
         var_data[i, 3] = _fmt_pct(m.cumulative_variance[i])
     end
@@ -143,8 +287,9 @@ function Base.show(io::IO, m::FactorModel{T}) where {T}
             load_data[row, 2] = _fmt(loadings_f[idx])
             load_data[row, 3] = _fmt(abs(loadings_f[idx]))
         end
+        ftitle = m.block_names !== nothing ? "Top Loadings — $(m.block_names[f])" : "Top Loadings — Factor $f"
         _pretty_table(io, load_data;
-            title = "Top Loadings — Factor $f",
+            title = ftitle,
             column_labels = ["Variable", "Loading", "|Loading|"],
             alignment = [:l, :r, :r],
         )
