@@ -364,3 +364,49 @@ function favar_panel_forecast(favar::FAVARModel{T}, fc::VARForecast{T}) where {T
         copy(favar.panel_varnames)
     )
 end
+
+# =============================================================================
+# Structural DFM — IRF and FEVD Dispatch
+# =============================================================================
+
+"""
+    irf(sdfm::StructuralDFM, horizon; kwargs...) -> ImpulseResponse
+
+Return pre-computed panel-wide structural IRFs from a Structural DFM.
+
+The structural IRFs map identified factor shocks to all N panel variables
+through the time-domain loadings Lambda.
+
+Dimensions: (H x N x q) where N = panel variables, q = structural shocks.
+
+If `horizon` exceeds the stored horizon, returns IRFs up to the stored horizon.
+"""
+function irf(sdfm::StructuralDFM{T}, horizon::Int; kwargs...) where {T}
+    H_stored = size(sdfm.structural_irf, 1)
+    H = min(horizon, H_stored)
+    N = size(sdfm.structural_irf, 2)
+    q = size(sdfm.structural_irf, 3)
+
+    values = sdfm.structural_irf[1:H, :, :]
+
+    ci_lo = zeros(T, H, N, q)
+    ci_hi = zeros(T, H, N, q)
+
+    panel_names = ["Var $i" for i in 1:N]
+
+    ImpulseResponse{T}(values, ci_lo, ci_hi, H, panel_names,
+        sdfm.shock_names, :none, nothing, zero(T))
+end
+
+"""
+    fevd(sdfm::StructuralDFM, horizon; kwargs...) -> FEVD
+
+Compute FEVD for the factor VAR underlying a Structural DFM.
+
+This delegates to the standard FEVD computation on the q-variable factor VAR,
+providing the forecast error variance decomposition among structural shocks
+in the factor space.
+"""
+function fevd(sdfm::StructuralDFM{T}, horizon::Int; kwargs...) where {T}
+    fevd(sdfm.factor_var, horizon; kwargs...)
+end
