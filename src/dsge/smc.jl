@@ -322,9 +322,13 @@ function _smc_mutation!(state::SMCState{T}, phi::T, ll_fn, prior::DSGEPrior{T},
     total_accepted = Threads.Atomic{Int}(0)
     total_proposed = Threads.Atomic{Int}(0)
 
+    # Pre-generate per-particle seeds BEFORE entering @threads
+    # (MersenneTwister is NOT thread-safe, so all rng calls must be sequential)
+    particle_seeds = [hash((j, rand(rng, UInt64))) for j in 1:N]
+
     Threads.@threads for j in 1:N
-        # Per-thread RNG for reproducibility
-        thread_rng = Random.MersenneTwister(hash((j, rand(rng, UInt64))))
+        # Per-thread RNG seeded from pre-generated seed
+        thread_rng = Random.MersenneTwister(particle_seeds[j])
 
         theta_j = state.theta_particles[:, j]
         ll_j = state.log_likelihoods[j]
@@ -1176,8 +1180,12 @@ function _smc2_sample(spec::DSGESpec{T}, data::AbstractMatrix,
         total_accepted = Threads.Atomic{Int}(0)
         total_proposed = Threads.Atomic{Int}(0)
 
+        # Pre-generate per-particle seeds BEFORE entering @threads
+        # (MersenneTwister is NOT thread-safe)
+        particle_seeds_mut = [hash((j, phi_new, rand(rng, UInt64))) for j in 1:N]
+
         Threads.@threads for j in 1:N
-            thread_rng = Random.MersenneTwister(hash((j, phi_new, rand(rng, UInt64))))
+            thread_rng = Random.MersenneTwister(particle_seeds_mut[j])
             ws = pool[mod1(Threads.threadid(), n_pool)]
 
             theta_j = state.theta_particles[:, j]
