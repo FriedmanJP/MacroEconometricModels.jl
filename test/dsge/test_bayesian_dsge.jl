@@ -2063,4 +2063,70 @@ end
     end
 end
 
+@testset "Projection PF: transition kernel matches evaluate_policy" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:projection, degree=3, scale=5.0)
+
+    Z = ones(Float64, 1, 1)
+    d = zeros(Float64, 1)
+    H = Matrix{Float64}(0.01 * I, 1, 1)
+    pss = MacroEconometricModels._build_projection_state_space(sol, Z, d, H)
+
+    nx = length(pss.state_indices)
+    n_vars = size(pss.coefficients, 1)
+    n_basis = size(pss.coefficients, 2)
+    N = 50
+    n_shocks = size(pss.impact, 2)
+    n_endog = length(pss.steady_state)
+
+    # Allocate workspace with projection buffers
+    ws = MacroEconometricModels._allocate_pf_workspace(
+        Float64, n_endog, 1, n_shocks, N;
+        proj_nx=nx, proj_n_basis=n_basis,
+        proj_max_degree=pss.max_degree, proj_n_vars=n_vars)
+
+    # Set particles to known states and zero shocks
+    rng = Random.MersenneTwister(42)
+    states_before = zeros(N)
+    for k in 1:N
+        x_k = 0.001 * randn(rng)
+        ws.particles[1, k] = x_k
+        states_before[k] = x_k
+    end
+    fill!(ws.shocks, zero(Float64))
+
+    # Run transition kernel
+    MacroEconometricModels._pf_transition_projection!(ws, pss)
+
+    # Compare with point-by-point evaluate_policy for each particle
+    for k in 1:N
+        y_ref = evaluate_policy(sol, [states_before[k]])
+        @test isapprox(ws.particles[1, k], y_ref[1]; atol=1e-10)
+    end
+
+    # All particles should be finite
+    @test all(isfinite, ws.particles)
+
+    # Zero-allocation check (warmup + measure)
+    # Restore particles for another run
+    for k in 1:N
+        ws.particles[1, k] = states_before[k]
+    end
+    MacroEconometricModels._pf_transition_projection!(ws, pss)  # warmup
+    for k in 1:N
+        ws.particles[1, k] = states_before[k]
+    end
+    allocs = @allocated MacroEconometricModels._pf_transition_projection!(ws, pss)
+    @test allocs == 0
+    end
+end
+
 end  # @testset "Bayesian DSGE"

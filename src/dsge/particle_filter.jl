@@ -1111,3 +1111,102 @@ function _conditional_smc!(ws::PFWorkspace{T}, nlss::NonlinearStateSpace{T},
 
     return log_lik
 end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Projection / PFI particle filter kernels
+# ─────────────────────────────────────────────────────────────────────────────
+
+"""
+    _pf_transition_projection!(ws, pss)
+
+Propagate N particles through a global nonlinear Chebyshev policy function.
+Zero-allocation: all buffers pre-allocated in ws.
+
+Algorithm:
+1. Extract states from particles → scale to [-1,1]
+2. Evaluate Chebyshev basis for all N particles (3D buffer, 1D recurrence per dimension)
+3. Policy multiply: mul!(proj_policy, coefficients, basis) — BLAS Level 3
+4. Assemble particles = policy + steady_state + impact * shocks, clamp states
+"""
+function _pf_transition_projection!(ws::PFWorkspace{T},
+                                      pss::ProjectionStateSpace{T}) where {T<:AbstractFloat}
+    N = size(ws.particles, 2)
+    nx = length(pss.state_indices)
+    n_endog = length(pss.steady_state)
+    n_eps = size(pss.impact, 2)
+    n_basis = size(pss.multi_indices, 1)
+    max_deg = pss.max_degree
+
+    # Step 1: Extract states and scale to [-1,1]
+    @inbounds for i in 1:nx
+        si = pss.state_indices[i]
+        sc = pss.scale[i]
+        sh = pss.shift[i]
+        @simd for k in 1:N
+            z = ws.particles[si, k] * sc + sh
+            ws.proj_scaled[i, k] = clamp(z, T(-1), T(1))
+        end
+    end
+
+    # Step 2a: 1D Chebyshev recurrence for all dimensions
+    @inbounds for d in 1:nx
+        @simd for k in 1:N
+            ws.proj_cheb_1d[1, d, k] = one(T)  # T_0 = 1
+        end
+        if max_deg >= 1
+            @simd for k in 1:N
+                ws.proj_cheb_1d[2, d, k] = ws.proj_scaled[d, k]  # T_1 = z
+            end
+        end
+        for n in 2:max_deg
+            @simd for k in 1:N
+                ws.proj_cheb_1d[n+1, d, k] = T(2) * ws.proj_scaled[d, k] * ws.proj_cheb_1d[n, d, k] - ws.proj_cheb_1d[n-1, d, k]
+            end
+        end
+    end
+
+    # Step 2b: Assemble tensor-product basis
+    fill!(ws.proj_basis, one(T))
+    @inbounds for j in 1:n_basis
+        for d in 1:nx
+            deg = pss.multi_indices[j, d]
+            @simd for k in 1:N
+                ws.proj_basis[j, k] *= ws.proj_cheb_1d[deg + 1, d, k]
+            end
+        end
+    end
+
+    # Step 3: Policy evaluation — single BLAS Level 3 call
+    mul!(ws.proj_policy, pss.coefficients, ws.proj_basis)
+
+    # Step 4: Assemble full endogenous = policy_deviation + steady_state
+    @inbounds for i in 1:n_endog
+        ss_i = pss.steady_state[i]
+        @simd for k in 1:N
+            ws.particles[i, k] = ws.proj_policy[i, k] + ss_i
+        end
+    end
+
+    # Step 5: Add shock impact to state variables
+    @inbounds for (ii, si) in enumerate(pss.state_indices)
+        for j in 1:n_eps
+            imp = pss.impact[si, j]
+            if imp != zero(T)
+                @simd for k in 1:N
+                    ws.particles[si, k] += imp * ws.shocks[j, k]
+                end
+            end
+        end
+    end
+
+    # Step 6: Clamp states to approximation bounds
+    @inbounds for (ii, si) in enumerate(pss.state_indices)
+        lb = pss.state_bounds[ii, 1]
+        ub = pss.state_bounds[ii, 2]
+        @simd for k in 1:N
+            ws.particles[si, k] = clamp(ws.particles[si, k], lb, ub)
+        end
+    end
+
+    return nothing
+end
