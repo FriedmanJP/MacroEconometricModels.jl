@@ -160,12 +160,6 @@ include("teststat/pesaran_cips.jl")
 include("teststat/moon_perron.jl")
 include("teststat/factor_break.jl")
 
-# Panel unit root tests (after factor models for estimate_factors + adf_test)
-include("teststat/panic.jl")
-include("teststat/pesaran_cips.jl")
-include("teststat/moon_perron.jl")
-include("teststat/factor_break.jl")
-
 # Nowcasting (after factor models for Kalman filter reuse)
 include("nowcast/types.jl")
 include("nowcast/kalman_missing.jl")
