@@ -1097,4 +1097,88 @@ end
     end
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 5: SMC² (Nested PF inside SMC)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "Adaptive N_x in SMC²" begin
+    N_x = 50
+    var_ll = 100.0  # high variance → should double
+    threshold = 10.0
+    new_N_x = MacroEconometricModels._adapt_n_particles(N_x, var_ll, threshold)
+    @test new_N_x == 100  # doubled
+
+    var_ll_low = 1.0
+    new_N_x2 = MacroEconometricModels._adapt_n_particles(N_x, var_ll_low, threshold)
+    @test new_N_x2 == N_x
+end
+
+@testset "PF likelihood function" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:gensys)
+    data_mat = simulate(sol, 50; rng=Random.MersenneTwister(42))'
+
+    pf_ll_fn = MacroEconometricModels._build_pf_likelihood_fn(spec, [:ρ], data_mat,
+        [:y], nothing, :gensys, NamedTuple(), 100)
+
+    ws = MacroEconometricModels._allocate_pf_workspace(Float64, 1, 1, 1, 100; T_obs=50)
+    rng = Random.MersenneTwister(123)
+
+    ll = pf_ll_fn([0.8], ws, rng)
+    @test isfinite(ll)
+    @test ll < 0.0
+
+    # Explosive parameter should give -Inf
+    ll_bad = pf_ll_fn([1.5], ws, rng)
+    @test ll_bad == -Inf
+    end
+end
+
+@testset "SMC² with particle filter: AR(1)" begin
+    FAST && return
+    _suppress_warnings() do
+    rng = Random.MersenneTwister(42)
+
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    true_spec = @dsge begin
+        parameters: ρ = 0.8, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    true_spec = compute_steady_state(true_spec)
+    sol_true = solve(true_spec; method=:gensys)
+    data = simulate(sol_true, 100; rng=rng)'
+
+    priors = Dict(:ρ => Beta(2, 2))
+    result = MacroEconometricModels._smc2_sample(spec, data, [:ρ],
+        MacroEconometricModels.DSGEPrior(priors; lower=Dict(:ρ => 0.01), upper=Dict(:ρ => 0.99)),
+        [0.5];
+        n_smc=100, n_particles=50, n_mh_steps=1, ess_target=0.5,
+        observables=[:y], measurement_error=nothing,
+        solver=:gensys, solver_kwargs=NamedTuple(),
+        rng=Random.MersenneTwister(123))
+
+    @test result.phi_schedule[end] ≈ 1.0
+    @test isfinite(result.log_marginal_likelihood)
+    end
+end
+
 end  # @testset "Bayesian DSGE"

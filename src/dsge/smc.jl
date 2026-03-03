@@ -722,3 +722,393 @@ function _mh_sample(spec::DSGESpec{T}, data::AbstractMatrix,
 
     return draws, log_posterior, acceptance_rate
 end
+
+# =============================================================================
+# SMC² with Conditional SMC mutation (Chopin, Jacob & Papaspiliopoulos 2013)
+# =============================================================================
+
+"""
+    _adapt_n_particles(N_x::Int, var_ll::Real, threshold::Real) → Int
+
+Adapt the number of internal particles for SMC². If the variance of
+log-likelihood estimates across θ-particles exceeds `threshold`, double `N_x`.
+Otherwise return `N_x` unchanged.
+"""
+function _adapt_n_particles(N_x::Int, var_ll::Real, threshold::Real)
+    return var_ll > threshold ? 2 * N_x : N_x
+end
+
+"""
+    _build_pf_likelihood_fn(spec, param_names, data, observables, measurement_error,
+                             solver, solver_kwargs, n_particles)
+
+Build a closure `(θ_vec, ws, rng) → log p(Y|θ)` that evaluates the likelihood
+via bootstrap particle filter instead of the Kalman filter.
+
+The closure updates spec parameters, solves the model, builds a `DSGEStateSpace`,
+and runs `_bootstrap_particle_filter!`. Returns `-Inf` on any failure.
+
+# Arguments
+- `spec::DSGESpec{T}` — model specification (template)
+- `param_names::Vector{Symbol}` — which parameters θ maps to
+- `data::Matrix{T}` — n_obs × T_obs data matrix
+- `observables::Vector{Symbol}` — observed endogenous variables
+- `measurement_error` — measurement error SDs or `nothing`
+- `solver::Symbol` — solver method
+- `solver_kwargs::NamedTuple` — additional keyword arguments for `solve`
+- `n_particles::Int` — number of particles for the internal PF
+
+# Returns
+Closure `(θ::Vector{T}, ws::PFWorkspace{T}, rng::AbstractRNG) → T`.
+"""
+function _build_pf_likelihood_fn(spec::DSGESpec{T}, param_names::Vector{Symbol},
+                                   data::AbstractMatrix, observables::Vector{Symbol},
+                                   measurement_error, solver::Symbol,
+                                   solver_kwargs::NamedTuple,
+                                   n_particles::Int) where {T<:AbstractFloat}
+    data = Matrix{T}(data)
+    T_obs = size(data, 2)
+
+    function pf_ll_fn(theta::Vector{T}, ws::PFWorkspace{T}, rng::AbstractRNG)
+        try
+            # Update parameter values
+            new_pv = copy(spec.param_values)
+            for (i, pn) in enumerate(param_names)
+                new_pv[pn] = theta[i]
+            end
+
+            # Create new spec with updated parameters
+            new_spec = DSGESpec{T}(
+                spec.endog, spec.exog, spec.params, new_pv,
+                spec.equations, spec.residual_fns,
+                spec.n_expect, spec.forward_indices, T[], spec.ss_fn;
+                original_endog=spec.original_endog,
+                original_equations=spec.original_equations,
+                augmented=spec.augmented,
+                max_lag=spec.max_lag,
+                max_lead=spec.max_lead
+            )
+
+            # Compute steady state
+            new_spec = compute_steady_state(new_spec)
+
+            # Solve model
+            sol = solve(new_spec; method=solver, solver_kwargs...)
+            if !is_determined(sol)
+                return T(-Inf)
+            end
+
+            # Build observation equation and state space
+            Z, d, H = _build_observation_equation(new_spec, observables, measurement_error)
+            ss = _build_state_space(sol, Z, d, H)
+
+            # Run bootstrap particle filter
+            ll = _bootstrap_particle_filter!(ws, ss, data, T_obs;
+                                              store_trajectory=true, rng=rng)
+
+            return isfinite(ll) ? ll : T(-Inf)
+        catch
+            return T(-Inf)
+        end
+    end
+
+    return pf_ll_fn
+end
+
+"""
+    _smc2_sample(spec, data, param_names, prior, θ0; kwargs...) → SMCState
+
+SMC² algorithm (Chopin, Jacob & Papaspiliopoulos 2013) that nests a particle
+filter inside the outer SMC sampler. The mutation step uses Conditional SMC
+(CSMC) instead of the Kalman filter for likelihood evaluation.
+
+Algorithm:
+1. Initialize N_smc θ-particles from prior
+2. Evaluate log-likelihoods via bootstrap PF for each θ-particle
+3. Adaptive tempering loop:
+   a. Find `phi_new` via `_adaptive_tempering`
+   b. Compute incremental weights, update log marginal likelihood
+   c. Resample if ESS drops
+   d. Update proposal covariance
+   e. Mutation: for each θ-particle, propose θ*, run CSMC, MH accept/reject
+   f. Adapt N_x if log-likelihood variance is high
+   g. Stop when phi = 1
+
+# Arguments
+- `spec::DSGESpec{T}` — model specification
+- `data::Matrix{T}` — n_obs × T_obs data matrix
+- `param_names::Vector{Symbol}` — parameters to estimate
+- `prior::DSGEPrior{T}` — prior specification
+- `θ0::Vector{T}` — initial parameter guess
+
+# Keywords
+- `n_smc::Int=200` — number of outer SMC particles
+- `n_particles::Int=100` — number of inner PF particles
+- `n_mh_steps::Int=1` — MH steps per mutation stage
+- `ess_target::Real=0.5` — target ESS fraction
+- `observables::Vector{Symbol}` — observed variables
+- `measurement_error` — measurement error SDs or `nothing`
+- `solver::Symbol=:gensys` — DSGE solver method
+- `solver_kwargs::NamedTuple` — additional solver kwargs
+- `rng::AbstractRNG` — random number generator
+
+# Returns
+`SMCState{T}` with posterior particles, weights, tempering schedule, and
+log marginal likelihood estimate.
+
+# References
+- Chopin, N., Jacob, P. E. & Papaspiliopoulos, O. (2013). SMC²: An efficient
+  algorithm for sequential analysis of state space models.
+  *Journal of the Royal Statistical Society: Series B*, 75(3), 397-426.
+"""
+function _smc2_sample(spec::DSGESpec{T}, data::AbstractMatrix,
+                       param_names::Vector{Symbol}, prior::DSGEPrior{T},
+                       theta0::AbstractVector{T};
+                       n_smc::Int=200, n_particles::Int=100,
+                       n_mh_steps::Int=1, ess_target::Real=0.5,
+                       observables::Vector{Symbol}=spec.endog,
+                       measurement_error=nothing,
+                       solver::Symbol=:gensys,
+                       solver_kwargs::NamedTuple=NamedTuple(),
+                       rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    data = Matrix{T}(data)
+    n_params = length(param_names)
+    N = n_smc
+    N_x = n_particles
+    T_obs = size(data, 2)
+    n_obs = size(data, 1)
+
+    # Determine state space dimensions from spec
+    n_states = spec.n_endog
+    n_shocks = spec.n_exog
+
+    # Build PF likelihood function
+    pf_ll_fn = _build_pf_likelihood_fn(spec, param_names, data, observables,
+                                        measurement_error, solver, solver_kwargs, N_x)
+
+    # Create workspace pool (one per thread for parallelism)
+    n_pool = max(Threads.nthreads(), 1)
+    pool = [_allocate_pf_workspace(T, n_states, n_obs, n_shocks, N_x; T_obs=T_obs)
+            for _ in 1:n_pool]
+
+    # Initialize θ-particles from prior
+    theta_particles = zeros(T, n_params, N)
+    log_priors = zeros(T, N)
+
+    for j in 1:N
+        for i in 1:n_params
+            for attempt in 1:100
+                draw = T(rand(rng, prior.distributions[i]))
+                if draw >= prior.lower[i] && draw <= prior.upper[i]
+                    theta_particles[i, j] = draw
+                    break
+                end
+                if attempt == 100
+                    lo = isfinite(prior.lower[i]) ? prior.lower[i] : T(0)
+                    hi = isfinite(prior.upper[i]) ? prior.upper[i] : T(1)
+                    theta_particles[i, j] = (lo + hi) / 2
+                end
+            end
+        end
+        log_priors[j] = _log_prior(theta_particles[:, j], prior)
+    end
+
+    # Initialize weights uniformly
+    log_weights = fill(-log(T(N)), N)
+
+    # Evaluate log-likelihoods via PF
+    log_likelihoods = fill(T(-Inf), N)
+    for j in 1:N
+        ws_idx = mod1(j, n_pool)
+        thread_rng = Random.MersenneTwister(hash((j, rand(rng, UInt64))))
+        log_likelihoods[j] = pf_ll_fn(theta_particles[:, j], pool[ws_idx], thread_rng)
+    end
+
+    # Initialize SMC state
+    state = SMCState{T}(
+        theta_particles,
+        log_weights,
+        log_likelihoods,
+        log_priors,
+        T[zero(T)],          # phi_schedule starts at 0
+        T[],                  # ess_history
+        T[],                  # acceptance_rates
+        zero(T),              # log_marginal_likelihood
+        pool,                 # pf_workspace_pool
+        Matrix{T}(I, n_params, n_params)  # proposal_cov
+    )
+
+    # Resampling buffers
+    weights_normalized = fill(one(T) / N, N)
+    ancestors = collect(1:N)
+    cumweights = zeros(T, N)
+
+    # Adaptive tempering loop
+    phi = zero(T)
+
+    while phi < one(T)
+        # Find next tempering parameter
+        valid_lls = copy(state.log_likelihoods)
+        for j in 1:N
+            if !isfinite(valid_lls[j])
+                valid_lls[j] = T(-1e10)
+            end
+        end
+
+        phi_new = _adaptive_tempering(valid_lls, phi, ess_target, N)
+        delta_phi = phi_new - phi
+
+        # Compute incremental log weights
+        inc_log_w = delta_phi .* state.log_likelihoods
+        for j in 1:N
+            if !isfinite(inc_log_w[j])
+                inc_log_w[j] = T(-1e10)
+            end
+        end
+
+        # Update log marginal likelihood
+        state.log_marginal_likelihood += _logsumexp(inc_log_w) - log(T(N))
+
+        # Update particle log weights
+        state.log_weights .+= inc_log_w
+
+        # Normalize weights for ESS computation and resampling
+        _normalize_log_weights!(weights_normalized, state.log_weights)
+
+        # Compute ESS
+        ess = one(T) / sum(abs2, weights_normalized)
+        push!(state.ess_history, ess)
+
+        # Record tempering step
+        push!(state.phi_schedule, phi_new)
+
+        # Resample if ESS is low
+        if ess < T(ess_target) * N
+            _systematic_resample!(ancestors, weights_normalized, cumweights, N, rng)
+
+            theta_new = similar(state.theta_particles)
+            ll_new = similar(state.log_likelihoods)
+            lp_new = similar(state.log_priors)
+            @inbounds for j in 1:N
+                a = ancestors[j]
+                theta_new[:, j] = state.theta_particles[:, a]
+                ll_new[j] = state.log_likelihoods[a]
+                lp_new[j] = state.log_priors[a]
+            end
+            state.theta_particles .= theta_new
+            state.log_likelihoods .= ll_new
+            state.log_priors .= lp_new
+
+            fill!(state.log_weights, -log(T(N)))
+        end
+
+        # Update proposal covariance
+        _update_proposal_cov!(state)
+
+        # --- SMC² Mutation: CSMC-based MH steps ---
+        L = try
+            cholesky(Hermitian(state.proposal_cov)).L
+        catch
+            cov_jittered = state.proposal_cov + T(1e-6) * I
+            cholesky(Hermitian(cov_jittered)).L
+        end
+
+        total_accepted = Threads.Atomic{Int}(0)
+        total_proposed = Threads.Atomic{Int}(0)
+
+        Threads.@threads for j in 1:N
+            thread_rng = Random.MersenneTwister(hash((j, phi_new, rand(rng, UInt64))))
+            ws = pool[mod1(Threads.threadid(), n_pool)]
+
+            theta_j = state.theta_particles[:, j]
+            ll_j = state.log_likelihoods[j]
+            lp_j = state.log_priors[j]
+
+            for _ in 1:n_mh_steps
+                # Propose: theta_star = theta_j + L * z
+                z = randn(thread_rng, T, n_params)
+                theta_star = theta_j + L * z
+
+                # Evaluate prior
+                lp_star = _log_prior(theta_star, prior)
+                if lp_star == T(-Inf)
+                    Threads.atomic_add!(total_proposed, 1)
+                    continue
+                end
+
+                # Build state space for proposed parameters and run CSMC
+                ll_star = try
+                    new_pv = copy(spec.param_values)
+                    for (i, pn) in enumerate(param_names)
+                        new_pv[pn] = theta_star[i]
+                    end
+                    new_spec = DSGESpec{T}(
+                        spec.endog, spec.exog, spec.params, new_pv,
+                        spec.equations, spec.residual_fns,
+                        spec.n_expect, spec.forward_indices, T[], spec.ss_fn;
+                        original_endog=spec.original_endog,
+                        original_equations=spec.original_equations,
+                        augmented=spec.augmented,
+                        max_lag=spec.max_lag,
+                        max_lead=spec.max_lead
+                    )
+                    new_spec = compute_steady_state(new_spec)
+                    sol_star = solve(new_spec; method=solver, solver_kwargs...)
+                    if !is_determined(sol_star)
+                        T(-Inf)
+                    else
+                        Z, d, H_mat = _build_observation_equation(new_spec, observables, measurement_error)
+                        ss_star = _build_state_space(sol_star, Z, d, H_mat)
+                        _conditional_smc!(ws, ss_star, data, T_obs; rng=thread_rng)
+                    end
+                catch
+                    T(-Inf)
+                end
+
+                if ll_star == T(-Inf)
+                    Threads.atomic_add!(total_proposed, 1)
+                    continue
+                end
+
+                # MH acceptance ratio (tempered)
+                log_alpha = (phi_new * ll_star + lp_star) - (phi_new * ll_j + lp_j)
+
+                if log(rand(thread_rng, T)) < log_alpha
+                    theta_j = theta_star
+                    ll_j = ll_star
+                    lp_j = lp_star
+                    Threads.atomic_add!(total_accepted, 1)
+                end
+
+                Threads.atomic_add!(total_proposed, 1)
+            end
+
+            # Write back
+            state.theta_particles[:, j] = theta_j
+            state.log_likelihoods[j] = ll_j
+            state.log_priors[j] = lp_j
+        end
+
+        # Record acceptance rate
+        tp = total_proposed[]
+        acc_rate = tp > 0 ? T(total_accepted[]) / T(tp) : zero(T)
+        push!(state.acceptance_rates, acc_rate)
+
+        # Adapt N_x if log-likelihood variance is too high
+        finite_lls = filter(isfinite, state.log_likelihoods)
+        if length(finite_lls) > 1
+            var_ll = var(finite_lls)
+            N_x_new = _adapt_n_particles(N_x, var_ll, T(10))
+            if N_x_new > N_x
+                N_x = N_x_new
+                for ws in pool
+                    _resize_pf_workspace!(ws, N_x)
+                end
+            end
+        end
+
+        phi = phi_new
+    end
+
+    return state
+end
