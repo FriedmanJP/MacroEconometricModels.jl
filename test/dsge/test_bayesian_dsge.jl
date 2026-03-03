@@ -2173,4 +2173,92 @@ end
     end
 end
 
+@testset "Projection bootstrap PF: finite log-likelihood (PFI)" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:pfi, degree=3, scale=5.0)
+    @test sol isa MacroEconometricModels.ProjectionSolution
+    @test sol.method == :pfi
+
+    sim_data = simulate(sol, 50; rng=Random.MersenneTwister(42))
+    data = reshape(sim_data[:, 1], 1, :)
+
+    Z = ones(Float64, 1, 1)
+    d = zeros(Float64, 1)
+    H = Matrix{Float64}(0.01 * I, 1, 1)
+    pss = MacroEconometricModels._build_projection_state_space(sol, Z, d, H)
+
+    nx = length(pss.state_indices)
+    n_vars = size(pss.coefficients, 1)
+    n_basis = size(pss.coefficients, 2)
+    N = 200
+    n_shocks = size(pss.impact, 2)
+    n_endog = length(pss.steady_state)
+    T_obs = size(data, 2)
+
+    ws = MacroEconometricModels._allocate_pf_workspace(
+        Float64, n_endog, 1, n_shocks, N;
+        proj_nx=nx, proj_n_basis=n_basis,
+        proj_max_degree=pss.max_degree, proj_n_vars=n_vars,
+        T_obs=T_obs)
+
+    rng = Random.MersenneTwister(123)
+    ll = MacroEconometricModels._bootstrap_particle_filter!(
+        ws, pss, data, T_obs; rng=rng)
+
+    @test isfinite(ll)
+    @test ll > -1e6
+    end
+end
+
+@testset "Projection CSMC: conditional SMC with reference trajectory" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:projection, degree=3, scale=5.0)
+
+    sim_data = simulate(sol, 30; rng=Random.MersenneTwister(42))
+    data = reshape(sim_data[:, 1], 1, :)
+
+    Z = ones(Float64, 1, 1)
+    d = zeros(Float64, 1)
+    H = Matrix{Float64}(0.01 * I, 1, 1)
+    pss = MacroEconometricModels._build_projection_state_space(sol, Z, d, H)
+
+    nx = length(pss.state_indices)
+    n_vars = size(pss.coefficients, 1)
+    n_basis = size(pss.coefficients, 2)
+    N = 100
+    n_shocks = size(pss.impact, 2)
+    n_endog = length(pss.steady_state)
+    T_obs = size(data, 2)
+
+    ws = MacroEconometricModels._allocate_pf_workspace(
+        Float64, n_endog, 1, n_shocks, N;
+        proj_nx=nx, proj_n_basis=n_basis,
+        proj_max_degree=pss.max_degree, proj_n_vars=n_vars,
+        T_obs=T_obs)
+
+    rng = Random.MersenneTwister(456)
+    ll = MacroEconometricModels._conditional_smc!(
+        ws, pss, data, T_obs; rng=rng)
+
+    @test isfinite(ll)
+    @test ll > -1e6
+    end
+end
+
 end  # @testset "Bayesian DSGE"

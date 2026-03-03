@@ -1327,3 +1327,98 @@ function _bootstrap_particle_filter!(ws::PFWorkspace{T}, pss::ProjectionStateSpa
 
     return log_lik
 end
+
+# =============================================================================
+# Conditional SMC — Projection / PFI
+# =============================================================================
+
+"""
+    _conditional_smc!(ws, pss::ProjectionStateSpace, data, T_obs; ...)
+
+Conditional SMC (particle Gibbs) for projection/PFI state space.
+Forces particle N to follow the reference trajectory at each time step.
+"""
+function _conditional_smc!(ws::PFWorkspace{T}, pss::ProjectionStateSpace{T},
+                             data::Matrix{T}, T_obs::Int;
+                             threshold::Real=0.5,
+                             rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    N = size(ws.particles, 2)
+    n_states = size(ws.particles, 1)
+    log_lik = zero(T)
+    log_N = log(T(N))
+
+    # Initialize
+    _pf_initialize_projection!(ws, pss; rng=rng)
+
+    # Initialize reference trajectory if not set (first CSMC pass)
+    if ws.reference_trajectory !== nothing && all(iszero, ws.reference_trajectory)
+        # Use a bootstrap PF to get initial trajectory
+        ws_init = deepcopy(ws)
+        _bootstrap_particle_filter!(ws_init, pss, data, T_obs; rng=rng)
+        # Store final particles as initial reference (repeat for each time step)
+        for t in 1:min(T_obs, size(ws.reference_trajectory, 2))
+            @inbounds @simd for s in 1:n_states
+                ws.reference_trajectory[s, t] = ws_init.particles[s, N]
+            end
+        end
+    end
+
+    @inbounds for t in 1:T_obs
+        # Draw shocks
+        randn!(rng, ws.shocks)
+
+        # Propagate particles through nonlinear policy
+        _pf_transition_projection!(ws, pss)
+
+        # Force particle N to reference trajectory
+        if ws.reference_trajectory !== nothing
+            @simd for s in 1:n_states
+                ws.particles[s, N] = ws.reference_trajectory[s, t]
+            end
+        end
+
+        # Compute observation log-weights
+        y_t = @view data[:, t]
+        _pf_log_weights!(ws.log_weights, ws.innovations, ws.tmp_obs,
+                          ws.particles, y_t, pss.Z, pss.d, pss.H_inv, pss.log_det_H)
+
+        # Accumulate log-likelihood
+        log_lik += _logsumexp(ws.log_weights) - log_N
+
+        # Normalize weights
+        _normalize_log_weights!(ws.weights, ws.log_weights)
+
+        # ESS-based adaptive resampling
+        ess = zero(T)
+        @simd for k in 1:N
+            ess += ws.weights[k]^2
+        end
+        ess = one(T) / ess
+
+        if ess < T(threshold) * T(N)
+            _systematic_resample!(ws.ancestors, ws.weights, ws.cumweights, N, rng)
+            ws.ancestors[N] = N  # Reference particle always survives
+            _resample_particles!(ws.particles_new, ws.particles, ws.ancestors)
+            ws.particles, ws.particles_new = ws.particles_new, ws.particles
+        end
+
+        # Store trajectory for backward sampling
+        if ws.reference_trajectory !== nothing
+            @simd for s in 1:n_states
+                ws.reference_trajectory[s, t] = ws.particles[s, N]
+            end
+        end
+    end
+
+    # Backward sample new reference trajectory
+    if ws.reference_ancestors !== nothing
+        idx = N
+        ws.reference_ancestors[T_obs] = idx
+        for t in (T_obs-1):-1:1
+            idx = ws.ancestors[idx]
+            ws.reference_ancestors[t] = idx
+        end
+    end
+
+    return log_lik
+end
