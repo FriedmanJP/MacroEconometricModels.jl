@@ -992,6 +992,10 @@ function _smc2_sample(spec::DSGESpec{T}, data::AbstractMatrix,
                                     proj_n_vars=pf_proj_n_vars)
             for _ in 1:n_pool]
 
+    # Per-particle solution cache for warm-starting (projection/PFI only)
+    solutions = Vector{Any}(undef, N)
+    fill!(solutions, nothing)
+
     # Initialize θ-particles from prior
     theta_particles = zeros(T, n_params, N)
     log_priors = zeros(T, N)
@@ -1017,12 +1021,24 @@ function _smc2_sample(spec::DSGESpec{T}, data::AbstractMatrix,
     # Initialize weights uniformly
     log_weights = fill(-log(T(N)), N)
 
-    # Evaluate log-likelihoods via PF
+    # Evaluate log-likelihoods via PF (and cache solutions for warm-starting)
     log_likelihoods = fill(T(-Inf), N)
     for j in 1:N
         ws_idx = mod1(j, n_pool)
         thread_rng = Random.MersenneTwister(hash((j, rand(rng, UInt64))))
-        log_likelihoods[j] = pf_ll_fn(theta_particles[:, j], pool[ws_idx], thread_rng)
+        if solver in (:projection, :pfi)
+            ll_j, sol_j = _solve_and_run_pf(spec, param_names,
+                                              theta_particles[:, j], observables,
+                                              measurement_error, solver, solver_kwargs,
+                                              pool[ws_idx], data, T_obs, thread_rng;
+                                              store_trajectory=true, return_solution=true)
+            log_likelihoods[j] = ll_j
+            if sol_j isa ProjectionSolution
+                solutions[j] = sol_j
+            end
+        else
+            log_likelihoods[j] = pf_ll_fn(theta_particles[:, j], pool[ws_idx], thread_rng)
+        end
     end
 
     # Initialize SMC state
@@ -1090,15 +1106,18 @@ function _smc2_sample(spec::DSGESpec{T}, data::AbstractMatrix,
             theta_new = similar(state.theta_particles)
             ll_new = similar(state.log_likelihoods)
             lp_new = similar(state.log_priors)
+            sol_new = Vector{Any}(undef, N)
             @inbounds for j in 1:N
                 a = ancestors[j]
                 theta_new[:, j] = state.theta_particles[:, a]
                 ll_new[j] = state.log_likelihoods[a]
                 lp_new[j] = state.log_priors[a]
+                sol_new[j] = solutions[a]
             end
             state.theta_particles .= theta_new
             state.log_likelihoods .= ll_new
             state.log_priors .= lp_new
+            solutions .= sol_new
 
             fill!(state.log_weights, -log(T(N)))
         end
@@ -1137,12 +1156,19 @@ function _smc2_sample(spec::DSGESpec{T}, data::AbstractMatrix,
                     continue
                 end
 
+                # Build solver_kwargs with warm-starting from cached solution
+                mh_solver_kwargs = if solver in (:projection, :pfi) && solutions[j] isa ProjectionSolution
+                    merge(solver_kwargs, (initial_coeffs=solutions[j].coefficients,))
+                else
+                    solver_kwargs
+                end
+
                 # Build state space for proposed parameters and run CSMC
-                # Dispatches on solution type (DSGESolution/PerturbationSolution/ProjectionSolution)
-                ll_star = _solve_and_run_pf(spec, param_names, theta_star, observables,
-                                             measurement_error, solver, solver_kwargs,
-                                             ws, data, T_obs, thread_rng;
-                                             use_csmc=true)
+                ll_star, sol_star = _solve_and_run_pf(spec, param_names, theta_star,
+                                                       observables, measurement_error,
+                                                       solver, mh_solver_kwargs,
+                                                       ws, data, T_obs, thread_rng;
+                                                       use_csmc=true, return_solution=true)
 
                 if ll_star == T(-Inf)
                     Threads.atomic_add!(total_proposed, 1)
@@ -1157,6 +1183,10 @@ function _smc2_sample(spec::DSGESpec{T}, data::AbstractMatrix,
                     ll_j = ll_star
                     lp_j = lp_star
                     Threads.atomic_add!(total_accepted, 1)
+                    # Update cached solution for warm-starting
+                    if sol_star isa ProjectionSolution
+                        solutions[j] = sol_star
+                    end
                 end
 
                 Threads.atomic_add!(total_proposed, 1)
