@@ -806,10 +806,16 @@ function _build_pf_likelihood_fn(spec::DSGESpec{T}, param_names::Vector{Symbol},
             # Build observation equation and state space
             Z, d, H = _build_observation_equation(new_spec, observables, measurement_error)
 
-            # Dispatch: PerturbationSolution → NonlinearStateSpace, else → DSGEStateSpace
+            # Dispatch: PerturbationSolution → NonlinearStateSpace,
+            #           ProjectionSolution → ProjectionStateSpace,
+            #           else → DSGEStateSpace
             if sol isa PerturbationSolution
                 nlss = _build_nonlinear_state_space(sol, Z, d, H)
                 ll = _bootstrap_particle_filter!(ws, nlss, data, T_obs;
+                                                  store_trajectory=true, rng=rng)
+            elseif sol isa ProjectionSolution
+                pss = _build_projection_state_space(sol, Z, d, H)
+                ll = _bootstrap_particle_filter!(ws, pss, data, T_obs;
                                                   store_trajectory=true, rng=rng)
             else
                 ss = _build_state_space(sol, Z, d, H)
@@ -897,6 +903,10 @@ function _smc2_sample(spec::DSGESpec{T}, data::AbstractMatrix,
     pf_nv = 0
     pf_nx = 0
     pf_order = 1
+    pf_proj_nx = 0
+    pf_proj_n_basis = 0
+    pf_proj_max_degree = 0
+    pf_proj_n_vars = 0
     if solver == :perturbation
         # Extract order from solver_kwargs (default 2)
         pf_order = get(solver_kwargs, :order, 2)
@@ -914,6 +924,23 @@ function _smc2_sample(spec::DSGESpec{T}, data::AbstractMatrix,
             pf_nx = n_states
             pf_nv = pf_nx + n_shocks
         end
+    elseif solver in (:projection, :pfi)
+        try
+            trial_spec = compute_steady_state(spec)
+            trial_sol = solve(trial_spec; method=solver, solver_kwargs...)
+            if trial_sol isa ProjectionSolution
+                pf_proj_nx = length(trial_sol.state_indices)
+                pf_proj_n_basis = trial_sol.n_basis
+                pf_proj_max_degree = maximum(trial_sol.multi_indices)
+                pf_proj_n_vars = length(trial_sol.steady_state)
+            end
+        catch
+            # Fallback: will be allocated at first likelihood evaluation
+            pf_proj_nx = n_states
+            pf_proj_n_basis = 0
+            pf_proj_max_degree = 5
+            pf_proj_n_vars = n_states
+        end
     end
 
     # Build PF likelihood function
@@ -923,7 +950,10 @@ function _smc2_sample(spec::DSGESpec{T}, data::AbstractMatrix,
     # Create workspace pool (one per thread for parallelism)
     n_pool = max(Threads.nthreads(), 1)
     pool = [_allocate_pf_workspace(T, n_states, n_obs, n_shocks, N_x;
-                                    nv=pf_nv, nx=pf_nx, order=pf_order, T_obs=T_obs)
+                                    nv=pf_nv, nx=pf_nx, order=pf_order, T_obs=T_obs,
+                                    proj_nx=pf_proj_nx, proj_n_basis=pf_proj_n_basis,
+                                    proj_max_degree=pf_proj_max_degree,
+                                    proj_n_vars=pf_proj_n_vars)
             for _ in 1:n_pool]
 
     # Initialize θ-particles from prior
