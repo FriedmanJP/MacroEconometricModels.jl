@@ -2261,4 +2261,85 @@ end
     end
 end
 
+@testset "Projection PF vs Kalman: linear model comparison" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    # Generate data from linear model
+    sol_lin = solve(spec; method=:gensys)
+    sim = simulate(sol_lin, 50; rng=Random.MersenneTwister(42))
+    data = reshape(sim[:, 1], 1, :)
+
+    Z = ones(Float64, 1, 1)
+    d = zeros(Float64, 1)
+    H = Matrix{Float64}(0.1 * I, 1, 1)
+
+    # Kalman log-likelihood
+    ss = MacroEconometricModels._build_state_space(sol_lin, Z, d, H)
+    ll_kalman = MacroEconometricModels._kalman_loglikelihood(ss, data)
+
+    # Projection PF log-likelihood (average over multiple runs for stability)
+    sol_proj = solve(spec; method=:projection, degree=5, scale=5.0)
+    pss = MacroEconometricModels._build_projection_state_space(sol_proj, Z, d, H)
+
+    nx = length(pss.state_indices)
+    n_vars = size(pss.coefficients, 1)
+    n_basis = size(pss.coefficients, 2)
+    N = 500
+    n_shocks = size(pss.impact, 2)
+    n_endog = length(pss.steady_state)
+    T_obs = size(data, 2)
+
+    lls = Float64[]
+    for seed in 1:10
+        ws = MacroEconometricModels._allocate_pf_workspace(
+            Float64, n_endog, 1, n_shocks, N;
+            proj_nx=nx, proj_n_basis=n_basis,
+            proj_max_degree=pss.max_degree, proj_n_vars=n_vars)
+        rng = Random.MersenneTwister(seed)
+        ll = MacroEconometricModels._bootstrap_particle_filter!(
+            ws, pss, data, T_obs; rng=rng)
+        push!(lls, ll)
+    end
+    ll_pf_mean = mean(lls)
+
+    # PF should be in the right ballpark (within 30% of Kalman)
+    @test isfinite(ll_pf_mean)
+    @test abs(ll_pf_mean - ll_kalman) / abs(ll_kalman) < 0.3
+    end
+end
+
+@testset "_build_solution_at_theta: ProjectionSolution dispatch" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    # Projection solver → ProjectionStateSpace
+    sol_proj, ss_proj = MacroEconometricModels._build_solution_at_theta(
+        spec, [:ρ], [0.9], [:y], nothing, :projection, (degree=3, scale=5.0))
+    @test sol_proj isa MacroEconometricModels.ProjectionSolution
+    @test ss_proj isa MacroEconometricModels.ProjectionStateSpace
+
+    # PFI solver → ProjectionStateSpace
+    sol_pfi, ss_pfi = MacroEconometricModels._build_solution_at_theta(
+        spec, [:ρ], [0.9], [:y], nothing, :pfi, (degree=3, scale=5.0))
+    @test sol_pfi isa MacroEconometricModels.ProjectionSolution
+    @test ss_pfi isa MacroEconometricModels.ProjectionStateSpace
+    @test sol_pfi.method == :pfi
+    end
+end
+
 end  # @testset "Bayesian DSGE"
