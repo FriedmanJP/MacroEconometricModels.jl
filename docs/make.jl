@@ -48,7 +48,13 @@ makedocs(;
         "Innovation Accounting" => "innovation_accounting.md",
         "Nowcasting" => "nowcast.md",
         "Statistical Identification" => "nongaussian.md",
-        "Hypothesis Tests" => "hypothesis_tests.md",
+        "Hypothesis Tests" => [
+            "Overview" => "tests.md",
+            "Unit Root & Cointegration" => "tests_unitroot.md",
+            "Structural Breaks" => "tests_breaks.md",
+            "Panel Tests" => "tests_panel.md",
+            "Model Diagnostics" => "tests_diagnostics.md",
+        ],
         "Visualization" => "plotting.md",
         "Examples" => "examples.md",
         "API Reference" => [

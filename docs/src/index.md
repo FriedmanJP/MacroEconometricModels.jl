@@ -487,6 +487,6 @@ Contributions are welcome! Please see the [GitHub repository](https://github.com
 ## Contents
 
 ```@contents
-Pages = ["data.md", "filters.md", "arima.md", "volatility.md", "manual.md", "bayesian.md", "vecm.md", "pvar.md", "lp.md", "factormodels.md", "dsge.md", "innovation_accounting.md", "nowcast.md", "nongaussian.md", "hypothesis_tests.md", "examples.md", "api.md", "api_types.md", "api_functions.md"]
+Pages = ["data.md", "filters.md", "arima.md", "volatility.md", "manual.md", "bayesian.md", "vecm.md", "pvar.md", "lp.md", "factormodels.md", "dsge.md", "innovation_accounting.md", "nowcast.md", "nongaussian.md", "tests.md", "examples.md", "api.md", "api_types.md", "api_functions.md"]
 Depth = 2
 ```
