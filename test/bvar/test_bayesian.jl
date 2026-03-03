@@ -271,7 +271,7 @@ end
         @test all(isfinite.(fc.forecast))
         @test all(fc.ci_lower .<= fc.forecast)
         @test all(fc.forecast .<= fc.ci_upper)
-        @test fc.point_estimate == :median  # default
+        @test fc.point_estimate == :mean  # default
         @test fc.conf_level == 0.95
 
         # point_estimate=:mean
@@ -297,7 +297,7 @@ end
         Random.seed!(50002)
         post = estimate_bvar(Y, 1; n_draws=(FAST ? 30 : 60), sampler=:direct)
 
-        # Show with :median (default)
+        # Show with :median (explicit)
         fc_med = forecast(post, 3; point_estimate=:median)
         io = IOBuffer()
         show(io, fc_med)
