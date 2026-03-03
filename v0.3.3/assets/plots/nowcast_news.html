@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nowcast News: 0.126 → 0.126 (Δ = 0.0)</title>
+<style>* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+    background: #fff;
+    color: #333;
+    padding: 20px;
+}
+.figure-title {
+    font-size: 18px;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 16px;
+    color: #222;
+}
+.figure-source {
+    font-size: 11px;
+    color: #888;
+    text-align: center;
+    margin-top: 8px;
+}
+.panel-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    justify-content: center;
+}
+.panel {
+    width: calc(100% - 16px);
+    min-width: 300px;
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 12px;
+}
+.panel-title {
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 8px;
+    color: #444;
+}
+.axis text { font-size: 11px; fill: #666; }
+.axis line, .axis path { stroke: #ccc; }
+.grid line { stroke: #f0f0f0; stroke-dasharray: 2,2; }
+.grid .domain { stroke: none; }
+.tooltip {
+    position: absolute;
+    background: rgba(0,0,0,0.8);
+    color: #fff;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 1000;
+}
+.legend { font-size: 11px; }
+.legend rect { rx: 2; }
+svg { overflow: visible; }
+</style>
+</head>
+<body>
+<div class="figure-title">Nowcast News: 0.126 → 0.126 (Δ = 0.0)</div>
+<div class="panel">
+<div class="panel-title">Per-Release Impact</div>
+<div id="news_112"></div>
+</div>
+<div class="tooltip" id="tooltip"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script>
+// Shared utilities
+const tooltip = d3.select('#tooltip');
+function fmt(v) {
+    if (v === null || v === undefined) return '';
+    return Math.abs(v) >= 1000 ? v.toFixed(1) : (Math.abs(v) >= 1 ? v.toFixed(3) : v.toFixed(4));
+}
+function showTip(evt, html) {
+    tooltip.html(html).style('opacity',1)
+        .style('left',(evt.pageX+12)+'px').style('top',(evt.pageY-28)+'px');
+}
+function hideTip() { tooltip.style('opacity',0); }
+
+(function() {
+    const data = [{"x":"Var5_t100","impact":-0.03796706199067329}];
+    const series = [{"name":"News Impact","color":"#1f77b4","key":"impact","dash":""}];
+    const mode = 'grouped';
+
+    const container = d3.select('#news_112');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    const keys = series.map(s => s.key);
+    const x = d3.scaleBand().domain(data.map(d=>d.x)).range([0,w]).padding(0.15);
+
+    let yMin = 0, yMax = 0;
+    if(mode === 'stacked') {
+        const stack = d3.stack().keys(keys).order(d3.stackOrderNone).offset(d3.stackOffsetDiverging);
+        const stacked = stack(data);
+        stacked.forEach(layer => layer.forEach(d => {
+            yMin = Math.min(yMin, d[0], d[1]);
+            yMax = Math.max(yMax, d[0], d[1]);
+        }));
+        const yPad = (yMax - yMin) * 0.08 || 1;
+        const y = d3.scaleLinear().domain([yMin - yPad, yMax + yPad]).range([h, 0]);
+
+        g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+        g.selectAll('.layer').data(stacked).join('g').attr('class','layer')
+            .attr('fill', (d,i) => series[i].color)
+            .selectAll('rect').data(d => d).join('rect')
+            .attr('x', d => x(d.data.x))
+            .attr('y', d => y(Math.max(d[0], d[1])))
+            .attr('height', d => Math.abs(y(d[0]) - y(d[1])))
+            .attr('width', x.bandwidth());
+
+        // Zero line
+        g.append('line').attr('x1',0).attr('x2',w)
+            .attr('y1',y(0)).attr('y2',y(0))
+            .attr('stroke','#333').attr('stroke-width',0.8);
+
+        g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+            .call(d3.axisBottom(x).tickValues(x.domain().filter((d,i) =>
+                i % Math.max(1,Math.floor(data.length/8)) === 0)));
+        g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+    } else {
+        // Grouped
+        data.forEach(d => keys.forEach(k => {
+            yMin = Math.min(yMin, d[k]||0);
+            yMax = Math.max(yMax, d[k]||0);
+        }));
+        const yPad = (yMax - yMin) * 0.08 || 1;
+        const y = d3.scaleLinear().domain([yMin - yPad, yMax + yPad]).range([h, 0]);
+        const x1 = d3.scaleBand().domain(keys).range([0, x.bandwidth()]).padding(0.05);
+
+        g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+        g.selectAll('.group').data(data).join('g').attr('class','group')
+            .attr('transform', d => 'translate('+x(d.x)+',0)')
+            .selectAll('rect').data(d => keys.map(k => ({key:k, val:d[k]||0})))
+            .join('rect')
+            .attr('x', d => x1(d.key))
+            .attr('y', d => y(Math.max(0, d.val)))
+            .attr('height', d => Math.abs(y(0) - y(d.val)))
+            .attr('width', x1.bandwidth())
+            .attr('fill', d => series.find(s=>s.key===d.key).color);
+
+        g.append('line').attr('x1',0).attr('x2',w)
+            .attr('y1',y(0)).attr('y2',y(0))
+            .attr('stroke','#333').attr('stroke-width',0.8);
+
+        g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+            .call(d3.axisBottom(x).tickValues(x.domain().filter((d,i) =>
+                i % Math.max(1,Math.floor(data.length/8)) === 0)));
+        g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+    }
+
+    if('') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('');
+    if('Impact') g.append('text').attr('transform','rotate(-90)')
+        .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Impact');
+
+    // Legend
+    if(series.length > 1) {
+        const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
+        series.forEach((s,i) => {
+            const gi = leg.append('g').attr('transform','translate('+(i*90)+',0)');
+            gi.append('rect').attr('width',12).attr('height',12).attr('y',-6).attr('fill',s.color);
+            gi.append('text').attr('x',16).attr('y',4).attr('font-size','10px').attr('fill','#555').text(s.name);
+        });
+    }
+
+    // Tooltip
+    svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g.node());
+            const bands = x.domain();
+            const idx = Math.min(Math.floor(mx / (w / bands.length)), bands.length-1);
+            const d = data[Math.max(0,idx)];
+            if(!d) return;
+            let html = '<b>'+d.x+'</b>';
+            series.forEach(s => { if(d[s.key]!==undefined) html += '<br>'+s.name+': '+fmt(d[s.key]); });
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+
+</script>
+</body>
+</html>

@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OccBin IRF — Shock: ε_d</title>
+<style>* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+    background: #fff;
+    color: #333;
+    padding: 20px;
+}
+.figure-title {
+    font-size: 18px;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 16px;
+    color: #222;
+}
+.figure-source {
+    font-size: 11px;
+    color: #888;
+    text-align: center;
+    margin-top: 8px;
+}
+.panel-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    justify-content: center;
+}
+.panel {
+    width: calc(33% - 16px);
+    min-width: 300px;
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 12px;
+}
+.panel-title {
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 8px;
+    color: #444;
+}
+.axis text { font-size: 11px; fill: #666; }
+.axis line, .axis path { stroke: #ccc; }
+.grid line { stroke: #f0f0f0; stroke-dasharray: 2,2; }
+.grid .domain { stroke: none; }
+.tooltip {
+    position: absolute;
+    background: rgba(0,0,0,0.8);
+    color: #fff;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 1000;
+}
+.legend { font-size: 11px; }
+.legend rect { rx: 2; }
+svg { overflow: visible; }
+</style>
+</head>
+<body>
+<div class="figure-title">OccBin IRF — Shock: ε_d</div>
+<div class="panel-grid">
+<div class="panel">
+<div class="panel-title">y</div>
+<div id="oirf_122"></div>
+</div>
+<div class="panel">
+<div class="panel-title">π</div>
+<div id="oirf_123"></div>
+</div>
+<div class="panel">
+<div class="panel-title">R</div>
+<div id="oirf_124"></div>
+</div>
+<div class="panel">
+<div class="panel-title">d</div>
+<div id="oirf_125"></div>
+</div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script>
+// Shared utilities
+const tooltip = d3.select('#tooltip');
+function fmt(v) {
+    if (v === null || v === undefined) return '';
+    return Math.abs(v) >= 1000 ? v.toFixed(1) : (Math.abs(v) >= 1 ? v.toFixed(3) : v.toFixed(4));
+}
+function showTip(evt, html) {
+    tooltip.html(html).style('opacity',1)
+        .style('left',(evt.pageX+12)+'px').style('top',(evt.pageY-28)+'px');
+}
+function hideTip() { tooltip.style('opacity',0); }
+
+(function() {
+    const data_oirf_122 = [{"h":1,"lin":0.04102564102564103,"pw":0.04102564102564103,"bind":0},
+{"h":2,"lin":0.03282051282051283,"pw":0.03282051282051283,"bind":0},
+{"h":3,"lin":0.026256410256410262,"pw":0.026256410256410262,"bind":0},
+{"h":4,"lin":0.02100512820512821,"pw":0.02100512820512821,"bind":0},
+{"h":5,"lin":0.016804102564102568,"pw":0.016804102564102568,"bind":0},
+{"h":6,"lin":0.013443282051282056,"pw":0.013443282051282056,"bind":0},
+{"h":7,"lin":0.010754625641025646,"pw":0.010754625641025646,"bind":0},
+{"h":8,"lin":0.008603700512820518,"pw":0.008603700512820518,"bind":0},
+{"h":9,"lin":0.006882960410256415,"pw":0.006882960410256415,"bind":0},
+{"h":10,"lin":0.0055063683282051325,"pw":0.0055063683282051325,"bind":0},
+{"h":11,"lin":0.004405094662564106,"pw":0.004405094662564106,"bind":0},
+{"h":12,"lin":0.003524075730051285,"pw":0.003524075730051285,"bind":0},
+{"h":13,"lin":0.0028192605840410283,"pw":0.0028192605840410283,"bind":0},
+{"h":14,"lin":0.0022554084672328227,"pw":0.0022554084672328227,"bind":0},
+{"h":15,"lin":0.0018043267737862584,"pw":0.0018043267737862584,"bind":0},
+{"h":16,"lin":0.0014434614190290069,"pw":0.0014434614190290069,"bind":0},
+{"h":17,"lin":0.0011547691352232056,"pw":0.0011547691352232056,"bind":0},
+{"h":18,"lin":0.0009238153081785644,"pw":0.0009238153081785644,"bind":0},
+{"h":19,"lin":0.0007390522465428516,"pw":0.0007390522465428516,"bind":0},
+{"h":20,"lin":0.0005912417972342814,"pw":0.0005912417972342814,"bind":0},
+{"h":21,"lin":0.0004729934377874251,"pw":0.0004729934377874251,"bind":0},
+{"h":22,"lin":0.00037839475022994007,"pw":0.00037839475022994007,"bind":0},
+{"h":23,"lin":0.0003027158001839521,"pw":0.0003027158001839521,"bind":0},
+{"h":24,"lin":0.00024217264014716168,"pw":0.00024217264014716168,"bind":0},
+{"h":25,"lin":0.00019373811211772935,"pw":0.00019373811211772935,"bind":0},
+{"h":26,"lin":0.00015499048969418348,"pw":0.00015499048969418348,"bind":0},
+{"h":27,"lin":0.0001239923917553468,"pw":0.0001239923917553468,"bind":0},
+{"h":28,"lin":9.919391340427744e-5,"pw":9.919391340427744e-5,"bind":0},
+{"h":29,"lin":7.935513072342196e-5,"pw":7.935513072342196e-5,"bind":0},
+{"h":30,"lin":6.348410457873757e-5,"pw":6.348410457873757e-5,"bind":0},
+{"h":31,"lin":5.0787283662990056e-5,"pw":5.0787283662990056e-5,"bind":0},
+{"h":32,"lin":4.062982693039205e-5,"pw":4.062982693039205e-5,"bind":0},
+{"h":33,"lin":3.250386154431364e-5,"pw":3.250386154431364e-5,"bind":0},
+{"h":34,"lin":2.6003089235450912e-5,"pw":2.6003089235450912e-5,"bind":0},
+{"h":35,"lin":2.080247138836073e-5,"pw":2.080247138836073e-5,"bind":0},
+{"h":36,"lin":1.6641977110688586e-5,"pw":1.6641977110688586e-5,"bind":0},
+{"h":37,"lin":1.3313581688550869e-5,"pw":1.3313581688550869e-5,"bind":0},
+{"h":38,"lin":1.0650865350840697e-5,"pw":1.0650865350840697e-5,"bind":0},
+{"h":39,"lin":8.520692280672557e-6,"pw":8.520692280672557e-6,"bind":0},
+{"h":40,"lin":6.816553824538047e-6,"pw":6.816553824538047e-6,"bind":0},
+{"h":41,"lin":5.4532430596304375e-6,"pw":5.4532430596304375e-6,"bind":0},
+{"h":42,"lin":4.3625944477043505e-6,"pw":4.3625944477043505e-6,"bind":0},
+{"h":43,"lin":3.4900755581634802e-6,"pw":3.4900755581634802e-6,"bind":0},
+{"h":44,"lin":2.792060446530784e-6,"pw":2.792060446530784e-6,"bind":0},
+{"h":45,"lin":2.2336483572246273e-6,"pw":2.2336483572246273e-6,"bind":0},
+{"h":46,"lin":1.786918685779702e-6,"pw":1.786918685779702e-6,"bind":0},
+{"h":47,"lin":1.4295349486237616e-6,"pw":1.4295349486237616e-6,"bind":0},
+{"h":48,"lin":1.1436279588990094e-6,"pw":1.1436279588990094e-6,"bind":0},
+{"h":49,"lin":9.149023671192074e-7,"pw":9.149023671192074e-7,"bind":0},
+{"h":50,"lin":7.31921893695366e-7,"pw":7.31921893695366e-7,"bind":0},
+{"h":51,"lin":5.855375149562929e-7,"pw":5.855375149562929e-7,"bind":0},
+{"h":52,"lin":4.6843001196503433e-7,"pw":4.6843001196503433e-7,"bind":0},
+{"h":53,"lin":3.7474400957202747e-7,"pw":3.7474400957202747e-7,"bind":0},
+{"h":54,"lin":2.9979520765762204e-7,"pw":2.9979520765762204e-7,"bind":0},
+{"h":55,"lin":2.3983616612609766e-7,"pw":2.3983616612609766e-7,"bind":0},
+{"h":56,"lin":1.9186893290087812e-7,"pw":1.9186893290087812e-7,"bind":0},
+{"h":57,"lin":1.5349514632070252e-7,"pw":1.5349514632070252e-7,"bind":0},
+{"h":58,"lin":1.2279611705656204e-7,"pw":1.2279611705656204e-7,"bind":0},
+{"h":59,"lin":9.823689364524964e-8,"pw":9.823689364524964e-8,"bind":0},
+{"h":60,"lin":7.858951491619971e-8,"pw":7.858951491619971e-8,"bind":0},
+{"h":61,"lin":6.287161193295978e-8,"pw":6.287161193295978e-8,"bind":0},
+{"h":62,"lin":5.029728954636782e-8,"pw":5.029728954636782e-8,"bind":0},
+{"h":63,"lin":4.023783163709426e-8,"pw":4.023783163709426e-8,"bind":0},
+{"h":64,"lin":3.219026530967541e-8,"pw":3.219026530967541e-8,"bind":0},
+{"h":65,"lin":2.575221224774033e-8,"pw":2.575221224774033e-8,"bind":0},
+{"h":66,"lin":2.0601769798192267e-8,"pw":2.0601769798192267e-8,"bind":0},
+{"h":67,"lin":1.6481415838553814e-8,"pw":1.6481415838553814e-8,"bind":0},
+{"h":68,"lin":1.3185132670843053e-8,"pw":1.3185132670843053e-8,"bind":0},
+{"h":69,"lin":1.0548106136674444e-8,"pw":1.0548106136674444e-8,"bind":0},
+{"h":70,"lin":8.438484909339556e-9,"pw":8.438484909339556e-9,"bind":0},
+{"h":71,"lin":6.750787927471644e-9,"pw":6.750787927471644e-9,"bind":0},
+{"h":72,"lin":5.400630341977316e-9,"pw":5.400630341977316e-9,"bind":0},
+{"h":73,"lin":4.3205042735818524e-9,"pw":4.3205042735818524e-9,"bind":0},
+{"h":74,"lin":3.456403418865482e-9,"pw":3.456403418865482e-9,"bind":0},
+{"h":75,"lin":2.765122735092386e-9,"pw":2.765122735092386e-9,"bind":0},
+{"h":76,"lin":2.212098188073909e-9,"pw":2.212098188073909e-9,"bind":0},
+{"h":77,"lin":1.769678550459127e-9,"pw":1.769678550459127e-9,"bind":0},
+{"h":78,"lin":1.4157428403673018e-9,"pw":1.4157428403673018e-9,"bind":0},
+{"h":79,"lin":1.1325942722938414e-9,"pw":1.1325942722938414e-9,"bind":0},
+{"h":80,"lin":9.060754178350731e-10,"pw":9.060754178350731e-10,"bind":0}];
+    const container_oirf_122 = d3.select('#oirf_122');
+    const W_oirf_122 = Math.max(container_oirf_122.node().clientWidth - 24, 280);
+    const margin_oirf_122 = {top:10, right:15, bottom:35, left:55};
+    const w_oirf_122 = W_oirf_122 - margin_oirf_122.left - margin_oirf_122.right;
+    const h_oirf_122 = Math.min(w_oirf_122 * 0.6, 250);
+
+    const svg_oirf_122 = container_oirf_122.append('svg')
+        .attr('width', W_oirf_122)
+        .attr('height', h_oirf_122 + margin_oirf_122.top + margin_oirf_122.bottom);
+    const g_oirf_122 = svg_oirf_122.append('g')
+        .attr('transform', 'translate('+margin_oirf_122.left+','+margin_oirf_122.top+')');
+
+    // Compute domains
+    const xVals_oirf_122 = data_oirf_122.map(d => d.h);
+    const allY_oirf_122 = [];
+    data_oirf_122.forEach(d => {
+        if(d.lin!==null) allY_oirf_122.push(d.lin);
+        if(d.pw!==null) allY_oirf_122.push(d.pw);
+    });
+    allY_oirf_122.push(0);
+
+    const x_oirf_122 = d3.scaleLinear().domain(d3.extent(xVals_oirf_122)).range([0, w_oirf_122]);
+    const yExt_oirf_122 = d3.extent(allY_oirf_122);
+    const yPad_oirf_122 = (yExt_oirf_122[1] - yExt_oirf_122[0]) * 0.08 || 0.1;
+    const y_oirf_122 = d3.scaleLinear()
+        .domain([yExt_oirf_122[0] - yPad_oirf_122, yExt_oirf_122[1] + yPad_oirf_122])
+        .range([h_oirf_122, 0]);
+
+    // Grid
+    g_oirf_122.append('g').attr('class','grid')
+        .call(d3.axisLeft(y_oirf_122).tickSize(-w_oirf_122).tickFormat(''));
+
+    // Binding-period shaded rectangles
+    const xStep_oirf_122 = w_oirf_122 / Math.max(xVals_oirf_122.length - 1, 1);
+    data_oirf_122.forEach((d, i) => {
+        if(d.bind === 1) {
+            const x0_oirf_122 = x_oirf_122(d.h) - xStep_oirf_122 * 0.5;
+            const x1_oirf_122 = x_oirf_122(d.h) + xStep_oirf_122 * 0.5;
+            g_oirf_122.append('rect')
+                .attr('x', Math.max(0, x0_oirf_122))
+                .attr('y', 0)
+                .attr('width', Math.min(x1_oirf_122, w_oirf_122) - Math.max(0, x0_oirf_122))
+                .attr('height', h_oirf_122)
+                .attr('fill', '#d62728')
+                .attr('opacity', 0.08);
+        }
+    });
+
+    // Zero reference line
+    g_oirf_122.append('line')
+        .attr('x1', 0).attr('x2', w_oirf_122)
+        .attr('y1', y_oirf_122(0)).attr('y2', y_oirf_122(0))
+        .attr('stroke', '#999').attr('stroke-width', 1)
+        .attr('stroke-dasharray', '4,3');
+
+    // Linear line (dashed)
+    const linLine_oirf_122 = d3.line().x(d => x_oirf_122(d.h)).y(d => y_oirf_122(d.lin))
+        .defined(d => d.lin !== null);
+    g_oirf_122.append('path').datum(data_oirf_122).attr('d', linLine_oirf_122)
+        .attr('fill', 'none').attr('stroke', '#2ca02c')
+        .attr('stroke-width', 1.8).attr('stroke-dasharray', '6,3');
+
+    // Piecewise line (solid)
+    const pwLine_oirf_122 = d3.line().x(d => x_oirf_122(d.h)).y(d => y_oirf_122(d.pw))
+        .defined(d => d.pw !== null);
+    g_oirf_122.append('path').datum(data_oirf_122).attr('d', pwLine_oirf_122)
+        .attr('fill', 'none').attr('stroke', '#1f77b4')
+        .attr('stroke-width', 1.8);
+
+    // Axes
+    g_oirf_122.append('g').attr('class','axis')
+        .attr('transform', 'translate(0,'+h_oirf_122+')')
+        .call(d3.axisBottom(x_oirf_122).ticks(Math.min(xVals_oirf_122.length, 8)));
+    g_oirf_122.append('g').attr('class','axis')
+        .call(d3.axisLeft(y_oirf_122).ticks(6));
+
+    if('Horizon') g_oirf_122.append('text')
+        .attr('x', w_oirf_122/2).attr('y', h_oirf_122+30)
+        .attr('text-anchor','middle').attr('font-size','11px')
+        .attr('fill','#666').text('Horizon');
+    if('y') g_oirf_122.append('text')
+        .attr('transform','rotate(-90)')
+        .attr('x', -h_oirf_122/2).attr('y', -42)
+        .attr('text-anchor','middle').attr('font-size','11px')
+        .attr('fill','#666').text('y');
+
+    // Legend
+    const leg_oirf_122 = g_oirf_122.append('g').attr('class','legend')
+        .attr('transform','translate(5,-5)');
+    // Linear (dashed)
+    const g1_oirf_122 = leg_oirf_122.append('g').attr('transform','translate(0,0)');
+    g1_oirf_122.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+        .attr('stroke','#2ca02c').attr('stroke-width',2)
+        .attr('stroke-dasharray','6,3');
+    g1_oirf_122.append('text').attr('x',20).attr('y',4)
+        .attr('font-size','10px').attr('fill','#555').text('Linear');
+    // Piecewise (solid)
+    const g2_oirf_122 = leg_oirf_122.append('g').attr('transform','translate(80,0)');
+    g2_oirf_122.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+        .attr('stroke','#1f77b4').attr('stroke-width',2);
+    g2_oirf_122.append('text').attr('x',20).attr('y',4)
+        .attr('font-size','10px').attr('fill','#555').text('Piecewise');
+    // Binding
+    const g3_oirf_122 = leg_oirf_122.append('g').attr('transform','translate(175,0)');
+    g3_oirf_122.append('rect').attr('width',12).attr('height',10).attr('y',-5)
+        .attr('fill','#d62728').attr('opacity',0.15);
+    g3_oirf_122.append('text').attr('x',16).attr('y',4)
+        .attr('font-size','10px').attr('fill','#555').text('Binding');
+
+    // Tooltip
+    svg_oirf_122.append('rect')
+        .attr('width', W_oirf_122)
+        .attr('height', h_oirf_122 + margin_oirf_122.top + margin_oirf_122.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g_oirf_122.node());
+            const x0 = x_oirf_122.invert(mx);
+            const idx = d3.minIndex(data_oirf_122, d => Math.abs(d.h - x0));
+            const d = data_oirf_122[idx];
+            let html = '<b>h='+d.h+'</b>';
+            if(d.lin!==null) html += '<br>Linear: '+fmt(d.lin);
+            if(d.pw!==null) html += '<br>Piecewise: '+fmt(d.pw);
+            if(d.bind===1) html += '<br><span style="color:#d62728">Binding</span>';
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+
+(function() {
+    const data_oirf_123 = [{"h":1,"lin":0.012307692307692306,"pw":0.012307692307692306,"bind":0},
+{"h":2,"lin":0.009846153846153846,"pw":0.009846153846153846,"bind":0},
+{"h":3,"lin":0.007876923076923076,"pw":0.007876923076923076,"bind":0},
+{"h":4,"lin":0.006301538461538462,"pw":0.006301538461538462,"bind":0},
+{"h":5,"lin":0.005041230769230769,"pw":0.005041230769230769,"bind":0},
+{"h":6,"lin":0.0040329846153846155,"pw":0.0040329846153846155,"bind":0},
+{"h":7,"lin":0.0032263876923076928,"pw":0.0032263876923076928,"bind":0},
+{"h":8,"lin":0.0025811101538461547,"pw":0.0025811101538461547,"bind":0},
+{"h":9,"lin":0.002064888123076924,"pw":0.002064888123076924,"bind":0},
+{"h":10,"lin":0.0016519104984615393,"pw":0.0016519104984615393,"bind":0},
+{"h":11,"lin":0.0013215283987692314,"pw":0.0013215283987692314,"bind":0},
+{"h":12,"lin":0.0010572227190153852,"pw":0.0010572227190153852,"bind":0},
+{"h":13,"lin":0.0008457781752123083,"pw":0.0008457781752123083,"bind":0},
+{"h":14,"lin":0.0006766225401698467,"pw":0.0006766225401698467,"bind":0},
+{"h":15,"lin":0.0005412980321358774,"pw":0.0005412980321358774,"bind":0},
+{"h":16,"lin":0.0004330384257087019,"pw":0.0004330384257087019,"bind":0},
+{"h":17,"lin":0.00034643074056696154,"pw":0.00034643074056696154,"bind":0},
+{"h":18,"lin":0.0002771445924535693,"pw":0.0002771445924535693,"bind":0},
+{"h":19,"lin":0.0002217156739628554,"pw":0.0002217156739628554,"bind":0},
+{"h":20,"lin":0.00017737253917028434,"pw":0.00017737253917028434,"bind":0},
+{"h":21,"lin":0.00014189803133622748,"pw":0.00014189803133622748,"bind":0},
+{"h":22,"lin":0.00011351842506898199,"pw":0.00011351842506898199,"bind":0},
+{"h":23,"lin":9.081474005518559e-5,"pw":9.081474005518559e-5,"bind":0},
+{"h":24,"lin":7.265179204414848e-5,"pw":7.265179204414848e-5,"bind":0},
+{"h":25,"lin":5.812143363531879e-5,"pw":5.812143363531879e-5,"bind":0},
+{"h":26,"lin":4.649714690825504e-5,"pw":4.649714690825504e-5,"bind":0},
+{"h":27,"lin":3.719771752660403e-5,"pw":3.719771752660403e-5,"bind":0},
+{"h":28,"lin":2.9758174021283225e-5,"pw":2.9758174021283225e-5,"bind":0},
+{"h":29,"lin":2.3806539217026582e-5,"pw":2.3806539217026582e-5,"bind":0},
+{"h":30,"lin":1.9045231373621266e-5,"pw":1.9045231373621266e-5,"bind":0},
+{"h":31,"lin":1.5236185098897011e-5,"pw":1.5236185098897011e-5,"bind":0},
+{"h":32,"lin":1.218894807911761e-5,"pw":1.218894807911761e-5,"bind":0},
+{"h":33,"lin":9.751158463294089e-6,"pw":9.751158463294089e-6,"bind":0},
+{"h":34,"lin":7.800926770635273e-6,"pw":7.800926770635273e-6,"bind":0},
+{"h":35,"lin":6.240741416508218e-6,"pw":6.240741416508218e-6,"bind":0},
+{"h":36,"lin":4.992593133206574e-6,"pw":4.992593133206574e-6,"bind":0},
+{"h":37,"lin":3.99407450656526e-6,"pw":3.99407450656526e-6,"bind":0},
+{"h":38,"lin":3.195259605252208e-6,"pw":3.195259605252208e-6,"bind":0},
+{"h":39,"lin":2.5562076842017663e-6,"pw":2.5562076842017663e-6,"bind":0},
+{"h":40,"lin":2.0449661473614133e-6,"pw":2.0449661473614133e-6,"bind":0},
+{"h":41,"lin":1.6359729178891307e-6,"pw":1.6359729178891307e-6,"bind":0},
+{"h":42,"lin":1.3087783343113048e-6,"pw":1.3087783343113048e-6,"bind":0},
+{"h":43,"lin":1.0470226674490438e-6,"pw":1.0470226674490438e-6,"bind":0},
+{"h":44,"lin":8.37618133959235e-7,"pw":8.37618133959235e-7,"bind":0},
+{"h":45,"lin":6.70094507167388e-7,"pw":6.70094507167388e-7,"bind":0},
+{"h":46,"lin":5.360756057339105e-7,"pw":5.360756057339105e-7,"bind":0},
+{"h":47,"lin":4.2886048458712835e-7,"pw":4.2886048458712835e-7,"bind":0},
+{"h":48,"lin":3.430883876697027e-7,"pw":3.430883876697027e-7,"bind":0},
+{"h":49,"lin":2.7447071013576215e-7,"pw":2.7447071013576215e-7,"bind":0},
+{"h":50,"lin":2.1957656810860974e-7,"pw":2.1957656810860974e-7,"bind":0},
+{"h":51,"lin":1.756612544868878e-7,"pw":1.756612544868878e-7,"bind":0},
+{"h":52,"lin":1.4052900358951025e-7,"pw":1.4052900358951025e-7,"bind":0},
+{"h":53,"lin":1.1242320287160821e-7,"pw":1.1242320287160821e-7,"bind":0},
+{"h":54,"lin":8.993856229728658e-8,"pw":8.993856229728658e-8,"bind":0},
+{"h":55,"lin":7.195084983782927e-8,"pw":7.195084983782927e-8,"bind":0},
+{"h":56,"lin":5.7560679870263423e-8,"pw":5.7560679870263423e-8,"bind":0},
+{"h":57,"lin":4.604854389621074e-8,"pw":4.604854389621074e-8,"bind":0},
+{"h":58,"lin":3.68388351169686e-8,"pw":3.68388351169686e-8,"bind":0},
+{"h":59,"lin":2.947106809357488e-8,"pw":2.947106809357488e-8,"bind":0},
+{"h":60,"lin":2.3576854474859908e-8,"pw":2.3576854474859908e-8,"bind":0},
+{"h":61,"lin":1.886148357988793e-8,"pw":1.886148357988793e-8,"bind":0},
+{"h":62,"lin":1.5089186863910343e-8,"pw":1.5089186863910343e-8,"bind":0},
+{"h":63,"lin":1.2071349491128274e-8,"pw":1.2071349491128274e-8,"bind":0},
+{"h":64,"lin":9.65707959290262e-9,"pw":9.65707959290262e-9,"bind":0},
+{"h":65,"lin":7.725663674322096e-9,"pw":7.725663674322096e-9,"bind":0},
+{"h":66,"lin":6.180530939457678e-9,"pw":6.180530939457678e-9,"bind":0},
+{"h":67,"lin":4.944424751566143e-9,"pw":4.944424751566143e-9,"bind":0},
+{"h":68,"lin":3.9555398012529145e-9,"pw":3.9555398012529145e-9,"bind":0},
+{"h":69,"lin":3.164431841002332e-9,"pw":3.164431841002332e-9,"bind":0},
+{"h":70,"lin":2.5315454728018658e-9,"pw":2.5315454728018658e-9,"bind":0},
+{"h":71,"lin":2.0252363782414925e-9,"pw":2.0252363782414925e-9,"bind":0},
+{"h":72,"lin":1.6201891025931944e-9,"pw":1.6201891025931944e-9,"bind":0},
+{"h":73,"lin":1.2961512820745554e-9,"pw":1.2961512820745554e-9,"bind":0},
+{"h":74,"lin":1.0369210256596444e-9,"pw":1.0369210256596444e-9,"bind":0},
+{"h":75,"lin":8.295368205277156e-10,"pw":8.295368205277156e-10,"bind":0},
+{"h":76,"lin":6.636294564221724e-10,"pw":6.636294564221724e-10,"bind":0},
+{"h":77,"lin":5.309035651377379e-10,"pw":5.309035651377379e-10,"bind":0},
+{"h":78,"lin":4.247228521101904e-10,"pw":4.247228521101904e-10,"bind":0},
+{"h":79,"lin":3.3977828168815236e-10,"pw":3.3977828168815236e-10,"bind":0},
+{"h":80,"lin":2.718226253505219e-10,"pw":2.718226253505219e-10,"bind":0}];
+    const container_oirf_123 = d3.select('#oirf_123');
+    const W_oirf_123 = Math.max(container_oirf_123.node().clientWidth - 24, 280);
+    const margin_oirf_123 = {top:10, right:15, bottom:35, left:55};
+    const w_oirf_123 = W_oirf_123 - margin_oirf_123.left - margin_oirf_123.right;
+    const h_oirf_123 = Math.min(w_oirf_123 * 0.6, 250);
+
+    const svg_oirf_123 = container_oirf_123.append('svg')
+        .attr('width', W_oirf_123)
+        .attr('height', h_oirf_123 + margin_oirf_123.top + margin_oirf_123.bottom);
+    const g_oirf_123 = svg_oirf_123.append('g')
+        .attr('transform', 'translate('+margin_oirf_123.left+','+margin_oirf_123.top+')');
+
+    // Compute domains
+    const xVals_oirf_123 = data_oirf_123.map(d => d.h);
+    const allY_oirf_123 = [];
+    data_oirf_123.forEach(d => {
+        if(d.lin!==null) allY_oirf_123.push(d.lin);
+        if(d.pw!==null) allY_oirf_123.push(d.pw);
+    });
+    allY_oirf_123.push(0);
+
+    const x_oirf_123 = d3.scaleLinear().domain(d3.extent(xVals_oirf_123)).range([0, w_oirf_123]);
+    const yExt_oirf_123 = d3.extent(allY_oirf_123);
+    const yPad_oirf_123 = (yExt_oirf_123[1] - yExt_oirf_123[0]) * 0.08 || 0.1;
+    const y_oirf_123 = d3.scaleLinear()
+        .domain([yExt_oirf_123[0] - yPad_oirf_123, yExt_oirf_123[1] + yPad_oirf_123])
+        .range([h_oirf_123, 0]);
+
+    // Grid
+    g_oirf_123.append('g').attr('class','grid')
+        .call(d3.axisLeft(y_oirf_123).tickSize(-w_oirf_123).tickFormat(''));
+
+    // Binding-period shaded rectangles
+    const xStep_oirf_123 = w_oirf_123 / Math.max(xVals_oirf_123.length - 1, 1);
+    data_oirf_123.forEach((d, i) => {
+        if(d.bind === 1) {
+            const x0_oirf_123 = x_oirf_123(d.h) - xStep_oirf_123 * 0.5;
+            const x1_oirf_123 = x_oirf_123(d.h) + xStep_oirf_123 * 0.5;
+            g_oirf_123.append('rect')
+                .attr('x', Math.max(0, x0_oirf_123))
+                .attr('y', 0)
+                .attr('width', Math.min(x1_oirf_123, w_oirf_123) - Math.max(0, x0_oirf_123))
+                .attr('height', h_oirf_123)
+                .attr('fill', '#d62728')
+                .attr('opacity', 0.08);
+        }
+    });
+
+    // Zero reference line
+    g_oirf_123.append('line')
+        .attr('x1', 0).attr('x2', w_oirf_123)
+        .attr('y1', y_oirf_123(0)).attr('y2', y_oirf_123(0))
+        .attr('stroke', '#999').attr('stroke-width', 1)
+        .attr('stroke-dasharray', '4,3');
+
+    // Linear line (dashed)
+    const linLine_oirf_123 = d3.line().x(d => x_oirf_123(d.h)).y(d => y_oirf_123(d.lin))
+        .defined(d => d.lin !== null);
+    g_oirf_123.append('path').datum(data_oirf_123).attr('d', linLine_oirf_123)
+        .attr('fill', 'none').attr('stroke', '#2ca02c')
+        .attr('stroke-width', 1.8).attr('stroke-dasharray', '6,3');
+
+    // Piecewise line (solid)
+    const pwLine_oirf_123 = d3.line().x(d => x_oirf_123(d.h)).y(d => y_oirf_123(d.pw))
+        .defined(d => d.pw !== null);
+    g_oirf_123.append('path').datum(data_oirf_123).attr('d', pwLine_oirf_123)
+        .attr('fill', 'none').attr('stroke', '#1f77b4')
+        .attr('stroke-width', 1.8);
+
+    // Axes
+    g_oirf_123.append('g').attr('class','axis')
+        .attr('transform', 'translate(0,'+h_oirf_123+')')
+        .call(d3.axisBottom(x_oirf_123).ticks(Math.min(xVals_oirf_123.length, 8)));
+    g_oirf_123.append('g').attr('class','axis')
+        .call(d3.axisLeft(y_oirf_123).ticks(6));
+
+    if('Horizon') g_oirf_123.append('text')
+        .attr('x', w_oirf_123/2).attr('y', h_oirf_123+30)
+        .attr('text-anchor','middle').attr('font-size','11px')
+        .attr('fill','#666').text('Horizon');
+    if('π') g_oirf_123.append('text')
+        .attr('transform','rotate(-90)')
+        .attr('x', -h_oirf_123/2).attr('y', -42)
+        .attr('text-anchor','middle').attr('font-size','11px')
+        .attr('fill','#666').text('π');
+
+    // Legend
+    const leg_oirf_123 = g_oirf_123.append('g').attr('class','legend')
+        .attr('transform','translate(5,-5)');
+    // Linear (dashed)
+    const g1_oirf_123 = leg_oirf_123.append('g').attr('transform','translate(0,0)');
+    g1_oirf_123.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+        .attr('stroke','#2ca02c').attr('stroke-width',2)
+        .attr('stroke-dasharray','6,3');
+    g1_oirf_123.append('text').attr('x',20).attr('y',4)
+        .attr('font-size','10px').attr('fill','#555').text('Linear');
+    // Piecewise (solid)
+    const g2_oirf_123 = leg_oirf_123.append('g').attr('transform','translate(80,0)');
+    g2_oirf_123.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+        .attr('stroke','#1f77b4').attr('stroke-width',2);
+    g2_oirf_123.append('text').attr('x',20).attr('y',4)
+        .attr('font-size','10px').attr('fill','#555').text('Piecewise');
+    // Binding
+    const g3_oirf_123 = leg_oirf_123.append('g').attr('transform','translate(175,0)');
+    g3_oirf_123.append('rect').attr('width',12).attr('height',10).attr('y',-5)
+        .attr('fill','#d62728').attr('opacity',0.15);
+    g3_oirf_123.append('text').attr('x',16).attr('y',4)
+        .attr('font-size','10px').attr('fill','#555').text('Binding');
+
+    // Tooltip
+    svg_oirf_123.append('rect')
+        .attr('width', W_oirf_123)
+        .attr('height', h_oirf_123 + margin_oirf_123.top + margin_oirf_123.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g_oirf_123.node());
+            const x0 = x_oirf_123.invert(mx);
+            const idx = d3.minIndex(data_oirf_123, d => Math.abs(d.h - x0));
+            const d = data_oirf_123[idx];
+            let html = '<b>h='+d.h+'</b>';
+            if(d.lin!==null) html += '<br>Linear: '+fmt(d.lin);
+            if(d.pw!==null) html += '<br>Piecewise: '+fmt(d.pw);
+            if(d.bind===1) html += '<br><span style="color:#d62728">Binding</span>';
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+
+(function() {
+    const data_oirf_124 = [{"h":1,"lin":0.038974358974358976,"pw":0.038974358974358976,"bind":0},
+{"h":2,"lin":0.031179487179487184,"pw":0.031179487179487184,"bind":0},
+{"h":3,"lin":0.024943589743589747,"pw":0.024943589743589747,"bind":0},
+{"h":4,"lin":0.0199548717948718,"pw":0.0199548717948718,"bind":0},
+{"h":5,"lin":0.01596389743589744,"pw":0.01596389743589744,"bind":0},
+{"h":6,"lin":0.012771117948717953,"pw":0.012771117948717953,"bind":0},
+{"h":7,"lin":0.010216894358974363,"pw":0.010216894358974363,"bind":0},
+{"h":8,"lin":0.00817351548717949,"pw":0.00817351548717949,"bind":0},
+{"h":9,"lin":0.006538812389743594,"pw":0.006538812389743594,"bind":0},
+{"h":10,"lin":0.0052310499117948755,"pw":0.0052310499117948755,"bind":0},
+{"h":11,"lin":0.004184839929435901,"pw":0.004184839929435901,"bind":0},
+{"h":12,"lin":0.0033478719435487206,"pw":0.0033478719435487206,"bind":0},
+{"h":13,"lin":0.0026782975548389765,"pw":0.0026782975548389765,"bind":0},
+{"h":14,"lin":0.0021426380438711815,"pw":0.0021426380438711815,"bind":0},
+{"h":15,"lin":0.0017141104350969453,"pw":0.0017141104350969453,"bind":0},
+{"h":16,"lin":0.0013712883480775564,"pw":0.0013712883480775564,"bind":0},
+{"h":17,"lin":0.0010970306784620451,"pw":0.0010970306784620451,"bind":0},
+{"h":18,"lin":0.0008776245427696361,"pw":0.0008776245427696361,"bind":0},
+{"h":19,"lin":0.0007020996342157089,"pw":0.0007020996342157089,"bind":0},
+{"h":20,"lin":0.0005616797073725672,"pw":0.0005616797073725672,"bind":0},
+{"h":21,"lin":0.0004493437658980538,"pw":0.0004493437658980538,"bind":0},
+{"h":22,"lin":0.00035947501271844305,"pw":0.00035947501271844305,"bind":0},
+{"h":23,"lin":0.00028758001017475444,"pw":0.00028758001017475444,"bind":0},
+{"h":24,"lin":0.0002300640081398036,"pw":0.0002300640081398036,"bind":0},
+{"h":25,"lin":0.00018405120651184288,"pw":0.00018405120651184288,"bind":0},
+{"h":26,"lin":0.0001472409652094743,"pw":0.0001472409652094743,"bind":0},
+{"h":27,"lin":0.00011779277216757944,"pw":0.00011779277216757944,"bind":0},
+{"h":28,"lin":9.423421773406356e-5,"pw":9.423421773406356e-5,"bind":0},
+{"h":29,"lin":7.538737418725086e-5,"pw":7.538737418725086e-5,"bind":0},
+{"h":30,"lin":6.030989934980069e-5,"pw":6.030989934980069e-5,"bind":0},
+{"h":31,"lin":4.824791947984055e-5,"pw":4.824791947984055e-5,"bind":0},
+{"h":32,"lin":3.859833558387244e-5,"pw":3.859833558387244e-5,"bind":0},
+{"h":33,"lin":3.087866846709796e-5,"pw":3.087866846709796e-5,"bind":0},
+{"h":34,"lin":2.4702934773678366e-5,"pw":2.4702934773678366e-5,"bind":0},
+{"h":35,"lin":1.9762347818942693e-5,"pw":1.9762347818942693e-5,"bind":0},
+{"h":36,"lin":1.5809878255154156e-5,"pw":1.5809878255154156e-5,"bind":0},
+{"h":37,"lin":1.2647902604123324e-5,"pw":1.2647902604123324e-5,"bind":0},
+{"h":38,"lin":1.0118322083298661e-5,"pw":1.0118322083298661e-5,"bind":0},
+{"h":39,"lin":8.094657666638929e-6,"pw":8.094657666638929e-6,"bind":0},
+{"h":40,"lin":6.4757261333111435e-6,"pw":6.4757261333111435e-6,"bind":0},
+{"h":41,"lin":5.180580906648915e-6,"pw":5.180580906648915e-6,"bind":0},
+{"h":42,"lin":4.144464725319132e-6,"pw":4.144464725319132e-6,"bind":0},
+{"h":43,"lin":3.3155717802553057e-6,"pw":3.3155717802553057e-6,"bind":0},
+{"h":44,"lin":2.6524574242042448e-6,"pw":2.6524574242042448e-6,"bind":0},
+{"h":45,"lin":2.1219659393633957e-6,"pw":2.1219659393633957e-6,"bind":0},
+{"h":46,"lin":1.6975727514907167e-6,"pw":1.6975727514907167e-6,"bind":0},
+{"h":47,"lin":1.3580582011925734e-6,"pw":1.3580582011925734e-6,"bind":0},
+{"h":48,"lin":1.0864465609540587e-6,"pw":1.0864465609540587e-6,"bind":0},
+{"h":49,"lin":8.69157248763247e-7,"pw":8.69157248763247e-7,"bind":0},
+{"h":50,"lin":6.953257990105977e-7,"pw":6.953257990105977e-7,"bind":0},
+{"h":51,"lin":5.562606392084781e-7,"pw":5.562606392084781e-7,"bind":0},
+{"h":52,"lin":4.4500851136678256e-7,"pw":4.4500851136678256e-7,"bind":0},
+{"h":53,"lin":3.560068090934261e-7,"pw":3.560068090934261e-7,"bind":0},
+{"h":54,"lin":2.848054472747409e-7,"pw":2.848054472747409e-7,"bind":0},
+{"h":55,"lin":2.2784435781979275e-7,"pw":2.2784435781979275e-7,"bind":0},
+{"h":56,"lin":1.822754862558342e-7,"pw":1.822754862558342e-7,"bind":0},
+{"h":57,"lin":1.458203890046674e-7,"pw":1.458203890046674e-7,"bind":0},
+{"h":58,"lin":1.1665631120373392e-7,"pw":1.1665631120373392e-7,"bind":0},
+{"h":59,"lin":9.332504896298715e-8,"pw":9.332504896298715e-8,"bind":0},
+{"h":60,"lin":7.466003917038972e-8,"pw":7.466003917038972e-8,"bind":0},
+{"h":61,"lin":5.972803133631178e-8,"pw":5.972803133631178e-8,"bind":0},
+{"h":62,"lin":4.778242506904943e-8,"pw":4.778242506904943e-8,"bind":0},
+{"h":63,"lin":3.8225940055239547e-8,"pw":3.8225940055239547e-8,"bind":0},
+{"h":64,"lin":3.0580752044191636e-8,"pw":3.0580752044191636e-8,"bind":0},
+{"h":65,"lin":2.4464601635353312e-8,"pw":2.4464601635353312e-8,"bind":0},
+{"h":66,"lin":1.957168130828265e-8,"pw":1.957168130828265e-8,"bind":0},
+{"h":67,"lin":1.5657345046626123e-8,"pw":1.5657345046626123e-8,"bind":0},
+{"h":68,"lin":1.2525876037300898e-8,"pw":1.2525876037300898e-8,"bind":0},
+{"h":69,"lin":1.002070082984072e-8,"pw":1.002070082984072e-8,"bind":0},
+{"h":70,"lin":8.016560663872576e-9,"pw":8.016560663872576e-9,"bind":0},
+{"h":71,"lin":6.413248531098061e-9,"pw":6.413248531098061e-9,"bind":0},
+{"h":72,"lin":5.13059882487845e-9,"pw":5.13059882487845e-9,"bind":0},
+{"h":73,"lin":4.104479059902759e-9,"pw":4.104479059902759e-9,"bind":0},
+{"h":74,"lin":3.2835832479222077e-9,"pw":3.2835832479222077e-9,"bind":0},
+{"h":75,"lin":2.6268665983377667e-9,"pw":2.6268665983377667e-9,"bind":0},
+{"h":76,"lin":2.1014932786702134e-9,"pw":2.1014932786702134e-9,"bind":0},
+{"h":77,"lin":1.6811946229361706e-9,"pw":1.6811946229361706e-9,"bind":0},
+{"h":78,"lin":1.3449556983489365e-9,"pw":1.3449556983489365e-9,"bind":0},
+{"h":79,"lin":1.0759645586791492e-9,"pw":1.0759645586791492e-9,"bind":0},
+{"h":80,"lin":8.607716469433194e-10,"pw":8.607716469433194e-10,"bind":0}];
+    const container_oirf_124 = d3.select('#oirf_124');
+    const W_oirf_124 = Math.max(container_oirf_124.node().clientWidth - 24, 280);
+    const margin_oirf_124 = {top:10, right:15, bottom:35, left:55};
+    const w_oirf_124 = W_oirf_124 - margin_oirf_124.left - margin_oirf_124.right;
+    const h_oirf_124 = Math.min(w_oirf_124 * 0.6, 250);
+
+    const svg_oirf_124 = container_oirf_124.append('svg')
+        .attr('width', W_oirf_124)
+        .attr('height', h_oirf_124 + margin_oirf_124.top + margin_oirf_124.bottom);
+    const g_oirf_124 = svg_oirf_124.append('g')
+        .attr('transform', 'translate('+margin_oirf_124.left+','+margin_oirf_124.top+')');
+
+    // Compute domains
+    const xVals_oirf_124 = data_oirf_124.map(d => d.h);
+    const allY_oirf_124 = [];
+    data_oirf_124.forEach(d => {
+        if(d.lin!==null) allY_oirf_124.push(d.lin);
+        if(d.pw!==null) allY_oirf_124.push(d.pw);
+    });
+    allY_oirf_124.push(0);
+
+    const x_oirf_124 = d3.scaleLinear().domain(d3.extent(xVals_oirf_124)).range([0, w_oirf_124]);
+    const yExt_oirf_124 = d3.extent(allY_oirf_124);
+    const yPad_oirf_124 = (yExt_oirf_124[1] - yExt_oirf_124[0]) * 0.08 || 0.1;
+    const y_oirf_124 = d3.scaleLinear()
+        .domain([yExt_oirf_124[0] - yPad_oirf_124, yExt_oirf_124[1] + yPad_oirf_124])
+        .range([h_oirf_124, 0]);
+
+    // Grid
+    g_oirf_124.append('g').attr('class','grid')
+        .call(d3.axisLeft(y_oirf_124).tickSize(-w_oirf_124).tickFormat(''));
+
+    // Binding-period shaded rectangles
+    const xStep_oirf_124 = w_oirf_124 / Math.max(xVals_oirf_124.length - 1, 1);
+    data_oirf_124.forEach((d, i) => {
+        if(d.bind === 1) {
+            const x0_oirf_124 = x_oirf_124(d.h) - xStep_oirf_124 * 0.5;
+            const x1_oirf_124 = x_oirf_124(d.h) + xStep_oirf_124 * 0.5;
+            g_oirf_124.append('rect')
+                .attr('x', Math.max(0, x0_oirf_124))
+                .attr('y', 0)
+                .attr('width', Math.min(x1_oirf_124, w_oirf_124) - Math.max(0, x0_oirf_124))
+                .attr('height', h_oirf_124)
+                .attr('fill', '#d62728')
+                .attr('opacity', 0.08);
+        }
+    });
+
+    // Zero reference line
+    g_oirf_124.append('line')
+        .attr('x1', 0).attr('x2', w_oirf_124)
+        .attr('y1', y_oirf_124(0)).attr('y2', y_oirf_124(0))
+        .attr('stroke', '#999').attr('stroke-width', 1)
+        .attr('stroke-dasharray', '4,3');
+
+    // Linear line (dashed)
+    const linLine_oirf_124 = d3.line().x(d => x_oirf_124(d.h)).y(d => y_oirf_124(d.lin))
+        .defined(d => d.lin !== null);
+    g_oirf_124.append('path').datum(data_oirf_124).attr('d', linLine_oirf_124)
+        .attr('fill', 'none').attr('stroke', '#2ca02c')
+        .attr('stroke-width', 1.8).attr('stroke-dasharray', '6,3');
+
+    // Piecewise line (solid)
+    const pwLine_oirf_124 = d3.line().x(d => x_oirf_124(d.h)).y(d => y_oirf_124(d.pw))
+        .defined(d => d.pw !== null);
+    g_oirf_124.append('path').datum(data_oirf_124).attr('d', pwLine_oirf_124)
+        .attr('fill', 'none').attr('stroke', '#1f77b4')
+        .attr('stroke-width', 1.8);
+
+    // Axes
+    g_oirf_124.append('g').attr('class','axis')
+        .attr('transform', 'translate(0,'+h_oirf_124+')')
+        .call(d3.axisBottom(x_oirf_124).ticks(Math.min(xVals_oirf_124.length, 8)));
+    g_oirf_124.append('g').attr('class','axis')
+        .call(d3.axisLeft(y_oirf_124).ticks(6));
+
+    if('Horizon') g_oirf_124.append('text')
+        .attr('x', w_oirf_124/2).attr('y', h_oirf_124+30)
+        .attr('text-anchor','middle').attr('font-size','11px')
+        .attr('fill','#666').text('Horizon');
+    if('R') g_oirf_124.append('text')
+        .attr('transform','rotate(-90)')
+        .attr('x', -h_oirf_124/2).attr('y', -42)
+        .attr('text-anchor','middle').attr('font-size','11px')
+        .attr('fill','#666').text('R');
+
+    // Legend
+    const leg_oirf_124 = g_oirf_124.append('g').attr('class','legend')
+        .attr('transform','translate(5,-5)');
+    // Linear (dashed)
+    const g1_oirf_124 = leg_oirf_124.append('g').attr('transform','translate(0,0)');
+    g1_oirf_124.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+        .attr('stroke','#2ca02c').attr('stroke-width',2)
+        .attr('stroke-dasharray','6,3');
+    g1_oirf_124.append('text').attr('x',20).attr('y',4)
+        .attr('font-size','10px').attr('fill','#555').text('Linear');
+    // Piecewise (solid)
+    const g2_oirf_124 = leg_oirf_124.append('g').attr('transform','translate(80,0)');
+    g2_oirf_124.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+        .attr('stroke','#1f77b4').attr('stroke-width',2);
+    g2_oirf_124.append('text').attr('x',20).attr('y',4)
+        .attr('font-size','10px').attr('fill','#555').text('Piecewise');
+    // Binding
+    const g3_oirf_124 = leg_oirf_124.append('g').attr('transform','translate(175,0)');
+    g3_oirf_124.append('rect').attr('width',12).attr('height',10).attr('y',-5)
+        .attr('fill','#d62728').attr('opacity',0.15);
+    g3_oirf_124.append('text').attr('x',16).attr('y',4)
+        .attr('font-size','10px').attr('fill','#555').text('Binding');
+
+    // Tooltip
+    svg_oirf_124.append('rect')
+        .attr('width', W_oirf_124)
+        .attr('height', h_oirf_124 + margin_oirf_124.top + margin_oirf_124.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g_oirf_124.node());
+            const x0 = x_oirf_124.invert(mx);
+            const idx = d3.minIndex(data_oirf_124, d => Math.abs(d.h - x0));
+            const d = data_oirf_124[idx];
+            let html = '<b>h='+d.h+'</b>';
+            if(d.lin!==null) html += '<br>Linear: '+fmt(d.lin);
+            if(d.pw!==null) html += '<br>Piecewise: '+fmt(d.pw);
+            if(d.bind===1) html += '<br><span style="color:#d62728">Binding</span>';
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+
+(function() {
+    const data_oirf_125 = [{"h":1,"lin":0.08,"pw":0.08,"bind":0},
+{"h":2,"lin":0.064,"pw":0.064,"bind":0},
+{"h":3,"lin":0.0512,"pw":0.0512,"bind":0},
+{"h":4,"lin":0.04096,"pw":0.04096,"bind":0},
+{"h":5,"lin":0.032768000000000005,"pw":0.032768000000000005,"bind":0},
+{"h":6,"lin":0.026214400000000006,"pw":0.026214400000000006,"bind":0},
+{"h":7,"lin":0.020971520000000007,"pw":0.020971520000000007,"bind":0},
+{"h":8,"lin":0.016777216000000008,"pw":0.016777216000000008,"bind":0},
+{"h":9,"lin":0.013421772800000007,"pw":0.013421772800000007,"bind":0},
+{"h":10,"lin":0.010737418240000006,"pw":0.010737418240000006,"bind":0},
+{"h":11,"lin":0.008589934592000005,"pw":0.008589934592000005,"bind":0},
+{"h":12,"lin":0.0068719476736000045,"pw":0.0068719476736000045,"bind":0},
+{"h":13,"lin":0.005497558138880004,"pw":0.005497558138880004,"bind":0},
+{"h":14,"lin":0.004398046511104004,"pw":0.004398046511104004,"bind":0},
+{"h":15,"lin":0.0035184372088832034,"pw":0.0035184372088832034,"bind":0},
+{"h":16,"lin":0.002814749767106563,"pw":0.002814749767106563,"bind":0},
+{"h":17,"lin":0.0022517998136852503,"pw":0.0022517998136852503,"bind":0},
+{"h":18,"lin":0.0018014398509482003,"pw":0.0018014398509482003,"bind":0},
+{"h":19,"lin":0.0014411518807585604,"pw":0.0014411518807585604,"bind":0},
+{"h":20,"lin":0.0011529215046068484,"pw":0.0011529215046068484,"bind":0},
+{"h":21,"lin":0.0009223372036854787,"pw":0.0009223372036854787,"bind":0},
+{"h":22,"lin":0.000737869762948383,"pw":0.000737869762948383,"bind":0},
+{"h":23,"lin":0.0005902958103587065,"pw":0.0005902958103587065,"bind":0},
+{"h":24,"lin":0.0004722366482869652,"pw":0.0004722366482869652,"bind":0},
+{"h":25,"lin":0.0003777893186295722,"pw":0.0003777893186295722,"bind":0},
+{"h":26,"lin":0.00030223145490365774,"pw":0.00030223145490365774,"bind":0},
+{"h":27,"lin":0.0002417851639229262,"pw":0.0002417851639229262,"bind":0},
+{"h":28,"lin":0.00019342813113834098,"pw":0.00019342813113834098,"bind":0},
+{"h":29,"lin":0.0001547425049106728,"pw":0.0001547425049106728,"bind":0},
+{"h":30,"lin":0.00012379400392853823,"pw":0.00012379400392853823,"bind":0},
+{"h":31,"lin":9.903520314283059e-5,"pw":9.903520314283059e-5,"bind":0},
+{"h":32,"lin":7.922816251426448e-5,"pw":7.922816251426448e-5,"bind":0},
+{"h":33,"lin":6.338253001141159e-5,"pw":6.338253001141159e-5,"bind":0},
+{"h":34,"lin":5.070602400912927e-5,"pw":5.070602400912927e-5,"bind":0},
+{"h":35,"lin":4.056481920730342e-5,"pw":4.056481920730342e-5,"bind":0},
+{"h":36,"lin":3.2451855365842736e-5,"pw":3.2451855365842736e-5,"bind":0},
+{"h":37,"lin":2.596148429267419e-5,"pw":2.596148429267419e-5,"bind":0},
+{"h":38,"lin":2.0769187434139353e-5,"pw":2.0769187434139353e-5,"bind":0},
+{"h":39,"lin":1.6615349947311485e-5,"pw":1.6615349947311485e-5,"bind":0},
+{"h":40,"lin":1.3292279957849188e-5,"pw":1.3292279957849188e-5,"bind":0},
+{"h":41,"lin":1.0633823966279351e-5,"pw":1.0633823966279351e-5,"bind":0},
+{"h":42,"lin":8.507059173023481e-6,"pw":8.507059173023481e-6,"bind":0},
+{"h":43,"lin":6.805647338418785e-6,"pw":6.805647338418785e-6,"bind":0},
+{"h":44,"lin":5.444517870735028e-6,"pw":5.444517870735028e-6,"bind":0},
+{"h":45,"lin":4.355614296588023e-6,"pw":4.355614296588023e-6,"bind":0},
+{"h":46,"lin":3.4844914372704182e-6,"pw":3.4844914372704182e-6,"bind":0},
+{"h":47,"lin":2.7875931498163346e-6,"pw":2.7875931498163346e-6,"bind":0},
+{"h":48,"lin":2.2300745198530677e-6,"pw":2.2300745198530677e-6,"bind":0},
+{"h":49,"lin":1.7840596158824543e-6,"pw":1.7840596158824543e-6,"bind":0},
+{"h":50,"lin":1.4272476927059635e-6,"pw":1.4272476927059635e-6,"bind":0},
+{"h":51,"lin":1.1417981541647709e-6,"pw":1.1417981541647709e-6,"bind":0},
+{"h":52,"lin":9.134385233318168e-7,"pw":9.134385233318168e-7,"bind":0},
+{"h":53,"lin":7.307508186654535e-7,"pw":7.307508186654535e-7,"bind":0},
+{"h":54,"lin":5.846006549323629e-7,"pw":5.846006549323629e-7,"bind":0},
+{"h":55,"lin":4.6768052394589033e-7,"pw":4.6768052394589033e-7,"bind":0},
+{"h":56,"lin":3.741444191567123e-7,"pw":3.741444191567123e-7,"bind":0},
+{"h":57,"lin":2.993155353253699e-7,"pw":2.993155353253699e-7,"bind":0},
+{"h":58,"lin":2.3945242826029593e-7,"pw":2.3945242826029593e-7,"bind":0},
+{"h":59,"lin":1.9156194260823676e-7,"pw":1.9156194260823676e-7,"bind":0},
+{"h":60,"lin":1.5324955408658942e-7,"pw":1.5324955408658942e-7,"bind":0},
+{"h":61,"lin":1.2259964326927154e-7,"pw":1.2259964326927154e-7,"bind":0},
+{"h":62,"lin":9.807971461541724e-8,"pw":9.807971461541724e-8,"bind":0},
+{"h":63,"lin":7.84637716923338e-8,"pw":7.84637716923338e-8,"bind":0},
+{"h":64,"lin":6.277101735386704e-8,"pw":6.277101735386704e-8,"bind":0},
+{"h":65,"lin":5.021681388309364e-8,"pw":5.021681388309364e-8,"bind":0},
+{"h":66,"lin":4.0173451106474913e-8,"pw":4.0173451106474913e-8,"bind":0},
+{"h":67,"lin":3.2138760885179933e-8,"pw":3.2138760885179933e-8,"bind":0},
+{"h":68,"lin":2.571100870814395e-8,"pw":2.571100870814395e-8,"bind":0},
+{"h":69,"lin":2.056880696651516e-8,"pw":2.056880696651516e-8,"bind":0},
+{"h":70,"lin":1.645504557321213e-8,"pw":1.645504557321213e-8,"bind":0},
+{"h":71,"lin":1.3164036458569704e-8,"pw":1.3164036458569704e-8,"bind":0},
+{"h":72,"lin":1.0531229166855763e-8,"pw":1.0531229166855763e-8,"bind":0},
+{"h":73,"lin":8.424983333484611e-9,"pw":8.424983333484611e-9,"bind":0},
+{"h":74,"lin":6.7399866667876894e-9,"pw":6.7399866667876894e-9,"bind":0},
+{"h":75,"lin":5.3919893334301516e-9,"pw":5.3919893334301516e-9,"bind":0},
+{"h":76,"lin":4.313591466744121e-9,"pw":4.313591466744121e-9,"bind":0},
+{"h":77,"lin":3.450873173395297e-9,"pw":3.450873173395297e-9,"bind":0},
+{"h":78,"lin":2.760698538716238e-9,"pw":2.760698538716238e-9,"bind":0},
+{"h":79,"lin":2.2085588309729903e-9,"pw":2.2085588309729903e-9,"bind":0},
+{"h":80,"lin":1.7668470647783923e-9,"pw":1.7668470647783923e-9,"bind":0}];
+    const container_oirf_125 = d3.select('#oirf_125');
+    const W_oirf_125 = Math.max(container_oirf_125.node().clientWidth - 24, 280);
+    const margin_oirf_125 = {top:10, right:15, bottom:35, left:55};
+    const w_oirf_125 = W_oirf_125 - margin_oirf_125.left - margin_oirf_125.right;
+    const h_oirf_125 = Math.min(w_oirf_125 * 0.6, 250);
+
+    const svg_oirf_125 = container_oirf_125.append('svg')
+        .attr('width', W_oirf_125)
+        .attr('height', h_oirf_125 + margin_oirf_125.top + margin_oirf_125.bottom);
+    const g_oirf_125 = svg_oirf_125.append('g')
+        .attr('transform', 'translate('+margin_oirf_125.left+','+margin_oirf_125.top+')');
+
+    // Compute domains
+    const xVals_oirf_125 = data_oirf_125.map(d => d.h);
+    const allY_oirf_125 = [];
+    data_oirf_125.forEach(d => {
+        if(d.lin!==null) allY_oirf_125.push(d.lin);
+        if(d.pw!==null) allY_oirf_125.push(d.pw);
+    });
+    allY_oirf_125.push(0);
+
+    const x_oirf_125 = d3.scaleLinear().domain(d3.extent(xVals_oirf_125)).range([0, w_oirf_125]);
+    const yExt_oirf_125 = d3.extent(allY_oirf_125);
+    const yPad_oirf_125 = (yExt_oirf_125[1] - yExt_oirf_125[0]) * 0.08 || 0.1;
+    const y_oirf_125 = d3.scaleLinear()
+        .domain([yExt_oirf_125[0] - yPad_oirf_125, yExt_oirf_125[1] + yPad_oirf_125])
+        .range([h_oirf_125, 0]);
+
+    // Grid
+    g_oirf_125.append('g').attr('class','grid')
+        .call(d3.axisLeft(y_oirf_125).tickSize(-w_oirf_125).tickFormat(''));
+
+    // Binding-period shaded rectangles
+    const xStep_oirf_125 = w_oirf_125 / Math.max(xVals_oirf_125.length - 1, 1);
+    data_oirf_125.forEach((d, i) => {
+        if(d.bind === 1) {
+            const x0_oirf_125 = x_oirf_125(d.h) - xStep_oirf_125 * 0.5;
+            const x1_oirf_125 = x_oirf_125(d.h) + xStep_oirf_125 * 0.5;
+            g_oirf_125.append('rect')
+                .attr('x', Math.max(0, x0_oirf_125))
+                .attr('y', 0)
+                .attr('width', Math.min(x1_oirf_125, w_oirf_125) - Math.max(0, x0_oirf_125))
+                .attr('height', h_oirf_125)
+                .attr('fill', '#d62728')
+                .attr('opacity', 0.08);
+        }
+    });
+
+    // Zero reference line
+    g_oirf_125.append('line')
+        .attr('x1', 0).attr('x2', w_oirf_125)
+        .attr('y1', y_oirf_125(0)).attr('y2', y_oirf_125(0))
+        .attr('stroke', '#999').attr('stroke-width', 1)
+        .attr('stroke-dasharray', '4,3');
+
+    // Linear line (dashed)
+    const linLine_oirf_125 = d3.line().x(d => x_oirf_125(d.h)).y(d => y_oirf_125(d.lin))
+        .defined(d => d.lin !== null);
+    g_oirf_125.append('path').datum(data_oirf_125).attr('d', linLine_oirf_125)
+        .attr('fill', 'none').attr('stroke', '#2ca02c')
+        .attr('stroke-width', 1.8).attr('stroke-dasharray', '6,3');
+
+    // Piecewise line (solid)
+    const pwLine_oirf_125 = d3.line().x(d => x_oirf_125(d.h)).y(d => y_oirf_125(d.pw))
+        .defined(d => d.pw !== null);
+    g_oirf_125.append('path').datum(data_oirf_125).attr('d', pwLine_oirf_125)
+        .attr('fill', 'none').attr('stroke', '#1f77b4')
+        .attr('stroke-width', 1.8);
+
+    // Axes
+    g_oirf_125.append('g').attr('class','axis')
+        .attr('transform', 'translate(0,'+h_oirf_125+')')
+        .call(d3.axisBottom(x_oirf_125).ticks(Math.min(xVals_oirf_125.length, 8)));
+    g_oirf_125.append('g').attr('class','axis')
+        .call(d3.axisLeft(y_oirf_125).ticks(6));
+
+    if('Horizon') g_oirf_125.append('text')
+        .attr('x', w_oirf_125/2).attr('y', h_oirf_125+30)
+        .attr('text-anchor','middle').attr('font-size','11px')
+        .attr('fill','#666').text('Horizon');
+    if('d') g_oirf_125.append('text')
+        .attr('transform','rotate(-90)')
+        .attr('x', -h_oirf_125/2).attr('y', -42)
+        .attr('text-anchor','middle').attr('font-size','11px')
+        .attr('fill','#666').text('d');
+
+    // Legend
+    const leg_oirf_125 = g_oirf_125.append('g').attr('class','legend')
+        .attr('transform','translate(5,-5)');
+    // Linear (dashed)
+    const g1_oirf_125 = leg_oirf_125.append('g').attr('transform','translate(0,0)');
+    g1_oirf_125.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+        .attr('stroke','#2ca02c').attr('stroke-width',2)
+        .attr('stroke-dasharray','6,3');
+    g1_oirf_125.append('text').attr('x',20).attr('y',4)
+        .attr('font-size','10px').attr('fill','#555').text('Linear');
+    // Piecewise (solid)
+    const g2_oirf_125 = leg_oirf_125.append('g').attr('transform','translate(80,0)');
+    g2_oirf_125.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+        .attr('stroke','#1f77b4').attr('stroke-width',2);
+    g2_oirf_125.append('text').attr('x',20).attr('y',4)
+        .attr('font-size','10px').attr('fill','#555').text('Piecewise');
+    // Binding
+    const g3_oirf_125 = leg_oirf_125.append('g').attr('transform','translate(175,0)');
+    g3_oirf_125.append('rect').attr('width',12).attr('height',10).attr('y',-5)
+        .attr('fill','#d62728').attr('opacity',0.15);
+    g3_oirf_125.append('text').attr('x',16).attr('y',4)
+        .attr('font-size','10px').attr('fill','#555').text('Binding');
+
+    // Tooltip
+    svg_oirf_125.append('rect')
+        .attr('width', W_oirf_125)
+        .attr('height', h_oirf_125 + margin_oirf_125.top + margin_oirf_125.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g_oirf_125.node());
+            const x0 = x_oirf_125.invert(mx);
+            const idx = d3.minIndex(data_oirf_125, d => Math.abs(d.h - x0));
+            const d = data_oirf_125[idx];
+            let html = '<b>h='+d.h+'</b>';
+            if(d.lin!==null) html += '<br>Linear: '+fmt(d.lin);
+            if(d.pw!==null) html += '<br>Piecewise: '+fmt(d.pw);
+            if(d.bind===1) html += '<br><span style="color:#d62728">Binding</span>';
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+
+</script>
+</body>
+</html>
