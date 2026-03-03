@@ -628,6 +628,61 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         journal="Journal of Business \\& Economic Statistics", volume="29", issue="2",
         pages="238--249", doi="10.1198/jbes.2010.07136", isbn="", publisher="",
         entry_type=:article),
+    # --- Structural Break Tests ---
+    :andrews1993 => (key=:andrews1993, authors="Andrews, Donald W. K.", year=1993,
+        title="Tests for Parameter Instability and Structural Change with Unknown Change Point",
+        journal="Econometrica", volume="61", issue="4", pages="821--856",
+        doi="10.2307/2951764", isbn="", publisher="", entry_type=:article),
+    :andrews_ploberger1994 => (key=:andrews_ploberger1994,
+        authors="Andrews, Donald W. K. and Ploberger, Werner", year=1994,
+        title="Optimal Tests When a Nuisance Parameter Is Present Only Under the Alternative",
+        journal="Econometrica", volume="62", issue="6", pages="1383--1414",
+        doi="10.2307/2951753", isbn="", publisher="", entry_type=:article),
+    :hansen1997 => (key=:hansen1997, authors="Hansen, Bruce E.", year=1997,
+        title="Approximate Asymptotic P Values for Structural-Change Tests",
+        journal="Journal of Business \\& Economic Statistics", volume="15", issue="1",
+        pages="60--67", doi="10.1080/07350015.1997.10524687", isbn="", publisher="",
+        entry_type=:article),
+    :bai_perron1998 => (key=:bai_perron1998, authors="Bai, Jushan and Perron, Pierre", year=1998,
+        title="Estimating and Testing Linear Models with Multiple Structural Changes",
+        journal="Econometrica", volume="66", issue="1", pages="47--78",
+        doi="10.2307/2998540", isbn="", publisher="", entry_type=:article),
+    :bai_perron2003 => (key=:bai_perron2003, authors="Bai, Jushan and Perron, Pierre", year=2003,
+        title="Computation and Analysis of Multiple Structural Change Models",
+        journal="Journal of Applied Econometrics", volume="18", issue="1", pages="1--22",
+        doi="10.1002/jae.659", isbn="", publisher="", entry_type=:article),
+    # --- Panel Unit Root Tests ---
+    :bai_ng2004 => (key=:bai_ng2004, authors="Bai, Jushan and Ng, Serena", year=2004,
+        title="A PANIC Attack on Unit Roots and Cointegration",
+        journal="Econometrica", volume="72", issue="4", pages="1127--1177",
+        doi="10.1111/j.1468-0262.2004.00528.x", isbn="", publisher="", entry_type=:article),
+    :bai_ng2010 => (key=:bai_ng2010, authors="Bai, Jushan and Ng, Serena", year=2010,
+        title="Panel Unit Root Tests with Cross-Section Dependence: A Further Investigation",
+        journal="Econometric Theory", volume="26", issue="4", pages="1088--1114",
+        doi="10.1017/S0266466609990478", isbn="", publisher="", entry_type=:article),
+    :pesaran2007 => (key=:pesaran2007, authors="Pesaran, M. Hashem", year=2007,
+        title="A Simple Panel Unit Root Test in the Presence of Cross-Section Dependence",
+        journal="Journal of Applied Econometrics", volume="22", issue="2", pages="265--312",
+        doi="10.1002/jae.951", isbn="", publisher="", entry_type=:article),
+    :moon_perron2004 => (key=:moon_perron2004, authors="Moon, Hyungsik Roger and Perron, Benoit", year=2004,
+        title="Testing for a Unit Root in Panels with Dynamic Factors",
+        journal="Journal of Econometrics", volume="122", issue="1", pages="81--126",
+        doi="10.1016/j.jeconom.2003.10.020", isbn="", publisher="", entry_type=:article),
+    # --- Factor Model Break Tests ---
+    :breitung_eickmeier2011 => (key=:breitung_eickmeier2011,
+        authors="Breitung, Jorg and Eickmeier, Sandra", year=2011,
+        title="Testing for Structural Breaks in Dynamic Factor Models",
+        journal="Journal of Econometrics", volume="163", issue="1", pages="71--84",
+        doi="10.1016/j.jeconom.2010.11.008", isbn="", publisher="", entry_type=:article),
+    :chen_dolado_gonzalo2014 => (key=:chen_dolado_gonzalo2014,
+        authors="Chen, Liang and Dolado, Juan J. and Gonzalo, Jesus", year=2014,
+        title="Detecting Big Structural Breaks in Large Factor Models",
+        journal="Journal of Econometrics", volume="180", issue="1", pages="30--48",
+        doi="10.1016/j.jeconom.2014.01.006", isbn="", publisher="", entry_type=:article),
+    :han_inoue2015 => (key=:han_inoue2015, authors="Han, Xu and Inoue, Atsushi", year=2015,
+        title="Tests for Parameter Instability in Dynamic Factor Models",
+        journal="Econometric Theory", volume="31", issue="5", pages="1117--1152",
+        doi="10.1017/S0266466614000413", isbn="", publisher="", entry_type=:article),
 )
 
 # --- Type/method → reference keys mapping ---
@@ -835,6 +890,24 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :bjs => [:borusyak_jaravel_spiess2024],
     :did_multiplegt => [:dechaisemartin_dhaultfoeuille2020],
     :lp_did => [:dube_girardi_jorda_taylor2023, :jorda2005],
+    # Structural break tests
+    :AndrewsResult => [:andrews1993, :andrews_ploberger1994, :hansen1997],
+    :BaiPerronResult => [:bai_perron1998, :bai_perron2003],
+    :andrews_test => [:andrews1993, :andrews_ploberger1994, :hansen1997],
+    :bai_perron_test => [:bai_perron1998, :bai_perron2003],
+    # Panel unit root tests
+    :PANICResult => [:bai_ng2004, :bai_ng2010],
+    :PesaranCIPSResult => [:pesaran2007],
+    :MoonPerronResult => [:moon_perron2004],
+    :panic_test => [:bai_ng2004, :bai_ng2010],
+    :pesaran_cips_test => [:pesaran2007],
+    :moon_perron_test => [:moon_perron2004],
+    # Factor model break tests
+    :FactorBreakResult => [:breitung_eickmeier2011, :chen_dolado_gonzalo2014, :han_inoue2015],
+    :factor_break_test => [:breitung_eickmeier2011, :chen_dolado_gonzalo2014, :han_inoue2015],
+    :breitung_eickmeier => [:breitung_eickmeier2011],
+    :chen_dolado_gonzalo => [:chen_dolado_gonzalo2014],
+    :han_inoue => [:han_inoue2015],
     # Data sources (symbol dispatch)
     :fred_md => [:mccracken_ng2016],
     :fred_qd => [:mccracken_ng2020],
@@ -1170,6 +1243,18 @@ refs(io::IO, ::LinearDSGE; kw...) = refs(io, _TYPE_REFS[:LinearDSGE]; kw...)
 # OccBin types
 refs(io::IO, ::OccBinSolution; kw...) = refs(io, _TYPE_REFS[:OccBinSolution]; kw...)
 refs(io::IO, ::OccBinIRF; kw...) = refs(io, _TYPE_REFS[:OccBinIRF]; kw...)
+
+# Structural break types
+refs(io::IO, ::AndrewsResult; kw...) = refs(io, _TYPE_REFS[:AndrewsResult]; kw...)
+refs(io::IO, ::BaiPerronResult; kw...) = refs(io, _TYPE_REFS[:BaiPerronResult]; kw...)
+
+# Panel unit root types
+refs(io::IO, ::PANICResult; kw...) = refs(io, _TYPE_REFS[:PANICResult]; kw...)
+refs(io::IO, ::PesaranCIPSResult; kw...) = refs(io, _TYPE_REFS[:PesaranCIPSResult]; kw...)
+refs(io::IO, ::MoonPerronResult; kw...) = refs(io, _TYPE_REFS[:MoonPerronResult]; kw...)
+
+# Factor break types
+refs(io::IO, ::FactorBreakResult; kw...) = refs(io, _TYPE_REFS[:FactorBreakResult]; kw...)
 
 # --- Convenience: stdout fallback ---
 function refs(x; kw...)
