@@ -1550,4 +1550,90 @@ end
     end
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 10: End-to-End Integration
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "E2E: 2-variable model, SMC + Kalman" begin
+    _suppress_warnings() do
+    rng = Random.MersenneTwister(42)
+
+    # Simple RBC-like model
+    spec = @dsge begin
+        parameters: ρ = 0.5, α = 0.3
+        endogenous: y, k
+        exogenous: ε
+        y[t] = α * k[t-1] + ε[t]
+        k[t] = ρ * k[t-1] + y[t]
+        steady_state = [0.0, 0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    # True: ρ=0.7, α=0.3
+    true_spec = @dsge begin
+        parameters: ρ = 0.7, α = 0.3
+        endogenous: y, k
+        exogenous: ε
+        y[t] = α * k[t-1] + ε[t]
+        k[t] = ρ * k[t-1] + y[t]
+        steady_state = [0.0, 0.0]
+    end
+    true_spec = compute_steady_state(true_spec)
+    sol_true = solve(true_spec; method=:gensys)
+    data = simulate(sol_true, 300; rng=rng)
+
+    priors = Dict(
+        :ρ => Beta(2, 2),
+        :α => Normal(0.3, 0.1)
+    )
+    result = estimate_dsge_bayes(spec, data, [0.5, 0.3];
+        priors=priors, method=:smc, observables=[:y, :k],
+        n_smc=300, n_mh_steps=1,
+        rng=Random.MersenneTwister(123))
+
+    @test result isa BayesianDSGE{Float64}
+    @test length(result.param_names) == 2
+
+    ps = posterior_summary(result)
+    # ρ should be recovered within tolerance
+    @test abs(ps[:ρ][:mean] - 0.7) < 0.3
+
+    # report should not error
+    io = IOBuffer()
+    show(io, result)
+    s = String(take!(io))
+    @test length(s) > 0
+
+    # plot should not error
+    p = plot_result(result)
+    @test p isa PlotOutput
+    end
+end
+
+@testset "E2E: MH baseline" begin
+    _suppress_warnings() do
+    rng = Random.MersenneTwister(42)
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:gensys)
+    data = simulate(sol, 200; rng=rng)
+
+    priors = Dict(:ρ => Beta(2, 2))
+    result = estimate_dsge_bayes(spec, data, [0.5];
+        priors=priors, method=:mh, observables=[:y],
+        n_draws=500, burnin=100,
+        rng=Random.MersenneTwister(1))
+
+    @test result.method == :mh || result.method == :rwmh
+    @test size(result.theta_draws, 1) == 500
+    @test 0.0 < result.acceptance_rate < 1.0
+    end
+end
+
 end  # @testset "Bayesian DSGE"
