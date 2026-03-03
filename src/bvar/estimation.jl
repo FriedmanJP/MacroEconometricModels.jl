@@ -342,12 +342,12 @@ varnames(post::BVARPosterior) = post.varnames
 # =============================================================================
 
 """
-    forecast(post::BVARPosterior, h; reps=nothing, conf_level=0.95, point_estimate=:median) -> BVARForecast{T}
+    forecast(post::BVARPosterior, h; reps=nothing, conf_level=0.95, point_estimate=:mean) -> BVARForecast{T}
 
 Forecast from Bayesian VAR using posterior draws.
 
 For each posterior draw, iterates the VAR recursion forward `h` steps.
-Returns posterior median forecast with credible intervals from the
+Returns posterior mean forecast with credible intervals from the
 distribution of forecast paths across draws.
 
 # Arguments
@@ -357,7 +357,7 @@ distribution of forecast paths across draws.
 # Keyword Arguments
 - `reps`: Number of posterior draws to use (default: all)
 - `conf_level`: Credible interval level (default: 0.95)
-- `point_estimate`: `:median` (default) or `:mean` for central tendency
+- `point_estimate`: `:mean` (default) or `:median` for central tendency
 
 # Returns
 `BVARForecast{T}` with posterior mean forecast and credible intervals.
@@ -371,7 +371,7 @@ fc = forecast(post, 12)
 function forecast(post::BVARPosterior{T}, h::Int;
                   reps::Union{Nothing,Int}=nothing,
                   conf_level::Real=0.95,
-                  point_estimate::Symbol=:median) where {T}
+                  point_estimate::Symbol=:mean) where {T}
     h < 1 && throw(ArgumentError("Forecast horizon must be positive"))
 
     n, p = post.n, post.p

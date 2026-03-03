@@ -150,7 +150,7 @@ function _estimate_sun_abraham(pd::PanelData{T}, outcome_col::Int, treat_col::In
         D_dm = _double_demean_matrix(D, gid_sub, tid_sub)
 
         # OLS
-        DtD_inv = robust_inv(D_dm' * D_dm)
+        DtD_inv = robust_inv(D_dm' * D_dm; silent=true)
         beta_g = DtD_inv * (D_dm' * y_dm)
         resid = y_dm - D_dm * beta_g
 

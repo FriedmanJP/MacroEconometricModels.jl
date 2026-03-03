@@ -148,6 +148,11 @@ include("factor/kalman.jl")
 include("factor/static.jl")
 include("factor/dynamic.jl")
 include("factor/generalized.jl")
+include("factor/structural.jl")
+
+# FAVAR types and estimation (after factor models, before nowcast)
+include("favar/types.jl")
+include("favar/estimation.jl")
 
 # Panel unit root tests (after factor models for estimate_factors + adf_test)
 include("teststat/panic.jl")
@@ -271,6 +276,10 @@ include("vecm/forecast.jl")
 include("vecm/analysis.jl")
 include("vecm/granger.jl")
 
+# FAVAR analysis and forecast (after irf + fevd + hd)
+include("favar/analysis.jl")
+include("favar/forecast.jl")
+
 # LP-FEVD (after irf + fevd)
 include("lp/fevd.jl")
 
@@ -281,6 +290,13 @@ include("dsge/pruning.jl")
 
 # DSGE estimation (after estimate_var, irf, estimate_gmm)
 include("dsge/estimation.jl")
+
+# DSGE Bayesian estimation (after estimation.jl, needs DSGESpec, solve, ParameterTransform)
+include("dsge/bayes_types.jl")
+include("dsge/kalman_dsge.jl")
+include("dsge/particle_filter.jl")
+include("dsge/smc.jl")
+include("dsge/bayes_estimation.jl")
 
 # Display (after all types)
 include("summary.jl")
@@ -354,6 +370,11 @@ export AbstractDSGEModel
 
 # Types
 export DSGESpec, LinearDSGE, DSGESolution, PerturbationSolution, ProjectionSolution, PerfectForesightPath, DSGEEstimation
+
+# Bayesian DSGE
+export BayesianDSGE
+export estimate_dsge_bayes, posterior_summary, marginal_likelihood, bayes_factor
+export prior_posterior_table, posterior_predictive
 
 # Macro
 export @dsge
@@ -529,6 +550,14 @@ export estimate_gdfm
 export ic_criteria_gdfm
 export common_variance_share
 export spectral_eigenvalue_plot_data
+
+# Structural DFM types and estimation
+export StructuralDFM, estimate_structural_dfm
+
+# FAVAR types and estimation
+export FAVARModel, BayesianFAVAR
+export estimate_favar
+export favar_panel_irf, favar_panel_forecast
 
 # =============================================================================
 # Exports - Utility Functions

@@ -276,7 +276,7 @@ decomp = fevd(var_model, 20)
 ### See Also
 
 - [VAR Estimation](manual.md) -- Reduced-form VAR and structural identification
-- [Hypothesis Tests](hypothesis_tests.md) -- Johansen cointegration test details and unit root tests
+- [Hypothesis Tests](tests.md) -- Johansen cointegration test details and unit root tests
 - [Data Management](data.md) -- Built-in datasets and data transformations
 - [API Reference](api_functions.md) -- Complete function signatures
 

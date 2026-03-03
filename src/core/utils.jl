@@ -125,30 +125,32 @@ _suppress_warnings(f) = Base.CoreLogging.with_logger(f, Base.CoreLogging.NullLog
 # Matrix Utilities
 # =============================================================================
 
-"""Compute inverse with fallback to pseudo-inverse for singular matrices."""
-function robust_inv(A::AbstractMatrix{T}) where {T<:AbstractFloat}
+"""Compute inverse with fallback to pseudo-inverse for singular matrices.
+Pass `silent=true` to suppress the warning (e.g., in internal loops where singularity is expected)."""
+function robust_inv(A::AbstractMatrix{T}; silent::Bool=false) where {T<:AbstractFloat}
     try
         inv(A)
     catch e
         if e isa LinearAlgebra.SingularException || e isa LinearAlgebra.LAPACKException || e isa ErrorException
-            @warn "Matrix singular or near-singular. Using pseudo-inverse."
+            silent || @warn "Matrix singular or near-singular. Using pseudo-inverse."
             pinv(A)
         else
             rethrow(e)
         end
     end
 end
-robust_inv(A::AbstractMatrix) = robust_inv(float.(A))
+robust_inv(A::AbstractMatrix; silent::Bool=false) = robust_inv(float.(A); silent=silent)
 
-"""Cholesky decomposition with automatic jitter for numerical stability."""
-function safe_cholesky(A::AbstractMatrix{T}; jitter::T=T(1e-8)) where {T<:AbstractFloat}
+"""Cholesky decomposition with automatic jitter for numerical stability.
+Pass `silent=true` to suppress the jitter warning."""
+function safe_cholesky(A::AbstractMatrix{T}; jitter::T=T(1e-8), silent::Bool=false) where {T<:AbstractFloat}
     try
         return cholesky(Hermitian(A)).L
     catch
         for scale in [1, 10, 100, 1000]
             try
                 result = cholesky(Hermitian(A + scale * jitter * I)).L
-                @warn "Covariance matrix required jitter ($(scale * jitter)) for Cholesky decomposition. Results may be affected by near-collinearity." maxlog=3
+                silent || @warn "Covariance matrix required jitter ($(scale * jitter)) for Cholesky decomposition. Results may be affected by near-collinearity." maxlog=3
                 return result
             catch; continue; end
         end

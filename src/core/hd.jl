@@ -334,7 +334,7 @@ hd = historical_decomposition(post, 198)
 """
 function historical_decomposition(post::BVARPosterior, horizon::Int=0;
     data::AbstractMatrix=Matrix{Float64}(undef, 0, 0), method::Symbol=:cholesky,
-    quantiles::Vector{<:Real}=[0.16, 0.5, 0.84], point_estimate::Symbol=:median,
+    quantiles::Vector{<:Real}=[0.16, 0.5, 0.84], point_estimate::Symbol=:mean,
     check_func=nothing, narrative_check=nothing,
     transition_var::Union{Nothing,AbstractVector}=nothing,
     regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing

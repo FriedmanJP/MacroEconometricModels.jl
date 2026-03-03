@@ -446,6 +446,7 @@ function report(x::DSGEEstimation)
     println(stdout)
     show(stdout, x.solution)
 end
+report(x::BayesianDSGE) = show(stdout, x)
 
 
 # =============================================================================

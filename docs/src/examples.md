@@ -89,7 +89,7 @@ fvd = fevd(model, 24)
 
 ## Example 2: Hypothesis Tests
 
-This example demonstrates comprehensive pre-estimation testing using real macroeconomic data. Pre-estimation analysis is the first step in any empirical macro workflow. See [Hypothesis Tests](hypothesis_tests.md) for theoretical background.
+This example demonstrates comprehensive pre-estimation testing using real macroeconomic data. Pre-estimation analysis is the first step in any empirical macro workflow. See [Hypothesis Tests](tests.md) for theoretical background.
 
 ### Individual Unit Root Tests
 

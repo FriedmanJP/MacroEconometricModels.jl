@@ -22,6 +22,8 @@
 - **Panel VAR**: GMM estimation via Arellano-Bond (1991) first-difference and Blundell-Bond (1998) system GMM; fixed-effects OLS; Windmeijer (2005) corrected standard errors; Hansen J-test, Andrews-Lu MMSC; OIRF, GIRF, FEVD; group-level bootstrap CIs; lag selection
 - **Local Projections**: Jorda (2005) with extensions for IV (Stock & Watson 2018), smooth LP (Barnichon & Brownlees 2019), state-dependence (Auerbach & Gorodnichenko 2013), propensity score weighting (Angrist et al. 2018), structural LP (Plagborg-Moller & Wolf 2021), LP forecasting, and LP-FEVD (Gorodnichenko & Lee 2019)
 - **Factor Models**: Static (PCA), dynamic (two-step/EM), and generalized dynamic (spectral GDFM) with Bai-Ng information criteria; unified forecasting with theoretical and bootstrap CIs
+- **FAVAR**: Factor-augmented VAR via two-step (PCA + VAR) or Bayesian Gibbs (Carter-Kohn smoother + NIW); `favar_panel_irf` maps factor IRFs to N observables via loadings
+- **Structural DFM**: Structural dynamic factor model wrapping GDFM + VAR for identified factor shocks
 - **GMM**: Flexible estimation with one-step, two-step, and iterated weighting; Hansen J-test
 
 **Innovation Accounting**
@@ -34,10 +36,13 @@
 **DSGE Models**
 
 - **Specification**: `@dsge` macro for domain-specific model specification with time-indexed variables, analytical or numerical steady state, and automatic Jacobian computation
-- **Solution Methods**: Gensys (Sims 2002), Blanchard-Kahn (1980), Klein (2000), second-order perturbation (Schmitt-Grohe & Uribe 2004) with Kim et al. (2008) pruning, Chebyshev collocation projection, policy function iteration
+- **Linear Solvers**: Gensys (Sims 2002), Blanchard-Kahn (1980), Klein (2000) with automatic eigenvalue decomposition
+- **Nonlinear Perturbation**: Second-order (Schmitt-Grohe & Uribe 2004) and third-order perturbation with Andreasen, Fernandez-Villaverde & Rubio-Ramirez (2018) pruned simulation; Kim et al. (2008) second-order pruning
+- **Global Methods**: Chebyshev collocation projection (tensor and Smolyak grids), policy function iteration
 - **Simulation and IRFs**: Stochastic simulation, pruned higher-order simulation, analytical and generalized IRFs, FEVD, Lyapunov-based unconditional moments
-- **Estimation**: IRF matching, Euler equation GMM, Simulated Method of Moments, analytical GMM via Lyapunov equation
-- **Nonlinear Methods**: Perfect foresight (Newton solver), OccBin occasionally binding constraints (Guerrieri & Iacoviello 2015), constrained steady state and perfect foresight via JuMP/Ipopt (NLP) and PATH (MCP)
+- **GMM Estimation**: IRF matching, Euler equation GMM, Simulated Method of Moments, analytical GMM via Lyapunov equation
+- **Bayesian Estimation**: Sequential Monte Carlo (SMC with adaptive tempering), SMC-squared (SMC² with particle filter likelihood), random-walk Metropolis-Hastings; delayed acceptance for accelerated sampling; nonlinear particle filter for higher-order solutions
+- **Constraints**: Perfect foresight (Newton solver), OccBin occasionally binding constraints (Guerrieri & Iacoviello 2015), constrained steady state and perfect foresight via JuMP/Ipopt (NLP) and PATH (MCP)
 
 **Structural Identification**
 
@@ -55,14 +60,29 @@
 - **News Decomposition**: Attribute nowcast revisions to individual data releases via Kalman gain weights
 - **Panel Balancing**: `balance_panel()` fills NaN in `TimeSeriesData`/`PanelData` using DFM imputation
 
+**Panel Models**
+
+- **Difference-in-Differences**: Five estimators — TWFE, Callaway-Sant'Anna (2021), Sun-Abraham (2021), Borusyak-Jaravel-Spiess (2024), de Chaisemartin-D'Haultfoeuille (2020); Bacon (2021) decomposition; pretrend tests; negative weight diagnostics; HonestDiD (Rambachan & Roth 2023) sensitivity analysis
+- **Event Study LP**: Local projection event study with staggered treatment, cluster-robust SEs
+- **LP-DiD**: Dube, Jorda & Taylor (2023) LP-DiD estimator combining LP with DiD identification
+
 **Hypothesis Tests**
 
-- Unit root: ADF, KPSS, Phillips-Perron, Zivot-Andrews, Ng-Perron
-- Cointegration: Johansen trace and max-eigenvalue tests
-- Granger causality: pairwise Wald, block (multivariate), all-pairs matrix
-- Model comparison: likelihood ratio (LR) and Lagrange multiplier (LM/score) tests for nested models
-- Normality: Jarque-Bera, Mardia, Doornik-Hansen, Henze-Zirkler
-- Stationarity diagnostics: `unit_root_summary()`, `test_all_variables()`
+- **Unit root**: ADF, KPSS, Phillips-Perron, Zivot-Andrews, Ng-Perron (MZa, MZt, MSB, MPT)
+- **Cointegration**: Johansen trace and max-eigenvalue tests
+- **Structural breaks**: Andrews (1993) SupWald/SupLM/SupLR with 9 test variants; Bai-Perron (1998) multiple break detection via dynamic programming with BIC/LWZ/sequential selection; factor break tests — Breitung-Eickmeier (2011), Chen-Dolado-Gonzalo (2014), Han-Inoue (2015)
+- **Panel unit root**: Bai-Ng (2004) PANIC with factor-adjusted pooled/individual tests; Pesaran (2007) CIPS with cross-sectional augmentation; Moon-Perron (2004) factor-adjusted t-statistics
+- **Granger causality**: pairwise Wald, block (multivariate), all-pairs matrix
+- **Model comparison**: likelihood ratio (LR) and Lagrange multiplier (LM/score) tests for nested models
+- **Normality**: Jarque-Bera, Mardia multivariate, Doornik-Hansen, Henze-Zirkler, Royston; unified `normality_test_suite()`
+- **ARCH diagnostics**: ARCH-LM test, Ljung-Box on squared residuals
+- **Stationarity diagnostics**: `unit_root_summary()`, `test_all_variables()`
+- **Panel VAR specification**: Hansen J-test, Andrews-Lu MMSC, lag selection criteria
+
+**Visualization**
+
+- **D3.js Plotting**: Zero-dependency interactive visualization via D3.js v7 with 41 plot dispatches; IRF, FEVD, historical decomposition, filter output, forecasts, model diagnostics, DiD event studies, nowcast fan charts
+- **Output Formats**: Self-contained HTML files with Solarized Light/Dark themes; embeddable in documentation and presentations
 
 **Data Management**
 
@@ -92,252 +112,6 @@ Or from the Julia REPL package mode:
 ] add MacroEconometricModels
 ```
 
-## Quick Start
-
-### One-Liner Overview
-
-```julia
-using MacroEconometricModels
-
-# Univariate
-hp = hp_filter(y; lambda=1600.0)                   # Trend-cycle decomposition
-ar = estimate_ar(y, 2)                              # AR(2) via OLS
-garch = estimate_garch(y, 1, 1)                     # GARCH(1,1)
-sv = estimate_sv(y; n_samples=2000)                  # Stochastic Volatility
-
-# Multivariate
-model = estimate_var(Y, 2)                           # VAR(2) via OLS
-irfs = irf(model, 20; method=:cholesky)              # Impulse responses
-post = estimate_bvar(Y, 2; prior=:minnesota)         # Bayesian VAR
-vecm = estimate_vecm(Y, 2; rank=:auto)               # VECM
-lp = estimate_lp(Y, 1, 20; cov_type=:newey_west)    # Local Projections
-fm = estimate_factors(X, 3)                          # Factor model
-gmm = estimate_gmm(g, theta0, data; weighting=:two_step)  # GMM
-
-# Tests & diagnostics
-adf = adf_test(y)                                    # Unit root test
-g = granger_test(model, 1, 2)                        # Granger causality
-suite = normality_test_suite(model)                   # Normality tests
-
-# Output
-refs(model)                                           # Bibliographic references
-set_display_backend(:latex)                            # Switch to LaTeX tables
-```
-
----
-
-### Time Series Filters
-
-```julia
-using MacroEconometricModels
-
-# Log industrial production from FRED-MD (monthly, I(1))
-fred = load_example(:fred_md)
-y = filter(isfinite, log.(fred[:, "INDPRO"]))
-
-hp  = hp_filter(y; lambda=129600.0)        # Hodrick-Prescott (monthly)
-ham = hamilton_filter(y; h=24, p=12)        # Hamilton (2018)
-bn  = beveridge_nelson(y)                   # Beveridge-Nelson
-bk  = baxter_king(y; pl=18, pu=96, K=36)  # Baxter-King band-pass (monthly)
-bhp = boosted_hp(y; stopping=:BIC)          # Boosted HP
-
-trend(hp)  # trend component
-cycle(hp)  # cyclical component
-```
-
-### ARIMA
-
-```julia
-using MacroEconometricModels
-
-# IP growth rate (log first difference) from FRED-MD
-fred = load_example(:fred_md)
-y = filter(isfinite, apply_tcode(fred[:, "INDPRO"], 5))
-
-best = auto_arima(y)                        # Automatic order selection
-arma = estimate_arma(y, 1, 1)              # ARMA(1,1) via CSS-MLE
-fc = forecast(arma, 12; conf_level=0.95)   # 12-step forecast with CIs
-```
-
-### Volatility Models
-
-```julia
-using MacroEconometricModels
-
-# S&P 500 returns from FRED-MD
-fred = load_example(:fred_md)
-sp_idx = findfirst(v -> occursin("S&P", v) && occursin("500", v), varnames(fred))
-y = filter(isfinite, apply_tcode(fred[:, varnames(fred)[sp_idx]], 5))
-
-garch  = estimate_garch(y, 1, 1)                    # GARCH(1,1)
-egarch = estimate_egarch(y, 1, 1)                    # EGARCH(1,1)
-gjr    = estimate_gjr_garch(y, 1, 1)                # GJR-GARCH(1,1)
-sv     = estimate_sv(y; n_samples=2000, burnin=1000) # Stochastic Volatility
-
-nic = news_impact_curve(egarch)    # Asymmetry diagnostic
-fc = forecast(garch, 20)           # Volatility forecast
-persistence(garch)                  # Volatility persistence
-```
-
-### VAR and Structural Identification
-
-```julia
-using MacroEconometricModels
-
-# Stationary 3-variable monetary VAR (IP, CPI, Fed Funds) from FRED-MD
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
-model = estimate_var(Y, 2)                          # OLS estimation
-irfs = irf(model, 20; method=:cholesky)             # Cholesky IRF
-decomp = fevd(model, 20; method=:cholesky)          # FEVD
-hd = historical_decomposition(model)                # Historical decomposition
-```
-
-### Bayesian VAR
-
-```julia
-using MacroEconometricModels, Random
-
-# Same 3-variable monetary VAR data as above
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
-Random.seed!(42)  # for reproducible MCMC draws
-best_hyper = optimize_hyperparameters(Y, 2; grid_size=20)
-post = estimate_bvar(Y, 2; n_draws=1000,
-                     prior=:minnesota, hyper=best_hyper)
-birf = irf(post, 20; method=:cholesky)   # Bayesian IRF with credible intervals
-```
-
-### VECM
-
-```julia
-using MacroEconometricModels
-
-# Cointegrated quarterly I(1) system: log GDP, consumption, investment from FRED-QD
-qd = load_example(:fred_qd)
-Y = log.(to_matrix(qd[:, ["GDPC1", "PCECC96", "GPDIC1"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
-joh = johansen_test(Y, 2)                          # Cointegration test
-vecm = estimate_vecm(Y, 2; rank=:auto)             # VECM estimation
-irfs = irf(vecm, 20; method=:cholesky)             # IRF via VAR conversion
-fc = forecast(vecm, 12; ci_method=:bootstrap)      # VECM forecast
-gc = granger_causality_vecm(vecm, 1, 2)            # VECM Granger causality
-```
-
-### Local Projections
-
-```julia
-using MacroEconometricModels
-
-# 3-variable monetary VAR data
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
-lp = estimate_lp(Y, 1, 20; lags=4, cov_type=:newey_west)   # Standard LP
-slp = structural_lp(Y, 20; method=:cholesky, lags=4)        # Structural LP
-lfevd = lp_fevd(slp)                                         # LP-FEVD
-```
-
-### Factor Models
-
-```julia
-using MacroEconometricModels
-
-# Large panel from FRED-MD (safe variables only, first 20 columns)
-fred = load_example(:fred_md)
-safe_idx = [i for i in 1:nvars(fred)
-            if fred.tcode[i] < 4 || all(x -> isfinite(x) && x > 0, fred.data[:, i])]
-fred_safe = fred[:, varnames(fred)[safe_idx]]
-X = to_matrix(apply_tcode(fred_safe))
-X = X[all.(isfinite, eachrow(X)), 1:min(20, size(X, 2))]
-
-ic = ic_criteria(X, 10)                                # Bai-Ng criteria
-fm = estimate_factors(X, ic.r_IC2; standardize=true)   # Static PCA
-dfm = estimate_dynamic_factors(X, 3, 2)                # Dynamic factors
-fc = forecast(fm, 12; ci_method=:theoretical)           # Forecast with CIs
-```
-
-### Hypothesis Tests
-
-```julia
-using MacroEconometricModels
-
-# Unit root tests on CPI inflation
-fred = load_example(:fred_md)
-y_cpi = filter(isfinite, apply_tcode(fred[:, "CPIAUCSL"], 5))
-adf = adf_test(y_cpi; lags=:aic)
-kpss = kpss_test(y_cpi)
-unit_root_summary(y_cpi)                  # Combined ADF + KPSS
-
-# Granger causality on 3-variable monetary VAR
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-g = granger_test(model, 1, 2)        # Pairwise
-g_block = granger_test(model, [1,2], 3)  # Block
-results = granger_test_all(model)    # All pairs
-
-# Model comparison
-lr = lr_test(restricted, unrestricted)   # Likelihood ratio
-lm = lm_test(restricted, unrestricted)   # Lagrange multiplier
-```
-
-### Non-Gaussian Identification
-
-```julia
-using MacroEconometricModels
-
-# 3-variable monetary VAR
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
-model = estimate_var(Y, 2)
-suite = normality_test_suite(model)          # Test for non-Gaussianity
-ica = identify_fastica(model)                # ICA identification
-ml = identify_student_t(model)               # ML identification
-irfs = irf(model, 20; method=:fastica)       # IRF with ICA-identified shocks
-```
-
-### Nowcasting
-
-```julia
-using MacroEconometricModels
-
-# Mixed-frequency panel from FRED-MD
-fred = load_example(:fred_md)
-sub = fred[:, ["INDPRO", "UNRATE", "CPIAUCSL", "FEDFUNDS"]]
-Y = to_matrix(apply_tcode(sub))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-nM = 3; nQ = 1  # 3 monthly indicators + 1 quarterly target
-
-dfm_model = nowcast_dfm(Y, nM, nQ; r=2, p=1)    # DFM (EM + Kalman)
-bvar = nowcast_bvar(Y, nM, nQ; lags=5)           # Large BVAR
-bridge = nowcast_bridge(Y, nM, nQ)                # Bridge equations
-
-result = nowcast(dfm_model)                        # Current-quarter nowcast
-fc = forecast(dfm_model, 6)                        # 6-step forecast
-```
-
-### Output and References
-
-```julia
-using MacroEconometricModels
-
-set_display_backend(:latex)          # LaTeX tables for papers
-print_table(irfs, 1, 1)             # Print IRF table
-
-refs(model)                          # AEA-style references
-refs(model; format=:bibtex)          # BibTeX for .bib files
-refs(:johansen; format=:html)        # HTML with DOI links
-```
-
 ## Package Structure
 
 The package is organized into the following modules:
@@ -357,10 +131,14 @@ The package is organized into the following modules:
 | `lp/` | Local Projections: core, IV, smooth, state-dependent, propensity, structural LP, forecast, LP-FEVD |
 | `factor/` | Static (PCA), dynamic (two-step/EM), generalized (spectral) factor models with forecasting |
 | `nongaussian/` | Non-Gaussian structural identification: ICA, ML, heteroskedastic-ID |
-| `teststat/` | Statistical tests: unit root, Johansen, normality, Granger causality, LR/LM, ARCH diagnostics |
+| `teststat/` | Statistical tests: unit root, cointegration, structural breaks, panel unit root, normality, Granger causality, LR/LM, ARCH diagnostics |
 | `pvar/` | Panel VAR: types, transforms, instruments, estimation (GMM/FE-OLS), analysis, bootstrap, tests |
-| `gmm/` | Generalized Method of Moments |
+| `did/` | Difference-in-Differences: TWFE, Callaway-Sant'Anna, Sun-Abraham, BJS, de Chaisemartin-D'Haultfoeuille; event study LP; LP-DiD |
+| `favar/` | Factor-Augmented VAR: two-step (PCA + VAR) and Bayesian Gibbs estimation, panel IRFs |
+| `dsge/` | DSGE: specification, linearization, solution (Gensys/BK/Klein/perturbation/projection/PFI), OccBin, Bayesian estimation (SMC/MH) |
+| `gmm/` | Generalized Method of Moments and Simulated Method of Moments |
 | `nowcast/` | Nowcasting: DFM (EM + Kalman), large BVAR, bridge equations, news decomposition |
+| `plotting/` | D3.js interactive visualization: 41 plot dispatches, Solarized Light/Dark themes |
 | `summary.jl` | Publication-quality summary tables and `refs()` bibliographic references |
 
 ## Mathematical Notation
@@ -467,8 +245,36 @@ Throughout this documentation, we use the following notation conventions:
 
 - Dickey, David A., and Wayne A. Fuller. 1979. "Distribution of the Estimators for Autoregressive Time Series with a Unit Root." *Journal of the American Statistical Association* 74 (366): 427--431. [https://doi.org/10.1080/01621459.1979.10482531](https://doi.org/10.1080/01621459.1979.10482531)
 - Kwiatkowski, Denis, Peter C. B. Phillips, Peter Schmidt, and Yongcheol Shin. 1992. "Testing the Null Hypothesis of Stationarity Against the Alternative of a Unit Root." *Journal of Econometrics* 54 (1--3): 159--178. [https://doi.org/10.1016/0304-4076(92)90104-Y](https://doi.org/10.1016/0304-4076(92)90104-Y)
+- Andrews, Donald W. K. 1993. "Tests for Parameter Instability and Structural Change with Unknown Change Point." *Econometrica* 61 (4): 821--856. [https://doi.org/10.2307/2951764](https://doi.org/10.2307/2951764)
+- Bai, Jushan, and Pierre Perron. 1998. "Estimating and Testing Linear Models with Multiple Structural Changes." *Econometrica* 66 (1): 47--78. [https://doi.org/10.2307/2998540](https://doi.org/10.2307/2998540)
+- Bai, Jushan, and Serena Ng. 2004. "A PANIC Attack on Unit Roots and Cointegration." *Econometrica* 72 (4): 1127--1177. [https://doi.org/10.1111/j.1468-0262.2004.00528.x](https://doi.org/10.1111/j.1468-0262.2004.00528.x)
+- Pesaran, M. Hashem. 2007. "A Simple Panel Unit Root Test in the Presence of Cross-Section Dependence." *Journal of Applied Econometrics* 22 (2): 265--312. [https://doi.org/10.1002/jae.951](https://doi.org/10.1002/jae.951)
+- Moon, Hyungsik Roger, and Benoit Perron. 2004. "Testing for a Unit Root in Panels with Dynamic Factors." *Journal of Econometrics* 122 (1): 81--126. [https://doi.org/10.1016/j.jeconom.2003.10.020](https://doi.org/10.1016/j.jeconom.2003.10.020)
+- Breitung, Jorg, and Sandra Eickmeier. 2011. "Testing for Structural Breaks in Dynamic Factor Models." *Journal of Econometrics* 163 (1): 71--84. [https://doi.org/10.1016/j.jeconom.2010.11.008](https://doi.org/10.1016/j.jeconom.2010.11.008)
 - Granger, Clive W. J. 1969. "Investigating Causal Relations by Econometric Models and Cross-spectral Methods." *Econometrica* 37 (3): 424--438. [https://doi.org/10.2307/1912791](https://doi.org/10.2307/1912791)
 - Wilks, Samuel S. 1938. "The Large-Sample Distribution of the Likelihood Ratio for Testing Composite Hypotheses." *Annals of Mathematical Statistics* 9 (1): 60--62. [https://doi.org/10.1214/aoms/1177732360](https://doi.org/10.1214/aoms/1177732360)
+
+### DSGE Models
+
+- Sims, Christopher A. 2002. "Solving Linear Rational Expectations Models." *Computational Economics* 20 (1--2): 1--20. [https://doi.org/10.1023/A:1020517101123](https://doi.org/10.1023/A:1020517101123)
+- Blanchard, Olivier Jean, and Charles M. Kahn. 1980. "The Solution of Linear Difference Models under Rational Expectations." *Econometrica* 48 (5): 1305--1311. [https://doi.org/10.2307/1912186](https://doi.org/10.2307/1912186)
+- Klein, Paul. 2000. "Using the Generalized Schur Form to Solve a Multivariate Linear Rational Expectations Model." *Journal of Economic Dynamics and Control* 24 (10): 1405--1423. [https://doi.org/10.1016/S0165-1889(99)00045-7](https://doi.org/10.1016/S0165-1889(99)00045-7)
+- Schmitt-Grohe, Stephanie, and Martin Uribe. 2004. "Solving Dynamic General Equilibrium Models Using a Second-Order Approximation to the Policy Function." *Journal of Economic Dynamics and Control* 28 (4): 755--775. [https://doi.org/10.1016/S0165-1889(03)00043-5](https://doi.org/10.1016/S0165-1889(03)00043-5)
+- Andreasen, Martin M., Jesus Fernandez-Villaverde, and Juan F. Rubio-Ramirez. 2018. "The Pruned State-Space System for Non-Linear DSGE Models: Theory and Empirical Applications." *Review of Economic Studies* 85 (1): 1--49. [https://doi.org/10.1093/restud/rdx037](https://doi.org/10.1093/restud/rdx037)
+- Guerrieri, Luca, and Matteo Iacoviello. 2015. "OccBin: A Toolkit for Solving Dynamic Models with Occasionally Binding Constraints Easily." *Journal of Monetary Economics* 70: 22--38. [https://doi.org/10.1016/j.jmoneco.2014.08.005](https://doi.org/10.1016/j.jmoneco.2014.08.005)
+- Herbst, Edward, and Frank Schorfheide. 2015. *Bayesian Estimation of DSGE Models*. Princeton, NJ: Princeton University Press. ISBN 978-0-691-16108-2.
+
+### Difference-in-Differences
+
+- Callaway, Brantly, and Pedro H. C. Sant'Anna. 2021. "Difference-in-Differences with Multiple Time Periods." *Journal of Econometrics* 225 (2): 200--230. [https://doi.org/10.1016/j.jeconom.2020.12.001](https://doi.org/10.1016/j.jeconom.2020.12.001)
+- Sun, Liyang, and Sarah Abraham. 2021. "Estimating Dynamic Treatment Effects in Event Studies with Heterogeneous Treatment Effects." *Journal of Econometrics* 225 (2): 175--199. [https://doi.org/10.1016/j.jeconom.2020.09.006](https://doi.org/10.1016/j.jeconom.2020.09.006)
+- Borusyak, Kirill, Xavier Jaravel, and Jann Spiess. 2024. "Revisiting Event-Study Designs: Robust and Efficient Estimation." *Review of Economic Studies* 91 (6): 3253--3285. [https://doi.org/10.1093/restud/rdae007](https://doi.org/10.1093/restud/rdae007)
+- Rambachan, Ashesh, and Jonathan Roth. 2023. "A More Credible Approach to Parallel Trends." *Review of Economic Studies* 90 (5): 2555--2591. [https://doi.org/10.1093/restud/rdad018](https://doi.org/10.1093/restud/rdad018)
+- Goodman-Bacon, Andrew. 2021. "Difference-in-Differences with Variation in Treatment Timing." *Journal of Econometrics* 225 (2): 254--277. [https://doi.org/10.1016/j.jeconom.2021.03.014](https://doi.org/10.1016/j.jeconom.2021.03.014)
+
+### FAVAR
+
+- Bernanke, Ben S., Jean Boivin, and Piotr Eliasz. 2005. "Measuring the Effects of Monetary Policy: A Factor-Augmented Vector Autoregressive (FAVAR) Approach." *Quarterly Journal of Economics* 120 (1): 387--422. [https://doi.org/10.1162/0033553053327452](https://doi.org/10.1162/0033553053327452)
 
 ### Nowcasting
 
@@ -487,6 +293,6 @@ Contributions are welcome! Please see the [GitHub repository](https://github.com
 ## Contents
 
 ```@contents
-Pages = ["data.md", "filters.md", "arima.md", "volatility.md", "manual.md", "bayesian.md", "vecm.md", "pvar.md", "lp.md", "factormodels.md", "dsge.md", "innovation_accounting.md", "nowcast.md", "nongaussian.md", "hypothesis_tests.md", "examples.md", "api.md", "api_types.md", "api_functions.md"]
+Pages = ["data.md", "filters.md", "arima.md", "volatility.md", "manual.md", "bayesian.md", "vecm.md", "pvar.md", "lp.md", "factormodels.md", "favar.md", "dsge.md", "dsge_linear.md", "dsge_nonlinear.md", "dsge_constraints.md", "dsge_estimation.md", "did.md", "event_study.md", "innovation_accounting.md", "nowcast.md", "nongaussian.md", "tests.md", "tests_unitroot.md", "tests_breaks.md", "tests_panel.md", "tests_diagnostics.md", "plotting.md", "examples.md", "api.md", "api_types.md", "api_functions.md"]
 Depth = 2
 ```

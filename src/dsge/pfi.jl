@@ -170,7 +170,8 @@ function pfi_solver(spec::DSGESpec{T};
                     tol::Real=1e-8,
                     max_iter::Int=500,
                     damping::Real=1.0,
-                    verbose::Bool=false) where {T<:AbstractFloat}
+                    verbose::Bool=false,
+                    initial_coeffs::Union{Nothing,AbstractMatrix{<:Real}}=nothing) where {T<:AbstractFloat}
 
     n_eq = spec.n_endog
     n_eps = spec.n_exog
@@ -226,14 +227,18 @@ function pfi_solver(spec::DSGESpec{T};
     G1 = result_1st.G1
     impact = result_1st.impact
 
-    coeffs = zeros(T, n_vars, n_basis)
-    for v in 1:n_vars
-        y_nodes = zeros(T, n_nodes)
-        for j in 1:n_nodes
-            x_dev = nodes_phys[j, :] .- ss[state_idx]
-            y_nodes[j] = dot(G1[v, state_idx], x_dev)
+    if initial_coeffs !== nothing && size(initial_coeffs) == (n_vars, n_basis)
+        coeffs = Matrix{T}(initial_coeffs)
+    else
+        coeffs = zeros(T, n_vars, n_basis)
+        for v in 1:n_vars
+            y_nodes = zeros(T, n_nodes)
+            for j in 1:n_nodes
+                x_dev = nodes_phys[j, :] .- ss[state_idx]
+                y_nodes[j] = dot(G1[v, state_idx], x_dev)
+            end
+            coeffs[v, :] = basis_matrix \ y_nodes
         end
-        coeffs[v, :] = basis_matrix \ y_nodes
     end
 
     state_bounds_T = Matrix{T}(state_bounds)

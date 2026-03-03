@@ -628,6 +628,66 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         journal="Journal of Business \\& Economic Statistics", volume="29", issue="2",
         pages="238--249", doi="10.1198/jbes.2010.07136", isbn="", publisher="",
         entry_type=:article),
+    :herbst_schorfheide2015 => (key=:herbst_schorfheide2015,
+        authors="Herbst, Edward P. and Schorfheide, Frank", year=2015,
+        title="Bayesian Estimation of DSGE Models",
+        journal="", volume="", issue="", pages="",
+        doi="10.1515/9781400873739", isbn="978-0-691-16108-2",
+        publisher="Princeton University Press", entry_type=:book),
+    :herbst_schorfheide2014 => (key=:herbst_schorfheide2014,
+        authors="Herbst, Edward and Schorfheide, Frank", year=2014,
+        title="Sequential Monte Carlo Sampling for DSGE Models",
+        journal="Journal of Applied Econometrics", volume="29", issue="7",
+        pages="1073--1098", doi="10.1002/jae.2397", isbn="", publisher="",
+        entry_type=:article),
+    :chopin_jacob_papaspiliopoulos2013 => (key=:chopin_jacob_papaspiliopoulos2013,
+        authors="Chopin, Nicolas and Jacob, Pierre E. and Papaspiliopoulos, Omiros",
+        year=2013,
+        title="SMC2: An Efficient Algorithm for Sequential Analysis of State Space Models",
+        journal="Journal of the Royal Statistical Society: Series B",
+        volume="75", issue="3", pages="397--426",
+        doi="10.1111/j.1467-9868.2012.01046.x", isbn="", publisher="",
+        entry_type=:article),
+    :an_schorfheide2007 => (key=:an_schorfheide2007,
+        authors="An, Sungbae and Schorfheide, Frank", year=2007,
+        title="Bayesian Analysis of DSGE Models",
+        journal="Econometric Reviews", volume="26", issue="2-4",
+        pages="113--172", doi="10.1080/07474930701220071", isbn="", publisher="",
+        entry_type=:article),
+    :andrieu_doucet_holenstein2010 => (key=:andrieu_doucet_holenstein2010,
+        authors="Andrieu, Christophe and Doucet, Arnaud and Holenstein, Roman",
+        year=2010,
+        title="Particle Markov Chain Monte Carlo Methods",
+        journal="Journal of the Royal Statistical Society: Series B",
+        volume="72", issue="3", pages="269--342",
+        doi="10.1111/j.1467-9868.2009.00736.x", isbn="", publisher="",
+        entry_type=:article),
+    :gordon_salmond_smith1993 => (key=:gordon_salmond_smith1993,
+        authors="Gordon, Neil J. and Salmond, David J. and Smith, Adrian F. M.",
+        year=1993,
+        title="Novel Approach to Nonlinear/Non-Gaussian Bayesian State Estimation",
+        journal="IEE Proceedings F - Radar and Signal Processing",
+        volume="140", issue="2", pages="107--113",
+        doi="10.1049/ip-f-2.1993.0015", isbn="", publisher="",
+        entry_type=:article),
+    :pitt_shephard1999 => (key=:pitt_shephard1999,
+        authors="Pitt, Michael K. and Shephard, Neil", year=1999,
+        title="Filtering via Simulation: Auxiliary Particle Filters",
+        journal="Journal of the American Statistical Association",
+        volume="94", issue="446", pages="590--599",
+        doi="10.1080/01621459.1999.10474153", isbn="", publisher="",
+        entry_type=:article),
+    # --- FAVAR & Structural DFM ---
+    :bernanke_boivin_eliasz2005 => (key=:bernanke_boivin_eliasz2005,
+        authors="Bernanke, Ben S. and Boivin, Jean and Eliasz, Piotr", year=2005,
+        title="Measuring the Effects of Monetary Policy: A Factor-Augmented Vector Autoregressive (FAVAR) Approach",
+        journal="Quarterly Journal of Economics", volume="120", issue="1", pages="387--422",
+        doi="10.1162/0033553053970344", isbn="", publisher="", entry_type=:article),
+    :forni_giannone_lippi_reichlin2009 => (key=:forni_giannone_lippi_reichlin2009,
+        authors="Forni, Mario and Giannone, Domenico and Lippi, Marco and Reichlin, Lucrezia", year=2009,
+        title="Opening the Black Box: Structural Factor Models with Large Cross Sections",
+        journal="Econometric Theory", volume="25", issue="5", pages="1319--1347",
+        doi="10.1017/S026646660809052X", isbn="", publisher="", entry_type=:article),
     # --- Structural Break Tests ---
     :andrews1993 => (key=:andrews1993, authors="Andrews, Donald W. K.", year=1993,
         title="Tests for Parameter Instability and Structural Change with Unknown Change Point",
@@ -725,6 +785,12 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :DynamicFactorModel => [:stock_watson2002],
     :GeneralizedDynamicFactorModel => [:stock_watson2002],
     :FactorForecast => [:stock_watson2002],
+    # FAVAR & Structural DFM
+    :FAVARModel => [:bernanke_boivin_eliasz2005, :stock_watson2002],
+    :BayesianFAVAR => [:bernanke_boivin_eliasz2005, :stock_watson2002],
+    :StructuralDFM => [:forni_giannone_lippi_reichlin2009, :stock_watson2002],
+    :favar => [:bernanke_boivin_eliasz2005, :stock_watson2002],
+    :structural_dfm => [:forni_giannone_lippi_reichlin2009, :stock_watson2002],
     # Unit Root Tests
     :ADFResult => [:dickey_fuller1979],
     :KPSSResult => [:kpss1992],
@@ -874,6 +940,9 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :PerturbationSolution => [:schmitt_grohe_uribe2004, :kim_kim_schaumburg_sims2008],
     :ProjectionSolution => [:judd1998, :judd_maliar_maliar_valero2014],
     :LinearDSGE => [:sims2002],
+    # Bayesian DSGE
+    :BayesianDSGE => [:herbst_schorfheide2015, :herbst_schorfheide2014, :an_schorfheide2007],
+    :estimate_dsge_bayes => [:herbst_schorfheide2015, :herbst_schorfheide2014, :an_schorfheide2007],
     # Analytical moments
     :analytical_moments => [:hamilton1994, :fernandez_villaverde_rubio_schorfheide2016],
     :solve_lyapunov => [:hamilton1994, :fernandez_villaverde_rubio_schorfheide2016],
@@ -1125,6 +1194,11 @@ refs(io::IO, ::DynamicFactorModel; kw...) = refs(io, _TYPE_REFS[:DynamicFactorMo
 refs(io::IO, ::GeneralizedDynamicFactorModel; kw...) = refs(io, _TYPE_REFS[:GeneralizedDynamicFactorModel]; kw...)
 refs(io::IO, ::FactorForecast; kw...) = refs(io, _TYPE_REFS[:FactorForecast]; kw...)
 
+# FAVAR & Structural DFM
+refs(io::IO, ::FAVARModel; kw...) = refs(io, _TYPE_REFS[:FAVARModel]; kw...)
+refs(io::IO, ::BayesianFAVAR; kw...) = refs(io, _TYPE_REFS[:BayesianFAVAR]; kw...)
+refs(io::IO, ::StructuralDFM; kw...) = refs(io, _TYPE_REFS[:StructuralDFM]; kw...)
+
 # Unit root tests
 refs(io::IO, ::ADFResult; kw...) = refs(io, _TYPE_REFS[:ADFResult]; kw...)
 refs(io::IO, ::KPSSResult; kw...) = refs(io, _TYPE_REFS[:KPSSResult]; kw...)
@@ -1239,6 +1313,9 @@ refs(io::IO, ::DSGESpec; kw...) = refs(io, _TYPE_REFS[:DSGESpec]; kw...)
 refs(io::IO, ::PerturbationSolution; kw...) = refs(io, _TYPE_REFS[:PerturbationSolution]; kw...)
 refs(io::IO, ::ProjectionSolution; kw...) = refs(io, _TYPE_REFS[:ProjectionSolution]; kw...)
 refs(io::IO, ::LinearDSGE; kw...) = refs(io, _TYPE_REFS[:LinearDSGE]; kw...)
+
+# Bayesian DSGE
+refs(io::IO, ::BayesianDSGE; kw...) = refs(io, _TYPE_REFS[:BayesianDSGE]; kw...)
 
 # OccBin types
 refs(io::IO, ::OccBinSolution; kw...) = refs(io, _TYPE_REFS[:OccBinSolution]; kw...)

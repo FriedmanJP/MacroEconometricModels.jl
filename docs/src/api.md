@@ -134,7 +134,7 @@ Direct multi-step forecasting from Local Projection models. See [Local Projectio
 | `forecast(lp, shock_path; ...)` | Direct multi-step LP forecast |
 | `forecast(slp, shock_idx, shock_path; ...)` | Structural LP conditional forecast |
 
-Augmented Dickey-Fuller, KPSS, Phillips-Perron, Zivot-Andrews, Ng-Perron, and Johansen cointegration tests. See [Hypothesis Tests](hypothesis_tests.md) for interpretation and examples.
+Augmented Dickey-Fuller, KPSS, Phillips-Perron, Zivot-Andrews, Ng-Perron, and Johansen cointegration tests. See [Hypothesis Tests](tests.md) for interpretation and examples.
 
 ### Unit Root Test Functions
 
@@ -150,7 +150,7 @@ Augmented Dickey-Fuller, KPSS, Phillips-Perron, Zivot-Andrews, Ng-Perron, and Jo
 | `unit_root_summary(y; ...)` | Run multiple tests with summary |
 | `test_all_variables(Y; ...)` | Apply test to all columns |
 
-Likelihood ratio (LR) and Lagrange multiplier (LM/score) tests for comparing nested models across ARIMA, VAR, and GARCH families. See [Hypothesis Tests](hypothesis_tests.md).
+Likelihood ratio (LR) and Lagrange multiplier (LM/score) tests for comparing nested models across ARIMA, VAR, and GARCH families. See [Hypothesis Tests](tests.md).
 
 ### Model Comparison Tests
 
@@ -159,7 +159,7 @@ Likelihood ratio (LR) and Lagrange multiplier (LM/score) tests for comparing nes
 | `lr_test(m1, m2)` | Likelihood ratio test for nested models |
 | `lm_test(m1, m2)` | Lagrange multiplier (score) test for nested models |
 
-Pairwise and block Wald tests for Granger causality in VAR models. See [Hypothesis Tests](hypothesis_tests.md) for details.
+Pairwise and block Wald tests for Granger causality in VAR models. See [Hypothesis Tests](tests.md) for details.
 
 ### Granger Causality Tests
 

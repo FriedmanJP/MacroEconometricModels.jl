@@ -860,6 +860,131 @@ idio_driven = findall(shares .< 0.3)
 
 ---
 
+## Restricted Factor Models (Block Structure)
+
+When economic theory suggests that different groups of variables load on distinct factors (e.g., "real" vs "nominal" factors), block-restricted estimation enforces zero loadings outside each block.
+
+### Model
+
+```math
+x_{it} = \lambda_i' F_t + e_{it}
+```
+
+where ``\lambda_{ij} = 0`` if variable ``i`` is not in block ``j``. This is enforced via an EM algorithm with masked updates.
+
+### Estimation
+
+```julia
+using MacroEconometricModels, Random
+Random.seed!(42)
+X = randn(200, 15)
+
+# Define 3 blocks: variables 1-5, 6-10, 11-15
+blocks = Dict(
+    :real => [1, 2, 3, 4, 5],
+    :nominal => [6, 7, 8, 9, 10],
+    :financial => [11, 12, 13, 14, 15]
+)
+
+fm = estimate_factors(X, 3; blocks=blocks)
+println("Block names: ", fm.block_names)
+```
+
+!!! note "Technical Note"
+    The EM algorithm initializes each block factor via block-wise PCA, then iterates:
+    (1) E-step: compute expected factors given current loadings,
+    (2) M-step: update only non-zero loadings (masked update).
+    Convergence is on log-likelihood. Validation requires: ``r`` blocks,
+    no overlapping indices, at least 2 variables per block.
+
+### Comparison with Unrestricted Estimation
+
+```julia
+# Unrestricted (existing, unchanged)
+fm_unr = estimate_factors(X, 3)
+println("Unrestricted block_names: ", fm_unr.block_names)  # nothing
+
+# Block-restricted
+fm_res = estimate_factors(X, 3; blocks=blocks)
+println("Restricted block_names: ", fm_res.block_names)   # [:real, :nominal, :financial]
+```
+
+---
+
+## Structural Dynamic Factor Model
+
+The Structural DFM (Forni, Giannone, Lippi & Reichlin 2009) identifies structural shocks in large panels by applying SVAR identification to the common factors.
+
+### Model
+
+```math
+F_t = c + \sum_{l=1}^p A_l F_{t-l} + B_0 \varepsilon_t
+```
+
+where ``F_t`` are the ``q`` common factors from a GDFM, ``B_0`` is the impact matrix, and ``\varepsilon_t`` are structural shocks. Panel-wide structural IRFs are:
+
+```math
+\text{IRF}_i(h, j) = \sum_{k=1}^q \Lambda_{ik} \cdot \Phi_h B_0 e_j
+```
+
+### Estimation
+
+Two identification schemes are available: Cholesky and sign restrictions.
+
+```julia
+using MacroEconometricModels, Random, FFTW
+Random.seed!(42)
+X = randn(200, 20)
+
+# Cholesky identification
+sdfm = estimate_structural_dfm(X, 2; identification=:cholesky, p=1, H=20)
+
+# Structural IRFs for all panel variables
+r = irf(sdfm, 20)
+println("IRF variables: ", length(r.variables))
+println("IRF shocks: ", length(r.shocks))
+
+# FEVD of the factor VAR
+d = fevd(sdfm, 20)
+```
+
+### Two-Step Estimation
+
+You can also pass a pre-estimated GDFM:
+
+```julia
+using MacroEconometricModels, Random, FFTW
+Random.seed!(42)
+X = randn(200, 20)
+
+gdfm = estimate_gdfm(X, 2)
+sdfm = estimate_structural_dfm(gdfm; identification=:cholesky, p=1, H=20)
+```
+
+### Sign Restrictions
+
+```julia
+using MacroEconometricModels, Random, FFTW
+Random.seed!(42)
+X = randn(200, 20)
+
+# Define sign restriction function
+sign_fn(irf_matrix) = irf_matrix[1, 1] > 0 && irf_matrix[1, 2] < 0
+
+sdfm = estimate_structural_dfm(X, 2;
+    identification=:sign, sign_check=sign_fn, max_draws=1000, H=20)
+```
+
+!!! note "Technical Note"
+    The Structural DFM proceeds in two steps: (1) estimate GDFM to extract common
+    factors and spectral loadings, (2) fit a VAR on the time-domain factors and apply
+    structural identification. Time-domain loadings are computed via OLS regression
+    ``\hat{\Lambda} = (F'F)^{-1}F'X`` rather than the spectral domain.
+
+**Reference**: Forni, Giannone, Lippi & Reichlin (2009)
+
+---
+
 ## StatsAPI Interface
 
 All three factor model types implement the standard [StatsAPI](https://github.com/JuliaStats/StatsAPI.jl) interface, enabling uniform access to fitted values, residuals, and model diagnostics.

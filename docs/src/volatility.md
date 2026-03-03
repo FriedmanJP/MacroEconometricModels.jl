@@ -627,7 +627,7 @@ The S&P 500 returns exhibit strong ARCH effects, confirming the need for volatil
 
 ### See Also
 
-- [Hypothesis Tests](hypothesis_tests.md) -- ARCH-LM test and diagnostic testing
+- [Hypothesis Tests](tests.md) -- ARCH-LM test and diagnostic testing
 - [ARIMA Models](arima.md) -- Mean equation modeling before volatility estimation
 - [API Reference](api_functions.md) -- Complete function signatures
 

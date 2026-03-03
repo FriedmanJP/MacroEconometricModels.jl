@@ -74,6 +74,9 @@ const TEST_GROUPS = [
         "factor/test_dynamicfactormodel.jl",
         "factor/test_gdfm.jl",
         "factor/test_factor_forecast.jl",
+        "factor/test_restricted.jl",
+        "factor/test_favar.jl",
+        "factor/test_structural_dfm.jl",
         "nowcast/test_nowcast.jl",
         "did/test_did.jl",
     ]),
@@ -103,6 +106,7 @@ const TEST_GROUPS = [
     # Group 7: DSGE Models
     ("DSGE Models" => [
         "dsge/test_dsge.jl",
+        "dsge/test_bayesian_dsge.jl",
     ]),
     # Group 8: Coverage gap tests (lightweight, fast)
     ("Coverage" => [
@@ -274,6 +278,9 @@ else
         @testset "Dynamic Factor Model" begin include("factor/test_dynamicfactormodel.jl") end
         @testset "Generalized Dynamic Factor Model" begin include("factor/test_gdfm.jl") end
         @testset "Factor Model Forecasting" begin include("factor/test_factor_forecast.jl") end
+        @testset "Restricted Factor Models" begin include("factor/test_restricted.jl") end
+        @testset "FAVAR" begin include("factor/test_favar.jl") end
+        @testset "Structural DFM" begin include("factor/test_structural_dfm.jl") end
         @testset "Nowcasting" begin include("nowcast/test_nowcast.jl") end
         @testset "Difference-in-Differences" begin include("did/test_did.jl") end
 
@@ -299,7 +306,10 @@ else
         @testset "Time Series Filters" begin include("filters/test_filters.jl") end
 
         # Group 7: DSGE Models
-        @testset "DSGE Models" begin include("dsge/test_dsge.jl") end
+        @testset "DSGE Models" begin
+            include("dsge/test_dsge.jl")
+            include("dsge/test_bayesian_dsge.jl")
+        end
 
         # Group 8: Coverage gap tests
         @testset "VECM & Teststat Coverage" begin include("coverage/test_vecm_teststat_coverage.jl") end

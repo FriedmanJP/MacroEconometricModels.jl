@@ -3049,6 +3049,201 @@ end
         @test Sigma_doub ≈ Sigma_kron atol=1e-10
     end
 
+    @testset "Third-order AR(1) solver" begin
+        spec = @dsge begin
+            parameters: ρ = 0.9, σ = 0.01
+            endogenous: y
+            exogenous: ε
+            y[t] = ρ * y[t-1] + σ * ε[t]
+        end
+        spec = compute_steady_state(spec)
+
+        sol3 = solve(spec; method=:perturbation, order=3)
+
+        @test sol3 isa MacroEconometricModels.PerturbationSolution
+        @test sol3.order == 3
+        @test is_determined(sol3)
+        @test is_stable(sol3)
+
+        # 3rd-order fields should be populated
+        @test sol3.hxxx !== nothing
+        @test sol3.hσσx !== nothing
+
+        # Dimensions: nx=1, n_eps=1, nv=2 → nv³=8
+        nx = length(sol3.state_indices)
+        nv = nx + 1  # n_eps=1
+        @test size(sol3.hxxx) == (nx, nv^3)
+        @test size(sol3.hσσx) == (nx, nv)
+
+        # For linear AR(1), 3rd-order terms should be ~zero
+        @test maximum(abs.(sol3.hxxx)) < 0.01
+        # σ³ correction is zero for Gaussian shocks
+        @test sol3.hσσσ !== nothing
+        # First-order part should match order-1
+        sol1 = solve(spec; method=:perturbation, order=1)
+        @test sol3.hx ≈ sol1.hx atol=1e-10
+        @test sol3.gx ≈ sol1.gx atol=1e-10
+    end
+
+    @testset "Third-order NK3 model" begin
+        spec = @dsge begin
+            parameters: β = 0.99, κ = 0.3, φ_π = 1.5, ρ = 0.8, σ_v = 0.01
+            endogenous: π, x, v
+            exogenous: ε_v
+            π[t] = β * π[t+1] + κ * x[t]
+            x[t] = x[t+1] - (φ_π * π[t] - π[t+1]) + v[t]
+            v[t] = ρ * v[t-1] + σ_v * ε_v[t]
+            steady_state = [0.0, 0.0, 0.0]
+        end
+        spec = compute_steady_state(spec)
+
+        sol3 = solve(spec; method=:perturbation, order=3)
+
+        @test sol3.order == 3
+        @test is_determined(sol3)
+
+        n = sol3.spec.n_endog    # 3
+        nx = length(sol3.state_indices)
+        ny = length(sol3.control_indices)
+        n_eps = sol3.spec.n_exog  # 1
+        nv = nx + n_eps
+
+        # Check dimensions
+        @test nx + ny == n
+        if nx > 0
+            @test size(sol3.hxxx) == (nx, nv^3)
+            @test size(sol3.hσσx) == (nx, nv)
+            @test length(sol3.hσσσ) == nx
+        end
+        if ny > 0
+            @test size(sol3.gxxx) == (ny, nv^3)
+            @test size(sol3.gσσx) == (ny, nv)
+            @test length(sol3.gσσσ) == ny
+        end
+
+        # σ³ = 0 for Gaussian shocks
+        @test all(abs.(sol3.hσσσ) .< 1e-8)
+        @test all(abs.(sol3.gσσσ) .< 1e-8)
+
+        # 2nd-order fields should also be present
+        @test sol3.hxx !== nothing || sol3.gxx !== nothing
+    end
+
+    @testset "Third-order pruned simulation" begin
+        spec = @dsge begin
+            parameters: ρ = 0.9, σ = 0.01
+            endogenous: y
+            exogenous: ε
+            y[t] = ρ * y[t-1] + σ * ε[t]
+        end
+        spec = compute_steady_state(spec)
+        sol3 = solve(spec; method=:perturbation, order=3)
+
+        # Zero-shock simulation stays near SS
+        sim = simulate(sol3, 100; shock_draws=zeros(100, 1))
+        @test size(sim) == (100, 1)
+        @test all(isfinite.(sim))
+
+        # Stochastic simulation doesn't explode
+        sim2 = simulate(sol3, 10000; rng=Random.MersenneTwister(42))
+        @test all(isfinite.(sim2))
+        @test std(sim2[:, 1]) < 1.0
+
+        # Antithetic shocks
+        sim_anti = simulate(sol3, 1000; antithetic=true, rng=Random.MersenneTwister(42))
+        @test size(sim_anti) == (1000, 1)
+        @test all(isfinite.(sim_anti))
+
+        # IRF works with order 3
+        ir = irf(sol3, 20)
+        @test size(ir.values) == (20, 1, 1)
+
+        # GIRF captures higher-order effects
+        ir_g = irf(sol3, 20; irf_type=:girf, n_draws=100)
+        @test size(ir_g.values) == (20, 1, 1)
+        @test all(isfinite.(ir_g.values))
+
+        # For linear model, order 3 sim should be very close to order 2
+        sol2 = solve(spec; method=:perturbation, order=2)
+        shocks = randn(Random.MersenneTwister(99), 5000, 1)
+        sim2_data = simulate(sol2, 5000; shock_draws=shocks)
+        sim3_data = simulate(sol3, 5000; shock_draws=shocks)
+        @test sim2_data ≈ sim3_data atol=1e-6
+    end
+
+    @testset "Third-order analytical moments" begin
+        spec = @dsge begin
+            parameters: ρ = 0.9, σ = 0.01
+            endogenous: y
+            exogenous: ε
+            y[t] = ρ * y[t-1] + σ * ε[t]
+        end
+        spec = compute_steady_state(spec)
+        sol3 = solve(spec; method=:perturbation, order=3)
+
+        # GMM format moments
+        mom3 = analytical_moments(sol3; lags=1, format=:gmm)
+        @test all(isfinite.(mom3))
+        @test length(mom3) == 3  # 1 mean + 1 product moment + 1 autocov
+
+        # Compare with simulation-based moments
+        sim = simulate(sol3, 500_000; rng=Random.MersenneTwister(99))
+        sim_dev = sim .- mean(sim, dims=1)
+        m_mean = vec(mean(sim, dims=1)) .- sol3.steady_state'
+        m_var = var(sim[:, 1])
+        m_autocov = sum(sim_dev[2:end, 1] .* sim_dev[1:end-1, 1]) / (size(sim, 1) - 1)
+        m_sim = [m_mean[1], m_var, m_autocov]
+        for i in eachindex(mom3)
+            @test mom3[i] ≈ m_sim[i] atol=max(abs(m_sim[i]) * 0.3, 1e-3)
+        end
+
+        # Covariance format also works
+        mom3_cov = analytical_moments(sol3; lags=1)
+        @test all(isfinite.(mom3_cov))
+    end
+
+    @testset "Third-order moments multi-variable" begin
+        spec = @dsge begin
+            parameters: ρ₁ = 0.8, ρ₂ = 0.7, σ₁ = 0.01, σ₂ = 0.02
+            endogenous: x, y
+            exogenous: ε₁, ε₂
+            x[t] = ρ₁ * x[t-1] + σ₁ * ε₁[t]
+            y[t] = ρ₂ * y[t-1] + σ₂ * ε₂[t]
+        end
+        spec = compute_steady_state(spec)
+        sol3 = solve(spec; method=:perturbation, order=3)
+
+        mom = analytical_moments(sol3; lags=2, format=:gmm)
+        # ny=2: 2 means + 3 product moments + 2*2 autocov = 9
+        @test length(mom) == 9
+        @test all(isfinite.(mom))
+
+        # For linear model, should be close to 2nd-order
+        sol2 = solve(spec; method=:perturbation, order=2)
+        mom2 = analytical_moments(sol2; lags=2, format=:gmm)
+        @test mom ≈ mom2 atol=1e-4
+    end
+
+    @testset "Extract xxx block" begin
+        # nx=1, n_eps=1, nv=2 → nv³=8, nx³=1
+        M = reshape(collect(1.0:16.0), 2, 8)
+        Mxxx = MacroEconometricModels._extract_xxx_block(M, 1, 2)
+        @test size(Mxxx) == (2, 1)
+        # Column (1,1,1) of v⊗v⊗v = column 1 of M
+        @test Mxxx[:, 1] == M[:, 1]
+
+        # nx=2, n_eps=1, nv=3 → nv³=27, nx³=8
+        M2 = reshape(collect(1.0:54.0), 2, 27)
+        Mxxx2 = MacroEconometricModels._extract_xxx_block(M2, 2, 3)
+        @test size(Mxxx2) == (2, 8)
+        # Column (1,1,1) in v³ = column 1, in x³ = column 1
+        @test Mxxx2[:, 1] == M2[:, 1]
+        # Column (1,1,2) in v³ = ((1-1)*3 + 1-1)*3 + 2 = 2, in x³ = ((1-1)*2 + 1-1)*2 + 2 = 2
+        @test Mxxx2[:, 2] == M2[:, 2]
+        # Column (2,2,2) in v³ = ((2-1)*3 + 2-1)*3 + 2 = (3+1)*3 + 2 = 14, in x³ = ((1)*2+1)*2+2 = 8
+        @test Mxxx2[:, 8] == M2[:, 14]
+    end
+
     # =====================================================================
     # Additional comprehensive tests (Task 6)
     # =====================================================================
@@ -3179,8 +3374,9 @@ end
             y[t] = ρ * y[t-1] + σ * ε[t]
         end
         spec = compute_steady_state(spec)
-        # Order 3 is recognized but not yet implemented
-        @test_throws ArgumentError solve(spec; method=:perturbation, order=3)
+        # Order 3 is now supported — verify it works
+        sol3 = solve(spec; method=:perturbation, order=3)
+        @test sol3.order == 3
         # Order 4 is out of valid range
         @test_throws ArgumentError solve(spec; method=:perturbation, order=4)
         # Order 0 is invalid
@@ -3649,6 +3845,38 @@ end
         show(io, est)
         output = String(take!(io))
         @test occursin("analytical_gmm", output)
+        end
+    end
+
+    @testset "GMM estimation with 3rd-order perturbation" begin
+        _suppress_warnings() do
+        spec = @dsge begin
+            parameters: ρ = 0.85, σ = 0.01
+            endogenous: y
+            exogenous: ε
+            y[t] = ρ * y[t-1] + σ * ε[t]
+        end
+        spec = compute_steady_state(spec)
+
+        # Generate data from 3rd-order solution
+        sol_true = solve(spec; method=:perturbation, order=3)
+        data = simulate(sol_true, 500; rng=Random.MersenneTwister(42))
+
+        # Estimate with perturbation order 3
+        bounds = ParameterTransform{Float64}([0.01], [0.999])
+        est = estimate_dsge(spec, data, [:ρ];
+                             method=:analytical_gmm,
+                             solve_method=:perturbation,
+                             solve_order=3,
+                             auto_lags=[1],
+                             bounds=bounds)
+
+        @test est.converged
+        @test est.method == :analytical_gmm
+        @test est.solution isa MacroEconometricModels.PerturbationSolution
+        @test est.solution.order == 3
+        @test abs(est.theta[1] - 0.85) < 0.15
+        @test est.J_stat >= 0.0
         end
     end
 
