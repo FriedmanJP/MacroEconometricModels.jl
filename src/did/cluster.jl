@@ -52,7 +52,7 @@ function _cluster_vcov(X::Matrix{T}, resid::Vector{T},
     clusters = unique(cluster_ids)
     G = length(clusters)
 
-    XtX_inv = robust_inv(X' * X)
+    XtX_inv = robust_inv(X' * X; silent=true)
 
     # Meat: sum of outer products of cluster scores
     meat = zeros(T, K, K)
