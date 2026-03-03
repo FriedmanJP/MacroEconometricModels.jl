@@ -134,6 +134,37 @@ function _build_nonlinear_state_space(sol::PerturbationSolution{T}, Z::Matrix{T}
     )
 end
 
+"""
+    _build_projection_state_space(sol::ProjectionSolution, Z, d, H)
+
+Build a `ProjectionStateSpace` from a projection/PFI solution.
+Computes the impact matrix once from the linearized solution and
+pre-computes scaling constants for the Chebyshev domain.
+"""
+function _build_projection_state_space(sol::ProjectionSolution{T}, Z::Matrix{T},
+                                        d::Vector{T}, H::Matrix{T}) where {T<:AbstractFloat}
+    # Compute impact matrix once from linearized solution
+    result_lin = gensys(sol.linear.Gamma0, sol.linear.Gamma1,
+                        sol.linear.C, sol.linear.Psi, sol.linear.Pi)
+    impact = Matrix{T}(result_lin.impact)
+
+    # Pre-compute scaling constants: z_i = x_i * scale_i + shift_i
+    nx = length(sol.state_indices)
+    scale_vec = Vector{T}(undef, nx)
+    shift_vec = Vector{T}(undef, nx)
+    for i in 1:nx
+        a = sol.state_bounds[i, 1]; b = sol.state_bounds[i, 2]
+        scale_vec[i] = T(2) / (b - a)
+        shift_vec[i] = -(a + b) / (b - a)
+    end
+
+    ProjectionStateSpace{T}(sol.coefficients, sol.multi_indices,
+                              maximum(sol.multi_indices),
+                              sol.steady_state, sol.state_indices,
+                              sol.control_indices, impact, sol.state_bounds,
+                              scale_vec, shift_vec, Z, d, H)
+end
+
 # =============================================================================
 # Kalman filter log-likelihood — prediction error decomposition
 # =============================================================================

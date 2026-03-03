@@ -2026,4 +2026,41 @@ end
     end
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 7: Projection Particle Filter
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "ProjectionStateSpace construction" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:projection, degree=3, scale=5.0)
+    @test sol isa MacroEconometricModels.ProjectionSolution
+
+    Z = ones(Float64, 1, 1)
+    d = zeros(Float64, 1)
+    H = Matrix{Float64}(0.01 * I, 1, 1)
+
+    pss = MacroEconometricModels._build_projection_state_space(sol, Z, d, H)
+    @test pss isa MacroEconometricModels.ProjectionStateSpace{Float64}
+    @test size(pss.coefficients, 1) == 1  # n_vars
+    @test size(pss.coefficients, 2) == size(pss.multi_indices, 1)  # n_basis
+    @test pss.max_degree == maximum(pss.multi_indices)
+    @test length(pss.state_indices) == 1
+    @test length(pss.steady_state) == 1
+    @test size(pss.impact) == (1, 1)
+    @test length(pss.scale) == 1
+    @test length(pss.shift) == 1
+    @test size(pss.Z) == (1, 1)
+    @test size(pss.H_inv) == (1, 1)
+    @test pss.log_det_H isa Float64
+    end
+end
+
 end  # @testset "Bayesian DSGE"

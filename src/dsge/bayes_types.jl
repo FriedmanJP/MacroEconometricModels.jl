@@ -202,6 +202,67 @@ struct NonlinearStateSpace{T<:AbstractFloat}
     end
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Projection / PFI state space — global nonlinear policy via Chebyshev basis
+# ─────────────────────────────────────────────────────────────────────────────
+
+"""
+    ProjectionStateSpace{T}
+
+State space for projection/PFI solutions using Chebyshev polynomial policy
+functions. Pre-extracts evaluation primitives from `ProjectionSolution` for
+zero-allocation batch particle filter evaluation.
+
+Fields:
+- `coefficients` — n_vars × n_basis Chebyshev coefficients
+- `multi_indices` — n_basis × nx multi-index matrix (polynomial degrees per basis fn)
+- `max_degree` — maximum Chebyshev polynomial degree
+- `steady_state` — n_endog full steady state vector
+- `state_indices` — indices of state variables in endogenous vector
+- `control_indices` — indices of control variables in endogenous vector
+- `impact` — n_endog × n_exog shock impact matrix (from first-order solution, cached)
+- `state_bounds` — nx × 2 approximation domain bounds per state
+- `scale` — pre-computed 2/(b-a) per state dimension
+- `shift` — pre-computed -(a+b)/(b-a) per state dimension
+- `Z, d, H` — observation equation matrices
+- `H_inv, log_det_H` — cached inverse and log-determinant of H
+"""
+struct ProjectionStateSpace{T<:AbstractFloat}
+    coefficients::Matrix{T}
+    multi_indices::Matrix{Int}
+    max_degree::Int
+
+    steady_state::Vector{T}
+    state_indices::Vector{Int}
+    control_indices::Vector{Int}
+    impact::Matrix{T}
+    state_bounds::Matrix{T}
+
+    scale::Vector{T}
+    shift::Vector{T}
+
+    Z::Matrix{T}
+    d::Vector{T}
+    H::Matrix{T}
+    H_inv::Matrix{T}
+    log_det_H::T
+
+    function ProjectionStateSpace{T}(coefficients, multi_indices, max_degree,
+                                      steady_state, state_indices, control_indices,
+                                      impact, state_bounds, scale, shift,
+                                      Z, d, H) where {T<:AbstractFloat}
+        n_obs = size(Z, 1)
+        @assert size(H) == (n_obs, n_obs) "H must be n_obs × n_obs"
+        @assert length(d) == n_obs "d length must match n_obs"
+        H_inv = Matrix{T}(robust_inv(H))
+        log_det_H = T(logdet(H))
+        new{T}(coefficients, multi_indices, max_degree,
+               steady_state, state_indices, control_indices,
+               impact, state_bounds, scale, shift,
+               Z, d, H, H_inv, log_det_H)
+    end
+end
+
 # =============================================================================
 # PFWorkspace — pre-allocated workspace for zero-allocation particle filter
 # =============================================================================
