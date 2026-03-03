@@ -147,6 +147,10 @@ include("factor/static.jl")
 include("factor/dynamic.jl")
 include("factor/generalized.jl")
 
+# FAVAR types and estimation (after factor models, before nowcast)
+include("favar/types.jl")
+include("favar/estimation.jl")
+
 # Nowcasting (after factor models for Kalman filter reuse)
 include("nowcast/types.jl")
 include("nowcast/kalman_missing.jl")
@@ -262,6 +266,10 @@ include("core/hd.jl")
 include("vecm/forecast.jl")
 include("vecm/analysis.jl")
 include("vecm/granger.jl")
+
+# FAVAR analysis and forecast (after irf + fevd + hd)
+include("favar/analysis.jl")
+include("favar/forecast.jl")
 
 # LP-FEVD (after irf + fevd)
 include("lp/fevd.jl")
@@ -521,6 +529,11 @@ export estimate_gdfm
 export ic_criteria_gdfm
 export common_variance_share
 export spectral_eigenvalue_plot_data
+
+# FAVAR types and estimation
+export FAVARModel, BayesianFAVAR
+export estimate_favar
+export favar_panel_irf, favar_panel_forecast
 
 # =============================================================================
 # Exports - Utility Functions
