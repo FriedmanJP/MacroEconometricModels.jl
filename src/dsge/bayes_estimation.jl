@@ -538,3 +538,71 @@ function posterior_predictive(result::BayesianDSGE{T}, n_sim::Int;
 
     return paths
 end
+
+# =============================================================================
+# StatsAPI
+# =============================================================================
+
+StatsAPI.coef(m::BayesianDSGE) = vec(mean(m.theta_draws, dims=1))
+StatsAPI.islinear(::BayesianDSGE) = false
+
+# =============================================================================
+# Show
+# =============================================================================
+
+function Base.show(io::IO, result::BayesianDSGE{T}) where {T}
+    n_draws, n_params = size(result.theta_draws)
+    ps = posterior_summary(result)
+
+    # Summary table
+    spec_data = Any[
+        "Method"                string(result.method);
+        "Parameters"            n_params;
+        "Posterior draws"       n_draws;
+        "Log marginal lik."    round(result.log_marginal_likelihood; digits=4);
+        "Acceptance rate"      round(result.acceptance_rate; digits=4);
+        "Tempering stages"     length(result.phi_schedule);
+    ]
+    _pretty_table(io, spec_data;
+        title="Bayesian DSGE Estimation",
+        column_labels=["", ""],
+        alignment=[:l, :r])
+
+    # Posterior summary table
+    pnames = [string(s) for s in result.param_names]
+    means = [ps[n][:mean] for n in result.param_names]
+    stds = [ps[n][:std] for n in result.param_names]
+    medians = [ps[n][:median] for n in result.param_names]
+    ci_lo = [ps[n][:ci_lower] for n in result.param_names]
+    ci_hi = [ps[n][:ci_upper] for n in result.param_names]
+
+    post_data = hcat(pnames, round.(means; digits=4), round.(stds; digits=4),
+                     round.(medians; digits=4), round.(ci_lo; digits=4),
+                     round.(ci_hi; digits=4))
+    _pretty_table(io, post_data;
+        title="Posterior Summary",
+        column_labels=["Parameter", "Mean", "Std", "Median", "2.5%", "97.5%"],
+        alignment=[:l, :r, :r, :r, :r, :r])
+
+    # Prior vs posterior table
+    pt = prior_posterior_table(result)
+    if !isempty(pt)
+        n_rows = length(pt)
+        pp_data = Matrix{Any}(undef, n_rows, 8)
+        for (ri, row) in enumerate(pt)
+            pp_data[ri, 1] = string(row.param)
+            pp_data[ri, 2] = row.prior_dist
+            pp_data[ri, 3] = round(row.prior_mean; digits=4)
+            pp_data[ri, 4] = round(row.prior_std; digits=4)
+            pp_data[ri, 5] = round(row.post_mean; digits=4)
+            pp_data[ri, 6] = round(row.post_std; digits=4)
+            pp_data[ri, 7] = round(row.ci_lower; digits=4)
+            pp_data[ri, 8] = round(row.ci_upper; digits=4)
+        end
+        _pretty_table(io, pp_data;
+            title="Prior vs Posterior",
+            column_labels=["Parameter", "Prior", "Prior Mean", "Prior Std",
+                          "Post Mean", "Post Std", "2.5%", "97.5%"],
+            alignment=[:l, :l, :r, :r, :r, :r, :r, :r])
+    end
+end

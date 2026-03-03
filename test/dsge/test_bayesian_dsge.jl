@@ -1373,4 +1373,152 @@ end
     end
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 8: Display, Report, Refs, Plot
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "BayesianDSGE show" begin
+    _suppress_warnings() do
+    rng = Random.MersenneTwister(42)
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:gensys)
+    sim_data = simulate(sol, 200; rng=rng)
+
+    priors = Dict(:ρ => Beta(2, 2))
+    result = estimate_dsge_bayes(spec, sim_data, [0.5];
+        priors=priors, method=:smc, observables=[:y],
+        n_smc=100, rng=Random.MersenneTwister(1))
+
+    io = IOBuffer()
+    show(io, result)
+    output = String(take!(io))
+
+    @test occursin("Bayesian DSGE Estimation", output)
+    @test occursin("Method", output)
+    @test occursin("Posterior Summary", output)
+    @test occursin("Parameter", output)
+    @test occursin("Mean", output)
+    @test occursin("Std", output)
+    @test occursin("Prior vs Posterior", output)
+    end
+end
+
+@testset "BayesianDSGE report" begin
+    _suppress_warnings() do
+    rng = Random.MersenneTwister(42)
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:gensys)
+    sim_data = simulate(sol, 200; rng=rng)
+
+    priors = Dict(:ρ => Beta(2, 2))
+    result = estimate_dsge_bayes(spec, sim_data, [0.5];
+        priors=priors, method=:smc, observables=[:y],
+        n_smc=100, rng=Random.MersenneTwister(1))
+
+    # report() calls show(stdout, result); capture stdout
+    io = IOBuffer()
+    show(io, result)
+    output = String(take!(io))
+    @test occursin("Bayesian DSGE Estimation", output)
+    @test occursin("Log marginal lik.", output)
+    end
+end
+
+@testset "BayesianDSGE refs" begin
+    _suppress_warnings() do
+    rng = Random.MersenneTwister(42)
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:gensys)
+    sim_data = simulate(sol, 200; rng=rng)
+
+    priors = Dict(:ρ => Beta(2, 2))
+    result = estimate_dsge_bayes(spec, sim_data, [0.5];
+        priors=priors, method=:smc, observables=[:y],
+        n_smc=100, rng=Random.MersenneTwister(1))
+
+    io = IOBuffer()
+    refs(io, result)
+    output = String(take!(io))
+    @test occursin("Herbst", output)
+    @test occursin("Schorfheide", output)
+    end
+end
+
+@testset "plot_result(BayesianDSGE)" begin
+    _suppress_warnings() do
+    rng = Random.MersenneTwister(42)
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:gensys)
+    sim_data = simulate(sol, 200; rng=rng)
+
+    priors = Dict(:ρ => Beta(2, 2))
+    result = estimate_dsge_bayes(spec, sim_data, [0.5];
+        priors=priors, method=:smc, observables=[:y],
+        n_smc=100, rng=Random.MersenneTwister(1))
+
+    p = plot_result(result)
+    @test p isa PlotOutput
+    @test occursin("d3", p.html)
+    @test occursin("Prior", p.html)
+    @test occursin("Posterior", p.html)
+    @test occursin("Bayesian DSGE", p.html)
+    end
+end
+
+@testset "StatsAPI methods for BayesianDSGE" begin
+    _suppress_warnings() do
+    rng = Random.MersenneTwister(42)
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:gensys)
+    sim_data = simulate(sol, 200; rng=rng)
+
+    priors = Dict(:ρ => Beta(2, 2))
+    result = estimate_dsge_bayes(spec, sim_data, [0.5];
+        priors=priors, method=:smc, observables=[:y],
+        n_smc=100, rng=Random.MersenneTwister(1))
+
+    c = StatsAPI.coef(result)
+    @test length(c) == 1
+    @test isfinite(c[1])
+    @test c[1] ≈ mean(result.theta_draws[:, 1])
+
+    @test StatsAPI.islinear(result) == false
+    end
+end
+
 end  # @testset "Bayesian DSGE"
