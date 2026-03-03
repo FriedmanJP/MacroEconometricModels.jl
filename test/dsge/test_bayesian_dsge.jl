@@ -2406,4 +2406,40 @@ end
     end
 end
 
+@testset "PFI solver warm-starting with initial_coeffs" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    sol1 = solve(spec; method=:pfi, degree=3, scale=5.0)
+    coeffs1 = sol1.coefficients
+
+    # Warm-start with own coefficients → same result
+    sol2 = solve(spec; method=:pfi, degree=3, scale=5.0,
+                 initial_coeffs=copy(coeffs1))
+    @test sol2 isa MacroEconometricModels.ProjectionSolution
+    @test isapprox(sol2.coefficients, coeffs1, atol=1e-6)
+
+    # Warm-start at nearby parameter
+    spec2 = @dsge begin
+        parameters: ρ = 0.85, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec2 = compute_steady_state(spec2)
+    sol3 = solve(spec2; method=:pfi, degree=3, scale=5.0,
+                 initial_coeffs=copy(coeffs1))
+    @test sol3 isa MacroEconometricModels.ProjectionSolution
+    @test isfinite(MacroEconometricModels.max_euler_error(sol3))
+    end
+end
+
 end  # @testset "Bayesian DSGE"
