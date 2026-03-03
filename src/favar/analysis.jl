@@ -57,6 +57,58 @@ function historical_decomposition(favar::FAVARModel{T}, horizon::Int=effective_n
 end
 
 # =============================================================================
+# Bayesian FAVAR Structural Analysis (via BVARPosterior delegation)
+# =============================================================================
+
+"""
+    _to_bvar_posterior(bfavar::BayesianFAVAR) -> BVARPosterior
+
+Convert a BayesianFAVAR to a BVARPosterior for delegation to existing
+Bayesian structural analysis methods (IRF, FEVD, HD).
+"""
+function _to_bvar_posterior(bfavar::BayesianFAVAR{T}) where {T}
+    BVARPosterior{T}(
+        bfavar.B_draws,
+        bfavar.Sigma_draws,
+        size(bfavar.B_draws, 1),   # n_draws
+        bfavar.p,
+        bfavar.n,
+        bfavar.data,
+        :normal,                    # prior (placeholder)
+        :gibbs,                     # sampler
+        bfavar.varnames
+    )
+end
+
+"""
+    irf(bfavar::BayesianFAVAR, horizon; kwargs...) -> BayesianImpulseResponse
+
+Compute Bayesian IRFs for a Bayesian FAVAR by converting to BVARPosterior
+and delegating to the existing Bayesian IRF infrastructure.
+"""
+function irf(bfavar::BayesianFAVAR{T}, horizon::Int; kwargs...) where {T}
+    irf(_to_bvar_posterior(bfavar), horizon; kwargs...)
+end
+
+"""
+    fevd(bfavar::BayesianFAVAR, horizon; kwargs...) -> BayesianFEVD
+
+Compute Bayesian FEVD for a Bayesian FAVAR.
+"""
+function fevd(bfavar::BayesianFAVAR{T}, horizon::Int; kwargs...) where {T}
+    fevd(_to_bvar_posterior(bfavar), horizon; kwargs...)
+end
+
+"""
+    historical_decomposition(bfavar::BayesianFAVAR; kwargs...) -> BayesianHistoricalDecomposition
+
+Compute Bayesian historical decomposition for a Bayesian FAVAR.
+"""
+function historical_decomposition(bfavar::BayesianFAVAR{T}, horizon::Int=0; kwargs...) where {T}
+    historical_decomposition(_to_bvar_posterior(bfavar), horizon; kwargs...)
+end
+
+# =============================================================================
 # Panel-Wide IRF Mapping
 # =============================================================================
 
@@ -168,6 +220,82 @@ function favar_panel_irf(favar::FAVARModel{T}, irf_result::ImpulseResponse{T}) w
         irf_result.ci_type,
         nothing,
         irf_result._conf_level
+    )
+end
+
+"""
+    favar_panel_irf(bfavar::BayesianFAVAR, irf_result::BayesianImpulseResponse) -> BayesianImpulseResponse
+
+Map Bayesian factor-space IRFs to all N panel variables using posterior mean loadings.
+
+For each panel variable i and shock j:
+    panel_irf[h, i, j] = sum_k Lambda_mean[i, k] * irf_result.point_estimate[h, k, j]
+
+Key variables use their direct VAR IRF responses.
+
+# Arguments
+- `bfavar`: Estimated Bayesian FAVAR model
+- `irf_result`: Bayesian IRF computed on the FAVAR's augmented VAR system
+
+# Returns
+`BayesianImpulseResponse{T}` with N panel variables as the response dimension.
+"""
+function favar_panel_irf(bfavar::BayesianFAVAR{T}, irf_result::BayesianImpulseResponse{T}) where {T}
+    r = bfavar.n_factors
+    n_key = bfavar.n_key
+    N = size(bfavar.X_panel, 2)
+    n_aug = r + n_key
+    H = irf_result.horizon
+    n_q = length(irf_result.quantile_levels)
+
+    # Use posterior mean loadings for the mapping
+    Lambda = dropdims(mean(bfavar.loadings_draws, dims=1), dims=1)  # N x r
+
+    # Validate dimensions
+    n_shocks = size(irf_result.point_estimate, 3)
+    n_shocks == n_aug || throw(ArgumentError(
+        "IRF has $n_shocks shocks but Bayesian FAVAR has $n_aug VAR variables"))
+
+    # Map point estimate
+    panel_pe = zeros(T, H, N, n_shocks)
+    for h in 1:H, j in 1:n_shocks
+        factor_irfs_h = @view irf_result.point_estimate[h, 1:r, j]
+        panel_pe[h, :, j] = Lambda * factor_irfs_h
+    end
+
+    # Map quantiles
+    panel_q = zeros(T, H, N, n_shocks, n_q)
+    for qi in 1:n_q, h in 1:H, j in 1:n_shocks
+        factor_q_h = @view irf_result.quantiles[h, 1:r, j, qi]
+        panel_q[h, :, j, qi] = Lambda * factor_q_h
+    end
+
+    # Override key variables with direct VAR IRF
+    if !isempty(bfavar.Y_key_indices)
+        for (k_idx, panel_idx) in enumerate(bfavar.Y_key_indices)
+            if 1 <= panel_idx <= N
+                var_idx = r + k_idx
+                for h in 1:H, j in 1:n_shocks
+                    panel_pe[h, panel_idx, j] = irf_result.point_estimate[h, var_idx, j]
+                    for qi in 1:n_q
+                        panel_q[h, panel_idx, j, qi] = irf_result.quantiles[h, var_idx, j, qi]
+                    end
+                end
+            end
+        end
+    end
+
+    panel_var_names = copy(bfavar.panel_varnames)
+    shock_names = irf_result.shocks
+
+    BayesianImpulseResponse{T}(
+        panel_q,
+        panel_pe,
+        H,
+        panel_var_names,
+        shock_names,
+        irf_result.quantile_levels,
+        nothing  # no raw draws for panel mapping
     )
 end
 

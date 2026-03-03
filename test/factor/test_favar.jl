@@ -238,7 +238,7 @@ using MacroEconometricModels
         @test_throws ArgumentError estimate_favar(X, [1, 2], 2, 0)
 
         # Invalid method
-        @test_throws ArgumentError estimate_favar(X, [1, 2], 2, 1; method=:bayesian)
+        @test_throws ArgumentError estimate_favar(X, [1, 2], 2, 1; method=:invalid_method)
     end
 
     @testset "NaN/Inf data validation" begin
@@ -482,6 +482,182 @@ using MacroEconometricModels
 
         @test nlags(favar) == 4
         @test effective_nobs(favar) == 196
+    end
+
+    # =========================================================================
+    # Task 7: Bayesian FAVAR Estimation
+    # =========================================================================
+
+    @testset "Bayesian FAVAR estimation dimensions" begin
+        X, _ = make_favar_data(T_obs=150, N=20, r_true=2)
+        bfavar = estimate_favar(X, [1, 5], 2, 1; method=:bayesian, n_draws=50, burnin=20)
+
+        @test bfavar isa BayesianFAVAR{Float64}
+        @test bfavar.n_factors == 2
+        @test bfavar.n_key == 2
+        @test bfavar.n == 4  # r + n_key
+        @test bfavar.p == 1
+        @test size(bfavar.B_draws, 1) == 50  # n_draws
+        @test size(bfavar.B_draws, 2) == 1 + 4 * 1  # k = 1 + n * p
+        @test size(bfavar.B_draws, 3) == 4  # n_var
+        @test size(bfavar.Sigma_draws) == (50, 4, 4)
+        @test size(bfavar.factor_draws) == (50, 150, 2)
+        @test size(bfavar.loadings_draws) == (50, 20, 2)
+        @test size(bfavar.X_panel) == (150, 20)
+        @test size(bfavar.data) == (150, 4)
+        @test length(bfavar.varnames) == 4
+        @test length(bfavar.panel_varnames) == 20
+        @test bfavar.Y_key_indices == [1, 5]
+    end
+
+    @testset "Bayesian FAVAR types and finite values" begin
+        X, _ = make_favar_data(T_obs=100, N=15)
+        bfavar = estimate_favar(X, [1, 3], 2, 1; method=:bayesian, n_draws=30, burnin=10)
+
+        # B_draws should be finite
+        @test all(isfinite, bfavar.B_draws)
+        # Sigma_draws should be finite
+        @test all(isfinite, bfavar.Sigma_draws)
+        # Factor draws should be finite
+        @test all(isfinite, bfavar.factor_draws)
+        # Loadings should be finite
+        @test all(isfinite, bfavar.loadings_draws)
+    end
+
+    @testset "Bayesian FAVAR with column indices" begin
+        X, _ = make_favar_data(T_obs=100, N=20)
+        bfavar = estimate_favar(X, [3, 10], 2, 1; method=:bayesian, n_draws=30, burnin=10)
+
+        @test bfavar isa BayesianFAVAR{Float64}
+        @test bfavar.Y_key_indices == [3, 10]
+        @test bfavar.n_key == 2
+    end
+
+    @testset "Bayesian FAVAR with matrix Y_key" begin
+        X, _ = make_favar_data(T_obs=100, N=20)
+        Y_key = X[:, [2, 7]]
+        bfavar = estimate_favar(X, Y_key, 2, 1; method=:bayesian, n_draws=30, burnin=10)
+
+        @test bfavar isa BayesianFAVAR{Float64}
+        @test bfavar.n_factors == 2
+        @test bfavar.n_key == 2
+    end
+
+    @testset "Bayesian FAVAR display" begin
+        X, _ = make_favar_data(T_obs=100, N=15)
+        bfavar = estimate_favar(X, [1, 2], 2, 1; method=:bayesian, n_draws=30, burnin=10)
+
+        io = IOBuffer()
+        show(io, bfavar)
+        output = String(take!(io))
+        @test length(output) > 100
+        @test occursin("Bayesian FAVAR", output)
+        @test occursin("Equation", output)
+        @test occursin("Draws", output)
+    end
+
+    @testset "Bayesian FAVAR default burnin" begin
+        X, _ = make_favar_data(T_obs=100, N=15)
+        # burnin=0 should default to 200 internally
+        bfavar = estimate_favar(X, [1, 2], 2, 1; method=:bayesian, n_draws=30, burnin=0)
+        @test bfavar isa BayesianFAVAR{Float64}
+        @test size(bfavar.B_draws, 1) == 30
+    end
+
+    # =========================================================================
+    # Task 8: Bayesian FAVAR Structural Analysis
+    # =========================================================================
+
+    @testset "Bayesian FAVAR IRF" begin
+        X, _ = make_favar_data(T_obs=150, N=20, r_true=2)
+        bfavar = estimate_favar(X, [1, 5], 2, 1; method=:bayesian, n_draws=60, burnin=20)
+
+        irf_result = irf(bfavar, 10)
+        @test irf_result isa BayesianImpulseResponse{Float64}
+        @test irf_result.horizon == 10
+        @test size(irf_result.point_estimate) == (10, 4, 4)
+        @test length(irf_result.variables) == 4
+        @test length(irf_result.shocks) == 4
+        @test all(isfinite, irf_result.point_estimate)
+    end
+
+    @testset "Bayesian FAVAR FEVD" begin
+        X, _ = make_favar_data(T_obs=150, N=20, r_true=2)
+        bfavar = estimate_favar(X, [1, 5], 2, 1; method=:bayesian, n_draws=60, burnin=20)
+
+        fevd_result = fevd(bfavar, 10)
+        @test fevd_result isa BayesianFEVD{Float64}
+        @test fevd_result.horizon == 10
+        @test all(isfinite, fevd_result.point_estimate)
+    end
+
+    @testset "Bayesian FAVAR panel IRF" begin
+        X, _ = make_favar_data(T_obs=150, N=20, r_true=2)
+        bfavar = estimate_favar(X, [1, 5], 2, 1; method=:bayesian, n_draws=60, burnin=20)
+
+        irf_aug = irf(bfavar, 10)
+        panel_irf = favar_panel_irf(bfavar, irf_aug)
+
+        @test panel_irf isa BayesianImpulseResponse{Float64}
+        @test size(panel_irf.point_estimate) == (10, 20, 4)  # H x N x n_shocks
+        @test length(panel_irf.variables) == 20
+        @test panel_irf.variables == bfavar.panel_varnames
+        @test all(isfinite, panel_irf.point_estimate)
+    end
+
+    @testset "Bayesian FAVAR panel IRF key variable override" begin
+        X, _ = make_favar_data(T_obs=150, N=20, r_true=2)
+        bfavar = estimate_favar(X, [1, 5], 2, 1; method=:bayesian, n_draws=60, burnin=20)
+
+        irf_aug = irf(bfavar, 10)
+        panel_irf = favar_panel_irf(bfavar, irf_aug)
+
+        r = bfavar.n_factors
+        # Key variable IRFs should match their direct VAR IRFs
+        for (k_idx, panel_idx) in enumerate(bfavar.Y_key_indices)
+            var_idx = r + k_idx
+            for h in 1:10, j in 1:4
+                @test panel_irf.point_estimate[h, panel_idx, j] ==
+                      irf_aug.point_estimate[h, var_idx, j]
+            end
+        end
+    end
+
+    @testset "Bayesian FAVAR panel IRF loadings mapping" begin
+        X, _ = make_favar_data(T_obs=150, N=20, r_true=2)
+        bfavar = estimate_favar(X, [1, 5], 2, 1; method=:bayesian, n_draws=60, burnin=20)
+
+        irf_aug = irf(bfavar, 10)
+        panel_irf = favar_panel_irf(bfavar, irf_aug)
+
+        Lambda_mean = dropdims(mean(bfavar.loadings_draws, dims=1), dims=1)
+        r = bfavar.n_factors
+        key_set = Set(bfavar.Y_key_indices)
+
+        # Non-key variables should be mapped via loadings
+        for i in 1:20
+            if !(i in key_set)
+                for h in 1:10, j in 1:4
+                    factor_irfs = irf_aug.point_estimate[h, 1:r, j]
+                    expected = dot(Lambda_mean[i, :], factor_irfs)
+                    @test isapprox(panel_irf.point_estimate[h, i, j], expected; atol=1e-10)
+                end
+            end
+        end
+    end
+
+    @testset "_to_bvar_posterior conversion" begin
+        X, _ = make_favar_data(T_obs=100, N=15)
+        bfavar = estimate_favar(X, [1, 2], 2, 1; method=:bayesian, n_draws=30, burnin=10)
+
+        post = MacroEconometricModels._to_bvar_posterior(bfavar)
+        @test post isa BVARPosterior{Float64}
+        @test post.n_draws == 30
+        @test post.p == 1
+        @test post.n == 4  # r + n_key
+        @test post.varnames == bfavar.varnames
+        @test size(post.B_draws) == size(bfavar.B_draws)
+        @test size(post.Sigma_draws) == size(bfavar.Sigma_draws)
     end
 
 end  # @testset "FAVAR Tests"
