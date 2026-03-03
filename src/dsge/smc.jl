@@ -923,6 +923,8 @@ function _smc2_sample(spec::DSGESpec{T}, data::AbstractMatrix,
                        measurement_error=nothing,
                        solver::Symbol=:gensys,
                        solver_kwargs::NamedTuple=NamedTuple(),
+                       delayed_acceptance::Bool=false,
+                       n_screen::Int=200,
                        rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     data = Matrix{T}(data)
     n_params = length(param_names)
@@ -996,6 +998,19 @@ function _smc2_sample(spec::DSGESpec{T}, data::AbstractMatrix,
     solutions = Vector{Any}(undef, N)
     fill!(solutions, nothing)
 
+    # Delayed acceptance: screening workspace pool + cheap log-likelihoods
+    screen_pool = if delayed_acceptance
+        [_allocate_pf_workspace(T, n_states, n_obs, n_shocks, n_screen;
+                                nv=pf_nv, nx=pf_nx, order=pf_order, T_obs=T_obs,
+                                proj_nx=pf_proj_nx, proj_n_basis=pf_proj_n_basis,
+                                proj_max_degree=pf_proj_max_degree,
+                                proj_n_vars=pf_proj_n_vars)
+         for _ in 1:n_pool]
+    else
+        PFWorkspace{T}[]
+    end
+    ll_cheap = fill(T(-Inf), N)
+
     # Initialize θ-particles from prior
     theta_particles = zeros(T, n_params, N)
     log_priors = zeros(T, N)
@@ -1038,6 +1053,19 @@ function _smc2_sample(spec::DSGESpec{T}, data::AbstractMatrix,
             end
         else
             log_likelihoods[j] = pf_ll_fn(theta_particles[:, j], pool[ws_idx], thread_rng)
+        end
+    end
+
+    # Compute cheap screening likelihoods for delayed acceptance
+    if delayed_acceptance
+        for j in 1:N
+            ws_idx = mod1(j, n_pool)
+            screen_rng = Random.MersenneTwister(hash((j, UInt64(0xDA), rand(rng, UInt64))))
+            ll_cheap[j] = _solve_and_run_pf(spec, param_names,
+                                              theta_particles[:, j], observables,
+                                              measurement_error, solver, solver_kwargs,
+                                              screen_pool[ws_idx], data, T_obs, screen_rng;
+                                              store_trajectory=false)
         end
     end
 
@@ -1107,17 +1135,20 @@ function _smc2_sample(spec::DSGESpec{T}, data::AbstractMatrix,
             ll_new = similar(state.log_likelihoods)
             lp_new = similar(state.log_priors)
             sol_new = Vector{Any}(undef, N)
+            ll_cheap_new = similar(ll_cheap)
             @inbounds for j in 1:N
                 a = ancestors[j]
                 theta_new[:, j] = state.theta_particles[:, a]
                 ll_new[j] = state.log_likelihoods[a]
                 lp_new[j] = state.log_priors[a]
                 sol_new[j] = solutions[a]
+                ll_cheap_new[j] = ll_cheap[a]
             end
             state.theta_particles .= theta_new
             state.log_likelihoods .= ll_new
             state.log_priors .= lp_new
             solutions .= sol_new
+            ll_cheap .= ll_cheap_new
 
             fill!(state.log_weights, -log(T(N)))
         end

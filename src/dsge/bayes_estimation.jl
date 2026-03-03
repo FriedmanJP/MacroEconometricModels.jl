@@ -130,6 +130,8 @@ function estimate_dsge_bayes(spec::DSGESpec{T}, data::AbstractMatrix,
                               likelihood::Symbol=:auto,
                               solver::Symbol=:gensys,
                               solver_kwargs::NamedTuple=NamedTuple(),
+                              delayed_acceptance::Bool=false,
+                              n_screen::Int=200,
                               rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
 
     # ── 1. Build DSGEPrior from priors dict ──────────────────────────────
@@ -194,7 +196,9 @@ function estimate_dsge_bayes(spec::DSGESpec{T}, data::AbstractMatrix,
                               n_mh_steps=n_mh_steps, ess_target=ess_target,
                               observables=observables,
                               measurement_error=measurement_error,
-                              solver=solver, solver_kwargs=solver_kwargs, rng=rng)
+                              solver=solver, solver_kwargs=solver_kwargs,
+                              delayed_acceptance=delayed_acceptance,
+                              n_screen=n_screen, rng=rng)
         return _smc_state_to_bayesian_dsge(state, prior, param_names, spec, :smc2,
                                             observables, measurement_error,
                                             solver, solver_kwargs)

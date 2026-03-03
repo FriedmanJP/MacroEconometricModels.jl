@@ -2469,4 +2469,32 @@ end
     end
 end
 
+@testset "Delayed acceptance kwarg passthrough" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    data_obs = randn(MersenneTwister(42), 1, 30) .* 0.02
+    priors = Dict(:ρ => Normal(0.5, 0.2))
+    θ0 = [0.5]
+
+    # delayed_acceptance kwarg should be accepted and produce valid result
+    result = estimate_dsge_bayes(
+        spec, data_obs, θ0;
+        priors=priors, method=:smc2, observables=[:y],
+        n_smc=20, n_particles=50, n_mh_steps=2,
+        ess_target=0.5, measurement_error=[0.005],
+        solver=:projection, solver_kwargs=(degree=3, scale=5.0),
+        delayed_acceptance=true, n_screen=30,
+        rng=MersenneTwister(555))
+    @test result isa MacroEconometricModels.BayesianDSGE
+    @test isfinite(result.log_marginal_likelihood)
+    end
+end
+
 end  # @testset "Bayesian DSGE"
