@@ -146,6 +146,7 @@ include("factor/kalman.jl")
 include("factor/static.jl")
 include("factor/dynamic.jl")
 include("factor/generalized.jl")
+include("factor/structural.jl")
 
 # FAVAR types and estimation (after factor models, before nowcast)
 include("favar/types.jl")
@@ -517,6 +518,9 @@ export estimate_gdfm
 export ic_criteria_gdfm
 export common_variance_share
 export spectral_eigenvalue_plot_data
+
+# Structural DFM types and estimation
+export StructuralDFM, estimate_structural_dfm
 
 # FAVAR types and estimation
 export FAVARModel, BayesianFAVAR
