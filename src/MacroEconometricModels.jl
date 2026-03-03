@@ -274,6 +274,9 @@ include("dsge/pruning.jl")
 # DSGE estimation (after estimate_var, irf, estimate_gmm)
 include("dsge/estimation.jl")
 
+# DSGE Bayesian estimation (after estimation.jl, needs DSGESpec, solve, ParameterTransform)
+include("dsge/bayes_types.jl")
+
 # Display (after all types)
 include("summary.jl")
 
@@ -346,6 +349,9 @@ export AbstractDSGEModel
 
 # Types
 export DSGESpec, LinearDSGE, DSGESolution, PerturbationSolution, ProjectionSolution, PerfectForesightPath, DSGEEstimation
+
+# Bayesian DSGE
+export BayesianDSGE
 
 # Macro
 export @dsge
