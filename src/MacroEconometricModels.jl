@@ -116,6 +116,8 @@ include("teststat/kpss.jl")
 include("teststat/pp.jl")
 include("teststat/za.jl")
 include("teststat/ngperron.jl")
+include("teststat/andrews.jl")
+include("teststat/bai_perron.jl")
 include("teststat/johansen.jl")
 
 # VECM types and estimation (after johansen.jl for JohansenResult)
@@ -151,6 +153,12 @@ include("factor/structural.jl")
 # FAVAR types and estimation (after factor models, before nowcast)
 include("favar/types.jl")
 include("favar/estimation.jl")
+
+# Panel unit root tests (after factor models for estimate_factors + adf_test)
+include("teststat/panic.jl")
+include("teststat/pesaran_cips.jl")
+include("teststat/moon_perron.jl")
+include("teststat/factor_break.jl")
 
 # Nowcasting (after factor models for Kalman filter reuse)
 include("nowcast/types.jl")
@@ -417,6 +425,15 @@ export adf_test, kpss_test, pp_test, za_test, ngperron_test
 
 # Multivariate cointegration test
 export johansen_test
+
+# Structural break tests
+export andrews_test, bai_perron_test
+
+# Panel unit root tests
+export panic_test, pesaran_cips_test, moon_perron_test, panel_unit_root_summary
+
+# Factor model structural break tests
+export factor_break_test
 
 # Convenience functions
 export unit_root_summary, test_all_variables

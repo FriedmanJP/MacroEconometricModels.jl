@@ -20,8 +20,6 @@
 Andrews (1993) / Andrews-Ploberger (1994) structural break tests.
 """
 
-using LinearAlgebra: dot
-
 """
     andrews_test(y, X; test=:supwald, trimming=0.15) -> AndrewsResult
 
@@ -317,4 +315,61 @@ function _andrews_pvalue(stat::T, k::Int, functional::Symbol, ::Type{T2}=T) wher
         excess = (cv[10] - stat) / cv[10]
         return T(min(1.0, 0.10 + 0.90 * min(1.0, excess)))
     end
+end
+
+# =============================================================================
+# Display
+# =============================================================================
+
+function Base.show(io::IO, r::AndrewsResult{T}) where {T}
+    test_label = Dict(
+        :supwald => "Sup-Wald", :suplr => "Sup-LR", :suplm => "Sup-LM",
+        :expwald => "Exp-Wald", :explr => "Exp-LR", :explm => "Exp-LM",
+        :meanwald => "Mean-Wald", :meanlr => "Mean-LR", :meanlm => "Mean-LM",
+    )
+    label = get(test_label, r.test_type, string(r.test_type))
+
+    spec_data = Any[
+        "H₀"                "No structural break";
+        "H₁"                "Single structural break at unknown date";
+        "Test type"          label;
+        "Parameters tested"  r.n_params;
+        "Trimming fraction"  round(r.trimming, digits=2);
+        "Observations"       r.nobs
+    ]
+    _pretty_table(io, spec_data;
+        title = "Andrews (1993) Structural Break Test",
+        column_labels = ["Specification", ""],
+        alignment = [:l, :r],
+    )
+
+    stars = _significance_stars(r.pvalue)
+    results_data = Any[
+        "Test statistic" string(round(r.statistic, digits=4), " ", stars);
+        "P-value" _format_pvalue(r.pvalue);
+        "Break date (index)" r.break_index;
+        "Break fraction" round(r.break_fraction, digits=3)
+    ]
+    _pretty_table(io, results_data;
+        title = "Results",
+        column_labels = ["", "Value"],
+        alignment = [:l, :r],
+    )
+
+    cv_data = Matrix{Any}(undef, 1, 3)
+    cv_data[1, :] = [round(r.critical_values[1], digits=3),
+                     round(r.critical_values[5], digits=3),
+                     round(r.critical_values[10], digits=3)]
+    _pretty_table(io, cv_data;
+        title = "Critical Values",
+        column_labels = ["1%", "5%", "10%"],
+        alignment = :r,
+    )
+
+    reject = r.pvalue < 0.05
+    conclusion = reject ?
+        "Reject H₀ at 5% level: evidence of a structural break at observation $(r.break_index)" :
+        "Fail to reject H₀: no significant structural break detected"
+    conc_data = Any["Conclusion" conclusion; "Note" "*** p<0.01, ** p<0.05, * p<0.10"]
+    _pretty_table(io, conc_data; column_labels=["",""], alignment=[:l,:l])
 end

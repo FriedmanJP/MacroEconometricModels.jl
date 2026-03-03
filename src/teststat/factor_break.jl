@@ -384,3 +384,60 @@ function _han_inoue_pvalue(stat::T, k::Int) where {T<:AbstractFloat}
         return clamp(pval, T(0.10), one(T))
     end
 end
+
+# =============================================================================
+# Display
+# =============================================================================
+
+function Base.show(io::IO, r::FactorBreakResult{T}) where {T}
+    method_label = Dict(
+        :breitung_eickmeier => "Breitung-Eickmeier (2011) CUSUM",
+        :chen_dolado_gonzalo => "Chen-Dolado-Gonzalo (2014) Eigenvalue Ratio",
+        :han_inoue => "Han-Inoue (2015) Sup-Wald",
+    )
+    label = get(method_label, r.method, string(r.method))
+
+    spec_data = Any[
+        "H₀"            "Factor loadings are stable";
+        "H₁"            "Structural break in factor loadings";
+        "Method"         label;
+        "Factors"        r.n_factors;
+        "Variables (N)"  r.n_vars;
+        "Time (T)"       r.nobs
+    ]
+    _pretty_table(io, spec_data;
+        title = "Factor Model Structural Break Test",
+        column_labels = ["Specification", ""],
+        alignment = [:l, :r],
+    )
+
+    stars = _significance_stars(r.pvalue)
+    if r.break_date !== nothing
+        results_data = Any[
+            "Test statistic" string(round(r.statistic, digits=4), " ", stars);
+            "P-value" _format_pvalue(r.pvalue);
+            "Break date (index)" r.break_date
+        ]
+    else
+        results_data = Any[
+            "Test statistic" string(round(r.statistic, digits=4), " ", stars);
+            "P-value" _format_pvalue(r.pvalue)
+        ]
+    end
+    _pretty_table(io, results_data;
+        title = "Results",
+        column_labels = ["", "Value"],
+        alignment = [:l, :r],
+    )
+
+    reject = r.pvalue < 0.05
+    conclusion = if reject && r.break_date !== nothing
+        "Reject H₀ at 5% level: evidence of loading instability at observation $(r.break_date)"
+    elseif reject
+        "Reject H₀ at 5% level: evidence of loading instability"
+    else
+        "Fail to reject H₀: factor loadings appear stable"
+    end
+    conc_data = Any["Conclusion" conclusion; "Note" "*** p<0.01, ** p<0.05, * p<0.10"]
+    _pretty_table(io, conc_data; column_labels=["",""], alignment=[:l,:l])
+end

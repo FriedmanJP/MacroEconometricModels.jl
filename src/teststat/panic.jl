@@ -30,8 +30,6 @@ References:
   A Further Investigation. Econometric Theory, 26(4), 1088-1114.
 """
 
-using LinearAlgebra, Statistics, Distributions, StatsAPI
-
 # =============================================================================
 # PANIC Test
 # =============================================================================
@@ -121,7 +119,8 @@ function panic_test(X::AbstractMatrix{T};
     # Under H0, individual p-values ~ U(0,1), so Pa standardizes their sum
     # Pa = (sum(p_i) - N*0.5) / sqrt(N/12) -> N(0,1) under H0
     Pa = (sum(individual_pvals) - N * T(0.5)) / sqrt(N / T(12))
-    pooled_pval = T(2 * (1 - cdf(Normal(), abs(Pa))))
+    # Left-tailed: reject when Pa is large negative (many small p-values = stationarity)
+    pooled_pval = T(cdf(Normal(), Pa))
 
     PANICResult{T}(
         factor_adf_stats,

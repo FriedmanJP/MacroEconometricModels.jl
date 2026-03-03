@@ -28,8 +28,6 @@ References:
   dynamic factors. Journal of Econometrics, 122(1), 81-126.
 """
 
-using LinearAlgebra, Statistics, Distributions
-
 # =============================================================================
 # Moon-Perron Test
 # =============================================================================
@@ -179,9 +177,9 @@ function moon_perron_test(X::AbstractMatrix{T};
     # Compute t*_b
     t_b_star = se_b > T(1e-20) ? (sqrt(T(N)) * t_pool - correction_b) / se_b : zero(T)
 
-    # P-values: two-sided, N(0,1) under H0
-    pvalue_a = T(2 * (1 - cdf(Normal(), abs(t_a_star))))
-    pvalue_b = T(2 * (1 - cdf(Normal(), abs(t_b_star))))
+    # P-values: left-tailed, N(0,1) under H0 (reject for large negative values)
+    pvalue_a = T(cdf(Normal(), t_a_star))
+    pvalue_b = T(cdf(Normal(), t_b_star))
 
     MoonPerronResult{T}(
         t_a_star,
@@ -244,4 +242,72 @@ function Base.show(io::IO, r::MoonPerronResult{T}) where {T}
     end
     conc_data = Any["Conclusion" conclusion; "Note" "*** p<0.01, ** p<0.05, * p<0.10"]
     _pretty_table(io, conc_data; column_labels=["",""], alignment=[:l,:l])
+end
+
+# =============================================================================
+# Convenience: Panel Unit Root Summary
+# =============================================================================
+
+"""
+    panel_unit_root_summary(X; r=:auto, lags=:auto) -> Nothing
+
+Print a summary of three panel unit root tests: PANIC (Bai-Ng 2004),
+Pesaran CIPS (2007), and Moon-Perron (2004).
+
+# Arguments
+- `X::AbstractMatrix`: Panel data (T × N)
+- `r`: Number of factors for PANIC and Moon-Perron (`:auto` for IC selection)
+- `lags`: Number of lags for CIPS (`:auto` for T^{1/3} rule)
+
+# Example
+```julia
+X = randn(100, 20)
+panel_unit_root_summary(X; r=1)
+```
+"""
+function panel_unit_root_summary(X::AbstractMatrix; r::Union{Int,Symbol}=:auto,
+                                  lags::Union{Int,Symbol}=:auto)
+    panel_unit_root_summary(stdout, X; r=r, lags=lags)
+end
+
+function panel_unit_root_summary(io::IO, X::AbstractMatrix; r::Union{Int,Symbol}=:auto,
+                                  lags::Union{Int,Symbol}=:auto)
+    println(io, "\n", "="^60)
+    println(io, "  Panel Unit Root Test Battery")
+    println(io, "="^60, "\n")
+
+    # PANIC
+    try
+        r_panic = panic_test(X; r=r, method=:pooled)
+        show(io, r_panic)
+        println(io)
+    catch e
+        println(io, "PANIC test failed: ", sprint(showerror, e))
+    end
+
+    # Pesaran CIPS
+    try
+        r_cips = pesaran_cips_test(X; lags=lags, deterministic=:constant)
+        show(io, r_cips)
+        println(io)
+    catch e
+        println(io, "Pesaran CIPS test failed: ", sprint(showerror, e))
+    end
+
+    # Moon-Perron
+    try
+        r_mp = moon_perron_test(X; r=r)
+        show(io, r_mp)
+        println(io)
+    catch e
+        println(io, "Moon-Perron test failed: ", sprint(showerror, e))
+    end
+
+    nothing
+end
+
+# PanelData dispatch
+function panel_unit_root_summary(pd::PanelData; kwargs...)
+    X = _panel_to_matrix(pd)
+    panel_unit_root_summary(X; kwargs...)
 end

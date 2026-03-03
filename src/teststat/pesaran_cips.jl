@@ -27,8 +27,6 @@ References:
   cross-section dependence. Journal of Applied Econometrics, 22(2), 265-312.
 """
 
-using LinearAlgebra, Statistics, Distributions
-
 # =============================================================================
 # Pesaran CIPS Test
 # =============================================================================
