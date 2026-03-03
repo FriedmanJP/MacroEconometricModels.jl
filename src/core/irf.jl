@@ -201,10 +201,10 @@ end
 # =============================================================================
 
 """
-    irf(post::BVARPosterior, horizon; method=:cholesky, quantiles=[0.16, 0.5, 0.84], point_estimate=:median, ...)
+    irf(post::BVARPosterior, horizon; method=:cholesky, quantiles=[0.16, 0.5, 0.84], point_estimate=:mean, ...)
 
 Compute Bayesian IRFs from posterior draws with posterior quantiles.
-Uses posterior median as central tendency by default (pass `point_estimate=:mean` for mean).
+Uses posterior mean as central tendency by default (pass `point_estimate=:median` for median).
 
 # Methods
 `:cholesky`, `:sign`, `:narrative`, `:long_run`,
@@ -220,7 +220,7 @@ Uses `process_posterior_samples` and `compute_posterior_quantiles` from bayesian
 function irf(post::BVARPosterior, horizon::Int;
     method::Symbol=:cholesky, data::AbstractMatrix=Matrix{Float64}(undef, 0, 0),
     check_func=nothing, narrative_check=nothing, quantiles::Vector{<:Real}=[0.16, 0.5, 0.84],
-    threaded::Bool=false, point_estimate::Symbol=:median,
+    threaded::Bool=false, point_estimate::Symbol=:mean,
     transition_var::Union{Nothing,AbstractVector}=nothing,
     regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing
 )
