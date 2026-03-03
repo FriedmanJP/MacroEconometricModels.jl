@@ -12,15 +12,15 @@ A comprehensive Julia package for macroeconomic time series analysis.
 
 **Univariate:** ARIMA, ARCH/GARCH, Stochastic Volatility, HP/Hamilton/BN/BK/Boosted HP filters
 
-**Multivariate:** VAR, VECM, Bayesian VAR, Local Projections, Factor Models
+**Multivariate:** VAR, VECM, Bayesian VAR, Local Projections, Factor Models, FAVAR, Structural DFM
 
 **Panel:** Panel VAR (FD-GMM, System GMM, FE-OLS), Difference-in-Differences (TWFE, Callaway-Sant'Anna, Sun-Abraham, BJS, dCDH, HonestDiD), Event Study LP
 
-**DSGE:** 6 solvers (Gensys, Blanchard-Kahn, Klein, higher-order perturbation with pruning, Chebyshev projection, PFI), constrained solvers (Ipopt NLP, PATH MCP for ZLB/binding bounds), OccBin, GMM/SMM estimation
+**DSGE:** 6 solvers (Gensys, Blanchard-Kahn, Klein, 2nd/3rd-order perturbation with pruning, Chebyshev projection, PFI), constrained solvers (Ipopt NLP, PATH MCP for ZLB/binding bounds), OccBin, GMM/SMM estimation, Bayesian estimation (SMC/SMC²/MH)
 
 **Estimation:** OLS, MLE, GMM, SMM, Bayesian (Gibbs/conjugate), Kalman filter/smoother
 
-**Features:** IRF, FEVD, historical decomposition, structural identification, nowcasting, hypothesis testing, interactive D3.js visualization
+**Features:** IRF, FEVD, historical decomposition, structural identification, nowcasting, structural break detection, panel unit root tests, hypothesis testing, interactive D3.js visualization
 
 ## Installation
 
@@ -69,6 +69,10 @@ Pkg.add("MacroEconometricModels")
   - Dynamic Factor Models (two-step and EM estimation)
   - Generalized Dynamic Factor Models (spectral methods, Forni et al. 2000)
   - Unified forecasting with theoretical (analytical) and bootstrap confidence intervals for all three factor model types
+- **FAVAR** - Factor-Augmented VAR (Bernanke, Boivin & Eliasz 2005):
+  - Two-step estimation (PCA + VAR) and Bayesian Gibbs (Carter-Kohn smoother + NIW)
+  - `favar_panel_irf` maps factor IRFs to N observables via loadings
+- **Structural DFM** - Structural dynamic factor model wrapping GDFM + VAR for identified factor shocks
 
 ### Panel Models
 - **Panel VAR (PVAR)** - GMM estimation for dynamic panel data:
@@ -97,14 +101,15 @@ Pkg.add("MacroEconometricModels")
 - **Model specification** - `@dsge` macro with declarative syntax for parameters, variables, shocks, and equilibrium equations
 - **Steady state** - Numerical solver (Newton's method) or analytical closed-form; optional JuMP constraints (`variable_bound`, `nonlinear_constraint`)
 - **Linear solvers** - Gensys (Sims 2002), Blanchard-Kahn (1980), Klein (2000) via unified `solve(spec; method=...)` interface
-- **Higher-order perturbation** - 2nd/3rd order (Schmitt-Grohe & Uribe 2004) with Kim et al. (2008) pruning for stable simulation
+- **Higher-order perturbation** - 2nd-order (Schmitt-Grohe & Uribe 2004) and 3rd-order with Andreasen, Fernandez-Villaverde & Rubio-Ramirez (2018) pruned simulation; Kim et al. (2008) 2nd-order pruning
 - **Global methods** - Chebyshev collocation (tensor/Smolyak grids, Gauss-Hermite quadrature; Judd 1998); Policy Function Iteration (Coleman 1990, Rendahl 2017)
 - **Constrained solvers** - Auto-detect PATH (MCP, binding bounds/ZLB; Ferris & Munson 1999) or Ipopt (NLP, nonlinear inequalities) via JuMP extensions
 - **Perfect foresight** - Newton solver on stacked system with block-tridiagonal Jacobian; optional PATH/Ipopt constraints
 - **OccBin** - Occasionally binding constraints via piecewise-linear regime switching (Guerrieri & Iacoviello 2015)
 - **Simulation & IRF** - `simulate`, `irf`, `fevd` for linear, pruned higher-order, and projection solutions
 - **Analytical moments** - Lyapunov equation for unconditional covariance; `analytical_moments` for theoretical autocovariance
-- **Estimation** - IRF matching, Euler equation GMM, SMM, analytical GMM via `estimate_dsge`
+- **GMM Estimation** - IRF matching, Euler equation GMM, SMM, analytical GMM via `estimate_dsge`
+- **Bayesian Estimation** - Sequential Monte Carlo (SMC with adaptive tempering), SMC² with particle filter likelihood, random-walk Metropolis-Hastings; delayed acceptance for accelerated sampling; nonlinear particle filter for higher-order solutions via `estimate_dsge_bayes`
 
 ### GMM
 - **Generalized Method of Moments** - One-step, two-step, and iterated; Hansen J-test
@@ -151,16 +156,20 @@ Pkg.add("MacroEconometricModels")
 - See Lewis (2025) for a comprehensive review
 
 ### Hypothesis Tests
-- **Unit Root Tests** - ADF, KPSS, Phillips-Perron, Zivot-Andrews, Ng-Perron
+- **Unit Root Tests** - ADF, KPSS, Phillips-Perron, Zivot-Andrews, Ng-Perron (MZa, MZt, MSB, MPT)
 - **Cointegration** - Johansen test (trace and max-eigenvalue)
-- **VAR** - Granger causality (pairwise and block Wald tests), stationarity diagnostics
+- **Structural Breaks** - Andrews (1993) SupWald/SupLM/SupLR with 9 test variants; Bai-Perron (1998) multiple break detection via dynamic programming with BIC/LWZ/sequential selection; factor break tests — Breitung-Eickmeier (2011), Chen-Dolado-Gonzalo (2014), Han-Inoue (2015)
+- **Panel Unit Root** - Bai-Ng (2004) PANIC with factor-adjusted pooled/individual tests; Pesaran (2007) CIPS with cross-sectional augmentation; Moon-Perron (2004) factor-adjusted t-statistics; `panel_unit_root_summary()` battery
+- **Granger Causality** - Pairwise and block Wald tests, all-pairs matrix
+- **Normality** - Jarque-Bera, Mardia multivariate, Doornik-Hansen, Henze-Zirkler, Royston; unified `normality_test_suite()`
+- **ARCH Diagnostics** - ARCH-LM test, Ljung-Box on squared residuals
 - **Panel VAR** - Hansen J-test for overidentifying restrictions, Andrews-Lu MMSC for lag/moment selection
 - **Model Comparison** - Likelihood ratio (LR) and Lagrange multiplier (LM/score) tests for nested models
 - **Stationarity diagnostics** - `unit_root_summary()`, `test_all_variables()`
 
 ### Visualization
 - **Interactive D3.js plots** - `plot_result()` renders self-contained HTML with inline D3.js v7 (no additional dependencies)
-  - 38 dispatch methods covering IRF, FEVD, historical decomposition, filters, forecasts, volatility models, factor models, data containers, nowcasting, and difference-in-differences
+  - 41 dispatch methods covering IRF, FEVD, historical decomposition, filters, forecasts, volatility models, factor models, data containers, nowcasting, and difference-in-differences
   - Three chart types: line (with confidence bands), stacked area, and bar charts
   - Interactive tooltips, responsive layout, multi-panel grid figures
   - `save_plot(p, "file.html")` saves to disk; `display_plot(p)` opens in browser; auto-renders in Jupyter
@@ -257,10 +266,20 @@ Full documentation available at [https://FriedmanJP.github.io/MacroEconometricMo
 - Roth, Jonathan. 2022. "Pretest with Caution: Event-Study Estimates after Testing for Parallel Trends." *American Economic Review: Insights* 4 (3): 305–322. [https://doi.org/10.1257/aeri.20210236](https://doi.org/10.1257/aeri.20210236)
 - Sun, Liyang, and Sarah Abraham. 2021. "Estimating Dynamic Treatment Effects in Event Studies with Heterogeneous Treatment Effects." *Journal of Econometrics* 225 (2): 175–199. [https://doi.org/10.1016/j.jeconom.2020.09.006](https://doi.org/10.1016/j.jeconom.2020.09.006)
 
+### FAVAR
+
+- Bernanke, Ben S., Jean Boivin, and Piotr Eliasz. 2005. "Measuring the Effects of Monetary Policy: A Factor-Augmented Vector Autoregressive (FAVAR) Approach." *Quarterly Journal of Economics* 120 (1): 387–422. [https://doi.org/10.1162/0033553053327452](https://doi.org/10.1162/0033553053327452)
+
 ### DSGE
 
+- Andreasen, Martin M., Jesús Fernández-Villaverde, and Juan F. Rubio-Ramírez. 2018. "The Pruned State-Space System for Non-Linear DSGE Models: Theory and Empirical Applications." *Review of Economic Studies* 85 (1): 1–49. [https://doi.org/10.1093/restud/rdx037](https://doi.org/10.1093/restud/rdx037)
 - Blanchard, Olivier Jean, and Charles M. Kahn. 1980. "The Solution of Linear Difference Models Under Rational Expectations." *Econometrica* 48 (5): 1305–1311. [https://doi.org/10.2307/1912186](https://doi.org/10.2307/1912186)
+- Guerrieri, Luca, and Matteo Iacoviello. 2015. "OccBin: A Toolkit for Solving Dynamic Models with Occasionally Binding Constraints Easily." *Journal of Monetary Economics* 70: 22–38. [https://doi.org/10.1016/j.jmoneco.2014.08.005](https://doi.org/10.1016/j.jmoneco.2014.08.005)
 - Hamilton, James D. 1994. *Time Series Analysis*. Princeton: Princeton University Press. ISBN 978-0-691-04289-3.
+- Herbst, Edward, and Frank Schorfheide. 2015. *Bayesian Estimation of DSGE Models*. Princeton: Princeton University Press. ISBN 978-0-691-16108-2.
+- Kim, Jinill, Sunghyun Kim, Ernst Schaumburg, and Christopher A. Sims. 2008. "Calculating and Using Second-Order Accurate Solutions of Discrete Time Dynamic Equilibrium Models." *Journal of Economic Dynamics and Control* 32 (11): 3397–3414. [https://doi.org/10.1016/j.jedc.2008.02.003](https://doi.org/10.1016/j.jedc.2008.02.003)
+- Klein, Paul. 2000. "Using the Generalized Schur Form to Solve a Multivariate Linear Rational Expectations Model." *Journal of Economic Dynamics and Control* 24 (10): 1405–1423. [https://doi.org/10.1016/S0165-1889(99)00045-7](https://doi.org/10.1016/S0165-1889(99)00045-7)
+- Schmitt-Grohé, Stephanie, and Martín Uribe. 2004. "Solving Dynamic General Equilibrium Models Using a Second-Order Approximation to the Policy Function." *Journal of Economic Dynamics and Control* 28 (4): 755–775. [https://doi.org/10.1016/S0165-1889(03)00043-5](https://doi.org/10.1016/S0165-1889(03)00043-5)
 - Sims, Christopher A. 2002. "Solving Linear Rational Expectations Models." *Computational Economics* 20 (1): 1–20. [https://doi.org/10.1023/A:1020517101123](https://doi.org/10.1023/A:1020517101123)
 
 ### GMM and Covariance Estimation
@@ -285,6 +304,18 @@ Full documentation available at [https://FriedmanJP.github.io/MacroEconometricMo
 - Johansen, Søren. 1991. "Estimation and Hypothesis Testing of Cointegration Vectors in Gaussian Vector Autoregressive Models." *Econometrica* 59 (6): 1551–1580. [https://doi.org/10.2307/2938278](https://doi.org/10.2307/2938278)
 - Kwiatkowski, Denis, Peter C. B. Phillips, Peter Schmidt, and Yongcheol Shin. 1992. "Testing the Null Hypothesis of Stationarity Against the Alternative of a Unit Root." *Journal of Econometrics* 54 (1–3): 159–178. [https://doi.org/10.1016/0304-4076(92)90104-Y](https://doi.org/10.1016/0304-4076(92)90104-Y)
 - Ng, Serena, and Pierre Perron. 2001. "Lag Length Selection and the Construction of Unit Root Tests with Good Size and Power." *Econometrica* 69 (6): 1519–1554. [https://doi.org/10.1111/1468-0262.00256](https://doi.org/10.1111/1468-0262.00256)
+
+### Structural Breaks
+
+- Andrews, Donald W. K. 1993. "Tests for Parameter Instability and Structural Change with Unknown Change Point." *Econometrica* 61 (4): 821–856. [https://doi.org/10.2307/2951764](https://doi.org/10.2307/2951764)
+- Bai, Jushan, and Pierre Perron. 1998. "Estimating and Testing Linear Models with Multiple Structural Changes." *Econometrica* 66 (1): 47–78. [https://doi.org/10.2307/2998540](https://doi.org/10.2307/2998540)
+- Breitung, Jörg, and Sandra Eickmeier. 2011. "Testing for Structural Breaks in Dynamic Factor Models." *Journal of Econometrics* 163 (1): 71–84. [https://doi.org/10.1016/j.jeconom.2010.11.008](https://doi.org/10.1016/j.jeconom.2010.11.008)
+
+### Panel Unit Root Tests
+
+- Bai, Jushan, and Serena Ng. 2004. "A PANIC Attack on Unit Roots and Cointegration." *Econometrica* 72 (4): 1127–1177. [https://doi.org/10.1111/j.1468-0262.2004.00528.x](https://doi.org/10.1111/j.1468-0262.2004.00528.x)
+- Moon, Hyungsik Roger, and Benoît Perron. 2004. "Testing for a Unit Root in Panels with Dynamic Factors." *Journal of Econometrics* 122 (1): 81–126. [https://doi.org/10.1016/j.jeconom.2003.10.020](https://doi.org/10.1016/j.jeconom.2003.10.020)
+- Pesaran, M. Hashem. 2007. "A Simple Panel Unit Root Test in the Presence of Cross-Section Dependence." *Journal of Applied Econometrics* 22 (2): 265–312. [https://doi.org/10.1002/jae.951](https://doi.org/10.1002/jae.951)
 
 ### Granger Causality
 
