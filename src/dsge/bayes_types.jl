@@ -289,6 +289,12 @@ Higher-order (pruning) buffers:
 - `particles_fo, particles_so` — 1st/2nd-order pruned state particles, nx x N (nothing if order < 2)
 - `particles_to` — 3rd-order pruned state particles, nx x N (nothing if order < 3)
 
+Projection/PFI buffers (Chebyshev batch evaluation):
+- `proj_scaled` — nx x N states scaled to [-1,1] (nothing if not projection)
+- `proj_cheb_1d` — (max_deg+1) x nx x N 1D Chebyshev polynomial values (nothing if not projection)
+- `proj_basis` — n_basis x N tensor-product basis (nothing if not projection)
+- `proj_policy` — n_vars x N policy deviations from steady state (nothing if not projection)
+
 Conditional SMC (CSMC):
 - `reference_trajectory` — n_states x T_obs reference path (nothing if no CSMC)
 - `reference_ancestors` — length-T_obs ancestor indices (nothing if no CSMC)
@@ -315,6 +321,12 @@ mutable struct PFWorkspace{T<:AbstractFloat}
     particles_so::Union{Nothing, Matrix{T}}
     particles_to::Union{Nothing, Matrix{T}}
 
+    # Projection-specific (Chebyshev batch evaluation)
+    proj_scaled::Union{Nothing, Matrix{T}}     # nx × N: states scaled to [-1,1]
+    proj_cheb_1d::Union{Nothing, Array{T,3}}   # (max_deg+1) × nx × N: 1D Chebyshev values
+    proj_basis::Union{Nothing, Matrix{T}}      # n_basis × N: tensor-product basis
+    proj_policy::Union{Nothing, Matrix{T}}     # n_vars × N: policy deviations
+
     # CSMC
     reference_trajectory::Union{Nothing, Matrix{T}}
     reference_ancestors::Union{Nothing, Vector{Int}}
@@ -322,7 +334,9 @@ end
 
 """
     _allocate_pf_workspace(::Type{T}, n_states, n_obs, n_shocks, N;
-                           nv=0, nx=0, order=1, T_obs=0) where {T}
+                           nv=0, nx=0, order=1, T_obs=0,
+                           proj_nx=0, proj_n_basis=0,
+                           proj_max_degree=0, proj_n_vars=0) where {T}
 
 Allocate a PFWorkspace with all required buffers.
 
@@ -335,11 +349,17 @@ Arguments:
 - `nx` — number of perturbation state variables (for pruning buffers)
 - `order` — perturbation order (1, 2, or 3)
 - `T_obs` — number of time periods (>0 enables CSMC reference trajectory)
+- `proj_nx` — number of projection state variables (>0 enables projection buffers)
+- `proj_n_basis` — number of Chebyshev basis functions
+- `proj_max_degree` — maximum Chebyshev polynomial degree
+- `proj_n_vars` — number of endogenous variables in projection policy
 """
 function _allocate_pf_workspace(::Type{T}, n_states::Int, n_obs::Int,
                                  n_shocks::Int, N::Int;
                                  nv::Int=0, nx::Int=0, order::Int=1,
-                                 T_obs::Int=0) where {T<:AbstractFloat}
+                                 T_obs::Int=0,
+                                 proj_nx::Int=0, proj_n_basis::Int=0,
+                                 proj_max_degree::Int=0, proj_n_vars::Int=0) where {T<:AbstractFloat}
     particles = zeros(T, n_states, N)
     particles_new = zeros(T, n_states, N)
     log_weights = zeros(T, N)
@@ -365,6 +385,12 @@ function _allocate_pf_workspace(::Type{T}, n_states::Int, n_obs::Int,
     particles_so = order >= 2 ? zeros(T, nx_eff, N) : nothing
     particles_to = order >= 3 ? zeros(T, nx_eff, N) : nothing
 
+    # Projection buffers
+    proj_scaled = proj_nx > 0 ? zeros(T, proj_nx, N) : nothing
+    proj_cheb_1d = proj_nx > 0 ? zeros(T, proj_max_degree + 1, proj_nx, N) : nothing
+    proj_basis = proj_n_basis > 0 ? zeros(T, proj_n_basis, N) : nothing
+    proj_policy = proj_n_vars > 0 ? zeros(T, proj_n_vars, N) : nothing
+
     # CSMC
     ref_traj = T_obs > 0 ? zeros(T, n_states, T_obs) : nothing
     ref_anc = T_obs > 0 ? zeros(Int, T_obs) : nothing
@@ -374,6 +400,7 @@ function _allocate_pf_workspace(::Type{T}, n_states::Int, n_obs::Int,
                    kron_buffer, kron3_buffer, kron_cross_buffer,
                    augmented_buffer, transition_scratch,
                    particles_fo, particles_so, particles_to,
+                   proj_scaled, proj_cheb_1d, proj_basis, proj_policy,
                    ref_traj, ref_anc)
 end
 
@@ -428,6 +455,24 @@ function _resize_pf_workspace!(ws::PFWorkspace{T}, N_new::Int) where {T}
     if ws.particles_to !== nothing
         nx = size(ws.particles_to, 1)
         ws.particles_to = zeros(T, nx, N_new)
+    end
+
+    # Projection buffers
+    if ws.proj_scaled !== nothing
+        nx_proj = size(ws.proj_scaled, 1)
+        ws.proj_scaled = zeros(T, nx_proj, N_new)
+    end
+    if ws.proj_cheb_1d !== nothing
+        deg_p1, nx_proj, _ = size(ws.proj_cheb_1d)
+        ws.proj_cheb_1d = zeros(T, deg_p1, nx_proj, N_new)
+    end
+    if ws.proj_basis !== nothing
+        n_basis = size(ws.proj_basis, 1)
+        ws.proj_basis = zeros(T, n_basis, N_new)
+    end
+    if ws.proj_policy !== nothing
+        n_vars = size(ws.proj_policy, 1)
+        ws.proj_policy = zeros(T, n_vars, N_new)
     end
     return ws
 end
