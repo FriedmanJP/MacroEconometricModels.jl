@@ -1194,29 +1194,77 @@ function _smc2_sample(spec::DSGESpec{T}, data::AbstractMatrix,
                     solver_kwargs
                 end
 
-                # Build state space for proposed parameters and run CSMC
-                ll_star, sol_star = _solve_and_run_pf(spec, param_names, theta_star,
-                                                       observables, measurement_error,
-                                                       solver, mh_solver_kwargs,
-                                                       ws, data, T_obs, thread_rng;
-                                                       use_csmc=true, return_solution=true)
+                if delayed_acceptance
+                    # ── Two-stage delayed acceptance (Christen & Fox 2005) ──
+                    # Stage 1: cheap bootstrap PF screening
+                    ws_screen = screen_pool[mod1(Threads.threadid(), length(screen_pool))]
+                    ll_cheap_star = _solve_and_run_pf(
+                        spec, param_names, theta_star, observables, measurement_error,
+                        solver, mh_solver_kwargs, ws_screen, data, T_obs, thread_rng)
 
-                if ll_star == T(-Inf)
-                    Threads.atomic_add!(total_proposed, 1)
-                    continue
-                end
+                    if ll_cheap_star == T(-Inf)
+                        Threads.atomic_add!(total_proposed, 1)
+                        continue
+                    end
 
-                # MH acceptance ratio (tempered)
-                log_alpha = (phi_new * ll_star + lp_star) - (phi_new * ll_j + lp_j)
+                    # Stage 1 acceptance ratio (using cheap likelihoods)
+                    log_alpha_1 = (phi_new * ll_cheap_star + lp_star) -
+                                  (phi_new * ll_cheap[j] + lp_j)
 
-                if log(rand(thread_rng, T)) < log_alpha
-                    theta_j = theta_star
-                    ll_j = ll_star
-                    lp_j = lp_star
-                    Threads.atomic_add!(total_accepted, 1)
-                    # Update cached solution for warm-starting
-                    if sol_star isa ProjectionSolution
-                        solutions[j] = sol_star
+                    if log(rand(thread_rng, T)) >= log_alpha_1
+                        # Stage 1 rejects — skip expensive CSMC
+                        Threads.atomic_add!(total_proposed, 1)
+                        continue
+                    end
+
+                    # Stage 2: full CSMC (only reached if Stage 1 accepts)
+                    ll_star, sol_star = _solve_and_run_pf(
+                        spec, param_names, theta_star, observables, measurement_error,
+                        solver, mh_solver_kwargs, ws, data, T_obs, thread_rng;
+                        use_csmc=true, return_solution=true)
+
+                    if ll_star == T(-Inf)
+                        Threads.atomic_add!(total_proposed, 1)
+                        continue
+                    end
+
+                    # Stage 2 acceptance ratio (correction term)
+                    log_alpha_2 = phi_new * (ll_star - ll_cheap_star) -
+                                  phi_new * (ll_j - ll_cheap[j])
+
+                    if log(rand(thread_rng, T)) < log_alpha_2
+                        theta_j = theta_star
+                        ll_j = ll_star
+                        lp_j = lp_star
+                        ll_cheap[j] = ll_cheap_star
+                        if sol_star isa ProjectionSolution
+                            solutions[j] = sol_star
+                        end
+                        Threads.atomic_add!(total_accepted, 1)
+                    end
+                else
+                    # ── Standard single-stage MH ──
+                    ll_star, sol_star = _solve_and_run_pf(
+                        spec, param_names, theta_star, observables, measurement_error,
+                        solver, mh_solver_kwargs, ws, data, T_obs, thread_rng;
+                        use_csmc=true, return_solution=true)
+
+                    if ll_star == T(-Inf)
+                        Threads.atomic_add!(total_proposed, 1)
+                        continue
+                    end
+
+                    # MH acceptance ratio (tempered)
+                    log_alpha = (phi_new * ll_star + lp_star) - (phi_new * ll_j + lp_j)
+
+                    if log(rand(thread_rng, T)) < log_alpha
+                        theta_j = theta_star
+                        ll_j = ll_star
+                        lp_j = lp_star
+                        if sol_star isa ProjectionSolution
+                            solutions[j] = sol_star
+                        end
+                        Threads.atomic_add!(total_accepted, 1)
                     end
                 end
 

@@ -2497,4 +2497,47 @@ end
     end
 end
 
+@testset "Two-stage delayed acceptance MH correctness" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    data_obs = randn(MersenneTwister(42), 1, 50) .* 0.02
+    priors = Dict(:ρ => Normal(0.5, 0.2))
+    θ0 = [0.5]
+
+    # Run standard SMC²
+    result_std = estimate_dsge_bayes(
+        spec, data_obs, θ0;
+        priors=priors, method=:smc2, observables=[:y],
+        n_smc=40, n_particles=100, n_mh_steps=2,
+        ess_target=0.5, measurement_error=[0.005],
+        solver=:projection, solver_kwargs=(degree=3, scale=5.0),
+        rng=MersenneTwister(777))
+
+    # Run delayed acceptance SMC²
+    result_da = estimate_dsge_bayes(
+        spec, data_obs, θ0;
+        priors=priors, method=:smc2, observables=[:y],
+        n_smc=40, n_particles=100, n_mh_steps=2,
+        ess_target=0.5, measurement_error=[0.005],
+        solver=:projection, solver_kwargs=(degree=3, scale=5.0),
+        delayed_acceptance=true, n_screen=30,
+        rng=MersenneTwister(777))
+
+    @test result_da isa MacroEconometricModels.BayesianDSGE
+    @test isfinite(result_da.log_marginal_likelihood)
+
+    # Posterior means should be in same ballpark (both target same posterior)
+    rho_std = mean(result_std.theta_draws[:, 1])
+    rho_da = mean(result_da.theta_draws[:, 1])
+    @test abs(rho_std - rho_da) < 0.3  # same ballpark, Monte Carlo variance
+    end
+end
+
 end  # @testset "Bayesian DSGE"
