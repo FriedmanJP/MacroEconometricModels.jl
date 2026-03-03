@@ -1210,3 +1210,120 @@ function _pf_transition_projection!(ws::PFWorkspace{T},
 
     return nothing
 end
+
+"""
+    _pf_initialize_projection!(ws, pss; rng)
+
+Initialize particles from the first-order stationary distribution for a
+projection/PFI state space. Draws states from N(ss, P0) where P0 is computed
+from the impact matrix, then evaluates the policy function to fill controls.
+"""
+function _pf_initialize_projection!(ws::PFWorkspace{T},
+                                      pss::ProjectionStateSpace{T};
+                                      rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    N = size(ws.particles, 2)
+    nx = length(pss.state_indices)
+    n_endog = length(pss.steady_state)
+
+    # Compute approximate P0 from impact matrix
+    impact_state = pss.impact[pss.state_indices, :]
+    Sigma_state = impact_state * impact_state'
+
+    # Scale by a diffuse factor for reasonable initial dispersion
+    P0 = T(10) * Sigma_state
+
+    # Cholesky for drawing with jitter fallback
+    chol_P0 = try
+        cholesky(Symmetric(P0))
+    catch
+        cholesky(Symmetric(P0 + T(1e-8) * I))
+    end
+    L = chol_P0.L
+
+    # Draw initial states around steady state
+    temp = randn(rng, T, nx, N)
+    state_draws = L * temp
+
+    # Place in particles at state indices + steady state
+    @inbounds for i in 1:n_endog
+        ss_i = pss.steady_state[i]
+        @simd for k in 1:N
+            ws.particles[i, k] = ss_i
+        end
+    end
+    @inbounds for (ii, si) in enumerate(pss.state_indices)
+        @simd for k in 1:N
+            ws.particles[si, k] = pss.steady_state[si] + state_draws[ii, k]
+        end
+    end
+
+    # Clamp to bounds
+    @inbounds for (ii, si) in enumerate(pss.state_indices)
+        lb = pss.state_bounds[ii, 1]
+        ub = pss.state_bounds[ii, 2]
+        @simd for k in 1:N
+            ws.particles[si, k] = clamp(ws.particles[si, k], lb, ub)
+        end
+    end
+
+    # Evaluate policy to fill controls (transition with zero shocks)
+    fill!(ws.shocks, zero(T))
+    _pf_transition_projection!(ws, pss)
+
+    return nothing
+end
+
+"""
+    _bootstrap_particle_filter!(ws, pss::ProjectionStateSpace, data, T_obs; ...)
+
+Bootstrap particle filter for projection/PFI state space.
+Uses batch Chebyshev evaluation for the nonlinear policy function.
+Same loop structure as linear/nonlinear PF variants.
+"""
+function _bootstrap_particle_filter!(ws::PFWorkspace{T}, pss::ProjectionStateSpace{T},
+                                       data::Matrix{T}, T_obs::Int;
+                                       threshold::Real=0.5,
+                                       rng::AbstractRNG=Random.default_rng(),
+                                       store_trajectory::Bool=false) where {T<:AbstractFloat}
+    N = size(ws.particles, 2)
+    n_obs = size(data, 1)
+    log_lik = zero(T)
+    log_N = log(T(N))
+
+    # Initialize from stationary distribution
+    _pf_initialize_projection!(ws, pss; rng=rng)
+
+    @inbounds for t in 1:T_obs
+        # Draw shocks
+        randn!(rng, ws.shocks)
+
+        # Propagate particles through nonlinear policy
+        _pf_transition_projection!(ws, pss)
+
+        # Compute observation log-weights
+        y_t = @view data[:, t]
+        _pf_log_weights!(ws.log_weights, ws.innovations, ws.tmp_obs,
+                          ws.particles, y_t, pss.Z, pss.d, pss.H_inv, pss.log_det_H)
+
+        # Accumulate log-likelihood
+        log_lik += _logsumexp(ws.log_weights) - log_N
+
+        # Normalize weights
+        _normalize_log_weights!(ws.weights, ws.log_weights)
+
+        # ESS-based adaptive resampling
+        ess = zero(T)
+        @simd for k in 1:N
+            ess += ws.weights[k]^2
+        end
+        ess = one(T) / ess
+
+        if ess < T(threshold) * T(N)
+            _systematic_resample!(ws.ancestors, ws.weights, ws.cumweights, N, rng)
+            _resample_particles!(ws.particles_new, ws.particles, ws.ancestors)
+            ws.particles, ws.particles_new = ws.particles_new, ws.particles
+        end
+    end
+
+    return log_lik
+end
