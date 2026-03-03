@@ -628,6 +628,17 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         journal="Journal of Business \\& Economic Statistics", volume="29", issue="2",
         pages="238--249", doi="10.1198/jbes.2010.07136", isbn="", publisher="",
         entry_type=:article),
+    # --- FAVAR & Structural DFM ---
+    :bernanke_boivin_eliasz2005 => (key=:bernanke_boivin_eliasz2005,
+        authors="Bernanke, Ben S. and Boivin, Jean and Eliasz, Piotr", year=2005,
+        title="Measuring the Effects of Monetary Policy: A Factor-Augmented Vector Autoregressive (FAVAR) Approach",
+        journal="Quarterly Journal of Economics", volume="120", issue="1", pages="387--422",
+        doi="10.1162/0033553053970344", isbn="", publisher="", entry_type=:article),
+    :forni_giannone_lippi_reichlin2009 => (key=:forni_giannone_lippi_reichlin2009,
+        authors="Forni, Mario and Giannone, Domenico and Lippi, Marco and Reichlin, Lucrezia", year=2009,
+        title="Opening the Black Box: Structural Factor Models with Large Cross Sections",
+        journal="Econometric Theory", volume="25", issue="5", pages="1319--1347",
+        doi="10.1017/S026646660809052X", isbn="", publisher="", entry_type=:article),
 )
 
 # --- Type/method → reference keys mapping ---
@@ -670,6 +681,12 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :DynamicFactorModel => [:stock_watson2002],
     :GeneralizedDynamicFactorModel => [:stock_watson2002],
     :FactorForecast => [:stock_watson2002],
+    # FAVAR & Structural DFM
+    :FAVARModel => [:bernanke_boivin_eliasz2005, :stock_watson2002],
+    :BayesianFAVAR => [:bernanke_boivin_eliasz2005, :stock_watson2002],
+    :StructuralDFM => [:forni_giannone_lippi_reichlin2009, :stock_watson2002],
+    :favar => [:bernanke_boivin_eliasz2005, :stock_watson2002],
+    :structural_dfm => [:forni_giannone_lippi_reichlin2009, :stock_watson2002],
     # Unit Root Tests
     :ADFResult => [:dickey_fuller1979],
     :KPSSResult => [:kpss1992],
@@ -1051,6 +1068,11 @@ refs(io::IO, ::FactorModel; kw...) = refs(io, _TYPE_REFS[:FactorModel]; kw...)
 refs(io::IO, ::DynamicFactorModel; kw...) = refs(io, _TYPE_REFS[:DynamicFactorModel]; kw...)
 refs(io::IO, ::GeneralizedDynamicFactorModel; kw...) = refs(io, _TYPE_REFS[:GeneralizedDynamicFactorModel]; kw...)
 refs(io::IO, ::FactorForecast; kw...) = refs(io, _TYPE_REFS[:FactorForecast]; kw...)
+
+# FAVAR & Structural DFM
+refs(io::IO, ::FAVARModel; kw...) = refs(io, _TYPE_REFS[:FAVARModel]; kw...)
+refs(io::IO, ::BayesianFAVAR; kw...) = refs(io, _TYPE_REFS[:BayesianFAVAR]; kw...)
+refs(io::IO, ::StructuralDFM; kw...) = refs(io, _TYPE_REFS[:StructuralDFM]; kw...)
 
 # Unit root tests
 refs(io::IO, ::ADFResult; kw...) = refs(io, _TYPE_REFS[:ADFResult]; kw...)

@@ -612,3 +612,102 @@ function _render_occbin_panel_js(id::String, data_json::String,
 })();
 """
 end
+
+# =============================================================================
+# FAVARModel
+# =============================================================================
+
+"""
+    plot_result(m::FAVARModel; title="", save_path=nothing)
+
+Plot FAVAR model: extracted factor series.
+"""
+function plot_result(m::FAVARModel{T};
+                     title::String="", save_path::Union{String,Nothing}=nothing) where {T}
+    r = m.n_factors
+    n_plot = min(r, 5)
+    fac_names = ["Factor $i" for i in 1:n_plot]
+    fac_colors = _PLOT_COLORS[1:n_plot]
+    data2 = _timeseries_data_json(m.factors[:, 1:n_plot], fac_names)
+    s2 = _series_json(fac_names, fac_colors; keys=["v$i" for i in 1:n_plot])
+
+    id = _next_plot_id("favar_fac")
+    js = _render_line_js(id, data2, s2; xlabel="Period", ylabel="Factor Value")
+    p1 = _PanelSpec(id, "Extracted Factors", js)
+
+    if isempty(title)
+        title = "FAVAR Model (r=$(m.n_factors), p=$(m.p))"
+    end
+
+    p = _make_plot([p1]; title=title, ncols=1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+# =============================================================================
+# BayesianFAVAR
+# =============================================================================
+
+"""
+    plot_result(m::BayesianFAVAR; title="", save_path=nothing)
+
+Plot Bayesian FAVAR: posterior mean factor series with 68% credible intervals.
+"""
+function plot_result(m::BayesianFAVAR{T};
+                     title::String="", save_path::Union{String,Nothing}=nothing) where {T}
+    r = m.n_factors
+    n_plot = min(r, 5)
+    F_mean = dropdims(mean(m.factor_draws, dims=1), dims=1)  # T_obs x r
+    F_lo = dropdims(mapslices(x -> quantile(x, 0.16), m.factor_draws; dims=1), dims=1)
+    F_hi = dropdims(mapslices(x -> quantile(x, 0.84), m.factor_draws; dims=1), dims=1)
+
+    panels = _PanelSpec[]
+    for j in 1:n_plot
+        id = _next_plot_id("bfavar_f")
+        fname = "Factor $j"
+        T_obs = size(F_mean, 1)
+
+        # Build data with mean + lo + hi
+        rows = Vector{Pair{String,String}}[]
+        for t in 1:T_obs
+            push!(rows, [
+                "x" => _json(t),
+                "mean" => _json(F_mean[t, j]),
+                "lo" => _json(F_lo[t, j]),
+                "hi" => _json(F_hi[t, j])
+            ])
+        end
+        data_json = _json_array_of_objects(rows)
+
+        s_json = _series_json([fname], [_PLOT_COLORS[j]]; keys=["mean"])
+        bands_json = "[{\"lo_key\":\"lo\",\"hi_key\":\"hi\",\"color\":\"$(_PLOT_COLORS[j])\",\"alpha\":$(_PLOT_CI_ALPHA)}]"
+        js = _render_line_js(id, data_json, s_json;
+                             bands_json=bands_json, xlabel="Period", ylabel="")
+        push!(panels, _PanelSpec(id, "$fname (68% CI)", js))
+    end
+
+    if isempty(title)
+        title = "Bayesian FAVAR (r=$(m.n_factors), p=$(m.p))"
+    end
+
+    p = _make_plot(panels; title=title, ncols=min(n_plot, 2))
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+# =============================================================================
+# StructuralDFM
+# =============================================================================
+
+"""
+    plot_result(m::StructuralDFM; title="", save_path=nothing, var=nothing, ncols=0)
+
+Plot Structural DFM: structural IRFs for panel variables.
+"""
+function plot_result(m::StructuralDFM{T};
+                     title::String="", save_path::Union{String,Nothing}=nothing,
+                     var::Union{Nothing,Int,String}=nothing, ncols::Int=0) where {T}
+    r = irf(m, size(m.structural_irf, 1))
+    plot_result(r; title=isempty(title) ? "Structural DFM IRFs" : title,
+                save_path=save_path, var=var, ncols=ncols)
+end
