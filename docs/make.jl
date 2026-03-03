@@ -31,6 +31,7 @@ makedocs(;
             "VECM" => "vecm.md",
             "Local Projections" => "lp.md",
             "Factor Models" => "factormodels.md",
+            "FAVAR" => "favar.md",
         ],
         "Panel Models" => [
             "Panel VAR" => "pvar.md",
