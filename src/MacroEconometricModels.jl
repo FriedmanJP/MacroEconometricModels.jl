@@ -408,6 +408,9 @@ export AbstractUnitRootTest
 # Result types
 export ADFResult, KPSSResult, PPResult, ZAResult, NgPerronResult
 export JohansenResult, VARStationarityResult
+export AndrewsResult, BaiPerronResult
+export PANICResult, PesaranCIPSResult, MoonPerronResult
+export FactorBreakResult
 
 # Univariate unit root tests
 export adf_test, kpss_test, pp_test, za_test, ngperron_test
