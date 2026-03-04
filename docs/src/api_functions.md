@@ -452,7 +452,7 @@ transform_jacobian
 
 ```@autodocs
 Modules = [MacroEconometricModels]
-Pages   = ["teststat/adf.jl", "teststat/kpss.jl", "teststat/pp.jl", "teststat/za.jl", "teststat/ngperron.jl", "teststat/johansen.jl", "teststat/stationarity.jl", "teststat/convenience.jl"]
+Pages   = ["teststat/adf.jl", "teststat/kpss.jl", "teststat/pp.jl", "teststat/za.jl", "teststat/ngperron.jl", "teststat/johansen.jl", "teststat/fourier.jl", "teststat/dfgls.jl", "teststat/lm_unitroot.jl", "teststat/adf_2break.jl", "teststat/gregory_hansen.jl", "teststat/stationarity.jl", "teststat/convenience.jl"]
 Order   = [:function]
 ```
 
