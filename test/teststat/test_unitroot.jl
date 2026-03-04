@@ -268,6 +268,18 @@ using Statistics
 
         # MPT should be positive
         @test result_rw.MPT > zero(result_rw.MPT)
+
+        # Regression test: GLS detrending should use original Z, not quasi-differenced Z
+        # After fix, MZt for stationary AR(1) with rho=0.3 should be more negative
+        # than for a random walk
+        rng_np = Random.MersenneTwister(99887)
+        y_ar_np = zeros(200)
+        y_ar_np[1] = randn(rng_np)
+        for t in 2:200; y_ar_np[t] = 0.3 * y_ar_np[t-1] + randn(rng_np); end
+        result_ar_np = ngperron_test(y_ar_np; regression=:trend)
+        y_rw_np = cumsum(randn(rng_np, 200))
+        result_rw_np = ngperron_test(y_rw_np; regression=:trend)
+        @test result_ar_np.MZt < result_rw_np.MZt  # stationary should be more negative
     end
 
     # ==========================================================================
