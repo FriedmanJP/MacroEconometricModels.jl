@@ -285,6 +285,20 @@ function plot_result(eslp::EventStudyLP{T};
     p
 end
 
+function plot_result(r::LPDiDResult{T};
+                     title::String="", save_path::Union{String,Nothing}=nothing) where {T}
+    eslp = EventStudyLP{T}(r.coefficients, r.se, r.ci_lower, r.ci_upper,
+                           r.event_times, r.reference_period,
+                           [zeros(T,1,1) for _ in r.event_times],
+                           [zeros(T,0,1) for _ in r.event_times],
+                           r.vcov, r.nobs_per_horizon,
+                           r.outcome_var, r.treatment_var,
+                           r.T_obs, r.n_groups, r.ylags, r.pre_window, r.post_window,
+                           true, r.cluster, r.conf_level, r.data)
+    plot_result(eslp; title=isempty(title) ? "LP-DiD (Dube et al. 2025)" : title,
+                save_path=save_path)
+end
+
 # =============================================================================
 # BaconDecomposition — Scatter Plot
 # =============================================================================

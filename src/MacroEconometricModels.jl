@@ -640,7 +640,7 @@ export pvar_hansen_j, pvar_mmsc, pvar_lag_selection
 # =============================================================================
 
 # Types
-export DIDResult, EventStudyLP, BaconDecomposition
+export DIDResult, EventStudyLP, LPDiDResult, BaconDecomposition
 export PretrendTestResult, NegativeWeightResult, HonestDiDResult
 
 # Estimation

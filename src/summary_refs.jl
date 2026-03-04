@@ -949,6 +949,7 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     # DiD / Event Study
     :DIDResult => [:callaway_santanna2021, :goodman_bacon2021],
     :EventStudyLP => [:jorda2005, :dube_girardi_jorda_taylor2023],
+    :LPDiDResult => [:dube_girardi_jorda_taylor2023, :jorda2005],
     :BaconDecomposition => [:goodman_bacon2021],
     :PretrendTestResult => [:callaway_santanna2021],
     :NegativeWeightResult => [:dechaisemartin_dhaultfoeuille2020],
@@ -1286,6 +1287,7 @@ refs(io::IO, ::PVARTestResult; kw...) = refs(io, _TYPE_REFS[:PVARTestResult]; kw
 # DiD / Event Study
 refs(io::IO, ::DIDResult; kw...) = refs(io, _TYPE_REFS[:DIDResult]; kw...)
 refs(io::IO, ::EventStudyLP; kw...) = refs(io, _TYPE_REFS[:EventStudyLP]; kw...)
+refs(io::IO, ::LPDiDResult; kw...) = refs(io, _TYPE_REFS[:LPDiDResult]; kw...)
 refs(io::IO, ::BaconDecomposition; kw...) = refs(io, _TYPE_REFS[:BaconDecomposition]; kw...)
 refs(io::IO, ::PretrendTestResult; kw...) = refs(io, _TYPE_REFS[:PretrendTestResult]; kw...)
 refs(io::IO, ::NegativeWeightResult; kw...) = refs(io, _TYPE_REFS[:NegativeWeightResult]; kw...)
