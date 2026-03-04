@@ -743,6 +743,23 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Tests for Parameter Instability in Dynamic Factor Models",
         journal="Econometric Theory", volume="31", issue="5", pages="1117--1152",
         doi="10.1017/S0266466614000413", isbn="", publisher="", entry_type=:article),
+    # --- Cross-Sectional Models ---
+    :wooldridge2010 => (key=:wooldridge2010, authors="Wooldridge, Jeffrey M.", year=2010,
+        title="Econometric Analysis of Cross Section and Panel Data", journal="",
+        volume="", issue="", pages="", doi="",
+        isbn="978-0-262-23258-6", publisher="MIT Press", entry_type=:book),
+    :cameron_trivedi2005 => (key=:cameron_trivedi2005, authors="Cameron, A. Colin and Trivedi, Pravin K.", year=2005,
+        title="Microeconometrics: Methods and Applications", journal="",
+        volume="", issue="", pages="", doi="",
+        isbn="978-0-521-84805-3", publisher="Cambridge University Press", entry_type=:book),
+    :mcfadden1974 => (key=:mcfadden1974, authors="McFadden, Daniel", year=1974,
+        title="Conditional Logit Analysis of Qualitative Choice Behavior",
+        journal="Frontiers in Econometrics", volume="", issue="", pages="105--142",
+        doi="", isbn="", publisher="Academic Press", entry_type=:incollection),
+    :staiger_stock1997 => (key=:staiger_stock1997, authors="Staiger, Douglas and Stock, James H.", year=1997,
+        title="Instrumental Variables Regression with Weak Instruments",
+        journal="Econometrica", volume="65", issue="3", pages="557--586",
+        doi="10.2307/2171753", isbn="", publisher="", entry_type=:article),
 )
 
 # --- Type/method → reference keys mapping ---
@@ -981,6 +998,15 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :fred_md => [:mccracken_ng2016],
     :fred_qd => [:mccracken_ng2020],
     :pwt => [:feenstra_etal2015],
+    # Cross-sectional models
+    :RegModel => [:wooldridge2010, :white1980],
+    :LogitModel => [:wooldridge2010, :cameron_trivedi2005, :mcfadden1974],
+    :ProbitModel => [:wooldridge2010, :cameron_trivedi2005],
+    :MarginalEffects => [:cameron_trivedi2005],
+    :estimate_reg => [:wooldridge2010, :white1980],
+    :estimate_iv => [:wooldridge2010, :staiger_stock1997],
+    :estimate_logit => [:wooldridge2010, :cameron_trivedi2005, :mcfadden1974],
+    :estimate_probit => [:wooldridge2010, :cameron_trivedi2005],
 )
 
 # ICA method → additional ref keys (appended to ICASVARResult base refs)
@@ -1332,6 +1358,12 @@ refs(io::IO, ::MoonPerronResult; kw...) = refs(io, _TYPE_REFS[:MoonPerronResult]
 
 # Factor break types
 refs(io::IO, ::FactorBreakResult; kw...) = refs(io, _TYPE_REFS[:FactorBreakResult]; kw...)
+
+# Cross-sectional models
+refs(io::IO, m::RegModel; kw...) = refs(io, m.method == :iv ? [:wooldridge2010, :white1980, :staiger_stock1997] : [:wooldridge2010, :white1980]; kw...)
+refs(io::IO, ::LogitModel; kw...) = refs(io, _TYPE_REFS[:LogitModel]; kw...)
+refs(io::IO, ::ProbitModel; kw...) = refs(io, _TYPE_REFS[:ProbitModel]; kw...)
+refs(io::IO, ::MarginalEffects; kw...) = refs(io, _TYPE_REFS[:MarginalEffects]; kw...)
 
 # --- Convenience: stdout fallback ---
 function refs(x; kw...)

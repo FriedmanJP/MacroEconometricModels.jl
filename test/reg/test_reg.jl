@@ -1457,3 +1457,155 @@ end
     end
 
 end
+
+# =============================================================================
+# Task 11: Report and Refs
+# =============================================================================
+
+@testset "Report and Refs (Task 11)" begin
+
+    @testset "report() produces output" begin
+        rng = MersenneTwister(11001)
+        n = 200
+        X = hcat(ones(n), randn(rng, n, 2))
+        y = X * [1.0, 2.0, -1.0] + randn(rng, n)
+
+        m = estimate_reg(y, X; varnames=["(Intercept)", "x1", "x2"])
+
+        # OLS report
+        io = IOBuffer()
+        show(io, m)
+        output = String(take!(io))
+        @test occursin("OLS Regression", output)
+        @test occursin("(Intercept)", output)
+
+        # Logit report
+        y_bin = Float64.(y .> 0)
+        m_logit = estimate_logit(y_bin, X)
+        io2 = IOBuffer()
+        show(io2, m_logit)
+        output2 = String(take!(io2))
+        @test occursin("Logit Regression", output2)
+
+        # Probit report
+        m_probit = estimate_probit(y_bin, X)
+        io3 = IOBuffer()
+        show(io3, m_probit)
+        output3 = String(take!(io3))
+        @test occursin("Probit Regression", output3)
+
+        # MarginalEffects report
+        me = marginal_effects(m_logit)
+        io4 = IOBuffer()
+        show(io4, me)
+        output4 = String(take!(io4))
+        @test occursin("Marginal Effects", output4)
+    end
+
+    @testset "refs() for cross-sectional models" begin
+        rng = MersenneTwister(11002)
+        n = 200
+        X = hcat(ones(n), randn(rng, n))
+        y = X * [1.0, 2.0] + randn(rng, n)
+
+        m = estimate_reg(y, X)
+        r = refs(m)
+        @test r isa String
+        @test occursin("White", r) || occursin("Wooldridge", r)
+
+        # Logit refs
+        y_bin = Float64.(y .> 0)
+        m_logit = estimate_logit(y_bin, X)
+        r2 = refs(m_logit)
+        @test r2 isa String
+        @test occursin("Wooldridge", r2) || occursin("Cameron", r2)
+
+        # Probit refs
+        m_probit = estimate_probit(y_bin, X)
+        r3 = refs(m_probit)
+        @test r3 isa String
+    end
+end
+
+# =============================================================================
+# Task 12: CrossSectionData Dispatch Wrappers
+# =============================================================================
+
+@testset "CrossSectionData Dispatch (Task 12)" begin
+    using DataFrames
+
+    @testset "OLS via CrossSectionData" begin
+        rng = MersenneTwister(12001)
+        n = 200
+        df = DataFrame(
+            y = zeros(n),
+            x1 = randn(rng, n),
+            x2 = randn(rng, n)
+        )
+        df.y .= 1.0 .+ 2.0 .* df.x1 .- 0.5 .* df.x2 .+ 0.3 .* randn(rng, n)
+
+        d = CrossSectionData(df)
+
+        m = estimate_reg(d, :y, [:x1, :x2])
+        @test m isa RegModel
+        @test length(coef(m)) == 3  # intercept + 2
+        @test m.varnames == ["(Intercept)", "x1", "x2"]
+
+        # Same result as raw matrix
+        X = hcat(ones(n), Matrix(df[:, [:x1, :x2]]))
+        m2 = estimate_reg(Vector{Float64}(df.y), X; varnames=["(Intercept)", "x1", "x2"])
+        @test coef(m) ≈ coef(m2) atol=1e-10
+    end
+
+    @testset "Logit/Probit via CrossSectionData" begin
+        rng = MersenneTwister(12002)
+        n = 300
+        df = DataFrame(
+            x1 = randn(rng, n),
+            x2 = randn(rng, n)
+        )
+        eta = 0.5 .+ 1.0 .* df.x1 .- 0.5 .* df.x2
+        df.y_bin = Float64.(rand(rng, n) .< 1.0 ./ (1.0 .+ exp.(-eta)))
+
+        d = CrossSectionData(df)
+
+        m_logit = estimate_logit(d, :y_bin, [:x1, :x2])
+        @test m_logit isa LogitModel
+        @test length(coef(m_logit)) == 3
+        @test m_logit.varnames == ["(Intercept)", "x1", "x2"]
+
+        m_probit = estimate_probit(d, :y_bin, [:x1, :x2])
+        @test m_probit isa ProbitModel
+        @test length(coef(m_probit)) == 3
+    end
+
+    @testset "IV via CrossSectionData" begin
+        rng = MersenneTwister(12003)
+        n = 500
+        df = DataFrame(
+            z1 = randn(rng, n),
+            z2 = randn(rng, n)
+        )
+        v = randn(rng, n)
+        u = 0.5 * v + randn(rng, n)
+        df.x_endog = 0.5 .* df.z1 .+ 0.3 .* df.z2 .+ v
+        df.y = 1.0 .+ 2.0 .* df.x_endog .+ u
+
+        d = CrossSectionData(df)
+
+        m = estimate_iv(d, :y, [:x_endog], [:z1, :z2]; endogenous=[:x_endog])
+        @test m isa RegModel
+        @test m.method == :iv
+        @test length(coef(m)) == 2
+        @test m.varnames == ["(Intercept)", "x_endog"]
+    end
+
+    @testset "CrossSectionData variable not found" begin
+        rng = MersenneTwister(12004)
+        df = DataFrame(x1 = randn(rng, 50), y = randn(rng, 50))
+        d = CrossSectionData(df)
+
+        @test_throws ArgumentError estimate_reg(d, :nonexistent, [:x1])
+        @test_throws ArgumentError estimate_reg(d, :y, [:nonexistent])
+    end
+end
