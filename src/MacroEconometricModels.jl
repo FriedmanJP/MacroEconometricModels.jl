@@ -99,6 +99,11 @@ include("data/panel.jl")
 include("data/summary_stats.jl")
 include("data/examples.jl")
 
+# Cross-sectional regression
+include("reg/types.jl")
+include("reg/covariance.jl")
+include("reg/estimation.jl")
+
 # VAR types and estimation
 include("var/types.jl")
 include("var/estimation.jl")
@@ -784,6 +789,16 @@ export to_matrix, to_vector
 
 # Examples
 export load_example
+
+# =============================================================================
+# Exports - Cross-Sectional Regression
+# =============================================================================
+
+# Types
+export RegModel, LogitModel, ProbitModel, MarginalEffects
+
+# Estimation
+export estimate_reg
 
 # =============================================================================
 # Exports - Plotting
