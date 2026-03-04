@@ -79,6 +79,7 @@ const TEST_GROUPS = [
         "factor/test_structural_dfm.jl",
         "nowcast/test_nowcast.jl",
         "did/test_did.jl",
+        "did/test_lpdid.jl",
     ]),
     # Group 5: ARIMA & Statistical Tests & Data & PVAR
     ("ARIMA & Tests & Data" => [
@@ -287,6 +288,7 @@ else
         @testset "Structural DFM" begin include("factor/test_structural_dfm.jl") end
         @testset "Nowcasting" begin include("nowcast/test_nowcast.jl") end
         @testset "Difference-in-Differences" begin include("did/test_did.jl") end
+        @testset "LP-DiD" begin include("did/test_lpdid.jl") end
 
         # Group 5: ARIMA & Tests & Data
         @testset "Unit Root Tests" begin include("teststat/test_unitroot.jl") end

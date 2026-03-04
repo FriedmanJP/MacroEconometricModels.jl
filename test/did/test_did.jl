@@ -254,16 +254,16 @@ end
     end
 
     # =========================================================================
-    # LP-DiD (Dube et al. 2023)
+    # LP-DiD (Dube et al. 2025)
     # =========================================================================
     @testset "LP-DiD" begin
         pd, te = _make_did_panel(seed=500, n_units=60, n_periods=25)
 
         lpdid = estimate_lp_did(pd, "outcome", "treat_time", 5;
-                                 leads=3, lags=2, cluster=:unit)
+                                 pre_window=3, ylags=2, cluster=:unit)
 
-        @test lpdid isa EventStudyLP{Float64}
-        @test lpdid.clean_controls == true
+        @test lpdid isa LPDiDResult{Float64}
+        @test lpdid.specification == :absorbing
 
         # Should still have valid event times and coefficients
         @test length(lpdid.coefficients) == length(lpdid.event_times)
@@ -430,7 +430,7 @@ end
 
         # LP-DiD plot
         lpdid = estimate_lp_did(pd, "outcome", "treat_time", 5;
-                                 leads=3, lags=2)
+                                 pre_window=3, ylags=2)
         p_lpdid = plot_result(lpdid)
         @test p_lpdid isa PlotOutput
         @test occursin("LP-DiD", p_lpdid.html)
@@ -567,8 +567,8 @@ end
         @test eslp_sym isa EventStudyLP{Float64}
 
         lpdid_sym = estimate_lp_did(pd, :outcome, :treat_time, 3;
-                                     leads=2, lags=2)
-        @test lpdid_sym isa EventStudyLP{Float64}
+                                     pre_window=2, ylags=2)
+        @test lpdid_sym isa LPDiDResult{Float64}
 
         bd_sym = bacon_decomposition(pd, :outcome, :treat_time)
         @test bd_sym isa BaconDecomposition{Float64}
@@ -1107,7 +1107,7 @@ end
 
         # LP-DiD
         lpdid = estimate_lp_did(pd_c, "y", "tt", 3)
-        @test lpdid isa EventStudyLP{Float64}
+        @test lpdid isa LPDiDResult{Float64}
 
         # Diagnostics
         bacon = bacon_decomposition(pd_c, "y", "tt")

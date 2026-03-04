@@ -154,10 +154,14 @@ function estimate_lp_did(pd::PanelData{T}, outcome::Union{String,Symbol},
         end
     end
 
-    # Pooled regressions
-    pooled_post_result = _lpdid_pooled_regression(
-        pd, outcome_col, cov_cols, switching, ccs_post, panel_idx, all_times,
-        post_pooled, ylags, dylags, pmd, pmd_baseline, reweight, cluster, conf_level, true, T)
+    # Pooled regressions (skip when only_event=true)
+    pooled_post_result = if !only_event
+        _lpdid_pooled_regression(
+            pd, outcome_col, cov_cols, switching, ccs_post, panel_idx, all_times,
+            post_pooled, ylags, dylags, pmd, pmd_baseline, reweight, cluster, conf_level, true, T)
+    else
+        nothing
+    end
 
     pooled_pre_result = if !only_event && pre_pooled !== nothing
         _lpdid_pooled_regression(
