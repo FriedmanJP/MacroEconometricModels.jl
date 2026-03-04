@@ -1072,9 +1072,16 @@ end
     @test occursin("2", s)
 end
 
-@testset "constraints.jl: _check_jump_loaded (no JuMP)" begin
-    # Without JuMP extension, this should throw
-    @test_throws ArgumentError MacroEconometricModels._check_jump_loaded()
+@testset "constraints.jl: _check_jump_loaded" begin
+    # Behavior depends on whether JuMP extension is loaded
+    if hasmethod(MacroEconometricModels._jump_compute_steady_state,
+                 Tuple{MacroEconometricModels.DSGESpec, Vector})
+        # JuMP extension loaded (e.g., Pkg.test() environment) — should not throw
+        @test MacroEconometricModels._check_jump_loaded() === nothing
+    else
+        # No JuMP extension — should throw ArgumentError
+        @test_throws ArgumentError MacroEconometricModels._check_jump_loaded()
+    end
 end
 
 @testset "constraints.jl: _path_available" begin

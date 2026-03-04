@@ -116,6 +116,10 @@ const TEST_GROUPS = [
         "coverage/test_pvar_nongaussian_coverage.jl",
         "coverage/test_gmm_ext_coverage.jl",
         "coverage/test_misc_coverage.jl",
+        "coverage/test_teststat_break_panel_coverage.jl",
+        "coverage/test_dsge_bayes_coverage.jl",
+        "coverage/test_data_types_coverage.jl",
+        "coverage/test_display_coverage.jl",
     ]),
 ]
 
@@ -318,5 +322,9 @@ else
         @testset "PVAR & Non-Gaussian Coverage" begin include("coverage/test_pvar_nongaussian_coverage.jl") end
         @testset "GMM & Extension Coverage" begin include("coverage/test_gmm_ext_coverage.jl") end
         @testset "Misc Coverage" begin include("coverage/test_misc_coverage.jl") end
+        @testset "Structural Break & Panel Coverage" begin include("coverage/test_teststat_break_panel_coverage.jl") end
+        @testset "DSGE Bayesian Coverage" begin include("coverage/test_dsge_bayes_coverage.jl") end
+        @testset "Data Types Coverage" begin include("coverage/test_data_types_coverage.jl") end
+        @testset "Display & Plotting Coverage" begin include("coverage/test_display_coverage.jl") end
     end
 end
