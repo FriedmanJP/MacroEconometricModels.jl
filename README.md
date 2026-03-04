@@ -14,7 +14,7 @@ A comprehensive Julia package for macroeconomic time series analysis.
 
 **Multivariate:** VAR, VECM, Bayesian VAR, Local Projections, Factor Models, FAVAR, Structural DFM
 
-**Panel:** Panel VAR (FD-GMM, System GMM, FE-OLS), Difference-in-Differences (TWFE, Callaway-Sant'Anna, Sun-Abraham, BJS, dCDH, HonestDiD), Event Study LP
+**Panel:** Panel VAR (FD-GMM, System GMM, FE-OLS), Difference-in-Differences (TWFE, Callaway-Sant'Anna, Sun-Abraham, BJS, dCDH, HonestDiD), Event Study LP, LP-DiD (Dube et al. 2025)
 
 **DSGE:** 6 solvers (Gensys, Blanchard-Kahn, Klein, 2nd/3rd-order perturbation with pruning, Chebyshev projection, PFI), constrained solvers (Ipopt NLP, PATH MCP for ZLB/binding bounds), OccBin, GMM/SMM estimation, Bayesian estimation (SMC/SMC²/MH)
 
@@ -93,9 +93,14 @@ Pkg.add("MacroEconometricModels")
   - Diagnostics: Bacon decomposition (Goodman-Bacon 2021), pre-trend testing, negative weight checks
   - HonestDiD sensitivity analysis with relative magnitudes bounds and breakdown values (Rambachan & Roth 2023)
 - **Event Study LP** - Local projection event study for panel data:
-  - LP-DiD clean-control estimator (Dube et al. 2023) with panel fixed effects
+  - Switching indicator treatment with time-only FE (Acemoglu et al. 2019)
   - Flexible lead/lag window specification with clustered standard errors
   - Interactive D3.js event-study plots with confidence bands
+- **LP-DiD** - Full-featured LP-DiD estimator (Dube, Girardi, Jordà & Taylor 2025):
+  - Clean control samples (CCS): absorbing, non-absorbing, one-off treatment
+  - Pre-mean differencing (PMD), IPW reweighting, nocomp restriction
+  - Pooled post-treatment and pre-treatment estimates
+  - `panel_lag`, `panel_lead`, `panel_diff` for within-group transformations
 
 ### DSGE
 - **Model specification** - `@dsge` macro with declarative syntax for parameters, variables, shocks, and equilibrium equations
@@ -177,7 +182,7 @@ Pkg.add("MacroEconometricModels")
 
 ### Data Management
 - **Typed containers** - `TimeSeriesData`, `PanelData`, `CrossSectionData` with variable names, frequency, transformation codes, and descriptions
-- **Built-in datasets** - FRED-MD (126 monthly variables), FRED-QD (245 quarterly variables), and Penn World Table (38 OECD countries, 1950–2023 balanced panel)
+- **Built-in datasets** - FRED-MD (126 monthly variables), FRED-QD (245 quarterly variables), Penn World Table (38 OECD countries, 1950–2023), and DDCG democracy-GDP (184 countries, 1960–2010; Acemoglu et al. 2019)
 - **Data diagnostics** - `diagnose()` scans for NaN/Inf/constant columns; `fix()` cleans via listwise deletion, interpolation, or mean imputation
 - **FRED transformations** - `apply_tcode()` / `inverse_tcode()` for all 7 FRED transformation codes
 - **Filtering** - `apply_filter()` applies HP, Hamilton, BN, BK, or boosted HP per-variable to `TimeSeriesData` and `PanelData`
@@ -258,8 +263,10 @@ Full documentation available at [https://FriedmanJP.github.io/MacroEconometricMo
 
 ### Difference-in-Differences
 
+- Acemoglu, Daron, Suresh Naidu, Pascual Restrepo, and James A. Robinson. 2019. "Democracy Does Cause Growth." *Journal of Political Economy* 127 (1): 47–100. [https://doi.org/10.1086/700936](https://doi.org/10.1086/700936)
 - Borusyak, Kirill, Xavier Jaravel, and Jann Spiess. 2024. "Revisiting Event-Study Designs: Robust and Efficient Estimation." *Review of Economic Studies* 91 (6): 3253–3285. [https://doi.org/10.1093/restud/rdae007](https://doi.org/10.1093/restud/rdae007)
 - Callaway, Brantly, and Pedro H. C. Sant'Anna. 2021. "Difference-in-Differences with Multiple Time Periods." *Journal of Econometrics* 225 (2): 200–230. [https://doi.org/10.1016/j.jeconom.2020.12.001](https://doi.org/10.1016/j.jeconom.2020.12.001)
+- Dube, Arindrajit, Daniele Girardi, Óscar Jordà, and Alan M. Taylor. 2025. "A Local Projections Approach to Difference-in-Differences." *Journal of Applied Econometrics*. [https://doi.org/10.1002/jae.3117](https://doi.org/10.1002/jae.3117)
 - de Chaisemartin, Clement, and Xavier D'Haultfoeuille. 2020. "Two-Way Fixed Effects Estimators with Heterogeneous Treatment Effects." *American Economic Review* 110 (9): 2964–2996. [https://doi.org/10.1257/aer.20181169](https://doi.org/10.1257/aer.20181169)
 - Goodman-Bacon, Andrew. 2021. "Difference-in-Differences with Variation in Treatment Timing." *Journal of Econometrics* 225 (2): 254–277. [https://doi.org/10.1016/j.jeconom.2021.03.014](https://doi.org/10.1016/j.jeconom.2021.03.014)
 - Rambachan, Ashesh, and Jonathan Roth. 2023. "A More Credible Approach to Parallel Trends." *Review of Economic Studies* 90 (5): 2555–2591. [https://doi.org/10.1093/restud/rdad018](https://doi.org/10.1093/restud/rdad018)
