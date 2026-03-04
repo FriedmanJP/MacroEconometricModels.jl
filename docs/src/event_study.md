@@ -1,147 +1,271 @@
-# Event Study LP
+# Event Study & LP-DiD
 
-This page documents the **Event Study Local Projections** implementation in **MacroEconometricModels.jl**, providing LP-based event study estimation with panel fixed effects (Jorda 2005) and the LP-DiD estimator with clean controls (Dube et al. 2023).
+This page documents two LP-based event study estimators: the **Event Study LP** (Jordà 2005; Acemoglu et al. 2019) and the **LP-DiD** estimator (Dube, Girardi, Jordà, and Taylor 2025) with clean control samples, switching indicator treatment, and time-only fixed effects.
+
+- **Event Study LP** — horizon-by-horizon local projections with switching indicator treatment and time-only FE
+- **LP-DiD** — full-featured engine matching Stata `lpdid` v1.0.2: absorbing/non-absorbing/one-off CCS, PMD, IPW reweighting, pooled estimates
+- **DDCG dataset** — built-in Acemoglu et al. (2019) democracy-GDP panel (184 countries, 1960–2010)
+- **Panel utilities** — `panel_lag`, `panel_lead`, `panel_diff` for within-group transformations
 
 ## Quick Start
 
 ```julia
-using MacroEconometricModels
+using MacroEconometricModels, DataFrames, Random
 
-# Synthetic staggered treatment panel: 50 units, 20 periods
-using Random; Random.seed!(42)
-N, T_periods = 50, 20
-group_id = repeat(1:N, inner=T_periods)
-time_id = repeat(1:T_periods, outer=N)
-treat_timing = [i <= 25 ? 10 : (i <= 40 ? 14 : 0) for i in 1:N]
-treatment = [treat_timing[g] for g in group_id]
-y = randn(N * T_periods) .+ 0.5 .* [t >= treat_timing[g] && treat_timing[g] > 0 ? 1.0 : 0.0
-    for (g, t) in zip(group_id, time_id)]
-
-using DataFrames
-df = DataFrame(group=group_id, time=time_id, outcome=y, treat_time=Float64.(treatment))
+# --- Recipe 1: Standard Event Study LP ---
+Random.seed!(42)
+N, T_per = 50, 20
+df = DataFrame(
+    group = repeat(1:N, inner=T_per),
+    time = repeat(1:T_per, outer=N),
+    outcome = randn(N * T_per) .+ [i <= 25 && t >= 10 ? 1.0 : 0.0
+        for i in 1:N for t in 1:T_per],
+    treat = Float64.([i <= 25 ? 10 : 0 for i in 1:N for _ in 1:T_per])
+)
 pd = xtset(df, :group, :time)
+eslp = estimate_event_study_lp(pd, :outcome, :treat, 5; leads=3, lags=2)
+report(eslp)
 
-# Standard event study LP
-eslp = estimate_event_study_lp(pd, "outcome", "treat_time", 5; leads=3, lags=2)
+# --- Recipe 2: LP-DiD with absorbing treatment ---
+r = estimate_lp_did(pd, :outcome, :treat, 5; pre_window=3, ylags=2)
+report(r)
 
-# LP-DiD with clean controls (Dube et al. 2023)
-lpdid = estimate_lp_did(pd, "outcome", "treat_time", 5; leads=3, lags=2)
+# --- Recipe 3: LP-DiD on DDCG dataset ---
+ddcg = load_example(:ddcg)
+r_ddcg = estimate_lp_did(ddcg, :y, :dem, 10; pre_window=5, ylags=1)
+plot_result(r_ddcg; title="Democracy → GDP (DDCG)")
+
+# --- Recipe 4: LP-DiD with PMD + reweighting ---
+r_pmd = estimate_lp_did(ddcg, :y, :dem, 10; pre_window=5, pmd=:max, reweight=true)
+
+# --- Recipe 5: Pooled estimates ---
+r_pool = estimate_lp_did(ddcg, :y, :dem, 10; post_pooled=(0, 5), pre_pooled=(1, 5))
+r_pool.pooled_post   # (coef=..., se=..., ci_lower=..., ci_upper=..., nobs=...)
 ```
 
 ---
 
 ## Model Specification
 
-The event study LP estimates separate regressions for each horizon ``h \in \{-K, \ldots, -1, 0, 1, \ldots, H\}``:
+Both estimators run separate regressions for each event-time horizon ``h \in \{-K, \ldots, -1, 0, 1, \ldots, H\}``:
 
 ```math
-y_{i,t+h} - y_{i,t-1} = \alpha_i^h + \gamma_t^h + \beta_h D_{it} + \mathbf{X}_{it}'\boldsymbol{\delta}^h + \varepsilon_{i,t+h}
+Y_{i,t+h} - Y_{i,t-1} = \gamma_t^h + \beta_h \Delta D_{it} + \mathbf{X}_{it}'\boldsymbol{\delta}^h + \varepsilon_{i,t+h}
 ```
 
 where:
-- ``y_{i,t+h}`` is the outcome for unit ``i`` at time ``t+h``
-- ``\alpha_i^h`` is a unit fixed effect (absorbed by double-demeaning)
-- ``\gamma_t^h`` is a time fixed effect (absorbed by double-demeaning)
-- ``D_{it} = \mathbf{1}[t \geq g_i]`` is the treatment indicator (``g_i`` = treatment timing for unit ``i``)
-- ``\mathbf{X}_{it}`` includes lagged outcomes and optional covariates
+- ``\Delta D_{it} = D_{it} - D_{i,t-1}`` is the **switching indicator** (equals 1 only at treatment onset)
+- ``\gamma_t^h`` is a time fixed effect (absorbed by within-time demeaning)
+- ``\mathbf{X}_{it}`` includes lagged outcomes ``L_1.Y, \ldots, L_k.Y``, differenced lags ``\Delta Y_{t-l}``, and optional covariates
 - ``\beta_h`` is the **dynamic treatment effect** at horizon ``h``
 
-The dependent variable is differenced from the baseline period ``t-1``, so ``\beta_h`` measures the cumulative effect of treatment ``h`` periods after (or before) the event. The reference period is ``h = -1`` (normalized to zero).
+The reference period ``h = -1`` is normalized to zero.
 
-!!! note "Double-Demeaning for Fixed Effects"
-    Unit and time fixed effects are absorbed by iterative double-demeaning (within-transformation along both dimensions). This avoids estimating a potentially large number of dummy coefficients while producing numerically identical estimates to explicit FE inclusion.
+!!! note "Time-Only Fixed Effects"
+    Long differencing ``Y_{i,t+h} - Y_{i,t-1}`` absorbs unit fixed effects, so only time FE remain. This is consistent with both the ANRR (2019) specification and the Stata `lpdid` package.
+
+!!! note "Switching Indicator vs Treatment Level"
+    The treatment regressor is the first difference ``\Delta D_{it}``, not the treatment level ``D_{it}``. This ensures that only the treatment onset contributes to identification. Already-treated observations with ``\Delta D = 0`` and ``D = 1`` are excluded from the sample.
 
 ---
 
-## Standard Event Study LP
+## Event Study LP
 
-The standard estimator runs horizon-by-horizon OLS on the full panel, using all untreated and already-treated units as potential controls:
+The standard estimator uses all switching (``\Delta D = 1``) and control (``D = 0``) observations:
 
 ```julia
 eslp = estimate_event_study_lp(pd, "outcome", "treat_time", 5;
-    leads=3,                      # pre-treatment horizons (for pre-trends)
-    lags=2,                       # lagged outcome controls
-    covariates=String[],          # additional covariates
-    cluster=:unit,                # clustering level
-    conf_level=0.95               # confidence level
+    leads=3,             # pre-treatment horizons K
+    lags=2,              # lagged outcome controls
+    covariates=String[], # additional controls
+    cluster=:unit,       # :unit, :time, or :twoway
+    conf_level=0.95
 )
-
-# Access results
-eslp.coefficients    # dynamic treatment effects (beta_h)
-eslp.se              # standard errors
-eslp.event_times     # event-time grid [-3, -2, -1, 0, 1, ..., 5]
-eslp.T_eff           # effective observations per horizon
 ```
 
-### Return Values
+### Return Values (`EventStudyLP{T}`)
 
 | Field | Type | Description |
 |:------|:-----|:------------|
 | `coefficients` | `Vector{T}` | Treatment effect ``\beta_h`` at each event-time |
 | `se` | `Vector{T}` | Cluster-robust standard errors |
-| `ci_lower` | `Vector{T}` | Lower confidence interval bounds |
-| `ci_upper` | `Vector{T}` | Upper confidence interval bounds |
-| `event_times` | `Vector{Int}` | Event-time grid (e.g., ``[-3, -2, 0, 1, \ldots, H]``) |
-| `reference_period` | `Int` | Omitted period (``-1`` by default) |
+| `ci_lower`, `ci_upper` | `Vector{T}` | Confidence interval bounds |
+| `event_times` | `Vector{Int}` | Event-time grid ``[-K, \ldots, H]`` |
+| `reference_period` | `Int` | Omitted period (``-1``) |
 | `B` | `Vector{Matrix{T}}` | Full coefficient vectors per horizon |
 | `residuals_per_h` | `Vector{Matrix{T}}` | OLS residuals per horizon |
 | `vcov` | `Vector{Matrix{T}}` | Variance-covariance matrices per horizon |
 | `T_eff` | `Vector{Int}` | Effective sample size per horizon |
-| `outcome_var` | `String` | Outcome variable name |
-| `treatment_var` | `String` | Treatment timing variable name |
 | `n_obs` | `Int` | Total panel observations |
-| `n_groups` | `Int` | Number of panel units |
-| `lags` | `Int` | Number of lagged outcome controls |
-| `leads` | `Int` | Number of pre-treatment leads |
-| `horizon` | `Int` | Maximum post-treatment horizon ``H`` |
-| `clean_controls` | `Bool` | `false` for standard LP, `true` for LP-DiD |
-| `cluster` | `Symbol` | Clustering level used |
-| `conf_level` | `T` | Confidence level |
-| `data` | `PanelData{T}` | Original panel data |
+| `lags` | `Int` | Number of lagged controls |
+| `leads` | `Int` | Pre-treatment window |
+| `horizon` | `Int` | Maximum horizon ``H`` |
+| `cluster` | `Symbol` | Clustering level |
 
 ---
 
-## LP-DiD (Dube et al. 2023)
+## LP-DiD (Dube et al. 2025)
 
-The `estimate_lp_did` function implements the **clean control** restriction from Dube, Girardi, Jorda, and Taylor (2023). In a standard event study LP, units that are already treated at ``t+h`` may serve as controls for newly treated units, introducing **contamination bias** when treatment effects are heterogeneous over time.
+The LP-DiD estimator adds **clean control sample** (CCS) restrictions. At each horizon ``h``, the control group contains only units whose treatment status does not change between ``t`` and ``t + h``. This prevents already-treated units from contaminating the control group under heterogeneous treatment effects.
 
-LP-DiD solves this by restricting the control group at each horizon ``h`` to units that are either:
-1. **Never-treated** (``g_i = 0``), or
-2. **Not-yet-treated at ``t+h``** (``g_i > t + h``)
-
-This ensures that no already-treated unit contaminates the control group.
+### Full API
 
 ```julia
-lpdid = estimate_lp_did(pd, "outcome", "treat_time", 5;
-    leads=3, lags=2, cluster=:unit, conf_level=0.95
+r = estimate_lp_did(pd, outcome, treatment, H;
+    # Window
+    pre_window=3,              # pre-treatment event-time K
+    post_window=H,             # post-treatment event-time
+    # Controls
+    ylags=0,                   # outcome lags (L1.Y, ..., Lk.Y)
+    dylags=0,                  # differenced outcome lags (L1.ΔY, ...)
+    covariates=String[],       # additional covariates
+    # CCS specification
+    nonabsorbing=nothing,      # stabilization window L (Int) for non-absorbing
+    oneoff=false,              # one-off treatment (requires nonabsorbing)
+    # Control group restrictions
+    notyet=false,              # restrict to not-yet-treated controls
+    nevertreated=false,        # restrict to never-treated controls
+    firsttreat=false,          # use only first treatment event per unit
+    # Baseline
+    pmd=nothing,               # pre-mean differencing (:max or Int k)
+    # Weighting
+    reweight=false,            # IPW for equally weighted ATE across time
+    nocomp=false,              # restrict to obs in CCS at all horizons
+    # Inference
+    cluster=:unit,             # :unit, :time, :twoway
+    conf_level=0.95,
+    # Pooled estimates
+    post_pooled=nothing,       # (start, end) tuple for pooled post-treatment
+    pre_pooled=nothing,        # (start, end) tuple for pooled pre-treatment
+    only_pooled=false,         # skip event study
+    only_event=false           # skip pooled
 )
-
-# The only difference from estimate_event_study_lp is clean_controls=true
-lpdid.clean_controls  # true
 ```
 
-!!! warning "Sample Size Reduction"
-    Clean controls can substantially reduce the effective sample at longer horizons, since more units have been treated by ``t+h``. Check `lpdid.T_eff` to monitor the effective sample size at each horizon. If `T_eff` drops too low, consider reducing the maximum horizon `H`.
+### Clean Control Samples
+
+Three CCS specifications match the Stata `lpdid` package:
+
+**Absorbing treatment** (default): A ``(g, t)`` pair belongs to CCS at horizon ``h`` if the unit is switching (``\Delta D_{it} = 1``) or treatment status does not change through ``t + h`` (i.e., ``D_{i,t+h} = 0``).
+
+```julia
+r = estimate_lp_did(pd, :y, :treat, 10)  # absorbing is default
+```
+
+**Non-absorbing treatment**: Treatment may reverse. A pair belongs to CCS if no switches occurred in the stabilization window of ``L`` periods before ``t``:
+
+```julia
+r = estimate_lp_did(pd, :y, :treat, 10; nonabsorbing=5)
+```
+
+**One-off treatment**: Treatment lasts exactly one period. Requires `nonabsorbing`:
+
+```julia
+r = estimate_lp_did(pd, :y, :treat, 10; nonabsorbing=3, oneoff=true)
+```
+
+### Pre-Mean Differencing (PMD)
+
+Instead of long differencing ``Y_{t+h} - Y_{t-1}``, PMD uses the average of pre-treatment outcomes as baseline:
+
+```julia
+# Use cumulative pre-treatment mean
+r = estimate_lp_did(pd, :y, :treat, 10; pmd=:max)
+
+# Use moving average of k pre-treatment periods
+r = estimate_lp_did(pd, :y, :treat, 10; pmd=3)
+```
+
+### IPW Reweighting
+
+Inverse probability weights ensure equally weighted ATE across time periods:
+
+```julia
+r = estimate_lp_did(pd, :y, :treat, 10; reweight=true)
+```
+
+### Pooled Estimates
+
+Pooled regressions average the LHS over a window of horizons:
+
+```julia
+r = estimate_lp_did(pd, :y, :treat, 10;
+    post_pooled=(0, 5),   # average effect over h=0,...,5
+    pre_pooled=(1, 3)     # pre-treatment placebo over h=-3,...,-1
+)
+
+r.pooled_post   # (coef, se, ci_lower, ci_upper, nobs)
+r.pooled_pre    # (coef, se, ci_lower, ci_upper, nobs)
+```
+
+### Return Values (`LPDiDResult{T}`)
+
+| Field | Type | Description |
+|:------|:-----|:------------|
+| `coefficients` | `Vector{T}` | Treatment effect ``\beta_h`` at each event-time |
+| `se` | `Vector{T}` | Cluster-robust standard errors |
+| `ci_lower`, `ci_upper` | `Vector{T}` | Confidence interval bounds |
+| `event_times` | `Vector{Int}` | Event-time grid ``[-K, \ldots, H]`` |
+| `reference_period` | `Int` | Omitted period (``-1``) |
+| `nobs_per_horizon` | `Vector{Int}` | Effective sample size per horizon |
+| `pooled_post` | `NamedTuple` or `nothing` | Pooled post-treatment estimate |
+| `pooled_pre` | `NamedTuple` or `nothing` | Pooled pre-treatment estimate |
+| `vcov` | `Vector{Matrix{T}}` | Variance-covariance matrices per horizon |
+| `specification` | `Symbol` | `:absorbing`, `:nonabsorbing`, or `:oneoff` |
+| `pmd` | type varies | PMD specification (`nothing`, `:max`, or `Int`) |
+| `reweight` | `Bool` | IPW reweighting flag |
+| `nocomp` | `Bool` | Nocomp restriction flag |
+| `ylags`, `dylags` | `Int` | Lag specifications |
+| `cluster` | `Symbol` | Clustering level |
+
+---
+
+## DDCG Dataset
+
+The built-in DDCG dataset contains 184 countries from 1960–2010 with log GDP per capita and a binary democracy indicator from Acemoglu, Naidu, Restrepo, and Robinson (2019):
+
+```julia
+ddcg = load_example(:ddcg)
+
+# Variables: y (log GDP per capita), dem (democracy 0/1)
+r = estimate_lp_did(ddcg, :y, :dem, 25;
+    pre_window=5, ylags=1, post_pooled=(0, 25))
+report(r)
+```
+
+---
+
+## Panel Utilities
+
+Within-group lag, lead, and difference operations for `PanelData`:
+
+```julia
+ddcg = load_example(:ddcg)
+
+# Compute lag/lead/diff vectors
+l1 = panel_lag(ddcg, :y, 1)     # L1.y
+f1 = panel_lead(ddcg, :y, 1)    # F1.y
+dy = panel_diff(ddcg, :y)       # Δy = y - L1.y
+
+# Add as new columns (returns new PanelData)
+ddcg2 = add_panel_lag(ddcg, :y, 1)    # adds "lag1_y"
+ddcg3 = add_panel_lead(ddcg, :y, 1)   # adds "lead1_y"
+ddcg4 = add_panel_diff(ddcg, :y)      # adds "d_y"
+```
 
 ---
 
 ## Clustering
 
-Both estimators support three clustering options for robust standard error computation via the `cluster` keyword:
+Both estimators support three clustering options:
 
-- **`:unit`** (default) -- cluster at the unit (entity) level. Accounts for serial correlation within units. Appropriate for most panel DiD settings.
-- **`:time`** -- cluster at the time level. Accounts for cross-sectional correlation within periods. Useful when shocks are common across units within a period.
-- **`:twoway`** -- two-way clustering (Cameron, Gelbach, and Miller 2011). Computes ``V_{\text{twoway}} = V_{\text{unit}} + V_{\text{time}} - V_{\text{het}}``, accounting for both serial and cross-sectional dependence simultaneously.
+- **`:unit`** (default) — accounts for serial correlation within units
+- **`:time`** — accounts for cross-sectional correlation within periods
+- **`:twoway`** — two-way clustering (Cameron, Gelbach, and Miller 2011): ``V_{\text{twoway}} = V_{\text{unit}} + V_{\text{time}} - V_{\text{het}}``
 
 ```julia
-# Two-way clustering for robustness
-eslp_tw = estimate_event_study_lp(pd, "outcome", "treat_time", 5;
-    leads=3, lags=2, cluster=:twoway
-)
+r = estimate_lp_did(ddcg, :y, :dem, 10; cluster=:twoway)
 ```
-
-!!! note "Cluster Choice"
-    Unit-level clustering is the standard default for panel event studies. Two-way clustering is more conservative and may be preferred when both dimensions of dependence are plausible, but requires sufficient clusters in both dimensions for reliable inference.
 
 ---
 
@@ -149,39 +273,39 @@ eslp_tw = estimate_event_study_lp(pd, "outcome", "treat_time", 5;
 
 ### Pre-Trend Test
 
-The `pretrend_test` function performs a joint Wald test that all pre-treatment coefficients are zero, providing a formal check of the **parallel trends** assumption:
+Joint Wald test that all pre-treatment coefficients are zero:
 
 ```julia
 pt = pretrend_test(eslp)
-pt.statistic    # Wald chi-squared statistic
-pt.pvalue       # p-value (high = no evidence against parallel trends)
-pt.df           # degrees of freedom
+pt.statistic    # Wald chi-squared
+pt.pvalue       # high = no evidence against parallel trends
 ```
 
 ### HonestDiD Sensitivity Analysis
 
-The `honest_did` function implements the Rambachan and Roth (2023) sensitivity analysis, constructing robust confidence intervals under bounded violations of parallel trends:
+Rambachan and Roth (2023) robust confidence intervals under bounded violations of parallel trends:
 
 ```julia
-h = honest_did(eslp; Mbar=1.0, conf_level=0.95)
-h.robust_ci_lower     # lower bounds accounting for trend violations
+h = honest_did(eslp; Mbar=1.0)
+h.robust_ci_lower     # lower bounds
 h.robust_ci_upper     # upper bounds
 h.breakdown_value     # smallest Mbar overturning significance
 ```
 
-The `Mbar` parameter controls the maximum allowed violation magnitude per period. The **breakdown value** is the smallest `Mbar` at which the robust confidence interval for at least one post-treatment period includes zero.
-
-See [Difference-in-Differences](@ref did_page) for additional diagnostics including `bacon_decomposition` and `negative_weight_check`.
+See [Difference-in-Differences](@ref did_page) for `bacon_decomposition` and `negative_weight_check`.
 
 ---
 
 ## Visualization
 
-`plot_result` produces an interactive D3.js event study plot with point estimates, confidence bands, and a reference line at zero:
+`plot_result` produces interactive D3.js event study plots for both `EventStudyLP` and `LPDiDResult`:
 
 ```julia
 p = plot_result(eslp)
 save_plot(p, "event_study.html")
+
+p2 = plot_result(r; title="LP-DiD: Democracy → GDP")
+save_plot(p2, "lpdid_ddcg.html")
 ```
 
 @raw html
@@ -192,49 +316,55 @@ save_plot(p, "event_study.html")
 ## Complete Example
 
 ```julia
-using MacroEconometricModels
-using Random; Random.seed!(42)
+using MacroEconometricModels, DataFrames
 
-# --- Synthetic staggered treatment panel ---
-N, T_periods = 50, 20
-group_id = repeat(1:N, inner=T_periods)
-time_id = repeat(1:T_periods, outer=N)
+# Load DDCG democracy-GDP dataset (Acemoglu et al. 2019)
+ddcg = load_example(:ddcg)
 
-# Staggered adoption: cohort 1 at t=10, cohort 2 at t=14, never-treated
-treat_timing = [i <= 25 ? 10 : (i <= 40 ? 14 : 0) for i in 1:N]
-treatment = [treat_timing[g] for g in group_id]
+# LP-DiD: effect of democracy on log GDP per capita
+r = estimate_lp_did(ddcg, :y, :dem, 25;
+    pre_window=5,
+    ylags=1,
+    post_pooled=(0, 25),
+    pre_pooled=(1, 5)
+)
+report(r)
 
-# Outcome with treatment effect = 1.0
-y = randn(N * T_periods) .+ [t >= treat_timing[g] && treat_timing[g] > 0 ? 1.0 : 0.0
-    for (g, t) in zip(group_id, time_id)]
+# Pooled estimates
+println("Post-treatment pooled (h=0:25): β = ", round(r.pooled_post.coef, digits=3),
+        " (SE = ", round(r.pooled_post.se, digits=3), ")")
+println("Pre-treatment pooled (h=-5:-1): β = ", round(r.pooled_pre.coef, digits=3),
+        " (SE = ", round(r.pooled_pre.se, digits=3), ")")
 
-using DataFrames
-df = DataFrame(group=group_id, time=time_id, outcome=y, treat_time=Float64.(treatment))
-pd = xtset(df, :group, :time)
+# Robustness: PMD + reweighting
+r_pmd = estimate_lp_did(ddcg, :y, :dem, 25;
+    pre_window=5, ylags=1, pmd=:max, reweight=true)
+println("PMD + IPW coefficients: ", round.(r_pmd.coefficients, digits=3))
 
-# Standard event study LP
-eslp = estimate_event_study_lp(pd, "outcome", "treat_time", 5; leads=3, lags=2)
-println("Standard LP coefficients: ", round.(eslp.coefficients, digits=3))
-
-# LP-DiD with clean controls
-lpdid = estimate_lp_did(pd, "outcome", "treat_time", 5; leads=3, lags=2)
-println("LP-DiD coefficients:      ", round.(lpdid.coefficients, digits=3))
-
-# Pre-trend test
-pt = pretrend_test(eslp)
-println("Pre-trend test: p = ", round(pt.pvalue, digits=3))
-
-# HonestDiD sensitivity
-h = honest_did(eslp; Mbar=0.5)
-println("Breakdown value: ", round(h.breakdown_value, digits=3))
-
-# Visualization
-p = plot_result(eslp)
+# Plot
+p = plot_result(r; title="Democracy → GDP (LP-DiD, DDCG)")
 ```
+
+---
+
+## Common Pitfalls
+
+1. **Treatment column format**: `estimate_lp_did` auto-detects binary (0/1) vs timing (year values). Mixing formats (e.g., 0, 1, 2019) causes misclassification.
+
+2. **Small effective samples at long horizons**: CCS restrictions reduce the sample at each horizon. Monitor `r.nobs_per_horizon` and reduce ``H`` if counts drop below ~30.
+
+3. **Combining `notyet` and `nevertreated`**: These are mutually exclusive. `notyet` uses units not yet treated at ``t+h`` as controls; `nevertreated` uses only units with ``g_i = 0``.
+
+4. **`oneoff` requires `nonabsorbing`**: One-off treatment is a special case of non-absorbing treatment where the treatment indicator lasts exactly one period.
+
+5. **PMD with short pre-treatment windows**: `pmd=:max` uses all available pre-treatment data. With few pre-treatment periods, the average baseline may be noisy. Consider `pmd=k` with a small ``k``.
 
 ---
 
 ## References
 
-- Jorda, Oscar. 2005. "Estimation and Inference of Impulse Responses by Local Projections." *American Economic Review* 95 (1): 161--182. [https://doi.org/10.1257/0002828053828518](https://doi.org/10.1257/0002828053828518)
-- Dube, Arindrajit, Daniele Girardi, Oscar Jorda, and Alan M. Taylor. 2023. "A Local Projections Approach to Difference-in-Differences Event Studies." NBER Working Paper 31184. [https://doi.org/10.3386/w31184](https://doi.org/10.3386/w31184)
+- Jordà, Óscar. 2005. "Estimation and Inference of Impulse Responses by Local Projections." *American Economic Review* 95 (1): 161–182. [https://doi.org/10.1257/0002828053828518](https://doi.org/10.1257/0002828053828518)
+- Acemoglu, Daron, Suresh Naidu, Pascual Restrepo, and James A. Robinson. 2019. "Democracy Does Cause Growth." *Journal of Political Economy* 127 (1): 47–100. [https://doi.org/10.1086/700936](https://doi.org/10.1086/700936)
+- Dube, Arindrajit, Daniele Girardi, Óscar Jordà, and Alan M. Taylor. 2025. "A Local Projections Approach to Difference-in-Differences." *Journal of Applied Econometrics*. [https://doi.org/10.1002/jae.3117](https://doi.org/10.1002/jae.3117)
+- Rambachan, Ashesh, and Jonathan Roth. 2023. "A More Credible Approach to Parallel Trends." *Review of Economic Studies* 90 (5): 2555–2591. [https://doi.org/10.1093/restud/rdad018](https://doi.org/10.1093/restud/rdad018)
+- Cameron, A. Colin, Jonah B. Gelbach, and Douglas L. Miller. 2011. "Robust Inference with Multiway Clustering." *Journal of Business & Economic Statistics* 29 (2): 238–249. [https://doi.org/10.1198/jbes.2010.07136](https://doi.org/10.1198/jbes.2010.07136)
