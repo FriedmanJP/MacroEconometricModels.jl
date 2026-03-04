@@ -18,6 +18,8 @@ A comprehensive Julia package for macroeconomic time series analysis.
 
 **DSGE:** 6 solvers (Gensys, Blanchard-Kahn, Klein, 2nd/3rd-order perturbation with pruning, Chebyshev projection, PFI), constrained solvers (Ipopt NLP, PATH MCP for ZLB/binding bounds), OccBin, GMM/SMM estimation, Bayesian estimation (SMC/SMC²/MH)
 
+**Cross-Sectional:** OLS, WLS, IV/2SLS, Logit, Probit (MLE), marginal effects (AME/MEM/MER)
+
 **Estimation:** OLS, MLE, GMM, SMM, Bayesian (Gibbs/conjugate), Kalman filter/smoother
 
 **Features:** IRF, FEVD, historical decomposition, structural identification, nowcasting, structural break detection, panel unit root tests, hypothesis testing, interactive D3.js visualization
@@ -73,6 +75,16 @@ Pkg.add("MacroEconometricModels")
   - Two-step estimation (PCA + VAR) and Bayesian Gibbs (Carter-Kohn smoother + NIW)
   - `favar_panel_irf` maps factor IRFs to N observables via loadings
 - **Structural DFM** - Structural dynamic factor model wrapping GDFM + VAR for identified factor shocks
+
+### Cross-Sectional Models
+- **Linear Regression** - OLS with HC0–HC3 robust and cluster-robust standard errors
+  - Weighted Least Squares (WLS) with analytic or user-supplied weights
+  - Variance Inflation Factor (VIF) for multicollinearity diagnostics
+- **Instrumental Variables** - IV/2SLS estimation with first-stage F-statistic and Sargan overidentification test
+- **Binary Choice** - Logit and Probit MLE via IRLS (Fisher scoring)
+  - Marginal effects: average (AME), at-means (MEM), at-representative (MER) with delta-method SEs
+  - `odds_ratio()`, `classification_table()`, McFadden/AIC/BIC fit statistics
+- **CrossSectionData** container with `diagnose()` / `fix()` and direct estimation dispatch
 
 ### Panel Models
 - **Panel VAR (PVAR)** - GMM estimation for dynamic panel data:
@@ -339,6 +351,12 @@ Full documentation available at [https://FriedmanJP.github.io/MacroEconometricMo
 - Feenstra, Robert C., Robert Inklaar, and Marcel P. Timmer. 2015. "The Next Generation of the Penn World Table." *American Economic Review* 105 (10): 3150–3182. [https://doi.org/10.1257/aer.20130954](https://doi.org/10.1257/aer.20130954)
 - McCracken, Michael W., and Serena Ng. 2016. "FRED-MD: A Monthly Database for Macroeconomic Research." *Journal of Business & Economic Statistics* 34 (4): 574–589. [https://doi.org/10.1080/07350015.2015.1086655](https://doi.org/10.1080/07350015.2015.1086655)
 - McCracken, Michael W., and Serena Ng. 2020. "FRED-QD: A Quarterly Database for Macroeconomic Research." *Federal Reserve Bank of St. Louis Working Paper* 2020-005. [https://doi.org/10.20955/wp.2020.005](https://doi.org/10.20955/wp.2020.005)
+
+### Cross-Sectional Regression
+
+- White, Halbert. 1980. "A Heteroskedasticity-Consistent Covariance Matrix Estimator and a Direct Test for Heteroskedasticity." *Econometrica* 48 (4): 817–838. [https://doi.org/10.2307/1912934](https://doi.org/10.2307/1912934)
+- MacKinnon, James G., and Halbert White. 1985. "Some Heteroskedasticity-Consistent Covariance Matrix Estimators with Improved Finite Sample Properties." *Journal of Econometrics* 29 (3): 305–325. [https://doi.org/10.1016/0304-4076(85)90158-7](https://doi.org/10.1016/0304-4076(85)90158-7)
+- Wooldridge, Jeffrey M. 2010. *Econometric Analysis of Cross Section and Panel Data*. 2nd ed. Cambridge, MA: MIT Press. ISBN 978-0-262-23258-6.
 
 ### Nowcasting
 
