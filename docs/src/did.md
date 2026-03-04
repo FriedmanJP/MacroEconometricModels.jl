@@ -186,12 +186,28 @@ did_cs = estimate_did(pd, :gdp, :reform; method=:callaway_santanna,
 
 The algorithm:
 1. Identify treatment cohorts ``G = \{g_1, g_2, \ldots\}``
-2. For each ``(g, t)``: compute ``\text{ATT}(g, t) = \mathbb{E}[Y_t - Y_{g-1} \mid G = g] - \mathbb{E}[Y_t - Y_{g-1} \mid C]``
+2. For each ``(g, t)``: compute ``\text{ATT}(g, t) = \mathbb{E}[\Delta Y \mid G = g] - \mathbb{E}[\Delta Y \mid C]``
 3. Aggregate to event-time: ``\text{ATT}(e) = \sum_g w_g \cdot \text{ATT}(g, g+e)``
 
 The `control_group` keyword controls the comparison group ``C``:
 - `:never_treated` (default) -- only units with ``G_i = \infty``
 - `:not_yet_treated` -- units not yet treated at time ``t``
+
+The `base_period` keyword controls the reference period for ``\Delta Y``:
+- `:varying` (default) -- pre-treatment: ``\Delta Y = Y_t - Y_{t-1}`` (adjacent periods); post-treatment: ``\Delta Y = Y_t - Y_{g-1}``
+- `:universal` -- always ``\Delta Y = Y_t - Y_{g-1}``
+
+The varying base period tests parallel trends period-by-period and produces non-zero pre-treatment estimates. The universal base always uses the last pre-treatment period ``g-1``, normalizing event-time ``e = -1`` to zero by construction.
+
+```julia
+# Varying base (default): adjacent-period pre-treatment comparisons
+did_cs = estimate_did(pd, :gdp, :reform; method=:callaway_santanna,
+                      leads=3, horizon=5, base_period=:varying)
+
+# Universal base period (forces e=-1 to zero)
+did_univ = estimate_did(pd, :gdp, :reform; method=:callaway_santanna,
+                        leads=3, horizon=5, base_period=:universal)
+```
 
 The `group_time_att` field of the result stores the full ``n_{\text{cohorts}} \times n_{\text{periods}}`` matrix of ATT(g,t) estimates.
 
@@ -397,6 +413,29 @@ plot_result(h)
 
 @raw html
 <iframe src="../assets/plots/did_honest.html" style="width:100%;height:420px;border:1px solid #eee;border-radius:8px;" loading="lazy"></iframe>
+
+---
+
+## Built-in Dataset: mpdta
+
+The `mpdta` dataset from Callaway & Sant'Anna (2021) contains county-level minimum wage data for 500 US counties over 2003--2007. Three treatment cohorts (2004, 2006, 2007) and 309 never-treated counties.
+
+```julia
+pd = load_example(:mpdta)
+
+# Callaway-Sant'Anna with varying base
+did = estimate_did(pd, "lemp", "first_treat";
+                   method=:callaway_santanna, leads=3, horizon=3,
+                   base_period=:varying)
+report(did)
+plot_result(did)
+```
+
+| Variable | Description |
+|:---|:---|
+| `lemp` | Log of county-level teen employment (outcome) |
+| `lpop` | Log of county population |
+| `first_treat` | Year state first raised minimum wage; 0 = never-treated |
 
 ---
 

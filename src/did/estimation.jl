@@ -54,6 +54,9 @@ Estimate a Difference-in-Differences model.
 - `cluster`: SE clustering: `:unit` (default), `:time`, `:twoway`
 - `conf_level`: Confidence level (default: 0.95)
 - `n_boot`: Number of bootstrap replications for `:did_multiplegt` (default: 200)
+- `base_period`: `:varying` (default, R `did` default) or `:universal`. For `:callaway_santanna` only.
+  `:varying` uses adjacent-period comparisons for pre-treatment cells;
+  `:universal` always uses `g-1` as base period
 
 # Returns
 `DIDResult{T}` -- unified result type for all methods.
@@ -80,7 +83,8 @@ function estimate_did(pd::PanelData{T}, outcome::Union{String,Symbol},
                       control_group::Symbol=:never_treated,
                       cluster::Symbol=:unit,
                       conf_level::Real=0.95,
-                      n_boot::Int=200) where {T<:AbstractFloat}
+                      n_boot::Int=200,
+                      base_period::Symbol=:varying) where {T<:AbstractFloat}
     # Validate inputs
     outcome_col = _resolve_varindex(pd, outcome)
     treat_col = _resolve_varindex(pd, treatment)
@@ -103,7 +107,8 @@ function estimate_did(pd::PanelData{T}, outcome::Union{String,Symbol},
         _estimate_callaway_santanna(pd, outcome_col, treat_col;
                                     leads=leads, horizon=horizon,
                                     control_group=control_group,
-                                    cluster=cluster, conf_level=conf_level)
+                                    cluster=cluster, conf_level=conf_level,
+                                    base_period=base_period)
     elseif method == :sun_abraham
         _estimate_sun_abraham(pd, outcome_col, treat_col;
                               leads=leads, horizon=horizon,

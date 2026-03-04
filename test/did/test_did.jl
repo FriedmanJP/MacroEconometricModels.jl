@@ -1129,4 +1129,128 @@ end
         @test occursin("Cohort", s2)
     end
 
+    # =========================================================================
+    # mpdta Dataset + CS Verification Against R `did` Package
+    # =========================================================================
+    @testset "mpdta dataset loading" begin
+        pd = load_example(:mpdta)
+        @test pd isa PanelData{Float64}
+        @test nobs(pd) == 2500
+        @test pd.n_groups == 500
+        @test pd.n_vars == 3
+        @test pd.varnames == ["lemp", "lpop", "first_treat"]
+        @test sort(unique(pd.time_id)) == [2003, 2004, 2005, 2006, 2007]
+        @test pd.balanced == true
+    end
+
+    @testset "CS varying base — nevertreated (mpdta verification)" begin
+        pd = load_example(:mpdta)
+
+        # CS estimator on Callaway & Sant'Anna (2021) minimum wage data
+        did = estimate_did(pd, "lemp", "first_treat";
+                           method=:callaway_santanna,
+                           leads=3, horizon=3,
+                           control_group=:never_treated,
+                           base_period=:varying)
+
+        @test did isa DIDResult{Float64}
+        @test did.method == :callaway_santanna
+        @test did.cohorts == [2004, 2006, 2007]
+
+        # Reference ATT(g,t) values (outcome regression, no covariates, nevertreated)
+        # Post-treatment ATT(g,t) computed with base = g-1
+
+        # Verify group_time_att matrix (cohorts x times)
+        # Cohort indices: 1=2004, 2=2006, 3=2007
+        # Time indices: 1=2003, 2=2004, 3=2005, 4=2006, 5=2007
+        @test !isnan(did.group_time_att[1, 2])  # g=2004, t=2004
+        @test isapprox(did.group_time_att[1, 2], -0.01050325; atol=1e-4)  # ATT(2004,2004)
+        @test isapprox(did.group_time_att[1, 3], -0.07042316; atol=1e-4)  # ATT(2004,2005)
+        @test isapprox(did.group_time_att[1, 4], -0.13725870; atol=1e-4)  # ATT(2004,2006)
+        @test isapprox(did.group_time_att[1, 5], -0.10081140; atol=1e-4)  # ATT(2004,2007)
+        @test isapprox(did.group_time_att[2, 4], -0.00459461; atol=1e-4)  # ATT(2006,2006)
+        @test isapprox(did.group_time_att[2, 5], -0.04122447; atol=1e-4)  # ATT(2006,2007)
+        @test isapprox(did.group_time_att[3, 5], -0.02605441; atol=1e-4)  # ATT(2007,2007)
+
+        # Dynamic aggregation reference (cohort-size-weighted):
+        # e=-3: 0.0305, e=-2: -0.0006, e=-1: -0.0245
+        # e=0: -0.0199, e=1: -0.0510, e=2: -0.1373, e=3: -0.1008
+        evt = did.event_times
+        att = coef(did)
+
+        # Post-treatment event-time ATTs (should match R closely)
+        e0_idx = findfirst(==(0), evt)
+        e1_idx = findfirst(==(1), evt)
+        e2_idx = findfirst(==(2), evt)
+        e3_idx = findfirst(==(3), evt)
+        @test isapprox(att[e0_idx], -0.0199; atol=0.005)
+        @test isapprox(att[e1_idx], -0.0510; atol=0.005)
+        @test isapprox(att[e2_idx], -0.1373; atol=0.005)
+        @test isapprox(att[e3_idx], -0.1008; atol=0.005)
+
+        # Pre-treatment (varying base, should be close to R)
+        em3_idx = findfirst(==(-3), evt)
+        em2_idx = findfirst(==(-2), evt)
+        em1_idx = findfirst(==(-1), evt)
+        @test isapprox(att[em3_idx], 0.0305; atol=0.005)
+        @test isapprox(att[em2_idx], -0.0006; atol=0.005)
+        @test isapprox(att[em1_idx], -0.0245; atol=0.005)
+    end
+
+    @testset "CS varying base — notyettreated (mpdta verification)" begin
+        pd = load_example(:mpdta)
+
+        did = estimate_did(pd, "lemp", "first_treat";
+                           method=:callaway_santanna,
+                           leads=3, horizon=3,
+                           control_group=:not_yet_treated,
+                           base_period=:varying)
+
+        @test did.method == :callaway_santanna
+        @test did.control_group == :not_yet_treated
+
+        # Reference: notyettreated
+        # Post-treatment ATT(g,t) at t=2007 use only never-treated controls (last period):
+        @test isapprox(did.group_time_att[1, 5], -0.10081140; atol=1e-4)  # g=2004, t=2007
+        @test isapprox(did.group_time_att[2, 5], -0.04122447; atol=1e-4)  # g=2006, t=2007
+        @test isapprox(did.group_time_att[3, 5], -0.02605441; atol=1e-4)  # g=2007, t=2007
+
+        # Notyettreated dynamic aggregation reference:
+        # e=0: -0.0189, e=1: -0.0536, e=2: -0.1363, e=3: -0.1008
+        evt = did.event_times
+        att = coef(did)
+        e0_idx = findfirst(==(0), evt)
+        e1_idx = findfirst(==(1), evt)
+        @test isapprox(att[e0_idx], -0.0189; atol=0.005)
+        @test isapprox(att[e1_idx], -0.0536; atol=0.005)
+    end
+
+    @testset "CS universal base period" begin
+        pd = load_example(:mpdta)
+
+        did = estimate_did(pd, "lemp", "first_treat";
+                           method=:callaway_santanna,
+                           leads=3, horizon=3,
+                           control_group=:never_treated,
+                           base_period=:universal)
+
+        @test did isa DIDResult{Float64}
+
+        # With universal base, reference period (e=-1) is zero by construction
+        em1_idx = findfirst(==(-1), did.event_times)
+        @test coef(did)[em1_idx] == 0.0
+        @test stderror(did)[em1_idx] == 0.0
+
+        # Post-treatment should match varying (both use g-1 as base for t >= g)
+        e0_idx = findfirst(==(0), did.event_times)
+        @test isapprox(coef(did)[e0_idx], -0.0199; atol=0.005)
+    end
+
+    @testset "CS base_period validation" begin
+        pd = load_example(:mpdta)
+        @test_throws ArgumentError estimate_did(pd, "lemp", "first_treat";
+                                                method=:callaway_santanna,
+                                                base_period=:invalid)
+    end
+
 end  # @testset "Difference-in-Differences"

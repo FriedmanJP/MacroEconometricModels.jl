@@ -182,7 +182,7 @@ Pkg.add("MacroEconometricModels")
 
 ### Data Management
 - **Typed containers** - `TimeSeriesData`, `PanelData`, `CrossSectionData` with variable names, frequency, transformation codes, and descriptions
-- **Built-in datasets** - FRED-MD (126 monthly variables), FRED-QD (245 quarterly variables), Penn World Table (38 OECD countries, 1950–2023), and DDCG democracy-GDP (184 countries, 1960–2010; Acemoglu et al. 2019)
+- **Built-in datasets** - FRED-MD (126 monthly variables), FRED-QD (245 quarterly variables), Penn World Table (38 OECD countries, 1950–2023), DDCG democracy-GDP (184 countries, 1960–2010; Acemoglu et al. 2019), and mpdta minimum wage panel (500 US counties, 2003–2007; Callaway & Sant'Anna 2021)
 - **Data diagnostics** - `diagnose()` scans for NaN/Inf/constant columns; `fix()` cleans via listwise deletion, interpolation, or mean imputation
 - **FRED transformations** - `apply_tcode()` / `inverse_tcode()` for all 7 FRED transformation codes
 - **Filtering** - `apply_filter()` applies HP, Hamilton, BN, BK, or boosted HP per-variable to `TimeSeriesData` and `PanelData`
