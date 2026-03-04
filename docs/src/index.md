@@ -64,7 +64,7 @@
 
 - **Difference-in-Differences**: Five estimators — TWFE, Callaway-Sant'Anna (2021), Sun-Abraham (2021), Borusyak-Jaravel-Spiess (2024), de Chaisemartin-D'Haultfoeuille (2020); Bacon (2021) decomposition; pretrend tests; negative weight diagnostics; HonestDiD (Rambachan & Roth 2023) sensitivity analysis
 - **Event Study LP**: Local projection event study with staggered treatment, cluster-robust SEs
-- **LP-DiD**: Dube, Jorda & Taylor (2023) LP-DiD estimator combining LP with DiD identification
+- **LP-DiD**: Dube, Girardi, Jordà & Taylor (2025) LP-DiD estimator with clean control samples, PMD, and IPW reweighting
 
 **Hypothesis Tests**
 

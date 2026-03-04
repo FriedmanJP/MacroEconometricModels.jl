@@ -22,7 +22,7 @@ Type definitions for Difference-in-Differences and Event Study LP methods.
 Implements types for:
 - TWFE DiD and Callaway-Sant'Anna (2021)
 - Event Study LP (Jorda 2005 + panel FE)
-- LP-DiD (Dube et al. 2023)
+- LP-DiD (Dube et al. 2025)
 - Bacon decomposition (Goodman-Bacon 2021)
 - Pre-trend testing and negative weight diagnostics
 """
@@ -133,7 +133,7 @@ along with per-horizon regression details for diagnostics.
 
 # References
 - Jorda, O. (2005). *AER* 95(1), 161-182.
-- Dube, A. et al. (2023). NBER WP 31184.
+- Dube, A. et al. (2025). *JAE*.
 """
 struct EventStudyLP{T<:AbstractFloat}
     coefficients::Vector{T}
@@ -423,7 +423,7 @@ function Base.show(io::IO, r::DIDResult{T}) where {T}
 end
 
 function Base.show(io::IO, r::EventStudyLP{T}) where {T}
-    lp_str = r.clean_controls ? "LP-DiD (Dube et al. 2023)" : "Event Study LP"
+    lp_str = r.clean_controls ? "LP-DiD (Dube et al. 2025)" : "Event Study LP"
     cluster_str = r.cluster == :twoway ? "Two-way (unit + time)" :
                   r.cluster == :unit ? "Unit-clustered" : "Time-clustered"
 
