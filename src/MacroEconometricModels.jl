@@ -123,6 +123,7 @@ include("teststat/fourier.jl")
 include("teststat/dfgls.jl")
 include("teststat/lm_unitroot.jl")
 include("teststat/adf_2break.jl")
+include("teststat/gregory_hansen.jl")
 
 # VECM types and estimation (after johansen.jl for JohansenResult)
 include("vecm/types.jl")

@@ -88,6 +88,7 @@ const TEST_GROUPS = [
         "teststat/test_dfgls.jl",
         "teststat/test_lm_unitroot.jl",
         "teststat/test_adf_2break.jl",
+        "teststat/test_gregory_hansen.jl",
         "arima/test_arima.jl",
         "arima/test_arima_coverage.jl",
         "teststat/test_granger.jl",
@@ -295,6 +296,7 @@ else
         @testset "DF-GLS Unit Root Test" begin include("teststat/test_dfgls.jl") end
         @testset "LM Unit Root Test" begin include("teststat/test_lm_unitroot.jl") end
         @testset "Two-Break ADF Test" begin include("teststat/test_adf_2break.jl") end
+        @testset "Gregory-Hansen Cointegration Test" begin include("teststat/test_gregory_hansen.jl") end
         @testset "ARIMA Models" begin include("arima/test_arima.jl") end
         @testset "ARIMA Coverage" begin include("arima/test_arima_coverage.jl") end
         @testset "Granger Causality Tests" begin include("teststat/test_granger.jl") end

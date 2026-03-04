@@ -469,3 +469,59 @@ function Base.show(io::IO, r::ADF2BreakResult)
     conc_data = Any["Conclusion" conclusion; "Note" "*** p<0.01, ** p<0.05, * p<0.10"]
     _pretty_table(io, conc_data; column_labels=["",""], alignment=[:l,:l])
 end
+
+function Base.show(io::IO, r::GregoryHansenResult)
+    model_desc = r.model == :C ? "C (level shift)" :
+                 r.model == :CT ? "C/T (level + trend shift)" : "C/S (regime shift)"
+    spec_data = Any[
+        "H₀" "No cointegration";
+        "H₁" "Cointegration with a structural break";
+        "Model" model_desc;
+        "Regressors (m)" r.n_regressors;
+        "Observations" r.nobs
+    ]
+    _pretty_table(io, spec_data;
+        title = "Gregory-Hansen Cointegration Test with Structural Break",
+        column_labels = ["Specification", ""],
+        alignment = [:l, :r],
+    )
+    adf_stars = _significance_stars(r.adf_pvalue)
+    zt_stars = _significance_stars(r.zt_pvalue)
+    za_stars = _significance_stars(r.za_pvalue)
+    stats_data = Any[
+        "ADF*" string(round(r.adf_statistic, digits=4), " ", adf_stars) r.adf_break _format_pvalue(r.adf_pvalue);
+        "Zt*" string(round(r.zt_statistic, digits=4), " ", zt_stars) r.zt_break _format_pvalue(r.zt_pvalue);
+        "Za*" string(round(r.za_statistic, digits=4), " ", za_stars) r.za_break _format_pvalue(r.za_pvalue)
+    ]
+    _pretty_table(io, stats_data;
+        title = "Test Statistics",
+        column_labels = ["Statistic", "Value", "Break", "P-value"],
+        alignment = [:l, :r, :r, :r],
+    )
+    cv_data = Matrix{Any}(undef, 2, 3)
+    cv_data[1, :] = [round(r.adf_critical_values[1], digits=3),
+                     round(r.adf_critical_values[5], digits=3),
+                     round(r.adf_critical_values[10], digits=3)]
+    cv_data[2, :] = [round(r.za_critical_values[1], digits=2),
+                     round(r.za_critical_values[5], digits=2),
+                     round(r.za_critical_values[10], digits=2)]
+    _pretty_table(io, cv_data;
+        title = "Critical Values",
+        column_labels = ["1%", "5%", "10%"],
+        alignment = :r,
+        row_labels = ["ADF*/Zt*", "Za*"]
+    )
+    reject_adf = r.adf_statistic < r.adf_critical_values[5]
+    reject_zt = r.zt_statistic < r.adf_critical_values[5]
+    reject_za = r.za_statistic < r.za_critical_values[5]
+    n_reject = sum([reject_adf, reject_zt, reject_za])
+    conclusion = if n_reject >= 2
+        "Reject H₀ (cointegration with structural break)"
+    elseif n_reject == 1
+        "Mixed evidence for cointegration with break"
+    else
+        "Fail to reject H₀ (no cointegration)"
+    end
+    conc_data = Any["Conclusion" conclusion; "Note" "*** p<0.01, ** p<0.05, * p<0.10"]
+    _pretty_table(io, conc_data; column_labels=["",""], alignment=[:l,:l])
+end
