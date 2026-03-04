@@ -419,6 +419,8 @@ export JohansenResult, VARStationarityResult
 export AndrewsResult, BaiPerronResult
 export PANICResult, PesaranCIPSResult, MoonPerronResult
 export FactorBreakResult
+export FourierADFResult, FourierKPSSResult, DFGLSResult
+export LMUnitRootResult, ADF2BreakResult, GregoryHansenResult
 
 # Univariate unit root tests
 export adf_test, kpss_test, pp_test, za_test, ngperron_test
@@ -434,6 +436,10 @@ export panic_test, pesaran_cips_test, moon_perron_test, panel_unit_root_summary
 
 # Factor model structural break tests
 export factor_break_test
+
+# Extended unit root tests
+export fourier_adf_test, fourier_kpss_test, dfgls_test
+export lm_unitroot_test, adf_2break_test, gregory_hansen_test
 
 # Convenience functions
 export unit_root_summary, test_all_variables
