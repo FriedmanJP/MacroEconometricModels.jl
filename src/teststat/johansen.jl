@@ -84,7 +84,7 @@ function johansen_test(Y::AbstractMatrix{T}, p::Int;
     dY_lags = if p > 1
         hcat([dY[(p-j):(end-j), :] for j in 1:(p-1)]...)
     else
-        Matrix{T}(undef, T_eff, 0)
+        Matrix{eltype(Y)}(undef, T_eff, 0)
     end
 
     # Dependent variable
@@ -94,6 +94,9 @@ function johansen_test(Y::AbstractMatrix{T}, p::Int;
     # Case 1 (:none): Z = lagged diffs only; Y_lag unaugmented
     # Case 2 (:constant): constant restricted to cointegrating space (augment Y_lag)
     # Case 4 (:trend): trend restricted, constant unrestricted in Z
+    # Use T_float for the element type to avoid confusion with dimensions
+    T_float = T
+
     if deterministic == :none
         Z = dY_lags
         Y_lag_aug = Y_lag
@@ -101,11 +104,15 @@ function johansen_test(Y::AbstractMatrix{T}, p::Int;
         # Case 2: restrict constant to cointegrating relation
         # Augment Y_lag with ones so constant enters β'[Y_{t-1}; 1]
         Z = dY_lags  # no unrestricted deterministic terms
-        Y_lag_aug = hcat(Y_lag, ones(T, T_eff))
+        Y_lag_aug = hcat(Y_lag, ones(T_float, T_eff))
     else  # :trend
         # Case 4: restrict trend, keep constant unrestricted
-        Z = isempty(dY_lags) ? ones(T, T_eff, 1) : hcat(ones(T, T_eff), dY_lags)
-        Y_lag_aug = hcat(Y_lag, T.(1:T_eff))
+        Z = if isempty(dY_lags)
+            reshape(ones(T_float, T_eff), :, 1)
+        else
+            hcat(ones(T_float, T_eff), dY_lags)
+        end
+        Y_lag_aug = hcat(Y_lag, T_float.(1:T_eff))
     end
 
     # Concentrate out short-run dynamics via least squares projection

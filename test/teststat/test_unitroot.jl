@@ -371,6 +371,16 @@ using Statistics
         # Test error handling
         @test_throws ArgumentError johansen_test(Y, 0)  # Invalid lags
         @test_throws ArgumentError johansen_test(randn(10, 3), 2)  # Too few obs
+
+        # Test Case 4 (:trend) runs without error and produces valid results
+        rng_joh = Random.MersenneTwister(7744)
+        Y_coint = hcat(cumsum(randn(rng_joh, 200)), cumsum(randn(rng_joh, 200)))
+        Y_coint[:, 2] = Y_coint[:, 1] + 0.1 * randn(rng_joh, 200)
+        result_trend4 = johansen_test(Y_coint, 2; deterministic=:trend)
+        @test result_trend4 isa JohansenResult
+        @test result_trend4.deterministic == :trend
+        @test length(result_trend4.trace_stats) == 2
+        @test all(isfinite, result_trend4.trace_stats)
     end
 
     # ==========================================================================
