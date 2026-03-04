@@ -121,6 +121,7 @@ include("teststat/bai_perron.jl")
 include("teststat/johansen.jl")
 include("teststat/fourier.jl")
 include("teststat/dfgls.jl")
+include("teststat/lm_unitroot.jl")
 
 # VECM types and estimation (after johansen.jl for JohansenResult)
 include("vecm/types.jl")
