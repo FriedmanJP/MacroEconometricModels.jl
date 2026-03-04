@@ -407,3 +407,65 @@ function Base.show(io::IO, r::VARStationarityResult)
         alignment = [:l, :r],
     )
 end
+
+function Base.show(io::IO, r::ADF2BreakResult)
+    model_desc = r.model == :level ? "level shifts" : "level + trend shifts"
+    spec_data = Any[
+        "H₀" "Series has a unit root with two breaks";
+        "H₁" string("Series is stationary with two breaks (", model_desc, ")");
+        "Model" (r.model == :level ? "A (level shifts)" : "C (level + trend shifts)");
+        "Lag length" r.lags;
+        "Observations" r.nobs
+    ]
+    _pretty_table(io, spec_data;
+        title = "Two-Break ADF Unit Root Test (Narayan & Popp 2010)",
+        column_labels = ["Specification", ""],
+        alignment = [:l, :r],
+    )
+    break1_pct = string(round(r.break1_fraction * 100, digits=1), "% of sample")
+    break2_pct = string(round(r.break2_fraction * 100, digits=1), "% of sample")
+    break_data = Any[
+        "Break 1 index" r.break1;
+        "Break 1 location" break1_pct;
+        "Break 2 index" r.break2;
+        "Break 2 location" break2_pct
+    ]
+    _pretty_table(io, break_data;
+        title = "Estimated Break Points",
+        column_labels = ["", ""],
+        alignment = [:l, :r],
+    )
+    stars = _significance_stars(r.pvalue)
+    results_data = Any[
+        "Minimum t-statistic" string(round(r.statistic, digits=4), " ", stars);
+        "P-value" _format_pvalue(r.pvalue)
+    ]
+    _pretty_table(io, results_data;
+        title = "Results",
+        column_labels = ["", "Value"],
+        alignment = [:l, :r],
+    )
+    cv_data = Matrix{Any}(undef, 1, 3)
+    cv_data[1, :] = [round(r.critical_values[1], digits=3),
+                     round(r.critical_values[5], digits=3),
+                     round(r.critical_values[10], digits=3)]
+    _pretty_table(io, cv_data;
+        title = "Critical Values",
+        column_labels = ["1%", "5%", "10%"],
+        alignment = :r,
+    )
+    reject_1 = r.statistic < r.critical_values[1]
+    reject_5 = r.statistic < r.critical_values[5]
+    reject_10 = r.statistic < r.critical_values[10]
+    conclusion = if reject_1
+        "Reject H₀ at 1% level (stationary with two breaks)"
+    elseif reject_5
+        "Reject H₀ at 5% level (stationary with two breaks)"
+    elseif reject_10
+        "Reject H₀ at 10% level (stationary with two breaks)"
+    else
+        "Fail to reject H₀ (unit root, no significant breaks)"
+    end
+    conc_data = Any["Conclusion" conclusion; "Note" "*** p<0.01, ** p<0.05, * p<0.10"]
+    _pretty_table(io, conc_data; column_labels=["",""], alignment=[:l,:l])
+end
