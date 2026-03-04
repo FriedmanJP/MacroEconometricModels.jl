@@ -34,6 +34,7 @@ const TEST_GROUPS = [
     ("Core & VAR" => [
         "core/test_aqua.jl",
         "core/test_kalman.jl",
+        "core/test_quadrature.jl",
         "var/test_core_var.jl",
         "var/test_statsapi.jl",
         "core/test_summary.jl",
@@ -80,8 +81,8 @@ const TEST_GROUPS = [
         "nowcast/test_nowcast.jl",
         "did/test_did.jl",
     ]),
-    # Group 5: ARIMA & Statistical Tests & Data & PVAR
-    ("ARIMA & Tests & Data" => [
+    # Group 5: ARIMA & Statistical Tests & Data & PVAR & Reg
+    ("ARIMA & Tests & Data & Reg" => [
         "teststat/test_unitroot.jl",
         "teststat/test_structural_break.jl",
         "arima/test_arima.jl",
@@ -93,6 +94,7 @@ const TEST_GROUPS = [
         "gmm/test_smm.jl",
         "data/test_data.jl",
         "pvar/test_pvar.jl",
+        "reg/test_reg.jl",
     ]),
     # Group 6: Volatility & Non-Gaussian & Plotting & Filters
     ("Volatility & Filters" => [
@@ -241,6 +243,7 @@ else
         # Group 1: Core & VAR
         @testset "Aqua" begin include("core/test_aqua.jl") end
         @testset "Core Kalman" begin include("core/test_kalman.jl") end
+        @testset "Core Quadrature" begin include("core/test_quadrature.jl") end
         @testset "Core VAR" begin include("var/test_core_var.jl") end
         @testset "StatsAPI Compatibility" begin include("var/test_statsapi.jl") end
         @testset "Summary Tables" begin include("core/test_summary.jl") end
@@ -296,6 +299,7 @@ else
         @testset "SMM Estimation" begin include("gmm/test_smm.jl") end
         @testset "Data Module" begin include("data/test_data.jl") end
         @testset "Panel VAR" begin include("pvar/test_pvar.jl") end
+        @testset "Cross-Sectional Models" begin include("reg/test_reg.jl") end
 
         # Group 6: Volatility & Filters
         @testset "Volatility Models (ARCH/GARCH/SV)" begin include("volatility/test_volatility.jl") end
