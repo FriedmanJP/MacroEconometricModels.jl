@@ -248,3 +248,55 @@ function _regression_name(regression::Symbol)
         return string(regression)
     end
 end
+
+# =============================================================================
+# Critical Value Helpers for New Tests
+# =============================================================================
+
+"""Compute DF-GLS critical values via response surface."""
+function _dfgls_critical_values(regression::Symbol, nobs::Int, lags::Int, ::Type{TF}=Float64) where {TF<:AbstractFloat}
+    coefs = DFGLS_RSF_COEFS[regression]
+    invT = 1.0 / nobs
+    pT = lags / nobs
+    Dict{Int,TF}(
+        level => TF(c[1] + c[2]*invT + c[3]*invT^2 + c[4]*invT^3 + c[5]*invT^4 +
+                     c[6]*pT + c[7]*pT^2 + c[8]*pT^3 + c[9]*pT^4)
+        for (level, c) in coefs
+    )
+end
+
+"""Compute LM unit root critical values via response surface."""
+function _lm_unitroot_critical_values(breaks::Int, nobs::Int, lags::Int, ::Type{TF}=Float64) where {TF<:AbstractFloat}
+    if breaks == 2
+        return Dict{Int,TF}(k => TF(v) for (k, v) in LM_2BREAK_A_CV)
+    end
+    if breaks == 1
+        return Dict{Int,TF}(k => TF(v) for (k, v) in LM_1BREAK_A_CV)
+    end
+    coefs = LM_UNITROOT_RSF[0]
+    invT = 1.0 / nobs
+    pT = lags / nobs
+    Dict{Int,TF}(
+        level => TF(c[1] + c[2]*invT + c[3]*invT^2 + c[4]*pT + c[5]*pT^2)
+        for (level, c) in coefs
+    )
+end
+
+"""Get sample bracket for Fourier critical values."""
+function _fourier_sample_bracket(n::Int)
+    n <= 150 ? 1 : n <= 349 ? 2 : n <= 500 ? 3 : 4
+end
+
+"""Get Narayan-Popp critical values based on sample size."""
+function _narayan_popp_cv(model::Symbol, n::Int, ::Type{TF}=Float64) where {TF<:AbstractFloat}
+    table = NARAYAN_POPP_CV[model]
+    key = n <= 50 ? 50 : n <= 200 ? 200 : n <= 400 ? 400 : 999
+    Dict{Int,TF}(k => TF(v) for (k, v) in table[key])
+end
+
+"""Get ERS Pt critical values by interpolating sample size."""
+function _ers_pt_critical_values(regression::Symbol, nobs::Int, ::Type{TF}=Float64) where {TF<:AbstractFloat}
+    table = ERS_PT_CV[regression]
+    key = nobs <= 50 ? 50 : nobs <= 100 ? 100 : nobs <= 200 ? 200 : 500
+    Dict{Int,TF}(k => TF(v) for (k, v) in table[key])
+end
