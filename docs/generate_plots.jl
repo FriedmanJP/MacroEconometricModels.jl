@@ -423,6 +423,74 @@ function main()
         save("eslp_event_study.html", plot_result(eslp))
     end
 
+    # -------------------------------------------------------------------
+    # 38. OLS Regression Diagnostics
+    # -------------------------------------------------------------------
+    begin
+        Random.seed!(123)
+        n_reg = 200
+        X_reg = hcat(ones(n_reg), randn(n_reg), randn(n_reg))
+        y_reg = X_reg * [1.0, 2.0, 0.5] + 0.5 * randn(n_reg)
+        m_ols = estimate_reg(y_reg, X_reg; varnames=["const", "x₁", "x₂"])
+        save("reg_ols_diagnostics.html", plot_result(m_ols))
+    end
+
+    # -------------------------------------------------------------------
+    # 39. IV/2SLS Regression
+    # -------------------------------------------------------------------
+    begin
+        Random.seed!(124)
+        n_iv = 300
+        z1 = randn(n_iv); z2 = randn(n_iv)
+        u = randn(n_iv)
+        x_endog = 0.5 .* z1 .+ 0.3 .* z2 .+ 0.7 .* u
+        x_exog = randn(n_iv)
+        y_iv = 1.0 .+ 1.5 .* x_endog .+ 0.8 .* x_exog .+ u
+        X_iv = hcat(ones(n_iv), x_endog, x_exog)
+        Z_iv = hcat(ones(n_iv), z1, z2, x_exog)
+        m_iv = estimate_iv(y_iv, X_iv, Z_iv;
+                           endogenous=[2],
+                           varnames=["const", "x_endog", "x_exog"])
+        save("reg_iv.html", plot_result(m_iv))
+    end
+
+    # -------------------------------------------------------------------
+    # 40. Logit Model
+    # -------------------------------------------------------------------
+    begin
+        Random.seed!(125)
+        n_bin = 500
+        X_bin = hcat(ones(n_bin), randn(n_bin), randn(n_bin))
+        eta = X_bin * [0.0, 1.0, -0.5]
+        prob_bin = 1.0 ./ (1.0 .+ exp.(-eta))
+        y_bin = Float64.(rand(n_bin) .< prob_bin)
+        m_logit = estimate_logit(y_bin, X_bin; varnames=["const", "x₁", "x₂"])
+        save("reg_logit.html", plot_result(m_logit))
+    end
+
+    # -------------------------------------------------------------------
+    # 41. Probit Model
+    # -------------------------------------------------------------------
+    begin
+        m_probit_reg = estimate_probit(y_bin, X_bin; varnames=["const", "x₁", "x₂"])
+        save("reg_probit.html", plot_result(m_probit_reg))
+    end
+
+    # -------------------------------------------------------------------
+    # 42. Marginal Effects
+    # -------------------------------------------------------------------
+    begin
+        me_ame = marginal_effects(m_logit; type=:ame)
+        save("reg_marginal_effects.html", plot_result(me_ame))
+    end
+
+    # -------------------------------------------------------------------
+    # 43. Classification Diagnostics
+    # -------------------------------------------------------------------
+    begin
+        save("reg_classification.html", plot_result(m_logit; title="Logit Classification Diagnostics"))
+    end
+
     println("\nDone! Generated $(length(readdir(PLOT_DIR))) HTML files in $PLOT_DIR")
 end
 
