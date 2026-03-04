@@ -1,7 +1,7 @@
 using Test
 using MacroEconometricModels
 using MacroEconometricModels: dof_residual
-using LinearAlgebra, Statistics, Random
+using LinearAlgebra, Statistics, Random, Distributions
 
 @testset "Cross-Sectional Regression (Tasks 2-4)" begin
 
@@ -453,6 +453,469 @@ using LinearAlgebra, Statistics, Random
             width99 = ci99[j, 2] - ci99[j, 1]
             @test width99 > width95 > width90
         end
+    end
+
+end
+
+# =============================================================================
+# Task 5: IV/2SLS Estimation
+# =============================================================================
+
+@testset "IV/2SLS Estimation (Task 5)" begin
+
+    @testset "2SLS recovers true beta better than OLS" begin
+        rng = MersenneTwister(5001)
+        n = 1000
+        beta_true = [1.0, 2.0]
+
+        # Instruments
+        z1 = randn(rng, n)
+        z2 = randn(rng, n)
+
+        # Endogenous regressor: correlated with error
+        v = randn(rng, n)
+        u = 0.8 * v + 0.6 * randn(rng, n)  # corr(u, v) != 0
+        x_endog = 0.5 * z1 + 0.4 * z2 + v
+
+        y = beta_true[1] .+ beta_true[2] .* x_endog .+ u
+
+        X = hcat(ones(n), x_endog)
+        Z = hcat(ones(n), z1, z2)
+
+        # OLS is biased
+        m_ols = estimate_reg(y, X)
+
+        # IV should be closer to true beta
+        m_iv = estimate_iv(y, X, Z; endogenous=[2])
+
+        @test m_iv.method == :iv
+        @test abs(coef(m_iv)[2] - beta_true[2]) < abs(coef(m_ols)[2] - beta_true[2])
+        @test abs(coef(m_iv)[2] - beta_true[2]) < 0.3
+    end
+
+    @testset "First-stage F > 10 (strong instruments)" begin
+        rng = MersenneTwister(5002)
+        n = 500
+        z1 = randn(rng, n)
+        z2 = randn(rng, n)
+        v = randn(rng, n)
+        u = 0.5 * v + randn(rng, n)
+        x_endog = 0.7 * z1 + 0.5 * z2 + v
+        y = 1.0 .+ 2.0 .* x_endog .+ u
+
+        X = hcat(ones(n), x_endog)
+        Z = hcat(ones(n), z1, z2)
+
+        m = estimate_iv(y, X, Z; endogenous=[2])
+        @test m.first_stage_f > 10.0
+    end
+
+    @testset "Sargan test: overidentified has stat, exactly identified is nothing" begin
+        rng = MersenneTwister(5003)
+        n = 500
+        z1 = randn(rng, n)
+        z2 = randn(rng, n)
+        z3 = randn(rng, n)
+        v = randn(rng, n)
+        u = 0.5 * v + randn(rng, n)
+        x_endog = 0.5 * z1 + 0.3 * z2 + 0.2 * z3 + v
+        y = 1.0 .+ 2.0 .* x_endog .+ u
+
+        X = hcat(ones(n), x_endog)
+
+        # Overidentified: 3 excluded instruments for 1 endogenous
+        Z_over = hcat(ones(n), z1, z2, z3)
+        m_over = estimate_iv(y, X, Z_over; endogenous=[2])
+        @test m_over.sargan_stat !== nothing
+        @test m_over.sargan_pval !== nothing
+        # Valid instruments → p > 0.05 typically
+        @test m_over.sargan_pval > 0.01
+
+        # Exactly identified: 1 excluded instrument for 1 endogenous
+        Z_exact = hcat(ones(n), z1)
+        m_exact = estimate_iv(y, X, Z_exact; endogenous=[2])
+        @test m_exact.sargan_stat === nothing
+        @test m_exact.sargan_pval === nothing
+    end
+
+    @testset "IV — robust covariance types" begin
+        rng = MersenneTwister(5004)
+        n = 300
+        z1 = randn(rng, n)
+        z2 = randn(rng, n)
+        v = randn(rng, n)
+        u = 0.5 * v + randn(rng, n)
+        x_endog = 0.5 * z1 + 0.3 * z2 + v
+        y = 1.0 .+ 1.5 .* x_endog .+ u
+
+        X = hcat(ones(n), x_endog)
+        Z = hcat(ones(n), z1, z2)
+
+        for ct in [:ols, :hc0, :hc1, :hc2, :hc3]
+            m = estimate_iv(y, X, Z; endogenous=[2], cov_type=ct)
+            @test m.cov_type == ct
+            @test all(stderror(m) .> 0)
+            @test all(isfinite.(coef(m)))
+        end
+    end
+
+    @testset "IV — error handling" begin
+        n = 50
+        X = hcat(ones(n), randn(n))
+        Z = hcat(ones(n))  # only 1 instrument < 2 regressors
+        y = randn(n)
+
+        # Order condition violation
+        @test_throws ArgumentError estimate_iv(y, X, Z; endogenous=[2])
+
+        # Empty endogenous
+        Z2 = hcat(ones(n), randn(n))
+        @test_throws ArgumentError estimate_iv(y, X, Z2; endogenous=Int[])
+
+        # Invalid endogenous index
+        @test_throws ArgumentError estimate_iv(y, X, Z2; endogenous=[5])
+    end
+
+    @testset "IV — Float fallback" begin
+        rng = MersenneTwister(5005)
+        n = 100
+        z1 = rand(rng, 0:10, n)
+        x = z1 .+ rand(rng, 0:3, n)
+        y = 2 .* x .+ rand(rng, 0:5, n)
+
+        X = hcat(ones(Int, n), x)
+        Z = hcat(ones(Int, n), z1)
+
+        m = estimate_iv(y, X, Z; endogenous=[2])
+        @test length(coef(m)) == 2
+    end
+
+    @testset "IV — show method" begin
+        rng = MersenneTwister(5006)
+        n = 200
+        z1 = randn(rng, n)
+        z2 = randn(rng, n)
+        v = randn(rng, n)
+        u = 0.5 * v + randn(rng, n)
+        x_endog = 0.5 * z1 + 0.3 * z2 + v
+        y = 1.0 .+ 2.0 .* x_endog .+ u
+
+        X = hcat(ones(n), x_endog)
+        Z = hcat(ones(n), z1, z2)
+
+        m = estimate_iv(y, X, Z; endogenous=[2])
+
+        io = IOBuffer()
+        show(io, m)
+        output = String(take!(io))
+        @test occursin("IV/2SLS", output)
+        @test occursin("1st-stage F", output)
+    end
+
+    @testset "IV — AIC/BIC/loglik finite" begin
+        rng = MersenneTwister(5007)
+        n = 200
+        z1 = randn(rng, n)
+        v = randn(rng, n)
+        u = 0.3 * v + randn(rng, n)
+        x_endog = 0.6 * z1 + v
+        y = 1.0 .+ 1.0 .* x_endog .+ u
+
+        X = hcat(ones(n), x_endog)
+        Z = hcat(ones(n), z1)
+
+        m = estimate_iv(y, X, Z; endogenous=[2])
+        @test isfinite(aic(m))
+        @test isfinite(bic(m))
+        @test isfinite(loglikelihood(m))
+    end
+
+end
+
+# =============================================================================
+# Task 6: Logit Estimation
+# =============================================================================
+
+@testset "Logit Estimation (Task 6)" begin
+
+    @testset "Logit coefficient recovery" begin
+        rng = MersenneTwister(6001)
+        n = 1000
+        beta_true = [0.0, 1.5, -1.0]
+        X = hcat(ones(n), randn(rng, n, 2))
+        p = 1.0 ./ (1.0 .+ exp.(-X * beta_true))
+        y = Float64.(rand(rng, n) .< p)
+
+        m = estimate_logit(y, X)
+
+        # Coefficient recovery (atol=0.3)
+        for j in 1:3
+            @test abs(coef(m)[j] - beta_true[j]) < 0.3
+        end
+    end
+
+    @testset "Logit convergence and predictions" begin
+        rng = MersenneTwister(6002)
+        n = 500
+        X = hcat(ones(n), randn(rng, n, 2))
+        beta_true = [0.5, 1.0, -0.5]
+        p = 1.0 ./ (1.0 .+ exp.(-X * beta_true))
+        y = Float64.(rand(rng, n) .< p)
+
+        m = estimate_logit(y, X)
+
+        # Convergence
+        @test m.converged == true
+        @test m.iterations > 0
+
+        # Predicted probabilities in (0, 1)
+        @test all(0 .< predict(m) .< 1)
+
+        # Pseudo R-squared > 0
+        @test m.pseudo_r2 > 0
+
+        # Log-likelihood > null log-likelihood
+        @test m.loglik > m.loglik_null
+    end
+
+    @testset "Logit StatsAPI interface" begin
+        rng = MersenneTwister(6003)
+        n = 300
+        X = hcat(ones(n), randn(rng, n))
+        p = 1.0 ./ (1.0 .+ exp.(-X * [0.0, 1.0]))
+        y = Float64.(rand(rng, n) .< p)
+
+        m = estimate_logit(y, X)
+
+        @test nobs(m) == n
+        @test dof(m) == 2
+        @test !islinear(m)
+
+        ci = confint(m)
+        @test size(ci) == (2, 2)
+        @test all(ci[:, 1] .< coef(m))
+        @test all(ci[:, 2] .> coef(m))
+    end
+
+    @testset "Logit deviance residuals finite" begin
+        rng = MersenneTwister(6004)
+        n = 500
+        X = hcat(ones(n), randn(rng, n, 2))
+        p = 1.0 ./ (1.0 .+ exp.(-X * [0.0, 1.0, -0.5]))
+        y = Float64.(rand(rng, n) .< p)
+
+        m = estimate_logit(y, X)
+
+        @test all(isfinite.(residuals(m)))
+        @test length(residuals(m)) == n
+    end
+
+    @testset "Logit AIC/BIC" begin
+        rng = MersenneTwister(6005)
+        n = 400
+        X = hcat(ones(n), randn(rng, n))
+        p = 1.0 ./ (1.0 .+ exp.(-X * [0.0, 0.8]))
+        y = Float64.(rand(rng, n) .< p)
+
+        m = estimate_logit(y, X)
+
+        @test isfinite(aic(m))
+        @test isfinite(bic(m))
+        @test isfinite(loglikelihood(m))
+    end
+
+    @testset "Logit robust covariance" begin
+        rng = MersenneTwister(6006)
+        n = 500
+        X = hcat(ones(n), randn(rng, n, 2))
+        p = 1.0 ./ (1.0 .+ exp.(-X * [0.0, 1.0, -0.5]))
+        y = Float64.(rand(rng, n) .< p)
+
+        for ct in [:ols, :hc0, :hc1]
+            m = estimate_logit(y, X; cov_type=ct)
+            @test m.cov_type == ct
+            @test all(stderror(m) .> 0)
+        end
+    end
+
+    @testset "Logit error handling" begin
+        n = 50
+        X = hcat(ones(n), randn(n))
+
+        # Non-binary y
+        @test_throws ArgumentError estimate_logit(randn(n), X)
+
+        # Dimension mismatch
+        @test_throws ArgumentError estimate_logit(Float64.([0,1,0,1,1]), randn(10, 2))
+    end
+
+    @testset "Logit Float fallback" begin
+        rng = MersenneTwister(6007)
+        n = 100
+        X = hcat(ones(Int, n), rand(rng, 0:1, n))
+        y = rand(rng, 0:1, n)
+
+        m = estimate_logit(y, X)
+        @test length(coef(m)) == 2
+    end
+
+    @testset "Logit show method" begin
+        rng = MersenneTwister(6008)
+        n = 200
+        X = hcat(ones(n), randn(rng, n))
+        p = 1.0 ./ (1.0 .+ exp.(-X * [0.0, 1.0]))
+        y = Float64.(rand(rng, n) .< p)
+
+        m = estimate_logit(y, X)
+
+        io = IOBuffer()
+        show(io, m)
+        output = String(take!(io))
+        @test occursin("Logit Regression", output)
+        @test occursin("Pseudo R-sq", output)
+    end
+
+end
+
+# =============================================================================
+# Task 7: Probit Estimation
+# =============================================================================
+
+@testset "Probit Estimation (Task 7)" begin
+
+    @testset "Probit coefficient recovery" begin
+        rng = MersenneTwister(7001)
+        n = 1000
+        beta_true = [0.0, 1.0, -0.8]
+        X = hcat(ones(n), randn(rng, n, 2))
+        d = Distributions.Normal()
+        p = Distributions.cdf.(d, X * beta_true)
+        y = Float64.(rand(rng, n) .< p)
+
+        m = estimate_probit(y, X)
+
+        # Coefficient recovery
+        for j in 1:3
+            @test abs(coef(m)[j] - beta_true[j]) < 0.3
+        end
+    end
+
+    @testset "Probit convergence and predictions" begin
+        rng = MersenneTwister(7002)
+        n = 500
+        X = hcat(ones(n), randn(rng, n, 2))
+        beta_true = [0.3, 0.8, -0.5]
+        d = Distributions.Normal()
+        p = Distributions.cdf.(d, X * beta_true)
+        y = Float64.(rand(rng, n) .< p)
+
+        m = estimate_probit(y, X)
+
+        @test m.converged == true
+        @test m.iterations > 0
+        @test all(0 .< predict(m) .< 1)
+        @test m.pseudo_r2 > 0
+    end
+
+    @testset "Probit beta ≈ logit beta / 1.6" begin
+        rng = MersenneTwister(7003)
+        n = 2000
+        beta_true_logit = [0.0, 2.0, -1.5]
+        X = hcat(ones(n), randn(rng, n, 2))
+        p = 1.0 ./ (1.0 .+ exp.(-X * beta_true_logit))
+        y = Float64.(rand(rng, n) .< p)
+
+        m_logit = estimate_logit(y, X)
+        m_probit = estimate_probit(y, X)
+
+        # Probit coefficients should be approximately logit / 1.6
+        for j in 1:3
+            ratio = abs(coef(m_logit)[j]) > 0.1 ?
+                coef(m_probit)[j] / coef(m_logit)[j] : NaN
+            if !isnan(ratio)
+                @test abs(ratio - 1.0 / 1.6) < 0.15
+            end
+        end
+    end
+
+    @testset "Probit StatsAPI interface" begin
+        rng = MersenneTwister(7004)
+        n = 300
+        X = hcat(ones(n), randn(rng, n))
+        d = Distributions.Normal()
+        p = Distributions.cdf.(d, X * [0.0, 0.8])
+        y = Float64.(rand(rng, n) .< p)
+
+        m = estimate_probit(y, X)
+
+        @test nobs(m) == n
+        @test dof(m) == 2
+        @test !islinear(m)
+
+        ci = confint(m)
+        @test size(ci) == (2, 2)
+    end
+
+    @testset "Probit deviance residuals finite" begin
+        rng = MersenneTwister(7005)
+        n = 500
+        X = hcat(ones(n), randn(rng, n, 2))
+        d = Distributions.Normal()
+        p = Distributions.cdf.(d, X * [0.0, 0.8, -0.5])
+        y = Float64.(rand(rng, n) .< p)
+
+        m = estimate_probit(y, X)
+        @test all(isfinite.(residuals(m)))
+    end
+
+    @testset "Probit robust covariance" begin
+        rng = MersenneTwister(7006)
+        n = 500
+        X = hcat(ones(n), randn(rng, n))
+        d = Distributions.Normal()
+        p = Distributions.cdf.(d, X * [0.0, 1.0])
+        y = Float64.(rand(rng, n) .< p)
+
+        for ct in [:ols, :hc0, :hc1]
+            m = estimate_probit(y, X; cov_type=ct)
+            @test m.cov_type == ct
+            @test all(stderror(m) .> 0)
+        end
+    end
+
+    @testset "Probit error handling" begin
+        n = 50
+        X = hcat(ones(n), randn(n))
+
+        # Non-binary y
+        @test_throws ArgumentError estimate_probit(randn(n), X)
+    end
+
+    @testset "Probit Float fallback" begin
+        rng = MersenneTwister(7007)
+        n = 100
+        X = hcat(ones(Int, n), rand(rng, 0:1, n))
+        y = rand(rng, 0:1, n)
+
+        m = estimate_probit(y, X)
+        @test length(coef(m)) == 2
+    end
+
+    @testset "Probit show method" begin
+        rng = MersenneTwister(7008)
+        n = 200
+        X = hcat(ones(n), randn(rng, n))
+        d = Distributions.Normal()
+        p = Distributions.cdf.(d, X * [0.0, 0.8])
+        y = Float64.(rand(rng, n) .< p)
+
+        m = estimate_probit(y, X)
+
+        io = IOBuffer()
+        show(io, m)
+        output = String(take!(io))
+        @test occursin("Probit Regression", output)
+        @test occursin("Pseudo R-sq", output)
     end
 
 end

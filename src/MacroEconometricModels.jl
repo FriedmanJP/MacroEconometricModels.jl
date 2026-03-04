@@ -103,6 +103,9 @@ include("data/examples.jl")
 include("reg/types.jl")
 include("reg/covariance.jl")
 include("reg/estimation.jl")
+include("reg/iv.jl")
+include("reg/logit.jl")
+include("reg/probit.jl")
 
 # VAR types and estimation
 include("var/types.jl")
@@ -798,7 +801,7 @@ export load_example
 export RegModel, LogitModel, ProbitModel, MarginalEffects
 
 # Estimation
-export estimate_reg
+export estimate_reg, estimate_iv, estimate_logit, estimate_probit
 
 # =============================================================================
 # Exports - Plotting
