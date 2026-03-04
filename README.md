@@ -157,7 +157,8 @@ Pkg.add("MacroEconometricModels")
 
 ### Hypothesis Tests
 - **Unit Root Tests** - ADF, KPSS, Phillips-Perron, Zivot-Andrews, Ng-Perron (MZa, MZt, MSB, MPT)
-- **Cointegration** - Johansen test (trace and max-eigenvalue)
+- **Advanced Unit Root** - Fourier ADF/KPSS (Enders & Lee 2012), DF-GLS/ERS (Elliott, Rothenberg & Stock 1996), LM unit root with 0/1/2 breaks (Lee & Strazicich 2003, 2013), two-break ADF (Narayan & Popp 2010)
+- **Cointegration** - Johansen test (trace and max-eigenvalue), Gregory-Hansen (1996) test with structural break (level shift, trend, regime)
 - **Structural Breaks** - Andrews (1993) SupWald/SupLM/SupLR with 9 test variants; Bai-Perron (1998) multiple break detection via dynamic programming with BIC/LWZ/sequential selection; factor break tests — Breitung-Eickmeier (2011), Chen-Dolado-Gonzalo (2014), Han-Inoue (2015)
 - **Panel Unit Root** - Bai-Ng (2004) PANIC with factor-adjusted pooled/individual tests; Pesaran (2007) CIPS with cross-sectional augmentation; Moon-Perron (2004) factor-adjusted t-statistics; `panel_unit_root_summary()` battery
 - **Granger Causality** - Pairwise and block Wald tests, all-pairs matrix
@@ -303,6 +304,11 @@ Full documentation available at [https://FriedmanJP.github.io/MacroEconometricMo
 - Dickey, David A., and Wayne A. Fuller. 1979. "Distribution of the Estimators for Autoregressive Time Series with a Unit Root." *Journal of the American Statistical Association* 74 (366): 427–431. [https://doi.org/10.1080/01621459.1979.10482531](https://doi.org/10.1080/01621459.1979.10482531)
 - Johansen, Søren. 1991. "Estimation and Hypothesis Testing of Cointegration Vectors in Gaussian Vector Autoregressive Models." *Econometrica* 59 (6): 1551–1580. [https://doi.org/10.2307/2938278](https://doi.org/10.2307/2938278)
 - Kwiatkowski, Denis, Peter C. B. Phillips, Peter Schmidt, and Yongcheol Shin. 1992. "Testing the Null Hypothesis of Stationarity Against the Alternative of a Unit Root." *Journal of Econometrics* 54 (1–3): 159–178. [https://doi.org/10.1016/0304-4076(92)90104-Y](https://doi.org/10.1016/0304-4076(92)90104-Y)
+- Elliott, Graham, Thomas J. Rothenberg, and James H. Stock. 1996. "Efficient Tests for an Autoregressive Unit Root." *Econometrica* 64 (4): 813–836. [https://doi.org/10.2307/2171846](https://doi.org/10.2307/2171846)
+- Enders, Walter, and Junsoo Lee. 2012. "A Unit Root Test Using a Fourier Series to Approximate Smooth Breaks." *Oxford Bulletin of Economics and Statistics* 74 (4): 574–599. [https://doi.org/10.1111/j.1468-0084.2011.00662.x](https://doi.org/10.1111/j.1468-0084.2011.00662.x)
+- Gregory, Allan W., and Bruce E. Hansen. 1996. "Residual-Based Tests for Cointegration in Models with Regime Shifts." *Journal of Econometrics* 70 (1): 99–126. [https://doi.org/10.1016/0304-4076(69)41685-7](https://doi.org/10.1016/0304-4076(69)41685-7)
+- Lee, Junsoo, and Mark C. Strazicich. 2003. "Minimum Lagrange Multiplier Unit Root Test with Two Structural Breaks." *Review of Economics and Statistics* 85 (4): 1082–1089. [https://doi.org/10.1162/003465303772815961](https://doi.org/10.1162/003465303772815961)
+- Narayan, Paresh Kumar, and Stephan Popp. 2010. "A New Unit Root Test with Two Structural Breaks in Level and Slope at Unknown Time." *Journal of Applied Statistics* 47 (12): 1425–1438. [https://doi.org/10.1080/02664760903039883](https://doi.org/10.1080/02664760903039883)
 - Ng, Serena, and Pierre Perron. 2001. "Lag Length Selection and the Construction of Unit Root Tests with Good Size and Power." *Econometrica* 69 (6): 1519–1554. [https://doi.org/10.1111/1468-0262.00256](https://doi.org/10.1111/1468-0262.00256)
 
 ### Structural Breaks
