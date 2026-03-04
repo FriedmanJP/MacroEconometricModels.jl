@@ -89,6 +89,7 @@ include("core/utils.jl")
 include("core/types.jl")
 include("core/display.jl")
 include("core/kalman.jl")
+include("core/quadrature.jl")
 
 # Data containers, validation, transforms, panel, summary stats, examples
 include("data/types.jl")
@@ -97,6 +98,17 @@ include("data/transform.jl")
 include("data/panel.jl")
 include("data/summary_stats.jl")
 include("data/examples.jl")
+
+# Cross-sectional regression
+include("reg/types.jl")
+include("reg/covariance.jl")
+include("reg/estimation.jl")
+include("reg/iv.jl")
+include("reg/logit.jl")
+include("reg/probit.jl")
+include("reg/margins.jl")
+include("reg/diagnostics.jl")
+include("reg/predict.jl")
 
 # VAR types and estimation
 include("var/types.jl")
@@ -785,6 +797,19 @@ export to_matrix, to_vector
 
 # Examples
 export load_example
+
+# =============================================================================
+# Exports - Cross-Sectional Regression
+# =============================================================================
+
+# Types
+export RegModel, LogitModel, ProbitModel, MarginalEffects
+
+# Estimation
+export estimate_reg, estimate_iv, estimate_logit, estimate_probit
+
+# Marginal effects, diagnostics, prediction
+export marginal_effects, odds_ratio, vif, classification_table
 
 # =============================================================================
 # Exports - Plotting

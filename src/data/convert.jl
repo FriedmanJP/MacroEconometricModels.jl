@@ -210,3 +210,67 @@ nowcast_bridge(d::TimeSeriesData, nM::Int, nQ::Int; kwargs...) =
 
 estimate_dsge_bayes(spec::DSGESpec, d::TimeSeriesData, θ0::Vector; kwargs...) =
     estimate_dsge_bayes(spec, to_matrix(d), θ0; kwargs...)
+
+# =============================================================================
+# CrossSectionData dispatch wrappers for cross-sectional models
+# =============================================================================
+
+function estimate_reg(d::CrossSectionData{T}, depvar::Symbol,
+                      indepvars::Vector{Symbol}; kwargs...) where {T}
+    y_idx = findfirst(==(String(depvar)), d.varnames)
+    y_idx === nothing && throw(ArgumentError("Variable '$(depvar)' not found. Available: $(d.varnames)"))
+    y = d.data[:, y_idx]
+    X_cols = [findfirst(==(String(v)), d.varnames) for v in indepvars]
+    any(isnothing, X_cols) && throw(ArgumentError("Variable not found in $(d.varnames)"))
+    X = hcat(ones(T, d.N_obs), d.data[:, X_cols])
+    names = ["(Intercept)"; String.(indepvars)]
+    estimate_reg(y, X; varnames=names, kwargs...)
+end
+
+function estimate_logit(d::CrossSectionData{T}, depvar::Symbol,
+                        indepvars::Vector{Symbol}; kwargs...) where {T}
+    y_idx = findfirst(==(String(depvar)), d.varnames)
+    y_idx === nothing && throw(ArgumentError("Variable '$(depvar)' not found. Available: $(d.varnames)"))
+    y = d.data[:, y_idx]
+    X_cols = [findfirst(==(String(v)), d.varnames) for v in indepvars]
+    any(isnothing, X_cols) && throw(ArgumentError("Variable not found in $(d.varnames)"))
+    X = hcat(ones(T, d.N_obs), d.data[:, X_cols])
+    names = ["(Intercept)"; String.(indepvars)]
+    estimate_logit(y, X; varnames=names, kwargs...)
+end
+
+function estimate_probit(d::CrossSectionData{T}, depvar::Symbol,
+                         indepvars::Vector{Symbol}; kwargs...) where {T}
+    y_idx = findfirst(==(String(depvar)), d.varnames)
+    y_idx === nothing && throw(ArgumentError("Variable '$(depvar)' not found. Available: $(d.varnames)"))
+    y = d.data[:, y_idx]
+    X_cols = [findfirst(==(String(v)), d.varnames) for v in indepvars]
+    any(isnothing, X_cols) && throw(ArgumentError("Variable not found in $(d.varnames)"))
+    X = hcat(ones(T, d.N_obs), d.data[:, X_cols])
+    names = ["(Intercept)"; String.(indepvars)]
+    estimate_probit(y, X; varnames=names, kwargs...)
+end
+
+function estimate_iv(d::CrossSectionData{T}, depvar::Symbol,
+                     indepvars::Vector{Symbol}, instruments::Vector{Symbol};
+                     endogenous::Vector{Symbol}, kwargs...) where {T}
+    y_idx = findfirst(==(String(depvar)), d.varnames)
+    y_idx === nothing && throw(ArgumentError("Variable '$(depvar)' not found. Available: $(d.varnames)"))
+    y = d.data[:, y_idx]
+
+    X_cols = [findfirst(==(String(v)), d.varnames) for v in indepvars]
+    any(isnothing, X_cols) && throw(ArgumentError("Variable not found in $(d.varnames)"))
+    X = hcat(ones(T, d.N_obs), d.data[:, X_cols])
+
+    # Instruments = exogenous regressors + excluded instruments
+    exog = setdiff(indepvars, endogenous)
+    all_iv = vcat(exog, instruments)
+    Z_cols = [findfirst(==(String(v)), d.varnames) for v in all_iv]
+    any(isnothing, Z_cols) && throw(ArgumentError("Instrument variable not found in $(d.varnames)"))
+    Z = hcat(ones(T, d.N_obs), d.data[:, Z_cols])
+
+    # Map endogenous symbols to column indices in X (offset by 1 for intercept)
+    endog_idx = [findfirst(==(e), indepvars) + 1 for e in endogenous]  # +1 for intercept
+    names = ["(Intercept)"; String.(indepvars)]
+    estimate_iv(y, X, Z; endogenous=endog_idx, varnames=names, kwargs...)
+end
