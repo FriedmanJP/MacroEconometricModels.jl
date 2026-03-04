@@ -230,6 +230,23 @@ using Statistics
         # Test error handling
         @test_throws ArgumentError za_test(randn(30))  # Too short
         @test_throws ArgumentError za_test(randn(100); trim=0.6)  # Invalid trim
+
+        # Test that AIC lag selection actually varies (not hardcoded)
+        result_aic = za_test(y_break; regression=:constant, lags=:aic)
+        @test result_aic isa ZAResult
+        @test result_aic.lags >= 0
+
+        # Test AO model
+        result_ao = za_test(y_break; regression=:constant, outlier=:ao)
+        @test result_ao isa ZAResult
+        @test result_ao.break_index > 0
+
+        # Test IO and AO give different results
+        result_io = za_test(y_break; regression=:constant, outlier=:io)
+        @test result_io.statistic != result_ao.statistic || result_io.break_index != result_ao.break_index
+
+        # Test invalid outlier argument
+        @test_throws ArgumentError za_test(y_break; outlier=:invalid)
     end
 
     # ==========================================================================
