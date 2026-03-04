@@ -129,6 +129,33 @@ MacroEconometricModels.StatsAPI.stderror(::ARIMAModel)
 
 ---
 
+## Cross-Sectional Models
+
+### Estimation
+
+```@docs
+estimate_reg
+estimate_iv
+estimate_logit
+estimate_probit
+```
+
+### Marginal Effects and Odds Ratios
+
+```@docs
+marginal_effects
+odds_ratio
+```
+
+### Diagnostics
+
+```@docs
+vif
+classification_table
+```
+
+---
+
 ## VAR Estimation
 
 ### Frequentist Estimation
@@ -775,7 +802,7 @@ display_plot
 
 ```@autodocs
 Modules = [MacroEconometricModels]
-Pages   = ["plotting/irf.jl", "plotting/fevd.jl", "plotting/hd.jl", "plotting/filters.jl", "plotting/forecast.jl", "plotting/models.jl", "plotting/nowcast.jl", "plotting/did.jl"]
+Pages   = ["plotting/irf.jl", "plotting/fevd.jl", "plotting/hd.jl", "plotting/filters.jl", "plotting/forecast.jl", "plotting/models.jl", "plotting/nowcast.jl", "plotting/did.jl", "plotting/reg.jl"]
 Order   = [:function]
 ```
 

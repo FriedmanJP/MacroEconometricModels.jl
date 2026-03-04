@@ -45,6 +45,10 @@ makedocs(;
             "Constraints" => "dsge_constraints.md",
             "Estimation" => "dsge_estimation.md",
         ],
+        "Cross-Sectional Models" => [
+            "Linear Regression" => "regression.md",
+            "Binary Choice Models" => "binary_choice.md",
+        ],
         "Innovation Accounting" => "innovation_accounting.md",
         "Nowcasting" => "nowcast.md",
         "Statistical Identification" => "nongaussian.md",
