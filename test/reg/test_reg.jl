@@ -919,3 +919,541 @@ end
     end
 
 end
+
+# =============================================================================
+# Task 8: Marginal Effects and Odds Ratios
+# =============================================================================
+
+@testset "Marginal Effects and Odds Ratios (Task 8)" begin
+
+    # ---- Shared data for logit ----
+    rng_logit = MersenneTwister(8001)
+    n_logit = 1000
+    beta_true_logit = [0.0, 1.5, -1.0]
+    X_logit = hcat(ones(n_logit), randn(rng_logit, n_logit, 2))
+    p_logit = 1.0 ./ (1.0 .+ exp.(-X_logit * beta_true_logit))
+    y_logit = Float64.(rand(rng_logit, n_logit) .< p_logit)
+    m_logit = estimate_logit(y_logit, X_logit; varnames=["const", "x1", "x2"])
+
+    # ---- Shared data for probit ----
+    rng_probit = MersenneTwister(8002)
+    n_probit = 1000
+    beta_true_probit = [0.0, 1.0, -0.8]
+    X_probit = hcat(ones(n_probit), randn(rng_probit, n_probit, 2))
+    d_norm = Distributions.Normal()
+    p_probit = Distributions.cdf.(d_norm, X_probit * beta_true_probit)
+    y_probit = Float64.(rand(rng_probit, n_probit) .< p_probit)
+    m_probit = estimate_probit(y_probit, X_probit; varnames=["const", "x1", "x2"])
+
+    @testset "Logit AME — basic properties" begin
+        me = marginal_effects(m_logit)
+
+        @test me.type == :ame
+        @test length(me.effects) == 3
+        @test length(me.se) == 3
+        @test length(me.z_stat) == 3
+        @test length(me.p_values) == 3
+        @test me.conf_level == 0.95
+        @test me.varnames == ["const", "x1", "x2"]
+
+        # SEs should be positive
+        @test all(me.se .> 0)
+
+        # CIs should bracket effects
+        @test all(me.ci_lower .< me.effects)
+        @test all(me.ci_upper .> me.effects)
+
+        # AME for slope coefficients should be non-trivial
+        # For logit: AME_j ≈ mean(p*(1-p)) * beta_j
+        # With beta2 = 1.5, AME should be positive
+        @test me.effects[2] > 0
+        # With beta3 = -1.0, AME should be negative
+        @test me.effects[3] < 0
+    end
+
+    @testset "Logit MEM — basic properties" begin
+        me = marginal_effects(m_logit; type=:mem)
+
+        @test me.type == :mem
+        @test length(me.effects) == 3
+        @test all(me.se .> 0)
+        @test all(me.ci_lower .< me.effects)
+        @test all(me.ci_upper .> me.effects)
+
+        # MEM should have same sign as AME for monotone link
+        me_ame = marginal_effects(m_logit; type=:ame)
+        for j in 2:3
+            @test sign(me.effects[j]) == sign(me_ame.effects[j])
+        end
+    end
+
+    @testset "Logit MER — basic properties" begin
+        me = marginal_effects(m_logit; type=:mer, at=Dict(2 => 0.0, 3 => 0.0))
+
+        @test me.type == :mer
+        @test length(me.effects) == 3
+        @test all(me.se .> 0)
+    end
+
+    @testset "MER error — missing at argument" begin
+        @test_throws ArgumentError marginal_effects(m_logit; type=:mer)
+    end
+
+    @testset "MER error — invalid column index" begin
+        @test_throws ArgumentError marginal_effects(m_logit; type=:mer, at=Dict(99 => 0.0))
+    end
+
+    @testset "Invalid type error" begin
+        @test_throws ArgumentError marginal_effects(m_logit; type=:invalid)
+    end
+
+    @testset "Probit AME — basic properties" begin
+        me = marginal_effects(m_probit)
+
+        @test me.type == :ame
+        @test length(me.effects) == 3
+        @test all(me.se .> 0)
+        @test all(me.ci_lower .< me.effects)
+        @test all(me.ci_upper .> me.effects)
+
+        # Probit AME for x1 (beta=1.0) should be positive
+        @test me.effects[2] > 0
+        # Probit AME for x2 (beta=-0.8) should be negative
+        @test me.effects[3] < 0
+    end
+
+    @testset "Probit MEM and MER" begin
+        me_mem = marginal_effects(m_probit; type=:mem)
+        @test me_mem.type == :mem
+        @test length(me_mem.effects) == 3
+
+        me_mer = marginal_effects(m_probit; type=:mer, at=Dict(2 => 0.5))
+        @test me_mer.type == :mer
+        @test length(me_mer.effects) == 3
+    end
+
+    @testset "AME magnitude: logit vs probit" begin
+        # AME for logit and probit on similar data should be comparable
+        # For balanced data, AME_logit ≈ AME_probit (approximately)
+        me_l = marginal_effects(m_logit)
+        me_p = marginal_effects(m_probit)
+
+        # Both should identify same direction for slopes
+        @test sign(me_l.effects[2]) == sign(me_p.effects[2])
+        @test sign(me_l.effects[3]) == sign(me_p.effects[3])
+    end
+
+    @testset "Confidence level affects CI width" begin
+        me_90 = marginal_effects(m_logit; conf_level=0.90)
+        me_95 = marginal_effects(m_logit; conf_level=0.95)
+        me_99 = marginal_effects(m_logit; conf_level=0.99)
+
+        for j in 1:3
+            w90 = me_90.ci_upper[j] - me_90.ci_lower[j]
+            w95 = me_95.ci_upper[j] - me_95.ci_lower[j]
+            w99 = me_99.ci_upper[j] - me_99.ci_lower[j]
+            @test w99 > w95 > w90
+        end
+    end
+
+    @testset "MarginalEffects show method" begin
+        me = marginal_effects(m_logit)
+        io = IOBuffer()
+        show(io, me)
+        output = String(take!(io))
+        @test occursin("Average Marginal Effects", output)
+
+        me_mem = marginal_effects(m_logit; type=:mem)
+        io2 = IOBuffer()
+        show(io2, me_mem)
+        output2 = String(take!(io2))
+        @test occursin("Marginal Effects at Mean", output2)
+    end
+
+    @testset "Odds ratios — basic properties" begin
+        result = odds_ratio(m_logit)
+
+        @test length(result.or) == 3
+        @test length(result.se) == 3
+        @test length(result.ci_lower) == 3
+        @test length(result.ci_upper) == 3
+        @test result.varnames == ["const", "x1", "x2"]
+
+        # OR = exp(beta), should be positive
+        @test all(result.or .> 0)
+
+        # OR should equal exp(beta) exactly
+        @test result.or ≈ exp.(coef(m_logit))
+
+        # SEs positive
+        @test all(result.se .> 0)
+
+        # CIs should bracket ORs
+        @test all(result.ci_lower .< result.or)
+        @test all(result.ci_upper .> result.or)
+
+        # For positive beta (x1 ~ 1.5), OR > 1
+        @test result.or[2] > 1.0
+
+        # For negative beta (x2 ~ -1.0), OR < 1
+        @test result.or[3] < 1.0
+    end
+
+    @testset "Odds ratios — confidence level" begin
+        or_90 = odds_ratio(m_logit; conf_level=0.90)
+        or_95 = odds_ratio(m_logit; conf_level=0.95)
+        or_99 = odds_ratio(m_logit; conf_level=0.99)
+
+        # Same ORs regardless of conf level
+        @test or_90.or ≈ or_95.or
+        @test or_95.or ≈ or_99.or
+
+        # Wider CIs for higher confidence
+        for j in 1:3
+            w90 = or_90.ci_upper[j] - or_90.ci_lower[j]
+            w95 = or_95.ci_upper[j] - or_95.ci_lower[j]
+            w99 = or_99.ci_upper[j] - or_99.ci_lower[j]
+            @test w99 > w95 > w90
+        end
+    end
+
+    @testset "Odds ratios — SE via delta method" begin
+        result = odds_ratio(m_logit)
+        se_beta = sqrt.(diag(m_logit.vcov_mat))
+
+        # Delta method: SE(OR_j) = OR_j * SE(beta_j)
+        expected_se = result.or .* se_beta
+        @test result.se ≈ expected_se
+    end
+
+end
+
+# =============================================================================
+# Task 9: Diagnostics — VIF and Classification Table
+# =============================================================================
+
+@testset "Diagnostics — VIF and Classification Table (Task 9)" begin
+
+    @testset "VIF — low collinearity" begin
+        rng = MersenneTwister(9001)
+        n = 500
+        X = hcat(ones(n), randn(rng, n, 3))
+        y = X * [1.0, 2.0, -0.5, 0.3] + 0.5 * randn(rng, n)
+
+        m = estimate_reg(y, X; varnames=["const", "x1", "x2", "x3"])
+        v = vif(m)
+
+        # With independent regressors, VIF should be near 1
+        @test length(v) == 3  # excludes intercept
+        @test all(v .> 0.9)
+        @test all(v .< 5.0)
+    end
+
+    @testset "VIF — high collinearity" begin
+        rng = MersenneTwister(9002)
+        n = 500
+        x1 = randn(rng, n)
+        x2 = x1 .+ 0.01 .* randn(rng, n)  # nearly collinear with x1
+        X = hcat(ones(n), x1, x2)
+        y = X * [1.0, 1.0, 1.0] + randn(rng, n)
+
+        m = estimate_reg(y, X; varnames=["const", "x1", "x2"])
+        v = vif(m)
+
+        # VIF should be very high for both collinear regressors
+        @test length(v) == 2
+        @test all(v .> 10.0)
+    end
+
+    @testset "VIF — single regressor" begin
+        rng = MersenneTwister(9003)
+        n = 100
+        X = hcat(ones(n), randn(rng, n))
+        y = X * [1.0, 2.0] + randn(rng, n)
+
+        m = estimate_reg(y, X)
+        v = vif(m)
+
+        # With single non-intercept regressor, VIF should be 1
+        @test length(v) == 1
+        @test v[1] ≈ 1.0 atol=0.1
+    end
+
+    @testset "Classification table — logit" begin
+        rng = MersenneTwister(9004)
+        n = 500
+        X = hcat(ones(n), randn(rng, n, 2))
+        beta_true = [0.0, 2.0, -1.5]
+        p = 1.0 ./ (1.0 .+ exp.(-X * beta_true))
+        y = Float64.(rand(rng, n) .< p)
+
+        m = estimate_logit(y, X)
+        ct = classification_table(m)
+
+        # Check keys
+        @test haskey(ct, "confusion")
+        @test haskey(ct, "accuracy")
+        @test haskey(ct, "sensitivity")
+        @test haskey(ct, "specificity")
+        @test haskey(ct, "precision")
+        @test haskey(ct, "f1_score")
+        @test haskey(ct, "n")
+        @test haskey(ct, "threshold")
+
+        # Confusion matrix 2x2
+        @test size(ct["confusion"]) == (2, 2)
+
+        # All metrics in [0, 1]
+        @test 0 <= ct["accuracy"] <= 1
+        @test 0 <= ct["sensitivity"] <= 1
+        @test 0 <= ct["specificity"] <= 1
+        @test 0 <= ct["precision"] <= 1
+        @test 0 <= ct["f1_score"] <= 1
+
+        # n should match
+        @test ct["n"] == n
+
+        # Confusion matrix should sum to n
+        @test sum(ct["confusion"]) ≈ n
+
+        # Accuracy = (TN + TP) / n
+        conf = ct["confusion"]
+        tn, fp, fn, tp = conf[1,1], conf[1,2], conf[2,1], conf[2,2]
+        @test ct["accuracy"] ≈ (tp + tn) / n
+
+        # With strong signal, accuracy should be decent
+        @test ct["accuracy"] > 0.6
+    end
+
+    @testset "Classification table — probit" begin
+        rng = MersenneTwister(9005)
+        n = 500
+        X = hcat(ones(n), randn(rng, n, 2))
+        d_norm = Distributions.Normal()
+        p = Distributions.cdf.(d_norm, X * [0.0, 1.5, -1.0])
+        y = Float64.(rand(rng, n) .< p)
+
+        m = estimate_probit(y, X)
+        ct = classification_table(m)
+
+        @test size(ct["confusion"]) == (2, 2)
+        @test sum(ct["confusion"]) ≈ n
+        @test 0 <= ct["accuracy"] <= 1
+        @test ct["accuracy"] > 0.6
+    end
+
+    @testset "Classification table — custom threshold" begin
+        rng = MersenneTwister(9006)
+        n = 300
+        X = hcat(ones(n), randn(rng, n))
+        p = 1.0 ./ (1.0 .+ exp.(-X * [0.0, 1.0]))
+        y = Float64.(rand(rng, n) .< p)
+
+        m = estimate_logit(y, X)
+
+        ct_50 = classification_table(m; threshold=0.5)
+        ct_30 = classification_table(m; threshold=0.3)
+        ct_70 = classification_table(m; threshold=0.7)
+
+        # Lower threshold → more positives → higher sensitivity, lower specificity
+        @test ct_30["sensitivity"] >= ct_50["sensitivity"]
+        @test ct_70["specificity"] >= ct_50["specificity"]
+
+        @test ct_50["threshold"] == 0.5
+        @test ct_30["threshold"] ≈ 0.3
+    end
+
+    @testset "Classification table — perfect separation" begin
+        # If model is very good, accuracy should be near 1
+        rng = MersenneTwister(9007)
+        n = 200
+        x = randn(rng, n)
+        X = hcat(ones(n), x)
+        # Very strong signal
+        p = 1.0 ./ (1.0 .+ exp.(-X * [0.0, 10.0]))
+        y = Float64.(rand(rng, n) .< p)
+
+        m = estimate_logit(y, X)
+        ct = classification_table(m)
+
+        @test ct["accuracy"] > 0.85
+    end
+
+    @testset "F1 score consistency" begin
+        rng = MersenneTwister(9008)
+        n = 400
+        X = hcat(ones(n), randn(rng, n, 2))
+        p = 1.0 ./ (1.0 .+ exp.(-X * [0.0, 1.5, -1.0]))
+        y = Float64.(rand(rng, n) .< p)
+
+        m = estimate_logit(y, X)
+        ct = classification_table(m)
+
+        # F1 = 2 * precision * recall / (precision + recall)
+        prec = ct["precision"]
+        recall = ct["sensitivity"]
+        if prec + recall > 0
+            expected_f1 = 2 * prec * recall / (prec + recall)
+            @test ct["f1_score"] ≈ expected_f1
+        end
+    end
+
+end
+
+# =============================================================================
+# Task 10: Predict Dispatches
+# =============================================================================
+
+@testset "Predict Dispatches (Task 10)" begin
+
+    @testset "RegModel predict — new data" begin
+        rng = MersenneTwister(10001)
+        n = 200
+        beta_true = [1.0, 2.0, -0.5]
+        k = length(beta_true)
+        X = hcat(ones(n), randn(rng, n, k - 1))
+        y = X * beta_true + 0.3 * randn(rng, n)
+
+        m = estimate_reg(y, X)
+
+        # Predict on training data should match fitted values
+        y_hat_train = predict(m, X)
+        @test y_hat_train ≈ predict(m) atol=1e-10
+
+        # Predict on new data
+        n_new = 50
+        X_new = hcat(ones(n_new), randn(rng, n_new, k - 1))
+        y_hat = predict(m, X_new)
+
+        @test length(y_hat) == n_new
+        @test all(isfinite.(y_hat))
+
+        # Should equal X_new * beta
+        @test y_hat ≈ X_new * coef(m) atol=1e-10
+    end
+
+    @testset "RegModel predict — dimension mismatch" begin
+        rng = MersenneTwister(10002)
+        n = 100
+        X = hcat(ones(n), randn(rng, n, 2))
+        y = randn(rng, n)
+        m = estimate_reg(y, X)
+
+        # Wrong number of columns
+        @test_throws ArgumentError predict(m, randn(10, 5))
+    end
+
+    @testset "LogitModel predict — new data" begin
+        rng = MersenneTwister(10003)
+        n = 500
+        X = hcat(ones(n), randn(rng, n, 2))
+        beta_true = [0.0, 1.5, -1.0]
+        p = 1.0 ./ (1.0 .+ exp.(-X * beta_true))
+        y = Float64.(rand(rng, n) .< p)
+
+        m = estimate_logit(y, X)
+
+        # Predict on training data should match fitted values
+        p_hat_train = predict(m, X)
+        @test p_hat_train ≈ predict(m) atol=1e-8
+
+        # Predict on new data
+        n_new = 50
+        X_new = hcat(ones(n_new), randn(rng, n_new, 2))
+        p_hat = predict(m, X_new)
+
+        @test length(p_hat) == n_new
+        @test all(isfinite.(p_hat))
+
+        # Predictions should be probabilities in (0, 1)
+        @test all(0 .< p_hat .< 1)
+
+        # Should equal logistic function applied to linear predictor
+        eta = X_new * coef(m)
+        expected = 1.0 ./ (1.0 .+ exp.(-eta))
+        @test p_hat ≈ expected atol=1e-10
+    end
+
+    @testset "LogitModel predict — dimension mismatch" begin
+        rng = MersenneTwister(10004)
+        n = 100
+        X = hcat(ones(n), randn(rng, n))
+        p = 1.0 ./ (1.0 .+ exp.(-X * [0.0, 1.0]))
+        y = Float64.(rand(rng, n) .< p)
+        m = estimate_logit(y, X)
+
+        @test_throws ArgumentError predict(m, randn(10, 5))
+    end
+
+    @testset "ProbitModel predict — new data" begin
+        rng = MersenneTwister(10005)
+        n = 500
+        X = hcat(ones(n), randn(rng, n, 2))
+        beta_true = [0.0, 1.0, -0.8]
+        d_norm = Distributions.Normal()
+        p = Distributions.cdf.(d_norm, X * beta_true)
+        y = Float64.(rand(rng, n) .< p)
+
+        m = estimate_probit(y, X)
+
+        # Predict on training data should match fitted values
+        p_hat_train = predict(m, X)
+        @test p_hat_train ≈ predict(m) atol=1e-8
+
+        # Predict on new data
+        n_new = 50
+        X_new = hcat(ones(n_new), randn(rng, n_new, 2))
+        p_hat = predict(m, X_new)
+
+        @test length(p_hat) == n_new
+        @test all(isfinite.(p_hat))
+
+        # Predictions should be probabilities in (0, 1)
+        @test all(0 .< p_hat .< 1)
+
+        # Should equal Phi(X_new * beta)
+        eta = X_new * coef(m)
+        expected = Distributions.cdf.(d_norm, eta)
+        @test p_hat ≈ expected atol=1e-10
+    end
+
+    @testset "ProbitModel predict — dimension mismatch" begin
+        rng = MersenneTwister(10006)
+        n = 100
+        X = hcat(ones(n), randn(rng, n))
+        d_norm = Distributions.Normal()
+        p = Distributions.cdf.(d_norm, X * [0.0, 0.8])
+        y = Float64.(rand(rng, n) .< p)
+        m = estimate_probit(y, X)
+
+        @test_throws ArgumentError predict(m, randn(10, 5))
+    end
+
+    @testset "Predict consistency across models" begin
+        # Generate data, fit all three model types, check predict dimensions
+        rng = MersenneTwister(10007)
+        n = 200
+        X = hcat(ones(n), randn(rng, n, 2))
+
+        # RegModel
+        y_cont = X * [1.0, 0.5, -0.3] + randn(rng, n)
+        m_reg = estimate_reg(y_cont, X)
+        y_hat_reg = predict(m_reg, X)
+        @test length(y_hat_reg) == n
+
+        # LogitModel
+        p_logit = 1.0 ./ (1.0 .+ exp.(-X * [0.0, 1.0, -0.5]))
+        y_bin = Float64.(rand(rng, n) .< p_logit)
+        m_logit = estimate_logit(y_bin, X)
+        y_hat_logit = predict(m_logit, X)
+        @test length(y_hat_logit) == n
+        @test all(0 .< y_hat_logit .< 1)
+
+        # ProbitModel
+        m_probit = estimate_probit(y_bin, X)
+        y_hat_probit = predict(m_probit, X)
+        @test length(y_hat_probit) == n
+        @test all(0 .< y_hat_probit .< 1)
+    end
+
+end

@@ -106,6 +106,9 @@ include("reg/estimation.jl")
 include("reg/iv.jl")
 include("reg/logit.jl")
 include("reg/probit.jl")
+include("reg/margins.jl")
+include("reg/diagnostics.jl")
+include("reg/predict.jl")
 
 # VAR types and estimation
 include("var/types.jl")
@@ -802,6 +805,9 @@ export RegModel, LogitModel, ProbitModel, MarginalEffects
 
 # Estimation
 export estimate_reg, estimate_iv, estimate_logit, estimate_probit
+
+# Marginal effects, diagnostics, prediction
+export marginal_effects, odds_ratio, vif, classification_table
 
 # =============================================================================
 # Exports - Plotting
