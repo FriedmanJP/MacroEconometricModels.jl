@@ -51,6 +51,7 @@ makedocs(;
         "Hypothesis Tests" => [
             "Overview" => "tests.md",
             "Unit Root & Cointegration" => "tests_unitroot.md",
+            "Advanced Unit Root" => "tests_unitroot_advanced.md",
             "Structural Breaks" => "tests_breaks.md",
             "Panel Tests" => "tests_panel.md",
             "Model Diagnostics" => "tests_diagnostics.md",
