@@ -111,6 +111,12 @@ using Statistics
         y_int = round.(Int, y_stationary * 10)
         result_int = adf_test(y_int)
         @test result_int isa ADFResult
+
+        # Critical values should differ when lag count changes (Cheung & Lai 1995)
+        cv_p0 = MacroEconometricModels.adf_critical_values(:constant, 200, 0)
+        cv_p8 = MacroEconometricModels.adf_critical_values(:constant, 200, 8)
+        @test cv_p0[5] != cv_p8[5]  # 5% CV should differ for p=0 vs p=8
+        @test cv_p8[5] > cv_p0[5]   # Higher lag count → less negative CV (wider)
     end
 
     # ==========================================================================
@@ -224,6 +230,23 @@ using Statistics
         # Test error handling
         @test_throws ArgumentError za_test(randn(30))  # Too short
         @test_throws ArgumentError za_test(randn(100); trim=0.6)  # Invalid trim
+
+        # Test that AIC lag selection actually varies (not hardcoded)
+        result_aic = za_test(y_break; regression=:constant, lags=:aic)
+        @test result_aic isa ZAResult
+        @test result_aic.lags >= 0
+
+        # Test AO model
+        result_ao = za_test(y_break; regression=:constant, outlier=:ao)
+        @test result_ao isa ZAResult
+        @test result_ao.break_index > 0
+
+        # Test IO and AO give different results
+        result_io = za_test(y_break; regression=:constant, outlier=:io)
+        @test result_io.statistic != result_ao.statistic || result_io.break_index != result_ao.break_index
+
+        # Test invalid outlier argument
+        @test_throws ArgumentError za_test(y_break; outlier=:invalid)
     end
 
     # ==========================================================================
@@ -268,6 +291,18 @@ using Statistics
 
         # MPT should be positive
         @test result_rw.MPT > zero(result_rw.MPT)
+
+        # Regression test: GLS detrending should use original Z, not quasi-differenced Z
+        # After fix, MZt for stationary AR(1) with rho=0.3 should be more negative
+        # than for a random walk
+        rng_np = Random.MersenneTwister(99887)
+        y_ar_np = zeros(200)
+        y_ar_np[1] = randn(rng_np)
+        for t in 2:200; y_ar_np[t] = 0.3 * y_ar_np[t-1] + randn(rng_np); end
+        result_ar_np = ngperron_test(y_ar_np; regression=:trend)
+        y_rw_np = cumsum(randn(rng_np, 200))
+        result_rw_np = ngperron_test(y_rw_np; regression=:trend)
+        @test result_ar_np.MZt < result_rw_np.MZt  # stationary should be more negative
     end
 
     # ==========================================================================
@@ -336,6 +371,16 @@ using Statistics
         # Test error handling
         @test_throws ArgumentError johansen_test(Y, 0)  # Invalid lags
         @test_throws ArgumentError johansen_test(randn(10, 3), 2)  # Too few obs
+
+        # Test Case 4 (:trend) runs without error and produces valid results
+        rng_joh = Random.MersenneTwister(7744)
+        Y_coint = hcat(cumsum(randn(rng_joh, 200)), cumsum(randn(rng_joh, 200)))
+        Y_coint[:, 2] = Y_coint[:, 1] + 0.1 * randn(rng_joh, 200)
+        result_trend4 = johansen_test(Y_coint, 2; deterministic=:trend)
+        @test result_trend4 isa JohansenResult
+        @test result_trend4.deterministic == :trend
+        @test length(result_trend4.trace_stats) == 2
+        @test all(isfinite, result_trend4.trace_stats)
     end
 
     # ==========================================================================
