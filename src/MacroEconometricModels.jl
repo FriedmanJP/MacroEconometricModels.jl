@@ -768,6 +768,7 @@ export Frequency, Daily, Monthly, Quarterly, Yearly, Mixed, Other
 export varnames, frequency, time_index, obs_id, rename_vars!
 export set_time_index!, set_obs_id!, desc, vardesc, set_desc!, set_vardesc!, dates, set_dates!
 export xtset, isbalanced, groups, ngroups, group_data, panel_summary
+export panel_lag, panel_lead, panel_diff, add_panel_lag, add_panel_lead, add_panel_diff
 
 # Validation
 export DataDiagnostic, diagnose, fix, validate_for_model
