@@ -111,6 +111,12 @@ using Statistics
         y_int = round.(Int, y_stationary * 10)
         result_int = adf_test(y_int)
         @test result_int isa ADFResult
+
+        # Critical values should differ when lag count changes (Cheung & Lai 1995)
+        cv_p0 = MacroEconometricModels.adf_critical_values(:constant, 200, 0)
+        cv_p8 = MacroEconometricModels.adf_critical_values(:constant, 200, 8)
+        @test cv_p0[5] != cv_p8[5]  # 5% CV should differ for p=0 vs p=8
+        @test cv_p8[5] > cv_p0[5]   # Higher lag count → less negative CV (wider)
     end
 
     # ==========================================================================

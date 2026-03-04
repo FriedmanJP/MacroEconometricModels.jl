@@ -26,19 +26,19 @@ using LinearAlgebra, Statistics, Distributions
 # Critical Value & P-value Functions
 # =============================================================================
 
-"""Compute ADF critical values using MacKinnon response surface."""
-function adf_critical_values(regression::Symbol, nobs::Int, T::Type=Float64)
+"""Compute ADF critical values using response surface (Cheung & Lai 1995)."""
+function adf_critical_values(regression::Symbol, nobs::Int, lags::Int=0, ::Type{TF}=Float64) where {TF<:AbstractFloat}
     coefs = MACKINNON_ADF_COEFS[regression]
-    Dict{Int,T}(
-        level => T(c[1] + c[2]/nobs + c[3]/nobs^2)
+    Dict{Int,TF}(
+        level => TF(c[1] + c[2]/nobs + c[3]/nobs^2 + c[4]*(lags/nobs) + c[5]*(lags/nobs)^2)
         for (level, c) in coefs
     )
 end
 
 """Approximate p-value for ADF test using MacKinnon (1994) interpolation."""
-function adf_pvalue(stat::T, regression::Symbol, nobs::Int) where {T<:AbstractFloat}
+function adf_pvalue(stat::T, regression::Symbol, nobs::Int, lags::Int=0) where {T<:AbstractFloat}
     # Get critical values at standard levels
-    cv = adf_critical_values(regression, nobs, T)
+    cv = adf_critical_values(regression, nobs, lags, T)
 
     # Simple interpolation between critical values
     if stat <= cv[1]
