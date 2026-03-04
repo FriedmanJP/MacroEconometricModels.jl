@@ -32,6 +32,7 @@ const _EXAMPLE_DATASETS = Dict{Symbol, Tuple{String, Symbol}}(
     :fred_md => ("fred_md.toml", :timeseries),
     :fred_qd => ("fred_qd.toml", :timeseries),
     :pwt     => ("pwt.toml",     :panel),
+    :ddcg    => ("ddcg.toml",    :panel),
 )
 
 # Parse frequency string to Frequency enum
@@ -52,6 +53,7 @@ Load a built-in example dataset.
 - `:fred_md` — FRED-MD Monthly Database, January 2026 vintage (126 variables × 804 months) → `TimeSeriesData`
 - `:fred_qd` — FRED-QD Quarterly Database, January 2026 vintage (245 variables × 268 quarters) → `TimeSeriesData`
 - `:pwt` — Penn World Table 10.01, 38 OECD countries (42 variables × 74 years, 1950–2023) → `PanelData`
+- `:ddcg` — Acemoglu et al. (2019) Democracy-GDP Panel (2 variables × 9,384 obs, 184 countries × 51 years) → `PanelData`
 
 For time series datasets, the returned `TimeSeriesData` includes variable names,
 transformation codes, frequency, per-variable descriptions (via `vardesc`),
