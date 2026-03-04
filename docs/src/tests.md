@@ -2,7 +2,8 @@
 
 MacroEconometricModels.jl provides a comprehensive suite of statistical hypothesis tests for macroeconomic time series analysis. The test battery covers pre-estimation diagnostics (unit root, cointegration, structural breaks, panel stationarity), post-estimation specification checks (Granger causality, normality, ARCH effects, model comparison), and panel-level instrument validation. All result types implement the StatsAPI interface for uniform access to test statistics, p-values, and degrees of freedom.
 
-- **[Unit Root & Cointegration](tests_unitroot.md)**: ADF, KPSS, Phillips-Perron, Zivot-Andrews, Ng-Perron, and Johansen tests for univariate stationarity and multivariate cointegrating relationships
+- **[Unit Root & Cointegration](tests_unitroot.md)**: ADF, KPSS, Phillips-Perron, Zivot-Andrews, and Ng-Perron tests for univariate stationarity; Johansen cointegration test
+- **[Advanced Unit Root](tests_unitroot_advanced.md)**: Fourier ADF/KPSS, DF-GLS/ERS, LM unit root (0/1/2 breaks), and two-break ADF for improved power under structural breaks
 - **[Structural Breaks](tests_breaks.md)**: Andrews single-break, Bai-Perron multiple-break, and factor loading stability tests for detecting parameter instability
 - **[Panel Tests](tests_panel.md)**: PANIC, Pesaran CIPS, and Moon-Perron tests for panel unit roots with cross-sectional dependence
 - **[Model Diagnostics](tests_diagnostics.md)**: Granger causality, multivariate normality, ARCH-LM, Ljung-Box, Hansen J, Andrews-Lu MMSC, and likelihood ratio / Lagrange multiplier tests
@@ -79,76 +80,82 @@ Tests for univariate stationarity and integration order. See [Unit Root & Cointe
 3. `pp_test` -- Phillips-Perron non-parametric unit root test (Phillips & Perron 1988)
 4. `za_test` -- Zivot-Andrews unit root test with endogenous structural break (Zivot & Andrews 1992)
 5. `ngperron_test` -- Ng-Perron GLS-detrended tests with improved size properties (Ng & Perron 2001)
+6. `fourier_adf_test` -- Fourier ADF unit root test with flexible Fourier form (Enders & Lee 2012). Null: unit root
+7. `fourier_kpss_test` -- Fourier KPSS stationarity test with Fourier terms (Becker, Enders & Lee 2006). Null: stationarity
+8. `dfgls_test` -- DF-GLS / ERS point-optimal unit root test with GLS detrending (Elliott, Rothenberg & Stock 1996). Null: unit root
+9. `lm_unitroot_test` -- LM unit root test with 0, 1, or 2 structural breaks (Schmidt-Phillips 1992; Lee-Strazicich 2003, 2013). Null: unit root with breaks
+10. `adf_2break_test` -- Two-break ADF unit root test (Narayan & Popp 2010). Null: unit root with two breaks
 
 ### Cointegration
 
 Tests for multivariate long-run equilibrium relationships. See [Unit Root & Cointegration](tests_unitroot.md).
 
-6. `johansen_test` -- Johansen trace and maximum eigenvalue tests (Johansen 1991)
+11. `johansen_test` -- Johansen trace and maximum eigenvalue tests (Johansen 1991)
+12. `gregory_hansen_test` -- Gregory-Hansen cointegration test with structural break (Gregory & Hansen 1996). Null: no cointegration
 
 ### Structural Breaks
 
 Tests for parameter instability at unknown break dates. See [Structural Breaks](tests_breaks.md).
 
-7. `andrews_test` -- Andrews (1993) sup-Wald / Andrews-Ploberger (1994) exp- and mean-Wald tests for a single structural break
-8. `bai_perron_test` -- Bai-Perron (1998, 2003) multiple structural break test with dynamic programming and BIC/LWZ selection
-9. `factor_break_test` -- Structural break tests for factor models: Breitung-Eickmeier (2011) loading stability, Chen-Dolado-Gonzalo (2014) factor number change, Han-Inoue (2015) sup-Wald
+13. `andrews_test` -- Andrews (1993) sup-Wald / Andrews-Ploberger (1994) exp- and mean-Wald tests for a single structural break
+14. `bai_perron_test` -- Bai-Perron (1998, 2003) multiple structural break test with dynamic programming and BIC/LWZ selection
+15. `factor_break_test` -- Structural break tests for factor models: Breitung-Eickmeier (2011) loading stability, Chen-Dolado-Gonzalo (2014) factor number change, Han-Inoue (2015) sup-Wald
 
 ### Panel Unit Root
 
 Tests for panel stationarity under cross-sectional dependence. See [Panel Tests](tests_panel.md).
 
-10. `panic_test` -- Bai-Ng (2004, 2010) PANIC decomposition into common factors and idiosyncratic components
-11. `pesaran_cips_test` -- Pesaran (2007) cross-sectionally augmented IPS test
-12. `moon_perron_test` -- Moon-Perron (2004) factor-adjusted pooled t-statistics
-13. `panel_unit_root_summary` -- Runs all three panel tests and prints a consolidated summary table
+16. `panic_test` -- Bai-Ng (2004, 2010) PANIC decomposition into common factors and idiosyncratic components
+17. `pesaran_cips_test` -- Pesaran (2007) cross-sectionally augmented IPS test
+18. `moon_perron_test` -- Moon-Perron (2004) factor-adjusted pooled t-statistics
+19. `panel_unit_root_summary` -- Runs all three panel tests and prints a consolidated summary table
 
 ### VAR Diagnostics
 
 Specification tests for Vector Autoregressive models. See [Model Diagnostics](tests_diagnostics.md).
 
-14. `is_stationary` -- Companion matrix eigenvalue check for VAR stability
-15. `granger_test` -- Pairwise or block Granger causality Wald test (Granger 1969)
-16. `granger_test_all` -- All-pairs Granger causality matrix
+20. `is_stationary` -- Companion matrix eigenvalue check for VAR stability
+21. `granger_test` -- Pairwise or block Granger causality Wald test (Granger 1969)
+22. `granger_test_all` -- All-pairs Granger causality matrix
 
 ### Panel VAR
 
 GMM instrument validation and lag selection for Panel VARs. See [Model Diagnostics](tests_diagnostics.md).
 
-17. `pvar_hansen_j` -- Hansen (1982) J-test for overidentifying restrictions
-18. `pvar_mmsc` -- Andrews-Lu (2001) model and moment selection criteria (BIC/AIC/HQIC)
-19. `pvar_lag_selection` -- Optimal lag order via MMSC comparison across specifications
+23. `pvar_hansen_j` -- Hansen (1982) J-test for overidentifying restrictions
+24. `pvar_mmsc` -- Andrews-Lu (2001) model and moment selection criteria (BIC/AIC/HQIC)
+25. `pvar_lag_selection` -- Optimal lag order via MMSC comparison across specifications
 
 ### Normality
 
 Multivariate normality tests for model residuals. See [Model Diagnostics](tests_diagnostics.md).
 
-20. `jarque_bera_test` -- Multivariate and component-wise Jarque-Bera (Jarque & Bera 1980)
-21. `mardia_test` -- Mardia skewness, kurtosis, and combined tests (Mardia 1970)
-22. `doornik_hansen_test` -- Doornik-Hansen omnibus test (Doornik & Hansen 2008)
-23. `henze_zirkler_test` -- Henze-Zirkler invariant test (Henze & Zirkler 1990)
-24. `normality_test_suite` -- Runs all seven normality tests and returns a consolidated `NormalityTestSuite`
+26. `jarque_bera_test` -- Multivariate and component-wise Jarque-Bera (Jarque & Bera 1980)
+27. `mardia_test` -- Mardia skewness, kurtosis, and combined tests (Mardia 1970)
+28. `doornik_hansen_test` -- Doornik-Hansen omnibus test (Doornik & Hansen 2008)
+29. `henze_zirkler_test` -- Henze-Zirkler invariant test (Henze & Zirkler 1990)
+30. `normality_test_suite` -- Runs all seven normality tests and returns a consolidated `NormalityTestSuite`
 
 ### ARCH Diagnostics
 
 Tests for conditional heteroskedasticity in residuals. See [Model Diagnostics](tests_diagnostics.md).
 
-25. `arch_lm_test` -- Engle (1982) ARCH-LM test (``T \cdot R^2`` from squared residual regression)
-26. `ljung_box_squared` -- Ljung-Box test on squared residuals for remaining ARCH effects
+31. `arch_lm_test` -- Engle (1982) ARCH-LM test (``T \cdot R^2`` from squared residual regression)
+32. `ljung_box_squared` -- Ljung-Box test on squared residuals for remaining ARCH effects
 
 ### Model Comparison
 
 Generic nested model comparison tests. See [Model Diagnostics](tests_diagnostics.md).
 
-27. `lr_test` -- Likelihood ratio test for any pair of nested models with `loglikelihood` (Wilks 1938)
-28. `lm_test` -- Lagrange multiplier (score) test for ARIMA, VAR, ARCH, and GARCH families (Rao 1948)
+33. `lr_test` -- Likelihood ratio test for any pair of nested models with `loglikelihood` (Wilks 1938)
+34. `lm_test` -- Lagrange multiplier (score) test for ARIMA, VAR, ARCH, and GARCH families (Rao 1948)
 
 ### Convenience
 
 Batch testing utilities for multi-variable workflows.
 
-29. `unit_root_summary` -- Runs ADF, KPSS, and PP on a single series and reports a combined verdict
-30. `test_all_variables` -- Applies a unit root test to every column of a data matrix
+35. `unit_root_summary` -- Runs ADF, KPSS, PP, and optionally Fourier ADF, DF-GLS on a single series and reports a combined verdict
+36. `test_all_variables` -- Applies a unit root test (including Fourier ADF, DF-GLS, LM unit root) to every column of a data matrix
 
 ---
 
@@ -166,6 +173,10 @@ Determining the integration order of each variable is the first step before spec
 | Suspected structural break | `za_test` | ADF has low power against break-stationary alternatives |
 | Small sample (``T < 100``) | `ngperron_test` | GLS detrending improves size and power |
 | Multiple variables, I(1) | `johansen_test` | Tests for cointegrating rank before VECM estimation |
+| Smooth structural breaks | `fourier_adf_test` | Fourier terms capture gradual shifts without specifying break dates |
+| Best power against near-unit-root | `dfgls_test` | GLS detrending; reports ERS Pt and MGLS statistics |
+| Unit root with breaks under H₀ | `lm_unitroot_test` | Breaks included under the null; 0/1/2 breaks |
+| Two known-type structural breaks | `adf_2break_test` | Grid search over two break dates |
 | Quick multi-test diagnosis | `unit_root_summary` | Combines ADF + KPSS + PP with automatic verdict |
 
 ### Pre-Estimation: Panel Data
@@ -188,6 +199,7 @@ Structural break tests detect changes in regression parameters at unknown dates.
 | Single unknown break | `andrews_test` | sup-Wald for point detection; exp/mean for average evidence |
 | Multiple unknown breaks | `bai_perron_test` | Dynamic programming with BIC/LWZ break selection |
 | Factor loading instability | `factor_break_test` | Loading CUSUM, factor number change, or sup-Wald |
+| Cointegration with regime shift | `gregory_hansen_test` | Three models (C/CT/CS), three statistics (ADF*/Zt*/Za*) |
 
 ### Post-Estimation Diagnostics
 
@@ -232,6 +244,12 @@ StatsAPI.HypothesisTest
     PPResult{T}
     ZAResult{T}
     NgPerronResult{T}
+    FourierADFResult{T}
+    FourierKPSSResult{T}
+    DFGLSResult{T}
+    LMUnitRootResult{T}
+    ADF2BreakResult{T}
+    GregoryHansenResult{T}
     JohansenResult{T}
     AndrewsResult{T}
     BaiPerronResult{T}
