@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>BVAR Nowcasting · MacroEconometricModels.jl</title><meta name="title" content="BVAR Nowcasting · MacroEconometricModels.jl"/><meta property="og:title" content="BVAR Nowcasting · MacroEconometricModels.jl"/><meta property="twitter:title" content="BVAR Nowcasting · MacroEconometricModels.jl"/><meta name="description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:description" content="Documentation for MacroEconometricModels.jl."/><meta property="twitter:description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:url" content="https://FriedmanJP.github.io/MacroEconometricModels.jl/nowcast_bvar/"/><meta property="twitter:url" content="https://FriedmanJP.github.io/MacroEconometricModels.jl/nowcast_bvar/"/><link rel="canonical" href="https://FriedmanJP.github.io/MacroEconometricModels.jl/nowcast_bvar/"/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script><link href="../assets/custom.css" rel="stylesheet" type="text/css"/><script src="../assets/theme-toggle.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">MacroEconometricModels.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><a class="tocitem" href="../data/">Data Management</a></li><li><span class="tocitem">Univariate Models</span><ul><li><a class="tocitem" href="../filters/">Time Series Filters</a></li><li><a class="tocitem" href="../arima/">ARIMA</a></li><li><a class="tocitem" href="../volatility/">Volatility Models</a></li></ul></li><li><span class="tocitem">Multivariate Models</span><ul><li><a class="tocitem" href="../manual/">VAR</a></li><li><a class="tocitem" href="../bayesian/">Bayesian VAR</a></li><li><a class="tocitem" href="../vecm/">VECM</a></li><li><a class="tocitem" href="../lp/">Local Projections</a></li><li><a class="tocitem" href="../factormodels/">Factor Models</a></li><li><a class="tocitem" href="../favar/">FAVAR</a></li></ul></li><li><span class="tocitem">Cross-Sectional Models</span><ul><li><a class="tocitem" href="../regression/">Linear Regression</a></li><li><a class="tocitem" href="../binary_choice/">Binary Choice Models</a></li></ul></li><li><span class="tocitem">Panel Models</span><ul><li><a class="tocitem" href="../pvar/">Panel VAR</a></li><li><a class="tocitem" href="../did/">Difference-in-Differences</a></li><li><a class="tocitem" href="../event_study/">Event Study LP</a></li></ul></li><li><span class="tocitem">DSGE Models</span><ul><li><a class="tocitem" href="../dsge/">Overview</a></li><li><a class="tocitem" href="../dsge_linear/">Linear Solvers</a></li><li><a class="tocitem" href="../dsge_nonlinear/">Nonlinear Methods</a></li><li><a class="tocitem" href="../dsge_constraints/">Constraints</a></li><li><a class="tocitem" href="../dsge_estimation/">Estimation</a></li></ul></li><li><span class="tocitem">Innovation Accounting</span><ul><li><a class="tocitem" href="../innovation_accounting/">Overview</a></li><li><a class="tocitem" href="../ia_irf/">Impulse Responses</a></li><li><a class="tocitem" href="../ia_fevd/">Variance Decomposition</a></li><li><a class="tocitem" href="../ia_hd/">Historical Decomposition</a></li></ul></li><li><span class="tocitem">Statistical Identification</span><ul><li><a class="tocitem" href="../nongaussian/">Overview</a></li><li><a class="tocitem" href="../id_nongaussian/">Non-Gaussian Methods</a></li><li><a class="tocitem" href="../id_heteroskedastic/">Heteroskedasticity</a></li><li><a class="tocitem" href="../id_testing/">Testing</a></li></ul></li><li><span class="tocitem">Nowcasting</span><ul><li><a class="tocitem" href="../nowcast/">Overview</a></li><li><a class="tocitem" href="../nowcast_dfm/">DFM Nowcasting</a></li><li class="is-active"><a class="tocitem" href>BVAR Nowcasting</a><ul class="internal"><li><a class="tocitem" href="#Quick-Start"><span>Quick Start</span></a></li><li><a class="tocitem" href="#Model-Specification"><span>Model Specification</span></a></li><li><a class="tocitem" href="#Estimation"><span>Estimation</span></a></li><li><a class="tocitem" href="#Forecasting"><span>Forecasting</span></a></li><li><a class="tocitem" href="#Keyword-Arguments"><span>Keyword Arguments</span></a></li><li><a class="tocitem" href="#NowcastBVAR-Return-Values"><span>NowcastBVAR Return Values</span></a></li><li><a class="tocitem" href="#Complete-Example"><span>Complete Example</span></a></li><li><a class="tocitem" href="#Common-Pitfalls"><span>Common Pitfalls</span></a></li><li><a class="tocitem" href="#References"><span>References</span></a></li></ul></li><li><a class="tocitem" href="../nowcast_bridge/">Bridge Equations</a></li><li><a class="tocitem" href="../nowcast_news/">News Decomposition</a></li></ul></li><li><span class="tocitem">Hypothesis Tests</span><ul><li><a class="tocitem" href="../tests/">Overview</a></li><li><a class="tocitem" href="../tests_unitroot/">Unit Root &amp; Cointegration</a></li><li><a class="tocitem" href="../tests_unitroot_advanced/">Advanced Unit Root</a></li><li><a class="tocitem" href="../tests_breaks/">Structural Breaks</a></li><li><a class="tocitem" href="../tests_panel/">Panel Tests</a></li><li><a class="tocitem" href="../tests_diagnostics/">Model Diagnostics</a></li></ul></li><li><a class="tocitem" href="../plotting/">Visualization</a></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../api/">Overview</a></li><li><a class="tocitem" href="../api_types/">Types</a></li><li><a class="tocitem" href="../api_functions/">Functions</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Nowcasting</a></li><li class="is-active"><a href>BVAR Nowcasting</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>BVAR Nowcasting</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/FriedmanJP/MacroEconometricModels.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/FriedmanJP/MacroEconometricModels.jl/blob/main/docs/src/nowcast_bvar.md#" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="nowcast_bvar_page"><a class="docs-heading-anchor" href="#nowcast_bvar_page">BVAR Nowcasting</a><a id="nowcast_bvar_page-1"></a><a class="docs-heading-anchor-permalink" href="#nowcast_bvar_page" title="Permalink"></a></h1><p>The large Bayesian VAR (BVAR) approach to nowcasting estimates a high-dimensional VAR directly on mixed-frequency data, using informative Normal-Inverse-Wishart priors to regularize the parameter space. The implementation follows Giannone, Lenza &amp; Primiceri (2015) with the mixed-frequency extensions of Cimadomo et al. (2022). Hyperparameters governing prior tightness are optimized automatically via marginal log-likelihood maximization.</p><p>For an overview of all nowcasting methods and method comparison, see <a href="@ref">Nowcasting</a>. For DFM-based nowcasting, see <a href="../nowcast_dfm/#nowcast_dfm_page">DFM Nowcasting</a>.</p><h2 id="Quick-Start"><a class="docs-heading-anchor" href="#Quick-Start">Quick Start</a><a id="Quick-Start-1"></a><a class="docs-heading-anchor-permalink" href="#Quick-Start" title="Permalink"></a></h2><p><strong>Recipe 1: Basic BVAR nowcast</strong></p><pre><code class="language-julia hljs">using MacroEconometricModels
+
+fred = load_example(:fred_md)
+nc_md = fred[:, [&quot;INDPRO&quot;, &quot;UNRATE&quot;, &quot;CPIAUCSL&quot;, &quot;M2SL&quot;, &quot;FEDFUNDS&quot;]]
+Y = to_matrix(apply_tcode(nc_md))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+Y = Y[end-99:end, :]
+nM, nQ = 4, 1
+for t in 1:size(Y, 1)
+    if mod(t, 3) != 0
+        Y[t, end] = NaN
+    end
+end
+Y[end, end] = NaN
+
+# BVAR with 5 lags and data-driven hyperparameters
+bvar = nowcast_bvar(Y, nM, nQ; lags=5)
+report(bvar)</code></pre><p><strong>Recipe 2: BVAR with custom hyperparameters</strong></p><pre><code class="language-julia hljs">using MacroEconometricModels
+
+fred = load_example(:fred_md)
+nc_md = fred[:, [&quot;INDPRO&quot;, &quot;UNRATE&quot;, &quot;CPIAUCSL&quot;, &quot;M2SL&quot;, &quot;FEDFUNDS&quot;]]
+Y = to_matrix(apply_tcode(nc_md))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+Y = Y[end-99:end, :]
+nM, nQ = 4, 1
+for t in 1:size(Y, 1)
+    if mod(t, 3) != 0
+        Y[t, end] = NaN
+    end
+end
+Y[end, end] = NaN
+
+# Tighter shrinkage and stronger unit root prior
+bvar = nowcast_bvar(Y, nM, nQ; lags=5, lambda0=0.1, theta0=2.0, miu0=0.5, alpha0=3.0)
+report(bvar)</code></pre><p><strong>Recipe 3: BVAR forecast</strong></p><pre><code class="language-julia hljs">using MacroEconometricModels
+
+fred = load_example(:fred_md)
+nc_md = fred[:, [&quot;INDPRO&quot;, &quot;UNRATE&quot;, &quot;CPIAUCSL&quot;, &quot;M2SL&quot;, &quot;FEDFUNDS&quot;]]
+Y = to_matrix(apply_tcode(nc_md))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+Y = Y[end-99:end, :]
+nM, nQ = 4, 1
+N = nM + nQ
+for t in 1:size(Y, 1)
+    if mod(t, 3) != 0
+        Y[t, end] = NaN
+    end
+end
+Y[end, end] = NaN
+
+# 6-step ahead forecast for all variables
+bvar = nowcast_bvar(Y, nM, nQ; lags=5)
+fc = forecast(bvar, 6; target_var=N)</code></pre><p><strong>Recipe 4: BVAR with TimeSeriesData</strong></p><pre><code class="language-julia hljs">using MacroEconometricModels
+
+fred = load_example(:fred_md)
+nc_md = fred[:, [&quot;INDPRO&quot;, &quot;UNRATE&quot;, &quot;CPIAUCSL&quot;, &quot;M2SL&quot;, &quot;FEDFUNDS&quot;]]
+Y = to_matrix(apply_tcode(nc_md))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+Y = Y[end-99:end, :]
+nM, nQ = 4, 1
+for t in 1:size(Y, 1)
+    if mod(t, 3) != 0
+        Y[t, end] = NaN
+    end
+end
+Y[end, end] = NaN
+
+# TimeSeriesData dispatch works identically to raw matrices
+ts = TimeSeriesData(Y; varnames=[&quot;INDPRO&quot;,&quot;UNRATE&quot;,&quot;CPI&quot;,&quot;M2&quot;,&quot;FEDFUNDS&quot;], frequency=Monthly)
+bvar = nowcast_bvar(ts, nM, nQ; lags=5)
+report(bvar)</code></pre><hr/><h2 id="Model-Specification"><a class="docs-heading-anchor" href="#Model-Specification">Model Specification</a><a id="Model-Specification-1"></a><a class="docs-heading-anchor-permalink" href="#Model-Specification" title="Permalink"></a></h2><p>The BVAR models all <span>$N$</span> variables jointly as a vector autoregression with <span>$p$</span> lags:</p><p class="math-container">\[y_t = c + B_1 y_{t-1} + \cdots + B_p y_{t-p} + u_t, \quad u_t \sim N(0, \Sigma)\]</p><p>where:</p><ul><li><span>$y_t$</span> is the <span>$N \times 1$</span> vector of observed variables at time <span>$t$</span></li><li><span>$c$</span> is the <span>$N \times 1$</span> intercept vector</li><li><span>$B_1, \ldots, B_p$</span> are <span>$N \times N$</span> coefficient matrices</li><li><span>$\Sigma$</span> is the <span>$N \times N$</span> error covariance matrix</li></ul><h3 id="Prior-Structure"><a class="docs-heading-anchor" href="#Prior-Structure">Prior Structure</a><a id="Prior-Structure-1"></a><a class="docs-heading-anchor-permalink" href="#Prior-Structure" title="Permalink"></a></h3><p>The Normal-Inverse-Wishart prior implements four types of shrinkage via dummy observations (Giannone, Lenza &amp; Primiceri 2015):</p><ol><li><p><strong>Overall tightness</strong> (<span>$\lambda$</span>): Controls the decay of prior precision with lag order. The prior variance for the coefficient on lag <span>$l$</span> of variable <span>$j$</span> in equation <span>$i$</span> scales as <span>$\sigma_i / (\lambda \cdot l^2)$</span>, so higher lags receive stronger shrinkage toward zero.</p></li><li><p><strong>Cross-variable shrinkage</strong> (<span>$\theta$</span>): Shrinks cross-variable coefficients relative to own-lag coefficients. The off-diagonal dummy observations scale as <span>$\sigma_i / (\theta \cdot \lambda \cdot l^2)$</span>, so larger <span>$\theta$</span> pulls coefficients on other variables&#39; lags more strongly toward zero.</p></li><li><p><strong>Sum-of-coefficients</strong> (<span>$\mu$</span>): Implements the unit root prior by constraining the sum of lag coefficients on each variable&#39;s own lags to equal one. Controlled by the tightness parameter <span>$\mu$</span>, where smaller values impose the prior more tightly.</p></li><li><p><strong>Co-persistence</strong> (<span>$\alpha$</span>): Implements the common stochastic trend prior, shrinking toward a model where all variables share a single unit root. Controlled by the tightness parameter <span>$\alpha$</span>.</p></li></ol><div class="admonition is-info" id="Technical-Note-5358485f52113d39"><header class="admonition-header">Technical Note<a class="admonition-anchor" href="#Technical-Note-5358485f52113d39" title="Permalink"></a></header><div class="admonition-body"><p>The prior is implemented via dummy observations appended to the data matrix before OLS estimation. This stacking approach yields the posterior mode of the Normal-Inverse-Wishart conjugate prior analytically, avoiding MCMC sampling. The AR(1) residual standard deviations <span>$\sigma_i$</span> are pre-estimated from the data to scale the prior appropriately for each variable.</p></div></div><hr/><h2 id="Estimation"><a class="docs-heading-anchor" href="#Estimation">Estimation</a><a id="Estimation-1"></a><a class="docs-heading-anchor-permalink" href="#Estimation" title="Permalink"></a></h2><p>The estimation proceeds in two stages. First, Nelder-Mead optimization maximizes the marginal log-likelihood over the hyperparameter vector <span>$(\lambda, \theta, \mu, \alpha)$</span> in log-space. Second, the BVAR is estimated at the optimal hyperparameters via OLS on the augmented data-plus-dummy system, and the Kalman smoother fills missing values in the ragged edge.</p><pre><code class="language-julia hljs">using MacroEconometricModels
+
+fred = load_example(:fred_md)
+nc_md = fred[:, [&quot;INDPRO&quot;, &quot;UNRATE&quot;, &quot;CPIAUCSL&quot;, &quot;M2SL&quot;, &quot;FEDFUNDS&quot;]]
+Y = to_matrix(apply_tcode(nc_md))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+Y = Y[end-99:end, :]
+nM, nQ = 4, 1
+for t in 1:size(Y, 1)
+    if mod(t, 3) != 0
+        Y[t, end] = NaN
+    end
+end
+Y[end, end] = NaN
+
+bvar = nowcast_bvar(Y, nM, nQ; lags=5, max_iter=200, thresh=1e-6)
+println(&quot;Optimized hyperparameters:&quot;)
+println(&quot;  lambda = &quot;, round(bvar.lambda, digits=4))
+println(&quot;  theta  = &quot;, round(bvar.theta, digits=4))
+println(&quot;  miu    = &quot;, round(bvar.miu, digits=4))
+println(&quot;  alpha  = &quot;, round(bvar.alpha, digits=4))
+println(&quot;Marginal log-likelihood: &quot;, round(bvar.loglik, digits=2))</code></pre><p>The optimized hyperparameters reveal how much the data favors shrinkage. A small <span>$\lambda$</span> indicates strong overall regularization is optimal. A large <span>$\theta$</span> means cross-variable dynamics are weak relative to own-lag persistence. The marginal log-likelihood provides a model comparison criterion –- higher values indicate better out-of-sample prediction potential.</p><hr/><h2 id="Forecasting"><a class="docs-heading-anchor" href="#Forecasting">Forecasting</a><a id="Forecasting-1"></a><a class="docs-heading-anchor-permalink" href="#Forecasting" title="Permalink"></a></h2><p>The <code>forecast</code> function iterates the estimated VAR equation forward from the last smoothed observation:</p><p class="math-container">\[\hat{y}_{T+h} = \hat{c} + \hat{B}_1 \hat{y}_{T+h-1} + \cdots + \hat{B}_p \hat{y}_{T+h-p}\]</p><p>For <span>$h &gt; 1$</span>, the forecast uses previously generated forecasts as inputs (iterated multi-step forecast).</p><pre><code class="language-julia hljs">using MacroEconometricModels
+
+fred = load_example(:fred_md)
+nc_md = fred[:, [&quot;INDPRO&quot;, &quot;UNRATE&quot;, &quot;CPIAUCSL&quot;, &quot;M2SL&quot;, &quot;FEDFUNDS&quot;]]
+Y = to_matrix(apply_tcode(nc_md))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+Y = Y[end-99:end, :]
+nM, nQ = 4, 1
+N = nM + nQ
+for t in 1:size(Y, 1)
+    if mod(t, 3) != 0
+        Y[t, end] = NaN
+    end
+end
+Y[end, end] = NaN
+
+bvar = nowcast_bvar(Y, nM, nQ; lags=5)
+
+# Forecast all variables 6 steps ahead
+fc_all = forecast(bvar, 6)
+
+# Forecast specific target variable only
+fc_target = forecast(bvar, 6; target_var=N)</code></pre><p>The BVAR forecast leverages the full cross-variable dynamics estimated from the data. Each forecast step uses the posterior mode coefficients <span>$\hat{B}_1, \ldots, \hat{B}_p$</span> and chains predictions forward. Missing values in the ragged edge are filled by the Kalman smoother before forecasting begins, ensuring a complete initial condition.</p><hr/><h2 id="Keyword-Arguments"><a class="docs-heading-anchor" href="#Keyword-Arguments">Keyword Arguments</a><a id="Keyword-Arguments-1"></a><a class="docs-heading-anchor-permalink" href="#Keyword-Arguments" title="Permalink"></a></h2><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>lags</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>5</code></td><td style="text-align: right">Number of VAR lags</td></tr><tr><td style="text-align: right"><code>thresh</code></td><td style="text-align: right"><code>Real</code></td><td style="text-align: right"><span>$10^{-6}$</span></td><td style="text-align: right">Nelder-Mead convergence threshold</td></tr><tr><td style="text-align: right"><code>max_iter</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>200</code></td><td style="text-align: right">Maximum optimization iterations</td></tr><tr><td style="text-align: right"><code>lambda0</code></td><td style="text-align: right"><code>Real</code></td><td style="text-align: right"><code>0.2</code></td><td style="text-align: right">Initial overall shrinkage</td></tr><tr><td style="text-align: right"><code>theta0</code></td><td style="text-align: right"><code>Real</code></td><td style="text-align: right"><code>1.0</code></td><td style="text-align: right">Initial cross-variable shrinkage</td></tr><tr><td style="text-align: right"><code>miu0</code></td><td style="text-align: right"><code>Real</code></td><td style="text-align: right"><code>1.0</code></td><td style="text-align: right">Initial sum-of-coefficients weight</td></tr><tr><td style="text-align: right"><code>alpha0</code></td><td style="text-align: right"><code>Real</code></td><td style="text-align: right"><code>2.0</code></td><td style="text-align: right">Initial co-persistence weight</td></tr></table><hr/><h2 id="NowcastBVAR-Return-Values"><a class="docs-heading-anchor" href="#NowcastBVAR-Return-Values">NowcastBVAR Return Values</a><a id="NowcastBVAR-Return-Values-1"></a><a class="docs-heading-anchor-permalink" href="#NowcastBVAR-Return-Values" title="Permalink"></a></h2><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>X_sm</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right">Smoothed data with all NaN values filled</td></tr><tr><td style="text-align: right"><code>beta</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right">Posterior mode VAR coefficients (<span>$(1 + Np) \times N$</span>)</td></tr><tr><td style="text-align: right"><code>sigma</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right">Posterior mode error covariance (<span>$N \times N$</span>)</td></tr><tr><td style="text-align: right"><code>lambda</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Optimized overall shrinkage</td></tr><tr><td style="text-align: right"><code>theta</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Optimized cross-variable shrinkage</td></tr><tr><td style="text-align: right"><code>miu</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Optimized sum-of-coefficients weight</td></tr><tr><td style="text-align: right"><code>alpha</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Optimized co-persistence weight</td></tr><tr><td style="text-align: right"><code>lags</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of VAR lags</td></tr><tr><td style="text-align: right"><code>loglik</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Marginal log-likelihood at optimum</td></tr></table><hr/><h2 id="Complete-Example"><a class="docs-heading-anchor" href="#Complete-Example">Complete Example</a><a id="Complete-Example-1"></a><a class="docs-heading-anchor-permalink" href="#Complete-Example" title="Permalink"></a></h2><pre><code class="language-julia hljs">using MacroEconometricModels
+
+# === Step 1: Prepare FRED-MD mixed-frequency panel ===
+fred = load_example(:fred_md)
+nc_md = fred[:, [&quot;INDPRO&quot;, &quot;UNRATE&quot;, &quot;CPIAUCSL&quot;, &quot;M2SL&quot;, &quot;FEDFUNDS&quot;]]
+Y = to_matrix(apply_tcode(nc_md))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+Y = Y[end-99:end, :]
+T_obs = size(Y, 1)
+nM, nQ = 4, 1
+N = nM + nQ
+for t in 1:T_obs
+    if mod(t, 3) != 0
+        Y[t, end] = NaN
+    end
+end
+Y[end, end] = NaN
+
+# === Step 2: Estimate BVAR ===
+bvar = nowcast_bvar(Y, nM, nQ; lags=5, max_iter=200)
+report(bvar)
+
+# === Step 3: Extract nowcast and forecast ===
+result = nowcast(bvar)
+println(&quot;Nowcast: &quot;, round(result.nowcast, digits=3))
+println(&quot;Forecast: &quot;, round(result.forecast, digits=3))
+
+# === Step 4: Multi-step forecast ===
+fc = forecast(bvar, 6; target_var=N)
+
+# === Step 5: Compare with DFM ===
+dfm = nowcast_dfm(Y, nM, nQ; r=2, p=1)
+r_dfm = nowcast(dfm)
+r_bvar = nowcast(bvar)
+println(&quot;DFM nowcast:  &quot;, round(r_dfm.nowcast, digits=3))
+println(&quot;BVAR nowcast: &quot;, round(r_bvar.nowcast, digits=3))</code></pre><p><strong>Interpretation.</strong> The BVAR estimates all cross-variable dynamics directly from the 5-variable mixed-frequency panel, with the Normal-Inverse-Wishart prior preventing overfitting in the <span>$5 \times (1 + 5 \times 5) = 130$</span>-parameter system. The Nelder-Mead optimizer finds the hyperparameter combination that maximizes marginal likelihood –- a criterion that inherently penalizes complexity. The Kalman smoother fills the quarterly NaN pattern and the ragged edge, producing a complete smoothed panel. Comparing the BVAR nowcast with the DFM nowcast provides a robustness check: agreement across methods strengthens confidence in the current-quarter estimate.</p><hr/><h2 id="Common-Pitfalls"><a class="docs-heading-anchor" href="#Common-Pitfalls">Common Pitfalls</a><a id="Common-Pitfalls-1"></a><a class="docs-heading-anchor-permalink" href="#Common-Pitfalls" title="Permalink"></a></h2><ol><li><p><strong>Insufficient complete observations.</strong> The BVAR requires at least <code>lags + 2</code> rows without any NaN values for estimation. If the complete portion is too short, the algorithm falls back to column-mean imputation, which degrades prior calibration.</p></li><li><p><strong>Hyperparameter initial values.</strong> The Nelder-Mead optimizer starts from <code>(lambda0, theta0, miu0, alpha0)</code>. Poor starting values can lead to local optima. If results appear unreasonable, try different initial values or increase <code>max_iter</code>.</p></li><li><p><strong>Too many lags for small samples.</strong> Each additional lag adds <span>$N$</span> parameters per equation. With <code>lags=5</code> and <span>$N = 10$</span>, each equation has 51 coefficients. The prior regularizes estimation, but very large lag orders relative to the sample size can still cause numerical instability.</p></li><li><p><strong>Ragged edge depth.</strong> The BVAR fills missing values at the end of the sample using iterated VAR forecasts from the last complete row. Deep ragged edges (many consecutive missing periods) accumulate forecast error and reduce nowcast accuracy.</p></li></ol><hr/><h2 id="References"><a class="docs-heading-anchor" href="#References">References</a><a id="References-1"></a><a class="docs-heading-anchor-permalink" href="#References" title="Permalink"></a></h2><ul><li>Giannone, Domenico, Michele Lenza, and Giorgio E. Primiceri. 2015. &quot;Prior Selection for Vector Autoregressions.&quot; <em>Review of Economics and Statistics</em> 97 (2): 436–451. <a href="https://doi.org/10.1162/REST_a_00483">DOI: 10.1162/REST<em>a</em>00483</a></li><li>Cimadomo, Jacopo, Domenico Giannone, Michele Lenza, Francesca Monti, and Andrej Sokol. 2022. &quot;Nowcasting with Large Bayesian Vector Autoregressions.&quot; <em>ECB Working Paper</em> No. 2696.</li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../nowcast_dfm/">« DFM Nowcasting</a><a class="docs-footer-nextpage" href="../nowcast_bridge/">Bridge Equations »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Friday 6 March 2026 22:02">Friday 6 March 2026</span>. Using Julia version 1.10.10.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
