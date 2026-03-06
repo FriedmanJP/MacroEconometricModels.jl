@@ -1,6 +1,6 @@
-# Structural Break Tests
+# [Structural Breaks](@id tests_breaks_page)
 
-This page covers tests for parameter instability and structural change in time series models. Structural breaks --- abrupt shifts in regression coefficients, factor loadings, or the number of latent factors --- invalidate standard inference and produce misleading forecasts if left undetected. Three complementary frameworks are provided:
+This page covers tests for parameter instability and structural change in time series models. Structural breaks --- abrupt shifts in regression coefficients, factor loadings, or the number of latent factors --- invalidate standard inference and produce misleading forecasts if left undetected. Four complementary frameworks are provided:
 
 - **Andrews (1993)**: Tests for a single unknown break point in a linear regression. Nine test variants combine three base statistics (Wald, LR, LM) with three functionals (supremum, exponential average, mean).
 - **Bai-Perron (1998, 2003)**: Tests for multiple unknown break points. Dynamic programming finds globally optimal break dates, with sequential testing and information criteria (BIC, LWZ) for break number selection.
@@ -48,6 +48,22 @@ Random.seed!(42)
 # Panel with 50 variables and 3 factors
 X = randn(200, 50)
 result = factor_break_test(X, 3; method=:breitung_eickmeier)
+report(result)
+```
+
+**Recipe 4: Gregory-Hansen cointegration test with regime shift**
+
+```julia
+using MacroEconometricModels, Random
+Random.seed!(42)
+
+# Two cointegrated series with a regime shift at t=100
+T_len = 200
+x = cumsum(randn(T_len))
+y = vcat(1.0 .+ 0.8 .* x[1:100], 3.0 .+ 1.5 .* x[101:end]) + randn(T_len) * 0.5
+
+Y = hcat(y, x)
+result = gregory_hansen_test(Y; model=:CS)
 report(result)
 ```
 
@@ -117,8 +133,6 @@ The **supremum** functional takes the maximum statistic over all candidate dates
 
 !!! note "Technical Note"
     P-values are computed by interpolation from Hansen (1997) critical value tables, which are tabulated by the number of parameters ``k`` and the functional type. Critical values depend on the trimming fraction ``\pi`` and are pre-computed for the standard ``\pi = 0.15`` setting. The asymptotic distribution under the null is a functional of a ``k``-dimensional Brownian bridge process.
-
-### Code Example
 
 ```julia
 using MacroEconometricModels, Random
@@ -214,8 +228,6 @@ where:
 
 !!! note "Technical Note"
     The dynamic programming algorithm has complexity ``O(T^2 \cdot m_{\max})``, where ``T`` is the sample size and ``m_{\max}`` is the maximum number of breaks. A segment SSR matrix is pre-computed and reused across all candidate break configurations. Each segment requires at least ``h = \max(k+1, \lceil \pi T \rceil)`` observations, where ``\pi`` is the trimming fraction.
-
-### Code Example
 
 ```julia
 using MacroEconometricModels, Random
@@ -469,13 +481,11 @@ y = vcat(1.0 .+ 0.8 .* x[1:100], 3.0 .+ 1.5 .* x[101:end]) + randn(T_len) * 0.5
 Y = hcat(y, x)
 result = gregory_hansen_test(Y; model=:CS)
 report(result)
-
-# Access individual statistics and break dates
-result.adf_statistic     # ADF* test statistic
-result.adf_break         # Break date for ADF*
-result.zt_statistic      # Zt* test statistic
-result.za_statistic      # Za* test statistic
 ```
+
+### Interpretation
+
+**Reject** ``H_0`` (p-value < 0.05): evidence for cointegration with a structural break. The estimated break date identifies when the cointegrating relationship shifted. **Fail to reject** ``H_0`` (p-value > 0.05): cannot reject no cointegration, even allowing for a regime change. When the standard Johansen or Engle-Granger test fails to find cointegration but economic theory suggests a long-run relationship, the Gregory-Hansen test checks whether a regime shift explains the apparent lack of cointegration.
 
 ### Options
 
@@ -505,10 +515,6 @@ result.za_statistic      # Za* test statistic
 | `za_critical_values` | `Dict{Int,T}` | Critical values for Za* at 1%, 5%, 10% |
 | `nobs` | `Int` | Number of observations |
 
-### Interpretation
-
-**Reject** ``H_0`` (p-value < 0.05): evidence for cointegration with a structural break. The estimated break date identifies when the cointegrating relationship shifted. **Fail to reject** ``H_0`` (p-value > 0.05): cannot reject no cointegration, even allowing for a regime change. When the standard Johansen or Engle-Granger test fails to find cointegration but economic theory suggests a long-run relationship, the Gregory-Hansen test checks whether a regime shift explains the apparent lack of cointegration.
-
 !!! note "Technical Note"
     Critical values depend on the number of regressors ``m`` and the break model. The `:CS` model (regime shift) allows all slope coefficients to change at the break, providing the most flexible alternative but also the least power. Start with `:C` (level shift only) and use `:CS` only when theory suggests the entire relationship changes.
 
@@ -516,7 +522,7 @@ result.za_statistic      # Za* test statistic
 
 ## Complete Example
 
-This example demonstrates a complete structural break analysis workflow: detecting a single break with Andrews, finding multiple breaks with Bai-Perron, and testing factor loading stability.
+This example demonstrates a complete structural break analysis workflow: detecting a single break with Andrews, finding multiple breaks with Bai-Perron, testing factor loading stability, and checking for cointegration with a regime shift.
 
 ```julia
 using MacroEconometricModels, Random
@@ -542,13 +548,9 @@ result_sup = andrews_test(y, X; test=:supwald)
 result_exp = andrews_test(y, X; test=:expwald)
 result_mean = andrews_test(y, X; test=:meanwald)
 
-println("Sup-Wald:  stat = ", round(result_sup.statistic, digits=2),
-        ", p = ", round(result_sup.pvalue, digits=4),
-        ", break at t = ", result_sup.break_index)
-println("Exp-Wald:  stat = ", round(result_exp.statistic, digits=2),
-        ", p = ", round(result_exp.pvalue, digits=4))
-println("Mean-Wald: stat = ", round(result_mean.statistic, digits=2),
-        ", p = ", round(result_mean.pvalue, digits=4))
+report(result_sup)
+report(result_exp)
+report(result_mean)
 
 # =========================================================================
 # Part 2: Bai-Perron multiple break test
@@ -568,19 +570,11 @@ result_bp = bai_perron_test(y2, X2; max_breaks=5, criterion=:bic)
 report(result_bp)
 
 # Display regime coefficients
-println("\nRegime estimates:")
 for (j, (coefs, ses)) in enumerate(zip(result_bp.regime_coefs, result_bp.regime_ses))
-    println("  Regime $j: intercept = $(round(coefs[1], digits=2)) ",
+    println("Regime $j: intercept = $(round(coefs[1], digits=2)) ",
             "(SE = $(round(ses[1], digits=2))), ",
             "slope = $(round(coefs[2], digits=2)) ",
             "(SE = $(round(ses[2], digits=2)))")
-end
-
-# Sequential test interpretation
-println("\nSequential tests:")
-for (i, (stat, pval)) in enumerate(zip(result_bp.sequential_stats,
-                                         result_bp.sequential_pvalues))
-    println("  sup-F($(i+1)|$i): stat = $(round(stat, digits=2)), p = $(round(pval, digits=4))")
 end
 
 # =========================================================================
@@ -598,10 +592,21 @@ result_be = factor_break_test(X_factor, r; method=:breitung_eickmeier)
 result_hi = factor_break_test(X_factor, r; method=:han_inoue)
 result_cdg = factor_break_test(X_factor; method=:chen_dolado_gonzalo)
 
-println("\nFactor break tests (stable loadings):")
-println("  Breitung-Eickmeier: p = ", round(result_be.pvalue, digits=4))
-println("  Han-Inoue:          p = ", round(result_hi.pvalue, digits=4))
-println("  Chen-Dolado-Gonzalo: p = ", round(result_cdg.pvalue, digits=4))
+report(result_be)
+report(result_hi)
+report(result_cdg)
+
+# =========================================================================
+# Part 4: Gregory-Hansen cointegration with regime shift
+# =========================================================================
+
+# Two cointegrated series with a level shift at t=120
+T_gh = 250
+x_gh = cumsum(randn(T_gh))
+y_gh = vcat(2.0 .+ 1.0 .* x_gh[1:120], 5.0 .+ 1.0 .* x_gh[121:end]) + randn(T_gh) * 0.3
+
+result_gh = gregory_hansen_test(hcat(y_gh, x_gh); model=:C)
+report(result_gh)
 ```
 
 ---
@@ -615,6 +620,8 @@ println("  Chen-Dolado-Gonzalo: p = ", round(result_cdg.pvalue, digits=4))
 3. **Bai-Perron minimum segment size.** Each regime segment requires at least ``\max(k+1, \lceil \pi T \rceil)`` observations for OLS estimation. With many regressors or small samples, the maximum feasible number of breaks is reduced below `max_breaks`. The function automatically adjusts `max_breaks` downward when necessary. If the test reports zero breaks despite visual evidence of instability, reduce the number of regressors or increase the sample size.
 
 4. **Factor break tests require sufficient cross-section dimension.** The Breitung-Eickmeier and Han-Inoue tests rely on cross-sectional averaging, which requires ``N`` large enough for the asymptotic approximation. With ``N < 30``, the CUSUM and sup-Wald statistics have poor size properties. The Chen-Dolado-Gonzalo test has similar requirements for the eigenvalue ratio computation. For small panels, Andrews or Bai-Perron tests applied to individual regression equations provide more reliable inference.
+
+5. **Gregory-Hansen model selection affects power.** The `:CS` model (regime shift) allows all slope coefficients to change at the break, providing the most flexible alternative but also the least power due to the larger number of parameters estimated under the alternative. Start with `:C` (level shift only) unless theory suggests the entire cointegrating relationship changes at the break.
 
 ---
 
@@ -632,10 +639,10 @@ println("  Chen-Dolado-Gonzalo: p = ", round(result_cdg.pvalue, digits=4))
 
 - Chen, L., Dolado, J. J., & Gonzalo, J. (2014). Detecting big structural breaks in large factor models. *Journal of Econometrics*, 180(1), 30-48. [DOI](https://doi.org/10.1016/j.jeconom.2014.01.006)
 
+- Gregory, A. W., & Hansen, B. E. (1996). Residual-based tests for cointegration in models with regime shifts. *Journal of Econometrics*, 70(1), 99-126. [DOI](https://doi.org/10.1016/0304-4076(69)41685-7)
+
 - Han, X., & Inoue, A. (2015). Tests for parameter instability in dynamic factor models. *Econometric Theory*, 31(5), 1117-1152. [DOI](https://doi.org/10.1017/S0266466614000486)
 
 - Hansen, B. E. (1997). Approximate asymptotic p values for structural-change tests. *Journal of Business & Economic Statistics*, 15(1), 60-67. [DOI](https://doi.org/10.1080/07350015.1997.10524687)
 
 - Liu, J., Wu, S., & Zidek, J. V. (1997). On segmented multivariate regression. *Statistica Sinica*, 7(2), 497-525.
-
-- Gregory, A. W., & Hansen, B. E. (1996). Residual-based tests for cointegration in models with regime shifts. *Journal of Econometrics*, 70(1), 99-126. [DOI](https://doi.org/10.1016/0304-4076(69)41685-7)

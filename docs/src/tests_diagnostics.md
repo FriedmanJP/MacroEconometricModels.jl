@@ -1,6 +1,6 @@
-# Model Diagnostics
+# [Model Diagnostics](@id tests_diagnostics_page)
 
-Post-estimation specification testing validates the assumptions underlying statistical inference in estimated models. This page covers five categories of diagnostic tests: VAR stability checks via companion matrix eigenvalues, Granger causality tests for predictive relationships, multivariate normality tests for residual distributional assumptions, ARCH diagnostics for conditional heteroskedasticity, and likelihood-based model comparison tests for nested specifications.
+Post-estimation specification testing validates the assumptions underlying statistical inference in estimated models. This page covers six categories of diagnostic tests: VAR stability checks via companion matrix eigenvalues, Granger causality tests for predictive relationships, multivariate normality tests for residual distributional assumptions, ARCH diagnostics for conditional heteroskedasticity, likelihood-based model comparison tests for nested specifications, and Panel VAR diagnostics for GMM-estimated models.
 
 - **VAR Stationarity**: Companion matrix eigenvalue check for stable dynamics
 - **Granger Causality**: Pairwise and block Wald tests for predictive causality (Granger 1969)
@@ -52,6 +52,7 @@ Random.seed!(42)
 
 # Test for ARCH effects in a return series
 result = arch_lm_test(randn(500), 5)
+report(result)
 ```
 
 **Recipe 4: LR test for lag selection**
@@ -376,13 +377,12 @@ Random.seed!(42)
 # Test raw series for ARCH effects
 y = randn(500)
 result = arch_lm_test(y, 5)
-result.statistic  # T * R^2
-result.pvalue     # chi-squared p-value
-result.q          # number of lags
+report(result)
 
 # Test GARCH model residuals for remaining ARCH effects
 g = estimate_garch(y)
 result2 = arch_lm_test(g, 10)
+report(result2)
 ```
 
 ### Ljung-Box on Squared Residuals
@@ -405,13 +405,12 @@ Random.seed!(42)
 # Test for serial correlation in squared residuals
 z = randn(500)
 result = ljung_box_squared(z, 10)
-result.statistic  # Ljung-Box Q statistic
-result.pvalue     # chi-squared p-value
-result.K          # number of lags
+report(result)
 
 # Test GARCH standardized residuals
 g = estimate_garch(z)
 result2 = ljung_box_squared(g, 20)
+report(result2)
 ```
 
 !!! note "Technical Note"
@@ -466,8 +465,8 @@ Random.seed!(42)
 y = cumsum(randn(200))
 ar2 = estimate_ar(diff(y), 2; method=:mle)
 ar4 = estimate_ar(diff(y), 4; method=:mle)
-lr_test(ar2, ar4)
-lm_test(ar2, ar4)
+report(lr_test(ar2, ar4))
+report(lm_test(ar2, ar4))
 
 # --- VAR lag order comparison ---
 fred = load_example(:fred_md)
@@ -482,7 +481,7 @@ report(lr_result)
 ret = randn(500)
 g11 = estimate_garch(ret; p=1, q=1)
 g21 = estimate_garch(ret; p=2, q=1)
-lr_test(g11, g21)
+report(lr_test(g11, g21))
 ```
 
 Both functions accept the models in any order --- they automatically determine which is restricted (fewer parameters) and which is unrestricted (more parameters).
@@ -550,7 +549,6 @@ m = estimate_pvar(pd, 2)
 
 j = pvar_hansen_j(m)
 report(j)
-j.pvalue > 0.05  # fail to reject: instruments appear valid
 ```
 
 ### Andrews-Lu MMSC
@@ -582,9 +580,7 @@ pd = xtset(df, :id, :t)
 m = estimate_pvar(pd, 2)
 
 mmsc = pvar_mmsc(m)
-mmsc.bic    # MMSC-BIC value
-mmsc.aic    # MMSC-AIC value
-mmsc.hqic   # MMSC-HQIC value
+report(mmsc)
 ```
 
 ### Lag Selection
@@ -605,9 +601,7 @@ df = DataFrame(
 pd = xtset(df, :id, :t)
 
 sel = pvar_lag_selection(pd, 4)
-sel.best_bic    # optimal lag order by BIC
-sel.best_aic    # optimal lag order by AIC
-sel.best_hqic   # optimal lag order by HQIC
+report(sel)
 ```
 
 ---
@@ -678,38 +672,26 @@ report(lr23)
 
 ## References
 
-- Granger, C. W. J. (1969). Investigating Causal Relations by Econometric Models and Cross-spectral Methods.
-  *Econometrica*, 37(3), 424--438. [DOI](https://doi.org/10.2307/1912791)
+- Andrews, D. W. K., & Lu, B. (2001). Consistent Model and Moment Selection Procedures for GMM Estimation with Application to Dynamic Panel Data Models. *Journal of Econometrics*, 101(1), 123-164. [DOI](https://doi.org/10.1016/S0304-4076(00)00077-4)
 
-- Jarque, C. M., & Bera, A. K. (1980). Efficient Tests for Normality, Homoscedasticity and Serial Independence of Regression Residuals.
-  *Economics Letters*, 6(3), 255--259. [DOI](https://doi.org/10.1016/0165-1765(80)90024-5)
+- Berndt, E. R., & Savin, N. E. (1977). Conflict Among Criteria for Testing Hypotheses in the Multivariate Linear Regression Model. *Econometrica*, 45(5), 1263-1277. [DOI](https://doi.org/10.2307/1914072)
 
-- Mardia, K. V. (1970). Measures of Multivariate Skewness and Kurtosis with Applications.
-  *Biometrika*, 57(3), 519--530. [DOI](https://doi.org/10.2307/2334770)
+- Doornik, J. A., & Hansen, H. (2008). An Omnibus Test for Univariate and Multivariate Normality. *Oxford Bulletin of Economics and Statistics*, 70(s1), 927-939. [DOI](https://doi.org/10.1111/j.1468-0084.2008.00537.x)
 
-- Doornik, J. A., & Hansen, H. (2008). An Omnibus Test for Univariate and Multivariate Normality.
-  *Oxford Bulletin of Economics and Statistics*, 70(s1), 927--939. [DOI](https://doi.org/10.1111/j.1468-0084.2008.00537.x)
+- Engle, R. F. (1982). Autoregressive Conditional Heteroscedasticity with Estimates of the Variance of United Kingdom Inflation. *Econometrica*, 50(4), 987-1007. [DOI](https://doi.org/10.2307/1912773)
 
-- Henze, N., & Zirkler, B. (1990). A Class of Invariant Consistent Tests for Multivariate Normality.
-  *Communications in Statistics --- Theory and Methods*, 19(10), 3595--3617. [DOI](https://doi.org/10.1080/03610929008830400)
+- Granger, C. W. J. (1969). Investigating Causal Relations by Econometric Models and Cross-spectral Methods. *Econometrica*, 37(3), 424-438. [DOI](https://doi.org/10.2307/1912791)
 
-- Engle, R. F. (1982). Autoregressive Conditional Heteroscedasticity with Estimates of the Variance of United Kingdom Inflation.
-  *Econometrica*, 50(4), 987--1007. [DOI](https://doi.org/10.2307/1912773)
+- Hansen, L. P. (1982). Large Sample Properties of Generalized Method of Moments Estimators. *Econometrica*, 50(4), 1029-1054. [DOI](https://doi.org/10.2307/1912775)
 
-- Wilks, S. S. (1938). The Large-Sample Distribution of the Likelihood Ratio for Testing Composite Hypotheses.
-  *Annals of Mathematical Statistics*, 9(1), 60--62. [DOI](https://doi.org/10.1214/aoms/1177732360)
+- Henze, N., & Zirkler, B. (1990). A Class of Invariant Consistent Tests for Multivariate Normality. *Communications in Statistics --- Theory and Methods*, 19(10), 3595-3617. [DOI](https://doi.org/10.1080/03610929008830400)
 
-- Rao, C. R. (1948). Large Sample Tests of Statistical Hypotheses Concerning Several Parameters with Applications to Problems of Estimation.
-  *Mathematical Proceedings of the Cambridge Philosophical Society*, 44(1), 50--57. [DOI](https://doi.org/10.1017/S0305004100023987)
+- Jarque, C. M., & Bera, A. K. (1980). Efficient Tests for Normality, Homoscedasticity and Serial Independence of Regression Residuals. *Economics Letters*, 6(3), 255-259. [DOI](https://doi.org/10.1016/0165-1765(80)90024-5)
 
-- Berndt, E. R., & Savin, N. E. (1977). Conflict Among Criteria for Testing Hypotheses in the Multivariate Linear Regression Model.
-  *Econometrica*, 45(5), 1263--1277. [DOI](https://doi.org/10.2307/1914072)
+- Lutkepohl, H. (2005). *New Introduction to Multiple Time Series Analysis*. Berlin: Springer. ISBN 978-3-540-40172-8.
 
-- Hansen, L. P. (1982). Large Sample Properties of Generalized Method of Moments Estimators.
-  *Econometrica*, 50(4), 1029--1054. [DOI](https://doi.org/10.2307/1912775)
+- Mardia, K. V. (1970). Measures of Multivariate Skewness and Kurtosis with Applications. *Biometrika*, 57(3), 519-530. [DOI](https://doi.org/10.2307/2334770)
 
-- Andrews, D. W. K., & Lu, B. (2001). Consistent Model and Moment Selection Procedures for GMM Estimation with Application to Dynamic Panel Data Models.
-  *Journal of Econometrics*, 101(1), 123--164. [DOI](https://doi.org/10.1016/S0304-4076(00)00077-4)
+- Rao, C. R. (1948). Large Sample Tests of Statistical Hypotheses Concerning Several Parameters with Applications to Problems of Estimation. *Mathematical Proceedings of the Cambridge Philosophical Society*, 44(1), 50-57. [DOI](https://doi.org/10.1017/S0305004100023987)
 
-- Lutkepohl, H. (2005). *New Introduction to Multiple Time Series Analysis*.
-  Berlin: Springer. ISBN 978-3-540-40172-8.
+- Wilks, S. S. (1938). The Large-Sample Distribution of the Likelihood Ratio for Testing Composite Hypotheses. *Annals of Mathematical Statistics*, 9(1), 60-62. [DOI](https://doi.org/10.1214/aoms/1177732360)

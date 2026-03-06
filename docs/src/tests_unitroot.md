@@ -1,4 +1,4 @@
-# Unit Root & Cointegration Tests
+# [Unit Root & Cointegration](@id tests_unitroot_page)
 
 Pre-estimation stationarity analysis determines whether a time series is stationary (I(0)) or contains a unit root (I(1)). This distinction drives the choice between VAR in levels, VAR in first differences, and VECM specifications. MacroEconometricModels.jl provides five unit root tests, a multivariate cointegration test, and convenience functions for batch analysis.
 
@@ -439,11 +439,9 @@ Y = Y[all.(isfinite, eachrow(Y)), :]
 # Apply ADF test to all columns (also supports :fourier_adf, :dfgls, :lm_unitroot)
 results = test_all_variables(Y; test=:adf)
 
-# Screen for unit roots
-varnames = ["INDPRO", "CPIAUCSL", "FEDFUNDS", "UNRATE", "M2SL"]
-for (i, r) in enumerate(results)
-    status = r.pvalue > 0.05 ? "I(1)" : "I(0)"
-    println("$(varnames[i]): p=$(round(r.pvalue, digits=3)) → $status")
+# Display each result
+for r in results
+    report(r)
 end
 ```
 
@@ -564,15 +562,13 @@ ffr    = filter(isfinite, to_vector(fred[:, "FEDFUNDS"]))
 for (name, y) in [("INDPRO", indpro), ("CPI", cpi), ("FFR", ffr)]
     adf  = adf_test(y; lags=:aic, regression=:constant)
     kpss = kpss_test(y; regression=:constant)
-    adf_status  = adf.pvalue < 0.05 ? "reject" : "fail to reject"
-    kpss_status = kpss.pvalue < 0.05 ? "reject" : "fail to reject"
-    println("$name: ADF p=$(round(adf.pvalue, digits=3)) ($adf_status) | ",
-            "KPSS p=$(round(kpss.pvalue, digits=3)) ($kpss_status)")
+    report(adf)
+    report(kpss)
 end
 
 # ── Step 3: Comprehensive summary for CPI ──────────────────────
 summary = unit_root_summary(cpi; tests=[:adf, :kpss, :pp])
-println("CPI conclusion: ", summary.conclusion)
+summary.conclusion
 
 # ── Step 4: Check for structural breaks in CPI ─────────────────
 za = za_test(cpi; regression=:both)
@@ -622,5 +618,6 @@ end
 - MacKinnon, James G. 2010. "Critical Values for Cointegration Tests." Queen's Economics Department Working Paper No. 1227.
 - Ng, Serena, and Pierre Perron. 2001. "Lag Length Selection and the Construction of Unit Root Tests with Good Size and Power." *Econometrica* 69 (6): 1519--1554. [https://doi.org/10.1111/1468-0262.00256](https://doi.org/10.1111/1468-0262.00256)
 - Osterwald-Lenum, Michael. 1992. "A Note with Quantiles of the Asymptotic Distribution of the Maximum Likelihood Cointegration Rank Test Statistics." *Oxford Bulletin of Economics and Statistics* 54 (3): 461--472. [https://doi.org/10.1111/j.1468-0084.1992.tb00013.x](https://doi.org/10.1111/j.1468-0084.1992.tb00013.x)
+- Perron, Pierre, and Serena Ng. 1996. "Useful Modifications to Some Unit Root Tests with Dependent Errors and Their Local Asymptotic Properties." *Review of Economic Studies* 63 (3): 435--463. [https://doi.org/10.2307/2297890](https://doi.org/10.2307/2297890)
 - Phillips, Peter C. B., and Pierre Perron. 1988. "Testing for a Unit Root in Time Series Regression." *Biometrika* 75 (2): 335--346. [https://doi.org/10.1093/biomet/75.2.335](https://doi.org/10.1093/biomet/75.2.335)
 - Zivot, Eric, and Donald W. K. Andrews. 1992. "Further Evidence on the Great Crash, the Oil-Price Shock, and the Unit-Root Hypothesis." *Journal of Business & Economic Statistics* 10 (3): 251--270. [https://doi.org/10.1080/07350015.1992.10509904](https://doi.org/10.1080/07350015.1992.10509904)
