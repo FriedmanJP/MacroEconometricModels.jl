@@ -127,7 +127,7 @@ report(result)
 
 ## Code Examples
 
-**Completeness:** Every code block must be runnable as-is. No fragments, no `...` ellipsis, no "add your data here" placeholders.
+**Completeness:** Every code block must be runnable as-is and **must execute without error**. No fragments, no `...` ellipsis, no "add your data here" placeholders. Before committing documentation, verify that all example code actually runs.
 
 **Output display:** Use the package's built-in display infrastructure:
 - `report(result)` — for estimation results, model summaries
@@ -291,7 +291,7 @@ where:
 **Never do these:**
 
 1. **`println` for results** — Use `report()`, `print_table()`, or field access with interpretation
-2. **Code fragments** — Every code block must be complete and runnable
+2. **Code fragments or broken examples** — Every code block must be complete, runnable, and execute without error
 3. **Undefined symbols** — Every variable in a math block must be defined in the "where" list
 4. **Orphan equations** — Every display equation needs context (intro sentence + "where" list + interpretation)
 5. **H4 or deeper** — Flatten hierarchy; use bold text for sub-subsections if needed
