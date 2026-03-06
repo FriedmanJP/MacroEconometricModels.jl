@@ -571,6 +571,33 @@ end
     @test spec2.ss_fn !== nothing  # ss_fn propagated
 end
 
+@testset "Steady state: NonlinearSolve algorithm kwarg" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+    end
+    spec2 = compute_steady_state(spec)
+    @test spec2.steady_state[1] ≈ 0.0 atol=1e-6
+
+    spec3 = compute_steady_state(spec; algorithm=NewtonRaphson())
+    @test spec3.steady_state[1] ≈ 0.0 atol=1e-6
+end
+
+@testset "Steady state: NonlinearSolve box-constrained" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+    spec_bound = compute_steady_state(spec; constraints=[variable_bound(:y, lower=0.5)])
+    @test spec_bound.steady_state[1] ≈ 0.5 atol=0.05
+end
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Section 4: Linearization
 # ─────────────────────────────────────────────────────────────────────────────
@@ -4651,6 +4678,9 @@ end
     mixed = [variable_bound(:y, lower=0.0),
              nonlinear_constraint((y, yl, yld, e, th) -> y[1] - 1.0; label="test")]
 
+    # Bounds-only → :nonlinearsolve (default)
+    @test MacroEconometricModels._select_solver(bounds_only, nothing) == :nonlinearsolve
+
     # With NonlinearConstraints → always :ipopt
     @test MacroEconometricModels._select_solver(mixed, nothing) == :ipopt
 
@@ -4925,11 +4955,11 @@ end
     end # _suppress_warnings
 end
 
-@testset "Auto-detection dispatches PATH" begin
-    # When PATHSolver is loaded and only VariableBounds, auto-detection picks PATH
-    @test MacroEconometricModels._path_available()
+@testset "Auto-detection defaults to NonlinearSolve" begin
+    # Bounds-only now defaults to :nonlinearsolve; PATH still available via override
     bounds_only = [variable_bound(:y, lower=0.0)]
-    @test MacroEconometricModels._select_solver(bounds_only, nothing) == :path
+    @test MacroEconometricModels._select_solver(bounds_only, nothing) == :nonlinearsolve
+    @test MacroEconometricModels._select_solver(bounds_only, :path) == :path
 end
 
 @testset "PATH rejects NonlinearConstraint" begin

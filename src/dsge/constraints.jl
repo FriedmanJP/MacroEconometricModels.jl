@@ -124,14 +124,14 @@ end
 """
     _select_solver(constraints, solver_override) -> Symbol
 
-Auto-detect solver: VariableBounds-only → :path (if available), NonlinearConstraints → :ipopt.
-User override always wins.
+Auto-detect solver: NonlinearConstraints → :ipopt, otherwise → :nonlinearsolve.
+User override always wins. PATH still reachable via `solver=:path`.
 """
 function _select_solver(constraints::Vector, solver_override::Union{Nothing,Symbol})
     solver_override !== nothing && return solver_override
     has_nlcon = any(c -> c isa NonlinearConstraint, constraints)
     has_nlcon && return :ipopt
-    return _path_available() ? :path : :ipopt
+    return :nonlinearsolve
 end
 
 """
