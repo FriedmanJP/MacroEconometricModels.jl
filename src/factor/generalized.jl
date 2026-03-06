@@ -21,21 +21,7 @@ References:
 """
 
 using LinearAlgebra, Statistics, StatsAPI
-
-# =============================================================================
-# FFT Wrapper (set by FFTW extension)
-# =============================================================================
-
-const _FFT_IMPL = Ref{Any}(nothing)
-const _IFFT_IMPL = Ref{Any}(nothing)
-
-function _check_fftw()
-    isnothing(_FFT_IMPL[]) && throw(ArgumentError(
-        "FFTW.jl is required for spectral analysis (GDFM). Load it with: using FFTW"))
-end
-
-_fft(X, dims) = (_check_fftw(); _FFT_IMPL[](X, dims))
-_ifft(X, dims) = (_check_fftw(); _IFFT_IMPL[](X, dims))
+using FFTW
 
 # =============================================================================
 # Generalized Dynamic Factor Model Type
@@ -182,7 +168,7 @@ function _estimate_spectral_density(X::AbstractMatrix{T}, bandwidth::Int, kernel
     frequencies = [T(2π * (j-1) / T_obs) for j in 1:n_freq]
 
     # Periodogram
-    X_fft = _fft(X, 1)
+    X_fft = FFTW.fft(X, 1)
     periodogram = [X_fft[j, :] * X_fft[j, :]' / T_obs for j in 1:n_freq]
 
     # Kernel smoothing
@@ -250,7 +236,7 @@ end
 function _reconstruct_time_domain(spectral_chi::Array{Complex{T},3}, X::AbstractMatrix{T}) where {T}
     T_obs, N = size(X)
     n_freq = size(spectral_chi, 3)
-    X_fft = _fft(X, 1)
+    X_fft = FFTW.fft(X, 1)
     chi_fft = zeros(Complex{T}, T_obs, N)
 
     @inbounds for j in 1:n_freq
@@ -259,14 +245,14 @@ function _reconstruct_time_domain(spectral_chi::Array{Complex{T},3}, X::Abstract
         chi_fft[j, :] = P * X_fft[j, :]
         j > 1 && j < n_freq && (chi_fft[T_obs - j + 2, :] = conj(chi_fft[j, :]))
     end
-    real(_ifft(chi_fft, 1))
+    real(FFTW.ifft(chi_fft, 1))
 end
 
 """Extract time-domain factors via frequency-domain projection."""
 function _extract_time_domain_factors(X::AbstractMatrix{T}, loadings::Array{Complex{T},3}, frequencies::Vector{T}) where {T}
     T_obs, N = size(X)
     _, q, n_freq = size(loadings)
-    X_fft, F_fft = _fft(X, 1), zeros(Complex{T}, T_obs, q)
+    X_fft, F_fft = FFTW.fft(X, 1), zeros(Complex{T}, T_obs, q)
 
     @inbounds for j in 1:n_freq
         L = loadings[:, :, j]
@@ -274,7 +260,7 @@ function _extract_time_domain_factors(X::AbstractMatrix{T}, loadings::Array{Comp
         j > 1 && j < n_freq && (F_fft[T_obs - j + 2, :] = conj(F_fft[j, :]))
     end
 
-    factors = real(_ifft(F_fft, 1))
+    factors = real(FFTW.ifft(F_fft, 1))
     # Normalize factors to unit variance
     for i in 1:q
         σ = std(factors[:, i])
