@@ -561,3 +561,29 @@ struct BayesianDSGE{T<:AbstractFloat} <: AbstractDSGEModel
                ess_history, phi_schedule, spec, solution, state_space)
     end
 end
+
+# =============================================================================
+# BayesianDSGESimulation — posterior predictive simulation with credible bands
+# =============================================================================
+
+"""
+    BayesianDSGESimulation{T}
+
+Posterior predictive simulation result with pointwise quantile bands.
+
+Fields:
+- `quantiles::Array{T,3}` — T_periods x n_vars x n_quantiles
+- `point_estimate::Matrix{T}` — T_periods x n_vars (posterior median)
+- `T_periods::Int` — number of simulation periods
+- `variables::Vector{String}` — variable names
+- `quantile_levels::Vector{T}` — quantile levels (e.g. [0.05, 0.16, 0.84, 0.95])
+- `all_paths::Array{T,3}` — n_draws x T_periods x n_vars (raw draws)
+"""
+struct BayesianDSGESimulation{T<:AbstractFloat}
+    quantiles::Array{T,3}
+    point_estimate::Matrix{T}
+    T_periods::Int
+    variables::Vector{String}
+    quantile_levels::Vector{T}
+    all_paths::Array{T,3}
+end

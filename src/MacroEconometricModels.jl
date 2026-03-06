@@ -391,7 +391,7 @@ export AbstractDSGEModel
 export DSGESpec, LinearDSGE, DSGESolution, PerturbationSolution, ProjectionSolution, PerfectForesightPath, DSGEEstimation
 
 # Bayesian DSGE
-export BayesianDSGE
+export BayesianDSGE, BayesianDSGESimulation
 export estimate_dsge_bayes, posterior_summary, marginal_likelihood, bayes_factor
 export prior_posterior_table, posterior_predictive
 
