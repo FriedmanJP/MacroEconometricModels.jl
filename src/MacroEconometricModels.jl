@@ -66,6 +66,7 @@ using StatsAPI
 using StatsAPI: fit, coef, vcov, residuals, predict, r2, aic, bic, dof, dof_residual, nobs, loglikelihood, confint, stderror, islinear
 using Distributions
 using SparseArrays
+using NonlinearSolve
 import Optim
 
 # =============================================================================
