@@ -9,6 +9,8 @@
 #   src/lp/types.jl, src/arima/types.jl, src/arch/types.jl,
 #   src/did/event_study.jl, src/factor/generalized.jl
 
+using DataFrames, StatsAPI
+
 if !@isdefined(FAST)
     const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
 end

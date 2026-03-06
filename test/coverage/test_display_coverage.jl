@@ -8,6 +8,8 @@
 #   src/plotting/render.jl, src/plotting/models.jl,
 #   src/summary.jl, src/summary_refs.jl
 
+using DataFrames
+
 if !@isdefined(FAST)
     const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
 end

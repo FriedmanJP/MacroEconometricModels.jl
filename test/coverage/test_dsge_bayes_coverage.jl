@@ -12,6 +12,8 @@
 #   test/dsge/test_bayesian_dsge.jl  (~2500 lines)
 #   test/coverage/test_dsge_coverage.jl  (~1100 lines)
 
+using Distributions, StatsAPI
+
 if !@isdefined(FAST)
     const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
 end
