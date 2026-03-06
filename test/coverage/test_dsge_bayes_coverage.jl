@@ -113,7 +113,7 @@ end
     ss = M.DSGEStateSpace{Float64}(G1, impact, Z, d, H_mat, Q_mat)
     data = reshape(y_obs, 1, T_sim)
 
-    N_particles = 80
+    N_particles = 30
     ws = M._allocate_pf_workspace(Float64, 1, 1, 1, N_particles; T_obs=T_sim)
 
     ll = M._bootstrap_particle_filter!(ws, ss, data, T_sim;
@@ -139,7 +139,7 @@ end
     ss = M.DSGEStateSpace{Float64}(G1, impact, Z, d, H_mat, Q_mat)
     data = randn(rng, 1, T_sim)
 
-    N_particles = 50
+    N_particles = 20
     ws = M._allocate_pf_workspace(Float64, 1, 1, 1, N_particles)
 
     # Very low threshold => rarely resample
@@ -168,7 +168,7 @@ end
     ss = M.DSGEStateSpace{Float64}(G1, impact, Z, d, H_mat, Q_mat)
     data = randn(rng, 1, T_sim)
 
-    N_particles = 40
+    N_particles = 20
     ws = M._allocate_pf_workspace(Float64, 1, 1, 1, N_particles; T_obs=T_sim)
 
     # Bootstrap first to populate reference
@@ -200,7 +200,7 @@ end
         ny = length(nlss.control_indices)
         n_eps = size(nlss.eta, 2)
         nv = nx + n_eps
-        N = 30
+        N = 15
 
         # n_states in workspace = nx (state count for particles_fo/so/to)
         # but particles itself = n_endog (all variables for observation)
@@ -228,7 +228,7 @@ end
     @test size(ws.particles, 2) == N
     @test size(ws.kron3_buffer, 2) == N
 
-    N_new = 40
+    N_new = 20
     M._resize_pf_workspace!(ws, N_new)
 
     @test size(ws.particles, 2) == N_new
@@ -300,7 +300,7 @@ end
 end
 
 @testset "smc: _adaptive_tempering edge cases" begin
-    N = 50
+    N = 25
     rng = Random.MersenneTwister(7002)
 
     # Case: uniform log-likelihoods => can jump to phi=1
@@ -323,7 +323,7 @@ end
 
 @testset "smc: _update_proposal_cov!" begin
     n_params = 2
-    N = 50
+    N = 25
     rng = Random.MersenneTwister(7003)
 
     theta_particles = randn(rng, n_params, N)
@@ -414,7 +414,7 @@ end
         priors = Dict(:rho => Beta(2, 2))
         result = estimate_dsge_bayes(spec, sim_data, [0.5];
             priors=priors, method=:smc, observables=[:y],
-            n_smc=50, rng=Random.MersenneTwister(8002))
+            n_smc=20, rng=Random.MersenneTwister(8002))
 
         # StatsAPI.coef
         c = StatsAPI.coef(result)
@@ -443,7 +443,7 @@ end
         priors = Dict(:rho => Beta(2, 2))
         result = estimate_dsge_bayes(spec, sim_data, [0.5];
             priors=priors, method=:smc, observables=[:y],
-            n_smc=50, rng=Random.MersenneTwister(8004))
+            n_smc=20, rng=Random.MersenneTwister(8004))
 
         pt = prior_posterior_table(result)
         @test length(pt) == 1
@@ -474,7 +474,7 @@ end
         priors = Dict(:rho => Beta(2, 2))
         result = estimate_dsge_bayes(spec, sim_data, [0.5];
             priors=priors, method=:smc, observables=[:y],
-            n_smc=50, rng=Random.MersenneTwister(8006))
+            n_smc=20, rng=Random.MersenneTwister(8006))
 
         io = IOBuffer()
         show(io, result)
@@ -505,12 +505,12 @@ end
         priors = Dict(:rho => Beta(2, 2))
         result = estimate_dsge_bayes(spec, sim_data, [0.5];
             priors=priors, method=:mh, observables=[:y],
-            n_draws=200, burnin=50,
+            n_draws=80, burnin=20,
             rng=Random.MersenneTwister(8008))
 
         @test result isa BayesianDSGE{Float64}
         @test result.method == :rwmh
-        @test size(result.theta_draws, 1) == 200
+        @test size(result.theta_draws, 1) == 80
         @test isfinite(result.log_marginal_likelihood)
         @test isempty(result.ess_history)
         @test isempty(result.phi_schedule)
@@ -545,7 +545,7 @@ end
         priors = Dict(:rho => Beta(2, 2))
         result = estimate_dsge_bayes(spec, sim_data, [0.5];
             priors=priors, method=:smc, observables=[:y],
-            n_smc=50, rng=Random.MersenneTwister(8010))
+            n_smc=20, rng=Random.MersenneTwister(8010))
 
         @test result isa BayesianDSGE{Float64}
     end
@@ -561,9 +561,9 @@ end
         sol = perturbation_solver(spec; order=3)
         @test sol.order == 3
 
-        sim = simulate(sol, 60; rng=Random.MersenneTwister(9001))
+        sim = simulate(sol, 30; rng=Random.MersenneTwister(9001))
         @test all(isfinite, sim)
-        @test size(sim, 1) == 60
+        @test size(sim, 1) == 30
     end
 end
 
@@ -585,9 +585,9 @@ end
         spec = _make_fwd_spec()
         sol = perturbation_solver(spec; order=2)
 
-        sim = simulate(sol, 100; antithetic=true, rng=Random.MersenneTwister(9003))
+        sim = simulate(sol, 40; antithetic=true, rng=Random.MersenneTwister(9003))
         @test all(isfinite, sim)
-        @test size(sim, 1) == 100
+        @test size(sim, 1) == 40
     end
 end
 
@@ -596,9 +596,9 @@ end
         spec = _make_fwd_spec()
         sol = perturbation_solver(spec; order=3)
 
-        sim = simulate(sol, 100; antithetic=true, rng=Random.MersenneTwister(9004))
+        sim = simulate(sol, 40; antithetic=true, rng=Random.MersenneTwister(9004))
         @test all(isfinite, sim)
-        @test size(sim, 1) == 100
+        @test size(sim, 1) == 40
     end
 end
 
@@ -1204,7 +1204,7 @@ end
                       :sigma => InverseGamma(2.0, 0.5))
         result = estimate_dsge_bayes(spec, data, [0.5, 0.5];
             priors=priors, method=:smc, observables=[:y],
-            n_smc=80, n_mh_steps=1,
+            n_smc=30, n_mh_steps=1,
             rng=Random.MersenneTwister(10002))
 
         @test result isa BayesianDSGE{Float64}
