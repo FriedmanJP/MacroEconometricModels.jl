@@ -339,6 +339,7 @@ include("plotting/models.jl")
 include("plotting/nowcast.jl")
 include("plotting/did.jl")
 include("plotting/reg.jl")
+include("plotting/spectral.jl")
 
 # =============================================================================
 # Exports - Types
