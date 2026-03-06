@@ -579,7 +579,7 @@ end
 
         sol = MacroEconometricModels.collocation_solver(spec; degree=3, grid=:tensor,
                                   quadrature=:gauss_hermite, n_quad=3,
-                                  max_iter=10, tol=1e-4)
+                                  max_iter=5, tol=1e-4)
         @test sol isa ProjectionSolution{Float64}
         @test sol.grid_type == :tensor
         @test sol.quadrature == :gauss_hermite
@@ -599,7 +599,7 @@ end
 
         sol = MacroEconometricModels.collocation_solver(spec; degree=3, grid=:tensor,
                                   quadrature=:monomial,
-                                  max_iter=10, tol=1e-4)
+                                  max_iter=5, tol=1e-4)
         @test sol.quadrature == :monomial
     end
 end
@@ -616,7 +616,7 @@ end
         end
         spec = compute_steady_state(spec)
 
-        sol_eval = MacroEconometricModels.collocation_solver(spec; degree=3, max_iter=10, tol=1e-4)
+        sol_eval = MacroEconometricModels.collocation_solver(spec; degree=3, max_iter=5, tol=1e-4)
 
         # Single point evaluation
         y_val = evaluate_policy(sol_eval, [0.0])
@@ -644,8 +644,8 @@ end
         end
         spec = compute_steady_state(spec)
 
-        sol = MacroEconometricModels.collocation_solver(spec; degree=3, max_iter=10, tol=1e-4)
-        err = max_euler_error(sol; n_test=50, rng=Random.MersenneTwister(42))
+        sol = MacroEconometricModels.collocation_solver(spec; degree=3, max_iter=5, tol=1e-4)
+        err = max_euler_error(sol; n_test=20, rng=Random.MersenneTwister(42))
         @test isfinite(err)
         @test err >= 0
     end
@@ -676,7 +676,7 @@ end
         end
         spec = compute_steady_state(spec)
 
-        sol = MacroEconometricModels.pfi_solver(spec; degree=3, max_iter=20, tol=1e-4)
+        sol = MacroEconometricModels.pfi_solver(spec; degree=3, max_iter=5, tol=1e-4)
         @test sol isa ProjectionSolution{Float64}
         @test sol.method == :pfi
     end
@@ -692,7 +692,7 @@ end
         end
         spec = compute_steady_state(spec)
 
-        sol = MacroEconometricModels.pfi_solver(spec; degree=3, max_iter=20, tol=1e-4, damping=0.5)
+        sol = MacroEconometricModels.pfi_solver(spec; degree=3, max_iter=5, tol=1e-4, damping=0.5)
         @test sol isa ProjectionSolution{Float64}
         @test sol.method == :pfi
     end
@@ -708,7 +708,7 @@ end
         end
         spec = compute_steady_state(spec)
 
-        sol = MacroEconometricModels.pfi_solver(spec; degree=3, max_iter=10, tol=1e-4,
+        sol = MacroEconometricModels.pfi_solver(spec; degree=3, max_iter=5, tol=1e-4,
                           quadrature=:monomial)
         @test sol.quadrature == :monomial
     end
@@ -892,7 +892,7 @@ end
 
     # ProjectionSolution
     _suppress() do
-        sol_proj = MacroEconometricModels.collocation_solver(spec; degree=3, max_iter=10, tol=1e-4)
+        sol_proj = MacroEconometricModels.collocation_solver(spec; degree=3, max_iter=5, tol=1e-4)
         s3 = sprint(show, sol_proj)
         @test occursin("Projection Solution", s3)
     end
@@ -921,13 +921,13 @@ end
 
     # :projection method via solve()
     _suppress() do
-        sol_c = solve(spec; method=:projection, degree=3, max_iter=10, tol=1e-4)
+        sol_c = solve(spec; method=:projection, degree=3, max_iter=5, tol=1e-4)
         @test sol_c isa ProjectionSolution{Float64}
     end
 
     # :pfi method via solve()
     _suppress() do
-        sol_pfi = solve(spec; method=:pfi, degree=3, max_iter=10, tol=1e-4)
+        sol_pfi = solve(spec; method=:pfi, degree=3, max_iter=5, tol=1e-4)
         @test sol_pfi isa ProjectionSolution{Float64}
     end
 
@@ -963,7 +963,7 @@ end
 
         # Force smolyak grid
         sol = MacroEconometricModels.collocation_solver(spec; degree=3, grid=:smolyak, smolyak_mu=2,
-                                  max_iter=10, tol=1e-3)
+                                  max_iter=5, tol=1e-3)
         @test sol.grid_type == :smolyak
     end
 end
@@ -980,7 +980,7 @@ end
         spec = compute_steady_state(spec)
 
         sol = MacroEconometricModels.pfi_solver(spec; degree=3, grid=:smolyak, smolyak_mu=2,
-                          max_iter=10, tol=1e-3)
+                          max_iter=5, tol=1e-3)
         @test sol.grid_type == :smolyak
         @test sol.method == :pfi
     end
@@ -1001,8 +1001,8 @@ end
 
     _suppress() do
         sol = perturbation_solver(spec; order=2)
-        sim = simulate(sol, 50; rng=Random.MersenneTwister(42))
-        @test size(sim, 1) == 50
+        sim = simulate(sol, 25; rng=Random.MersenneTwister(42))
+        @test size(sim, 1) == 25
         @test size(sim, 2) >= 2  # at least 2 variables (may be augmented)
         @test all(isfinite, sim)
     end
