@@ -127,20 +127,20 @@ report(result)
 
 ## Code Examples
 
-**Completeness:** Every code block must be runnable as-is. No fragments, no `...` ellipsis, no "add your data here" placeholders.
+**Completeness:** Every code block must be runnable as-is and **must execute without error**. No fragments, no `...` ellipsis, no "add your data here" placeholders. Before committing documentation, verify that all example code actually runs.
 
 **Output display:** Use the package's built-in display infrastructure:
 - `report(result)` — for estimation results, model summaries
 - `print_table(stdout, result)` — for tabular output
 - `plot_result(result)` — for visualization
 - Direct field access (`result.theta`, `result.J_stat`) only when showing specific values for interpretation
-- **Avoid `println` for displaying results.** Use `println` only for simple scalar diagnostics like convergence flags.
+- **Never use `println` to display model results, estimation output, or test statistics.** Use `report(result)` for model output, `plot_result(result)` for visualizations, `print_table(stdout, result)` for tabular data, and direct field access with `round()` for specific values in interpretation paragraphs. Reserve `println` only for simple scalar diagnostics like convergence flags or iteration counts.
 
 **Comments:** Inline comments explain intent, not mechanics:
 - YES: `# Large negative demand shock pushes economy to ZLB`
 - NO: `# Set shocks[1,1] to -3.0`
 
-**Data examples:** Use `load_example(:fred_md)` or synthetic data from model simulation. Never reference external files.
+**Data examples:** Use built-in datasets whenever possible: `load_example(:fred_md)`, `load_example(:fred_qd)`, `load_example(:pwt)`, `load_example(:ddcg)`, `load_example(:mpdta)`. Fall back to synthetic data from model simulation only when no built-in dataset fits. Never reference external files.
 
 **Progressive complexity:**
 1. Minimal example with defaults
@@ -271,6 +271,7 @@ where:
 - Full reference list at the bottom of every page (not just a master list)
 - DOI links for all journal articles
 - Book references include publisher and ISBN
+- **Verify all DOIs and ISBNs before committing.** Every DOI must resolve to the correct publication. Every ISBN must match the cited edition. Do not fabricate or guess DOIs — look up the actual DOI from the publisher or CrossRef. If a DOI is not available (e.g., working papers), use the direct URL instead.
 
 ---
 
@@ -291,7 +292,7 @@ where:
 **Never do these:**
 
 1. **`println` for results** — Use `report()`, `print_table()`, or field access with interpretation
-2. **Code fragments** — Every code block must be complete and runnable
+2. **Code fragments or broken examples** — Every code block must be complete, runnable, and execute without error
 3. **Undefined symbols** — Every variable in a math block must be defined in the "where" list
 4. **Orphan equations** — Every display equation needs context (intro sentence + "where" list + interpretation)
 5. **H4 or deeper** — Flatten hierarchy; use bold text for sub-subsections if needed

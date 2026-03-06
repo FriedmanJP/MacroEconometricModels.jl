@@ -2,19 +2,7 @@
 # Copyright (C) 2025-2026 Wookyung Chung <chung@friedman.jp>
 #
 # This file is part of MacroEconometricModels.jl.
-#
-# MacroEconometricModels.jl is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# MacroEconometricModels.jl is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with MacroEconometricModels.jl. If not, see <https://www.gnu.org/licenses/>.
+# Licensed under GPL-3.0-or-later. See LICENSE for details.
 
 using Test
 using FFTW  # activate FFTW extension for GDFM tests
@@ -116,18 +104,24 @@ const TEST_GROUPS = [
         "dsge/test_dsge.jl",
         "dsge/test_bayesian_dsge.jl",
     ]),
-    # Group 8: Coverage gap tests (lightweight, fast)
-    ("Coverage" => [
-        "coverage/test_vecm_teststat_coverage.jl",
-        "coverage/test_nowcast_coverage.jl",
+    # Group 8: Coverage-A (DSGE — heaviest coverage tests)
+    ("Coverage-A" => [
         "coverage/test_dsge_coverage.jl",
-        "coverage/test_pvar_nongaussian_coverage.jl",
-        "coverage/test_gmm_ext_coverage.jl",
-        "coverage/test_misc_coverage.jl",
-        "coverage/test_teststat_break_panel_coverage.jl",
         "coverage/test_dsge_bayes_coverage.jl",
+    ]),
+    # Group 9: Coverage-B (medium-weight coverage tests)
+    ("Coverage-B" => [
         "coverage/test_data_types_coverage.jl",
+        "coverage/test_teststat_break_panel_coverage.jl",
         "coverage/test_display_coverage.jl",
+        "coverage/test_gmm_ext_coverage.jl",
+    ]),
+    # Group 10: Coverage-C (lightweight coverage tests)
+    ("Coverage-C" => [
+        "coverage/test_pvar_nongaussian_coverage.jl",
+        "coverage/test_nowcast_coverage.jl",
+        "coverage/test_vecm_teststat_coverage.jl",
+        "coverage/test_misc_coverage.jl",
     ]),
 ]
 
@@ -331,16 +325,20 @@ else
             include("dsge/test_bayesian_dsge.jl")
         end
 
-        # Group 8: Coverage gap tests
-        @testset "VECM & Teststat Coverage" begin include("coverage/test_vecm_teststat_coverage.jl") end
-        @testset "Nowcast Coverage" begin include("coverage/test_nowcast_coverage.jl") end
+        # Group 8: Coverage-A (DSGE)
         @testset "DSGE Coverage" begin include("coverage/test_dsge_coverage.jl") end
-        @testset "PVAR & Non-Gaussian Coverage" begin include("coverage/test_pvar_nongaussian_coverage.jl") end
-        @testset "GMM & Extension Coverage" begin include("coverage/test_gmm_ext_coverage.jl") end
-        @testset "Misc Coverage" begin include("coverage/test_misc_coverage.jl") end
-        @testset "Structural Break & Panel Coverage" begin include("coverage/test_teststat_break_panel_coverage.jl") end
         @testset "DSGE Bayesian Coverage" begin include("coverage/test_dsge_bayes_coverage.jl") end
+
+        # Group 9: Coverage-B (medium-weight)
         @testset "Data Types Coverage" begin include("coverage/test_data_types_coverage.jl") end
+        @testset "Structural Break & Panel Coverage" begin include("coverage/test_teststat_break_panel_coverage.jl") end
         @testset "Display & Plotting Coverage" begin include("coverage/test_display_coverage.jl") end
+        @testset "GMM & Extension Coverage" begin include("coverage/test_gmm_ext_coverage.jl") end
+
+        # Group 10: Coverage-C (lightweight)
+        @testset "PVAR & Non-Gaussian Coverage" begin include("coverage/test_pvar_nongaussian_coverage.jl") end
+        @testset "Nowcast Coverage" begin include("coverage/test_nowcast_coverage.jl") end
+        @testset "VECM & Teststat Coverage" begin include("coverage/test_vecm_teststat_coverage.jl") end
+        @testset "Misc Coverage" begin include("coverage/test_misc_coverage.jl") end
     end
 end

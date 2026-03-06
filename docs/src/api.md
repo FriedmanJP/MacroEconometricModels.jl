@@ -292,7 +292,7 @@ Mixed-frequency nowcasting via DFM, BVAR, and bridge equations with news decompo
 | `nowcast_news(X_new, X_old, dfm, t; ...)` | News decomposition: attribute revision to data releases |
 | `balance_panel(d; r=2, method=:dfm)` | Fill NaN in TimeSeriesData/PanelData via DFM |
 
-Publication-quality tables, display backend switching, and bibliographic references. See [Examples](examples.md) for LaTeX and HTML export workflows.
+Publication-quality tables, display backend switching, and bibliographic references. See individual section pages for usage examples.
 
 ### Display and Output Functions
 

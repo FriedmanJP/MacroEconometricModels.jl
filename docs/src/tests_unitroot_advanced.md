@@ -1,4 +1,4 @@
-# Advanced Unit Root Tests
+# [Advanced Unit Root Tests](@id tests_unitroot_advanced_page)
 
 Standard unit root tests (ADF, PP, KPSS) perform well when the data-generating process is a simple autoregressive model with fixed deterministic components. Real macroeconomic series, however, exhibit smooth structural changes, multiple regime shifts, and near-unit-root behavior that erode the power of classical tests. This page covers five advanced unit root tests that address these limitations through Fourier approximation of smooth breaks, GLS detrending for optimal power, LM-based testing with endogenous breaks under the null, and two-break ADF extensions.
 
@@ -494,40 +494,32 @@ cpi = filter(isfinite, to_vector(fred[:, "CPIAUCSL"]))
 
 # ── Step 2: Standard ADF as baseline ──────────────────────────
 adf = adf_test(cpi; lags=:aic, regression=:constant)
-println("ADF:          stat=$(round(adf.statistic, digits=3)), ",
-        "p=$(round(adf.pvalue, digits=3))")
+report(adf)
 
 # ── Step 3: Fourier ADF for smooth structural change ──────────
 fadf = fourier_adf_test(cpi; regression=:constant, fmax=3)
-println("Fourier ADF:  stat=$(round(fadf.statistic, digits=3)), ",
-        "p=$(round(fadf.pvalue, digits=3)), k=$(fadf.frequency)")
-println("  F-test for Fourier terms: F=$(round(fadf.f_statistic, digits=3)), ",
-        "p=$(round(fadf.f_pvalue, digits=3))")
+report(fadf)
+
+# Check whether Fourier terms contribute
+println("Fourier F-test: F=$(round(fadf.f_statistic, digits=3)), p=$(round(fadf.f_pvalue, digits=3))")
 
 # ── Step 4: Fourier KPSS as complementary stationarity test ──
 fkpss = fourier_kpss_test(cpi; regression=:constant, fmax=3)
-println("Fourier KPSS: stat=$(round(fkpss.statistic, digits=3)), ",
-        "p=$(round(fkpss.pvalue, digits=3)), k=$(fkpss.frequency)")
+report(fkpss)
 
 # ── Step 5: DF-GLS for maximum power ─────────────────────────
 dfgls = dfgls_test(cpi; regression=:constant, lags=:aic)
-println("DF-GLS:       tau=$(round(dfgls.statistic, digits=3)), ",
-        "p=$(round(dfgls.pvalue, digits=3))")
-println("  ERS Pt:     stat=$(round(dfgls.pt_statistic, digits=3)), ",
-        "p=$(round(dfgls.pt_pvalue, digits=3))")
-println("  MZt:        $(round(dfgls.MZt, digits=3))")
+report(dfgls)
 
 # ── Step 6: LM test with 1 break (breaks under H0) ──────────
 lm1 = lm_unitroot_test(cpi; breaks=1, regression=:level)
-println("LM (1 break): stat=$(round(lm1.statistic, digits=3)), ",
-        "p=$(round(lm1.pvalue, digits=3)), ",
-        "break at t=$(lm1.break_dates[1])")
+report(lm1)
+println("Break at observation: ", lm1.break_dates[1])
 
 # ── Step 7: Two-break ADF ───────────────────────────────────
 adf2 = adf_2break_test(cpi; model=:level, lags=:aic)
-println("ADF 2-break:  stat=$(round(adf2.statistic, digits=3)), ",
-        "p=$(round(adf2.pvalue, digits=3)), ",
-        "breaks at t=$(adf2.break1), $(adf2.break2)")
+report(adf2)
+println("Breaks at observations: ", adf2.break1, ", ", adf2.break2)
 
 # ── Step 8: Synthesis ───────────────────────────────────────
 println("\n── Summary ──────────────────────────────────────────────")

@@ -1,19 +1,20 @@
-# Factor Models
+# [Factor Models](@id factor_page)
 
-This chapter covers static factor models for dimensionality reduction in large macroeconomic panels, including estimation via principal components and information criteria for selecting the number of factors.
+**MacroEconometricModels.jl** provides a complete toolkit for estimating, diagnosing, and forecasting with factor models in large macroeconomic panels. The package covers static principal components, dynamic factor models with explicit VAR dynamics, generalized dynamic factor models via spectral methods, and structural identification of common shocks.
 
-## Introduction
+- **Static Factor Model**: Principal components estimation (Stock & Watson 2002a) with automatic panel orientation (short vs tall), standardization, and block-restricted EM estimation
+- **Information Criteria**: Bai & Ng (2002) IC1--IC3 for selecting the number of static factors, plus AIC/BIC for dynamic factor model specification
+- **Dynamic Factor Model**: Two-step (PCA + VAR) or EM (Kalman smoother) estimation with four confidence interval methods for forecasting (Doz, Giannone & Reichlin 2011, 2012)
+- **Generalized Dynamic Factor Model**: Spectral estimation via kernel-smoothed periodogram with frequency-domain eigenanalysis (Forni, Hallin, Lippi & Reichlin 2000, 2005)
+- **Structural DFM**: SVAR identification (Cholesky or sign restrictions) on common factors with panel-wide structural IRFs (Forni, Giannone, Lippi & Reichlin 2009)
+- **Block-Restricted Estimation**: EM algorithm with masked loadings for theory-guided factor structures
+- **Forecasting**: Factor-augmented forecasting with theoretical, bootstrap, and simulation-based confidence intervals
 
-Factor models are fundamental tools in macroeconometrics for extracting common sources of variation from large panels of economic indicators. They enable:
-
-1. **Dimensionality Reduction**: Summarize ``N`` variables with ``r \ll N`` factors
-2. **Forecasting**: Use factors as predictors in regressions (diffusion indices)
-3. **Structural Analysis**: Identify common shocks driving multiple series
-4. **FAVAR**: Combine factors with VARs for high-dimensional structural analysis
-
-**Reference**: Stock & Watson (2002a, 2002b), Bai & Ng (2002)
+All results integrate with `report()` for publication-quality output and `plot_result()` for interactive D3.js visualization.
 
 ## Quick Start
+
+**Recipe 1: Static factor model from FRED-MD**
 
 ```julia
 using MacroEconometricModels
@@ -26,59 +27,74 @@ fred_safe = fred[:, varnames(fred)[safe_idx]]
 X = to_matrix(apply_tcode(fred_safe))
 X = X[all.(isfinite, eachrow(X)), 1:min(20, size(X, 2))]
 
-fm = estimate_factors(X, 3; standardize=true)                      # Static factor model via PCA
-ic = ic_criteria(X, 10)                                            # Bai-Ng IC for factor count
-dfm = estimate_dynamic_factors(X, 3, 1; method=:twostep)           # Dynamic factor model
-gdfm = estimate_gdfm(X, 2; kernel=:bartlett)                       # Generalized DFM (spectral)
-fc = forecast(fm, 12; ci_method=:theoretical)                      # Static FM forecast with analytical CIs
-fc = forecast(dfm, 12; ci_method=:bootstrap, n_boot=1000)          # DFM forecast with bootstrap CIs
-fc = forecast(gdfm, 12; ci_method=:theoretical)                    # GDFM forecast with analytical CIs
+# Estimate 3-factor model via PCA
+fm = estimate_factors(X, 3; standardize=true)
+report(fm)
+```
+
+**Recipe 2: Select the number of factors**
+
+```julia
+# Bai-Ng information criteria for factor count selection
+ic = ic_criteria(X, 10)
+report(ic)
+```
+
+**Recipe 3: Dynamic factor model with VAR dynamics**
+
+```julia
+# 3 factors with VAR(1) dynamics, two-step estimation
+dfm = estimate_dynamic_factors(X, 3, 1; method=:twostep, standardize=true)
+report(dfm)
+```
+
+**Recipe 4: Generalized dynamic factor model (spectral)**
+
+```julia
+using FFTW
+
+# 2 dynamic factors via spectral analysis
+gdfm = estimate_gdfm(X, 2; kernel=:bartlett)
+report(gdfm)
+```
+
+**Recipe 5: Forecast with bootstrap confidence intervals**
+
+```julia
+using Random; Random.seed!(42)
+
+# DFM forecast with bootstrap CIs
+fc = forecast(dfm, 12; ci_method=:bootstrap, n_boot=1000)
+report(fc)
+```
+
+**Recipe 6: Structural DFM with Cholesky identification**
+
+```julia
+using FFTW, Random; Random.seed!(42)
+
+# Identify structural shocks in common factors
+sdfm = estimate_structural_dfm(X, 2; identification=:cholesky, p=1, H=20)
+r = irf(sdfm, 20)
+plot_result(r)
 ```
 
 ---
 
 ## The Static Factor Model
 
-### Model Specification
-
-The static factor model decomposes an ``N``-dimensional vector of observables ``x_t`` into common and idiosyncratic components:
-
-```math
-x_{it} = \lambda_i' F_t + e_{it}, \quad i = 1, \ldots, N, \quad t = 1, \ldots, T
-```
-
-In matrix form:
+The static factor model decomposes an ``N``-dimensional panel of observables into common and idiosyncratic components. It is the workhorse of modern empirical macroeconomics, enabling dimensionality reduction from hundreds of indicators to a handful of latent factors that summarize aggregate economic conditions.
 
 ```math
 X = F \Lambda' + E
 ```
 
 where:
-- ``X`` is the ``T \times N`` data matrix
-- ``F`` is the ``T \times r`` matrix of latent factors
+- ``X`` is the ``T \times N`` data matrix of observables
+- ``F`` is the ``T \times r`` matrix of latent common factors
 - ``\Lambda`` is the ``N \times r`` matrix of factor loadings
 - ``E`` is the ``T \times N`` matrix of idiosyncratic errors
 - ``r`` is the number of factors (with ``r \ll \min(T, N)``)
-
-### Assumptions
-
-**Factors and Loadings**:
-- ``E[F_t] = 0``, ``\text{Var}(F_t) = I_r`` (normalization)
-- ``\frac{1}{T} \sum_t F_t F_t' \xrightarrow{p} \Sigma_F`` positive definite
-- ``\frac{1}{N} \Lambda' \Lambda \xrightarrow{p} \Sigma_\Lambda`` positive definite
-
-**Idiosyncratic Errors**:
-- ``E[e_{it}] = 0``
-- Weak cross-sectional and temporal dependence allowed
-- Weak correlation with factors: ``\frac{1}{NT} \sum_{i,t} |E[F_t e_{it}]| \to 0``
-
-**Reference**: Bai & Ng (2002), Bai (2003)
-
----
-
-## Estimation via Principal Components
-
-### Principal Components Analysis (PCA)
 
 The factors and loadings are estimated by minimizing the sum of squared idiosyncratic errors:
 
@@ -86,39 +102,14 @@ The factors and loadings are estimated by minimizing the sum of squared idiosync
 \min_{F, \Lambda} \sum_{i=1}^N \sum_{t=1}^T (x_{it} - \lambda_i' F_t)^2
 ```
 
-subject to the normalization ``F'F/T = I_r``.
+where:
+- ``\lambda_i`` is the ``r \times 1`` loading vector for variable ``i``
+- ``F_t`` is the ``r \times 1`` factor vector at time ``t``
 
-### Solution
+subject to the normalization ``F'F/T = I_r``. The solution involves the eigenvalue decomposition of ``X'X`` (when ``N \leq T``) or ``XX'`` (when ``T < N``), with the first ``r`` eigenvectors forming the estimated factors or loadings.
 
-The solution involves the eigenvalue decomposition of ``X'X`` (or ``XX'``):
-
-**Case 1**: ``T < N`` (short panel)
-- Compute ``XX'`` (``T \times T`` matrix)
-- ``\hat{F} = \sqrt{T} \times`` (first ``r`` eigenvectors of ``XX'``)
-- ``\hat{\Lambda} = X' \hat{F} / T``
-
-**Case 2**: ``N \leq T`` (tall panel)
-- Compute ``X'X`` (``N \times N`` matrix)
-- ``\hat{\Lambda} = \sqrt{N} \times`` (first ``r`` eigenvectors of ``X'X``)
-- ``\hat{F} = X \hat{\Lambda} / N``
-
-### Data Preprocessing
-
-Before estimation, data is typically:
-1. **Demeaned**: Center each series to have zero mean
-2. **Standardized**: Scale each series to have unit variance
-
-This prevents high-variance series from dominating the factor extraction.
-
-### Identification
-
-The factors and loadings are identified only up to an ``r \times r`` invertible rotation. If ``(F, \Lambda)`` is a solution, so is ``(FH, \Lambda H^{-1})`` for any invertible ``H``.
-
-The normalization ``F'F/T = I_r`` and ``\Lambda'\Lambda`` diagonal pins down rotation up to sign.
-
-**Reference**: Stock & Watson (2002a), Bai & Ng (2002)
-
-### Julia Implementation
+!!! note "Technical Note"
+    The factors and loadings are identified only up to an ``r \times r`` invertible rotation: if ``(\hat{F}, \hat{\Lambda})`` is a solution, then ``(\hat{F}H, \hat{\Lambda}H^{-1'})`` is equally valid for any invertible ``H``. The normalization ``F'F/T = I_r`` pins down orientation but not sign. Individual factor loadings should not be interpreted as structural parameters. To compare estimated factors with "true" factors (e.g., in simulations), compute absolute correlations rather than raw correlations.
 
 ```julia
 using MacroEconometricModels
@@ -132,74 +123,54 @@ X = to_matrix(apply_tcode(fred_safe))
 X = X[all.(isfinite, eachrow(X)), 1:min(20, size(X, 2))]
 
 # Estimate 3-factor model from FRED-MD indicators
-model = estimate_factors(X, 3;
-    standardize = true,    # Standardize data
-    method = :pca          # Principal components
-)
+fm = estimate_factors(X, 3; standardize=true, method=:pca)
+report(fm)
 
-# Access results
-F = model.factors          # T×3 estimated factors
-Λ = model.loadings         # 20×3 estimated loadings
+# Visualization: scree plot of eigenvalues and extracted factor time series
+plot_result(fm)
 ```
 
-### FactorModel Return Values
+```@raw html
+<iframe src="../assets/plots/model_factor_static.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+The first three factors capture the dominant sources of common variation across the FRED-MD panel. The scree plot shows a clear decline in eigenvalue magnitude after the first few factors, consistent with a low-dimensional factor structure. The cumulative variance explained indicates how much of the total panel variation is attributable to common factors versus idiosyncratic noise.
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `standardize` | `Bool` | `true` | Standardize data to zero mean, unit variance before estimation |
+| `method` | `Symbol` | `:pca` | Estimation method (`:pca` for principal components) |
+| `blocks` | `Dict` | `nothing` | Block structure for restricted estimation (see [Block-Restricted Estimation](@ref block_restricted)) |
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `X` | `Matrix{T}` | Original ``T \times N`` data matrix |
 | `factors` | `Matrix{T}` | ``T \times r`` estimated factor matrix |
 | `loadings` | `Matrix{T}` | ``N \times r`` estimated loading matrix |
-| `eigenvalues` | `Vector{T}` | Eigenvalues from PCA (in descending order) |
+| `eigenvalues` | `Vector{T}` | Eigenvalues from PCA (descending order) |
 | `explained_variance` | `Vector{T}` | Fraction of variance explained by each factor |
 | `cumulative_variance` | `Vector{T}` | Cumulative fraction of variance explained |
 | `r` | `Int` | Number of factors |
 | `standardized` | `Bool` | Whether data was standardized before estimation |
 
-!!! note "Technical Note"
-    Factor models are identified only up to an ``r \times r`` rotation: if ``(\hat{F}, \hat{\Lambda})`` is a solution, then ``(\hat{F}H, \hat{\Lambda}H^{-1'})`` is equally valid for any invertible ``H``. The normalization ``F'F/T = I_r`` pins down orientation but not sign. Consequently, individual factor loadings should not be interpreted as structural parameters. To compare estimated factors with "true" factors (e.g., in simulations), compute absolute correlations rather than raw correlations.
-
 ---
 
 ## Determining the Number of Factors
 
-### The Selection Problem
+Choosing ``r`` is the central model selection problem in factor analysis. Too few factors omit common variation and bias downstream estimates; too many factors overfit, including noise as signal. Bai & Ng (2002) propose three information criteria that trade off goodness-of-fit against model complexity, with penalty terms designed for the double-indexed (``N, T``) asymptotic framework of factor models.
 
-Choosing ``r`` is crucial:
-- Too few factors: Omitted common variation, biased estimates
-- Too many factors: Overfitting, including noise as signal
-
-### Bai & Ng (2002) Information Criteria
-
-Bai & Ng propose three information criteria:
-
-**IC1**:
 ```math
-IC_1(r) = \log \hat{\sigma}^2(r) + r \cdot \frac{N + T}{NT} \log\left( \frac{NT}{N+T} \right)
-```
-
-**IC2**:
-```math
-IC_2(r) = \log \hat{\sigma}^2(r) + r \cdot \frac{N + T}{NT} \log(C_{NT}^2)
-```
-
-**IC3**:
-```math
-IC_3(r) = \log \hat{\sigma}^2(r) + r \cdot \frac{\log(C_{NT}^2)}{C_{NT}^2}
+IC_k(r) = \log \hat{\sigma}^2(r) + r \cdot g_k(N, T)
 ```
 
 where:
-- ``\hat{\sigma}^2(r) = \frac{1}{NT} \sum_{i,t} \hat{e}_{it}^2`` is the average squared residual
+- ``\hat{\sigma}^2(r) = \frac{1}{NT} \sum_{i,t} \hat{e}_{it}^2`` is the average squared residual with ``r`` factors
+- ``g_1(N, T) = \frac{N + T}{NT} \log\left(\frac{NT}{N+T}\right)`` is the IC1 penalty
+- ``g_2(N, T) = \frac{N + T}{NT} \log(C_{NT}^2)`` is the IC2 penalty
+- ``g_3(N, T) = \frac{\log(C_{NT}^2)}{C_{NT}^2}`` is the IC3 penalty
 - ``C_{NT}^2 = \min(N, T)``
 
-**Selection Rule**: Choose ``\hat{r}`` that minimizes ``IC_k(r)`` over ``r \in \{1, \ldots, r_{max}\}``.
-
-**Properties**:
-- IC2 and IC3 perform best in simulations
-- All three are consistent: ``\hat{r} \xrightarrow{p} r_0`` as ``N, T \to \infty``
-
-**Reference**: Bai & Ng (2002)
-
-### Julia Implementation
+The optimal ``\hat{r}`` minimizes ``IC_k(r)`` over ``r \in \{1, \ldots, r_{\max}\}``. All three criteria are consistent: ``\hat{r} \xrightarrow{p} r_0`` as ``N, T \to \infty``. IC2 and IC3 perform best in Monte Carlo simulations.
 
 ```julia
 using MacroEconometricModels
@@ -212,336 +183,135 @@ fred_safe = fred[:, varnames(fred)[safe_idx]]
 X = to_matrix(apply_tcode(fred_safe))
 X = X[all.(isfinite, eachrow(X)), 1:min(20, size(X, 2))]
 
-# Bai-Ng information criteria select the number of factors from FRED-MD indicators
-r_max = 10
-ic = ic_criteria(X, r_max)
-
-# Optimal number by each criterion
-println("IC1 selects: ", ic.r_IC1, " factors")
-println("IC2 selects: ", ic.r_IC2, " factors")
-println("IC3 selects: ", ic.r_IC3, " factors")
-
-# IC values for all r
-for r in 1:r_max
-    println("r=$r: IC1=$(ic.IC1[r]), IC2=$(ic.IC2[r]), IC3=$(ic.IC3[r])")
-end
+# Bai-Ng information criteria
+ic = ic_criteria(X, 10)
+report(ic)
 ```
 
----
+The three criteria typically agree on the number of factors for well-separated factor structures. When they disagree, IC2 and IC3 are preferred. The scree plot provides a complementary visual diagnostic: a sharp drop in eigenvalue magnitude after factor ``r`` confirms the information criteria selection.
 
-## Scree Plot Analysis
-
-### Visual Factor Selection
-
-The scree plot displays eigenvalues (or variance explained) against factor number. The "elbow" in the plot suggests the number of significant factors.
-
-### Variance Explained
-
-For each factor ``j``:
-
-**Individual Variance**:
-```math
-\text{VarExp}_j = \frac{\mu_j}{\sum_{k=1}^N \mu_k}
-```
-
-**Cumulative Variance**:
-```math
-\text{CumVarExp}_r = \sum_{j=1}^r \text{VarExp}_j
-```
-
-where ``\mu_j`` is the ``j``-th largest eigenvalue of ``X'X/T`` (or ``XX'/N``).
-
-### Julia Implementation
-
-```julia
-using MacroEconometricModels
-
-# Estimate factor model from FRED-MD panel (using X from above)
-model = estimate_factors(X, 5)
-
-# Get scree plot data
-scree = scree_plot_data(model)
-
-# Variance explained by each factor
-for j in 1:min(5, length(scree.factors))
-    println("Factor $j: $(round(scree.explained_variance[j]*100, digits=2))% ",
-            "(cumulative: $(round(scree.cumulative_variance[j]*100, digits=2))%)")
-end
-```
+| Field | Type | Description |
+|-------|------|-------------|
+| `r_IC1` | `Int` | Number of factors selected by IC1 |
+| `r_IC2` | `Int` | Number of factors selected by IC2 |
+| `r_IC3` | `Int` | Number of factors selected by IC3 |
+| `IC1` | `Vector{T}` | IC1 values for ``r = 1, \ldots, r_{\max}`` |
+| `IC2` | `Vector{T}` | IC2 values for ``r = 1, \ldots, r_{\max}`` |
+| `IC3` | `Vector{T}` | IC3 values for ``r = 1, \ldots, r_{\max}`` |
 
 ---
 
 ## Model Diagnostics
 
-### R-squared for Each Variable
-
-The ``R^2`` measures how much of variable ``i``'s variation is explained by the common factors:
+The ``R^2`` for each variable measures how much of its variation is explained by the common factors, providing a variable-level diagnostic for the factor model fit.
 
 ```math
 R^2_i = 1 - \frac{\sum_t \hat{e}_{it}^2}{\sum_t (x_{it} - \bar{x}_i)^2}
 ```
 
-Variables with low ``R^2`` are mainly driven by idiosyncratic shocks.
+where:
+- ``\hat{e}_{it} = x_{it} - \hat{\lambda}_i' \hat{F}_t`` is the idiosyncratic residual for variable ``i``
+- ``\bar{x}_i`` is the sample mean of variable ``i``
 
-### Julia Implementation
-
-```julia
-using MacroEconometricModels
-
-# Estimate 3-factor model from FRED-MD panel (using X from above)
-model = estimate_factors(X, 3)
-
-# R² for each variable — how much of each FRED-MD indicator is driven by common factors
-r2_values = r2(model)
-
-# Summary statistics
-println("Mean R²: ", round(mean(r2_values), digits=3))
-println("Median R²: ", round(median(r2_values), digits=3))
-println("Min R²: ", round(minimum(r2_values), digits=3))
-println("Max R²: ", round(maximum(r2_values), digits=3))
-
-# Variables well-explained by factors
-well_explained = findall(r2_values .> 0.7)
-```
-
-### Fitted Values and Residuals
+Variables with high ``R^2`` are strongly driven by common factors; variables with low ``R^2`` are dominated by idiosyncratic shocks and contribute little to the common factor structure.
 
 ```julia
-# Fitted values: X̂ = FΛ'
-X_fitted = predict(model)
+using MacroEconometricModels, Statistics
 
-# Residuals: E = X - X̂
-resid = residuals(model)
-
-# Model statistics
-println("Number of observations: ", nobs(model))
-println("Degrees of freedom: ", dof(model))
-```
-
----
-
-## Applications
-
-### Diffusion Index Forecasting
-
-Use factors as predictors for forecasting a target variable ``y_{t+h}``:
-
-```math
-y_{t+h} = \alpha + \beta' \hat{F}_t + \gamma' y_{t:t-p} + \varepsilon_{t+h}
-```
-
-Factors summarize information from a large panel, improving forecast accuracy.
-
-**Reference**: Stock & Watson (2002b)
-
-### Factor-Augmented VAR (FAVAR)
-
-Combine factors with key observable variables in a VAR:
-
-```math
-\begin{bmatrix} y_t \\ F_t \end{bmatrix} = A_1 \begin{bmatrix} y_{t-1} \\ F_{t-1} \end{bmatrix} + \cdots + A_p \begin{bmatrix} y_{t-p} \\ F_{t-p} \end{bmatrix} + u_t
-```
-
-This allows structural analysis with high-dimensional information sets.
-
-**Reference**: Bernanke, Boivin & Eliasz (2005)
-
-### Example: FAVAR Setup
-
-```julia
-using MacroEconometricModels
-
-# Estimate factors from FRED-MD panel (using X from above)
-fm = estimate_factors(X, 3)
-F = fm.factors
-
-# Load key monetary policy observables
+# Estimate 3-factor model from FRED-MD panel
 fred = load_example(:fred_md)
-Y_key = to_matrix(apply_tcode(fred[:, ["FEDFUNDS", "INDPRO", "CPIAUCSL"]]))
-Y_key = Y_key[all.(isfinite, eachrow(Y_key)), :]
+safe_idx = [i for i in 1:nvars(fred)
+            if fred.tcode[i] < 4 || all(x -> isfinite(x) && x > 0, fred.data[:, i])]
+fred_safe = fred[:, varnames(fred)[safe_idx]]
+X = to_matrix(apply_tcode(fred_safe))
+X = X[all.(isfinite, eachrow(X)), 1:min(20, size(X, 2))]
 
-# Align lengths and combine factors with key observables
-T_min = min(size(F, 1), size(Y_key, 1))
-Y_favar = hcat(Y_key[end-T_min+1:end, :], F[end-T_min+1:end, :])
+fm = estimate_factors(X, 3; standardize=true)
+report(fm)
 
-# Estimate FAVAR: 6 variables (3 observables + 3 factors)
-favar_model = estimate_var(Y_favar, 4)
+# Per-variable R-squared
+r2_vals = r2(fm)
 
-# Structural analysis: monetary policy shock via Cholesky
-irf_favar = irf(favar_model, 20; method=:cholesky)
+# Fitted values and residuals via StatsAPI
+X_hat = predict(fm)       # T x N fitted values
+resid = residuals(fm)     # T x N residuals
 ```
 
----
+The mean ``R^2`` across all variables summarizes the overall explanatory power of the factor model. A mean ``R^2`` above 0.5 indicates that common factors capture more than half of total panel variation, consistent with a strong factor structure.
 
-## Forecasting with Static Factor Models
+### StatsAPI Interface
 
-### Forecast Method
+All factor model types implement the standard StatsAPI interface:
 
-The static factor model does not directly specify factor dynamics, but forecasting is possible by fitting a VAR(p) on the extracted factors:
+| Function | `FactorModel` | `DynamicFactorModel` | `GeneralizedDynamicFactorModel` |
+|----------|:---:|:---:|:---:|
+| `predict(m)` | Fitted values ``\hat{X} = F\Lambda'`` | Fitted values ``\hat{X} = F\Lambda'`` | Common component ``\hat{\chi}_t`` |
+| `residuals(m)` | Idiosyncratic residuals | Idiosyncratic residuals | Idiosyncratic component |
+| `r2(m)` | Per-variable ``R^2`` | Per-variable ``R^2`` | Per-variable ``R^2`` |
+| `nobs(m)` | Number of observations | Number of observations | Number of observations |
+| `dof(m)` | Degrees of freedom | Degrees of freedom | Degrees of freedom |
+| `loglikelihood(m)` | --- | Log-likelihood | --- |
+| `aic(m)` | --- | AIC | --- |
+| `bic(m)` | --- | BIC | --- |
 
-```math
-\hat{F}_{T+h|T} = \hat{A}_1 \hat{F}_{T+h-1|T} + \cdots + \hat{A}_p \hat{F}_{T+h-p|T}
-```
-
-Observable forecasts are obtained via the loading matrix:
-
-```math
-\hat{X}_{T+h|T} = \hat{\Lambda} \hat{F}_{T+h|T}
-```
-
-### Confidence Intervals
-
-**Theoretical CIs** use the VMA(``\infty``) representation of the factor VAR to compute the ``h``-step forecast error covariance analytically:
-
-```math
-\text{MSE}_h = \sum_{j=0}^{h-1} \Psi_j \Sigma_\eta \Psi_j'
-```
-
-where ``\Psi_j = J C^j`` are the VMA coefficient matrices from the companion form.
-
-**Bootstrap CIs** resample factor VAR residuals to construct simulated forecast paths and compute percentile intervals.
-
-### Julia Implementation
-
-```julia
-using MacroEconometricModels
-
-# Estimate static factor model from FRED-MD panel (using X from above)
-fm = estimate_factors(X, 3)
-
-# Point forecast (fits VAR(1) on factors internally)
-fc = forecast(fm, 12)
-fc.factors       # 12×3 factor forecasts
-fc.observables   # 12×N observable forecasts
-
-# Forecast with theoretical (analytical) confidence intervals
-fc = forecast(fm, 12; ci_method=:theoretical, conf_level=0.95)
-fc.factors_lower   # 12×3 lower CI for factors
-fc.factors_upper   # 12×3 upper CI for factors
-fc.observables_se  # 12×N standard errors for observables
-
-# Forecast with bootstrap CIs
-using Random; Random.seed!(42)
-fc = forecast(fm, 12; ci_method=:bootstrap, n_boot=1000, conf_level=0.90)
-
-# Use higher-order VAR for factor dynamics
-fc = forecast(fm, 12; p=2, ci_method=:theoretical)
-```
-
-The theoretical SEs increase with the forecast horizon, reflecting growing uncertainty. For stationary factor dynamics, the SEs converge to the unconditional forecast error standard deviation. Bootstrap CIs are preferred when the Gaussian assumption may not hold.
-
-**Reference**: Stock & Watson (2002b)
-
----
-
-## Asymptotic Theory
-
-### Consistency of Factor Estimates
-
-Under the assumptions of Bai & Ng (2002), as ``T, N \to \infty``:
-
-```math
-\frac{1}{T} \sum_{t=1}^T \|\hat{F}_t - H F_t\|^2 = O_p\left( \frac{1}{\min(N, T)} \right)
-```
-
-where ``H`` is an ``r \times r`` rotation matrix.
-
-The factors are consistently estimated up to rotation at rate ``\min(\sqrt{N}, \sqrt{T})``.
-
-### Distribution Theory
-
-For large ``N, T``, the factor estimates are asymptotically normal:
-
-```math
-\sqrt{T} (\hat{F}_t - H F_t) \xrightarrow{d} N(0, V)
-```
-
-where ``V`` depends on the cross-sectional and temporal dependence structure.
-
-**Reference**: Bai (2003), Bai & Ng (2006)
-
----
-
-## Comparison with Other Methods
-
-### Static vs. Dynamic Factor Models
-
-| Aspect | Static FM | Dynamic FM |
-|--------|-----------|------------|
-| **Model** | ``X_t = \Lambda F_t + e_t`` | ``X_t = \Lambda(L) f_t + e_t`` |
-| **Factors** | Contemporaneous | May include lags |
-| **Estimation** | PCA | Spectral methods, Kalman filter |
-| **Use case** | Large N, moderate T | Time series dynamics important |
-
-**Reference**: Forni, Hallin, Lippi & Reichlin (2000)
-
-### Maximum Likelihood Estimation
-
-ML estimation assumes Gaussian factors and errors:
-
-```math
-F_t \sim N(0, I_r), \quad e_t \sim N(0, \Psi)
-```
-
-Estimated via EM algorithm. More efficient than PCA if model is correctly specified, but computationally intensive.
+!!! note "Technical Note"
+    `loglikelihood`, `aic`, and `bic` are available only for `DynamicFactorModel` since static PCA and spectral GDFM estimation do not produce a well-defined likelihood.
 
 ---
 
 ## Dynamic Factor Models
 
-### Model Specification
+The dynamic factor model (DFM) extends the static model by specifying explicit VAR dynamics for the latent factors. This state-space formulation enables likelihood-based estimation, Kalman filtering, and principled multi-step forecasting with proper uncertainty quantification.
 
-The dynamic factor model extends the static model by allowing factors to follow a VAR process:
+**Observation equation**:
 
-**Observation Equation**:
 ```math
 X_t = \Lambda F_t + e_t
 ```
 
-**State Equation (Factor Dynamics)**:
+**State equation**:
+
 ```math
 F_t = A_1 F_{t-1} + A_2 F_{t-2} + \cdots + A_p F_{t-p} + \eta_t
 ```
 
 where:
+- ``X_t`` is the ``N \times 1`` vector of observables at time ``t``
 - ``F_t`` is the ``r \times 1`` vector of latent factors
 - ``\Lambda`` is the ``N \times r`` loading matrix
 - ``A_1, \ldots, A_p`` are ``r \times r`` autoregressive coefficient matrices
 - ``\eta_t \sim N(0, \Sigma_\eta)`` are factor innovations
 - ``e_t \sim N(0, \Sigma_e)`` are idiosyncratic errors (typically diagonal)
 
-### Estimation Methods
-
-**Two-Step Estimation**:
-1. Extract factors using PCA (as in static model)
-2. Estimate VAR(p) on extracted factors
-
-**EM Algorithm**:
-- Iterates between E-step (Kalman smoother) and M-step (parameter updates)
-- More efficient but computationally intensive
-
-### Julia Implementation
+Two estimation methods are available. **Two-step estimation** extracts factors via PCA and fits a VAR on the extracted factors (Stock & Watson 2002a). **EM estimation** iterates between the Kalman smoother (E-step) and parameter updates (M-step), producing more efficient estimates at higher computational cost (Doz, Giannone & Reichlin 2012).
 
 ```julia
 using MacroEconometricModels
 
-# Estimate dynamic factor model from FRED-MD panel (using X from above)
-# 3 factors with VAR(1) dynamics
-model = estimate_dynamic_factors(X, 3, 1;
-    method = :twostep,      # or :em
-    standardize = true,
-    diagonal_idio = true    # Diagonal idiosyncratic covariance
-)
+# Load and transform FRED-MD panel
+fred = load_example(:fred_md)
+safe_idx = [i for i in 1:nvars(fred)
+            if fred.tcode[i] < 4 || all(x -> isfinite(x) && x > 0, fred.data[:, i])]
+fred_safe = fred[:, varnames(fred)[safe_idx]]
+X = to_matrix(apply_tcode(fred_safe))
+X = X[all.(isfinite, eachrow(X)), 1:min(20, size(X, 2))]
 
-# Access results
-F = model.factors           # T×3 estimated factors
-Λ = model.loadings          # N×3 loadings
-A = model.A                 # Vector of 3×3 AR coefficient matrices
-Σ_η = model.Sigma_eta       # 3×3 factor innovation covariance
-Σ_e = model.Sigma_e         # N×N idiosyncratic covariance
+# 3 factors with VAR(1) dynamics
+dfm = estimate_dynamic_factors(X, 3, 1;
+    method=:twostep,
+    standardize=true,
+    diagonal_idio=true    # Diagonal idiosyncratic covariance
+)
+report(dfm)
 ```
 
-### DynamicFactorModel Return Values
+The two-step estimator is fast and consistent under the Bai & Ng (2002) conditions. The EM estimator is preferred when the Gaussian state-space structure is a reasonable approximation, as it exploits the full likelihood and produces efficient estimates even with moderate ``N``.
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `method` | `Symbol` | `:twostep` | Estimation method (`:twostep` or `:em`) |
+| `standardize` | `Bool` | `true` | Standardize data before estimation |
+| `diagonal_idio` | `Bool` | `true` | Restrict ``\Sigma_e`` to be diagonal |
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -557,34 +327,68 @@ A = model.A                 # Vector of 3×3 AR coefficient matrices
 | `cumulative_variance` | `Vector{T}` | Cumulative variance explained |
 | `r` | `Int` | Number of factors |
 | `p` | `Int` | Number of factor VAR lags |
-| `method` | `Symbol` | Estimation method (`:twostep` or `:em`) |
+| `method` | `Symbol` | Estimation method used |
 | `standardized` | `Bool` | Whether data was standardized |
-| `converged` | `Bool` | Convergence status (relevant for `:em`) |
-| `iterations` | `Int` | Number of iterations (relevant for `:em`) |
+| `converged` | `Bool` | Convergence status (for `:em`) |
+| `iterations` | `Int` | Number of iterations (for `:em`) |
 | `loglik` | `T` | Log-likelihood value |
 
 ### Model Selection for DFM
 
-Select the number of factors ``r`` and lag order ``p`` using information criteria:
+The joint selection of factor count ``r`` and lag order ``p`` uses standard information criteria computed from the state-space log-likelihood:
 
 ```julia
 # Grid search over (r, p) combinations
-ic = ic_criteria_dynamic(X, max_r, max_p;
-    method = :twostep,
-    standardize = true
-)
-
-println("AIC selects: r=$(ic.r_AIC), p=$(ic.p_AIC)")
-println("BIC selects: r=$(ic.r_BIC), p=$(ic.p_BIC)")
+ic = ic_criteria_dynamic(X, 5, 3; method=:twostep, standardize=true)
+report(ic)
 
 # View full IC matrices
-ic.AIC  # r×p matrix of AIC values
-ic.BIC  # r×p matrix of BIC values
+ic.AIC   # r x p matrix of AIC values
+ic.BIC   # r x p matrix of BIC values
 ```
 
-### Forecasting with DFM
+### Stationarity Check
 
-The DFM forecast extrapolates the factor VAR dynamics forward and projects to observables via the loading matrix. Four CI methods are available:
+```julia
+# Verify factor dynamics are stationary
+is_stationary(dfm)   # true if max|eigenvalue| < 1
+```
+
+---
+
+## Forecasting
+
+Factor model forecasts extrapolate factor dynamics forward and project to observables via the loading matrix. For static factor models, a VAR is fitted internally on the extracted factors. Four confidence interval methods are available.
+
+```math
+\hat{F}_{T+h|T} = \hat{A}_1 \hat{F}_{T+h-1|T} + \cdots + \hat{A}_p \hat{F}_{T+h-p|T}
+```
+
+where:
+- ``\hat{F}_{T+h|T}`` is the ``h``-step-ahead factor forecast conditional on information at time ``T``
+- ``\hat{A}_1, \ldots, \hat{A}_p`` are the estimated factor VAR coefficient matrices
+
+Observable forecasts are obtained via the loading matrix:
+
+```math
+\hat{X}_{T+h|T} = \hat{\Lambda} \hat{F}_{T+h|T}
+```
+
+where:
+- ``\hat{X}_{T+h|T}`` is the ``N \times 1`` vector of observable forecasts
+- ``\hat{\Lambda}`` is the ``N \times r`` estimated loading matrix
+
+**Theoretical CIs** compute the ``h``-step forecast error covariance analytically via the VMA(``\infty``) representation:
+
+```math
+\text{MSE}_h = \sum_{j=0}^{h-1} \Psi_j \, \Sigma_\eta \, \Psi_j'
+```
+
+where:
+- ``\Psi_j = J C^j`` are the VMA coefficient matrices from the companion form
+- ``C`` is the companion matrix of the factor VAR
+- ``J`` is the selector for the first ``r`` rows
+- ``\Sigma_\eta`` is the factor innovation covariance
 
 | `ci_method` | Description | Best for |
 |-------------|-------------|----------|
@@ -594,28 +398,32 @@ The DFM forecast extrapolates the factor VAR dynamics forward and projects to ob
 | `:simulation` | Monte Carlo draws from estimated model | Full uncertainty propagation |
 
 ```julia
-# Point forecasts h steps ahead
-fc = forecast(model, h)
-fc.factors       # h×r factor forecasts
-fc.observables   # h×N observable forecasts
+using MacroEconometricModels, Random
+Random.seed!(42)
 
-# Theoretical (analytical) confidence intervals
-fc = forecast(model, h; ci_method=:theoretical, conf_level=0.95)
-fc.factors_se           # h×r standard errors
-fc.observables_lower    # h×N lower CI bounds
-fc.observables_upper    # h×N upper CI bounds
+# Load and prepare FRED-MD panel
+fred = load_example(:fred_md)
+safe_idx = [i for i in 1:nvars(fred)
+            if fred.tcode[i] < 4 || all(x -> isfinite(x) && x > 0, fred.data[:, i])]
+fred_safe = fred[:, varnames(fred)[safe_idx]]
+X = to_matrix(apply_tcode(fred_safe))
+X = X[all.(isfinite, eachrow(X)), 1:min(20, size(X, 2))]
 
-# Bootstrap confidence intervals
-fc = forecast(model, h; ci_method=:bootstrap, n_boot=1000, conf_level=0.90)
-
-# Simulation-based CIs (original method, also accessible via legacy ci=true)
-fc = forecast(model, h; ci_method=:simulation, n_boot=2000)
-fc = forecast(model, h; ci=true, ci_level=0.90)  # Legacy interface
+# DFM forecast with bootstrap CIs
+dfm = estimate_dynamic_factors(X, 2, 1)
+fc = forecast(dfm, 10; ci_method=:bootstrap, n_boot=1000, conf_level=0.95)
+report(fc)
+plot_result(fc)
 ```
 
-All forecast methods return a `FactorForecast` struct. When `ci_method=:none`, the CI and SE fields are zero matrices.
+```@raw html
+<iframe src="../assets/plots/forecast_factor.html" width="100%" height="400" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
 
-### FactorForecast Return Values
+The theoretical standard errors increase with the forecast horizon, reflecting growing uncertainty about future factor values. For stationary factor dynamics, the standard errors converge to the unconditional forecast error standard deviation. Bootstrap CIs are preferred when the Gaussian assumption is doubtful.
+
+!!! note "Technical Note"
+    Observable forecast standard errors combine factor uncertainty with idiosyncratic variance: ``\text{Var}(\hat{X}_{T+h}) = \Lambda \cdot \text{MSE}_h \cdot \Lambda' + \Sigma_e``. The GDFM forecast uses AR(1) extrapolation of each factor series with closed-form variance: ``\text{Var}(\hat{F}_{T+h,i}) = \sigma_i^2 \sum_{j=0}^{h-1} \phi_i^{2j}``.
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -629,35 +437,15 @@ All forecast methods return a `FactorForecast` struct. When `ci_method=:none`, t
 | `observables_se` | `Matrix{T}` | ``h \times N`` observable forecast standard errors |
 | `horizon` | `Int` | Forecast horizon ``h`` |
 | `conf_level` | `T` | Confidence level (e.g., 0.95) |
-| `ci_method` | `Symbol` | CI method used (`:none`, `:theoretical`, `:bootstrap`, `:simulation`) |
-
-!!! note "Technical Note"
-    The theoretical CIs compute the ``h``-step forecast MSE via the VMA(``\infty``) representation: ``\text{MSE}_h = \sum_{j=0}^{h-1} \Psi_j \Sigma_\eta \Psi_j'`` where ``\Psi_j = J C^j`` with ``C`` the companion matrix and ``J`` the selector for the first ``r`` rows. Observable SEs combine factor uncertainty with idiosyncratic variance: ``\text{Var}(\hat{X}_{T+h}) = \Lambda \cdot \text{MSE}_h \cdot \Lambda' + \Sigma_e``.
-
-### Stationarity Check
-
-```julia
-# Check if factor dynamics are stationary
-is_stationary(model)  # true if max|eigenvalue| < 1
-
-# Get companion matrix for factor VAR
-C = companion_matrix_factors(model)
-eigvals(C)  # Eigenvalues determine stability
-```
-
-**Reference**: Stock & Watson (2002a), Doz, Giannone & Reichlin (2011)
+| `ci_method` | `Symbol` | CI method used |
 
 ---
 
-## Generalized Dynamic Factor Model (GDFM)
+## Generalized Dynamic Factor Model
 
-### Theoretical Foundation
+The Generalized Dynamic Factor Model (GDFM) of Forni, Hallin, Lippi & Reichlin (2000, 2005) provides a fully dynamic approach to factor analysis using spectral methods. Unlike the standard DFM that uses static PCA followed by a VAR, the GDFM extracts factors directly in the frequency domain, exploiting the spectral density structure of the panel.
 
-The Generalized Dynamic Factor Model of Forni, Hallin, Lippi & Reichlin (2000, 2005) provides a fully dynamic approach to factor analysis using spectral methods. Unlike the standard DFM which uses static PCA followed by VAR, the GDFM extracts factors directly in the frequency domain.
-
-### Model Specification
-
-The GDFM decomposes each observable as:
+The GDFM decomposes each observable into common and idiosyncratic components:
 
 ```math
 x_{it} = \chi_{it} + \xi_{it}
@@ -667,162 +455,24 @@ where:
 - ``\chi_{it}`` is the **common component** driven by ``q`` common shocks
 - ``\xi_{it}`` is the **idiosyncratic component**
 
-The common component has the representation:
+The common component has the dynamic representation:
 
 ```math
 \chi_{it} = b_{i1}(L) u_{1t} + b_{i2}(L) u_{2t} + \cdots + b_{iq}(L) u_{qt}
 ```
 
-where ``b_{ij}(L)`` are square-summable filters and ``u_{jt}`` are orthonormal white noise shocks.
+where:
+- ``b_{ij}(L)`` are square-summable lag polynomial filters
+- ``u_{jt}`` are orthonormal white noise common shocks
+- ``q`` is the number of dynamic factors
 
-### Spectral Representation
+In the frequency domain, the spectral density of ``X_t`` decomposes as ``\Sigma_X(\omega) = \Sigma_\chi(\omega) + \Sigma_\xi(\omega)``. The key insight is that common factors produce **diverging eigenvalues** (growing with ``N``) while idiosyncratic components produce **bounded eigenvalues**. This spectral separation identifies the factor space without imposing a finite VAR structure on factor dynamics.
 
-In the frequency domain, the spectral density of ``X_t`` decomposes as:
-
-```math
-\Sigma_X(\omega) = \Sigma_\chi(\omega) + \Sigma_\xi(\omega)
-```
-
-The key insight is that common factors produce **diverging eigenvalues** (growing with ``N``) while idiosyncratic components produce **bounded eigenvalues**.
-
-### Estimation Algorithm
-
-1. **Spectral Density Estimation**: Estimate ``\hat{\Sigma}_X(\omega)`` using kernel smoothing of the periodogram
-2. **Dynamic Eigenanalysis**: Compute eigenvalue decomposition at each frequency
-3. **Factor Extraction**: Select top ``q`` eigenvectors (dynamic principal components)
-4. **Common Component**: Reconstruct ``\chi_t`` via inverse Fourier transform
-
-### Julia Implementation
+!!! note "Technical Note"
+    The estimation algorithm proceeds in four steps: (1) estimate ``\hat{\Sigma}_X(\omega)`` using kernel smoothing of the periodogram, (2) compute eigenvalue decomposition at each frequency, (3) select top ``q`` eigenvectors (dynamic principal components), (4) reconstruct the common component ``\chi_t`` via inverse Fourier transform.
 
 ```julia
-using MacroEconometricModels
-
-# Estimate GDFM from FRED-MD panel (using X from above)
-# 2 dynamic factors via spectral analysis
-model = estimate_gdfm(X, 2;
-    standardize = true,
-    bandwidth = 0,           # Auto-select: T^(1/3)
-    kernel = :bartlett,      # :bartlett, :parzen, or :tukey
-    r = 0                    # Static factors (0 = same as q)
-)
-
-# Access results
-F = model.factors                 # T×2 time-domain factors
-χ = model.common_component        # T×N common component
-ξ = model.idiosyncratic           # T×N idiosyncratic component
-Λ = model.loadings_spectral       # N×2×n_freq frequency-domain loadings
-
-# Variance explained by dynamic factors
-model.variance_explained          # 2-vector of variance shares
-```
-
-### GeneralizedDynamicFactorModel Return Values
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `X` | `Matrix{T}` | Original ``T \times N`` data matrix |
-| `factors` | `Matrix{T}` | ``T \times q`` time-domain factors |
-| `common_component` | `Matrix{T}` | ``T \times N`` common component ``\chi_t`` |
-| `idiosyncratic` | `Matrix{T}` | ``T \times N`` idiosyncratic component ``\xi_t`` |
-| `loadings_spectral` | `Array{Complex{T},3}` | ``N \times q \times n_{freq}`` frequency-domain loadings |
-| `spectral_density_X` | `Array{Complex{T},3}` | Spectral density of ``X_t`` |
-| `spectral_density_chi` | `Array{Complex{T},3}` | Spectral density of common component |
-| `eigenvalues_spectral` | `Matrix{T}` | ``N \times n_{freq}`` eigenvalues across frequencies |
-| `frequencies` | `Vector{T}` | Frequency grid (0 to ``\pi``) |
-| `q` | `Int` | Number of dynamic factors |
-| `r` | `Int` | Number of static factors |
-| `bandwidth` | `Int` | Kernel smoothing bandwidth |
-| `kernel` | `Symbol` | Kernel type (`:bartlett`, `:parzen`, `:tukey`) |
-| `standardized` | `Bool` | Whether data was standardized |
-| `variance_explained` | `Vector{T}` | Variance share per dynamic factor |
-
-### Selecting the Number of Dynamic Factors
-
-The GDFM uses eigenvalue-based criteria rather than information criteria:
-
-```julia
-# Compute selection criteria
-ic = ic_criteria_gdfm(X, max_q;
-    standardize = true,
-    bandwidth = 0,
-    kernel = :bartlett
-)
-
-# Eigenvalue ratio criterion (Ahn & Horenstein 2013)
-println("Ratio criterion selects: q=$(ic.q_ratio)")
-
-# Variance threshold criterion (90% of spectral variance)
-println("Variance criterion selects: q=$(ic.q_variance)")
-
-# Diagnostic data
-ic.eigenvalue_ratios      # λ_i / λ_{i+1} ratios
-ic.cumulative_variance    # Cumulative variance explained
-ic.avg_eigenvalues        # Average eigenvalues across frequencies
-```
-
-### Spectral Diagnostics
-
-```julia
-# Get data for eigenvalue plots across frequencies
-plot_data = spectral_eigenvalue_plot_data(model)
-plot_data.frequencies     # Vector of frequencies (0 to π)
-plot_data.eigenvalues     # N×n_freq matrix of eigenvalues
-
-# First eigenvalue should dominate if one strong factor
-# Gap between q-th and (q+1)-th eigenvalue indicates factor count
-```
-
-### Common Variance Share
-
-```julia
-# Fraction of variance explained by common component for each variable
-shares = common_variance_share(model)
-
-# Variables well-explained by common factors
-well_explained = findall(shares .> 0.5)
-
-# Summary statistics
-println("Mean common variance share: ", round(mean(shares), digits=3))
-println("Variables with >50% common: ", length(well_explained))
-```
-
-### Forecasting with GDFM
-
-The GDFM forecast uses AR(1) extrapolation of each factor series, with observable forecasts computed via the average spectral loadings. Confidence intervals are available via analytical or bootstrap methods.
-
-```julia
-# Point forecast
-fc = forecast(model, h; method=:ar)
-fc.factors       # h×q factor forecasts
-fc.observables   # h×N observable forecasts
-
-# Theoretical CIs (closed-form AR(1) variance)
-fc = forecast(model, h; ci_method=:theoretical, conf_level=0.95)
-fc.factors_se           # h×q SEs (non-decreasing with horizon)
-fc.observables_lower    # h×N lower CI bounds
-fc.observables_upper    # h×N upper CI bounds
-
-# Bootstrap CIs (resample AR(1) residuals per factor)
-fc = forecast(model, h; ci_method=:bootstrap, n_boot=1000)
-```
-
-The theoretical CIs use the closed-form AR(1) forecast variance: ``\text{Var}(\hat{F}_{T+h,i}) = \sigma_i^2 \sum_{j=0}^{h-1} \phi_i^{2j}`` where ``\phi_i`` and ``\sigma_i^2`` are the AR(1) coefficient and innovation variance for factor ``i``. Observable SEs combine factor uncertainty with idiosyncratic variance.
-
-### Comparison: DFM vs GDFM
-
-| Aspect | Dynamic Factor Model | Generalized DFM |
-|--------|---------------------|-----------------|
-| **Approach** | Time domain (PCA + VAR) | Frequency domain (spectral) |
-| **Factor dynamics** | Explicit VAR structure | Implicit through spectral density |
-| **Estimation** | Two-step or EM | Kernel-smoothed periodogram |
-| **Computational cost** | Moderate | Higher (FFT at each frequency) |
-| **Asymptotics** | ``T \to \infty`` | ``N, T \to \infty`` jointly |
-| **Best for** | Moderate N, focus on forecasting | Large N, structural decomposition |
-
-### Example: Complete GDFM Workflow
-
-```julia
-using MacroEconometricModels
+using MacroEconometricModels, FFTW
 
 # Load and transform FRED-MD panel
 fred = load_example(:fred_md)
@@ -832,47 +482,85 @@ fred_safe = fred[:, varnames(fred)[safe_idx]]
 X = to_matrix(apply_tcode(fred_safe))
 X = X[all.(isfinite, eachrow(X)), 1:min(20, size(X, 2))]
 
-# Step 1: Select number of factors
-ic = ic_criteria_gdfm(X, 10)
-q = ic.q_ratio
-println("Selected q = $q dynamic factors")
+# 2 dynamic factors via spectral analysis
+gdfm = estimate_gdfm(X, 2;
+    standardize=true,
+    bandwidth=0,          # Auto-select: T^(1/3)
+    kernel=:bartlett      # :bartlett, :parzen, or :tukey
+)
+report(gdfm)
 
-# Step 2: Estimate GDFM
-model = estimate_gdfm(X, q; kernel=:parzen)
-
-# Step 3: Diagnostics
-println("Variance explained: ", round.(model.variance_explained, digits=3))
-println("Mean R²: ", round(mean(r2(model)), digits=3))
-
-# Step 4: Extract common component for further analysis
-χ = model.common_component  # Use in FAVAR, forecasting, etc.
-
-# Step 5: Identify variables driven by common vs idiosyncratic shocks
-shares = common_variance_share(model)
-common_driven = findall(shares .> 0.7)
-idio_driven = findall(shares .< 0.3)
+# Common vs idiosyncratic decomposition
+chi = gdfm.common_component      # T x N common component
+xi = gdfm.idiosyncratic          # T x N idiosyncratic component
 ```
 
-**References**:
-- Forni, M., Hallin, M., Lippi, M., & Reichlin, L. (2000). "The Generalized Dynamic-Factor Model: Identification and Estimation."
-- Forni, M., Hallin, M., Lippi, M., & Reichlin, L. (2005). "The Generalized Dynamic Factor Model: One-Sided Estimation and Forecasting."
-- Hallin, M., & Liška, R. (2007). "Determining the Number of Factors in the General Dynamic Factor Model."
+The common variance share for each variable measures the fraction of its total variation attributable to the ``q`` common shocks. Variables with high common variance shares are strongly connected to aggregate fluctuations; those with low shares are driven primarily by sector-specific or idiosyncratic disturbances.
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `standardize` | `Bool` | `true` | Standardize data before estimation |
+| `bandwidth` | `Int` | `0` | Kernel bandwidth (0 for auto: ``T^{1/3}``) |
+| `kernel` | `Symbol` | `:bartlett` | Spectral kernel (`:bartlett`, `:parzen`, `:tukey`) |
+| `r` | `Int` | `0` | Number of static factors (0 = same as ``q``) |
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `X` | `Matrix{T}` | Original ``T \times N`` data matrix |
+| `factors` | `Matrix{T}` | ``T \times q`` time-domain factors |
+| `common_component` | `Matrix{T}` | ``T \times N`` common component ``\chi_t`` |
+| `idiosyncratic` | `Matrix{T}` | ``T \times N`` idiosyncratic component ``\xi_t`` |
+| `loadings_spectral` | `Array{Complex{T},3}` | ``N \times q \times n_{freq}`` frequency-domain loadings |
+| `spectral_density_X` | `Array{Complex{T},3}` | Spectral density of ``X_t`` |
+| `eigenvalues_spectral` | `Matrix{T}` | ``N \times n_{freq}`` eigenvalues across frequencies |
+| `frequencies` | `Vector{T}` | Frequency grid (0 to ``\pi``) |
+| `q` | `Int` | Number of dynamic factors |
+| `bandwidth` | `Int` | Kernel smoothing bandwidth |
+| `kernel` | `Symbol` | Kernel type |
+| `variance_explained` | `Vector{T}` | Variance share per dynamic factor |
+
+### Selecting the Number of Dynamic Factors
+
+The GDFM uses eigenvalue-based criteria rather than information criteria:
+
+```julia
+# Eigenvalue ratio and variance criteria
+ic = ic_criteria_gdfm(X, 10; kernel=:bartlett)
+report(ic)
+
+# Diagnostic data
+ic.eigenvalue_ratios       # lambda_i / lambda_{i+1} ratios
+ic.cumulative_variance     # Cumulative variance explained
+ic.avg_eigenvalues         # Average eigenvalues across frequencies
+```
+
+### DFM vs GDFM
+
+| Aspect | Dynamic Factor Model | Generalized DFM |
+|--------|---------------------|-----------------|
+| **Approach** | Time domain (PCA + VAR) | Frequency domain (spectral) |
+| **Factor dynamics** | Explicit VAR structure | Implicit through spectral density |
+| **Estimation** | Two-step or EM | Kernel-smoothed periodogram |
+| **Computational cost** | Moderate | Higher (FFT at each frequency) |
+| **Asymptotics** | ``T \to \infty`` | ``N, T \to \infty`` jointly |
+| **Best for** | Moderate ``N``, forecasting focus | Large ``N``, structural decomposition |
 
 ---
 
-## Restricted Factor Models (Block Structure)
+## [Block-Restricted Estimation](@id block_restricted)
 
-When economic theory suggests that different groups of variables load on distinct factors (e.g., "real" vs "nominal" factors), block-restricted estimation enforces zero loadings outside each block.
-
-### Model
+When economic theory suggests that different groups of variables load on distinct factors --- for example, "real activity" versus "nominal" versus "financial" factors --- block-restricted estimation enforces zero loadings outside each block. The EM algorithm with masked updates estimates the model while respecting the prescribed factor structure.
 
 ```math
-x_{it} = \lambda_i' F_t + e_{it}
+x_{it} = \lambda_i' F_t + e_{it}, \quad \lambda_{ij} = 0 \text{ if variable } i \notin \text{block } j
 ```
 
-where ``\lambda_{ij} = 0`` if variable ``i`` is not in block ``j``. This is enforced via an EM algorithm with masked updates.
+where:
+- ``\lambda_{ij}`` is the loading of variable ``i`` on factor ``j``
+- The zero restriction ``\lambda_{ij} = 0`` is imposed when variable ``i`` does not belong to block ``j``
 
-### Estimation
+!!! note "Technical Note"
+    The EM algorithm initializes each block factor via block-wise PCA, then iterates: (1) E-step: compute expected factors given current loadings, (2) M-step: update only non-zero loadings (masked update). Convergence is on log-likelihood. Validation requires: ``r`` blocks, no overlapping indices, at least 2 variables per block.
 
 ```julia
 using MacroEconometricModels, Random
@@ -886,50 +574,41 @@ blocks = Dict(
     :financial => [11, 12, 13, 14, 15]
 )
 
+# Block-restricted estimation via EM
 fm = estimate_factors(X, 3; blocks=blocks)
-println("Block names: ", fm.block_names)
+report(fm)
 ```
 
-!!! note "Technical Note"
-    The EM algorithm initializes each block factor via block-wise PCA, then iterates:
-    (1) E-step: compute expected factors given current loadings,
-    (2) M-step: update only non-zero loadings (masked update).
-    Convergence is on log-likelihood. Validation requires: ``r`` blocks,
-    no overlapping indices, at least 2 variables per block.
-
-### Comparison with Unrestricted Estimation
-
-```julia
-# Unrestricted (existing, unchanged)
-fm_unr = estimate_factors(X, 3)
-println("Unrestricted block_names: ", fm_unr.block_names)  # nothing
-
-# Block-restricted
-fm_res = estimate_factors(X, 3; blocks=blocks)
-println("Restricted block_names: ", fm_res.block_names)   # [:real, :nominal, :financial]
-```
+The block-restricted model produces loadings that are exactly zero outside each block, enabling economically interpretable factor labeling. The unrestricted PCA estimate is more flexible but cannot distinguish between "real" and "nominal" sources of common variation without additional identification.
 
 ---
 
 ## Structural Dynamic Factor Model
 
-The Structural DFM (Forni, Giannone, Lippi & Reichlin 2009) identifies structural shocks in large panels by applying SVAR identification to the common factors.
-
-### Model
+The Structural DFM (Forni, Giannone, Lippi & Reichlin 2009) identifies structural shocks in large panels by applying SVAR identification to the common factors. It combines the GDFM with a VAR on the time-domain factors and maps identified factor-level shocks to all ``N`` panel variables via the loading matrix.
 
 ```math
 F_t = c + \sum_{l=1}^p A_l F_{t-l} + B_0 \varepsilon_t
 ```
 
-where ``F_t`` are the ``q`` common factors from a GDFM, ``B_0`` is the impact matrix, and ``\varepsilon_t`` are structural shocks. Panel-wide structural IRFs are:
+where:
+- ``F_t`` is the ``q \times 1`` vector of common factors from the GDFM
+- ``A_l`` are ``q \times q`` autoregressive coefficient matrices
+- ``B_0`` is the ``q \times q`` impact matrix
+- ``\varepsilon_t`` are structural shocks
+
+Panel-wide structural IRFs map factor responses to all ``N`` observables:
 
 ```math
-\text{IRF}_i(h, j) = \sum_{k=1}^q \Lambda_{ik} \cdot \Phi_h B_0 e_j
+\text{IRF}_i(h, j) = \sum_{k=1}^q \Lambda_{ik} \cdot \Phi_h \, B_0 \, e_j
 ```
 
-### Estimation
+where:
+- ``\Lambda_{ik}`` is the time-domain loading of variable ``i`` on factor ``k``
+- ``\Phi_h`` is the ``h``-step reduced-form IRF matrix of the factor VAR
+- ``e_j`` is the ``j``-th structural shock selector
 
-Two identification schemes are available: Cholesky and sign restrictions.
+Two identification schemes are available: **Cholesky decomposition** and **sign restrictions**.
 
 ```julia
 using MacroEconometricModels, Random, FFTW
@@ -938,28 +617,16 @@ X = randn(200, 20)
 
 # Cholesky identification
 sdfm = estimate_structural_dfm(X, 2; identification=:cholesky, p=1, H=20)
-
-# Structural IRFs for all panel variables
 r = irf(sdfm, 20)
-println("IRF variables: ", length(r.variables))
-println("IRF shocks: ", length(r.shocks))
+report(r)
+plot_result(r)
 
 # FEVD of the factor VAR
 d = fevd(sdfm, 20)
+report(d)
 ```
 
-### Two-Step Estimation
-
-You can also pass a pre-estimated GDFM:
-
-```julia
-using MacroEconometricModels, Random, FFTW
-Random.seed!(42)
-X = randn(200, 20)
-
-gdfm = estimate_gdfm(X, 2)
-sdfm = estimate_structural_dfm(gdfm; identification=:cholesky, p=1, H=20)
-```
+The structural IRFs show how a one-standard-deviation structural shock propagates to each of the ``N`` panel variables over the ``H``-period horizon. Cholesky identification imposes a recursive ordering on the factors; sign restrictions allow the researcher to test alternative identification schemes based on economic theory.
 
 ### Sign Restrictions
 
@@ -973,94 +640,172 @@ sign_fn(irf_matrix) = irf_matrix[1, 1] > 0 && irf_matrix[1, 2] < 0
 
 sdfm = estimate_structural_dfm(X, 2;
     identification=:sign, sign_check=sign_fn, max_draws=1000, H=20)
+r = irf(sdfm, 20)
+report(r)
+```
+
+### Two-Step Estimation
+
+A pre-estimated GDFM can be passed directly:
+
+```julia
+using MacroEconometricModels, Random, FFTW
+Random.seed!(42)
+X = randn(200, 20)
+
+gdfm = estimate_gdfm(X, 2)
+sdfm = estimate_structural_dfm(gdfm; identification=:cholesky, p=1, H=20)
+report(sdfm)
 ```
 
 !!! note "Technical Note"
-    The Structural DFM proceeds in two steps: (1) estimate GDFM to extract common
-    factors and spectral loadings, (2) fit a VAR on the time-domain factors and apply
-    structural identification. Time-domain loadings are computed via OLS regression
-    ``\hat{\Lambda} = (F'F)^{-1}F'X`` rather than the spectral domain.
-
-**Reference**: Forni, Giannone, Lippi & Reichlin (2009)
+    The Structural DFM proceeds in two steps: (1) estimate GDFM to extract common factors and spectral loadings, (2) fit a VAR on the time-domain factors and apply structural identification. Time-domain loadings are computed via OLS regression ``\hat{\Lambda} = (F'F)^{-1}F'X`` rather than the spectral domain.
 
 ---
 
-## StatsAPI Interface
+## Asymptotic Theory
 
-All three factor model types implement the standard [StatsAPI](https://github.com/JuliaStats/StatsAPI.jl) interface, enabling uniform access to fitted values, residuals, and model diagnostics.
+Under the conditions of Bai & Ng (2002) and Bai (2003), the principal components estimator of the factors is consistent and asymptotically normal as both ``N`` and ``T`` grow. The convergence rate depends on ``\min(N, T)``, reflecting the dual large-sample requirement of factor models.
 
-| Function | `FactorModel` | `DynamicFactorModel` | `GeneralizedDynamicFactorModel` |
-|----------|:---:|:---:|:---:|
-| `predict(m)` | Fitted values ``\hat{X} = F\Lambda'`` | Fitted values ``\hat{X} = F\Lambda'`` | Common component ``\hat{\chi}_t`` |
-| `residuals(m)` | Idiosyncratic residuals | Idiosyncratic residuals | Idiosyncratic component |
-| `r2(m)` | Per-variable ``R^2`` | Per-variable ``R^2`` | Per-variable ``R^2`` |
-| `nobs(m)` | Number of observations | Number of observations | Number of observations |
-| `dof(m)` | Degrees of freedom | Degrees of freedom | Degrees of freedom |
-| `loglikelihood(m)` | — | Log-likelihood | — |
-| `aic(m)` | — | AIC | — |
-| `bic(m)` | — | BIC | — |
-
-!!! note "Technical Note"
-    `loglikelihood`, `aic`, and `bic` are only available for `DynamicFactorModel` since static PCA
-    and spectral GDFM estimation do not produce a well-defined likelihood.
-
-```julia
-using MacroEconometricModels
-
-# Load and transform FRED-MD panel (using X from above)
-
-# Static factor model
-fm = estimate_factors(X, 3)
-X_hat = predict(fm)                # T × N fitted values
-resid = residuals(fm)              # T × N residuals
-r2_vals = r2(fm)                   # N-vector of R² values
-println("Static FM — nobs: ", nobs(fm), ", dof: ", dof(fm))
-println("Mean R²: ", round(mean(r2_vals), digits=3))
-
-# Dynamic factor model
-dfm = estimate_dynamic_factors(X, 3, 1; method=:twostep)
-println("\nDFM — nobs: ", nobs(dfm), ", dof: ", dof(dfm))
-println("Log-likelihood: ", round(loglikelihood(dfm), digits=1))
-println("AIC: ", round(aic(dfm), digits=1), ", BIC: ", round(bic(dfm), digits=1))
-println("Mean R²: ", round(mean(r2(dfm)), digits=3))
-
-# GDFM
-gdfm = estimate_gdfm(X, 3)
-println("\nGDFM — nobs: ", nobs(gdfm), ", dof: ", dof(gdfm))
-println("Mean R²: ", round(mean(r2(gdfm)), digits=3))
+```math
+\frac{1}{T} \sum_{t=1}^T \|\hat{F}_t - H F_t\|^2 = O_p\left( \frac{1}{\min(N, T)} \right)
 ```
 
-The interface is useful for model comparison:
+where:
+- ``\hat{F}_t`` is the estimated factor vector at time ``t``
+- ``F_t`` is the true factor vector
+- ``H`` is an ``r \times r`` rotation matrix (reflecting the identification-up-to-rotation property)
+
+For large ``N`` and ``T``, the factor estimates are asymptotically normal:
+
+```math
+\sqrt{T} (\hat{F}_t - H F_t) \xrightarrow{d} N(0, V)
+```
+
+where:
+- ``V`` depends on the cross-sectional and temporal dependence structure of the idiosyncratic errors
+
+The consistency result holds under weak cross-sectional and temporal dependence in the idiosyncratic errors, making PCA robust to moderate departures from independence. The ``\sqrt{\min(N, T)}`` convergence rate implies that both dimensions must grow for the factor estimates to be precise --- a panel with large ``T`` but small ``N`` does not benefit from factor extraction.
+
+---
+
+## Applications
+
+### Diffusion Index Forecasting
+
+Estimated factors serve as regressors for forecasting a target variable ``y_{t+h}``:
+
+```math
+y_{t+h} = \alpha + \beta' \hat{F}_t + \gamma' y_{t:t-p} + \varepsilon_{t+h}
+```
+
+where:
+- ``\alpha`` is the intercept
+- ``\beta`` is the ``r \times 1`` vector of factor coefficients
+- ``\hat{F}_t`` is the ``r \times 1`` vector of estimated factors at time ``t``
+- ``\gamma`` is the vector of autoregressive coefficients on own lags of ``y``
+- ``\varepsilon_{t+h}`` is the forecast error
+
+Factors summarize information from a large panel into a small number of predictors, improving forecast accuracy relative to simple autoregressive models (Stock & Watson 2002b).
+
+### Factor-Augmented VAR
+
+Factors combine with key observable variables in a VAR system for structural analysis with high-dimensional information sets. See the [FAVAR](favar.md) page for full coverage of the `estimate_favar` function, Bayesian Gibbs sampling, and panel-wide impulse response mapping.
+
+---
+
+## Complete Example
+
+This example demonstrates the full factor model workflow: data preparation, factor selection, estimation of static and dynamic models, forecasting, and visualization.
 
 ```julia
-# Compare DFM specifications via information criteria on FRED-MD data
-for r in 1:5
-    m = estimate_dynamic_factors(X, r, 1; method=:twostep)
-    println("r=$r: AIC=$(round(aic(m), digits=1)), BIC=$(round(bic(m), digits=1))")
-end
+using MacroEconometricModels, Random, Statistics
+Random.seed!(42)
+
+# Step 1: Load and transform FRED-MD panel
+fred = load_example(:fred_md)
+safe_idx = [i for i in 1:nvars(fred)
+            if fred.tcode[i] < 4 || all(x -> isfinite(x) && x > 0, fred.data[:, i])]
+fred_safe = fred[:, varnames(fred)[safe_idx]]
+X = to_matrix(apply_tcode(fred_safe))
+X = X[all.(isfinite, eachrow(X)), 1:min(20, size(X, 2))]
+
+# Step 2: Select number of factors via Bai-Ng criteria
+ic = ic_criteria(X, 10)
+report(ic)
+
+# Step 3: Estimate static factor model
+fm = estimate_factors(X, 3; standardize=true)
+report(fm)
+
+# Step 4: Estimate dynamic factor model with VAR(1) dynamics
+dfm = estimate_dynamic_factors(X, 3, 1; method=:twostep, standardize=true)
+report(dfm)
+
+# Step 5: Diagnostics — per-variable R-squared
+r2_static = r2(fm)
+r2_dynamic = r2(dfm)
+
+# Step 6: Forecast with theoretical CIs
+fc = forecast(dfm, 12; ci_method=:theoretical, conf_level=0.95)
+report(fc)
+plot_result(fc)
 ```
+
+The Bai-Ng information criteria select the number of factors from the FRED-MD panel. The static factor model extracts the dominant principal components, and the dynamic factor model augments the static estimate with VAR(1) dynamics on the factors. The per-variable ``R^2`` values identify which FRED-MD indicators are well-explained by the common factors and which are driven by idiosyncratic variation. The 12-step-ahead forecast with theoretical confidence intervals shows factor and observable predictions with uncertainty bands that widen at longer horizons, reflecting the accumulation of forecast error variance through the factor VAR dynamics.
+
+---
+
+## Common Pitfalls
+
+1. **Choosing the number of factors without information criteria.** The scree plot provides a useful visual diagnostic, but formal selection requires the Bai & Ng (2002) information criteria (IC1--IC3). Relying solely on the "elbow" in the scree plot is subjective and can lead to over- or under-extraction. Use `ic_criteria(X, r_max)` and check whether IC1, IC2, and IC3 agree.
+
+2. **Interpreting factor loadings as structural parameters.** Factor loadings are identified only up to an ``r \times r`` rotation matrix. The signs and magnitudes of individual loadings are not invariant to the normalization convention. Use block-restricted estimation or rotate factors post-estimation when structural labeling is required.
+
+3. **Forgetting to standardize before estimation.** If the panel variables have heterogeneous scales (e.g., interest rates in percent vs industrial production index levels), high-variance series dominate the principal components. Always set `standardize=true` (the default) unless all variables are already on comparable scales.
+
+4. **Misspecifying block structure.** When using block-restricted estimation, each block must contain at least 2 variables, blocks must not overlap, and the number of blocks must equal the number of factors ``r``. Violating any of these conditions raises a validation error.
+
+5. **Applying GDFM to short panels.** The GDFM spectral estimator requires ``N, T \to \infty`` jointly. For small ``N`` (fewer than 20 variables), the spectral density estimate is unreliable and the standard DFM with two-step or EM estimation is preferred.
+
+6. **Ignoring stationarity of factor dynamics.** The DFM forecast assumes stationary factor VAR dynamics. If the estimated companion matrix has eigenvalues at or above unity, forecasts diverge. Check `is_stationary(dfm)` before forecasting.
 
 ---
 
 ## References
 
-### Core References
+- Bai, J. (2003). Inferential Theory for Factor Models of Large Dimensions.
+  *Econometrica*, 71(1), 135-171. [DOI](https://doi.org/10.1111/1468-0262.00392)
 
-- Bai, Jushan. 2003. "Inferential Theory for Factor Models of Large Dimensions." *Econometrica* 71 (1): 135–171. [https://doi.org/10.1111/1468-0262.00392](https://doi.org/10.1111/1468-0262.00392)
-- Bai, Jushan, and Serena Ng. 2002. "Determining the Number of Factors in Approximate Factor Models." *Econometrica* 70 (1): 191–221. [https://doi.org/10.1111/1468-0262.00273](https://doi.org/10.1111/1468-0262.00273)
-- Bai, Jushan, and Serena Ng. 2006. "Confidence Intervals for Diffusion Index Forecasts and Inference for Factor-Augmented Regressions." *Econometrica* 74 (4): 1133–1150. [https://doi.org/10.1111/j.1468-0262.2006.00696.x](https://doi.org/10.1111/j.1468-0262.2006.00696.x)
-- Stock, James H., and Mark W. Watson. 2002a. "Forecasting Using Principal Components from a Large Number of Predictors." *Journal of the American Statistical Association* 97 (460): 1167–1179. [https://doi.org/10.1198/016214502388618960](https://doi.org/10.1198/016214502388618960)
-- Stock, James H., and Mark W. Watson. 2002b. "Macroeconomic Forecasting Using Diffusion Indexes." *Journal of Business & Economic Statistics* 20 (2): 147–162. [https://doi.org/10.1198/073500102317351921](https://doi.org/10.1198/073500102317351921)
+- Bai, J., & Ng, S. (2002). Determining the Number of Factors in Approximate Factor Models.
+  *Econometrica*, 70(1), 191-221. [DOI](https://doi.org/10.1111/1468-0262.00273)
 
-### Dynamic Factor Models
+- Bai, J., & Ng, S. (2006). Confidence Intervals for Diffusion Index Forecasts and Inference for Factor-Augmented Regressions.
+  *Econometrica*, 74(4), 1133-1150. [DOI](https://doi.org/10.1111/j.1468-0262.2006.00696.x)
 
-- Doz, Catherine, Domenico Giannone, and Lucrezia Reichlin. 2011. "A Two-Step Estimator for Large Approximate Dynamic Factor Models Based on Kalman Filtering." *Journal of Econometrics* 164 (1): 188–205. [https://doi.org/10.1016/j.jeconom.2011.02.012](https://doi.org/10.1016/j.jeconom.2011.02.012)
-- Doz, Catherine, Domenico Giannone, and Lucrezia Reichlin. 2012. "A Quasi-Maximum Likelihood Approach for Large, Approximate Dynamic Factor Models." *Review of Economics and Statistics* 94 (4): 1014–1024. [https://doi.org/10.1162/REST_a_00225](https://doi.org/10.1162/REST_a_00225)
-- Forni, Mario, Marc Hallin, Marco Lippi, and Lucrezia Reichlin. 2000. "The Generalized Dynamic-Factor Model: Identification and Estimation." *Review of Economics and Statistics* 82 (4): 540–554. [https://doi.org/10.1162/003465300559037](https://doi.org/10.1162/003465300559037)
-- Forni, Mario, Marc Hallin, Marco Lippi, and Lucrezia Reichlin. 2005. "The Generalized Dynamic Factor Model: One-Sided Estimation and Forecasting." *Journal of the American Statistical Association* 100 (471): 830–840. [https://doi.org/10.1198/016214504000002050](https://doi.org/10.1198/016214504000002050)
-- Hallin, Marc, and Roman Liška. 2007. "Determining the Number of Factors in the General Dynamic Factor Model." *Journal of the American Statistical Association* 102 (478): 603–617. [https://doi.org/10.1198/016214506000001275](https://doi.org/10.1198/016214506000001275)
+- Doz, C., Giannone, D., & Reichlin, L. (2011). A Two-Step Estimator for Large Approximate Dynamic Factor Models Based on Kalman Filtering.
+  *Journal of Econometrics*, 164(1), 188-205. [DOI](https://doi.org/10.1016/j.jeconom.2011.02.012)
 
-### Applications
+- Doz, C., Giannone, D., & Reichlin, L. (2012). A Quasi-Maximum Likelihood Approach for Large, Approximate Dynamic Factor Models.
+  *Review of Economics and Statistics*, 94(4), 1014-1024. [DOI](https://doi.org/10.1162/REST_a_00225)
 
-- Bernanke, Ben S., Jean Boivin, and Piotr Eliasz. 2005. "Measuring the Effects of Monetary Policy: A Factor-Augmented Vector Autoregressive (FAVAR) Approach." *Quarterly Journal of Economics* 120 (1): 387–422. [https://doi.org/10.1162/0033553053327452](https://doi.org/10.1162/0033553053327452)
-- McCracken, Michael W., and Serena Ng. 2016. "FRED-MD: A Monthly Database for Macroeconomic Research." *Journal of Business & Economic Statistics* 34 (4): 574–589. [https://doi.org/10.1080/07350015.2015.1086655](https://doi.org/10.1080/07350015.2015.1086655)
+- Forni, M., Hallin, M., Lippi, M., & Reichlin, L. (2000). The Generalized Dynamic-Factor Model: Identification and Estimation.
+  *Review of Economics and Statistics*, 82(4), 540-554. [DOI](https://doi.org/10.1162/003465300559037)
+
+- Forni, M., Hallin, M., Lippi, M., & Reichlin, L. (2005). The Generalized Dynamic Factor Model: One-Sided Estimation and Forecasting.
+  *Journal of the American Statistical Association*, 100(471), 830-840. [DOI](https://doi.org/10.1198/016214504000002050)
+
+- Forni, M., Giannone, D., Lippi, M., & Reichlin, L. (2009). Opening the Black Box: Structural Factor Models with Large Cross-Sections.
+  *Econometric Theory*, 25(5), 1319-1347. [DOI](https://doi.org/10.1017/S0266466609090422)
+
+- Hallin, M., & Liska, R. (2007). Determining the Number of Factors in the General Dynamic Factor Model.
+  *Journal of the American Statistical Association*, 102(478), 603-617. [DOI](https://doi.org/10.1198/016214506000001275)
+
+- McCracken, M. W., & Ng, S. (2016). FRED-MD: A Monthly Database for Macroeconomic Research.
+  *Journal of Business & Economic Statistics*, 34(4), 574-589. [DOI](https://doi.org/10.1080/07350015.2015.1086655)
+
+- Stock, J. H., & Watson, M. W. (2002a). Forecasting Using Principal Components from a Large Number of Predictors.
+  *Journal of the American Statistical Association*, 97(460), 1167-1179. [DOI](https://doi.org/10.1198/016214502388618960)
+
+- Stock, J. H., & Watson, M. W. (2002b). Macroeconomic Forecasting Using Diffusion Indexes.
+  *Journal of Business & Economic Statistics*, 20(2), 147-162. [DOI](https://doi.org/10.1198/073500102317351921)

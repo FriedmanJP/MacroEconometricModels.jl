@@ -2,19 +2,7 @@
 # Copyright (C) 2025-2026 Wookyung Chung <chung@friedman.jp>
 #
 # This file is part of MacroEconometricModels.jl.
-#
-# MacroEconometricModels.jl is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# MacroEconometricModels.jl is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with MacroEconometricModels.jl. If not, see <https://www.gnu.org/licenses/>.
+# Licensed under GPL-3.0-or-later. See LICENSE for details.
 
 """
 Publication-quality report and summary tables for all model results.
@@ -150,7 +138,7 @@ function report(model::VARModel{T}) where {T}
         # F-statistic: (SSR_restricted - SSR_unrestricted) / (k-1) / (SSR_unrestricted / dof_r)
         # Restricted = constant only
         f_stat = dof_r > 0 && (k - 1) > 0 ? (r2 / (k - 1)) / ((one(T) - r2) / dof_r) : zero(T)
-        eq_data[j, 1] = "Var $j"
+        eq_data[j, 1] = model.varnames[j]
         eq_data[j, 2] = k
         eq_data[j, 3] = _fmt(rmse)
         eq_data[j, 4] = _fmt(r2)
@@ -167,7 +155,7 @@ function report(model::VARModel{T}) where {T}
     coef_names = String["const"]
     for l in 1:p
         for v in 1:n
-            push!(coef_names, "Var$(v).L$l")
+            push!(coef_names, "$(model.varnames[v]).L$l")
         end
     end
 
@@ -175,7 +163,7 @@ function report(model::VARModel{T}) where {T}
     for j in 1:n
         se_j = sqrt.(max.(diag(XtX_inv) .* model.Sigma[j, j], zero(T)))
         coef_vals = model.B[:, j]
-        _coef_table(stdout, "Equation: Var $j", coef_names, coef_vals, se_j;
+        _coef_table(stdout, "Equation: $(model.varnames[j])", coef_names, coef_vals, se_j;
                     dist=:t, dof_r=dof_r)
     end
 
@@ -195,15 +183,15 @@ function report(model::VARModel{T}) where {T}
 
     # --- Residual Covariance ---
     _matrix_table(stdout, model.Sigma, "Residual Covariance (Σ)";
-        row_labels=["Var $i" for i in 1:n],
-        col_labels=["Var $j" for j in 1:n])
+        row_labels=model.varnames,
+        col_labels=model.varnames)
 
     # --- Residual Correlation ---
     D_inv = Diagonal(one(T) ./ sqrt.(max.(diag(model.Sigma), eps(T))))
     corr_mat = D_inv * model.Sigma * D_inv
     _matrix_table(stdout, corr_mat, "Residual Correlation";
-        row_labels=["Var $i" for i in 1:n],
-        col_labels=["Var $j" for j in 1:n])
+        row_labels=model.varnames,
+        col_labels=model.varnames)
 
     # --- Stationarity ---
     F = companion_matrix(model.B, n, p)
@@ -259,31 +247,31 @@ function report(m::VECMModel{T}) where {T}
     # --- Cointegrating vectors (β) ---
     if r > 0
         _matrix_table(stdout, m.beta, "Cointegrating Vectors (β)";
-            row_labels=["Var $i" for i in 1:n],
+            row_labels=m.varnames,
             col_labels=["β$j" for j in 1:r])
 
         # --- Adjustment coefficients (α) ---
         _matrix_table(stdout, m.alpha, "Adjustment Coefficients (α)";
-            row_labels=["Var $i" for i in 1:n],
+            row_labels=m.varnames,
             col_labels=["α$j" for j in 1:r])
 
         # --- Long-run matrix (Π = αβ') ---
         _matrix_table(stdout, m.Pi, "Long-Run Matrix (Π = αβ')";
-            row_labels=["Var $i" for i in 1:n],
-            col_labels=["Var $j" for j in 1:n])
+            row_labels=m.varnames,
+            col_labels=m.varnames)
     end
 
     # --- Short-run dynamics ---
     for (i, Gi) in enumerate(m.Gamma)
         _matrix_table(stdout, Gi, "Short-Run Dynamics Γ$i";
-            row_labels=["Var $i" for i in 1:n],
-            col_labels=["Var $j" for j in 1:n])
+            row_labels=m.varnames,
+            col_labels=m.varnames)
     end
 
     # --- Intercept ---
     mu_data = Matrix{Any}(undef, n, 2)
     for i in 1:n
-        mu_data[i, 1] = "Var $i"
+        mu_data[i, 1] = m.varnames[i]
         mu_data[i, 2] = _fmt(m.mu[i])
     end
     _pretty_table(stdout, mu_data;
@@ -305,15 +293,15 @@ function report(m::VECMModel{T}) where {T}
 
     # --- Residual Covariance ---
     _matrix_table(stdout, m.Sigma, "Residual Covariance (Σ)";
-        row_labels=["Var $i" for i in 1:n],
-        col_labels=["Var $j" for j in 1:n])
+        row_labels=m.varnames,
+        col_labels=m.varnames)
 
     # --- Residual Correlation ---
     D_inv = Diagonal(one(T) ./ sqrt.(max.(diag(m.Sigma), eps(T))))
     corr_mat = D_inv * m.Sigma * D_inv
     _matrix_table(stdout, corr_mat, "Residual Correlation";
-        row_labels=["Var $i" for i in 1:n],
-        col_labels=["Var $j" for j in 1:n])
+        row_labels=m.varnames,
+        col_labels=m.varnames)
 
     # --- Notes ---
     note_data = Any["Note" "Standard errors for α/β not available (asymptotic SEs: future release)"]
@@ -454,6 +442,18 @@ report(m::RegModel) = show(stdout, m)
 report(m::LogitModel) = show(stdout, m)
 report(m::ProbitModel) = show(stdout, m)
 report(me::MarginalEffects) = show(stdout, me)
+
+# Panel VAR
+report(x::PVARModel) = show(stdout, x)
+report(x::PVARStability) = show(stdout, x)
+report(x::PVARTestResult) = show(stdout, x)
+
+# DiD
+report(x::DIDResult) = show(stdout, x)
+report(x::EventStudyLP) = show(stdout, x)
+report(x::LPDiDResult) = show(stdout, x)
+report(x::BaconDecomposition) = show(stdout, x)
+report(x::HonestDiDResult) = show(stdout, x)
 
 
 # =============================================================================

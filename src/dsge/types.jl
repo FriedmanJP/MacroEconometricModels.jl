@@ -2,19 +2,7 @@
 # Copyright (C) 2025-2026 Wookyung Chung <chung@friedman.jp>
 #
 # This file is part of MacroEconometricModels.jl.
-#
-# MacroEconometricModels.jl is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# MacroEconometricModels.jl is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with MacroEconometricModels.jl. If not, see <https://www.gnu.org/licenses/>.
+# Licensed under GPL-3.0-or-later. See LICENSE for details.
 
 """
 Type definitions for DSGE models — specification, linearized form, solution, and estimation.
@@ -569,6 +557,7 @@ Fields:
 - `iterations::Int` — number of guess-and-verify iterations
 - `spec::DSGESpec{T}` — model specification
 - `varnames::Vector{String}` — variable display names
+- `constraints::Vector{OccBinConstraint{T}}` — constraint(s) used in the solve
 """
 struct OccBinSolution{T<:AbstractFloat}
     linear_path::Matrix{T}
@@ -579,6 +568,7 @@ struct OccBinSolution{T<:AbstractFloat}
     iterations::Int
     spec::DSGESpec{T}
     varnames::Vector{String}
+    constraints::Vector{OccBinConstraint{T}}
 end
 
 function Base.show(io::IO, sol::OccBinSolution{T}) where {T}

@@ -1,11 +1,11 @@
-# Panel Tests
+# [Panel Tests](@id tests_panel_page)
 
 Panel-level hypothesis testing addresses two distinct phases of the empirical workflow. **Panel unit root tests** detect non-stationarity in datasets with cross-sectional dependence, a prerequisite for correct specification of panel VARs and factor models. **Panel VAR specification tests** validate GMM instrument validity and select optimal lag orders after estimation. This page covers three second-generation panel unit root tests (PANIC, Pesaran CIPS, Moon-Perron) and three Panel VAR diagnostics (Hansen J-test, Andrews-Lu MMSC, lag selection).
 
-- PANIC: factor-based decomposition into common and idiosyncratic components (Bai & Ng 2004, 2010)
-- Pesaran CIPS: cross-sectionally augmented IPS test robust to common factors (Pesaran 2007)
-- Moon-Perron: factor-adjusted pooled AR(1) with bias correction (Moon & Perron 2004)
-- Hansen J-test, Andrews-Lu MMSC, and MMSC-based lag selection for Panel VAR
+- **PANIC**: Factor-based decomposition into common and idiosyncratic components (Bai & Ng 2004, 2010)
+- **Pesaran CIPS**: Cross-sectionally augmented IPS test robust to common factors (Pesaran 2007)
+- **Moon-Perron**: Factor-adjusted pooled AR(1) with bias correction (Moon & Perron 2004)
+- **Hansen J-test, Andrews-Lu MMSC, and MMSC-based lag selection** for Panel VAR
 
 ## Quick Start
 
@@ -18,7 +18,7 @@ Random.seed!(42)
 # Stationary panel with one common factor
 X = randn(100, 20)
 result = panic_test(X; r=1)
-result.pooled_pvalue  # small p-value rejects unit root null
+report(result)
 ```
 
 **Recipe 2: Pesaran CIPS test**
@@ -29,11 +29,21 @@ Random.seed!(42)
 
 X = randn(50, 20)
 result = pesaran_cips_test(X; lags=1, deterministic=:constant)
-result.cips_statistic
-result.pvalue
+report(result)
 ```
 
-**Recipe 3: Panel VAR Hansen J-test and lag selection**
+**Recipe 3: Moon-Perron test**
+
+```julia
+using MacroEconometricModels, Random
+Random.seed!(42)
+
+X = randn(80, 15)
+result = moon_perron_test(X; r=1)
+report(result)
+```
+
+**Recipe 4: Panel VAR Hansen J-test and lag selection**
 
 ```julia
 using MacroEconometricModels, DataFrames, Random
@@ -53,7 +63,7 @@ df.time = repeat(1:T_total, outer=N)
 pd = xtset(df, :id, :time)
 model = estimate_pvar(pd, 2; steps=:twostep)
 j = pvar_hansen_j(model)
-j.pvalue  # p > 0.05 indicates valid instruments
+report(j)
 ```
 
 ---
@@ -97,22 +107,22 @@ Random.seed!(42)
 # Stationary panel: idiosyncratic components are I(0)
 X_stationary = randn(100, 20)
 result_s = panic_test(X_stationary; r=1)
-result_s.pooled_pvalue  # expect small p-value (reject unit root)
+report(result_s)
 
 # I(1) panel: cumulate to create unit roots
 X_nonstat = cumsum(randn(100, 20), dims=1)
 result_ns = panic_test(X_nonstat; r=1)
-result_ns.pooled_pvalue  # expect large p-value (fail to reject)
+report(result_ns)
 ```
 
 The stationary panel produces a small pooled p-value, indicating that the defactored residuals are stationary. The I(1) panel produces a large p-value, consistent with the unit root null. The factor ADF statistics in `result.factor_adf_stats` reveal whether the common component itself is non-stationary.
 
 ### Options
 
-| Argument | Description | Default |
-|----------|-------------|---------|
-| `r` | Number of common factors, or `:auto` for IC-based selection | `:auto` |
-| `method` | Pooling method: `:pooled` (standardized p-value sum) or `:individual` (unit-by-unit) | `:pooled` |
+| Argument | Type | Default | Description |
+|----------|------|---------|-------------|
+| `r` | `Union{Int,Symbol}` | `:auto` | Number of common factors, or `:auto` for IC-based selection |
+| `method` | `Symbol` | `:pooled` | Pooling method: `:pooled` (standardized p-value sum) or `:individual` (unit-by-unit) |
 
 ### PANICResult Return Values
 
@@ -167,22 +177,21 @@ Random.seed!(42)
 # Stationary panel
 X = randn(50, 20)
 result_const = pesaran_cips_test(X; lags=1, deterministic=:constant)
-result_const.cips_statistic
-result_const.critical_values  # Dict with 1%, 5%, 10% critical values
+report(result_const)
 
 # With trend deterministic
 result_trend = pesaran_cips_test(X; lags=1, deterministic=:trend)
-result_trend.pvalue
+report(result_trend)
 ```
 
 A CIPS statistic below the 5% critical value rejects the null of a panel unit root. The `critical_values` dictionary provides thresholds at the 1%, 5%, and 10% levels for the nearest tabulated ``(N, T)`` combination.
 
 ### Options
 
-| Argument | Description | Default |
-|----------|-------------|---------|
-| `lags` | Number of augmenting lags, or `:auto` for ``\lfloor T^{1/3} \rfloor`` rule | `:auto` |
-| `deterministic` | Deterministic terms: `:none`, `:constant`, or `:trend` | `:constant` |
+| Argument | Type | Default | Description |
+|----------|------|---------|-------------|
+| `lags` | `Union{Int,Symbol}` | `:auto` | Number of augmenting lags, or `:auto` for ``\lfloor T^{1/3} \rfloor`` rule |
+| `deterministic` | `Symbol` | `:constant` | Deterministic terms: `:none`, `:constant`, or `:trend` |
 
 ### PesaranCIPSResult Return Values
 
@@ -228,19 +237,16 @@ Random.seed!(42)
 # Stationary panel
 X = randn(80, 15)
 result = moon_perron_test(X; r=1)
-result.t_a_statistic  # modified t*_a statistic
-result.t_b_statistic  # modified t*_b statistic
-result.pvalue_a       # p-value for t*_a (standard normal)
-result.pvalue_b       # p-value for t*_b (standard normal)
+report(result)
 ```
 
 Both p-values test the same null hypothesis using different pooling approaches. When both reject at the 5% level, the evidence against the panel unit root is strong. When only one rejects, the evidence is moderate.
 
 ### Options
 
-| Argument | Description | Default |
-|----------|-------------|---------|
-| `r` | Number of common factors, or `:auto` for IC-based selection | `:auto` |
+| Argument | Type | Default | Description |
+|----------|------|---------|-------------|
+| `r` | `Union{Int,Symbol}` | `:auto` | Number of common factors, or `:auto` for IC-based selection |
 
 ### MoonPerronResult Return Values
 
@@ -333,9 +339,7 @@ df.time = repeat(1:T_total, outer=N)
 pd = xtset(df, :id, :time)
 model = estimate_pvar(pd, 2; steps=:twostep)
 j = pvar_hansen_j(model)
-j.statistic  # J-statistic value
-j.pvalue     # p > 0.05 indicates valid instruments
-j.df         # degrees of freedom (q - k)
+report(j)
 ```
 
 A p-value above 0.05 means the test fails to reject instrument validity. This is a necessary but not sufficient condition: the J-test has low power when the number of instruments is large relative to the sample size.
@@ -395,9 +399,7 @@ df.time = repeat(1:T_total, outer=N)
 pd = xtset(df, :id, :time)
 model = estimate_pvar(pd, 2; steps=:twostep)
 mmsc = pvar_mmsc(model)
-mmsc.bic   # MMSC-BIC value
-mmsc.aic   # MMSC-AIC value
-mmsc.hqic  # MMSC-HQIC value
+report(mmsc)
 ```
 
 ### Lag Selection
@@ -421,9 +423,7 @@ df.id = repeat(1:N, inner=T_total)
 df.time = repeat(1:T_total, outer=N)
 pd = xtset(df, :id, :time)
 sel = pvar_lag_selection(pd, 4)
-sel.best_bic   # optimal lag by MMSC-BIC
-sel.best_aic   # optimal lag by MMSC-AIC
-sel.best_hqic  # optimal lag by MMSC-HQIC
+report(sel)
 ```
 
 The `table` field contains a ``p_{max} \times 4`` matrix with columns for the lag order and the three MMSC values. The `models` vector stores all estimated `PVARModel` objects for further analysis.
@@ -449,24 +449,15 @@ X = F * Lambda' + e                                  # T x N panel
 # --- Step 2: PANIC test ---
 # Decompose into factor + idiosyncratic, test each
 panic_result = panic_test(X; r=1)
-panic_result.pooled_pvalue
-# Expect small p-value: idiosyncratic components are stationary
-# Check whether the common factor is I(1):
-panic_result.factor_adf_pvalues
-# Expect large p-value for factor (fail to reject unit root)
+report(panic_result)
 
 # --- Step 3: Pesaran CIPS test ---
 cips_result = pesaran_cips_test(X; lags=1, deterministic=:constant)
-cips_result.cips_statistic
-cips_result.pvalue
-# CIPS tests the composite null; result depends on factor vs. idiosyncratic balance
+report(cips_result)
 
 # --- Step 4: Moon-Perron test ---
 mp_result = moon_perron_test(X; r=1)
-mp_result.t_a_statistic
-mp_result.pvalue_a
-mp_result.t_b_statistic
-mp_result.pvalue_b
+report(mp_result)
 
 # --- Step 5: Run all three tests together ---
 panel_unit_root_summary(X; r=1)
@@ -492,15 +483,15 @@ model = estimate_pvar(pd, 2; steps=:twostep)
 
 # Hansen J-test: validate overidentifying restrictions
 j = pvar_hansen_j(model)
-j.pvalue  # p > 0.05 supports instrument validity
+report(j)
 
 # MMSC criteria for this specification
 mmsc = pvar_mmsc(model)
-mmsc.bic
+report(mmsc)
 
 # Lag selection: compare p = 1, ..., 4
 sel = pvar_lag_selection(pd, 4)
-sel.best_bic  # optimal lag order by MMSC-BIC
+report(sel)
 ```
 
 The PANIC test separates the common factor (I(1)) from the stationary idiosyncratic errors, providing a nuanced view that the composite tests (CIPS, Moon-Perron) cannot. The Panel VAR diagnostics confirm that the GMM instruments are valid and identify the preferred lag order.
@@ -522,9 +513,15 @@ The PANIC test separates the common factor (I(1)) from the stationary idiosyncra
 ## References
 
 - Andrews, D. W. K., & Lu, B. (2001). Consistent Model and Moment Selection Procedures for GMM Estimation with Application to Dynamic Panel Data Models. *Journal of Econometrics*, 101(1), 123-164. [DOI](https://doi.org/10.1016/S0304-4076(00)00077-4)
+
 - Bai, J., & Ng, S. (2002). Determining the Number of Factors in Approximate Factor Models. *Econometrica*, 70(1), 191-221. [DOI](https://doi.org/10.1111/1468-0262.00273)
+
 - Bai, J., & Ng, S. (2004). A PANIC Attack on Unit Roots and Cointegration. *Econometrica*, 72(4), 1127-1177. [DOI](https://doi.org/10.1111/j.1468-0262.2004.00528.x)
+
 - Bai, J., & Ng, S. (2010). Panel Unit Root Tests with Cross-Section Dependence: A Further Investigation. *Econometric Theory*, 26(4), 1088-1114. [DOI](https://doi.org/10.1017/S0266466609990478)
+
 - Hansen, L. P. (1982). Large Sample Properties of Generalized Method of Moments Estimators. *Econometrica*, 50(4), 1029-1054. [DOI](https://doi.org/10.2307/1912775)
+
 - Moon, H. R., & Perron, B. (2004). Testing for a Unit Root in Panels with Dynamic Factors. *Journal of Econometrics*, 122(1), 81-126. [DOI](https://doi.org/10.1016/j.jeconom.2003.10.020)
+
 - Pesaran, M. H. (2007). A Simple Panel Unit Root Test in the Presence of Cross-Section Dependence. *Journal of Applied Econometrics*, 22(2), 265-312. [DOI](https://doi.org/10.1002/jae.951)

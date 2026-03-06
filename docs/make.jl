@@ -33,6 +33,10 @@ makedocs(;
             "Factor Models" => "factormodels.md",
             "FAVAR" => "favar.md",
         ],
+        "Cross-Sectional Models" => [
+            "Linear Regression" => "regression.md",
+            "Binary Choice Models" => "binary_choice.md",
+        ],
         "Panel Models" => [
             "Panel VAR" => "pvar.md",
             "Difference-in-Differences" => "did.md",
@@ -45,13 +49,25 @@ makedocs(;
             "Constraints" => "dsge_constraints.md",
             "Estimation" => "dsge_estimation.md",
         ],
-        "Cross-Sectional Models" => [
-            "Linear Regression" => "regression.md",
-            "Binary Choice Models" => "binary_choice.md",
+        "Innovation Accounting" => [
+            "Overview" => "innovation_accounting.md",
+            "Impulse Responses" => "ia_irf.md",
+            "Variance Decomposition" => "ia_fevd.md",
+            "Historical Decomposition" => "ia_hd.md",
         ],
-        "Innovation Accounting" => "innovation_accounting.md",
-        "Nowcasting" => "nowcast.md",
-        "Statistical Identification" => "nongaussian.md",
+        "Statistical Identification" => [
+            "Overview" => "nongaussian.md",
+            "Non-Gaussian Methods" => "id_nongaussian.md",
+            "Heteroskedasticity" => "id_heteroskedastic.md",
+            "Testing" => "id_testing.md",
+        ],
+        "Nowcasting" => [
+            "Overview" => "nowcast.md",
+            "DFM Nowcasting" => "nowcast_dfm.md",
+            "BVAR Nowcasting" => "nowcast_bvar.md",
+            "Bridge Equations" => "nowcast_bridge.md",
+            "News Decomposition" => "nowcast_news.md",
+        ],
         "Hypothesis Tests" => [
             "Overview" => "tests.md",
             "Unit Root & Cointegration" => "tests_unitroot.md",
@@ -61,7 +77,6 @@ makedocs(;
             "Model Diagnostics" => "tests_diagnostics.md",
         ],
         "Visualization" => "plotting.md",
-        "Examples" => "examples.md",
         "API Reference" => [
             "Overview" => "api.md",
             "Types" => "api_types.md",

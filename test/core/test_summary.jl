@@ -2,19 +2,7 @@
 # Copyright (C) 2025-2026 Wookyung Chung <chung@friedman.jp>
 #
 # This file is part of MacroEconometricModels.jl.
-#
-# MacroEconometricModels.jl is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# MacroEconometricModels.jl is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with MacroEconometricModels.jl. If not, see <https://www.gnu.org/licenses/>.
+# Licensed under GPL-3.0-or-later. See LICENSE for details.
 
 using MacroEconometricModels
 using Test
@@ -32,6 +20,54 @@ using Statistics
             report(model)
         end
         @test true
+    end
+
+    @testset "report(VARModel) uses varnames" begin
+        Y = randn(100, 3)
+        model = estimate_var(Y, 2; varnames=["GDP", "INF", "FFR"])
+        old_stdout = stdout
+        rd, wr = redirect_stdout()
+        report(model)
+        redirect_stdout(old_stdout)
+        close(wr)
+        output = read(rd, String)
+        close(rd)
+        @test occursin("GDP", output)
+        @test occursin("INF", output)
+        @test occursin("FFR", output)
+        @test !occursin("Var 1", output)
+        @test !occursin("Var1", output)
+        @test !occursin("Var 2", output)
+        @test !occursin("Var2", output)
+    end
+
+    @testset "report(VECMModel) uses varnames" begin
+        Y = randn(200, 3)
+        vecm = estimate_vecm(Y, 2; varnames=["GDP", "INF", "FFR"])
+        old_stdout = stdout
+        rd, wr = redirect_stdout()
+        report(vecm)
+        redirect_stdout(old_stdout)
+        close(wr)
+        output = read(rd, String)
+        close(rd)
+        @test occursin("GDP", output)
+        @test occursin("INF", output)
+        @test occursin("FFR", output)
+        @test !occursin("Var 1", output)
+        @test !occursin("Var 2", output)
+    end
+
+    @testset "show(BVARPosterior) uses varnames" begin
+        Y = randn(100, 3)
+        post = estimate_bvar(Y, 2; n_draws=100, varnames=["GDP", "INF", "FFR"])
+        io = IOBuffer()
+        show(io, post)
+        output = String(take!(io))
+        @test occursin("GDP.L1", output)
+        @test occursin("INF.L1", output)
+        @test !occursin("Var1.L1", output)
+        @test !occursin("Var2.L1", output)
     end
 
     @testset "IRF table and print_table" begin
@@ -1097,6 +1133,41 @@ using Statistics
         t = table(bfevd, 1; stat=1)
         @test size(t, 1) == H
         @test size(t, 2) == n + 1
+    end
+
+    @testset "report() for PVAR types" begin
+        using DataFrames
+        df = DataFrame(
+            id = repeat(1:10, inner=20),
+            time = repeat(1:20, outer=10),
+            y1 = randn(200),
+            y2 = randn(200)
+        )
+        pd = xtset(df, :id, :time)
+        pvar = estimate_pvar(pd, 1)
+        redirect_stdout(devnull) do
+            report(pvar)
+            report(pvar_stability(pvar))
+        end
+        @test true
+    end
+
+    @testset "report() for DiD types" begin
+        using DataFrames
+        n_units, n_periods = 40, 10
+        df = DataFrame(
+            unit = repeat(1:n_units, inner=n_periods),
+            time = repeat(1:n_periods, outer=n_units),
+            y = randn(n_units * n_periods),
+            treat = repeat(vcat(zeros(Int, n_units÷2), ones(Int, n_units÷2)), inner=n_periods) .*
+                    repeat(vcat(zeros(Int, n_periods÷2), ones(Int, n_periods÷2)), outer=n_units)
+        )
+        pd = xtset(df, :unit, :time)
+        did = estimate_did(pd, :y, :treat)
+        redirect_stdout(devnull) do
+            report(did)
+        end
+        @test true
     end
 
 end

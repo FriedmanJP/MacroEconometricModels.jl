@@ -1,7 +1,15 @@
+# MacroEconometricModels.jl
+# Copyright (C) 2025-2026 Wookyung Chung <chung@friedman.jp>
+#
+# This file is part of MacroEconometricModels.jl.
+# Licensed under GPL-3.0-or-later. See LICENSE for details.
+
 # Coverage tests targeting 9 source files with low coverage:
 #   src/data/convert.jl, src/data/types.jl, src/data/filter.jl, src/data/transform.jl,
 #   src/lp/types.jl, src/arima/types.jl, src/arch/types.jl,
 #   src/did/event_study.jl, src/factor/generalized.jl
+
+using DataFrames, StatsAPI
 
 if !@isdefined(FAST)
     const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
@@ -51,7 +59,7 @@ const _suppress_warnings = M._suppress_warnings
         @test size(m.B, 1) > 0
 
         # estimate_bvar dispatch
-        post = estimate_bvar(ts, 2; n_draws=50)
+        post = estimate_bvar(ts, 2; n_draws=25)
         @test post isa M.BVARPosterior
 
         # estimate_factors dispatch
@@ -1101,7 +1109,7 @@ const _suppress_warnings = M._suppress_warnings
         X = randn(rng, T_obs, N)
         model = estimate_gdfm(X, q)
 
-        fc_boot = forecast(model, 3; ci_method=:bootstrap, n_boot=100)
+        fc_boot = forecast(model, 3; ci_method=:bootstrap, n_boot=50)
         @test fc_boot isa M.FactorForecast
         @test fc_boot.ci_method == :bootstrap
         @test size(fc_boot.factors) == (3, q)

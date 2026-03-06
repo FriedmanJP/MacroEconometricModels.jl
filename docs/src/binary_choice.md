@@ -1,10 +1,10 @@
-# Binary Choice Models
+# [Binary Choice Models](@id binary_choice_page)
 
-MacroEconometricModels.jl implements logistic and probit regression for binary dependent variables, estimated via maximum likelihood using iteratively reweighted least squares (IRLS). Both models produce Stata/EViews-style output via `report()` and integrate with the package's D3.js visualization and StatsAPI interface.
+**MacroEconometricModels.jl** provides logistic and probit regression for binary dependent variables, estimated via maximum likelihood using iteratively reweighted least squares (IRLS). Both models produce Stata/EViews-style output and integrate with the package's D3.js visualization, StatsAPI interface, and marginal effects infrastructure.
 
 - **Logit** (logistic regression) with MLE via IRLS/Fisher scoring (McCullagh & Nelder 1989)
-- **Probit** with standard normal CDF link (Wooldridge 2010)
-- **Marginal effects**: average (AME), at-mean (MEM), and at-representative (MER) with delta-method SEs (Cameron & Trivedi 2005)
+- **Probit** with standard normal CDF link and latent variable interpretation (Wooldridge 2010)
+- **Marginal effects**: average (AME), at-mean (MEM), and at-representative (MER) with delta-method standard errors (Cameron & Trivedi 2005)
 - **Odds ratios** with delta-method confidence intervals (Agresti 2002)
 - **Classification table**: confusion matrix, accuracy, sensitivity, specificity, precision, F1 score
 - **Robust inference**: HC0--HC3 heteroskedasticity-robust and cluster-robust standard errors
@@ -32,13 +32,12 @@ report(m)
 **Recipe 2: Probit estimation**
 
 ```julia
-using MacroEconometricModels, Random
+using MacroEconometricModels, Random, Distributions
 Random.seed!(42)
 
 n = 500
 X = hcat(ones(n), randn(n, 2))
 eta = X * [0.0, 1.0, -0.8]
-using Distributions
 prob = cdf.(Normal(), eta)
 y = Float64.(rand(n) .< prob)
 m = estimate_probit(y, X; varnames=["(Intercept)", "x1", "x2"])
@@ -71,10 +70,10 @@ X = hcat(ones(n), randn(n, 2))
 eta = X * [0.0, 1.5, -1.0]
 y = Float64.(rand(n) .< 1.0 ./ (1.0 .+ exp.(-eta)))
 m = estimate_logit(y, X; varnames=["(Intercept)", "x1", "x2"])
+
+# Odds ratios with 95% CIs
 or = odds_ratio(m)
-println("OR(x1) = ", round(or.or[2], digits=3),
-        " [", round(or.ci_lower[2], digits=3), ", ",
-        round(or.ci_upper[2], digits=3), "]")
+round.(or.or[2:end], digits=3)  # slope odds ratios
 ```
 
 **Recipe 5: Classification diagnostics**
@@ -88,11 +87,10 @@ X = hcat(ones(n), randn(n, 2))
 eta = X * [0.0, 1.5, -1.0]
 y = Float64.(rand(n) .< 1.0 ./ (1.0 .+ exp.(-eta)))
 m = estimate_logit(y, X; varnames=["(Intercept)", "x1", "x2"])
+
+# Confusion matrix and summary metrics
 ct = classification_table(m)
-println("Accuracy:    ", round(ct["accuracy"], digits=3))
-println("Sensitivity: ", round(ct["sensitivity"], digits=3))
-println("Specificity: ", round(ct["specificity"], digits=3))
-println("F1 Score:    ", round(ct["f1_score"], digits=3))
+round(ct["accuracy"], digits=3)
 ```
 
 **Recipe 6: CrossSectionData dispatch**
@@ -113,8 +111,6 @@ report(m)
 
 ## Logit Model
 
-### Model Specification
-
 The **logistic regression model** relates a binary outcome ``y_i \in \{0, 1\}`` to a ``k \times 1`` regressor vector ``x_i`` through the logistic cumulative distribution function (McCullagh & Nelder 1989):
 
 ```math
@@ -127,7 +123,7 @@ where:
 - ``\beta`` is the ``k \times 1`` vector of coefficients
 - ``\Lambda(\cdot)`` is the logistic CDF
 
-The logistic function maps the linear index ``x_i' \beta \in (-\infty, \infty)`` to probabilities in ``(0, 1)``. The coefficients ``\beta`` do not have a direct marginal effect interpretation because the relationship between ``x_j`` and ``P(y = 1)`` is nonlinear -- see [Marginal Effects](@ref marginal-effects) below.
+The logistic function maps the linear index ``x_i' \beta \in (-\infty, \infty)`` to probabilities in ``(0, 1)``. The coefficients ``\beta`` do not have a direct marginal effect interpretation because the relationship between ``x_j`` and ``P(y = 1)`` is nonlinear --- see [Marginal Effects](@ref marginal-effects) below.
 
 ### Log-Likelihood
 
@@ -143,11 +139,6 @@ where:
 
 The log-likelihood is globally concave, guaranteeing a unique maximum.
 
-### IRLS Algorithm
-
-!!! note "Technical Note"
-    The estimator uses **iteratively reweighted least squares** (IRLS), also known as Fisher scoring. At each iteration, the algorithm solves a weighted least squares problem with weight matrix ``W = \text{diag}(\hat{\mu}_i (1 - \hat{\mu}_i))`` and working response ``z_i = \hat{\eta}_i + (y_i - \hat{\mu}_i) / (\hat{\mu}_i (1 - \hat{\mu}_i))``. The update is ``\hat{\beta}^{(t+1)} = (X' W^{(t)} X)^{-1} X' W^{(t)} z^{(t)}``. Convergence is declared when ``|\ell^{(t+1)} - \ell^{(t)}| < \texttt{tol} \cdot (|\ell^{(t)}| + 1)``.
-
 ### McFadden's Pseudo R-squared
 
 The logit model does not have a natural ``R^2``. McFadden (1974) proposes a likelihood-ratio index:
@@ -162,7 +153,8 @@ where:
 
 Values between 0.2 and 0.4 indicate excellent fit (McFadden 1974). Unlike the linear ``R^2``, the McFadden pseudo ``R^2`` never equals 1 in practice.
 
-### Code Example
+!!! note "Technical Note"
+    The estimator uses **iteratively reweighted least squares** (IRLS), also known as Fisher scoring. At each iteration, the algorithm solves a weighted least squares problem with weight matrix ``W = \text{diag}(\hat{\mu}_i (1 - \hat{\mu}_i))`` and working response ``z_i = \hat{\eta}_i + (y_i - \hat{\mu}_i) / (\hat{\mu}_i (1 - \hat{\mu}_i))``. The update is ``\hat{\beta}^{(t+1)} = (X' W^{(t)} X)^{-1} X' W^{(t)} z^{(t)}``. Convergence is declared when ``|\ell^{(t+1)} - \ell^{(t)}| < \texttt{tol} \cdot (|\ell^{(t)}| + 1)``.
 
 ```julia
 using MacroEconometricModels, Random
@@ -179,11 +171,6 @@ y = Float64.(rand(n) .< prob)
 # Estimate logit with HC1 robust standard errors
 m = estimate_logit(y, X; cov_type=:hc1, varnames=["(Intercept)", "x1", "x2"])
 report(m)
-
-# Access individual fields
-println("Coefficients: ", round.(m.beta, digits=3))
-println("Pseudo R-sq:  ", round(m.pseudo_r2, digits=3))
-println("Converged:    ", m.converged, " in ", m.iterations, " iterations")
 ```
 
 The estimated coefficients recover the true DGP values ``(\beta_0, \beta_1, \beta_2) = (0, 1.5, -1.0)``. With ``n = 1000`` observations, the standard errors are small enough to reject ``H_0: \beta_j = 0`` for both slope coefficients at the 1% level. The McFadden pseudo ``R^2`` reflects the strong signal in the data.
@@ -224,8 +211,6 @@ The estimated coefficients recover the true DGP values ``(\beta_0, \beta_1, \bet
 
 ## Probit Model
 
-### Model Specification
-
 The **probit model** replaces the logistic CDF with the standard normal CDF ``\Phi(\cdot)`` (Wooldridge 2010, Chapter 15):
 
 ```math
@@ -238,12 +223,8 @@ where:
 
 The probit model arises naturally from a latent variable framework: ``y_i^* = x_i' \beta + \varepsilon_i`` with ``\varepsilon_i \sim N(0, 1)``, and ``y_i = \mathbf{1}(y_i^* > 0)``. The IRLS algorithm for probit uses Fisher scoring weights ``w_i = \phi(\hat{\eta}_i)^2 / [\hat{\mu}_i (1 - \hat{\mu}_i)]``, where ``\phi(\cdot)`` is the standard normal PDF.
 
-### Logit-Probit Relationship
-
 !!! note "Technical Note"
     The logistic and normal CDFs are nearly identical after rescaling. The approximation ``\beta_{\text{probit}} \approx \beta_{\text{logit}} / 1.6`` holds well across the range of the linear index (Amemiya 1981). Both models produce similar predicted probabilities and marginal effects when the sample is large. The logit model is preferred when odds ratios are the quantity of interest; the probit model when latent variable interpretation or normality assumptions are natural.
-
-### Code Example
 
 ```julia
 using MacroEconometricModels, Random
@@ -261,21 +242,15 @@ m_logit = estimate_logit(y, X; varnames=["(Intercept)", "x1", "x2"])
 m_probit = estimate_probit(y, X; varnames=["(Intercept)", "x1", "x2"])
 
 # Compare coefficients: probit ~ logit / 1.6
-println("            Logit     Probit    Probit*1.6")
-for j in 1:3
-    name = m_logit.varnames[j]
-    println(rpad(name, 12),
-            round(m_logit.beta[j], digits=3), "     ",
-            round(m_probit.beta[j], digits=3), "     ",
-            round(m_probit.beta[j] * 1.6, digits=3))
-end
-
-# Compare log-likelihoods (both maximize the same binary log-likelihood)
-println("\nLog-likelihood (logit):  ", round(m_logit.loglik, digits=2))
-println("Log-likelihood (probit): ", round(m_probit.loglik, digits=2))
+report(m_logit)
+report(m_probit)
 ```
 
 The probit coefficients are approximately ``1/1.6`` times the logit coefficients. The log-likelihoods are close, reflecting the near-identical shapes of the logistic and normal CDFs. Both models yield similar predicted probabilities and marginal effects.
+
+### Return Values
+
+`estimate_probit` returns a `ProbitModel{T}` with the same fields as `LogitModel{T}` (see [Logit Model](@ref) above). The keyword arguments are identical.
 
 ---
 
@@ -299,11 +274,18 @@ where:
 \text{AME}_j = \frac{1}{n} \sum_{i=1}^{n} f(x_i' \hat{\beta}) \cdot \hat{\beta}_j
 ```
 
+where:
+- ``n`` is the number of observations
+- ``f(x_i' \hat{\beta})`` is the link density evaluated at the fitted linear index for observation ``i``
+
 **Marginal Effects at the Mean** (MEM) evaluate at the sample mean of the regressors:
 
 ```math
 \text{MEM}_j = f(\bar{x}' \hat{\beta}) \cdot \hat{\beta}_j
 ```
+
+where:
+- ``\bar{x}`` is the ``k \times 1`` vector of sample means
 
 **Marginal Effects at Representative values** (MER) evaluate at user-specified covariate values ``x_0``:
 
@@ -312,17 +294,12 @@ where:
 ```
 
 where:
-- ``\bar{x}`` is the ``k \times 1`` vector of sample means
 - ``x_0`` is a user-specified evaluation point (defaults to ``\bar{x}`` with selected values overridden via the `at` argument)
 
 AME is the most commonly reported in applied work because it does not depend on an arbitrary evaluation point. MEM and MER are useful for interpreting effects at specific covariate profiles.
 
-### Delta-Method Standard Errors
-
 !!! note "Technical Note"
     Standard errors for marginal effects use the **delta method** (Oehlert 1992). Let ``g(\hat{\beta})`` denote the vector of marginal effects and ``G = \partial g / \partial \beta'`` its Jacobian. The asymptotic covariance matrix is ``\text{Var}(\hat{g}) \approx G \, \hat{V} \, G'``, where ``\hat{V}`` is the estimated covariance matrix of ``\hat{\beta}``. For AME, the Jacobian row for variable ``j`` has element ``G_{j,l} = \frac{1}{n} \sum_{i=1}^{n} [\mathbf{1}(j = l) \cdot f_i + f'_i \cdot \hat{\beta}_j \cdot x_{il}]``, where ``f_i = f(x_i' \hat{\beta})`` and ``f'_i`` is its derivative with respect to the linear index.
-
-### Code Example
 
 ```julia
 using MacroEconometricModels, Random
@@ -385,6 +362,7 @@ The **odds ratio** (OR) provides a multiplicative interpretation of logit coeffi
 ```
 
 where:
+- ``\hat{\beta}_j`` is the estimated logit coefficient for regressor ``j``
 - ``\text{OR}_j > 1`` means a one-unit increase in ``x_j`` increases the odds of ``y = 1``
 - ``\text{OR}_j < 1`` means a one-unit increase in ``x_j`` decreases the odds
 - ``\text{OR}_j = 1`` means no association
@@ -394,6 +372,10 @@ The standard error uses the delta method: ``\text{SE}(\text{OR}_j) = \text{OR}_j
 ```math
 \text{CI} = \left[ \exp(\hat{\beta}_j - z_{\alpha/2} \cdot \text{SE}(\hat{\beta}_j)), \;\; \exp(\hat{\beta}_j + z_{\alpha/2} \cdot \text{SE}(\hat{\beta}_j)) \right]
 ```
+
+where:
+- ``z_{\alpha/2}`` is the critical value from the standard normal distribution
+- ``\text{SE}(\hat{\beta}_j)`` is the standard error of the log-odds coefficient
 
 !!! note "Technical Note"
     Odds ratios are defined only for logit models. For probit models, marginal effects are the standard way to quantify the impact of regressors. The `odds_ratio` function accepts only `LogitModel` inputs.
@@ -409,15 +391,25 @@ y = Float64.(rand(n) .< 1.0 ./ (1.0 .+ exp.(-eta)))
 m = estimate_logit(y, X; varnames=["(Intercept)", "x1", "x2"])
 
 or = odds_ratio(m)
-for j in 1:length(or.or)
-    println(rpad(or.varnames[j], 14),
-            "OR = ", round(or.or[j], digits=3),
-            "  95% CI [", round(or.ci_lower[j], digits=3), ", ",
-            round(or.ci_upper[j], digits=3), "]")
-end
+# Access odds ratios and CIs for each variable
+round.(or.or, digits=3)
+round.(or.ci_lower, digits=3)
+round.(or.ci_upper, digits=3)
 ```
 
 An odds ratio of ``\exp(1.5) \approx 4.48`` for `x1` means that a one-unit increase in `x1` multiplies the odds of ``y = 1`` by approximately 4.5. The confidence interval excludes 1, confirming statistical significance. The odds ratio for `x2` is below 1, indicating that higher values of `x2` reduce the odds of the positive outcome.
+
+### Return Values
+
+`odds_ratio` returns a `NamedTuple` with the following fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `or` | `Vector{T}` | Odds ratios ``\exp(\hat{\beta}_j)`` |
+| `se` | `Vector{T}` | Delta-method standard errors |
+| `ci_lower` | `Vector{T}` | Lower confidence interval bounds |
+| `ci_upper` | `Vector{T}` | Upper confidence interval bounds |
+| `varnames` | `Vector{String}` | Variable names |
 
 ---
 
@@ -452,27 +444,39 @@ m = estimate_logit(y, X; varnames=["(Intercept)", "x1", "x2"])
 
 # Default threshold = 0.5
 ct = classification_table(m)
-println("Confusion matrix:")
-println("  TN = ", Int(ct["confusion"][1,1]),
-        "  FP = ", Int(ct["confusion"][1,2]))
-println("  FN = ", Int(ct["confusion"][2,1]),
-        "  TP = ", Int(ct["confusion"][2,2]))
-println("Accuracy:    ", round(ct["accuracy"], digits=3))
-println("Sensitivity: ", round(ct["sensitivity"], digits=3))
-println("Specificity: ", round(ct["specificity"], digits=3))
-println("Precision:   ", round(ct["precision"], digits=3))
-println("F1 Score:    ", round(ct["f1_score"], digits=3))
+round(ct["accuracy"], digits=3)
+round(ct["sensitivity"], digits=3)
+round(ct["specificity"], digits=3)
+round(ct["f1_score"], digits=3)
 
-# Try a different threshold
+# Lower threshold increases sensitivity at the cost of specificity
 ct_30 = classification_table(m; threshold=0.3)
-println("\nWith threshold = 0.3:")
-println("Sensitivity: ", round(ct_30["sensitivity"], digits=3),
-        "  (higher — more positives classified correctly)")
-println("Specificity: ", round(ct_30["specificity"], digits=3),
-        "  (lower — more false positives)")
+round(ct_30["sensitivity"], digits=3)
+round(ct_30["specificity"], digits=3)
 ```
 
 The default threshold of 0.5 balances sensitivity and specificity. Lowering the threshold increases sensitivity (catches more true positives) at the cost of specificity (more false positives). The optimal threshold depends on the relative costs of false positives and false negatives in the application.
+
+### Keyword Arguments
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `threshold` | `Real` | `0.5` | Classification probability threshold |
+
+### Return Values
+
+`classification_table` returns a `Dict{String,Any}` with the following keys:
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `"confusion"` | `Matrix{T}` | ``2 \times 2`` confusion matrix `[[TN, FP], [FN, TP]]` |
+| `"accuracy"` | `T` | Overall correct classification rate |
+| `"sensitivity"` | `T` | True positive rate (recall) |
+| `"specificity"` | `T` | True negative rate |
+| `"precision"` | `T` | Positive predictive value |
+| `"f1_score"` | `T` | Harmonic mean of precision and sensitivity |
+| `"n"` | `Int` | Number of observations |
+| `"threshold"` | `T` | Classification threshold used |
 
 ---
 
@@ -495,7 +499,7 @@ outcome = Float64.(rand(n) .< prob)
 data = hcat(outcome, x1, x2)
 d = CrossSectionData(data; varnames=["outcome", "x1", "x2"])
 
-# Logit via symbols — intercept added automatically
+# Logit via symbols --- intercept added automatically
 m_logit = estimate_logit(d, :outcome, [:x1, :x2])
 report(m_logit)
 
@@ -514,7 +518,7 @@ The `CrossSectionData` dispatch accepts the same keyword arguments as the matrix
 
 ## Visualization
 
-The `plot_result` function generates D3.js diagnostic plots for binary choice models:
+The `plot_result` function generates D3.js diagnostic plots for binary choice models.
 
 ```julia
 using MacroEconometricModels, Random
@@ -593,7 +597,6 @@ beta_true = [-0.5, 1.5, 0.8]           # True coefficients
 eta = X * beta_true
 prob_true = 1.0 ./ (1.0 .+ exp.(-eta))
 y = Float64.(rand(n) .< prob_true)
-println("Prevalence: ", round(mean(y), digits=3))
 
 # ──────────────────────────────────────────────────────────────────────
 # Step 2: Logit estimation with robust SEs
@@ -607,57 +610,37 @@ report(m_logit)
 # ──────────────────────────────────────────────────────────────────────
 m_probit = estimate_probit(y, X; cov_type=:hc1,
                             varnames=["(Intercept)", "education", "experience"])
-
-# Compare: probit coefficients ~ logit / 1.6
-println("\n=== Coefficient Comparison ===")
-println("Variable        Logit    Probit   Probit*1.6   True")
-for j in 1:3
-    name = m_logit.varnames[j]
-    println(rpad(name, 16),
-            rpad(round(m_logit.beta[j], digits=3), 9),
-            rpad(round(m_probit.beta[j], digits=3), 9),
-            rpad(round(m_probit.beta[j] * 1.6, digits=3), 13),
-            round(beta_true[j], digits=3))
-end
+report(m_probit)
 
 # ──────────────────────────────────────────────────────────────────────
 # Step 4: Marginal effects (all three types)
 # ──────────────────────────────────────────────────────────────────────
 me_ame = marginal_effects(m_logit)
-me_mem = marginal_effects(m_logit; type=:mem)
-me_mer = marginal_effects(m_logit; type=:mer, at=Dict(2 => 1.0, 3 => 0.0))
+report(me_ame)
 
-println("\n=== Marginal Effects Comparison ===")
-println("Variable        AME      MEM      MER(educ=1,exp=0)")
-for j in 2:3
-    name = m_logit.varnames[j]
-    println(rpad(name, 16),
-            rpad(round(me_ame.effects[j], digits=4), 9),
-            rpad(round(me_mem.effects[j], digits=4), 9),
-            round(me_mer.effects[j], digits=4))
-end
+me_mem = marginal_effects(m_logit; type=:mem)
+report(me_mem)
+
+# MER at education=1 std above mean, experience=0
+me_mer = marginal_effects(m_logit; type=:mer, at=Dict(2 => 1.0, 3 => 0.0))
+report(me_mer)
 
 # ──────────────────────────────────────────────────────────────────────
 # Step 5: Odds ratios
 # ──────────────────────────────────────────────────────────────────────
 or = odds_ratio(m_logit)
-println("\n=== Odds Ratios ===")
-for j in 1:length(or.or)
-    println(rpad(or.varnames[j], 16),
-            "OR = ", rpad(round(or.or[j], digits=3), 8),
-            "95% CI [", round(or.ci_lower[j], digits=3), ", ",
-            round(or.ci_upper[j], digits=3), "]")
-end
+round.(or.or, digits=3)
+round.(or.ci_lower, digits=3)
+round.(or.ci_upper, digits=3)
 
 # ──────────────────────────────────────────────────────────────────────
 # Step 6: Classification diagnostics
 # ──────────────────────────────────────────────────────────────────────
 ct = classification_table(m_logit)
-println("\n=== Classification (threshold = 0.5) ===")
-println("Accuracy:    ", round(ct["accuracy"], digits=3))
-println("Sensitivity: ", round(ct["sensitivity"], digits=3))
-println("Specificity: ", round(ct["specificity"], digits=3))
-println("F1 Score:    ", round(ct["f1_score"], digits=3))
+round(ct["accuracy"], digits=3)
+round(ct["sensitivity"], digits=3)
+round(ct["specificity"], digits=3)
+round(ct["f1_score"], digits=3)
 
 # ──────────────────────────────────────────────────────────────────────
 # Step 7: Visualization
@@ -672,32 +655,46 @@ The complete workflow estimates both logit and probit specifications on the same
 
 ## Common Pitfalls
 
-1. **Forgetting the intercept column.** `estimate_logit` and `estimate_probit` require the user to include a column of ones in `X` for the intercept. If omitted, the model is estimated without a constant, which biases all coefficients. The `CrossSectionData` dispatch adds the intercept automatically.
+1. **Perfect or quasi-perfect separation.** When a linear combination of regressors perfectly predicts the outcome, the MLE does not exist --- the coefficients diverge to ``\pm\infty``. The IRLS algorithm fails to converge or produces extremely large coefficients with large standard errors. Check for separation before estimation by inspecting cross-tabulations of the outcome against each regressor. Reduce model complexity or use penalized estimation (Firth 1993) if separation is detected.
 
-2. **Interpreting logit coefficients as marginal effects.** Unlike linear regression, the coefficient ``\hat{\beta}_j`` in a logit or probit model does not equal the marginal effect of ``x_j`` on ``P(y = 1)``. Always compute `marginal_effects(m)` for the correct partial derivative interpretation.
+2. **Forgetting the intercept column.** `estimate_logit` and `estimate_probit` require the user to include a column of ones in `X` for the intercept. If omitted, the model is estimated without a constant, which biases all coefficients. The `CrossSectionData` dispatch adds the intercept automatically.
 
-3. **Comparing logit and probit coefficients directly.** Logit and probit coefficients are on different scales because the logistic and normal distributions have different variances (``\pi^2/3`` vs. 1). Use the rule ``\hat{\beta}_{\text{probit}} \approx \hat{\beta}_{\text{logit}} / 1.6`` for approximate comparison, or compare marginal effects or predicted probabilities instead.
+3. **Interpreting logit coefficients as marginal effects.** Unlike linear regression, the coefficient ``\hat{\beta}_j`` in a logit or probit model does not equal the marginal effect of ``x_j`` on ``P(y = 1)``. Always compute `marginal_effects(m)` for the correct partial derivative interpretation.
 
-4. **Using `odds_ratio` with probit models.** The odds ratio interpretation is specific to the logistic link function. The `odds_ratio` function accepts only `LogitModel` inputs. For probit models, report marginal effects.
+4. **Marginal effects at the mean versus average marginal effects.** MEM evaluates derivatives at the sample mean ``\bar{x}``, which may not represent any actual observation (e.g., a 0.47-child household). AME averages over observed covariate distributions and is the preferred measure in modern applied work. The two coincide only when ``f(x_i'\beta)`` is linear in ``x``, which never holds exactly for logit or probit.
 
-5. **Choosing the classification threshold arbitrarily.** The default threshold of 0.5 is not optimal for all applications. When the cost of false negatives differs from the cost of false positives (e.g., medical screening, fraud detection), use a threshold that reflects the relative costs. Evaluate performance across a range of thresholds.
+5. **Comparing logit and probit coefficients directly.** Logit and probit coefficients are on different scales because the logistic and normal distributions have different variances (``\pi^2/3`` vs. 1). Use the rule ``\hat{\beta}_{\text{probit}} \approx \hat{\beta}_{\text{logit}} / 1.6`` for approximate comparison, or compare marginal effects or predicted probabilities instead.
 
-6. **Small-sample bias in pseudo R-squared.** McFadden's ``R^2_{\text{McF}}`` is bounded well below 1 even for perfectly specified models with finite samples. Do not compare pseudo ``R^2`` values across different dependent variables or samples. Use the likelihood ratio test, AIC, or BIC for formal model comparison.
+6. **Using `odds_ratio` with probit models.** The odds ratio interpretation is specific to the logistic link function. The `odds_ratio` function accepts only `LogitModel` inputs. For probit models, report marginal effects instead. An odds ratio of 2.0 means the odds double per unit increase; it does not mean the probability doubles.
+
+7. **Small-sample bias in pseudo R-squared.** McFadden's ``R^2_{\text{McF}}`` is bounded well below 1 even for perfectly specified models with finite samples. Do not compare pseudo ``R^2`` values across different dependent variables or samples. Use the likelihood ratio test, AIC, or BIC for formal model comparison.
+
+8. **Choosing the classification threshold arbitrarily.** The default threshold of 0.5 is not optimal for all applications. When the cost of false negatives differs from the cost of false positives (e.g., medical screening, fraud detection), use a threshold that reflects the relative costs. Evaluate performance across a range of thresholds.
 
 ---
 
 ## References
 
-- Agresti, Alan. 2002. *Categorical Data Analysis*. 2nd ed. New York: Wiley. ISBN 978-0-471-36093-3.
+- Agresti, A. (2002). *Categorical Data Analysis*. 2nd ed.
+  New York: Wiley. ISBN 978-0-471-36093-3.
 
-- Amemiya, Takeshi. 1981. "Qualitative Response Models: A Survey." *Journal of Economic Literature* 19 (4): 1483--1536.
+- Amemiya, T. (1981). Qualitative Response Models: A Survey.
+  *Journal of Economic Literature*, 19(4), 1483--1536. [DOI](https://doi.org/10.2307/2724565)
 
-- Cameron, A. Colin, and Pravin K. Trivedi. 2005. *Microeconometrics: Methods and Applications*. Cambridge: Cambridge University Press. ISBN 978-0-521-84805-3.
+- Cameron, A. C., & Trivedi, P. K. (2005). *Microeconometrics: Methods and Applications*.
+  Cambridge: Cambridge University Press. ISBN 978-0-521-84805-3.
 
-- McCullagh, Peter, and John A. Nelder. 1989. *Generalized Linear Models*. 2nd ed. London: Chapman & Hall. ISBN 978-0-412-31760-6.
+- Firth, D. (1993). Bias Reduction of Maximum Likelihood Estimates.
+  *Biometrika*, 80(1), 27--38. [DOI](https://doi.org/10.1093/biomet/80.1.27)
 
-- McFadden, Daniel. 1974. "Conditional Logit Analysis of Qualitative Choice Behavior." In *Frontiers in Econometrics*, edited by Paul Zarembka, 105--142. New York: Academic Press.
+- McCullagh, P., & Nelder, J. A. (1989). *Generalized Linear Models*. 2nd ed.
+  London: Chapman & Hall. ISBN 978-0-412-31760-6.
 
-- Oehlert, Gary W. 1992. "A Note on the Delta Method." *The American Statistician* 46 (1): 27--29. [DOI](https://doi.org/10.1080/00031305.1992.10475842)
+- McFadden, D. (1974). Conditional Logit Analysis of Qualitative Choice Behavior.
+  In P. Zarembka (Ed.), *Frontiers in Econometrics* (pp. 105--142). New York: Academic Press.
 
-- Wooldridge, Jeffrey M. 2010. *Econometric Analysis of Cross Section and Panel Data*. 2nd ed. Cambridge, MA: MIT Press. ISBN 978-0-262-23258-6.
+- Oehlert, G. W. (1992). A Note on the Delta Method.
+  *The American Statistician*, 46(1), 27--29. [DOI](https://doi.org/10.1080/00031305.1992.10475842)
+
+- Wooldridge, J. M. (2010). *Econometric Analysis of Cross Section and Panel Data*. 2nd ed.
+  Cambridge, MA: MIT Press. ISBN 978-0-262-23258-6.

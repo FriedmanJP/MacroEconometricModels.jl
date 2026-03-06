@@ -2,19 +2,7 @@
 # Copyright (C) 2025-2026 Wookyung Chung <chung@friedman.jp>
 #
 # This file is part of MacroEconometricModels.jl.
-#
-# MacroEconometricModels.jl is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# MacroEconometricModels.jl is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with MacroEconometricModels.jl. If not, see <https://www.gnu.org/licenses/>.
+# Licensed under GPL-3.0-or-later. See LICENSE for details.
 
 using Test
 using MacroEconometricModels
@@ -1462,7 +1450,8 @@ end
 
     sol = MacroEconometricModels.OccBinSolution{Float64}(
         linear_path, piecewise_path, ss, regime_hist,
-        true, 7, spec, ["y"]
+        true, 7, spec, ["y"],
+        MacroEconometricModels.OccBinConstraint{Float64}[]
     )
     @test sol.converged == true
     @test sol.iterations == 7
@@ -2156,6 +2145,127 @@ end
 
     # Missing time index
     @test_throws ArgumentError parse_constraint(:(y >= 0), spec)
+end
+
+@testset "OccBin equation ordering independence" begin
+    nk_swap = @dsge begin
+        parameters: β = 0.99, σ_c = 1.0, κ = 0.3, φ_π = 1.5, φ_y = 0.5,
+                    ρ_d = 0.8, σ_d = 0.01
+        endogenous: y, π, R, d
+        exogenous: ε_d
+
+        y[t] = y[t+1] - (1 / σ_c) * (R[t] - π[t+1]) + d[t]
+        R[t] = φ_π * π[t] + φ_y * y[t]
+        π[t] = β * π[t+1] + κ * y[t]
+        d[t] = ρ_d * d[t-1] + σ_d * ε_d[t]
+    end
+
+    nk_std = @dsge begin
+        parameters: β = 0.99, σ_c = 1.0, κ = 0.3, φ_π = 1.5, φ_y = 0.5,
+                    ρ_d = 0.8, σ_d = 0.01
+        endogenous: y, π, R, d
+        exogenous: ε_d
+
+        y[t] = y[t+1] - (1 / σ_c) * (R[t] - π[t+1]) + d[t]
+        π[t] = β * π[t+1] + κ * y[t]
+        R[t] = φ_π * π[t] + φ_y * y[t]
+        d[t] = ρ_d * d[t-1] + σ_d * ε_d[t]
+    end
+
+    nk_swap = compute_steady_state(nk_swap)
+    nk_std = compute_steady_state(nk_std)
+
+    c_swap = parse_constraint(:(R[t] >= 0), nk_swap)
+    c_std = parse_constraint(:(R[t] >= 0), nk_std)
+
+    shocks = zeros(40, 1)
+    shocks[1, 1] = -1.0
+    sol_swap = occbin_solve(nk_swap, c_swap; shock_path=shocks)
+    sol_std = occbin_solve(nk_std, c_std; shock_path=shocks)
+
+    @test sol_swap.piecewise_path ≈ sol_std.piecewise_path atol=1e-8
+end
+
+@testset "OccBin divergence detection" begin
+    # Directly test _backward_iteration with a pathological regime
+    # that has large A matrix entries, causing P_tv to diverge
+    n = 2
+    # Reference regime: well-behaved
+    ref = OccBinRegime{Float64}(
+        zeros(n, n),          # A (no forward terms)
+        Matrix{Float64}(I, n, n),  # B = I
+        -0.5 * Matrix{Float64}(I, n, n),  # C
+        zeros(n, 1)           # D
+    )
+    # Alternative regime: unstable — large A causes P_tv > 1e10
+    alt = OccBinRegime{Float64}(
+        1e12 * Matrix{Float64}(I, n, n),  # A very large → P_tv explodes
+        Matrix{Float64}(I, n, n),
+        -0.5 * Matrix{Float64}(I, n, n),
+        zeros(n, 1)
+    )
+    d_ref = zeros(n)
+    d_alt = zeros(n)
+    P = 0.5 * Matrix{Float64}(I, n, n)
+    Q = zeros(n, 1)
+    violvec = falses(10)
+    violvec[5:8] .= true  # binding in periods 5-8
+    shock_path = zeros(10, 1)
+
+    @test_throws ErrorException MacroEconometricModels._backward_iteration(
+        ref, alt, d_ref, d_alt, P, Q, violvec, shock_path)
+end
+
+@testset "OccBin constraints stored in solution" begin
+    nk = @dsge begin
+        parameters: β = 0.99, σ_c = 1.0, κ = 0.3, φ_π = 1.5, φ_y = 0.5,
+                    ρ_d = 0.8, σ_d = 0.01
+        endogenous: y, π, R, d
+        exogenous: ε_d
+
+        y[t] = y[t+1] - (1 / σ_c) * (R[t] - π[t+1]) + d[t]
+        π[t] = β * π[t+1] + κ * y[t]
+        R[t] = φ_π * π[t] + φ_y * y[t]
+        d[t] = ρ_d * d[t-1] + σ_d * ε_d[t]
+    end
+    nk = compute_steady_state(nk)
+    constraint = parse_constraint(:(R[t] >= 0), nk)
+
+    shocks = zeros(40, 1)
+    shocks[1, 1] = -1.0
+    sol = occbin_solve(nk, constraint; shock_path=shocks)
+    @test length(sol.constraints) == 1
+    @test sol.constraints[1].variable == :R
+end
+
+@testset "OccBin: irf(OccBinSolution) dispatch" begin
+    nk = @dsge begin
+        parameters: β = 0.99, σ_c = 1.0, κ = 0.3, φ_π = 1.5, φ_y = 0.5,
+                    ρ_d = 0.8, σ_d = 0.01
+        endogenous: y, π, R, d
+        exogenous: ε_d
+
+        y[t] = y[t+1] - (1 / σ_c) * (R[t] - π[t+1]) + d[t]
+        π[t] = β * π[t+1] + κ * y[t]
+        R[t] = φ_π * π[t] + φ_y * y[t]
+        d[t] = ρ_d * d[t-1] + σ_d * ε_d[t]
+    end
+    nk = compute_steady_state(nk)
+    constraint = parse_constraint(:(R[t] >= 0), nk)
+
+    shocks = zeros(40, 1)
+    shocks[1, 1] = -1.0
+    sol = occbin_solve(nk, constraint; shock_path=shocks)
+
+    # Simple API — constraint comes from sol
+    result = irf(sol, 40)
+    @test result isa OccBinIRF{Float64}
+    @test size(result.piecewise, 1) >= 40
+    @test all(isfinite.(result.piecewise))
+
+    # With custom shock
+    result2 = irf(sol, 40; shock_idx=1, magnitude=-0.5)
+    @test result2 isa OccBinIRF{Float64}
 end
 
 # ─────────────────────────────────────────────────────────────────────────────

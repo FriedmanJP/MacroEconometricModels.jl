@@ -1,4 +1,4 @@
-# Hypothesis Tests
+# [Hypothesis Tests](@id tests_page)
 
 MacroEconometricModels.jl provides a comprehensive suite of statistical hypothesis tests for macroeconomic time series analysis. The test battery covers pre-estimation diagnostics (unit root, cointegration, structural breaks, panel stationarity), post-estimation specification checks (Granger causality, normality, ARCH effects, model comparison), and panel-level instrument validation. All result types implement the StatsAPI interface for uniform access to test statistics, p-values, and degrees of freedom.
 
@@ -296,4 +296,4 @@ Every result type supports `nobs()`, `dof()`, and `pvalue()`. For tests with mul
   Princeton, NJ: Princeton University Press. ISBN 978-0-691-04289-3.
 
 - Lutkepohl, Helmut. 2005. *New Introduction to Multiple Time Series Analysis*.
-  Berlin: Springer. ISBN 978-3-540-40172-8.
+  Berlin: Springer. [https://doi.org/10.1007/978-3-540-27752-1](https://doi.org/10.1007/978-3-540-27752-1)

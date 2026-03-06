@@ -293,6 +293,6 @@ Contributions are welcome! Please see the [GitHub repository](https://github.com
 ## Contents
 
 ```@contents
-Pages = ["data.md", "filters.md", "arima.md", "volatility.md", "manual.md", "bayesian.md", "vecm.md", "pvar.md", "lp.md", "factormodels.md", "favar.md", "dsge.md", "dsge_linear.md", "dsge_nonlinear.md", "dsge_constraints.md", "dsge_estimation.md", "did.md", "event_study.md", "innovation_accounting.md", "nowcast.md", "nongaussian.md", "tests.md", "tests_unitroot.md", "tests_unitroot_advanced.md", "tests_breaks.md", "tests_panel.md", "tests_diagnostics.md", "plotting.md", "examples.md", "api.md", "api_types.md", "api_functions.md"]
+Pages = ["data.md", "filters.md", "arima.md", "volatility.md", "manual.md", "bayesian.md", "vecm.md", "lp.md", "factormodels.md", "favar.md", "regression.md", "binary_choice.md", "pvar.md", "did.md", "event_study.md", "dsge.md", "dsge_linear.md", "dsge_nonlinear.md", "dsge_constraints.md", "dsge_estimation.md", "innovation_accounting.md", "ia_irf.md", "ia_fevd.md", "ia_hd.md", "nongaussian.md", "id_nongaussian.md", "id_heteroskedastic.md", "id_testing.md", "nowcast.md", "nowcast_dfm.md", "nowcast_bvar.md", "nowcast_bridge.md", "nowcast_news.md", "tests.md", "tests_unitroot.md", "tests_unitroot_advanced.md", "tests_breaks.md", "tests_panel.md", "tests_diagnostics.md", "plotting.md", "api.md", "api_types.md", "api_functions.md"]
 Depth = 2
 ```

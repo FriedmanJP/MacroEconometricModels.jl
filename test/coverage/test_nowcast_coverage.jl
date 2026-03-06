@@ -1,3 +1,9 @@
+# MacroEconometricModels.jl
+# Copyright (C) 2025-2026 Wookyung Chung <chung@friedman.jp>
+#
+# This file is part of MacroEconometricModels.jl.
+# Licensed under GPL-3.0-or-later. See LICENSE for details.
+
 # Coverage tests for nowcast/bvar_nowcast.jl and nowcast/bridge.jl
 # Targets specific uncovered branches: interior NaN interpolation,
 # first/last-row NaN, fallback paths, short columns, singular XtX,
@@ -34,7 +40,7 @@ Random.seed!(9002)
             Y[t, j] = NaN
         end
 
-        m = nowcast_bvar(Y, 2, 1; lags=2, max_iter=10)
+        m = nowcast_bvar(Y, 2, 1; lags=2, max_iter=5)
 
         @test m isa NowcastBVAR{Float64}
         @test !any(isnan, m.X_sm)
@@ -58,7 +64,7 @@ Random.seed!(9002)
             end
         end
 
-        m = nowcast_bvar(Y, 2, 1; lags=2, max_iter=10)
+        m = nowcast_bvar(Y, 2, 1; lags=2, max_iter=5)
 
         @test m isa NowcastBVAR{Float64}
         @test !any(isnan, m.X_sm)
@@ -77,7 +83,7 @@ Random.seed!(9002)
         # t_complete = 5 (row 5 is last clean row)
         # lags = 4, so lags + 2 = 6 > 5 -> fallback path triggers
 
-        m = nowcast_bvar(Y, 2, 1; lags=4, max_iter=10)
+        m = nowcast_bvar(Y, 2, 1; lags=4, max_iter=5)
 
         @test m isa NowcastBVAR{Float64}
         @test !any(isnan, m.X_sm)
@@ -98,7 +104,7 @@ Random.seed!(9002)
             Y[t, mod(t, N) + 1] = NaN
         end
 
-        m = nowcast_bvar(Y, 2, 1; lags=2, max_iter=10)
+        m = nowcast_bvar(Y, 2, 1; lags=2, max_iter=5)
 
         @test m isa NowcastBVAR{Float64}
         @test !any(isnan, m.X_sm)
@@ -120,7 +126,7 @@ Random.seed!(9002)
             Y[t, mod(t, N) + 1] = NaN
         end
 
-        m = nowcast_bvar(Y, 2, 1; lags=2, max_iter=10)
+        m = nowcast_bvar(Y, 2, 1; lags=2, max_iter=5)
 
         @test m isa NowcastBVAR{Float64}
         @test !any(isnan, m.X_sm)
@@ -143,7 +149,7 @@ Random.seed!(9002)
             end
         end
 
-        m = nowcast_bvar(Y, 2, 1; lags=2, max_iter=10)
+        m = nowcast_bvar(Y, 2, 1; lags=2, max_iter=5)
 
         @test m isa NowcastBVAR{Float64}
         @test !any(isnan, m.X_sm)

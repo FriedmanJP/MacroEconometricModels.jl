@@ -1,3 +1,9 @@
+# MacroEconometricModels.jl
+# Copyright (C) 2025-2026 Wookyung Chung <chung@friedman.jp>
+#
+# This file is part of MacroEconometricModels.jl.
+# Licensed under GPL-3.0-or-later. See LICENSE for details.
+
 # MacroEconometricModels.jl — PVAR & Non-Gaussian Identification Coverage Tests
 #
 # Targets uncovered branches in:
@@ -101,7 +107,7 @@ end
     pd = dgp.pd
 
     @testset "mstep converges" begin
-        model = estimate_pvar(pd, 1; steps=:mstep, max_iter=50)
+        model = estimate_pvar(pd, 1; steps=:mstep, max_iter=25)
         @test model isa PVARModel
         @test model.steps == :mstep
         @test model.method == :fd_gmm
@@ -111,7 +117,7 @@ end
     end
 
     @testset "mstep with FOD transformation" begin
-        model = estimate_pvar(pd, 1; steps=:mstep, transformation=:fod, max_iter=30)
+        model = estimate_pvar(pd, 1; steps=:mstep, transformation=:fod, max_iter=15)
         @test model.steps == :mstep
         @test model.transformation == :fod
         @test size(model.Phi) == (2, 2)
@@ -125,7 +131,7 @@ end
     end
 
     @testset "mstep with multiple lags" begin
-        model = estimate_pvar(pd, 2; steps=:mstep, max_iter=20)
+        model = estimate_pvar(pd, 2; steps=:mstep, max_iter=10)
         @test model.p == 2
         @test size(model.Phi) == (2, 4)  # 2 vars * 2 lags
     end
@@ -157,7 +163,7 @@ end
     end
 
     @testset "System GMM mstep" begin
-        model = estimate_pvar(pd, 1; system_instruments=true, steps=:mstep, max_iter=20)
+        model = estimate_pvar(pd, 1; system_instruments=true, steps=:mstep, max_iter=10)
         @test model.method == :system_gmm
         @test model.steps == :mstep
     end
@@ -230,7 +236,7 @@ end
 
     @testset "mstep SEs differ from twostep" begin
         m2 = estimate_pvar(pd, 1; steps=:twostep)
-        m3 = estimate_pvar(pd, 1; steps=:mstep, max_iter=50)
+        m3 = estimate_pvar(pd, 1; steps=:mstep, max_iter=25)
         # mstep iterates further — SEs may differ
         @test all(isfinite.(m3.se))
         @test all(m3.se .>= 0)

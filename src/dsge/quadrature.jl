@@ -1,3 +1,9 @@
+# MacroEconometricModels.jl
+# Copyright (C) 2025-2026 Wookyung Chung <chung@friedman.jp>
+#
+# This file is part of MacroEconometricModels.jl.
+# Licensed under GPL-3.0-or-later. See LICENSE for details.
+
 # MacroEconometricModels.jl — Monomial quadrature rule for DSGE numerical integration
 # Judd-Maliar-Maliar (2011) monomial rule (degree-3 exact, 2n+1 points)
 
