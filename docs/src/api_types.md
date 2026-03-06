@@ -275,6 +275,17 @@ VolatilityForecast
 
 ---
 
+## Cross-Sectional Models
+
+```@docs
+RegModel
+LogitModel
+ProbitModel
+MarginalEffects
+```
+
+---
+
 ## Non-Gaussian SVAR Types
 
 ```@docs
@@ -446,6 +457,13 @@ OccBinConstraint{T}
 OccBinRegime{T}
 OccBinSolution{T}
 OccBinIRF{T}
+
+StatsAPI.RegressionModel
+├── RegModel{T} (OLS/WLS/IV)
+├── LogitModel{T} (Binary logit MLE)
+└── ProbitModel{T} (Binary probit MLE)
+
+MarginalEffects{T}
 ```
 
 ---

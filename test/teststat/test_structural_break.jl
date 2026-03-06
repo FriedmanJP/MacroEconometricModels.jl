@@ -348,6 +348,22 @@ end
         @test occursin("Bai-Perron", output)
         @test occursin("Observations", output)
     end
+
+    @testset "Bai (1997) CIs valid ranges" begin
+        # CIs should be valid ranges
+        rng_bp = Random.MersenneTwister(55443)
+        T_bp = 200
+        X_bp = ones(T_bp, 1)
+        y_bp = vcat(2.0 * ones(100), 5.0 * ones(100)) + 0.5 * randn(rng_bp, T_bp)
+        result_bp = bai_perron_test(y_bp, X_bp; max_breaks=3)
+        if result_bp.n_breaks > 0
+            for (lo, hi) in result_bp.break_cis
+                @test lo >= 1
+                @test hi <= T_bp
+                @test lo < hi
+            end
+        end
+    end
 end
 
 @testset "Factor Break Tests" begin

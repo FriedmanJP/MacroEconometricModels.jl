@@ -5,6 +5,7 @@ This page covers tests for parameter instability and structural change in time s
 - **Andrews (1993)**: Tests for a single unknown break point in a linear regression. Nine test variants combine three base statistics (Wald, LR, LM) with three functionals (supremum, exponential average, mean).
 - **Bai-Perron (1998, 2003)**: Tests for multiple unknown break points. Dynamic programming finds globally optimal break dates, with sequential testing and information criteria (BIC, LWZ) for break number selection.
 - **Factor model break tests**: Three methods for detecting instability in factor loadings or the number of factors --- Breitung-Eickmeier (2011) CUSUM, Chen-Dolado-Gonzalo (2014) eigenvalue ratio, and Han-Inoue (2015) sup-Wald.
+- **Gregory-Hansen (1996)**: Tests for cointegration allowing a single structural break in the cointegrating relationship. Three models (level shift, level + trend, regime shift) and three test statistics (ADF*, Zt*, Za*).
 
 ## Quick Start
 
@@ -416,6 +417,103 @@ report(result)
 
 ---
 
+## Gregory-Hansen Cointegration Test
+
+The Gregory-Hansen test (Gregory & Hansen 1996) extends standard residual-based cointegration tests by allowing a single structural break in the cointegrating relationship. Standard cointegration tests lose power when the equilibrium relationship shifts at an unknown date --- what appears to be no cointegration may actually be cointegration with a regime change.
+
+The test estimates the cointegrating regression at each candidate break date and computes residual-based test statistics. The null hypothesis is no cointegration; the alternative is cointegration with a single structural break.
+
+Three models control the form of the break:
+
+**Level shift** (`:C`):
+
+```math
+y_{1t} = \mu_1 + \mu_2 D_t + \alpha' y_{2t} + e_t
+```
+
+**Level + trend shift** (`:CT`):
+
+```math
+y_{1t} = \mu_1 + \mu_2 D_t + \beta t + \alpha' y_{2t} + e_t
+```
+
+**Regime shift** (`:CS`):
+
+```math
+y_{1t} = \mu_1 + \mu_2 D_t + \alpha_1' y_{2t} + \alpha_2' y_{2t} D_t + e_t
+```
+
+where:
+- ``y_{1t}`` is the dependent variable (first column of `Y`)
+- ``y_{2t}`` is the ``m \times 1`` vector of regressors (remaining columns)
+- ``D_t = \mathbf{1}(t > T_B)`` is the break dummy
+- ``T_B`` is the break date, searched over the trimmed range
+
+Three test statistics are computed from the residuals ``\hat{e}_t`` at each break date:
+
+- **ADF***: Minimum ADF t-statistic on the residuals across all break dates
+- **Zt***: Minimum Phillips-Perron ``Z_t`` statistic
+- **Za***: Minimum Phillips-Perron ``Z_\alpha`` statistic
+
+Each statistic selects its own optimal break date. The primary statistic is ADF* (most commonly reported).
+
+```julia
+using MacroEconometricModels, Random
+Random.seed!(42)
+
+# Two cointegrated series with a regime shift at t=100
+T_len = 200
+x = cumsum(randn(T_len))
+y = vcat(1.0 .+ 0.8 .* x[1:100], 3.0 .+ 1.5 .* x[101:end]) + randn(T_len) * 0.5
+
+Y = hcat(y, x)
+result = gregory_hansen_test(Y; model=:CS)
+report(result)
+
+# Access individual statistics and break dates
+result.adf_statistic     # ADF* test statistic
+result.adf_break         # Break date for ADF*
+result.zt_statistic      # Zt* test statistic
+result.za_statistic      # Za* test statistic
+```
+
+### Options
+
+| Argument | Type | Default | Description |
+|----------|------|---------|-------------|
+| `model` | `Symbol` | `:C` | Break model: `:C` (level shift), `:CT` (level + trend), `:CS` (regime shift) |
+| `lags` | `Union{Int,Symbol}` | `:aic` | ADF augmenting lags for residual test, or `:aic`/`:bic` |
+| `max_lags` | `Union{Int,Nothing}` | `nothing` | Maximum lags for IC selection |
+| `trim` | `Real` | `0.15` | Trimming fraction for break search |
+
+### GregoryHansenResult Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `adf_statistic` | `T` | ADF* test statistic (minimum ADF over break dates) |
+| `adf_pvalue` | `T` | P-value for ADF* |
+| `zt_statistic` | `T` | Zt* Phillips-Perron test statistic |
+| `zt_pvalue` | `T` | P-value for Zt* |
+| `za_statistic` | `T` | Za* Phillips-Perron test statistic |
+| `za_pvalue` | `T` | P-value for Za* |
+| `adf_break` | `Int` | Estimated break date for ADF* (observation index) |
+| `zt_break` | `Int` | Estimated break date for Zt* |
+| `za_break` | `Int` | Estimated break date for Za* |
+| `model` | `Symbol` | Break model (`:C`, `:CT`, `:CS`) |
+| `n_regressors` | `Int` | Number of regressors (``m``) |
+| `adf_critical_values` | `Dict{Int,T}` | Critical values for ADF*/Zt* at 1%, 5%, 10% |
+| `za_critical_values` | `Dict{Int,T}` | Critical values for Za* at 1%, 5%, 10% |
+| `nobs` | `Int` | Number of observations |
+
+### Interpretation
+
+**Reject** ``H_0`` (p-value < 0.05): evidence for cointegration with a structural break. The estimated break date identifies when the cointegrating relationship shifted. **Fail to reject** ``H_0`` (p-value > 0.05): cannot reject no cointegration, even allowing for a regime change. When the standard Johansen or Engle-Granger test fails to find cointegration but economic theory suggests a long-run relationship, the Gregory-Hansen test checks whether a regime shift explains the apparent lack of cointegration.
+
+!!! note "Technical Note"
+    Critical values depend on the number of regressors ``m`` and the break model. The `:CS` model (regime shift) allows all slope coefficients to change at the break, providing the most flexible alternative but also the least power. Start with `:C` (level shift only) and use `:CS` only when theory suggests the entire relationship changes.
+
+---
+
 ## Complete Example
 
 This example demonstrates a complete structural break analysis workflow: detecting a single break with Andrews, finding multiple breaks with Bai-Perron, and testing factor loading stability.
@@ -539,3 +637,5 @@ println("  Chen-Dolado-Gonzalo: p = ", round(result_cdg.pvalue, digits=4))
 - Hansen, B. E. (1997). Approximate asymptotic p values for structural-change tests. *Journal of Business & Economic Statistics*, 15(1), 60-67. [DOI](https://doi.org/10.1080/07350015.1997.10524687)
 
 - Liu, J., Wu, S., & Zidek, J. V. (1997). On segmented multivariate regression. *Statistica Sinica*, 7(2), 497-525.
+
+- Gregory, A. W., & Hansen, B. E. (1996). Residual-based tests for cointegration in models with regime shifts. *Journal of Econometrics*, 70(1), 99-126. [DOI](https://doi.org/10.1016/0304-4076(69)41685-7)

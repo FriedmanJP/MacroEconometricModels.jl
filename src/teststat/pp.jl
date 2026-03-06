@@ -102,9 +102,9 @@ function pp_test(y::AbstractVector{T};
     stat = sqrt(gamma0 / lambda2) * t_rho -
            (lambda2 - gamma0) / (2 * sqrt(lambda2) * rho_se * sqrt(nobs))
 
-    # Critical values (same as ADF)
-    cv = adf_critical_values(regression, nobs, T)
-    pval = adf_pvalue(stat, regression, nobs)
+    # Critical values (same as ADF with 0 lags)
+    cv = adf_critical_values(regression, nobs, 0, T)
+    pval = adf_pvalue(stat, regression, nobs, 0)
 
     PPResult(stat, pval, regression, cv, bw, nobs)
 end

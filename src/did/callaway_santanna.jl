@@ -30,22 +30,28 @@ using LinearAlgebra, Statistics, Distributions
                                 leads::Int=0, horizon::Int=5,
                                 control_group::Symbol=:never_treated,
                                 cluster::Symbol=:unit,
-                                conf_level::Real=0.95) where {T}
+                                conf_level::Real=0.95,
+                                base_period::Symbol=:varying) where {T}
 
 Internal Callaway-Sant'Anna estimator.
 
 Algorithm:
 1. Identify cohorts G = unique treatment times
-2. For each (g, t): compute ATT(g,t) = E[Y_t - Y_{g-1} | G=g] - E[Y_t - Y_{g-1} | C]
-   where C is the control group (never-treated or not-yet-treated at t)
+2. For each (g, t): compute ATT(g,t) = E[ΔY | G=g] - E[ΔY | C]
+   - `:varying` base: pre-treatment uses ΔY = Y_t - Y_{t-1}; post uses ΔY = Y_t - Y_{g-1}
+   - `:universal` base: always ΔY = Y_t - Y_{g-1}
 3. Aggregate: ATT(e) = sum_g w_g * ATT(g, g+e) with w_g proportional to cohort size
-4. SEs via influence function (analytical)
+4. SEs via analytical variance (delta method)
 """
 function _estimate_callaway_santanna(pd::PanelData{T}, outcome_col::Int, treat_col::Int;
                                      leads::Int=0, horizon::Int=5,
                                      control_group::Symbol=:never_treated,
                                      cluster::Symbol=:unit,
-                                     conf_level::Real=0.95) where {T<:AbstractFloat}
+                                     conf_level::Real=0.95,
+                                     base_period::Symbol=:varying) where {T<:AbstractFloat}
+
+    base_period in (:varying, :universal) ||
+        throw(ArgumentError("base_period must be :varying or :universal, got :$base_period"))
 
     timing = _extract_treatment_timing(pd, treat_col)
 
@@ -91,16 +97,28 @@ function _estimate_callaway_santanna(pd::PanelData{T}, outcome_col::Int, treat_c
         cohort_units = [g for (g, t) in timing if t == g_time]
         n_g = length(cohort_units)
 
-        # Base period: g_time - 1
-        base_t = g_time - 1
-        base_t < minimum(all_times) && continue
+        # Universal base period: g_time - 1 (last pre-treatment period)
+        universal_base = g_time - 1
+        universal_base < minimum(all_times) && continue
 
         for (ti, t) in enumerate(all_times)
-            # Control group at this time
+            # Determine base period for this (g, t) cell
+            if base_period == :varying && t < g_time
+                # Pre-treatment with varying base: compare adjacent periods
+                ti <= 1 && continue  # need a preceding period
+                base_t = all_times[ti - 1]
+            else
+                # Post-treatment (both modes) or universal pre-treatment
+                base_t = universal_base
+            end
+
+            # Control group selection
+            # Threshold = max(t, base_t): exclude units treated at or before the base period
+            ctrl_threshold = max(t, base_t)
             if control_group == :never_treated
                 ctrl_units = never_treated
             else  # :not_yet_treated
-                ctrl_units = [u for (u, ut) in timing if ut == 0 || ut > t]
+                ctrl_units = [u for (u, ut) in timing if ut == 0 || ut > ctrl_threshold]
                 # Exclude the current cohort from controls
                 ctrl_units = filter(u -> !(u in cohort_units), ctrl_units)
             end
@@ -142,8 +160,8 @@ function _estimate_callaway_santanna(pd::PanelData{T}, outcome_col::Int, treat_c
     se_agg = zeros(T, n_evt)
 
     for (ei, e) in enumerate(event_times_all)
-        if e == reference_period
-            # Reference period = 0 by construction
+        # With universal base, reference period e=-1 is zero by construction
+        if base_period == :universal && e == reference_period
             att_agg[ei] = zero(T)
             se_agg[ei] = zero(T)
             continue

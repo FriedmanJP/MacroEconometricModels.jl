@@ -328,6 +328,169 @@ ts.data[95:100, 2] .= NaN
 ts_bal = balance_panel(ts; r=2)
 ```
 """
+# =============================================================================
+# Panel lag / lead / diff utilities
+# =============================================================================
+
+function _panel_varindex(pd::PanelData, var::Union{String,Symbol})
+    s = string(var)
+    col = findfirst(==(s), pd.varnames)
+    col === nothing && throw(ArgumentError("Variable '$s' not found. Available: $(pd.varnames)"))
+    col
+end
+
+"""
+    panel_lag(pd::PanelData{T}, var::Union{String,Symbol}, k::Int=1) -> Vector{T}
+
+Compute within-group lag of variable `var` by `k` periods.
+
+Returns a vector of length `T_obs` with NaN where the lag is unavailable
+(first `k` observations per group, or when there is a time gap).
+
+# Examples
+```julia
+pd = load_example(:ddcg)
+lag1_y = panel_lag(pd, :y, 1)    # L.y
+lag4_y = panel_lag(pd, :y, 4)    # L4.y
+```
+"""
+function panel_lag(pd::PanelData{T}, var::Union{String,Symbol}, k::Int=1) where {T<:AbstractFloat}
+    k >= 0 || throw(ArgumentError("Lag order k must be non-negative, got $k"))
+    col = _panel_varindex(pd, var)
+    result = fill(T(NaN), pd.T_obs)
+
+    group_times = Dict{Int, Vector{Tuple{Int,Int}}}()
+    for i in 1:pd.T_obs
+        g = pd.group_id[i]
+        t = pd.time_id[i]
+        if !haskey(group_times, g)
+            group_times[g] = Tuple{Int,Int}[]
+        end
+        push!(group_times[g], (t, i))
+    end
+
+    for g in 1:pd.n_groups
+        haskey(group_times, g) || continue
+        gt = sort(group_times[g]; by=first)
+        time_to_row = Dict{Int,Int}(t => r for (t, r) in gt)
+        for (t, row) in gt
+            lag_time = t - k
+            if haskey(time_to_row, lag_time)
+                result[row] = pd.data[time_to_row[lag_time], col]
+            end
+        end
+    end
+    result
+end
+
+"""
+    panel_lead(pd::PanelData{T}, var::Union{String,Symbol}, k::Int=1) -> Vector{T}
+
+Compute within-group lead of variable `var` by `k` periods.
+NaN where the lead is unavailable.
+
+# Examples
+```julia
+pd = load_example(:ddcg)
+lead1_y = panel_lead(pd, :y, 1)  # F.y
+```
+"""
+function panel_lead(pd::PanelData{T}, var::Union{String,Symbol}, k::Int=1) where {T<:AbstractFloat}
+    k >= 0 || throw(ArgumentError("Lead order k must be non-negative, got $k"))
+    col = _panel_varindex(pd, var)
+    result = fill(T(NaN), pd.T_obs)
+
+    group_times = Dict{Int, Vector{Tuple{Int,Int}}}()
+    for i in 1:pd.T_obs
+        g = pd.group_id[i]
+        t = pd.time_id[i]
+        if !haskey(group_times, g)
+            group_times[g] = Tuple{Int,Int}[]
+        end
+        push!(group_times[g], (t, i))
+    end
+
+    for g in 1:pd.n_groups
+        haskey(group_times, g) || continue
+        gt = sort(group_times[g]; by=first)
+        time_to_row = Dict{Int,Int}(t => r for (t, r) in gt)
+        for (t, row) in gt
+            lead_time = t + k
+            if haskey(time_to_row, lead_time)
+                result[row] = pd.data[time_to_row[lead_time], col]
+            end
+        end
+    end
+    result
+end
+
+"""
+    panel_diff(pd::PanelData{T}, var::Union{String,Symbol}) -> Vector{T}
+
+Compute within-group first difference: `D.var = var_t - var_{t-1}`.
+NaN at the first observation of each group or when there is a time gap.
+
+# Examples
+```julia
+pd = load_example(:ddcg)
+d_dem = panel_diff(pd, :dem)  # D.dem (switching indicator)
+```
+"""
+function panel_diff(pd::PanelData{T}, var::Union{String,Symbol}) where {T<:AbstractFloat}
+    col = _panel_varindex(pd, var)
+    lag_vals = panel_lag(pd, var, 1)
+    result = fill(T(NaN), pd.T_obs)
+    for i in 1:pd.T_obs
+        if !isnan(lag_vals[i]) && !isnan(pd.data[i, col])
+            result[i] = pd.data[i, col] - lag_vals[i]
+        end
+    end
+    result
+end
+
+"""
+    add_panel_lag(pd::PanelData{T}, var::Union{String,Symbol}, k::Int=1) -> PanelData{T}
+
+Return a new PanelData with a `"lag{k}_{var}"` column appended.
+"""
+function add_panel_lag(pd::PanelData{T}, var::Union{String,Symbol}, k::Int=1) where {T<:AbstractFloat}
+    lag_col = panel_lag(pd, var, k)
+    varname = "lag$(k)_$(string(var))"
+    _append_panel_column(pd, lag_col, varname)
+end
+
+"""
+    add_panel_lead(pd::PanelData{T}, var::Union{String,Symbol}, k::Int=1) -> PanelData{T}
+
+Return a new PanelData with a `"lead{k}_{var}"` column appended.
+"""
+function add_panel_lead(pd::PanelData{T}, var::Union{String,Symbol}, k::Int=1) where {T<:AbstractFloat}
+    lead_col = panel_lead(pd, var, k)
+    varname = "lead$(k)_$(string(var))"
+    _append_panel_column(pd, lead_col, varname)
+end
+
+"""
+    add_panel_diff(pd::PanelData{T}, var::Union{String,Symbol}) -> PanelData{T}
+
+Return a new PanelData with a `"d_{var}"` column appended.
+"""
+function add_panel_diff(pd::PanelData{T}, var::Union{String,Symbol}) where {T<:AbstractFloat}
+    diff_col = panel_diff(pd, var)
+    varname = "d_$(string(var))"
+    _append_panel_column(pd, diff_col, varname)
+end
+
+function _append_panel_column(pd::PanelData{T}, col::Vector{T}, name::String) where {T<:AbstractFloat}
+    new_data = hcat(pd.data, col)
+    new_varnames = [pd.varnames; name]
+    new_tcode = [pd.tcode; 1]
+    PanelData{T}(new_data, new_varnames, pd.frequency, new_tcode,
+                 pd.group_id, pd.time_id, pd.cohort_id, pd.group_names,
+                 pd.n_groups, pd.n_vars + 1, pd.T_obs, pd.balanced,
+                 pd.desc, pd.vardesc, pd.source_refs)
+end
+
 function balance_panel(ts::TimeSeriesData{T}; method::Symbol=:dfm,
                        r::Int=3, p::Int=2) where {T}
     method == :dfm || throw(ArgumentError("method must be :dfm, got :$method"))

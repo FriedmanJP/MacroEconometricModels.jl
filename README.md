@@ -14,9 +14,11 @@ A comprehensive Julia package for macroeconomic time series analysis.
 
 **Multivariate:** VAR, VECM, Bayesian VAR, Local Projections, Factor Models, FAVAR, Structural DFM
 
-**Panel:** Panel VAR (FD-GMM, System GMM, FE-OLS), Difference-in-Differences (TWFE, Callaway-Sant'Anna, Sun-Abraham, BJS, dCDH, HonestDiD), Event Study LP
+**Panel:** Panel VAR (FD-GMM, System GMM, FE-OLS), Difference-in-Differences (TWFE, Callaway-Sant'Anna, Sun-Abraham, BJS, dCDH, HonestDiD), Event Study LP, LP-DiD (Dube et al. 2025)
 
-**DSGE:** 6 solvers (Gensys, Blanchard-Kahn, Klein, 2nd/3rd-order perturbation with pruning, Chebyshev projection, PFI), constrained solvers (Ipopt NLP, PATH MCP for ZLB/binding bounds), OccBin, GMM/SMM estimation, Bayesian estimation (SMC/SMC²/MH)
+**DSGE:** 6 solvers (Gensys, Blanchard-Kahn, Klein, 2nd/3rd-order perturbation with pruning, Chebyshev projection, PFI), constrained solvers (Ipopt NLP, PATH MCP for ZLB/binding bounds), OccBin, GMM/SMM estimation, Bayesian estimation (SMC/SMC²/MH) with posterior IRF/FEVD credible bands
+
+**Cross-Sectional:** OLS, WLS, IV/2SLS, Logit, Probit (MLE), marginal effects (AME/MEM/MER)
 
 **Estimation:** OLS, MLE, GMM, SMM, Bayesian (Gibbs/conjugate), Kalman filter/smoother
 
@@ -74,6 +76,16 @@ Pkg.add("MacroEconometricModels")
   - `favar_panel_irf` maps factor IRFs to N observables via loadings
 - **Structural DFM** - Structural dynamic factor model wrapping GDFM + VAR for identified factor shocks
 
+### Cross-Sectional Models
+- **Linear Regression** - OLS with HC0–HC3 robust and cluster-robust standard errors
+  - Weighted Least Squares (WLS) with analytic or user-supplied weights
+  - Variance Inflation Factor (VIF) for multicollinearity diagnostics
+- **Instrumental Variables** - IV/2SLS estimation with first-stage F-statistic and Sargan overidentification test
+- **Binary Choice** - Logit and Probit MLE via IRLS (Fisher scoring)
+  - Marginal effects: average (AME), at-means (MEM), at-representative (MER) with delta-method SEs
+  - `odds_ratio()`, `classification_table()`, McFadden/AIC/BIC fit statistics
+- **CrossSectionData** container with `diagnose()` / `fix()` and direct estimation dispatch
+
 ### Panel Models
 - **Panel VAR (PVAR)** - GMM estimation for dynamic panel data:
   - First-difference GMM (Arellano & Bond 1991) and System GMM (Blundell & Bond 1998)
@@ -93,9 +105,14 @@ Pkg.add("MacroEconometricModels")
   - Diagnostics: Bacon decomposition (Goodman-Bacon 2021), pre-trend testing, negative weight checks
   - HonestDiD sensitivity analysis with relative magnitudes bounds and breakdown values (Rambachan & Roth 2023)
 - **Event Study LP** - Local projection event study for panel data:
-  - LP-DiD clean-control estimator (Dube et al. 2023) with panel fixed effects
+  - Switching indicator treatment with time-only FE (Acemoglu et al. 2019)
   - Flexible lead/lag window specification with clustered standard errors
   - Interactive D3.js event-study plots with confidence bands
+- **LP-DiD** - Full-featured LP-DiD estimator (Dube, Girardi, Jordà & Taylor 2025):
+  - Clean control samples (CCS): absorbing, non-absorbing, one-off treatment
+  - Pre-mean differencing (PMD), IPW reweighting, nocomp restriction
+  - Pooled post-treatment and pre-treatment estimates
+  - `panel_lag`, `panel_lead`, `panel_diff` for within-group transformations
 
 ### DSGE
 - **Model specification** - `@dsge` macro with declarative syntax for parameters, variables, shocks, and equilibrium equations
@@ -106,7 +123,7 @@ Pkg.add("MacroEconometricModels")
 - **Constrained solvers** - Auto-detect PATH (MCP, binding bounds/ZLB; Ferris & Munson 1999) or Ipopt (NLP, nonlinear inequalities) via JuMP extensions
 - **Perfect foresight** - Newton solver on stacked system with block-tridiagonal Jacobian; optional PATH/Ipopt constraints
 - **OccBin** - Occasionally binding constraints via piecewise-linear regime switching (Guerrieri & Iacoviello 2015)
-- **Simulation & IRF** - `simulate`, `irf`, `fevd` for linear, pruned higher-order, and projection solutions
+- **Simulation & IRF** - `simulate`, `irf`, `fevd` for linear, pruned higher-order, and projection solutions; Bayesian posterior credible bands (dual 68%/90%) via `irf(::BayesianDSGE)`, `fevd(::BayesianDSGE)`, `simulate(::BayesianDSGE)`
 - **Analytical moments** - Lyapunov equation for unconditional covariance; `analytical_moments` for theoretical autocovariance
 - **GMM Estimation** - IRF matching, Euler equation GMM, SMM, analytical GMM via `estimate_dsge`
 - **Bayesian Estimation** - Sequential Monte Carlo (SMC with adaptive tempering), SMC² with particle filter likelihood, random-walk Metropolis-Hastings; delayed acceptance for accelerated sampling; nonlinear particle filter for higher-order solutions via `estimate_dsge_bayes`
@@ -157,7 +174,8 @@ Pkg.add("MacroEconometricModels")
 
 ### Hypothesis Tests
 - **Unit Root Tests** - ADF, KPSS, Phillips-Perron, Zivot-Andrews, Ng-Perron (MZa, MZt, MSB, MPT)
-- **Cointegration** - Johansen test (trace and max-eigenvalue)
+- **Advanced Unit Root** - Fourier ADF/KPSS (Enders & Lee 2012), DF-GLS/ERS (Elliott, Rothenberg & Stock 1996), LM unit root with 0/1/2 breaks (Lee & Strazicich 2003, 2013), two-break ADF (Narayan & Popp 2010)
+- **Cointegration** - Johansen test (trace and max-eigenvalue), Gregory-Hansen (1996) test with structural break (level shift, trend, regime)
 - **Structural Breaks** - Andrews (1993) SupWald/SupLM/SupLR with 9 test variants; Bai-Perron (1998) multiple break detection via dynamic programming with BIC/LWZ/sequential selection; factor break tests — Breitung-Eickmeier (2011), Chen-Dolado-Gonzalo (2014), Han-Inoue (2015)
 - **Panel Unit Root** - Bai-Ng (2004) PANIC with factor-adjusted pooled/individual tests; Pesaran (2007) CIPS with cross-sectional augmentation; Moon-Perron (2004) factor-adjusted t-statistics; `panel_unit_root_summary()` battery
 - **Granger Causality** - Pairwise and block Wald tests, all-pairs matrix
@@ -177,7 +195,7 @@ Pkg.add("MacroEconometricModels")
 
 ### Data Management
 - **Typed containers** - `TimeSeriesData`, `PanelData`, `CrossSectionData` with variable names, frequency, transformation codes, and descriptions
-- **Built-in datasets** - FRED-MD (126 monthly variables), FRED-QD (245 quarterly variables), and Penn World Table (38 OECD countries, 1950–2023 balanced panel)
+- **Built-in datasets** - FRED-MD (126 monthly variables), FRED-QD (245 quarterly variables), Penn World Table (38 OECD countries, 1950–2023), DDCG democracy-GDP (184 countries, 1960–2010; Acemoglu et al. 2019), and mpdta minimum wage panel (500 US counties, 2003–2007; Callaway & Sant'Anna 2021)
 - **Data diagnostics** - `diagnose()` scans for NaN/Inf/constant columns; `fix()` cleans via listwise deletion, interpolation, or mean imputation
 - **FRED transformations** - `apply_tcode()` / `inverse_tcode()` for all 7 FRED transformation codes
 - **Filtering** - `apply_filter()` applies HP, Hamilton, BN, BK, or boosted HP per-variable to `TimeSeriesData` and `PanelData`
@@ -258,8 +276,10 @@ Full documentation available at [https://FriedmanJP.github.io/MacroEconometricMo
 
 ### Difference-in-Differences
 
+- Acemoglu, Daron, Suresh Naidu, Pascual Restrepo, and James A. Robinson. 2019. "Democracy Does Cause Growth." *Journal of Political Economy* 127 (1): 47–100. [https://doi.org/10.1086/700936](https://doi.org/10.1086/700936)
 - Borusyak, Kirill, Xavier Jaravel, and Jann Spiess. 2024. "Revisiting Event-Study Designs: Robust and Efficient Estimation." *Review of Economic Studies* 91 (6): 3253–3285. [https://doi.org/10.1093/restud/rdae007](https://doi.org/10.1093/restud/rdae007)
 - Callaway, Brantly, and Pedro H. C. Sant'Anna. 2021. "Difference-in-Differences with Multiple Time Periods." *Journal of Econometrics* 225 (2): 200–230. [https://doi.org/10.1016/j.jeconom.2020.12.001](https://doi.org/10.1016/j.jeconom.2020.12.001)
+- Dube, Arindrajit, Daniele Girardi, Óscar Jordà, and Alan M. Taylor. 2025. "A Local Projections Approach to Difference-in-Differences." *Journal of Applied Econometrics*. [https://doi.org/10.1002/jae.3117](https://doi.org/10.1002/jae.3117)
 - de Chaisemartin, Clement, and Xavier D'Haultfoeuille. 2020. "Two-Way Fixed Effects Estimators with Heterogeneous Treatment Effects." *American Economic Review* 110 (9): 2964–2996. [https://doi.org/10.1257/aer.20181169](https://doi.org/10.1257/aer.20181169)
 - Goodman-Bacon, Andrew. 2021. "Difference-in-Differences with Variation in Treatment Timing." *Journal of Econometrics* 225 (2): 254–277. [https://doi.org/10.1016/j.jeconom.2021.03.014](https://doi.org/10.1016/j.jeconom.2021.03.014)
 - Rambachan, Ashesh, and Jonathan Roth. 2023. "A More Credible Approach to Parallel Trends." *Review of Economic Studies* 90 (5): 2555–2591. [https://doi.org/10.1093/restud/rdad018](https://doi.org/10.1093/restud/rdad018)
@@ -303,6 +323,11 @@ Full documentation available at [https://FriedmanJP.github.io/MacroEconometricMo
 - Dickey, David A., and Wayne A. Fuller. 1979. "Distribution of the Estimators for Autoregressive Time Series with a Unit Root." *Journal of the American Statistical Association* 74 (366): 427–431. [https://doi.org/10.1080/01621459.1979.10482531](https://doi.org/10.1080/01621459.1979.10482531)
 - Johansen, Søren. 1991. "Estimation and Hypothesis Testing of Cointegration Vectors in Gaussian Vector Autoregressive Models." *Econometrica* 59 (6): 1551–1580. [https://doi.org/10.2307/2938278](https://doi.org/10.2307/2938278)
 - Kwiatkowski, Denis, Peter C. B. Phillips, Peter Schmidt, and Yongcheol Shin. 1992. "Testing the Null Hypothesis of Stationarity Against the Alternative of a Unit Root." *Journal of Econometrics* 54 (1–3): 159–178. [https://doi.org/10.1016/0304-4076(92)90104-Y](https://doi.org/10.1016/0304-4076(92)90104-Y)
+- Elliott, Graham, Thomas J. Rothenberg, and James H. Stock. 1996. "Efficient Tests for an Autoregressive Unit Root." *Econometrica* 64 (4): 813–836. [https://doi.org/10.2307/2171846](https://doi.org/10.2307/2171846)
+- Enders, Walter, and Junsoo Lee. 2012. "A Unit Root Test Using a Fourier Series to Approximate Smooth Breaks." *Oxford Bulletin of Economics and Statistics* 74 (4): 574–599. [https://doi.org/10.1111/j.1468-0084.2011.00662.x](https://doi.org/10.1111/j.1468-0084.2011.00662.x)
+- Gregory, Allan W., and Bruce E. Hansen. 1996. "Residual-Based Tests for Cointegration in Models with Regime Shifts." *Journal of Econometrics* 70 (1): 99–126. [https://doi.org/10.1016/0304-4076(69)41685-7](https://doi.org/10.1016/0304-4076(69)41685-7)
+- Lee, Junsoo, and Mark C. Strazicich. 2003. "Minimum Lagrange Multiplier Unit Root Test with Two Structural Breaks." *Review of Economics and Statistics* 85 (4): 1082–1089. [https://doi.org/10.1162/003465303772815961](https://doi.org/10.1162/003465303772815961)
+- Narayan, Paresh Kumar, and Stephan Popp. 2010. "A New Unit Root Test with Two Structural Breaks in Level and Slope at Unknown Time." *Journal of Applied Statistics* 47 (12): 1425–1438. [https://doi.org/10.1080/02664760903039883](https://doi.org/10.1080/02664760903039883)
 - Ng, Serena, and Pierre Perron. 2001. "Lag Length Selection and the Construction of Unit Root Tests with Good Size and Power." *Econometrica* 69 (6): 1519–1554. [https://doi.org/10.1111/1468-0262.00256](https://doi.org/10.1111/1468-0262.00256)
 
 ### Structural Breaks
@@ -326,6 +351,12 @@ Full documentation available at [https://FriedmanJP.github.io/MacroEconometricMo
 - Feenstra, Robert C., Robert Inklaar, and Marcel P. Timmer. 2015. "The Next Generation of the Penn World Table." *American Economic Review* 105 (10): 3150–3182. [https://doi.org/10.1257/aer.20130954](https://doi.org/10.1257/aer.20130954)
 - McCracken, Michael W., and Serena Ng. 2016. "FRED-MD: A Monthly Database for Macroeconomic Research." *Journal of Business & Economic Statistics* 34 (4): 574–589. [https://doi.org/10.1080/07350015.2015.1086655](https://doi.org/10.1080/07350015.2015.1086655)
 - McCracken, Michael W., and Serena Ng. 2020. "FRED-QD: A Quarterly Database for Macroeconomic Research." *Federal Reserve Bank of St. Louis Working Paper* 2020-005. [https://doi.org/10.20955/wp.2020.005](https://doi.org/10.20955/wp.2020.005)
+
+### Cross-Sectional Regression
+
+- White, Halbert. 1980. "A Heteroskedasticity-Consistent Covariance Matrix Estimator and a Direct Test for Heteroskedasticity." *Econometrica* 48 (4): 817–838. [https://doi.org/10.2307/1912934](https://doi.org/10.2307/1912934)
+- MacKinnon, James G., and Halbert White. 1985. "Some Heteroskedasticity-Consistent Covariance Matrix Estimators with Improved Finite Sample Properties." *Journal of Econometrics* 29 (3): 305–325. [https://doi.org/10.1016/0304-4076(85)90158-7](https://doi.org/10.1016/0304-4076(85)90158-7)
+- Wooldridge, Jeffrey M. 2010. *Econometric Analysis of Cross Section and Panel Data*. 2nd ed. Cambridge, MA: MIT Press. ISBN 978-0-262-23258-6.
 
 ### Nowcasting
 

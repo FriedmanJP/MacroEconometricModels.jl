@@ -203,10 +203,37 @@ function bai_perron_test(y::AbstractVector{T}, X::AbstractMatrix{T};
         regime_ses[i] = _segment_se(y, X, s, e)
     end
 
-    # Break date confidence intervals (rough: ±10% of n)
-    ci_width = max(1, ceil(Int, 0.10 * n))
+    # Break date confidence intervals (Bai 1997)
     break_cis = Vector{Tuple{Int,Int}}(undef, n_breaks)
     for i in 1:n_breaks
+        seg_before = i == 1 ? (1, break_dates[1]) : (break_dates[i-1]+1, break_dates[i])
+        seg_after = i == n_breaks ? (break_dates[i]+1, n) : (break_dates[i]+1, break_dates[i+1])
+
+        # Coefficient change at break
+        delta_coef = regime_coefs[i+1] - regime_coefs[i]
+
+        # Moment matrix Q = X'X/n in neighborhood of break
+        n_before = seg_before[2] - seg_before[1] + 1
+        n_after = seg_after[2] - seg_after[1] + 1
+        X_before = @view X[seg_before[1]:seg_before[2], :]
+        X_after = @view X[seg_after[1]:seg_after[2], :]
+        Q_hat = (X_before'X_before / n_before + X_after'X_after / n_after) / 2
+
+        # Residual variance at break
+        y_before = @view y[seg_before[1]:seg_before[2]]
+        y_after = @view y[seg_after[1]:seg_after[2]]
+        r_before = y_before - X_before * regime_coefs[i]
+        r_after = y_after - X_after * regime_coefs[i+1]
+        sigma2 = (dot(r_before, r_before) + dot(r_after, r_after)) / (n_before + n_after - 2*k)
+
+        # CI width: Bai (1997) formula
+        dQd = dot(delta_coef, Q_hat * delta_coef)
+        if dQd > zero(T)
+            ci_width = ceil(Int, T(1.96)^2 * sigma2 / dQd)
+        else
+            ci_width = max(1, ceil(Int, 0.10 * n))
+        end
+
         lo = max(1, break_dates[i] - ci_width)
         hi = min(n, break_dates[i] + ci_width)
         break_cis[i] = (lo, hi)

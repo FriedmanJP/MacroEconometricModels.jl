@@ -405,6 +405,122 @@ struct FactorBreakResult{T<:AbstractFloat} <: AbstractUnitRootTest
     n_vars::Int
 end
 
+"""
+    FourierADFResult{T} <: AbstractUnitRootTest
+
+Fourier ADF unit root test result (Enders & Lee 2012).
+"""
+struct FourierADFResult{T<:AbstractFloat} <: AbstractUnitRootTest
+    statistic::T
+    pvalue::T
+    frequency::Int
+    f_statistic::T
+    f_pvalue::T
+    lags::Int
+    regression::Symbol
+    critical_values::Dict{Int,T}
+    f_critical_values::Dict{Int,T}
+    nobs::Int
+end
+
+"""
+    FourierKPSSResult{T} <: AbstractUnitRootTest
+
+Fourier KPSS stationarity test result (Becker, Enders & Lee 2006).
+"""
+struct FourierKPSSResult{T<:AbstractFloat} <: AbstractUnitRootTest
+    statistic::T
+    pvalue::T
+    frequency::Int
+    f_statistic::T
+    f_pvalue::T
+    regression::Symbol
+    critical_values::Dict{Int,T}
+    f_critical_values::Dict{Int,T}
+    bandwidth::Int
+    nobs::Int
+end
+
+"""
+    DFGLSResult{T} <: AbstractUnitRootTest
+
+DF-GLS unit root test result (Elliott, Rothenberg & Stock 1996).
+Also reports ERS Pt statistic and Ng-Perron MGLS statistics.
+"""
+struct DFGLSResult{T<:AbstractFloat} <: AbstractUnitRootTest
+    statistic::T
+    pvalue::T
+    pt_statistic::T
+    pt_pvalue::T
+    MZa::T
+    MZt::T
+    MSB::T
+    MPT::T
+    lags::Int
+    regression::Symbol
+    critical_values::Dict{Int,T}
+    pt_critical_values::Dict{Int,T}
+    mgls_critical_values::Dict{Symbol,Dict{Int,T}}
+    nobs::Int
+end
+
+"""
+    LMUnitRootResult{T} <: AbstractUnitRootTest
+
+LM unit root test result (Schmidt-Phillips 1992; Lee-Strazicich 2003, 2013).
+"""
+struct LMUnitRootResult{T<:AbstractFloat} <: AbstractUnitRootTest
+    statistic::T
+    pvalue::T
+    breaks::Int
+    break_dates::Vector{Int}
+    break_fractions::Vector{T}
+    lags::Int
+    regression::Symbol
+    critical_values::Dict{Int,T}
+    nobs::Int
+end
+
+"""
+    ADF2BreakResult{T} <: AbstractUnitRootTest
+
+ADF unit root test with two structural breaks (Narayan & Popp 2010).
+"""
+struct ADF2BreakResult{T<:AbstractFloat} <: AbstractUnitRootTest
+    statistic::T
+    pvalue::T
+    break1::Int
+    break2::Int
+    break1_fraction::T
+    break2_fraction::T
+    lags::Int
+    model::Symbol
+    critical_values::Dict{Int,T}
+    nobs::Int
+end
+
+"""
+    GregoryHansenResult{T} <: AbstractUnitRootTest
+
+Gregory-Hansen cointegration test with structural break (Gregory & Hansen 1996).
+"""
+struct GregoryHansenResult{T<:AbstractFloat} <: AbstractUnitRootTest
+    adf_statistic::T
+    adf_pvalue::T
+    zt_statistic::T
+    zt_pvalue::T
+    za_statistic::T
+    za_pvalue::T
+    adf_break::Int
+    zt_break::Int
+    za_break::Int
+    model::Symbol
+    n_regressors::Int
+    adf_critical_values::Dict{Int,T}
+    za_critical_values::Dict{Int,T}
+    nobs::Int
+end
+
 # =============================================================================
 # StatsAPI Interface for Unit Root Tests
 # =============================================================================
@@ -455,3 +571,25 @@ StatsAPI.pvalue(r::PesaranCIPSResult) = r.pvalue
 # For MoonPerron, return t_a p-value as primary
 StatsAPI.pvalue(r::MoonPerronResult) = r.pvalue_a
 StatsAPI.pvalue(r::FactorBreakResult) = r.pvalue
+
+# New unit root test types
+StatsAPI.nobs(r::FourierADFResult) = r.nobs
+StatsAPI.nobs(r::FourierKPSSResult) = r.nobs
+StatsAPI.nobs(r::DFGLSResult) = r.nobs
+StatsAPI.nobs(r::LMUnitRootResult) = r.nobs
+StatsAPI.nobs(r::ADF2BreakResult) = r.nobs
+StatsAPI.nobs(r::GregoryHansenResult) = r.nobs
+
+StatsAPI.dof(r::FourierADFResult) = r.lags + 2 + (r.regression == :trend ? 1 : 0)
+StatsAPI.dof(r::FourierKPSSResult) = r.regression == :constant ? 3 : 4
+StatsAPI.dof(r::DFGLSResult) = r.lags + (r.regression == :constant ? 1 : 2)
+StatsAPI.dof(r::LMUnitRootResult) = r.lags + r.breaks * 2
+StatsAPI.dof(r::ADF2BreakResult) = r.lags + (r.model == :level ? 4 : 8)
+StatsAPI.dof(r::GregoryHansenResult) = r.n_regressors
+
+StatsAPI.pvalue(r::FourierADFResult) = r.pvalue
+StatsAPI.pvalue(r::FourierKPSSResult) = r.pvalue
+StatsAPI.pvalue(r::DFGLSResult) = r.pvalue
+StatsAPI.pvalue(r::LMUnitRootResult) = r.pvalue
+StatsAPI.pvalue(r::ADF2BreakResult) = r.pvalue
+StatsAPI.pvalue(r::GregoryHansenResult) = r.adf_pvalue

@@ -66,22 +66,26 @@ function ngperron_test(y::AbstractVector{T};
     y_qd = copy(y)
     y_qd[2:end] = y[2:end] - alpha * y[1:end-1]
 
-    # Deterministic regressors (quasi-differenced)
+    # Deterministic regressors: ORIGINAL (for detrending) and quasi-differenced (for GLS)
     if regression == :constant
-        z = ones(T, n)
-        z[2:end] .= 1 - alpha
-        Z = reshape(z, :, 1)
+        Z_orig = ones(T, n)
+        z_qd = ones(T, n)
+        z_qd[2:end] .= 1 - alpha
+        Z_qd = reshape(z_qd, :, 1)
+        Z_orig_mat = reshape(Z_orig, :, 1)
     else  # :trend
+        Z_orig = hcat(ones(T, n), T.(1:n))
         z1 = ones(T, n)
         z1[2:end] .= 1 - alpha
         z2 = T.(1:n)
         z2[2:end] = z2[2:end] - alpha * z2[1:end-1]
-        Z = hcat(z1, z2)
+        Z_qd = hcat(z1, z2)
+        Z_orig_mat = Z_orig
     end
 
-    # GLS detrending
-    delta = Z \ y_qd
-    y_d = y - Z * (Z \ y)  # Detrended series using full Z
+    # GLS detrending: coefficients from QD regression, applied to original Z
+    delta = Z_qd \ y_qd
+    y_d = y - Z_orig_mat * delta
 
     # Compute statistics
     # Autoregressive spectral density estimate at frequency zero

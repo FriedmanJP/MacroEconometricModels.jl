@@ -98,9 +98,9 @@ function adf_test(y::AbstractVector{T};
     # ADF test statistic
     stat = gamma / gamma_se
 
-    # Critical values and p-value
-    cv = adf_critical_values(regression, nobs, T)
-    pval = adf_pvalue(stat, regression, nobs)
+    # Critical values and p-value (lag-adjusted response surface)
+    cv = adf_critical_values(regression, nobs, p, T)
+    pval = adf_pvalue(stat, regression, nobs, p)
 
     ADFResult(stat, pval, p, regression, cv, nobs)
 end

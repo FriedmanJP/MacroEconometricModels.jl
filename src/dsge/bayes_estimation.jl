@@ -556,6 +556,231 @@ function posterior_predictive(result::BayesianDSGE{T}, n_sim::Int;
 end
 
 # =============================================================================
+# Bayesian DSGE IRF — posterior credible bands
+# =============================================================================
+
+"""
+    irf(result::BayesianDSGE{T}, horizon::Int;
+        n_draws::Int=200,
+        quantiles::Vector{<:Real}=[0.05, 0.16, 0.84, 0.95],
+        solver::Symbol=:gensys,
+        solver_kwargs::NamedTuple=NamedTuple(),
+        rng::AbstractRNG=Random.default_rng()) → BayesianImpulseResponse{T}
+
+Compute Bayesian impulse responses with posterior credible bands.
+
+For each of `n_draws` randomly selected posterior parameter draws, re-solves
+the DSGE model and computes analytical IRFs. Reports pointwise posterior median
+and quantile bands.
+
+Default quantiles give dual 68% (16th–84th) and 90% (5th–95th) credible bands.
+
+# References
+- Herbst, E. & Schorfheide, F. (2015). *Bayesian Estimation of DSGE Models*.
+  Princeton University Press.
+"""
+function irf(result::BayesianDSGE{T}, horizon::Int;
+             n_draws::Int=200,
+             quantiles::Vector{<:Real}=T[0.05, 0.16, 0.84, 0.95],
+             solver::Symbol=:gensys,
+             solver_kwargs::NamedTuple=NamedTuple(),
+             rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    spec = result.spec
+    n_draws_total = size(result.theta_draws, 1)
+    n_sim = min(n_draws, n_draws_total)
+
+    # Determine output dimensions from a reference IRF at the posterior mode solution
+    ref_irf = irf(result.solution, horizon)
+    n_vars = length(ref_irf.variables)
+    n_shocks = length(ref_irf.shocks)
+    var_names = ref_irf.variables
+    shock_names = ref_irf.shocks
+
+    # Collect IRF arrays from posterior draws
+    all_irfs = Vector{Array{T,3}}()
+    draw_indices = randperm(rng, n_draws_total)[1:n_sim]
+
+    for idx in draw_indices
+        theta = Vector{T}(result.theta_draws[idx, :])
+        try
+            _suppress_warnings() do
+                sol, _ = _build_solution_at_theta(spec, result.param_names, theta,
+                                                   spec.endog, nothing, solver, solver_kwargs)
+                if sol isa DSGESolution && (!is_determined(sol))
+                    return  # skip indeterminate
+                end
+                irf_i = irf(sol, horizon)
+                push!(all_irfs, irf_i.values)
+            end
+        catch
+            continue
+        end
+    end
+
+    n_valid = length(all_irfs)
+    n_valid == 0 && error("All posterior draws failed to produce valid IRFs")
+
+    # Stack into (n_valid x H x n_vars x n_shocks) array
+    stacked = zeros(T, n_valid, horizon, n_vars, n_shocks)
+    for (s, arr) in enumerate(all_irfs)
+        stacked[s, :, :, :] = arr
+    end
+
+    # Compute quantiles
+    q_vec = T.(quantiles)
+    irf_q, irf_m = compute_posterior_quantiles(stacked, q_vec)
+
+    BayesianImpulseResponse{T}(irf_q, irf_m, horizon, var_names, shock_names, q_vec, stacked)
+end
+
+# =============================================================================
+# Bayesian DSGE FEVD — posterior credible bands
+# =============================================================================
+
+"""
+    fevd(result::BayesianDSGE{T}, horizon::Int;
+         n_draws::Int=200,
+         quantiles::Vector{<:Real}=[0.05, 0.16, 0.84, 0.95],
+         solver::Symbol=:gensys,
+         solver_kwargs::NamedTuple=NamedTuple(),
+         rng::AbstractRNG=Random.default_rng()) → BayesianFEVD{T}
+
+Compute Bayesian forecast error variance decomposition with posterior credible bands.
+
+For each of `n_draws` randomly selected posterior parameter draws, re-solves
+the DSGE model and computes FEVD proportions. Reports pointwise posterior median
+and quantile bands.
+
+Default quantiles give dual 68% (16th–84th) and 90% (5th–95th) credible bands.
+"""
+function fevd(result::BayesianDSGE{T}, horizon::Int;
+              n_draws::Int=200,
+              quantiles::Vector{<:Real}=T[0.05, 0.16, 0.84, 0.95],
+              solver::Symbol=:gensys,
+              solver_kwargs::NamedTuple=NamedTuple(),
+              rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    spec = result.spec
+    n_draws_total = size(result.theta_draws, 1)
+    n_sim = min(n_draws, n_draws_total)
+
+    # Reference dimensions from posterior mode
+    ref_fevd = fevd(result.solution, horizon)
+    n_vars = length(ref_fevd.variables)
+    n_shocks = length(ref_fevd.shocks)
+    var_names = ref_fevd.variables
+    shock_names = ref_fevd.shocks
+
+    # Collect FEVD proportions from posterior draws
+    all_fevds = Vector{Array{T,3}}()
+    draw_indices = randperm(rng, n_draws_total)[1:n_sim]
+
+    for idx in draw_indices
+        theta = Vector{T}(result.theta_draws[idx, :])
+        try
+            _suppress_warnings() do
+                sol, _ = _build_solution_at_theta(spec, result.param_names, theta,
+                                                   spec.endog, nothing, solver, solver_kwargs)
+                if sol isa DSGESolution && (!is_determined(sol))
+                    return
+                end
+                fevd_i = fevd(sol, horizon)
+                push!(all_fevds, fevd_i.proportions)
+            end
+        catch
+            continue
+        end
+    end
+
+    n_valid = length(all_fevds)
+    n_valid == 0 && error("All posterior draws failed to produce valid FEVDs")
+
+    # Stack: FEVD proportions are (n_vars x n_shocks x horizon)
+    # Rearrange to (n_valid x horizon x n_vars x n_shocks) for quantile computation
+    stacked = zeros(T, n_valid, horizon, n_vars, n_shocks)
+    for (s, arr) in enumerate(all_fevds)
+        for h in 1:horizon, v in 1:n_vars, sh in 1:n_shocks
+            stacked[s, h, v, sh] = arr[v, sh, h]
+        end
+    end
+
+    q_vec = T.(quantiles)
+    fevd_q, fevd_m = compute_posterior_quantiles(stacked, q_vec)
+
+    BayesianFEVD{T}(fevd_q, fevd_m, horizon, var_names, shock_names, q_vec)
+end
+
+# =============================================================================
+# Bayesian DSGE Simulation — posterior predictive bands
+# =============================================================================
+
+"""
+    simulate(result::BayesianDSGE{T}, T_periods::Int;
+             n_draws::Int=200,
+             quantiles::Vector{<:Real}=[0.05, 0.16, 0.84, 0.95],
+             solver::Symbol=:gensys,
+             solver_kwargs::NamedTuple=NamedTuple(),
+             rng::AbstractRNG=Random.default_rng()) → BayesianDSGESimulation{T}
+
+Simulate from the posterior predictive distribution with credible bands.
+
+For each of `n_draws` randomly selected posterior parameter draws, re-solves
+the DSGE model and simulates `T_periods` forward. Reports pointwise posterior
+median and quantile bands.
+
+Default quantiles give dual 68% (16th–84th) and 90% (5th–95th) credible bands.
+"""
+function simulate(result::BayesianDSGE{T}, T_periods::Int;
+                   n_draws::Int=200,
+                   quantiles::Vector{<:Real}=T[0.05, 0.16, 0.84, 0.95],
+                   solver::Symbol=:gensys,
+                   solver_kwargs::NamedTuple=NamedTuple(),
+                   rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    spec = result.spec
+    n_draws_total = size(result.theta_draws, 1)
+    n_sim = min(n_draws, n_draws_total)
+
+    # Determine n_vars from spec
+    n_vars = spec.augmented ? length(spec.original_endog) : spec.n_endog
+    var_names = spec.augmented ? [string(s) for s in spec.original_endog] :
+                                 [string(s) for s in spec.endog]
+
+    # Collect simulation paths
+    all_paths_list = Vector{Matrix{T}}()
+    draw_indices = randperm(rng, n_draws_total)[1:n_sim]
+
+    for idx in draw_indices
+        theta = Vector{T}(result.theta_draws[idx, :])
+        try
+            _suppress_warnings() do
+                sol, _ = _build_solution_at_theta(spec, result.param_names, theta,
+                                                   spec.endog, nothing, solver, solver_kwargs)
+                if sol isa DSGESolution && (!is_determined(sol))
+                    return
+                end
+                sim = simulate(sol, T_periods; rng=rng)
+                push!(all_paths_list, sim)
+            end
+        catch
+            continue
+        end
+    end
+
+    n_valid = length(all_paths_list)
+    n_valid == 0 && error("All posterior draws failed to produce valid simulations")
+
+    # Stack into (n_valid x T_periods x n_vars)
+    stacked = zeros(T, n_valid, T_periods, n_vars)
+    for (s, path) in enumerate(all_paths_list)
+        stacked[s, :, :] = path
+    end
+
+    q_vec = T.(quantiles)
+    sim_q, sim_m = compute_posterior_quantiles(stacked, q_vec)
+
+    BayesianDSGESimulation{T}(sim_q, sim_m, T_periods, var_names, q_vec, stacked)
+end
+
+# =============================================================================
 # StatsAPI
 # =============================================================================
 
@@ -621,4 +846,12 @@ function Base.show(io::IO, result::BayesianDSGE{T}) where {T}
                           "Post Mean", "Post Std", "2.5%", "97.5%"],
             alignment=[:l, :l, :r, :r, :r, :r, :r, :r])
     end
+end
+
+function Base.show(io::IO, result::BayesianDSGESimulation{T}) where {T}
+    println(io, "BayesianDSGESimulation{$T}")
+    println(io, "  Periods:    $(result.T_periods)")
+    println(io, "  Variables:  $(length(result.variables))")
+    println(io, "  Draws:      $(size(result.all_paths, 1))")
+    println(io, "  Quantiles:  $(result.quantile_levels)")
 end

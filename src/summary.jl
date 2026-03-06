@@ -447,6 +447,13 @@ function report(x::DSGEEstimation)
     show(stdout, x.solution)
 end
 report(x::BayesianDSGE) = show(stdout, x)
+report(x::BayesianDSGESimulation) = show(stdout, x)
+
+# Cross-sectional models
+report(m::RegModel) = show(stdout, m)
+report(m::LogitModel) = show(stdout, m)
+report(m::ProbitModel) = show(stdout, m)
+report(me::MarginalEffects) = show(stdout, me)
 
 
 # =============================================================================

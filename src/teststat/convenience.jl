@@ -62,6 +62,12 @@ function unit_root_summary(y::AbstractVector{T};
         elseif test == :ngperron
             reg = regression == :none ? :constant : regression
             results[:ngperron] = ngperron_test(y; regression=reg)
+        elseif test == :fourier_adf
+            reg = regression == :none ? :constant : regression
+            results[:fourier_adf] = fourier_adf_test(y; regression=reg)
+        elseif test == :dfgls
+            reg = regression == :none ? :constant : regression
+            results[:dfgls] = dfgls_test(y; regression=reg)
         end
     end
 
@@ -123,8 +129,14 @@ function test_all_variables(Y::AbstractMatrix{T};
         za_test
     elseif test == :ngperron
         ngperron_test
+    elseif test == :fourier_adf
+        fourier_adf_test
+    elseif test == :dfgls
+        dfgls_test
+    elseif test == :lm_unitroot
+        lm_unitroot_test
     else
-        throw(ArgumentError("Unknown test: $test. Use :adf, :kpss, :pp, :za, or :ngperron"))
+        throw(ArgumentError("Unknown test: $test. Use :adf, :kpss, :pp, :za, :ngperron, :fourier_adf, :dfgls, or :lm_unitroot"))
     end
 
     for i in 1:n

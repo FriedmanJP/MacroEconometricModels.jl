@@ -604,9 +604,9 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         doi="10.1257/aer.20181169", isbn="", publisher="", entry_type=:article),
     :dube_girardi_jorda_taylor2023 => (key=:dube_girardi_jorda_taylor2023,
         authors="Dube, Arindrajit and Girardi, Daniele and Jord\u00e0, \u00d2scar and Taylor, Alan M.",
-        year=2023, title="A Local Projections Approach to Difference-in-Differences Event Studies",
-        journal="NBER Working Paper", volume="31184", issue="", pages="",
-        doi="10.3386/w31184", isbn="", publisher="NBER", entry_type=:techreport),
+        year=2025, title="A Local Projections Approach to Difference-in-Differences",
+        journal="Journal of Applied Econometrics", volume="", issue="", pages="",
+        doi="10.1002/jae.3117", isbn="", publisher="", entry_type=:article),
     :sun_abraham2021 => (key=:sun_abraham2021,
         authors="Sun, Liyang and Abraham, Sarah", year=2021,
         title="Estimating Dynamic Treatment Effects in Event Studies with Heterogeneous Treatment Effects",
@@ -743,6 +743,23 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Tests for Parameter Instability in Dynamic Factor Models",
         journal="Econometric Theory", volume="31", issue="5", pages="1117--1152",
         doi="10.1017/S0266466614000413", isbn="", publisher="", entry_type=:article),
+    # --- Cross-Sectional Models ---
+    :wooldridge2010 => (key=:wooldridge2010, authors="Wooldridge, Jeffrey M.", year=2010,
+        title="Econometric Analysis of Cross Section and Panel Data", journal="",
+        volume="", issue="", pages="", doi="",
+        isbn="978-0-262-23258-6", publisher="MIT Press", entry_type=:book),
+    :cameron_trivedi2005 => (key=:cameron_trivedi2005, authors="Cameron, A. Colin and Trivedi, Pravin K.", year=2005,
+        title="Microeconometrics: Methods and Applications", journal="",
+        volume="", issue="", pages="", doi="",
+        isbn="978-0-521-84805-3", publisher="Cambridge University Press", entry_type=:book),
+    :mcfadden1974 => (key=:mcfadden1974, authors="McFadden, Daniel", year=1974,
+        title="Conditional Logit Analysis of Qualitative Choice Behavior",
+        journal="Frontiers in Econometrics", volume="", issue="", pages="105--142",
+        doi="", isbn="", publisher="Academic Press", entry_type=:incollection),
+    :staiger_stock1997 => (key=:staiger_stock1997, authors="Staiger, Douglas and Stock, James H.", year=1997,
+        title="Instrumental Variables Regression with Weak Instruments",
+        journal="Econometrica", volume="65", issue="3", pages="557--586",
+        doi="10.2307/2171753", isbn="", publisher="", entry_type=:article),
 )
 
 # --- Type/method → reference keys mapping ---
@@ -949,6 +966,7 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     # DiD / Event Study
     :DIDResult => [:callaway_santanna2021, :goodman_bacon2021],
     :EventStudyLP => [:jorda2005, :dube_girardi_jorda_taylor2023],
+    :LPDiDResult => [:dube_girardi_jorda_taylor2023, :jorda2005],
     :BaconDecomposition => [:goodman_bacon2021],
     :PretrendTestResult => [:callaway_santanna2021],
     :NegativeWeightResult => [:dechaisemartin_dhaultfoeuille2020],
@@ -981,6 +999,15 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :fred_md => [:mccracken_ng2016],
     :fred_qd => [:mccracken_ng2020],
     :pwt => [:feenstra_etal2015],
+    # Cross-sectional models
+    :RegModel => [:wooldridge2010, :white1980],
+    :LogitModel => [:wooldridge2010, :cameron_trivedi2005, :mcfadden1974],
+    :ProbitModel => [:wooldridge2010, :cameron_trivedi2005],
+    :MarginalEffects => [:cameron_trivedi2005],
+    :estimate_reg => [:wooldridge2010, :white1980],
+    :estimate_iv => [:wooldridge2010, :staiger_stock1997],
+    :estimate_logit => [:wooldridge2010, :cameron_trivedi2005, :mcfadden1974],
+    :estimate_probit => [:wooldridge2010, :cameron_trivedi2005],
 )
 
 # ICA method → additional ref keys (appended to ICASVARResult base refs)
@@ -1286,6 +1313,7 @@ refs(io::IO, ::PVARTestResult; kw...) = refs(io, _TYPE_REFS[:PVARTestResult]; kw
 # DiD / Event Study
 refs(io::IO, ::DIDResult; kw...) = refs(io, _TYPE_REFS[:DIDResult]; kw...)
 refs(io::IO, ::EventStudyLP; kw...) = refs(io, _TYPE_REFS[:EventStudyLP]; kw...)
+refs(io::IO, ::LPDiDResult; kw...) = refs(io, _TYPE_REFS[:LPDiDResult]; kw...)
 refs(io::IO, ::BaconDecomposition; kw...) = refs(io, _TYPE_REFS[:BaconDecomposition]; kw...)
 refs(io::IO, ::PretrendTestResult; kw...) = refs(io, _TYPE_REFS[:PretrendTestResult]; kw...)
 refs(io::IO, ::NegativeWeightResult; kw...) = refs(io, _TYPE_REFS[:NegativeWeightResult]; kw...)
@@ -1332,6 +1360,12 @@ refs(io::IO, ::MoonPerronResult; kw...) = refs(io, _TYPE_REFS[:MoonPerronResult]
 
 # Factor break types
 refs(io::IO, ::FactorBreakResult; kw...) = refs(io, _TYPE_REFS[:FactorBreakResult]; kw...)
+
+# Cross-sectional models
+refs(io::IO, m::RegModel; kw...) = refs(io, m.method == :iv ? [:wooldridge2010, :white1980, :staiger_stock1997] : [:wooldridge2010, :white1980]; kw...)
+refs(io::IO, ::LogitModel; kw...) = refs(io, _TYPE_REFS[:LogitModel]; kw...)
+refs(io::IO, ::ProbitModel; kw...) = refs(io, _TYPE_REFS[:ProbitModel]; kw...)
+refs(io::IO, ::MarginalEffects; kw...) = refs(io, _TYPE_REFS[:MarginalEffects]; kw...)
 
 # --- Convenience: stdout fallback ---
 function refs(x; kw...)

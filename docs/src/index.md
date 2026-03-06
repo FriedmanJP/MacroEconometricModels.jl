@@ -64,12 +64,12 @@
 
 - **Difference-in-Differences**: Five estimators — TWFE, Callaway-Sant'Anna (2021), Sun-Abraham (2021), Borusyak-Jaravel-Spiess (2024), de Chaisemartin-D'Haultfoeuille (2020); Bacon (2021) decomposition; pretrend tests; negative weight diagnostics; HonestDiD (Rambachan & Roth 2023) sensitivity analysis
 - **Event Study LP**: Local projection event study with staggered treatment, cluster-robust SEs
-- **LP-DiD**: Dube, Jorda & Taylor (2023) LP-DiD estimator combining LP with DiD identification
+- **LP-DiD**: Dube, Girardi, Jordà & Taylor (2025) LP-DiD estimator with clean control samples, PMD, and IPW reweighting
 
 **Hypothesis Tests**
 
-- **Unit root**: ADF, KPSS, Phillips-Perron, Zivot-Andrews, Ng-Perron (MZa, MZt, MSB, MPT)
-- **Cointegration**: Johansen trace and max-eigenvalue tests
+- **Unit root**: ADF, KPSS, Phillips-Perron, Zivot-Andrews, Ng-Perron, Fourier ADF/KPSS (Enders & Lee 2012; Becker, Enders & Lee 2006), DF-GLS/ERS (Elliott, Rothenberg & Stock 1996), LM unit root with 0/1/2 breaks (Schmidt-Phillips 1992; Lee-Strazicich 2003, 2013), two-break ADF (Narayan & Popp 2010)
+- **Cointegration**: Johansen trace and max-eigenvalue tests, Gregory-Hansen (1996) with regime shift
 - **Structural breaks**: Andrews (1993) SupWald/SupLM/SupLR with 9 test variants; Bai-Perron (1998) multiple break detection via dynamic programming with BIC/LWZ/sequential selection; factor break tests — Breitung-Eickmeier (2011), Chen-Dolado-Gonzalo (2014), Han-Inoue (2015)
 - **Panel unit root**: Bai-Ng (2004) PANIC with factor-adjusted pooled/individual tests; Pesaran (2007) CIPS with cross-sectional augmentation; Moon-Perron (2004) factor-adjusted t-statistics
 - **Granger causality**: pairwise Wald, block (multivariate), all-pairs matrix
@@ -293,6 +293,6 @@ Contributions are welcome! Please see the [GitHub repository](https://github.com
 ## Contents
 
 ```@contents
-Pages = ["data.md", "filters.md", "arima.md", "volatility.md", "manual.md", "bayesian.md", "vecm.md", "pvar.md", "lp.md", "factormodels.md", "favar.md", "dsge.md", "dsge_linear.md", "dsge_nonlinear.md", "dsge_constraints.md", "dsge_estimation.md", "did.md", "event_study.md", "innovation_accounting.md", "nowcast.md", "nongaussian.md", "tests.md", "tests_unitroot.md", "tests_breaks.md", "tests_panel.md", "tests_diagnostics.md", "plotting.md", "examples.md", "api.md", "api_types.md", "api_functions.md"]
+Pages = ["data.md", "filters.md", "arima.md", "volatility.md", "manual.md", "bayesian.md", "vecm.md", "pvar.md", "lp.md", "factormodels.md", "favar.md", "dsge.md", "dsge_linear.md", "dsge_nonlinear.md", "dsge_constraints.md", "dsge_estimation.md", "did.md", "event_study.md", "innovation_accounting.md", "nowcast.md", "nongaussian.md", "tests.md", "tests_unitroot.md", "tests_unitroot_advanced.md", "tests_breaks.md", "tests_panel.md", "tests_diagnostics.md", "plotting.md", "examples.md", "api.md", "api_types.md", "api_functions.md"]
 Depth = 2
 ```

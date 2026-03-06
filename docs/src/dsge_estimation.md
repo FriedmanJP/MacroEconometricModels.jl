@@ -55,7 +55,23 @@ result = estimate_dsge_bayes(spec, Y_data, [0.9, 0.01];
 report(result)
 ```
 
-**Recipe 4: Model comparison via Bayes factor**
+**Recipe 4: Bayesian IRFs with credible bands**
+
+```julia
+# Dual 68%/90% credible bands from posterior draws
+birf = irf(result, 20; n_draws=200)
+report(birf)
+plot_result(birf)
+```
+
+**Recipe 5: Bayesian FEVD with credible bands**
+
+```julia
+bfevd = fevd(result, 20; n_draws=200)
+report(bfevd)
+```
+
+**Recipe 6: Model comparison via Bayes factor**
 
 ```julia
 log_bf = bayes_factor(result1, result2)
@@ -400,6 +416,59 @@ Y_pred = posterior_predictive(result, 100; T_periods=200)
 
 `posterior_summary` returns a `Dict{Symbol, Dict{Symbol, T}}` with keys `:mean`, `:median`, `:std`, `:ci_lower` (2.5th percentile), and `:ci_upper` (97.5th percentile) for each parameter. `prior_posterior_table` returns a vector of named tuples suitable for tabular display, comparing prior and posterior moments side by side. `posterior_predictive` draws `n_sim` parameter vectors from the posterior, solves the model at each, and simulates forward, returning an `n_sim x T_periods x n_vars` array of simulated paths.
 
+### Posterior IRFs and FEVD (Herbst & Schorfheide 2015)
+
+Bayesian DSGE estimation quantifies parameter uncertainty. `irf` and `fevd` propagate this uncertainty into impulse responses and variance decompositions by re-solving the model at posterior parameter draws and computing pointwise credible bands.
+
+For each of `n_draws` randomly selected posterior draws, the model is re-solved at those parameter values and the analytical IRF (or FEVD) is computed. The results are stacked and summarized with pointwise quantile bands. The default quantiles ``[0.05, 0.16, 0.84, 0.95]`` produce dual 68% and 90% credible bands --- the standard reporting convention in the Bayesian DSGE literature.
+
+```julia
+# Bayesian IRFs with dual credible bands
+birf = irf(result, 20; n_draws=200)
+report(birf)
+plot_result(birf)
+
+# Bayesian FEVD
+bfevd = fevd(result, 20; n_draws=200)
+report(bfevd)
+
+# Custom quantiles (90% band only)
+birf_90 = irf(result, 20; n_draws=200, quantiles=[0.05, 0.95])
+```
+
+Both methods return `BayesianImpulseResponse{T}` and `BayesianFEVD{T}` respectively --- the same types used by Bayesian VAR, so all existing `report()`, `plot_result()`, `table()`, and `cumulative_irf()` infrastructure works automatically.
+
+Draws that produce indeterminate or explosive solutions are silently skipped. If all draws fail, an error is raised.
+
+### Posterior Predictive Simulation
+
+`simulate` draws from the posterior predictive distribution with credible bands. For each posterior parameter draw, the model is re-solved and simulated forward `T_periods` periods:
+
+```julia
+bsim = simulate(result, 200; n_draws=200)
+report(bsim)
+```
+
+The result is a `BayesianDSGESimulation{T}` containing the pointwise median, quantile bands, and all raw simulation paths.
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `n_draws` | `Int` | `200` | Number of posterior draws to subsample |
+| `quantiles` | `Vector{<:Real}` | `[0.05, 0.16, 0.84, 0.95]` | Quantile levels for credible bands |
+| `solver` | `Symbol` | `:gensys` | DSGE solver for re-solving at each draw |
+| `solver_kwargs` | `NamedTuple` | `()` | Additional solver keyword arguments |
+
+### `BayesianDSGESimulation{T}` Return Value
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `quantiles` | `Array{T,3}` | ``T \times n_{\text{vars}} \times n_q`` pointwise quantile bands |
+| `point_estimate` | `Matrix{T}` | ``T \times n_{\text{vars}}`` posterior median |
+| `T_periods` | `Int` | Number of simulation periods |
+| `variables` | `Vector{String}` | Variable names |
+| `quantile_levels` | `Vector{T}` | Quantile levels used |
+| `all_paths` | `Array{T,3}` | ``n_{\text{draws}} \times T \times n_{\text{vars}}`` raw simulation paths |
+
 ### Bayesian Return Value (`BayesianDSGE{T}`)
 
 | Field | Type | Description |
@@ -469,11 +538,20 @@ ps = posterior_summary(est_bayes)
 tbl = prior_posterior_table(est_bayes)
 ml = marginal_likelihood(est_bayes)
 
-# 6. Posterior predictive check
-Y_pred = posterior_predictive(est_bayes, 50; T_periods=200)
+# 6. Bayesian IRFs with credible bands
+birf = irf(est_bayes, 20; n_draws=100)
+report(birf)
+
+# 7. Bayesian FEVD
+bfevd = fevd(est_bayes, 20; n_draws=100)
+report(bfevd)
+
+# 8. Posterior predictive simulation
+bsim = simulate(est_bayes, 200; n_draws=100)
+report(bsim)
 ```
 
-The GMM point estimates and Bayesian posterior means should cluster near the true values ``\rho = 0.9`` and ``\sigma = 0.01``. The Bayesian credible intervals additionally quantify parameter uncertainty, and the marginal likelihood enables formal model comparison.
+The GMM point estimates and Bayesian posterior means should cluster near the true values ``\rho = 0.9`` and ``\sigma = 0.01``. The Bayesian IRFs propagate parameter uncertainty into impulse response bands, and the marginal likelihood enables formal model comparison.
 
 ---
 

@@ -89,6 +89,7 @@ include("core/utils.jl")
 include("core/types.jl")
 include("core/display.jl")
 include("core/kalman.jl")
+include("core/quadrature.jl")
 
 # Data containers, validation, transforms, panel, summary stats, examples
 include("data/types.jl")
@@ -97,6 +98,17 @@ include("data/transform.jl")
 include("data/panel.jl")
 include("data/summary_stats.jl")
 include("data/examples.jl")
+
+# Cross-sectional regression
+include("reg/types.jl")
+include("reg/covariance.jl")
+include("reg/estimation.jl")
+include("reg/iv.jl")
+include("reg/logit.jl")
+include("reg/probit.jl")
+include("reg/margins.jl")
+include("reg/diagnostics.jl")
+include("reg/predict.jl")
 
 # VAR types and estimation
 include("var/types.jl")
@@ -119,6 +131,11 @@ include("teststat/ngperron.jl")
 include("teststat/andrews.jl")
 include("teststat/bai_perron.jl")
 include("teststat/johansen.jl")
+include("teststat/fourier.jl")
+include("teststat/dfgls.jl")
+include("teststat/lm_unitroot.jl")
+include("teststat/adf_2break.jl")
+include("teststat/gregory_hansen.jl")
 
 # VECM types and estimation (after johansen.jl for JohansenResult)
 include("vecm/types.jl")
@@ -259,6 +276,7 @@ include("did/cluster.jl")
 include("did/twfe.jl")
 include("did/callaway_santanna.jl")
 include("did/event_study.jl")
+include("did/lpdid.jl")
 include("did/diagnostics.jl")
 include("did/sun_abraham.jl")
 include("did/bjs.jl")
@@ -319,6 +337,7 @@ include("plotting/forecast.jl")
 include("plotting/models.jl")
 include("plotting/nowcast.jl")
 include("plotting/did.jl")
+include("plotting/reg.jl")
 
 # =============================================================================
 # Exports - Types
@@ -372,7 +391,7 @@ export AbstractDSGEModel
 export DSGESpec, LinearDSGE, DSGESolution, PerturbationSolution, ProjectionSolution, PerfectForesightPath, DSGEEstimation
 
 # Bayesian DSGE
-export BayesianDSGE
+export BayesianDSGE, BayesianDSGESimulation
 export estimate_dsge_bayes, posterior_summary, marginal_likelihood, bayes_factor
 export prior_posterior_table, posterior_predictive
 
@@ -419,6 +438,8 @@ export JohansenResult, VARStationarityResult
 export AndrewsResult, BaiPerronResult
 export PANICResult, PesaranCIPSResult, MoonPerronResult
 export FactorBreakResult
+export FourierADFResult, FourierKPSSResult, DFGLSResult
+export LMUnitRootResult, ADF2BreakResult, GregoryHansenResult
 
 # Univariate unit root tests
 export adf_test, kpss_test, pp_test, za_test, ngperron_test
@@ -434,6 +455,10 @@ export panic_test, pesaran_cips_test, moon_perron_test, panel_unit_root_summary
 
 # Factor model structural break tests
 export factor_break_test
+
+# Extended unit root tests
+export fourier_adf_test, fourier_kpss_test, dfgls_test
+export lm_unitroot_test, adf_2break_test, gregory_hansen_test
 
 # Convenience functions
 export unit_root_summary, test_all_variables
@@ -640,7 +665,7 @@ export pvar_hansen_j, pvar_mmsc, pvar_lag_selection
 # =============================================================================
 
 # Types
-export DIDResult, EventStudyLP, BaconDecomposition
+export DIDResult, EventStudyLP, LPDiDResult, BaconDecomposition
 export PretrendTestResult, NegativeWeightResult, HonestDiDResult
 
 # Estimation
@@ -768,6 +793,7 @@ export Frequency, Daily, Monthly, Quarterly, Yearly, Mixed, Other
 export varnames, frequency, time_index, obs_id, rename_vars!
 export set_time_index!, set_obs_id!, desc, vardesc, set_desc!, set_vardesc!, dates, set_dates!
 export xtset, isbalanced, groups, ngroups, group_data, panel_summary
+export panel_lag, panel_lead, panel_diff, add_panel_lag, add_panel_lead, add_panel_diff
 
 # Validation
 export DataDiagnostic, diagnose, fix, validate_for_model
@@ -783,6 +809,19 @@ export to_matrix, to_vector
 
 # Examples
 export load_example
+
+# =============================================================================
+# Exports - Cross-Sectional Regression
+# =============================================================================
+
+# Types
+export RegModel, LogitModel, ProbitModel, MarginalEffects
+
+# Estimation
+export estimate_reg, estimate_iv, estimate_logit, estimate_probit
+
+# Marginal effects, diagnostics, prediction
+export marginal_effects, odds_ratio, vif, classification_table
 
 # =============================================================================
 # Exports - Plotting

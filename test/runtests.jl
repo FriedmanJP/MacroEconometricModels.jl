@@ -34,6 +34,7 @@ const TEST_GROUPS = [
     ("Core & VAR" => [
         "core/test_aqua.jl",
         "core/test_kalman.jl",
+        "core/test_quadrature.jl",
         "var/test_core_var.jl",
         "var/test_statsapi.jl",
         "core/test_summary.jl",
@@ -79,11 +80,17 @@ const TEST_GROUPS = [
         "factor/test_structural_dfm.jl",
         "nowcast/test_nowcast.jl",
         "did/test_did.jl",
+        "did/test_lpdid.jl",
     ]),
-    # Group 5: ARIMA & Statistical Tests & Data & PVAR
-    ("ARIMA & Tests & Data" => [
+    # Group 5: ARIMA & Statistical Tests & Data & PVAR & Reg
+    ("ARIMA & Tests & Data & Reg" => [
         "teststat/test_unitroot.jl",
         "teststat/test_structural_break.jl",
+        "teststat/test_fourier.jl",
+        "teststat/test_dfgls.jl",
+        "teststat/test_lm_unitroot.jl",
+        "teststat/test_adf_2break.jl",
+        "teststat/test_gregory_hansen.jl",
         "arima/test_arima.jl",
         "arima/test_arima_coverage.jl",
         "teststat/test_granger.jl",
@@ -93,6 +100,7 @@ const TEST_GROUPS = [
         "gmm/test_smm.jl",
         "data/test_data.jl",
         "pvar/test_pvar.jl",
+        "reg/test_reg.jl",
     ]),
     # Group 6: Volatility & Non-Gaussian & Plotting & Filters
     ("Volatility & Filters" => [
@@ -116,6 +124,10 @@ const TEST_GROUPS = [
         "coverage/test_pvar_nongaussian_coverage.jl",
         "coverage/test_gmm_ext_coverage.jl",
         "coverage/test_misc_coverage.jl",
+        "coverage/test_teststat_break_panel_coverage.jl",
+        "coverage/test_dsge_bayes_coverage.jl",
+        "coverage/test_data_types_coverage.jl",
+        "coverage/test_display_coverage.jl",
     ]),
 ]
 
@@ -241,6 +253,7 @@ else
         # Group 1: Core & VAR
         @testset "Aqua" begin include("core/test_aqua.jl") end
         @testset "Core Kalman" begin include("core/test_kalman.jl") end
+        @testset "Core Quadrature" begin include("core/test_quadrature.jl") end
         @testset "Core VAR" begin include("var/test_core_var.jl") end
         @testset "StatsAPI Compatibility" begin include("var/test_statsapi.jl") end
         @testset "Summary Tables" begin include("core/test_summary.jl") end
@@ -283,10 +296,16 @@ else
         @testset "Structural DFM" begin include("factor/test_structural_dfm.jl") end
         @testset "Nowcasting" begin include("nowcast/test_nowcast.jl") end
         @testset "Difference-in-Differences" begin include("did/test_did.jl") end
+        @testset "LP-DiD" begin include("did/test_lpdid.jl") end
 
         # Group 5: ARIMA & Tests & Data
         @testset "Unit Root Tests" begin include("teststat/test_unitroot.jl") end
         @testset "Structural Break & Panel Unit Root" begin include("teststat/test_structural_break.jl") end
+        @testset "Fourier Unit Root Tests" begin include("teststat/test_fourier.jl") end
+        @testset "DF-GLS Unit Root Test" begin include("teststat/test_dfgls.jl") end
+        @testset "LM Unit Root Test" begin include("teststat/test_lm_unitroot.jl") end
+        @testset "Two-Break ADF Test" begin include("teststat/test_adf_2break.jl") end
+        @testset "Gregory-Hansen Cointegration Test" begin include("teststat/test_gregory_hansen.jl") end
         @testset "ARIMA Models" begin include("arima/test_arima.jl") end
         @testset "ARIMA Coverage" begin include("arima/test_arima_coverage.jl") end
         @testset "Granger Causality Tests" begin include("teststat/test_granger.jl") end
@@ -296,6 +315,7 @@ else
         @testset "SMM Estimation" begin include("gmm/test_smm.jl") end
         @testset "Data Module" begin include("data/test_data.jl") end
         @testset "Panel VAR" begin include("pvar/test_pvar.jl") end
+        @testset "Cross-Sectional Models" begin include("reg/test_reg.jl") end
 
         # Group 6: Volatility & Filters
         @testset "Volatility Models (ARCH/GARCH/SV)" begin include("volatility/test_volatility.jl") end
@@ -318,5 +338,9 @@ else
         @testset "PVAR & Non-Gaussian Coverage" begin include("coverage/test_pvar_nongaussian_coverage.jl") end
         @testset "GMM & Extension Coverage" begin include("coverage/test_gmm_ext_coverage.jl") end
         @testset "Misc Coverage" begin include("coverage/test_misc_coverage.jl") end
+        @testset "Structural Break & Panel Coverage" begin include("coverage/test_teststat_break_panel_coverage.jl") end
+        @testset "DSGE Bayesian Coverage" begin include("coverage/test_dsge_bayes_coverage.jl") end
+        @testset "Data Types Coverage" begin include("coverage/test_data_types_coverage.jl") end
+        @testset "Display & Plotting Coverage" begin include("coverage/test_display_coverage.jl") end
     end
 end

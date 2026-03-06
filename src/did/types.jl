@@ -22,7 +22,7 @@ Type definitions for Difference-in-Differences and Event Study LP methods.
 Implements types for:
 - TWFE DiD and Callaway-Sant'Anna (2021)
 - Event Study LP (Jorda 2005 + panel FE)
-- LP-DiD (Dube et al. 2023)
+- LP-DiD (Dube et al. 2025)
 - Bacon decomposition (Goodman-Bacon 2021)
 - Pre-trend testing and negative weight diagnostics
 """
@@ -133,7 +133,7 @@ along with per-horizon regression details for diagnostics.
 
 # References
 - Jorda, O. (2005). *AER* 95(1), 161-182.
-- Dube, A. et al. (2023). NBER WP 31184.
+- Dube, A. et al. (2025). *JAE*.
 """
 struct EventStudyLP{T<:AbstractFloat}
     coefficients::Vector{T}
@@ -164,6 +164,86 @@ StatsAPI.nobs(r::EventStudyLP) = r.n_obs
 StatsAPI.coef(r::EventStudyLP) = r.coefficients
 StatsAPI.stderror(r::EventStudyLP) = r.se
 StatsAPI.confint(r::EventStudyLP) = hcat(r.ci_lower, r.ci_upper)
+
+# =============================================================================
+# LPDiDResult — LP-DiD with full Dube et al. (2025) specification
+# =============================================================================
+
+"""
+    LPDiDResult{T<:AbstractFloat}
+
+LP-DiD estimation result with full Dube, Girardi, Jordà & Taylor (2025) specification.
+
+# Fields
+## Event Study
+- `coefficients::Vector{T}` — treatment effects β_h at each event-time
+- `se::Vector{T}` — standard errors
+- `ci_lower::Vector{T}` — lower CI bounds
+- `ci_upper::Vector{T}` — upper CI bounds
+- `event_times::Vector{Int}` — event-time grid
+- `reference_period::Int` — omitted period (typically -1)
+- `nobs_per_horizon::Vector{Int}` — effective observations per horizon
+
+## Pooled Estimates
+- `pooled_post` — NamedTuple (coef, se, ci_lower, ci_upper, nobs) or nothing
+- `pooled_pre` — NamedTuple (coef, se, ci_lower, ci_upper, nobs) or nothing
+
+## Regression Details
+- `vcov::Vector{Matrix{T}}` — VCV matrices per horizon
+
+## Metadata
+- `outcome_var::String` — outcome variable name
+- `treatment_var::String` — treatment variable name
+- `T_obs::Int` — total observations in panel
+- `n_groups::Int` — number of panel units
+- `specification::Symbol` — :absorbing, :nonabsorbing, or :oneoff
+- `pmd::Union{Nothing,Symbol,Int}` — PMD specification
+- `reweight::Bool` — whether IPW reweighting was used
+- `nocomp::Bool` — whether composition changes were ruled out
+- `ylags::Int` — number of outcome lags as controls
+- `dylags::Int` — number of ΔY lags as controls
+- `pre_window::Int` — pre-treatment event window
+- `post_window::Int` — post-treatment event window
+- `cluster::Symbol` — clustering level
+- `conf_level::T` — confidence level
+- `data::PanelData{T}` — original panel data
+
+# References
+- Dube, A., Girardi, D., Jordà, Ò. & Taylor, A.M. (2025). *JAE*.
+- Acemoglu, D. et al. (2019). *JPE* 127(1), 47-100.
+"""
+struct LPDiDResult{T<:AbstractFloat}
+    coefficients::Vector{T}
+    se::Vector{T}
+    ci_lower::Vector{T}
+    ci_upper::Vector{T}
+    event_times::Vector{Int}
+    reference_period::Int
+    nobs_per_horizon::Vector{Int}
+    pooled_post::Union{Nothing, @NamedTuple{coef::T, se::T, ci_lower::T, ci_upper::T, nobs::Int}}
+    pooled_pre::Union{Nothing, @NamedTuple{coef::T, se::T, ci_lower::T, ci_upper::T, nobs::Int}}
+    vcov::Vector{Matrix{T}}
+    outcome_var::String
+    treatment_var::String
+    T_obs::Int
+    n_groups::Int
+    specification::Symbol
+    pmd::Union{Nothing,Symbol,Int}
+    reweight::Bool
+    nocomp::Bool
+    ylags::Int
+    dylags::Int
+    pre_window::Int
+    post_window::Int
+    cluster::Symbol
+    conf_level::T
+    data::PanelData{T}
+end
+
+StatsAPI.nobs(r::LPDiDResult) = r.T_obs
+StatsAPI.coef(r::LPDiDResult) = r.coefficients
+StatsAPI.stderror(r::LPDiDResult) = r.se
+StatsAPI.confint(r::LPDiDResult) = hcat(r.ci_lower, r.ci_upper)
 
 # =============================================================================
 # BaconDecomposition
@@ -343,7 +423,7 @@ function Base.show(io::IO, r::DIDResult{T}) where {T}
 end
 
 function Base.show(io::IO, r::EventStudyLP{T}) where {T}
-    lp_str = r.clean_controls ? "LP-DiD (Dube et al. 2023)" : "Event Study LP"
+    lp_str = r.clean_controls ? "LP-DiD (Dube et al. 2025)" : "Event Study LP"
     cluster_str = r.cluster == :twoway ? "Two-way (unit + time)" :
                   r.cluster == :unit ? "Unit-clustered" : "Time-clustered"
 
@@ -368,6 +448,62 @@ function Base.show(io::IO, r::EventStudyLP{T}) where {T}
     evt_names = ["h=" * string(e) for e in r.event_times]
     _coef_table(io, "Dynamic Treatment Effects", evt_names,
                 T.(r.coefficients), T.(r.se); dist=:z)
+end
+
+function Base.show(io::IO, r::LPDiDResult{T}) where {T}
+    spec_str = r.specification == :absorbing ? "Absorbing" :
+               r.specification == :nonabsorbing ? "Non-absorbing" :
+               r.specification == :oneoff ? "One-off" : string(r.specification)
+    pmd_str = r.pmd === nothing ? "Standard (long diff)" :
+              r.pmd == :max ? "PMD (all pre-treatment)" :
+              "PMD (MA k=$(r.pmd))"
+    cluster_str = r.cluster == :twoway ? "Two-way (unit + time)" :
+                  r.cluster == :unit ? "Unit-clustered" : "Time-clustered"
+
+    spec = Any[
+        "Method"          "LP-DiD (Dube et al. 2025)";
+        "Treatment"       spec_str;
+        "LHS"             pmd_str;
+        "Outcome"         r.outcome_var;
+        "Treatment var"   r.treatment_var;
+        "Clustering"      cluster_str;
+        "Reweighted"      r.reweight ? "Yes (IPW)" : "No";
+        "Y lags"          r.ylags;
+        "ΔY lags"         r.dylags;
+        "Pre-window"      r.pre_window;
+        "Post-window"     r.post_window;
+        "Groups"          r.n_groups;
+        "Observations"    r.T_obs;
+    ]
+
+    _pretty_table(io, spec;
+        title = "LP-DiD Estimation -- Dube, Girardi, Jorda & Taylor (2025)",
+        column_labels = ["", ""],
+        alignment = [:l, :r],
+    )
+
+    evt_names = ["h=" * string(e) for e in r.event_times]
+    _coef_table(io, "Dynamic Treatment Effects", evt_names,
+                T.(r.coefficients), T.(r.se); dist=:z)
+
+    if r.pooled_post !== nothing || r.pooled_pre !== nothing
+        println(io)
+        pooled_names = String[]
+        pooled_coefs = T[]
+        pooled_ses = T[]
+        if r.pooled_pre !== nothing
+            push!(pooled_names, "Pre-pooled")
+            push!(pooled_coefs, r.pooled_pre.coef)
+            push!(pooled_ses, r.pooled_pre.se)
+        end
+        if r.pooled_post !== nothing
+            push!(pooled_names, "Post-pooled")
+            push!(pooled_coefs, r.pooled_post.coef)
+            push!(pooled_ses, r.pooled_post.se)
+        end
+        _coef_table(io, "Pooled Estimates", pooled_names,
+                    pooled_coefs, pooled_ses; dist=:z)
+    end
 end
 
 function Base.show(io::IO, r::BaconDecomposition{T}) where {T}
