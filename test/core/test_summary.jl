@@ -22,6 +22,54 @@ using Statistics
         @test true
     end
 
+    @testset "report(VARModel) uses varnames" begin
+        Y = randn(100, 3)
+        model = estimate_var(Y, 2; varnames=["GDP", "INF", "FFR"])
+        old_stdout = stdout
+        rd, wr = redirect_stdout()
+        report(model)
+        redirect_stdout(old_stdout)
+        close(wr)
+        output = read(rd, String)
+        close(rd)
+        @test occursin("GDP", output)
+        @test occursin("INF", output)
+        @test occursin("FFR", output)
+        @test !occursin("Var 1", output)
+        @test !occursin("Var1", output)
+        @test !occursin("Var 2", output)
+        @test !occursin("Var2", output)
+    end
+
+    @testset "report(VECMModel) uses varnames" begin
+        Y = randn(200, 3)
+        vecm = estimate_vecm(Y, 2; varnames=["GDP", "INF", "FFR"])
+        old_stdout = stdout
+        rd, wr = redirect_stdout()
+        report(vecm)
+        redirect_stdout(old_stdout)
+        close(wr)
+        output = read(rd, String)
+        close(rd)
+        @test occursin("GDP", output)
+        @test occursin("INF", output)
+        @test occursin("FFR", output)
+        @test !occursin("Var 1", output)
+        @test !occursin("Var 2", output)
+    end
+
+    @testset "show(BVARPosterior) uses varnames" begin
+        Y = randn(100, 3)
+        post = estimate_bvar(Y, 2; n_draws=100, varnames=["GDP", "INF", "FFR"])
+        io = IOBuffer()
+        show(io, post)
+        output = String(take!(io))
+        @test occursin("GDP.L1", output)
+        @test occursin("INF.L1", output)
+        @test !occursin("Var1.L1", output)
+        @test !occursin("Var2.L1", output)
+    end
+
     @testset "IRF table and print_table" begin
         Y = randn(100, 2)
         model = estimate_var(Y, 2)

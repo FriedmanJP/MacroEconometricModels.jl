@@ -116,10 +116,11 @@ function Base.show(io::IO, post::BVARPosterior{T}) where {T}
     )
 
     # Build coefficient names
+    vn = post.varnames
     coef_names = String["const"]
     for l in 1:post.p
         for v in 1:post.n
-            push!(coef_names, "Var$(v).L$l")
+            push!(coef_names, "$(vn[v]).L$l")
         end
     end
     while length(coef_names) < k
@@ -127,7 +128,6 @@ function Base.show(io::IO, post::BVARPosterior{T}) where {T}
     end
 
     # Per-equation posterior summary
-    vn = post.varnames
     for eq in 1:post.n
         draws_eq = post.B_draws[:, :, eq]  # n_draws × k
         n_show = min(k, size(draws_eq, 2))
