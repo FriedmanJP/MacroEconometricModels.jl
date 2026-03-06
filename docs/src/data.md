@@ -1,79 +1,171 @@
-# Data Management
+# [Data Management](@id data_page)
 
-Applied macroeconometric research begins with data. This module provides typed data containers that track metadata (frequency, variable names, panel structure, transformation codes), validate inputs, compute summary statistics, and guarantee clean data for estimation.
+**MacroEconometricModels.jl** provides typed data containers that track metadata, validate inputs, transform series to stationarity, and dispatch directly to estimation functions. The data module eliminates manual bookkeeping between loading raw data and fitting models.
 
-| Feature | Function | Description |
-|---------|----------|-------------|
-| **Containers** | `TimeSeriesData`, `PanelData`, `CrossSectionData` | Typed wrappers with metadata |
-| **Validation** | `diagnose`, `fix` | Detect and repair NaN, Inf, constant columns |
-| **Transforms** | `apply_tcode`, `inverse_tcode` | FRED transformation codes 1--7 |
-| **Filtering** | `apply_filter` | Apply HP/Hamilton/BN/BK/Boosted HP per-variable |
-| **Panel** | `xtset`, `group_data` | Stata-style panel setup and slicing |
-| **Summary** | `describe_data` | Per-variable descriptive statistics |
-| **Dispatch** | `estimate_var(d, p)` | All estimators accept `TimeSeriesData` directly |
+- **Containers**: `TimeSeriesData`, `PanelData`, and `CrossSectionData` wrap numeric matrices with variable names, frequency, transformation codes, and bibliographic references
+- **Built-in Datasets**: Five curated datasets --- FRED-MD, FRED-QD, Penn World Table, DDCG democracy panel, and Callaway & Sant'Anna minimum wage panel --- load with a single call
+- **Transformations**: FRED transformation codes 1--7 convert raw levels to stationary series; `inverse_tcode` recovers original levels
+- **Validation**: `diagnose` detects NaN, Inf, and constant columns; `fix` repairs them via listwise deletion, interpolation, or mean imputation
+- **Filtering**: `apply_filter` applies HP, Hamilton, BN, BK, or Boosted HP filters per-variable to extract trend or cycle components
+- **Panel Operations**: Stata-style `xtset` for panel construction, within-group lag/lead/diff, group extraction, and balance detection
+- **Estimation Dispatch**: All estimators accept `TimeSeriesData` and `PanelData` directly --- no manual conversion required
 
 ## Quick Start
+
+**Recipe 1: Load FRED-MD and explore**
 
 ```julia
 using MacroEconometricModels
 
-# Load FRED-MD and select key macro variables
+# Load the January 2026 vintage (126 variables, 804 months)
+fred = load_example(:fred_md)
+describe_data(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]])
+```
+
+**Recipe 2: Transform to stationarity and clean**
+
+```julia
+using MacroEconometricModels
+
 fred = load_example(:fred_md)
 sub = fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]
 
-# Apply FRED transformation codes to achieve stationarity
+# Apply recommended FRED transformation codes
 d = apply_tcode(sub)
 
-# Diagnose — apply_tcode introduces NaN from differencing
-diag = diagnose(d)
-
-# Fix by dropping NaN rows
+# Differencing introduces NaN --- fix by dropping those rows
 d_clean = fix(d)
-
-# Summary statistics
 describe_data(d_clean)
+```
 
-# Estimate directly from data container
-model = estimate_var(d_clean, 2)
+**Recipe 3: Estimate directly from a data container**
 
-# Panel data — Penn World Table
+```julia
+using MacroEconometricModels
+
+fred = load_example(:fred_md)
+d = fix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+
+# No manual to_matrix() needed --- dispatch handles it
+model = estimate_var(d, 2)
+report(model)
+```
+
+**Recipe 4: Panel data with Penn World Table**
+
+```julia
+using MacroEconometricModels
+
 pwt = load_example(:pwt)
 panel_summary(pwt)
-usa = group_data(pwt, "USA")   # extract single country
+
+# Extract a single country as TimeSeriesData
+usa = group_data(pwt, "USA")
+describe_data(usa[:, ["rgdpna", "rconna"]])
+```
+
+**Recipe 5: Apply filters to data containers**
+
+```julia
+using MacroEconometricModels
+
+fred = load_example(:fred_md)
+d = TimeSeriesData(
+    log.(to_matrix(fred[:, ["INDPRO", "PAYEMS"]]));
+    varnames=["INDPRO", "PAYEMS"], frequency=Monthly)
+d = fix(d)
+
+# HP cycle extraction for all variables
+d_cycle = apply_filter(d, :hp; component=:cycle, lambda=129600.0)
+describe_data(d_cycle)
+```
+
+**Recipe 6: Panel lag/lead/diff operations**
+
+```julia
+using MacroEconometricModels
+
+ddcg = load_example(:ddcg)
+
+# Stata-style within-group transformations
+lag1_y = panel_lag(ddcg, :y, 1)     # L.y
+d_dem = panel_diff(ddcg, :dem)      # D.dem
+lead1_y = panel_lead(ddcg, :y, 1)   # F.y
 ```
 
 ---
 
 ## Data Containers
 
-All containers inherit from `AbstractMacroData` and carry metadata alongside the numeric data matrix.
+All containers inherit from `AbstractMacroData` and carry metadata alongside the numeric data matrix. The three container types correspond to the three fundamental data structures in applied econometrics: time series, panel, and cross-sectional.
 
 ### TimeSeriesData
 
-`TimeSeriesData{T}` is the primary container for single-entity time series:
+`TimeSeriesData{T}` is the primary container for single-entity time series. It stores a ``T_{obs} \times n`` data matrix together with variable names, frequency, FRED transformation codes, an integer time index, optional date labels, dataset and per-variable descriptions, and bibliographic references.
 
 ```julia
-# Load built-in dataset (recommended)
-fred = load_example(:fred_md)   # 804 obs × 126 vars (Monthly)
+using MacroEconometricModels
+
+# From a built-in dataset (recommended)
+fred = load_example(:fred_md)
 sub = fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]
 
-# From matrix with metadata
+# From a matrix with metadata
 d = TimeSeriesData(randn(200, 3);
     varnames=["GDP", "CPI", "FFR"],
     frequency=Quarterly,
     tcode=[5, 5, 1],
-    time_index=collect(1959:2158))
+    time_index=collect(1:200))
 
-# From vector (univariate)
-d = TimeSeriesData(randn(200); varname="GDP", frequency=Monthly)
+# From a vector (univariate)
+d_uni = TimeSeriesData(randn(200); varname="GDP", frequency=Monthly)
 
-# From DataFrame (auto-selects numeric columns)
+# From a DataFrame (auto-selects numeric columns, missing becomes NaN)
 using DataFrames
 df = DataFrame(gdp=randn(100), cpi=randn(100), date=1:100)
-d = TimeSeriesData(df; frequency=Quarterly)
+d_df = TimeSeriesData(df; frequency=Quarterly)
 ```
 
 Non-float inputs are automatically converted to `Float64`. Missing values in DataFrames become `NaN`.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `data` | `Matrix{T}` | ``T_{obs} \times n`` data matrix |
+| `varnames` | `Vector{String}` | Variable names |
+| `frequency` | `Frequency` | Data frequency (informational metadata) |
+| `tcode` | `Vector{Int}` | FRED transformation codes per variable (default: all 1) |
+| `time_index` | `Vector{Int}` | Integer time identifiers (default: `1:T`) |
+| `desc` | `Vector{String}` | Dataset description (length-1 vector for mutability) |
+| `vardesc` | `Dict{String,String}` | Per-variable descriptions keyed by variable name |
+| `source_refs` | `Vector{Symbol}` | Reference keys for bibliographic citations |
+| `dates` | `Vector{String}` | Date labels (default: empty) |
+
+### PanelData
+
+`PanelData{T}` stores stacked panel (longitudinal) data with group and time identifiers. The preferred constructor is `xtset()`, described in the [Panel Data](@ref panel_data_section) section below.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `data` | `Matrix{T}` | Stacked data matrix (total rows ``\times n``) |
+| `varnames` | `Vector{String}` | Variable names |
+| `frequency` | `Frequency` | Data frequency |
+| `group_id` | `Vector{Int}` | Group identifier per row |
+| `time_id` | `Vector{Int}` | Time identifier per row |
+| `cohort_id` | `Union{Vector{Int}, Nothing}` | Treatment cohort per row (for DiD) |
+| `group_names` | `Vector{String}` | Unique group labels |
+| `n_groups` | `Int` | Number of groups |
+| `balanced` | `Bool` | True if all groups have the same number of observations |
+
+### CrossSectionData
+
+`CrossSectionData{T}` stores cross-sectional observations (single time point):
+
+```julia
+using MacroEconometricModels
+
+d = CrossSectionData(randn(500, 4);
+    varnames=["income", "education", "age", "hours"])
+```
 
 ### Frequency Enum
 
@@ -83,95 +175,15 @@ Non-float inputs are automatically converted to `Float64`. Missing values in Dat
 
 The `frequency` field is informational metadata used in summary displays. It does not affect estimation.
 
-### PanelData
-
-`PanelData{T}` stores stacked panel (longitudinal) data with group and time identifiers. Constructed via `xtset()`:
-
-```julia
-# Load Penn World Table (balanced panel, 38 OECD countries × 74 years)
-pwt = load_example(:pwt)
-
-# Or construct from a DataFrame via xtset
-using DataFrames
-df = DataFrame(
-    country = repeat(["US", "UK", "JP"], inner=50),
-    quarter = repeat(1:50, 3),
-    gdp = randn(150),
-    cpi = randn(150)
-)
-pd = xtset(df, :country, :quarter; frequency=Quarterly)
-
-# With cohort specification for DiD
-df_did = DataFrame(
-    firm = repeat(1:6, inner=10),
-    year = repeat(2001:2010, 6),
-    revenue = randn(60),
-    treatment_cohort = repeat([1, 1, 2, 2, 0, 0], inner=10)
-)
-pd_did = xtset(df_did, :firm, :year; cohort=:treatment_cohort)
-```
-
-### CrossSectionData
-
-`CrossSectionData{T}` stores cross-sectional observations (single time point):
-
-```julia
-d = CrossSectionData(randn(500, 4);
-    varnames=["income", "education", "age", "hours"])
-```
-
----
-
-## Descriptions
-
-Data containers carry optional metadata descriptions — one for the dataset itself, and per-variable descriptions accessible by name. These are empty by default and only populated if the user provides them.
-
-### Setting at Construction
-
-```julia
-# Built-in datasets already carry descriptions
-fred = load_example(:fred_md)
-desc(fred)              # "FRED-MD Monthly Database, January 2026 Vintage ..."
-vardesc(fred, "INDPRO")  # "IP Index"
-
-# Or set manually at construction
-d = TimeSeriesData(randn(200, 3);
-    varnames=["GDP", "CPI", "FFR"],
-    frequency=Quarterly,
-    desc="US macroeconomic quarterly data 1959-2024",
-    vardesc=Dict(
-        "GDP" => "Real Gross Domestic Product, seasonally adjusted annual rate",
-        "CPI" => "Consumer Price Index for All Urban Consumers",
-        "FFR" => "Effective Federal Funds Rate"))
-```
-
-### Accessing Descriptions
-
-```julia
-fred = load_example(:fred_md)
-desc(fred)              # "FRED-MD Monthly Database, January 2026 Vintage ..."
-vardesc(fred, "INDPRO")  # "IP Index"
-vardesc(fred)            # Dict with all variable descriptions
-```
-
-### Setting After Construction
-
-```julia
-d = TimeSeriesData(randn(100, 2); varnames=["GDP", "CPI"])
-set_desc!(d, "Updated dataset description")
-set_vardesc!(d, "GDP", "Real GDP growth rate")
-set_vardesc!(d, Dict("GDP" => "Real GDP", "CPI" => "Consumer prices"))
-```
-
-Descriptions propagate through subsetting (`d[:, ["GDP"]]`), transformations (`apply_tcode`), cleaning (`fix`), and panel extraction (`group_data`). Renaming variables (`rename_vars!`) automatically updates `vardesc` keys.
-
 ---
 
 ## Accessors and Indexing
 
-All data types support a common interface:
+All data types support a common interface for inspecting dimensions, metadata, and extracting subsets.
 
 ```julia
+using MacroEconometricModels
+
 fred = load_example(:fred_md)
 
 # Dimensions
@@ -185,29 +197,102 @@ frequency(fred)    # Monthly
 time_index(fred)   # 1:804
 
 # Column extraction
-ip = fred[:, "INDPRO"]                          # Vector{Float64}
-sub = fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]  # new TimeSeriesData with 3 variables
+ip = fred[:, "INDPRO"]                              # Vector{Float64}
+sub = fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]   # new TimeSeriesData
 
-# Conversion
-to_matrix(sub)    # raw T x n matrix
-to_vector(fred[:, ["INDPRO"]])   # raw vector (univariate only)
+# Conversion to raw arrays
+to_matrix(sub)               # raw T x n matrix
+to_vector(sub[:, ["INDPRO"]])  # raw vector (univariate only)
+to_vector(sub, "INDPRO")      # single column by name
+to_vector(sub, 1)              # single column by index
 ```
 
 ### Renaming Variables
 
 ```julia
+using MacroEconometricModels
+
 d = TimeSeriesData(randn(50, 2); varnames=["a", "b"])
-rename_vars!(d, "a" => "GDP")
-rename_vars!(d, ["output", "prices"])
+rename_vars!(d, "a" => "GDP")       # single rename
+rename_vars!(d, ["output", "prices"])  # replace all
 ```
 
-### Time Index
+`rename_vars!` also updates `vardesc` keys automatically.
+
+### Descriptions
+
+Data containers carry optional metadata descriptions --- one for the dataset itself, and per-variable descriptions accessible by name. Built-in datasets come with descriptions pre-populated.
 
 ```julia
-d = TimeSeriesData(randn(50, 1))
-set_time_index!(d, collect(1970:2019))
-time_index(d)  # [1970, 1971, ..., 2019]
+using MacroEconometricModels
+
+fred = load_example(:fred_md)
+desc(fred)              # "FRED-MD Monthly Database, January 2026 Vintage ..."
+vardesc(fred, "INDPRO")  # "IP Index"
+vardesc(fred)            # Dict with all variable descriptions
+
+# Set descriptions on custom data
+d = TimeSeriesData(randn(100, 2); varnames=["GDP", "CPI"],
+    desc="US macroeconomic quarterly data",
+    vardesc=Dict("GDP" => "Real GDP growth", "CPI" => "Consumer prices"))
+
+# Modify after construction
+set_desc!(d, "Updated description")
+set_vardesc!(d, "GDP", "Real Gross Domestic Product")
+set_vardesc!(d, Dict("GDP" => "Real GDP", "CPI" => "CPI inflation"))
 ```
+
+Descriptions propagate through subsetting (`d[:, ["GDP"]]`), transformations (`apply_tcode`), cleaning (`fix`), and panel extraction (`group_data`).
+
+### Date Labels
+
+```julia
+using MacroEconometricModels
+
+d = TimeSeriesData(randn(4, 2); varnames=["GDP", "CPI"])
+set_dates!(d, ["2020Q1", "2020Q2", "2020Q3", "2020Q4"])
+dates(d)  # ["2020Q1", "2020Q2", "2020Q3", "2020Q4"]
+
+# Date-based indexing
+d["2020Q1", :]                      # row values as vector
+d[["2020Q1", "2020Q2"], :]          # sub-TimeSeriesData
+```
+
+---
+
+## Visualization
+
+`plot_result()` renders `TimeSeriesData` as multi-panel line charts and `PanelData` as multi-panel charts with one line per group.
+
+### TimeSeriesData Plot
+
+```julia
+using MacroEconometricModels
+
+fred = load_example(:fred_md)
+d = fred[:, ["INDPRO", "UNRATE", "CPIAUCSL"]]
+p = plot_result(d)                               # All variables
+p = plot_result(d; vars=["INDPRO", "CPIAUCSL"])  # Subset
+```
+
+```@raw html
+<iframe src="../assets/plots/data_timeseries.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+### PanelData Plot
+
+```julia
+using MacroEconometricModels
+
+pwt = load_example(:pwt)
+p = plot_result(pwt; vars=["rgdpna", "pop", "emp", "hc"])
+```
+
+```@raw html
+<iframe src="../assets/plots/data_panel.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+Panel data plots show each variable in a separate panel with one line per group.
 
 ---
 
@@ -215,33 +300,47 @@ time_index(d)  # [1970, 1971, ..., 2019]
 
 ### Diagnosing Issues
 
-`diagnose()` scans for NaN, Inf, constant columns, and very short series:
+`diagnose()` scans for NaN, Inf, constant columns, and very short series. It returns a `DataDiagnostic` struct summarizing per-variable issues.
 
 ```julia
-# Transforming FRED-MD introduces NaN from differencing and log of non-positive values
+using MacroEconometricModels
+
 fred = load_example(:fred_md)
 d = apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]])
 
 diag = diagnose(d)
-diag.is_clean     # false — NaN rows from differencing
-diag.n_nan        # number of NaN per variable
-diag.is_constant  # [false, false, false]
-diag.is_short     # false
+diag.is_clean      # false --- NaN rows from differencing
+diag.n_nan         # NaN count per variable
+diag.is_constant   # [false, false, false]
+diag.is_short      # false
 ```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `n_nan` | `Vector{Int}` | NaN count per variable |
+| `n_inf` | `Vector{Int}` | Inf count per variable |
+| `is_constant` | `Vector{Bool}` | True if variable has zero variance |
+| `is_short` | `Bool` | True if fewer than 10 observations |
+| `is_clean` | `Bool` | True if no issues detected |
 
 ### Fixing Issues
 
 `fix()` returns a clean copy using one of three methods:
 
 ```julia
+using MacroEconometricModels
+
+fred = load_example(:fred_md)
+d = apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]])
+
 # Drop rows with any NaN/Inf (default)
 d_clean = fix(d; method=:listwise)
 
 # Linear interpolation for interior NaN, forward-fill edges
-d_clean = fix(d; method=:interpolate)
+d_interp = fix(d; method=:interpolate)
 
 # Replace NaN with column mean of finite values
-d_clean = fix(d; method=:mean)
+d_mean = fix(d; method=:mean)
 ```
 
 All methods replace Inf with NaN first, then apply the chosen method. Constant columns are dropped automatically with a warning.
@@ -249,11 +348,17 @@ All methods replace Inf with NaN first, then apply the chosen method. Constant c
 !!! note "Technical Note"
     `fix()` always returns a new `TimeSeriesData` object. The original is never modified. After fixing, `diagnose(d_clean).is_clean` is guaranteed to be `true` (unless all columns are constant).
 
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `method` | `Symbol` | `:listwise` | Fix strategy: `:listwise`, `:interpolate`, or `:mean` |
+
 ### Model Compatibility
 
-`validate_for_model()` checks dimensionality requirements:
+`validate_for_model()` checks dimensionality requirements before estimation:
 
 ```julia
+using MacroEconometricModels
+
 d_multi = TimeSeriesData(randn(100, 3))
 d_uni = TimeSeriesData(randn(100))
 
@@ -273,55 +378,71 @@ validate_for_model(d_multi, :garch)  # throws ArgumentError
 
 ## FRED Transformation Codes
 
-The FRED-MD database uses integer codes to specify how each series should be transformed to achieve stationarity. `apply_tcode()` implements all seven codes:
+The FRED-MD and FRED-QD databases use integer codes to specify how each series should be transformed to achieve stationarity (McCracken & Ng 2016). `apply_tcode()` implements all seven codes:
 
-| Code | Transformation | Formula | Observations Lost |
-|------|---------------|---------|-------------------|
-| 1 | Level | ``x_t`` | 0 |
-| 2 | First difference | ``\Delta x_t`` | 1 |
-| 3 | Second difference | ``\Delta^2 x_t`` | 2 |
-| 4 | Log | ``\ln x_t`` | 0 |
-| 5 | Log first difference | ``\Delta \ln x_t`` | 1 |
-| 6 | Log second difference | ``\Delta^2 \ln x_t`` | 2 |
-| 7 | Delta percent change | ``\Delta(x_t / x_{t-1} - 1)`` | 2 |
+```math
+\text{tcode 1: } x_t, \quad \text{tcode 2: } \Delta x_t, \quad \text{tcode 3: } \Delta^2 x_t, \quad \text{tcode 4: } \ln x_t
+```
 
-Codes 4--7 require strictly positive data.
+```math
+\text{tcode 5: } \Delta \ln x_t, \quad \text{tcode 6: } \Delta^2 \ln x_t, \quad \text{tcode 7: } \Delta(x_t / x_{t-1} - 1)
+```
+
+where:
+- ``x_t`` is the raw series value at time ``t``
+- ``\Delta`` is the first-difference operator
+- ``\Delta^2`` is the second-difference operator
+- ``\ln`` is the natural logarithm
+
+| Code | Transformation | Observations Lost |
+|------|---------------|-------------------|
+| 1 | Level (no transformation) | 0 |
+| 2 | First difference | 1 |
+| 3 | Second difference | 2 |
+| 4 | Log level | 0 |
+| 5 | Log first difference (growth rate) | 1 |
+| 6 | Log second difference | 2 |
+| 7 | Delta percent change | 2 |
+
+Codes 4--7 require strictly positive data. If a series contains non-positive values with a log-based code, `apply_tcode` falls back to code 2 (first difference) with a warning.
 
 ### Applying Transformations
 
 ```julia
+using MacroEconometricModels
+
 # Univariate
 y = [100.0, 105.0, 110.0, 108.0, 115.0]
-growth = apply_tcode(y, 5)   # log first differences
+growth = apply_tcode(y, 5)   # log first differences (approx growth rates)
 
-# Apply recommended FRED codes to data container
+# Apply recommended FRED codes stored in metadata
 fred = load_example(:fred_md)
 sub = fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]
 d = apply_tcode(sub)   # uses per-variable tcode from metadata
 
-# Or specify codes explicitly
+# Specify codes explicitly
 d2 = apply_tcode(sub, [5, 5, 1])   # log-diff IP and CPI, level FFR
 
 # Same code for all variables
 d3 = apply_tcode(sub, 5)
 ```
 
-When applying per-variable codes to a `TimeSeriesData`, rows are trimmed consistently to the shortest transformed series, aligning to the end of the sample.
+When applying per-variable codes to a `TimeSeriesData`, rows are trimmed consistently to the shortest transformed series, aligning to the end of the sample. For example, if one variable uses code 6 (losing 2 observations) and another uses code 1 (losing none), the output has ``T - 2`` rows for both variables.
 
 ### Inverse Transformations
 
-`inverse_tcode()` undoes a transformation given initial values:
+`inverse_tcode()` undoes a transformation given initial values needed to anchor the reconstruction:
 
 ```julia
+using MacroEconometricModels
+
 y = [100.0, 105.0, 110.0, 108.0]
 yd = apply_tcode(y, 5)
 
 # Recover original levels
 recovered = inverse_tcode(yd, 5; x_prev=[y[1]])
-# recovered ≈ [105.0, 110.0, 108.0]
+# recovered approx [105.0, 110.0, 108.0]
 ```
-
-The `x_prev` argument provides the initial values needed to anchor the reconstruction:
 
 | Code | Required `x_prev` |
 |------|-------------------|
@@ -334,16 +455,14 @@ The `x_prev` argument provides the initial values needed to anchor the reconstru
 
 ---
 
-## Panel Data
+## [Panel Data](@id panel_data_section)
 
-### Stata-style xtset
+### Stata-Style xtset
 
-`xtset()` converts a DataFrame into a `PanelData` container, analogous to Stata's `xtset` command:
+`xtset()` converts a DataFrame into a `PanelData` container, analogous to Stata's `xtset` command. It extracts all numeric columns (excluding group, time, and cohort columns), sorts by (group, time), validates no duplicate (group, time) pairs, and detects balanced vs unbalanced panels.
 
 ```julia
-# The preferred way to get panel data is load_example(:pwt)
-# For custom DataFrames, use xtset:
-using DataFrames
+using MacroEconometricModels, DataFrames
 
 df = DataFrame(
     firm = repeat(1:50, inner=20),
@@ -355,16 +474,32 @@ df = DataFrame(
 pd = xtset(df, :firm, :year; frequency=Yearly)
 ```
 
-The function:
-- Extracts all numeric columns (excluding group and time columns)
-- Sorts by (group, time)
-- Validates no duplicate (group, time) pairs
-- Detects balanced vs unbalanced panels
-- Optionally assigns cohort membership via `cohort` kwarg (for DiD methods)
+For difference-in-differences estimation, specify a cohort column to encode treatment timing:
+
+```julia
+using MacroEconometricModels, DataFrames
+
+df_did = DataFrame(
+    firm = repeat(1:6, inner=10),
+    year = repeat(2001:2010, 6),
+    revenue = randn(60),
+    treatment_cohort = repeat([1, 1, 2, 2, 0, 0], inner=10)
+)
+pd_did = xtset(df_did, :firm, :year; cohort=:treatment_cohort)
+```
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `varnames` | `Union{Vector{String},Nothing}` | `nothing` | Override variable names (default: column names) |
+| `frequency` | `Frequency` | `Other` | Data frequency metadata |
+| `tcode` | `Union{Vector{Int},Nothing}` | `nothing` | Transformation codes per variable |
+| `cohort` | `Union{Symbol,Nothing}` | `nothing` | Column identifying treatment cohort membership |
 
 ### Panel Operations
 
 ```julia
+using MacroEconometricModels
+
 pwt = load_example(:pwt)
 
 # Structure summary
@@ -378,83 +513,221 @@ usa = group_data(pwt, "USA")       # by name
 usa = group_data(pwt, 38)          # by index
 ```
 
+### Panel Lag, Lead, and Diff
+
+`panel_lag`, `panel_lead`, and `panel_diff` compute within-group transformations that respect panel structure. They return vectors of length ``T_{obs}`` with `NaN` where the operation is unavailable (first observations per group, or time gaps).
+
+```julia
+using MacroEconometricModels
+
+ddcg = load_example(:ddcg)
+
+lag1_y  = panel_lag(ddcg, :y, 1)     # L.y --- one-period lag of GDP
+lag4_y  = panel_lag(ddcg, :y, 4)     # L4.y --- four-period lag
+lead1_y = panel_lead(ddcg, :y, 1)    # F.y --- one-period lead
+d_dem   = panel_diff(ddcg, :dem)     # D.dem --- first difference of democracy
+
+# Append as new columns (returns new PanelData)
+ddcg2 = add_panel_lag(ddcg, :y, 1)   # adds "lag1_y" column
+ddcg3 = add_panel_diff(ddcg, :dem)   # adds "d_dem" column
+```
+
+### Balance Panel
+
+`balance_panel` fills missing values (NaN) using DFM-based nowcasting (Kalman smoothing) to produce a complete panel:
+
+```julia
+using MacroEconometricModels
+
+pd = load_example(:pwt)
+pd_bal = balance_panel(pd; r=2, p=1)
+isbalanced(pd_bal)   # true
+```
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `method` | `Symbol` | `:dfm` | Fill method (currently only `:dfm`) |
+| `r` | `Int` | `3` | Number of factors for DFM |
+| `p` | `Int` | `2` | VAR lags in DFM factor dynamics |
+
 ---
 
 ## Summary Statistics
 
-`describe_data()` computes per-variable descriptive statistics displayed via PrettyTables:
+`describe_data()` computes per-variable descriptive statistics and displays them via PrettyTables. For `PanelData`, it additionally prints panel dimensions.
 
 ```julia
+using MacroEconometricModels
+
 fred = load_example(:fred_md)
 d = fix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
 s = describe_data(d)
 ```
 
-The returned `DataSummary` object contains fields: `varnames`, `n`, `mean`, `std`, `min`, `p25`, `median`, `p75`, `max`, `skewness`, `kurtosis`.
+The output table shows N, Mean, Std, Min, P25, Median, P75, Max, Skewness, and Kurtosis for each variable. For INDPRO (log first difference), a positive mean indicates trend growth in industrial production. The skewness and excess kurtosis columns reveal departures from normality common in macroeconomic data.
 
-For `PanelData`, `describe_data()` additionally prints panel dimensions.
+| Field | Type | Description |
+|-------|------|-------------|
+| `varnames` | `Vector{String}` | Variable names |
+| `n` | `Vector{Int}` | Non-NaN observation count per variable |
+| `mean` | `Vector{Float64}` | Mean of finite values |
+| `std` | `Vector{Float64}` | Standard deviation |
+| `min` | `Vector{Float64}` | Minimum |
+| `p25` | `Vector{Float64}` | 25th percentile |
+| `median` | `Vector{Float64}` | 50th percentile |
+| `p75` | `Vector{Float64}` | 75th percentile |
+| `max` | `Vector{Float64}` | Maximum |
+| `skewness` | `Vector{Float64}` | Skewness |
+| `kurtosis` | `Vector{Float64}` | Excess kurtosis |
 
 ---
 
 ## Estimation Dispatch
 
-All estimation functions accept `TimeSeriesData` directly via thin dispatch wrappers. This avoids manual conversion:
+All estimation functions accept `TimeSeriesData` directly via thin dispatch wrappers. This avoids manual conversion and preserves variable names through to the output:
 
 ```julia
+using MacroEconometricModels
+
 fred = load_example(:fred_md)
 d = fix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
 
-# Multivariate — automatically calls to_matrix(d)
+# Multivariate --- automatically extracts to_matrix(d)
 model = estimate_var(d, 2)
 post = estimate_bvar(d, 2)
 fm = estimate_factors(d, 2)
 lp = estimate_lp(d, 1, 20)
 
-# Univariate — automatically calls to_vector(d) (requires n_vars == 1)
-d_uni = d[:, ["INDPRO"]]  # select single variable
+# Univariate --- automatically extracts to_vector(d) (requires n_vars == 1)
+d_uni = d[:, ["INDPRO"]]
 ar = estimate_ar(d_uni, 2)
 adf = adf_test(d_uni)
 ```
 
-Explicit conversion is also available:
+Explicit conversion is also available when working with raw arrays:
 
 ```julia
+using MacroEconometricModels
+
+fred = load_example(:fred_md)
+d = fix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+
 to_matrix(d)             # Matrix{Float64}
-to_vector(d)             # Vector{Float64} (n_vars == 1 only)
+to_vector(d[:, ["INDPRO"]])   # Vector{Float64} (n_vars == 1 only)
 to_vector(d, "INDPRO")   # single column by name
-to_vector(d, 2)          # single column by index
+to_vector(d, 2)           # single column by index
 ```
+
+---
+
+## Filtering
+
+`apply_filter()` applies time series filters to variables in a `TimeSeriesData` or `PanelData`, extracting trend or cycle components. When filters produce different-length outputs (e.g., Hamilton drops initial observations), the result is trimmed to the common valid range. For mathematical details on each filter, see [Time Series Filters](@ref filters_page).
+
+### Basic Usage
+
+```julia
+using MacroEconometricModels
+
+fred = load_example(:fred_md)
+d = TimeSeriesData(
+    log.(to_matrix(fred[:, ["INDPRO", "PAYEMS", "HOUST"]]));
+    varnames=["INDPRO", "PAYEMS", "HOUST"], frequency=Monthly)
+d = fix(d)
+
+# HP cycle for all variables (monthly lambda)
+d_hp = apply_filter(d, :hp; component=:cycle, lambda=129600.0)
+
+# HP trend for all variables
+d_trend = apply_filter(d, :hp; component=:trend, lambda=129600.0)
+
+# Hamilton filter (output is shorter --- drops initial observations)
+d_ham = apply_filter(d, :hamilton; component=:cycle, h=24, p=12)
+```
+
+Available filter symbols: `:hp`, `:hamilton`, `:bn`, `:bk`, `:boosted_hp`.
+
+### Per-Variable Specifications
+
+```julia
+using MacroEconometricModels
+
+fred = load_example(:fred_md)
+d = TimeSeriesData(
+    log.(to_matrix(fred[:, ["INDPRO", "PAYEMS", "HOUST"]]));
+    varnames=["INDPRO", "PAYEMS", "HOUST"], frequency=Monthly)
+d = fix(d)
+
+# Different filters per variable (nothing = pass-through)
+d2 = apply_filter(d, [:hp, :hamilton, nothing]; component=:cycle)
+
+# Per-variable component overrides via tuples
+d3 = apply_filter(d, [(:hp, :trend), (:hamilton, :cycle), nothing])
+```
+
+### Selective and Panel Filtering
+
+```julia
+using MacroEconometricModels
+
+fred = load_example(:fred_md)
+d = TimeSeriesData(
+    log.(to_matrix(fred[:, ["INDPRO", "PAYEMS", "HOUST"]]));
+    varnames=["INDPRO", "PAYEMS", "HOUST"], frequency=Monthly)
+d = fix(d)
+
+# Filter only selected variables (others pass through unchanged)
+d_sel = apply_filter(d, :hp; vars=["INDPRO", "PAYEMS"], component=:cycle)
+
+# Panel data: filters applied group-by-group
+pwt = load_example(:pwt)
+pd_hp = apply_filter(pwt[:, ["rgdpna", "rconna"]], :hp; component=:cycle)
+```
+
+!!! note "Technical Note"
+    Filters that produce shorter output (Hamilton, Baxter-King) trim each group independently. If groups have different lengths, the resulting panel may become unbalanced.
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `component` | `Symbol` | `:cycle` | Component to extract: `:cycle` or `:trend` |
+| `vars` | `Union{Nothing, Vector{String}, Vector{Int}}` | `nothing` | Variables to filter (default: all) |
+
+Additional keyword arguments are forwarded to the underlying filter functions (e.g., `lambda` for HP, `h` and `p` for Hamilton).
 
 ---
 
 ## Example Datasets
 
-Three built-in datasets are included, stored as TOML files in the `data/` directory:
+Five built-in datasets are included, stored as TOML files in the `data/` directory:
 
 | Dataset | Function | Type | Variables | Observations | Frequency |
 |---------|----------|------|-----------|--------------|-----------|
 | FRED-MD | `load_example(:fred_md)` | `TimeSeriesData` | 126 | 804 months (1959--2025) | Monthly |
 | FRED-QD | `load_example(:fred_qd)` | `TimeSeriesData` | 245 | 268 quarters (1959--2025) | Quarterly |
-| PWT | `load_example(:pwt)` | `PanelData` | 42 | 38 countries × 74 years (1950--2023) | Yearly |
-
-FRED-MD and FRED-QD are January 2026 vintage and include per-variable descriptions and recommended transformation codes from McCracken and Ng. PWT 10.01 covers 38 OECD countries with national accounts, productivity, and price level data from Feenstra, Inklaar, and Timmer.
+| PWT | `load_example(:pwt)` | `PanelData` | 42 | 38 countries ``\times`` 74 years (1950--2023) | Yearly |
+| DDCG | `load_example(:ddcg)` | `PanelData` | 2 | 184 countries ``\times`` 51 years (1960--2010) | Yearly |
+| mpdta | `load_example(:mpdta)` | `PanelData` | 3 | 500 counties ``\times`` 5 years (2003--2007) | Yearly |
 
 ### FRED Databases
 
+FRED-MD and FRED-QD are January 2026 vintage and include per-variable descriptions and recommended transformation codes from McCracken & Ng (2016, 2020).
+
 ```julia
+using MacroEconometricModels
+
 # Load FRED-MD
 md = load_example(:fred_md)
-md                              # 804 obs × 126 vars (Monthly)
 desc(md)                        # "FRED-MD Monthly Database, January 2026 Vintage ..."
 vardesc(md, "INDPRO")           # "IP Index"
 refs(md)                        # McCracken & Ng (2016)
 
 # Apply recommended FRED transformations to achieve stationarity
-md_stationary = apply_tcode(md, md.tcode)
+md_stationary = apply_tcode(md)
 
 # Estimate a VAR on a subset
-sub = md_stationary[:, ["INDPRO", "UNRATE", "CPIAUCSL", "FEDFUNDS"]]
+sub = fix(md_stationary[:, ["INDPRO", "UNRATE", "CPIAUCSL", "FEDFUNDS"]])
 model = estimate_var(sub, 4)
+report(model)
 
 # Load FRED-QD
 qd = load_example(:fred_qd)
@@ -465,12 +738,13 @@ refs(qd)                        # McCracken & Ng (2020)
 
 ### Penn World Table
 
-The Penn World Table (PWT) 10.01 provides a balanced panel of 38 OECD countries over 1950--2023. It loads as `PanelData`, giving access to panel-specific functions like `group_data`, `groups`, and `panel_summary`.
+The Penn World Table (PWT) 10.01 provides a balanced panel of 38 OECD countries over 1950--2023 (Feenstra, Inklaar & Timmer 2015). It loads as `PanelData`, giving access to panel-specific functions.
 
 ```julia
-# Load PWT
+using MacroEconometricModels
+
 pwt = load_example(:pwt)
-nobs(pwt)                       # 2812 (38 × 74)
+nobs(pwt)                       # 2812 (38 x 74)
 nvars(pwt)                      # 42
 ngroups(pwt)                    # 38
 groups(pwt)                     # ["AUS", "AUT", ..., "USA"]
@@ -480,20 +754,44 @@ refs(pwt)                       # Feenstra, Inklaar & Timmer (2015)
 
 # Extract a single country as TimeSeriesData
 usa = group_data(pwt, "USA")
-nobs(usa)                       # 74 (years 1950–2023)
-
-# Run a VAR on US real GDP, consumption, and investment
-rgdpna = usa[:, "rgdpna"]
-rconna = usa[:, "rconna"]
-# Panel summary
+nobs(usa)                       # 74 (years 1950-2023)
 panel_summary(pwt)
 ```
 
-### References
+### DDCG Democracy Panel
+
+The DDCG panel from Acemoglu, Naidu, Restrepo & Robinson (2019) contains 184 countries over 1960--2010 with two variables: log GDP per capita (`y`) and a binary democracy indicator (`dem`). It is the standard test dataset for LP-DiD and event study LP methods.
+
+```julia
+using MacroEconometricModels
+
+ddcg = load_example(:ddcg)
+nobs(ddcg)      # 9384
+ngroups(ddcg)   # 184
+panel_summary(ddcg)
+```
+
+### Callaway & Sant'Anna Panel (mpdta)
+
+The mpdta dataset from Callaway & Sant'Anna (2021) contains 500 US counties over 2003--2007 with county-level employment (`lemp`, log), population (`lpop`, log), and a staggered treatment indicator for minimum wage changes. It is the reference dataset for the Callaway-Sant'Anna DiD estimator.
+
+```julia
+using MacroEconometricModels
+
+mpdta = load_example(:mpdta)
+nobs(mpdta)      # 2500
+ngroups(mpdta)   # 500
+panel_summary(mpdta)
+```
+
+### Bibliographic References
 
 Each loaded dataset carries bibliographic references accessible via `refs()`, supporting `:text`, `:latex`, `:bibtex`, and `:html` output formats:
 
 ```julia
+using MacroEconometricModels
+
+md = load_example(:fred_md)
 refs(md; format=:bibtex)   # BibTeX entry for McCracken & Ng (2016)
 refs(:fred_md)             # same via symbol dispatch
 refs(:pwt)                 # Feenstra, Inklaar & Timmer (2015)
@@ -501,143 +799,88 @@ refs(:pwt)                 # Feenstra, Inklaar & Timmer (2015)
 
 ---
 
-## Filtering
-
-`apply_filter()` applies time series filters (HP, Hamilton, BN, BK, Boosted HP) to variables in a `TimeSeriesData` or `PanelData`, extracting trend or cycle components. When filters produce different-length outputs (e.g., Hamilton drops initial observations), the result is trimmed to the common valid range.
-
-### Basic Usage
-
-```julia
-# Log levels from FRED-MD (I(1) series, suitable for trend-cycle decomposition)
-fred = load_example(:fred_md)
-d = TimeSeriesData(
-    log.(to_matrix(fred[:, ["INDPRO", "PAYEMS", "HOUST"]]));
-    varnames=["INDPRO", "PAYEMS", "HOUST"], frequency=Monthly)
-# Drop any NaN from log of non-positive values
-d = fix(d)
-
-# HP cycle for all variables (monthly lambda)
-d_hp = apply_filter(d, :hp; component=:cycle, lambda=129600.0)
-
-# HP trend for all variables
-d_trend = apply_filter(d, :hp; component=:trend, lambda=129600.0)
-
-# Hamilton filter (output is shorter — drops initial observations)
-d_ham = apply_filter(d, :hamilton; component=:cycle, h=24, p=12)
-```
-
-Available filter symbols: `:hp`, `:hamilton`, `:bn`, `:bk`, `:boosted_hp`.
-
-### Per-Variable Specifications
-
-```julia
-# Different filters per variable (nothing = pass-through)
-d2 = apply_filter(d, [:hp, :hamilton, nothing]; component=:cycle)
-
-# Per-variable component overrides via tuples
-d3 = apply_filter(d, [(:hp, :trend), (:hamilton, :cycle), nothing])
-```
-
-### Selective Filtering
-
-```julia
-# Filter only selected variables (others pass through unchanged)
-d_sel = apply_filter(d, :hp; vars=["INDPRO", "PAYEMS"], component=:cycle)
-d_sel = apply_filter(d, :hp; vars=[1, 2], component=:cycle)  # by index
-```
-
-### Pre-Computed Results
-
-```julia
-# Use a pre-computed filter result
-r = hp_filter(d[:, "INDPRO"]; lambda=129600.0)
-d2 = apply_filter(d, [r, :hp, nothing]; component=:cycle)
-```
-
-### Forwarding Filter Parameters
-
-Additional keyword arguments are forwarded to the filter functions:
-
-```julia
-# Custom HP lambda
-d_smooth = apply_filter(d, :hp; component=:cycle, lambda=100.0)
-
-# Custom Hamilton horizon and lags
-d_ham = apply_filter(d, :hamilton; component=:cycle, h=24, p=12)
-```
-
-### Panel Data
-
-`apply_filter` applies filters group-by-group to `PanelData`, reassembling the results:
-
-```julia
-# Penn World Table — real GDP and consumption for 38 OECD countries
-pwt = load_example(:pwt)
-
-# HP cycle for all variables, applied per-group
-pd_hp = apply_filter(pwt[:, ["rgdpna", "rconna"]], :hp; component=:cycle)
-
-# Filter only rgdpna, pass through rconna
-pd_sel = apply_filter(pwt[:, ["rgdpna", "rconna"]], :hp; vars=["rgdpna"], component=:cycle)
-```
-
-!!! note "Technical Note"
-    Filters that produce shorter output (Hamilton, Baxter-King) trim each group independently. If groups have different lengths, the resulting panel may become unbalanced.
-
----
-
 ## Complete Example
+
+This example demonstrates a full data pipeline: loading FRED-MD, diagnosing and cleaning, summarizing, estimating a VAR, and performing structural analysis --- all using data containers without manual conversion.
 
 ```julia
 using MacroEconometricModels
 
-# === Step 1: Load FRED-MD and select variables ===
+# Step 1: Load FRED-MD and select key macro variables
 fred = load_example(:fred_md)
 sub = fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]
 
-# === Step 2: Apply FRED transformation codes ===
+# Step 2: Apply FRED transformation codes to achieve stationarity
 d = apply_tcode(sub)
 
-# === Step 3: Diagnose — differencing introduces NaN ===
+# Step 3: Diagnose --- differencing introduces NaN in early rows
 diag = diagnose(d)
-println("Clean: ", diag.is_clean)   # false
+diag.is_clean   # false
 
-# === Step 4: Fix by dropping NaN rows ===
+# Step 4: Fix by dropping NaN rows
 d_clean = fix(d)
-println("Clean: ", diagnose(d_clean).is_clean)   # true
+diagnose(d_clean).is_clean   # true
 
-# === Step 5: Summary statistics ===
+# Step 5: Summary statistics
 describe_data(d_clean)
 
-# === Step 6: Validate for VAR ===
-validate_for_model(d_clean, :var)   # OK — multivariate
+# Step 6: Validate for VAR estimation
+validate_for_model(d_clean, :var)   # OK --- multivariate
 
-# === Step 7: Estimate VAR directly from container ===
+# Step 7: Estimate VAR directly from container
 model = estimate_var(d_clean, 2)
+report(model)
 
-# === Step 8: Structural analysis ===
+# Step 8: Structural analysis --- Cholesky-identified IRFs
 irfs = irf(model, 20; method=:cholesky)
+plot_result(irfs)
 
-# === Step 9: Panel workflow with Penn World Table ===
+# Step 9: Panel workflow with Penn World Table
 pwt = load_example(:pwt)
 panel_summary(pwt)
 
-# Extract and estimate per country
+# Extract and analyze per country
 for country in ["USA", "GBR", "JPN"]
     gd = group_data(pwt, country)
     y = filter(isfinite, log.(gd[:, "rgdpna"]))
     hp = hp_filter(y)
-    println("$country: trend length = ", length(trend(hp)))
+    report(hp)
 end
 ```
 
-### See Also
+The pipeline starts with `load_example(:fred_md)`, which returns a `TimeSeriesData` with 126 variables, transformation codes, and descriptions pre-loaded. `apply_tcode(sub)` applies the per-variable codes stored in `tcode` (code 5 for INDPRO and CPIAUCSL, code 1 for FEDFUNDS), producing log growth rates for the first two and leaving the federal funds rate in levels. The differencing step introduces NaN in the first two rows, which `fix(d)` removes via listwise deletion. The cleaned container passes directly to `estimate_var`, which extracts the data matrix and variable names automatically. The Penn World Table loop demonstrates extracting individual countries from a panel container for univariate analysis.
 
-- [Time Series Filters](filters.md) -- HP, Hamilton, BN, BK, and boosted HP filters used by `apply_filter`
-- [Examples](examples.md) -- Complete worked examples including FRED-MD data pipeline
-- [API Reference](api_functions.md) -- Complete function signatures
+---
+
+## Common Pitfalls
+
+1. **NaN from differencing**: `apply_tcode` with codes 2, 3, 5, 6, or 7 produces NaN in the first 1--2 rows because differencing requires prior values. Always follow `apply_tcode` with `fix(d)` or manually drop NaN rows before estimation. Passing data with NaN to `estimate_var` or other estimators produces invalid results silently.
+
+2. **Log of non-positive values**: Codes 4--7 require strictly positive data. If a series contains zeros or negatives, `apply_tcode` falls back to code 2 (first difference) with a warning. Check `d.tcode` after transformation to verify which codes were actually applied.
+
+3. **Panel vs time series dispatch**: Passing a `PanelData` to `estimate_var` does not work --- VAR estimators expect `TimeSeriesData` or raw matrices. Extract a single group with `group_data(pd, "USA")` first, then estimate.
+
+4. **Forgetting to filter NaN rows**: `diagnose(d).is_clean` returns `false` if any NaN exists. Do not assume `apply_tcode` produces clean output. The `fix` step is not optional for downstream estimation.
+
+5. **tcode metadata mismatch after subsetting**: When subsetting columns with `d[:, ["INDPRO", "FEDFUNDS"]]`, the `tcode` vector is automatically sliced to match. However, if you construct `TimeSeriesData` manually from a subset of columns, you must provide the correct `tcode` vector yourself.
+
+6. **Unbalanced panels from filtering**: Applying Hamilton or Baxter-King filters to `PanelData` via `apply_filter` trims each group independently. If groups have different time spans, the resulting panel becomes unbalanced even if the input was balanced.
+
+---
 
 ## References
 
-- McCracken, Michael W., and Serena Ng. 2016. "FRED-MD: A Monthly Database for Macroeconomic Research." *Journal of Business & Economic Statistics* 34 (4): 574--589. [https://doi.org/10.1080/07350015.2015.1086655](https://doi.org/10.1080/07350015.2015.1086655)
-- McCracken, Michael W., and Serena Ng. 2020. "FRED-QD: A Quarterly Database for Macroeconomic Research." *Federal Reserve Bank of St. Louis Working Paper* 2020-005. [https://doi.org/10.20955/wp.2020.005](https://doi.org/10.20955/wp.2020.005)
+- McCracken, M. W., & Ng, S. (2016). FRED-MD: A Monthly Database for Macroeconomic Research.
+  *Journal of Business & Economic Statistics*, 34(4), 574--589. [DOI](https://doi.org/10.1080/07350015.2015.1086655)
+
+- McCracken, M. W., & Ng, S. (2020). FRED-QD: A Quarterly Database for Macroeconomic Research.
+  *Federal Reserve Bank of St. Louis Working Paper*, 2020-005. [DOI](https://doi.org/10.20955/wp.2020.005)
+
+- Feenstra, R. C., Inklaar, R., & Timmer, M. P. (2015). The Next Generation of the Penn World Table.
+  *American Economic Review*, 105(10), 3150--3182. [DOI](https://doi.org/10.1257/aer.20130954)
+
+- Acemoglu, D., Naidu, S., Restrepo, P., & Robinson, J. A. (2019). Democracy Does Cause Growth.
+  *Journal of Political Economy*, 127(1), 47--100. [DOI](https://doi.org/10.1086/700936)
+
+- Callaway, B., & Sant'Anna, P. H. C. (2021). Difference-in-Differences with Multiple Time Periods.
+  *Journal of Econometrics*, 225(2), 200--230. [DOI](https://doi.org/10.1016/j.jeconom.2020.12.001)
