@@ -18,7 +18,6 @@ and beta are the slope coefficients.
 No intercept should appear in X -- it is absorbed by the cutpoints.
 """
 
-using LinearAlgebra, Statistics, Distributions
 
 # =============================================================================
 # Type Definitions
@@ -523,8 +522,8 @@ function _estimate_ordered(y::AbstractVector, X::AbstractMatrix{T}, link::Symbol
     K = size(X, 2)
     size(X, 1) == n || throw(ArgumentError("X must have $n rows (got $(size(X, 1)))"))
 
-    cov_type in (:ols, :hc0, :hc1, :hc2, :hc3, :cluster) ||
-        throw(ArgumentError("cov_type must be :ols, :hc0, :hc1, :hc2, :hc3, or :cluster; got :$cov_type"))
+    cov_type in (:ols, :hc0, :hc1, :cluster) ||
+        throw(ArgumentError("cov_type must be :ols, :hc0, :hc1, or :cluster; got :$cov_type"))
 
     if cov_type == :cluster
         clusters === nothing && throw(ArgumentError("clusters required for :cluster cov_type"))
@@ -598,18 +597,7 @@ function _estimate_ordered(y::AbstractVector, X::AbstractMatrix{T}, link::Symbol
             vcov_mat = H_inv * B * H_inv
         else
             # HC variants
-            B = zeros(T, P, P)
-            for i in 1:n
-                si = @view S_mat[i, :]
-                omega = if cov_type == :hc0
-                    one(T)
-                elseif cov_type == :hc1
-                    one(T)
-                else
-                    one(T)  # HC2/HC3 not well-defined for MLE; treat as HC0
-                end
-                B .+= omega .* (si * si')
-            end
+            B = S_mat' * S_mat  # outer product of scores
             if cov_type == :hc1
                 B .*= T(n) / T(n - P)
             end
