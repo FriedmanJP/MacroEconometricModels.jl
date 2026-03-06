@@ -581,7 +581,7 @@ end
     spec2 = compute_steady_state(spec)
     @test spec2.steady_state[1] ≈ 0.0 atol=1e-6
 
-    spec3 = compute_steady_state(spec; algorithm=NewtonRaphson())
+    spec3 = compute_steady_state(spec; algorithm=MacroEconometricModels.NewtonRaphson())
     @test spec3.steady_state[1] ≈ 0.0 atol=1e-6
 end
 
@@ -867,6 +867,41 @@ end
     s = String(take!(io))
     @test occursin("Perfect Foresight Path", s)
     @test occursin("Converged", s)
+end
+
+@testset "Perfect foresight: NonlinearSolve algorithm kwarg" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 1.0
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+    end
+    spec = compute_steady_state(spec)
+    shocks = zeros(30, 1)
+    shocks[1, 1] = 1.0
+    pf = solve(spec; method=:perfect_foresight, T_periods=30, shock_path=shocks,
+               algorithm=MacroEconometricModels.NewtonRaphson())
+    @test pf isa PerfectForesightPath{Float64}
+    @test pf.converged
+    @test pf.deviations[1, 1] ≈ 1.0 atol=0.1
+end
+
+@testset "Perfect foresight: NonlinearSolve box-constrained" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 1.0
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+    shocks = zeros(30, 1)
+    shocks[1, 1] = -3.0
+    pf = solve(spec; method=:perfect_foresight, T_periods=30, shock_path=shocks,
+               constraints=[variable_bound(:y, lower=0.0)])
+    @test pf isa PerfectForesightPath
+    @test pf.converged
+    @test all(pf.path[:, 1] .>= -1e-4)
 end
 
 # ─────────────────────────────────────────────────────────────────────────────

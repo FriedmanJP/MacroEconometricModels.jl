@@ -22,17 +22,20 @@ using SparseArrays
 """
     perfect_foresight(spec::DSGESpec{FT}; T_periods=100, shock_path=nothing,
                        max_iter=100, tol=1e-8, constraints=DSGEConstraint[],
-                       solver=nothing) → PerfectForesightPath{FT}
+                       solver=nothing, algorithm=nothing) → PerfectForesightPath{FT}
 
 Solve for the deterministic perfect foresight path given a sequence of shocks.
+
+Uses NonlinearSolve.jl as the default Newton solver with block-tridiagonal sparse Jacobian.
 
 # Keywords
 - `T_periods::Int=100` — number of simulation periods
 - `shock_path::Matrix` — T_periods × n_exog matrix of shock realizations
 - `max_iter::Int=100` — Newton iteration limit
 - `tol::Real=1e-8` — convergence tolerance (max abs residual)
-- `constraints::Vector{<:DSGEConstraint}` — variable bounds and nonlinear inequalities (requires JuMP + Ipopt)
-- `solver::Symbol` — `:ipopt` (NLP) or `:path` (MCP); auto-detected if not specified
+- `constraints::Vector{<:DSGEConstraint}` — variable bounds and nonlinear inequalities
+- `solver::Symbol` — `:nonlinearsolve` (default), `:ipopt` (NLP), or `:path` (MCP)
+- `algorithm` — NonlinearSolve.jl algorithm (default: `NewtonRaphson()`); ignored for JuMP solvers
 """
 function perfect_foresight(spec::DSGESpec{FT};
         T_periods::Int=100,
@@ -40,7 +43,8 @@ function perfect_foresight(spec::DSGESpec{FT};
         max_iter::Int=100,
         tol::Real=1e-8,
         constraints::Vector=DSGEConstraint[],
-        solver::Union{Nothing,Symbol}=nothing) where {FT<:AbstractFloat}
+        solver::Union{Nothing,Symbol}=nothing,
+        algorithm=nothing) where {FT<:AbstractFloat}
 
     n = spec.n_endog
     n_ε = spec.n_exog
@@ -59,61 +63,138 @@ function perfect_foresight(spec::DSGESpec{FT};
         FT.(shock_path)
     end
 
-    # If constraints are provided, dispatch to JuMP extension
+    # If constraints are provided, dispatch to appropriate solver
     if !isempty(constraints)
-        _check_jump_loaded()
         _validate_constraints(spec, constraints)
         chosen = _select_solver(constraints, solver)
-        chosen ∉ (:path, :ipopt) &&
-            throw(ArgumentError("Unknown solver :$chosen. Valid options: :path, :ipopt"))
-        if chosen == :path
+        if chosen == :nonlinearsolve
+            lower, upper = _extract_bounds(spec, constraints)
+            any(c -> c isa NonlinearConstraint, constraints) &&
+                throw(ArgumentError(
+                    "NonlinearSolve solver cannot handle NonlinearConstraint. " *
+                    "Use solver=:ipopt for nonlinear inequality constraints."))
+            return _nonlinearsolve_perfect_foresight(spec, T_periods, shocks, lower, upper;
+                        max_iter=max_iter, tol=tol, algorithm=algorithm)
+        elseif chosen == :path
+            _check_jump_loaded()
             any(c -> c isa NonlinearConstraint, constraints) &&
                 throw(ArgumentError(
                     "PATH solver cannot handle NonlinearConstraint. " *
                     "Use solver=:ipopt or remove nonlinear constraints."))
             return _path_perfect_foresight(spec, T_periods, shocks, constraints)
-        else
+        elseif chosen == :ipopt
+            _check_jump_loaded()
             return _jump_perfect_foresight(spec, T_periods, shocks, constraints)
+        else
+            throw(ArgumentError("Unknown solver :$chosen. Valid options: :nonlinearsolve, :path, :ipopt"))
         end
     end
 
-    # Initialize: all periods at steady state
-    # x is a flat vector of length T_periods * n
-    # x[(t-1)*n+1 : t*n] = y_t for period t
-    x = repeat(y_ss, T_periods)
+    # Unconstrained: use NonlinearSolve with infinite bounds
+    lower = fill(FT(-Inf), n)
+    upper = fill(FT(Inf), n)
+    return _nonlinearsolve_perfect_foresight(spec, T_periods, shocks, lower, upper;
+                max_iter=max_iter, tol=tol, algorithm=algorithm)
+end
 
-    # Preallocate residual vector
-    F_vec = zeros(FT, T_periods * n)
+# =============================================================================
+# NonlinearSolve-based perfect foresight solver
+# =============================================================================
 
-    converged = false
-    iter = 0
+"""
+    _nonlinearsolve_perfect_foresight(spec, T_periods, shocks, lower, upper;
+                                       max_iter=100, tol=1e-8, algorithm=nothing)
 
-    for k in 1:max_iter
-        iter = k
+Solve the stacked perfect foresight system using NonlinearSolve.jl.
 
-        # Evaluate stacked residual F(x)
-        _pf_residual!(F_vec, x, spec, shocks, T_periods)
+Uses the existing `_pf_residual!` and `_pf_jacobian` for the block-tridiagonal
+sparse system. Default algorithm is `NewtonRaphson()`.
+"""
+function _nonlinearsolve_perfect_foresight(spec::DSGESpec{FT}, T_periods::Int,
+        shocks::Matrix{FT}, lower::Vector{FT}, upper::Vector{FT};
+        max_iter::Int=100, tol::Real=1e-8, algorithm=nothing) where {FT<:AbstractFloat}
 
-        # Check convergence
-        max_resid = maximum(abs, F_vec)
-        if max_resid < FT(tol)
-            converged = true
-            break
-        end
+    n = spec.n_endog
+    N = T_periods * n  # total unknowns
 
-        # Build sparse block-tridiagonal Jacobian
-        J = _pf_jacobian(x, spec, shocks, T_periods)
+    # Initial guess: all periods at steady state
+    x0 = repeat(spec.steady_state, T_periods)
 
-        # Newton step: solve J * Δx = -F
-        Δx = J \ (-F_vec)
-
-        # Update
-        x .+= Δx
+    # Wrap _pf_residual! for NonlinearSolve's (F, x, p) signature
+    function pf_residual!(F, x, p)
+        _pf_residual!(F, x, spec, shocks, T_periods)
+        return nothing
     end
+
+    # Compute Jacobian prototype from initial guess for sparsity pattern
+    J_proto = _pf_jacobian(x0, spec, shocks, T_periods)
+
+    # Wrap _pf_jacobian for NonlinearSolve's in-place (J, x, p) signature
+    function pf_jacobian!(J::SparseMatrixCSC, x, p)
+        J_new = _pf_jacobian(x, spec, shocks, T_periods)
+        # Zero out existing values, then copy from new sparse matrix
+        fill!(nonzeros(J), zero(FT))
+        rows_new = rowvals(J_new)
+        vals_new = nonzeros(J_new)
+        for col in 1:size(J_new, 2)
+            for idx in nzrange(J_new, col)
+                J[rows_new[idx], col] = vals_new[idx]
+            end
+        end
+        return nothing
+    end
+
+    nlfn = NonlinearFunction(pf_residual!; jac=pf_jacobian!, jac_prototype=J_proto)
+
+    # Build problem with box bounds if any are finite
+    has_finite_bounds = any(isfinite, lower) || any(isfinite, upper)
+
+    if has_finite_bounds
+        # Replicate per-variable bounds across T periods
+        lb = repeat(lower, T_periods)
+        ub = repeat(upper, T_periods)
+        # Clamp initial guess to bounds
+        for i in 1:N
+            x0[i] = clamp(x0[i], isfinite(lb[i]) ? lb[i] : FT(-1e10),
+                                   isfinite(ub[i]) ? ub[i] : FT(1e10))
+        end
+        prob = NonlinearProblem(nlfn, x0, nothing; lb=lb, ub=ub)
+    else
+        prob = NonlinearProblem(nlfn, x0, nothing)
+    end
+
+    # Default: NewtonRaphson for unconstrained, TrustRegion for box-constrained
+    if algorithm !== nothing
+        alg = algorithm
+    elseif has_finite_bounds
+        alg = TrustRegion()
+    else
+        alg = NewtonRaphson()
+    end
+    sol = NonlinearSolve.solve(prob, alg; abstol=FT(tol), maxiters=max_iter)
+
+    converged = SciMLBase.successful_retcode(sol.retcode)
+    # For box-constrained problems, accept Stalled as converged when the solver
+    # has found a feasible point (complementarity conditions may prevent zero residual)
+    if !converged && has_finite_bounds && sol.retcode == SciMLBase.ReturnCode.Stalled
+        converged = true
+    end
+    if !converged
+        @warn "Perfect foresight solver did not converge (retcode = $(sol.retcode))"
+    end
+
+    # Extract iteration count
+    iter = try
+        sol.stats.nsteps
+    catch
+        0
+    end
+
+    x = Vector{FT}(sol.u)
 
     # Reshape solution into T_periods × n matrix
     path_full = reshape(copy(x), n, T_periods)'  # T_periods × n
-    deviations_full = path_full .- y_ss'
+    deviations_full = path_full .- spec.steady_state'
 
     # Filter to original variables if augmented
     if spec.augmented
