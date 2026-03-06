@@ -2540,4 +2540,88 @@ end
     end
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Section: Bayesian DSGE IRF / FEVD / Simulate
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Build a simple BayesianDSGE result for testing IRF/FEVD/simulate
+_bayes_dsge_irf_test_result = _suppress_warnings() do
+    spec = @dsge begin
+        parameters: rho = 0.5, sig = 0.01
+        endogenous: y
+        exogenous: e
+        y[t] = rho * y[t-1] + sig * e[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    data_obs = randn(MersenneTwister(42), 1, 30) .* 0.02
+    priors = Dict(:rho => Normal(0.5, 0.2))
+    theta0 = [0.5]
+    estimate_dsge_bayes(
+        spec, data_obs, theta0;
+        priors=priors, method=:smc, observables=[:y],
+        n_smc=30, n_mh_steps=1, ess_target=0.5,
+        measurement_error=[0.01],
+        rng=MersenneTwister(123))
+end
+
+@testset "irf(::BayesianDSGE)" begin
+    result = _bayes_dsge_irf_test_result
+    _suppress_warnings() do
+        birf = irf(result, 10; n_draws=10, rng=MersenneTwister(42))
+        @test birf isa BayesianImpulseResponse{Float64}
+        @test birf.horizon == 10
+        @test length(birf.variables) >= 1
+        @test length(birf.shocks) >= 1
+        @test size(birf.point_estimate) == (10, length(birf.variables), length(birf.shocks))
+        @test birf.quantile_levels == Float64[0.05, 0.16, 0.84, 0.95]
+        @test size(birf.quantiles, ndims(birf.quantiles)) == 4  # 4 quantile levels
+
+        # Custom quantiles
+        birf2 = irf(result, 5; n_draws=5, quantiles=[0.1, 0.9], rng=MersenneTwister(42))
+        @test birf2.quantile_levels == Float64[0.1, 0.9]
+        @test size(birf2.quantiles, ndims(birf2.quantiles)) == 2
+
+        # show should not error
+        io = IOBuffer()
+        show(io, birf)
+        @test length(take!(io)) > 0
+    end
+end
+
+@testset "fevd(::BayesianDSGE)" begin
+    result = _bayes_dsge_irf_test_result
+    _suppress_warnings() do
+        bfevd = fevd(result, 10; n_draws=10, rng=MersenneTwister(42))
+        @test bfevd isa BayesianFEVD{Float64}
+        @test bfevd.horizon == 10
+        @test length(bfevd.variables) >= 1
+        @test length(bfevd.shocks) >= 1
+        @test bfevd.quantile_levels == Float64[0.05, 0.16, 0.84, 0.95]
+
+        # FEVD proportions should be in [0, 1]
+        @test all(x -> 0.0 <= x <= 1.0 + 1e-10, bfevd.point_estimate)
+    end
+end
+
+@testset "simulate(::BayesianDSGE)" begin
+    result = _bayes_dsge_irf_test_result
+    _suppress_warnings() do
+        bsim = simulate(result, 20; n_draws=10, rng=MersenneTwister(42))
+        @test bsim isa BayesianDSGESimulation{Float64}
+        @test bsim.T_periods == 20
+        @test length(bsim.variables) >= 1
+        @test bsim.quantile_levels == Float64[0.05, 0.16, 0.84, 0.95]
+        @test size(bsim.point_estimate) == (20, length(bsim.variables))
+        @test size(bsim.all_paths, 2) == 20
+        @test size(bsim.all_paths, 3) == length(bsim.variables)
+
+        # show and report should not error
+        io = IOBuffer()
+        show(io, bsim)
+        @test length(take!(io)) > 0
+        report(bsim)
+    end
+end
+
 end  # @testset "Bayesian DSGE"
