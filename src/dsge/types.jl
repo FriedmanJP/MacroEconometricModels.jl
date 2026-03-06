@@ -557,6 +557,7 @@ Fields:
 - `iterations::Int` — number of guess-and-verify iterations
 - `spec::DSGESpec{T}` — model specification
 - `varnames::Vector{String}` — variable display names
+- `constraints::Vector{OccBinConstraint{T}}` — constraint(s) used in the solve
 """
 struct OccBinSolution{T<:AbstractFloat}
     linear_path::Matrix{T}
@@ -567,6 +568,7 @@ struct OccBinSolution{T<:AbstractFloat}
     iterations::Int
     spec::DSGESpec{T}
     varnames::Vector{String}
+    constraints::Vector{OccBinConstraint{T}}
 end
 
 function Base.show(io::IO, sol::OccBinSolution{T}) where {T}

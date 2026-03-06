@@ -143,17 +143,37 @@ function _derive_alternative_regime(spec::DSGESpec{T}, constraint::OccBinConstra
 
     bound = constraint.bound
 
-    # Build new equations vector: replace the constrained variable's equation
-    new_equations = copy(spec.equations)
-    new_equations[var_idx] = constraint.bind_expr
+    # Find the equation that defines the constrained variable:
+    # The "defining equation" has the largest |∂f_i/∂y_t[var_idx]| entry
+    y_ss = spec.steady_state
+    n = spec.n_endog
+    eq_idx = var_idx  # default fallback
+    if !isempty(y_ss)
+        jac_col = zeros(T, n)
+        θ = spec.param_values
+        ε_zero = zeros(T, spec.n_exog)
+        h = max(T(1e-6), sqrt(eps(T)))
+        for i in 1:n
+            y_plus = copy(y_ss); y_plus[var_idx] += h
+            y_minus = copy(y_ss); y_minus[var_idx] -= h
+            f_plus = spec.residual_fns[i](y_plus, y_ss, y_ss, ε_zero, θ)
+            f_minus = spec.residual_fns[i](y_minus, y_ss, y_ss, ε_zero, θ)
+            jac_col[i] = (f_plus - f_minus) / (2h)
+        end
+        eq_idx = argmax(abs.(jac_col))
+    end
 
-    # Build new residual functions: replace the constrained variable's residual
+    # Build new equations vector: replace the defining equation
+    new_equations = copy(spec.equations)
+    new_equations[eq_idx] = constraint.bind_expr
+
+    # Build new residual functions: replace the defining equation's residual
     new_residual_fns = copy(spec.residual_fns)
-    new_residual_fns[var_idx] = (y_t, y_lag, y_lead, epsilon, theta) -> y_t[var_idx] - bound
+    new_residual_fns[eq_idx] = (y_t, y_lag, y_lead, epsilon, theta) -> y_t[var_idx] - bound
 
     # Update forward indices: the binding equation is never forward-looking
-    # Remove var_idx from forward_indices if present
-    new_forward_indices = filter(!=(var_idx), spec.forward_indices)
+    # Remove eq_idx from forward_indices if present
+    new_forward_indices = filter(!=(eq_idx), spec.forward_indices)
     n_expect_new = length(new_forward_indices)
 
     DSGESpec{T}(spec.endog, spec.exog, spec.params, spec.param_values,
@@ -321,6 +341,13 @@ function _backward_iteration(ref::OccBinRegime{T}, alt::OccBinRegime{T},
         # (B + C · P_next) · ŷ_t = -A · ŷ_{t-1} - D · ε_t - d - C · D_next
         invmat = robust_inv(rgm.B + rgm.C * P_next)
         P_tv[:, :, t] = -invmat * rgm.A
+
+        if maximum(abs.(P_tv[:, :, t])) > T(1e10)
+            error("OccBin backward iteration diverged (max|P_tv| > 1e10 at period $t). " *
+                  "The alternative (binding) regime is likely indeterminate. " *
+                  "This commonly occurs in simple NK models at the ZLB. " *
+                  "Consider adding model frictions (habits, investment adj. costs) or reducing shock magnitude.")
+        end
 
         # Constant: D_tv_t = -invmat * (D · ε_t + d + C · D_tv_{t+1})
         # At T_max, D_tv_{t+1} = 0 (unconstrained regime has no constant in deviations)
@@ -517,12 +544,6 @@ function _guess_verify_one(ref::OccBinRegime{T}, alt::OccBinRegime{T},
         @warn "OccBin guess-and-verify did not converge after $maxiter iterations"
     end
 
-    # Check if constraint is binding at the terminal period
-    if violvec[end]
-        @warn "OccBin: constraint is binding at the terminal period ($nperiods). " *
-              "Consider increasing nperiods."
-    end
-
     regime_history = reshape(Int.(violvec), nperiods, 1)
 
     return (path, regime_history, converged, iterations)
@@ -594,9 +615,47 @@ function occbin_solve(spec::DSGESpec{T}, constraint::OccBinConstraint{T};
     linear_path = _simulate_linear(P, Q, init, shock_path, nperiods)
 
     # Run guess-and-verify loop
+    orig_nperiods = nperiods
     pw_path, regime_history, converged, iterations =
         _guess_verify_one(ref_regime, alt_regime, d_ref, d_alt, P, Q,
                           spec, constraint, shock_path, nperiods; maxiter=maxiter)
+
+    # Auto-extend if converged but constraint binds at terminal
+    if converged && any(regime_history[end, :] .== 1)
+        orig_lp, orig_pw, orig_rh = linear_path, pw_path, regime_history
+        orig_conv, orig_iter = converged, iterations
+        max_nperiods = 2000
+        extended = false
+        while any(regime_history[end, :] .== 1) && nperiods < max_nperiods
+            nperiods = min(nperiods * 2, max_nperiods)
+            new_shock_path = zeros(T, nperiods, size(shock_path, 2))
+            new_shock_path[1:size(shock_path, 1), :] .= shock_path
+            shock_path = new_shock_path
+            linear_path = _simulate_linear(P, Q, init, shock_path, nperiods)
+            pw_path, regime_history, converged, iterations =
+                _guess_verify_one(ref_regime, alt_regime, d_ref, d_alt, P, Q,
+                                  spec, constraint, shock_path, nperiods; maxiter=maxiter)
+            if !converged
+                break
+            end
+            extended = true
+        end
+        if extended && converged && !any(regime_history[end, :] .== 1)
+            # Successfully extended: truncate to original horizon
+            linear_path = linear_path[1:orig_nperiods, :]
+            pw_path = pw_path[1:orig_nperiods, :]
+            regime_history = regime_history[1:orig_nperiods, :]
+        else
+            # Fall back to original result
+            linear_path, pw_path, regime_history = orig_lp, orig_pw, orig_rh
+            converged, iterations = orig_conv, orig_iter
+            nperiods = orig_nperiods
+            if any(regime_history[end, :] .== 1)
+                @warn "OccBin: constraint binding at terminal period ($orig_nperiods). " *
+                      "Consider increasing nperiods."
+            end
+        end
+    end
 
     # Filter output to original variables if augmented
     if spec.augmented
@@ -605,13 +664,13 @@ function occbin_solve(spec::DSGESpec{T}, constraint::OccBinConstraint{T};
         OccBinSolution{T}(
             linear_path[:, orig_idx], pw_path[:, orig_idx], spec.steady_state[orig_idx],
             regime_history, converged, iterations,
-            spec, vnames
+            spec, vnames, [constraint]
         )
     else
         OccBinSolution{T}(
             linear_path, pw_path, spec.steady_state,
             regime_history, converged, iterations,
-            spec, spec.varnames
+            spec, spec.varnames, [constraint]
         )
     end
 end
@@ -661,9 +720,45 @@ function occbin_solve(spec::DSGESpec{T}, constraint::OccBinConstraint{T},
     linear_path = _simulate_linear(P, Q, init, shock_path, nperiods)
 
     # Piecewise-linear path
+    orig_nperiods = nperiods
     pw_path, regime_history, converged, iterations =
         _guess_verify_one(ref_regime, alt_regime, d_ref, d_alt, P, Q,
                           spec, constraint, shock_path, nperiods; maxiter=maxiter)
+
+    # Auto-extend if converged but constraint binds at terminal
+    if converged && any(regime_history[end, :] .== 1)
+        orig_lp, orig_pw, orig_rh = linear_path, pw_path, regime_history
+        orig_conv, orig_iter = converged, iterations
+        max_nperiods = 2000
+        extended = false
+        while any(regime_history[end, :] .== 1) && nperiods < max_nperiods
+            nperiods = min(nperiods * 2, max_nperiods)
+            new_shock_path = zeros(T, nperiods, size(shock_path, 2))
+            new_shock_path[1:size(shock_path, 1), :] .= shock_path
+            shock_path = new_shock_path
+            linear_path = _simulate_linear(P, Q, init, shock_path, nperiods)
+            pw_path, regime_history, converged, iterations =
+                _guess_verify_one(ref_regime, alt_regime, d_ref, d_alt, P, Q,
+                                  spec, constraint, shock_path, nperiods; maxiter=maxiter)
+            if !converged
+                break
+            end
+            extended = true
+        end
+        if extended && converged && !any(regime_history[end, :] .== 1)
+            linear_path = linear_path[1:orig_nperiods, :]
+            pw_path = pw_path[1:orig_nperiods, :]
+            regime_history = regime_history[1:orig_nperiods, :]
+        else
+            linear_path, pw_path, regime_history = orig_lp, orig_pw, orig_rh
+            converged, iterations = orig_conv, orig_iter
+            nperiods = orig_nperiods
+            if any(regime_history[end, :] .== 1)
+                @warn "OccBin: constraint binding at terminal period ($orig_nperiods). " *
+                      "Consider increasing nperiods."
+            end
+        end
+    end
 
     # Filter output to original variables if augmented
     if spec.augmented
@@ -672,13 +767,13 @@ function occbin_solve(spec::DSGESpec{T}, constraint::OccBinConstraint{T},
         OccBinSolution{T}(
             linear_path[:, orig_idx], pw_path[:, orig_idx], spec.steady_state[orig_idx],
             regime_history, converged, iterations,
-            spec, vnames
+            spec, vnames, [constraint]
         )
     else
         OccBinSolution{T}(
             linear_path, pw_path, spec.steady_state,
             regime_history, converged, iterations,
-            spec, spec.varnames
+            spec, spec.varnames, [constraint]
         )
     end
 end
@@ -772,6 +867,12 @@ function _backward_iteration_two(ref::OccBinRegime{T}, alt1::OccBinRegime{T},
         # (B + C · P_next) · ŷ_t = -A · ŷ_{t-1} - D · ε_t - d - C · D_next
         invmat = robust_inv(rgm.B + rgm.C * P_next)
         P_tv[:, :, t] = -invmat * rgm.A
+
+        if maximum(abs.(P_tv[:, :, t])) > T(1e10)
+            error("OccBin backward iteration diverged (max|P_tv| > 1e10 at period $t). " *
+                  "The alternative (binding) regime is likely indeterminate. " *
+                  "Consider adding model frictions or reducing shock magnitude.")
+        end
 
         # Constant: D_tv_t = -invmat * (D · ε_t + d + C · D_tv_{t+1})
         if t == T_max
@@ -896,12 +997,6 @@ function _guess_verify_two(ref::OccBinRegime{T}, alt1::OccBinRegime{T},
         @warn "OccBin two-constraint guess-and-verify did not converge after $maxiter iterations"
     end
 
-    # Check if either constraint is binding at the terminal period
-    if violvec[end, 1] || violvec[end, 2]
-        @warn "OccBin: constraint is binding at the terminal period ($nperiods). " *
-              "Consider increasing nperiods."
-    end
-
     regime_history = Matrix{Int}(violvec)
 
     return (path, regime_history, converged, iterations)
@@ -981,11 +1076,50 @@ function occbin_solve(spec::DSGESpec{T}, c1::OccBinConstraint{T}, c2::OccBinCons
     linear_path = _simulate_linear(P, Q, init, shock_path, nperiods)
 
     # Run guess-and-verify loop with 4 regimes
+    orig_nperiods = nperiods
     pw_path, regime_history, converged, iterations =
         _guess_verify_two(ref_regime, alt1_regime, alt2_regime, alt12_regime,
                           d_ref, d_alt1, d_alt2, d_alt12,
                           P, Q, spec, c1, c2, shock_path, nperiods;
                           maxiter=maxiter, curb_retrench=curb_retrench)
+
+    # Auto-extend if converged but constraint binds at terminal
+    _terminal_binding_two(rh) = rh[end, 1] == 1 || rh[end, 2] == 1
+    if converged && _terminal_binding_two(regime_history)
+        orig_lp, orig_pw, orig_rh = linear_path, pw_path, regime_history
+        orig_conv, orig_iter = converged, iterations
+        max_nperiods = 2000
+        extended = false
+        while _terminal_binding_two(regime_history) && nperiods < max_nperiods
+            nperiods = min(nperiods * 2, max_nperiods)
+            new_shock_path = zeros(T, nperiods, size(shock_path, 2))
+            new_shock_path[1:size(shock_path, 1), :] .= shock_path
+            shock_path = new_shock_path
+            linear_path = _simulate_linear(P, Q, init, shock_path, nperiods)
+            pw_path, regime_history, converged, iterations =
+                _guess_verify_two(ref_regime, alt1_regime, alt2_regime, alt12_regime,
+                                  d_ref, d_alt1, d_alt2, d_alt12,
+                                  P, Q, spec, c1, c2, shock_path, nperiods;
+                                  maxiter=maxiter, curb_retrench=curb_retrench)
+            if !converged
+                break
+            end
+            extended = true
+        end
+        if extended && converged && !_terminal_binding_two(regime_history)
+            linear_path = linear_path[1:orig_nperiods, :]
+            pw_path = pw_path[1:orig_nperiods, :]
+            regime_history = regime_history[1:orig_nperiods, :]
+        else
+            linear_path, pw_path, regime_history = orig_lp, orig_pw, orig_rh
+            converged, iterations = orig_conv, orig_iter
+            nperiods = orig_nperiods
+            if _terminal_binding_two(regime_history)
+                @warn "OccBin: constraint binding at terminal period ($orig_nperiods). " *
+                      "Consider increasing nperiods."
+            end
+        end
+    end
 
     # Filter output to original variables if augmented
     if spec.augmented
@@ -994,13 +1128,13 @@ function occbin_solve(spec::DSGESpec{T}, c1::OccBinConstraint{T}, c2::OccBinCons
         OccBinSolution{T}(
             linear_path[:, orig_idx], pw_path[:, orig_idx], spec.steady_state[orig_idx],
             regime_history, converged, iterations,
-            spec, vnames
+            spec, vnames, [c1, c2]
         )
     else
         OccBinSolution{T}(
             linear_path, pw_path, spec.steady_state,
             regime_history, converged, iterations,
-            spec, spec.varnames
+            spec, spec.varnames, [c1, c2]
         )
     end
 end
@@ -1076,11 +1210,50 @@ function occbin_solve(spec::DSGESpec{T}, c1::OccBinConstraint{T}, c2::OccBinCons
     linear_path = _simulate_linear(P, Q, init, shock_path, nperiods)
 
     # Piecewise-linear path
+    orig_nperiods = nperiods
     pw_path, regime_history, converged, iterations =
         _guess_verify_two(ref_regime, alt1_regime, alt2_regime, alt12_regime,
                           d_ref, d_alt1, d_alt2, d_alt12,
                           P, Q, spec, c1, c2, shock_path, nperiods;
                           maxiter=maxiter, curb_retrench=curb_retrench)
+
+    # Auto-extend if converged but constraint binds at terminal
+    _terminal_binding_two(rh) = rh[end, 1] == 1 || rh[end, 2] == 1
+    if converged && _terminal_binding_two(regime_history)
+        orig_lp, orig_pw, orig_rh = linear_path, pw_path, regime_history
+        orig_conv, orig_iter = converged, iterations
+        max_nperiods = 2000
+        extended = false
+        while _terminal_binding_two(regime_history) && nperiods < max_nperiods
+            nperiods = min(nperiods * 2, max_nperiods)
+            new_shock_path = zeros(T, nperiods, size(shock_path, 2))
+            new_shock_path[1:size(shock_path, 1), :] .= shock_path
+            shock_path = new_shock_path
+            linear_path = _simulate_linear(P, Q, init, shock_path, nperiods)
+            pw_path, regime_history, converged, iterations =
+                _guess_verify_two(ref_regime, alt1_regime, alt2_regime, alt12_regime,
+                                  d_ref, d_alt1, d_alt2, d_alt12,
+                                  P, Q, spec, c1, c2, shock_path, nperiods;
+                                  maxiter=maxiter, curb_retrench=curb_retrench)
+            if !converged
+                break
+            end
+            extended = true
+        end
+        if extended && converged && !_terminal_binding_two(regime_history)
+            linear_path = linear_path[1:orig_nperiods, :]
+            pw_path = pw_path[1:orig_nperiods, :]
+            regime_history = regime_history[1:orig_nperiods, :]
+        else
+            linear_path, pw_path, regime_history = orig_lp, orig_pw, orig_rh
+            converged, iterations = orig_conv, orig_iter
+            nperiods = orig_nperiods
+            if _terminal_binding_two(regime_history)
+                @warn "OccBin: constraint binding at terminal period ($orig_nperiods). " *
+                      "Consider increasing nperiods."
+            end
+        end
+    end
 
     # Filter output to original variables if augmented
     if spec.augmented
@@ -1089,13 +1262,13 @@ function occbin_solve(spec::DSGESpec{T}, c1::OccBinConstraint{T}, c2::OccBinCons
         OccBinSolution{T}(
             linear_path[:, orig_idx], pw_path[:, orig_idx], spec.steady_state[orig_idx],
             regime_history, converged, iterations,
-            spec, vnames
+            spec, vnames, [c1, c2]
         )
     else
         OccBinSolution{T}(
             linear_path, pw_path, spec.steady_state,
             regime_history, converged, iterations,
-            spec, spec.varnames
+            spec, spec.varnames, [c1, c2]
         )
     end
 end
