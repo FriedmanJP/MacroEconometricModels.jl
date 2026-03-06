@@ -1,8 +1,19 @@
-# Manual
+# [VAR](@id var_page)
 
-This manual provides a comprehensive theoretical background for the macroeconometric methods implemented in **MacroEconometricModels.jl**, including precise mathematical formulations and references to the literature.
+**MacroEconometricModels.jl** provides a complete implementation of Vector Autoregression (VAR) models, from reduced-form estimation through structural identification and robust inference. The VAR framework, introduced by Sims (1980), remains the workhorse of empirical macroeconomics for analyzing the dynamic interactions among multiple time series.
+
+- **Estimation**: OLS estimation of reduced-form VAR(p) with automatic information criteria (AIC, BIC, HQIC) and stability checking
+- **Lag Selection**: Data-driven lag order selection via AIC, BIC, or HQIC minimization
+- **Structural Identification**: Six methods --- Cholesky (recursive), sign restrictions, narrative restrictions, long-run (Blanchard-Quah), Arias et al. (2018) zero + sign, and Mountford-Uhlig (2009) penalty function
+- **Robust Inference**: Newey-West HAC, White heteroscedasticity-robust (HC0), and Driscoll-Kraay panel-robust covariance estimators
+- **Innovation Accounting**: IRF, FEVD, and historical decomposition with bootstrap or asymptotic confidence intervals; see [Innovation Accounting](innovation_accounting.md)
+- **Forecasting**: Multi-step ahead point forecasts with bootstrap confidence intervals
+
+All results integrate with `report()` for publication-quality output and `plot_result()` for interactive D3.js visualization.
 
 ## Quick Start
+
+**Recipe 1: Estimate VAR(p)**
 
 ```julia
 using MacroEconometricModels
@@ -12,93 +23,201 @@ fred = load_example(:fred_md)
 Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
 Y = Y[all.(isfinite, eachrow(Y)), :]
 
-model = estimate_var(Y, 4)                                 # Estimate VAR(4) via OLS
-sel = select_lag_order(Y, 13)                              # AIC/BIC/HQIC lag selection
-irfs = irf(model, 20; method=:cholesky)                    # Cholesky-identified IRFs
-decomp = fevd(model, 20)                                   # Forecast error variance decomposition
-id = identify_sign(model; check_func=f, n_draws=1000)      # Sign restriction identification
-hd = historical_decomposition(model, size(model.U, 1))     # Historical decomposition
+model = estimate_var(Y, 4)
+report(model)
+```
+
+**Recipe 2: Lag selection**
+
+```julia
+using MacroEconometricModels
+
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+
+# Select lag order minimizing BIC (default)
+p_bic = select_lag_order(Y, 13)
+
+# Select via AIC
+p_aic = select_lag_order(Y, 13; criterion=:aic)
+
+model = estimate_var(Y, p_bic)
+report(model)
+```
+
+**Recipe 3: Cholesky IRF**
+
+```julia
+using MacroEconometricModels
+
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+
+model = estimate_var(Y, 4)
+
+# Cholesky IRF with bootstrap confidence intervals
+result = irf(model, 20; method=:cholesky, ci_type=:bootstrap, reps=500)
+plot_result(result)
+```
+
+**Recipe 4: Sign restrictions**
+
+```julia
+using MacroEconometricModels, Random
+Random.seed!(42)
+
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+
+model = estimate_var(Y, 4)
+
+# Contractionary monetary shock: FFR rises, INDPRO and CPI fall on impact
+check = irf -> irf[1, 3, 3] > 0 && irf[1, 1, 3] < 0 && irf[1, 2, 3] < 0
+result = irf(model, 20; method=:sign, check_func=check)
+plot_result(result)
+```
+
+**Recipe 5: Arias identification**
+
+```julia
+using MacroEconometricModels, Random
+Random.seed!(42)
+
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+
+model = estimate_var(Y, 4)
+
+# Zero + sign restrictions on the monetary policy shock (shock 3)
+restrictions = SVARRestrictions(3;
+    zeros = [zero_restriction(1, 3; horizon=0)],       # No impact on INDPRO on impact
+    signs = [sign_restriction(3, 3, :positive),          # FFR rises
+             sign_restriction(2, 3, :negative; horizon=1)] # CPI falls at h=1
+)
+result = identify_arias(model, restrictions, 20; n_draws=500)
+result
+```
+
+**Recipe 6: Uhlig identification**
+
+```julia
+using MacroEconometricModels, Random
+Random.seed!(42)
+
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+
+model = estimate_var(Y, 4)
+
+# Mountford-Uhlig penalty function: one optimal rotation
+restrictions = SVARRestrictions(3;
+    zeros = [zero_restriction(3, 1; horizon=0)],   # Fiscal shock has no impact on FFR
+    signs = [sign_restriction(1, 1, :positive),     # Fiscal shock raises INDPRO
+             sign_restriction(3, 3, :positive)]     # Monetary shock raises FFR
+)
+result = identify_uhlig(model, restrictions, 20)
+result
 ```
 
 ---
 
-## Vector Autoregression (VAR)
+## Reduced-Form VAR
 
-### The Reduced-Form VAR Model
+### The Model
 
-A VAR(p) model for an ``n``-dimensional vector of endogenous variables ``y_t`` is defined as:
+A **VAR(p)** model for an ``n``-dimensional vector of endogenous variables ``y_t`` is:
 
 ```math
 y_t = c + A_1 y_{t-1} + A_2 y_{t-2} + \cdots + A_p y_{t-p} + u_t
 ```
 
 where:
-- ``y_t`` is an ``n \times 1`` vector of endogenous variables at time ``t``
-- ``c`` is an ``n \times 1`` vector of intercepts
-- ``A_i`` are ``n \times n`` coefficient matrices for lag ``i = 1, \ldots, p``
-- ``u_t`` is an ``n \times 1`` vector of reduced-form innovations with ``E[u_t] = 0`` and ``E[u_t u_t'] = \Sigma``
-
-**Reference**: Sims (1980), Lütkepohl (2005, Chapter 2)
-
-### Compact Matrix Representation
-
-For estimation, we stack observations into matrices. Let ``T`` denote the effective sample size after accounting for lags. Define:
-
-```math
-Y = \begin{bmatrix} y_{p+1}' \\ y_{p+2}' \\ \vdots \\ y_T' \end{bmatrix}_{(T-p) \times n}, \quad
-X = \begin{bmatrix} 1 & y_p' & y_{p-1}' & \cdots & y_1' \\
-1 & y_{p+1}' & y_p' & \cdots & y_2' \\
-\vdots & \vdots & \vdots & \ddots & \vdots \\
-1 & y_{T-1}' & y_{T-2}' & \cdots & y_{T-p}' \end{bmatrix}_{(T-p) \times (1+np)}
-```
-
-The VAR can be written in matrix form as:
-
-```math
-Y = X B + U
-```
-
-where ``B = [c, A_1, A_2, \ldots, A_p]'`` is a ``(1+np) \times n`` coefficient matrix.
+- ``y_t`` is the ``n \times 1`` vector of endogenous variables at time ``t``
+- ``c`` is the ``n \times 1`` vector of intercepts
+- ``A_i`` is the ``n \times n`` coefficient matrix for lag ``i = 1, \ldots, p``
+- ``u_t`` is the ``n \times 1`` vector of reduced-form innovations with ``E[u_t] = 0`` and ``E[u_t u_t'] = \Sigma``
 
 ### OLS Estimation
 
-The OLS estimator is given by:
+Stack the observations into matrices. Let ``T`` denote the total sample size and define the effective sample as ``T_{\text{eff}} = T - p`` observations after accounting for lags:
+
+```math
+Y = \begin{bmatrix} y_{p+1}' \\ y_{p+2}' \\ \vdots \\ y_T' \end{bmatrix}_{T_{\text{eff}} \times n}, \quad
+X = \begin{bmatrix} 1 & y_p' & y_{p-1}' & \cdots & y_1' \\
+1 & y_{p+1}' & y_p' & \cdots & y_2' \\
+\vdots & \vdots & \vdots & \ddots & \vdots \\
+1 & y_{T-1}' & y_{T-2}' & \cdots & y_{T-p}' \end{bmatrix}_{T_{\text{eff}} \times (1+np)}
+```
+
+where:
+- ``Y`` is the ``T_{\text{eff}} \times n`` matrix of dependent variables
+- ``X`` is the ``T_{\text{eff}} \times k`` matrix of regressors with ``k = 1 + np``
+
+The compact form ``Y = XB + U`` yields the OLS estimator:
 
 ```math
 \hat{B} = (X'X)^{-1} X'Y
 ```
 
-The residual covariance matrix is estimated as:
+where:
+- ``\hat{B}`` is the ``k \times n`` coefficient matrix ``[c, A_1, \ldots, A_p]'``
+
+The residual covariance matrix is:
 
 ```math
-\hat{\Sigma} = \frac{1}{T-p-k} \hat{U}'\hat{U}
+\hat{\Sigma} = \frac{1}{T_{\text{eff}} - k} \hat{U}'\hat{U}
 ```
 
-where ``\hat{U} = Y - X\hat{B}`` and ``k = 1 + np`` is the number of regressors per equation.
+where:
+- ``\hat{U} = Y - X\hat{B}`` is the ``T_{\text{eff}} \times n`` residual matrix
+- ``k = 1 + np`` is the number of regressors per equation
 
-**Reference**: Hamilton (1994, Chapter 11), Lütkepohl (2005, Section 3.2)
+```julia
+using MacroEconometricModels
 
-### VARModel Return Values
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
 
-`estimate_var` returns a `VARModel{T}` with the following fields:
+model = estimate_var(Y, 4; varnames=["INDPRO", "CPI", "FFR"])
+report(model)
+```
+
+The `report` output displays the VAR specification (number of variables, lags, observations) alongside the AIC, BIC, and HQIC values. The coefficient matrix `model.B` stores the intercept in row 1, followed by ``A_1, A_2, \ldots, A_p`` stacked vertically. To extract lag-``i`` coefficients for an ``n``-variable system: `A_i = model.B[(i-1)*n+2 : i*n+1, :]`.
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `check_stability` | `Bool` | `true` | Warn if estimated VAR is non-stationary |
+| `varnames` | `Vector{String}` | `nothing` | Variable display names (default: `y1`, `y2`, ...) |
+
+### Return Value
+
+`estimate_var` returns a `VARModel{T}` with these fields:
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `Y` | `Matrix{T}` | Original ``T \times n`` data matrix |
 | `p` | `Int` | Number of lags |
 | `B` | `Matrix{T}` | ``(1+np) \times n`` coefficient matrix ``[c, A_1, \ldots, A_p]'`` |
-| `U` | `Matrix{T}` | ``(T-p) \times n`` residual matrix |
+| `U` | `Matrix{T}` | ``T_{\text{eff}} \times n`` residual matrix |
 | `Sigma` | `Matrix{T}` | ``n \times n`` residual covariance matrix |
 | `aic` | `T` | Akaike Information Criterion |
 | `bic` | `T` | Bayesian Information Criterion |
 | `hqic` | `T` | Hannan-Quinn Information Criterion |
+| `varnames` | `Vector{String}` | Variable display names |
 
-!!! note "Technical Note"
-    The coefficient matrix `B` stores the intercept in the first row, followed by ``A_1, A_2, \ldots, A_p`` stacked vertically. To extract lag-``i`` coefficients: `A_i = model.B[(i-1)*n+2 : i*n+1, :]`. The intercept is `model.B[1, :]`.
+---
 
-### Stability Condition
+## Stability and Lag Selection
 
-A VAR(p) is stable (stationary) if all eigenvalues of the companion matrix ``F`` lie inside the unit circle:
+### Companion Form and Stability
+
+A VAR(p) is **stable** (stationary) if all eigenvalues of the companion matrix ``F`` lie inside the unit circle. The companion form rewrites the VAR(p) as a VAR(1) in the ``np``-dimensional state vector:
 
 ```math
 F = \begin{bmatrix}
@@ -110,38 +229,79 @@ I_n & 0 & \cdots & 0 & 0 \\
 \end{bmatrix}_{np \times np}
 ```
 
-**Stability Check**: ``|\lambda_i| < 1`` for all eigenvalues ``\lambda_i`` of ``F``.
+where:
+- ``A_i`` is the ``n \times n`` VAR coefficient matrix for lag ``i``
+- ``I_n`` is the ``n \times n`` identity matrix
+- ``F`` is the ``np \times np`` companion matrix
 
-### Information Criteria for Lag Selection
+The stability condition requires ``|\lambda_i| < 1`` for all eigenvalues ``\lambda_i`` of ``F``. The function `is_stationary` checks this condition and returns the companion matrix eigenvalues:
 
-The optimal lag length can be selected using information criteria:
+```julia
+using MacroEconometricModels
 
-**Akaike Information Criterion (AIC)**:
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+
+model = estimate_var(Y, 4)
+stab = is_stationary(model)
+stab
+```
+
+The `max_modulus` field reports the largest eigenvalue modulus. A value below 1.0 confirms stationarity; values near 1.0 indicate near-unit-root behavior suggesting the system may require differencing or a VECM specification.
+
+### Information Criteria
+
+The optimal lag length minimizes an information criterion that balances fit against model complexity. For a Gaussian VAR:
+
 ```math
 \text{AIC}(p) = \log|\hat{\Sigma}| + \frac{2}{T}(n^2 p + n)
 ```
 
-**Bayesian Information Criterion (BIC)**:
 ```math
 \text{BIC}(p) = \log|\hat{\Sigma}| + \frac{\log T}{T}(n^2 p + n)
 ```
 
-**Hannan-Quinn Criterion (HQ)**:
 ```math
 \text{HQ}(p) = \log|\hat{\Sigma}| + \frac{2 \log(\log T)}{T}(n^2 p + n)
 ```
 
-Select the lag order ``p`` that minimizes the criterion.
+where:
+- ``\hat{\Sigma}`` is the ML residual covariance at lag order ``p``
+- ``T`` is the effective sample size
+- ``n`` is the number of endogenous variables
+- ``n^2 p + n`` is the total number of free parameters (``n^2`` per lag plus ``n`` intercepts)
 
-**Reference**: Lütkepohl (2005, Section 4.3)
+AIC tends to overfit in finite samples; BIC is consistent (selects the true order with probability approaching 1 as ``T \to \infty``); HQIC offers an intermediate trade-off.
+
+```julia
+using MacroEconometricModels
+
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+
+# BIC-optimal lag order (default)
+p_bic = select_lag_order(Y, 13)
+
+# AIC-optimal lag order
+p_aic = select_lag_order(Y, 13; criterion=:aic)
+
+model = estimate_var(Y, p_bic)
+report(model)
+```
+
+The function `select_lag_order` evaluates all lag orders from 1 to `max_p` and returns the integer lag order minimizing the selected criterion. The BIC default provides the most parsimonious specification and is the standard choice for structural analysis (Lütkepohl 2005).
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `criterion` | `Symbol` | `:bic` | Information criterion: `:aic`, `:bic`, or `:hqic` |
 
 ---
 
-## Structural VAR (SVAR) and Identification
+## Structural VAR and Identification
 
-### From Reduced-Form to Structural Shocks
-
-The reduced-form residuals ``u_t`` are linear combinations of structural shocks ``\varepsilon_t``:
+The reduced-form residuals ``u_t`` are linear combinations of orthogonal structural shocks ``\varepsilon_t``:
 
 ```math
 u_t = B_0 \varepsilon_t
@@ -151,17 +311,9 @@ where:
 - ``B_0`` is the ``n \times n`` contemporaneous impact matrix
 - ``\varepsilon_t`` are structural shocks with ``E[\varepsilon_t \varepsilon_t'] = I_n``
 
-The relationship between the reduced-form and structural covariance is:
+The identifying restriction ``\Sigma = B_0 B_0'`` provides ``n(n+1)/2`` equations for ``n^2`` unknowns, leaving ``n(n-1)/2`` free parameters. Additional restrictions are required to achieve **exact identification**. The package provides six identification strategies.
 
-```math
-\Sigma = B_0 B_0'
-```
-
-The **identification problem** is that infinitely many ``B_0`` matrices satisfy this condition. To identify structural shocks, we need ``n(n-1)/2`` additional restrictions.
-
-**Reference**: Kilian & Lütkepohl (2017, Chapter 8)
-
-### Cholesky Identification (Recursive)
+### Cholesky (Recursive)
 
 The Cholesky decomposition imposes a lower triangular structure on ``B_0``:
 
@@ -169,214 +321,230 @@ The Cholesky decomposition imposes a lower triangular structure on ``B_0``:
 B_0 = \text{chol}(\Sigma)
 ```
 
-This implies a recursive causal ordering where variable ``i`` responds contemporaneously only to variables ``1, 2, \ldots, i-1``.
+where:
+- ``B_0`` is lower triangular, implying variable ``i`` responds contemporaneously only to shocks ``1, \ldots, i``
 
-**Economic Interpretation**: The ordering reflects assumptions about the speed of adjustment. Variables ordered first respond only to their own shocks contemporaneously.
+The ordering reflects economic assumptions about the speed of adjustment. Variables ordered first respond only to their own shocks on impact. In the standard monetary VAR ordering [INDPRO, CPI, FFR], the federal funds rate shock (shock 3) has no contemporaneous effect on output or prices, consistent with the information and implementation lags in monetary policy transmission (Christiano, Eichenbaum & Evans 1999).
 
-**Reference**: Sims (1980), Christiano, Eichenbaum & Evans (1999)
+```julia
+using MacroEconometricModels
+
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+
+model = estimate_var(Y, 4)
+
+# Cholesky IRF with bootstrap 90% CI
+result = irf(model, 20; method=:cholesky, ci_type=:bootstrap, reps=500, conf_level=0.90)
+plot_result(result)
+```
 
 ### Sign Restrictions
 
-Sign restrictions identify structural shocks by constraining the signs of impulse responses at selected horizons. Let ``\Theta_h`` denote the impulse response at horizon ``h``. The identification algorithm:
+Sign restrictions identify structural shocks by constraining the signs of impulse responses at selected horizons, following Rubio-Ramírez, Waggoner & Zha (2010). The algorithm draws random orthogonal matrices ``Q`` from the Haar measure and retains only those producing IRFs consistent with the sign constraints:
 
-1. Compute the Cholesky decomposition: ``P = \text{chol}(\Sigma)``
-2. Draw a random orthogonal matrix ``Q`` from the Haar measure (using QR decomposition of a random matrix)
-3. Compute candidate impact matrix: ``B_0 = PQ``
-4. Check if impulse responses ``\Theta_0 = B_0, \Theta_1, \ldots`` satisfy the sign restrictions
-5. If restrictions are satisfied, keep the draw; otherwise, discard and repeat
+1. Compute the Cholesky factor: ``P = \text{chol}(\Sigma)``
+2. Draw ``Q`` uniformly from ``O(n)`` via QR decomposition of a random matrix
+3. Compute the candidate impact matrix: ``B_0 = PQ``
+4. Compute IRFs ``\Theta_0 = B_0, \Theta_1, \ldots`` from the candidate ``B_0``
+5. Accept if all sign conditions hold; otherwise discard and repeat
 
-**Implementation**: We use the algorithm of Rubio-Ramírez, Waggoner & Zha (2010).
+!!! note "Technical Note"
+    With `store_all=true`, `identify_sign` returns a `SignIdentifiedSet` containing all accepted rotation matrices and their IRFs, enabling characterization of the full identified set (Baumeister & Hamilton 2015). Use `irf_bounds` and `irf_median` to summarize the identified set.
 
-**Reference**: Faust (1998), Uhlig (2005), Rubio-Ramírez, Waggoner & Zha (2010)
+```julia
+using MacroEconometricModels, Random
+Random.seed!(42)
+
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+
+model = estimate_var(Y, 4)
+
+# Contractionary monetary shock: FFR rises, INDPRO and CPI fall
+check = irf -> irf[1, 3, 3] > 0 && irf[1, 1, 3] < 0 && irf[1, 2, 3] < 0
+
+# Full identified set
+id_set = identify_sign(model, 20, check; max_draws=5000, store_all=true)
+id_set
+
+# Pointwise median and 68% credible bands
+med = irf_median(id_set)
+lower, upper = irf_bounds(id_set; quantiles=[0.16, 0.84])
+```
+
+The acceptance rate indicates what fraction of random draws satisfy all sign conditions simultaneously. Rates below 1% suggest the restrictions may be overly stringent or nearly contradictory.
 
 ### Narrative Restrictions
 
-Narrative restrictions combine sign restrictions with historical information about specific shocks at particular dates. Following Antolín-Díaz & Rubio-Ramírez (2018):
+Narrative restrictions augment sign restrictions with historical information about specific shocks at particular dates, following Antolín-Díaz & Rubio-Ramírez (2018). Two types of narrative constraints are supported:
 
-1. **Shock Sign Narrative**: At date ``t^*``, structural shock ``j`` was positive/negative
-2. **Shock Contribution Narrative**: At date ``t^*``, shock ``j`` was the main driver of variable ``i``
+1. **Shock sign narrative**: at date ``t^*``, structural shock ``j`` was positive (or negative)
+2. **Shock contribution narrative**: at date ``t^*``, shock ``j`` was the dominant driver of variable ``i``
 
-The algorithm:
-1. Draw orthogonal matrix ``Q`` satisfying sign restrictions
-2. Recover structural shocks: ``\varepsilon = B_0^{-1} u``
-3. Check if narrative constraints are satisfied
-4. Weight the draw using importance sampling
+```julia
+using MacroEconometricModels, Random
+Random.seed!(42)
 
-**Reference**: Antolín-Díaz & Rubio-Ramírez (2018)
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
 
-### Long-Run (Blanchard-Quah) Identification
+model = estimate_var(Y, 4)
 
-Long-run restrictions constrain the cumulative effect of structural shocks. For a stationary VAR, the long-run impact matrix is:
+# Sign restrictions on impact
+sign_check = irf -> irf[1, 3, 3] > 0 && irf[1, 1, 3] < 0
+
+# Narrative: monetary shock was positive at observation 100
+narrative_check = shocks -> shocks[100, 3] > 0
+
+Q, irfs, shocks = identify_narrative(model, 20, sign_check, narrative_check; max_draws=5000)
+```
+
+The algorithm first filters for sign-satisfying rotations, then checks whether the recovered structural shocks ``\varepsilon = B_0^{-1} u`` satisfy the narrative conditions. This sequential filtering sharply reduces the identified set.
+
+### Long-Run (Blanchard-Quah)
+
+Long-run restrictions constrain the cumulative effect of structural shocks on selected variables. The long-run impact matrix is:
 
 ```math
 C(1) = (I_n - A_1 - A_2 - \cdots - A_p)^{-1} B_0
 ```
 
-Blanchard & Quah (1989) impose that certain shocks have zero long-run effect on specific variables by requiring ``C(1)`` to be lower triangular:
+where:
+- ``C(1)`` is the ``n \times n`` long-run cumulative response matrix
+- ``A(1) = A_1 + A_2 + \cdots + A_p`` is the sum of VAR coefficient matrices
 
-```math
-C(1) = \text{chol}\left( (I - A(1))^{-1} \Sigma (I - A(1)')^{-1} \right)
+Blanchard & Quah (1989) impose that ``C(1)`` is lower triangular, so that shocks ordered later have zero long-run effect on variables ordered earlier. The typical application restricts demand shocks to have no long-run effect on output, identifying supply-driven long-run fluctuations.
+
+```julia
+using MacroEconometricModels
+
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+
+model = estimate_var(Y, 4)
+result = irf(model, 40; method=:long_run)
+plot_result(result)
 ```
 
-Then ``B_0 = (I - A(1)) C(1)``.
+### Arias et al. (2018) Zero + Sign Restrictions
 
-**Economic Application**: Demand shocks have no long-run effect on output (supply-driven long-run fluctuations).
+When sign restrictions alone are insufficient, zero restrictions on specific impulse responses can be imposed alongside sign constraints. Arias, Rubio-Ramírez & Waggoner (2018) develop an algorithm that draws rotation matrices ``Q`` uniformly over the set satisfying zero restrictions, then filters for sign satisfaction. Importance weights correct for non-uniform sampling induced by the zero-restriction constraint manifold.
 
-**Reference**: Blanchard & Quah (1989), King, Plosser, Stock & Watson (1991)
-
-### Arias et al. (2018) Identification
-
-When sign restrictions alone are insufficient, one can impose **zero restrictions** on specific impulse responses in addition to sign constraints. Arias, Rubio-Ramírez & Waggoner (2018) develop an algorithm that draws orthogonal rotation matrices ``Q`` from a distribution that is uniform over the set satisfying the zero restrictions, then filters for sign satisfaction.
-
-**Restriction Types**:
+The algorithm constructs ``Q`` column-by-column via QR decomposition in the null space of the zero restriction matrix, then checks sign restrictions on the candidate IRF ``\Theta_h = \Phi_h L Q``.
 
 | Type | Function | Description |
 |------|----------|-------------|
 | Zero | `zero_restriction(var, shock; horizon=0)` | Variable `var` does not respond to `shock` at `horizon` |
 | Sign | `sign_restriction(var, shock, :positive; horizon=0)` | Response has required sign at `horizon` |
 
-**Algorithm**: For ``n`` variables with ``r_j`` zero restrictions on shock ``j``:
-1. Compute MA coefficients ``\Phi_0, \ldots, \Phi_H`` and Cholesky factor ``L``
-2. For each draw, construct ``Q`` column-by-column via QR decomposition in the null space of the zero restriction matrix
-3. Check sign restrictions on the candidate IRF ``\Theta_h = \Phi_h L Q``
-4. Correct non-uniform sampling via importance weights from the analytical volume element Jacobian (computed from the derivatives of the QR parameterization)
-
 ```julia
-using MacroEconometricModels
+using MacroEconometricModels, Random
+Random.seed!(42)
 
-# Load FRED-MD monetary policy variables
 fred = load_example(:fred_md)
 Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
 Y = Y[all.(isfinite, eachrow(Y)), :]
+
 model = estimate_var(Y, 4)
 
-# Define restrictions: monetary policy shock (shock 3)
-# Zero: INDPRO does not respond to monetary shock on impact
-# Sign: FFR rises, CPI falls after a contractionary monetary shock
+# Monetary policy shock (shock 3):
+# Zero: INDPRO does not respond on impact
+# Sign: FFR rises on impact, CPI falls at h=1
 restrictions = SVARRestrictions(3;
-    zeros = [zero_restriction(1, 3; horizon=0)],        # No impact on INDPRO on impact
-    signs = [sign_restriction(3, 3, :positive),          # FFR rises on impact
-             sign_restriction(2, 3, :negative; horizon=1)] # CPI falls at h=1
+    zeros = [zero_restriction(1, 3; horizon=0)],
+    signs = [sign_restriction(3, 3, :positive),
+             sign_restriction(2, 3, :negative; horizon=1)]
 )
 
-# Identify
 result = identify_arias(model, restrictions, 20; n_draws=1000)
-println("Acceptance rate: ", round(result.acceptance_rate * 100, digits=1), "%")
+result
 
-# Weighted IRF percentiles
-pct = irf_percentiles(result; probs=[0.16, 0.5, 0.84])
-println("Median IRF(FFR→INDPRO, h=0): ", round(pct[1, 1, 3, 2], digits=3))
-
-# Bayesian version
-# bresult = identify_arias_bayesian(post, restrictions, 20)
+# Weighted IRF percentiles (importance-weight-corrected)
+pct = irf_percentiles(result; quantiles=[0.16, 0.5, 0.84])
 ```
 
-The acceptance rate indicates what fraction of random draws satisfy all restrictions simultaneously. Low rates (below 1%) suggest the restrictions may be nearly contradictory or overly stringent. The importance weights correct for non-uniform sampling induced by zero restrictions — the weighted percentiles provide correctly calibrated credible intervals.
+The acceptance rate reports the fraction of draws satisfying all restrictions. Low rates (below 1%) suggest overly stringent restrictions. The importance weights correct for non-uniform sampling --- the weighted percentiles provide correctly calibrated credible intervals.
 
-### AriasSVARResult Return Values
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `n_draws` | `Int` | `1000` | Target number of accepted draws |
+| `n_rotations` | `Int` | `1000` | Maximum attempts per target draw |
+| `compute_weights` | `Bool` | `true` | Compute importance weights (set `false` for faster exploratory analysis) |
+
+**AriasSVARResult fields:**
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `Q_draws` | `Vector{Matrix{T}}` | Accepted rotation matrices |
-| `irf_draws` | `Array{T,4}` | ``n_{draws} \times H \times n \times n`` IRF draws |
+| `irf_draws` | `Array{T,4}` | ``n_{\text{draws}} \times H \times n \times n`` IRF draws |
 | `weights` | `Vector{T}` | Importance weights (normalized to sum to 1) |
 | `acceptance_rate` | `T` | Fraction of draws satisfying all restrictions |
 | `restrictions` | `SVARRestrictions` | The imposed restrictions |
 
-**Reference**: Arias, Rubio-Ramírez & Waggoner (2018)
+### Mountford-Uhlig (2009) Penalty Function
 
-### Mountford-Uhlig (2009) Penalty Function Identification
+When a single best rotation is preferred over a distribution of draws, Mountford & Uhlig (2009) provide a penalty function approach. Zero restrictions are enforced exactly via null-space projection; sign restrictions are encouraged through a penalty function minimized with two-phase Nelder-Mead optimization.
 
-When you want a **single best rotation** rather than a distribution of draws, Mountford & Uhlig (2009) provide a penalty function approach. Zero restrictions are enforced exactly via null-space projection; sign restrictions are encouraged via a penalty function optimized with Nelder-Mead.
+The penalty for each sign restriction ``s`` is:
 
-**When to use**: Use `identify_uhlig` when you need one optimal ``Q`` satisfying sign (and optionally zero) restrictions. Use `identify_arias` when you need a distribution of valid ``Q`` matrices for credible intervals.
+```math
+\text{penalty} = -\sum_{s} w_s \cdot \text{sign}_s \cdot \frac{\text{IRF}_s}{\sigma_s}
+```
 
-**Algorithm**:
-1. Parameterize ``Q`` column-by-column using spherical coordinates in the null space of zero-restriction constraints
-2. Define penalty: ``-\sum_{s} w_s \cdot \text{sign}_s \cdot \text{IRF}_s / \sigma_s`` where ``w_s = 100`` if the sign is satisfied, ``w_s = 1`` if violated
-3. Minimize penalty via two-phase Nelder-Mead: coarse global search (multi-threaded across `n_starts` random initializations), then local refinement from the best candidates
+where:
+- ``w_s = 100`` if the sign restriction is satisfied, ``w_s = 1`` if violated
+- ``\text{sign}_s \in \{+1, -1\}`` is the required sign direction
+- ``\text{IRF}_s`` is the impulse response value at the restricted horizon
+- ``\sigma_s`` is the standard deviation of the response variable (normalization)
+
+!!! note "When to use Uhlig vs Arias"
+    Use `identify_uhlig` when a single point-identified rotation is needed --- for example, as a starting point for policy analysis. Use `identify_arias` when the full identified set is required for inference with credible intervals.
 
 ```julia
-using MacroEconometricModels
+using MacroEconometricModels, Random
+Random.seed!(42)
 
-# Load FRED-MD monetary policy variables
 fred = load_example(:fred_md)
 Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
 Y = Y[all.(isfinite, eachrow(Y)), :]
+
 model = estimate_var(Y, 4)
 
-# Mountford-Uhlig: separate fiscal vs monetary shocks
-# Shock 1 (fiscal): no impact on FFR, positive on INDPRO
-# Shock 3 (monetary): positive FFR on impact
+# Fiscal vs monetary separation
 restrictions = SVARRestrictions(3;
     zeros = [zero_restriction(3, 1; horizon=0)],   # Fiscal shock has no impact on FFR
-    signs = [sign_restriction(1, 1, :positive),     # Fiscal shock → INDPRO positive
-             sign_restriction(3, 3, :positive)]     # Monetary shock → FFR positive
+    signs = [sign_restriction(1, 1, :positive),     # Fiscal shock raises INDPRO
+             sign_restriction(3, 3, :positive)]     # Monetary shock raises FFR
 )
 
-# Find optimal Q
 result = identify_uhlig(model, restrictions, 20)
-println("Converged: ", result.converged)
-println("Penalty: ", round(result.penalty, digits=2))
-println("Impact IRF(fiscal→INDPRO): ", round(result.irf[1, 1, 1], digits=3))
+result
 ```
 
-### UhligSVARResult Return Values
+The `converged` field indicates whether all sign restrictions are satisfied at the optimum. A `false` value means the optimizer found a local minimum where some sign conditions are violated --- increasing `n_starts` or relaxing restrictions may help.
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `n_starts` | `Int` | `50` | Random starting points for coarse search |
+| `n_refine` | `Int` | `10` | Top candidates refined in second phase |
+| `max_iter_coarse` | `Int` | `500` | Maximum Nelder-Mead iterations (coarse phase) |
+| `max_iter_fine` | `Int` | `2000` | Maximum iterations (refinement phase) |
+
+**UhligSVARResult fields:**
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `Q` | `Matrix{T}` | Optimal rotation matrix |
 | `irf` | `Array{T,3}` | ``H \times n \times n`` impulse responses |
-| `penalty` | `T` | Total penalty at optimum (negative = better) |
+| `penalty` | `T` | Total penalty at optimum (more negative = better) |
 | `shock_penalties` | `Vector{T}` | Per-shock penalty values |
 | `restrictions` | `SVARRestrictions` | The imposed restrictions |
 | `converged` | `Bool` | Whether all sign restrictions are satisfied |
-
-**Reference**: Mountford & Uhlig (2009)
-
----
-
-## Innovation Accounting
-
-For detailed coverage of innovation accounting tools, see the dedicated [Innovation Accounting](innovation_accounting.md) chapter. This includes:
-
-- **Impulse Response Functions (IRF)**: Dynamic effects of structural shocks
-- **Forecast Error Variance Decomposition (FEVD)**: Variance contribution of each shock
-- **Historical Decomposition (HD)**: Decompose observed movements into shock contributions
-- **Summary Tables**: Publication-quality output with `report()`, `table()`, `print_table()`
-
----
-
-## Bayesian VAR (BVAR)
-
-For comprehensive coverage of Bayesian VAR estimation, see the dedicated [Bayesian VAR](bayesian.md) chapter. Key topics include:
-
-- Minnesota/Litterman prior specification
-- Hyperparameter optimization via marginal likelihood (Giannone, Lenza & Primiceri, 2015)
-- Conjugate NIW posterior sampling
-- Posterior inference and credible intervals
-
----
-
-## Information Criteria and Model Selection
-
-### Log-Likelihood
-
-For a Gaussian VAR, the log-likelihood is:
-
-```math
-\log L = -\frac{T \cdot n}{2} \log(2\pi) - \frac{T}{2} \log|\Sigma| - \frac{1}{2} \sum_{t=1}^{T} u_t' \Sigma^{-1} u_t
-```
-
-### Marginal Likelihood (Bayesian)
-
-For Bayesian model comparison, we use the marginal likelihood (also called evidence):
-
-```math
-p(Y | \mathcal{M}) = \int p(Y | \theta, \mathcal{M}) p(\theta | \mathcal{M}) \, d\theta
-```
-
-Models with higher marginal likelihood better balance fit and complexity.
 
 ---
 
@@ -384,30 +552,39 @@ Models with higher marginal likelihood better balance fit and complexity.
 
 ### Newey-West HAC Estimator
 
-For robust inference in the presence of heteroskedasticity and autocorrelation, we use the Newey-West (1987, 1994) estimator:
+For robust inference in the presence of heteroscedasticity and autocorrelation, the Newey-West (1987, 1994) estimator computes a heteroscedasticity and autocorrelation consistent (HAC) covariance matrix:
 
 ```math
-\hat{V}_{NW} = (X'X)^{-1} \hat{S} (X'X)^{-1}
+\hat{V}_{\text{NW}} = (X'X)^{-1} \hat{S} (X'X)^{-1}
 ```
 
-where the long-run covariance ``\hat{S}`` is:
+where:
+- ``\hat{V}_{\text{NW}}`` is the HAC covariance matrix of the coefficient estimator
+- ``\hat{S}`` is the long-run covariance estimator
+
+The long-run covariance ``\hat{S}`` is:
 
 ```math
 \hat{S} = \hat{\Gamma}_0 + \sum_{j=1}^{m} w_j (\hat{\Gamma}_j + \hat{\Gamma}_j')
 ```
 
-with ``\hat{\Gamma}_j = \frac{1}{T} \sum_{t=j+1}^{T} \hat{u}_t \hat{u}_{t-j}' x_t x_{t-j}'``.
+where:
+- ``\hat{\Gamma}_j = \sum_{t=j+1}^{T} \hat{u}_t \hat{u}_{t-j}' x_t x_{t-j}'`` is the ``j``-th order autocovariance
+- ``w_j`` is the kernel weight at lag ``j``
+- ``m`` is the bandwidth (truncation parameter)
 
 ### Kernel Functions
 
-The weight function ``w_j`` depends on the kernel:
+The weight function ``w_j`` depends on the kernel choice:
 
-**Bartlett (Newey-West)**:
+**Bartlett** (default):
+
 ```math
 w_j = 1 - \frac{j}{m+1}
 ```
 
 **Parzen**:
+
 ```math
 w_j = \begin{cases}
 1 - 6x^2 + 6|x|^3 & |x| \leq 0.5 \\
@@ -415,12 +592,17 @@ w_j = \begin{cases}
 \end{cases}
 ```
 
-where ``x = j/(m+1)``.
+where:
+- ``x = j/(m+1)``
 
-**Quadratic Spectral (Andrews, 1991)**:
+**Quadratic spectral** (Andrews 1991):
+
 ```math
 w_j = \frac{25}{12\pi^2 x^2} \left( \frac{\sin(6\pi x/5)}{6\pi x/5} - \cos(6\pi x/5) \right)
 ```
+
+where:
+- ``x = j/(m+1)``
 
 ### Automatic Bandwidth Selection
 
@@ -430,76 +612,96 @@ Newey & West (1994) provide a data-driven bandwidth:
 m^* = 1.1447 \left( \hat{\alpha} \cdot T \right)^{1/3}
 ```
 
-where ``\hat{\alpha}`` is estimated from an AR(1) fit to the residuals:
+where:
+- ``\hat{\alpha} = 4\hat{\rho}^2 / (1-\hat{\rho})^4`` is estimated from AR(1) fits to the residuals
+- ``T`` is the sample size
 
-```math
-\hat{\alpha} = \frac{4\hat{\rho}^2}{(1-\hat{\rho})^4}
-```
+### White Heteroscedasticity-Robust Estimator
 
-### White Heteroscedasticity-Robust Estimator (HC0)
-
-When errors are heteroscedastic but serially uncorrelated, the White (1980) estimator provides consistent standard errors without requiring bandwidth selection:
+When errors are heteroscedastic but serially uncorrelated, the White (1980) HC0 estimator provides consistent standard errors without bandwidth selection:
 
 ```math
 \hat{V}_{W} = (X'X)^{-1} \left( \sum_{t=1}^{T} \hat{u}_t^2 x_t x_t' \right) (X'X)^{-1}
 ```
 
-where
-- ``\hat{u}_t`` are the OLS residuals
+where:
+- ``\hat{u}_t`` is the OLS residual at time ``t``
 - ``x_t`` is the ``k \times 1`` regressor vector at time ``t``
 
 ### Driscoll-Kraay Panel-Robust Estimator
 
-For panel data with both cross-sectional and temporal dependence, the Driscoll & Kraay (1998) estimator applies HAC estimation to the cross-sectional averages of the moment conditions. This produces standard errors robust to both heteroscedasticity, serial correlation, and cross-sectional dependence.
-
-### Julia Implementation
+For panel data with both cross-sectional and temporal dependence, the Driscoll & Kraay (1998) estimator applies HAC estimation to the cross-sectional averages of moment conditions. This produces standard errors robust to heteroscedasticity, serial correlation, and cross-sectional dependence.
 
 ```julia
 using MacroEconometricModels
 
-# Load FRED-MD monetary policy variables
 fred = load_example(:fred_md)
 Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
 Y = Y[all.(isfinite, eachrow(Y)), :]
 
-# Construct design matrices
+# Construct VAR design matrices
 Y_eff, X = construct_var_matrices(Y, 2)
 residuals = Y_eff - X * ((X'X) \ (X'Y_eff))
 
-# Newey-West HAC (default: Bartlett kernel, automatic bandwidth)
+# Newey-West HAC (Bartlett kernel, automatic bandwidth)
 V_nw = newey_west(X, residuals; bandwidth=0, kernel=:bartlett)
 
 # White heteroscedasticity-robust (HC0)
 V_w = white_vcov(X, residuals)
 
-# Driscoll-Kraay for panel data
-# V_dk = driscoll_kraay(X, residuals; bandwidth=4)
-
 # Automatic bandwidth selection
 bw = optimal_bandwidth_nw(residuals)
-println("Optimal Newey-West bandwidth: ", bw)
 ```
 
-The Newey-West estimator is appropriate for time series with heteroscedastic and serially correlated errors — the standard choice for LP and VAR applications. The White estimator is simpler but inconsistent when errors are autocorrelated. The Driscoll-Kraay estimator extends HAC to panel settings where cross-sectional units may be correlated (e.g., country-level macro panels).
+The Newey-West estimator is the standard choice for time series with heteroscedastic and serially correlated errors --- the default for VAR and LP applications. The White estimator is simpler but inconsistent when errors are autocorrelated. The Driscoll-Kraay estimator extends HAC to panel settings where cross-sectional units may be correlated.
 
-### Comparing LP and VAR
+---
 
-The `compare_var_lp` function provides a structured comparison of VAR and LP impulse responses:
+## Forecasting
+
+The VAR generates multi-step ahead forecasts by iterating the estimated recursion forward from the last ``p`` observations:
+
+```math
+\hat{y}_{T+h} = \hat{c} + \hat{A}_1 \hat{y}_{T+h-1} + \cdots + \hat{A}_p \hat{y}_{T+h-p}
+```
+
+where:
+- ``\hat{y}_{T+h}`` is the ``h``-step ahead point forecast
+- ``\hat{y}_{T+j}`` for ``j \leq 0`` uses the observed data
+
+Bootstrap confidence intervals resample the residuals and simulate forecast paths to construct empirical prediction intervals.
 
 ```julia
-# Compare VAR and LP impulse responses for the monetary policy shock (variable 3)
-comparison = compare_var_lp(Y, 3, 20; lags=4)
+using MacroEconometricModels
+
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+
+model = estimate_var(Y, 4; varnames=["INDPRO", "CPI", "FFR"])
+fc = forecast(model, 12; ci_method=:bootstrap, reps=500, conf_level=0.95)
+fc
 ```
 
-This estimates both a VAR and LP model on the same FRED-MD data and returns the IRFs from each, facilitating visual and numerical comparison. Under correct specification, the IRFs should be close (Plagborg-Møller & Wolf 2021); substantial disagreement suggests dynamic misspecification in the VAR.
+The forecast object displays per-variable tables with point forecasts and confidence interval bounds at each horizon. The bootstrap intervals account for both parameter uncertainty and future shock uncertainty.
 
-**Reference**: Newey & West (1987, 1994), Andrews (1991), Driscoll & Kraay (1998)
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `ci_method` | `Symbol` | `:bootstrap` | Confidence interval method: `:bootstrap` or `:none` |
+| `reps` | `Int` | `500` | Number of bootstrap replications |
+| `conf_level` | `Real` | `0.95` | Confidence level for intervals |
+
+---
+
+## Innovation Accounting and Bayesian VAR
+
+For detailed coverage of impulse response functions, forecast error variance decomposition, and historical decomposition, see the dedicated [Innovation Accounting](innovation_accounting.md) page. For Bayesian VAR estimation with Minnesota priors, conjugate NIW sampling, and hyperparameter optimization, see [Bayesian VAR](bayesian.md).
 
 ---
 
 ## Complete Example
 
-This example demonstrates an end-to-end VAR workflow from lag selection through structural analysis.
+This example demonstrates an end-to-end VAR workflow from data loading through structural analysis using FRED-MD monetary policy variables.
 
 ```julia
 using MacroEconometricModels
@@ -510,84 +712,98 @@ Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
 Y = Y[all.(isfinite, eachrow(Y)), :]
 
 # Step 1: Select lag order
-sel = select_lag_order(Y, 13)
-println("AIC lag: ", sel.p_aic, "  BIC lag: ", sel.p_bic)
+p_opt = select_lag_order(Y, 13)
 
 # Step 2: Estimate VAR
-model = estimate_var(Y, sel.p_bic)
-println("AIC: ", round(model.aic, digits=2),
-        "  BIC: ", round(model.bic, digits=2))
+model = estimate_var(Y, p_opt; varnames=["INDPRO", "CPI", "FFR"])
+report(model)
 
 # Step 3: Check stability
 stab = is_stationary(model)
-println("Stationary: ", stab.is_stationary,
-        "  Max modulus: ", round(stab.max_modulus, digits=4))
+stab
 
 # Step 4: Cholesky IRF with bootstrap CI
-# Ordering: [INDPRO, CPI, FFR] — a monetary policy shock raises FFR
-irfs = irf(model, 20; method=:cholesky, ci_type=:bootstrap, reps=500)
-println("Impact of monetary shock on FFR: ", round(irfs.values[1, 3, 3], digits=3))
-println("Response of INDPRO at h=8: ", round(irfs.values[9, 1, 3], digits=3))
+# Ordering: [INDPRO, CPI, FFR] — monetary policy shock is shock 3
+result = irf(model, 20; method=:cholesky, ci_type=:bootstrap, reps=500)
+plot_result(result)
 
 # Step 5: FEVD
 decomp = fevd(model, 20)
-println("INDPRO explained by monetary shock at h=1: ",
-        round(decomp.proportions[1, 1, 3] * 100, digits=1), "%")
-println("INDPRO explained by monetary shock at h=20: ",
-        round(decomp.proportions[20, 1, 3] * 100, digits=1), "%")
+decomp
 
 # Step 6: Historical decomposition
 hd = historical_decomposition(model, size(model.U, 1))
-verify_decomposition(hd)  # Should return true
+verify_decomposition(hd)
+
+# Step 7: Forecast
+fc = forecast(model, 12)
+fc
 ```
 
-The lag selection criteria typically agree for well-specified systems; BIC tends to be more conservative and is preferred when parsimony matters. The Cholesky ordering [INDPRO, CPI, FFR] implies that a monetary policy shock (shock 3) raises the federal funds rate on impact, while output and prices respond with a lag — the standard recursive identification following Christiano, Eichenbaum & Evans (1999). The FEVD reveals how much of the forecast error variance in industrial production is attributable to monetary shocks at different horizons. The historical decomposition identity ``y_t = \sum_j \text{HD}_j(t) + \text{initial}(t)`` should hold exactly up to numerical precision.
+The BIC selects a parsimonious lag order for the 3-variable system. The Cholesky ordering [INDPRO, CPI, FFR] implements the standard recursive identification of Christiano, Eichenbaum & Evans (1999): a monetary policy shock (shock 3) raises the federal funds rate on impact while output and prices respond with a lag. The FEVD reveals the fraction of industrial production forecast error variance attributable to monetary shocks at each horizon. The historical decomposition identity ``y_t = \sum_j \text{HD}_j(t) + \text{initial}(t)`` holds exactly up to numerical precision, verified by `verify_decomposition`.
 
 ---
 
-### See Also
+## Common Pitfalls
 
-- [VECM Analysis](vecm.md) -- Error correction models for cointegrated systems
-- [Local Projections](lp.md) -- Model-free impulse response estimation (Jorda 2005)
-- [Non-Gaussian Identification](nongaussian.md) -- ICA, ML, and heteroskedasticity-based SVAR identification
-- [Innovation Accounting](innovation_accounting.md) -- IRF, FEVD, and historical decomposition details
-- [API Reference](api_functions.md) -- Complete function signatures
+1. **Variable ordering matters for Cholesky identification.** The Cholesky decomposition imposes a recursive causal structure where variable ``i`` responds contemporaneously only to shocks ``1, \ldots, i``. Reordering the columns of ``Y`` changes the economic interpretation of the structural shocks. The standard monetary VAR ordering places slow-moving variables first (output, prices) and the policy instrument last.
+
+2. **Non-stationary VAR produces unreliable inference.** If `is_stationary` returns `false`, the companion matrix has unit-root eigenvalues and the asymptotic distribution theory underlying OLS standard errors and bootstrap confidence intervals is invalid. Consider differencing the data, applying the appropriate transformation codes via `apply_tcode`, or estimating a [VECM](vecm.md) for cointegrated systems.
+
+3. **Too many lags exhaust degrees of freedom.** Each additional lag adds ``n^2`` parameters. For an ``n = 7`` variable system, each lag costs 49 parameters. With moderate sample sizes (``T < 200``), overfitting degrades forecast accuracy and inflates IRF confidence intervals. Use `select_lag_order` with BIC for parsimony.
+
+4. **Low acceptance rate for sign restrictions.** When `identify_sign` or `identify_arias` reports an acceptance rate below 1%, the imposed sign conditions are difficult to satisfy jointly. This may indicate contradictory economic restrictions or an overidentified specification. Relaxing some conditions (e.g., restricting only impact responses rather than multiple horizons) typically improves acceptance.
+
+5. **Uhlig penalty function finds local minima.** The `identify_uhlig` optimizer uses multi-start Nelder-Mead, but non-convexity of the penalty landscape means the solution depends on initial conditions. If `converged` is `false`, increase `n_starts` or verify that the sign restrictions are economically coherent.
+
+---
 
 ## References
 
-### Vector Autoregression
+- Andrews, D. W. K. (1991). Heteroskedasticity and Autocorrelation Consistent Covariance Matrix Estimation.
+  *Econometrica*, 59(3), 817-858. [DOI](https://doi.org/10.2307/2938229)
 
-- Christiano, Lawrence J., Martin Eichenbaum, and Charles L. Evans. 1999. "Monetary Policy Shocks: What Have We Learned and to What End?" In *Handbook of Macroeconomics*, Vol. 1, edited by John B. Taylor and Michael Woodford, 65–148. Amsterdam: Elsevier. [https://doi.org/10.1016/S1574-0048(99)01005-8](https://doi.org/10.1016/S1574-0048(99)01005-8)
-- Hamilton, James D. 1994. *Time Series Analysis*. Princeton, NJ: Princeton University Press. ISBN 978-0-691-04289-3.
-- Lütkepohl, Helmut. 2005. *New Introduction to Multiple Time Series Analysis*. Berlin: Springer. ISBN 978-3-540-40172-8.
-- Sims, Christopher A. 1980. "Macroeconomics and Reality." *Econometrica* 48 (1): 1–48. [https://doi.org/10.2307/1912017](https://doi.org/10.2307/1912017)
+- Antolín-Díaz, J., & Rubio-Ramírez, J. F. (2018). Narrative Sign Restrictions for SVARs.
+  *American Economic Review*, 108(10), 2802-2829. [DOI](https://doi.org/10.1257/aer.20161852)
 
-### Structural Identification
+- Arias, J. E., Rubio-Ramírez, J. F., & Waggoner, D. F. (2018). Inference Based on Structural Vector Autoregressions Identified with Sign and Zero Restrictions: Theory and Applications.
+  *Econometrica*, 86(2), 685-720. [DOI](https://doi.org/10.3982/ECTA14468)
 
-- Arias, Jonas E., Juan F. Rubio-Ramírez, and Daniel F. Waggoner. 2018. "Inference Based on Structural Vector Autoregressions Identified with Sign and Zero Restrictions: Theory and Applications." *Econometrica* 86 (2): 685–720. [https://doi.org/10.3982/ECTA14468](https://doi.org/10.3982/ECTA14468)
-- Antolín-Díaz, Juan, and Juan F. Rubio-Ramírez. 2018. "Narrative Sign Restrictions for SVARs." *American Economic Review* 108 (10): 2802–2829. [https://doi.org/10.1257/aer.20161852](https://doi.org/10.1257/aer.20161852)
-- Blanchard, Olivier Jean, and Danny Quah. 1989. "The Dynamic Effects of Aggregate Demand and Supply Disturbances." *American Economic Review* 79 (4): 655–673.
-- Faust, Jon. 1998. "The Robustness of Identified VAR Conclusions about Money." *Carnegie-Rochester Conference Series on Public Policy* 49: 207–244. [https://doi.org/10.1016/S0167-2231(99)00009-3](https://doi.org/10.1016/S0167-2231(99)00009-3)
-- Kilian, Lutz, and Helmut Lütkepohl. 2017. *Structural Vector Autoregressive Analysis*. Cambridge: Cambridge University Press. [https://doi.org/10.1017/9781108164818](https://doi.org/10.1017/9781108164818)
-- Mountford, Andrew, and Harald Uhlig. 2009. "What Are the Effects of Fiscal Policy Shocks?" *Journal of Applied Econometrics* 24 (6): 960–992. [https://doi.org/10.1002/jae.1079](https://doi.org/10.1002/jae.1079)
-- Rubio-Ramírez, Juan F., Daniel F. Waggoner, and Tao Zha. 2010. "Structural Vector Autoregressions: Theory of Identification and Algorithms for Inference." *Review of Economic Studies* 77 (2): 665–696. [https://doi.org/10.1111/j.1467-937X.2009.00578.x](https://doi.org/10.1111/j.1467-937X.2009.00578.x)
-- Uhlig, Harald. 2005. "What Are the Effects of Monetary Policy on Output? Results from an Agnostic Identification Procedure." *Journal of Monetary Economics* 52 (2): 381–419. [https://doi.org/10.1016/j.jmoneco.2004.05.007](https://doi.org/10.1016/j.jmoneco.2004.05.007)
+- Baumeister, C., & Hamilton, J. D. (2015). Sign Restrictions, Structural Vector Autoregressions, and Useful Prior Information.
+  *Econometrica*, 83(5), 1963-1999. [DOI](https://doi.org/10.3982/ECTA12356)
 
-### Bayesian Methods
+- Blanchard, O. J., & Quah, D. (1989). The Dynamic Effects of Aggregate Demand and Supply Disturbances.
+  *American Economic Review*, 79(4), 655-673. [DOI](https://doi.org/10.3386/w2737)
 
-- Bańbura, Marta, Domenico Giannone, and Lucrezia Reichlin. 2010. "Large Bayesian Vector Auto Regressions." *Journal of Applied Econometrics* 25 (1): 71–92. [https://doi.org/10.1002/jae.1137](https://doi.org/10.1002/jae.1137)
-- Carriero, Andrea, Todd E. Clark, and Massimiliano Marcellino. 2015. "Bayesian VARs: Specification Choices and Forecast Accuracy." *Journal of Applied Econometrics* 30 (1): 46–73. [https://doi.org/10.1002/jae.2315](https://doi.org/10.1002/jae.2315)
-- Doan, Thomas, Robert Litterman, and Christopher Sims. 1984. "Forecasting and Conditional Projection Using Realistic Prior Distributions." *Econometric Reviews* 3 (1): 1–100. [https://doi.org/10.1080/07474938408800053](https://doi.org/10.1080/07474938408800053)
-- Giannone, Domenico, Michele Lenza, and Giorgio E. Primiceri. 2015. "Prior Selection for Vector Autoregressions." *Review of Economics and Statistics* 97 (2): 436–451. [https://doi.org/10.1162/REST_a_00483](https://doi.org/10.1162/REST_a_00483)
-- Kadiyala, K. Rao, and Sune Karlsson. 1997. "Numerical Methods for Estimation and Inference in Bayesian VAR-Models." *Journal of Applied Econometrics* 12 (2): 99–132. [https://doi.org/10.1002/(SICI)1099-1255(199703)12:2<99::AID-JAE429>3.0.CO;2-A](https://doi.org/10.1002/(SICI)1099-1255(199703)12:2<99::AID-JAE429>3.0.CO;2-A)
-- Litterman, Robert B. 1986. "Forecasting with Bayesian Vector Autoregressions—Five Years of Experience." *Journal of Business & Economic Statistics* 4 (1): 25–38. [https://doi.org/10.1080/07350015.1986.10509491](https://doi.org/10.1080/07350015.1986.10509491)
+- Christiano, L. J., Eichenbaum, M., & Evans, C. L. (1999). Monetary Policy Shocks: What Have We Learned and to What End?
+  In *Handbook of Macroeconomics*, Vol. 1, edited by J. B. Taylor & M. Woodford, 65-148. Amsterdam: Elsevier. [DOI](https://doi.org/10.1016/S1574-0048(99)01005-8)
 
-### Inference
+- Driscoll, J. C., & Kraay, A. C. (1998). Consistent Covariance Matrix Estimation with Spatially Dependent Panel Data.
+  *Review of Economics and Statistics*, 80(4), 549-560. [DOI](https://doi.org/10.1162/003465398557825)
 
-- Driscoll, John C., and Aart C. Kraay. 1998. "Consistent Covariance Matrix Estimation with Spatially Dependent Panel Data." *Review of Economics and Statistics* 80 (4): 549–560. [https://doi.org/10.1162/003465398557825](https://doi.org/10.1162/003465398557825)
-- Andrews, Donald W. K. 1991. "Heteroskedasticity and Autocorrelation Consistent Covariance Matrix Estimation." *Econometrica* 59 (3): 817–858. [https://doi.org/10.2307/2938229](https://doi.org/10.2307/2938229)
-- Gelman, Andrew, John B. Carlin, Hal S. Stern, David B. Dunson, Aki Vehtari, and Donald B. Rubin. 2013. *Bayesian Data Analysis*. 3rd ed. Boca Raton, FL: CRC Press. ISBN 978-1-4398-4095-5.
-- Hoffman, Matthew D., and Andrew Gelman. 2014. "The No-U-Turn Sampler: Adaptively Setting Path Lengths in Hamiltonian Monte Carlo." *Journal of Machine Learning Research* 15 (1): 1593–1623.
-- Kilian, Lutz. 1998. "Small-Sample Confidence Intervals for Impulse Response Functions." *Review of Economics and Statistics* 80 (2): 218–230. [https://doi.org/10.1162/003465398557465](https://doi.org/10.1162/003465398557465)
-- Newey, Whitney K., and Kenneth D. West. 1987. "A Simple, Positive Semi-Definite, Heteroskedasticity and Autocorrelation Consistent Covariance Matrix." *Econometrica* 55 (3): 703–708. [https://doi.org/10.2307/1913610](https://doi.org/10.2307/1913610)
-- Newey, Whitney K., and Kenneth D. West. 1994. "Automatic Lag Selection in Covariance Matrix Estimation." *Review of Economic Studies* 61 (4): 631–653. [https://doi.org/10.2307/2297912](https://doi.org/10.2307/2297912)
+- Hamilton, J. D. (1994). *Time Series Analysis*. Princeton, NJ: Princeton University Press. ISBN 978-0-691-04289-3.
+
+- Kilian, L., & Lütkepohl, H. (2017). *Structural Vector Autoregressive Analysis*. Cambridge: Cambridge University Press. [DOI](https://doi.org/10.1017/9781108164818)
+
+- Lütkepohl, H. (2005). *New Introduction to Multiple Time Series Analysis*. Berlin: Springer. [DOI](https://doi.org/10.1007/978-3-540-27752-1)
+
+- Mountford, A., & Uhlig, H. (2009). What Are the Effects of Fiscal Policy Shocks?
+  *Journal of Applied Econometrics*, 24(6), 960-992. [DOI](https://doi.org/10.1002/jae.1079)
+
+- Newey, W. K., & West, K. D. (1987). A Simple, Positive Semi-Definite, Heteroskedasticity and Autocorrelation Consistent Covariance Matrix.
+  *Econometrica*, 55(3), 703-708. [DOI](https://doi.org/10.2307/1913610)
+
+- Newey, W. K., & West, K. D. (1994). Automatic Lag Selection in Covariance Matrix Estimation.
+  *Review of Economic Studies*, 61(4), 631-653. [DOI](https://doi.org/10.2307/2297912)
+
+- Rubio-Ramírez, J. F., Waggoner, D. F., & Zha, T. (2010). Structural Vector Autoregressions: Theory of Identification and Algorithms for Inference.
+  *Review of Economic Studies*, 77(2), 665-696. [DOI](https://doi.org/10.1111/j.1467-937X.2009.00578.x)
+
+- Sims, C. A. (1980). Macroeconomics and Reality.
+  *Econometrica*, 48(1), 1-48. [DOI](https://doi.org/10.2307/1912017)
+
+- Uhlig, H. (2005). What Are the Effects of Monetary Policy on Output? Results from an Agnostic Identification Procedure.
+  *Journal of Monetary Economics*, 52(2), 381-419. [DOI](https://doi.org/10.1016/j.jmoneco.2004.05.007)
+
+- White, H. (1980). A Heteroskedasticity-Consistent Covariance Matrix Estimator and a Direct Test for Heteroskedasticity.
+  *Econometrica*, 48(4), 817-838. [DOI](https://doi.org/10.2307/1912934)
