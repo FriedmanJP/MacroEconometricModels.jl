@@ -104,18 +104,24 @@ const TEST_GROUPS = [
         "dsge/test_dsge.jl",
         "dsge/test_bayesian_dsge.jl",
     ]),
-    # Group 8: Coverage gap tests (lightweight, fast)
-    ("Coverage" => [
-        "coverage/test_vecm_teststat_coverage.jl",
-        "coverage/test_nowcast_coverage.jl",
+    # Group 8: Coverage-A (DSGE — heaviest coverage tests)
+    ("Coverage-A" => [
         "coverage/test_dsge_coverage.jl",
-        "coverage/test_pvar_nongaussian_coverage.jl",
-        "coverage/test_gmm_ext_coverage.jl",
-        "coverage/test_misc_coverage.jl",
-        "coverage/test_teststat_break_panel_coverage.jl",
         "coverage/test_dsge_bayes_coverage.jl",
+    ]),
+    # Group 9: Coverage-B (medium-weight coverage tests)
+    ("Coverage-B" => [
         "coverage/test_data_types_coverage.jl",
+        "coverage/test_teststat_break_panel_coverage.jl",
         "coverage/test_display_coverage.jl",
+        "coverage/test_gmm_ext_coverage.jl",
+    ]),
+    # Group 10: Coverage-C (lightweight coverage tests)
+    ("Coverage-C" => [
+        "coverage/test_pvar_nongaussian_coverage.jl",
+        "coverage/test_nowcast_coverage.jl",
+        "coverage/test_vecm_teststat_coverage.jl",
+        "coverage/test_misc_coverage.jl",
     ]),
 ]
 
@@ -319,16 +325,20 @@ else
             include("dsge/test_bayesian_dsge.jl")
         end
 
-        # Group 8: Coverage gap tests
-        @testset "VECM & Teststat Coverage" begin include("coverage/test_vecm_teststat_coverage.jl") end
-        @testset "Nowcast Coverage" begin include("coverage/test_nowcast_coverage.jl") end
+        # Group 8: Coverage-A (DSGE)
         @testset "DSGE Coverage" begin include("coverage/test_dsge_coverage.jl") end
-        @testset "PVAR & Non-Gaussian Coverage" begin include("coverage/test_pvar_nongaussian_coverage.jl") end
-        @testset "GMM & Extension Coverage" begin include("coverage/test_gmm_ext_coverage.jl") end
-        @testset "Misc Coverage" begin include("coverage/test_misc_coverage.jl") end
-        @testset "Structural Break & Panel Coverage" begin include("coverage/test_teststat_break_panel_coverage.jl") end
         @testset "DSGE Bayesian Coverage" begin include("coverage/test_dsge_bayes_coverage.jl") end
+
+        # Group 9: Coverage-B (medium-weight)
         @testset "Data Types Coverage" begin include("coverage/test_data_types_coverage.jl") end
+        @testset "Structural Break & Panel Coverage" begin include("coverage/test_teststat_break_panel_coverage.jl") end
         @testset "Display & Plotting Coverage" begin include("coverage/test_display_coverage.jl") end
+        @testset "GMM & Extension Coverage" begin include("coverage/test_gmm_ext_coverage.jl") end
+
+        # Group 10: Coverage-C (lightweight)
+        @testset "PVAR & Non-Gaussian Coverage" begin include("coverage/test_pvar_nongaussian_coverage.jl") end
+        @testset "Nowcast Coverage" begin include("coverage/test_nowcast_coverage.jl") end
+        @testset "VECM & Teststat Coverage" begin include("coverage/test_vecm_teststat_coverage.jl") end
+        @testset "Misc Coverage" begin include("coverage/test_misc_coverage.jl") end
     end
 end
