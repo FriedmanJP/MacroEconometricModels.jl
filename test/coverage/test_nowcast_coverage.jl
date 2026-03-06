@@ -1,3 +1,9 @@
+# MacroEconometricModels.jl
+# Copyright (C) 2025-2026 Wookyung Chung <chung@friedman.jp>
+#
+# This file is part of MacroEconometricModels.jl.
+# Licensed under GPL-3.0-or-later. See LICENSE for details.
+
 # Coverage tests for nowcast/bvar_nowcast.jl and nowcast/bridge.jl
 # Targets specific uncovered branches: interior NaN interpolation,
 # first/last-row NaN, fallback paths, short columns, singular XtX,

@@ -1,3 +1,9 @@
+# MacroEconometricModels.jl
+# Copyright (C) 2025-2026 Wookyung Chung <chung@friedman.jp>
+#
+# This file is part of MacroEconometricModels.jl.
+# Licensed under GPL-3.0-or-later. See LICENSE for details.
+
 # Coverage tests for VECM granger and teststat modules
 # Targets:
 #   src/vecm/granger.jl      — p=1, rank=0, deterministic=:trend paths

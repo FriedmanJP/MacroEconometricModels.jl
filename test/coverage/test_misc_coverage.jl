@@ -1,3 +1,9 @@
+# MacroEconometricModels.jl
+# Copyright (C) 2025-2026 Wookyung Chung <chung@friedman.jp>
+#
+# This file is part of MacroEconometricModels.jl.
+# Licensed under GPL-3.0-or-later. See LICENSE for details.
+
 # Miscellaneous coverage tests for MacroEconometricModels.jl
 # Targets small coverage gaps in:
 #   - src/data/summary_stats.jl (CrossSectionData dispatch, all-NaN, single-obs)
