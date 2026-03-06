@@ -2238,6 +2238,36 @@ end
     @test sol.constraints[1].variable == :R
 end
 
+@testset "OccBin: irf(OccBinSolution) dispatch" begin
+    nk = @dsge begin
+        parameters: β = 0.99, σ_c = 1.0, κ = 0.3, φ_π = 1.5, φ_y = 0.5,
+                    ρ_d = 0.8, σ_d = 0.01
+        endogenous: y, π, R, d
+        exogenous: ε_d
+
+        y[t] = y[t+1] - (1 / σ_c) * (R[t] - π[t+1]) + d[t]
+        π[t] = β * π[t+1] + κ * y[t]
+        R[t] = φ_π * π[t] + φ_y * y[t]
+        d[t] = ρ_d * d[t-1] + σ_d * ε_d[t]
+    end
+    nk = compute_steady_state(nk)
+    constraint = parse_constraint(:(R[t] >= 0), nk)
+
+    shocks = zeros(40, 1)
+    shocks[1, 1] = -1.0
+    sol = occbin_solve(nk, constraint; shock_path=shocks)
+
+    # Simple API — constraint comes from sol
+    result = irf(sol, 40)
+    @test result isa OccBinIRF{Float64}
+    @test size(result.piecewise, 1) >= 40
+    @test all(isfinite.(result.piecewise))
+
+    # With custom shock
+    result2 = irf(sol, 40; shock_idx=1, magnitude=-0.5)
+    @test result2 isa OccBinIRF{Float64}
+end
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Section 22: OccBin Plotting
 # ─────────────────────────────────────────────────────────────────────────────

@@ -1335,3 +1335,34 @@ function occbin_irf(spec::DSGESpec{T}, c1::OccBinConstraint{T}, c2::OccBinConstr
     OccBinIRF{T}(sol.linear_path, sol.piecewise_path, sol.regime_history,
                   sol.varnames, shock_name)
 end
+
+"""
+    irf(sol::OccBinSolution{T}, horizon::Int;
+        shock_idx::Int=1, magnitude::Real=one(T),
+        maxiter::Int=100) → OccBinIRF{T}
+
+Compute OccBin IRF from a solved OccBin model. Uses the constraint(s) stored in `sol`.
+Preferred over `occbin_irf`.
+
+# Arguments
+- `sol` — solved OccBin model (contains constraint from `occbin_solve`)
+- `horizon` — number of IRF periods
+
+# Keyword Arguments
+- `shock_idx` — index of shock to perturb (default: 1)
+- `magnitude` — shock size (default: 1.0)
+- `maxiter` — max iterations (default: 100)
+"""
+function irf(sol::OccBinSolution{T}, horizon::Int;
+             shock_idx::Int=1, magnitude::Real=one(T),
+             maxiter::Int=100) where {T<:AbstractFloat}
+    if length(sol.constraints) == 1
+        occbin_irf(sol.spec, sol.constraints[1], shock_idx, horizon;
+                   magnitude=magnitude, maxiter=maxiter)
+    elseif length(sol.constraints) == 2
+        occbin_irf(sol.spec, sol.constraints[1], sol.constraints[2],
+                   shock_idx, horizon; magnitude=magnitude, maxiter=maxiter)
+    else
+        error("OccBinSolution has $(length(sol.constraints)) constraints; expected 1 or 2")
+    end
+end
