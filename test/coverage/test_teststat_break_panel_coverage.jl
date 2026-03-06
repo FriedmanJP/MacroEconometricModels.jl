@@ -19,7 +19,7 @@
 #                                     _andrews_functional (sup/exp/mean), _andrews_critical_values (3 tables),
 #                                     _andrews_pvalue (4 branches), show (reject/fail), error handling
 
-using DataFrames
+using DataFrames, Statistics
 #   src/teststat/helpers.jl         — adf_critical_values, adf_pvalue (4 branches), kpss_pvalue (4 branches),
 #                                     za_pvalue (4 branches), _ngperron_pvalue (MZa/MZt + MSB/MPT, 4 branches each),
 #                                     adf_select_lags (:bic,:hqic), _build_adf_matrix (none/constant/trend x lags),
