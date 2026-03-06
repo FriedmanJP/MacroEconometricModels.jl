@@ -134,6 +134,7 @@ include("teststat/stationarity.jl")
 include("teststat/convenience.jl")
 include("teststat/show.jl")
 include("teststat/normality.jl")
+include("teststat/portmanteau.jl")
 
 # Structural identification
 include("core/identification.jl")
@@ -154,6 +155,17 @@ include("factor/kalman.jl")
 include("factor/static.jl")
 include("factor/dynamic.jl")
 include("factor/generalized.jl")
+
+# Spectral analysis and ACF/PACF
+include("spectral/types.jl")
+include("spectral/windows.jl")
+include("spectral/acf.jl")
+include("spectral/estimation.jl")
+include("spectral/cross.jl")
+include("spectral/diagnostics.jl")
+include("spectral/filtering.jl")
+include("spectral/show.jl")
+
 include("factor/structural.jl")
 
 # FAVAR types and estimation (after factor models, before nowcast)
@@ -744,6 +756,34 @@ export estimate_sv
 
 # Type accessors
 export arch_order, garch_order, persistence, halflife, unconditional_variance
+
+# =============================================================================
+# Exports - Spectral Analysis & ACF/PACF
+# =============================================================================
+
+# Result types
+export ACFResult, SpectralDensityResult, CrossSpectrumResult, TransferFunctionResult
+
+# ACF/PACF/CCF
+export acf, pacf, acf_pacf, ccf
+
+# Spectral estimation
+export periodogram, spectral_density
+
+# Cross-spectral analysis
+export cross_spectrum, coherence, phase, gain
+
+# Spectral diagnostics
+export band_power
+
+# Filtering
+export ideal_bandpass, transfer_function
+
+# Portmanteau & serial correlation tests
+export LjungBoxResult, BoxPierceResult, DurbinWatsonResult
+export FisherTestResult, BartlettWhiteNoiseResult
+export ljung_box_test, box_pierce_test, durbin_watson_test
+export fisher_test, bartlett_white_noise_test
 
 # =============================================================================
 # Exports - Time Series Filters
