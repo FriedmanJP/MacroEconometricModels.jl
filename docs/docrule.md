@@ -140,7 +140,7 @@ report(result)
 - YES: `# Large negative demand shock pushes economy to ZLB`
 - NO: `# Set shocks[1,1] to -3.0`
 
-**Data examples:** Use `load_example(:fred_md)` or synthetic data from model simulation. Never reference external files.
+**Data examples:** Use built-in datasets whenever possible: `load_example(:fred_md)`, `load_example(:fred_qd)`, `load_example(:pwt)`, `load_example(:ddcg)`, `load_example(:mpdta)`. Fall back to synthetic data from model simulation only when no built-in dataset fits. Never reference external files.
 
 **Progressive complexity:**
 1. Minimal example with defaults
