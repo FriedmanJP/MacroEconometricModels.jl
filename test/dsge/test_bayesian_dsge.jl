@@ -941,7 +941,7 @@ end
 
 @testset "Adaptive tempering bisection" begin
     N = 100
-    log_liks = randn(N)
+    log_liks = randn(Random.MersenneTwister(123), N)
     phi_old = 0.0
     ess_target = 0.5
 
