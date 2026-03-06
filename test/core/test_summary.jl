@@ -1135,4 +1135,39 @@ using Statistics
         @test size(t, 2) == n + 1
     end
 
+    @testset "report() for PVAR types" begin
+        using DataFrames
+        df = DataFrame(
+            id = repeat(1:10, inner=20),
+            time = repeat(1:20, outer=10),
+            y1 = randn(200),
+            y2 = randn(200)
+        )
+        pd = xtset(df, :id, :time)
+        pvar = estimate_pvar(pd, 1)
+        redirect_stdout(devnull) do
+            report(pvar)
+            report(pvar_stability(pvar))
+        end
+        @test true
+    end
+
+    @testset "report() for DiD types" begin
+        using DataFrames
+        n_units, n_periods = 40, 10
+        df = DataFrame(
+            unit = repeat(1:n_units, inner=n_periods),
+            time = repeat(1:n_periods, outer=n_units),
+            y = randn(n_units * n_periods),
+            treat = repeat(vcat(zeros(Int, n_units÷2), ones(Int, n_units÷2)), inner=n_periods) .*
+                    repeat(vcat(zeros(Int, n_periods÷2), ones(Int, n_periods÷2)), outer=n_units)
+        )
+        pd = xtset(df, :unit, :time)
+        did = estimate_did(pd, :y, :treat)
+        redirect_stdout(devnull) do
+            report(did)
+        end
+        @test true
+    end
+
 end

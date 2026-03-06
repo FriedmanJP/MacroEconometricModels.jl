@@ -443,6 +443,18 @@ report(m::LogitModel) = show(stdout, m)
 report(m::ProbitModel) = show(stdout, m)
 report(me::MarginalEffects) = show(stdout, me)
 
+# Panel VAR
+report(x::PVARModel) = show(stdout, x)
+report(x::PVARStability) = show(stdout, x)
+report(x::PVARTestResult) = show(stdout, x)
+
+# DiD
+report(x::DIDResult) = show(stdout, x)
+report(x::EventStudyLP) = show(stdout, x)
+report(x::LPDiDResult) = show(stdout, x)
+report(x::BaconDecomposition) = show(stdout, x)
+report(x::HonestDiDResult) = show(stdout, x)
+
 
 # =============================================================================
 # Split Files (table extraction, display, references, nowcasting)
