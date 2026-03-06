@@ -1,0 +1,555 @@
+/* ==========================================================================
+   Solarized Theme Override for Documenter.jl
+   Light: Solarized Light  |  Dark: Solarized Dark
+   https://ethanschoonover.com/solarized/
+
+   Light rules scoped under html:not(.theme--documenter-dark) to prevent
+   bleed-through when dark theme is active.
+   ========================================================================== */
+
+/* --- Solarized Palette ---
+   base03:  #002b36   base02:  #073642
+   base01:  #586e75   base00:  #657b83
+   base0:   #839496   base1:   #93a1a1
+   base2:   #eee8d5   base3:   #fdf6e3
+   yellow:  #b58900   orange:  #cb4b16
+   red:     #dc322f   magenta: #d33682
+   violet:  #6c71c4   blue:    #268bd2
+   cyan:    #2aa198   green:   #859900
+*/
+
+/* =====================================================================
+   LIGHT THEME (Solarized Light)
+   Scoped: html:not(.theme--documenter-dark)
+   #fff → #fdf6e3 (base3),  #f5f5f5 → #eee8d5 (base2)
+   ===================================================================== */
+
+/* Page-level backgrounds */
+html:not(.theme--documenter-dark),
+html:not(.theme--documenter-dark) body,
+html:not(.theme--documenter-dark) #documenter,
+html:not(.theme--documenter-dark) #documenter .docs-main,
+html:not(.theme--documenter-dark) .box,
+html:not(.theme--documenter-dark) .card,
+html:not(.theme--documenter-dark) .panel,
+html:not(.theme--documenter-dark) .dropdown-content,
+html:not(.theme--documenter-dark) .modal-card-body,
+html:not(.theme--documenter-dark) .message-body {
+    background-color: #fdf6e3;
+    color: #657b83;
+}
+
+/* Component-level backgrounds */
+html:not(.theme--documenter-dark) .button,
+html:not(.theme--documenter-dark) .button.is-static,
+html:not(.theme--documenter-dark) .content blockquote,
+html:not(.theme--documenter-dark) .notification,
+html:not(.theme--documenter-dark) .tag:not(body),
+html:not(.theme--documenter-dark) .content kbd:not(body),
+html:not(.theme--documenter-dark) details.docstring > section > a.docs-sourcelink:not(body),
+html:not(.theme--documenter-dark) .number,
+html:not(.theme--documenter-dark) .file-cta,
+html:not(.theme--documenter-dark) .modal-card-head,
+html:not(.theme--documenter-dark) .modal-card-foot,
+html:not(.theme--documenter-dark) .panel-heading,
+html:not(.theme--documenter-dark) .panel-block {
+    background-color: #eee8d5;
+}
+
+/* Form elements */
+html:not(.theme--documenter-dark) .select select,
+html:not(.theme--documenter-dark) .textarea,
+html:not(.theme--documenter-dark) .input {
+    background-color: #fdf6e3;
+    color: #657b83;
+    border-color: #d3cbb7;
+}
+
+/* Sidebar */
+html:not(.theme--documenter-dark) #documenter .docs-sidebar {
+    background-color: #eee8d5 !important;
+    border-right: 1px solid #d3cbb7 !important;
+}
+html:not(.theme--documenter-dark) #documenter .docs-sidebar .docs-package-name {
+    background-color: #eee8d5 !important;
+}
+html:not(.theme--documenter-dark) #documenter .docs-sidebar nav.docs-menu a {
+    color: #586e75;
+}
+/* Base tocitem background (overrides theme #f5f5f5) */
+html:not(.theme--documenter-dark) #documenter .docs-sidebar ul.docs-menu .tocitem,
+html:not(.theme--documenter-dark) #documenter .docs-sidebar ul.docs-menu .tocitem:hover {
+    background: #eee8d5 !important;
+    background-color: #eee8d5 !important;
+    color: #586e75;
+}
+html:not(.theme--documenter-dark) #documenter .docs-sidebar ul.docs-menu a.tocitem:hover,
+html:not(.theme--documenter-dark) #documenter .docs-sidebar ul.docs-menu label.tocitem:hover {
+    color: #268bd2;
+    background: #d6cfc0 !important;
+    background-color: #d6cfc0 !important;
+}
+html:not(.theme--documenter-dark) .menu-list a:hover {
+    background-color: #d6cfc0 !important;
+}
+html:not(.theme--documenter-dark) #documenter .docs-sidebar nav.docs-menu .tocitem.is-active,
+html:not(.theme--documenter-dark) #documenter .docs-sidebar nav.docs-menu a.is-active {
+    color: #268bd2;
+}
+html:not(.theme--documenter-dark) #documenter .docs-sidebar ul.docs-menu li.is-active {
+    background-color: #fdf6e3 !important;
+    border-color: #d3cbb7 !important;
+}
+html:not(.theme--documenter-dark) #documenter .docs-sidebar ul.docs-menu li.is-active .tocitem,
+html:not(.theme--documenter-dark) #documenter .docs-sidebar ul.docs-menu li.is-active .tocitem:hover {
+    background: #fdf6e3 !important;
+    background-color: #fdf6e3 !important;
+    color: #586e75;
+}
+html:not(.theme--documenter-dark) #documenter .docs-sidebar ul.docs-menu li.is-active ul.internal .tocitem:hover {
+    background: #d6cfc0 !important;
+    background-color: #d6cfc0 !important;
+}
+html:not(.theme--documenter-dark) #documenter .docs-sidebar .docs-version-selector,
+html:not(.theme--documenter-dark) #documenter .docs-sidebar ul.docs-menu,
+html:not(.theme--documenter-dark) #documenter .docs-sidebar ul.docs-menu ul.internal {
+    border-color: #d3cbb7;
+}
+html:not(.theme--documenter-dark) #documenter .docs-sidebar ul.docs-menu > li li {
+    border-left-color: #d3cbb7;
+}
+html:not(.theme--documenter-dark) #documenter .docs-sidebar form.docs-search > input {
+    background-color: #fdf6e3 !important;
+    color: #657b83;
+    border-color: #d3cbb7;
+}
+/* Scrollbar in sidebar */
+html:not(.theme--documenter-dark) #documenter .docs-sidebar ul.docs-menu::-webkit-scrollbar-thumb,
+html:not(.theme--documenter-dark) #documenter .docs-sidebar::-webkit-scrollbar-thumb {
+    background: #d3cbb7 !important;
+}
+html:not(.theme--documenter-dark) #documenter .docs-sidebar ul.docs-menu::-webkit-scrollbar-thumb:hover,
+html:not(.theme--documenter-dark) #documenter .docs-sidebar::-webkit-scrollbar-thumb:hover {
+    background: #c4b8a4 !important;
+}
+
+/* Headings — override link color inside headings */
+html:not(.theme--documenter-dark) .content h1,
+html:not(.theme--documenter-dark) .content h2,
+html:not(.theme--documenter-dark) .content h3,
+html:not(.theme--documenter-dark) .content h4,
+html:not(.theme--documenter-dark) .content h5,
+html:not(.theme--documenter-dark) .content h6,
+html:not(.theme--documenter-dark) .content h1 a,
+html:not(.theme--documenter-dark) .content h2 a,
+html:not(.theme--documenter-dark) .content h3 a,
+html:not(.theme--documenter-dark) .content h4 a,
+html:not(.theme--documenter-dark) .content h5 a,
+html:not(.theme--documenter-dark) .content h6 a,
+html:not(.theme--documenter-dark) .content h1 .docs-heading-anchor,
+html:not(.theme--documenter-dark) .content h2 .docs-heading-anchor,
+html:not(.theme--documenter-dark) .content h3 .docs-heading-anchor {
+    color: #073642 !important;
+}
+/* Page title */
+html:not(.theme--documenter-dark) article#documenter-page > h1,
+html:not(.theme--documenter-dark) article#documenter-page > h1 a,
+html:not(.theme--documenter-dark) .docs-main h1:first-child,
+html:not(.theme--documenter-dark) .docs-main h1:first-child a {
+    color: #073642 !important;
+}
+
+/* Links */
+html:not(.theme--documenter-dark) a { color: #268bd2; }
+html:not(.theme--documenter-dark) a:hover { color: #2aa198; }
+
+/* Code */
+html:not(.theme--documenter-dark) .content pre {
+    background-color: #eee8d5;
+    border: 1px solid #d3cbb7;
+}
+html:not(.theme--documenter-dark) .content code {
+    background-color: #eee8d5;
+    color: #657b83;
+}
+html:not(.theme--documenter-dark) .content pre code {
+    background-color: transparent;
+}
+
+/* Syntax highlighting — Solarized Light */
+html:not(.theme--documenter-dark) .hljs { background: #eee8d5; color: #657b83; }
+html:not(.theme--documenter-dark) .hljs-keyword { color: #859900; }
+html:not(.theme--documenter-dark) .hljs-built_in { color: #859900; }
+html:not(.theme--documenter-dark) .hljs-type { color: #b58900; }
+html:not(.theme--documenter-dark) .hljs-title { color: #268bd2; }
+html:not(.theme--documenter-dark) .hljs-string { color: #2aa198; }
+html:not(.theme--documenter-dark) .hljs-meta { color: #2aa198; }
+html:not(.theme--documenter-dark) .hljs-number { color: #d33682; }
+html:not(.theme--documenter-dark) .hljs-literal { color: #d33682; }
+html:not(.theme--documenter-dark) .hljs-comment { color: #93a1a1; font-style: italic; }
+html:not(.theme--documenter-dark) .hljs-function { color: #268bd2; }
+html:not(.theme--documenter-dark) .hljs-symbol { color: #cb4b16; }
+html:not(.theme--documenter-dark) .hljs-variable { color: #657b83; }
+
+/* Admonitions */
+html:not(.theme--documenter-dark) .admonition { background-color: #eee8d5; }
+html:not(.theme--documenter-dark) .admonition.is-info { border-left-color: #268bd2; }
+html:not(.theme--documenter-dark) .admonition.is-info > .admonition-header { background-color: rgba(38, 139, 210, 0.12); }
+html:not(.theme--documenter-dark) .admonition.is-warning { border-left-color: #b58900; }
+html:not(.theme--documenter-dark) .admonition.is-warning > .admonition-header { background-color: rgba(181, 137, 0, 0.12); }
+html:not(.theme--documenter-dark) .admonition.is-danger { border-left-color: #dc322f; }
+html:not(.theme--documenter-dark) .admonition.is-danger > .admonition-header { background-color: rgba(220, 50, 47, 0.12); }
+html:not(.theme--documenter-dark) .admonition.is-success { border-left-color: #859900; }
+html:not(.theme--documenter-dark) .admonition.is-success > .admonition-header { background-color: rgba(133, 153, 0, 0.12); }
+html:not(.theme--documenter-dark) .admonition.is-default { border-left-color: #268bd2; }
+html:not(.theme--documenter-dark) .admonition.is-default > .admonition-header { background-color: rgba(38, 139, 210, 0.12); }
+
+/* Tables */
+html:not(.theme--documenter-dark) table thead { background-color: #eee8d5; }
+html:not(.theme--documenter-dark) table thead th { color: #073642; border-bottom: 2px solid #d3cbb7; }
+html:not(.theme--documenter-dark) table tbody tr:nth-child(even),
+html:not(.theme--documenter-dark) .table.is-striped tbody tr:not(.is-selected):nth-child(even),
+html:not(.theme--documenter-dark) .table.is-hoverable tbody tr:not(.is-selected):hover {
+    background-color: rgba(238, 232, 213, 0.4);
+}
+html:not(.theme--documenter-dark) table td,
+html:not(.theme--documenter-dark) table th { border-color: #d3cbb7; }
+
+/* Navbar — same as page bg to avoid seam at left/right edges */
+html:not(.theme--documenter-dark) nav.navbar,
+html:not(.theme--documenter-dark) .navbar,
+html:not(.theme--documenter-dark) .docs-navbar,
+html:not(.theme--documenter-dark) .navbar-menu,
+html:not(.theme--documenter-dark) .navbar-dropdown,
+html:not(.theme--documenter-dark) #documenter .docs-main header.docs-navbar {
+    background-color: #fdf6e3 !important;
+    border-bottom: 1px solid #d3cbb7 !important;
+    box-shadow: none !important;
+}
+html:not(.theme--documenter-dark) #documenter .docs-main header.docs-navbar.headroom--not-top {
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08) !important;
+}
+html:not(.theme--documenter-dark) .navbar.has-shadow {
+    box-shadow: none !important;
+}
+html:not(.theme--documenter-dark) a.navbar-item:hover,
+html:not(.theme--documenter-dark) a.navbar-item:focus,
+html:not(.theme--documenter-dark) a.navbar-item:focus-within,
+html:not(.theme--documenter-dark) a.navbar-item.is-active,
+html:not(.theme--documenter-dark) .navbar-link:hover,
+html:not(.theme--documenter-dark) .navbar-link:focus,
+html:not(.theme--documenter-dark) .navbar-link:focus-within,
+html:not(.theme--documenter-dark) .navbar-link.is-active,
+html:not(.theme--documenter-dark) .navbar-item.has-dropdown:focus .navbar-link,
+html:not(.theme--documenter-dark) .navbar-item.has-dropdown:hover .navbar-link,
+html:not(.theme--documenter-dark) .navbar-item.has-dropdown.is-active .navbar-link {
+    background-color: #eee8d5;
+}
+html:not(.theme--documenter-dark) .navbar-dropdown a.navbar-item:hover,
+html:not(.theme--documenter-dark) .navbar-dropdown a.navbar-item:focus,
+html:not(.theme--documenter-dark) .navbar-dropdown a.navbar-item.is-active {
+    background-color: #d6cfc0;
+}
+html:not(.theme--documenter-dark) .navbar-divider { background-color: #d3cbb7; }
+
+/* Breadcrumb */
+html:not(.theme--documenter-dark) .breadcrumb a { color: #586e75; }
+html:not(.theme--documenter-dark) .breadcrumb li.is-active a { color: #073642; }
+
+/* Search */
+html:not(.theme--documenter-dark) #documenter .search-modal .modal-card-body { background-color: #fdf6e3; }
+
+/* Footer */
+html:not(.theme--documenter-dark) footer.footer { background-color: #eee8d5; color: #93a1a1; }
+
+/* Docstring blocks */
+html:not(.theme--documenter-dark) .docstring { border-color: #d3cbb7; }
+html:not(.theme--documenter-dark) .docstring header { background-color: #eee8d5; }
+
+/* Hide collapse-all-docstrings chevron and settings gear */
+#documenter-article-toggle-button,
+#documenter-settings-button {
+    display: none !important;
+}
+
+/* Settings modal */
+html:not(.theme--documenter-dark) #documenter .docs-settings { background-color: #fdf6e3; }
+
+/* Horizontal rule */
+html:not(.theme--documenter-dark) .content hr,
+html:not(.theme--documenter-dark) hr { background-color: #d3cbb7; }
+
+
+/* =====================================================================
+   DARK THEME (Solarized Dark)
+   Prefix: html.theme--documenter-dark
+   #1f2424 → #002b36 (base03),  #282f2f → #073642 (base02)
+   ===================================================================== */
+
+/* Page-level backgrounds */
+html.theme--documenter-dark,
+html.theme--documenter-dark body,
+html.theme--documenter-dark #documenter,
+html.theme--documenter-dark #documenter .docs-main {
+    background-color: #002b36;
+    color: #839496;
+}
+
+/* Component-level backgrounds */
+html.theme--documenter-dark pre,
+html.theme--documenter-dark .button,
+html.theme--documenter-dark .button.is-static,
+html.theme--documenter-dark .content blockquote,
+html.theme--documenter-dark .notification,
+html.theme--documenter-dark .tag:not(body),
+html.theme--documenter-dark .content kbd:not(body),
+html.theme--documenter-dark details.docstring > section > a.docs-sourcelink:not(body),
+html.theme--documenter-dark .number,
+html.theme--documenter-dark .file-cta,
+html.theme--documenter-dark .dropdown-content,
+html.theme--documenter-dark .menu-list a:hover,
+html.theme--documenter-dark .message,
+html.theme--documenter-dark .modal-card-head,
+html.theme--documenter-dark .modal-card-body,
+html.theme--documenter-dark .modal-card-foot,
+html.theme--documenter-dark .panel,
+html.theme--documenter-dark .panel-heading,
+html.theme--documenter-dark .panel-block,
+html.theme--documenter-dark .card,
+html.theme--documenter-dark .box,
+html.theme--documenter-dark .message-body {
+    background-color: #073642;
+}
+
+/* Form elements */
+html.theme--documenter-dark .select select,
+html.theme--documenter-dark .textarea,
+html.theme--documenter-dark .input,
+html.theme--documenter-dark #documenter .docs-sidebar form.docs-search > input {
+    background-color: #002b36;
+    color: #839496;
+    border-color: #0a4050;
+}
+
+/* Documenter-specific */
+html.theme--documenter-dark .documenter-example-output,
+html.theme--documenter-dark .footnote-preview {
+    background-color: #002b36;
+}
+
+/* Sidebar */
+html.theme--documenter-dark #documenter .docs-sidebar {
+    background-color: #073642 !important;
+    border-right: 1px solid #0a4050 !important;
+}
+html.theme--documenter-dark #documenter .docs-sidebar .docs-package-name {
+    background-color: #073642 !important;
+}
+html.theme--documenter-dark #documenter .docs-sidebar nav.docs-menu a {
+    color: #93a1a1;
+}
+/* Base tocitem background (overrides theme defaults) */
+html.theme--documenter-dark #documenter .docs-sidebar ul.docs-menu .tocitem,
+html.theme--documenter-dark #documenter .docs-sidebar ul.docs-menu .tocitem:hover {
+    background: #073642 !important;
+    background-color: #073642 !important;
+    color: #93a1a1;
+}
+html.theme--documenter-dark #documenter .docs-sidebar ul.docs-menu a.tocitem:hover,
+html.theme--documenter-dark #documenter .docs-sidebar ul.docs-menu label.tocitem:hover {
+    color: #268bd2;
+    background: #0a4a5c !important;
+    background-color: #0a4a5c !important;
+}
+html.theme--documenter-dark #documenter .docs-sidebar nav.docs-menu .tocitem.is-active,
+html.theme--documenter-dark #documenter .docs-sidebar nav.docs-menu a.is-active {
+    color: #268bd2;
+}
+html.theme--documenter-dark #documenter .docs-sidebar ul.docs-menu li.is-active {
+    background-color: #002b36 !important;
+    border-color: #0a4050 !important;
+}
+html.theme--documenter-dark #documenter .docs-sidebar ul.docs-menu li.is-active .tocitem,
+html.theme--documenter-dark #documenter .docs-sidebar ul.docs-menu li.is-active .tocitem:hover {
+    background: #002b36 !important;
+    background-color: #002b36 !important;
+    color: #93a1a1;
+}
+html.theme--documenter-dark #documenter .docs-sidebar ul.docs-menu li.is-active ul.internal .tocitem:hover {
+    background: #0a4a5c !important;
+    background-color: #0a4a5c !important;
+}
+html.theme--documenter-dark #documenter .docs-sidebar .docs-version-selector,
+html.theme--documenter-dark #documenter .docs-sidebar ul.docs-menu,
+html.theme--documenter-dark #documenter .docs-sidebar ul.docs-menu ul.internal {
+    border-color: #0a4050;
+}
+html.theme--documenter-dark #documenter .docs-sidebar ul.docs-menu > li li {
+    border-left-color: #0a4050;
+}
+/* Scrollbar in sidebar */
+html.theme--documenter-dark #documenter .docs-sidebar ul.docs-menu::-webkit-scrollbar-thumb,
+html.theme--documenter-dark #documenter .docs-sidebar::-webkit-scrollbar-thumb {
+    background: #0a4050 !important;
+}
+html.theme--documenter-dark #documenter .docs-sidebar ul.docs-menu::-webkit-scrollbar-thumb:hover,
+html.theme--documenter-dark #documenter .docs-sidebar::-webkit-scrollbar-thumb:hover {
+    background: #0d5060 !important;
+}
+
+/* Headings — override link color inside headings */
+html.theme--documenter-dark .content h1,
+html.theme--documenter-dark .content h2,
+html.theme--documenter-dark .content h3,
+html.theme--documenter-dark .content h4,
+html.theme--documenter-dark .content h5,
+html.theme--documenter-dark .content h6,
+html.theme--documenter-dark .content h1 a,
+html.theme--documenter-dark .content h2 a,
+html.theme--documenter-dark .content h3 a,
+html.theme--documenter-dark .content h4 a,
+html.theme--documenter-dark .content h5 a,
+html.theme--documenter-dark .content h6 a,
+html.theme--documenter-dark .content h1 .docs-heading-anchor,
+html.theme--documenter-dark .content h2 .docs-heading-anchor,
+html.theme--documenter-dark .content h3 .docs-heading-anchor {
+    color: #93a1a1 !important;
+}
+html.theme--documenter-dark article#documenter-page > h1,
+html.theme--documenter-dark article#documenter-page > h1 a,
+html.theme--documenter-dark .docs-main h1:first-child,
+html.theme--documenter-dark .docs-main h1:first-child a {
+    color: #93a1a1 !important;
+}
+
+/* Text color */
+html.theme--documenter-dark .content p,
+html.theme--documenter-dark .content li,
+html.theme--documenter-dark .content td,
+html.theme--documenter-dark .content th,
+html.theme--documenter-dark .content dd,
+html.theme--documenter-dark .content dt {
+    color: #839496;
+}
+
+/* Links */
+html.theme--documenter-dark a { color: #268bd2; }
+html.theme--documenter-dark a:hover { color: #2aa198; }
+
+/* Code */
+html.theme--documenter-dark .content pre {
+    background-color: #073642;
+    border: 1px solid #0a4050;
+}
+html.theme--documenter-dark .content code {
+    background-color: #073642;
+    color: #93a1a1;
+}
+html.theme--documenter-dark .content pre code { background-color: transparent; }
+
+/* Syntax highlighting — Solarized Dark */
+html.theme--documenter-dark .hljs { background: #073642; color: #839496; }
+html.theme--documenter-dark .hljs-keyword { color: #859900; }
+html.theme--documenter-dark .hljs-built_in { color: #859900; }
+html.theme--documenter-dark .hljs-type { color: #b58900; }
+html.theme--documenter-dark .hljs-title { color: #268bd2; }
+html.theme--documenter-dark .hljs-string { color: #2aa198; }
+html.theme--documenter-dark .hljs-meta { color: #2aa198; }
+html.theme--documenter-dark .hljs-number { color: #d33682; }
+html.theme--documenter-dark .hljs-literal { color: #d33682; }
+html.theme--documenter-dark .hljs-comment { color: #586e75; font-style: italic; }
+html.theme--documenter-dark .hljs-function { color: #268bd2; }
+html.theme--documenter-dark .hljs-symbol { color: #cb4b16; }
+html.theme--documenter-dark .hljs-variable { color: #839496; }
+
+/* Admonitions */
+html.theme--documenter-dark .admonition { background-color: #073642; }
+html.theme--documenter-dark .admonition.is-info { border-left-color: #268bd2; }
+html.theme--documenter-dark .admonition.is-info > .admonition-header { background-color: rgba(38, 139, 210, 0.15); }
+html.theme--documenter-dark .admonition.is-warning { border-left-color: #b58900; }
+html.theme--documenter-dark .admonition.is-warning > .admonition-header { background-color: rgba(181, 137, 0, 0.15); }
+html.theme--documenter-dark .admonition.is-danger { border-left-color: #dc322f; }
+html.theme--documenter-dark .admonition.is-danger > .admonition-header { background-color: rgba(220, 50, 47, 0.15); }
+html.theme--documenter-dark .admonition.is-success { border-left-color: #859900; }
+html.theme--documenter-dark .admonition.is-success > .admonition-header { background-color: rgba(133, 153, 0, 0.15); }
+html.theme--documenter-dark .admonition.is-default { border-left-color: #268bd2; }
+html.theme--documenter-dark .admonition.is-default > .admonition-header { background-color: rgba(38, 139, 210, 0.15); }
+
+/* Tables */
+html.theme--documenter-dark table thead { background-color: #073642; }
+html.theme--documenter-dark table thead th { color: #93a1a1; border-bottom: 2px solid #0a4050; }
+html.theme--documenter-dark table tbody tr:nth-child(even),
+html.theme--documenter-dark .table.is-striped tbody tr:not(.is-selected):nth-child(even),
+html.theme--documenter-dark .table.is-hoverable tbody tr:not(.is-selected):hover {
+    background-color: rgba(7, 54, 66, 0.5);
+}
+html.theme--documenter-dark table td,
+html.theme--documenter-dark table th { border-color: #0a4050; color: #839496; }
+
+/* Navbar — same as page bg to avoid seam at left/right edges */
+html.theme--documenter-dark nav.navbar,
+html.theme--documenter-dark .navbar,
+html.theme--documenter-dark .docs-navbar,
+html.theme--documenter-dark .navbar-menu,
+html.theme--documenter-dark .navbar-dropdown,
+html.theme--documenter-dark #documenter .docs-main header.docs-navbar {
+    background-color: #002b36 !important;
+    border-bottom: 1px solid #0a4050 !important;
+    box-shadow: none !important;
+}
+html.theme--documenter-dark #documenter .docs-main header.docs-navbar.headroom--not-top {
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) !important;
+}
+html.theme--documenter-dark .navbar.has-shadow {
+    box-shadow: none !important;
+}
+html.theme--documenter-dark a.navbar-item:hover,
+html.theme--documenter-dark a.navbar-item:focus,
+html.theme--documenter-dark a.navbar-item:focus-within,
+html.theme--documenter-dark a.navbar-item.is-active,
+html.theme--documenter-dark .navbar-link:hover,
+html.theme--documenter-dark .navbar-link:focus,
+html.theme--documenter-dark .navbar-link:focus-within,
+html.theme--documenter-dark .navbar-link.is-active,
+html.theme--documenter-dark .navbar-item.has-dropdown:focus .navbar-link,
+html.theme--documenter-dark .navbar-item.has-dropdown:hover .navbar-link,
+html.theme--documenter-dark .navbar-item.has-dropdown.is-active .navbar-link {
+    background-color: #073642;
+}
+html.theme--documenter-dark .navbar-dropdown a.navbar-item:hover,
+html.theme--documenter-dark .navbar-dropdown a.navbar-item:focus,
+html.theme--documenter-dark .navbar-dropdown a.navbar-item.is-active {
+    background-color: #0a4a5c;
+}
+html.theme--documenter-dark .navbar-divider { background-color: #0a4050; }
+
+/* Breadcrumb */
+html.theme--documenter-dark .breadcrumb a { color: #93a1a1; }
+html.theme--documenter-dark .breadcrumb li.is-active a { color: #eee8d5; }
+
+/* Search */
+html.theme--documenter-dark #documenter .search-modal .modal-card-body { background-color: #002b36; }
+
+/* Footer */
+html.theme--documenter-dark footer.footer { background-color: #073642; color: #586e75; }
+
+/* Docstring blocks */
+html.theme--documenter-dark .docstring { border-color: #0a4050; }
+html.theme--documenter-dark .docstring header { background-color: #073642; }
+
+/* Settings modal */
+html.theme--documenter-dark #documenter .docs-settings { background-color: #002b36; }
+
+/* Horizontal rule */
+html.theme--documenter-dark .content hr,
+html.theme--documenter-dark hr { background-color: #0a4050; }
+
+/* Version selector */
+html.theme--documenter-dark .select select {
+    background-color: #073642;
+    color: #839496;
+    border-color: #0a4050;
+}
+
+/* Tabs */
+html.theme--documenter-dark .tabs.is-boxed li.is-active a { background-color: #002b36; }
