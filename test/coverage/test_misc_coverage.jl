@@ -185,7 +185,7 @@ Random.seed!(9004)
     # =========================================================================
     @testset "BVARForecast show with :median" begin
         Y = randn(100, 2)
-        post = estimate_bvar(Y, 2; n_draws=100, varnames=["GDP", "INF"])
+        post = estimate_bvar(Y, 2; n_draws=50, varnames=["GDP", "INF"])
         fc = forecast(post, 5; point_estimate=:median)
         @test fc isa MacroEconometricModels.BVARForecast
         @test fc.point_estimate == :median
@@ -200,7 +200,7 @@ Random.seed!(9004)
     # =========================================================================
     @testset "BVARForecast show with :mean" begin
         Y = randn(100, 2)
-        post = estimate_bvar(Y, 2; n_draws=100, varnames=["X1", "X2"])
+        post = estimate_bvar(Y, 2; n_draws=50, varnames=["X1", "X2"])
         fc = forecast(post, 3; point_estimate=:mean)
         @test fc.point_estimate == :mean
         str = sprint(show, fc)

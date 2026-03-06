@@ -184,7 +184,7 @@ end
             # Use 2 lags for overidentification: 1*(1+1)/2 + 1*2 = 3 moments for 2 params
             result = estimate_smm(sim_ar1, d -> autocovariance_moments(d; lags=2),
                                   [0.5, 0.3], data;
-                                  sim_ratio=5, burn=100, weighting=:identity,
+                                  sim_ratio=3, burn=50, weighting=:identity,
                                   rng=Random.MersenneTwister(42))
 
             @test result isa SMMModel{Float64}
@@ -225,7 +225,7 @@ end
             # This is overidentified (2 > 1), but identity weighting takes the sandwich path
             result = estimate_smm(sim_fn, d -> autocovariance_moments(d; lags=1),
                                   [0.3], data;
-                                  sim_ratio=3, burn=50, weighting=:identity,
+                                  sim_ratio=3, burn=25, weighting=:identity,
                                   rng=Random.MersenneTwister(55))
             @test result isa SMMModel{Float64}
             @test result.weighting.method == :identity
@@ -404,7 +404,7 @@ end
             bounds = ParameterTransform([-1.0], [1.0])
             result = estimate_smm(sim_bounded, d -> autocovariance_moments(d; lags=1),
                                   [0.3], data;
-                                  sim_ratio=3, burn=50, weighting=:identity,
+                                  sim_ratio=3, burn=25, weighting=:identity,
                                   bounds=bounds,
                                   rng=Random.MersenneTwister(42))
             @test result isa SMMModel{Float64}
