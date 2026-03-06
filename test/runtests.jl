@@ -89,7 +89,7 @@ const TEST_GROUPS = [
         "pvar/test_pvar.jl",
         "reg/test_reg.jl",
     ]),
-    # Group 6: Volatility & Non-Gaussian & Plotting & Filters
+    # Group 6: Volatility & Non-Gaussian & Plotting & Filters & Spectral
     ("Volatility & Filters" => [
         "volatility/test_volatility.jl",
         "volatility/test_volatility_coverage.jl",
@@ -97,6 +97,7 @@ const TEST_GROUPS = [
         "nongaussian/test_nongaussian_internals.jl",
         "plotting/test_plot_result.jl",
         "filters/test_filters.jl",
+        "spectral/test_spectral.jl",
     ]),
     # Group 7: DSGE Models
     ("DSGE Models" => [
@@ -317,6 +318,7 @@ else
         @testset "Non-Gaussian Internals" begin include("nongaussian/test_nongaussian_internals.jl") end
         @testset "Plotting" begin include("plotting/test_plot_result.jl") end
         @testset "Time Series Filters" begin include("filters/test_filters.jl") end
+        @testset "Spectral Analysis" begin include("spectral/test_spectral.jl") end
 
         # Group 7: DSGE Models
         @testset "DSGE Models" begin
