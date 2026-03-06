@@ -134,7 +134,7 @@ report(result)
 - `print_table(stdout, result)` — for tabular output
 - `plot_result(result)` — for visualization
 - Direct field access (`result.theta`, `result.J_stat`) only when showing specific values for interpretation
-- **Avoid `println` for displaying results.** Use `println` only for simple scalar diagnostics like convergence flags.
+- **Never use `println` to display model results, estimation output, or test statistics.** Use `report(result)` for model output, `plot_result(result)` for visualizations, `print_table(stdout, result)` for tabular data, and direct field access with `round()` for specific values in interpretation paragraphs. Reserve `println` only for simple scalar diagnostics like convergence flags or iteration counts.
 
 **Comments:** Inline comments explain intent, not mechanics:
 - YES: `# Large negative demand shock pushes economy to ZLB`
@@ -271,6 +271,7 @@ where:
 - Full reference list at the bottom of every page (not just a master list)
 - DOI links for all journal articles
 - Book references include publisher and ISBN
+- **Verify all DOIs and ISBNs before committing.** Every DOI must resolve to the correct publication. Every ISBN must match the cited edition. Do not fabricate or guess DOIs — look up the actual DOI from the publisher or CrossRef. If a DOI is not available (e.g., working papers), use the direct URL instead.
 
 ---
 
