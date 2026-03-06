@@ -153,7 +153,7 @@ end
         @testset "models.jl — SVModel plot" begin
             rng = Random.MersenneTwister(9014)
             y = randn(rng, 200)
-            m = estimate_sv(y; n_samples=100, burnin=50)
+            m = estimate_sv(y; n_samples=50, burnin=20)
             p = plot_result(m)
             @test p isa PlotOutput
             @test occursin("Stochastic Volatility", p.html)
@@ -339,7 +339,7 @@ end
     @testset "summary.jl — report(BVARPosterior)" begin
         rng = Random.MersenneTwister(9039)
         Y = randn(rng, 100, 3)
-        post = estimate_bvar(Y, 2; n_draws=50)
+        post = estimate_bvar(Y, 2; n_draws=25)
         redirect_stdout(devnull) do
             report(post)
         end
@@ -401,7 +401,7 @@ end
     @testset "summary.jl — Bayesian point_estimate/uncertainty_bounds" begin
         rng = Random.MersenneTwister(9043)
         Y = randn(rng, 100, 2)
-        post = estimate_bvar(Y, 2; n_draws=50)
+        post = estimate_bvar(Y, 2; n_draws=25)
 
         birf = irf(post, 8)
         @test M.point_estimate(birf) == birf.point_estimate
