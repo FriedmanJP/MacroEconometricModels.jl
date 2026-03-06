@@ -16,7 +16,7 @@ A comprehensive Julia package for macroeconomic time series analysis.
 
 **Panel:** Panel VAR (FD-GMM, System GMM, FE-OLS), Difference-in-Differences (TWFE, Callaway-Sant'Anna, Sun-Abraham, BJS, dCDH, HonestDiD), Event Study LP, LP-DiD (Dube et al. 2025)
 
-**DSGE:** 6 solvers (Gensys, Blanchard-Kahn, Klein, 2nd/3rd-order perturbation with pruning, Chebyshev projection, PFI), constrained solvers (Ipopt NLP, PATH MCP for ZLB/binding bounds), OccBin, GMM/SMM estimation, Bayesian estimation (SMC/SMC²/MH)
+**DSGE:** 6 solvers (Gensys, Blanchard-Kahn, Klein, 2nd/3rd-order perturbation with pruning, Chebyshev projection, PFI), constrained solvers (Ipopt NLP, PATH MCP for ZLB/binding bounds), OccBin, GMM/SMM estimation, Bayesian estimation (SMC/SMC²/MH) with posterior IRF/FEVD credible bands
 
 **Cross-Sectional:** OLS, WLS, IV/2SLS, Logit, Probit (MLE), marginal effects (AME/MEM/MER)
 
@@ -123,7 +123,7 @@ Pkg.add("MacroEconometricModels")
 - **Constrained solvers** - Auto-detect PATH (MCP, binding bounds/ZLB; Ferris & Munson 1999) or Ipopt (NLP, nonlinear inequalities) via JuMP extensions
 - **Perfect foresight** - Newton solver on stacked system with block-tridiagonal Jacobian; optional PATH/Ipopt constraints
 - **OccBin** - Occasionally binding constraints via piecewise-linear regime switching (Guerrieri & Iacoviello 2015)
-- **Simulation & IRF** - `simulate`, `irf`, `fevd` for linear, pruned higher-order, and projection solutions
+- **Simulation & IRF** - `simulate`, `irf`, `fevd` for linear, pruned higher-order, and projection solutions; Bayesian posterior credible bands (dual 68%/90%) via `irf(::BayesianDSGE)`, `fevd(::BayesianDSGE)`, `simulate(::BayesianDSGE)`
 - **Analytical moments** - Lyapunov equation for unconditional covariance; `analytical_moments` for theoretical autocovariance
 - **GMM Estimation** - IRF matching, Euler equation GMM, SMM, analytical GMM via `estimate_dsge`
 - **Bayesian Estimation** - Sequential Monte Carlo (SMC with adaptive tempering), SMC² with particle filter likelihood, random-walk Metropolis-Hastings; delayed acceptance for accelerated sampling; nonlinear particle filter for higher-order solutions via `estimate_dsge_bayes`
