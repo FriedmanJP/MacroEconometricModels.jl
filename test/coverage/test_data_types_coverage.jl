@@ -1016,18 +1016,16 @@ const _suppress_warnings = M._suppress_warnings
 
         # LP-DiD with clean controls
         lpdid = estimate_lp_did(pd, "outcome", "treat_time", 5;
-                                 leads=2, lags=2, cluster=:unit)
-        @test lpdid isa M.EventStudyLP{Float64}
-        @test lpdid.clean_controls == true
+                                 pre_window=2, post_window=2, cluster=:unit)
+        @test lpdid isa M.LPDiDResult{Float64}
         @test all(lpdid.se .>= 0)
 
         # LP-DiD with covariates
         lpdid_cov = estimate_lp_did(pd, "outcome", "treat_time", 5;
-                                     leads=2, lags=2,
+                                     pre_window=2, post_window=2,
                                      covariates=["cov"],
                                      cluster=:unit)
-        @test lpdid_cov isa M.EventStudyLP{Float64}
-        @test lpdid_cov.clean_controls == true
+        @test lpdid_cov isa M.LPDiDResult{Float64}
     end
 
     # =========================================================================

@@ -37,7 +37,7 @@ Random.seed!(9010)
         end
 
         # Test with Float32 type
-        cv32 = MacroEconometricModels.adf_critical_values(:constant, 200, Float32)
+        cv32 = MacroEconometricModels.adf_critical_values(:constant, 200, 0, Float32)
         @test cv32[1] isa Float32
     end
 
