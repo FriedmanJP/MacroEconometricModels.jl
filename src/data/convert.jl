@@ -262,3 +262,50 @@ function estimate_iv(d::CrossSectionData{T}, depvar::Symbol,
     names = ["(Intercept)"; String.(indepvars)]
     estimate_iv(y, X, Z; endogenous=endog_idx, varnames=names, kwargs...)
 end
+
+# =============================================================================
+# Spectral / ACF dispatch wrappers (TimeSeriesData → Vector)
+# =============================================================================
+
+"""Extract a vector from TimeSeriesData, optionally selecting a variable."""
+function _ts_extract(d::TimeSeriesData, var)
+    var === nothing && return to_vector(d)
+    to_vector(d, var isa Symbol ? string(var) : var)
+end
+
+acf(d::TimeSeriesData, maxlag::Int=20; var=nothing, kwargs...) =
+    acf(_ts_extract(d, var); lags=maxlag, kwargs...)
+
+pacf(d::TimeSeriesData, maxlag::Int=20; var=nothing, kwargs...) =
+    pacf(_ts_extract(d, var); lags=maxlag, kwargs...)
+
+acf_pacf(d::TimeSeriesData, maxlag::Int=20; var=nothing, kwargs...) =
+    acf_pacf(_ts_extract(d, var); lags=maxlag, kwargs...)
+
+spectral_density(d::TimeSeriesData; var=nothing, kwargs...) =
+    spectral_density(_ts_extract(d, var); kwargs...)
+
+periodogram(d::TimeSeriesData; var=nothing, kwargs...) =
+    periodogram(_ts_extract(d, var); kwargs...)
+
+# =============================================================================
+# Spectral / ACF dispatch wrappers (PanelData → Dict per group)
+# =============================================================================
+
+function acf(d::PanelData, maxlag::Int=20; var=nothing, kwargs...)
+    result = Dict{Any,ACFResult}()
+    for (i, gname) in enumerate(d.group_names)
+        gd = group_data(d, i)
+        result[gname] = acf(_ts_extract(gd, var); lags=maxlag, kwargs...)
+    end
+    result
+end
+
+function spectral_density(d::PanelData; var=nothing, kwargs...)
+    result = Dict{Any,SpectralDensityResult}()
+    for (i, gname) in enumerate(d.group_names)
+        gd = group_data(d, i)
+        result[gname] = spectral_density(_ts_extract(gd, var); kwargs...)
+    end
+    result
+end

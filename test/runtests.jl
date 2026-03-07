@@ -5,7 +5,6 @@
 # Licensed under GPL-3.0-or-later. See LICENSE for details.
 
 using Test
-using FFTW  # activate FFTW extension for GDFM tests
 
 # FAST mode for development iteration (shared across all test files in threaded mode)
 const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
@@ -90,7 +89,7 @@ const TEST_GROUPS = [
         "pvar/test_pvar.jl",
         "reg/test_reg.jl",
     ]),
-    # Group 6: Volatility & Non-Gaussian & Plotting & Filters
+    # Group 6: Volatility & Non-Gaussian & Plotting & Filters & Spectral
     ("Volatility & Filters" => [
         "volatility/test_volatility.jl",
         "volatility/test_volatility_coverage.jl",
@@ -98,6 +97,7 @@ const TEST_GROUPS = [
         "nongaussian/test_nongaussian_internals.jl",
         "plotting/test_plot_result.jl",
         "filters/test_filters.jl",
+        "spectral/test_spectral.jl",
     ]),
     # Group 7: DSGE Models
     ("DSGE Models" => [
@@ -131,7 +131,7 @@ function run_test_group(group_name::String, files::Vector{String})
     includes = join(["include(\"$(test_dir)/$(f)\");" for f in files], "\n    ")
     fixtures_path = replace(joinpath(test_dir, "fixtures.jl"), '\\' => '/')
     code = """
-    using Test, MacroEconometricModels, FFTW
+    using Test, MacroEconometricModels
     const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
     include("$(fixtures_path)")
     @testset "$group_name" begin
@@ -318,6 +318,7 @@ else
         @testset "Non-Gaussian Internals" begin include("nongaussian/test_nongaussian_internals.jl") end
         @testset "Plotting" begin include("plotting/test_plot_result.jl") end
         @testset "Time Series Filters" begin include("filters/test_filters.jl") end
+        @testset "Spectral Analysis" begin include("spectral/test_spectral.jl") end
 
         # Group 7: DSGE Models
         @testset "DSGE Models" begin
