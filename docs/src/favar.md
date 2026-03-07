@@ -10,68 +10,60 @@
 
 All results integrate with `report()` for publication-quality output and `plot_result()` for interactive D3.js visualization.
 
+```@setup favar
+using MacroEconometricModels, Random
+Random.seed!(42)
+fred = load_example(:fred_md)
+slow_names = ["INDPRO", "CPIAUCSL", "UNRATE"]
+fast_names = ["M2SL", "FEDFUNDS", "TB3MS", "GS10"]
+md = fred[:, vcat(slow_names, fast_names)]
+X = to_matrix(apply_tcode(md))
+X = X[all.(isfinite, eachrow(X)), :]
+X = X[end-59:end, :]
+Y_slow = X[:, 1:3]
+Y_fast = X[:, 4:end]
+```
+
 ## Quick Start
 
 **Recipe 1: Two-step FAVAR estimation**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-# Simulate a panel (T=200, N=50) and designate columns 1-2 as key variables
-X = randn(200, 50)
-favar = estimate_favar(X, [1, 2], 3, 2)  # 3 factors, 2 lags
+```@example favar
+# FAVAR: 2 factors, 2 lags, columns 4-7 as key variables
+favar = estimate_favar(X, [4, 5, 6, 7], 2, 2)
 report(irf(favar, 20; method=:cholesky))
 ```
 
 **Recipe 2: Bayesian FAVAR with Gibbs sampling**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-X = randn(200, 50)
-bfavar = estimate_favar(X, [1, 2], 3, 2;
-    method=:bayesian, n_draws=5000, burnin=1000)
+```@example favar
+bfavar = estimate_favar(X, [4, 5], 2, 2;
+    method=:bayesian, n_draws=100, burnin=50)
 report(irf(bfavar, 20))
 ```
 
 **Recipe 3: Panel-wide impulse responses**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-X = randn(200, 50)
-favar = estimate_favar(X, [1, 2], 3, 2)
-r = irf(favar, 20; method=:cholesky)
-r_panel = favar_panel_irf(favar, r)  # map to all 50 variables via Lambda
+```@example favar
+favar3 = estimate_favar(X, [4, 5], 2, 2)
+r3 = irf(favar3, 20; method=:cholesky)
+r_panel = favar_panel_irf(favar3, r3)
 report(r_panel)
 ```
 
 **Recipe 4: Panel-wide forecasting**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-X = randn(200, 50)
-favar = estimate_favar(X, [1, 2], 3, 2)
-fc = forecast(favar, 12)
-fc_panel = favar_panel_forecast(favar, fc)  # forecasts for all 50 variables
+```@example favar
+fc = forecast(favar3, 12)
+fc_panel = favar_panel_forecast(favar3, fc)
 report(fc_panel)
 ```
 
 **Recipe 5: FEVD and historical decomposition**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-X = randn(200, 50)
-favar = estimate_favar(X, [1, 2], 3, 2)
-d = fevd(favar, 20)
-h = historical_decomposition(favar)
+```@example favar
+d = fevd(favar3, 20)
+h = historical_decomposition(favar3)
 report(d)
 ```
 
@@ -130,35 +122,25 @@ The algorithm proceeds in three stages:
     regressing ``F`` on ``Y^{key}`` and using the residual component as the factors
     in the VAR.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-X = randn(200, 50)
-
-# Two-step FAVAR: 3 factors, 2 lags, key variables at columns 1 and 2
-favar = estimate_favar(X, [1, 2], 3, 2)
-report(irf(favar, 20; method=:cholesky))
+```@example favar
+# Two-step FAVAR: 2 factors, 2 lags, key variables at columns 4 and 5
+favar_ts = estimate_favar(X, [4, 5], 2, 2)
+report(irf(favar_ts, 20; method=:cholesky))
 ```
 
-The estimation extracts 3 principal components from the 50-variable panel, orthogonalizes them against the 2 key variables, and fits a VAR(2) on the resulting 5-variable system. The `report()` call on the IRF displays the structural impulse responses with Cholesky identification, where the ordering places factors before key variables.
+The estimation extracts factors from the panel, orthogonalizes them against the 2 key variables, and fits a VAR(2) on the resulting 5-variable system. The `report()` call on the IRF displays the structural impulse responses with Cholesky identification, where the ordering places factors before key variables.
 
 ### Specifying Key Variables
 
 Key variables enter the FAVAR directly and receive exact (not factor-mapped) impulse responses. They can be specified as column indices or as a matrix:
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-X = randn(200, 50)
-
+```@example favar
 # By column indices (preferred)
-favar = estimate_favar(X, [1, 5, 10], 3, 2)
+favar_idx = estimate_favar(X, [4, 5, 6], 2, 2)
 
 # With custom variable names for the panel
-favar = estimate_favar(X, [1, 2], 3, 2;
-    panel_varnames=["GDP", "CPI", "FFR", ["x$i" for i in 4:50]...])
+favar_named = estimate_favar(X, [4, 5], 2, 2;
+    panel_varnames=["Slow1", "Slow2", "Slow3", "Fast1", "Fast2", "Fast3", "Fast4"])
 ```
 
 ### Keyword Arguments
@@ -203,35 +185,23 @@ The Gibbs sampler iterates three blocks:
 2. **Draw** ``F \mid \Lambda, B, \Sigma, X, Y^{key}``: Posterior regression combining the observation equation likelihood with a standard Normal prior, producing time-``t`` factor draws
 3. **Draw** ``(B, \Sigma) \mid F, Y^{key}``: Normal-Inverse-Wishart conjugate posterior from the VAR on the augmented system ``[F, Y^{key}]``
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-X = randn(200, 50)
-
-# Bayesian FAVAR with 5000 posterior draws and 1000 burn-in
-bfavar = estimate_favar(X, [1, 2], 3, 2;
-    method=:bayesian, n_draws=5000, burnin=1000)
+```@example favar
+# Bayesian FAVAR with 100 posterior draws and 50 burn-in
+bfavar = estimate_favar(X, [4, 5], 2, 2;
+    method=:bayesian, n_draws=100, burnin=50)
 
 # Bayesian IRF with posterior credible intervals
 birf = irf(bfavar, 20)
 report(birf)
 ```
 
-The Bayesian FAVAR produces 5000 posterior draws of the VAR coefficients, covariance matrix, factors, and loadings. The IRF computation propagates parameter uncertainty by computing impulse responses at each draw and reporting posterior median and credible intervals. Wider intervals relative to the two-step approach reflect the additional uncertainty from treating factors as latent.
+The Bayesian FAVAR produces posterior draws of the VAR coefficients, covariance matrix, factors, and loadings. The IRF computation propagates parameter uncertainty by computing impulse responses at each draw and reporting posterior median and credible intervals. Wider intervals relative to the two-step approach reflect the additional uncertainty from treating factors as latent.
 
 ### Bayesian Structural Analysis
 
 All structural analysis methods --- IRFs, FEVD, and historical decomposition --- operate draw-by-draw through automatic delegation to the `BVARPosterior` infrastructure:
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-X = randn(200, 50)
-bfavar = estimate_favar(X, [1, 2], 3, 2;
-    method=:bayesian, n_draws=5000, burnin=1000)
-
+```@example favar
 # Bayesian FEVD and historical decomposition
 bfevd = fevd(bfavar, 20)
 bhd = historical_decomposition(bfavar)
@@ -273,36 +243,24 @@ where:
 
 Key observed variables bypass the factor mapping and use their direct VAR impulse responses, providing exact structural responses for the variables that enter the FAVAR directly.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
+```@example favar
+favar_panel = estimate_favar(X, [4, 5], 2, 2)
 
-X = randn(200, 50)
-favar = estimate_favar(X, [1, 2], 3, 2)
+# Standard IRF in the augmented space
+r_aug = irf(favar_panel, 20; method=:cholesky)
 
-# Standard IRF in the augmented space (r + n_key = 5 variables)
-r_aug = irf(favar, 20; method=:cholesky)
-
-# Map to all 50 panel variables via Lambda
-r_panel = favar_panel_irf(favar, r_aug)
+# Map to all panel variables via Lambda
+r_panel = favar_panel_irf(favar_panel, r_aug)
 report(r_panel)
 ```
 
-The panel IRF result contains responses for all 50 variables. Variables 1 and 2 (the key variables) use their direct VAR responses, while variables 3--50 are reconstructed through the loading matrix. The mapping preserves confidence intervals when available.
+The panel IRF result contains responses for all variables. Key variables use their direct VAR responses, while remaining variables are reconstructed through the loading matrix. The mapping preserves confidence intervals when available.
 
 ### Bayesian Panel IRFs
 
 The Bayesian variant uses posterior mean loadings for the panel mapping:
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-X = randn(200, 50)
-bfavar = estimate_favar(X, [1, 2], 3, 2;
-    method=:bayesian, n_draws=5000, burnin=1000)
-
-birf = irf(bfavar, 20)
+```@example favar
 birf_panel = favar_panel_irf(bfavar, birf)
 report(birf_panel)
 ```
@@ -313,19 +271,13 @@ report(birf_panel)
 
 FAVAR forecasts operate in the augmented VAR space ``[F, Y^{key}]`` and can be mapped to the full panel via `favar_panel_forecast`. The forecast delegates to the standard VAR forecast infrastructure through `to_var()`.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
+```@example favar
+# VAR-space forecast
+fc_favar = forecast(favar_panel, 12)
 
-X = randn(200, 50)
-favar = estimate_favar(X, [1, 2], 3, 2)
-
-# VAR-space forecast (5 variables: 3 factors + 2 key)
-fc = forecast(favar, 12)
-
-# Map to all 50 panel variables
-fc_panel = favar_panel_forecast(favar, fc)
-report(fc_panel)
+# Map to all panel variables
+fc_panel_full = favar_panel_forecast(favar_panel, fc_favar)
+report(fc_panel_full)
 ```
 
 The panel forecast maps factor forecasts through ``\Lambda`` for non-key variables and uses direct VAR forecasts for key variables. Confidence intervals are mapped through the same loading matrix, preserving the relative width across variables proportional to their factor loadings.
@@ -342,22 +294,16 @@ The panel forecast maps factor forecasts through ``\Lambda`` for non-key variabl
 
 The FAVAR inherits all structural identification methods from the VAR infrastructure through automatic `to_var()` delegation. The ordering convention places factors first and key variables last, which determines the Cholesky recursive structure.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-X = randn(200, 50)
-favar = estimate_favar(X, [1, 2], 3, 2)
-
+```@example favar
 # Cholesky identification (factors ordered before key variables)
-r_chol = irf(favar, 20; method=:cholesky)
+r_chol = irf(favar_panel, 20; method=:cholesky)
 
 # Sign restrictions
 restrictions = Dict(
     (1, 1) => :positive,   # Shock 1 raises Factor 1 on impact
-    (4, 1) => :negative    # Shock 1 lowers key variable 1 on impact
+    (3, 1) => :negative    # Shock 1 lowers key variable 1 on impact
 )
-r_sign = irf(favar, 20; method=:sign, restrictions=restrictions, n_draws=500)
+r_sign_favar = irf(favar_panel, 20; method=:sign, restrictions=restrictions, n_draws=50)
 
 report(r_chol)
 ```
@@ -370,37 +316,31 @@ The Cholesky identification places the slow-moving factors before the fast-movin
 
 This example estimates a FAVAR on simulated data, performs structural analysis with both frequentist and Bayesian approaches, and maps results to the full panel:
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-# Simulate a large panel: 200 periods, 50 variables
-X = randn(200, 50)
-
+```@example favar
 # --- Two-step FAVAR ---
-favar = estimate_favar(X, [1, 2], 3, 2)
+favar_full = estimate_favar(X, [4, 5], 2, 2)
 
 # Structural analysis in the augmented space
-r_aug = irf(favar, 20; method=:cholesky)
-d_aug = fevd(favar, 20)
-hd = historical_decomposition(favar)
+r_aug_full = irf(favar_full, 20; method=:cholesky)
+d_aug_full = fevd(favar_full, 20)
+hd_full = historical_decomposition(favar_full)
 
-# Panel-wide mapping: IRFs and forecasts for all 50 variables
-r_panel = favar_panel_irf(favar, r_aug)
-fc = forecast(favar, 12)
-fc_panel = favar_panel_forecast(favar, fc)
+# Panel-wide mapping: IRFs and forecasts for all variables
+r_panel_full = favar_panel_irf(favar_full, r_aug_full)
+fc_full = forecast(favar_full, 12)
+fc_panel_map = favar_panel_forecast(favar_full, fc_full)
 
 # --- Bayesian FAVAR ---
-bfavar = estimate_favar(X, [1, 2], 3, 2;
-    method=:bayesian, n_draws=5000, burnin=1000)
+bfavar_full = estimate_favar(X, [4, 5], 2, 2;
+    method=:bayesian, n_draws=100, burnin=50)
 
-birf = irf(bfavar, 20)
-birf_panel = favar_panel_irf(bfavar, birf)
-bfevd = fevd(bfavar, 20)
+birf_full = irf(bfavar_full, 20)
+birf_panel_full = favar_panel_irf(bfavar_full, birf_full)
+bfevd_full = fevd(bfavar_full, 20)
 
 # Display results
-report(r_panel)
-report(bfevd)
+report(r_panel_full)
+report(bfevd_full)
 ```
 
 The two-step FAVAR extracts 3 factors from the 50-variable panel, removes the component spanned by the 2 key variables, and estimates a VAR(2) on the resulting 5-variable augmented system. The panel-wide IRFs map structural shocks to all 50 variables through the ``N \times r`` loading matrix ``\Lambda``. The Bayesian FAVAR additionally quantifies uncertainty in the factor extraction through 5000 Gibbs draws, producing wider credible intervals that account for estimation error in both the factors and the VAR parameters.

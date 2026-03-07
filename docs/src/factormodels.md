@@ -12,21 +12,20 @@
 
 All results integrate with `report()` for publication-quality output and `plot_result()` for interactive D3.js visualization.
 
+```@setup factor
+using MacroEconometricModels, Random
+Random.seed!(42)
+fred = load_example(:fred_md)
+X = to_matrix(apply_tcode(fred))
+X = X[all.(isfinite, eachrow(X)), :]
+X = X[end-59:end, :]
+```
+
 ## Quick Start
 
 **Recipe 1: Static factor model from FRED-MD**
 
-```julia
-using MacroEconometricModels
-
-# Load FRED-MD and prepare a transformed panel of macro indicators
-fred = load_example(:fred_md)
-safe_idx = [i for i in 1:nvars(fred)
-            if fred.tcode[i] < 4 || all(x -> isfinite(x) && x > 0, fred.data[:, i])]
-fred_safe = fred[:, varnames(fred)[safe_idx]]
-X = to_matrix(apply_tcode(fred_safe))
-X = X[all.(isfinite, eachrow(X)), 1:min(20, size(X, 2))]
-
+```@example factor
 # Estimate 3-factor model via PCA
 fm = estimate_factors(X, 3; standardize=true)
 report(fm)
@@ -34,7 +33,7 @@ report(fm)
 
 **Recipe 2: Select the number of factors**
 
-```julia
+```@example factor
 # Bai-Ng information criteria for factor count selection
 ic = ic_criteria(X, 10)
 report(ic)
@@ -42,7 +41,7 @@ report(ic)
 
 **Recipe 3: Dynamic factor model with VAR dynamics**
 
-```julia
+```@example factor
 # 3 factors with VAR(1) dynamics, two-step estimation
 dfm = estimate_dynamic_factors(X, 3, 1; method=:twostep, standardize=true)
 report(dfm)
@@ -50,9 +49,7 @@ report(dfm)
 
 **Recipe 4: Generalized dynamic factor model (spectral)**
 
-```julia
-using FFTW
-
+```@example factor
 # 2 dynamic factors via spectral analysis
 gdfm = estimate_gdfm(X, 2; kernel=:bartlett)
 report(gdfm)
@@ -60,22 +57,22 @@ report(gdfm)
 
 **Recipe 5: Forecast with bootstrap confidence intervals**
 
-```julia
-using Random; Random.seed!(42)
-
+```@example factor
 # DFM forecast with bootstrap CIs
-fc = forecast(dfm, 12; ci_method=:bootstrap, n_boot=1000)
+fc = forecast(dfm, 12; ci_method=:bootstrap, n_boot=50)
 report(fc)
 ```
 
 **Recipe 6: Structural DFM with Cholesky identification**
 
-```julia
-using FFTW, Random; Random.seed!(42)
-
+```@example factor
 # Identify structural shocks in common factors
 sdfm = estimate_structural_dfm(X, 2; identification=:cholesky, p=1, H=20)
 r = irf(sdfm, 20)
+report(r)
+```
+
+```julia
 plot_result(r)
 ```
 
@@ -111,22 +108,13 @@ subject to the normalization ``F'F/T = I_r``. The solution involves the eigenval
 !!! note "Technical Note"
     The factors and loadings are identified only up to an ``r \times r`` invertible rotation: if ``(\hat{F}, \hat{\Lambda})`` is a solution, then ``(\hat{F}H, \hat{\Lambda}H^{-1'})`` is equally valid for any invertible ``H``. The normalization ``F'F/T = I_r`` pins down orientation but not sign. Individual factor loadings should not be interpreted as structural parameters. To compare estimated factors with "true" factors (e.g., in simulations), compute absolute correlations rather than raw correlations.
 
-```julia
-using MacroEconometricModels
-
-# Load FRED-MD and prepare transformed panel
-fred = load_example(:fred_md)
-safe_idx = [i for i in 1:nvars(fred)
-            if fred.tcode[i] < 4 || all(x -> isfinite(x) && x > 0, fred.data[:, i])]
-fred_safe = fred[:, varnames(fred)[safe_idx]]
-X = to_matrix(apply_tcode(fred_safe))
-X = X[all.(isfinite, eachrow(X)), 1:min(20, size(X, 2))]
-
+```@example factor
 # Estimate 3-factor model from FRED-MD indicators
 fm = estimate_factors(X, 3; standardize=true, method=:pca)
 report(fm)
+```
 
-# Visualization: scree plot of eigenvalues and extracted factor time series
+```julia
 plot_result(fm)
 ```
 
@@ -172,17 +160,7 @@ where:
 
 The optimal ``\hat{r}`` minimizes ``IC_k(r)`` over ``r \in \{1, \ldots, r_{\max}\}``. All three criteria are consistent: ``\hat{r} \xrightarrow{p} r_0`` as ``N, T \to \infty``. IC2 and IC3 perform best in Monte Carlo simulations.
 
-```julia
-using MacroEconometricModels
-
-# Load and transform FRED-MD panel
-fred = load_example(:fred_md)
-safe_idx = [i for i in 1:nvars(fred)
-            if fred.tcode[i] < 4 || all(x -> isfinite(x) && x > 0, fred.data[:, i])]
-fred_safe = fred[:, varnames(fred)[safe_idx]]
-X = to_matrix(apply_tcode(fred_safe))
-X = X[all.(isfinite, eachrow(X)), 1:min(20, size(X, 2))]
-
+```@example factor
 # Bai-Ng information criteria
 ic = ic_criteria(X, 10)
 report(ic)
@@ -215,17 +193,7 @@ where:
 
 Variables with high ``R^2`` are strongly driven by common factors; variables with low ``R^2`` are dominated by idiosyncratic shocks and contribute little to the common factor structure.
 
-```julia
-using MacroEconometricModels, Statistics
-
-# Estimate 3-factor model from FRED-MD panel
-fred = load_example(:fred_md)
-safe_idx = [i for i in 1:nvars(fred)
-            if fred.tcode[i] < 4 || all(x -> isfinite(x) && x > 0, fred.data[:, i])]
-fred_safe = fred[:, varnames(fred)[safe_idx]]
-X = to_matrix(apply_tcode(fred_safe))
-X = X[all.(isfinite, eachrow(X)), 1:min(20, size(X, 2))]
-
+```@example factor
 fm = estimate_factors(X, 3; standardize=true)
 report(fm)
 
@@ -285,17 +253,7 @@ where:
 
 Two estimation methods are available. **Two-step estimation** extracts factors via PCA and fits a VAR on the extracted factors (Stock & Watson 2002a). **EM estimation** iterates between the Kalman smoother (E-step) and parameter updates (M-step), producing more efficient estimates at higher computational cost (Doz, Giannone & Reichlin 2012).
 
-```julia
-using MacroEconometricModels
-
-# Load and transform FRED-MD panel
-fred = load_example(:fred_md)
-safe_idx = [i for i in 1:nvars(fred)
-            if fred.tcode[i] < 4 || all(x -> isfinite(x) && x > 0, fred.data[:, i])]
-fred_safe = fred[:, varnames(fred)[safe_idx]]
-X = to_matrix(apply_tcode(fred_safe))
-X = X[all.(isfinite, eachrow(X)), 1:min(20, size(X, 2))]
-
+```@example factor
 # 3 factors with VAR(1) dynamics
 dfm = estimate_dynamic_factors(X, 3, 1;
     method=:twostep,
@@ -337,19 +295,19 @@ The two-step estimator is fast and consistent under the Bai & Ng (2002) conditio
 
 The joint selection of factor count ``r`` and lag order ``p`` uses standard information criteria computed from the state-space log-likelihood:
 
-```julia
+```@example factor
 # Grid search over (r, p) combinations
-ic = ic_criteria_dynamic(X, 5, 3; method=:twostep, standardize=true)
-report(ic)
+ic_dyn = ic_criteria_dynamic(X, 5, 3; method=:twostep, standardize=true)
+report(ic_dyn)
 
 # View full IC matrices
-ic.AIC   # r x p matrix of AIC values
-ic.BIC   # r x p matrix of BIC values
+ic_dyn.AIC   # r x p matrix of AIC values
+ic_dyn.BIC   # r x p matrix of BIC values
 ```
 
 ### Stationarity Check
 
-```julia
+```@example factor
 # Verify factor dynamics are stationary
 is_stationary(dfm)   # true if max|eigenvalue| < 1
 ```
@@ -397,22 +355,14 @@ where:
 | `:bootstrap` | Residual resampling | Non-Gaussian innovations |
 | `:simulation` | Monte Carlo draws from estimated model | Full uncertainty propagation |
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-# Load and prepare FRED-MD panel
-fred = load_example(:fred_md)
-safe_idx = [i for i in 1:nvars(fred)
-            if fred.tcode[i] < 4 || all(x -> isfinite(x) && x > 0, fred.data[:, i])]
-fred_safe = fred[:, varnames(fred)[safe_idx]]
-X = to_matrix(apply_tcode(fred_safe))
-X = X[all.(isfinite, eachrow(X)), 1:min(20, size(X, 2))]
-
+```@example factor
 # DFM forecast with bootstrap CIs
-dfm = estimate_dynamic_factors(X, 2, 1)
-fc = forecast(dfm, 10; ci_method=:bootstrap, n_boot=1000, conf_level=0.95)
+dfm2 = estimate_dynamic_factors(X, 2, 1)
+fc = forecast(dfm2, 10; ci_method=:bootstrap, n_boot=50, conf_level=0.95)
 report(fc)
+```
+
+```julia
 plot_result(fc)
 ```
 
@@ -471,17 +421,7 @@ In the frequency domain, the spectral density of ``X_t`` decomposes as ``\Sigma_
 !!! note "Technical Note"
     The estimation algorithm proceeds in four steps: (1) estimate ``\hat{\Sigma}_X(\omega)`` using kernel smoothing of the periodogram, (2) compute eigenvalue decomposition at each frequency, (3) select top ``q`` eigenvectors (dynamic principal components), (4) reconstruct the common component ``\chi_t`` via inverse Fourier transform.
 
-```julia
-using MacroEconometricModels, FFTW
-
-# Load and transform FRED-MD panel
-fred = load_example(:fred_md)
-safe_idx = [i for i in 1:nvars(fred)
-            if fred.tcode[i] < 4 || all(x -> isfinite(x) && x > 0, fred.data[:, i])]
-fred_safe = fred[:, varnames(fred)[safe_idx]]
-X = to_matrix(apply_tcode(fred_safe))
-X = X[all.(isfinite, eachrow(X)), 1:min(20, size(X, 2))]
-
+```@example factor
 # 2 dynamic factors via spectral analysis
 gdfm = estimate_gdfm(X, 2;
     standardize=true,
@@ -523,15 +463,15 @@ The common variance share for each variable measures the fraction of its total v
 
 The GDFM uses eigenvalue-based criteria rather than information criteria:
 
-```julia
+```@example factor
 # Eigenvalue ratio and variance criteria
-ic = ic_criteria_gdfm(X, 10; kernel=:bartlett)
-report(ic)
+ic_gdfm = ic_criteria_gdfm(X, 10; kernel=:bartlett)
+report(ic_gdfm)
 
 # Diagnostic data
-ic.eigenvalue_ratios       # lambda_i / lambda_{i+1} ratios
-ic.cumulative_variance     # Cumulative variance explained
-ic.avg_eigenvalues         # Average eigenvalues across frequencies
+ic_gdfm.eigenvalue_ratios       # lambda_i / lambda_{i+1} ratios
+ic_gdfm.cumulative_variance     # Cumulative variance explained
+ic_gdfm.avg_eigenvalues         # Average eigenvalues across frequencies
 ```
 
 ### DFM vs GDFM
@@ -562,10 +502,8 @@ where:
 !!! note "Technical Note"
     The EM algorithm initializes each block factor via block-wise PCA, then iterates: (1) E-step: compute expected factors given current loadings, (2) M-step: update only non-zero loadings (masked update). Convergence is on log-likelihood. Validation requires: ``r`` blocks, no overlapping indices, at least 2 variables per block.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-X = randn(200, 15)
+```@example factor
+X_block = randn(200, 15)
 
 # Define 3 blocks: variables 1-5, 6-10, 11-15
 blocks = Dict(
@@ -575,8 +513,8 @@ blocks = Dict(
 )
 
 # Block-restricted estimation via EM
-fm = estimate_factors(X, 3; blocks=blocks)
-report(fm)
+fm_block = estimate_factors(X_block, 3; blocks=blocks)
+report(fm_block)
 ```
 
 The block-restricted model produces loadings that are exactly zero outside each block, enabling economically interpretable factor labeling. The unrestricted PCA estimate is more flexible but cannot distinguish between "real" and "nominal" sources of common variation without additional identification.
@@ -610,52 +548,45 @@ where:
 
 Two identification schemes are available: **Cholesky decomposition** and **sign restrictions**.
 
-```julia
-using MacroEconometricModels, Random, FFTW
-Random.seed!(42)
-X = randn(200, 20)
+```@example factor
+X_sdfm = randn(200, 20)
 
 # Cholesky identification
-sdfm = estimate_structural_dfm(X, 2; identification=:cholesky, p=1, H=20)
-r = irf(sdfm, 20)
-report(r)
-plot_result(r)
+sdfm = estimate_structural_dfm(X_sdfm, 2; identification=:cholesky, p=1, H=20)
+r_sdfm = irf(sdfm, 20)
+report(r_sdfm)
 
 # FEVD of the factor VAR
 d = fevd(sdfm, 20)
 report(d)
 ```
 
+```julia
+plot_result(r_sdfm)
+```
+
 The structural IRFs show how a one-standard-deviation structural shock propagates to each of the ``N`` panel variables over the ``H``-period horizon. Cholesky identification imposes a recursive ordering on the factors; sign restrictions allow the researcher to test alternative identification schemes based on economic theory.
 
 ### Sign Restrictions
 
-```julia
-using MacroEconometricModels, Random, FFTW
-Random.seed!(42)
-X = randn(200, 20)
-
+```@example factor
 # Define sign restriction function
 sign_fn(irf_matrix) = irf_matrix[1, 1] > 0 && irf_matrix[1, 2] < 0
 
-sdfm = estimate_structural_dfm(X, 2;
+sdfm_sign = estimate_structural_dfm(X_sdfm, 2;
     identification=:sign, sign_check=sign_fn, max_draws=1000, H=20)
-r = irf(sdfm, 20)
-report(r)
+r_sign = irf(sdfm_sign, 20)
+report(r_sign)
 ```
 
 ### Two-Step Estimation
 
 A pre-estimated GDFM can be passed directly:
 
-```julia
-using MacroEconometricModels, Random, FFTW
-Random.seed!(42)
-X = randn(200, 20)
-
-gdfm = estimate_gdfm(X, 2)
-sdfm = estimate_structural_dfm(gdfm; identification=:cholesky, p=1, H=20)
-report(sdfm)
+```@example factor
+gdfm_pre = estimate_gdfm(X_sdfm, 2)
+sdfm_two = estimate_structural_dfm(gdfm_pre; identification=:cholesky, p=1, H=20)
+report(sdfm_two)
 ```
 
 !!! note "Technical Note"
@@ -718,38 +649,30 @@ Factors combine with key observable variables in a VAR system for structural ana
 
 This example demonstrates the full factor model workflow: data preparation, factor selection, estimation of static and dynamic models, forecasting, and visualization.
 
+```@example factor
+# Step 1: Select number of factors via Bai-Ng criteria
+ic_full = ic_criteria(X, 10)
+report(ic_full)
+
+# Step 2: Estimate static factor model
+fm_full = estimate_factors(X, 3; standardize=true)
+report(fm_full)
+
+# Step 3: Estimate dynamic factor model with VAR(1) dynamics
+dfm_full = estimate_dynamic_factors(X, 3, 1; method=:twostep, standardize=true)
+report(dfm_full)
+
+# Step 4: Diagnostics — per-variable R-squared
+r2_static = r2(fm_full)
+r2_dynamic = r2(dfm_full)
+
+# Step 5: Forecast with theoretical CIs
+fc_full = forecast(dfm_full, 12; ci_method=:theoretical, conf_level=0.95)
+report(fc_full)
+```
+
 ```julia
-using MacroEconometricModels, Random, Statistics
-Random.seed!(42)
-
-# Step 1: Load and transform FRED-MD panel
-fred = load_example(:fred_md)
-safe_idx = [i for i in 1:nvars(fred)
-            if fred.tcode[i] < 4 || all(x -> isfinite(x) && x > 0, fred.data[:, i])]
-fred_safe = fred[:, varnames(fred)[safe_idx]]
-X = to_matrix(apply_tcode(fred_safe))
-X = X[all.(isfinite, eachrow(X)), 1:min(20, size(X, 2))]
-
-# Step 2: Select number of factors via Bai-Ng criteria
-ic = ic_criteria(X, 10)
-report(ic)
-
-# Step 3: Estimate static factor model
-fm = estimate_factors(X, 3; standardize=true)
-report(fm)
-
-# Step 4: Estimate dynamic factor model with VAR(1) dynamics
-dfm = estimate_dynamic_factors(X, 3, 1; method=:twostep, standardize=true)
-report(dfm)
-
-# Step 5: Diagnostics — per-variable R-squared
-r2_static = r2(fm)
-r2_dynamic = r2(dfm)
-
-# Step 6: Forecast with theoretical CIs
-fc = forecast(dfm, 12; ci_method=:theoretical, conf_level=0.95)
-report(fc)
-plot_result(fc)
+plot_result(fc_full)
 ```
 
 The Bai-Ng information criteria select the number of factors from the FRED-MD panel. The static factor model extracts the dominant principal components, and the dynamic factor model augments the static estimate with VAR(1) dynamics on the factors. The per-variable ``R^2`` values identify which FRED-MD indicators are well-explained by the common factors and which are driven by idiosyncratic variation. The 12-step-ahead forecast with theoretical confidence intervals shows factor and observable predictions with uncertainty bands that widen at longer horizons, reflecting the accumulation of forecast error variance through the factor VAR dynamics.
