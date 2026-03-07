@@ -144,6 +144,23 @@ model_custom = estimate_pvar(pd_custom, 2; dependent_vars=["gdp", "inv", "cons"]
 nothing # hide
 ```
 
+### Data Cleaning
+
+`apply_tcode` removes rows lost to differencing but does **not** drop rows with pre-existing NaN values. If your raw data contains missing observations, clean the transformed panel before estimation:
+
+```julia
+pd = apply_tcode(pwt, 5)
+
+# Option 1: drop all rows with NaN/Inf
+pd_clean = dropna(pd)
+
+# Option 2: drop only rows where specific variables are missing
+pd_clean = dropna(pd; vars=["rgdpna", "emp"])
+
+# Option 3: full data cleaning (listwise deletion + constant-column removal)
+pd_clean = fix(pd)
+```
+
 ---
 
 ## GMM Estimation
