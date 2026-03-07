@@ -909,7 +909,7 @@ end
     @test maximum(abs.(pf.path .- pf_unc.path)) < 1e-6
 end
 
-@testset "Perfect foresight: box-constrained binding (no JuMP fallback)" begin
+@testset "Perfect foresight: box-constrained binding (escalation)" begin
     _suppress_warnings() do
     spec = @dsge begin
         parameters: ρ = 0.9, σ = 1.0
@@ -921,7 +921,8 @@ end
     spec = compute_steady_state(spec)
     shocks = zeros(30, 1)
     shocks[1, 1] = -3.0
-    # Binding: unconstrained goes below 0; without JuMP, returns unconstrained solution
+    # Binding: unconstrained goes below 0; without JuMP loaded, returns unconstrained
+    # When JuMP is loaded, auto-escalates to Ipopt/PATH
     pf = solve(spec; method=:perfect_foresight, T_periods=30, shock_path=shocks,
                constraints=[variable_bound(:y, lower=0.0)])
     @test pf isa PerfectForesightPath
@@ -4842,28 +4843,6 @@ end
     @test pf_upper isa PerfectForesightPath
     @test pf_upper.converged
     @test all(pf_upper.path[:, 1] .<= 5.0 + 1e-4)
-    end # _suppress_warnings
-end
-
-@testset "Perfect foresight: box-constrained binding escalation (JuMP)" begin
-    _suppress_warnings() do
-    spec = @dsge begin
-        parameters: ρ = 0.9, σ = 1.0
-        endogenous: y
-        exogenous: ε
-        y[t] = ρ * y[t-1] + σ * ε[t]
-        steady_state: [0.0]
-    end
-    spec = compute_steady_state(spec)
-    shocks = zeros(30, 1)
-    shocks[1, 1] = -3.0
-    # Binding: unconstrained goes below 0, auto-escalates from NonlinearSolve to Ipopt
-    pf = solve(spec; method=:perfect_foresight, T_periods=30, shock_path=shocks,
-               constraints=[variable_bound(:y, lower=0.0)])
-    @test pf isa PerfectForesightPath
-    # Ipopt may report LOCALLY_INFEASIBLE for tightly binding constraints
-    # but the path values should still respect bounds (within tolerance)
-    @test all(pf.path[:, 1] .>= -1e-4)
     end # _suppress_warnings
 end
 

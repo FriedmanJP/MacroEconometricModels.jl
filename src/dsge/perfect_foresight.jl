@@ -87,13 +87,14 @@ function perfect_foresight(spec::DSGESpec{FT};
                 end
             end
             bounds_ok && return pf
-            # Bounds violated: escalate to JuMP/Ipopt if available
+            # Bounds violated: escalate to JuMP/Ipopt/PATH if available
             if _path_available()
                 return _path_perfect_foresight(spec, T_periods, shocks, constraints)
             elseif hasmethod(_jump_compute_steady_state, Tuple{DSGESpec, Vector})
                 return _jump_perfect_foresight(spec, T_periods, shocks, constraints)
             end
-            @warn "Box constraints violated but JuMP/Ipopt not loaded. Returning unconstrained solution."
+            @warn "Box constraints violated but JuMP/Ipopt not loaded. " *
+                  "Install JuMP + Ipopt for binding constraint support."
             return pf
         elseif chosen == :path
             _check_jump_loaded()
