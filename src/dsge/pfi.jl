@@ -263,11 +263,16 @@ function pfi_solver(spec::DSGESpec{T};
     anderson_history = anderson_m > 0 ? Vector{T}[] : nothing
     anderson_residuals = anderson_m > 0 ? Vector{T}[] : nothing
 
+    # Pre-allocate buffers for iteration loop
+    y_current_nodes = zeros(T, n_nodes, n_eq)
+    y_new_nodes = zeros(T, n_nodes, n_eq)
+    y_updated_nodes = zeros(T, n_nodes, n_eq)
+    coeffs_new = zeros(T, n_vars, n_basis)
+
     for k in 1:max_iter
         iter = k
 
         # (a) Evaluate current policy at all grid points (deviations → levels)
-        y_current_nodes = zeros(T, n_nodes, n_eq)
         for j in 1:n_nodes
             for v in 1:n_vars
                 y_current_nodes[j, v] = dot(@view(basis_matrix[j, :]), @view(coeffs[v, :])) + ss[v]
@@ -282,7 +287,6 @@ function pfi_solver(spec::DSGESpec{T};
                                               y_current_nodes, impact)
 
         # (c) Solve Euler equation at each grid point
-        y_new_nodes = zeros(T, n_nodes, n_eq)
         if threaded && Threads.nthreads() > 1
             Threads.@threads for j in 1:n_nodes
                 y_lag = copy(ss)
@@ -304,7 +308,7 @@ function pfi_solver(spec::DSGESpec{T};
         end
 
         # (d) Refit Chebyshev coefficients (deviations from SS)
-        coeffs_new = zeros(T, n_vars, n_basis)
+        fill!(coeffs_new, zero(T))
         for v in 1:n_vars
             y_dev_nodes = y_new_nodes[:, v] .- ss[v]
             coeffs_new[v, :] = basis_matrix \ y_dev_nodes
@@ -312,7 +316,7 @@ function pfi_solver(spec::DSGESpec{T};
 
         # (e) Apply damping
         if damping < one(T)
-            coeffs_new = (one(T) - T(damping)) .* coeffs .+ T(damping) .* coeffs_new
+            coeffs_new .= (one(T) - T(damping)) .* coeffs .+ T(damping) .* coeffs_new
         end
 
         # Anderson acceleration
@@ -326,7 +330,7 @@ function pfi_solver(spec::DSGESpec{T};
 
             if length(anderson_history) >= 2
                 coeffs_mixed = _anderson_step(anderson_history, anderson_residuals, anderson_m)
-                coeffs_new = reshape(coeffs_mixed, n_vars, n_basis)
+                coeffs_new .= reshape(coeffs_mixed, n_vars, n_basis)
             end
 
             while length(anderson_history) > anderson_m + 1
@@ -336,7 +340,6 @@ function pfi_solver(spec::DSGESpec{T};
         end
 
         # (f) Check convergence (sup-norm on policy change at grid points)
-        y_updated_nodes = zeros(T, n_nodes, n_eq)
         for j in 1:n_nodes
             for v in 1:n_vars
                 y_updated_nodes[j, v] = dot(@view(basis_matrix[j, :]), @view(coeffs_new[v, :])) + ss[v]
@@ -348,7 +351,7 @@ function pfi_solver(spec::DSGESpec{T};
             println("  PFI iteration $k: sup-norm = $(sup_norm)")
         end
 
-        coeffs = coeffs_new
+        coeffs .= coeffs_new
 
         if sup_norm < tol
             converged = true
