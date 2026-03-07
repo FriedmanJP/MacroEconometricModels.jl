@@ -100,7 +100,10 @@ function nowcast_bvar(Y::AbstractMatrix, nM::Int, nQ::Int;
     # Optimize hyperparameters via marginal log-likelihood
     par0 = [log(Tf(lambda0)), log(Tf(theta0)), log(Tf(miu0)), log(Tf(alpha0))]
 
-    obj = par -> -_bvar_log_ml(par, Ybal, lags, sigma_ar)
+    obj = par -> begin
+        val = -_bvar_log_ml(par, Ybal, lags, sigma_ar)
+        isfinite(val) ? val : Tf(1e10)
+    end
 
     result = Optim.optimize(obj, par0, Optim.NelderMead(),
                             Optim.Options(iterations=max_iter, f_reltol=Tf(thresh)))
@@ -135,7 +138,7 @@ function _bvar_log_ml(par::AbstractVector{T}, Y::Matrix{T}, lags::Int,
     alpha = exp(par[4])
 
     _, _, ml = _bvar_estimate(Y, lags, sigma_ar, lambda, theta, miu, alpha)
-    return ml
+    return isfinite(ml) ? ml : -T(1e10)
 end
 
 # =============================================================================
@@ -173,7 +176,7 @@ function _bvar_estimate(Y::Matrix{T}, lags::Int, sigma_ar::Vector{T},
 
     # OLS on augmented system (= posterior mode of Normal-IW)
     XtX = X_star' * X_star
-    XtX_reg = XtX + T(1e-8) * I(k)
+    XtX_reg = XtX + T(1e-6) * I(k)
     beta = XtX_reg \ (X_star' * Y_star)
 
     # Residuals and posterior sigma
@@ -184,9 +187,11 @@ function _bvar_estimate(Y::Matrix{T}, lags::Int, sigma_ar::Vector{T},
     # Log marginal likelihood (Normal-IW closed form approximation)
     resid_data = Y_dep - X_reg * beta
     SSR = resid_data' * resid_data
+    ld = logdet_safe(sigma)
+    sigma_inv = Matrix{T}(robust_inv(sigma + T(1e-6) * I(N); silent=true))
     logml = -T(0.5) * T_eff * N * log(T(2π)) -
-            T(0.5) * T_eff * log(max(det(sigma), T(1e-300))) -
-            T(0.5) * tr(inv(sigma + T(1e-8) * I(N)) * SSR)
+            T(0.5) * T_eff * ld -
+            T(0.5) * tr(sigma_inv * SSR)
 
     return beta, sigma, logml
 end
