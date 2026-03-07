@@ -341,6 +341,80 @@ function dropna(d::CrossSectionData{T}; vars::Union{Vector{String},Nothing}=noth
 end
 
 # =============================================================================
+# keeprows
+# =============================================================================
+
+"""
+    keeprows(d, mask::BitVector)
+    keeprows(d, indices::Vector{Int})
+
+Keep only the specified rows and return a new data container.
+
+# Examples
+```julia
+d2 = keeprows(d, d[:, "GDP"] .> 0)         # BitVector mask
+d2 = keeprows(d, [1, 3, 5, 7])             # integer indices
+```
+"""
+function keeprows(d::TimeSeriesData{T}, mask::BitVector) where {T}
+    length(mask) == d.T_obs || throw(ArgumentError(
+        "mask length ($(length(mask))) must match T_obs ($(d.T_obs))"))
+    keeprows(d, findall(mask))
+end
+
+function keeprows(d::TimeSeriesData{T}, idx::Vector{Int}) where {T}
+    isempty(idx) && throw(ArgumentError("No rows selected — empty result"))
+    all(i -> 1 <= i <= d.T_obs, idx) || throw(BoundsError(d, idx))
+    new_dates = isempty(d.dates) ? nothing : d.dates[idx]
+    TimeSeriesData(d.data[idx, :];
+                   varnames=copy(d.varnames),
+                   frequency=d.frequency,
+                   tcode=copy(d.tcode),
+                   time_index=d.time_index[idx],
+                   desc=desc(d),
+                   vardesc=copy(d.vardesc),
+                   source_refs=copy(d.source_refs),
+                   dates=new_dates)
+end
+
+function keeprows(d::PanelData{T}, mask::BitVector) where {T}
+    length(mask) == d.T_obs || throw(ArgumentError(
+        "mask length ($(length(mask))) must match T_obs ($(d.T_obs))"))
+    keeprows(d, findall(mask))
+end
+
+function keeprows(d::PanelData{T}, idx::Vector{Int}) where {T}
+    isempty(idx) && throw(ArgumentError("No rows selected — empty result"))
+    all(i -> 1 <= i <= d.T_obs, idx) || throw(BoundsError(d, idx))
+    new_gid = d.group_id[idx]
+    new_tid = d.time_id[idx]
+    new_cid = d.cohort_id === nothing ? nothing : d.cohort_id[idx]
+    obs_per_group = [count(==(g), new_gid) for g in 1:d.n_groups]
+    balanced = length(obs_per_group) > 0 && all(==(obs_per_group[1]), obs_per_group)
+    PanelData{T}(d.data[idx, :], copy(d.varnames), d.frequency, copy(d.tcode),
+                  new_gid, new_tid, new_cid, copy(d.group_names),
+                  d.n_groups, d.n_vars, length(idx), balanced,
+                  copy(d.desc), copy(d.vardesc), copy(d.source_refs))
+end
+
+function keeprows(d::CrossSectionData{T}, mask::BitVector) where {T}
+    length(mask) == d.N_obs || throw(ArgumentError(
+        "mask length ($(length(mask))) must match N_obs ($(d.N_obs))"))
+    keeprows(d, findall(mask))
+end
+
+function keeprows(d::CrossSectionData{T}, idx::Vector{Int}) where {T}
+    isempty(idx) && throw(ArgumentError("No rows selected — empty result"))
+    all(i -> 1 <= i <= d.N_obs, idx) || throw(BoundsError(d, idx))
+    CrossSectionData(d.data[idx, :];
+                     varnames=copy(d.varnames),
+                     obs_id=d.obs_id[idx],
+                     desc=desc(d),
+                     vardesc=copy(d.vardesc),
+                     source_refs=copy(d.source_refs))
+end
+
+# =============================================================================
 # validate_for_model
 # =============================================================================
 

@@ -511,6 +511,42 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
             @test !any(isinf, Matrix(d2))
         end
 
+        @testset "keeprows TimeSeriesData BitVector" begin
+            d = TimeSeriesData(Float64.(reshape(1:20, 10, 2));
+                               time_index=collect(1:10))
+            mask = falses(10)
+            mask[[1, 3, 5, 7, 9]] .= true
+            d2 = keeprows(d, mask)
+            @test nobs(d2) == 5
+            @test d2.time_index == [1, 3, 5, 7, 9]
+            @test d2.data[1, 1] == 1.0
+        end
+
+        @testset "keeprows TimeSeriesData indices" begin
+            d = TimeSeriesData(Float64.(reshape(1:20, 10, 2));
+                               time_index=collect(1:10))
+            d2 = keeprows(d, [2, 4, 6])
+            @test nobs(d2) == 3
+            @test d2.time_index == [2, 4, 6]
+        end
+
+        @testset "keeprows PanelData" begin
+            using DataFrames
+            df = DataFrame(g=repeat(1:2, inner=5), t=repeat(1:5, 2),
+                           x=Float64.(1:10))
+            pd = xtset(df, :g, :t)
+            pd2 = keeprows(pd, [1, 2, 3, 6, 7, 8])
+            @test nobs(pd2) == 6
+            @test pd2.balanced  # 3 per group
+        end
+
+        @testset "keeprows CrossSectionData" begin
+            cs = CrossSectionData(randn(10, 2); obs_id=collect(1:10))
+            cs2 = keeprows(cs, [1, 5, 10])
+            @test nobs(cs2) == 3
+            @test cs2.obs_id == [1, 5, 10]
+        end
+
         @testset "validate_for_model" begin
             d_multi = TimeSeriesData(randn(100, 3))
             d_uni = TimeSeriesData(randn(100, 1))
