@@ -205,6 +205,8 @@ include("dsge/perturbation.jl")
 include("dsge/quadrature.jl")
 include("dsge/projection.jl")
 include("dsge/pfi.jl")
+include("dsge/anderson.jl")
+include("dsge/vfi.jl")
 include("dsge/perfect_foresight.jl")
 include("dsge/occbin.jl")
 
@@ -420,7 +422,7 @@ export compute_steady_state, linearize, solve, gensys, blanchard_kahn, klein, pe
 export collocation_solver, pfi_solver, perfect_foresight
 export simulate, estimate_dsge
 export solve_lyapunov, analytical_moments
-export evaluate_policy, max_euler_error
+export evaluate_policy, max_euler_error, vfi_solver
 
 # Accessors
 export nshocks, is_determined, is_stable

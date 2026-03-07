@@ -136,6 +136,7 @@ Solve a DSGE model.
 - `:perturbation` -- Higher-order perturbation (Schmitt-Grohe & Uribe 2004); pass `order=2` for second-order
 - `:projection` -- Chebyshev collocation (Judd 1998); pass `degree=5` for polynomial degree
 - `:pfi` -- Policy Function Iteration / Time Iteration (Coleman 1990); pass `degree=5`, `damping=1.0`
+- `:vfi` -- Value Function Iteration (Stokey-Lucas-Prescott 1989); pass `degree=5`, `howard_steps=0`
 - `:perfect_foresight` -- deterministic Newton solver
 """
 function solve(spec::DSGESpec{T}; method::Symbol=:gensys, kwargs...) where {T<:AbstractFloat}
@@ -171,7 +172,9 @@ function solve(spec::DSGESpec{T}; method::Symbol=:gensys, kwargs...) where {T<:A
         return collocation_solver(spec; kwargs...)
     elseif method == :pfi
         return pfi_solver(spec; kwargs...)
+    elseif method == :vfi
+        return vfi_solver(spec; kwargs...)
     else
-        throw(ArgumentError("method must be :gensys, :blanchard_kahn, :klein, :perturbation, :projection, :pfi, or :perfect_foresight"))
+        throw(ArgumentError("method must be :gensys, :blanchard_kahn, :klein, :perturbation, :projection, :pfi, :vfi, or :perfect_foresight"))
     end
 end

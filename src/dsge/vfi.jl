@@ -4,155 +4,23 @@
 # This file is part of MacroEconometricModels.jl.
 # Licensed under GPL-3.0-or-later. See LICENSE for details.
 
-# MacroEconometricModels.jl — Policy Function Iteration (Time Iteration)
+# MacroEconometricModels.jl — Value Function Iteration (VFI)
 #
 # References:
-#   Coleman (1990), Solving the Stochastic Growth Model
-#   Judd (1998), Numerical Methods in Economics, Ch. 11
-#   Heer & Maussner (2009), Dynamic General Equilibrium Modeling
+#   Stokey, Lucas, Prescott (1989), Recursive Methods in Economic Dynamics
+#   Howard (1960), Dynamic Programming and Markov Processes
+#   Judd (1998), Numerical Methods in Economics, Ch. 12
+#   Santos & Rust (2003), Convergence Properties of Policy Iteration
 
 """
-    _pfi_euler_step(y_guess, y_lag, E_y_lead, spec) -> Vector{T}
+    vfi_solver(spec::DSGESpec{T}; kwargs...) -> ProjectionSolution{T}
 
-Solve the Euler equation at one grid point via Newton iteration.
+Solve DSGE model via Value Function Iteration.
 
-Given lagged state `y_lag` (levels) and expected next-period variables `E_y_lead` (levels),
-find `y_t` (levels) such that `F(y_t, y_lag, E_y_lead, 0, θ) = 0`.
-"""
-function _pfi_euler_step(y_guess::Vector{T}, y_lag::Vector{T},
-                          E_y_lead::Vector{T}, spec::DSGESpec{T};
-                          newton_tol::Real=1e-10, newton_max::Int=50) where {T}
-    n_eq = spec.n_endog
-    n_eps = spec.n_exog
-    θ = spec.param_values
-    ε_zero = zeros(T, n_eps)
-
-    y = copy(y_guess)
-    h = max(T(1e-7), sqrt(eps(T)))
-
-    for _ in 1:newton_max
-        # Evaluate residuals
-        R = zeros(T, n_eq)
-        for i in 1:n_eq
-            try
-                R[i] = spec.residual_fns[i](y, y_lag, E_y_lead, ε_zero, θ)
-            catch e
-                if e isa DomainError || e isa InexactError
-                    R[i] = T(1e10)
-                else
-                    rethrow(e)
-                end
-            end
-        end
-
-        if maximum(abs.(R)) < newton_tol
-            return y
-        end
-
-        # Jacobian w.r.t. y_t (finite differences)
-        J = zeros(T, n_eq, n_eq)
-        @inbounds for j in 1:n_eq
-            y_plus = copy(y)
-            y_plus[j] += h
-            for i in 1:n_eq
-                try
-                    R_plus = spec.residual_fns[i](y_plus, y_lag, E_y_lead, ε_zero, θ)
-                    J[i, j] = (R_plus - R[i]) / h
-                catch e
-                    if e isa DomainError || e isa InexactError
-                        J[i, j] = T(1e10)
-                    else
-                        rethrow(e)
-                    end
-                end
-            end
-        end
-
-        # Newton step
-        if n_eq == 1
-            abs(J[1, 1]) > eps(T) || break
-            y[1] -= R[1] / J[1, 1]
-        else
-            delta = -(robust_inv(J) * R)
-            y .+= delta
-        end
-    end
-
-    return y
-end
-
-"""
-    _pfi_compute_expectations(coeffs, n_vars, n_basis, state_idx, spec,
-                               quad_nodes, quad_weights, state_bounds,
-                               multi_indices, steady_state, y_current_nodes, impact)
-
-Compute E[y_{t+1}] at all grid points using quadrature.
-
-For each grid point j, expected next-period values are:
-`E[y'] = Σ_i w_i · policy(x'(x_j, ε_i))`
-
-where `x'` are next-period states derived from current policy + shock.
-"""
-function _pfi_compute_expectations(coeffs::Matrix{T}, n_vars::Int, n_basis::Int,
-                                    state_idx::Vector{Int}, spec::DSGESpec{T},
-                                    quad_nodes::Matrix{T}, quad_weights::Vector{T},
-                                    state_bounds::Matrix{T}, multi_indices::Matrix{Int},
-                                    steady_state::Vector{T},
-                                    y_current_nodes::Matrix{T},
-                                    impact::Matrix{T}) where {T}
-    n_nodes = size(y_current_nodes, 1)
-    n_eq = spec.n_endog
-    n_eps = spec.n_exog
-    nx = length(state_idx)
-    n_quad = length(quad_weights)
-
-    E_y_lead = zeros(T, n_nodes, n_eq)
-
-    @inbounds for j in 1:n_nodes
-        for q in 1:n_quad
-            # Next-period states from current policy
-            x_next_level = zeros(T, nx)
-            for (ii, si) in enumerate(state_idx)
-                x_next_level[ii] = y_current_nodes[j, si]
-            end
-
-            # Add shock effect via linear impact matrix
-            for (ii, si) in enumerate(state_idx)
-                for k in 1:n_eps
-                    x_next_level[ii] += impact[si, k] * quad_nodes[q, k]
-                end
-            end
-
-            # Clamp to bounds
-            for d in 1:nx
-                x_next_level[d] = clamp(x_next_level[d], state_bounds[d, 1], state_bounds[d, 2])
-            end
-
-            # Evaluate policy at next-period states
-            z_next = _scale_to_unit(x_next_level, state_bounds)
-            z_next = clamp.(z_next, T(-1), T(1))
-            B_next = _chebyshev_basis_multi(reshape(z_next, 1, nx), multi_indices)
-
-            y_next = zeros(T, n_eq)
-            for v in 1:n_vars
-                y_next[v] = dot(@view(B_next[1, :]), @view(coeffs[v, :])) + steady_state[v]
-            end
-
-            E_y_lead[j, :] .+= quad_weights[q] .* y_next
-        end
-    end
-
-    return E_y_lead
-end
-
-"""
-    pfi_solver(spec::DSGESpec{T}; kwargs...) -> ProjectionSolution{T}
-
-Solve DSGE model via Policy Function Iteration (Time Iteration).
-
-At each iteration: (1) compute expected next-period values using quadrature,
-(2) solve Euler equation at each grid point via Newton, (3) refit Chebyshev
-coefficients via least squares.
+Iterates on the Bellman operator using Euler equation residuals:
+at each grid point, solve for the policy via Newton on `residual_fns`,
+then update the value (Chebyshev coefficients) and check sup-norm
+convergence on the policy function.
 
 # Keyword Arguments
 - `degree::Int=5`: Chebyshev polynomial degree
@@ -161,14 +29,16 @@ coefficients via least squares.
 - `quadrature::Symbol=:auto`: `:gauss_hermite`, `:monomial`, or `:auto`
 - `n_quad::Int=5`: quadrature nodes per shock dimension
 - `scale::Real=3.0`: state bounds = SS ± scale × σ
-- `tol::Real=1e-8`: sup-norm convergence tolerance
-- `max_iter::Int=500`: maximum PFI iterations
-- `damping::Real=1.0`: policy mixing factor (1.0 = no damping)
+- `tol::Real=1e-8`: sup-norm convergence tolerance on value function
+- `max_iter::Int=1000`: maximum VFI iterations
+- `damping::Real=1.0`: coefficient mixing factor (1.0 = no damping)
+- `howard_steps::Int=0`: Howard improvement steps per iteration (0 = pure VFI)
 - `anderson_m::Int=0`: Anderson acceleration depth (0 = disabled)
 - `threaded::Bool=false`: enable multi-threaded grid evaluation
 - `verbose::Bool=false`: print iteration info
+- `initial_coeffs`: warm-start coefficients (n_vars × n_basis)
 """
-function pfi_solver(spec::DSGESpec{T};
+function vfi_solver(spec::DSGESpec{T};
                     degree::Int=5,
                     grid::Symbol=:auto,
                     smolyak_mu::Int=3,
@@ -176,8 +46,9 @@ function pfi_solver(spec::DSGESpec{T};
                     n_quad::Int=5,
                     scale::Real=3.0,
                     tol::Real=1e-8,
-                    max_iter::Int=500,
+                    max_iter::Int=1000,
                     damping::Real=1.0,
+                    howard_steps::Int=0,
                     anderson_m::Int=0,
                     threaded::Bool=false,
                     verbose::Bool=false,
@@ -187,12 +58,12 @@ function pfi_solver(spec::DSGESpec{T};
     n_eps = spec.n_exog
     ss = spec.steady_state
 
-    # Step 1: Setup (identical to collocation)
+    # Step 1: Setup (identical to collocation/PFI)
     ld = linearize(spec)
     state_idx, control_idx = _state_control_indices(ld)
     nx = length(state_idx)
 
-    nx > 0 || throw(ArgumentError("Model has no state variables — PFI requires at least one"))
+    nx > 0 || throw(ArgumentError("Model has no state variables — VFI requires at least one"))
 
     if grid == :auto
         grid = nx <= 4 ? :tensor : :smolyak
@@ -254,25 +125,25 @@ function pfi_solver(spec::DSGESpec{T};
     state_bounds_T = Matrix{T}(state_bounds)
     nodes_phys_T = Matrix{T}(nodes_phys)
 
-    # Step 3: Time iteration loop
-    converged = false
-    iter = 0
-    sup_norm = T(Inf)
-
-    # Anderson acceleration history
-    anderson_history = anderson_m > 0 ? Vector{T}[] : nothing
-    anderson_residuals = anderson_m > 0 ? Vector{T}[] : nothing
-
-    # Pre-allocate buffers for iteration loop
+    # Pre-allocate buffers
     y_current_nodes = zeros(T, n_nodes, n_eq)
     y_new_nodes = zeros(T, n_nodes, n_eq)
     y_updated_nodes = zeros(T, n_nodes, n_eq)
     coeffs_new = zeros(T, n_vars, n_basis)
 
+    # Anderson acceleration history
+    anderson_history = anderson_m > 0 ? Vector{T}[] : nothing
+    anderson_residuals = anderson_m > 0 ? Vector{T}[] : nothing
+
+    # Step 3: VFI iteration loop
+    converged = false
+    iter = 0
+    sup_norm = T(Inf)
+
     for k in 1:max_iter
         iter = k
 
-        # (a) Evaluate current policy at all grid points (deviations → levels)
+        # (a) Evaluate current policy at all grid points (deviations -> levels)
         for j in 1:n_nodes
             for v in 1:n_vars
                 y_current_nodes[j, v] = dot(@view(basis_matrix[j, :]), @view(coeffs[v, :])) + ss[v]
@@ -286,7 +157,7 @@ function pfi_solver(spec::DSGESpec{T};
                                               state_bounds_T, multi_indices, ss,
                                               y_current_nodes, impact)
 
-        # (c) Solve Euler equation at each grid point
+        # (c) Solve Euler equation at each grid point (Bellman step)
         if threaded && Threads.nthreads() > 1
             Threads.@threads for j in 1:n_nodes
                 y_lag = copy(ss)
@@ -308,10 +179,8 @@ function pfi_solver(spec::DSGESpec{T};
         end
 
         # (d) Refit Chebyshev coefficients (deviations from SS)
-        fill!(coeffs_new, zero(T))
         for v in 1:n_vars
-            y_dev_nodes = y_new_nodes[:, v] .- ss[v]
-            coeffs_new[v, :] = basis_matrix \ y_dev_nodes
+            coeffs_new[v, :] = basis_matrix \ (y_new_nodes[:, v] .- ss[v])
         end
 
         # (e) Apply damping
@@ -319,13 +188,41 @@ function pfi_solver(spec::DSGESpec{T};
             coeffs_new .= (one(T) - T(damping)) .* coeffs .+ T(damping) .* coeffs_new
         end
 
-        # Anderson acceleration
-        if anderson_m > 0
-            coeffs_vec_new = vec(coeffs_new)
-            coeffs_vec_old = vec(coeffs)
-            residual_vec = coeffs_vec_new .- coeffs_vec_old
+        # (f) Howard improvement steps — hold policy fixed, re-evaluate
+        for _h in 1:howard_steps
+            for j in 1:n_nodes
+                for v in 1:n_vars
+                    y_current_nodes[j, v] = dot(@view(basis_matrix[j, :]), @view(coeffs_new[v, :])) + ss[v]
+                end
+            end
 
-            push!(anderson_history, copy(coeffs_vec_old))
+            E_y_lead_h = _pfi_compute_expectations(coeffs_new, n_vars, n_basis,
+                                                     state_idx, spec,
+                                                     quad_nodes, quad_weights,
+                                                     state_bounds_T, multi_indices, ss,
+                                                     y_current_nodes, impact)
+
+            for j in 1:n_nodes
+                y_lag = copy(ss)
+                for (ii, si) in enumerate(state_idx)
+                    y_lag[si] = nodes_phys_T[j, ii]
+                end
+                y_new = _pfi_euler_step(y_current_nodes[j, :], y_lag, E_y_lead_h[j, :], spec)
+                y_new_nodes[j, :] = y_new
+            end
+
+            for v in 1:n_vars
+                coeffs_new[v, :] = basis_matrix \ (y_new_nodes[:, v] .- ss[v])
+            end
+        end
+
+        # (g) Anderson acceleration
+        if anderson_m > 0
+            coeffs_vec = vec(coeffs_new)
+            coeffs_old_vec = vec(coeffs)
+            residual_vec = coeffs_vec .- coeffs_old_vec
+
+            push!(anderson_history, copy(coeffs_old_vec))
             push!(anderson_residuals, copy(residual_vec))
 
             if length(anderson_history) >= 2
@@ -339,16 +236,23 @@ function pfi_solver(spec::DSGESpec{T};
             end
         end
 
-        # (f) Check convergence (sup-norm on policy change at grid points)
+        # (h) Check convergence (sup-norm on policy change at grid points)
         for j in 1:n_nodes
             for v in 1:n_vars
                 y_updated_nodes[j, v] = dot(@view(basis_matrix[j, :]), @view(coeffs_new[v, :])) + ss[v]
             end
         end
+
+        # Recompute y_current_nodes with old coeffs for comparison
+        for j in 1:n_nodes
+            for v in 1:n_vars
+                y_current_nodes[j, v] = dot(@view(basis_matrix[j, :]), @view(coeffs[v, :])) + ss[v]
+            end
+        end
         sup_norm = maximum(abs.(y_updated_nodes .- y_current_nodes))
 
         if verbose
-            println("  PFI iteration $k: sup-norm = $(sup_norm)")
+            println("  VFI iteration $k: sup-norm = $(sup_norm)")
         end
 
         coeffs .= coeffs_new
@@ -360,10 +264,10 @@ function pfi_solver(spec::DSGESpec{T};
     end
 
     if !converged && verbose
-        @warn "PFI solver did not converge after $max_iter iterations (sup-norm = $sup_norm)"
+        @warn "VFI solver did not converge after $max_iter iterations (sup-norm = $sup_norm)"
     end
 
-    # Step 4: Package result (reuse ProjectionSolution with method=:pfi)
+    # Step 4: Package result
     return ProjectionSolution{T}(
         coeffs,
         state_bounds_T,
@@ -381,6 +285,6 @@ function pfi_solver(spec::DSGESpec{T};
         control_idx,
         converged,
         iter,
-        :pfi
+        :vfi
     )
 end

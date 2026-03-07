@@ -37,7 +37,7 @@ function _chebyshev_eval(x::Real, degree::Int)
     if degree >= 1
         vals[2] = Float64(x)  # T_1 = x
     end
-    for k in 2:degree
+    @inbounds for k in 2:degree
         vals[k + 1] = 2.0 * Float64(x) * vals[k] - vals[k - 1]
     end
     return vals
@@ -66,7 +66,7 @@ function _chebyshev_basis_multi(X::AbstractMatrix, multi_indices::AbstractMatrix
 
     # Build basis matrix via tensor products
     B = ones(n_points, n_basis)
-    for k in 1:n_basis
+    @inbounds for k in 1:n_basis
         for d in 1:nx
             deg = multi_indices[k, d]
             B[:, k] .*= T_vals[d][:, deg + 1]
@@ -415,6 +415,7 @@ Solve DSGE model via Chebyshev collocation (projection method).
 - `scale::Real=3.0`: state bounds = SS +/- scale * sigma
 - `tol::Real=1e-8`: Newton convergence tolerance
 - `max_iter::Int=100`: maximum Newton iterations
+- `threaded::Bool=false`: enable multi-threaded Jacobian evaluation
 - `verbose::Bool=false`: print iteration info
 - `initial_coeffs::Union{Nothing,AbstractMatrix{<:Real}}=nothing`: warm-start coefficients (n_vars x n_basis)
 """
@@ -427,6 +428,7 @@ function collocation_solver(spec::DSGESpec{T};
                             scale::Real=3.0,
                             tol::Real=1e-8,
                             max_iter::Int=100,
+                            threaded::Bool=false,
                             verbose::Bool=false,
                             initial_coeffs::Union{Nothing,AbstractMatrix{<:Real}}=nothing) where {T<:AbstractFloat}
 
@@ -542,15 +544,28 @@ function collocation_solver(spec::DSGESpec{T};
         J = zeros(T, n_residuals, n_unknowns)
         h_fd = max(T(1e-7), sqrt(eps(T)))
 
-        for i in 1:n_unknowns
-            c_plus = copy(coeffs_vec)
-            c_plus[i] += h_fd
-            R_plus = _collocation_residual(c_plus, n_vars, n_basis,
-                                            basis_matrix, nodes_phys_T,
-                                            state_idx, control_idx, spec,
-                                            quad_nodes, quad_weights,
-                                            state_bounds_T, multi_indices, ss)
-            J[:, i] = (R_plus .- R) ./ h_fd
+        if threaded && Threads.nthreads() > 1
+            Threads.@threads for i in 1:n_unknowns
+                c_plus = copy(coeffs_vec)
+                c_plus[i] += h_fd
+                R_plus = _collocation_residual(c_plus, n_vars, n_basis,
+                                                basis_matrix, nodes_phys_T,
+                                                state_idx, control_idx, spec,
+                                                quad_nodes, quad_weights,
+                                                state_bounds_T, multi_indices, ss)
+                J[:, i] = (R_plus .- R) ./ h_fd
+            end
+        else
+            for i in 1:n_unknowns
+                c_plus = copy(coeffs_vec)
+                c_plus[i] += h_fd
+                R_plus = _collocation_residual(c_plus, n_vars, n_basis,
+                                                basis_matrix, nodes_phys_T,
+                                                state_idx, control_idx, spec,
+                                                quad_nodes, quad_weights,
+                                                state_bounds_T, multi_indices, ss)
+                J[:, i] = (R_plus .- R) ./ h_fd
+            end
         end
 
         # Gauss-Newton step with line search
