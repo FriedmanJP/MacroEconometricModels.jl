@@ -4311,6 +4311,20 @@ end
         sol_pert = solve(spec; method=:perturbation, order=2)
         @test sol_pert isa PerturbationSolution
     end
+
+    @testset "Projection threaded matches sequential" begin
+        sol_seq = solve(spec; method=:projection, degree=3, threaded=false, verbose=false)
+        sol_par = solve(spec; method=:projection, degree=3, threaded=true, verbose=false)
+
+        @test sol_seq.converged
+        @test sol_par.converged
+
+        for x_val in [-0.02, 0.0, 0.02]
+            y_seq = evaluate_policy(sol_seq, [x_val])
+            y_par = evaluate_policy(sol_par, [x_val])
+            @test abs(y_seq[1] - y_par[1]) < 1e-6
+        end
+    end
 end
 
 @testset "Nonlinear growth model" begin
