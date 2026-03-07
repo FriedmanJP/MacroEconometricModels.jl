@@ -899,3 +899,18 @@ function dsge_particle_smoother(nss::NonlinearStateSpace{T}, data::Matrix{T};
         log_lik
     )
 end
+
+# =============================================================================
+# Display
+# =============================================================================
+
+function Base.show(io::IO, r::KalmanSmootherResult{T}) where {T}
+    n_states, T_obs = size(r.smoothed_states)
+    n_shocks = size(r.smoothed_shocks, 1)
+    println(io, "Kalman Smoother Result")
+    println(io, "═" ^ 40)
+    println(io, "  States:         $n_states")
+    println(io, "  Shocks:         $n_shocks")
+    println(io, "  Periods:        $T_obs")
+    println(io, "  Log-likelihood: $(round(r.log_likelihood; digits=4))")
+end

@@ -494,4 +494,27 @@ end
     @test length(hd.shock_names) == 1
 end
 
+@testset "KalmanSmootherResult show method" begin
+    spec = @dsge begin
+        parameters: rho = 0.8
+        endogenous: y
+        exogenous: eps
+        y[t] = rho * y[t-1] + eps[t]
+    end
+    sol = solve(spec)
+    rng = Random.MersenneTwister(42)
+    sim_data = simulate(sol, 30; rng=rng)
+    Z, d, H_mat = MacroEconometricModels._build_observation_equation(spec, [:y], nothing)
+    ss = MacroEconometricModels._build_state_space(sol, Z, d, H_mat)
+    data_matrix = Matrix{Float64}(sim_data' .- sol.spec.steady_state)
+
+    result = dsge_smoother(ss, data_matrix)
+    io = IOBuffer()
+    show(io, result)
+    output = String(take!(io))
+    @test occursin("Kalman Smoother Result", output)
+    @test occursin("Log-likelihood", output)
+    @test occursin("States", output)
+end
+
 end  # outer testset
