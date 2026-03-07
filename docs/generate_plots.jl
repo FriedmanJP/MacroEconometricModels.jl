@@ -491,6 +491,47 @@ function main()
         save("reg_classification.html", plot_result(m_logit; title="Logit Classification Diagnostics"))
     end
 
+    # -------------------------------------------------------------------
+    # 44. ACF/PACF Correlogram (ACFResult)
+    # -------------------------------------------------------------------
+    begin
+        y_acf = use_real ? filter(isfinite, diff(log.(fred_gm[:, "INDPRO"]))) : randn(200)
+        r_acf = acf_pacf(y_acf; lags=24)
+        save("spectral_acf.html", plot_result(r_acf))
+    end
+
+    # -------------------------------------------------------------------
+    # 45. Spectral Density (SpectralDensityResult)
+    # -------------------------------------------------------------------
+    begin
+        y_sd = use_real ? filter(isfinite, diff(log.(fred_gm[:, "INDPRO"]))) : randn(200)
+        r_sd = spectral_density(y_sd; method=:welch)
+        save("spectral_density.html", plot_result(r_sd))
+    end
+
+    # -------------------------------------------------------------------
+    # 46. Cross-Spectrum Coherence + Phase (CrossSpectrumResult)
+    # -------------------------------------------------------------------
+    begin
+        if use_real
+            y_cs1 = filter(isfinite, diff(log.(fred_gm[:, "INDPRO"])))
+            y_cs2 = filter(isfinite, diff(log.(fred_gm[:, "CPIAUCSL"])))
+            n_cs = min(length(y_cs1), length(y_cs2))
+            r_cs = cross_spectrum(y_cs1[1:n_cs], y_cs2[1:n_cs])
+        else
+            r_cs = cross_spectrum(randn(200), randn(200))
+        end
+        save("spectral_cross.html", plot_result(r_cs))
+    end
+
+    # -------------------------------------------------------------------
+    # 47. Transfer Function — HP filter (TransferFunctionResult)
+    # -------------------------------------------------------------------
+    begin
+        r_tf = transfer_function(:hp; lambda=1600)
+        save("spectral_transfer.html", plot_result(r_tf))
+    end
+
     println("\nDone! Generated $(length(readdir(PLOT_DIR))) HTML files in $PLOT_DIR")
 end
 

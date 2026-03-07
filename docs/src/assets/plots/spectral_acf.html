@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ACF / PACF (n=251)</title>
+<style>* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+    background: #fff;
+    color: #333;
+    padding: 20px;
+}
+.figure-title {
+    font-size: 18px;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 16px;
+    color: #222;
+}
+.figure-source {
+    font-size: 11px;
+    color: #888;
+    text-align: center;
+    margin-top: 8px;
+}
+.panel-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    justify-content: center;
+}
+.panel {
+    width: calc(50% - 16px);
+    min-width: 300px;
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 12px;
+}
+.panel-title {
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 8px;
+    color: #444;
+}
+.axis text { font-size: 11px; fill: #666; }
+.axis line, .axis path { stroke: #ccc; }
+.grid line { stroke: #f0f0f0; stroke-dasharray: 2,2; }
+.grid .domain { stroke: none; }
+.tooltip {
+    position: absolute;
+    background: rgba(0,0,0,0.8);
+    color: #fff;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 1000;
+}
+.legend { font-size: 11px; }
+.legend rect { rx: 2; }
+svg { overflow: visible; }
+</style>
+</head>
+<body>
+<div class="figure-title">ACF / PACF (n=251)</div>
+<div class="panel-grid">
+<div class="panel">
+<div class="panel-title">Autocorrelation</div>
+<div id="acf_1"></div>
+</div>
+<div class="panel">
+<div class="panel-title">Partial Autocorrelation</div>
+<div id="pacf_2"></div>
+</div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script>
+// Shared utilities
+const tooltip = d3.select('#tooltip');
+function fmt(v) {
+    if (v === null || v === undefined) return '';
+    return Math.abs(v) >= 1000 ? v.toFixed(1) : (Math.abs(v) >= 1 ? v.toFixed(3) : v.toFixed(4));
+}
+function showTip(evt, html) {
+    tooltip.html(html).style('opacity',1)
+        .style('left',(evt.pageX+12)+'px').style('top',(evt.pageY-28)+'px');
+}
+function hideTip() { tooltip.style('opacity',0); }
+
+(function() {
+    const data = [{"x":1,"y":0.06342268383391492},
+{"x":2,"y":0.2529165933942823},
+{"x":3,"y":0.17693054817109224},
+{"x":4,"y":0.12149592010346215},
+{"x":5,"y":0.09891211938883454},
+{"x":6,"y":0.11748464295292002},
+{"x":7,"y":-0.03647299796514508},
+{"x":8,"y":0.11298856037261233},
+{"x":9,"y":0.10393374085487597},
+{"x":10,"y":0.10691796091208004},
+{"x":11,"y":-0.02065892684635216},
+{"x":12,"y":0.12080398882888307},
+{"x":13,"y":0.023614593941963465},
+{"x":14,"y":0.06663455801814962},
+{"x":15,"y":0.04454236428970851},
+{"x":16,"y":0.01603379153766969},
+{"x":17,"y":0.0022474527910819053},
+{"x":18,"y":0.192050161776141},
+{"x":19,"y":-0.10141697038276264},
+{"x":20,"y":0.07820535094849394},
+{"x":21,"y":0.013807999480089409},
+{"x":22,"y":-0.030612172528815863},
+{"x":23,"y":0.02607376188822422},
+{"x":24,"y":-0.08353417397624785}];
+    const refLines = [{"value":0.12371182973149536,"color":"#d62728","dash":"5,4"},{"value":-0.12371182973149536,"color":"#d62728","dash":"5,4"}];
+
+    const container = d3.select('#acf_1');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    const xVals = data.map(d => d.x);
+    const yVals = data.map(d => d.y);
+    refLines.forEach(r => yVals.push(r.value));
+    yVals.push(0);
+
+    const xExt = d3.extent(xVals);
+    const xPad = xVals.length > 1 ? (xVals[1] - xVals[0]) * 0.5 : 0.5;
+    const x = d3.scaleLinear().domain([xExt[0] - xPad, xExt[1] + xPad]).range([0, w]);
+
+    const yExt = d3.extent(yVals);
+    const yPad = (yExt[1] - yExt[0]) * 0.08 || 0.1;
+    const y = d3.scaleLinear().domain([yExt[0] - yPad, yExt[1] + yPad]).range([h, 0]);
+
+    // Grid
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+
+    // Zero line
+    g.append('line').attr('x1',0).attr('x2',w)
+        .attr('y1',y(0)).attr('y2',y(0))
+        .attr('stroke','#333').attr('stroke-width',0.8);
+
+    // Reference lines (CI bounds)
+    refLines.forEach(r => {
+        g.append('line').attr('x1',0).attr('x2',w)
+            .attr('y1',y(r.value)).attr('y2',y(r.value))
+            .attr('stroke',r.color||'#d62728').attr('stroke-width',1)
+            .attr('stroke-dasharray',r.dash||'5,4');
+    });
+
+    // Bars
+    const barW = Math.max(1, Math.min(6, w / data.length * 0.6));
+    data.forEach(d => {
+        const yTop = d.y >= 0 ? y(d.y) : y(0);
+        const yBot = d.y >= 0 ? y(0) : y(d.y);
+        g.append('rect')
+            .attr('x', x(d.x) - barW/2)
+            .attr('y', yTop)
+            .attr('width', barW)
+            .attr('height', Math.max(0.5, yBot - yTop))
+            .attr('fill', '#1f77b4')
+            .attr('opacity', 0.85);
+    });
+
+    // Axes
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+        .call(d3.axisBottom(x).ticks(Math.min(xVals.length, 10)));
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+
+    if('Lag') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Lag');
+    if('ACF') g.append('text').attr('transform','rotate(-90)')
+        .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('ACF');
+
+    // Tooltip
+    svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g.node());
+            const x0 = x.invert(mx);
+            const idx = d3.minIndex(data, d => Math.abs(d.x - x0));
+            const d = data[idx];
+            showTip(evt, '<b>Lag '+d.x+'</b><br>Value: '+fmt(d.y));
+        })
+        .on('mouseout', hideTip);
+})();
+
+(function() {
+    const data = [{"x":1,"y":0.06342268383391492},
+{"x":2,"y":0.2498993609615856},
+{"x":3,"y":0.15961929671580646},
+{"x":4,"y":0.05354977457092708},
+{"x":5,"y":0.01628743060803541},
+{"x":6,"y":0.052936387428473286},
+{"x":7,"y":-0.10066066071994802},
+{"x":8,"y":0.05688603365515266},
+{"x":9,"y":0.11144058955226684},
+{"x":10,"y":0.0856419050189654},
+{"x":11,"y":-0.09959765457324607},
+{"x":12,"y":0.04758637841441624},
+{"x":13,"y":0.011729512509120106},
+{"x":14,"y":0.0065468095188250496},
+{"x":15,"y":0.013368271201138565},
+{"x":16,"y":-0.004016865581116572},
+{"x":17,"y":-0.025998645736606617},
+{"x":18,"y":0.156378739501604},
+{"x":19,"y":-0.11625219200393684},
+{"x":20,"y":0.0007125114879830023},
+{"x":21,"y":0.01186442102357335},
+{"x":22,"y":-0.0625337356630105},
+{"x":23,"y":0.007097456660370391},
+{"x":24,"y":-0.10495565962812334}];
+    const refLines = [{"value":0.12371182973149536,"color":"#d62728","dash":"5,4"},{"value":-0.12371182973149536,"color":"#d62728","dash":"5,4"}];
+
+    const container = d3.select('#pacf_2');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    const xVals = data.map(d => d.x);
+    const yVals = data.map(d => d.y);
+    refLines.forEach(r => yVals.push(r.value));
+    yVals.push(0);
+
+    const xExt = d3.extent(xVals);
+    const xPad = xVals.length > 1 ? (xVals[1] - xVals[0]) * 0.5 : 0.5;
+    const x = d3.scaleLinear().domain([xExt[0] - xPad, xExt[1] + xPad]).range([0, w]);
+
+    const yExt = d3.extent(yVals);
+    const yPad = (yExt[1] - yExt[0]) * 0.08 || 0.1;
+    const y = d3.scaleLinear().domain([yExt[0] - yPad, yExt[1] + yPad]).range([h, 0]);
+
+    // Grid
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+
+    // Zero line
+    g.append('line').attr('x1',0).attr('x2',w)
+        .attr('y1',y(0)).attr('y2',y(0))
+        .attr('stroke','#333').attr('stroke-width',0.8);
+
+    // Reference lines (CI bounds)
+    refLines.forEach(r => {
+        g.append('line').attr('x1',0).attr('x2',w)
+            .attr('y1',y(r.value)).attr('y2',y(r.value))
+            .attr('stroke',r.color||'#d62728').attr('stroke-width',1)
+            .attr('stroke-dasharray',r.dash||'5,4');
+    });
+
+    // Bars
+    const barW = Math.max(1, Math.min(6, w / data.length * 0.6));
+    data.forEach(d => {
+        const yTop = d.y >= 0 ? y(d.y) : y(0);
+        const yBot = d.y >= 0 ? y(0) : y(d.y);
+        g.append('rect')
+            .attr('x', x(d.x) - barW/2)
+            .attr('y', yTop)
+            .attr('width', barW)
+            .attr('height', Math.max(0.5, yBot - yTop))
+            .attr('fill', '#ff7f0e')
+            .attr('opacity', 0.85);
+    });
+
+    // Axes
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+        .call(d3.axisBottom(x).ticks(Math.min(xVals.length, 10)));
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+
+    if('Lag') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Lag');
+    if('PACF') g.append('text').attr('transform','rotate(-90)')
+        .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('PACF');
+
+    // Tooltip
+    svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g.node());
+            const x0 = x.invert(mx);
+            const idx = d3.minIndex(data, d => Math.abs(d.x - x0));
+            const d = data[idx];
+            showTip(evt, '<b>Lag '+d.x+'</b><br>Value: '+fmt(d.y));
+        })
+        .on('mouseout', hideTip);
+})();
+
+</script>
+</body>
+</html>

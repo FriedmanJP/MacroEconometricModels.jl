@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spectral Density Estimate (welch, n=251)</title>
+<style>* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+    background: #fff;
+    color: #333;
+    padding: 20px;
+}
+.figure-title {
+    font-size: 18px;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 16px;
+    color: #222;
+}
+.figure-source {
+    font-size: 11px;
+    color: #888;
+    text-align: center;
+    margin-top: 8px;
+}
+.panel-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    justify-content: center;
+}
+.panel {
+    width: calc(100% - 16px);
+    min-width: 300px;
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 12px;
+}
+.panel-title {
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 8px;
+    color: #444;
+}
+.axis text { font-size: 11px; fill: #666; }
+.axis line, .axis path { stroke: #ccc; }
+.grid line { stroke: #f0f0f0; stroke-dasharray: 2,2; }
+.grid .domain { stroke: none; }
+.tooltip {
+    position: absolute;
+    background: rgba(0,0,0,0.8);
+    color: #fff;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 1000;
+}
+.legend { font-size: 11px; }
+.legend rect { rx: 2; }
+svg { overflow: visible; }
+</style>
+</head>
+<body>
+<div class="figure-title">Spectral Density Estimate (welch, n=251)</div>
+<div class="panel">
+<div class="panel-title">Spectral Density (welch)</div>
+<div id="spec_3"></div>
+</div>
+<div class="tooltip" id="tooltip"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script>
+// Shared utilities
+const tooltip = d3.select('#tooltip');
+function fmt(v) {
+    if (v === null || v === undefined) return '';
+    return Math.abs(v) >= 1000 ? v.toFixed(1) : (Math.abs(v) >= 1 ? v.toFixed(3) : v.toFixed(4));
+}
+function showTip(evt, html) {
+    tooltip.html(html).style('opacity',1)
+        .style('left',(evt.pageX+12)+'px').style('top',(evt.pageY-28)+'px');
+}
+function hideTip() { tooltip.style('opacity',0); }
+
+(function() {
+    const data = [{"x":0.0,"density":-4.813893312214202,"ci_lo":-5.084720958042696,"ci_hi":-4.418175392697935},
+{"x":0.10134169850289655,"density":-4.983199818381317,"ci_lo":-5.254027464209812,"ci_hi":-4.587481898865051},
+{"x":0.2026833970057931,"density":-5.270882741030996,"ci_lo":-5.54171038685949,"ci_hi":-4.87516482151473},
+{"x":0.30402509550868967,"density":-5.286772228202118,"ci_lo":-5.557599874030612,"ci_hi":-4.891054308685851},
+{"x":0.4053667940115862,"density":-5.25537336044609,"ci_lo":-5.526201006274585,"ci_hi":-4.859655440929823},
+{"x":0.5067084925144828,"density":-5.490213358566485,"ci_lo":-5.761041004394979,"ci_hi":-5.094495439050218},
+{"x":0.6080501910173793,"density":-5.342449985964167,"ci_lo":-5.613277631792662,"ci_hi":-4.946732066447901},
+{"x":0.7093918895202759,"density":-5.354757308658299,"ci_lo":-5.6255849544867935,"ci_hi":-4.959039389142032},
+{"x":0.8107335880231724,"density":-5.692804792550369,"ci_lo":-5.963632438378863,"ci_hi":-5.297086873034102},
+{"x":0.912075286526069,"density":-5.6928774574360235,"ci_lo":-5.963705103264518,"ci_hi":-5.297159537919757},
+{"x":1.0134169850289656,"density":-5.642665894253728,"ci_lo":-5.913493540082222,"ci_hi":-5.246947974737462},
+{"x":1.114758683531862,"density":-5.673473907099106,"ci_lo":-5.944301552927599,"ci_hi":-5.277755987582839},
+{"x":1.2161003820347587,"density":-5.589846229664425,"ci_lo":-5.860673875492919,"ci_hi":-5.194128310148158},
+{"x":1.3174420805376552,"density":-5.470262325838361,"ci_lo":-5.741089971666855,"ci_hi":-5.074544406322095},
+{"x":1.4187837790405518,"density":-5.38735832050786,"ci_lo":-5.6581859663363545,"ci_hi":-4.991640400991594},
+{"x":1.520125477543448,"density":-5.496592151768337,"ci_lo":-5.7674197975968315,"ci_hi":-5.100874232252071},
+{"x":1.6214671760463448,"density":-6.012489335614556,"ci_lo":-6.28331698144305,"ci_hi":-5.616771416098289},
+{"x":1.7228088745492416,"density":-5.630056727325104,"ci_lo":-5.900884373153597,"ci_hi":-5.234338807808837},
+{"x":1.824150573052138,"density":-5.582597434953553,"ci_lo":-5.853425080782047,"ci_hi":-5.186879515437287},
+{"x":1.9254922715550344,"density":-5.586822576956156,"ci_lo":-5.857650222784651,"ci_hi":-5.19110465743989},
+{"x":2.026833970057931,"density":-5.392957573646815,"ci_lo":-5.66378521947531,"ci_hi":-4.997239654130548},
+{"x":2.1281756685608277,"density":-5.183615278467977,"ci_lo":-5.454442924296471,"ci_hi":-4.78789735895171},
+{"x":2.229517367063724,"density":-5.316460518653425,"ci_lo":-5.58728816448192,"ci_hi":-4.920742599137159},
+{"x":2.3308590655666204,"density":-5.603813016959943,"ci_lo":-5.874640662788437,"ci_hi":-5.208095097443676},
+{"x":2.4322007640695174,"density":-5.217666678455353,"ci_lo":-5.488494324283847,"ci_hi":-4.821948758939087},
+{"x":2.533542462572414,"density":-5.196628993271234,"ci_lo":-5.467456639099727,"ci_hi":-4.800911073754967},
+{"x":2.6348841610753104,"density":-5.564896006379866,"ci_lo":-5.83572365220836,"ci_hi":-5.1691780868635995},
+{"x":2.736225859578207,"density":-5.332694933224055,"ci_lo":-5.60352257905255,"ci_hi":-4.936977013707789},
+{"x":2.8375675580811035,"density":-5.552735056382526,"ci_lo":-5.82356270221102,"ci_hi":-5.157017136866259},
+{"x":2.938909256584,"density":-5.46741582997481,"ci_lo":-5.738243475803304,"ci_hi":-5.071697910458544},
+{"x":3.040250955086896,"density":-5.259851413958624,"ci_lo":-5.5306790597871185,"ci_hi":-4.864133494442357},
+{"x":3.141592653589793,"density":-5.139528083482905,"ci_lo":-5.410355729311399,"ci_hi":-4.743810163966638}];
+    const series = [{"name":"Log Spectral Density","color":"#1f77b4","key":"density","dash":""}];
+    const bands = [{"lo_key":"ci_lo","hi_key":"ci_hi","color":"#1f77b4","alpha":0.15}];
+    const refLines = [];
+
+    const container = d3.select('#spec_3');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    // Compute domains
+    const xVals = data.map(d => d.x);
+    const allYVals = [];
+    series.forEach(s => data.forEach(d => { if(d[s.key]!==null) allYVals.push(d[s.key]); }));
+    bands.forEach(b => data.forEach(d => {
+        if(d[b.lo_key]!==null) allYVals.push(d[b.lo_key]);
+        if(d[b.hi_key]!==null) allYVals.push(d[b.hi_key]);
+    }));
+    refLines.forEach(r => allYVals.push(r.value));
+
+    const x = d3.scaleLinear().domain(d3.extent(xVals)).range([0,w]);
+    const yExt = d3.extent(allYVals);
+    const yPad = (yExt[1]-yExt[0])*0.08 || 1;
+    const y = d3.scaleLinear().domain([yExt[0]-yPad, yExt[1]+yPad]).range([h,0]);
+
+    // Grid
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+
+    // Bands
+    bands.forEach(b => {
+        const area = d3.area()
+            .x(d => x(d.x))
+            .y0(d => y(d[b.lo_key]!==null ? d[b.lo_key] : 0))
+            .y1(d => y(d[b.hi_key]!==null ? d[b.hi_key] : 0))
+            .defined(d => d[b.lo_key]!==null && d[b.hi_key]!==null);
+        g.append('path').datum(data).attr('d',area)
+            .attr('fill',b.color).attr('opacity',b.alpha||0.15);
+    });
+
+    // Reference lines
+    refLines.forEach(r => {
+        g.append('line').attr('x1',0).attr('x2',w)
+            .attr('y1',y(r.value)).attr('y2',y(r.value))
+            .attr('stroke',r.color||'#999').attr('stroke-width',1)
+            .attr('stroke-dasharray',r.dash||'4,3');
+    });
+
+    // Lines
+    series.forEach(s => {
+        const line = d3.line().x(d=>x(d.x)).y(d=>y(d[s.key]))
+            .defined(d=>d[s.key]!==null);
+        g.append('path').datum(data).attr('d',line)
+            .attr('fill','none').attr('stroke',s.color).attr('stroke-width',1.8)
+            .attr('stroke-dasharray',s.dash||'');
+    });
+
+    // Axes
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+        .call(d3.axisBottom(x).ticks(Math.min(xVals.length,8)));
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+
+    if('Frequency (radians)') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Frequency (radians)');
+    if('log₁₀ Spectral Density') g.append('text').attr('transform','rotate(-90)')
+        .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('log₁₀ Spectral Density');
+
+    // Legend
+    if(series.length > 1) {
+        const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
+        series.forEach((s,i) => {
+            const gi = leg.append('g').attr('transform','translate('+(i*100)+',0)');
+            gi.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+                .attr('stroke',s.color).attr('stroke-width',2)
+                .attr('stroke-dasharray',s.dash||'');
+            gi.append('text').attr('x',20).attr('y',4).attr('font-size','10px')
+                .attr('fill','#555').text(s.name);
+        });
+    }
+
+    // Tooltip overlay
+    svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g.node());
+            const x0 = x.invert(mx);
+            const idx = d3.minIndex(data, d => Math.abs(d.x - x0));
+            const d = data[idx];
+            let html = '<b>x='+fmt(d.x)+'</b>';
+            series.forEach(s => { if(d[s.key]!==null) html += '<br>'+s.name+': '+fmt(d[s.key]); });
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+
+</script>
+</body>
+</html>

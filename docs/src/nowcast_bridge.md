@@ -184,5 +184,3 @@ println("Bridge: ", round(r1.nowcast, digits=4), "  DFM: ", round(r_dfm.nowcast,
 - Banbura, Marta, Irina Belousova, Katalin Bodnar, and Mate Barnabas Toth. 2023.
   "Nowcasting Employment in the Euro Area." *ECB Working Paper* No. 2815.
 
-- Delle Chiaie, Simona, Florian Heider, Soren Hoppe, Alexander Melemenidis, Mate Barnabas Toth, and Stefan Zeugner. 2022.
-  "Real-time Data and Advance Estimates in Nowcasting." *ECB Research Bulletin* No. 75.
