@@ -2,13 +2,16 @@
 
 Standard linearized DSGE models assume all equilibrium conditions hold with equality at all times. Occasionally binding constraints --- such as the zero lower bound on nominal interest rates, borrowing limits, or irreversible investment --- require specialized solution methods. This page covers three approaches: deterministic perfect foresight, constrained optimization via JuMP (Ipopt and PATH), and the piecewise-linear OccBin algorithm (Guerrieri & Iacoviello 2015). For model specification and linearization, see [DSGE Models](@ref dsge_page). For first-order solvers, see [Linear Solvers](@ref dsge_linear).
 
+```@setup dsge_constraints
+using MacroEconometricModels, Random
+Random.seed!(42)
+```
+
 ## Quick Start
 
 **Recipe 1: Perfect foresight path**
 
-```julia
-using MacroEconometricModels
-
+```@example dsge_constraints
 spec = @dsge begin
     parameters: beta = 0.99, alpha = 0.36, delta = 0.025, rho = 0.9, sigma = 0.01
     endogenous: Y, C, K, A
@@ -71,17 +74,18 @@ where:
 
 The function `perfect_foresight` solves this system using [NonlinearSolve.jl](https://github.com/SciML/NonlinearSolve.jl) with `NewtonRaphson()` as the default algorithm. The same solver is accessible through the unified `solve` interface:
 
-```julia
+```@example dsge_constraints
 # Direct call
 pf = perfect_foresight(spec; T_periods=100, shock_path=shocks)
 
 # Via unified solve interface
 pf = solve(spec; method=:perfect_foresight, T_periods=100, shock_path=shocks)
+nothing # hide
 ```
 
 The `PerfectForesightPath{T}` result contains both the level path and deviations from steady state:
 
-```julia
+```@example dsge_constraints
 pf.path         # 100 x 4 matrix of variable levels
 pf.deviations   # 100 x 4 matrix of deviations from steady state
 pf.converged    # true if Newton iteration converged
@@ -309,10 +313,7 @@ occ_irf = occbin_irf(spec, zlb, borrow, 1, 40; magnitude=-3.0)
 
 This example combines perfect foresight and OccBin to analyze a New Keynesian model at the zero lower bound:
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example dsge_constraints
 # Specify a 3-equation NK model
 nk_spec = @dsge begin
     parameters: β = 0.99, σ_c = 1.0, κ = 0.024, ϕ_π = 1.5, ϕ_y = 0.125,
@@ -335,6 +336,9 @@ constraint = parse_constraint(:(R[t] >= 0), nk_spec)
 
 # Large negative demand shock pushes economy to ZLB
 occ_irf = occbin_irf(nk_spec, constraint, 1, 40; magnitude=-3.0)
+```
+
+```julia
 plot_result(occ_irf)
 ```
 

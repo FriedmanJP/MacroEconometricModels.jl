@@ -13,14 +13,16 @@
 
 All results integrate with `plot_result()` for interactive D3.js visualization and `report()` for publication-quality output.
 
+```@setup dsge_overview
+using MacroEconometricModels, Random
+Random.seed!(42)
+```
+
 ## Quick Start
 
 **Recipe 1: Solve and plot IRFs**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example dsge_overview
 # Specify a simple RBC model
 spec = @dsge begin
     parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.9, σ = 0.01
@@ -43,15 +45,19 @@ end
 
 sol = solve(spec)
 result = irf(sol, 40)
+```
+
+```julia
 plot_result(result)
 ```
 
 **Recipe 2: Second-order perturbation with pruning**
 
-```julia
+```@example dsge_overview
 psol = perturbation_solver(spec; order=2)
 Y_sim = simulate(psol, 1000)  # pruned simulation (Kim et al. 2008)
-girf = irf(psol, 40; irf_type=:girf, n_draws=500)
+girf = irf(psol, 40; irf_type=:girf, n_draws=100)
+nothing # hide
 ```
 
 **Recipe 3: Estimate with GMM**
@@ -73,9 +79,9 @@ plot_result(occ_irf)
 
 **Recipe 5: Chebyshev projection**
 
-```julia
-proj = collocation_solver(spec; degree=5, grid=:tensor)
-y = evaluate_policy(proj, x_state)
+```@example dsge_overview
+proj = collocation_solver(spec; degree=5, grid=:tensor, max_iter=200)
+y = evaluate_policy(proj, proj.steady_state[proj.state_indices])
 err = max_euler_error(proj)
 ```
 
@@ -98,8 +104,8 @@ The `@dsge` macro provides a domain-specific language for specifying DSGE models
 
 ### Syntax
 
-```julia
-spec = @dsge begin
+```@example dsge_overview
+spec_demo = @dsge begin
     parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.9, σ = 0.01
     endogenous: Y, C, K, A
     exogenous: ε_A
@@ -176,7 +182,7 @@ For the RBC model above, the analytical steady state is:
 
 `compute_steady_state` uses NonlinearSolve.jl to solve the system ``f(\bar{y}, \bar{y}, \bar{y}, 0, \theta) = 0``. The default algorithm is `TrustRegion()`, which is robust to poor starting points. Box constraints (e.g., non-negativity) are handled natively via NonlinearSolve's bounded problem formulation.
 
-```julia
+```@example dsge_overview
 spec = compute_steady_state(spec)
 report(spec)
 ```
@@ -193,7 +199,7 @@ The solver converges to the steady state from a default initial guess of ones. F
 
 For models where the steady state has a closed-form solution, specify it in a `steady_state = begin ... end` block. The block must return a vector matching the endogenous variable ordering:
 
-```julia
+```@example dsge_overview
 spec = @dsge begin
     parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.9, σ = 0.01
     endogenous: Y, C, K, A
@@ -281,7 +287,7 @@ where:
 - ``\varepsilon_t`` is the vector of exogenous shocks
 - ``\eta_t = y_t - E_{t-1}[y_t]`` is the vector of expectation errors for forward-looking variables
 
-```julia
+```@example dsge_overview
 ld = linearize(spec)
 ```
 
@@ -307,10 +313,7 @@ The matrix pair ``(\Gamma_0, \Gamma_1)`` defines a generalized eigenvalue proble
 
 This example specifies, solves, and analyzes a full RBC model using the core functions covered on this page:
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example dsge_overview
 # Specify the RBC model with analytical steady state
 spec = @dsge begin
     parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.9, σ = 0.01
@@ -333,7 +336,9 @@ end
 
 # Verify steady state
 report(spec)
+```
 
+```@example dsge_overview
 # Linearize and inspect the canonical form matrices
 ld = linearize(spec)
 
@@ -342,6 +347,9 @@ sol = solve(spec)
 
 # IRFs and FEVD
 result = irf(sol, 40)
+```
+
+```julia
 plot_result(result)
 ```
 

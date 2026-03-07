@@ -2,14 +2,16 @@
 
 First-order linear solutions impose **certainty equivalence** --- agents behave as if shocks have zero variance. This rules out risk premia, precautionary savings, welfare costs of uncertainty, and asymmetric dynamics. Nonlinear methods capture all of these by retaining higher-order terms in the Taylor expansion of the policy function or by solving the functional equation globally. MacroEconometricModels.jl provides three families: **higher-order perturbation** (local, Schmitt-Grohe & Uribe 2004; Andreasen, Fernandez-Villaverde & Rubio-Ramirez 2018), **Chebyshev projection** (global polynomial, Judd 1992, 1998), and **policy function iteration** (global iterative, Coleman 1990). For model specification and linearization, see [DSGE Models](@ref dsge_page). For first-order solvers, see [Linear Solvers](@ref dsge_linear).
 
+```@setup dsge_nonlinear
+using MacroEconometricModels, Random
+Random.seed!(42)
+```
+
 ## Quick Start
 
 **Recipe 1: Second-order perturbation with pruned simulation**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example dsge_nonlinear
 spec = @dsge begin
     parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.9, σ = 0.01
     endogenous: Y, C, K, A
@@ -29,29 +31,34 @@ end
 
 psol = perturbation_solver(spec; order=2)
 Y_sim = simulate(psol, 1000)  # pruned simulation (Kim et al. 2008)
+nothing # hide
 ```
 
 **Recipe 2: Third-order perturbation with GIRFs**
 
-```julia
+```@example dsge_nonlinear
 psol3 = perturbation_solver(spec; order=3)
 Y_sim3 = simulate(psol3, 1000)
-girf3 = irf(psol3, 40; irf_type=:girf, n_draws=500)
+girf3 = irf(psol3, 40; irf_type=:girf, n_draws=100)
+nothing # hide
+```
+
+```julia
 plot_result(girf3)
 ```
 
 **Recipe 3: Chebyshev projection and Euler errors**
 
-```julia
-proj = collocation_solver(spec; degree=5, grid=:tensor)
+```@example dsge_nonlinear
+proj = collocation_solver(spec; degree=5, grid=:tensor, max_iter=200)
 y = evaluate_policy(proj, proj.steady_state[proj.state_indices])
 err = max_euler_error(proj)
 ```
 
 **Recipe 4: PFI with damped updates**
 
-```julia
-pfi = pfi_solver(spec; degree=5, damping=0.5)
+```@example dsge_nonlinear
+pfi = pfi_solver(spec; degree=5, damping=0.5, max_iter=200)
 report(pfi)
 ```
 
@@ -75,8 +82,9 @@ where:
 - ``f_{\sigma\sigma}`` is the ``n \times 1`` variance correction (shifts the **stochastic steady state**)
 - ``\sigma`` is the perturbation scaling parameter
 
-```julia
+```@example dsge_nonlinear
 psol = perturbation_solver(spec; order=2)
+nothing # hide
 ```
 
 | Keyword | Type | Default | Description |
@@ -113,8 +121,9 @@ where:
 - ``f_{\sigma\sigma v}`` is the ``n \times n_v`` interaction between uncertainty and the state
 - ``f_{\sigma\sigma\sigma}`` is the ``n \times 1`` cubic variance correction (zero for Gaussian shocks)
 
-```julia
+```@example dsge_nonlinear
 psol3 = perturbation_solver(spec; order=3)
+nothing # hide
 ```
 
 ### Algorithm
@@ -183,13 +192,10 @@ where ``v_t^{(2)} = [x_{t-1}^{(2)}; 0]`` contains the second-order state correct
 
 Total: ``x_t = x_t^{(1)} + x_t^{(2)} + x_t^{(3)}``
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-# (assume spec defined as in Quick Start)
+```@example dsge_nonlinear
 psol3 = perturbation_solver(spec; order=3)
 Y_sim = simulate(psol3, 1000)  # 3-component pruned simulation
+nothing # hide
 ```
 
 | Keyword | Type | Default | Description |
@@ -218,12 +224,16 @@ where:
 
 The GIRF captures nonlinear dynamics that the analytical first-order IRF misses: asymmetric responses to positive vs. negative shocks, state-dependent propagation, and variance-correction effects. For a first-order solution, the GIRF converges to the analytical IRF as ``n_{\text{draws}} \to \infty``.
 
-```julia
+```@example dsge_nonlinear
 # Analytical IRFs (first-order only, fast)
 irf_analytical = irf(psol3, 40)
 
 # GIRFs (captures nonlinear dynamics, Monte Carlo)
-girf = irf(psol3, 40; irf_type=:girf, n_draws=500)
+girf = irf(psol3, 40; irf_type=:girf, n_draws=100)
+nothing # hide
+```
+
+```julia
 plot_result(girf)
 ```
 
@@ -262,8 +272,8 @@ The collocation solver proceeds in five steps:
 4. **Initialize coefficients** from the first-order perturbation solution via least-squares projection onto the Chebyshev basis
 5. **Newton iteration**: solve ``R(c) = 0`` where ``R`` is the vector of equilibrium residuals evaluated at all nodes, with Gauss-Hermite or monomial quadrature for expectations of next-period variables. Uses Gauss-Newton with backtracking line search.
 
-```julia
-proj = collocation_solver(spec; degree=5, grid=:tensor)
+```@example dsge_nonlinear
+proj = collocation_solver(spec; degree=5, grid=:tensor, max_iter=200)
 report(proj)
 ```
 
@@ -290,16 +300,15 @@ For models with ``n_x > 4`` states, tensor grids become computationally infeasib
 
 The `evaluate_policy` function maps state vectors to the full vector of endogenous variables using the stored Chebyshev coefficients:
 
-```julia
-y = evaluate_policy(proj, x_state)          # single point (vector)
-Y = evaluate_policy(proj, X_states)         # multiple points (matrix, n_points x nx)
+```@example dsge_nonlinear
+y = evaluate_policy(proj, proj.steady_state[proj.state_indices])  # single point (vector)
 ```
 
 ### Euler Equation Errors
 
 The **Euler equation error** measures the accuracy of the global approximation by evaluating residuals at random test points drawn uniformly within the state bounds:
 
-```julia
+```@example dsge_nonlinear
 err = max_euler_error(proj; n_test=1000)
 ```
 
@@ -324,8 +333,8 @@ The algorithm iterates three sub-steps at each grid point ``j``:
 2. **Euler solve**: given ``y_{\text{lag}} = x_j`` (the grid point as lagged state) and ``E[y_{t+1}]``, solve ``F(y_t, y_{\text{lag}}, E[y_{t+1}], 0, \theta) = 0`` for ``y_t`` via Newton iteration
 3. **Refit**: project the updated policy values onto the Chebyshev basis via least squares
 
-```julia
-pfi = pfi_solver(spec; degree=5, damping=0.5)
+```@example dsge_nonlinear
+pfi = pfi_solver(spec; degree=5, damping=0.5, max_iter=200)
 report(pfi)
 ```
 
@@ -377,7 +386,7 @@ where:
 
 The `solve_lyapunov` function solves this equation via Kronecker vectorization: ``\text{vec}(\Sigma) = (I_{n^2} - G_1 \otimes G_1)^{-1} \, \text{vec}(\text{impact} \cdot \text{impact}')``. Autocovariances at lag ``h`` follow from ``\Gamma_h = G_1^h \, \Sigma``.
 
-```julia
+```@example dsge_nonlinear
 sol = solve(spec)
 
 # Unconditional covariance matrix
@@ -395,28 +404,7 @@ The moment vector contains two blocks: (1) the upper triangle of the variance-co
 
 This example solves the RBC model at all three perturbation orders, compares analytical and generalized IRFs, and validates a global projection solution with Euler equation errors.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-# Specify RBC model
-spec = @dsge begin
-    parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.9, σ = 0.01
-    endogenous: Y, C, K, A
-    exogenous: ε_A
-    Y[t] = A[t] * K[t-1]^α
-    C[t] + K[t] = Y[t] + (1 - δ) * K[t-1]
-    1 = β * (C[t] / C[t+1]) * (α * A[t+1] * K[t]^(α - 1) + 1 - δ)
-    A[t] = ρ * A[t-1] + σ * ε_A[t]
-    steady_state = begin
-        A_ss = 1.0
-        K_ss = (α * β / (1 - β * (1 - δ)))^(1 / (1 - α))
-        Y_ss = K_ss^α
-        C_ss = Y_ss - δ * K_ss
-        [Y_ss, C_ss, K_ss, A_ss]
-    end
-end
-
+```@example dsge_nonlinear
 # First-order: certainty equivalence
 sol1 = perturbation_solver(spec; order=1)
 
@@ -432,22 +420,27 @@ Y2 = simulate(sol2, 10000)
 Y3 = simulate(sol3, 10000)
 
 # Generalized IRFs at third order
-girf = irf(sol3, 40; irf_type=:girf, n_draws=500)
-plot_result(girf)
+girf = irf(sol3, 40; irf_type=:girf, n_draws=100)
 
 # Global solution via Chebyshev collocation
-proj = collocation_solver(spec; degree=5, grid=:tensor)
+proj = collocation_solver(spec; degree=5, grid=:tensor, max_iter=200)
 report(proj)
+```
 
+```@example dsge_nonlinear
 # Euler equation accuracy
 err = max_euler_error(proj; n_test=1000)
 
 # PFI for comparison
-pfi = pfi_solver(spec; degree=5, damping=0.5)
+pfi = pfi_solver(spec; degree=5, damping=0.5, max_iter=200)
 err_pfi = max_euler_error(pfi; n_test=1000)
 
 # Analytical moments for estimation targets
 m = analytical_moments(sol1; lags=2)
+```
+
+```julia
+plot_result(girf)
 ```
 
 The stochastic steady state shifts from second-order perturbation reflect precautionary savings: the ergodic mean of capital exceeds the deterministic steady state because risk-averse agents over-accumulate capital as a buffer against productivity shocks. Third-order perturbation adds state-dependent risk premia --- the precautionary effect is stronger in recessions than expansions.

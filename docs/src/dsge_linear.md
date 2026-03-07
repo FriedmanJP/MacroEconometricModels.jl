@@ -2,13 +2,16 @@
 
 First-order linear rational expectations solutions produce the **state-space representation** that is the workhorse of DSGE analysis --- impulse responses, variance decompositions, simulation, and moment matching all flow from this representation. MacroEconometricModels.jl provides three solver implementations (Gensys, Blanchard-Kahn, and Klein) that share the unified `solve()` interface and return the same `DSGESolution{T}` output type. For model specification and linearization, see [DSGE Models](@ref dsge_page).
 
+```@setup dsge_linear
+using MacroEconometricModels, Random
+Random.seed!(42)
+```
+
 ## Quick Start
 
 **Recipe 1: Solve with Gensys and check determinacy**
 
-```julia
-using MacroEconometricModels
-
+```@example dsge_linear
 spec = @dsge begin
     parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.9, σ = 0.01
     endogenous: Y, C, K, A
@@ -34,17 +37,20 @@ report(sol)
 
 **Recipe 2: Impulse responses and FEVD**
 
-```julia
+```@example dsge_linear
 result = irf(sol, 40)
-plot_result(result)
-
 decomp = fevd(sol, 40)
+nothing # hide
+```
+
+```julia
+plot_result(result)
 plot_result(decomp)
 ```
 
 **Recipe 3: Unconditional moments via Lyapunov equation**
 
-```julia
+```@example dsge_linear
 Σ = solve_lyapunov(sol.G1, sol.impact)
 m = analytical_moments(sol; lags=2)
 ```
@@ -130,7 +136,7 @@ The **generalized eigenvalues** of the matrix pencil ``(\Gamma_0, \Gamma_1)`` de
 | `[1, 0]` | Existence but multiple solutions (indeterminate) |
 | `[0, 0]` | No stable solution (explosive) |
 
-```julia
+```@example dsge_linear
 sol = solve(spec; method=:gensys)
 sol.eu                          # [1, 1] = determinate
 is_determined(sol)              # true
@@ -144,7 +150,7 @@ maximum(abs.(sol.eigenvalues))  # largest eigenvalue modulus
 
 When `is_determined(sol)` returns `false`, inspect the eigenvalue decomposition to understand why. Count the number of stable and unstable eigenvalues and compare with the number of forward-looking variables:
 
-```julia
+```@example dsge_linear
 sol = solve(spec; method=:blanchard_kahn)
 eigenvalues = sol.eigenvalues
 n_stable = count(e -> abs(e) < 1.0, eigenvalues)
@@ -169,13 +175,13 @@ The **Gensys** solver is the default method. It uses the QZ (generalized Schur) 
 
 The `div` keyword sets the dividing line between stable and unstable eigenvalues. The default value of ``1.0 + 10^{-8}`` places the cutoff slightly above the unit circle, ensuring that borderline eigenvalues (exactly at unity) are treated as stable.
 
-```julia
+```@example dsge_linear
 sol = solve(spec; method=:gensys)
 ```
 
 Or calling the low-level function directly after linearization:
 
-```julia
+```@example dsge_linear
 ld = linearize(spec)
 result = gensys(ld.Gamma0, ld.Gamma1, ld.C, ld.Psi, ld.Pi; div=1.0+1e-8)
 result.G1       # state transition matrix
@@ -192,7 +198,7 @@ result.eu       # [existence, uniqueness]
 
 The **Blanchard-Kahn** method uses the same QZ decomposition but checks the BK condition directly: the number of unstable eigenvalues (``|\lambda| > 1``) must equal the number of forward-looking variables ``n_\eta``. It uses a strict unit circle cutoff (``|\lambda| > 1.0``) rather than Gensys's ``1 + 10^{-8}`` convention.
 
-```julia
+```@example dsge_linear
 sol = solve(spec; method=:blanchard_kahn)
 ```
 
@@ -205,7 +211,7 @@ sol = solve(spec; method=:blanchard_kahn)
 
 The **Klein** method uses the generalized Schur decomposition with automatic **predetermined variable detection**: variables appearing with ``[t-1]`` subscripts are classified as states by scanning for non-zero columns in ``\Gamma_1``. The BK condition is checked as ``n_{\text{stable}} = n_{\text{predetermined}}``.
 
-```julia
+```@example dsge_linear
 sol = solve(spec; method=:klein)
 ```
 
@@ -248,29 +254,7 @@ y_t = G_1 \, y_{t-1} + \text{impact} \cdot \varepsilon_t + C_{\text{sol}}
 
 where ``\varepsilon_t \sim N(0, I_{n_\varepsilon})`` are i.i.d. standard normal shocks. The simulation returns **levels** (steady state plus deviations), not deviations alone.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-spec = @dsge begin
-    parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.9, σ = 0.01
-    endogenous: Y, C, K, A
-    exogenous: ε_A
-
-    Y[t] = A[t] * K[t-1]^α
-    C[t] + K[t] = Y[t] + (1 - δ) * K[t-1]
-    1 = β * (C[t] / C[t+1]) * (α * A[t+1] * K[t]^(α - 1) + 1 - δ)
-    A[t] = ρ * A[t-1] + σ * ε_A[t]
-
-    steady_state = begin
-        A_ss = 1.0
-        K_ss = (α * β / (1 - β * (1 - δ)))^(1 / (1 - α))
-        Y_ss = K_ss^α
-        C_ss = Y_ss - δ * K_ss
-        [Y_ss, C_ss, K_ss, A_ss]
-    end
-end
-
+```@example dsge_linear
 sol = solve(spec)
 Y = simulate(sol, 200)  # 200 x n_endog matrix of levels
 ```
@@ -299,8 +283,11 @@ where:
 
 Each column ``j`` of ``\Phi_h`` gives the response of all ``n`` endogenous variables to a one-standard-deviation shock to exogenous variable ``j``, measured ``h`` periods after impact.
 
-```julia
+```@example dsge_linear
 result = irf(sol, 40)
+```
+
+```julia
 plot_result(result)
 ```
 
@@ -323,8 +310,11 @@ where:
 
 By construction, ``\sum_j \text{FEVD}_{i,j}(h) = 1`` for every variable ``i`` and horizon ``h``.
 
-```julia
+```@example dsge_linear
 decomp = fevd(sol, 40)
+```
+
+```julia
 plot_result(decomp)
 ```
 
@@ -353,13 +343,13 @@ The equation is solved via Kronecker vectorization:
 \text{vec}(\Sigma) = (I_{n^2} - G_1 \otimes G_1)^{-1} \, \text{vec}(\text{impact} \cdot \text{impact}')
 ```
 
-```julia
+```@example dsge_linear
 Σ = solve_lyapunov(sol.G1, sol.impact)  # n x n covariance matrix
 ```
 
 The `analytical_moments` function extracts a moment vector in a format compatible with `autocovariance_moments(data, lags)`, enabling direct comparison between model-implied and data moments for GMM estimation:
 
-```julia
+```@example dsge_linear
 m = analytical_moments(sol; lags=2)
 ```
 
@@ -376,30 +366,7 @@ The moment vector contains:
 
 This example combines all the linear solution tools: specification, solving with three methods, simulation, IRFs, FEVD, and unconditional moments.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-# Specify the RBC model
-spec = @dsge begin
-    parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.9, σ = 0.01
-    endogenous: Y, C, K, A
-    exogenous: ε_A
-
-    Y[t] = A[t] * K[t-1]^α
-    C[t] + K[t] = Y[t] + (1 - δ) * K[t-1]
-    1 = β * (C[t] / C[t+1]) * (α * A[t+1] * K[t]^(α - 1) + 1 - δ)
-    A[t] = ρ * A[t-1] + σ * ε_A[t]
-
-    steady_state = begin
-        A_ss = 1.0
-        K_ss = (α * β / (1 - β * (1 - δ)))^(1 / (1 - α))
-        Y_ss = K_ss^α
-        C_ss = Y_ss - δ * K_ss
-        [Y_ss, C_ss, K_ss, A_ss]
-    end
-end
-
+```@example dsge_linear
 # Solve with all three linear methods
 sol_g = solve(spec; method=:gensys)
 sol_bk = solve(spec; method=:blanchard_kahn)
@@ -411,12 +378,15 @@ Y_sim = simulate(sol_g, 200)
 # IRFs and FEVD
 result = irf(sol_g, 40)
 decomp = fevd(sol_g, 40)
-plot_result(result)
-plot_result(decomp)
 
 # Unconditional moments
 Σ = solve_lyapunov(sol_g.G1, sol_g.impact)
 m = analytical_moments(sol_g; lags=2)
+```
+
+```julia
+plot_result(result)
+plot_result(decomp)
 ```
 
 All three solvers produce identical state-space representations for a well-specified, determinate model. The Gensys solver handles singularity in ``\Gamma_0`` most robustly; Blanchard-Kahn and Klein are faster for smaller models. The simulation, IRF, FEVD, and moment functions all operate on the common `DSGESolution` type returned by any solver.
