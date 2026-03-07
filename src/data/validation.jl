@@ -249,6 +249,98 @@ function _interpolate_column!(col::AbstractVector{T}) where {T}
 end
 
 # =============================================================================
+# dropna
+# =============================================================================
+
+"""
+    dropna(d::TimeSeriesData; vars=nothing) -> TimeSeriesData
+    dropna(d::PanelData; vars=nothing) -> PanelData
+    dropna(d::CrossSectionData; vars=nothing) -> CrossSectionData
+
+Drop rows containing NaN or Inf values and return a new data container.
+
+# Keyword Arguments
+- `vars::Union{Vector{String}, Nothing}` — check only these variables (default: all)
+
+# Examples
+```julia
+d_clean = dropna(d)                 # drop rows with any NaN/Inf
+d_clean = dropna(d; vars=["GDP"])   # drop only if GDP is NaN/Inf
+```
+"""
+function dropna(d::TimeSeriesData{T}; vars::Union{Vector{String},Nothing}=nothing) where {T}
+    mat = d.data
+    if vars === nothing
+        good = [all(isfinite, @view(mat[i, :])) for i in 1:d.T_obs]
+    else
+        col_idx = [findfirst(==(v), d.varnames) for v in vars]
+        any(isnothing, col_idx) && throw(ArgumentError(
+            "Variable(s) not found: $(vars[findall(isnothing, col_idx)])"))
+        cidx = Int[c for c in col_idx]
+        good = [all(isfinite, @view(mat[i, cidx])) for i in 1:d.T_obs]
+    end
+    idx = findall(good)
+    isempty(idx) && throw(ArgumentError("All rows contain NaN or Inf — no data remaining"))
+    new_dates = isempty(d.dates) ? nothing : d.dates[idx]
+    TimeSeriesData(mat[idx, :];
+                   varnames=copy(d.varnames),
+                   frequency=d.frequency,
+                   tcode=copy(d.tcode),
+                   time_index=d.time_index[idx],
+                   desc=desc(d),
+                   vardesc=copy(d.vardesc),
+                   source_refs=copy(d.source_refs),
+                   dates=new_dates)
+end
+
+function dropna(d::PanelData{T}; vars::Union{Vector{String},Nothing}=nothing) where {T}
+    mat = d.data
+    if vars === nothing
+        good = [all(isfinite, @view(mat[i, :])) for i in 1:d.T_obs]
+    else
+        col_idx = [findfirst(==(v), d.varnames) for v in vars]
+        any(isnothing, col_idx) && throw(ArgumentError(
+            "Variable(s) not found: $(vars[findall(isnothing, col_idx)])"))
+        cidx = Int[c for c in col_idx]
+        good = [all(isfinite, @view(mat[i, cidx])) for i in 1:d.T_obs]
+    end
+    idx = findall(good)
+    isempty(idx) && throw(ArgumentError("All rows contain NaN or Inf — no data remaining"))
+
+    new_gid = d.group_id[idx]
+    new_tid = d.time_id[idx]
+    new_cid = d.cohort_id === nothing ? nothing : d.cohort_id[idx]
+    obs_per_group = [count(==(g), new_gid) for g in 1:d.n_groups]
+    balanced = length(obs_per_group) > 0 && all(==(obs_per_group[1]), obs_per_group)
+
+    PanelData{T}(mat[idx, :], copy(d.varnames), d.frequency, copy(d.tcode),
+                  new_gid, new_tid, new_cid, copy(d.group_names),
+                  d.n_groups, d.n_vars, length(idx), balanced,
+                  copy(d.desc), copy(d.vardesc), copy(d.source_refs))
+end
+
+function dropna(d::CrossSectionData{T}; vars::Union{Vector{String},Nothing}=nothing) where {T}
+    mat = d.data
+    if vars === nothing
+        good = [all(isfinite, @view(mat[i, :])) for i in 1:d.N_obs]
+    else
+        col_idx = [findfirst(==(v), d.varnames) for v in vars]
+        any(isnothing, col_idx) && throw(ArgumentError(
+            "Variable(s) not found: $(vars[findall(isnothing, col_idx)])"))
+        cidx = Int[c for c in col_idx]
+        good = [all(isfinite, @view(mat[i, cidx])) for i in 1:d.N_obs]
+    end
+    idx = findall(good)
+    isempty(idx) && throw(ArgumentError("All rows contain NaN or Inf — no data remaining"))
+    CrossSectionData(mat[idx, :];
+                     varnames=copy(d.varnames),
+                     obs_id=d.obs_id[idx],
+                     desc=desc(d),
+                     vardesc=copy(d.vardesc),
+                     source_refs=copy(d.source_refs))
+end
+
+# =============================================================================
 # validate_for_model
 # =============================================================================
 

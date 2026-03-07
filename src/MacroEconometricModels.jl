@@ -856,7 +856,7 @@ export xtset, isbalanced, groups, ngroups, group_data, panel_summary
 export panel_lag, panel_lead, panel_diff, add_panel_lag, add_panel_lead, add_panel_diff
 
 # Validation
-export DataDiagnostic, diagnose, fix, validate_for_model
+export DataDiagnostic, diagnose, fix, dropna, validate_for_model
 
 # Transformations
 export apply_tcode, inverse_tcode, apply_filter

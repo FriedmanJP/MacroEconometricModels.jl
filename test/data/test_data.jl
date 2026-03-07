@@ -457,6 +457,60 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
             @test_throws ArgumentError fix(d; method=:invalid)
         end
 
+        @testset "dropna TimeSeriesData" begin
+            mat = [1.0 2.0; NaN 3.0; 4.0 5.0; 6.0 NaN; 7.0 8.0;
+                   9.0 10.0; 11.0 12.0; 13.0 14.0; 15.0 16.0; 17.0 18.0;
+                   19.0 20.0; 21.0 22.0]
+            d = TimeSeriesData(mat; time_index=collect(1:12),
+                               dates=["m$i" for i in 1:12])
+            d2 = dropna(d)
+            @test nobs(d2) == 10
+            @test !any(isnan, Matrix(d2))
+            @test d2.time_index == [1, 3, 5, 6, 7, 8, 9, 10, 11, 12]
+            @test d2.dates == ["m1", "m3", "m5", "m6", "m7", "m8", "m9", "m10", "m11", "m12"]
+        end
+
+        @testset "dropna TimeSeriesData with vars" begin
+            mat = [1.0 NaN; 2.0 3.0; NaN 4.0]
+            d = TimeSeriesData(mat; varnames=["a", "b"])
+            d2 = dropna(d; vars=["a"])  # only check column a
+            @test nobs(d2) == 2  # drops row 3 only (row 1 kept because NaN is in b, not a)
+            @test d2.data[1, 1] == 1.0  # row 1 kept
+            @test d2.data[2, 1] == 2.0  # row 2 kept
+        end
+
+        @testset "dropna PanelData" begin
+            using DataFrames
+            df = DataFrame(
+                g = repeat(1:2, inner=5),
+                t = repeat(1:5, 2),
+                x = [1.0, NaN, 3.0, 4.0, 5.0, 6.0, 7.0, NaN, 9.0, 10.0],
+                y = Float64.(1:10)
+            )
+            pd = xtset(df, :g, :t)
+            pd2 = dropna(pd)
+            @test nobs(pd2) == 8  # 2 NaN rows dropped
+            @test !any(isnan, Matrix(pd2))
+            @test pd2.n_groups == 2
+        end
+
+        @testset "dropna CrossSectionData" begin
+            mat = [1.0 2.0; NaN 3.0; 4.0 5.0; 6.0 NaN; 7.0 8.0]
+            cs = CrossSectionData(mat; obs_id=collect(10:10:50))
+            cs2 = dropna(cs)
+            @test nobs(cs2) == 3
+            @test !any(isnan, Matrix(cs2))
+            @test cs2.obs_id == [10, 30, 50]
+        end
+
+        @testset "dropna Inf treated as missing" begin
+            mat = [1.0; Inf; 3.0; 4.0; 5.0; 6.0; 7.0; 8.0; 9.0; 10.0; 11.0; 12.0]
+            d = TimeSeriesData(mat)
+            d2 = dropna(d)
+            @test nobs(d2) == 11
+            @test !any(isinf, Matrix(d2))
+        end
+
         @testset "validate_for_model" begin
             d_multi = TimeSeriesData(randn(100, 3))
             d_uni = TimeSeriesData(randn(100, 1))
