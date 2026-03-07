@@ -311,7 +311,10 @@ function dsge_smoother(ss::DSGEStateSpace{T}, data::Matrix{T}) where {T<:Abstrac
     x_diff = zeros(T, n_states)              # x_{t+1|T} - x_{t+1|t}
     P_diff = zeros(T, n_states, n_states)    # P_{t+1|T} - P_{t+1|t}
     JP = zeros(T, n_states, n_states)        # J_t * P_diff
+    JP_Jt = zeros(T, n_states, n_states)     # JP * J_t'
     P_filt_G1t = zeros(T, n_states, n_states)  # P_{t|t} * G1'
+    P_pred_inv_buf = zeros(T, n_states, n_states)  # inv(P_{t+1|t}) buffer
+    Jx = zeros(T, n_states)                  # J_t * x_diff
 
     @inbounds for t in (T_obs - 1):-1:1
         # Load filtered covariance at t
@@ -334,17 +337,17 @@ function dsge_smoother(ss::DSGEStateSpace{T}, data::Matrix{T}) where {T<:Abstrac
             end
             P_pred_chol = cholesky(Hermitian(P_pred_tp1))
         end
-        P_pred_inv = inv(P_pred_chol)
-        mul!(J_t, P_filt_G1t, Matrix{T}(P_pred_inv))
+        copyto!(P_pred_inv_buf, inv(P_pred_chol))
+        mul!(J_t, P_filt_G1t, P_pred_inv_buf)
 
         # Smoothed state: x_{t|T} = x_{t|t} + J_t * (x_{t+1|T} - x_{t+1|t})
         for i in 1:n_states
             x_diff[i] = x_smooth[i, t + 1] - x_pred_store[i, t + 1]
         end
         # x_smooth[:, t] = x_filt[:, t] + J_t * x_diff
-        mul!(Kv, J_t, x_diff)  # reuse Kv workspace
+        mul!(Jx, J_t, x_diff)
         for i in 1:n_states
-            x_smooth[i, t] = x_filt_store[i, t] + Kv[i]
+            x_smooth[i, t] = x_filt_store[i, t] + Jx[i]
         end
 
         # Smoothed covariance: P_{t|T} = P_{t|t} + J_t * (P_{t+1|T} - P_{t+1|t}) * J_t'
@@ -355,9 +358,9 @@ function dsge_smoother(ss::DSGEStateSpace{T}, data::Matrix{T}) where {T<:Abstrac
             P_diff[i, j] = P_smooth_tp1[i, j] - P_pred_store[i, j, t + 1]
         end
         mul!(JP, J_t, P_diff)
-        mul!(P_smooth_tp1, JP, J_t')  # reuse P_smooth_tp1 as temporary
+        mul!(JP_Jt, JP, J_t')
         for j in 1:n_states, i in 1:n_states
-            P_smooth[i, j, t] = P_filt_t[i, j] + P_smooth_tp1[i, j]
+            P_smooth[i, j, t] = P_filt_t[i, j] + JP_Jt[i, j]
         end
         # Symmetrize P_{t|T}
         for j in 1:n_states, i in 1:j-1
