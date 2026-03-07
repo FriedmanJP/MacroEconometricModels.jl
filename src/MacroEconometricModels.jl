@@ -253,6 +253,7 @@ include("panel_reg/types.jl")
 include("panel_reg/covariance.jl")
 include("panel_reg/estimation.jl")
 include("panel_reg/tests.jl")
+include("panel_reg/iv.jl")
 include("panel_reg/predict.jl")
 include("panel_reg/display.jl")
 
@@ -666,7 +667,7 @@ export pvar_hansen_j, pvar_mmsc, pvar_lag_selection
 export PanelRegModel, PanelIVModel, PanelLogitModel, PanelProbitModel, PanelTestResult
 
 # Estimation
-export estimate_xtreg
+export estimate_xtreg, estimate_xtiv
 
 # Specification tests
 export hausman_test, breusch_pagan_test, f_test_fe
