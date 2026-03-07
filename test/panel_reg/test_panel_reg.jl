@@ -206,3 +206,311 @@ end
         @test_throws ArgumentError estimate_xtreg(pd, :y, [:nonexistent])
     end
 end
+
+@testset "estimate_xtreg — Random Effects" begin
+    @testset "Coefficient recovery" begin
+        # N=50, T=20, uncorrelated alpha_i with X
+        rng = Random.MersenneTwister(5001)
+        N_g = 50; T_p = 20; n = N_g * T_p
+        beta_true = [1.5, -0.8]
+
+        ids = repeat(1:N_g, inner=T_p)
+        ts = repeat(1:T_p, N_g)
+        x1 = randn(rng, n)
+        x2 = randn(rng, n)
+        # Random effects uncorrelated with regressors
+        alpha = repeat(randn(rng, N_g) .* 2.0, inner=T_p)
+        y = alpha .+ beta_true[1] .* x1 .+ beta_true[2] .* x2 .+ 0.5 .* randn(rng, n)
+
+        df = DataFrame(id=ids, t=ts, x1=x1, x2=x2, y=y)
+        pd = xtset(df, :id, :t)
+        m = estimate_xtreg(pd, :y, [:x1, :x2]; model=:re)
+
+        @test m.method == :re
+        @test abs(coef(m)[1] - 1.5) < 0.15
+        @test abs(coef(m)[2] - (-0.8)) < 0.15
+        @test length(coef(m)) == 2
+        @test nobs(m) == n
+        @test m.n_groups == N_g
+    end
+
+    @testset "Variance components" begin
+        rng = Random.MersenneTwister(5002)
+        N_g = 50; T_p = 20; n = N_g * T_p
+
+        ids = repeat(1:N_g, inner=T_p)
+        ts = repeat(1:T_p, N_g)
+        x1 = randn(rng, n)
+        alpha = repeat(randn(rng, N_g) .* 3.0, inner=T_p)
+        y = alpha .+ 1.0 .* x1 .+ 0.5 .* randn(rng, n)
+
+        df = DataFrame(id=ids, t=ts, x1=x1, y=y)
+        pd = xtset(df, :id, :t)
+        m = estimate_xtreg(pd, :y, [:x1]; model=:re)
+
+        @test m.sigma_u > 0
+        @test m.sigma_e > 0
+        @test m.theta !== nothing
+        @test m.theta > 0
+        @test 0 <= m.rho <= 1
+        @test m.rho > 0.5  # large entity effects
+    end
+
+    @testset "R-squared variants" begin
+        rng = Random.MersenneTwister(5003)
+        N_g = 40; T_p = 15; n = N_g * T_p
+
+        ids = repeat(1:N_g, inner=T_p)
+        ts = repeat(1:T_p, N_g)
+        x1 = randn(rng, n)
+        alpha = repeat(randn(rng, N_g) .* 1.5, inner=T_p)
+        y = alpha .+ 2.0 .* x1 .+ 0.3 .* randn(rng, n)
+
+        df = DataFrame(id=ids, t=ts, x1=x1, y=y)
+        pd = xtset(df, :id, :t)
+        m = estimate_xtreg(pd, :y, [:x1]; model=:re)
+
+        @test 0 <= m.r2_within <= 1
+        @test 0 <= m.r2_between <= 1
+        @test 0 <= m.r2_overall <= 1
+    end
+
+    @testset "Display output" begin
+        rng = Random.MersenneTwister(5004)
+        N_g = 10; T_p = 10; n = N_g * T_p
+        ids = repeat(1:N_g, inner=T_p)
+        ts = repeat(1:T_p, N_g)
+        x1 = randn(rng, n)
+        alpha = repeat(randn(rng, N_g), inner=T_p)
+        y = alpha .+ 1.0 .* x1 .+ randn(rng, n)
+
+        df = DataFrame(id=ids, t=ts, x1=x1, y=y)
+        pd = xtset(df, :id, :t)
+        m = estimate_xtreg(pd, :y, [:x1]; model=:re)
+
+        io = IOBuffer()
+        show(io, m)
+        output = String(take!(io))
+        @test occursin("Random Effects", output)
+        @test occursin("theta", output)
+    end
+end
+
+@testset "estimate_xtreg — First Differences" begin
+    @testset "Coefficient recovery" begin
+        rng = Random.MersenneTwister(6001)
+        N_g = 50; T_p = 20; n = N_g * T_p
+        beta_true = [1.5, -0.8]
+
+        ids = repeat(1:N_g, inner=T_p)
+        ts = repeat(1:T_p, N_g)
+        # Persistent X (random walk component) to ensure FD works well
+        x1 = randn(rng, n)
+        x2 = randn(rng, n)
+        alpha = repeat(randn(rng, N_g) .* 2.0, inner=T_p)
+        y = alpha .+ beta_true[1] .* x1 .+ beta_true[2] .* x2 .+ 0.5 .* randn(rng, n)
+
+        df = DataFrame(id=ids, t=ts, x1=x1, x2=x2, y=y)
+        pd = xtset(df, :id, :t)
+        m = estimate_xtreg(pd, :y, [:x1, :x2]; model=:fd)
+
+        @test m.method == :fd
+        @test abs(coef(m)[1] - 1.5) < 0.2
+        @test abs(coef(m)[2] - (-0.8)) < 0.2
+        @test length(coef(m)) == 2
+        # n_obs should be NT - N (one obs dropped per group)
+        @test nobs(m) == N_g * (T_p - 1)
+    end
+
+    @testset "Handles time gaps" begin
+        # Panel with a gap in time
+        rng = Random.MersenneTwister(6002)
+        N_g = 10; n_obs = N_g * 5
+        ids = repeat(1:N_g, inner=5)
+        # Time periods with a gap: 1,2,3,5,6 (skip 4)
+        ts = repeat([1,2,3,5,6], N_g)
+        x1 = randn(rng, n_obs)
+        alpha = repeat(randn(rng, N_g), inner=5)
+        y = alpha .+ 1.0 .* x1 .+ 0.3 .* randn(rng, n_obs)
+
+        df = DataFrame(id=ids, t=ts, x1=x1, y=y)
+        pd = xtset(df, :id, :t)
+        m = estimate_xtreg(pd, :y, [:x1]; model=:fd)
+
+        # Should have N_g * 3 obs (only consecutive: 1->2, 2->3, 5->6)
+        @test nobs(m) == N_g * 3
+        @test m.method == :fd
+    end
+
+    @testset "Display output" begin
+        rng = Random.MersenneTwister(6003)
+        N_g = 10; T_p = 10; n = N_g * T_p
+        ids = repeat(1:N_g, inner=T_p)
+        ts = repeat(1:T_p, N_g)
+        x1 = randn(rng, n)
+        alpha = repeat(randn(rng, N_g), inner=T_p)
+        y = alpha .+ 1.0 .* x1 .+ randn(rng, n)
+
+        df = DataFrame(id=ids, t=ts, x1=x1, y=y)
+        pd = xtset(df, :id, :t)
+        m = estimate_xtreg(pd, :y, [:x1]; model=:fd)
+
+        io = IOBuffer()
+        show(io, m)
+        output = String(take!(io))
+        @test occursin("First-Difference", output)
+    end
+end
+
+@testset "estimate_xtreg — Between" begin
+    @testset "Coefficient recovery" begin
+        # Between variation: time-invariant component drives identification
+        rng = Random.MersenneTwister(7001)
+        N_g = 100; T_p = 10; n = N_g * T_p
+        beta_true = [2.0, -1.0]
+
+        ids = repeat(1:N_g, inner=T_p)
+        ts = repeat(1:T_p, N_g)
+        # X with large between variation (group-level component)
+        x1_between = repeat(randn(rng, N_g) .* 3.0, inner=T_p)
+        x1_within = randn(rng, n) .* 0.5
+        x1 = x1_between .+ x1_within
+        x2_between = repeat(randn(rng, N_g) .* 3.0, inner=T_p)
+        x2_within = randn(rng, n) .* 0.5
+        x2 = x2_between .+ x2_within
+        y = beta_true[1] .* x1 .+ beta_true[2] .* x2 .+ 0.5 .* randn(rng, n)
+
+        df = DataFrame(id=ids, t=ts, x1=x1, x2=x2, y=y)
+        pd = xtset(df, :id, :t)
+        m = estimate_xtreg(pd, :y, [:x1, :x2]; model=:between)
+
+        @test m.method == :between
+        @test abs(coef(m)[1] - 2.0) < 0.3
+        @test abs(coef(m)[2] - (-1.0)) < 0.3
+        @test length(coef(m)) == 2
+        # n_obs = N (number of groups)
+        @test nobs(m) == N_g
+        @test m.n_groups == N_g
+    end
+
+    @testset "R-squared" begin
+        rng = Random.MersenneTwister(7002)
+        N_g = 80; T_p = 10; n = N_g * T_p
+
+        ids = repeat(1:N_g, inner=T_p)
+        ts = repeat(1:T_p, N_g)
+        x1 = repeat(randn(rng, N_g) .* 2.0, inner=T_p) .+ randn(rng, n) .* 0.3
+        y = 1.5 .* x1 .+ 0.3 .* randn(rng, n)
+
+        df = DataFrame(id=ids, t=ts, x1=x1, y=y)
+        pd = xtset(df, :id, :t)
+        m = estimate_xtreg(pd, :y, [:x1]; model=:between)
+
+        @test m.r2_between > 0.5
+    end
+
+    @testset "Display output" begin
+        rng = Random.MersenneTwister(7003)
+        N_g = 20; T_p = 5; n = N_g * T_p
+        ids = repeat(1:N_g, inner=T_p)
+        ts = repeat(1:T_p, N_g)
+        x1 = randn(rng, n)
+        y = 1.0 .* x1 .+ randn(rng, n)
+
+        df = DataFrame(id=ids, t=ts, x1=x1, y=y)
+        pd = xtset(df, :id, :t)
+        m = estimate_xtreg(pd, :y, [:x1]; model=:between)
+
+        io = IOBuffer()
+        show(io, m)
+        output = String(take!(io))
+        @test occursin("Between", output)
+    end
+end
+
+@testset "estimate_xtreg — CRE (Mundlak)" begin
+    @testset "CRE slopes approximate FE slopes" begin
+        rng = Random.MersenneTwister(8001)
+        N_g = 50; T_p = 20; n = N_g * T_p
+        beta_true = [1.5, -0.8]
+
+        ids = repeat(1:N_g, inner=T_p)
+        ts = repeat(1:T_p, N_g)
+        x1 = randn(rng, n)
+        x2 = randn(rng, n)
+        # Correlated effects (alpha depends on mean X)
+        x1_means = repeat([mean(x1[((i-1)*T_p+1):(i*T_p)]) for i in 1:N_g], inner=T_p)
+        alpha = repeat(randn(rng, N_g) .* 1.0, inner=T_p) .+ 0.5 .* x1_means
+        y = alpha .+ beta_true[1] .* x1 .+ beta_true[2] .* x2 .+ 0.5 .* randn(rng, n)
+
+        df = DataFrame(id=ids, t=ts, x1=x1, x2=x2, y=y)
+        pd = xtset(df, :id, :t)
+
+        m_fe = estimate_xtreg(pd, :y, [:x1, :x2]; model=:fe)
+        m_cre = estimate_xtreg(pd, :y, [:x1, :x2]; model=:cre)
+
+        @test m_cre.method == :cre
+        # CRE original slopes should approximate FE slopes
+        @test abs(coef(m_cre)[1] - coef(m_fe)[1]) < 0.3
+        @test abs(coef(m_cre)[2] - coef(m_fe)[2]) < 0.3
+    end
+
+    @testset "Variable names include mean variables" begin
+        rng = Random.MersenneTwister(8002)
+        N_g = 20; T_p = 10; n = N_g * T_p
+        ids = repeat(1:N_g, inner=T_p)
+        ts = repeat(1:T_p, N_g)
+        x1 = randn(rng, n)
+        x2 = randn(rng, n)
+        alpha = repeat(randn(rng, N_g), inner=T_p)
+        y = alpha .+ 1.0 .* x1 .- 0.5 .* x2 .+ randn(rng, n)
+
+        df = DataFrame(id=ids, t=ts, x1=x1, x2=x2, y=y)
+        pd = xtset(df, :id, :t)
+        m = estimate_xtreg(pd, :y, [:x1, :x2]; model=:cre)
+
+        @test length(m.varnames) == 4
+        @test m.varnames == ["x1", "x2", "x1_mean", "x2_mean"]
+        @test length(coef(m)) == 4
+    end
+
+    @testset "Theta and variance components" begin
+        rng = Random.MersenneTwister(8003)
+        N_g = 40; T_p = 15; n = N_g * T_p
+        ids = repeat(1:N_g, inner=T_p)
+        ts = repeat(1:T_p, N_g)
+        x1 = randn(rng, n)
+        alpha = repeat(randn(rng, N_g) .* 2.0, inner=T_p)
+        y = alpha .+ 1.5 .* x1 .+ 0.5 .* randn(rng, n)
+
+        df = DataFrame(id=ids, t=ts, x1=x1, y=y)
+        pd = xtset(df, :id, :t)
+        m = estimate_xtreg(pd, :y, [:x1]; model=:cre)
+
+        @test m.theta !== nothing
+        @test m.theta > 0
+        @test m.sigma_u > 0
+        @test m.sigma_e > 0
+        @test 0 <= m.rho <= 1
+    end
+
+    @testset "Display output" begin
+        rng = Random.MersenneTwister(8004)
+        N_g = 10; T_p = 10; n = N_g * T_p
+        ids = repeat(1:N_g, inner=T_p)
+        ts = repeat(1:T_p, N_g)
+        x1 = randn(rng, n)
+        alpha = repeat(randn(rng, N_g), inner=T_p)
+        y = alpha .+ 1.0 .* x1 .+ randn(rng, n)
+
+        df = DataFrame(id=ids, t=ts, x1=x1, y=y)
+        pd = xtset(df, :id, :t)
+        m = estimate_xtreg(pd, :y, [:x1]; model=:cre)
+
+        io = IOBuffer()
+        show(io, m)
+        output = String(take!(io))
+        @test occursin("Correlated RE", output)
+        @test occursin("x1_mean", output)
+    end
+end
