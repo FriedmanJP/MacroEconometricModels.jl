@@ -430,4 +430,68 @@ end
     @test size(hd.actual) == (T_obs, 3)
 end
 
+# =============================================================================
+# Missing data & edge case tests
+# =============================================================================
+
+@testset "RTS smoother — missing data handling" begin
+    spec = @dsge begin
+        parameters: rho = 0.8
+        endogenous: y
+        exogenous: eps
+        y[t] = rho * y[t-1] + eps[t]
+    end
+    sol = solve(spec)
+
+    T_obs = 50
+    rng = Random.MersenneTwister(44)
+    sim_data = simulate(sol, T_obs; rng=rng)
+    observables = [:y]
+    Z, d, H_mat = MacroEconometricModels._build_observation_equation(spec, observables, nothing)
+    ss = MacroEconometricModels._build_state_space(sol, Z, d, H_mat)
+    data_matrix = Matrix{Float64}(sim_data' .- sol.spec.steady_state)
+
+    data_nan = copy(data_matrix)
+    data_nan[1, 10] = NaN
+    data_nan[1, 20] = NaN
+    data_nan[1, 30] = NaN
+
+    result = dsge_smoother(ss, data_nan)
+    @test isfinite(result.log_likelihood)
+    @test all(isfinite, result.smoothed_states)
+    @test all(isfinite, result.smoothed_shocks)
+end
+
+@testset "HD — short sample (T=5)" begin
+    spec = @dsge begin
+        parameters: rho = 0.5
+        endogenous: y
+        exogenous: eps
+        y[t] = rho * y[t-1] + eps[t]
+    end
+    sol = solve(spec)
+
+    rng = Random.MersenneTwister(11)
+    sim_data = simulate(sol, 5; rng=rng)
+    hd = historical_decomposition(sol, sim_data, [:y])
+    @test size(hd.contributions, 1) == 5
+    @test verify_decomposition(hd; tol=0.05)
+end
+
+@testset "HD — single shock, single observable" begin
+    spec = @dsge begin
+        parameters: rho = 0.9
+        endogenous: y
+        exogenous: eps
+        y[t] = rho * y[t-1] + eps[t]
+    end
+    sol = solve(spec)
+
+    rng = Random.MersenneTwister(22)
+    sim_data = simulate(sol, 30; rng=rng)
+    hd = historical_decomposition(sol, sim_data, [:y])
+    @test size(hd.contributions) == (30, 1, 1)
+    @test length(hd.shock_names) == 1
+end
+
 end  # outer testset
