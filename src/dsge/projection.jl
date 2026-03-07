@@ -37,7 +37,7 @@ function _chebyshev_eval(x::Real, degree::Int)
     if degree >= 1
         vals[2] = Float64(x)  # T_1 = x
     end
-    for k in 2:degree
+    @inbounds for k in 2:degree
         vals[k + 1] = 2.0 * Float64(x) * vals[k] - vals[k - 1]
     end
     return vals
@@ -66,7 +66,7 @@ function _chebyshev_basis_multi(X::AbstractMatrix, multi_indices::AbstractMatrix
 
     # Build basis matrix via tensor products
     B = ones(n_points, n_basis)
-    for k in 1:n_basis
+    @inbounds for k in 1:n_basis
         for d in 1:nx
             deg = multi_indices[k, d]
             B[:, k] .*= T_vals[d][:, deg + 1]

@@ -51,7 +51,7 @@ function _pfi_euler_step(y_guess::Vector{T}, y_lag::Vector{T},
 
         # Jacobian w.r.t. y_t (finite differences)
         J = zeros(T, n_eq, n_eq)
-        for j in 1:n_eq
+        @inbounds for j in 1:n_eq
             y_plus = copy(y)
             y_plus[j] += h
             for i in 1:n_eq
@@ -108,7 +108,7 @@ function _pfi_compute_expectations(coeffs::Matrix{T}, n_vars::Int, n_basis::Int,
 
     E_y_lead = zeros(T, n_nodes, n_eq)
 
-    for j in 1:n_nodes
+    @inbounds for j in 1:n_nodes
         for q in 1:n_quad
             # Next-period states from current policy
             x_next_level = zeros(T, nx)
