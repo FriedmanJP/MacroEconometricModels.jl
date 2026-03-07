@@ -11,31 +11,27 @@
 
 All results integrate with `report()` for publication-quality output and `plot_result()` for interactive D3.js visualization.
 
+```@setup var
+using MacroEconometricModels, Random
+Random.seed!(42)
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+Y = Y[end-59:end, :]
+```
+
 ## Quick Start
 
 **Recipe 1: Estimate VAR(p)**
 
-```julia
-using MacroEconometricModels
-
-# Load FRED-MD: industrial production, CPI, federal funds rate
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example var
 model = estimate_var(Y, 4)
 report(model)
 ```
 
 **Recipe 2: Lag selection**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example var
 # Select lag order minimizing BIC (default)
 p_bic = select_lag_order(Y, 13)
 
@@ -48,48 +44,34 @@ report(model)
 
 **Recipe 3: Cholesky IRF**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example var
 model = estimate_var(Y, 4)
 
 # Cholesky IRF with bootstrap confidence intervals
-result = irf(model, 20; method=:cholesky, ci_type=:bootstrap, reps=500)
+result = irf(model, 20; method=:cholesky, ci_type=:bootstrap, reps=50)
+```
+
+```julia
 plot_result(result)
 ```
 
 **Recipe 4: Sign restrictions**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example var
 model = estimate_var(Y, 4)
 
 # Contractionary monetary shock: FFR rises, INDPRO and CPI fall on impact
 check = irf -> irf[1, 3, 3] > 0 && irf[1, 1, 3] < 0 && irf[1, 2, 3] < 0
 result = irf(model, 20; method=:sign, check_func=check)
+```
+
+```julia
 plot_result(result)
 ```
 
 **Recipe 5: Arias identification**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example var
 model = estimate_var(Y, 4)
 
 # Zero + sign restrictions on the monetary policy shock (shock 3)
@@ -104,14 +86,7 @@ result
 
 **Recipe 6: Uhlig identification**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example var
 model = estimate_var(Y, 4)
 
 # Mountford-Uhlig penalty function: one optimal rotation
@@ -177,13 +152,7 @@ where:
 - ``\hat{U} = Y - X\hat{B}`` is the ``T_{\text{eff}} \times n`` residual matrix
 - ``k = 1 + np`` is the number of regressors per equation
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example var
 model = estimate_var(Y, 4; varnames=["INDPRO", "CPI", "FFR"])
 report(model)
 ```
@@ -236,13 +205,7 @@ where:
 
 The stability condition requires ``|\lambda_i| < 1`` for all eigenvalues ``\lambda_i`` of ``F``. The function `is_stationary` checks this condition and returns the companion matrix eigenvalues:
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example var
 model = estimate_var(Y, 4)
 stab = is_stationary(model)
 stab
@@ -274,13 +237,7 @@ where:
 
 AIC tends to overfit in finite samples; BIC is consistent (selects the true order with probability approaching 1 as ``T \to \infty``); HQIC offers an intermediate trade-off.
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example var
 # BIC-optimal lag order (default)
 p_bic = select_lag_order(Y, 13)
 
@@ -326,17 +283,14 @@ where:
 
 The ordering reflects economic assumptions about the speed of adjustment. Variables ordered first respond only to their own shocks on impact. In the standard monetary VAR ordering [INDPRO, CPI, FFR], the federal funds rate shock (shock 3) has no contemporaneous effect on output or prices, consistent with the information and implementation lags in monetary policy transmission (Christiano, Eichenbaum & Evans 1999).
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example var
 model = estimate_var(Y, 4)
 
 # Cholesky IRF with bootstrap 90% CI
-result = irf(model, 20; method=:cholesky, ci_type=:bootstrap, reps=500, conf_level=0.90)
+result = irf(model, 20; method=:cholesky, ci_type=:bootstrap, reps=50, conf_level=0.90)
+```
+
+```julia
 plot_result(result)
 ```
 
@@ -353,14 +307,7 @@ Sign restrictions identify structural shocks by constraining the signs of impuls
 !!! note "Technical Note"
     With `store_all=true`, `identify_sign` returns a `SignIdentifiedSet` containing all accepted rotation matrices and their IRFs, enabling characterization of the full identified set (Baumeister & Hamilton 2015). Use `irf_bounds` and `irf_median` to summarize the identified set.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example var
 model = estimate_var(Y, 4)
 
 # Contractionary monetary shock: FFR rises, INDPRO and CPI fall
@@ -384,21 +331,14 @@ Narrative restrictions augment sign restrictions with historical information abo
 1. **Shock sign narrative**: at date ``t^*``, structural shock ``j`` was positive (or negative)
 2. **Shock contribution narrative**: at date ``t^*``, shock ``j`` was the dominant driver of variable ``i``
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example var
 model = estimate_var(Y, 4)
 
 # Sign restrictions on impact
 sign_check = irf -> irf[1, 3, 3] > 0 && irf[1, 1, 3] < 0
 
-# Narrative: monetary shock was positive at observation 100
-narrative_check = shocks -> shocks[100, 3] > 0
+# Narrative: monetary shock was positive at observation 20
+narrative_check = shocks -> shocks[20, 3] > 0
 
 Q, irfs, shocks = identify_narrative(model, 20, sign_check, narrative_check; max_draws=5000)
 ```
@@ -419,15 +359,12 @@ where:
 
 Blanchard & Quah (1989) impose that ``C(1)`` is lower triangular, so that shocks ordered later have zero long-run effect on variables ordered earlier. The typical application restricts demand shocks to have no long-run effect on output, identifying supply-driven long-run fluctuations.
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example var
 model = estimate_var(Y, 4)
 result = irf(model, 40; method=:long_run)
+```
+
+```julia
 plot_result(result)
 ```
 
@@ -442,14 +379,7 @@ The algorithm constructs ``Q`` column-by-column via QR decomposition in the null
 | Zero | `zero_restriction(var, shock; horizon=0)` | Variable `var` does not respond to `shock` at `horizon` |
 | Sign | `sign_restriction(var, shock, :positive; horizon=0)` | Response has required sign at `horizon` |
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example var
 model = estimate_var(Y, 4)
 
 # Monetary policy shock (shock 3):
@@ -505,14 +435,7 @@ where:
 !!! note "When to use Uhlig vs Arias"
     Use `identify_uhlig` when a single point-identified rotation is needed --- for example, as a starting point for policy analysis. Use `identify_arias` when the full identified set is required for inference with credible intervals.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example var
 model = estimate_var(Y, 4)
 
 # Fiscal vs monetary separation
@@ -632,13 +555,7 @@ where:
 
 For panel data with both cross-sectional and temporal dependence, the Driscoll & Kraay (1998) estimator applies HAC estimation to the cross-sectional averages of moment conditions. This produces standard errors robust to heteroscedasticity, serial correlation, and cross-sectional dependence.
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example var
 # Construct VAR design matrices
 Y_eff, X = construct_var_matrices(Y, 2)
 residuals = Y_eff - X * ((X'X) \ (X'Y_eff))
@@ -671,15 +588,9 @@ where:
 
 Bootstrap confidence intervals resample the residuals and simulate forecast paths to construct empirical prediction intervals.
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example var
 model = estimate_var(Y, 4; varnames=["INDPRO", "CPI", "FFR"])
-fc = forecast(model, 12; ci_method=:bootstrap, reps=500, conf_level=0.95)
+fc = forecast(model, 12; ci_method=:bootstrap, reps=50, conf_level=0.95)
 fc
 ```
 
@@ -703,14 +614,7 @@ For detailed coverage of impulse response functions, forecast error variance dec
 
 This example demonstrates an end-to-end VAR workflow from data loading through structural analysis using FRED-MD monetary policy variables.
 
-```julia
-using MacroEconometricModels
-
-# Load FRED-MD: standard monetary VAR ordering (slow to fast)
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example var
 # Step 1: Select lag order
 p_opt = select_lag_order(Y, 13)
 
@@ -724,9 +628,14 @@ stab
 
 # Step 4: Cholesky IRF with bootstrap CI
 # Ordering: [INDPRO, CPI, FFR] — monetary policy shock is shock 3
-result = irf(model, 20; method=:cholesky, ci_type=:bootstrap, reps=500)
-plot_result(result)
+result = irf(model, 20; method=:cholesky, ci_type=:bootstrap, reps=50)
+```
 
+```julia
+plot_result(result)
+```
+
+```@example var
 # Step 5: FEVD
 decomp = fevd(model, 20)
 decomp
