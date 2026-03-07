@@ -748,6 +748,46 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Instrumental Variables Regression with Weak Instruments",
         journal="Econometrica", volume="65", issue="3", pages="557--586",
         doi="10.2307/2171753", isbn="", publisher="", entry_type=:article),
+    # --- Ordered & Multinomial Models ---
+    :mccullagh1980 => (key=:mccullagh1980, authors="McCullagh, Peter", year=1980,
+        title="Regression Models for Ordinal Data",
+        journal="Journal of the Royal Statistical Society: Series B", volume="42", issue="2", pages="109--142",
+        doi="10.1111/j.2517-6161.1980.tb01109.x", isbn="", publisher="", entry_type=:article),
+    :brant1990 => (key=:brant1990, authors="Brant, Rollin", year=1990,
+        title="Assessing Proportionality in the Proportional Odds Model",
+        journal="Biometrics", volume="46", issue="4", pages="1171--1178",
+        doi="10.2307/2532457", isbn="", publisher="", entry_type=:article),
+    :hausman_mcfadden1984 => (key=:hausman_mcfadden1984, authors="Hausman, Jerry and McFadden, Daniel", year=1984,
+        title="Specification Tests for the Multinomial Logit Model",
+        journal="Econometrica", volume="52", issue="5", pages="1219--1240",
+        doi="10.2307/1910997", isbn="", publisher="", entry_type=:article),
+    # --- Panel Regression ---
+    :baltagi2021 => (key=:baltagi2021, authors="Baltagi, Badi H.", year=2021,
+        title="Econometric Analysis of Panel Data", journal="",
+        volume="", issue="", pages="", doi="",
+        isbn="978-3-030-53952-8", publisher="Springer", entry_type=:book),
+    :hausman_taylor1981 => (key=:hausman_taylor1981,
+        authors="Hausman, Jerry A. and Taylor, William E.", year=1981,
+        title="Panel Data and Unobservable Individual Effects",
+        journal="Econometrica", volume="49", issue="6", pages="1377--1398",
+        doi="10.2307/1911406", isbn="", publisher="", entry_type=:article),
+    :chamberlain1980 => (key=:chamberlain1980, authors="Chamberlain, Gary", year=1980,
+        title="Analysis of Covariance with Qualitative Data",
+        journal="Review of Economic Studies", volume="47", issue="1", pages="225--238",
+        doi="10.2307/2297110", isbn="", publisher="", entry_type=:article),
+    :mundlak1978 => (key=:mundlak1978, authors="Mundlak, Yair", year=1978,
+        title="On the Pooling of Time Series and Cross Section Data",
+        journal="Econometrica", volume="46", issue="1", pages="69--85",
+        doi="10.2307/1913646", isbn="", publisher="", entry_type=:article),
+    :breusch_pagan1980 => (key=:breusch_pagan1980, authors="Breusch, Trevor S. and Pagan, Adrian R.", year=1980,
+        title="The Lagrange Multiplier Test and Its Applications to Model Specification in Econometrics",
+        journal="Review of Economic Studies", volume="47", issue="1", pages="239--253",
+        doi="10.2307/2297111", isbn="", publisher="", entry_type=:article),
+    :driscoll_kraay1998 => (key=:driscoll_kraay1998,
+        authors="Driscoll, John C. and Kraay, Aart C.", year=1998,
+        title="Consistent Covariance Matrix Estimation with Spatially Dependent Panel Data",
+        journal="Review of Economics and Statistics", volume="80", issue="4", pages="549--560",
+        doi="10.1162/003465398557825", isbn="", publisher="", entry_type=:article),
 )
 
 # --- Type/method → reference keys mapping ---
@@ -996,6 +1036,27 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :estimate_iv => [:wooldridge2010, :staiger_stock1997],
     :estimate_logit => [:wooldridge2010, :cameron_trivedi2005, :mcfadden1974],
     :estimate_probit => [:wooldridge2010, :cameron_trivedi2005],
+    # Ordered & Multinomial models
+    :OrderedLogitModel => [:mccullagh1980, :brant1990, :wooldridge2010],
+    :OrderedProbitModel => [:mccullagh1980, :wooldridge2010],
+    :MultinomialLogitModel => [:mcfadden1974, :hausman_mcfadden1984, :wooldridge2010],
+    :estimate_ologit => [:mccullagh1980, :brant1990, :wooldridge2010],
+    :estimate_oprobit => [:mccullagh1980, :wooldridge2010],
+    :estimate_mlogit => [:mcfadden1974, :hausman_mcfadden1984, :wooldridge2010],
+    # Panel regression
+    :PanelRegModel => [:baltagi2021, :wooldridge2010],
+    :PanelIVModel => [:baltagi2021, :wooldridge2010, :hausman_taylor1981],
+    :PanelLogitModel => [:chamberlain1980, :wooldridge2010],
+    :PanelProbitModel => [:wooldridge2010],
+    :PanelTestResult => [:baltagi2021],
+    :panel_fe => [:baltagi2021, :wooldridge2010],
+    :panel_re => [:baltagi2021, :wooldridge2010, :mundlak1978],
+    :panel_fd => [:baltagi2021, :wooldridge2010],
+    :panel_between => [:baltagi2021, :wooldridge2010],
+    :panel_cre => [:baltagi2021, :mundlak1978],
+    :panel_iv => [:baltagi2021, :wooldridge2010, :hausman_taylor1981],
+    :panel_logit => [:chamberlain1980, :wooldridge2010],
+    :panel_probit => [:wooldridge2010],
 )
 
 # ICA method → additional ref keys (appended to ICASVARResult base refs)
@@ -1354,6 +1415,32 @@ refs(io::IO, m::RegModel; kw...) = refs(io, m.method == :iv ? [:wooldridge2010, 
 refs(io::IO, ::LogitModel; kw...) = refs(io, _TYPE_REFS[:LogitModel]; kw...)
 refs(io::IO, ::ProbitModel; kw...) = refs(io, _TYPE_REFS[:ProbitModel]; kw...)
 refs(io::IO, ::MarginalEffects; kw...) = refs(io, _TYPE_REFS[:MarginalEffects]; kw...)
+
+# Ordered & Multinomial models
+refs(io::IO, ::OrderedLogitModel; kw...) = refs(io, _TYPE_REFS[:OrderedLogitModel]; kw...)
+refs(io::IO, ::OrderedProbitModel; kw...) = refs(io, _TYPE_REFS[:OrderedProbitModel]; kw...)
+refs(io::IO, ::MultinomialLogitModel; kw...) = refs(io, _TYPE_REFS[:MultinomialLogitModel]; kw...)
+
+# Panel regression
+function refs(io::IO, m::PanelRegModel; format::Symbol=get_display_backend())
+    base = [:baltagi2021, :wooldridge2010]
+    if m.method == :re
+        push!(base, :mundlak1978)
+    elseif m.method == :cre
+        push!(base, :mundlak1978)
+    end
+    refs(io, unique(base); format=format)
+end
+function refs(io::IO, m::PanelIVModel; format::Symbol=get_display_backend())
+    base = [:baltagi2021, :wooldridge2010]
+    if m.method == :hausman_taylor
+        push!(base, :hausman_taylor1981)
+    end
+    refs(io, unique(base); format=format)
+end
+refs(io::IO, ::PanelLogitModel; kw...) = refs(io, _TYPE_REFS[:PanelLogitModel]; kw...)
+refs(io::IO, ::PanelProbitModel; kw...) = refs(io, _TYPE_REFS[:PanelProbitModel]; kw...)
+refs(io::IO, ::PanelTestResult; kw...) = refs(io, _TYPE_REFS[:PanelTestResult]; kw...)
 
 # --- Convenience: stdout fallback ---
 function refs(x; kw...)

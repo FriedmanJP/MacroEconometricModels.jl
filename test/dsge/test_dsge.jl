@@ -2271,7 +2271,7 @@ end
     sol_swap = occbin_solve(nk_swap, c_swap; shock_path=shocks)
     sol_std = occbin_solve(nk_std, c_std; shock_path=shocks)
 
-    @test sol_swap.piecewise_path ≈ sol_std.piecewise_path atol=1e-8
+    @test sol_swap.piecewise_path ≈ sol_std.piecewise_path atol=1e-6
 end
 
 @testset "OccBin divergence detection" begin

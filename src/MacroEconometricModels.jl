@@ -99,6 +99,8 @@ include("reg/probit.jl")
 include("reg/margins.jl")
 include("reg/diagnostics.jl")
 include("reg/predict.jl")
+include("reg/ordered.jl")
+include("reg/multinomial.jl")
 
 # VAR types and estimation
 include("var/types.jl")
@@ -259,6 +261,18 @@ include("pvar/bootstrap.jl")
 include("teststat/pvar_hansen_j.jl")
 include("teststat/pvar_mmsc.jl")
 include("teststat/pvar_lag_selection.jl")
+
+# Panel Regression (FE/RE/FD/Between/CRE, IV, Logit, Probit)
+include("preg/types.jl")
+include("preg/covariance.jl")
+include("preg/estimation.jl")
+include("preg/tests.jl")
+include("preg/iv.jl")
+include("preg/predict.jl")
+include("preg/logit.jl")
+include("preg/probit.jl")
+include("preg/margins.jl")
+include("preg/display.jl")
 
 # Covariance estimators
 include("core/covariance.jl")
@@ -664,6 +678,20 @@ export pvar_bootstrap_irf
 export pvar_hansen_j, pvar_mmsc, pvar_lag_selection
 
 # =============================================================================
+# Exports - Panel Regression
+# =============================================================================
+
+# Types
+export PanelRegModel, PanelIVModel, PanelLogitModel, PanelProbitModel, PanelTestResult
+
+# Estimation
+export estimate_xtreg, estimate_xtiv, estimate_xtlogit, estimate_xtprobit
+
+# Specification tests
+export hausman_test, breusch_pagan_test, f_test_fe
+export pesaran_cd_test, wooldridge_ar_test, modified_wald_test
+
+# =============================================================================
 # Exports - Difference-in-Differences / Event Study
 # =============================================================================
 
@@ -847,12 +875,15 @@ export load_example
 
 # Types
 export RegModel, LogitModel, ProbitModel, MarginalEffects
+export OrderedLogitModel, OrderedProbitModel, estimate_ologit, estimate_oprobit
+export MultinomialLogitModel, estimate_mlogit
 
 # Estimation
 export estimate_reg, estimate_iv, estimate_logit, estimate_probit
 
 # Marginal effects, diagnostics, prediction
 export marginal_effects, odds_ratio, vif, classification_table
+export brant_test, hausman_iia
 
 # =============================================================================
 # Exports - Plotting
