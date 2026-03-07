@@ -1,6 +1,6 @@
 name = "MacroEconometricModels"
 uuid = "14a6ec33-bcac-448e-845f-2fb6769698f1"
-version = "0.3.5"
+version = "0.3.6"
 authors = ["Wookyung Chung <chung@friedman.jp>"]
 
 [deps]
@@ -31,8 +31,8 @@ Distributions = "0.25"
 FFTW = "1.5"
 Ipopt = "1"
 JuMP = "1"
-PATHSolver = "1"
 Optim = "1, 2"
+PATHSolver = "1"
 PrettyTables = "3"
 SparseArrays = "1"
 Statistics = "1"
