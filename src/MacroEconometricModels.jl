@@ -248,6 +248,9 @@ include("teststat/pvar_hansen_j.jl")
 include("teststat/pvar_mmsc.jl")
 include("teststat/pvar_lag_selection.jl")
 
+# Panel Regression (FE/RE/FD/Between/CRE, IV, Logit, Probit)
+include("panel_reg/types.jl")
+
 # Covariance estimators
 include("core/covariance.jl")
 
@@ -649,6 +652,13 @@ export pvar_bootstrap_irf
 
 # Specification tests
 export pvar_hansen_j, pvar_mmsc, pvar_lag_selection
+
+# =============================================================================
+# Exports - Panel Regression
+# =============================================================================
+
+# Types
+export PanelRegModel, PanelIVModel, PanelLogitModel, PanelProbitModel, PanelTestResult
 
 # =============================================================================
 # Exports - Difference-in-Differences / Event Study
