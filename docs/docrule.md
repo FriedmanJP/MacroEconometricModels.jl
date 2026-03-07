@@ -283,7 +283,26 @@ where:
 - Double backticks for inline math: ``` ``\theta`` ```
 - `---` horizontal rules separate H2 sections
 - Cross-references: `[Section Name](@ref target)` with page anchors `(@id target)` on H1 titles
-- Visualization: `plot_result(obj)` followed by `@raw html` iframe embedding (not wrapped in triple backticks)
+- Visualization: `plot_result(obj)` followed by a fenced `@raw html` block for iframe embedding (see below)
+
+### Embedding Plot Iframes
+
+**CRITICAL:** Documenter.jl requires the fenced code block syntax for raw HTML. A bare `@raw html` line is **not valid** and renders as literal text.
+
+**Correct** (fenced — always use this):
+````
+```@raw html
+<iframe src="../assets/plots/my_plot.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+````
+
+**Wrong** (bare — never use this):
+```
+@raw html
+<iframe src="../assets/plots/my_plot.html" ...></iframe>
+```
+
+The fenced block must have blank lines before and after it. The `src` path uses `../assets/plots/` because Documenter with `prettyurls=true` renders each page as `page_name/index.html`.
 
 ---
 
@@ -301,3 +320,4 @@ where:
 8. **Missing references** — Every algorithm needs Author (Year) on first mention
 9. **Raw output without interpretation** — After every code output, explain what the numbers mean
 10. **Duplicated content** — Cross-reference other pages instead of repeating material
+11. **Bare `@raw html`** — Always use the fenced `` ```@raw html `` ... `` ``` `` block syntax. Bare `@raw html` renders as literal text, not HTML.
