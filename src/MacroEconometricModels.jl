@@ -189,6 +189,7 @@ include("dsge/perturbation.jl")
 include("dsge/quadrature.jl")
 include("dsge/projection.jl")
 include("dsge/pfi.jl")
+include("dsge/anderson.jl")
 include("dsge/perfect_foresight.jl")
 include("dsge/occbin.jl")
 
