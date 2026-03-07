@@ -10,6 +10,7 @@ using StatsAPI
 using LinearAlgebra
 using Random
 using Statistics
+import NonlinearSolve
 
 if !@isdefined(FAST)
     const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
@@ -571,6 +572,33 @@ end
     @test spec2.ss_fn !== nothing  # ss_fn propagated
 end
 
+@testset "Steady state: NonlinearSolve algorithm kwarg" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+    end
+    spec2 = compute_steady_state(spec)
+    @test spec2.steady_state[1] ≈ 0.0 atol=1e-6
+
+    spec3 = compute_steady_state(spec; algorithm=NonlinearSolve.NewtonRaphson())
+    @test spec3.steady_state[1] ≈ 0.0 atol=1e-6
+end
+
+@testset "Steady state: NonlinearSolve box-constrained" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+    spec_bound = compute_steady_state(spec; constraints=[variable_bound(:y, lower=0.5)])
+    @test spec_bound.steady_state[1] ≈ 0.5 atol=0.05
+end
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Section 4: Linearization
 # ─────────────────────────────────────────────────────────────────────────────
@@ -840,6 +868,66 @@ end
     s = String(take!(io))
     @test occursin("Perfect Foresight Path", s)
     @test occursin("Converged", s)
+end
+
+@testset "Perfect foresight: NonlinearSolve algorithm kwarg" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 1.0
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+    end
+    spec = compute_steady_state(spec)
+    shocks = zeros(30, 1)
+    shocks[1, 1] = 1.0
+    pf = solve(spec; method=:perfect_foresight, T_periods=30, shock_path=shocks,
+               algorithm=NonlinearSolve.NewtonRaphson())
+    @test pf isa PerfectForesightPath{Float64}
+    @test pf.converged
+    @test pf.deviations[1, 1] ≈ 1.0 atol=0.1
+end
+
+@testset "Perfect foresight: NonlinearSolve box-constrained (non-binding)" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 1.0
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+    shocks = zeros(20, 1)
+    shocks[1, 1] = -1.0
+    # Non-binding lower bound: unconstrained path stays above -5
+    pf = solve(spec; method=:perfect_foresight, T_periods=20, shock_path=shocks,
+               constraints=[variable_bound(:y, lower=-5.0)])
+    @test pf isa PerfectForesightPath
+    @test pf.converged
+    @test all(pf.path[:, 1] .>= -5.0 - 1e-4)
+    # Matches unconstrained
+    pf_unc = solve(spec; method=:perfect_foresight, T_periods=20, shock_path=shocks)
+    @test maximum(abs.(pf.path .- pf_unc.path)) < 1e-6
+end
+
+@testset "Perfect foresight: box-constrained binding (escalation)" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 1.0
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+    shocks = zeros(30, 1)
+    shocks[1, 1] = -3.0
+    # Binding: unconstrained goes below 0; without JuMP loaded, returns unconstrained
+    # When JuMP is loaded, auto-escalates to Ipopt/PATH
+    pf = solve(spec; method=:perfect_foresight, T_periods=30, shock_path=shocks,
+               constraints=[variable_bound(:y, lower=0.0)])
+    @test pf isa PerfectForesightPath
+    @test pf.converged  # unconstrained solve converges
+    end
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -4651,6 +4739,9 @@ end
     mixed = [variable_bound(:y, lower=0.0),
              nonlinear_constraint((y, yl, yld, e, th) -> y[1] - 1.0; label="test")]
 
+    # Bounds-only → :nonlinearsolve (default)
+    @test MacroEconometricModels._select_solver(bounds_only, nothing) == :nonlinearsolve
+
     # With NonlinearConstraints → always :ipopt
     @test MacroEconometricModels._select_solver(mixed, nothing) == :ipopt
 
@@ -4682,8 +4773,8 @@ if _jump_available
     end
     spec = compute_steady_state(spec)
 
-    # Non-binding: SS is 0, lower=-1 doesn't bind
-    spec_c = compute_steady_state(spec; constraints=[variable_bound(:y, lower=-1.0)])
+    # Non-binding: SS is 0, lower=-1 doesn't bind (explicit Ipopt for JuMP test)
+    spec_c = compute_steady_state(spec; constraints=[variable_bound(:y, lower=-1.0)], solver=:ipopt)
     @test abs(spec_c.steady_state[1]) < 0.01
 
     # Growth model with positivity constraints (non-binding at true SS)
@@ -4704,7 +4795,7 @@ if _jump_available
     c_ss = spec2.steady_state[2]
 
     spec2_c = compute_steady_state(spec2;
-        constraints=[variable_bound(:k, lower=0.1), variable_bound(:c, lower=0.1)])
+        constraints=[variable_bound(:k, lower=0.1), variable_bound(:c, lower=0.1)], solver=:ipopt)
     @test abs(spec2_c.steady_state[1] - k_ss) / k_ss < 0.05
     @test abs(spec2_c.steady_state[2] - c_ss) / c_ss < 0.05
     end # _suppress_warnings
@@ -4728,9 +4819,9 @@ end
     pf_unc = solve(spec; method=:perfect_foresight, T_periods=20, shock_path=shocks)
     @test pf_unc.converged
 
-    # Non-binding lower bound: constraint doesn't alter the path
+    # Non-binding lower bound: constraint doesn't alter the path (explicit Ipopt)
     pf_con = solve(spec; method=:perfect_foresight, T_periods=20, shock_path=shocks,
-                    constraints=[variable_bound(:y, lower=-5.0)])
+                    constraints=[variable_bound(:y, lower=-5.0)], solver=:ipopt)
     @test pf_con isa PerfectForesightPath
     @test pf_con.converged
     @test all(pf_con.path[:, 1] .>= -5.0 - 1e-4)  # bound respected
@@ -4744,11 +4835,11 @@ end
     # Terminal convergence to SS
     @test abs(pf_con.path[end, 1]) < 0.5
 
-    # Upper bound test: constrain y <= 5 (non-binding)
+    # Upper bound test: constrain y <= 5 (non-binding, explicit Ipopt)
     shocks2 = zeros(20, 1)
     shocks2[1, 1] = 2.0
     pf_upper = solve(spec; method=:perfect_foresight, T_periods=20, shock_path=shocks2,
-                      constraints=[variable_bound(:y, upper=5.0)])
+                      constraints=[variable_bound(:y, upper=5.0)], solver=:ipopt)
     @test pf_upper isa PerfectForesightPath
     @test pf_upper.converged
     @test all(pf_upper.path[:, 1] .<= 5.0 + 1e-4)
@@ -4769,14 +4860,14 @@ end
     spec = compute_steady_state(spec)
     @test abs(spec.steady_state[1]) < 1e-8  # unconstrained SS = 0
 
-    spec_bound = compute_steady_state(spec; constraints=[variable_bound(:y, lower=0.5)])
+    spec_bound = compute_steady_state(spec; constraints=[variable_bound(:y, lower=0.5)], solver=:ipopt)
     @test spec_bound.steady_state[1] ≈ 0.5 atol=0.01  # bound binds
 
-    # Binding PF: conflicting constraint → solver reports infeasibility
+    # Binding PF with Ipopt: conflicting constraint → solver reports infeasibility
     shocks = zeros(10, 1)
     shocks[1, 1] = -3.0
     pf = solve(spec; method=:perfect_foresight, T_periods=10, shock_path=shocks,
-                constraints=[variable_bound(:y, lower=0.0)])
+                constraints=[variable_bound(:y, lower=0.0)], solver=:ipopt)
     @test pf isa PerfectForesightPath
     @test !pf.converged  # infeasible: equality constraints + binding bound conflict
     end # _suppress_warnings
@@ -4925,11 +5016,11 @@ end
     end # _suppress_warnings
 end
 
-@testset "Auto-detection dispatches PATH" begin
-    # When PATHSolver is loaded and only VariableBounds, auto-detection picks PATH
-    @test MacroEconometricModels._path_available()
+@testset "Auto-detection defaults to NonlinearSolve" begin
+    # Bounds-only now defaults to :nonlinearsolve; PATH still available via override
     bounds_only = [variable_bound(:y, lower=0.0)]
-    @test MacroEconometricModels._select_solver(bounds_only, nothing) == :path
+    @test MacroEconometricModels._select_solver(bounds_only, nothing) == :nonlinearsolve
+    @test MacroEconometricModels._select_solver(bounds_only, :path) == :path
 end
 
 @testset "PATH rejects NonlinearConstraint" begin

@@ -214,11 +214,10 @@ end
     @test MacroEconometricModels._select_solver([], :ipopt) == :ipopt
     @test MacroEconometricModels._select_solver([], :path) == :path
 
-    # Without override, no NonlinearConstraint
+    # Without override, no NonlinearConstraint → :nonlinearsolve
     vb = variable_bound(:y, lower=0.0)
-    # Will be :path if PATHSolver loaded, :ipopt otherwise
     result = MacroEconometricModels._select_solver([vb], nothing)
-    @test result in (:path, :ipopt)
+    @test result == :nonlinearsolve
 
     # With NonlinearConstraint -> always :ipopt
     nc = nonlinear_constraint((y, yl, yle, e, theta) -> y[1]; label="test")

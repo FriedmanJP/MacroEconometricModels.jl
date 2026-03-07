@@ -69,7 +69,7 @@ where:
 - ``F`` is the ``nT \times 1`` stacked residual vector
 - Boundary conditions: ``y_0 = \bar{y}`` (initial steady state) and ``y_{T+1} = \bar{y}`` (terminal steady state)
 
-The function `perfect_foresight` solves this system via Newton iteration. The same solver is accessible through the unified `solve` interface:
+The function `perfect_foresight` solves this system using [NonlinearSolve.jl](https://github.com/SciML/NonlinearSolve.jl) with `NewtonRaphson()` as the default algorithm. The same solver is accessible through the unified `solve` interface:
 
 ```julia
 # Direct call
@@ -89,7 +89,7 @@ pf.iterations   # number of Newton iterations used
 ```
 
 !!! note "Technical Note"
-    The Newton solver exploits the block-tridiagonal structure of the Jacobian via sparse LU factorization. Each Newton step solves ``J \Delta x = -F(x)`` where ``J`` is ``nT \times nT`` but has only ``3n^2 T`` non-zeros (vs ``n^2 T^2`` for dense). Numerical Jacobians use central differences with adaptive step sizes.
+    The solver exploits the block-tridiagonal structure of the Jacobian via sparse LU factorization. Each Newton step solves ``J \Delta x = -F(x)`` where ``J`` is ``nT \times nT`` but has only ``3n^2 T`` non-zeros (vs ``n^2 T^2`` for dense). Numerical Jacobians use central differences with adaptive step sizes. The `algorithm` keyword accepts any NonlinearSolve.jl algorithm (e.g., `NonlinearSolve.TrustRegion()`).
 
 ### Keywords
 
@@ -100,7 +100,8 @@ pf.iterations   # number of Newton iterations used
 | `max_iter` | `Int` | `100` | Newton iteration limit |
 | `tol` | `Real` | ``10^{-8}`` | Convergence tolerance (max absolute residual) |
 | `constraints` | `Vector{<:DSGEConstraint}` | `[]` | Variable bounds and nonlinear constraints |
-| `solver` | `Union{Nothing, Symbol}` | `nothing` | `:ipopt` or `:path` (auto-detected from constraint types) |
+| `solver` | `Union{Nothing, Symbol}` | `nothing` | `:nonlinearsolve` (default), `:ipopt`, or `:path` |
+| `algorithm` | `Any` | `NewtonRaphson()` | NonlinearSolve.jl algorithm (ignored for JuMP solvers) |
 
 ### Return Value
 
@@ -118,7 +119,13 @@ pf.iterations   # number of Newton iterations used
 
 ## Constrained Perfect Foresight
 
-When variable bounds or nonlinear inequality constraints are present, the perfect foresight problem becomes a constrained optimization problem. Two solver backends are available via JuMP.
+When variable bounds or nonlinear inequality constraints are present, the solver uses a three-tier hierarchy:
+
+1. **NonlinearSolve.jl** (default): Solves the unconstrained system first. If all variable bounds are satisfied, returns the solution. If bounds are violated, automatically escalates to Ipopt or PATH.
+2. **Ipopt** (NLP): Handles general nonlinear constraints and variable bounds via interior point optimization. Requires `import JuMP, Ipopt`.
+3. **PATH** (MCP): Solves box-constrained problems as mixed complementarity problems. Requires `import JuMP, PATHSolver`.
+
+The solver is auto-detected from the constraint types: `NonlinearConstraint` requires Ipopt; pure `VariableBound` constraints use NonlinearSolve with automatic escalation. Override with `solver=:ipopt` or `solver=:path`.
 
 ### Ipopt (NLP)
 
@@ -160,10 +167,10 @@ pf = perfect_foresight(spec; shock_path=shocks,
                         constraints=[zlb], solver=:path)
 ```
 
-When `solver` is not specified, the solver is auto-detected: pure `VariableBound` constraints use PATH (if PATHSolver.jl is loaded), and any `NonlinearConstraint` requires Ipopt.
+When `solver` is not specified, pure `VariableBound` constraints use NonlinearSolve (with automatic escalation to Ipopt if bounds are violated), and any `NonlinearConstraint` requires Ipopt.
 
-!!! warning "PATH vs Ipopt"
-    Use **PATH** for pure box constraints (variable bounds) with a natural complementarity structure. Use **Ipopt** for general nonlinear inequality constraints. PATH requires the PATHSolver.jl package; Ipopt requires Ipopt.jl. Both require JuMP.jl. These are weak dependencies --- load them with `import` before calling `perfect_foresight` with constraints.
+!!! warning "Solver Selection"
+    **NonlinearSolve** is the default and handles unconstrained and non-binding box constraints without additional dependencies. **PATH** is preferred for pure box constraints with a natural complementarity structure. **Ipopt** handles general nonlinear inequality constraints. PATH requires PATHSolver.jl; Ipopt requires Ipopt.jl. Both require JuMP.jl. These are weak dependencies --- load them with `import` before calling `perfect_foresight` with constraints.
 
 ### Constraint Constructors
 
@@ -341,7 +348,7 @@ The unconstrained IRF shows the linear response to a demand shock. The OccBin IR
 
 2. **OccBin regime cycling**: The guess-and-verify algorithm can cycle between regime sequences without converging. For one-constraint problems, increase `maxiter`. For two-constraint problems, set `curb_retrench=true` to limit relaxation to one period per iteration.
 
-3. **Missing JuMP extensions**: Constrained solvers require `import JuMP, Ipopt` or `import JuMP, PATHSolver` *before* calling `perfect_foresight` with constraints. Without these imports, the package raises an `ArgumentError` with installation instructions.
+3. **Missing JuMP extensions**: NonlinearSolve handles unconstrained and non-binding box constraints without JuMP. For binding box constraints or nonlinear constraints, `import JuMP, Ipopt` or `import JuMP, PATHSolver` is required *before* calling `perfect_foresight`. Without these imports, binding box constraints return the unconstrained solution with a warning.
 
 4. **Wrong constraint direction**: `:(R[t] >= 0)` means "``R`` must be at least 0" (a lower bound). `:(D[t] <= D_max)` means "``D`` must be at most `D_max`" (an upper bound). Verify that the direction matches the economic interpretation.
 
@@ -354,6 +361,8 @@ The unconstrained IRF shows the linear response to a demand shock. The OccBin IR
 - Guerrieri, L., & Iacoviello, M. (2015). OccBin: A Toolkit for Solving Dynamic Models with Occasionally Binding Constraints Easily. *Journal of Monetary Economics*, 70, 22--38. [DOI](https://doi.org/10.1016/j.jmoneco.2014.08.005)
 
 - Ferris, M. C., & Munson, T. S. (1999). Interfaces to PATH 3.0: Design, Implementation and Usage. *Computational Optimization and Applications*, 12(1), 207--227. [DOI](https://doi.org/10.1023/A:1018636318047)
+
+- Pal, A., et al. (2024). NonlinearSolve.jl: High-Performance and Robust Solvers for Systems of Nonlinear Equations in Julia. [GitHub](https://github.com/SciML/NonlinearSolve.jl)
 
 - Rendahl, P. (2017). Linear Time Iteration. Unpublished manuscript.
 

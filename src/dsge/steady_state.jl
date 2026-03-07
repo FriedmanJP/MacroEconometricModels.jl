@@ -5,13 +5,13 @@
 # Licensed under GPL-3.0-or-later. See LICENSE for details.
 
 """
-Numerical steady-state computation for DSGE models via Optim.jl.
+Numerical steady-state computation for DSGE models via NonlinearSolve.jl.
 """
 
 """
     compute_steady_state(spec::DSGESpec{T}; initial_guess=nothing, method=:auto,
                           ss_fn=nothing, constraints=DSGEConstraint[],
-                          solver=nothing) → DSGESpec{T}
+                          solver=nothing, algorithm=nothing) → DSGESpec{T}
 
 Compute the deterministic steady state: f(y_ss, y_ss, y_ss, 0, θ) = 0.
 
@@ -19,35 +19,48 @@ Returns a new `DSGESpec` with the `steady_state` field filled.
 
 # Keywords
 - `initial_guess::Vector{T}` — starting point (default: ones)
-- `method::Symbol` — `:auto` (NelderMead → LBFGS), `:analytical`
+- `method::Symbol` — `:auto` (NonlinearSolve), `:analytical`
 - `ss_fn::Function` — for `:analytical`, a function `θ → y_ss::Vector`
-- `constraints::Vector{<:DSGEConstraint}` — variable bounds and nonlinear inequalities (requires JuMP + Ipopt)
-- `solver::Symbol` — `:ipopt` (NLP) or `:path` (MCP); auto-detected if not specified
+- `constraints::Vector{<:DSGEConstraint}` — variable bounds and nonlinear inequalities
+- `solver::Symbol` — `:nonlinearsolve` (default), `:ipopt` (NLP), or `:path` (MCP); auto-detected if not specified
+- `algorithm` — NonlinearSolve.jl algorithm (default: `TrustRegion()`); ignored for JuMP solvers
 """
 function compute_steady_state(spec::DSGESpec{T};
         initial_guess::Union{Nothing,AbstractVector}=nothing,
         method::Symbol=:auto,
         ss_fn::Union{Nothing,Function}=nothing,
         constraints::Vector=DSGEConstraint[],
-        solver::Union{Nothing,Symbol}=nothing) where {T<:AbstractFloat}
+        solver::Union{Nothing,Symbol}=nothing,
+        algorithm=nothing) where {T<:AbstractFloat}
 
     n = spec.n_endog
 
-    # If constraints are provided, dispatch to JuMP extension
+    # If constraints are provided, dispatch based on solver
     if !isempty(constraints)
-        _check_jump_loaded()
         _validate_constraints(spec, constraints)
         chosen = _select_solver(constraints, solver)
-        chosen ∉ (:path, :ipopt) &&
-            throw(ArgumentError("Unknown solver :$chosen. Valid options: :path, :ipopt"))
-        if chosen == :path
+        chosen ∉ (:path, :ipopt, :nonlinearsolve) &&
+            throw(ArgumentError("Unknown solver :$chosen. Valid options: :nonlinearsolve, :path, :ipopt"))
+
+        if chosen == :nonlinearsolve
+            lower, upper = _extract_bounds(spec, constraints)
+            # NonlinearSolve cannot handle NonlinearConstraint
+            any(c -> c isa NonlinearConstraint, constraints) &&
+                throw(ArgumentError(
+                    "NonlinearSolve solver cannot handle NonlinearConstraint. " *
+                    "Use solver=:ipopt for nonlinear inequality constraints."))
+            y_ss = _nonlinearsolve_steady_state(spec, lower, upper;
+                        initial_guess=initial_guess, algorithm=algorithm)
+        elseif chosen == :path
+            _check_jump_loaded()
             any(c -> c isa NonlinearConstraint, constraints) &&
                 throw(ArgumentError(
                     "PATH solver cannot handle NonlinearConstraint. " *
                     "Use solver=:ipopt or remove nonlinear constraints."))
             y_ss = _path_compute_steady_state(spec, constraints;
                         initial_guess=initial_guess)
-        else
+        else  # :ipopt
+            _check_jump_loaded()
             y_ss = _jump_compute_steady_state(spec, constraints;
                         initial_guess=initial_guess)
         end
@@ -70,41 +83,91 @@ function compute_steady_state(spec::DSGESpec{T};
         return _update_steady_state(spec, y_ss)
     end
 
-    # Numerical: minimize sum of squared residuals
-    y0 = initial_guess !== nothing ? T.(initial_guess) : ones(T, n)
-    @assert length(y0) == n "initial_guess must have length $n"
-
-    ε_zero = zeros(T, spec.n_exog)
-
-    # Objective: sum of squared residuals at SS (y_t = y_{t-1} = y_{t+1} = y)
-    function ss_objective(y)
-        total = zero(T)
-        for fn in spec.residual_fns
-            r = fn(y, y, y, ε_zero, θ)
-            total += r^2
-        end
-        total
-    end
-
-    # Phase 1: Nelder-Mead (derivative-free, robust to bad starting point)
-    result = Optim.optimize(ss_objective, y0, Optim.NelderMead(),
-                            Optim.Options(iterations=5000, f_reltol=T(1e-12)))
-    y_ss = Optim.minimizer(result)
-
-    # Phase 2: Refine with LBFGS if gradient is available
-    if Optim.minimum(result) > T(1e-10)
-        result2 = Optim.optimize(ss_objective, y_ss, Optim.LBFGS(),
-                                 Optim.Options(iterations=2000, f_reltol=T(1e-14)))
-        if Optim.minimum(result2) < Optim.minimum(result)
-            y_ss = Optim.minimizer(result2)
-        end
-    end
-
-    # Verify convergence
-    final_resid = ss_objective(y_ss)
-    final_resid > T(1e-6) && @warn "Steady state may not have converged (residual = $final_resid)"
+    # Numerical: use NonlinearSolve (unconstrained, infinite bounds)
+    lower = fill(T(-Inf), n)
+    upper = fill(T(Inf), n)
+    y_ss = _nonlinearsolve_steady_state(spec, lower, upper;
+                initial_guess=initial_guess, algorithm=algorithm)
 
     _update_steady_state(spec, y_ss)
+end
+
+"""
+    _nonlinearsolve_steady_state(spec, lower, upper; initial_guess=nothing, algorithm=nothing)
+
+Solve the steady-state system f(y, y, y, 0, θ) = 0 using NonlinearSolve.jl.
+
+Default algorithm is `TrustRegion()`. Box bounds are applied when finite.
+"""
+function _nonlinearsolve_steady_state(spec::DSGESpec{T}, lower::Vector{T}, upper::Vector{T};
+        initial_guess::Union{Nothing,AbstractVector}=nothing,
+        algorithm=nothing) where {T<:AbstractFloat}
+
+    n = spec.n_endog
+    if initial_guess !== nothing
+        y0 = T.(initial_guess)
+    elseif !isempty(spec.steady_state)
+        y0 = T.(spec.steady_state)
+    else
+        y0 = ones(T, n)
+    end
+    @assert length(y0) == n "initial_guess must have length $n"
+
+    θ = spec.param_values
+    ε_zero = zeros(T, spec.n_exog)
+    fns = spec.residual_fns
+
+    # Residual function: F[i] = f_i(y, y, y, 0, θ)
+    function ss_residual!(F, y, p)
+        for i in eachindex(fns)
+            F[i] = fns[i](y, y, y, ε_zero, θ)
+        end
+        return nothing
+    end
+
+    # Jacobian via central differences
+    function ss_jacobian!(J, y, p)
+        F_plus = similar(y)
+        F_minus = similar(y)
+        for j in 1:n
+            h = max(T(1e-7), T(1e-7) * abs(y[j]))
+            y_p = copy(y)
+            y_m = copy(y)
+            y_p[j] += h
+            y_m[j] -= h
+            ss_residual!(F_plus, y_p, p)
+            ss_residual!(F_minus, y_m, p)
+            for i in 1:n
+                J[i, j] = (F_plus[i] - F_minus[i]) / (2 * h)
+            end
+        end
+        return nothing
+    end
+
+    nlfn = NonlinearSolve.NonlinearFunction(ss_residual!; jac=ss_jacobian!)
+
+    # Determine if bounds are finite
+    has_finite_bounds = any(isfinite, lower) || any(isfinite, upper)
+
+    if has_finite_bounds
+        # Clamp initial guess to bounds
+        for i in 1:n
+            y0[i] = clamp(y0[i], isfinite(lower[i]) ? lower[i] : T(-1e10),
+                                   isfinite(upper[i]) ? upper[i] : T(1e10))
+        end
+        prob = NonlinearSolve.NonlinearProblem(nlfn, y0, nothing; lb=lower, ub=upper)
+    else
+        prob = NonlinearSolve.NonlinearProblem(nlfn, y0, nothing)
+    end
+
+    alg = algorithm !== nothing ? algorithm : NonlinearSolve.TrustRegion()
+    sol = NonlinearSolve.solve(prob, alg; abstol=T(1e-10), maxiters=5000)
+
+    if !NonlinearSolve.SciMLBase.successful_retcode(sol.retcode)
+        @warn "Steady state solver did not converge (retcode = $(sol.retcode))"
+    end
+
+    return Vector{T}(sol.u)
 end
 
 """Return a new DSGESpec with updated steady_state field."""
