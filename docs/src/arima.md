@@ -13,7 +13,8 @@
 ```@setup arima
 using MacroEconometricModels
 fred = load_example(:fred_md)
-y = filter(isfinite, to_vector(apply_tcode(fred[:, "CPIAUCSL"])))
+cpi_raw = fred[:, "CPIAUCSL"]
+y = filter(isfinite, diff(log.(cpi_raw)))
 y = y[end-99:end]
 ```
 

@@ -599,10 +599,12 @@ nothing # hide
 ```@example data
 # Filter only selected variables (others pass through unchanged)
 d_sel = apply_filter(d_fl, :hp; vars=["INDPRO", "PAYEMS"], component=:cycle)
+nothing # hide
+```
 
+```julia
 # Panel data: filters applied group-by-group
 pd_hp = apply_filter(pwt[:, ["rgdpna", "rconna"]], :hp; component=:cycle)
-nothing # hide
 ```
 
 !!! note "Technical Note"

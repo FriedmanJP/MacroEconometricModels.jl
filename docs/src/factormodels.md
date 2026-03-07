@@ -36,7 +36,7 @@ report(fm)
 ```@example factor
 # Bai-Ng information criteria for factor count selection
 ic = ic_criteria(X, 10)
-report(ic)
+println("IC1 selects r = ", ic.r_IC1, ", IC2 selects r = ", ic.r_IC2, ", IC3 selects r = ", ic.r_IC3)
 ```
 
 **Recipe 3: Dynamic factor model with VAR dynamics**
@@ -110,7 +110,7 @@ subject to the normalization ``F'F/T = I_r``. The solution involves the eigenval
 
 ```@example factor
 # Estimate 3-factor model from FRED-MD indicators
-fm = estimate_factors(X, 3; standardize=true, method=:pca)
+fm = estimate_factors(X, 3; standardize=true)
 report(fm)
 ```
 
@@ -163,7 +163,7 @@ The optimal ``\hat{r}`` minimizes ``IC_k(r)`` over ``r \in \{1, \ldots, r_{\max}
 ```@example factor
 # Bai-Ng information criteria
 ic = ic_criteria(X, 10)
-report(ic)
+println("IC1 selects r = ", ic.r_IC1, ", IC2 selects r = ", ic.r_IC2, ", IC3 selects r = ", ic.r_IC3)
 ```
 
 The three criteria typically agree on the number of factors for well-separated factor structures. When they disagree, IC2 and IC3 are preferred. The scree plot provides a complementary visual diagnostic: a sharp drop in eigenvalue magnitude after factor ``r`` confirms the information criteria selection.
@@ -295,10 +295,9 @@ The two-step estimator is fast and consistent under the Bai & Ng (2002) conditio
 
 The joint selection of factor count ``r`` and lag order ``p`` uses standard information criteria computed from the state-space log-likelihood:
 
-```@example factor
+```julia
 # Grid search over (r, p) combinations
 ic_dyn = ic_criteria_dynamic(X, 5, 3; method=:twostep, standardize=true)
-report(ic_dyn)
 
 # View full IC matrices
 ic_dyn.AIC   # r x p matrix of AIC values
@@ -463,10 +462,9 @@ The common variance share for each variable measures the fraction of its total v
 
 The GDFM uses eigenvalue-based criteria rather than information criteria:
 
-```@example factor
+```julia
 # Eigenvalue ratio and variance criteria
 ic_gdfm = ic_criteria_gdfm(X, 10; kernel=:bartlett)
-report(ic_gdfm)
 
 # Diagnostic data
 ic_gdfm.eigenvalue_ratios       # lambda_i / lambda_{i+1} ratios
@@ -652,7 +650,7 @@ This example demonstrates the full factor model workflow: data preparation, fact
 ```@example factor
 # Step 1: Select number of factors via Bai-Ng criteria
 ic_full = ic_criteria(X, 10)
-report(ic_full)
+println("IC1 selects r = ", ic_full.r_IC1, ", IC2 selects r = ", ic_full.r_IC2, ", IC3 selects r = ", ic_full.r_IC3)
 
 # Step 2: Estimate static factor model
 fm_full = estimate_factors(X, 3; standardize=true)

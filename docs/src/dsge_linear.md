@@ -50,7 +50,7 @@ plot_result(decomp)
 
 **Recipe 3: Unconditional moments via Lyapunov equation**
 
-```@example dsge_linear
+```julia
 Σ = solve_lyapunov(sol.G1, sol.impact)
 m = analytical_moments(sol; lags=2)
 ```

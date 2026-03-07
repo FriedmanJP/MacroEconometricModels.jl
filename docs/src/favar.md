@@ -297,15 +297,13 @@ The FAVAR inherits all structural identification methods from the VAR infrastruc
 ```@example favar
 # Cholesky identification (factors ordered before key variables)
 r_chol = irf(favar_panel, 20; method=:cholesky)
-
-# Sign restrictions
-restrictions = Dict(
-    (1, 1) => :positive,   # Shock 1 raises Factor 1 on impact
-    (3, 1) => :negative    # Shock 1 lowers key variable 1 on impact
-)
-r_sign_favar = irf(favar_panel, 20; method=:sign, restrictions=restrictions, n_draws=50)
-
 report(r_chol)
+```
+
+```julia
+# Sign restrictions via check function
+check_fn(irf_matrix) = irf_matrix[1, 1] > 0 && irf_matrix[3, 1] < 0
+r_sign_favar = irf(favar_panel, 20; method=:sign, check_func=check_fn)
 ```
 
 The Cholesky identification places the slow-moving factors before the fast-moving key variables, consistent with the Bernanke, Boivin & Eliasz (2005) identification scheme where monetary policy (the key variable) responds contemporaneously to factor movements but not vice versa. For a detailed treatment of identification methods, see [Innovation Accounting](@ref innovation_accounting_page).

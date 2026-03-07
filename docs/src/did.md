@@ -185,13 +185,12 @@ nothing # hide
 
 By default, DiD methods derive cohorts from the treatment timing column. For custom cohort definitions (e.g., geographic clusters, pre-treatment characteristics), specify a `cohort` column in `xtset`:
 
-```@example did
+```julia
 df.region_cohort = [g <= 60 ? 1 : g <= 140 ? 2 : 0 for g in group_id]
 pd_cohort = xtset(df, :group, :time; cohort=:region_cohort)
 
 # DiD methods use region_cohort instead of deriving from treatment timing
 did = estimate_did(pd_cohort, :gdp, :reform; method=:callaway_santanna)
-nothing # hide
 ```
 
 When `cohort_id` is `nothing` (the default), cohorts are inferred from the treatment column.

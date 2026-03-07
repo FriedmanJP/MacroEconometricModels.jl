@@ -2,16 +2,12 @@
 
 First-order linear solutions impose **certainty equivalence** --- agents behave as if shocks have zero variance. This rules out risk premia, precautionary savings, welfare costs of uncertainty, and asymmetric dynamics. Nonlinear methods capture all of these by retaining higher-order terms in the Taylor expansion of the policy function or by solving the functional equation globally. MacroEconometricModels.jl provides three families: **higher-order perturbation** (local, Schmitt-Grohe & Uribe 2004; Andreasen, Fernandez-Villaverde & Rubio-Ramirez 2018), **Chebyshev projection** (global polynomial, Judd 1992, 1998), and **policy function iteration** (global iterative, Coleman 1990). For model specification and linearization, see [DSGE Models](@ref dsge_page). For first-order solvers, see [Linear Solvers](@ref dsge_linear).
 
-```@setup dsge_nonlinear
-using MacroEconometricModels, Random
-Random.seed!(42)
-```
 
 ## Quick Start
 
 **Recipe 1: Second-order perturbation with pruned simulation**
 
-```@example dsge_nonlinear
+```julia
 spec = @dsge begin
     parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.9, σ = 0.01
     endogenous: Y, C, K, A
@@ -36,7 +32,7 @@ nothing # hide
 
 **Recipe 2: Third-order perturbation with GIRFs**
 
-```@example dsge_nonlinear
+```julia
 psol3 = perturbation_solver(spec; order=3)
 Y_sim3 = simulate(psol3, 1000)
 girf3 = irf(psol3, 40; irf_type=:girf, n_draws=100)
@@ -49,7 +45,7 @@ plot_result(girf3)
 
 **Recipe 3: Chebyshev projection and Euler errors**
 
-```@example dsge_nonlinear
+```julia
 proj = collocation_solver(spec; degree=5, grid=:tensor, max_iter=200)
 y = evaluate_policy(proj, proj.steady_state[proj.state_indices])
 err = max_euler_error(proj)
@@ -57,7 +53,7 @@ err = max_euler_error(proj)
 
 **Recipe 4: PFI with damped updates**
 
-```@example dsge_nonlinear
+```julia
 pfi = pfi_solver(spec; degree=5, damping=0.5, max_iter=200)
 report(pfi)
 ```
@@ -82,7 +78,7 @@ where:
 - ``f_{\sigma\sigma}`` is the ``n \times 1`` variance correction (shifts the **stochastic steady state**)
 - ``\sigma`` is the perturbation scaling parameter
 
-```@example dsge_nonlinear
+```julia
 psol = perturbation_solver(spec; order=2)
 nothing # hide
 ```
@@ -121,7 +117,7 @@ where:
 - ``f_{\sigma\sigma v}`` is the ``n \times n_v`` interaction between uncertainty and the state
 - ``f_{\sigma\sigma\sigma}`` is the ``n \times 1`` cubic variance correction (zero for Gaussian shocks)
 
-```@example dsge_nonlinear
+```julia
 psol3 = perturbation_solver(spec; order=3)
 nothing # hide
 ```
@@ -192,7 +188,7 @@ where ``v_t^{(2)} = [x_{t-1}^{(2)}; 0]`` contains the second-order state correct
 
 Total: ``x_t = x_t^{(1)} + x_t^{(2)} + x_t^{(3)}``
 
-```@example dsge_nonlinear
+```julia
 psol3 = perturbation_solver(spec; order=3)
 Y_sim = simulate(psol3, 1000)  # 3-component pruned simulation
 nothing # hide
@@ -224,7 +220,7 @@ where:
 
 The GIRF captures nonlinear dynamics that the analytical first-order IRF misses: asymmetric responses to positive vs. negative shocks, state-dependent propagation, and variance-correction effects. For a first-order solution, the GIRF converges to the analytical IRF as ``n_{\text{draws}} \to \infty``.
 
-```@example dsge_nonlinear
+```julia
 # Analytical IRFs (first-order only, fast)
 irf_analytical = irf(psol3, 40)
 
@@ -272,7 +268,7 @@ The collocation solver proceeds in five steps:
 4. **Initialize coefficients** from the first-order perturbation solution via least-squares projection onto the Chebyshev basis
 5. **Newton iteration**: solve ``R(c) = 0`` where ``R`` is the vector of equilibrium residuals evaluated at all nodes, with Gauss-Hermite or monomial quadrature for expectations of next-period variables. Uses Gauss-Newton with backtracking line search.
 
-```@example dsge_nonlinear
+```julia
 proj = collocation_solver(spec; degree=5, grid=:tensor, max_iter=200)
 report(proj)
 ```
@@ -300,7 +296,7 @@ For models with ``n_x > 4`` states, tensor grids become computationally infeasib
 
 The `evaluate_policy` function maps state vectors to the full vector of endogenous variables using the stored Chebyshev coefficients:
 
-```@example dsge_nonlinear
+```julia
 y = evaluate_policy(proj, proj.steady_state[proj.state_indices])  # single point (vector)
 ```
 
@@ -308,7 +304,7 @@ y = evaluate_policy(proj, proj.steady_state[proj.state_indices])  # single point
 
 The **Euler equation error** measures the accuracy of the global approximation by evaluating residuals at random test points drawn uniformly within the state bounds:
 
-```@example dsge_nonlinear
+```julia
 err = max_euler_error(proj; n_test=1000)
 ```
 
@@ -333,7 +329,7 @@ The algorithm iterates three sub-steps at each grid point ``j``:
 2. **Euler solve**: given ``y_{\text{lag}} = x_j`` (the grid point as lagged state) and ``E[y_{t+1}]``, solve ``F(y_t, y_{\text{lag}}, E[y_{t+1}], 0, \theta) = 0`` for ``y_t`` via Newton iteration
 3. **Refit**: project the updated policy values onto the Chebyshev basis via least squares
 
-```@example dsge_nonlinear
+```julia
 pfi = pfi_solver(spec; degree=5, damping=0.5, max_iter=200)
 report(pfi)
 ```
@@ -386,7 +382,7 @@ where:
 
 The `solve_lyapunov` function solves this equation via Kronecker vectorization: ``\text{vec}(\Sigma) = (I_{n^2} - G_1 \otimes G_1)^{-1} \, \text{vec}(\text{impact} \cdot \text{impact}')``. Autocovariances at lag ``h`` follow from ``\Gamma_h = G_1^h \, \Sigma``.
 
-```@example dsge_nonlinear
+```julia
 sol = solve(spec)
 
 # Unconditional covariance matrix
@@ -404,7 +400,7 @@ The moment vector contains two blocks: (1) the upper triangle of the variance-co
 
 This example solves the RBC model at all three perturbation orders, compares analytical and generalized IRFs, and validates a global projection solution with Euler equation errors.
 
-```@example dsge_nonlinear
+```julia
 # First-order: certainty equivalence
 sol1 = perturbation_solver(spec; order=1)
 
@@ -427,7 +423,7 @@ proj = collocation_solver(spec; degree=5, grid=:tensor, max_iter=200)
 report(proj)
 ```
 
-```@example dsge_nonlinear
+```julia
 # Euler equation accuracy
 err = max_euler_error(proj; n_test=1000)
 

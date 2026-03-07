@@ -79,7 +79,7 @@ plot_result(occ_irf)
 
 **Recipe 5: Chebyshev projection**
 
-```@example dsge_overview
+```julia
 proj = collocation_solver(spec; degree=5, grid=:tensor, max_iter=200)
 y = evaluate_policy(proj, proj.steady_state[proj.state_indices])
 err = max_euler_error(proj)
@@ -182,7 +182,7 @@ For the RBC model above, the analytical steady state is:
 
 `compute_steady_state` uses NonlinearSolve.jl to solve the system ``f(\bar{y}, \bar{y}, \bar{y}, 0, \theta) = 0``. The default algorithm is `TrustRegion()`, which is robust to poor starting points. Box constraints (e.g., non-negativity) are handled natively via NonlinearSolve's bounded problem formulation.
 
-```@example dsge_overview
+```julia
 spec = compute_steady_state(spec)
 report(spec)
 ```
@@ -287,7 +287,7 @@ where:
 - ``\varepsilon_t`` is the vector of exogenous shocks
 - ``\eta_t = y_t - E_{t-1}[y_t]`` is the vector of expectation errors for forward-looking variables
 
-```@example dsge_overview
+```julia
 ld = linearize(spec)
 ```
 
@@ -313,7 +313,7 @@ The matrix pair ``(\Gamma_0, \Gamma_1)`` defines a generalized eigenvalue proble
 
 This example specifies, solves, and analyzes a full RBC model using the core functions covered on this page:
 
-```@example dsge_overview
+```julia
 # Specify the RBC model with analytical steady state
 spec = @dsge begin
     parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.9, σ = 0.01
@@ -336,9 +336,7 @@ end
 
 # Verify steady state
 report(spec)
-```
 
-```@example dsge_overview
 # Linearize and inspect the canonical form matrices
 ld = linearize(spec)
 

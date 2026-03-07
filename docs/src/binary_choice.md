@@ -34,11 +34,10 @@ report(m)
 **Recipe 2: Probit estimation**
 
 ```@example binary
-using Distributions  # hide
 n = 500
 X = hcat(ones(n), randn(n, 2))
 eta = X * [0.0, 1.0, -0.8]
-prob = cdf.(Normal(), eta)
+prob = 1.0 ./ (1.0 .+ exp.(-eta .* 1.7))  # approximate probit with scaled logistic
 y = Float64.(rand(n) .< prob)
 m = estimate_probit(y, X; varnames=["(Intercept)", "x1", "x2"])
 report(m)
