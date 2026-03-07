@@ -257,6 +257,7 @@ include("panel_reg/iv.jl")
 include("panel_reg/predict.jl")
 include("panel_reg/logit.jl")
 include("panel_reg/probit.jl")
+include("panel_reg/margins.jl")
 include("panel_reg/display.jl")
 
 # Covariance estimators

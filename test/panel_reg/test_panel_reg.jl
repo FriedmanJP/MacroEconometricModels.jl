@@ -514,3 +514,71 @@ end
         @test occursin("x1_mean", output)
     end
 end
+
+@testset "estimate_xtreg -- Arellano-Bond" begin
+    rng = Random.MersenneTwister(9001)
+    N_g = 100; T_p = 20; n = N_g * T_p
+
+    ids = repeat(1:N_g, inner=T_p)
+    ts = repeat(1:T_p, N_g)
+
+    # Dynamic panel DGP: y_t = 0.3*y_{t-1} + 0.5*x_t + alpha_i + error
+    alpha = repeat(randn(rng, N_g) .* 0.5, inner=T_p)
+    x = randn(rng, n)
+    y = zeros(n)
+    for g in 1:N_g
+        base = (g - 1) * T_p
+        y[base + 1] = alpha[base + 1] + 0.5 * x[base + 1] + 0.3 * randn(rng)
+        for t in 2:T_p
+            y[base + t] = 0.3 * y[base + t - 1] + 0.5 * x[base + t] + alpha[base + t] + 0.3 * randn(rng)
+        end
+    end
+
+    df = DataFrame(id=ids, t=ts, x=x, y=y)
+    pd = xtset(df, :id, :t)
+
+    m = estimate_xtreg(pd, :y, [:x]; model=:ab)
+    @test m isa PanelRegModel{Float64}
+    @test m.method == :ab
+    @test length(coef(m)) >= 2  # L.y + x
+    @test length(m.varnames) >= 2
+    @test m.varnames[1] == "L.y"
+    @test m.varnames[2] == "x"
+
+    se = stderror(m)
+    @test all(se .> 0)
+    @test m.n_groups == N_g
+end
+
+@testset "estimate_xtreg -- Blundell-Bond" begin
+    rng = Random.MersenneTwister(9002)
+    N_g = 100; T_p = 20; n = N_g * T_p
+
+    ids = repeat(1:N_g, inner=T_p)
+    ts = repeat(1:T_p, N_g)
+
+    alpha = repeat(randn(rng, N_g) .* 0.5, inner=T_p)
+    x = randn(rng, n)
+    y = zeros(n)
+    for g in 1:N_g
+        base = (g - 1) * T_p
+        y[base + 1] = alpha[base + 1] + 0.5 * x[base + 1] + 0.3 * randn(rng)
+        for t in 2:T_p
+            y[base + t] = 0.3 * y[base + t - 1] + 0.5 * x[base + t] + alpha[base + t] + 0.3 * randn(rng)
+        end
+    end
+
+    df = DataFrame(id=ids, t=ts, x=x, y=y)
+    pd = xtset(df, :id, :t)
+
+    m = estimate_xtreg(pd, :y, [:x]; model=:bb)
+    @test m isa PanelRegModel{Float64}
+    @test m.method == :bb
+    @test length(coef(m)) >= 2
+    @test m.varnames[1] == "L.y"
+    @test m.varnames[2] == "x"
+
+    se = stderror(m)
+    @test all(se .> 0)
+    @test m.n_groups == N_g
+end

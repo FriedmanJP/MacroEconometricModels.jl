@@ -387,7 +387,9 @@ function Base.show(io::IO, m::PanelRegModel{T}) where {T}
     method_str = m.method == :fe ? "Fixed Effects" :
                  m.method == :re ? "Random Effects" :
                  m.method == :fd ? "First-Difference" :
-                 m.method == :between ? "Between" : "Correlated RE"
+                 m.method == :between ? "Between" :
+                 m.method == :ab ? "Arellano-Bond" :
+                 m.method == :bb ? "Blundell-Bond" : "Correlated RE"
     twoway_str = m.twoway ? " (Two-way)" : ""
 
     spec = Any[

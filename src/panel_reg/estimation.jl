@@ -239,8 +239,8 @@ function estimate_xtreg(pd::PanelData{T}, depvar::Symbol, indepvars::Vector{Symb
                         model::Symbol=:fe, twoway::Bool=false,
                         cov_type::Symbol=:cluster,
                         bandwidth::Union{Nothing,Int}=nothing) where {T<:AbstractFloat}
-    model in (:fe, :re, :fd, :between, :cre) ||
-        throw(ArgumentError("model must be :fe, :re, :fd, :between, or :cre; got :$model"))
+    model in (:fe, :re, :fd, :between, :cre, :ab, :bb) ||
+        throw(ArgumentError("model must be :fe, :re, :fd, :between, :cre, :ab, or :bb; got :$model"))
     cov_type in (:ols, :cluster, :twoway, :driscoll_kraay) ||
         throw(ArgumentError("cov_type must be :ols, :cluster, :twoway, or :driscoll_kraay; got :$cov_type"))
 
@@ -283,6 +283,10 @@ function estimate_xtreg(pd::PanelData{T}, depvar::Symbol, indepvars::Vector{Symb
     elseif model == :cre
         return _estimate_cre(pd, y, X, groups, time_ids, unique_groups, unique_times,
                              N, n_times, n, k, indepvars, cov_type, bandwidth)
+    elseif model == :ab
+        return _estimate_ab(pd, depvar, indepvars, n, N, k)
+    elseif model == :bb
+        return _estimate_bb(pd, depvar, indepvars, n, N, k)
     end
 end
 
@@ -942,6 +946,91 @@ function _estimate_cre(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
         loglik, aic_val, bic_val,
         vn_all, :cre, false, cov_type,
         n, N, n_periods_avg,
+        nothing, pd
+    )
+end
+
+# =============================================================================
+# Arellano-Bond (AB) — Thin wrapper over PVAR GMM
+# =============================================================================
+
+function _estimate_ab(pd::PanelData{T}, depvar::Symbol, indepvars::Vector{Symbol},
+                      n::Int, N::Int, k::Int) where {T}
+    _estimate_dynamic_panel(pd, depvar, indepvars, n, N, k, :ab, false)
+end
+
+# =============================================================================
+# Blundell-Bond (BB) — Thin wrapper over PVAR System GMM
+# =============================================================================
+
+function _estimate_bb(pd::PanelData{T}, depvar::Symbol, indepvars::Vector{Symbol},
+                      n::Int, N::Int, k::Int) where {T}
+    _estimate_dynamic_panel(pd, depvar, indepvars, n, N, k, :bb, true)
+end
+
+"""
+    _estimate_dynamic_panel(pd, depvar, indepvars, n, N, k, method, system_instruments) -> PanelRegModel{T}
+
+Shared implementation for Arellano-Bond and Blundell-Bond dynamic panel estimators.
+Dispatches to `estimate_pvar` and extracts the first equation's coefficients.
+"""
+function _estimate_dynamic_panel(pd::PanelData{T}, depvar::Symbol, indepvars::Vector{Symbol},
+                                  n::Int, N::Int, k::Int, method::Symbol,
+                                  system_instruments::Bool) where {T}
+    m_pvar = estimate_pvar(pd, 1;
+        dependent_vars=[String(depvar)],
+        exog_vars=String.(indepvars),
+        transformation=:fd,
+        steps=:twostep,
+        system_instruments=system_instruments)
+
+    # Extract first (only) equation results from PVARModel
+    # Phi is m x K where K = m*p + n_exog
+    # For single-equation: row 1 is our equation
+    # Columns: [lag1_of_depvar, exog1, exog2, ...]
+    phi_row = vec(m_pvar.Phi[1, :])
+    se_row = vec(m_pvar.se[1, :])
+    pval_row = vec(m_pvar.pvalues[1, :])
+
+    # Variable names: L.depvar + exogenous
+    vn = vcat(["L.$(String(depvar))"], [String(v) for v in indepvars])
+
+    k_total = length(phi_row)
+
+    # Construct vcov as diagonal from SEs (we don't have the full vcov from PVAR per-equation)
+    vcov_mat = Diagonal(se_row .^ 2)
+    vcov_mat_dense = Matrix{T}(vcov_mat)
+
+    # Dummy residuals and fitted (not directly available from PVAR wrapper)
+    resid_dummy = zeros(T, m_pvar.n_obs)
+    fitted_dummy = zeros(T, m_pvar.n_obs)
+    y_dummy = zeros(T, m_pvar.n_obs)
+    X_dummy = zeros(T, m_pvar.n_obs, k_total)
+
+    # F-test for joint significance
+    f_stat = try
+        T(dot(phi_row, robust_inv(vcov_mat_dense) * phi_row) / k_total)
+    catch
+        zero(T)
+    end
+    f_pval = if f_stat > zero(T) && isfinite(f_stat)
+        df2 = max(N - 1, 1)
+        T(1 - cdf(FDist(k_total, df2), f_stat))
+    else
+        one(T)
+    end
+
+    n_periods_avg = T(m_pvar.n_obs) / T(N)
+
+    PanelRegModel{T}(
+        phi_row, vcov_mat_dense, resid_dummy, fitted_dummy, y_dummy, X_dummy,
+        zero(T), zero(T), zero(T),  # r2_within, r2_between, r2_overall
+        zero(T), zero(T), zero(T),  # sigma_u, sigma_e, rho
+        nothing,  # theta
+        f_stat, f_pval,
+        zero(T), zero(T), zero(T),  # loglik, aic, bic
+        vn, method, false, :cluster,
+        m_pvar.n_obs, N, n_periods_avg,
         nothing, pd
     )
 end

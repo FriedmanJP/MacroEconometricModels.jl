@@ -280,6 +280,133 @@ end
     @test length(yhat) == n
 end
 
+@testset "Panel marginal effects" begin
+    @testset "Pooled logit" begin
+        rng = Random.MersenneTwister(4001)
+        N_g = 50; T_p = 10; n = N_g * T_p
+        ids = repeat(1:N_g, inner=T_p)
+        ts = repeat(1:T_p, N_g)
+        x1 = randn(rng, n)
+        x2 = randn(rng, n)
+        eta = 1.0 .* x1 .- 0.8 .* x2
+        p = 1.0 ./ (1.0 .+ exp.(-eta))
+        y = Float64.(rand(rng, n) .< p)
+
+        df = DataFrame(id=ids, t=ts, x1=x1, x2=x2, y=y)
+        pd = xtset(df, :id, :t)
+        m = estimate_xtlogit(pd, :y, [:x1, :x2])
+
+        me = marginal_effects(m)
+        @test me isa MarginalEffects{Float64}
+        @test length(me.effects) == 3  # intercept + 2 vars
+        @test all(me.se .> 0)
+        # AME for x1 should be positive, x2 negative
+        @test me.effects[2] > 0
+        @test me.effects[3] < 0
+        # AMEs should be smaller in magnitude than raw coefficients (attenuation by f(eta))
+        @test abs(me.effects[2]) < abs(coef(m)[2])
+        @test abs(me.effects[3]) < abs(coef(m)[3])
+    end
+
+    @testset "RE logit — attenuation" begin
+        rng = Random.MersenneTwister(4002)
+        N_g = 50; T_p = 10; n = N_g * T_p
+        ids = repeat(1:N_g, inner=T_p)
+        ts = repeat(1:T_p, N_g)
+        x1 = randn(rng, n)
+        alpha = repeat(1.0 .* randn(rng, N_g), inner=T_p)
+        eta = alpha .+ 0.8 .* x1
+        p = 1.0 ./ (1.0 .+ exp.(-eta))
+        y = Float64.(rand(rng, n) .< p)
+
+        df = DataFrame(id=ids, t=ts, x1=x1, y=y)
+        pd = xtset(df, :id, :t)
+        m = estimate_xtlogit(pd, :y, [:x1]; model=:re, maxiter=300)
+
+        me = marginal_effects(m)
+        @test me isa MarginalEffects{Float64}
+        @test length(me.effects) == 2  # intercept + x1
+        @test all(me.se .> 0)
+        # AME for x1 should be positive
+        @test me.effects[2] > 0
+        # Effects should be smaller than coefficients (attenuation)
+        @test abs(me.effects[2]) < abs(coef(m)[2])
+    end
+
+    @testset "FE logit" begin
+        rng = Random.MersenneTwister(4003)
+        N_g = 100; T_p = 10; n = N_g * T_p
+        ids = repeat(1:N_g, inner=T_p)
+        ts = repeat(1:T_p, N_g)
+        x1 = randn(rng, n)
+        x2 = randn(rng, n)
+        alpha = repeat(randn(rng, N_g), inner=T_p)
+        eta = alpha .+ 0.8 .* x1 .- 0.5 .* x2
+        p = 1.0 ./ (1.0 .+ exp.(-eta))
+        y = Float64.(rand(rng, n) .< p)
+
+        df = DataFrame(id=ids, t=ts, x1=x1, x2=x2, y=y)
+        pd = xtset(df, :id, :t)
+        m = estimate_xtlogit(pd, :y, [:x1, :x2]; model=:fe)
+
+        me = marginal_effects(m)
+        @test me isa MarginalEffects{Float64}
+        @test length(me.effects) == 2  # no intercept in FE
+        @test all(me.se .> 0)
+        @test me.effects[1] > 0  # x1 positive
+        @test me.effects[2] < 0  # x2 negative
+    end
+
+    @testset "Pooled probit" begin
+        rng = Random.MersenneTwister(4004)
+        N_g = 50; T_p = 10; n = N_g * T_p
+        ids = repeat(1:N_g, inner=T_p)
+        ts = repeat(1:T_p, N_g)
+        x1 = randn(rng, n)
+        x2 = randn(rng, n)
+        d = Normal()
+        eta = 0.8 .* x1 .- 0.5 .* x2
+        p = cdf.(d, eta)
+        y = Float64.(rand(rng, n) .< p)
+
+        df = DataFrame(id=ids, t=ts, x1=x1, x2=x2, y=y)
+        pd = xtset(df, :id, :t)
+        m = estimate_xtprobit(pd, :y, [:x1, :x2])
+
+        me = marginal_effects(m)
+        @test me isa MarginalEffects{Float64}
+        @test length(me.effects) == 3  # intercept + 2
+        @test all(me.se .> 0)
+        @test me.effects[2] > 0
+        @test me.effects[3] < 0
+        @test abs(me.effects[2]) < abs(coef(m)[2])
+    end
+
+    @testset "CRE logit — only original vars" begin
+        rng = Random.MersenneTwister(4005)
+        N_g = 50; T_p = 10; n = N_g * T_p
+        ids = repeat(1:N_g, inner=T_p)
+        ts = repeat(1:T_p, N_g)
+        x1 = randn(rng, n)
+        alpha = repeat(randn(rng, N_g), inner=T_p)
+        eta = alpha .+ 1.0 .* x1
+        p = 1.0 ./ (1.0 .+ exp.(-eta))
+        y = Float64.(rand(rng, n) .< p)
+
+        df = DataFrame(id=ids, t=ts, x1=x1, y=y)
+        pd = xtset(df, :id, :t)
+        m = estimate_xtlogit(pd, :y, [:x1]; model=:cre, maxiter=300)
+
+        me = marginal_effects(m)
+        @test me isa MarginalEffects{Float64}
+        # CRE should only report original vars (not _cons and not _mean)
+        @test length(me.effects) == 1
+        @test all(me.se .> 0)
+        @test me.effects[1] > 0
+        @test !any(endswith("_mean"), me.varnames)
+    end
+end
+
 @testset "Panel nonlinear -- display" begin
     rng = Random.MersenneTwister(7788)
     N_g = 20; T_p = 5; n = N_g * T_p
