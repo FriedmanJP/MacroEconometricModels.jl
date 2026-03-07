@@ -6,19 +6,22 @@ Forecast Error Variance Decomposition (FEVD) quantifies the proportion of each v
 - **Bayesian FEVD**: Posterior distributions over variance shares with credible intervals
 - **LP-Based FEVD**: R²-based estimator robust to VAR dynamic misspecification (Gorodnichenko & Lee 2019)
 
+```@setup ia_fevd
+using MacroEconometricModels, Random
+Random.seed!(42)
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+Y = Y[end-59:end, :]
+model = estimate_var(Y, 4)
+post = estimate_bvar(Y, 4; n_draws=100)
+```
+
 ## Quick Start
 
 **Recipe 1: Basic FEVD with Cholesky identification**
 
-```julia
-using MacroEconometricModels
-
-# Load FRED-MD: industrial production, CPI inflation, federal funds rate
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-
+```@example ia_fevd
 # FEVD at horizon 20 with Cholesky identification
 decomp = fevd(model, 20)
 report(decomp)
@@ -26,61 +29,30 @@ report(decomp)
 
 **Recipe 2: FEVD with bootstrap confidence intervals**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-
+```@example ia_fevd
 # Bootstrap CI via IRF bootstrap (Kilian 1998)
-irfs_ci = irf(model, 20; ci_type=:bootstrap, reps=500)
+irfs_ci = irf(model, 20; ci_type=:bootstrap, reps=50)
 report(irfs_ci)
 ```
 
 **Recipe 3: Bayesian FEVD with credible intervals**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
-post = estimate_bvar(Y, 2; n_draws=1000, prior=:minnesota,
-                     varnames=["INDPRO", "CPI", "FFR"])
+```@example ia_fevd
 bfevd = fevd(post, 20; method=:cholesky)
 report(bfevd)
 ```
 
 **Recipe 4: LP-based FEVD with bias correction**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example ia_fevd
 slp = structural_lp(Y, 20; method=:cholesky, lags=4)
-lp_decomp = fevd(slp, 20; bias_correct=true, n_boot=500)
+lp_decomp = fevd(slp, 20; bias_correct=true, n_boot=50)
 report(lp_decomp)
 ```
 
 **Recipe 5: FEVD table output at selected horizons**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-
+```@example ia_fevd
 decomp = fevd(model, 20)
 print_table(stdout, decomp, "INDPRO"; horizons=[1, 4, 8, 12, 20])
 ```
@@ -114,15 +86,7 @@ At short horizons, own shocks typically dominate (large diagonal entries in the 
 
 ### Code Example
 
-```julia
-using MacroEconometricModels
-
-# Load FRED-MD: monetary policy VAR
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-
+```@example ia_fevd
 # Cholesky FEVD: ordering implies INDPRO → CPI → FFR
 decomp = fevd(model, 20)
 report(decomp)
@@ -164,18 +128,7 @@ The Cholesky ordering INDPRO, CPIAUCSL, FEDFUNDS implies that monetary policy sh
 
 Bayesian FEVD integrates over parameter uncertainty by computing variance shares for each posterior draw and reporting posterior quantiles (Kilian & Lutkepohl 2017, Chapter 12). This produces credible intervals that reflect both estimation uncertainty and identification uncertainty.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
-# Bayesian VAR with Minnesota prior
-post = estimate_bvar(Y, 2; n_draws=1000, prior=:minnesota,
-                     varnames=["INDPRO", "CPI", "FFR"])
-
+```@example ia_fevd
 # Bayesian FEVD with 68% credible intervals
 bfevd = fevd(post, 20; method=:cholesky, quantiles=[0.16, 0.5, 0.84])
 report(bfevd)
@@ -244,20 +197,13 @@ The raw R² estimator has a finite-sample upward bias. The package applies the V
 
 ### Code Example
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example ia_fevd
 # Structural LP with Cholesky identification
 slp = structural_lp(Y, 20; method=:cholesky, lags=4)
 
 # LP-FEVD with bias correction and bootstrap CIs
 lp_decomp = fevd(slp, 20; method=:r2, bias_correct=true,
-                 n_boot=500, conf_level=0.95)
+                 n_boot=50, conf_level=0.95)
 report(lp_decomp)
 ```
 
@@ -302,36 +248,29 @@ For full details on structural LP estimation, see [Local Projections](@ref lp_pa
 
 This example computes frequentist, Bayesian, and LP-based FEVD for a three-variable monetary policy VAR using FRED-MD data, then compares the variance shares across methods.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-# Load FRED-MD: industrial production, CPI inflation, federal funds rate
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-H = 20
-
+```@example ia_fevd
 # --- Frequentist FEVD ---
-model = estimate_var(Y, 2)
-freq_fevd = fevd(model, H)
+freq_fevd = fevd(model, 20)
 report(freq_fevd)
+```
 
+```@example ia_fevd
 # --- Bayesian FEVD ---
-post = estimate_bvar(Y, 2; n_draws=1000, prior=:minnesota,
-                     varnames=["INDPRO", "CPI", "FFR"])
-bayes_fevd = fevd(post, H; method=:cholesky)
+bayes_fevd = fevd(post, 20; method=:cholesky)
 report(bayes_fevd)
+```
 
+```@example ia_fevd
 # --- LP-based FEVD ---
-slp = structural_lp(Y, H; method=:cholesky, lags=4)
-lp_fevd_result = fevd(slp, H; bias_correct=true, n_boot=500)
+slp_full = structural_lp(Y, 20; method=:cholesky, lags=4)
+lp_fevd_result = fevd(slp_full, 20; bias_correct=true, n_boot=50)
 report(lp_fevd_result)
 
 # --- Tabular comparison at selected horizons ---
 print_table(stdout, freq_fevd, 1; horizons=[1, 4, 8, 20])
+```
 
-# --- Visualization ---
+```julia
 plot_result(freq_fevd)
 plot_result(bayes_fevd)
 plot_result(lp_fevd_result)

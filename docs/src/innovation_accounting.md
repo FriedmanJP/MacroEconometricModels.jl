@@ -8,48 +8,36 @@ Innovation accounting decomposes the dynamics of a structural VAR into the contr
 
 All three tools support frequentist VAR, Bayesian VAR, VECM, FAVAR, DSGE, and Local Projection estimation, with six structural identification schemes and interactive D3.js visualization via `plot_result()`.
 
+```@setup ia
+using MacroEconometricModels, Random
+Random.seed!(42)
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+Y = Y[end-59:end, :]
+model = estimate_var(Y, 4)
+```
+
 ## Quick Start
 
 **Recipe 1: Cholesky IRF with bootstrap confidence intervals**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-
+```@example ia
 # Recursive identification: INDPRO -> CPIAUCSL -> FEDFUNDS
-irfs = irf(model, 20; ci_type=:bootstrap, reps=500)
+irfs = irf(model, 20; ci_type=:bootstrap, reps=50)
 report(irfs)
 ```
 
 **Recipe 2: Forecast error variance decomposition**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-
+```@example ia
 decomp = fevd(model, 20)
 report(decomp)
 ```
 
 **Recipe 3: Historical decomposition with verification**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-
+```@example ia
 hd = historical_decomposition(model, size(model.U, 1))
 verify_decomposition(hd)
 report(hd)
@@ -57,14 +45,8 @@ report(hd)
 
 **Recipe 4: Bayesian IRF with credible intervals**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-post = estimate_bvar(Y, 2; n_draws=1000)
+```@example ia
+post = estimate_bvar(Y, 4; n_draws=100)
 
 # Posterior median IRF with 68% credible intervals
 birfs = irf(post, 20)
@@ -73,29 +55,15 @@ report(birfs)
 
 **Recipe 5: Sign-restricted IRF**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-
+```@example ia
 # Demand shock: positive output, positive prices; supply shock: positive output, negative prices
-irfs = irf(model, 20; method=:sign, sign_restrictions=[1 1 0; -1 0 0; 0 0 1])
-report(irfs)
+irfs_sign = irf(model, 20; method=:sign, sign_restrictions=[1 1 0; -1 0 0; 0 0 1])
+report(irfs_sign)
 ```
 
 **Recipe 6: Structural LP impulse responses**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example ia
 # LP-based IRF robust to VAR misspecification
 slp = structural_lp(Y, 20; method=:cholesky, lags=4)
 lp_irfs = irf(slp)

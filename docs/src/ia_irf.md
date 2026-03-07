@@ -2,84 +2,55 @@
 
 The **impulse response function** (IRF) traces the dynamic effect of a one-unit structural shock on each endogenous variable over time. MacroEconometricModels.jl computes IRFs from VAR, BVAR, and Local Projection models with bootstrap confidence intervals, Bayesian credible bands, cumulation for growth-rate variables, and stationarity-filtered inference.
 
+```@setup ia_irf
+using MacroEconometricModels, Random
+Random.seed!(42)
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+Y = Y[end-59:end, :]
+model = estimate_var(Y, 4)
+post = estimate_bvar(Y, 4; n_draws=100)
+```
+
 ## Quick Start
 
 **Recipe 1: Basic Cholesky IRF**
 
-```julia
-using MacroEconometricModels
-
-# Load FRED-MD: industrial production, CPI inflation, federal funds rate
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example ia_irf
 # Cholesky IRF with recursive ordering
-model = estimate_var(Y, 4)
 result = irf(model, 20)
 report(result)
 ```
 
 **Recipe 2: IRF with bootstrap confidence intervals**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 4)
-
+```@example ia_irf
 # Residual bootstrap with 95% pointwise intervals
-result = irf(model, 20; ci_type=:bootstrap, reps=500, conf_level=0.95)
+result = irf(model, 20; ci_type=:bootstrap, reps=50, conf_level=0.95)
 report(result)
 ```
 
 **Recipe 3: Cumulative IRF**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 4)
-
+```@example ia_irf
 # Cumulate IRF for growth-rate variables (level effect)
-result = irf(model, 20; ci_type=:bootstrap, reps=500)
+result = irf(model, 20; ci_type=:bootstrap, reps=50)
 cum_result = cumulative_irf(result)
 report(cum_result)
 ```
 
 **Recipe 4: Bayesian IRF (BVAR)**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example ia_irf
 # Bayesian IRF with 68% credible bands
-post = estimate_bvar(Y, 4; n_draws=1000)
 result = irf(post, 20)
 report(result)
 ```
 
 **Recipe 5: Sign-restricted IRF**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 4)
-
+```@example ia_irf
 # Demand shock: positive output and positive prices on impact
 check_demand = irf_array -> irf_array[1, 1, 1] > 0 && irf_array[1, 2, 1] > 0
 result = irf(model, 20; method=:sign, check_func=check_demand)
@@ -88,13 +59,7 @@ report(result)
 
 **Recipe 6: Structural LP IRF**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example ia_irf
 # Structural LP: Cholesky identification + LP estimation
 slp = structural_lp(Y, 20; method=:cholesky, lags=4)
 result = irf(slp)
@@ -144,20 +109,14 @@ where:
 
 The following example estimates a three-variable monetary policy VAR from FRED-MD data and computes Cholesky-identified IRFs with bootstrap confidence intervals (Kilian 1998).
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-# Load FRED-MD: industrial production, CPI inflation, federal funds rate
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 4)
-
+```@example ia_irf
 # Cholesky IRF with bootstrap 95% confidence intervals
 H = 20
-result = irf(model, H; ci_type=:bootstrap, reps=500, conf_level=0.95)
+result = irf(model, H; ci_type=:bootstrap, reps=50, conf_level=0.95)
 report(result)
+```
+
+```julia
 plot_result(result)
 ```
 
@@ -210,20 +169,12 @@ where:
 
 The `cumulative_irf` function accepts `ImpulseResponse`, `BayesianImpulseResponse`, or `LPImpulseResponse` objects. When raw bootstrap draws are available (from a prior `irf()` call with `ci_type=:bootstrap`), the function cumulates each draw before extracting quantiles.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 4)
-
+```@example ia_irf
 # Pointwise IRF with bootstrap draws
-result = irf(model, 20; ci_type=:bootstrap, reps=500)
+result_ci = irf(model, 20; ci_type=:bootstrap, reps=50)
 
 # Cumulate: each bootstrap draw is summed before extracting quantiles
-cum_result = cumulative_irf(result)
+cum_result = cumulative_irf(result_ci)
 report(cum_result)
 ```
 
@@ -246,21 +197,14 @@ where:
 
 The returned quantiles (default: 16th, 50th, 84th percentiles) form 68% pointwise credible bands. The point estimate is the posterior mean by default; pass `point_estimate=:median` for the posterior median.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
-# BVAR with Minnesota-style prior
-post = estimate_bvar(Y, 4; n_draws=1000)
-
+```@example ia_irf
 # Bayesian IRFs with default 68% credible bands
-result = irf(post, 20)
-report(result)
-plot_result(result)
+bayes_result = irf(post, 20)
+report(bayes_result)
+```
+
+```julia
+plot_result(bayes_result)
 ```
 
 ```@raw html
@@ -309,18 +253,15 @@ LP and VAR produce identical IRFs under correct specification (Plagborg-Møller 
 
 **Standard LP IRF**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example ia_irf
 # LP-IRF: response of all variables to a FFR shock (variable 3)
 lp = estimate_lp(Y, 3, 20; lags=4, cov_type=:newey_west)
-result = lp_irf(lp; conf_level=0.95)
-report(result)
-plot_result(result)
+lp_result = lp_irf(lp; conf_level=0.95)
+report(lp_result)
+```
+
+```julia
+plot_result(lp_result)
 ```
 
 ```@raw html
@@ -329,18 +270,15 @@ plot_result(result)
 
 **Structural LP IRF**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example ia_irf
 # Structural LP with Cholesky identification
-slp = structural_lp(Y, 20; method=:cholesky, lags=4)
-result = irf(slp)
-report(result)
-plot_result(slp)
+slp2 = structural_lp(Y, 20; method=:cholesky, lags=4)
+slp_result = irf(slp2)
+report(slp_result)
+```
+
+```julia
+plot_result(slp2)
 ```
 
 ```@raw html
@@ -360,19 +298,11 @@ The residual bootstrap of Kilian (1998) can produce explosive bootstrap draws wh
 !!! note "Technical Note"
     The algorithm attempts up to ``10 \times \text{reps}`` draws to collect the requested number of stationary replications. If fewer than `reps` stationary draws are obtained, a warning is emitted. In practice, well-specified models with moderate sample sizes produce rejection rates below 10%.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 4)
-
+```@example ia_irf
 # Bootstrap with stationarity filtering
-result = irf(model, 20; ci_type=:bootstrap, reps=500,
-             conf_level=0.95, stationary_only=true)
-report(result)
+result_stat = irf(model, 20; ci_type=:bootstrap, reps=50,
+                  conf_level=0.95, stationary_only=true)
+report(result_stat)
 ```
 
 Stationarity filtering removes the heavy tails in bootstrap IRF distributions caused by near-unit-root draws. The filtered confidence bands are typically narrower and more symmetric, reflecting the prior belief that the data-generating process is covariance-stationary. Kilian (1998) demonstrates that this improves finite-sample coverage of bootstrap confidence intervals in monetary VARs.
@@ -383,19 +313,9 @@ Stationarity filtering removes the heavy tails in bootstrap IRF distributions ca
 
 This example combines frequentist, Bayesian, and LP-based IRFs for a three-variable monetary policy VAR using FRED-MD data.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-# ── Data ──────────────────────────────────────────────────────────────
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example ia_irf
 # ── Frequentist VAR IRF ──────────────────────────────────────────────
-model = estimate_var(Y, 4)
-H = 20
-freq_irf = irf(model, H; ci_type=:bootstrap, reps=500, conf_level=0.95)
+freq_irf = irf(model, 20; ci_type=:bootstrap, reps=50, conf_level=0.95)
 report(freq_irf)
 
 # Cumulative IRF for growth-rate variables
@@ -403,16 +323,19 @@ cum_irf = cumulative_irf(freq_irf)
 
 # Selected horizons via table()
 print_table(stdout, freq_irf, "INDPRO", "FEDFUNDS"; horizons=[1, 4, 8, 12, 20])
+```
 
+```@example ia_irf
 # ── Bayesian BVAR IRF ────────────────────────────────────────────────
-post = estimate_bvar(Y, 4; n_draws=1000)
-bayes_irf = irf(post, H)
+bayes_irf = irf(post, 20)
 report(bayes_irf)
+```
 
+```@example ia_irf
 # ── Structural LP IRF ────────────────────────────────────────────────
-slp = structural_lp(Y, H; method=:cholesky, lags=4)
-lp_result = irf(slp)
-report(lp_result)
+slp_full = structural_lp(Y, 20; method=:cholesky, lags=4)
+lp_full = irf(slp_full)
+report(lp_full)
 ```
 
 The three approaches produce qualitatively similar IRFs under correct specification, but differ in their uncertainty quantification. The bootstrap CI on the frequentist IRF reflects sampling variability in the OLS estimates. The Bayesian credible bands incorporate prior information from the Minnesota prior, which stabilizes long-horizon responses. The structural LP bands are the widest because LP does not impose the VAR's cross-horizon coefficient restrictions. Comparing all three provides a robustness check: if the qualitative shape and sign of the response are consistent across methods, the structural conclusion is credible.

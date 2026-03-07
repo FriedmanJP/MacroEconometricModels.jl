@@ -6,19 +6,22 @@ Historical Decomposition (HD) decomposes observed variable movements into contri
 - **Bayesian HD**: Posterior distributions over shock contributions with credible intervals
 - **Accessor functions**: `contribution()`, `total_shock_contribution()`, and `verify_decomposition()` for programmatic analysis
 
+```@setup ia_hd
+using MacroEconometricModels, Random
+Random.seed!(42)
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+Y = Y[end-59:end, :]
+model = estimate_var(Y, 4)
+post = estimate_bvar(Y, 4; n_draws=100)
+```
+
 ## Quick Start
 
 **Recipe 1: Basic historical decomposition**
 
-```julia
-using MacroEconometricModels
-
-# Load FRED-MD: industrial production, CPI inflation, federal funds rate
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-
+```@example ia_hd
 # HD with Cholesky identification
 hd = historical_decomposition(model)
 report(hd)
@@ -26,14 +29,7 @@ report(hd)
 
 **Recipe 2: Verify the decomposition identity**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-
+```@example ia_hd
 hd = historical_decomposition(model)
 
 # The identity y_t = sum_j HD_j(t) + initial(t) holds to machine precision
@@ -42,14 +38,7 @@ verified = verify_decomposition(hd)
 
 **Recipe 3: Extract individual shock contributions**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-
+```@example ia_hd
 hd = historical_decomposition(model)
 
 # Contribution of monetary shock (shock 3) to output (variable 1)
@@ -61,31 +50,19 @@ total = total_shock_contribution(hd, 1)
 
 **Recipe 4: Bayesian historical decomposition**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
-post = estimate_bvar(Y, 2; n_draws=1000, prior=:minnesota,
-                     varnames=["INDPRO", "CPI", "FFR"])
+```@example ia_hd
 bhd = historical_decomposition(post; method=:cholesky)
 report(bhd)
 ```
 
 **Recipe 5: HD visualization**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-
+```@example ia_hd
 hd = historical_decomposition(model)
+nothing # hide
+```
+
+```julia
 plot_result(hd)
 ```
 
@@ -132,15 +109,7 @@ The `verify_decomposition()` function checks this identity to machine precision 
 
 ### Code Example
 
-```julia
-using MacroEconometricModels
-
-# Load FRED-MD: monetary policy VAR
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-
+```@example ia_hd
 # Historical decomposition with Cholesky identification
 hd = historical_decomposition(model)
 report(hd)
@@ -200,18 +169,7 @@ The HD reveals which structural shocks drove specific historical episodes. Large
 
 Bayesian HD computes the historical decomposition for each posterior draw from a Bayesian VAR, producing posterior distributions over shock contributions (Kilian & Lutkepohl 2017, Chapter 12). Non-stationary posterior draws are discarded to ensure economically meaningful decompositions.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
-# Bayesian VAR with Minnesota prior
-post = estimate_bvar(Y, 2; n_draws=1000, prior=:minnesota,
-                     varnames=["INDPRO", "CPI", "FFR"])
-
+```@example ia_hd
 # Bayesian HD with 68% credible intervals
 bhd = historical_decomposition(post; method=:cholesky,
                                quantiles=[0.16, 0.5, 0.84])
@@ -263,26 +221,20 @@ The Bayesian HD iterates over all stationary posterior draws, computing the stru
 
 This example combines IRF, FEVD, and HD for a complete structural analysis of a three-variable monetary policy VAR. The workflow moves from shock identification to dynamic responses, variance contributions, and finally episode-level attribution.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-# Load FRED-MD: industrial production, CPI inflation, federal funds rate
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-H = 20
-
+```@example ia_hd
 # Step 1: Impulse responses — how do variables respond to shocks?
-irfs = irf(model, H; method=:cholesky, ci_type=:bootstrap, reps=500)
+irfs = irf(model, 20; method=:cholesky, ci_type=:bootstrap, reps=50)
 report(irfs)
+```
 
+```@example ia_hd
 # Step 2: Variance decomposition — which shocks matter most?
-decomp = fevd(model, H)
+decomp = fevd(model, 20)
 report(decomp)
 print_table(stdout, decomp, 1; horizons=[1, 4, 8, 20])
+```
 
+```@example ia_hd
 # Step 3: Historical decomposition — which shocks drove specific episodes?
 hd = historical_decomposition(model)
 report(hd)
@@ -292,8 +244,10 @@ verified = verify_decomposition(hd)
 
 # Monetary policy contribution to output over time
 monetary_to_output = contribution(hd, 1, 3)
+nothing # hide
+```
 
-# Visualize all three
+```julia
 plot_result(irfs)
 plot_result(decomp)
 plot_result(hd)
