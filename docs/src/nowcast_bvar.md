@@ -4,13 +4,16 @@ The large Bayesian VAR (BVAR) approach to nowcasting estimates a high-dimensiona
 
 For an overview of all nowcasting methods and method comparison, see [Nowcasting](@ref). For DFM-based nowcasting, see [DFM Nowcasting](@ref nowcast_dfm_page).
 
+```@setup nc_bvar
+using MacroEconometricModels, Random
+Random.seed!(42)
+```
+
 ## Quick Start
 
 **Recipe 1: Basic BVAR nowcast**
 
-```julia
-using MacroEconometricModels
-
+```@example nc_bvar
 fred = load_example(:fred_md)
 nc_md = fred[:, ["INDPRO", "UNRATE", "CPIAUCSL", "M2SL", "FEDFUNDS"]]
 Y = to_matrix(apply_tcode(nc_md))
@@ -31,22 +34,7 @@ report(bvar)
 
 **Recipe 2: BVAR with custom hyperparameters**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-nc_md = fred[:, ["INDPRO", "UNRATE", "CPIAUCSL", "M2SL", "FEDFUNDS"]]
-Y = to_matrix(apply_tcode(nc_md))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-Y = Y[end-99:end, :]
-nM, nQ = 4, 1
-for t in 1:size(Y, 1)
-    if mod(t, 3) != 0
-        Y[t, end] = NaN
-    end
-end
-Y[end, end] = NaN
-
+```@example nc_bvar
 # Tighter shrinkage and stronger unit root prior
 bvar = nowcast_bvar(Y, nM, nQ; lags=5, lambda0=0.1, theta0=2.0, miu0=0.5, alpha0=3.0)
 report(bvar)
@@ -54,22 +42,8 @@ report(bvar)
 
 **Recipe 3: BVAR forecast**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-nc_md = fred[:, ["INDPRO", "UNRATE", "CPIAUCSL", "M2SL", "FEDFUNDS"]]
-Y = to_matrix(apply_tcode(nc_md))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-Y = Y[end-99:end, :]
-nM, nQ = 4, 1
+```@example nc_bvar
 N = nM + nQ
-for t in 1:size(Y, 1)
-    if mod(t, 3) != 0
-        Y[t, end] = NaN
-    end
-end
-Y[end, end] = NaN
 
 # 6-step ahead forecast for all variables
 bvar = nowcast_bvar(Y, nM, nQ; lags=5)
@@ -78,22 +52,7 @@ fc = forecast(bvar, 6; target_var=N)
 
 **Recipe 4: BVAR with TimeSeriesData**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-nc_md = fred[:, ["INDPRO", "UNRATE", "CPIAUCSL", "M2SL", "FEDFUNDS"]]
-Y = to_matrix(apply_tcode(nc_md))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-Y = Y[end-99:end, :]
-nM, nQ = 4, 1
-for t in 1:size(Y, 1)
-    if mod(t, 3) != 0
-        Y[t, end] = NaN
-    end
-end
-Y[end, end] = NaN
-
+```@example nc_bvar
 # TimeSeriesData dispatch works identically to raw matrices
 ts = TimeSeriesData(Y; varnames=["INDPRO","UNRATE","CPI","M2","FEDFUNDS"], frequency=Monthly)
 bvar = nowcast_bvar(ts, nM, nQ; lags=5)
@@ -137,22 +96,7 @@ The Normal-Inverse-Wishart prior implements four types of shrinkage via dummy ob
 
 The estimation proceeds in two stages. First, Nelder-Mead optimization maximizes the marginal log-likelihood over the hyperparameter vector ``(\lambda, \theta, \mu, \alpha)`` in log-space. Second, the BVAR is estimated at the optimal hyperparameters via OLS on the augmented data-plus-dummy system, and the Kalman smoother fills missing values in the ragged edge.
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-nc_md = fred[:, ["INDPRO", "UNRATE", "CPIAUCSL", "M2SL", "FEDFUNDS"]]
-Y = to_matrix(apply_tcode(nc_md))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-Y = Y[end-99:end, :]
-nM, nQ = 4, 1
-for t in 1:size(Y, 1)
-    if mod(t, 3) != 0
-        Y[t, end] = NaN
-    end
-end
-Y[end, end] = NaN
-
+```@example nc_bvar
 bvar = nowcast_bvar(Y, nM, nQ; lags=5, max_iter=200, thresh=1e-6)
 println("Optimized hyperparameters:")
 println("  lambda = ", round(bvar.lambda, digits=4))
@@ -176,23 +120,7 @@ The `forecast` function iterates the estimated VAR equation forward from the las
 
 For ``h > 1``, the forecast uses previously generated forecasts as inputs (iterated multi-step forecast).
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-nc_md = fred[:, ["INDPRO", "UNRATE", "CPIAUCSL", "M2SL", "FEDFUNDS"]]
-Y = to_matrix(apply_tcode(nc_md))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-Y = Y[end-99:end, :]
-nM, nQ = 4, 1
-N = nM + nQ
-for t in 1:size(Y, 1)
-    if mod(t, 3) != 0
-        Y[t, end] = NaN
-    end
-end
-Y[end, end] = NaN
-
+```@example nc_bvar
 bvar = nowcast_bvar(Y, nM, nQ; lags=5)
 
 # Forecast all variables 6 steps ahead
@@ -238,38 +166,20 @@ The BVAR forecast leverages the full cross-variable dynamics estimated from the 
 
 ## Complete Example
 
-```julia
-using MacroEconometricModels
-
-# === Step 1: Prepare FRED-MD mixed-frequency panel ===
-fred = load_example(:fred_md)
-nc_md = fred[:, ["INDPRO", "UNRATE", "CPIAUCSL", "M2SL", "FEDFUNDS"]]
-Y = to_matrix(apply_tcode(nc_md))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-Y = Y[end-99:end, :]
-T_obs = size(Y, 1)
-nM, nQ = 4, 1
-N = nM + nQ
-for t in 1:T_obs
-    if mod(t, 3) != 0
-        Y[t, end] = NaN
-    end
-end
-Y[end, end] = NaN
-
-# === Step 2: Estimate BVAR ===
+```@example nc_bvar
+# === Step 1: Estimate BVAR ===
 bvar = nowcast_bvar(Y, nM, nQ; lags=5, max_iter=200)
 report(bvar)
 
-# === Step 3: Extract nowcast and forecast ===
+# === Step 2: Extract nowcast and forecast ===
 result = nowcast(bvar)
 println("Nowcast: ", round(result.nowcast, digits=3))
 println("Forecast: ", round(result.forecast, digits=3))
 
-# === Step 4: Multi-step forecast ===
+# === Step 3: Multi-step forecast ===
 fc = forecast(bvar, 6; target_var=N)
 
-# === Step 5: Compare with DFM ===
+# === Step 4: Compare with DFM ===
 dfm = nowcast_dfm(Y, nM, nQ; r=2, p=1)
 r_dfm = nowcast(dfm)
 r_bvar = nowcast(bvar)

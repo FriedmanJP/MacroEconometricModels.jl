@@ -7,13 +7,16 @@ Central banks and forecasters need current-quarter GDP estimates weeks before of
 - **Bridge Equations**: OLS regressions on quarterly-aggregated monthly indicators, combined via median; see [Bridge Equations](@ref nowcast_bridge_page)
 - **News Decomposition**: attribute nowcast revisions to individual data releases (Banbura and Modugno 2014); see [News Decomposition](@ref nowcast_news_page)
 
+```@setup nc
+using MacroEconometricModels, Random
+Random.seed!(42)
+```
+
 ## Quick Start
 
 All recipes use the following FRED-MD mixed-frequency setup:
 
-```julia
-using MacroEconometricModels
-
+```@example nc
 fred = load_example(:fred_md)
 nc_md = fred[:, ["INDPRO", "UNRATE", "CPIAUCSL", "M2SL", "FEDFUNDS"]]
 Y = to_matrix(apply_tcode(nc_md))
@@ -26,32 +29,33 @@ for t in 1:size(Y, 1)
     end
 end
 Y[end, end] = NaN       # simulate ragged edge
+nothing # hide
 ```
 
 **Recipe 1: DFM nowcasting**
 
-```julia
+```@example nc
 dfm = nowcast_dfm(Y, nM, nQ; r=2, p=1, idio=:ar1)
 report(dfm)
 ```
 
 **Recipe 2: BVAR nowcasting**
 
-```julia
+```@example nc
 bvar = nowcast_bvar(Y, nM, nQ; lags=5)
 report(bvar)
 ```
 
 **Recipe 3: Bridge equation nowcasting**
 
-```julia
+```@example nc
 bridge = nowcast_bridge(Y, nM, nQ; lagM=1, lagQ=1)
 report(bridge)
 ```
 
 **Recipe 4: Nowcast extraction and comparison**
 
-```julia
+```@example nc
 r_dfm = nowcast(dfm)
 r_bvar = nowcast(bvar)
 r_bridge = nowcast(bridge)
@@ -60,7 +64,7 @@ report(r_dfm)
 
 **Recipe 5: News decomposition**
 
-```julia
+```@example nc
 X_old = copy(Y)
 X_new = copy(Y)
 X_old[end, 1:3] .= NaN   # simulate 3 releases arriving
@@ -111,8 +115,8 @@ Three challenges define the problem:
 
 The `nowcast()` function extracts the current-quarter estimate and a one-quarter-ahead forecast from any `AbstractNowcastModel`:
 
-```julia
-result = nowcast(model)
+```@example nc
+result = nowcast(dfm)
 result.nowcast    # current-quarter value
 result.forecast   # next-quarter forecast
 result.method     # :dfm, :bvar, or :bridge

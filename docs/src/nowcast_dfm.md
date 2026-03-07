@@ -4,13 +4,16 @@ The Dynamic Factor Model (DFM) extracts a small number of latent factors from a 
 
 For an overview of all nowcasting methods and method comparison, see [Nowcasting](@ref). For BVAR-based nowcasting, see [BVAR Nowcasting](@ref nowcast_bvar_page).
 
+```@setup nc_dfm
+using MacroEconometricModels, Random
+Random.seed!(42)
+```
+
 ## Quick Start
 
 **Recipe 1: Basic DFM nowcast**
 
-```julia
-using MacroEconometricModels
-
+```@example nc_dfm
 fred = load_example(:fred_md)
 nc_md = fred[:, ["INDPRO", "UNRATE", "CPIAUCSL", "M2SL", "FEDFUNDS"]]
 Y = to_matrix(apply_tcode(nc_md))
@@ -31,22 +34,7 @@ report(dfm)
 
 **Recipe 2: DFM with IID idiosyncratic errors**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-nc_md = fred[:, ["INDPRO", "UNRATE", "CPIAUCSL", "M2SL", "FEDFUNDS"]]
-Y = to_matrix(apply_tcode(nc_md))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-Y = Y[end-99:end, :]
-nM, nQ = 4, 1
-for t in 1:size(Y, 1)
-    if mod(t, 3) != 0
-        Y[t, end] = NaN
-    end
-end
-Y[end, end] = NaN
-
+```@example nc_dfm
 # IID idiosyncratic errors simplify the state space
 dfm_iid = nowcast_dfm(Y, nM, nQ; r=2, p=1, idio=:iid)
 report(dfm_iid)
@@ -54,22 +42,7 @@ report(dfm_iid)
 
 **Recipe 3: DFM with block structure**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-nc_md = fred[:, ["INDPRO", "UNRATE", "CPIAUCSL", "M2SL", "FEDFUNDS"]]
-Y = to_matrix(apply_tcode(nc_md))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-Y = Y[end-99:end, :]
-nM, nQ = 4, 1
-for t in 1:size(Y, 1)
-    if mod(t, 3) != 0
-        Y[t, end] = NaN
-    end
-end
-Y[end, end] = NaN
-
+```@example nc_dfm
 # Block structure: real activity (cols 1-2), nominal (cols 3-4), target (col 5)
 blocks = [1 0; 1 0; 0 1; 0 1; 1 1]
 dfm_block = nowcast_dfm(Y, nM, nQ; r=1, p=1, blocks=blocks)
@@ -78,22 +51,7 @@ report(dfm_block)
 
 **Recipe 4: DFM forecast**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-nc_md = fred[:, ["INDPRO", "UNRATE", "CPIAUCSL", "M2SL", "FEDFUNDS"]]
-Y = to_matrix(apply_tcode(nc_md))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-Y = Y[end-99:end, :]
-nM, nQ = 4, 1
-for t in 1:size(Y, 1)
-    if mod(t, 3) != 0
-        Y[t, end] = NaN
-    end
-end
-Y[end, end] = NaN
-
+```@example nc_dfm
 # 6-step ahead forecast for the quarterly target variable
 dfm = nowcast_dfm(Y, nM, nQ; r=2, p=1)
 fc = forecast(dfm, 6; target_var=5)
@@ -101,22 +59,7 @@ fc = forecast(dfm, 6; target_var=5)
 
 **Recipe 5: DFM with TimeSeriesData dispatch**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-nc_md = fred[:, ["INDPRO", "UNRATE", "CPIAUCSL", "M2SL", "FEDFUNDS"]]
-Y = to_matrix(apply_tcode(nc_md))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-Y = Y[end-99:end, :]
-nM, nQ = 4, 1
-for t in 1:size(Y, 1)
-    if mod(t, 3) != 0
-        Y[t, end] = NaN
-    end
-end
-Y[end, end] = NaN
-
+```@example nc_dfm
 # TimeSeriesData dispatch works identically to raw matrices
 ts = TimeSeriesData(Y; varnames=["INDPRO","UNRATE","CPI","M2","FEDFUNDS"], frequency=Monthly)
 dfm = nowcast_dfm(ts, nM, nQ; r=2, p=1)
@@ -185,22 +128,7 @@ The algorithm iterates until the relative change in log-likelihood falls below `
 \frac{|\ell^{(k)} - \ell^{(k-1)}|}{|\ell^{(k-1)}|} < \text{thresh}
 ```
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-nc_md = fred[:, ["INDPRO", "UNRATE", "CPIAUCSL", "M2SL", "FEDFUNDS"]]
-Y = to_matrix(apply_tcode(nc_md))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-Y = Y[end-99:end, :]
-nM, nQ = 4, 1
-for t in 1:size(Y, 1)
-    if mod(t, 3) != 0
-        Y[t, end] = NaN
-    end
-end
-Y[end, end] = NaN
-
+```@example nc_dfm
 # Estimate with tighter convergence and more iterations
 dfm = nowcast_dfm(Y, nM, nQ; r=2, p=1, idio=:ar1, max_iter=200, thresh=1e-6)
 println("Converged in $(dfm.n_iter) iterations, log-likelihood: $(round(dfm.loglik, digits=2))")
@@ -214,22 +142,7 @@ The log-likelihood value measures the overall fit of the estimated factors to th
 
 The `blocks` argument accepts an ``N \times B`` binary matrix specifying which variables load on which block factors. Entry ``(i, b) = 1`` indicates that variable ``i`` loads on block ``b``. This structure is useful when variables fall into natural groups --- for example, real activity indicators, price indices, and financial variables.
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-nc_md = fred[:, ["INDPRO", "UNRATE", "CPIAUCSL", "M2SL", "FEDFUNDS"]]
-Y = to_matrix(apply_tcode(nc_md))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-Y = Y[end-99:end, :]
-nM, nQ = 4, 1
-for t in 1:size(Y, 1)
-    if mod(t, 3) != 0
-        Y[t, end] = NaN
-    end
-end
-Y[end, end] = NaN
-
+```@example nc_dfm
 # Two blocks: real activity (INDPRO, UNRATE) and nominal (CPI, M2)
 # FEDFUNDS loads on both blocks
 blocks = [1 0;    # INDPRO → block 1
@@ -249,23 +162,8 @@ When `blocks=nothing` (default), all variables load on a single global factor bl
 
 The `forecast` function projects the state vector forward using the estimated transition equation ``z_{t+h} = A^h z_t`` and maps the forecast states back to observables via the observation equation.
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-nc_md = fred[:, ["INDPRO", "UNRATE", "CPIAUCSL", "M2SL", "FEDFUNDS"]]
-Y = to_matrix(apply_tcode(nc_md))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-Y = Y[end-99:end, :]
-nM, nQ = 4, 1
+```@example nc_dfm
 N = nM + nQ
-for t in 1:size(Y, 1)
-    if mod(t, 3) != 0
-        Y[t, end] = NaN
-    end
-end
-Y[end, end] = NaN
-
 dfm = nowcast_dfm(Y, nM, nQ; r=2, p=1)
 
 # Forecast all variables 6 months ahead
@@ -313,19 +211,16 @@ The forecast horizon `h` counts monthly steps. For quarterly targets, a 3-step f
 
 The `balance_panel` utility fills missing values in `TimeSeriesData` or `PanelData` using DFM imputation. Observed values are preserved; only NaN entries are replaced with DFM-smoothed estimates.
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-nc_md = fred[:, ["INDPRO", "UNRATE", "CPIAUCSL", "M2SL", "FEDFUNDS"]]
-Y = to_matrix(apply_tcode(nc_md))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-Y = Y[end-99:end, :]
+```@example nc_dfm
+# Use a fresh copy without quarterly NaN pattern for balancing
+Y_bal = to_matrix(apply_tcode(nc_md))
+Y_bal = Y_bal[all.(isfinite, eachrow(Y_bal)), :]
+Y_bal = Y_bal[end-99:end, :]
 
 # Introduce some missing values
-Y[end, 1:3] .= NaN
+Y_bal[end, 1:3] .= NaN
 
-ts = TimeSeriesData(Y; varnames=["INDPRO","UNRATE","CPI","M2","FEDFUNDS"], frequency=Monthly)
+ts = TimeSeriesData(Y_bal; varnames=["INDPRO","UNRATE","CPI","M2","FEDFUNDS"], frequency=Monthly)
 ts_balanced = balance_panel(ts; r=2, p=1, method=:dfm)
 ```
 
@@ -335,38 +230,22 @@ The function uses `nowcast_dfm` internally with `nQ=0` (all variables treated as
 
 ## Complete Example
 
-```julia
-using MacroEconometricModels
-
-# === Step 1: Prepare FRED-MD mixed-frequency panel ===
-fred = load_example(:fred_md)
-nc_md = fred[:, ["INDPRO", "UNRATE", "CPIAUCSL", "M2SL", "FEDFUNDS"]]
-Y = to_matrix(apply_tcode(nc_md))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-Y = Y[end-99:end, :]
+```@example nc_dfm
 T_obs = size(Y, 1)
-nM, nQ = 4, 1
-N = nM + nQ
-for t in 1:T_obs
-    if mod(t, 3) != 0
-        Y[t, end] = NaN
-    end
-end
-Y[end, end] = NaN
 
-# === Step 2: Estimate DFM ===
+# === Step 1: Estimate DFM ===
 dfm = nowcast_dfm(Y, nM, nQ; r=2, p=1, idio=:ar1, max_iter=100, thresh=1e-4)
 report(dfm)
 
-# === Step 3: Extract nowcast and forecast ===
+# === Step 2: Extract nowcast and forecast ===
 result = nowcast(dfm)
 println("Nowcast: ", round(result.nowcast, digits=3))
 println("Forecast: ", round(result.forecast, digits=3))
 
-# === Step 4: Multi-step forecast ===
+# === Step 3: Multi-step forecast ===
 fc = forecast(dfm, 6; target_var=N)
 
-# === Step 5: News decomposition ===
+# === Step 4: News decomposition ===
 X_old = copy(Y)
 X_new = copy(Y)
 X_old[end, 1:3] .= NaN    # simulate that 3 releases were not yet available
@@ -376,7 +255,7 @@ println("Old nowcast: ", round(news.old_nowcast, digits=3))
 println("New nowcast: ", round(news.new_nowcast, digits=3))
 println("Total revision: ", round(news.new_nowcast - news.old_nowcast, digits=3))
 
-# === Step 6: Balance panel for further analysis ===
+# === Step 5: Balance panel for further analysis ===
 ts = TimeSeriesData(Y; varnames=["INDPRO","UNRATE","CPI","M2","FEDFUNDS"], frequency=Monthly)
 ts_balanced = balance_panel(ts; r=2, p=1)
 ```

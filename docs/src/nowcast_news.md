@@ -2,11 +2,14 @@
 
 When new data releases arrive, the nowcast changes. The **news decomposition** (Banbura and Modugno 2014) attributes this revision to individual data releases, answering a central question in real-time forecasting: *which releases drove the revision?* For the underlying DFM model, see [Nowcasting](@ref).
 
+```@setup nc_news
+using MacroEconometricModels, Random
+Random.seed!(42)
+```
+
 ## Quick Start
 
-```julia
-using MacroEconometricModels
-
+```@example nc_news
 # Standard mixed-frequency data setup (used throughout this page)
 fred = load_example(:fred_md)
 nc_md = fred[:, ["INDPRO", "UNRATE", "CPIAUCSL", "M2SL", "FEDFUNDS"]]
@@ -25,11 +28,12 @@ Y[end, end] = NaN
 dfm = nowcast_dfm(Y, nM, nQ; r=2, p=1, idio=:ar1)
 T_obs = size(Y, 1)
 N = size(Y, 2)
+nothing # hide
 ```
 
 **Recipe 1: Basic news decomposition**
 
-```julia
+```@example nc_news
 X_old = copy(Y)
 X_new = copy(Y)
 X_old[end, 1:3] .= NaN   # simulate 3 missing releases in old vintage
@@ -40,7 +44,7 @@ report(news)
 
 **Recipe 2: News with grouped releases**
 
-```julia
+```@example nc_news
 X_old = copy(Y)
 X_new = copy(Y)
 X_old[end, 1:3] .= NaN
@@ -54,18 +58,22 @@ println("Nominal sector: ", round(news.group_impacts[2], digits=4))
 
 **Recipe 3: Visualize news impacts**
 
-```julia
+```@example nc_news
 X_old = copy(Y)
 X_new = copy(Y)
 X_old[end, 1:3] .= NaN
 
 news = nowcast_news(X_new, X_old, dfm, T_obs; target_var=N)
+nothing # hide
+```
+
+```julia
 plot_result(news)
 ```
 
 **Recipe 4: Multi-vintage tracking**
 
-```julia
+```@example nc_news
 base = copy(Y)
 base[end, 1:3] .= NaN
 
@@ -114,7 +122,7 @@ where ``P_{t|t-1}`` is the state forecast covariance from the Kalman smoother, `
 
 The `nowcast_news` function requires two data vintages and a pre-estimated DFM model. The **old vintage** (`X_old`) contains more NaN values than the **new vintage** (`X_new`), representing the state of the data before and after new releases.
 
-```julia
+```@example nc_news
 X_old = copy(Y)
 X_new = copy(Y)
 X_old[end, 1:3] .= NaN
@@ -152,29 +160,12 @@ The `report()` function displays a formatted table with old and new nowcasts, to
 
 ## Complete Example
 
-```julia
-using MacroEconometricModels
-
-# === Step 1: Prepare FRED-MD mixed-frequency panel ===
-fred = load_example(:fred_md)
-nc_md = fred[:, ["INDPRO", "UNRATE", "CPIAUCSL", "M2SL", "FEDFUNDS"]]
-Y = to_matrix(apply_tcode(nc_md))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-Y = Y[end-99:end, :]
-T_obs, N = size(Y)
-nM, nQ = 4, 1
-for t in 1:T_obs
-    if mod(t, 3) != 0
-        Y[t, end] = NaN
-    end
-end
-Y[end, end] = NaN
-
-# === Step 2: Estimate DFM ===
+```@example nc_news
+# === Step 1: Estimate DFM ===
 dfm = nowcast_dfm(Y, nM, nQ; r=2, p=1, idio=:ar1, max_iter=100)
 report(dfm)
 
-# === Step 3: Simulate sequential data releases ===
+# === Step 2: Simulate sequential data releases ===
 base = copy(Y)
 base[end, 1:4] .= NaN
 varnames = ["INDPRO", "UNRATE", "CPI", "M2"]
@@ -189,11 +180,14 @@ for col in 1:4
     base[end, col] = Y[end, col]
 end
 
-# === Step 4: Full decomposition and visualization ===
+# === Step 3: Full decomposition ===
 X_old = copy(Y)
 X_old[end, 1:4] .= NaN
 news = nowcast_news(Y, X_old, dfm, T_obs; target_var=N)
 report(news)
+```
+
+```julia
 plot_result(news)
 ```
 
