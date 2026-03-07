@@ -248,6 +248,164 @@ function _interpolate_column!(col::AbstractVector{T}) where {T}
     end
 end
 
+"""
+    fix(d::PanelData; method=:listwise) -> PanelData
+
+Fix data issues and return a clean copy.
+
+# Methods
+- `:listwise` — drop rows with any NaN or Inf (default)
+- `:interpolate` — linear interpolation within each group
+- `:mean` — replace NaN with within-group column mean
+
+Inf values are replaced with NaN first. Constant columns are dropped with a warning.
+"""
+function fix(d::PanelData{T}; method::Symbol=:listwise) where {T}
+    method ∈ (:listwise, :interpolate, :mean) ||
+        throw(ArgumentError("method must be :listwise, :interpolate, or :mean, got :$method"))
+
+    mat = copy(d.data)
+    T_obs = d.T_obs
+
+    # Replace Inf with NaN
+    for j in 1:d.n_vars, i in 1:T_obs
+        isinf(mat[i, j]) && (mat[i, j] = T(NaN))
+    end
+
+    if method == :listwise
+        good = [all(x -> !isnan(x), @view(mat[i, :])) for i in 1:T_obs]
+        idx = findall(good)
+        isempty(idx) && throw(ArgumentError("No rows remaining after listwise deletion"))
+        new_mat = mat[idx, :]
+        new_gid = d.group_id[idx]
+        new_tid = d.time_id[idx]
+        new_cid = d.cohort_id === nothing ? nothing : d.cohort_id[idx]
+    elseif method == :interpolate
+        for g in 1:d.n_groups
+            gidx = findall(d.group_id .== g)
+            for j in 1:d.n_vars
+                _interpolate_column!(view(mat, gidx, j))
+            end
+        end
+        new_mat = mat
+        new_gid = copy(d.group_id)
+        new_tid = copy(d.time_id)
+        new_cid = d.cohort_id === nothing ? nothing : copy(d.cohort_id)
+    elseif method == :mean
+        for g in 1:d.n_groups
+            gidx = findall(d.group_id .== g)
+            for j in 1:d.n_vars
+                col = @view(mat[gidx, j])
+                finite_vals = filter(isfinite, col)
+                if !isempty(finite_vals)
+                    m = mean(finite_vals)
+                    for i in eachindex(col)
+                        isnan(col[i]) && (col[i] = T(m))
+                    end
+                end
+            end
+        end
+        new_mat = mat
+        new_gid = copy(d.group_id)
+        new_tid = copy(d.time_id)
+        new_cid = d.cohort_id === nothing ? nothing : copy(d.cohort_id)
+    end
+
+    # Drop constant columns
+    keep_cols = Int[]
+    for j in 1:size(new_mat, 2)
+        col = @view(new_mat[:, j])
+        finite_vals = filter(isfinite, col)
+        if length(finite_vals) > 1 && !all(x -> x == finite_vals[1], finite_vals)
+            push!(keep_cols, j)
+        else
+            @warn "Dropping constant column '$(d.varnames[j])'"
+        end
+    end
+    isempty(keep_cols) && throw(ArgumentError("All columns constant after fixing — no data remaining"))
+
+    kept_names = d.varnames[keep_cols]
+    sub_vd = Dict(k => v for (k, v) in d.vardesc if k in kept_names)
+    n_new = size(new_mat, 1)
+    obs_per_group = [count(==(g), new_gid) for g in 1:d.n_groups]
+    balanced = length(obs_per_group) > 0 && all(==(obs_per_group[1]), obs_per_group)
+
+    PanelData{T}(new_mat[:, keep_cols], kept_names, d.frequency, d.tcode[keep_cols],
+                  new_gid, new_tid, new_cid, copy(d.group_names),
+                  d.n_groups, length(kept_names), n_new, balanced,
+                  copy(d.desc), sub_vd, copy(d.source_refs))
+end
+
+"""
+    fix(d::CrossSectionData; method=:listwise) -> CrossSectionData
+
+Fix data issues and return a clean copy.
+
+# Methods
+- `:listwise` — drop rows with any NaN or Inf (default)
+- `:mean` — replace NaN with column mean of finite values
+- `:interpolate` — same as `:mean` (no time ordering in cross-section data)
+
+Inf values are replaced with NaN first. Constant columns are dropped with a warning.
+"""
+function fix(d::CrossSectionData{T}; method::Symbol=:listwise) where {T}
+    method ∈ (:listwise, :interpolate, :mean) ||
+        throw(ArgumentError("method must be :listwise, :interpolate, or :mean, got :$method"))
+
+    effective = method == :interpolate ? :mean : method
+
+    mat = copy(d.data)
+    N_obs = d.N_obs
+
+    # Replace Inf with NaN
+    for j in 1:d.n_vars, i in 1:N_obs
+        isinf(mat[i, j]) && (mat[i, j] = T(NaN))
+    end
+
+    if effective == :listwise
+        good = [all(x -> !isnan(x), @view(mat[i, :])) for i in 1:N_obs]
+        idx = findall(good)
+        isempty(idx) && throw(ArgumentError("No rows remaining after listwise deletion"))
+        new_mat = mat[idx, :]
+        new_oid = d.obs_id[idx]
+    elseif effective == :mean
+        for j in 1:d.n_vars
+            col = @view(mat[:, j])
+            finite_vals = filter(isfinite, col)
+            if !isempty(finite_vals)
+                m = mean(finite_vals)
+                for i in 1:N_obs
+                    isnan(col[i]) && (col[i] = T(m))
+                end
+            end
+        end
+        new_mat = mat
+        new_oid = copy(d.obs_id)
+    end
+
+    # Drop constant columns
+    keep_cols = Int[]
+    for j in 1:size(new_mat, 2)
+        col = @view(new_mat[:, j])
+        finite_vals = filter(isfinite, col)
+        if length(finite_vals) > 1 && !all(x -> x == finite_vals[1], finite_vals)
+            push!(keep_cols, j)
+        else
+            @warn "Dropping constant column '$(d.varnames[j])'"
+        end
+    end
+    isempty(keep_cols) && throw(ArgumentError("All columns constant after fixing — no data remaining"))
+
+    kept_names = d.varnames[keep_cols]
+    sub_vd = Dict(k => v for (k, v) in d.vardesc if k in kept_names)
+    CrossSectionData(new_mat[:, keep_cols];
+                     varnames=kept_names,
+                     obs_id=new_oid,
+                     desc=desc(d),
+                     vardesc=sub_vd,
+                     source_refs=copy(d.source_refs))
+end
+
 # =============================================================================
 # dropna
 # =============================================================================

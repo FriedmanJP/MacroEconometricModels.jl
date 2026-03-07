@@ -457,6 +457,53 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
             @test_throws ArgumentError fix(d; method=:invalid)
         end
 
+        @testset "fix PanelData listwise" begin
+            using DataFrames
+            df = DataFrame(
+                g = repeat(1:2, inner=10),
+                t = repeat(1:10, 2),
+                x = vcat([1.0, NaN, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0], Float64.(11:20)),
+                y = Float64.(1:20)
+            )
+            pd = xtset(df, :g, :t)
+            pd2 = fix(pd; method=:listwise)
+            @test nobs(pd2) == 19  # 1 NaN row dropped
+            @test !any(isnan, Matrix(pd2))
+        end
+
+        @testset "fix PanelData interpolate" begin
+            using DataFrames
+            df = DataFrame(
+                g = repeat(1:2, inner=10),
+                t = repeat(1:10, 2),
+                x = vcat([1.0, NaN, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0], Float64.(11:20)),
+                y = Float64.(1:20)
+            )
+            pd = xtset(df, :g, :t)
+            pd2 = fix(pd; method=:interpolate)
+            @test nobs(pd2) == 20  # no rows dropped
+            @test !any(isnan, Matrix(pd2))
+        end
+
+        @testset "fix CrossSectionData listwise" begin
+            mat = [1.0 2.0; NaN 3.0; 4.0 5.0; 6.0 NaN; 7.0 8.0;
+                   9.0 10.0; 11.0 12.0; 13.0 14.0; 15.0 16.0; 17.0 18.0;
+                   19.0 20.0; 21.0 22.0]
+            cs = CrossSectionData(mat; obs_id=collect(1:12))
+            cs2 = fix(cs; method=:listwise)
+            @test nobs(cs2) == 10
+            @test !any(isnan, Matrix(cs2))
+            @test cs2.obs_id == [1, 3, 5, 6, 7, 8, 9, 10, 11, 12]
+        end
+
+        @testset "fix CrossSectionData mean" begin
+            mat = reshape([1.0, NaN, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0], :, 1)
+            cs = CrossSectionData(mat)
+            cs2 = fix(cs; method=:mean)
+            @test nobs(cs2) == 12
+            @test !any(isnan, Matrix(cs2))
+        end
+
         @testset "dropna TimeSeriesData" begin
             mat = [1.0 2.0; NaN 3.0; 4.0 5.0; 6.0 NaN; 7.0 8.0;
                    9.0 10.0; 11.0 12.0; 13.0 14.0; 15.0 16.0; 17.0 18.0;
