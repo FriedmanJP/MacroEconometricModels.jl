@@ -99,4 +99,64 @@ end
     end
 end
 
+@testset "Linear DSGE historical decomposition" begin
+    spec = @dsge begin
+        parameters: rho_y = 0.8, rho_pi = 0.5, rho_r = 0.6
+        endogenous: y, pi_var, r
+        exogenous: eps_y, eps_pi, eps_r
+        y[t] = rho_y * y[t-1] + eps_y[t]
+        pi_var[t] = rho_pi * pi_var[t-1] + eps_pi[t]
+        r[t] = rho_r * r[t-1] + eps_r[t]
+    end
+    sol = solve(spec)
+
+    T_obs = 80
+    rng = Random.MersenneTwister(55)
+    sim_data = simulate(sol, T_obs; rng=rng)
+    observables = [:y, :pi_var, :r]
+
+    hd = historical_decomposition(sol, sim_data, observables)
+
+    @test hd isa HistoricalDecomposition{Float64}
+    @test size(hd.contributions) == (T_obs, 3, 3)
+    @test size(hd.initial_conditions) == (T_obs, 3)
+    @test size(hd.actual) == (T_obs, 3)
+    @test hd.method == :dsge_linear
+    @test verify_decomposition(hd; tol=0.1)
+end
+
+@testset "Linear DSGE HD — single variable" begin
+    spec = @dsge begin
+        parameters: rho = 0.9
+        endogenous: y
+        exogenous: eps
+        y[t] = rho * y[t-1] + eps[t]
+    end
+    sol = solve(spec)
+
+    T_obs = 60
+    rng = Random.MersenneTwister(77)
+    sim_data = simulate(sol, T_obs; rng=rng)
+    hd = historical_decomposition(sol, sim_data, [:y])
+    @test size(hd.contributions, 3) == 1
+    @test verify_decomposition(hd; tol=0.05)
+end
+
+@testset "Linear DSGE HD — states=:all" begin
+    spec = @dsge begin
+        parameters: rho_y = 0.8, rho_pi = 0.5
+        endogenous: y, pi_var
+        exogenous: eps_y, eps_pi
+        y[t] = rho_y * y[t-1] + eps_y[t]
+        pi_var[t] = rho_pi * pi_var[t-1] + eps_pi[t]
+    end
+    sol = solve(spec)
+
+    T_obs = 40
+    rng = Random.MersenneTwister(33)
+    sim_data = simulate(sol, T_obs; rng=rng)
+    hd = historical_decomposition(sol, sim_data, [:y, :pi_var]; states=:all)
+    @test size(hd.contributions, 2) == 2
+end
+
 end  # outer testset
