@@ -10,69 +10,65 @@
 
 All results support `report()` for publication-quality tabular output and `plot_result()` for interactive D3.js visualization.
 
+```@setup spectral
+using MacroEconometricModels, Random
+Random.seed!(42)
+fred = load_example(:fred_md)
+y = filter(isfinite, to_vector(apply_tcode(fred[:, "INDPRO"])))
+y = y[end-99:end]
+```
+
 ## Quick Start
 
 **Recipe 1: ACF/PACF correlogram**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-y = filter(isfinite, diff(log.(fred[:, "INDPRO"])))
-
+```@example spectral
 result = acf_pacf(y; lags=24)
 report(result)
+```
+
+```julia
 plot_result(result)
 ```
 
 **Recipe 2: Spectral density (Welch)**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-y = filter(isfinite, diff(log.(fred[:, "INDPRO"])))
-
+```@example spectral
 sd = spectral_density(y; method=:welch)
 report(sd)
+```
+
+```julia
 plot_result(sd)
 ```
 
 **Recipe 3: Cross-spectrum coherence**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-y1 = filter(isfinite, diff(log.(fred[:, "INDPRO"])))
-y2 = filter(isfinite, diff(log.(fred[:, "CPIAUCSL"])))
-n = min(length(y1), length(y2))
-
-cs = cross_spectrum(y1[1:n], y2[1:n])
+```@example spectral
+y_cpi = filter(isfinite, to_vector(apply_tcode(fred[:, "CPIAUCSL"])))
+y_cpi = y_cpi[end-99:end]
+n = min(length(y), length(y_cpi))
+cs = cross_spectrum(y[1:n], y_cpi[1:n])
 report(cs)
+```
+
+```julia
 plot_result(cs)
 ```
 
 **Recipe 4: Ideal bandpass (business-cycle frequencies)**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-y = filter(isfinite, log.(fred[:, "INDPRO"]))
-
+```@example spectral
 # Business cycle: 18–96 months (1.5–8 years)
 y_bc = ideal_bandpass(y, 2π/96, 2π/18)
+nothing  # hide
 ```
 
 **Recipe 5: Fisher test for hidden periodicities**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-y = randn(200)
-result = fisher_test(y)
+```@example spectral
+y_wn = randn(200)
+result = fisher_test(y_wn)
 report(result)
 ```
 
@@ -158,7 +154,7 @@ I(\omega_j) = \frac{1}{2\pi n U} \left| \sum_{t=1}^{n} w_t y_t e^{-i\omega_j t} 
 
 where ``w_t`` is a data window and ``U = n^{-1}\sum w_t^2`` is the window energy normalization. The periodogram is computed via the FFT in ``O(n \log n)`` time.
 
-```julia
+```@example spectral
 I = periodogram(y; window=:hann)
 report(I)
 ```
@@ -174,7 +170,7 @@ report(I)
 
 The variance reduction comes at the cost of reduced frequency resolution. The equivalent degrees of freedom are ``2K``.
 
-```julia
+```@example spectral
 sd = spectral_density(y; method=:welch, window=:hann, segment_length=64, overlap=0.5)
 report(sd)
 ```
@@ -189,8 +185,9 @@ The **smoothed periodogram** applies a Daniell kernel to the raw periodogram:
 
 where ``m`` is the kernel half-width (bandwidth). Larger bandwidth reduces variance but increases bias.
 
-```julia
+```@example spectral
 sd = spectral_density(y; method=:smoothed, bandwidth=7)
+nothing  # hide
 ```
 
 ### AR Parametric Spectrum
@@ -203,8 +200,9 @@ S(\omega) = \frac{\hat{\sigma}^2}{2\pi \left| 1 + \sum_{j=1}^{p} \hat{a}_j e^{-i
 
 The AR order ``p`` is selected by AIC (default) or specified directly. Burg's algorithm produces stable AR coefficient estimates.
 
-```julia
+```@example spectral
 sd = spectral_density(y; method=:ar, order=12)
+nothing  # hide
 ```
 
 ### Method Comparison
@@ -264,15 +262,21 @@ Three derived quantities summarize the relationship:
 - **Phase**: ``\phi_{xy}(\omega) = \arctan(Q_{xy} / C_{xy})`` --- the lead-lag relationship in radians
 - **Gain**: ``G_{xy}(\omega) = |S_{xy}(\omega)| / S_{xx}(\omega)`` --- the amplitude ratio
 
-```julia
-cs = cross_spectrum(x, y; window=:hann)
+```@example spectral
+cs = cross_spectrum(y[1:n], y_cpi[1:n]; window=:hann)
 report(cs)
-plot_result(cs)
+```
 
+```julia
+plot_result(cs)
+```
+
+```@example spectral
 # Convenience accessors
-freq, coh = coherence(x, y)
-freq, ph  = phase(x, y)
-freq, g   = gain(x, y)
+freq, coh = coherence(y[1:n], y_cpi[1:n])
+freq, ph  = phase(y[1:n], y_cpi[1:n])
+freq, g   = gain(y[1:n], y_cpi[1:n])
+nothing  # hide
 ```
 
 ### Keywords
@@ -311,7 +315,7 @@ g = \frac{\max_j I(\omega_j)}{\sum_j I(\omega_j)}
 
 where ``I(\omega_j)`` is the periodogram at Fourier frequency ``\omega_j``. Under ``H_0`` (white noise), ``g`` has an exact distribution. A large ``g`` indicates a hidden periodicity at the peak frequency.
 
-```julia
+```@example spectral
 result = fisher_test(y)
 report(result)
 ```
@@ -326,7 +330,7 @@ D = \max_j \left| \frac{\sum_{k=1}^{j} I(\omega_k)}{\sum_{k=1}^{m} I(\omega_k)} 
 
 The Kolmogorov-Smirnov statistic ``D`` measures the maximum departure from uniformity. Rejection indicates the series is not white noise.
 
-```julia
+```@example spectral
 result = bartlett_white_noise_test(y)
 report(result)
 ```
@@ -335,7 +339,7 @@ report(result)
 
 `band_power` computes the integrated spectral density in a frequency band:
 
-```julia
+```@example spectral
 sd = spectral_density(y; method=:welch)
 power = band_power(sd, 2π/32, 2π/6)  # business-cycle band (6–32 quarters)
 ```
@@ -356,7 +360,7 @@ Q = n(n+2) \sum_{k=1}^{h} \frac{\hat{\rho}_k^2}{n-k} \sim \chi^2(h - p)
 
 where ``p`` is the number of fitted AR/MA parameters (set via `fitdf`).
 
-```julia
+```@example spectral
 result = ljung_box_test(y; lags=20, fitdf=0)
 report(result)
 ```
@@ -365,7 +369,7 @@ report(result)
 
 The original Box-Pierce test (Box & Pierce 1970) uses the simpler statistic ``Q_0 = n \sum \hat{\rho}_k^2``. The Ljung-Box modification is preferred for small samples.
 
-```julia
+```@example spectral
 result = box_pierce_test(y; lags=20)
 report(result)
 ```
@@ -380,9 +384,9 @@ DW = \frac{\sum_{t=2}^{n}(e_t - e_{t-1})^2}{\sum_{t=1}^{n} e_t^2} \approx 2(1 - 
 
 Values near 2 indicate no autocorrelation; values near 0 indicate positive autocorrelation; values near 4 indicate negative autocorrelation.
 
-```julia
-result = durbin_watson_test(residuals)
-report(result)
+```@example spectral
+dw_result = durbin_watson_test(y)
+report(dw_result)
 ```
 
 ---
@@ -393,12 +397,13 @@ report(result)
 
 The **ideal bandpass filter** retains frequency components in ``[\omega_l, \omega_h]`` by zeroing out all other Fourier coefficients:
 
-```julia
+```@example spectral
 # Business cycle: 18–96 months
 y_bc = ideal_bandpass(y, 2π/96, 2π/18)
 
 # High-frequency: < 18 months
 y_hf = ideal_bandpass(y, 2π/18, π)
+nothing  # hide
 ```
 
 !!! warning "Gibbs Phenomenon"
@@ -408,17 +413,23 @@ y_hf = ideal_bandpass(y, 2π/18, π)
 
 `transfer_function` computes the frequency response (gain and phase) of three standard macroeconomic filters:
 
-```julia
+```@example spectral
 # HP filter frequency response
 tf_hp = transfer_function(:hp; lambda=1600)
 report(tf_hp)
-plot_result(tf_hp)
+```
 
+```julia
+plot_result(tf_hp)
+```
+
+```@example spectral
 # Baxter-King frequency response
 tf_bk = transfer_function(:bk; K=12)
 
 # Hamilton filter frequency response
 tf_ham = transfer_function(:hamilton; h=8)
+nothing  # hide
 ```
 
 The HP transfer function has the closed-form gain:
@@ -451,45 +462,61 @@ G(\omega) = \frac{4\lambda \sin^2(\omega/2)}{1 + 4\lambda \sin^2(\omega/2)}
 
 This example demonstrates a full spectral analysis workflow on U.S. industrial production growth:
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-# Load FRED-MD and compute log differences (growth rates)
-fred = load_example(:fred_md)
-y = filter(isfinite, diff(log.(fred[:, "INDPRO"])))
-
+```@example spectral
 # 1. Correlogram: ACF + PACF with Ljung-Box Q-stats
 corr = acf_pacf(y; lags=24)
 report(corr)
-plot_result(corr)
+```
 
+```julia
+plot_result(corr)
+```
+
+```@example spectral
 # 2. Spectral density: Welch's method with Hann window
 sd = spectral_density(y; method=:welch, window=:hann)
 report(sd)
-plot_result(sd)
+```
 
+```julia
+plot_result(sd)
+```
+
+```@example spectral
 # 3. Business-cycle power as fraction of total variance
 total_power = band_power(sd, 0.0, π)
 bc_power = band_power(sd, 2π/96, 2π/18)  # 18–96 months
+```
 
+```@example spectral
 # 4. AR parametric spectrum for comparison
 sd_ar = spectral_density(y; method=:ar)
 report(sd_ar)
+```
 
+```@example spectral
 # 5. Cross-spectrum: industrial production vs. CPI inflation
-y_cpi = filter(isfinite, diff(log.(fred[:, "CPIAUCSL"])))
-n = min(length(y), length(y_cpi))
 cs = cross_spectrum(y[1:n], y_cpi[1:n])
 report(cs)
-plot_result(cs)
+```
 
+```julia
+plot_result(cs)
+```
+
+```@example spectral
 # 6. Diagnostic tests
 fisher = fisher_test(y)
 bartlett = bartlett_white_noise_test(y)
 lb = ljung_box_test(y; lags=20)
 report(fisher)
+```
+
+```@example spectral
 report(bartlett)
+```
+
+```@example spectral
 report(lb)
 ```
 

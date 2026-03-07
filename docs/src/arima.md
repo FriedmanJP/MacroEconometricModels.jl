@@ -10,29 +10,25 @@
 - **Order Selection**: Grid search over information criteria and automatic `auto_arima`
 - **StatsAPI Interface**: Full `coef`, `nobs`, `predict`, `fit`, `residuals`, `aic`, `bic` compatibility
 
+```@setup arima
+using MacroEconometricModels
+fred = load_example(:fred_md)
+y = filter(isfinite, to_vector(apply_tcode(fred[:, "CPIAUCSL"])))
+y = y[end-99:end]
+```
+
 ## Quick Start
 
 **Recipe 1: Estimate an AR(2) on industrial production growth**
 
-```julia
-using MacroEconometricModels
-
-# Industrial production growth (monthly, FRED-MD)
-fred = load_example(:fred_md)
-y = filter(isfinite, apply_tcode(fred[:, "INDPRO"], 5))
-
+```@example arima
 ar = estimate_ar(y, 2)
 report(ar)
 ```
 
 **Recipe 2: Fit an ARMA(1,1) and forecast 12 months ahead**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-y = filter(isfinite, apply_tcode(fred[:, "INDPRO"], 5))
-
+```@example arima
 arma = estimate_arma(y, 1, 1)
 fc = forecast(arma, 12; conf_level=0.95)
 report(fc)
@@ -40,50 +36,34 @@ report(fc)
 
 **Recipe 3: ARIMA(1,1,0) on a non-stationary level series**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-y_level = filter(isfinite, log.(fred[:, "INDPRO"]))
-
+```@example arima
+y_level = cumsum(y)  # synthetic I(1) series
 arima = estimate_arima(y_level, 1, 1, 0)
 report(arima)
 ```
 
 **Recipe 4: Automatic order selection via grid search**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-y = filter(isfinite, apply_tcode(fred[:, "INDPRO"], 5))
-
+```@example arima
 sel = select_arima_order(y, 4, 4)
 report(sel)
 ```
 
 **Recipe 5: Fully automatic model selection with `auto_arima`**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-y_level = filter(isfinite, log.(fred[:, "INDPRO"]))
-
+```@example arima
 best = auto_arima(y_level; max_p=5, max_q=5, max_d=2, criterion=:bic)
 report(best)
 ```
 
 **Recipe 6: Forecast and visualize**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-y = filter(isfinite, apply_tcode(fred[:, "INDPRO"], 5))
-
+```@example arima
 ar = estimate_ar(y, 2)
 fc = forecast(ar, 20)
+```
+
+```julia
 p = plot_result(fc; history=y, n_history=30)
 ```
 
@@ -130,16 +110,13 @@ satisfy ``|\lambda_i(F)| < 1`` for all ``i``. The estimator checks this conditio
 
 AR models support two estimation methods. **OLS** (`:ols`, default) constructs the lagged regressor matrix and applies ordinary least squares --- consistent and asymptotically efficient for stationary processes (Hamilton 1994, Section 5.2). **MLE** (`:mle`) maximizes the exact Gaussian log-likelihood via the Kalman filter (see [Exact MLE via Kalman Filter](@ref kalman_mle) below).
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-y = filter(isfinite, apply_tcode(fred[:, "INDPRO"], 5))
-
+```@example arima
 # OLS estimation (default)
 ar_ols = estimate_ar(y, 2)
 report(ar_ols)
+```
 
+```@example arima
 # MLE estimation
 ar_mle = estimate_ar(y, 2; method=:mle)
 report(ar_mle)
@@ -201,12 +178,7 @@ MA parameters cannot be estimated by OLS because the innovations ``\varepsilon_t
 - **MLE** (`:mle`): Exact MLE via Kalman filter --- efficient but sensitive to starting values
 - **CSS-MLE** (`:css_mle`, default): CSS initialization followed by MLE refinement, combining robustness with efficiency
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-y = filter(isfinite, apply_tcode(fred[:, "INDPRO"], 5))
-
+```@example arima
 ma = estimate_ma(y, 1; method=:css_mle)
 report(ma)
 ```
@@ -258,12 +230,7 @@ The process is stationary when all roots of ``\phi(z) = 0`` lie outside the unit
 !!! note "Technical Note"
     CSS (Conditional Sum of Squares) conditions on initial residuals being zero, introducing bias in small samples. MLE via the Kalman filter provides exact inference by properly handling initialization but is computationally more expensive and can be sensitive to starting values. The default `:css_mle` combines both: CSS provides robust starting values, then MLE refines to the exact optimum. For pure AR models, OLS is equivalent to CSS and is preferred for speed.
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-y = filter(isfinite, apply_tcode(fred[:, "INDPRO"], 5))
-
+```@example arima
 arma = estimate_arma(y, 1, 1; method=:css_mle)
 report(arma)
 ```
@@ -317,13 +284,7 @@ Common cases:
 
 The implementation differences the series ``d`` times, estimates ARMA(p,q) on the differenced series using the unified estimation pipeline, and stores both the original and differenced data.
 
-```julia
-using MacroEconometricModels
-
-# Log industrial production — an I(1) series
-fred = load_example(:fred_md)
-y_level = filter(isfinite, log.(fred[:, "INDPRO"]))
-
+```@example arima
 model = estimate_arima(y_level, 1, 1, 0)
 report(model)
 ```
@@ -457,16 +418,13 @@ where:
 
 Standard errors are adjusted for the integration via cumulative variance accumulation.
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-y = filter(isfinite, apply_tcode(fred[:, "INDPRO"], 5))
-
+```@example arima
 arma = estimate_arma(y, 1, 1)
 fc = forecast(arma, 12; conf_level=0.95)
 report(fc)
+```
 
+```julia
 # Visualize with recent history
 p = plot_result(fc; history=y, n_history=30)
 ```
@@ -502,12 +460,7 @@ Choosing the AR and MA orders is a central step in the Box-Jenkins methodology. 
 
 `select_arima_order` evaluates all ARMA(p,q) combinations up to specified maxima and selects the best model by AIC or BIC:
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-y = filter(isfinite, apply_tcode(fred[:, "INDPRO"], 5))
-
+```@example arima
 # Search over p in {0,...,4}, q in {0,...,4}
 sel = select_arima_order(y, 4, 4)
 report(sel)
@@ -539,12 +492,7 @@ The BIC-optimal order typically selects a more parsimonious model than AIC becau
 
 `auto_arima` implements a fully automatic model selection procedure. It first determines the integration order ``d`` via a variance-reduction heuristic (differencing until variance stops decreasing), then performs a grid search over ``p`` and ``q``:
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-y_level = filter(isfinite, log.(fred[:, "INDPRO"]))
-
+```@example arima
 best = auto_arima(y_level; max_p=5, max_q=5, max_d=2, criterion=:bic)
 report(best)
 ```
@@ -564,12 +512,7 @@ report(best)
 
 All ARIMA-class models implement the Julia `StatsAPI.RegressionModel` interface, providing interoperability with the broader Julia statistics ecosystem.
 
-```julia
-using MacroEconometricModels, StatsAPI
-
-fred = load_example(:fred_md)
-y = filter(isfinite, apply_tcode(fred[:, "INDPRO"], 5))
-
+```@example arima
 model = estimate_arma(y, 1, 1)
 
 # Standard accessors
@@ -601,29 +544,31 @@ The `fit` interface provides a standard constructor pattern consistent with othe
 
 This example demonstrates the full Box-Jenkins workflow: unit root testing, order selection, estimation, diagnostics, and forecasting on FRED-MD industrial production data.
 
-```julia
-using MacroEconometricModels
-
-# Industrial production growth (monthly, FRED-MD)
-fred = load_example(:fred_md)
-y = filter(isfinite, apply_tcode(fred[:, "INDPRO"], 5))
-
+```@example arima
 # Step 1: Check for unit root — IP growth should be stationary
 adf_result = adf_test(y; lags=:aic, regression=:constant)
 report(adf_result)
+```
 
+```@example arima
 # Step 2: Select ARMA order via BIC grid search
 sel = select_arima_order(y, 4, 4)
 report(sel)
+```
 
+```@example arima
 # Step 3: Estimate the BIC-optimal model
 model = sel.best_model_bic
 report(model)
+```
 
+```@example arima
 # Step 4: Forecast IP growth 12 months ahead
 fc = forecast(model, 12; conf_level=0.95)
 report(fc)
+```
 
+```julia
 # Step 5: Visualize forecast with recent history
 p = plot_result(fc; history=y, n_history=50)
 ```

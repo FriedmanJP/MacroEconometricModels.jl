@@ -10,99 +10,74 @@
 - **Diagnostics**: ARCH-LM test, Ljung-Box on squared residuals, news impact curves
 - **Forecasting**: Multi-step ahead variance forecasts with simulation-based confidence intervals (GARCH family) or posterior predictive intervals (SV)
 
+```@setup volatility
+using MacroEconometricModels, Random
+Random.seed!(42)
+fred = load_example(:fred_md)
+ip = filter(isfinite, to_vector(apply_tcode(fred[:, "INDPRO"])))
+ip = ip[end-99:end]
+```
+
 ## Quick Start
 
 **Recipe 1: ARCH(q)**
 
-```julia
-using MacroEconometricModels
-
-# S&P 500 monthly returns (FRED-MD)
-fred = load_example(:fred_md)
-sp_idx = findfirst(v -> occursin("S&P", v) && occursin("500", v), varnames(fred))
-y = filter(isfinite, apply_tcode(fred[:, varnames(fred)[sp_idx]], 5))
-
+```@example volatility
 # ARCH(5) — Engle (1982)
-arch = estimate_arch(y, 5)
+arch = estimate_arch(ip, 5)
 report(arch)
 ```
 
 **Recipe 2: GARCH(1,1)**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-sp_idx = findfirst(v -> occursin("S&P", v) && occursin("500", v), varnames(fred))
-y = filter(isfinite, apply_tcode(fred[:, varnames(fred)[sp_idx]], 5))
-
+```@example volatility
 # GARCH(1,1) — the workhorse specification
-garch = estimate_garch(y, 1, 1)
+garch = estimate_garch(ip, 1, 1)
 report(garch)
 ```
 
 **Recipe 3: Asymmetric GARCH models**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-sp_idx = findfirst(v -> occursin("S&P", v) && occursin("500", v), varnames(fred))
-y = filter(isfinite, apply_tcode(fred[:, varnames(fred)[sp_idx]], 5))
-
+```@example volatility
 # EGARCH captures leverage without positivity constraints
-egarch = estimate_egarch(y, 1, 1)
+egarch = estimate_egarch(ip, 1, 1)
 report(egarch)
+```
 
+```@example volatility
 # GJR-GARCH captures leverage via an indicator function
-gjr = estimate_gjr_garch(y, 1, 1)
+gjr = estimate_gjr_garch(ip, 1, 1)
 report(gjr)
 ```
 
 **Recipe 4: Stochastic volatility**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-sp_idx = findfirst(v -> occursin("S&P", v) && occursin("500", v), varnames(fred))
-y = filter(isfinite, apply_tcode(fred[:, varnames(fred)[sp_idx]], 5))
-
+```@example volatility
 # SV via Kim-Shephard-Chib (1998) Gibbs sampler
-sv = estimate_sv(y; n_samples=2000, burnin=1000)
+sv = estimate_sv(ip; n_samples=2000, burnin=1000)
 report(sv)
 ```
 
 **Recipe 5: ARCH-LM diagnostics**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-sp_idx = findfirst(v -> occursin("S&P", v) && occursin("500", v), varnames(fred))
-y = filter(isfinite, apply_tcode(fred[:, varnames(fred)[sp_idx]], 5))
-
+```@example volatility
 # Test raw data for ARCH effects (should reject)
-stat, pval, q = arch_lm_test(y, 5)
+stat, pval, q = arch_lm_test(ip, 5)
 
 # Fit GARCH and test residuals (should fail to reject)
-garch = estimate_garch(y, 1, 1)
+garch = estimate_garch(ip, 1, 1)
 stat_r, pval_r, q_r = arch_lm_test(garch, 5)
 ```
 
 **Recipe 6: Volatility forecasting**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-sp_idx = findfirst(v -> occursin("S&P", v) && occursin("500", v), varnames(fred))
-y = filter(isfinite, apply_tcode(fred[:, varnames(fred)[sp_idx]], 5))
-
-garch = estimate_garch(y, 1, 1)
+```@example volatility
+garch = estimate_garch(ip, 1, 1)
 fc = forecast(garch, 20; conf_level=0.95)
 report(fc)
+```
+
+```julia
 plot_result(fc)
 ```
 
@@ -134,15 +109,9 @@ The process is covariance stationary when ``\sum_{i=1}^{q} \alpha_i < 1``, with 
 !!! note "Technical Note"
     Estimation uses two-stage maximum likelihood. Stage 1 applies Nelder-Mead (derivative-free) to find a good starting region. Stage 2 refines with L-BFGS (gradient-based). Parameters are log-transformed internally to enforce positivity (``\omega > 0``, ``\alpha_i \geq 0``) without constrained optimization. Standard errors use the delta method to transform from optimization space back to the original parameter space.
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-sp_idx = findfirst(v -> occursin("S&P", v) && occursin("500", v), varnames(fred))
-y = filter(isfinite, apply_tcode(fred[:, varnames(fred)[sp_idx]], 5))
-
+```@example volatility
 # Estimate ARCH(5) model
-arch = estimate_arch(y, 5)
+arch = estimate_arch(ip, 5)
 report(arch)
 ```
 
@@ -190,17 +159,13 @@ where:
 
 The process is covariance stationary when ``\sum_{i=1}^{q} \alpha_i + \sum_{j=1}^{p} \beta_j < 1``. The unconditional variance is ``\sigma^2 = \omega / (1 - \sum \alpha_i - \sum \beta_j)``. The GARCH(1,1) captures the key empirical regularity of volatility clustering with just three variance parameters.
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-sp_idx = findfirst(v -> occursin("S&P", v) && occursin("500", v), varnames(fred))
-y = filter(isfinite, apply_tcode(fred[:, varnames(fred)[sp_idx]], 5))
-
+```@example volatility
 # Estimate GARCH(1,1) — the workhorse specification
-garch = estimate_garch(y, 1, 1)
+garch = estimate_garch(ip, 1, 1)
 report(garch)
+```
 
+```@example volatility
 # Model-specific summary statistics
 persistence(garch)              # α₁ + β₁ (close to 1 = slow reversion)
 halflife(garch)                 # Half-life in periods
@@ -226,14 +191,8 @@ where:
 
 The stationarity condition is ``\sum_{j=1}^{p} \beta_j < 1`` (in log-variance), and the unconditional variance is ``\sigma^2 = \exp(\omega / (1 - \sum \beta_j))``.
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-sp_idx = findfirst(v -> occursin("S&P", v) && occursin("500", v), varnames(fred))
-y = filter(isfinite, apply_tcode(fred[:, varnames(fred)[sp_idx]], 5))
-
-egarch = estimate_egarch(y, 1, 1)
+```@example volatility
+egarch = estimate_egarch(ip, 1, 1)
 report(egarch)
 ```
 
@@ -253,14 +212,8 @@ where:
 
 When ``\gamma_i > 0``, negative shocks have a larger impact on future variance than positive shocks of equal magnitude. This captures the **leverage effect** first documented by Black (1976): stock price declines increase financial leverage, which in turn increases equity volatility. The stationarity condition is ``\sum \alpha_i + \sum \gamma_i / 2 + \sum \beta_j < 1``, and the unconditional variance is ``\sigma^2 = \omega / (1 - \sum \alpha_i - \sum \gamma_i / 2 - \sum \beta_j)``.
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-sp_idx = findfirst(v -> occursin("S&P", v) && occursin("500", v), varnames(fred))
-y = filter(isfinite, apply_tcode(fred[:, varnames(fred)[sp_idx]], 5))
-
-gjr = estimate_gjr_garch(y, 1, 1)
+```@example volatility
+gjr = estimate_gjr_garch(ip, 1, 1)
 report(gjr)
 ```
 
@@ -270,16 +223,10 @@ A statistically significant ``\gamma_1 > 0`` confirms the leverage effect. The G
 
 The **news impact curve** (NIC) shows how a shock ``\varepsilon_{t-1}`` maps to the next-period conditional variance ``\sigma^2_t``, holding all other information constant at the unconditional level. For symmetric models (ARCH, GARCH), the NIC is a parabola centered at zero. For asymmetric models (EGARCH, GJR-GARCH), the NIC is steeper for negative shocks.
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-sp_idx = findfirst(v -> occursin("S&P", v) && occursin("500", v), varnames(fred))
-y = filter(isfinite, apply_tcode(fred[:, varnames(fred)[sp_idx]], 5))
-
-garch = estimate_garch(y, 1, 1)
-egarch = estimate_egarch(y, 1, 1)
-gjr = estimate_gjr_garch(y, 1, 1)
+```@example volatility
+garch = estimate_garch(ip, 1, 1)
+egarch = estimate_egarch(ip, 1, 1)
+gjr = estimate_gjr_garch(ip, 1, 1)
 
 nic_garch  = news_impact_curve(garch)
 nic_egarch = news_impact_curve(egarch; range=(-3.0, 3.0), n_points=200)
@@ -293,13 +240,7 @@ Comparing news impact curves across models reveals whether asymmetric specificat
 ARCH, GARCH, EGARCH, and GJR-GARCH models produce a three-panel diagnostic figure via `plot_result()`: return series, conditional volatility, and standardized residuals with ``\pm 2`` standard deviation bounds.
 
 ```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-sp_idx = findfirst(v -> occursin("S&P", v) && occursin("500", v), varnames(fred))
-y = filter(isfinite, apply_tcode(fred[:, varnames(fred)[sp_idx]], 5))
-
-garch = estimate_garch(y, 1, 1)
+garch = estimate_garch(ip, 1, 1)
 plot_result(garch)
 ```
 
@@ -441,24 +382,21 @@ The SV model is estimated via the Kim-Shephard-Chib (1998) Gibbs sampler with th
 !!! note "Technical Note"
     The Kim-Shephard-Chib (1998) Gibbs sampler approximates the non-Gaussian observation equation ``\log y_t^2 = h_t + \log \varepsilon_t^2`` using a 10-component Gaussian mixture (Omori et al. 2007). Each Gibbs iteration: (1) samples the mixture indicators conditional on ``h``, (2) samples ``h_{1:T}`` via the simulation smoother conditional on parameters and indicators, and (3) samples ``(\mu, \varphi, \sigma_\eta)`` from their conditional posteriors. Typical run times are under 30 seconds for ``T = 500`` with 2000 posterior draws.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-sp_idx = findfirst(v -> occursin("S&P", v) && occursin("500", v), varnames(fred))
-y = filter(isfinite, apply_tcode(fred[:, varnames(fred)[sp_idx]], 5))
-
+```@example volatility
 # Basic SV model
-sv = estimate_sv(y; n_samples=2000, burnin=1000)
+sv = estimate_sv(ip; n_samples=2000, burnin=1000)
 report(sv)
+```
 
+```@example volatility
 # SV with leverage effect
-sv_lev = estimate_sv(y; leverage=true, n_samples=2000, burnin=1000)
+sv_lev = estimate_sv(ip; leverage=true, n_samples=2000, burnin=1000)
 report(sv_lev)
+```
 
+```@example volatility
 # SV with Student-t errors
-sv_t = estimate_sv(y; dist=:studentt, n_samples=2000, burnin=1000)
+sv_t = estimate_sv(ip; dist=:studentt, n_samples=2000, burnin=1000)
 report(sv_t)
 ```
 
@@ -477,14 +415,7 @@ The `report()` output displays a posterior summary table with mean, standard dev
 The SV model visualization shows posterior volatility with quantile credible bands:
 
 ```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-sp_idx = findfirst(v -> occursin("S&P", v) && occursin("500", v), varnames(fred))
-y = filter(isfinite, apply_tcode(fred[:, varnames(fred)[sp_idx]], 5))
-
-sv = estimate_sv(y; n_samples=2000, burnin=1000)
+sv = estimate_sv(ip; n_samples=2000, burnin=1000)
 plot_result(sv)
 ```
 
@@ -531,18 +462,12 @@ where:
 
 Under the null hypothesis of no ARCH effects, ``\text{LM} \sim \chi^2(q)``. Rejection indicates ARCH effects are present (or remain after fitting).
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-sp_idx = findfirst(v -> occursin("S&P", v) && occursin("500", v), varnames(fred))
-y = filter(isfinite, apply_tcode(fred[:, varnames(fred)[sp_idx]], 5))
-
+```@example volatility
 # Test raw data for ARCH effects (H₀: no ARCH effects)
-stat, pval, q = arch_lm_test(y, 5)
+stat, pval, q = arch_lm_test(ip, 5)
 
 # Test standardized residuals after fitting (should fail to reject)
-garch = estimate_garch(y, 1, 1)
+garch = estimate_garch(ip, 1, 1)
 stat_r, pval_r, q_r = arch_lm_test(garch, 5)
 ```
 
@@ -561,14 +486,8 @@ where:
 - ``\hat{\rho}_k`` is the sample autocorrelation of squared standardized residuals at lag ``k``
 - ``K`` is the maximum lag order
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-sp_idx = findfirst(v -> occursin("S&P", v) && occursin("500", v), varnames(fred))
-y = filter(isfinite, apply_tcode(fred[:, varnames(fred)[sp_idx]], 5))
-
-garch = estimate_garch(y, 1, 1)
+```@example volatility
+garch = estimate_garch(ip, 1, 1)
 stat, pval, K = ljung_box_squared(garch, 10)
 ```
 
@@ -593,14 +512,8 @@ where:
 
 Confidence intervals are constructed by simulating ``n`` paths forward from the last observed state, generating the empirical distribution of future conditional variances.
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-sp_idx = findfirst(v -> occursin("S&P", v) && occursin("500", v), varnames(fred))
-y = filter(isfinite, apply_tcode(fred[:, varnames(fred)[sp_idx]], 5))
-
-garch = estimate_garch(y, 1, 1)
+```@example volatility
+garch = estimate_garch(ip, 1, 1)
 fc = forecast(garch, 20; conf_level=0.95, n_sim=10000)
 report(fc)
 ```
@@ -611,15 +524,8 @@ The forecast report displays a table of point forecasts, standard errors, and co
 
 For SV models, each posterior draw provides a full parameter vector ``(\mu, \varphi, \sigma_\eta)`` and the terminal log-volatility ``h_T``. The forecast simulates the log-volatility process forward from the last state for each draw, yielding a posterior predictive distribution of future volatility. The reported intervals are posterior predictive quantiles, not frequentist confidence intervals.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-sp_idx = findfirst(v -> occursin("S&P", v) && occursin("500", v), varnames(fred))
-y = filter(isfinite, apply_tcode(fred[:, varnames(fred)[sp_idx]], 5))
-
-sv = estimate_sv(y; n_samples=2000, burnin=1000)
+```@example volatility
+sv = estimate_sv(ip; n_samples=2000, burnin=1000)
 fc_sv = forecast(sv, 20; conf_level=0.95)
 report(fc_sv)
 ```
@@ -627,13 +533,7 @@ report(fc_sv)
 ### Volatility Forecast Visualization
 
 ```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-sp_idx = findfirst(v -> occursin("S&P", v) && occursin("500", v), varnames(fred))
-y = filter(isfinite, apply_tcode(fred[:, varnames(fred)[sp_idx]], 5))
-
-garch = estimate_garch(y, 1, 1)
+garch = estimate_garch(ip, 1, 1)
 fc = forecast(garch, 10)
 plot_result(fc; history=garch.conditional_variance)
 ```
@@ -672,14 +572,8 @@ The following accessor functions provide model-specific summary statistics. The 
 
 In the table, ``p`` denotes `persistence(m)`. The half-life returns `Inf` if the process is non-stationary (persistence ``\geq 1``).
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-sp_idx = findfirst(v -> occursin("S&P", v) && occursin("500", v), varnames(fred))
-y = filter(isfinite, apply_tcode(fred[:, varnames(fred)[sp_idx]], 5))
-
-garch = estimate_garch(y, 1, 1)
+```@example volatility
+garch = estimate_garch(ip, 1, 1)
 persistence(garch)              # α₁ + β₁
 halflife(garch)                 # Half-life in periods
 unconditional_variance(garch)   # Long-run variance
@@ -708,14 +602,8 @@ All volatility models implement the standard StatsAPI interface:
 | `confint(m)` | Confidence intervals for parameters |
 | `vcov(m)` | Variance-covariance matrix of parameter estimates |
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-sp_idx = findfirst(v -> occursin("S&P", v) && occursin("500", v), varnames(fred))
-y = filter(isfinite, apply_tcode(fred[:, varnames(fred)[sp_idx]], 5))
-
-garch = estimate_garch(y, 1, 1)
+```@example volatility
+garch = estimate_garch(ip, 1, 1)
 nobs(garch)          # Number of observations
 loglikelihood(garch) # Maximized log-likelihood
 aic(garch)           # AIC for model comparison
@@ -729,52 +617,66 @@ coef(garch)          # [μ, ω, α₁, ..., αq, β₁, ..., βp]
 
 This example estimates all four GARCH-family models on S&P 500 returns, runs diagnostics, compares specifications, and estimates an SV model for comparison.
 
-```julia
-using MacroEconometricModels, Random, Statistics
-Random.seed!(42)
-
-# S&P 500 monthly returns (FRED-MD)
-fred = load_example(:fred_md)
-sp_idx = findfirst(v -> occursin("S&P", v) && occursin("500", v), varnames(fred))
-y = filter(isfinite, apply_tcode(fred[:, varnames(fred)[sp_idx]], 5))
-
+```@example volatility
 # === Step 1: Test for ARCH effects ===
-stat, pval, q = arch_lm_test(y, 5)
+stat, pval, q = arch_lm_test(ip, 5)
 
 # === Step 2: Estimate competing GARCH-family models ===
-garch  = estimate_garch(y, 1, 1)
-egarch = estimate_egarch(y, 1, 1)
-gjr    = estimate_gjr_garch(y, 1, 1)
+garch  = estimate_garch(ip, 1, 1)
+egarch = estimate_egarch(ip, 1, 1)
+gjr    = estimate_gjr_garch(ip, 1, 1)
 
 # Display each model's coefficient table and fit statistics
 report(garch)
-report(egarch)
-report(gjr)
+```
 
+```@example volatility
+report(egarch)
+```
+
+```@example volatility
+report(gjr)
+```
+
+```@example volatility
 # === Step 3: Compare information criteria and persistence ===
-# Lower AIC/BIC indicates better fit; persistence near 1 = slow reversion
 round(aic(garch), digits=1)
 round(aic(egarch), digits=1)
 round(aic(gjr), digits=1)
 round(persistence(garch), digits=4)
 round(persistence(egarch), digits=4)
 round(persistence(gjr), digits=4)
+```
 
+```@example volatility
 # === Step 4: Check residual diagnostics ===
 _, p_g, _ = arch_lm_test(garch, 5)
 _, p_e, _ = arch_lm_test(egarch, 5)
 _, p_j, _ = arch_lm_test(gjr, 5)
+nothing  # hide
+```
 
+```@example volatility
 # === Step 5: Forecast volatility ===
 fc = forecast(garch, 20; conf_level=0.95)
 report(fc)
+```
+
+```julia
 plot_result(fc; history=garch.conditional_variance)
+```
 
+```@example volatility
 # === Step 6: Stochastic volatility for comparison ===
-sv = estimate_sv(y; n_samples=2000, burnin=1000)
+sv = estimate_sv(ip; n_samples=2000, burnin=1000)
 report(sv)
-plot_result(sv)
+```
 
+```julia
+plot_result(sv)
+```
+
+```@example volatility
 # SV forecast
 fc_sv = forecast(sv, 20)
 report(fc_sv)
