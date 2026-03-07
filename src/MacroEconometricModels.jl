@@ -252,6 +252,7 @@ include("teststat/pvar_lag_selection.jl")
 include("panel_reg/types.jl")
 include("panel_reg/covariance.jl")
 include("panel_reg/estimation.jl")
+include("panel_reg/tests.jl")
 
 # Covariance estimators
 include("core/covariance.jl")
@@ -664,6 +665,10 @@ export PanelRegModel, PanelIVModel, PanelLogitModel, PanelProbitModel, PanelTest
 
 # Estimation
 export estimate_xtreg
+
+# Specification tests
+export hausman_test, breusch_pagan_test, f_test_fe
+export pesaran_cd_test, wooldridge_ar_test, modified_wald_test
 
 # =============================================================================
 # Exports - Difference-in-Differences / Event Study
