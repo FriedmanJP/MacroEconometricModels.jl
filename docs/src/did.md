@@ -9,13 +9,16 @@
 - **de Chaisemartin & D'Haultfoeuille (2020)**: First-difference DiD with bootstrap inference
 - **Diagnostics**: Bacon decomposition, pre-trend test, negative weight check, HonestDiD sensitivity
 
+```@setup did
+using MacroEconometricModels, Random, DataFrames
+Random.seed!(42)
+```
+
 ## Quick Start
 
 **Recipe 1: TWFE event study**
 
-```julia
-using MacroEconometricModels
-
+```@example did
 # Built-in Callaway & Sant'Anna (2021) minimum wage dataset
 pd = load_example(:mpdta)
 
@@ -26,23 +29,22 @@ report(did)
 
 **Recipe 2: Callaway-Sant'Anna (heterogeneity-robust)**
 
-```julia
-using MacroEconometricModels
-
+```@example did
 pd = load_example(:mpdta)
 
 # Group-time ATTs with never-treated controls
 did_cs = estimate_did(pd, "lemp", "first_treat"; method=:callaway_santanna,
                       leads=3, horizon=3, control_group=:never_treated)
 report(did_cs)
+```
+
+```julia
 plot_result(did_cs)
 ```
 
 **Recipe 3: Sun-Abraham interaction-weighted estimator**
 
-```julia
-using MacroEconometricModels
-
+```@example did
 pd = load_example(:mpdta)
 
 did_sa = estimate_did(pd, "lemp", "first_treat"; method=:sun_abraham,
@@ -52,27 +54,30 @@ report(did_sa)
 
 **Recipe 4: Bacon decomposition diagnostics**
 
-```julia
-using MacroEconometricModels
-
+```@example did
 pd = load_example(:mpdta)
 
 # Decompose the TWFE estimate into 2x2 comparisons
 bd = bacon_decomposition(pd, "lemp", "first_treat")
 report(bd)
+```
+
+```julia
 plot_result(bd)
 ```
 
 **Recipe 5: HonestDiD sensitivity analysis**
 
-```julia
-using MacroEconometricModels
-
+```@example did
 pd = load_example(:mpdta)
 
 did = estimate_did(pd, "lemp", "first_treat"; method=:callaway_santanna,
                    leads=3, horizon=3)
 h = honest_did(did; Mbar=1.0, conf_level=0.95)
+nothing # hide
+```
+
+```julia
 plot_result(h)
 ```
 
@@ -138,9 +143,7 @@ DiD estimation requires a `PanelData` object with an outcome variable and a trea
 
 The `mpdta` dataset from Callaway & Sant'Anna (2021) contains county-level minimum wage data for 500 US counties over 2003--2007. Three treatment cohorts (2004, 2006, 2007) and 309 never-treated counties:
 
-```julia
-using MacroEconometricModels
-
+```@example did
 pd = load_example(:mpdta)
 did = estimate_did(pd, "lemp", "first_treat";
                    method=:callaway_santanna, leads=3, horizon=3)
@@ -157,10 +160,7 @@ report(did)
 
 For simulation studies, construct a staggered adoption panel with known treatment effects:
 
-```julia
-using MacroEconometricModels, DataFrames, Random
-Random.seed!(42)
-
+```@example did
 N, T_periods = 200, 20
 group_id = repeat(1:N, inner=T_periods)
 time_id = repeat(1:T_periods, outer=N)
@@ -177,19 +177,21 @@ y = [fe_i[g] + fe_t[t] +
      for (g, t) in zip(group_id, time_id)]
 
 df = DataFrame(group=group_id, time=time_id, gdp=y, reform=treat_col)
-pd = xtset(df, :group, :time)
+pd_synth = xtset(df, :group, :time)
+nothing # hide
 ```
 
 ### Custom Cohort Specification
 
 By default, DiD methods derive cohorts from the treatment timing column. For custom cohort definitions (e.g., geographic clusters, pre-treatment characteristics), specify a `cohort` column in `xtset`:
 
-```julia
+```@example did
 df.region_cohort = [g <= 60 ? 1 : g <= 140 ? 2 : 0 for g in group_id]
-pd = xtset(df, :group, :time; cohort=:region_cohort)
+pd_cohort = xtset(df, :group, :time; cohort=:region_cohort)
 
 # DiD methods use region_cohort instead of deriving from treatment timing
-did = estimate_did(pd, :gdp, :reform; method=:callaway_santanna)
+did = estimate_did(pd_cohort, :gdp, :reform; method=:callaway_santanna)
+nothing # hide
 ```
 
 When `cohort_id` is `nothing` (the default), cohorts are inferred from the treatment column.
@@ -213,9 +215,7 @@ where:
 !!! warning "TWFE Bias under Heterogeneity"
     When treatment effects vary across cohorts or over time, the TWFE estimator implicitly uses already-treated units as controls, which introduces negative weights on some group-time ATTs (Goodman-Bacon 2021). Use the heterogeneity-robust estimators below when treatment timing is staggered.
 
-```julia
-using MacroEconometricModels
-
+```@example did
 pd = load_example(:mpdta)
 did = estimate_did(pd, "lemp", "first_treat"; method=:twfe, leads=3, horizon=3)
 report(did)
@@ -279,9 +279,7 @@ The `base_period` keyword controls the reference period for ``\Delta Y``:
 !!! note "Control Group Choice"
     Using `:not_yet_treated` increases the effective control sample but requires a stronger parallel trends assumption (across all cohorts, not just vs never-treated). When there are few never-treated units, `:not_yet_treated` may be necessary for precision.
 
-```julia
-using MacroEconometricModels
-
+```@example did
 pd = load_example(:mpdta)
 
 # Varying base (default): adjacent-period pre-treatment comparisons
@@ -292,6 +290,7 @@ report(did_cs)
 # Universal base period (forces e=-1 to zero)
 did_univ = estimate_did(pd, "lemp", "first_treat"; method=:callaway_santanna,
                         leads=3, horizon=3, base_period=:universal)
+nothing # hide
 ```
 
 The `group_time_att` field stores the full ``n_{\text{cohorts}} \times n_{\text{periods}}`` matrix of ``\text{ATT}(g,t)`` estimates.
@@ -300,9 +299,7 @@ The `group_time_att` field stores the full ``n_{\text{cohorts}} \times n_{\text{
 
 The interaction-weighted estimator runs per-cohort TWFE regressions (each cohort vs the control group) with event-time dummies for **all** relative periods, then aggregates with cohort-size weights:
 
-```julia
-using MacroEconometricModels
-
+```@example did
 pd = load_example(:mpdta)
 did_sa = estimate_did(pd, "lemp", "first_treat"; method=:sun_abraham,
                       leads=3, horizon=3)
@@ -323,9 +320,7 @@ The imputation estimator follows a two-step procedure:
 !!! note "Efficiency and Precision"
     The BJS imputation estimator is efficient under homoskedasticity and uses all available pre-treatment data for imputation. It naturally handles unbalanced panels and does not require specifying a control group explicitly.
 
-```julia
-using MacroEconometricModels
-
+```@example did
 pd = load_example(:mpdta)
 did_bjs = estimate_did(pd, "lemp", "first_treat"; method=:bjs,
                        leads=3, horizon=3)
@@ -336,13 +331,10 @@ report(did_bjs)
 
 The `did_multiplegt` estimator uses first-differences and bootstrap inference:
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example did
 pd = load_example(:mpdta)
 did_dcdh = estimate_did(pd, "lemp", "first_treat"; method=:did_multiplegt,
-                        leads=3, horizon=3, n_boot=200)
+                        leads=3, horizon=3, n_boot=50)
 report(did_dcdh)
 ```
 
@@ -360,12 +352,13 @@ The Goodman-Bacon (2021) decomposition reveals the TWFE estimator as a weighted 
 - **Earlier vs Later**: an earlier-treated cohort vs a later-treated cohort before the later cohort's treatment (valid comparison)
 - **Later vs Earlier**: a later-treated cohort vs an already-treated earlier cohort (problematic --- uses treated units as controls)
 
-```julia
-using MacroEconometricModels
-
+```@example did
 pd = load_example(:mpdta)
 bd = bacon_decomposition(pd, "lemp", "first_treat")
 report(bd)
+```
+
+```julia
 plot_result(bd)
 ```
 
@@ -393,9 +386,7 @@ where:
 - ``\beta_k`` is the event-time coefficient at relative time ``k``
 - ``K`` is the number of pre-treatment leads
 
-```julia
-using MacroEconometricModels
-
+```@example did
 pd = load_example(:mpdta)
 did = estimate_did(pd, "lemp", "first_treat"; method=:callaway_santanna,
                    leads=3, horizon=3)
@@ -420,9 +411,7 @@ A high p-value indicates no evidence against parallel trends. A low p-value sugg
 
 The de Chaisemartin & D'Haultfoeuille (2020) diagnostic checks whether the TWFE estimator assigns **negative weights** to some group-time ATTs:
 
-```julia
-using MacroEconometricModels
-
+```@example did
 pd = load_example(:mpdta)
 nw = negative_weight_check(pd, "first_treat")
 nw.has_negative_weights   # true if any weights are negative
@@ -477,14 +466,16 @@ where:
 
 A large breakdown value indicates that the result is robust to substantial departures from parallel trends.
 
-```julia
-using MacroEconometricModels
-
+```@example did
 pd = load_example(:mpdta)
 did = estimate_did(pd, "lemp", "first_treat"; method=:callaway_santanna,
                    leads=3, horizon=3)
 
 h = honest_did(did; Mbar=1.0, conf_level=0.95)
+nothing # hide
+```
+
+```julia
 plot_result(h)
 ```
 
@@ -511,12 +502,14 @@ All DiD result types support `plot_result` for interactive D3.js visualization.
 
 ### Event Study Plot
 
-```julia
-using MacroEconometricModels
-
+```@example did
 pd = load_example(:mpdta)
 did = estimate_did(pd, "lemp", "first_treat"; method=:callaway_santanna,
                    leads=3, horizon=3)
+nothing # hide
+```
+
+```julia
 plot_result(did)
 ```
 
@@ -526,8 +519,12 @@ plot_result(did)
 
 ### Bacon Decomposition Plot
 
-```julia
+```@example did
 bd = bacon_decomposition(pd, "lemp", "first_treat")
+nothing # hide
+```
+
+```julia
 plot_result(bd)
 ```
 
@@ -537,8 +534,12 @@ plot_result(bd)
 
 ### HonestDiD Sensitivity Plot
 
-```julia
+```@example did
 h = honest_did(did; Mbar=1.0)
+nothing # hide
+```
+
+```julia
 plot_result(h)
 ```
 
@@ -550,10 +551,7 @@ plot_result(h)
 
 ## Complete Example
 
-```julia
-using MacroEconometricModels, DataFrames, Random
-Random.seed!(42)
-
+```@example did
 # Simulate staggered adoption panel with heterogeneous effects
 N, T_periods = 200, 20
 group_id = repeat(1:N, inner=T_periods)
@@ -591,8 +589,10 @@ pt = pretrend_test(did_cs)
 
 # HonestDiD sensitivity
 h = honest_did(did_cs; Mbar=1.0, conf_level=0.95)
+nothing # hide
+```
 
-# Visualize
+```julia
 plot_result(did_cs)
 plot_result(bd)
 plot_result(h)

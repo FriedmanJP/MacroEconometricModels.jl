@@ -8,14 +8,16 @@
 - **Panel utilities**: `panel_lag`, `panel_lead`, `panel_diff` for within-group transformations
 - **Diagnostics**: Pre-trend tests and HonestDiD sensitivity analysis
 
+```@setup event
+using MacroEconometricModels, Random, DataFrames
+Random.seed!(42)
+```
+
 ## Quick Start
 
 **Recipe 1: Standard Event Study LP**
 
-```julia
-using MacroEconometricModels, DataFrames, Random
-Random.seed!(42)
-
+```@example event
 N, T_per = 50, 20
 df = DataFrame(
     group = repeat(1:N, inner=T_per),
@@ -31,10 +33,7 @@ report(eslp)
 
 **Recipe 2: LP-DiD with absorbing treatment**
 
-```julia
-using MacroEconometricModels, DataFrames, Random
-Random.seed!(42)
-
+```@example event
 N, T_per = 50, 20
 df = DataFrame(
     group = repeat(1:N, inner=T_per),
@@ -51,21 +50,20 @@ report(r)
 
 **Recipe 3: LP-DiD on DDCG dataset**
 
-```julia
-using MacroEconometricModels
-
+```@example event
 # Democracy and GDP: Acemoglu et al. (2019)
 ddcg = load_example(:ddcg)
 r = estimate_lp_did(ddcg, :y, :dem, 10; pre_window=5, ylags=1)
 report(r)
+```
+
+```julia
 plot_result(r; title="Democracy -> GDP (DDCG)")
 ```
 
 **Recipe 4: LP-DiD with PMD and IPW reweighting**
 
-```julia
-using MacroEconometricModels
-
+```@example event
 ddcg = load_example(:ddcg)
 
 # Pre-mean differencing + inverse probability weighting
@@ -75,9 +73,7 @@ report(r_pmd)
 
 **Recipe 5: Pooled estimates**
 
-```julia
-using MacroEconometricModels
-
+```@example event
 ddcg = load_example(:ddcg)
 
 r = estimate_lp_did(ddcg, :y, :dem, 10;
@@ -118,10 +114,7 @@ The reference period ``h = -1`` is normalized to zero.
 
 The standard estimator uses all switching (``\Delta D = 1``) and control (``D = 0``) observations at each horizon:
 
-```julia
-using MacroEconometricModels, DataFrames, Random
-Random.seed!(42)
-
+```@example event
 N, T_per = 50, 20
 df = DataFrame(
     group = repeat(1:N, inner=T_per),
@@ -139,6 +132,9 @@ eslp = estimate_event_study_lp(pd, :outcome, :treat, 5;
     conf_level=0.95
 )
 report(eslp)
+```
+
+```julia
 plot_result(eslp)
 ```
 
@@ -186,9 +182,7 @@ Three CCS specifications match the Stata `lpdid` package:
 
 **Absorbing treatment** (default): A ``(i, t)`` pair belongs to CCS at horizon ``h`` if the unit is switching (``\Delta D_{it} = 1``) or treatment status remains at zero through ``t + h``:
 
-```julia
-using MacroEconometricModels
-
+```@example event
 ddcg = load_example(:ddcg)
 r = estimate_lp_did(ddcg, :y, :dem, 10)  # Absorbing is default
 report(r)
@@ -196,14 +190,16 @@ report(r)
 
 **Non-absorbing treatment**: Treatment may reverse. A pair belongs to CCS if no switches occurred in the stabilization window of ``L`` periods before ``t``:
 
-```julia
+```@example event
 r = estimate_lp_did(ddcg, :y, :dem, 10; nonabsorbing=5)
+nothing # hide
 ```
 
 **One-off treatment**: Treatment lasts exactly one period. Requires `nonabsorbing`:
 
-```julia
+```@example event
 r = estimate_lp_did(ddcg, :y, :dem, 10; nonabsorbing=3, oneoff=true)
+nothing # hide
 ```
 
 ### Pre-Mean Differencing (PMD)
@@ -217,9 +213,7 @@ Y_{i,t+h} - \bar{Y}_{i,\text{pre}} = \gamma_t^h + \beta_h \, \Delta D_{it} + \ma
 where:
 - ``\bar{Y}_{i,\text{pre}}`` is the average of ``Y_{i,t-1}, Y_{i,t-2}, \ldots`` over a window of pre-treatment periods
 
-```julia
-using MacroEconometricModels
-
+```@example event
 ddcg = load_example(:ddcg)
 
 # Use cumulative pre-treatment mean
@@ -227,26 +221,24 @@ r = estimate_lp_did(ddcg, :y, :dem, 10; pmd=:max)
 
 # Use moving average of k pre-treatment periods
 r = estimate_lp_did(ddcg, :y, :dem, 10; pmd=3)
+nothing # hide
 ```
 
 ### IPW Reweighting
 
 Inverse probability weights ensure equally weighted ATE across time periods, correcting for compositional changes in the treatment-control balance:
 
-```julia
-using MacroEconometricModels
-
+```@example event
 ddcg = load_example(:ddcg)
 r = estimate_lp_did(ddcg, :y, :dem, 10; reweight=true)
+nothing # hide
 ```
 
 ### Pooled Estimates
 
 Pooled regressions average the left-hand side over a window of horizons, producing a single average treatment effect:
 
-```julia
-using MacroEconometricModels
-
+```@example event
 ddcg = load_example(:ddcg)
 r = estimate_lp_did(ddcg, :y, :dem, 10;
     post_pooled=(0, 5),   # Average effect over h=0,...,5
@@ -306,9 +298,7 @@ The pooled estimates are stored in `r.pooled_post` and `r.pooled_pre` as named t
 
 The built-in DDCG dataset contains 184 countries from 1960--2010 with log GDP per capita and a binary democracy indicator from Acemoglu, Naidu, Restrepo & Robinson (2019):
 
-```julia
-using MacroEconometricModels
-
+```@example event
 ddcg = load_example(:ddcg)
 
 r = estimate_lp_did(ddcg, :y, :dem, 25;
@@ -329,9 +319,7 @@ The dataset is organized as a balanced panel with country-year observations. The
 
 Within-group lag, lead, and difference operations for `PanelData`:
 
-```julia
-using MacroEconometricModels
-
+```@example event
 ddcg = load_example(:ddcg)
 
 # Compute lag/lead/diff vectors
@@ -343,6 +331,7 @@ dy = panel_diff(ddcg, :y)       # delta y = y - L1.y
 ddcg2 = add_panel_lag(ddcg, :y, 1)    # adds "lag1_y"
 ddcg3 = add_panel_lead(ddcg, :y, 1)   # adds "lead1_y"
 ddcg4 = add_panel_diff(ddcg, :y)      # adds "d_y"
+nothing # hide
 ```
 
 These functions respect panel group boundaries --- lags, leads, and differences do not cross from one unit to another.
@@ -357,9 +346,7 @@ Both estimators support three clustering options for standard error computation:
 - **`:time`** --- accounts for cross-sectional correlation within periods
 - **`:twoway`** --- two-way clustering (Cameron, Gelbach & Miller 2011): ``V_{\text{twoway}} = V_{\text{unit}} + V_{\text{time}} - V_{\text{het}}``
 
-```julia
-using MacroEconometricModels
-
+```@example event
 ddcg = load_example(:ddcg)
 r = estimate_lp_did(ddcg, :y, :dem, 10; cluster=:twoway)
 report(r)
@@ -382,10 +369,7 @@ H_0: \beta_{-K} = \beta_{-K+1} = \cdots = \beta_{-2} = 0
 where:
 - ``\beta_k`` is the LP coefficient at event-time ``k``
 
-```julia
-using MacroEconometricModels, DataFrames, Random
-Random.seed!(42)
-
+```@example event
 N, T_per = 50, 20
 df = DataFrame(
     group = repeat(1:N, inner=T_per),
@@ -406,8 +390,12 @@ A high p-value indicates no evidence against parallel trends at the given sample
 
 Rambachan & Roth (2023) robust confidence intervals under bounded violations of parallel trends:
 
-```julia
+```@example event
 h = honest_did(eslp; Mbar=1.0)
+nothing # hide
+```
+
+```julia
 plot_result(h)
 ```
 
@@ -419,10 +407,7 @@ The breakdown value ``\bar{M}^*`` reports the smallest violation magnitude at wh
 
 `plot_result` produces interactive D3.js event study plots for both `EventStudyLP` and `LPDiDResult`:
 
-```julia
-using MacroEconometricModels, DataFrames, Random
-Random.seed!(42)
-
+```@example event
 N, T_per = 50, 20
 df = DataFrame(
     group = repeat(1:N, inner=T_per),
@@ -433,7 +418,10 @@ df = DataFrame(
 )
 pd = xtset(df, :group, :time)
 eslp = estimate_event_study_lp(pd, :outcome, :treat, 5; leads=3, lags=2)
+nothing # hide
+```
 
+```julia
 p = plot_result(eslp)
 save_plot(p, "event_study.html")
 ```
@@ -446,9 +434,7 @@ save_plot(p, "event_study.html")
 
 ## Complete Example
 
-```julia
-using MacroEconometricModels
-
+```@example event
 # Load DDCG democracy-GDP dataset (Acemoglu et al. 2019)
 ddcg = load_example(:ddcg)
 
@@ -465,8 +451,9 @@ report(r)
 r_pmd = estimate_lp_did(ddcg, :y, :dem, 25;
     pre_window=5, ylags=1, pmd=:max, reweight=true)
 report(r_pmd)
+```
 
-# Plot
+```julia
 plot_result(r; title="Democracy -> GDP (LP-DiD, DDCG)")
 ```
 

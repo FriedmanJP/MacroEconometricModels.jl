@@ -9,13 +9,16 @@
 - **Bootstrap inference**: Group-level block bootstrap for IRF confidence intervals
 - **Specification tests**: Hansen (1982) J-test, Andrews-Lu (2001) MMSC, and lag selection
 
+```@setup pvar
+using MacroEconometricModels, Random, DataFrames
+Random.seed!(42)
+```
+
 ## Quick Start
 
 **Recipe 1: FD-GMM with two-step estimation**
 
-```julia
-using MacroEconometricModels
-
+```@example pvar
 # Load Penn World Table: 38 OECD countries, 1950-2023
 pwt = load_example(:pwt)
 pd = apply_tcode(pwt, 5)  # Log first difference for stationarity
@@ -27,9 +30,7 @@ report(model)
 
 **Recipe 2: System GMM (Blundell-Bond)**
 
-```julia
-using MacroEconometricModels
-
+```@example pvar
 pwt = load_example(:pwt)
 pd = apply_tcode(pwt, 5)
 
@@ -41,9 +42,7 @@ report(model_sys)
 
 **Recipe 3: Fixed-effects OLS**
 
-```julia
-using MacroEconometricModels
-
+```@example pvar
 pwt = load_example(:pwt)
 pd = apply_tcode(pwt, 5)
 
@@ -54,9 +53,7 @@ report(model_fe)
 
 **Recipe 4: Specification tests and lag selection**
 
-```julia
-using MacroEconometricModels
-
+```@example pvar
 pwt = load_example(:pwt)
 pd = apply_tcode(pwt, 5)
 dep_vars = ["rgdpna", "emp", "hc"]
@@ -76,10 +73,7 @@ sel = pvar_lag_selection(pd, 4; dependent_vars=dep_vars)
 
 **Recipe 5: Structural analysis with bootstrap CIs**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example pvar
 pwt = load_example(:pwt)
 pd = apply_tcode(pwt, 5)
 dep_vars = ["rgdpna", "emp", "hc"]
@@ -91,7 +85,7 @@ irfs = pvar_oirf(model, 10)
 decomp = pvar_fevd(model, 10)
 
 # Bootstrap confidence intervals
-boot = pvar_bootstrap_irf(model, 10; n_draws=200, ci=0.90)
+boot = pvar_bootstrap_irf(model, 10; n_draws=50, ci=0.90)
 ```
 
 ---
@@ -125,9 +119,7 @@ The fixed effect ``\boldsymbol{\mu}_i`` is correlated with ``\mathbf{y}_{i,t-l}`
 
 Panel VAR estimation requires a `PanelData` object. The built-in Penn World Table provides a balanced panel of 38 OECD countries with annual macroeconomic indicators:
 
-```julia
-using MacroEconometricModels
-
+```@example pvar
 # Load PWT --- already a PanelData object
 pwt = load_example(:pwt)
 
@@ -137,18 +129,19 @@ pd = apply_tcode(pwt, 5)  # tcode 5 = log first difference
 
 All numeric columns are treated as potential endogenous variables. Use the `dependent_vars` keyword to select a subset:
 
-```julia
+```@example pvar
 model = estimate_pvar(pd, 2; dependent_vars=["rgdpna", "emp", "hc"])
+nothing # hide
 ```
 
 For custom panel data, construct a `PanelData` object via `xtset`:
 
-```julia
-using DataFrames
+```@example pvar
 df = DataFrame(country=repeat(1:20, inner=30), year=repeat(1:30, outer=20),
                gdp=randn(600), inv=randn(600), cons=randn(600))
-pd = xtset(df, :country, :year)
-model = estimate_pvar(pd, 2; dependent_vars=["gdp", "inv", "cons"])
+pd_custom = xtset(df, :country, :year)
+model_custom = estimate_pvar(pd_custom, 2; dependent_vars=["gdp", "inv", "cons"])
+nothing # hide
 ```
 
 ---
@@ -172,9 +165,7 @@ Lagged **levels** ``\mathbf{y}_{i,t-2}, \mathbf{y}_{i,t-3}, \ldots`` serve as in
 !!! note "One-Step vs Two-Step"
     The two-step estimator is asymptotically efficient but its naive standard errors are severely downward-biased in finite samples. The package automatically applies the Windmeijer (2005) correction for two-step GMM, which restores proper inference.
 
-```julia
-using MacroEconometricModels
-
+```@example pvar
 pwt = load_example(:pwt)
 pd = apply_tcode(pwt, 5)
 dep_vars = ["rgdpna", "emp", "hc"]
@@ -188,6 +179,7 @@ m2 = estimate_pvar(pd, 2; dependent_vars=dep_vars, steps=:twostep)
 # Forward orthogonal deviations (Arellano & Bover 1995)
 m3 = estimate_pvar(pd, 2; dependent_vars=dep_vars,
                    transformation=:fod, steps=:twostep)
+nothing # hide
 ```
 
 The forward orthogonal deviations (FOD) transformation preserves orthogonality of the transformed errors, making the initial weighting matrix more efficient than first-differencing when the panel is unbalanced.
@@ -204,9 +196,7 @@ where:
 - The top block uses lagged levels ``\mathbf{y}_{i,t-2}, \ldots`` as instruments (as in FD-GMM)
 - The bottom block uses lagged differences ``\Delta \mathbf{y}_{i,t-1}`` as instruments for the level equation
 
-```julia
-using MacroEconometricModels
-
+```@example pvar
 pwt = load_example(:pwt)
 pd = apply_tcode(pwt, 5)
 
@@ -259,9 +249,7 @@ The system estimator exploits additional moment conditions but requires the assu
 
 For panels with large ``T``, the within (FE-OLS) estimator provides a simpler alternative. The estimator demeans each entity's data (removing ``\boldsymbol{\mu}_i``) and runs pooled OLS on the stacked system with cluster-robust standard errors at the group level:
 
-```julia
-using MacroEconometricModels
-
+```@example pvar
 pwt = load_example(:pwt)
 pd = apply_tcode(pwt, 5)
 
@@ -277,9 +265,7 @@ The FE-OLS estimator accepts the same `dependent_vars`, `predet_vars`, and `exog
 
 When the number of instruments is large relative to ``N``, standard errors become unreliable and the Hansen J-test loses power. Several options control instrument proliferation:
 
-```julia
-using MacroEconometricModels
-
+```@example pvar
 pwt = load_example(:pwt)
 pd = apply_tcode(pwt, 5)
 dep_vars = ["rgdpna", "emp", "hc"]
@@ -293,6 +279,7 @@ m = estimate_pvar(pd, 2; dependent_vars=dep_vars, collapse=true)
 
 # PCA instrument reduction
 m = estimate_pvar(pd, 2; dependent_vars=dep_vars, pca_instruments=true)
+nothing # hide
 ```
 
 !!! warning "Instrument Proliferation"
@@ -315,9 +302,7 @@ where:
 - ``P`` is the lower-triangular Cholesky factor of ``\Sigma``
 - ``J = [I_m \mid 0 \cdots 0]`` is the ``m \times mp`` selection matrix
 
-```julia
-using MacroEconometricModels
-
+```@example pvar
 pwt = load_example(:pwt)
 pd = apply_tcode(pwt, 5)
 model = estimate_pvar(pd, 1; dependent_vars=["rgdpna", "emp", "hc"], steps=:twostep)
@@ -335,7 +320,7 @@ where:
 - ``\mathbf{e}_j`` is the ``j``-th unit vector
 - ``\sigma_{jj} = \Sigma[j,j]`` is the variance of the ``j``-th variable
 
-```julia
+```@example pvar
 girfs = pvar_girf(model, 20)   # H+1 x m x m array
 ```
 
@@ -353,7 +338,7 @@ where:
 
 Each row sums to 1 (100% of forecast error variance accounted for).
 
-```julia
+```@example pvar
 decomp = pvar_fevd(model, 20)   # H+1 x m x m array
 ```
 
@@ -361,7 +346,7 @@ decomp = pvar_fevd(model, 20)   # H+1 x m x m array
 
 The system is stable if all eigenvalues of the companion matrix lie inside the unit circle:
 
-```julia
+```@example pvar
 stab = pvar_stability(model)
 stab.is_stable      # true if all |lambda| < 1
 stab.moduli          # moduli of eigenvalues (sorted descending)
@@ -380,19 +365,17 @@ report(stab)
 
 Group-level block bootstrap preserves the within-group time structure. For each bootstrap draw, ``N`` groups are resampled with replacement, the PVAR is re-estimated, and IRFs are computed. Quantile-based confidence intervals are constructed from the bootstrap distribution:
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example pvar
 pwt = load_example(:pwt)
 pd = apply_tcode(pwt, 5)
 model = estimate_pvar(pd, 1; dependent_vars=["rgdpna", "emp", "hc"], steps=:twostep)
 
 boot = pvar_bootstrap_irf(model, 20;
     irf_type=:oirf,   # or :girf
-    n_draws=500,
+    n_draws=50,
     ci=0.95
 )
+nothing # hide
 ```
 
 The returned named tuple contains `boot.irf` (point estimate), `boot.lower` and `boot.upper` (CI bounds), and `boot.draws` (all bootstrap draws). All arrays have shape ``(H+1) \times m \times m``.
@@ -427,9 +410,7 @@ where:
 - ``\hat{W}`` is the optimal weighting matrix
 - ``c`` is the number of instruments and ``b`` is the number of estimated parameters
 
-```julia
-using MacroEconometricModels
-
+```@example pvar
 pwt = load_example(:pwt)
 pd = apply_tcode(pwt, 5)
 model = estimate_pvar(pd, 1; dependent_vars=["rgdpna", "emp", "hc"], steps=:twostep)
@@ -464,7 +445,7 @@ where:
 
 Lower values are preferred. These criteria penalize overidentification, balancing model fit against instrument proliferation.
 
-```julia
+```@example pvar
 mmsc = pvar_mmsc(model)
 mmsc.bic     # MMSC-BIC
 mmsc.aic     # MMSC-AIC
@@ -477,9 +458,7 @@ mmsc.hqic    # MMSC-HQIC
 
 The `pvar_lag_selection` function compares MMSC criteria across candidate lag orders to select the optimal specification:
 
-```julia
-using MacroEconometricModels
-
+```@example pvar
 pwt = load_example(:pwt)
 pd = apply_tcode(pwt, 5)
 
@@ -495,10 +474,7 @@ The function estimates PVAR models for lags 1 through the maximum candidate, com
 
 ## Complete Example
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example pvar
 # Load Penn World Table and convert to growth rates
 pwt = load_example(:pwt)
 pd = apply_tcode(pwt, 5)  # log first difference
@@ -524,7 +500,7 @@ irfs = pvar_oirf(model, 10)
 decomp = pvar_fevd(model, 10)
 
 # Bootstrap confidence intervals
-boot = pvar_bootstrap_irf(model, 10; n_draws=200, ci=0.90)
+boot = pvar_bootstrap_irf(model, 10; n_draws=50, ci=0.90)
 
 # Academic references
 refs(model)
