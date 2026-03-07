@@ -11,68 +11,47 @@
 
 All results integrate with `report()` for publication-quality output and `plot_result()` for interactive D3.js visualization.
 
+```@setup bvar
+using MacroEconometricModels, Random
+Random.seed!(42)
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+Y = Y[end-59:end, :]
+post = estimate_bvar(Y, 2; n_draws=100, prior=:minnesota, varnames=["INDPRO", "CPI", "FFR"])
+```
+
 ## Quick Start
 
 **Recipe 1: Estimate a BVAR with Minnesota prior**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-# Load FRED-MD: standard monetary VAR (slow-to-fast ordering)
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
-# Estimate BVAR(2) with Minnesota prior and automatic tau optimization
-post = estimate_bvar(Y, 2; n_draws=1000, prior=:minnesota,
-                     varnames=["INDPRO", "CPI", "FFR"])
+```@example bvar
 report(post)
 ```
 
 **Recipe 2: Optimize hyperparameters via marginal likelihood**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example bvar
 best = optimize_hyperparameters(Y, 2; grid_size=20)
-post = estimate_bvar(Y, 2; n_draws=1000, prior=:minnesota, hyper=best,
-                     varnames=["INDPRO", "CPI", "FFR"])
-report(post)
+post_opt = estimate_bvar(Y, 2; n_draws=100, prior=:minnesota, hyper=best,
+                         varnames=["INDPRO", "CPI", "FFR"])
+report(post_opt)
 ```
 
 **Recipe 3: Bayesian IRFs with Cholesky identification**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
-post = estimate_bvar(Y, 2; n_draws=1000, prior=:minnesota,
-                     varnames=["INDPRO", "CPI", "FFR"])
+```@example bvar
 birf = irf(post, 20; method=:cholesky)
+report(birf)
+```
+
+```julia
 plot_result(birf)
 ```
 
 **Recipe 4: Bayesian FEVD and historical decomposition**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
-post = estimate_bvar(Y, 2; n_draws=1000, prior=:minnesota,
-                     varnames=["INDPRO", "CPI", "FFR"])
+```@example bvar
 bfevd = fevd(post, 20; method=:cholesky)
 bhd = historical_decomposition(post; method=:cholesky)
 report(bfevd)
@@ -80,36 +59,23 @@ report(bfevd)
 
 **Recipe 5: Multi-step forecasting with credible intervals**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
-post = estimate_bvar(Y, 2; n_draws=1000, prior=:minnesota,
-                     varnames=["INDPRO", "CPI", "FFR"])
+```@example bvar
 fc = forecast(post, 12; conf_level=0.95)
 report(fc)
 ```
 
 **Recipe 6: Joint hyperparameter optimization for large systems**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
+```@example bvar
 safe_idx = [i for i in 1:nvars(fred)
             if fred.tcode[i] < 4 || all(x -> isfinite(x) && x > 0, fred.data[:, i])]
 fred_safe = fred[:, varnames(fred)[safe_idx]]
 X = to_matrix(apply_tcode(fred_safe))
 X = X[all.(isfinite, eachrow(X)), 1:min(20, size(X, 2))]
 
-best, ml = optimize_hyperparameters_full(X, 4)
-post = estimate_bvar(X, 4; n_draws=1000, prior=:minnesota, hyper=best)
-report(post)
+best_full, ml = optimize_hyperparameters_full(X, 4)
+post_large = estimate_bvar(X, 4; n_draws=100, prior=:minnesota, hyper=best_full)
+report(post_large)
 ```
 
 ---
@@ -192,15 +158,7 @@ where:
 !!! note "Technical Note"
     The Minnesota prior is implemented via **dummy observations** (Theil-Goldberger mixed estimation). Augmenting the data with pseudo-observations and running OLS on the combined system is algebraically equivalent to computing the posterior mean under the NIW conjugate prior. This approach avoids explicit construction of the ``\Sigma \otimes \Omega_0`` Kronecker prior covariance.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-# Load FRED-MD monetary policy variables
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example bvar
 # Define hyperparameters explicitly
 hyper = MinnesotaHyperparameters(
     tau = 0.5,      # Moderate overall tightness
@@ -210,9 +168,9 @@ hyper = MinnesotaHyperparameters(
     omega = 1.0     # Covariance scaling
 )
 
-post = estimate_bvar(Y, 2; n_draws=1000, prior=:minnesota, hyper=hyper,
-                     varnames=["INDPRO", "CPI", "FFR"])
-report(post)
+post_hyper = estimate_bvar(Y, 2; n_draws=100, prior=:minnesota, hyper=hyper,
+                           varnames=["INDPRO", "CPI", "FFR"])
+report(post_hyper)
 ```
 
 The `tau=0.5` setting provides moderate shrinkage --- coefficient estimates are pulled halfway between the data-driven OLS values and the random walk prior. With `decay=2.0`, the prior variance for lag-``l`` coefficients decays as ``1/l^2``, so distant lags are strongly penalized. Setting `mu=1.0` treats cross-variable and own lags symmetrically; reducing `mu` (e.g., to 0.5) imposes stronger cross-variable shrinkage, reflecting the common finding that own lags carry more predictive power.
@@ -258,20 +216,14 @@ where:
 
 The `optimize_hyperparameters` function performs a one-dimensional grid search over ``\tau``, holding all other hyperparameters at their defaults:
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example bvar
 # Optimize tau via marginal likelihood
-best = optimize_hyperparameters(Y, 2; grid_size=20, tau_range=(0.01, 10.0))
+best_tau = optimize_hyperparameters(Y, 2; grid_size=20, tau_range=(0.01, 10.0))
 
 # Use optimized hyperparameters in estimation
-post = estimate_bvar(Y, 2; n_draws=1000, prior=:minnesota, hyper=best,
-                     varnames=["INDPRO", "CPI", "FFR"])
-report(post)
+post_tau = estimate_bvar(Y, 2; n_draws=100, prior=:minnesota, hyper=best_tau,
+                         varnames=["INDPRO", "CPI", "FFR"])
+report(post_tau)
 ```
 
 The optimal ``\tau`` balances fit and complexity: values near 0.01 produce near-dogmatic shrinkage to the random walk (useful for high-dimensional systems), while values near 1.0 produce minimal shrinkage (approaching OLS). The marginal likelihood automatically penalizes overfitting, so the optimal ``\tau`` increases with sample size as data evidence accumulates.
@@ -294,24 +246,17 @@ where:
 - ``\hat{\lambda}`` is the optimal sum-of-coefficients scaling
 - ``\hat{\mu}`` is the optimal co-persistence scaling
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example bvar
 # Three-dimensional grid search
-best, ml = optimize_hyperparameters_full(Y, 2;
+best_joint, ml_joint = optimize_hyperparameters_full(Y, 2;
     tau_grid    = range(0.1, 5.0, length=10),
     lambda_grid = [1.0, 5.0, 10.0],
     mu_grid     = [1.0, 2.0, 5.0]
 )
 
-post = estimate_bvar(Y, 2; n_draws=1000, prior=:minnesota, hyper=best,
-                     varnames=["INDPRO", "CPI", "FFR"])
-report(post)
+post_joint = estimate_bvar(Y, 2; n_draws=100, prior=:minnesota, hyper=best_joint,
+                           varnames=["INDPRO", "CPI", "FFR"])
+report(post_joint)
 ```
 
 Joint optimization is particularly important for large systems (``n \geq 10``), where the optimal ``\mu`` is often substantially below 1.0 --- imposing strong cross-variable shrinkage while allowing own lags to remain relatively free. For small systems (``n \leq 5``), the simpler tau-only search is usually sufficient.
@@ -347,21 +292,14 @@ The Gibbs sampler is useful for diagnostics, extensions, or cross-validation aga
 !!! note "Technical Note"
     The Gibbs sampler pre-computes the posterior variance ``\Omega_{\text{post}}`` and its Cholesky factor before the sampling loop, since these depend only on the data and prior (not on the current draw of ``\Sigma``). Workspace buffers are pre-allocated to minimize allocations during the MCMC loop.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example bvar
 # Direct sampler (i.i.d. draws, fast)
-post_direct = estimate_bvar(Y, 2; n_draws=1000, sampler=:direct,
+post_direct = estimate_bvar(Y, 2; n_draws=100, sampler=:direct,
                             prior=:minnesota,
                             varnames=["INDPRO", "CPI", "FFR"])
 
 # Gibbs sampler (MCMC, for diagnostics)
-post_gibbs = estimate_bvar(Y, 2; n_draws=1000, sampler=:gibbs,
+post_gibbs = estimate_bvar(Y, 2; n_draws=100, sampler=:gibbs,
                            burnin=500, thin=2, prior=:minnesota,
                            varnames=["INDPRO", "CPI", "FFR"])
 report(post_direct)
@@ -401,17 +339,7 @@ The `:direct` sampler is typically 10--100x faster than Gibbs because it avoids 
 
 After estimation, it is often useful to extract a single `VARModel` based on the posterior mean or median. This enables all frequentist tools --- stationarity checks, Granger causality, information criteria --- on the Bayesian point estimate.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
-post = estimate_bvar(Y, 2; n_draws=1000, prior=:minnesota,
-                     varnames=["INDPRO", "CPI", "FFR"])
-
+```@example bvar
 # Extract VARModel with posterior mean parameters
 mean_model = posterior_mean_model(post)
 report(mean_model)
@@ -422,6 +350,7 @@ median_model = posterior_median_model(post)
 # Standard VAR tools work on the point estimate
 stab = is_stationary(mean_model)
 irfs_mean = irf(mean_model, 20; method=:cholesky)
+nothing # hide
 ```
 
 The `posterior_mean_model` averages ``B`` and ``\Sigma`` across all posterior draws, providing a point estimate that integrates over parameter uncertainty. The `posterior_median_model` uses the element-wise median, which is more robust to outlier draws. The `BVARPosterior` stores the original data, so residuals are computed automatically for downstream analyses such as `historical_decomposition`.
@@ -434,19 +363,13 @@ For each posterior draw ``(B^{(s)}, \Sigma^{(s)})``, the package computes impuls
 
 ### Cholesky Identification
 
+```@example bvar
+birf_chol = irf(post, 20; method=:cholesky)
+report(birf_chol)
+```
+
 ```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
-post = estimate_bvar(Y, 2; n_draws=1000, prior=:minnesota,
-                     varnames=["INDPRO", "CPI", "FFR"])
-birf = irf(post, 20; method=:cholesky)
-report(birf)
-plot_result(birf)
+plot_result(birf_chol)
 ```
 
 ```@raw html
@@ -462,17 +385,7 @@ The Cholesky ordering [INDPRO, CPI, FFR] identifies a monetary policy shock as t
 
 Sign restrictions provide set identification by retaining only rotation matrices ``Q`` that produce economically meaningful impulse responses:
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
-post = estimate_bvar(Y, 2; n_draws=1000, prior=:minnesota,
-                     varnames=["INDPRO", "CPI", "FFR"])
-
+```@example bvar
 # Contractionary monetary shock: FFR rises, INDPRO and CPI fall on impact
 function check_monetary(irf_array)
     return irf_array[1, 3, 3] > 0 &&   # FFR rises
@@ -514,19 +427,13 @@ The sign-restricted credible intervals combine both parameter uncertainty (from 
 
 The **forecast error variance decomposition** (FEVD) measures the share of each variable's forecast error variance attributable to each structural shock. For each posterior draw, the FEVD is computed from the VMA coefficients, yielding a posterior distribution over variance shares.
 
+```@example bvar
+bfevd_sec = fevd(post, 20; method=:cholesky)
+report(bfevd_sec)
+```
+
 ```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
-post = estimate_bvar(Y, 2; n_draws=1000, prior=:minnesota,
-                     varnames=["INDPRO", "CPI", "FFR"])
-bfevd = fevd(post, 20; method=:cholesky)
-report(bfevd)
-plot_result(bfevd)
+plot_result(bfevd_sec)
 ```
 
 ```@raw html
@@ -552,19 +459,13 @@ At short horizons, the monetary shock (shock 3) explains a small fraction of IND
 
 The **historical decomposition** decomposes the actual realization of each variable into contributions from each structural shock and an initial condition component. For each posterior draw, structural shocks are recovered and cumulated through the VMA representation.
 
+```@example bvar
+bhd_sec = historical_decomposition(post; method=:cholesky)
+report(bhd_sec)
+```
+
 ```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
-post = estimate_bvar(Y, 2; n_draws=1000, prior=:minnesota,
-                     varnames=["INDPRO", "CPI", "FFR"])
-bhd = historical_decomposition(post; method=:cholesky)
-report(bhd)
-plot_result(bhd)
+plot_result(bhd_sec)
 ```
 
 ```@raw html
@@ -593,19 +494,13 @@ The historical decomposition reveals which structural shocks drove each variable
 
 The BVAR forecast integrates over parameter uncertainty by iterating the VAR recursion forward for each posterior draw. For each draw ``(B^{(s)}, \Sigma^{(s)})``, future shocks are drawn from ``N(0, \Sigma^{(s)})`` and the VAR is simulated forward ``h`` steps. The distribution of forecast paths across draws produces posterior credible intervals.
 
+```@example bvar
+fc_sec = forecast(post, 12; conf_level=0.90, point_estimate=:median)
+report(fc_sec)
+```
+
 ```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
-post = estimate_bvar(Y, 2; n_draws=1000, prior=:minnesota,
-                     varnames=["INDPRO", "CPI", "FFR"])
-fc = forecast(post, 12; conf_level=0.90, point_estimate=:median)
-report(fc)
-plot_result(fc)
+plot_result(fc_sec)
 ```
 
 ```@raw html
@@ -642,19 +537,13 @@ For high-dimensional systems (20+ variables), the number of VAR parameters ``n^2
 
 Banbura, Giannone & Reichlin (2010) show that BVAR with optimized shrinkage outperforms both unrestricted VAR and small-scale models for macroeconomic forecasting. The key insight is that stronger shrinkage is needed as the system dimension grows:
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-# Load full FRED-MD dataset (100+ variables)
-fred = load_example(:fred_md)
-
+```@example bvar
 # Select variables with safe transformations
-safe_idx = [i for i in 1:nvars(fred)
-            if fred.tcode[i] < 4 || all(x -> isfinite(x) && x > 0, fred.data[:, i])]
-fred_safe = fred[:, varnames(fred)[safe_idx]]
-X = to_matrix(apply_tcode(fred_safe))
-X = X[all.(isfinite, eachrow(X)), 1:min(20, size(X, 2))]
+safe_idx_lg = [i for i in 1:nvars(fred)
+               if fred.tcode[i] < 4 || all(x -> isfinite(x) && x > 0, fred.data[:, i])]
+fred_safe_lg = fred[:, varnames(fred)[safe_idx_lg]]
+X_lg = to_matrix(apply_tcode(fred_safe_lg))
+X_lg = X_lg[all.(isfinite, eachrow(X_lg)), 1:min(20, size(X_lg, 2))]
 
 # Tighter prior for large systems
 hyper_large = MinnesotaHyperparameters(
@@ -665,8 +554,8 @@ hyper_large = MinnesotaHyperparameters(
     omega = 1.0     # Covariance scaling
 )
 
-post = estimate_bvar(X, 4; n_draws=1000, prior=:minnesota, hyper=hyper_large)
-report(post)
+post_lg = estimate_bvar(X_lg, 4; n_draws=100, prior=:minnesota, hyper=hyper_large)
+report(post_lg)
 ```
 
 For 20 variables at 4 lags, the VAR has ``20^2 \times 4 + 20 = 1620`` parameters per equation. With a typical monthly sample of 600 observations, OLS is ill-conditioned. The Minnesota prior with `tau=0.1` and `mu=0.5` regularizes the system by imposing strong cross-variable shrinkage while allowing own lags to retain flexibility. The `optimize_hyperparameters_full` function automates the selection of ``(\tau, \lambda, \mu)`` for large systems.
@@ -677,44 +566,35 @@ For 20 variables at 4 lags, the VAR has ``20^2 \times 4 + 20 = 1620`` parameters
 
 This example demonstrates the full BVAR workflow: hyperparameter optimization, estimation, structural analysis, and forecasting using FRED-MD data.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-# Load FRED-MD: industrial production, CPI, federal funds rate
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-p = 2
-
+```@example bvar
 # Step 1: Optimize hyperparameters via marginal likelihood
-best = optimize_hyperparameters(Y, p; grid_size=20)
-report(best)
+best_ce = optimize_hyperparameters(Y, 2; grid_size=20)
+report(best_ce)
 
 # Step 2: Estimate BVAR with optimized Minnesota prior
-post = estimate_bvar(Y, p; n_draws=1000, prior=:minnesota, hyper=best,
-                     varnames=["INDPRO", "CPI", "FFR"])
-report(post)
+post_ce = estimate_bvar(Y, 2; n_draws=100, prior=:minnesota, hyper=best_ce,
+                        varnames=["INDPRO", "CPI", "FFR"])
+report(post_ce)
 
 # Step 3: Bayesian IRFs — response to monetary policy shock
-birf = irf(post, 20; method=:cholesky)
-report(birf)
+birf_ce = irf(post_ce, 20; method=:cholesky)
+report(birf_ce)
 
 # Step 4: FEVD — variance decomposition with credible bands
-bfevd = fevd(post, 20; method=:cholesky)
-report(bfevd)
+bfevd_ce = fevd(post_ce, 20; method=:cholesky)
+report(bfevd_ce)
 
 # Step 5: Historical decomposition
-bhd = historical_decomposition(post; method=:cholesky)
-report(bhd)
+bhd_ce = historical_decomposition(post_ce; method=:cholesky)
+report(bhd_ce)
 
 # Step 6: 12-step-ahead forecast
-fc = forecast(post, 12; conf_level=0.95)
-report(fc)
+fc_ce = forecast(post_ce, 12; conf_level=0.95)
+report(fc_ce)
 
 # Step 7: Extract posterior mean VARModel for stationarity check
-mean_model = posterior_mean_model(post)
-stab = is_stationary(mean_model)
+mean_model_ce = posterior_mean_model(post_ce)
+stab_ce = is_stationary(mean_model_ce)
 ```
 
 This workflow demonstrates the complete Bayesian pipeline: hyperparameter optimization selects the optimal shrinkage ``\tau`` via marginal likelihood, the conjugate NIW sampler produces 1000 posterior draws, and the structural analysis functions compute IRFs, FEVD, and historical decomposition with credible intervals. The Cholesky ordering [INDPRO, CPI, FFR] identifies a monetary policy shock as the third innovation. The forecast integrates over the full posterior distribution of ``(B, \Sigma)``, providing credible intervals that account for both parameter and shock uncertainty. The posterior mean model confirms stationarity of the system.
