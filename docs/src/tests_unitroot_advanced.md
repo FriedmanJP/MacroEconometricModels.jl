@@ -8,16 +8,18 @@ Standard unit root tests (ADF, PP, KPSS) perform well when the data-generating p
 - **LM Unit Root** (Schmidt & Phillips 1992; Lee & Strazicich 2003, 2013): Breaks under the null hypothesis
 - **Two-Break ADF** (Narayan & Popp 2010): ADF with two endogenous structural breaks
 
+```@setup test_ur_adv
+using MacroEconometricModels, Random
+Random.seed!(42)
+fred = load_example(:fred_md)
+cpi = filter(isfinite, to_vector(fred[:, "CPIAUCSL"]))
+```
+
 ## Quick Start
 
 **Recipe 1: Fourier ADF for smooth breaks**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-cpi = filter(isfinite, to_vector(fred[:, "CPIAUCSL"]))
-
+```@example test_ur_adv
 # Fourier ADF — captures smooth structural change without specifying break dates
 result = fourier_adf_test(cpi; regression=:constant)
 report(result)
@@ -25,12 +27,7 @@ report(result)
 
 **Recipe 2: DF-GLS for best power**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-cpi = filter(isfinite, to_vector(fred[:, "CPIAUCSL"]))
-
+```@example test_ur_adv
 # DF-GLS — near-optimal power against local alternatives
 result = dfgls_test(cpi; regression=:constant, lags=:aic)
 report(result)
@@ -38,10 +35,7 @@ report(result)
 
 **Recipe 3: LM unit root with 2 breaks**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example test_ur_adv
 # Simulated series with two level shifts
 y = vcat(cumsum(randn(100)), 5.0 .+ cumsum(randn(100)), cumsum(randn(100)))
 
@@ -79,12 +73,7 @@ The null and alternative hypotheses are:
 !!! note "Technical Note"
     A single Fourier frequency can approximate a wide range of smooth structural changes, including gradual level shifts, slow trend changes, and multiple smooth breaks. Enders & Lee (2012) show that ``k_{\max} = 3`` captures virtually all empirically relevant break patterns. Setting ``k_{\max}`` too high wastes degrees of freedom and reduces power against the unit root null.
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-cpi = filter(isfinite, to_vector(fred[:, "CPIAUCSL"]))
-
+```@example test_ur_adv
 # Fourier ADF with automatic frequency selection
 result = fourier_adf_test(cpi; regression=:constant, fmax=3)
 report(result)
@@ -157,12 +146,7 @@ The null and alternative hypotheses are:
 
 An F-test for ``H_0: a_k = b_k = 0`` tests whether the Fourier terms are needed. If the Fourier terms are not significant, the standard KPSS test is preferable.
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-cpi = filter(isfinite, to_vector(fred[:, "CPIAUCSL"]))
-
+```@example test_ur_adv
 # Fourier KPSS — stationarity test robust to smooth breaks
 result = fourier_kpss_test(cpi; regression=:constant, fmax=3)
 report(result)
@@ -251,12 +235,7 @@ where ``S(\bar{\alpha})`` and ``S(1)`` are the sum of squared residuals from qua
 !!! note "Technical Note"
     The function also computes the four Ng-Perron (2001) ``M^{GLS}`` statistics -- ``MZ_\alpha``, ``MZ_t``, ``MSB``, and ``MP_T`` -- from the same GLS-detrended series. These are identical to the statistics reported by `ngperron_test` but computed on the DF-GLS detrended data, providing a unified set of power-optimized unit root diagnostics in a single function call.
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-cpi = filter(isfinite, to_vector(fred[:, "CPIAUCSL"]))
-
+```@example test_ur_adv
 # DF-GLS test with AIC lag selection
 result = dfgls_test(cpi; regression=:constant, lags=:aic)
 report(result)
@@ -344,10 +323,7 @@ The test statistic is the t-ratio on ``\phi``. Break dates are selected by minim
 !!! note "Technical Note"
     The critical values for the LM test with breaks depend on the break location within the sample. Lee & Strazicich (2003, 2013) provide critical values for specific break fractions ``\lambda = T_B / T``. The implementation interpolates over tabulated values to produce accurate critical values for the estimated break locations.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example test_ur_adv
 # Simulated series with a level shift at t=100
 y = vcat(cumsum(randn(100)), 5.0 .+ cumsum(randn(100)))
 
@@ -428,10 +404,7 @@ The test statistic is the minimum t-ratio on ``\gamma`` over all admissible ``(T
 !!! note "Technical Note"
     The grid search over two break dates is computationally intensive: with trimming parameter ``\tau``, the number of candidate pairs is ``O((T(1 - 2\tau))^2)``. The default trimming ``\tau = 0.10`` excludes the first and last 10% of the sample. The minimum gap between break dates is 2 observations for `:level` and 3 for `:both` to ensure identification of the break parameters.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example test_ur_adv
 # Simulated series with two level shifts
 y = vcat(cumsum(randn(80)), 3.0 .+ cumsum(randn(80)), -2.0 .+ cumsum(randn(80)))
 
@@ -484,14 +457,7 @@ report(result_both)
 
 This workflow applies all five advanced unit root tests to a macroeconomic series, compares results with the standard ADF test, and demonstrates how the tests complement each other for robust inference.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-# ── Step 1: Load data ──────────────────────────────────────────
-fred = load_example(:fred_md)
-cpi = filter(isfinite, to_vector(fred[:, "CPIAUCSL"]))
-
+```@example test_ur_adv
 # ── Step 2: Standard ADF as baseline ──────────────────────────
 adf = adf_test(cpi; lags=:aic, regression=:constant)
 report(adf)

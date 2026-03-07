@@ -11,16 +11,20 @@ The ADF and KPSS tests are complementary: ADF tests the null of a unit root, whi
 - **Zivot-Andrews**: Unit root test robust to a single endogenous structural break
 - **Johansen**: Tests for cointegrating relationships among multiple I(1) series
 
+```@setup test_ur
+using MacroEconometricModels
+fred = load_example(:fred_md)
+cpi = filter(isfinite, to_vector(fred[:, "CPIAUCSL"]))
+qd = load_example(:fred_qd)
+Y_qd = log.(to_matrix(qd[:, ["GDPC1", "PCECC96"]]))
+Y_qd = Y_qd[all.(isfinite, eachrow(Y_qd)), :]
+```
+
 ## Quick Start
 
 **Recipe 1: ADF + KPSS combined workflow**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-cpi = filter(isfinite, to_vector(fred[:, "CPIAUCSL"]))
-
+```@example test_ur
 # ADF: H0 = unit root
 adf_result = adf_test(cpi; lags=:aic, regression=:constant)
 report(adf_result)
@@ -34,26 +38,15 @@ report(kpss_result)
 
 **Recipe 2: Johansen cointegration**
 
-```julia
-using MacroEconometricModels
-
-qd = load_example(:fred_qd)
-Y = log.(to_matrix(qd[:, ["GDPC1", "PCECC96"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example test_ur
 # Test for cointegrating relationships with 2 lags
-result = johansen_test(Y, 2; deterministic=:constant)
+result = johansen_test(Y_qd, 2; deterministic=:constant)
 report(result)
 ```
 
 **Recipe 3: Batch unit root summary**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-cpi = filter(isfinite, to_vector(fred[:, "CPIAUCSL"]))
-
+```@example test_ur
 # Run ADF, KPSS, and PP simultaneously with automatic conclusion
 summary = unit_root_summary(cpi; tests=[:adf, :kpss, :pp])
 summary.conclusion
@@ -89,13 +82,8 @@ The ADF statistic is the t-ratio on ``\gamma``:
 
 Critical values follow non-standard distributions and depend on the deterministic specification. MacroEconometricModels.jl computes p-values from the MacKinnon (1994, 2010) response surface approximation.
 
-```julia
-using MacroEconometricModels
-
+```@example test_ur
 # CPI price level — expected to have a unit root
-fred = load_example(:fred_md)
-cpi = filter(isfinite, to_vector(fred[:, "CPIAUCSL"]))
-
 # ADF test with automatic lag selection via AIC
 result = adf_test(cpi; lags=:aic, regression=:constant)
 report(result)
@@ -157,12 +145,9 @@ where:
 - ``S_t = \sum_{s=1}^{t} \hat{e}_s`` are partial sums of OLS residuals from regressing ``y_t`` on deterministic terms
 - ``\hat{\sigma}^2_{LR}`` is the long-run variance estimated using a Bartlett kernel
 
-```julia
-using MacroEconometricModels
-
+```@example test_ur
 # CPI inflation rate (Δlog CPI) — expected to be stationary
-fred = load_example(:fred_md)
-cpi_growth = diff(log.(filter(isfinite, to_vector(fred[:, "CPIAUCSL"]))))
+cpi_growth = diff(log.(cpi))
 
 result = kpss_test(cpi_growth; regression=:constant)
 report(result)
@@ -232,13 +217,8 @@ where:
 
 The PP test shares the same null distribution as the ADF test, so MacKinnon critical values apply. Its advantage is that it does not require specifying the number of augmenting lags, although bandwidth selection for the Newey-West estimator plays an analogous role.
 
-```julia
-using MacroEconometricModels
-
+```@example test_ur
 # CPI price level — non-parametric unit root test
-fred = load_example(:fred_md)
-cpi = filter(isfinite, to_vector(fred[:, "CPIAUCSL"]))
-
 result = pp_test(cpi; regression=:constant)
 report(result)
 ```
@@ -293,13 +273,8 @@ where:
 - ``T_B`` is the break date, selected to minimize the ADF t-statistic on ``\gamma``
 - The trimming parameter excludes endpoints from the search (default: 15% on each side)
 
-```julia
-using MacroEconometricModels
-
+```@example test_ur
 # CPI price level — test for unit root allowing a structural break
-fred = load_example(:fred_md)
-cpi = filter(isfinite, to_vector(fred[:, "CPIAUCSL"]))
-
 result = za_test(cpi; regression=:both)
 report(result)
 
@@ -353,13 +328,8 @@ where ``\bar{c} = -7`` for level stationarity (`:constant`) and ``\bar{c} = -13.
 
 All four statistics are computed from the GLS-detrended series and use the autoregressive spectral density estimator for the long-run variance.
 
-```julia
-using MacroEconometricModels
-
+```@example test_ur
 # CPI price level — GLS-detrended unit root tests
-fred = load_example(:fred_md)
-cpi = filter(isfinite, to_vector(fred[:, "CPIAUCSL"]))
-
 result = ngperron_test(cpi; regression=:constant)
 report(result)
 
@@ -404,12 +374,7 @@ Two convenience functions simplify batch unit root analysis across multiple test
 
 The `unit_root_summary` function runs multiple unit root tests on a single series and synthesizes the results into an overall conclusion based on the ADF-KPSS decision matrix.
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-cpi = filter(isfinite, to_vector(fred[:, "CPIAUCSL"]))
-
+```@example test_ur
 # Run ADF, KPSS, and PP simultaneously
 summary = unit_root_summary(cpi; tests=[:adf, :kpss, :pp])
 
@@ -428,16 +393,13 @@ summary.conclusion
 
 The `test_all_variables` function applies a single unit root test to every column of a data matrix, returning a vector of results for quick screening.
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
+```@example test_ur
 vars = fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS", "UNRATE", "M2SL"]]
-Y = to_matrix(vars)
-Y = Y[all.(isfinite, eachrow(Y)), :]
+Y_vars = to_matrix(vars)
+Y_vars = Y_vars[all.(isfinite, eachrow(Y_vars)), :]
 
 # Apply ADF test to all columns (also supports :fourier_adf, :dfgls, :lm_unitroot)
-results = test_all_variables(Y; test=:adf)
+results = test_all_variables(Y_vars; test=:adf)
 
 # Display each result
 for r in results
@@ -488,16 +450,10 @@ where ``\hat{\lambda}_1 \geq \hat{\lambda}_2 \geq \cdots \geq \hat{\lambda}_n`` 
 !!! note "Technical Note"
     The `deterministic` keyword controls the placement of deterministic terms following Johansen's (1995) five cases. With `:constant` (Case 2), the intercept is restricted to the cointegrating space -- it enters the error correction term ``\Pi y_{t-1}`` but not the short-run dynamics, preventing linear trends in levels. With `:trend` (Case 4), a linear trend is restricted to the cointegrating space, allowing quadratic trends in levels. Critical values are tabulated separately for each case.
 
-```julia
-using MacroEconometricModels
-
+```@example test_ur
 # Test cointegration between log real GDP and log real consumption
-qd = load_example(:fred_qd)
-Y = log.(to_matrix(qd[:, ["GDPC1", "PCECC96"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
 # Johansen test with 2 lags in VECM
-result = johansen_test(Y, 2; deterministic=:constant)
+result = johansen_test(Y_qd, 2; deterministic=:constant)
 report(result)
 
 # Access results
@@ -547,15 +503,9 @@ The first non-rejected hypothesis gives the cointegration rank. With rank ``r > 
 
 This workflow demonstrates the full pre-estimation stationarity analysis pipeline: screen individual series for unit roots, confirm with complementary tests, and test for cointegration among I(1) variables.
 
-```julia
-using MacroEconometricModels
-
-# ── Step 1: Load data ──────────────────────────────────────────
-fred = load_example(:fred_md)
-
-# Extract key macroeconomic variables
+```@example test_ur
+# ── Step 1: Extract key macroeconomic variables ────────────────
 indpro = filter(isfinite, to_vector(fred[:, "INDPRO"]))
-cpi    = filter(isfinite, to_vector(fred[:, "CPIAUCSL"]))
 ffr    = filter(isfinite, to_vector(fred[:, "FEDFUNDS"]))
 
 # ── Step 2: Individual unit root tests (ADF + KPSS) ───────────
@@ -580,11 +530,7 @@ np = ngperron_test(cpi; regression=:constant)
 report(np)
 
 # ── Step 6: Test cointegration among I(1) variables ────────────
-qd = load_example(:fred_qd)
-Y = log.(to_matrix(qd[:, ["GDPC1", "PCECC96"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
-johansen = johansen_test(Y, 2; deterministic=:constant)
+johansen = johansen_test(Y_qd, 2; deterministic=:constant)
 report(johansen)
 
 if johansen.rank > 0
