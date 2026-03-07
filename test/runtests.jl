@@ -91,10 +91,10 @@ const TEST_GROUPS = [
         "reg/test_reg.jl",
         "reg/test_ordered.jl",
         "reg/test_multinomial.jl",
-        "panel_reg/test_panel_reg.jl",
-        "panel_reg/test_panel_tests.jl",
-        "panel_reg/test_panel_iv.jl",
-        "panel_reg/test_panel_nonlinear.jl",
+        "preg/test_panel_reg.jl",
+        "preg/test_panel_tests.jl",
+        "preg/test_panel_iv.jl",
+        "preg/test_panel_nonlinear.jl",
     ]),
     # Group 6: Volatility & Non-Gaussian & Plotting & Filters
     ("Volatility & Filters" => [
@@ -318,10 +318,10 @@ else
         @testset "Cross-Sectional Models" begin include("reg/test_reg.jl") end
         @testset "Ordered Models" begin include("reg/test_ordered.jl") end
         @testset "Multinomial Models" begin include("reg/test_multinomial.jl") end
-        @testset "Panel Regression" begin include("panel_reg/test_panel_reg.jl") end
-        @testset "Panel Specification Tests" begin include("panel_reg/test_panel_tests.jl") end
-        @testset "Panel IV" begin include("panel_reg/test_panel_iv.jl") end
-        @testset "Panel Nonlinear" begin include("panel_reg/test_panel_nonlinear.jl") end
+        @testset "Panel Regression" begin include("preg/test_panel_reg.jl") end
+        @testset "Panel Specification Tests" begin include("preg/test_panel_tests.jl") end
+        @testset "Panel IV" begin include("preg/test_panel_iv.jl") end
+        @testset "Panel Nonlinear" begin include("preg/test_panel_nonlinear.jl") end
 
         # Group 6: Volatility & Filters
         @testset "Volatility Models (ARCH/GARCH/SV)" begin include("volatility/test_volatility.jl") end
