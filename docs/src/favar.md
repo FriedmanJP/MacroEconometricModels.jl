@@ -301,8 +301,8 @@ report(r_chol)
 ```
 
 ```julia
-# Sign restrictions via check function
-check_fn(irf_matrix) = irf_matrix[1, 1] > 0 && irf_matrix[3, 1] < 0
+# Sign restrictions via check function (irf_matrix is H × n × n)
+check_fn(irf_matrix) = irf_matrix[1, 1, 1] > 0 && irf_matrix[1, 3, 1] < 0
 r_sign_favar = irf(favar_panel, 20; method=:sign, check_func=check_fn)
 ```
 

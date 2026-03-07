@@ -16,6 +16,24 @@ All results integrate with `plot_result()` for interactive D3.js visualization a
 ```@setup dsge_overview
 using MacroEconometricModels, Random
 Random.seed!(42)
+# Pre-define the RBC spec for reuse across blocks
+_spec_rbc = @dsge begin
+    parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.9, σ = 0.01
+    endogenous: Y, C, K, A
+    exogenous: ε_A
+    Y[t] = A[t] * K[t-1]^α
+    C[t] + K[t] = Y[t] + (1 - δ) * K[t-1]
+    1 = β * (C[t] / C[t+1]) * (α * A[t+1] * K[t]^(α - 1) + 1 - δ)
+    A[t] = ρ * A[t-1] + σ * ε_A[t]
+    steady_state = begin
+        A_ss = 1.0
+        K_ss = (α * β / (1 - β * (1 - δ)))^(1 / (1 - α))
+        Y_ss = K_ss^α
+        C_ss = Y_ss - δ * K_ss
+        [Y_ss, C_ss, K_ss, A_ss]
+    end
+end
+_spec_rbc = compute_steady_state(_spec_rbc)
 ```
 
 ## Quick Start
@@ -42,6 +60,7 @@ spec = @dsge begin
         [Y_ss, C_ss, K_ss, A_ss]
     end
 end
+spec = compute_steady_state(spec)
 
 sol = solve(spec)
 result = irf(sol, 40)
@@ -79,10 +98,11 @@ plot_result(occ_irf)
 
 **Recipe 5: Chebyshev projection**
 
-```julia
+```@example dsge_overview
 proj = collocation_solver(spec; degree=5, grid=:tensor, max_iter=200)
 y = evaluate_policy(proj, proj.steady_state[proj.state_indices])
 err = max_euler_error(proj)
+nothing # hide
 ```
 
 **Recipe 6: Bayesian estimation via SMC``^2``**
@@ -182,7 +202,7 @@ For the RBC model above, the analytical steady state is:
 
 `compute_steady_state` uses NonlinearSolve.jl to solve the system ``f(\bar{y}, \bar{y}, \bar{y}, 0, \theta) = 0``. The default algorithm is `TrustRegion()`, which is robust to poor starting points. Box constraints (e.g., non-negativity) are handled natively via NonlinearSolve's bounded problem formulation.
 
-```julia
+```@example dsge_overview
 spec = compute_steady_state(spec)
 report(spec)
 ```
@@ -287,8 +307,9 @@ where:
 - ``\varepsilon_t`` is the vector of exogenous shocks
 - ``\eta_t = y_t - E_{t-1}[y_t]`` is the vector of expectation errors for forward-looking variables
 
-```julia
+```@example dsge_overview
 ld = linearize(spec)
+nothing # hide
 ```
 
 The matrix pair ``(\Gamma_0, \Gamma_1)`` defines a generalized eigenvalue problem whose solution governs the model dynamics. The three [Linear Solvers](@ref dsge_linear) --- Gensys, Blanchard-Kahn, and Klein --- each decompose this pencil to extract the stable state-space representation.
@@ -313,30 +334,12 @@ The matrix pair ``(\Gamma_0, \Gamma_1)`` defines a generalized eigenvalue proble
 
 This example specifies, solves, and analyzes a full RBC model using the core functions covered on this page:
 
-```julia
-# Specify the RBC model with analytical steady state
-spec = @dsge begin
-    parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.9, σ = 0.01
-    endogenous: Y, C, K, A
-    exogenous: ε_A
-
-    Y[t] = A[t] * K[t-1]^α
-    C[t] + K[t] = Y[t] + (1 - δ) * K[t-1]
-    1 = β * (C[t] / C[t+1]) * (α * A[t+1] * K[t]^(α - 1) + 1 - δ)
-    A[t] = ρ * A[t-1] + σ * ε_A[t]
-
-    steady_state = begin
-        A_ss = 1.0
-        K_ss = (α * β / (1 - β * (1 - δ)))^(1 / (1 - α))
-        Y_ss = K_ss^α
-        C_ss = Y_ss - δ * K_ss
-        [Y_ss, C_ss, K_ss, A_ss]
-    end
-end
-
-# Verify steady state
+```@example dsge_overview
+# Verify steady state (spec defined in Quick Start)
 report(spec)
+```
 
+```@example dsge_overview
 # Linearize and inspect the canonical form matrices
 ld = linearize(spec)
 
@@ -345,6 +348,7 @@ sol = solve(spec)
 
 # IRFs and FEVD
 result = irf(sol, 40)
+report(result)
 ```
 
 ```julia

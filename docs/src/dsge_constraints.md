@@ -5,30 +5,29 @@ Standard linearized DSGE models assume all equilibrium conditions hold with equa
 
 ## Quick Start
 
+```@setup dsge_constraints
+using MacroEconometricModels, Random
+Random.seed!(42)
+```
+
 **Recipe 1: Perfect foresight path**
 
-```julia
+```@example dsge_constraints
 spec = @dsge begin
-    parameters: beta = 0.99, alpha = 0.36, delta = 0.025, rho = 0.9, sigma = 0.01
-    endogenous: Y, C, K, A
-    exogenous: eps_A
+    parameters: β = 0.99, σ_c = 1.0, κ = 0.024, ϕ_π = 1.5, ϕ_y = 0.125,
+                ρ_d = 0.9, σ_d = 0.01
+    endogenous: y, π, R, d
+    exogenous: ε_d
 
-    Y[t] = A[t] * K[t-1]^alpha
-    C[t] + K[t] = Y[t] + (1 - delta) * K[t-1]
-    1 = beta * (C[t] / C[t+1]) * (alpha * A[t+1] * K[t]^(alpha - 1) + 1 - delta)
-    A[t] = rho * A[t-1] + sigma * eps_A[t]
-
-    steady_state = begin
-        A_ss = 1.0
-        K_ss = (alpha * beta / (1 - beta * (1 - delta)))^(1 / (1 - alpha))
-        Y_ss = K_ss^alpha
-        C_ss = Y_ss - delta * K_ss
-        [Y_ss, C_ss, K_ss, A_ss]
-    end
+    y[t] = y[t+1] - σ_c * (R[t] - π[t+1]) + d[t]
+    π[t] = β * π[t+1] + κ * y[t]
+    R[t] = ϕ_π * π[t] + ϕ_y * y[t]
+    d[t] = ρ_d * d[t-1] + σ_d * ε_d[t]
 end
+spec = compute_steady_state(spec)
 
 shocks = zeros(100, 1)
-shocks[1, 1] = -3.0  # Large negative TFP shock at period 1
+shocks[1, 1] = -3.0  # Large negative demand shock at period 1
 pf = perfect_foresight(spec; shock_path=shocks)
 report(pf)
 ```
@@ -70,7 +69,7 @@ where:
 
 The function `perfect_foresight` solves this system using [NonlinearSolve.jl](https://github.com/SciML/NonlinearSolve.jl) with `NewtonRaphson()` as the default algorithm. The same solver is accessible through the unified `solve` interface:
 
-```julia
+```@example dsge_constraints
 # Direct call
 pf = perfect_foresight(spec; T_periods=100, shock_path=shocks)
 
@@ -81,9 +80,9 @@ nothing # hide
 
 The `PerfectForesightPath{T}` result contains both the level path and deviations from steady state:
 
-```julia
-pf.path         # 100 x 4 matrix of variable levels
-pf.deviations   # 100 x 4 matrix of deviations from steady state
+```@example dsge_constraints
+pf.path         # T x n matrix of variable levels
+pf.deviations   # T x n matrix of deviations from steady state
 pf.converged    # true if Newton iteration converged
 pf.iterations   # number of Newton iterations used
 ```
@@ -309,7 +308,7 @@ occ_irf = occbin_irf(spec, zlb, borrow, 1, 40; magnitude=-3.0)
 
 This example combines perfect foresight and OccBin to analyze a New Keynesian model at the zero lower bound:
 
-```julia
+```@example dsge_constraints
 # Specify a 3-equation NK model
 nk_spec = @dsge begin
     parameters: β = 0.99, σ_c = 1.0, κ = 0.024, ϕ_π = 1.5, ϕ_y = 0.125,
@@ -322,6 +321,7 @@ nk_spec = @dsge begin
     R[t] = ϕ_π * π[t] + ϕ_y * y[t]
     d[t] = ρ_d * d[t-1] + σ_d * ε_d[t]
 end
+nk_spec = compute_steady_state(nk_spec)
 
 # Unconstrained solution for comparison
 sol = solve(nk_spec)
@@ -332,6 +332,7 @@ constraint = parse_constraint(:(R[t] >= 0), nk_spec)
 
 # Large negative demand shock pushes economy to ZLB
 occ_irf = occbin_irf(nk_spec, constraint, 1, 40; magnitude=-3.0)
+nothing # hide
 ```
 
 ```julia

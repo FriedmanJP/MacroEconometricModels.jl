@@ -295,7 +295,7 @@ The two-step estimator is fast and consistent under the Bai & Ng (2002) conditio
 
 The joint selection of factor count ``r`` and lag order ``p`` uses standard information criteria computed from the state-space log-likelihood:
 
-```julia
+```@example factor
 # Grid search over (r, p) combinations
 ic_dyn = ic_criteria_dynamic(X, 5, 3; method=:twostep, standardize=true)
 
@@ -462,9 +462,9 @@ The common variance share for each variable measures the fraction of its total v
 
 The GDFM uses eigenvalue-based criteria rather than information criteria:
 
-```julia
+```@example factor
 # Eigenvalue ratio and variance criteria
-ic_gdfm = ic_criteria_gdfm(X, 10; kernel=:bartlett)
+ic_gdfm = ic_criteria_gdfm(X, 5; kernel=:bartlett)
 
 # Diagnostic data
 ic_gdfm.eigenvalue_ratios       # lambda_i / lambda_{i+1} ratios
@@ -568,8 +568,8 @@ The structural IRFs show how a one-standard-deviation structural shock propagate
 ### Sign Restrictions
 
 ```@example factor
-# Define sign restriction function
-sign_fn(irf_matrix) = irf_matrix[1, 1] > 0 && irf_matrix[1, 2] < 0
+# Define sign restriction: shock 1 raises var 1, shock 2 lowers var 1 at impact
+sign_fn(irf_matrix) = irf_matrix[1, 1, 1] > 0 && irf_matrix[1, 1, 2] < 0
 
 sdfm_sign = estimate_structural_dfm(X_sdfm, 2;
     identification=:sign, sign_check=sign_fn, max_draws=1000, H=20)

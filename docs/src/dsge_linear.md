@@ -7,6 +7,7 @@ using MacroEconometricModels, Random
 Random.seed!(42)
 ```
 
+
 ## Quick Start
 
 **Recipe 1: Solve with Gensys and check determinacy**
@@ -50,9 +51,10 @@ plot_result(decomp)
 
 **Recipe 3: Unconditional moments via Lyapunov equation**
 
-```julia
+```@example dsge_linear
 Σ = solve_lyapunov(sol.G1, sol.impact)
 m = analytical_moments(sol; lags=2)
+nothing # hide
 ```
 
 ---
@@ -182,6 +184,7 @@ sol = solve(spec; method=:gensys)
 Or calling the low-level function directly after linearization:
 
 ```@example dsge_linear
+spec = compute_steady_state(spec)  # required before linearize
 ld = linearize(spec)
 result = gensys(ld.Gamma0, ld.Gamma1, ld.C, ld.Psi, ld.Pi; div=1.0+1e-8)
 result.G1       # state transition matrix
