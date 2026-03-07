@@ -303,6 +303,8 @@ include("dsge/kalman_dsge.jl")
 include("dsge/particle_filter.jl")
 include("dsge/smc.jl")
 include("dsge/bayes_estimation.jl")
+include("dsge/smoother.jl")
+include("dsge/hd.jl")
 
 # Display (after all types)
 include("summary.jl")
@@ -402,6 +404,10 @@ export parse_constraint, occbin_solve, occbin_irf
 # Constraint types and helpers
 export DSGEConstraint, VariableBound, NonlinearConstraint
 export variable_bound, nonlinear_constraint
+
+# DSGE Smoother and HD
+export KalmanSmootherResult
+export dsge_smoother, dsge_particle_smoother
 
 # Local Projection types
 export AbstractLPModel, AbstractLPImpulseResponse, AbstractCovarianceEstimator
