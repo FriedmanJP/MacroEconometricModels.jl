@@ -10,18 +10,19 @@
 - **Granger causality**: Short-run, long-run, and strong (joint) causality decomposition
 - **TimeSeriesData dispatch**: Pass `TimeSeriesData` objects directly --- variable names propagate automatically
 
+```@setup vecm
+using MacroEconometricModels, Random
+Random.seed!(42)
+qd = load_example(:fred_qd)
+Y = log.(to_matrix(qd[:, ["GDPC1", "PCECC96", "GPDIC1"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+```
+
 ## Quick Start
 
 **Recipe 1: Estimate with automatic rank selection**
 
-```julia
-using MacroEconometricModels
-
-# Load FRED-QD: log GDP, Consumption, Investment (I(1), cointegrated)
-qd = load_example(:fred_qd)
-Y = log.(to_matrix(qd[:, ["GDPC1", "PCECC96", "GPDIC1"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example vecm
 # Automatic rank via Johansen trace test
 vecm = estimate_vecm(Y, 2)
 report(vecm)
@@ -29,55 +30,33 @@ report(vecm)
 
 **Recipe 2: Explicit rank and deterministic specification**
 
-```julia
-using MacroEconometricModels
-
-qd = load_example(:fred_qd)
-Y = log.(to_matrix(qd[:, ["GDPC1", "PCECC96", "GPDIC1"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example vecm
 vecm = estimate_vecm(Y, 2; rank=1, deterministic=:constant)
 report(vecm)
 ```
 
 **Recipe 3: Impulse responses via VAR conversion**
 
-```julia
-using MacroEconometricModels
-
-qd = load_example(:fred_qd)
-Y = log.(to_matrix(qd[:, ["GDPC1", "PCECC96", "GPDIC1"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example vecm
 vecm = estimate_vecm(Y, 2; rank=1)
 irfs = irf(vecm, 20; method=:cholesky)
+```
+
+```julia
 plot_result(irfs)
 ```
 
 **Recipe 4: Forecast with bootstrap confidence intervals**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-qd = load_example(:fred_qd)
-Y = log.(to_matrix(qd[:, ["GDPC1", "PCECC96", "GPDIC1"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example vecm
 vecm = estimate_vecm(Y, 2; rank=1)
-fc = forecast(vecm, 10; ci_method=:bootstrap, reps=500, conf_level=0.95)
+fc = forecast(vecm, 10; ci_method=:bootstrap, reps=50, conf_level=0.95)
 report(fc)
 ```
 
 **Recipe 5: Granger causality decomposition**
 
-```julia
-using MacroEconometricModels
-
-qd = load_example(:fred_qd)
-Y = log.(to_matrix(qd[:, ["GDPC1", "PCECC96", "GPDIC1"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example vecm
 vecm = estimate_vecm(Y, 2; rank=1)
 g = granger_causality_vecm(vecm, 1, 2)  # GDP -> Consumption
 report(g)
@@ -85,10 +64,7 @@ report(g)
 
 **Recipe 6: TimeSeriesData dispatch**
 
-```julia
-using MacroEconometricModels
-
-qd = load_example(:fred_qd)
+```@example vecm
 ts = qd[:, ["GDPC1", "PCECC96", "GPDIC1"]]
 
 # Pass TimeSeriesData directly --- variable names propagate
@@ -167,13 +143,7 @@ where:
 - ``\hat{\lambda}_i`` is the ``i``-th largest eigenvalue
 - ``r_0`` is the null hypothesis rank
 
-```julia
-using MacroEconometricModels
-
-qd = load_example(:fred_qd)
-Y = log.(to_matrix(qd[:, ["GDPC1", "PCECC96", "GPDIC1"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example vecm
 # Automatic rank selection via Johansen trace test
 vecm = estimate_vecm(Y, 2)
 report(vecm)
@@ -193,13 +163,7 @@ The Johansen method estimates ``\alpha`` and ``\beta`` jointly, producing effici
 
 The `select_vecm_rank` function provides fine-grained control over rank determination using either the trace test or the maximum eigenvalue test:
 
-```julia
-using MacroEconometricModels
-
-qd = load_example(:fred_qd)
-Y = log.(to_matrix(qd[:, ["GDPC1", "PCECC96", "GPDIC1"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example vecm
 r_trace = select_vecm_rank(Y, 2; criterion=:trace, significance=0.05)
 r_max = select_vecm_rank(Y, 2; criterion=:max_eigen)
 ```
@@ -217,13 +181,7 @@ For bivariate systems with a single cointegrating relationship (``r = 1``), the 
 1. **Step 1**: Estimate the cointegrating vector via static OLS regression of ``y_{1,t}`` on ``y_{2,t}, \ldots, y_{n,t}``
 2. **Step 2**: Estimate the VECM equations using the OLS residuals as the error correction term
 
-```julia
-using MacroEconometricModels
-
-qd = load_example(:fred_qd)
-Y = log.(to_matrix(qd[:, ["GDPC1", "PCECC96", "GPDIC1"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example vecm
 vecm_eg = estimate_vecm(Y, 2; method=:engle_granger, rank=1)
 report(vecm_eg)
 ```
@@ -282,13 +240,7 @@ where:
 - ``I_n`` is the ``n \times n`` identity matrix
 - ``\Gamma_i`` are the short-run dynamics matrices
 
-```julia
-using MacroEconometricModels
-
-qd = load_example(:fred_qd)
-Y = log.(to_matrix(qd[:, ["GDPC1", "PCECC96", "GPDIC1"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example vecm
 vecm = estimate_vecm(Y, 2; rank=1)
 var_model = to_var(vecm)
 report(var_model)
@@ -302,26 +254,23 @@ This conversion is critical because it enables all 18 identification methods (Ch
 
 All structural analysis functions accept `VECMModel` objects directly. The conversion to VAR in levels is handled automatically via `to_var()`.
 
-```julia
-using MacroEconometricModels
-
-qd = load_example(:fred_qd)
-Y = log.(to_matrix(qd[:, ["GDPC1", "PCECC96", "GPDIC1"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example vecm
 vecm = estimate_vecm(Y, 2; rank=1)
 
 # Impulse response functions (Cholesky identification)
 irfs = irf(vecm, 20; method=:cholesky)
-plot_result(irfs)
 
 # Forecast error variance decomposition
 decomp = fevd(vecm, 20)
-plot_result(decomp)
 
 # Historical decomposition
 T_eff = effective_nobs(to_var(vecm))
 hd = historical_decomposition(vecm, T_eff)
+```
+
+```julia
+plot_result(irfs)
+plot_result(decomp)
 plot_result(hd)
 ```
 
@@ -342,14 +291,7 @@ where:
 - ``\hat{y}_{T+h-1}`` is the previous forecast (or last observed value for ``h = 1``)
 - ``\Delta\hat{y}_{T+h-i}`` are lagged forecast differences
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-qd = load_example(:fred_qd)
-Y = log.(to_matrix(qd[:, ["GDPC1", "PCECC96", "GPDIC1"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example vecm
 vecm = estimate_vecm(Y, 2; rank=1)
 
 # Point forecast
@@ -357,13 +299,16 @@ fc = forecast(vecm, 10)
 report(fc)
 
 # Bootstrap confidence intervals
-fc = forecast(vecm, 10; ci_method=:bootstrap, reps=500, conf_level=0.95)
+fc = forecast(vecm, 10; ci_method=:bootstrap, reps=50, conf_level=0.95)
 report(fc)
-plot_result(fc)
 
 # Simulation-based confidence intervals
-fc = forecast(vecm, 10; ci_method=:simulation, reps=500)
+fc = forecast(vecm, 10; ci_method=:simulation, reps=50)
 report(fc)
+```
+
+```julia
+plot_result(fc)
 ```
 
 ```@raw html
@@ -400,13 +345,7 @@ The forecast preserves cointegrating relationships by iterating the VECM equatio
 
 VECM Granger causality tests (Toda & Phillips 1993) decompose causal channels into **short-run** (through lagged differences ``\Gamma``) and **long-run** (through the error correction term ``\alpha\beta'y_{t-1}``) components. The **strong** test combines both channels in a single joint test.
 
-```julia
-using MacroEconometricModels
-
-qd = load_example(:fred_qd)
-Y = log.(to_matrix(qd[:, ["GDPC1", "PCECC96", "GPDIC1"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example vecm
 vecm = estimate_vecm(Y, 2; rank=1)
 
 # Test: does GDP (var 1) Granger-cause Consumption (var 2)?
@@ -448,15 +387,7 @@ Each test reports a Wald ``\chi^2`` statistic, degrees of freedom, and p-value. 
 
 This example demonstrates the full VECM workflow: cointegration testing, estimation, structural analysis, forecasting, and Granger causality.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-# Load FRED-QD: log GDP, Consumption, Investment (quarterly, I(1))
-qd = load_example(:fred_qd)
-Y = log.(to_matrix(qd[:, ["GDPC1", "PCECC96", "GPDIC1"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example vecm
 # Step 1: Test for cointegration
 joh = johansen_test(Y, 2)
 report(joh)
@@ -467,12 +398,10 @@ report(vecm)
 
 # Step 3: Impulse responses (Cholesky identification)
 irfs = irf(vecm, 20; method=:cholesky)
-plot_result(irfs)
 
 # Step 4: Forecast with bootstrap CIs
-fc = forecast(vecm, 10; ci_method=:bootstrap, reps=200)
+fc = forecast(vecm, 10; ci_method=:bootstrap, reps=50)
 report(fc)
-plot_result(fc)
 
 # Step 5: Granger causality --- does GDP Granger-cause Consumption?
 g = granger_causality_vecm(vecm, 1, 2)
@@ -481,6 +410,11 @@ report(g)
 # Step 6: Convert to VAR for FEVD
 var_model = to_var(vecm)
 decomp = fevd(var_model, 20)
+```
+
+```julia
+plot_result(irfs)
+plot_result(fc)
 plot_result(decomp)
 ```
 

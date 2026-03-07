@@ -13,18 +13,20 @@
 
 All results integrate with `report()` for publication-quality output and `plot_result()` for interactive D3.js visualization.
 
+```@setup lp
+using MacroEconometricModels, Random, Statistics
+Random.seed!(42)
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+Y = Y[end-59:end, :]
+```
+
 ## Quick Start
 
 **Recipe 1: Standard LP with HAC standard errors**
 
-```julia
-using MacroEconometricModels
-
-# Load FRED-MD: industrial production, CPI, federal funds rate
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example lp
 # LP-IRF of a federal funds rate shock up to horizon 20
 lp = estimate_lp(Y, 3, 20; lags=4, cov_type=:newey_west)
 result = lp_irf(lp; conf_level=0.95)
@@ -33,13 +35,7 @@ report(result)
 
 **Recipe 2: LP-IV with external instruments**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example lp
 # Instrument FFR with its own lagged changes
 Z = reshape([zeros(1); diff(Y[:, 3])], :, 1)
 lpiv = estimate_lp_iv(Y, 3, Z, 20; lags=4, cov_type=:newey_west)
@@ -48,40 +44,25 @@ report(lpiv)
 
 **Recipe 3: Smooth LP with B-splines**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example lp
 slp = estimate_smooth_lp(Y, 3, 20; lambda=1.0, n_knots=4, lags=4)
 report(slp)
 ```
 
 **Recipe 4: Structural LP with Cholesky identification**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example lp
 # Cholesky ordering: output -> prices -> monetary policy
 slp = structural_lp(Y, 20; method=:cholesky, lags=4)
+```
+
+```julia
 plot_result(slp)
 ```
 
 **Recipe 5: State-dependent LP (recession vs. expansion)**
 
-```julia
-using MacroEconometricModels, Statistics
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example lp
 # 7-month MA of IP growth as state variable
 ip_growth = Y[:, 1]
 state_var = [mean(ip_growth[max(1, t-6):t]) for t in 1:length(ip_growth)]
@@ -93,16 +74,12 @@ report(slm)
 
 **Recipe 6: LP-FEVD with bias correction**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example lp
 slp = structural_lp(Y, 20; method=:cholesky, lags=4)
-lfevd = lp_fevd(slp, 20; method=:r2, bias_correct=true, n_boot=500)
+lfevd = lp_fevd(slp, 20; method=:r2, bias_correct=true, n_boot=50)
+```
+
+```julia
 plot_result(lfevd)
 ```
 
@@ -152,14 +129,7 @@ where:
 !!! note "Automatic Bandwidth Selection"
     When `bandwidth=0` (the default), the effective bandwidth at each horizon ``h`` is `max(m̂_NW, h+1)` where `m̂_NW` is the Newey-West (1994) data-driven selection. This ensures the bandwidth always accounts for the MA(``h-1``) serial correlation structure induced by the overlapping projection.
 
-```julia
-using MacroEconometricModels
-
-# Load FRED-MD monetary policy dataset
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example lp
 # Estimate LP-IRF of a federal funds rate shock up to horizon 20
 lp_model = estimate_lp(Y, 3, 20;       # shock_var=3 (FEDFUNDS)
     lags = 4,                           # Control lags
@@ -170,6 +140,9 @@ lp_model = estimate_lp(Y, 3, 20;       # shock_var=3 (FEDFUNDS)
 # Extract IRF with confidence intervals
 irf_result = lp_irf(lp_model; conf_level=0.95)
 report(irf_result)
+```
+
+```julia
 plot_result(irf_result)
 ```
 
@@ -259,14 +232,7 @@ A rule of thumb requires ``F > 10`` for strong instruments (Stock & Yogo 2005).
 !!! note "HAC-Robust F-Statistic"
     The first-stage F-statistic uses Newey-West HAC standard errors, consistent with the second-stage inference. This accounts for the MA(``h-1``) serial correlation in LP residuals. The HAC bandwidth follows the same automatic selection as the second stage.
 
-```julia
-using MacroEconometricModels
-
-# Load FRED-MD monetary policy dataset
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example lp
 # Construct instrument: lagged changes in the federal funds rate
 Z = reshape([zeros(1); diff(Y[:, 3])], :, 1)
 
@@ -343,14 +309,7 @@ where:
 
 The smoothing parameter ``\lambda`` controls the bias-variance trade-off. Larger values impose more smoothness, shrinking the IRF toward a low-frequency polynomial. Cross-validation selects the ``\lambda`` that minimizes out-of-sample prediction error.
 
-```julia
-using MacroEconometricModels
-
-# Load FRED-MD monetary policy dataset
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example lp
 # Smooth LP with cubic splines
 smooth_model = estimate_smooth_lp(Y, 3, 20;   # shock_var=3 (FEDFUNDS)
     degree = 3,           # Cubic splines
@@ -446,14 +405,7 @@ where:
 !!! note "Optimization of Transition Parameters"
     When `gamma=:estimate` and `threshold=:estimate`, the transition parameters ``(\gamma, c)`` are jointly optimized using Nelder-Mead over the nonlinear least squares objective. The threshold ``c`` is box-constrained within the data's interquartile range, and ``\gamma > 0`` is enforced.
 
-```julia
-using MacroEconometricModels, Statistics
-
-# Load FRED-MD monetary policy dataset
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example lp
 # Construct state variable: 7-month MA of industrial production growth
 ip_growth = Y[:, 1]
 state_var = [mean(ip_growth[max(1, t-6):t]) for t in 1:length(ip_growth)]
@@ -558,14 +510,7 @@ The DR estimator is consistent if **either** the propensity score model **or** t
 !!! note "Recommendation"
     Use `doubly_robust_lp` as the default. It is never worse than IPW asymptotically, and can be substantially better when the propensity model is misspecified. Use `estimate_propensity_lp` when you have strong confidence in the propensity score specification or want direct WLS coefficients.
 
-```julia
-using MacroEconometricModels
-
-# Load FRED-MD monetary policy dataset
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example lp
 # Construct binary treatment: large absolute FFR changes (top quartile)
 ffr_changes = abs.(diff(Y[:, 3]))
 treatment = Bool.(ffr_changes .> quantile(ffr_changes, 0.75))
@@ -667,19 +612,13 @@ The 3D IRF array stores ``\Theta[h, i, j] = \hat{\beta}_{i,h}^{(j)}`` for ``h = 
 | Mixture-normal ML | `:mixture_normal` | Gaussian mixture ML |
 | PML | `:pml` | Pseudo maximum likelihood |
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-# Load FRED-MD monetary policy dataset: [INDPRO, CPI, FFR]
-# Cholesky ordering: output -> prices -> monetary policy
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example lp
 # Structural LP with Cholesky identification
 slp = structural_lp(Y, 20; method=:cholesky, lags=4)
 report(slp)
+```
+
+```julia
 plot_result(slp)
 ```
 
@@ -689,9 +628,9 @@ plot_result(slp)
 
 The `slp.irf.values` array has shape ``H \times n \times n``, where `values[h, i, j]` gives the response of variable ``i`` to structural shock ``j`` at horizon ``h``. Under Cholesky identification with ordering [INDPRO, CPI, FFR], the monetary policy shock (shock 3) affects all variables contemporaneously, but the federal funds rate does not respond to output or price shocks within the period. Standard errors in `slp.se` are computed from HAC-corrected LP regressions and tend to be wider than VAR-based IRF confidence bands, reflecting the efficiency cost of LP's robustness.
 
-```julia
+```@example lp
 # With bootstrap confidence intervals
-slp_ci = structural_lp(Y, 20; method=:cholesky, ci_type=:bootstrap, reps=500)
+slp_ci = structural_lp(Y, 20; method=:cholesky, ci_type=:bootstrap, reps=50)
 
 # With sign restrictions: positive supply shock raises output and lowers prices
 check_fn(irf) = irf[1, 1, 1] > 0 && irf[1, 2, 1] < 0
@@ -753,14 +692,7 @@ This direct approach avoids compounding misspecification errors across horizons,
 | `:bootstrap` | Residual resampling with percentile CIs |
 | `:none` | Point forecasts only |
 
-```julia
-using MacroEconometricModels
-
-# Load FRED-MD monetary policy dataset
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example lp
 # Estimate LP model
 lp = estimate_lp(Y, 3, 20; lags=4, cov_type=:newey_west)
 
@@ -768,6 +700,9 @@ lp = estimate_lp(Y, 3, 20; lags=4, cov_type=:newey_west)
 shock_path = ones(20)
 fc = forecast(lp, shock_path; ci_method=:analytical, conf_level=0.95)
 report(fc)
+```
+
+```julia
 plot_result(fc)
 ```
 
@@ -777,12 +712,11 @@ plot_result(fc)
 
 The `fc.forecast` matrix has shape ``H \times n_{\text{resp}}``, where each row gives the point forecast at a given horizon. Analytical CIs widen with the horizon because LP regression residuals exhibit increasing variance at longer horizons and the effective sample shrinks. Bootstrap CIs are more reliable in small samples because they do not rely on the normal approximation.
 
-```julia
+```@example lp
 # Structural LP forecast with monetary policy shock
-using Random; Random.seed!(42)
 slp = structural_lp(Y, 20; method=:cholesky)
 fc_struct = forecast(slp, 3, shock_path;  # shock_idx=3 (monetary policy)
-                     ci_method=:bootstrap, n_boot=500)
+                     ci_method=:bootstrap, n_boot=50)
 report(fc_struct)
 ```
 
@@ -853,21 +787,16 @@ LP-FEVD estimates can be biased in finite samples. Following Kilian (1998), the 
 4. Estimate bias = mean(bootstrap) - true
 5. Bias-corrected estimate = raw - bias
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-# Load FRED-MD monetary policy dataset
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example lp
 # Structural LP with Cholesky ordering [INDPRO, CPI, FFR]
 slp = structural_lp(Y, 20; method=:cholesky, lags=4)
 
 # R²-based LP-FEVD with bias correction
-lfevd = lp_fevd(slp, 20; method=:r2, bias_correct=true, n_boot=500)
+lfevd = lp_fevd(slp, 20; method=:r2, bias_correct=true, n_boot=50)
 report(lfevd)
+```
+
+```julia
 plot_result(lfevd)
 ```
 
@@ -933,15 +862,7 @@ Use LP when concerned about VAR misspecification, when incorporating external in
 
 This example demonstrates a full LP workflow --- estimation, structural identification, IRF extraction, FEVD, and forecasting --- using FRED-MD monetary policy data.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-# Load FRED-MD: industrial production, CPI, federal funds rate
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example lp
 # Step 1: Standard LP-IRF with Newey-West standard errors
 lp = estimate_lp(Y, 3, 20; lags=4, cov_type=:newey_west)
 irf_result = lp_irf(lp; conf_level=0.95)
@@ -952,15 +873,16 @@ slp = structural_lp(Y, 20; method=:cholesky, lags=4)
 report(slp)
 
 # Step 3: LP-FEVD with bias correction
-lfevd = lp_fevd(slp, 20; method=:r2, bias_correct=true, n_boot=500)
+lfevd = lp_fevd(slp, 20; method=:r2, bias_correct=true, n_boot=50)
 report(lfevd)
 
 # Step 4: Direct multi-step forecast
 shock_path = zeros(20); shock_path[1] = 1.0  # unit impulse
 fc = forecast(lp, shock_path; ci_method=:analytical, conf_level=0.95)
 report(fc)
+```
 
-# Step 5: Visualize
+```julia
 plot_result(irf_result)
 plot_result(slp)
 plot_result(lfevd)
