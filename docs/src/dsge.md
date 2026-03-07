@@ -3,7 +3,7 @@
 **MacroEconometricModels.jl** provides a complete toolkit for specifying, solving, simulating, and estimating Dynamic Stochastic General Equilibrium (DSGE) models. The package covers the full workflow from model definition through structural estimation, with six solution methods spanning linear, higher-order, and global approaches.
 
 - **Specification**: The `@dsge` macro provides a domain-specific language for writing equilibrium conditions with time-indexed variables
-- **Steady State**: Analytical or numerical steady-state computation with two-phase optimization and optional JuMP constraints
+- **Steady State**: Analytical or numerical steady-state computation via NonlinearSolve.jl (`TrustRegion()` default) with optional JuMP constraints
 - **Linearization**: Automatic first-order approximation via numerical Jacobians in the Sims (2002) canonical form
 - **Linear Solvers**: Three first-order solvers --- Gensys (Sims 2002), Blanchard-Kahn (1980), and Klein (2000) --- producing the state-space solution; see [Linear Solvers](@ref dsge_linear)
 - **Nonlinear Methods**: Up to 3rd-order perturbation with Andreasen, Fernandez-Villaverde & Rubio-Ramirez (2018) pruning, Chebyshev collocation, and policy function iteration for globally accurate policy functions; see [Nonlinear Methods](@ref dsge_nonlinear)
@@ -174,19 +174,20 @@ For the RBC model above, the analytical steady state is:
 
 ### Numerical Computation
 
-`compute_steady_state` uses a two-phase optimizer: Nelder-Mead for robustness (derivative-free global exploration), then L-BFGS for refinement. It minimizes the sum of squared residuals ``\sum_i f_i(\bar{y})^2``.
+`compute_steady_state` uses NonlinearSolve.jl to solve the system ``f(\bar{y}, \bar{y}, \bar{y}, 0, \theta) = 0``. The default algorithm is `TrustRegion()`, which is robust to poor starting points. Box constraints (e.g., non-negativity) are handled natively via NonlinearSolve's bounded problem formulation.
 
 ```julia
 spec = compute_steady_state(spec)
 report(spec)
 ```
 
-The optimizer converges to the steady state from a default initial guess of ones. For models with multiple equilibria, providing a good starting point via `initial_guess` avoids convergence to an economically irrelevant solution.
+The solver converges to the steady state from a default initial guess of ones. For models with multiple equilibria, providing a good starting point via `initial_guess` avoids convergence to an economically irrelevant solution.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
 | `initial_guess` | `Vector` | `nothing` | Starting point (default: ones) |
-| `method` | `Symbol` | `:auto` | `:auto` (NelderMead then LBFGS) or `:analytical` |
+| `method` | `Symbol` | `:auto` | `:auto` (NonlinearSolve) or `:analytical` |
+| `algorithm` | `Any` | `TrustRegion()` | NonlinearSolve.jl algorithm (ignored for JuMP solvers) |
 
 ### Analytical Steady State
 
@@ -215,21 +216,25 @@ end
 
 When the `steady_state` block is provided, `compute_steady_state` (or `solve`) uses it directly and validates the result against the equations. The analytical path is faster and avoids numerical convergence issues, but the user is responsible for correctness --- the validator checks that ``\|f(\bar{y})\| < 10^{-10}``.
 
-### Constrained Steady State (JuMP/Ipopt)
+### Constrained Steady State
 
-For models with variable bounds --- such as a zero lower bound on the nominal interest rate or non-negativity of consumption --- the steady state can be computed as a constrained optimization problem using JuMP and Ipopt:
+For models with variable bounds --- such as a zero lower bound on the nominal interest rate or non-negativity of consumption --- NonlinearSolve.jl handles box constraints natively:
+
+```julia
+# ZLB: interest rate cannot go below zero
+bound = variable_bound(:R, lower=0.0)
+
+# Solve constrained steady state (NonlinearSolve handles box bounds)
+spec = compute_steady_state(spec; constraints=[bound])
+```
+
+For nonlinear inequality constraints or explicit Ipopt solving, load JuMP and Ipopt:
 
 ```julia
 import JuMP, Ipopt
 
-# ZLB: interest rate cannot go below zero
-bound = variable_bound(:R, lower=0.0)
-
-# Solve constrained steady state
-spec = compute_steady_state(spec, [bound])
+spec = compute_steady_state(spec; constraints=[bound], solver=:ipopt)
 ```
-
-The solver minimizes the sum of squared equilibrium residuals subject to the variable bounds. It uses Ipopt (Interior Point Optimizer) via JuMP's automatic differentiation.
 
 ### Constrained Steady State (PATH MCP)
 
@@ -354,7 +359,7 @@ The `spec` object stores the parsed model. `linearize` produces the Sims (2002) 
 
 4. **Numerical steady state converges to wrong equilibrium**: For models with multiple equilibria, the default initial guess (vector of ones) may converge to an economically irrelevant solution. Provide `initial_guess` close to the desired equilibrium, or use the analytical `steady_state` block.
 
-5. **Constrained steady state requires JuMP**: Calling `compute_steady_state(spec, [bound])` requires `import JuMP, Ipopt` (for NLP) or `import JuMP, PATHSolver` (for MCP) before the call. Without these imports, the package raises an `ArgumentError`.
+5. **Constrained steady state**: Box constraints (variable bounds) are handled by NonlinearSolve.jl without additional dependencies. Nonlinear inequality constraints require `import JuMP, Ipopt`. PATH MCP requires `import JuMP, PATHSolver`.
 
 ---
 
