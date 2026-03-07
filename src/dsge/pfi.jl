@@ -164,6 +164,8 @@ coefficients via least squares.
 - `tol::Real=1e-8`: sup-norm convergence tolerance
 - `max_iter::Int=500`: maximum PFI iterations
 - `damping::Real=1.0`: policy mixing factor (1.0 = no damping)
+- `anderson_m::Int=0`: Anderson acceleration depth (0 = disabled)
+- `threaded::Bool=false`: enable multi-threaded grid evaluation
 - `verbose::Bool=false`: print iteration info
 """
 function pfi_solver(spec::DSGESpec{T};
@@ -176,6 +178,8 @@ function pfi_solver(spec::DSGESpec{T};
                     tol::Real=1e-8,
                     max_iter::Int=500,
                     damping::Real=1.0,
+                    anderson_m::Int=0,
+                    threaded::Bool=false,
                     verbose::Bool=false,
                     initial_coeffs::Union{Nothing,AbstractMatrix{<:Real}}=nothing) where {T<:AbstractFloat}
 
@@ -255,6 +259,10 @@ function pfi_solver(spec::DSGESpec{T};
     iter = 0
     sup_norm = T(Inf)
 
+    # Anderson acceleration history
+    anderson_history = anderson_m > 0 ? Vector{T}[] : nothing
+    anderson_residuals = anderson_m > 0 ? Vector{T}[] : nothing
+
     for k in 1:max_iter
         iter = k
 
@@ -275,16 +283,24 @@ function pfi_solver(spec::DSGESpec{T};
 
         # (c) Solve Euler equation at each grid point
         y_new_nodes = zeros(T, n_nodes, n_eq)
-        for j in 1:n_nodes
-            # y_lag: the grid point represents the lagged state
-            y_lag = copy(ss)
-            for (ii, si) in enumerate(state_idx)
-                y_lag[si] = nodes_phys_T[j, ii]
+        if threaded && Threads.nthreads() > 1
+            Threads.@threads for j in 1:n_nodes
+                y_lag = copy(ss)
+                for (ii, si) in enumerate(state_idx)
+                    y_lag[si] = nodes_phys_T[j, ii]
+                end
+                y_new = _pfi_euler_step(y_current_nodes[j, :], y_lag, E_y_lead[j, :], spec)
+                y_new_nodes[j, :] = y_new
             end
-
-            # Solve for y_t given y_lag and E[y_{t+1}]
-            y_new = _pfi_euler_step(y_current_nodes[j, :], y_lag, E_y_lead[j, :], spec)
-            y_new_nodes[j, :] = y_new
+        else
+            for j in 1:n_nodes
+                y_lag = copy(ss)
+                for (ii, si) in enumerate(state_idx)
+                    y_lag[si] = nodes_phys_T[j, ii]
+                end
+                y_new = _pfi_euler_step(y_current_nodes[j, :], y_lag, E_y_lead[j, :], spec)
+                y_new_nodes[j, :] = y_new
+            end
         end
 
         # (d) Refit Chebyshev coefficients (deviations from SS)
@@ -297,6 +313,26 @@ function pfi_solver(spec::DSGESpec{T};
         # (e) Apply damping
         if damping < one(T)
             coeffs_new = (one(T) - T(damping)) .* coeffs .+ T(damping) .* coeffs_new
+        end
+
+        # Anderson acceleration
+        if anderson_m > 0
+            coeffs_vec_new = vec(coeffs_new)
+            coeffs_vec_old = vec(coeffs)
+            residual_vec = coeffs_vec_new .- coeffs_vec_old
+
+            push!(anderson_history, copy(coeffs_vec_old))
+            push!(anderson_residuals, copy(residual_vec))
+
+            if length(anderson_history) >= 2
+                coeffs_mixed = _anderson_step(anderson_history, anderson_residuals, anderson_m)
+                coeffs_new = reshape(coeffs_mixed, n_vars, n_basis)
+            end
+
+            while length(anderson_history) > anderson_m + 1
+                popfirst!(anderson_history)
+                popfirst!(anderson_residuals)
+            end
         end
 
         # (f) Check convergence (sup-norm on policy change at grid points)

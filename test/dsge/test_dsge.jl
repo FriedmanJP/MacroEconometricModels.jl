@@ -4570,6 +4570,52 @@ end
     @test all(isfinite.(Y_sim))
 end
 
+@testset "PFI Anderson acceleration" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    sol_plain = solve(spec; method=:pfi, degree=5, anderson_m=0, verbose=false)
+    sol_anderson = solve(spec; method=:pfi, degree=5, anderson_m=3, verbose=false)
+
+    @test sol_plain.converged
+    @test sol_anderson.converged
+
+    for x_val in [-0.02, 0.0, 0.02]
+        y_plain = evaluate_policy(sol_plain, [x_val])
+        y_anderson = evaluate_policy(sol_anderson, [x_val])
+        @test abs(y_plain[1] - y_anderson[1]) < 1e-3
+    end
+end
+
+@testset "PFI threaded matches sequential" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    sol_seq = solve(spec; method=:pfi, degree=5, threaded=false, verbose=false)
+    sol_par = solve(spec; method=:pfi, degree=5, threaded=true, verbose=false)
+
+    @test sol_seq.converged
+    @test sol_par.converged
+
+    for x_val in [-0.02, 0.0, 0.02]
+        y_seq = evaluate_policy(sol_seq, [x_val])
+        y_par = evaluate_policy(sol_par, [x_val])
+        @test abs(y_seq[1] - y_par[1]) < 1e-6
+    end
+end
+
 end # Policy Function Iteration
 
 # ─────────────────────────────────────────────────────────────────────────────
