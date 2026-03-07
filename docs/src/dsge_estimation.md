@@ -2,11 +2,7 @@
 
 **MacroEconometricModels.jl** provides two paradigms for estimating the deep structural parameters of DSGE models. **Frequentist estimation** via `estimate_dsge` matches model-implied moments to data moments using Generalized Method of Moments (GMM) with four moment conditions. **Bayesian estimation** via `estimate_dsge_bayes` combines prior distributions with the likelihood function, targeting the posterior with Sequential Monte Carlo (SMC), SMC``^2``, or Random-Walk Metropolis-Hastings (RWMH). Both approaches build on the solution infrastructure documented in [DSGE Models](@ref dsge_page).
 
-## Quick Start
-
-**Recipe 1: IRF matching GMM**
-
-```julia
+```@setup dsge_estimation
 using MacroEconometricModels, Random
 Random.seed!(42)
 
@@ -29,7 +25,15 @@ spec = @dsge begin
     end
 end
 
-Y_data = randn(200, 4)
+sol = solve(spec)
+Y_data = simulate(sol, 200)
+```
+
+## Quick Start
+
+**Recipe 1: IRF matching GMM**
+
+```@example dsge_estimation
 est = estimate_dsge(spec, Y_data, [:ρ, :σ];
                     method=:irf_matching, var_lags=4, irf_horizon=20)
 report(est)
@@ -37,11 +41,11 @@ report(est)
 
 **Recipe 2: Bayesian SMC**
 
-```julia
+```@example dsge_estimation
 using Distributions
 result = estimate_dsge_bayes(spec, Y_data, [0.9, 0.01];
     priors=Dict(:ρ => Beta(5, 2), :σ => InverseGamma(2, 0.01)),
-    method=:smc, observables=[:Y, :C], n_smc=1000)
+    method=:smc, observables=[:Y, :C], n_smc=100)
 report(result)
 ```
 
@@ -57,17 +61,20 @@ report(result)
 
 **Recipe 4: Bayesian IRFs with credible bands**
 
-```julia
+```@example dsge_estimation
 # Dual 68%/90% credible bands from posterior draws
-birf = irf(result, 20; n_draws=200)
+birf = irf(result, 20; n_draws=100)
 report(birf)
+```
+
+```julia
 plot_result(birf)
 ```
 
 **Recipe 5: Bayesian FEVD with credible bands**
 
-```julia
-bfevd = fevd(result, 20; n_draws=200)
+```@example dsge_estimation
+bfevd = fevd(result, 20; n_draws=100)
 report(bfevd)
 ```
 
@@ -100,11 +107,11 @@ where:
 
 The procedure first estimates a reduced-form VAR on the observed data, computes Cholesky-identified IRFs, then searches over the structural parameter space to find the ``\theta`` that best replicates those empirical IRFs. This is the workhorse approach for medium-scale DSGE estimation in the frequency domain.
 
-```julia
-est = estimate_dsge(spec, Y_data, [:ρ, :σ];
+```@example dsge_estimation
+est_irf = estimate_dsge(spec, Y_data, [:ρ, :σ];
                     method=:irf_matching, var_lags=4, irf_horizon=20,
                     weighting=:two_step)
-report(est)
+report(est_irf)
 ```
 
 The two-step weighting uses the inverse of the estimated variance of the moment conditions from the first-step residuals. For pre-computed target IRFs (e.g., from a sign-identified VAR), pass them via `target_irfs` to bypass the internal VAR estimation.
@@ -124,11 +131,11 @@ where:
 
 This method does not require solving the model --- it evaluates the equilibrium conditions directly on the data. The instrument set consists of ``n_{\text{lags}}`` lags of the endogenous variables, producing ``n_{\text{eq}} \times n_{\text{vars}} \times n_{\text{lags}}`` moment conditions.
 
-```julia
-est = estimate_dsge(spec, Y_data, [:ρ, :σ];
+```@example dsge_estimation
+est_euler = estimate_dsge(spec, Y_data, [:ρ, :σ];
                     method=:euler_gmm, n_lags_instruments=4,
                     weighting=:two_step)
-report(est)
+report(est_euler)
 ```
 
 ### Simulated Method of Moments
@@ -144,10 +151,10 @@ where:
 - ``\hat{m}_T`` is the vector of sample moments from the observed data of length ``T``
 - ``W`` accounts for both sampling and simulation uncertainty
 
-```julia
-est = estimate_dsge(spec, Y_data, [:ρ, :σ];
+```@example dsge_estimation
+est_smm = estimate_dsge(spec, Y_data, [:ρ, :σ];
                     method=:smm, sim_ratio=5)
-report(est)
+report(est_smm)
 ```
 
 The default moment function computes autocovariances at lag 1. Supply a custom `moments_fn` to target specific features of the data.
@@ -156,11 +163,11 @@ The default moment function computes autocovariances at lag 1. Supply a custom `
 
 Analytical GMM computes model-implied moments from the unconditional distribution without simulation. For linear models, the Lyapunov equation provides exact second moments via `analytical_moments`. For higher-order perturbation solutions, moments are computed from pruned simulations.
 
-```julia
-est = estimate_dsge(spec, Y_data, [:ρ, :σ];
+```@example dsge_estimation
+est_agmm = estimate_dsge(spec, Y_data, [:ρ, :σ];
                     method=:analytical_gmm, solve_method=:gensys,
                     solve_order=1, lags=1)
-report(est)
+report(est_agmm)
 ```
 
 Use `solve_method=:perturbation` with `solve_order=2` to match moments from second-order solutions, which capture risk premia and precautionary behavior absent from linear approximations.
@@ -180,7 +187,7 @@ where:
 
 A large J-statistic (low p-value) indicates model misspecification --- the model cannot simultaneously satisfy all moment conditions.
 
-```julia
+```@example dsge_estimation
 est.J_stat     # Hansen J-statistic
 est.J_pvalue   # p-value under chi-squared distribution
 ```
@@ -240,12 +247,12 @@ Three sampling algorithms target the posterior: Sequential Monte Carlo (SMC), SM
 
 Priors are specified as a `Dict{Symbol, Distribution}` mapping parameter names to distributions from `Distributions.jl`. Parameter bounds are inferred automatically from the distribution support:
 
-```julia
-using Distributions
+```@example dsge_estimation
 priors = Dict(
     :ρ => Beta(5, 2),           # persistence: mean ≈ 0.71, support [0,1]
     :σ => InverseGamma(2, 0.01) # shock std: positive, heavy-tailed
 )
+nothing # hide
 ```
 
 | Distribution | Support | Typical Use |
@@ -280,11 +287,11 @@ The algorithm proceeds in six steps:
 
 The adaptive tempering schedule selects ``\phi_s`` to maintain the effective sample size at the target fraction (default: 50%). This avoids both degenerate weights (too large a step) and unnecessary computation (too small a step).
 
-```julia
-result = estimate_dsge_bayes(spec, Y_data, [0.9, 0.01];
+```@example dsge_estimation
+result_smc = estimate_dsge_bayes(spec, Y_data, [0.9, 0.01];
     priors=Dict(:ρ => Beta(5, 2), :σ => InverseGamma(2, 0.01)),
-    method=:smc, observables=[:Y, :C], n_smc=5000)
-report(result)
+    method=:smc, observables=[:Y, :C], n_smc=100)
+report(result_smc)
 ```
 
 The likelihood is evaluated via the Kalman filter, which is exact for linear state-space models produced by [Linear Solvers](@ref dsge_linear) (`:gensys`, `:blanchard_kahn`, `:klein`).
@@ -362,12 +369,12 @@ where:
 - ``\hat{\Sigma}`` is the estimated posterior covariance (initialized from the prior, updated during burnin)
 - ``c`` is the step-size scalar adapted to target 23.4% acceptance
 
-```julia
-result = estimate_dsge_bayes(spec, Y_data, [0.9, 0.01];
+```@example dsge_estimation
+result_mh = estimate_dsge_bayes(spec, Y_data, [0.9, 0.01];
     priors=Dict(:ρ => Beta(5, 2), :σ => InverseGamma(2, 0.01)),
     method=:mh, observables=[:Y, :C],
-    n_draws=50000, burnin=25000)
-report(result)
+    n_draws=100, burnin=50)
+report(result_mh)
 ```
 
 RWMH is simple to implement and diagnose but converges slowly for high-dimensional parameter spaces. For models with more than 5--10 parameters, SMC is strongly preferred.
@@ -395,23 +402,36 @@ RWMH is simple to implement and diagnose but converges slowly for high-dimension
 
 After estimation, five functions extract information from the `BayesianDSGE` result:
 
-```julia
+```@example dsge_estimation
 # Posterior summary: mean, median, std, 95% credible interval per parameter
-ps = posterior_summary(result)
+ps = posterior_summary(result_smc)
 ps[:ρ][:mean]       # posterior mean of ρ
+```
+
+```@example dsge_estimation
 ps[:σ][:ci_lower]   # lower bound of 95% CI for σ
+```
 
+```@example dsge_estimation
 # Log marginal likelihood (model evidence)
-ml = marginal_likelihood(result)
+ml = marginal_likelihood(result_smc)
+```
 
+```julia
 # Bayes factor: log p(Y|M₁) - log p(Y|M₂)
 log_bf = bayes_factor(result1, result2)
+```
 
+```@example dsge_estimation
 # Prior vs posterior comparison table
-tbl = prior_posterior_table(result)
+tbl = prior_posterior_table(result_smc)
+nothing # hide
+```
 
+```@example dsge_estimation
 # Posterior predictive simulation
-Y_pred = posterior_predictive(result, 100; T_periods=200)
+Y_pred = posterior_predictive(result_smc, 10; T_periods=50)
+size(Y_pred)
 ```
 
 `posterior_summary` returns a `Dict{Symbol, Dict{Symbol, T}}` with keys `:mean`, `:median`, `:std`, `:ci_lower` (2.5th percentile), and `:ci_upper` (97.5th percentile) for each parameter. `prior_posterior_table` returns a vector of named tuples suitable for tabular display, comparing prior and posterior moments side by side. `posterior_predictive` draws `n_sim` parameter vectors from the posterior, solves the model at each, and simulates forward, returning an `n_sim x T_periods x n_vars` array of simulated paths.
@@ -422,18 +442,26 @@ Bayesian DSGE estimation quantifies parameter uncertainty. `irf` and `fevd` prop
 
 For each of `n_draws` randomly selected posterior draws, the model is re-solved at those parameter values and the analytical IRF (or FEVD) is computed. The results are stacked and summarized with pointwise quantile bands. The default quantiles ``[0.05, 0.16, 0.84, 0.95]`` produce dual 68% and 90% credible bands --- the standard reporting convention in the Bayesian DSGE literature.
 
-```julia
+```@example dsge_estimation
 # Bayesian IRFs with dual credible bands
-birf = irf(result, 20; n_draws=200)
-report(birf)
-plot_result(birf)
+birf_smc = irf(result_smc, 20; n_draws=100)
+report(birf_smc)
+```
 
+```julia
+plot_result(birf_smc)
+```
+
+```@example dsge_estimation
 # Bayesian FEVD
-bfevd = fevd(result, 20; n_draws=200)
-report(bfevd)
+bfevd_smc = fevd(result_smc, 20; n_draws=100)
+report(bfevd_smc)
+```
 
+```@example dsge_estimation
 # Custom quantiles (90% band only)
-birf_90 = irf(result, 20; n_draws=200, quantiles=[0.05, 0.95])
+birf_90 = irf(result_smc, 20; n_draws=100, quantiles=[0.05, 0.95])
+nothing # hide
 ```
 
 Both methods return `BayesianImpulseResponse{T}` and `BayesianFEVD{T}` respectively --- the same types used by Bayesian VAR, so all existing `report()`, `plot_result()`, `table()`, and `cumulative_irf()` infrastructure works automatically.
@@ -444,8 +472,8 @@ Draws that produce indeterminate or explosive solutions are silently skipped. If
 
 `simulate` draws from the posterior predictive distribution with credible bands. For each posterior parameter draw, the model is re-solved and simulated forward `T_periods` periods:
 
-```julia
-bsim = simulate(result, 200; n_draws=200)
+```@example dsge_estimation
+bsim = simulate(result_smc, 50; n_draws=100)
 report(bsim)
 ```
 
