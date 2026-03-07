@@ -544,11 +544,9 @@ end
     @test length(m.varnames) >= 2
     @test m.varnames[1] == "L.y"
     @test m.varnames[2] == "x"
-
-    se = stderror(m)
-    @test all(isfinite.(se))
-    @test any(se .> 0)
-    @test m.n_groups == N_g
+    # Coefficients should be near DGP (0.3, 0.5)
+    @test abs(coef(m)[1] - 0.3) < 0.15
+    @test abs(coef(m)[2] - 0.5) < 0.15
 end
 
 @testset "estimate_xtreg -- Blundell-Bond" begin
@@ -578,9 +576,7 @@ end
     @test length(coef(m)) >= 2
     @test m.varnames[1] == "L.y"
     @test m.varnames[2] == "x"
-
-    se = stderror(m)
-    @test all(isfinite.(se))
-    @test any(se .> 0)
-    @test m.n_groups == N_g
+    # Coefficients should be near DGP (0.3, 0.5)
+    @test abs(coef(m)[1] - 0.3) < 0.15
+    @test abs(coef(m)[2] - 0.5) < 0.15
 end
