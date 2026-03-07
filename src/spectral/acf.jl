@@ -321,7 +321,9 @@ end
 # Non-Float64 fallbacks
 ccf(x::AbstractVector{<:Real}, y::AbstractVector{<:Real}; kwargs...) =
     ccf(Float64.(x), Float64.(y); kwargs...)
-ccf(x::AbstractVector{T}, y::AbstractVector{<:Real}; kwargs...) where {T<:AbstractFloat} =
+ccf(x::AbstractVector{T}, y::AbstractVector{S}; kwargs...) where {T<:AbstractFloat, S<:AbstractFloat} =
+    ccf(promote(x, y)...; kwargs...)
+ccf(x::AbstractVector{T}, y::AbstractVector{<:Integer}; kwargs...) where {T<:AbstractFloat} =
     ccf(x, T.(y); kwargs...)
-ccf(x::AbstractVector{<:Real}, y::AbstractVector{T}; kwargs...) where {T<:AbstractFloat} =
+ccf(x::AbstractVector{<:Integer}, y::AbstractVector{T}; kwargs...) where {T<:AbstractFloat} =
     ccf(T.(x), y; kwargs...)

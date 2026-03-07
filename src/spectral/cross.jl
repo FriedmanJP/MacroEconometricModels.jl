@@ -117,9 +117,11 @@ end
 # Non-Float64 fallbacks
 cross_spectrum(x::AbstractVector{<:Real}, y::AbstractVector{<:Real}; kwargs...) =
     cross_spectrum(Float64.(x), Float64.(y); kwargs...)
-cross_spectrum(x::AbstractVector{T}, y::AbstractVector{<:Real}; kwargs...) where {T<:AbstractFloat} =
+cross_spectrum(x::AbstractVector{T}, y::AbstractVector{S}; kwargs...) where {T<:AbstractFloat, S<:AbstractFloat} =
+    cross_spectrum(promote(x, y)...; kwargs...)
+cross_spectrum(x::AbstractVector{T}, y::AbstractVector{<:Integer}; kwargs...) where {T<:AbstractFloat} =
     cross_spectrum(x, T.(y); kwargs...)
-cross_spectrum(x::AbstractVector{<:Real}, y::AbstractVector{T}; kwargs...) where {T<:AbstractFloat} =
+cross_spectrum(x::AbstractVector{<:Integer}, y::AbstractVector{T}; kwargs...) where {T<:AbstractFloat} =
     cross_spectrum(T.(x), y; kwargs...)
 
 # =============================================================================
