@@ -70,7 +70,7 @@ svg { overflow: visible; }
 <div class="figure-title">Spectral Density Estimate (welch, n=251)</div>
 <div class="panel">
 <div class="panel-title">Spectral Density (welch)</div>
-<div id="spec_3"></div>
+<div id="spec_149"></div>
 </div>
 <div class="tooltip" id="tooltip"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
@@ -124,7 +124,7 @@ function hideTip() { tooltip.style('opacity',0); }
     const bands = [{"lo_key":"ci_lo","hi_key":"ci_hi","color":"#1f77b4","alpha":0.15}];
     const refLines = [];
 
-    const container = d3.select('#spec_3');
+    const container = d3.select('#spec_149');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;
