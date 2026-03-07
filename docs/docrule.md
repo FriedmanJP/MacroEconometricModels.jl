@@ -103,25 +103,77 @@ Not every section needs all 9 elements. Scale to complexity. A simple utility fu
 
 ## Quick Start Recipes
 
-Each recipe is a self-contained code block showing one capability:
+Each page has a `@setup` block (hidden) followed by `@example` blocks (visible with output):
 
-```julia
+````markdown
+```@setup var
 using MacroEconometricModels, Random
 Random.seed!(42)
-
-# [1-line comment explaining what this recipe demonstrates]
-result = function_call(args; key_kwargs...)
-report(result)
+fred = load_example(:fred_md)
+Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
+Y = Y[all.(isfinite, eachrow(Y)), :]
+Y = Y[end-59:end, :]  # fast build
 ```
 
+**Recipe 1: Estimate VAR(p)**
+
+```@example var
+model = estimate_var(Y, 4)
+report(model)
+```
+
+```julia
+plot_result(model)
+```
+
+```@raw html
+<iframe src="../assets/plots/irf_freq.html" ...></iframe>
+```
+````
+
 **Rules:**
-- Always start with `using MacroEconometricModels`
-- Always set `Random.seed!(42)` when randomness is involved
+- `@setup` loads the package, seeds RNG, prepares data with reduced sizes — never shown to reader
+- `@example` blocks contain only computation + `report()` — visible code + captured output
+- `plot_result()` stays in static `julia` blocks (iframe shows the plot)
+- All blocks on a page share the same group name
 - Inline comments explain the "what", not the "how"
-- Use `report(result)` or `plot_result(result)` to display results — **not `println`**
-- Each recipe is 5-15 lines
+- Use `report(result)` or field access to display results — **not `println`**
+- Each recipe is 3-10 lines (shorter than before since setup handles boilerplate)
 - Progressive complexity: Recipe 1 is the simplest possible usage, Recipe 6 is an advanced configuration
 - Recipe titles use **bold**: `**Recipe 1: Solve and plot IRFs**`
+
+---
+
+## Code Block Types
+
+Documentation uses four block types. Choosing the right one is critical for correct rendering.
+
+| Block type | Syntax | Shown to reader? | Executed? | Use for |
+|---|---|---|---|---|
+| Setup | `` ```@setup name `` | No | Yes | Package loading, data prep, reduced problem sizes |
+| Example | `` ```@example name `` | Code + output | Yes | All `report()`, field access, `println` calls |
+| Static Julia | `` ```julia `` | Code only | No | `plot_result()` calls (output via iframe below) |
+| Raw HTML | `` ```@raw html `` | HTML output | No | Iframe plot embeds |
+
+**Rules:**
+1. **One named group per page** — all `@setup` and `@example` blocks on a page share state via the same name (e.g., `var`, `bvar`, `filters`)
+2. **`@setup` reduces problem sizes silently** — smaller samples, fewer draws, shorter horizons. The reader never sees these reductions.
+3. **Visible `@example` code looks realistic** — no `Y[1:10, :]` in shown code
+4. **`plot_result()` stays static** — use `` ```julia `` (not `@example`) for `plot_result()` calls, since the iframe below shows the actual visualization
+5. **Every `@example` block must run without error** — if a block depends on prior state, it must be in the same named group
+6. **`report()` output is the primary goal** — formatted tables appear directly in the documentation
+
+### Setup Reduction Guidelines
+
+| Parameter | Realistic value | Setup value | Rationale |
+|---|---|---|---|
+| Sample size | `Y[end-99:end, :]` | `Y[end-59:end, :]` | 60 obs sufficient for all estimators |
+| `n_draws` (BVAR) | 1000-5000 | 100 | Posterior tables still meaningful |
+| `reps` (bootstrap) | 200-500 | 50 | CI bands still visible |
+| IRF horizon | 20-40 | 20 | No reduction needed |
+| DSGE `max_iter` | 1000 | 200 | Usually converges in <50 |
+| `n_particles` (SMC) | 1000 | 100 | Fastest SMC setting |
+| Nowcast panel | 100 obs | 60 obs | Sufficient for EM convergence |
 
 ---
 
@@ -135,6 +187,11 @@ report(result)
 - `plot_result(result)` — for visualization
 - Direct field access (`result.theta`, `result.J_stat`) only when showing specific values for interpretation
 - **Never use `println` to display model results, estimation output, or test statistics.** Use `report(result)` for model output, `plot_result(result)` for visualizations, `print_table(stdout, result)` for tabular data, and direct field access with `round()` for specific values in interpretation paragraphs. Reserve `println` only for simple scalar diagnostics like convergence flags or iteration counts.
+
+**Block type selection:**
+- Every code block that calls `report()` or prints output **must** be an `@example` block
+- `plot_result()` calls use static `julia` blocks, not `@example`
+- Pure API signature examples (no output) can use static `julia` blocks
 
 **Comments:** Inline comments explain intent, not mechanics:
 - YES: `# Large negative demand shock pushes economy to ZLB`
@@ -321,3 +378,4 @@ The fenced block must have blank lines before and after it. The `src` path uses 
 9. **Raw output without interpretation** — After every code output, explain what the numbers mean
 10. **Duplicated content** — Cross-reference other pages instead of repeating material
 11. **Bare `@raw html`** — Always use the fenced `` ```@raw html `` ... `` ``` `` block syntax. Bare `@raw html` renders as literal text, not HTML.
+12. **Static `julia` block for code that produces output the reader should see** — Use `@example` instead so the output appears in the documentation. Static blocks are only for `plot_result()` calls and pure API signatures.

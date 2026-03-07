@@ -207,6 +207,8 @@ Pkg.add("MacroEconometricModels")
 
 Full documentation available at [https://FriedmanJP.github.io/MacroEconometricModels.jl/dev/](https://FriedmanJP.github.io/MacroEconometricModels.jl/dev/)
 
+All documentation code examples execute during the build — `report()` output, estimation tables, and test statistics appear directly on each page.
+
 ## References
 
 ### Time Series Filters
