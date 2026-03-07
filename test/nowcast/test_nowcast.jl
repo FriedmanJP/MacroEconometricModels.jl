@@ -465,6 +465,20 @@ end
         @test predict(m) == m.X_sm
         @test nobs(m) == 60
     end
+
+    @testset "Handles near-singular data without NaN" begin
+        # Construct data with near-collinear columns to stress the optimizer
+        rng = Random.MersenneTwister(999)
+        base = randn(rng, 80, 1)
+        Y = hcat(base, base .+ 1e-8 * randn(rng, 80, 1),
+                 base .+ 1e-8 * randn(rng, 80, 1))
+        Y[75:80, 3] .= NaN
+
+        m = nowcast_bvar(Y, 2, 1; lags=2, max_iter=30)
+        @test m isa NowcastBVAR{Float64}
+        @test isfinite(m.loglik)
+        @test !any(isnan, m.X_sm)
+    end
 end
 
 # =============================================================================
