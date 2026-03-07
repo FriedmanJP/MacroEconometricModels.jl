@@ -5,21 +5,27 @@
 # Licensed under GPL-3.0-or-later. See LICENSE for details.
 
 """
-Historical decomposition for linear DSGE models.
+Historical decomposition for DSGE models (linear and nonlinear).
 
 Decomposes observed variable movements into contributions from individual structural shocks
-plus initial conditions, using the Kalman smoother to recover smoothed shocks and the
-structural MA representation to attribute movements to each shock.
+plus initial conditions.
 
+For linear DSGE: uses the Kalman smoother to recover smoothed shocks and the
+structural MA representation to attribute movements to each shock.
 Theory: y_t = Σ_{s=0}^{t-1} Θ_s ε_{t-s} + initial_conditions
 where Θ_s = Z_dec * G1^s * impact (structural MA coefficients at lag s).
+
+For nonlinear DSGE: uses the FFBSi particle smoother to recover smoothed shocks and
+counterfactual simulation to attribute movements to each shock.
 
 References:
 - Herbst, E. & Schorfheide, F. (2015). Bayesian Estimation of DSGE Models. Ch. 6.
 - Canova, F. (2007). Methods for Applied Macroeconomic Research. Ch. 7.
+- Godsill, S. J., Doucet, A., & West, M. (2004). Monte Carlo smoothing for nonlinear
+  time series. JASA, 99(465), 156-168.
 """
 
-using LinearAlgebra
+using LinearAlgebra, Random
 
 """
     historical_decomposition(sol::DSGESolution{T}, data::AbstractMatrix,
@@ -177,5 +183,153 @@ function historical_decomposition(sol::DSGESolution{T}, data::AbstractMatrix,
     return HistoricalDecomposition{T}(
         contributions, initial_conditions, actual, shocks_mat, T_obs,
         var_names, shock_names, :dsge_linear
+    )
+end
+
+# =============================================================================
+# Nonlinear DSGE historical decomposition — counterfactual simulation
+# =============================================================================
+
+"""
+    historical_decomposition(sol::PerturbationSolution{T}, data::AbstractMatrix,
+                              observables::Vector{Symbol};
+                              states::Symbol=:observables,
+                              measurement_error=nothing,
+                              N::Int=1000, N_back::Int=100,
+                              rng::AbstractRNG=Random.default_rng()) where {T}
+
+Compute historical decomposition for a nonlinear (higher-order perturbation) DSGE model.
+
+Uses the FFBSi particle smoother to recover smoothed shocks, then performs counterfactual
+simulation: for each shock j, simulates the model with shock j zeroed out.
+Contribution of shock j = baseline - counterfactual_without_j.
+
+# Arguments
+- `sol::PerturbationSolution{T}`: Higher-order perturbation solution
+- `data::AbstractMatrix`: T_obs × n_endog matrix of data in LEVELS
+- `observables::Vector{Symbol}`: Which endogenous variables are observed
+
+# Keyword Arguments
+- `states::Symbol=:observables`: Decompose `:observables` (default) or `:all` states
+- `measurement_error`: Vector of measurement error std devs, or `nothing`
+- `N::Int=1000`: Number of forward particles for the smoother
+- `N_back::Int=100`: Number of backward trajectories for the smoother
+- `rng::AbstractRNG`: Random number generator
+
+# Returns
+`HistoricalDecomposition{T}` with `method=:dsge_nonlinear`.
+"""
+function historical_decomposition(sol::PerturbationSolution{T}, data::AbstractMatrix,
+                                   observables::Vector{Symbol};
+                                   states::Symbol=:observables,
+                                   measurement_error=nothing,
+                                   N::Int=1000, N_back::Int=100,
+                                   rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    spec = sol.spec
+    n_endog = spec.n_endog
+    n_shocks = spec.n_exog
+    T_obs = size(data, 1)
+
+    states in (:observables, :all) || throw(ArgumentError(
+        "states must be :observables or :all, got :$states"))
+
+    # =========================================================================
+    # Step 1: Build nonlinear state space
+    # =========================================================================
+    Z, d, H = _build_observation_equation(spec, observables, measurement_error)
+    nss = _build_nonlinear_state_space(sol, Z, d, H)
+    n_obs = length(observables)
+
+    # Observable indices
+    obs_indices = [findfirst(==(obs), spec.endog) for obs in observables]
+
+    # =========================================================================
+    # Step 2: Convert data to deviations from steady state (n_obs × T_obs)
+    # =========================================================================
+    data_dev = zeros(T, n_obs, T_obs)
+    for (i, idx) in enumerate(obs_indices)
+        ss_val = isempty(spec.steady_state) ? zero(T) : spec.steady_state[idx]
+        for t in 1:T_obs
+            data_dev[i, t] = T(data[t, idx]) - ss_val
+        end
+    end
+
+    # =========================================================================
+    # Step 3: Run particle smoother to get smoothed shocks
+    # =========================================================================
+    smoother_result = dsge_particle_smoother(nss, data_dev; N=N, N_back=N_back, rng=rng)
+    # smoothed_shocks is n_shocks × T_obs
+    shocks_mat = Matrix{T}(smoother_result.smoothed_shocks')  # T_obs × n_shocks
+
+    # =========================================================================
+    # Step 4: Baseline simulation with all smoothed shocks
+    # =========================================================================
+    baseline_levels = simulate(sol, T_obs; shock_draws=shocks_mat)
+    # Convert to deviations from steady state: T_obs × n_endog
+    baseline_dev = baseline_levels .- sol.steady_state'
+
+    # =========================================================================
+    # Step 5: Determine decomposition variables
+    # =========================================================================
+    if states == :all
+        n_vars = n_endog
+        var_indices = collect(1:n_endog)
+        var_names = [string(s) for s in spec.endog]
+    else
+        n_vars = n_obs
+        var_indices = obs_indices
+        var_names = [string(s) for s in observables]
+    end
+
+    # =========================================================================
+    # Step 6: Counterfactual decomposition
+    # For each shock j: simulate with shock j zeroed out
+    # contribution_j = baseline - counterfactual_without_j
+    # =========================================================================
+    contributions = zeros(T, T_obs, n_vars, n_shocks)
+
+    for j in 1:n_shocks
+        # Create shock matrix with shock j zeroed out
+        shocks_cf = copy(shocks_mat)
+        shocks_cf[:, j] .= zero(T)
+
+        # Simulate counterfactual
+        cf_levels = simulate(sol, T_obs; shock_draws=shocks_cf)
+        cf_dev = cf_levels .- sol.steady_state'
+
+        # Contribution = baseline - counterfactual
+        for (vi, vidx) in enumerate(var_indices)
+            for t in 1:T_obs
+                contributions[t, vi, j] = baseline_dev[t, vidx] - cf_dev[t, vidx]
+            end
+        end
+    end
+
+    # =========================================================================
+    # Step 7: Actual data in deviations (T_obs × n_vars)
+    # =========================================================================
+    if states == :all
+        actual = zeros(T, T_obs, n_endog)
+        for i in 1:n_endog
+            ss_val = isempty(spec.steady_state) ? zero(T) : spec.steady_state[i]
+            for t in 1:T_obs
+                actual[t, i] = T(data[t, i]) - ss_val
+            end
+        end
+    else
+        actual = Matrix{T}(data_dev')
+    end
+
+    # =========================================================================
+    # Step 8: Initial conditions = actual - sum of contributions
+    # =========================================================================
+    initial_conditions = _compute_initial_conditions(actual, contributions)
+
+    # Shock names
+    shock_names = [string(s) for s in spec.exog]
+
+    return HistoricalDecomposition{T}(
+        contributions, initial_conditions, actual, shocks_mat, T_obs,
+        var_names, shock_names, :dsge_nonlinear
     )
 end

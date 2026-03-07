@@ -396,27 +396,506 @@ function dsge_smoother(ss::DSGEStateSpace{T}, data::Matrix{T}) where {T<:Abstrac
     )
 end
 
+# =============================================================================
+# Helper: single-particle nonlinear (pruned) transition
+# =============================================================================
+
+"""
+    _nonlinear_transition(nss::NonlinearStateSpace{T}, xf_prev::AbstractVector{T},
+                           xs_prev::AbstractVector{T}, xrd_prev::AbstractVector{T},
+                           eps_t::AbstractVector{T}) where {T}
+
+Evaluate one step of the pruned nonlinear transition for a single particle.
+
+Returns `(xf_new, xs_new, xrd_new, x_total, y_t)` — the updated first-order state,
+second-order correction, third-order correction, total state, and control vector.
+
+Uses the same formulas as `simulate(::PerturbationSolution, ...)` in pruning.jl.
+"""
+function _nonlinear_transition(nss::NonlinearStateSpace{T},
+                                xf_prev::AbstractVector{T},
+                                xs_prev::AbstractVector{T},
+                                xrd_prev::AbstractVector{T},
+                                eps_t::AbstractVector{T}) where {T<:AbstractFloat}
+    nx = length(nss.state_indices)
+    ny = length(nss.control_indices)
+    n_eps = size(nss.eta, 2)
+    nv = nx + n_eps
+
+    # Extract first-order blocks
+    hx_state = @view nss.hx[:, 1:nx]       # nx x nx
+    eta_x = @view nss.hx[:, nx+1:nv]       # nx x n_eps
+    gx_state = @view nss.gx[:, 1:nx]       # ny x nx
+    eta_y = @view nss.gx[:, nx+1:nv]       # ny x n_eps
+
+    # First-order state
+    xf_new = hx_state * xf_prev + eta_x * eps_t
+
+    # Build augmented vector vf = [xf_prev; eps_t]
+    vf = zeros(T, nv)
+    if nx > 0
+        vf[1:nx] = xf_prev
+    end
+    vf[nx+1:nv] = eps_t
+
+    xs_new = zeros(T, nx)
+    xrd_new = zeros(T, nx)
+
+    if nss.order >= 2
+        kron_vf = kron(vf, vf)
+
+        # Second-order state correction
+        xs_new = hx_state * xs_prev
+        if nss.hxx !== nothing && !isempty(kron_vf)
+            xs_new += T(0.5) * nss.hxx * kron_vf
+        end
+        if nss.hsigmasigma !== nothing
+            xs_new += T(0.5) * nss.hsigmasigma
+        end
+
+        if nss.order >= 3
+            # Build vs = [xs_prev; 0]
+            vs = zeros(T, nv)
+            if nx > 0
+                vs[1:nx] = xs_prev
+            end
+            kron_vf_vs = kron(vf, vs)
+            kron3_vf = kron(vf, kron_vf)
+
+            xrd_new = hx_state * xrd_prev
+            if nss.hxx !== nothing && !isempty(kron_vf_vs)
+                xrd_new += nss.hxx * kron_vf_vs
+            end
+            if nss.hxxx !== nothing && !isempty(kron3_vf)
+                xrd_new += (one(T) / T(6)) * nss.hxxx * kron3_vf
+            end
+            if nss.hsigmax !== nothing
+                xrd_new += T(0.5) * nss.hsigmax * vf
+            end
+            if nss.hsigmasigmasigma !== nothing
+                xrd_new += (one(T) / T(6)) * nss.hsigmasigmasigma
+            end
+        end
+    end
+
+    # Total state
+    x_total = xf_new + xs_new + xrd_new
+
+    # Controls
+    y_t = gx_state * x_total + eta_y * eps_t
+
+    if nss.order >= 2 && nss.gxx !== nothing
+        # Build vf_new = [xf_new; eps_t] for control Kronecker products
+        vf_new = zeros(T, nv)
+        if nx > 0
+            vf_new[1:nx] = xf_new
+        end
+        vf_new[nx+1:nv] = eps_t
+        kron_vf_new = kron(vf_new, vf_new)
+
+        if nss.order >= 3
+            vs_new = zeros(T, nv)
+            if nx > 0
+                vs_new[1:nx] = xs_new
+            end
+            kron_vfvs_new = kron(vf_new, vs_new)
+            y_t += T(0.5) * nss.gxx * (kron_vf_new + T(2) * kron_vfvs_new)
+        else
+            y_t += T(0.5) * nss.gxx * kron_vf_new
+        end
+
+        if nss.gsigmasigma !== nothing
+            y_t += T(0.5) * nss.gsigmasigma
+        end
+
+        if nss.order >= 3
+            vf_new = zeros(T, nv)
+            if nx > 0
+                vf_new[1:nx] = xf_new
+            end
+            vf_new[nx+1:nv] = eps_t
+            kron_vf_new2 = kron(vf_new, vf_new)
+            kron3_vf_new = kron(vf_new, kron_vf_new2)
+
+            if nss.gxxx !== nothing
+                y_t += (one(T) / T(6)) * nss.gxxx * kron3_vf_new
+            end
+            if nss.gsigmax !== nothing
+                y_t += T(0.5) * nss.gsigmax * vf_new
+            end
+            if nss.gsigmasigmasigma !== nothing
+                y_t += (one(T) / T(6)) * nss.gsigmasigmasigma
+            end
+        end
+    end
+
+    return xf_new, xs_new, xrd_new, x_total, y_t
+end
+
+"""
+    _nonlinear_transition_full(nss::NonlinearStateSpace{T}, xf_prev, xs_prev, xrd_prev,
+                                eps_t) -> full_state_vector
+
+Evaluate one step and return the full endogenous vector (states + controls) assembled
+at the correct indices.
+"""
+function _nonlinear_transition_full(nss::NonlinearStateSpace{T},
+                                     xf_prev::AbstractVector{T},
+                                     xs_prev::AbstractVector{T},
+                                     xrd_prev::AbstractVector{T},
+                                     eps_t::AbstractVector{T}) where {T<:AbstractFloat}
+    xf_new, xs_new, xrd_new, x_total, y_t = _nonlinear_transition(nss, xf_prev, xs_prev, xrd_prev, eps_t)
+    nx = length(nss.state_indices)
+    ny = length(nss.control_indices)
+    n_endog = nx + ny
+    full = zeros(T, n_endog)
+    for (k, si) in enumerate(nss.state_indices)
+        full[si] = x_total[k]
+    end
+    for (k, ci) in enumerate(nss.control_indices)
+        full[ci] = y_t[k]
+    end
+    return full, xf_new, xs_new, xrd_new
+end
+
+# =============================================================================
+# Helper: categorical draw
+# =============================================================================
+
+"""
+    _categorical_draw(w::AbstractVector{T}, rng::AbstractRNG) where {T}
+
+Draw one index from a categorical distribution with weights `w` (must sum to 1).
+Uses a simple linear scan.
+"""
+function _categorical_draw(w::AbstractVector{T}, rng::AbstractRNG) where {T<:AbstractFloat}
+    u = rand(rng, T)
+    cumw = zero(T)
+    @inbounds for i in eachindex(w)
+        cumw += w[i]
+        if u <= cumw
+            return i
+        end
+    end
+    return length(w)  # fallback for floating-point edge case
+end
+
+# =============================================================================
+# FFBSi particle smoother
+# =============================================================================
+
 """
     dsge_particle_smoother(nss::NonlinearStateSpace{T}, data::Matrix{T};
-                            n_particles::Int=1000, rng::AbstractRNG=Random.default_rng()) where {T}
+                            N::Int=1000, N_back::Int=100,
+                            rng::AbstractRNG=Random.default_rng()) where {T}
 
 Forward-filtering backward-simulation (FFBSi) particle smoother for nonlinear DSGE models.
 
-Uses a bootstrap particle filter forward pass followed by backward simulation to
-produce smoothed state trajectories for higher-order perturbation solutions.
+Uses a bootstrap particle filter forward pass followed by Godsill-Doucet-West (2004)
+backward simulation to produce smoothed state trajectories for higher-order perturbation
+solutions.
 
 # Arguments
 - `nss` — `NonlinearStateSpace{T}` from a higher-order perturbation solution
-- `data` — `n_obs × T_obs` matrix of observables
-- `n_particles` — number of particles (default: 1000)
+- `data` — `n_obs × T_obs` matrix of observables (deviations from steady state)
+- `N` — number of forward particles (default: 1000)
+- `N_back` — number of backward trajectories (default: 100)
 - `rng` — random number generator (default: `Random.default_rng()`)
 
 # Returns
 A `KalmanSmootherResult{T}` with smoothed states and shocks (covariances from particle
 approximation).
+
+# References
+- Godsill, S. J., Doucet, A., & West, M. (2004). Monte Carlo smoothing for nonlinear
+  time series. JASA, 99(465), 156-168.
 """
 function dsge_particle_smoother(nss::NonlinearStateSpace{T}, data::Matrix{T};
-                                 n_particles::Int=1000,
+                                 N::Int=1000, N_back::Int=100,
                                  rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
-    error("dsge_particle_smoother is not yet implemented — see Task 5 of the DSGE HD plan")
+    n_obs, T_obs = size(data)
+    nx = length(nss.state_indices)
+    ny = length(nss.control_indices)
+    n_endog = nx + ny
+    n_eps = size(nss.eta, 2)
+    nv = nx + n_eps
+
+    # Extract first-order blocks for impact matrix
+    eta_x = @view nss.hx[:, nx+1:nv]       # nx x n_eps
+    eta_y = @view nss.gx[:, nx+1:nv]       # ny x n_eps
+
+    # Build the full impact matrix (n_endog x n_eps)
+    impact_full = zeros(T, n_endog, n_eps)
+    for (k, si) in enumerate(nss.state_indices)
+        impact_full[si, :] = eta_x[k, :]
+    end
+    for (k, ci) in enumerate(nss.control_indices)
+        impact_full[ci, :] = eta_y[k, :]
+    end
+    impact_pinv = pinv(impact_full)
+
+    # =====================================================================
+    # Forward pass — Bootstrap Particle Filter with storage
+    # =====================================================================
+
+    # Allocate PF workspace
+    ws = _allocate_pf_workspace(T, n_endog, n_obs, n_eps, N;
+                                 nv=nv, nx=nx, order=nss.order)
+
+    # Storage for all particles and weights at each time step (for backward pass)
+    # Store full endogenous particles and pruned components
+    particles_store = zeros(T, n_endog, N, T_obs)
+    weights_store = zeros(T, N, T_obs)
+    # Also store pruned state components for each particle at each t
+    xf_store = zeros(T, nx, N, T_obs)
+    xs_store = zeros(T, nx, N, T_obs)
+    xrd_store = nss.order >= 3 ? zeros(T, nx, N, T_obs) : nothing
+
+    # Initialize particles at zero (deviation from SS)
+    fill!(ws.particles, zero(T))
+    fill!(ws.particles_fo, zero(T))
+    if ws.particles_so !== nothing
+        fill!(ws.particles_so, zero(T))
+    end
+    if ws.particles_to !== nothing
+        fill!(ws.particles_to, zero(T))
+    end
+    inv_N = one(T) / N
+    fill!(ws.weights, inv_N)
+    fill!(ws.log_weights, -log(T(N)))
+
+    log_lik = zero(T)
+    log_N = log(T(N))
+
+    @inbounds for t in 1:T_obs
+        # Draw shocks
+        randn!(rng, ws.shocks)
+
+        # Propagate through pruned nonlinear transition
+        _pf_transition_pruned!(ws, nss)
+
+        # Compute log weights
+        y_t = @view data[:, t]
+        _pf_log_weights!(ws.log_weights, ws.innovations, ws.tmp_obs,
+                          ws.particles, y_t, nss.Z, nss.d, nss.H_inv, nss.log_det_H)
+
+        # Accumulate log-likelihood
+        log_lik += _logsumexp(ws.log_weights) - log_N
+
+        # Normalize weights
+        _normalize_log_weights!(ws.weights, ws.log_weights)
+
+        # Store particles and weights BEFORE resampling
+        for k in 1:N
+            weights_store[k, t] = ws.weights[k]
+            for s in 1:n_endog
+                particles_store[s, k, t] = ws.particles[s, k]
+            end
+            for i in 1:nx
+                xf_store[i, k, t] = ws.particles_fo[i, k]
+            end
+            if ws.particles_so !== nothing
+                for i in 1:nx
+                    xs_store[i, k, t] = ws.particles_so[i, k]
+                end
+            end
+            if xrd_store !== nothing && ws.particles_to !== nothing
+                for i in 1:nx
+                    xrd_store[i, k, t] = ws.particles_to[i, k]
+                end
+            end
+        end
+
+        # ESS-based adaptive resampling
+        ess = zero(T)
+        for k in 1:N
+            ess += ws.weights[k] * ws.weights[k]
+        end
+        ess = one(T) / ess
+
+        if ess < T(0.5) * N
+            _systematic_resample!(ws.ancestors, ws.weights, ws.cumweights, N, rng)
+            _resample_particles!(ws.particles_new, ws.particles, ws.ancestors)
+            ws.particles, ws.particles_new = ws.particles_new, ws.particles
+            _pf_resample_pruned!(ws, N, nx, nss.order)
+            fill!(ws.weights, inv_N)
+            fill!(ws.log_weights, -log_N)
+        end
+    end
+
+    # =====================================================================
+    # Backward simulation (Godsill-Doucet-West 2004)
+    # =====================================================================
+
+    # For transition density evaluation: first-order hx_state block
+    hx_state = nx > 0 ? Matrix{T}(nss.hx[:, 1:nx]) : zeros(T, 0, 0)
+
+    # Pre-compute transition impact pseudo-inverse (for shock extraction from state only)
+    # The first-order impact on states: eta_x (nx x n_eps)
+    eta_x_mat = Matrix{T}(eta_x)
+    eta_x_pinv = pinv(eta_x_mat)
+
+    # Backward trajectories: store full states
+    back_states = zeros(T, n_endog, N_back, T_obs)
+    back_shocks = zeros(T, n_eps, N_back, T_obs)
+
+    # Temporary backward weights
+    bw = zeros(T, N)
+
+    for b in 1:N_back
+        # Draw x_T from final weights
+        idx_T = _categorical_draw(@view(weights_store[:, T_obs]), rng)
+        back_states[:, b, T_obs] = particles_store[:, idx_T, T_obs]
+
+        # Backward pass: t = T_obs-1 down to 1
+        for t in (T_obs - 1):-1:1
+            x_tp1 = @view back_states[:, b, t + 1]
+
+            # Extract the state part of x_{t+1}
+            x_tp1_states = zeros(T, nx)
+            for (k, si) in enumerate(nss.state_indices)
+                x_tp1_states[k] = x_tp1[si]
+            end
+
+            # Compute backward weights: w_tilde_k = w_t^k * p(x_{t+1} | x_t^k)
+            # Transition density approximation: first-order
+            # x_{t+1}_states approx = hx_state * xf_t^k + eta_x * eps
+            # implied_shock = eta_x_pinv * (x_{t+1}_states - hx_state * xf_t^k)
+            # log p = -0.5 * ||implied_shock||^2 (standard normal prior on shocks)
+            max_log_bw = T(-Inf)
+            for k in 1:N
+                xf_k = @view xf_store[:, k, t]
+                predicted = hx_state * xf_k
+                residual = x_tp1_states - predicted
+                implied_shock = eta_x_pinv * residual
+                log_trans = -T(0.5) * dot(implied_shock, implied_shock)
+                bw[k] = log(max(weights_store[k, t], T(1e-300))) + log_trans
+                if bw[k] > max_log_bw
+                    max_log_bw = bw[k]
+                end
+            end
+
+            # Normalize backward weights (in log space then exponentiate)
+            bw_sum = zero(T)
+            for k in 1:N
+                bw[k] = exp(bw[k] - max_log_bw)
+                bw_sum += bw[k]
+            end
+            if bw_sum > zero(T)
+                for k in 1:N
+                    bw[k] /= bw_sum
+                end
+            else
+                # Fallback: uniform
+                fill!(bw, inv_N)
+            end
+
+            # Draw ancestor
+            idx = _categorical_draw(bw, rng)
+            back_states[:, b, t] = particles_store[:, idx, t]
+        end
+
+        # Extract shocks from backward trajectory
+        # eps_t = impact_pinv * (full_state_t - f(full_state_{t-1}, 0))
+        # For t=1: x_prev = 0
+        prev_xf = zeros(T, nx)
+        prev_xs = zeros(T, nx)
+        prev_xrd = zeros(T, nx)
+
+        for t in 1:T_obs
+            x_t = @view back_states[:, b, t]
+
+            # Get the deterministic prediction (zero shocks) from previous state
+            # Assemble deterministic full state
+            det_full = zeros(T, n_endog)
+            xf_det, xs_det, xrd_det, x_total_det, y_det = _nonlinear_transition(nss, prev_xf, prev_xs, prev_xrd, zeros(T, n_eps))
+            for (k, si) in enumerate(nss.state_indices)
+                det_full[si] = x_total_det[k]
+            end
+            for (k, ci) in enumerate(nss.control_indices)
+                det_full[ci] = y_det[k]
+            end
+
+            # Implied shock
+            resid = Vector{T}(x_t) - det_full
+            implied_eps = impact_pinv * resid
+            back_shocks[:, b, t] = implied_eps
+
+            # Update previous states for next step
+            # Recover pruned components from the shock we just extracted
+            xf_new, xs_new, xrd_new, _, _ = _nonlinear_transition(nss, prev_xf, prev_xs, prev_xrd, implied_eps)
+            prev_xf = xf_new
+            prev_xs = xs_new
+            prev_xrd = xrd_new
+        end
+    end
+
+    # =====================================================================
+    # Aggregate: posterior mean of smoothed states and shocks
+    # =====================================================================
+    smoothed_states = zeros(T, n_endog, T_obs)
+    smoothed_shocks = zeros(T, n_eps, T_obs)
+
+    for t in 1:T_obs
+        for b in 1:N_back
+            for s in 1:n_endog
+                smoothed_states[s, t] += back_states[s, b, t]
+            end
+            for j in 1:n_eps
+                smoothed_shocks[j, t] += back_shocks[j, b, t]
+            end
+        end
+        smoothed_states[:, t] ./= N_back
+        smoothed_shocks[:, t] ./= N_back
+    end
+
+    # =====================================================================
+    # Compute covariances from particle approximation
+    # =====================================================================
+    smoothed_cov = zeros(T, n_endog, n_endog, T_obs)
+    for t in 1:T_obs
+        for b in 1:N_back
+            diff = back_states[:, b, t] - smoothed_states[:, t]
+            for j in 1:n_endog, i in 1:n_endog
+                smoothed_cov[i, j, t] += diff[i] * diff[j]
+            end
+        end
+        smoothed_cov[:, :, t] ./= (N_back - 1)
+    end
+
+    # Use weighted forward filter means as filtered/predicted quantities
+    filtered_states = zeros(T, n_endog, T_obs)
+    filtered_cov = zeros(T, n_endog, n_endog, T_obs)
+    predicted_states = zeros(T, n_endog, T_obs)
+    predicted_cov = zeros(T, n_endog, n_endog, T_obs)
+
+    for t in 1:T_obs
+        for k in 1:N
+            w = weights_store[k, t]
+            for s in 1:n_endog
+                filtered_states[s, t] += w * particles_store[s, k, t]
+            end
+        end
+    end
+    # Approximate filtered covariance
+    for t in 1:T_obs
+        for k in 1:N
+            w = weights_store[k, t]
+            diff = particles_store[:, k, t] - filtered_states[:, t]
+            for j in 1:n_endog, i in 1:n_endog
+                filtered_cov[i, j, t] += w * diff[i] * diff[j]
+            end
+        end
+    end
+
+    # Predicted = filtered from previous step propagated (approximate: use filtered)
+    copyto!(predicted_states, filtered_states)
+    copyto!(predicted_cov, filtered_cov)
+
+    return KalmanSmootherResult{T}(
+        smoothed_states, smoothed_cov, smoothed_shocks,
+        filtered_states, filtered_cov,
+        predicted_states, predicted_cov,
+        log_lik
+    )
 end
