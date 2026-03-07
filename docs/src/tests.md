@@ -8,13 +8,16 @@ MacroEconometricModels.jl provides a comprehensive suite of statistical hypothes
 - **[Panel Tests](tests_panel.md)**: PANIC, Pesaran CIPS, and Moon-Perron tests for panel unit roots with cross-sectional dependence
 - **[Model Diagnostics](tests_diagnostics.md)**: Granger causality, multivariate normality, ARCH-LM, Ljung-Box, Hansen J, Andrews-Lu MMSC, and likelihood ratio / Lagrange multiplier tests
 
+```@setup tests_overview
+using MacroEconometricModels, Random
+Random.seed!(42)
+```
+
 ## Quick Start
 
 **Recipe 1: ADF unit root test**
 
-```julia
-using MacroEconometricModels
-
+```@example tests_overview
 # Test CPI price level for a unit root
 fred = load_example(:fred_md)
 cpi = filter(isfinite, to_vector(fred[:, "CPIAUCSL"]))
@@ -24,10 +27,7 @@ report(result)
 
 **Recipe 2: Andrews structural break test**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example tests_overview
 # Detect a structural break in a linear regression
 T = 200
 X = hcat(ones(T), randn(T))
@@ -40,10 +40,7 @@ report(result)
 
 **Recipe 3: PANIC panel unit root test**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example tests_overview
 # Panel data: 100 time periods, 20 cross-section units
 X_panel = cumsum(randn(100, 20), dims=1)   # I(1) panel with common factors
 result = panic_test(X_panel; r=:auto, method=:pooled)
@@ -52,9 +49,7 @@ report(result)
 
 **Recipe 4: Normality test suite on VAR residuals**
 
-```julia
-using MacroEconometricModels
-
+```@example tests_overview
 # Estimate a VAR and test residual normality
 fred = load_example(:fred_md)
 Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
@@ -221,9 +216,7 @@ After estimating a model, specification tests validate the assumptions underlyin
 
 All test result types implement the StatsAPI.jl interface. This provides a uniform way to extract test statistics, p-values, and degrees of freedom regardless of the specific test.
 
-```julia
-using MacroEconometricModels, StatsAPI
-
+```@example tests_overview
 fred = load_example(:fred_md)
 cpi = filter(isfinite, to_vector(fred[:, "CPIAUCSL"]))
 result = adf_test(cpi; lags=:aic, regression=:constant)

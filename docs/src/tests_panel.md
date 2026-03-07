@@ -7,14 +7,16 @@ Panel-level hypothesis testing addresses two distinct phases of the empirical wo
 - **Moon-Perron**: Factor-adjusted pooled AR(1) with bias correction (Moon & Perron 2004)
 - **Hansen J-test, Andrews-Lu MMSC, and MMSC-based lag selection** for Panel VAR
 
+```@setup test_panel
+using MacroEconometricModels, Random, DataFrames
+Random.seed!(42)
+```
+
 ## Quick Start
 
 **Recipe 1: PANIC test on a panel**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example test_panel
 # Stationary panel with one common factor
 X = randn(100, 20)
 result = panic_test(X; r=1)
@@ -23,10 +25,7 @@ report(result)
 
 **Recipe 2: Pesaran CIPS test**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example test_panel
 X = randn(50, 20)
 result = pesaran_cips_test(X; lags=1, deterministic=:constant)
 report(result)
@@ -34,10 +33,7 @@ report(result)
 
 **Recipe 3: Moon-Perron test**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example test_panel
 X = randn(80, 15)
 result = moon_perron_test(X; r=1)
 report(result)
@@ -45,9 +41,7 @@ report(result)
 
 **Recipe 4: Panel VAR Hansen J-test and lag selection**
 
-```julia
-using MacroEconometricModels, DataFrames, Random
-Random.seed!(42)
+```@example test_panel
 N, T_total, m_vars = 50, 20, 3
 data = zeros(N * T_total, m_vars)
 for i in 1:N
@@ -100,10 +94,7 @@ Under ``H_0`` (all idiosyncratic components have unit roots), the individual p-v
 !!! note "Technical Note"
     When `r=:auto`, the number of factors is selected using the Bai-Ng (2002) IC2 information criterion via `ic_criteria`. The defactored residuals are tested with ADF regressions without deterministic terms, since the common factor extraction already absorbs any trends.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example test_panel
 # Stationary panel: idiosyncratic components are I(0)
 X_stationary = randn(100, 20)
 result_s = panic_test(X_stationary; r=1)
@@ -170,10 +161,7 @@ where ``\tilde{t}_i = \max(-6.19, \min(6.19, t_i))`` are the truncated CADF stat
 
 Critical values depend on ``N``, ``T``, and the deterministic specification. The test rejects when the CIPS statistic falls below the critical value (left-tailed test).
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example test_panel
 # Stationary panel
 X = randn(50, 20)
 result_const = pesaran_cips_test(X; lags=1, deterministic=:constant)
@@ -230,10 +218,7 @@ Both statistics converge to ``N(0,1)`` under ``H_0``: all units have unit roots.
 !!! note "Technical Note"
     The long-run variance ``\hat{\omega}_i^2`` for each unit is estimated using a Bartlett kernel with Newey-West bandwidth. The projection matrix ``Q_\perp = I_N - \hat{\Lambda}(\hat{\Lambda}'\hat{\Lambda})^{-1}\hat{\Lambda}'`` removes the factor space from the cross-section dimension.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example test_panel
 # Stationary panel
 X = randn(80, 15)
 result = moon_perron_test(X; r=1)
@@ -266,10 +251,7 @@ Both p-values test the same null hypothesis using different pooling approaches. 
 
 The convenience function `panel_unit_root_summary` runs all three panel unit root tests (PANIC, Pesaran CIPS, Moon-Perron) and prints a consolidated report. This is the recommended entry point for pre-estimation diagnostics on panel data.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example test_panel
 X = randn(100, 20)
 panel_unit_root_summary(X; r=1)
 ```
@@ -284,9 +266,7 @@ After estimating a Panel VAR by GMM, three diagnostics validate the specificatio
 
 The following data generation pattern is used throughout this section:
 
-```julia
-using MacroEconometricModels, DataFrames, Random
-Random.seed!(42)
+```@example test_panel
 N, T_total, m_vars = 50, 20, 3
 data = zeros(N * T_total, m_vars)
 for i in 1:N
@@ -300,6 +280,7 @@ df = DataFrame(data, ["y1", "y2", "y3"])
 df.id = repeat(1:N, inner=T_total)
 df.time = repeat(1:T_total, outer=N)
 pd = xtset(df, :id, :time)
+nothing # hide
 ```
 
 ### Hansen J-Test
@@ -321,23 +302,21 @@ where:
 
 Under ``H_0`` (all moment conditions are valid), the J-statistic follows a chi-squared distribution. Rejection indicates that some instruments are invalid, pointing to misspecification or endogeneity problems.
 
-```julia
-using MacroEconometricModels, DataFrames, Random
-Random.seed!(42)
-N, T_total, m_vars = 50, 20, 3
-data = zeros(N * T_total, m_vars)
-for i in 1:N
-    mu = randn(m_vars) * 0.5
-    for t in 2:T_total
-        idx = (i-1)*T_total + t
-        data[idx, :] = mu + 0.5 * data[(i-1)*T_total + t - 1, :] + 0.2 * randn(m_vars)
+```@example test_panel
+N2, T2, m2 = 50, 20, 3
+data2 = zeros(N2 * T2, m2)
+for i in 1:N2
+    mu = randn(m2) * 0.5
+    for t in 2:T2
+        idx = (i-1)*T2 + t
+        data2[idx, :] = mu + 0.5 * data2[(i-1)*T2 + t - 1, :] + 0.2 * randn(m2)
     end
 end
-df = DataFrame(data, ["y1", "y2", "y3"])
-df.id = repeat(1:N, inner=T_total)
-df.time = repeat(1:T_total, outer=N)
-pd = xtset(df, :id, :time)
-model = estimate_pvar(pd, 2; steps=:twostep)
+df2 = DataFrame(data2, ["y1", "y2", "y3"])
+df2.id = repeat(1:N2, inner=T2)
+df2.time = repeat(1:T2, outer=N2)
+pd2 = xtset(df2, :id, :time)
+model = estimate_pvar(pd2, 2; steps=:twostep)
 j = pvar_hansen_j(model)
 report(j)
 ```
@@ -381,23 +360,7 @@ where:
 
 Lower values indicate a better-fitting specification. MMSC-BIC penalizes most heavily and tends to select parsimonious models.
 
-```julia
-using MacroEconometricModels, DataFrames, Random
-Random.seed!(42)
-N, T_total, m_vars = 50, 20, 3
-data = zeros(N * T_total, m_vars)
-for i in 1:N
-    mu = randn(m_vars) * 0.5
-    for t in 2:T_total
-        idx = (i-1)*T_total + t
-        data[idx, :] = mu + 0.5 * data[(i-1)*T_total + t - 1, :] + 0.2 * randn(m_vars)
-    end
-end
-df = DataFrame(data, ["y1", "y2", "y3"])
-df.id = repeat(1:N, inner=T_total)
-df.time = repeat(1:T_total, outer=N)
-pd = xtset(df, :id, :time)
-model = estimate_pvar(pd, 2; steps=:twostep)
+```@example test_panel
 mmsc = pvar_mmsc(model)
 report(mmsc)
 ```
@@ -406,23 +369,8 @@ report(mmsc)
 
 The `pvar_lag_selection` function estimates Panel VAR models for lag orders ``p = 1, \ldots, p_{max}`` and compares them using Andrews-Lu MMSC criteria. This automates the model comparison workflow and returns the optimal lag order under each criterion.
 
-```julia
-using MacroEconometricModels, DataFrames, Random
-Random.seed!(42)
-N, T_total, m_vars = 50, 20, 3
-data = zeros(N * T_total, m_vars)
-for i in 1:N
-    mu = randn(m_vars) * 0.5
-    for t in 2:T_total
-        idx = (i-1)*T_total + t
-        data[idx, :] = mu + 0.5 * data[(i-1)*T_total + t - 1, :] + 0.2 * randn(m_vars)
-    end
-end
-df = DataFrame(data, ["y1", "y2", "y3"])
-df.id = repeat(1:N, inner=T_total)
-df.time = repeat(1:T_total, outer=N)
-pd = xtset(df, :id, :time)
-sel = pvar_lag_selection(pd, 4)
+```@example test_panel
+sel = pvar_lag_selection(pd2, 4)
 report(sel)
 ```
 
@@ -434,20 +382,16 @@ The `table` field contains a ``p_{max} \times 4`` matrix with columns for the la
 
 This example demonstrates a full panel diagnostics workflow: test for unit roots with all three second-generation tests, estimate a Panel VAR, and validate the specification with GMM diagnostics.
 
-```julia
-using MacroEconometricModels, DataFrames, Random
-Random.seed!(42)
-
+```@example test_panel
 # --- Step 1: Generate panel data with a common factor ---
-N, T_obs = 30, 60
+N_ce, T_obs = 30, 60
 r_true = 1
 F = cumsum(randn(T_obs, r_true), dims=1)          # I(1) common factor
-Lambda = randn(N, r_true)                           # unit-specific loadings
-e = randn(T_obs, N) * 0.5                           # stationary idiosyncratic errors
+Lambda = randn(N_ce, r_true)                        # unit-specific loadings
+e = randn(T_obs, N_ce) * 0.5                        # stationary idiosyncratic errors
 X = F * Lambda' + e                                  # T x N panel
 
 # --- Step 2: PANIC test ---
-# Decompose into factor + idiosyncratic, test each
 panic_result = panic_test(X; r=1)
 report(panic_result)
 
@@ -463,34 +407,33 @@ report(mp_result)
 panel_unit_root_summary(X; r=1)
 
 # --- Step 6: Panel VAR estimation and specification tests ---
-# Generate a multivariate panel for PVAR
-N_pvar, T_pvar, m_vars = 50, 20, 3
-pvar_data = zeros(N_pvar * T_pvar, m_vars)
+N_pvar, T_pvar, m_v = 50, 20, 3
+pvar_data = zeros(N_pvar * T_pvar, m_v)
 for i in 1:N_pvar
-    mu = randn(m_vars) * 0.5
+    mu = randn(m_v) * 0.5
     for t in 2:T_pvar
         idx = (i-1)*T_pvar + t
-        pvar_data[idx, :] = mu + 0.5 * pvar_data[(i-1)*T_pvar + t - 1, :] + 0.2 * randn(m_vars)
+        pvar_data[idx, :] = mu + 0.5 * pvar_data[(i-1)*T_pvar + t - 1, :] + 0.2 * randn(m_v)
     end
 end
-df = DataFrame(pvar_data, ["y1", "y2", "y3"])
-df.id = repeat(1:N_pvar, inner=T_pvar)
-df.time = repeat(1:T_pvar, outer=N_pvar)
-pd = xtset(df, :id, :time)
+df_ce = DataFrame(pvar_data, ["y1", "y2", "y3"])
+df_ce.id = repeat(1:N_pvar, inner=T_pvar)
+df_ce.time = repeat(1:T_pvar, outer=N_pvar)
+pd_ce = xtset(df_ce, :id, :time)
 
 # Estimate PVAR(2) by two-step GMM
-model = estimate_pvar(pd, 2; steps=:twostep)
+model_ce = estimate_pvar(pd_ce, 2; steps=:twostep)
 
 # Hansen J-test: validate overidentifying restrictions
-j = pvar_hansen_j(model)
+j = pvar_hansen_j(model_ce)
 report(j)
 
 # MMSC criteria for this specification
-mmsc = pvar_mmsc(model)
+mmsc = pvar_mmsc(model_ce)
 report(mmsc)
 
 # Lag selection: compare p = 1, ..., 4
-sel = pvar_lag_selection(pd, 4)
+sel = pvar_lag_selection(pd_ce, 4)
 report(sel)
 ```
 

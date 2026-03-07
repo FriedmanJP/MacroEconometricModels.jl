@@ -9,13 +9,16 @@ Post-estimation specification testing validates the assumptions underlying stati
 - **Model Comparison**: Likelihood ratio (Wilks 1938) and Lagrange multiplier (Rao 1948) tests for nested models
 - **Panel VAR Diagnostics**: Hansen J-test, Andrews-Lu MMSC, and lag selection for GMM-estimated Panel VARs
 
+```@setup test_diag
+using MacroEconometricModels, Random
+Random.seed!(42)
+```
+
 ## Quick Start
 
 **Recipe 1: VAR stability and Granger causality**
 
-```julia
-using MacroEconometricModels
-
+```@example test_diag
 fred = load_example(:fred_md)
 Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
 Y = Y[all.(isfinite, eachrow(Y)), :]
@@ -31,14 +34,7 @@ results = granger_test_all(m)
 
 **Recipe 2: Normality test suite**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-m = estimate_var(Y, 2)
-
+```@example test_diag
 # Run all 7 normality tests at once
 suite = normality_test_suite(m)
 report(suite)
@@ -46,10 +42,7 @@ report(suite)
 
 **Recipe 3: ARCH-LM test**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example test_diag
 # Test for ARCH effects in a return series
 result = arch_lm_test(randn(500), 5)
 report(result)
@@ -57,13 +50,7 @@ report(result)
 
 **Recipe 4: LR test for lag selection**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
+```@example test_diag
 m1 = estimate_var(Y, 1)
 m2 = estimate_var(Y, 2)
 result = lr_test(m1, m2)
@@ -95,14 +82,7 @@ where:
 
 The stability condition requires ``|\lambda_i(F)| < 1`` for all eigenvalues ``\lambda_i``.
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-m = estimate_var(Y, 2)
-
+```@example test_diag
 result = is_stationary(m)
 report(result)
 
@@ -149,14 +129,7 @@ For the block test with ``m`` causing variables, ``df = p \times m``.
 !!! note "Technical Note"
     Granger causality is a **predictive** concept, not a causal one. Variable ``j`` Granger-causes variable ``i`` if lagged values of ``j`` contain information useful for forecasting ``i`` beyond what is already contained in the lags of ``i`` and all other variables in the VAR. This does not imply a structural causal mechanism.
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-m = estimate_var(Y, 2)
-
+```@example test_diag
 # Pairwise test: does FFR (var 3) Granger-cause INDPRO (var 1)?
 g = granger_test(m, 3, 1)
 report(g)
@@ -205,14 +178,7 @@ where:
 
 The `:component` method applies univariate Jarque-Bera tests to each standardized residual component and sums the statistics, providing per-variable diagnostics via the `components` and `component_pvalues` fields.
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-m = estimate_var(Y, 2)
-
+```@example test_diag
 # Multivariate JB test
 jb = jarque_bera_test(m; method=:multivariate)
 report(jb)
@@ -232,14 +198,7 @@ Mardia's tests (Mardia 1970) assess multivariate normality through skewness and 
 - `:kurtosis` --- tests ``H_0: b_{2,k} = k(k+2)``. The standardized statistic ``(b_{2,k} - k(k+2)) / \sqrt{8k(k+2)/T} \sim N(0,1)``
 - `:both` --- combines both tests into a single ``\chi^2`` statistic
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-m = estimate_var(Y, 2)
-
+```@example test_diag
 # Skewness, kurtosis, and combined
 ms = mardia_test(m; type=:skewness)
 mk = mardia_test(m; type=:kurtosis)
@@ -257,14 +216,7 @@ DH = \sum_{j=1}^{k} (z_{1,j}^2 + z_{2,j}^2) \sim \chi^2(2k)
 
 The transformation improves finite-sample size properties compared to the raw Jarque-Bera test, particularly for small samples.
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-m = estimate_var(Y, 2)
-
+```@example test_diag
 dh = doornik_hansen_test(m)
 report(dh)
 dh.components         # per-component DH statistics
@@ -285,14 +237,7 @@ where:
 - ``\beta`` is a bandwidth parameter chosen as a function of ``k`` and ``n``
 - The p-value uses a log-normal approximation under ``H_0``
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-m = estimate_var(Y, 2)
-
+```@example test_diag
 hz = henze_zirkler_test(m)
 report(hz)
 ```
@@ -301,14 +246,7 @@ report(hz)
 
 The `normality_test_suite` function runs all seven normality tests at once and returns a `NormalityTestSuite` with a consolidated display. The seven tests are: multivariate Jarque-Bera, component-wise Jarque-Bera, Mardia skewness, Mardia kurtosis, Mardia combined, Doornik-Hansen, and Henze-Zirkler.
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-m = estimate_var(Y, 2)
-
+```@example test_diag
 suite = normality_test_suite(m)
 report(suite)
 
@@ -370,10 +308,7 @@ where:
 
 The function accepts either a raw data vector (centering and squaring internally) or an `AbstractVolatilityModel` (using standardized residuals to test for remaining ARCH effects after model fitting).
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example test_diag
 # Test raw series for ARCH effects
 y = randn(500)
 result = arch_lm_test(y, 5)
@@ -398,18 +333,15 @@ where:
 - ``n`` is the sample size
 - ``K`` is the maximum lag
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example test_diag
 # Test for serial correlation in squared residuals
 z = randn(500)
 result = ljung_box_squared(z, 10)
 report(result)
 
 # Test GARCH standardized residuals
-g = estimate_garch(z)
-result2 = ljung_box_squared(g, 20)
+g_lb = estimate_garch(z)
+result2 = ljung_box_squared(g_lb, 20)
 report(result2)
 ```
 
@@ -457,24 +389,18 @@ The `lr_test` function works for any model pair implementing `loglikelihood`, `d
 | `lm_test` | ARCH x GARCH | Cross-type nesting (ARCH is GARCH with ``p=0``) |
 | `lm_test` | EGARCH x EGARCH, GJR x GJR | Same family, different orders |
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example test_diag
 # --- ARIMA model comparison ---
-y = cumsum(randn(200))
-ar2 = estimate_ar(diff(y), 2; method=:mle)
-ar4 = estimate_ar(diff(y), 4; method=:mle)
+y_mc = cumsum(randn(200))
+ar2 = estimate_ar(diff(y_mc), 2; method=:mle)
+ar4 = estimate_ar(diff(y_mc), 4; method=:mle)
 report(lr_test(ar2, ar4))
 report(lm_test(ar2, ar4))
 
 # --- VAR lag order comparison ---
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-m1 = estimate_var(Y, 1)
-m2 = estimate_var(Y, 2)
-lr_result = lr_test(m1, m2)
+m1_mc = estimate_var(Y, 1)
+m2_mc = estimate_var(Y, 2)
+lr_result = lr_test(m1_mc, m2_mc)
 report(lr_result)
 
 # --- GARCH order comparison ---
@@ -532,22 +458,21 @@ where:
 
 A significant J-statistic indicates misspecification: either some instruments are invalid or the model is incorrectly specified. The test applies only to GMM-estimated Panel VARs (not FE-OLS).
 
-```julia
-using MacroEconometricModels, Random, DataFrames
-Random.seed!(42)
+```@example test_diag
+using DataFrames  # hide
 
 # Simulate panel data
-N, T_obs = 20, 50
-df = DataFrame(
-    id = repeat(1:N, inner=T_obs),
-    t = repeat(1:T_obs, outer=N),
-    y1 = randn(N * T_obs),
-    y2 = randn(N * T_obs),
+N_pd, T_pd = 20, 50
+df_pd = DataFrame(
+    id = repeat(1:N_pd, inner=T_pd),
+    t = repeat(1:T_pd, outer=N_pd),
+    y1 = randn(N_pd * T_pd),
+    y2 = randn(N_pd * T_pd),
 )
-pd = xtset(df, :id, :t)
-m = estimate_pvar(pd, 2)
+pd = xtset(df_pd, :id, :t)
+m_pd = estimate_pvar(pd, 2)
 
-j = pvar_hansen_j(m)
+j = pvar_hansen_j(m_pd)
 report(j)
 ```
 
@@ -565,21 +490,8 @@ The Andrews-Lu (2001) model and moment selection criteria extend standard inform
 
 where ``q - k`` is the number of overidentifying restrictions and ``n`` is the total number of observations. Lower values indicate better model-moment fit.
 
-```julia
-using MacroEconometricModels, Random, DataFrames
-Random.seed!(42)
-
-N, T_obs = 20, 50
-df = DataFrame(
-    id = repeat(1:N, inner=T_obs),
-    t = repeat(1:T_obs, outer=N),
-    y1 = randn(N * T_obs),
-    y2 = randn(N * T_obs),
-)
-pd = xtset(df, :id, :t)
-m = estimate_pvar(pd, 2)
-
-mmsc = pvar_mmsc(m)
+```@example test_diag
+mmsc = pvar_mmsc(m_pd)
 report(mmsc)
 ```
 
@@ -587,19 +499,7 @@ report(mmsc)
 
 The `pvar_lag_selection` function estimates Panel VARs for lag orders ``p = 1, \ldots, p_{\max}`` and selects the optimal lag based on MMSC criteria.
 
-```julia
-using MacroEconometricModels, Random, DataFrames
-Random.seed!(42)
-
-N, T_obs = 20, 50
-df = DataFrame(
-    id = repeat(1:N, inner=T_obs),
-    t = repeat(1:T_obs, outer=N),
-    y1 = randn(N * T_obs),
-    y2 = randn(N * T_obs),
-)
-pd = xtset(df, :id, :t)
-
+```@example test_diag
 sel = pvar_lag_selection(pd, 4)
 report(sel)
 ```
@@ -610,17 +510,7 @@ report(sel)
 
 A full post-estimation diagnostic workflow for a VAR model estimated on FRED-MD data:
 
-```julia
-using MacroEconometricModels
-
-# Load and prepare data
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-
-# Estimate VAR(2)
-m = estimate_var(Y, 2)
-
+```@example test_diag
 # --- Step 1: Check stability ---
 stat = is_stationary(m)
 report(stat)
@@ -644,15 +534,15 @@ for j in 1:3
 end
 
 # --- Step 5: Compare lag orders ---
-m1 = estimate_var(Y, 1)
-m3 = estimate_var(Y, 3)
+m1_ce = estimate_var(Y, 1)
+m3_ce = estimate_var(Y, 3)
 
 # Test VAR(1) vs VAR(2)
-lr12 = lr_test(m1, m)
+lr12 = lr_test(m1_ce, m)
 report(lr12)
 
 # Test VAR(2) vs VAR(3)
-lr23 = lr_test(m, m3)
+lr23 = lr_test(m, m3_ce)
 report(lr23)
 ```
 

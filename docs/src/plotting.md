@@ -2,13 +2,16 @@
 
 MacroEconometricModels.jl includes a zero-dependency visualization system that renders interactive HTML/SVG charts using inline [D3.js](https://d3js.org/) v7. The unified `plot_result()` function dispatches on 41 result types, producing self-contained HTML documents with interactive tooltips.
 
+```@setup plotting
+using MacroEconometricModels, Random
+Random.seed!(42)
+```
+
 ## Quick Start
 
 **Recipe 1: Plot and save**
 
 ```julia
-using MacroEconometricModels
-
 fred = load_example(:fred_md)
 Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "UNRATE", "CPIAUCSL"]]))
 Y = Y[all.(isfinite, eachrow(Y)), :]
@@ -21,8 +24,6 @@ save_plot(p, "irf_plot.html")
 **Recipe 2: Display in browser**
 
 ```julia
-using MacroEconometricModels
-
 fred = load_example(:fred_md)
 d = fred[:, ["INDPRO", "UNRATE", "CPIAUCSL"]]
 p = plot_result(d)

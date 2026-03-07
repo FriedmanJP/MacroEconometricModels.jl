@@ -7,14 +7,16 @@ This page covers tests for parameter instability and structural change in time s
 - **Factor model break tests**: Three methods for detecting instability in factor loadings or the number of factors --- Breitung-Eickmeier (2011) CUSUM, Chen-Dolado-Gonzalo (2014) eigenvalue ratio, and Han-Inoue (2015) sup-Wald.
 - **Gregory-Hansen (1996)**: Tests for cointegration allowing a single structural break in the cointegrating relationship. Three models (level shift, level + trend, regime shift) and three test statistics (ADF*, Zt*, Za*).
 
+```@setup test_breaks
+using MacroEconometricModels, Random
+Random.seed!(42)
+```
+
 ## Quick Start
 
 **Recipe 1: Andrews SupF test on a regression**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example test_breaks
 # Linear regression with a break in the slope at t=100
 X = hcat(ones(200), randn(200))
 y = X * [1.0, 2.0] + randn(200) * 0.5
@@ -26,10 +28,7 @@ report(result)
 
 **Recipe 2: Bai-Perron multiple break detection**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example test_breaks
 # Three regimes with different intercepts
 T_len = 300
 X = ones(T_len, 1)
@@ -41,10 +40,7 @@ report(result)
 
 **Recipe 3: Factor break test**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example test_breaks
 # Panel with 50 variables and 3 factors
 X = randn(200, 50)
 result = factor_break_test(X, 3; method=:breitung_eickmeier)
@@ -53,10 +49,7 @@ report(result)
 
 **Recipe 4: Gregory-Hansen cointegration test with regime shift**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example test_breaks
 # Two cointegrated series with a regime shift at t=100
 T_len = 200
 x = cumsum(randn(T_len))
@@ -134,10 +127,7 @@ The **supremum** functional takes the maximum statistic over all candidate dates
 !!! note "Technical Note"
     P-values are computed by interpolation from Hansen (1997) critical value tables, which are tabulated by the number of parameters ``k`` and the functional type. Critical values depend on the trimming fraction ``\pi`` and are pre-computed for the standard ``\pi = 0.15`` setting. The asymptotic distribution under the null is a functional of a ``k``-dimensional Brownian bridge process.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example test_breaks
 # Generate data with a break in slope at t=100
 T_len = 200
 X = hcat(ones(T_len), randn(T_len))
@@ -229,10 +219,7 @@ where:
 !!! note "Technical Note"
     The dynamic programming algorithm has complexity ``O(T^2 \cdot m_{\max})``, where ``T`` is the sample size and ``m_{\max}`` is the maximum number of breaks. A segment SSR matrix is pre-computed and reused across all candidate break configurations. Each segment requires at least ``h = \max(k+1, \lceil \pi T \rceil)`` observations, where ``\pi`` is the trimming fraction.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example test_breaks
 # Generate data with 2 breaks: regimes at t=1-100, 101-200, 201-300
 T_len = 300
 X = hcat(ones(T_len), randn(T_len))
@@ -320,10 +307,7 @@ S_t = \sqrt{t / T} \cdot \frac{\| \text{vec}(\hat{\Lambda}_t - \hat{\Lambda}_T) 
 
 where ``\hat{\sigma}^2`` is the estimated loading regression variance. The test statistic is ``\sup_t S_t`` over the trimmed range. Under the null of stable loadings, the statistic converges to the supremum of a Bessel process. Rejection indicates that the factor-variable relationships shift at some point in the sample.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example test_breaks
 # Matrix dispatch
 X = randn(200, 50)
 result = factor_break_test(X, 3; method=:breitung_eickmeier)
@@ -351,10 +335,7 @@ where ``\lambda_1 \geq \lambda_2 \geq \cdots`` are the ordered eigenvalues of th
 
 This test does not require specifying the number of factors ``r`` in advance, making it useful as a preliminary diagnostic.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example test_breaks
 # Chen-Dolado-Gonzalo does not require specifying r
 X = randn(200, 50)
 result = factor_break_test(X; method=:chen_dolado_gonzalo)
@@ -382,10 +363,7 @@ where:
 
 The cross-sectional averaging improves power when many loadings shift simultaneously. P-values use the Andrews (1993) sup-Wald critical values with ``k = r`` degrees of freedom.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example test_breaks
 # Han-Inoue requires specifying the number of factors
 X = randn(200, 50)
 result = factor_break_test(X, 3; method=:han_inoue)
@@ -469,10 +447,7 @@ Three test statistics are computed from the residuals ``\hat{e}_t`` at each brea
 
 Each statistic selects its own optimal break date. The primary statistic is ADF* (most commonly reported).
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example test_breaks
 # Two cointegrated series with a regime shift at t=100
 T_len = 200
 x = cumsum(randn(T_len))
@@ -524,10 +499,7 @@ report(result)
 
 This example demonstrates a complete structural break analysis workflow: detecting a single break with Andrews, finding multiple breaks with Bai-Perron, testing factor loading stability, and checking for cointegration with a regime shift.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example test_breaks
 # =========================================================================
 # Part 1: Andrews single break test
 # =========================================================================
