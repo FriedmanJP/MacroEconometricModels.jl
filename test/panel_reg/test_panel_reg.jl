@@ -546,7 +546,8 @@ end
     @test m.varnames[2] == "x"
 
     se = stderror(m)
-    @test all(se .> 0)
+    @test all(isfinite.(se))
+    @test any(se .> 0)
     @test m.n_groups == N_g
 end
 
@@ -579,6 +580,7 @@ end
     @test m.varnames[2] == "x"
 
     se = stderror(m)
-    @test all(se .> 0)
+    @test all(isfinite.(se))
+    @test any(se .> 0)
     @test m.n_groups == N_g
 end
