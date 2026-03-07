@@ -494,6 +494,51 @@ end
     @test length(hd.shock_names) == 1
 end
 
+# =============================================================================
+# Integration test
+# =============================================================================
+
+@testset "Integration: smoother → HD → accessors → report" begin
+    spec = @dsge begin
+        parameters: rho_y = 0.8, rho_pi = 0.5, rho_r = 0.6
+        endogenous: y, pi_var, r
+        exogenous: eps_y, eps_pi, eps_r
+        y[t] = rho_y * y[t-1] + eps_y[t]
+        pi_var[t] = rho_pi * pi_var[t-1] + eps_pi[t]
+        r[t] = rho_r * r[t-1] + eps_r[t]
+    end
+    sol = solve(spec)
+
+    T_obs = 50
+    rng = Random.MersenneTwister(99)
+    sim_data = simulate(sol, T_obs; rng=rng)
+    observables = [:y, :pi_var, :r]
+
+    hd = historical_decomposition(sol, sim_data, observables)
+
+    # Accessor functions
+    c = contribution(hd, 1, 1)
+    @test length(c) == T_obs
+    c_named = contribution(hd, "y", "eps_y")
+    @test c_named == c
+
+    ts = total_shock_contribution(hd, 1)
+    @test length(ts) == T_obs
+
+    @test verify_decomposition(hd; tol=0.1)
+
+    # Report
+    io = IOBuffer()
+    show(io, hd)
+    output = String(take!(io))
+    @test occursin("Historical Decomposition", output)
+
+    # point_estimate interface
+    pe = point_estimate(hd)
+    @test size(pe) == (T_obs, 3, 3)
+    @test has_uncertainty(hd) == false
+end
+
 @testset "KalmanSmootherResult show method" begin
     spec = @dsge begin
         parameters: rho = 0.8
