@@ -335,4 +335,99 @@ end
     end
 end
 
+# =============================================================================
+# Bayesian DSGE HD tests
+# =============================================================================
+
+@testset "Bayesian DSGE HD — mode_only" begin
+    spec = @dsge begin
+        parameters: rho_y = 0.8, rho_pi = 0.5, rho_r = 0.6
+        endogenous: y, pi_var, r
+        exogenous: eps_y, eps_pi, eps_r
+        y[t] = rho_y * y[t-1] + eps_y[t]
+        pi_var[t] = rho_pi * pi_var[t-1] + eps_pi[t]
+        r[t] = rho_r * r[t-1] + eps_r[t]
+    end
+    sol = solve(spec)
+    observables = [:y, :pi_var, :r]
+    Z, d, H_mat = MacroEconometricModels._build_observation_equation(spec, observables, nothing)
+    ss = MacroEconometricModels._build_state_space(sol, Z, d, H_mat)
+
+    n_draws = 10
+    param_names = [:rho_y, :rho_pi, :rho_r]
+    theta_draws = repeat([0.8, 0.5, 0.6]', n_draws, 1)
+    theta_draws .+= 0.01 * randn(Random.MersenneTwister(1), n_draws, 3)
+    theta_draws = clamp.(theta_draws, 0.01, 0.99)
+
+    prior = MacroEconometricModels.DSGEPrior{Float64}(
+        param_names,
+        [MacroEconometricModels.Distributions.Uniform(0.0, 1.0) for _ in 1:3],
+        zeros(3), ones(3)
+    )
+
+    post = BayesianDSGE{Float64}(
+        theta_draws, zeros(n_draws), param_names, prior,
+        0.0, :smc, 0.5, Float64[], Float64[],
+        spec, sol, ss
+    )
+
+    T_obs = 40
+    rng = Random.MersenneTwister(42)
+    sim_data = simulate(sol, T_obs; rng=rng)
+
+    hd = historical_decomposition(post, sim_data, observables; mode_only=true)
+    @test hd isa HistoricalDecomposition{Float64}
+    @test hd.method == :dsge_bayes_mode
+    @test verify_decomposition(hd; tol=0.1)
+end
+
+@testset "Bayesian DSGE HD — full posterior" begin
+    spec = @dsge begin
+        parameters: rho_y = 0.8, rho_pi = 0.5, rho_r = 0.6
+        endogenous: y, pi_var, r
+        exogenous: eps_y, eps_pi, eps_r
+        y[t] = rho_y * y[t-1] + eps_y[t]
+        pi_var[t] = rho_pi * pi_var[t-1] + eps_pi[t]
+        r[t] = rho_r * r[t-1] + eps_r[t]
+    end
+    sol = solve(spec)
+    observables = [:y, :pi_var, :r]
+    Z, d, H_mat = MacroEconometricModels._build_observation_equation(spec, observables, nothing)
+    ss = MacroEconometricModels._build_state_space(sol, Z, d, H_mat)
+
+    n_draws = 20
+    param_names = [:rho_y, :rho_pi, :rho_r]
+    theta_draws = repeat([0.8, 0.5, 0.6]', n_draws, 1)
+    theta_draws .+= 0.02 * randn(Random.MersenneTwister(2), n_draws, 3)
+    theta_draws = clamp.(theta_draws, 0.01, 0.99)
+
+    prior = MacroEconometricModels.DSGEPrior{Float64}(
+        param_names,
+        [MacroEconometricModels.Distributions.Uniform(0.0, 1.0) for _ in 1:3],
+        zeros(3), ones(3)
+    )
+
+    post = BayesianDSGE{Float64}(
+        theta_draws, zeros(n_draws), param_names, prior,
+        0.0, :smc, 0.5, Float64[], Float64[],
+        spec, sol, ss
+    )
+
+    T_obs = 30
+    rng = Random.MersenneTwister(42)
+    sim_data = simulate(sol, T_obs; rng=rng)
+
+    hd = historical_decomposition(post, sim_data, observables;
+                                   n_draws=10, quantiles=[0.16, 0.5, 0.84])
+    @test hd isa BayesianHistoricalDecomposition{Float64}
+    @test size(hd.quantiles, 4) == 3
+    @test hd.method == :dsge_bayes
+    @test length(hd.quantile_levels) == 3
+    # Point estimate dimensions
+    @test size(hd.point_estimate) == (T_obs, 3, 3)
+    @test size(hd.initial_point_estimate) == (T_obs, 3)
+    @test size(hd.shocks_point_estimate) == (T_obs, 3)
+    @test size(hd.actual) == (T_obs, 3)
+end
+
 end  # outer testset

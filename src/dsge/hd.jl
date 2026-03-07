@@ -25,7 +25,7 @@ References:
   time series. JASA, 99(465), 156-168.
 """
 
-using LinearAlgebra, Random
+using LinearAlgebra, Random, Statistics
 
 """
     historical_decomposition(sol::DSGESolution{T}, data::AbstractMatrix,
@@ -331,5 +331,175 @@ function historical_decomposition(sol::PerturbationSolution{T}, data::AbstractMa
     return HistoricalDecomposition{T}(
         contributions, initial_conditions, actual, shocks_mat, T_obs,
         var_names, shock_names, :dsge_nonlinear
+    )
+end
+
+# =============================================================================
+# Bayesian DSGE historical decomposition — posterior credible bands
+# =============================================================================
+
+"""
+    historical_decomposition(post::BayesianDSGE{T}, data::AbstractMatrix,
+                              observables::Vector{Symbol};
+                              mode_only::Bool=false,
+                              n_draws::Int=200,
+                              quantiles::Vector{<:Real}=T[0.16, 0.5, 0.84],
+                              measurement_error=nothing,
+                              states::Symbol=:observables) where {T}
+
+Compute Bayesian historical decomposition for a DSGE model with posterior credible bands.
+
+For each of `n_draws` subsampled posterior parameter draws, re-solves the model and
+computes the historical decomposition. Reports pointwise posterior mean and quantile bands.
+
+# Arguments
+- `post::BayesianDSGE{T}`: Bayesian DSGE estimation result
+- `data::AbstractMatrix`: T_obs × n_endog matrix of data in LEVELS
+- `observables::Vector{Symbol}`: Which endogenous variables are observed
+
+# Keyword Arguments
+- `mode_only::Bool=false`: If `true`, use posterior mode solution only (fast path),
+  returning `HistoricalDecomposition{T}` with `method=:dsge_bayes_mode`
+- `n_draws::Int=200`: Number of posterior draws to subsample for full Bayesian HD
+- `quantiles::Vector{<:Real}=[0.16, 0.5, 0.84]`: Quantile levels for credible bands
+- `measurement_error`: Vector of measurement error std devs, or `nothing`
+- `states::Symbol=:observables`: Decompose `:observables` (default) or `:all` states
+
+# Returns
+- If `mode_only=true`: `HistoricalDecomposition{T}` with `method=:dsge_bayes_mode`
+- If `mode_only=false`: `BayesianHistoricalDecomposition{T}` with `method=:dsge_bayes`
+
+# References
+- Herbst, E. & Schorfheide, F. (2015). *Bayesian Estimation of DSGE Models*.
+  Princeton University Press, Ch. 6.
+"""
+function historical_decomposition(post::BayesianDSGE{T}, data::AbstractMatrix,
+                                   observables::Vector{Symbol};
+                                   mode_only::Bool=false,
+                                   n_draws::Int=200,
+                                   quantiles::Vector{<:Real}=T[0.16, 0.5, 0.84],
+                                   measurement_error=nothing,
+                                   states::Symbol=:observables) where {T<:AbstractFloat}
+
+    # =========================================================================
+    # Fast path: mode_only — use posterior mode solution directly
+    # =========================================================================
+    if mode_only
+        sol = post.solution
+        if sol isa DSGESolution
+            hd = historical_decomposition(sol, data, observables;
+                                           states=states, measurement_error=measurement_error)
+        elseif sol isa PerturbationSolution
+            hd = historical_decomposition(sol, data, observables;
+                                           states=states, measurement_error=measurement_error)
+        else
+            error("Unsupported solution type $(typeof(sol)) for mode_only HD")
+        end
+        # Re-wrap with Bayesian mode method tag
+        return HistoricalDecomposition{T}(
+            hd.contributions, hd.initial_conditions, hd.actual, hd.shocks,
+            hd.T_eff, hd.variables, hd.shock_names, :dsge_bayes_mode
+        )
+    end
+
+    # =========================================================================
+    # Full Bayesian: loop over posterior draws
+    # =========================================================================
+    spec = post.spec
+    n_draws_total = size(post.theta_draws, 1)
+    n_sim = min(n_draws, n_draws_total)
+
+    # Evenly spaced subsampling
+    draw_indices = if n_sim >= n_draws_total
+        collect(1:n_draws_total)
+    else
+        step = n_draws_total / n_sim
+        [round(Int, (i - 0.5) * step) + 1 for i in 1:n_sim]
+    end
+    draw_indices = clamp.(draw_indices, 1, n_draws_total)
+
+    # Get reference dimensions from mode solution
+    ref_hd = historical_decomposition(post.solution, data, observables;
+                                       states=states, measurement_error=measurement_error)
+    T_obs = ref_hd.T_eff
+    n_vars = length(ref_hd.variables)
+    n_shocks = length(ref_hd.shock_names)
+    var_names = ref_hd.variables
+    shock_names = ref_hd.shock_names
+
+    # Storage for all draws
+    all_contributions = Vector{Array{T,3}}()
+    all_initial = Vector{Matrix{T}}()
+    all_shocks = Vector{Matrix{T}}()
+
+    for idx in draw_indices
+        theta = Vector{T}(post.theta_draws[idx, :])
+        try
+            _suppress_warnings() do
+                sol, _ = _build_solution_at_theta(spec, post.param_names, theta,
+                                                   observables, measurement_error,
+                                                   :gensys, NamedTuple())
+                if sol isa DSGESolution && !is_determined(sol)
+                    return  # skip indeterminate
+                end
+
+                hd_i = historical_decomposition(sol, data, observables;
+                                                 states=states,
+                                                 measurement_error=measurement_error)
+
+                push!(all_contributions, hd_i.contributions)
+                push!(all_initial, hd_i.initial_conditions)
+                push!(all_shocks, hd_i.shocks)
+            end
+        catch
+            continue
+        end
+    end
+
+    n_valid = length(all_contributions)
+    n_valid == 0 && error("All posterior draws failed to produce valid historical decompositions")
+
+    # =========================================================================
+    # Compute quantiles and point estimates across valid draws
+    # =========================================================================
+    q_vec = T.(quantiles)
+    nq = length(q_vec)
+
+    contrib_q = zeros(T, T_obs, n_vars, n_shocks, nq)
+    contrib_m = zeros(T, T_obs, n_vars, n_shocks)
+    initial_q = zeros(T, T_obs, n_vars, nq)
+    initial_m = zeros(T, T_obs, n_vars)
+    shocks_m = zeros(T, T_obs, n_shocks)
+
+    # Reconstruct actual from reference
+    actual = ref_hd.actual
+
+    @inbounds for t in 1:T_obs
+        for i in 1:n_vars
+            # Initial conditions across draws
+            d_init = T[all_initial[s][t, i] for s in 1:n_valid]
+            initial_m[t, i] = Statistics.mean(d_init)
+            for (qi, q) in enumerate(q_vec)
+                initial_q[t, i, qi] = Statistics.quantile(d_init, q)
+            end
+
+            for j in 1:n_shocks
+                d_contrib = T[all_contributions[s][t, i, j] for s in 1:n_valid]
+                contrib_m[t, i, j] = Statistics.mean(d_contrib)
+                for (qi, q) in enumerate(q_vec)
+                    contrib_q[t, i, j, qi] = Statistics.quantile(d_contrib, q)
+                end
+            end
+        end
+
+        for j in 1:n_shocks
+            d_shock = T[all_shocks[s][t, j] for s in 1:n_valid]
+            shocks_m[t, j] = Statistics.mean(d_shock)
+        end
+    end
+
+    return BayesianHistoricalDecomposition{T}(
+        contrib_q, contrib_m, initial_q, initial_m, shocks_m, actual, T_obs,
+        var_names, shock_names, q_vec, :dsge_bayes
     )
 end
