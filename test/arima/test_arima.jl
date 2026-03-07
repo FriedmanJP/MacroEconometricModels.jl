@@ -924,3 +924,57 @@ end
     fc2 = forecast(m, 5; conf_level=Float32(0.9))
     @test fc2.conf_level ≈ Float32(0.9) atol=1e-6
 end
+
+# =============================================================================
+# Stepwise auto_arima (Hyndman-Khandakar 2008)
+# =============================================================================
+
+@testset "auto_arima stepwise search" begin
+    @testset "stepwise=true (default) returns valid model" begin
+        Random.seed!(7001)
+        y = randn(200)
+        m = auto_arima(y; max_p=4, max_q=4, max_d=0)
+        @test m isa MacroEconometricModels.AbstractARIMAModel
+        @test ar_order(m) <= 4
+        @test ma_order(m) <= 4
+    end
+
+    @testset "stepwise=false falls back to grid search" begin
+        Random.seed!(7002)
+        y = randn(150)
+        m = auto_arima(y; max_p=2, max_q=2, max_d=0, stepwise=false)
+        @test m isa MacroEconometricModels.AbstractARIMAModel
+    end
+
+    @testset "stepwise finds same or comparable model to grid" begin
+        Random.seed!(7003)
+        y = randn(200)
+        m_step = auto_arima(y; max_p=3, max_q=3, max_d=0, stepwise=true, criterion=:bic)
+        m_grid = auto_arima(y; max_p=3, max_q=3, max_d=0, stepwise=false, criterion=:bic)
+        # Stepwise may not find the exact same model, but BIC should be close
+        @test m_step.bic < m_grid.bic + 10.0
+    end
+
+    @testset "stepwise with d > 0" begin
+        Random.seed!(7004)
+        y = cumsum(randn(200))
+        m = auto_arima(y; max_p=3, max_q=3, max_d=2, stepwise=true)
+        @test m isa MacroEconometricModels.AbstractARIMAModel
+    end
+
+    @testset "stepwise with criterion=:aic" begin
+        Random.seed!(7005)
+        y = randn(150)
+        m = auto_arima(y; max_p=3, max_q=3, max_d=0, stepwise=true, criterion=:aic)
+        @test m isa MacroEconometricModels.AbstractARIMAModel
+    end
+
+    @testset "stepwise with small bounds max_p=1, max_q=0" begin
+        Random.seed!(7006)
+        y = randn(100)
+        m = auto_arima(y; max_p=1, max_q=0, max_d=0, stepwise=true)
+        @test m isa MacroEconometricModels.AbstractARIMAModel
+        @test ar_order(m) <= 1
+        @test ma_order(m) == 0
+    end
+end

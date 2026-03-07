@@ -120,7 +120,7 @@ select_arima_order(y::AbstractVector, max_p::Int, max_q::Int; kwargs...) =
 # =============================================================================
 
 """
-    auto_arima(y; max_p=5, max_q=5, max_d=2, criterion=:bic, method=:css_mle)
+    auto_arima(y; max_p=5, max_q=5, max_d=2, criterion=:bic, method=:css_mle, stepwise=true)
 
 Automatically select and fit the best ARIMA model.
 
@@ -134,6 +134,8 @@ For integration order d, uses unit root test heuristics.
 - `max_d`: Maximum integration order (default 2)
 - `criterion`: Selection criterion (:aic or :bic)
 - `method`: Estimation method
+- `stepwise`: If `true` (default), use Hyndman-Khandakar (2008) stepwise search.
+  If `false`, use exhaustive grid search over all (p,q) combinations.
 
 # Returns
 Best fitted ARIMAModel or ARMAModel.
@@ -144,17 +146,26 @@ y = cumsum(randn(200))
 model = auto_arima(y)
 println(model)
 ```
+
+# References
+- Hyndman, R. J., & Khandakar, Y. (2008). Automatic time series forecasting:
+  the forecast package for R. *Journal of Statistical Software* 27(3): 1–22.
 """
 function auto_arima(y::AbstractVector{T}; max_p::Int=5, max_q::Int=5, max_d::Int=2,
                     criterion::Symbol=:bic, method::Symbol=:css_mle,
-                    include_intercept::Bool=true) where {T<:AbstractFloat}
+                    include_intercept::Bool=true, stepwise::Bool=true) where {T<:AbstractFloat}
     y_vec = Vector{T}(y)
 
     # Simple heuristic for d: difference until series appears stationary
     # (based on variance reduction)
     d_best = _select_d_heuristic(y_vec, max_d)
 
-    # Grid search for p and q
+    if stepwise
+        return _stepwise_arima(y_vec, max_p, max_q, d_best; criterion=criterion,
+                               method=method, include_intercept=include_intercept)
+    end
+
+    # Exhaustive grid search fallback
     result = select_arima_order(y_vec, max_p, max_q; criterion=criterion, d=d_best,
                                 method=method, include_intercept=include_intercept)
 
@@ -162,6 +173,95 @@ function auto_arima(y::AbstractVector{T}; max_p::Int=5, max_q::Int=5, max_d::Int
 end
 
 auto_arima(y::AbstractVector; kwargs...) = auto_arima(Float64.(y); kwargs...)
+
+# =============================================================================
+# Stepwise Search (Hyndman & Khandakar, 2008)
+# =============================================================================
+
+"""
+    _stepwise_arima(y, max_p, max_q, d; criterion, method, include_intercept) -> AbstractARIMAModel
+
+Stepwise model selection following Hyndman & Khandakar (2008).
+
+Starts from seed models (0,0), (1,0), (0,1), (2,2), then iteratively explores
+neighbors that differ by ±1 in p or q until no improvement is found.
+"""
+function _stepwise_arima(y::Vector{T}, max_p::Int, max_q::Int, d::Int;
+                         criterion::Symbol=:bic, method::Symbol=:css_mle,
+                         include_intercept::Bool=true) where {T<:AbstractFloat}
+    y_work = d > 0 ? _difference(y, d) : y
+
+    # Cache: (p,q) => (ic_value, model)
+    cache = Dict{Tuple{Int,Int}, Tuple{T, AbstractARIMAModel}}()
+
+    function _fit_and_cache(p::Int, q::Int)
+        haskey(cache, (p, q)) && return cache[(p, q)]
+        p < 0 || q < 0 || p > max_p || q > max_q && return nothing
+        try
+            model = if d == 0
+                estimate_arma(y_work, p, q; method=method, include_intercept=include_intercept)
+            else
+                estimate_arima(y, p, d, q; method=method, include_intercept=include_intercept)
+            end
+            ic = criterion == :aic ? model.aic : model.bic
+            cache[(p, q)] = (ic, model)
+            return (ic, model)
+        catch
+            return nothing
+        end
+    end
+
+    # Seed models: (0,0), (1,0), (0,1), (2,2)
+    seeds = [(0, 0), (1, 0), (0, 1), (2, 2)]
+    # Filter seeds within bounds
+    filter!(s -> s[1] <= max_p && s[2] <= max_q, seeds)
+
+    best_ic = T(Inf)
+    best_model = nothing
+    best_pq = (0, 0)
+
+    for (p, q) in seeds
+        result = _fit_and_cache(p, q)
+        if result !== nothing && result[1] < best_ic
+            best_ic = result[1]
+            best_model = result[2]
+            best_pq = (p, q)
+        end
+    end
+
+    if best_model === nothing
+        throw(ArgumentError(
+            "All seed ARMA models failed to fit. " *
+            "Check that the input series has sufficient length, no NaN/Inf values, " *
+            "and adequate variation."))
+    end
+
+    # Stepwise search: explore ±1 neighbors until convergence
+    improved = true
+    while improved
+        improved = false
+        p0, q0 = best_pq
+
+        neighbors = [
+            (p0 - 1, q0), (p0 + 1, q0),     # vary p
+            (p0, q0 - 1), (p0, q0 + 1),     # vary q
+            (p0 - 1, q0 - 1), (p0 + 1, q0 + 1),  # vary both
+        ]
+
+        for (p, q) in neighbors
+            (p < 0 || q < 0 || p > max_p || q > max_q) && continue
+            result = _fit_and_cache(p, q)
+            if result !== nothing && result[1] < best_ic
+                best_ic = result[1]
+                best_model = result[2]
+                best_pq = (p, q)
+                improved = true
+            end
+        end
+    end
+
+    best_model
+end
 
 """
     _select_d_heuristic(y, max_d) -> Int
