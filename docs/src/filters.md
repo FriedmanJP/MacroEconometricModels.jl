@@ -10,29 +10,24 @@
 
 All results support unified `trend()` and `cycle()` accessors, `report()` for tabular output, and `plot_result()` for interactive D3.js visualization.
 
+```@setup filters
+using MacroEconometricModels, Statistics
+fred = load_example(:fred_md)
+y = filter(isfinite, log.(fred[:, "INDPRO"]))
+```
+
 ## Quick Start
 
 **Recipe 1: HP filter on monthly data**
 
-```julia
-using MacroEconometricModels
-
-# Log industrial production — a trending I(1) monthly series
-fred = load_example(:fred_md)
-y = filter(isfinite, log.(fred[:, "INDPRO"]))
-
+```@example filters
 hp = hp_filter(y; lambda=129600.0)
 report(hp)
 ```
 
 **Recipe 2: Hamilton regression filter**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-y = filter(isfinite, log.(fred[:, "INDPRO"]))
-
+```@example filters
 # Monthly parameters: 2-year horizon (h=24), 12 monthly lags
 ham = hamilton_filter(y; h=24, p=12)
 report(ham)
@@ -40,24 +35,14 @@ report(ham)
 
 **Recipe 3: Beveridge-Nelson decomposition**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-y = filter(isfinite, log.(fred[:, "INDPRO"]))
-
+```@example filters
 bn = beveridge_nelson(y)
 report(bn)
 ```
 
 **Recipe 4: Baxter-King band-pass filter**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-y = filter(isfinite, log.(fred[:, "INDPRO"]))
-
+```@example filters
 # Monthly business cycle band: 18–96 months (1.5–8 years), K=36
 bk = baxter_king(y; pl=18, pu=96, K=36)
 report(bk)
@@ -65,12 +50,7 @@ report(bk)
 
 **Recipe 5: Boosted HP with BIC stopping**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-y = filter(isfinite, log.(fred[:, "INDPRO"]))
-
+```@example filters
 bhp = boosted_hp(y; lambda=129600.0, stopping=:BIC)
 report(bhp)
 ```
@@ -78,11 +58,6 @@ report(bhp)
 **Recipe 6: Visualize any filter result**
 
 ```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-y = filter(isfinite, log.(fred[:, "INDPRO"]))
-
 hp = hp_filter(y; lambda=129600.0)
 p = plot_result(hp)
 save_plot(p, "hp_filter.html")
@@ -119,17 +94,13 @@ The smoothing parameter must match the data frequency. Ravn and Uhlig (2002) pro
 | Quarterly | 1,600 |
 | Monthly | 129,600 |
 
-```julia
-using MacroEconometricModels
-
-# Log industrial production (monthly)
-fred = load_example(:fred_md)
-y = filter(isfinite, log.(fred[:, "INDPRO"]))
-
+```@example filters
 # Monthly smoothing parameter
 hp = hp_filter(y; lambda=129600.0)
 report(hp)
+```
 
+```julia
 # Visualize trend and cycle
 p = plot_result(hp)
 ```
@@ -178,20 +149,16 @@ The fitted values ``\hat{y}_{t+h}`` form the trend and the OLS residuals ``v_t``
 !!! warning "Observation loss"
     The Hamilton filter loses ``h + p - 1`` observations at the start of the sample. For monthly data with ``h=24``, ``p=12``, this is 35 observations. Plan accordingly with short samples.
 
-```julia
-using MacroEconometricModels
-
-# Log industrial production (monthly)
-fred = load_example(:fred_md)
-y = filter(isfinite, log.(fred[:, "INDPRO"]))
-
+```@example filters
 # Monthly parameters: 2-year horizon, 12 monthly lags
 ham = hamilton_filter(y; h=24, p=12)
 report(ham)
 
 # OLS coefficients from the predictive regression
 ham.beta
+```
 
+```julia
 # Visualize (pass original series for overlay on shortened output)
 p = plot_result(ham; original=y)
 ```
@@ -250,13 +217,7 @@ where:
 !!! note "Technical Note"
     Two methods are available. The classic `:arima` method fits an ARMA model to ``\Delta y_t``, computes the ``\psi``-weights from the MA(``\infty``) representation, and constructs the transitory component. The `:statespace` method estimates the correlated unobserved components (UC) model of Morley, Nelson & Zivot (2003) via MLE and Kalman smoother, allowing correlation between permanent and transitory innovations.
 
-```julia
-using MacroEconometricModels
-
-# Log industrial production — an I(1) series suitable for BN decomposition
-fred = load_example(:fred_md)
-y = filter(isfinite, log.(fred[:, "INDPRO"]))
-
+```@example filters
 # Automatic ARMA order selection for Δy
 bn = beveridge_nelson(y)
 report(bn)
@@ -266,7 +227,10 @@ bn2 = beveridge_nelson(y; p=2, q=1)
 
 # Correlated UC model (Morley, Nelson & Zivot 2003)
 bn_ss = beveridge_nelson(y; method=:statespace, cycle_order=2)
+nothing # hide
+```
 
+```julia
 # Visualize permanent and transitory components
 p = plot_result(bn)
 ```
@@ -337,13 +301,7 @@ where:
 !!! warning "Endpoint truncation"
     The BK filter loses ``K`` observations at each end (``2K`` total). With ``K = 36`` and monthly data, this is 6 years of data at the boundaries.
 
-```julia
-using MacroEconometricModels
-
-# Log industrial production (monthly)
-fred = load_example(:fred_md)
-y = filter(isfinite, log.(fred[:, "INDPRO"]))
-
+```@example filters
 # Monthly business cycle band: 18–96 months (1.5–8 years), K=36
 bk = baxter_king(y; pl=18, pu=96, K=36)
 report(bk)
@@ -351,7 +309,9 @@ report(bk)
 # Verify weights sum to zero by construction
 w = bk.weights
 total = w[1] + 2 * sum(w[2:end])  # ≈ 0
+```
 
+```julia
 # Visualize (pass original series for overlay on shortened output)
 p = plot_result(bk; original=y)
 ```
@@ -412,13 +372,7 @@ Three stopping rules determine the optimal number of iterations ``m^*``:
 !!! note "Technical Note"
     The Phillips-Shi information criterion balances variance reduction against effective degrees of freedom: ``\text{IC}(m) = \text{Var}(c_m) / \text{Var}(c_1) + \log(T) \cdot \text{tr}(B_m) / \text{tr}(I - S)`` where ``B_m = I - (I - S)^m``. The eigenvalues of ``(I - S)`` are computed once and reused across iterations.
 
-```julia
-using MacroEconometricModels
-
-# Log industrial production (monthly)
-fred = load_example(:fred_md)
-y = filter(isfinite, log.(fred[:, "INDPRO"]))
-
+```@example filters
 # BIC stopping (default) with monthly lambda
 bhp = boosted_hp(y; lambda=129600.0, stopping=:BIC)
 report(bhp)
@@ -428,7 +382,10 @@ bhp_adf = boosted_hp(y; lambda=129600.0, stopping=:ADF, sig_p=0.05)
 
 # Fixed iterations for comparison
 bhp_fixed = boosted_hp(y; lambda=129600.0, stopping=:fixed, max_iter=5)
+nothing # hide
+```
 
+```julia
 # Visualize
 p = plot_result(bhp)
 ```
@@ -467,12 +424,7 @@ The boosted HP trend is sharper than the standard HP trend, tracking structural 
 
 All filter results inherit from `AbstractFilterResult` and support the `trend()` and `cycle()` accessors for uniform access to decomposition components:
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-y = filter(isfinite, log.(fred[:, "INDPRO"]))
-
+```@example filters
 hp  = hp_filter(y; lambda=129600.0)
 ham = hamilton_filter(y; h=24, p=12)
 bn  = beveridge_nelson(y)
@@ -494,14 +446,7 @@ For `BeveridgeNelsonResult`, `trend()` returns the permanent component and `cycl
 
 This example applies all five filters to log industrial production from FRED-MD and compares the extracted business cycles:
 
-```julia
-using MacroEconometricModels
-using Statistics
-
-# Log industrial production (monthly, FRED-MD)
-fred = load_example(:fred_md)
-y = filter(isfinite, log.(fred[:, "INDPRO"]))
-
+```@example filters
 # Apply all five filters with monthly parameters
 hp  = hp_filter(y; lambda=129600.0)
 ham = hamilton_filter(y; h=24, p=12)
