@@ -125,8 +125,9 @@ report(news)
 
 The `report()` function displays a formatted table with old and new nowcasts, total revision, and top contributing releases ranked by absolute impact. Use `plot_result(news)` for a horizontal bar chart of per-release impacts.
 
-@raw html
+```@raw html
 <iframe src="../assets/plots/nowcast_news.html" width="100%" height="400" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
 
 ### Keyword Arguments
 

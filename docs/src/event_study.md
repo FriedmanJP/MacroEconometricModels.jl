@@ -438,8 +438,9 @@ p = plot_result(eslp)
 save_plot(p, "event_study.html")
 ```
 
-@raw html
+```@raw html
 <iframe src="../assets/plots/eslp_event_study.html" style="width:100%;height:420px;border:1px solid #eee;border-radius:8px;" loading="lazy"></iframe>
+```
 
 ---
 

@@ -160,8 +160,9 @@ print_table(stdout, hd, 1; periods=(hd.T_eff-9):hd.T_eff)
 
 The HD reveals which structural shocks drove specific historical episodes. Large positive contributions from the monetary shock to industrial production indicate periods of accommodative policy, while large negative contributions signal contractionary episodes. The initial conditions component is typically large at the beginning of the sample and decays toward zero as the sample grows, reflecting the diminishing influence of pre-sample values.
 
-@raw html
+```@raw html
 <iframe src="../assets/plots/hd_freq.html" width="100%" height="600" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
 
 ### Helper Functions
 
@@ -228,8 +229,9 @@ The Bayesian HD iterates over all stationary posterior draws, computing the stru
 !!! note "Technical Note"
     The `verify_decomposition` tolerance for Bayesian HD (default ``10^{-6}``) is looser than for frequentist HD (``10^{-10}``) because the point estimate is an average across draws, and the additive identity holds exactly only for each individual draw. The per-draw identity is always exact.
 
-@raw html
+```@raw html
 <iframe src="../assets/plots/hd_bayesian.html" width="100%" height="600" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
 
 ### BayesianHistoricalDecomposition Return Values
 

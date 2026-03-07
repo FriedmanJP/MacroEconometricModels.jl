@@ -520,8 +520,9 @@ did = estimate_did(pd, "lemp", "first_treat"; method=:callaway_santanna,
 plot_result(did)
 ```
 
-@raw html
+```@raw html
 <iframe src="../assets/plots/did_event_study.html" style="width:100%;height:420px;border:1px solid #eee;border-radius:8px;" loading="lazy"></iframe>
+```
 
 ### Bacon Decomposition Plot
 
@@ -530,8 +531,9 @@ bd = bacon_decomposition(pd, "lemp", "first_treat")
 plot_result(bd)
 ```
 
-@raw html
+```@raw html
 <iframe src="../assets/plots/did_bacon.html" style="width:100%;height:420px;border:1px solid #eee;border-radius:8px;" loading="lazy"></iframe>
+```
 
 ### HonestDiD Sensitivity Plot
 
@@ -540,8 +542,9 @@ h = honest_did(did; Mbar=1.0)
 plot_result(h)
 ```
 
-@raw html
+```@raw html
 <iframe src="../assets/plots/did_honest.html" style="width:100%;height:420px;border:1px solid #eee;border-radius:8px;" loading="lazy"></iframe>
+```
 
 ---
 

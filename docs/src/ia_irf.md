@@ -161,8 +161,9 @@ report(result)
 plot_result(result)
 ```
 
-@raw html
+```@raw html
 <iframe src="../assets/plots/irf_freq.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
 
 The recursive ordering INDPRO, CPIAUCSL, FEDFUNDS implies that monetary policy shocks (federal funds rate innovations) do not contemporaneously affect industrial production or prices. The bootstrap confidence bands quantify estimation uncertainty: at impact (``h = 0``), the federal funds rate shock has zero effect on INDPRO by construction. By ``h = 8`` quarters, the contractionary transmission is visible as the INDPRO response becomes negative, consistent with standard monetary transmission mechanisms.
 
@@ -262,8 +263,9 @@ report(result)
 plot_result(result)
 ```
 
-@raw html
+```@raw html
 <iframe src="../assets/plots/irf_bayesian.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
 
 The posterior credible bands reflect both estimation uncertainty and prior information. The Minnesota prior shrinks VAR coefficients toward a random walk, which stabilizes IRFs at longer horizons. The 68% bands (16th--84th percentiles) are the standard reporting convention in BVAR applications. Wider 90% bands are obtained by passing `quantiles=[0.05, 0.5, 0.95]`.
 
@@ -321,8 +323,9 @@ report(result)
 plot_result(result)
 ```
 
-@raw html
+```@raw html
 <iframe src="../assets/plots/irf_lp.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
 
 **Structural LP IRF**
 
@@ -340,8 +343,9 @@ report(result)
 plot_result(slp)
 ```
 
-@raw html
+```@raw html
 <iframe src="../assets/plots/irf_structural_lp.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
 
 The structural LP produces the full ``n \times n`` IRF matrix (responses of all variables to all shocks), whereas the standard `estimate_lp` traces responses to a single reduced-form shock. The LP-based confidence bands are wider than their VAR counterparts because each horizon is estimated independently without cross-horizon restrictions. This width reflects LP's agnosticism about dynamic propagation: the cost of robustness is reduced precision.
 

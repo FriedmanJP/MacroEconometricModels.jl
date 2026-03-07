@@ -134,8 +134,9 @@ Each method computes the forecast differently: DFM projects the state vector 3 m
 
 ## Visualization
 
-@raw html
+```@raw html
 <iframe src="../assets/plots/nowcast_result.html" width="100%" height="400" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
 
 ---
 

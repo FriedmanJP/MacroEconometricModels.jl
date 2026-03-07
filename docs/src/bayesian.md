@@ -449,8 +449,9 @@ report(birf)
 plot_result(birf)
 ```
 
-@raw html
+```@raw html
 <iframe src="../assets/plots/irf_bayesian.html" style="width:100%; height:520px; border:none;"></iframe>
+```
 
 The Cholesky ordering [INDPRO, CPI, FFR] identifies a monetary policy shock as the third orthogonalized innovation. The posterior median IRF at ``h = 0`` for INDPRO is zero by construction (ordered first, so it does not respond on impact). Unlike frequentist bootstrap confidence intervals, Bayesian credible intervals integrate over parameter uncertainty in ``(B, \Sigma)`` across all posterior draws, providing a complete characterization of inference uncertainty.
 
@@ -528,8 +529,9 @@ report(bfevd)
 plot_result(bfevd)
 ```
 
-@raw html
+```@raw html
 <iframe src="../assets/plots/fevd_bayesian.html" style="width:100%; height:520px; border:none;"></iframe>
+```
 
 At short horizons, the monetary shock (shock 3) explains a small fraction of INDPRO forecast error variance --- consistent with the Cholesky ordering where INDPRO does not respond on impact. As the horizon increases, the monetary transmission mechanism operates through lagged effects, and the monetary shock's contribution grows. The wide credible intervals at long horizons reflect cumulating parameter uncertainty through the VMA representation.
 
@@ -565,8 +567,9 @@ report(bhd)
 plot_result(bhd)
 ```
 
-@raw html
+```@raw html
 <iframe src="../assets/plots/hd_bayesian.html" style="width:100%; height:520px; border:none;"></iframe>
+```
 
 The historical decomposition reveals which structural shocks drove each variable's movements at each point in time. Credible intervals on the shock contributions reflect posterior uncertainty in both the VAR parameters and the structural identification. For the [INDPRO, CPI, FFR] system, the decomposition shows how supply, demand, and monetary policy shocks combine to explain the observed dynamics of output, prices, and the policy rate.
 
@@ -605,8 +608,9 @@ report(fc)
 plot_result(fc)
 ```
 
-@raw html
+```@raw html
 <iframe src="../assets/plots/forecast_bvar.html" style="width:100%; height:520px; border:none;"></iframe>
+```
 
 The posterior credible intervals widen with the forecast horizon, reflecting both parameter uncertainty (from the posterior distribution of ``(B, \Sigma)``) and shock uncertainty (from the stochastic future innovations). Non-stationary draws are automatically filtered out to prevent explosive forecast paths.
 

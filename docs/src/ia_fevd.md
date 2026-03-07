@@ -137,8 +137,9 @@ print_table(stdout, decomp, 1; horizons=[1, 4, 8, 12, 20])
 
 The Cholesky ordering INDPRO, CPIAUCSL, FEDFUNDS implies that monetary policy shocks (FFR) do not contemporaneously affect output or prices. At horizon 1, the INDPRO own shock dominates by construction. By horizon 20, the FEVD reveals the relative importance of supply, demand, and monetary shocks in driving industrial production forecast uncertainty.
 
-@raw html
+```@raw html
 <iframe src="../assets/plots/fevd_freq.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
 
 ### FEVD Return Values
 
@@ -185,8 +186,9 @@ median_share = bfevd.point_estimate[8, 1, :]
 
 The Bayesian FEVD computes variance shares for each accepted posterior draw, discarding non-stationary draws. The `point_estimate` array contains the posterior mean (or median) FEVD, while the `quantiles` array stores the full posterior distribution at each horizon. Wide credible bands indicate that the data are not sufficiently informative to pin down the relative importance of specific shocks.
 
-@raw html
+```@raw html
 <iframe src="../assets/plots/fevd_bayesian.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
 
 ### BayesianFEVD Return Values
 
@@ -261,8 +263,9 @@ report(lp_decomp)
 
 The LP-FEVD produces variance shares that are numerically close to VAR-based FEVD under correct specification, but the LP estimates have wider confidence intervals because each horizon is estimated independently. The bias-corrected shares are bounded to ``[0, 1]`` and clamped to ensure non-negativity.
 
-@raw html
+```@raw html
 <iframe src="../assets/plots/fevd_lp.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
 
 For full details on structural LP estimation, see [Local Projections](@ref lp_page).
 
