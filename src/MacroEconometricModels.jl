@@ -63,7 +63,7 @@ using Random
 using Statistics
 using DataFrames
 using StatsAPI
-using StatsAPI: fit, coef, vcov, residuals, predict, r2, aic, bic, dof, dof_residual, nobs, loglikelihood, confint, stderror, islinear
+using StatsAPI: fit, coef, vcov, residuals, predict, fitted, r2, aic, bic, dof, dof_residual, nobs, loglikelihood, confint, stderror, islinear
 using Distributions
 using SparseArrays
 using FFTW
@@ -417,6 +417,7 @@ export @dsge
 
 # Functions
 export compute_steady_state, linearize, solve, gensys, blanchard_kahn, klein, perturbation_solver
+export collocation_solver, pfi_solver, perfect_foresight
 export simulate, estimate_dsge
 export solve_lyapunov, analytical_moments
 export evaluate_policy, max_euler_error
@@ -836,8 +837,8 @@ export trend, cycle
 # Exports - StatsAPI Interface
 # =============================================================================
 
-export fit, coef, vcov, residuals, predict
-export r2, aic, bic, dof, nobs
+export fit, coef, vcov, residuals, predict, fitted
+export r2, aic, bic, dof, dof_residual, nobs
 export loglikelihood, confint, stderror, islinear
 
 # =============================================================================

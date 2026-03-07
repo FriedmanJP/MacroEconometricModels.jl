@@ -292,6 +292,7 @@ StatsAPI.residuals(m::AbstractARIMAModel) = m.residuals
 
 # Fitted values
 StatsAPI.predict(m::AbstractARIMAModel) = m.fitted
+StatsAPI.fitted(m::AbstractARIMAModel) = m.fitted
 
 # Log-likelihood and information criteria
 StatsAPI.loglikelihood(m::AbstractARIMAModel) = m.loglik

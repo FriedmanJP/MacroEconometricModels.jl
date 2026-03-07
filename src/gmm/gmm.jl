@@ -275,7 +275,7 @@ function optimal_weighting_matrix(moment_fn::Function, theta::AbstractVector{T},
     eigvals_O = eigvals(Omega_sym)
     if minimum(eigvals_O) < eps(T)
         Omega_reg = Omega_sym + T(1e-8) * I
-        return inv(Omega_reg)
+        return Matrix{T}(inv(Omega_reg))
     end
 
     robust_inv(Matrix(Omega_sym))
