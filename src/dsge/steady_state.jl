@@ -144,7 +144,7 @@ function _nonlinearsolve_steady_state(spec::DSGESpec{T}, lower::Vector{T}, upper
         return nothing
     end
 
-    nlfn = NonlinearFunction(ss_residual!; jac=ss_jacobian!)
+    nlfn = NonlinearSolve.NonlinearFunction(ss_residual!; jac=ss_jacobian!)
 
     # Determine if bounds are finite
     has_finite_bounds = any(isfinite, lower) || any(isfinite, upper)
@@ -155,15 +155,15 @@ function _nonlinearsolve_steady_state(spec::DSGESpec{T}, lower::Vector{T}, upper
             y0[i] = clamp(y0[i], isfinite(lower[i]) ? lower[i] : T(-1e10),
                                    isfinite(upper[i]) ? upper[i] : T(1e10))
         end
-        prob = NonlinearProblem(nlfn, y0, nothing; lb=lower, ub=upper)
+        prob = NonlinearSolve.NonlinearProblem(nlfn, y0, nothing; lb=lower, ub=upper)
     else
-        prob = NonlinearProblem(nlfn, y0, nothing)
+        prob = NonlinearSolve.NonlinearProblem(nlfn, y0, nothing)
     end
 
-    alg = algorithm !== nothing ? algorithm : TrustRegion()
+    alg = algorithm !== nothing ? algorithm : NonlinearSolve.TrustRegion()
     sol = NonlinearSolve.solve(prob, alg; abstol=T(1e-10), maxiters=5000)
 
-    if !SciMLBase.successful_retcode(sol.retcode)
+    if !NonlinearSolve.SciMLBase.successful_retcode(sol.retcode)
         @warn "Steady state solver did not converge (retcode = $(sol.retcode))"
     end
 

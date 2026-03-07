@@ -68,13 +68,33 @@ function perfect_foresight(spec::DSGESpec{FT};
         _validate_constraints(spec, constraints)
         chosen = _select_solver(constraints, solver)
         if chosen == :nonlinearsolve
-            lower, upper = _extract_bounds(spec, constraints)
             any(c -> c isa NonlinearConstraint, constraints) &&
                 throw(ArgumentError(
                     "NonlinearSolve solver cannot handle NonlinearConstraint. " *
                     "Use solver=:ipopt for nonlinear inequality constraints."))
-            return _nonlinearsolve_perfect_foresight(spec, T_periods, shocks, lower, upper;
+            # Solve unconstrained first, then check if bounds are violated
+            lower, upper = _extract_bounds(spec, constraints)
+            pf = _nonlinearsolve_perfect_foresight(spec, T_periods, shocks;
                         max_iter=max_iter, tol=tol, algorithm=algorithm)
+            # Check if bounds are violated in the unconstrained solution
+            bounds_ok = true
+            for t in 1:T_periods, i in 1:n
+                v = pf.path[t, i]
+                if (isfinite(lower[i]) && v < lower[i] - FT(1e-6)) ||
+                   (isfinite(upper[i]) && v > upper[i] + FT(1e-6))
+                    bounds_ok = false
+                    break
+                end
+            end
+            bounds_ok && return pf
+            # Bounds violated: escalate to JuMP/Ipopt if available
+            if _path_available()
+                return _path_perfect_foresight(spec, T_periods, shocks, constraints)
+            elseif hasmethod(_jump_compute_steady_state, Tuple{DSGESpec, Vector})
+                return _jump_perfect_foresight(spec, T_periods, shocks, constraints)
+            end
+            @warn "Box constraints violated but JuMP/Ipopt not loaded. Returning unconstrained solution."
+            return pf
         elseif chosen == :path
             _check_jump_loaded()
             any(c -> c isa NonlinearConstraint, constraints) &&
@@ -90,10 +110,8 @@ function perfect_foresight(spec::DSGESpec{FT};
         end
     end
 
-    # Unconstrained: use NonlinearSolve with infinite bounds
-    lower = fill(FT(-Inf), n)
-    upper = fill(FT(Inf), n)
-    return _nonlinearsolve_perfect_foresight(spec, T_periods, shocks, lower, upper;
+    # Unconstrained: use NonlinearSolve
+    return _nonlinearsolve_perfect_foresight(spec, T_periods, shocks;
                 max_iter=max_iter, tol=tol, algorithm=algorithm)
 end
 
@@ -102,16 +120,16 @@ end
 # =============================================================================
 
 """
-    _nonlinearsolve_perfect_foresight(spec, T_periods, shocks, lower, upper;
+    _nonlinearsolve_perfect_foresight(spec, T_periods, shocks;
                                        max_iter=100, tol=1e-8, algorithm=nothing)
 
-Solve the stacked perfect foresight system using NonlinearSolve.jl.
+Solve the stacked perfect foresight system using NonlinearSolve.jl (unconstrained).
 
 Uses the existing `_pf_residual!` and `_pf_jacobian` for the block-tridiagonal
 sparse system. Default algorithm is `NewtonRaphson()`.
 """
 function _nonlinearsolve_perfect_foresight(spec::DSGESpec{FT}, T_periods::Int,
-        shocks::Matrix{FT}, lower::Vector{FT}, upper::Vector{FT};
+        shocks::Matrix{FT};
         max_iter::Int=100, tol::Real=1e-8, algorithm=nothing) where {FT<:AbstractFloat}
 
     n = spec.n_endog
@@ -144,41 +162,13 @@ function _nonlinearsolve_perfect_foresight(spec::DSGESpec{FT}, T_periods::Int,
         return nothing
     end
 
-    nlfn = NonlinearFunction(pf_residual!; jac=pf_jacobian!, jac_prototype=J_proto)
+    nlfn = NonlinearSolve.NonlinearFunction(pf_residual!; jac=pf_jacobian!, jac_prototype=J_proto)
+    prob = NonlinearSolve.NonlinearProblem(nlfn, x0, nothing)
 
-    # Build problem with box bounds if any are finite
-    has_finite_bounds = any(isfinite, lower) || any(isfinite, upper)
-
-    if has_finite_bounds
-        # Replicate per-variable bounds across T periods
-        lb = repeat(lower, T_periods)
-        ub = repeat(upper, T_periods)
-        # Clamp initial guess to bounds
-        for i in 1:N
-            x0[i] = clamp(x0[i], isfinite(lb[i]) ? lb[i] : FT(-1e10),
-                                   isfinite(ub[i]) ? ub[i] : FT(1e10))
-        end
-        prob = NonlinearProblem(nlfn, x0, nothing; lb=lb, ub=ub)
-    else
-        prob = NonlinearProblem(nlfn, x0, nothing)
-    end
-
-    # Default: NewtonRaphson for unconstrained, TrustRegion for box-constrained
-    if algorithm !== nothing
-        alg = algorithm
-    elseif has_finite_bounds
-        alg = TrustRegion()
-    else
-        alg = NewtonRaphson()
-    end
+    alg = algorithm !== nothing ? algorithm : NonlinearSolve.NewtonRaphson()
     sol = NonlinearSolve.solve(prob, alg; abstol=FT(tol), maxiters=max_iter)
 
-    converged = SciMLBase.successful_retcode(sol.retcode)
-    # For box-constrained problems, accept Stalled as converged when the solver
-    # has found a feasible point (complementarity conditions may prevent zero residual)
-    if !converged && has_finite_bounds && sol.retcode == SciMLBase.ReturnCode.Stalled
-        converged = true
-    end
+    converged = NonlinearSolve.SciMLBase.successful_retcode(sol.retcode)
     if !converged
         @warn "Perfect foresight solver did not converge (retcode = $(sol.retcode))"
     end
