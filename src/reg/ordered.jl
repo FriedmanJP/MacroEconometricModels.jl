@@ -766,3 +766,195 @@ end
 # report dispatches
 report(m::OrderedLogitModel) = show(stdout, m)
 report(m::OrderedProbitModel) = show(stdout, m)
+
+# =============================================================================
+# Marginal Effects (AME) for Ordered Models
+# =============================================================================
+
+"""
+    marginal_effects(m::OrderedLogitModel{T}) -> NamedTuple
+
+Compute average marginal effects (AME) for an ordered logit model.
+
+Returns a K x J matrix of AMEs where element (k,j) is the average
+marginal effect of variable k on P(y = j).
+
+Formula: dP(y=j)/dx_k = [f(alpha_{j-1} - x'beta) - f(alpha_j - x'beta)] * beta_k
+where f is the logistic PDF, alpha_0 = -Inf, alpha_J = +Inf.
+
+Key property: AMEs sum to zero across categories for each variable.
+
+# Returns
+Named tuple with fields:
+- `effects::Matrix{T}` -- K x J matrix of AMEs
+- `varnames::Vector{String}` -- variable names
+- `categories::Vector` -- category labels
+
+# References
+- Cameron, A. C. & Trivedi, P. K. (2005). *Microeconometrics*. Cambridge University Press, ch. 15.
+- Greene, W. H. (2012). *Econometric Analysis*. 7th ed. Prentice Hall.
+"""
+function marginal_effects(m::OrderedLogitModel{T}) where {T<:AbstractFloat}
+    _ordered_marginal_effects(m, _logistic_pdf)
+end
+
+"""
+    marginal_effects(m::OrderedProbitModel{T}) -> NamedTuple
+
+Compute average marginal effects (AME) for an ordered probit model.
+
+Same structure as `marginal_effects(::OrderedLogitModel)` but using the
+standard normal PDF.
+
+# References
+- Cameron, A. C. & Trivedi, P. K. (2005). *Microeconometrics*. Cambridge University Press, ch. 15.
+- Greene, W. H. (2012). *Econometric Analysis*. 7th ed. Prentice Hall.
+"""
+function marginal_effects(m::OrderedProbitModel{T}) where {T<:AbstractFloat}
+    _ordered_marginal_effects(m, _normal_pdf)
+end
+
+"""Internal: compute AME for ordered logit/probit."""
+function _ordered_marginal_effects(m, F_pdf::Function)
+    T_type = eltype(m.beta)
+    n = length(m.y)
+    K = length(m.beta)
+    J = length(m.cutpoints) + 1
+    alpha = m.cutpoints
+    beta = m.beta
+
+    ame = zeros(T_type, K, J)
+
+    @inbounds for i in 1:n
+        xi = @view m.X[i, :]
+        xb = dot(xi, beta)
+
+        for j in 1:J
+            # f(alpha_{j-1} - xb) - f(alpha_j - xb)
+            f_lower = j == 1 ? zero(T_type) : F_pdf(T_type, alpha[j-1] - xb)
+            f_upper = j == J ? zero(T_type) : F_pdf(T_type, alpha[j] - xb)
+            factor = f_lower - f_upper
+
+            for k in 1:K
+                ame[k, j] += factor * beta[k]
+            end
+        end
+    end
+
+    ame ./= T_type(n)
+
+    (effects=ame, varnames=copy(m.varnames), categories=copy(m.categories))
+end
+
+# =============================================================================
+# Brant Test (Proportional Odds / Parallel Regression Assumption)
+# =============================================================================
+
+"""
+    brant_test(m::OrderedLogitModel{T}) -> NamedTuple
+
+Brant test of the proportional odds (parallel regression) assumption for
+an ordered logit model.
+
+For each cutpoint j = 1,...,J-1, fits a binary logit (y <= j vs y > j).
+Under H0 (proportional odds), all binary logit coefficients should be equal.
+
+# Algorithm
+1. Fit J-1 binary logits splitting at each cutpoint
+2. Compute Wald statistic comparing each binary logit's beta to the
+   pooled ordered logit estimate
+3. Overall test: chi-squared with K*(J-2) degrees of freedom
+4. Per-variable tests: chi-squared with (J-2) df each
+
+# Returns
+Named tuple with fields:
+- `statistic::T` -- overall Wald test statistic
+- `pvalue::T` -- overall p-value (chi-squared)
+- `df::Int` -- degrees of freedom K*(J-2)
+- `per_variable::Vector{T}` -- per-variable p-values (length K)
+- `binary_coefs::Matrix{T}` -- K x (J-1) matrix of binary logit coefficients
+
+# References
+- Brant, R. (1990). Assessing proportionality in the proportional odds model
+  for ordinal logistic regression. *Biometrics* 46, 1171-1178.
+"""
+function brant_test(m::OrderedLogitModel{T}) where {T<:AbstractFloat}
+    n = length(m.y)
+    K = length(m.beta)
+    J = length(m.cutpoints) + 1
+    Jm1 = J - 1
+
+    Jm1 >= 2 || throw(ArgumentError("Brant test requires at least 3 categories (J >= 3)"))
+
+    # Fit J-1 binary logits: y <= j vs y > j
+    # X must include intercept for binary logit
+    X_bin = hcat(ones(T, n), m.X)  # n x (K+1)
+
+    binary_coefs = Matrix{T}(undef, K, Jm1)
+    binary_vcovs = Vector{Matrix{T}}(undef, Jm1)
+
+    for j in 1:Jm1
+        y_bin = T.(m.y .<= j)
+        mj = estimate_logit(y_bin, X_bin; maxiter=200)
+        # Extract slope coefficients (skip intercept at index 1)
+        binary_coefs[:, j] = mj.beta[2:end]
+        # Extract vcov for slopes only
+        binary_vcovs[j] = mj.vcov_mat[2:end, 2:end]
+    end
+
+    # Overall Wald test: compare each binary logit's beta to the ordered logit beta
+    # Under H0, beta_j = beta for all j
+    # Use the first J-2 contrasts: beta_j - beta_{J-1} for j = 1,...,J-2
+    # (comparing each to the last binary logit)
+    if Jm1 == 2
+        # Simple case: one contrast beta_1 - beta_2
+        d = binary_coefs[:, 1] - binary_coefs[:, 2]
+        V_d = binary_vcovs[1] + binary_vcovs[2]
+        V_d_inv = Matrix{T}(robust_inv(Hermitian(V_d)))
+        stat_overall = dot(d, V_d_inv * d)
+        df_overall = K
+    else
+        # Stack contrasts: (beta_j - beta_{J-1}) for j = 1,...,J-2
+        n_contrasts = Jm1 - 1
+        d_stack = Vector{T}(undef, K * n_contrasts)
+        V_stack = zeros(T, K * n_contrasts, K * n_contrasts)
+
+        for j in 1:n_contrasts
+            offset = (j - 1) * K
+            d_stack[offset+1:offset+K] = binary_coefs[:, j] - binary_coefs[:, Jm1]
+            # Var(beta_j - beta_{J-1}) = Var(beta_j) + Var(beta_{J-1})
+            # (assuming independence across binary logits)
+            V_stack[offset+1:offset+K, offset+1:offset+K] =
+                binary_vcovs[j] + binary_vcovs[Jm1]
+        end
+
+        V_stack_inv = Matrix{T}(robust_inv(Hermitian(V_stack)))
+        stat_overall = dot(d_stack, V_stack_inv * d_stack)
+        df_overall = K * n_contrasts
+    end
+
+    pval_overall = T(1 - cdf(Chisq(df_overall), stat_overall))
+
+    # Per-variable tests: for each k, test that beta_{k,1} = ... = beta_{k,J-1}
+    per_var_pvals = Vector{T}(undef, K)
+    n_contrasts = Jm1 - 1
+    df_per_var = n_contrasts
+
+    for k in 1:K
+        d_k = Vector{T}(undef, n_contrasts)
+        V_k = zeros(T, n_contrasts, n_contrasts)
+
+        for j in 1:n_contrasts
+            d_k[j] = binary_coefs[k, j] - binary_coefs[k, Jm1]
+            # Variance of the contrast
+            V_k[j, j] = binary_vcovs[j][k, k] + binary_vcovs[Jm1][k, k]
+        end
+
+        V_k_inv = Matrix{T}(robust_inv(Hermitian(V_k)))
+        stat_k = dot(d_k, V_k_inv * d_k)
+        per_var_pvals[k] = T(1 - cdf(Chisq(df_per_var), stat_k))
+    end
+
+    (statistic=stat_overall, pvalue=pval_overall, df=df_overall,
+     per_variable=per_var_pvals, binary_coefs=binary_coefs)
+end

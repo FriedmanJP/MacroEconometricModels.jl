@@ -503,3 +503,233 @@ end
 
 # report dispatch
 report(m::MultinomialLogitModel) = show(stdout, m)
+
+# =============================================================================
+# Marginal Effects (AME) for Multinomial Logit
+# =============================================================================
+
+"""
+    marginal_effects(m::MultinomialLogitModel{T}) -> NamedTuple
+
+Compute average marginal effects (AME) for a multinomial logit model.
+
+Returns a K x J matrix of AMEs where element (k,j) is the average
+marginal effect of variable k on P(y = j).
+
+Formula: dP(y=j)/dx_k = p_j * (beta_{j,k} - sum_m p_m * beta_{m,k})
+where beta for the base category = 0.
+
+Key property: AMEs sum to zero across categories for each variable.
+
+# Returns
+Named tuple with fields:
+- `effects::Matrix{T}` -- K x J matrix of AMEs
+- `varnames::Vector{String}` -- variable names
+- `categories::Vector` -- category labels
+
+# References
+- Cameron, A. C. & Trivedi, P. K. (2005). *Microeconometrics*. Cambridge University Press, ch. 15.
+- Train, K. E. (2009). *Discrete Choice Methods with Simulation*. 2nd ed. Cambridge Univ. Press.
+"""
+function marginal_effects(m::MultinomialLogitModel{T}) where {T<:AbstractFloat}
+    n = length(m.y)
+    K = size(m.X, 2)
+    J = size(m.fitted, 2)
+    Jm1 = J - 1
+
+    # Build full K x J coefficient matrix (base category = column 1, all zeros)
+    beta_full = zeros(T, K, J)
+    @inbounds for j in 1:Jm1
+        beta_full[:, j+1] = m.beta[:, j]
+    end
+
+    ame = zeros(T, K, J)
+
+    @inbounds for i in 1:n
+        xi = @view m.X[i, :]
+        probs = _mlogit_probs(xi, m.beta, J)
+
+        # Weighted average coefficient: sum_m p_m * beta_{m,k}
+        for k in 1:K
+            beta_bar_k = zero(T)
+            for jj in 1:J
+                beta_bar_k += probs[jj] * beta_full[k, jj]
+            end
+
+            for j in 1:J
+                ame[k, j] += probs[j] * (beta_full[k, j] - beta_bar_k)
+            end
+        end
+    end
+
+    ame ./= T(n)
+
+    (effects=ame, varnames=copy(m.varnames), categories=copy(m.categories))
+end
+
+# =============================================================================
+# Hausman IIA Test
+# =============================================================================
+
+"""
+    hausman_iia(m::MultinomialLogitModel{T}; omit_category::Int) -> NamedTuple
+
+Hausman-McFadden test of the Independence of Irrelevant Alternatives (IIA)
+assumption for a multinomial logit model.
+
+Re-estimates the model excluding observations where y = omit_category,
+then compares coefficients for the remaining categories with the full model
+using a Hausman-type statistic.
+
+# Arguments
+- `m::MultinomialLogitModel{T}` -- estimated full multinomial logit model
+- `omit_category::Int` -- category to omit (1-based index into m.categories)
+
+# Returns
+Named tuple with fields:
+- `statistic::T` -- Hausman test statistic
+- `pvalue::T` -- p-value (chi-squared)
+- `df::Int` -- degrees of freedom
+- `omitted_category` -- the omitted category label
+
+# References
+- Hausman, J. & McFadden, D. (1984). Specification Tests for the Multinomial
+  Logit Model. *Econometrica* 52(5), 1219-1240.
+"""
+function hausman_iia(m::MultinomialLogitModel{T}; omit_category::Int) where {T<:AbstractFloat}
+    J = size(m.fitted, 2)
+    K = size(m.X, 2)
+
+    1 <= omit_category <= J ||
+        throw(ArgumentError("omit_category must be in 1:$J (got $omit_category)"))
+
+    # Identify the remapped category to omit
+    omit_val = omit_category  # category index in internal 1:J mapping
+
+    # Subset: observations where y != omit_val
+    keep_idx = findall(!=(omit_val), m.y)
+    length(keep_idx) > 0 || throw(ArgumentError("No observations remain after omitting category $omit_category"))
+
+    y_sub = m.y[keep_idx]
+    X_sub = m.X[keep_idx, :]
+
+    # Remap remaining categories to 1:J_new
+    old_cats = sort(unique(y_sub))
+    J_new = length(old_cats)
+    J_new >= 3 || throw(ArgumentError("Need at least 3 remaining categories for restricted model (got $J_new)"))
+
+    cat_remap = Dict(old_cats[j] => j for j in 1:J_new)
+    y_new = [cat_remap[yi] for yi in y_sub]
+
+    # Re-estimate the restricted model
+    m_r = estimate_mlogit(y_new, X_sub; maxiter=200)
+
+    # Map restricted coefficients back to full-model categories
+    # Full model: base = category 1, betas for categories 2,...,J
+    # Restricted: base = first remaining category, betas for rest
+    # We need to align the coefficient vectors for comparable categories
+
+    # Find which full-model beta columns correspond to restricted model categories
+    # Full model beta columns: j=1,...,J-1 correspond to categories 2,...,J
+    # old_cats are in full-model category indices; restricted model base = old_cats[1]
+
+    # Build mapping: for each restricted model non-base category (columns 1,...,J_new-1),
+    # find the corresponding full-model beta column
+    full_base = 1  # full model base category
+    restricted_base = old_cats[1]  # restricted model base (first remaining category)
+
+    # Coefficients to compare: for categories present in both models (excluding both bases)
+    # We need to re-normalize so both share the same base.
+    # Full model: log(P_j/P_1) = x'beta_j for j=2,...,J
+    # Restricted: log(P_j/P_{restricted_base}) = x'beta_r_j
+
+    # If restricted_base == full_base (==1):
+    #   beta_r_j should equal beta_f_j for remaining categories
+    # If restricted_base != full_base:
+    #   log(P_j/P_{restricted_base}) = log(P_j/P_1) - log(P_{restricted_base}/P_1)
+    #   So beta_r_j = beta_f_j - beta_f_{restricted_base}
+
+    # Full model beta for the restricted base category
+    if restricted_base == 1
+        beta_f_rbase = zeros(T, K)
+    else
+        beta_f_rbase = m.beta[:, restricted_base - 1]
+    end
+
+    # Build comparable coefficient vectors
+    # For each non-base category in restricted model
+    comparable_cats = old_cats[2:end]  # restricted model non-base categories
+    n_compare = length(comparable_cats)
+    n_params = K * n_compare
+
+    beta_f_vec = Vector{T}(undef, n_params)
+    beta_r_vec = Vector{T}(undef, n_params)
+
+    for (idx, cat) in enumerate(comparable_cats)
+        offset = (idx - 1) * K
+        # Full model: adjusted for different base
+        if cat == 1
+            beta_f_cat = zeros(T, K)
+        else
+            beta_f_cat = m.beta[:, cat - 1]
+        end
+        beta_f_vec[offset+1:offset+K] = beta_f_cat - beta_f_rbase
+
+        # Restricted model: column idx
+        beta_r_vec[offset+1:offset+K] = m_r.beta[:, idx]
+    end
+
+    # Hausman statistic: (b_r - b_f)' (V_r - V_f)^{-1} (b_r - b_f)
+    d = beta_r_vec - beta_f_vec
+
+    # Get vcov for comparable parameters from both models
+    V_r = m_r.vcov_mat  # already K*(J_new-1) x K*(J_new-1)
+
+    # For the full model, we need to extract/transform the vcov for the
+    # comparable parameters with the base adjustment
+    # V_f for (beta_cat - beta_rbase): need to account for the subtraction
+    V_f = zeros(T, n_params, n_params)
+    Jm1_full = J - 1
+
+    for (i, cat_i) in enumerate(comparable_cats)
+        oi = (i - 1) * K
+        for (j_idx, cat_j) in enumerate(comparable_cats)
+            oj = (j_idx - 1) * K
+
+            # Cov(beta_cat_i - beta_rbase, beta_cat_j - beta_rbase)
+            # = Cov(beta_ci, beta_cj) - Cov(beta_ci, beta_rb)
+            #   - Cov(beta_rb, beta_cj) + Cov(beta_rb, beta_rb)
+
+            # Helper to get full-model vcov block for categories a, b
+            # Category a corresponds to column (a-1) of beta (0-indexed base)
+            # In vcov, block (a-1)*K+1 : a*K
+            _block = (a, b) -> begin
+                if a == 1 || b == 1
+                    return zeros(T, K, K)
+                end
+                oa = (a - 2) * K
+                ob = (b - 2) * K
+                m.vcov_mat[oa+1:oa+K, ob+1:ob+K]
+            end
+
+            V_f[oi+1:oi+K, oj+1:oj+K] =
+                _block(cat_i, cat_j) - _block(cat_i, restricted_base) -
+                _block(restricted_base, cat_j) + _block(restricted_base, restricted_base)
+        end
+    end
+
+    V_diff = V_r - V_f
+    # Make symmetric and invert
+    V_diff = T(0.5) * (V_diff + V_diff')
+    V_diff_inv = Matrix{T}(robust_inv(Hermitian(V_diff)))
+
+    stat = dot(d, V_diff_inv * d)
+    # Clamp to non-negative (numerical issues can make it slightly negative)
+    stat = max(stat, zero(T))
+
+    df_val = n_params
+    pval = T(1 - cdf(Chisq(df_val), stat))
+
+    (statistic=stat, pvalue=pval, df=df_val,
+     omitted_category=m.categories[omit_category])
+end

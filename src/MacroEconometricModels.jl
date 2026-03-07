@@ -834,6 +834,7 @@ export estimate_reg, estimate_iv, estimate_logit, estimate_probit
 
 # Marginal effects, diagnostics, prediction
 export marginal_effects, odds_ratio, vif, classification_table
+export brant_test, hausman_iia
 
 # =============================================================================
 # Exports - Plotting

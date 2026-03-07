@@ -366,6 +366,159 @@ using LinearAlgebra, Statistics, Random, Distributions
     end
 
     # =========================================================================
+    # Ordered Logit — Marginal Effects
+    # =========================================================================
+
+    @testset "Ordered Logit — marginal effects" begin
+        rng = MersenneTwister(3030)
+        n = 3000
+        beta_true = [1.0, -0.5]
+        cutpoints_true = [0.0, 1.5]
+        y, X = generate_ordered_data(rng, n, beta_true, cutpoints_true; link=:logit)
+
+        m = estimate_ologit(y, X; varnames=["x1", "x2"])
+        me = marginal_effects(m)
+
+        # Returns a NamedTuple with effects, varnames, categories
+        @test haskey(me, :effects)
+        @test haskey(me, :varnames)
+        @test haskey(me, :categories)
+
+        # K x J matrix
+        K = length(coef(m))
+        J = length(m.categories)
+        @test size(me.effects) == (K, J)
+
+        # Key property: AMEs sum to ~0 across categories for each variable
+        row_sums = sum(me.effects, dims=2)
+        for k in 1:K
+            @test abs(row_sums[k]) < 1e-10
+        end
+
+        # Variable names preserved
+        @test me.varnames == ["x1", "x2"]
+
+        # Same test for ordered probit
+        mp = estimate_oprobit(y, X; varnames=["x1", "x2"])
+        me_p = marginal_effects(mp)
+        @test size(me_p.effects) == (K, J)
+        row_sums_p = sum(me_p.effects, dims=2)
+        for k in 1:K
+            @test abs(row_sums_p[k]) < 1e-10
+        end
+    end
+
+    @testset "Ordered Logit — marginal effects 5-category" begin
+        rng = MersenneTwister(4040)
+        n = 5000
+        beta_true = [0.8, -0.6, 0.4]
+        cutpoints_true = [-1.5, -0.3, 0.8, 2.0]
+        y, X = generate_ordered_data(rng, n, beta_true, cutpoints_true; link=:logit)
+
+        m = estimate_ologit(y, X; varnames=["x1", "x2", "x3"])
+        me = marginal_effects(m)
+
+        K = 3
+        J = 5
+        @test size(me.effects) == (K, J)
+
+        # Row sums should be ~0
+        row_sums = sum(me.effects, dims=2)
+        for k in 1:K
+            @test abs(row_sums[k]) < 1e-10
+        end
+    end
+
+    # =========================================================================
+    # Brant Test
+    # =========================================================================
+
+    @testset "Brant test — structure" begin
+        rng = MersenneTwister(5050)
+        n = 2000
+        beta_true = [1.0, -0.5]
+        cutpoints_true = [0.0, 1.5]
+        y, X = generate_ordered_data(rng, n, beta_true, cutpoints_true; link=:logit)
+
+        m = estimate_ologit(y, X; varnames=["x1", "x2"])
+        bt = brant_test(m)
+
+        # Check structure
+        @test haskey(bt, :statistic)
+        @test haskey(bt, :pvalue)
+        @test haskey(bt, :df)
+        @test haskey(bt, :per_variable)
+        @test haskey(bt, :binary_coefs)
+
+        # Types
+        @test bt.statistic isa Float64
+        @test bt.pvalue isa Float64
+        @test bt.df isa Int
+        @test length(bt.per_variable) == 2
+
+        # df should be K*(J-2) = 2*1 = 2
+        K = length(coef(m))
+        J = length(m.categories)
+        @test bt.df == K * (J - 2)
+
+        # binary_coefs: K x (J-1)
+        @test size(bt.binary_coefs) == (K, J - 1)
+
+        # p-value should be in [0, 1]
+        @test 0 <= bt.pvalue <= 1
+        for pv in bt.per_variable
+            @test 0 <= pv <= 1
+        end
+    end
+
+    @testset "Brant test — proportional odds data should not reject" begin
+        # Data generated from ordered logit (proportional odds holds by construction)
+        rng = MersenneTwister(6060)
+        n = 5000
+        beta_true = [1.0, -0.5]
+        cutpoints_true = [0.0, 1.5]
+        y, X = generate_ordered_data(rng, n, beta_true, cutpoints_true; link=:logit)
+
+        m = estimate_ologit(y, X)
+        bt = brant_test(m)
+
+        # Should not reject at 0.01 level (proportional odds holds)
+        @test bt.pvalue > 0.01
+    end
+
+    @testset "Brant test — violation of proportional odds" begin
+        # Generate data that violates proportional odds
+        rng = MersenneTwister(7070)
+        n = 5000
+        K = 2
+        X = randn(rng, n, K)
+
+        # Use DIFFERENT slopes for each binary split
+        # Split 1 (y <= 1 vs y > 1): beta = [2.0, -1.0]
+        # Split 2 (y <= 2 vs y > 2): beta = [0.2, 0.5]
+        # This strongly violates proportional odds
+        y = Vector{Int}(undef, n)
+        u = rand(rng, n)
+        for i in 1:n
+            p1 = 1.0 / (1.0 + exp(-(0.0 - X[i,:]' * [2.0, -1.0])))
+            p2 = 1.0 / (1.0 + exp(-(1.5 - X[i,:]' * [0.2, 0.5])))
+            if u[i] < p1
+                y[i] = 1
+            elseif u[i] < p2
+                y[i] = 2
+            else
+                y[i] = 3
+            end
+        end
+
+        m = estimate_ologit(y, X)
+        bt = brant_test(m)
+
+        # Should reject at 0.05 level
+        @test bt.pvalue < 0.05
+    end
+
+    # =========================================================================
     # Edge case: exactly 3 categories required
     # =========================================================================
 

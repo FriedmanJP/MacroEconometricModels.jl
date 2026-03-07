@@ -356,6 +356,127 @@ using LinearAlgebra, Statistics, Random, Distributions
     end
 
     # =========================================================================
+    # Multinomial Logit — Marginal Effects
+    # =========================================================================
+
+    @testset "Multinomial Logit — marginal effects" begin
+        rng = MersenneTwister(3030)
+        n = 5000
+        beta_true = [0.5 -0.3;
+                     1.0 -0.5;
+                    -0.5  0.8]
+        y, X = generate_mlogit_data(rng, n, beta_true)
+
+        m = estimate_mlogit(y, X; varnames=["const", "x1", "x2"])
+        me = marginal_effects(m)
+
+        # Returns a NamedTuple with effects, varnames, categories
+        @test haskey(me, :effects)
+        @test haskey(me, :varnames)
+        @test haskey(me, :categories)
+
+        # K x J matrix
+        K = size(m.X, 2)
+        J = length(m.categories)
+        @test size(me.effects) == (K, J)
+
+        # Key property: AMEs sum to ~0 across categories for each variable
+        row_sums = sum(me.effects, dims=2)
+        for k in 1:K
+            @test abs(row_sums[k]) < 1e-10
+        end
+
+        # Variable names preserved
+        @test me.varnames == ["const", "x1", "x2"]
+    end
+
+    @testset "Multinomial Logit — marginal effects 4-category" begin
+        rng = MersenneTwister(4040)
+        n = 8000
+        beta_true = [0.3 -0.5  0.2;
+                     0.8 -0.3  0.6;
+                    -0.4  0.7 -0.2]
+        y, X = generate_mlogit_data(rng, n, beta_true)
+
+        m = estimate_mlogit(y, X; varnames=["const", "x1", "x2"])
+        me = marginal_effects(m)
+
+        K = 3
+        J = 4
+        @test size(me.effects) == (K, J)
+
+        # Row sums should be ~0
+        row_sums = sum(me.effects, dims=2)
+        for k in 1:K
+            @test abs(row_sums[k]) < 1e-10
+        end
+    end
+
+    # =========================================================================
+    # Hausman IIA Test
+    # =========================================================================
+
+    @testset "Hausman IIA test — structure" begin
+        rng = MersenneTwister(5050)
+        n = 5000
+        # Use 4-category model so omitting one leaves 3 categories
+        beta_true = [0.3 -0.5  0.2;
+                     0.8 -0.3  0.6;
+                    -0.4  0.7 -0.2]
+        y, X = generate_mlogit_data(rng, n, beta_true)
+
+        m = estimate_mlogit(y, X; varnames=["const", "x1", "x2"])
+        ht = hausman_iia(m; omit_category=4)
+
+        # Check structure
+        @test haskey(ht, :statistic)
+        @test haskey(ht, :pvalue)
+        @test haskey(ht, :df)
+        @test haskey(ht, :omitted_category)
+
+        # Types
+        @test ht.statistic isa Float64
+        @test ht.pvalue isa Float64
+        @test ht.df isa Int
+        @test ht.statistic >= 0
+
+        # p-value should be in [0, 1]
+        @test 0 <= ht.pvalue <= 1
+
+        # Omitted category label
+        @test ht.omitted_category == m.categories[4]
+
+        # df = K * (J_new - 1) where J_new = 3
+        K = size(m.X, 2)
+        @test ht.df == K * 2
+    end
+
+    @testset "Hausman IIA test — different omit categories" begin
+        rng = MersenneTwister(6060)
+        n = 5000
+        # 4-category model to ensure enough categories after omission
+        beta_true = [0.3 -0.5  0.2;
+                     0.8 -0.3  0.6;
+                    -0.4  0.7 -0.2]
+        y, X = generate_mlogit_data(rng, n, beta_true)
+
+        m = estimate_mlogit(y, X; varnames=["const", "x1", "x2"])
+
+        # Omit different categories
+        ht2 = hausman_iia(m; omit_category=2)
+        @test ht2.statistic >= 0
+        @test 0 <= ht2.pvalue <= 1
+
+        ht4 = hausman_iia(m; omit_category=4)
+        @test ht4.statistic >= 0
+        @test 0 <= ht4.pvalue <= 1
+
+        # Invalid omit_category
+        @test_throws ArgumentError hausman_iia(m; omit_category=0)
+        @test_throws ArgumentError hausman_iia(m; omit_category=5)
+    end
+
+    # =========================================================================
     # Input validation
     # =========================================================================
 
