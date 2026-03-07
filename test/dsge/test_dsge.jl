@@ -4573,6 +4573,278 @@ end
 end # Policy Function Iteration
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Section: Anderson Acceleration
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "Anderson Acceleration" begin
+
+@testset "Anderson step on simple fixed point" begin
+    T_fp = Float64
+    history = Vector{T_fp}[]
+    residuals_fp = Vector{T_fp}[]
+
+    x = [0.0]
+    for i in 1:5
+        g_x = [0.5 * x[1] + 1.0]
+        r = g_x .- x
+        push!(history, copy(x))
+        push!(residuals_fp, copy(r))
+        x = g_x
+    end
+
+    x_anderson = MacroEconometricModels._anderson_step(history, residuals_fp, 3)
+    @test length(x_anderson) == 1
+    @test isfinite(x_anderson[1])
+    @test abs(x_anderson[1] - 2.0) < abs(x[1] - 2.0)
+end
+
+@testset "Anderson step m=1 is valid" begin
+    history = [[1.0], [1.5]]
+    residuals_a = [[0.5], [0.25]]
+    x_a = MacroEconometricModels._anderson_step(history, residuals_a, 1)
+    @test length(x_a) == 1
+    @test isfinite(x_a[1])
+end
+
+@testset "Anderson step with multidimensional vectors" begin
+    history = [[1.0, 2.0], [1.5, 1.8], [1.7, 1.9]]
+    residuals_a = [[0.5, -0.2], [0.2, 0.1], [0.1, 0.05]]
+    x_a = MacroEconometricModels._anderson_step(history, residuals_a, 2)
+    @test length(x_a) == 2
+    @test all(isfinite.(x_a))
+end
+
+end # Anderson Acceleration
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Section: Value Function Iteration (VFI)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "Value Function Iteration" begin
+
+@testset "Linear AR(1) VFI" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    sol = solve(spec; method=:vfi, degree=5, verbose=false)
+
+    @test sol isa MacroEconometricModels.ProjectionSolution
+    @test sol.converged
+    @test sol.method == :vfi
+    @test sol.residual_norm < 1e-6
+
+    y_ss = evaluate_policy(sol, [0.0])
+    @test length(y_ss) == 1
+    @test abs(y_ss[1]) < 1e-6
+
+    pert_sol = solve(spec; method=:gensys)
+    for x_val in [-0.02, -0.01, 0.0, 0.01, 0.02]
+        y_vfi = evaluate_policy(sol, [x_val])
+        y_pert = pert_sol.G1[1, 1] * x_val
+        @test abs(y_vfi[1] - y_pert) < 1e-4
+    end
+
+    euler_err = max_euler_error(sol; n_test=100, rng=Random.MersenneTwister(42))
+    @test euler_err < 1e-6
+end
+
+@testset "VFI vs PFI vs projection agreement" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    sol_vfi = solve(spec; method=:vfi, degree=5, verbose=false)
+    sol_pfi = solve(spec; method=:pfi, degree=5, verbose=false)
+    sol_proj = solve(spec; method=:projection, degree=5, verbose=false)
+
+    @test sol_vfi.converged
+    @test sol_pfi.converged
+    @test sol_proj.converged
+
+    for x_val in [-0.02, 0.0, 0.02]
+        y_vfi = evaluate_policy(sol_vfi, [x_val])
+        y_pfi = evaluate_policy(sol_pfi, [x_val])
+        y_proj = evaluate_policy(sol_proj, [x_val])
+        @test abs(y_vfi[1] - y_pfi[1]) < 1e-4
+        @test abs(y_vfi[1] - y_proj[1]) < 1e-4
+    end
+end
+
+@testset "VFI damping" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    sol1 = solve(spec; method=:vfi, degree=5, damping=1.0, verbose=false)
+    @test sol1.converged
+
+    sol05 = solve(spec; method=:vfi, degree=5, damping=0.5, verbose=false)
+    @test sol05.converged
+
+    y1 = evaluate_policy(sol1, [0.01])
+    y05 = evaluate_policy(sol05, [0.01])
+    @test abs(y1[1] - y05[1]) < 1e-4
+end
+
+@testset "VFI dispatch through solve()" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    sol = solve(spec; method=:vfi, degree=3, verbose=false)
+    @test sol isa ProjectionSolution
+    @test sol.method == :vfi
+end
+
+@testset "VFI show()" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    sol = solve(spec; method=:vfi, degree=3, verbose=false)
+    io = IOBuffer()
+    show(io, sol)
+    output = String(take!(io))
+    @test occursin("Converged", output)
+end
+
+@testset "VFI simulate and irf" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:vfi, degree=5, verbose=false)
+
+    Random.seed!(42)
+    Y_sim = simulate(sol, 100)
+    @test size(Y_sim) == (100, 1)
+    @test all(abs.(Y_sim) .< 1.0)
+
+    irfs = irf(sol, 20; n_sim=200)
+    @test irfs isa ImpulseResponse
+    @test size(irfs.values) == (20, 1, 1)
+    @test abs(irfs.values[1, 1, 1] - 0.01) < 0.005
+end
+
+@testset "Howard improvement steps" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    sol_pure = solve(spec; method=:vfi, degree=5, howard_steps=0, verbose=false)
+    sol_howard = solve(spec; method=:vfi, degree=5, howard_steps=5, verbose=false)
+
+    @test sol_pure.converged
+    @test sol_howard.converged
+    @test sol_howard.iterations <= sol_pure.iterations
+
+    for x_val in [-0.02, 0.0, 0.02]
+        y_pure = evaluate_policy(sol_pure, [x_val])
+        y_howard = evaluate_policy(sol_howard, [x_val])
+        @test abs(y_pure[1] - y_howard[1]) < 1e-4
+    end
+end
+
+@testset "VFI Anderson acceleration" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    sol_plain = solve(spec; method=:vfi, degree=5, anderson_m=0, verbose=false)
+    sol_anderson = solve(spec; method=:vfi, degree=5, anderson_m=3, verbose=false)
+
+    @test sol_plain.converged
+    @test sol_anderson.converged
+    @test sol_anderson.iterations <= sol_plain.iterations + 5
+
+    for x_val in [-0.02, 0.0, 0.02]
+        y_plain = evaluate_policy(sol_plain, [x_val])
+        y_anderson = evaluate_policy(sol_anderson, [x_val])
+        @test abs(y_plain[1] - y_anderson[1]) < 1e-3
+    end
+end
+
+@testset "VFI Smolyak grid" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    sol = solve(spec; method=:vfi, degree=5, grid=:smolyak, smolyak_mu=2, verbose=false)
+    @test sol.converged
+    @test sol.grid_type == :smolyak
+end
+
+@testset "VFI threaded matches sequential" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    sol_seq = solve(spec; method=:vfi, degree=5, threaded=false, verbose=false)
+    sol_par = solve(spec; method=:vfi, degree=5, threaded=true, verbose=false)
+
+    @test sol_seq.converged
+    @test sol_par.converged
+
+    for x_val in [-0.02, 0.0, 0.02]
+        y_seq = evaluate_policy(sol_seq, [x_val])
+        y_par = evaluate_policy(sol_par, [x_val])
+        @test abs(y_seq[1] - y_par[1]) < 1e-6
+    end
+end
+
+end # Value Function Iteration
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Section: DSGE Constraint Types
 # ─────────────────────────────────────────────────────────────────────────────
 
