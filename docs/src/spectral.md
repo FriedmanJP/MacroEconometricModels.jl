@@ -31,6 +31,10 @@ report(result)
 plot_result(result)
 ```
 
+```@raw html
+<iframe src="../assets/plots/spectral_acf.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
 **Recipe 2: Spectral density (Welch)**
 
 ```@example spectral
@@ -40,6 +44,10 @@ report(sd)
 
 ```julia
 plot_result(sd)
+```
+
+```@raw html
+<iframe src="../assets/plots/spectral_density.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
 **Recipe 3: Cross-spectrum coherence**
@@ -54,6 +62,10 @@ report(cs)
 
 ```julia
 plot_result(cs)
+```
+
+```@raw html
+<iframe src="../assets/plots/spectral_cross.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
 **Recipe 4: Ideal bandpass (business-cycle frequencies)**
@@ -271,6 +283,10 @@ report(cs)
 plot_result(cs)
 ```
 
+```@raw html
+<iframe src="../assets/plots/spectral_cross.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
 ```@example spectral
 # Convenience accessors
 freq, coh = coherence(y[1:n], y_cpi[1:n])
@@ -423,6 +439,10 @@ report(tf_hp)
 plot_result(tf_hp)
 ```
 
+```@raw html
+<iframe src="../assets/plots/spectral_transfer.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
 ```@example spectral
 # Baxter-King frequency response
 tf_bk = transfer_function(:bk; K=12)
@@ -472,6 +492,10 @@ report(corr)
 plot_result(corr)
 ```
 
+```@raw html
+<iframe src="../assets/plots/spectral_acf.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
 ```@example spectral
 # 2. Spectral density: Welch's method with Hann window
 sd = spectral_density(y; method=:welch, window=:hann)
@@ -480,6 +504,10 @@ report(sd)
 
 ```julia
 plot_result(sd)
+```
+
+```@raw html
+<iframe src="../assets/plots/spectral_density.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
 ```@example spectral
@@ -502,6 +530,10 @@ report(cs)
 
 ```julia
 plot_result(cs)
+```
+
+```@raw html
+<iframe src="../assets/plots/spectral_density.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
 ```@example spectral

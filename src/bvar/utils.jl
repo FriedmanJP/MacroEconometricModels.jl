@@ -66,7 +66,7 @@ results, n_samples = process_posterior_samples(post,
 function process_posterior_samples(post::BVARPosterior, compute_func::Function;
     data::AbstractMatrix=Matrix{Float64}(undef, 0, 0),
     method::Symbol=:cholesky, horizon::Int=20,
-    check_func=nothing, narrative_check=nothing, max_draws::Int=100,
+    check_func=nothing, narrative_check=nothing, max_draws::Int=5000,
     transition_var::Union{Nothing,AbstractVector}=nothing,
     regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing
 )
@@ -86,10 +86,16 @@ function process_posterior_samples(post::BVARPosterior, compute_func::Function;
         if !is_stationary(m).is_stationary
             continue
         end
-        valid_count += 1
-        Q = compute_Q(m, method, horizon, check_func, narrative_check;
-                      max_draws=max_draws, transition_var=transition_var, regime_indicator=regime_indicator)
-        results[valid_count] = compute_func(m, Q, horizon)
+        try
+            Q = compute_Q(m, method, horizon, check_func, narrative_check;
+                          max_draws=max_draws, transition_var=transition_var, regime_indicator=regime_indicator)
+            valid_count += 1
+            results[valid_count] = compute_func(m, Q, horizon)
+        catch e
+            # Skip draws where identification fails (e.g., no valid Q found for sign restrictions)
+            e isa ErrorException && contains(e.msg, "No valid Q found") && continue
+            rethrow(e)
+        end
     end
     valid_count == 0 && error("All posterior draws are non-stationary; cannot process posterior samples")
     valid_count < samples ÷ 2 && @warn "$(samples - valid_count)/$samples posterior draws non-stationary, skipped"

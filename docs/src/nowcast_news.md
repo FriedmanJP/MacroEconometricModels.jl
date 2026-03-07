@@ -71,6 +71,10 @@ nothing # hide
 plot_result(news)
 ```
 
+```@raw html
+<iframe src="../assets/plots/nowcast_news.html" width="100%" height="400" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
 **Recipe 4: Multi-vintage tracking**
 
 ```@example nc_news
@@ -189,6 +193,10 @@ report(news)
 
 ```julia
 plot_result(news)
+```
+
+```@raw html
+<iframe src="../assets/plots/nowcast_news.html" width="100%" height="400" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
 **Interpretation.** The sequential release simulation reveals how each monthly indicator contributes to the quarterly nowcast. Industrial production and unemployment typically carry the largest weights because they load heavily on the common factors driving the quarterly target. The bar chart from `plot_result` visualizes which releases had the largest absolute impact, immediately identifying the key drivers of the nowcast revision.

@@ -49,6 +49,10 @@ report(birf)
 plot_result(birf)
 ```
 
+```@raw html
+<iframe src="../assets/plots/irf_bayesian.html" style="width:100%; height:520px; border:none;"></iframe>
+```
+
 **Recipe 4: Bayesian FEVD and historical decomposition**
 
 ```@example bvar
@@ -393,7 +397,7 @@ function check_monetary(irf_array)
            irf_array[1, 2, 3] < 0       # CPI falls
 end
 
-birf_sign = irf(post, 20; method=:sign, check_func=check_monetary)
+birf_sign = irf(post, 20; method=:sign, check_func=check_monetary, max_draws=5000)
 report(birf_sign)
 ```
 

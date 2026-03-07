@@ -15,7 +15,7 @@ fred = load_example(:fred_md)
 Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
 Y = Y[all.(isfinite, eachrow(Y)), :]
 Y = Y[end-59:end, :]
-model = estimate_var(Y, 4)
+model = estimate_var(Y, 4; varnames=["INDPRO", "CPIAUCSL", "FEDFUNDS"])
 ```
 
 ## Quick Start
@@ -46,7 +46,7 @@ report(hd)
 **Recipe 4: Bayesian IRF with credible intervals**
 
 ```@example ia
-post = estimate_bvar(Y, 4; n_draws=100)
+post = estimate_bvar(Y, 4; n_draws=100, varnames=["INDPRO", "CPIAUCSL", "FEDFUNDS"])
 
 # Posterior median IRF with 68% credible intervals
 birfs = irf(post, 20)

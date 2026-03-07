@@ -745,6 +745,10 @@ irfs = irf(model_ce, 20; method=:cholesky)
 plot_result(irfs)
 ```
 
+```@raw html
+<iframe src="../assets/plots/irf_freq.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
 ```@example data
 # Step 9: Panel workflow with Penn World Table
 panel_summary(pwt)

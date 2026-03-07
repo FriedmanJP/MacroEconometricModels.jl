@@ -50,6 +50,10 @@ occ_irf = occbin_irf(nk_spec, constraint, 1, 40; magnitude=-3.0)
 plot_result(occ_irf)
 ```
 
+```@raw html
+<iframe src="../assets/plots/occbin_irf.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
 ---
 
 ## Perfect Foresight
@@ -269,6 +273,10 @@ occ_irf = occbin_irf(nk_spec, constraint, 1, 40; magnitude=-3.0)
 plot_result(occ_irf)
 ```
 
+```@raw html
+<iframe src="../assets/plots/occbin_irf.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
 The `magnitude` keyword controls the shock size. It must be large enough to trigger the constraint --- small shocks produce identical linear and piecewise paths. The result contains both the unconstrained and constrained IRFs for direct comparison.
 
 For two-constraint IRFs:
@@ -337,6 +345,10 @@ nothing # hide
 
 ```julia
 plot_result(occ_irf)
+```
+
+```@raw html
+<iframe src="../assets/plots/occbin_irf.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
 The unconstrained IRF shows the linear response to a demand shock. The OccBin IRF reveals that when the ZLB binds, the interest rate remains at zero for several periods, amplifying the output and inflation responses relative to the linear solution. The `regime_history` field tracks which periods the constraint binds.

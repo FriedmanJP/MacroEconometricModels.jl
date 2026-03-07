@@ -379,3 +379,15 @@ The fenced block must have blank lines before and after it. The `src` path uses 
 10. **Duplicated content** — Cross-reference other pages instead of repeating material
 11. **Bare `@raw html`** — Always use the fenced `` ```@raw html `` ... `` ``` `` block syntax. Bare `@raw html` renders as literal text, not HTML.
 12. **Static `julia` block for code that produces output the reader should see** — Use `@example` instead so the output appears in the documentation. Static blocks are only for `plot_result()` calls and pure API signatures.
+
+---
+
+## Verification
+
+After writing or modifying any documentation `.md` file, **always** verify that all `@example` and `@setup` blocks run without error by executing:
+
+```bash
+julia --project=docs docs/verify_examples.jl docs/src/<changed_file>.md
+```
+
+Report the result (OK or FAIL with error) before considering the documentation task complete. Do not commit documentation with failing examples.

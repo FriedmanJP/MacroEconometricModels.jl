@@ -857,6 +857,7 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :StructuralDFM => [:forni_giannone_lippi_reichlin2009, :stock_watson2002],
     :favar => [:bernanke_boivin_eliasz2005, :stock_watson2002],
     :structural_dfm => [:forni_giannone_lippi_reichlin2009, :stock_watson2002],
+    :sdfm_panel_irf => [:forni_giannone_lippi_reichlin2009, :stock_watson2002],
     # Unit Root Tests
     :ADFResult => [:dickey_fuller1979],
     :KPSSResult => [:kpss1992],

@@ -30,13 +30,15 @@ Note: `:smooth_transition` requires `transition_var` kwarg.
 """
 function fevd(model::VARModel{T}, horizon::Int;
     method::Symbol=:cholesky, check_func=nothing, narrative_check=nothing,
+    shock_names::Union{Nothing,Vector{String}}=nothing,
     transition_var::Union{Nothing,AbstractVector}=nothing,
     regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing
 ) where {T<:AbstractFloat}
     irf_result = irf(model, horizon; method, check_func, narrative_check,
                      transition_var=transition_var, regime_indicator=regime_indicator)
     decomp, props = _compute_fevd(irf_result.values, nvars(model), horizon)
-    FEVD{T}(decomp, props, model.varnames, model.varnames)
+    snames = isnothing(shock_names) ? model.varnames : shock_names
+    FEVD{T}(decomp, props, model.varnames, snames)
 end
 
 """Compute FEVD from IRF array: decomposition[i,j,h] = cumulative MSE contribution."""
@@ -87,6 +89,8 @@ function fevd(post::BVARPosterior, horizon::Int;
     method::Symbol=:cholesky, data::AbstractMatrix=Matrix{Float64}(undef, 0, 0),
     check_func=nothing, narrative_check=nothing, quantiles::Vector{<:Real}=[0.16, 0.5, 0.84],
     threaded::Bool=false, point_estimate::Symbol=:mean,
+    shock_names::Union{Nothing,Vector{String}}=nothing,
+    max_draws::Int=1000,
     transition_var::Union{Nothing,AbstractVector}=nothing,
     regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing
 )
@@ -105,6 +109,7 @@ function fevd(post::BVARPosterior, horizon::Int;
         end;
         data=use_data, method=method, horizon=horizon,
         check_func=check_func, narrative_check=narrative_check,
+        max_draws=max_draws,
         transition_var=transition_var, regime_indicator=regime_indicator
     )
 
@@ -121,7 +126,8 @@ function fevd(post::BVARPosterior, horizon::Int;
     use_threaded = threaded || (samples * horizon * n * n > 100000)
     fevd_q, fevd_m = compute_posterior_quantiles(all_fevds, q_vec; threaded=use_threaded, central=point_estimate)
 
-    BayesianFEVD{ET}(fevd_q, fevd_m, horizon, post.varnames, post.varnames, q_vec)
+    snames = isnothing(shock_names) ? post.varnames : shock_names
+    BayesianFEVD{ET}(fevd_q, fevd_m, horizon, post.varnames, snames, q_vec)
 end
 
 # Deprecated wrapper for old (chain, p, n, horizon) signature

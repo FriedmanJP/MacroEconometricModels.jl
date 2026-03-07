@@ -398,3 +398,84 @@ in the factor space.
 function fevd(sdfm::StructuralDFM{T}, horizon::Int; kwargs...) where {T}
     fevd(sdfm.factor_var, horizon; kwargs...)
 end
+
+# =============================================================================
+# sdfm_panel_irf — Project structural factor IRFs to panel observables
+# =============================================================================
+
+"""
+    sdfm_panel_irf(sdfm::StructuralDFM, H::Int) -> ImpulseResponse{T}
+
+Compute panel-wide structural IRFs by projecting factor-space IRFs to all N
+observable variables via the time-domain loading matrix.
+
+Internally computes factor IRFs from the factor VAR using the stored
+identification matrix Q, then applies `Λ * factor_irf` at each horizon.
+
+# Arguments
+- `sdfm`: Estimated Structural DFM
+- `H`: IRF horizon
+
+# Returns
+`ImpulseResponse{T}` with dimensions (H, N, q) — N observable responses to q structural shocks.
+"""
+function sdfm_panel_irf(sdfm::StructuralDFM{T}, H::Int) where {T}
+    H >= 1 || throw(ArgumentError("horizon H must be >= 1"))
+
+    q = sdfm.gdfm.q
+    factor_irf = compute_irf(sdfm.factor_var, sdfm.Q, H)  # H x q x q
+
+    _sdfm_project_irf(sdfm, factor_irf, H)
+end
+
+"""
+    sdfm_panel_irf(sdfm::StructuralDFM, irf_result::ImpulseResponse) -> ImpulseResponse{T}
+
+Project an existing factor-space `ImpulseResponse` to all N observable panel
+variables via the time-domain loading matrix.
+
+Analogous to `favar_panel_irf`: takes factor-space IRFs (from the factor VAR
+with any identification) and maps them to observable space.
+
+# Arguments
+- `sdfm`: Estimated Structural DFM (provides loadings)
+- `irf_result`: Factor-space IRF (H x q x q)
+
+# Returns
+`ImpulseResponse{T}` with dimensions (H, N, q).
+"""
+function sdfm_panel_irf(sdfm::StructuralDFM{T}, irf_result::ImpulseResponse{T}) where {T}
+    q = sdfm.gdfm.q
+    n_vars = size(irf_result.values, 2)
+    n_shocks = size(irf_result.values, 3)
+    H = irf_result.horizon
+
+    n_vars == q || throw(ArgumentError(
+        "IRF has $n_vars variables but StructuralDFM has $q factors"))
+    n_shocks == q || throw(ArgumentError(
+        "IRF has $n_shocks shocks but StructuralDFM has $q factors"))
+
+    _sdfm_project_irf(sdfm, irf_result.values, H)
+end
+
+"""Project factor-space IRF array (H x q x q) to panel space (H x N x q)."""
+function _sdfm_project_irf(sdfm::StructuralDFM{T}, factor_irf::AbstractArray{T,3}, H::Int) where {T}
+    q = sdfm.gdfm.q
+    N = size(sdfm.loadings_td, 1)
+    Lambda = sdfm.loadings_td  # N x q
+
+    panel_values = zeros(T, H, N, q)
+    for h in 1:H
+        for j in 1:q
+            factor_irfs_h = @view factor_irf[h, :, j]
+            panel_values[h, :, j] = Lambda * factor_irfs_h
+        end
+    end
+
+    panel_names = ["Var $i" for i in 1:N]
+    ci_lo = zeros(T, H, N, q)
+    ci_hi = zeros(T, H, N, q)
+
+    ImpulseResponse{T}(panel_values, ci_lo, ci_hi, H, panel_names,
+        sdfm.shock_names, :none, nothing, zero(T))
+end

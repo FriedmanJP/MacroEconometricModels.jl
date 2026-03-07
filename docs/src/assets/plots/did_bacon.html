@@ -70,7 +70,7 @@ svg { overflow: visible; }
 <div class="figure-title">Bacon Decomposition (TWFE = 2.668155967021939)</div>
 <div class="panel">
 <div class="panel-title">Estimate vs Weight</div>
-<div id="bacon_131"></div>
+<div id="bacon_143"></div>
 </div>
 <div class="tooltip" id="tooltip"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
@@ -95,7 +95,7 @@ function hideTip() { tooltip.style('opacity',0); }
     const groups = [{"name":"Treated vs Untreated","color":"#1f77b4"},{"name":"Earlier vs Later","color":"#ff7f0e"},{"name":"Later vs Earlier","color":"#2ca02c"}];
     const refLines = [{"value":2.668155967021939,"color":"#d62728","dash":"6,3","axis":"x"}];
 
-    const container = d3.select('#bacon_131');
+    const container = d3.select('#bacon_143');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;

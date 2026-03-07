@@ -13,8 +13,8 @@ fred = load_example(:fred_md)
 Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
 Y = Y[all.(isfinite, eachrow(Y)), :]
 Y = Y[end-59:end, :]
-model = estimate_var(Y, 4)
-post = estimate_bvar(Y, 4; n_draws=100)
+model = estimate_var(Y, 4; varnames=["INDPRO", "CPIAUCSL", "FEDFUNDS"])
+post = estimate_bvar(Y, 4; n_draws=100, varnames=["INDPRO", "CPIAUCSL", "FEDFUNDS"])
 ```
 
 ## Quick Start
@@ -274,6 +274,10 @@ print_table(stdout, freq_fevd, 1; horizons=[1, 4, 8, 20])
 plot_result(freq_fevd)
 plot_result(bayes_fevd)
 plot_result(lp_fevd_result)
+```
+
+```@raw html
+<iframe src="../assets/plots/fevd_freq.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
 The frequentist FEVD provides point estimates at each horizon. The Bayesian FEVD adds credible intervals reflecting parameter uncertainty. The LP-FEVD offers robustness to VAR lag misspecification at the cost of wider confidence bands. All three methods agree on the qualitative pattern: own shocks dominate at short horizons, while cross-variable transmission mechanisms become visible at longer horizons.

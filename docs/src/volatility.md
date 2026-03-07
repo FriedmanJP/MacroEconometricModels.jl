@@ -81,6 +81,10 @@ report(fc)
 plot_result(fc)
 ```
 
+```@raw html
+<iframe src="../assets/plots/forecast_volatility.html" width="100%" height="400" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
 ---
 
 ## ARCH Models
@@ -666,6 +670,10 @@ report(fc)
 plot_result(fc; history=garch.conditional_variance)
 ```
 
+```@raw html
+<iframe src="../assets/plots/forecast_volatility.html" width="100%" height="400" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
 ```@example volatility
 # === Step 6: Stochastic volatility for comparison ===
 sv = estimate_sv(ip; n_samples=2000, burnin=1000)
@@ -674,6 +682,10 @@ report(sv)
 
 ```julia
 plot_result(sv)
+```
+
+```@raw html
+<iframe src="../assets/plots/model_sv.html" width="100%" height="400" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
 ```@example volatility

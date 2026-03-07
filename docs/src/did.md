@@ -42,6 +42,10 @@ report(did_cs)
 plot_result(did_cs)
 ```
 
+```@raw html
+<iframe src="../assets/plots/did_event_study.html" style="width:100%;height:420px;border:1px solid #eee;border-radius:8px;" loading="lazy"></iframe>
+```
+
 **Recipe 3: Sun-Abraham interaction-weighted estimator**
 
 ```@example did
@@ -66,6 +70,10 @@ report(bd)
 plot_result(bd)
 ```
 
+```@raw html
+<iframe src="../assets/plots/did_bacon.html" style="width:100%;height:420px;border:1px solid #eee;border-radius:8px;" loading="lazy"></iframe>
+```
+
 **Recipe 5: HonestDiD sensitivity analysis**
 
 ```@example did
@@ -79,6 +87,10 @@ nothing # hide
 
 ```julia
 plot_result(h)
+```
+
+```@raw html
+<iframe src="../assets/plots/did_honest.html" style="width:100%;height:420px;border:1px solid #eee;border-radius:8px;" loading="lazy"></iframe>
 ```
 
 ---
@@ -361,6 +373,10 @@ report(bd)
 plot_result(bd)
 ```
 
+```@raw html
+<iframe src="../assets/plots/did_bacon.html" style="width:100%;height:420px;border:1px solid #eee;border-radius:8px;" loading="lazy"></iframe>
+```
+
 | Field | Type | Description |
 |-------|------|-------------|
 | `estimates` | `Vector{T}` | 2x2 DiD estimates |
@@ -476,6 +492,10 @@ nothing # hide
 
 ```julia
 plot_result(h)
+```
+
+```@raw html
+<iframe src="../assets/plots/did_honest.html" style="width:100%;height:420px;border:1px solid #eee;border-radius:8px;" loading="lazy"></iframe>
 ```
 
 !!! note "Choosing Mbar"
@@ -595,6 +615,10 @@ nothing # hide
 plot_result(did_cs)
 plot_result(bd)
 plot_result(h)
+```
+
+```@raw html
+<iframe src="../assets/plots/did_event_study.html" style="width:100%;height:420px;border:1px solid #eee;border-radius:8px;" loading="lazy"></iframe>
 ```
 
 The TWFE estimator produces biased event-study coefficients when treatment effects are heterogeneous across the early and late cohorts. The Bacon decomposition reveals the source of this bias by decomposing the TWFE estimate into treated-vs-untreated, earlier-vs-later, and later-vs-earlier 2x2 comparisons --- the last category uses already-treated units as controls and is contaminated. The Callaway-Sant'Anna, Sun-Abraham, and BJS estimators all avoid this problem by restricting comparisons to clean control groups, producing consistent ATT estimates. The pre-trend test checks whether pre-treatment event-study coefficients are jointly zero, and the HonestDiD analysis quantifies how much violation of parallel trends the result can withstand before significance is overturned.

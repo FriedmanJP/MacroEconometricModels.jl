@@ -413,6 +413,8 @@ report(x::VARForecast) = show(stdout, x)
 report(x::BVARForecast) = show(stdout, x)
 report(x::LPForecast) = show(stdout, x)
 report(x::LPImpulseResponse) = show(stdout, x)
+report(x::LPFEVD) = show(stdout, x)
+report(x::StructuralLP) = show(stdout, x)
 report(x::IdentifiabilityTestResult) = show(stdout, x)
 report(x::NormalityTestSuite) = show(stdout, x)
 
@@ -427,6 +429,8 @@ report(x::SVARRestrictions) = show(stdout, x)
 
 # DSGE
 report(x::DSGESolution) = show(stdout, x)
+report(x::PerturbationSolution) = show(stdout, x)
+report(x::ProjectionSolution) = show(stdout, x)
 report(x::PerfectForesightPath) = show(stdout, x)
 report(x::DSGESpec) = show(stdout, x)
 function report(x::DSGEEstimation)
@@ -454,7 +458,6 @@ report(x::EventStudyLP) = show(stdout, x)
 report(x::LPDiDResult) = show(stdout, x)
 report(x::BaconDecomposition) = show(stdout, x)
 report(x::HonestDiDResult) = show(stdout, x)
-
 
 # =============================================================================
 # Split Files (table extraction, display, references, nowcasting)

@@ -13,8 +13,8 @@ fred = load_example(:fred_md)
 Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
 Y = Y[all.(isfinite, eachrow(Y)), :]
 Y = Y[end-59:end, :]
-model = estimate_var(Y, 4)
-post = estimate_bvar(Y, 4; n_draws=100)
+model = estimate_var(Y, 4; varnames=["INDPRO", "CPIAUCSL", "FEDFUNDS"])
+post = estimate_bvar(Y, 4; n_draws=100, varnames=["INDPRO", "CPIAUCSL", "FEDFUNDS"])
 ```
 
 ## Quick Start
@@ -64,6 +64,10 @@ nothing # hide
 
 ```julia
 plot_result(hd)
+```
+
+```@raw html
+<iframe src="../assets/plots/hd_freq.html" width="100%" height="600" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
 ---
@@ -251,6 +255,10 @@ nothing # hide
 plot_result(irfs)
 plot_result(decomp)
 plot_result(hd)
+```
+
+```@raw html
+<iframe src="../assets/plots/hd_freq.html" width="100%" height="600" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
 The IRFs reveal the dynamic transmission mechanism: a contractionary monetary shock (positive FFR innovation) reduces industrial production with a lag of several quarters. The FEVD shows that monetary shocks explain a modest but non-trivial share of output forecast error variance at business-cycle horizons. The HD identifies specific historical episodes where monetary shocks made large positive or negative contributions to output movements, providing a narrative interpretation of the estimated structural model.

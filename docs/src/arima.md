@@ -68,6 +68,10 @@ fc = forecast(ar, 20)
 p = plot_result(fc; history=y, n_history=30)
 ```
 
+```@raw html
+<iframe src="../assets/plots/forecast_arima.html" width="100%" height="400" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
 ---
 
 ## The AR(p) Model
@@ -572,6 +576,10 @@ report(fc)
 ```julia
 # Step 5: Visualize forecast with recent history
 p = plot_result(fc; history=y, n_history=50)
+```
+
+```@raw html
+<iframe src="../assets/plots/forecast_arima.html" width="100%" height="400" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
 The ADF test rejects the unit root null at the 1% level, confirming that IP growth is stationary and no differencing is required. The BIC grid search identifies the optimal ARMA order, balancing fit against parsimony. The 12-month forecast shows IP growth reverting toward its unconditional mean, with widening confidence bands that reflect increasing uncertainty at longer horizons. The one-step standard error provides the minimal forecast uncertainty, while the 12-step band is substantially wider due to the accumulation of ``\psi``-weight variance.

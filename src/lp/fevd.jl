@@ -102,7 +102,7 @@ function lp_fevd(slp::StructuralLP{T}, horizon::Int;
 
     LPFEVD{T}(proportions, bias_corrected, se_arr, ci_lower, ci_upper,
               method, H, n_boot, T(conf_level), bias_correct,
-              slp.var_model.varnames, slp.var_model.varnames)
+              slp.var_model.varnames, slp.irf.shocks)
 end
 
 """

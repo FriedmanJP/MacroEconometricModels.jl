@@ -77,7 +77,8 @@ With `store_all=true`, returns a `SignIdentifiedSet` containing ALL accepted
 rotations and their IRFs (Baumeister & Hamilton, 2015).
 """
 function identify_sign(model::VARModel{T}, horizon::Int, check_func::Function;
-                       max_draws::Int=1000, store_all::Bool=false) where {T<:AbstractFloat}
+                       max_draws::Int=1000, store_all::Bool=false,
+                       shock_names::Union{Nothing,Vector{String}}=nothing) where {T<:AbstractFloat}
     n = nvars(model)
 
     if !store_all
@@ -114,8 +115,9 @@ function identify_sign(model::VARModel{T}, horizon::Int, check_func::Function;
 
     acceptance_rate = T(n_accepted) / T(max_draws)
 
+    snames = isnothing(shock_names) ? model.varnames : shock_names
     SignIdentifiedSet{T}(accepted_Q, irf_draws, n_accepted, max_draws, acceptance_rate,
-                         model.varnames, model.varnames)
+                         model.varnames, snames)
 end
 
 """

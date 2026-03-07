@@ -35,6 +35,7 @@ function irf(model::VARModel{T}, horizon::Int;
     method::Symbol=:cholesky, check_func=nothing, narrative_check=nothing,
     ci_type::Symbol=:none, reps::Int=200, conf_level::Real=0.95,
     stationary_only::Bool=false,
+    shock_names::Union{Nothing,Vector{String}}=nothing,
     transition_var::Union{Nothing,AbstractVector}=nothing,
     regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing
 ) where {T<:AbstractFloat}
@@ -57,9 +58,10 @@ function irf(model::VARModel{T}, horizon::Int;
         end
     end
 
+    snames = isnothing(shock_names) ? model.varnames : shock_names
     cl = ci_type == :none ? zero(T) : T(conf_level)
     ImpulseResponse{T}(point_irf, ci_lower, ci_upper, horizon,
-                       model.varnames, model.varnames, ci_type, sim_irfs, cl)
+                       model.varnames, snames, ci_type, sim_irfs, cl)
 end
 
 """Simulate IRFs for confidence intervals (bootstrap or asymptotic)."""
@@ -209,6 +211,8 @@ function irf(post::BVARPosterior, horizon::Int;
     method::Symbol=:cholesky, data::AbstractMatrix=Matrix{Float64}(undef, 0, 0),
     check_func=nothing, narrative_check=nothing, quantiles::Vector{<:Real}=[0.16, 0.5, 0.84],
     threaded::Bool=false, point_estimate::Symbol=:mean,
+    shock_names::Union{Nothing,Vector{String}}=nothing,
+    max_draws::Int=1000,
     transition_var::Union{Nothing,AbstractVector}=nothing,
     regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing
 )
@@ -223,6 +227,7 @@ function irf(post::BVARPosterior, horizon::Int;
         (m, Q, h) -> compute_irf(m, Q, h);
         data=use_data, method=method, horizon=horizon,
         check_func=check_func, narrative_check=narrative_check,
+        max_draws=max_draws,
         transition_var=transition_var, regime_indicator=regime_indicator
     )
 
@@ -234,7 +239,8 @@ function irf(post::BVARPosterior, horizon::Int;
     use_threaded = threaded || (samples * horizon * n * n > 100000)
     irf_q, irf_m = compute_posterior_quantiles(all_irfs, q_vec; threaded=use_threaded, central=point_estimate)
 
-    BayesianImpulseResponse{ET}(irf_q, irf_m, horizon, post.varnames, post.varnames, q_vec, all_irfs)
+    snames = isnothing(shock_names) ? post.varnames : shock_names
+    BayesianImpulseResponse{ET}(irf_q, irf_m, horizon, post.varnames, snames, q_vec, all_irfs)
 end
 
 # Deprecated wrapper for old (chain, p, n, horizon) signature

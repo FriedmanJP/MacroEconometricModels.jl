@@ -46,6 +46,10 @@ irfs = irf(vecm, 20; method=:cholesky)
 plot_result(irfs)
 ```
 
+```@raw html
+<iframe src="../assets/plots/vecm_irf.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
 **Recipe 4: Forecast with bootstrap confidence intervals**
 
 ```@example vecm
@@ -274,6 +278,10 @@ plot_result(decomp)
 plot_result(hd)
 ```
 
+```@raw html
+<iframe src="../assets/plots/vecm_irf.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
 The Cholesky-identified IRFs trace the dynamic effects of orthogonalized shocks on the level variables. Because the VAR is estimated in levels (via conversion), the IRFs capture both the transitory short-run dynamics and the permanent effects that cointegration implies. For a system with ``r < n`` cointegrating vectors, exactly ``n - r`` shocks have permanent effects on the levels, corresponding to the common stochastic trends. For details on identification methods, see [Innovation Accounting](@ref innovation_accounting_page).
 
 ---
@@ -416,6 +424,10 @@ decomp = fevd(var_model, 20)
 plot_result(irfs)
 plot_result(fc)
 plot_result(decomp)
+```
+
+```@raw html
+<iframe src="../assets/plots/vecm_irf.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
 The cointegrating vector ``\beta`` identifies the long-run equilibrium between GDP, consumption, and investment. A cointegrating relationship ``\beta'y_t \sim I(0)`` implies these variables share common stochastic trends, consistent with balanced growth path theory. The adjustment coefficients ``\alpha`` reveal how each variable responds to disequilibrium --- a negative ``\alpha`` for consumption indicates it contracts when the system overshoots the equilibrium ratio. The Granger causality test decomposes predictive content into short-run (through lagged differences ``\Gamma``) and long-run (through the error correction term ``\alpha\beta'y_{t-1}``) channels, providing a richer picture than standard VAR-based Granger tests.

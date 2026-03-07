@@ -71,15 +71,15 @@ svg { overflow: visible; }
 <div class="panel-grid">
 <div class="panel">
 <div class="panel-title">Residuals vs Fitted</div>
-<div id="reg_rvf_134"></div>
+<div id="reg_rvf_146"></div>
 </div>
 <div class="panel">
 <div class="panel-title">Residual Histogram</div>
-<div id="reg_hist_135"></div>
+<div id="reg_hist_147"></div>
 </div>
 <div class="panel">
 <div class="panel-title">Normal Q-Q Plot</div>
-<div id="reg_qq_136"></div>
+<div id="reg_qq_148"></div>
 </div>
 </div>
 
@@ -302,7 +302,7 @@ function hideTip() { tooltip.style('opacity',0); }
     const groups = [{"name":"Residuals","color":"#1f77b4"}];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
 
-    const container = d3.select('#reg_rvf_134');
+    const container = d3.select('#reg_rvf_146');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;
@@ -415,7 +415,7 @@ function hideTip() { tooltip.style('opacity',0); }
     const series = [{"name":"Count","color":"#ff7f0e","key":"s1","dash":""}];
     const mode = 'stacked';
 
-    const container = d3.select('#reg_hist_135');
+    const container = d3.select('#reg_hist_147');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;
@@ -723,7 +723,7 @@ function hideTip() { tooltip.style('opacity',0); }
     const groups = [{"name":"Q-Q","color":"#2ca02c"}];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
 
-    const container = d3.select('#reg_qq_136');
+    const container = d3.select('#reg_qq_148');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;
@@ -813,7 +813,7 @@ function hideTip() { tooltip.style('opacity',0); }
 })();
 
 (function() {
-    const container = d3.select('#reg_qq_136');
+    const container = d3.select('#reg_qq_148');
     const svgEl = container.select('svg');
     const gEl = svgEl.select('g');
     const W = +svgEl.attr('width');

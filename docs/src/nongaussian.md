@@ -65,6 +65,10 @@ report(irfs)
 plot_result(irfs)
 ```
 
+```@raw html
+<iframe src="../assets/plots/nongaussian_irf.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
 ---
 
 ## The SVAR Setting

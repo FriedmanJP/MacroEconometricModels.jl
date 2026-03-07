@@ -55,6 +55,10 @@ result = irf(model, 20; method=:cholesky, ci_type=:bootstrap, reps=50)
 plot_result(result)
 ```
 
+```@raw html
+<iframe src="../assets/plots/quickstart_irf.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
 **Recipe 4: Sign restrictions**
 
 ```@example var
@@ -69,25 +73,29 @@ result = irf(model, 20; method=:sign, check_func=check)
 plot_result(result)
 ```
 
+```@raw html
+<iframe src="../assets/plots/irf_freq.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
 **Recipe 5: Arias identification**
 
 ```@example var
-model = estimate_var(Y, 4)
+model_short = estimate_var(Y[end-59:end, :], 2)
 
 # Zero + sign restrictions on the monetary policy shock (shock 3)
 restrictions = SVARRestrictions(3;
     zeros = [zero_restriction(1, 3; horizon=0)],       # No impact on INDPRO on impact
     signs = [sign_restriction(3, 3, :positive),          # FFR rises
-             sign_restriction(2, 3, :negative; horizon=1)] # CPI falls at h=1
+             sign_restriction(2, 3, :negative)]          # CPI falls
 )
-result = identify_arias(model, restrictions, 20; n_draws=500)
+result = identify_arias(model_short, restrictions, 20; n_draws=500)
 result
 ```
 
 **Recipe 6: Uhlig identification**
 
 ```@example var
-model = estimate_var(Y, 4)
+model_short = estimate_var(Y[end-59:end, :], 2)
 
 # Mountford-Uhlig penalty function: one optimal rotation
 restrictions = SVARRestrictions(3;
@@ -95,7 +103,7 @@ restrictions = SVARRestrictions(3;
     signs = [sign_restriction(1, 1, :positive),     # Fiscal shock raises INDPRO
              sign_restriction(3, 3, :positive)]     # Monetary shock raises FFR
 )
-result = identify_uhlig(model, restrictions, 20)
+result = identify_uhlig(model_short, restrictions, 20)
 result
 ```
 
@@ -294,6 +302,10 @@ result = irf(model, 20; method=:cholesky, ci_type=:bootstrap, reps=50, conf_leve
 plot_result(result)
 ```
 
+```@raw html
+<iframe src="../assets/plots/irf_freq.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
 ### Sign Restrictions
 
 Sign restrictions identify structural shocks by constraining the signs of impulse responses at selected horizons, following Rubio-Ramírez, Waggoner & Zha (2010). The algorithm draws random orthogonal matrices ``Q`` from the Haar measure and retains only those producing IRFs consistent with the sign constraints:
@@ -368,6 +380,10 @@ result = irf(model, 40; method=:long_run)
 plot_result(result)
 ```
 
+```@raw html
+<iframe src="../assets/plots/irf_freq.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
 ### Arias et al. (2018) Zero + Sign Restrictions
 
 When sign restrictions alone are insufficient, zero restrictions on specific impulse responses can be imposed alongside sign constraints. Arias, Rubio-Ramírez & Waggoner (2018) develop an algorithm that draws rotation matrices ``Q`` uniformly over the set satisfying zero restrictions, then filters for sign satisfaction. Importance weights correct for non-uniform sampling induced by the zero-restriction constraint manifold.
@@ -380,18 +396,18 @@ The algorithm constructs ``Q`` column-by-column via QR decomposition in the null
 | Sign | `sign_restriction(var, shock, :positive; horizon=0)` | Response has required sign at `horizon` |
 
 ```@example var
-model = estimate_var(Y, 4)
+model_short = estimate_var(Y[end-59:end, :], 2)
 
 # Monetary policy shock (shock 3):
 # Zero: INDPRO does not respond on impact
-# Sign: FFR rises on impact, CPI falls at h=1
+# Sign: FFR rises on impact, CPI falls
 restrictions = SVARRestrictions(3;
     zeros = [zero_restriction(1, 3; horizon=0)],
     signs = [sign_restriction(3, 3, :positive),
-             sign_restriction(2, 3, :negative; horizon=1)]
+             sign_restriction(2, 3, :negative)]
 )
 
-result = identify_arias(model, restrictions, 20; n_draws=1000)
+result = identify_arias(model_short, restrictions, 20; n_draws=1000)
 result
 
 # Weighted IRF percentiles (importance-weight-corrected)
@@ -436,7 +452,7 @@ where:
     Use `identify_uhlig` when a single point-identified rotation is needed --- for example, as a starting point for policy analysis. Use `identify_arias` when the full identified set is required for inference with credible intervals.
 
 ```@example var
-model = estimate_var(Y, 4)
+model_short = estimate_var(Y[end-59:end, :], 2)
 
 # Fiscal vs monetary separation
 restrictions = SVARRestrictions(3;
@@ -445,7 +461,7 @@ restrictions = SVARRestrictions(3;
              sign_restriction(3, 3, :positive)]     # Monetary shock raises FFR
 )
 
-result = identify_uhlig(model, restrictions, 20)
+result = identify_uhlig(model_short, restrictions, 20)
 result
 ```
 
@@ -633,6 +649,10 @@ result = irf(model, 20; method=:cholesky, ci_type=:bootstrap, reps=50)
 
 ```julia
 plot_result(result)
+```
+
+```@raw html
+<iframe src="../assets/plots/irf_freq.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
 ```@example var

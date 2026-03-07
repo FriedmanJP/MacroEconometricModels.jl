@@ -6,6 +6,7 @@
 
 using MacroEconometricModels
 using DataFrames
+using Distributions
 using Random
 
 Random.seed!(42)
@@ -197,19 +198,22 @@ function main()
     save("forecast_bvar.html", plot_result(fc_bvar))
 
     # -------------------------------------------------------------------
-    # 20. VECM Forecast
+    # 20. VECM Forecast + IRF + FEVD
     # -------------------------------------------------------------------
+    local vecm_m
     try
         vecm_m  = estimate_vecm(Y_ci, 2; rank=1, varnames=["GDP", "PCE", "Investment"])
-        fc_vecm = forecast(vecm_m, 10)
-        save("forecast_vecm.html", plot_result(fc_vecm))
     catch e
         @warn "VECM with real data failed, using synthetic" exception=e
         Y_ci_syn = cumsum(randn(150, 3), dims=1)
         vecm_m   = estimate_vecm(Y_ci_syn, 2; rank=1, varnames=["GDP", "PCE", "Investment"])
-        fc_vecm  = forecast(vecm_m, 10)
-        save("forecast_vecm.html", plot_result(fc_vecm))
     end
+    fc_vecm = forecast(vecm_m, 10)
+    save("forecast_vecm.html", plot_result(fc_vecm))
+    vecm_irf_r = irf(vecm_m, 20; method=:cholesky)
+    save("vecm_irf.html", plot_result(vecm_irf_r))
+    vecm_fevd_r = fevd(vecm_m, 20)
+    save("vecm_fevd.html", plot_result(vecm_fevd_r))
 
     # -------------------------------------------------------------------
     # 21. Factor Forecast
@@ -530,6 +534,56 @@ function main()
     begin
         r_tf = transfer_function(:hp; lambda=1600)
         save("spectral_transfer.html", plot_result(r_tf))
+    end
+
+    # -------------------------------------------------------------------
+    # 48. DSGE GIRF (2nd-order perturbation)
+    # -------------------------------------------------------------------
+    begin
+        psol2 = perturbation_solver(dsge_sol.spec; order=2)
+        girf = irf(psol2, 40; irf_type=:girf, n_draws=100)
+        save("dsge_girf.html", plot_result(girf))
+    end
+
+    # -------------------------------------------------------------------
+    # 49. Non-Gaussian SVAR IRF (ICA identification)
+    # -------------------------------------------------------------------
+    begin
+        ng_irf = irf(m_var, 20; method=:fastica)
+        save("nongaussian_irf.html", plot_result(ng_irf))
+    end
+
+    # -------------------------------------------------------------------
+    # 50. Structural DFM IRF
+    # -------------------------------------------------------------------
+    begin
+        sdfm = estimate_structural_dfm(X20, 3; p=1, H=20)
+        r_sdfm = irf(sdfm, 20)
+        save("sdfm_irf.html", plot_result(r_sdfm))
+    end
+
+    # -------------------------------------------------------------------
+    # 51. Structural DFM Panel IRF
+    # -------------------------------------------------------------------
+    begin
+        panel_irf = sdfm_panel_irf(sdfm, 20)
+        save("sdfm_panel_irf.html", plot_result(panel_irf))
+    end
+
+    # -------------------------------------------------------------------
+    # 52. Bayesian DSGE IRF (estimate_dsge_bayes + credible bands)
+    # -------------------------------------------------------------------
+    begin
+        # Simulate data from the RBC model for Bayesian estimation
+        Y_dsge_sim = simulate(dsge_sol, 200)
+        Y_data = Y_dsge_sim[:, [1, 4]]  # observe Y and A
+
+        bayes_result = estimate_dsge_bayes(dsge_spec, Y_data, [0.9];
+            priors=Dict(:ρ => Beta(5, 2)),
+            method=:mh, n_draws=5000, burnin=2000,
+            observables=[:Y, :A])
+        birf_dsge = irf(bayes_result, 40; n_draws=50)
+        save("dsge_bayes_irf.html", plot_result(birf_dsge))
     end
 
     println("\nDone! Generated $(length(readdir(PLOT_DIR))) HTML files in $PLOT_DIR")

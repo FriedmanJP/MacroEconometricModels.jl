@@ -76,6 +76,18 @@ report(r)
 plot_result(r)
 ```
 
+```@raw html
+<iframe src="../assets/plots/sdfm_irf.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+**Recipe 7: Panel IRFs from Structural DFM**
+
+```@example factor
+# Project structural factor IRFs to all N observable variables
+panel_irf = sdfm_panel_irf(sdfm, 20)
+nothing # hide
+```
+
 ---
 
 ## The Static Factor Model
@@ -563,6 +575,10 @@ report(d)
 plot_result(r_sdfm)
 ```
 
+```@raw html
+<iframe src="../assets/plots/sdfm_irf.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
 The structural IRFs show how a one-standard-deviation structural shock propagates to each of the ``N`` panel variables over the ``H``-period horizon. Cholesky identification imposes a recursive ordering on the factors; sign restrictions allow the researcher to test alternative identification schemes based on economic theory.
 
 ### Sign Restrictions
@@ -589,6 +605,33 @@ report(sdfm_two)
 
 !!! note "Technical Note"
     The Structural DFM proceeds in two steps: (1) estimate GDFM to extract common factors and spectral loadings, (2) fit a VAR on the time-domain factors and apply structural identification. Time-domain loadings are computed via OLS regression ``\hat{\Lambda} = (F'F)^{-1}F'X`` rather than the spectral domain.
+
+### Panel IRFs
+
+`sdfm_panel_irf` projects structural factor IRFs to all ``N`` observable panel variables via the loading matrix, analogous to `favar_panel_irf` for FAVAR models. Two forms are available:
+
+```@example factor
+# Form 1: Convenience — computes factor IRFs internally (no horizon cap)
+panel_irf = sdfm_panel_irf(sdfm, 20)
+report(panel_irf)
+```
+
+```@example factor
+# Form 2: From existing factor-space ImpulseResponse
+factor_irf = irf(sdfm.factor_var, 20)
+panel_irf2 = sdfm_panel_irf(sdfm, factor_irf)
+nothing # hide
+```
+
+```julia
+plot_result(panel_irf)
+```
+
+```@raw html
+<iframe src="../assets/plots/sdfm_panel_irf.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+The convenience form recomputes factor IRFs from the VAR coefficients, so horizons beyond the estimation-time ``H`` are available. The second form accepts any factor-space `ImpulseResponse` (e.g., from a custom identification), validates dimensions, and projects via ``\Lambda``.
 
 ---
 
@@ -671,6 +714,10 @@ report(fc_full)
 
 ```julia
 plot_result(fc_full)
+```
+
+```@raw html
+<iframe src="../assets/plots/forecast_factor.html" width="100%" height="400" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
 The Bai-Ng information criteria select the number of factors from the FRED-MD panel. The static factor model extracts the dominant principal components, and the dynamic factor model augments the static estimate with VAR(1) dynamics on the factors. The per-variable ``R^2`` values identify which FRED-MD indicators are well-explained by the common factors and which are driven by idiosyncratic variation. The 12-step-ahead forecast with theoretical confidence intervals shows factor and observable predictions with uncertainty bands that widen at longer horizons, reflecting the accumulation of forecast error variance through the factor VAR dynamics.

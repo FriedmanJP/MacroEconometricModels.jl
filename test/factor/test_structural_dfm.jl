@@ -300,4 +300,82 @@ using MacroEconometricModels
         @test mean_abs_late < 10 * mean_abs_early
     end
 
+    # =========================================================================
+    # sdfm_panel_irf
+    # =========================================================================
+
+    @testset "sdfm_panel_irf convenience form" begin
+        X, q = make_sdfm_data()
+        T_obs, N = size(X)
+        sdfm = estimate_structural_dfm(X, q; p=1, H=30)
+
+        # Compute panel IRFs via convenience form
+        panel_irf = sdfm_panel_irf(sdfm, 20)
+
+        @test panel_irf isa ImpulseResponse{Float64}
+        @test panel_irf.horizon == 20
+        @test size(panel_irf.values) == (20, N, q)
+        @test length(panel_irf.variables) == N
+        @test length(panel_irf.shocks) == q
+        @test panel_irf.ci_type == :none
+
+        # Values should agree with stored structural_irf for overlapping horizons
+        @test panel_irf.values ≈ sdfm.structural_irf[1:20, :, :] atol=1e-10
+    end
+
+    @testset "sdfm_panel_irf exceeds stored horizon" begin
+        X, q = make_sdfm_data()
+        T_obs, N = size(X)
+        sdfm = estimate_structural_dfm(X, q; p=1, H=20)
+
+        # Request horizon beyond stored — convenience form recomputes from VAR
+        panel_irf = sdfm_panel_irf(sdfm, 40)
+
+        @test panel_irf.horizon == 40
+        @test size(panel_irf.values) == (40, N, q)
+        @test all(isfinite.(panel_irf.values))
+
+        # First 20 horizons should match stored
+        @test panel_irf.values[1:20, :, :] ≈ sdfm.structural_irf atol=1e-10
+    end
+
+    @testset "sdfm_panel_irf from ImpulseResponse" begin
+        X, q = make_sdfm_data()
+        T_obs, N = size(X)
+        sdfm = estimate_structural_dfm(X, q; p=1, H=20)
+
+        # Get factor-space IRF
+        factor_irf_result = irf(sdfm.factor_var, 20)
+
+        # Project to panel space
+        panel_irf = sdfm_panel_irf(sdfm, factor_irf_result)
+
+        @test panel_irf isa ImpulseResponse{Float64}
+        @test panel_irf.horizon == 20
+        @test size(panel_irf.values) == (20, N, q)
+
+        # Should agree with stored structural_irf (both use Cholesky = default)
+        @test panel_irf.values ≈ sdfm.structural_irf atol=1e-10
+    end
+
+    @testset "sdfm_panel_irf dimension validation" begin
+        X, q = make_sdfm_data(; q=3)
+        sdfm = estimate_structural_dfm(X, q; p=1, H=20)
+
+        # Wrong number of variables in IRF
+        bad_irf = ImpulseResponse{Float64}(
+            zeros(20, 2, 3), zeros(20, 2, 3), zeros(20, 2, 3),
+            20, ["a", "b"], ["s1", "s2", "s3"], :none, nothing, 0.0)
+        @test_throws ArgumentError sdfm_panel_irf(sdfm, bad_irf)
+
+        # Wrong number of shocks in IRF
+        bad_irf2 = ImpulseResponse{Float64}(
+            zeros(20, 3, 2), zeros(20, 3, 2), zeros(20, 3, 2),
+            20, ["a", "b", "c"], ["s1", "s2"], :none, nothing, 0.0)
+        @test_throws ArgumentError sdfm_panel_irf(sdfm, bad_irf2)
+
+        # Invalid horizon
+        @test_throws ArgumentError sdfm_panel_irf(sdfm, 0)
+    end
+
 end

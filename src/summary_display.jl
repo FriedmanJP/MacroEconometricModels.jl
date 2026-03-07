@@ -65,6 +65,14 @@ end
 print_table(irf::ImpulseResponse, var, shock; kwargs...) =
     print_table(stdout, irf, var, shock; kwargs...)
 
+function print_table(io::IO, irf::ImpulseResponse{T}, var::String, shock::String; kwargs...) where {T}
+    vi = findfirst(==(var), irf.variables)
+    si = findfirst(==(shock), irf.shocks)
+    isnothing(vi) && throw(ArgumentError("Variable '$var' not found. Available: $(irf.variables)"))
+    isnothing(si) && throw(ArgumentError("Shock '$shock' not found. Available: $(irf.shocks)"))
+    print_table(io, irf, vi, si; kwargs...)
+end
+
 function print_table(io::IO, irf::BayesianImpulseResponse{T}, var::Int, shock::Int;
                      horizons::Union{Nothing,AbstractVector{Int}}=nothing) where {T}
     raw = table(irf, var, shock; horizons=horizons)
@@ -81,6 +89,14 @@ end
 
 print_table(irf::BayesianImpulseResponse, var, shock; kwargs...) =
     print_table(stdout, irf, var, shock; kwargs...)
+
+function print_table(io::IO, irf::BayesianImpulseResponse{T}, var::String, shock::String; kwargs...) where {T}
+    vi = findfirst(==(var), irf.variables)
+    si = findfirst(==(shock), irf.shocks)
+    isnothing(vi) && throw(ArgumentError("Variable '$var' not found. Available: $(irf.variables)"))
+    isnothing(si) && throw(ArgumentError("Shock '$shock' not found. Available: $(irf.shocks)"))
+    print_table(io, irf, vi, si; kwargs...)
+end
 
 """
     print_table([io], f::FEVD, var; horizons=nothing)
@@ -111,6 +127,12 @@ end
 
 print_table(f::FEVD, var; kwargs...) = print_table(stdout, f, var; kwargs...)
 
+function print_table(io::IO, f::FEVD{T}, var::String; kwargs...) where {T}
+    idx = findfirst(==(var), f.variables)
+    isnothing(idx) && throw(ArgumentError("Variable '$var' not found. Available: $(f.variables)"))
+    print_table(io, f, idx; kwargs...)
+end
+
 function print_table(io::IO, f::BayesianFEVD{T}, var::Int;
                      horizons::Union{Nothing,AbstractVector{Int}}=nothing,
                      stat::Union{Symbol,Int}=:mean) where {T}
@@ -136,6 +158,12 @@ function print_table(io::IO, f::BayesianFEVD{T}, var::Int;
 end
 
 print_table(f::BayesianFEVD, var; kwargs...) = print_table(stdout, f, var; kwargs...)
+
+function print_table(io::IO, f::BayesianFEVD{T}, var::String; kwargs...) where {T}
+    idx = findfirst(==(var), f.variables)
+    isnothing(idx) && throw(ArgumentError("Variable '$var' not found. Available: $(f.variables)"))
+    print_table(io, f, idx; kwargs...)
+end
 
 """
     print_table([io], hd::HistoricalDecomposition, var; periods=nothing)

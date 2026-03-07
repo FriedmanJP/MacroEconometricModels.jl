@@ -9,8 +9,8 @@ fred = load_example(:fred_md)
 Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
 Y = Y[all.(isfinite, eachrow(Y)), :]
 Y = Y[end-59:end, :]
-model = estimate_var(Y, 4)
-post = estimate_bvar(Y, 4; n_draws=100)
+model = estimate_var(Y, 4; varnames=["INDPRO", "CPIAUCSL", "FEDFUNDS"])
+post = estimate_bvar(Y, 4; n_draws=100, varnames=["INDPRO", "CPIAUCSL", "FEDFUNDS"])
 ```
 
 ## Quick Start
@@ -322,7 +322,7 @@ report(freq_irf)
 cum_irf = cumulative_irf(freq_irf)
 
 # Selected horizons via table()
-print_table(stdout, freq_irf, "INDPRO", "FEDFUNDS"; horizons=[1, 4, 8, 12, 20])
+print_table(stdout, freq_irf, "INDPRO", "Monetary policy"; horizons=[1, 4, 8, 12, 20])
 ```
 
 ```@example ia_irf

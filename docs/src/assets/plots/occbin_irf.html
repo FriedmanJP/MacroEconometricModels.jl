@@ -71,19 +71,19 @@ svg { overflow: visible; }
 <div class="panel-grid">
 <div class="panel">
 <div class="panel-title">y</div>
-<div id="oirf_122"></div>
+<div id="oirf_134"></div>
 </div>
 <div class="panel">
 <div class="panel-title">π</div>
-<div id="oirf_123"></div>
+<div id="oirf_135"></div>
 </div>
 <div class="panel">
 <div class="panel-title">R</div>
-<div id="oirf_124"></div>
+<div id="oirf_136"></div>
 </div>
 <div class="panel">
 <div class="panel-title">d</div>
-<div id="oirf_125"></div>
+<div id="oirf_137"></div>
 </div>
 </div>
 
@@ -103,7 +103,7 @@ function showTip(evt, html) {
 function hideTip() { tooltip.style('opacity',0); }
 
 (function() {
-    const data_oirf_122 = [{"h":1,"lin":0.04102564102564103,"pw":0.04102564102564103,"bind":0},
+    const data_oirf_134 = [{"h":1,"lin":0.04102564102564103,"pw":0.04102564102564103,"bind":0},
 {"h":2,"lin":0.03282051282051283,"pw":0.03282051282051283,"bind":0},
 {"h":3,"lin":0.026256410256410262,"pw":0.026256410256410262,"bind":0},
 {"h":4,"lin":0.02100512820512821,"pw":0.02100512820512821,"bind":0},
@@ -183,125 +183,125 @@ function hideTip() { tooltip.style('opacity',0); }
 {"h":78,"lin":1.4157428403673018e-9,"pw":1.4157428403673018e-9,"bind":0},
 {"h":79,"lin":1.1325942722938414e-9,"pw":1.1325942722938414e-9,"bind":0},
 {"h":80,"lin":9.060754178350731e-10,"pw":9.060754178350731e-10,"bind":0}];
-    const container_oirf_122 = d3.select('#oirf_122');
-    const W_oirf_122 = Math.max(container_oirf_122.node().clientWidth - 24, 280);
-    const margin_oirf_122 = {top:10, right:15, bottom:35, left:55};
-    const w_oirf_122 = W_oirf_122 - margin_oirf_122.left - margin_oirf_122.right;
-    const h_oirf_122 = Math.min(w_oirf_122 * 0.6, 250);
+    const container_oirf_134 = d3.select('#oirf_134');
+    const W_oirf_134 = Math.max(container_oirf_134.node().clientWidth - 24, 280);
+    const margin_oirf_134 = {top:10, right:15, bottom:35, left:55};
+    const w_oirf_134 = W_oirf_134 - margin_oirf_134.left - margin_oirf_134.right;
+    const h_oirf_134 = Math.min(w_oirf_134 * 0.6, 250);
 
-    const svg_oirf_122 = container_oirf_122.append('svg')
-        .attr('width', W_oirf_122)
-        .attr('height', h_oirf_122 + margin_oirf_122.top + margin_oirf_122.bottom);
-    const g_oirf_122 = svg_oirf_122.append('g')
-        .attr('transform', 'translate('+margin_oirf_122.left+','+margin_oirf_122.top+')');
+    const svg_oirf_134 = container_oirf_134.append('svg')
+        .attr('width', W_oirf_134)
+        .attr('height', h_oirf_134 + margin_oirf_134.top + margin_oirf_134.bottom);
+    const g_oirf_134 = svg_oirf_134.append('g')
+        .attr('transform', 'translate('+margin_oirf_134.left+','+margin_oirf_134.top+')');
 
     // Compute domains
-    const xVals_oirf_122 = data_oirf_122.map(d => d.h);
-    const allY_oirf_122 = [];
-    data_oirf_122.forEach(d => {
-        if(d.lin!==null) allY_oirf_122.push(d.lin);
-        if(d.pw!==null) allY_oirf_122.push(d.pw);
+    const xVals_oirf_134 = data_oirf_134.map(d => d.h);
+    const allY_oirf_134 = [];
+    data_oirf_134.forEach(d => {
+        if(d.lin!==null) allY_oirf_134.push(d.lin);
+        if(d.pw!==null) allY_oirf_134.push(d.pw);
     });
-    allY_oirf_122.push(0);
+    allY_oirf_134.push(0);
 
-    const x_oirf_122 = d3.scaleLinear().domain(d3.extent(xVals_oirf_122)).range([0, w_oirf_122]);
-    const yExt_oirf_122 = d3.extent(allY_oirf_122);
-    const yPad_oirf_122 = (yExt_oirf_122[1] - yExt_oirf_122[0]) * 0.08 || 0.1;
-    const y_oirf_122 = d3.scaleLinear()
-        .domain([yExt_oirf_122[0] - yPad_oirf_122, yExt_oirf_122[1] + yPad_oirf_122])
-        .range([h_oirf_122, 0]);
+    const x_oirf_134 = d3.scaleLinear().domain(d3.extent(xVals_oirf_134)).range([0, w_oirf_134]);
+    const yExt_oirf_134 = d3.extent(allY_oirf_134);
+    const yPad_oirf_134 = (yExt_oirf_134[1] - yExt_oirf_134[0]) * 0.08 || 0.1;
+    const y_oirf_134 = d3.scaleLinear()
+        .domain([yExt_oirf_134[0] - yPad_oirf_134, yExt_oirf_134[1] + yPad_oirf_134])
+        .range([h_oirf_134, 0]);
 
     // Grid
-    g_oirf_122.append('g').attr('class','grid')
-        .call(d3.axisLeft(y_oirf_122).tickSize(-w_oirf_122).tickFormat(''));
+    g_oirf_134.append('g').attr('class','grid')
+        .call(d3.axisLeft(y_oirf_134).tickSize(-w_oirf_134).tickFormat(''));
 
     // Binding-period shaded rectangles
-    const xStep_oirf_122 = w_oirf_122 / Math.max(xVals_oirf_122.length - 1, 1);
-    data_oirf_122.forEach((d, i) => {
+    const xStep_oirf_134 = w_oirf_134 / Math.max(xVals_oirf_134.length - 1, 1);
+    data_oirf_134.forEach((d, i) => {
         if(d.bind === 1) {
-            const x0_oirf_122 = x_oirf_122(d.h) - xStep_oirf_122 * 0.5;
-            const x1_oirf_122 = x_oirf_122(d.h) + xStep_oirf_122 * 0.5;
-            g_oirf_122.append('rect')
-                .attr('x', Math.max(0, x0_oirf_122))
+            const x0_oirf_134 = x_oirf_134(d.h) - xStep_oirf_134 * 0.5;
+            const x1_oirf_134 = x_oirf_134(d.h) + xStep_oirf_134 * 0.5;
+            g_oirf_134.append('rect')
+                .attr('x', Math.max(0, x0_oirf_134))
                 .attr('y', 0)
-                .attr('width', Math.min(x1_oirf_122, w_oirf_122) - Math.max(0, x0_oirf_122))
-                .attr('height', h_oirf_122)
+                .attr('width', Math.min(x1_oirf_134, w_oirf_134) - Math.max(0, x0_oirf_134))
+                .attr('height', h_oirf_134)
                 .attr('fill', '#d62728')
                 .attr('opacity', 0.08);
         }
     });
 
     // Zero reference line
-    g_oirf_122.append('line')
-        .attr('x1', 0).attr('x2', w_oirf_122)
-        .attr('y1', y_oirf_122(0)).attr('y2', y_oirf_122(0))
+    g_oirf_134.append('line')
+        .attr('x1', 0).attr('x2', w_oirf_134)
+        .attr('y1', y_oirf_134(0)).attr('y2', y_oirf_134(0))
         .attr('stroke', '#999').attr('stroke-width', 1)
         .attr('stroke-dasharray', '4,3');
 
     // Linear line (dashed)
-    const linLine_oirf_122 = d3.line().x(d => x_oirf_122(d.h)).y(d => y_oirf_122(d.lin))
+    const linLine_oirf_134 = d3.line().x(d => x_oirf_134(d.h)).y(d => y_oirf_134(d.lin))
         .defined(d => d.lin !== null);
-    g_oirf_122.append('path').datum(data_oirf_122).attr('d', linLine_oirf_122)
+    g_oirf_134.append('path').datum(data_oirf_134).attr('d', linLine_oirf_134)
         .attr('fill', 'none').attr('stroke', '#2ca02c')
         .attr('stroke-width', 1.8).attr('stroke-dasharray', '6,3');
 
     // Piecewise line (solid)
-    const pwLine_oirf_122 = d3.line().x(d => x_oirf_122(d.h)).y(d => y_oirf_122(d.pw))
+    const pwLine_oirf_134 = d3.line().x(d => x_oirf_134(d.h)).y(d => y_oirf_134(d.pw))
         .defined(d => d.pw !== null);
-    g_oirf_122.append('path').datum(data_oirf_122).attr('d', pwLine_oirf_122)
+    g_oirf_134.append('path').datum(data_oirf_134).attr('d', pwLine_oirf_134)
         .attr('fill', 'none').attr('stroke', '#1f77b4')
         .attr('stroke-width', 1.8);
 
     // Axes
-    g_oirf_122.append('g').attr('class','axis')
-        .attr('transform', 'translate(0,'+h_oirf_122+')')
-        .call(d3.axisBottom(x_oirf_122).ticks(Math.min(xVals_oirf_122.length, 8)));
-    g_oirf_122.append('g').attr('class','axis')
-        .call(d3.axisLeft(y_oirf_122).ticks(6));
+    g_oirf_134.append('g').attr('class','axis')
+        .attr('transform', 'translate(0,'+h_oirf_134+')')
+        .call(d3.axisBottom(x_oirf_134).ticks(Math.min(xVals_oirf_134.length, 8)));
+    g_oirf_134.append('g').attr('class','axis')
+        .call(d3.axisLeft(y_oirf_134).ticks(6));
 
-    if('Horizon') g_oirf_122.append('text')
-        .attr('x', w_oirf_122/2).attr('y', h_oirf_122+30)
+    if('Horizon') g_oirf_134.append('text')
+        .attr('x', w_oirf_134/2).attr('y', h_oirf_134+30)
         .attr('text-anchor','middle').attr('font-size','11px')
         .attr('fill','#666').text('Horizon');
-    if('y') g_oirf_122.append('text')
+    if('y') g_oirf_134.append('text')
         .attr('transform','rotate(-90)')
-        .attr('x', -h_oirf_122/2).attr('y', -42)
+        .attr('x', -h_oirf_134/2).attr('y', -42)
         .attr('text-anchor','middle').attr('font-size','11px')
         .attr('fill','#666').text('y');
 
     // Legend
-    const leg_oirf_122 = g_oirf_122.append('g').attr('class','legend')
+    const leg_oirf_134 = g_oirf_134.append('g').attr('class','legend')
         .attr('transform','translate(5,-5)');
     // Linear (dashed)
-    const g1_oirf_122 = leg_oirf_122.append('g').attr('transform','translate(0,0)');
-    g1_oirf_122.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+    const g1_oirf_134 = leg_oirf_134.append('g').attr('transform','translate(0,0)');
+    g1_oirf_134.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
         .attr('stroke','#2ca02c').attr('stroke-width',2)
         .attr('stroke-dasharray','6,3');
-    g1_oirf_122.append('text').attr('x',20).attr('y',4)
+    g1_oirf_134.append('text').attr('x',20).attr('y',4)
         .attr('font-size','10px').attr('fill','#555').text('Linear');
     // Piecewise (solid)
-    const g2_oirf_122 = leg_oirf_122.append('g').attr('transform','translate(80,0)');
-    g2_oirf_122.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+    const g2_oirf_134 = leg_oirf_134.append('g').attr('transform','translate(80,0)');
+    g2_oirf_134.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
         .attr('stroke','#1f77b4').attr('stroke-width',2);
-    g2_oirf_122.append('text').attr('x',20).attr('y',4)
+    g2_oirf_134.append('text').attr('x',20).attr('y',4)
         .attr('font-size','10px').attr('fill','#555').text('Piecewise');
     // Binding
-    const g3_oirf_122 = leg_oirf_122.append('g').attr('transform','translate(175,0)');
-    g3_oirf_122.append('rect').attr('width',12).attr('height',10).attr('y',-5)
+    const g3_oirf_134 = leg_oirf_134.append('g').attr('transform','translate(175,0)');
+    g3_oirf_134.append('rect').attr('width',12).attr('height',10).attr('y',-5)
         .attr('fill','#d62728').attr('opacity',0.15);
-    g3_oirf_122.append('text').attr('x',16).attr('y',4)
+    g3_oirf_134.append('text').attr('x',16).attr('y',4)
         .attr('font-size','10px').attr('fill','#555').text('Binding');
 
     // Tooltip
-    svg_oirf_122.append('rect')
-        .attr('width', W_oirf_122)
-        .attr('height', h_oirf_122 + margin_oirf_122.top + margin_oirf_122.bottom)
+    svg_oirf_134.append('rect')
+        .attr('width', W_oirf_134)
+        .attr('height', h_oirf_134 + margin_oirf_134.top + margin_oirf_134.bottom)
         .attr('fill','none').attr('pointer-events','all')
         .on('mousemove', function(evt) {
-            const [mx] = d3.pointer(evt, g_oirf_122.node());
-            const x0 = x_oirf_122.invert(mx);
-            const idx = d3.minIndex(data_oirf_122, d => Math.abs(d.h - x0));
-            const d = data_oirf_122[idx];
+            const [mx] = d3.pointer(evt, g_oirf_134.node());
+            const x0 = x_oirf_134.invert(mx);
+            const idx = d3.minIndex(data_oirf_134, d => Math.abs(d.h - x0));
+            const d = data_oirf_134[idx];
             let html = '<b>h='+d.h+'</b>';
             if(d.lin!==null) html += '<br>Linear: '+fmt(d.lin);
             if(d.pw!==null) html += '<br>Piecewise: '+fmt(d.pw);
@@ -312,7 +312,7 @@ function hideTip() { tooltip.style('opacity',0); }
 })();
 
 (function() {
-    const data_oirf_123 = [{"h":1,"lin":0.012307692307692306,"pw":0.012307692307692306,"bind":0},
+    const data_oirf_135 = [{"h":1,"lin":0.012307692307692306,"pw":0.012307692307692306,"bind":0},
 {"h":2,"lin":0.009846153846153846,"pw":0.009846153846153846,"bind":0},
 {"h":3,"lin":0.007876923076923076,"pw":0.007876923076923076,"bind":0},
 {"h":4,"lin":0.006301538461538462,"pw":0.006301538461538462,"bind":0},
@@ -392,125 +392,125 @@ function hideTip() { tooltip.style('opacity',0); }
 {"h":78,"lin":4.247228521101904e-10,"pw":4.247228521101904e-10,"bind":0},
 {"h":79,"lin":3.3977828168815236e-10,"pw":3.3977828168815236e-10,"bind":0},
 {"h":80,"lin":2.718226253505219e-10,"pw":2.718226253505219e-10,"bind":0}];
-    const container_oirf_123 = d3.select('#oirf_123');
-    const W_oirf_123 = Math.max(container_oirf_123.node().clientWidth - 24, 280);
-    const margin_oirf_123 = {top:10, right:15, bottom:35, left:55};
-    const w_oirf_123 = W_oirf_123 - margin_oirf_123.left - margin_oirf_123.right;
-    const h_oirf_123 = Math.min(w_oirf_123 * 0.6, 250);
+    const container_oirf_135 = d3.select('#oirf_135');
+    const W_oirf_135 = Math.max(container_oirf_135.node().clientWidth - 24, 280);
+    const margin_oirf_135 = {top:10, right:15, bottom:35, left:55};
+    const w_oirf_135 = W_oirf_135 - margin_oirf_135.left - margin_oirf_135.right;
+    const h_oirf_135 = Math.min(w_oirf_135 * 0.6, 250);
 
-    const svg_oirf_123 = container_oirf_123.append('svg')
-        .attr('width', W_oirf_123)
-        .attr('height', h_oirf_123 + margin_oirf_123.top + margin_oirf_123.bottom);
-    const g_oirf_123 = svg_oirf_123.append('g')
-        .attr('transform', 'translate('+margin_oirf_123.left+','+margin_oirf_123.top+')');
+    const svg_oirf_135 = container_oirf_135.append('svg')
+        .attr('width', W_oirf_135)
+        .attr('height', h_oirf_135 + margin_oirf_135.top + margin_oirf_135.bottom);
+    const g_oirf_135 = svg_oirf_135.append('g')
+        .attr('transform', 'translate('+margin_oirf_135.left+','+margin_oirf_135.top+')');
 
     // Compute domains
-    const xVals_oirf_123 = data_oirf_123.map(d => d.h);
-    const allY_oirf_123 = [];
-    data_oirf_123.forEach(d => {
-        if(d.lin!==null) allY_oirf_123.push(d.lin);
-        if(d.pw!==null) allY_oirf_123.push(d.pw);
+    const xVals_oirf_135 = data_oirf_135.map(d => d.h);
+    const allY_oirf_135 = [];
+    data_oirf_135.forEach(d => {
+        if(d.lin!==null) allY_oirf_135.push(d.lin);
+        if(d.pw!==null) allY_oirf_135.push(d.pw);
     });
-    allY_oirf_123.push(0);
+    allY_oirf_135.push(0);
 
-    const x_oirf_123 = d3.scaleLinear().domain(d3.extent(xVals_oirf_123)).range([0, w_oirf_123]);
-    const yExt_oirf_123 = d3.extent(allY_oirf_123);
-    const yPad_oirf_123 = (yExt_oirf_123[1] - yExt_oirf_123[0]) * 0.08 || 0.1;
-    const y_oirf_123 = d3.scaleLinear()
-        .domain([yExt_oirf_123[0] - yPad_oirf_123, yExt_oirf_123[1] + yPad_oirf_123])
-        .range([h_oirf_123, 0]);
+    const x_oirf_135 = d3.scaleLinear().domain(d3.extent(xVals_oirf_135)).range([0, w_oirf_135]);
+    const yExt_oirf_135 = d3.extent(allY_oirf_135);
+    const yPad_oirf_135 = (yExt_oirf_135[1] - yExt_oirf_135[0]) * 0.08 || 0.1;
+    const y_oirf_135 = d3.scaleLinear()
+        .domain([yExt_oirf_135[0] - yPad_oirf_135, yExt_oirf_135[1] + yPad_oirf_135])
+        .range([h_oirf_135, 0]);
 
     // Grid
-    g_oirf_123.append('g').attr('class','grid')
-        .call(d3.axisLeft(y_oirf_123).tickSize(-w_oirf_123).tickFormat(''));
+    g_oirf_135.append('g').attr('class','grid')
+        .call(d3.axisLeft(y_oirf_135).tickSize(-w_oirf_135).tickFormat(''));
 
     // Binding-period shaded rectangles
-    const xStep_oirf_123 = w_oirf_123 / Math.max(xVals_oirf_123.length - 1, 1);
-    data_oirf_123.forEach((d, i) => {
+    const xStep_oirf_135 = w_oirf_135 / Math.max(xVals_oirf_135.length - 1, 1);
+    data_oirf_135.forEach((d, i) => {
         if(d.bind === 1) {
-            const x0_oirf_123 = x_oirf_123(d.h) - xStep_oirf_123 * 0.5;
-            const x1_oirf_123 = x_oirf_123(d.h) + xStep_oirf_123 * 0.5;
-            g_oirf_123.append('rect')
-                .attr('x', Math.max(0, x0_oirf_123))
+            const x0_oirf_135 = x_oirf_135(d.h) - xStep_oirf_135 * 0.5;
+            const x1_oirf_135 = x_oirf_135(d.h) + xStep_oirf_135 * 0.5;
+            g_oirf_135.append('rect')
+                .attr('x', Math.max(0, x0_oirf_135))
                 .attr('y', 0)
-                .attr('width', Math.min(x1_oirf_123, w_oirf_123) - Math.max(0, x0_oirf_123))
-                .attr('height', h_oirf_123)
+                .attr('width', Math.min(x1_oirf_135, w_oirf_135) - Math.max(0, x0_oirf_135))
+                .attr('height', h_oirf_135)
                 .attr('fill', '#d62728')
                 .attr('opacity', 0.08);
         }
     });
 
     // Zero reference line
-    g_oirf_123.append('line')
-        .attr('x1', 0).attr('x2', w_oirf_123)
-        .attr('y1', y_oirf_123(0)).attr('y2', y_oirf_123(0))
+    g_oirf_135.append('line')
+        .attr('x1', 0).attr('x2', w_oirf_135)
+        .attr('y1', y_oirf_135(0)).attr('y2', y_oirf_135(0))
         .attr('stroke', '#999').attr('stroke-width', 1)
         .attr('stroke-dasharray', '4,3');
 
     // Linear line (dashed)
-    const linLine_oirf_123 = d3.line().x(d => x_oirf_123(d.h)).y(d => y_oirf_123(d.lin))
+    const linLine_oirf_135 = d3.line().x(d => x_oirf_135(d.h)).y(d => y_oirf_135(d.lin))
         .defined(d => d.lin !== null);
-    g_oirf_123.append('path').datum(data_oirf_123).attr('d', linLine_oirf_123)
+    g_oirf_135.append('path').datum(data_oirf_135).attr('d', linLine_oirf_135)
         .attr('fill', 'none').attr('stroke', '#2ca02c')
         .attr('stroke-width', 1.8).attr('stroke-dasharray', '6,3');
 
     // Piecewise line (solid)
-    const pwLine_oirf_123 = d3.line().x(d => x_oirf_123(d.h)).y(d => y_oirf_123(d.pw))
+    const pwLine_oirf_135 = d3.line().x(d => x_oirf_135(d.h)).y(d => y_oirf_135(d.pw))
         .defined(d => d.pw !== null);
-    g_oirf_123.append('path').datum(data_oirf_123).attr('d', pwLine_oirf_123)
+    g_oirf_135.append('path').datum(data_oirf_135).attr('d', pwLine_oirf_135)
         .attr('fill', 'none').attr('stroke', '#1f77b4')
         .attr('stroke-width', 1.8);
 
     // Axes
-    g_oirf_123.append('g').attr('class','axis')
-        .attr('transform', 'translate(0,'+h_oirf_123+')')
-        .call(d3.axisBottom(x_oirf_123).ticks(Math.min(xVals_oirf_123.length, 8)));
-    g_oirf_123.append('g').attr('class','axis')
-        .call(d3.axisLeft(y_oirf_123).ticks(6));
+    g_oirf_135.append('g').attr('class','axis')
+        .attr('transform', 'translate(0,'+h_oirf_135+')')
+        .call(d3.axisBottom(x_oirf_135).ticks(Math.min(xVals_oirf_135.length, 8)));
+    g_oirf_135.append('g').attr('class','axis')
+        .call(d3.axisLeft(y_oirf_135).ticks(6));
 
-    if('Horizon') g_oirf_123.append('text')
-        .attr('x', w_oirf_123/2).attr('y', h_oirf_123+30)
+    if('Horizon') g_oirf_135.append('text')
+        .attr('x', w_oirf_135/2).attr('y', h_oirf_135+30)
         .attr('text-anchor','middle').attr('font-size','11px')
         .attr('fill','#666').text('Horizon');
-    if('π') g_oirf_123.append('text')
+    if('π') g_oirf_135.append('text')
         .attr('transform','rotate(-90)')
-        .attr('x', -h_oirf_123/2).attr('y', -42)
+        .attr('x', -h_oirf_135/2).attr('y', -42)
         .attr('text-anchor','middle').attr('font-size','11px')
         .attr('fill','#666').text('π');
 
     // Legend
-    const leg_oirf_123 = g_oirf_123.append('g').attr('class','legend')
+    const leg_oirf_135 = g_oirf_135.append('g').attr('class','legend')
         .attr('transform','translate(5,-5)');
     // Linear (dashed)
-    const g1_oirf_123 = leg_oirf_123.append('g').attr('transform','translate(0,0)');
-    g1_oirf_123.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+    const g1_oirf_135 = leg_oirf_135.append('g').attr('transform','translate(0,0)');
+    g1_oirf_135.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
         .attr('stroke','#2ca02c').attr('stroke-width',2)
         .attr('stroke-dasharray','6,3');
-    g1_oirf_123.append('text').attr('x',20).attr('y',4)
+    g1_oirf_135.append('text').attr('x',20).attr('y',4)
         .attr('font-size','10px').attr('fill','#555').text('Linear');
     // Piecewise (solid)
-    const g2_oirf_123 = leg_oirf_123.append('g').attr('transform','translate(80,0)');
-    g2_oirf_123.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+    const g2_oirf_135 = leg_oirf_135.append('g').attr('transform','translate(80,0)');
+    g2_oirf_135.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
         .attr('stroke','#1f77b4').attr('stroke-width',2);
-    g2_oirf_123.append('text').attr('x',20).attr('y',4)
+    g2_oirf_135.append('text').attr('x',20).attr('y',4)
         .attr('font-size','10px').attr('fill','#555').text('Piecewise');
     // Binding
-    const g3_oirf_123 = leg_oirf_123.append('g').attr('transform','translate(175,0)');
-    g3_oirf_123.append('rect').attr('width',12).attr('height',10).attr('y',-5)
+    const g3_oirf_135 = leg_oirf_135.append('g').attr('transform','translate(175,0)');
+    g3_oirf_135.append('rect').attr('width',12).attr('height',10).attr('y',-5)
         .attr('fill','#d62728').attr('opacity',0.15);
-    g3_oirf_123.append('text').attr('x',16).attr('y',4)
+    g3_oirf_135.append('text').attr('x',16).attr('y',4)
         .attr('font-size','10px').attr('fill','#555').text('Binding');
 
     // Tooltip
-    svg_oirf_123.append('rect')
-        .attr('width', W_oirf_123)
-        .attr('height', h_oirf_123 + margin_oirf_123.top + margin_oirf_123.bottom)
+    svg_oirf_135.append('rect')
+        .attr('width', W_oirf_135)
+        .attr('height', h_oirf_135 + margin_oirf_135.top + margin_oirf_135.bottom)
         .attr('fill','none').attr('pointer-events','all')
         .on('mousemove', function(evt) {
-            const [mx] = d3.pointer(evt, g_oirf_123.node());
-            const x0 = x_oirf_123.invert(mx);
-            const idx = d3.minIndex(data_oirf_123, d => Math.abs(d.h - x0));
-            const d = data_oirf_123[idx];
+            const [mx] = d3.pointer(evt, g_oirf_135.node());
+            const x0 = x_oirf_135.invert(mx);
+            const idx = d3.minIndex(data_oirf_135, d => Math.abs(d.h - x0));
+            const d = data_oirf_135[idx];
             let html = '<b>h='+d.h+'</b>';
             if(d.lin!==null) html += '<br>Linear: '+fmt(d.lin);
             if(d.pw!==null) html += '<br>Piecewise: '+fmt(d.pw);
@@ -521,7 +521,7 @@ function hideTip() { tooltip.style('opacity',0); }
 })();
 
 (function() {
-    const data_oirf_124 = [{"h":1,"lin":0.038974358974358976,"pw":0.038974358974358976,"bind":0},
+    const data_oirf_136 = [{"h":1,"lin":0.038974358974358976,"pw":0.038974358974358976,"bind":0},
 {"h":2,"lin":0.031179487179487184,"pw":0.031179487179487184,"bind":0},
 {"h":3,"lin":0.024943589743589747,"pw":0.024943589743589747,"bind":0},
 {"h":4,"lin":0.0199548717948718,"pw":0.0199548717948718,"bind":0},
@@ -601,125 +601,125 @@ function hideTip() { tooltip.style('opacity',0); }
 {"h":78,"lin":1.3449556983489365e-9,"pw":1.3449556983489365e-9,"bind":0},
 {"h":79,"lin":1.0759645586791492e-9,"pw":1.0759645586791492e-9,"bind":0},
 {"h":80,"lin":8.607716469433194e-10,"pw":8.607716469433194e-10,"bind":0}];
-    const container_oirf_124 = d3.select('#oirf_124');
-    const W_oirf_124 = Math.max(container_oirf_124.node().clientWidth - 24, 280);
-    const margin_oirf_124 = {top:10, right:15, bottom:35, left:55};
-    const w_oirf_124 = W_oirf_124 - margin_oirf_124.left - margin_oirf_124.right;
-    const h_oirf_124 = Math.min(w_oirf_124 * 0.6, 250);
+    const container_oirf_136 = d3.select('#oirf_136');
+    const W_oirf_136 = Math.max(container_oirf_136.node().clientWidth - 24, 280);
+    const margin_oirf_136 = {top:10, right:15, bottom:35, left:55};
+    const w_oirf_136 = W_oirf_136 - margin_oirf_136.left - margin_oirf_136.right;
+    const h_oirf_136 = Math.min(w_oirf_136 * 0.6, 250);
 
-    const svg_oirf_124 = container_oirf_124.append('svg')
-        .attr('width', W_oirf_124)
-        .attr('height', h_oirf_124 + margin_oirf_124.top + margin_oirf_124.bottom);
-    const g_oirf_124 = svg_oirf_124.append('g')
-        .attr('transform', 'translate('+margin_oirf_124.left+','+margin_oirf_124.top+')');
+    const svg_oirf_136 = container_oirf_136.append('svg')
+        .attr('width', W_oirf_136)
+        .attr('height', h_oirf_136 + margin_oirf_136.top + margin_oirf_136.bottom);
+    const g_oirf_136 = svg_oirf_136.append('g')
+        .attr('transform', 'translate('+margin_oirf_136.left+','+margin_oirf_136.top+')');
 
     // Compute domains
-    const xVals_oirf_124 = data_oirf_124.map(d => d.h);
-    const allY_oirf_124 = [];
-    data_oirf_124.forEach(d => {
-        if(d.lin!==null) allY_oirf_124.push(d.lin);
-        if(d.pw!==null) allY_oirf_124.push(d.pw);
+    const xVals_oirf_136 = data_oirf_136.map(d => d.h);
+    const allY_oirf_136 = [];
+    data_oirf_136.forEach(d => {
+        if(d.lin!==null) allY_oirf_136.push(d.lin);
+        if(d.pw!==null) allY_oirf_136.push(d.pw);
     });
-    allY_oirf_124.push(0);
+    allY_oirf_136.push(0);
 
-    const x_oirf_124 = d3.scaleLinear().domain(d3.extent(xVals_oirf_124)).range([0, w_oirf_124]);
-    const yExt_oirf_124 = d3.extent(allY_oirf_124);
-    const yPad_oirf_124 = (yExt_oirf_124[1] - yExt_oirf_124[0]) * 0.08 || 0.1;
-    const y_oirf_124 = d3.scaleLinear()
-        .domain([yExt_oirf_124[0] - yPad_oirf_124, yExt_oirf_124[1] + yPad_oirf_124])
-        .range([h_oirf_124, 0]);
+    const x_oirf_136 = d3.scaleLinear().domain(d3.extent(xVals_oirf_136)).range([0, w_oirf_136]);
+    const yExt_oirf_136 = d3.extent(allY_oirf_136);
+    const yPad_oirf_136 = (yExt_oirf_136[1] - yExt_oirf_136[0]) * 0.08 || 0.1;
+    const y_oirf_136 = d3.scaleLinear()
+        .domain([yExt_oirf_136[0] - yPad_oirf_136, yExt_oirf_136[1] + yPad_oirf_136])
+        .range([h_oirf_136, 0]);
 
     // Grid
-    g_oirf_124.append('g').attr('class','grid')
-        .call(d3.axisLeft(y_oirf_124).tickSize(-w_oirf_124).tickFormat(''));
+    g_oirf_136.append('g').attr('class','grid')
+        .call(d3.axisLeft(y_oirf_136).tickSize(-w_oirf_136).tickFormat(''));
 
     // Binding-period shaded rectangles
-    const xStep_oirf_124 = w_oirf_124 / Math.max(xVals_oirf_124.length - 1, 1);
-    data_oirf_124.forEach((d, i) => {
+    const xStep_oirf_136 = w_oirf_136 / Math.max(xVals_oirf_136.length - 1, 1);
+    data_oirf_136.forEach((d, i) => {
         if(d.bind === 1) {
-            const x0_oirf_124 = x_oirf_124(d.h) - xStep_oirf_124 * 0.5;
-            const x1_oirf_124 = x_oirf_124(d.h) + xStep_oirf_124 * 0.5;
-            g_oirf_124.append('rect')
-                .attr('x', Math.max(0, x0_oirf_124))
+            const x0_oirf_136 = x_oirf_136(d.h) - xStep_oirf_136 * 0.5;
+            const x1_oirf_136 = x_oirf_136(d.h) + xStep_oirf_136 * 0.5;
+            g_oirf_136.append('rect')
+                .attr('x', Math.max(0, x0_oirf_136))
                 .attr('y', 0)
-                .attr('width', Math.min(x1_oirf_124, w_oirf_124) - Math.max(0, x0_oirf_124))
-                .attr('height', h_oirf_124)
+                .attr('width', Math.min(x1_oirf_136, w_oirf_136) - Math.max(0, x0_oirf_136))
+                .attr('height', h_oirf_136)
                 .attr('fill', '#d62728')
                 .attr('opacity', 0.08);
         }
     });
 
     // Zero reference line
-    g_oirf_124.append('line')
-        .attr('x1', 0).attr('x2', w_oirf_124)
-        .attr('y1', y_oirf_124(0)).attr('y2', y_oirf_124(0))
+    g_oirf_136.append('line')
+        .attr('x1', 0).attr('x2', w_oirf_136)
+        .attr('y1', y_oirf_136(0)).attr('y2', y_oirf_136(0))
         .attr('stroke', '#999').attr('stroke-width', 1)
         .attr('stroke-dasharray', '4,3');
 
     // Linear line (dashed)
-    const linLine_oirf_124 = d3.line().x(d => x_oirf_124(d.h)).y(d => y_oirf_124(d.lin))
+    const linLine_oirf_136 = d3.line().x(d => x_oirf_136(d.h)).y(d => y_oirf_136(d.lin))
         .defined(d => d.lin !== null);
-    g_oirf_124.append('path').datum(data_oirf_124).attr('d', linLine_oirf_124)
+    g_oirf_136.append('path').datum(data_oirf_136).attr('d', linLine_oirf_136)
         .attr('fill', 'none').attr('stroke', '#2ca02c')
         .attr('stroke-width', 1.8).attr('stroke-dasharray', '6,3');
 
     // Piecewise line (solid)
-    const pwLine_oirf_124 = d3.line().x(d => x_oirf_124(d.h)).y(d => y_oirf_124(d.pw))
+    const pwLine_oirf_136 = d3.line().x(d => x_oirf_136(d.h)).y(d => y_oirf_136(d.pw))
         .defined(d => d.pw !== null);
-    g_oirf_124.append('path').datum(data_oirf_124).attr('d', pwLine_oirf_124)
+    g_oirf_136.append('path').datum(data_oirf_136).attr('d', pwLine_oirf_136)
         .attr('fill', 'none').attr('stroke', '#1f77b4')
         .attr('stroke-width', 1.8);
 
     // Axes
-    g_oirf_124.append('g').attr('class','axis')
-        .attr('transform', 'translate(0,'+h_oirf_124+')')
-        .call(d3.axisBottom(x_oirf_124).ticks(Math.min(xVals_oirf_124.length, 8)));
-    g_oirf_124.append('g').attr('class','axis')
-        .call(d3.axisLeft(y_oirf_124).ticks(6));
+    g_oirf_136.append('g').attr('class','axis')
+        .attr('transform', 'translate(0,'+h_oirf_136+')')
+        .call(d3.axisBottom(x_oirf_136).ticks(Math.min(xVals_oirf_136.length, 8)));
+    g_oirf_136.append('g').attr('class','axis')
+        .call(d3.axisLeft(y_oirf_136).ticks(6));
 
-    if('Horizon') g_oirf_124.append('text')
-        .attr('x', w_oirf_124/2).attr('y', h_oirf_124+30)
+    if('Horizon') g_oirf_136.append('text')
+        .attr('x', w_oirf_136/2).attr('y', h_oirf_136+30)
         .attr('text-anchor','middle').attr('font-size','11px')
         .attr('fill','#666').text('Horizon');
-    if('R') g_oirf_124.append('text')
+    if('R') g_oirf_136.append('text')
         .attr('transform','rotate(-90)')
-        .attr('x', -h_oirf_124/2).attr('y', -42)
+        .attr('x', -h_oirf_136/2).attr('y', -42)
         .attr('text-anchor','middle').attr('font-size','11px')
         .attr('fill','#666').text('R');
 
     // Legend
-    const leg_oirf_124 = g_oirf_124.append('g').attr('class','legend')
+    const leg_oirf_136 = g_oirf_136.append('g').attr('class','legend')
         .attr('transform','translate(5,-5)');
     // Linear (dashed)
-    const g1_oirf_124 = leg_oirf_124.append('g').attr('transform','translate(0,0)');
-    g1_oirf_124.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+    const g1_oirf_136 = leg_oirf_136.append('g').attr('transform','translate(0,0)');
+    g1_oirf_136.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
         .attr('stroke','#2ca02c').attr('stroke-width',2)
         .attr('stroke-dasharray','6,3');
-    g1_oirf_124.append('text').attr('x',20).attr('y',4)
+    g1_oirf_136.append('text').attr('x',20).attr('y',4)
         .attr('font-size','10px').attr('fill','#555').text('Linear');
     // Piecewise (solid)
-    const g2_oirf_124 = leg_oirf_124.append('g').attr('transform','translate(80,0)');
-    g2_oirf_124.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+    const g2_oirf_136 = leg_oirf_136.append('g').attr('transform','translate(80,0)');
+    g2_oirf_136.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
         .attr('stroke','#1f77b4').attr('stroke-width',2);
-    g2_oirf_124.append('text').attr('x',20).attr('y',4)
+    g2_oirf_136.append('text').attr('x',20).attr('y',4)
         .attr('font-size','10px').attr('fill','#555').text('Piecewise');
     // Binding
-    const g3_oirf_124 = leg_oirf_124.append('g').attr('transform','translate(175,0)');
-    g3_oirf_124.append('rect').attr('width',12).attr('height',10).attr('y',-5)
+    const g3_oirf_136 = leg_oirf_136.append('g').attr('transform','translate(175,0)');
+    g3_oirf_136.append('rect').attr('width',12).attr('height',10).attr('y',-5)
         .attr('fill','#d62728').attr('opacity',0.15);
-    g3_oirf_124.append('text').attr('x',16).attr('y',4)
+    g3_oirf_136.append('text').attr('x',16).attr('y',4)
         .attr('font-size','10px').attr('fill','#555').text('Binding');
 
     // Tooltip
-    svg_oirf_124.append('rect')
-        .attr('width', W_oirf_124)
-        .attr('height', h_oirf_124 + margin_oirf_124.top + margin_oirf_124.bottom)
+    svg_oirf_136.append('rect')
+        .attr('width', W_oirf_136)
+        .attr('height', h_oirf_136 + margin_oirf_136.top + margin_oirf_136.bottom)
         .attr('fill','none').attr('pointer-events','all')
         .on('mousemove', function(evt) {
-            const [mx] = d3.pointer(evt, g_oirf_124.node());
-            const x0 = x_oirf_124.invert(mx);
-            const idx = d3.minIndex(data_oirf_124, d => Math.abs(d.h - x0));
-            const d = data_oirf_124[idx];
+            const [mx] = d3.pointer(evt, g_oirf_136.node());
+            const x0 = x_oirf_136.invert(mx);
+            const idx = d3.minIndex(data_oirf_136, d => Math.abs(d.h - x0));
+            const d = data_oirf_136[idx];
             let html = '<b>h='+d.h+'</b>';
             if(d.lin!==null) html += '<br>Linear: '+fmt(d.lin);
             if(d.pw!==null) html += '<br>Piecewise: '+fmt(d.pw);
@@ -730,7 +730,7 @@ function hideTip() { tooltip.style('opacity',0); }
 })();
 
 (function() {
-    const data_oirf_125 = [{"h":1,"lin":0.08,"pw":0.08,"bind":0},
+    const data_oirf_137 = [{"h":1,"lin":0.08,"pw":0.08,"bind":0},
 {"h":2,"lin":0.064,"pw":0.064,"bind":0},
 {"h":3,"lin":0.0512,"pw":0.0512,"bind":0},
 {"h":4,"lin":0.04096,"pw":0.04096,"bind":0},
@@ -810,125 +810,125 @@ function hideTip() { tooltip.style('opacity',0); }
 {"h":78,"lin":2.760698538716238e-9,"pw":2.760698538716238e-9,"bind":0},
 {"h":79,"lin":2.2085588309729903e-9,"pw":2.2085588309729903e-9,"bind":0},
 {"h":80,"lin":1.7668470647783923e-9,"pw":1.7668470647783923e-9,"bind":0}];
-    const container_oirf_125 = d3.select('#oirf_125');
-    const W_oirf_125 = Math.max(container_oirf_125.node().clientWidth - 24, 280);
-    const margin_oirf_125 = {top:10, right:15, bottom:35, left:55};
-    const w_oirf_125 = W_oirf_125 - margin_oirf_125.left - margin_oirf_125.right;
-    const h_oirf_125 = Math.min(w_oirf_125 * 0.6, 250);
+    const container_oirf_137 = d3.select('#oirf_137');
+    const W_oirf_137 = Math.max(container_oirf_137.node().clientWidth - 24, 280);
+    const margin_oirf_137 = {top:10, right:15, bottom:35, left:55};
+    const w_oirf_137 = W_oirf_137 - margin_oirf_137.left - margin_oirf_137.right;
+    const h_oirf_137 = Math.min(w_oirf_137 * 0.6, 250);
 
-    const svg_oirf_125 = container_oirf_125.append('svg')
-        .attr('width', W_oirf_125)
-        .attr('height', h_oirf_125 + margin_oirf_125.top + margin_oirf_125.bottom);
-    const g_oirf_125 = svg_oirf_125.append('g')
-        .attr('transform', 'translate('+margin_oirf_125.left+','+margin_oirf_125.top+')');
+    const svg_oirf_137 = container_oirf_137.append('svg')
+        .attr('width', W_oirf_137)
+        .attr('height', h_oirf_137 + margin_oirf_137.top + margin_oirf_137.bottom);
+    const g_oirf_137 = svg_oirf_137.append('g')
+        .attr('transform', 'translate('+margin_oirf_137.left+','+margin_oirf_137.top+')');
 
     // Compute domains
-    const xVals_oirf_125 = data_oirf_125.map(d => d.h);
-    const allY_oirf_125 = [];
-    data_oirf_125.forEach(d => {
-        if(d.lin!==null) allY_oirf_125.push(d.lin);
-        if(d.pw!==null) allY_oirf_125.push(d.pw);
+    const xVals_oirf_137 = data_oirf_137.map(d => d.h);
+    const allY_oirf_137 = [];
+    data_oirf_137.forEach(d => {
+        if(d.lin!==null) allY_oirf_137.push(d.lin);
+        if(d.pw!==null) allY_oirf_137.push(d.pw);
     });
-    allY_oirf_125.push(0);
+    allY_oirf_137.push(0);
 
-    const x_oirf_125 = d3.scaleLinear().domain(d3.extent(xVals_oirf_125)).range([0, w_oirf_125]);
-    const yExt_oirf_125 = d3.extent(allY_oirf_125);
-    const yPad_oirf_125 = (yExt_oirf_125[1] - yExt_oirf_125[0]) * 0.08 || 0.1;
-    const y_oirf_125 = d3.scaleLinear()
-        .domain([yExt_oirf_125[0] - yPad_oirf_125, yExt_oirf_125[1] + yPad_oirf_125])
-        .range([h_oirf_125, 0]);
+    const x_oirf_137 = d3.scaleLinear().domain(d3.extent(xVals_oirf_137)).range([0, w_oirf_137]);
+    const yExt_oirf_137 = d3.extent(allY_oirf_137);
+    const yPad_oirf_137 = (yExt_oirf_137[1] - yExt_oirf_137[0]) * 0.08 || 0.1;
+    const y_oirf_137 = d3.scaleLinear()
+        .domain([yExt_oirf_137[0] - yPad_oirf_137, yExt_oirf_137[1] + yPad_oirf_137])
+        .range([h_oirf_137, 0]);
 
     // Grid
-    g_oirf_125.append('g').attr('class','grid')
-        .call(d3.axisLeft(y_oirf_125).tickSize(-w_oirf_125).tickFormat(''));
+    g_oirf_137.append('g').attr('class','grid')
+        .call(d3.axisLeft(y_oirf_137).tickSize(-w_oirf_137).tickFormat(''));
 
     // Binding-period shaded rectangles
-    const xStep_oirf_125 = w_oirf_125 / Math.max(xVals_oirf_125.length - 1, 1);
-    data_oirf_125.forEach((d, i) => {
+    const xStep_oirf_137 = w_oirf_137 / Math.max(xVals_oirf_137.length - 1, 1);
+    data_oirf_137.forEach((d, i) => {
         if(d.bind === 1) {
-            const x0_oirf_125 = x_oirf_125(d.h) - xStep_oirf_125 * 0.5;
-            const x1_oirf_125 = x_oirf_125(d.h) + xStep_oirf_125 * 0.5;
-            g_oirf_125.append('rect')
-                .attr('x', Math.max(0, x0_oirf_125))
+            const x0_oirf_137 = x_oirf_137(d.h) - xStep_oirf_137 * 0.5;
+            const x1_oirf_137 = x_oirf_137(d.h) + xStep_oirf_137 * 0.5;
+            g_oirf_137.append('rect')
+                .attr('x', Math.max(0, x0_oirf_137))
                 .attr('y', 0)
-                .attr('width', Math.min(x1_oirf_125, w_oirf_125) - Math.max(0, x0_oirf_125))
-                .attr('height', h_oirf_125)
+                .attr('width', Math.min(x1_oirf_137, w_oirf_137) - Math.max(0, x0_oirf_137))
+                .attr('height', h_oirf_137)
                 .attr('fill', '#d62728')
                 .attr('opacity', 0.08);
         }
     });
 
     // Zero reference line
-    g_oirf_125.append('line')
-        .attr('x1', 0).attr('x2', w_oirf_125)
-        .attr('y1', y_oirf_125(0)).attr('y2', y_oirf_125(0))
+    g_oirf_137.append('line')
+        .attr('x1', 0).attr('x2', w_oirf_137)
+        .attr('y1', y_oirf_137(0)).attr('y2', y_oirf_137(0))
         .attr('stroke', '#999').attr('stroke-width', 1)
         .attr('stroke-dasharray', '4,3');
 
     // Linear line (dashed)
-    const linLine_oirf_125 = d3.line().x(d => x_oirf_125(d.h)).y(d => y_oirf_125(d.lin))
+    const linLine_oirf_137 = d3.line().x(d => x_oirf_137(d.h)).y(d => y_oirf_137(d.lin))
         .defined(d => d.lin !== null);
-    g_oirf_125.append('path').datum(data_oirf_125).attr('d', linLine_oirf_125)
+    g_oirf_137.append('path').datum(data_oirf_137).attr('d', linLine_oirf_137)
         .attr('fill', 'none').attr('stroke', '#2ca02c')
         .attr('stroke-width', 1.8).attr('stroke-dasharray', '6,3');
 
     // Piecewise line (solid)
-    const pwLine_oirf_125 = d3.line().x(d => x_oirf_125(d.h)).y(d => y_oirf_125(d.pw))
+    const pwLine_oirf_137 = d3.line().x(d => x_oirf_137(d.h)).y(d => y_oirf_137(d.pw))
         .defined(d => d.pw !== null);
-    g_oirf_125.append('path').datum(data_oirf_125).attr('d', pwLine_oirf_125)
+    g_oirf_137.append('path').datum(data_oirf_137).attr('d', pwLine_oirf_137)
         .attr('fill', 'none').attr('stroke', '#1f77b4')
         .attr('stroke-width', 1.8);
 
     // Axes
-    g_oirf_125.append('g').attr('class','axis')
-        .attr('transform', 'translate(0,'+h_oirf_125+')')
-        .call(d3.axisBottom(x_oirf_125).ticks(Math.min(xVals_oirf_125.length, 8)));
-    g_oirf_125.append('g').attr('class','axis')
-        .call(d3.axisLeft(y_oirf_125).ticks(6));
+    g_oirf_137.append('g').attr('class','axis')
+        .attr('transform', 'translate(0,'+h_oirf_137+')')
+        .call(d3.axisBottom(x_oirf_137).ticks(Math.min(xVals_oirf_137.length, 8)));
+    g_oirf_137.append('g').attr('class','axis')
+        .call(d3.axisLeft(y_oirf_137).ticks(6));
 
-    if('Horizon') g_oirf_125.append('text')
-        .attr('x', w_oirf_125/2).attr('y', h_oirf_125+30)
+    if('Horizon') g_oirf_137.append('text')
+        .attr('x', w_oirf_137/2).attr('y', h_oirf_137+30)
         .attr('text-anchor','middle').attr('font-size','11px')
         .attr('fill','#666').text('Horizon');
-    if('d') g_oirf_125.append('text')
+    if('d') g_oirf_137.append('text')
         .attr('transform','rotate(-90)')
-        .attr('x', -h_oirf_125/2).attr('y', -42)
+        .attr('x', -h_oirf_137/2).attr('y', -42)
         .attr('text-anchor','middle').attr('font-size','11px')
         .attr('fill','#666').text('d');
 
     // Legend
-    const leg_oirf_125 = g_oirf_125.append('g').attr('class','legend')
+    const leg_oirf_137 = g_oirf_137.append('g').attr('class','legend')
         .attr('transform','translate(5,-5)');
     // Linear (dashed)
-    const g1_oirf_125 = leg_oirf_125.append('g').attr('transform','translate(0,0)');
-    g1_oirf_125.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+    const g1_oirf_137 = leg_oirf_137.append('g').attr('transform','translate(0,0)');
+    g1_oirf_137.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
         .attr('stroke','#2ca02c').attr('stroke-width',2)
         .attr('stroke-dasharray','6,3');
-    g1_oirf_125.append('text').attr('x',20).attr('y',4)
+    g1_oirf_137.append('text').attr('x',20).attr('y',4)
         .attr('font-size','10px').attr('fill','#555').text('Linear');
     // Piecewise (solid)
-    const g2_oirf_125 = leg_oirf_125.append('g').attr('transform','translate(80,0)');
-    g2_oirf_125.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+    const g2_oirf_137 = leg_oirf_137.append('g').attr('transform','translate(80,0)');
+    g2_oirf_137.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
         .attr('stroke','#1f77b4').attr('stroke-width',2);
-    g2_oirf_125.append('text').attr('x',20).attr('y',4)
+    g2_oirf_137.append('text').attr('x',20).attr('y',4)
         .attr('font-size','10px').attr('fill','#555').text('Piecewise');
     // Binding
-    const g3_oirf_125 = leg_oirf_125.append('g').attr('transform','translate(175,0)');
-    g3_oirf_125.append('rect').attr('width',12).attr('height',10).attr('y',-5)
+    const g3_oirf_137 = leg_oirf_137.append('g').attr('transform','translate(175,0)');
+    g3_oirf_137.append('rect').attr('width',12).attr('height',10).attr('y',-5)
         .attr('fill','#d62728').attr('opacity',0.15);
-    g3_oirf_125.append('text').attr('x',16).attr('y',4)
+    g3_oirf_137.append('text').attr('x',16).attr('y',4)
         .attr('font-size','10px').attr('fill','#555').text('Binding');
 
     // Tooltip
-    svg_oirf_125.append('rect')
-        .attr('width', W_oirf_125)
-        .attr('height', h_oirf_125 + margin_oirf_125.top + margin_oirf_125.bottom)
+    svg_oirf_137.append('rect')
+        .attr('width', W_oirf_137)
+        .attr('height', h_oirf_137 + margin_oirf_137.top + margin_oirf_137.bottom)
         .attr('fill','none').attr('pointer-events','all')
         .on('mousemove', function(evt) {
-            const [mx] = d3.pointer(evt, g_oirf_125.node());
-            const x0 = x_oirf_125.invert(mx);
-            const idx = d3.minIndex(data_oirf_125, d => Math.abs(d.h - x0));
-            const d = data_oirf_125[idx];
+            const [mx] = d3.pointer(evt, g_oirf_137.node());
+            const x0 = x_oirf_137.invert(mx);
+            const idx = d3.minIndex(data_oirf_137, d => Math.abs(d.h - x0));
+            const d = data_oirf_137[idx];
             let html = '<b>h='+d.h+'</b>';
             if(d.lin!==null) html += '<br>Linear: '+fmt(d.lin);
             if(d.pw!==null) html += '<br>Piecewise: '+fmt(d.pw);

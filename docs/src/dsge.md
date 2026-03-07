@@ -1,12 +1,12 @@
 # [DSGE Models](@id dsge_page)
 
-**MacroEconometricModels.jl** provides a complete toolkit for specifying, solving, simulating, and estimating Dynamic Stochastic General Equilibrium (DSGE) models. The package covers the full workflow from model definition through structural estimation, with six solution methods spanning linear, higher-order, and global approaches.
+**MacroEconometricModels.jl** provides a complete toolkit for specifying, solving, simulating, and estimating Dynamic Stochastic General Equilibrium (DSGE) models. The package covers the full workflow from model definition through structural estimation, with seven solution methods spanning linear, higher-order, and global approaches.
 
 - **Specification**: The `@dsge` macro provides a domain-specific language for writing equilibrium conditions with time-indexed variables
 - **Steady State**: Analytical or numerical steady-state computation via NonlinearSolve.jl (`TrustRegion()` default) with optional JuMP constraints
 - **Linearization**: Automatic first-order approximation via numerical Jacobians in the Sims (2002) canonical form
 - **Linear Solvers**: Three first-order solvers --- Gensys (Sims 2002), Blanchard-Kahn (1980), and Klein (2000) --- producing the state-space solution; see [Linear Solvers](@ref dsge_linear)
-- **Nonlinear Methods**: Up to 3rd-order perturbation with Andreasen, Fernandez-Villaverde & Rubio-Ramirez (2018) pruning, Chebyshev collocation, and policy function iteration for globally accurate policy functions; see [Nonlinear Methods](@ref dsge_nonlinear)
+- **Nonlinear Methods**: Up to 3rd-order perturbation with Andreasen, Fernandez-Villaverde & Rubio-Ramirez (2018) pruning, Chebyshev collocation, policy function iteration, and value function iteration (with Howard steps and Anderson acceleration) for globally accurate policy functions; see [Nonlinear Methods](@ref dsge_nonlinear)
 - **Constraints**: Perfect foresight paths, OccBin occasionally-binding constraints (Guerrieri & Iacoviello 2015), and constrained optimization via JuMP/Ipopt (NLP) and PATH (MCP); see [Constraints](@ref dsge_constraints)
 - **Estimation**: Four GMM-based methods (one-step, two-step, iterative, CU) for IRF matching, plus Bayesian estimation via SMC, SMC`` ^2 `` with two-stage delayed acceptance, and Random-Walk Metropolis-Hastings; see [Estimation](@ref dsge_estimation)
 - **Simulation and IRFs**: Stochastic and pruned simulation, analytical and generalized impulse responses, FEVD, and unconditional moments via Lyapunov equation; see [Nonlinear Methods](@ref dsge_nonlinear)
@@ -70,6 +70,10 @@ result = irf(sol, 40)
 plot_result(result)
 ```
 
+```@raw html
+<iframe src="../assets/plots/dsge_irf.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
 **Recipe 2: Second-order perturbation with pruning**
 
 ```@example dsge_overview
@@ -94,6 +98,10 @@ constraint = parse_constraint(:(R[t] >= 0), spec)
 occ_sol = occbin_solve(spec, constraint; shock_path=shocks)
 occ_irf = occbin_irf(spec, constraint, 1, 40)
 plot_result(occ_irf)
+```
+
+```@raw html
+<iframe src="../assets/plots/occbin_irf.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
 **Recipe 5: Chebyshev projection**
@@ -238,6 +246,8 @@ spec = @dsge begin
         [Y_ss, C_ss, K_ss, A_ss]
     end
 end
+spec = compute_steady_state(spec)
+nothing # hide
 ```
 
 When the `steady_state` block is provided, `compute_steady_state` (or `solve`) uses it directly and validates the result against the equations. The analytical path is faster and avoids numerical convergence issues, but the user is responsible for correctness --- the validator checks that ``\|f(\bar{y})\| < 10^{-10}``.
@@ -353,6 +363,10 @@ report(result)
 
 ```julia
 plot_result(result)
+```
+
+```@raw html
+<iframe src="../assets/plots/dsge_irf.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
 The `spec` object stores the parsed model. `linearize` produces the Sims (2002) canonical form ``(\Gamma_0, \Gamma_1, C, \Psi, \Pi)``. `solve` dispatches to the Gensys algorithm and returns a `DSGESolution` with the state-space representation ``y_t = G_1 y_{t-1} + C + \text{impact} \cdot \varepsilon_t``. The IRF and FEVD functions operate on this solution. For higher-order or global solutions, see [Nonlinear Methods](@ref dsge_nonlinear).

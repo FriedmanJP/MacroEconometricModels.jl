@@ -1,6 +1,6 @@
 # [Nonlinear Solution Methods](@id dsge_nonlinear)
 
-First-order linear solutions impose **certainty equivalence** --- agents behave as if shocks have zero variance. This rules out risk premia, precautionary savings, welfare costs of uncertainty, and asymmetric dynamics. Nonlinear methods capture all of these by retaining higher-order terms in the Taylor expansion of the policy function or by solving the functional equation globally. MacroEconometricModels.jl provides three families: **higher-order perturbation** (local, Schmitt-Grohe & Uribe 2004; Andreasen, Fernandez-Villaverde & Rubio-Ramirez 2018), **Chebyshev projection** (global polynomial, Judd 1992, 1998), and **policy function iteration** (global iterative, Coleman 1990). For model specification and linearization, see [DSGE Models](@ref dsge_page). For first-order solvers, see [Linear Solvers](@ref dsge_linear).
+First-order linear solutions impose **certainty equivalence** --- agents behave as if shocks have zero variance. This rules out risk premia, precautionary savings, welfare costs of uncertainty, and asymmetric dynamics. Nonlinear methods capture all of these by retaining higher-order terms in the Taylor expansion of the policy function or by solving the functional equation globally. MacroEconometricModels.jl provides four families: **higher-order perturbation** (local, Schmitt-Grohe & Uribe 2004; Andreasen, Fernandez-Villaverde & Rubio-Ramirez 2018), **Chebyshev projection** (global polynomial, Judd 1992, 1998), **policy function iteration** (global iterative, Coleman 1990), and **value function iteration** (global Bellman, Stokey, Lucas & Prescott 1989). All three global solvers support Anderson acceleration (Walker & Ni 2011) and multi-threading. For model specification and linearization, see [DSGE Models](@ref dsge_page). For first-order solvers, see [Linear Solvers](@ref dsge_linear).
 
 
 ```@setup dsge_nonlinear
@@ -49,6 +49,10 @@ nothing # hide
 plot_result(girf3)
 ```
 
+```@raw html
+<iframe src="../assets/plots/dsge_girf.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
 **Recipe 3: Chebyshev projection and Euler errors**
 
 ```@example dsge_nonlinear
@@ -62,6 +66,13 @@ err = max_euler_error(proj)
 ```@example dsge_nonlinear
 pfi = pfi_solver(spec; degree=5, damping=0.5, max_iter=200)
 report(pfi)
+```
+
+**Recipe 5: VFI with Howard steps and Anderson acceleration**
+
+```@example dsge_nonlinear
+vfi = vfi_solver(spec; degree=5, howard_steps=5, anderson_m=3, max_iter=500)
+report(vfi)
 ```
 
 ---
@@ -239,6 +250,10 @@ nothing # hide
 plot_result(girf)
 ```
 
+```@raw html
+<iframe src="../assets/plots/dsge_girf.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
 | `irf_type` | `Symbol` | `:analytical` | `:analytical` for first-order, `:girf` for simulation-based |
@@ -345,12 +360,14 @@ report(pfi)
 | `degree` | `Int` | `5` | Chebyshev polynomial degree |
 | `grid` | `Symbol` | `:auto` | `:tensor`, `:smolyak`, or `:auto` |
 | `damping` | `Real` | `1.0` | Damping factor (0.5 for slow convergence, 1.0 for no damping) |
+| `anderson_m` | `Int` | `0` | Anderson acceleration depth (0 = disabled; see [Anderson Acceleration](@ref anderson_accel)) |
+| `threaded` | `Bool` | `false` | Multi-threaded grid-point Euler evaluation |
 | `tol` | `Real` | ``10^{-8}`` | Sup-norm convergence tolerance |
 | `max_iter` | `Int` | `500` | Maximum iterations |
 | `initial_coeffs` | `Union{Nothing, Matrix}` | `nothing` | Warm-start from previous solve |
 
 !!! note "Technical Note"
-    PFI and Chebyshev collocation return the same `ProjectionSolution{T}` type. Both support `evaluate_policy`, `simulate`, `irf`, and `max_euler_error`. The `method` field distinguishes them: `:projection` for collocation, `:pfi` for policy function iteration.
+    PFI, Chebyshev collocation, and VFI all return the same `ProjectionSolution{T}` type. All three support `evaluate_policy`, `simulate`, `irf`, and `max_euler_error`. The `method` field distinguishes them: `:projection` for collocation, `:pfi` for policy function iteration, `:vfi` for value function iteration.
 
 ### Return Value (`ProjectionSolution{T}`)
 
@@ -361,7 +378,7 @@ report(pfi)
 | `grid_type` | `Symbol` | `:tensor` or `:smolyak` |
 | `degree` | `Int` | Polynomial degree (tensor) or Smolyak level ``\mu`` |
 | `collocation_nodes` | `Matrix{T}` | ``n_{\text{nodes}} \times n_x`` grid points in ``[-1, 1]`` |
-| `residual_norm` | `T` | Final ``\|R\|`` residual (collocation) or sup-norm (PFI) |
+| `residual_norm` | `T` | Final ``\|R\|`` residual (collocation) or sup-norm (PFI/VFI) |
 | `n_basis` | `Int` | Number of basis functions |
 | `multi_indices` | `Matrix{Int}` | ``n_b \times n_x`` multi-index matrix |
 | `quadrature` | `Symbol` | `:gauss_hermite` or `:monomial` |
@@ -369,7 +386,113 @@ report(pfi)
 | `iterations` | `Int` | Iterations until convergence |
 | `state_indices` | `Vector{Int}` | State variable indices |
 | `control_indices` | `Vector{Int}` | Control variable indices |
-| `method` | `Symbol` | `:projection` or `:pfi` |
+| `method` | `Symbol` | `:projection`, `:pfi`, or `:vfi` |
+
+---
+
+## Value Function Iteration
+
+**Value function iteration** (VFI, Stokey, Lucas & Prescott 1989) solves the Bellman equation by iterating on the value function. At each iteration, the solver evaluates the Euler equation residuals at all grid points, updates the policy coefficients, and checks sup-norm convergence. VFI is the most general global method --- it converges under weaker regularity conditions than PFI or collocation --- but is typically slower per iteration. Two acceleration techniques reduce the iteration count: **Howard improvement steps** (Howard 1960) and **Anderson acceleration** (Walker & Ni 2011).
+
+The algorithm proceeds in four steps:
+
+1. **Setup**: Linearize the model, compute state bounds, build the Chebyshev grid and basis matrix (identical to PFI/collocation)
+2. **Euler evaluation**: At each grid point ``x_j``, compute expectations via quadrature and solve ``F(y_t, x_j, E[y_{t+1}], 0, \theta) = 0`` for ``y_t`` via Newton's method
+3. **Update**: Project updated policy values onto the Chebyshev basis, apply damping and optional Howard/Anderson steps
+4. **Convergence**: Check sup-norm of policy change; iterate until ``\|y_{\text{new}} - y_{\text{old}}\|_\infty < \text{tol}``
+
+```@example dsge_nonlinear
+vfi = vfi_solver(spec; degree=5, max_iter=500)
+report(vfi)
+```
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `degree` | `Int` | `5` | Chebyshev polynomial degree |
+| `grid` | `Symbol` | `:auto` | `:tensor`, `:smolyak`, or `:auto` |
+| `smolyak_mu` | `Int` | `3` | Smolyak approximation level |
+| `quadrature` | `Symbol` | `:auto` | `:gauss_hermite` or `:monomial` |
+| `n_quad` | `Int` | `5` | Quadrature nodes per dimension |
+| `scale` | `Real` | `3.0` | State bounds as multiples of unconditional std |
+| `damping` | `Real` | `1.0` | Coefficient mixing factor (1.0 = no damping) |
+| `howard_steps` | `Int` | `0` | Howard improvement steps per iteration (0 = pure VFI) |
+| `anderson_m` | `Int` | `0` | Anderson acceleration depth (0 = disabled; see [Anderson Acceleration](@ref anderson_accel)) |
+| `threaded` | `Bool` | `false` | Multi-threaded grid-point evaluation |
+| `tol` | `Real` | ``10^{-8}`` | Sup-norm convergence tolerance |
+| `max_iter` | `Int` | `1000` | Maximum VFI iterations |
+| `initial_coeffs` | `Union{Nothing, Matrix}` | `nothing` | Warm-start coefficients from previous solve |
+
+### Howard Improvement Steps
+
+Pure VFI updates the policy at every iteration, but each policy update requires solving a nonlinear system at every grid point. **Howard improvement steps** (Howard 1960; Santos & Rust 2003) amortize the cost: after each policy update, hold the policy fixed and re-evaluate the Euler equation ``howard_steps`` times, updating only the value (Chebyshev coefficients). Because value evaluation is cheaper than policy optimization, Howard steps reduce the total iteration count at modest per-iteration cost.
+
+```@example dsge_nonlinear
+vfi_howard = vfi_solver(spec; degree=5, howard_steps=5, max_iter=500)
+report(vfi_howard)
+```
+
+### VFI vs PFI vs Collocation
+
+All three global solvers return `ProjectionSolution{T}` and share the same post-solution API (`evaluate_policy`, `simulate`, `irf`, `max_euler_error`). The methods differ in convergence properties:
+
+- **Collocation** (Gauss-Newton on residuals): fastest for smooth problems, but can stall at local minima
+- **PFI** (fixed-point on the Euler equation): more robust for models with kinks, but requires good initialization
+- **VFI** (fixed-point on the Bellman operator): most general convergence guarantees (contraction under Blackwell conditions), but slowest without acceleration
+
+```@example dsge_nonlinear
+sol_vfi = vfi_solver(spec; degree=5, max_iter=500)
+sol_pfi = pfi_solver(spec; degree=5, damping=0.5, max_iter=200)
+sol_proj = collocation_solver(spec; degree=5, max_iter=200)
+
+# All three agree at the steady state
+y_vfi = evaluate_policy(sol_vfi, sol_vfi.steady_state[sol_vfi.state_indices])
+y_pfi = evaluate_policy(sol_pfi, sol_pfi.steady_state[sol_pfi.state_indices])
+y_proj = evaluate_policy(sol_proj, sol_proj.steady_state[sol_proj.state_indices])
+nothing # hide
+```
+
+---
+
+## [Anderson Acceleration](@id anderson_accel)
+
+**Anderson acceleration** (Walker & Ni 2011) speeds convergence of fixed-point iterations by mixing the last ``m`` iterates. Given iterates ``x_k`` and residuals ``r_k = g(x_k) - x_k``, the method solves:
+
+```math
+\min_{\alpha} \left\| \sum_{i=1}^{m} \alpha_i \, r_i \right\|^2 \quad \text{s.t.} \quad \sum_{i=1}^{m} \alpha_i = 1
+```
+
+and returns the mixed iterate ``x_{\text{new}} = \sum_{i} \alpha_i (x_i + r_i)``. The depth parameter ``m`` controls how many previous iterates are used. Larger ``m`` captures more history but increases the linear algebra cost. In practice, ``m = 3``--``5`` works well.
+
+Anderson acceleration is available for both PFI (`anderson_m` kwarg) and VFI (`anderson_m` kwarg). It operates on the vectorized Chebyshev coefficient matrix, treating the coefficient update as a fixed-point iteration.
+
+```@example dsge_nonlinear
+# PFI with Anderson acceleration
+pfi_anderson = pfi_solver(spec; degree=5, damping=0.5, anderson_m=3, max_iter=200)
+
+# VFI with Anderson acceleration
+vfi_anderson = vfi_solver(spec; degree=5, anderson_m=3, max_iter=500)
+nothing # hide
+```
+
+---
+
+## Multi-Threading
+
+The three global solvers (collocation, PFI, VFI) support opt-in multi-threading via the `threaded=true` keyword. When enabled:
+
+- **VFI / PFI**: Grid-point Euler equation evaluations run in parallel via `Threads.@threads`
+- **Collocation**: Jacobian column computation runs in parallel
+
+Threading requires Julia to be started with multiple threads (e.g., `julia -t 4`). On single-threaded Julia, `threaded=true` has no effect. The solutions are numerically identical regardless of the `threaded` setting.
+
+```@example dsge_nonlinear
+# Sequential (default)
+sol_seq = vfi_solver(spec; degree=5, threaded=false, max_iter=500)
+
+# Threaded (requires julia -t N)
+sol_par = vfi_solver(spec; degree=5, threaded=true, max_iter=500)
+nothing # hide
+```
 
 ---
 
@@ -437,12 +560,20 @@ err = max_euler_error(proj; n_test=1000)
 pfi = pfi_solver(spec; degree=5, damping=0.5, max_iter=200)
 err_pfi = max_euler_error(pfi; n_test=1000)
 
+# VFI with Howard steps
+vfi = vfi_solver(spec; degree=5, howard_steps=5, max_iter=500)
+err_vfi = max_euler_error(vfi; n_test=1000)
+
 # Analytical moments for estimation targets
 m = analytical_moments(sol1; lags=2)
 ```
 
 ```julia
 plot_result(girf)
+```
+
+```@raw html
+<iframe src="../assets/plots/dsge_girf.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
 The stochastic steady state shifts from second-order perturbation reflect precautionary savings: the ergodic mean of capital exceeds the deterministic steady state because risk-averse agents over-accumulate capital as a buffer against productivity shocks. Third-order perturbation adds state-dependent risk premia --- the precautionary effect is stronger in recessions than expansions.
@@ -460,6 +591,8 @@ The stochastic steady state shifts from second-order perturbation reflect precau
 4. **Non-convergence of collocation**: The Gauss-Newton solver uses backtracking line search but can stall at local minima. Warm-start with `initial_coeffs` from a lower-degree solution or from PFI.
 
 5. **Lyapunov equation instability**: `solve_lyapunov` throws an error if the first-order solution has eigenvalues on or outside the unit circle. Check determinacy with `is_determined(sol)` before computing moments.
+
+6. **VFI convergence speed**: Pure VFI is slow --- use `howard_steps=5` or `howard_steps=10` to reduce iteration count by 3--5x. Combine with `anderson_m=3` for further acceleration.
 
 ---
 
@@ -479,4 +612,10 @@ The stochastic steady state shifts from second-order perturbation reflect precau
 
 - Koop, G., Pesaran, M. H., & Potter, S. M. (1996). Impulse Response Analysis in Nonlinear Multivariate Models. *Journal of Econometrics*, 74(1), 119--147. [DOI](https://doi.org/10.1016/0304-4076(95)01753-4)
 
+- Santos, M. S., & Rust, J. (2003). Convergence Properties of Policy Iteration. *SIAM Journal on Control and Optimization*, 42(6), 2094--2115. [DOI](https://doi.org/10.1137/S0363012902399824)
+
 - Schmitt-Grohe, S., & Uribe, M. (2004). Solving Dynamic General Equilibrium Models Using a Second-Order Approximation to the Policy Function. *Journal of Economic Dynamics and Control*, 28(4), 755--775. [DOI](https://doi.org/10.1016/S0165-1889(03)00043-5)
+
+- Stokey, N. L., Lucas, R. E., & Prescott, E. C. (1989). *Recursive Methods in Economic Dynamics*. Harvard University Press. ISBN: 978-0-674-75096-8.
+
+- Walker, H. F., & Ni, P. (2011). Anderson Acceleration for Fixed-Point Iterations. *SIAM Journal on Numerical Analysis*, 49(4), 1715--1735. [DOI](https://doi.org/10.1137/10078356X)

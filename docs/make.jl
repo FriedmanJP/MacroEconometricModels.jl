@@ -4,6 +4,7 @@ using Documenter
 DocMeta.setdocmeta!(MacroEconometricModels, :DocTestSetup, :(using MacroEconometricModels); recursive=true)
 
 makedocs(;
+    draft=true,
     modules=[MacroEconometricModels],
     authors="Wookyung Chung <chung@friedman.jp>",
     repo="https://github.com/FriedmanJP/MacroEconometricModels.jl/blob/{commit}{path}#{line}",
@@ -37,9 +38,11 @@ makedocs(;
         "Cross-Sectional Models" => [
             "Linear Regression" => "regression.md",
             "Binary Choice Models" => "binary_choice.md",
+            "Ordered & Multinomial" => "ordered_multinomial.md",
         ],
         "Panel Models" => [
             "Panel VAR" => "pvar.md",
+            "Panel Regression" => "panel_reg.md",
             "Difference-in-Differences" => "did.md",
             "Event Study LP" => "event_study.md",
         ],

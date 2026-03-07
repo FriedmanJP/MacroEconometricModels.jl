@@ -59,6 +59,10 @@ report(birf)
 plot_result(birf)
 ```
 
+```@raw html
+<iframe src="../assets/plots/dsge_bayes_irf.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
 **Recipe 5: Bayesian FEVD with credible bands**
 
 ```@example dsge_estimation
@@ -437,6 +441,10 @@ report(birf_smc)
 
 ```julia
 plot_result(birf_smc)
+```
+
+```@raw html
+<iframe src="../assets/plots/dsge_bayes_irf.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
 ```@example dsge_estimation

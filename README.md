@@ -10,19 +10,19 @@
 
 A comprehensive Julia package for macroeconomic time series analysis.
 
-**Univariate:** ARIMA, ARCH/GARCH, Stochastic Volatility, HP/Hamilton/BN/BK/Boosted HP filters
+**Univariate:** ARIMA, ARCH/GARCH, Stochastic Volatility, HP/Hamilton/BN/BK/Boosted HP filters, Spectral Analysis, ACF/PACF/CCF
 
 **Multivariate:** VAR, VECM, Bayesian VAR, Local Projections, Factor Models, FAVAR, Structural DFM
 
-**Panel:** Panel VAR (FD-GMM, System GMM, FE-OLS), Difference-in-Differences (TWFE, Callaway-Sant'Anna, Sun-Abraham, BJS, dCDH, HonestDiD), Event Study LP, LP-DiD (Dube et al. 2025)
+**Panel:** Panel VAR (FD-GMM, System GMM, FE-OLS), Panel Regression (FE/RE/FD/Between/CRE/AB/BB), Panel IV (FE-IV/RE-IV/FD-IV/Hausman-Taylor), Panel Logit/Probit, Difference-in-Differences (TWFE, Callaway-Sant'Anna, Sun-Abraham, BJS, dCDH, HonestDiD), Event Study LP, LP-DiD (Dube et al. 2025)
 
-**DSGE:** 6 solvers (Gensys, Blanchard-Kahn, Klein, 2nd/3rd-order perturbation with pruning, Chebyshev projection, PFI), constrained solvers (Ipopt NLP, PATH MCP for ZLB/binding bounds), OccBin, GMM/SMM estimation, Bayesian estimation (SMC/SMC²/MH) with posterior IRF/FEVD credible bands
+**DSGE:** 7 solvers (Gensys, Blanchard-Kahn, Klein, 2nd/3rd-order perturbation with pruning, Chebyshev projection, PFI, VFI), constrained solvers (Ipopt NLP, PATH MCP for ZLB/binding bounds), OccBin, GMM/SMM estimation, Bayesian estimation (SMC/SMC²/MH) with posterior IRF/FEVD credible bands
 
-**Cross-Sectional:** OLS, WLS, IV/2SLS, Logit, Probit (MLE), marginal effects (AME/MEM/MER)
+**Cross-Sectional:** OLS, WLS, IV/2SLS, Logit, Probit, Ordered Logit/Probit, Multinomial Logit (MLE), marginal effects (AME/MEM/MER)
 
 **Estimation:** OLS, MLE, GMM, SMM, Bayesian (Gibbs/conjugate), Kalman filter/smoother
 
-**Features:** IRF, FEVD, historical decomposition, structural identification, nowcasting, structural break detection, panel unit root tests, hypothesis testing, interactive D3.js visualization
+**Features:** IRF, FEVD, historical decomposition, structural identification, nowcasting, spectral analysis, structural break detection, panel unit root tests, hypothesis testing, interactive D3.js visualization
 
 ## Installation
 
@@ -49,6 +49,15 @@ Pkg.add("MacroEconometricModels")
   - Stochastic Volatility - Bayesian SV via Kim-Shephard-Chib Gibbs sampler (basic, leverage, Student-t variants)
   - Multi-step volatility forecasts with simulation CIs
   - Diagnostics: news impact curves, persistence, half-life, unconditional variance
+- **Spectral Analysis**:
+  - Periodogram, Welch method, smoothed periodogram (Daniell kernel), AR spectral estimation
+  - Cross-spectrum: coherence, phase, gain functions
+  - Fisher exact test and Bartlett white noise test
+  - Ideal bandpass filter, transfer function visualization
+- **Autocorrelation**:
+  - ACF, PACF (Levinson-Durbin and OLS), CCF for cross-correlation
+  - Correlogram display with cumulative Ljung-Box Q-statistics
+  - Ljung-Box, Box-Pierce, and Durbin-Watson tests
 
 ### Multivariate Models
 - **Vector Autoregression (VAR)** - OLS estimation with lag order selection (AIC, BIC, HQ)
@@ -75,6 +84,7 @@ Pkg.add("MacroEconometricModels")
   - Two-step estimation (PCA + VAR) and Bayesian Gibbs (Carter-Kohn smoother + NIW)
   - `favar_panel_irf` maps factor IRFs to N observables via loadings
 - **Structural DFM** - Structural dynamic factor model wrapping GDFM + VAR for identified factor shocks
+  - `sdfm_panel_irf` maps structural factor IRFs to all N observable panel variables via loadings
 
 ### Cross-Sectional Models
 - **Linear Regression** - OLS with HC0–HC3 robust and cluster-robust standard errors
@@ -84,6 +94,12 @@ Pkg.add("MacroEconometricModels")
 - **Binary Choice** - Logit and Probit MLE via IRLS (Fisher scoring)
   - Marginal effects: average (AME), at-means (MEM), at-representative (MER) with delta-method SEs
   - `odds_ratio()`, `classification_table()`, McFadden/AIC/BIC fit statistics
+- **Ordered Choice** - Ordered Logit and Ordered Probit MLE with cut-point estimation
+  - Marginal effects (AME/MEM/MER) per outcome category with delta-method SEs
+  - Brant (1990) test for parallel regression assumption
+- **Multinomial Logit** - MLE with IIA assumption
+  - Marginal effects per alternative with delta-method SEs
+  - Hausman-McFadden IIA test
 - **CrossSectionData** container with `diagnose()` / `fix()` and direct estimation dispatch
 
 ### Panel Models
@@ -96,6 +112,19 @@ Pkg.add("MacroEconometricModels")
   - Structural analysis: OIRF, GIRF (Pesaran & Shin 1998), FEVD, stability
   - Group-level block bootstrap confidence intervals for IRFs
   - Instrument management: min/max lag truncation, collapse, PCA reduction
+- **Panel Regression** - `estimate_xtreg` unified dispatcher for linear panel models:
+  - Fixed Effects (within estimator), Random Effects (GLS), First Differences
+  - Between estimator, Correlated Random Effects (Mundlak/Chamberlain)
+  - Dynamic panels: Arellano-Bond (1991) and Blundell-Bond (1998) GMM
+  - 4 covariance estimators: conventional, robust (HC1), cluster-robust, Driscoll-Kraay
+  - Specification tests: Hausman FE vs RE, Breusch-Pagan LM, Pesaran CD, Wooldridge AR(1), Modified Wald
+- **Panel IV** - `estimate_xtiv` for instrumental variables in panel data:
+  - FE-IV, RE-IV, FD-IV, Hausman-Taylor estimator
+  - First-stage F-statistics, Sargan-Hansen overidentification test
+- **Panel Discrete Choice** - `estimate_xtlogit` / `estimate_xtprobit`:
+  - Pooled, Fixed Effects (conditional logit), Random Effects (Gauss-Hermite quadrature)
+  - Correlated Random Effects (Mundlak projection)
+  - Panel marginal effects with delta-method SEs
 - **Difference-in-Differences (DiD)** - Unified `estimate_did()` dispatcher for staggered treatment designs:
   - TWFE event-study regression with double-demeaned panel fixed effects
   - Callaway & Sant'Anna (2021) group-time ATT with doubly robust estimation
@@ -119,7 +148,8 @@ Pkg.add("MacroEconometricModels")
 - **Steady state** - Numerical solver (Newton's method) or analytical closed-form; optional JuMP constraints (`variable_bound`, `nonlinear_constraint`)
 - **Linear solvers** - Gensys (Sims 2002), Blanchard-Kahn (1980), Klein (2000) via unified `solve(spec; method=...)` interface
 - **Higher-order perturbation** - 2nd-order (Schmitt-Grohe & Uribe 2004) and 3rd-order with Andreasen, Fernandez-Villaverde & Rubio-Ramirez (2018) pruned simulation; Kim et al. (2008) 2nd-order pruning
-- **Global methods** - Chebyshev collocation (tensor/Smolyak grids, Gauss-Hermite quadrature; Judd 1998); Policy Function Iteration (Coleman 1990, Rendahl 2017)
+- **Global methods** - Chebyshev collocation (tensor/Smolyak grids, Gauss-Hermite quadrature; Judd 1998); Policy Function Iteration (Coleman 1990, Rendahl 2017); Value Function Iteration (Stokey, Lucas & Prescott 1989) with Howard improvement steps and Anderson acceleration (Walker & Ni 2011)
+  - Opt-in multi-threading for VFI, PFI, and collocation grid evaluation
 - **Constrained solvers** - Auto-detect PATH (MCP, binding bounds/ZLB; Ferris & Munson 1999) or Ipopt (NLP, nonlinear inequalities) via JuMP extensions
 - **Perfect foresight** - Newton solver on stacked system with block-tridiagonal Jacobian; optional PATH/Ipopt constraints
 - **OccBin** - Occasionally binding constraints via piecewise-linear regime switching (Guerrieri & Iacoviello 2015)
@@ -180,6 +210,7 @@ Pkg.add("MacroEconometricModels")
 - **Panel Unit Root** - Bai-Ng (2004) PANIC with factor-adjusted pooled/individual tests; Pesaran (2007) CIPS with cross-sectional augmentation; Moon-Perron (2004) factor-adjusted t-statistics; `panel_unit_root_summary()` battery
 - **Granger Causality** - Pairwise and block Wald tests, all-pairs matrix
 - **Normality** - Jarque-Bera, Mardia multivariate, Doornik-Hansen, Henze-Zirkler, Royston; unified `normality_test_suite()`
+- **Portmanteau Tests** - Ljung-Box, Box-Pierce autocorrelation tests; Durbin-Watson test for first-order serial correlation
 - **ARCH Diagnostics** - ARCH-LM test, Ljung-Box on squared residuals
 - **Panel VAR** - Hansen J-test for overidentifying restrictions, Andrews-Lu MMSC for lag/moment selection
 - **Model Comparison** - Likelihood ratio (LR) and Lagrange multiplier (LM/score) tests for nested models
@@ -303,6 +334,8 @@ All documentation code examples execute during the build — `report()` output, 
 - Klein, Paul. 2000. "Using the Generalized Schur Form to Solve a Multivariate Linear Rational Expectations Model." *Journal of Economic Dynamics and Control* 24 (10): 1405–1423. [https://doi.org/10.1016/S0165-1889(99)00045-7](https://doi.org/10.1016/S0165-1889(99)00045-7)
 - Schmitt-Grohé, Stephanie, and Martín Uribe. 2004. "Solving Dynamic General Equilibrium Models Using a Second-Order Approximation to the Policy Function." *Journal of Economic Dynamics and Control* 28 (4): 755–775. [https://doi.org/10.1016/S0165-1889(03)00043-5](https://doi.org/10.1016/S0165-1889(03)00043-5)
 - Sims, Christopher A. 2002. "Solving Linear Rational Expectations Models." *Computational Economics* 20 (1): 1–20. [https://doi.org/10.1023/A:1020517101123](https://doi.org/10.1023/A:1020517101123)
+- Stokey, Nancy L., Robert E. Lucas, and Edward C. Prescott. 1989. *Recursive Methods in Economic Dynamics*. Cambridge, MA: Harvard University Press. ISBN 978-0-674-75096-8.
+- Walker, Homer F., and Peng Ni. 2011. "Anderson Acceleration for Fixed-Point Iterations." *SIAM Journal on Numerical Analysis* 49 (4): 1715–1735. [https://doi.org/10.1137/10078356X](https://doi.org/10.1137/10078356X)
 
 ### GMM and Covariance Estimation
 
@@ -343,6 +376,22 @@ All documentation code examples execute during the build — `report()` output, 
 - Bai, Jushan, and Serena Ng. 2004. "A PANIC Attack on Unit Roots and Cointegration." *Econometrica* 72 (4): 1127–1177. [https://doi.org/10.1111/j.1468-0262.2004.00528.x](https://doi.org/10.1111/j.1468-0262.2004.00528.x)
 - Moon, Hyungsik Roger, and Benoît Perron. 2004. "Testing for a Unit Root in Panels with Dynamic Factors." *Journal of Econometrics* 122 (1): 81–126. [https://doi.org/10.1016/j.jeconom.2003.10.020](https://doi.org/10.1016/j.jeconom.2003.10.020)
 - Pesaran, M. Hashem. 2007. "A Simple Panel Unit Root Test in the Presence of Cross-Section Dependence." *Journal of Applied Econometrics* 22 (2): 265–312. [https://doi.org/10.1002/jae.951](https://doi.org/10.1002/jae.951)
+
+### Panel Regression
+
+- Hausman, Jerry A., and William E. Taylor. 1981. "Panel Data and Unobservable Individual Effects." *Econometrica* 49 (6): 1377–1398. [https://doi.org/10.2307/1911406](https://doi.org/10.2307/1911406)
+- Mundlak, Yair. 1978. "On the Pooling of Time Series and Cross Section Data." *Econometrica* 46 (1): 69–85. [https://doi.org/10.2307/1913646](https://doi.org/10.2307/1913646)
+- Wooldridge, Jeffrey M. 2010. *Econometric Analysis of Cross Section and Panel Data*. 2nd ed. Cambridge, MA: MIT Press. ISBN 978-0-262-23258-6.
+
+### Ordered and Multinomial Choice
+
+- Brant, Rollin. 1990. "Assessing Proportionality in the Proportional Odds Model for Ordinal Logistic Regression." *Biometrics* 46 (4): 1171–1178. [https://doi.org/10.2307/2532457](https://doi.org/10.2307/2532457)
+- McFadden, Daniel. 1974. "Conditional Logit Analysis of Qualitative Choice Behavior." In *Frontiers in Econometrics*, edited by Paul Zarembka, 105–142. New York: Academic Press.
+
+### Spectral Analysis
+
+- Welch, Peter D. 1967. "The Use of Fast Fourier Transform for the Estimation of Power Spectra." *IEEE Transactions on Audio and Electroacoustics* 15 (2): 70–73. [https://doi.org/10.1109/TAU.1967.1161901](https://doi.org/10.1109/TAU.1967.1161901)
+- Priestley, Maurice B. 1981. *Spectral Analysis and Time Series*. London: Academic Press. ISBN 978-0-12-564922-3.
 
 ### Granger Causality
 

@@ -199,6 +199,7 @@ verify_decomposition(hd)  # Check decomposition identity
 function historical_decomposition(model::VARModel{T}, horizon::Int=effective_nobs(model);
     method::Symbol=:cholesky, check_func=nothing, narrative_check=nothing,
     max_draws::Int=1000,
+    shock_names::Union{Nothing,Vector{String}}=nothing,
     transition_var::Union{Nothing,AbstractVector}=nothing,
     regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing
 ) where {T<:AbstractFloat}
@@ -228,9 +229,10 @@ function historical_decomposition(model::VARModel{T}, horizon::Int=effective_nob
     # Compute initial conditions
     initial_conditions = _compute_initial_conditions(actual, contributions)
 
+    snames = isnothing(shock_names) ? model.varnames : shock_names
     HistoricalDecomposition{T}(
         contributions, initial_conditions, actual, shocks, T_eff,
-        model.varnames, model.varnames, method
+        model.varnames, snames, method
     )
 end
 
@@ -253,7 +255,9 @@ shocks from the underlying VAR identification.
 # Returns
 `HistoricalDecomposition{T}` with contributions, initial conditions, and actual data.
 """
-function historical_decomposition(slp::StructuralLP{T}, T_hd::Int=effective_nobs(slp.var_model)) where {T<:AbstractFloat}
+function historical_decomposition(slp::StructuralLP{T}, T_hd::Int=effective_nobs(slp.var_model);
+    shock_names::Union{Nothing,Vector{String}}=nothing
+) where {T<:AbstractFloat}
     n = nvars(slp)
     H = size(slp.irf.values, 1)
     T_eff = effective_nobs(slp.var_model)
@@ -274,9 +278,10 @@ function historical_decomposition(slp::StructuralLP{T}, T_hd::Int=effective_nobs
     # Initial conditions
     initial_conditions = _compute_initial_conditions(actual, contributions)
 
+    snames = isnothing(shock_names) ? slp.var_model.varnames : shock_names
     HistoricalDecomposition{T}(
         contributions, initial_conditions, actual, shocks, T_hd,
-        slp.var_model.varnames, slp.var_model.varnames, slp.method
+        slp.var_model.varnames, snames, slp.method
     )
 end
 
@@ -324,6 +329,7 @@ function historical_decomposition(post::BVARPosterior, horizon::Int=0;
     data::AbstractMatrix=Matrix{Float64}(undef, 0, 0), method::Symbol=:cholesky,
     quantiles::Vector{<:Real}=[0.16, 0.5, 0.84], point_estimate::Symbol=:mean,
     check_func=nothing, narrative_check=nothing,
+    shock_names::Union{Nothing,Vector{String}}=nothing,
     transition_var::Union{Nothing,AbstractVector}=nothing,
     regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing
 )
@@ -398,9 +404,10 @@ function historical_decomposition(post::BVARPosterior, horizon::Int=0;
         end
     end
 
+    snames = isnothing(shock_names) ? post.varnames : shock_names
     BayesianHistoricalDecomposition{ET}(
         contrib_q, contrib_m, initial_q, initial_m, shocks_m, actual, T_eff,
-        post.varnames, post.varnames, q_vec, method
+        post.varnames, snames, q_vec, method
     )
 end
 
@@ -439,7 +446,8 @@ hd = historical_decomposition(model, r, 198; n_draws=500)
 """
 function historical_decomposition(model::VARModel{T}, restrictions::SVARRestrictions, horizon::Int=effective_nobs(model);
     n_draws::Int=1000, n_rotations::Int=1000,
-    quantiles::Vector{<:Real}=[0.16, 0.5, 0.84]
+    quantiles::Vector{<:Real}=[0.16, 0.5, 0.84],
+    shock_names::Union{Nothing,Vector{String}}=nothing
 ) where {T<:AbstractFloat}
 
     n = nvars(model)
@@ -504,9 +512,10 @@ function historical_decomposition(model::VARModel{T}, restrictions::SVARRestrict
         end
     end
 
+    snames = isnothing(shock_names) ? model.varnames : shock_names
     BayesianHistoricalDecomposition{T}(
         contrib_q, contrib_m, initial_q, initial_m, shocks_m, actual, T_eff,
-        model.varnames, model.varnames, q_vec, :arias
+        model.varnames, snames, q_vec, :arias
     )
 end
 

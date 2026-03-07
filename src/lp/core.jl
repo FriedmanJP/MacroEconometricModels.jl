@@ -401,7 +401,8 @@ function structural_lp(Y::AbstractMatrix{T}, horizon::Int;
                        max_draws::Int=1000,
                        transition_var::Union{Nothing,AbstractVector}=nothing,
                        regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing,
-                       varnames::Vector{String}=["y$i" for i in 1:size(Y, 2)]) where {T<:AbstractFloat}
+                       varnames::Vector{String}=["y$i" for i in 1:size(Y, 2)],
+                       shock_names::Union{Nothing,Vector{String}}=nothing) where {T<:AbstractFloat}
     T_obs, n = size(Y)
     p = isnothing(var_lags) ? lags : var_lags
 
@@ -449,8 +450,9 @@ function structural_lp(Y::AbstractMatrix{T}, horizon::Int;
         ci_sym = :bootstrap
     end
 
+    snames = isnothing(shock_names) ? var_model.varnames : shock_names
     irf_result = ImpulseResponse{ET}(irfs, ci_lower, ci_upper, horizon,
-                                      var_model.varnames, var_model.varnames, ci_sym)
+                                      var_model.varnames, snames, ci_sym)
 
     StructuralLP{ET}(irf_result, Matrix{ET}(eps), var_model, Matrix{ET}(Q), method,
                      lags, cov_type, se_arr, lp_models)

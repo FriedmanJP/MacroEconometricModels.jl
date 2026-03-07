@@ -49,6 +49,14 @@ plot_result(result)
 plot_result(decomp)
 ```
 
+```@raw html
+<iframe src="../assets/plots/dsge_irf.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+```@raw html
+<iframe src="../assets/plots/dsge_fevd.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
 **Recipe 3: Unconditional moments via Lyapunov equation**
 
 ```@example dsge_linear
@@ -294,6 +302,10 @@ result = irf(sol, 40)
 plot_result(result)
 ```
 
+```@raw html
+<iframe src="../assets/plots/dsge_irf.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
 The return type is `ImpulseResponse{T}` with field `.values` (``H \times n \times n_\varepsilon``), `.variables` (variable names), and `.shocks` (shock names). The result is directly compatible with `plot_result()` for interactive D3.js visualization.
 
 ---
@@ -319,6 +331,10 @@ decomp = fevd(sol, 40)
 
 ```julia
 plot_result(decomp)
+```
+
+```@raw html
+<iframe src="../assets/plots/dsge_fevd.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
 The return type is `FEVD{T}` with fields `.decomposition` (raw cumulative squared IRFs) and `.proportions` (normalized shares). Compatible with `plot_result()`.
@@ -390,6 +406,14 @@ m = analytical_moments(sol_g; lags=2)
 ```julia
 plot_result(result)
 plot_result(decomp)
+```
+
+```@raw html
+<iframe src="../assets/plots/dsge_irf.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+```@raw html
+<iframe src="../assets/plots/dsge_fevd.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
 All three solvers produce identical state-space representations for a well-specified, determinate model. The Gensys solver handles singularity in ``\Gamma_0`` most robustly; Blanchard-Kahn and Klein are faster for smaller models. The simulation, IRF, FEVD, and moment functions all operate on the common `DSGESolution` type returned by any solver.

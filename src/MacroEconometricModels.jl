@@ -602,7 +602,7 @@ export StructuralDFM, estimate_structural_dfm
 # FAVAR types and estimation
 export FAVARModel, BayesianFAVAR
 export estimate_favar
-export favar_panel_irf, favar_panel_forecast
+export favar_panel_irf, favar_panel_forecast, sdfm_panel_irf
 
 # =============================================================================
 # Exports - Utility Functions
