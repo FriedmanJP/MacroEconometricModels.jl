@@ -89,6 +89,8 @@ const TEST_GROUPS = [
         "data/test_data.jl",
         "pvar/test_pvar.jl",
         "reg/test_reg.jl",
+        "reg/test_ordered.jl",
+        "reg/test_multinomial.jl",
     ]),
     # Group 6: Volatility & Non-Gaussian & Plotting & Filters
     ("Volatility & Filters" => [
@@ -310,6 +312,8 @@ else
         @testset "Data Module" begin include("data/test_data.jl") end
         @testset "Panel VAR" begin include("pvar/test_pvar.jl") end
         @testset "Cross-Sectional Models" begin include("reg/test_reg.jl") end
+        @testset "Ordered Models" begin include("reg/test_ordered.jl") end
+        @testset "Multinomial Models" begin include("reg/test_multinomial.jl") end
 
         # Group 6: Volatility & Filters
         @testset "Volatility Models (ARCH/GARCH/SV)" begin include("volatility/test_volatility.jl") end

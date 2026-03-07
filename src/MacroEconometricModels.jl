@@ -253,6 +253,8 @@ include("panel_reg/types.jl")
 include("panel_reg/covariance.jl")
 include("panel_reg/estimation.jl")
 include("panel_reg/tests.jl")
+include("panel_reg/predict.jl")
+include("panel_reg/display.jl")
 
 # Covariance estimators
 include("core/covariance.jl")
