@@ -11,14 +11,16 @@
 - **CrossSectionData dispatch** for symbol-based formula-like syntax
 - **StatsAPI interface**: `coef`, `vcov`, `predict`, `confint`, `stderror`, `nobs`, `loglikelihood`
 
+```@setup binary
+using MacroEconometricModels, Random
+Random.seed!(42)
+```
+
 ## Quick Start
 
 **Recipe 1: Logit estimation**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example binary
 # Simulate binary outcome data
 n = 500
 X = hcat(ones(n), randn(n, 2))
@@ -31,10 +33,8 @@ report(m)
 
 **Recipe 2: Probit estimation**
 
-```julia
-using MacroEconometricModels, Random, Distributions
-Random.seed!(42)
-
+```@example binary
+using Distributions  # hide
 n = 500
 X = hcat(ones(n), randn(n, 2))
 eta = X * [0.0, 1.0, -0.8]
@@ -46,10 +46,7 @@ report(m)
 
 **Recipe 3: Average marginal effects**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example binary
 n = 500
 X = hcat(ones(n), randn(n, 2))
 eta = X * [0.0, 1.5, -1.0]
@@ -61,10 +58,7 @@ report(me)
 
 **Recipe 4: Odds ratios**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example binary
 n = 500
 X = hcat(ones(n), randn(n, 2))
 eta = X * [0.0, 1.5, -1.0]
@@ -78,10 +72,7 @@ round.(or.or[2:end], digits=3)  # slope odds ratios
 
 **Recipe 5: Classification diagnostics**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example binary
 n = 500
 X = hcat(ones(n), randn(n, 2))
 eta = X * [0.0, 1.5, -1.0]
@@ -95,10 +86,7 @@ round(ct["accuracy"], digits=3)
 
 **Recipe 6: CrossSectionData dispatch**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example binary
 # Symbol-based API with automatic intercept
 n = 500
 data = hcat(Float64.(rand(n) .< 0.5), randn(n), randn(n))
@@ -156,10 +144,7 @@ Values between 0.2 and 0.4 indicate excellent fit (McFadden 1974). Unlike the li
 !!! note "Technical Note"
     The estimator uses **iteratively reweighted least squares** (IRLS), also known as Fisher scoring. At each iteration, the algorithm solves a weighted least squares problem with weight matrix ``W = \text{diag}(\hat{\mu}_i (1 - \hat{\mu}_i))`` and working response ``z_i = \hat{\eta}_i + (y_i - \hat{\mu}_i) / (\hat{\mu}_i (1 - \hat{\mu}_i))``. The update is ``\hat{\beta}^{(t+1)} = (X' W^{(t)} X)^{-1} X' W^{(t)} z^{(t)}``. Convergence is declared when ``|\ell^{(t+1)} - \ell^{(t)}| < \texttt{tol} \cdot (|\ell^{(t)}| + 1)``.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example binary
 # Generate data from a known logistic DGP
 n = 1000
 X = hcat(ones(n), randn(n, 2))
@@ -226,10 +211,7 @@ The probit model arises naturally from a latent variable framework: ``y_i^* = x_
 !!! note "Technical Note"
     The logistic and normal CDFs are nearly identical after rescaling. The approximation ``\beta_{\text{probit}} \approx \beta_{\text{logit}} / 1.6`` holds well across the range of the linear index (Amemiya 1981). Both models produce similar predicted probabilities and marginal effects when the sample is large. The logit model is preferred when odds ratios are the quantity of interest; the probit model when latent variable interpretation or normality assumptions are natural.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example binary
 # Generate data and estimate both models
 n = 1000
 X = hcat(ones(n), randn(n, 2))
@@ -301,10 +283,7 @@ AME is the most commonly reported in applied work because it does not depend on 
 !!! note "Technical Note"
     Standard errors for marginal effects use the **delta method** (Oehlert 1992). Let ``g(\hat{\beta})`` denote the vector of marginal effects and ``G = \partial g / \partial \beta'`` its Jacobian. The asymptotic covariance matrix is ``\text{Var}(\hat{g}) \approx G \, \hat{V} \, G'``, where ``\hat{V}`` is the estimated covariance matrix of ``\hat{\beta}``. For AME, the Jacobian row for variable ``j`` has element ``G_{j,l} = \frac{1}{n} \sum_{i=1}^{n} [\mathbf{1}(j = l) \cdot f_i + f'_i \cdot \hat{\beta}_j \cdot x_{il}]``, where ``f_i = f(x_i' \hat{\beta})`` and ``f'_i`` is its derivative with respect to the linear index.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example binary
 # Estimate a logit model
 n = 1000
 X = hcat(ones(n), randn(n, 2))
@@ -380,10 +359,7 @@ where:
 !!! note "Technical Note"
     Odds ratios are defined only for logit models. For probit models, marginal effects are the standard way to quantify the impact of regressors. The `odds_ratio` function accepts only `LogitModel` inputs.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example binary
 n = 1000
 X = hcat(ones(n), randn(n, 2))
 eta = X * [0.0, 1.5, -1.0]
@@ -432,10 +408,7 @@ Summary metrics derived from the confusion matrix:
 | **Precision** | ``\text{TP} / (\text{TP} + \text{FP})`` | Positive predictive value |
 | **F1 Score** | ``2 \cdot \text{Prec} \cdot \text{Sens} / (\text{Prec} + \text{Sens})`` | Harmonic mean of precision and sensitivity |
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example binary
 n = 1000
 X = hcat(ones(n), randn(n, 2))
 eta = X * [0.0, 1.5, -1.0]
@@ -484,10 +457,7 @@ The default threshold of 0.5 balances sensitivity and specificity. Lowering the 
 
 The `CrossSectionData` wrapper provides a symbol-based API for logit and probit estimation. The dispatch automatically extracts the dependent variable by name, constructs the regressor matrix with an `(Intercept)` column prepended, and passes variable names through to the estimator.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example binary
 # Create a CrossSectionData container with binary outcome
 n = 500
 x1 = randn(n)
@@ -582,10 +552,7 @@ save_plot(p, "marginal_effects.html")
 
 This example demonstrates a full binary choice modeling workflow: data generation, logit and probit estimation, comparison, marginal effects, odds ratios, classification diagnostics, and visualization.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example binary
 # ──────────────────────────────────────────────────────────────────────
 # Step 1: Generate synthetic binary outcome data
 # ──────────────────────────────────────────────────────────────────────

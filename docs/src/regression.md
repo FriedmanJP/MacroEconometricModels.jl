@@ -10,14 +10,16 @@
 - **CrossSectionData dispatch** for symbol-based formula-like syntax
 - **StatsAPI interface**: `coef`, `vcov`, `predict`, `confint`, `stderror`, `nobs`, `r2`
 
+```@setup reg
+using MacroEconometricModels, Random
+Random.seed!(42)
+```
+
 ## Quick Start
 
 **Recipe 1: OLS with robust standard errors**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example reg
 # Simulate a cross-sectional dataset
 n = 200
 X = hcat(ones(n), randn(n, 2))
@@ -28,10 +30,7 @@ report(m)
 
 **Recipe 2: Weighted Least Squares**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example reg
 # Heteroskedastic DGP: variance proportional to x1^2
 n = 300
 x1 = 1.0 .+ abs.(randn(n))
@@ -44,10 +43,7 @@ report(m)
 
 **Recipe 3: HC3 robust standard errors**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example reg
 # HC3 is preferred for small samples with heteroskedasticity
 n = 200
 X = hcat(ones(n), randn(n, 3))
@@ -58,10 +54,7 @@ report(m)
 
 **Recipe 4: IV/2SLS estimation**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example reg
 # Endogenous regressor correlated with the error
 n = 500
 z1, z2 = randn(n), randn(n)
@@ -76,10 +69,7 @@ report(m)
 
 **Recipe 5: Multicollinearity diagnostics**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example reg
 # Two highly correlated regressors
 n = 200
 x1 = randn(n)
@@ -94,10 +84,7 @@ report(m)
 
 **Recipe 6: CrossSectionData dispatch**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example reg
 # Symbol-based formula-like API
 n = 300
 data = hcat(randn(n), randn(n), randn(n))
@@ -200,10 +187,7 @@ where:
 - ``\log L = -\frac{n}{2} \log(2\pi) - \frac{n}{2} \log(\hat{\sigma}^2_{ML}) - \frac{n}{2}`` is the Gaussian log-likelihood
 - ``\hat{\sigma}^2_{ML} = SSR / n`` is the ML error variance estimator
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example reg
 # Generate data with known coefficients
 n = 500
 X = hcat(ones(n), randn(n, 3))
@@ -272,10 +256,7 @@ WLS is equivalent to applying OLS to the transformed model ``\sqrt{w_i} \, y_i =
 !!! note "Technical Note"
     The package computes residuals from the **original** (untransformed) data: ``\hat{u}_i = y_i - x_i' \hat{\beta}_{WLS}``. Robust standard errors (HC0--HC3) applied under WLS use the original ``X`` and residuals with the WLS bread matrix ``(X'WX)^{-1}``, providing double robustness against weight misspecification.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example reg
 # DGP with heteroskedastic errors: Var(u_i) = sigma^2 * x1_i^2
 n = 500
 x1 = 1.0 .+ abs.(randn(n))
@@ -325,10 +306,7 @@ where ``h_{ii} = x_i' (X'X)^{-1} x_i`` is the ``i``-th diagonal element of the h
 !!! note "Technical Note"
     The leverage ``h_{ii}`` measures how influential observation ``i`` is on the regression fit. High-leverage observations (``h_{ii}`` close to 1) have small residuals mechanically, making HC0 and HC1 underestimate the true variance. HC2 corrects for this exactly under homoskedasticity; HC3 provides conservative inference even under heteroskedasticity. MacKinnon & White (1985) recommend HC3 for small samples (``n < 250``).
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example reg
 # Heteroskedastic DGP
 n = 200
 X = hcat(ones(n), randn(n, 2))
@@ -361,10 +339,7 @@ where:
 
 Cluster-robust standard errors are consistent as ``G \to \infty``, regardless of the within-cluster correlation structure. A rule of thumb requires at least ``G \geq 50`` clusters for reliable inference (Cameron & Miller 2015).
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example reg
 # 50 clusters with 20 observations each
 G, n_per_g = 50, 20
 n = G * n_per_g
@@ -437,10 +412,7 @@ where:
 
 Rejection suggests at least one instrument is invalid. The test has no power when the model is exactly identified (``m = k``).
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example reg
 # Classical IV setup: returns to education with ability bias
 n = 1000
 ability = randn(n)                                    # Unobserved ability
@@ -503,10 +475,7 @@ where:
 
 A VIF of 10 means that the variance of ``\hat{\beta}_j`` is 10 times larger than it would be if ``x_j`` were uncorrelated with the other regressors. Remedial actions include dropping or combining correlated variables, using ridge regression, or collecting more data.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example reg
 n = 300
 x1 = randn(n)
 x2 = 0.95 * x1 + 0.05 * randn(n)   # Nearly collinear with x1
@@ -527,10 +496,7 @@ The VIF values for `x1` and `x2` are large because these two variables are corre
 
 The `CrossSectionData` wrapper provides a symbol-based API that automatically constructs the regressor matrix with an intercept column and maps variable names. This dispatch eliminates manual column extraction and intercept handling.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example reg
 # Create a CrossSectionData container
 n = 500
 data = hcat(randn(n), randn(n), randn(n), randn(n))
@@ -543,10 +509,7 @@ report(m)
 
 For IV estimation, the `CrossSectionData` dispatch accepts symbol-based arguments for endogenous variables and instruments:
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example reg
 n = 500
 z1, z2 = randn(n), randn(n)
 u = randn(n)
@@ -617,10 +580,7 @@ save_plot(p, "reg_iv.html")
 
 This example demonstrates a full cross-sectional regression workflow: OLS estimation with robust standard error comparison, WLS correction for heteroskedasticity, IV estimation for an endogenous regressor, and VIF diagnostics.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example reg
 # ──────────────────────────────────────────────────────────────────────
 # Step 1: Generate synthetic cross-sectional data
 # ──────────────────────────────────────────────────────────────────────
