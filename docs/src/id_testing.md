@@ -2,13 +2,16 @@
 
 Before relying on statistical identification, the practitioner must verify that the identifying conditions hold in the data. This page covers the diagnostic tests for non-Gaussian and heteroskedasticity-based SVAR identification: multivariate normality tests, shock gaussianity and independence tests, likelihood ratio tests, and bootstrap identification strength assessments.
 
+```@setup id_test
+using MacroEconometricModels, Random
+Random.seed!(42)
+```
+
 ## Quick Start
 
 **Recipe 1: Normality test suite**
 
-```julia
-using MacroEconometricModels
-
+```@example id_test
 fred = load_example(:fred_md)
 Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
 Y = Y[all.(isfinite, eachrow(Y)), :]
@@ -20,28 +23,14 @@ report(suite)
 
 **Recipe 2: Multivariate Jarque-Bera**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-
+```@example id_test
 jb = jarque_bera_test(model)
 report(jb)
 ```
 
 **Recipe 3: Shock gaussianity test**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-
+```@example id_test
 ica = identify_fastica(model)
 result = test_shock_gaussianity(ica)
 report(result)
@@ -49,15 +38,7 @@ report(result)
 
 **Recipe 4: Shock independence test**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-
+```@example id_test
 ica = identify_fastica(model)
 indep = test_shock_independence(ica; max_lag=10)
 report(indep)
@@ -65,14 +46,7 @@ report(indep)
 
 **Recipe 5: Gaussian vs non-Gaussian LR test**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-
+```@example id_test
 lr = test_gaussian_vs_nongaussian(model; distribution=:student_t)
 report(lr)
 ```
@@ -98,18 +72,13 @@ where:
 
 The `:component` method applies univariate JB tests to each standardized residual. The component-wise p-values in the result's `component_pvalues` field pinpoint which variables drive non-Gaussianity.
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-
+```@example id_test
 # Joint and component-wise tests
 jb = jarque_bera_test(model)
 report(jb)
+```
 
+```@example id_test
 jb_comp = jarque_bera_test(model; method=:component)
 report(jb_comp)
 ```
@@ -157,14 +126,7 @@ JB_j = T \left( \frac{\hat{s}_j^2}{6} + \frac{\hat{\kappa}_j^2}{24} \right) \sim
 
 where ``\hat{s}_j`` is sample skewness and ``\hat{\kappa}_j`` is excess kurtosis. The Darmois-Skitovich theorem requires at most one Gaussian shock for identification. The test counts how many shocks fail to reject at the 5% level.
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-
+```@example id_test
 ica = identify_fastica(model)
 result = test_shock_gaussianity(ica)
 report(result)
@@ -188,14 +150,7 @@ where:
 - ``\ell_1`` is the non-Gaussian log-likelihood (ML with distribution-specific parameters)
 - ``p = n \times p_{\text{dist}}`` is the number of extra distribution parameters
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-
+```@example id_test
 lr = test_gaussian_vs_nongaussian(model; distribution=:student_t)
 report(lr)
 ```
@@ -213,15 +168,7 @@ Independence of recovered shocks is necessary for valid identification. This tes
 
 Fisher's method: ``\chi^2_F = -2 \sum_k \ln p_k \sim \chi^2(2K)``. Failing to reject (``p \geq 0.05``) indicates independent shocks.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-
+```@example id_test
 ica = identify_fastica(model)
 result = test_shock_independence(ica; max_lag=10)
 report(result)
@@ -240,15 +187,7 @@ The bootstrap identification strength test assesses robustness of the estimated 
 !!! warning "Weak Identification"
     Lewis (2022) demonstrates that weak identification is common in empirical applications. When variances change little or deviations from Gaussianity are small, standard Wald tests have poor size properties and confidence intervals are unreliable. Always run the identification strength test before reporting structural results.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-
+```@example id_test
 result = test_identification_strength(model; method=:fastica, n_bootstrap=499)
 report(result)
 println("Normalized distance: ", round(result.details[:normalized_distance], digits=4))
@@ -265,15 +204,7 @@ println("Normalized distance: ", round(result.details[:normalized_distance], dig
 
 When additional restrictions beyond non-Gaussianity are imposed on ``B_0``, this bootstrap test checks consistency. It compares the discrepancy between ``B_0 B_0'`` and ``\Sigma`` to a bootstrap distribution under the null.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-
+```@example id_test
 ica = identify_fastica(model)
 result = test_overidentification(model, ica; n_bootstrap=499)
 report(result)
@@ -293,38 +224,39 @@ report(result)
 
 ## Complete Example
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-# Three-variable monetary policy VAR
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-
+```@example id_test
 # Step 1: Normality diagnostics
 suite = normality_test_suite(model)
 report(suite)
+```
 
+```@example id_test
 # Step 2: LR test — Gaussian vs Student-t
 lr = test_gaussian_vs_nongaussian(model; distribution=:student_t)
 report(lr)
+```
 
+```@example id_test
 # Step 3: ICA identification + shock diagnostics
 ica = identify_fastica(model)
 gauss = test_shock_gaussianity(ica)
 report(gauss)
 println("Gaussian shocks: ", gauss.details[:n_gaussian])
+```
 
+```@example id_test
 indep = test_shock_independence(ica; max_lag=5)
 report(indep)
 println("Shocks independent: ", indep.identified)
+```
 
+```@example id_test
 # Step 4: Identification strength
 strength = test_identification_strength(model; method=:fastica, n_bootstrap=199)
 report(strength)
+```
 
+```@example id_test
 # Step 5: Compute structural IRFs if identification holds
 if gauss.identified
     irfs = irf(model, 20; method=:fastica)

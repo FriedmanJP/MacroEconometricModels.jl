@@ -7,13 +7,16 @@ Statistical identification recovers the structural impact matrix ``B_0`` from hi
 - **Full pipeline integration**: all methods produce a rotation ``Q`` consumed by `irf()`, `fevd()`, `historical_decomposition()`
 - **Sub-pages**: [Non-Gaussian Methods](@ref id_nongaussian_page) | [Heteroskedasticity](@ref id_heteroskedastic_page) | [Testing](@ref id_testing_page)
 
+```@setup id_overview
+using MacroEconometricModels, Random
+Random.seed!(42)
+```
+
 ## Quick Start
 
 **Recipe 1: FastICA identification**
 
-```julia
-using MacroEconometricModels
-
+```@example id_overview
 fred = load_example(:fred_md)
 Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
 Y = Y[all.(isfinite, eachrow(Y)), :]
@@ -24,53 +27,28 @@ report(ica)
 
 **Recipe 2: Student-t ML identification**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
+```@example id_overview
 ml = identify_student_t(model)
 report(ml)
 ```
 
 **Recipe 3: Markov-switching heteroskedasticity**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
+```@example id_overview
 ms = identify_markov_switching(model; n_regimes=2)
 report(ms)
 ```
 
 **Recipe 4: Normality test suite**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
+```@example id_overview
 suite = normality_test_suite(model)
 report(suite)
 ```
 
 **Recipe 5: Shock Gaussianity test**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
+```@example id_overview
 ica = identify_fastica(model)
 result = test_shock_gaussianity(ica)
 report(result)
@@ -78,16 +56,12 @@ report(result)
 
 **Recipe 6: IRF via statistical identification**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
+```@example id_overview
 irfs = irf(model, 20; method=:fastica)
 report(irfs)
+```
+
+```julia
 plot_result(irfs)
 ```
 
@@ -139,11 +113,12 @@ All 13 methods return a rotation matrix ``Q`` and structural impact matrix ``B_0
 
 All 13 methods integrate with `irf()`, `fevd()`, and `historical_decomposition()` via `compute_Q()`. Pass the method name as a symbol:
 
-```julia
+```@example id_overview
 irfs_ica = irf(model, 20; method=:fastica)
 irfs_ml  = irf(model, 20; method=:student_t)
 irfs_ms  = irf(model, 20; method=:markov_switching)
 decomp   = fevd(model, 20; method=:jade)
+nothing # hide
 ```
 
 Supported symbols: `:fastica`, `:jade`, `:sobi`, `:dcov`, `:hsic`, `:student_t`, `:mixture_normal`, `:pml`, `:skew_normal`, `:markov_switching`, `:garch`.

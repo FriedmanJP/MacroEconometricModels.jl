@@ -7,13 +7,16 @@ Heteroskedasticity-based SVAR identification exploits time-varying second moment
 - **Smooth transition**: Logistic transition function allows gradual regime shifts (Lutkepohl & Netsunajev 2017)
 - **External volatility**: Known regime indicators (NBER recessions, financial crises) provide the simplest sample-split approach (Rigobon 2003)
 
+```@setup id_het
+using MacroEconometricModels, Random
+Random.seed!(42)
+```
+
 ## Quick Start
 
 **Recipe 1: Markov-switching identification**
 
-```julia
-using MacroEconometricModels
-
+```@example id_het
 fred = load_example(:fred_md)
 Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
 Y = Y[all.(isfinite, eachrow(Y)), :]
@@ -25,28 +28,14 @@ report(ms)
 
 **Recipe 2: GARCH-based identification**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-
+```@example id_het
 garch = identify_garch(model)
 report(garch)
 ```
 
 **Recipe 3: Smooth transition identification**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-
+```@example id_het
 # Lagged industrial production as the transition variable
 s = Y[2:end, 1]
 st = identify_smooth_transition(model, s)
@@ -55,14 +44,7 @@ report(st)
 
 **Recipe 4: External volatility instruments**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-
+```@example id_het
 # Known regimes: split sample at midpoint
 T_obs = size(model.U, 1)
 regime = vcat(fill(1, T_obs ÷ 2), fill(2, T_obs - T_obs ÷ 2))
@@ -72,14 +54,7 @@ report(ev)
 
 **Recipe 5: IRF via heteroskedasticity identification**
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-
+```@example id_het
 irfs = irf(model, 20; method=:markov_switching)
 report(irfs)
 ```
@@ -138,14 +113,7 @@ The EM algorithm iterates:
 !!! note "Kim (1994) Joint Smoother"
     The transition matrix update uses ``\xi_{t,t-1|T}(i,j) = \xi_{t|T}(j) \cdot P_{ij} \cdot \xi_{t-1|t-1}(i) / \xi_{t|t-1}(j)`` rather than the naive product of marginal smoothed probabilities. This accounts for serial dependence in regime assignments and produces unbiased transition matrix estimates.
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-
+```@example id_het
 ms = identify_markov_switching(model; n_regimes=2)
 report(ms)
 ```
@@ -194,14 +162,7 @@ The structural impact matrix ``B_0`` is estimated by maximizing:
 
 where ``\varepsilon_t = B_0^{-1} u_t`` and each ``h_{j,t}`` follows the GARCH recursion. The estimation iterates: (1) initialize ``B_0`` from Cholesky, (2) fit GARCH(1,1) to each shock, (3) re-estimate ``B_0`` via Givens rotation optimization, (4) repeat until convergence.
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-
+```@example id_het
 garch = identify_garch(model)
 report(garch)
 ```
@@ -239,14 +200,7 @@ where:
 
 When ``G = 0`` the covariance equals ``B_0 B_0'``; when ``G = 1`` it equals ``B_0 \Lambda B_0'``.
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-
+```@example id_het
 s = Y[2:end, 1]
 st = identify_smooth_transition(model, s)
 report(st)
@@ -272,14 +226,7 @@ report(st)
 
 When volatility regimes are known a priori (NBER recessions, financial crises, policy regime changes), external volatility identification (Rigobon 2003) splits the sample and estimates regime-specific covariance matrices directly. This is the simplest heteroskedasticity method --- no latent state estimation or iterative optimization.
 
-```julia
-using MacroEconometricModels
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-
+```@example id_het
 T_obs = size(model.U, 1)
 regime = vcat(fill(1, T_obs ÷ 2), fill(2, T_obs - T_obs ÷ 2))
 ev = identify_external_volatility(model, regime)
@@ -301,19 +248,13 @@ report(ev)
 
 ## Complete Example
 
-```julia
-using MacroEconometricModels
-
-# Three-variable monetary policy VAR
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-
+```@example id_het
 # Step 1: Markov-switching identification
 ms = identify_markov_switching(model; n_regimes=2)
 report(ms)
+```
 
+```@example id_het
 # Step 2: Check convergence and regime structure
 println("Converged: ", ms.converged)
 println("Transition matrix:")
@@ -323,15 +264,21 @@ println(round.(ms.transition_matrix, digits=3))
 for k in 1:ms.n_regimes
     println("Regime $k variances: ", round.(ms.Lambda[k], digits=3))
 end
+```
 
+```@example id_het
 # Step 4: Compare with GARCH identification
 garch = identify_garch(model)
 report(garch)
+```
 
+```@example id_het
 # Step 5: Structural IRFs and FEVD
 irfs = irf(model, 20; method=:markov_switching)
 report(irfs)
+```
 
+```@example id_het
 decomp = fevd(model, 20; method=:markov_switching)
 report(decomp)
 ```

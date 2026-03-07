@@ -9,14 +9,16 @@ This page covers two complementary approaches:
 
 For heteroskedasticity-based identification, see [Heteroskedasticity](@ref id_heteroskedastic_page). For identifiability diagnostics, see [Testing](@ref id_testing_page).
 
+```@setup id_ng
+using MacroEconometricModels, Random
+Random.seed!(42)
+```
+
 ## Quick Start
 
 **Recipe 1: FastICA identification**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example id_ng
 # Identify structural shocks via FastICA (Hyvärinen 1999)
 fred = load_example(:fred_md)
 Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
@@ -28,60 +30,32 @@ report(ica)
 
 **Recipe 2: JADE identification**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example id_ng
 # Fourth-order cumulant diagonalization (Cardoso & Souloumiac 1993)
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
 jade = identify_jade(model)
 report(jade)
 ```
 
 **Recipe 3: Student-t ML identification**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example id_ng
 # Parametric ML with shock-specific degrees of freedom (Lanne, Meitz & Saikkonen 2017)
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
 ml = identify_student_t(model)
 report(ml)
 ```
 
 **Recipe 4: Mixture of normals ML identification**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example id_ng
 # Two-component Gaussian mixture shocks (Lanne & Lütkepohl 2010)
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
 ml = identify_mixture_normal(model)
 report(ml)
 ```
 
 **Recipe 5: Model comparison across distributions**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example id_ng
 # Compare AIC/BIC across all non-Gaussian distributions
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
 for dist in [:student_t, :mixture_normal, :pml, :skew_normal]
     ml = identify_nongaussian_ml(model; distribution=dist)
     println("$dist: AIC=$(round(ml.aic, digits=2)), BIC=$(round(ml.bic, digits=2))")
@@ -90,15 +64,8 @@ end
 
 **Recipe 6: IRF via non-Gaussian identification**
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
+```@example id_ng
 # Non-Gaussian identification integrates directly with the IRF pipeline
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
 irfs = irf(model, 20; method=:fastica)
 report(irfs)
 ```
@@ -138,19 +105,13 @@ Two extraction approaches control how components are recovered:
 - `:deflation` — extracts components one at a time, orthogonalizing against previously found components
 - `:symmetric` — extracts all components simultaneously via symmetric decorrelation ``W \leftarrow (WW')^{-1/2} W``
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-
+```@example id_ng
 # Default: logcosh contrast, deflation approach
 ica1 = identify_fastica(model)
 report(ica1)
+```
 
+```@example id_ng
 # Symmetric approach with exponential contrast
 ica2 = identify_fastica(model; approach=:symmetric, contrast=:exp)
 report(ica2)
@@ -173,15 +134,7 @@ C_{ij}[k,l] = \text{cum}(z_k, z_l, z_i, z_j) = E[z_k z_l z_i z_j] - E[z_k z_l] E
 
 where ``z_t`` are the pre-whitened residuals. Joint diagonalization minimizes the sum of squared off-diagonal elements across all cumulant matrices.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-
+```@example id_ng
 jade = identify_jade(model; max_iter=100)
 report(jade)
 ```
@@ -203,15 +156,7 @@ R(\tau) = \frac{1}{T - \tau} \sum_{t=1}^{T-\tau} z_{t+\tau} z_t'
 
 SOBI finds the orthogonal ``V`` that simultaneously diagonalizes ``\{R(\tau)\}_{\tau \in \text{lags}}``.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-
+```@example id_ng
 sobi = identify_sobi(model; lags=1:12)
 report(sobi)
 ```
@@ -226,15 +171,7 @@ report(sobi)
 
 Distance covariance (Székely et al. 2007) measures dependence between random vectors and equals zero if and only if the variables are independent. The `identify_dcov` function minimizes the sum of pairwise distance covariances between recovered shocks by optimizing over Givens rotation angles (Matteson & Tsay 2017).
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-
+```@example id_ng
 dcov = identify_dcov(model; max_iter=200)
 report(dcov)
 ```
@@ -250,15 +187,7 @@ The Hilbert-Schmidt Independence Criterion (Gretton et al. 2005) measures depend
 
 The Gaussian kernel bandwidth ``\sigma`` defaults to the median pairwise distance heuristic when set to `1.0`.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-
+```@example id_ng
 hsic = identify_hsic(model; sigma=1.0)
 report(hsic)
 ```
@@ -314,15 +243,7 @@ f_j(x;\, \nu_j) = \frac{\Gamma((\nu_j+1)/2)}{\sqrt{\pi \nu_j}\, \Gamma(\nu_j/2)}
 
 The scaling factor ``\sqrt{\nu_j / (\nu_j - 2)}`` standardizes the variance to unity. Low ``\nu_j`` indicates heavy tails; as ``\nu_j \to \infty``, shock ``j`` approaches Gaussianity.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-
+```@example id_ng
 ml = identify_student_t(model)
 report(ml)
 ```
@@ -339,15 +260,7 @@ f_j(x;\, p_j, \sigma_{1j}, \sigma_{2j}) = p_j \, \phi(x / \sigma_{1j}) / \sigma_
 
 where ``\phi(\cdot)`` is the standard normal density. The unit variance constraint ``p_j \sigma_{1j}^2 + (1 - p_j) \sigma_{2j}^2 = 1`` reduces the free parameters to ``p_j`` and ``\sigma_{1j}`` per shock. The second variance is derived as ``\sigma_{2j}^2 = (1 - p_j \sigma_{1j}^2) / (1 - p_j)``.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-
+```@example id_ng
 ml = identify_mixture_normal(model)
 report(ml)
 ```
@@ -358,15 +271,7 @@ The mixing probabilities are in `ml.dist_params[:p_mix]` and the first component
 
 Pseudo Maximum Likelihood (Herwartz 2018) uses Pearson Type IV distributions that accommodate both skewness and excess kurtosis. Each shock has two parameters: a skewness correction ``\kappa_j`` and a tail parameter ``\nu_j``.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-
+```@example id_ng
 ml = identify_pml(model)
 report(ml)
 ```
@@ -388,15 +293,7 @@ where:
 
 When ``\alpha_j = 0``, the distribution reduces to the standard normal.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-
+```@example id_ng
 ml = identify_skew_normal(model)
 report(ml)
 ```
@@ -407,15 +304,7 @@ The skewness parameters are in `ml.dist_params[:alpha]`. Positive ``\alpha`` pro
 
 The `identify_nongaussian_ml` function selects the distribution at runtime, enabling systematic model comparison:
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-
+```@example id_ng
 for dist in [:student_t, :mixture_normal, :pml, :skew_normal]
     ml = identify_nongaussian_ml(model; distribution=dist)
     println("$dist: logL=$(round(ml.loglik, digits=2)), AIC=$(round(ml.aic, digits=2)), BIC=$(round(ml.bic, digits=2))")
@@ -458,24 +347,19 @@ All ML methods return a `NonGaussianMLResult{T}`:
 
 This workflow estimates a three-variable monetary policy VAR, identifies structural shocks using both ICA and ML approaches, compares models via information criteria, and computes impulse responses.
 
-```julia
-using MacroEconometricModels, Random
-Random.seed!(42)
-
-# --- Data: FRED-MD monetary policy model ---
-fred = load_example(:fred_md)
-Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
-Y = Y[all.(isfinite, eachrow(Y)), :]
-model = estimate_var(Y, 2)
-
+```@example id_ng
 # --- Step 1: ICA identification (nonparametric) ---
 ica = identify_fastica(model; contrast=:logcosh, approach=:deflation)
 report(ica)
+```
 
+```@example id_ng
 # --- Step 2: ML identification (parametric, Student-t) ---
 ml_t = identify_student_t(model)
 report(ml_t)
+```
 
+```@example id_ng
 # --- Step 3: Compare distributions via AIC ---
 best_dist = :student_t
 best_aic = Inf
@@ -488,7 +372,9 @@ for dist in [:student_t, :mixture_normal, :pml, :skew_normal]
     end
 end
 println("Best distribution by AIC: $best_dist")
+```
 
+```@example id_ng
 # --- Step 4: Compute IRFs using preferred identification ---
 irfs = irf(model, 20; method=:fastica)
 report(irfs)
