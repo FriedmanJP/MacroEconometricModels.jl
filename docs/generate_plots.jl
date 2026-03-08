@@ -586,6 +586,15 @@ function main()
         save("dsge_bayes_irf.html", plot_result(birf_dsge))
     end
 
+    # -------------------------------------------------------------------
+    # 53. DSGE Historical Decomposition (linear)
+    # -------------------------------------------------------------------
+    begin
+        Y_dsge_hd = simulate(dsge_sol, 200)
+        dsge_hd = historical_decomposition(dsge_sol, Y_dsge_hd, [:Y, :C, :K, :A])
+        save("dsge_hd.html", plot_result(dsge_hd))
+    end
+
     println("\nDone! Generated $(length(readdir(PLOT_DIR))) HTML files in $PLOT_DIR")
 end
 
