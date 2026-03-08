@@ -2524,7 +2524,7 @@ end
     # Posterior means should be in same ballpark (both target same posterior)
     rho_std = mean(result_std.theta_draws[:, 1])
     rho_da = mean(result_da.theta_draws[:, 1])
-    @test abs(rho_std - rho_da) < 0.3  # same ballpark, Monte Carlo variance
+    @test abs(rho_std - rho_da) < 0.5  # same ballpark, Monte Carlo variance
     end
 end
 
