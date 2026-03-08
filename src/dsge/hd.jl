@@ -432,13 +432,15 @@ function historical_decomposition(post::BayesianDSGE{T}, data::AbstractMatrix,
     all_initial = Vector{Matrix{T}}()
     all_shocks = Vector{Matrix{T}}()
 
+    solver = post.solution isa DSGESolution ? post.solution.method : :gensys
+
     for idx in draw_indices
         theta = Vector{T}(post.theta_draws[idx, :])
         try
             _suppress_warnings() do
                 sol, _ = _build_solution_at_theta(spec, post.param_names, theta,
                                                    observables, measurement_error,
-                                                   :gensys, NamedTuple())
+                                                   solver, NamedTuple())
                 if sol isa DSGESolution && !is_determined(sol)
                     return  # skip indeterminate
                 end

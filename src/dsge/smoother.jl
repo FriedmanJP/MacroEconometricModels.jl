@@ -512,13 +512,7 @@ function _nonlinear_transition(nss::NonlinearStateSpace{T},
         end
 
         if nss.order >= 3
-            vf_new = zeros(T, nv)
-            if nx > 0
-                vf_new[1:nx] = xf_new
-            end
-            vf_new[nx+1:nv] = eps_t
-            kron_vf_new2 = kron(vf_new, vf_new)
-            kron3_vf_new = kron(vf_new, kron_vf_new2)
+            kron3_vf_new = kron(vf_new, kron_vf_new)
 
             if nss.gxxx !== nothing
                 y_t += (one(T) / T(6)) * nss.gxxx * kron3_vf_new
@@ -745,6 +739,17 @@ function dsge_particle_smoother(nss::NonlinearStateSpace{T}, data::Matrix{T};
     # Temporary backward weights
     bw = zeros(T, N)
 
+    # Pre-allocate backward pass temporaries
+    xf_k_buf = zeros(T, nx)
+    predicted = zeros(T, nx)
+    residual_bw = zeros(T, nx)
+    implied_shock = zeros(T, n_eps)
+    det_full = zeros(T, n_endog)
+    x_tp1_states = zeros(T, nx)
+    zero_eps = zeros(T, n_eps)
+    resid_buf = zeros(T, n_endog)
+    implied_eps = zeros(T, n_eps)
+
     for b in 1:N_back
         # Draw x_T from final weights
         idx_T = _categorical_draw(@view(weights_store[:, T_obs]), rng)
@@ -755,7 +760,6 @@ function dsge_particle_smoother(nss::NonlinearStateSpace{T}, data::Matrix{T};
             x_tp1 = @view back_states[:, b, t + 1]
 
             # Extract the state part of x_{t+1}
-            x_tp1_states = zeros(T, nx)
             for (k, si) in enumerate(nss.state_indices)
                 x_tp1_states[k] = x_tp1[si]
             end
@@ -767,10 +771,15 @@ function dsge_particle_smoother(nss::NonlinearStateSpace{T}, data::Matrix{T};
             # log p = -0.5 * ||implied_shock||^2 (standard normal prior on shocks)
             max_log_bw = T(-Inf)
             for k in 1:N
-                xf_k = @view xf_store[:, k, t]
-                predicted = hx_state * xf_k
-                residual = x_tp1_states - predicted
-                implied_shock = eta_x_pinv * residual
+                # predicted = hx_state * xf_store[:, k, t]
+                xf_k_view = @view xf_store[:, k, t]
+                mul!(predicted, hx_state, xf_k_view)
+                # residual_bw = x_tp1_states - predicted
+                @inbounds for i in 1:nx
+                    residual_bw[i] = x_tp1_states[i] - predicted[i]
+                end
+                # implied_shock = eta_x_pinv * residual_bw
+                mul!(implied_shock, eta_x_pinv, residual_bw)
                 log_trans = -T(0.5) * dot(implied_shock, implied_shock)
                 bw[k] = log(max(weights_store[k, t], T(1e-300))) + log_trans
                 if bw[k] > max_log_bw
@@ -810,8 +819,8 @@ function dsge_particle_smoother(nss::NonlinearStateSpace{T}, data::Matrix{T};
 
             # Get the deterministic prediction (zero shocks) from previous state
             # Assemble deterministic full state
-            det_full = zeros(T, n_endog)
-            xf_det, xs_det, xrd_det, x_total_det, y_det = _nonlinear_transition(nss, prev_xf, prev_xs, prev_xrd, zeros(T, n_eps))
+            fill!(det_full, zero(T))
+            xf_det, xs_det, xrd_det, x_total_det, y_det = _nonlinear_transition(nss, prev_xf, prev_xs, prev_xrd, zero_eps)
             for (k, si) in enumerate(nss.state_indices)
                 det_full[si] = x_total_det[k]
             end
@@ -819,10 +828,14 @@ function dsge_particle_smoother(nss::NonlinearStateSpace{T}, data::Matrix{T};
                 det_full[ci] = y_det[k]
             end
 
-            # Implied shock
-            resid = Vector{T}(x_t) - det_full
-            implied_eps = impact_pinv * resid
-            back_shocks[:, b, t] = implied_eps
+            # Implied shock: resid_buf = x_t - det_full, implied_eps = impact_pinv * resid_buf
+            @inbounds for i in 1:n_endog
+                resid_buf[i] = x_t[i] - det_full[i]
+            end
+            mul!(implied_eps, impact_pinv, resid_buf)
+            @inbounds for i in 1:n_eps
+                back_shocks[i, b, t] = implied_eps[i]
+            end
 
             # Update previous states for next step
             # Recover pruned components from the shock we just extracted

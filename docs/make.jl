@@ -48,6 +48,7 @@ makedocs(;
             "Nonlinear Methods" => "dsge_nonlinear.md",
             "Constraints" => "dsge_constraints.md",
             "Estimation" => "dsge_estimation.md",
+            "Historical Decomposition" => "dsge_hd.md",
         ],
         "Innovation Accounting" => [
             "Overview" => "innovation_accounting.md",
