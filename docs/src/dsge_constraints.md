@@ -32,21 +32,40 @@ pf = perfect_foresight(spec; shock_path=shocks)
 report(pf)
 ```
 
-**Recipe 2: OccBin ZLB**
+**Recipe 2: OccBin borrowing constraint**
 
-```julia
-# (assume nk_spec is a New Keynesian model with endogenous variable R)
-constraint = parse_constraint(:(R[t] >= 0), nk_spec)
-shocks = zeros(100, 1)
-shocks[1, 1] = -3.0
-occ_sol = occbin_solve(nk_spec, constraint; shock_path=shocks)
+```@example dsge_constraints
+borrow_spec = @dsge begin
+    parameters: β = 20/21, R = 21/20, ρ = 0.9, σ = 0.05, M = 1.0
+    endogenous: b, c, y
+    exogenous: u
+
+    # Savings optimality (substituted Euler, β*R = 1)
+    b[t] = (y[t+1] + b[t+1] + R * b[t-1] - y[t]) / (1 + R)
+    # Budget constraint
+    c[t] = y[t] + b[t] - R * b[t-1]
+    # Income process
+    y[t] = y[t-1]^ρ * exp(σ * u[t])
+end
+borrow_spec = compute_steady_state(borrow_spec;
+    method=:analytical, ss_fn = θ -> [0.0, 1.0, 1.0])
+
+# Borrowing limit: debt cannot exceed M
+constraint = parse_constraint(:(b[t] <= 1.0), borrow_spec)
+borrow_shocks = zeros(60, 1)
+borrow_shocks[1, 1] = -40.0  # Large negative income shock
+occ_sol = occbin_solve(borrow_spec, constraint; shock_path=borrow_shocks)
 report(occ_sol)
 ```
 
 **Recipe 3: OccBin IRFs --- linear vs constrained**
 
+```@example dsge_constraints
+occ_irf = occbin_irf(borrow_spec, constraint, 1, 40; magnitude=-40.0)
+nothing # hide
+```
+
 ```julia
-occ_irf = occbin_irf(nk_spec, constraint, 1, 40; magnitude=-3.0)
 plot_result(occ_irf)
 ```
 
@@ -197,36 +216,41 @@ The `parse_constraint` function converts a Julia expression into an `OccBinConst
 # ZLB: nominal rate cannot go below zero
 constraint = parse_constraint(:(R[t] >= 0), spec)
 
+# Borrowing limit: debt cannot exceed M
+borrow = parse_constraint(:(b[t] <= 1.0), spec)
+
 # Upper bound: output gap capped at 5%
 cap = parse_constraint(:(gap[t] <= 0.05), spec)
 ```
 
 The constraint defines two regimes:
 
-- **Slack regime**: The original model equation holds --- ``R_t`` is determined by the Taylor rule
-- **Binding regime**: The constraint replaces the policy equation with ``R_t = 0``
+- **Slack regime**: The original model equation holds --- the variable is determined by its defining equation (e.g., a Taylor rule for ``R_t``, a savings optimality condition for ``b_t``)
+- **Binding regime**: The constraint replaces the defining equation with the bound (e.g., ``R_t = 0`` at the ZLB, ``b_t = M`` at the borrowing limit)
 
 The variable name must match one of the endogenous variables declared in the `@dsge` block.
 
-### One-Constraint Example (ZLB)
+### One-Constraint Example (Borrowing Limit)
 
-```julia
-# Large negative demand shock pushes economy to ZLB
-shocks = zeros(100, 1)
-shocks[1, 1] = -3.0
+```@example dsge_constraints
+# Large negative income shock pushes agent to borrowing limit
+borrow_shocks = zeros(60, 1)
+borrow_shocks[1, 1] = -40.0
 
-occ_sol = occbin_solve(nk_spec, constraint; shock_path=shocks)
+occ_sol = occbin_solve(borrow_spec, constraint; shock_path=borrow_shocks)
 report(occ_sol)
 ```
 
 The solution contains both the unconstrained linear path and the piecewise-linear constrained path:
 
-```julia
-occ_sol.linear_path      # 100 x n unconstrained path (deviations from SS)
-occ_sol.piecewise_path   # 100 x n constrained path (deviations from SS)
-occ_sol.regime_history   # 100 x 1 matrix: 0 = slack, 1 = binding
+```@example dsge_constraints
+occ_sol.linear_path      # 60 x 3 unconstrained path (deviations from SS)
+occ_sol.piecewise_path   # 60 x 3 constrained path (deviations from SS)
+occ_sol.regime_history   # 60 x 1 matrix: 0 = slack, 1 = binding
 occ_sol.converged        # true if regime sequence converged
 ```
+
+When the constraint binds, ``b_t = M`` replaces the savings optimality condition. The budget constraint continues to hold, so consumption absorbs the full income shortfall that can no longer be smoothed through additional borrowing.
 
 ### Guess-and-Verify Algorithm
 
@@ -269,7 +293,7 @@ The `regime_history` matrix has two columns --- one per constraint --- recording
 OccBin impulse responses compare the linear and constrained paths for a given shock:
 
 ```julia
-occ_irf = occbin_irf(nk_spec, constraint, 1, 40; magnitude=-3.0)
+occ_irf = occbin_irf(borrow_spec, constraint, 1, 40; magnitude=-40.0)
 plot_result(occ_irf)
 ```
 
@@ -314,44 +338,48 @@ occ_irf = occbin_irf(spec, zlb, borrow, 1, 40; magnitude=-3.0)
 
 ## Complete Example
 
-This example combines perfect foresight and OccBin to analyze a New Keynesian model at the zero lower bound:
+This example builds a consumption-savings model with an occasionally binding borrowing constraint and compares unconstrained and constrained impulse responses:
 
 ```@example dsge_constraints
-# Specify a 3-equation NK model
-nk_spec = @dsge begin
-    parameters: β = 0.99, σ_c = 1.0, κ = 0.024, ϕ_π = 1.5, ϕ_y = 0.125,
-                ρ_d = 0.9, σ_d = 0.01
-    endogenous: y, π, R, d
-    exogenous: ε_d
+# Consumption-savings model with borrowing limit
+# β*R = 1 ensures a clean unconstrained steady state (b=0, c=1, y=1)
+bc_spec = @dsge begin
+    parameters: β = 20/21, R = 21/20, ρ = 0.9, σ = 0.05, M = 1.0
+    endogenous: b, c, y
+    exogenous: u
 
-    y[t] = y[t+1] - σ_c * (R[t] - π[t+1]) + d[t]
-    π[t] = β * π[t+1] + κ * y[t]
-    R[t] = ϕ_π * π[t] + ϕ_y * y[t]
-    d[t] = ρ_d * d[t-1] + σ_d * ε_d[t]
+    # Savings optimality: substituted Euler equation
+    # Derived from c[t] = c[t+1] (log utility, β*R = 1) + budget constraint
+    b[t] = (y[t+1] + b[t+1] + R * b[t-1] - y[t]) / (1 + R)
+    # Budget constraint (accounting identity — always holds)
+    c[t] = y[t] + b[t] - R * b[t-1]
+    # Income process (log AR(1))
+    y[t] = y[t-1]^ρ * exp(σ * u[t])
 end
-nk_spec = compute_steady_state(nk_spec)
+bc_spec = compute_steady_state(bc_spec;
+    method=:analytical, ss_fn = θ -> [0.0, 1.0, 1.0])
 
 # Unconstrained solution for comparison
-sol = solve(nk_spec)
-result_unc = irf(sol, 40)
+sol_unc = solve(bc_spec)
+irf_unc = irf(sol_unc, 40)
 
-# OccBin with ZLB: R >= 0
-constraint = parse_constraint(:(R[t] >= 0), nk_spec)
+# OccBin with borrowing limit: b <= M
+bc_constraint = parse_constraint(:(b[t] <= 1.0), bc_spec)
 
-# Large negative demand shock pushes economy to ZLB
-occ_irf = occbin_irf(nk_spec, constraint, 1, 40; magnitude=-3.0)
+# Large negative income shock pushes agent to borrowing limit
+bc_irf = occbin_irf(bc_spec, bc_constraint, 1, 40; magnitude=-40.0)
 nothing # hide
 ```
 
 ```julia
-plot_result(occ_irf)
+plot_result(bc_irf)
 ```
 
 ```@raw html
 <iframe src="../assets/plots/occbin_irf.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-The unconstrained IRF shows the linear response to a demand shock. The OccBin IRF reveals that when the ZLB binds, the interest rate remains at zero for several periods, amplifying the output and inflation responses relative to the linear solution. The `regime_history` field tracks which periods the constraint binds.
+The unconstrained IRF shows optimal consumption smoothing: the agent borrows freely in response to a negative income shock, spreading the impact across many periods. The OccBin IRF reveals that when borrowing hits the limit ``b_t = M``, the savings optimality condition is replaced by the bound. Consumption must absorb the full income shortfall that can no longer be smoothed, producing a sharper drop. The `regime_history` field tracks which periods the constraint binds.
 
 ---
 
@@ -363,7 +391,7 @@ The unconstrained IRF shows the linear response to a demand shock. The OccBin IR
 
 3. **Missing JuMP extensions**: NonlinearSolve handles unconstrained and non-binding box constraints without JuMP. For binding box constraints or nonlinear constraints, `import JuMP, Ipopt` or `import JuMP, PATHSolver` is required *before* calling `perfect_foresight`. Without these imports, binding box constraints return the unconstrained solution with a warning.
 
-4. **Wrong constraint direction**: `:(R[t] >= 0)` means "``R`` must be at least 0" (a lower bound). `:(D[t] <= D_max)` means "``D`` must be at most `D_max`" (an upper bound). Verify that the direction matches the economic interpretation.
+4. **Wrong constraint direction**: `:(R[t] >= 0)` means "``R`` must be at least 0" (a lower bound). `:(b[t] <= 1.0)` means "debt cannot exceed ``M``" (a borrowing limit). `:(D[t] <= D_max)` means "``D`` must be at most `D_max`" (an upper bound). Verify that the direction matches the economic interpretation.
 
 5. **Constraint binding at terminal period**: If `regime_history` shows the constraint binding in the last period, the horizon is too short. OccBin warns when this occurs --- increase `nperiods` until the constraint releases before the terminal period.
 

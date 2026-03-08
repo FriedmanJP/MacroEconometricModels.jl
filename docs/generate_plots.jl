@@ -354,29 +354,29 @@ function main()
     save("dsge_fevd.html", plot_result(dsge_fevd))
 
     # -------------------------------------------------------------------
-    # 32. OccBin IRF comparison (large negative demand shock hits ZLB)
+    # 32. OccBin IRF comparison (borrowing constraint)
     # -------------------------------------------------------------------
-    nk_occ_spec = @dsge begin
-        parameters: β = 0.99, σ_c = 1.0, κ = 0.3, φ_π = 1.5, φ_y = 0.5,
-                    ρ_d = 0.8, σ_d = 0.01
-        endogenous: y, π, R, d
-        exogenous: ε_d
+    borrow_spec = @dsge begin
+        parameters: β = 20/21, R = 21/20, ρ = 0.9, σ = 0.05, M = 1.0
+        endogenous: b, c, y
+        exogenous: u
 
-        y[t] = y[t+1] - (1 / σ_c) * (R[t] - π[t+1]) + d[t]
-        π[t] = β * π[t+1] + κ * y[t]
-        R[t] = φ_π * π[t] + φ_y * y[t]
-        d[t] = ρ_d * d[t-1] + σ_d * ε_d[t]
+        b[t] = (y[t+1] + b[t+1] + R * b[t-1] - y[t]) / (1 + R)
+        c[t] = y[t] + b[t] - R * b[t-1]
+        y[t] = y[t-1]^ρ * exp(σ * u[t])
     end
-    nk_occ_constraint = parse_constraint(:(R[t] >= 0), nk_occ_spec)
-    oirf = occbin_irf(nk_occ_spec, nk_occ_constraint, 1, 80; magnitude=8.0)
+    borrow_spec = compute_steady_state(borrow_spec;
+        method=:analytical, ss_fn = θ -> [0.0, 1.0, 1.0])
+    borrow_constraint = parse_constraint(:(b[t] <= 1.0), borrow_spec)
+    oirf = occbin_irf(borrow_spec, borrow_constraint, 1, 60; magnitude=-40.0)
     save("occbin_irf.html", plot_result(oirf))
 
     # -------------------------------------------------------------------
-    # 33. OccBin solution path
+    # 33. OccBin solution path (borrowing constraint)
     # -------------------------------------------------------------------
-    occ_shocks = zeros(80, 1)
-    occ_shocks[1, 1] = -8.0
-    occ_sol = occbin_solve(nk_occ_spec, nk_occ_constraint; shock_path=occ_shocks)
+    occ_shocks = zeros(60, 1)
+    occ_shocks[1, 1] = -40.0
+    occ_sol = occbin_solve(borrow_spec, borrow_constraint; shock_path=occ_shocks)
     save("occbin_solution.html", plot_result(occ_sol))
 
     # -------------------------------------------------------------------
