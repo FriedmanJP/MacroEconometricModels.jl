@@ -70,7 +70,7 @@ svg { overflow: visible; }
 <div class="figure-title">y (Event Study LP)</div>
 <div class="panel">
 <div class="panel-title">Dynamic Treatment Effects (Event Study LP)</div>
-<div id="eslp_133"></div>
+<div id="eslp_143"></div>
 </div>
 <div class="tooltip" id="tooltip"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
@@ -101,7 +101,7 @@ function hideTip() { tooltip.style('opacity',0); }
     const bands = [{"lo_key":"ci_lo","hi_key":"ci_hi","color":"#1f77b4","alpha":0.15}];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
 
-    const container = d3.select('#eslp_133');
+    const container = d3.select('#eslp_143');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;
@@ -196,7 +196,7 @@ function hideTip() { tooltip.style('opacity',0); }
 })();
 
 (function() {
-    const container = d3.select('#eslp_133');
+    const container = d3.select('#eslp_143');
     const svgEl = container.select('svg');
     const gEl = svgEl.select('g');
     const W = +svgEl.attr('width');

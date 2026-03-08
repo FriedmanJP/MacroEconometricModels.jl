@@ -272,6 +272,11 @@ html:not(.theme--documenter-dark) .docstring header { background-color: #eee8d5;
     display: none !important;
 }
 
+/* Hide draft-mode placeholder output from @example blocks */
+.documenter-example-output {
+    display: none !important;
+}
+
 /* Settings modal */
 html:not(.theme--documenter-dark) #documenter .docs-settings { background-color: #fdf6e3; }
 
