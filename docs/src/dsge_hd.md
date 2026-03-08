@@ -166,7 +166,7 @@ psol = perturbation_solver(_spec_hd; order=2)
 
 # Nonlinear HD via counterfactual simulation
 hd_nl = historical_decomposition(psol, _data_hd, [:Y, :A];
-                                  N=200, N_back=50)
+                                  N=200, N_back=50, rng=Random.MersenneTwister(42))
 report(hd_nl)
 ```
 
@@ -235,8 +235,14 @@ The Kalman and particle smoothers can be used independently of the historical de
 
 ### RTS Smoother (Linear)
 
+!!! note "Advanced Usage"
+    The state-space construction functions (`_build_observation_equation`, `_build_state_space`)
+    are internal helpers. The `historical_decomposition` function calls them automatically.
+    Use the standalone smoother only when you need smoothed states or shocks without the
+    full decomposition.
+
 ```@example dsge_hd
-# Build the state space manually
+# Build the state space (internal helpers — subject to change)
 observables = [:Y, :A]
 Z, d, H = MacroEconometricModels._build_observation_equation(_spec_hd, observables, nothing)
 ss = MacroEconometricModels._build_state_space(_sol_hd, Z, d, H)
@@ -254,7 +260,7 @@ The smoother handles missing data (NaN entries) by reducing the observation dime
 ### FFBSi Particle Smoother (Nonlinear)
 
 ```@example dsge_hd
-# Build nonlinear state space from perturbation solution
+# Build nonlinear state space (internal helper — subject to change)
 nss = MacroEconometricModels._build_nonlinear_state_space(psol, Z, d, H)
 
 # Run the particle smoother
@@ -316,11 +322,8 @@ verify_decomposition(hd_ce)
 ```
 
 ```@example dsge_hd
-# Technology shock contribution to each variable
-for var in ["Y", "C", "K", "A"]
-    c = contribution(hd_ce, var, "ε_A")
-    println("$(var): max |contribution| = $(round(maximum(abs, c); digits=6))")
-end
+# Technology shock contribution to output
+contribution(hd_ce, "Y", "ε_A")[1:5]
 ```
 
 ```julia
@@ -352,7 +355,7 @@ The stacked bar chart shows the technology shock's contribution to each variable
 ## References
 
 - Canova, F. (2007). *Methods for Applied Macroeconomic Research*.
-  Princeton University Press. ISBN 978-0-691-11510-7.
+  Princeton University Press. ISBN 978-0-691-11583-1.
 
 - Godsill, S. J., Doucet, A., & West, M. (2004). Monte Carlo Smoothing for Nonlinear Time Series.
   *Journal of the American Statistical Association*, 99(465), 156--168. [DOI](https://doi.org/10.1198/016214504000000151)
