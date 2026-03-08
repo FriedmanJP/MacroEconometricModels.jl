@@ -3,3 +3,6 @@ docs/plans/
 
 # Local scripts (not for remote)
 scripts/
+
+# Benchmarks (local only)
+benchmarks/
