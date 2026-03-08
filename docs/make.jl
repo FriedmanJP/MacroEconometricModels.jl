@@ -95,4 +95,5 @@ makedocs(;
 deploydocs(;
     repo="github.com/FriedmanJP/MacroEconometricModels.jl",
     devbranch="main",
+    cname="api.friedman.jp",
 )
