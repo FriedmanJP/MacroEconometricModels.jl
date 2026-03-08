@@ -71,11 +71,11 @@ svg { overflow: visible; }
 <div class="panel-grid">
 <div class="panel">
 <div class="panel-title">Sorted Predicted Probabilities</div>
-<div id="bc_sort_154"></div>
+<div id="bc_sort_152"></div>
 </div>
 <div class="panel">
 <div class="panel-title">Distribution by Outcome</div>
-<div id="bc_dist_155"></div>
+<div id="bc_dist_153"></div>
 </div>
 </div>
 
@@ -598,7 +598,7 @@ function hideTip() { tooltip.style('opacity',0); }
     const groups = [{"name":"y = 1","color":"#1f77b4"},{"name":"y = 0","color":"#d62728"}];
     const refLines = [{"value":0.5,"color":"#999","dash":"4,3"}];
 
-    const container = d3.select('#bc_sort_154');
+    const container = d3.select('#bc_sort_152');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;
@@ -701,7 +701,7 @@ function hideTip() { tooltip.style('opacity',0); }
     const series = [{"name":"y = 0","color":"#d62728","key":"s0","dash":""},{"name":"y = 1","color":"#1f77b4","key":"s1","dash":""}];
     const mode = 'grouped';
 
-    const container = d3.select('#bc_dist_155');
+    const container = d3.select('#bc_dist_153');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;
