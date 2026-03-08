@@ -10,6 +10,7 @@
 - **Constraints**: Perfect foresight paths, OccBin occasionally-binding constraints (Guerrieri & Iacoviello 2015), and constrained optimization via JuMP/Ipopt (NLP) and PATH (MCP); see [Constraints](@ref dsge_constraints)
 - **Estimation**: Four GMM-based methods (one-step, two-step, iterative, CU) for IRF matching, plus Bayesian estimation via SMC, SMC`` ^2 `` with two-stage delayed acceptance, and Random-Walk Metropolis-Hastings; see [Estimation](@ref dsge_estimation)
 - **Simulation and IRFs**: Stochastic and pruned simulation, analytical and generalized impulse responses, FEVD, and unconditional moments via Lyapunov equation; see [Nonlinear Methods](@ref dsge_nonlinear)
+- **Historical Decomposition**: Kalman smoother-based shock attribution for linear models, FFBSi particle smoother for nonlinear models, and Bayesian posterior bands; see [Historical Decomposition](@ref dsge_hd_page)
 
 All results integrate with `plot_result()` for interactive D3.js visualization and `report()` for publication-quality output.
 
@@ -122,6 +123,14 @@ result = estimate_dsge_bayes(spec, data, [0.99, 0.9, 0.01];
     method=:smc2, observables=[:y], n_smc=200, n_particles=100,
     solver=:projection, solver_kwargs=(degree=5,))
 report(result)
+```
+
+**Recipe 7: Historical decomposition**
+
+```@example dsge_overview
+data_hd = simulate(sol, 100)
+hd = historical_decomposition(sol, data_hd, [:Y, :C, :K, :A])
+report(hd)
 ```
 
 ---
