@@ -7,6 +7,8 @@ The API documentation is organized into the following pages:
 - **[Types](@ref api_types)**: Core type definitions for models, results, and estimators
 - **[Functions](@ref api_functions)**: Function documentation organized by module
 
+The quick reference tables below cover all modules: data management, time series, multivariate models, cross-sectional and panel models, DSGE, difference-in-differences, factor models, spectral analysis, volatility, nowcasting, hypothesis tests, and output utilities.
+
 ## Quick Reference Tables
 
 Typed data containers, built-in datasets (FRED-MD, FRED-QD, Penn World Table), and data cleaning utilities. See [Data Management](data.md) for theory and examples.
@@ -330,10 +332,6 @@ Low-level matrix construction and numerical utilities used internally.
 | `robust_inv(A)` | Robust matrix inverse |
 | `safe_cholesky(A; ...)` | Stable Cholesky decomposition |
 
----
-
-## DSGE Models
-
 Specify, solve, simulate, and estimate Dynamic Stochastic General Equilibrium models. See [DSGE Models](dsge.md) for the full guide.
 
 ### DSGE Specification and Solution
@@ -346,6 +344,11 @@ Specify, solve, simulate, and estimate Dynamic Stochastic General Equilibrium mo
 | `solve(spec; method=:gensys)` | Solve rational expectations model |
 | `gensys(Γ₀, Γ₁, C, Ψ, Π)` | Sims (2002) QZ decomposition solver |
 | `blanchard_kahn(ld, spec)` | Blanchard-Kahn (1980) eigenvalue counting |
+| `klein(ld, spec)` | Klein (2000) generalized Schur solver |
+| `perturbation_solver(spec; order=2)` | Higher-order perturbation solver |
+| `collocation_solver(spec; ...)` | Chebyshev collocation projection |
+| `pfi_solver(spec; ...)` | Policy function iteration |
+| `vfi_solver(spec; ...)` | Value function iteration |
 | `is_determined(sol)` | Check existence and uniqueness |
 | `is_stable(sol)` | Check stability of solution |
 
@@ -356,6 +359,7 @@ Specify, solve, simulate, and estimate Dynamic Stochastic General Equilibrium mo
 | `simulate(sol, T)` | Stochastic simulation |
 | `irf(sol, H)` | Analytical impulse responses |
 | `fevd(sol, H)` | Forecast error variance decomposition |
+| `historical_decomposition(sol, data, obs)` | DSGE historical decomposition |
 | `solve_lyapunov(G1, impact)` | Unconditional covariance (Lyapunov equation) |
 | `analytical_moments(sol; lags)` | Analytical variance and autocovariances |
 | `perfect_foresight(spec; T_periods, shock_path)` | Deterministic transition path |
@@ -365,6 +369,7 @@ Specify, solve, simulate, and estimate Dynamic Stochastic General Equilibrium mo
 | Function | Description |
 |----------|-------------|
 | `estimate_dsge(spec, data, params; method)` | GMM estimation (IRF matching, Euler, SMM, analytical) |
+| `estimate_dsge_bayes(spec, data, θ0; ...)` | Bayesian estimation (SMC/SMC²/MH) |
 
 ### Occasionally Binding Constraints (OccBin)
 
@@ -373,3 +378,160 @@ Specify, solve, simulate, and estimate Dynamic Stochastic General Equilibrium mo
 | `parse_constraint(expr, spec)` | Parse constraint expression |
 | `occbin_solve(spec, constraint; ...)` | Piecewise-linear OccBin solution (1 or 2 constraints) |
 | `occbin_irf(spec, constraint, shock_idx, H; ...)` | OccBin impulse responses |
+
+### DSGE Smoothers and Diagnostics
+
+| Function | Description |
+|----------|-------------|
+| `dsge_smoother(ss, data)` | RTS Kalman smoother for linear DSGE |
+| `dsge_particle_smoother(nss, data)` | FFBSi particle smoother for nonlinear DSGE |
+| `evaluate_policy(sol, grid)` | Evaluate policy function on grid |
+| `max_euler_error(sol, grid)` | Maximum Euler equation error |
+
+OLS, WLS, IV/2SLS, logit, probit, ordered, and multinomial estimation for cross-sectional data. See [Regression](regression.md) and [Binary Choice](binary_choice.md) for theory and examples.
+
+### Cross-Sectional Models
+
+| Function | Description |
+|----------|-------------|
+| `estimate_reg(y, X; ...)` | OLS/WLS regression (HC0–HC3, cluster-robust SEs) |
+| `estimate_iv(y, X, Z; ...)` | IV/2SLS estimation |
+| `estimate_logit(y, X)` | Logit MLE via IRLS |
+| `estimate_probit(y, X)` | Probit MLE via IRLS |
+| `estimate_ologit(y, X)` | Ordered logit MLE |
+| `estimate_oprobit(y, X)` | Ordered probit MLE |
+| `estimate_mlogit(y, X)` | Multinomial logit MLE |
+| `marginal_effects(m; ...)` | AME/MEM/MER with delta-method SEs |
+| `odds_ratio(m)` | Odds ratios for logit models |
+| `classification_table(m)` | Classification accuracy table |
+| `vif(m)` | Variance inflation factors |
+| `brant_test(m)` | Brant test for parallel regression |
+| `hausman_iia(m)` | Hausman test for IIA assumption |
+
+FE, RE, FD, Between, CRE, Arellano-Bond, and Blundell-Bond panel estimators. See [Panel Models](pvar.md) for theory and examples.
+
+### Panel Regression
+
+| Function | Description |
+|----------|-------------|
+| `estimate_xtreg(pd, :y, :x1, :x2; ...)` | Panel FE/RE/FD/Between/CRE/AB/BB |
+| `estimate_xtiv(pd, :y, :x; ...)` | Panel IV (FE-IV/RE-IV/FD-IV/Hausman-Taylor) |
+| `estimate_xtlogit(pd, :y, :x; ...)` | Panel logit (pooled/FE/RE/CRE) |
+| `estimate_xtprobit(pd, :y, :x; ...)` | Panel probit (pooled/FE/RE/CRE) |
+| `hausman_test(m_fe, m_re)` | Hausman FE vs RE specification test |
+| `breusch_pagan_test(m)` | Breusch-Pagan LM test |
+| `pesaran_cd_test(m)` | Pesaran CD cross-sectional dependence test |
+| `wooldridge_ar_test(m)` | Wooldridge AR(1) test |
+| `modified_wald_test(m)` | Modified Wald heteroskedasticity test |
+| `f_test_fe(m)` | F-test for fixed effects |
+
+TWFE, Callaway-Sant'Anna, Sun-Abraham, BJS, and did_multiplegt estimators plus LP-DiD and diagnostics. See [DiD](did.md) and [Event Study](event_study.md) for theory and examples.
+
+### Difference-in-Differences
+
+| Function | Description |
+|----------|-------------|
+| `estimate_did(pd, :y, :treat; ...)` | DiD estimation (5 methods: twfe/cs/sa/bjs/did_multiplegt) |
+| `estimate_event_study_lp(pd, :y, :treat; ...)` | Event study LP for panel data |
+| `estimate_lp_did(pd, :y, :treat; ...)` | LP-DiD (Dube et al. 2025) |
+| `bacon_decomposition(pd, :y, :treat)` | Goodman-Bacon (2021) decomposition |
+| `pretrend_test(result)` | Pre-trend parallel trends test |
+| `negative_weight_check(pd, :y, :treat)` | Negative weight diagnostic |
+| `honest_did(result; ...)` | HonestDiD sensitivity analysis |
+
+Two-step or Bayesian Gibbs FAVAR with factor-to-observable IRF mapping. See [FAVAR](favar.md) for theory and examples.
+
+### FAVAR
+
+| Function | Description |
+|----------|-------------|
+| `estimate_favar(Y_slow, Y_fast, r, p; ...)` | FAVAR (two-step or Bayesian Gibbs) |
+| `favar_panel_irf(favar, H)` | Map factor IRFs to N observables |
+| `favar_panel_forecast(favar, h)` | FAVAR multi-step forecasting |
+
+Structural DFM combining GDFM spectral estimation with structural VAR identification. See [Factor Models](factormodels.md) for theory and examples.
+
+### Structural DFM
+
+| Function | Description |
+|----------|-------------|
+| `estimate_structural_dfm(X, q; ...)` | Structural DFM (GDFM + VAR) |
+| `sdfm_panel_irf(sdfm, H)` | Map structural factor IRFs to observables |
+
+Periodogram, Welch/Daniell/AR spectral density, cross-spectrum, coherence, and autocorrelation functions. See [Hypothesis Tests](tests_diagnostics.md) for serial correlation tests.
+
+### Spectral Analysis
+
+| Function | Description |
+|----------|-------------|
+| `periodogram(y; ...)` | Raw periodogram |
+| `spectral_density(y; ...)` | Smoothed spectral density (Welch/Daniell/AR) |
+| `cross_spectrum(x, y; ...)` | Cross-spectral analysis |
+| `acf(y, maxlag)` | Sample autocorrelation function |
+| `pacf(y, maxlag)` | Partial autocorrelation function |
+| `ccf(x, y, maxlag)` | Cross-correlation function |
+| `coherence(cs)` | Coherence from cross-spectrum |
+| `phase(cs)` | Phase spectrum |
+| `gain(cs)` | Gain function |
+| `ideal_bandpass(y; pl, pu)` | Ideal bandpass filter |
+| `transfer_function(b, a; ...)` | Filter transfer function |
+
+Ljung-Box, Box-Pierce, and Durbin-Watson tests for autocorrelation and serial correlation. See [Hypothesis Tests](tests_diagnostics.md) for details.
+
+### Portmanteau and Serial Correlation Tests
+
+| Function | Description |
+|----------|-------------|
+| `ljung_box_test(y, K)` | Ljung-Box autocorrelation test |
+| `box_pierce_test(y, K)` | Box-Pierce autocorrelation test |
+| `durbin_watson_test(m)` | Durbin-Watson serial correlation test |
+| `bartlett_white_noise_test(y)` | Bartlett white noise test |
+| `fisher_test(y)` | Fisher exact periodogram test |
+
+Fourier ADF/KPSS, DF-GLS, LM unit root, two-break ADF, and Gregory-Hansen cointegration tests. See [Advanced Unit Root Tests](tests_unitroot_advanced.md) for details.
+
+### Advanced Unit Root Tests
+
+| Function | Description |
+|----------|-------------|
+| `fourier_adf_test(y; ...)` | Fourier ADF test (Enders & Lee 2012) |
+| `fourier_kpss_test(y; ...)` | Fourier KPSS test |
+| `dfgls_test(y; ...)` | DF-GLS/ERS unit root test |
+| `lm_unitroot_test(y; ...)` | LM unit root test with breaks |
+| `adf_2break_test(y; ...)` | Two-break ADF test (Narayan & Popp 2010) |
+| `gregory_hansen_test(Y; ...)` | Gregory-Hansen cointegration test with break |
+
+Andrews SupWald/SupLM/SupLR, Bai-Perron multiple break detection, and factor structural break tests. See [Structural Break Tests](tests_breaks.md) for details.
+
+### Structural Break Tests
+
+| Function | Description |
+|----------|-------------|
+| `andrews_test(y, X; ...)` | Andrews (1993) SupWald/SupLM/SupLR |
+| `bai_perron_test(y, X; ...)` | Bai-Perron (1998) multiple break detection |
+| `factor_break_test(X; ...)` | Factor structural break test |
+
+PANIC, Pesaran CIPS, and Moon-Perron panel unit root tests. See [Panel Unit Root Tests](tests_panel.md) for details.
+
+### Panel Unit Root Tests
+
+| Function | Description |
+|----------|-------------|
+| `panic_test(pd; ...)` | Bai-Ng (2004) PANIC test |
+| `pesaran_cips_test(pd; ...)` | Pesaran (2007) CIPS test |
+| `moon_perron_test(pd; ...)` | Moon-Perron (2004) test |
+| `panel_unit_root_summary(pd; ...)` | Run all panel unit root tests |
+
+Within-group lag, lead, and differencing utilities for panel data construction. See [Data Management](data.md) for details.
+
+### Panel Data Utilities
+
+| Function | Description |
+|----------|-------------|
+| `panel_lag(pd, :var, k)` | Within-group lagged variable |
+| `panel_lead(pd, :var, k)` | Within-group lead variable |
+| `panel_diff(pd, :var)` | Within-group first difference |
+| `add_panel_lag(pd, :var, k)` | Add lagged column to panel |
+| `add_panel_lead(pd, :var, k)` | Add lead column to panel |
+| `add_panel_diff(pd, :var)` | Add differenced column to panel |
+| `balance_panel(d; ...)` | Fill NaN via DFM imputation |
