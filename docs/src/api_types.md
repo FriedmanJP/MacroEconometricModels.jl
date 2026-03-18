@@ -481,7 +481,6 @@ PerfectForesightPath
 DSGEEstimation
 BayesianDSGE
 BayesianDSGESimulation
-KalmanSmootherResult
 DSGEConstraint
 VariableBound
 NonlinearConstraint
@@ -528,7 +527,6 @@ BayesianFAVAR
 
 ```@docs
 StructuralDFM
-StructuralLP
 ```
 
 ---

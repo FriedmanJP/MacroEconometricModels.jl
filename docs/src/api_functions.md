@@ -712,13 +712,6 @@ prior_posterior_table
 posterior_predictive
 ```
 
-### DSGE Smoothers
-
-```@docs
-dsge_smoother
-dsge_particle_smoother
-```
-
 ### Occasionally Binding Constraints
 
 ```@docs
