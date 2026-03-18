@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Average Marginal Effects</title>
+<style>* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+    background: #fff;
+    color: #333;
+    padding: 20px;
+}
+.figure-title {
+    font-size: 18px;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 16px;
+    color: #222;
+}
+.figure-source {
+    font-size: 11px;
+    color: #888;
+    text-align: center;
+    margin-top: 8px;
+}
+.panel-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    justify-content: center;
+}
+.panel {
+    width: calc(100% - 16px);
+    min-width: 300px;
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 12px;
+}
+.panel-title {
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 8px;
+    color: #444;
+}
+.axis text { font-size: 11px; fill: #666; }
+.axis line, .axis path { stroke: #ccc; }
+.grid line { stroke: #f0f0f0; stroke-dasharray: 2,2; }
+.grid .domain { stroke: none; }
+.tooltip {
+    position: absolute;
+    background: rgba(0,0,0,0.8);
+    color: #fff;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 1000;
+}
+.legend { font-size: 11px; }
+.legend rect { rx: 2; }
+svg { overflow: visible; }
+</style>
+</head>
+<body>
+<div class="figure-title">Average Marginal Effects</div>
+<div class="panel">
+<div class="panel-title">Average Marginal Effects (95% CI)</div>
+<div id="me_coef_154"></div>
+</div>
+<div class="tooltip" id="tooltip"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script>
+// Shared utilities
+const tooltip = d3.select('#tooltip');
+function fmt(v) {
+    if (v === null || v === undefined) return '';
+    return Math.abs(v) >= 1000 ? v.toFixed(1) : (Math.abs(v) >= 1 ? v.toFixed(3) : v.toFixed(4));
+}
+function showTip(evt, html) {
+    tooltip.html(html).style('opacity',1)
+        .style('left',(evt.pageX+12)+'px').style('top',(evt.pageY-28)+'px');
+}
+function hideTip() { tooltip.style('opacity',0); }
+
+(function() {
+    const data = [{"name":"const","effect":0.036726228962365076,"ci_lo":-0.002571555633962816,"ci_hi":0.07602401355869297},
+{"name":"x₁","effect":0.1990214435064403,"ci_lo":0.16378639889298363,"ci_hi":0.23425648811989697},
+{"name":"x₂","effect":-0.0925898112832604,"ci_lo":-0.1293182062801064,"ci_hi":-0.05586141628641439}];
+
+    const container = d3.select('#me_coef_154');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:100};
+    const w = W - margin.left - margin.right;
+    const h = Math.max(data.length * 28, 120);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    // Scales
+    const allX = [];
+    data.forEach(d => { allX.push(d.effect, d.ci_lo, d.ci_hi); });
+    allX.push(0);
+    const xExt = d3.extent(allX);
+    const xPad = (xExt[1] - xExt[0]) * 0.12 || 0.1;
+    const x = d3.scaleLinear().domain([xExt[0] - xPad, xExt[1] + xPad]).range([0, w]);
+    const y = d3.scaleBand().domain(data.map(d => d.name)).range([0, h]).padding(0.3);
+
+    // Grid
+    g.append('g').attr('class','grid')
+        .call(d3.axisBottom(x).tickSize(h).tickFormat(''))
+        .attr('transform','translate(0,0)');
+
+    // Zero reference line
+    g.append('line')
+        .attr('x1', x(0)).attr('x2', x(0))
+        .attr('y1', 0).attr('y2', h)
+        .attr('stroke', '#d62728').attr('stroke-width', 1)
+        .attr('stroke-dasharray', '6,3');
+
+    // CI whiskers (horizontal lines)
+    g.selectAll('.ci-line').data(data).join('line')
+        .attr('class', 'ci-line')
+        .attr('x1', d => x(d.ci_lo))
+        .attr('x2', d => x(d.ci_hi))
+        .attr('y1', d => y(d.name) + y.bandwidth()/2)
+        .attr('y2', d => y(d.name) + y.bandwidth()/2)
+        .attr('stroke', '#1f77b4')
+        .attr('stroke-width', 1.5);
+
+    // CI caps (vertical lines at ends)
+    const capH = y.bandwidth() * 0.4;
+    g.selectAll('.ci-cap-lo').data(data).join('line')
+        .attr('class', 'ci-cap-lo')
+        .attr('x1', d => x(d.ci_lo)).attr('x2', d => x(d.ci_lo))
+        .attr('y1', d => y(d.name) + y.bandwidth()/2 - capH/2)
+        .attr('y2', d => y(d.name) + y.bandwidth()/2 + capH/2)
+        .attr('stroke', '#1f77b4').attr('stroke-width', 1.5);
+    g.selectAll('.ci-cap-hi').data(data).join('line')
+        .attr('class', 'ci-cap-hi')
+        .attr('x1', d => x(d.ci_hi)).attr('x2', d => x(d.ci_hi))
+        .attr('y1', d => y(d.name) + y.bandwidth()/2 - capH/2)
+        .attr('y2', d => y(d.name) + y.bandwidth()/2 + capH/2)
+        .attr('stroke', '#1f77b4').attr('stroke-width', 1.5);
+
+    // Effect bars (horizontal from 0 to effect)
+    g.selectAll('.effect-bar').data(data).join('rect')
+        .attr('class', 'effect-bar')
+        .attr('x', d => x(Math.min(0, d.effect)))
+        .attr('y', d => y(d.name) + y.bandwidth() * 0.15)
+        .attr('width', d => Math.abs(x(d.effect) - x(0)))
+        .attr('height', y.bandwidth() * 0.7)
+        .attr('fill', '#1f77b4')
+        .attr('opacity', 0.7);
+
+    // Effect dots (circles at effect value)
+    g.selectAll('.effect-dot').data(data).join('circle')
+        .attr('class', 'effect-dot')
+        .attr('cx', d => x(d.effect))
+        .attr('cy', d => y(d.name) + y.bandwidth()/2)
+        .attr('r', 4)
+        .attr('fill', '#1f77b4')
+        .attr('stroke', '#fff')
+        .attr('stroke-width', 1);
+
+    // Axes
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+        .call(d3.axisBottom(x).ticks(8));
+    g.append('g').attr('class','axis')
+        .call(d3.axisLeft(y));
+
+    if('Effect Size') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Effect Size');
+    if('') g.append('text').attr('transform','rotate(-90)')
+        .attr('x',-h/2).attr('y',-85).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('');
+
+    // Tooltip
+    svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx, my] = d3.pointer(evt, g.node());
+            const names = data.map(d => d.name);
+            const bandY = y.step();
+            const idx = Math.min(Math.floor(my / bandY), data.length-1);
+            const d = data[Math.max(0,idx)];
+            if(!d) return;
+            showTip(evt, '<b>'+d.name+'</b><br>Effect: '+fmt(d.effect)+'<br>CI: ['+fmt(d.ci_lo)+', '+fmt(d.ci_hi)+']');
+        })
+        .on('mouseout', hideTip);
+})();
+
+</script>
+</body>
+</html>

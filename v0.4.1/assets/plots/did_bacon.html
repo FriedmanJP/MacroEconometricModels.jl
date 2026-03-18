@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bacon Decomposition (TWFE = 2.668155967021939)</title>
+<style>* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+    background: #fff;
+    color: #333;
+    padding: 20px;
+}
+.figure-title {
+    font-size: 18px;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 16px;
+    color: #222;
+}
+.figure-source {
+    font-size: 11px;
+    color: #888;
+    text-align: center;
+    margin-top: 8px;
+}
+.panel-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    justify-content: center;
+}
+.panel {
+    width: calc(100% - 16px);
+    min-width: 300px;
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 12px;
+}
+.panel-title {
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 8px;
+    color: #444;
+}
+.axis text { font-size: 11px; fill: #666; }
+.axis line, .axis path { stroke: #ccc; }
+.grid line { stroke: #f0f0f0; stroke-dasharray: 2,2; }
+.grid .domain { stroke: none; }
+.tooltip {
+    position: absolute;
+    background: rgba(0,0,0,0.8);
+    color: #fff;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 1000;
+}
+.legend { font-size: 11px; }
+.legend rect { rx: 2; }
+svg { overflow: visible; }
+</style>
+</head>
+<body>
+<div class="figure-title">Bacon Decomposition (TWFE = 2.668155967021939)</div>
+<div class="panel">
+<div class="panel-title">Estimate vs Weight</div>
+<div id="bacon_141"></div>
+</div>
+<div class="tooltip" id="tooltip"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script>
+// Shared utilities
+const tooltip = d3.select('#tooltip');
+function fmt(v) {
+    if (v === null || v === undefined) return '';
+    return Math.abs(v) >= 1000 ? v.toFixed(1) : (Math.abs(v) >= 1 ? v.toFixed(3) : v.toFixed(4));
+}
+function showTip(evt, html) {
+    tooltip.html(html).style('opacity',1)
+        .style('left',(evt.pageX+12)+'px').style('top',(evt.pageY-28)+'px');
+}
+function hideTip() { tooltip.style('opacity',0); }
+
+(function() {
+    const data = [{"x":3.5277780309396745,"y":0.25,"group":"Treated vs Untreated"},
+{"x":2.6711930609900447,"y":0.25,"group":"Earlier vs Later"},
+{"x":1.2536788180378098,"y":0.25,"group":"Later vs Earlier"},
+{"x":3.2199739581202276,"y":0.25,"group":"Treated vs Untreated"}];
+    const groups = [{"name":"Treated vs Untreated","color":"#1f77b4"},{"name":"Earlier vs Later","color":"#ff7f0e"},{"name":"Later vs Earlier","color":"#2ca02c"}];
+    const refLines = [{"value":2.668155967021939,"color":"#d62728","dash":"6,3","axis":"x"}];
+
+    const container = d3.select('#bacon_141');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    // Compute domains
+    const xVals = data.map(d => d.x).filter(v => v !== null);
+    const yVals = data.map(d => d.y).filter(v => v !== null);
+    refLines.forEach(r => {
+        if(r.axis === 'x') xVals.push(r.value);
+        else yVals.push(r.value);
+    });
+
+    const xExt = d3.extent(xVals);
+    const xPad = (xExt[1] - xExt[0]) * 0.08 || 1;
+    const x = d3.scaleLinear().domain([xExt[0] - xPad, xExt[1] + xPad]).range([0, w]);
+
+    const yExt = d3.extent(yVals);
+    const yPad = (yExt[1] - yExt[0]) * 0.08 || 0.01;
+    const y = d3.scaleLinear().domain([yExt[0] - yPad, yExt[1] + yPad]).range([h, 0]);
+
+    // Grid
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+
+    // Reference lines
+    refLines.forEach(r => {
+        if(r.axis === 'x') {
+            g.append('line').attr('x1', x(r.value)).attr('x2', x(r.value))
+                .attr('y1', 0).attr('y2', h)
+                .attr('stroke', r.color || '#999').attr('stroke-width', 1)
+                .attr('stroke-dasharray', r.dash || '4,3');
+        } else {
+            g.append('line').attr('x1', 0).attr('x2', w)
+                .attr('y1', y(r.value)).attr('y2', y(r.value))
+                .attr('stroke', r.color || '#999').attr('stroke-width', 1)
+                .attr('stroke-dasharray', r.dash || '4,3');
+        }
+    });
+
+    // Build color map from groups
+    const colorMap = {};
+    groups.forEach(gr => { colorMap[gr.name] = gr.color; });
+
+    // Scatter points
+    g.selectAll('circle').data(data).join('circle')
+        .attr('cx', d => x(d.x))
+        .attr('cy', d => y(d.y))
+        .attr('r', 5)
+        .attr('fill', d => colorMap[d.group] || '#999')
+        .attr('opacity', 0.8)
+        .attr('stroke', '#fff')
+        .attr('stroke-width', 0.5)
+        .on('mouseover', function(evt, d) {
+            d3.select(this).attr('r', 7).attr('opacity', 1);
+            showTip(evt, '<b>'+d.group+'</b><br>x: '+fmt(d.x)+'<br>y: '+fmt(d.y));
+        })
+        .on('mouseout', function() {
+            d3.select(this).attr('r', 5).attr('opacity', 0.8);
+            hideTip();
+        });
+
+    // Axes
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+        .call(d3.axisBottom(x).ticks(8));
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+
+    if('2x2 DiD Estimate') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('2x2 DiD Estimate');
+    if('Weight') g.append('text').attr('transform','rotate(-90)')
+        .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Weight');
+
+    // Legend
+    if(groups.length > 1) {
+        const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
+        groups.forEach((gr, i) => {
+            const gi = leg.append('g').attr('transform','translate('+(i*130)+',0)');
+            gi.append('circle').attr('cx',6).attr('cy',0).attr('r',5)
+                .attr('fill',gr.color).attr('opacity',0.8);
+            gi.append('text').attr('x',16).attr('y',4).attr('font-size','10px')
+                .attr('fill','#555').text(gr.name);
+        });
+    }
+})();
+
+</script>
+</body>
+</html>

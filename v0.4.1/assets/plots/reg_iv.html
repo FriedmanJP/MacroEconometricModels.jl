@@ -1,0 +1,1353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IV/2SLS Regression Diagnostics</title>
+<style>* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+    background: #fff;
+    color: #333;
+    padding: 20px;
+}
+.figure-title {
+    font-size: 18px;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 16px;
+    color: #222;
+}
+.figure-source {
+    font-size: 11px;
+    color: #888;
+    text-align: center;
+    margin-top: 8px;
+}
+.panel-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    justify-content: center;
+}
+.panel {
+    width: calc(100% - 16px);
+    min-width: 300px;
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 12px;
+}
+.panel-title {
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 8px;
+    color: #444;
+}
+.axis text { font-size: 11px; fill: #666; }
+.axis line, .axis path { stroke: #ccc; }
+.grid line { stroke: #f0f0f0; stroke-dasharray: 2,2; }
+.grid .domain { stroke: none; }
+.tooltip {
+    position: absolute;
+    background: rgba(0,0,0,0.8);
+    color: #fff;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 1000;
+}
+.legend { font-size: 11px; }
+.legend rect { rx: 2; }
+svg { overflow: visible; }
+</style>
+</head>
+<body>
+<div class="figure-title">IV/2SLS Regression Diagnostics</div>
+<div class="panel-grid">
+<div class="panel">
+<div class="panel-title">Residuals vs Fitted</div>
+<div id="reg_rvf_147"></div>
+</div>
+<div class="panel">
+<div class="panel-title">Residual Histogram</div>
+<div id="reg_hist_148"></div>
+</div>
+<div class="panel">
+<div class="panel-title">Normal Q-Q Plot</div>
+<div id="reg_qq_149"></div>
+</div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script>
+// Shared utilities
+const tooltip = d3.select('#tooltip');
+function fmt(v) {
+    if (v === null || v === undefined) return '';
+    return Math.abs(v) >= 1000 ? v.toFixed(1) : (Math.abs(v) >= 1 ? v.toFixed(3) : v.toFixed(4));
+}
+function showTip(evt, html) {
+    tooltip.html(html).style('opacity',1)
+        .style('left',(evt.pageX+12)+'px').style('top',(evt.pageY-28)+'px');
+}
+function hideTip() { tooltip.style('opacity',0); }
+
+(function() {
+    const data = [{"x":1.0797332315569574,"y":0.5048705383009022,"group":"Residuals"},
+{"x":-0.6850592798418311,"y":0.22409854245265554,"group":"Residuals"},
+{"x":0.27435681627758857,"y":0.9603382114883569,"group":"Residuals"},
+{"x":1.9174599211624148,"y":0.19262345072798182,"group":"Residuals"},
+{"x":1.8376015287949377,"y":0.48307782500688146,"group":"Residuals"},
+{"x":4.283881166046805,"y":1.7015458965059898,"group":"Residuals"},
+{"x":1.1134543616874317,"y":-1.2564871541834925,"group":"Residuals"},
+{"x":2.499195939931804,"y":-0.10300887280462279,"group":"Residuals"},
+{"x":-0.15299022163678067,"y":1.4479415011105927,"group":"Residuals"},
+{"x":-0.6145771150136958,"y":-1.8495957304521526,"group":"Residuals"},
+{"x":1.4621993220625848,"y":-1.4683326476839835,"group":"Residuals"},
+{"x":-1.0109654238551278,"y":-0.6220927392449274,"group":"Residuals"},
+{"x":1.4805593218170319,"y":0.02682448546592542,"group":"Residuals"},
+{"x":1.3792343766851585,"y":0.10813583658682413,"group":"Residuals"},
+{"x":1.3093679249666859,"y":-0.6631779691045742,"group":"Residuals"},
+{"x":3.0519254083316976,"y":1.7976081299567164,"group":"Residuals"},
+{"x":2.6022723301857362,"y":2.0795644831132107,"group":"Residuals"},
+{"x":2.0037682851906977,"y":2.1054982033450127,"group":"Residuals"},
+{"x":-0.42720589810379084,"y":-1.2513738936635002,"group":"Residuals"},
+{"x":-0.39255575329774084,"y":-0.6928922015615997,"group":"Residuals"},
+{"x":-0.19329119793183605,"y":-0.6908957467508913,"group":"Residuals"},
+{"x":3.8947592021190625,"y":1.5561419141994088,"group":"Residuals"},
+{"x":2.0254543059197836,"y":1.4755442093666495,"group":"Residuals"},
+{"x":1.60134759516853,"y":1.4251789803937758,"group":"Residuals"},
+{"x":1.3338732936200046,"y":1.4291585342168684,"group":"Residuals"},
+{"x":-2.870943915571349,"y":-2.1205832205901363,"group":"Residuals"},
+{"x":0.5996479952565549,"y":0.2075280292520275,"group":"Residuals"},
+{"x":2.5020746717143725,"y":0.8736726057703006,"group":"Residuals"},
+{"x":-1.1012659397817595,"y":-1.9994546353825318,"group":"Residuals"},
+{"x":0.9636349317378525,"y":-1.0751936269848077,"group":"Residuals"},
+{"x":-0.29426230517974095,"y":0.06617002224520305,"group":"Residuals"},
+{"x":1.9410360691680897,"y":1.7084674433937337,"group":"Residuals"},
+{"x":3.544472350479254,"y":1.3055955431674247,"group":"Residuals"},
+{"x":0.8286686119886408,"y":-0.5315475607901549,"group":"Residuals"},
+{"x":1.5041181804189208,"y":0.9050746761607242,"group":"Residuals"},
+{"x":3.3176732430076297,"y":0.09710164774604912,"group":"Residuals"},
+{"x":-2.107360896311431,"y":-1.14965955087348,"group":"Residuals"},
+{"x":0.5719492850302582,"y":-0.424698715862441,"group":"Residuals"},
+{"x":1.4434281267420137,"y":0.6428584900961698,"group":"Residuals"},
+{"x":-1.1579213244223907,"y":-0.6833689304488826,"group":"Residuals"},
+{"x":2.936192946487335,"y":2.2305547061757363,"group":"Residuals"},
+{"x":1.5616945593722786,"y":0.8679138870859717,"group":"Residuals"},
+{"x":0.40284398634979374,"y":-0.5943616073275939,"group":"Residuals"},
+{"x":0.7276592187618053,"y":-0.24554957314839637,"group":"Residuals"},
+{"x":0.8605707989312559,"y":0.5292433520439199,"group":"Residuals"},
+{"x":0.567571960340242,"y":-0.9692577430235072,"group":"Residuals"},
+{"x":2.9574037661597816,"y":2.0683799852834164,"group":"Residuals"},
+{"x":-0.9477861195350612,"y":-1.2332141381601138,"group":"Residuals"},
+{"x":2.1582041228209836,"y":0.19480417511020098,"group":"Residuals"},
+{"x":1.6804434246158397,"y":-1.1408924759481627,"group":"Residuals"},
+{"x":-0.30836482111689806,"y":-1.1849889331915542,"group":"Residuals"},
+{"x":-0.9644769578690716,"y":-1.4501566200362372,"group":"Residuals"},
+{"x":-1.181890452188853,"y":-0.851373517338349,"group":"Residuals"},
+{"x":-0.2361402172682297,"y":0.9430355825428571,"group":"Residuals"},
+{"x":-0.7934860811719184,"y":-1.014261519318557,"group":"Residuals"},
+{"x":0.18508841735691406,"y":-1.1910832918129424,"group":"Residuals"},
+{"x":3.179326569951516,"y":1.3083337016631997,"group":"Residuals"},
+{"x":2.1879742516326997,"y":0.9874761064777355,"group":"Residuals"},
+{"x":-0.12954985409051994,"y":-0.9857146102803835,"group":"Residuals"},
+{"x":0.6427019966556554,"y":-0.9187274149947336,"group":"Residuals"},
+{"x":1.282740417761773,"y":0.04642061093340333,"group":"Residuals"},
+{"x":2.500202024406336,"y":0.4730294447336676,"group":"Residuals"},
+{"x":0.8268905959529196,"y":-0.16239591540671738,"group":"Residuals"},
+{"x":-0.549082562091947,"y":-0.9597157457480189,"group":"Residuals"},
+{"x":2.710282092993517,"y":0.20106662188760982,"group":"Residuals"},
+{"x":0.3659937330483515,"y":0.3806222041130828,"group":"Residuals"},
+{"x":1.2690144127414247,"y":1.1133280724060752,"group":"Residuals"},
+{"x":1.0200667116800652,"y":0.19656903151265448,"group":"Residuals"},
+{"x":0.0507647969012118,"y":-1.506951119919485,"group":"Residuals"},
+{"x":-0.8549400535190363,"y":-0.9209023848935067,"group":"Residuals"},
+{"x":1.0513876315136257,"y":0.26870002242390423,"group":"Residuals"},
+{"x":1.4558669790916365,"y":-0.4311055628965459,"group":"Residuals"},
+{"x":3.5649669866714904,"y":1.7221389692856413,"group":"Residuals"},
+{"x":0.9336487883288808,"y":-1.0879928928107563,"group":"Residuals"},
+{"x":0.8373889400214032,"y":-0.06562008887276172,"group":"Residuals"},
+{"x":1.1164117331212806,"y":0.4836962858763345,"group":"Residuals"},
+{"x":0.30644416927608137,"y":0.2184354717710681,"group":"Residuals"},
+{"x":2.565908012015397,"y":1.4335952452726417,"group":"Residuals"},
+{"x":2.882443365944496,"y":1.5602324242131922,"group":"Residuals"},
+{"x":0.7772888700057485,"y":1.5348542809726295,"group":"Residuals"},
+{"x":0.9484827132646483,"y":0.41042060917548007,"group":"Residuals"},
+{"x":1.4028943693135338,"y":-0.8187985548858469,"group":"Residuals"},
+{"x":-1.5772324401266027,"y":-2.206759701046171,"group":"Residuals"},
+{"x":2.7425358434439024,"y":1.7497950412639405,"group":"Residuals"},
+{"x":0.01964678683856387,"y":1.1058669843873974,"group":"Residuals"},
+{"x":0.2883913102034459,"y":-0.43204272120031945,"group":"Residuals"},
+{"x":2.828656973187804,"y":0.8237310746769277,"group":"Residuals"},
+{"x":1.1355613341412327,"y":1.2529644568851126,"group":"Residuals"},
+{"x":0.0024540240523792133,"y":0.7489732767329503,"group":"Residuals"},
+{"x":0.5297606498712603,"y":-0.6215297145302678,"group":"Residuals"},
+{"x":1.6696810270050522,"y":1.0282225436601138,"group":"Residuals"},
+{"x":2.022408162528472,"y":1.5830385067663295,"group":"Residuals"},
+{"x":1.3645690237512276,"y":-1.3694022867964535,"group":"Residuals"},
+{"x":2.2878661307040566,"y":1.418157572523477,"group":"Residuals"},
+{"x":-0.40631155446679634,"y":-0.599655807688398,"group":"Residuals"},
+{"x":-1.6696661000355144,"y":-0.7271631240939032,"group":"Residuals"},
+{"x":1.1057729418332485,"y":1.1681166876333837,"group":"Residuals"},
+{"x":1.5177112518460028,"y":-0.10703101026856254,"group":"Residuals"},
+{"x":-0.9981618335977263,"y":-0.7504904547883295,"group":"Residuals"},
+{"x":2.2197638731040468,"y":-0.20926040190076556,"group":"Residuals"},
+{"x":0.87875013283804,"y":0.4070098777614106,"group":"Residuals"},
+{"x":1.6471924251450476,"y":0.9373118412654047,"group":"Residuals"},
+{"x":0.7969945004209651,"y":-0.27603414073477595,"group":"Residuals"},
+{"x":0.9289329856813638,"y":-1.765559260603641,"group":"Residuals"},
+{"x":-0.6399155327029916,"y":-0.22348156163020916,"group":"Residuals"},
+{"x":2.5377775094097537,"y":1.5720231558874946,"group":"Residuals"},
+{"x":0.39083913297659745,"y":-0.2991779334308958,"group":"Residuals"},
+{"x":3.316525393029016,"y":1.3051046972128146,"group":"Residuals"},
+{"x":0.9050054861830964,"y":0.4728637230761482,"group":"Residuals"},
+{"x":0.2802417945960566,"y":-0.5843181393833572,"group":"Residuals"},
+{"x":-1.8760350154700174,"y":-0.45334530130226436,"group":"Residuals"},
+{"x":-1.5960571011495996,"y":0.21371810341662867,"group":"Residuals"},
+{"x":1.9133632773922502,"y":-0.18581094904043782,"group":"Residuals"},
+{"x":0.5206900599018682,"y":1.1087470608989343,"group":"Residuals"},
+{"x":1.427960915996638,"y":-0.9981425134462099,"group":"Residuals"},
+{"x":0.845382857276511,"y":0.47653327364208464,"group":"Residuals"},
+{"x":2.0574526646443636,"y":0.6684553618330011,"group":"Residuals"},
+{"x":-0.6773776062497694,"y":-0.3285494058915299,"group":"Residuals"},
+{"x":1.9979245580028322,"y":1.1194965218984652,"group":"Residuals"},
+{"x":-0.07259171871980924,"y":-0.6589825700641874,"group":"Residuals"},
+{"x":-1.798779135238271,"y":-0.33895013569551713,"group":"Residuals"},
+{"x":2.602794627571738,"y":-0.2601796608973026,"group":"Residuals"},
+{"x":1.4573565831005721,"y":-1.0015900278236953,"group":"Residuals"},
+{"x":2.4718854284946734,"y":0.8579303674086574,"group":"Residuals"},
+{"x":1.70876788197079,"y":1.6722895232522705,"group":"Residuals"},
+{"x":-0.8539476472199374,"y":-1.398236487109727,"group":"Residuals"},
+{"x":0.043567707262546176,"y":-0.3275990582762616,"group":"Residuals"},
+{"x":-0.6254957278090736,"y":-1.7212606376949864,"group":"Residuals"},
+{"x":3.3473763598141826,"y":0.9366728121885259,"group":"Residuals"},
+{"x":-1.0486318281086366,"y":-0.7503577672604482,"group":"Residuals"},
+{"x":0.5420980635710287,"y":-0.6272096160977921,"group":"Residuals"},
+{"x":1.272305634523641,"y":0.7301298361021904,"group":"Residuals"},
+{"x":-2.568652754736734,"y":-1.802436456986063,"group":"Residuals"},
+{"x":1.1329022022892175,"y":-1.1014682783653647,"group":"Residuals"},
+{"x":2.8437438382650573,"y":0.9539379383975115,"group":"Residuals"},
+{"x":0.5242504378811498,"y":-0.8845732617489604,"group":"Residuals"},
+{"x":-1.268375387537731,"y":-0.15543695582436756,"group":"Residuals"},
+{"x":0.5670749133526667,"y":0.08561095198496094,"group":"Residuals"},
+{"x":2.6264667799108103,"y":1.2613352898895078,"group":"Residuals"},
+{"x":-1.9104821184666327,"y":-2.1590580989134915,"group":"Residuals"},
+{"x":0.22537437648953015,"y":-0.8754230853454976,"group":"Residuals"},
+{"x":-0.2627642256073859,"y":-1.5062685156198217,"group":"Residuals"},
+{"x":3.280903760152229,"y":1.0492620443714942,"group":"Residuals"},
+{"x":0.5278526155476058,"y":0.20479702349225737,"group":"Residuals"},
+{"x":-2.2026674311772463,"y":-0.006983332908069517,"group":"Residuals"},
+{"x":1.7543312165527267,"y":0.7671829914513519,"group":"Residuals"},
+{"x":2.063793560439292,"y":0.04658729292513186,"group":"Residuals"},
+{"x":2.6290827083563757,"y":-0.5184944985215711,"group":"Residuals"},
+{"x":1.712077477612537,"y":0.46359601332004186,"group":"Residuals"},
+{"x":0.5085658165612787,"y":-0.09336205838946632,"group":"Residuals"},
+{"x":-0.5402993164939731,"y":-0.7170317006015983,"group":"Residuals"},
+{"x":-0.17423964170741077,"y":-1.4973653046101882,"group":"Residuals"},
+{"x":0.7470080729186128,"y":0.022455610124686998,"group":"Residuals"},
+{"x":0.2050653135701047,"y":0.34528528930666125,"group":"Residuals"},
+{"x":0.5625529344710933,"y":0.0232595989289599,"group":"Residuals"},
+{"x":0.4261516078756788,"y":-0.05044989465481792,"group":"Residuals"},
+{"x":1.23252598732421,"y":-0.19281442780790403,"group":"Residuals"},
+{"x":-0.08155825410070279,"y":-0.9693304807187021,"group":"Residuals"},
+{"x":2.5915959121654604,"y":0.6261072755857748,"group":"Residuals"},
+{"x":-0.31052492855365793,"y":-0.44647123526510574,"group":"Residuals"},
+{"x":0.8155133176310969,"y":0.1809872196028317,"group":"Residuals"},
+{"x":0.1752630775399172,"y":-0.6158391767228364,"group":"Residuals"},
+{"x":2.995019983164658,"y":0.7253607078477433,"group":"Residuals"},
+{"x":0.6614668425567893,"y":-0.32265516703094305,"group":"Residuals"},
+{"x":-0.4672929802959319,"y":-1.3075752861782974,"group":"Residuals"},
+{"x":-0.15664465474293857,"y":-0.8020952621629606,"group":"Residuals"},
+{"x":2.6488525400414518,"y":1.5770344307770556,"group":"Residuals"},
+{"x":3.563479519285525,"y":1.7908776019003767,"group":"Residuals"},
+{"x":0.421542110824795,"y":0.16451110281696346,"group":"Residuals"},
+{"x":0.22160247512519024,"y":0.5281815051764126,"group":"Residuals"},
+{"x":-1.2371005333355416,"y":-1.8885255861072887,"group":"Residuals"},
+{"x":-0.19521101150412987,"y":-0.10086694737334148,"group":"Residuals"},
+{"x":-0.37724837238479003,"y":-0.07942099599131902,"group":"Residuals"},
+{"x":0.3302497425361244,"y":-0.40383609540778853,"group":"Residuals"},
+{"x":1.0282311691549786,"y":0.504442292712951,"group":"Residuals"},
+{"x":2.2006582715511214,"y":0.4180701781397582,"group":"Residuals"},
+{"x":0.34317033336900643,"y":-1.153597105763961,"group":"Residuals"},
+{"x":-0.02325981056004681,"y":-0.2260632446028573,"group":"Residuals"},
+{"x":-2.563713690106475,"y":-1.5783787626338786,"group":"Residuals"},
+{"x":-0.01892004722244394,"y":-0.8902102434806222,"group":"Residuals"},
+{"x":1.0085630345740177,"y":-0.08125568401100502,"group":"Residuals"},
+{"x":-0.6775236534008826,"y":0.1874655253723324,"group":"Residuals"},
+{"x":0.9077484412232497,"y":0.2899937331615743,"group":"Residuals"},
+{"x":1.386789424990387,"y":0.05821850458396782,"group":"Residuals"},
+{"x":2.83928189861115,"y":2.0661374594739246,"group":"Residuals"},
+{"x":3.0121110330595453,"y":1.081003810296144,"group":"Residuals"},
+{"x":1.7216927115103444,"y":0.825513677076446,"group":"Residuals"},
+{"x":0.4790588250793465,"y":0.8249194972305246,"group":"Residuals"},
+{"x":2.226100871123338,"y":0.5389693392601775,"group":"Residuals"},
+{"x":1.0631355793946915,"y":-0.05331249078625211,"group":"Residuals"},
+{"x":0.24836908659193055,"y":-1.1058966691437393,"group":"Residuals"},
+{"x":-0.7215766369316654,"y":-2.3616396184035358,"group":"Residuals"},
+{"x":0.4614195508627621,"y":0.6789438721086665,"group":"Residuals"},
+{"x":0.9775904442850889,"y":0.0894604468040574,"group":"Residuals"},
+{"x":2.107272627139028,"y":0.7227614863267666,"group":"Residuals"},
+{"x":0.6664913782645412,"y":-0.7697357968569267,"group":"Residuals"},
+{"x":0.44268734709159563,"y":-0.4962579896306928,"group":"Residuals"},
+{"x":-1.4766247166383968,"y":0.5671497315710867,"group":"Residuals"},
+{"x":1.7547461253306509,"y":1.4096326238816423,"group":"Residuals"},
+{"x":0.880789069819123,"y":0.27411418172390656,"group":"Residuals"},
+{"x":2.033145852785334,"y":-0.06793765663445983,"group":"Residuals"},
+{"x":0.30881188805049836,"y":-0.5739516178118456,"group":"Residuals"},
+{"x":-1.2206859778913315,"y":-1.4529416598704152,"group":"Residuals"},
+{"x":1.0147778936083756,"y":0.4354357976002692,"group":"Residuals"},
+{"x":1.969367092111454,"y":0.9866727374605913,"group":"Residuals"},
+{"x":1.9953566789792956,"y":0.37289490998301256,"group":"Residuals"},
+{"x":-0.598442595875396,"y":-0.030427939307715146,"group":"Residuals"},
+{"x":1.631679496575641,"y":1.2288740158504983,"group":"Residuals"},
+{"x":0.5474249571783102,"y":-0.3957468484444997,"group":"Residuals"},
+{"x":2.349981447164848,"y":1.2948950231347216,"group":"Residuals"},
+{"x":-1.2165954600928104,"y":0.2837681526027138,"group":"Residuals"},
+{"x":1.1938253136149146,"y":-0.2929763598831987,"group":"Residuals"},
+{"x":2.4125841712132683,"y":1.3044396741314328,"group":"Residuals"},
+{"x":0.05402408236110264,"y":-0.9424596934767162,"group":"Residuals"},
+{"x":4.320845955227626,"y":1.3501950265558236,"group":"Residuals"},
+{"x":1.9197032318451932,"y":2.1764866272138645,"group":"Residuals"},
+{"x":-1.5585603491873878,"y":-1.365540567576684,"group":"Residuals"},
+{"x":3.6127522789213025,"y":3.273309135011999,"group":"Residuals"},
+{"x":-0.4163427280452495,"y":-0.16150363987884708,"group":"Residuals"},
+{"x":-1.1730129527554427,"y":-0.8065126190736407,"group":"Residuals"},
+{"x":0.440264496324091,"y":-1.3132004893438172,"group":"Residuals"},
+{"x":3.853434536968303,"y":2.702381430512584,"group":"Residuals"},
+{"x":1.7419474052829744,"y":0.9592102661861257,"group":"Residuals"},
+{"x":0.6188689510330537,"y":-1.1820409968336072,"group":"Residuals"},
+{"x":-0.027079201275720048,"y":-0.4495345161959612,"group":"Residuals"},
+{"x":-1.892666680832212,"y":-0.7819599694218049,"group":"Residuals"},
+{"x":0.5496741127487496,"y":0.7151313525639046,"group":"Residuals"},
+{"x":0.3143588236643334,"y":-0.34562983409439796,"group":"Residuals"},
+{"x":-1.1163916520596864,"y":-0.6401388550537379,"group":"Residuals"},
+{"x":0.579304793035452,"y":-0.48314681946927596,"group":"Residuals"},
+{"x":0.8512603822279827,"y":0.3767258803442297,"group":"Residuals"},
+{"x":2.6423016312661765,"y":1.2203613827021491,"group":"Residuals"},
+{"x":1.3348118374186804,"y":-0.15188682287072242,"group":"Residuals"},
+{"x":-1.6315704297025957,"y":-0.49702180529409556,"group":"Residuals"},
+{"x":2.4122040403754417,"y":1.4071180281058417,"group":"Residuals"},
+{"x":-1.0464683372420653,"y":-1.0903532788511354,"group":"Residuals"},
+{"x":4.77562465795679,"y":1.6934725279796385,"group":"Residuals"},
+{"x":1.372981196552738,"y":0.19773361153057856,"group":"Residuals"},
+{"x":1.5782014169806113,"y":1.6243618457538154,"group":"Residuals"},
+{"x":0.41282786281610273,"y":-0.6941664117177647,"group":"Residuals"},
+{"x":0.1276627936713739,"y":-0.08943797392463745,"group":"Residuals"},
+{"x":1.5848297316267397,"y":0.5370401371358042,"group":"Residuals"},
+{"x":-1.9844838332344727,"y":-2.9368439569514964,"group":"Residuals"},
+{"x":0.9342643508250533,"y":0.1175206489935553,"group":"Residuals"},
+{"x":-0.6346428884875847,"y":-1.9693922672687276,"group":"Residuals"},
+{"x":1.903148936464871,"y":-0.997663364788735,"group":"Residuals"},
+{"x":0.6641152289435883,"y":-0.18091798428733663,"group":"Residuals"},
+{"x":0.5965258501375024,"y":0.4366520588911831,"group":"Residuals"},
+{"x":1.9771778488106606,"y":-0.22524441997416078,"group":"Residuals"},
+{"x":-0.11982579328375212,"y":-0.45189260706354084,"group":"Residuals"},
+{"x":-0.09430611464485782,"y":-1.725213500499257,"group":"Residuals"},
+{"x":2.4445216509961747,"y":1.731073270058681,"group":"Residuals"},
+{"x":2.3419063030064655,"y":0.7774161993046924,"group":"Residuals"},
+{"x":2.490363937216113,"y":0.49087110257669897,"group":"Residuals"},
+{"x":-0.7283581973324708,"y":-0.5718572318520802,"group":"Residuals"},
+{"x":0.8079285103602416,"y":0.5912309593101868,"group":"Residuals"},
+{"x":1.2609530630407038,"y":-0.6377480830810829,"group":"Residuals"},
+{"x":1.1479929745285022,"y":-1.1753684889669167,"group":"Residuals"},
+{"x":2.0331704040780187,"y":0.4404268159043574,"group":"Residuals"},
+{"x":1.1095841063493332,"y":-0.0649391101368273,"group":"Residuals"},
+{"x":-2.1045075605975416,"y":-1.5731202779316344,"group":"Residuals"},
+{"x":-2.58670203843153,"y":-2.6064949059335047,"group":"Residuals"},
+{"x":1.6047732041607563,"y":-0.7210042161526471,"group":"Residuals"},
+{"x":0.5923188829578606,"y":-0.20614871241945437,"group":"Residuals"},
+{"x":0.20620215022876784,"y":0.2705530428625562,"group":"Residuals"},
+{"x":2.279968421715348,"y":1.1163246470207442,"group":"Residuals"},
+{"x":2.1370521950274357,"y":-0.6310190029858429,"group":"Residuals"},
+{"x":-1.0316133157736962,"y":-0.829090497938404,"group":"Residuals"},
+{"x":0.47245724663310695,"y":-0.7120682294387318,"group":"Residuals"},
+{"x":3.929205840396795,"y":0.8063939155510593,"group":"Residuals"},
+{"x":1.480342197623146,"y":0.874972696113878,"group":"Residuals"},
+{"x":0.10311423928216026,"y":0.008191984592573476,"group":"Residuals"},
+{"x":1.3408831006721438,"y":-0.0828047043483453,"group":"Residuals"},
+{"x":0.8428187016631381,"y":-0.2862349395729745,"group":"Residuals"},
+{"x":0.08010596658756416,"y":-0.7855375801170436,"group":"Residuals"},
+{"x":-0.10198962526324425,"y":-0.9728506719822879,"group":"Residuals"},
+{"x":1.6854899836108141,"y":-0.2558060118064618,"group":"Residuals"},
+{"x":-0.5601867698510888,"y":-0.7583680388587483,"group":"Residuals"},
+{"x":0.215632467339326,"y":0.05321512031527692,"group":"Residuals"},
+{"x":2.085957026814113,"y":-0.36969654405021757,"group":"Residuals"},
+{"x":0.91161277497489,"y":1.0698589939641936,"group":"Residuals"},
+{"x":-1.0985646491023084,"y":-1.2648239192129171,"group":"Residuals"},
+{"x":-0.49852321490147405,"y":-1.0913585406207527,"group":"Residuals"},
+{"x":0.24992357351333253,"y":-1.45431820041096,"group":"Residuals"},
+{"x":1.462246822442682,"y":0.32232310512515605,"group":"Residuals"},
+{"x":-0.003547731215101175,"y":-0.2242426322654638,"group":"Residuals"},
+{"x":-0.95010547824116,"y":-1.9591591264679054,"group":"Residuals"},
+{"x":-1.8764289170242088,"y":-3.223720358892393,"group":"Residuals"},
+{"x":3.626481961289142,"y":0.41461840738738465,"group":"Residuals"},
+{"x":0.1830737691624679,"y":0.03533266047197167,"group":"Residuals"},
+{"x":0.07681244216884653,"y":0.1642780590238364,"group":"Residuals"},
+{"x":3.106598911539748,"y":0.3518963439528666,"group":"Residuals"},
+{"x":1.2002918570792043,"y":0.5564880975141469,"group":"Residuals"},
+{"x":2.060342582510102,"y":0.42441404937526395,"group":"Residuals"},
+{"x":1.0541568576741396,"y":0.5005916596862621,"group":"Residuals"},
+{"x":3.0428437853337824,"y":1.65917252567505,"group":"Residuals"},
+{"x":-1.9495503509808618,"y":-1.370351693747476,"group":"Residuals"},
+{"x":-1.9673237092769194,"y":-1.0419940202729205,"group":"Residuals"},
+{"x":2.4552197951963164,"y":2.4301387054728947,"group":"Residuals"},
+{"x":1.2007311680711208,"y":0.9252360484571067,"group":"Residuals"}];
+    const groups = [{"name":"Residuals","color":"#1f77b4"}];
+    const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
+
+    const container = d3.select('#reg_rvf_147');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    // Compute domains
+    const xVals = data.map(d => d.x).filter(v => v !== null);
+    const yVals = data.map(d => d.y).filter(v => v !== null);
+    refLines.forEach(r => {
+        if(r.axis === 'x') xVals.push(r.value);
+        else yVals.push(r.value);
+    });
+
+    const xExt = d3.extent(xVals);
+    const xPad = (xExt[1] - xExt[0]) * 0.08 || 1;
+    const x = d3.scaleLinear().domain([xExt[0] - xPad, xExt[1] + xPad]).range([0, w]);
+
+    const yExt = d3.extent(yVals);
+    const yPad = (yExt[1] - yExt[0]) * 0.08 || 0.01;
+    const y = d3.scaleLinear().domain([yExt[0] - yPad, yExt[1] + yPad]).range([h, 0]);
+
+    // Grid
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+
+    // Reference lines
+    refLines.forEach(r => {
+        if(r.axis === 'x') {
+            g.append('line').attr('x1', x(r.value)).attr('x2', x(r.value))
+                .attr('y1', 0).attr('y2', h)
+                .attr('stroke', r.color || '#999').attr('stroke-width', 1)
+                .attr('stroke-dasharray', r.dash || '4,3');
+        } else {
+            g.append('line').attr('x1', 0).attr('x2', w)
+                .attr('y1', y(r.value)).attr('y2', y(r.value))
+                .attr('stroke', r.color || '#999').attr('stroke-width', 1)
+                .attr('stroke-dasharray', r.dash || '4,3');
+        }
+    });
+
+    // Build color map from groups
+    const colorMap = {};
+    groups.forEach(gr => { colorMap[gr.name] = gr.color; });
+
+    // Scatter points
+    g.selectAll('circle').data(data).join('circle')
+        .attr('cx', d => x(d.x))
+        .attr('cy', d => y(d.y))
+        .attr('r', 5)
+        .attr('fill', d => colorMap[d.group] || '#999')
+        .attr('opacity', 0.8)
+        .attr('stroke', '#fff')
+        .attr('stroke-width', 0.5)
+        .on('mouseover', function(evt, d) {
+            d3.select(this).attr('r', 7).attr('opacity', 1);
+            showTip(evt, '<b>'+d.group+'</b><br>x: '+fmt(d.x)+'<br>y: '+fmt(d.y));
+        })
+        .on('mouseout', function() {
+            d3.select(this).attr('r', 5).attr('opacity', 0.8);
+            hideTip();
+        });
+
+    // Axes
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+        .call(d3.axisBottom(x).ticks(8));
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+
+    if('Fitted Values') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Fitted Values');
+    if('Residuals') g.append('text').attr('transform','rotate(-90)')
+        .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Residuals');
+
+    // Legend
+    if(groups.length > 1) {
+        const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
+        groups.forEach((gr, i) => {
+            const gi = leg.append('g').attr('transform','translate('+(i*130)+',0)');
+            gi.append('circle').attr('cx',6).attr('cy',0).attr('r',5)
+                .attr('fill',gr.color).attr('opacity',0.8);
+            gi.append('text').attr('x',16).attr('y',4).attr('font-size','10px')
+                .attr('fill','#555').text(gr.name);
+        });
+    }
+})();
+
+(function() {
+    const data = [{"x":"-3.06","s1":2},
+{"x":"-2.74","s1":1},
+{"x":"-2.41","s1":1},
+{"x":"-2.09","s1":6},
+{"x":"-1.76","s1":6},
+{"x":"-1.44","s1":15},
+{"x":"-1.11","s1":27},
+{"x":"-0.79","s1":31},
+{"x":"-0.46","s1":28},
+{"x":"-0.14","s1":38},
+{"x":"0.19","s1":33},
+{"x":"0.51","s1":32},
+{"x":"0.84","s1":26},
+{"x":"1.16","s1":19},
+{"x":"1.49","s1":16},
+{"x":"1.81","s1":10},
+{"x":"2.14","s1":6},
+{"x":"2.46","s1":1},
+{"x":"2.79","s1":1},
+{"x":"3.11","s1":1}];
+    const series = [{"name":"Count","color":"#ff7f0e","key":"s1","dash":""}];
+    const mode = 'stacked';
+
+    const container = d3.select('#reg_hist_148');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    const keys = series.map(s => s.key);
+    const x = d3.scaleBand().domain(data.map(d=>d.x)).range([0,w]).padding(0.15);
+
+    let yMin = 0, yMax = 0;
+    if(mode === 'stacked') {
+        const stack = d3.stack().keys(keys).order(d3.stackOrderNone).offset(d3.stackOffsetDiverging);
+        const stacked = stack(data);
+        stacked.forEach(layer => layer.forEach(d => {
+            yMin = Math.min(yMin, d[0], d[1]);
+            yMax = Math.max(yMax, d[0], d[1]);
+        }));
+        const yPad = (yMax - yMin) * 0.08 || 1;
+        const y = d3.scaleLinear().domain([yMin - yPad, yMax + yPad]).range([h, 0]);
+
+        g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+        g.selectAll('.layer').data(stacked).join('g').attr('class','layer')
+            .attr('fill', (d,i) => series[i].color)
+            .selectAll('rect').data(d => d).join('rect')
+            .attr('x', d => x(d.data.x))
+            .attr('y', d => y(Math.max(d[0], d[1])))
+            .attr('height', d => Math.abs(y(d[0]) - y(d[1])))
+            .attr('width', x.bandwidth());
+
+        // Zero line
+        g.append('line').attr('x1',0).attr('x2',w)
+            .attr('y1',y(0)).attr('y2',y(0))
+            .attr('stroke','#333').attr('stroke-width',0.8);
+
+        g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+            .call(d3.axisBottom(x).tickValues(x.domain().filter((d,i) =>
+                i % Math.max(1,Math.floor(data.length/8)) === 0)));
+        g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+    } else {
+        // Grouped
+        data.forEach(d => keys.forEach(k => {
+            yMin = Math.min(yMin, d[k]||0);
+            yMax = Math.max(yMax, d[k]||0);
+        }));
+        const yPad = (yMax - yMin) * 0.08 || 1;
+        const y = d3.scaleLinear().domain([yMin - yPad, yMax + yPad]).range([h, 0]);
+        const x1 = d3.scaleBand().domain(keys).range([0, x.bandwidth()]).padding(0.05);
+
+        g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+        g.selectAll('.group').data(data).join('g').attr('class','group')
+            .attr('transform', d => 'translate('+x(d.x)+',0)')
+            .selectAll('rect').data(d => keys.map(k => ({key:k, val:d[k]||0})))
+            .join('rect')
+            .attr('x', d => x1(d.key))
+            .attr('y', d => y(Math.max(0, d.val)))
+            .attr('height', d => Math.abs(y(0) - y(d.val)))
+            .attr('width', x1.bandwidth())
+            .attr('fill', d => series.find(s=>s.key===d.key).color);
+
+        g.append('line').attr('x1',0).attr('x2',w)
+            .attr('y1',y(0)).attr('y2',y(0))
+            .attr('stroke','#333').attr('stroke-width',0.8);
+
+        g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+            .call(d3.axisBottom(x).tickValues(x.domain().filter((d,i) =>
+                i % Math.max(1,Math.floor(data.length/8)) === 0)));
+        g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+    }
+
+    if('') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('');
+    if('Frequency') g.append('text').attr('transform','rotate(-90)')
+        .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Frequency');
+
+    // Legend
+    if(series.length > 1) {
+        const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
+        series.forEach((s,i) => {
+            const gi = leg.append('g').attr('transform','translate('+(i*90)+',0)');
+            gi.append('rect').attr('width',12).attr('height',12).attr('y',-6).attr('fill',s.color);
+            gi.append('text').attr('x',16).attr('y',4).attr('font-size','10px').attr('fill','#555').text(s.name);
+        });
+    }
+
+    // Tooltip
+    svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g.node());
+            const bands = x.domain();
+            const idx = Math.min(Math.floor(mx / (w / bands.length)), bands.length-1);
+            const d = data[Math.max(0,idx)];
+            if(!d) return;
+            let html = '<b>'+d.x+'</b>';
+            series.forEach(s => { if(d[s.key]!==undefined) html += '<br>'+s.name+': '+fmt(d[s.key]); });
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+
+(function() {
+    const data = [{"x":-2.9351994688667116,"y":-3.223720358892393,"group":"Q-Q"},
+{"x":-2.5758293035489053,"y":-2.9368439569514964,"group":"Q-Q"},
+{"x":-2.3939797998185135,"y":-2.6064949059335047,"group":"Q-Q"},
+{"x":-2.267932299458364,"y":-2.3616396184035358,"group":"Q-Q"},
+{"x":-2.170090377584566,"y":-2.206759701046171,"group":"Q-Q"},
+{"x":-2.089456312427495,"y":-2.1590580989134915,"group":"Q-Q"},
+{"x":-2.0204827917634094,"y":-2.1205832205901363,"group":"Q-Q"},
+{"x":-1.9599639845400592,"y":-1.9994546353825318,"group":"Q-Q"},
+{"x":-1.9058731401211786,"y":-1.9693922672687276,"group":"Q-Q"},
+{"x":-1.8568441290659177,"y":-1.9591591264679054,"group":"Q-Q"},
+{"x":-1.8119106729525973,"y":-1.8885255861072887,"group":"Q-Q"},
+{"x":-1.7703631359311631,"y":-1.8495957304521526,"group":"Q-Q"},
+{"x":-1.731664396122245,"y":-1.802436456986063,"group":"Q-Q"},
+{"x":-1.6953977102721365,"y":-1.765559260603641,"group":"Q-Q"},
+{"x":-1.6612329682193088,"y":-1.725213500499257,"group":"Q-Q"},
+{"x":-1.6289040465802755,"y":-1.7212606376949864,"group":"Q-Q"},
+{"x":-1.5981931399228178,"y":-1.5783787626338786,"group":"Q-Q"},
+{"x":-1.5689196324989263,"y":-1.5731202779316344,"group":"Q-Q"},
+{"x":-1.5409320137606048,"y":-1.506951119919485,"group":"Q-Q"},
+{"x":-1.5141018876192838,"y":-1.5062685156198217,"group":"Q-Q"},
+{"x":-1.4883194549179162,"y":-1.4973653046101882,"group":"Q-Q"},
+{"x":-1.4634900534667052,"y":-1.4683326476839835,"group":"Q-Q"},
+{"x":-1.439531470938456,"y":-1.45431820041096,"group":"Q-Q"},
+{"x":-1.4163718316812286,"y":-1.4529416598704152,"group":"Q-Q"},
+{"x":-1.3939479159177006,"y":-1.4501566200362372,"group":"Q-Q"},
+{"x":-1.3722038089987256,"y":-1.398236487109727,"group":"Q-Q"},
+{"x":-1.3510898056228149,"y":-1.370351693747476,"group":"Q-Q"},
+{"x":-1.3305615131788966,"y":-1.3694022867964535,"group":"Q-Q"},
+{"x":-1.310579112168129,"y":-1.365540567576684,"group":"Q-Q"},
+{"x":-1.2911067416889617,"y":-1.3132004893438172,"group":"Q-Q"},
+{"x":-1.2721119853500624,"y":-1.3075752861782974,"group":"Q-Q"},
+{"x":-1.253565438470451,"y":-1.2648239192129171,"group":"Q-Q"},
+{"x":-1.2354403415612518,"y":-1.2564871541834925,"group":"Q-Q"},
+{"x":-1.2177122682264057,"y":-1.2513738936635002,"group":"Q-Q"},
+{"x":-1.200358858030859,"y":-1.2332141381601138,"group":"Q-Q"},
+{"x":-1.1833595867506723,"y":-1.1910832918129424,"group":"Q-Q"},
+{"x":-1.1666955678752136,"y":-1.1849889331915542,"group":"Q-Q"},
+{"x":-1.1503493803760083,"y":-1.1820409968336072,"group":"Q-Q"},
+{"x":-1.1343049186629564,"y":-1.1753684889669167,"group":"Q-Q"},
+{"x":-1.118547261370974,"y":-1.153597105763961,"group":"Q-Q"},
+{"x":-1.1030625561995977,"y":-1.14965955087348,"group":"Q-Q"},
+{"x":-1.0878379184958122,"y":-1.1408924759481627,"group":"Q-Q"},
+{"x":-1.0728613416500035,"y":-1.1058966691437393,"group":"Q-Q"},
+{"x":-1.058121617684777,"y":-1.1014682783653647,"group":"Q-Q"},
+{"x":-1.0436082666705326,"y":-1.0913585406207527,"group":"Q-Q"},
+{"x":-1.0293114738111981,"y":-1.0903532788511354,"group":"Q-Q"},
+{"x":-1.0152220332170279,"y":-1.0879928928107563,"group":"Q-Q"},
+{"x":-1.0013312975256932,"y":-1.0751936269848077,"group":"Q-Q"},
+{"x":-0.9876311326534525,"y":-1.0419940202729205,"group":"Q-Q"},
+{"x":-0.9741138770593093,"y":-1.014261519318557,"group":"Q-Q"},
+{"x":-0.9607723049901921,"y":-1.0015900278236953,"group":"Q-Q"},
+{"x":-0.9475995932471384,"y":-0.9981425134462099,"group":"Q-Q"},
+{"x":-0.9345892910734804,"y":-0.997663364788735,"group":"Q-Q"},
+{"x":-0.9217352928179438,"y":-0.9857146102803835,"group":"Q-Q"},
+{"x":-0.9090318130698933,"y":-0.9728506719822879,"group":"Q-Q"},
+{"x":-0.8964733640019164,"y":-0.9693304807187021,"group":"Q-Q"},
+{"x":-0.8840547346875399,"y":-0.9692577430235072,"group":"Q-Q"},
+{"x":-0.871770972189959,"y":-0.9597157457480189,"group":"Q-Q"},
+{"x":-0.8596173642419116,"y":-0.9424596934767162,"group":"Q-Q"},
+{"x":-0.8475894233578639,"y":-0.9209023848935067,"group":"Q-Q"},
+{"x":-0.8356828722378926,"y":-0.9187274149947336,"group":"Q-Q"},
+{"x":-0.8238936303385576,"y":-0.8902102434806222,"group":"Q-Q"},
+{"x":-0.8122178014999127,"y":-0.8845732617489604,"group":"Q-Q"},
+{"x":-0.8006516625299289,"y":-0.8754230853454976,"group":"Q-Q"},
+{"x":-0.7891916526582227,"y":-0.851373517338349,"group":"Q-Q"},
+{"x":-0.7778343637803435,"y":-0.829090497938404,"group":"Q-Q"},
+{"x":-0.7665765314220766,"y":-0.8187985548858469,"group":"Q-Q"},
+{"x":-0.7554150263604694,"y":-0.8065126190736407,"group":"Q-Q"},
+{"x":-0.7443468468447183,"y":-0.8020952621629606,"group":"Q-Q"},
+{"x":-0.7333691113657103,"y":-0.7855375801170436,"group":"Q-Q"},
+{"x":-0.7224790519280626,"y":-0.7819599694218049,"group":"Q-Q"},
+{"x":-0.7116740077829768,"y":-0.7697357968569267,"group":"Q-Q"},
+{"x":-0.7009514195842119,"y":-0.7583680388587483,"group":"Q-Q"},
+{"x":-0.690308823933034,"y":-0.7504904547883295,"group":"Q-Q"},
+{"x":-0.6797438482811798,"y":-0.7503577672604482,"group":"Q-Q"},
+{"x":-0.6692542061637118,"y":-0.7271631240939032,"group":"Q-Q"},
+{"x":-0.6588376927361878,"y":-0.7210042161526471,"group":"Q-Q"},
+{"x":-0.6484921805928572,"y":-0.7170317006015983,"group":"Q-Q"},
+{"x":-0.6382156158446497,"y":-0.7120682294387318,"group":"Q-Q"},
+{"x":-0.6280060144375696,"y":-0.6941664117177647,"group":"Q-Q"},
+{"x":-0.6178614586937793,"y":-0.6928922015615997,"group":"Q-Q"},
+{"x":-0.6077800940591571,"y":-0.6908957467508913,"group":"Q-Q"},
+{"x":-0.5977601260424783,"y":-0.6833689304488826,"group":"Q-Q"},
+{"x":-0.5877998173325932,"y":-0.6631779691045742,"group":"Q-Q"},
+{"x":-0.5778974850810944,"y":-0.6589825700641874,"group":"Q-Q"},
+{"x":-0.5680514983389829,"y":-0.6401388550537379,"group":"Q-Q"},
+{"x":-0.5582602756367432,"y":-0.6377480830810829,"group":"Q-Q"},
+{"x":-0.5485222826980979,"y":-0.6310190029858429,"group":"Q-Q"},
+{"x":-0.5388360302784503,"y":-0.6272096160977921,"group":"Q-Q"},
+{"x":-0.5292000721197277,"y":-0.6220927392449274,"group":"Q-Q"},
+{"x":-0.5196130030139723,"y":-0.6215297145302678,"group":"Q-Q"},
+{"x":-0.5100734569685949,"y":-0.6158391767228364,"group":"Q-Q"},
+{"x":-0.5005801054667397,"y":-0.599655807688398,"group":"Q-Q"},
+{"x":-0.49113165581669754,"y":-0.5943616073275939,"group":"Q-Q"},
+{"x":-0.4817268495847302,"y":-0.5843181393833572,"group":"Q-Q"},
+{"x":-0.47236446110609487,"y":-0.5739516178118456,"group":"Q-Q"},
+{"x":-0.46304329606941314,"y":-0.5718572318520802,"group":"Q-Q"},
+{"x":-0.4537621901698794,"y":-0.5315475607901549,"group":"Q-Q"},
+{"x":-0.4445200078271197,"y":-0.5184944985215711,"group":"Q-Q"},
+{"x":-0.4353156409637888,"y":-0.49702180529409556,"group":"Q-Q"},
+{"x":-0.42614800784127815,"y":-0.4962579896306928,"group":"Q-Q"},
+{"x":-0.41701605194913577,"y":-0.48314681946927596,"group":"Q-Q"},
+{"x":-0.4079187409450348,"y":-0.45334530130226436,"group":"Q-Q"},
+{"x":-0.39885506564233675,"y":-0.45189260706354084,"group":"Q-Q"},
+{"x":-0.38982403904248086,"y":-0.4495345161959612,"group":"Q-Q"},
+{"x":-0.38082469540961905,"y":-0.44647123526510574,"group":"Q-Q"},
+{"x":-0.3718560893850747,"y":-0.43204272120031945,"group":"Q-Q"},
+{"x":-0.3629172951393562,"y":-0.4311055628965459,"group":"Q-Q"},
+{"x":-0.3540074055596039,"y":-0.424698715862441,"group":"Q-Q"},
+{"x":-0.34512553147047237,"y":-0.40383609540778853,"group":"Q-Q"},
+{"x":-0.3362708008865747,"y":-0.3957468484444997,"group":"Q-Q"},
+{"x":-0.32744235829473306,"y":-0.36969654405021757,"group":"Q-Q"},
+{"x":-0.31863936396437514,"y":-0.34562983409439796,"group":"Q-Q"},
+{"x":-0.3098609932845232,"y":-0.33895013569551713,"group":"Q-Q"},
+{"x":-0.3011064361259048,"y":-0.3285494058915299,"group":"Q-Q"},
+{"x":-0.29237489622680424,"y":-0.3275990582762616,"group":"Q-Q"},
+{"x":-0.28366559060135,"y":-0.32265516703094305,"group":"Q-Q"},
+{"x":-0.2749777489690048,"y":-0.2991779334308958,"group":"Q-Q"},
+{"x":-0.266310613204095,"y":-0.2929763598831987,"group":"Q-Q"},
+{"x":-0.2576634368042788,"y":-0.2862349395729745,"group":"Q-Q"},
+{"x":-0.2490354843769092,"y":-0.27603414073477595,"group":"Q-Q"},
+{"x":-0.2404260311423079,"y":-0.2601796608973026,"group":"Q-Q"},
+{"x":-0.2318343624530099,"y":-0.2558060118064618,"group":"Q-Q"},
+{"x":-0.22325977332809224,"y":-0.24554957314839637,"group":"Q-Q"},
+{"x":-0.21470156800174453,"y":-0.2260632446028573,"group":"Q-Q"},
+{"x":-0.20615905948527322,"y":-0.22524441997416078,"group":"Q-Q"},
+{"x":-0.19763156914178165,"y":-0.2242426322654638,"group":"Q-Q"},
+{"x":-0.18911842627279254,"y":-0.22348156163020916,"group":"Q-Q"},
+{"x":-0.18061896771611988,"y":-0.20926040190076556,"group":"Q-Q"},
+{"x":-0.17213253745432833,"y":-0.20614871241945437,"group":"Q-Q"},
+{"x":-0.16365848623314128,"y":-0.19281442780790403,"group":"Q-Q"},
+{"x":-0.15519617118919435,"y":-0.18581094904043782,"group":"Q-Q"},
+{"x":-0.1467449554865486,"y":-0.18091798428733663,"group":"Q-Q"},
+{"x":-0.13830420796140447,"y":-0.16239591540671738,"group":"Q-Q"},
+{"x":-0.12987330277448186,"y":-0.16150363987884708,"group":"Q-Q"},
+{"x":-0.1214516190705431,"y":-0.15543695582436756,"group":"Q-Q"},
+{"x":-0.11303854064456509,"y":-0.15188682287072242,"group":"Q-Q"},
+{"x":-0.10463345561407539,"y":-0.10703101026856254,"group":"Q-Q"},
+{"x":-0.09623575609718539,"y":-0.10300887280462279,"group":"Q-Q"},
+{"x":-0.08784483789587168,"y":-0.10086694737334148,"group":"Q-Q"},
+{"x":-0.07946010018406333,"y":-0.09336205838946632,"group":"Q-Q"},
+{"x":-0.07108094520010964,"y":-0.08943797392463745,"group":"Q-Q"},
+{"x":-0.06270677794321385,"y":-0.0828047043483453,"group":"Q-Q"},
+{"x":-0.05433700587342325,"y":-0.08125568401100502,"group":"Q-Q"},
+{"x":-0.04597103861478235,"y":-0.07942099599131902,"group":"Q-Q"},
+{"x":-0.037608287661255936,"y":-0.06793765663445983,"group":"Q-Q"},
+{"x":-0.029248166085040536,"y":-0.06562008887276172,"group":"Q-Q"},
+{"x":-0.020890088246888563,"y":-0.0649391101368273,"group":"Q-Q"},
+{"x":-0.012533469508069276,"y":-0.05331249078625211,"group":"Q-Q"},
+{"x":-0.004177725943602671,"y":-0.05044989465481792,"group":"Q-Q"},
+{"x":0.004177725943602811,"y":-0.030427939307715146,"group":"Q-Q"},
+{"x":0.012533469508069276,"y":-0.006983332908069517,"group":"Q-Q"},
+{"x":0.020890088246888424,"y":0.008191984592573476,"group":"Q-Q"},
+{"x":0.02924816608504068,"y":0.022455610124686998,"group":"Q-Q"},
+{"x":0.037608287661255936,"y":0.0232595989289599,"group":"Q-Q"},
+{"x":0.04597103861478235,"y":0.02682448546592542,"group":"Q-Q"},
+{"x":0.05433700587342311,"y":0.03533266047197167,"group":"Q-Q"},
+{"x":0.06270677794321385,"y":0.04642061093340333,"group":"Q-Q"},
+{"x":0.07108094520010964,"y":0.04658729292513186,"group":"Q-Q"},
+{"x":0.07946010018406319,"y":0.05321512031527692,"group":"Q-Q"},
+{"x":0.08784483789587182,"y":0.05821850458396782,"group":"Q-Q"},
+{"x":0.09623575609718539,"y":0.06617002224520305,"group":"Q-Q"},
+{"x":0.10463345561407525,"y":0.08561095198496094,"group":"Q-Q"},
+{"x":0.11303854064456524,"y":0.0894604468040574,"group":"Q-Q"},
+{"x":0.1214516190705431,"y":0.09710164774604912,"group":"Q-Q"},
+{"x":0.12987330277448172,"y":0.10813583658682413,"group":"Q-Q"},
+{"x":0.1383042079614046,"y":0.1175206489935553,"group":"Q-Q"},
+{"x":0.1467449554865486,"y":0.1642780590238364,"group":"Q-Q"},
+{"x":0.15519617118919435,"y":0.16451110281696346,"group":"Q-Q"},
+{"x":0.1636584862331411,"y":0.1809872196028317,"group":"Q-Q"},
+{"x":0.17213253745432833,"y":0.1874655253723324,"group":"Q-Q"},
+{"x":0.18061896771611988,"y":0.19262345072798182,"group":"Q-Q"},
+{"x":0.18911842627279238,"y":0.19480417511020098,"group":"Q-Q"},
+{"x":0.19763156914178182,"y":0.19656903151265448,"group":"Q-Q"},
+{"x":0.20615905948527322,"y":0.19773361153057856,"group":"Q-Q"},
+{"x":0.2147015680017444,"y":0.20106662188760982,"group":"Q-Q"},
+{"x":0.22325977332809246,"y":0.20479702349225737,"group":"Q-Q"},
+{"x":0.2318343624530099,"y":0.2075280292520275,"group":"Q-Q"},
+{"x":0.2404260311423079,"y":0.21371810341662867,"group":"Q-Q"},
+{"x":0.2490354843769093,"y":0.2184354717710681,"group":"Q-Q"},
+{"x":0.2576634368042788,"y":0.22409854245265554,"group":"Q-Q"},
+{"x":0.266310613204095,"y":0.26870002242390423,"group":"Q-Q"},
+{"x":0.2749777489690047,"y":0.2705530428625562,"group":"Q-Q"},
+{"x":0.28366559060135,"y":0.27411418172390656,"group":"Q-Q"},
+{"x":0.29237489622680424,"y":0.2837681526027138,"group":"Q-Q"},
+{"x":0.30110643612590465,"y":0.2899937331615743,"group":"Q-Q"},
+{"x":0.3098609932845234,"y":0.32232310512515605,"group":"Q-Q"},
+{"x":0.31863936396437514,"y":0.34528528930666125,"group":"Q-Q"},
+{"x":0.32744235829473295,"y":0.3518963439528666,"group":"Q-Q"},
+{"x":0.33627080088657485,"y":0.37289490998301256,"group":"Q-Q"},
+{"x":0.34512553147047237,"y":0.3767258803442297,"group":"Q-Q"},
+{"x":0.3540074055596039,"y":0.3806222041130828,"group":"Q-Q"},
+{"x":0.3629172951393563,"y":0.4070098777614106,"group":"Q-Q"},
+{"x":0.3718560893850747,"y":0.41042060917548007,"group":"Q-Q"},
+{"x":0.38082469540961905,"y":0.41461840738738465,"group":"Q-Q"},
+{"x":0.3898240390424806,"y":0.4180701781397582,"group":"Q-Q"},
+{"x":0.39885506564233675,"y":0.42441404937526395,"group":"Q-Q"},
+{"x":0.4079187409450348,"y":0.4354357976002692,"group":"Q-Q"},
+{"x":0.4170160519491355,"y":0.4366520588911831,"group":"Q-Q"},
+{"x":0.4261480078412782,"y":0.4404268159043574,"group":"Q-Q"},
+{"x":0.4353156409637888,"y":0.46359601332004186,"group":"Q-Q"},
+{"x":0.44452000782711953,"y":0.4728637230761482,"group":"Q-Q"},
+{"x":0.45376219016987956,"y":0.4730294447336676,"group":"Q-Q"},
+{"x":0.46304329606941314,"y":0.47653327364208464,"group":"Q-Q"},
+{"x":0.47236446110609487,"y":0.48307782500688146,"group":"Q-Q"},
+{"x":0.48172684958473044,"y":0.4836962858763345,"group":"Q-Q"},
+{"x":0.49113165581669754,"y":0.49087110257669897,"group":"Q-Q"},
+{"x":0.5005801054667397,"y":0.5005916596862621,"group":"Q-Q"},
+{"x":0.5100734569685947,"y":0.504442292712951,"group":"Q-Q"},
+{"x":0.5196130030139725,"y":0.5048705383009022,"group":"Q-Q"},
+{"x":0.5292000721197277,"y":0.5281815051764126,"group":"Q-Q"},
+{"x":0.5388360302784502,"y":0.5292433520439199,"group":"Q-Q"},
+{"x":0.5485222826980981,"y":0.5370401371358042,"group":"Q-Q"},
+{"x":0.5582602756367432,"y":0.5389693392601775,"group":"Q-Q"},
+{"x":0.5680514983389828,"y":0.5564880975141469,"group":"Q-Q"},
+{"x":0.5778974850810947,"y":0.5671497315710867,"group":"Q-Q"},
+{"x":0.5877998173325932,"y":0.5912309593101868,"group":"Q-Q"},
+{"x":0.5977601260424783,"y":0.6261072755857748,"group":"Q-Q"},
+{"x":0.6077800940591573,"y":0.6428584900961698,"group":"Q-Q"},
+{"x":0.6178614586937793,"y":0.6684553618330011,"group":"Q-Q"},
+{"x":0.6280060144375696,"y":0.6789438721086665,"group":"Q-Q"},
+{"x":0.6382156158446496,"y":0.7151313525639046,"group":"Q-Q"},
+{"x":0.6484921805928573,"y":0.7227614863267666,"group":"Q-Q"},
+{"x":0.6588376927361878,"y":0.7253607078477433,"group":"Q-Q"},
+{"x":0.6692542061637117,"y":0.7301298361021904,"group":"Q-Q"},
+{"x":0.6797438482811798,"y":0.7489732767329503,"group":"Q-Q"},
+{"x":0.690308823933034,"y":0.7671829914513519,"group":"Q-Q"},
+{"x":0.7009514195842119,"y":0.7774161993046924,"group":"Q-Q"},
+{"x":0.711674007782977,"y":0.8063939155510593,"group":"Q-Q"},
+{"x":0.7224790519280626,"y":0.8237310746769277,"group":"Q-Q"},
+{"x":0.7333691113657103,"y":0.8249194972305246,"group":"Q-Q"},
+{"x":0.744346846844718,"y":0.825513677076446,"group":"Q-Q"},
+{"x":0.7554150263604694,"y":0.8579303674086574,"group":"Q-Q"},
+{"x":0.7665765314220766,"y":0.8679138870859717,"group":"Q-Q"},
+{"x":0.7778343637803434,"y":0.8736726057703006,"group":"Q-Q"},
+{"x":0.7891916526582227,"y":0.874972696113878,"group":"Q-Q"},
+{"x":0.8006516625299289,"y":0.9050746761607242,"group":"Q-Q"},
+{"x":0.8122178014999127,"y":0.9252360484571067,"group":"Q-Q"},
+{"x":0.8238936303385576,"y":0.9366728121885259,"group":"Q-Q"},
+{"x":0.8356828722378926,"y":0.9373118412654047,"group":"Q-Q"},
+{"x":0.8475894233578639,"y":0.9430355825428571,"group":"Q-Q"},
+{"x":0.8596173642419116,"y":0.9539379383975115,"group":"Q-Q"},
+{"x":0.871770972189959,"y":0.9592102661861257,"group":"Q-Q"},
+{"x":0.8840547346875399,"y":0.9603382114883569,"group":"Q-Q"},
+{"x":0.8964733640019159,"y":0.9866727374605913,"group":"Q-Q"},
+{"x":0.9090318130698933,"y":0.9874761064777355,"group":"Q-Q"},
+{"x":0.9217352928179438,"y":1.0282225436601138,"group":"Q-Q"},
+{"x":0.9345892910734801,"y":1.0492620443714942,"group":"Q-Q"},
+{"x":0.9475995932471384,"y":1.0698589939641936,"group":"Q-Q"},
+{"x":0.9607723049901921,"y":1.081003810296144,"group":"Q-Q"},
+{"x":0.9741138770593093,"y":1.1058669843873974,"group":"Q-Q"},
+{"x":0.9876311326534525,"y":1.1087470608989343,"group":"Q-Q"},
+{"x":1.0013312975256932,"y":1.1133280724060752,"group":"Q-Q"},
+{"x":1.0152220332170279,"y":1.1163246470207442,"group":"Q-Q"},
+{"x":1.0293114738111984,"y":1.1194965218984652,"group":"Q-Q"},
+{"x":1.0436082666705326,"y":1.1681166876333837,"group":"Q-Q"},
+{"x":1.058121617684777,"y":1.2203613827021491,"group":"Q-Q"},
+{"x":1.072861341650003,"y":1.2288740158504983,"group":"Q-Q"},
+{"x":1.0878379184958122,"y":1.2529644568851126,"group":"Q-Q"},
+{"x":1.1030625561995977,"y":1.2613352898895078,"group":"Q-Q"},
+{"x":1.1185472613709735,"y":1.2948950231347216,"group":"Q-Q"},
+{"x":1.1343049186629564,"y":1.3044396741314328,"group":"Q-Q"},
+{"x":1.1503493803760083,"y":1.3051046972128146,"group":"Q-Q"},
+{"x":1.1666955678752136,"y":1.3055955431674247,"group":"Q-Q"},
+{"x":1.183359586750673,"y":1.3083337016631997,"group":"Q-Q"},
+{"x":1.200358858030859,"y":1.3501950265558236,"group":"Q-Q"},
+{"x":1.2177122682264057,"y":1.4071180281058417,"group":"Q-Q"},
+{"x":1.235440341561252,"y":1.4096326238816423,"group":"Q-Q"},
+{"x":1.253565438470451,"y":1.418157572523477,"group":"Q-Q"},
+{"x":1.2721119853500624,"y":1.4251789803937758,"group":"Q-Q"},
+{"x":1.2911067416889614,"y":1.4291585342168684,"group":"Q-Q"},
+{"x":1.310579112168129,"y":1.4335952452726417,"group":"Q-Q"},
+{"x":1.3305615131788966,"y":1.4479415011105927,"group":"Q-Q"},
+{"x":1.3510898056228144,"y":1.4755442093666495,"group":"Q-Q"},
+{"x":1.3722038089987256,"y":1.5348542809726295,"group":"Q-Q"},
+{"x":1.3939479159177006,"y":1.5561419141994088,"group":"Q-Q"},
+{"x":1.4163718316812286,"y":1.5602324242131922,"group":"Q-Q"},
+{"x":1.4395314709384566,"y":1.5720231558874946,"group":"Q-Q"},
+{"x":1.4634900534667052,"y":1.5770344307770556,"group":"Q-Q"},
+{"x":1.4883194549179162,"y":1.5830385067663295,"group":"Q-Q"},
+{"x":1.5141018876192844,"y":1.6243618457538154,"group":"Q-Q"},
+{"x":1.5409320137606048,"y":1.65917252567505,"group":"Q-Q"},
+{"x":1.5689196324989263,"y":1.6722895232522705,"group":"Q-Q"},
+{"x":1.598193139922817,"y":1.6934725279796385,"group":"Q-Q"},
+{"x":1.6289040465802755,"y":1.7015458965059898,"group":"Q-Q"},
+{"x":1.6612329682193088,"y":1.7084674433937337,"group":"Q-Q"},
+{"x":1.695397710272136,"y":1.7221389692856413,"group":"Q-Q"},
+{"x":1.7316643961222458,"y":1.731073270058681,"group":"Q-Q"},
+{"x":1.7703631359311631,"y":1.7497950412639405,"group":"Q-Q"},
+{"x":1.8119106729525973,"y":1.7908776019003767,"group":"Q-Q"},
+{"x":1.8568441290659188,"y":1.7976081299567164,"group":"Q-Q"},
+{"x":1.9058731401211786,"y":2.0661374594739246,"group":"Q-Q"},
+{"x":1.9599639845400576,"y":2.0683799852834164,"group":"Q-Q"},
+{"x":2.0204827917634107,"y":2.0795644831132107,"group":"Q-Q"},
+{"x":2.089456312427495,"y":2.1054982033450127,"group":"Q-Q"},
+{"x":2.170090377584565,"y":2.1764866272138645,"group":"Q-Q"},
+{"x":2.2679322994583617,"y":2.2305547061757363,"group":"Q-Q"},
+{"x":2.393979799818515,"y":2.4301387054728947,"group":"Q-Q"},
+{"x":2.5758293035489053,"y":2.702381430512584,"group":"Q-Q"},
+{"x":2.9351994688667036,"y":3.273309135011999,"group":"Q-Q"}];
+    const groups = [{"name":"Q-Q","color":"#2ca02c"}];
+    const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
+
+    const container = d3.select('#reg_qq_149');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    // Compute domains
+    const xVals = data.map(d => d.x).filter(v => v !== null);
+    const yVals = data.map(d => d.y).filter(v => v !== null);
+    refLines.forEach(r => {
+        if(r.axis === 'x') xVals.push(r.value);
+        else yVals.push(r.value);
+    });
+
+    const xExt = d3.extent(xVals);
+    const xPad = (xExt[1] - xExt[0]) * 0.08 || 1;
+    const x = d3.scaleLinear().domain([xExt[0] - xPad, xExt[1] + xPad]).range([0, w]);
+
+    const yExt = d3.extent(yVals);
+    const yPad = (yExt[1] - yExt[0]) * 0.08 || 0.01;
+    const y = d3.scaleLinear().domain([yExt[0] - yPad, yExt[1] + yPad]).range([h, 0]);
+
+    // Grid
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+
+    // Reference lines
+    refLines.forEach(r => {
+        if(r.axis === 'x') {
+            g.append('line').attr('x1', x(r.value)).attr('x2', x(r.value))
+                .attr('y1', 0).attr('y2', h)
+                .attr('stroke', r.color || '#999').attr('stroke-width', 1)
+                .attr('stroke-dasharray', r.dash || '4,3');
+        } else {
+            g.append('line').attr('x1', 0).attr('x2', w)
+                .attr('y1', y(r.value)).attr('y2', y(r.value))
+                .attr('stroke', r.color || '#999').attr('stroke-width', 1)
+                .attr('stroke-dasharray', r.dash || '4,3');
+        }
+    });
+
+    // Build color map from groups
+    const colorMap = {};
+    groups.forEach(gr => { colorMap[gr.name] = gr.color; });
+
+    // Scatter points
+    g.selectAll('circle').data(data).join('circle')
+        .attr('cx', d => x(d.x))
+        .attr('cy', d => y(d.y))
+        .attr('r', 5)
+        .attr('fill', d => colorMap[d.group] || '#999')
+        .attr('opacity', 0.8)
+        .attr('stroke', '#fff')
+        .attr('stroke-width', 0.5)
+        .on('mouseover', function(evt, d) {
+            d3.select(this).attr('r', 7).attr('opacity', 1);
+            showTip(evt, '<b>'+d.group+'</b><br>x: '+fmt(d.x)+'<br>y: '+fmt(d.y));
+        })
+        .on('mouseout', function() {
+            d3.select(this).attr('r', 5).attr('opacity', 0.8);
+            hideTip();
+        });
+
+    // Axes
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+        .call(d3.axisBottom(x).ticks(8));
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+
+    if('Theoretical Quantiles') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Theoretical Quantiles');
+    if('Sample Quantiles') g.append('text').attr('transform','rotate(-90)')
+        .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Sample Quantiles');
+
+    // Legend
+    if(groups.length > 1) {
+        const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
+        groups.forEach((gr, i) => {
+            const gi = leg.append('g').attr('transform','translate('+(i*130)+',0)');
+            gi.append('circle').attr('cx',6).attr('cy',0).attr('r',5)
+                .attr('fill',gr.color).attr('opacity',0.8);
+            gi.append('text').attr('x',16).attr('y',4).attr('font-size','10px')
+                .attr('fill','#555').text(gr.name);
+        });
+    }
+})();
+
+(function() {
+    const container = d3.select('#reg_qq_149');
+    const svgEl = container.select('svg');
+    const gEl = svgEl.select('g');
+    const W = +svgEl.attr('width');
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const qMin = -2.9351994688667116;
+    const qMax = 2.9351994688667036;
+    const rMean = 2.753353101070388e-16;
+    const rStd = 1.0619293942393617;
+
+    // x domain matches scatter
+    const data = [{"x":-2.9351994688667116,"y":-3.223720358892393,"group":"Q-Q"},
+{"x":-2.5758293035489053,"y":-2.9368439569514964,"group":"Q-Q"},
+{"x":-2.3939797998185135,"y":-2.6064949059335047,"group":"Q-Q"},
+{"x":-2.267932299458364,"y":-2.3616396184035358,"group":"Q-Q"},
+{"x":-2.170090377584566,"y":-2.206759701046171,"group":"Q-Q"},
+{"x":-2.089456312427495,"y":-2.1590580989134915,"group":"Q-Q"},
+{"x":-2.0204827917634094,"y":-2.1205832205901363,"group":"Q-Q"},
+{"x":-1.9599639845400592,"y":-1.9994546353825318,"group":"Q-Q"},
+{"x":-1.9058731401211786,"y":-1.9693922672687276,"group":"Q-Q"},
+{"x":-1.8568441290659177,"y":-1.9591591264679054,"group":"Q-Q"},
+{"x":-1.8119106729525973,"y":-1.8885255861072887,"group":"Q-Q"},
+{"x":-1.7703631359311631,"y":-1.8495957304521526,"group":"Q-Q"},
+{"x":-1.731664396122245,"y":-1.802436456986063,"group":"Q-Q"},
+{"x":-1.6953977102721365,"y":-1.765559260603641,"group":"Q-Q"},
+{"x":-1.6612329682193088,"y":-1.725213500499257,"group":"Q-Q"},
+{"x":-1.6289040465802755,"y":-1.7212606376949864,"group":"Q-Q"},
+{"x":-1.5981931399228178,"y":-1.5783787626338786,"group":"Q-Q"},
+{"x":-1.5689196324989263,"y":-1.5731202779316344,"group":"Q-Q"},
+{"x":-1.5409320137606048,"y":-1.506951119919485,"group":"Q-Q"},
+{"x":-1.5141018876192838,"y":-1.5062685156198217,"group":"Q-Q"},
+{"x":-1.4883194549179162,"y":-1.4973653046101882,"group":"Q-Q"},
+{"x":-1.4634900534667052,"y":-1.4683326476839835,"group":"Q-Q"},
+{"x":-1.439531470938456,"y":-1.45431820041096,"group":"Q-Q"},
+{"x":-1.4163718316812286,"y":-1.4529416598704152,"group":"Q-Q"},
+{"x":-1.3939479159177006,"y":-1.4501566200362372,"group":"Q-Q"},
+{"x":-1.3722038089987256,"y":-1.398236487109727,"group":"Q-Q"},
+{"x":-1.3510898056228149,"y":-1.370351693747476,"group":"Q-Q"},
+{"x":-1.3305615131788966,"y":-1.3694022867964535,"group":"Q-Q"},
+{"x":-1.310579112168129,"y":-1.365540567576684,"group":"Q-Q"},
+{"x":-1.2911067416889617,"y":-1.3132004893438172,"group":"Q-Q"},
+{"x":-1.2721119853500624,"y":-1.3075752861782974,"group":"Q-Q"},
+{"x":-1.253565438470451,"y":-1.2648239192129171,"group":"Q-Q"},
+{"x":-1.2354403415612518,"y":-1.2564871541834925,"group":"Q-Q"},
+{"x":-1.2177122682264057,"y":-1.2513738936635002,"group":"Q-Q"},
+{"x":-1.200358858030859,"y":-1.2332141381601138,"group":"Q-Q"},
+{"x":-1.1833595867506723,"y":-1.1910832918129424,"group":"Q-Q"},
+{"x":-1.1666955678752136,"y":-1.1849889331915542,"group":"Q-Q"},
+{"x":-1.1503493803760083,"y":-1.1820409968336072,"group":"Q-Q"},
+{"x":-1.1343049186629564,"y":-1.1753684889669167,"group":"Q-Q"},
+{"x":-1.118547261370974,"y":-1.153597105763961,"group":"Q-Q"},
+{"x":-1.1030625561995977,"y":-1.14965955087348,"group":"Q-Q"},
+{"x":-1.0878379184958122,"y":-1.1408924759481627,"group":"Q-Q"},
+{"x":-1.0728613416500035,"y":-1.1058966691437393,"group":"Q-Q"},
+{"x":-1.058121617684777,"y":-1.1014682783653647,"group":"Q-Q"},
+{"x":-1.0436082666705326,"y":-1.0913585406207527,"group":"Q-Q"},
+{"x":-1.0293114738111981,"y":-1.0903532788511354,"group":"Q-Q"},
+{"x":-1.0152220332170279,"y":-1.0879928928107563,"group":"Q-Q"},
+{"x":-1.0013312975256932,"y":-1.0751936269848077,"group":"Q-Q"},
+{"x":-0.9876311326534525,"y":-1.0419940202729205,"group":"Q-Q"},
+{"x":-0.9741138770593093,"y":-1.014261519318557,"group":"Q-Q"},
+{"x":-0.9607723049901921,"y":-1.0015900278236953,"group":"Q-Q"},
+{"x":-0.9475995932471384,"y":-0.9981425134462099,"group":"Q-Q"},
+{"x":-0.9345892910734804,"y":-0.997663364788735,"group":"Q-Q"},
+{"x":-0.9217352928179438,"y":-0.9857146102803835,"group":"Q-Q"},
+{"x":-0.9090318130698933,"y":-0.9728506719822879,"group":"Q-Q"},
+{"x":-0.8964733640019164,"y":-0.9693304807187021,"group":"Q-Q"},
+{"x":-0.8840547346875399,"y":-0.9692577430235072,"group":"Q-Q"},
+{"x":-0.871770972189959,"y":-0.9597157457480189,"group":"Q-Q"},
+{"x":-0.8596173642419116,"y":-0.9424596934767162,"group":"Q-Q"},
+{"x":-0.8475894233578639,"y":-0.9209023848935067,"group":"Q-Q"},
+{"x":-0.8356828722378926,"y":-0.9187274149947336,"group":"Q-Q"},
+{"x":-0.8238936303385576,"y":-0.8902102434806222,"group":"Q-Q"},
+{"x":-0.8122178014999127,"y":-0.8845732617489604,"group":"Q-Q"},
+{"x":-0.8006516625299289,"y":-0.8754230853454976,"group":"Q-Q"},
+{"x":-0.7891916526582227,"y":-0.851373517338349,"group":"Q-Q"},
+{"x":-0.7778343637803435,"y":-0.829090497938404,"group":"Q-Q"},
+{"x":-0.7665765314220766,"y":-0.8187985548858469,"group":"Q-Q"},
+{"x":-0.7554150263604694,"y":-0.8065126190736407,"group":"Q-Q"},
+{"x":-0.7443468468447183,"y":-0.8020952621629606,"group":"Q-Q"},
+{"x":-0.7333691113657103,"y":-0.7855375801170436,"group":"Q-Q"},
+{"x":-0.7224790519280626,"y":-0.7819599694218049,"group":"Q-Q"},
+{"x":-0.7116740077829768,"y":-0.7697357968569267,"group":"Q-Q"},
+{"x":-0.7009514195842119,"y":-0.7583680388587483,"group":"Q-Q"},
+{"x":-0.690308823933034,"y":-0.7504904547883295,"group":"Q-Q"},
+{"x":-0.6797438482811798,"y":-0.7503577672604482,"group":"Q-Q"},
+{"x":-0.6692542061637118,"y":-0.7271631240939032,"group":"Q-Q"},
+{"x":-0.6588376927361878,"y":-0.7210042161526471,"group":"Q-Q"},
+{"x":-0.6484921805928572,"y":-0.7170317006015983,"group":"Q-Q"},
+{"x":-0.6382156158446497,"y":-0.7120682294387318,"group":"Q-Q"},
+{"x":-0.6280060144375696,"y":-0.6941664117177647,"group":"Q-Q"},
+{"x":-0.6178614586937793,"y":-0.6928922015615997,"group":"Q-Q"},
+{"x":-0.6077800940591571,"y":-0.6908957467508913,"group":"Q-Q"},
+{"x":-0.5977601260424783,"y":-0.6833689304488826,"group":"Q-Q"},
+{"x":-0.5877998173325932,"y":-0.6631779691045742,"group":"Q-Q"},
+{"x":-0.5778974850810944,"y":-0.6589825700641874,"group":"Q-Q"},
+{"x":-0.5680514983389829,"y":-0.6401388550537379,"group":"Q-Q"},
+{"x":-0.5582602756367432,"y":-0.6377480830810829,"group":"Q-Q"},
+{"x":-0.5485222826980979,"y":-0.6310190029858429,"group":"Q-Q"},
+{"x":-0.5388360302784503,"y":-0.6272096160977921,"group":"Q-Q"},
+{"x":-0.5292000721197277,"y":-0.6220927392449274,"group":"Q-Q"},
+{"x":-0.5196130030139723,"y":-0.6215297145302678,"group":"Q-Q"},
+{"x":-0.5100734569685949,"y":-0.6158391767228364,"group":"Q-Q"},
+{"x":-0.5005801054667397,"y":-0.599655807688398,"group":"Q-Q"},
+{"x":-0.49113165581669754,"y":-0.5943616073275939,"group":"Q-Q"},
+{"x":-0.4817268495847302,"y":-0.5843181393833572,"group":"Q-Q"},
+{"x":-0.47236446110609487,"y":-0.5739516178118456,"group":"Q-Q"},
+{"x":-0.46304329606941314,"y":-0.5718572318520802,"group":"Q-Q"},
+{"x":-0.4537621901698794,"y":-0.5315475607901549,"group":"Q-Q"},
+{"x":-0.4445200078271197,"y":-0.5184944985215711,"group":"Q-Q"},
+{"x":-0.4353156409637888,"y":-0.49702180529409556,"group":"Q-Q"},
+{"x":-0.42614800784127815,"y":-0.4962579896306928,"group":"Q-Q"},
+{"x":-0.41701605194913577,"y":-0.48314681946927596,"group":"Q-Q"},
+{"x":-0.4079187409450348,"y":-0.45334530130226436,"group":"Q-Q"},
+{"x":-0.39885506564233675,"y":-0.45189260706354084,"group":"Q-Q"},
+{"x":-0.38982403904248086,"y":-0.4495345161959612,"group":"Q-Q"},
+{"x":-0.38082469540961905,"y":-0.44647123526510574,"group":"Q-Q"},
+{"x":-0.3718560893850747,"y":-0.43204272120031945,"group":"Q-Q"},
+{"x":-0.3629172951393562,"y":-0.4311055628965459,"group":"Q-Q"},
+{"x":-0.3540074055596039,"y":-0.424698715862441,"group":"Q-Q"},
+{"x":-0.34512553147047237,"y":-0.40383609540778853,"group":"Q-Q"},
+{"x":-0.3362708008865747,"y":-0.3957468484444997,"group":"Q-Q"},
+{"x":-0.32744235829473306,"y":-0.36969654405021757,"group":"Q-Q"},
+{"x":-0.31863936396437514,"y":-0.34562983409439796,"group":"Q-Q"},
+{"x":-0.3098609932845232,"y":-0.33895013569551713,"group":"Q-Q"},
+{"x":-0.3011064361259048,"y":-0.3285494058915299,"group":"Q-Q"},
+{"x":-0.29237489622680424,"y":-0.3275990582762616,"group":"Q-Q"},
+{"x":-0.28366559060135,"y":-0.32265516703094305,"group":"Q-Q"},
+{"x":-0.2749777489690048,"y":-0.2991779334308958,"group":"Q-Q"},
+{"x":-0.266310613204095,"y":-0.2929763598831987,"group":"Q-Q"},
+{"x":-0.2576634368042788,"y":-0.2862349395729745,"group":"Q-Q"},
+{"x":-0.2490354843769092,"y":-0.27603414073477595,"group":"Q-Q"},
+{"x":-0.2404260311423079,"y":-0.2601796608973026,"group":"Q-Q"},
+{"x":-0.2318343624530099,"y":-0.2558060118064618,"group":"Q-Q"},
+{"x":-0.22325977332809224,"y":-0.24554957314839637,"group":"Q-Q"},
+{"x":-0.21470156800174453,"y":-0.2260632446028573,"group":"Q-Q"},
+{"x":-0.20615905948527322,"y":-0.22524441997416078,"group":"Q-Q"},
+{"x":-0.19763156914178165,"y":-0.2242426322654638,"group":"Q-Q"},
+{"x":-0.18911842627279254,"y":-0.22348156163020916,"group":"Q-Q"},
+{"x":-0.18061896771611988,"y":-0.20926040190076556,"group":"Q-Q"},
+{"x":-0.17213253745432833,"y":-0.20614871241945437,"group":"Q-Q"},
+{"x":-0.16365848623314128,"y":-0.19281442780790403,"group":"Q-Q"},
+{"x":-0.15519617118919435,"y":-0.18581094904043782,"group":"Q-Q"},
+{"x":-0.1467449554865486,"y":-0.18091798428733663,"group":"Q-Q"},
+{"x":-0.13830420796140447,"y":-0.16239591540671738,"group":"Q-Q"},
+{"x":-0.12987330277448186,"y":-0.16150363987884708,"group":"Q-Q"},
+{"x":-0.1214516190705431,"y":-0.15543695582436756,"group":"Q-Q"},
+{"x":-0.11303854064456509,"y":-0.15188682287072242,"group":"Q-Q"},
+{"x":-0.10463345561407539,"y":-0.10703101026856254,"group":"Q-Q"},
+{"x":-0.09623575609718539,"y":-0.10300887280462279,"group":"Q-Q"},
+{"x":-0.08784483789587168,"y":-0.10086694737334148,"group":"Q-Q"},
+{"x":-0.07946010018406333,"y":-0.09336205838946632,"group":"Q-Q"},
+{"x":-0.07108094520010964,"y":-0.08943797392463745,"group":"Q-Q"},
+{"x":-0.06270677794321385,"y":-0.0828047043483453,"group":"Q-Q"},
+{"x":-0.05433700587342325,"y":-0.08125568401100502,"group":"Q-Q"},
+{"x":-0.04597103861478235,"y":-0.07942099599131902,"group":"Q-Q"},
+{"x":-0.037608287661255936,"y":-0.06793765663445983,"group":"Q-Q"},
+{"x":-0.029248166085040536,"y":-0.06562008887276172,"group":"Q-Q"},
+{"x":-0.020890088246888563,"y":-0.0649391101368273,"group":"Q-Q"},
+{"x":-0.012533469508069276,"y":-0.05331249078625211,"group":"Q-Q"},
+{"x":-0.004177725943602671,"y":-0.05044989465481792,"group":"Q-Q"},
+{"x":0.004177725943602811,"y":-0.030427939307715146,"group":"Q-Q"},
+{"x":0.012533469508069276,"y":-0.006983332908069517,"group":"Q-Q"},
+{"x":0.020890088246888424,"y":0.008191984592573476,"group":"Q-Q"},
+{"x":0.02924816608504068,"y":0.022455610124686998,"group":"Q-Q"},
+{"x":0.037608287661255936,"y":0.0232595989289599,"group":"Q-Q"},
+{"x":0.04597103861478235,"y":0.02682448546592542,"group":"Q-Q"},
+{"x":0.05433700587342311,"y":0.03533266047197167,"group":"Q-Q"},
+{"x":0.06270677794321385,"y":0.04642061093340333,"group":"Q-Q"},
+{"x":0.07108094520010964,"y":0.04658729292513186,"group":"Q-Q"},
+{"x":0.07946010018406319,"y":0.05321512031527692,"group":"Q-Q"},
+{"x":0.08784483789587182,"y":0.05821850458396782,"group":"Q-Q"},
+{"x":0.09623575609718539,"y":0.06617002224520305,"group":"Q-Q"},
+{"x":0.10463345561407525,"y":0.08561095198496094,"group":"Q-Q"},
+{"x":0.11303854064456524,"y":0.0894604468040574,"group":"Q-Q"},
+{"x":0.1214516190705431,"y":0.09710164774604912,"group":"Q-Q"},
+{"x":0.12987330277448172,"y":0.10813583658682413,"group":"Q-Q"},
+{"x":0.1383042079614046,"y":0.1175206489935553,"group":"Q-Q"},
+{"x":0.1467449554865486,"y":0.1642780590238364,"group":"Q-Q"},
+{"x":0.15519617118919435,"y":0.16451110281696346,"group":"Q-Q"},
+{"x":0.1636584862331411,"y":0.1809872196028317,"group":"Q-Q"},
+{"x":0.17213253745432833,"y":0.1874655253723324,"group":"Q-Q"},
+{"x":0.18061896771611988,"y":0.19262345072798182,"group":"Q-Q"},
+{"x":0.18911842627279238,"y":0.19480417511020098,"group":"Q-Q"},
+{"x":0.19763156914178182,"y":0.19656903151265448,"group":"Q-Q"},
+{"x":0.20615905948527322,"y":0.19773361153057856,"group":"Q-Q"},
+{"x":0.2147015680017444,"y":0.20106662188760982,"group":"Q-Q"},
+{"x":0.22325977332809246,"y":0.20479702349225737,"group":"Q-Q"},
+{"x":0.2318343624530099,"y":0.2075280292520275,"group":"Q-Q"},
+{"x":0.2404260311423079,"y":0.21371810341662867,"group":"Q-Q"},
+{"x":0.2490354843769093,"y":0.2184354717710681,"group":"Q-Q"},
+{"x":0.2576634368042788,"y":0.22409854245265554,"group":"Q-Q"},
+{"x":0.266310613204095,"y":0.26870002242390423,"group":"Q-Q"},
+{"x":0.2749777489690047,"y":0.2705530428625562,"group":"Q-Q"},
+{"x":0.28366559060135,"y":0.27411418172390656,"group":"Q-Q"},
+{"x":0.29237489622680424,"y":0.2837681526027138,"group":"Q-Q"},
+{"x":0.30110643612590465,"y":0.2899937331615743,"group":"Q-Q"},
+{"x":0.3098609932845234,"y":0.32232310512515605,"group":"Q-Q"},
+{"x":0.31863936396437514,"y":0.34528528930666125,"group":"Q-Q"},
+{"x":0.32744235829473295,"y":0.3518963439528666,"group":"Q-Q"},
+{"x":0.33627080088657485,"y":0.37289490998301256,"group":"Q-Q"},
+{"x":0.34512553147047237,"y":0.3767258803442297,"group":"Q-Q"},
+{"x":0.3540074055596039,"y":0.3806222041130828,"group":"Q-Q"},
+{"x":0.3629172951393563,"y":0.4070098777614106,"group":"Q-Q"},
+{"x":0.3718560893850747,"y":0.41042060917548007,"group":"Q-Q"},
+{"x":0.38082469540961905,"y":0.41461840738738465,"group":"Q-Q"},
+{"x":0.3898240390424806,"y":0.4180701781397582,"group":"Q-Q"},
+{"x":0.39885506564233675,"y":0.42441404937526395,"group":"Q-Q"},
+{"x":0.4079187409450348,"y":0.4354357976002692,"group":"Q-Q"},
+{"x":0.4170160519491355,"y":0.4366520588911831,"group":"Q-Q"},
+{"x":0.4261480078412782,"y":0.4404268159043574,"group":"Q-Q"},
+{"x":0.4353156409637888,"y":0.46359601332004186,"group":"Q-Q"},
+{"x":0.44452000782711953,"y":0.4728637230761482,"group":"Q-Q"},
+{"x":0.45376219016987956,"y":0.4730294447336676,"group":"Q-Q"},
+{"x":0.46304329606941314,"y":0.47653327364208464,"group":"Q-Q"},
+{"x":0.47236446110609487,"y":0.48307782500688146,"group":"Q-Q"},
+{"x":0.48172684958473044,"y":0.4836962858763345,"group":"Q-Q"},
+{"x":0.49113165581669754,"y":0.49087110257669897,"group":"Q-Q"},
+{"x":0.5005801054667397,"y":0.5005916596862621,"group":"Q-Q"},
+{"x":0.5100734569685947,"y":0.504442292712951,"group":"Q-Q"},
+{"x":0.5196130030139725,"y":0.5048705383009022,"group":"Q-Q"},
+{"x":0.5292000721197277,"y":0.5281815051764126,"group":"Q-Q"},
+{"x":0.5388360302784502,"y":0.5292433520439199,"group":"Q-Q"},
+{"x":0.5485222826980981,"y":0.5370401371358042,"group":"Q-Q"},
+{"x":0.5582602756367432,"y":0.5389693392601775,"group":"Q-Q"},
+{"x":0.5680514983389828,"y":0.5564880975141469,"group":"Q-Q"},
+{"x":0.5778974850810947,"y":0.5671497315710867,"group":"Q-Q"},
+{"x":0.5877998173325932,"y":0.5912309593101868,"group":"Q-Q"},
+{"x":0.5977601260424783,"y":0.6261072755857748,"group":"Q-Q"},
+{"x":0.6077800940591573,"y":0.6428584900961698,"group":"Q-Q"},
+{"x":0.6178614586937793,"y":0.6684553618330011,"group":"Q-Q"},
+{"x":0.6280060144375696,"y":0.6789438721086665,"group":"Q-Q"},
+{"x":0.6382156158446496,"y":0.7151313525639046,"group":"Q-Q"},
+{"x":0.6484921805928573,"y":0.7227614863267666,"group":"Q-Q"},
+{"x":0.6588376927361878,"y":0.7253607078477433,"group":"Q-Q"},
+{"x":0.6692542061637117,"y":0.7301298361021904,"group":"Q-Q"},
+{"x":0.6797438482811798,"y":0.7489732767329503,"group":"Q-Q"},
+{"x":0.690308823933034,"y":0.7671829914513519,"group":"Q-Q"},
+{"x":0.7009514195842119,"y":0.7774161993046924,"group":"Q-Q"},
+{"x":0.711674007782977,"y":0.8063939155510593,"group":"Q-Q"},
+{"x":0.7224790519280626,"y":0.8237310746769277,"group":"Q-Q"},
+{"x":0.7333691113657103,"y":0.8249194972305246,"group":"Q-Q"},
+{"x":0.744346846844718,"y":0.825513677076446,"group":"Q-Q"},
+{"x":0.7554150263604694,"y":0.8579303674086574,"group":"Q-Q"},
+{"x":0.7665765314220766,"y":0.8679138870859717,"group":"Q-Q"},
+{"x":0.7778343637803434,"y":0.8736726057703006,"group":"Q-Q"},
+{"x":0.7891916526582227,"y":0.874972696113878,"group":"Q-Q"},
+{"x":0.8006516625299289,"y":0.9050746761607242,"group":"Q-Q"},
+{"x":0.8122178014999127,"y":0.9252360484571067,"group":"Q-Q"},
+{"x":0.8238936303385576,"y":0.9366728121885259,"group":"Q-Q"},
+{"x":0.8356828722378926,"y":0.9373118412654047,"group":"Q-Q"},
+{"x":0.8475894233578639,"y":0.9430355825428571,"group":"Q-Q"},
+{"x":0.8596173642419116,"y":0.9539379383975115,"group":"Q-Q"},
+{"x":0.871770972189959,"y":0.9592102661861257,"group":"Q-Q"},
+{"x":0.8840547346875399,"y":0.9603382114883569,"group":"Q-Q"},
+{"x":0.8964733640019159,"y":0.9866727374605913,"group":"Q-Q"},
+{"x":0.9090318130698933,"y":0.9874761064777355,"group":"Q-Q"},
+{"x":0.9217352928179438,"y":1.0282225436601138,"group":"Q-Q"},
+{"x":0.9345892910734801,"y":1.0492620443714942,"group":"Q-Q"},
+{"x":0.9475995932471384,"y":1.0698589939641936,"group":"Q-Q"},
+{"x":0.9607723049901921,"y":1.081003810296144,"group":"Q-Q"},
+{"x":0.9741138770593093,"y":1.1058669843873974,"group":"Q-Q"},
+{"x":0.9876311326534525,"y":1.1087470608989343,"group":"Q-Q"},
+{"x":1.0013312975256932,"y":1.1133280724060752,"group":"Q-Q"},
+{"x":1.0152220332170279,"y":1.1163246470207442,"group":"Q-Q"},
+{"x":1.0293114738111984,"y":1.1194965218984652,"group":"Q-Q"},
+{"x":1.0436082666705326,"y":1.1681166876333837,"group":"Q-Q"},
+{"x":1.058121617684777,"y":1.2203613827021491,"group":"Q-Q"},
+{"x":1.072861341650003,"y":1.2288740158504983,"group":"Q-Q"},
+{"x":1.0878379184958122,"y":1.2529644568851126,"group":"Q-Q"},
+{"x":1.1030625561995977,"y":1.2613352898895078,"group":"Q-Q"},
+{"x":1.1185472613709735,"y":1.2948950231347216,"group":"Q-Q"},
+{"x":1.1343049186629564,"y":1.3044396741314328,"group":"Q-Q"},
+{"x":1.1503493803760083,"y":1.3051046972128146,"group":"Q-Q"},
+{"x":1.1666955678752136,"y":1.3055955431674247,"group":"Q-Q"},
+{"x":1.183359586750673,"y":1.3083337016631997,"group":"Q-Q"},
+{"x":1.200358858030859,"y":1.3501950265558236,"group":"Q-Q"},
+{"x":1.2177122682264057,"y":1.4071180281058417,"group":"Q-Q"},
+{"x":1.235440341561252,"y":1.4096326238816423,"group":"Q-Q"},
+{"x":1.253565438470451,"y":1.418157572523477,"group":"Q-Q"},
+{"x":1.2721119853500624,"y":1.4251789803937758,"group":"Q-Q"},
+{"x":1.2911067416889614,"y":1.4291585342168684,"group":"Q-Q"},
+{"x":1.310579112168129,"y":1.4335952452726417,"group":"Q-Q"},
+{"x":1.3305615131788966,"y":1.4479415011105927,"group":"Q-Q"},
+{"x":1.3510898056228144,"y":1.4755442093666495,"group":"Q-Q"},
+{"x":1.3722038089987256,"y":1.5348542809726295,"group":"Q-Q"},
+{"x":1.3939479159177006,"y":1.5561419141994088,"group":"Q-Q"},
+{"x":1.4163718316812286,"y":1.5602324242131922,"group":"Q-Q"},
+{"x":1.4395314709384566,"y":1.5720231558874946,"group":"Q-Q"},
+{"x":1.4634900534667052,"y":1.5770344307770556,"group":"Q-Q"},
+{"x":1.4883194549179162,"y":1.5830385067663295,"group":"Q-Q"},
+{"x":1.5141018876192844,"y":1.6243618457538154,"group":"Q-Q"},
+{"x":1.5409320137606048,"y":1.65917252567505,"group":"Q-Q"},
+{"x":1.5689196324989263,"y":1.6722895232522705,"group":"Q-Q"},
+{"x":1.598193139922817,"y":1.6934725279796385,"group":"Q-Q"},
+{"x":1.6289040465802755,"y":1.7015458965059898,"group":"Q-Q"},
+{"x":1.6612329682193088,"y":1.7084674433937337,"group":"Q-Q"},
+{"x":1.695397710272136,"y":1.7221389692856413,"group":"Q-Q"},
+{"x":1.7316643961222458,"y":1.731073270058681,"group":"Q-Q"},
+{"x":1.7703631359311631,"y":1.7497950412639405,"group":"Q-Q"},
+{"x":1.8119106729525973,"y":1.7908776019003767,"group":"Q-Q"},
+{"x":1.8568441290659188,"y":1.7976081299567164,"group":"Q-Q"},
+{"x":1.9058731401211786,"y":2.0661374594739246,"group":"Q-Q"},
+{"x":1.9599639845400576,"y":2.0683799852834164,"group":"Q-Q"},
+{"x":2.0204827917634107,"y":2.0795644831132107,"group":"Q-Q"},
+{"x":2.089456312427495,"y":2.1054982033450127,"group":"Q-Q"},
+{"x":2.170090377584565,"y":2.1764866272138645,"group":"Q-Q"},
+{"x":2.2679322994583617,"y":2.2305547061757363,"group":"Q-Q"},
+{"x":2.393979799818515,"y":2.4301387054728947,"group":"Q-Q"},
+{"x":2.5758293035489053,"y":2.702381430512584,"group":"Q-Q"},
+{"x":2.9351994688667036,"y":3.273309135011999,"group":"Q-Q"}];
+    const xVals = data.map(d => d.x);
+    const yVals = data.map(d => d.y);
+    yVals.push(0);
+    const xExt = d3.extent(xVals);
+    const xPad = (xExt[1] - xExt[0]) * 0.08 || 1;
+    const x = d3.scaleLinear().domain([xExt[0] - xPad, xExt[1] + xPad]).range([0, w]);
+    const yExt = d3.extent(yVals);
+    const yPad = (yExt[1] - yExt[0]) * 0.08 || 0.01;
+    const y = d3.scaleLinear().domain([yExt[0] - yPad, yExt[1] + yPad]).range([h, 0]);
+
+    // 45-degree line: sample quantile = mean + std * theoretical quantile
+    const x1 = qMin, x2 = qMax;
+    const y1 = rMean + rStd * x1;
+    const y2 = rMean + rStd * x2;
+    gEl.append('line')
+        .attr('x1', x(x1)).attr('x2', x(x2))
+        .attr('y1', y(y1)).attr('y2', y(y2))
+        .attr('stroke', '#d62728').attr('stroke-width', 1.5)
+        .attr('stroke-dasharray', '6,3');
+})();
+
+</script>
+</body>
+</html>
