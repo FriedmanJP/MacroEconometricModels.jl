@@ -479,6 +479,9 @@ PerturbationSolution
 ProjectionSolution
 PerfectForesightPath
 DSGEEstimation
+BayesianDSGE
+BayesianDSGESimulation
+KalmanSmootherResult
 DSGEConstraint
 VariableBound
 NonlinearConstraint
@@ -487,4 +490,93 @@ OccBinConstraint
 OccBinRegime
 OccBinSolution
 OccBinIRF
+```
+
+---
+
+## Panel Regression Models
+
+```@docs
+PanelRegModel
+PanelIVModel
+PanelLogitModel
+PanelProbitModel
+```
+
+---
+
+## Ordered and Multinomial Models
+
+```@docs
+OrderedLogitModel
+OrderedProbitModel
+MultinomialLogitModel
+```
+
+---
+
+## FAVAR Models
+
+```@docs
+FAVARModel
+BayesianFAVAR
+```
+
+---
+
+## Structural DFM
+
+```@docs
+StructuralDFM
+StructuralLP
+```
+
+---
+
+## Spectral Analysis Types
+
+```@docs
+SpectralDensityResult
+CrossSpectrumResult
+TransferFunctionResult
+ACFResult
+```
+
+---
+
+## Portmanteau Test Types
+
+```@docs
+LjungBoxResult
+BoxPierceResult
+DurbinWatsonResult
+BartlettWhiteNoiseResult
+FisherTestResult
+```
+
+---
+
+## Advanced Test Types
+
+```@docs
+FourierADFResult
+FourierKPSSResult
+DFGLSResult
+LMUnitRootResult
+ADF2BreakResult
+GregoryHansenResult
+AndrewsResult
+BaiPerronResult
+FactorBreakResult
+PANICResult
+PesaranCIPSResult
+MoonPerronResult
+```
+
+---
+
+## LP-DiD Types
+
+```@docs
+LPDiDResult
 ```

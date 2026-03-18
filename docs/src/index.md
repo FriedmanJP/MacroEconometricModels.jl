@@ -13,6 +13,7 @@
 - **Time Series Filters**: Hodrick-Prescott (1997), Hamilton (2018) regression, Beveridge-Nelson (1981), Baxter-King (1999) band-pass, and boosted HP (Phillips & Shi 2021) with unified `trend()`/`cycle()` accessors
 - **ARIMA**: AR, MA, ARMA, ARIMA estimation via OLS, CSS, MLE (Kalman filter), and CSS-MLE; automatic order selection (`auto_arima`); multi-step forecasting with confidence intervals
 - **Volatility Models**: ARCH (Engle 1982), GARCH (Bollerslev 1986), EGARCH (Nelson 1991), GJR-GARCH (Glosten et al. 1993) via MLE; Stochastic Volatility via Kim-Shephard-Chib (1998) Gibbs sampler (basic, leverage, Student-t variants); news impact curves, ARCH-LM diagnostics, multi-step forecasting
+- **Spectral Analysis**: Periodogram, Welch method, smoothed periodogram, AR spectral estimation; cross-spectrum with coherence, phase, gain functions; ACF/PACF/CCF with Ljung-Box/Box-Pierce/Durbin-Watson portmanteau tests
 
 **Multivariate Models**
 
@@ -38,11 +39,11 @@
 - **Specification**: `@dsge` macro for domain-specific model specification with time-indexed variables, analytical or numerical steady state, and automatic Jacobian computation
 - **Linear Solvers**: Gensys (Sims 2002), Blanchard-Kahn (1980), Klein (2000) with automatic eigenvalue decomposition
 - **Nonlinear Perturbation**: Second-order (Schmitt-Grohe & Uribe 2004) and third-order perturbation with Andreasen, Fernandez-Villaverde & Rubio-Ramirez (2018) pruned simulation; Kim et al. (2008) second-order pruning
-- **Global Methods**: Chebyshev collocation projection (tensor and Smolyak grids), policy function iteration
+- **Global Methods**: Chebyshev collocation projection (tensor and Smolyak grids), policy function iteration, value function iteration (with Howard improvement steps and Anderson acceleration)
 - **Simulation and IRFs**: Stochastic simulation, pruned higher-order simulation, analytical and generalized IRFs, FEVD, Lyapunov-based unconditional moments
 - **GMM Estimation**: IRF matching, Euler equation GMM, Simulated Method of Moments, analytical GMM via Lyapunov equation
 - **Bayesian Estimation**: Sequential Monte Carlo (SMC with adaptive tempering), SMC-squared (SMC² with particle filter likelihood), random-walk Metropolis-Hastings; delayed acceptance for accelerated sampling; nonlinear particle filter for higher-order solutions
-- **Constraints**: Perfect foresight (Newton solver), OccBin occasionally binding constraints (Guerrieri & Iacoviello 2015), constrained steady state and perfect foresight via JuMP/Ipopt (NLP) and PATH (MCP)
+- **Constraints**: Perfect foresight (Newton solver), OccBin occasionally binding constraints (Guerrieri & Iacoviello 2015), built-in constrained solvers (Optim.jl box constraints, NLopt.jl nonlinear inequalities, projected Newton) with optional JuMP/Ipopt (NLP) and PATH (MCP) backends
 
 **Structural Identification**
 
@@ -60,8 +61,15 @@
 - **News Decomposition**: Attribute nowcast revisions to individual data releases via Kalman gain weights
 - **Panel Balancing**: `balance_panel()` fills NaN in `TimeSeriesData`/`PanelData` using DFM imputation
 
+**Cross-Sectional Models**
+
+- **Linear Regression**: OLS with HC0--HC3 robust and cluster-robust standard errors; Weighted Least Squares (WLS); IV/2SLS with first-stage F-statistic and Sargan test; VIF multicollinearity diagnostics
+- **Binary Choice**: Logit and Probit MLE via IRLS; marginal effects (AME/MEM/MER) with delta-method SEs; `odds_ratio()`, `classification_table()`
+- **Ordered and Multinomial**: Ordered Logit/Probit MLE with cut-point estimation; Multinomial Logit MLE; Brant (1990) parallel regression test; Hausman-McFadden IIA test
+
 **Panel Models**
 
+- **Panel Regression**: `estimate_xtreg` for FE/RE/FD/Between/CRE/Arellano-Bond/Blundell-Bond; `estimate_xtiv` for panel IV (FE-IV/RE-IV/FD-IV/Hausman-Taylor); `estimate_xtlogit`/`estimate_xtprobit` for panel discrete choice; Hausman, Breusch-Pagan, Pesaran CD specification tests
 - **Difference-in-Differences**: Five estimators — TWFE, Callaway-Sant'Anna (2021), Sun-Abraham (2021), Borusyak-Jaravel-Spiess (2024), de Chaisemartin-D'Haultfoeuille (2020); Bacon (2021) decomposition; pretrend tests; negative weight diagnostics; HonestDiD (Rambachan & Roth 2023) sensitivity analysis
 - **Event Study LP**: Local projection event study with staggered treatment, cluster-robust SEs
 - **LP-DiD**: Dube, Girardi, Jordà & Taylor (2025) LP-DiD estimator with clean control samples, PMD, and IPW reweighting
@@ -125,6 +133,9 @@ The package is organized into the following modules:
 | `arch/` | ARCH(q) estimation via MLE, volatility forecasting |
 | `garch/` | GARCH, EGARCH, GJR-GARCH estimation via MLE, news impact curves, forecasting |
 | `sv/` | Stochastic Volatility via KSC (1998) Gibbs sampler, posterior predictive forecasts |
+| `reg/` | Cross-sectional regression: OLS, WLS, IV/2SLS, Logit, Probit, Ordered, Multinomial, marginal effects |
+| `preg/` | Panel regression: FE/RE/FD/Between/CRE/AB/BB, Panel IV, Panel Logit/Probit, specification tests |
+| `spectral/` | Spectral analysis: periodogram, Welch, AR, cross-spectrum, ACF/PACF/CCF, portmanteau tests |
 | `var/` | VAR estimation (OLS), structural identification, IRF, FEVD, historical decomposition |
 | `vecm/` | VECM: Johansen MLE, Engle-Granger, cointegrating vectors, forecasting, Granger causality |
 | `bvar/` | Bayesian VAR: conjugate NIW posterior sampling, Minnesota prior, hyperparameter optimization |
@@ -135,7 +146,7 @@ The package is organized into the following modules:
 | `pvar/` | Panel VAR: types, transforms, instruments, estimation (GMM/FE-OLS), analysis, bootstrap, tests |
 | `did/` | Difference-in-Differences: TWFE, Callaway-Sant'Anna, Sun-Abraham, BJS, de Chaisemartin-D'Haultfoeuille; event study LP; LP-DiD |
 | `favar/` | Factor-Augmented VAR: two-step (PCA + VAR) and Bayesian Gibbs estimation, panel IRFs |
-| `dsge/` | DSGE: specification, linearization, solution (Gensys/BK/Klein/perturbation/projection/PFI), OccBin, Bayesian estimation (SMC/MH) |
+| `dsge/` | DSGE: specification, linearization, solution (Gensys/BK/Klein/perturbation/projection/PFI/VFI), constrained solvers (Optim/NLopt/projected Newton), OccBin, Bayesian estimation (SMC/SMC²/MH) |
 | `gmm/` | Generalized Method of Moments and Simulated Method of Moments |
 | `nowcast/` | Nowcasting: DFM (EM + Kalman), large BVAR, bridge equations, news decomposition |
 | `plotting/` | D3.js interactive visualization: 41 plot dispatches, Solarized Light/Dark themes |
