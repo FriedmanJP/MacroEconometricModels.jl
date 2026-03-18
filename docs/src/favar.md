@@ -349,7 +349,7 @@ The two-step FAVAR extracts 3 factors from the 50-variable panel, removes the co
 
 1. **Slow/fast variable classification**: The ordering ``[F, Y^{key}]`` implies that factors are "slow" and key variables are "fast" under Cholesky identification. Placing a slow-moving variable (e.g., GDP) as a key variable violates this assumption. Use the factor ordering to encode your identification scheme, or switch to sign restrictions.
 
-2. **Number of factors**: Too few factors omit relevant information; too many introduce noise and reduce degrees of freedom in the VAR. Use `ic_criteria(X, r_max)` from the [Factor Models](@ref) page to select ``r`` via the Bai & Ng (2002) information criteria before estimating the FAVAR.
+2. **Number of factors**: Too few factors omit relevant information; too many introduce noise and reduce degrees of freedom in the VAR. Use `ic_criteria(X, r_max)` from the [Factor Models](@ref factor_page) page to select ``r`` via the Bai & Ng (2002) information criteria before estimating the FAVAR.
 
 3. **Gibbs burn-in too short**: The Bayesian FAVAR Gibbs sampler requires adequate burn-in for the factor and loading draws to converge from the PCA initialization. With ``N > 100`` panel variables, set `burnin` to at least 2000. Monitor convergence by comparing results across different `burnin` values.
 

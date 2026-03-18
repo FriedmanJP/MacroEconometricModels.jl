@@ -235,7 +235,7 @@ The probit coefficients are approximately ``1/1.6`` times the logit coefficients
 
 ---
 
-## Marginal Effects (@id marginal-effects)
+## [Marginal Effects](@id marginal-effects)
 
 In nonlinear binary choice models, the coefficient ``\beta_j`` does not equal the marginal effect of ``x_j`` on ``P(y = 1)``. The **marginal effect** of a continuous regressor ``x_j`` is (Cameron & Trivedi 2005, Chapter 14):
 

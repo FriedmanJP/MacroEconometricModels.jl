@@ -1,6 +1,6 @@
 # [Bridge Equations](@id nowcast_bridge_page)
 
-Bridge equations provide a simple, transparent approach to nowcasting by regressing a quarterly target on aggregated monthly indicators via OLS. Multiple equations --- one per pair of monthly indicators, plus univariate equations --- are combined through the **median**, producing a robust current-quarter estimate. For the broader nowcasting framework, see [Nowcasting](@ref).
+Bridge equations provide a simple, transparent approach to nowcasting by regressing a quarterly target on aggregated monthly indicators via OLS. Multiple equations --- one per pair of monthly indicators, plus univariate equations --- are combined through the **median**, producing a robust current-quarter estimate. For the broader nowcasting framework, see [Nowcasting](@ref nowcast_page).
 
 ```@setup nc_bridge
 using MacroEconometricModels, Random
