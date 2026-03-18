@@ -3,11 +3,11 @@
 **MacroEconometricModels.jl** provides a complete toolkit for specifying, solving, simulating, and estimating Dynamic Stochastic General Equilibrium (DSGE) models. The package covers the full workflow from model definition through structural estimation, with seven solution methods spanning linear, higher-order, and global approaches.
 
 - **Specification**: The `@dsge` macro provides a domain-specific language for writing equilibrium conditions with time-indexed variables
-- **Steady State**: Analytical or numerical steady-state computation via NonlinearSolve.jl (`TrustRegion()` default) with optional JuMP constraints
+- **Steady State**: Analytical or numerical steady-state computation via NonlinearSolve.jl (`TrustRegion()` default) with built-in constrained solvers (Optim.jl, NLopt.jl) and optional JuMP backends
 - **Linearization**: Automatic first-order approximation via numerical Jacobians in the Sims (2002) canonical form
 - **Linear Solvers**: Three first-order solvers --- Gensys (Sims 2002), Blanchard-Kahn (1980), and Klein (2000) --- producing the state-space solution; see [Linear Solvers](@ref dsge_linear)
 - **Nonlinear Methods**: Up to 3rd-order perturbation with Andreasen, Fernandez-Villaverde & Rubio-Ramirez (2018) pruning, Chebyshev collocation, policy function iteration, and value function iteration (with Howard steps and Anderson acceleration) for globally accurate policy functions; see [Nonlinear Methods](@ref dsge_nonlinear)
-- **Constraints**: Perfect foresight paths, OccBin occasionally-binding constraints (Guerrieri & Iacoviello 2015), and constrained optimization via JuMP/Ipopt (NLP) and PATH (MCP); see [Constraints](@ref dsge_constraints)
+- **Constraints**: Perfect foresight paths, OccBin occasionally-binding constraints (Guerrieri & Iacoviello 2015), and constrained optimization via Optim.jl/NLopt.jl (built-in) with optional JuMP/Ipopt (NLP) and PATH (MCP) backends; see [Constraints](@ref dsge_constraints)
 - **Estimation**: Four GMM-based methods (one-step, two-step, iterative, CU) for IRF matching, plus Bayesian estimation via SMC, SMC`` ^2 `` with two-stage delayed acceptance, and Random-Walk Metropolis-Hastings; see [Estimation](@ref dsge_estimation)
 - **Simulation and IRFs**: Stochastic and pruned simulation, analytical and generalized impulse responses, FEVD, and unconditional moments via Lyapunov equation; see [Nonlinear Methods](@ref dsge_nonlinear)
 - **Historical Decomposition**: Kalman smoother-based shock attribution for linear models, FFBSi particle smoother for nonlinear models, and Bayesian posterior bands; see [Historical Decomposition](@ref dsge_hd_page)
@@ -263,48 +263,44 @@ When the `steady_state` block is provided, `compute_steady_state` (or `solve`) u
 
 ### Constrained Steady State
 
-For models with variable bounds --- such as a zero lower bound on the nominal interest rate or non-negativity of consumption --- NonlinearSolve.jl handles box constraints natively:
+For models with variable bounds --- such as a zero lower bound on the nominal interest rate or non-negativity of consumption --- box constraints work out of the box. NonlinearSolve.jl attempts the solve first; if bounds are violated, the solver auto-escalates to Optim.jl `Fminbox(LBFGS())`:
 
 ```julia
 # ZLB: interest rate cannot go below zero
 bound = variable_bound(:R, lower=0.0)
 
-# Solve constrained steady state (NonlinearSolve handles box bounds)
+# Solve constrained steady state (auto-escalates to Optim.jl if bounds bind)
 spec = compute_steady_state(spec; constraints=[bound])
 ```
 
-For nonlinear inequality constraints or explicit Ipopt solving, load JuMP and Ipopt:
+For nonlinear inequality constraints, NLopt.jl `LD_SLSQP` is the default solver --- no additional packages required:
 
 ```julia
+# Debt-to-GDP ceiling: fn(y, ...) <= 0
+debt_limit = nonlinear_constraint(
+    (y, y_lag, y_lead, e, theta) -> y[debt_idx] / y[gdp_idx] - 0.6;
+    label="Debt-to-GDP <= 60%"
+)
+
+spec = compute_steady_state(spec; constraints=[bound, debt_limit])
+```
+
+### Advanced: Explicit Solver Backends
+
+For large-scale problems or complementarity formulations, JuMP-based backends provide additional power:
+
+```julia
+# Ipopt (NLP): handles general nonlinear constraints
 import JuMP, Ipopt
-
 spec = compute_steady_state(spec; constraints=[bound], solver=:ipopt)
-```
 
-### Constrained Steady State (PATH MCP)
-
-For problems naturally expressed as complementarity conditions --- where a constraint binds if and only if a corresponding equation holds with slack --- the PATH solver formulates the steady state as a Mixed Complementarity Problem (MCP):
-
-```julia
+# PATH (MCP): natural for complementarity problems (e.g., ZLB)
 import JuMP, PATHSolver
-
-bound = variable_bound(:R, lower=0.0)
-spec = compute_steady_state(spec, [bound]; solver=:path)
+spec = compute_steady_state(spec; constraints=[bound], solver=:path)
 ```
 
-The MCP formulation is: for each variable ``i`` with lower bound ``l_i`` and upper bound ``u_i``, find ``y_i`` such that:
-
-```math
-l_i \leq y_i \leq u_i, \quad f_i(y) \begin{cases} \geq 0 & \text{if } y_i = l_i \\ = 0 & \text{if } l_i < y_i < u_i \\ \leq 0 & \text{if } y_i = u_i \end{cases}
-```
-
-where:
-- ``y_i`` is the ``i``-th endogenous variable
-- ``l_i, u_i`` are the lower and upper bounds
-- ``f_i(y)`` is the ``i``-th equilibrium residual
-
-!!! note "When to use PATH vs Ipopt"
-    Use **PATH** when constraints are box bounds (variable bounds only) and the model has a natural complementarity structure --- for example, a ZLB where ``R_t \geq 0`` and the Taylor rule holds with equality when ``R_t > 0``. Use **Ipopt** when you have general nonlinear inequality constraints or when the complementarity interpretation is not natural. For full details on constrained solvers, see [Constraints](@ref dsge_constraints).
+!!! note "Solver Selection Guide"
+    **Built-in solvers** (no extra packages): `:nonlinearsolve` for unconstrained, `:optim` for box constraints, `:nlopt` for nonlinear inequality constraints. **JuMP solvers** (require `import`): `:ipopt` for large-scale NLP, `:path` for complementarity problems. The solver is auto-detected from constraint types --- override with the `solver` keyword. For full details, see [Constraints](@ref dsge_constraints).
 
 ---
 

@@ -34,8 +34,8 @@ Uses NonlinearSolve.jl as the default Newton solver with block-tridiagonal spars
 - `max_iter::Int=100` — Newton iteration limit
 - `tol::Real=1e-8` — convergence tolerance (max abs residual)
 - `constraints::Vector{<:DSGEConstraint}` — variable bounds and nonlinear inequalities
-- `solver::Symbol` — `:nonlinearsolve` (default), `:ipopt` (NLP), or `:path` (MCP)
-- `algorithm` — NonlinearSolve.jl algorithm (default: `NewtonRaphson()`); ignored for JuMP solvers
+- `solver::Symbol` — `:nonlinearsolve` (default), `:nlopt` (SLSQP), `:ipopt` (NLP), or `:path` (MCP); auto-detected
+- `algorithm` — NonlinearSolve.jl algorithm (default: `NewtonRaphson()`); passed through to chosen backend
 """
 function perfect_foresight(spec::DSGESpec{FT};
         T_periods::Int=100,

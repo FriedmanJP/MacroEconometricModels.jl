@@ -22,8 +22,8 @@ Returns a new `DSGESpec` with the `steady_state` field filled.
 - `method::Symbol` — `:auto` (NonlinearSolve), `:analytical`
 - `ss_fn::Function` — for `:analytical`, a function `θ → y_ss::Vector`
 - `constraints::Vector{<:DSGEConstraint}` — variable bounds and nonlinear inequalities
-- `solver::Symbol` — `:nonlinearsolve` (default), `:ipopt` (NLP), or `:path` (MCP); auto-detected if not specified
-- `algorithm` — NonlinearSolve.jl algorithm (default: `TrustRegion()`); ignored for JuMP solvers
+- `solver::Symbol` — `:nonlinearsolve` (default), `:optim` (Fminbox), `:nlopt` (SLSQP), `:ipopt` (NLP), or `:path` (MCP); auto-detected if not specified
+- `algorithm` — NonlinearSolve.jl algorithm (default: `TrustRegion()`); passed through to chosen backend
 """
 function compute_steady_state(spec::DSGESpec{T};
         initial_guess::Union{Nothing,AbstractVector}=nothing,

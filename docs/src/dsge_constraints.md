@@ -1,6 +1,6 @@
 # [Constraints and Occasionally Binding Models](@id dsge_constraints)
 
-Standard linearized DSGE models assume all equilibrium conditions hold with equality at all times. Occasionally binding constraints --- such as the zero lower bound on nominal interest rates, borrowing limits, or irreversible investment --- require specialized solution methods. This page covers three approaches: deterministic perfect foresight, constrained optimization via JuMP (Ipopt and PATH), and the piecewise-linear OccBin algorithm (Guerrieri & Iacoviello 2015). For model specification and linearization, see [DSGE Models](@ref dsge_page). For first-order solvers, see [Linear Solvers](@ref dsge_linear).
+Standard linearized DSGE models assume all equilibrium conditions hold with equality at all times. Occasionally binding constraints --- such as the zero lower bound on nominal interest rates, borrowing limits, or irreversible investment --- require specialized solution methods. This page covers three approaches: deterministic perfect foresight with built-in constrained solvers (Optim.jl, NLopt.jl), optional JuMP-based backends (Ipopt and PATH), and the piecewise-linear OccBin algorithm (Guerrieri & Iacoviello 2015). For model specification and linearization, see [DSGE Models](@ref dsge_page). For first-order solvers, see [Linear Solvers](@ref dsge_linear).
 
 
 ## Quick Start
@@ -122,8 +122,8 @@ pf.iterations   # number of Newton iterations used
 | `max_iter` | `Int` | `100` | Newton iteration limit |
 | `tol` | `Real` | ``10^{-8}`` | Convergence tolerance (max absolute residual) |
 | `constraints` | `Vector{<:DSGEConstraint}` | `[]` | Variable bounds and nonlinear constraints |
-| `solver` | `Union{Nothing, Symbol}` | `nothing` | `:nonlinearsolve` (default), `:ipopt`, or `:path` |
-| `algorithm` | `Any` | `NewtonRaphson()` | NonlinearSolve.jl algorithm (ignored for JuMP solvers) |
+| `solver` | `Union{Nothing, Symbol}` | `nothing` | `:nonlinearsolve`, `:optim`, `:nlopt`, `:ipopt`, or `:path`; auto-detected |
+| `algorithm` | `Any` | `NewtonRaphson()` | Algorithm for chosen backend (e.g., `Optim.IPNewton()`, `:LN_COBYLA`) |
 
 ### Return Value
 
@@ -141,25 +141,37 @@ pf.iterations   # number of Newton iterations used
 
 ## Constrained Perfect Foresight
 
-When variable bounds or nonlinear inequality constraints are present, the solver uses a three-tier hierarchy:
+When variable bounds or nonlinear inequality constraints are present, the solver uses a five-tier hierarchy. Tiers 1--4 require no additional packages. Tiers 4--5 provide optional JuMP-based backends for large-scale problems.
 
-1. **NonlinearSolve.jl** (default): Solves the unconstrained system first. If all variable bounds are satisfied, returns the solution. If bounds are violated, automatically escalates to Ipopt or PATH.
-2. **Ipopt** (NLP): Handles general nonlinear constraints and variable bounds via interior point optimization. Requires `import JuMP, Ipopt`.
-3. **PATH** (MCP): Solves box-constrained problems as mixed complementarity problems. Requires `import JuMP, PATHSolver`.
+| Tier | Backend | Handles | Activation |
+|------|---------|---------|------------|
+| 1 | NonlinearSolve.jl | Unconstrained, non-binding box | Default |
+| 2 | Projected Newton | Box-constrained PF | Auto-escalation when bounds violated |
+| 3 | Optim.jl `Fminbox(LBFGS())` | Box-constrained SS | Auto-escalation when SS bounds violated |
+| 4 | NLopt.jl `LD_SLSQP` | Nonlinear inequality constraints | Default for `NonlinearConstraint` |
+| 5 | JuMP+Ipopt / JuMP+PATH | Full NLP / MCP | Explicit `solver=:ipopt` or `:path` |
 
-The solver is auto-detected from the constraint types: `NonlinearConstraint` requires Ipopt; pure `VariableBound` constraints use NonlinearSolve with automatic escalation. Override with `solver=:ipopt` or `solver=:path`.
+The solver is auto-detected from constraint types. Pure `VariableBound` constraints start with NonlinearSolve and auto-escalate to projected Newton (PF) or Optim.jl (SS) if bounds are violated. `NonlinearConstraint` dispatches to NLopt.jl when JuMP is absent, or Ipopt when JuMP is loaded. Override with the `solver` keyword.
 
-### Ipopt (NLP)
+### Box Constraints (Built-in)
 
-**Ipopt** (Interior Point Optimizer) handles general nonlinear constraints. Variable bounds and nonlinear inequalities are both supported:
+Box constraints work out of the box --- no additional packages required. For perfect foresight, the solver first attempts the unconstrained Newton solve. If any variable violates its bounds, it auto-escalates to a projected Newton method that preserves the sparse block-tridiagonal Jacobian structure:
 
 ```julia
-import JuMP, Ipopt
-
-# Variable bound: ZLB on nominal rate
+# ZLB on nominal rate --- no imports needed
 zlb = variable_bound(:R, lower=0.0)
+pf = perfect_foresight(spec; shock_path=shocks, constraints=[zlb])
+```
 
-# Nonlinear constraint: debt-to-GDP ceiling
+The projected Newton solver uses NCP (nonlinear complementarity problem) convergence criteria: at interior points the residual must equal zero, at a binding lower bound the residual must be non-negative, and at a binding upper bound the residual must be non-positive.
+
+### Nonlinear Constraints (NLopt)
+
+For general nonlinear inequality constraints, NLopt.jl `LD_SLSQP` is the default solver. No additional packages required:
+
+```julia
+# Variable bound + nonlinear constraint
+zlb = variable_bound(:R, lower=0.0)
 debt_limit = nonlinear_constraint(
     (y, y_lag, y_lead, e, theta) -> y[debt_idx] / y[gdp_idx] - 0.6;
     label="Debt-to-GDP <= 60%"
@@ -169,30 +181,41 @@ pf = perfect_foresight(spec; shock_path=shocks,
                         constraints=[zlb, debt_limit])
 ```
 
-The `nonlinear_constraint` function takes a closure with the standard residual signature `(y, y_lag, y_lead, e, theta) -> scalar`. The constraint is satisfied when the return value is ``\leq 0``.
+The `nonlinear_constraint` function takes a closure with the standard residual signature `(y, y_lag, y_lead, e, theta) -> scalar`. The constraint is satisfied when the return value is ``\leq 0``. For perfect foresight, NLopt formulates the problem as a feasibility problem with equality constraints (model equations) and inequality constraints (user-specified).
 
-### PATH (MCP)
+!!! warning "NLopt PF Performance"
+    NLopt's SLSQP is a dense algorithm. For large PF problems (T × n > 1000), consider `solver=:ipopt` with JuMP + Ipopt for better scalability. The solver warns when the problem size exceeds this threshold.
 
-**PATH** solves the perfect foresight problem as a Mixed Complementarity Problem (MCP). For each variable ``i`` with bounds ``[l_i, u_i]``:
+### Advanced: JuMP Backends (Ipopt and PATH)
+
+For large-scale problems or complementarity formulations, JuMP-based backends are available as optional weak dependencies:
+
+**Ipopt** (Interior Point Optimizer) handles general NLP problems. It is more robust than NLopt for large systems:
+
+```julia
+import JuMP, Ipopt
+
+pf = perfect_foresight(spec; shock_path=shocks,
+                        constraints=[zlb, debt_limit], solver=:ipopt)
+```
+
+**PATH** solves the problem as a Mixed Complementarity Problem (MCP). For each variable ``i`` with bounds ``[l_i, u_i]``:
 
 ```math
 l_i \leq y_i \leq u_i, \quad f_i(y) \begin{cases} \geq 0 & \text{if } y_i = l_i \\ = 0 & \text{if } l_i < y_i < u_i \\ \leq 0 & \text{if } y_i = u_i \end{cases}
 ```
 
-where ``f_i(y)`` is the ``i``-th equilibrium residual. This complementarity structure is natural for problems where a constraint replaces an equilibrium condition when binding (e.g., the Taylor rule is replaced by ``R_t = 0`` at the ZLB).
+This complementarity structure is natural for problems where a constraint replaces an equilibrium condition when binding (e.g., the Taylor rule is replaced by ``R_t = 0`` at the ZLB).
 
 ```julia
 import JuMP, PATHSolver
 
-zlb = variable_bound(:R, lower=0.0)
 pf = perfect_foresight(spec; shock_path=shocks,
                         constraints=[zlb], solver=:path)
 ```
 
-When `solver` is not specified, pure `VariableBound` constraints use NonlinearSolve (with automatic escalation to Ipopt if bounds are violated), and any `NonlinearConstraint` requires Ipopt.
-
-!!! warning "Solver Selection"
-    **NonlinearSolve** is the default and handles unconstrained and non-binding box constraints without additional dependencies. **PATH** is preferred for pure box constraints with a natural complementarity structure. **Ipopt** handles general nonlinear inequality constraints. PATH requires PATHSolver.jl; Ipopt requires Ipopt.jl. Both require JuMP.jl. These are weak dependencies --- load them with `import` before calling `perfect_foresight` with constraints.
+!!! note "Solver Selection Guide"
+    **Built-in** (no extra packages): Box constraints auto-escalate from NonlinearSolve to projected Newton (PF) or Optim.jl (SS). Nonlinear constraints default to NLopt.jl. **JuMP backends**: Use `:ipopt` for large-scale NLP or when NLopt doesn't converge. Use `:path` for pure box constraints with a natural complementarity structure (ZLB). Both require JuMP.jl as a weak dependency.
 
 ### Constraint Constructors
 
@@ -389,7 +412,7 @@ The unconstrained IRF shows optimal consumption smoothing: the agent borrows fre
 
 2. **OccBin regime cycling**: The guess-and-verify algorithm can cycle between regime sequences without converging. For one-constraint problems, increase `maxiter`. For two-constraint problems, set `curb_retrench=true` to limit relaxation to one period per iteration.
 
-3. **Missing JuMP extensions**: NonlinearSolve handles unconstrained and non-binding box constraints without JuMP. For binding box constraints or nonlinear constraints, `import JuMP, Ipopt` or `import JuMP, PATHSolver` is required *before* calling `perfect_foresight`. Without these imports, binding box constraints return the unconstrained solution with a warning.
+3. **NLopt PF limits**: NLopt's SLSQP is a dense method that struggles with large perfect foresight problems. For models with T × n > 1000 variables, use `solver=:ipopt` with JuMP + Ipopt. For box-constrained PF, the built-in projected Newton solver handles large problems efficiently.
 
 4. **Wrong constraint direction**: `:(R[t] >= 0)` means "``R`` must be at least 0" (a lower bound). `:(b[t] <= 1.0)` means "debt cannot exceed ``M``" (a borrowing limit). `:(D[t] <= D_max)` means "``D`` must be at most `D_max`" (an upper bound). Verify that the direction matches the economic interpretation.
 
@@ -404,6 +427,8 @@ The unconstrained IRF shows optimal consumption smoothing: the agent borrows fre
 - Ferris, M. C., & Munson, T. S. (1999). Interfaces to PATH 3.0: Design, Implementation and Usage. *Computational Optimization and Applications*, 12(1), 207--227. [DOI](https://doi.org/10.1023/A:1018636318047)
 
 - Pal, A., et al. (2024). NonlinearSolve.jl: High-Performance and Robust Solvers for Systems of Nonlinear Equations in Julia. [GitHub](https://github.com/SciML/NonlinearSolve.jl)
+
+- Johnson, S. G. (2007). The NLopt Nonlinear-Optimization Package. [GitHub](https://github.com/stevengj/nlopt)
 
 - Rendahl, P. (2017). Linear Time Iteration. Unpublished manuscript.
 
