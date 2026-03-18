@@ -98,7 +98,8 @@ end
 # Dispatch stubs — JuMP extension overrides these methods
 # =============================================================================
 
-const _JUMP_INSTALL_MSG = "Constrained solving requires JuMP and Ipopt. Install with:\n" *
+const _JUMP_INSTALL_MSG = "JuMP + Ipopt not loaded. NLopt handles most constrained problems by default.\n" *
+    "For explicit JuMP/Ipopt use, install with:\n" *
     "  using Pkg; Pkg.add(\"JuMP\"); Pkg.add(\"Ipopt\")\n" *
     "Then load: import JuMP, Ipopt"
 
@@ -130,7 +131,13 @@ User override always wins. PATH still reachable via `solver=:path`.
 function _select_solver(constraints::Vector, solver_override::Union{Nothing,Symbol})
     solver_override !== nothing && return solver_override
     has_nlcon = any(c -> c isa NonlinearConstraint, constraints)
-    has_nlcon && return :ipopt
+    if has_nlcon
+        # Prefer Ipopt when JuMP extension is loaded (more robust for large NLP)
+        if hasmethod(_jump_compute_steady_state, Tuple{DSGESpec, Vector})
+            return :ipopt
+        end
+        return :nlopt
+    end
     return :nonlinearsolve
 end
 
@@ -274,4 +281,83 @@ function _extract_bounds(spec::DSGESpec{T}, constraints::Vector) where {T}
         end
     end
     return lower, upper
+end
+
+# =============================================================================
+# Adapter wrappers: splatted-scalar closures → vector interfaces
+# =============================================================================
+
+"""Wrap a splatted-scalar closure `f(args::Real...)` as `f(x::AbstractVector)` for Optim.jl."""
+_vec_wrap(f) = x -> f(x...)
+
+"""
+Wrap a splatted-scalar closure for NLopt's `(x::Vector, grad::Vector)` callback.
+Computes gradient in-place via ForwardDiff when `length(grad) > 0`.
+"""
+function _nlopt_wrap(f)
+    function nlopt_cb(x::Vector, grad::Vector)
+        if length(grad) > 0
+            ForwardDiff.gradient!(grad, z -> f(z...), x)
+        end
+        return f(x...)
+    end
+    return nlopt_cb
+end
+
+"""
+Wrap a PF equation/constraint for NLopt. Each constraint depends on variables at
+periods (t-1, t, t+1), so only a `3n + n_ε` slice of the full `T*n` stacked vector
+matters. This adapter extracts the relevant slice, computes the local gradient via
+ForwardDiff, and scatters it into the full-length gradient vector.
+
+Arguments:
+- `f` — splatted-scalar closure from `_build_pf_equation` or `_build_pf_nlcon`
+- `t` — period index (1-based)
+- `n` — number of endogenous variables
+- `n_ε` — number of exogenous shocks
+- `T_periods` — total periods
+- `y_ss` — steady state vector (for boundary conditions)
+- `shocks` — T_periods × n_ε shock matrix
+"""
+function _pf_nlopt_wrap(f, t::Int, n::Int, n_ε::Int, T_periods::Int,
+                         y_ss::Vector, shocks::Matrix)
+    function pf_nlopt_cb(x::Vector, grad::Vector)
+        # Extract y_t from stacked vector
+        y_t = x[(t-1)*n+1 : t*n]
+
+        # y_{t-1}: boundary at t=1
+        y_lag = t == 1 ? y_ss : x[(t-2)*n+1 : (t-1)*n]
+
+        # y_{t+1}: boundary at t=T
+        y_lead = t == T_periods ? y_ss : x[t*n+1 : (t+1)*n]
+
+        ε_t = shocks[t, :]
+
+        # Build local args for the splatted closure: [y_t; y_lag; y_lead; ε_t]
+        local_args = vcat(y_t, y_lag, y_lead, ε_t)
+        val = f(local_args...)
+
+        if length(grad) > 0
+            fill!(grad, 0.0)
+            # Compute local gradient w.r.t. local_args
+            local_grad = ForwardDiff.gradient(z -> f(z...), local_args)
+
+            # Scatter: first n entries → ∂f/∂y_t → grad[(t-1)*n+1 : t*n]
+            grad[(t-1)*n+1 : t*n] .= local_grad[1:n]
+
+            # Next n entries → ∂f/∂y_{t-1} → grad[(t-2)*n+1 : (t-1)*n] (if t > 1)
+            if t > 1
+                grad[(t-2)*n+1 : (t-1)*n] .= local_grad[n+1:2n]
+            end
+
+            # Next n entries → ∂f/∂y_{t+1} → grad[t*n+1 : (t+1)*n] (if t < T)
+            if t < T_periods
+                grad[t*n+1 : (t+1)*n] .= local_grad[2n+1:3n]
+            end
+            # ε_t entries are not decision variables — no scatter needed
+        end
+
+        return val
+    end
+    return pf_nlopt_cb
 end
