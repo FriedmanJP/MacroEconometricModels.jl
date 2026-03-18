@@ -1,6 +1,6 @@
 # [News Decomposition](@id nowcast_news_page)
 
-When new data releases arrive, the nowcast changes. The **news decomposition** (Banbura and Modugno 2014) attributes this revision to individual data releases, answering a central question in real-time forecasting: *which releases drove the revision?* For the underlying DFM model, see [Nowcasting](@ref).
+When new data releases arrive, the nowcast changes. The **news decomposition** (Banbura and Modugno 2014) attributes this revision to individual data releases, answering a central question in real-time forecasting: *which releases drove the revision?* For the underlying DFM model, see [Nowcasting](@ref nowcast_page).
 
 ```@setup nc_news
 using MacroEconometricModels, Random

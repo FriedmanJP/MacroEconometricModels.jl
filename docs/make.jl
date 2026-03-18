@@ -14,7 +14,7 @@ makedocs(;
         canonical="https://FriedmanJP.github.io/MacroEconometricModels.jl",
         edit_link="main",
         assets=["assets/custom.css", "assets/theme-toggle.js"],
-        size_threshold=700 * 1024,
+        size_threshold=900 * 1024,
         mathengine=Documenter.MathJax3(),
         repolink="https://github.com/FriedmanJP/MacroEconometricModels.jl",
     ),
@@ -95,4 +95,5 @@ makedocs(;
 deploydocs(;
     repo="github.com/FriedmanJP/MacroEconometricModels.jl",
     devbranch="main",
+    cname="api.friedman.jp",
 )

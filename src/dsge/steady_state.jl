@@ -22,8 +22,8 @@ Returns a new `DSGESpec` with the `steady_state` field filled.
 - `method::Symbol` — `:auto` (NonlinearSolve), `:analytical`
 - `ss_fn::Function` — for `:analytical`, a function `θ → y_ss::Vector`
 - `constraints::Vector{<:DSGEConstraint}` — variable bounds and nonlinear inequalities
-- `solver::Symbol` — `:nonlinearsolve` (default), `:ipopt` (NLP), or `:path` (MCP); auto-detected if not specified
-- `algorithm` — NonlinearSolve.jl algorithm (default: `TrustRegion()`); ignored for JuMP solvers
+- `solver::Symbol` — `:nonlinearsolve` (default), `:optim` (Fminbox), `:nlopt` (SLSQP), `:ipopt` (NLP), or `:path` (MCP); auto-detected if not specified
+- `algorithm` — NonlinearSolve.jl algorithm (default: `TrustRegion()`); passed through to chosen backend
 """
 function compute_steady_state(spec::DSGESpec{T};
         initial_guess::Union{Nothing,AbstractVector}=nothing,
@@ -39,24 +39,43 @@ function compute_steady_state(spec::DSGESpec{T};
     if !isempty(constraints)
         _validate_constraints(spec, constraints)
         chosen = _select_solver(constraints, solver)
-        chosen ∉ (:path, :ipopt, :nonlinearsolve) &&
-            throw(ArgumentError("Unknown solver :$chosen. Valid options: :nonlinearsolve, :path, :ipopt"))
+        chosen ∉ (:path, :ipopt, :nonlinearsolve, :optim, :nlopt) &&
+            throw(ArgumentError("Unknown solver :$chosen. " *
+                "Valid options: :nonlinearsolve, :optim, :nlopt, :path, :ipopt"))
 
         if chosen == :nonlinearsolve
             lower, upper = _extract_bounds(spec, constraints)
-            # NonlinearSolve cannot handle NonlinearConstraint
             any(c -> c isa NonlinearConstraint, constraints) &&
                 throw(ArgumentError(
                     "NonlinearSolve solver cannot handle NonlinearConstraint. " *
-                    "Use solver=:ipopt for nonlinear inequality constraints."))
+                    "Use solver=:nlopt (default) or solver=:ipopt for nonlinear inequality constraints."))
             y_ss = _nonlinearsolve_steady_state(spec, lower, upper;
+                        initial_guess=initial_guess, algorithm=algorithm)
+            # Check if bounds are violated — escalate to Optim if needed
+            bounds_ok = all(i -> (!isfinite(lower[i]) || y_ss[i] >= lower[i] - T(1e-6)) &&
+                                  (!isfinite(upper[i]) || y_ss[i] <= upper[i] + T(1e-6)),
+                            1:n)
+            if !bounds_ok
+                y_ss = _optim_steady_state(spec, lower, upper;
+                            initial_guess=initial_guess, algorithm=nothing)
+            end
+        elseif chosen == :optim
+            lower, upper = _extract_bounds(spec, constraints)
+            any(c -> c isa NonlinearConstraint, constraints) &&
+                throw(ArgumentError(
+                    "Optim solver cannot handle NonlinearConstraint. " *
+                    "Use solver=:nlopt or solver=:ipopt."))
+            y_ss = _optim_steady_state(spec, lower, upper;
+                        initial_guess=initial_guess, algorithm=algorithm)
+        elseif chosen == :nlopt
+            y_ss = _nlopt_steady_state(spec, constraints;
                         initial_guess=initial_guess, algorithm=algorithm)
         elseif chosen == :path
             _check_jump_loaded()
             any(c -> c isa NonlinearConstraint, constraints) &&
                 throw(ArgumentError(
                     "PATH solver cannot handle NonlinearConstraint. " *
-                    "Use solver=:ipopt or remove nonlinear constraints."))
+                    "Use solver=:nlopt or solver=:ipopt."))
             y_ss = _path_compute_steady_state(spec, constraints;
                         initial_guess=initial_guess)
         else  # :ipopt
@@ -168,6 +187,139 @@ function _nonlinearsolve_steady_state(spec::DSGESpec{T}, lower::Vector{T}, upper
     end
 
     return Vector{T}(sol.u)
+end
+
+"""
+    _optim_steady_state(spec, lower, upper; initial_guess=nothing, algorithm=nothing)
+
+Box-constrained steady state via Optim.jl Fminbox(LBFGS()).
+Minimizes sum-of-squared-residuals subject to variable bounds.
+"""
+function _optim_steady_state(spec::DSGESpec{T}, lower::Vector{T}, upper::Vector{T};
+        initial_guess::Union{Nothing,AbstractVector}=nothing,
+        algorithm=nothing) where {T<:AbstractFloat}
+
+    n = spec.n_endog
+    if initial_guess !== nothing
+        y0 = T.(initial_guess)
+    elseif !isempty(spec.steady_state)
+        y0 = T.(spec.steady_state)
+    else
+        y0 = ones(T, n)
+    end
+    @assert length(y0) == n "initial_guess must have length $n"
+
+    # Clamp initial guess to bounds, nudging slightly into interior for Fminbox
+    eps_nudge = T(1e-8)
+    for i in 1:n
+        lo = isfinite(lower[i]) ? lower[i] : T(-1e10)
+        hi = isfinite(upper[i]) ? upper[i] : T(1e10)
+        y0[i] = clamp(y0[i], lo + eps_nudge, hi - eps_nudge)
+    end
+
+    # Build objective: sum of squared residuals (vector interface via _vec_wrap)
+    ss_obj_splat = _build_ss_objective(spec.residual_fns, spec.n_exog, spec.param_values)
+    obj = _vec_wrap(ss_obj_splat)
+
+    alg = algorithm !== nothing ? algorithm : Optim.Fminbox(Optim.LBFGS())
+
+    # Build OnceDifferentiable with explicit ForwardDiff gradient for Fminbox
+    grad! = (G, x) -> ForwardDiff.gradient!(G, obj, x)
+    od = Optim.OnceDifferentiable(obj, grad!, y0)
+    result = Optim.optimize(od, lower, upper, y0, alg,
+                Optim.Options(iterations=5000, g_tol=T(1e-12), show_trace=false))
+
+    if !Optim.converged(result)
+        @warn "Optim steady state solver did not converge. " *
+              "Try solver=:ipopt with JuMP + Ipopt for large-scale NLP."
+    end
+
+    y_ss = Vector{T}(Optim.minimizer(result))
+
+    # Verify residuals are near zero
+    final_obj = obj(y_ss)
+    if final_obj > T(1e-6)
+        @warn "Optim converged to non-zero residual (||F||² = $(final_obj)). " *
+              "Steady state may not be accurate."
+    end
+
+    return y_ss
+end
+
+"""
+    _nlopt_steady_state(spec, constraints; initial_guess=nothing, algorithm=nothing)
+
+Constrained steady state via NLopt LD_SLSQP.
+Handles both VariableBound (box) and NonlinearConstraint (inequality).
+"""
+function _nlopt_steady_state(spec::DSGESpec{T}, constraints::Vector;
+        initial_guess::Union{Nothing,AbstractVector}=nothing,
+        algorithm=nothing) where {T<:AbstractFloat}
+
+    n = spec.n_endog
+    # NLopt.jl only supports Float64 — convert everything, then convert back at return
+    if initial_guess !== nothing
+        y0 = Float64.(initial_guess)
+    elseif !isempty(spec.steady_state)
+        y0 = Float64.(spec.steady_state)
+    else
+        y0 = ones(Float64, n)
+    end
+    @assert length(y0) == n "initial_guess must have length $n"
+
+    # Build objective: sum of squared residuals
+    ss_obj_splat = _build_ss_objective(spec.residual_fns, spec.n_exog, spec.param_values)
+    nlopt_obj = _nlopt_wrap(ss_obj_splat)
+
+    # Choose algorithm
+    alg_sym = algorithm !== nothing ? algorithm : :LD_SLSQP
+    opt = NLopt.Opt(alg_sym, n)
+
+    # Set objective
+    NLopt.min_objective!(opt, nlopt_obj)
+
+    # Box bounds
+    lower, upper = _extract_bounds(spec, constraints)
+    NLopt.lower_bounds!(opt, Float64.(lower))
+    NLopt.upper_bounds!(opt, Float64.(upper))
+
+    # Nonlinear inequality constraints: fn(y, y, y, 0, θ) <= 0
+    for c in constraints
+        if c isa NonlinearConstraint
+            ss_nlcon_splat = _build_ss_nlcon(c.fn, spec.n_exog, spec.param_values)
+            nlopt_con = _nlopt_wrap(ss_nlcon_splat)
+            NLopt.inequality_constraint!(opt, nlopt_con, 1e-8)
+        end
+    end
+
+    # Tolerances
+    NLopt.xtol_rel!(opt, 1e-12)
+    NLopt.ftol_rel!(opt, 1e-12)
+    NLopt.maxeval!(opt, 5000)
+
+    # Clamp initial guess
+    lo_f = Float64.(lower)
+    hi_f = Float64.(upper)
+    for i in 1:n
+        y0[i] = clamp(y0[i], isfinite(lo_f[i]) ? lo_f[i] : -1e10,
+                               isfinite(hi_f[i]) ? hi_f[i] : 1e10)
+    end
+
+    (min_val, min_x, ret) = NLopt.optimize(opt, y0)
+
+    if ret ∉ (:SUCCESS, :FTOL_REACHED, :XTOL_REACHED, :STOPVAL_REACHED)
+        throw(ErrorException(
+            "NLopt steady state solver did not converge (return code: $ret). " *
+            "Try solver=:ipopt with JuMP + Ipopt for large-scale NLP."))
+    end
+
+    # Verify residuals are near zero (warn if not — binding constraints make nonzero residual expected)
+    if min_val > 1e-6
+        @warn "NLopt converged to non-zero residual (||F||² = $(min_val)). " *
+              "This is expected when constraints are binding. Verify solution accuracy."
+    end
+
+    return Vector{T}(min_x)
 end
 
 """Return a new DSGESpec with updated steady_state field."""

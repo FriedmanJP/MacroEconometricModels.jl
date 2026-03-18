@@ -2,7 +2,7 @@
 
 The Dynamic Factor Model (DFM) extracts a small number of latent factors from a large panel of indicators and uses them to produce real-time nowcasts of target variables. This is the workhorse model used by the ECB, the Federal Reserve Bank of New York, and many other central banks for real-time macroeconomic monitoring. The implementation follows Banbura & Modugno (2014) with Mariano & Murasawa (2003) temporal aggregation for mixed-frequency data.
 
-For an overview of all nowcasting methods and method comparison, see [Nowcasting](@ref). For BVAR-based nowcasting, see [BVAR Nowcasting](@ref nowcast_bvar_page).
+For an overview of all nowcasting methods and method comparison, see [Nowcasting](@ref nowcast_page). For BVAR-based nowcasting, see [BVAR Nowcasting](@ref nowcast_bvar_page).
 
 ```@setup nc_dfm
 using MacroEconometricModels, Random

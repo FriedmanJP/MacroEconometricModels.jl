@@ -2,7 +2,7 @@
 
 The large Bayesian VAR (BVAR) approach to nowcasting estimates a high-dimensional VAR directly on mixed-frequency data, using informative Normal-Inverse-Wishart priors to regularize the parameter space. The implementation follows Giannone, Lenza & Primiceri (2015) with the mixed-frequency extensions of Cimadomo et al. (2022). Hyperparameters governing prior tightness are optimized automatically via marginal log-likelihood maximization.
 
-For an overview of all nowcasting methods and method comparison, see [Nowcasting](@ref). For DFM-based nowcasting, see [DFM Nowcasting](@ref nowcast_dfm_page).
+For an overview of all nowcasting methods and method comparison, see [Nowcasting](@ref nowcast_page). For DFM-based nowcasting, see [DFM Nowcasting](@ref nowcast_dfm_page).
 
 ```@setup nc_bvar
 using MacroEconometricModels, Random

@@ -34,8 +34,8 @@ Uses NonlinearSolve.jl as the default Newton solver with block-tridiagonal spars
 - `max_iter::Int=100` — Newton iteration limit
 - `tol::Real=1e-8` — convergence tolerance (max abs residual)
 - `constraints::Vector{<:DSGEConstraint}` — variable bounds and nonlinear inequalities
-- `solver::Symbol` — `:nonlinearsolve` (default), `:ipopt` (NLP), or `:path` (MCP)
-- `algorithm` — NonlinearSolve.jl algorithm (default: `NewtonRaphson()`); ignored for JuMP solvers
+- `solver::Symbol` — `:nonlinearsolve` (default), `:nlopt` (SLSQP), `:ipopt` (NLP), or `:path` (MCP); auto-detected
+- `algorithm` — NonlinearSolve.jl algorithm (default: `NewtonRaphson()`); passed through to chosen backend
 """
 function perfect_foresight(spec::DSGESpec{FT};
         T_periods::Int=100,
@@ -67,12 +67,12 @@ function perfect_foresight(spec::DSGESpec{FT};
     if !isempty(constraints)
         _validate_constraints(spec, constraints)
         chosen = _select_solver(constraints, solver)
+
         if chosen == :nonlinearsolve
             any(c -> c isa NonlinearConstraint, constraints) &&
                 throw(ArgumentError(
                     "NonlinearSolve solver cannot handle NonlinearConstraint. " *
-                    "Use solver=:ipopt for nonlinear inequality constraints."))
-            # Solve unconstrained first, then check if bounds are violated
+                    "Use solver=:nlopt (default) or solver=:ipopt for nonlinear inequality constraints."))
             lower, upper = _extract_bounds(spec, constraints)
             pf = _nonlinearsolve_perfect_foresight(spec, T_periods, shocks;
                         max_iter=max_iter, tol=tol, algorithm=algorithm)
@@ -87,27 +87,25 @@ function perfect_foresight(spec::DSGESpec{FT};
                 end
             end
             bounds_ok && return pf
-            # Bounds violated: escalate to JuMP/Ipopt/PATH if available
-            if _path_available()
-                return _path_perfect_foresight(spec, T_periods, shocks, constraints)
-            elseif hasmethod(_jump_compute_steady_state, Tuple{DSGESpec, Vector})
-                return _jump_perfect_foresight(spec, T_periods, shocks, constraints)
-            end
-            @warn "Box constraints violated but JuMP/Ipopt not loaded. " *
-                  "Install JuMP + Ipopt for binding constraint support."
-            return pf
+            # Escalate to projected Newton (always available)
+            return _projected_newton_pf(spec, T_periods, shocks, lower, upper;
+                        max_iter=max_iter, tol=tol)
+        elseif chosen == :nlopt
+            return _nlopt_perfect_foresight(spec, T_periods, shocks, constraints;
+                        algorithm=algorithm)
         elseif chosen == :path
             _check_jump_loaded()
             any(c -> c isa NonlinearConstraint, constraints) &&
                 throw(ArgumentError(
                     "PATH solver cannot handle NonlinearConstraint. " *
-                    "Use solver=:ipopt or remove nonlinear constraints."))
+                    "Use solver=:nlopt or solver=:ipopt."))
             return _path_perfect_foresight(spec, T_periods, shocks, constraints)
         elseif chosen == :ipopt
             _check_jump_loaded()
             return _jump_perfect_foresight(spec, T_periods, shocks, constraints)
         else
-            throw(ArgumentError("Unknown solver :$chosen. Valid options: :nonlinearsolve, :path, :ipopt"))
+            throw(ArgumentError("Unknown solver :$chosen. " *
+                "Valid options: :nonlinearsolve, :nlopt, :path, :ipopt"))
         end
     end
 
@@ -198,6 +196,227 @@ function _nonlinearsolve_perfect_foresight(spec::DSGESpec{FT}, T_periods::Int,
     end
 
     PerfectForesightPath{FT}(path, deviations, converged, iter, spec)
+end
+
+# =============================================================================
+# Projected Newton solver for box-constrained perfect foresight
+# =============================================================================
+
+"""
+    _projected_newton_pf(spec, T_periods, shocks, lower, upper;
+                          max_iter=100, tol=1e-8)
+
+Box-constrained perfect foresight via projected Newton with Armijo backtracking.
+
+Uses the existing block-tridiagonal sparse Jacobian (`_pf_jacobian`) for the
+Newton step, then clamps to bounds. Preserves O(T·n) sparsity structure.
+"""
+function _projected_newton_pf(spec::DSGESpec{FT}, T_periods::Int,
+        shocks::Matrix{FT}, lower::Vector{FT}, upper::Vector{FT};
+        max_iter::Int=100, tol::Real=1e-8) where {FT<:AbstractFloat}
+
+    n = spec.n_endog
+    N = T_periods * n
+
+    # Stack bounds: repeat per-variable bounds across all periods
+    lower_stacked = repeat(lower, T_periods)
+    upper_stacked = repeat(upper, T_periods)
+
+    # Initial guess: steady state, clamped to bounds
+    x = repeat(spec.steady_state, T_periods)
+    x .= clamp.(x, lower_stacked, upper_stacked)
+
+    F = zeros(FT, N)
+    _pf_residual!(F, x, spec, shocks, T_periods)
+
+    # NCP natural residual: at interior points F=0; at lower bound F>=0; at upper bound F<=0
+    bound_tol = FT(1e-10)
+    function _ncp_residual(x_v, F_v)
+        ncp = FT(0)
+        for j in 1:N
+            at_lower = isfinite(lower_stacked[j]) && x_v[j] <= lower_stacked[j] + bound_tol
+            at_upper = isfinite(upper_stacked[j]) && x_v[j] >= upper_stacked[j] - bound_tol
+            if at_lower
+                ncp = max(ncp, max(FT(0), -F_v[j]))  # F should be >= 0
+            elseif at_upper
+                ncp = max(ncp, max(FT(0), F_v[j]))   # F should be <= 0
+            else
+                ncp = max(ncp, abs(F_v[j]))           # F should be = 0
+            end
+        end
+        return ncp
+    end
+
+    converged = false
+    iter = 0
+
+    for k in 1:max_iter
+        iter = k
+
+        # Build sparse Jacobian and compute Newton direction
+        J = _pf_jacobian(x, spec, shocks, T_periods)
+        d = -(J \ F)  # Newton step (sparse LU)
+
+        # Damped step with backtracking on NCP residual
+        α = FT(1.0)
+        x_trial = similar(x)
+        F_trial = similar(F)
+        ncp_old = _ncp_residual(x, F)
+
+        for _ls in 1:20
+            x_trial .= clamp.(x .+ α .* d, lower_stacked, upper_stacked)
+            _pf_residual!(F_trial, x_trial, spec, shocks, T_periods)
+            ncp_new = _ncp_residual(x_trial, F_trial)
+            if ncp_new < ncp_old || ncp_new < FT(tol)
+                break
+            end
+            α *= FT(0.5)
+        end
+
+        x .= clamp.(x .+ α .* d, lower_stacked, upper_stacked)
+        _pf_residual!(F, x, spec, shocks, T_periods)
+
+        if _ncp_residual(x, F) < FT(tol)
+            converged = true
+            break
+        end
+    end
+
+    if !converged
+        throw(ErrorException(
+            "Projected Newton PF did not converge after $max_iter iterations " *
+            "(||F|| = $(sqrt(merit))). Try solver=:ipopt with JuMP + Ipopt."))
+    end
+
+    # Reshape solution
+    path_full = reshape(copy(x), n, T_periods)'
+    deviations_full = path_full .- spec.steady_state'
+
+    if spec.augmented
+        orig_idx = _original_var_indices(spec)
+        path = Matrix{FT}(path_full[:, orig_idx])
+        deviations = Matrix{FT}(deviations_full[:, orig_idx])
+    else
+        path = Matrix{FT}(path_full)
+        deviations = Matrix{FT}(deviations_full)
+    end
+
+    PerfectForesightPath{FT}(path, deviations, converged, iter, spec)
+end
+
+# =============================================================================
+# NLopt solver for nonlinear-constrained perfect foresight
+# =============================================================================
+
+"""
+    _nlopt_perfect_foresight(spec, T_periods, shocks, constraints; algorithm=nothing)
+
+Perfect foresight with nonlinear inequality constraints via NLopt LD_SLSQP.
+
+Formulates as a feasibility problem with equality constraints (model equations)
+and inequality constraints (NonlinearConstraint). Box bounds from VariableBound.
+"""
+function _nlopt_perfect_foresight(spec::DSGESpec{FT}, T_periods::Int,
+        shocks::Matrix{FT}, constraints::Vector;
+        algorithm=nothing) where {FT<:AbstractFloat}
+
+    n = spec.n_endog
+    n_ε = spec.n_exog
+    N = T_periods * n
+    θ = spec.param_values
+    y_ss = Float64.(spec.steady_state)
+    shocks_f = Float64.(shocks)
+
+    # Warn for large problems
+    if N > 1000
+        @warn "NLopt PF with $N decision variables may be slow. " *
+              "Consider solver=:ipopt with JuMP + Ipopt for large problems."
+    end
+
+    alg_sym = algorithm !== nothing ? algorithm : :LD_SLSQP
+    opt = NLopt.Opt(alg_sym, N)
+
+    # Objective: constant zero (feasibility problem)
+    NLopt.min_objective!(opt, (x, grad) -> begin
+        if length(grad) > 0
+            fill!(grad, 0.0)
+        end
+        return 0.0
+    end)
+
+    # Box bounds: stack per-variable bounds across all periods
+    lower, upper = _extract_bounds(spec, constraints)
+    NLopt.lower_bounds!(opt, repeat(Float64.(lower), T_periods))
+    NLopt.upper_bounds!(opt, repeat(Float64.(upper), T_periods))
+
+    # Equality constraints: model equations f_i(y_t, y_{t-1}, y_{t+1}, ε_t, θ) = 0
+    for t in 1:T_periods
+        for i in 1:n
+            pf_eq = _build_pf_equation(spec.residual_fns[i], n, n_ε, θ)
+            cb = _pf_nlopt_wrap(pf_eq, t, n, n_ε, T_periods, y_ss, shocks_f)
+            NLopt.equality_constraint!(opt, cb, 1e-8)
+        end
+    end
+
+    # Inequality constraints: NonlinearConstraint fn(...) <= 0
+    for c in constraints
+        if c isa NonlinearConstraint
+            for t in 1:T_periods
+                pf_nlcon = _build_pf_nlcon(c.fn, n, n_ε, θ)
+                cb = _pf_nlopt_wrap(pf_nlcon, t, n, n_ε, T_periods, y_ss, shocks_f)
+                NLopt.inequality_constraint!(opt, cb, 1e-8)
+            end
+        end
+    end
+
+    # Tolerances
+    NLopt.xtol_rel!(opt, 1e-10)
+    NLopt.ftol_rel!(opt, 1e-10)
+    NLopt.maxeval!(opt, 10000)
+
+    # Initial guess: steady state, clamped to bounds
+    x0 = repeat(y_ss, T_periods)
+    lo_stacked = repeat(Float64.(lower), T_periods)
+    hi_stacked = repeat(Float64.(upper), T_periods)
+    x0 .= clamp.(x0, lo_stacked, hi_stacked)
+
+    (min_val, min_x, ret) = NLopt.optimize(opt, x0)
+
+    # Check solution quality: evaluate residual and verify equations are approximately satisfied
+    x_sol = Vector{FT}(min_x)
+    F_check = zeros(FT, N)
+    _pf_residual!(F_check, x_sol, spec, shocks, N ÷ n)
+    max_resid = maximum(abs, F_check)
+
+    if ret ∉ (:SUCCESS, :FTOL_REACHED, :XTOL_REACHED, :STOPVAL_REACHED, :MAXEVAL_REACHED, :ROUNDOFF_LIMITED)
+        throw(ErrorException(
+            "NLopt PF solver failed (return code: $ret). " *
+            "Try solver=:ipopt with JuMP + Ipopt for large-scale NLP."))
+    end
+
+    if max_resid > 1e-4
+        throw(ErrorException(
+            "NLopt PF solver did not find a feasible solution (max |F| = $max_resid, return code: $ret). " *
+            "Try solver=:ipopt with JuMP + Ipopt for large-scale NLP."))
+    end
+
+    converged = max_resid < FT(1e-6)
+    x = Vector{FT}(min_x)
+
+    # Reshape solution
+    path_full = reshape(copy(x), n, T_periods)'
+    deviations_full = path_full .- spec.steady_state'
+
+    if spec.augmented
+        orig_idx = _original_var_indices(spec)
+        path = Matrix{FT}(path_full[:, orig_idx])
+        deviations = Matrix{FT}(deviations_full[:, orig_idx])
+    else
+        path = Matrix{FT}(path_full)
+        deviations = Matrix{FT}(deviations_full)
+    end
+
+    PerfectForesightPath{FT}(path, deviations, converged, 0, spec)
 end
 
 # =============================================================================

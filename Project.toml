@@ -1,13 +1,15 @@
 name = "MacroEconometricModels"
 uuid = "14a6ec33-bcac-448e-845f-2fb6769698f1"
-version = "0.4.0"
+version = "0.4.1"
 authors = ["Wookyung Chung <chung@friedman.jp>"]
 
 [deps]
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 FFTW = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"
+ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+NLopt = "76087f3c-5699-56af-9a33-bf431cd00edd"
 NonlinearSolve = "8913a72c-1f9b-4ce2-8d82-65094dcecaec"
 Optim = "429524aa-4258-5aef-a3af-852621145aeb"
 PrettyTables = "08abe8d2-0d0c-5749-adfa-8a2ac140af0d"
@@ -30,8 +32,10 @@ MacroEconometricModelsPATHExt = ["JuMP", "PATHSolver"]
 DataFrames = "1"
 Distributions = "0.25"
 FFTW = "1.5"
+ForwardDiff = "1"
 Ipopt = "1"
 JuMP = "1"
+NLopt = "1"
 NonlinearSolve = "4"
 Optim = "1, 2"
 PATHSolver = "1"

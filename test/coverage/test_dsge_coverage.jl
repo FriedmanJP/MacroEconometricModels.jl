@@ -219,9 +219,9 @@ end
     result = MacroEconometricModels._select_solver([vb], nothing)
     @test result == :nonlinearsolve
 
-    # With NonlinearConstraint -> always :ipopt
+    # With NonlinearConstraint -> :ipopt when JuMP loaded, :nlopt otherwise
     nc = nonlinear_constraint((y, yl, yle, e, theta) -> y[1]; label="test")
-    @test MacroEconometricModels._select_solver([nc], nothing) == :ipopt
+    @test MacroEconometricModels._select_solver([nc], nothing) ∈ (:nlopt, :ipopt)
 end
 
 @testset "constraints.jl: _extract_bounds" begin

@@ -5066,6 +5066,150 @@ end
     @test pf.converged
 end
 
+@testset "Box-constrained SS via Optim.jl" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+    # SS is 0; lower=0.5 forces Optim to find constrained minimum
+    spec_c = compute_steady_state(spec;
+        constraints=[variable_bound(:y, lower=0.5)], solver=:optim)
+    @test spec_c.steady_state[1] >= 0.5 - 1e-4
+end
+
+@testset "Box-constrained SS via NLopt" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+    spec_c = compute_steady_state(spec;
+        constraints=[variable_bound(:y, lower=0.5)], solver=:nlopt)
+    @test spec_c.steady_state[1] >= 0.5 - 1e-4
+end
+
+@testset "Nonlinear-constrained SS via NLopt" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+    # Box bound + nonlinear constraint: y >= 0.3 AND (y - 0.5) <= 0 → y <= 0.5
+    constraints = [
+        variable_bound(:y, lower=0.3),
+        nonlinear_constraint((y, yl, yld, e, th) -> y[1] - 0.5; label="upper_nl")
+    ]
+    spec_c = compute_steady_state(spec; constraints=constraints, solver=:nlopt)
+    @test spec_c.steady_state[1] >= 0.3 - 1e-4
+    @test spec_c.steady_state[1] <= 0.5 + 1e-4
+end
+
+@testset "SS escalation: NonlinearSolve → Optim.jl" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+    # SS is 0; lower=0.5 should trigger escalation from NonlinearSolve to Optim
+    spec_c = compute_steady_state(spec;
+        constraints=[variable_bound(:y, lower=0.5)], solver=:nonlinearsolve)
+    @test spec_c.steady_state[1] >= 0.5 - 1e-3
+end
+
+@testset "Box-constrained PF via projected Newton" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 1.0
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+    shocks = zeros(30, 1)
+    shocks[1, 1] = -3.0
+    # Binding: unconstrained goes below 0; projected Newton should enforce y >= 0
+    pf = solve(spec; method=:perfect_foresight, T_periods=30, shock_path=shocks,
+               constraints=[variable_bound(:y, lower=0.0)])
+    @test pf isa PerfectForesightPath
+    @test pf.converged
+    @test all(pf.path[:, 1] .>= -1e-4)
+end
+
+@testset "PF escalation: NonlinearSolve → projected Newton" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 1.0
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+    shocks = zeros(20, 1)
+    shocks[1, 1] = -3.0
+    # Escalation path: NonlinearSolve unconstrained → bounds violated → projected Newton
+    pf = solve(spec; method=:perfect_foresight, T_periods=20, shock_path=shocks,
+               constraints=[variable_bound(:y, lower=0.0)], solver=:nonlinearsolve)
+    @test pf isa PerfectForesightPath
+    @test pf.converged
+    @test all(pf.path[:, 1] .>= -1e-4)
+    end
+end
+
+@testset "NLopt PF with mixed constraints" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 1.0
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+    # Small problem (5 periods) — NLopt SLSQP can handle this
+    shocks = zeros(5, 1)
+    shocks[1, 1] = -0.5
+    # Box bound + nonlinear constraint: -1.0 <= y <= 1.0
+    constraints = [
+        variable_bound(:y, lower=-1.0),
+        nonlinear_constraint((y, yl, yld, e, th) -> y[1] - 1.0; label="cap_y")
+    ]
+    pf = solve(spec; method=:perfect_foresight, T_periods=5, shock_path=shocks,
+               constraints=constraints, solver=:nlopt)
+    @test pf isa PerfectForesightPath
+    @test all(pf.path[:, 1] .>= -1.0 - 1e-3)
+    @test all(pf.path[:, 1] .<= 1.0 + 1e-3)
+end
+
+@testset "Explicit solver=:ipopt/:path errors without JuMP" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+    constraints = [variable_bound(:y, lower=0.0)]
+    # These should error if JuMP is not loaded (in CI they may be loaded)
+    if !hasmethod(MacroEconometricModels._jump_compute_steady_state, Tuple{DSGESpec, Vector})
+        @test_throws ArgumentError compute_steady_state(spec;
+            constraints=constraints, solver=:ipopt)
+    end
+end
+
 @testset "Solver auto-detection" begin
     bounds_only = [variable_bound(:y, lower=0.0)]
     mixed = [variable_bound(:y, lower=0.0),
@@ -5074,12 +5218,15 @@ end
     # Bounds-only → :nonlinearsolve (default)
     @test MacroEconometricModels._select_solver(bounds_only, nothing) == :nonlinearsolve
 
-    # With NonlinearConstraints → always :ipopt
-    @test MacroEconometricModels._select_solver(mixed, nothing) == :ipopt
+    # With NonlinearConstraints → :nlopt when JuMP not loaded, :ipopt when loaded
+    result = MacroEconometricModels._select_solver(mixed, nothing)
+    @test result ∈ (:nlopt, :ipopt)
 
     # User override always wins
     @test MacroEconometricModels._select_solver(bounds_only, :ipopt) == :ipopt
     @test MacroEconometricModels._select_solver(mixed, :path) == :path
+    @test MacroEconometricModels._select_solver(bounds_only, :optim) == :optim
+    @test MacroEconometricModels._select_solver(mixed, :nlopt) == :nlopt
 end
 
 # JuMP integration tests — only run if JuMP + Ipopt are available

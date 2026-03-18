@@ -156,6 +156,18 @@ classification_table
 
 ---
 
+## Ordered and Multinomial Models
+
+```@docs
+estimate_ologit
+estimate_oprobit
+estimate_mlogit
+brant_test
+hausman_iia
+```
+
+---
+
 ## VAR Estimation
 
 ### Frequentist Estimation
@@ -677,10 +689,27 @@ solve_lyapunov
 analytical_moments
 ```
 
-### Estimation
+### Global Solution Methods
+
+```@docs
+MacroEconometricModels.vfi_solver
+```
+
+### DSGE GMM Estimation
 
 ```@docs
 estimate_dsge
+```
+
+### DSGE Bayesian Estimation
+
+```@docs
+estimate_dsge_bayes
+posterior_summary
+marginal_likelihood
+bayes_factor
+prior_posterior_table
+posterior_predictive
 ```
 
 ### Occasionally Binding Constraints
@@ -814,4 +843,135 @@ Order   = [:function]
 Modules = [MacroEconometricModels]
 Pages   = ["core/utils.jl"]
 Order   = [:function]
+```
+
+---
+
+## Panel Regression
+
+### Panel Linear Models
+
+```@docs
+estimate_xtreg
+```
+
+### Panel Instrumental Variables
+
+```@docs
+estimate_xtiv
+```
+
+### Panel Discrete Choice
+
+```@docs
+estimate_xtlogit
+estimate_xtprobit
+```
+
+### Panel Specification Tests
+
+```@docs
+hausman_test
+breusch_pagan_test
+pesaran_cd_test
+wooldridge_ar_test
+modified_wald_test
+f_test_fe
+```
+
+---
+
+## Spectral Analysis
+
+### Spectral Estimation
+
+```@docs
+periodogram
+spectral_density
+cross_spectrum
+```
+
+### Autocorrelation Functions
+
+```@docs
+acf
+pacf
+ccf
+acf_pacf
+```
+
+### Spectral Diagnostics
+
+```@docs
+coherence
+phase
+gain
+band_power
+ideal_bandpass
+transfer_function
+```
+
+---
+
+## Portmanteau and Serial Correlation Tests
+
+```@docs
+ljung_box_test
+box_pierce_test
+durbin_watson_test
+bartlett_white_noise_test
+fisher_test
+```
+
+---
+
+## Structural Break Tests
+
+```@docs
+andrews_test
+bai_perron_test
+factor_break_test
+```
+
+---
+
+## Panel Unit Root Tests
+
+```@docs
+panic_test
+pesaran_cips_test
+moon_perron_test
+panel_unit_root_summary
+```
+
+---
+
+## FAVAR
+
+```@docs
+estimate_favar
+favar_panel_irf
+favar_panel_forecast
+```
+
+---
+
+## Structural Dynamic Factor Models
+
+```@docs
+estimate_structural_dfm
+sdfm_panel_irf
+```
+
+---
+
+## Panel Data Utilities
+
+```@docs
+panel_lag
+panel_lead
+panel_diff
+add_panel_lag
+add_panel_lead
+add_panel_diff
 ```

@@ -16,7 +16,7 @@ A comprehensive Julia package for macroeconomic time series analysis.
 
 **Panel:** Panel VAR (FD-GMM, System GMM, FE-OLS), Panel Regression (FE/RE/FD/Between/CRE/AB/BB), Panel IV (FE-IV/RE-IV/FD-IV/Hausman-Taylor), Panel Logit/Probit, Difference-in-Differences (TWFE, Callaway-Sant'Anna, Sun-Abraham, BJS, dCDH, HonestDiD), Event Study LP, LP-DiD (Dube et al. 2025)
 
-**DSGE:** 7 solvers (Gensys, Blanchard-Kahn, Klein, 2nd/3rd-order perturbation with pruning, Chebyshev projection, PFI, VFI), constrained solvers (Ipopt NLP, PATH MCP for ZLB/binding bounds), OccBin, GMM/SMM estimation, Bayesian estimation (SMC/SMC²/MH) with posterior IRF/FEVD credible bands
+**DSGE:** 7 solvers (Gensys, Blanchard-Kahn, Klein, 2nd/3rd-order perturbation with pruning, Chebyshev projection, PFI, VFI), built-in constrained solvers (Optim.jl, NLopt.jl, projected Newton) with optional JuMP+Ipopt/PATH, OccBin, GMM/SMM estimation, Bayesian estimation (SMC/SMC²/MH) with posterior IRF/FEVD credible bands
 
 **Cross-Sectional:** OLS, WLS, IV/2SLS, Logit, Probit, Ordered Logit/Probit, Multinomial Logit (MLE), marginal effects (AME/MEM/MER)
 
@@ -145,13 +145,13 @@ Pkg.add("MacroEconometricModels")
 
 ### DSGE
 - **Model specification** - `@dsge` macro with declarative syntax for parameters, variables, shocks, and equilibrium equations
-- **Steady state** - Numerical solver (Newton's method) or analytical closed-form; optional JuMP constraints (`variable_bound`, `nonlinear_constraint`)
+- **Steady state** - Numerical solver (Newton's method) or analytical closed-form; built-in constrained solvers (Optim.jl box constraints, NLopt.jl nonlinear inequalities) with optional JuMP backends
 - **Linear solvers** - Gensys (Sims 2002), Blanchard-Kahn (1980), Klein (2000) via unified `solve(spec; method=...)` interface
 - **Higher-order perturbation** - 2nd-order (Schmitt-Grohe & Uribe 2004) and 3rd-order with Andreasen, Fernandez-Villaverde & Rubio-Ramirez (2018) pruned simulation; Kim et al. (2008) 2nd-order pruning
 - **Global methods** - Chebyshev collocation (tensor/Smolyak grids, Gauss-Hermite quadrature; Judd 1998); Policy Function Iteration (Coleman 1990, Rendahl 2017); Value Function Iteration (Stokey, Lucas & Prescott 1989) with Howard improvement steps and Anderson acceleration (Walker & Ni 2011)
   - Opt-in multi-threading for VFI, PFI, and collocation grid evaluation
-- **Constrained solvers** - Auto-detect PATH (MCP, binding bounds/ZLB; Ferris & Munson 1999) or Ipopt (NLP, nonlinear inequalities) via JuMP extensions
-- **Perfect foresight** - Newton solver on stacked system with block-tridiagonal Jacobian; optional PATH/Ipopt constraints
+- **Constrained solvers** - Built-in projected Newton (box-constrained PF), Optim.jl Fminbox (box-constrained SS), NLopt.jl SLSQP (nonlinear inequalities); optional JuMP+Ipopt (NLP) and PATH (MCP) backends
+- **Perfect foresight** - Newton solver on stacked system with block-tridiagonal Jacobian; built-in box and nonlinear constraint support
 - **OccBin** - Occasionally binding constraints via piecewise-linear regime switching (Guerrieri & Iacoviello 2015)
 - **Simulation & IRF** - `simulate`, `irf`, `fevd` for linear, pruned higher-order, and projection solutions; Bayesian posterior credible bands (dual 68%/90%) via `irf(::BayesianDSGE)`, `fevd(::BayesianDSGE)`, `simulate(::BayesianDSGE)`
 - **Historical decomposition** - `historical_decomposition(sol, data, observables)` for linear (Kalman/RTS smoother), nonlinear (FFBSi particle smoother + counterfactual), and Bayesian (posterior draws) DSGE models; standalone `dsge_smoother` and `dsge_particle_smoother`
