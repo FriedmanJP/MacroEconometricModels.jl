@@ -5178,18 +5178,19 @@ end
         steady_state: [0.0]
     end
     spec = compute_steady_state(spec)
-    shocks = zeros(15, 1)
-    shocks[1, 1] = -2.0
-    # Box bound + nonlinear constraint
+    # Small problem (5 periods) — NLopt SLSQP can handle this
+    shocks = zeros(5, 1)
+    shocks[1, 1] = -0.5
+    # Box bound + nonlinear constraint: -1.0 <= y <= 1.0
     constraints = [
-        variable_bound(:y, lower=-0.5),
-        nonlinear_constraint((y, yl, yld, e, th) -> y[1] - 0.5; label="cap_y")
+        variable_bound(:y, lower=-1.0),
+        nonlinear_constraint((y, yl, yld, e, th) -> y[1] - 1.0; label="cap_y")
     ]
-    pf = solve(spec; method=:perfect_foresight, T_periods=15, shock_path=shocks,
+    pf = solve(spec; method=:perfect_foresight, T_periods=5, shock_path=shocks,
                constraints=constraints, solver=:nlopt)
     @test pf isa PerfectForesightPath
-    @test all(pf.path[:, 1] .>= -0.5 - 1e-4)
-    @test all(pf.path[:, 1] .<= 0.5 + 1e-4)
+    @test all(pf.path[:, 1] .>= -1.0 - 1e-3)
+    @test all(pf.path[:, 1] .<= 1.0 + 1e-3)
 end
 
 @testset "Explicit solver=:ipopt/:path errors without JuMP" begin

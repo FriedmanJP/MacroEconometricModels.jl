@@ -228,11 +228,27 @@ function _projected_newton_pf(spec::DSGESpec{FT}, T_periods::Int,
 
     F = zeros(FT, N)
     _pf_residual!(F, x, spec, shocks, T_periods)
-    merit = dot(F, F)
+
+    # NCP natural residual: at interior points F=0; at lower bound F>=0; at upper bound F<=0
+    bound_tol = FT(1e-10)
+    function _ncp_residual(x_v, F_v)
+        ncp = FT(0)
+        for j in 1:N
+            at_lower = isfinite(lower_stacked[j]) && x_v[j] <= lower_stacked[j] + bound_tol
+            at_upper = isfinite(upper_stacked[j]) && x_v[j] >= upper_stacked[j] - bound_tol
+            if at_lower
+                ncp = max(ncp, max(FT(0), -F_v[j]))  # F should be >= 0
+            elseif at_upper
+                ncp = max(ncp, max(FT(0), F_v[j]))   # F should be <= 0
+            else
+                ncp = max(ncp, abs(F_v[j]))           # F should be = 0
+            end
+        end
+        return ncp
+    end
 
     converged = false
     iter = 0
-    c_armijo = FT(1e-4)
 
     for k in 1:max_iter
         iter = k
@@ -241,18 +257,17 @@ function _projected_newton_pf(spec::DSGESpec{FT}, T_periods::Int,
         J = _pf_jacobian(x, spec, shocks, T_periods)
         d = -(J \ F)  # Newton step (sparse LU)
 
-        # Armijo backtracking line search on merit = ||F(x)||^2
-        # Directional derivative: ∇merit · d = 2 * F' * J * d = -2 * F' * F (at Newton step)
-        dir_deriv = FT(2) * dot(F, J * d)
+        # Damped step with backtracking on NCP residual
         α = FT(1.0)
         x_trial = similar(x)
         F_trial = similar(F)
+        ncp_old = _ncp_residual(x, F)
 
         for _ls in 1:20
             x_trial .= clamp.(x .+ α .* d, lower_stacked, upper_stacked)
             _pf_residual!(F_trial, x_trial, spec, shocks, T_periods)
-            merit_trial = dot(F_trial, F_trial)
-            if merit_trial <= merit + c_armijo * α * dir_deriv
+            ncp_new = _ncp_residual(x_trial, F_trial)
+            if ncp_new < ncp_old || ncp_new < FT(tol)
                 break
             end
             α *= FT(0.5)
@@ -260,9 +275,8 @@ function _projected_newton_pf(spec::DSGESpec{FT}, T_periods::Int,
 
         x .= clamp.(x .+ α .* d, lower_stacked, upper_stacked)
         _pf_residual!(F, x, spec, shocks, T_periods)
-        merit = dot(F, F)
 
-        if sqrt(merit) < FT(tol)
+        if _ncp_residual(x, F) < FT(tol)
             converged = true
             break
         end
@@ -358,7 +372,7 @@ function _nlopt_perfect_foresight(spec::DSGESpec{FT}, T_periods::Int,
     # Tolerances
     NLopt.xtol_rel!(opt, 1e-10)
     NLopt.ftol_rel!(opt, 1e-10)
-    NLopt.maxeval!(opt, 3000)
+    NLopt.maxeval!(opt, 10000)
 
     # Initial guess: steady state, clamped to bounds
     x0 = repeat(y_ss, T_periods)
@@ -368,13 +382,25 @@ function _nlopt_perfect_foresight(spec::DSGESpec{FT}, T_periods::Int,
 
     (min_val, min_x, ret) = NLopt.optimize(opt, x0)
 
-    if ret ∉ (:SUCCESS, :FTOL_REACHED, :XTOL_REACHED, :STOPVAL_REACHED)
+    # Check solution quality: evaluate residual and verify equations are approximately satisfied
+    x_sol = Vector{FT}(min_x)
+    F_check = zeros(FT, N)
+    _pf_residual!(F_check, x_sol, spec, shocks, N ÷ n)
+    max_resid = maximum(abs, F_check)
+
+    if ret ∉ (:SUCCESS, :FTOL_REACHED, :XTOL_REACHED, :STOPVAL_REACHED, :MAXEVAL_REACHED, :ROUNDOFF_LIMITED)
         throw(ErrorException(
-            "NLopt PF solver did not converge (return code: $ret). " *
+            "NLopt PF solver failed (return code: $ret). " *
             "Try solver=:ipopt with JuMP + Ipopt for large-scale NLP."))
     end
 
-    converged = true
+    if max_resid > 1e-4
+        throw(ErrorException(
+            "NLopt PF solver did not find a feasible solution (max |F| = $max_resid, return code: $ret). " *
+            "Try solver=:ipopt with JuMP + Ipopt for large-scale NLP."))
+    end
+
+    converged = max_resid < FT(1e-6)
     x = Vector{FT}(min_x)
 
     # Reshape solution
