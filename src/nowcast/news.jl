@@ -17,7 +17,8 @@ releases (news), data revisions, and parameter re-estimation.
 
 """
     nowcast_news(X_new, X_old, model::NowcastDFM, target_period;
-                 target_var=size(X_new,2), groups=nothing) -> NowcastNews{T}
+                 target_var=size(X_new,2), groups=nothing,
+                 group_names=nothing) -> NowcastNews{T}
 
 Compute news decomposition between two data vintages.
 
@@ -34,6 +35,7 @@ and decomposes the total revision.
 # Keyword Arguments
 - `target_var::Int` — target variable index (default: last column)
 - `groups::Union{Vector{Int},Nothing}` — group assignment per variable (for aggregation)
+- `group_names::Union{Vector{String},Nothing}` — labels for each group (auto-generated if omitted)
 
 # Returns
 `NowcastNews{T}` with per-release impacts and total decomposition.
@@ -45,7 +47,8 @@ and decomposes the total revision.
 function nowcast_news(X_new::AbstractMatrix, X_old::AbstractMatrix,
                       model::NowcastDFM{T}, target_period::Int;
                       target_var::Int=size(X_new, 2),
-                      groups::Union{Vector{Int},Nothing}=nothing) where {T<:AbstractFloat}
+                      groups::Union{Vector{Int},Nothing}=nothing,
+                      group_names::Union{Vector{String},Nothing}=nothing) where {T<:AbstractFloat}
     T_obs, N = size(X_new)
     size(X_old) == (T_obs, N) || throw(ArgumentError("X_new and X_old must have same size"))
     1 <= target_period <= T_obs || throw(ArgumentError("target_period out of range"))
@@ -121,6 +124,7 @@ function nowcast_news(X_new::AbstractMatrix, X_old::AbstractMatrix,
                 group_impacts[g] += impact_news[k]
             end
         end
+        gn = group_names !== nothing ? group_names : ["Group $i" for i in 1:n_groups]
     else
         # Default: one group per variable
         group_impacts = zeros(T, N)
@@ -128,8 +132,9 @@ function nowcast_news(X_new::AbstractMatrix, X_old::AbstractMatrix,
             v_k = idx[2]
             group_impacts[v_k] += impact_news[k]
         end
+        gn = group_names !== nothing ? group_names : ["Var$i" for i in 1:N]
     end
 
     NowcastNews{T}(now_old, now_new, impact_news, impact_revision,
-                   impact_reestimation, group_impacts, variable_names)
+                   impact_reestimation, group_impacts, gn, variable_names)
 end

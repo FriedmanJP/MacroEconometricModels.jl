@@ -190,6 +190,7 @@ data revisions, and parameter re-estimation.
 - `impact_revision::T` — data revision impact
 - `impact_reestimation::T` — parameter re-estimation impact (residual)
 - `group_impacts::Vector{T}` — news aggregated by variable group
+- `group_names::Vector{String}` — labels for each group in group_impacts
 - `variable_names::Vector{String}` — names for each news release
 """
 struct NowcastNews{T<:AbstractFloat}
@@ -199,6 +200,7 @@ struct NowcastNews{T<:AbstractFloat}
     impact_revision::T
     impact_reestimation::T
     group_impacts::Vector{T}
+    group_names::Vector{String}
     variable_names::Vector{String}
 end
 
