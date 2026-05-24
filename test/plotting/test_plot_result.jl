@@ -344,6 +344,60 @@ using Test, Random, DataFrames
         @test occursin("Nowcast", p.html)
     end
 
+    @testset "NowcastResult view=:default with DFM factors" begin
+        nM = 4; nQ = 1
+        Y_nc = randn(Random.MersenneTwister(70), 100, nM + nQ)
+        Y_nc[end, end] = NaN
+        dfm_nc = nowcast_dfm(Y_nc, nM, nQ; r=2, p=1)
+        nr = nowcast(dfm_nc)
+        p = plot_result(nr; view=:default)
+        check_plot(p)
+        @test occursin("Factor 1", p.html)
+        @test occursin("Factor 2", p.html)
+    end
+
+    @testset "NowcastResult view=:heatmap" begin
+        nM = 4; nQ = 1
+        Y_nc = randn(Random.MersenneTwister(77), 100, nM + nQ)
+        Y_nc[end, end] = NaN
+        Y_nc[end-1:end, 3] .= NaN
+        dfm_nc = nowcast_dfm(Y_nc, nM, nQ; r=2, p=1)
+        nr = nowcast(dfm_nc)
+        p = plot_result(nr; view=:heatmap)
+        check_plot(p)
+        @test occursin("interpolateRdBu", p.html)
+        @test occursin("#d9d9d9", p.html)
+    end
+
+    @testset "NowcastResult view=:contributions" begin
+        nM = 4; nQ = 1
+        Y_nc = randn(Random.MersenneTwister(71), 100, nM + nQ)
+        Y_nc[end, end] = NaN
+        dfm_nc = nowcast_dfm(Y_nc, nM, nQ; r=2, p=1)
+        nr = nowcast(dfm_nc)
+        p = plot_result(nr; view=:contributions)
+        check_plot(p)
+        @test occursin("Contribution", p.html) || occursin("contribution", p.html)
+    end
+
+    @testset "NowcastResult view=:contributions requires DFM" begin
+        rng = Random.MersenneTwister(72)
+        Y = randn(rng, 60, 4)
+        Y[55:60, 3:4] .= NaN
+        m = nowcast_bvar(Y, 2, 2; lags=2, max_iter=20)
+        nr = nowcast(m)
+        @test_throws ArgumentError plot_result(nr; view=:contributions)
+    end
+
+    @testset "NowcastResult invalid view" begin
+        nM = 4; nQ = 1
+        Y_nc = randn(Random.MersenneTwister(73), 100, nM + nQ)
+        Y_nc[end, end] = NaN
+        dfm_nc = nowcast_dfm(Y_nc, nM, nQ; r=2, p=1)
+        nr = nowcast(dfm_nc)
+        @test_throws ArgumentError plot_result(nr; view=:bad)
+    end
+
     @testset "NowcastNews" begin
         X_old = randn(100, 5)
         X_old[end, end] = NaN
