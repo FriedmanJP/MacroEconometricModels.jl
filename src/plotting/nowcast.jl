@@ -88,16 +88,41 @@ end
 # =============================================================================
 
 """
-    plot_result(nn::NowcastNews; title="", save_path=nothing)
+    plot_result(nn::NowcastNews; view=:releases, title="", save_path=nothing)
 
-Plot nowcast news decomposition: horizontal bar chart of per-release impact.
+Plot nowcast news decomposition.
+
+# Views
+- `:releases` — horizontal bar chart of per-release impact (default)
+- `:groups` — stacked bar chart of group impacts
+- `:individual` — horizontal bar chart sorted by absolute impact
 """
 function plot_result(nn::NowcastNews{T};
-                     title::String="", save_path::Union{String,Nothing}=nothing) where {T}
+                     view::Symbol=:releases,
+                     title::String="",
+                     save_path::Union{String,Nothing}=nothing) where {T}
+    if view == :releases
+        p = _plot_news_releases(nn; title=title)
+    elseif view == :groups
+        p = _plot_news_groups(nn; title=title)
+    elseif view == :individual
+        p = _plot_news_individual(nn; title=title)
+    else
+        throw(ArgumentError("Unknown view: $view. Expected :releases, :groups, or :individual"))
+    end
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+function _news_title(nn::NowcastNews{T}, prefix::String) where {T}
+    delta = nn.new_nowcast - nn.old_nowcast
+    isempty(prefix) ? "Nowcast News: $(round(nn.old_nowcast, digits=3)) → $(round(nn.new_nowcast, digits=3)) (Δ = $(round(delta, digits=3)))" : prefix
+end
+
+function _plot_news_releases(nn::NowcastNews{T}; title::String="") where {T}
     id = _next_plot_id("news")
     n_releases = length(nn.impact_news)
 
-    # Build bar data (use variable names as x labels)
     rows = Vector{Pair{String,String}}[]
     for i in 1:n_releases
         label = i <= length(nn.variable_names) ? nn.variable_names[i] : "Release $i"
@@ -112,12 +137,75 @@ function plot_result(nn::NowcastNews{T};
     js = _render_bar_js(id, data_json, s_json; mode="grouped",
                         xlabel="", ylabel="Impact")
 
-    delta = nn.new_nowcast - nn.old_nowcast
-    if isempty(title)
-        title = "Nowcast News: $(round(nn.old_nowcast, digits=3)) → $(round(nn.new_nowcast, digits=3)) (Δ = $(round(delta, digits=3)))"
+    _make_plot([_PanelSpec(id, "Per-Release Impact", js)];
+               title=_news_title(nn, title))
+end
+
+function _plot_news_groups(nn::NowcastNews{T}; title::String="") where {T}
+    id = _next_plot_id("news_grp")
+    n_groups = length(nn.group_impacts)
+
+    bar_labels = String["News"]
+    has_other = abs(nn.impact_revision) + abs(nn.impact_reestimation) > T(1e-10)
+    if has_other
+        push!(bar_labels, "Revision + Re-est.")
     end
 
-    p = _make_plot([_PanelSpec(id, "Per-Release Impact", js)]; title=title)
-    save_path !== nothing && save_plot(p, save_path)
-    p
+    rows = Vector{Pair{String,String}}[]
+
+    row_news = Pair{String,String}["x" => _json("News")]
+    for g in 1:n_groups
+        push!(row_news, "g$g" => _json(nn.group_impacts[g]))
+    end
+    push!(rows, row_news)
+
+    if has_other
+        row_other = Pair{String,String}["x" => _json("Revision + Re-est.")]
+        for g in 1:n_groups
+            push!(row_other, "g$g" => _json(g == 1 ? nn.impact_revision + nn.impact_reestimation : zero(T)))
+        end
+        push!(rows, row_other)
+    end
+
+    data_json = _json_array_of_objects(rows)
+
+    names = String[]
+    colors = String[]
+    keys_arr = String[]
+    for g in 1:n_groups
+        push!(names, g <= length(nn.group_names) ? nn.group_names[g] : "Group $g")
+        push!(colors, _PLOT_COLORS[mod1(g, length(_PLOT_COLORS))])
+        push!(keys_arr, "g$g")
+    end
+    s_json = _series_json(names, colors; keys=keys_arr)
+
+    js = _render_bar_js(id, data_json, s_json; mode="stacked",
+                        xlabel="", ylabel="Impact")
+
+    _make_plot([_PanelSpec(id, "News by Group", js)];
+               title=_news_title(nn, title))
+end
+
+function _plot_news_individual(nn::NowcastNews{T}; title::String="") where {T}
+    id = _next_plot_id("news_ind")
+    n_releases = length(nn.impact_news)
+
+    sorted_idx = sortperm(abs.(nn.impact_news), rev=true)
+
+    rows = Vector{Pair{String,String}}[]
+    for i in sorted_idx
+        label = i <= length(nn.variable_names) ? nn.variable_names[i] : "Release $i"
+        push!(rows, [
+            "x" => _json(label),
+            "impact" => _json(nn.impact_news[i])
+        ])
+    end
+    data_json = _json_array_of_objects(rows)
+    s_json = _series_json(["News Impact"], [_PLOT_COLORS[1]]; keys=["impact"])
+
+    js = _render_bar_js(id, data_json, s_json; mode="grouped",
+                        xlabel="", ylabel="Impact")
+
+    _make_plot([_PanelSpec(id, "Individual Impacts (sorted)", js)];
+               title=_news_title(nn, title))
 end

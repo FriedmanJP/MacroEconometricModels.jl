@@ -356,6 +356,43 @@ using Test, Random, DataFrames
         @test occursin("News", p.html) || occursin("news", p.html)
     end
 
+    @testset "NowcastNews view=:groups" begin
+        X_old = randn(Random.MersenneTwister(55), 100, 5)
+        X_old[end, end] = NaN
+        X_new = copy(X_old)
+        X_new[end, end] = 0.5
+        dfm2 = nowcast_dfm(X_old, 4, 1; r=2, p=1)
+        groups = [1, 1, 2, 2, 3]
+        nn = nowcast_news(X_new, X_old, dfm2, 5; groups=groups,
+                          group_names=["Industry", "Retail", "GDP"])
+        p = plot_result(nn; view=:groups)
+        check_plot(p)
+        @test occursin("Industry", p.html)
+        @test occursin("Retail", p.html)
+    end
+
+    @testset "NowcastNews view=:individual" begin
+        X_old = randn(Random.MersenneTwister(56), 100, 5)
+        X_old[98:100, 1:2] .= NaN
+        X_new = copy(X_old)
+        X_new[98:100, 1:2] .= randn(Random.MersenneTwister(57), 3, 2)
+        dfm2 = nowcast_dfm(X_old, 4, 1; r=2, p=1)
+        nn = nowcast_news(X_new, X_old, dfm2, 5)
+        p = plot_result(nn; view=:individual)
+        check_plot(p)
+        @test occursin("Impact", p.html)
+    end
+
+    @testset "NowcastNews invalid view" begin
+        X_old = randn(Random.MersenneTwister(58), 100, 5)
+        X_old[end, end] = NaN
+        X_new = copy(X_old)
+        X_new[end, end] = 0.5
+        dfm2 = nowcast_dfm(X_old, 4, 1; r=2, p=1)
+        nn = nowcast_news(X_new, X_old, dfm2, 5)
+        @test_throws ArgumentError plot_result(nn; view=:nonexistent)
+    end
+
     # =========================================================================
     # Infrastructure
     # =========================================================================
