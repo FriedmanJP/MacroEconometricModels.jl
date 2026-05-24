@@ -59,7 +59,8 @@ function main()
         println("  ✓ Great Moderation subset: $(nobs(fred_gm)) monthly obs")
 
         # 3-variable stationary macro panel (VAR / IRF / FEVD / HD / LP)
-        key_md = fred_gm[:, ["INDPRO", "UNRATE", "CPIAUCSL"]]
+        # Must match doc @setup blocks: ["INDPRO", "CPIAUCSL", "FEDFUNDS"]
+        key_md = fred_gm[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]
         Y3 = _clean_rows(to_matrix(apply_tcode(key_md)))
 
         # Trending I(1) series: log INDPRO (for filters + ARIMA(1,1,0) with widening CIs)
@@ -102,7 +103,7 @@ function main()
     # -------------------------------------------------------------------
     # 1. Quick Start IRF
     # -------------------------------------------------------------------
-    m_var = estimate_var(Y3, 4; varnames=["INDPRO", "UNRATE", "CPI"])
+    m_var = estimate_var(Y3, 4; varnames=["INDPRO", "CPI", "FFR"])
     r_qs  = irf(m_var, 20; ci_type=:bootstrap, reps=500)
     save("quickstart_irf.html", plot_result(r_qs))
 
@@ -112,23 +113,36 @@ function main()
     save("irf_freq.html", plot_result(r_qs))
 
     # -------------------------------------------------------------------
+    # 2b. Sign-restricted IRF
+    # -------------------------------------------------------------------
+    check_fn = (irfs) -> irfs[1, 1, 1] > 0 && irfs[1, 2, 1] < 0
+    r_sign = irf(m_var, 20; method=:sign, check_func=check_fn)
+    save("irf_sign.html", plot_result(r_sign))
+
+    # -------------------------------------------------------------------
+    # 2c. Long-run restricted IRF
+    # -------------------------------------------------------------------
+    r_lr = irf(m_var, 40; method=:long_run)
+    save("irf_longrun.html", plot_result(r_lr))
+
+    # -------------------------------------------------------------------
     # 3. Bayesian IRF
     # -------------------------------------------------------------------
-    post = estimate_bvar(Y3, 4; n_draws=1000, varnames=["INDPRO", "UNRATE", "CPI"])
+    post = estimate_bvar(Y3, 4; n_draws=1000, varnames=["INDPRO", "CPI", "FFR"])
     r_birf = irf(post, 20)
     save("irf_bayesian.html", plot_result(r_birf))
 
     # -------------------------------------------------------------------
     # 4. LP IRF
     # -------------------------------------------------------------------
-    lp_m = estimate_lp(Y3, 1, 20; lags=4, varnames=["INDPRO", "UNRATE", "CPI"])
+    lp_m = estimate_lp(Y3, 1, 20; lags=4, varnames=["INDPRO", "CPI", "FFR"])
     r_lp = lp_irf(lp_m)
     save("irf_lp.html", plot_result(r_lp))
 
     # -------------------------------------------------------------------
     # 5. Structural LP IRF
     # -------------------------------------------------------------------
-    slp = structural_lp(Y3, 20; method=:cholesky, lags=4, varnames=["INDPRO", "UNRATE", "CPI"])
+    slp = structural_lp(Y3, 20; method=:cholesky, lags=4, varnames=["INDPRO", "CPI", "FFR"])
     save("irf_structural_lp.html", plot_result(slp))
 
     # -------------------------------------------------------------------
@@ -171,11 +185,26 @@ function main()
     save("filter_boosted_hp.html", plot_result(boosted_hp(y_rw)))
 
     # -------------------------------------------------------------------
-    # 16. ARIMA Forecast
+    # 16. ARIMA Forecast (matches arima.md @setup: CPI log differences)
     # -------------------------------------------------------------------
-    ar = estimate_arima(y_rw, 1, 1, 0)
-    fc_ar = forecast(ar, 20)
-    save("forecast_arima.html", plot_result(fc_ar; history=y_rw, n_history=30))
+    y_cpi = filter(isfinite, diff(log.(fred_gm[:, "CPIAUCSL"])))
+    arima_m = estimate_arima(y_cpi, 1, 1, 0)
+    fc_arima = forecast(arima_m, 20)
+    save("forecast_arima.html", plot_result(fc_arima; history=y_cpi, n_history=30))
+
+    # -------------------------------------------------------------------
+    # 16b. AR Forecast (stationary CPI inflation, matches arima.md Recipe 6)
+    # -------------------------------------------------------------------
+    ar_pure = estimate_ar(y_cpi, 2)
+    fc_ar_pure = forecast(ar_pure, 20)
+    save("forecast_ar.html", plot_result(fc_ar_pure; history=y_cpi, n_history=30))
+
+    # -------------------------------------------------------------------
+    # 16c. ARMA Forecast (stationary CPI inflation)
+    # -------------------------------------------------------------------
+    arma_m = estimate_arma(y_cpi, 2, 1)
+    fc_arma = forecast(arma_m, 12)
+    save("forecast_arma.html", plot_result(fc_arma; history=y_cpi, n_history=30))
 
     # -------------------------------------------------------------------
     # 17. Volatility Forecast

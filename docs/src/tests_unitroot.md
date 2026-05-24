@@ -523,7 +523,7 @@ summary.conclusion
 # ── Step 4: Check for structural breaks in CPI ─────────────────
 za = za_test(cpi; regression=:both)
 report(za)
-println("Break detected at observation: ", za.break_index)
+za.break_index
 
 # ── Step 5: Ng-Perron as robustness check ──────────────────────
 np = ngperron_test(cpi; regression=:constant)
@@ -533,11 +533,8 @@ report(np)
 johansen = johansen_test(Y_qd, 2; deterministic=:constant)
 report(johansen)
 
-if johansen.rank > 0
-    println("Cointegration rank = $(johansen.rank) → estimate VECM")
-else
-    println("No cointegration → use VAR in first differences")
-end
+johansen.rank > 0 ? "Cointegration rank = $(johansen.rank) → estimate VECM" :
+                    "No cointegration → use VAR in first differences"
 ```
 
 ---

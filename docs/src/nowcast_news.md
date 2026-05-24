@@ -53,8 +53,7 @@ X_old[end, 1:3] .= NaN
 groups = [1, 1, 2, 2, 2]
 news = nowcast_news(X_new, X_old, dfm, T_obs; target_var=N,
                     groups=groups, group_names=["Real", "Nominal"])
-println("Real sector:    ", round(news.group_impacts[1], digits=4))
-println("Nominal sector: ", round(news.group_impacts[2], digits=4))
+round.(news.group_impacts, digits=4)
 ```
 
 **Recipe 3: Visualize per-release impacts**
@@ -114,12 +113,12 @@ base = copy(Y)
 base[end, 1:3] .= NaN
 
 # Simulate sequential releases
-for col in 1:3
+revisions = map(1:3) do col
     v_new = copy(base)
     v_new[end, col] = Y[end, col]
     news = nowcast_news(v_new, base, dfm, T_obs; target_var=N)
-    println("Release col $col: Δ = ", round(news.new_nowcast - news.old_nowcast, digits=4))
     base[end, col] = Y[end, col]   # update base for next iteration
+    (release=col, delta=round(news.new_nowcast - news.old_nowcast, digits=4))
 end
 ```
 
@@ -202,22 +201,27 @@ The `report()` function displays a formatted table with old and new nowcasts, to
 # === Step 1: Estimate DFM ===
 dfm = nowcast_dfm(Y, nM, nQ; r=2, p=1, idio=:ar1, max_iter=100)
 report(dfm)
+```
 
+```@example nc_news
 # === Step 2: Simulate sequential data releases ===
 base = copy(Y)
 base[end, 1:4] .= NaN
 varnames = ["INDPRO", "UNRATE", "CPI", "M2"]
 
-for col in 1:4
+revisions = map(1:4) do col
     v_new = copy(base)
     v_new[end, col] = Y[end, col]
     news = nowcast_news(v_new, base, dfm, T_obs; target_var=N)
-    println("Release: $(varnames[col])  ",
-            round(news.old_nowcast, digits=4), " → ", round(news.new_nowcast, digits=4),
-            "  (Δ = ", round(news.new_nowcast - news.old_nowcast, digits=4), ")")
     base[end, col] = Y[end, col]
+    (release=varnames[col],
+     old=round(news.old_nowcast, digits=4),
+     new=round(news.new_nowcast, digits=4),
+     delta=round(news.new_nowcast - news.old_nowcast, digits=4))
 end
+```
 
+```@example nc_news
 # === Step 3: Full decomposition ===
 X_old = copy(Y)
 X_old[end, 1:4] .= NaN

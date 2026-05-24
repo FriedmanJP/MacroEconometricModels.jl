@@ -607,10 +607,10 @@ round(ct["accuracy"], digits=3)
 round(ct["sensitivity"], digits=3)
 round(ct["specificity"], digits=3)
 round(ct["f1_score"], digits=3)
+nothing # hide
+```
 
-# ──────────────────────────────────────────────────────────────────────
-# Step 7: Visualization
-# ──────────────────────────────────────────────────────────────────────
+```julia
 p_logit = plot_result(m_logit)
 p_me = plot_result(me_ame)
 ```

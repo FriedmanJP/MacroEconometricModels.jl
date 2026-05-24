@@ -528,10 +528,8 @@ suite = normality_test_suite(m)
 report(suite)
 
 # --- Step 4: ARCH effects in residuals ---
-for j in 1:3
-    r = arch_lm_test(m.U[:, j], 5)
-    println("Variable $j: ARCH-LM p-value = ", round(r.pvalue, digits=4))
-end
+[(variable=j, arch_lm_pvalue=round(arch_lm_test(m.U[:, j], 5).pvalue, digits=4))
+ for j in 1:3]
 
 # --- Step 5: Compare lag orders ---
 m1_ce = estimate_var(Y, 1)

@@ -98,12 +98,7 @@ The estimation proceeds in two stages. First, Nelder-Mead optimization maximizes
 
 ```@example nc_bvar
 bvar = nowcast_bvar(Y, nM, nQ; lags=5, max_iter=200, thresh=1e-6)
-println("Optimized hyperparameters:")
-println("  lambda = ", round(bvar.lambda, digits=4))
-println("  theta  = ", round(bvar.theta, digits=4))
-println("  miu    = ", round(bvar.miu, digits=4))
-println("  alpha  = ", round(bvar.alpha, digits=4))
-println("Marginal log-likelihood: ", round(bvar.loglik, digits=2))
+report(bvar)
 ```
 
 The optimized hyperparameters reveal how much the data favors shrinkage. A small ``\lambda`` indicates strong overall regularization is optimal. A large ``\theta`` means cross-variable dynamics are weak relative to own-lag persistence. The marginal log-likelihood provides a model comparison criterion --- higher values indicate better out-of-sample prediction potential.
@@ -173,9 +168,10 @@ report(bvar)
 
 # === Step 2: Extract nowcast and forecast ===
 result = nowcast(bvar)
-println("Nowcast: ", round(result.nowcast, digits=3))
-println("Forecast: ", round(result.forecast, digits=3))
+(nowcast=round(result.nowcast, digits=3), forecast=round(result.forecast, digits=3))
+```
 
+```@example nc_bvar
 # === Step 3: Multi-step forecast ===
 fc = forecast(bvar, 6; target_var=N)
 
@@ -183,8 +179,7 @@ fc = forecast(bvar, 6; target_var=N)
 dfm = nowcast_dfm(Y, nM, nQ; r=2, p=1)
 r_dfm = nowcast(dfm)
 r_bvar = nowcast(bvar)
-println("DFM nowcast:  ", round(r_dfm.nowcast, digits=3))
-println("BVAR nowcast: ", round(r_bvar.nowcast, digits=3))
+(dfm=round(r_dfm.nowcast, digits=3), bvar=round(r_bvar.nowcast, digits=3))
 ```
 
 **Interpretation.** The BVAR estimates all cross-variable dynamics directly from the 5-variable mixed-frequency panel, with the Normal-Inverse-Wishart prior preventing overfitting in the ``5 \times (1 + 5 \times 5) = 130``-parameter system. The Nelder-Mead optimizer finds the hyperparameter combination that maximizes marginal likelihood --- a criterion that inherently penalizes complexity. The Kalman smoother fills the quarterly NaN pattern and the ragged edge, producing a complete smoothed panel. Comparing the BVAR nowcast with the DFM nowcast provides a robustness check: agreement across methods strengthens confidence in the current-quarter estimate.

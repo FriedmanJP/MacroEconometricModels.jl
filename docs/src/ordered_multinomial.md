@@ -329,7 +329,10 @@ y = _gen_ordered_logit(Random.default_rng(), n, X, [1.0, -0.5], [0.0, 1.5])
 m = estimate_ologit(y, X; varnames=["income", "education"])
 bt = brant_test(m)
 # Overall test
-println("Chi-squared: ", round(bt.statistic, digits=3), ", p-value: ", round(bt.pvalue, digits=4))
+(chi2=round(bt.statistic, digits=3), pvalue=round(bt.pvalue, digits=4))
+```
+
+```@example ordmult
 # Per-variable p-values
 round.(bt.per_variable, digits=4)
 ```
@@ -357,8 +360,7 @@ P = hcat(ones(n), eV) ./ (1.0 .+ sum(eV, dims=2))
 y = [findfirst(cumsum(P[i, :]) .>= rand()) for i in 1:n]
 m = estimate_mlogit(y, X; varnames=["const", "x1", "x2"])
 iia = hausman_iia(m; omit_category=4)
-println("Hausman stat: ", round(iia.statistic, digits=3), ", p-value: ", round(iia.pvalue, digits=4))
-nothing # hide
+(chi2=round(iia.statistic, digits=3), pvalue=round(iia.pvalue, digits=4))
 ```
 
 Failure to reject supports the IIA assumption. If IIA is rejected, consider nested logit or mixed logit alternatives.
@@ -423,8 +425,7 @@ round.(me.effects, digits=4)
 ```@example ordmult
 # Brant test
 bt = brant_test(m_ologit)
-println("Brant test p-value: ", round(bt.pvalue, digits=4))
-nothing # hide
+round(bt.pvalue, digits=4)
 ```
 
 ```@example ordmult

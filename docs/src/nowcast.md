@@ -203,6 +203,49 @@ For detailed treatment of each method --- theory, model specification, keyword t
 
 ---
 
+## Complete Example
+
+This workflow produces a real-time GDP nowcast from mixed-frequency FRED-MD data, compares DFM and BVAR estimates, and attributes the revision to individual data releases via news decomposition.
+
+```@example nc
+# 1. DFM estimation with 2 factors and AR(1) idiosyncratic dynamics
+dfm_full = nowcast_dfm(Y, nM, nQ; r=2, p=1, idio=:ar1, max_iter=200)
+report(dfm_full)
+```
+
+```@example nc
+# 2. BVAR estimation with GLP prior
+bvar_full = nowcast_bvar(Y, nM, nQ; lags=4, max_iter=200)
+report(bvar_full)
+```
+
+```@example nc
+# 3. Compare point estimates
+r_dfm = nowcast(dfm_full)
+r_bvar = nowcast(bvar_full)
+(dfm=round(r_dfm.nowcast, digits=4), bvar=round(r_bvar.nowcast, digits=4))
+```
+
+```@example nc
+# 4. News decomposition: simulate a data vintage update
+X_old = copy(Y)
+X_old[end-2, 1:nM] .= NaN   # mask the most recent monthly releases
+X_new = copy(Y)
+news = nowcast_news(X_new, X_old, dfm_full, size(Y, 1);
+                    groups=[1, 2, 1, 2, 3],
+                    group_names=["Real", "Nominal", "Target"])
+report(news)
+```
+
+```julia
+plot_result(dfm_full)
+plot_result(news)
+```
+
+The DFM and BVAR nowcasts provide independent estimates of the target quarter. Agreement between the two methods increases confidence in the point forecast. The news decomposition traces the nowcast revision to specific data releases, identifying which monthly indicator contributed most to the update. The group-level attribution reveals whether the revision is driven by real activity, nominal prices, or financial conditions.
+
+---
+
 ## Common Pitfalls
 
 1. **NaN placement determines quarterly alignment.** Quarterly values must appear at rows divisible by 3 (months 3, 6, 9, 12). Placing quarterly observations at other rows produces silently incorrect temporal aggregation weights.

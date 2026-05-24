@@ -56,10 +56,10 @@ report(ml)
 
 ```@example id_ng
 # Compare AIC/BIC across all non-Gaussian distributions
-for dist in [:student_t, :mixture_normal, :pml, :skew_normal]
-    ml = identify_nongaussian_ml(model; distribution=dist)
-    println("$dist: AIC=$(round(ml.aic, digits=2)), BIC=$(round(ml.bic, digits=2))")
-end
+results = [(dist=dist, AIC=round(ml.aic, digits=2), BIC=round(ml.bic, digits=2))
+           for dist in [:student_t, :mixture_normal, :pml, :skew_normal]
+           for ml in (identify_nongaussian_ml(model; distribution=dist),)]
+results
 ```
 
 **Recipe 6: IRF via non-Gaussian identification**
@@ -305,10 +305,10 @@ The skewness parameters are in `ml.dist_params[:alpha]`. Positive ``\alpha`` pro
 The `identify_nongaussian_ml` function selects the distribution at runtime, enabling systematic model comparison:
 
 ```@example id_ng
-for dist in [:student_t, :mixture_normal, :pml, :skew_normal]
-    ml = identify_nongaussian_ml(model; distribution=dist)
-    println("$dist: logL=$(round(ml.loglik, digits=2)), AIC=$(round(ml.aic, digits=2)), BIC=$(round(ml.bic, digits=2))")
-end
+results = [(dist=dist, logL=round(ml.loglik, digits=2), AIC=round(ml.aic, digits=2), BIC=round(ml.bic, digits=2))
+           for dist in [:student_t, :mixture_normal, :pml, :skew_normal]
+           for ml in (identify_nongaussian_ml(model; distribution=dist),)]
+results
 ```
 
 Select the distribution with the lowest AIC or BIC. The `loglik_gaussian` field stores the Gaussian log-likelihood for likelihood ratio testing.
@@ -361,17 +361,11 @@ report(ml_t)
 
 ```@example id_ng
 # --- Step 3: Compare distributions via AIC ---
-best_dist = :student_t
-best_aic = Inf
-for dist in [:student_t, :mixture_normal, :pml, :skew_normal]
-    ml = identify_nongaussian_ml(model; distribution=dist)
-    println("$dist: AIC=$(round(ml.aic, digits=2)), BIC=$(round(ml.bic, digits=2))")
-    if ml.aic < best_aic
-        best_aic = ml.aic
-        best_dist = dist
-    end
-end
-println("Best distribution by AIC: $best_dist")
+comparisons = [(dist=dist, AIC=round(ml.aic, digits=2), BIC=round(ml.bic, digits=2))
+               for dist in [:student_t, :mixture_normal, :pml, :skew_normal]
+               for ml in (identify_nongaussian_ml(model; distribution=dist),)]
+best_dist = comparisons[argmin([c.AIC for c in comparisons])].dist
+(comparisons=comparisons, best=best_dist)
 ```
 
 ```@example id_ng

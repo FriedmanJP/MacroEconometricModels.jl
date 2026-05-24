@@ -70,7 +70,7 @@ svg { overflow: visible; }
 <div class="figure-title">y (Event Study LP)</div>
 <div class="panel">
 <div class="panel-title">Dynamic Treatment Effects (Event Study LP)</div>
-<div id="eslp_143"></div>
+<div id="eslp_169"></div>
 </div>
 <div class="tooltip" id="tooltip"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
@@ -88,20 +88,20 @@ function showTip(evt, html) {
 function hideTip() { tooltip.style('opacity',0); }
 
 (function() {
-    const data = [{"x":-3,"coef":0.09136736363789912,"ci_lo":-0.42924489407794564,"ci_hi":0.6119796213537438,"zero":0},
-{"x":-2,"coef":3.8108094643623707e-17,"ci_lo":-1.1613623089472189e-16,"ci_hi":1.9235242018196927e-16,"zero":0},
+    const data = [{"x":-3,"coef":-0.03427294007957055,"ci_lo":-0.49304899219092174,"ci_hi":0.42450311203178065,"zero":0},
+{"x":-2,"coef":2.370536792055513e-16,"ci_lo":-2.1583721987563103e-16,"ci_hi":6.899445782867336e-16,"zero":0},
 {"x":-1,"coef":0.0,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":0,"coef":2.2962330580071764,"ci_lo":1.7602515752285974,"ci_hi":2.8322145407857553,"zero":0},
-{"x":1,"coef":1.9647870201182698,"ci_lo":1.3567832177643862,"ci_hi":2.5727908224721534,"zero":0},
-{"x":2,"coef":2.684314747575982,"ci_lo":2.1679571565202016,"ci_hi":3.2006723386317626,"zero":0},
-{"x":3,"coef":2.8637904730914667,"ci_lo":2.4018039761122916,"ci_hi":3.325776970070642,"zero":0},
-{"x":4,"coef":3.53123758136031,"ci_lo":3.035233234397216,"ci_hi":4.027241928323404,"zero":0},
-{"x":5,"coef":3.6980660803109284,"ci_lo":3.230323023577805,"ci_hi":4.165809137044052,"zero":0}];
+{"x":0,"coef":2.0925565968456556,"ci_lo":1.5996760411798003,"ci_hi":2.5854371525115107,"zero":0},
+{"x":1,"coef":2.076246040094953,"ci_lo":1.4707605975476676,"ci_hi":2.6817314826422383,"zero":0},
+{"x":2,"coef":2.71527819760921,"ci_lo":2.1982830973617182,"ci_hi":3.2322732978567017,"zero":0},
+{"x":3,"coef":2.6423365978677276,"ci_lo":2.188883210909422,"ci_hi":3.095789984826033,"zero":0},
+{"x":4,"coef":3.05932816405781,"ci_lo":2.4713961493224996,"ci_hi":3.64726017879312,"zero":0},
+{"x":5,"coef":3.388621365376399,"ci_lo":2.76901822420264,"ci_hi":4.0082245065501585,"zero":0}];
     const series = [{"name":"LP","color":"#1f77b4","key":"coef","dash":""}];
     const bands = [{"lo_key":"ci_lo","hi_key":"ci_hi","color":"#1f77b4","alpha":0.15}];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
 
-    const container = d3.select('#eslp_143');
+    const container = d3.select('#eslp_169');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;
@@ -196,7 +196,7 @@ function hideTip() { tooltip.style('opacity',0); }
 })();
 
 (function() {
-    const container = d3.select('#eslp_143');
+    const container = d3.select('#eslp_169');
     const svgEl = container.select('svg');
     const gEl = svgEl.select('g');
     const W = +svgEl.attr('width');

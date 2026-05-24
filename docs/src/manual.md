@@ -74,7 +74,7 @@ plot_result(result)
 ```
 
 ```@raw html
-<iframe src="../assets/plots/irf_freq.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+<iframe src="../assets/plots/irf_sign.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
 **Recipe 5: Arias identification**
@@ -381,7 +381,7 @@ plot_result(result)
 ```
 
 ```@raw html
-<iframe src="../assets/plots/irf_freq.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+<iframe src="../assets/plots/irf_longrun.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
 ### Arias et al. (2018) Zero + Sign Restrictions

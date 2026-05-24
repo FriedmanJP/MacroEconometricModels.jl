@@ -155,7 +155,7 @@ The solver is auto-detected from constraint types. Pure `VariableBound` constrai
 
 ### Box Constraints (Built-in)
 
-Box constraints work out of the box --- no additional packages required. For perfect foresight, the solver first attempts the unconstrained Newton solve. If any variable violates its bounds, it auto-escalates to a projected Newton method that preserves the sparse block-tridiagonal Jacobian structure:
+Box constraints work out of the box --- no additional packages required. For perfect foresight, the solver solves the unconstrained Newton system first. If any variable violates its bounds, it auto-escalates to a projected Newton method that preserves the sparse block-tridiagonal Jacobian structure:
 
 ```julia
 # ZLB on nominal rate --- no imports needed

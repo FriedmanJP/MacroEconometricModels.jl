@@ -70,40 +70,40 @@ svg { overflow: visible; }
 <div class="figure-title">Impulse Response Functions</div>
 <div class="panel-grid">
 <div class="panel">
-<div class="panel-title">GDP ← GDP</div>
-<div id="irf_102"></div>
+<div class="panel-title">INDPRO ← INDPRO</div>
+<div id="irf_19"></div>
 </div>
 <div class="panel">
-<div class="panel-title">PCE ← GDP</div>
-<div id="irf_103"></div>
+<div class="panel-title">CPI ← INDPRO</div>
+<div id="irf_20"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Investment ← GDP</div>
-<div id="irf_104"></div>
+<div class="panel-title">FFR ← INDPRO</div>
+<div id="irf_21"></div>
 </div>
 <div class="panel">
-<div class="panel-title">GDP ← PCE</div>
-<div id="irf_105"></div>
+<div class="panel-title">INDPRO ← CPI</div>
+<div id="irf_22"></div>
 </div>
 <div class="panel">
-<div class="panel-title">PCE ← PCE</div>
-<div id="irf_106"></div>
+<div class="panel-title">CPI ← CPI</div>
+<div id="irf_23"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Investment ← PCE</div>
-<div id="irf_107"></div>
+<div class="panel-title">FFR ← CPI</div>
+<div id="irf_24"></div>
 </div>
 <div class="panel">
-<div class="panel-title">GDP ← Investment</div>
-<div id="irf_108"></div>
+<div class="panel-title">INDPRO ← FFR</div>
+<div id="irf_25"></div>
 </div>
 <div class="panel">
-<div class="panel-title">PCE ← Investment</div>
-<div id="irf_109"></div>
+<div class="panel-title">CPI ← FFR</div>
+<div id="irf_26"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Investment ← Investment</div>
-<div id="irf_110"></div>
+<div class="panel-title">FFR ← FFR</div>
+<div id="irf_27"></div>
 </div>
 </div>
 
@@ -123,31 +123,31 @@ function showTip(evt, html) {
 function hideTip() { tooltip.style('opacity',0); }
 
 (function() {
-    const data = [{"x":0,"irf":0.0043677613476867955,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":0.005038687291168079,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":0.006014671278340275,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":0.006511132590300584,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":0.006853291940435283,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":0.007059881021036997,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":0.0071843716915179386,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":0.0072557153731088175,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":0.007292817438619512,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":0.00730885037247597,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":0.007311888192284946,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":0.007307405841400926,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":0.007298787607805448,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":0.0072882152090765605,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":0.007277011440510139,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":0.007265972852706111,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":0.007255545085634162,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":0.007245956520764206,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":0.007237298244620342,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":0.007229579154063966,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.0036196727788067123,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":-0.0004830446997796221,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":0.000768526362293232,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":0.0003579121946857189,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":0.0005208972205189924,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":0.0002547304254043759,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":0.00030645530921183584,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":0.00017012720018875946,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":9.34919655543925e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":0.00010269617778523257,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":9.214749894541303e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":5.264329095609025e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":2.0243003189010107e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":1.3295656802249185e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":1.3332461231487343e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":8.42980461228089e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":2.2582003443481172e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-5.190878780085812e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":-5.364242120312941e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-3.8097860957408087e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
 
-    const container = d3.select('#irf_102');
+    const container = d3.select('#irf_19');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;
@@ -242,31 +242,31 @@ function hideTip() { tooltip.style('opacity',0); }
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.0018647671383549707,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":0.0027939826813347646,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":0.003581370336866409,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":0.00408042780632723,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":0.004457747542222777,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":0.004720915460946055,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":0.004916970310220325,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":0.005061051391768374,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":0.005170312145428048,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":0.005253782374923918,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":0.005318836151488029,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":0.0053701651198475395,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":0.005411265202613178,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":0.005444554630462571,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":0.005471812900097439,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":0.0054943322312037655,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":0.005513080122348221,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":0.005528786319489593,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":0.005542012550206137,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":0.00555319684561191,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":-0.00045701196790486775,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":0.0002723694252501243,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":0.00022779540279450634,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-1.4472121098161263e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":-0.00019921993593021418,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":2.090833618647005e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":8.095576758056454e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":3.465395493242071e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":-2.825035872054021e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-3.00745656102452e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":5.010008927649668e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":2.0238981287372247e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":6.347400026883916e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-9.462537868982479e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":-7.321041235878027e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":2.6766843896773428e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":5.1250334737667374e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":3.139905313150423e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":-2.9816323856310082e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-1.5264992257092247e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
 
-    const container = d3.select('#irf_103');
+    const container = d3.select('#irf_20');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;
@@ -361,31 +361,31 @@ function hideTip() { tooltip.style('opacity',0); }
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.013790112426436704,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":0.019948457762044472,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":0.023394713712510822,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":0.025024103564731053,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":0.025391707731828313,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":0.02512561242795979,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":0.024452040397289175,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":0.02360273277497294,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":0.02268078449175244,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":0.021765335798637774,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":0.020894414023170473,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":0.02009069014599453,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":0.01936279909200323,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":0.018712641759384453,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":0.018137461882954994,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":0.017632250178189136,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":0.017190822067822742,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":0.016806656649908283,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":0.01647332606806077,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":0.016184764882091644,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":-0.07678477057325249,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":-0.004030536075157614,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":-0.004445524778035762,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-0.0036479869929600985,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":0.00022862644872148272,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":0.0061409114296477225,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":0.0036221801093191675,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":0.004376508026655453,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":0.0060254986667190435,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":0.005467075155797468,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":0.00440853045000148,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":0.003832375924848842,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":0.0034960981111547573,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":0.003055652895618941,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":0.0025016814508084335,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":0.0019503895119898842,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":0.0015313292511497472,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":0.0012479172236723294,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":0.000999278896519829,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":0.0007464221265550356,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
 
-    const container = d3.select('#irf_104');
+    const container = d3.select('#irf_21');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;
@@ -480,31 +480,31 @@ function hideTip() { tooltip.style('opacity',0); }
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.0,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":0.0017217432519154282,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":0.002099773018846911,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":0.002657138812278378,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":0.002883952263642211,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":0.003079791722963943,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":0.003178947722908489,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":0.0032466091287093133,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":0.003281350150013792,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":0.0033003507186704552,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":0.003307492443752833,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":0.0033082885333172727,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":0.003305086770257622,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":0.003299872811312778,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":0.0032936960022872117,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":0.0032872779120535723,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":0.003281013330614247,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":0.0032751338081052324,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":0.0032697490942764544,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":0.003264900987050465,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.002931975104353606,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":0.0006538510041438001,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":0.0007257380210961541,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":0.0008535442631094254,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":0.0002933043787107476,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":0.00015881282795873812,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":0.00017120955611699527,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-3.182564161841908e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":-6.314499448561008e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":5.02075865587036e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":-7.850781031857335e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-8.131004620737182e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":-6.1102131432048e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-5.77843966280711e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":-5.6065149651482246e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-5.3521929528667055e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":-4.7387300004610745e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-3.72739592075348e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":-2.923911961468206e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-2.500512502950779e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
 
-    const container = d3.select('#irf_105');
+    const container = d3.select('#irf_22');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;
@@ -599,31 +599,31 @@ function hideTip() { tooltip.style('opacity',0); }
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.0035855101395952135,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":0.003424566991851481,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":0.004383576171706593,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":0.004616292293995941,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":0.004959010245886707,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":0.0051305093607434665,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":0.0052844213944368695,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":0.005385032866808607,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":0.005464987982287195,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":0.005523410261222153,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":0.005569159866953851,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":0.0056045181543734526,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":0.005632658868347535,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":0.005655180242863996,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":0.005673489613868988,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":0.0056884989855506005,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":0.005700923529024345,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":0.005711279231963253,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":0.0057199651259755326,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":0.00572728576223981,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.0005303245130009196,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":-1.9227489053470623e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":-0.0001371507985490241,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-0.00012334440514560492,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":6.0870951272203944e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":0.00013604329600417093,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":-4.277924791447159e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-5.822114161751733e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":-3.06458154895131e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":1.799704653880224e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":1.5466193878156216e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-7.3921327111605455e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":-1.5974255207399555e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-2.6754923422467416e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":6.689708191523033e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":2.425263915750894e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":-3.919048816012343e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-3.844599929393745e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":-8.632062543842877e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":1.5917344529565683e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
 
-    const container = d3.select('#irf_106');
+    const container = d3.select('#irf_23');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;
@@ -718,31 +718,31 @@ function hideTip() { tooltip.style('opacity',0); }
 })();
 
 (function() {
-    const data = [{"x":0,"irf":-0.008294609597819093,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":0.00492802016284237,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":0.005217881573486502,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":0.008187611330291483,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":0.008422603163678495,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":0.008763708089965717,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":0.008463188549534288,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":0.008088127613206639,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":0.007574274828003897,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":0.00705108167998553,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":0.006528268659319376,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":0.006037792547534701,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":0.005585738367492526,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":0.005178154839954582,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":0.004814656845090406,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":0.0044936778302937025,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":0.00421203530805336,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":0.003966180157064243,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":0.003752352261525928,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":0.0035669144749783587,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.12263439449685283,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":0.06736788436260496,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":0.04188344620458885,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":0.05926517275989965,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":0.04570344970972806,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":0.033848282483053355,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":0.030401620311796072,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":0.026048205891091032,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":0.01966543115331319,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":0.014755367743578659,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":0.011784597598905221,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":0.009109173262645964,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":0.00670509503083149,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":0.004786517234308677,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":0.0033002804499680893,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":0.0022461063012444264,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":0.0015069706101929906,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":0.0009133850357108384,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":0.0004424438462402105,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":0.00013472039454452602,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
 
-    const container = d3.select('#irf_107');
+    const container = d3.select('#irf_24');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;
@@ -837,31 +837,31 @@ function hideTip() { tooltip.style('opacity',0); }
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.0,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":0.0011255270338492067,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":0.0016801663112410406,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":0.002020723253959668,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":0.0022544763354104816,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":0.002379555797247693,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":0.0024575061246045788,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":0.002494566152939903,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":0.0025110267040775167,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":0.0025129218823977274,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":0.0025072104359050535,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":0.002497056446966523,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":0.0024849736950335218,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":0.002472291952744662,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":0.0024598848081993675,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":0.0024482065366279197,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":0.0024374973356033293,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":0.0024278439403658397,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":0.00241924892425413,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":0.0024116632535221283,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.00028425994072961007,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":0.00011762788676003299,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":2.4232173842303814e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":0.0001893449164698454,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":-0.0007475839508220859,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":0.0003919524547945513,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":3.690099628186411e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-0.00010264920708972185,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":-0.00012794221679700844,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-4.597317737213777e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":1.789447666743078e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-6.1180829117470054e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":-3.8027170173564564e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-3.972202980548509e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":-1.3951363810194528e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":1.5059439605173741e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":-4.621279958280501e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-1.2889087055786784e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":-1.0081017289711965e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-2.2801779008669192e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
 
-    const container = d3.select('#irf_108');
+    const container = d3.select('#irf_25');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;
@@ -956,31 +956,31 @@ function hideTip() { tooltip.style('opacity',0); }
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.0,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":0.0012556174501683803,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":0.0016335127794856812,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":0.00210874218342789,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":0.002368109493890012,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":0.0025923749977592534,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":0.002745163135933421,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":0.0028663586343805206,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":0.002957040943489257,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":0.0030287022370928613,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":0.00308499097432386,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":0.0031302761665067107,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":0.0031669468328765758,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":0.0031970333565188376,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":0.003221904328676792,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":0.0032426313212230184,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":0.0032600058033076897,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":0.0032746457230643563,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":0.003287030737031038,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":0.003297542714200766,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":-0.0020289522687151973,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":0.0010494871771800504,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":0.000675759430685475,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-0.0002555718249080998,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":-0.00023277459745112407,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-0.0001815362225778445,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":0.0001723259771447894,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":0.00013797381280962655,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":-3.65511202339306e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-9.894192096428541e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":-1.9003658479072752e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":5.119307276132103e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":2.898000038131849e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-1.8062718132350885e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":-2.4198085802048102e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":5.347950467202119e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":1.3972086358222573e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":5.101421914104928e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":-6.16055141414181e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-5.4920864574290084e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
 
-    const container = d3.select('#irf_109');
+    const container = d3.select('#irf_26');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;
@@ -1075,31 +1075,31 @@ function hideTip() { tooltip.style('opacity',0); }
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.011376399312149474,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":0.012582030439407801,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":0.015284776877891044,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":0.015124770063636352,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":0.014948486803361687,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":0.014071947070401655,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":0.013130016469975869,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":0.012071855029005504,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":0.011047294242429674,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":0.010069197684753374,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":0.009172072129332041,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":0.008359939290374561,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":0.007636007552170618,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":0.006995996512349957,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":0.0064343293362679925,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":0.005943808637338236,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":0.00551710764115724,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":0.005146980439553934,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":0.0048266433937427695,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":0.004549864683223263,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.040707879357753926,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":0.022835836016416183,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":0.0064634614420347875,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":0.0017990642996289375,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":0.021929683825133744,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":0.005139203323527002,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":0.001936007658235898,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":0.0027783933327981273,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":0.003203468557225062,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":0.0025800362313682466,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":0.0011425859836151104,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":0.0001536673220451101,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":4.26996536042882e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":0.00035900388307006124,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":0.00025379709491379335,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-0.00014410733589981893,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":-0.00032018915277910905,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-0.00021948681154810884,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":-0.00010764292727073402,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-0.00012552562708944122,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
 
-    const container = d3.select('#irf_110');
+    const container = d3.select('#irf_27');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;

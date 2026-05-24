@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>HonestDiD: Robust CI (breakdown = 0.5222154574839358)</title>
+<title>HonestDiD: Robust CI (breakdown = 0.44819666053276)</title>
 <style>* { margin: 0; padding: 0; box-sizing: border-box; }
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
@@ -67,10 +67,10 @@ svg { overflow: visible; }
 </style>
 </head>
 <body>
-<div class="figure-title">HonestDiD: Robust CI (breakdown = 0.5222154574839358)</div>
+<div class="figure-title">HonestDiD: Robust CI (breakdown = 0.44819666053276)</div>
 <div class="panel">
 <div class="panel-title">HonestDiD Sensitivity (M̅ = 1.0)</div>
-<div id="honest_did_142"></div>
+<div id="honest_did_168"></div>
 </div>
 <div class="tooltip" id="tooltip"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
@@ -88,17 +88,17 @@ function showTip(evt, html) {
 function hideTip() { tooltip.style('opacity',0); }
 
 (function() {
-    const data = [{"x":0,"att":2.394492540219605,"orig_lo":1.5678519718045398,"orig_hi":3.22113310863467,"robust_lo":0.5678519718045398,"robust_hi":4.22113310863467,"zero":0},
-{"x":1,"att":2.1915857523104862,"orig_lo":1.4023151842739288,"orig_hi":2.9808563203470437,"robust_lo":-0.5976848157260714,"robust_hi":4.980856320347043,"zero":0},
-{"x":2,"att":2.7442117848676677,"orig_lo":1.9831752718531996,"orig_hi":3.5052482978821358,"robust_lo":-1.0168247281468004,"robust_hi":6.505248297882136,"zero":0},
-{"x":3,"att":2.7449086435108327,"orig_lo":2.1294643715244472,"orig_hi":3.3603529154972183,"robust_lo":-1.8705356284755528,"robust_hi":7.360352915497218,"zero":0},
-{"x":4,"att":3.6643811052539492,"orig_lo":2.9874416429230717,"orig_hi":4.341320567584827,"robust_lo":-2.0125583570769283,"robust_hi":9.341320567584827,"zero":0},
-{"x":5,"att":3.7788271540919145,"orig_lo":3.133292744903615,"orig_hi":4.424361563280214,"robust_lo":-2.866707255096385,"robust_hi":10.424361563280213,"zero":0}];
+    const data = [{"x":0,"att":2.140828690583581,"orig_lo":1.2429162644854463,"orig_hi":3.0387411166817158,"robust_lo":0.24291626448544634,"robust_hi":4.038741116681716,"zero":0},
+{"x":1,"att":2.1993053303336465,"orig_lo":1.3026087474557135,"orig_hi":3.0960019132115795,"robust_lo":-0.6973912525442865,"robust_hi":5.0960019132115795,"zero":0},
+{"x":2,"att":2.93556881168434,"orig_lo":1.9954350156531693,"orig_hi":3.8757026077155112,"robust_lo":-1.0045649843468307,"robust_hi":6.875702607715511,"zero":0},
+{"x":3,"att":2.96572972935485,"orig_lo":2.145639705917513,"orig_hi":3.785819752792187,"robust_lo":-1.854360294082487,"robust_hi":7.785819752792187,"zero":0},
+{"x":4,"att":3.1866540755581623,"orig_lo":2.2791815542599663,"orig_hi":4.094126596856358,"robust_lo":-2.7208184457400337,"robust_hi":9.09412659685636,"zero":0},
+{"x":5,"att":3.5519732639909147,"orig_lo":2.68917996319656,"orig_hi":4.414766564785269,"robust_lo":-3.31082003680344,"robust_hi":10.41476656478527,"zero":0}];
     const series = [{"name":"ATT","color":"#1f77b4","key":"att","dash":""}];
     const bands = [{"lo_key":"robust_lo","hi_key":"robust_hi","color":"#ff7f0e","alpha":0.15},{"lo_key":"orig_lo","hi_key":"orig_hi","color":"#1f77b4","alpha":0.15}];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
 
-    const container = d3.select('#honest_did_142');
+    const container = d3.select('#honest_did_168');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;

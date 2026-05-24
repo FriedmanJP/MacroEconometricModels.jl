@@ -70,7 +70,7 @@ svg { overflow: visible; }
 <div class="figure-title">ARIMA Forecast (h=20, 95% CI)</div>
 <div class="panel">
 <div class="panel-title">ARIMA Forecast (h=20, 95% CI)</div>
-<div id="arima_fc_71"></div>
+<div id="arima_fc_89"></div>
 </div>
 <div class="tooltip" id="tooltip"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
@@ -88,61 +88,61 @@ function showTip(evt, html) {
 function hideTip() { tooltip.style('opacity',0); }
 
 (function() {
-    const data = [{"x":-29,"hist":4.573345097659094,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-28,"hist":4.576598886005656,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-27,"hist":4.55703505723611,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-26,"hist":4.5690993866433205,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-25,"hist":4.580276903264815,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-24,"hist":4.585428596829047,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-23,"hist":4.587005197029963,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-22,"hist":4.587426697210301,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-21,"hist":4.589678811870047,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-20,"hist":4.592710890313318,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-19,"hist":4.592965004869729,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-18,"hist":4.596126414086154,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-17,"hist":4.595613667580622,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-16,"hist":4.599992806458956,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-15,"hist":4.598329844102016,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-14,"hist":4.59718236814589,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-13,"hist":4.596761935517553,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-12,"hist":4.606903682614242,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-11,"hist":4.603514816619926,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-10,"hist":4.6128932859276,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-9,"hist":4.614671901376903,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-8,"hist":4.621372221278656,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-7,"hist":4.622328142753466,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-6,"hist":4.622904990537174,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-5,"hist":4.6217047338271815,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-4,"hist":4.6236287732120305,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-3,"hist":4.625848899996448,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-2,"hist":4.623024838781934,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-1,"hist":4.628345550578648,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":0,"hist":4.628694311284961,"fc":null,"ci_lo":null,"ci_hi":null,"fc":4.628694311284961},
-{"x":1,"hist":null,"fc":4.6311166040158795,"ci_lo":4.621146471481069,"ci_hi":4.64108673655069},
-{"x":2,"hist":null,"fc":4.633672307041599,"ci_lo":4.6137114271601405,"ci_hi":4.653633186923058},
-{"x":3,"hist":null,"fc":4.636236593637067,"ci_lo":4.606284881160524,"ci_hi":4.66618830611361},
-{"x":4,"hist":null,"fc":4.638801432496285,"ci_lo":4.598858887071765,"ci_hi":4.678743977920805},
-{"x":5,"hist":null,"fc":4.64136630688795,"ci_lo":4.591432928513994,"ci_hi":4.6912996852619075},
-{"x":6,"hist":null,"fc":4.643931183565761,"ci_lo":4.584006972242361,"ci_hi":4.703855394889161},
-{"x":7,"hist":null,"fc":4.646496060390662,"ci_lo":4.576581016117818,"ci_hi":4.716411104663505},
-{"x":8,"hist":null,"fc":4.649060937225026,"ci_lo":4.569155060002739,"ci_hi":4.728966814447313},
-{"x":9,"hist":null,"fc":4.651625814059999,"ci_lo":4.561729103888268,"ci_hi":4.74152252423173},
-{"x":10,"hist":null,"fc":4.654190690895011,"ci_lo":4.554303147773838,"ci_hi":4.754078234016185},
-{"x":11,"hist":null,"fc":4.656755567730026,"ci_lo":4.546877191659409,"ci_hi":4.7666339438006435},
-{"x":12,"hist":null,"fc":4.659320444565041,"ci_lo":4.5394512355449805,"ci_hi":4.779189653585101},
-{"x":13,"hist":null,"fc":4.661885321400056,"ci_lo":4.532025279430552,"ci_hi":4.79174536336956},
-{"x":14,"hist":null,"fc":4.664450198235071,"ci_lo":4.5245993233161235,"ci_hi":4.804301073154018},
-{"x":15,"hist":null,"fc":4.667015075070085,"ci_lo":4.5171733672016945,"ci_hi":4.816856782938476},
-{"x":16,"hist":null,"fc":4.6695799519051,"ci_lo":4.509747411087266,"ci_hi":4.829412492722934},
-{"x":17,"hist":null,"fc":4.672144828740115,"ci_lo":4.502321454972837,"ci_hi":4.841968202507393},
-{"x":18,"hist":null,"fc":4.67470970557513,"ci_lo":4.494895498858409,"ci_hi":4.854523912291851},
-{"x":19,"hist":null,"fc":4.677274582410145,"ci_lo":4.487469542743981,"ci_hi":4.867079622076309},
-{"x":20,"hist":null,"fc":4.67983945924516,"ci_lo":4.480043586629552,"ci_hi":4.879635331860768}];
+    const data = [{"x":-29,"hist":0.006176036100564275,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-28,"hist":0.006138126688785661,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-27,"hist":0.013674561020173392,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-26,"hist":0.0015079168476770377,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-25,"hist":-0.005035257365645585,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-24,"hist":0.0,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-23,"hist":0.006039273514243604,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-22,"hist":0.0005016303089888652,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-21,"hist":0.001503382894031624,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-20,"hist":0.004995015380522716,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-19,"hist":0.0029850768434540598,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-18,"hist":0.002480775273762781,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-17,"hist":0.0054361389122599135,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-16,"hist":0.004425873956855675,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-15,"hist":-0.004918849071596121,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-14,"hist":-0.0044477463982364185,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-13,"hist":0.00049517208241312,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-12,"hist":0.00543077118513402,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-11,"hist":0.0016579060562325054,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-10,"hist":0.0038708491335395223,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-9,"hist":0.0051866474931996365,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-8,"hist":0.002996169481998656,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-7,"hist":0.004124476656923726,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-6,"hist":0.0023140721794590036,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-5,"hist":0.0017790124666809959,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-4,"hist":0.0003082332001183019,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-3,"hist":0.004228600245438585,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-2,"hist":0.0030784944010990856,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-1,"hist":0.007828164082873457,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":0,"hist":0.0028938234029487475,"fc":null,"ci_lo":null,"ci_hi":null,"fc":0.0028938234029487475},
+{"x":1,"hist":null,"fc":0.0040884919025662,"ci_lo":-0.0007714718917146051,"ci_hi":0.008948455696847005},
+{"x":2,"hist":null,"fc":0.003800606399976943,"ci_lo":-0.006059481731305832,"ci_hi":0.01366069453125972},
+{"x":3,"hist":null,"fc":0.0038713378132826173,"ci_lo":-0.010996954174408342,"ci_hi":0.01873962980097358},
+{"x":4,"hist":null,"fc":0.0038553229143631932,"ci_lo":-0.01602164527013577,"ci_hi":0.02373229109886216},
+{"x":5,"hist":null,"fc":0.003860291193735501,"ci_lo":-0.02102538082349076,"ci_hi":0.028745963210961768},
+{"x":6,"hist":null,"fc":0.003860183824818806,"ci_lo":-0.0260341936421464,"ci_hi":0.033754561291784016},
+{"x":7,"hist":null,"fc":0.0038613042110684386,"ci_lo":-0.031041778800249317,"ci_hi":0.0387643872223862},
+{"x":8,"hist":null,"fc":0.0038621276140239943,"ci_lo":-0.03604966094718228,"ci_hi":0.04377391617523027},
+{"x":9,"hist":null,"fc":0.0038630228546548294,"ci_lo":-0.041057471256763886,"ci_hi":0.04878351696607355},
+{"x":10,"hist":null,"fc":0.0038639007183769543,"ci_lo":-0.04606529894327315,"ci_hi":0.05379310038002706},
+{"x":11,"hist":null,"fc":0.003864782785422129,"ci_lo":-0.05107312242646048,"ci_hi":0.05880268799730474},
+{"x":12,"hist":null,"fc":0.0038656638357200237,"ci_lo":-0.05608094692639515,"ci_hi":0.0638122745978352},
+{"x":13,"hist":null,"fc":0.003866545131960241,"ci_lo":-0.0610887711803875,"ci_hi":0.06882186144430799},
+{"x":14,"hist":null,"fc":0.0038674263687091493,"ci_lo":-0.06609659549387115,"ci_hi":0.07383144823128947},
+{"x":15,"hist":null,"fc":0.003868307619848488,"ci_lo":-0.07110441979296438,"ci_hi":0.07884103503266138},
+{"x":16,"hist":null,"fc":0.0038691888675069066,"ci_lo":-0.07611224409553853,"ci_hi":0.08385062183055236},
+{"x":17,"hist":null,"fc":0.00387007011600733,"ci_lo":-0.08112006839727068,"ci_hi":0.08886020862928536},
+{"x":18,"hist":null,"fc":0.003870951364304079,"ci_lo":-0.0861278926992065,"ci_hi":0.09386979542781468},
+{"x":19,"hist":null,"fc":0.0038718326126500956,"ci_lo":-0.09113571700109305,"ci_hi":0.09887938222639327},
+{"x":20,"hist":null,"fc":0.003872713860984195,"ci_lo":-0.09614354130299152,"ci_hi":0.10388896902495993}];
     const series = [{"name":"History","color":"#1f77b4","key":"hist","dash":""},{"name":"Forecast","color":"#ff7f0e","key":"fc","dash":"6,3"}];
     const bands = [{"lo_key":"ci_lo","hi_key":"ci_hi","color":"#ff7f0e","alpha":0.15}];
     const refLines = [];
 
-    const container = d3.select('#arima_fc_71');
+    const container = d3.select('#arima_fc_89');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;

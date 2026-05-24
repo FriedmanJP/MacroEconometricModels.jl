@@ -70,7 +70,7 @@ svg { overflow: visible; }
 <div class="figure-title">Nowcast Data Availability & Z-Scores (dfm)</div>
 <div class="panel">
 <div class="panel-title">Z-Score Heatmap</div>
-<div id="nc_heatmap_126"></div>
+<div id="nc_heatmap_146"></div>
 </div>
 <div class="tooltip" id="tooltip"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
@@ -181,7 +181,7 @@ function hideTip() { tooltip.style('opacity',0); }
     const rowLabels = ["INDPRO","UNRATE","CPI","M2","FFR"];
     const colLabels = ["83","84","85","86","87","88","89","90","91","92","93","94","95","96","97","98","99","100"];
 
-    const container = d3.select('#nc_heatmap_126');
+    const container = d3.select('#nc_heatmap_146');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const maxLabelW = 120;
     const margin = {top:10, right:15, bottom:35, left: maxLabelW};

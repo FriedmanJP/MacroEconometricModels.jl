@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Volatility Forecast (garch, h=10, 95% CI)</title>
+<title>ARIMA Forecast (h=20, 95% CI)</title>
 <style>* { margin: 0; padding: 0; box-sizing: border-box; }
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
@@ -67,10 +67,10 @@ svg { overflow: visible; }
 </style>
 </head>
 <body>
-<div class="figure-title">Volatility Forecast (garch, h=10, 95% CI)</div>
+<div class="figure-title">ARIMA Forecast (h=20, 95% CI)</div>
 <div class="panel">
-<div class="panel-title">Volatility Forecast (garch, h=10, 95% CI)</div>
-<div id="vol_fc_92"></div>
+<div class="panel-title">ARIMA Forecast (h=20, 95% CI)</div>
+<div id="arima_fc_90"></div>
 </div>
 <div class="tooltip" id="tooltip"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
@@ -88,71 +88,61 @@ function showTip(evt, html) {
 function hideTip() { tooltip.style('opacity',0); }
 
 (function() {
-    const data = [{"x":-49,"hist":0.001040827683403026,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-48,"hist":0.0008798762496578852,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-47,"hist":0.0008270421165909477,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-46,"hist":0.0009731157960278889,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-45,"hist":0.0008256303981183108,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-44,"hist":0.0008199303756676652,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-43,"hist":0.0007044220105940039,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-42,"hist":0.0008330779766667175,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-41,"hist":0.0007760672119398675,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-40,"hist":0.0008504859378459283,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-39,"hist":0.0008251829223130784,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-38,"hist":0.0007647727868965234,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-37,"hist":0.0006735438168168621,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-36,"hist":0.0008303748681854409,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-35,"hist":0.0007659801764498978,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-34,"hist":0.0007548026328210183,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-33,"hist":0.0006620994793176053,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-32,"hist":0.0006052894721173879,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-31,"hist":0.0007364022685047531,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-30,"hist":0.0006409336935927504,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-29,"hist":0.000588521638596191,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-28,"hist":0.0005341385209438973,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-27,"hist":0.00048618604844856574,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-26,"hist":0.00044907367647269153,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-25,"hist":0.000640884032892356,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-24,"hist":0.0007131250773431559,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-23,"hist":0.0006439300373681863,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-22,"hist":0.000569944323462773,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-21,"hist":0.0005237330617076631,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-20,"hist":0.00047543802019767324,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-19,"hist":0.00043306570813727793,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-18,"hist":0.0004526365569685613,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-17,"hist":0.0006549829733938646,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-16,"hist":0.0005753451645243739,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-15,"hist":0.0005411082244775496,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-14,"hist":0.0005258167522616135,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-13,"hist":0.0005900775578624435,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-12,"hist":0.000541454083834911,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-11,"hist":0.0005086578263600105,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-10,"hist":0.0004600543621135322,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-9,"hist":0.00042738652206041517,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-8,"hist":0.000604623391365771,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-7,"hist":0.0007069386525063077,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-6,"hist":0.0007146059754645802,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-5,"hist":0.0006277911428755472,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-4,"hist":0.0005553511220173815,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-3,"hist":0.0009782485148506388,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-2,"hist":0.0009042220137869207,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":-1,"hist":0.0008402754622959791,"fc":null,"ci_lo":null,"ci_hi":null},
-{"x":0,"hist":0.0013272431608123394,"fc":null,"ci_lo":null,"ci_hi":null,"fc":0.0013272431608123394},
-{"x":1,"hist":null,"fc":0.0011059127472039334,"ci_lo":0.0011059127472039317,"ci_hi":0.0011059127472039317},
-{"x":2,"hist":null,"fc":0.0011230400668951713,"ci_lo":0.0009302271007870025,"ci_hi":0.0018838289267322358},
-{"x":3,"hist":null,"fc":0.0011394871018441694,"ci_lo":0.0007992719081772185,"ci_hi":0.002149097892225729},
-{"x":4,"hist":null,"fc":0.0011619812756613966,"ci_lo":0.0007093792269671837,"ci_hi":0.002409835007591177},
-{"x":5,"hist":null,"fc":0.001183181333436912,"ci_lo":0.0006485113997305107,"ci_hi":0.002671253957554487},
-{"x":6,"hist":null,"fc":0.001197105511310459,"ci_lo":0.0006022613364341737,"ci_hi":0.002860816146561564},
-{"x":7,"hist":null,"fc":0.0012154163620006232,"ci_lo":0.000571092701578184,"ci_hi":0.003006006070879229},
-{"x":8,"hist":null,"fc":0.001226878639326856,"ci_lo":0.0005458876082170674,"ci_hi":0.0031107580461529516},
-{"x":9,"hist":null,"fc":0.0012366518006025917,"ci_lo":0.0005226617458579785,"ci_hi":0.0031942051047501013},
-{"x":10,"hist":null,"fc":0.001244662631834623,"ci_lo":0.0005061090350297417,"ci_hi":0.003354668541083407}];
-    const series = [{"name":"History","color":"#1f77b4","key":"hist","dash":""},{"name":"Forecast σ²","color":"#ff7f0e","key":"fc","dash":"6,3"}];
+    const data = [{"x":-29,"hist":0.006176036100564275,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-28,"hist":0.006138126688785661,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-27,"hist":0.013674561020173392,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-26,"hist":0.0015079168476770377,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-25,"hist":-0.005035257365645585,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-24,"hist":0.0,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-23,"hist":0.006039273514243604,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-22,"hist":0.0005016303089888652,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-21,"hist":0.001503382894031624,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-20,"hist":0.004995015380522716,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-19,"hist":0.0029850768434540598,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-18,"hist":0.002480775273762781,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-17,"hist":0.0054361389122599135,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-16,"hist":0.004425873956855675,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-15,"hist":-0.004918849071596121,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-14,"hist":-0.0044477463982364185,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-13,"hist":0.00049517208241312,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-12,"hist":0.00543077118513402,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-11,"hist":0.0016579060562325054,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-10,"hist":0.0038708491335395223,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-9,"hist":0.0051866474931996365,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-8,"hist":0.002996169481998656,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-7,"hist":0.004124476656923726,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-6,"hist":0.0023140721794590036,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-5,"hist":0.0017790124666809959,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-4,"hist":0.0003082332001183019,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-3,"hist":0.004228600245438585,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-2,"hist":0.0030784944010990856,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":-1,"hist":0.007828164082873457,"fc":null,"ci_lo":null,"ci_hi":null},
+{"x":0,"hist":0.0028938234029487475,"fc":null,"ci_lo":null,"ci_hi":null,"fc":0.0028938234029487475},
+{"x":1,"hist":null,"fc":0.0016595692590266676,"ci_lo":-0.002315332075183067,"ci_hi":0.005634470593236403},
+{"x":2,"hist":null,"fc":0.0021749381788529138,"ci_lo":-0.0020223841039600145,"ci_hi":0.006372260461665842},
+{"x":3,"hist":null,"fc":0.0025833693326438294,"ci_lo":-0.001624314466890646,"ci_hi":0.006791053132178305},
+{"x":4,"hist":null,"fc":0.0026243490202024905,"ci_lo":-0.0015983084718306732,"ci_hi":0.006847006512235654},
+{"x":5,"hist":null,"fc":0.002560938010528883,"ci_lo":-0.0016622143386676837,"ci_hi":0.0067840903597254495},
+{"x":6,"hist":null,"fc":0.002531673290406809,"ci_lo":-0.001691722272951782,"ci_hi":0.0067550688537654},
+{"x":7,"hist":null,"fc":0.002533750105557648,"ci_lo":-0.001689735708198357,"ci_hi":0.006757235919313653},
+{"x":8,"hist":null,"fc":0.0025399939413043816,"ci_lo":-0.0016834919455126834,"ci_hi":0.006763479828121447},
+{"x":9,"hist":null,"fc":0.0025417186189473774,"ci_lo":-0.0016817701801373265,"ci_hi":0.006765207418032082},
+{"x":10,"hist":null,"fc":0.0025411217225291397,"ci_lo":-0.0016823674734412508,"ci_hi":0.006764610918499531},
+{"x":11,"hist":null,"fc":0.0025405928081944436,"ci_lo":-0.0016828963997321113,"ci_hi":0.006764082016120998},
+{"x":12,"hist":null,"fc":0.002540526394954998,"ci_lo":-0.0016829628374124715,"ci_hi":0.006764015627322467},
+{"x":13,"hist":null,"fc":0.0025406039852367904,"ci_lo":-0.0016828852481758291,"ci_hi":0.00676409321864941},
+{"x":14,"hist":null,"fc":0.002540642873528216,"ci_lo":-0.0016828463602313682,"ci_hi":0.0067641321072878},
+{"x":15,"hist":null,"fc":0.002540641376900125,"ci_lo":-0.0016828478570141453,"ci_hi":0.006764130610814396},
+{"x":16,"hist":null,"fc":0.0025406335082397632,"ci_lo":-0.0016828557256749876,"ci_hi":0.006764122742154514},
+{"x":17,"hist":null,"fc":0.0025406311226307257,"ci_lo":-0.0016828581112885163,"ci_hi":0.006764120356549968},
+{"x":18,"hist":null,"fc":0.002540631802909249,"ci_lo":-0.0016828574310107157,"ci_hi":0.006764121036829213},
+{"x":19,"hist":null,"fc":0.0025406324852106717,"ci_lo":-0.0016828567487093059,"ci_hi":0.006764121719130649},
+{"x":20,"hist":null,"fc":0.0025406325878667936,"ci_lo":-0.001682856646053223,"ci_hi":0.00676412182178681}];
+    const series = [{"name":"History","color":"#1f77b4","key":"hist","dash":""},{"name":"Forecast","color":"#ff7f0e","key":"fc","dash":"6,3"}];
     const bands = [{"lo_key":"ci_lo","hi_key":"ci_hi","color":"#ff7f0e","alpha":0.15}];
     const refLines = [];
 
-    const container = d3.select('#vol_fc_92');
+    const container = d3.select('#arima_fc_90');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;
@@ -212,11 +202,11 @@ function hideTip() { tooltip.style('opacity',0); }
         .call(d3.axisBottom(x).ticks(Math.min(xVals.length,8)));
     g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
 
-    if('Horizon') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
-        .attr('font-size','11px').attr('fill','#666').text('Horizon');
-    if('Conditional Variance') g.append('text').attr('transform','rotate(-90)')
+    if('Period') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Period');
+    if('Value') g.append('text').attr('transform','rotate(-90)')
         .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
-        .attr('font-size','11px').attr('fill','#666').text('Conditional Variance');
+        .attr('font-size','11px').attr('fill','#666').text('Value');
 
     // Legend
     if(series.length > 1) {

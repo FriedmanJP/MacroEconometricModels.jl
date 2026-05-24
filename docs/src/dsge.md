@@ -263,7 +263,7 @@ When the `steady_state` block is provided, `compute_steady_state` (or `solve`) u
 
 ### Constrained Steady State
 
-For models with variable bounds --- such as a zero lower bound on the nominal interest rate or non-negativity of consumption --- box constraints work out of the box. NonlinearSolve.jl attempts the solve first; if bounds are violated, the solver auto-escalates to Optim.jl `Fminbox(LBFGS())`:
+For models with variable bounds --- such as a zero lower bound on the nominal interest rate or non-negativity of consumption --- box constraints work out of the box. NonlinearSolve.jl solves the unconstrained system first; if bounds are violated, the solver auto-escalates to Optim.jl `Fminbox(LBFGS())`:
 
 ```julia
 # ZLB: interest rate cannot go below zero

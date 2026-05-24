@@ -256,14 +256,16 @@ report(ms)
 
 ```@example id_het
 # Step 2: Check convergence and regime structure
-println("Converged: ", ms.converged)
-println("Transition matrix:")
-println(round.(ms.transition_matrix, digits=3))
+ms.converged
+```
 
+```@example id_het
+round.(ms.transition_matrix, digits=3)
+```
+
+```@example id_het
 # Step 3: Inspect relative variance ratios
-for k in 1:ms.n_regimes
-    println("Regime $k variances: ", round.(ms.Lambda[k], digits=3))
-end
+[round.(ms.Lambda[k], digits=3) for k in 1:ms.n_regimes]
 ```
 
 ```@example id_het

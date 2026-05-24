@@ -71,11 +71,11 @@ svg { overflow: visible; }
 <div class="panel-grid">
 <div class="panel">
 <div class="panel-title">Trend-Cycle Decomposition</div>
-<div id="filt_tc_65"></div>
+<div id="filt_tc_83"></div>
 </div>
 <div class="panel">
 <div class="panel-title">Cyclical Component</div>
-<div id="filt_cy_66"></div>
+<div id="filt_cy_84"></div>
 </div>
 </div>
 
@@ -351,7 +351,7 @@ function hideTip() { tooltip.style('opacity',0); }
     const bands = [];
     const refLines = [];
 
-    const container = d3.select('#filt_tc_65');
+    const container = d3.select('#filt_tc_83');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;
@@ -702,7 +702,7 @@ function hideTip() { tooltip.style('opacity',0); }
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
 
-    const container = d3.select('#filt_cy_66');
+    const container = d3.select('#filt_cy_84');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;
