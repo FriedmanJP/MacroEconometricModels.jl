@@ -124,6 +124,9 @@ function nowcast_news(X_new::AbstractMatrix, X_old::AbstractMatrix,
                 group_impacts[g] += impact_news[k]
             end
         end
+        if group_names !== nothing && length(group_names) != n_groups
+            throw(ArgumentError("group_names length ($(length(group_names))) must match number of groups ($n_groups)"))
+        end
         gn = group_names !== nothing ? group_names : ["Group $i" for i in 1:n_groups]
     else
         # Default: one group per variable
@@ -131,6 +134,9 @@ function nowcast_news(X_new::AbstractMatrix, X_old::AbstractMatrix,
         for (k, idx) in enumerate(i_new)
             v_k = idx[2]
             group_impacts[v_k] += impact_news[k]
+        end
+        if group_names !== nothing && length(group_names) != N
+            throw(ArgumentError("group_names length ($(length(group_names))) must match number of variables ($N)"))
         end
         gn = group_names !== nothing ? group_names : ["Var$i" for i in 1:N]
     end

@@ -604,6 +604,7 @@ end
         @test_throws ArgumentError nowcast_news(Y, Y[1:50, :], m, 30)  # size mismatch
         @test_throws ArgumentError nowcast_news(Y, Y, m, 0)  # out of range
         @test_throws ArgumentError nowcast_news(Y, Y, m, 30; target_var=0)  # out of range
+        @test_throws ArgumentError nowcast_news(Y, Y, m, 30; groups=[1,1,2,2,3], group_names=["A", "B"])
     end
 
     @testset "Group impacts" begin
