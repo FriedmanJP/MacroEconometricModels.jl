@@ -51,12 +51,13 @@ X_old[end, 1:3] .= NaN
 
 # Group: 1=real (INDPRO,UNRATE), 2=nominal (CPI,M2,FFR)
 groups = [1, 1, 2, 2, 2]
-news = nowcast_news(X_new, X_old, dfm, T_obs; target_var=N, groups=groups)
+news = nowcast_news(X_new, X_old, dfm, T_obs; target_var=N,
+                    groups=groups, group_names=["Real", "Nominal"])
 println("Real sector:    ", round(news.group_impacts[1], digits=4))
 println("Nominal sector: ", round(news.group_impacts[2], digits=4))
 ```
 
-**Recipe 3: Visualize news impacts**
+**Recipe 3: Visualize per-release impacts**
 
 ```@example nc_news
 X_old = copy(Y)
@@ -75,7 +76,38 @@ plot_result(news)
 <iframe src="../assets/plots/nowcast_news.html" width="100%" height="400" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-**Recipe 4: Multi-vintage tracking**
+**Recipe 4: News by group (stacked bar)**
+
+```@example nc_news
+X_old = copy(Y)
+X_new = copy(Y)
+X_old[end, 1:3] .= NaN
+
+groups = [1, 1, 2, 2, 2]
+news_grp = nowcast_news(X_new, X_old, dfm, T_obs; target_var=N,
+                        groups=groups, group_names=["Real", "Nominal"])
+nothing # hide
+```
+
+```julia
+plot_result(news_grp; view=:groups)
+```
+
+```@raw html
+<iframe src="../assets/plots/nowcast_news_groups.html" width="100%" height="350" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+**Recipe 5: Sorted individual impacts**
+
+```julia
+plot_result(news; view=:individual)
+```
+
+```@raw html
+<iframe src="../assets/plots/nowcast_news_individual.html" width="100%" height="350" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+**Recipe 6: Multi-vintage tracking**
 
 ```@example nc_news
 base = copy(Y)
@@ -135,7 +167,7 @@ news = nowcast_news(X_new, X_old, dfm, T_obs; target_var=N)
 report(news)
 ```
 
-The `report()` function displays a formatted table with old and new nowcasts, total revision, and top contributing releases ranked by absolute impact. Use `plot_result(news)` for a horizontal bar chart of per-release impacts.
+The `report()` function displays a formatted table with old and new nowcasts, total revision, and top contributing releases ranked by absolute impact. The `plot_result` function supports three views: `:releases` (default per-release bar chart), `:groups` (stacked bar by variable group), and `:individual` (sorted by absolute impact).
 
 ```@raw html
 <iframe src="../assets/plots/nowcast_news.html" width="100%" height="400" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
@@ -147,6 +179,7 @@ The `report()` function displays a formatted table with old and new nowcasts, to
 |---------|------|---------|-------------|
 | `target_var` | `Int` | `size(Y,2)` | Target variable column index |
 | `groups` | `Vector{Int}` or `nothing` | `nothing` | Group assignment per variable for impact aggregation |
+| `group_names` | `Vector{String}` or `nothing` | `nothing` | Labels for each group; auto-generated as `"Group 1"`, `"Group 2"`, ... if omitted |
 
 ### `NowcastNews` Return Values
 
@@ -158,6 +191,7 @@ The `report()` function displays a formatted table with old and new nowcasts, to
 | `impact_revision` | `T` | Impact from data revisions |
 | `impact_reestimation` | `T` | Residual impact from parameter re-estimation |
 | `group_impacts` | `Vector{T}` | News impacts aggregated by variable group |
+| `group_names` | `Vector{String}` | Labels for each group (auto-generated if not provided) |
 | `variable_names` | `Vector{String}` | Release identifiers (format: `"Var{j}_t{t}"`) |
 
 ---
@@ -192,14 +226,15 @@ report(news)
 ```
 
 ```julia
-plot_result(news)
+plot_result(news)                    # per-release impacts
+plot_result(news; view=:individual)  # sorted by absolute impact
 ```
 
 ```@raw html
 <iframe src="../assets/plots/nowcast_news.html" width="100%" height="400" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-**Interpretation.** The sequential release simulation reveals how each monthly indicator contributes to the quarterly nowcast. Industrial production and unemployment typically carry the largest weights because they load heavily on the common factors driving the quarterly target. The bar chart from `plot_result` visualizes which releases had the largest absolute impact, immediately identifying the key drivers of the nowcast revision.
+**Interpretation.** The sequential release simulation reveals how each monthly indicator contributes to the quarterly nowcast. Industrial production and unemployment typically carry the largest weights because they load heavily on the common factors driving the quarterly target. The `:individual` view sorts releases by absolute impact, immediately identifying the key drivers of the nowcast revision. The `:groups` view aggregates impacts by sector, revealing whether the revision was driven by real-activity or nominal-sector data.
 
 ---
 

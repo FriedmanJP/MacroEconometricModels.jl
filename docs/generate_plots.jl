@@ -299,6 +299,9 @@ function main()
     dfm_nc = nowcast_dfm(Y_nc, 4, 1; r=2, p=1)
     nr = nowcast(dfm_nc)
     save("nowcast_result.html", plot_result(nr))
+    save("nowcast_heatmap.html", plot_result(nr; view=:heatmap,
+         variable_names=["INDPRO", "UNRATE", "CPI", "M2", "FFR"]))
+    save("nowcast_contributions.html", plot_result(nr; view=:contributions))
 
     # -------------------------------------------------------------------
     # 29. Nowcast news
@@ -308,6 +311,15 @@ function main()
     dfm_news = nowcast_dfm(X_old, 4, 1; r=2, p=1)
     nn = nowcast_news(X_new, X_old, dfm_news, 5)
     save("nowcast_news.html", plot_result(nn))
+
+    X_old2 = copy(Y_nc)
+    X_old2[end, 1:3] .= NaN
+    groups = [1, 1, 2, 2, 2]
+    nn_grp = nowcast_news(Y_nc, X_old2, dfm_nc, size(Y_nc, 1);
+             target_var=5, groups=groups,
+             group_names=["Real", "Nominal"])
+    save("nowcast_news_groups.html", plot_result(nn_grp; view=:groups))
+    save("nowcast_news_individual.html", plot_result(nn_grp; view=:individual))
 
     # -------------------------------------------------------------------
     # 30. DSGE IRF

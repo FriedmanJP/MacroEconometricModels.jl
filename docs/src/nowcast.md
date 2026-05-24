@@ -138,8 +138,56 @@ Each method computes the forecast differently: DFM projects the state vector 3 m
 
 ## Visualization
 
+The `plot_result` function supports multiple views for both `NowcastResult` and `NowcastNews` objects, following the visualization patterns of the ECB Nowcasting Toolbox (Linzenich and Meunier 2024).
+
+### Nowcast Result Views
+
+The default view displays the smoothed target variable with nowcast/forecast extension. For DFM models, extracted factor panels are appended automatically.
+
+```julia
+plot_result(nr)                          # default: target + factors (DFM)
+plot_result(nr; view=:heatmap)           # z-score heatmap with ragged edge
+plot_result(nr; view=:contributions)     # group contributions (DFM only)
+```
+
 ```@raw html
 <iframe src="../assets/plots/nowcast_result.html" width="100%" height="400" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+The **heatmap view** computes z-scores for each variable and renders the last `n_periods` (default 18) as a color-coded matrix. Missing values appear in grey, revealing the ragged edge --- the characteristic pattern of staggered data releases.
+
+```@raw html
+<iframe src="../assets/plots/nowcast_heatmap.html" width="100%" height="350" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+The **contributions view** decomposes the nowcast into factor/block group contributions, showing how each group drives the current-quarter estimate and the one-quarter-ahead forecast.
+
+```@raw html
+<iframe src="../assets/plots/nowcast_contributions.html" width="100%" height="350" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+### News Decomposition Views
+
+```julia
+plot_result(news)                        # default: per-release impact bar chart
+plot_result(news; view=:groups)          # stacked bar by variable group
+plot_result(news; view=:individual)      # sorted bar by absolute impact
+```
+
+```@raw html
+<iframe src="../assets/plots/nowcast_news.html" width="100%" height="400" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+The **group view** aggregates news impacts by variable group, immediately revealing which sector drove the revision.
+
+```@raw html
+<iframe src="../assets/plots/nowcast_news_groups.html" width="100%" height="350" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+The **individual view** sorts releases by absolute impact, identifying the single most influential data points.
+
+```@raw html
+<iframe src="../assets/plots/nowcast_news_individual.html" width="100%" height="350" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
 ---
@@ -175,4 +223,5 @@ For detailed treatment of each method --- theory, model specification, keyword t
 - Banbura, Marta, Irina Belousova, Katalin Bodnar, and Mate Barnabas Toth. 2023. "Nowcasting Employment in the Euro Area." *ECB Working Paper* No. 2815.
 - Cimadomo, Jacopo, Domenico Giannone, Michele Lenza, Francesca Monti, and Andrej Sokol. 2022. "Nowcasting with Large Bayesian Vector Autoregressions." *ECB Working Paper* No. 2696.
 - Giannone, Domenico, Michele Lenza, and Giorgio E. Primiceri. 2015. "Prior Selection for Vector Autoregressions." *Review of Economics and Statistics* 97 (2): 436--451. [DOI: 10.1162/REST\_a\_00483](https://doi.org/10.1162/REST_a_00483)
+- Linzenich, Jan, and Baptiste Meunier. 2024. "Nowcasting with Mixed Frequency Data Using a Simple Modelling Setup: An Update of the ECB Nowcasting Framework." *ECB Working Paper* No. 3004.
 - Mariano, Roberto S., and Yasutomo Murasawa. 2003. "A New Coincident Index of Business Cycles Based on Monthly and Quarterly Series." *Journal of Applied Econometrics* 18 (4): 427--443. [DOI: 10.1002/jae.695](https://doi.org/10.1002/jae.695)
