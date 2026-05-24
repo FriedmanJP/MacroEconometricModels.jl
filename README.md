@@ -191,7 +191,7 @@ Pkg.add("MacroEconometricModels")
   - Hyperparameter optimization via marginal log-likelihood maximization
   - Minnesota shrinkage with sum-of-coefficients and co-persistence priors
 - **Bridge Equations** - OLS regressions combining pairs of monthly indicators via median (Banbura et al. 2023)
-- **News Decomposition** - Attribute nowcast revisions to individual data releases
+- **News Decomposition** - Attribute nowcast revisions to individual data releases with group aggregation and named groups
 - **Panel Balancing** - `balance_panel()` fills NaN in TimeSeriesData/PanelData using DFM imputation
 
 ### Statistical Identification via Higher Moments
@@ -219,11 +219,12 @@ Pkg.add("MacroEconometricModels")
 
 ### Visualization
 - **Interactive D3.js plots** - `plot_result()` renders self-contained HTML with inline D3.js v7 (no additional dependencies)
-  - 41 dispatch methods covering IRF, FEVD, historical decomposition, filters, forecasts, volatility models, factor models, data containers, nowcasting, and difference-in-differences
-  - Three chart types: line (with confidence bands), stacked area, and bar charts
+  - 51 dispatch methods covering IRF, FEVD, historical decomposition, filters, forecasts, volatility models, factor models, data containers, nowcasting, regression, and difference-in-differences
+  - Four chart types: line (with confidence bands), stacked area, bar, and heatmap
   - Interactive tooltips, responsive layout, multi-panel grid figures
+  - Nowcast views: `view=:default` (+ DFM factor panels), `:heatmap` (z-score ragged edge), `:contributions` (group stacked bar); news views: `:releases`, `:groups`, `:individual`
   - `save_plot(p, "file.html")` saves to disk; `display_plot(p)` opens in browser; auto-renders in Jupyter
-  - Common kwargs: `var`, `shock`, `title`, `save_path`, `ncols`
+  - Common kwargs: `var`, `shock`, `title`, `save_path`, `ncols`, `view`
 
 ### Data Management
 - **Typed containers** - `TimeSeriesData`, `PanelData`, `CrossSectionData` with variable names, frequency, transformation codes, and descriptions
@@ -415,6 +416,7 @@ All documentation code examples execute during the build — `report()` output, 
 - Bańbura, Marta, and Michele Modugno. 2014. "Maximum Likelihood Estimation of Factor Models on Datasets with Arbitrary Pattern of Missing Data." *Journal of Applied Econometrics* 29 (1): 133–160. [https://doi.org/10.1002/jae.2306](https://doi.org/10.1002/jae.2306)
 - Cimadomo, Jacopo, Domenico Giannone, Michele Lenza, Francesca Monti, and Andrej Sokol. 2022. "Nowcasting with Large Bayesian Vector Autoregressions." *ECB Working Paper* No. 2696.
 - Bańbura, Marta, Irina Belousova, Katalin Bodnár, and Máté Barnabás Tóth. 2023. "Nowcasting Employment in the Euro Area." *ECB Working Paper* No. 2815.
+- Linzenich, Jan, and Baptiste Meunier. 2024. "Nowcasting with Mixed Frequency Data Using a Simple Modelling Setup: An Update of the ECB Nowcasting Framework." *ECB Working Paper* No. 3004.
 
 ### Model Comparison Tests
 
