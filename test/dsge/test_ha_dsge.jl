@@ -858,7 +858,7 @@ end
     spec = load_ha_example(:krusell_smith)
 
     # Compute steady state for generating fake data
-    ss = ha_steady_state(spec; K_init=10.0, r_bounds=(-0.02, 0.04), max_iter=50, tol=1e-3)
+    ss = compute_steady_state(spec; K_init=10.0, r_bounds=(-0.02, 0.04), max_iter=50, tol=1e-3)
     K_ss = ss.aggregates[:K]
     T_data = 50
     rng = Random.MersenneTwister(42)

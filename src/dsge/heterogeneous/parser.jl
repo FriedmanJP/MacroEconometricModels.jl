@@ -527,7 +527,7 @@ function solve(spec::HADSGESpec{T}; method::Symbol=:ssj,
                 ss_kwargs[k] = kwargs[k]
             end
         end
-        ss = ha_steady_state(spec; ss_kwargs...)
+        ss = compute_steady_state(spec; ss_kwargs...)
     end
 
     if method === :ssj

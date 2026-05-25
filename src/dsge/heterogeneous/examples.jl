@@ -28,7 +28,7 @@ Provides pre-calibrated `HADSGESpec` specifications for canonical models:
 
 Construct a minimal DSGESpec representing a Cobb-Douglas aggregate block.
 
-The individual-level steady state solver (`ha_steady_state`) does not evaluate
+The individual-level steady state solver (`compute_steady_state`) does not evaluate
 the aggregate DSGESpec equations directly -- it uses the price function instead.
 This helper creates a lightweight placeholder that records parameter values and
 variable names for the aggregate block.
@@ -270,7 +270,7 @@ Return a pre-calibrated `HADSGESpec` for a canonical heterogeneous agent model.
 
 ```julia
 spec = load_ha_example(:krusell_smith)
-ss = ha_steady_state(spec; max_iter=100, tol=1e-4)
+ss = compute_steady_state(spec; max_iter=100, tol=1e-4)
 report(ss)
 ```
 

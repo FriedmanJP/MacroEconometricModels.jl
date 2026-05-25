@@ -484,7 +484,7 @@ export dsge_smoother, dsge_particle_smoother
 export HADSGESpec, HAGrid, IncomeProcess, IndividualProblem
 export HASteadyState, HADSGESolution, KrusellSmithSolution
 export rouwenhorst, tauchen
-export ha_steady_state, load_ha_example
+export load_ha_example
 export distribution_irf, inequality_irf, simulate_panel
 
 # Local Projection types

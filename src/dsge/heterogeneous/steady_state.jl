@@ -307,11 +307,11 @@ function _default_cobb_douglas_price_fn(K::T, params::Dict{Symbol,T}) where {T<:
 end
 
 # =============================================================================
-# ha_steady_state — public API
+# compute_steady_state — public API (dispatch on HADSGESpec)
 # =============================================================================
 
 """
-    ha_steady_state(spec::HADSGESpec{T}; kwargs...) → HASteadyState{T}
+    compute_steady_state(spec::HADSGESpec{T}; kwargs...) → HASteadyState{T}
 
 Compute the stationary equilibrium of a heterogeneous agent DSGE model.
 
@@ -327,7 +327,7 @@ does not provide one, and delegates to `_ha_steady_state`.
 - `verbose::Bool` — print progress (default false)
 - `price_fn::Function` — custom price function; if not supplied, uses Cobb-Douglas
 """
-function ha_steady_state(spec::HADSGESpec{T};
+function compute_steady_state(spec::HADSGESpec{T};
                           K_init::T=T(10),
                           r_bounds::Tuple{T,T}=(T(-0.01), T(0.04)),
                           max_iter::Int=200,
