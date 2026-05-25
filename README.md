@@ -16,7 +16,7 @@ A comprehensive Julia package for macroeconomic time series analysis.
 
 **Panel:** Panel VAR (FD-GMM, System GMM, FE-OLS), Panel Regression (FE/RE/FD/Between/CRE/AB/BB), Panel IV (FE-IV/RE-IV/FD-IV/Hausman-Taylor), Panel Logit/Probit, Difference-in-Differences (TWFE, Callaway-Sant'Anna, Sun-Abraham, BJS, dCDH, HonestDiD), Event Study LP, LP-DiD (Dube et al. 2025)
 
-**DSGE:** 7 solvers (Gensys, Blanchard-Kahn, Klein, 2nd/3rd-order perturbation with pruning, Chebyshev projection, PFI, VFI), built-in constrained solvers (Optim.jl, NLopt.jl, projected Newton) with optional JuMP+Ipopt/PATH, OccBin, GMM/SMM estimation, Bayesian estimation (SMC/SMC²/MH) with posterior IRF/FEVD credible bands
+**DSGE:** 7 solvers (Gensys, Blanchard-Kahn, Klein, 2nd/3rd-order perturbation with pruning, Chebyshev projection, PFI, VFI), built-in constrained solvers (Optim.jl, NLopt.jl, projected Newton) with optional JuMP+Ipopt/PATH, OccBin, GMM/SMM estimation, Bayesian estimation (SMC/SMC²/MH) with posterior IRF/FEVD credible bands, **Heterogeneous Agent DSGE** (Reiter, Sequence-Space Jacobian, Krusell-Smith; one-asset and two-asset HANK; EGM/VFI individual solvers; Bayesian estimation)
 
 **Cross-Sectional:** OLS, WLS, IV/2SLS, Logit, Probit, Ordered Logit/Probit, Multinomial Logit (MLE), marginal effects (AME/MEM/MER)
 
@@ -165,6 +165,24 @@ Pkg.add("MacroEconometricModels")
 - **Analytical moments** - Lyapunov equation for unconditional covariance; `analytical_moments` for theoretical autocovariance
 - **GMM Estimation** - IRF matching, Euler equation GMM, SMM, analytical GMM via `estimate_dsge`
 - **Bayesian Estimation** - Sequential Monte Carlo (SMC with adaptive tempering), SMC² with particle filter likelihood, random-walk Metropolis-Hastings; delayed acceptance for accelerated sampling; nonlinear particle filter for higher-order solutions via `estimate_dsge_bayes`
+
+### Heterogeneous Agent DSGE
+- **Model specification** - `@dsge` macro with `heterogeneous:`, `idiosyncratic:`, `aggregation:` blocks for declaring individual state space, income process, and market clearing conditions
+- **Built-in examples** - `load_ha_example(:krusell_smith)`, `load_ha_example(:one_asset_hank)`, `load_ha_example(:two_asset_hank)` with published calibrations
+- **Individual solvers**:
+  - Endogenous Grid Method (Carroll 2006) for one-asset models with borrowing constraints
+  - Nested EGM for two-asset HANK (Kaplan, Moll & Violante 2018) with portfolio adjustment costs
+  - Value Function Iteration with Howard (1960) improvement steps as fallback
+- **Distribution tracking** - Young (2010) non-stochastic histogram method with sparse transition matrices and power iteration for stationary distribution
+- **Income discretization** - Rouwenhorst (1995) and Tauchen (1986) methods for AR(1) processes
+- **Steady state** - Bisection on the interest rate iterating EGM + distribution + market clearing until capital supply equals demand
+- **Solution methods**:
+  - Sequence-Space Jacobian (Auclert, Bardóczy, Rognlie & Straub 2021) with fake news algorithm and Ho-Kalman state-space reduction
+  - Reiter (2009) linearization with observability-based SVD dimensionality reduction
+  - Krusell-Smith (1998) bounded rationality via perceived law of motion simulation
+- **Bayesian estimation** - `estimate_dsge_bayes(spec::HADSGESpec, ...)` with adaptive RWMH; re-solves HA steady state + linearizes at each draw; Kalman filter on reduced system
+- **Analysis** - `irf`, `fevd`, `simulate` dispatch via embedded `DSGESolution`; `distribution_irf` for wealth distribution dynamics; `inequality_irf` for Gini/percentile responses; `simulate_panel` for individual-level data
+- **Visualization** - `plot_result(ss; view=:distribution)` (wealth histogram), `:lorenz` (Lorenz curve with Gini), `:policy` (consumption and savings functions by income state)
 
 ### GMM
 - **Generalized Method of Moments** - One-step, two-step, and iterated; Hansen J-test
@@ -351,6 +369,15 @@ All documentation code examples execute during the build — `report()` output, 
 - Sims, Christopher A. 2002. "Solving Linear Rational Expectations Models." *Computational Economics* 20 (1): 1–20. [https://doi.org/10.1023/A:1020517101123](https://doi.org/10.1023/A:1020517101123)
 - Stokey, Nancy L., Robert E. Lucas, and Edward C. Prescott. 1989. *Recursive Methods in Economic Dynamics*. Cambridge, MA: Harvard University Press. ISBN 978-0-674-75096-8.
 - Walker, Homer F., and Peng Ni. 2011. "Anderson Acceleration for Fixed-Point Iterations." *SIAM Journal on Numerical Analysis* 49 (4): 1715–1735. [https://doi.org/10.1137/10078356X](https://doi.org/10.1137/10078356X)
+
+### Heterogeneous Agent DSGE
+
+- Auclert, Adrien, Bence Bardóczy, Matthew Rognlie, and Ludwig Straub. 2021. "Using the Sequence-Space Jacobian to Solve and Estimate Heterogeneous-Agent Models." *Econometrica* 89 (5): 2375–2408. [https://doi.org/10.3982/ECTA17434](https://doi.org/10.3982/ECTA17434)
+- Carroll, Christopher D. 2006. "The Method of Endogenous Gridpoints for Solving Dynamic Stochastic Optimization Problems." *Economics Letters* 91 (3): 312–320. [https://doi.org/10.1016/j.econlet.2005.09.013](https://doi.org/10.1016/j.econlet.2005.09.013)
+- Kaplan, Greg, Benjamin Moll, and Giovanni L. Violante. 2018. "Monetary Policy According to HANK." *American Economic Review* 108 (3): 697–743. [https://doi.org/10.1257/aer.20160042](https://doi.org/10.1257/aer.20160042)
+- Krusell, Per, and Anthony A. Smith Jr. 1998. "Income and Wealth Heterogeneity in the Macroeconomy." *Journal of Political Economy* 106 (5): 867–896. [https://doi.org/10.1086/250034](https://doi.org/10.1086/250034)
+- Reiter, Michael. 2009. "Solving Heterogeneous-Agent Models by Projection and Perturbation." *Journal of Economic Dynamics and Control* 33 (3): 649–665. [https://doi.org/10.1016/j.jedc.2008.08.010](https://doi.org/10.1016/j.jedc.2008.08.010)
+- Young, Eric R. 2010. "Solving the Incomplete Markets Model with Aggregate Uncertainty Using the Krusell–Smith Algorithm and Non-Stochastic Simulations." *Journal of Economic Dynamics and Control* 34 (1): 36–41. [https://doi.org/10.1016/j.jedc.2008.11.010](https://doi.org/10.1016/j.jedc.2008.11.010)
 
 ### GMM and Covariance Estimation
 
