@@ -8,6 +8,7 @@ using Test
 using MacroEconometricModels
 using LinearAlgebra
 using SparseArrays
+using Random
 
 @testset "HA-DSGE Types" begin
 
@@ -585,6 +586,116 @@ end
     p90 = MacroEconometricModels._wealth_percentile(vec(ss.distribution), ss.grid, 0.9)
     @test p90 >= p50  # 90th percentile >= median
     @test isfinite(p50)
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 17: Analysis functions
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "Analysis functions" begin
+    grid = HAGrid(assets=(0.0, 200.0, 80), income_states=3)
+    inc = rouwenhorst(0.966, 0.5, 3)
+    ip = IndividualProblem{Float64}(
+        c -> log(c), c -> 1.0/c, m -> 1.0/m, 0.99,
+        (a, e, prices) -> (1 + prices[:r]) * a + prices[:w] * e,
+        [0.0], nothing, 1
+    )
+    function price_fn_analysis(K, params)
+        r = 0.36 * K^(0.36-1) - 0.025; w = 0.64 * K^0.36
+        Dict(:r => r, :w => w)
+    end
+    params = Dict(:alpha => 0.36, :delta => 0.025, :Z => 1.0, :L => 1.0)
+    ss = MacroEconometricModels._ha_steady_state(ip, grid, inc, price_fn_analysis, params;
+        K_init=10.0, r_bounds=(-0.02, 0.04), max_iter=60, tol=1e-3)
+
+    # simulate_panel
+    panel = MacroEconometricModels.simulate_panel(ss; N_agents=100, T_periods=50,
+        rng=Random.MersenneTwister(42))
+    @test size(panel) == (100, 50)
+    @test all(panel .>= 0)
+    @test all(isfinite.(panel))
+    # Mean asset holdings should be in a reasonable range
+    mean_assets = sum(panel[:, end]) / 100
+    @test mean_assets > 0
+
+    # inequality_irf (using steady state directly — simplified)
+    ineq = MacroEconometricModels.inequality_irf(ss; T_periods=20)
+    @test haskey(ineq, :gini)
+    @test haskey(ineq, :p50)
+    @test haskey(ineq, :p90)
+    @test length(ineq[:gini]) == 20
+    @test all(0 .<= ineq[:gini] .<= 1)
+    # At steady state, all periods should be identical
+    @test all(ineq[:gini] .≈ ineq[:gini][1])
+    @test all(ineq[:p50] .≈ ineq[:p50][1])
+    @test all(ineq[:p90] .≈ ineq[:p90][1])
+    # Percentile ordering
+    @test ineq[:p90][1] >= ineq[:p50][1]
+    @test ineq[:p50][1] >= ineq[:p10][1]
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 18: Built-in examples
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "Built-in examples" begin
+    @testset "Krusell-Smith" begin
+        spec = load_ha_example(:krusell_smith)
+        @test spec isa HADSGESpec{Float64}
+        @test spec.grid.n_dims == 1
+        @test spec.grid.n_income == 7
+        @test spec.individual.beta ≈ 0.99
+        @test length(spec.income.states) == 7
+        @test spec.individual.borrowing_constraint[1] ≈ 0.0
+        @test spec.grid.n_points == [200]
+        @test spec.grid.bounds[1] == (0.0, 200.0)
+        @test spec.het_params[:alpha] ≈ 0.36
+        @test spec.het_params[:delta] ≈ 0.025
+        @test spec.n_assets == 1
+        @test spec.n_income == 7
+        # Aggregate spec is a valid DSGESpec
+        @test spec.aggregate_spec isa DSGESpec{Float64}
+        @test :Y in spec.aggregate_spec.endog
+        @test :K in spec.aggregate_spec.endog
+    end
+
+    @testset "One-asset HANK" begin
+        spec = load_ha_example(:one_asset_hank)
+        @test spec isa HADSGESpec{Float64}
+        @test spec.grid.n_dims == 1
+        @test spec.individual.borrowing_constraint[1] ≈ -2.0
+        @test spec.individual.beta ≈ 0.986
+        @test spec.grid.bounds[1][1] ≈ -2.0
+        @test spec.grid.bounds[1][2] ≈ 50.0
+        @test spec.grid.n_points == [200]
+        @test spec.grid.n_income == 7
+        @test spec.het_params[:sigma_c] ≈ 1.0
+        @test spec.n_assets == 1
+    end
+
+    @testset "Two-asset HANK" begin
+        spec = load_ha_example(:two_asset_hank)
+        @test spec isa HADSGESpec{Float64}
+        @test spec.grid.n_dims == 2
+        @test spec.individual.adjustment_cost !== nothing
+        @test spec.individual.n_asset_dims == 2
+        @test spec.individual.borrowing_constraint[1] ≈ -2.0
+        @test spec.individual.borrowing_constraint[2] ≈ 0.0
+        @test spec.grid.labels == [:liquid, :illiquid]
+        @test spec.grid.n_points == [50, 50]
+        @test spec.grid.bounds[1] == (-2.0, 50.0)
+        @test spec.grid.bounds[2] == (0.0, 100.0)
+        @test spec.n_assets == 2
+        @test spec.n_income == 7
+        # Adjustment cost should return a positive value for nonzero deposit
+        chi = spec.individual.adjustment_cost(1.0, 10.0)
+        @test chi > 0.0
+        @test isfinite(chi)
+    end
+
+    @testset "Invalid example" begin
+        @test_throws ErrorException load_ha_example(:nonexistent)
+    end
 end
 
 end # @testset "HA-DSGE Types"

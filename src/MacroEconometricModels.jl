@@ -369,7 +369,9 @@ include("dsge/heterogeneous/steady_state.jl")
 include("dsge/heterogeneous/krusell_smith.jl")
 include("dsge/heterogeneous/ssj.jl")
 include("dsge/heterogeneous/reiter.jl")
+include("dsge/heterogeneous/examples.jl")
 include("dsge/heterogeneous/display.jl")
+include("dsge/heterogeneous/analysis.jl")
 
 # Display (after all types)
 include("summary.jl")
@@ -480,7 +482,8 @@ export dsge_smoother, dsge_particle_smoother
 export HADSGESpec, HAGrid, IncomeProcess, IndividualProblem
 export HASteadyState, HADSGESolution, KrusellSmithSolution
 export rouwenhorst, tauchen
-export ha_steady_state
+export ha_steady_state, load_ha_example
+export distribution_irf, inequality_irf, simulate_panel
 
 # Local Projection types
 export AbstractLPModel, AbstractLPImpulseResponse, AbstractCovarianceEstimator
