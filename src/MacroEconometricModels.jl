@@ -365,6 +365,7 @@ include("dsge/heterogeneous/types.jl")
 include("dsge/heterogeneous/egm.jl")
 include("dsge/heterogeneous/individual_vfi.jl")
 include("dsge/heterogeneous/distribution.jl")
+include("dsge/heterogeneous/steady_state.jl")
 
 # Display (after all types)
 include("summary.jl")
@@ -475,6 +476,7 @@ export dsge_smoother, dsge_particle_smoother
 export HADSGESpec, HAGrid, IncomeProcess, IndividualProblem
 export HASteadyState, HADSGESolution, KrusellSmithSolution
 export rouwenhorst, tauchen
+export ha_steady_state
 
 # Local Projection types
 export AbstractLPModel, AbstractLPImpulseResponse, AbstractCovarianceEstimator

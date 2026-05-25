@@ -345,4 +345,82 @@ end
     @test isfinite(K)
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 10: HA steady state — bisection on interest rate
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "HA steady state" begin
+    grid = HAGrid(assets=(0.0, 200.0, 150), income_states=5)
+    inc = rouwenhorst(0.966, 0.5, 5)
+    ip = IndividualProblem{Float64}(
+        c -> log(c), c -> 1.0/c, m -> 1.0/m, 0.99,
+        (a, e, prices) -> (1 + prices[:r]) * a + prices[:w] * e,
+        [0.0], nothing, 1
+    )
+    function price_fn(K, params)
+        alpha = params[:alpha]; delta = params[:delta]
+        Z = params[:Z]; L = params[:L]
+        r = alpha * Z * K^(alpha-1) * L^(1-alpha) - delta
+        w = (1-alpha) * Z * K^alpha * L^(-alpha)
+        Dict(:r => r, :w => w)
+    end
+    params = Dict(:alpha => 0.36, :delta => 0.025, :Z => 1.0, :L => 1.0)
+
+    ss = MacroEconometricModels._ha_steady_state(
+        ip, grid, inc, price_fn, params;
+        K_init=10.0, r_bounds=(-0.01, 0.04), max_iter=100, tol=1e-4
+    )
+
+    @test ss isa HASteadyState{Float64}
+    @test ss.converged || abs(ss.excess_demand) < 1e-3
+    @test ss.prices[:r] > -0.01   # above lower bisection bound
+    @test ss.prices[:r] < 0.04    # below upper bisection bound
+    @test ss.prices[:w] > 0
+    @test sum(ss.distribution) ≈ 1.0 atol=1e-10
+    @test all(ss.distribution .>= 0)
+    @test ss.aggregates[:K] > 0
+    @test ss.euler_error < 1e-2
+    @test haskey(ss.policies, :savings)
+    @test haskey(ss.policies, :consumption)
+
+    # Value function should be zeros for EGM-based solver
+    @test all(ss.value_fn .== 0.0)
+
+    # Aggregate output should be positive
+    @test ss.aggregates[:Y] > 0
+
+    # Distribution shape
+    @test size(ss.distribution) == (150, 5)
+
+    # Policy shapes
+    @test size(ss.policies[:savings]) == (150, 5)
+    @test size(ss.policies[:consumption]) == (150, 5)
+
+    # Consumption should be positive everywhere
+    @test all(ss.policies[:consumption] .> 0)
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 11: Euler error computation
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "Euler error computation" begin
+    grid = HAGrid(assets=(0.0, 200.0, 100), income_states=3)
+    inc = rouwenhorst(0.966, 0.5, 3)
+    ip = IndividualProblem{Float64}(
+        c -> log(c), c -> 1.0/c, m -> 1.0/m, 0.99,
+        (a, e, prices) -> (1 + prices[:r]) * a + prices[:w] * e,
+        [0.0], nothing, 1
+    )
+    prices = Dict(:r => 0.01, :w => 1.0)
+    c_pol, a_pol = MacroEconometricModels._egm_solve(ip, grid, inc, prices; max_iter=1000, tol=1e-10)
+
+    euler_err = MacroEconometricModels._compute_euler_error(c_pol, a_pol, ip, grid, inc, prices)
+
+    # Euler error should be finite and in log10 units (negative = small error)
+    @test isfinite(euler_err)
+    # Well-converged EGM should yield small Euler errors (< ~1e-1 → log10 < -1)
+    @test euler_err < -1.0
+end
+
 end # @testset "HA-DSGE Types"
