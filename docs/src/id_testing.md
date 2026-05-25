@@ -130,7 +130,7 @@ where ``\hat{s}_j`` is sample skewness and ``\hat{\kappa}_j`` is excess kurtosis
 ica = identify_fastica(model)
 result = test_shock_gaussianity(ica)
 report(result)
-println("Gaussian shocks: ", result.details[:n_gaussian], " (need <= 1)")
+result.details[:n_gaussian]
 ```
 
 The test also accepts `NonGaussianMLResult`: `test_shock_gaussianity(ml_result)`.
@@ -190,7 +190,7 @@ The bootstrap identification strength test assesses robustness of the estimated 
 ```@example id_test
 result = test_identification_strength(model; method=:fastica, n_bootstrap=499)
 report(result)
-println("Normalized distance: ", round(result.details[:normalized_distance], digits=4))
+round(result.details[:normalized_distance], digits=4)
 ```
 
 | Keyword | Type | Default | Description |
@@ -241,13 +241,13 @@ report(lr)
 ica = identify_fastica(model)
 gauss = test_shock_gaussianity(ica)
 report(gauss)
-println("Gaussian shocks: ", gauss.details[:n_gaussian])
+gauss.details[:n_gaussian]
 ```
 
 ```@example id_test
 indep = test_shock_independence(ica; max_lag=5)
 report(indep)
-println("Shocks independent: ", indep.identified)
+indep.identified
 ```
 
 ```@example id_test

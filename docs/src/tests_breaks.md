@@ -238,15 +238,11 @@ result = bai_perron_test(y, X; max_breaks=5, criterion=:bic)
 report(result)
 
 # Examine regime-specific coefficients
-for (j, coefs) in enumerate(result.regime_coefs)
-    println("Regime $j: intercept = $(round(coefs[1], digits=2)), ",
-            "slope = $(round(coefs[2], digits=2))")
-end
+[(regime=j, intercept=round(coefs[1], digits=2), slope=round(coefs[2], digits=2))
+ for (j, coefs) in enumerate(result.regime_coefs)]
 
 # Compare BIC and LWZ break number selection
-bic_choice = argmin(result.bic_values) - 1
-lwz_choice = argmin(result.lwz_values) - 1
-println("BIC selects $bic_choice breaks, LWZ selects $lwz_choice breaks")
+(bic_breaks=argmin(result.bic_values) - 1, lwz_breaks=argmin(result.lwz_values) - 1)
 ```
 
 The `n_breaks` field reports the selected number of breaks. The `break_dates` vector gives the observation indices where breaks occur. The `regime_coefs` and `regime_ses` vectors contain coefficient estimates and standard errors for each regime. The `supf_stats` and `sequential_stats` vectors provide the test statistics for formal inference, while `bic_values` and `lwz_values` give information criteria for each candidate number of breaks (0 through `max_breaks`).
@@ -542,12 +538,9 @@ result_bp = bai_perron_test(y2, X2; max_breaks=5, criterion=:bic)
 report(result_bp)
 
 # Display regime coefficients
-for (j, (coefs, ses)) in enumerate(zip(result_bp.regime_coefs, result_bp.regime_ses))
-    println("Regime $j: intercept = $(round(coefs[1], digits=2)) ",
-            "(SE = $(round(ses[1], digits=2))), ",
-            "slope = $(round(coefs[2], digits=2)) ",
-            "(SE = $(round(ses[2], digits=2)))")
-end
+[(regime=j, intercept=round(coefs[1], digits=2), intercept_se=round(ses[1], digits=2),
+  slope=round(coefs[2], digits=2), slope_se=round(ses[2], digits=2))
+ for (j, (coefs, ses)) in enumerate(zip(result_bp.regime_coefs, result_bp.regime_ses))]
 
 # =========================================================================
 # Part 3: Factor model break test

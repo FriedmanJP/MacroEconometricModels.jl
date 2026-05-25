@@ -533,7 +533,7 @@ plot_result(cs)
 ```
 
 ```@raw html
-<iframe src="../assets/plots/spectral_density.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+<iframe src="../assets/plots/spectral_cross.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
 ```@example spectral

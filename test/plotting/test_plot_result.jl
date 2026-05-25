@@ -344,6 +344,60 @@ using Test, Random, DataFrames
         @test occursin("Nowcast", p.html)
     end
 
+    @testset "NowcastResult view=:default with DFM factors" begin
+        nM = 4; nQ = 1
+        Y_nc = randn(Random.MersenneTwister(70), 100, nM + nQ)
+        Y_nc[end, end] = NaN
+        dfm_nc = nowcast_dfm(Y_nc, nM, nQ; r=2, p=1)
+        nr = nowcast(dfm_nc)
+        p = plot_result(nr; view=:default)
+        check_plot(p)
+        @test occursin("Factor 1", p.html)
+        @test occursin("Factor 2", p.html)
+    end
+
+    @testset "NowcastResult view=:heatmap" begin
+        nM = 4; nQ = 1
+        Y_nc = randn(Random.MersenneTwister(77), 100, nM + nQ)
+        Y_nc[end, end] = NaN
+        Y_nc[end-1:end, 3] .= NaN
+        dfm_nc = nowcast_dfm(Y_nc, nM, nQ; r=2, p=1)
+        nr = nowcast(dfm_nc)
+        p = plot_result(nr; view=:heatmap)
+        check_plot(p)
+        @test occursin("interpolateRdBu", p.html)
+        @test occursin("#d9d9d9", p.html)
+    end
+
+    @testset "NowcastResult view=:contributions" begin
+        nM = 4; nQ = 1
+        Y_nc = randn(Random.MersenneTwister(71), 100, nM + nQ)
+        Y_nc[end, end] = NaN
+        dfm_nc = nowcast_dfm(Y_nc, nM, nQ; r=2, p=1)
+        nr = nowcast(dfm_nc)
+        p = plot_result(nr; view=:contributions)
+        check_plot(p)
+        @test occursin("Contribution", p.html) || occursin("contribution", p.html)
+    end
+
+    @testset "NowcastResult view=:contributions requires DFM" begin
+        rng = Random.MersenneTwister(72)
+        Y = randn(rng, 60, 4)
+        Y[55:60, 3:4] .= NaN
+        m = nowcast_bvar(Y, 2, 2; lags=2, max_iter=20)
+        nr = nowcast(m)
+        @test_throws ArgumentError plot_result(nr; view=:contributions)
+    end
+
+    @testset "NowcastResult invalid view" begin
+        nM = 4; nQ = 1
+        Y_nc = randn(Random.MersenneTwister(73), 100, nM + nQ)
+        Y_nc[end, end] = NaN
+        dfm_nc = nowcast_dfm(Y_nc, nM, nQ; r=2, p=1)
+        nr = nowcast(dfm_nc)
+        @test_throws ArgumentError plot_result(nr; view=:bad)
+    end
+
     @testset "NowcastNews" begin
         X_old = randn(100, 5)
         X_old[end, end] = NaN
@@ -354,6 +408,43 @@ using Test, Random, DataFrames
         p = plot_result(nn)
         check_plot(p)
         @test occursin("News", p.html) || occursin("news", p.html)
+    end
+
+    @testset "NowcastNews view=:groups" begin
+        X_old = randn(Random.MersenneTwister(55), 100, 5)
+        X_old[end, end] = NaN
+        X_new = copy(X_old)
+        X_new[end, end] = 0.5
+        dfm2 = nowcast_dfm(X_old, 4, 1; r=2, p=1)
+        groups = [1, 1, 2, 2, 3]
+        nn = nowcast_news(X_new, X_old, dfm2, 5; groups=groups,
+                          group_names=["Industry", "Retail", "GDP"])
+        p = plot_result(nn; view=:groups)
+        check_plot(p)
+        @test occursin("Industry", p.html)
+        @test occursin("Retail", p.html)
+    end
+
+    @testset "NowcastNews view=:individual" begin
+        X_old = randn(Random.MersenneTwister(56), 100, 5)
+        X_old[98:100, 1:2] .= NaN
+        X_new = copy(X_old)
+        X_new[98:100, 1:2] .= randn(Random.MersenneTwister(57), 3, 2)
+        dfm2 = nowcast_dfm(X_old, 4, 1; r=2, p=1)
+        nn = nowcast_news(X_new, X_old, dfm2, 5)
+        p = plot_result(nn; view=:individual)
+        check_plot(p)
+        @test occursin("Impact", p.html)
+    end
+
+    @testset "NowcastNews invalid view" begin
+        X_old = randn(Random.MersenneTwister(58), 100, 5)
+        X_old[end, end] = NaN
+        X_new = copy(X_old)
+        X_new[end, end] = 0.5
+        dfm2 = nowcast_dfm(X_old, 4, 1; r=2, p=1)
+        nn = nowcast_news(X_new, X_old, dfm2, 5)
+        @test_throws ArgumentError plot_result(nn; view=:nonexistent)
     end
 
     # =========================================================================

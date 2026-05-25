@@ -898,7 +898,19 @@ plot_result(fc)
 ```
 
 ```@raw html
+<iframe src="../assets/plots/irf_lp.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+```@raw html
 <iframe src="../assets/plots/irf_structural_lp.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+```@raw html
+<iframe src="../assets/plots/fevd_lp.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+```@raw html
+<iframe src="../assets/plots/forecast_lp.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
 The `estimate_lp` call fits 21 horizon-specific OLS regressions (``h = 0, \ldots, 20``) with Newey-West HAC standard errors, producing the reduced-form IRF of a federal funds rate innovation. The `structural_lp` call estimates a VAR(4) for Cholesky identification, recovers orthogonalized structural shocks, and re-estimates the LP regressions using each structural shock as the impulse variable. The LP-FEVD uses R² regressions with bootstrap bias correction to decompose forecast error variance without relying on the VMA representation. The direct forecast projects each response variable forward using the LP coefficients and an assumed unit-impulse shock path.

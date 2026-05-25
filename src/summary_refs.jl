@@ -376,6 +376,22 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="The boosted Hodrick-Prescott filter is more general than you might think",
         journal="Journal of Applied Econometrics", volume="39", issue="7", pages="1260--1281",
         doi="10.1002/jae.3086", isbn="", publisher="", entry_type=:article),
+    # --- X-13ARIMA-SEATS ---
+    :dagum_bianconcini2016 => (key=:dagum_bianconcini2016,
+        authors="Dagum, Estela Bee and Bianconcini, Silvia", year=2016,
+        title="Seasonal Adjustment Methods and Real Time Trend-Cycle Estimation",
+        journal="", volume="", issue="", pages="",
+        doi="10.1007/978-3-319-31822-6", isbn="978-3-319-31820-2", publisher="Springer", entry_type=:book),
+    :findley1998 => (key=:findley1998,
+        authors="Findley, David F. and Monsell, Brian C. and Bell, William R. and Otto, Mark C. and Chen, Bor-Chung", year=1998,
+        title="New Capabilities and Methods of the X-12-ARIMA Seasonal-Adjustment Program",
+        journal="Journal of Business and Economic Statistics", volume="16", issue="2", pages="127--152",
+        doi="10.1080/07350015.1998.10524743", isbn="", publisher="", entry_type=:article),
+    :gomez_maravall1996 => (key=:gomez_maravall1996,
+        authors="Gómez, Víctor and Maravall, Agustín", year=1996,
+        title="Programs TRAMO and SEATS: Instructions for the User",
+        journal="Banco de España Working Papers", volume="9628", issue="", pages="",
+        doi="", isbn="", publisher="Banco de España", entry_type=:techreport),
     # --- Model Comparison Tests ---
     :wilks1938 => (key=:wilks1938, authors="Wilks, Samuel S.", year=1938,
         title="The Large-Sample Distribution of the Likelihood Ratio for Testing Composite Hypotheses",
@@ -952,6 +968,8 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :beveridge_nelson => [:beveridge_nelson1981, :morley_nelson_zivot2003],
     :baxter_king => [:baxter_king1999],
     :boosted_hp => [:phillips_shi2021, :mei_phillips_shi2024],
+    :X13FilterResult => [:dagum_bianconcini2016, :findley1998, :gomez_maravall1996],
+    :x13_filter => [:dagum_bianconcini2016, :findley1998, :gomez_maravall1996],
     # Model comparison tests
     :LRTestResult => [:wilks1938, :neyman_pearson1933],
     :LMTestResult => [:rao1948, :silvey1959],
@@ -1370,6 +1388,7 @@ refs(io::IO, ::HamiltonFilterResult; kw...) = refs(io, _TYPE_REFS[:HamiltonFilte
 refs(io::IO, ::BeveridgeNelsonResult; kw...) = refs(io, _TYPE_REFS[:BeveridgeNelsonResult]; kw...)
 refs(io::IO, ::BaxterKingResult; kw...) = refs(io, _TYPE_REFS[:BaxterKingResult]; kw...)
 refs(io::IO, ::BoostedHPResult; kw...) = refs(io, _TYPE_REFS[:BoostedHPResult]; kw...)
+refs(io::IO, ::X13FilterResult; kw...) = refs(io, _TYPE_REFS[:X13FilterResult]; kw...)
 
 # Model comparison tests
 refs(io::IO, ::LRTestResult; kw...) = refs(io, _TYPE_REFS[:LRTestResult]; kw...)

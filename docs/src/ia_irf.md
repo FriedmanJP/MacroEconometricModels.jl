@@ -296,7 +296,7 @@ For full LP estimation details, including LP-IV, smooth LP, and state-dependent 
 The residual bootstrap of Kilian (1998) can produce explosive bootstrap draws when the companion matrix has eigenvalues near the unit circle. Setting `stationary_only=true` rejects any draw whose companion matrix has ``|\lambda_{\max}| \geq 1`` and redraws, ensuring all bootstrap IRFs come from stationary parameter configurations.
 
 !!! note "Technical Note"
-    The algorithm attempts up to ``10 \times \text{reps}`` draws to collect the requested number of stationary replications. If fewer than `reps` stationary draws are obtained, a warning is emitted. In practice, well-specified models with moderate sample sizes produce rejection rates below 10%.
+    The algorithm draws up to ``10 \times \text{reps}`` candidates to collect the requested number of stationary replications. If fewer than `reps` stationary draws are obtained, a warning is emitted. In practice, well-specified models with moderate sample sizes produce rejection rates below 10%.
 
 ```@example ia_irf
 # Bootstrap with stationarity filtering

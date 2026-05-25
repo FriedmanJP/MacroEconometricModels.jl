@@ -23,6 +23,7 @@ makedocs(;
         "Data Management" => "data.md",
         "Univariate Models" => [
             "Time Series Filters" => "filters.md",
+            "X-13ARIMA-SEATS" => "x13.md",
             "Spectral Analysis" => "spectral.md",
             "ARIMA" => "arima.md",
             "Volatility Models" => "volatility.md",

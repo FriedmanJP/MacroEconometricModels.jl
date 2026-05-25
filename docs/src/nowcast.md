@@ -138,8 +138,56 @@ Each method computes the forecast differently: DFM projects the state vector 3 m
 
 ## Visualization
 
+The `plot_result` function supports multiple views for both `NowcastResult` and `NowcastNews` objects, following the visualization patterns of the ECB Nowcasting Toolbox (Linzenich and Meunier 2024).
+
+### Nowcast Result Views
+
+The default view displays the smoothed target variable with nowcast/forecast extension. For DFM models, extracted factor panels are appended automatically.
+
+```julia
+plot_result(nr)                          # default: target + factors (DFM)
+plot_result(nr; view=:heatmap)           # z-score heatmap with ragged edge
+plot_result(nr; view=:contributions)     # group contributions (DFM only)
+```
+
 ```@raw html
 <iframe src="../assets/plots/nowcast_result.html" width="100%" height="400" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+The **heatmap view** computes z-scores for each variable and renders the last `n_periods` (default 18) as a color-coded matrix. Missing values appear in grey, revealing the ragged edge --- the characteristic pattern of staggered data releases.
+
+```@raw html
+<iframe src="../assets/plots/nowcast_heatmap.html" width="100%" height="350" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+The **contributions view** decomposes the nowcast into factor/block group contributions, showing how each group drives the current-quarter estimate and the one-quarter-ahead forecast.
+
+```@raw html
+<iframe src="../assets/plots/nowcast_contributions.html" width="100%" height="350" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+### News Decomposition Views
+
+```julia
+plot_result(news)                        # default: per-release impact bar chart
+plot_result(news; view=:groups)          # stacked bar by variable group
+plot_result(news; view=:individual)      # sorted bar by absolute impact
+```
+
+```@raw html
+<iframe src="../assets/plots/nowcast_news.html" width="100%" height="400" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+The **group view** aggregates news impacts by variable group, immediately revealing which sector drove the revision.
+
+```@raw html
+<iframe src="../assets/plots/nowcast_news_groups.html" width="100%" height="350" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
+The **individual view** sorts releases by absolute impact, identifying the single most influential data points.
+
+```@raw html
+<iframe src="../assets/plots/nowcast_news_individual.html" width="100%" height="350" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
 ---
@@ -152,6 +200,49 @@ For detailed treatment of each method --- theory, model specification, keyword t
 - [BVAR Nowcasting](@ref nowcast_bvar_page) --- GLP prior, dummy observations, hyperparameter optimization, Kalman smoothing
 - [Bridge Equations](@ref nowcast_bridge_page) --- quarterly aggregation, pairwise OLS, median combination, interpolation
 - [News Decomposition](@ref nowcast_news_page) --- revision attribution, per-release impact, group aggregation, data vintage comparison
+
+---
+
+## Complete Example
+
+This workflow produces a real-time GDP nowcast from mixed-frequency FRED-MD data, compares DFM and BVAR estimates, and attributes the revision to individual data releases via news decomposition.
+
+```@example nc
+# 1. DFM estimation with 2 factors and AR(1) idiosyncratic dynamics
+dfm_full = nowcast_dfm(Y, nM, nQ; r=2, p=1, idio=:ar1, max_iter=200)
+report(dfm_full)
+```
+
+```@example nc
+# 2. BVAR estimation with GLP prior
+bvar_full = nowcast_bvar(Y, nM, nQ; lags=4, max_iter=200)
+report(bvar_full)
+```
+
+```@example nc
+# 3. Compare point estimates
+r_dfm = nowcast(dfm_full)
+r_bvar = nowcast(bvar_full)
+(dfm=round(r_dfm.nowcast, digits=4), bvar=round(r_bvar.nowcast, digits=4))
+```
+
+```@example nc
+# 4. News decomposition: simulate a data vintage update
+X_old = copy(Y)
+X_old[end-2, 1:nM] .= NaN   # mask the most recent monthly releases
+X_new = copy(Y)
+news = nowcast_news(X_new, X_old, dfm_full, size(Y, 1);
+                    groups=[1, 2, 1, 2, 3],
+                    group_names=["Real", "Nominal", "Target"])
+report(news)
+```
+
+```julia
+plot_result(dfm_full)
+plot_result(news)
+```
+
+The DFM and BVAR nowcasts provide independent estimates of the target quarter. Agreement between the two methods increases confidence in the point forecast. The news decomposition traces the nowcast revision to specific data releases, identifying which monthly indicator contributed most to the update. The group-level attribution reveals whether the revision is driven by real activity, nominal prices, or financial conditions.
 
 ---
 
@@ -175,4 +266,5 @@ For detailed treatment of each method --- theory, model specification, keyword t
 - Banbura, Marta, Irina Belousova, Katalin Bodnar, and Mate Barnabas Toth. 2023. "Nowcasting Employment in the Euro Area." *ECB Working Paper* No. 2815.
 - Cimadomo, Jacopo, Domenico Giannone, Michele Lenza, Francesca Monti, and Andrej Sokol. 2022. "Nowcasting with Large Bayesian Vector Autoregressions." *ECB Working Paper* No. 2696.
 - Giannone, Domenico, Michele Lenza, and Giorgio E. Primiceri. 2015. "Prior Selection for Vector Autoregressions." *Review of Economics and Statistics* 97 (2): 436--451. [DOI: 10.1162/REST\_a\_00483](https://doi.org/10.1162/REST_a_00483)
+- Linzenich, Jan, and Baptiste Meunier. 2024. "Nowcasting with Mixed Frequency Data Using a Simple Modelling Setup: An Update of the ECB Nowcasting Framework." *ECB Working Paper* No. 3004.
 - Mariano, Roberto S., and Yasutomo Murasawa. 2003. "A New Coincident Index of Business Cycles Based on Monthly and Quarterly Series." *Journal of Applied Econometrics* 18 (4): 427--443. [DOI: 10.1002/jae.695](https://doi.org/10.1002/jae.695)

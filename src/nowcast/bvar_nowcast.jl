@@ -64,21 +64,26 @@ function nowcast_bvar(Y::AbstractMatrix, nM::Int, nQ::Int;
         t_complete -= 1
     end
 
-    # Need at least lags+1 complete rows
+    # Need at least lags+1 complete rows for VAR construction
     if t_complete < lags + 2
-        # Fallback: use column means for NaN
-        Y_filled = copy(Ymat)
-        for j in 1:N
-            valid = filter(!isnan, Y_filled[:, j])
-            m = isempty(valid) ? zero(Tf) : mean(valid)
-            for i in 1:T_obs
-                isnan(Y_filled[i, j]) && (Y_filled[i, j] = m)
-            end
-        end
         t_complete = T_obs
-        Ybal = Y_filled[1:t_complete, :]
-    else
-        Ybal = Ymat[1:t_complete, :]
+    end
+
+    # Fill NaN in balanced panel (quarterly columns have NaN at non-quarter months)
+    Ybal = copy(Ymat[1:t_complete, :])
+    for j in 1:N
+        col = Ybal[:, j]
+        valid_mask = .!isnan.(col)
+        if any(valid_mask) && !all(valid_mask)
+            m = mean(col[valid_mask])
+            for i in 1:t_complete
+                if isnan(Ybal[i, j])
+                    Ybal[i, j] = m
+                end
+            end
+        elseif !any(valid_mask)
+            Ybal[:, j] .= zero(Tf)
+        end
     end
 
     # Compute AR(1) residual standard deviations for prior scaling
@@ -132,6 +137,7 @@ end
 """Compute log marginal likelihood for Normal-IW BVAR."""
 function _bvar_log_ml(par::AbstractVector{T}, Y::Matrix{T}, lags::Int,
                       sigma_ar::Vector{T}) where {T<:AbstractFloat}
+    any(x -> abs(x) > T(5), par) && return -T(1e10)
     lambda = exp(par[1])
     theta = exp(par[2])
     miu = exp(par[3])
@@ -174,10 +180,18 @@ function _bvar_estimate(Y::Matrix{T}, lags::Int, sigma_ar::Vector{T},
     Y_star = vcat(Y_dep, Y_d)
     X_star = vcat(X_reg, X_d)
 
+    if !all(isfinite, Y_star) || !all(isfinite, X_star)
+        return zeros(T, k, N), Matrix{T}(I(N)), -T(1e10)
+    end
+
     # OLS on augmented system (= posterior mode of Normal-IW)
     XtX = X_star' * X_star
     XtX_reg = XtX + T(1e-6) * I(k)
     beta = XtX_reg \ (X_star' * Y_star)
+
+    if !all(isfinite, beta)
+        return zeros(T, k, N), Matrix{T}(I(N)), -T(1e10)
+    end
 
     # Residuals and posterior sigma
     resid = Y_star - X_star * beta
@@ -192,6 +206,10 @@ function _bvar_estimate(Y::Matrix{T}, lags::Int, sigma_ar::Vector{T},
     logml = -T(0.5) * T_eff * N * log(T(2π)) -
             T(0.5) * T_eff * ld -
             T(0.5) * tr(sigma_inv * SSR)
+
+    if !isfinite(logml)
+        logml = -T(1e10)
+    end
 
     return beta, sigma, logml
 end
@@ -211,8 +229,13 @@ function _bvar_dummy_obs(Y0::AbstractMatrix{T}, lags::Int, sigma_ar::Vector{T},
     N = size(Y0, 2)
     k = 1 + N * lags
 
-    # Mean of initial observations
-    y_bar = vec(mean(Y0, dims=1))
+    # Mean of initial observations (NaN-safe for mixed-frequency data)
+    y_bar = zeros(T, N)
+    for j in 1:N
+        col = Y0[:, j]
+        valid = filter(!isnan, col)
+        y_bar[j] = isempty(valid) ? zero(T) : mean(valid)
+    end
 
     dummy_Y = Matrix{T}(undef, 0, N)
     dummy_X = Matrix{T}(undef, 0, k)
@@ -275,29 +298,7 @@ function _bvar_smooth_missing(Y::Matrix{T}, beta::Matrix{T}, sigma::Matrix{T},
     T_obs, N = size(Y)
     X_sm = copy(Y)
 
-    # For observed values, keep originals; for NaN, use BVAR forecast
-    if t_complete < T_obs
-        for t in (t_complete + 1):T_obs
-            # Construct lagged values (use smoothed values for already-filled periods)
-            x_lag = ones(T, 1)
-            for lag in 1:lags
-                t_lag = t - lag
-                if t_lag >= 1
-                    x_lag = vcat(x_lag, X_sm[t_lag, :])
-                else
-                    x_lag = vcat(x_lag, zeros(T, N))
-                end
-            end
-            y_pred = beta' * x_lag
-            for j in 1:N
-                if isnan(X_sm[t, j])
-                    X_sm[t, j] = y_pred[j]
-                end
-            end
-        end
-    end
-
-    # Also fill any interior NaN values using interpolation + BVAR conditional
+    # Fill interior NaN values first (quarterly columns at non-quarter months)
     for t in 1:t_complete
         for j in 1:N
             if isnan(X_sm[t, j])
@@ -321,6 +322,27 @@ function _bvar_smooth_missing(Y::Matrix{T}, beta::Matrix{T}, sigma::Matrix{T},
                     # Column mean
                     valid = filter(!isnan, Y[:, j])
                     X_sm[t, j] = isempty(valid) ? zero(T) : mean(valid)
+                end
+            end
+        end
+    end
+
+    # Fill ragged edge (t > t_complete) using BVAR forecast
+    if t_complete < T_obs
+        for t in (t_complete + 1):T_obs
+            x_lag = ones(T, 1)
+            for lag in 1:lags
+                t_lag = t - lag
+                if t_lag >= 1
+                    x_lag = vcat(x_lag, X_sm[t_lag, :])
+                else
+                    x_lag = vcat(x_lag, zeros(T, N))
+                end
+            end
+            y_pred = beta' * x_lag
+            for j in 1:N
+                if isnan(X_sm[t, j])
+                    X_sm[t, j] = y_pred[j]
                 end
             end
         end

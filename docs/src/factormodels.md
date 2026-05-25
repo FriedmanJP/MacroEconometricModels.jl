@@ -36,7 +36,7 @@ report(fm)
 ```@example factor
 # Bai-Ng information criteria for factor count selection
 ic = ic_criteria(X, 10)
-println("IC1 selects r = ", ic.r_IC1, ", IC2 selects r = ", ic.r_IC2, ", IC3 selects r = ", ic.r_IC3)
+(IC1=ic.r_IC1, IC2=ic.r_IC2, IC3=ic.r_IC3)
 ```
 
 **Recipe 3: Dynamic factor model with VAR dynamics**
@@ -175,7 +175,7 @@ The optimal ``\hat{r}`` minimizes ``IC_k(r)`` over ``r \in \{1, \ldots, r_{\max}
 ```@example factor
 # Bai-Ng information criteria
 ic = ic_criteria(X, 10)
-println("IC1 selects r = ", ic.r_IC1, ", IC2 selects r = ", ic.r_IC2, ", IC3 selects r = ", ic.r_IC3)
+(IC1=ic.r_IC1, IC2=ic.r_IC2, IC3=ic.r_IC3)
 ```
 
 The three criteria typically agree on the number of factors for well-separated factor structures. When they disagree, IC2 and IC3 are preferred. The scree plot provides a complementary visual diagnostic: a sharp drop in eigenvalue magnitude after factor ``r`` confirms the information criteria selection.
@@ -693,7 +693,7 @@ This example demonstrates the full factor model workflow: data preparation, fact
 ```@example factor
 # Step 1: Select number of factors via Bai-Ng criteria
 ic_full = ic_criteria(X, 10)
-println("IC1 selects r = ", ic_full.r_IC1, ", IC2 selects r = ", ic_full.r_IC2, ", IC3 selects r = ", ic_full.r_IC3)
+(IC1=ic_full.r_IC1, IC2=ic_full.r_IC2, IC3=ic_full.r_IC3)
 
 # Step 2: Estimate static factor model
 fm_full = estimate_factors(X, 3; standardize=true)

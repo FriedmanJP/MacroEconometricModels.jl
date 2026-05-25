@@ -467,7 +467,7 @@ fadf = fourier_adf_test(cpi; regression=:constant, fmax=3)
 report(fadf)
 
 # Check whether Fourier terms contribute
-println("Fourier F-test: F=$(round(fadf.f_statistic, digits=3)), p=$(round(fadf.f_pvalue, digits=3))")
+(F=round(fadf.f_statistic, digits=3), p=round(fadf.f_pvalue, digits=3))
 
 # ── Step 4: Fourier KPSS as complementary stationarity test ──
 fkpss = fourier_kpss_test(cpi; regression=:constant, fmax=3)
@@ -480,23 +480,21 @@ report(dfgls)
 # ── Step 6: LM test with 1 break (breaks under H0) ──────────
 lm1 = lm_unitroot_test(cpi; breaks=1, regression=:level)
 report(lm1)
-println("Break at observation: ", lm1.break_dates[1])
+lm1.break_dates[1]
 
 # ── Step 7: Two-break ADF ───────────────────────────────────
 adf2 = adf_2break_test(cpi; model=:level, lags=:aic)
 report(adf2)
-println("Breaks at observations: ", adf2.break1, ", ", adf2.break2)
+(break1=adf2.break1, break2=adf2.break2)
 
 # ── Step 8: Synthesis ───────────────────────────────────────
-println("\n── Summary ──────────────────────────────────────────────")
-for (name, pval) in [("ADF", adf.pvalue), ("Fourier ADF", fadf.pvalue),
-                      ("DF-GLS", dfgls.pvalue), ("LM (1 break)", lm1.pvalue),
-                      ("ADF 2-break", adf2.pvalue)]
+map([("ADF", adf.pvalue), ("Fourier ADF", fadf.pvalue),
+     ("DF-GLS", dfgls.pvalue), ("LM (1 break)", lm1.pvalue),
+     ("ADF 2-break", adf2.pvalue)]) do (name, pval)
     status = pval < 0.05 ? "Reject H0 (stationary)" : "Fail to reject H0 (unit root)"
-    println("  $name: $status")
-end
-fkpss_status = fkpss.pvalue < 0.05 ? "Reject H0 (unit root)" : "Fail to reject H0 (stationary)"
-println("  Fourier KPSS: $fkpss_status")
+    (test=name, verdict=status)
+end |> v -> push!(v, (test="Fourier KPSS",
+    verdict=fkpss.pvalue < 0.05 ? "Reject H0 (unit root)" : "Fail to reject H0 (stationary)"))
 ```
 
 ---

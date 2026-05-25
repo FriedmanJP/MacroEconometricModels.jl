@@ -10,7 +10,7 @@
 
 A comprehensive Julia package for macroeconomic time series analysis.
 
-**Univariate:** ARIMA, ARCH/GARCH, Stochastic Volatility, HP/Hamilton/BN/BK/Boosted HP filters, Spectral Analysis, ACF/PACF/CCF
+**Univariate:** ARIMA, ARCH/GARCH, Stochastic Volatility, HP/Hamilton/BN/BK/Boosted HP filters, X-13ARIMA-SEATS seasonal adjustment, Spectral Analysis, ACF/PACF/CCF
 
 **Multivariate:** VAR, VECM, Bayesian VAR, Local Projections, Factor Models, FAVAR, Structural DFM
 
@@ -40,6 +40,13 @@ Pkg.add("MacroEconometricModels")
   - Beveridge-Nelson decomposition (ARIMA psi-weights)
   - Baxter-King band-pass filter
   - Boosted HP filter (Phillips & Shi 2021) with ADF/BIC/fixed stopping
+- **X-13ARIMA-SEATS** - Pure-Julia port of the US Census Bureau's seasonal adjustment program:
+  - X-11 decomposition (iterative moving average with Henderson trend filters)
+  - SEATS decomposition (Wiener-Kolmogorov spectral signal extraction)
+  - Automatic ARIMA model identification (TRAMO-style search with AICC selection)
+  - Outlier detection (additive outliers, level shifts, temporary changes)
+  - Calendar effects (trading day and Easter regressors)
+  - Log/level transformation selection with Jacobian-corrected AICC comparison
 - **ARIMA** - AR, MA, ARMA, ARIMA estimation via CSS, exact MLE (Kalman filter), or CSS-MLE
   - Automatic order selection via `auto_arima` with grid search over (p,d,q), AIC/BIC information criteria
   - Multi-step ahead forecasting with confidence intervals via psi-weight accumulation
@@ -191,7 +198,7 @@ Pkg.add("MacroEconometricModels")
   - Hyperparameter optimization via marginal log-likelihood maximization
   - Minnesota shrinkage with sum-of-coefficients and co-persistence priors
 - **Bridge Equations** - OLS regressions combining pairs of monthly indicators via median (Banbura et al. 2023)
-- **News Decomposition** - Attribute nowcast revisions to individual data releases
+- **News Decomposition** - Attribute nowcast revisions to individual data releases with group aggregation and named groups
 - **Panel Balancing** - `balance_panel()` fills NaN in TimeSeriesData/PanelData using DFM imputation
 
 ### Statistical Identification via Higher Moments
@@ -219,11 +226,12 @@ Pkg.add("MacroEconometricModels")
 
 ### Visualization
 - **Interactive D3.js plots** - `plot_result()` renders self-contained HTML with inline D3.js v7 (no additional dependencies)
-  - 41 dispatch methods covering IRF, FEVD, historical decomposition, filters, forecasts, volatility models, factor models, data containers, nowcasting, and difference-in-differences
-  - Three chart types: line (with confidence bands), stacked area, and bar charts
+  - 52 dispatch methods covering IRF, FEVD, historical decomposition, filters, forecasts, volatility models, factor models, data containers, nowcasting, regression, and difference-in-differences
+  - Four chart types: line (with confidence bands), stacked area, bar, and heatmap
   - Interactive tooltips, responsive layout, multi-panel grid figures
+  - Nowcast views: `view=:default` (+ DFM factor panels), `:heatmap` (z-score ragged edge), `:contributions` (group stacked bar); news views: `:releases`, `:groups`, `:individual`
   - `save_plot(p, "file.html")` saves to disk; `display_plot(p)` opens in browser; auto-renders in Jupyter
-  - Common kwargs: `var`, `shock`, `title`, `save_path`, `ncols`
+  - Common kwargs: `var`, `shock`, `title`, `save_path`, `ncols`, `view`
 
 ### Data Management
 - **Typed containers** - `TimeSeriesData`, `PanelData`, `CrossSectionData` with variable names, frequency, transformation codes, and descriptions
@@ -250,6 +258,12 @@ All documentation code examples execute during the build — `report()` output, 
 - Hamilton, James D. 2018. "Why You Should Never Use the Hodrick-Prescott Filter." *Review of Economics and Statistics* 100 (5): 831–843. [https://doi.org/10.1162/rest_a_00706](https://doi.org/10.1162/rest_a_00706)
 - Hodrick, Robert J., and Edward C. Prescott. 1997. "Postwar U.S. Business Cycles: An Empirical Investigation." *Journal of Money, Credit and Banking* 29 (1): 1–16. [https://doi.org/10.2307/2953682](https://doi.org/10.2307/2953682)
 - Phillips, Peter C. B., and Zhentao Shi. 2021. "Boosting: Why You Can Use the HP Filter." *International Economic Review* 62 (2): 521–570. [https://doi.org/10.1111/iere.12495](https://doi.org/10.1111/iere.12495)
+
+### X-13ARIMA-SEATS
+
+- Dagum, Estela Bee, and Silvia Bianconcini. 2016. *Seasonal Adjustment Methods and Real Time Trend-Cycle Estimation*. Springer. [https://doi.org/10.1007/978-3-319-31822-6](https://doi.org/10.1007/978-3-319-31822-6)
+- Findley, David F., Brian C. Monsell, William R. Bell, Mark C. Otto, and Bor-Chung Chen. 1998. "New Capabilities and Methods of the X-12-ARIMA Seasonal-Adjustment Program." *Journal of Business and Economic Statistics* 16 (2): 127–152. [https://doi.org/10.1080/07350015.1998.10524743](https://doi.org/10.1080/07350015.1998.10524743)
+- Gómez, Víctor, and Agustín Maravall. 1996. "Programs TRAMO and SEATS: Instructions for the User." *Banco de España Working Papers* 9628.
 
 ### ARIMA
 
@@ -415,6 +429,7 @@ All documentation code examples execute during the build — `report()` output, 
 - Bańbura, Marta, and Michele Modugno. 2014. "Maximum Likelihood Estimation of Factor Models on Datasets with Arbitrary Pattern of Missing Data." *Journal of Applied Econometrics* 29 (1): 133–160. [https://doi.org/10.1002/jae.2306](https://doi.org/10.1002/jae.2306)
 - Cimadomo, Jacopo, Domenico Giannone, Michele Lenza, Francesca Monti, and Andrej Sokol. 2022. "Nowcasting with Large Bayesian Vector Autoregressions." *ECB Working Paper* No. 2696.
 - Bańbura, Marta, Irina Belousova, Katalin Bodnár, and Máté Barnabás Tóth. 2023. "Nowcasting Employment in the Euro Area." *ECB Working Paper* No. 2815.
+- Linzenich, Jan, and Baptiste Meunier. 2024. "Nowcasting with Mixed Frequency Data Using a Simple Modelling Setup: An Update of the ECB Nowcasting Framework." *ECB Working Paper* No. 3004.
 
 ### Model Comparison Tests
 

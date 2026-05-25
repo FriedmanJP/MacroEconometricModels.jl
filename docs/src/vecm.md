@@ -282,6 +282,10 @@ plot_result(hd)
 <iframe src="../assets/plots/vecm_irf.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
+```@raw html
+<iframe src="../assets/plots/vecm_fevd.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
+```
+
 The Cholesky-identified IRFs trace the dynamic effects of orthogonalized shocks on the level variables. Because the VAR is estimated in levels (via conversion), the IRFs capture both the transitory short-run dynamics and the permanent effects that cointegration implies. For a system with ``r < n`` cointegrating vectors, exactly ``n - r`` shocks have permanent effects on the levels, corresponding to the common stochastic trends. For details on identification methods, see [Innovation Accounting](@ref innovation_accounting_page).
 
 ---

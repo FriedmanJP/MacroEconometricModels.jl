@@ -444,6 +444,75 @@ function _render_bar_js(id::String, data_json::String, series_json::String;
 end
 
 # =============================================================================
+# Heatmap Chart Renderer
+# =============================================================================
+
+"""
+Generate D3.js code for a color-coded heatmap matrix.
+- `data_json`: JSON array of {x, y, v} objects (v can be null for missing)
+- `row_labels_json`: JSON array of row label strings
+- `col_labels_json`: JSON array of column label strings
+- `color_domain`: [min, max] for the diverging color scale
+"""
+function _render_heatmap_js(id::String, data_json::String,
+                            row_labels_json::String, col_labels_json::String;
+                            xlabel::String="", ylabel::String="",
+                            color_domain::Vector{<:Real}=[-3, 3])
+    cmin, cmax = color_domain[1], color_domain[2]
+    """
+(function() {
+    const data = $(data_json);
+    const rowLabels = $(row_labels_json);
+    const colLabels = $(col_labels_json);
+
+    const container = d3.select('#$(id)');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const maxLabelW = 120;
+    const margin = {top:10, right:15, bottom:35, left: maxLabelW};
+    const w = W - margin.left - margin.right;
+    const cellH = Math.max(Math.min(18, 250 / rowLabels.length), 8);
+    const h = cellH * rowLabels.length;
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    const x = d3.scaleBand().domain(colLabels).range([0, w]).padding(0.02);
+    const y = d3.scaleBand().domain(rowLabels).range([0, h]).padding(0.02);
+
+    const color = d3.scaleSequential(t => d3.interpolateRdBu(1 - t))
+        .domain([$(cmin), $(cmax)]);
+    const grey = '#d9d9d9';
+
+    g.selectAll('rect.cell').data(data).join('rect').attr('class','cell')
+        .attr('x', d => x(d.x))
+        .attr('y', d => y(d.y))
+        .attr('width', x.bandwidth())
+        .attr('height', y.bandwidth())
+        .attr('fill', d => d.v === null ? grey : color(Math.max($(cmin), Math.min($(cmax), d.v))))
+        .attr('rx', 1)
+        .on('mouseover', function(evt, d) {
+            const val = d.v === null ? 'Missing' : fmt(d.v);
+            showTip(evt, '<b>'+d.y+'</b><br>Period '+d.x+': '+val);
+        })
+        .on('mouseout', hideTip);
+
+    // Axes
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+        .call(d3.axisBottom(x).tickValues(colLabels.filter((d,i) =>
+            i % Math.max(1, Math.floor(colLabels.length/10)) === 0)));
+    g.append('g').attr('class','axis')
+        .call(d3.axisLeft(y).tickFormat(d => d.length > 20 ? d.slice(0,18)+'..' : d));
+
+    if('$(xlabel)') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('$(xlabel)');
+    if('$(ylabel)') g.append('text').attr('transform','rotate(-90)')
+        .attr('x',-h/2).attr('y',-maxLabelW+10).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('$(ylabel)');
+})();
+"""
+end
+
+# =============================================================================
 # Panel Body Rendering
 # =============================================================================
 

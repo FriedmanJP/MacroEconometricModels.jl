@@ -67,6 +67,7 @@ using StatsAPI: fit, coef, vcov, residuals, predict, fitted, r2, aic, bic, dof, 
 using Distributions
 using SparseArrays
 using FFTW
+using Dates
 import ForwardDiff
 import NLopt
 import NonlinearSolve
@@ -224,6 +225,26 @@ include("arima/estimation.jl")
 include("arima/forecast.jl")
 include("arima/selection.jl")
 
+# X-13ARIMA-SEATS internal (before filters for X13FilterResult)
+include("x13/types.jl")
+include("x13/linalg.jl")
+include("x13/lmdif.jl")
+include("x13/armafilter.jl")
+include("x13/likelihood.jl")
+include("x13/henderson.jl")
+include("x13/seasonalma.jl")
+include("x13/polynomials.jl")
+include("x13/spectrum.jl")
+include("x13/estimate.jl")
+include("x13/automodel.jl")
+include("x13/regression.jl")
+include("x13/transform.jl")
+include("x13/outliers.jl")
+include("x13/forecast.jl")
+include("x13/x11.jl")
+include("x13/seats.jl")
+include("x13/api.jl")
+
 # Time Series Filters (after ARIMA for beveridge_nelson, after teststat for boosted_hp ADF)
 include("filters/types.jl")
 include("filters/hp.jl")
@@ -231,6 +252,7 @@ include("filters/hamilton.jl")
 include("filters/beveridge_nelson.jl")
 include("filters/baxter_king.jl")
 include("filters/boosted_hp.jl")
+include("filters/x13.jl")
 
 # ARCH models
 include("arch/types.jl")
@@ -835,13 +857,14 @@ export AbstractFilterResult
 
 # Result types
 export HPFilterResult, HamiltonFilterResult, BeveridgeNelsonResult
-export BaxterKingResult, BoostedHPResult
+export BaxterKingResult, BoostedHPResult, X13FilterResult
 
 # Filter functions
 export hp_filter, hamilton_filter, beveridge_nelson, baxter_king, boosted_hp
+export x13_filter
 
 # Accessors
-export trend, cycle
+export trend, cycle, seasonal, adjusted
 
 # =============================================================================
 # Exports - StatsAPI Interface

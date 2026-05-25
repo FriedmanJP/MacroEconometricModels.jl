@@ -604,6 +604,7 @@ end
         @test_throws ArgumentError nowcast_news(Y, Y[1:50, :], m, 30)  # size mismatch
         @test_throws ArgumentError nowcast_news(Y, Y, m, 0)  # out of range
         @test_throws ArgumentError nowcast_news(Y, Y, m, 30; target_var=0)  # out of range
+        @test_throws ArgumentError nowcast_news(Y, Y, m, 30; groups=[1,1,2,2,3], group_names=["A", "B"])
     end
 
     @testset "Group impacts" begin
@@ -617,6 +618,29 @@ end
         news = nowcast_news(Y, X_old, m, 58; target_var=5, groups=groups)
 
         @test length(news.group_impacts) == 3
+
+        # group_names auto-generated
+        @test length(news.group_names) == 3
+        @test news.group_names[1] == "Group 1"
+        @test news.group_names[3] == "Group 3"
+
+        # group_names explicit
+        news2 = nowcast_news(Y, X_old, m, 58; target_var=5, groups=groups,
+                             group_names=["Ind. Prod.", "Retail", "GDP"])
+        @test news2.group_names == ["Ind. Prod.", "Retail", "GDP"]
+    end
+
+    @testset "Default group_names without groups" begin
+        Y, _, _, _ = _make_nowcast_data(T_obs=60, nM=4, nQ=1, r=1, seed=1150)
+        m = nowcast_dfm(Y, 4, 1; r=1, p=1, max_iter=20, thresh=1e-3)
+
+        X_old = copy(Y)
+        X_old[58:60, 1:2] .= NaN
+
+        news = nowcast_news(Y, X_old, m, 58; target_var=5)
+        @test length(news.group_names) == 5  # one per variable
+        @test news.group_names[1] == "Var1"
+        @test news.group_names[5] == "Var5"
     end
 end
 

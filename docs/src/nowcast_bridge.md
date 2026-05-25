@@ -45,11 +45,10 @@ report(bridge)
 ```@example nc_bridge
 bridge = nowcast_bridge(Y, nM, nQ)
 n_quarters = length(bridge.Y_nowcast)
-for eq in 1:bridge.n_equations
-    val = bridge.Y_individual[n_quarters, eq]
-    isnan(val) || println("Equation $eq: ", round(val, digits=4))
-end
-println("Combined (median): ", round(bridge.Y_nowcast[n_quarters], digits=4))
+eqs = [(eq=eq, nowcast=round(bridge.Y_individual[n_quarters, eq], digits=4))
+       for eq in 1:bridge.n_equations
+       if !isnan(bridge.Y_individual[n_quarters, eq])]
+(equations=eqs, combined_median=round(bridge.Y_nowcast[n_quarters], digits=4))
 ```
 
 **Recipe 4: Bridge with TimeSeriesData**
@@ -93,7 +92,10 @@ Each bridge equation is estimated by OLS with regularization. The procedure is f
 ```@example nc_bridge
 bridge = nowcast_bridge(Y, nM, nQ; lagM=1, lagQ=1, lagY=1)
 report(bridge)
-println("Bridge equations: ", bridge.n_equations)  # C(4,2) + 4 = 10
+```
+
+```@example nc_bridge
+bridge.n_equations  # C(4,2) + 4 = 10
 ```
 
 The median combination provides robustness because individual equations may overfit or suffer from collinearity. When two monthly indicators are highly correlated, their pairwise equation may produce an extreme forecast, but the median is unaffected.
@@ -134,21 +136,27 @@ bridge_2 = nowcast_bridge(Y, nM, nQ; lagM=2, lagQ=1, lagY=2)
 # === Step 2: Compare nowcasts ===
 r1 = nowcast(bridge_1)
 r2 = nowcast(bridge_2)
-println("Bridge (lagM=1, lagY=1): ", round(r1.nowcast, digits=4))
-println("Bridge (lagM=2, lagY=2): ", round(r2.nowcast, digits=4))
+(lag1=round(r1.nowcast, digits=4), lag2=round(r2.nowcast, digits=4))
+```
 
+```@example nc_bridge
 # === Step 3: Inspect individual equations ===
 report(bridge_1)
+```
+
+```@example nc_bridge
 n_quarters = length(bridge_1.Y_nowcast)
 valid_preds = filter(!isnan, bridge_1.Y_individual[n_quarters, :])
-println("Spread: min=", round(minimum(valid_preds), digits=4),
-        " median=", round(bridge_1.Y_nowcast[n_quarters], digits=4),
-        " max=", round(maximum(valid_preds), digits=4))
+(min=round(minimum(valid_preds), digits=4),
+ median=round(bridge_1.Y_nowcast[n_quarters], digits=4),
+ max=round(maximum(valid_preds), digits=4))
+```
 
+```@example nc_bridge
 # === Step 4: Compare with DFM ===
 dfm = nowcast_dfm(Y, nM, nQ; r=2, p=1, idio=:ar1)
 r_dfm = nowcast(dfm)
-println("Bridge: ", round(r1.nowcast, digits=4), "  DFM: ", round(r_dfm.nowcast, digits=4))
+(bridge=round(r1.nowcast, digits=4), dfm=round(r_dfm.nowcast, digits=4))
 ```
 
 **Interpretation.** The bridge approach constructs 10 equations from the 4 monthly FRED-MD indicators (6 pairwise + 4 univariate). Each equation aggregates monthly indicators to quarterly frequency via 3-month averages, then runs OLS on the quarterly target. The spread between minimum and maximum individual equation nowcasts reveals disagreement across indicator combinations --- a wide spread suggests the choice of indicators matters, while a narrow spread indicates consensus.

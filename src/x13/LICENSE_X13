@@ -1,0 +1,26 @@
+The X-13ARIMA-SEATS code in this directory is a Julia port of the original
+Fortran source code from the US Census Bureau's X-13ARIMA-SEATS program
+(v1.1 Build 62).
+
+Original software license:
+==========================
+
+This Software was created by U.S. Government employees and therefore is not
+subject to copyright in the United States (17 U.S.C. §105). The United
+States/U.S. Department of Commerce ("Commerce") reserve all rights to seek
+and obtain copyright protection in countries other than the United States.
+The United States/Commerce hereby grant to User a royalty-free, nonexclusive
+license to use, copy, and create derivative works of the Software outside of
+the United States.
+
+The Software is provided to the User and those who may take by, through or
+under it, "as is," without any warranty (whether express or implied) or
+representation whatsoever, including but not limited to any warranty of
+merchantability.
+
+See the full license text at:
+https://www.census.gov/data/software/x13as.License_Agreement.html
+
+This Julia port is distributed as part of MacroEconometricModels.jl under
+GPL-3.0-or-later, which is compatible with the permissive US Government
+Work license above.

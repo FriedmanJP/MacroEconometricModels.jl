@@ -362,6 +362,13 @@ Print boosted HP filter summary.
 report(r::BoostedHPResult) = show(stdout, r)
 
 """
+    report(r::X13FilterResult)
+
+Print X-13ARIMA-SEATS seasonal adjustment summary.
+"""
+report(r::X13FilterResult) = show(stdout, r)
+
+"""
     report(irf::ImpulseResponse)
     report(irf::BayesianImpulseResponse)
 

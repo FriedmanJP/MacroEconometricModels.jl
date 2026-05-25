@@ -131,7 +131,7 @@ The algorithm iterates until the relative change in log-likelihood falls below `
 ```@example nc_dfm
 # Estimate with tighter convergence and more iterations
 dfm = nowcast_dfm(Y, nM, nQ; r=2, p=1, idio=:ar1, max_iter=200, thresh=1e-6)
-println("Converged in $(dfm.n_iter) iterations, log-likelihood: $(round(dfm.loglik, digits=2))")
+(converged_in=dfm.n_iter, loglik=round(dfm.loglik, digits=2))
 ```
 
 The log-likelihood value measures the overall fit of the estimated factors to the observed data. Higher values indicate better fit, and the convergence path should be monotonically increasing (a property guaranteed by the EM algorithm).
@@ -239,9 +239,10 @@ report(dfm)
 
 # === Step 2: Extract nowcast and forecast ===
 result = nowcast(dfm)
-println("Nowcast: ", round(result.nowcast, digits=3))
-println("Forecast: ", round(result.forecast, digits=3))
+(nowcast=round(result.nowcast, digits=3), forecast=round(result.forecast, digits=3))
+```
 
+```@example nc_dfm
 # === Step 3: Multi-step forecast ===
 fc = forecast(dfm, 6; target_var=N)
 
@@ -251,10 +252,12 @@ X_new = copy(Y)
 X_old[end, 1:3] .= NaN    # simulate that 3 releases were not yet available
 
 news = nowcast_news(X_new, X_old, dfm, T_obs; target_var=N)
-println("Old nowcast: ", round(news.old_nowcast, digits=3))
-println("New nowcast: ", round(news.new_nowcast, digits=3))
-println("Total revision: ", round(news.new_nowcast - news.old_nowcast, digits=3))
+(old=round(news.old_nowcast, digits=3),
+ new=round(news.new_nowcast, digits=3),
+ revision=round(news.new_nowcast - news.old_nowcast, digits=3))
+```
 
+```@example nc_dfm
 # === Step 5: Balance panel for further analysis ===
 ts = TimeSeriesData(Y; varnames=["INDPRO","UNRATE","CPI","M2","FEDFUNDS"], frequency=Monthly)
 ts_balanced = balance_panel(ts; r=2, p=1)

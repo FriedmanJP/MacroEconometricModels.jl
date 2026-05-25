@@ -123,7 +123,7 @@ where:
 
 This method does not require solving the model --- it evaluates the equilibrium conditions directly on the data. The instrument set consists of ``n_{\text{lags}}`` lags of the endogenous variables, producing ``n_{\text{eq}} \times n_{\text{vars}} \times n_{\text{lags}}`` moment conditions.
 
-```julia
+```@example dsge_estimation
 est_euler = estimate_dsge(spec, Y_data, [:rho];
                     method=:euler_gmm, n_lags_instruments=4,
                     weighting=:two_step)
