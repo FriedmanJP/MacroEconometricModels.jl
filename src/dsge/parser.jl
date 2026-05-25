@@ -46,6 +46,11 @@ function _dsge_impl(block::Expr)
 
     stmts = filter(a -> !(a isa LineNumberNode), block.args)
 
+    # Check for heterogeneous agent declarations — delegate to HA parser
+    if _has_ha_declarations(stmts)
+        return _parse_ha_dsge(block)
+    end
+
     for stmt in stmts
         label = _detect_declaration(stmt)
         if label === :parameters

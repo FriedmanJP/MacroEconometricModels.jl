@@ -746,4 +746,107 @@ end
     @test contains(p4.html, "Custom Title")
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 20: @dsge macro parser extensions
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "@dsge with heterogeneous" begin
+    @testset "Rouwenhorst parser" begin
+        spec = @dsge begin
+            parameters: alpha = 0.36, beta_hh = 0.99, delta = 0.025, rho_z = 0.95, sigma_z = 0.007
+            endogenous: Y, K, r, w, Z
+            exogenous: eps_Z
+
+            heterogeneous: a in [0.0, 200.0], n_grid = 100, utility = log, discount = beta_hh, borrowing = 0.0
+
+            idiosyncratic: e ~ Rouwenhorst(0.966, 0.5, 5)
+
+            aggregation: K = sum(a)
+
+            Y[t] = Z[t] * K[t-1]^alpha
+            r[t] = alpha * Z[t] * K[t-1]^(alpha-1) - delta
+            w[t] = (1 - alpha) * Z[t] * K[t-1]^alpha
+            Z[t] = rho_z * Z[t-1] + sigma_z * eps_Z[t]
+        end
+
+        @test spec isa HADSGESpec{Float64}
+        @test spec.grid.n_dims == 1
+        @test spec.grid.n_points == [100]
+        @test spec.grid.bounds[1] == (0.0, 200.0)
+        @test spec.n_income == 5
+        @test spec.individual.beta ≈ 0.99
+        @test spec.individual.borrowing_constraint[1] ≈ 0.0
+        @test spec.individual.n_asset_dims == 1
+        @test spec.n_assets == 1
+        @test spec.het_params[:alpha] ≈ 0.36
+        @test spec.het_params[:delta] ≈ 0.025
+        @test spec.aggregate_spec isa DSGESpec{Float64}
+        @test :Y in spec.aggregate_spec.endog
+        @test :K in spec.aggregate_spec.endog
+        @test length(spec.income.states) == 5
+        @test size(spec.income.transition) == (5, 5)
+    end
+
+    @testset "Tauchen parser" begin
+        spec = @dsge begin
+            parameters: alpha = 0.36, beta_hh = 0.99, delta = 0.025, rho_z = 0.95, sigma_z = 0.007
+            endogenous: Y, K, r, w, Z
+            exogenous: eps_Z
+
+            heterogeneous: a in [0.0, 150.0], n_grid = 80, utility = log, discount = beta_hh, borrowing = 0.0
+
+            idiosyncratic: e ~ Tauchen(0.9, 0.3, 7)
+
+            aggregation: K = sum(a)
+
+            Y[t] = Z[t] * K[t-1]^alpha
+            r[t] = alpha * Z[t] * K[t-1]^(alpha-1) - delta
+            w[t] = (1 - alpha) * Z[t] * K[t-1]^alpha
+            Z[t] = rho_z * Z[t-1] + sigma_z * eps_Z[t]
+        end
+
+        @test spec isa HADSGESpec{Float64}
+        @test spec.grid.n_points == [80]
+        @test spec.grid.bounds[1] == (0.0, 150.0)
+        @test spec.n_income == 7
+        @test length(spec.income.states) == 7
+    end
+
+    @testset "Standard @dsge unaffected" begin
+        spec_std = @dsge begin
+            parameters: rho = 0.9, sigma = 0.01
+            endogenous: Y, A
+            exogenous: eps_A
+
+            Y[t] = A[t]
+            A[t] = rho * A[t-1] + sigma * eps_A[t]
+        end
+        @test spec_std isa DSGESpec{Float64}
+    end
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 21: solve dispatch
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "solve dispatch" begin
+    spec = load_ha_example(:krusell_smith)
+    # Verify method dispatch exists and does not conflict
+    @test hasmethod(solve, Tuple{HADSGESpec{Float64}})
+    @test hasmethod(solve, Tuple{DSGESpec{Float64}})
+
+    # Verify dispatch is distinct: solve(::HADSGESpec) and solve(::DSGESpec) are different methods
+    m1 = which(solve, Tuple{HADSGESpec{Float64}})
+    m2 = which(solve, Tuple{DSGESpec{Float64}})
+    @test m1 !== m2
+
+    # Verify unknown method raises error
+    ss = MacroEconometricModels._ha_steady_state(
+        spec.individual, spec.grid, spec.income,
+        MacroEconometricModels._default_cobb_douglas_price_fn, spec.het_params;
+        K_init=10.0, r_bounds=(-0.02, 0.04), max_iter=30, tol=1e-2
+    )
+    @test_throws ErrorException solve(spec; method=:nonexistent, ss=ss)
+end
+
 end # @testset "HA-DSGE Types"

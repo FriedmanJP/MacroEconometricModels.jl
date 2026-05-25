@@ -370,6 +370,7 @@ include("dsge/heterogeneous/krusell_smith.jl")
 include("dsge/heterogeneous/ssj.jl")
 include("dsge/heterogeneous/reiter.jl")
 include("dsge/heterogeneous/examples.jl")
+include("dsge/heterogeneous/parser.jl")
 include("dsge/heterogeneous/display.jl")
 include("dsge/heterogeneous/analysis.jl")
 
