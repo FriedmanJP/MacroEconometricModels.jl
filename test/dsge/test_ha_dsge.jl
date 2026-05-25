@@ -423,4 +423,94 @@ end
     @test euler_err < -1.0
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 12: Krusell-Smith simulation
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "Krusell-Smith simulation" begin
+    grid = HAGrid(assets=(0.0, 200.0, 80), income_states=3)
+    inc = rouwenhorst(0.966, 0.5, 3)
+    ip = IndividualProblem{Float64}(
+        c -> log(c), c -> 1.0/c, m -> 1.0/m, 0.99,
+        (a, e, prices) -> (1 + prices[:r]) * a + prices[:w] * e,
+        [0.0], nothing, 1
+    )
+    function price_fn(K, params)
+        alpha = params[:alpha]; delta = params[:delta]
+        r = alpha * K^(alpha-1) - delta
+        w = (1-alpha) * K^alpha
+        Dict(:r => r, :w => w)
+    end
+    params = Dict(:alpha => 0.36, :delta => 0.025, :Z => 1.0, :L => 1.0)
+    ss = MacroEconometricModels._ha_steady_state(ip, grid, inc, price_fn, params;
+        K_init=10.0, r_bounds=(-0.02, 0.04), max_iter=60, tol=1e-3)
+
+    result = MacroEconometricModels._krusell_smith_solve(
+        ss, ip, grid, inc, price_fn, params;
+        T_sim=300, T_burn=50, max_outer=3, rho_z=0.95, sigma_z=0.007
+    )
+
+    @test haskey(result.plm_coefficients, :K)
+    @test length(result.plm_coefficients[:K]) == 2
+    @test haskey(result.r_squared, :K)
+    @test result.r_squared[:K] > 0.9  # KS typically gets R² > 0.999
+    @test result.iterations <= 3
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 13: SSJ Jacobian
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "SSJ Jacobian" begin
+    grid = HAGrid(assets=(0.0, 200.0, 80), income_states=3)
+    inc = rouwenhorst(0.966, 0.5, 3)
+    ip = IndividualProblem{Float64}(
+        c -> log(c), c -> 1.0/c, m -> 1.0/m, 0.99,
+        (a, e, prices) -> (1 + prices[:r]) * a + prices[:w] * e,
+        [0.0], nothing, 1
+    )
+    function price_fn_ssj(K, params)
+        alpha = params[:alpha]; delta = params[:delta]
+        r = alpha * K^(alpha-1) - delta
+        w = (1-alpha) * K^alpha
+        Dict(:r => r, :w => w)
+    end
+    params = Dict(:alpha => 0.36, :delta => 0.025, :Z => 1.0, :L => 1.0)
+    ss = MacroEconometricModels._ha_steady_state(ip, grid, inc, price_fn_ssj, params;
+        K_init=10.0, r_bounds=(-0.02, 0.04), max_iter=60, tol=1e-3)
+
+    T_h = 30
+    J = MacroEconometricModels._ssj_jacobian(ss, ip, grid, inc, :r, :K; T_horizon=T_h, dx=1e-4)
+    @test size(J) == (T_h, T_h)
+    @test all(isfinite.(J))
+    # Contemporaneous effect should be nonzero
+    @test abs(J[1,1]) > 1e-8
+    # Effects should decay
+    @test abs(J[T_h, 1]) < abs(J[1, 1]) + 1.0  # loose: just not exploding
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 14: Ho-Kalman realization
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "Ho-Kalman realization" begin
+    # Create a known state-space system and verify recovery
+    # True system: x_{t+1} = 0.9 x_t + ε_t, y_t = x_t
+    T_len = 50
+    irf_seq = [reshape([0.9^t], 1, 1) for t in 0:T_len-1]
+
+    G1, impact, C_sol, eu, eigenvalues = MacroEconometricModels._ho_kalman(irf_seq, 1, 1, 5)
+
+    @test size(G1, 1) == size(G1, 2)  # square
+    @test size(impact, 2) == 1         # one shock
+    @test length(C_sol) == size(G1, 1)
+    @test eu == [1, 1]
+    @test all(isfinite.(G1))
+    @test all(isfinite.(impact))
+
+    # The dominant eigenvalue should be close to 0.9
+    max_eig = maximum(abs.(eigenvalues))
+    @test abs(max_eig - 0.9) < 0.1
+end
+
 end # @testset "HA-DSGE Types"

@@ -366,6 +366,8 @@ include("dsge/heterogeneous/egm.jl")
 include("dsge/heterogeneous/individual_vfi.jl")
 include("dsge/heterogeneous/distribution.jl")
 include("dsge/heterogeneous/steady_state.jl")
+include("dsge/heterogeneous/krusell_smith.jl")
+include("dsge/heterogeneous/ssj.jl")
 
 # Display (after all types)
 include("summary.jl")
