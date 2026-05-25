@@ -24,12 +24,12 @@ Provides pre-calibrated `HADSGESpec` specifications for canonical models:
 # =============================================================================
 
 """
-    _minimal_agg_spec(; alpha, delta, rho_z, sigma_z) → DSGESpec{Float64}
+    _minimal_agg_spec(; alpha, delta, rho_z, sigma_z) -> DSGESpec{Float64}
 
 Construct a minimal DSGESpec representing a Cobb-Douglas aggregate block.
 
 The individual-level steady state solver (`ha_steady_state`) does not evaluate
-the aggregate DSGESpec equations directly — it uses the price function instead.
+the aggregate DSGESpec equations directly -- it uses the price function instead.
 This helper creates a lightweight placeholder that records parameter values and
 variable names for the aggregate block.
 """
@@ -51,15 +51,16 @@ function _minimal_agg_spec(; alpha::Float64=0.36, delta::Float64=0.025,
     ]
 
     # Identity residual functions (not called during steady-state computation)
-    dummy_fn = (y_t, y_lag, y_lead, eps, theta) -> zero(Float64)
+    dummy_fn = (y_t, y_lag, y_lead, eps, theta) -> 0.0
     residual_fns = [dummy_fn for _ in 1:5]
 
     n_expect = 0
     forward_indices = Int[]
     steady_state = ones(Float64, 5)  # placeholder
 
-    return DSGESpec{Float64}(endog, exog, params, param_values, equations, residual_fns,
-                       n_expect, forward_indices, steady_state, nothing)
+    return DSGESpec{Float64}(endog, exog, params, param_values, equations,
+                              residual_fns, n_expect, forward_indices,
+                              steady_state, nothing)
 end
 
 # =============================================================================
@@ -67,10 +68,10 @@ end
 # =============================================================================
 
 """
-    _crra_utility(sigma_c) → (u, u', (u')⁻¹)
+    _crra_utility(sigma_c) -> (u, u_prime, u_prime_inv)
 
-Return CRRA utility `u(c) = c^{1-σ}/(1-σ)` (or `log(c)` when σ=1), its
-marginal utility, and the inverse of marginal utility.
+Return CRRA utility `u(c) = c^(1-sigma)/(1-sigma)` (or `log(c)` when sigma=1),
+its marginal utility, and the inverse of marginal utility.
 """
 function _crra_utility(sigma_c::Float64)
     if sigma_c ≈ 1.0
@@ -84,6 +85,36 @@ function _crra_utility(sigma_c::Float64)
     end
     return u, up, upi
 end
+
+# =============================================================================
+# Shared helper functions (named, to avoid closure-over-local issues in 1.12)
+# =============================================================================
+
+# Budget function for Krusell-Smith: c + a' = (1+r)*a + w*e
+function _ks_budget(a::Float64, e::Float64, prices::Dict{Symbol,Float64})
+    (1.0 + prices[:r]) * a + prices[:w] * e
+end
+
+# Budget function for one-asset HANK: c + b' = (1+r)*b + w*e + div
+function _hank1_budget(b::Float64, e::Float64, prices::Dict{Symbol,Float64})
+    (1.0 + prices[:r]) * b + prices[:w] * e + get(prices, :div, 0.0)
+end
+
+# Budget function for two-asset HANK: resources from liquid side
+function _hank2_budget(b::Float64, a::Float64, e::Float64, prices::Dict{Symbol,Float64})
+    (1.0 + get(prices, :r_b, prices[:r])) * b + prices[:w] * e +
+    get(prices, :div, 0.0)
+end
+
+# Portfolio adjustment cost: chi(d, a) = 0.5 * |d / max(a, 0.01)|^2 * max(a, 0.01)
+function _hank2_adjustment_cost(d::Float64, a::Float64)
+    a_floor = max(a, 0.01)
+    0.5 * (d / a_floor)^2 * a_floor
+end
+
+# Aggregation helpers
+_agg_var1(dist, grid_arg) = _aggregate(dist, grid_arg; var_index=1)
+_agg_var2(dist, grid_arg) = _aggregate(dist, grid_arg; var_index=2)
 
 # =============================================================================
 # _ks_example — Krusell & Smith (1998)
@@ -104,22 +135,18 @@ function _ks_example()
     # Asset grid: [0, 200] with 200 points
     grid = HAGrid(; assets=(0.0, 200.0, 200), income_states=7)
 
-    # Budget: c + a' = (1+r)*a + w*e
-    budget_fn = (a::Float64, e::Float64, prices::Dict{Symbol,Float64}) ->
-        (1.0 + prices[:r]) * a + prices[:w] * e
-
     # Individual problem
-    individual = IndividualProblem{Float64}(u, up, upi, beta, budget_fn,
-                                      [0.0],    # borrowing constraint: a >= 0
-                                      nothing,  # no adjustment cost
-                                      1)        # one asset dimension
+    individual = IndividualProblem{Float64}(u, up, upi, beta, _ks_budget,
+                                            [0.0],    # borrowing constraint: a >= 0
+                                            nothing,  # no adjustment cost
+                                            1)        # one asset dimension
 
     # Aggregate block
     agg_spec = _minimal_agg_spec(; alpha=alpha, delta=delta)
 
     # Aggregation: capital = integral of assets over distribution
-    aggregation = [
-        :K => (dist, grid_arg) -> _aggregate(dist, grid_arg; var_index=1)
+    aggregation = Pair{Symbol,Function}[
+        :K => _agg_var1
     ]
 
     # HA-specific parameters
@@ -129,7 +156,7 @@ function _ks_example()
     )
 
     return HADSGESpec{Float64}(agg_spec, individual, income, grid,
-                          aggregation, het_params)
+                                aggregation, het_params)
 end
 
 # =============================================================================
@@ -152,23 +179,18 @@ function _one_asset_hank_example()
     # Asset grid: [-2, 50] with 200 points (allows borrowing)
     grid = HAGrid(; assets=(-2.0, 50.0, 200), income_states=7)
 
-    # Budget: c + b' = (1+r)*b + w*e + div
-    # div enters as a price to allow general equilibrium feedback
-    budget_fn = (b::Float64, e::Float64, prices::Dict{Symbol,Float64}) ->
-        (1.0 + prices[:r]) * b + prices[:w] * e + get(prices, :div, 0.0)
-
     # Individual problem — borrowing constraint b >= -2
-    individual = IndividualProblem{Float64}(u, up, upi, beta, budget_fn,
-                                      [-2.0],   # borrowing constraint
-                                      nothing,  # no adjustment cost
-                                      1)        # one asset dimension
+    individual = IndividualProblem{Float64}(u, up, upi, beta, _hank1_budget,
+                                            [-2.0],   # borrowing constraint
+                                            nothing,  # no adjustment cost
+                                            1)        # one asset dimension
 
     # Aggregate block
     agg_spec = _minimal_agg_spec(; alpha=alpha, delta=delta)
 
     # Aggregation
-    aggregation = [
-        :K => (dist, grid_arg) -> _aggregate(dist, grid_arg; var_index=1)
+    aggregation = Pair{Symbol,Function}[
+        :K => _agg_var1
     ]
 
     # HA-specific parameters
@@ -178,7 +200,7 @@ function _one_asset_hank_example()
     )
 
     return HADSGESpec{Float64}(agg_spec, individual, income, grid,
-                          aggregation, het_params)
+                                aggregation, het_params)
 end
 
 # =============================================================================
@@ -202,31 +224,19 @@ function _two_asset_hank_example()
     grid = HAGrid(; liquid=(-2.0, 50.0, 50), illiquid=(0.0, 100.0, 50),
                     income_states=7)
 
-    # Budget: c + b' + d + chi(d,a) = (1+r_b)*b + w*e + div
-    # Illiquid: a' = (1+r_a)*a + d
-    budget_fn = (b::Float64, a::Float64, e::Float64, prices::Dict{Symbol,Float64}) ->
-        (1.0 + get(prices, :r_b, prices[:r])) * b + prices[:w] * e +
-        get(prices, :div, 0.0)
-
-    # Portfolio adjustment cost: chi(d, a) = 0.5 * |d / max(a, 0.01)|^2 * max(a, 0.01)
-    adjustment_cost = (d::Float64, a::Float64) -> begin
-        a_floor = max(a, 0.01)
-        0.5 * (d / a_floor)^2 * a_floor
-    end
-
     # Individual problem — liquid b >= -2, illiquid a >= 0
-    individual = IndividualProblem{Float64}(u, up, upi, beta, budget_fn,
-                                      [-2.0, 0.0],     # borrowing constraints
-                                      adjustment_cost,  # portfolio adjustment cost
-                                      2)                # two asset dimensions
+    individual = IndividualProblem{Float64}(u, up, upi, beta, _hank2_budget,
+                                            [-2.0, 0.0],          # borrowing constraints
+                                            _hank2_adjustment_cost, # portfolio adjustment cost
+                                            2)                     # two asset dimensions
 
     # Aggregate block
     agg_spec = _minimal_agg_spec(; alpha=alpha, delta=delta)
 
     # Aggregation: liquid and illiquid separately
-    aggregation = [
-        :B => (dist, grid_arg) -> _aggregate(dist, grid_arg; var_index=1),
-        :A => (dist, grid_arg) -> _aggregate(dist, grid_arg; var_index=2)
+    aggregation = Pair{Symbol,Function}[
+        :B => _agg_var1,
+        :A => _agg_var2
     ]
 
     # HA-specific parameters
@@ -236,7 +246,7 @@ function _two_asset_hank_example()
     )
 
     return HADSGESpec{Float64}(agg_spec, individual, income, grid,
-                          aggregation, het_params)
+                                aggregation, het_params)
 end
 
 # =============================================================================
@@ -244,7 +254,7 @@ end
 # =============================================================================
 
 """
-    load_ha_example(name::Symbol) → HADSGESpec{Float64}
+    load_ha_example(name::Symbol) -> HADSGESpec{Float64}
 
 Return a pre-calibrated `HADSGESpec` for a canonical heterogeneous agent model.
 
@@ -266,9 +276,9 @@ report(ss)
 
 # References
 - Krusell, P., & Smith, A. A. (1998). Income and wealth heterogeneity in the
-  macroeconomy. *Journal of Political Economy*, 106(5), 867–896.
+  macroeconomy. *Journal of Political Economy*, 106(5), 867-896.
 - Kaplan, G., Moll, B., & Violante, G. L. (2018). Monetary policy according to
-  HANK. *American Economic Review*, 108(3), 697–743.
+  HANK. *American Economic Review*, 108(3), 697-743.
 """
 function load_ha_example(name::Symbol)
     if name === :krusell_smith
