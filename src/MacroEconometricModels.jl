@@ -360,6 +360,9 @@ include("dsge/bayes_estimation.jl")
 include("dsge/smoother.jl")
 include("dsge/hd.jl")
 
+# Heterogeneous Agent DSGE (after dsge/types.jl and dsge/hd.jl)
+include("dsge/heterogeneous/types.jl")
+
 # Display (after all types)
 include("summary.jl")
 
@@ -464,6 +467,11 @@ export variable_bound, nonlinear_constraint
 # DSGE Smoother and HD
 export KalmanSmootherResult
 export dsge_smoother, dsge_particle_smoother
+
+# Heterogeneous Agent DSGE types
+export HADSGESpec, HAGrid, IncomeProcess, IndividualProblem
+export HASteadyState, HADSGESolution, KrusellSmithSolution
+export rouwenhorst, tauchen
 
 # Local Projection types
 export AbstractLPModel, AbstractLPImpulseResponse, AbstractCovarianceEstimator
