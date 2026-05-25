@@ -160,6 +160,49 @@ struct BoostedHPResult{T<:AbstractFloat} <: AbstractFilterResult
 end
 
 # =============================================================================
+# X-13ARIMA-SEATS Seasonal Adjustment Result
+# =============================================================================
+
+"""
+    X13FilterResult{T} <: AbstractFilterResult
+
+Result of X-13ARIMA-SEATS seasonal adjustment (US Census Bureau).
+
+Decomposes a time series into trend, seasonal, and irregular components using
+both X-11 (iterative moving average) and SEATS (spectral decomposition) methods.
+
+# Fields
+- `trend::Vector{T}`: Trend-cycle component
+- `seasonal::Vector{T}`: Seasonal component
+- `irregular::Vector{T}`: Irregular component
+- `adjusted::Vector{T}`: Seasonally adjusted series (trend + irregular)
+- `original::Vector{T}`: Original input series
+- `method::Symbol`: Decomposition method used (`:x11` or `:seats`)
+- `arima_order::NTuple{6,Int}`: Fitted (p,d,q,P,D,Q) ARIMA specification
+- `frequency::Int`: Seasonal frequency (4 or 12)
+- `transform::Symbol`: Transformation applied (`:log` or `:none`)
+- `sigma2::T`: Innovation variance
+- `aic::T`: Akaike information criterion
+- `n_outliers::Int`: Number of detected outliers
+- `T_obs::Int`: Number of observations
+"""
+struct X13FilterResult{T<:AbstractFloat} <: AbstractFilterResult
+    trend::Vector{T}
+    seasonal::Vector{T}
+    irregular::Vector{T}
+    adjusted::Vector{T}
+    original::Vector{T}
+    method::Symbol
+    arima_order::NTuple{6,Int}
+    frequency::Int
+    transform::Symbol
+    sigma2::T
+    aic::T
+    n_outliers::Int
+    T_obs::Int
+end
+
+# =============================================================================
 # Unified Accessors
 # =============================================================================
 
@@ -174,6 +217,7 @@ trend(r::HamiltonFilterResult) = r.trend
 trend(r::BeveridgeNelsonResult) = r.permanent
 trend(r::BaxterKingResult) = r.trend
 trend(r::BoostedHPResult) = r.trend
+trend(r::X13FilterResult) = r.trend
 
 """
     cycle(result::AbstractFilterResult) -> Vector
@@ -186,6 +230,7 @@ cycle(r::HamiltonFilterResult) = r.cycle
 cycle(r::BeveridgeNelsonResult) = r.transitory
 cycle(r::BaxterKingResult) = r.cycle
 cycle(r::BoostedHPResult) = r.cycle
+cycle(r::X13FilterResult) = r.irregular
 
 # =============================================================================
 # Display
@@ -264,6 +309,27 @@ function Base.show(io::IO, r::BoostedHPResult)
     ]
     _pretty_table(io, data;
         title = "Boosted HP Filter (Phillips & Shi 2021)",
+        column_labels = ["", "Value"],
+        alignment = [:l, :r],
+    )
+end
+
+function Base.show(io::IO, r::X13FilterResult)
+    p, d, q, P, D, Q = r.arima_order
+    data = Any[
+        "Observations"   r.T_obs;
+        "Frequency"      r.frequency;
+        "Method"         string(r.method);
+        "Transform"      string(r.transform);
+        "ARIMA"          "($p,$d,$q)($P,$D,$Q)_$(r.frequency)";
+        "σ²"             _fmt(r.sigma2);
+        "AIC"            _fmt(r.aic; digits=2);
+        "Outliers"       r.n_outliers;
+        "Seasonal std"   _fmt(std(r.seasonal));
+        "Irregular std"  _fmt(std(r.irregular))
+    ]
+    _pretty_table(io, data;
+        title = "X-13ARIMA-SEATS Seasonal Adjustment",
         column_labels = ["", "Value"],
         alignment = [:l, :r],
     )

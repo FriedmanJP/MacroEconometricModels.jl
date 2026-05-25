@@ -161,3 +161,65 @@ function plot_result(r::BoostedHPResult{T};
     save_path !== nothing && save_plot(p, save_path)
     p
 end
+
+# =============================================================================
+# X13FilterResult
+# =============================================================================
+
+"""
+    plot_result(r::X13FilterResult; title="", save_path=nothing)
+
+Plot X-13 seasonal adjustment: (1) Original + Trend + SA, (2) Seasonal, (3) Irregular.
+"""
+function plot_result(r::X13FilterResult{T};
+                     title::String="", save_path::Union{String,Nothing}=nothing) where {T}
+    n = r.T_obs
+
+    # Panel 1: Original + Trend + SA
+    rows1 = Vector{Pair{String,String}}[]
+    for i in 1:n
+        push!(rows1, ["x" => _json(i), "orig" => _json(r.original[i]),
+                       "trend" => _json(r.trend[i]), "sa" => _json(r.adjusted[i])])
+    end
+    data1 = _json_array_of_objects(rows1)
+    id1 = _next_plot_id("x13_tc")
+    s1 = _series_json(["Original", "Trend", "Seasonally Adjusted"],
+                       [_PLOT_COLORS[1], _PLOT_COLORS[2], _PLOT_COLORS[4]];
+                       keys=["orig", "trend", "sa"], dash=["", "6,3", "3,3"])
+    js1 = _render_line_js(id1, data1, s1; xlabel="Period", ylabel="Value")
+    p1 = _PanelSpec(id1, "Trend-Cycle Decomposition", js1)
+
+    # Panel 2: Seasonal component
+    rows2 = Vector{Pair{String,String}}[]
+    for i in 1:n
+        push!(rows2, ["x" => _json(i), "seasonal" => _json(r.seasonal[i])])
+    end
+    data2 = _json_array_of_objects(rows2)
+    id2 = _next_plot_id("x13_seas")
+    s2 = _series_json(["Seasonal"], [_PLOT_COLORS[3]]; keys=["seasonal"])
+    ref_val = r.transform == :log ? "1" : "0"
+    refs2 = "[{\"value\":$ref_val,\"color\":\"#999\",\"dash\":\"4,3\"}]"
+    js2 = _render_line_js(id2, data2, s2; ref_lines_json=refs2,
+                          xlabel="Period", ylabel="Seasonal")
+    p2 = _PanelSpec(id2, "Seasonal Component", js2)
+
+    # Panel 3: Irregular component
+    rows3 = Vector{Pair{String,String}}[]
+    for i in 1:n
+        push!(rows3, ["x" => _json(i), "irregular" => _json(r.irregular[i])])
+    end
+    data3 = _json_array_of_objects(rows3)
+    id3 = _next_plot_id("x13_irr")
+    s3 = _series_json(["Irregular"], [_PLOT_COLORS[5]]; keys=["irregular"])
+    js3 = _render_line_js(id3, data3, s3; ref_lines_json=refs2,
+                          xlabel="Period", ylabel="Irregular")
+    p3 = _PanelSpec(id3, "Irregular Component", js3)
+
+    if isempty(title)
+        p_o, d_o, q_o, P_o, D_o, Q_o = r.arima_order
+        title = "X-13ARIMA-SEATS ($(uppercase(string(r.method))), ($p_o,$d_o,$q_o)($P_o,$D_o,$Q_o)_$(r.frequency))"
+    end
+    p = _make_plot([p1, p2, p3]; title=title, ncols=1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end

@@ -71,39 +71,39 @@ svg { overflow: visible; }
 <div class="panel-grid">
 <div class="panel">
 <div class="panel-title">INDPRO ← INDPRO</div>
-<div id="irf_194"></div>
-</div>
-<div class="panel">
-<div class="panel-title">CPI ← INDPRO</div>
-<div id="irf_195"></div>
-</div>
-<div class="panel">
-<div class="panel-title">FFR ← INDPRO</div>
-<div id="irf_196"></div>
-</div>
-<div class="panel">
-<div class="panel-title">INDPRO ← CPI</div>
 <div id="irf_197"></div>
 </div>
 <div class="panel">
-<div class="panel-title">CPI ← CPI</div>
+<div class="panel-title">CPI ← INDPRO</div>
 <div id="irf_198"></div>
 </div>
 <div class="panel">
-<div class="panel-title">FFR ← CPI</div>
+<div class="panel-title">FFR ← INDPRO</div>
 <div id="irf_199"></div>
 </div>
 <div class="panel">
-<div class="panel-title">INDPRO ← FFR</div>
+<div class="panel-title">INDPRO ← CPI</div>
 <div id="irf_200"></div>
 </div>
 <div class="panel">
-<div class="panel-title">CPI ← FFR</div>
+<div class="panel-title">CPI ← CPI</div>
 <div id="irf_201"></div>
 </div>
 <div class="panel">
-<div class="panel-title">FFR ← FFR</div>
+<div class="panel-title">FFR ← CPI</div>
 <div id="irf_202"></div>
+</div>
+<div class="panel">
+<div class="panel-title">INDPRO ← FFR</div>
+<div id="irf_203"></div>
+</div>
+<div class="panel">
+<div class="panel-title">CPI ← FFR</div>
+<div id="irf_204"></div>
+</div>
+<div class="panel">
+<div class="panel-title">FFR ← FFR</div>
+<div id="irf_205"></div>
 </div>
 </div>
 
@@ -147,7 +147,7 @@ function hideTip() { tooltip.style('opacity',0); }
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
 
-    const container = d3.select('#irf_194');
+    const container = d3.select('#irf_197');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;
@@ -266,7 +266,7 @@ function hideTip() { tooltip.style('opacity',0); }
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
 
-    const container = d3.select('#irf_195');
+    const container = d3.select('#irf_198');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;
@@ -385,7 +385,7 @@ function hideTip() { tooltip.style('opacity',0); }
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
 
-    const container = d3.select('#irf_196');
+    const container = d3.select('#irf_199');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;
@@ -504,7 +504,7 @@ function hideTip() { tooltip.style('opacity',0); }
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
 
-    const container = d3.select('#irf_197');
+    const container = d3.select('#irf_200');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;
@@ -623,7 +623,7 @@ function hideTip() { tooltip.style('opacity',0); }
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
 
-    const container = d3.select('#irf_198');
+    const container = d3.select('#irf_201');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;
@@ -742,7 +742,7 @@ function hideTip() { tooltip.style('opacity',0); }
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
 
-    const container = d3.select('#irf_199');
+    const container = d3.select('#irf_202');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;
@@ -861,7 +861,7 @@ function hideTip() { tooltip.style('opacity',0); }
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
 
-    const container = d3.select('#irf_200');
+    const container = d3.select('#irf_203');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;
@@ -980,7 +980,7 @@ function hideTip() { tooltip.style('opacity',0); }
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
 
-    const container = d3.select('#irf_201');
+    const container = d3.select('#irf_204');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;
@@ -1099,7 +1099,7 @@ function hideTip() { tooltip.style('opacity',0); }
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
 
-    const container = d3.select('#irf_202');
+    const container = d3.select('#irf_205');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;

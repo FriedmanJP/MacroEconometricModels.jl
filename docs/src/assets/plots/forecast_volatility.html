@@ -70,7 +70,7 @@ svg { overflow: visible; }
 <div class="figure-title">Volatility Forecast (garch, h=10, 95% CI)</div>
 <div class="panel">
 <div class="panel-title">Volatility Forecast (garch, h=10, 95% CI)</div>
-<div id="vol_fc_92"></div>
+<div id="vol_fc_95"></div>
 </div>
 <div class="tooltip" id="tooltip"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
@@ -152,7 +152,7 @@ function hideTip() { tooltip.style('opacity',0); }
     const bands = [{"lo_key":"ci_lo","hi_key":"ci_hi","color":"#ff7f0e","alpha":0.15}];
     const refLines = [];
 
-    const container = d3.select('#vol_fc_92');
+    const container = d3.select('#vol_fc_95');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;
