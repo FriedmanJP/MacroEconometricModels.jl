@@ -169,4 +169,113 @@ end
     @test sum(inc2.stationary_dist) ≈ 1.0 atol=1e-10
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 5: Interpolation utilities
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "Interpolation" begin
+    x = [1.0, 2.0, 3.0, 4.0]
+    y = [10.0, 20.0, 30.0, 40.0]
+    @test MacroEconometricModels._linear_interp(x, y, 2.5) ≈ 25.0
+    @test MacroEconometricModels._linear_interp(x, y, 1.0) ≈ 10.0
+    @test MacroEconometricModels._linear_interp(x, y, 4.0) ≈ 40.0
+    @test MacroEconometricModels._linear_interp(x, y, 0.5) ≈ 10.0  # flat extrapolation
+    @test MacroEconometricModels._linear_interp(x, y, 5.0) ≈ 40.0  # flat extrapolation
+
+    # Non-linear function
+    x2 = [0.0, 1.0, 2.0, 3.0, 4.0]
+    y2 = [0.0, 1.0, 4.0, 9.0, 16.0]
+    @test MacroEconometricModels._linear_interp(x2, y2, 1.5) ≈ 2.5  # linear interp between 1 and 4
+    @test MacroEconometricModels._linear_interp(x2, y2, 0.0) ≈ 0.0
+    @test MacroEconometricModels._linear_interp(x2, y2, 4.0) ≈ 16.0
+
+    # Bilinear interpolation
+    x1_grid = [0.0, 1.0, 2.0]
+    x2_grid = [0.0, 1.0, 2.0]
+    z_mat = [1.0 2.0 3.0; 4.0 5.0 6.0; 7.0 8.0 9.0]
+    @test MacroEconometricModels._bilinear_interp(x1_grid, x2_grid, z_mat, 0.0, 0.0) ≈ 1.0
+    @test MacroEconometricModels._bilinear_interp(x1_grid, x2_grid, z_mat, 1.0, 1.0) ≈ 5.0
+    @test MacroEconometricModels._bilinear_interp(x1_grid, x2_grid, z_mat, 0.5, 0.5) ≈ 3.0
+    @test MacroEconometricModels._bilinear_interp(x1_grid, x2_grid, z_mat, 2.0, 2.0) ≈ 9.0
+    # Flat extrapolation (clamped)
+    @test MacroEconometricModels._bilinear_interp(x1_grid, x2_grid, z_mat, -1.0, 0.0) ≈ 1.0
+    @test MacroEconometricModels._bilinear_interp(x1_grid, x2_grid, z_mat, 0.0, 3.0) ≈ 3.0
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 6: EGM one-asset
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "EGM one-asset" begin
+    n_a = 500
+    grid = HAGrid(assets=(0.0, 200.0, n_a), income_states=3, grid_type=:linear)
+    # Rouwenhorst discretizes log-income; exponentiate for level income
+    inc_raw = rouwenhorst(0.966, 0.5, 3)
+    e_levels = exp.(inc_raw.states)
+    inc = IncomeProcess{Float64}(inc_raw.transition, e_levels, inc_raw.stationary_dist, :income)
+    ip = IndividualProblem{Float64}(
+        c -> log(c), c -> 1.0/c, m -> 1.0/m, 0.99,
+        (a, e, prices) -> (1 + prices[:r]) * a + prices[:w] * e,
+        [0.0], nothing, 1
+    )
+    prices = Dict(:r => 0.01, :w => 1.0)
+    c_pol, a_pol = MacroEconometricModels._egm_solve(ip, grid, inc, prices; max_iter=1000, tol=1e-10)
+
+    @test size(c_pol) == (n_a, 3)
+    @test size(a_pol) == (n_a, 3)
+    @test all(c_pol .> 0)
+    @test all(a_pol .>= -1e-10)
+    # Higher income → higher consumption at same asset level
+    mid = div(n_a, 2)
+    @test c_pol[mid, 3] > c_pol[mid, 1]
+    # Euler equation error at interior (unconstrained) points
+    r = prices[:r]
+    euler_checked = 0
+    for j in 1:3
+        for i in 50:(n_a - 50)
+            if a_pol[i, j] > 0.5
+                Eu_prime = sum(inc.transition[j, jp] * (1.0 / MacroEconometricModels._linear_interp(
+                    grid.grids[1], c_pol[:, jp], a_pol[i, j])) for jp in 1:3)
+                euler_resid = abs(1.0 - 0.99 * (1 + r) * Eu_prime / (1.0 / c_pol[i, j]))
+                @test euler_resid < 1e-3
+                euler_checked += 1
+            end
+        end
+    end
+    @test euler_checked > 100  # enough interior points tested
+
+    # Savings should be non-decreasing in assets (for a given income state)
+    for j in 1:3
+        for i in 2:n_a
+            @test a_pol[i, j] >= a_pol[i-1, j] - 1e-10
+        end
+    end
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 7: Two-asset nested EGM
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "Two-asset nested EGM" begin
+    grid2 = HAGrid(; liquid=(0.0, 20.0, 30), illiquid=(0.0, 50.0, 20), income_states=3)
+    inc = rouwenhorst(0.966, 0.5, 3)
+    ip2 = IndividualProblem{Float64}(
+        c -> log(c), c -> 1.0/c, m -> 1.0/m, 0.99,
+        (b, a, e, prices) -> (1 + prices[:r]) * b + prices[:w] * e,
+        [0.0, 0.0], nothing, 2
+    )
+    prices2 = Dict(:r => 0.01, :r_b => 0.01, :r_a => 0.02, :w => 1.0)
+    result = MacroEconometricModels._two_asset_egm_solve(ip2, grid2, inc, prices2;
+        max_iter=200, tol=1e-6, n_deposit=10)
+
+    @test haskey(result, :consumption)
+    @test haskey(result, :liquid_savings)
+    @test haskey(result, :deposit)
+    @test size(result[:consumption]) == (30, 20, 3)
+    @test size(result[:liquid_savings]) == (30, 20, 3)
+    @test size(result[:deposit]) == (30, 20, 3)
+    # Consumption should be positive
+    @test all(result[:consumption] .> 0)
+end
+
 end # @testset "HA-DSGE Types"

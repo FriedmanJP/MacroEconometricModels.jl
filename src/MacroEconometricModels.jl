@@ -362,6 +362,7 @@ include("dsge/hd.jl")
 
 # Heterogeneous Agent DSGE (after dsge/types.jl and dsge/hd.jl)
 include("dsge/heterogeneous/types.jl")
+include("dsge/heterogeneous/egm.jl")
 
 # Display (after all types)
 include("summary.jl")
