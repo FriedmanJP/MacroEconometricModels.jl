@@ -12,7 +12,7 @@ Standard DSGE models assume a **representative agent** whose decisions aggregate
 - Visualization: wealth distribution, Lorenz curve, policy functions
 
 ```@setup dsge_ha
-using MacroEconometricModels, Random, LinearAlgebra, SparseArrays
+using MacroEconometricModels, Random
 Random.seed!(42)
 ```
 
@@ -102,33 +102,20 @@ The **EGM** (Carroll 2006) avoids root-finding by inverting the Euler equation o
 5. Interpolate back to the exogenous grid
 6. Apply the borrowing constraint: if ``a < a_{\text{endo},1}``, consume all cash-on-hand
 
-```@example dsge_ha
-grid = HAGrid(assets=(0.0, 200.0, 200), income_states=5)
-inc = rouwenhorst(0.966, 0.5, 5)
-ip = IndividualProblem{Float64}(
-    c -> log(c), c -> 1.0/c, m -> 1.0/m, 0.99,
-    (a, e, prices) -> (1 + prices[:r]) * a + prices[:w] * e,
-    [0.0], nothing, 1
-)
-prices = Dict(:r => 0.01, :w => 1.0)
-c_pol, a_pol = MacroEconometricModels._egm_solve(ip, grid, inc, prices;
-                                                  max_iter=500, tol=1e-10)
-println("Consumption policy: ", size(c_pol), " (N_a × N_e)")
-println("Max Euler error: ", round(MacroEconometricModels._compute_euler_error(
-    c_pol, a_pol, ip, grid, inc, prices), digits=1))
-```
+The EGM converges in 200--400 iterations for typical calibrations. The `compute_steady_state` function calls EGM internally at each bisection step. Users interact with the public API:
 
-The EGM converges in 200--400 iterations for typical calibrations. The max Euler equation error measures the log10 accuracy of the solution.
+```@example dsge_ha
+spec_ks = load_ha_example(:krusell_smith)
+ss_egm = compute_steady_state(spec_ks; K_init=10.0, r_bounds=(-0.02, 0.04),
+                               max_iter=80, tol=1e-4)
+println("Converged: ", ss_egm.converged)
+println("Euler error (log10): ", round(ss_egm.euler_error, digits=1))
+println("Policy shape: ", size(ss_egm.policies[:consumption]), " (N_a × N_e)")
+```
 
 ### VFI with Howard Improvement
 
-When EGM is not applicable (non-separable utility, complex constraints), **Value Function Iteration** with **Howard improvement steps** provides a robust alternative. Each VFI iteration consists of one policy maximization step followed by ``K`` policy-evaluation steps (default ``K = 20``), which are cheap linear operations that dramatically accelerate convergence.
-
-```@example dsge_ha
-V, c_vfi, a_vfi = MacroEconometricModels._vfi_solve(ip, grid, inc, prices;
-    max_iter=300, tol=1e-6, howard_steps=20)
-println("Value function range: [", round(minimum(V), digits=1), ", ", round(maximum(V), digits=1), "]")
-```
+When EGM is not applicable (non-separable utility, complex constraints), **Value Function Iteration** with **Howard improvement steps** provides a robust alternative. Each VFI iteration consists of one policy maximization step followed by ``K`` policy-evaluation steps (default ``K = 20``), which are cheap linear operations that dramatically accelerate convergence. The VFI solver is used automatically when `compute_steady_state` detects a two-asset model.
 
 ---
 
@@ -153,6 +140,7 @@ The **Tauchen (1986)** method uses equally spaced grid points covering ``\pm m``
 ```@example dsge_ha
 inc_t = tauchen(0.9, 0.2, 5; m=3)
 println("States: ", round.(inc_t.states, digits=3))
+println("Stationary dist: ", round.(inc_t.stationary_dist, digits=4))
 ```
 
 | Keyword | Type | Default | Description |
@@ -175,21 +163,19 @@ where ``\Lambda`` uses **lottery weights** to map off-grid savings back to grid 
 \omega = \frac{a_{k+1} - g(a_i, e_j)}{a_{k+1} - a_k}
 ```
 
-The transition matrix is sparse --- each column has at most ``2 N_e`` nonzero entries. The **stationary distribution** ``D^*`` satisfies ``D^* = \Lambda D^*`` and is found via power iteration.
+The transition matrix is sparse --- each column has at most ``2 N_e`` nonzero entries. The **stationary distribution** ``D^*`` satisfies ``D^* = \Lambda D^*`` and is found via power iteration. The `compute_steady_state` function handles distribution tracking internally. The resulting `HASteadyState` stores the distribution:
 
 ```@example dsge_ha
-Lambda = MacroEconometricModels._build_transition_matrix(a_pol, grid, inc)
-println("Transition matrix: ", size(Lambda), ", nnz = ", length(Lambda.nzval))
-dist = MacroEconometricModels._stationary_dist_young(Lambda)
-K_agg = MacroEconometricModels._aggregate(dist, grid; var_index=1)
-println("Aggregate capital: ", round(K_agg, digits=2))
+println("Distribution shape: ", size(ss.distribution))
+println("Total mass: ", round(sum(ss.distribution), digits=10))
+println("Aggregate capital: ", round(ss.aggregates[:K], digits=2))
 ```
 
 ---
 
 ## Steady State
 
-The **stationary equilibrium** requires the individual problem, distribution, and prices to be mutually consistent. The solver bisects on the interest rate ``r``:
+The **stationary equilibrium** requires the individual problem, distribution, and prices to be mutually consistent. `compute_steady_state` bisects on the interest rate ``r``:
 
 1. Guess ``r_{\text{mid}} = (r_{\text{lo}} + r_{\text{hi}}) / 2``
 2. Compute prices ``(r, w)`` from the firm's first-order conditions given ``r_{\text{mid}}``
@@ -201,19 +187,10 @@ The **stationary equilibrium** requires the individual problem, distribution, an
 8. Converge when ``|K_s - K_d| < \text{tol}``
 
 ```@example dsge_ha
-function price_fn(K, params)
-    alpha, delta = params[:alpha], params[:delta]
-    r = alpha * K^(alpha - 1) - delta
-    w = (1 - alpha) * K^alpha
-    Dict(:r => r, :w => w)
-end
-params = Dict(:alpha => 0.36, :delta => 0.025, :Z => 1.0, :L => 1.0)
-
-ss2 = MacroEconometricModels._ha_steady_state(
-    ip, grid, inc, price_fn, params;
-    K_init=10.0, r_bounds=(-0.02, 0.04), max_iter=80, tol=1e-4)
-println("Converged: ", ss2.converged, ", r = ", round(ss2.prices[:r], digits=5),
-        ", K = ", round(ss2.aggregates[:K], digits=2))
+spec_hank = load_ha_example(:one_asset_hank)
+ss_hank = compute_steady_state(spec_hank; K_init=10.0, r_bounds=(-0.02, 0.04),
+                                max_iter=80, tol=1e-4)
+report(ss_hank)
 ```
 
 | Keyword | Type | Default | Description |
@@ -238,10 +215,10 @@ The algorithm computes a **fake news matrix** ``\mathcal{F}`` via:
 The resulting ``\mathcal{J}`` is converted to a minimal state-space realization via the **Ho-Kalman algorithm** (SVD of the Hankel matrix of IRF coefficients), producing a reduced ``DSGESolution`` compatible with all existing analysis functions.
 
 ```@example dsge_ha
-J = MacroEconometricModels._ssj_jacobian(ss2, ip, grid, inc, :r, :K;
-                                          T_horizon=30, dx=1e-4)
-println("Jacobian size: ", size(J))
-println("Contemporaneous effect: ", round(J[1,1], digits=4))
+sol_ssj = solve(spec; method=:ssj, ss=ss, T_horizon=50, n_reduced=15)
+println("Method: ", sol_ssj.method)
+println("Reduced states: ", sol_ssj.n_reduced, " (from ", sol_ssj.n_full_states, ")")
+println("Explained variance: ", round(100 * sol_ssj.explained_variance, digits=2), "%")
 ```
 
 | Keyword | Type | Default | Description |
@@ -259,11 +236,10 @@ The **Reiter (2009)** method linearizes the entire system --- Euler equations, d
 The implementation uses **observability-based SVD**: the reduction basis is built from the observability matrix ``[c', c' \Lambda', c' (\Lambda')^2, \ldots]'`` where ``c`` is the capital aggregation vector. This identifies the distribution directions most relevant for aggregate dynamics, achieving ``>99.9\%`` explained variance with 15--30 reduced states.
 
 ```@example dsge_ha
-G1, impact, n_red, explained = MacroEconometricModels._reiter_linearize(
-    ss2, ip, grid, inc; n_reduced=15)
-println("Reduced dimension: ", n_red, " (from ", grid.total_individual_states, ")")
-println("Explained variance: ", round(100 * explained, digits=2), "%")
-println("Max eigenvalue: ", round(maximum(abs.(eigvals(G1))), digits=4))
+sol_reiter = solve(spec; method=:reiter, ss=ss, n_reduced=15)
+println("Method: ", sol_reiter.method)
+println("Reduced states: ", sol_reiter.n_reduced)
+println("Explained variance: ", round(100 * sol_reiter.explained_variance, digits=2), "%")
 ```
 
 | Keyword | Type | Default | Description |
@@ -285,6 +261,15 @@ The algorithm iterates between simulation (using the PLM to forecast prices) and
 
 !!! note "Technical Note"
     The PLM coefficients are updated with damping: ``b^{\text{new}} = 0.5 \, b^{\text{OLS}} + 0.5 \, b^{\text{old}}``. This prevents oscillation and ensures monotone convergence.
+
+```@example dsge_ha
+sol_ks = solve(spec; method=:krusell_smith, ss=ss,
+               T_sim=500, T_burn=100, max_outer=3,
+               rho_z=0.95, sigma_z=0.007)
+println("Converged: ", sol_ks.converged)
+println("PLM coefficients: ", round.(sol_ks.plm_coefficients[:K], digits=4))
+println("R²: ", round(sol_ks.r_squared[:K], digits=6))
+```
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -324,6 +309,7 @@ The individual problem is solved via **nested EGM**: an outer loop over deposit 
 spec_2a = load_ha_example(:two_asset_hank)
 println("Asset dimensions: ", spec_2a.grid.n_dims)
 println("Grid: ", spec_2a.grid.n_points, " (liquid × illiquid)")
+println("Labels: ", spec_2a.grid.labels)
 println("Adjustment cost: ", spec_2a.individual.adjustment_cost !== nothing)
 ```
 
@@ -378,7 +364,7 @@ report(result)
 
 ## Complete Example
 
-A full workflow for a Krusell-Smith (1998) economy: load the model, compute the steady state, solve via SSJ, examine the wealth distribution, and simulate panel data.
+A full workflow for a Krusell-Smith (1998) economy: load the model, compute the steady state, examine the wealth distribution, and simulate panel data.
 
 ```@example dsge_ha
 # Load calibrated model
@@ -394,11 +380,8 @@ report(ss_ks)
 # Inequality measures
 ineq_ks = inequality_irf(ss_ks; T_periods=5)
 println("Gini coefficient: ", round(ineq_ks[:gini][1], digits=4))
-println("P10 / P90 ratio: ",
-        round(MacroEconometricModels._wealth_percentile(
-            vec(ss_ks.distribution), ss_ks.grid, 0.1) /
-            MacroEconometricModels._wealth_percentile(
-            vec(ss_ks.distribution), ss_ks.grid, 0.9), digits=4))
+println("Median wealth (P50): ", round(ineq_ks[:p50][1], digits=2))
+println("P90: ", round(ineq_ks[:p90][1], digits=2))
 ```
 
 ```@example dsge_ha
