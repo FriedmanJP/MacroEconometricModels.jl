@@ -70,7 +70,7 @@ svg { overflow: visible; }
 <div class="figure-title">Volatility Forecast (garch, h=10, 95% CI)</div>
 <div class="panel">
 <div class="panel-title">Volatility Forecast (garch, h=10, 95% CI)</div>
-<div id="vol_fc_72"></div>
+<div id="vol_fc_95"></div>
 </div>
 <div class="tooltip" id="tooltip"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
@@ -139,20 +139,20 @@ function hideTip() { tooltip.style('opacity',0); }
 {"x":-1,"hist":0.0008402754622959791,"fc":null,"ci_lo":null,"ci_hi":null},
 {"x":0,"hist":0.0013272431608123394,"fc":null,"ci_lo":null,"ci_hi":null,"fc":0.0013272431608123394},
 {"x":1,"hist":null,"fc":0.0011059127472039334,"ci_lo":0.0011059127472039317,"ci_hi":0.0011059127472039317},
-{"x":2,"hist":null,"fc":0.0011202499735214516,"ci_lo":0.0009302520051151606,"ci_hi":0.001910178423946175},
-{"x":3,"hist":null,"fc":0.0011328227398038255,"ci_lo":0.000798506658294785,"ci_hi":0.002153537160006152},
-{"x":4,"hist":null,"fc":0.0011468824473432249,"ci_lo":0.0007102618050055196,"ci_hi":0.002371535152069939},
-{"x":5,"hist":null,"fc":0.001161907235778791,"ci_lo":0.0006499119889562722,"ci_hi":0.0025434342533409192},
-{"x":6,"hist":null,"fc":0.0011771558923655433,"ci_lo":0.0006050145379098046,"ci_hi":0.0026968562408422694},
-{"x":7,"hist":null,"fc":0.0012000271619891927,"ci_lo":0.0005694525777670211,"ci_hi":0.0029767252294441724},
-{"x":8,"hist":null,"fc":0.0012200549328294035,"ci_lo":0.0005446325067656492,"ci_hi":0.0031341339142911735},
-{"x":9,"hist":null,"fc":0.001234460853927895,"ci_lo":0.0005278335518641844,"ci_hi":0.003332877195242624},
-{"x":10,"hist":null,"fc":0.0012513065240882908,"ci_lo":0.0005094142688236047,"ci_hi":0.003444083063257904}];
+{"x":2,"hist":null,"fc":0.0011230400668951713,"ci_lo":0.0009302271007870025,"ci_hi":0.0018838289267322358},
+{"x":3,"hist":null,"fc":0.0011394871018441694,"ci_lo":0.0007992719081772185,"ci_hi":0.002149097892225729},
+{"x":4,"hist":null,"fc":0.0011619812756613966,"ci_lo":0.0007093792269671837,"ci_hi":0.002409835007591177},
+{"x":5,"hist":null,"fc":0.001183181333436912,"ci_lo":0.0006485113997305107,"ci_hi":0.002671253957554487},
+{"x":6,"hist":null,"fc":0.001197105511310459,"ci_lo":0.0006022613364341737,"ci_hi":0.002860816146561564},
+{"x":7,"hist":null,"fc":0.0012154163620006232,"ci_lo":0.000571092701578184,"ci_hi":0.003006006070879229},
+{"x":8,"hist":null,"fc":0.001226878639326856,"ci_lo":0.0005458876082170674,"ci_hi":0.0031107580461529516},
+{"x":9,"hist":null,"fc":0.0012366518006025917,"ci_lo":0.0005226617458579785,"ci_hi":0.0031942051047501013},
+{"x":10,"hist":null,"fc":0.001244662631834623,"ci_lo":0.0005061090350297417,"ci_hi":0.003354668541083407}];
     const series = [{"name":"History","color":"#1f77b4","key":"hist","dash":""},{"name":"Forecast σ²","color":"#ff7f0e","key":"fc","dash":"6,3"}];
     const bands = [{"lo_key":"ci_lo","hi_key":"ci_hi","color":"#ff7f0e","alpha":0.15}];
     const refLines = [];
 
-    const container = d3.select('#vol_fc_72');
+    const container = d3.select('#vol_fc_95');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;

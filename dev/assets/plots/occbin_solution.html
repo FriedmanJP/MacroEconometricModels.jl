@@ -71,15 +71,15 @@ svg { overflow: visible; }
 <div class="panel-grid">
 <div class="panel">
 <div class="panel-title">b</div>
-<div id="osol_137"></div>
+<div id="osol_166"></div>
 </div>
 <div class="panel">
 <div class="panel-title">c</div>
-<div id="osol_138"></div>
+<div id="osol_167"></div>
 </div>
 <div class="panel">
 <div class="panel-title">y</div>
-<div id="osol_139"></div>
+<div id="osol_168"></div>
 </div>
 </div>
 
@@ -99,7 +99,7 @@ function showTip(evt, html) {
 function hideTip() { tooltip.style('opacity',0); }
 
 (function() {
-    const data_osol_137 = [{"h":1,"lin":0.9756097501683212,"pw":0.5853658524698834,"bind":0},
+    const data_osol_166 = [{"h":1,"lin":0.9756097501683212,"pw":0.5853658524698834,"bind":0},
 {"h":2,"lin":1.3777513308447316,"pw":0.9999999999712443,"bind":1},
 {"h":3,"lin":1.4959214098173017,"pw":0.9999999999712443,"bind":1},
 {"h":4,"lin":1.4774231584554582,"pw":0.9999999999712443,"bind":1},
@@ -159,125 +159,125 @@ function hideTip() { tooltip.style('opacity',0); }
 {"h":58,"lin":0.005581210831620833,"pw":0.005581210831620559,"bind":0},
 {"h":59,"lin":0.005023089751866777,"pw":0.005023089751866637,"bind":0},
 {"h":60,"lin":0.004520780779747319,"pw":0.004520780779747247,"bind":0}];
-    const container_osol_137 = d3.select('#osol_137');
-    const W_osol_137 = Math.max(container_osol_137.node().clientWidth - 24, 280);
-    const margin_osol_137 = {top:10, right:15, bottom:35, left:55};
-    const w_osol_137 = W_osol_137 - margin_osol_137.left - margin_osol_137.right;
-    const h_osol_137 = Math.min(w_osol_137 * 0.6, 250);
+    const container_osol_166 = d3.select('#osol_166');
+    const W_osol_166 = Math.max(container_osol_166.node().clientWidth - 24, 280);
+    const margin_osol_166 = {top:10, right:15, bottom:35, left:55};
+    const w_osol_166 = W_osol_166 - margin_osol_166.left - margin_osol_166.right;
+    const h_osol_166 = Math.min(w_osol_166 * 0.6, 250);
 
-    const svg_osol_137 = container_osol_137.append('svg')
-        .attr('width', W_osol_137)
-        .attr('height', h_osol_137 + margin_osol_137.top + margin_osol_137.bottom);
-    const g_osol_137 = svg_osol_137.append('g')
-        .attr('transform', 'translate('+margin_osol_137.left+','+margin_osol_137.top+')');
+    const svg_osol_166 = container_osol_166.append('svg')
+        .attr('width', W_osol_166)
+        .attr('height', h_osol_166 + margin_osol_166.top + margin_osol_166.bottom);
+    const g_osol_166 = svg_osol_166.append('g')
+        .attr('transform', 'translate('+margin_osol_166.left+','+margin_osol_166.top+')');
 
     // Compute domains
-    const xVals_osol_137 = data_osol_137.map(d => d.h);
-    const allY_osol_137 = [];
-    data_osol_137.forEach(d => {
-        if(d.lin!==null) allY_osol_137.push(d.lin);
-        if(d.pw!==null) allY_osol_137.push(d.pw);
+    const xVals_osol_166 = data_osol_166.map(d => d.h);
+    const allY_osol_166 = [];
+    data_osol_166.forEach(d => {
+        if(d.lin!==null) allY_osol_166.push(d.lin);
+        if(d.pw!==null) allY_osol_166.push(d.pw);
     });
-    allY_osol_137.push(0);
+    allY_osol_166.push(0);
 
-    const x_osol_137 = d3.scaleLinear().domain(d3.extent(xVals_osol_137)).range([0, w_osol_137]);
-    const yExt_osol_137 = d3.extent(allY_osol_137);
-    const yPad_osol_137 = (yExt_osol_137[1] - yExt_osol_137[0]) * 0.08 || 0.1;
-    const y_osol_137 = d3.scaleLinear()
-        .domain([yExt_osol_137[0] - yPad_osol_137, yExt_osol_137[1] + yPad_osol_137])
-        .range([h_osol_137, 0]);
+    const x_osol_166 = d3.scaleLinear().domain(d3.extent(xVals_osol_166)).range([0, w_osol_166]);
+    const yExt_osol_166 = d3.extent(allY_osol_166);
+    const yPad_osol_166 = (yExt_osol_166[1] - yExt_osol_166[0]) * 0.08 || 0.1;
+    const y_osol_166 = d3.scaleLinear()
+        .domain([yExt_osol_166[0] - yPad_osol_166, yExt_osol_166[1] + yPad_osol_166])
+        .range([h_osol_166, 0]);
 
     // Grid
-    g_osol_137.append('g').attr('class','grid')
-        .call(d3.axisLeft(y_osol_137).tickSize(-w_osol_137).tickFormat(''));
+    g_osol_166.append('g').attr('class','grid')
+        .call(d3.axisLeft(y_osol_166).tickSize(-w_osol_166).tickFormat(''));
 
     // Binding-period shaded rectangles
-    const xStep_osol_137 = w_osol_137 / Math.max(xVals_osol_137.length - 1, 1);
-    data_osol_137.forEach((d, i) => {
+    const xStep_osol_166 = w_osol_166 / Math.max(xVals_osol_166.length - 1, 1);
+    data_osol_166.forEach((d, i) => {
         if(d.bind === 1) {
-            const x0_osol_137 = x_osol_137(d.h) - xStep_osol_137 * 0.5;
-            const x1_osol_137 = x_osol_137(d.h) + xStep_osol_137 * 0.5;
-            g_osol_137.append('rect')
-                .attr('x', Math.max(0, x0_osol_137))
+            const x0_osol_166 = x_osol_166(d.h) - xStep_osol_166 * 0.5;
+            const x1_osol_166 = x_osol_166(d.h) + xStep_osol_166 * 0.5;
+            g_osol_166.append('rect')
+                .attr('x', Math.max(0, x0_osol_166))
                 .attr('y', 0)
-                .attr('width', Math.min(x1_osol_137, w_osol_137) - Math.max(0, x0_osol_137))
-                .attr('height', h_osol_137)
+                .attr('width', Math.min(x1_osol_166, w_osol_166) - Math.max(0, x0_osol_166))
+                .attr('height', h_osol_166)
                 .attr('fill', '#d62728')
                 .attr('opacity', 0.08);
         }
     });
 
     // Zero reference line
-    g_osol_137.append('line')
-        .attr('x1', 0).attr('x2', w_osol_137)
-        .attr('y1', y_osol_137(0)).attr('y2', y_osol_137(0))
+    g_osol_166.append('line')
+        .attr('x1', 0).attr('x2', w_osol_166)
+        .attr('y1', y_osol_166(0)).attr('y2', y_osol_166(0))
         .attr('stroke', '#999').attr('stroke-width', 1)
         .attr('stroke-dasharray', '4,3');
 
     // Linear line (dashed)
-    const linLine_osol_137 = d3.line().x(d => x_osol_137(d.h)).y(d => y_osol_137(d.lin))
+    const linLine_osol_166 = d3.line().x(d => x_osol_166(d.h)).y(d => y_osol_166(d.lin))
         .defined(d => d.lin !== null);
-    g_osol_137.append('path').datum(data_osol_137).attr('d', linLine_osol_137)
+    g_osol_166.append('path').datum(data_osol_166).attr('d', linLine_osol_166)
         .attr('fill', 'none').attr('stroke', '#2ca02c')
         .attr('stroke-width', 1.8).attr('stroke-dasharray', '6,3');
 
     // Piecewise line (solid)
-    const pwLine_osol_137 = d3.line().x(d => x_osol_137(d.h)).y(d => y_osol_137(d.pw))
+    const pwLine_osol_166 = d3.line().x(d => x_osol_166(d.h)).y(d => y_osol_166(d.pw))
         .defined(d => d.pw !== null);
-    g_osol_137.append('path').datum(data_osol_137).attr('d', pwLine_osol_137)
+    g_osol_166.append('path').datum(data_osol_166).attr('d', pwLine_osol_166)
         .attr('fill', 'none').attr('stroke', '#1f77b4')
         .attr('stroke-width', 1.8);
 
     // Axes
-    g_osol_137.append('g').attr('class','axis')
-        .attr('transform', 'translate(0,'+h_osol_137+')')
-        .call(d3.axisBottom(x_osol_137).ticks(Math.min(xVals_osol_137.length, 8)));
-    g_osol_137.append('g').attr('class','axis')
-        .call(d3.axisLeft(y_osol_137).ticks(6));
+    g_osol_166.append('g').attr('class','axis')
+        .attr('transform', 'translate(0,'+h_osol_166+')')
+        .call(d3.axisBottom(x_osol_166).ticks(Math.min(xVals_osol_166.length, 8)));
+    g_osol_166.append('g').attr('class','axis')
+        .call(d3.axisLeft(y_osol_166).ticks(6));
 
-    if('Period') g_osol_137.append('text')
-        .attr('x', w_osol_137/2).attr('y', h_osol_137+30)
+    if('Period') g_osol_166.append('text')
+        .attr('x', w_osol_166/2).attr('y', h_osol_166+30)
         .attr('text-anchor','middle').attr('font-size','11px')
         .attr('fill','#666').text('Period');
-    if('b') g_osol_137.append('text')
+    if('b') g_osol_166.append('text')
         .attr('transform','rotate(-90)')
-        .attr('x', -h_osol_137/2).attr('y', -42)
+        .attr('x', -h_osol_166/2).attr('y', -42)
         .attr('text-anchor','middle').attr('font-size','11px')
         .attr('fill','#666').text('b');
 
     // Legend
-    const leg_osol_137 = g_osol_137.append('g').attr('class','legend')
+    const leg_osol_166 = g_osol_166.append('g').attr('class','legend')
         .attr('transform','translate(5,-5)');
     // Linear (dashed)
-    const g1_osol_137 = leg_osol_137.append('g').attr('transform','translate(0,0)');
-    g1_osol_137.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+    const g1_osol_166 = leg_osol_166.append('g').attr('transform','translate(0,0)');
+    g1_osol_166.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
         .attr('stroke','#2ca02c').attr('stroke-width',2)
         .attr('stroke-dasharray','6,3');
-    g1_osol_137.append('text').attr('x',20).attr('y',4)
+    g1_osol_166.append('text').attr('x',20).attr('y',4)
         .attr('font-size','10px').attr('fill','#555').text('Linear');
     // Piecewise (solid)
-    const g2_osol_137 = leg_osol_137.append('g').attr('transform','translate(80,0)');
-    g2_osol_137.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+    const g2_osol_166 = leg_osol_166.append('g').attr('transform','translate(80,0)');
+    g2_osol_166.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
         .attr('stroke','#1f77b4').attr('stroke-width',2);
-    g2_osol_137.append('text').attr('x',20).attr('y',4)
+    g2_osol_166.append('text').attr('x',20).attr('y',4)
         .attr('font-size','10px').attr('fill','#555').text('Piecewise');
     // Binding
-    const g3_osol_137 = leg_osol_137.append('g').attr('transform','translate(175,0)');
-    g3_osol_137.append('rect').attr('width',12).attr('height',10).attr('y',-5)
+    const g3_osol_166 = leg_osol_166.append('g').attr('transform','translate(175,0)');
+    g3_osol_166.append('rect').attr('width',12).attr('height',10).attr('y',-5)
         .attr('fill','#d62728').attr('opacity',0.15);
-    g3_osol_137.append('text').attr('x',16).attr('y',4)
+    g3_osol_166.append('text').attr('x',16).attr('y',4)
         .attr('font-size','10px').attr('fill','#555').text('Binding');
 
     // Tooltip
-    svg_osol_137.append('rect')
-        .attr('width', W_osol_137)
-        .attr('height', h_osol_137 + margin_osol_137.top + margin_osol_137.bottom)
+    svg_osol_166.append('rect')
+        .attr('width', W_osol_166)
+        .attr('height', h_osol_166 + margin_osol_166.top + margin_osol_166.bottom)
         .attr('fill','none').attr('pointer-events','all')
         .on('mousemove', function(evt) {
-            const [mx] = d3.pointer(evt, g_osol_137.node());
-            const x0 = x_osol_137.invert(mx);
-            const idx = d3.minIndex(data_osol_137, d => Math.abs(d.h - x0));
-            const d = data_osol_137[idx];
+            const [mx] = d3.pointer(evt, g_osol_166.node());
+            const x0 = x_osol_166.invert(mx);
+            const idx = d3.minIndex(data_osol_166, d => Math.abs(d.h - x0));
+            const d = data_osol_166[idx];
             let html = '<b>h='+d.h+'</b>';
             if(d.lin!==null) html += '<br>Linear: '+fmt(d.lin);
             if(d.pw!==null) html += '<br>Piecewise: '+fmt(d.pw);
@@ -288,7 +288,7 @@ function hideTip() { tooltip.style('opacity',0); }
 })();
 
 (function() {
-    const data_osol_138 = [{"h":1,"lin":-1.0243902376192255,"pw":-1.4146341353176635,"bind":0},
+    const data_osol_167 = [{"h":1,"lin":-1.0243902376192255,"pw":-1.4146341353176635,"bind":0},
 {"h":2,"lin":-1.4466388973057505,"pw":-1.4146341354983951,"bind":1},
 {"h":3,"lin":-1.5707174802199833,"pw":-1.669999992554517,"bind":1},
 {"h":4,"lin":-1.5512943162911377,"pw":-1.5079999943131104,"bind":1},
@@ -348,125 +348,125 @@ function hideTip() { tooltip.style('opacity',0); }
 {"h":58,"lin":-0.005860271372872865,"pw":-0.005860271372872578,"bind":0},
 {"h":59,"lin":-0.005274244239164007,"pw":-0.00527424423916386,"bind":0},
 {"h":60,"lin":-0.004746819818468187,"pw":-0.004746819818468112,"bind":0}];
-    const container_osol_138 = d3.select('#osol_138');
-    const W_osol_138 = Math.max(container_osol_138.node().clientWidth - 24, 280);
-    const margin_osol_138 = {top:10, right:15, bottom:35, left:55};
-    const w_osol_138 = W_osol_138 - margin_osol_138.left - margin_osol_138.right;
-    const h_osol_138 = Math.min(w_osol_138 * 0.6, 250);
+    const container_osol_167 = d3.select('#osol_167');
+    const W_osol_167 = Math.max(container_osol_167.node().clientWidth - 24, 280);
+    const margin_osol_167 = {top:10, right:15, bottom:35, left:55};
+    const w_osol_167 = W_osol_167 - margin_osol_167.left - margin_osol_167.right;
+    const h_osol_167 = Math.min(w_osol_167 * 0.6, 250);
 
-    const svg_osol_138 = container_osol_138.append('svg')
-        .attr('width', W_osol_138)
-        .attr('height', h_osol_138 + margin_osol_138.top + margin_osol_138.bottom);
-    const g_osol_138 = svg_osol_138.append('g')
-        .attr('transform', 'translate('+margin_osol_138.left+','+margin_osol_138.top+')');
+    const svg_osol_167 = container_osol_167.append('svg')
+        .attr('width', W_osol_167)
+        .attr('height', h_osol_167 + margin_osol_167.top + margin_osol_167.bottom);
+    const g_osol_167 = svg_osol_167.append('g')
+        .attr('transform', 'translate('+margin_osol_167.left+','+margin_osol_167.top+')');
 
     // Compute domains
-    const xVals_osol_138 = data_osol_138.map(d => d.h);
-    const allY_osol_138 = [];
-    data_osol_138.forEach(d => {
-        if(d.lin!==null) allY_osol_138.push(d.lin);
-        if(d.pw!==null) allY_osol_138.push(d.pw);
+    const xVals_osol_167 = data_osol_167.map(d => d.h);
+    const allY_osol_167 = [];
+    data_osol_167.forEach(d => {
+        if(d.lin!==null) allY_osol_167.push(d.lin);
+        if(d.pw!==null) allY_osol_167.push(d.pw);
     });
-    allY_osol_138.push(0);
+    allY_osol_167.push(0);
 
-    const x_osol_138 = d3.scaleLinear().domain(d3.extent(xVals_osol_138)).range([0, w_osol_138]);
-    const yExt_osol_138 = d3.extent(allY_osol_138);
-    const yPad_osol_138 = (yExt_osol_138[1] - yExt_osol_138[0]) * 0.08 || 0.1;
-    const y_osol_138 = d3.scaleLinear()
-        .domain([yExt_osol_138[0] - yPad_osol_138, yExt_osol_138[1] + yPad_osol_138])
-        .range([h_osol_138, 0]);
+    const x_osol_167 = d3.scaleLinear().domain(d3.extent(xVals_osol_167)).range([0, w_osol_167]);
+    const yExt_osol_167 = d3.extent(allY_osol_167);
+    const yPad_osol_167 = (yExt_osol_167[1] - yExt_osol_167[0]) * 0.08 || 0.1;
+    const y_osol_167 = d3.scaleLinear()
+        .domain([yExt_osol_167[0] - yPad_osol_167, yExt_osol_167[1] + yPad_osol_167])
+        .range([h_osol_167, 0]);
 
     // Grid
-    g_osol_138.append('g').attr('class','grid')
-        .call(d3.axisLeft(y_osol_138).tickSize(-w_osol_138).tickFormat(''));
+    g_osol_167.append('g').attr('class','grid')
+        .call(d3.axisLeft(y_osol_167).tickSize(-w_osol_167).tickFormat(''));
 
     // Binding-period shaded rectangles
-    const xStep_osol_138 = w_osol_138 / Math.max(xVals_osol_138.length - 1, 1);
-    data_osol_138.forEach((d, i) => {
+    const xStep_osol_167 = w_osol_167 / Math.max(xVals_osol_167.length - 1, 1);
+    data_osol_167.forEach((d, i) => {
         if(d.bind === 1) {
-            const x0_osol_138 = x_osol_138(d.h) - xStep_osol_138 * 0.5;
-            const x1_osol_138 = x_osol_138(d.h) + xStep_osol_138 * 0.5;
-            g_osol_138.append('rect')
-                .attr('x', Math.max(0, x0_osol_138))
+            const x0_osol_167 = x_osol_167(d.h) - xStep_osol_167 * 0.5;
+            const x1_osol_167 = x_osol_167(d.h) + xStep_osol_167 * 0.5;
+            g_osol_167.append('rect')
+                .attr('x', Math.max(0, x0_osol_167))
                 .attr('y', 0)
-                .attr('width', Math.min(x1_osol_138, w_osol_138) - Math.max(0, x0_osol_138))
-                .attr('height', h_osol_138)
+                .attr('width', Math.min(x1_osol_167, w_osol_167) - Math.max(0, x0_osol_167))
+                .attr('height', h_osol_167)
                 .attr('fill', '#d62728')
                 .attr('opacity', 0.08);
         }
     });
 
     // Zero reference line
-    g_osol_138.append('line')
-        .attr('x1', 0).attr('x2', w_osol_138)
-        .attr('y1', y_osol_138(0)).attr('y2', y_osol_138(0))
+    g_osol_167.append('line')
+        .attr('x1', 0).attr('x2', w_osol_167)
+        .attr('y1', y_osol_167(0)).attr('y2', y_osol_167(0))
         .attr('stroke', '#999').attr('stroke-width', 1)
         .attr('stroke-dasharray', '4,3');
 
     // Linear line (dashed)
-    const linLine_osol_138 = d3.line().x(d => x_osol_138(d.h)).y(d => y_osol_138(d.lin))
+    const linLine_osol_167 = d3.line().x(d => x_osol_167(d.h)).y(d => y_osol_167(d.lin))
         .defined(d => d.lin !== null);
-    g_osol_138.append('path').datum(data_osol_138).attr('d', linLine_osol_138)
+    g_osol_167.append('path').datum(data_osol_167).attr('d', linLine_osol_167)
         .attr('fill', 'none').attr('stroke', '#2ca02c')
         .attr('stroke-width', 1.8).attr('stroke-dasharray', '6,3');
 
     // Piecewise line (solid)
-    const pwLine_osol_138 = d3.line().x(d => x_osol_138(d.h)).y(d => y_osol_138(d.pw))
+    const pwLine_osol_167 = d3.line().x(d => x_osol_167(d.h)).y(d => y_osol_167(d.pw))
         .defined(d => d.pw !== null);
-    g_osol_138.append('path').datum(data_osol_138).attr('d', pwLine_osol_138)
+    g_osol_167.append('path').datum(data_osol_167).attr('d', pwLine_osol_167)
         .attr('fill', 'none').attr('stroke', '#1f77b4')
         .attr('stroke-width', 1.8);
 
     // Axes
-    g_osol_138.append('g').attr('class','axis')
-        .attr('transform', 'translate(0,'+h_osol_138+')')
-        .call(d3.axisBottom(x_osol_138).ticks(Math.min(xVals_osol_138.length, 8)));
-    g_osol_138.append('g').attr('class','axis')
-        .call(d3.axisLeft(y_osol_138).ticks(6));
+    g_osol_167.append('g').attr('class','axis')
+        .attr('transform', 'translate(0,'+h_osol_167+')')
+        .call(d3.axisBottom(x_osol_167).ticks(Math.min(xVals_osol_167.length, 8)));
+    g_osol_167.append('g').attr('class','axis')
+        .call(d3.axisLeft(y_osol_167).ticks(6));
 
-    if('Period') g_osol_138.append('text')
-        .attr('x', w_osol_138/2).attr('y', h_osol_138+30)
+    if('Period') g_osol_167.append('text')
+        .attr('x', w_osol_167/2).attr('y', h_osol_167+30)
         .attr('text-anchor','middle').attr('font-size','11px')
         .attr('fill','#666').text('Period');
-    if('c') g_osol_138.append('text')
+    if('c') g_osol_167.append('text')
         .attr('transform','rotate(-90)')
-        .attr('x', -h_osol_138/2).attr('y', -42)
+        .attr('x', -h_osol_167/2).attr('y', -42)
         .attr('text-anchor','middle').attr('font-size','11px')
         .attr('fill','#666').text('c');
 
     // Legend
-    const leg_osol_138 = g_osol_138.append('g').attr('class','legend')
+    const leg_osol_167 = g_osol_167.append('g').attr('class','legend')
         .attr('transform','translate(5,-5)');
     // Linear (dashed)
-    const g1_osol_138 = leg_osol_138.append('g').attr('transform','translate(0,0)');
-    g1_osol_138.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+    const g1_osol_167 = leg_osol_167.append('g').attr('transform','translate(0,0)');
+    g1_osol_167.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
         .attr('stroke','#2ca02c').attr('stroke-width',2)
         .attr('stroke-dasharray','6,3');
-    g1_osol_138.append('text').attr('x',20).attr('y',4)
+    g1_osol_167.append('text').attr('x',20).attr('y',4)
         .attr('font-size','10px').attr('fill','#555').text('Linear');
     // Piecewise (solid)
-    const g2_osol_138 = leg_osol_138.append('g').attr('transform','translate(80,0)');
-    g2_osol_138.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+    const g2_osol_167 = leg_osol_167.append('g').attr('transform','translate(80,0)');
+    g2_osol_167.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
         .attr('stroke','#1f77b4').attr('stroke-width',2);
-    g2_osol_138.append('text').attr('x',20).attr('y',4)
+    g2_osol_167.append('text').attr('x',20).attr('y',4)
         .attr('font-size','10px').attr('fill','#555').text('Piecewise');
     // Binding
-    const g3_osol_138 = leg_osol_138.append('g').attr('transform','translate(175,0)');
-    g3_osol_138.append('rect').attr('width',12).attr('height',10).attr('y',-5)
+    const g3_osol_167 = leg_osol_167.append('g').attr('transform','translate(175,0)');
+    g3_osol_167.append('rect').attr('width',12).attr('height',10).attr('y',-5)
         .attr('fill','#d62728').attr('opacity',0.15);
-    g3_osol_138.append('text').attr('x',16).attr('y',4)
+    g3_osol_167.append('text').attr('x',16).attr('y',4)
         .attr('font-size','10px').attr('fill','#555').text('Binding');
 
     // Tooltip
-    svg_osol_138.append('rect')
-        .attr('width', W_osol_138)
-        .attr('height', h_osol_138 + margin_osol_138.top + margin_osol_138.bottom)
+    svg_osol_167.append('rect')
+        .attr('width', W_osol_167)
+        .attr('height', h_osol_167 + margin_osol_167.top + margin_osol_167.bottom)
         .attr('fill','none').attr('pointer-events','all')
         .on('mousemove', function(evt) {
-            const [mx] = d3.pointer(evt, g_osol_138.node());
-            const x0 = x_osol_138.invert(mx);
-            const idx = d3.minIndex(data_osol_138, d => Math.abs(d.h - x0));
-            const d = data_osol_138[idx];
+            const [mx] = d3.pointer(evt, g_osol_167.node());
+            const x0 = x_osol_167.invert(mx);
+            const idx = d3.minIndex(data_osol_167, d => Math.abs(d.h - x0));
+            const d = data_osol_167[idx];
             let html = '<b>h='+d.h+'</b>';
             if(d.lin!==null) html += '<br>Linear: '+fmt(d.lin);
             if(d.pw!==null) html += '<br>Piecewise: '+fmt(d.pw);
@@ -477,7 +477,7 @@ function hideTip() { tooltip.style('opacity',0); }
 })();
 
 (function() {
-    const data_osol_139 = [{"h":1,"lin":-1.9999999877875467,"pw":-1.9999999877875467,"bind":0},
+    const data_osol_168 = [{"h":1,"lin":-1.9999999877875467,"pw":-1.9999999877875467,"bind":0},
 {"h":2,"lin":-1.7999999902300374,"pw":-1.7999999902300374,"bind":1},
 {"h":3,"lin":-1.6199999923061545,"pw":-1.6199999923061545,"bind":1},
 {"h":4,"lin":-1.457999994064748,"pw":-1.457999994064748,"bind":1},
@@ -537,125 +537,125 @@ function hideTip() { tooltip.style('opacity',0); }
 {"h":58,"lin":-0.004930069570471456,"pw":-0.004930069570471456,"bind":0},
 {"h":59,"lin":-0.004437062616434723,"pw":-0.004437062616434723,"bind":0},
 {"h":60,"lin":-0.003993356357500622,"pw":-0.003993356357500622,"bind":0}];
-    const container_osol_139 = d3.select('#osol_139');
-    const W_osol_139 = Math.max(container_osol_139.node().clientWidth - 24, 280);
-    const margin_osol_139 = {top:10, right:15, bottom:35, left:55};
-    const w_osol_139 = W_osol_139 - margin_osol_139.left - margin_osol_139.right;
-    const h_osol_139 = Math.min(w_osol_139 * 0.6, 250);
+    const container_osol_168 = d3.select('#osol_168');
+    const W_osol_168 = Math.max(container_osol_168.node().clientWidth - 24, 280);
+    const margin_osol_168 = {top:10, right:15, bottom:35, left:55};
+    const w_osol_168 = W_osol_168 - margin_osol_168.left - margin_osol_168.right;
+    const h_osol_168 = Math.min(w_osol_168 * 0.6, 250);
 
-    const svg_osol_139 = container_osol_139.append('svg')
-        .attr('width', W_osol_139)
-        .attr('height', h_osol_139 + margin_osol_139.top + margin_osol_139.bottom);
-    const g_osol_139 = svg_osol_139.append('g')
-        .attr('transform', 'translate('+margin_osol_139.left+','+margin_osol_139.top+')');
+    const svg_osol_168 = container_osol_168.append('svg')
+        .attr('width', W_osol_168)
+        .attr('height', h_osol_168 + margin_osol_168.top + margin_osol_168.bottom);
+    const g_osol_168 = svg_osol_168.append('g')
+        .attr('transform', 'translate('+margin_osol_168.left+','+margin_osol_168.top+')');
 
     // Compute domains
-    const xVals_osol_139 = data_osol_139.map(d => d.h);
-    const allY_osol_139 = [];
-    data_osol_139.forEach(d => {
-        if(d.lin!==null) allY_osol_139.push(d.lin);
-        if(d.pw!==null) allY_osol_139.push(d.pw);
+    const xVals_osol_168 = data_osol_168.map(d => d.h);
+    const allY_osol_168 = [];
+    data_osol_168.forEach(d => {
+        if(d.lin!==null) allY_osol_168.push(d.lin);
+        if(d.pw!==null) allY_osol_168.push(d.pw);
     });
-    allY_osol_139.push(0);
+    allY_osol_168.push(0);
 
-    const x_osol_139 = d3.scaleLinear().domain(d3.extent(xVals_osol_139)).range([0, w_osol_139]);
-    const yExt_osol_139 = d3.extent(allY_osol_139);
-    const yPad_osol_139 = (yExt_osol_139[1] - yExt_osol_139[0]) * 0.08 || 0.1;
-    const y_osol_139 = d3.scaleLinear()
-        .domain([yExt_osol_139[0] - yPad_osol_139, yExt_osol_139[1] + yPad_osol_139])
-        .range([h_osol_139, 0]);
+    const x_osol_168 = d3.scaleLinear().domain(d3.extent(xVals_osol_168)).range([0, w_osol_168]);
+    const yExt_osol_168 = d3.extent(allY_osol_168);
+    const yPad_osol_168 = (yExt_osol_168[1] - yExt_osol_168[0]) * 0.08 || 0.1;
+    const y_osol_168 = d3.scaleLinear()
+        .domain([yExt_osol_168[0] - yPad_osol_168, yExt_osol_168[1] + yPad_osol_168])
+        .range([h_osol_168, 0]);
 
     // Grid
-    g_osol_139.append('g').attr('class','grid')
-        .call(d3.axisLeft(y_osol_139).tickSize(-w_osol_139).tickFormat(''));
+    g_osol_168.append('g').attr('class','grid')
+        .call(d3.axisLeft(y_osol_168).tickSize(-w_osol_168).tickFormat(''));
 
     // Binding-period shaded rectangles
-    const xStep_osol_139 = w_osol_139 / Math.max(xVals_osol_139.length - 1, 1);
-    data_osol_139.forEach((d, i) => {
+    const xStep_osol_168 = w_osol_168 / Math.max(xVals_osol_168.length - 1, 1);
+    data_osol_168.forEach((d, i) => {
         if(d.bind === 1) {
-            const x0_osol_139 = x_osol_139(d.h) - xStep_osol_139 * 0.5;
-            const x1_osol_139 = x_osol_139(d.h) + xStep_osol_139 * 0.5;
-            g_osol_139.append('rect')
-                .attr('x', Math.max(0, x0_osol_139))
+            const x0_osol_168 = x_osol_168(d.h) - xStep_osol_168 * 0.5;
+            const x1_osol_168 = x_osol_168(d.h) + xStep_osol_168 * 0.5;
+            g_osol_168.append('rect')
+                .attr('x', Math.max(0, x0_osol_168))
                 .attr('y', 0)
-                .attr('width', Math.min(x1_osol_139, w_osol_139) - Math.max(0, x0_osol_139))
-                .attr('height', h_osol_139)
+                .attr('width', Math.min(x1_osol_168, w_osol_168) - Math.max(0, x0_osol_168))
+                .attr('height', h_osol_168)
                 .attr('fill', '#d62728')
                 .attr('opacity', 0.08);
         }
     });
 
     // Zero reference line
-    g_osol_139.append('line')
-        .attr('x1', 0).attr('x2', w_osol_139)
-        .attr('y1', y_osol_139(0)).attr('y2', y_osol_139(0))
+    g_osol_168.append('line')
+        .attr('x1', 0).attr('x2', w_osol_168)
+        .attr('y1', y_osol_168(0)).attr('y2', y_osol_168(0))
         .attr('stroke', '#999').attr('stroke-width', 1)
         .attr('stroke-dasharray', '4,3');
 
     // Linear line (dashed)
-    const linLine_osol_139 = d3.line().x(d => x_osol_139(d.h)).y(d => y_osol_139(d.lin))
+    const linLine_osol_168 = d3.line().x(d => x_osol_168(d.h)).y(d => y_osol_168(d.lin))
         .defined(d => d.lin !== null);
-    g_osol_139.append('path').datum(data_osol_139).attr('d', linLine_osol_139)
+    g_osol_168.append('path').datum(data_osol_168).attr('d', linLine_osol_168)
         .attr('fill', 'none').attr('stroke', '#2ca02c')
         .attr('stroke-width', 1.8).attr('stroke-dasharray', '6,3');
 
     // Piecewise line (solid)
-    const pwLine_osol_139 = d3.line().x(d => x_osol_139(d.h)).y(d => y_osol_139(d.pw))
+    const pwLine_osol_168 = d3.line().x(d => x_osol_168(d.h)).y(d => y_osol_168(d.pw))
         .defined(d => d.pw !== null);
-    g_osol_139.append('path').datum(data_osol_139).attr('d', pwLine_osol_139)
+    g_osol_168.append('path').datum(data_osol_168).attr('d', pwLine_osol_168)
         .attr('fill', 'none').attr('stroke', '#1f77b4')
         .attr('stroke-width', 1.8);
 
     // Axes
-    g_osol_139.append('g').attr('class','axis')
-        .attr('transform', 'translate(0,'+h_osol_139+')')
-        .call(d3.axisBottom(x_osol_139).ticks(Math.min(xVals_osol_139.length, 8)));
-    g_osol_139.append('g').attr('class','axis')
-        .call(d3.axisLeft(y_osol_139).ticks(6));
+    g_osol_168.append('g').attr('class','axis')
+        .attr('transform', 'translate(0,'+h_osol_168+')')
+        .call(d3.axisBottom(x_osol_168).ticks(Math.min(xVals_osol_168.length, 8)));
+    g_osol_168.append('g').attr('class','axis')
+        .call(d3.axisLeft(y_osol_168).ticks(6));
 
-    if('Period') g_osol_139.append('text')
-        .attr('x', w_osol_139/2).attr('y', h_osol_139+30)
+    if('Period') g_osol_168.append('text')
+        .attr('x', w_osol_168/2).attr('y', h_osol_168+30)
         .attr('text-anchor','middle').attr('font-size','11px')
         .attr('fill','#666').text('Period');
-    if('y') g_osol_139.append('text')
+    if('y') g_osol_168.append('text')
         .attr('transform','rotate(-90)')
-        .attr('x', -h_osol_139/2).attr('y', -42)
+        .attr('x', -h_osol_168/2).attr('y', -42)
         .attr('text-anchor','middle').attr('font-size','11px')
         .attr('fill','#666').text('y');
 
     // Legend
-    const leg_osol_139 = g_osol_139.append('g').attr('class','legend')
+    const leg_osol_168 = g_osol_168.append('g').attr('class','legend')
         .attr('transform','translate(5,-5)');
     // Linear (dashed)
-    const g1_osol_139 = leg_osol_139.append('g').attr('transform','translate(0,0)');
-    g1_osol_139.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+    const g1_osol_168 = leg_osol_168.append('g').attr('transform','translate(0,0)');
+    g1_osol_168.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
         .attr('stroke','#2ca02c').attr('stroke-width',2)
         .attr('stroke-dasharray','6,3');
-    g1_osol_139.append('text').attr('x',20).attr('y',4)
+    g1_osol_168.append('text').attr('x',20).attr('y',4)
         .attr('font-size','10px').attr('fill','#555').text('Linear');
     // Piecewise (solid)
-    const g2_osol_139 = leg_osol_139.append('g').attr('transform','translate(80,0)');
-    g2_osol_139.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+    const g2_osol_168 = leg_osol_168.append('g').attr('transform','translate(80,0)');
+    g2_osol_168.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
         .attr('stroke','#1f77b4').attr('stroke-width',2);
-    g2_osol_139.append('text').attr('x',20).attr('y',4)
+    g2_osol_168.append('text').attr('x',20).attr('y',4)
         .attr('font-size','10px').attr('fill','#555').text('Piecewise');
     // Binding
-    const g3_osol_139 = leg_osol_139.append('g').attr('transform','translate(175,0)');
-    g3_osol_139.append('rect').attr('width',12).attr('height',10).attr('y',-5)
+    const g3_osol_168 = leg_osol_168.append('g').attr('transform','translate(175,0)');
+    g3_osol_168.append('rect').attr('width',12).attr('height',10).attr('y',-5)
         .attr('fill','#d62728').attr('opacity',0.15);
-    g3_osol_139.append('text').attr('x',16).attr('y',4)
+    g3_osol_168.append('text').attr('x',16).attr('y',4)
         .attr('font-size','10px').attr('fill','#555').text('Binding');
 
     // Tooltip
-    svg_osol_139.append('rect')
-        .attr('width', W_osol_139)
-        .attr('height', h_osol_139 + margin_osol_139.top + margin_osol_139.bottom)
+    svg_osol_168.append('rect')
+        .attr('width', W_osol_168)
+        .attr('height', h_osol_168 + margin_osol_168.top + margin_osol_168.bottom)
         .attr('fill','none').attr('pointer-events','all')
         .on('mousemove', function(evt) {
-            const [mx] = d3.pointer(evt, g_osol_139.node());
-            const x0 = x_osol_139.invert(mx);
-            const idx = d3.minIndex(data_osol_139, d => Math.abs(d.h - x0));
-            const d = data_osol_139[idx];
+            const [mx] = d3.pointer(evt, g_osol_168.node());
+            const x0 = x_osol_168.invert(mx);
+            const idx = d3.minIndex(data_osol_168, d => Math.abs(d.h - x0));
+            const d = data_osol_168[idx];
             let html = '<b>h='+d.h+'</b>';
             if(d.lin!==null) html += '<br>Linear: '+fmt(d.lin);
             if(d.pw!==null) html += '<br>Piecewise: '+fmt(d.pw);
