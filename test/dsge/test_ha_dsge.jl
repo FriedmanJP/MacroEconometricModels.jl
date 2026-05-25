@@ -7,6 +7,7 @@
 using Test
 using MacroEconometricModels
 using LinearAlgebra
+using SparseArrays
 
 @testset "HA-DSGE Types" begin
 
@@ -276,6 +277,72 @@ end
     @test size(result[:deposit]) == (30, 20, 3)
     # Consumption should be positive
     @test all(result[:consumption] .> 0)
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 8: VFI one-asset with Howard improvement
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "VFI one-asset" begin
+    grid = HAGrid(assets=(0.0, 200.0, 80), income_states=3)
+    inc = rouwenhorst(0.966, 0.5, 3)
+    ip = IndividualProblem{Float64}(
+        c -> log(c), c -> 1.0/c, m -> 1.0/m, 0.99,
+        (a, e, prices) -> (1 + prices[:r]) * a + prices[:w] * e,
+        [0.0], nothing, 1
+    )
+    prices = Dict(:r => 0.01, :w => 1.0)
+    V, c_pol, a_pol = MacroEconometricModels._vfi_solve(ip, grid, inc, prices;
+                                                         max_iter=300, tol=1e-6, howard_steps=20)
+    @test size(V) == (80, 3)
+    @test size(c_pol) == (80, 3)
+    @test size(a_pol) == (80, 3)
+    @test all(c_pol .> 0)
+    @test all(a_pol .>= -1e-10)
+    # Higher income → higher consumption
+    @test c_pol[40, 3] > c_pol[40, 1]
+    # Value function increasing in assets
+    @test V[70, 2] > V[10, 2]
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 9: Young (2010) distribution tracking
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "Young (2010) distribution" begin
+    grid = HAGrid(assets=(0.0, 200.0, 100), income_states=3)
+    inc = rouwenhorst(0.966, 0.5, 3)
+    ip = IndividualProblem{Float64}(
+        c -> log(c), c -> 1.0/c, m -> 1.0/m, 0.99,
+        (a, e, prices) -> (1 + prices[:r]) * a + prices[:w] * e,
+        [0.0], nothing, 1
+    )
+    prices = Dict(:r => 0.01, :w => 1.0)
+    c_pol, a_pol = MacroEconometricModels._egm_solve(ip, grid, inc, prices; max_iter=300, tol=1e-8)
+
+    Lambda = MacroEconometricModels._build_transition_matrix(a_pol, grid, inc)
+    @test size(Lambda) == (300, 300)
+    @test Lambda isa SparseArrays.SparseMatrixCSC
+    # Columns sum to 1
+    for col in 1:300
+        @test sum(Lambda[:, col]) ≈ 1.0 atol=1e-10
+    end
+
+    dist = MacroEconometricModels._stationary_dist_young(Lambda)
+    @test length(dist) == 300
+    @test sum(dist) ≈ 1.0 atol=1e-10
+    @test all(dist .>= 0)
+
+    # Forward iteration preserves mass
+    dist2 = MacroEconometricModels._forward_iterate(Lambda, dist)
+    @test sum(dist2) ≈ 1.0 atol=1e-10
+    # Stationary: forward iteration ≈ identity
+    @test maximum(abs.(dist2 .- dist)) < 1e-10
+
+    # Aggregate capital
+    K = MacroEconometricModels._aggregate(dist, grid; var_index=1)
+    @test K > 0
+    @test isfinite(K)
 end
 
 end # @testset "HA-DSGE Types"
