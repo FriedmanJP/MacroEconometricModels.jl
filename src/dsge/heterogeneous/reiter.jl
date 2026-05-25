@@ -86,66 +86,58 @@ function _reiter_linearize(ss::HASteadyState{T}, ip::IndividualProblem{T},
     # Build steady-state transition matrix
     Lambda_ss = _build_transition_matrix(a_pol_ss, grid, income)
 
-    # ── Step 2: Probe the reachable subspace ──────────────────────────────────
-    # Build a Krylov-type subspace by launching random perturbations and
-    # iterating them forward through Lambda_ss for multiple periods.  Each
-    # random initial perturbation is propagated for n_forward steps, and
-    # every intermediate deviation from steady state is recorded.  The SVD
-    # of the resulting matrix captures the dominant modes the distribution
-    # can visit.
+    # ── Step 2: Build aggregate-relevant reduction basis via SVD ────────────
+    # The distribution evolves as δ_{t+1} = Λ δ_t.  We care about directions
+    # that matter for aggregate capital K = a_vec' d.  Build a matrix whose
+    # columns span the reachable subspace weighted by both the transition
+    # dynamics and the capital aggregator.
+    #
+    # Strategy: construct a "controllability-like" matrix by iterating Λ on
+    # random perturbations *and* an "observability-like" matrix by iterating
+    # Λ' on the capital aggregation vector.  The SVD of their combination
+    # captures the directions most relevant for aggregate dynamics.
 
-    n_init = min(n_sim, 30)       # number of random initial perturbations
-    n_forward = max(div(n_sim, n_init), 5)  # forward iterations per perturbation
+    Lambda_dense = Matrix{T}(Lambda_ss)
 
-    M = zeros(T, N, n_init * n_forward)
-    col = 0
-
-    for k in 1:n_init
-        # Random perturbation: zero-mean → simplex tangent space
-        noise = randn(rng_actual, T, N)
-        noise .-= mean(noise)
-
-        # Current deviation from steady state (un-normalized, in tangent space)
-        delta = dx_T .* noise
-
-        for t in 1:n_forward
-            # Propagate deviation: since d_ss = Lambda_ss * d_ss,
-            # the deviation evolves as delta_{t+1} = Lambda_ss * delta_t
-            delta = Lambda_ss * delta
-
-            col += 1
-            M[:, col] .= delta
+    # Build the capital aggregation vector
+    a_vec_pre = zeros(T, N)
+    @inbounds for j in 1:n_e
+        offset = (j - 1) * n_a
+        for i in 1:n_a
+            a_vec_pre[offset + i] = a_grid[i]
         end
     end
 
-    # ── Step 3: SVD of deviation matrix → retain top singular vectors ─────────
+    # Observability matrix: rows are a_vec' Λ^k for k = 0, 1, ..., n_obs-1
+    # This identifies which distribution directions affect K at various horizons.
+    n_obs = min(N - 1, max(n_reduced * 3, 50))
+    O_mat = zeros(T, N, n_obs)
+    v_obs = copy(a_vec_pre)
+    for k in 1:n_obs
+        O_mat[:, k] .= v_obs
+        v_obs = Lambda_dense' * v_obs
+    end
 
-    F = svd(M)
+    # SVD of O_mat to get the dominant observable directions
+    F_obs = svd(O_mat)
 
-    # Determine number of retained vectors: threshold on singular values
-    s_total = sum(F.S .^ 2)
-    n_available = length(F.S)
-    n_red = min(n_reduced, n_available, N - 1)  # at most N-1 (simplex constraint)
+    n_available = min(length(F_obs.S), N - 1)
+    n_red = min(n_reduced, n_available)
 
-    # Threshold: retain singular values above 1e-10 × max
-    s_thresh = F.S[1] * T(1e-10)
-    n_above = count(s -> s > s_thresh, F.S[1:n_red])
+    # Threshold: retain singular values above a relative threshold
+    s_thresh = F_obs.S[1] * T(1e-10)
+    n_above = count(s -> s > s_thresh, F_obs.S[1:n_red])
     n_red = max(n_above, 1)
 
-    # Explained variance
-    explained = sum(F.S[1:n_red] .^ 2) / max(s_total, T(1e-30))
-    explained = min(explained, one(T))
+    # Reduction basis: left singular vectors of the observability matrix
+    U_k = F_obs.U[:, 1:n_red]   # N × n_red
 
-    # Reduction basis: top n_red left singular vectors
-    U_k = F.U[:, 1:n_red]   # N × n_red
-
-    # ── Step 4: Build reduced distribution transition ─────────────────────────
+    # ── Step 3: Build reduced distribution transition ─────────────────────────
     # G1_dist = U_k' Λ_ss U_k  (project transition into reduced coordinates)
 
-    Lambda_dense = Matrix{T}(Lambda_ss)
     G1_dist = U_k' * Lambda_dense * U_k   # n_red × n_red
 
-    # ── Step 5: Capital loading ───────────────────────────────────────────────
+    # ── Step 4: Capital loading ───────────────────────────────────────────────
     # K is a linear function of the distribution: K = a_grid' * d
     # In reduced coordinates: δK = a_loading' * d̃  where a_loading = U_k' * a_vec
     # and a_vec[i + (j-1)*n_a] = a_grid[i]
@@ -158,6 +150,35 @@ function _reiter_linearize(ss::HASteadyState{T}, ip::IndividualProblem{T},
         end
     end
     K_loading = U_k' * a_vec   # n_red vector
+
+    # ── Step 4b: Explained variance ───────────────────────────────────────────
+    # Measure how well the reduced basis captures the distribution dynamics
+    # that matter for aggregate capital.  For random perturbations δ, compare
+    # the full aggregate capital response ΔK_full = a_vec' Λ δ with the
+    # reduced reconstruction ΔK_red = K_loading' G1_dist (U_k' δ).
+
+    n_test = min(n_sim, 100)
+    var_full = zero(T)
+    var_resid = zero(T)
+
+    for k_test in 1:n_test
+        noise = randn(rng_actual, T, N)
+        noise .-= mean(noise)
+        delta_test = dx_T .* noise
+
+        # Full response
+        dK_full = dot(a_vec, Lambda_dense * delta_test)
+
+        # Reduced response
+        d_tilde = U_k' * delta_test
+        dK_red = dot(K_loading, G1_dist * d_tilde)
+
+        var_full += dK_full^2
+        var_resid += (dK_full - dK_red)^2
+    end
+
+    explained = var_full > zero(T) ? one(T) - var_resid / var_full : one(T)
+    explained = clamp(explained, zero(T), one(T))
 
     # ── Step 6: Assemble full system ──────────────────────────────────────────
     # Aggregate variables: K (capital) and Z (TFP shock)
