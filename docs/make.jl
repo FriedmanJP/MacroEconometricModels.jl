@@ -54,6 +54,7 @@ makedocs(;
             "Constraints" => "dsge_constraints.md",
             "Estimation" => "dsge_estimation.md",
             "Historical Decomposition" => "dsge_hd.md",
+            "Heterogeneous Agents" => "dsge_ha.md",
         ],
         "Innovation Accounting" => [
             "Overview" => "innovation_accounting.md",
