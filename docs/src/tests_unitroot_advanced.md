@@ -12,7 +12,7 @@ Standard unit root tests (ADF, PP, KPSS) perform well when the data-generating p
 using MacroEconometricModels, Random
 Random.seed!(42)
 fred = load_example(:fred_md)
-cpi = filter(isfinite, to_vector(fred[:, "CPIAUCSL"]))
+cpi = filter(isfinite, fred[:, "CPIAUCSL"])
 ```
 
 ## Quick Start

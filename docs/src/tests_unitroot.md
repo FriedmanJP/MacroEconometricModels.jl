@@ -14,7 +14,7 @@ The ADF and KPSS tests are complementary: ADF tests the null of a unit root, whi
 ```@setup test_ur
 using MacroEconometricModels
 fred = load_example(:fred_md)
-cpi = filter(isfinite, to_vector(fred[:, "CPIAUCSL"]))
+cpi = filter(isfinite, fred[:, "CPIAUCSL"])
 qd = load_example(:fred_qd)
 Y_qd = log.(to_matrix(qd[:, ["GDPC1", "PCECC96"]]))
 Y_qd = Y_qd[all.(isfinite, eachrow(Y_qd)), :]
@@ -505,8 +505,8 @@ This workflow demonstrates the full pre-estimation stationarity analysis pipelin
 
 ```@example test_ur
 # ── Step 1: Extract key macroeconomic variables ────────────────
-indpro = filter(isfinite, to_vector(fred[:, "INDPRO"]))
-ffr    = filter(isfinite, to_vector(fred[:, "FEDFUNDS"]))
+indpro = filter(isfinite, fred[:, "INDPRO"])
+ffr    = filter(isfinite, fred[:, "FEDFUNDS"])
 
 # ── Step 2: Individual unit root tests (ADF + KPSS) ───────────
 for (name, y) in [("INDPRO", indpro), ("CPI", cpi), ("FFR", ffr)]

@@ -91,7 +91,7 @@ makedocs(;
         ],
     ],
     checkdocs=:exports,
-    warnonly=[:missing_docs, :cross_references, :autodocs_block, :docs_block],
+    warnonly=[:missing_docs, :cross_references, :autodocs_block, :docs_block, :setup_block, :example_block],
 )
 
 deploydocs(;

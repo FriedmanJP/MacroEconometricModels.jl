@@ -362,7 +362,9 @@ Lower values indicate a better-fitting specification. MMSC-BIC penalizes most he
 
 ```@example test_panel
 mmsc = pvar_mmsc(model)
-report(mmsc)
+println("MMSC-BIC: ", round(mmsc.bic, digits=2),
+        ", MMSC-AIC: ", round(mmsc.aic, digits=2),
+        ", MMSC-HQIC: ", round(mmsc.hqic, digits=2))
 ```
 
 ### Lag Selection
@@ -371,7 +373,9 @@ The `pvar_lag_selection` function estimates Panel VAR models for lag orders ``p 
 
 ```@example test_panel
 sel = pvar_lag_selection(pd2, 4)
-report(sel)
+println("Optimal lag (BIC): ", sel.best_bic,
+        ", (AIC): ", sel.best_aic,
+        ", (HQIC): ", sel.best_hqic)
 ```
 
 The `table` field contains a ``p_{max} \times 4`` matrix with columns for the lag order and the three MMSC values. The `models` vector stores all estimated `PVARModel` objects for further analysis.
@@ -430,11 +434,15 @@ report(j)
 
 # MMSC criteria for this specification
 mmsc = pvar_mmsc(model_ce)
-report(mmsc)
+println("MMSC-BIC: ", round(mmsc.bic, digits=2),
+        ", MMSC-AIC: ", round(mmsc.aic, digits=2),
+        ", MMSC-HQIC: ", round(mmsc.hqic, digits=2))
 
 # Lag selection: compare p = 1, ..., 4
 sel = pvar_lag_selection(pd_ce, 4)
-report(sel)
+println("Optimal lag (BIC): ", sel.best_bic,
+        ", (AIC): ", sel.best_aic,
+        ", (HQIC): ", sel.best_hqic)
 ```
 
 The PANIC test separates the common factor (I(1)) from the stationary idiosyncratic errors, providing a nuanced view that the composite tests (CIPS, Moon-Perron) cannot. The Panel VAR diagnostics confirm that the GMM instruments are valid and identify the preferred lag order.
