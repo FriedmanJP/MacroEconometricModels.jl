@@ -698,4 +698,52 @@ end
     end
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 19: Plotting
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "Plotting" begin
+    grid = HAGrid(assets=(0.0, 200.0, 80), income_states=3)
+    inc = rouwenhorst(0.966, 0.5, 3)
+    ip = IndividualProblem{Float64}(
+        c -> log(c), c -> 1.0/c, m -> 1.0/m, 0.99,
+        (a, e, prices) -> (1 + prices[:r]) * a + prices[:w] * e,
+        [0.0], nothing, 1
+    )
+    function price_fn_plot(K, params)
+        r = 0.36 * K^(0.36-1) - 0.025; w = 0.64 * K^0.36
+        Dict(:r => r, :w => w)
+    end
+    params = Dict(:alpha => 0.36, :delta => 0.025, :Z => 1.0, :L => 1.0)
+    ss = MacroEconometricModels._ha_steady_state(ip, grid, inc, price_fn_plot, params;
+        K_init=10.0, r_bounds=(-0.02, 0.04), max_iter=60, tol=1e-3)
+
+    # Distribution plot (default view)
+    p = plot_result(ss)
+    @test p isa PlotOutput
+    @test !isempty(p.html)
+    @test contains(p.html, "Wealth Distribution")
+
+    # Explicit :distribution view
+    p1b = plot_result(ss; view=:distribution)
+    @test p1b isa PlotOutput
+
+    # Lorenz curve
+    p2 = plot_result(ss; view=:lorenz)
+    @test p2 isa PlotOutput
+    @test contains(p2.html, "Lorenz")
+
+    # Policy function plot
+    p3 = plot_result(ss; view=:policy)
+    @test p3 isa PlotOutput
+    @test contains(p3.html, "Policy")
+
+    # Invalid view
+    @test_throws ArgumentError plot_result(ss; view=:invalid)
+
+    # Custom title
+    p4 = plot_result(ss; title="Custom Title")
+    @test contains(p4.html, "Custom Title")
+end
+
 end # @testset "HA-DSGE Types"
