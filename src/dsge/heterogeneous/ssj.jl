@@ -358,7 +358,7 @@ function _ssj_solve(spec::HADSGESpec{T}, ss::HASteadyState{T};
     exog_names = [:epsilon_r]
     param_names = Symbol[]
     param_values = Dict{Symbol,T}()
-    equations = [:(0) for _ in 1:n_red]
+    equations = [:(0 + 0) for _ in 1:n_red]
     residual_fns = [((yt, yl, yle, eps, th) -> zero(T)) for _ in 1:n_red]
     steady_state_vec = zeros(T, n_red)
 

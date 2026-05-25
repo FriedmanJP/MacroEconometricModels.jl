@@ -373,6 +373,7 @@ include("dsge/heterogeneous/examples.jl")
 include("dsge/heterogeneous/parser.jl")
 include("dsge/heterogeneous/display.jl")
 include("dsge/heterogeneous/analysis.jl")
+include("dsge/heterogeneous/estimation.jl")
 
 # Display (after all types)
 include("summary.jl")

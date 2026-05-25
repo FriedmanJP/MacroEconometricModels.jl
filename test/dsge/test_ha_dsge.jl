@@ -9,6 +9,7 @@ using MacroEconometricModels
 using LinearAlgebra
 using SparseArrays
 using Random
+using Distributions
 
 @testset "HA-DSGE Types" begin
 
@@ -847,6 +848,111 @@ end
         K_init=10.0, r_bounds=(-0.02, 0.04), max_iter=30, tol=1e-2
     )
     @test_throws ErrorException solve(spec; method=:nonexistent, ss=ss)
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 22: HA Bayesian estimation
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "HA Bayesian estimation" begin
+    spec = load_ha_example(:krusell_smith)
+
+    # Compute steady state for generating fake data
+    ss = ha_steady_state(spec; K_init=10.0, r_bounds=(-0.02, 0.04), max_iter=50, tol=1e-3)
+    K_ss = ss.aggregates[:K]
+    T_data = 50
+    rng = Random.MersenneTwister(42)
+    data_K = K_ss .+ 0.1 .* randn(rng, T_data)  # K with noise
+
+    @testset "_update_ha_params" begin
+        param_names = [:alpha]
+        theta = [0.30]
+        new_spec = MacroEconometricModels._update_ha_params(spec, param_names, theta)
+        @test new_spec isa HADSGESpec{Float64}
+        @test new_spec.aggregate_spec.param_values[:alpha] ≈ 0.30
+        @test new_spec.het_params[:alpha] ≈ 0.36  # het_params has its own copy
+        @test new_spec.individual.beta ≈ 0.99  # unchanged
+
+        # Update beta
+        param_names2 = [:beta]
+        theta2 = [0.98]
+        new_spec2 = MacroEconometricModels._update_ha_params(spec, param_names2, theta2)
+        @test new_spec2.individual.beta ≈ 0.98
+    end
+
+    @testset "_build_ha_likelihood_fn" begin
+        # Solve model first to have a valid solution for observation equation
+        sol = solve(spec; method=:ssj, ss=ss, T_horizon=30, n_reduced=10)
+        @test sol isa HADSGESolution{Float64}
+
+        param_names = [:alpha]
+        ll_fn = MacroEconometricModels._build_ha_likelihood_fn(
+            spec, param_names, reshape(data_K, 1, :),
+            [:K], nothing, :ssj, (T_horizon=30, n_reduced=10)
+        )
+
+        ll_val = ll_fn([0.36])
+        @test isfinite(ll_val)
+        @test ll_val < 0  # log likelihood is negative
+
+        # Likelihood should handle bad parameter values gracefully
+        ll_bad = ll_fn([0.001])  # extreme parameter
+        @test ll_bad == -Inf || ll_bad < ll_val + 100  # either fails or worse
+    end
+
+    @testset "_build_ha_observation_equation" begin
+        sol = solve(spec; method=:ssj, ss=ss, T_horizon=30, n_reduced=10)
+
+        Z, d, H = MacroEconometricModels._build_ha_observation_equation(
+            sol, [:K], nothing
+        )
+        n_states = size(sol.linear_solution.G1, 1)
+        @test size(Z) == (1, n_states)
+        @test length(d) == 1
+        @test size(H) == (1, 1)
+        @test d[1] ≈ K_ss atol=1.0  # steady state K
+        @test H[1, 1] > 0  # positive measurement error
+
+        # Custom measurement error
+        Z2, d2, H2 = MacroEconometricModels._build_ha_observation_equation(
+            sol, [:K], [0.5]
+        )
+        @test H2[1, 1] ≈ 0.25  # 0.5^2
+    end
+
+    @testset "estimate_dsge_bayes dispatch" begin
+        # Very small run to verify the method dispatches correctly
+        priors = Dict(:alpha => Distributions.Normal(0.36, 0.05))
+        rng_est = Random.MersenneTwister(123)
+
+        result = estimate_dsge_bayes(
+            spec, reshape(data_K, T_data, 1), [0.36];
+            priors=priors,
+            observables=[:K],
+            n_draws=20,
+            burnin=5,
+            ha_method=:ssj,
+            ha_kwargs=(T_horizon=30, n_reduced=10),
+            proposal_scale=0.001,
+            adapt_interval=50,  # no adaptation in 20 draws
+            rng=rng_est
+        )
+
+        @test result isa BayesianDSGE{Float64}
+        @test size(result.theta_draws, 2) == 1  # one parameter
+        @test size(result.theta_draws, 1) == 15  # n_draws - burnin = 20 - 5
+        @test length(result.log_posterior) == 15
+        @test result.method === :rwmh
+        @test result.acceptance_rate >= 0.0
+        @test result.acceptance_rate <= 1.0
+        @test length(result.param_names) == 1
+        @test result.param_names[1] === :alpha
+
+        # Posterior summary should work
+        ps = posterior_summary(result)
+        @test haskey(ps, :alpha)
+        @test isfinite(ps[:alpha][:mean])
+    end
 end
 
 end # @testset "HA-DSGE Types"
