@@ -513,4 +513,78 @@ end
     @test abs(max_eig - 0.9) < 0.1
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 15: Reiter linearization
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "Reiter linearization" begin
+    grid = HAGrid(assets=(0.0, 200.0, 50), income_states=3)
+    inc = rouwenhorst(0.966, 0.5, 3)
+    ip = IndividualProblem{Float64}(
+        c -> log(c), c -> 1.0/c, m -> 1.0/m, 0.99,
+        (a, e, prices) -> (1 + prices[:r]) * a + prices[:w] * e,
+        [0.0], nothing, 1
+    )
+    function price_fn_reiter(K, params)
+        alpha = params[:alpha]; delta = params[:delta]
+        r = alpha * K^(alpha-1) - delta
+        w = (1-alpha) * K^alpha
+        Dict(:r => r, :w => w)
+    end
+    params = Dict(:alpha => 0.36, :delta => 0.025, :Z => 1.0, :L => 1.0)
+    ss = MacroEconometricModels._ha_steady_state(ip, grid, inc, price_fn_reiter, params;
+        K_init=10.0, r_bounds=(-0.02, 0.04), max_iter=60, tol=1e-3)
+
+    G1, impact, n_red, explained = MacroEconometricModels._reiter_linearize(
+        ss, ip, grid, inc; n_reduced=15
+    )
+    @test size(G1, 1) == size(G1, 2)  # square
+    @test size(G1, 1) <= 15 + 5  # reduced dim + aggregates
+    @test n_red <= 15
+    @test explained > 0.95
+    @test maximum(abs.(eigvals(G1))) < 1.0 + 0.01  # approximately stable
+    @test size(impact, 1) == size(G1, 1)
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 16: Display
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "Display" begin
+    grid = HAGrid(assets=(0.0, 200.0, 100), income_states=3)
+    inc = rouwenhorst(0.966, 0.5, 3)
+    ip = IndividualProblem{Float64}(
+        c -> log(c), c -> 1.0/c, m -> 1.0/m, 0.99,
+        (a, e, prices) -> (1 + prices[:r]) * a + prices[:w] * e,
+        [0.0], nothing, 1
+    )
+    function price_fn(K, params)
+        r = 0.36 * K^(0.36-1) - 0.025; w = 0.64 * K^0.36
+        Dict(:r => r, :w => w)
+    end
+    params = Dict(:alpha => 0.36, :delta => 0.025, :Z => 1.0, :L => 1.0)
+    ss = MacroEconometricModels._ha_steady_state(ip, grid, inc, price_fn, params;
+        K_init=10.0, r_bounds=(-0.02, 0.04), max_iter=60, tol=1e-3)
+
+    # show doesn't error
+    io = IOBuffer()
+    show(io, ss)
+    s = String(take!(io))
+    @test contains(s, "HASteadyState")
+
+    # report doesn't error
+    report(ss)
+
+    # Gini coefficient
+    gini = MacroEconometricModels._gini_coefficient(vec(ss.distribution), ss.grid)
+    @test 0.0 <= gini <= 1.0
+    @test isfinite(gini)
+
+    # Wealth percentiles
+    p50 = MacroEconometricModels._wealth_percentile(vec(ss.distribution), ss.grid, 0.5)
+    p90 = MacroEconometricModels._wealth_percentile(vec(ss.distribution), ss.grid, 0.9)
+    @test p90 >= p50  # 90th percentile >= median
+    @test isfinite(p50)
+end
+
 end # @testset "HA-DSGE Types"
