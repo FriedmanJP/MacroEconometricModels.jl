@@ -46,8 +46,21 @@ function linearize(spec::DSGESpec{T}) where {T<:AbstractFloat}
 
     Gamma0 = f_0                            # n × n
     Gamma1 = -f_1                           # n × n
-    C = zeros(T, n)                         # constants (zero at SS)
     Psi = -f_ε                              # n × n_ε
+
+    # Compute constant vector C
+    # For nonlinear models: f(y_ss, y_ss, y_ss, 0, θ) = 0 at SS, so C = 0
+    # For linear models with constants (e.g., measurement eqs): residual at SS is nonzero
+    if spec.linear
+        # Evaluate residual at SS to capture constant terms
+        resid_ss = zeros(T, n)
+        for i in 1:n
+            resid_ss[i] = spec.residual_fns[i](y_ss, y_ss, y_ss, ε_zero, θ)
+        end
+        C = -resid_ss  # Sims form: Γ₀·y = Γ₁·y_{-1} + C + ..., so C = -f(y_ss,...)
+    else
+        C = zeros(T, n)  # zero at true SS by construction
+    end
 
     # Π: select columns of -f_lead corresponding to forward-looking variables
     if n_η > 0

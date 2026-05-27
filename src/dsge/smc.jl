@@ -80,7 +80,8 @@ function _build_likelihood_fn(spec::DSGESpec{T}, param_names::Vector{Symbol},
                 original_equations=spec.original_equations,
                 augmented=spec.augmented,
                 max_lag=spec.max_lag,
-                max_lead=spec.max_lead
+                max_lead=spec.max_lead,
+                linear=spec.linear
             )
 
             # Compute steady state

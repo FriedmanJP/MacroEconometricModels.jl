@@ -103,14 +103,21 @@ function gensys(Gamma0::AbstractMatrix{T}, Gamma1::AbstractMatrix{T},
             impact_c = Z1 * (S11 \ (Q1 * complex(Psi)))
         end
 
-        G1 = real(Matrix{T}(G1_c))
-        impact = real(Matrix{T}(impact_c))
+        G1 = Matrix{T}(real(G1_c))
+        impact = Matrix{T}(real(impact_c))
     else
         G1 = zeros(T, n, n)
         impact = zeros(T, n, size(Psi, 2))
     end
 
-    C_sol = norm(C) > eps(T) ? real(Vector{T}((I - complex(G1)) \ complex(C))) : zeros(T, n)
+    # Compute solution constant: y_t = G1*y_{t-1} + impact*eps + C_sol
+    # At SS: y_ss = (Gamma0-Gamma1)^{-1}*C, and C_sol = (I-G1)*y_ss
+    if norm(C) > eps(T)
+        y_bar = real(Vector{T}((complex(Gamma0) - complex(Gamma1)) \ complex(C)))
+        C_sol = (I - G1) * y_bar
+    else
+        C_sol = zeros(T, n)
+    end
 
     (G1=G1, impact=impact, C_sol=C_sol, eu=eu, eigenvalues=eigenvalues)
 end
@@ -177,7 +184,12 @@ Solve a DSGE model.
 """
 function solve(spec::DSGESpec{T}; method::Symbol=:gensys, kwargs...) where {T<:AbstractFloat}
     if isempty(spec.steady_state)
-        spec = compute_steady_state(spec)
+        if spec.linear
+            # Linear models: steady state is all zeros (variables are deviations)
+            spec = _update_steady_state(spec, zeros(T, spec.n_endog))
+        else
+            spec = compute_steady_state(spec)
+        end
     end
 
     if method == :gensys
@@ -207,7 +219,13 @@ function solve(spec::DSGESpec{T}; method::Symbol=:gensys, kwargs...) where {T<:A
             eigenvalues = qz_result.eigenvalues
         end
 
-        C_sol = norm(ld.C) > eps(T) ? real(Vector{T}((I - complex(G1)) \ complex(ld.C))) : zeros(T, spec.n_endog)
+        # Compute solution constant: C_sol = (I-G1)*y_ss where y_ss = (Gamma0-Gamma1)^{-1}*C
+        if norm(ld.C) > eps(T)
+            y_bar = real(Vector{T}((complex(ld.Gamma0) - complex(ld.Gamma1)) \ complex(ld.C)))
+            C_sol = (I - G1) * y_bar
+        else
+            C_sol = zeros(T, spec.n_endog)
+        end
 
         return DSGESolution{T}(
             G1, impact, C_sol, qz_result.eu,

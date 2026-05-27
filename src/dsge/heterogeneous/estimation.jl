@@ -68,7 +68,8 @@ function _update_ha_params(spec::HADSGESpec{T}, param_names::Vector{Symbol},
         original_equations=agg.original_equations,
         augmented=agg.augmented,
         max_lag=agg.max_lag,
-        max_lead=agg.max_lead
+        max_lead=agg.max_lead,
+        linear=agg.linear
     )
 
     # Rebuild individual problem with updated beta

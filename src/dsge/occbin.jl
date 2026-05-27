@@ -183,7 +183,8 @@ function _derive_alternative_regime(spec::DSGESpec{T}, constraint::OccBinConstra
                 original_equations=spec.original_equations,
                 augmented=spec.augmented,
                 max_lag=spec.max_lag,
-                max_lead=spec.max_lead)
+                max_lead=spec.max_lead,
+                linear=spec.linear)
 end
 
 # =============================================================================

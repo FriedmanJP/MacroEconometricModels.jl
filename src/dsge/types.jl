@@ -41,6 +41,7 @@ Fields:
 - `augmented::Bool` — whether model was augmented with auxiliary variables
 - `max_lag::Int` — maximum lag order in the model (1 for standard, >1 if augmented)
 - `max_lead::Int` — maximum lead order in the model (1 for standard, >1 if augmented)
+- `linear::Bool` — whether the model is pre-linearized (variables are deviations from SS)
 """
 struct DSGESpec{T<:AbstractFloat}
     endog::Vector{Symbol}
@@ -64,6 +65,7 @@ struct DSGESpec{T<:AbstractFloat}
     augmented::Bool
     max_lag::Int
     max_lead::Int
+    linear::Bool
 
     function DSGESpec{T}(endog, exog, params, param_values, equations, residual_fns,
                          n_expect, forward_indices, steady_state,
@@ -72,7 +74,8 @@ struct DSGESpec{T<:AbstractFloat}
                          original_equations::Vector{Expr}=equations,
                          augmented::Bool=false,
                          max_lag::Int=1,
-                         max_lead::Int=1) where {T<:AbstractFloat}
+                         max_lead::Int=1,
+                         linear::Bool=false) where {T<:AbstractFloat}
         n_endog = length(endog)
         n_exog = length(exog)
         n_params = length(params)
@@ -85,7 +88,7 @@ struct DSGESpec{T<:AbstractFloat}
         new{T}(endog, exog, params, param_values, equations, residual_fns,
                n_endog, n_exog, n_params, n_expect, forward_indices, steady_state,
                varnames, ss_fn, original_endog, original_equations,
-               n_original_endog, n_original_eq, augmented, max_lag, max_lead)
+               n_original_endog, n_original_eq, augmented, max_lag, max_lead, linear)
     end
 end
 

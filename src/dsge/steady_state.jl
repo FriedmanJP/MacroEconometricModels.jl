@@ -332,6 +332,7 @@ function _update_steady_state(spec::DSGESpec{T}, y_ss::Vector{T}) where {T}
         original_equations=spec.original_equations,
         augmented=spec.augmented,
         max_lag=spec.max_lag,
-        max_lead=spec.max_lead
+        max_lead=spec.max_lead,
+        linear=spec.linear
     )
 end

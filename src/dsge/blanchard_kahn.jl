@@ -107,9 +107,10 @@ function blanchard_kahn(ld::LinearDSGE{T}, spec::DSGESpec{T}) where {T<:Abstract
         impact = zeros(T, n, n_eps)
     end
 
-    # Solve for constants: C_sol = (I - G1)^{-1} * C
+    # Solve for constants: C_sol = (I-G1)*y_ss where y_ss = (Gamma0-Gamma1)^{-1}*C
     C_sol = if norm(C) > eps(T)
-        real(Vector{T}((I - complex(G1)) \ complex(C)))
+        y_bar = real(Vector{T}((complex(ld.Gamma0) - complex(ld.Gamma1)) \ complex(C)))
+        (I - G1) * y_bar
     else
         zeros(T, n)
     end

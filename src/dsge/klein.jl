@@ -166,9 +166,10 @@ function klein(Gamma0::AbstractMatrix{T}, Gamma1::AbstractMatrix{T},
         impact = zeros(T, n, size(Psi, 2))
     end
 
-    # Constants: C_sol = (I - G1)^{-1} * C
+    # Constants: C_sol = (I-G1)*y_ss where y_ss = (Gamma0-Gamma1)^{-1}*C
     C_sol = if norm(C) > eps(T)
-        real(Vector{T}((I - complex(G1)) \ complex(C)))
+        y_bar = real(Vector{T}((complex(Gamma0) - complex(Gamma1)) \ complex(C)))
+        Vector{T}((I - G1) * y_bar)
     else
         zeros(T, n)
     end

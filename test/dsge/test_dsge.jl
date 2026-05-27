@@ -5527,4 +5527,122 @@ end # _jump_available
 
 end # DSGE Constraint Types
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Section: linear: true (pre-linearized models)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "Linear model support" begin
+
+@testset "Simple 3-equation NK (linear)" begin
+    spec = @dsge begin
+        parameters: rho = 0.9, sigma_y = 0.5, kappa = 0.3, phi_pi = 1.5
+        endogenous: y, pi_v, i_rate
+        exogenous: eps_y
+        linear: true
+
+        y[t] = y[t+1] - sigma_y * (i_rate[t] - pi_v[t+1])
+        pi_v[t] = 0.99 * pi_v[t+1] + kappa * y[t]
+        i_rate[t] = phi_pi * pi_v[t] + eps_y[t]
+    end
+
+    @test spec.linear == true
+    @test spec.ss_fn !== nothing  # auto-generated zeros SS
+    @test isempty(spec.steady_state)
+
+    sol = solve(spec; method=:gensys)
+    @test is_determined(sol)
+    @test all(sol.spec.steady_state .== 0.0)
+    @test all(sol.C_sol .== 0.0)  # no constants in pure linear model
+end
+
+@testset "Linear NK with persistence" begin
+    spec = @dsge begin
+        parameters: rho = 0.9, sigma_y = 0.5, kappa = 0.3, phi_pi = 1.5, rho_r = 0.7
+        endogenous: y, pi_v, i_rate, a
+        exogenous: eps_y
+        linear: true
+
+        y[t] = y[t+1] - sigma_y * (i_rate[t] - pi_v[t+1])
+        pi_v[t] = 0.99 * pi_v[t+1] + kappa * y[t]
+        i_rate[t] = rho_r * i_rate[t-1] + (1.0 - rho_r) * phi_pi * pi_v[t] + a[t]
+        a[t] = rho * a[t-1] + eps_y[t]
+    end
+
+    @test spec.linear == true
+    sol = solve(spec; method=:gensys)
+    @test is_determined(sol)
+    @test is_stable(sol)
+    @test all(sol.spec.steady_state .== 0.0)
+
+    # IRF should be non-trivial
+    ir = irf(sol, 20)
+    @test size(ir.values) == (20, 4, 1)
+    @test ir.values[1, 4, 1] ≈ 1.0  # AR(1) shock: unit impact
+    @test abs(ir.values[1, 1, 1]) > 0.1  # output responds
+end
+
+@testset "Linear model with observation constants" begin
+    # Test model with measurement equations that add constants
+    # (like SW07's dy = y - y(-1) + ctrend)
+    ctrend = 0.5
+    endog_v = [:y, :dy, :a]
+    exog_v = [:eps]
+    params_v = [:rho, :ctrend_p]
+    pv = Dict{Symbol,Float64}(:rho => 0.9, :ctrend_p => ctrend)
+
+    fns = Function[
+        (yt, yl, yle, eps, th) -> yt[1] - th[:rho] * yl[1] - eps[1],  # y = rho*y(-1) + eps
+        (yt, yl, yle, eps, th) -> yt[2] - yt[1] + yl[1] - th[:ctrend_p],  # dy = y - y(-1) + ctrend
+        (yt, yl, yle, eps, th) -> yt[3] - th[:rho] * yl[3] - eps[1]  # a = rho*a(-1) + eps
+    ]
+
+    eqs = Expr[:(0 + 0) for _ in 1:3]
+    forward_idx = Int[]
+    n_exp = 0
+
+    spec_obs = DSGESpec{Float64}(
+        endog_v, exog_v, params_v, pv,
+        eqs, fns, n_exp, forward_idx, Float64[], nothing;
+        linear=true
+    )
+
+    sol_obs = solve(spec_obs; method=:gensys)
+    @test is_determined(sol_obs)
+    @test all(sol_obs.spec.steady_state .== 0.0)
+
+    # C_sol should be nonzero for measurement equations
+    @test norm(sol_obs.C_sol) > 0
+
+    # Effective SS: y_ss = (I-G1)^{-1} * C_sol
+    eff_ss = (I - sol_obs.G1) \ sol_obs.C_sol
+    @test eff_ss[1] ≈ 0.0 atol=1e-8  # model var y: SS = 0
+    @test eff_ss[2] ≈ ctrend atol=1e-8  # obs var dy: SS = ctrend
+    @test eff_ss[3] ≈ 0.0 atol=1e-8  # model var a: SS = 0
+end
+
+@testset "Nonlinear model: linear field is false" begin
+    spec = @dsge begin
+        parameters: alpha = 0.36, beta = 0.99, delta = 0.025, rho = 0.95, sigma = 0.01
+        endogenous: Y, C, K, A
+        exogenous: eps
+
+        1/C[t] = beta * (1/C[t+1]) * (alpha * A[t+1] * K[t]^(alpha-1) + 1 - delta)
+        Y[t] = A[t] * K[t-1]^alpha
+        Y[t] = C[t] + K[t] - (1-delta)*K[t-1]
+        log(A[t]) = rho * log(A[t-1]) + sigma * eps[t]
+
+        steady_state = begin
+            A_ss = 1.0
+            rk = 1.0/beta - 1.0 + delta
+            K_ss = (alpha * A_ss / rk)^(1/(1-alpha))
+            Y_ss = A_ss * K_ss^alpha
+            C_ss = Y_ss - delta * K_ss
+            [Y_ss, C_ss, K_ss, A_ss]
+        end
+    end
+    @test spec.linear == false
+end
+
+end # Linear model support
+
 end # top-level @testset
