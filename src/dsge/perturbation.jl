@@ -71,20 +71,19 @@ function perturbation_solver(spec::DSGESpec{T};
     # -------------------------------------------------------------------------
     ld = linearize(spec)
 
-    first_order = if method == :gensys
-        gensys(ld.Gamma0, ld.Gamma1, ld.C, ld.Psi, ld.Pi)
-    elseif method == :blanchard_kahn
-        # blanchard_kahn returns a DSGESolution; extract the fields we need
-        bk_sol = blanchard_kahn(ld, spec)
-        (G1=bk_sol.G1, impact=bk_sol.impact, C_sol=bk_sol.C_sol,
-         eu=bk_sol.eu, eigenvalues=bk_sol.eigenvalues)
-    else
-        throw(ArgumentError("method must be :gensys or :blanchard_kahn; got $method"))
-    end
+    # Use QZ for eigenvalue analysis + UC solver for robust solution (same as solve())
+    qz_result = gensys(ld.Gamma0, ld.Gamma1, ld.C, ld.Psi, ld.Pi)
+    uc_result = _solve_undetermined_coefficients(spec)
 
-    G1 = first_order.G1         # n x n
-    impact = first_order.impact # n x n_epsilon
-    eu = first_order.eu
+    f_0 = _dsge_jacobian(spec, spec.steady_state, :current)
+    f_1 = _dsge_jacobian(spec, spec.steady_state, :lag)
+    f_lead = _dsge_jacobian(spec, spec.steady_state, :lead)
+    resid_uc = (f_0 + f_lead * uc_result.G1) * uc_result.G1 + f_1
+    uc_ok = maximum(abs.(resid_uc)) < T(1e-8) && uc_result.converged
+
+    G1 = uc_ok ? uc_result.G1 : qz_result.G1
+    impact = uc_ok ? uc_result.impact : qz_result.impact
+    eu = qz_result.eu
 
     n = spec.n_endog
     n_eps = spec.n_exog
