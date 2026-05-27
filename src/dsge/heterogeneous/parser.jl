@@ -573,12 +573,14 @@ function solve(spec::HADSGESpec{T}; method::Symbol=:ssj,
         rho_z = get(kwargs, :rho_z, 0.95)
         sigma_z = get(kwargs, :sigma_z, 0.007)
 
-        return _krusell_smith_solve(ss, spec.individual, spec.grid, spec.income,
-                                     _default_cobb_douglas_price_fn,
-                                     spec.het_params;
-                                     T_sim=T_sim, T_burn=T_burn,
-                                     max_outer=max_outer,
-                                     rho_z=rho_z, sigma_z=sigma_z)
+        raw = _krusell_smith_solve(ss, spec.individual, spec.grid, spec.income,
+                                    _default_cobb_douglas_price_fn,
+                                    spec.het_params;
+                                    T_sim=T_sim, T_burn=T_burn,
+                                    max_outer=max_outer,
+                                    rho_z=rho_z, sigma_z=sigma_z)
+        return KrusellSmithSolution{T}(ss, raw.plm_coefficients, raw.r_squared,
+                                        spec, raw.converged, raw.iterations)
     else
         error("Unknown HA-DSGE method: :$method. Use :ssj, :reiter, or :krusell_smith.")
     end

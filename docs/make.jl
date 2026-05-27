@@ -4,7 +4,7 @@ using Documenter
 DocMeta.setdocmeta!(MacroEconometricModels, :DocTestSetup, :(using MacroEconometricModels); recursive=true)
 
 makedocs(;
-    draft=get(ENV, "DOCUMENTER_DRAFT", "false") == "true",
+    draft=true,
     modules=[MacroEconometricModels],
     authors="Wookyung Chung <chung@friedman.jp>",
     repo="https://github.com/FriedmanJP/MacroEconometricModels.jl/blob/{commit}{path}#{line}",

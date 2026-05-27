@@ -31,7 +31,7 @@ report(ss)
 
 ```@example dsge_ha
 sol = solve(spec; method=:ssj, ss=ss, T_horizon=50, n_reduced=15)
-nothing # hide
+report(sol)
 ```
 
 **Recipe 3: Wealth distribution visualization**
@@ -46,17 +46,18 @@ plot_result(ss; view=:policy)       # consumption and savings by income
 
 ```@example dsge_ha
 panel = simulate_panel(ss; N_agents=500, T_periods=100)
-println("Panel size: ", size(panel))
-println("Mean assets: ", round(sum(panel) / length(panel), digits=2))
+size(panel)
 ```
+
+The panel matrix contains simulated asset holdings for 500 agents over 100 periods, enabling cross-sectional and longitudinal analyses of wealth dynamics at the micro level.
 
 **Recipe 5: Inequality dynamics at steady state**
 
 ```@example dsge_ha
 ineq = inequality_irf(ss; T_periods=10)
-println("Gini: ", round(ineq[:gini][1], digits=4))
-println("Median wealth: ", round(ineq[:p50][1], digits=2))
-println("90th percentile: ", round(ineq[:p90][1], digits=2))
+(gini = round(ineq[:gini][1], digits=4),
+ p50  = round(ineq[:p50][1], digits=2),
+ p90  = round(ineq[:p90][1], digits=2))
 ```
 
 **Recipe 6: Krusell-Smith simulation method**
@@ -65,7 +66,7 @@ println("90th percentile: ", round(ineq[:p90][1], digits=2))
 ks_result = solve(spec; method=:krusell_smith, ss=ss,
                   T_sim=500, T_burn=100, max_outer=3,
                   rho_z=0.95, sigma_z=0.007)
-println("PLM R²: ", round(ks_result.r_squared[:K], digits=6))
+report(ks_result)
 ```
 
 ---
@@ -102,16 +103,16 @@ The **EGM** (Carroll 2006) avoids root-finding by inverting the Euler equation o
 5. Interpolate back to the exogenous grid
 6. Apply the borrowing constraint: if ``a < a_{\text{endo},1}``, consume all cash-on-hand
 
-The EGM converges in 200--400 iterations for typical calibrations. The `compute_steady_state` function calls EGM internally at each bisection step. Users interact with the public API:
+The EGM converges in 200--400 iterations for typical calibrations. The `compute_steady_state` function calls EGM internally at each bisection step:
 
 ```@example dsge_ha
 spec_ks = load_ha_example(:krusell_smith)
 ss_egm = compute_steady_state(spec_ks; K_init=10.0, r_bounds=(-0.02, 0.04),
                                max_iter=80, tol=1e-4)
-println("Converged: ", ss_egm.converged)
-println("Euler error (log10): ", round(ss_egm.euler_error, digits=1))
-println("Policy shape: ", size(ss_egm.policies[:consumption]), " (N_a × N_e)")
+report(ss_egm)
 ```
+
+The steady state report displays convergence diagnostics, equilibrium prices, aggregate quantities, and wealth distribution statistics. A negative Euler error (in ``\log_{10}`` units) indicates the accuracy of the consumption policy --- values below ``-3`` are standard in the literature.
 
 ### VFI with Howard Improvement
 
@@ -129,9 +130,23 @@ The **Rouwenhorst (1995)** method constructs the transition matrix recursively. 
 
 ```@example dsge_ha
 inc7 = rouwenhorst(0.966, 0.5, 7)
-println("States: ", round.(inc7.states, digits=3))
-println("Stationary dist: ", round.(inc7.stationary_dist, digits=4))
+(states = round.(inc7.states, digits=3),
+ stationary = round.(inc7.stationary_dist, digits=4))
 ```
+
+The 7-state discretization spans the ergodic support of the log-productivity process. The stationary distribution concentrates mass near the mean, with thin tails reflecting the high persistence.
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `rho` | `Real` | — | Persistence parameter |
+| `sigma` | `Real` | — | Standard deviation of innovations |
+| `n` | `Int` | — | Number of grid points |
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `transition` | `Matrix{T}` | ``n \times n`` Markov transition matrix |
+| `states` | `Vector{T}` | Grid of log-productivity levels |
+| `stationary_dist` | `Vector{T}` | Ergodic distribution over states |
 
 ### Tauchen
 
@@ -139,9 +154,11 @@ The **Tauchen (1986)** method uses equally spaced grid points covering ``\pm m``
 
 ```@example dsge_ha
 inc_t = tauchen(0.9, 0.2, 5; m=3)
-println("States: ", round.(inc_t.states, digits=3))
-println("Stationary dist: ", round.(inc_t.stationary_dist, digits=4))
+(states = round.(inc_t.states, digits=3),
+ stationary = round.(inc_t.stationary_dist, digits=4))
 ```
+
+With lower persistence (``\rho = 0.9``), Tauchen produces a wider grid and a flatter stationary distribution than Rouwenhorst. The ``m = 3`` setting covers three unconditional standard deviations on each side.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -166,10 +183,12 @@ where ``\Lambda`` uses **lottery weights** to map off-grid savings back to grid 
 The transition matrix is sparse --- each column has at most ``2 N_e`` nonzero entries. The **stationary distribution** ``D^*`` satisfies ``D^* = \Lambda D^*`` and is found via power iteration. The `compute_steady_state` function handles distribution tracking internally. The resulting `HASteadyState` stores the distribution:
 
 ```@example dsge_ha
-println("Distribution shape: ", size(ss.distribution))
-println("Total mass: ", round(sum(ss.distribution), digits=10))
-println("Aggregate capital: ", round(ss.aggregates[:K], digits=2))
+(shape = size(ss.distribution),
+ total_mass = round(sum(ss.distribution), digits=10),
+ aggregate_K = round(ss.aggregates[:K], digits=2))
 ```
+
+The distribution is an ``N_a \times N_e`` matrix whose entries sum to unity. Aggregate capital integrates asset holdings against the distribution, providing the supply side of the capital market clearing condition.
 
 ---
 
@@ -193,6 +212,8 @@ ss_hank = compute_steady_state(spec_hank; K_init=10.0, r_bounds=(-0.02, 0.04),
 report(ss_hank)
 ```
 
+The one-asset HANK steady state features a lower equilibrium interest rate than the standard Aiyagari economy due to the New Keynesian markup and dividend income. The Gini coefficient and wealth percentiles characterize the cross-sectional distribution, with the 90th percentile typically several times the median --- consistent with empirical wealth data.
+
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
 | `K_init` | `T` | `10.0` | Initial guess for aggregate capital |
@@ -200,6 +221,18 @@ report(ss_hank)
 | `max_iter` | `Int` | `200` | Maximum bisection iterations |
 | `tol` | `Real` | ``10^{-8}`` | Convergence tolerance on excess demand |
 | `verbose` | `Bool` | `false` | Print iteration progress |
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `converged` | `Bool` | Whether bisection converged |
+| `iterations` | `Int` | Number of bisection iterations |
+| `prices` | `Dict{Symbol,T}` | Equilibrium prices (``r``, ``w``) |
+| `aggregates` | `Dict{Symbol,T}` | Aggregate quantities (``K``, ``Y``, ``C``) |
+| `distribution` | `Matrix{T}` | ``N_a \times N_e`` stationary distribution |
+| `policies` | `Dict{Symbol,Matrix{T}}` | Policy functions (`:consumption`, `:savings`) |
+| `excess_demand` | `T` | Final excess demand for capital |
+| `euler_error` | `T` | ``\log_{10}`` Euler equation error |
+| `grid` | `HAGrid{T}` | Asset grid used |
 
 ---
 
@@ -212,20 +245,29 @@ The algorithm computes a **fake news matrix** ``\mathcal{F}`` via:
 2. **Forward iteration**: propagate the perturbed policies through the distribution forward in time
 3. **Accumulation**: the true Jacobian ``\mathcal{J}`` is the cumulative sum of ``\mathcal{F}``
 
-The resulting ``\mathcal{J}`` is converted to a minimal state-space realization via the **Ho-Kalman algorithm** (SVD of the Hankel matrix of IRF coefficients), producing a reduced ``DSGESolution`` compatible with all existing analysis functions.
+The resulting ``\mathcal{J}`` is converted to a minimal state-space realization via the **Ho-Kalman algorithm** (SVD of the Hankel matrix of IRF coefficients), producing a reduced `DSGESolution` compatible with all existing analysis functions.
 
 ```@example dsge_ha
 sol_ssj = solve(spec; method=:ssj, ss=ss, T_horizon=50, n_reduced=15)
-println("Method: ", sol_ssj.method)
-println("Reduced states: ", sol_ssj.n_reduced, " (from ", sol_ssj.n_full_states, ")")
-println("Explained variance: ", round(100 * sol_ssj.explained_variance, digits=2), "%")
+report(sol_ssj)
 ```
+
+The SSJ method reduces the full sequence-space representation (dimension ``T``) to a compact state-space form with `n_reduced` states. The explained variance measures the fraction of aggregate dynamics captured by the truncated Ho-Kalman basis --- values above 99.9% confirm the reduction is adequate. The underlying steady state is reported alongside the reduction diagnostics.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
 | `T_horizon` | `Int` | `300` | Truncation horizon for sequences |
 | `n_reduced` | `Int` | `30` | Reduced state-space dimension (Ho-Kalman) |
 | `dx` | `Real` | ``10^{-4}`` | Finite-difference step size |
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `method` | `Symbol` | Solution method (`:ssj` or `:reiter`) |
+| `n_full_states` | `Int` | Full state-space dimension before reduction |
+| `n_reduced` | `Int` | Reduced state-space dimension |
+| `explained_variance` | `T` | Fraction of variance captured by truncation |
+| `linear_solution` | `DSGESolution{T}` | Reduced-form state-space representation |
+| `steady_state` | `HASteadyState{T}` | Underlying stationary equilibrium |
 
 ---
 
@@ -237,10 +279,10 @@ The implementation uses **observability-based SVD**: the reduction basis is buil
 
 ```@example dsge_ha
 sol_reiter = solve(spec; method=:reiter, ss=ss, n_reduced=15)
-println("Method: ", sol_reiter.method)
-println("Reduced states: ", sol_reiter.n_reduced)
-println("Explained variance: ", round(100 * sol_reiter.explained_variance, digits=2), "%")
+report(sol_reiter)
 ```
+
+The Reiter method produces an equivalent reduced state-space form to SSJ. The explained variance confirms that 15 reduced states capture nearly all aggregate dynamics. The two methods yield identical IRFs up to numerical precision for the same `n_reduced`, but differ in computational cost: SSJ is faster for models with few aggregate inputs, while Reiter scales better when many prices affect household decisions.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -266,10 +308,10 @@ The algorithm iterates between simulation (using the PLM to forecast prices) and
 sol_ks = solve(spec; method=:krusell_smith, ss=ss,
                T_sim=500, T_burn=100, max_outer=3,
                rho_z=0.95, sigma_z=0.007)
-println("Converged: ", sol_ks.converged)
-println("PLM coefficients: ", round.(sol_ks.plm_coefficients[:K], digits=4))
-println("R²: ", round(sol_ks.r_squared[:K], digits=6))
+report(sol_ks)
 ```
+
+The PLM ``R^2`` near unity confirms that aggregate capital is approximately sufficient for forecasting prices --- the core insight of Krusell & Smith (1998). The PLM intercept and slope jointly characterize the aggregate law of motion. Unlike SSJ and Reiter, the Krusell-Smith method does not produce a reduced linear state-space form, so it cannot be used directly with `irf` or `fevd`.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -278,6 +320,14 @@ println("R²: ", round(sol_ks.r_squared[:K], digits=6))
 | `max_outer` | `Int` | `20` | Maximum PLM iterations |
 | `rho_z` | `Real` | `0.95` | Aggregate shock persistence |
 | `sigma_z` | `Real` | `0.007` | Aggregate shock standard deviation |
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `converged` | `Bool` | Whether PLM coefficients converged |
+| `iterations` | `Int` | Number of outer PLM iterations |
+| `plm_coefficients` | `Dict{Symbol,Vector{T}}` | PLM regression coefficients per variable |
+| `r_squared` | `Dict{Symbol,T}` | ``R^2`` of PLM regression per variable |
+| `steady_state` | `HASteadyState{T}` | Underlying stationary equilibrium |
 
 ---
 
@@ -307,11 +357,13 @@ The individual problem is solved via **nested EGM**: an outer loop over deposit 
 
 ```@example dsge_ha
 spec_2a = load_ha_example(:two_asset_hank)
-println("Asset dimensions: ", spec_2a.grid.n_dims)
-println("Grid: ", spec_2a.grid.n_points, " (liquid × illiquid)")
-println("Labels: ", spec_2a.grid.labels)
-println("Adjustment cost: ", spec_2a.individual.adjustment_cost !== nothing)
+(n_dims = spec_2a.grid.n_dims,
+ grid_points = spec_2a.grid.n_points,
+ labels = spec_2a.grid.labels,
+ has_adjustment_cost = spec_2a.individual.adjustment_cost !== nothing)
 ```
+
+The two-asset model uses a two-dimensional grid (liquid ``\times`` illiquid) with 2500 total points. The presence of the adjustment cost ``\chi(d, a)`` induces an inaction region where households neither deposit nor withdraw from the illiquid account, generating realistic portfolio rebalancing behavior.
 
 ---
 
@@ -328,10 +380,14 @@ Three canonical models are available via `load_ha_example`:
 ```@example dsge_ha
 for name in [:krusell_smith, :one_asset_hank, :two_asset_hank]
     s = load_ha_example(name)
-    println(name, ": ", s.grid.n_dims, "-asset, β=", s.individual.beta,
-            ", grid=", s.grid.n_points)
+    n = s.grid.n_dims
+    g = join(s.grid.n_points, "×")
+    println(rpad(name, 20), n, "-asset   β=", s.individual.beta, "   grid=", g)
 end
+nothing # hide
 ```
+
+The Krusell-Smith economy is the simplest benchmark with a single asset and Cobb-Douglas production. The one-asset HANK adds New Keynesian features (sticky prices, monetary policy, dividends) and allows borrowing. The two-asset HANK introduces portfolio choice between liquid and illiquid assets, capturing the empirical finding that most household wealth is illiquid.
 
 ---
 
@@ -341,7 +397,7 @@ Bayesian estimation of HA-DSGE models uses the **linearized reduced system** (fr
 
 1. Update model parameters
 2. Re-solve the HA steady state (the expensive step)
-3. Linearize via SSJ → produce a reduced ``DSGESolution``
+3. Linearize via SSJ → produce a reduced `DSGESolution`
 4. Build the state space → evaluate Kalman log-likelihood
 5. Accept/reject via the Metropolis-Hastings ratio
 
@@ -351,7 +407,6 @@ result = estimate_dsge_bayes(spec, data, [0.36];
     priors=Dict(:alpha => Beta(5, 2)),
     observables=[:K], n_draws=5000, burnin=1000,
     ha_method=:ssj, ha_kwargs=(T_horizon=50, n_reduced=15))
-report(result)
 ```
 
 !!! note "Technical Note"
@@ -360,39 +415,47 @@ report(result)
     likelihood evaluation takes approximately 0.5 seconds, yielding a 5000-draw
     chain in about 40 minutes.
 
+The estimation output is a `BayesianDSGE` object with posterior draws, acceptance rate, and log-likelihood trace. Use `report(result)` for a formatted summary including posterior means, credible intervals, and convergence diagnostics.
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `priors` | `Dict{Symbol,Distribution}` | — | Prior distributions keyed by parameter name |
+| `observables` | `Vector{Symbol}` | — | Observable variable names matching data columns |
+| `n_draws` | `Int` | `5000` | Total RWMH draws |
+| `burnin` | `Int` | `1000` | Burn-in draws to discard |
+| `ha_method` | `Symbol` | `:ssj` | Aggregate solution method (`:ssj` or `:reiter`) |
+| `ha_kwargs` | `NamedTuple` | `()` | Keyword arguments passed to `solve` |
+
 ---
 
 ## Complete Example
 
-A full workflow for a Krusell-Smith (1998) economy: load the model, compute the steady state, examine the wealth distribution, and simulate panel data.
+A full workflow for a Krusell-Smith (1998) economy: load the model, compute the steady state, examine the wealth distribution, solve for aggregate dynamics, and simulate panel data.
 
 ```@example dsge_ha
-# Load calibrated model
 ks = load_ha_example(:krusell_smith)
-
-# Compute stationary equilibrium
 ss_ks = compute_steady_state(ks; K_init=10.0, r_bounds=(-0.02, 0.04),
                               max_iter=80, tol=1e-4)
 report(ss_ks)
 ```
 
 ```@example dsge_ha
-# Inequality measures
 ineq_ks = inequality_irf(ss_ks; T_periods=5)
-println("Gini coefficient: ", round(ineq_ks[:gini][1], digits=4))
-println("Median wealth (P50): ", round(ineq_ks[:p50][1], digits=2))
-println("P90: ", round(ineq_ks[:p90][1], digits=2))
+(gini = round(ineq_ks[:gini][1], digits=4),
+ p50  = round(ineq_ks[:p50][1], digits=2),
+ p90  = round(ineq_ks[:p90][1], digits=2))
 ```
+
+The Gini coefficient reflects the degree of wealth concentration in the stationary equilibrium. The gap between the median and 90th percentile illustrates the right-skewed nature of the wealth distribution --- a robust feature of heterogeneous agent models with borrowing constraints and precautionary savings.
 
 ```@example dsge_ha
-# Simulate panel
 panel_ks = simulate_panel(ss_ks; N_agents=1000, T_periods=200)
-println("Panel: ", size(panel_ks), " (agents × periods)")
-println("Cross-sectional mean: ", round(sum(panel_ks[:, end]) / 1000, digits=2))
+size(panel_ks)
 ```
 
+The simulated panel tracks 1000 agents over 200 periods, providing micro-level data for computing cross-sectional moments, transition matrices, and mobility statistics.
+
 ```julia
-# Visualize
 plot_result(ss_ks)                    # wealth distribution
 plot_result(ss_ks; view=:lorenz)      # Lorenz curve with Gini
 plot_result(ss_ks; view=:policy)      # policy functions by income

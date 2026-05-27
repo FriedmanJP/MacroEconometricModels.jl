@@ -384,10 +384,18 @@ The fenced block must have blank lines before and after it. The `src` path uses 
 
 ## Verification
 
-After writing or modifying any documentation `.md` file, **always** verify that all `@example` and `@setup` blocks run without error by executing:
+**Mandatory after every documentation change.** Run verification whenever you:
+- Create a new documentation `.md` file
+- Edit any `@setup` or `@example` code block in an existing file
+- Change API function signatures, return types, or keyword arguments that examples depend on
 
 ```bash
 julia --project=docs docs/verify_examples.jl docs/src/<changed_file>.md
 ```
 
-Report the result (OK or FAIL with error) before considering the documentation task complete. Do not commit documentation with failing examples.
+**Rules:**
+1. Run verification **before** reporting the task as complete — never skip this step
+2. Report the result (OK or FAIL with error details) explicitly in your response
+3. If verification fails, fix the code block and re-run until all examples pass
+4. Do not commit documentation with failing examples
+5. When editing source code that examples depend on (types, function signatures, return values), re-verify all affected documentation pages
