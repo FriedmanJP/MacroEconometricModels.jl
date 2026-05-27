@@ -147,8 +147,17 @@ function klein(Gamma0::AbstractMatrix{T}, Gamma1::AbstractMatrix{T},
         # State transition: G1 = Z1 * S11^{-1} * T11 * Z1'
         G1_c = Z1 * (S11 \ T11) * Z1'
 
-        # Impact: impact = Z1 * S11^{-1} * Q1 * Psi
-        impact_c = Z1 * (S11 \ (Q1 * complex(Psi)))
+        # Impact: account for expectations adjustment
+        n_unstable = n - n_stable
+        if n_unstable > 0 && size(Pi, 2) > 0
+            Q2 = Qp[n_stable+1:n, :]
+            Q2Pi = Q2 * complex(Pi)
+            Q1Pi = Q1 * complex(Pi)
+            Q1_adj = Q1 - Q1Pi * pinv(Q2Pi) * Q2
+            impact_c = Z1 * (S11 \ (Q1_adj * complex(Psi)))
+        else
+            impact_c = Z1 * (S11 \ (Q1 * complex(Psi)))
+        end
 
         G1 = real(Matrix{T}(G1_c))
         impact = real(Matrix{T}(impact_c))
