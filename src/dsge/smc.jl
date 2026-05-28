@@ -100,6 +100,16 @@ function _build_likelihood_fn(spec::DSGESpec{T}, param_names::Vector{Symbol},
 
             # Build observation equation and state space
             Z, d, H = _build_observation_equation(new_spec, observables, measurement_error)
+
+            # For linear models with constant offsets (C_sol ≠ 0), the observation
+            # equation offset d must include the effective steady state from gensys,
+            # since spec.steady_state is zero for model(linear) models.
+            if new_spec.linear && !all(iszero, sol.C_sol)
+                eff_ss = (I - sol.G1) \ sol.C_sol
+                obs_idx = [findfirst(==(obs), new_spec.endog) for obs in observables]
+                d = T[eff_ss[j] for j in obs_idx]
+            end
+
             ss = _build_state_space(sol, Z, d, H)
 
             # Evaluate Kalman log-likelihood
