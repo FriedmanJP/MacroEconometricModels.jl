@@ -389,6 +389,9 @@ RWMH is simple to implement and diagnose but converges slowly for high-dimension
 | `delayed_acceptance` | `Bool` | `false` | Two-stage delayed acceptance (SMC``^2`` only) |
 | `n_screen` | `Int` | `200` | Screening PF particles (delayed acceptance only) |
 
+!!! note "Pre-Linearized Models"
+    For `DSGESpec` with `linear=true` (e.g., Smets & Wouters 2007), the Kalman filter automatically computes the observation equation offset as ``d = (I - G_1)^{-1} C_{\text{sol}}``, where ``C_{\text{sol}}`` contains the constant terms from gensys. This handles models where observation equations include trend growth, steady-state inflation, or other constant offsets that are absent from the zero steady state. No user intervention is required --- `estimate_dsge_bayes` detects and handles `linear=true` models transparently.
+
 ### Posterior Analysis
 
 After estimation, five functions extract information from the `BayesianDSGE` result:

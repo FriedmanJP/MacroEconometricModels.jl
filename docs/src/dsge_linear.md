@@ -255,6 +255,38 @@ Accessor functions:
 
 ---
 
+## Pre-Linearized Models
+
+Some medium- and large-scale DSGE models (e.g., Smets & Wouters 2007) ship with **pre-linearized equations** where all variables represent log-deviations from a balanced growth path. The `linear` keyword skips the automatic linearization step and passes the equations directly to the solver:
+
+```@example dsge_linear
+spec_lin = MacroEconometricModels.DSGESpec{Float64}(
+    [:y, :r], [:eps],
+    [:rho_p, :phi_p],
+    Dict(:rho_p => 0.8, :phi_p => 1.5),
+    [:(0 + 0), :(0 + 0)],
+    [
+        (yt, yl, yle, eps, th) -> yt[1] - th[:rho_p] * yl[1] - eps[1],
+        (yt, yl, yle, eps, th) -> yt[2] - th[:phi_p] * yt[1]
+    ],
+    0, Int[], Float64[], nothing;
+    linear=true
+)
+sol_lin = solve(spec_lin; method=:gensys)
+is_determined(sol_lin)
+```
+
+For `linear=true` models:
+- `compute_steady_state` returns zeros (all variables are deviations from steady state)
+- The constant ``C_{\text{sol}}`` from gensys carries observation equation offsets (e.g., trend growth, steady-state inflation)
+- The **effective steady state** is ``\bar{y} = (I - G_1)^{-1} C_{\text{sol}}``
+- Bayesian estimation via `estimate_dsge_bayes` automatically computes ``\bar{y}`` for the Kalman filter observation offset
+
+!!! note "Technical Note"
+    When building observation equations for the Kalman filter, the internal `_build_likelihood_fn` detects `linear=true` and sets ``d = (I - G_1)^{-1} C_{\text{sol}}`` at the observable indices, overriding the zero steady state. This ensures correct likelihood evaluation for models like Smets & Wouters (2007) where observation equations include constant offsets (trend growth ``\bar{\gamma}``, steady-state inflation ``\bar{\pi}``, etc.).
+
+---
+
 ## Simulation
 
 Stochastic forward simulation generates sample paths from the state-space solution:
@@ -447,3 +479,6 @@ All three solvers produce identical state-space representations for a well-speci
 
 - Sims, C. A. (2002). Solving Linear Rational Expectations Models.
   *Computational Economics*, 20(1--2), 1--20. [DOI](https://doi.org/10.1023/A:1020517101123)
+
+- Smets, F., & Wouters, R. (2007). Shocks and Frictions in US Business Cycles: A Bayesian DSGE Approach.
+  *American Economic Review*, 97(3), 586--606. [DOI](https://doi.org/10.1257/aer.97.3.586)
