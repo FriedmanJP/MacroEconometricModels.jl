@@ -5,7 +5,7 @@
 # Licensed under GPL-3.0-or-later. See LICENSE for details.
 
 """
-    _solve_qz_quadratic(f_0, f_1, f_lead, f_ε; div=1.0)
+    _solve_qz_quadratic(f_0, f_1, f_lead, f_ε; div=1.0 + 1e-8)
         → (G, impact, eigenvalues, n_stable, eu, residual)
 
 Solve the quadratic matrix equation `f_lead·G² + f_0·G + f_1 = 0` for the unique stable
@@ -28,20 +28,24 @@ self-check on the recovered `G`.
 
 The stable solvent is recovered as `G = Z_b · Z_t⁻¹`, where `[Z_t; Z_b]` are the top/bottom
 n-row blocks of the first `n` (stable) columns of the ordered right Schur vectors `Z`.
+
+The returned `eigenvalues` are the UNORDERED companion generalized eigenvalues (diagnostic
+only); do NOT reorder them — wrappers report `eigvals(G1)` separately.
 """
 function _solve_qz_quadratic(f_0::AbstractMatrix{T}, f_1::AbstractMatrix{T},
         f_lead::AbstractMatrix{T}, f_ε::AbstractMatrix{T};
-        div::Real=1.0) where {T<:AbstractFloat}
-    n = size(f_0, 1)
+        div::Real=1.0 + 1e-8) where {T<:AbstractFloat}
+    f0 = Matrix{T}(f_0); f1 = Matrix{T}(f_1); flead = Matrix{T}(f_lead); fε = Matrix{T}(f_ε)
+    n = size(f0, 1)
     N = 2n
     Z0 = zeros(T, n, n)
     In = Matrix{T}(I, n, n)
 
     # Companion pencil
     L = [Z0    In;
-         -Matrix{T}(f_1)  -Matrix{T}(f_0)]
+         -f1   -f0]
     M = [In    Z0;
-         Z0    Matrix{T}(f_lead)]
+         Z0    flead]
 
     F = schur(complex(L), complex(M))
     λ = F.values                                   # 2n generalized eigenvalues (Inf where β≈0)
@@ -53,20 +57,26 @@ function _solve_qz_quadratic(f_0::AbstractMatrix{T}, f_1::AbstractMatrix{T},
 
     G = zeros(T, n, n)
     if n_stable >= n
+        # For n_stable > n (indeterminate) this returns one representative stable solvent;
+        # callers treat eu[2] == 0 as indeterminate.
         Fo = ordschur(F, stable_select)
         Zt = Fo.Z[1:n, 1:n]
         Zb = Fo.Z[n+1:N, 1:n]
         if rank(Zt) == n
-            G = real(Zb * inv(Zt))
+            G = real((Zt' \ Zb')')                 # G = Zb·Zt⁻¹ via backslash
         else
             eu = [eu[1], 0]
         end
     end
 
-    A = Matrix{T}(f_0) + Matrix{T}(f_lead) * G
-    impact = Matrix{T}(-(A \ Matrix{T}(f_ε)))
+    A = f0 + flead * G
+    impact = try
+        Matrix{T}(-(A \ fε))
+    catch
+        fill(T(NaN), n, size(fε, 2))
+    end
 
-    residual = maximum(abs.(Matrix{T}(f_lead) * G * G + Matrix{T}(f_0) * G + Matrix{T}(f_1)))
+    residual = maximum(abs.(flead * G * G + f0 * G + f1); init = zero(T))
 
     (G=G, impact=impact, eigenvalues=Vector{ComplexF64}(λ),
      n_stable=n_stable, eu=eu, residual=residual)
