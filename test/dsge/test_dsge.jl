@@ -3482,9 +3482,48 @@ end
             @test fv.proportions[i, 1, h] ≈ 1.0 atol=1e-8
         end
 
+        # Unconditional FEVD (order=2 augmented Lyapunov)
+        fv_uc = fevd(sol2, 1; unconditional=true)
+        @test all(isfinite.(fv_uc.proportions))
+        @test size(fv_uc.proportions, 3) == 1
+        for i in 1:2
+            @test fv_uc.proportions[i, 1, 1] ≈ 1.0 atol=1e-6
+            @test sum(fv_uc.proportions[i, :, 1]) ≈ 1.0 atol=1e-6
+        end
+
         # Moments
         mom = analytical_moments(sol2; lags=2)
         @test all(isfinite.(mom))
+    end
+
+    @testset "Order=2 unconditional FEVD multi-shock" begin
+        spec = _suppress_warnings() do
+            @dsge begin
+                parameters: rho_y = 0.8, rho_z = 0.5, sigma_y = 0.01, sigma_z = 0.02
+                endogenous: y, z
+                exogenous: eps_y, eps_z
+                y[t] = rho_y * y[t-1] + 0.3 * z[t-1] + sigma_y * eps_y[t]
+                z[t] = rho_z * z[t-1] + sigma_z * eps_z[t]
+                steady_state = [0.0, 0.0]
+            end
+        end
+        spec = compute_steady_state(spec)
+        sol2 = _suppress_warnings() do
+            solve(spec; method=:perturbation, order=2)
+        end
+
+        fv = fevd(sol2, 1; unconditional=true)
+        @test size(fv.proportions) == (2, 2, 1)
+        @test all(isfinite.(fv.proportions))
+        # z is driven only by eps_z
+        @test fv.proportions[2, 2, 1] ≈ 1.0 atol=1e-6
+        @test fv.proportions[2, 1, 1] ≈ 0.0 atol=1e-6
+        # y is driven by both shocks
+        @test fv.proportions[1, 1, 1] > 0.1
+        @test fv.proportions[1, 2, 1] > 0.1
+        # Rows sum to 1
+        @test sum(fv.proportions[1, :, 1]) ≈ 1.0 atol=1e-6
+        @test sum(fv.proportions[2, :, 1]) ≈ 1.0 atol=1e-6
     end
 
     @testset "Pruning stability — long simulation" begin
