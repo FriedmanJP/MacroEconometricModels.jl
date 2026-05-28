@@ -62,6 +62,7 @@ makedocs(;
             "Variance Decomposition" => "ia_fevd.md",
             "Historical Decomposition" => "ia_hd.md",
         ],
+        "Structural Identification" => "structural_identification.md",
         "Statistical Identification" => [
             "Overview" => "nongaussian.md",
             "Non-Gaussian Methods" => "id_nongaussian.md",
