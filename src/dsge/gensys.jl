@@ -199,16 +199,18 @@ function solve(spec::DSGESpec{T}; method::Symbol=:gensys, kwargs...) where {T<:A
         qz_result = gensys(ld.Gamma0, ld.Gamma1, ld.C, ld.Psi, ld.Pi)
 
         # Phase 2: solve via undetermined coefficients (robust to static vars)
-        uc_result = _solve_undetermined_coefficients(spec)
+        uc_ok = false
+        local uc_result
+        try
+            uc_result = _solve_undetermined_coefficients(spec)
+            f_0 = _dsge_jacobian(spec, spec.steady_state, :current)
+            f_1 = _dsge_jacobian(spec, spec.steady_state, :lag)
+            f_lead = _dsge_jacobian(spec, spec.steady_state, :lead)
+            resid = (f_0 + f_lead * uc_result.G1) * uc_result.G1 + f_1
+            uc_ok = maximum(abs.(resid)) < T(1e-8) && uc_result.converged
+        catch
+        end
 
-        # Verify the UC solution satisfies the quadratic equation
-        f_0 = _dsge_jacobian(spec, spec.steady_state, :current)
-        f_1 = _dsge_jacobian(spec, spec.steady_state, :lag)
-        f_lead = _dsge_jacobian(spec, spec.steady_state, :lead)
-        resid = (f_0 + f_lead * uc_result.G1) * uc_result.G1 + f_1
-        uc_ok = maximum(abs.(resid)) < T(1e-8) && uc_result.converged
-
-        # Use UC result if it passes verification, otherwise fall back to QZ
         if uc_ok
             G1 = uc_result.G1
             impact = uc_result.impact
