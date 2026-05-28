@@ -1212,9 +1212,8 @@ end
     sol_g = solve(spec; method=:gensys)
     sol_bk = solve(spec; method=:blanchard_kahn)
     @test is_determined(sol_g)
-    # BK eigenvalue counting may flag purely forward-looking models as
-    # indeterminate (n_unstable=0 < n_fwd=1), while gensys finds the
-    # unique bounded solution. The solution matrices still agree.
+    # Companion-QZ BK agrees with gensys on the determinate solution.
+    @test is_determined(sol_bk)
     @test sol_g.G1 ≈ sol_bk.G1 atol=1e-4
     @test sol_g.impact ≈ sol_bk.impact atol=1e-4
 

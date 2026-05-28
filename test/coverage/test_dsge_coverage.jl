@@ -337,7 +337,7 @@ end
     end
 end
 
-@testset "blanchard_kahn.jl: indeterminate (fewer unstable than forward)" begin
+@testset "blanchard_kahn.jl: forward + backward determinate" begin
     _suppress() do
         # Use a model with forward-looking terms so Pi has columns
         spec_fwd = @dsge begin
@@ -349,10 +349,9 @@ end
         end
         spec_fwd = compute_steady_state(spec_fwd)
         ld = linearize(spec_fwd)
-        # eigenvalues are close to 0.5 => both stable => 0 unstable
-        # n_forward = 2 (both variables appear with E[t]) => n_unstable(0) < n_fwd(2) => eu=[1,0]
+        # Corrected companion-QZ BK: forward roots are now counted, model is determinate.
         sol = blanchard_kahn(ld, spec_fwd)
-        @test sol.eu == [1, 0]
+        @test sol.eu == [1, 1]
     end
 end
 
