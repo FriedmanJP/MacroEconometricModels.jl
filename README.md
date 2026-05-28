@@ -16,7 +16,7 @@ A comprehensive Julia package for macroeconomic time series analysis.
 
 **Panel:** Panel VAR (FD-GMM, System GMM, FE-OLS), Panel Regression (FE/RE/FD/Between/CRE/AB/BB), Panel IV (FE-IV/RE-IV/FD-IV/Hausman-Taylor), Panel Logit/Probit, Difference-in-Differences (TWFE, Callaway-Sant'Anna, Sun-Abraham, BJS, dCDH, HonestDiD), Event Study LP, LP-DiD (Dube et al. 2025)
 
-**DSGE:** 7 solvers (Gensys, Blanchard-Kahn, Klein, 2nd/3rd-order perturbation with pruning, Chebyshev projection, PFI, VFI), built-in constrained solvers (Optim.jl, NLopt.jl, projected Newton) with optional JuMP+Ipopt/PATH, OccBin, GMM/SMM estimation, Bayesian estimation (SMC/SMC²/MH) with posterior IRF/FEVD credible bands, **Heterogeneous Agent DSGE** (Reiter, Sequence-Space Jacobian, Krusell-Smith; one-asset and two-asset HANK; EGM/VFI individual solvers; Bayesian estimation)
+**DSGE:** 7 solvers (Gensys, Blanchard-Kahn, Klein, 2nd/3rd-order perturbation with pruning, Chebyshev projection, PFI, VFI), model(linear) for pre-linearized models, built-in constrained solvers (Optim.jl, NLopt.jl, projected Newton) with optional JuMP+Ipopt/PATH, OccBin, GMM/SMM estimation, Bayesian estimation (SMC/SMC²/MH) with posterior IRF/FEVD credible bands, order≥2 unconditional FEVD (Andreasen et al. 2018), 27-model Dynare replication suite, **Heterogeneous Agent DSGE** (Reiter, Sequence-Space Jacobian, Krusell-Smith; one-asset and two-asset HANK; EGM/VFI individual solvers; Bayesian estimation)
 
 **Cross-Sectional:** OLS, WLS, IV/2SLS, Logit, Probit, Ordered Logit/Probit, Multinomial Logit (MLE), marginal effects (AME/MEM/MER)
 
@@ -160,11 +160,13 @@ Pkg.add("MacroEconometricModels")
 - **Constrained solvers** - Built-in projected Newton (box-constrained PF), Optim.jl Fminbox (box-constrained SS), NLopt.jl SLSQP (nonlinear inequalities); optional JuMP+Ipopt (NLP) and PATH (MCP) backends
 - **Perfect foresight** - Newton solver on stacked system with block-tridiagonal Jacobian; built-in box and nonlinear constraint support
 - **OccBin** - Occasionally binding constraints via piecewise-linear regime switching (Guerrieri & Iacoviello 2015)
-- **Simulation & IRF** - `simulate`, `irf`, `fevd` for linear, pruned higher-order, and projection solutions; Bayesian posterior credible bands (dual 68%/90%) via `irf(::BayesianDSGE)`, `fevd(::BayesianDSGE)`, `simulate(::BayesianDSGE)`
+- **Pre-linearized models** - `model(linear)` support via `DSGESpec(... ; linear=true)` for Dynare-style pre-linearized models (e.g., Smets-Wouters 2007); automatic zero steady state, gensys constant handling in Kalman filter
+- **Simulation & IRF** - `simulate`, `irf`, `fevd` for linear, pruned higher-order, and projection solutions; `fevd(sol, H; unconditional=true)` for order≥2 asymptotic FEVD via Andreasen et al. (2018) augmented Lyapunov with per-shock variance decomposition; Bayesian posterior credible bands (dual 68%/90%) via `irf(::BayesianDSGE)`, `fevd(::BayesianDSGE)`, `simulate(::BayesianDSGE)`
 - **Historical decomposition** - `historical_decomposition(sol, data, observables)` for linear (Kalman/RTS smoother), nonlinear (FFBSi particle smoother + counterfactual), and Bayesian (posterior draws) DSGE models; standalone `dsge_smoother` and `dsge_particle_smoother`
-- **Analytical moments** - Lyapunov equation for unconditional covariance; `analytical_moments` for theoretical autocovariance
+- **Analytical moments** - Order 1: Lyapunov equation for unconditional covariance; Order ≥2: Andreasen et al. (2018) augmented state-space Lyapunov for means, variances, and autocovariances; `analytical_moments` for both
 - **GMM Estimation** - IRF matching, Euler equation GMM, SMM, analytical GMM via `estimate_dsge`
 - **Bayesian Estimation** - Sequential Monte Carlo (SMC with adaptive tempering), SMC² with particle filter likelihood, random-walk Metropolis-Hastings; delayed acceptance for accelerated sampling; nonlinear particle filter for higher-order solutions via `estimate_dsge_bayes`
+- **Dynare replication** - 27-model replication suite (`examples/dynare_replication/`) with automated steady-state, IRF, variance decomposition, and theoretical moment comparison against Dynare 6.5+ reference values; includes Smets-Wouters (2007) full estimation pipeline
 
 ### Heterogeneous Agent DSGE
 - **Model specification** - `@dsge` macro with `heterogeneous:`, `idiosyncratic:`, `aggregation:` blocks for declaring individual state space, income process, and market clearing conditions
@@ -367,6 +369,7 @@ All documentation code examples execute during the build — `report()` output, 
 - Klein, Paul. 2000. "Using the Generalized Schur Form to Solve a Multivariate Linear Rational Expectations Model." *Journal of Economic Dynamics and Control* 24 (10): 1405–1423. [https://doi.org/10.1016/S0165-1889(99)00045-7](https://doi.org/10.1016/S0165-1889(99)00045-7)
 - Schmitt-Grohé, Stephanie, and Martín Uribe. 2004. "Solving Dynamic General Equilibrium Models Using a Second-Order Approximation to the Policy Function." *Journal of Economic Dynamics and Control* 28 (4): 755–775. [https://doi.org/10.1016/S0165-1889(03)00043-5](https://doi.org/10.1016/S0165-1889(03)00043-5)
 - Sims, Christopher A. 2002. "Solving Linear Rational Expectations Models." *Computational Economics* 20 (1): 1–20. [https://doi.org/10.1023/A:1020517101123](https://doi.org/10.1023/A:1020517101123)
+- Smets, Frank, and Rafael Wouters. 2007. "Shocks and Frictions in US Business Cycles: A Bayesian DSGE Approach." *American Economic Review* 97 (3): 586–606. [https://doi.org/10.1257/aer.97.3.586](https://doi.org/10.1257/aer.97.3.586)
 - Stokey, Nancy L., Robert E. Lucas, and Edward C. Prescott. 1989. *Recursive Methods in Economic Dynamics*. Cambridge, MA: Harvard University Press. ISBN 978-0-674-75096-8.
 - Walker, Homer F., and Peng Ni. 2011. "Anderson Acceleration for Fixed-Point Iterations." *SIAM Journal on Numerical Analysis* 49 (4): 1715–1735. [https://doi.org/10.1137/10078356X](https://doi.org/10.1137/10078356X)
 
