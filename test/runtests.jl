@@ -104,6 +104,7 @@ const TEST_GROUPS = [
         "plotting/test_plot_result.jl",
         "filters/test_filters.jl",
         "filters/test_x13.jl",
+        "filters/test_x13_coverage.jl",
         "spectral/test_spectral.jl",
     ]),
     # Group 7: DSGE Models
@@ -334,6 +335,7 @@ else
         @testset "Plotting" begin include("plotting/test_plot_result.jl") end
         @testset "Time Series Filters" begin include("filters/test_filters.jl") end
         @testset "X-13ARIMA-SEATS" begin include("filters/test_x13.jl") end
+        @testset "X-13 Coverage" begin include("filters/test_x13_coverage.jl") end
         @testset "Spectral Analysis" begin include("spectral/test_spectral.jl") end
 
         # Group 7: DSGE Models
