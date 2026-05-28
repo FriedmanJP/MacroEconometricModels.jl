@@ -1320,4 +1320,66 @@ end
     MacroEconometricModels.set_display_backend(:text)
 end
 
+# =========================================================================
+# 18. _solve_qz_quadratic -- companion-QZ solver of f_lead·G² + f_0·G + f_1 = 0
+# =========================================================================
+@testset "_solve_qz_quadratic: AR(1) backward model" begin
+    # y_t = 0.9 y_{t-1} + ε ; residual f = y_t - 0.9 y_{t-1} - ε
+    f_0 = reshape([1.0], 1, 1)
+    f_1 = reshape([-0.9], 1, 1)
+    f_lead = reshape([0.0], 1, 1)
+    f_ε = reshape([-1.0], 1, 1)
+    r = MacroEconometricModels._solve_qz_quadratic(f_0, f_1, f_lead, f_ε)
+    @test r.eu == [1, 1]
+    @test r.n_stable == 1
+    @test r.G[1, 1] ≈ 0.9 atol = 1e-10
+    @test r.impact[1, 1] ≈ 1.0 atol = 1e-10
+    @test r.residual < 1e-8
+end
+
+@testset "_solve_qz_quadratic: purely forward model" begin
+    # x_t = 0.5 E_t[x_{t+1}] + ε ; f = x_t - 0.5 x_{t+1} - ε
+    f_0 = reshape([1.0], 1, 1)
+    f_1 = reshape([0.0], 1, 1)
+    f_lead = reshape([-0.5], 1, 1)
+    f_ε = reshape([-1.0], 1, 1)
+    r = MacroEconometricModels._solve_qz_quadratic(f_0, f_1, f_lead, f_ε)
+    @test r.eu == [1, 1]            # determinate: stable solvent G = 0
+    @test r.n_stable == 1
+    @test r.G[1, 1] ≈ 0.0 atol = 1e-10
+    @test r.impact[1, 1] ≈ 1.0 atol = 1e-10
+    @test r.residual < 1e-8
+end
+
+@testset "_solve_qz_quadratic: explosive model" begin
+    # y_t = 1.5 y_{t-1} + ε ; no forward var, root 1.5 outside unit circle
+    f_0 = reshape([1.0], 1, 1)
+    f_1 = reshape([-1.5], 1, 1)
+    f_lead = reshape([0.0], 1, 1)
+    f_ε = reshape([-1.0], 1, 1)
+    r = MacroEconometricModels._solve_qz_quadratic(f_0, f_1, f_lead, f_ε)
+    @test r.n_stable == 0
+    @test r.eu == [0, 0]           # no stable solution
+end
+
+@testset "_solve_qz_quadratic: forward jump + backward state (asset model)" begin
+    # p_t = (1/(1+r)) E_t[p_{t+1}] + (r/(1+r)) d_t ;  d_t = ρ d_{t-1} + e
+    # Order [p, d]. Closed form: p = 0.2 d, d AR(0.8). r=0.05, ρ=0.8.
+    rr = 0.05; ρ = 0.8; β = 1 / (1 + rr); κ = rr / (1 + rr)
+    # residuals: f1 = p_t - β p_{t+1} - κ d_t ; f2 = d_t - ρ d_{t-1} - e
+    f_0 = [1.0  -κ; 0.0  1.0]          # ∂f/∂y_t
+    f_1 = [0.0   0.0; 0.0  -ρ]         # ∂f/∂y_{t-1}
+    f_lead = [-β  0.0; 0.0  0.0]       # ∂f/∂y_{t+1}
+    f_ε = reshape([0.0, -1.0], 2, 1)   # ∂f/∂ε
+    r = MacroEconometricModels._solve_qz_quadratic(f_0, f_1, f_lead, f_ε)
+    @test r.eu == [1, 1]
+    @test r.n_stable == 2
+    @test r.residual < 1e-8
+    # impact: d responds 1, p responds 0.2
+    @test r.impact[2, 1] ≈ 1.0 atol = 1e-6
+    @test r.impact[1, 1] ≈ 0.2 atol = 1e-6
+    # G eigenvalues are {0, 0.8}
+    @test maximum(abs.(eigvals(r.G))) ≈ 0.8 atol = 1e-6
+end
+
 end  # @testset "DSGE Coverage"
