@@ -462,15 +462,25 @@ end
 # =============================================================================
 
 """
-    fevd(sol::PerturbationSolution{T}, horizon::Int) -> FEVD{T}
+    fevd(sol::PerturbationSolution{T}, horizon::Int;
+         unconditional::Bool=false) -> FEVD{T}
 
 Compute forecast error variance decomposition from a perturbation solution.
 
-Uses the analytical first-order IRFs to compute the proportion of h-step
-forecast error variance attributable to each structural shock. This follows
-the same IRF-based computation as `fevd(::DSGESolution, ...)`.
+# Keyword Arguments
+- `unconditional::Bool=false`: if `true` and `sol.order >= 2`, compute the
+  unconditional (asymptotic) FEVD using the Andreasen et al. (2018) augmented
+  Lyapunov approach. This properly accounts for second-order cross-terms (Hxx)
+  when attributing variance to individual shocks. The returned FEVD has
+  `horizon=1` with the asymptotic decomposition.
+  If `false`, uses analytical first-order IRFs (same as `fevd(::DSGESolution)`).
 """
-function fevd(sol::PerturbationSolution{T}, horizon::Int) where {T<:AbstractFloat}
+function fevd(sol::PerturbationSolution{T}, horizon::Int;
+              unconditional::Bool=false) where {T<:AbstractFloat}
+    if unconditional && sol.order >= 2
+        return _fevd_unconditional(sol)
+    end
+
     irf_result = irf(sol, horizon)
     n_vars = length(irf_result.variables)
     n_eps = nshocks(sol)
@@ -492,6 +502,142 @@ function fevd(sol::PerturbationSolution{T}, horizon::Int) where {T<:AbstractFloa
 
     var_names = irf_result.variables
     shock_names = irf_result.shocks
+
+    FEVD{T}(decomp, props, var_names, shock_names)
+end
+
+"""
+    _fevd_unconditional(sol::PerturbationSolution{T}) -> FEVD{T}
+
+Compute unconditional (asymptotic) FEVD using the augmented Lyapunov approach.
+For each shock j, zeros out all other shocks and re-solves the augmented system
+to get the variance contribution. Properly handles second-order cross-terms.
+"""
+function _fevd_unconditional(sol::PerturbationSolution{T}) where {T}
+    nx = nstates(sol)
+    ny = ncontrols(sol)
+    n  = nvars(sol)
+    n_eps = nshocks(sol)
+    nv = nx + n_eps
+
+    hx_state = nx > 0 ? sol.hx[:, 1:nx] : zeros(T, 0, 0)
+    eta_x    = nx > 0 ? sol.hx[:, nx+1:nv] : zeros(T, 0, n_eps)
+    gx_state = ny > 0 ? sol.gx[:, 1:nx] : zeros(T, 0, nx)
+    eta_y    = ny > 0 ? sol.gx[:, nx+1:nv] : zeros(T, 0, n_eps)
+
+    hxx_xx = sol.hxx !== nothing ? _extract_xx_block(sol.hxx, nx, nv) : zeros(T, nx, nx^2)
+    gxx_xx = sol.gxx !== nothing ? _extract_xx_block(sol.gxx, nx, nv) : zeros(T, ny, nx^2)
+
+    nz = 2 * nx + nx^2
+
+    # Build transition matrix A (same for all shocks — doesn't depend on η)
+    A = zeros(T, nz, nz)
+    A[1:nx, 1:nx] = hx_state
+    A[nx+1:2*nx, nx+1:2*nx] = hx_state
+    A[nx+1:2*nx, 2*nx+1:nz] = T(0.5) * hxx_xx
+    A[2*nx+1:nz, 2*nx+1:nz] = kron(hx_state, hx_state)
+
+    # Observation matrices (same for all shocks)
+    C_state = zeros(T, nx, nz)
+    C_state[:, 1:nx] = hx_state
+    C_state[:, nx+1:2*nx] = hx_state
+    if nx > 0
+        C_state[:, 2*nx+1:nz] = T(0.5) * hxx_xx
+    end
+    noise_state = eta_x
+
+    C_ctrl = zeros(T, ny, nz)
+    if ny > 0 && nx > 0
+        C_ctrl = gx_state * C_state
+        C_ctrl[:, 2*nx+1:nz] += T(0.5) * gxx_xx
+    end
+    noise_ctrl = ny > 0 ? gx_state * eta_x + eta_y : zeros(T, 0, n_eps)
+
+    C_full = zeros(T, n, nz)
+    noise_full = zeros(T, n, n_eps)
+    for (k, si) in enumerate(sol.state_indices)
+        C_full[si, :] = C_state[k, :]
+        noise_full[si, :] = noise_state[k, :]
+    end
+    for (k, ci) in enumerate(sol.control_indices)
+        C_full[ci, :] = C_ctrl[k, :]
+        noise_full[ci, :] = noise_ctrl[k, :]
+    end
+
+    # Total unconditional variance (all shocks)
+    Var_xf_total = nx > 0 ? _dlyap_doubling(hx_state, eta_x * eta_x') : zeros(T, 0, 0)
+    I_ne = Matrix{T}(I, n_eps, n_eps)
+    c_total = zeros(T, nz)
+    if sol.hσσ !== nothing
+        c_total[nx+1:2*nx] = T(0.5) * sol.hσσ
+    end
+    c_total[2*nx+1:nz] = kron(eta_x, eta_x) * vec(I_ne)
+
+    Var_inov_total = _innovation_variance_2nd(hx_state, eta_x, Var_xf_total, nx, n_eps)
+    Var_z_total = _dlyap_doubling(A, Var_inov_total)
+    Var_y_total = C_full * Var_z_total * C_full' + noise_full * noise_full'
+    Var_y_total = (Var_y_total + Var_y_total') / 2
+
+    # Per-shock variance contribution
+    decomp = zeros(T, n, n_eps, 1)
+    props  = zeros(T, n, n_eps, 1)
+
+    for j in 1:n_eps
+        eta_x_j = zeros(T, nx, n_eps)
+        eta_x_j[:, j] = eta_x[:, j]
+
+        eta_y_j = zeros(T, ny, n_eps)
+        if ny > 0
+            eta_y_j[:, j] = eta_y[:, j]
+        end
+
+        noise_full_j = zeros(T, n, n_eps)
+        for (k, si) in enumerate(sol.state_indices)
+            noise_full_j[si, :] = eta_x_j[k, :]
+        end
+        for (k, ci) in enumerate(sol.control_indices)
+            noise_full_j[ci, :] = ny > 0 ? gx_state[k:k, :] * eta_x_j + eta_y_j[k:k, :] : zeros(T, 1, n_eps)
+        end
+
+        Var_xf_j = nx > 0 ? _dlyap_doubling(hx_state, eta_x_j * eta_x_j') : zeros(T, 0, 0)
+
+        Var_inov_j = _innovation_variance_2nd(hx_state, eta_x_j, Var_xf_j, nx, n_eps)
+        Var_z_j = _dlyap_doubling(A, Var_inov_j)
+        Var_y_j = C_full * Var_z_j * C_full' + noise_full_j * noise_full_j'
+        Var_y_j = (Var_y_j + Var_y_j') / 2
+
+        for i in 1:n
+            decomp[i, j, 1] = max(Var_y_j[i, i], zero(T))
+        end
+    end
+
+    # Normalize: at order≥2 the per-shock contributions don't sum to the total
+    # variance due to cross-shock quartic moment terms. We normalize by the
+    # sum of per-shock contributions (not by total variance) to ensure rows
+    # sum to 1, following Andreasen et al. (2018) §4.2.
+    for i in 1:n
+        row_sum = zero(T)
+        for j in 1:n_eps
+            row_sum += decomp[i, j, 1]
+        end
+        if row_sum > 0
+            for j in 1:n_eps
+                props[i, j, 1] = decomp[i, j, 1] / row_sum
+            end
+        end
+    end
+
+    # Handle augmented models
+    if sol.spec.augmented
+        orig_idx = _original_var_indices(sol.spec)
+        decomp = decomp[orig_idx, :, :]
+        props = props[orig_idx, :, :]
+        n = length(orig_idx)
+    end
+
+    var_names = [string(sol.spec.endog[i]) for i in 1:(sol.spec.augmented ?
+                 length(_original_var_indices(sol.spec)) : n)]
+    shock_names = [string(s) for s in sol.spec.exog]
 
     FEVD{T}(decomp, props, var_names, shock_names)
 end
