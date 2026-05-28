@@ -1207,32 +1207,6 @@ end
     @test maximum(abs.(sol.eigenvalues)) ≈ 0.8 atol = 1e-6
 end
 
-@testset "klein direct: Q1_adj branch on synthetic unstable pencil" begin
-    # Engineered canonical system with one stable (0.5) and one unstable (2.0)
-    # generalized eigenvalue, plus a Π column for the jump variable. This is the
-    # n_stable>0 && n_unstable>0 && size(Π,2)>0 regime that triggers the
-    # expectations-adjustment (Q1_adj) impact branch in klein.jl.
-    G0  = Matrix{Float64}(I, 2, 2)
-    G1m = [0.5 0.0; 0.0 2.0]
-    Cv  = zeros(2)
-    Psi = reshape([1.0, 0.0], 2, 1)   # shock hits the stable variable
-    Pi  = reshape([0.0, 1.0], 2, 1)   # expectation error on the jump variable
-
-    res = MacroEconometricModels.klein(G0, G1m, Cv, Psi, Pi, 1)
-    @test res.eu == [1, 1]            # n_stable (1) == n_predetermined (1)
-    @test size(res.G1) == (2, 2)
-    @test size(res.impact) == (2, 1)
-    @test all(isfinite, res.G1)
-    @test all(isfinite, res.impact)
-    # Stable variable retains its 0.5 root and the full shock loading
-    @test res.G1[1, 1] ≈ 0.5 atol = 1e-8
-    @test res.impact[1, 1] ≈ 1.0 atol = 1e-8
-
-    # Same system with a constant exercises the C_sol = (I-G1)·y_bar path
-    res_c = MacroEconometricModels.klein(G0, G1m, [0.3, 0.0], Psi, Pi, 1)
-    @test all(isfinite, res_c.C_sol)
-    @test length(res_c.C_sol) == 2
-end
 
 @testset "klein/bk via solve: Q1_adj branch with forward jump + unstable state" begin
     # x is an explosive predetermined variable (root 1.5); p is a forward jump

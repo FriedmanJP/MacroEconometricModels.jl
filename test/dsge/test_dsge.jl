@@ -2953,12 +2953,11 @@ end
         sol_g = solve(spec; method=:gensys)
         sol_k = solve(spec; method=:klein)
 
-        # Klein reports eu=[1,0] for purely forward-looking models (n_stable > n_predetermined=0)
-        # because BK counting flags indeterminacy, but gensys resolves it via Pi.
-        # The solution matrices still match.
-        @test sol_k.eu[1] == 1  # existence
-        @test !is_determined(sol_k)  # Klein BK counting flags indeterminacy
-        @test is_determined(sol_g)   # gensys resolves it via Pi rank check
+        # Companion-QZ Klein is determinate here (unique bounded solution), agreeing
+        # with gensys; the stable solvent is G = 0 (no state persistence).
+        @test is_determined(sol_k)
+        @test is_determined(sol_g)
+        @test sol_k.eu == sol_g.eu
         @test sol_k.G1 ≈ sol_g.G1 atol=1e-8
         @test sol_k.impact ≈ sol_g.impact atol=1e-8
     end
@@ -2978,9 +2977,9 @@ end
         sol_g = solve(spec; method=:gensys)
         sol_k = solve(spec; method=:klein)
 
-        # Purely forward-looking NK model: Klein BK counting differs from gensys
-        # (n_stable > n_predetermined=0), but solution matrices match.
-        @test sol_k.eu[1] == 1  # existence
+        # Determinate NK model: Klein and gensys agree on solution and determinacy.
+        @test is_determined(sol_k)
+        @test sol_k.eu == sol_g.eu
         @test sol_k.G1 ≈ sol_g.G1 atol=1e-6
         @test sol_k.impact ≈ sol_g.impact atol=1e-6
     end
