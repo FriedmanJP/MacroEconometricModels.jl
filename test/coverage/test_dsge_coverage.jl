@@ -1238,6 +1238,51 @@ end
     @test abs(ir.values[15, 2, 1]) < abs(ir.values[1, 2, 1])
 end
 
+@testset "cross-solver: gensys == klein == bk on asset model" begin
+    spec = _asset_pricing_spec()
+    sol_g  = solve(spec; method=:gensys)
+    sol_k  = solve(spec; method=:klein)
+    sol_bk = solve(spec; method=:blanchard_kahn)
+
+    @test sol_g.eu  == [1, 1]
+    @test sol_k.eu  == [1, 1]
+    @test sol_bk.eu == [1, 1]
+
+    @test sol_k.G1      ≈ sol_g.G1     atol = 1e-6
+    @test sol_k.impact  ≈ sol_g.impact atol = 1e-6
+    @test sol_bk.G1     ≈ sol_g.G1     atol = 1e-6
+    @test sol_bk.impact ≈ sol_g.impact atol = 1e-6
+
+    # Closed form: p = 0.2·d ; endogenous order [p, d]
+    @test sol_k.impact[2, 1] ≈ 1.0 atol = 1e-6
+    @test sol_k.impact[1, 1] ≈ 0.2 atol = 1e-6
+end
+
+@testset "cross-solver: gensys == klein == bk on NK 3-equation" begin
+    spec = @dsge begin
+        parameters: β = 0.99, κ = 0.3, φ_π = 1.5, φ_y = 0.125, ρ_v = 0.5, σ_v = 0.25
+        endogenous: π, y, i
+        exogenous: ε_v
+        π[t] = β * π[t+1] + κ * y[t]
+        y[t] = y[t+1] - (i[t] - π[t+1]) + σ_v * ε_v[t]
+        i[t] = φ_π * π[t] + φ_y * y[t] + ρ_v * ε_v[t]
+        steady_state = [0.0, 0.0, 0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    sol_g  = solve(spec; method=:gensys)
+    sol_k  = solve(spec; method=:klein)
+    sol_bk = solve(spec; method=:blanchard_kahn)
+
+    @test is_determined(sol_g)
+    @test sol_k.eu  == sol_g.eu
+    @test sol_bk.eu == sol_g.eu
+    @test sol_k.G1      ≈ sol_g.G1     atol = 1e-5
+    @test sol_k.impact  ≈ sol_g.impact atol = 1e-5
+    @test sol_bk.G1     ≈ sol_g.G1     atol = 1e-5
+    @test sol_bk.impact ≈ sol_g.impact atol = 1e-5
+end
+
 # =========================================================================
 # 17. parser.jl / display.jl -- linear: true declaration plumbing
 # =========================================================================
