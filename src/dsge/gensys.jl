@@ -239,7 +239,7 @@ function solve(spec::DSGESpec{T}; method::Symbol=:gensys, kwargs...) where {T<:A
     elseif method == :klein
         ld = linearize(spec)
         n_pre = _count_predetermined(ld)
-        result = klein(ld.Gamma0, ld.Gamma1, ld.C, ld.Psi, n_pre)
+        result = klein(ld.Gamma0, ld.Gamma1, ld.C, ld.Psi, ld.Pi, n_pre)
         return DSGESolution{T}(
             result.G1, result.impact, result.C_sol, result.eu,
             :klein, result.eigenvalues, spec, ld

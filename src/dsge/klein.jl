@@ -84,7 +84,7 @@ Named tuple `(G1, impact, C_sol, eu, eigenvalues)` where:
 """
 function klein(Gamma0::AbstractMatrix{T}, Gamma1::AbstractMatrix{T},
                C::AbstractVector{T}, Psi::AbstractMatrix{T},
-               n_predetermined::Int;
+               Pi::AbstractMatrix{T}, n_predetermined::Int;
                div::Real=1.0) where {T<:AbstractFloat}
     n = size(Gamma0, 1)
     eu = [0, 0]
