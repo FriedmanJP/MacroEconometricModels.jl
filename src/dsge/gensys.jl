@@ -10,10 +10,9 @@ Sims (2002) gensys solver for linear rational expectations models.
 Solves: Gamma0 * y_t = Gamma1 * y_{t-1} + C + Psi * eps_t + Pi * eta_t
 Returns: y_t = G1 * y_{t-1} + impact * eps_t + C_sol
 
-Two-phase approach:
-1. QZ decomposition for eigenvalue analysis and determinacy checking
-2. Iterative undetermined coefficients on raw Jacobians (f₀, f₁, f_lead, f_ε)
-   for the actual solution — robust to models with many static variables
+Solution approach in `solve(:gensys)`: undetermined coefficients (primary G1/impact,
+robust to many static variables), with the companion-QZ core (`_solve_qz_quadratic`)
+supplying determinacy (`eu`) and a fallback G1/impact when UC does not converge.
 """
 
 """
@@ -195,10 +194,12 @@ function solve(spec::DSGESpec{T}; method::Symbol=:gensys, kwargs...) where {T<:A
     if method == :gensys
         ld = linearize(spec)
 
-        f_0 = _dsge_jacobian(spec, spec.steady_state, :current)
-        f_1 = _dsge_jacobian(spec, spec.steady_state, :lag)
+        # Recover f_0,f_1,f_ε from the canonical form (as klein/bk do); f_lead is
+        # not stored losslessly in ld.Pi, so compute it directly.
+        f_0 = ld.Gamma0
+        f_1 = -ld.Gamma1
+        f_ε = -ld.Psi
         f_lead = _dsge_jacobian(spec, spec.steady_state, :lead)
-        f_ε = _dsge_jacobian_shocks(spec, spec.steady_state)
 
         # Companion-QZ for correct determinacy + a robust solution fallback
         qz_core = _solve_qz_quadratic(f_0, f_1, f_lead, f_ε)
@@ -211,6 +212,7 @@ function solve(spec::DSGESpec{T}; method::Symbol=:gensys, kwargs...) where {T<:A
             resid = (f_0 + f_lead * uc_result.G1) * uc_result.G1 + f_1
             uc_ok = maximum(abs.(resid)) < T(1e-8) && uc_result.converged
         catch
+            # UC failed (SingularException or non-convergence) — fall through to qz_core
         end
 
         G1 = uc_ok ? uc_result.G1 : qz_core.G
