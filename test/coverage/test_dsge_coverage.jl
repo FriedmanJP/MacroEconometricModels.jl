@@ -1112,4 +1112,212 @@ end
     @test MacroEconometricModels._find_last_binding_two(vm_none) == 0
 end
 
+# =========================================================================
+# 15. perturbation.jl -- _solve_kronecker_sylvester (dense + matrix-free GMRES)
+# =========================================================================
+# The 2nd/3rd-order perturbation steps solve the Kronecker-Sylvester system
+#   f_c * X + f_f * X * Mkd = -RHS
+# directly for small systems (n*nvd <= 5000) and via matrix-free GMRES for
+# larger ones. Small DSGE test models never trip the GMRES branch, so we
+# exercise it here with synthetic, well-conditioned operators.
+
+# Build a strongly diagonally-dominant operator so GMRES converges quickly and
+# the dense solve is well-posed. f_c ≈ 3·I dominates the f_f·X·Mkd perturbation.
+function _make_sylvester_problem(n::Int, nvd::Int, rng)
+    f_c = Matrix{Float64}(I, n, n) .* 3.0 .+ 0.1 .* randn(rng, n, n)
+    f_f = 0.1 .* randn(rng, n, n)
+    Mraw = randn(rng, nvd, nvd)
+    Mkd = 0.3 .* Mraw ./ opnorm(Mraw)      # operator norm 0.3 (contraction)
+    RHS = randn(rng, n, nvd)
+    (f_c, f_f, Mkd, RHS)
+end
+
+@testset "perturbation.jl: _solve_kronecker_sylvester dense path" begin
+    rng = Random.MersenneTwister(2024)
+    n, nvd = 8, 8                           # total = 64 <= 5000 -> dense solve
+    f_c, f_f, Mkd, RHS = _make_sylvester_problem(n, nvd, rng)
+
+    X = MacroEconometricModels._solve_kronecker_sylvester(f_c, f_f, Mkd, RHS, n, nvd)
+    @test size(X) == (n, nvd)
+    @test all(isfinite, X)
+
+    # X must satisfy the Sylvester equation
+    resid = f_c * X + f_f * (X * Mkd) + RHS
+    @test maximum(abs.(resid)) < 1e-8
+
+    # Cross-check against the explicit dense Kronecker solve
+    LHS = kron(Matrix{Float64}(I, nvd, nvd), f_c) + kron(Mkd', f_f)
+    X_ref = reshape(LHS \ (-vec(RHS)), n, nvd)
+    @test maximum(abs.(X - X_ref)) < 1e-9
+end
+
+@testset "perturbation.jl: _solve_kronecker_sylvester GMRES path (large system)" begin
+    rng = Random.MersenneTwister(99)
+    n, nvd = 60, 100                        # total = 6000 > 5000 -> matrix-free GMRES
+    f_c, f_f, Mkd, RHS = _make_sylvester_problem(n, nvd, rng)
+
+    X = MacroEconometricModels._solve_kronecker_sylvester(f_c, f_f, Mkd, RHS, n, nvd)
+    @test size(X) == (n, nvd)
+    @test all(isfinite, X)
+
+    # GMRES must drive the Sylvester residual to (near) zero. For this
+    # well-conditioned, invertible operator that uniquely pins down X, so no
+    # dense reference is needed (and would cost a 6000x6000 dense factorization).
+    resid = f_c * X + f_f * (X * Mkd) + RHS
+    @test maximum(abs.(resid)) < 1e-6
+end
+
+# =========================================================================
+# 16. Forward-looking models: gensys UC two-phase solver + klein/bk Q1_adj
+# =========================================================================
+# This framework's `linearize` routes expectational leads into the
+# expectation-error matrix Π rather than into auxiliary variables with explosive
+# eigenvalues. The two-phase gensys (QZ for determinacy + undetermined
+# coefficients for the actual solution) handles this robustly; pure-QZ klein/bk
+# do not — which is exactly why the UC solver was added. The tests below pin down
+# (a) gensys correctness on a forward-looking model and (b) coverage of the
+# Q1_adj expectations-adjustment branch in klein.jl / blanchard_kahn.jl using
+# systems that genuinely carry an unstable pencil eigenvalue alongside Π.
+
+# Asset-pricing model: forward-looking jump `p` priced off an AR(1) state `d`.
+# p_t = (1/(1+r))·E_t[p_{t+1}] + (r/(1+r))·d_t ,  d_t = ρ·d_{t-1} + e_t.
+# Closed form: p_t = r/((1+r)-ρ)·d_t = 0.2·d_t.
+function _asset_pricing_spec()
+    spec = @dsge begin
+        parameters: r = 0.05, rho = 0.8
+        endogenous: p, d
+        exogenous: e
+        p[t] = (1.0 / (1.0 + r)) * E[t](p[t+1]) + (r / (1.0 + r)) * d[t]
+        d[t] = rho * d[t-1] + e[t]
+    end
+    compute_steady_state(spec)
+end
+
+@testset "forward-looking: gensys UC two-phase solves correctly" begin
+    spec = _asset_pricing_spec()
+    sol = solve(spec; method=:gensys)
+    @test sol.eu == [1, 1]
+    @test all(isfinite, sol.G1)
+    @test all(isfinite, sol.impact)
+    # A unit shock to e moves d by 1 and p by r/((1+r)-ρ) = 0.2 on impact.
+    # Endogenous order is [p, d].
+    @test sol.impact[2, 1] ≈ 1.0 atol = 1e-6   # d on impact
+    @test sol.impact[1, 1] ≈ 0.2 atol = 1e-4   # p on impact
+    # d follows AR(0.8); p tracks d, so the persistent root is ρ = 0.8
+    @test maximum(abs.(sol.eigenvalues)) ≈ 0.8 atol = 1e-6
+end
+
+@testset "klein direct: Q1_adj branch on synthetic unstable pencil" begin
+    # Engineered canonical system with one stable (0.5) and one unstable (2.0)
+    # generalized eigenvalue, plus a Π column for the jump variable. This is the
+    # n_stable>0 && n_unstable>0 && size(Π,2)>0 regime that triggers the
+    # expectations-adjustment (Q1_adj) impact branch in klein.jl.
+    G0  = Matrix{Float64}(I, 2, 2)
+    G1m = [0.5 0.0; 0.0 2.0]
+    Cv  = zeros(2)
+    Psi = reshape([1.0, 0.0], 2, 1)   # shock hits the stable variable
+    Pi  = reshape([0.0, 1.0], 2, 1)   # expectation error on the jump variable
+
+    res = MacroEconometricModels.klein(G0, G1m, Cv, Psi, Pi, 1)
+    @test res.eu == [1, 1]            # n_stable (1) == n_predetermined (1)
+    @test size(res.G1) == (2, 2)
+    @test size(res.impact) == (2, 1)
+    @test all(isfinite, res.G1)
+    @test all(isfinite, res.impact)
+    # Stable variable retains its 0.5 root and the full shock loading
+    @test res.G1[1, 1] ≈ 0.5 atol = 1e-8
+    @test res.impact[1, 1] ≈ 1.0 atol = 1e-8
+
+    # Same system with a constant exercises the C_sol = (I-G1)·y_bar path
+    res_c = MacroEconometricModels.klein(G0, G1m, [0.3, 0.0], Psi, Pi, 1)
+    @test all(isfinite, res_c.C_sol)
+    @test length(res_c.C_sol) == 2
+end
+
+@testset "klein/bk via solve: Q1_adj branch with forward jump + unstable state" begin
+    # x is an explosive predetermined variable (root 1.5); p is a forward jump
+    # (Π column). The pencil then has n_stable=1, n_unstable=1, size(Π,2)=1 —
+    # so solve(:klein) and solve(:blanchard_kahn) both enter the Q1_adj branch.
+    spec = @dsge begin
+        parameters: g = 1.5, b = 0.5
+        endogenous: x, p
+        exogenous: e
+        x[t] = g * x[t-1] + e[t]
+        p[t] = b * E[t](p[t+1]) + x[t]
+    end
+    spec = compute_steady_state(spec)
+
+    for m in (:klein, :blanchard_kahn)
+        sol = solve(spec; method=m)
+        @test sol isa DSGESolution{Float64}
+        @test sol.method == m
+        @test size(sol.G1) == (2, 2)
+        @test size(sol.impact) == (2, 1)
+        @test all(isfinite, sol.G1)
+        @test all(isfinite, sol.impact)
+        # Pencil carries the explosive root 1.5
+        @test maximum(abs.(sol.eigenvalues)) ≈ 1.5 atol = 1e-4
+    end
+end
+
+@testset "forward-looking: _solve_undetermined_coefficients converges" begin
+    spec = _asset_pricing_spec()
+    uc = MacroEconometricModels._solve_undetermined_coefficients(spec)
+    @test uc.converged
+    @test all(isfinite, uc.G1)
+    @test all(isfinite, uc.impact)
+    # G1 eigenvalues are the stable roots of the saddle system
+    @test all(abs.(uc.eigenvalues) .< 1.0 + 1e-6)
+
+    # UC G1 must satisfy the quadratic matrix equation it solves
+    f0 = MacroEconometricModels._dsge_jacobian(spec, spec.steady_state, :current)
+    f1 = MacroEconometricModels._dsge_jacobian(spec, spec.steady_state, :lag)
+    fl = MacroEconometricModels._dsge_jacobian(spec, spec.steady_state, :lead)
+    resid = (f0 + fl * uc.G1) * uc.G1 + f1
+    @test maximum(abs.(resid)) < 1e-8
+end
+
+@testset "forward-looking: IRFs decay and match closed form" begin
+    spec = _asset_pricing_spec()
+    sol = solve(spec; method=:gensys)
+    ir = irf(sol, 15)
+    @test size(ir.values) == (15, 2, 1)
+    @test all(isfinite, ir.values)
+    # p_t = 0.2·d_t at every horizon for this model
+    for h in 1:15
+        @test ir.values[h, 1, 1] ≈ 0.2 * ir.values[h, 2, 1] atol = 1e-4
+    end
+    # d follows AR(0.8): response halves roughly every ~3 periods, -> decays
+    @test abs(ir.values[15, 2, 1]) < abs(ir.values[1, 2, 1])
+end
+
+# =========================================================================
+# 17. parser.jl / display.jl -- linear: true declaration plumbing
+# =========================================================================
+@testset "parser.jl: _extract_linear_value true/false/error" begin
+    @test MacroEconometricModels._extract_linear_value(:(linear:true)) === true
+    @test MacroEconometricModels._extract_linear_value(:(linear:false)) === false
+    # Non-boolean value -> error
+    @test_throws ErrorException MacroEconometricModels._extract_linear_value(:(linear:maybe))
+    # Wrong AST shape (not a `:` call) -> error
+    @test_throws ErrorException MacroEconometricModels._extract_linear_value(:(linear = true))
+end
+
+@testset "display.jl: linear flag in text show" begin
+    spec = @dsge begin
+        parameters: rho = 0.9
+        endogenous: y
+        exogenous: e
+        linear: true
+        y[t] = rho * y[t-1] + e[t]
+    end
+    @test spec.linear == true
+
+    MacroEconometricModels.set_display_backend(:text)
+    s = sprint(show, spec)
+    @test occursin("Linear:", s)
+    @test occursin("pre-linearized", s)
+    MacroEconometricModels.set_display_backend(:text)
+end
+
 end  # @testset "DSGE Coverage"
