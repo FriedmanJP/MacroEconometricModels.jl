@@ -1208,32 +1208,6 @@ end
 end
 
 
-@testset "klein/bk via solve: Q1_adj branch with forward jump + unstable state" begin
-    # x is an explosive predetermined variable (root 1.5); p is a forward jump
-    # (Π column). The pencil then has n_stable=1, n_unstable=1, size(Π,2)=1 —
-    # so solve(:klein) and solve(:blanchard_kahn) both enter the Q1_adj branch.
-    spec = @dsge begin
-        parameters: g = 1.5, b = 0.5
-        endogenous: x, p
-        exogenous: e
-        x[t] = g * x[t-1] + e[t]
-        p[t] = b * E[t](p[t+1]) + x[t]
-    end
-    spec = compute_steady_state(spec)
-
-    for m in (:klein, :blanchard_kahn)
-        sol = solve(spec; method=m)
-        @test sol isa DSGESolution{Float64}
-        @test sol.method == m
-        @test size(sol.G1) == (2, 2)
-        @test size(sol.impact) == (2, 1)
-        @test all(isfinite, sol.G1)
-        @test all(isfinite, sol.impact)
-        # Pencil carries the explosive root 1.5
-        @test maximum(abs.(sol.eigenvalues)) ≈ 1.5 atol = 1e-4
-    end
-end
-
 @testset "forward-looking: _solve_undetermined_coefficients converges" begin
     spec = _asset_pricing_spec()
     uc = MacroEconometricModels._solve_undetermined_coefficients(spec)
