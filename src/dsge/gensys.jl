@@ -195,33 +195,28 @@ function solve(spec::DSGESpec{T}; method::Symbol=:gensys, kwargs...) where {T<:A
     if method == :gensys
         ld = linearize(spec)
 
-        # Phase 1: QZ for eigenvalue analysis and determinacy
-        qz_result = gensys(ld.Gamma0, ld.Gamma1, ld.C, ld.Psi, ld.Pi)
+        f_0 = _dsge_jacobian(spec, spec.steady_state, :current)
+        f_1 = _dsge_jacobian(spec, spec.steady_state, :lag)
+        f_lead = _dsge_jacobian(spec, spec.steady_state, :lead)
+        f_ε = _dsge_jacobian_shocks(spec, spec.steady_state)
 
-        # Phase 2: solve via undetermined coefficients (robust to static vars)
+        # Companion-QZ for correct determinacy + a robust solution fallback
+        qz_core = _solve_qz_quadratic(f_0, f_1, f_lead, f_ε)
+
+        # Primary solution via undetermined coefficients (robust to many static vars)
         uc_ok = false
         local uc_result
         try
             uc_result = _solve_undetermined_coefficients(spec)
-            f_0 = _dsge_jacobian(spec, spec.steady_state, :current)
-            f_1 = _dsge_jacobian(spec, spec.steady_state, :lag)
-            f_lead = _dsge_jacobian(spec, spec.steady_state, :lead)
             resid = (f_0 + f_lead * uc_result.G1) * uc_result.G1 + f_1
             uc_ok = maximum(abs.(resid)) < T(1e-8) && uc_result.converged
         catch
         end
 
-        if uc_ok
-            G1 = uc_result.G1
-            impact = uc_result.impact
-            eigenvalues = [qz_result.eigenvalues; uc_result.eigenvalues]
-        else
-            G1 = qz_result.G1
-            impact = qz_result.impact
-            eigenvalues = qz_result.eigenvalues
-        end
+        G1 = uc_ok ? uc_result.G1 : qz_core.G
+        impact = uc_ok ? uc_result.impact : qz_core.impact
 
-        # Compute solution constant: C_sol = (I-G1)*y_ss where y_ss = (Gamma0-Gamma1)^{-1}*C
+        # Constants: C_sol = (I - G1)·y_ss, y_ss = (Γ0 - Γ1)⁻¹·C
         if norm(ld.C) > eps(T)
             y_bar = real(Vector{T}((complex(ld.Gamma0) - complex(ld.Gamma1)) \ complex(ld.C)))
             C_sol = (I - G1) * y_bar
@@ -229,9 +224,10 @@ function solve(spec::DSGESpec{T}; method::Symbol=:gensys, kwargs...) where {T<:A
             C_sol = zeros(T, spec.n_endog)
         end
 
+        eigenvalues = Vector{ComplexF64}(eigvals(G1))
         return DSGESolution{T}(
-            G1, impact, C_sol, qz_result.eu,
-            :gensys, unique(eigenvalues), spec, ld
+            G1, impact, Vector{T}(C_sol), qz_core.eu,
+            :gensys, eigenvalues, spec, ld
         )
     elseif method == :blanchard_kahn
         ld = linearize(spec)
