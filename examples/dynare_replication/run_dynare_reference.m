@@ -41,6 +41,21 @@ function save_dynare_results(model_name, output_path)
         result.autocorr = oo_.autocorr{1};
     end
 
+    % Estimation outputs (when estimation() was run)
+    if isfield(oo_, 'posterior_mode')
+        result.posterior_mode = oo_.posterior_mode;
+    end
+    if isfield(oo_, 'MarginalDensity')
+        result.marginal_density = oo_.MarginalDensity;
+    end
+    if isfield(oo_, 'likelihood_at_initial_parameters')
+        result.loglik_at_mode = oo_.likelihood_at_initial_parameters;
+    end
+
+    % Parameter names and values (always available)
+    result.param_names = cellstr(M_.param_names);
+    result.param_values = M_.params;
+
     save(fullfile(output_path, [model_name '.mat']), '-struct', 'result');
     fprintf('  Saved %s.mat\n', model_name);
 end

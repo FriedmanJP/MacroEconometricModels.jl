@@ -77,7 +77,7 @@ if isfile(dynare_mat)
     vars = [("log_y",1,true), ("log_c",2,true), ("log_k",3,true), ("log_l",4,true),
             ("z",5,false), ("ghat",6,false), ("r",7,false), ("log_w",8,true), ("log_invest",9,true)]
     shocks = ["eps_z", "eps_g"]
-    local all_pass = true
+    local all_irf_pass = true
     for sn in shocks, (dname, idx, is_log) in vars
         d_key = dname * "_" * sn
         haskey(irfs, d_key) || continue
@@ -88,10 +88,90 @@ if isfile(dynare_mat)
         j_conv = is_log ? j_vals ./ ss[idx] : j_vals
         max_diff = maximum(abs.(j_conv .- d_vals[1:H]))
         ok = max_diff < 1e-4
-        all_pass = all_pass && ok
+        all_irf_pass = all_irf_pass && ok
         @printf("  %-25s  max|diff|=%8.2e  %s\n", d_key, max_diff, ok ? "PASS" : "FAIL")
     end
-    println("\n  Overall: ", all_pass ? "ALL PASS" : "SOME FAIL")
+    println("  IRFs: ", all_irf_pass ? "ALL PASS" : "SOME FAIL")
+
+    # ── Variance Decomposition ──
+    d_names_raw = data["endo_names"]
+    if d_names_raw isa Matrix
+        d_names_parsed = vec([strip(string(d_names_raw[i,1])) for i in 1:size(d_names_raw, 1)])
+    else
+        d_names_parsed = vec([strip(string(x)) for x in d_names_raw])
+    end
+    d_endo_idx = Dict{String,Int}(n => i for (i, n) in enumerate(d_names_parsed))
+
+    local all_vd_pass = true
+    if haskey(data, "variance_decomposition")
+        fv = fevd(sol, 1000)
+        d_vd = data["variance_decomposition"]
+
+        d_exo_names_raw = data["exo_names"]
+        if d_exo_names_raw isa Matrix
+            d_exo_names = vec([strip(string(d_exo_names_raw[i,1])) for i in 1:size(d_exo_names_raw, 1)])
+        else
+            d_exo_names = vec([strip(string(x)) for x in d_exo_names_raw])
+        end
+        d_exo_idx = Dict{String,Int}(n => i for (i, n) in enumerate(d_exo_names))
+
+        j_vd = fv.proportions[:, :, end] .* 100.0
+
+        our_var_names = string.(spec.endog)
+        our_shock_names = string.(spec.exog)
+
+        println("\n=== Variance Decomposition (asymptotic, %) ===")
+        @printf("  %-4s %-12s %-10s %10s %10s %10s\n", "", "Variable", "Shock", "Julia", "Dynare", "Diff")
+        println("  ", "-"^60)
+
+        for (j_vi, vn) in enumerate(our_var_names)
+            d_vi = get(d_endo_idx, vn, 0)
+            (d_vi == 0 || d_vi > size(d_vd, 1)) && continue
+            for (j_si, sn) in enumerate(our_shock_names)
+                d_si = get(d_exo_idx, sn, 0)
+                (d_si == 0 || d_si > size(d_vd, 2)) && continue
+                j_val = j_vd[j_vi, j_si]
+                d_val = d_vd[d_vi, d_si]
+                diff = abs(j_val - d_val)
+                ok = diff < 1.0
+                all_vd_pass = all_vd_pass && ok
+                @printf("  %s  %-12s %-10s %10.4f %10.4f %10.4f\n",
+                        ok ? "✓" : "✗", vn, sn, j_val, d_val, diff)
+            end
+        end
+        println("  VD: ", all_vd_pass ? "ALL PASS" : "SOME FAIL")
+    else
+        println("\n  (No variance_decomposition in .mat — skipping)")
+    end
+
+    # ── Moments comparison ──
+    local all_acorr_pass = true
+    if haskey(data, "autocorr")
+        d_acorr = data["autocorr"]
+        Sigma_y = MacroEconometricModels.solve_lyapunov(sol.G1, sol.impact)
+        Gamma_1 = sol.G1 * Sigma_y
+
+        println("\n=== Autocorrelation (lag 1) ===")
+        @printf("  %-4s %-12s %14s %14s %10s\n", "", "Variable", "Julia", "Dynare", "Diff")
+        println("  ", "-"^55)
+
+        for (j_i, vn) in enumerate(string.(spec.endog))
+            d_i = get(d_endo_idx, vn, 0)
+            (d_i == 0 || d_i > size(d_acorr, 1)) && continue
+            j_val = Sigma_y[j_i, j_i] > 0 ? Gamma_1[j_i, j_i] / Sigma_y[j_i, j_i] : 0.0
+            d_val = d_acorr[d_i, d_i]
+            diff = abs(j_val - d_val)
+            ok = diff < 0.01
+            all_acorr_pass = all_acorr_pass && ok
+            @printf("  %s  %-12s %14.8f %14.8f %10.6f\n",
+                    ok ? "✓" : "✗", vn, j_val, d_val, diff)
+        end
+        println("  Autocorrelation: ", all_acorr_pass ? "ALL PASS" : "SOME FAIL")
+    end
+
+    println("\n  Overall: IRF=$(all_irf_pass ? "PASS" : "FAIL"), " *
+            "VD=$(all_vd_pass ? "PASS" : "FAIL"), " *
+            "Acorr=$(all_acorr_pass ? "PASS" : "FAIL")")
 else
     println("  (No Dynare .mat file found — run run_dynare_reference.m first)")
 end
