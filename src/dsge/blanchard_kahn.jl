@@ -5,104 +5,60 @@
 # Licensed under GPL-3.0-or-later. See LICENSE for details.
 
 """
-Blanchard-Kahn (1980) eigenvalue counting solver for linear RE models.
+Blanchard-Kahn (1980) solver for linear RE models, implemented via the
+companion-QZ quadratic matrix equation.
 
-Solves the system by decomposing A = Gamma0^{-1} * Gamma1 and checking the
-eigenvalue counting condition: n_unstable eigenvalues == n_forward-looking variables.
+Solves: Gamma0 * y_t = Gamma1 * y_{t-1} + C + Psi * eps_t + Pi * eta_t
+Returns: y_t = G1 * y_{t-1} + impact * eps_t + C_sol
+
+The system is recast as `f_lead·G² + f_0·G + f_1 = 0` and solved via
+`_solve_qz_quadratic`, which sizes determinacy by the 2n companion pencil's
+stable-root count — correct for forward-looking, backward-looking, and mixed
+models.
+
+Reference:
+Blanchard, Olivier J., and Charles M. Kahn. 1980. "The Solution of Linear
+Difference Models under Rational Expectations." Econometrica 48 (5): 1305-1311.
 """
 
 """
-    blanchard_kahn(ld::LinearDSGE{T}, spec::DSGESpec{T}) -> DSGESolution{T}
+    blanchard_kahn(ld::LinearDSGE{T}, spec::DSGESpec{T}; div=1.0+1e-8) → DSGESolution{T}
 
 Solve the linearized DSGE model via the Blanchard-Kahn method.
 
-The BK condition requires that the number of eigenvalues with modulus > 1
-equals the number of forward-looking (non-predetermined) variables.
+Uses the companion-QZ quadratic matrix equation approach via `_solve_qz_quadratic`,
+which correctly counts stable roots from the 2n companion pencil (including
+forward-looking roots). `eu=[1,1]` signals existence and uniqueness (determinacy).
+
+# Arguments
+- `ld`   — `LinearDSGE{T}` from `linearize(spec)`
+- `spec` — `DSGESpec{T}` (must have `steady_state` set)
+
+# Keywords
+- `div::Real=1.0+1e-8` — stable/unstable boundary for eigenvalue sorting
+
+# Returns
+`DSGESolution{T}` with `method=:blanchard_kahn`; `eu=[1,1]` signals determinacy.
 """
-function blanchard_kahn(ld::LinearDSGE{T}, spec::DSGESpec{T}) where {T<:AbstractFloat}
+function blanchard_kahn(ld::LinearDSGE{T}, spec::DSGESpec{T}; div::Real=1.0 + 1e-8) where {T<:AbstractFloat}
     n = spec.n_endog
-    n_eps = spec.n_exog
-    n_fwd = size(ld.Pi, 2)  # number of forward-looking/expectation errors
-    eu = [0, 0]
 
-    Gamma0 = ld.Gamma0
-    Gamma1 = ld.Gamma1
-    Psi = ld.Psi
-    C = ld.C
+    f_0 = ld.Gamma0
+    f_1 = -ld.Gamma1
+    f_ε = -ld.Psi
+    f_lead = _dsge_jacobian(spec, spec.steady_state, :lead)
 
-    # Generalized Schur (QZ) decomposition: Q'*Gamma0*Z = S, Q'*Gamma1*Z = T
-    # Generalized eigenvalues are T_ii / S_ii
-    F = schur(complex(Gamma0), complex(Gamma1))
+    res = _solve_qz_quadratic(f_0, f_1, f_lead, f_ε; div=div)
+    G1 = res.G
+    impact = res.impact
 
-    # Compute generalized eigenvalue magnitudes
-    gev_mag = zeros(n)
-    for i in 1:n
-        if abs(F.S[i,i]) > eps(T)
-            gev_mag[i] = abs(F.T[i,i] / F.S[i,i])
-        else
-            gev_mag[i] = Inf
-        end
-    end
-
-    # Count unstable eigenvalues (|lambda| > 1)
-    n_unstable = count(m -> m > 1.0, gev_mag)
-    n_stable = n - n_unstable
-
-    # BK condition check
-    if n_unstable == n_fwd
-        eu = [1, 1]  # existence and uniqueness
-    elseif n_unstable < n_fwd
-        eu = [1, 0]  # exists but indeterminate (multiple solutions)
-    else
-        eu = [0, 0]  # no stable solution (explosive)
-    end
-
-    # Reorder: stable eigenvalues first
-    stable_select = BitVector(gev_mag .<= 1.0)
-    F_ordered = ordschur(F, stable_select)
-
-    # Recompute eigenvalues after reordering
-    eigenvalues = Vector{ComplexF64}(undef, n)
-    for i in 1:n
-        if abs(F_ordered.S[i,i]) > eps(T)
-            eigenvalues[i] = F_ordered.T[i,i] / F_ordered.S[i,i]
-        else
-            eigenvalues[i] = complex(T(Inf))
-        end
-    end
-
-    Z = F_ordered.Z
-    Q = F_ordered.Q
-    Qp = Q'
-    S = F_ordered.S
-    TT = F_ordered.T
-
-    # Build solution matrices (same algebra as gensys)
-    if n_stable > 0
-        Z1 = Z[:, 1:n_stable]
-        S11 = S[1:n_stable, 1:n_stable]
-        T11 = TT[1:n_stable, 1:n_stable]
-        Q1 = Qp[1:n_stable, :]
-
-        # G1 = Z1 * S11^{-1} * T11 * Z1'
-        G1_c = Z1 * (S11 \ T11) * Z1'
-
-        # impact = Z1 * S11^{-1} * Q1' * Psi
-        impact_c = Z1 * (S11 \ (Q1 * complex(Psi)))
-
-        G1 = real(Matrix{T}(G1_c))
-        impact = real(Matrix{T}(impact_c))
-    else
-        G1 = zeros(T, n, n)
-        impact = zeros(T, n, n_eps)
-    end
-
-    # Solve for constants: C_sol = (I - G1)^{-1} * C
-    C_sol = if norm(C) > eps(T)
-        real(Vector{T}((I - complex(G1)) \ complex(C)))
+    C_sol = if norm(ld.C) > eps(T)
+        y_bar = real(Vector{T}((complex(ld.Gamma0) - complex(ld.Gamma1)) \ complex(ld.C)))
+        Vector{T}((I - G1) * y_bar)
     else
         zeros(T, n)
     end
 
-    DSGESolution{T}(G1, impact, C_sol, eu, :blanchard_kahn, eigenvalues, spec, ld)
+    eigenvalues = Vector{ComplexF64}(eigvals(G1))
+    DSGESolution{T}(G1, impact, C_sol, res.eu, :blanchard_kahn, eigenvalues, spec, ld)
 end

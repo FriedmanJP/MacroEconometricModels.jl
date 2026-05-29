@@ -8,13 +8,13 @@
 - **Filtering**: Ideal bandpass filter and transfer function evaluation for HP, Baxter-King, and Hamilton filters
 - **Diagnostics**: Fisher's test for hidden periodicities, Bartlett's cumulative periodogram test, plus portmanteau tests (Ljung-Box, Box-Pierce, Durbin-Watson)
 
-All results support `report()` for publication-quality tabular output and `plot_result()` for interactive D3.js visualization.
+All results support `show()` for publication-quality tabular output and `plot_result()` for interactive D3.js visualization.
 
 ```@setup spectral
 using MacroEconometricModels, Random
 Random.seed!(42)
 fred = load_example(:fred_md)
-y = filter(isfinite, to_vector(apply_tcode(fred[:, "INDPRO"])))
+y = filter(isfinite, to_vector(apply_tcode(fred[:, ["INDPRO"]])))
 y = y[end-99:end]
 ```
 
@@ -24,7 +24,7 @@ y = y[end-99:end]
 
 ```@example spectral
 result = acf_pacf(y; lags=24)
-report(result)
+show(stdout, result)
 ```
 
 ```julia
@@ -39,7 +39,7 @@ plot_result(result)
 
 ```@example spectral
 sd = spectral_density(y; method=:welch)
-report(sd)
+show(stdout, sd)
 ```
 
 ```julia
@@ -53,11 +53,11 @@ plot_result(sd)
 **Recipe 3: Cross-spectrum coherence**
 
 ```@example spectral
-y_cpi = filter(isfinite, to_vector(apply_tcode(fred[:, "CPIAUCSL"])))
+y_cpi = filter(isfinite, to_vector(apply_tcode(fred[:, ["CPIAUCSL"]])))
 y_cpi = y_cpi[end-99:end]
 n = min(length(y), length(y_cpi))
 cs = cross_spectrum(y[1:n], y_cpi[1:n])
-report(cs)
+show(stdout, cs)
 ```
 
 ```julia
@@ -81,7 +81,7 @@ nothing  # hide
 ```@example spectral
 y_wn = randn(200)
 result = fisher_test(y_wn)
-report(result)
+show(stdout, result)
 ```
 
 ---
@@ -168,7 +168,7 @@ where ``w_t`` is a data window and ``U = n^{-1}\sum w_t^2`` is the window energy
 
 ```@example spectral
 I = periodogram(y; window=:hann)
-report(I)
+show(stdout, I)
 ```
 
 ### Welch's Method
@@ -184,7 +184,7 @@ The variance reduction comes at the cost of reduced frequency resolution. The eq
 
 ```@example spectral
 sd = spectral_density(y; method=:welch, window=:hann, segment_length=64, overlap=0.5)
-report(sd)
+show(stdout, sd)
 ```
 
 ### Kernel-Smoothed Periodogram
@@ -276,7 +276,7 @@ Three derived quantities summarize the relationship:
 
 ```@example spectral
 cs = cross_spectrum(y[1:n], y_cpi[1:n]; window=:hann)
-report(cs)
+show(stdout, cs)
 ```
 
 ```julia
@@ -333,7 +333,7 @@ where ``I(\omega_j)`` is the periodogram at Fourier frequency ``\omega_j``. Unde
 
 ```@example spectral
 result = fisher_test(y)
-report(result)
+show(stdout, result)
 ```
 
 ### Bartlett's Cumulative Periodogram Test
@@ -348,7 +348,7 @@ The Kolmogorov-Smirnov statistic ``D`` measures the maximum departure from unifo
 
 ```@example spectral
 result = bartlett_white_noise_test(y)
-report(result)
+show(stdout, result)
 ```
 
 ### Band Power
@@ -378,7 +378,7 @@ where ``p`` is the number of fitted AR/MA parameters (set via `fitdf`).
 
 ```@example spectral
 result = ljung_box_test(y; lags=20, fitdf=0)
-report(result)
+show(stdout, result)
 ```
 
 ### Box-Pierce Q Test
@@ -387,7 +387,7 @@ The original Box-Pierce test (Box & Pierce 1970) uses the simpler statistic ``Q_
 
 ```@example spectral
 result = box_pierce_test(y; lags=20)
-report(result)
+show(stdout, result)
 ```
 
 ### Durbin-Watson Test
@@ -402,7 +402,7 @@ Values near 2 indicate no autocorrelation; values near 0 indicate positive autoc
 
 ```@example spectral
 dw_result = durbin_watson_test(y)
-report(dw_result)
+show(stdout, dw_result)
 ```
 
 ---
@@ -432,7 +432,7 @@ nothing  # hide
 ```@example spectral
 # HP filter frequency response
 tf_hp = transfer_function(:hp; lambda=1600)
-report(tf_hp)
+show(stdout, tf_hp)
 ```
 
 ```julia
@@ -485,7 +485,7 @@ This example demonstrates a full spectral analysis workflow on U.S. industrial p
 ```@example spectral
 # 1. Correlogram: ACF + PACF with Ljung-Box Q-stats
 corr = acf_pacf(y; lags=24)
-report(corr)
+show(stdout, corr)
 ```
 
 ```julia
@@ -499,7 +499,7 @@ plot_result(corr)
 ```@example spectral
 # 2. Spectral density: Welch's method with Hann window
 sd = spectral_density(y; method=:welch, window=:hann)
-report(sd)
+show(stdout, sd)
 ```
 
 ```julia
@@ -519,13 +519,13 @@ bc_power = band_power(sd, 2π/96, 2π/18)  # 18–96 months
 ```@example spectral
 # 4. AR parametric spectrum for comparison
 sd_ar = spectral_density(y; method=:ar)
-report(sd_ar)
+show(stdout, sd_ar)
 ```
 
 ```@example spectral
 # 5. Cross-spectrum: industrial production vs. CPI inflation
 cs = cross_spectrum(y[1:n], y_cpi[1:n])
-report(cs)
+show(stdout, cs)
 ```
 
 ```julia
@@ -541,15 +541,15 @@ plot_result(cs)
 fisher = fisher_test(y)
 bartlett = bartlett_white_noise_test(y)
 lb = ljung_box_test(y; lags=20)
-report(fisher)
+show(stdout, fisher)
 ```
 
 ```@example spectral
-report(bartlett)
+show(stdout, bartlett)
 ```
 
 ```@example spectral
-report(lb)
+show(stdout, lb)
 ```
 
 The correlogram reveals significant autocorrelation in industrial production growth, consistent with the business-cycle peak visible in the spectral density around ``\omega \approx 2\pi/48`` (4-year cycle). The coherence between output growth and inflation indicates the frequencies at which these series co-move.

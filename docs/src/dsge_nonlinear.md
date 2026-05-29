@@ -260,7 +260,33 @@ plot_result(girf)
 | `n_draws` | `Int` | `500` | Number of Monte Carlo draws for GIRF |
 | `shock_size` | `Real` | `1.0` | Impulse size in standard deviations |
 
-The FEVD is also available via `fevd(psol, H)`, which uses the first-order decomposition from the underlying linear solution.
+### Forecast Error Variance Decomposition
+
+The standard `fevd(psol, H)` uses the first-order decomposition from the underlying linear solution. For order ≥ 2, the **unconditional FEVD** decomposes the asymptotic variance by shock source using the Andreasen et al. (2018) augmented Lyapunov approach. For each shock ``j``, the solver zeros out all other shocks in the augmented innovation variance and re-solves the Lyapunov equation to isolate that shock's contribution:
+
+```math
+\text{FEVD}_{i,j}^{\infty} = \frac{\text{Var}_j(y_i)}{\sum_{k=1}^{n_\varepsilon} \text{Var}_k(y_i)}
+```
+
+where ``\text{Var}_j(y_i)`` is the unconditional variance of variable ``i`` attributable to shock ``j`` alone, computed from the restricted augmented system.
+
+```@example dsge_nonlinear
+# Standard FEVD (first-order IRFs)
+psol2 = perturbation_solver(spec; order=2)
+fv1 = fevd(psol2, 40)
+
+# Unconditional FEVD (order≥2, augmented Lyapunov)
+fv2 = fevd(psol2, 1; unconditional=true)
+```
+
+The unconditional FEVD captures second-order cross-terms through the Kronecker state block ``\text{vec}(x^f \otimes x^f)`` in the augmented system. At order 1, it reduces to the standard asymptotic first-order decomposition. At order 2, it reflects how nonlinear propagation redistributes variance across shocks.
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `unconditional` | `Bool` | `false` | Use augmented Lyapunov instead of IRF-based decomposition |
+
+!!! note "Technical Note"
+    At order ≥ 2, per-shock contributions do not sum exactly to the total variance due to cross-shock quartic moment terms. The solver normalizes proportions to sum to 1 for each variable, following Andreasen et al. (2018) §4.2.
 
 ---
 
@@ -498,6 +524,8 @@ nothing # hide
 
 ## Analytical Moments
 
+### First-Order Moments
+
 For first-order solutions, `analytical_moments` computes unconditional moments in closed form via the discrete **Lyapunov equation**:
 
 ```math
@@ -522,6 +550,31 @@ m = analytical_moments(sol; lags=2)
 ```
 
 The moment vector contains two blocks: (1) the upper triangle of the variance-covariance matrix (``k(k+1)/2`` elements) and (2) diagonal autocovariances at each lag (``k`` elements per lag). This format matches `autocovariance_moments(data, lags)` for direct comparison in [Estimation](@ref dsge_estimation).
+
+### Second-Order Moments (Andreasen et al. 2018)
+
+At order ≥ 2, the unconditional distribution is no longer Gaussian and certainty equivalence breaks down. The **augmented state-space Lyapunov** approach (Andreasen, Fernandez-Villaverde & Rubio-Ramirez 2018) computes exact closed-form moments by stacking the first-order state ``x^f``, the second-order correction ``x^s``, and the Kronecker product ``\text{vec}(x^f \otimes x^f)`` into an augmented state:
+
+```math
+z_t = \begin{bmatrix} x^f_t \\ x^s_t \\ \text{vec}(x^f_t \otimes x^f_t) \end{bmatrix} \in \mathbb{R}^{2n_x + n_x^2}
+```
+
+The augmented system is linear: ``z_{t+1} = A \, z_t + c + u_t``, where ``A`` contains the pruned dynamics and ``c`` captures the stochastic steady-state correction ``\frac{1}{2} h_{\sigma\sigma}``. Unconditional moments follow from the augmented Lyapunov equation ``\text{Var}(z) = A \, \text{Var}(z) \, A' + \text{Var}(u)``, solved via iterative doubling.
+
+The `:gmm` format returns mean shifts and product moments suitable for higher-order GMM estimation:
+
+```@example dsge_nonlinear
+# Second-order moments (closed-form augmented Lyapunov)
+m2 = analytical_moments(psol2; lags=1, format=:gmm)
+```
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `lags` | `Int` | `1` | Number of autocovariance lags |
+| `format` | `Symbol` | `:covariance` | `:covariance` for backward-compatible format, `:gmm` for closed-form augmented Lyapunov |
+
+!!! note "Technical Note"
+    The innovation variance ``\text{Var}(u)`` includes quartic shock moments (``E[\varepsilon^4] = 3`` for Gaussian shocks) via a ``(2n_x + n_x^2) \times (2n_x + n_x^2)`` block matrix assembled from ``E[(\varepsilon \otimes \varepsilon)(\varepsilon \otimes \varepsilon)']``. Third moments vanish for symmetric shocks (``E[\varepsilon^3] = 0``).
 
 ---
 

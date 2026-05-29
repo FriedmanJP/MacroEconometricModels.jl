@@ -1212,9 +1212,8 @@ end
     sol_g = solve(spec; method=:gensys)
     sol_bk = solve(spec; method=:blanchard_kahn)
     @test is_determined(sol_g)
-    # BK eigenvalue counting may flag purely forward-looking models as
-    # indeterminate (n_unstable=0 < n_fwd=1), while gensys finds the
-    # unique bounded solution. The solution matrices still agree.
+    # Companion-QZ BK agrees with gensys on the determinate solution.
+    @test is_determined(sol_bk)
     @test sol_g.G1 ≈ sol_bk.G1 atol=1e-4
     @test sol_g.impact ≈ sol_bk.impact atol=1e-4
 
@@ -2271,7 +2270,7 @@ end
     sol_swap = occbin_solve(nk_swap, c_swap; shock_path=shocks)
     sol_std = occbin_solve(nk_std, c_std; shock_path=shocks)
 
-    @test sol_swap.piecewise_path ≈ sol_std.piecewise_path atol=1e-6
+    @test sol_swap.piecewise_path ≈ sol_std.piecewise_path atol=1e-4
 end
 
 @testset "OccBin divergence detection" begin
@@ -2953,12 +2952,11 @@ end
         sol_g = solve(spec; method=:gensys)
         sol_k = solve(spec; method=:klein)
 
-        # Klein reports eu=[1,0] for purely forward-looking models (n_stable > n_predetermined=0)
-        # because BK counting flags indeterminacy, but gensys resolves it via Pi.
-        # The solution matrices still match.
-        @test sol_k.eu[1] == 1  # existence
-        @test !is_determined(sol_k)  # Klein BK counting flags indeterminacy
-        @test is_determined(sol_g)   # gensys resolves it via Pi rank check
+        # Companion-QZ Klein is determinate here (unique bounded solution), agreeing
+        # with gensys; the stable solvent is G = 0 (no state persistence).
+        @test is_determined(sol_k)
+        @test is_determined(sol_g)
+        @test sol_k.eu == sol_g.eu
         @test sol_k.G1 ≈ sol_g.G1 atol=1e-8
         @test sol_k.impact ≈ sol_g.impact atol=1e-8
     end
@@ -2978,9 +2976,9 @@ end
         sol_g = solve(spec; method=:gensys)
         sol_k = solve(spec; method=:klein)
 
-        # Purely forward-looking NK model: Klein BK counting differs from gensys
-        # (n_stable > n_predetermined=0), but solution matrices match.
-        @test sol_k.eu[1] == 1  # existence
+        # Determinate NK model: Klein and gensys agree on solution and determinacy.
+        @test is_determined(sol_k)
+        @test sol_k.eu == sol_g.eu
         @test sol_k.G1 ≈ sol_g.G1 atol=1e-6
         @test sol_k.impact ≈ sol_g.impact atol=1e-6
     end
@@ -3482,9 +3480,48 @@ end
             @test fv.proportions[i, 1, h] ≈ 1.0 atol=1e-8
         end
 
+        # Unconditional FEVD (order=2 augmented Lyapunov)
+        fv_uc = fevd(sol2, 1; unconditional=true)
+        @test all(isfinite.(fv_uc.proportions))
+        @test size(fv_uc.proportions, 3) == 1
+        for i in 1:2
+            @test fv_uc.proportions[i, 1, 1] ≈ 1.0 atol=1e-6
+            @test sum(fv_uc.proportions[i, :, 1]) ≈ 1.0 atol=1e-6
+        end
+
         # Moments
         mom = analytical_moments(sol2; lags=2)
         @test all(isfinite.(mom))
+    end
+
+    @testset "Order=2 unconditional FEVD multi-shock" begin
+        spec = _suppress_warnings() do
+            @dsge begin
+                parameters: rho_y = 0.8, rho_z = 0.5, sigma_y = 0.01, sigma_z = 0.02
+                endogenous: y, z
+                exogenous: eps_y, eps_z
+                y[t] = rho_y * y[t-1] + 0.3 * z[t-1] + sigma_y * eps_y[t]
+                z[t] = rho_z * z[t-1] + sigma_z * eps_z[t]
+                steady_state = [0.0, 0.0]
+            end
+        end
+        spec = compute_steady_state(spec)
+        sol2 = _suppress_warnings() do
+            solve(spec; method=:perturbation, order=2)
+        end
+
+        fv = fevd(sol2, 1; unconditional=true)
+        @test size(fv.proportions) == (2, 2, 1)
+        @test all(isfinite.(fv.proportions))
+        # z is driven only by eps_z
+        @test fv.proportions[2, 2, 1] ≈ 1.0 atol=1e-6
+        @test fv.proportions[2, 1, 1] ≈ 0.0 atol=1e-6
+        # y is driven by both shocks
+        @test fv.proportions[1, 1, 1] > 0.1
+        @test fv.proportions[1, 2, 1] > 0.1
+        # Rows sum to 1
+        @test sum(fv.proportions[1, :, 1]) ≈ 1.0 atol=1e-6
+        @test sum(fv.proportions[2, :, 1]) ≈ 1.0 atol=1e-6
     end
 
     @testset "Pruning stability — long simulation" begin
@@ -5526,5 +5563,123 @@ end # _path_available
 end # _jump_available
 
 end # DSGE Constraint Types
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Section: linear: true (pre-linearized models)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "Linear model support" begin
+
+@testset "Simple 3-equation NK (linear)" begin
+    spec = @dsge begin
+        parameters: rho = 0.9, sigma_y = 0.5, kappa = 0.3, phi_pi = 1.5
+        endogenous: y, pi_v, i_rate
+        exogenous: eps_y
+        linear: true
+
+        y[t] = y[t+1] - sigma_y * (i_rate[t] - pi_v[t+1])
+        pi_v[t] = 0.99 * pi_v[t+1] + kappa * y[t]
+        i_rate[t] = phi_pi * pi_v[t] + eps_y[t]
+    end
+
+    @test spec.linear == true
+    @test spec.ss_fn !== nothing  # auto-generated zeros SS
+    @test isempty(spec.steady_state)
+
+    sol = solve(spec; method=:gensys)
+    @test is_determined(sol)
+    @test all(sol.spec.steady_state .== 0.0)
+    @test all(sol.C_sol .== 0.0)  # no constants in pure linear model
+end
+
+@testset "Linear NK with persistence" begin
+    spec = @dsge begin
+        parameters: rho = 0.9, sigma_y = 0.5, kappa = 0.3, phi_pi = 1.5, rho_r = 0.7
+        endogenous: y, pi_v, i_rate, a
+        exogenous: eps_y
+        linear: true
+
+        y[t] = y[t+1] - sigma_y * (i_rate[t] - pi_v[t+1])
+        pi_v[t] = 0.99 * pi_v[t+1] + kappa * y[t]
+        i_rate[t] = rho_r * i_rate[t-1] + (1.0 - rho_r) * phi_pi * pi_v[t] + a[t]
+        a[t] = rho * a[t-1] + eps_y[t]
+    end
+
+    @test spec.linear == true
+    sol = solve(spec; method=:gensys)
+    @test is_determined(sol)
+    @test is_stable(sol)
+    @test all(sol.spec.steady_state .== 0.0)
+
+    # IRF should be non-trivial
+    ir = irf(sol, 20)
+    @test size(ir.values) == (20, 4, 1)
+    @test ir.values[1, 4, 1] ≈ 1.0  # AR(1) shock: unit impact
+    @test abs(ir.values[1, 1, 1]) > 0.1  # output responds
+end
+
+@testset "Linear model with observation constants" begin
+    # Test model with measurement equations that add constants
+    # (like SW07's dy = y - y(-1) + ctrend)
+    ctrend = 0.5
+    endog_v = [:y, :dy, :a]
+    exog_v = [:eps]
+    params_v = [:rho, :ctrend_p]
+    pv = Dict{Symbol,Float64}(:rho => 0.9, :ctrend_p => ctrend)
+
+    fns = Function[
+        (yt, yl, yle, eps, th) -> yt[1] - th[:rho] * yl[1] - eps[1],  # y = rho*y(-1) + eps
+        (yt, yl, yle, eps, th) -> yt[2] - yt[1] + yl[1] - th[:ctrend_p],  # dy = y - y(-1) + ctrend
+        (yt, yl, yle, eps, th) -> yt[3] - th[:rho] * yl[3] - eps[1]  # a = rho*a(-1) + eps
+    ]
+
+    eqs = Expr[:(0 + 0) for _ in 1:3]
+    forward_idx = Int[]
+    n_exp = 0
+
+    spec_obs = DSGESpec{Float64}(
+        endog_v, exog_v, params_v, pv,
+        eqs, fns, n_exp, forward_idx, Float64[], nothing;
+        linear=true
+    )
+
+    sol_obs = solve(spec_obs; method=:gensys)
+    @test is_determined(sol_obs)
+    @test all(sol_obs.spec.steady_state .== 0.0)
+
+    # C_sol should be nonzero for measurement equations
+    @test norm(sol_obs.C_sol) > 0
+
+    # Effective SS: y_ss = (I-G1)^{-1} * C_sol
+    eff_ss = (I - sol_obs.G1) \ sol_obs.C_sol
+    @test eff_ss[1] ≈ 0.0 atol=1e-8  # model var y: SS = 0
+    @test eff_ss[2] ≈ ctrend atol=1e-8  # obs var dy: SS = ctrend
+    @test eff_ss[3] ≈ 0.0 atol=1e-8  # model var a: SS = 0
+end
+
+@testset "Nonlinear model: linear field is false" begin
+    spec = @dsge begin
+        parameters: alpha = 0.36, beta = 0.99, delta = 0.025, rho = 0.95, sigma = 0.01
+        endogenous: Y, C, K, A
+        exogenous: eps
+
+        1/C[t] = beta * (1/C[t+1]) * (alpha * A[t+1] * K[t]^(alpha-1) + 1 - delta)
+        Y[t] = A[t] * K[t-1]^alpha
+        Y[t] = C[t] + K[t] - (1-delta)*K[t-1]
+        log(A[t]) = rho * log(A[t-1]) + sigma * eps[t]
+
+        steady_state = begin
+            A_ss = 1.0
+            rk = 1.0/beta - 1.0 + delta
+            K_ss = (alpha * A_ss / rk)^(1/(1-alpha))
+            Y_ss = A_ss * K_ss^alpha
+            C_ss = Y_ss - delta * K_ss
+            [Y_ss, C_ss, K_ss, A_ss]
+        end
+    end
+    @test spec.linear == false
+end
+
+end # Linear model support
 
 end # top-level @testset

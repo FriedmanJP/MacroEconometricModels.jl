@@ -69,7 +69,8 @@ report(g)
 **Recipe 6: TimeSeriesData dispatch**
 
 ```@example vecm
-ts = qd[:, ["GDPC1", "PCECC96", "GPDIC1"]]
+# Construct TimeSeriesData from cleaned log-level data
+ts = TimeSeriesData(Y; varnames=["GDPC1", "PCECC96", "GPDIC1"])
 
 # Pass TimeSeriesData directly --- variable names propagate
 vecm = estimate_vecm(ts, 2; rank=1)

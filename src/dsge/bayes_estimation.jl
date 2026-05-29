@@ -339,7 +339,8 @@ function _build_solution_at_theta(spec::DSGESpec{T}, param_names::Vector{Symbol}
         original_equations=spec.original_equations,
         augmented=spec.augmented,
         max_lag=spec.max_lag,
-        max_lead=spec.max_lead
+        max_lead=spec.max_lead,
+        linear=spec.linear
     )
 
     new_spec = compute_steady_state(new_spec)

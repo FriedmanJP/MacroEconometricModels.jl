@@ -9,6 +9,10 @@ Sims (2002) gensys solver for linear rational expectations models.
 
 Solves: Gamma0 * y_t = Gamma1 * y_{t-1} + C + Psi * eps_t + Pi * eta_t
 Returns: y_t = G1 * y_{t-1} + impact * eps_t + C_sol
+
+Solution approach in `solve(:gensys)`: undetermined coefficients (primary G1/impact,
+robust to many static variables), with the companion-QZ core (`_solve_qz_quadratic`)
+supplying determinacy (`eu`) and a fallback G1/impact when UC does not converge.
 """
 
 """
@@ -26,102 +30,140 @@ function gensys(Gamma0::AbstractMatrix{T}, Gamma1::AbstractMatrix{T},
     n = size(Gamma0, 1)
     eu = [0, 0]
 
-    # QZ (generalized Schur) decomposition
+    # QZ (generalized Schur) decomposition for eigenvalue analysis
     F = schur(complex(Gamma0), complex(Gamma1))
-    S = F.S
-    TT = F.T
+    S = F.S; TT = F.T
 
-    # Compute generalized eigenvalues |T_ii/S_ii|
-    # Select which to put first (stable = |eigenvalue| < div)
     gev_mag = zeros(n)
     for i in 1:n
-        if abs(S[i,i]) > eps(T)
-            gev_mag[i] = abs(TT[i,i] / S[i,i])
-        else
-            gev_mag[i] = Inf
-        end
+        gev_mag[i] = abs(S[i,i]) > eps(T) ? abs(TT[i,i] / S[i,i]) : Inf
     end
 
-    # Reorder: stable eigenvalues first using ordschur
     stable_select = BitVector(gev_mag .< div)
     F_ordered = ordschur(F, stable_select)
-    S = F_ordered.S
-    TT = F_ordered.T
-    Q = F_ordered.Q  # Q such that Q*Gamma0*Z = S, Q*Gamma1*Z = T
-    Z = F_ordered.Z
-
-    # Recompute eigenvalues after reordering
+    S = F_ordered.S; TT = F_ordered.T
+    Q = F_ordered.Q; Z = F_ordered.Z
     nstab = count(stable_select)
     nunstab = n - nstab
 
     eigenvalues = Vector{ComplexF64}(undef, n)
     for i in 1:n
-        if abs(S[i,i]) > eps(T)
-            eigenvalues[i] = TT[i,i] / S[i,i]
-        else
-            eigenvalues[i] = complex(T(Inf))
-        end
+        eigenvalues[i] = abs(S[i,i]) > eps(T) ? TT[i,i] / S[i,i] : complex(T(Inf))
     end
 
-    # Partition: Q'*Gamma0*Z = S, Q'*Gamma1*Z = T  (schur convention: Q is unitary)
-    # After ordschur: rows 1:nstab are stable, (nstab+1):n are unstable
-    # Q is unitary so Q' = inv(Q)
-    # We need Q' (conjugate transpose) applied to vectors
-    Qp = Q'  # Q' = Q^H
+    Qp = Q'
 
-    # Existence check
-    if size(Pi, 2) > 0 && nunstab > 0
+    # Existence/uniqueness via QZ rank conditions
+    n_fwd = size(Pi, 2)
+    if n_fwd > 0 && nunstab > 0
         Q2Pi = Qp[nstab+1:n, :] * complex(Pi)
-        # SVD to check rank
+        Q2Psi = Qp[nstab+1:n, :] * complex(Psi)
         sv = svd(Q2Pi)
         rank_Q2Pi = count(s -> s > eps(T) * 1e6 * maximum(sv.S), sv.S)
 
-        if rank_Q2Pi >= nunstab
-            eu[1] = 1  # existence
+        # Check consistency: range(Q2*Psi) ⊆ range(Q2*Pi)
+        # Project Q2Psi onto null space of (Q2Pi)'
+        proj_null = Q2Psi - Q2Pi * pinv(Q2Pi) * Q2Psi
+        consistent = maximum(abs.(proj_null)) < T(1e-8)
+
+        if consistent || rank_Q2Pi >= nunstab
+            eu[1] = 1
         end
 
-        # Uniqueness
-        n_fwd = size(Pi, 2)
-        if nunstab == n_fwd
+        # Count finite unstable eigenvalues for BK condition
+        n_finite_unstable = count(i -> !isinf(abs(eigenvalues[i])) && abs(eigenvalues[i]) >= div,
+                                   1:n)
+        if n_finite_unstable == n_fwd || (consistent && n_finite_unstable <= n_fwd)
             eu[2] = 1
-        elseif nunstab < n_fwd
-            eu[2] = 1  # over-determined forward block
         end
     else
-        # No forward-looking variables or no unstable eigenvalues
         if nunstab == 0
             eu = [1, 1]
         end
     end
 
-    # Build solution matrices
+    # Build solution via QZ stable block
     if nstab > 0
         Z1 = Z[:, 1:nstab]
         S11 = S[1:nstab, 1:nstab]
         T11 = TT[1:nstab, 1:nstab]
+        Q1 = Qp[1:nstab, :]
 
-        # G1 = Z1 * S11^{-1} * T11 * Z1'
         G1_c = Z1 * (S11 \ T11) * Z1'
 
-        # impact = Z1 * S11^{-1} * Q1' * Psi
-        Q1 = Qp[1:nstab, :]
-        impact_c = Z1 * (S11 \ (Q1 * complex(Psi)))
+        if nunstab > 0 && n_fwd > 0
+            Q2 = Qp[nstab+1:n, :]
+            Q2Pi = Q2 * complex(Pi)
+            Q1Pi = Q1 * complex(Pi)
+            Q2Pi_pinv = pinv(Q2Pi)
+            Q1_adj = Q1 - Q1Pi * Q2Pi_pinv * Q2
+            impact_c = Z1 * (S11 \ (Q1_adj * complex(Psi)))
+        else
+            impact_c = Z1 * (S11 \ (Q1 * complex(Psi)))
+        end
 
-        G1 = real(Matrix{T}(G1_c))
-        impact = real(Matrix{T}(impact_c))
+        G1 = Matrix{T}(real(G1_c))
+        impact = Matrix{T}(real(impact_c))
     else
         G1 = zeros(T, n, n)
         impact = zeros(T, n, size(Psi, 2))
     end
 
-    # Constants
-    C_sol = if norm(C) > eps(T)
-        real(Vector{T}((I - complex(G1)) \ complex(C)))
+    # Compute solution constant: y_t = G1*y_{t-1} + impact*eps + C_sol
+    # At SS: y_ss = (Gamma0-Gamma1)^{-1}*C, and C_sol = (I-G1)*y_ss
+    if norm(C) > eps(T)
+        y_bar = real(Vector{T}((complex(Gamma0) - complex(Gamma1)) \ complex(C)))
+        C_sol = (I - G1) * y_bar
     else
-        zeros(T, n)
+        C_sol = zeros(T, n)
     end
 
     (G1=G1, impact=impact, C_sol=C_sol, eu=eu, eigenvalues=eigenvalues)
+end
+
+"""
+    _solve_undetermined_coefficients(spec::DSGESpec{T}) -> (G1, impact, eigenvalues)
+
+Solve the first-order DSGE system via iterative undetermined coefficients.
+
+From the linearized system: f₀·ŷ_t + f₁·ŷ_{t-1} + f_lead·E_t[ŷ_{t+1}] + f_ε·ε_t = 0
+
+Guessing ŷ_t = G1·ŷ_{t-1} + M·ε_t and matching coefficients:
+- G1 satisfies: (f₀ + f_lead·G1)·G1 + f₁ = 0 (quadratic matrix equation)
+- M satisfies: (f₀ + f_lead·G1)·M + f_ε = 0
+
+The iteration G1_{k+1} = -(f₀ + f_lead·G1_k)⁻¹·f₁ converges to the unique stable
+solution. This method is robust to models with many static variables.
+"""
+function _solve_undetermined_coefficients(spec::DSGESpec{T};
+        maxiter::Int=10000, tol::Real=1e-13) where {T<:AbstractFloat}
+    y_ss = spec.steady_state
+    f_0 = _dsge_jacobian(spec, y_ss, :current)
+    f_1 = _dsge_jacobian(spec, y_ss, :lag)
+    f_lead = _dsge_jacobian(spec, y_ss, :lead)
+    f_eps = _dsge_jacobian_shocks(spec, y_ss)
+    n = spec.n_endog
+
+    # Iterative solution: G1_{k+1} = -(f_0 + f_lead * G1_k)^{-1} * f_1
+    G1 = zeros(T, n, n)
+    converged = false
+    for iter in 1:maxiter
+        A = f_0 + f_lead * G1
+        G1_new = -(A \ f_1)
+        diff = maximum(abs.(G1_new - G1))
+        G1 = G1_new
+        if diff < tol
+            converged = true
+            break
+        end
+    end
+
+    # Impact: M = -(f_0 + f_lead * G1)^{-1} * f_eps
+    A = f_0 + f_lead * G1
+    impact = -(A \ f_eps)
+
+    ev = eigvals(G1)
+    (G1=G1, impact=impact, eigenvalues=ev, converged=converged)
 end
 
 """
@@ -140,17 +182,54 @@ Solve a DSGE model.
 - `:perfect_foresight` -- deterministic Newton solver
 """
 function solve(spec::DSGESpec{T}; method::Symbol=:gensys, kwargs...) where {T<:AbstractFloat}
-    # Ensure steady state is computed
     if isempty(spec.steady_state)
-        spec = compute_steady_state(spec)
+        if spec.linear
+            # Linear models: steady state is all zeros (variables are deviations)
+            spec = _update_steady_state(spec, zeros(T, spec.n_endog))
+        else
+            spec = compute_steady_state(spec)
+        end
     end
 
     if method == :gensys
         ld = linearize(spec)
-        result = gensys(ld.Gamma0, ld.Gamma1, ld.C, ld.Psi, ld.Pi)
+
+        # Recover f_0,f_1,f_ε from the canonical form (as klein/bk do); f_lead is
+        # not stored losslessly in ld.Pi, so compute it directly.
+        f_0 = ld.Gamma0
+        f_1 = -ld.Gamma1
+        f_ε = -ld.Psi
+        f_lead = _dsge_jacobian(spec, spec.steady_state, :lead)
+
+        # Companion-QZ for correct determinacy + a robust solution fallback
+        qz_core = _solve_qz_quadratic(f_0, f_1, f_lead, f_ε)
+
+        # Primary solution via undetermined coefficients (robust to many static vars)
+        uc_ok = false
+        local uc_result
+        try
+            uc_result = _solve_undetermined_coefficients(spec)
+            resid = (f_0 + f_lead * uc_result.G1) * uc_result.G1 + f_1
+            uc_ok = maximum(abs.(resid)) < T(1e-8) && uc_result.converged
+        catch
+            # UC failed (SingularException or non-convergence) — fall through to qz_core
+        end
+
+        G1 = uc_ok ? uc_result.G1 : qz_core.G
+        impact = uc_ok ? uc_result.impact : qz_core.impact
+
+        # Constants: C_sol = (I - G1)·y_ss, y_ss = (Γ0 - Γ1)⁻¹·C
+        if norm(ld.C) > eps(T)
+            y_bar = real(Vector{T}((complex(ld.Gamma0) - complex(ld.Gamma1)) \ complex(ld.C)))
+            C_sol = (I - G1) * y_bar
+        else
+            C_sol = zeros(T, spec.n_endog)
+        end
+
+        eigenvalues = Vector{ComplexF64}(eigvals(G1))
         return DSGESolution{T}(
-            result.G1, result.impact, result.C_sol, result.eu,
-            :gensys, result.eigenvalues, spec, ld
+            G1, impact, Vector{T}(C_sol), qz_core.eu,
+            :gensys, eigenvalues, spec, ld
         )
     elseif method == :blanchard_kahn
         ld = linearize(spec)
@@ -159,12 +238,7 @@ function solve(spec::DSGESpec{T}; method::Symbol=:gensys, kwargs...) where {T<:A
         return perfect_foresight(spec; kwargs...)
     elseif method == :klein
         ld = linearize(spec)
-        n_pre = _count_predetermined(ld)
-        result = klein(ld.Gamma0, ld.Gamma1, ld.C, ld.Psi, n_pre)
-        return DSGESolution{T}(
-            result.G1, result.impact, result.C_sol, result.eu,
-            :klein, result.eigenvalues, spec, ld
-        )
+        return klein(ld, spec)
     elseif method == :perturbation
         order = get(kwargs, :order, 2)
         return perturbation_solver(spec; order=order)

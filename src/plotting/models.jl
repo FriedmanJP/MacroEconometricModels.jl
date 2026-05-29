@@ -791,3 +791,242 @@ function plot_result(m::StructuralDFM{T};
     plot_result(r; title=isempty(title) ? "Structural DFM IRFs" : title,
                 save_path=save_path, var=var, ncols=ncols)
 end
+
+# =============================================================================
+# HASteadyState — Heterogeneous Agent wealth distribution
+# =============================================================================
+
+"""
+    plot_result(ss::HASteadyState; view=:default, title="", save_path=nothing)
+
+Plot heterogeneous agent steady state results.
+
+# Views
+- `:default` / `:distribution` — Wealth distribution histogram (marginal over income)
+- `:lorenz` — Lorenz curve with 45-degree equality reference
+- `:policy` — Policy functions (consumption and savings by income state)
+
+# Example
+```julia
+p = plot_result(ss)                        # wealth distribution
+p = plot_result(ss; view=:lorenz)          # Lorenz curve
+p = plot_result(ss; view=:policy)          # policy functions
+```
+"""
+function plot_result(ss::HASteadyState{T};
+                     view::Symbol=:default,
+                     title::String="",
+                     save_path::Union{String,Nothing}=nothing) where {T}
+    if view == :default || view == :distribution
+        p = _plot_ha_distribution(ss; title=title)
+    elseif view == :lorenz
+        p = _plot_ha_lorenz(ss; title=title)
+    elseif view == :policy
+        p = _plot_ha_policy(ss; title=title)
+    else
+        throw(ArgumentError("Unknown view: $view. Use :distribution, :lorenz, or :policy"))
+    end
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+"""
+Wealth distribution histogram: marginal asset distribution (summed over income states)
+plotted as a bar chart with asset grid on x-axis and density on y-axis.
+"""
+function _plot_ha_distribution(ss::HASteadyState{T}; title::String="") where {T}
+    a_grid = ss.grid.grids[1]
+    n_a = ss.grid.n_points[1]
+    n_e = ss.grid.n_income
+
+    # Compute marginal asset distribution
+    d_mat = reshape(vec(ss.distribution), n_a, n_e)
+    d_asset = vec(sum(d_mat; dims=2))
+
+    # Normalize
+    total_mass = sum(d_asset)
+    if total_mass > zero(T)
+        d_asset ./= total_mass
+    end
+
+    # Subsample grid for bar chart readability (cap at 60 bars)
+    max_bars = min(n_a, 60)
+    step = max(1, div(n_a, max_bars))
+    idxs = 1:step:n_a
+    if last(idxs) != n_a
+        idxs = vcat(collect(idxs), n_a)
+    end
+
+    # For subsampled bars, aggregate density within each bin
+    rows = Vector{Pair{String,String}}[]
+    for (bi, idx) in enumerate(idxs)
+        # Use the grid value as label
+        label = _fmt_grid_label(a_grid[idx])
+        push!(rows, [
+            "x" => _json(label),
+            "dens" => _json(d_asset[idx])
+        ])
+    end
+    data_json = _json_array_of_objects(rows)
+
+    id = _next_plot_id("ha_dist")
+    s_json = _series_json(["Density"], [_PLOT_COLORS[1]]; keys=["dens"])
+    js = _render_bar_js(id, data_json, s_json;
+                        mode="grouped", xlabel="Assets", ylabel="Density")
+    p1 = _PanelSpec(id, "Marginal Wealth Distribution", js)
+
+    if isempty(title)
+        gini = _gini_coefficient(vec(ss.distribution), ss.grid)
+        title = "Wealth Distribution (Gini = $(_fmt(gini; digits=3)))"
+    end
+
+    _make_plot([p1]; title=title, ncols=1)
+end
+
+"""Format asset grid value as a compact label string."""
+function _fmt_grid_label(x::Real)
+    ax = abs(x)
+    if ax >= 1000
+        return string(round(Int, x))
+    elseif ax >= 1
+        return string(round(x; digits=1))
+    else
+        return string(round(x; digits=2))
+    end
+end
+
+"""
+Lorenz curve: cumulative population share vs cumulative wealth share,
+with the 45-degree equality line for reference.
+"""
+function _plot_ha_lorenz(ss::HASteadyState{T}; title::String="") where {T}
+    a_grid = ss.grid.grids[1]
+    n_a = ss.grid.n_points[1]
+    n_e = ss.grid.n_income
+
+    # Marginal asset distribution
+    d_mat = reshape(vec(ss.distribution), n_a, n_e)
+    d_asset = vec(sum(d_mat; dims=2))
+
+    # Sort by asset level
+    perm = sortperm(a_grid)
+    a_sorted = a_grid[perm]
+    d_sorted = d_asset[perm]
+
+    # Normalize
+    total_mass = sum(d_sorted)
+    if total_mass > zero(T)
+        d_sorted ./= total_mass
+    end
+
+    mean_wealth = dot(d_sorted, a_sorted)
+
+    # Compute Lorenz curve points
+    n_pts = length(a_sorted)
+    cum_pop = zeros(T, n_pts + 1)
+    cum_wealth = zeros(T, n_pts + 1)
+
+    for i in 1:n_pts
+        cum_pop[i + 1] = cum_pop[i] + d_sorted[i]
+        cum_wealth[i + 1] = cum_wealth[i] + d_sorted[i] * a_sorted[i]
+    end
+
+    # Normalize wealth share by total wealth
+    total_wealth = cum_wealth[end]
+    if total_wealth > zero(T)
+        cum_wealth ./= total_wealth
+    end
+
+    # Subsample for manageable plot size
+    max_pts = 100
+    step = max(1, div(n_pts + 1, max_pts))
+    idxs = 1:step:(n_pts + 1)
+    if last(idxs) != n_pts + 1
+        idxs = vcat(collect(idxs), n_pts + 1)
+    end
+
+    rows = Vector{Pair{String,String}}[]
+    for idx in idxs
+        push!(rows, [
+            "x" => _json(cum_pop[idx]),
+            "lorenz" => _json(cum_wealth[idx]),
+            "equality" => _json(cum_pop[idx])
+        ])
+    end
+    data_json = _json_array_of_objects(rows)
+
+    id = _next_plot_id("ha_lorenz")
+    s_json = "[{\"name\":\"Lorenz Curve\",\"color\":\"$(_PLOT_COLORS[1])\",\"key\":\"lorenz\",\"dash\":\"\"}," *
+             "{\"name\":\"Perfect Equality\",\"color\":\"#999999\",\"key\":\"equality\",\"dash\":\"6,3\"}]"
+
+    js = _render_line_js(id, data_json, s_json;
+                         xlabel="Cumulative Population Share",
+                         ylabel="Cumulative Wealth Share")
+    p1 = _PanelSpec(id, "Lorenz Curve", js)
+
+    if isempty(title)
+        gini = _gini_coefficient(vec(ss.distribution), ss.grid)
+        title = "Lorenz Curve (Gini = $(_fmt(gini; digits=3)))"
+    end
+
+    _make_plot([p1]; title=title, ncols=1)
+end
+
+"""
+Policy function plot: consumption and savings as functions of assets,
+one line per income state. Two panels side by side.
+"""
+function _plot_ha_policy(ss::HASteadyState{T}; title::String="") where {T}
+    a_grid = ss.grid.grids[1]
+    n_a = ss.grid.n_points[1]
+    n_e = ss.grid.n_income
+    panels = _PanelSpec[]
+
+    # Subsample grid points for cleaner plots
+    max_pts = 80
+    step = max(1, div(n_a, max_pts))
+    idxs = 1:step:n_a
+    if last(idxs) != n_a
+        idxs = vcat(collect(idxs), n_a)
+    end
+
+    income_names = ["e$j" for j in 1:n_e]
+    n_plot_e = min(n_e, length(_PLOT_COLORS))
+
+    for (pol_key, pol_label, pol_ylabel) in [
+        (:consumption, "Consumption Policy", "c(a, e)"),
+        (:savings, "Savings Policy", "a'(a, e)")
+    ]
+        haskey(ss.policies, pol_key) || continue
+        pol = ss.policies[pol_key]
+
+        id = _next_plot_id("ha_pol")
+        rows = Vector{Pair{String,String}}[]
+        for idx in idxs
+            row = Pair{String,String}["x" => _json(a_grid[idx])]
+            for j in 1:n_plot_e
+                push!(row, "e$j" => _json(pol[idx, j]))
+            end
+            push!(rows, row)
+        end
+        data_json = _json_array_of_objects(rows)
+
+        s_json = _series_json(income_names[1:n_plot_e],
+                              _PLOT_COLORS[1:n_plot_e];
+                              keys=["e$j" for j in 1:n_plot_e])
+        js = _render_line_js(id, data_json, s_json;
+                             xlabel="Assets", ylabel=pol_ylabel)
+        push!(panels, _PanelSpec(id, pol_label, js))
+    end
+
+    if isempty(panels)
+        throw(ArgumentError("No :consumption or :savings policy found in HASteadyState"))
+    end
+
+    if isempty(title)
+        r_val = get(ss.prices, :r, NaN)
+        title = "Policy Functions (r = $(_fmt(r_val; digits=4)))"
+    end
+
+    _make_plot(panels; title=title, ncols=min(length(panels), 2))
+end

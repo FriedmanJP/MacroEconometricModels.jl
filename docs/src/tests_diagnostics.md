@@ -10,7 +10,7 @@ Post-estimation specification testing validates the assumptions underlying stati
 - **Panel VAR Diagnostics**: Hansen J-test, Andrews-Lu MMSC, and lag selection for GMM-estimated Panel VARs
 
 ```@setup test_diag
-using MacroEconometricModels, Random
+using MacroEconometricModels, Random, DataFrames
 Random.seed!(42)
 ```
 
@@ -26,7 +26,7 @@ m = estimate_var(Y, 2)
 
 # Check VAR stability
 stat = is_stationary(m)
-report(stat)
+show(stdout, stat)
 
 # All-pairs Granger causality
 results = granger_test_all(m)
@@ -45,7 +45,8 @@ report(suite)
 ```@example test_diag
 # Test for ARCH effects in a return series
 result = arch_lm_test(randn(500), 5)
-report(result)
+println("ARCH-LM statistic: ", round(result.statistic, digits=4),
+        ", p-value: ", round(result.pvalue, digits=4), ", q: ", result.q)
 ```
 
 **Recipe 4: LR test for lag selection**
@@ -54,7 +55,7 @@ report(result)
 m1 = estimate_var(Y, 1)
 m2 = estimate_var(Y, 2)
 result = lr_test(m1, m2)
-report(result)
+show(stdout, result)
 ```
 
 ---
@@ -84,7 +85,7 @@ The stability condition requires ``|\lambda_i(F)| < 1`` for all eigenvalues ``\l
 
 ```@example test_diag
 result = is_stationary(m)
-report(result)
+show(stdout, result)
 
 # Access fields directly
 result.is_stationary    # true if all eigenvalues inside unit circle
@@ -132,11 +133,11 @@ For the block test with ``m`` causing variables, ``df = p \times m``.
 ```@example test_diag
 # Pairwise test: does FFR (var 3) Granger-cause INDPRO (var 1)?
 g = granger_test(m, 3, 1)
-report(g)
+show(stdout, g)
 
 # Block test: do CPI and FFR jointly Granger-cause INDPRO?
 g_block = granger_test(m, [2, 3], 1)
-report(g_block)
+show(stdout, g_block)
 
 # All-pairs causality matrix (n x n, diagonal is nothing)
 results = granger_test_all(m)
@@ -312,12 +313,12 @@ The function accepts either a raw data vector (centering and squaring internally
 # Test raw series for ARCH effects
 y = randn(500)
 result = arch_lm_test(y, 5)
-report(result)
+println("ARCH-LM: statistic=$(round(result.statistic, digits=4)), p=$(round(result.pvalue, digits=4))")
 
 # Test GARCH model residuals for remaining ARCH effects
 g = estimate_garch(y)
 result2 = arch_lm_test(g, 10)
-report(result2)
+println("ARCH-LM (residuals): statistic=$(round(result2.statistic, digits=4)), p=$(round(result2.pvalue, digits=4))")
 ```
 
 ### Ljung-Box on Squared Residuals
@@ -337,12 +338,12 @@ where:
 # Test for serial correlation in squared residuals
 z = randn(500)
 result = ljung_box_squared(z, 10)
-report(result)
+println("Ljung-Box Q²: statistic=$(round(result.statistic, digits=4)), p=$(round(result.pvalue, digits=4))")
 
 # Test GARCH standardized residuals
 g_lb = estimate_garch(z)
 result2 = ljung_box_squared(g_lb, 20)
-report(result2)
+println("Ljung-Box Q² (residuals): statistic=$(round(result2.statistic, digits=4)), p=$(round(result2.pvalue, digits=4))")
 ```
 
 !!! note "Technical Note"
@@ -394,20 +395,20 @@ The `lr_test` function works for any model pair implementing `loglikelihood`, `d
 y_mc = cumsum(randn(200))
 ar2 = estimate_ar(diff(y_mc), 2; method=:mle)
 ar4 = estimate_ar(diff(y_mc), 4; method=:mle)
-report(lr_test(ar2, ar4))
-report(lm_test(ar2, ar4))
+show(stdout, lr_test(ar2, ar4))
+show(stdout, lm_test(ar2, ar4))
 
 # --- VAR lag order comparison ---
 m1_mc = estimate_var(Y, 1)
 m2_mc = estimate_var(Y, 2)
 lr_result = lr_test(m1_mc, m2_mc)
-report(lr_result)
+show(stdout, lr_result)
 
 # --- GARCH order comparison ---
 ret = randn(500)
-g11 = estimate_garch(ret; p=1, q=1)
-g21 = estimate_garch(ret; p=2, q=1)
-report(lr_test(g11, g21))
+g11 = estimate_garch(ret, 1, 1)
+g21 = estimate_garch(ret, 2, 1)
+show(stdout, lr_test(g11, g21))
 ```
 
 Both functions accept the models in any order --- they automatically determine which is restricted (fewer parameters) and which is unrestricted (more parameters).
@@ -492,7 +493,9 @@ where ``q - k`` is the number of overidentifying restrictions and ``n`` is the t
 
 ```@example test_diag
 mmsc = pvar_mmsc(m_pd)
-report(mmsc)
+println("MMSC-BIC: ", round(mmsc.bic, digits=2),
+        ", MMSC-AIC: ", round(mmsc.aic, digits=2),
+        ", MMSC-HQIC: ", round(mmsc.hqic, digits=2))
 ```
 
 ### Lag Selection
@@ -501,7 +504,9 @@ The `pvar_lag_selection` function estimates Panel VARs for lag orders ``p = 1, \
 
 ```@example test_diag
 sel = pvar_lag_selection(pd, 4)
-report(sel)
+println("Optimal lag (BIC): ", sel.best_bic,
+        ", (AIC): ", sel.best_aic,
+        ", (HQIC): ", sel.best_hqic)
 ```
 
 ---
@@ -513,12 +518,12 @@ A full post-estimation diagnostic workflow for a VAR model estimated on FRED-MD 
 ```@example test_diag
 # --- Step 1: Check stability ---
 stat = is_stationary(m)
-report(stat)
+show(stdout, stat)
 
 # --- Step 2: Granger causality ---
 # Does the federal funds rate Granger-cause industrial production?
 g = granger_test(m, 3, 1)
-report(g)
+show(stdout, g)
 
 # All-pairs causality matrix
 results = granger_test_all(m)
@@ -537,11 +542,11 @@ m3_ce = estimate_var(Y, 3)
 
 # Test VAR(1) vs VAR(2)
 lr12 = lr_test(m1_ce, m)
-report(lr12)
+show(stdout, lr12)
 
 # Test VAR(2) vs VAR(3)
 lr23 = lr_test(m, m3_ce)
-report(lr23)
+show(stdout, lr23)
 ```
 
 ---

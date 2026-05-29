@@ -200,6 +200,7 @@ include("dsge/display.jl")
 include("dsge/parser.jl")
 include("dsge/steady_state.jl")
 include("dsge/linearize.jl")
+include("dsge/qz_solve.jl")
 include("dsge/gensys.jl")
 include("dsge/blanchard_kahn.jl")
 include("dsge/klein.jl")
@@ -360,6 +361,21 @@ include("dsge/bayes_estimation.jl")
 include("dsge/smoother.jl")
 include("dsge/hd.jl")
 
+# Heterogeneous Agent DSGE (after dsge/types.jl and dsge/hd.jl)
+include("dsge/heterogeneous/types.jl")
+include("dsge/heterogeneous/egm.jl")
+include("dsge/heterogeneous/individual_vfi.jl")
+include("dsge/heterogeneous/distribution.jl")
+include("dsge/heterogeneous/steady_state.jl")
+include("dsge/heterogeneous/krusell_smith.jl")
+include("dsge/heterogeneous/ssj.jl")
+include("dsge/heterogeneous/reiter.jl")
+include("dsge/heterogeneous/examples.jl")
+include("dsge/heterogeneous/parser.jl")
+include("dsge/heterogeneous/display.jl")
+include("dsge/heterogeneous/analysis.jl")
+include("dsge/heterogeneous/estimation.jl")
+
 # Display (after all types)
 include("summary.jl")
 
@@ -464,6 +480,13 @@ export variable_bound, nonlinear_constraint
 # DSGE Smoother and HD
 export KalmanSmootherResult
 export dsge_smoother, dsge_particle_smoother
+
+# Heterogeneous Agent DSGE types
+export HADSGESpec, HAGrid, IncomeProcess, IndividualProblem
+export HASteadyState, HADSGESolution, KrusellSmithSolution
+export rouwenhorst, tauchen
+export load_ha_example
+export distribution_irf, inequality_irf, simulate_panel
 
 # Local Projection types
 export AbstractLPModel, AbstractLPImpulseResponse, AbstractCovarianceEstimator

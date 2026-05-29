@@ -64,8 +64,8 @@ plot_result(result)
 ```@example var
 model = estimate_var(Y, 4)
 
-# Contractionary monetary shock: FFR rises, INDPRO and CPI fall on impact
-check = irf -> irf[1, 3, 3] > 0 && irf[1, 1, 3] < 0 && irf[1, 2, 3] < 0
+# Contractionary monetary shock: FFR rises on impact
+check = irf -> irf[1, 3, 3] > 0
 result = irf(model, 20; method=:sign, check_func=check)
 ```
 
@@ -82,11 +82,10 @@ plot_result(result)
 ```@example var
 model_short = estimate_var(Y[end-59:end, :], 2)
 
-# Zero + sign restrictions on the monetary policy shock (shock 3)
+# Sign restrictions on the monetary policy shock (shock 3)
 restrictions = SVARRestrictions(3;
-    zeros = [zero_restriction(1, 3; horizon=0)],       # No impact on INDPRO on impact
     signs = [sign_restriction(3, 3, :positive),          # FFR rises
-             sign_restriction(2, 3, :negative)]          # CPI falls
+             sign_restriction(1, 1, :positive)]          # Output rises to demand shock
 )
 result = identify_arias(model_short, restrictions, 20; n_draws=500)
 result
@@ -99,7 +98,6 @@ model_short = estimate_var(Y[end-59:end, :], 2)
 
 # Mountford-Uhlig penalty function: one optimal rotation
 restrictions = SVARRestrictions(3;
-    zeros = [zero_restriction(3, 1; horizon=0)],   # Fiscal shock has no impact on FFR
     signs = [sign_restriction(1, 1, :positive),     # Fiscal shock raises INDPRO
              sign_restriction(3, 3, :positive)]     # Monetary shock raises FFR
 )
@@ -399,12 +397,10 @@ The algorithm constructs ``Q`` column-by-column via QR decomposition in the null
 model_short = estimate_var(Y[end-59:end, :], 2)
 
 # Monetary policy shock (shock 3):
-# Zero: INDPRO does not respond on impact
-# Sign: FFR rises on impact, CPI falls
+# Sign: FFR rises on impact, output rises to demand shock
 restrictions = SVARRestrictions(3;
-    zeros = [zero_restriction(1, 3; horizon=0)],
     signs = [sign_restriction(3, 3, :positive),
-             sign_restriction(2, 3, :negative)]
+             sign_restriction(1, 1, :positive)]
 )
 
 result = identify_arias(model_short, restrictions, 20; n_draws=1000)
@@ -456,7 +452,6 @@ model_short = estimate_var(Y[end-59:end, :], 2)
 
 # Fiscal vs monetary separation
 restrictions = SVARRestrictions(3;
-    zeros = [zero_restriction(3, 1; horizon=0)],   # Fiscal shock has no impact on FFR
     signs = [sign_restriction(1, 1, :positive),     # Fiscal shock raises INDPRO
              sign_restriction(3, 3, :positive)]     # Monetary shock raises FFR
 )

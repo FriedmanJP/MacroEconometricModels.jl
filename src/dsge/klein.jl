@@ -10,8 +10,10 @@ Klein (2000) generalized Schur decomposition solver for linear RE models.
 Solves: Gamma0 * y_t = Gamma1 * y_{t-1} + C + Psi * eps_t + Pi * eta_t
 Returns: y_t = G1 * y_{t-1} + impact * eps_t + C_sol
 
-Uses the QZ decomposition of the pencil (Gamma0, Gamma1) with eigenvalue
-reordering and the Blanchard-Kahn counting condition on predetermined variables.
+Rewired to use the companion-QZ quadratic matrix equation via `_solve_qz_quadratic`,
+which counts the roots of the 2n companion pencil (correct for forward-looking models).
+The `_count_predetermined` and `_state_control_indices` helpers below remain available
+for other solvers.
 
 Reference:
 Klein, Paul. 2000. "Using the Generalized Schur Form to Solve a Multivariate
@@ -53,116 +55,46 @@ function _state_control_indices(ld::LinearDSGE{T}) where {T}
 end
 
 """
-    klein(Gamma0, Gamma1, C, Psi, n_predetermined; div=1.0) → NamedTuple
+    klein(ld::LinearDSGE{T}, spec::DSGESpec{T}; div=1.0+1e-8) → DSGESolution{T}
 
-Solve the linear RE system via the Klein (2000) QZ decomposition method.
+Solve the linear RE model represented by `ld`/`spec` via the companion-QZ quadratic
+matrix equation, returning a `DSGESolution{T}`.
 
-The system is in Sims canonical form:
-`Gamma0 * y_t = Gamma1 * y_{t-1} + C + Psi * eps_t + Pi * eta_t`
-
-Klein computes the generalized Schur decomposition of the pencil `(Gamma0, Gamma1)`,
-reorders eigenvalues so stable roots (|λ| < div) come first, and checks the
-Blanchard-Kahn condition: n_stable == n_predetermined.
+The system `Gamma0·y_t = Gamma1·y_{t-1} + C + Psi·ε_t + Pi·η_t` is recast as the
+quadratic equation `f_lead·G² + f_0·G + f_1 = 0` and solved via `_solve_qz_quadratic`,
+which sizes determinacy by the 2n companion pencil's stable-root count (correct for
+forward-looking, backward-looking, and mixed models).
 
 # Arguments
-- `Gamma0` — n × n coefficient on y_t
-- `Gamma1` — n × n coefficient on y_{t-1}
-- `C` — n × 1 constant vector
-- `Psi` — n × n_shocks shock loading matrix
-- `n_predetermined` — number of predetermined (state) variables
+- `ld`   — `LinearDSGE{T}` from `linearize(spec)`
+- `spec` — `DSGESpec{T}` (must have `steady_state` set)
 
 # Keywords
-- `div::Real=1.0` — dividing line for stable vs unstable eigenvalues
+- `div::Real=1.0+1e-8` — stable/unstable boundary for eigenvalue sorting
 
 # Returns
-Named tuple `(G1, impact, C_sol, eu, eigenvalues)` where:
-- `G1` — n × n state transition matrix
-- `impact` — n × n_shocks impact matrix
-- `C_sol` — n × 1 constants
-- `eu` — `[existence, uniqueness]`: 1=yes, 0=no
-- `eigenvalues` — generalized eigenvalues from QZ decomposition
+`DSGESolution{T}` with `method=:klein`; `eu=[1,1]` signals determinacy.
 """
-function klein(Gamma0::AbstractMatrix{T}, Gamma1::AbstractMatrix{T},
-               C::AbstractVector{T}, Psi::AbstractMatrix{T},
-               n_predetermined::Int;
-               div::Real=1.0) where {T<:AbstractFloat}
-    n = size(Gamma0, 1)
-    eu = [0, 0]
+function klein(ld::LinearDSGE{T}, spec::DSGESpec{T}; div::Real=1.0 + 1e-8) where {T<:AbstractFloat}
+    n = spec.n_endog
 
-    # QZ decomposition of pencil (Gamma0, Gamma1)
-    # Q * Gamma0 * Z = S, Q * Gamma1 * Z = T (upper triangular)
-    # Transition eigenvalues: λ_i = T_ii / S_ii (eigenvalues of Gamma0^{-1} * Gamma1)
-    F = schur(complex(Gamma0), complex(Gamma1))
+    f_0 = ld.Gamma0
+    f_1 = -ld.Gamma1
+    f_ε = -ld.Psi
+    f_lead = _dsge_jacobian(spec, spec.steady_state, :lead)
 
-    # Compute generalized eigenvalue magnitudes
-    gev_mag = zeros(n)
-    for i in 1:n
-        if abs(F.S[i,i]) > eps(T)
-            gev_mag[i] = abs(F.T[i,i] / F.S[i,i])
-        else
-            gev_mag[i] = Inf
-        end
-    end
+    res = _solve_qz_quadratic(f_0, f_1, f_lead, f_ε; div=div)
+    G1 = res.G
+    impact = res.impact
 
-    # Reorder: stable eigenvalues (|λ| < div) first
-    stable_select = BitVector(gev_mag .< T(div))
-    F_ordered = ordschur(F, stable_select)
-
-    n_stable = count(stable_select)
-    n_unstable = n - n_stable
-
-    # Compute eigenvalues after reordering
-    eigenvalues = Vector{ComplexF64}(undef, n)
-    for i in 1:n
-        if abs(F_ordered.S[i,i]) > eps(T)
-            eigenvalues[i] = F_ordered.T[i,i] / F_ordered.S[i,i]
-        else
-            eigenvalues[i] = complex(T(Inf))
-        end
-    end
-
-    # Blanchard-Kahn condition: n_stable must equal n_predetermined
-    if n_stable == n_predetermined
-        eu = [1, 1]  # existence and uniqueness
-    elseif n_stable > n_predetermined
-        eu = [1, 0]  # indeterminate (multiple solutions)
-    else
-        eu = [0, 0]  # no stable solution (explosive)
-    end
-
-    # Extract ordered Schur matrices
-    S = F_ordered.S
-    TT = F_ordered.T
-    Z = F_ordered.Z
-    Q = F_ordered.Q
-    Qp = Q'  # conjugate transpose
-
-    # Build solution matrices
-    if n_stable > 0
-        Z1 = Z[:, 1:n_stable]
-        S11 = S[1:n_stable, 1:n_stable]
-        T11 = TT[1:n_stable, 1:n_stable]
-        Q1 = Qp[1:n_stable, :]
-
-        # State transition: G1 = Z1 * S11^{-1} * T11 * Z1'
-        G1_c = Z1 * (S11 \ T11) * Z1'
-
-        # Impact: impact = Z1 * S11^{-1} * Q1 * Psi
-        impact_c = Z1 * (S11 \ (Q1 * complex(Psi)))
-
-        G1 = real(Matrix{T}(G1_c))
-        impact = real(Matrix{T}(impact_c))
-    else
-        G1 = zeros(T, n, n)
-        impact = zeros(T, n, size(Psi, 2))
-    end
-
-    # Constants: C_sol = (I - G1)^{-1} * C
-    C_sol = if norm(C) > eps(T)
-        real(Vector{T}((I - complex(G1)) \ complex(C)))
+    # Constants: C_sol = (I - G1)·y_ss, y_ss = (Γ0 - Γ1)⁻¹·C
+    C_sol = if norm(ld.C) > eps(T)
+        y_bar = real(Vector{T}((complex(ld.Gamma0) - complex(ld.Gamma1)) \ complex(ld.C)))
+        Vector{T}((I - G1) * y_bar)
     else
         zeros(T, n)
     end
 
-    (G1=G1, impact=impact, C_sol=C_sol, eu=eu, eigenvalues=eigenvalues)
+    eigenvalues = Vector{ComplexF64}(eigvals(G1))
+    DSGESolution{T}(G1, impact, C_sol, res.eu, :klein, eigenvalues, spec, ld)
 end

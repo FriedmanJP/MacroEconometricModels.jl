@@ -10,6 +10,8 @@ MacroEconometricModels.jl provides a comprehensive suite of statistical hypothes
 
 ```@setup tests_overview
 using MacroEconometricModels, Random
+import MacroEconometricModels: StatsAPI
+const pvalue = StatsAPI.pvalue
 Random.seed!(42)
 ```
 
@@ -20,7 +22,7 @@ Random.seed!(42)
 ```@example tests_overview
 # Test CPI price level for a unit root
 fred = load_example(:fred_md)
-cpi = filter(isfinite, to_vector(fred[:, "CPIAUCSL"]))
+cpi = filter(isfinite, fred[:, "CPIAUCSL"])
 result = adf_test(cpi; lags=:aic, regression=:constant)
 report(result)
 ```
@@ -218,7 +220,7 @@ All test result types implement the StatsAPI.jl interface. This provides a unifo
 
 ```@example tests_overview
 fred = load_example(:fred_md)
-cpi = filter(isfinite, to_vector(fred[:, "CPIAUCSL"]))
+cpi = filter(isfinite, fred[:, "CPIAUCSL"])
 result = adf_test(cpi; lags=:aic, regression=:constant)
 
 # Uniform interface across all test types

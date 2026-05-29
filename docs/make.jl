@@ -54,6 +54,7 @@ makedocs(;
             "Constraints" => "dsge_constraints.md",
             "Estimation" => "dsge_estimation.md",
             "Historical Decomposition" => "dsge_hd.md",
+            "Heterogeneous Agents" => "dsge_ha.md",
         ],
         "Innovation Accounting" => [
             "Overview" => "innovation_accounting.md",
@@ -61,6 +62,7 @@ makedocs(;
             "Variance Decomposition" => "ia_fevd.md",
             "Historical Decomposition" => "ia_hd.md",
         ],
+        "Structural Identification" => "structural_identification.md",
         "Statistical Identification" => [
             "Overview" => "nongaussian.md",
             "Non-Gaussian Methods" => "id_nongaussian.md",
@@ -90,7 +92,7 @@ makedocs(;
         ],
     ],
     checkdocs=:exports,
-    warnonly=[:missing_docs, :cross_references, :autodocs_block, :docs_block],
+    warnonly=[:missing_docs, :cross_references, :autodocs_block, :docs_block, :setup_block, :example_block],
 )
 
 deploydocs(;

@@ -337,7 +337,7 @@ end
     end
 end
 
-@testset "blanchard_kahn.jl: indeterminate (fewer unstable than forward)" begin
+@testset "blanchard_kahn.jl: forward + backward determinate" begin
     _suppress() do
         # Use a model with forward-looking terms so Pi has columns
         spec_fwd = @dsge begin
@@ -349,10 +349,9 @@ end
         end
         spec_fwd = compute_steady_state(spec_fwd)
         ld = linearize(spec_fwd)
-        # eigenvalues are close to 0.5 => both stable => 0 unstable
-        # n_forward = 2 (both variables appear with E[t]) => n_unstable(0) < n_fwd(2) => eu=[1,0]
+        # Corrected companion-QZ BK: forward roots are now counted, model is determinate.
         sol = blanchard_kahn(ld, spec_fwd)
-        @test sol.eu == [1, 0]
+        @test sol.eu == [1, 1]
     end
 end
 
@@ -1110,6 +1109,277 @@ end
 
     vm_none = falses(5, 2)
     @test MacroEconometricModels._find_last_binding_two(vm_none) == 0
+end
+
+# =========================================================================
+# 15. perturbation.jl -- _solve_kronecker_sylvester (dense + matrix-free GMRES)
+# =========================================================================
+# The 2nd/3rd-order perturbation steps solve the Kronecker-Sylvester system
+#   f_c * X + f_f * X * Mkd = -RHS
+# directly for small systems (n*nvd <= 5000) and via matrix-free GMRES for
+# larger ones. Small DSGE test models never trip the GMRES branch, so we
+# exercise it here with synthetic, well-conditioned operators.
+
+# Build a strongly diagonally-dominant operator so GMRES converges quickly and
+# the dense solve is well-posed. f_c ≈ 3·I dominates the f_f·X·Mkd perturbation.
+function _make_sylvester_problem(n::Int, nvd::Int, rng)
+    f_c = Matrix{Float64}(I, n, n) .* 3.0 .+ 0.1 .* randn(rng, n, n)
+    f_f = 0.1 .* randn(rng, n, n)
+    Mraw = randn(rng, nvd, nvd)
+    Mkd = 0.3 .* Mraw ./ opnorm(Mraw)      # operator norm 0.3 (contraction)
+    RHS = randn(rng, n, nvd)
+    (f_c, f_f, Mkd, RHS)
+end
+
+@testset "perturbation.jl: _solve_kronecker_sylvester dense path" begin
+    rng = Random.MersenneTwister(2024)
+    n, nvd = 8, 8                           # total = 64 <= 5000 -> dense solve
+    f_c, f_f, Mkd, RHS = _make_sylvester_problem(n, nvd, rng)
+
+    X = MacroEconometricModels._solve_kronecker_sylvester(f_c, f_f, Mkd, RHS, n, nvd)
+    @test size(X) == (n, nvd)
+    @test all(isfinite, X)
+
+    # X must satisfy the Sylvester equation
+    resid = f_c * X + f_f * (X * Mkd) + RHS
+    @test maximum(abs.(resid)) < 1e-8
+
+    # Cross-check against the explicit dense Kronecker solve
+    LHS = kron(Matrix{Float64}(I, nvd, nvd), f_c) + kron(Mkd', f_f)
+    X_ref = reshape(LHS \ (-vec(RHS)), n, nvd)
+    @test maximum(abs.(X - X_ref)) < 1e-9
+end
+
+@testset "perturbation.jl: _solve_kronecker_sylvester GMRES path (large system)" begin
+    rng = Random.MersenneTwister(99)
+    n, nvd = 60, 100                        # total = 6000 > 5000 -> matrix-free GMRES
+    f_c, f_f, Mkd, RHS = _make_sylvester_problem(n, nvd, rng)
+
+    X = MacroEconometricModels._solve_kronecker_sylvester(f_c, f_f, Mkd, RHS, n, nvd)
+    @test size(X) == (n, nvd)
+    @test all(isfinite, X)
+
+    # GMRES must drive the Sylvester residual to (near) zero. For this
+    # well-conditioned, invertible operator that uniquely pins down X, so no
+    # dense reference is needed (and would cost a 6000x6000 dense factorization).
+    resid = f_c * X + f_f * (X * Mkd) + RHS
+    @test maximum(abs.(resid)) < 1e-6
+end
+
+# =========================================================================
+# 16. Forward-looking models: companion-QZ solvers (gensys / klein / bk)
+# =========================================================================
+# klein, blanchard_kahn, and solve(:gensys) all build on the shared companion-QZ
+# core (_solve_qz_quadratic), so they produce the same correct solution for
+# forward-looking models. solve(:gensys) keeps the undetermined-coefficients
+# solver for G1/impact and takes its determinacy flag from the core.
+
+# Asset-pricing model: forward-looking jump `p` priced off an AR(1) state `d`.
+# p_t = (1/(1+r))·E_t[p_{t+1}] + (r/(1+r))·d_t ,  d_t = ρ·d_{t-1} + e_t.
+# Closed form: p_t = r/((1+r)-ρ)·d_t = 0.2·d_t.
+function _asset_pricing_spec()
+    spec = @dsge begin
+        parameters: r = 0.05, rho = 0.8
+        endogenous: p, d
+        exogenous: e
+        p[t] = (1.0 / (1.0 + r)) * E[t](p[t+1]) + (r / (1.0 + r)) * d[t]
+        d[t] = rho * d[t-1] + e[t]
+    end
+    compute_steady_state(spec)
+end
+
+@testset "forward-looking: gensys UC two-phase solves correctly" begin
+    spec = _asset_pricing_spec()
+    sol = solve(spec; method=:gensys)
+    @test sol.eu == [1, 1]
+    @test all(isfinite, sol.G1)
+    @test all(isfinite, sol.impact)
+    # A unit shock to e moves d by 1 and p by r/((1+r)-ρ) = 0.2 on impact.
+    # Endogenous order is [p, d].
+    @test sol.impact[2, 1] ≈ 1.0 atol = 1e-6   # d on impact
+    @test sol.impact[1, 1] ≈ 0.2 atol = 1e-4   # p on impact
+    # d follows AR(0.8); p tracks d, so the persistent root is ρ = 0.8
+    @test maximum(abs.(sol.eigenvalues)) ≈ 0.8 atol = 1e-6
+end
+
+
+@testset "forward-looking: _solve_undetermined_coefficients converges" begin
+    spec = _asset_pricing_spec()
+    uc = MacroEconometricModels._solve_undetermined_coefficients(spec)
+    @test uc.converged
+    @test all(isfinite, uc.G1)
+    @test all(isfinite, uc.impact)
+    # G1 eigenvalues are the stable roots of the saddle system
+    @test all(abs.(uc.eigenvalues) .< 1.0 + 1e-6)
+
+    # UC G1 must satisfy the quadratic matrix equation it solves
+    f0 = MacroEconometricModels._dsge_jacobian(spec, spec.steady_state, :current)
+    f1 = MacroEconometricModels._dsge_jacobian(spec, spec.steady_state, :lag)
+    fl = MacroEconometricModels._dsge_jacobian(spec, spec.steady_state, :lead)
+    resid = (f0 + fl * uc.G1) * uc.G1 + f1
+    @test maximum(abs.(resid)) < 1e-8
+end
+
+@testset "forward-looking: IRFs decay and match closed form" begin
+    spec = _asset_pricing_spec()
+    sol = solve(spec; method=:gensys)
+    ir = irf(sol, 15)
+    @test size(ir.values) == (15, 2, 1)
+    @test all(isfinite, ir.values)
+    # p_t = 0.2·d_t at every horizon for this model
+    for h in 1:15
+        @test ir.values[h, 1, 1] ≈ 0.2 * ir.values[h, 2, 1] atol = 1e-4
+    end
+    # d follows AR(0.8): response halves roughly every ~3 periods, -> decays
+    @test abs(ir.values[15, 2, 1]) < abs(ir.values[1, 2, 1])
+end
+
+@testset "cross-solver: gensys == klein == bk on asset model" begin
+    spec = _asset_pricing_spec()
+    sol_g  = solve(spec; method=:gensys)
+    sol_k  = solve(spec; method=:klein)
+    sol_bk = solve(spec; method=:blanchard_kahn)
+
+    @test sol_g.eu  == [1, 1]
+    @test sol_k.eu  == [1, 1]
+    @test sol_bk.eu == [1, 1]
+
+    @test sol_k.G1      ≈ sol_g.G1     atol = 1e-6
+    @test sol_k.impact  ≈ sol_g.impact atol = 1e-6
+    @test sol_bk.G1     ≈ sol_g.G1     atol = 1e-6
+    @test sol_bk.impact ≈ sol_g.impact atol = 1e-6
+
+    # Closed form: p = 0.2·d ; endogenous order [p, d]
+    @test sol_k.impact[2, 1] ≈ 1.0 atol = 1e-6
+    @test sol_k.impact[1, 1] ≈ 0.2 atol = 1e-6
+end
+
+@testset "cross-solver: gensys == klein == bk on NK 3-equation" begin
+    spec = @dsge begin
+        parameters: β = 0.99, κ = 0.3, φ_π = 1.5, φ_y = 0.125, ρ_v = 0.5, σ_v = 0.25
+        endogenous: π, y, i
+        exogenous: ε_v
+        π[t] = β * π[t+1] + κ * y[t]
+        y[t] = y[t+1] - (i[t] - π[t+1]) + σ_v * ε_v[t]
+        i[t] = φ_π * π[t] + φ_y * y[t] + ρ_v * ε_v[t]
+        steady_state = [0.0, 0.0, 0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    sol_g  = solve(spec; method=:gensys)
+    sol_k  = solve(spec; method=:klein)
+    sol_bk = solve(spec; method=:blanchard_kahn)
+
+    @test is_determined(sol_g)
+    @test sol_k.eu  == sol_g.eu
+    @test sol_bk.eu == sol_g.eu
+    @test sol_k.G1      ≈ sol_g.G1     atol = 1e-5
+    @test sol_k.impact  ≈ sol_g.impact atol = 1e-5
+    @test sol_bk.G1     ≈ sol_g.G1     atol = 1e-5
+    @test sol_bk.impact ≈ sol_g.impact atol = 1e-5
+end
+
+# =========================================================================
+# 17. parser.jl / display.jl -- linear: true declaration plumbing
+# =========================================================================
+@testset "parser.jl: _extract_linear_value true/false/error" begin
+    @test MacroEconometricModels._extract_linear_value(:(linear:true)) === true
+    @test MacroEconometricModels._extract_linear_value(:(linear:false)) === false
+    # Non-boolean value -> error
+    @test_throws ErrorException MacroEconometricModels._extract_linear_value(:(linear:maybe))
+    # Wrong AST shape (not a `:` call) -> error
+    @test_throws ErrorException MacroEconometricModels._extract_linear_value(:(linear = true))
+end
+
+@testset "display.jl: linear flag in text show" begin
+    spec = @dsge begin
+        parameters: rho = 0.9
+        endogenous: y
+        exogenous: e
+        linear: true
+        y[t] = rho * y[t-1] + e[t]
+    end
+    @test spec.linear == true
+
+    MacroEconometricModels.set_display_backend(:text)
+    s = sprint(show, spec)
+    @test occursin("Linear:", s)
+    @test occursin("pre-linearized", s)
+    MacroEconometricModels.set_display_backend(:text)
+end
+
+# =========================================================================
+# 18. _solve_qz_quadratic -- companion-QZ solver of f_lead·G² + f_0·G + f_1 = 0
+# =========================================================================
+@testset "_solve_qz_quadratic: AR(1) backward model" begin
+    # y_t = 0.9 y_{t-1} + ε ; residual f = y_t - 0.9 y_{t-1} - ε
+    f_0 = reshape([1.0], 1, 1)
+    f_1 = reshape([-0.9], 1, 1)
+    f_lead = reshape([0.0], 1, 1)
+    f_ε = reshape([-1.0], 1, 1)
+    r = MacroEconometricModels._solve_qz_quadratic(f_0, f_1, f_lead, f_ε)
+    @test r.eu == [1, 1]
+    @test r.n_stable == 1
+    @test r.G[1, 1] ≈ 0.9 atol = 1e-10
+    @test r.impact[1, 1] ≈ 1.0 atol = 1e-10
+    @test r.residual < 1e-8
+end
+
+@testset "_solve_qz_quadratic: purely forward model" begin
+    # x_t = 0.5 E_t[x_{t+1}] + ε ; f = x_t - 0.5 x_{t+1} - ε
+    f_0 = reshape([1.0], 1, 1)
+    f_1 = reshape([0.0], 1, 1)
+    f_lead = reshape([-0.5], 1, 1)
+    f_ε = reshape([-1.0], 1, 1)
+    r = MacroEconometricModels._solve_qz_quadratic(f_0, f_1, f_lead, f_ε)
+    @test r.eu == [1, 1]            # determinate: stable solvent G = 0
+    @test r.n_stable == 1
+    @test r.G[1, 1] ≈ 0.0 atol = 1e-10
+    @test r.impact[1, 1] ≈ 1.0 atol = 1e-10
+    @test r.residual < 1e-8
+end
+
+@testset "_solve_qz_quadratic: explosive model" begin
+    # y_t = 1.5 y_{t-1} + ε ; no forward var, root 1.5 outside unit circle
+    f_0 = reshape([1.0], 1, 1)
+    f_1 = reshape([-1.5], 1, 1)
+    f_lead = reshape([0.0], 1, 1)
+    f_ε = reshape([-1.0], 1, 1)
+    r = MacroEconometricModels._solve_qz_quadratic(f_0, f_1, f_lead, f_ε)
+    @test r.n_stable == 0
+    @test r.eu == [0, 0]           # no stable solution
+end
+
+@testset "_solve_qz_quadratic: indeterminate (n_stable > n)" begin
+    # x_t = 2·E_t[x_{t+1}] ; f = x_t - 2·x_{t+1}. Forward root 0.5 is stable, so the
+    # 2-root companion {0, 0.5} has 2 stable roots for n=1 ⇒ indeterminate.
+    f_0 = reshape([1.0], 1, 1)
+    f_1 = reshape([0.0], 1, 1)
+    f_lead = reshape([-2.0], 1, 1)
+    f_ε = reshape([-1.0], 1, 1)
+    r = MacroEconometricModels._solve_qz_quadratic(f_0, f_1, f_lead, f_ε)
+    @test r.n_stable == 2
+    @test r.eu == [1, 0]
+end
+
+@testset "_solve_qz_quadratic: forward jump + backward state (asset model)" begin
+    # p_t = (1/(1+r)) E_t[p_{t+1}] + (r/(1+r)) d_t ;  d_t = ρ d_{t-1} + e
+    # Order [p, d]. Closed form: p = 0.2 d, d AR(0.8). r=0.05, ρ=0.8.
+    rr = 0.05; ρ = 0.8; β = 1 / (1 + rr); κ = rr / (1 + rr)
+    # residuals: f1 = p_t - β p_{t+1} - κ d_t ; f2 = d_t - ρ d_{t-1} - e
+    f_0 = [1.0  -κ; 0.0  1.0]          # ∂f/∂y_t
+    f_1 = [0.0   0.0; 0.0  -ρ]         # ∂f/∂y_{t-1}
+    f_lead = [-β  0.0; 0.0  0.0]       # ∂f/∂y_{t+1}
+    f_ε = reshape([0.0, -1.0], 2, 1)   # ∂f/∂ε
+    r = MacroEconometricModels._solve_qz_quadratic(f_0, f_1, f_lead, f_ε)
+    @test r.eu == [1, 1]
+    @test r.n_stable == 2
+    @test r.residual < 1e-8
+    # impact: d responds 1, p responds 0.2
+    @test r.impact[2, 1] ≈ 1.0 atol = 1e-6
+    @test r.impact[1, 1] ≈ 0.2 atol = 1e-6
+    # G eigenvalues are {0, 0.8}
+    @test maximum(abs.(eigvals(r.G))) ≈ 0.8 atol = 1e-6
 end
 
 end  # @testset "DSGE Coverage"

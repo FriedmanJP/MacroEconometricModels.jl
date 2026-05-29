@@ -14,7 +14,7 @@
 using MacroEconometricModels, Random
 Random.seed!(42)
 fred = load_example(:fred_md)
-ip = filter(isfinite, to_vector(apply_tcode(fred[:, "INDPRO"])))
+ip = filter(isfinite, to_vector(apply_tcode(fred[:, ["INDPRO"]])))
 ip = ip[end-99:end]
 ```
 

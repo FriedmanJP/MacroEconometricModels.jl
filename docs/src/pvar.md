@@ -12,6 +12,16 @@
 ```@setup pvar
 using MacroEconometricModels, Random, DataFrames
 Random.seed!(42)
+pwt = load_example(:pwt)
+_pd_raw = apply_tcode(pwt, 5)
+_dep_vars = ["rgdpna", "emp", "hc"]
+_dep_idx = [findfirst(==(v), _pd_raw.varnames) for v in _dep_vars]
+_df = DataFrame(_pd_raw.data[:, _dep_idx], _dep_vars)
+_df.id = _pd_raw.group_id
+_df.time = _pd_raw.time_id
+_mask = [all(isfinite, row) for row in eachrow(Matrix(_df[:, _dep_vars]))]
+_df = _df[_mask, :]
+pd = xtset(_df, :id, :time)
 ```
 
 ## Quick Start
@@ -19,10 +29,7 @@ Random.seed!(42)
 **Recipe 1: FD-GMM with two-step estimation**
 
 ```@example pvar
-# Load Penn World Table: 38 OECD countries, 1950-2023
-pwt = load_example(:pwt)
-pd = apply_tcode(pwt, 5)  # Log first difference for stationarity
-
+# PWT panel data (pre-loaded in setup: log first-differenced, NaN-filtered)
 # Arellano-Bond two-step GMM
 model = estimate_pvar(pd, 2; dependent_vars=["rgdpna", "emp", "hc"], steps=:twostep)
 report(model)
@@ -31,9 +38,6 @@ report(model)
 **Recipe 2: System GMM (Blundell-Bond)**
 
 ```@example pvar
-pwt = load_example(:pwt)
-pd = apply_tcode(pwt, 5)
-
 # System GMM adds level equations instrumented by lagged differences
 model_sys = estimate_pvar(pd, 2; dependent_vars=["rgdpna", "emp", "hc"],
                           system_instruments=true, steps=:twostep)
@@ -43,9 +47,6 @@ report(model_sys)
 **Recipe 3: Fixed-effects OLS**
 
 ```@example pvar
-pwt = load_example(:pwt)
-pd = apply_tcode(pwt, 5)
-
 # Within estimator with cluster-robust SEs
 model_fe = estimate_pvar_feols(pd, 2; dependent_vars=["rgdpna", "emp", "hc"])
 report(model_fe)
@@ -54,8 +55,6 @@ report(model_fe)
 **Recipe 4: Specification tests and lag selection**
 
 ```@example pvar
-pwt = load_example(:pwt)
-pd = apply_tcode(pwt, 5)
 dep_vars = ["rgdpna", "emp", "hc"]
 
 model = estimate_pvar(pd, 2; dependent_vars=dep_vars, steps=:twostep)
@@ -74,8 +73,6 @@ sel = pvar_lag_selection(pd, 4; dependent_vars=dep_vars)
 **Recipe 5: Structural analysis with bootstrap CIs**
 
 ```@example pvar
-pwt = load_example(:pwt)
-pd = apply_tcode(pwt, 5)
 dep_vars = ["rgdpna", "emp", "hc"]
 
 model = estimate_pvar(pd, 1; dependent_vars=dep_vars, steps=:twostep)
@@ -121,10 +118,11 @@ Panel VAR estimation requires a `PanelData` object. The built-in Penn World Tabl
 
 ```@example pvar
 # Load PWT --- already a PanelData object
-pwt = load_example(:pwt)
+pwt_demo = load_example(:pwt)
 
 # Convert to growth rates for stationarity
-pd = apply_tcode(pwt, 5)  # tcode 5 = log first difference
+pd_demo = apply_tcode(pwt_demo, 5)  # tcode 5 = log first difference
+nothing # hide
 ```
 
 All numeric columns are treated as potential endogenous variables. Use the `dependent_vars` keyword to select a subset:
@@ -183,8 +181,6 @@ Lagged **levels** ``\mathbf{y}_{i,t-2}, \mathbf{y}_{i,t-3}, \ldots`` serve as in
     The two-step estimator is asymptotically efficient but its naive standard errors are severely downward-biased in finite samples. The package automatically applies the Windmeijer (2005) correction for two-step GMM, which restores proper inference.
 
 ```@example pvar
-pwt = load_example(:pwt)
-pd = apply_tcode(pwt, 5)
 dep_vars = ["rgdpna", "emp", "hc"]
 
 # One-step GMM (heteroskedasticity-robust SEs)
@@ -214,8 +210,6 @@ where:
 - The bottom block uses lagged differences ``\Delta \mathbf{y}_{i,t-1}`` as instruments for the level equation
 
 ```@example pvar
-pwt = load_example(:pwt)
-pd = apply_tcode(pwt, 5)
 
 m_sys = estimate_pvar(pd, 2; dependent_vars=["rgdpna", "emp", "hc"],
                       system_instruments=true, steps=:twostep)
@@ -267,8 +261,6 @@ The system estimator exploits additional moment conditions but requires the assu
 For panels with large ``T``, the within (FE-OLS) estimator provides a simpler alternative. The estimator demeans each entity's data (removing ``\boldsymbol{\mu}_i``) and runs pooled OLS on the stacked system with cluster-robust standard errors at the group level:
 
 ```@example pvar
-pwt = load_example(:pwt)
-pd = apply_tcode(pwt, 5)
 
 m_fe = estimate_pvar_feols(pd, 2; dependent_vars=["rgdpna", "emp", "hc"])
 report(m_fe)
@@ -283,8 +275,6 @@ The FE-OLS estimator accepts the same `dependent_vars`, `predet_vars`, and `exog
 When the number of instruments is large relative to ``N``, standard errors become unreliable and the Hansen J-test loses power. Several options control instrument proliferation:
 
 ```@example pvar
-pwt = load_example(:pwt)
-pd = apply_tcode(pwt, 5)
 dep_vars = ["rgdpna", "emp", "hc"]
 
 # Restrict instrument lags to avoid proliferation
@@ -320,8 +310,6 @@ where:
 - ``J = [I_m \mid 0 \cdots 0]`` is the ``m \times mp`` selection matrix
 
 ```@example pvar
-pwt = load_example(:pwt)
-pd = apply_tcode(pwt, 5)
 model = estimate_pvar(pd, 1; dependent_vars=["rgdpna", "emp", "hc"], steps=:twostep)
 
 irfs = pvar_oirf(model, 20)   # H+1 x m x m array
@@ -383,8 +371,6 @@ report(stab)
 Group-level block bootstrap preserves the within-group time structure. For each bootstrap draw, ``N`` groups are resampled with replacement, the PVAR is re-estimated, and IRFs are computed. Quantile-based confidence intervals are constructed from the bootstrap distribution:
 
 ```@example pvar
-pwt = load_example(:pwt)
-pd = apply_tcode(pwt, 5)
 model = estimate_pvar(pd, 1; dependent_vars=["rgdpna", "emp", "hc"], steps=:twostep)
 
 boot = pvar_bootstrap_irf(model, 20;
@@ -428,8 +414,6 @@ where:
 - ``c`` is the number of instruments and ``b`` is the number of estimated parameters
 
 ```@example pvar
-pwt = load_example(:pwt)
-pd = apply_tcode(pwt, 5)
 model = estimate_pvar(pd, 1; dependent_vars=["rgdpna", "emp", "hc"], steps=:twostep)
 
 j = pvar_hansen_j(model)
@@ -476,8 +460,6 @@ mmsc.hqic    # MMSC-HQIC
 The `pvar_lag_selection` function compares MMSC criteria across candidate lag orders to select the optimal specification:
 
 ```@example pvar
-pwt = load_example(:pwt)
-pd = apply_tcode(pwt, 5)
 
 sel = pvar_lag_selection(pd, 4; dependent_vars=["rgdpna", "emp", "hc"])
 sel.best_bic    # optimal lag by BIC
@@ -493,8 +475,6 @@ The function estimates PVAR models for lags 1 through the maximum candidate, com
 
 ```@example pvar
 # Load Penn World Table and convert to growth rates
-pwt = load_example(:pwt)
-pd = apply_tcode(pwt, 5)  # log first difference
 dep_vars = ["rgdpna", "emp", "hc"]
 
 # Lag selection

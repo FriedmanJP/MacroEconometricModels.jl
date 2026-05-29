@@ -88,6 +88,11 @@ function compute_steady_state(spec::DSGESpec{T};
 
     θ = spec.param_values
 
+    # Linear models: steady state is all zeros (variables are deviations from SS)
+    if spec.linear && method == :auto && spec.ss_fn === nothing
+        return _update_steady_state(spec, zeros(T, n))
+    end
+
     # Auto-detect: if spec has an analytical ss_fn, use it
     if method == :auto && spec.ss_fn !== nothing
         y_ss = T.(spec.ss_fn(θ))
@@ -332,6 +337,7 @@ function _update_steady_state(spec::DSGESpec{T}, y_ss::Vector{T}) where {T}
         original_equations=spec.original_equations,
         augmented=spec.augmented,
         max_lag=spec.max_lag,
-        max_lead=spec.max_lead
+        max_lead=spec.max_lead,
+        linear=spec.linear
     )
 end

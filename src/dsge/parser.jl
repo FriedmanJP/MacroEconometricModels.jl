@@ -43,8 +43,14 @@ function _dsge_impl(block::Expr)
     exog = Symbol[]
     raw_equations = Expr[]
     ss_body = nothing  # steady_state block body (Expr or nothing)
+    is_linear = false  # linear: true declaration
 
     stmts = filter(a -> !(a isa LineNumberNode), block.args)
+
+    # Check for heterogeneous agent declarations — delegate to HA parser
+    if _has_ha_declarations(stmts)
+        return _parse_ha_dsge(block)
+    end
 
     for stmt in stmts
         label = _detect_declaration(stmt)
@@ -54,6 +60,11 @@ function _dsge_impl(block::Expr)
             append!(endog, _extract_names(stmt))
         elseif label === :exogenous
             append!(exog, _extract_names(stmt))
+        elseif label === :linear
+            # linear: true/false declaration
+            # AST: (call : linear true)
+            val = _extract_linear_value(stmt)
+            is_linear = val
         elseif label === :steady_state
             # Single-line: steady_state: [expr]
             # AST: (call : steady_state <body_expr>)
@@ -187,7 +198,13 @@ function _dsge_impl(block::Expr)
         end
         Expr(:->, :_ss_θ_, body)
     else
-        :nothing
+        # For linear models without a steady_state block, auto-generate zeros SS
+        if is_linear
+            n_endog_val = length(endog)
+            :((_ss_θ_) -> zeros($n_endog_val))
+        else
+            :nothing
+        end
     end
 
     result = quote
@@ -201,7 +218,8 @@ function _dsge_impl(block::Expr)
             original_equations=$orig_eq_vec_expr,
             augmented=$aug_flag,
             max_lag=$max_lag_val,
-            max_lead=$max_lead_val
+            max_lead=$max_lead_val,
+            linear=$is_linear
         )
     end
 
@@ -308,6 +326,22 @@ function _collect_param_chain!(name::Symbol, rhs, params::Vector{Symbol}, defaul
         push!(params, name)
         defaults[name] = rhs
     end
+end
+
+"""
+    _extract_linear_value(stmt) → Bool
+
+Extract boolean value from a `linear: true` or `linear: false` declaration.
+"""
+function _extract_linear_value(stmt::Expr)
+    # stmt is (call : linear true) for `linear: true`
+    if stmt.head == :call && length(stmt.args) >= 3 && stmt.args[1] === :(:)
+        val = stmt.args[3]
+        val === true && return true
+        val === false && return false
+        error("@dsge: linear declaration must be `linear: true` or `linear: false`, got: $val")
+    end
+    error("@dsge: cannot parse linear declaration: $stmt")
 end
 
 """

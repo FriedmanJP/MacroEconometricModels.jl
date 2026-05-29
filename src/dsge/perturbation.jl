@@ -71,20 +71,24 @@ function perturbation_solver(spec::DSGESpec{T};
     # -------------------------------------------------------------------------
     ld = linearize(spec)
 
-    first_order = if method == :gensys
-        gensys(ld.Gamma0, ld.Gamma1, ld.C, ld.Psi, ld.Pi)
-    elseif method == :blanchard_kahn
-        # blanchard_kahn returns a DSGESolution; extract the fields we need
-        bk_sol = blanchard_kahn(ld, spec)
-        (G1=bk_sol.G1, impact=bk_sol.impact, C_sol=bk_sol.C_sol,
-         eu=bk_sol.eu, eigenvalues=bk_sol.eigenvalues)
-    else
-        throw(ArgumentError("method must be :gensys or :blanchard_kahn; got $method"))
+    # Use QZ for eigenvalue analysis + UC solver for robust solution (same as solve())
+    qz_result = gensys(ld.Gamma0, ld.Gamma1, ld.C, ld.Psi, ld.Pi)
+
+    uc_ok = false
+    local uc_result
+    try
+        uc_result = _solve_undetermined_coefficients(spec)
+        f_0 = _dsge_jacobian(spec, spec.steady_state, :current)
+        f_1 = _dsge_jacobian(spec, spec.steady_state, :lag)
+        f_lead = _dsge_jacobian(spec, spec.steady_state, :lead)
+        resid_uc = (f_0 + f_lead * uc_result.G1) * uc_result.G1 + f_1
+        uc_ok = maximum(abs.(resid_uc)) < T(1e-8) && uc_result.converged
+    catch
     end
 
-    G1 = first_order.G1         # n x n
-    impact = first_order.impact # n x n_epsilon
-    eu = first_order.eu
+    G1 = uc_ok ? uc_result.G1 : qz_result.G1
+    impact = uc_ok ? uc_result.impact : qz_result.impact
+    eu = qz_result.eu
 
     n = spec.n_endog
     n_eps = spec.n_exog
@@ -265,9 +269,7 @@ function perturbation_solver(spec::DSGESpec{T};
 
     if nv > 0
         MkM = kron(M, M)  # nv^2 x nv^2
-        LHS = kron(Matrix{T}(I, nv2, nv2), f_c) + kron(MkM', f_f)
-        fvv_vec = LHS \ (-vec(RHS))
-        fvv = reshape(fvv_vec, n, nv2)
+        fvv = _solve_kronecker_sylvester(f_c, f_f, MkM, RHS, n, nv2)
     else
         fvv = zeros(T, n, 0)
     end
@@ -414,9 +416,7 @@ function perturbation_solver(spec::DSGESpec{T};
 
     if nv > 0
         MkMkM = kron(MkM, M)  # nv³ × nv³
-        LHS_3 = kron(Matrix{T}(I, nv3, nv3), f_c) + kron(MkMkM', f_f)
-        fvvv_vec = LHS_3 \ (-vec(RHS_3))
-        fvvv = reshape(fvvv_vec, n, nv3)
+        fvvv = _solve_kronecker_sylvester(f_c, f_f, MkMkM, RHS_3, n, nv3)
     else
         fvvv = zeros(T, n, 0)
     end
@@ -849,4 +849,99 @@ function _accumulate_mixed_rhs!(RHS_3::Matrix{T},
     end
 
     return nothing
+end
+
+"""
+    _solve_kronecker_sylvester(f_c, f_f, Mkd, RHS, n, nvd) → Matrix{T}
+
+Solve the Kronecker-Sylvester system:
+    f_c * X + f_f * X * Mkd = -RHS
+where X is n × nvd (nvd = nv^d for d-th order).
+
+Vectorized form: [(I_{nvd} ⊗ f_c) + (Mkd' ⊗ f_f)] * vec(X) = -vec(RHS)
+
+For small systems (n*nvd ≤ 5000), uses direct dense solve.
+For larger systems, uses matrix-free GMRES to avoid forming the (n*nvd)² system matrix.
+Memory: O(n·nvd) instead of O(n²·nvd²).
+"""
+function _solve_kronecker_sylvester(f_c::Matrix{T}, f_f::Matrix{T},
+        Mkd::Matrix{T}, RHS::Matrix{T}, n::Int, nvd::Int) where {T<:AbstractFloat}
+    total = n * nvd
+
+    if total <= 5000
+        LHS = kron(Matrix{T}(I, nvd, nvd), f_c) + kron(Mkd', f_f)
+        x = LHS \ (-vec(RHS))
+        return reshape(x, n, nvd)
+    end
+
+    # Matrix-free GMRES: apply A*x = [(I⊗f_c) + (Mkd'⊗f_f)] * x without forming A
+    rhs = -vec(RHS)
+
+    function matvec!(y::AbstractVector, x::AbstractVector)
+        X = reshape(x, n, nvd)
+        Y = f_c * X + f_f * (X * Mkd)
+        copyto!(y, vec(Y))
+        return y
+    end
+
+    x = zeros(T, total)
+    r = copy(rhs)
+    matvec_buf = similar(r)
+
+    max_outer = 20
+    restart = min(200, total)
+    tol = T(1e-12) * norm(rhs)
+
+    for outer in 1:max_outer
+        matvec!(matvec_buf, x)
+        r .= rhs .- matvec_buf
+        beta = norm(r)
+        beta < tol && break
+
+        V = zeros(T, total, restart + 1)
+        H = zeros(T, restart + 1, restart)
+        V[:, 1] .= r ./ beta
+        cs = zeros(T, restart)
+        sn = zeros(T, restart)
+        g = zeros(T, restart + 1)
+        g[1] = beta
+
+        k = 0
+        for j in 1:restart
+            k = j
+            matvec!(view(V, :, j + 1), view(V, :, j))
+
+            for i in 1:j
+                H[i, j] = dot(view(V, :, i), view(V, :, j + 1))
+                V[:, j + 1] .-= H[i, j] .* view(V, :, i)
+            end
+            H[j + 1, j] = norm(view(V, :, j + 1))
+            abs(H[j + 1, j]) > eps(T) && (V[:, j + 1] ./= H[j + 1, j])
+
+            for i in 1:j-1
+                tmp = cs[i] * H[i, j] + sn[i] * H[i + 1, j]
+                H[i + 1, j] = -sn[i] * H[i, j] + cs[i] * H[i + 1, j]
+                H[i, j] = tmp
+            end
+
+            denom = hypot(H[j, j], H[j + 1, j])
+            cs[j] = H[j, j] / denom
+            sn[j] = H[j + 1, j] / denom
+            H[j, j] = denom
+            H[j + 1, j] = zero(T)
+            g[j + 1] = -sn[j] * g[j]
+            g[j] = cs[j] * g[j]
+
+            abs(g[j + 1]) < tol && break
+        end
+
+        y = g[1:k]
+        for i in k:-1:1
+            y[i] = (y[i] - dot(view(H, i, i+1:k), view(y, i+1:k))) / H[i, i]
+        end
+
+        x .+= V[:, 1:k] * y
+    end
+
+    return reshape(x, n, nvd)
 end

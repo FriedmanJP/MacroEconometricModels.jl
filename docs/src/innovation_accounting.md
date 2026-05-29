@@ -14,8 +14,8 @@ Random.seed!(42)
 fred = load_example(:fred_md)
 Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
 Y = Y[all.(isfinite, eachrow(Y)), :]
-Y = Y[end-59:end, :]
-model = estimate_var(Y, 4; varnames=["INDPRO", "CPIAUCSL", "FEDFUNDS"])
+Y = Y[end-99:end, :]
+model = estimate_var(Y, 2; varnames=["INDPRO", "CPIAUCSL", "FEDFUNDS"])
 ```
 
 ## Quick Start
@@ -46,7 +46,7 @@ report(hd)
 **Recipe 4: Bayesian IRF with credible intervals**
 
 ```@example ia
-post = estimate_bvar(Y, 4; n_draws=100, varnames=["INDPRO", "CPIAUCSL", "FEDFUNDS"])
+post = estimate_bvar(Y, 2; n_draws=500, varnames=["INDPRO", "CPIAUCSL", "FEDFUNDS"])
 
 # Posterior median IRF with 68% credible intervals
 birfs = irf(post, 20)
@@ -56,8 +56,9 @@ report(birfs)
 **Recipe 5: Sign-restricted IRF**
 
 ```@example ia
-# Demand shock: positive output, positive prices; supply shock: positive output, negative prices
-irfs_sign = irf(model, 20; method=:sign, sign_restrictions=[1 1 0; -1 0 0; 0 0 1])
+# Demand shock: positive output and positive prices on impact
+check_demand = irf_array -> irf_array[1, 1, 1] > 0 && irf_array[1, 2, 1] > 0
+irfs_sign = irf(model, 20; method=:sign, check_func=check_demand)
 report(irfs_sign)
 ```
 

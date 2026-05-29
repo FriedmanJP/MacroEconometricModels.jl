@@ -626,6 +626,9 @@ function _show_dsge_text(io::IO, spec::DSGESpec{T}) where {T}
     println(io, "  Parameters:            ", spec.n_params)
     println(io, "  Equations:             ", length(disp_eq))
     println(io, "  Forward-looking:       ", spec.n_expect)
+    if spec.linear
+        println(io, "  Linear:                true (pre-linearized)")
+    end
     if spec.augmented
         println(io, "  Augmented state dim:   ", spec.n_endog,
                 "  (max lag: ", spec.max_lag, ", max lead: ", spec.max_lead, ")")
