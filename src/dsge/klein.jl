@@ -10,8 +10,10 @@ Klein (2000) generalized Schur decomposition solver for linear RE models.
 Solves: Gamma0 * y_t = Gamma1 * y_{t-1} + C + Psi * eps_t + Pi * eta_t
 Returns: y_t = G1 * y_{t-1} + impact * eps_t + C_sol
 
-Uses the QZ decomposition of the pencil (Gamma0, Gamma1) with eigenvalue
-reordering and the Blanchard-Kahn counting condition on predetermined variables.
+Rewired to use the companion-QZ quadratic matrix equation via `_solve_qz_quadratic`,
+which counts the roots of the 2n companion pencil (correct for forward-looking models).
+The `_count_predetermined` and `_state_control_indices` helpers below remain available
+for other solvers.
 
 Reference:
 Klein, Paul. 2000. "Using the Generalized Schur Form to Solve a Multivariate

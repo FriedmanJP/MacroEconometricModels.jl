@@ -170,8 +170,8 @@ Fields:
 - `G1::Matrix{T}` — n × n state transition matrix
 - `impact::Matrix{T}` — n × n_shocks impact matrix
 - `C_sol::Vector{T}` — n × 1 constants
-- `eu::Vector{Int}` — [existence, uniqueness]: 1=yes, 0=no, -1=indeterminate
-- `method::Symbol` — `:gensys` or `:blanchard_kahn`
+- `eu::Vector{Int}` — [existence, uniqueness]: 1=yes, 0=no
+- `method::Symbol` — `:gensys`, `:blanchard_kahn`, or `:klein`
 - `eigenvalues::Vector{ComplexF64}` — eigenvalues of G1 (the state-transition matrix)
 - `spec::DSGESpec{T}` — model specification
 - `linear::LinearDSGE{T}` — linearized form

@@ -48,7 +48,7 @@ function _solve_qz_quadratic(f_0::AbstractMatrix{T}, f_1::AbstractMatrix{T},
          Z0    flead]
 
     F = schur(complex(L), complex(M))
-    λ = F.values                                   # 2n generalized eigenvalues (Inf where β≈0)
+    λ = F.values                                   # 2n generalized eigenvalues (NaN for infinite roots from singular M)
 
     stable_select = BitVector(abs.(λ) .< T(div))
     n_stable = count(stable_select)

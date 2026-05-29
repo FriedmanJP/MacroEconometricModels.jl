@@ -1167,16 +1167,12 @@ end
 end
 
 # =========================================================================
-# 16. Forward-looking models: gensys UC two-phase solver + klein/bk Q1_adj
+# 16. Forward-looking models: companion-QZ solvers (gensys / klein / bk)
 # =========================================================================
-# This framework's `linearize` routes expectational leads into the
-# expectation-error matrix Π rather than into auxiliary variables with explosive
-# eigenvalues. The two-phase gensys (QZ for determinacy + undetermined
-# coefficients for the actual solution) handles this robustly; pure-QZ klein/bk
-# do not — which is exactly why the UC solver was added. The tests below pin down
-# (a) gensys correctness on a forward-looking model and (b) coverage of the
-# Q1_adj expectations-adjustment branch in klein.jl / blanchard_kahn.jl using
-# systems that genuinely carry an unstable pencil eigenvalue alongside Π.
+# klein, blanchard_kahn, and solve(:gensys) all build on the shared companion-QZ
+# core (_solve_qz_quadratic), so they produce the same correct solution for
+# forward-looking models. solve(:gensys) keeps the undetermined-coefficients
+# solver for G1/impact and takes its determinacy flag from the core.
 
 # Asset-pricing model: forward-looking jump `p` priced off an AR(1) state `d`.
 # p_t = (1/(1+r))·E_t[p_{t+1}] + (r/(1+r))·d_t ,  d_t = ρ·d_{t-1} + e_t.
@@ -1352,6 +1348,18 @@ end
     r = MacroEconometricModels._solve_qz_quadratic(f_0, f_1, f_lead, f_ε)
     @test r.n_stable == 0
     @test r.eu == [0, 0]           # no stable solution
+end
+
+@testset "_solve_qz_quadratic: indeterminate (n_stable > n)" begin
+    # x_t = 2·E_t[x_{t+1}] ; f = x_t - 2·x_{t+1}. Forward root 0.5 is stable, so the
+    # 2-root companion {0, 0.5} has 2 stable roots for n=1 ⇒ indeterminate.
+    f_0 = reshape([1.0], 1, 1)
+    f_1 = reshape([0.0], 1, 1)
+    f_lead = reshape([-2.0], 1, 1)
+    f_ε = reshape([-1.0], 1, 1)
+    r = MacroEconometricModels._solve_qz_quadratic(f_0, f_1, f_lead, f_ε)
+    @test r.n_stable == 2
+    @test r.eu == [1, 0]
 end
 
 @testset "_solve_qz_quadratic: forward jump + backward state (asset model)" begin
