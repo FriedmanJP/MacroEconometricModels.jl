@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LP-FEVD (bias-corrected)</title>
+<style>* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+    background: #fff;
+    color: #333;
+    padding: 20px;
+}
+.figure-title {
+    font-size: 18px;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 16px;
+    color: #222;
+}
+.figure-source {
+    font-size: 11px;
+    color: #888;
+    text-align: center;
+    margin-top: 8px;
+}
+.panel-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    justify-content: center;
+}
+.panel {
+    width: calc(33% - 16px);
+    min-width: 300px;
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 12px;
+}
+.panel-title {
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 8px;
+    color: #444;
+}
+.axis text { font-size: 11px; fill: #666; }
+.axis line, .axis path { stroke: #ccc; }
+.grid line { stroke: #f0f0f0; stroke-dasharray: 2,2; }
+.grid .domain { stroke: none; }
+.tooltip {
+    position: absolute;
+    background: rgba(0,0,0,0.8);
+    color: #fff;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 1000;
+}
+.legend { font-size: 11px; }
+.legend rect { rx: 2; }
+svg { overflow: visible; }
+</style>
+</head>
+<body>
+<div class="figure-title">LP-FEVD (bias-corrected)</div>
+<div class="panel-grid">
+<div class="panel">
+<div class="panel-title">INDPRO</div>
+<div id="lpfevd_64"></div>
+</div>
+<div class="panel">
+<div class="panel-title">CPI</div>
+<div id="lpfevd_65"></div>
+</div>
+<div class="panel">
+<div class="panel-title">FFR</div>
+<div id="lpfevd_66"></div>
+</div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script>
+// Shared utilities
+const tooltip = d3.select('#tooltip');
+function fmt(v) {
+    if (v === null || v === undefined) return '';
+    return Math.abs(v) >= 1000 ? v.toFixed(1) : (Math.abs(v) >= 1 ? v.toFixed(3) : v.toFixed(4));
+}
+function showTip(evt, html) {
+    tooltip.html(html).style('opacity',1)
+        .style('left',(evt.pageX+12)+'px').style('top',(evt.pageY-28)+'px');
+}
+function hideTip() { tooltip.style('opacity',0); }
+
+(function() {
+    const data = [{"x":1,"s1":1.0,"s2":0.0,"s3":0.0},
+{"x":2,"s1":0.9713009473684273,"s2":0.0,"s3":0.028699052631572717},
+{"x":3,"s1":0.9713092799839963,"s2":0.0,"s3":0.028690720016003764},
+{"x":4,"s1":0.9614222958731888,"s2":0.0,"s3":0.03857770412681118},
+{"x":5,"s1":0.9643622831347233,"s2":0.0,"s3":0.03563771686527667},
+{"x":6,"s1":0.9692820367867305,"s2":0.00026701395383500016,"s3":0.030450949259434392},
+{"x":7,"s1":0.967509443929583,"s2":0.009107620928387284,"s3":0.023382935142029618},
+{"x":8,"s1":0.9614001454819158,"s2":0.011047333679486142,"s3":0.027552520838597976},
+{"x":9,"s1":0.9561795373117155,"s2":0.018253728642008225,"s3":0.025566734046276223},
+{"x":10,"s1":0.9627772903932084,"s2":0.011843419905709862,"s3":0.025379289701081855},
+{"x":11,"s1":0.9555016149189388,"s2":0.01566294065222455,"s3":0.028835444428836617},
+{"x":12,"s1":0.9486967531041325,"s2":0.015122363132954215,"s3":0.0361808837629133},
+{"x":13,"s1":0.9487150814325933,"s2":0.01722520132491971,"s3":0.03405971724248699},
+{"x":14,"s1":0.9647715884453492,"s2":0.0,"s3":0.035228411554650875},
+{"x":15,"s1":0.9536907796354959,"s2":0.0,"s3":0.046309220364504106},
+{"x":16,"s1":0.9497950841263548,"s2":0.0,"s3":0.050204915873645256},
+{"x":17,"s1":0.9525499634269403,"s2":0.0,"s3":0.04745003657305974},
+{"x":18,"s1":0.9418486156457352,"s2":0.0030340007628134437,"s3":0.055117383591451394},
+{"x":19,"s1":0.9385842155425146,"s2":0.017109891191646767,"s3":0.0443058932658387},
+{"x":20,"s1":0.9559261608763895,"s2":0.0011459719168354662,"s3":0.042927867206775064}];
+    const series = [{"name":"INDPRO","color":"#1f77b4","key":"s1","dash":""},{"name":"CPI","color":"#ff7f0e","key":"s2","dash":""},{"name":"FFR","color":"#2ca02c","key":"s3","dash":""}];
+
+    const container = d3.select('#lpfevd_64');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    const keys = series.map(s => s.key);
+    const x = d3.scaleLinear().domain(d3.extent(data, d=>d.x)).range([0,w]);
+    const y = d3.scaleLinear().domain([0,1]).range([h,0]);
+
+    const stack = d3.stack().keys(keys).order(d3.stackOrderNone).offset(d3.stackOffsetNone);
+    const stacked = stack(data);
+
+    const area = d3.area()
+        .x(d => x(d.data.x))
+        .y0(d => y(d[0]))
+        .y1(d => y(d[1]));
+
+    g.selectAll('.layer').data(stacked).join('path')
+        .attr('class','layer')
+        .attr('d', area)
+        .attr('fill', (d,i) => series[i].color)
+        .attr('opacity', 0.85);
+
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+        .call(d3.axisBottom(x).ticks(Math.min(data.length,8)));
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(5).tickFormat(d3.format('.0%')));
+
+    if('Horizon') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Horizon');
+    if('Proportion') g.append('text').attr('transform','rotate(-90)')
+        .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Proportion');
+
+    // Legend
+    const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
+    series.forEach((s,i) => {
+        const gi = leg.append('g').attr('transform','translate('+(i*90)+',0)');
+        gi.append('rect').attr('width',12).attr('height',12).attr('y',-6).attr('fill',s.color).attr('opacity',0.85);
+        gi.append('text').attr('x',16).attr('y',4).attr('font-size','10px').attr('fill','#555').text(s.name);
+    });
+
+    // Tooltip
+    svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g.node());
+            const x0 = x.invert(mx);
+            const idx = d3.minIndex(data, d => Math.abs(d.x - x0));
+            const d = data[idx];
+            let html = '<b>h='+d.x+'</b>';
+            series.forEach(s => { html += '<br>'+s.name+': '+(d[s.key]*100).toFixed(1)+'%'; });
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+
+(function() {
+    const data = [{"x":1,"s1":0.0,"s2":1.0,"s3":0.0},
+{"x":2,"s1":0.011236717903934778,"s2":0.9887632820960652,"s3":0.0},
+{"x":3,"s1":0.005348304071688758,"s2":0.9946516959283113,"s3":0.0},
+{"x":4,"s1":0.006235208902087673,"s2":0.9937647910979124,"s3":0.0},
+{"x":5,"s1":0.0007592703924279862,"s2":0.999240729607572,"s3":0.0},
+{"x":6,"s1":0.006025641318959214,"s2":0.9939743586810409,"s3":0.0},
+{"x":7,"s1":0.010458701689836506,"s2":0.9895412983101636,"s3":0.0},
+{"x":8,"s1":0.01720769614060709,"s2":0.982792303859393,"s3":0.0},
+{"x":9,"s1":0.019111051484037783,"s2":0.9808889485159622,"s3":0.0},
+{"x":10,"s1":0.021173169046159627,"s2":0.9788268309538404,"s3":0.0},
+{"x":11,"s1":0.025057048712558566,"s2":0.9749429512874414,"s3":0.0},
+{"x":12,"s1":0.022282923784983876,"s2":0.9777170762150161,"s3":0.0},
+{"x":13,"s1":0.007148149673990312,"s2":0.9928518503260098,"s3":0.0},
+{"x":14,"s1":0.0007677270735966687,"s2":0.9992322729264033,"s3":0.0},
+{"x":15,"s1":0.0,"s2":1.0,"s3":0.0},
+{"x":16,"s1":0.0015737579666115567,"s2":0.9984262420333885,"s3":0.0},
+{"x":17,"s1":0.006293594063589143,"s2":0.9937064059364109,"s3":0.0},
+{"x":18,"s1":0.0,"s2":1.0,"s3":0.0},
+{"x":19,"s1":0.012353461554891644,"s2":0.9876465384451084,"s3":0.0},
+{"x":20,"s1":0.00027173280834882934,"s2":0.9997282671916511,"s3":0.0}];
+    const series = [{"name":"INDPRO","color":"#1f77b4","key":"s1","dash":""},{"name":"CPI","color":"#ff7f0e","key":"s2","dash":""},{"name":"FFR","color":"#2ca02c","key":"s3","dash":""}];
+
+    const container = d3.select('#lpfevd_65');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    const keys = series.map(s => s.key);
+    const x = d3.scaleLinear().domain(d3.extent(data, d=>d.x)).range([0,w]);
+    const y = d3.scaleLinear().domain([0,1]).range([h,0]);
+
+    const stack = d3.stack().keys(keys).order(d3.stackOrderNone).offset(d3.stackOffsetNone);
+    const stacked = stack(data);
+
+    const area = d3.area()
+        .x(d => x(d.data.x))
+        .y0(d => y(d[0]))
+        .y1(d => y(d[1]));
+
+    g.selectAll('.layer').data(stacked).join('path')
+        .attr('class','layer')
+        .attr('d', area)
+        .attr('fill', (d,i) => series[i].color)
+        .attr('opacity', 0.85);
+
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+        .call(d3.axisBottom(x).ticks(Math.min(data.length,8)));
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(5).tickFormat(d3.format('.0%')));
+
+    if('Horizon') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Horizon');
+    if('Proportion') g.append('text').attr('transform','rotate(-90)')
+        .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Proportion');
+
+    // Legend
+    const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
+    series.forEach((s,i) => {
+        const gi = leg.append('g').attr('transform','translate('+(i*90)+',0)');
+        gi.append('rect').attr('width',12).attr('height',12).attr('y',-6).attr('fill',s.color).attr('opacity',0.85);
+        gi.append('text').attr('x',16).attr('y',4).attr('font-size','10px').attr('fill','#555').text(s.name);
+    });
+
+    // Tooltip
+    svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g.node());
+            const x0 = x.invert(mx);
+            const idx = d3.minIndex(data, d => Math.abs(d.x - x0));
+            const d = data[idx];
+            let html = '<b>h='+d.x+'</b>';
+            series.forEach(s => { html += '<br>'+s.name+': '+(d[s.key]*100).toFixed(1)+'%'; });
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+
+(function() {
+    const data = [{"x":1,"s1":0.023437839627246545,"s2":0.0,"s3":0.9765621603727535},
+{"x":2,"s1":0.08801267139141976,"s2":0.0,"s3":0.9119873286085803},
+{"x":3,"s1":0.09171898852746956,"s2":0.0,"s3":0.9082810114725304},
+{"x":4,"s1":0.1284141691073464,"s2":0.0,"s3":0.8715858308926536},
+{"x":5,"s1":0.1648044792785035,"s2":0.0,"s3":0.8351955207214965},
+{"x":6,"s1":0.16199634917351602,"s2":0.0,"s3":0.838003650826484},
+{"x":7,"s1":0.16711407941244147,"s2":0.0,"s3":0.8328859205875585},
+{"x":8,"s1":0.18195175642968417,"s2":0.0,"s3":0.8180482435703159},
+{"x":9,"s1":0.17034399662066027,"s2":0.0,"s3":0.8296560033793396},
+{"x":10,"s1":0.177307761594297,"s2":0.0,"s3":0.822692238405703},
+{"x":11,"s1":0.1771691624600802,"s2":0.0,"s3":0.8228308375399197},
+{"x":12,"s1":0.1841494203349436,"s2":0.0,"s3":0.8158505796650564},
+{"x":13,"s1":0.1760481103188636,"s2":0.0,"s3":0.8239518896811365},
+{"x":14,"s1":0.1947708629746227,"s2":0.0,"s3":0.8052291370253772},
+{"x":15,"s1":0.19996571260364004,"s2":0.0,"s3":0.80003428739636},
+{"x":16,"s1":0.21114301131891242,"s2":0.0,"s3":0.7888569886810876},
+{"x":17,"s1":0.22389434754849522,"s2":0.0,"s3":0.7761056524515048},
+{"x":18,"s1":0.2291626302446365,"s2":0.0,"s3":0.7708373697553635},
+{"x":19,"s1":0.2282054791275767,"s2":0.0,"s3":0.7717945208724232},
+{"x":20,"s1":0.22511703168084896,"s2":0.0,"s3":0.774882968319151}];
+    const series = [{"name":"INDPRO","color":"#1f77b4","key":"s1","dash":""},{"name":"CPI","color":"#ff7f0e","key":"s2","dash":""},{"name":"FFR","color":"#2ca02c","key":"s3","dash":""}];
+
+    const container = d3.select('#lpfevd_66');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    const keys = series.map(s => s.key);
+    const x = d3.scaleLinear().domain(d3.extent(data, d=>d.x)).range([0,w]);
+    const y = d3.scaleLinear().domain([0,1]).range([h,0]);
+
+    const stack = d3.stack().keys(keys).order(d3.stackOrderNone).offset(d3.stackOffsetNone);
+    const stacked = stack(data);
+
+    const area = d3.area()
+        .x(d => x(d.data.x))
+        .y0(d => y(d[0]))
+        .y1(d => y(d[1]));
+
+    g.selectAll('.layer').data(stacked).join('path')
+        .attr('class','layer')
+        .attr('d', area)
+        .attr('fill', (d,i) => series[i].color)
+        .attr('opacity', 0.85);
+
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+        .call(d3.axisBottom(x).ticks(Math.min(data.length,8)));
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(5).tickFormat(d3.format('.0%')));
+
+    if('Horizon') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Horizon');
+    if('Proportion') g.append('text').attr('transform','rotate(-90)')
+        .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Proportion');
+
+    // Legend
+    const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
+    series.forEach((s,i) => {
+        const gi = leg.append('g').attr('transform','translate('+(i*90)+',0)');
+        gi.append('rect').attr('width',12).attr('height',12).attr('y',-6).attr('fill',s.color).attr('opacity',0.85);
+        gi.append('text').attr('x',16).attr('y',4).attr('font-size','10px').attr('fill','#555').text(s.name);
+    });
+
+    // Tooltip
+    svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g.node());
+            const x0 = x.invert(mx);
+            const idx = d3.minIndex(data, d => Math.abs(d.x - x0));
+            const d = data[idx];
+            let html = '<b>h='+d.x+'</b>';
+            series.forEach(s => { html += '<br>'+s.name+': '+(d[s.key]*100).toFixed(1)+'%'; });
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+
+</script>
+</body>
+</html>
