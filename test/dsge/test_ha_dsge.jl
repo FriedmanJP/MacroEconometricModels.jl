@@ -955,4 +955,56 @@ end
     end
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 23: Clearing closure (Aiyagari regression — refactor must not change behavior)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "Clearing closure (Aiyagari regression)" begin
+    spec = load_ha_example(:krusell_smith)
+    @test spec.model == :aiyagari                       # new field defaults correctly
+
+    ss = compute_steady_state(spec; r_bounds=(-0.02, 0.04), max_iter=100, tol=1e-3)
+    @test ss.aggregates[:K] > 0
+    @test isfinite(ss.prices[:r])
+    @test haskey(ss.prices, :w)                         # Cobb-Douglas wage still produced
+    @test abs(ss.excess_demand) < 5e-3                  # market essentially clears
+    @test -0.01 < ss.prices[:r] < 1 / spec.individual.beta - 1  # r* below time-pref rate
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 24: Huggett (1993) — pure-exchange risk-free bond, zero net supply
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "Huggett (1993) steady state" begin
+    # Six model periods per year (Huggett 1993): annualize the per-period rate.
+    annualize(rp) = (1 + rp)^6 - 1
+    # Table 1 (σ = 1.5): credit limit => equilibrium annual risk-free rate.
+    targets = [(-2.0, -0.071), (-4.0, 0.023), (-6.0, 0.034), (-8.0, 0.040)]
+
+    r_annuals = Float64[]
+    for (cl, r_target) in targets
+        a_max = cl <= -6 ? 18.0 : 8.0
+        spec = MacroEconometricModels._huggett_example(; credit_limit=cl, a_max=a_max, n_a=400)
+        @test spec.model == :huggett
+        ss = compute_steady_state(spec; max_iter=200, tol=5e-4)
+        @test ss.converged
+        @test abs(ss.excess_demand) < 3e-3                 # bond market clears (∫a' ≈ 0)
+        r_ann = annualize(ss.prices[:r])
+        push!(r_annuals, r_ann)
+        # Reproduces Huggett (1993) Table 1 within method/grid tolerance (~1.5pp)
+        @test isapprox(r_ann, r_target; atol=0.015)
+        # Precautionary saving keeps r* below the time-preference rate (1/β − 1)
+        @test r_ann < annualize((1 - spec.individual.beta) / spec.individual.beta)
+    end
+
+    # Huggett's comparative static: r* rises as the credit limit loosens.
+    @test issorted(r_annuals)
+
+    # load_ha_example(:huggett) is the default (credit limit −2) economy.
+    spec0 = load_ha_example(:huggett)
+    @test spec0.model == :huggett
+    @test spec0.individual.borrowing_constraint[1] == -2.0
+    @test spec0.income.states == [1.0, 0.1]
+end
+
 end # @testset "HA-DSGE Types"
