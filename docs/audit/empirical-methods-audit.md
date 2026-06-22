@@ -86,6 +86,49 @@ Cross-stack convention differences that are NOT bugs (recorded so they are not r
   per its own header. Our `baxter_king` is the classic symmetric BK (loses 2K obs) — a different,
   correctly-implemented filter, so a direct numeric comparison would be meaningless.
 
+| F-07 | pvar | `src/pvar/estimation.jl:386-469` | High | Confirmed | `_windmeijer_correct` computes the derivative matrices `D_j` (l.401-415) and `D_jk` (l.420-436) but **never uses them** — it returns the plain two-step sandwich `gmm_sandwich_vcov(S_ZX, W, D_e)` (l.459). The Windmeijer (2005) finite-sample correction is therefore a no-op placeholder, so reported two-step PVAR standard errors are downward-biased (a well-known, sometimes large, bias). Fix = implement the full correction term (non-trivial). |
+
+## Tier-2 audit — method and candidate findings
+
+Tier-2 (no MATLAB reference) was swept by parallel code-review agents, then **every candidate was
+re-checked against source and theory by hand**. The agents had a high false-positive rate on
+"formula" claims, so only hand-verified items are recorded as findings.
+
+**Refuted agent claims (verified CORRECT in source — do NOT change):**
+- `nongaussian/ml.jl:113` Student-t standardized log-pdf — correct: `f_X(x)=f_Z(x·s)·s` with
+  `s=√(ν/(ν-2))` is exactly the unit-variance density. (Agent wrongly said "divide not multiply".)
+- `nongaussian/ica.jl:251-254` JADE Gaussian-cumulant subtraction — correct: subtracts the three
+  pairings `δ_{ij}δ_{kl}+δ_{ik}δ_{jl}+δ_{il}δ_{jk}`, yielding −3 on the `(i,i)` diagonal when `i=j`.
+- `core/arias.jl:~220` A0 form — only `|det(A0)|` enters the importance weight, and
+  `|det((L')⁻¹Q)|=|det(Q'L⁻¹)|`, so the weight is unaffected (cosmetic at most).
+- `spectral/cross.jl:108` phase `atan2(quad,co)` with `quad=−Im` — a self-consistent engineering
+  convention for the phase sign, not an error.
+- `teststat/helpers.jl:43` ADF p-value normal tail — only used in the fail-to-reject region
+  (p>0.10), monotonic and bounded; a Low approximation, not the HIGH the agent claimed.
+- `nongaussian/shared.jl` heteroskedasticity uses `eigen(Σ₁⁻¹Σ₂)` — that IS the correct generalized
+  eigendecomposition (real eigenvalues; SVD would be wrong here).
+
+**Unverified candidate findings (leads only — need confirmation before any fix):**
+- `did/sun_abraham.jl:154-160` — missing-cohort-cell event-times left at 0 (not skipped) could bias
+  aggregation when the reporting window exceeds a cohort's estimable range (edge case; Medium?).
+- `did/callaway_santanna.jl` — `cluster` kwarg may not feed a cluster-robust SE in all aggregation
+  schemes (verify; Medium?).
+- `nowcast/dfm.jl:~380` — EM M-step may update only the first `p` factor-VAR lags while the
+  state spans `p_eff=max(p,5)` lags for quarterly aggregation (verify; would affect MM cases).
+- `reg/iv.jl:54` — first-stage F may use #total instruments instead of #excluded for the
+  Stock-Yogo weak-IV diagnostic (Low-Medium; point estimates unaffected).
+- `pvar` Hansen-J aggregation across equations / d.o.f. (verify; affects J p-value only).
+
+**Verified correct (hand-checked):** VECM (Johansen trace/max stat, α/β Phillips normalization,
+VECM↔VAR mapping), ARIMA (Harvey state-space, exact-ML + CSS likelihood, ψ-weight forecast
+variance), ARCH/GARCH/EGARCH/GJR (log-likelihood, persistence constraints incl. GJR α+γ/2+β and
+EGARCH |β|<1), GMM (J-test d.o.f. = #moments−#params, HAC sandwich), reg/preg core (OLS, HC0–HC3,
+cluster-robust finite-sample factor, logit/probit IRLS + delta-method margins, FE within + RE
+Swamy-Arora), most teststat statistics (KPSS, PP, DF-GLS, Ng-Perron, Johansen, Zivot-Andrews,
+Bai-Perron, CIPS) and their critical-value tables, DSGE estimation seams (Kalman likelihood,
+Lyapunov init, QZ→state-space wiring, prior bounds), spectral periodogram/Welch/Burg + windows,
+X-13 seasonal-MA filter coefficients.
+
 ## Cases where OURS is correct and the reference deviates
 
 - **Bai–Ng ICp2 penalty.** Reference `baing.m` `jj==2` uses `(N+T)/(NT)·2·log(min(N,T))·k` — an
