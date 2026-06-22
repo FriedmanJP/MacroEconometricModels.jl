@@ -61,6 +61,9 @@ Routines checked and found correct (so we know what was actually verified vs. as
 | factor | PCA eigen-decomposition (eigenvalues/explained variance) | Code review + reference projection | eigenvalues/`explained_variance` correct; the **reconstruction** (`predict`) is buggy → F-06 |
 | factor | Bai–Ng penalty formulas IC1/IC3 | Code review vs `baing.m` + Bai-Ng 2002 | IC1/IC3 penalties correct (match `baing` jj=1/jj=3); IC2 matches *published* formula (reference adds a non-standard ×2) — but residuals feeding all three are wrong until F-06 fixed |
 | favar | BBE two-step structure (PCA → orthogonalize vs Y_key → augmented VAR) + `favar_panel_irf` mapping form | Code review vs BBE 2005 | structure & mapping `Λ·factor_irf` correct in form; magnitudes inherit F-06 (shared `estimate_factors` loadings) |
+| lp | `estimate_lp` (Jordà 2005) OLS + IRF extraction | Numerical (manual OLS) + code review | regression coef == manual OLS; standard Jordà form (regress yₜ₊ₕ on shock+lags, IRF=shock coef) |
+| lp | horizon-aware NW bandwidth floor `max(auto, h+1)` | Code review vs Jordà MA(h) serial-corr | correct floor; reference `directmethods` uses `lags+h+1` (also valid) |
+| lp | `structural_lp` (Plagborg-Møller & Wolf 2021) ε=Q'L⁻¹u → LP per shock | Code review | correct PMW construction; LP-Cholesky h=0 impact ≈ Cholesky L (0.014 finite-sample control-set gap) |
 
 ## Notes / convention map
 
