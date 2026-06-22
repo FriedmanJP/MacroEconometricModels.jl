@@ -26,6 +26,7 @@ estimators; algorithmic code review vs canonical formulas elsewhere. See
 | F-02 | bvar | `src/bvar/priors.jl:129-131` | High | Confirmed | `log_marginal_likelihood` omits the multivariate-gamma terms `logΓₙ(ν_post/2) − logΓₙ(ν_prior/2)` and the `−½·n·T_eff·log π` constant present in the reference `matrictint.m`. Confirmed numerically: our value −2653.18 vs true ML −1343.27 (assembled from Octave `matrictint`); gap 1309.91 = the analytic omitted terms to 1e-13. Invariant for tau-tuning (active dummy blocks fixed), but the returned value is **not** the marginal likelihood — cross-lag/cross-model/cross-n comparison is invalid. `checks_bvar_ml.jl`. |
 | F-03 | bvar | `src/var/types.jl:223`, `src/bvar/priors.jl:21` | Low | Confirmed | Hyperparameter naming/convention hazard (NOT a numerical bug). `tau` is inverse-tightness (divides dummies; larger ⇒ looser) vs reference `mnprior.tight` (multiplies; larger ⇒ tighter). `lambda` (our sum-of-coefficients) and `mu` (our co-persistence) are **swapped** vs `rfvar3` semantics, yet the defaults `lambda=5, mu=2` are copied from the reference's `lambda`(co-persistence)`=5`, `mu`(own)`=2` guidance — so the default prior differs from what a user porting reference settings expects. Doc fix recommended. |
 | F-04 | bvar | `src/bvar/estimation.jl:76` | Low | Confirmed | `optimize_hyperparameters(Y_eff, p)` passes the already-lagged `Y_eff` as if it were raw data, so the marginal likelihood used for tau selection drops another `p` rows (double-lag) and scales the prior from `Y_eff` while estimation (`gen_dummy_obs(Y, …)` at line 77) scales from the full `Y`. Affects only the auto-selected `tau`, not estimation given a fixed `tau`. Minor sample/scaling inconsistency. |
+| F-05 | core | `src/core/identification.jl:184-192` | Low | Confirmed | `identify_long_run` (Blanchard–Quah) is algebraically correct (`L·Q = (I−A_sum)·chol(C1ΣC1')`, verified `Q_BQ Q_BQ'=Σ` and long-run cumulative impact lower-triangular vs reference, IRF² match 1.7e-12), but applies **no sign normalization** of the permanent shock, whereas reference `iresponse_longrun.m` pins `Q(1,1)>0`. The permanent shock's sign is therefore arbitrary/run-dependent — usability/reproducibility nit, not a numerical error. |
 
 ## Verified-correct ledger
 
@@ -42,6 +43,12 @@ Routines checked and found correct (so we know what was actually verified vs. as
 | bvar | `_draw_inverse_wishart(ν,S)` parameterization (scale S, mean S/(ν-n-1)) | Bartlett algebra vs `rand_inverse_wishart.m` + property test | matches standard IW; `checks_bvar_posterior.jl` E[Σ] within 0.24% |
 | bvar | Conjugate NIW posterior moments `B_post, V_post, ν_post, S_post` | Code review + sampler reproduces them | textbook conjugate update; `checks_bvar_posterior.jl` |
 | bvar | `:direct` and `:gibbs` samplers | Property test vs analytic posterior | `checks_bvar_posterior.jl`: E[B], E[Σ] match analytic moments within MC error |
+| core | Cholesky IRF (`compute_irf`) | Numerical vs `iresponse.m` | `checks_irf.jl`: maxrel 1.5e-12 (same Φ,Σ) |
+| core | FEVD (`_compute_fevd`) | Numerical vs `fevd.m` | `checks_irf.jl`: maxrel 4.7e-15 |
+| core | structural shocks `ε=Q'L⁻¹u` | Numerical vs `ε=L⁻¹u` (Cholesky) | `checks_irf.jl`: maxabs 0 |
+| core | historical decomposition identity | Self-consistency | `checks_irf.jl`: contrib+initial==actual exact |
+| core | long-run / Blanchard–Quah IRF | Numerical vs `iresponse_longrun.m` (sign-free) | `checks_irf.jl`: IRF² maxrel 1.7e-12; long-run impact lower-triangular |
+| var | unconditional forecast recursion (`predict`) | Numerical vs `forecasts.m` no-shock | `checks_forecast.jl` (below) |
 
 ## Notes / convention map
 
