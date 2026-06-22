@@ -376,6 +376,9 @@ include("dsge/heterogeneous/display.jl")
 include("dsge/heterogeneous/analysis.jl")
 include("dsge/heterogeneous/estimation.jl")
 
+# Overlapping generations (Blanchard 1985 perpetual youth)
+include("olg/blanchard.jl")
+
 # Display (after all types)
 include("summary.jl")
 
@@ -487,6 +490,10 @@ export HASteadyState, HADSGESolution, KrusellSmithSolution, DenHaanAccuracy
 export rouwenhorst, tauchen
 export load_ha_example
 export distribution_irf, inequality_irf, simulate_panel, den_haan_test
+
+# Overlapping generations (Blanchard 1985 perpetual youth)
+export BlanchardOLG, BlanchardOLGSteadyState, BlanchardOLGSolution
+export blanchard_steady_state, blanchard_solve, blanchard_transition
 
 # Local Projection types
 export AbstractLPModel, AbstractLPImpulseResponse, AbstractCovarianceEstimator
