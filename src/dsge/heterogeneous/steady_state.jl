@@ -136,12 +136,18 @@ function _ha_steady_state(ip::IndividualProblem{T}, grid::HAGrid{T},
                            r_bounds::Tuple{T,T}=(T(-0.01), T(0.04)),
                            max_iter::Int=200,
                            tol::Real=T(1e-8),
-                           verbose::Bool=false) where {T<:AbstractFloat}
+                           verbose::Bool=false,
+                           clearing_fn::Union{Nothing,Function}=nothing) where {T<:AbstractFloat}
     @assert grid.n_dims == 1 "Steady state bisection requires a one-asset grid"
     @assert ip.n_asset_dims == 1 "Steady state bisection requires a one-asset individual problem"
 
     tol_T = T(tol)
     r_lo, r_hi = r_bounds
+
+    # Market-clearing closure: given a trial rate, return (asset demand, prices).
+    # Defaults to the Aiyagari firm-FOC rule built from `price_fn`, preserving the
+    # original behavior exactly when no explicit closure is supplied.
+    clr = isnothing(clearing_fn) ? _aiyagari_clearing(price_fn) : clearing_fn
 
     # Validate bounds: at r_lo capital supply should exceed demand,
     # at r_hi demand should exceed supply (standard Aiyagari setup)
@@ -167,27 +173,14 @@ function _ha_steady_state(ip::IndividualProblem{T}, grid::HAGrid{T},
         # Bisection midpoint
         r_mid = (r_lo + r_hi) / T(2)
 
-        # Compute capital demand from firm FOC given r_mid.
-        # From Cobb-Douglas: r = alpha * Z * K^(alpha-1) * L^(1-alpha) - delta
-        # Invert: K_d = ((r + delta) / (alpha * Z * L^(1-alpha)))^(1/(alpha-1))
-        alpha = get(params, :alpha, T(0.36))
-        delta = get(params, :delta, T(0.025))
-        Z = get(params, :Z, one(T))
-        L = get(params, :L, one(T))
-
-        # Ensure r_mid + delta > 0 to avoid negative marginal product
-        r_eff = r_mid + delta
-        if r_eff <= zero(T)
-            # Interest rate too low — capital demand infinite, increase r
+        # Market-clearing closure: trial rate → (asset demand, prices).
+        # Aiyagari: K_d from the inverted firm FOC. Huggett: K_d = 0 (zero net supply).
+        K_d, prices = clr(r_mid, params)
+        if !isfinite(K_d)
+            # Demand diverges (e.g. r below the marginal-product floor) → raise r.
             r_lo = r_mid
             continue
         end
-
-        K_d = (r_eff / (alpha * Z * L^(one(T) - alpha)))^(one(T) / (alpha - one(T)))
-
-        # Compute prices at K_d
-        prices = price_fn(K_d, params)
-        prices[:r] = r_mid  # ensure consistency
 
         # Solve individual problem via EGM
         c_pol, a_pol = _egm_solve(ip, grid, income, prices; max_iter=1000, tol=T(1e-10))
@@ -244,9 +237,15 @@ function _ha_steady_state(ip::IndividualProblem{T}, grid::HAGrid{T},
     # Compute Euler equation error
     euler_err = _compute_euler_error(best_c_pol, best_a_pol, ip, grid, income, best_prices)
 
-    # Compute output from Cobb-Douglas
-    Y_val = get(params, :Z, one(T)) * best_K_d^(get(params, :alpha, T(0.36))) *
-            get(params, :L, one(T))^(one(T) - get(params, :alpha, T(0.36)))
+    # Compute output: Cobb-Douglas for production economies, aggregate endowment otherwise
+    if best_K_d > zero(T)
+        Y_val = get(params, :Z, one(T)) * best_K_d^(get(params, :alpha, T(0.36))) *
+                get(params, :L, one(T))^(one(T) - get(params, :alpha, T(0.36)))
+    else
+        # Pure-exchange (e.g. Huggett): Y = aggregate endowment Σ_j p_j e_j
+        inc_marg = vec(sum(reshape(best_dist, n_a, n_e), dims=1))
+        Y_val = sum(inc_marg .* income.states)
+    end
 
     # Reshape distribution to N_a × N_e
     dist_reshaped = reshape(best_dist, n_a, n_e)
@@ -307,6 +306,48 @@ function _default_cobb_douglas_price_fn(K::T, params::Dict{Symbol,T}) where {T<:
 end
 
 # =============================================================================
+# Market-clearing closures — pluggable (asset demand, prices) given a trial rate
+# =============================================================================
+
+"""
+    _aiyagari_clearing(price_fn) → (r_mid, params) -> (K_d, prices)
+
+Default Aiyagari (1994) clearing rule. Inverts the Cobb-Douglas firm FOC to obtain
+capital demand `K_d` at the trial rate, then evaluates `price_fn(K_d, params)` and
+overwrites `prices[:r]` with the trial rate. Returns `(Inf, …)` when the rate falls
+below the marginal-product floor so the caller raises `r`. Numerically identical to
+the original hard-coded steady-state logic.
+"""
+function _aiyagari_clearing(price_fn::Function)
+    return function (r_mid::T, params::Dict{Symbol,T}) where {T<:AbstractFloat}
+        alpha = get(params, :alpha, T(0.36))
+        delta = get(params, :delta, T(0.025))
+        Z = get(params, :Z, one(T))
+        L = get(params, :L, one(T))
+        r_eff = r_mid + delta
+        r_eff <= zero(T) && return (T(Inf), Dict{Symbol,T}(:r => r_mid))
+        K_d = (r_eff / (alpha * Z * L^(one(T) - alpha)))^(one(T) / (alpha - one(T)))
+        prices = price_fn(K_d, params)
+        prices[:r] = r_mid
+        return (K_d, prices)
+    end
+end
+
+"""
+    _huggett_clearing() → (r_mid, params) -> (0, Dict(:r, :w))
+
+Huggett (1993) zero-net-supply clearing rule for a pure-exchange risk-free-bond
+economy: asset demand is identically zero, so the bisection clears `∫a' dμ = 0`.
+The aggregate endowment level `w` is fixed at 1 in steady state (income enters the
+budget as `w·e`).
+"""
+function _huggett_clearing()
+    return function (r_mid::T, params::Dict{Symbol,T}) where {T<:AbstractFloat}
+        return (zero(T), Dict{Symbol,T}(:r => r_mid, :w => one(T)))
+    end
+end
+
+# =============================================================================
 # compute_steady_state — public API (dispatch on HADSGESpec)
 # =============================================================================
 
@@ -329,11 +370,12 @@ does not provide one, and delegates to `_ha_steady_state`.
 """
 function compute_steady_state(spec::HADSGESpec{T};
                           K_init::T=T(10),
-                          r_bounds::Tuple{T,T}=(T(-0.01), T(0.04)),
+                          r_bounds::Union{Nothing,Tuple{T,T}}=nothing,
                           max_iter::Int=200,
                           tol::Real=T(1e-8),
                           verbose::Bool=false,
-                          price_fn::Union{Nothing,Function}=nothing) where {T<:AbstractFloat}
+                          price_fn::Union{Nothing,Function}=nothing,
+                          clearing::Union{Nothing,Function}=nothing) where {T<:AbstractFloat}
     pfn = isnothing(price_fn) ? _default_cobb_douglas_price_fn : price_fn
 
     # Extract parameters: merge het_params with aggregate steady-state params
@@ -353,9 +395,21 @@ function compute_steady_state(spec::HADSGESpec{T};
         params[:L] = one(T)
     end
 
+    # Select the market-clearing closure: explicit override > model family > Aiyagari.
+    clr = !isnothing(clearing) ? clearing :
+          spec.model === :huggett ? _huggett_clearing() :
+          _aiyagari_clearing(pfn)
+
+    # Select bisection bounds: explicit override > model-appropriate default.
+    # Huggett's risk-free rate lies below the per-period time-preference rate 1/β − 1.
+    rb = !isnothing(r_bounds) ? r_bounds :
+         spec.model === :huggett ?
+            (T(-0.05), one(T) / spec.individual.beta - one(T) - T(1e-4)) :
+            (T(-0.01), T(0.04))
+
     return _ha_steady_state(
         spec.individual, spec.grid, spec.income, pfn, params;
-        K_init=K_init, r_bounds=r_bounds, max_iter=max_iter,
-        tol=tol, verbose=verbose
+        K_init=K_init, r_bounds=rb, max_iter=max_iter,
+        tol=tol, verbose=verbose, clearing_fn=clr
     )
 end
