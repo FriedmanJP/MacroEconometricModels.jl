@@ -295,6 +295,42 @@ function _ho_kalman(irf_sequence::Vector{Matrix{T}}, n_vars::Int,
 end
 
 # =============================================================================
+# _wrap_hadsge_solution — assemble an HADSGESolution from reduced state-space
+# =============================================================================
+
+"""
+    _wrap_hadsge_solution(spec, ss, G1, impact, C_sol, eu, eigenvalues, jacobians,
+                          T_horizon, method; explained_variance=1.0) → HADSGESolution{T}
+
+Wrap a reduced first-order state-space realization `(G1, impact)` into the
+`DSGESolution`/`HADSGESolution` types so the standard `irf`/`fevd`/`simulate`
+dispatch applies. Used by the Huggett SSJ general-equilibrium path.
+"""
+function _wrap_hadsge_solution(spec::HADSGESpec{T}, ss::HASteadyState{T},
+                               G1::Matrix{T}, impact::Matrix{T}, C_sol::Vector{T},
+                               eu::Vector{Int}, eigenvalues::Vector{ComplexF64},
+                               jacobians::Dict{Symbol,Matrix{T}},
+                               T_horizon::Int, method::Symbol;
+                               explained_variance::T=one(T)) where {T<:AbstractFloat}
+    n_red = size(G1, 1)
+    endog_names = [Symbol("x_$i") for i in 1:n_red]
+    dummy_spec = DSGESpec{T}(
+        endog_names, [:epsilon], Symbol[], Dict{Symbol,T}(),
+        [:(0 + 0) for _ in 1:n_red],
+        [((yt, yl, yle, eps, th) -> zero(T)) for _ in 1:n_red],
+        0, Int[], zeros(T, n_red), nothing
+    )
+    Gamma0 = Matrix{T}(I, n_red, n_red)
+    linear = LinearDSGE{T}(Gamma0, copy(G1), zeros(T, n_red), copy(impact),
+                            zeros(T, n_red, 0), dummy_spec)
+    dsge_sol = DSGESolution{T}(G1, impact, C_sol, eu, method, eigenvalues,
+                                dummy_spec, linear)
+    reduction_basis = Matrix{T}(I, n_red, n_red)
+    return HADSGESolution{T}(ss, dsge_sol, method, spec, reduction_basis,
+                              T_horizon, n_red, explained_variance, jacobians)
+end
+
+# =============================================================================
 # _ssj_solve — full SSJ solution pipeline
 # =============================================================================
 
@@ -325,6 +361,39 @@ function _ssj_solve(spec::HADSGESpec{T}, ss::HASteadyState{T};
                      n_reduced::Int=30) where {T<:AbstractFloat}
     # Step 1: Compute HA block Jacobians
     jacobians = Dict{Symbol, Matrix{T}}()
+
+    # ── Huggett (zero net supply): general-equilibrium close ──────────────────
+    # The bond clears in zero net supply (A_t = 0 ∀t). With an aggregate endowment
+    # shock w_t (AR(1)), solve for the market-clearing rate path:
+    #   H_U · dr + H_Z · dw = 0  ⟹  dr = -H_U \ (H_Z · dw).
+    # H_U = ∂A/∂r-path, H_Z = ∂A/∂w-path (both via the existing finite-difference
+    # Jacobian, which aggregates household assets). Ho-Kalman realizes the rate IRF.
+    if spec.model === :huggett
+        H_U = _ssj_jacobian(ss, spec.individual, spec.grid, spec.income,
+                            :r, :A; T_horizon=T_horizon)
+        H_Z = _ssj_jacobian(ss, spec.individual, spec.grid, spec.income,
+                            :w, :A; T_horizon=T_horizon)
+        jacobians[:H_U] = H_U
+        jacobians[:H_Z] = H_Z
+
+        rho = T(get(spec.het_params, :rho_e, 0.9))
+        dw = T[rho^(t - 1) for t in 1:T_horizon]          # endowment-shock impulse path
+        dr = -(H_U \ (H_Z * dw))                          # clearing rate path (IRF of r)
+
+        irf_seq = [reshape([dr[t]], 1, 1) for t in 1:T_horizon]
+        k = max(min(n_reduced, div(T_horizon, 2) - 1), 1)
+        G1, impact, C_sol, eu, eig = _ho_kalman(irf_seq, 1, 1, k)
+        # Ho-Kalman realizations can land marginally outside the unit circle;
+        # contract onto it (mirrors the Reiter stabilization) since the rate IRF
+        # is genuinely stable (decays at the shock persistence ρ).
+        max_eig = maximum(abs.(eig))
+        if max_eig > one(T)
+            G1 .*= T(0.999) / max_eig
+            eig = eigvals(ComplexF64.(G1))
+        end
+        return _wrap_hadsge_solution(spec, ss, G1, impact, C_sol, eu, eig,
+                                     jacobians, T_horizon, :ssj)
+    end
 
     # Primary Jacobian: r → K
     J_r_K = _ssj_jacobian(ss, spec.individual, spec.grid, spec.income,

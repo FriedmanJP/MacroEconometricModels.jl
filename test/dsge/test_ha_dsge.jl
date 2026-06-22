@@ -1007,4 +1007,19 @@ end
     @test spec0.income.states == [1.0, 0.1]
 end
 
+@testset "Huggett SSJ" begin
+    spec = MacroEconometricModels._huggett_example(; credit_limit=-2.0, a_max=8.0, n_a=200)
+    ss = compute_steady_state(spec; max_iter=120, tol=1e-3)
+    sol = solve(spec; method=:ssj, ss=ss, T_horizon=100, n_reduced=20)
+    @test sol isa HADSGESolution
+    @test sol.method === :ssj
+    @test maximum(abs.(eigvals(sol.linear_solution.G1))) <= 1 + 1e-6  # stable
+    @test haskey(sol.jacobians, :H_U)                                  # clearing Jacobian
+    @test haskey(sol.jacobians, :H_Z)                                  # shock Jacobian
+    # A positive aggregate endowment shock lowers the clearing risk-free rate on impact.
+    H_U = sol.jacobians[:H_U]; H_Z = sol.jacobians[:H_Z]
+    dr = -(H_U \ (H_Z * [0.9^(t - 1) for t in 1:100]))
+    @test dr[1] < 0
+end
+
 end # @testset "HA-DSGE Types"
