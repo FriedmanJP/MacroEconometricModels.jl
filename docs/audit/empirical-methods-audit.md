@@ -7,6 +7,11 @@
 estimators; algorithmic code review vs canonical formulas elsewhere. See
 `docs/superpowers/specs/2026-06-23-empirical-methods-audit-design.md`.
 
+**The reference is NOT ground truth.** A difference between ours and `BVAR_` does not mean ours is
+wrong — sometimes ours is the better implementation. Every discrepancy is judged against correct
+econometric theory and classified as: real bug in ours / convention difference / reference is
+weaker or wrong. Only the first becomes a fix.
+
 ## Severity legend
 
 | Severity | Meaning |
@@ -48,7 +53,10 @@ Routines checked and found correct (so we know what was actually verified vs. as
 | core | structural shocks `ε=Q'L⁻¹u` | Numerical vs `ε=L⁻¹u` (Cholesky) | `checks_irf.jl`: maxabs 0 |
 | core | historical decomposition identity | Self-consistency | `checks_irf.jl`: contrib+initial==actual exact |
 | core | long-run / Blanchard–Quah IRF | Numerical vs `iresponse_longrun.m` (sign-free) | `checks_irf.jl`: IRF² maxrel 1.7e-12; long-run impact lower-triangular |
-| var | unconditional forecast recursion (`predict`) | Numerical vs `forecasts.m` no-shock | `checks_forecast.jl` (below) |
+| var | unconditional forecast recursion (`predict`) | Numerical vs `forecasts.m` no-shock | `checks_forecast.jl`: maxrel 1.1e-13 |
+| filters | HP filter (`hp_filter`) | Numerical vs `Hpfilter.m` | `checks_filters.jl`: maxrel 1.8e-11 (identical pentadiagonal system) |
+| filters | Hamilton filter (`hamilton_filter`) | Numerical vs `hamfilter.m` | `checks_filters.jl`: cycle/trend maxrel 7e-15 |
+| filters | Baxter–King (`baxter_king`), symmetric | Canonical BK property test | zero-sum `a₀+2Σaⱼ`=5.5e-17; loses K each end (reference `bkfilter.m` is actually Christiano–Fitzgerald, not symmetric BK) |
 
 ## Notes / convention map
 
@@ -66,3 +74,7 @@ Cross-stack convention differences that are NOT bugs (recorded so they are not r
   sum-of-coefficients prior (reference calls this `mu` in `rfvar3`), our `mu` drives the
   co-persistence/dummy-initial-observation prior (reference's `lambda`). Both are present and
   correctly formed. Documentation hazard only — flagged as a Low doc item below if confirmed.
+- **`bkfilter.m` ≠ Baxter–King.** The reference function *named* `bkfilter.m` actually implements
+  the Christiano–Fitzgerald (1999) default filter (drift removal + full-sample asymmetric weights),
+  per its own header. Our `baxter_king` is the classic symmetric BK (loses 2K obs) — a different,
+  correctly-implemented filter, so a direct numeric comparison would be meaningless.
