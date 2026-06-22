@@ -65,6 +65,8 @@ function _reiter_linearize(ss::HASteadyState{T}, ip::IndividualProblem{T},
                             grid::HAGrid{T}, income::IncomeProcess{T};
                             n_reduced::Int=50, dx::Real=T(1e-6),
                             n_sim::Int=200,
+                            model::Symbol=:aiyagari,
+                            het_params::Dict{Symbol,T}=Dict{Symbol,T}(),
                             rng::Union{Nothing,AbstractRNG}=nothing) where {T<:AbstractFloat}
     @assert grid.n_dims == 1 "Reiter linearization requires a one-asset grid"
     @assert ip.n_asset_dims == 1 "Reiter linearization requires a one-asset individual problem"
@@ -179,6 +181,58 @@ function _reiter_linearize(ss::HASteadyState{T}, ip::IndividualProblem{T},
 
     explained = var_full > zero(T) ? one(T) - var_resid / var_full : one(T)
     explained = clamp(explained, zero(T), one(T))
+
+    # ── Huggett (zero net supply): aggregate block with r pinned by clearing ──
+    # State [d̃; w], where w is the aggregate endowment level (AR(1) shock). The bond
+    # clears every period (∫a' = 0), which pins the rate statically:
+    #   dr_t = -(1/A_r) (A_w·dw_t + sav_load'·d̃_t),
+    # with A_r = ∂(∫a')/∂r, A_w = ∂(∫a')/∂w, sav_load = U_k'·a'_ss. Substituting into
+    # the distribution transition d̃_{t+1} = G1_dist·d̃_t + g_r·dr_t + g_w·dw_t gives the
+    # closed reduced system. (No hard-coded Cobb-Douglas channel — unlike the Aiyagari
+    # path below — since Huggett has no production.)
+    if model === :huggett
+        rho = T(get(het_params, :rho_e, 0.9))
+        a_sav_ss = vec(a_pol_ss)
+        dr_step = T(1e-5)
+        dw_step = T(1e-5)
+
+        prices_r = copy(ss.prices); prices_r[:r] = ss.prices[:r] + dr_step
+        _, a_pol_r = _egm_solve(ip, grid, income, prices_r; max_iter=1000, tol=T(1e-10))
+        Lambda_r = _build_transition_matrix(a_pol_r, grid, income)
+
+        prices_w = copy(ss.prices); prices_w[:w] = ss.prices[:w] + dw_step
+        _, a_pol_w = _egm_solve(ip, grid, income, prices_w; max_iter=1000, tol=T(1e-10))
+        Lambda_w = _build_transition_matrix(a_pol_w, grid, income)
+
+        # Distribution responses (projected) and aggregate-savings sensitivities.
+        g_r = (Lambda_r * dist_ss .- Lambda_ss * dist_ss) ./ dr_step
+        g_w = (Lambda_w * dist_ss .- Lambda_ss * dist_ss) ./ dw_step
+        gr_red = U_k' * g_r
+        gw_red = U_k' * g_w
+        A_r = sum((vec(a_pol_r) .- a_sav_ss) .* dist_ss) / dr_step
+        A_w = sum((vec(a_pol_w) .- a_sav_ss) .* dist_ss) / dw_step
+        sav_load = U_k' * a_sav_ss
+
+        @assert abs(A_r) > eps(T) "Huggett Reiter: ∂(asset demand)/∂r ≈ 0 (cannot pin rate)"
+
+        channel_w = gw_red .- gr_red .* (A_w / A_r)        # response of d̃ to a w shock
+
+        n_total = n_red + 1
+        G1 = zeros(T, n_total, n_total)
+        G1[1:n_red, 1:n_red] .= G1_dist .- (gr_red ./ A_r) * sav_load'
+        G1[1:n_red, n_red + 1] .= channel_w
+        G1[n_red + 1, n_red + 1] = rho                      # w_{t+1} = ρ·w_t + ε
+
+        impact_vec = zeros(T, n_total, 1)
+        impact_vec[n_red + 1, 1] = one(T)
+        impact_vec[1:n_red, 1] .= channel_w
+
+        eigs = eigvals(G1)
+        me = maximum(abs.(eigs))
+        me > one(T) && (G1 .*= T(0.999) / me)
+
+        return G1, impact_vec, n_red, explained
+    end
 
     # ── Step 6: Assemble full system ──────────────────────────────────────────
     # Aggregate variables: K (capital) and Z (TFP shock)

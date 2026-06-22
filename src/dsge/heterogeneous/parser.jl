@@ -539,7 +539,8 @@ function solve(spec::HADSGESpec{T}; method::Symbol=:ssj,
     elseif method === :reiter
         n_reduced = get(kwargs, :n_reduced, 30)
         G1, impact, n_red, explained = _reiter_linearize(
-            ss, spec.individual, spec.grid, spec.income; n_reduced=n_reduced
+            ss, spec.individual, spec.grid, spec.income; n_reduced=n_reduced,
+            model=spec.model, het_params=spec.het_params
         )
 
         # Build a minimal DSGESolution and HADSGESolution from Reiter output

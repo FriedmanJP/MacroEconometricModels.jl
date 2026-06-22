@@ -1022,4 +1022,15 @@ end
     @test dr[1] < 0
 end
 
+@testset "Huggett Reiter" begin
+    spec = MacroEconometricModels._huggett_example(; credit_limit=-2.0, a_max=8.0, n_a=200)
+    ss = compute_steady_state(spec; max_iter=120, tol=1e-3)
+    sol = solve(spec; method=:reiter, ss=ss, n_reduced=30)
+    @test sol isa HADSGESolution
+    @test sol.method === :reiter
+    @test maximum(abs.(eigvals(sol.linear_solution.G1))) <= 1 + 1e-6   # stable
+    @test sol.explained_variance > 0.5
+    @test size(sol.linear_solution.G1, 1) == sol.n_reduced + 1         # state [d̃; w]
+end
+
 end # @testset "HA-DSGE Types"
