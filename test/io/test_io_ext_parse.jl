@@ -14,4 +14,20 @@ using Test, MacroEconometricModels
     else
         @test_broken false  # ZipFile not installed in this environment
     end
+
+    if Base.find_package("XLSX") !== nothing
+        @eval using XLSX
+        ext = Base.get_extension(MacroEconometricModels, :MacroEconometricModelsXLSXExt)
+        @test ext !== nothing
+        dir = mktempdir(); xp = joinpath(dir, "t.xlsx")
+        XLSX.openxlsx(xp, mode="w") do xf
+            s = xf[1]
+            s["A1"] = 150.0; s["B1"] = 500.0; s["C1"] = 350.0
+            s["A2"] = 200.0; s["B2"] = 100.0; s["C2"] = 1700.0
+        end
+        io = MacroEconometricModels._parse_xlsx_io(xp; n_sectors=2, n_fd=1)
+        @test io.x ≈ [1000.0, 2000.0]
+    else
+        @test_broken false  # XLSX not installed in this environment
+    end
 end
