@@ -38,7 +38,16 @@ const WIOD_VIEW = "http://www.wiod.org/database/wiots13"
 const WIOD_REGEX = r"http://www\.wiod\.org/protected3/data13/\S+?wiot\d\d\S+?xlsx"
 const EXIO3_ZENODO = "https://zenodo.org/record/5589597"     # EXIOBASE 3.8.2 record
 const EXIO3_REGEX = r"https://zenodo\.org/record/\d+/files/IOT_\d{4}_[ip]x[ip]\.zip"
-const GLORIA_URLS = String[]   # populate from pymrio GLORIA constants when needed
+# Representative GLORIA release-053 MRIO zip URLs (subset transcribed from pymrio;
+# extend with additional years as needed).
+const _GLORIA_BASE = "https://dl.dropboxusercontent.com/sh/o4fxq94n7grvdbk/"
+const GLORIA_URLS = String[
+    _GLORIA_BASE * "AACPnp0qOD1N7CSjv0reFKSba/previous_releases/053/MRIO/GLORIA_MRIOs_53_2006.zip?dl=0",
+    _GLORIA_BASE * "AACD6UmIBqbmkAQiAOfX7U_fa/previous_releases/053/MRIO/GLORIA_MRIOs_53_1997.zip?dl=0",
+    _GLORIA_BASE * "AAD6y_13ul9SZnJkPV1GhZCza/previous_releases/053/MRIO/GLORIA_MRIOs_53_2013.zip?dl=0",
+    _GLORIA_BASE * "AAB3PLbnxPHIP2MGN8S36ZUBa/previous_releases/053/MRIO/GLORIA_MRIOs_53_2007.zip?dl=0",
+    _GLORIA_BASE * "AABIfGIVZkelhq58Ij1DKO1Va/previous_releases/053/MRIO/GLORIA_MRIOs_53_2012.zip?dl=0",
+]
 
 # A year filter matches when `years` is nothing, or any requested year equals or
 # is contained in the table key (handles both "1995" and "1995-1999" keys).
@@ -125,7 +134,7 @@ Download GLORIA MRIO tables into `folder` (URL set populated from the registry).
 """
 function download_gloria(folder; years=nothing, overwrite_existing::Bool=false,
                          fetch=fetch_file)
-    meta = IOMetaData(; source="GLORIA", version="057")
+    meta = IOMetaData(; source="GLORIA", version="053")
     for url in GLORIA_URLS
         fn = basename(url)
         fetch(url, joinpath(folder, fn); overwrite=overwrite_existing)

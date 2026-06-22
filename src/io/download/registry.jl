@@ -15,7 +15,7 @@ const IO_SOURCES = Dict{Symbol,NamedTuple}(
               versions=["26"],
               note="Requires worldmrio.com account (email/password)."),
     :gloria => (name="GLORIA", needs_credentials=false,
-              versions=["057"],
+              versions=["053"],
               note="Global Resource Input-Output Assessment; fixed URL set."),
 )
 

@@ -154,6 +154,7 @@ const TEST_GROUPS = [
         "io/test_io_show.jl",
         "io/test_io_plotting.jl",
         "io/test_io_refs.jl",
+        "io/test_io_coverage.jl",
     ]),
 ]
 
