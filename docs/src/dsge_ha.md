@@ -367,18 +367,58 @@ The two-asset model uses a two-dimensional grid (liquid ``\times`` illiquid) wit
 
 ---
 
+## Huggett (1993): The Risk-Free Rate
+
+The Huggett (1993) economy is a pure-exchange, incomplete-markets model: agents receive a stochastic endowment ``e_t`` and trade a single risk-free bond in **zero net supply**, subject to a credit limit ``\underline{a} < 0``. With no production, the equilibrium interest rate is the price that clears the bond market, and precautionary saving against uninsurable endowment risk drives it **below** the representative-agent time-preference rate.
+
+```math
+c_t + a_{t+1} = (1 + r)\, a_t + w\, e_t, \qquad a_{t+1} \geq \underline{a}, \qquad \int a_{t+1}\, d\mu = 0
+```
+
+where:
+- ``e_t \in \{e_h, e_l\} = \{1.0, 0.1\}`` is the two-state Markov endowment
+- ``w`` is the aggregate endowment level (``w = 1`` in steady state)
+- ``r`` is the per-period risk-free rate that clears the bond market in zero net supply
+- ``\underline{a}`` is the credit limit; the `:huggett` example defaults to ``\underline{a} = -2``
+
+The model is selected by `spec.model == :huggett`, which routes `compute_steady_state` to the zero-net-supply clearing rule (no firm FOC). Calibration follows Huggett (1993): CRRA utility (``\sigma = 1.5``), ``\beta = 0.99322``, and six model periods per year.
+
+```@example dsge_ha
+hug = load_ha_example(:huggett)               # default credit limit ā = -2
+ss_hug = compute_steady_state(hug; max_iter=150, tol=5e-4)
+r_annual = (1 + ss_hug.prices[:r])^6 - 1      # six model periods per year
+(r_period = round(ss_hug.prices[:r], digits=5),
+ r_annual = round(r_annual, digits=4),
+ clearing = round(ss_hug.excess_demand, digits=6))
+```
+
+The annual risk-free rate is about ``-7\%`` --- far below the ``4.2\%`` time-preference rate of the representative-agent benchmark, and matching Huggett's Table 1. Incomplete insurance against idiosyncratic endowment risk depresses the rate: agents collectively demand the bond for self-insurance, but it is in zero net supply, so the price (the interest rate) must fall until aggregate bond holdings clear at zero. Loosening the credit limit raises the equilibrium rate toward the time-preference rate.
+
+With an aggregate endowment shock (``w_t``, AR(1)), the model is dynamically solvable by all three methods; the clearing rate ``r_t`` falls on impact of a positive endowment shock:
+
+```julia
+sol_ssj = solve(hug; method=:ssj, ss=ss_hug, T_horizon=100, n_reduced=20)
+sol_rei = solve(hug; method=:reiter, ss=ss_hug, n_reduced=30)
+sol_ks  = solve(hug; method=:krusell_smith, ss=ss_hug, T_sim=2000)
+```
+
+The Sequence-Space Jacobian forms the market-clearing system ``H_U \, dr + H_Z \, dw = 0`` and solves for the rate path; the Reiter method pins ``r`` statically each period from the linearized clearing condition; and the Krusell-Smith variant fits a perceived law of motion for the clearing rate (rather than capital).
+
+---
+
 ## Built-in Examples
 
-Three canonical models are available via `load_ha_example`:
+Four canonical models are available via `load_ha_example`:
 
 | Model | Assets | Grid | Income | Key Feature |
 |-------|--------|------|--------|-------------|
 | `:krusell_smith` | 1 (``a \in [0, 200]``) | 200 pts | 7 states | Standard Aiyagari economy |
 | `:one_asset_hank` | 1 (``b \in [-2, 50]``) | 200 pts | 7 states | NK with dividends, borrowing |
 | `:two_asset_hank` | 2 (liquid + illiquid) | 50 × 50 | 7 states | Portfolio choice with adjustment cost |
+| `:huggett` | 1 (``a \in [-2, 8]``) | 300 pts | 2 states | Pure exchange, bond in zero net supply |
 
 ```@example dsge_ha
-for name in [:krusell_smith, :one_asset_hank, :two_asset_hank]
+for name in [:krusell_smith, :one_asset_hank, :two_asset_hank, :huggett]
     s = load_ha_example(name)
     n = s.grid.n_dims
     g = join(s.grid.n_points, "×")
@@ -484,6 +524,8 @@ plot_result(ss_ks; view=:policy)      # policy functions by income
 - Auclert, Adrien, Bence Bardóczy, Matthew Rognlie, and Ludwig Straub. 2021. "Using the Sequence-Space Jacobian to Solve and Estimate Heterogeneous-Agent Models." *Econometrica* 89 (5): 2375--2408. [DOI](https://doi.org/10.3982/ECTA17434)
 
 - Carroll, Christopher D. 2006. "The Method of Endogenous Gridpoints for Solving Dynamic Stochastic Optimization Problems." *Economics Letters* 91 (3): 312--320. [DOI](https://doi.org/10.1016/j.econlet.2005.09.013)
+
+- Huggett, Mark. 1993. "The Risk-Free Rate in Heterogeneous-Agent Incomplete-Insurance Economies." *Journal of Economic Dynamics and Control* 17 (5--6): 953--969. [DOI](https://doi.org/10.1016/0165-1889(93)90024-M)
 
 - Kaplan, Greg, Benjamin Moll, and Giovanni L. Violante. 2018. "Monetary Policy According to HANK." *American Economic Review* 108 (3): 697--743. [DOI](https://doi.org/10.1257/aer.20160042)
 
