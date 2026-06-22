@@ -379,6 +379,9 @@ include("dsge/heterogeneous/estimation.jl")
 # Overlapping generations (Blanchard 1985 perpetual youth)
 include("olg/blanchard.jl")
 
+# Continuous-time heterogeneous agents (Achdou et al. 2022)
+include("ct/continuous_aiyagari.jl")
+
 # Display (after all types)
 include("summary.jl")
 
@@ -494,6 +497,10 @@ export distribution_irf, inequality_irf, simulate_panel, den_haan_test
 # Overlapping generations (Blanchard 1985 perpetual youth)
 export BlanchardOLG, BlanchardOLGSteadyState, BlanchardOLGSolution
 export blanchard_steady_state, blanchard_solve, blanchard_transition
+
+# Continuous-time heterogeneous agents (Achdou et al. 2022)
+export CTAiyagari, CTPoissonIncome, CTSteadyState
+export ct_hjb, ct_kfe, ct_steady_state
 
 # Local Projection types
 export AbstractLPModel, AbstractLPImpulseResponse, AbstractCovarianceEstimator
