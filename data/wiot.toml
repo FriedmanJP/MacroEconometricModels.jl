@@ -1,0 +1,38 @@
+# Miller & Blair (2009) hypothetical 2-sector input-output table (Table 2.3).
+# Distributed as a small, license-clean teaching example for load_example(:wiot).
+# Satellite "employment" and "CO2" accounts are illustrative figures attached
+# for demonstrating multiplier and footprint calculations.
+
+[metadata]
+desc = "Miller & Blair (2009) hypothetical 2-sector input-output table"
+year = 2009
+unit = "millions"
+source = "Miller, R.E. & Blair, P.D. (2009) Input-Output Analysis, 2nd ed., Table 2.3"
+source_refs = ["miller_blair_2009"]
+
+[dims]
+sectors = ["Agriculture", "Manufacturing"]
+regions = ["total"]
+fd_cats = ["final_demand"]
+va_cats = ["compensation", "other_va"]
+
+[flows]
+# Z: row = supplying sector, col = using sector
+Z = [[150.0, 500.0], [200.0, 100.0]]
+# Y: row = sector, col = final-demand category
+Y = [[350.0], [1700.0]]
+# va: row = value-added category, col = sector
+va = [[300.0, 1000.0], [350.0, 400.0]]
+
+[[extensions]]
+name = "employment"
+stressors = ["jobs"]
+unit = ["thousand persons"]
+# F: row = stressor, col = sector
+F = [[30.0, 40.0]]
+
+[[extensions]]
+name = "CO2"
+stressors = ["CO2"]
+unit = ["kt"]
+F = [[100.0, 300.0]]
