@@ -55,6 +55,7 @@ makedocs(;
             "Estimation" => "dsge_estimation.md",
             "Historical Decomposition" => "dsge_hd.md",
             "Heterogeneous Agents" => "dsge_ha.md",
+            "Overlapping Generations" => "dsge_olg.md",
         ],
         "Innovation Accounting" => [
             "Overview" => "innovation_accounting.md",
