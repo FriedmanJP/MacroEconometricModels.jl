@@ -1033,4 +1033,16 @@ end
     @test size(sol.linear_solution.G1, 1) == sol.n_reduced + 1         # state [d̃; w]
 end
 
+@testset "Huggett Krusell-Smith" begin
+    spec = MacroEconometricModels._huggett_example(; credit_limit=-2.0, a_max=8.0, n_a=150)
+    ss = compute_steady_state(spec; max_iter=100, tol=1e-3)
+    sol = solve(spec; method=:krusell_smith, ss=ss, T_sim=800, T_burn=200, max_outer=3)
+    @test sol isa KrusellSmithSolution
+    @test haskey(sol.plm_coefficients, :r)        # PLM forecasts the clearing rate, not K
+    @test sol.r_squared[:r] > 0.7                 # rate is near-linear in the endowment shock
+    b = sol.plm_coefficients[:r]
+    @test abs(b[1] - ss.prices[:r]) < 0.01        # PLM intercept ≈ steady-state rate
+    @test b[2] < 0                                # positive endowment shock lowers r
+end
+
 end # @testset "HA-DSGE Types"

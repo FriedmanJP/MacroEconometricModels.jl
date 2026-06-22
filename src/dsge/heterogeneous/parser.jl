@@ -573,13 +573,16 @@ function solve(spec::HADSGESpec{T}; method::Symbol=:ssj,
         max_outer = get(kwargs, :max_outer, 20)
         rho_z = get(kwargs, :rho_z, 0.95)
         sigma_z = get(kwargs, :sigma_z, 0.007)
+        rho_e = get(kwargs, :rho_e, get(spec.het_params, :rho_e, 0.9))
+        sigma_e = get(kwargs, :sigma_e, get(spec.het_params, :sigma_e, 0.01))
 
         raw = _krusell_smith_solve(ss, spec.individual, spec.grid, spec.income,
                                     _default_cobb_douglas_price_fn,
                                     spec.het_params;
                                     T_sim=T_sim, T_burn=T_burn,
                                     max_outer=max_outer,
-                                    rho_z=rho_z, sigma_z=sigma_z)
+                                    rho_z=rho_z, sigma_z=sigma_z,
+                                    model=spec.model, rho_e=rho_e, sigma_e=sigma_e)
         return KrusellSmithSolution{T}(ss, raw.plm_coefficients, raw.r_squared,
                                         spec, raw.converged, raw.iterations)
     else

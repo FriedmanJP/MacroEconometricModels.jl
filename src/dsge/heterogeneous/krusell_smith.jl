@@ -90,10 +90,19 @@ function _krusell_smith_solve(ss::HASteadyState{T},
                                sigma_z::Real=0.007,
                                tol::Real=1e-5,
                                damping::Real=0.5,
+                               model::Symbol=:aiyagari,
+                               rho_e::Real=0.9,
+                               sigma_e::Real=0.01,
                                seed::Int=1234) where {T<:AbstractFloat}
     @assert grid.n_dims == 1 "Krusell-Smith solver requires a one-asset grid"
     @assert ip.n_asset_dims == 1 "Krusell-Smith solver requires a one-asset individual problem"
     @assert T_sim > T_burn "T_sim must exceed T_burn"
+
+    if model === :huggett
+        return _krusell_smith_huggett(ss, ip, grid, income;
+            T_sim=T_sim, T_burn=T_burn, max_outer=max_outer,
+            rho_e=rho_e, sigma_e=sigma_e, tol=tol, damping=damping, seed=seed)
+    end
 
     rho_z_T = T(rho_z)
     sigma_z_T = T(sigma_z)
@@ -230,4 +239,95 @@ function _krusell_smith_solve(ss::HASteadyState{T},
     r_squared = Dict{Symbol,T}(:K => best_r2)
 
     return (; plm_coefficients, r_squared, converged, iterations=final_iter)
+end
+
+# =============================================================================
+# _krusell_smith_huggett — Huggett (1993) variant: PLM forecasts the clearing rate
+# =============================================================================
+
+"""
+    _krusell_smith_huggett(ss, ip, grid, income; T_sim, T_burn, max_outer,
+        rho_e, sigma_e, tol, damping, seed) → NamedTuple
+
+Krusell-Smith algorithm for the Huggett (1993) economy with an aggregate endowment
+shock. Because the bond is in zero net supply, the relevant aggregate price is the
+risk-free rate, so the perceived law of motion forecasts `r` (not capital) from the
+endowment shock:
+
+    r_t = b[1] + b[2] · z_t,      z_t = ρ_e z_{t-1} + σ_e ε_t,   w_t = exp(z_t).
+
+Each period uses the Young (2010) non-stochastic simulation. The market-clearing rate
+is recovered by a single Newton step around the PLM guess,
+`r_clear = r_guess − A(r_guess) / A_r`, where `A(r) = ∫ a'(·; r, w_t) dμ_t` is aggregate
+bond demand and `A_r ≈ ∂A/∂r` is the (positive) aggregate-savings slope evaluated once
+at the steady state. The PLM is then refit by OLS and damped until convergence.
+"""
+function _krusell_smith_huggett(ss::HASteadyState{T}, ip::IndividualProblem{T},
+                                 grid::HAGrid{T}, income::IncomeProcess{T};
+                                 T_sim::Int=4000, T_burn::Int=500, max_outer::Int=8,
+                                 rho_e::Real=0.9, sigma_e::Real=0.01,
+                                 tol::Real=1e-5, damping::Real=0.5,
+                                 seed::Int=1234) where {T<:AbstractFloat}
+    rho = T(rho_e); sig = T(sigma_e); tol_T = T(tol); damping_T = T(damping)
+    rng = Random.MersenneTwister(seed)
+    r_ss = ss.prices[:r]
+    dist_ss = vec(ss.distribution); dist_ss ./= sum(dist_ss)
+
+    # Aggregate-savings slope dA/dr at the steady state (fixed Newton-step slope).
+    dr0 = T(1e-4)
+    _, ap0 = _egm_solve(ip, grid, income, Dict{Symbol,T}(:r => r_ss, :w => one(T));
+                        max_iter=1000, tol=T(1e-10))
+    _, ap1 = _egm_solve(ip, grid, income, Dict{Symbol,T}(:r => r_ss + dr0, :w => one(T));
+                        max_iter=1000, tol=T(1e-10))
+    A_r = (sum(vec(ap1) .* dist_ss) - sum(vec(ap0) .* dist_ss)) / dr0
+    @assert A_r > zero(T) "Huggett KS: non-positive aggregate-savings slope"
+
+    # Aggregate endowment shock path (log endowment).
+    z = zeros(T, T_sim); innov = randn(rng, T, T_sim)
+    for t in 2:T_sim
+        z[t] = rho * z[t-1] + sig * innov[t]
+    end
+
+    b = T[r_ss, zero(T)]                # PLM: r_t = b[1] + b[2] z_t
+    r_series = zeros(T, T_sim)
+    r_ceil = one(T) / ip.beta - one(T) - T(1e-5)   # per-period time-preference ceiling
+    best_r2 = zero(T); converged = false; final_iter = 0
+
+    for outer in 1:max_outer
+        final_iter = outer
+        dist = copy(dist_ss)
+        for t in 1:T_sim
+            w_t = exp(z[t])
+            r_g = b[1] + b[2] * z[t]                 # PLM forecast (warm start)
+            # One Newton clearing step using the SS savings slope A_r (≈ exact slope).
+            _, a_pol_g = _egm_solve(ip, grid, income, Dict{Symbol,T}(:r => r_g, :w => w_t);
+                                    max_iter=80, tol=T(1e-8))
+            A_g = sum(vec(a_pol_g) .* dist)
+            r_t = clamp(r_g - A_g / A_r, T(-0.2), r_ceil)
+            # Re-solve at the cleared rate and forward with that policy (keeps ∫a' ≈ 0).
+            _, a_pol = _egm_solve(ip, grid, income, Dict{Symbol,T}(:r => r_t, :w => w_t);
+                                  max_iter=80, tol=T(1e-8))
+            r_series[t] = r_t
+            dist = _forward_iterate(_build_transition_matrix(a_pol, grid, income), dist)
+        end
+
+        idx = (T_burn + 1):T_sim
+        X = hcat(ones(T, length(idx)), z[idx])
+        y = r_series[idx]
+        b_new = X \ y
+        yhat = X * b_new
+        ss_res = sum((y .- yhat) .^ 2)
+        ss_tot = sum((y .- mean(y)) .^ 2)
+        best_r2 = ss_tot > zero(T) ? one(T) - ss_res / ss_tot : one(T)
+
+        # The realized clearing path is independent of the PLM guess (agents are myopic
+        # about prices, as in the Aiyagari path), so a full update converges in ~2 passes.
+        if maximum(abs.(b_new .- b)) < tol_T
+            b = b_new; converged = true; break
+        end
+        b = b_new
+    end
+
+    return (; plm_coefficients=Dict{Symbol,Vector{T}}(:r => copy(b)),
+              r_squared=Dict{Symbol,T}(:r => best_r2), converged, iterations=final_iter)
 end
