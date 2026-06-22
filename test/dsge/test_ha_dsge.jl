@@ -453,7 +453,7 @@ end
     )
 
     @test haskey(result.plm_coefficients, :K)
-    @test length(result.plm_coefficients[:K]) == 2
+    @test length(result.plm_coefficients[:K]) == 3  # z-augmented PLM: [b1, b2, b3]
     @test haskey(result.r_squared, :K)
     @test result.r_squared[:K] > 0.9  # KS typically gets R² > 0.999
     @test result.iterations <= 3
@@ -1043,6 +1043,31 @@ end
     b = sol.plm_coefficients[:r]
     @test abs(b[1] - ss.prices[:r]) < 0.01        # PLM intercept ≈ steady-state rate
     @test b[2] < 0                                # positive endowment shock lowers r
+end
+
+@testset "Den Haan (2010) accuracy" begin
+    # --- Aiyagari capital model (z-augmented PLM makes the test meaningful) ---
+    ks_spec = load_ha_example(:krusell_smith)
+    ss_a = compute_steady_state(ks_spec; r_bounds=(-0.02, 0.04), max_iter=80, tol=1e-3)
+    ks = solve(ks_spec; method=:krusell_smith, ss=ss_a, T_sim=500, T_burn=100, max_outer=3)
+    @test length(ks.plm_coefficients[:K]) == 3          # z-augmented PLM
+
+    dh = den_haan_test(ks; T_sim=400, T_burn=100)
+    @test dh isa DenHaanAccuracy
+    @test dh.aggregate === :K
+    @test isfinite(dh.dh_max) && dh.dh_max >= dh.dh_mean >= 0
+    @test dh.sigma_ref > 0 && dh.sigma_plm > 0
+    @test length(dh.ref_path) == 400 && length(dh.plm_path) == 400
+    @test dh.sigma_plm > 0.2 * dh.sigma_ref             # PLM reproduces the fluctuations
+    @test dh.dh_max < 1.0                               # accurate: well under 1% (Den Haan)
+    report(dh)                                          # display smoke test
+
+    # --- Huggett: rate accuracy test is intentionally unsupported (errors clearly) ---
+    hug_spec = MacroEconometricModels._huggett_example(; n_a=120)
+    ss_h = compute_steady_state(hug_spec; max_iter=80, tol=1e-3)
+    ks_h = KrusellSmithSolution{Float64}(ss_h,
+        Dict(:r => [ss_h.prices[:r], 0.0]), Dict(:r => 1.0), hug_spec, false, 0)
+    @test_throws ErrorException den_haan_test(ks_h)
 end
 
 end # @testset "HA-DSGE Types"

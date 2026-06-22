@@ -483,10 +483,10 @@ export dsge_smoother, dsge_particle_smoother
 
 # Heterogeneous Agent DSGE types
 export HADSGESpec, HAGrid, IncomeProcess, IndividualProblem
-export HASteadyState, HADSGESolution, KrusellSmithSolution
+export HASteadyState, HADSGESolution, KrusellSmithSolution, DenHaanAccuracy
 export rouwenhorst, tauchen
 export load_ha_example
-export distribution_irf, inequality_irf, simulate_panel
+export distribution_irf, inequality_irf, simulate_panel, den_haan_test
 
 # Local Projection types
 export AbstractLPModel, AbstractLPImpulseResponse, AbstractCovarianceEstimator
