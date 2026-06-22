@@ -530,9 +530,15 @@ using MacroEconometricModels
             @test corr_j > 0.7 || any(abs.(cor(F_ts[:, j], F_em)) .> 0.7)
         end
 
-        # Log-likelihoods should be in similar range
-        # EM should achieve higher or similar likelihood
-        @test model_em.loglik >= model_twostep.loglik - 50
+        # `model_twostep.loglik` is a conditional-on-factors Gaussian likelihood of the
+        # idiosyncratic residuals (e = Y − F·Λ'), whereas `model_em.loglik` is the marginal
+        # state-space likelihood — different quantities, not directly comparable in magnitude.
+        # (The old `EM ≥ twostep − 50` only held because the F-06 PCA-reconstruction bug made
+        # the two-step residuals — and hence its loglik — artificially low.) Require both finite
+        # and negative, and agreeing to within ~1 nat per observation-variable.
+        @test isfinite(model_twostep.loglik) && isfinite(model_em.loglik)
+        @test model_twostep.loglik < 0 && model_em.loglik < 0
+        @test abs(model_em.loglik - model_twostep.loglik) / (T_obs * N) < 1.0
     end
 
     # ==========================================================================

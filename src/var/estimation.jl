@@ -39,10 +39,11 @@ function estimate_var(Y::AbstractMatrix{T}, p::Int; check_stability::Bool=true, 
     B = robust_inv(X'X) * (X' * Y_eff)
     U = Y_eff - X * B
 
-    # Covariance with dof adjustment
-    dof_adj = max(T_eff - k, T_eff)
-    T_eff - k <= 0 && @warn "Non-positive dof adjustment, using T_eff"
-    Sigma = (U'U) / dof_adj
+    # Residual covariance, ML estimate (denominator T_eff). This is the right choice for the
+    # information criteria and the Gaussian log-likelihood. Coefficient standard errors instead
+    # use the small-sample dof-adjusted covariance U'U/(T_eff−k) inside `vcov` (audit F-01:
+    # the previous `max(T_eff-k, T_eff)` could never select T_eff−k, so SEs were too small).
+    Sigma = (U'U) / T_eff
 
     # Information criteria (ML estimate)
     Sigma_ml = (U'U) / T_eff
@@ -92,10 +93,13 @@ StatsAPI.aic(model::VARModel) = model.aic
 StatsAPI.bic(model::VARModel) = model.bic
 StatsAPI.islinear(::VARModel) = true
 
-"""Covariance of vectorized coefficients: Σ ⊗ (X'X)⁻¹."""
+"""Covariance of vectorized coefficients: Σ̂_dof ⊗ (X'X)⁻¹ with the dof-adjusted Σ̂_dof = U'U/(T_eff−k)."""
 function StatsAPI.vcov(model::VARModel{T}) where {T}
     _, X = construct_var_matrices(model.Y, model.p)
-    kron(model.Sigma, robust_inv(X'X))
+    T_eff, k = size(X, 1), size(X, 2)
+    dof = T_eff > k ? T_eff - k : T_eff          # small-sample adjustment for coefficient SEs
+    Sigma_dof = (model.U' * model.U) / T(dof)
+    kron(Sigma_dof, robust_inv(X'X))
 end
 
 """In-sample fitted values."""
