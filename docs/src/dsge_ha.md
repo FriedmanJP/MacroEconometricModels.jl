@@ -293,13 +293,13 @@ The Reiter method produces an equivalent reduced state-space form to SSJ. The ex
 
 ## Krusell-Smith Method
 
-The **Krusell-Smith (1998)** method approximates agents' forecasting rule with a **perceived law of motion** (PLM):
+The **Krusell-Smith (1998)** method approximates agents' forecasting rule with a **perceived law of motion** (PLM) for aggregate capital, including the aggregate shock ``z``:
 
 ```math
-\log K_{t+1} = b_0 + b_1 \log K_t
+\log K_{t+1} = b_0 + b_1 \log K_t + b_2 z_t
 ```
 
-The algorithm iterates between simulation (using the PLM to forecast prices) and regression (updating PLM coefficients via OLS). Convergence requires ``R^2 > 0.9999``, reflecting the near-sufficiency of the first moment for forecasting.
+The algorithm iterates between simulation (using the PLM to forecast prices) and regression (updating PLM coefficients via OLS). Convergence requires ``R^2 > 0.9999``, reflecting the near-sufficiency of the first moment plus the aggregate shock for forecasting. Including ``z`` is essential for the Den Haan (2010) accuracy test below: a ``z``-free PLM produces a degenerate, fluctuation-free simulated path.
 
 !!! note "Technical Note"
     The PLM coefficients are updated with damping: ``b^{\text{new}} = 0.5 \, b^{\text{OLS}} + 0.5 \, b^{\text{old}}``. This prevents oscillation and ensures monotone convergence.
@@ -311,7 +311,7 @@ sol_ks = solve(spec; method=:krusell_smith, ss=ss,
 report(sol_ks)
 ```
 
-The PLM ``R^2`` near unity confirms that aggregate capital is approximately sufficient for forecasting prices --- the core insight of Krusell & Smith (1998). The PLM intercept and slope jointly characterize the aggregate law of motion. Unlike SSJ and Reiter, the Krusell-Smith method does not produce a reduced linear state-space form, so it cannot be used directly with `irf` or `fevd`.
+The PLM ``R^2`` near unity confirms that aggregate capital plus the aggregate shock is approximately sufficient for forecasting prices --- the core insight of Krusell & Smith (1998). The three coefficients (intercept, capital slope, and shock loading) characterize the aggregate law of motion. Unlike SSJ and Reiter, the Krusell-Smith method does not produce a reduced linear state-space form, so it cannot be used directly with `irf` or `fevd`.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -328,6 +328,46 @@ The PLM ``R^2`` near unity confirms that aggregate capital is approximately suff
 | `plm_coefficients` | `Dict{Symbol,Vector{T}}` | PLM regression coefficients per variable |
 | `r_squared` | `Dict{Symbol,T}` | ``R^2`` of PLM regression per variable |
 | `steady_state` | `HASteadyState{T}` | Underlying stationary equilibrium |
+
+---
+
+## Accuracy: the Den Haan (2010) Test
+
+Den Haan (2010) shows that the regression ``R^2`` and standard error are **inadequate** accuracy measures for a Krusell-Smith solution: an ``R^2`` of 0.9999 can coexist with a standard deviation of aggregate capital that is off by double digits. The powerful test compares two simulations under the same shock path --- a **reference** path from the explicit cross-sectional (Young) simulation, and a **PLM-only** path that iterates the aggregate law of motion on its *own* forecasts without re-anchoring to the simulated cross-section:
+
+```math
+\varepsilon_t = 100 \cdot \left| \log K_t^{\text{ref}} - \log K_t^{\text{PLM}} \right|
+```
+
+where:
+- ``K_t^{\text{ref}}`` is the reference aggregate capital from the explicit distribution simulation
+- ``K_t^{\text{PLM}}`` is the PLM-only path, ``\log K_{t+1}^{\text{PLM}} = b_0 + b_1 \log K_t^{\text{PLM}} + b_2 z_t``
+
+The maximum and mean of ``\varepsilon_t`` (post burn-in) are the headline statistics; `den_haan_test` also reports the standard-deviation comparison.
+
+```@example dsge_ha
+acc = den_haan_test(sol_ks; T_sim=300, T_burn=50)
+report(acc)
+```
+
+A maximum error well below 1% confirms that the perceived law of motion reproduces the aggregate dynamics implied by the full cross-section --- the benchmark for an accurate Krusell-Smith solution. The ``\sigma`` ratio near unity shows the PLM reproduces the volatility of aggregate capital, the diagnostic Den Haan (2010) emphasizes.
+
+!!! note "Aiyagari only"
+    `den_haan_test` targets the Aiyagari capital model of Den Haan (2010). For a Huggett solution the cleared aggregate is the risk-free rate, which is driven by the wealth distribution rather than the shock alone, so the test raises an informative error.
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `T_sim` | `Int` | `10000` | Simulation length |
+| `T_burn` | `Int` | `1000` | Burn-in periods to discard |
+| `rho_z` | `Real` | `0.95` | Aggregate shock persistence |
+| `sigma_z` | `Real` | `0.007` | Aggregate shock standard deviation |
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `dh_max` | `T` | Maximum percentage error between reference and PLM-only paths |
+| `dh_mean` | `T` | Mean absolute percentage error |
+| `sigma_ref` | `T` | Standard deviation of the reference aggregate (``\log K``) |
+| `sigma_plm` | `T` | Standard deviation of the PLM-only aggregate |
 
 ---
 
@@ -524,6 +564,8 @@ plot_result(ss_ks; view=:policy)      # policy functions by income
 - Auclert, Adrien, Bence Bardóczy, Matthew Rognlie, and Ludwig Straub. 2021. "Using the Sequence-Space Jacobian to Solve and Estimate Heterogeneous-Agent Models." *Econometrica* 89 (5): 2375--2408. [DOI](https://doi.org/10.3982/ECTA17434)
 
 - Carroll, Christopher D. 2006. "The Method of Endogenous Gridpoints for Solving Dynamic Stochastic Optimization Problems." *Economics Letters* 91 (3): 312--320. [DOI](https://doi.org/10.1016/j.econlet.2005.09.013)
+
+- den Haan, Wouter J. 2010. "Assessing the Accuracy of the Aggregate Law of Motion in Models with Heterogeneous Agents." *Journal of Economic Dynamics and Control* 34 (1): 79--99. [DOI](https://doi.org/10.1016/j.jedc.2009.07.006)
 
 - Huggett, Mark. 1993. "The Risk-Free Rate in Heterogeneous-Agent Incomplete-Insurance Economies." *Journal of Economic Dynamics and Control* 17 (5--6): 953--969. [DOI](https://doi.org/10.1016/0165-1889(93)90024-M)
 
