@@ -7,3 +7,5 @@ scripts/
 
 # Benchmarks (local only)
 benchmarks/
+test/oracle/_out/
+test/oracle/_data/
