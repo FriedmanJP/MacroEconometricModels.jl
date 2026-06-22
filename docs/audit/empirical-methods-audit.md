@@ -23,7 +23,9 @@ estimators; algorithmic code review vs canonical formulas elsewhere. See
 | ID | Module | file:line | Severity | Status | Summary |
 |----|--------|-----------|----------|--------|---------|
 | F-01 | var | `src/var/estimation.jl:43` | Medium | Confirmed | `dof_adj = max(T_eff-k, T_eff)` always equals `T_eff` (since k≥1), so `Sigma` is the ML covariance `U'U/T_eff`, never the dof-adjusted `U'U/(T_eff-k)` the comment/warning intend. Propagates to `vcov`→`stderror`→`confint`: reported VAR coefficient SEs/CIs are too small (anti-conservative). Reference `ols_reg.m:86` uses `1/(N-K)`. Confirmed numerically (gap 2.35% on a T=300,k=7 fixture; grows as k/T rises). Fix must preserve `loglikelihood` (wants ML cov) and decide IRF/identification convention. |
-| F-02 | bvar | `src/bvar/priors.jl:129-131` | High | Open (verify in 1.3) | `log_marginal_likelihood` omits the multivariate-gamma terms `logΓₙ(ν_post/2) − logΓₙ(ν_prior/2)` and the `−(n·T_eff/2)·log π` constant present in the reference `matrictint.m`. Invariant terms cancel for tau-tuning (active dummy blocks fixed), but the returned value is **not** the marginal likelihood and cross-lag/cross-model comparison is invalid. To confirm numerically vs `matrictint` in Task 1.3. |
+| F-02 | bvar | `src/bvar/priors.jl:129-131` | High | Confirmed | `log_marginal_likelihood` omits the multivariate-gamma terms `logΓₙ(ν_post/2) − logΓₙ(ν_prior/2)` and the `−½·n·T_eff·log π` constant present in the reference `matrictint.m`. Confirmed numerically: our value −2653.18 vs true ML −1343.27 (assembled from Octave `matrictint`); gap 1309.91 = the analytic omitted terms to 1e-13. Invariant for tau-tuning (active dummy blocks fixed), but the returned value is **not** the marginal likelihood — cross-lag/cross-model/cross-n comparison is invalid. `checks_bvar_ml.jl`. |
+| F-03 | bvar | `src/var/types.jl:223`, `src/bvar/priors.jl:21` | Low | Confirmed | Hyperparameter naming/convention hazard (NOT a numerical bug). `tau` is inverse-tightness (divides dummies; larger ⇒ looser) vs reference `mnprior.tight` (multiplies; larger ⇒ tighter). `lambda` (our sum-of-coefficients) and `mu` (our co-persistence) are **swapped** vs `rfvar3` semantics, yet the defaults `lambda=5, mu=2` are copied from the reference's `lambda`(co-persistence)`=5`, `mu`(own)`=2` guidance — so the default prior differs from what a user porting reference settings expects. Doc fix recommended. |
+| F-04 | bvar | `src/bvar/estimation.jl:76` | Low | Confirmed | `optimize_hyperparameters(Y_eff, p)` passes the already-lagged `Y_eff` as if it were raw data, so the marginal likelihood used for tau selection drops another `p` rows (double-lag) and scales the prior from `Y_eff` while estimation (`gen_dummy_obs(Y, …)` at line 77) scales from the full `Y`. Affects only the auto-selected `tau`, not estimation given a fixed `tau`. Minor sample/scaling inconsistency. |
 
 ## Verified-correct ledger
 
@@ -36,6 +38,10 @@ Routines checked and found correct (so we know what was actually verified vs. as
 | var | `Sigma` numerator `U'U` (ML form) | Numerical vs `rfvar3` ML | `checks_var.jl`: maxrel 8.6e-16 (denominator is the F-01 bug) |
 | var | `companion_matrix` eigenvalues / stationarity | Numerical vs ref companion | `checks_var.jl`: maxrel 1.8e-15 |
 | bvar | Minnesota dummy blocks (AR/SOC/co-persistence/cov) form | Code review vs `varprior.m`+`rfvar3.m` | own-first-lag mean 1, higher lags→0 w/ `l^decay`, SOC→ΣAₗ=I, co-persist incl. constant — all correct (BGR parameterization) |
+| bvar | `matrictint` reimplementation (used to assemble true ML) | Numerical vs Octave `matrictint` | `checks_bvar_ml.jl`: maxabs 0 on fixed case |
+| bvar | `_draw_inverse_wishart(ν,S)` parameterization (scale S, mean S/(ν-n-1)) | Bartlett algebra vs `rand_inverse_wishart.m` + property test | matches standard IW; `checks_bvar_posterior.jl` E[Σ] within 0.24% |
+| bvar | Conjugate NIW posterior moments `B_post, V_post, ν_post, S_post` | Code review + sampler reproduces them | textbook conjugate update; `checks_bvar_posterior.jl` |
+| bvar | `:direct` and `:gibbs` samplers | Property test vs analytic posterior | `checks_bvar_posterior.jl`: E[B], E[Σ] match analytic moments within MC error |
 
 ## Notes / convention map
 
