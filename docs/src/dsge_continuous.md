@@ -139,6 +139,40 @@ On impact the higher productivity raises the marginal product of capital, so the
 
 ---
 
+## Two-Asset HANK (Kaplan-Moll-Violante)
+
+The two-asset model adds a second, **illiquid** asset ``a`` (return ``r_a``) alongside the **liquid** asset ``b`` (return ``r_b < r_a``). Moving funds between them — the **deposit** ``d`` — incurs a convex adjustment cost ``\chi(d) = \tfrac{\chi}{2} d^2``. Households therefore accept the low liquid return to hold high-return illiquid wealth, producing a large illiquid stock and a thin liquid buffer: the central Kaplan-Moll-Violante (2018) mechanism.
+
+```math
+\rho V(b,a,z) = \max_{c,d}\; u(c) + V_b\,(w z + r_b b - d - \tfrac{\chi}{2}d^2 - c) + V_a\,(r_a a + d) + \sum_{z'}\lambda_{z\to z'}[V(b,a,z')-V(b,a,z)]
+```
+
+where the first-order conditions are ``c = (V_b)^{-1/\sigma}`` and ``d = (V_a/V_b - 1)/\chi``. The HJB is a two-dimensional PDE solved by upwind finite differences in both ``b`` and ``a``; the stationary joint density of ``(b,a,z)`` solves the Kolmogorov-Forward equation.
+
+```@example ct
+tw = CTTwoAsset(; r_a=0.05, r_b=0.02, chi=2.0, rho=0.08, Ib=30, Ia=30)
+sol = ct_two_asset_solve(tw; tol=1e-6)
+report(sol)
+```
+
+The vast majority of wealth is held in the illiquid asset: the higher return more than compensates for the adjustment friction, while a small liquid balance buffers income risk. A larger illiquidity premium ``r_a - r_b`` raises the illiquid share further.
+
+!!! note "Simplifications relative to full KMV"
+    This solver uses a smooth quadratic adjustment cost (rather than the kinked
+    linear-plus-quadratic cost of KMV, which produces an explicit inaction region), a
+    single liquid return (no borrowing wedge), and solves the household block at given
+    returns. It is numerically stable for moderate adjustment costs ``\chi``; very small
+    ``\chi`` makes the optimal deposit large and the HJB iteration unstable.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `B`, `A` | `T` | Aggregate liquid and illiquid holdings (``\int b\,g``, ``\int a\,g``) |
+| `g` | `Array{T,3}` | Stationary joint density over ``(b, a, z)`` (``I_b \times I_a \times 2``) |
+| `c`, `d` | `Array{T,3}` | Consumption and deposit policies |
+| `gen` | `SparseMatrixCSC{T}` | Infinitesimal generator (``2 I_b I_a`` square) |
+
+---
+
 ## Common Pitfalls
 
 1. **Grid resolution.** The implicit upwind scheme is first-order accurate. Increase `I` (and `a_max`) for sharper policy functions and a more accurate constrained mass; `I = 500`–`1000` is typical for publication.
