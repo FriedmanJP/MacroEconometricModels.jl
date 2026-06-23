@@ -92,4 +92,26 @@ const _CT = MacroEconometricModels
         @test occursin("CTTransition", String(take!(io)))
     end
 
+    @testset "Two-asset KMV-style solver" begin
+        m2 = CTTwoAsset(; Ib=30, Ia=30, r_a=0.05, r_b=0.02, chi=2.0, rho=0.08)
+        s = ct_two_asset_solve(m2; tol=1e-6)
+        @test s isa CTTwoAssetSolution{Float64}
+        @test s.hjb_converged
+        # Valid infinitesimal generator (rows sum to ~0).
+        @test maximum(abs.(vec(sum(s.gen; dims=2)))) < 1e-8
+        db = s.b[2] - s.b[1]; da = s.a[2] - s.a[1]
+        @test isapprox(sum(s.g) * db * da, 1.0; atol=1e-6)   # joint density integrates to 1
+        @test minimum(s.g) >= -1e-10
+        @test all(s.c .> 0)
+        @test s.A > 0 && s.B >= 0
+        @test s.A / (s.A + s.B) > 0.3                        # illiquidity premium ⟹ illiquid wealth
+        # A larger illiquidity premium raises the illiquid share.
+        s2 = ct_two_asset_solve(CTTwoAsset(; Ib=30, Ia=30, r_a=0.07, r_b=0.02, chi=2.0, rho=0.08); tol=1e-6)
+        @test s2.hjb_converged
+        @test s2.A / (s2.A + s2.B) > s.A / (s.A + s.B)
+        io = IOBuffer(); show(io, s)
+        @test occursin("CTTwoAssetSolution", String(take!(io)))
+        report(s)
+    end
+
 end

@@ -381,6 +381,7 @@ include("olg/blanchard.jl")
 
 # Continuous-time heterogeneous agents (Achdou et al. 2022)
 include("ct/continuous_aiyagari.jl")
+include("ct/two_asset.jl")
 
 # Display (after all types)
 include("summary.jl")
@@ -501,6 +502,7 @@ export blanchard_steady_state, blanchard_solve, blanchard_transition
 # Continuous-time heterogeneous agents (Achdou et al. 2022)
 export CTAiyagari, CTPoissonIncome, CTSteadyState, CTTransition
 export ct_hjb, ct_kfe, ct_steady_state, ct_mit_shock
+export CTTwoAsset, CTTwoAssetSolution, ct_two_asset_solve
 
 # Local Projection types
 export AbstractLPModel, AbstractLPImpulseResponse, AbstractCovarianceEstimator
