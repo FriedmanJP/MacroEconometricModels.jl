@@ -72,4 +72,24 @@ const _CT = MacroEconometricModels
         report(ss)                                  # smoke test
     end
 
+    @testset "MIT-shock transition" begin
+        ss0 = ct_steady_state(m; tol=1e-6)
+        N = 60
+        # Zero shock ⟹ the transition path is flat at the steady state.
+        tr0 = ct_mit_shock(m, ss0, fill(m.Z, N + 1); dt=0.5, max_iter=50, tol=1e-7, relax=0.5)
+        @test tr0.converged
+        @test length(tr0.t) == N + 1
+        @test maximum(abs.(tr0.K .- ss0.K)) < 1e-3
+        # Transitory positive TFP shock ⟹ capital accumulates then returns; r up on impact.
+        Z_shock = [m.Z * (1 + 0.03 * exp(-0.4 * (n - 1) * 0.5)) for n in 1:(N+1)]
+        tr = ct_mit_shock(m, ss0, Z_shock; dt=0.5, max_iter=400, tol=1e-6, relax=0.3)
+        @test tr.converged
+        @test isapprox(tr.K[1], ss0.K; atol=1e-4)          # K_0 pinned by initial dist
+        @test maximum(tr.K) > ss0.K + 1e-4                 # capital accumulates (hump)
+        @test isapprox(tr.K[end], ss0.K; rtol=3e-2)        # returns toward the steady state
+        @test tr.r[1] > ss0.r                              # positive TFP ⟹ higher r on impact
+        io = IOBuffer(); show(io, tr)
+        @test occursin("CTTransition", String(take!(io)))
+    end
+
 end

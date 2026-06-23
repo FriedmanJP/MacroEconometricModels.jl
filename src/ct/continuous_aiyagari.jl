@@ -109,9 +109,64 @@ end
 # Utility helpers
 # =============================================================================
 
-# CRRA marginal utility and its inverse (log when σ = 1).
+# CRRA utility, marginal utility, and the inverse of marginal utility (log when σ = 1).
 _ct_u(c, σ) = σ ≈ 1 ? log(c) : c^(1 - σ) / (1 - σ)
+_ct_uprime(c, σ) = c^(-σ)
 _ct_uprime_inv(dv, σ) = dv^(-1 / σ)     # c = (v_a)^{-1/σ}
+
+# Constant income-switching block of the generator (Poisson, 2 states), 2I×2I.
+# Ordering is column-major over (a, z): index k = i + (j-1)*I.
+function _ct_aswitch(m::CTAiyagari{T}) where {T<:AbstractFloat}
+    I = m.I; la = m.income.lambda
+    As = spzeros(T, 2I, 2I)
+    for i in 1:I
+        k1 = i; k2 = i + I
+        As[k1, k1] -= la[1]; As[k1, k2] += la[1]
+        As[k2, k2] -= la[2]; As[k2, k1] += la[2]
+    end
+    return As
+end
+
+"""
+    _ct_policy_and_generator(m, v, r, w, a, da, Aswitch) → (c, s, A)
+
+Given a value function `v` and prices `(r, w)`, compute the consumption policy `c`, the
+saving drift `s`, and the sparse infinitesimal generator `A` via the upwind scheme:
+forward differences where the drift is positive, backward where negative, with the
+state-constraint boundaries (zero saving at `a_min` and `a_max`). `A` includes the income
+switching block `Aswitch`.
+"""
+function _ct_policy_and_generator(m::CTAiyagari{T}, v::Matrix{T}, r::T, w::T,
+                                   a::Vector{T}, da::T,
+                                   Aswitch::SparseMatrixCSC{T,Int}) where {T<:AbstractFloat}
+    I = m.I; z = m.income.z; σ = m.sigma
+    c = zeros(T, I, 2); s = zeros(T, I, 2)
+    rows = Int[]; cols = Int[]; vals = T[]
+    for j in 1:2
+        off = (j - 1) * I
+        for i in 1:I
+            dVf = i < I ? (v[i+1, j] - v[i, j]) / da : _ct_uprime(w * z[j] + r * a[I], σ)
+            dVb = i > 1 ? (v[i, j] - v[i-1, j]) / da : _ct_uprime(w * z[j] + r * a[1], σ)
+            cf = _ct_uprime_inv(max(dVf, T(1e-12)), σ)
+            cb = _ct_uprime_inv(max(dVb, T(1e-12)), σ)
+            c0 = w * z[j] + r * a[i]
+            sf = c0 - cf; sb = c0 - cb
+            If = sf > zero(T); Ib = sb < zero(T)
+            If && Ib && (Ib = false)
+            I0 = !(If || Ib)
+            c[i, j] = max(cf * If + cb * Ib + c0 * I0, T(1e-10))
+            s[i, j] = c0 - c[i, j]
+            X = -min(sb, zero(T)) / da
+            Z_ = max(sf, zero(T)) / da
+            k = i + off
+            push!(rows, k); push!(cols, k); push!(vals, -X - Z_)
+            i > 1 && (push!(rows, k); push!(cols, k - 1); push!(vals, X))
+            i < I && (push!(rows, k); push!(cols, k + 1); push!(vals, Z_))
+        end
+    end
+    A = sparse(rows, cols, vals, 2I, 2I) + Aswitch
+    return c, s, A
+end
 
 # =============================================================================
 # HJB — implicit upwind scheme
@@ -136,106 +191,36 @@ function ct_hjb(m::CTAiyagari{T}, r::T, w::T; max_iter::Int=100, tol::Real=1e-6,
     a = collect(range(m.a_min, m.a_max; length=I))
     da = a[2] - a[1]
     Δ = T(Delta)
-
-    # Income switching block (constant): 2I×2I with -la on block diagonal, +la off.
-    # Ordering: column-major over (a, z): index k = i + (j-1)*I.
-    Aswitch = spzeros(T, 2I, 2I)
-    for i in 1:I
-        k1 = i              # state (i, 1)
-        k2 = i + I          # state (i, 2)
-        Aswitch[k1, k1] -= la[1]; Aswitch[k1, k2] += la[1]
-        Aswitch[k2, k2] -= la[2]; Aswitch[k2, k1] += la[2]
-    end
+    Aswitch = _ct_aswitch(m)
 
     # Initial guess: value of staying put (consume income, zero saving) forever.
     v = zeros(T, I, 2)
     for j in 1:2, i in 1:I
-        c0 = w * z[j] + r * a[i]
-        v[i, j] = _ct_u(max(c0, T(1e-10)), σ) / ρ
+        v[i, j] = _ct_u(max(w * z[j] + r * a[i], T(1e-10)), σ) / ρ
     end
 
-    c = zeros(T, I, 2)
-    s = zeros(T, I, 2)
+    c = zeros(T, I, 2); s = zeros(T, I, 2)
     A = spzeros(T, 2I, 2I)
     converged = false
 
     for _ in 1:max_iter
-        dVf = zeros(T, I, 2)
-        dVb = zeros(T, I, 2)
-        for j in 1:2
-            # forward difference; upper boundary: zero saving at a_max
-            for i in 1:I-1
-                dVf[i, j] = (v[i+1, j] - v[i, j]) / da
-            end
-            dVf[I, j] = _ct_uprime(w * z[j] + r * a[I], σ)
-            # backward difference; lower boundary: zero saving at a_min (state constraint)
-            for i in 2:I
-                dVb[i, j] = (v[i, j] - v[i-1, j]) / da
-            end
-            dVb[1, j] = _ct_uprime(w * z[j] + r * a[1], σ)
-        end
-
-        # Upwind: consumption and drift from forward/backward, else stay-put.
-        ssf = zeros(T, I, 2)   # forward drift
-        ssb = zeros(T, I, 2)   # backward drift
-        for j in 1:2, i in 1:I
-            cf = _ct_uprime_inv(max(dVf[i, j], T(1e-12)), σ)
-            cb = _ct_uprime_inv(max(dVb[i, j], T(1e-12)), σ)
-            c0 = w * z[j] + r * a[i]
-            ssf[i, j] = w * z[j] + r * a[i] - cf
-            ssb[i, j] = w * z[j] + r * a[i] - cb
-            If = ssf[i, j] > zero(T)
-            Ib = ssb[i, j] < zero(T)
-            I0 = !(If || Ib)
-            # at most one of If, Ib should hold; if both, prefer the consistent one
-            if If && Ib
-                Ib = false
-            end
-            cc = cf * If + cb * Ib + c0 * I0
-            c[i, j] = max(cc, T(1e-10))
-            s[i, j] = w * z[j] + r * a[i] - c[i, j]
-        end
-
-        # Build sparse generator A from upwind drifts.
-        rows = Int[]; cols = Int[]; vals = T[]
-        for j in 1:2
-            off = (j - 1) * I
-            for i in 1:I
-                k = i + off
-                X = -min(ssb[i, j], zero(T)) / da          # to i-1
-                Z_ = max(ssf[i, j], zero(T)) / da          # to i+1
-                Y = -X - Z_                                # diagonal (drift part)
-                push!(rows, k); push!(cols, k); push!(vals, Y)
-                if i > 1
-                    push!(rows, k); push!(cols, k - 1); push!(vals, X)
-                end
-                if i < I
-                    push!(rows, k); push!(cols, k + 1); push!(vals, Z_)
-                end
-            end
-        end
-        A = sparse(rows, cols, vals, 2I, 2I) + Aswitch
-
+        c, s, A = _ct_policy_and_generator(m, v, r, w, a, da, Aswitch)
         # Implicit update: (1/Δ + ρ) v^{n+1} − A v^{n+1} = u(c) + v^n/Δ.
         u_vec = vec([_ct_u(c[i, j], σ) for i in 1:I, j in 1:2])
-        v_vec = vec(v)
         B = (one(T) / Δ + ρ) * LinearAlgebra.I - A   # UniformScaling − sparse → sparse
-        b = u_vec + v_vec / Δ
-        v_new = B \ b
-        v_mat = reshape(v_new, I, 2)
-
-        dist = maximum(abs.(v_mat - v))
-        v = v_mat
+        v_new = reshape(B \ (u_vec + vec(v) / Δ), I, 2)
+        dist = maximum(abs.(v_new - v))
+        v = v_new
         if dist < tol
             converged = true
             break
         end
     end
+    # Recompute policy/generator at the converged value for exact consistency.
+    c, s, A = _ct_policy_and_generator(m, v, r, w, a, da, Aswitch)
 
     return v, c, s, A, a, converged
 end
-
-_ct_uprime(c, σ) = c^(-σ)
 
 # =============================================================================
 # KFE — stationary distribution
@@ -326,6 +311,129 @@ function ct_steady_state(m::CTAiyagari{T};
 end
 
 # =============================================================================
+# MIT-shock transition (deterministic perfect-foresight path)
+# =============================================================================
+
+"""
+    CTTransition{T}
+
+Deterministic transition path of a continuous-time Aiyagari economy after an unanticipated
+aggregate shock (an "MIT shock"). Fields are length-`(N+1)` time series on the grid `t`:
+TFP `Z`, aggregate capital `K`, interest rate `r`, wage `w`, aggregate consumption `C`.
+"""
+struct CTTransition{T<:AbstractFloat}
+    t::Vector{T}
+    Z::Vector{T}
+    K::Vector{T}
+    r::Vector{T}
+    w::Vector{T}
+    C::Vector{T}
+    converged::Bool
+    iterations::Int
+end
+
+"""
+    ct_mit_shock(m::CTAiyagari, ss0::CTSteadyState, Z_path; dt=0.25, max_iter=300,
+                 tol=1e-6, relax=0.3) → CTTransition
+
+Compute the perfect-foresight transition after an unanticipated aggregate TFP shock. The
+economy begins at the initial steady state `ss0` (distribution `g_0 = ss0.g`) and, given
+the deterministic TFP path `Z_path` (which must return to `m.Z` so the terminal steady
+state is `ss0`), converges back to `ss0`. The algorithm shoots on the capital path `K_t`:
+
+1. Given `{K_t, Z_t}`, set prices `r_t = α Z_t (K_t/L)^{α-1} − δ`, `w_t = (1-α) Z_t (K_t/L)^α`.
+2. Solve the HJB **backward** from the terminal value `v(·,T) = ss0.v` (implicit step).
+3. Solve the KFE **forward** from `g(·,0) = ss0.g` using the time-`t` generators (implicit).
+4. Update `K_t = ∫ a g_t` by relaxation until the path converges.
+
+`K_0` is pinned by the initial distribution. `dt` is the time step, `relax ∈ (0,1]` the
+damping on the capital-path update.
+"""
+function ct_mit_shock(m::CTAiyagari{T}, ss0::CTSteadyState{T}, Z_path::AbstractVector;
+                       dt::Real=0.25, max_iter::Int=300, tol::Real=1e-6,
+                       relax::Real=0.3) where {T<:AbstractFloat}
+    Np1 = length(Z_path)          # number of time points (N+1)
+    N = Np1 - 1
+    Z = collect(T, Z_path)
+    dt_T = T(dt); relax_T = T(relax)
+    a = ss0.a; da = a[2] - a[1]; I = m.I; L = ss0.L
+    Aswitch = _ct_aswitch(m)
+    avec = vcat(a, a)             # asset value per state index (column-major (a,z))
+
+    firm_r(Zt, Kt) = m.alpha * Zt * (Kt / L)^(m.alpha - one(T)) - m.delta
+    firm_w(Zt, Kt) = (one(T) - m.alpha) * Zt * (Kt / L)^m.alpha
+
+    K = fill(ss0.K, Np1)          # initial guess: flat at the steady state
+    g0 = vec(ss0.g)
+    vT = vec(ss0.v)
+
+    Avec = Vector{SparseMatrixCSC{T,Int}}(undef, Np1)
+    cmat = [zeros(T, I, 2) for _ in 1:Np1]
+    converged = false
+    iters = 0
+
+    for outer in 1:max_iter
+        iters = outer
+        rpath = [firm_r(Z[n], K[n]) for n in 1:Np1]
+        wpath = [firm_w(Z[n], K[n]) for n in 1:Np1]
+
+        # ── Backward HJB: v(·,T) = ss0.v ──
+        V = copy(vT)
+        for n in N:-1:1
+            Vmat = reshape(V, I, 2)
+            c, _, A = _ct_policy_and_generator(m, Vmat, rpath[n], wpath[n], a, da, Aswitch)
+            Avec[n] = A
+            cmat[n] = c
+            u_vec = vec([_ct_u(c[i, j], m.sigma) for i in 1:I, j in 1:2])
+            B = (one(T) / dt_T + m.rho) * LinearAlgebra.I - A
+            V = B \ (u_vec + V / dt_T)
+        end
+
+        # ── Forward KFE: g(·,0) = ss0.g ──
+        gcur = copy(g0)
+        K_new = similar(K)
+        K_new[1] = sum(avec .* gcur) * da
+        for n in 1:N
+            B = LinearAlgebra.I - dt_T * copy(transpose(Avec[n]))
+            gnext = B \ gcur
+            gnext = max.(gnext, zero(T))
+            gnext ./= (sum(gnext) * da)        # renormalize (guards numerical drift)
+            gcur = gnext
+            K_new[n+1] = sum(avec .* gcur) * da
+        end
+
+        diff = maximum(abs.(K_new .- K))
+        # K_0 is pinned by the initial distribution; relax the rest.
+        for n in 2:Np1
+            K[n] = relax_T * K_new[n] + (one(T) - relax_T) * K[n]
+        end
+        if diff < tol
+            converged = true
+            break
+        end
+    end
+
+    # Final pass: prices and aggregate consumption along the converged path.
+    rpath = [firm_r(Z[n], K[n]) for n in 1:Np1]
+    wpath = [firm_w(Z[n], K[n]) for n in 1:Np1]
+    Cpath = zeros(T, Np1)
+    gcur = copy(g0)
+    for n in 1:Np1
+        gmat = reshape(gcur, I, 2)
+        cn = n <= N ? cmat[n] : cmat[max(N, 1)]
+        Cpath[n] = sum(cn .* gmat) * da
+        if n <= N
+            B = LinearAlgebra.I - dt_T * copy(transpose(Avec[n]))
+            gnext = B \ gcur; gnext = max.(gnext, zero(T)); gnext ./= (sum(gnext) * da)
+            gcur = gnext
+        end
+    end
+
+    tgrid = collect(T, range(zero(T); step=dt_T, length=Np1))
+    return CTTransition{T}(tgrid, Z, copy(K), rpath, wpath, Cpath, converged, iters)
+end
+
+# =============================================================================
 # Display
 # =============================================================================
 
@@ -336,6 +444,12 @@ end
 function Base.show(io::IO, ss::CTSteadyState{T}) where {T}
     print(io, "CTSteadyState{$T}: r=$(round(ss.r; digits=5)), K=$(round(ss.K; digits=4)), ",
               "converged=$(ss.converged)")
+end
+
+function Base.show(io::IO, tr::CTTransition{T}) where {T}
+    print(io, "CTTransition{$T}: ", length(tr.t), " periods, ",
+              "K: $(round(tr.K[1]; digits=4)) → $(round(maximum(tr.K); digits=4)) → ",
+              "$(round(tr.K[end]; digits=4)), converged=$(tr.converged)")
 end
 
 """

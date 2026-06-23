@@ -499,8 +499,8 @@ export BlanchardOLG, BlanchardOLGSteadyState, BlanchardOLGSolution
 export blanchard_steady_state, blanchard_solve, blanchard_transition
 
 # Continuous-time heterogeneous agents (Achdou et al. 2022)
-export CTAiyagari, CTPoissonIncome, CTSteadyState
-export ct_hjb, ct_kfe, ct_steady_state
+export CTAiyagari, CTPoissonIncome, CTSteadyState, CTTransition
+export ct_hjb, ct_kfe, ct_steady_state, ct_mit_shock
 
 # Local Projection types
 export AbstractLPModel, AbstractLPImpulseResponse, AbstractCovarianceEstimator
