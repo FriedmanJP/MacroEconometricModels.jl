@@ -25,24 +25,37 @@ weaker or wrong. Only the first becomes a fix.
 
 ## Fixes applied on branch `fix`
 
-Only the three findings I verified **myself** (numerically/from source) were fixed, each with a
-regression test; all targeted test groups pass (factor 66, FAVAR 2225, VAR statsapi/core/irf/fevd/hd,
-BVAR bayesian/minnesota/bgr) plus the full suite.
+All seven confirmed findings (F-01…F-07) are fixed, each with a regression test; the full
+multiprocess suite passes (only the pre-existing broken tests + the Aqua test-dep env artifact).
 
 - **F-06 (Critical)** — `src/factor/static.jl`: normalize PCA factors to unit variance so
   `predict = F·Λ'` is the true projection; fixes `residuals`/`r2`, Bai–Ng factor selection, and the
-  FAVAR panel-IRF magnitudes. Regression test in `test/factor/test_factormodel.jl`.
+  FAVAR panel-IRF magnitudes. Regression test in `test/factor/test_factormodel.jl` (recalibrated a
+  bug-dependent cross-method loglik assertion in `test_dynamicfactormodel.jl`).
 - **F-02 (High)** — `src/bvar/priors.jl`: add the multivariate-gamma + `−½·T_eff·n·log π` terms so
   `log_marginal_likelihood` returns the true ML (cross-model comparison now valid; τ-selection
   unchanged). Regression test in `test/bvar/test_bayesian.jl` (vs `matrictint` assembly).
+- **F-07 (High)** — `src/pvar/estimation.jl`: implement the real Windmeijer (2005) two-step
+  finite-sample correction (the previous `_windmeijer_correct` computed the derivative matrices then
+  discarded them). `V_c = V₂ + D·V₂ + V₂·D' + D·V₁·D'` with `V₂` the correctly-scaled efficient
+  two-step variance (robust sandwich at the optimal weight) and `D` the weighting-matrix derivative
+  evaluated at the first step. Monte-Carlo validated: the corrected SE now tracks the empirical
+  sampling SD (ratio 0.98–1.23 across DGPs, up from ~0.6 uncorrected). Regression test in
+  `test/pvar/test_pvar.jl`.
 - **F-01 (Medium)** — `src/var/estimation.jl`: dof-adjust the coefficient covariance inside `vcov`
   (`U'U/(T_eff−k)`), leaving `model.Sigma` as the ML estimate (so IRF/FEVD/HD/loglik/IC are
   unchanged). Regression test in `test/var/test_statsapi.jl`.
+- **F-04 (Low)** — `src/bvar/estimation.jl`: optimize `tau` on the full `Y` (lagged once internally),
+  not the already-lagged `Y_eff` (which double-lagged the marginal-likelihood sample).
+- **F-05 (Low)** — `src/core/identification.jl`: make the Blanchard–Quah sign normalization explicit
+  and deterministic (each permanent shock has a non-negative long-run own-effect).
+- **F-03 (Low)** — `src/var/types.jl` + `src/bvar/priors.jl`: documentation only — clarify that `tau`
+  is inverse-tightness and that `lambda`/`mu` roles are swapped vs the `BVAR_` reference (renaming
+  the public fields would be a breaking change, so left as-is and documented).
 
-**Deliberately NOT fixed (left for review):** F-07 (pvar Windmeijer — needs the full correction
-implemented), F-03/F-04/F-05 (Low; conventions/doc/sign-normalization that could disturb existing
-behavior), and all "unverified candidate findings" below (the automated review had a high
-false-positive rate — see the refuted list).
+**Deliberately NOT fixed (left for review):** the "unverified candidate findings" below (the
+automated parallel review had a high false-positive rate — see the refuted list; these are leads
+that need source verification before any change).
 
 ## Findings
 
@@ -50,10 +63,10 @@ false-positive rate — see the refuted list).
 |----|--------|-----------|----------|--------|---------|
 | F-01 | var | `src/var/estimation.jl:43` | Medium | Fixed | `dof_adj = max(T_eff-k, T_eff)` always equals `T_eff` (since k≥1), so `Sigma` is the ML covariance `U'U/T_eff`, never the dof-adjusted `U'U/(T_eff-k)` the comment/warning intend. Propagates to `vcov`→`stderror`→`confint`: reported VAR coefficient SEs/CIs are too small (anti-conservative). Reference `ols_reg.m:86` uses `1/(N-K)`. Confirmed numerically (gap 2.35% on a T=300,k=7 fixture; grows as k/T rises). Fix must preserve `loglikelihood` (wants ML cov) and decide IRF/identification convention. |
 | F-02 | bvar | `src/bvar/priors.jl:129-131` | High | Fixed | `log_marginal_likelihood` omits the multivariate-gamma terms `logΓₙ(ν_post/2) − logΓₙ(ν_prior/2)` and the `−½·n·T_eff·log π` constant present in the reference `matrictint.m`. Confirmed numerically: our value −2653.18 vs true ML −1343.27 (assembled from Octave `matrictint`); gap 1309.91 = the analytic omitted terms to 1e-13. Invariant for tau-tuning (active dummy blocks fixed), but the returned value is **not** the marginal likelihood — cross-lag/cross-model/cross-n comparison is invalid. `checks_bvar_ml.jl`. |
-| F-03 | bvar | `src/var/types.jl:223`, `src/bvar/priors.jl:21` | Low | Confirmed | Hyperparameter naming/convention hazard (NOT a numerical bug). `tau` is inverse-tightness (divides dummies; larger ⇒ looser) vs reference `mnprior.tight` (multiplies; larger ⇒ tighter). `lambda` (our sum-of-coefficients) and `mu` (our co-persistence) are **swapped** vs `rfvar3` semantics, yet the defaults `lambda=5, mu=2` are copied from the reference's `lambda`(co-persistence)`=5`, `mu`(own)`=2` guidance — so the default prior differs from what a user porting reference settings expects. Doc fix recommended. |
-| F-04 | bvar | `src/bvar/estimation.jl:76` | Low | Confirmed | `optimize_hyperparameters(Y_eff, p)` passes the already-lagged `Y_eff` as if it were raw data, so the marginal likelihood used for tau selection drops another `p` rows (double-lag) and scales the prior from `Y_eff` while estimation (`gen_dummy_obs(Y, …)` at line 77) scales from the full `Y`. Affects only the auto-selected `tau`, not estimation given a fixed `tau`. Minor sample/scaling inconsistency. |
+| F-03 | bvar | `src/var/types.jl:223`, `src/bvar/priors.jl:21` | Low | Fixed | Hyperparameter naming/convention hazard (NOT a numerical bug). `tau` is inverse-tightness (divides dummies; larger ⇒ looser) vs reference `mnprior.tight` (multiplies; larger ⇒ tighter). `lambda` (our sum-of-coefficients) and `mu` (our co-persistence) are **swapped** vs `rfvar3` semantics, yet the defaults `lambda=5, mu=2` are copied from the reference's `lambda`(co-persistence)`=5`, `mu`(own)`=2` guidance — so the default prior differs from what a user porting reference settings expects. Doc fix recommended. |
+| F-04 | bvar | `src/bvar/estimation.jl:76` | Low | Fixed | `optimize_hyperparameters(Y_eff, p)` passes the already-lagged `Y_eff` as if it were raw data, so the marginal likelihood used for tau selection drops another `p` rows (double-lag) and scales the prior from `Y_eff` while estimation (`gen_dummy_obs(Y, …)` at line 77) scales from the full `Y`. Affects only the auto-selected `tau`, not estimation given a fixed `tau`. Minor sample/scaling inconsistency. |
 | F-06 | factor | `src/factor/static.jl:100-101` | **Critical** | Fixed | `estimate_factors` mixes PCA normalizations: `factors = X·Vᵣ` (variance λ) paired with `loadings = Vᵣ·√Λ` (which assume unit-variance factors). So `predict = F·Λ' = X·Vᵣ·√Λ·Vᵣ'` overshoots each principal component by `√λ` instead of equalling the projection `X·Vᵣ·Vᵣ'`. Pure-Julia check: `predict` vs `X·Vᵣ·Vᵣ'` fails (maxrel 8660). Propagates to `residuals`, `r2`, and **`ic_criteria` (Bai–Ng) selects the wrong number of factors — 1 vs the true 3** (reference `baing.m` correctly gets 3). Fix: normalize factors to unit variance (`F = X·Vᵣ·Λ^{-1/2}`) keeping `loadings = Vᵣ·Λ^{1/2}`, so `F·Λ' = X·Vᵣ·Vᵣ'`. Fix verified: corrected `predict==projection` and Bai–Ng then selects 3. **Blast radius:** FAVAR (`favar_panel_irf` = `Λ·factor_irf` uses these inconsistent loadings → panel-wide IRFs mis-scaled by `√λ` per factor) and `estimate_favar` `:bayesian` init. Fixing F-06 fixes the FAVAR mapping too. `checks_factor.jl`. |
-| F-05 | core | `src/core/identification.jl:184-192` | Low | Confirmed | `identify_long_run` (Blanchard–Quah) is algebraically correct (`L·Q = (I−A_sum)·chol(C1ΣC1')`, verified `Q_BQ Q_BQ'=Σ` and long-run cumulative impact lower-triangular vs reference, IRF² match 1.7e-12), but applies **no sign normalization** of the permanent shock, whereas reference `iresponse_longrun.m` pins `Q(1,1)>0`. The permanent shock's sign is therefore arbitrary/run-dependent — usability/reproducibility nit, not a numerical error. |
+| F-05 | core | `src/core/identification.jl:184-192` | Low | Fixed | `identify_long_run` (Blanchard–Quah) is algebraically correct (`L·Q = (I−A_sum)·chol(C1ΣC1')`, verified `Q_BQ Q_BQ'=Σ` and long-run cumulative impact lower-triangular vs reference, IRF² match 1.7e-12), but applies **no sign normalization** of the permanent shock, whereas reference `iresponse_longrun.m` pins `Q(1,1)>0`. The permanent shock's sign is therefore arbitrary/run-dependent — usability/reproducibility nit, not a numerical error. |
 
 ## Verified-correct ledger
 
@@ -107,7 +120,7 @@ Cross-stack convention differences that are NOT bugs (recorded so they are not r
   per its own header. Our `baxter_king` is the classic symmetric BK (loses 2K obs) — a different,
   correctly-implemented filter, so a direct numeric comparison would be meaningless.
 
-| F-07 | pvar | `src/pvar/estimation.jl:386-469` | High | Confirmed | `_windmeijer_correct` computes the derivative matrices `D_j` (l.401-415) and `D_jk` (l.420-436) but **never uses them** — it returns the plain two-step sandwich `gmm_sandwich_vcov(S_ZX, W, D_e)` (l.459). The Windmeijer (2005) finite-sample correction is therefore a no-op placeholder, so reported two-step PVAR standard errors are downward-biased (a well-known, sometimes large, bias). Fix = implement the full correction term (non-trivial). |
+| F-07 | pvar | `src/pvar/estimation.jl:386-469` | High | Fixed | `_windmeijer_correct` computes the derivative matrices `D_j` (l.401-415) and `D_jk` (l.420-436) but **never uses them** — it returns the plain two-step sandwich `gmm_sandwich_vcov(S_ZX, W, D_e)` (l.459). The Windmeijer (2005) finite-sample correction is therefore a no-op placeholder, so reported two-step PVAR standard errors are downward-biased (a well-known, sometimes large, bias). Fix = implement the full correction term (non-trivial). |
 
 ## Tier-2 audit — method and candidate findings
 

@@ -71,9 +71,13 @@ function estimate_bvar(Y::AbstractMatrix{T}, p::Int;
     T_eff = size(Y_eff, 1)
     k = size(X, 2)  # 1 + n*p
 
-    # Apply Minnesota prior augmentation if requested
+    # Apply Minnesota prior augmentation if requested.
+    # Optimize tau on the full data `Y` (not the already-lagged `Y_eff`): both
+    # optimize_hyperparameters and gen_dummy_obs lag `Y` once internally, so passing `Y_eff`
+    # would double-lag the marginal-likelihood sample and scale the prior off a shifted sample
+    # (audit F-04).
     Y_data, X_data = if prior == :minnesota
-        h = isnothing(hyper) ? optimize_hyperparameters(Y_eff, p) : hyper
+        h = isnothing(hyper) ? optimize_hyperparameters(Y, p) : hyper
         Y_d, X_d = gen_dummy_obs(Y, p, h)
         (vcat(Y_eff, Y_d), vcat(X, X_d))
     else

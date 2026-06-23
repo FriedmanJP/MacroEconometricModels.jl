@@ -18,8 +18,11 @@ using Distributions: loggamma
 """
     gen_dummy_obs(Y, p, hyper) -> (Y_dummy, X_dummy)
 
-Generate Minnesota prior dummy observations.
-Hyperparameters: tau (tightness), decay, lambda (sum-of-coef), mu (co-persistence), omega.
+Generate Minnesota prior dummy observations (stacked-dummy / BGR parameterization).
+Hyperparameters (see [`MinnesotaHyperparameters`](@ref) for exact conventions): `tau`
+(inverse-tightness — larger ⇒ looser), `decay`, `lambda` (sum-of-coefficients), `mu`
+(co-persistence), `omega` (residual-covariance). Note `lambda`/`mu` roles are swapped relative to
+the reference `BVAR_`/`rfvar3` toolbox (audit F-03).
 """
 function gen_dummy_obs(Y::AbstractMatrix{T}, p::Int, hyper::MinnesotaHyperparameters) where {T<:AbstractFloat}
     T_obs, n = size(Y)
