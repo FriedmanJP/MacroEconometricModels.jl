@@ -166,7 +166,7 @@ Pkg.add("MacroEconometricModels")
 - **Analytical moments** - Order 1: Lyapunov equation for unconditional covariance; Order ≥2: Andreasen et al. (2018) augmented state-space Lyapunov for means, variances, and autocovariances; `analytical_moments` for both
 - **GMM Estimation** - IRF matching, Euler equation GMM, SMM, analytical GMM via `estimate_dsge`
 - **Bayesian Estimation** - Sequential Monte Carlo (SMC with adaptive tempering), SMC² with particle filter likelihood, random-walk Metropolis-Hastings; delayed acceptance for accelerated sampling; nonlinear particle filter for higher-order solutions via `estimate_dsge_bayes`
-- **Dynare replication** - 27-model replication suite (`examples/dynare_replication/`) with automated steady-state, IRF, variance decomposition, and theoretical moment comparison against Dynare 6.5+ reference values; includes Smets-Wouters (2007) full estimation pipeline
+- **Dynare replication** - 27-model replication suite (`test/dynare_replication/`) with automated steady-state, IRF, variance decomposition, and theoretical moment comparison against Dynare 6.5+ reference values; includes Smets-Wouters (2007) full estimation pipeline
 
 ### Heterogeneous Agent DSGE
 - **Model specification** - `@dsge` macro with `heterogeneous:`, `idiosyncratic:`, `aggregation:` blocks for declaring individual state space, income process, and market clearing conditions
