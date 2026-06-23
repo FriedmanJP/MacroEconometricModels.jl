@@ -105,6 +105,40 @@ The equilibrium interest rate lies strictly below the discount rate ``\rho``: in
 
 ---
 
+## MIT-Shock Transitions
+
+An **MIT shock** is an unanticipated, deterministic aggregate disturbance: the economy sits at a steady state, is hit by a one-time shock, and converges back along a perfect-foresight path. `ct_mit_shock` computes this transition by **shooting on the capital path** ``K_t``:
+
+1. Given a guess ``\{K_t\}`` and the TFP path ``\{Z_t\}``, set prices ``r_t, w_t``.
+2. Solve the HJB **backward** from the terminal steady-state value ``v(\cdot,T)``.
+3. Solve the KFE **forward** from the initial distribution ``g(\cdot,0)``.
+4. Update ``K_t = \int a\, g_t`` by relaxation until the path converges.
+
+```@example ct
+m2 = CTAiyagari(; sigma=2.0, rho=0.05, delta=0.05, a_max=30.0, I=120)
+ss0 = ct_steady_state(m2; tol=1e-6)
+# Transitory 3% TFP shock, mean-reverting; horizon T = 30 (dt = 0.5).
+N = 60
+Z_shock = [m2.Z * (1 + 0.03 * exp(-0.4 * (n - 1) * 0.5)) for n in 1:(N+1)]
+tr = ct_mit_shock(m2, ss0, Z_shock; dt=0.5, max_iter=400, tol=1e-6, relax=0.3)
+(converged = tr.converged,
+ r_on_impact = round(tr.r[1], digits=5),
+ steady_r = round(ss0.r, digits=5),
+ K_peak = round(maximum(tr.K), digits=4),
+ K_steady = round(ss0.K, digits=4))
+```
+
+On impact the higher productivity raises the marginal product of capital, so the interest rate jumps above its steady-state value; investment rises and capital accumulates to a hump before depreciating back to the steady state as the shock fades. The initial capital ``K_0`` is pinned by the predetermined wealth distribution. A zero shock (``Z_t \equiv Z``) returns a path that is flat at the steady state — a useful correctness check.
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `dt` | `Real` | `0.25` | Time step of the transition grid |
+| `max_iter` | `Int` | `300` | Maximum shooting iterations |
+| `tol` | `Real` | ``10^{-6}`` | Convergence tolerance on the capital path |
+| `relax` | `Real` | `0.3` | Relaxation weight on the capital-path update |
+
+---
+
 ## Common Pitfalls
 
 1. **Grid resolution.** The implicit upwind scheme is first-order accurate. Increase `I` (and `a_max`) for sharper policy functions and a more accurate constrained mass; `I = 500`–`1000` is typical for publication.
