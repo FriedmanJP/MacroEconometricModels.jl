@@ -453,7 +453,7 @@ end
     )
 
     @test haskey(result.plm_coefficients, :K)
-    @test length(result.plm_coefficients[:K]) == 2
+    @test length(result.plm_coefficients[:K]) == 3  # z-augmented PLM: [b1, b2, b3]
     @test haskey(result.r_squared, :K)
     @test result.r_squared[:K] > 0.9  # KS typically gets R² > 0.999
     @test result.iterations <= 3
@@ -953,6 +953,121 @@ end
         @test haskey(ps, :alpha)
         @test isfinite(ps[:alpha][:mean])
     end
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 23: Clearing closure (Aiyagari regression — refactor must not change behavior)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "Clearing closure (Aiyagari regression)" begin
+    spec = load_ha_example(:krusell_smith)
+    @test spec.model == :aiyagari                       # new field defaults correctly
+
+    ss = compute_steady_state(spec; r_bounds=(-0.02, 0.04), max_iter=100, tol=1e-3)
+    @test ss.aggregates[:K] > 0
+    @test isfinite(ss.prices[:r])
+    @test haskey(ss.prices, :w)                         # Cobb-Douglas wage still produced
+    @test abs(ss.excess_demand) < 5e-3                  # market essentially clears
+    @test -0.01 < ss.prices[:r] < 1 / spec.individual.beta - 1  # r* below time-pref rate
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 24: Huggett (1993) — pure-exchange risk-free bond, zero net supply
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "Huggett (1993) steady state" begin
+    # Six model periods per year (Huggett 1993): annualize the per-period rate.
+    annualize(rp) = (1 + rp)^6 - 1
+    # Table 1 (σ = 1.5): credit limit => equilibrium annual risk-free rate.
+    targets = [(-2.0, -0.071), (-4.0, 0.023), (-6.0, 0.034), (-8.0, 0.040)]
+
+    r_annuals = Float64[]
+    for (cl, r_target) in targets
+        a_max = cl <= -6 ? 18.0 : 8.0
+        spec = MacroEconometricModels._huggett_example(; credit_limit=cl, a_max=a_max, n_a=400)
+        @test spec.model == :huggett
+        ss = compute_steady_state(spec; max_iter=200, tol=5e-4)
+        @test ss.converged
+        @test abs(ss.excess_demand) < 3e-3                 # bond market clears (∫a' ≈ 0)
+        r_ann = annualize(ss.prices[:r])
+        push!(r_annuals, r_ann)
+        # Reproduces Huggett (1993) Table 1 within method/grid tolerance (~1.5pp)
+        @test isapprox(r_ann, r_target; atol=0.015)
+        # Precautionary saving keeps r* below the time-preference rate (1/β − 1)
+        @test r_ann < annualize((1 - spec.individual.beta) / spec.individual.beta)
+    end
+
+    # Huggett's comparative static: r* rises as the credit limit loosens.
+    @test issorted(r_annuals)
+
+    # load_ha_example(:huggett) is the default (credit limit −2) economy.
+    spec0 = load_ha_example(:huggett)
+    @test spec0.model == :huggett
+    @test spec0.individual.borrowing_constraint[1] == -2.0
+    @test spec0.income.states == [1.0, 0.1]
+end
+
+@testset "Huggett SSJ" begin
+    spec = MacroEconometricModels._huggett_example(; credit_limit=-2.0, a_max=8.0, n_a=200)
+    ss = compute_steady_state(spec; max_iter=120, tol=1e-3)
+    sol = solve(spec; method=:ssj, ss=ss, T_horizon=100, n_reduced=20)
+    @test sol isa HADSGESolution
+    @test sol.method === :ssj
+    @test maximum(abs.(eigvals(sol.linear_solution.G1))) <= 1 + 1e-6  # stable
+    @test haskey(sol.jacobians, :H_U)                                  # clearing Jacobian
+    @test haskey(sol.jacobians, :H_Z)                                  # shock Jacobian
+    # A positive aggregate endowment shock lowers the clearing risk-free rate on impact.
+    H_U = sol.jacobians[:H_U]; H_Z = sol.jacobians[:H_Z]
+    dr = -(H_U \ (H_Z * [0.9^(t - 1) for t in 1:100]))
+    @test dr[1] < 0
+end
+
+@testset "Huggett Reiter" begin
+    spec = MacroEconometricModels._huggett_example(; credit_limit=-2.0, a_max=8.0, n_a=200)
+    ss = compute_steady_state(spec; max_iter=120, tol=1e-3)
+    sol = solve(spec; method=:reiter, ss=ss, n_reduced=30)
+    @test sol isa HADSGESolution
+    @test sol.method === :reiter
+    @test maximum(abs.(eigvals(sol.linear_solution.G1))) <= 1 + 1e-6   # stable
+    @test sol.explained_variance > 0.5
+    @test size(sol.linear_solution.G1, 1) == sol.n_reduced + 1         # state [d̃; w]
+end
+
+@testset "Huggett Krusell-Smith" begin
+    spec = MacroEconometricModels._huggett_example(; credit_limit=-2.0, a_max=8.0, n_a=150)
+    ss = compute_steady_state(spec; max_iter=100, tol=1e-3)
+    sol = solve(spec; method=:krusell_smith, ss=ss, T_sim=800, T_burn=200, max_outer=3)
+    @test sol isa KrusellSmithSolution
+    @test haskey(sol.plm_coefficients, :r)        # PLM forecasts the clearing rate, not K
+    @test sol.r_squared[:r] > 0.7                 # rate is near-linear in the endowment shock
+    b = sol.plm_coefficients[:r]
+    @test abs(b[1] - ss.prices[:r]) < 0.01        # PLM intercept ≈ steady-state rate
+    @test b[2] < 0                                # positive endowment shock lowers r
+end
+
+@testset "Den Haan (2010) accuracy" begin
+    # --- Aiyagari capital model (z-augmented PLM makes the test meaningful) ---
+    ks_spec = load_ha_example(:krusell_smith)
+    ss_a = compute_steady_state(ks_spec; r_bounds=(-0.02, 0.04), max_iter=80, tol=1e-3)
+    ks = solve(ks_spec; method=:krusell_smith, ss=ss_a, T_sim=500, T_burn=100, max_outer=3)
+    @test length(ks.plm_coefficients[:K]) == 3          # z-augmented PLM
+
+    dh = den_haan_test(ks; T_sim=400, T_burn=100)
+    @test dh isa DenHaanAccuracy
+    @test dh.aggregate === :K
+    @test isfinite(dh.dh_max) && dh.dh_max >= dh.dh_mean >= 0
+    @test dh.sigma_ref > 0 && dh.sigma_plm > 0
+    @test length(dh.ref_path) == 400 && length(dh.plm_path) == 400
+    @test dh.sigma_plm > 0.2 * dh.sigma_ref             # PLM reproduces the fluctuations
+    @test dh.dh_max < 1.0                               # accurate: well under 1% (Den Haan)
+    report(dh)                                          # display smoke test
+
+    # --- Huggett: rate accuracy test is intentionally unsupported (errors clearly) ---
+    hug_spec = MacroEconometricModels._huggett_example(; n_a=120)
+    ss_h = compute_steady_state(hug_spec; max_iter=80, tol=1e-3)
+    ks_h = KrusellSmithSolution{Float64}(ss_h,
+        Dict(:r => [ss_h.prices[:r], 0.0]), Dict(:r => 1.0), hug_spec, false, 0)
+    @test_throws ErrorException den_haan_test(ks_h)
 end
 
 end # @testset "HA-DSGE Types"

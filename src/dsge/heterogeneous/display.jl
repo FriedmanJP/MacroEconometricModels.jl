@@ -160,6 +160,13 @@ function Base.show(io::IO, sol::KrusellSmithSolution{T}) where {T}
     print(io, "KrusellSmithSolution{$T}: converged=$(sol.converged), R²=$r2_val")
 end
 
+function Base.show(io::IO, dh::DenHaanAccuracy{T}) where {T}
+    unit = dh.aggregate === :K ? "%" : "pp"
+    print(io, "DenHaanAccuracy{$T}: aggregate=:$(dh.aggregate), " *
+              "max=$(_fmt(dh.dh_max; digits=4))$unit, " *
+              "mean=$(_fmt(dh.dh_mean; digits=4))$unit")
+end
+
 # =============================================================================
 # report() — detailed summaries
 # =============================================================================
@@ -330,6 +337,37 @@ function report(sol::KrusellSmithSolution{T}) where {T}
 
     # Delegate to steady state report
     report(sol.steady_state)
+
+    return nothing
+end
+
+"""
+    report(dh::DenHaanAccuracy)
+
+Print the Den Haan (2010) accuracy diagnostics: maximum and mean errors between the
+reference (explicit cross-sectional) and PLM-only aggregate paths, and the
+standard-deviation comparison.
+"""
+function report(dh::DenHaanAccuracy{T}) where {T}
+    io = stdout
+    unit = dh.aggregate === :K ? "%" : "pp"
+    agg_label = dh.aggregate === :K ? "log K" : "r"
+    sig_ratio = dh.sigma_ref > zero(T) ? dh.sigma_plm / dh.sigma_ref : T(NaN)
+
+    data = Any[
+        "Aggregate"                  string(dh.aggregate);
+        "Max error ($unit)"          _fmt(dh.dh_max; digits=4);
+        "Mean error ($unit)"         _fmt(dh.dh_mean; digits=4);
+        "σ reference ($agg_label)"   _fmt(dh.sigma_ref; digits=6);
+        "σ PLM-only ($agg_label)"    _fmt(dh.sigma_plm; digits=6);
+        "σ ratio (PLM/ref)"          _fmt(sig_ratio; digits=4);
+        "Simulation length"          dh.T_sim;
+        "Burn-in"                    dh.T_burn
+    ]
+    _pretty_table(io, data;
+        title="Den Haan (2010) Accuracy Test",
+        column_labels=["", "Value"],
+        alignment=[:l, :r])
 
     return nothing
 end

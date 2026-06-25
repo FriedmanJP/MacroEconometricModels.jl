@@ -1,5 +1,5 @@
 % run_dynare_reference.m — Extract Dynare reference values for replication comparison
-% Usage: cd examples/dynare_replication && octave --no-gui run_dynare_reference.m
+% Usage: cd test/dynare_replication && octave --no-gui run_dynare_reference.m
 %
 % Requires: Dynare 6.5+ (Homebrew), Octave 11+
 % Output:   dynare_results/<model_name>.mat for each model

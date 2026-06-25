@@ -393,6 +393,8 @@ Fields:
 - `het_params::Dict{Symbol,T}` — heterogeneous-agent-specific parameters
 - `n_assets::Int` — number of asset dimensions
 - `n_income::Int` — number of income states
+- `model::Symbol` — model family for clearing/dynamics dispatch (`:aiyagari` default,
+  `:huggett` for zero-net-supply pure exchange)
 """
 struct HADSGESpec{T<:AbstractFloat}
     aggregate_spec::DSGESpec{T}
@@ -403,15 +405,17 @@ struct HADSGESpec{T<:AbstractFloat}
     het_params::Dict{Symbol,T}
     n_assets::Int
     n_income::Int
+    model::Symbol
 
     function HADSGESpec{T}(aggregate_spec, individual, income, grid,
-                            aggregation, het_params) where {T<:AbstractFloat}
+                            aggregation, het_params;
+                            model::Symbol=:aiyagari) where {T<:AbstractFloat}
         n_assets = grid.n_dims
         n_income = grid.n_income
         @assert individual.n_asset_dims == n_assets "Individual problem asset dims must match grid"
         @assert length(income.states) == n_income "Income states must match grid n_income"
         new{T}(aggregate_spec, individual, income, grid,
-               aggregation, het_params, n_assets, n_income)
+               aggregation, het_params, n_assets, n_income, model)
     end
 end
 

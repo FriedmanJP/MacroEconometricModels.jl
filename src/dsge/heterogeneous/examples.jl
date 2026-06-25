@@ -250,6 +250,70 @@ function _two_asset_hank_example()
 end
 
 # =============================================================================
+# _huggett_example — Huggett (1993)
+# =============================================================================
+
+"""
+    _huggett_income() -> IncomeProcess{Float64}
+
+Two-state endowment process from Huggett (1993): `e ∈ {e_h, e_l} = {1.0, 0.1}` with
+transition `π(e_h|e_h) = 0.925`, `π(e_h|e_l) = 0.5` (state order `[e_h, e_l]`). The
+stationary distribution puts mass `0.5/0.575 ≈ 0.870` on the high state, giving a mean
+endowment of `≈ 0.883` (so six periods ≈ 5.3 = "one year's average endowment", matching
+the paper's credit-limit normalization).
+"""
+function _huggett_income()
+    states = [1.0, 0.1]
+    P = [0.925 0.075; 0.5 0.5]
+    pi_h = 0.5 / (0.5 + 0.075)
+    stat = [pi_h, 1.0 - pi_h]
+    return IncomeProcess{Float64}(P, states, stat, :endowment)
+end
+
+"""
+    _huggett_example(; credit_limit=-2.0, a_max=4.0, n_a=300, sigma=1.5,
+                       beta=0.99322, rho_e=0.90, sigma_e=0.01) -> HADSGESpec{Float64}
+
+Huggett (1993) pure-exchange, risk-free-bond economy. Agents trade a one-period bond in
+**zero net supply** (`∫a' dμ = 0`) subject to a credit limit `ā = credit_limit < 0`.
+Income enters the budget as `w·e` with `w = 1` the (steady-state) aggregate endowment
+level, so the household problem reuses `_ks_budget` and the equilibrium risk-free rate is
+found by bisection (see `_huggett_clearing`). `rho_e`/`sigma_e` parameterize an aggregate
+endowment shock used by the dynamic solvers (an extension; the 1993 paper has no
+aggregate risk).
+
+Calibration follows Huggett (1993): CRRA `σ = 1.5`, `β = 0.99322` (six model periods per
+year, annual `β = 0.96`), endowment `{1.0, 0.1}`, credit limits `{-2,-4,-6,-8}`.
+"""
+function _huggett_example(; credit_limit::Float64=-2.0, a_max::Float64=4.0,
+                            n_a::Int=300, sigma::Float64=1.5,
+                            beta::Float64=0.99322, rho_e::Float64=0.90,
+                            sigma_e::Float64=0.01)
+    u, up, upi = _crra_utility(sigma)
+    income = _huggett_income()
+    grid = HAGrid(; assets=(credit_limit, a_max, n_a), income_states=2)
+
+    # Pure-exchange household: budget c + a' = (1+r)*a + w*e (w = endowment level)
+    individual = IndividualProblem{Float64}(u, up, upi, beta, _ks_budget,
+                                            [credit_limit],  # borrowing/credit limit ā
+                                            nothing, 1)
+
+    # Minimal aggregate block: endowment-level AR(1) metadata for the dynamic solvers
+    agg_spec = _minimal_agg_spec(; rho_z=rho_e, sigma_z=sigma_e)
+
+    # Aggregation: net bond position A = ∫ a dμ (clears at 0)
+    aggregation = Pair{Symbol,Function}[:A => _agg_var1]
+
+    het_params = Dict{Symbol,Float64}(
+        :sigma_c => sigma, :beta_hh => beta, :credit_limit => credit_limit,
+        :rho_e => rho_e, :sigma_e => sigma_e, :Z => 1.0, :L => 1.0
+    )
+
+    return HADSGESpec{Float64}(agg_spec, individual, income, grid,
+                                aggregation, het_params; model=:huggett)
+end
+
+# =============================================================================
 # load_ha_example — public API
 # =============================================================================
 
@@ -265,6 +329,7 @@ Return a pre-calibrated `HADSGESpec` for a canonical heterogeneous agent model.
 | `:krusell_smith` | Incomplete markets, one asset | Krusell & Smith (1998) |
 | `:one_asset_hank` | One-asset HANK | Kaplan, Moll & Violante (2018) |
 | `:two_asset_hank` | Two-asset HANK with adjustment costs | Kaplan, Moll & Violante (2018) |
+| `:huggett` | Pure-exchange risk-free bond, zero net supply | Huggett (1993) |
 
 # Examples
 
@@ -287,8 +352,10 @@ function load_ha_example(name::Symbol)
         return _one_asset_hank_example()
     elseif name === :two_asset_hank
         return _two_asset_hank_example()
+    elseif name === :huggett
+        return _huggett_example()
     else
         error("Unknown HA-DSGE example: :$name. " *
-              "Available: :krusell_smith, :one_asset_hank, :two_asset_hank")
+              "Available: :krusell_smith, :one_asset_hank, :two_asset_hank, :huggett")
     end
 end
