@@ -107,14 +107,19 @@ const TEST_GROUPS = [
         "filters/test_x13_coverage.jl",
         "spectral/test_spectral.jl",
     ]),
-    # Group 7: DSGE Models
-    ("DSGE Models" => [
+    # Group 7 split into three so the DSGE critical path balances across processes (#123):
+    # the heavy test_ha_dsge.jl (~65% of the old group) runs alone.
+    ("DSGE Core" => [
         "dsge/test_dsge.jl",
-        "dsge/test_bayesian_dsge.jl",
-        "dsge/test_dsge_hd.jl",
-        "dsge/test_ha_dsge.jl",
         "dsge/test_blanchard_olg.jl",
         "dsge/test_continuous_aiyagari.jl",
+    ]),
+    ("DSGE Bayesian & HD" => [
+        "dsge/test_bayesian_dsge.jl",
+        "dsge/test_dsge_hd.jl",
+    ]),
+    ("HA-DSGE" => [
+        "dsge/test_ha_dsge.jl",
     ]),
     # Group 8: Coverage-A (DSGE — heaviest coverage tests)
     ("Coverage-A" => [
@@ -367,14 +372,18 @@ else
         @testset "X-13 Coverage" begin include("filters/test_x13_coverage.jl") end
         @testset "Spectral Analysis" begin include("spectral/test_spectral.jl") end
 
-        # Group 7: DSGE Models
-        @testset "DSGE Models" begin
+        # Group 7 split into three (#123)
+        @testset "DSGE Core" begin
             include("dsge/test_dsge.jl")
-            include("dsge/test_bayesian_dsge.jl")
-            include("dsge/test_dsge_hd.jl")
-            include("dsge/test_ha_dsge.jl")
             include("dsge/test_blanchard_olg.jl")
             include("dsge/test_continuous_aiyagari.jl")
+        end
+        @testset "DSGE Bayesian & HD" begin
+            include("dsge/test_bayesian_dsge.jl")
+            include("dsge/test_dsge_hd.jl")
+        end
+        @testset "HA-DSGE" begin
+            include("dsge/test_ha_dsge.jl")
         end
 
         # Group 8: Coverage-A (DSGE)
