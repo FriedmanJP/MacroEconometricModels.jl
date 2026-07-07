@@ -209,8 +209,20 @@ end
 """
     MinnesotaHyperparameters{T} <: AbstractPrior
 
-Minnesota prior hyperparameters: tau (tightness), decay, lambda (sum-of-coef),
-mu (co-persistence), omega (covariance).
+Minnesota prior hyperparameters (Bańbura–Giannone–Reichlin stacked-dummy parameterization).
+
+- `tau`    — overall shrinkage, as **inverse tightness**: dummy observations are divided by `tau`,
+             so LARGER `tau` ⇒ LOOSER prior. (Opposite direction to the reference `BVAR_`'s
+             `mnprior.tight`, which multiplies.)
+- `decay`  — lag decay; higher lags shrink toward zero faster (scaling `lag^decay`).
+- `lambda` — weight on the **sum-of-coefficients** prior (shrinks toward Σₗ Aₗ = I).
+- `mu`     — weight on the **co-persistence / dummy-initial-observation** prior.
+- `omega`  — weight on the prior for the residual covariance.
+
+Reference-naming caveat (audit F-03): in Ferroni–Canova `BVAR_`/`rfvar3`, `lambda` is
+co-persistence and `mu` is own/sum-of-coefficients — i.e. our `lambda`/`mu` roles are SWAPPED
+relative to that toolbox. The defaults `lambda=5, mu=2` reuse the reference's numeric guidance
+under our role assignment.
 """
 struct MinnesotaHyperparameters{T<:AbstractFloat} <: AbstractPrior
     tau::T

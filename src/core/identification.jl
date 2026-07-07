@@ -180,13 +180,23 @@ end
 # Long-Run Restrictions (Blanchard-Quah)
 # =============================================================================
 
-"""Identify via long-run restrictions: long-run cumulative impact matrix is lower triangular."""
+"""
+Identify via long-run restrictions (Blanchard–Quah): the long-run cumulative impact matrix is
+lower triangular. Shocks are sign-normalized so each permanent shock has a non-negative long-run
+effect on its own variable (a positive diagonal of the long-run cumulative impact matrix) — the
+standard BQ normalization, applied explicitly so shock signs are deterministic (audit F-05; the
+reference `iresponse_longrun.m` normalizes only the impact sign of the first shock).
+"""
 function identify_long_run(model::VARModel{T}) where {T<:AbstractFloat}
     n, p = nvars(model), model.p
     A_sum = sum(extract_ar_coefficients(model.B, n, p))
     inv_lag = robust_inv(I(n) - A_sum)
     V_LR = inv_lag * model.Sigma * inv_lag'
-    D = safe_cholesky(V_LR)
+    D = Matrix(safe_cholesky(V_LR))   # lower-triangular; D == long-run cumulative impact matrix
+    # Sign-normalize: long-run own-effect (diag of D) non-negative for every shock.
+    @inbounds for j in 1:n
+        D[j, j] < zero(T) && (@views D[:, j] .*= -one(T))
+    end
     P = (I(n) - A_sum) * D
     robust_inv(Matrix(safe_cholesky(model.Sigma))) * P
 end

@@ -9,6 +9,7 @@ Minnesota prior dummy observations and marginal likelihood for Bayesian VAR.
 """
 
 using LinearAlgebra, Statistics
+using Distributions: loggamma
 
 # =============================================================================
 # Dummy Observation Generation
@@ -17,8 +18,11 @@ using LinearAlgebra, Statistics
 """
     gen_dummy_obs(Y, p, hyper) -> (Y_dummy, X_dummy)
 
-Generate Minnesota prior dummy observations.
-Hyperparameters: tau (tightness), decay, lambda (sum-of-coef), mu (co-persistence), omega.
+Generate Minnesota prior dummy observations (stacked-dummy / BGR parameterization).
+Hyperparameters (see [`MinnesotaHyperparameters`](@ref) for exact conventions): `tau`
+(inverse-tightness — larger ⇒ looser), `decay`, `lambda` (sum-of-coefficients), `mu`
+(co-persistence), `omega` (residual-covariance). Note `lambda`/`mu` roles are swapped relative to
+the reference `BVAR_`/`rfvar3` toolbox (audit F-03).
 """
 function gen_dummy_obs(Y::AbstractMatrix{T}, p::Int, hyper::MinnesotaHyperparameters) where {T<:AbstractFloat}
     T_obs, n = size(Y)
@@ -126,9 +130,19 @@ function log_marginal_likelihood(Y::AbstractMatrix{T}, p::Int, hyper::MinnesotaH
     nu_prior <= n - 1 && (@warn "Prior dof too low"; return T(-Inf))
     nu_post = T_eff + nu_prior
 
+    # Full Normal-Inverse-Wishart log marginal likelihood. The data-dimension constant
+    # −½·T_eff·n·log π and the multivariate-gamma terms logΓₙ(ν/2) are REQUIRED for the
+    # value to be the actual marginal likelihood (and thus valid for cross-lag / cross-model
+    # comparison). They are constant in `tau` for a fixed dummy-block structure, so the
+    # hyperparameter optimizer is unaffected. See audit F-02.
+    # logΓₙ(a) = n(n-1)/4·log π + Σ_{j=1}^n logΓ(a + (1-j)/2)
+    logmvgamma(a) = T(n * (n - 1)) / 4 * log(T(π)) + sum(loggamma(a + T(1 - j) / 2) for j in 1:n)
+
     T(0.5) * n * (logdet_safe(K_prior) - logdet_safe(K_post)) -
     T(0.5) * nu_post * logdet_safe(S_post) +
-    T(0.5) * nu_prior * logdet_safe(S_prior)
+    T(0.5) * nu_prior * logdet_safe(S_prior) -
+    T(0.5) * T_eff * n * log(T(π)) +
+    logmvgamma(T(nu_post) / 2) - logmvgamma(T(nu_prior) / 2)
 end
 
 @float_fallback log_marginal_likelihood Y

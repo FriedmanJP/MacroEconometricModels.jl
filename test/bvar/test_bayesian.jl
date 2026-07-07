@@ -9,6 +9,7 @@ using Test
 using LinearAlgebra
 using Statistics
 using Random
+using Distributions: loggamma
 
 if !@isdefined(FAST)
     const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
@@ -482,6 +483,31 @@ end
         )
         @test best_full isa MinnesotaHyperparameters
         @test isfinite(best_ml)
+
+        # F-02 regression: the returned value must be the TRUE Normal-Inverse-Wishart marginal
+        # likelihood, including the multivariate-gamma + log-π normalization terms (previously
+        # dropped). Compare against an independent assembly via the Sims `matrictint` integral:
+        #   logML = matrictint(post) − matrictint(prior) − ½·T_eff·n·log(2π).
+        _matrictint(S, df, XXi) = begin
+            kk = size(XXi, 1); ny = size(S, 1)
+            cx = cholesky(Symmetric(XXi)).U; cs = cholesky(Symmetric(S)).U
+            w1 = 0.5*kk*ny*log(2π) + ny*sum(log.(diag(cx)))
+            lgg = sum(loggamma(0.5*(df + 1 - j)) for j in 1:ny)
+            w1 + (-df*sum(log.(diag(cs))) + 0.5*df*ny*log(2) + ny*(ny-1)*0.25*log(π) + lgg)
+        end
+        hyp = MinnesotaHyperparameters(tau=0.5, decay=2.0, omega=0.5)
+        Yd, Xd = MacroEconometricModels.gen_dummy_obs(Y_lml, 1, hyp)
+        Yeff, Xreg = MacroEconometricModels.construct_var_matrices(Y_lml, 1)
+        Teff = size(Yeff, 1); kreg = size(Xreg, 2); n2 = size(Y_lml, 2)
+        Yaug, Xaug = vcat(Yeff, Yd), vcat(Xreg, Xd)
+        Kpost, Kprior, Td = Xaug'Xaug, Xd'Xd, size(Yd, 1)
+        Baug = Kpost \ (Xaug'Yaug); Bpr = Kprior \ (Xd'Yd)
+        Spost = (Yaug - Xaug*Baug)' * (Yaug - Xaug*Baug)
+        Spr   = (Yd - Xd*Bpr)' * (Yd - Xd*Bpr)
+        nupr = Td - kreg; nupost = Teff + nupr
+        true_ml = _matrictint(Spost, nupost, inv(Kpost)) - _matrictint(Spr, nupr, inv(Kprior)) -
+                  0.5*Teff*n2*log(2π)
+        @test isapprox(log_marginal_likelihood(Y_lml, 1, hyp), true_ml; rtol=1e-8)
 
         _tprint("log_marginal_likelihood tests passed.")
     end

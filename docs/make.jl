@@ -4,7 +4,10 @@ using Documenter
 DocMeta.setdocmeta!(MacroEconometricModels, :DocTestSetup, :(using MacroEconometricModels); recursive=true)
 
 makedocs(;
-    draft=true,
+    # Draft mode skips execution of every @setup/@example block. It must be opt-in for
+    # local iteration only (DOCS_DRAFT=true) — never committed — so CI and any plain
+    # make.jl run execute examples and render real output.
+    draft = get(ENV, "DOCS_DRAFT", "false") == "true",
     modules=[MacroEconometricModels],
     authors="Wookyung Chung <chung@friedman.jp>",
     repo="https://github.com/FriedmanJP/MacroEconometricModels.jl/blob/{commit}{path}#{line}",
@@ -58,6 +61,13 @@ makedocs(;
             "Overlapping Generations" => "dsge_olg.md",
             "Continuous Time" => "dsge_continuous.md",
         ],
+        "Input-Output Analysis" => [
+            "Overview" => "io.md",
+            "Classical Analysis" => "io_classical.md",
+            "Environmental Extensions" => "io_environmental.md",
+            "Baqaee & Farhi (2019)" => "io_baqaee_farhi.md",
+            "Downloading Data" => "io_download.md",
+        ],
         "Innovation Accounting" => [
             "Overview" => "innovation_accounting.md",
             "Impulse Responses" => "ia_irf.md",
@@ -94,7 +104,10 @@ makedocs(;
         ],
     ],
     checkdocs=:exports,
-    warnonly=[:missing_docs, :cross_references, :autodocs_block, :docs_block, :setup_block, :example_block],
+    # example/setup/docs/autodocs block failures must FAIL the build (docrule: "@example
+    # blocks MUST run"). :missing_docs stays until the docstring backlog clears ([T202]);
+    # :cross_references deferred to the docs-consistency stage (xref burn-down not yet done).
+    warnonly=[:missing_docs, :cross_references],
 )
 
 deploydocs(;

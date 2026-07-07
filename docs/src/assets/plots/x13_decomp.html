@@ -71,15 +71,15 @@ svg { overflow: visible; }
 <div class="panel-grid">
 <div class="panel">
 <div class="panel-title">Trend-Cycle Decomposition</div>
-<div id="x13_tc_1"></div>
+<div id="x13_tc_89"></div>
 </div>
 <div class="panel">
 <div class="panel-title">Seasonal Component</div>
-<div id="x13_seas_2"></div>
+<div id="x13_seas_90"></div>
 </div>
 <div class="panel">
 <div class="panel-title">Irregular Component</div>
-<div id="x13_irr_3"></div>
+<div id="x13_irr_91"></div>
 </div>
 </div>
 
@@ -247,7 +247,7 @@ function hideTip() { tooltip.style('opacity',0); }
     const bands = [];
     const refLines = [];
 
-    const container = d3.select('#x13_tc_1');
+    const container = d3.select('#x13_tc_89');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;
@@ -490,7 +490,7 @@ function hideTip() { tooltip.style('opacity',0); }
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
 
-    const container = d3.select('#x13_seas_2');
+    const container = d3.select('#x13_seas_90');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;
@@ -733,7 +733,7 @@ function hideTip() { tooltip.style('opacity',0); }
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
 
-    const container = d3.select('#x13_irr_3');
+    const container = d3.select('#x13_irr_91');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;

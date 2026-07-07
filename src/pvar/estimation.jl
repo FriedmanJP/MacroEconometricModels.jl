@@ -333,9 +333,11 @@ function estimate_pvar(d::PanelData{T}, p::Int;
             bread_inv = robust_inv(S_ZX' * W_final * S_ZX)
             V_naive = bread_inv
 
-            # Apply Windmeijer correction: finite-sample corrected SE
+            # Apply Windmeijer (2005) finite-sample correction: pass both the first-step (phi1)
+            # and final (phi_curr) estimates — the correction's weighting-matrix derivative is
+            # evaluated at the first step.
             V_corrected = _windmeijer_correct(S_ZX, W_final, group_Z, group_X_trans,
-                                               group_Y_trans, phi_curr, eq, K, N, V1, bread_inv)
+                                               group_Y_trans, phi1, phi_curr, eq, K, N, V1, bread_inv)
 
             Phi[eq, :] = phi_curr
             se_eq = sqrt.(max.(diag(V_corrected), zero(T)))
@@ -383,88 +385,73 @@ function estimate_pvar(d::PanelData{T}, p::Int;
     )
 end
 
-"""Windmeijer (2005) finite-sample correction for equation `eq`."""
+"""
+Windmeijer (2005) finite-sample correction of the two-step GMM coefficient covariance for
+equation `eq`. The naive two-step variance `V₂ = (S_ZX'·W·S_ZX)⁻¹` (`bread_inv`) treats the
+estimated optimal weight `W = A_N(φ̂₁)⁻¹` as fixed and is downward biased; the corrected covariance is
+
+    V_c = V₂ + D·V₂ + V₂·D' + D·V₁·D'
+
+with `V₁` the first-step robust variance and the k-th column of `D` given by
+
+    D[:,k] = -V₂·(S_ZX'·W)·(∂A_N/∂φ_k |_{φ̂₁})·W·(Z'ê₂),
+
+where `∂A_N/∂φ_k` is the derivative of the optimal-weighting moment covariance evaluated at the
+first-step estimate `φ̂₁`, and `Z'ê₂ = Σ_g Z_g'·ê₂_g` is the second-step moment vector. (audit F-07:
+the previous version computed the derivative matrices but discarded them, so no correction applied.)
+"""
 function _windmeijer_correct(S_ZX::Matrix{T}, W::Matrix{T},
                               group_Z, group_X_trans, group_Y_trans,
-                              phi::Vector{T}, eq::Int, K::Int, N::Int,
+                              phi1::Vector{T}, phi2::Vector{T}, eq::Int, K::Int, N::Int,
                               V1::Matrix{T}, bread_inv::Matrix{T}) where {T}
     n_inst = size(S_ZX, 1)
-
-    # If V1 is empty, fall back to naive variance
     isempty(V1) && return bread_inv
 
-    # Compute D_j matrices: derivative of weighting matrix w.r.t. phi_j
-    # D = -(1/N) Σ_i [ (Z_i' ∂e_i/∂φ_j) (Z_i' e_i)' + (Z_i' e_i) (Z_i' ∂e_i/∂φ_j)' ]
-    # For linear model: ∂e_i/∂φ_j = -X_i[:,j]
-
-    D_W = zeros(T, K, K)
-    for j in 1:K
-        D_j = zeros(T, n_inst, n_inst)
-        for g in 1:N
-            Z_g = group_Z[g]
-            X_g = group_X_trans[g][:, 1:min(size(group_X_trans[g], 2), K)]
-            if size(X_g, 2) < K
-                X_g = hcat(X_g, zeros(T, size(X_g, 1), K - size(X_g, 2)))
-            end
-            Y_g = group_Y_trans[g]
-            e_g = Y_g[:, eq] - X_g * phi
-            Ze = Z_g' * e_g
-            Zx_j = Z_g' * (-X_g[:, j])
-            D_j .+= Zx_j * Ze' + Ze * Zx_j'
-        end
-        D_j ./= N
-
-        # Contribution to correction matrix
-        # a_j = -bread_inv * S_ZX' * W * D_j * W * S_ZX * bread_inv * S_ZX' * W * ... simplified
-        # The full Windmeijer formula: C = bread_inv + D_adj
-        for k in 1:K
-            # D_W[j,k] = trace contribution — simplified version
-            D_jk = zeros(T, n_inst, n_inst)
-            for g in 1:N
-                Z_g = group_Z[g]
-                X_g = group_X_trans[g][:, 1:min(size(group_X_trans[g], 2), K)]
-                if size(X_g, 2) < K
-                    X_g = hcat(X_g, zeros(T, size(X_g, 1), K - size(X_g, 2)))
-                end
-                Y_g = group_Y_trans[g]
-                e_g = Y_g[:, eq] - X_g * phi
-                Ze = Z_g' * e_g
-                Zx_k = Z_g' * (-X_g[:, k])
-                D_jk .+= Zx_k * Ze' + Ze * Zx_k'
-            end
-            D_jk ./= N
-        end
+    # Trimmed/padded regressor block for a group (matches the estimation loop).
+    _Xg(g) = begin
+        Xg = group_X_trans[g][:, 1:min(size(group_X_trans[g], 2), K)]
+        size(Xg, 2) < K ? hcat(Xg, zeros(T, size(Xg, 1), K - size(Xg, 2))) : Xg
     end
 
-    # Simplified Windmeijer correction: use sandwich with first-step variance
-    # V_WC = bread_inv + bread_inv * A + A' * bread_inv + A' * V1 * A
-    # where A captures the weighting matrix update
-    # Simplified: V_corrected ≈ max(V_naive, V_sandwich_first_step)
-    V_sand = gmm_sandwich_vcov(S_ZX, W, zeros(T, n_inst, n_inst))
-
-    # Recompute sandwich with actual residuals
-    D_e = zeros(T, n_inst, n_inst)
+    # Second-step moment vector Z'ê₂ = Σ_g Z_g'(Y_g[:,eq] − X_g·φ̂₂)
+    Zres2 = zeros(T, n_inst)
     for g in 1:N
-        Z_g = group_Z[g]
-        X_g = group_X_trans[g][:, 1:min(size(group_X_trans[g], 2), K)]
-        if size(X_g, 2) < K
-            X_g = hcat(X_g, zeros(T, size(X_g, 1), K - size(X_g, 2)))
+        Zres2 .+= group_Z[g]' * (group_Y_trans[g][:, eq] - _Xg(g) * phi2)
+    end
+    WZr2  = W * Zres2          # n_inst
+    SZXtW = S_ZX' * W          # K × n_inst
+
+    # Correctly-scaled efficient two-step variance V₂ = (Ḡ'W₂Ḡ)⁻¹. With the code's weight
+    # W = A_N(φ̂₁)⁻¹ = inv((1/N)·Ω₁) this equals the robust sandwich at W with the first-step
+    # moment covariance Ω₁ = Σ_g (Z_g'ê₁_g)(Z_g'ê₁_g)' (= N·bread_inv, but computed as a sandwich
+    # so it is robust to the weight's scaling). `bread_inv` itself is the (1/N)-scaled inverse and
+    # is the right object inside the D formula below.
+    Omega1 = zeros(T, n_inst, n_inst)
+    for g in 1:N
+        g1 = group_Z[g]' * (group_Y_trans[g][:, eq] - _Xg(g) * phi1)
+        Omega1 .+= g1 * g1'
+    end
+    V2 = gmm_sandwich_vcov(S_ZX, W, Omega1)
+
+    # D[:,k] = -bread_inv · SZXtW · (∂A_N/∂φ_k at φ̂₁) · W · Z'ê₂ ; A_N = (1/N) Σ_g (Z_g'e₁_g)(Z_g'e₁_g)'
+    D = zeros(T, K, K)
+    for k in 1:K
+        dA = zeros(T, n_inst, n_inst)
+        for g in 1:N
+            Z_g = group_Z[g]; X_g = _Xg(g)
+            g1  = Z_g' * (group_Y_trans[g][:, eq] - X_g * phi1)   # first-step moment contribution
+            dgk = Z_g' * (-X_g[:, k])                             # ∂(Z_g'e_g)/∂φ_k
+            dA .+= dgk * g1' + g1 * dgk'
         end
-        Y_g = group_Y_trans[g]
-        e_g = Y_g[:, eq] - X_g * phi
-        Ze = Z_g' * e_g
-        D_e .+= Ze * Ze'
+        dA ./= N
+        D[:, k] = -bread_inv * (SZXtW * (dA * WZr2))
     end
 
-    V_corrected = gmm_sandwich_vcov(S_ZX, W, D_e)
-
-    # Ensure positive diagonal
-    for i in 1:K
-        if V_corrected[i, i] < zero(T)
-            V_corrected[i, i] = bread_inv[i, i]
-        end
+    V_corrected = V2 + D * V2 + V2 * D' + D * V1 * D'
+    V_corrected = (V_corrected + V_corrected') / 2               # enforce symmetry
+    @inbounds for i in 1:K
+        V_corrected[i, i] <= zero(T) && (V_corrected[i, i] = V2[i, i])   # safety floor
     end
-
     V_corrected
 end
 

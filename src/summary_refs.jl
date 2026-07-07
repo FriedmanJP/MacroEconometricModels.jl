@@ -15,6 +15,39 @@ const _RefEntry = @NamedTuple{
 }
 
 const _REFERENCES = Dict{Symbol, _RefEntry}(
+    # --- Input-Output Analysis ---
+    :leontief1936 => (key=:leontief1936, authors="Leontief, Wassily W.", year=1936,
+        title="Quantitative Input and Output Relations in the Economic System of the United States",
+        journal="Review of Economics and Statistics", volume="18", issue="3", pages="105--125",
+        doi="10.2307/1927837", isbn="", publisher="", entry_type=:article),
+    :ghosh1958 => (key=:ghosh1958, authors="Ghosh, Ambica", year=1958,
+        title="Input-Output Approach in an Allocation System",
+        journal="Economica", volume="25", issue="97", pages="58--64",
+        doi="10.2307/2550694", isbn="", publisher="", entry_type=:article),
+    :rasmussen1956 => (key=:rasmussen1956, authors="Rasmussen, Poul Norregaard", year=1956,
+        title="Studies in Inter-Sectoral Relations", journal="",
+        volume="", issue="", pages="", doi="",
+        isbn="", publisher="North-Holland", entry_type=:book),
+    :hirschman1958 => (key=:hirschman1958, authors="Hirschman, Albert O.", year=1958,
+        title="The Strategy of Economic Development", journal="",
+        volume="", issue="", pages="", doi="",
+        isbn="", publisher="Yale University Press", entry_type=:book),
+    :dietzenbacher_los1998 => (key=:dietzenbacher_los1998,
+        authors="Dietzenbacher, Erik and Los, Bart", year=1998,
+        title="Structural Decomposition Techniques: Sense and Sensitivity",
+        journal="Economic Systems Research", volume="10", issue="4", pages="307--324",
+        doi="10.1080/09535319800000023", isbn="", publisher="", entry_type=:article),
+    :miller_blair_2009 => (key=:miller_blair_2009,
+        authors="Miller, Ronald E. and Blair, Peter D.", year=2009,
+        title="Input-Output Analysis: Foundations and Extensions",
+        journal="", volume="", issue="", pages="",
+        doi="10.1017/CBO9780511626982", isbn="978-0-521-51713-3",
+        publisher="Cambridge University Press", entry_type=:book),
+    :baqaee_farhi_2019 => (key=:baqaee_farhi_2019,
+        authors="Baqaee, David Rezza and Farhi, Emmanuel", year=2019,
+        title="The Macroeconomic Impact of Microeconomic Shocks: Beyond Hulten's Theorem",
+        journal="Econometrica", volume="87", issue="4", pages="1155--1203",
+        doi="10.3982/ECTA15202", isbn="", publisher="", entry_type=:article),
     # --- VAR & Structural VAR ---
     :sims1980 => (key=:sims1980, authors="Sims, Christopher A.", year=1980,
         title="Macroeconomics and Reality", journal="Econometrica",
@@ -830,6 +863,17 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
 # --- Type/method → reference keys mapping ---
 
 const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
+    # Input-Output analysis
+    :IOData => [:leontief1936, :ghosh1958, :miller_blair_2009],
+    :LeontiefModel => [:leontief1936, :miller_blair_2009],
+    :GhoshModel => [:ghosh1958, :miller_blair_2009],
+    :IOMultipliers => [:miller_blair_2009],
+    :LinkageResult => [:rasmussen1956, :hirschman1958, :miller_blair_2009],
+    :SDAResult => [:dietzenbacher_los1998, :miller_blair_2009],
+    :ExtractionResult => [:miller_blair_2009],
+    :FootprintResult => [:leontief1936, :miller_blair_2009],
+    :BaqaeeFarhiResult => [:baqaee_farhi_2019, :miller_blair_2009],
+    :io => [:leontief1936, :ghosh1958, :miller_blair_2009, :baqaee_farhi_2019],
     # VAR
     :VARModel => [:sims1980, :lutkepohl2005],
     :ImpulseResponse => [:lutkepohl2005, :kilian1998],
@@ -1294,6 +1338,17 @@ refs(io::IO, ::SVARRestrictions; kw...) = refs(io, _TYPE_REFS[:SVARRestrictions]
 refs(io::IO, ::SignIdentifiedSet; kw...) = refs(io, _TYPE_REFS[:SignIdentifiedSet]; kw...)
 refs(io::IO, ::MinnesotaHyperparameters; kw...) = refs(io, _TYPE_REFS[:MinnesotaHyperparameters]; kw...)
 refs(io::IO, ::BVARPosterior; kw...) = refs(io, _TYPE_REFS[:BVARPosterior]; kw...)
+
+# Input-Output analysis
+refs(io::IO, ::IOData; kw...) = refs(io, _TYPE_REFS[:IOData]; kw...)
+refs(io::IO, ::LeontiefModel; kw...) = refs(io, _TYPE_REFS[:LeontiefModel]; kw...)
+refs(io::IO, ::GhoshModel; kw...) = refs(io, _TYPE_REFS[:GhoshModel]; kw...)
+refs(io::IO, ::IOMultipliers; kw...) = refs(io, _TYPE_REFS[:IOMultipliers]; kw...)
+refs(io::IO, ::LinkageResult; kw...) = refs(io, _TYPE_REFS[:LinkageResult]; kw...)
+refs(io::IO, ::SDAResult; kw...) = refs(io, _TYPE_REFS[:SDAResult]; kw...)
+refs(io::IO, ::ExtractionResult; kw...) = refs(io, _TYPE_REFS[:ExtractionResult]; kw...)
+refs(io::IO, ::FootprintResult; kw...) = refs(io, _TYPE_REFS[:FootprintResult]; kw...)
+refs(io::IO, ::BaqaeeFarhiResult; kw...) = refs(io, _TYPE_REFS[:BaqaeeFarhiResult]; kw...)
 
 # LP types
 refs(io::IO, ::LPModel; kw...) = refs(io, _TYPE_REFS[:LPModel]; kw...)
