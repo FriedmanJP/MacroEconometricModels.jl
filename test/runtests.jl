@@ -135,6 +135,29 @@ const TEST_GROUPS = [
         "coverage/test_vecm_teststat_coverage.jl",
         "coverage/test_misc_coverage.jl",
     ]),
+    # Group 11: Input-Output analysis
+    ("IO Analysis" => [
+        "io/test_io_smoke.jl",
+        "io/test_io_types.jl",
+        "io/test_io_coefficients.jl",
+        "io/test_io_example.jl",
+        "io/test_io_multipliers.jl",
+        "io/test_io_linkages.jl",
+        "io/test_io_sda.jl",
+        "io/test_io_extraction.jl",
+        "io/test_io_environmental.jl",
+        "io/test_io_bf_first.jl",
+        "io/test_io_bf_second.jl",
+        "io/test_io_fetch.jl",
+        "io/test_io_registry.jl",
+        "io/test_io_sources.jl",
+        "io/test_io_parse.jl",
+        "io/test_io_ext_parse.jl",
+        "io/test_io_show.jl",
+        "io/test_io_plotting.jl",
+        "io/test_io_refs.jl",
+        "io/test_io_coverage.jl",
+    ]),
 ]
 
 # Multi-process runner (fallback when threads unavailable)

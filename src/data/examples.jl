@@ -22,6 +22,7 @@ const _EXAMPLE_DATASETS = Dict{Symbol, Tuple{String, Symbol}}(
     :pwt     => ("pwt.toml",     :panel),
     :ddcg    => ("ddcg.toml",    :panel),
     :mpdta   => ("mpdta.toml",   :panel),
+    :wiot    => ("wiot.toml",    :io),
 )
 
 # Parse frequency string to Frequency enum
@@ -92,9 +93,47 @@ function load_example(name::Symbol)
 
     if dtype == :panel
         _load_panel_example(d)
+    elseif dtype == :io
+        _load_io_example(d)
     else
         _load_timeseries_example(d)
     end
+end
+
+# Build an (r×c) Float64 matrix from a TOML array-of-rows.
+function _toml_matrix(rows, r::Int, c::Int)
+    M = zeros(Float64, r, c)
+    for i in 1:r, j in 1:c
+        M[i, j] = Float64(rows[i][j])
+    end
+    M
+end
+
+# Load an Input-Output example (:wiot). Builds an `IOData` with value added,
+# final demand, and any satellite extensions declared in the TOML.
+function _load_io_example(d::Dict)
+    meta = d["metadata"]; dims = d["dims"]; flows = d["flows"]
+    secs = String.(dims["sectors"])
+    n = length(secs)
+    Z  = _toml_matrix(flows["Z"], n, n)
+    Y  = _toml_matrix(flows["Y"], n, length(dims["fd_cats"]))
+    va = _toml_matrix(flows["va"], length(dims["va_cats"]), n)
+    io = IOData(Z, Y, va;
+                sectors=secs, regions=String.(dims["regions"]),
+                fd_cats=String.(dims["fd_cats"]), va_cats=String.(dims["va_cats"]),
+                unit=get(meta, "unit", ""), year=get(meta, "year", nothing),
+                source=get(meta, "source", ""))
+    # Build IOExtension structs directly (avoids depending on add_extension!,
+    # which is defined in a later-included file).
+    T = eltype(io.x)
+    for ext in get(d, "extensions", Any[])
+        F = Matrix{T}(_toml_matrix(ext["F"], length(ext["stressors"]), n))
+        S = F * Diagonal(_invdiag(io.x))
+        io.extensions[String(ext["name"])] = IOExtension{T}(
+            F, zeros(T, size(F, 1), size(io.Y, 2)), S,
+            String.(ext["stressors"]), String.(ext["unit"]))
+    end
+    io
 end
 
 # Load a time series example (FRED-MD, FRED-QD)

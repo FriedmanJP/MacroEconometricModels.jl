@@ -58,6 +58,13 @@ makedocs(;
             "Overlapping Generations" => "dsge_olg.md",
             "Continuous Time" => "dsge_continuous.md",
         ],
+        "Input-Output Analysis" => [
+            "Overview" => "io.md",
+            "Classical Analysis" => "io_classical.md",
+            "Environmental Extensions" => "io_environmental.md",
+            "Baqaee & Farhi (2019)" => "io_baqaee_farhi.md",
+            "Downloading Data" => "io_download.md",
+        ],
         "Innovation Accounting" => [
             "Overview" => "innovation_accounting.md",
             "Impulse Responses" => "ia_irf.md",
