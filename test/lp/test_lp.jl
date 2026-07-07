@@ -620,6 +620,24 @@ using Random
         @test sargan_result.df == 1  # 2 instruments - 1 endogenous = 1 df
         @test sargan_result.valid == true
 
+        # Regression (audit R-02 / #112): reported Sargan J must equal the textbook
+        # J = (Z'u)'(Z'Z)⁻¹(Z'u)/σ̂², σ̂² = u'u/T_h. Pre-fix a stray leading T_h inflated it
+        # by the horizon sample size, forcing p≈0 (spurious overid rejection) for valid instruments.
+        let h0 = 0
+            U_h = model_sar.residuals[h0 + 1]
+            T_h = model_sar.T_eff[h0 + 1]
+            t0, t1 = MacroEconometricModels.compute_horizon_bounds(size(model_sar.Y, 1), h0, model_sar.lags)
+            Zc = model_sar.instruments[t0:t1, :]
+            ZtZ_inv = MacroEconometricModels.robust_inv(Zc' * Zc)
+            nresp = size(U_h, 2)
+            J_textbook = sum(begin
+                u = U_h[:, eq]; Zu = Zc' * u
+                (Zu' * ZtZ_inv * Zu) / (sum(u .^ 2) / T_h)
+            end for eq in 1:nresp) / nresp
+            @test sargan_result.J_stat ≈ J_textbook rtol=1e-8
+            @test !isapprox(sargan_result.J_stat, T_h * J_textbook; rtol=1e-6)  # not the pre-fix T_h-inflated value
+        end
+
         # Test with just-identified model (should return NaN)
         Z_just = randn(T_sar, 1)
         shock_just = 0.5 * Z_just[:, 1] + 0.5 * randn(T_sar)
