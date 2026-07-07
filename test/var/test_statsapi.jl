@@ -86,6 +86,17 @@ using Random
     @test all(ci_widths .> 0)
     @test all(ci_widths .< 10)  # Reasonable upper bound
 
+    # F-01 regression: vcov/stderror must use the dof-adjusted residual covariance
+    # U'U/(T_eff−k), not the ML covariance U'U/T_eff (which made SEs too small).
+    _, Xd = MacroEconometricModels.construct_var_matrices(model.Y, model.p)
+    Teff, kk = size(Xd, 1), size(Xd, 2)
+    XtXi = MacroEconometricModels.robust_inv(Xd' * Xd)
+    V_dof = kron((model.U' * model.U) / (Teff - kk), XtXi)
+    @test isapprox(StatsAPI.vcov(model), V_dof; rtol=1e-10)
+    se_ml = sqrt.(diag(kron((model.U' * model.U) / Teff, XtXi)))
+    @test all(StatsAPI.stderror(model) .> se_ml)            # dof-adjusted SEs strictly larger
+    @test isapprox(StatsAPI.stderror(model) ./ se_ml, fill(sqrt(Teff / (Teff - kk)), length(se_ml)); rtol=1e-10)
+
     # 9. Test islinear
     _tprint("Testing islinear...")
     @test StatsAPI.islinear(model)

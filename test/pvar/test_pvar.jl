@@ -601,3 +601,30 @@ end
         @test occursin("System GMM", s)
     end
 end
+
+@testset "Windmeijer correction (F-07)" begin
+    # The two-step GMM Windmeijer (2005) finite-sample correction must make the corrected SE
+    # track the empirical sampling SD of the estimator; the uncorrected/optimistic two-step SE
+    # is far too small. Monte Carlo over a dynamic panel, robust (MAD-based) spread.
+    _fast = (@isdefined(FAST)) ? FAST : (get(ENV, "MACRO_FAST_TESTS", "") == "1")
+    function _wm_panel(rng, N, Tt, ρ)
+        data = zeros(N * Tt, 2); A = [ρ 0.0; 0.1 0.4]
+        for i in 1:N
+            μ = randn(rng, 2); off = (i - 1) * Tt; data[off + 1, :] = μ
+            for t in 2:Tt; data[off + t, :] = μ .+ A * data[off + t - 1, :] + randn(rng, 2); end
+        end
+        df = DataFrame(data, ["y1", "y2"]); df.id = repeat(1:N, inner=Tt); df.time = repeat(1:Tt, outer=N)
+        xtset(df, :id, :time)
+    end
+    nrep = _fast ? 40 : 120
+    bs = Float64[]; ses = Float64[]
+    for r in 1:nrep
+        rng = MersenneTwister(4321 + r); pd = _wm_panel(rng, 120, 8, 0.4)
+        m = estimate_pvar(pd, 1; steps=:twostep)
+        push!(bs, m.Phi[1, 1]); push!(ses, m.se[1, 1])
+    end
+    @test all(isfinite, ses) && all(ses .>= 0)
+    robsd = 1.4826 * median(abs.(bs .- median(bs)))
+    ratio = median(ses) / robsd
+    @test 0.6 < ratio < 1.6   # corrected two-step SE tracks the empirical sampling SD
+end
