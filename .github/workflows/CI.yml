@@ -38,6 +38,13 @@ jobs:
           - version: 'lts'
             os: macos-latest
             arch: arm64
+          # Coverage cell (T007): current stable Julia owns coverage + Codecov upload.
+          # 1.12's coverage machinery is cheaper than 1.10's and keeps coverage off the
+          # LTS critical path (one extra free parallel runner). LTS (1.10) still tested on
+          # all three OSes for dual-major Optim = "1, 2" compatibility.
+          - version: '1'
+            os: ubuntu-latest
+            arch: x64
 
     steps:
       - uses: actions/checkout@v7
@@ -57,7 +64,7 @@ jobs:
       # branches could drop. '0' is equivalent to unset (FAST const treats only "1" as true).
       - uses: julia-actions/julia-runtest@v1
         with:
-          coverage: ${{ matrix.os == 'ubuntu-latest' }}
+          coverage: ${{ matrix.os == 'ubuntu-latest' && matrix.version == '1' }}
         env:
           JULIA_NUM_THREADS: 1
           OPENBLAS_NUM_THREADS: "1"
@@ -65,10 +72,10 @@ jobs:
           MACRO_FAST_TESTS: ${{ matrix.os == 'ubuntu-latest' && '0' || '1' }}
 
       - uses: julia-actions/julia-processcoverage@v1
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-latest' && matrix.version == '1'
 
       - uses: codecov/codecov-action@v7
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-latest' && matrix.version == '1'
         with:
           files: lcov.info
           slug: FriedmanJP/MacroEconometricModels.jl
