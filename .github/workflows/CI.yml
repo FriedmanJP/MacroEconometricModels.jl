@@ -51,6 +51,10 @@ jobs:
 
       - uses: julia-actions/julia-buildpkg@v1
 
+      # Robustness trade-off: windows/macOS run as reduced-sampling (fewer draws/reps)
+      # cross-platform smoke tests; ubuntu stays the full-fidelity reference (full
+      # sampling + coverage). ubuntu must NEVER set FAST or coverage of high-sampling
+      # branches could drop. '0' is equivalent to unset (FAST const treats only "1" as true).
       - uses: julia-actions/julia-runtest@v1
         with:
           coverage: ${{ matrix.os == 'ubuntu-latest' }}
@@ -58,6 +62,7 @@ jobs:
           JULIA_NUM_THREADS: 1
           OPENBLAS_NUM_THREADS: "1"
           MACRO_MULTIPROCESS_TESTS: "1"
+          MACRO_FAST_TESTS: ${{ matrix.os == 'ubuntu-latest' && '0' || '1' }}
 
       - uses: julia-actions/julia-processcoverage@v1
         if: matrix.os == 'ubuntu-latest'
