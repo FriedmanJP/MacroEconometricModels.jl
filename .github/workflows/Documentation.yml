@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - dev            # build + verify on every dev push; deploy stays main/tags-only
     tags: ['*']
   pull_request:
   workflow_dispatch:
