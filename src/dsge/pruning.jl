@@ -91,8 +91,10 @@ function simulate(sol::PerturbationSolution{T}, T_periods::Int;
             eps_t = e[t, :]
             # State transition
             xf_new = hx_state * xf + eta_x * eps_t
-            # Control
-            y_t = gx_state * xf_new + eta_y * eps_t
+            # Control uses the LAGGED first-order state xf (= x_{t-1}). gx_state = G1[control,
+            # state] is the loading on the lagged state; applying it to xf_new (= x_t) would
+            # propagate the state channel twice (audit S-01 / #119).
+            y_t = gx_state * xf + eta_y * eps_t
             # Store
             for (k, si) in enumerate(sol.state_indices)
                 dev[t, si] = xf_new[k]
@@ -346,15 +348,16 @@ function irf(sol::PerturbationSolution{T}, horizon::Int;
             ej[j] = T(shock_size)
 
             if h == 1
-                # x_1 = eta_x * e_j
+                # x_1 = eta_x * e_j ; control at impact = direct shock only (lagged state x_0 = 0)
                 x_h = eta_x * ej
-                # y_1 = gx_state * x_1 + eta_y * e_j
-                y_h = gx_state * x_h + eta_y * ej
+                y_h = eta_y * ej
             else
                 # x_h = hx_state^(h-1) * eta_x * e_j
                 x_h = hx_power * eta_x * ej
-                # y_h = gx_state * x_h  (no direct shock effect for h > 1)
-                y_h = gx_state * x_h
+                # Control uses the LAGGED state x_{h-1} (stored at horizon h-1); gx_state loads
+                # the lagged state, and the direct shock enters only at impact (audit S-01 / #119).
+                x_lag = T[point_irf[h-1, si, j] for si in sol.state_indices]
+                y_h = gx_state * x_lag
             end
 
             # Store in original variable ordering
@@ -551,7 +554,9 @@ function _fevd_unconditional(sol::PerturbationSolution{T}) where {T}
         C_ctrl = gx_state * C_state
         C_ctrl[:, 2*nx+1:nz] += T(0.5) * gxx_xx
     end
-    noise_ctrl = ny > 0 ? gx_state * eta_x + eta_y : zeros(T, 0, n_eps)
+    # Contemporaneous shock loading on the control is eta_y alone; the state's shock channel
+    # is already carried by gx_state·C_state·z (adding gx_state·eta_x double-counts, S-01/#119).
+    noise_ctrl = ny > 0 ? eta_y : zeros(T, 0, n_eps)
 
     C_full = zeros(T, n, nz)
     noise_full = zeros(T, n, n_eps)
@@ -1070,7 +1075,9 @@ function _augmented_moments_2nd(sol::PerturbationSolution{T};
         C_ctrl = gx_state * C_state
         C_ctrl[:, 2*nx+1:nz] += T(0.5) * gxx_xx
     end
-    noise_ctrl = ny > 0 ? gx_state * eta_x + eta_y : zeros(T, 0, n_eps)
+    # Contemporaneous shock loading on the control is eta_y alone; the state's shock channel
+    # is already carried by gx_state·C_state·z (adding gx_state·eta_x double-counts, S-01/#119).
+    noise_ctrl = ny > 0 ? eta_y : zeros(T, 0, n_eps)
     d_ctrl = zeros(T, ny)
     if ny > 0 && nx > 0
         d_ctrl = gx_state * d_state
@@ -1270,7 +1277,9 @@ function _augmented_moments_3rd(sol::PerturbationSolution{T};
         C_ctrl[:, r6] += (one(T) / T(6)) * gxxx_xxx
         C_ctrl[:, r1] += T(0.5) * gssx_xx
     end
-    noise_ctrl = ny > 0 ? gx_state * eta_x + eta_y : zeros(T, 0, n_eps)
+    # Contemporaneous shock loading on the control is eta_y alone; the state's shock channel
+    # is already carried by gx_state·C_state·z (adding gx_state·eta_x double-counts, S-01/#119).
+    noise_ctrl = ny > 0 ? eta_y : zeros(T, 0, n_eps)
     d_ctrl = zeros(T, ny)
     if ny > 0 && nx > 0
         d_ctrl = gx_state * d_state

@@ -3190,6 +3190,32 @@ end
         @test all(fv.proportions[:, 1, :] .≈ 1.0)  # single shock = 100%
     end
 
+    @testset "Perturbation control IRF matches gensys at order 1 (S-01 / #119)" begin
+        # Model WITH a control: a_t = ρ·a_{t-1} + σ·ε_t (state), c_t = α·a_t (control).
+        # gx_state = G1[c,a] loads the LAGGED state, so the control impact must be α·σ,
+        # not α·σ·(1+ρ) (double-counting the state channel).
+        rho, sigma, alpha = 0.8, 0.5, 2.0
+        spec = @dsge begin
+            parameters: rho = 0.8, sigma = 0.5, alpha = 2.0
+            endogenous: a, c
+            exogenous: eps
+            a[t] = rho * a[t-1] + sigma * eps[t]
+            c[t] = alpha * a[t]
+            steady_state = begin
+                [0.0, 0.0]
+            end
+        end
+        spec = compute_steady_state(spec)
+        psol = MacroEconometricModels.perturbation_solver(spec; order=1)
+        gsol = solve(spec; method=:gensys)
+        ir_p = irf(psol, 12)
+        ir_g = irf(gsol, 12)
+        c_idx = findfirst(==(:c), spec.endog)
+        @test ir_p.values[1, c_idx, 1] ≈ alpha * sigma atol=1e-10
+        @test !isapprox(ir_p.values[1, c_idx, 1], alpha * sigma * (1 + rho); atol=1e-6)
+        @test ir_p.values ≈ ir_g.values atol=1e-10   # full agreement, all vars & horizons
+    end
+
     @testset "Closed-form moments" begin
         spec = @dsge begin
             parameters: ρ = 0.9, σ = 0.01
