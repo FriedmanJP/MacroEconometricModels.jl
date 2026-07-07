@@ -318,8 +318,14 @@ function _estimate_mle(y::Vector{T}, p::Int, q::Int; include_intercept::Bool=tru
                                                  include_intercept=include_intercept,
                                                  has_log_sigma2=true)
 
-    # Compute final log-likelihood and residuals
+    # Compute final log-likelihood and residuals (Kalman parameterization uses c = mean μ)
     loglik, residuals, fitted = _kalman_filter_arma(y, c, phi, theta, sigma2)
+
+    # The state-space MLE estimates c as the process MEAN μ, but the model stores and the
+    # forecast recursion use c as the AR INTERCEPT (ŷ = c + Σφᵢ·y_{t-i}). Convert so forecasts
+    # are unbiased on non-demeaned series: intercept = μ·(1 - Σφᵢ) (audit R-01 / #121).
+    # For p=0 (pure MA / white noise) Σφ = 0 ⇒ c = μ, unchanged.
+    c = c * (one(T) - sum(phi))
 
     c, phi, theta, sigma2, loglik, residuals, fitted, converged, iterations
 end

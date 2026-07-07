@@ -307,6 +307,27 @@ end
         @test abs(fc_long.forecast[end] - unconditional_mean) < 0.5
     end
 
+    @testset "MLE forecast unbiased on non-demeaned series (R-01 / #121)" begin
+        Random.seed!(4121)
+        n = 800
+        mu, phi_true = 20.0, 0.6
+        y = fill(mu, n)
+        for t in 2:n
+            y[t] = mu + phi_true * (y[t-1] - mu) + 0.5 * randn()
+        end
+        # :mle stores c as the AR intercept μ(1-φ); the 1-step forecast is c + φ·y_T
+        # (= μ + φ(y_T - μ)), not the pre-fix μ + φ·y_T which biased it by μ·φ.
+        m = estimate_ar(y, 1; method=:mle)
+        c, phi = m.c, m.phi[1]
+        yhat = forecast(m, 1).forecast[1]
+        @test yhat ≈ c + phi * y[end] atol=1e-8
+        @test !isapprox(yhat, (c / (1 - phi)) + phi * y[end]; atol=1e-2)   # not the μ+φ·y_T bias
+        @test isapprox(forecast(m, 60).forecast[end], c / (1 - phi); atol=0.3)  # multi-step -> μ
+        # :ols already used the intercept convention; post-fix the two agree
+        m_ols = estimate_ar(y, 1; method=:ols)
+        @test isapprox(yhat, forecast(m_ols, 1).forecast[1]; atol=0.2)
+    end
+
     @testset "MA forecast" begin
         y = randn(200)
         model = estimate_ma(y, 2)
