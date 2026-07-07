@@ -34,6 +34,25 @@ using Distributions
 # =============================================================================
 
 """
+    _effective_obs_offset(d, new_spec, sol, observables) -> Vector
+
+Observation-equation offset for the likelihood. For pre-linearized (`linear=true`) models
+with a non-zero constant, `spec.steady_state` is zero, so the offset must instead be the
+effective steady state `(I - G1)⁻¹·C_sol` at the observed variables. Shared by the Kalman
+and particle-filter paths so both apply the same offset (audit E-07 / #115). Returns `d`
+unchanged for nonlinear models (the `linear` guard short-circuits before touching `sol.C_sol`).
+"""
+function _effective_obs_offset(d::AbstractVector{T}, new_spec::DSGESpec{T},
+                               sol, observables) where {T<:AbstractFloat}
+    if new_spec.linear && !all(iszero, sol.C_sol)
+        eff_ss = (I - sol.G1) \ sol.C_sol
+        obs_idx = [findfirst(==(obs), new_spec.endog) for obs in observables]
+        return T[eff_ss[j] for j in obs_idx]
+    end
+    return d
+end
+
+"""
     _build_likelihood_fn(spec, param_names, data, observables, measurement_error,
                          solver, solver_kwargs)
 
@@ -72,17 +91,7 @@ function _build_likelihood_fn(spec::DSGESpec{T}, param_names::Vector{Symbol},
             end
 
             # Create new spec with updated parameters
-            new_spec = DSGESpec{T}(
-                spec.endog, spec.exog, spec.params, new_pv,
-                spec.equations, spec.residual_fns,
-                spec.n_expect, spec.forward_indices, T[], spec.ss_fn;
-                original_endog=spec.original_endog,
-                original_equations=spec.original_equations,
-                augmented=spec.augmented,
-                max_lag=spec.max_lag,
-                max_lead=spec.max_lead,
-                linear=spec.linear
-            )
+            new_spec = _respec(spec, new_pv)
 
             # Compute steady state
             new_spec = compute_steady_state(new_spec)
@@ -101,14 +110,9 @@ function _build_likelihood_fn(spec::DSGESpec{T}, param_names::Vector{Symbol},
             # Build observation equation and state space
             Z, d, H = _build_observation_equation(new_spec, observables, measurement_error)
 
-            # For linear models with constant offsets (C_sol ≠ 0), the observation
-            # equation offset d must include the effective steady state from gensys,
-            # since spec.steady_state is zero for model(linear) models.
-            if new_spec.linear && !all(iszero, sol.C_sol)
-                eff_ss = (I - sol.G1) \ sol.C_sol
-                obs_idx = [findfirst(==(obs), new_spec.endog) for obs in observables]
-                d = T[eff_ss[j] for j in obs_idx]
-            end
+            # linear=true models need the effective-SS observation offset (shared helper,
+            # so the Kalman and particle-filter paths agree).
+            d = _effective_obs_offset(d, new_spec, sol, observables)
 
             ss = _build_state_space(sol, Z, d, H)
 
@@ -590,7 +594,8 @@ acceptance rate (Roberts & Rosenthal 2001).
 
 # Keywords
 - `n_draws::Int=5000` — total number of draws (including burnin)
-- `burnin::Int=1000` — number of burnin draws (kept in output)
+- `burnin::Int=1000` — burn-in length. `_mh_sample` returns the FULL chain; the caller
+  (`estimate_dsge_bayes`) discards the first `burnin` draws unless `keep_burnin=true`.
 - `adapt_interval::Int=100` — adapt proposal covariance every N draws
 - `observables::Vector{Symbol}` — observed variables
 - `measurement_error` — measurement error SDs or `nothing`
@@ -781,16 +786,7 @@ function _solve_and_run_pf(spec::DSGESpec{T}, param_names::Vector{Symbol},
         end
 
         # Create new spec with updated parameters
-        new_spec = DSGESpec{T}(
-            spec.endog, spec.exog, spec.params, new_pv,
-            spec.equations, spec.residual_fns,
-            spec.n_expect, spec.forward_indices, T[], spec.ss_fn;
-            original_endog=spec.original_endog,
-            original_equations=spec.original_equations,
-            augmented=spec.augmented,
-            max_lag=spec.max_lag,
-            max_lead=spec.max_lead
-        )
+        new_spec = _respec(spec, new_pv)
 
         # Compute steady state and solve
         new_spec = compute_steady_state(new_spec)
@@ -799,8 +795,10 @@ function _solve_and_run_pf(spec::DSGESpec{T}, param_names::Vector{Symbol},
             return fail
         end
 
-        # Build observation equation
+        # Build observation equation; apply the same effective-SS offset as the Kalman path
+        # so linear=true constant models are not silently mis-offset in the PF (E-07 / #115).
         Z, d_vec, H_mat = _build_observation_equation(new_spec, observables, measurement_error)
+        d_vec = _effective_obs_offset(d_vec, new_spec, sol, observables)
 
         # Dispatch: PerturbationSolution → NonlinearStateSpace,
         #           ProjectionSolution → ProjectionStateSpace,

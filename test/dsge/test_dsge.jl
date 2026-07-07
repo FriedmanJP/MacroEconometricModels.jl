@@ -3190,6 +3190,62 @@ end
         @test all(fv.proportions[:, 1, :] .≈ 1.0)  # single shock = 100%
     end
 
+    @testset "Perturbation control IRF matches gensys at order 1 (S-01 / #119)" begin
+        # Model WITH a control: a_t = ρ·a_{t-1} + σ·ε_t (state), c_t = α·a_t (control).
+        # gx_state = G1[c,a] loads the LAGGED state, so the control impact must be α·σ,
+        # not α·σ·(1+ρ) (double-counting the state channel).
+        rho, sigma, alpha = 0.8, 0.5, 2.0
+        spec = @dsge begin
+            parameters: rho = 0.8, sigma = 0.5, alpha = 2.0
+            endogenous: a, c
+            exogenous: eps
+            a[t] = rho * a[t-1] + sigma * eps[t]
+            c[t] = alpha * a[t]
+            steady_state = begin
+                [0.0, 0.0]
+            end
+        end
+        spec = compute_steady_state(spec)
+        psol = MacroEconometricModels.perturbation_solver(spec; order=1)
+        gsol = solve(spec; method=:gensys)
+        ir_p = irf(psol, 12)
+        ir_g = irf(gsol, 12)
+        c_idx = findfirst(==(:c), spec.endog)
+        @test ir_p.values[1, c_idx, 1] ≈ alpha * sigma atol=1e-10
+        @test !isapprox(ir_p.values[1, c_idx, 1], alpha * sigma * (1 + rho); atol=1e-6)
+        @test ir_p.values ≈ ir_g.values atol=1e-10   # full agreement, all vars & horizons
+    end
+
+    @testset "Collocation integrates next-period shocks, matching PFI (S-02 / #120)" begin
+        # Nonlinear control policy c(y)=exp(y); w_t = β·E_t[c_{t+1}]. The precautionary effect
+        # (E[c'] > c(E[y'])) enters only if the solver integrates over next-period shocks.
+        # Pre-fix the collocation ignored its quadrature nodes and returned the certainty-
+        # equivalent w = β, disagreeing with PFI (which the audit confirmed correct).
+        rho, beta, sigma = 0.5, 0.95, 0.3
+        spec = @dsge begin
+            parameters: rho = 0.5, beta = 0.95, sigma = 0.3
+            endogenous: y, c, w
+            exogenous: e
+            y[t] = rho * y[t-1] + sigma * e[t]
+            c[t] = exp(y[t])
+            w[t] = beta * c[t+1]
+            steady_state = begin
+                [0.0, 1.0, beta]
+            end
+        end
+        spec = compute_steady_state(spec)
+        wi = findfirst(==(:w), spec.endog)
+        solc = collocation_solver(spec; degree=6, grid=:tensor, quadrature=:gauss_hermite,
+                                  n_quad=9, scale=4, max_iter=100, tol=1e-11)
+        solp = pfi_solver(spec; degree=6, quadrature=:gauss_hermite, n_quad=9, scale=4,
+                          max_iter=100, tol=1e-11)
+        wc = MacroEconometricModels.evaluate_policy(solc, [0.0])[wi]
+        wp = MacroEconometricModels.evaluate_policy(solp, [0.0])[wi]
+        @test wc ≈ wp rtol=1e-3          # fixed collocation now agrees with the correct PFI
+        @test wp > beta + 5e-3           # PFI reference has a genuine precautionary component
+        @test wc > beta + 5e-3           # collocation captures it (pre-fix returned exactly β)
+    end
+
     @testset "Closed-form moments" begin
         spec = @dsge begin
             parameters: ρ = 0.9, σ = 0.01
@@ -5655,6 +5711,31 @@ end
     @test eff_ss[1] ≈ 0.0 atol=1e-8  # model var y: SS = 0
     @test eff_ss[2] ≈ ctrend atol=1e-8  # obs var dy: SS = ctrend
     @test eff_ss[3] ≈ 0.0 atol=1e-8  # model var a: SS = 0
+end
+
+@testset "Linear model C_sol includes the lead block (S-06 / #114)" begin
+    # Pre-linearized forward-looking model with a constant:
+    #   y_t = a·E[y_{t+1}] + b·y_{t-1} + c + eps  ⇒  SS: (1-a-b)·y = c.
+    # Dropping f_lead gives the wrong SS c/(1-b); the correct SS is c/(1-a-b).
+    a, b, c = 0.5, 0.3, 1.0
+    spec_fwd = DSGESpec{Float64}(
+        [:y], [:eps], [:a, :b, :c],
+        Dict{Symbol,Float64}(:a => a, :b => b, :c => c),
+        Expr[:(0 + 0)],
+        Function[(yt, yl, yle, eps, th) -> yt[1] - th[:a] * yle[1] - th[:b] * yl[1] - th[:c] - eps[1]],
+        1, [1], Float64[], nothing; linear=true,
+    )
+    y_ss_correct = c / (1 - a - b)   # 5.0     = (f₀+f₁+f_lead)⁻¹C
+    y_ss_wrong   = c / (1 - b)       # ≈1.4286 = (f₀+f₁)⁻¹C  (pre-fix, drops f_lead)
+    @test !isapprox(y_ss_correct, y_ss_wrong; atol=1e-6)
+
+    for method in (:gensys, :klein, :blanchard_kahn)
+        sol = solve(spec_fwd; method=method)
+        @test is_determined(sol)
+        eff_ss = ((I - sol.G1) \ sol.C_sol)[1]
+        @test eff_ss ≈ y_ss_correct atol=1e-8
+        @test !isapprox(eff_ss, y_ss_wrong; atol=1e-6)
+    end
 end
 
 @testset "Nonlinear model: linear field is false" begin

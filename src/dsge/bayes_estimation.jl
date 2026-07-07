@@ -86,7 +86,8 @@ SMC², or Random-Walk Metropolis-Hastings (RWMH).
 - `n_particles::Int=500` — number of PF particles (for `:smc2` only)
 - `n_mh_steps::Int=1` — MH mutation steps per SMC stage
 - `n_draws::Int=10000` — total draws for `:mh` (including burnin)
-- `burnin::Int=5000` — burnin draws for `:mh`
+- `burnin::Int=5000` — burn-in draws discarded from `:mh` output; the posterior uses `n_draws - burnin`
+- `keep_burnin::Bool=false` — if true, retain the full `:mh` chain (e.g. for trace plots)
 - `ess_target::Float64=0.5` — target ESS fraction for adaptive tempering
 - `measurement_error::Union{Nothing,Vector{<:Real}}=nothing` — measurement error SDs
 - `likelihood::Symbol=:auto` — likelihood evaluation method (currently auto = Kalman)
@@ -117,6 +118,7 @@ function estimate_dsge_bayes(spec::DSGESpec{T}, data::AbstractMatrix,
                               n_mh_steps::Int=1,
                               n_draws::Int=10000,
                               burnin::Int=5000,
+                              keep_burnin::Bool=false,
                               ess_target::Float64=0.5,
                               measurement_error::Union{Nothing,Vector{<:Real}}=nothing,
                               likelihood::Symbol=:auto,
@@ -202,6 +204,14 @@ function estimate_dsge_bayes(spec::DSGESpec{T}, data::AbstractMatrix,
             observables=observables,
             measurement_error=measurement_error,
             solver=solver, solver_kwargs=solver_kwargs, rng=rng)
+        # Discard burn-in so posterior summaries exclude the transient. The burnin kwarg was
+        # previously a no-op for :mh (all draws stored). keep_burnin=true retains the full
+        # chain (e.g. for trace plots) without affecting the default summaries (E-03 / #122).
+        if !keep_burnin && burnin > 0
+            keep = min(burnin, n_draws - 1)          # always retain ≥1 posterior draw
+            draws = draws[keep+1:end, :]
+            log_posterior = log_posterior[keep+1:end]
+        end
         return _mh_to_bayesian_dsge(draws, log_posterior, acceptance_rate,
                                      prior, param_names, spec,
                                      observables, measurement_error,
@@ -331,17 +341,7 @@ function _build_solution_at_theta(spec::DSGESpec{T}, param_names::Vector{Symbol}
         new_pv[pn] = theta[i]
     end
 
-    new_spec = DSGESpec{T}(
-        spec.endog, spec.exog, spec.params, new_pv,
-        spec.equations, spec.residual_fns,
-        spec.n_expect, spec.forward_indices, T[], spec.ss_fn;
-        original_endog=spec.original_endog,
-        original_equations=spec.original_equations,
-        augmented=spec.augmented,
-        max_lag=spec.max_lag,
-        max_lead=spec.max_lead,
-        linear=spec.linear
-    )
+    new_spec = _respec(spec, new_pv)
 
     new_spec = compute_steady_state(new_spec)
     sol = solve(new_spec; method=solver, solver_kwargs...)
@@ -516,16 +516,7 @@ function posterior_predictive(result::BayesianDSGE{T}, n_sim::Int;
             new_pv[pn] = theta[i]
         end
 
-        new_spec = DSGESpec{T}(
-            spec.endog, spec.exog, spec.params, new_pv,
-            spec.equations, spec.residual_fns,
-            spec.n_expect, spec.forward_indices, T[], spec.ss_fn;
-            original_endog=spec.original_endog,
-            original_equations=spec.original_equations,
-            augmented=spec.augmented,
-            max_lag=spec.max_lag,
-            max_lead=spec.max_lead
-        )
+        new_spec = _respec(spec, new_pv)
 
         try
             new_spec = compute_steady_state(new_spec)

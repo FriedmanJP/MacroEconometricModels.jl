@@ -87,9 +87,10 @@ function klein(ld::LinearDSGE{T}, spec::DSGESpec{T}; div::Real=1.0 + 1e-8) where
     G1 = res.G
     impact = res.impact
 
-    # Constants: C_sol = (I - G1)·y_ss, y_ss = (Γ0 - Γ1)⁻¹·C
+    # Constants: C_sol = (I - G1)·y_ss, y_ss = (f₀+f₁+f_lead)⁻¹·C (Γ0-Γ1 = f₀+f₁ omits
+    # the lead block, giving the wrong SS for forward models with a constant — S-06 / #114).
     C_sol = if norm(ld.C) > eps(T)
-        y_bar = real(Vector{T}((complex(ld.Gamma0) - complex(ld.Gamma1)) \ complex(ld.C)))
+        y_bar = real(Vector{T}(complex(f_0 + f_1 + f_lead) \ complex(ld.C)))
         Vector{T}((I - G1) * y_bar)
     else
         zeros(T, n)

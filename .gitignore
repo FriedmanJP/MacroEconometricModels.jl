@@ -9,3 +9,8 @@ scripts/
 benchmarks/
 test/oracle/_out/
 test/oracle/_data/
+
+# Coverage artifacts (never commit — produced by julia --code-coverage)
+*.cov
+*.jl.*.cov
+lcov.info

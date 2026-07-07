@@ -1235,7 +1235,17 @@ end
 
     @test result isa BayesianDSGE{Float64}
     @test result.method == :rwmh
-    @test size(result.theta_draws, 1) == 1000
+    # Burn-in is discarded (E-03 / #122): stored posterior draws = n_draws - burnin, with
+    # log_posterior sliced consistently. Pre-fix this returned all 1000 draws (burnin no-op).
+    @test size(result.theta_draws, 1) == 1000 - 200
+    @test length(result.log_posterior) == 1000 - 200
+
+    # keep_burnin=true retains the full chain (smaller run to stay fast)
+    result_full = estimate_dsge_bayes(spec, sim_data, [0.5];
+        priors=priors, method=:mh, observables=[:y],
+        n_draws=300, burnin=100, keep_burnin=true,
+        rng=Random.MersenneTwister(7))
+    @test size(result_full.theta_draws, 1) == 300
     end
 end
 
@@ -1619,7 +1629,7 @@ end
         rng=Random.MersenneTwister(1))
 
     @test result.method == :mh || result.method == :rwmh
-    @test size(result.theta_draws, 1) == 500
+    @test size(result.theta_draws, 1) == 500 - 100   # burn-in discarded (E-03 / #122)
     @test 0.0 < result.acceptance_rate < 1.0
     end
 end
@@ -2610,6 +2620,35 @@ end
         @test length(take!(io)) > 0
         report(bsim)
     end
+end
+
+@testset "_respec + PF effective-SS offset preserve linear=true (E-07 / #115)" begin
+    a, b, c = 0.5, 0.3, 1.0
+    spec = DSGESpec{Float64}(
+        [:y], [:eps], [:a, :b, :c], Dict{Symbol,Float64}(:a => a, :b => b, :c => c),
+        Expr[:(0 + 0)],
+        Function[(yt, yl, yle, eps, th) -> yt[1] - th[:a] * yle[1] - th[:b] * yl[1] - th[:c] - eps[1]],
+        1, [1], Float64[], nothing; linear=true,
+    )
+    # _respec must carry every parse/SS-affecting flag to the rebuilt spec — esp. linear=true,
+    # which the hand-written rebuild sites dropped (re-parsing the model as nonlinear).
+    new_pv = copy(spec.param_values); new_pv[:a] = 0.4
+    re = MacroEconometricModels._respec(spec, new_pv)
+    @test re.linear == true
+    @test re.n_expect == spec.n_expect
+    @test re.forward_indices == spec.forward_indices
+    @test re.max_lag == spec.max_lag
+    @test re.max_lead == spec.max_lead
+    @test re.augmented == spec.augmented
+    @test re.param_values[:a] == 0.4
+
+    # Kalman and particle-filter paths share _effective_obs_offset: linear=true constant models
+    # get the effective SS (I-G1)⁻¹·C_sol as the observation offset, not the zero raw offset.
+    sspec = compute_steady_state(spec)
+    sol = solve(sspec; method=:gensys)
+    d_eff = MacroEconometricModels._effective_obs_offset(zeros(1), sspec, sol, [:y])
+    @test d_eff[1] ≈ c / (1 - a - b) atol=1e-6
+    @test !(d_eff[1] ≈ 0.0)
 end
 
 end  # @testset "Bayesian DSGE"

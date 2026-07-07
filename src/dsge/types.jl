@@ -93,6 +93,30 @@ struct DSGESpec{T<:AbstractFloat}
 end
 
 """
+    _respec(spec::DSGESpec{T}, new_pv) -> DSGESpec{T}
+
+Rebuild `spec` at a new parameter dictionary `new_pv`, propagating EVERY flag that affects
+parsing and steady-state resolution: `original_endog`/`original_equations`, `augmented`,
+`max_lag`/`max_lead`, and crucially `linear`. Estimation loops that rebuilt the spec by hand
+and dropped these flags silently mis-specified augmented / pre-linearized (`linear=true`)
+models — the rebuilt spec was re-parsed as a plain nonlinear model (audit E-07 / #115).
+Steady state is left unset (`T[]`); callers run `compute_steady_state` when needed.
+"""
+function _respec(spec::DSGESpec{T}, new_pv) where {T<:AbstractFloat}
+    DSGESpec{T}(
+        spec.endog, spec.exog, spec.params, new_pv,
+        spec.equations, spec.residual_fns,
+        spec.n_expect, spec.forward_indices, T[], spec.ss_fn;
+        original_endog=spec.original_endog,
+        original_equations=spec.original_equations,
+        augmented=spec.augmented,
+        max_lag=spec.max_lag,
+        max_lead=spec.max_lead,
+        linear=spec.linear,
+    )
+end
+
+"""
     _original_var_indices(spec::DSGESpec) → Vector{Int}
 
 Return indices of original endogenous variables in the (possibly augmented) state vector.

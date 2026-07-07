@@ -128,11 +128,7 @@ function _estimate_irf_matching(spec::DSGESpec{T}, data::Matrix{T},
         for (i, pn) in enumerate(param_names)
             new_pv[pn] = theta[i]
         end
-        new_spec = DSGESpec{T}(
-            spec.endog, spec.exog, spec.params, new_pv,
-            spec.equations, spec.residual_fns,
-            spec.n_expect, spec.forward_indices, T[], spec.ss_fn
-        )
+        new_spec = _respec(spec, new_pv)
         try
             new_spec = compute_steady_state(new_spec)
             sol = solve(new_spec; method=:gensys)
@@ -186,11 +182,7 @@ function _estimate_irf_matching(spec::DSGESpec{T}, data::Matrix{T},
     for (i, pn) in enumerate(param_names)
         final_pv[pn] = theta_hat[i]
     end
-    final_spec = DSGESpec{T}(
-        spec.endog, spec.exog, spec.params, final_pv,
-        spec.equations, spec.residual_fns,
-        spec.n_expect, spec.forward_indices, T[], spec.ss_fn
-    )
+    final_spec = _respec(spec, final_pv)
     final_spec = compute_steady_state(final_spec)
     final_sol = solve(final_spec; method=:gensys)
 
@@ -268,11 +260,7 @@ function _estimate_euler_gmm(spec::DSGESpec{T}, data::Matrix{T},
     for (i, pn) in enumerate(param_names)
         final_pv[pn] = gmm_result.theta[i]
     end
-    final_spec = DSGESpec{T}(
-        spec.endog, spec.exog, spec.params, final_pv,
-        spec.equations, spec.residual_fns,
-        spec.n_expect, spec.forward_indices, T[], spec.ss_fn
-    )
+    final_spec = _respec(spec, final_pv)
     final_spec = compute_steady_state(final_spec)
     final_sol = solve(final_spec; method=:gensys)
 
@@ -317,11 +305,7 @@ function _estimate_dsge_smm(spec::DSGESpec{T}, data::Matrix{T},
         for (i, pn) in enumerate(param_names)
             new_pv[pn] = theta[i]
         end
-        new_spec = DSGESpec{T}(
-            spec.endog, spec.exog, spec.params, new_pv,
-            spec.equations, spec.residual_fns,
-            spec.n_expect, spec.forward_indices, T[], spec.ss_fn
-        )
+        new_spec = _respec(spec, new_pv)
         try
             new_spec = compute_steady_state(new_spec)
             sol = solve(new_spec; method=:gensys)
@@ -345,11 +329,7 @@ function _estimate_dsge_smm(spec::DSGESpec{T}, data::Matrix{T},
     for (i, pn) in enumerate(param_names)
         final_pv[pn] = smm_result.theta[i]
     end
-    final_spec = DSGESpec{T}(
-        spec.endog, spec.exog, spec.params, final_pv,
-        spec.equations, spec.residual_fns,
-        spec.n_expect, spec.forward_indices, T[], spec.ss_fn
-    )
+    final_spec = _respec(spec, final_pv)
     final_spec = compute_steady_state(final_spec)
     final_sol = solve(final_spec; method=:gensys)
 
@@ -458,11 +438,7 @@ function _estimate_dsge_analytical_gmm(spec::DSGESpec{T}, data::Matrix{T},
         for (i, pn) in enumerate(param_names)
             new_pv[pn] = theta[i]
         end
-        new_spec = DSGESpec{T}(
-            spec.endog, spec.exog, spec.params, new_pv,
-            spec.equations, spec.residual_fns,
-            spec.n_expect, spec.forward_indices, T[], spec.ss_fn
-        )
+        new_spec = _respec(spec, new_pv)
         try
             new_spec = compute_steady_state(new_spec)
             if use_perturbation
@@ -493,11 +469,7 @@ function _estimate_dsge_analytical_gmm(spec::DSGESpec{T}, data::Matrix{T},
     for (i, pn) in enumerate(param_names)
         final_pv[pn] = gmm_result.theta[i]
     end
-    final_spec = DSGESpec{T}(
-        spec.endog, spec.exog, spec.params, final_pv,
-        spec.equations, spec.residual_fns,
-        spec.n_expect, spec.forward_indices, T[], spec.ss_fn
-    )
+    final_spec = _respec(spec, final_pv)
     final_spec = compute_steady_state(final_spec)
     if use_perturbation
         final_sol = solve(final_spec; method=:perturbation, order=solve_order)

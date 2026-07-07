@@ -52,8 +52,10 @@ function blanchard_kahn(ld::LinearDSGE{T}, spec::DSGESpec{T}; div::Real=1.0 + 1e
     G1 = res.G
     impact = res.impact
 
+    # y_ss = (f₀+f₁+f_lead)⁻¹·C — include the lead block (Γ0-Γ1 = f₀+f₁ omits it), else the
+    # SS is wrong for forward-looking models with a constant (audit S-06 / #114).
     C_sol = if norm(ld.C) > eps(T)
-        y_bar = real(Vector{T}((complex(ld.Gamma0) - complex(ld.Gamma1)) \ complex(ld.C)))
+        y_bar = real(Vector{T}(complex(f_0 + f_1 + f_lead) \ complex(ld.C)))
         Vector{T}((I - G1) * y_bar)
     else
         zeros(T, n)
