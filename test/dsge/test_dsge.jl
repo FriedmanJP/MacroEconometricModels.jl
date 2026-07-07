@@ -3216,6 +3216,36 @@ end
         @test ir_p.values ≈ ir_g.values atol=1e-10   # full agreement, all vars & horizons
     end
 
+    @testset "Collocation integrates next-period shocks, matching PFI (S-02 / #120)" begin
+        # Nonlinear control policy c(y)=exp(y); w_t = β·E_t[c_{t+1}]. The precautionary effect
+        # (E[c'] > c(E[y'])) enters only if the solver integrates over next-period shocks.
+        # Pre-fix the collocation ignored its quadrature nodes and returned the certainty-
+        # equivalent w = β, disagreeing with PFI (which the audit confirmed correct).
+        rho, beta, sigma = 0.5, 0.95, 0.3
+        spec = @dsge begin
+            parameters: rho = 0.5, beta = 0.95, sigma = 0.3
+            endogenous: y, c, w
+            exogenous: e
+            y[t] = rho * y[t-1] + sigma * e[t]
+            c[t] = exp(y[t])
+            w[t] = beta * c[t+1]
+            steady_state = begin
+                [0.0, 1.0, beta]
+            end
+        end
+        spec = compute_steady_state(spec)
+        wi = findfirst(==(:w), spec.endog)
+        solc = collocation_solver(spec; degree=6, grid=:tensor, quadrature=:gauss_hermite,
+                                  n_quad=9, scale=4, max_iter=100, tol=1e-11)
+        solp = pfi_solver(spec; degree=6, quadrature=:gauss_hermite, n_quad=9, scale=4,
+                          max_iter=100, tol=1e-11)
+        wc = MacroEconometricModels.evaluate_policy(solc, [0.0])[wi]
+        wp = MacroEconometricModels.evaluate_policy(solp, [0.0])[wi]
+        @test wc ≈ wp rtol=1e-3          # fixed collocation now agrees with the correct PFI
+        @test wp > beta + 5e-3           # PFI reference has a genuine precautionary component
+        @test wc > beta + 5e-3           # collocation captures it (pre-fix returned exactly β)
+    end
+
     @testset "Closed-form moments" begin
         spec = @dsge begin
             parameters: ρ = 0.9, σ = 0.01
