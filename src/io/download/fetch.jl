@@ -13,6 +13,15 @@ function _log_download!(meta::IOMetaData, url::AbstractString, filename::Abstrac
     meta
 end
 
+"""
+    _url_filename(url) -> String
+
+Local filename for a download URL: `basename` with any query string (`?…`) stripped.
+Dropbox/GLORIA-style `…zip?dl=0` URLs would otherwise yield filenames containing `?`,
+which is a legal path char on Linux/macOS but illegal on Windows (`open` throws EINVAL).
+"""
+_url_filename(url::AbstractString) = basename(split(url, "?")[1])
+
 "Extract all substrings of `html` matching `pattern`."
 scrape_links(html::AbstractString, pattern::Regex) =
     String[m.match for m in eachmatch(pattern, html)]

@@ -83,7 +83,7 @@ function download_wiod(folder; years=nothing, overwrite_existing::Bool=false,
     meta = IOMetaData(; source="WIOD 2013", version="2013")
     html = fetch_text(WIOD_VIEW)
     for url in scrape_links(html, WIOD_REGEX)
-        fn = basename(split(url, "?")[1])
+        fn = _url_filename(url)
         fetch(url, joinpath(folder, fn); overwrite=overwrite_existing)
         _log_download!(meta, url, fn)
     end
@@ -105,7 +105,7 @@ function download_exiobase3(folder; years=nothing, system::AbstractString="pxp",
         occursin(system, url) || continue
         m = match(r"IOT_(\d{4})_", url)
         (m === nothing || _match_year(m.captures[1], years)) || continue
-        fn = basename(url)
+        fn = _url_filename(url)
         fetch(url, joinpath(folder, fn); overwrite=overwrite_existing)
         _log_download!(meta, url, fn)
     end
@@ -136,7 +136,7 @@ function download_gloria(folder; years=nothing, overwrite_existing::Bool=false,
                          fetch=fetch_file)
     meta = IOMetaData(; source="GLORIA", version="053")
     for url in GLORIA_URLS
-        fn = basename(url)
+        fn = _url_filename(url)
         fetch(url, joinpath(folder, fn); overwrite=overwrite_existing)
         _log_download!(meta, url, fn)
     end

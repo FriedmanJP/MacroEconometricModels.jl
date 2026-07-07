@@ -99,8 +99,13 @@ end
     m2 = download_exiobase3(dir; system="pxp", years=[2010], fetch=mf, fetch_text=mt2)
     @test m2.source == "EXIOBASE3"
 
-    # GLORIA (empty URL set), EORA26 (history + error)
-    @test download_gloria(dir; fetch=mf) isa MacroEconometricModels.IOMetaData
+    # GLORIA (Dropbox '?dl=0' URLs): local filenames must strip the query string, else
+    # they contain '?' — legal on Linux/macOS but illegal on Windows (open throws EINVAL).
+    mg = download_gloria(dir; fetch=mf)
+    @test mg isa MacroEconometricModels.IOMetaData
+    @test !isempty(mg.files)                                # GLORIA_URLS is populated
+    @test all(!occursin('?', fn) for (_, fn) in mg.files)   # query stripped -> Windows-safe
+    # EORA26 (history + error)
     me = download_eora26(dir; email="you@example.com", password="pw")
     @test !isempty(me.history)
     @test_throws ArgumentError download_eora26(dir; email="", password="")
