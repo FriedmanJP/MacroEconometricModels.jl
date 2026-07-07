@@ -33,6 +33,11 @@ jobs:
           Pkg.develop(PackageSpec(path=pwd()))
           Pkg.instantiate()
       - uses: julia-actions/julia-buildpkg@v1
+      # Enforcement backstop (T011): execute every page's @setup/@example blocks —
+      # including the show/display path — with per-block attribution. A non-zero exit
+      # (any example failure) fails the job before deploy. No continue-on-error.
+      - name: Verify documentation examples
+        run: julia --project=docs docs/verify_examples.jl --all
       - uses: julia-actions/julia-docdeploy@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
