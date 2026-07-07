@@ -4,7 +4,10 @@ using Documenter
 DocMeta.setdocmeta!(MacroEconometricModels, :DocTestSetup, :(using MacroEconometricModels); recursive=true)
 
 makedocs(;
-    draft=true,
+    # Draft mode skips execution of every @setup/@example block. It must be opt-in for
+    # local iteration only (DOCS_DRAFT=true) — never committed — so CI and any plain
+    # make.jl run execute examples and render real output.
+    draft = get(ENV, "DOCS_DRAFT", "false") == "true",
     modules=[MacroEconometricModels],
     authors="Wookyung Chung <chung@friedman.jp>",
     repo="https://github.com/FriedmanJP/MacroEconometricModels.jl/blob/{commit}{path}#{line}",
