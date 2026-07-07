@@ -1235,7 +1235,17 @@ end
 
     @test result isa BayesianDSGE{Float64}
     @test result.method == :rwmh
-    @test size(result.theta_draws, 1) == 1000
+    # Burn-in is discarded (E-03 / #122): stored posterior draws = n_draws - burnin, with
+    # log_posterior sliced consistently. Pre-fix this returned all 1000 draws (burnin no-op).
+    @test size(result.theta_draws, 1) == 1000 - 200
+    @test length(result.log_posterior) == 1000 - 200
+
+    # keep_burnin=true retains the full chain (smaller run to stay fast)
+    result_full = estimate_dsge_bayes(spec, sim_data, [0.5];
+        priors=priors, method=:mh, observables=[:y],
+        n_draws=300, burnin=100, keep_burnin=true,
+        rng=Random.MersenneTwister(7))
+    @test size(result_full.theta_draws, 1) == 300
     end
 end
 
@@ -1619,7 +1629,7 @@ end
         rng=Random.MersenneTwister(1))
 
     @test result.method == :mh || result.method == :rwmh
-    @test size(result.theta_draws, 1) == 500
+    @test size(result.theta_draws, 1) == 500 - 100   # burn-in discarded (E-03 / #122)
     @test 0.0 < result.acceptance_rate < 1.0
     end
 end

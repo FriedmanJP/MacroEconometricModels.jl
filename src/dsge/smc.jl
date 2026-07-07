@@ -594,7 +594,8 @@ acceptance rate (Roberts & Rosenthal 2001).
 
 # Keywords
 - `n_draws::Int=5000` — total number of draws (including burnin)
-- `burnin::Int=1000` — number of burnin draws (kept in output)
+- `burnin::Int=1000` — burn-in length. `_mh_sample` returns the FULL chain; the caller
+  (`estimate_dsge_bayes`) discards the first `burnin` draws unless `keep_burnin=true`.
 - `adapt_interval::Int=100` — adapt proposal covariance every N draws
 - `observables::Vector{Symbol}` — observed variables
 - `measurement_error` — measurement error SDs or `nothing`
