@@ -977,4 +977,15 @@ end
         @test ar_order(m) <= 1
         @test ma_order(m) == 0
     end
+
+    @testset "stepwise respects tight bounds max_p=0, max_q=0 (R-23 / #117)" begin
+        # Only (0,0) is admissible; the _fit_and_cache bounds guard (parenthesized so the
+        # full ||-chain gates the early return) must never admit an out-of-bounds order.
+        Random.seed!(7007)
+        y = randn(120)
+        m = auto_arima(y; max_p=0, max_q=0, max_d=0, stepwise=true)
+        @test m isa MacroEconometricModels.AbstractARIMAModel
+        @test ar_order(m) == 0
+        @test ma_order(m) == 0
+    end
 end
