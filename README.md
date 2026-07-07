@@ -18,6 +18,8 @@ A comprehensive Julia package for macroeconomic time series analysis.
 
 **DSGE:** 7 solvers (Gensys, Blanchard-Kahn, Klein, 2nd/3rd-order perturbation with pruning, Chebyshev projection, PFI, VFI), model(linear) for pre-linearized models, built-in constrained solvers (Optim.jl, NLopt.jl, projected Newton) with optional JuMP+Ipopt/PATH, OccBin, GMM/SMM estimation, Bayesian estimation (SMC/SMC²/MH) with posterior IRF/FEVD credible bands, order≥2 unconditional FEVD (Andreasen et al. 2018), 27-model Dynare replication suite, **Heterogeneous Agent DSGE** (Reiter, Sequence-Space Jacobian, Krusell-Smith; one-asset and two-asset HANK; EGM/VFI individual solvers; Bayesian estimation)
 
+**Input-Output:** IOData container, Leontief/Ghosh models, output/income/employment multipliers, backward/forward linkages (Rasmussen) & key sectors, structural decomposition analysis, hypothetical extraction, environmental satellite accounts, Baqaee-Farhi (2019), pymrio-style MRIO downloaders (OECD/WIOD/Exiobase3/Eora26/GLORIA)
+
 **Cross-Sectional:** OLS, WLS, IV/2SLS, Logit, Probit, Ordered Logit/Probit, Multinomial Logit (MLE), marginal effects (AME/MEM/MER)
 
 **Estimation:** OLS, MLE, GMM, SMM, Bayesian (Gibbs/conjugate), Kalman filter/smoother
