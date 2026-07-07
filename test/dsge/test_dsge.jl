@@ -5657,6 +5657,31 @@ end
     @test eff_ss[3] ≈ 0.0 atol=1e-8  # model var a: SS = 0
 end
 
+@testset "Linear model C_sol includes the lead block (S-06 / #114)" begin
+    # Pre-linearized forward-looking model with a constant:
+    #   y_t = a·E[y_{t+1}] + b·y_{t-1} + c + eps  ⇒  SS: (1-a-b)·y = c.
+    # Dropping f_lead gives the wrong SS c/(1-b); the correct SS is c/(1-a-b).
+    a, b, c = 0.5, 0.3, 1.0
+    spec_fwd = DSGESpec{Float64}(
+        [:y], [:eps], [:a, :b, :c],
+        Dict{Symbol,Float64}(:a => a, :b => b, :c => c),
+        Expr[:(0 + 0)],
+        Function[(yt, yl, yle, eps, th) -> yt[1] - th[:a] * yle[1] - th[:b] * yl[1] - th[:c] - eps[1]],
+        1, [1], Float64[], nothing; linear=true,
+    )
+    y_ss_correct = c / (1 - a - b)   # 5.0     = (f₀+f₁+f_lead)⁻¹C
+    y_ss_wrong   = c / (1 - b)       # ≈1.4286 = (f₀+f₁)⁻¹C  (pre-fix, drops f_lead)
+    @test !isapprox(y_ss_correct, y_ss_wrong; atol=1e-6)
+
+    for method in (:gensys, :klein, :blanchard_kahn)
+        sol = solve(spec_fwd; method=method)
+        @test is_determined(sol)
+        eff_ss = ((I - sol.G1) \ sol.C_sol)[1]
+        @test eff_ss ≈ y_ss_correct atol=1e-8
+        @test !isapprox(eff_ss, y_ss_wrong; atol=1e-6)
+    end
+end
+
 @testset "Nonlinear model: linear field is false" begin
     spec = @dsge begin
         parameters: alpha = 0.36, beta = 0.99, delta = 0.025, rho = 0.95, sigma = 0.01
