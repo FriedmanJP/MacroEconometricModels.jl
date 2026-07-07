@@ -70,6 +70,8 @@ jobs:
           OPENBLAS_NUM_THREADS: "1"
           MACRO_MULTIPROCESS_TESTS: "1"
           MACRO_FAST_TESTS: ${{ matrix.os == 'ubuntu-latest' && '0' || '1' }}
+          # Restore standard Pkg.test bounds-checking on the full-fidelity ubuntu job only (#126).
+          MACRO_CHECK_BOUNDS: ${{ matrix.os == 'ubuntu-latest' && '1' || '0' }}
 
       - uses: julia-actions/julia-processcoverage@v1
         if: matrix.os == 'ubuntu-latest' && matrix.version == '1'
