@@ -104,7 +104,10 @@ makedocs(;
         ],
     ],
     checkdocs=:exports,
-    warnonly=[:missing_docs, :cross_references, :autodocs_block, :docs_block, :setup_block, :example_block],
+    # example/setup/docs/autodocs block failures must FAIL the build (docrule: "@example
+    # blocks MUST run"). :missing_docs stays until the docstring backlog clears ([T202]);
+    # :cross_references deferred to the docs-consistency stage (xref burn-down not yet done).
+    warnonly=[:missing_docs, :cross_references],
 )
 
 deploydocs(;
