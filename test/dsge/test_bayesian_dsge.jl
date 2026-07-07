@@ -2612,4 +2612,33 @@ end
     end
 end
 
+@testset "_respec + PF effective-SS offset preserve linear=true (E-07 / #115)" begin
+    a, b, c = 0.5, 0.3, 1.0
+    spec = DSGESpec{Float64}(
+        [:y], [:eps], [:a, :b, :c], Dict{Symbol,Float64}(:a => a, :b => b, :c => c),
+        Expr[:(0 + 0)],
+        Function[(yt, yl, yle, eps, th) -> yt[1] - th[:a] * yle[1] - th[:b] * yl[1] - th[:c] - eps[1]],
+        1, [1], Float64[], nothing; linear=true,
+    )
+    # _respec must carry every parse/SS-affecting flag to the rebuilt spec — esp. linear=true,
+    # which the hand-written rebuild sites dropped (re-parsing the model as nonlinear).
+    new_pv = copy(spec.param_values); new_pv[:a] = 0.4
+    re = MacroEconometricModels._respec(spec, new_pv)
+    @test re.linear == true
+    @test re.n_expect == spec.n_expect
+    @test re.forward_indices == spec.forward_indices
+    @test re.max_lag == spec.max_lag
+    @test re.max_lead == spec.max_lead
+    @test re.augmented == spec.augmented
+    @test re.param_values[:a] == 0.4
+
+    # Kalman and particle-filter paths share _effective_obs_offset: linear=true constant models
+    # get the effective SS (I-G1)⁻¹·C_sol as the observation offset, not the zero raw offset.
+    sspec = compute_steady_state(spec)
+    sol = solve(sspec; method=:gensys)
+    d_eff = MacroEconometricModels._effective_obs_offset(zeros(1), sspec, sol, [:y])
+    @test d_eff[1] ≈ c / (1 - a - b) atol=1e-6
+    @test !(d_eff[1] ≈ 0.0)
+end
+
 end  # @testset "Bayesian DSGE"

@@ -331,17 +331,7 @@ function _build_solution_at_theta(spec::DSGESpec{T}, param_names::Vector{Symbol}
         new_pv[pn] = theta[i]
     end
 
-    new_spec = DSGESpec{T}(
-        spec.endog, spec.exog, spec.params, new_pv,
-        spec.equations, spec.residual_fns,
-        spec.n_expect, spec.forward_indices, T[], spec.ss_fn;
-        original_endog=spec.original_endog,
-        original_equations=spec.original_equations,
-        augmented=spec.augmented,
-        max_lag=spec.max_lag,
-        max_lead=spec.max_lead,
-        linear=spec.linear
-    )
+    new_spec = _respec(spec, new_pv)
 
     new_spec = compute_steady_state(new_spec)
     sol = solve(new_spec; method=solver, solver_kwargs...)
@@ -516,16 +506,7 @@ function posterior_predictive(result::BayesianDSGE{T}, n_sim::Int;
             new_pv[pn] = theta[i]
         end
 
-        new_spec = DSGESpec{T}(
-            spec.endog, spec.exog, spec.params, new_pv,
-            spec.equations, spec.residual_fns,
-            spec.n_expect, spec.forward_indices, T[], spec.ss_fn;
-            original_endog=spec.original_endog,
-            original_equations=spec.original_equations,
-            augmented=spec.augmented,
-            max_lag=spec.max_lag,
-            max_lead=spec.max_lead
-        )
+        new_spec = _respec(spec, new_pv)
 
         try
             new_spec = compute_steady_state(new_spec)
