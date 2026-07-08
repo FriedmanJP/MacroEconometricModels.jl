@@ -789,56 +789,6 @@ end
     @test rel_error < 0.15
 end
 
-@testset "Auxiliary particle filter" begin
-    Random.seed!(300)
-
-    # Same AR(1) setup
-    rho = 0.8
-    sigma_eps = 0.5
-    sigma_me = 0.1
-    T_sim = 150
-
-    x = zeros(T_sim)
-    y = zeros(T_sim)
-    for t in 2:T_sim
-        x[t] = rho * x[t-1] + sigma_eps * randn()
-    end
-    for t in 1:T_sim
-        y[t] = x[t] + sigma_me * randn()
-    end
-
-    G1 = fill(rho, 1, 1)
-    impact = fill(sigma_eps, 1, 1)
-    Z = ones(1, 1)
-    d = zeros(1)
-    H = fill(sigma_me^2, 1, 1)
-    Q = ones(1, 1)
-
-    ss = MacroEconometricModels.DSGEStateSpace{Float64}(G1, impact, Z, d, H, Q)
-    data = reshape(y, 1, T_sim)
-
-    # Kalman log-likelihood
-    ll_kalman = MacroEconometricModels._kalman_loglikelihood(ss, data)
-
-    # APF log-likelihood
-    N_particles = 500
-    n_runs = 10
-    ll_apf_runs = zeros(n_runs)
-
-    for r in 1:n_runs
-        ws = MacroEconometricModels._allocate_pf_workspace(Float64, 1, 1, 1, N_particles)
-        ll_apf_runs[r] = MacroEconometricModels._auxiliary_particle_filter!(
-            ws, ss, data, T_sim; rng=Random.MersenneTwister(r * 2000))
-    end
-
-    ll_apf_mean = mean(ll_apf_runs)
-
-    @test isfinite(ll_apf_mean)
-    # APF should be finite and in the right ballpark
-    # APF likelihood estimate can differ from Kalman due to the two-stage structure
-    # but should still be a reasonable finite value
-    @test ll_apf_mean < 0.0  # log-likelihood should be negative
-end
 
 @testset "Conditional SMC" begin
     Random.seed!(400)

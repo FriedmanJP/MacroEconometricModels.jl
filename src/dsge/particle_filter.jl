@@ -8,14 +8,12 @@
 Particle filter compute kernels for Bayesian DSGE estimation.
 
 All functions operate on pre-allocated `PFWorkspace` buffers for zero inner-loop
-allocation. Provides bootstrap particle filter, auxiliary particle filter (Pitt &
-Shephard 1999), and conditional SMC (Andrieu, Doucet & Holenstein 2010).
+allocation. Provides the bootstrap particle filter and conditional SMC (Andrieu,
+Doucet & Holenstein 2010).
 
 References:
 - Gordon, N. J., Salmond, D. J. & Smith, A. F. M. (1993). Novel approach to
   nonlinear/non-Gaussian Bayesian state estimation. IEE Proceedings F, 140(2), 107-113.
-- Pitt, M. K. & Shephard, N. (1999). Filtering via simulation: Auxiliary particle
-  filters. Journal of the American Statistical Association, 94(446), 590-599.
 - Andrieu, C., Doucet, A. & Holenstein, R. (2010). Particle Markov chain Monte Carlo
   methods. Journal of the Royal Statistical Society: Series B, 72(3), 269-342.
 """
@@ -332,108 +330,6 @@ function _bootstrap_particle_filter!(ws::PFWorkspace{T}, ss::DSGEStateSpace{T},
             @simd for s in 1:size(ws.particles, 1)
                 ws.reference_trajectory[s, t] = ws.particles[s, N]
             end
-        end
-    end
-
-    return log_lik
-end
-
-# =============================================================================
-# Auxiliary Particle Filter (Pitt & Shephard 1999)
-# =============================================================================
-
-"""
-    _auxiliary_particle_filter!(ws, ss, data, T_obs; threshold=0.5, rng=Random.default_rng())
-
-Auxiliary particle filter (Pitt & Shephard 1999) for linear state space.
-
-First-stage weights use the predictive mean mu_k = G1 * s_k to compute
-p(y_t | Z * mu_k + d, H) as a Gaussian density. Particles are resampled
-according to first-stage weights, then propagated, and adjustment weights
-are computed.
-
-Returns log marginal likelihood estimate.
-"""
-function _auxiliary_particle_filter!(ws::PFWorkspace{T}, ss::DSGEStateSpace{T},
-                                      data::Matrix{T}, T_obs::Int;
-                                      threshold::Real=0.5,
-                                      rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
-    N = size(ws.particles, 2)
-    n_obs = size(data, 1)
-    n_states = size(ws.particles, 1)
-    log_N = log(T(N))
-    inv_N = one(T) / N
-    half = T(0.5)
-
-    # Initialize from stationary distribution
-    _pf_initialize_stationary!(ws, ss; rng=rng)
-
-    log_lik = zero(T)
-
-    @inbounds for t in 1:T_obs
-        y_t = @view data[:, t]
-
-        # --- First stage: compute predictive mean for each particle ---
-        # particles_new = G1 * particles (predictive mean, no shocks)
-        mul!(ws.particles_new, ss.G1, ws.particles)
-
-        # Compute first-stage log weights using predictive mean
-        # innovations = y_t - Z * mu - d
-        _pf_log_weights!(ws.log_weights, ws.innovations, ws.tmp_obs,
-                          ws.particles_new, y_t, ss.Z, ss.d, ss.H_inv, ss.log_det_H)
-
-        # Add current particle weights (log scale) if not uniform
-        # log_first_stage = log_w_current + log_predictive
-        # (weights start uniform, so this is just the predictive on first step)
-
-        # Normalize and accumulate first-stage contribution
-        lse_first = _logsumexp(ws.log_weights)
-        log_lik += lse_first - log_N
-
-        _normalize_log_weights!(ws.weights, ws.log_weights)
-
-        # Resample based on first-stage weights
-        _systematic_resample!(ws.ancestors, ws.weights, ws.cumweights, N, rng)
-        _resample_particles!(ws.particles_new, ws.particles, ws.ancestors)
-        # Swap: particles now hold resampled particles
-        ws.particles, ws.particles_new = ws.particles_new, ws.particles
-
-        # --- Second stage: propagate with shocks ---
-        randn!(rng, ws.shocks)
-        _pf_transition_linear!(ws.particles_new, ws.particles, ws.shocks,
-                                ss.G1, ss.impact)
-        ws.particles, ws.particles_new = ws.particles_new, ws.particles
-
-        # Compute actual observation log weights
-        _pf_log_weights!(ws.log_weights, ws.innovations, ws.tmp_obs,
-                          ws.particles, y_t, ss.Z, ss.d, ss.H_inv, ss.log_det_H)
-
-        # Compute predictive mean log weights for adjustment
-        # Recompute predictive mean from ancestors (before shock addition)
-        # The adjustment is: log w_adjust = log p(y|x_t) - log p(y|mu_{a_t})
-        # We already have log p(y|x_t) in log_weights
-        # Need to subtract log p(y|mu_{a_t}) which was the first-stage weight
-        # For simplicity with the resampled particles, recompute mu = G1 * particles_before_shock
-        # Since we already propagated, compute from the resampled (pre-shock) state:
-        # pre-shock state = particles (post resample) which is now overwritten
-        # We use the fact that for linear Gaussian, the adjustment is a constant shift
-
-        # Normalize adjustment weights
-        _normalize_log_weights!(ws.weights, ws.log_weights)
-
-        # ESS-based resampling of adjustment weights
-        ess = zero(T)
-        @simd for k in 1:N
-            ess += ws.weights[k] * ws.weights[k]
-        end
-        ess = one(T) / ess
-
-        if ess < threshold * N
-            _systematic_resample!(ws.ancestors, ws.weights, ws.cumweights, N, rng)
-            _resample_particles!(ws.particles_new, ws.particles, ws.ancestors)
-            ws.particles, ws.particles_new = ws.particles_new, ws.particles
-            fill!(ws.weights, inv_N)
-            fill!(ws.log_weights, -log_N)
         end
     end
 
