@@ -3137,4 +3137,89 @@ end
     end
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Prior/posterior predictive checks (T237 / #336)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "prior_predictive + posterior_predictive_check (#336)" begin
+    _suppress_warnings() do
+    rng = Random.MersenneTwister(42)
+
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    priors = Dict(:ρ => Beta(2, 2))
+
+    # Prior predictive: draw-level statistic distribution, sensible variance
+    ppr = prior_predictive(spec, priors; n_draws=100, T_periods=150,
+                           observables=[:y], rng=Random.MersenneTwister(1))
+    @test ppr isa PriorPredictiveResult{Float64}
+    @test ppr.n_draws == 100
+    @test 0 < ppr.n_effective <= 100
+    @test size(ppr.stats) == (ppr.n_effective, length(ppr.stat_names))
+    @test "mean_y" in ppr.stat_names
+    @test "var_y" in ppr.stat_names
+    @test "ar1_y" in ppr.stat_names
+    j = findfirst(==("var_y"), ppr.stat_names)
+    @test isfinite(mean(ppr.stats[:, j]))
+    @test mean(ppr.stats[:, j]) > 0
+    io = IOBuffer()
+    show(io, ppr)
+    @test occursin("Prior Predictive", String(take!(io)))
+
+    # Posterior predictive check on a correctly specified model: interior p-values
+    true_spec = @dsge begin
+        parameters: ρ = 0.8, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    true_spec = compute_steady_state(true_spec)
+    data = simulate(solve(true_spec; method=:gensys), 300; rng=rng)'
+    fit = estimate_dsge_bayes(spec, data, [0.5];
+        priors=priors, method=:smc, n_smc=200, observables=[:y],
+        rng=Random.MersenneTwister(11))
+
+    ppc = posterior_predictive_check(fit; n_draws=150, rng=Random.MersenneTwister(2))
+    @test ppc isa PosteriorPredictiveCheck{Float64}
+    @test ppc.n_effective > 0
+    @test length(ppc.p_values) == length(ppc.stat_names) == length(ppc.observed)
+    @test size(ppc.replicated) == (ppc.n_effective, length(ppc.stat_names))
+    jv = findfirst(==("var_y"), ppc.stat_names)
+    ja = findfirst(==("ar1_y"), ppc.stat_names)
+    @test 0.01 < ppc.p_values[jv] < 0.99      # model reproduces the variance
+    @test 0.01 < ppc.p_values[ja] < 0.99      # ... and the persistence
+    io2 = IOBuffer()
+    show(io2, ppc)
+    @test occursin("p-value", String(take!(io2)))
+
+    # Deliberately misspecified: prior pins ρ ≈ 0.2 while the data have ρ = 0.8
+    # → replicated persistence is far below observed → extreme p-value
+    tight = Dict(:ρ => Beta(60, 240))
+    fit_bad = estimate_dsge_bayes(spec, data, [0.2];
+        priors=tight, method=:smc, n_smc=200, observables=[:y],
+        rng=Random.MersenneTwister(12))
+    ppc_bad = posterior_predictive_check(fit_bad; n_draws=150,
+                                         rng=Random.MersenneTwister(3))
+    @test ppc_bad.p_values[findfirst(==("ar1_y"), ppc_bad.stat_names)] < 0.05
+
+    # Custom stats via NamedTuple contract
+    ppc_c = posterior_predictive_check(fit; n_draws=50, rng=Random.MersenneTwister(4),
+        stats=Y -> (skew_y = mean(((Y[:, 1] .- mean(Y[:, 1])) ./ std(Y[:, 1])).^3),))
+    @test ppc_c.stat_names == ["skew_y"]
+    @test length(ppc_c.p_values) == 1
+
+    # Explicit data argument (T_obs × n_obs orientation) matches stored data
+    ppc_d = posterior_predictive_check(fit; data=Matrix(data'), n_draws=50,
+                                       rng=Random.MersenneTwister(5))
+    @test ppc_d.observed ≈ ppc.observed
+    end
+end
+
 end  # @testset "Bayesian DSGE"

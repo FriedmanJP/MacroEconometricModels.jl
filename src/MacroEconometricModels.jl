@@ -498,6 +498,8 @@ export bridge_sampling_ml
 export identification_diagnostics, IdentificationDiagnostics
 export learning_rate_check, LearningRateCheck
 export prior_posterior_overlap, PriorPosteriorOverlap
+export prior_predictive, PriorPredictiveResult
+export posterior_predictive_check, PosteriorPredictiveCheck
 
 # Macro
 export @dsge

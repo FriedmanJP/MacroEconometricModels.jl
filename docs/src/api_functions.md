@@ -722,6 +722,10 @@ learning_rate_check
 LearningRateCheck
 prior_posterior_overlap
 PriorPosteriorOverlap
+prior_predictive
+PriorPredictiveResult
+posterior_predictive_check
+PosteriorPredictiveCheck
 ```
 
 ### Occasionally Binding Constraints

@@ -961,6 +961,351 @@ function posterior_predictive(result::BayesianDSGE{T}, n_sim::Int;
 end
 
 # =============================================================================
+# Prior predictive & posterior predictive checks (Gelman, Meng & Stern 1996)
+# =============================================================================
+
+"""
+    PriorPredictiveResult{T}
+
+Prior predictive distribution of summary statistics.
+
+Fields:
+- `stat_names::Vector{String}` — statistic labels
+- `stats::Matrix{T}` — `n_effective × n_stats` draw-level statistics
+- `n_draws::Int` — requested prior draws
+- `n_effective::Int` — draws that solved and simulated successfully
+- `T_periods::Int` — simulated sample length per draw
+"""
+struct PriorPredictiveResult{T<:AbstractFloat}
+    stat_names::Vector{String}
+    stats::Matrix{T}
+    n_draws::Int
+    n_effective::Int
+    T_periods::Int
+end
+
+"""
+    PosteriorPredictiveCheck{T}
+
+Posterior predictive check result.
+
+Fields:
+- `stat_names::Vector{String}` — statistic labels
+- `observed::Vector{T}` — statistics computed on the observed data
+- `replicated::Matrix{T}` — `n_effective × n_stats` statistics on replicated datasets
+- `p_values::Vector{T}` — posterior predictive p-values `P(T(y_rep) ≥ T(y_obs))`
+- `n_draws::Int` — requested posterior draws
+- `n_effective::Int` — draws that solved and simulated successfully
+"""
+struct PosteriorPredictiveCheck{T<:AbstractFloat}
+    stat_names::Vector{String}
+    observed::Vector{T}
+    replicated::Matrix{T}
+    p_values::Vector{T}
+    n_draws::Int
+    n_effective::Int
+end
+
+"""
+    _make_default_stats(observables) → Function
+
+Default predictive summary statistics: mean, variance, and first-order
+autocorrelation of each observable, plus pairwise cross-correlations.
+"""
+function _make_default_stats(observables::Vector{Symbol})
+    return function (Y::AbstractMatrix)
+        names = String[]
+        vals = Float64[]
+        n = size(Y, 2)
+        for (j, o) in enumerate(observables)
+            yj = @view Y[:, j]
+            push!(names, "mean_$o");
+            push!(vals, mean(yj))
+            push!(names, "var_$o")
+            push!(vals, var(yj))
+            v = var(yj)
+            r1 = v > 0 ? cor(@view(Y[2:end, j]), @view(Y[1:end-1, j])) : 0.0
+            push!(names, "ar1_$o")
+            push!(vals, r1)
+        end
+        for i in 1:n, j in (i+1):n
+            push!(names, "corr_$(observables[i])_$(observables[j])")
+            push!(vals, cor(@view(Y[:, i]), @view(Y[:, j])))
+        end
+        return (names, vals)
+    end
+end
+
+"""
+    _stat_pairs(out) → (names::Vector{String}, values::Vector{Float64})
+
+Normalize a stats-function return value: accepts a `(names, values)` tuple or a
+`NamedTuple` of scalars.
+"""
+_stat_pairs(out::Tuple{<:AbstractVector,<:AbstractVector}) =
+    (String.(out[1]), Float64.(out[2]))
+_stat_pairs(out::NamedTuple) = (String.(collect(keys(out))), Float64.(collect(values(out))))
+
+"""
+    _predictive_stats_loop(spec, thetas, param_names, observables, T_periods,
+                           stats_fn, solver, solver_kwargs, rng)
+        → (stat_names, stats_matrix, n_effective)
+
+Shared loop for predictive simulation: for each parameter draw (row of
+`thetas`), solve the model, simulate `T_periods`, restrict to the observables,
+and compute the summary statistics. Failed solves/simulations are **dropped and
+counted**, never zero-filled.
+"""
+function _predictive_stats_loop(spec::DSGESpec{T}, thetas::AbstractMatrix{T},
+                                param_names::Vector{Symbol},
+                                observables::Vector{Symbol}, T_periods::Int,
+                                stats_fn, solver::Symbol,
+                                solver_kwargs::NamedTuple,
+                                rng::AbstractRNG) where {T<:AbstractFloat}
+    var_syms = spec.augmented ? spec.original_endog : spec.endog
+    obs_idx = [findfirst(==(o), var_syms) for o in observables]
+    any(isnothing, obs_idx) &&
+        throw(ArgumentError("observables must be endogenous variables of the spec"))
+    obs_idx = Vector{Int}(obs_idx)
+
+    n = size(thetas, 1)
+    stat_names = String[]
+    rows = Vector{Vector{Float64}}()
+    for s in 1:n
+        theta = Vector{T}(thetas[s, :])
+        try
+            new_pv = copy(spec.param_values)
+            for (i, pn) in enumerate(param_names)
+                new_pv[pn] = theta[i]
+            end
+            new_spec = _respec(spec, new_pv)
+            new_spec = compute_steady_state(new_spec)
+            sol = solve(new_spec; method=solver, solver_kwargs...)
+            if sol isa DSGESolution && !is_determined(sol)
+                continue
+            end
+            sim = simulate(sol, T_periods; rng=rng)      # T_periods × n_vars
+            Y = sim[:, obs_idx]
+            all(isfinite, Y) || continue
+            names, vals = _stat_pairs(stats_fn(Y))
+            if isempty(stat_names)
+                append!(stat_names, names)
+            end
+            length(vals) == length(stat_names) || continue
+            push!(rows, vals)
+        catch
+            continue
+        end
+    end
+
+    n_eff = length(rows)
+    stats_mat = n_eff == 0 ? zeros(T, 0, length(stat_names)) :
+                Matrix{T}(reduce(vcat, (permutedims(r) for r in rows)))
+    return stat_names, stats_mat, n_eff
+end
+
+"""
+    prior_predictive(spec, priors; n_draws=500, T_periods=200,
+                     observables=Symbol[], stats=nothing, solver=:gensys,
+                     solver_kwargs=NamedTuple(), rng=Random.default_rng())
+        → PriorPredictiveResult
+
+Prior predictive analysis (Geweke 2005): draw parameters from the prior, solve
+the model, simulate `T_periods` of observables, and record summary statistics
+per draw — the implied *prior predictive distribution* of the statistics. Use
+this to check whether a prior implies economically absurd data **before**
+estimating.
+
+Draws where the model fails to solve are dropped and counted (`n_effective`);
+a warning reports the skipped fraction when it exceeds 10%.
+
+# Keywords
+- `n_draws::Int=500` — prior draws
+- `T_periods::Int=200` — simulated periods per draw
+- `observables::Vector{Symbol}=Symbol[]` — observables (default: all endogenous)
+- `stats=nothing` — statistic function `Y::Matrix → (names, values)` or
+  `NamedTuple`; default: mean/variance/AR(1) per observable + cross-correlations
+- `solver`, `solver_kwargs`, `rng` — as in [`estimate_dsge_bayes`](@ref)
+"""
+function prior_predictive(spec::DSGESpec{T},
+                          priors::Dict{Symbol,<:Distribution};
+                          n_draws::Int=500,
+                          T_periods::Int=200,
+                          observables::Vector{Symbol}=Symbol[],
+                          stats=nothing,
+                          solver::Symbol=:gensys,
+                          solver_kwargs::NamedTuple=NamedTuple(),
+                          rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    prior = _build_bayes_prior(priors)
+    param_names = prior.param_names
+    d = length(param_names)
+    if isempty(observables)
+        observables = spec.augmented ? copy(spec.original_endog) : copy(spec.endog)
+    end
+    stats_fn = stats === nothing ? _make_default_stats(observables) : stats
+
+    thetas = zeros(T, n_draws, d)
+    for s in 1:n_draws, i in 1:d
+        for attempt in 1:100
+            draw = T(rand(rng, prior.distributions[i]))
+            if prior.lower[i] <= draw <= prior.upper[i]
+                thetas[s, i] = draw
+                break
+            end
+            if attempt == 100
+                lo = isfinite(prior.lower[i]) ? prior.lower[i] : T(0)
+                hi = isfinite(prior.upper[i]) ? prior.upper[i] : T(1)
+                thetas[s, i] = (lo + hi) / 2
+            end
+        end
+    end
+
+    stat_names, stats_mat, n_eff = _predictive_stats_loop(
+        spec, thetas, param_names, observables, T_periods, stats_fn,
+        solver, solver_kwargs, rng)
+
+    skipped = n_draws - n_eff
+    if skipped > n_draws ÷ 10
+        @warn "prior_predictive: $skipped of $n_draws prior draws failed to solve " *
+              "(indeterminate/explosive) and were dropped — the prior puts substantial " *
+              "mass outside the determinacy region"
+    end
+    n_eff == 0 && @warn "prior_predictive: no prior draw produced a valid simulation"
+
+    return PriorPredictiveResult{T}(stat_names, stats_mat, n_draws, n_eff, T_periods)
+end
+
+"""
+    posterior_predictive_check(result::BayesianDSGE; data=nothing, n_draws=200,
+                               stats=nothing, rng=Random.default_rng())
+        → PosteriorPredictiveCheck
+
+Posterior predictive checks (Gelman, Meng & Stern 1996): draw parameter vectors
+from the posterior, simulate replicated datasets of the observed sample length,
+compute summary statistics on each replication and on the observed data, and
+report the **posterior predictive p-value** per statistic,
+
+```math
+p_j = \\Pr\\big(T_j(y^{\\mathrm{rep}}) \\geq T_j(y^{\\mathrm{obs}})\\big).
+```
+
+Interior p-values (say 0.05–0.95) indicate the model reproduces that feature of
+the data; extreme p-values flag misspecification along that dimension. Failed
+draws are dropped and counted (`n_effective`), never zero-filled.
+
+# Keywords
+- `data=nothing` — observed data; default: the sample stored on the result
+- `n_draws::Int=200` — posterior draws to replicate
+- `stats=nothing` — statistic function (same contract as [`prior_predictive`](@ref))
+- `rng::AbstractRNG` — random number generator
+"""
+function posterior_predictive_check(result::BayesianDSGE{T};
+                                    data::Union{Nothing,AbstractMatrix}=nothing,
+                                    n_draws::Int=200,
+                                    stats=nothing,
+                                    rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    observables = isempty(result.observables) ?
+        (result.spec.augmented ? copy(result.spec.original_endog) : copy(result.spec.endog)) :
+        result.observables
+    if data === nothing
+        isempty(result.data) &&
+            throw(ArgumentError("result carries no stored data; pass data=... explicitly"))
+        data = result.data
+    end
+    # Observed data → T_obs × n_obs orientation for the stats function
+    data_no = _orient_bayes_data(data, length(observables), T)
+    Y_obs = Matrix{T}(data_no')
+    T_obs = size(Y_obs, 1)
+
+    stats_fn = stats === nothing ? _make_default_stats(observables) : stats
+    obs_names, obs_vals = _stat_pairs(stats_fn(Y_obs))
+
+    n_total = size(result.theta_draws, 1)
+    n_use = min(n_draws, n_total)
+    idx = n_use == n_total ? collect(1:n_total) : randperm(rng, n_total)[1:n_use]
+    thetas = result.theta_draws[idx, :]
+
+    stat_names, rep_mat, n_eff = _predictive_stats_loop(
+        result.spec, thetas, result.param_names, observables, T_obs, stats_fn,
+        result.solver, result.solver_kwargs, rng)
+
+    skipped = n_use - n_eff
+    skipped > n_use ÷ 10 &&
+        @warn "posterior_predictive_check: $skipped of $n_use posterior draws failed " *
+              "to solve and were dropped"
+    n_eff == 0 &&
+        throw(ArgumentError("no posterior draw produced a valid replication"))
+
+    n_stats = length(obs_names)
+    pvals = zeros(T, n_stats)
+    for j in 1:n_stats
+        pvals[j] = mean(rep_mat[:, j] .>= obs_vals[j])
+    end
+
+    return PosteriorPredictiveCheck{T}(obs_names, Vector{T}(obs_vals), rep_mat,
+                                       pvals, n_use, n_eff)
+end
+
+function Base.show(io::IO, ppr::PriorPredictiveResult{T}) where {T}
+    header = Any[
+        "Prior draws"      ppr.n_draws;
+        "Effective draws"  ppr.n_effective;
+        "Periods"          ppr.T_periods;
+        "Statistics"       length(ppr.stat_names);
+    ]
+    _pretty_table(io, header;
+        title="Prior Predictive Analysis",
+        column_labels=["", ""],
+        alignment=[:l, :r])
+    ppr.n_effective == 0 && return
+    n_stats = length(ppr.stat_names)
+    data = Matrix{Any}(undef, n_stats, 6)
+    for j in 1:n_stats
+        col = ppr.stats[:, j]
+        q = quantile(col, [0.05, 0.5, 0.95])
+        data[j, 1] = ppr.stat_names[j]
+        data[j, 2] = round(mean(col); sigdigits=4)
+        data[j, 3] = round(std(col); sigdigits=4)
+        data[j, 4] = round(q[1]; sigdigits=4)
+        data[j, 5] = round(q[2]; sigdigits=4)
+        data[j, 6] = round(q[3]; sigdigits=4)
+    end
+    _pretty_table(io, data;
+        title="Prior Predictive Distribution of Statistics",
+        column_labels=["Statistic", "Mean", "Std", "5%", "50%", "95%"],
+        alignment=[:l, :r, :r, :r, :r, :r])
+end
+
+function Base.show(io::IO, ppc::PosteriorPredictiveCheck{T}) where {T}
+    header = Any[
+        "Posterior draws"  ppc.n_draws;
+        "Effective draws"  ppc.n_effective;
+        "Statistics"       length(ppc.stat_names);
+    ]
+    _pretty_table(io, header;
+        title="Posterior Predictive Check",
+        column_labels=["", ""],
+        alignment=[:l, :r])
+    n_stats = length(ppc.stat_names)
+    data = Matrix{Any}(undef, n_stats, 6)
+    for j in 1:n_stats
+        col = ppc.replicated[:, j]
+        q = quantile(col, [0.05, 0.95])
+        p = ppc.p_values[j]
+        data[j, 1] = ppc.stat_names[j]
+        data[j, 2] = round(ppc.observed[j]; sigdigits=4)
+        data[j, 3] = round(mean(col); sigdigits=4)
+        data[j, 4] = round(q[1]; sigdigits=4)
+        data[j, 5] = round(q[2]; sigdigits=4)
+        data[j, 6] = string(round(p; digits=3), (p < 0.05 || p > 0.95) ? " *" : "")
+    end
+    _pretty_table(io, data;
+        title="Observed vs Replicated (p = P(rep ≥ obs); * = extreme)",
+        column_labels=["Statistic", "Observed", "Rep. mean", "Rep. 5%", "Rep. 95%", "p-value"],
+        alignment=[:l, :r, :r, :r, :r, :r])
+end
+
+# =============================================================================
 # Bayesian DSGE IRF — posterior credible bands
 # =============================================================================
 

@@ -613,6 +613,36 @@ All three emit a warning naming the offending parameters when something looks un
 !!! warning "Identification is observables-dependent"
     A parameter can be perfectly identified with one observable set and unidentified with another. Re-run `identification_diagnostics` with exactly the `observables` you pass to `estimate_dsge_bayes`, and check several `n_lags` horizons (Iskrev's recommendation).
 
+### Predictive Checks
+
+**Prior predictive analysis** (Geweke 2005) answers "what kind of data does my prior believe in?" *before* estimation: draw parameters from the prior, solve, simulate, and summarize. A prior that implies absurd volatilities or persistence should be revised before it distorts the posterior:
+
+```@example dsge_estimation
+ppr = prior_predictive(spec, Dict(:rho => Beta(5, 2));
+    n_draws=50, T_periods=100, observables=[:y])
+ppr
+```
+
+**Posterior predictive checks** (Gelman, Meng & Stern 1996) assess model adequacy *after* estimation: draw from the posterior, simulate replicated datasets of the observed length, and compare summary statistics. The posterior predictive p-value ``p_j = \Pr(T_j(y^{\mathrm{rep}}) \geq T_j(y^{\mathrm{obs}}))`` should be interior — extreme values (marked `*` in the table) flag the data feature the model cannot reproduce:
+
+```@example dsge_estimation
+ppc = posterior_predictive_check(result_smc; n_draws=25)
+ppc
+```
+
+**Keywords**:
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `n_draws` | `Int` | `500` / `200` | Prior / posterior draws to simulate |
+| `T_periods` | `Int` | `200` | Simulated periods per draw (prior predictive only) |
+| `observables` | `Vector{Symbol}` | all endogenous | Which variables to summarize (prior predictive) |
+| `data` | matrix | stored sample | Observed data override (posterior check) |
+| `stats` | function | mean/var/AR(1)/cross-corr | `Y::Matrix → (names, values)` or `NamedTuple` of scalars |
+| `rng` | `AbstractRNG` | `Random.default_rng()` | Random number generator |
+
+**Return values**: `PriorPredictiveResult` carries the `n_effective × n_stats` draw-level statistic matrix (`stats`), the labels (`stat_names`), and the effective draw count. `PosteriorPredictiveCheck` adds the `observed` statistic vector and `p_values`. In both, parameter draws for which the model fails to solve are **dropped and counted** — `n_effective` reports the draws actually used, and a warning fires when more than 10% are lost (a symptom of a prior straddling the determinacy boundary).
+
 ### Posterior IRFs and FEVD (Herbst & Schorfheide 2015)
 
 Bayesian DSGE estimation quantifies parameter uncertainty. `irf` and `fevd` propagate this uncertainty into impulse responses and variance decompositions by re-solving the model at posterior parameter draws and computing pointwise credible bands.
