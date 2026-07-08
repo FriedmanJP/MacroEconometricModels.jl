@@ -493,6 +493,7 @@ export estimate_dsge_bayes, posterior_summary, marginal_likelihood, bayes_factor
 export prior_posterior_table, posterior_predictive
 export posterior_mode, PosteriorMode
 export mcmc_diagnostics, MCMCDiagnostics, trace
+export bridge_sampling_ml
 
 # Macro
 export @dsge

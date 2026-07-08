@@ -521,6 +521,12 @@ Fields:
 - `spec::DSGESpec{T}` — model specification
 - `solution::Union{DSGESolution{T}, PerturbationSolution{T}}` — solution at posterior mode
 - `state_space::Union{DSGEStateSpace{T}, NonlinearStateSpace{T}}` — state space at posterior mode
+- `data::Matrix{T}` — observed data (n_obs × T_obs) used for estimation (empty if
+  the result was built without estimation context, e.g. hand-constructed)
+- `observables::Vector{Symbol}` — observed endogenous variables
+- `measurement_error::Union{Nothing,Vector{T}}` — measurement error SDs
+- `solver::Symbol` — DSGE solver used during estimation
+- `solver_kwargs::NamedTuple` — solver keyword arguments used during estimation
 """
 struct BayesianDSGE{T<:AbstractFloat} <: AbstractDSGEModel
     theta_draws::Matrix{T}
@@ -535,18 +541,29 @@ struct BayesianDSGE{T<:AbstractFloat} <: AbstractDSGEModel
     spec::DSGESpec{T}
     solution::Union{DSGESolution{T}, PerturbationSolution{T}, ProjectionSolution{T}}
     state_space::Union{DSGEStateSpace{T}, NonlinearStateSpace{T}, ProjectionStateSpace{T}}
+    data::Matrix{T}
+    observables::Vector{Symbol}
+    measurement_error::Union{Nothing,Vector{T}}
+    solver::Symbol
+    solver_kwargs::NamedTuple
 
     function BayesianDSGE{T}(theta_draws, log_posterior, param_names, priors,
                               log_marginal_likelihood, method, acceptance_rate,
                               ess_history, phi_schedule, spec, solution,
-                              state_space) where {T<:AbstractFloat}
+                              state_space,
+                              data=zeros(T, 0, 0), observables=Symbol[],
+                              measurement_error=nothing, solver=:gensys,
+                              solver_kwargs=NamedTuple()) where {T<:AbstractFloat}
         n_draws, n_params = size(theta_draws)
         @assert length(log_posterior) == n_draws "log_posterior length must match n_draws"
         @assert length(param_names) == n_params "param_names length must match n_params"
         @assert method in (:smc, :rwmh, :csmc, :smc2, :importance) "unknown method: $method"
+        me = measurement_error === nothing ? nothing : Vector{T}(measurement_error)
         new{T}(theta_draws, log_posterior, param_names, priors,
                log_marginal_likelihood, method, acceptance_rate,
-               ess_history, phi_schedule, spec, solution, state_space)
+               ess_history, phi_schedule, spec, solution, state_space,
+               Matrix{T}(data), Vector{Symbol}(observables), me,
+               solver, solver_kwargs)
     end
 end
 

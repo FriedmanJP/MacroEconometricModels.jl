@@ -2929,4 +2929,99 @@ end
     end
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Bridge sampling marginal likelihood (T235 / #334)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "bridge_sampling_ml: agrees with SMC and Laplace (#334)" begin
+    _suppress_warnings() do
+    rng = Random.MersenneTwister(42)
+
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    true_spec = @dsge begin
+        parameters: ρ = 0.8, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    true_spec = compute_steady_state(true_spec)
+    sol_true = solve(true_spec; method=:gensys)
+    data = simulate(sol_true, 300; rng=rng)'
+
+    priors = Dict(:ρ => Beta(2, 2))
+
+    fit = estimate_dsge_bayes(spec, data, [0.5];
+        priors=priors, method=:mh, proposal=:mode,
+        n_draws=3000, burnin=1000, observables=[:y],
+        rng=Random.MersenneTwister(7))
+
+    # Estimation context is now stored on the result
+    @test !isempty(fit.data)
+    @test size(fit.data, 1) == 1                  # n_obs × T_obs orientation
+    @test fit.observables == [:y]
+    @test fit.solver == :gensys
+
+    bml = bridge_sampling_ml(fit; rng=Random.MersenneTwister(3))
+    @test isfinite(bml)
+
+    # Documented tolerance: 1 nat against the SMC tempering path and Laplace
+    smc_fit = estimate_dsge_bayes(spec, data, [0.5];
+        priors=priors, method=:smc, observables=[:y],
+        n_smc=300, rng=Random.MersenneTwister(11))
+    @test abs(bml - marginal_likelihood(smc_fit)) < 1.0
+
+    pm = posterior_mode(spec, data, [0.5]; priors=priors, observables=[:y])
+    @test abs(bml - pm.laplace_log_ml) < 1.0
+
+    # Student-t proposal agrees closely with the normal proposal
+    bml_t = bridge_sampling_ml(fit; proposal=:t, df=5, rng=Random.MersenneTwister(3))
+    @test isfinite(bml_t)
+    @test abs(bml_t - bml) < 0.5
+
+    # Works on SMC draws too (context stored for all methods)
+    bml_smc = bridge_sampling_ml(smc_fit; rng=Random.MersenneTwister(3))
+    @test isfinite(bml_smc)
+    @test abs(bml_smc - bml) < 0.5
+
+    # Invalid proposal family throws
+    @test_throws ArgumentError bridge_sampling_ml(fit; proposal=:bogus)
+    end
+end
+
+@testset "bridge_sampling_ml: failure paths return NaN + warn (#334)" begin
+    _suppress_warnings() do
+    rng = Random.MersenneTwister(42)
+
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:gensys)
+    data = simulate(sol, 100; rng=rng)'
+    priors = Dict(:ρ => Beta(2, 2))
+
+    # Chain too short → NaN + warning
+    fit_short = estimate_dsge_bayes(spec, data, [0.5];
+        priors=priors, method=:mh, n_draws=15, burnin=5, observables=[:y],
+        rng=Random.MersenneTwister(9))
+    bml = @test_logs (:warn, r"chain too short") match_mode=:any begin
+        bridge_sampling_ml(fit_short)
+    end
+    @test isnan(bml)
+    end
+end
+
 end  # @testset "Bayesian DSGE"

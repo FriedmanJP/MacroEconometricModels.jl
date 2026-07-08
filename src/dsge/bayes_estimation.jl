@@ -12,6 +12,7 @@ Provides:
 - `posterior_mode` — posterior mode + Laplace marginal likelihood + RWMH proposal seed
 - `posterior_summary` — posterior mean, median, std, credible intervals
 - `marginal_likelihood` — log marginal likelihood accessor
+- `bridge_sampling_ml` — bridge sampling log marginal likelihood (Meng & Wong 1996)
 - `bayes_factor` — log Bayes factor between two models
 - `prior_posterior_table` — prior vs posterior comparison
 - `posterior_predictive` — simulate from posterior draws
@@ -210,7 +211,7 @@ function estimate_dsge_bayes(spec::DSGESpec{T}, data::AbstractMatrix,
                              solver=solver, solver_kwargs=solver_kwargs, rng=rng)
         return _smc_state_to_bayesian_dsge(state, prior, param_names, spec, :smc,
                                             observables, measurement_error,
-                                            solver, solver_kwargs)
+                                            solver, solver_kwargs, data_mat)
 
     elseif method == :smc2
         state = _smc2_sample(spec, data_mat, param_names, prior, theta0_sorted;
@@ -223,7 +224,7 @@ function estimate_dsge_bayes(spec::DSGESpec{T}, data::AbstractMatrix,
                               n_screen=n_screen, rng=rng)
         return _smc_state_to_bayesian_dsge(state, prior, param_names, spec, :smc2,
                                             observables, measurement_error,
-                                            solver, solver_kwargs)
+                                            solver, solver_kwargs, data_mat)
 
     else  # :mh
         theta_init = theta0_sorted
@@ -255,7 +256,7 @@ function estimate_dsge_bayes(spec::DSGESpec{T}, data::AbstractMatrix,
         return _mh_to_bayesian_dsge(draws, log_posterior, acceptance_rate,
                                      prior, param_names, spec,
                                      observables, measurement_error,
-                                     solver, solver_kwargs)
+                                     solver, solver_kwargs, data_mat)
     end
 end
 
@@ -457,7 +458,8 @@ function _smc_state_to_bayesian_dsge(state::SMCState{T}, prior::DSGEPrior{T},
                                        observables::Vector{Symbol},
                                        measurement_error,
                                        solver::Symbol,
-                                       solver_kwargs::NamedTuple) where {T<:AbstractFloat}
+                                       solver_kwargs::NamedTuple,
+                                       data::Matrix{T}=zeros(T, 0, 0)) where {T<:AbstractFloat}
     # theta_draws: transpose from n_params × N_smc to N_smc × n_params
     theta_draws = Matrix{T}(state.theta_particles')
 
@@ -488,7 +490,8 @@ function _smc_state_to_bayesian_dsge(state::SMCState{T}, prior::DSGEPrior{T},
         theta_draws, log_posterior, param_names, prior,
         state.log_marginal_likelihood, method_sym, acceptance_rate,
         state.ess_history, state.phi_schedule,
-        spec, sol, ss
+        spec, sol, ss,
+        data, observables, measurement_error, solver, solver_kwargs
     )
 end
 
@@ -511,7 +514,8 @@ function _mh_to_bayesian_dsge(draws::Matrix{T}, log_posterior::Vector{T},
                                 observables::Vector{Symbol},
                                 measurement_error,
                                 solver::Symbol,
-                                solver_kwargs::NamedTuple) where {T<:AbstractFloat}
+                                solver_kwargs::NamedTuple,
+                                data::Matrix{T}=zeros(T, 0, 0)) where {T<:AbstractFloat}
     # Posterior mean from draws
     theta_mean = vec(mean(draws; dims=1))
 
@@ -536,7 +540,8 @@ function _mh_to_bayesian_dsge(draws::Matrix{T}, log_posterior::Vector{T},
         draws, log_posterior, param_names, prior,
         log_ml, :rwmh, acceptance_rate,
         T[], T[],  # no ESS history or phi schedule for MH
-        spec, sol, ss
+        spec, sol, ss,
+        data, observables, measurement_error, solver, solver_kwargs
     )
 end
 
@@ -681,6 +686,173 @@ Following Kass & Raftery (1995), `2 * log BF > 6` is strong evidence.
 """
 function bayes_factor(r1::BayesianDSGE, r2::BayesianDSGE)
     return r1.log_marginal_likelihood - r2.log_marginal_likelihood
+end
+
+"""
+    bridge_sampling_ml(result::BayesianDSGE; proposal=:normal, df=5,
+                       n_proposal=0, max_iter=1000, tol=1e-10,
+                       rng=Random.default_rng()) → T
+
+Bridge sampling estimate of the log marginal likelihood from stored posterior
+draws (Meng & Wong 1996), using the optimal bridge function with the iterative
+implementation of Gronau et al. (2017).
+
+The estimator works in the **prior-transformed unconstrained space** (same
+[`ParameterTransform`](@ref) as [`posterior_mode`](@ref)): the posterior draws
+are mapped through the transform, a multivariate normal (or Student-t) proposal
+`g` is fitted to the first half of the transformed draws, and the bridge
+recursion
+
+```math
+r_{t+1} = \\frac{\\tfrac{1}{N_2}\\sum_j \\ell_{2,j} / (s_1 \\ell_{2,j} + s_2 r_t)}
+               {\\tfrac{1}{N_1}\\sum_i 1 / (s_1 \\ell_{1,i} + s_2 r_t)},
+\\qquad \\ell = \\frac{p(Y|\\theta)\\,\\pi(\\theta)\\,|J(\\phi)|}{g(\\phi)}
+```
+
+is iterated to convergence on the second half (`ℓ₁`) and fresh draws from `g`
+(`ℓ₂`); `log p̂(Y) = log r^*`. All averages run in shifted log space to avoid
+overflow. Bridge sampling is markedly more stable than the modified harmonic
+mean, whose importance weights can have infinite variance.
+
+Returns `NaN` with a warning when the chain is too short, the result carries no
+estimation data, too few proposal draws yield a finite posterior kernel, or the
+recursion fails to converge — never a silently wrong number. The additive
+constant convention matches the SMC tempering-path estimate, so the two are
+comparable via [`bayes_factor`](@ref).
+
+# Keywords
+- `proposal::Symbol=:normal` — proposal family: `:normal` or `:t` (Student-t)
+- `df::Real=5` — degrees of freedom for the `:t` proposal
+- `n_proposal::Int=0` — number of proposal draws (`0` → same as bridge half)
+- `max_iter::Int=1000` — maximum bridge iterations
+- `tol::Real=1e-10` — relative convergence tolerance on `r`
+- `rng::AbstractRNG` — random number generator for proposal draws
+
+# References
+- Meng, X.-L. & Wong, W. H. (1996). Simulating Ratios of Normalizing Constants
+  via a Simple Identity. *Statistica Sinica*, 6, 831-860.
+- Gronau, Q. F. et al. (2017). A Tutorial on Bridge Sampling.
+  *Journal of Mathematical Psychology*, 81, 80-97.
+"""
+function bridge_sampling_ml(result::BayesianDSGE{T};
+                            proposal::Symbol=:normal,
+                            df::Real=5,
+                            n_proposal::Int=0,
+                            max_iter::Int=1000,
+                            tol::Real=1e-10,
+                            rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    proposal in (:normal, :t) ||
+        throw(ArgumentError("proposal must be :normal or :t, got :$proposal"))
+    N, d = size(result.theta_draws)
+
+    if isempty(result.data)
+        @warn "bridge_sampling_ml: result carries no estimation data " *
+              "(hand-constructed result?); returning NaN"
+        return T(NaN)
+    end
+    if N < max(20, 4 * d)
+        @warn "bridge_sampling_ml: chain too short (N=$N draws for d=$d " *
+              "parameters); returning NaN"
+        return T(NaN)
+    end
+
+    prior = result.priors
+    pt = ParameterTransform(prior.lower, prior.upper)
+
+    # Transform all draws to the unconstrained space
+    phi = zeros(T, N, d)
+    for i in 1:N
+        phi[i, :] = to_unconstrained(pt, result.theta_draws[i, :])
+    end
+    finite_rows = [all(isfinite, @view phi[i, :]) for i in 1:N]
+    if !all(finite_rows)
+        keep = findall(finite_rows)
+        length(keep) < max(20, 4 * d) &&
+            (@warn "bridge_sampling_ml: too few interior draws after transform"; return T(NaN))
+        phi = phi[keep, :]
+        N = length(keep)
+    end
+
+    # First half fits the proposal, second half enters the bridge (Gronau et al.)
+    n_fit = N ÷ 2
+    idx_bridge = (n_fit+1):N
+    n1 = length(idx_bridge)
+    n2 = n_proposal > 0 ? n_proposal : n1
+
+    mu_g = vec(mean(@view(phi[1:n_fit, :]); dims=1))
+    Sigma_g = cov(@view(phi[1:n_fit, :]))
+    Sigma_g = Matrix{T}((Sigma_g + Sigma_g') / 2)
+    L = _suppress_warnings() do
+        safe_cholesky(Sigma_g)
+    end
+    Sigma_pd = Matrix{T}(L * L')
+    g = proposal == :normal ? MvNormal(mu_g, Sigma_pd) :
+                              MvTDist(T(df), mu_g, Sigma_pd)
+
+    # log |J(φ)| — Jacobian of the unconstrained → constrained map
+    log_jac(phiv) = sum(log(abs(transform_jacobian(pt, phiv)[k, k])) for k in 1:d)
+
+    # ℓ₁: posterior-kernel over proposal at the bridge half (kernel values stored)
+    l1 = zeros(T, n1)
+    for (k, i) in enumerate(idx_bridge)
+        phiv = phi[i, :]
+        l1[k] = result.log_posterior[i] + log_jac(phiv) - T(logpdf(g, phiv))
+    end
+
+    # ℓ₂: posterior-kernel over proposal at fresh g draws — evaluated through the
+    # same likelihood closure the samplers used
+    ll_fn = _build_likelihood_fn(result.spec, result.param_names, result.data,
+                                 result.observables, result.measurement_error,
+                                 result.solver, result.solver_kwargs)
+    phi_g = rand(rng, g, n2)                       # d × n2
+    l2 = fill(T(-Inf), n2)
+    for j in 1:n2
+        phiv = Vector{T}(phi_g[:, j])
+        theta_j = to_constrained(pt, phiv)
+        lp = _log_prior(theta_j, prior)
+        isfinite(lp) || continue
+        ll = ll_fn(theta_j)
+        isfinite(ll) || continue
+        l2[j] = ll + lp + log_jac(phiv) - T(logpdf(g, phiv))
+    end
+    n2_finite = count(isfinite, l2)
+    if n2_finite < max(10, n2 ÷ 20)
+        @warn "bridge_sampling_ml: only $n2_finite of $n2 proposal draws yield a " *
+              "finite posterior kernel; proposal too diffuse — returning NaN"
+        return T(NaN)
+    end
+
+    # Bridge recursion in shifted log space
+    lstar = median(filter(isfinite, l1))
+    e1 = [isfinite(v) ? exp(v - lstar) : zero(T) for v in l1]
+    e2 = [isfinite(v) ? exp(v - lstar) : zero(T) for v in l2]
+    s1 = T(n1) / (n1 + n2)
+    s2 = T(n2) / (n1 + n2)
+
+    r = one(T)
+    converged = false
+    for _ in 1:max_iter
+        num = mean(e2 ./ (s1 .* e2 .+ s2 * r))
+        den = mean(one(T) ./ (s1 .* e1 .+ s2 * r))
+        r_new = num / den
+        if !isfinite(r_new) || r_new <= 0
+            break
+        end
+        if abs(r_new - r) <= tol * abs(r_new)
+            r = r_new
+            converged = true
+            break
+        end
+        r = r_new
+    end
+
+    if !converged || !isfinite(r) || r <= 0
+        @warn "bridge_sampling_ml: bridge recursion did not converge in " *
+              "$max_iter iterations; returning NaN"
+        return T(NaN)
+    end
+
+    return log(r) + lstar
 end
 
 """

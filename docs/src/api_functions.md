@@ -709,6 +709,7 @@ posterior_mode
 PosteriorMode
 posterior_summary
 marginal_likelihood
+bridge_sampling_ml
 bayes_factor
 prior_posterior_table
 posterior_predictive

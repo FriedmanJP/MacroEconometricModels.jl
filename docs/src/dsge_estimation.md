@@ -480,6 +480,30 @@ ml = marginal_likelihood(result_smc)
 log_bf = bayes_factor(result1, result2)
 ```
 
+For RWMH output, `bridge_sampling_ml` provides a marginal-likelihood estimate that is far more stable than harmonic-mean-style estimators (whose importance weights can have infinite variance). It fits a proposal density to the posterior draws in the prior-transformed unconstrained space and iterates the Meng & Wong (1996) optimal-bridge recursion to convergence (Gronau et al. 2017):
+
+```@example dsge_estimation
+bml = bridge_sampling_ml(result_mode_mh)
+```
+
+**Keywords** (`bridge_sampling_ml`):
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `proposal` | `Symbol` | `:normal` | Proposal family fitted to the draws: `:normal` or `:t` |
+| `df` | `Real` | `5` | Degrees of freedom for the `:t` proposal |
+| `n_proposal` | `Int` | `0` | Number of proposal draws (`0` → same as the bridge half) |
+| `max_iter` | `Int` | `1000` | Maximum bridge-recursion iterations |
+| `tol` | `Real` | `1e-10` | Relative convergence tolerance on the bridge ratio |
+| `rng` | `AbstractRNG` | `Random.default_rng()` | RNG for proposal draws |
+
+**Returns**: the scalar log marginal likelihood estimate, on the same additive-constant convention as the SMC tempering-path estimate and the Laplace approximation from `posterior_mode` — the three are directly comparable via `bayes_factor`. Failure cases (chain too short, proposal too diffuse, recursion non-convergence) return `NaN` with a warning, never a silently wrong number.
+
+!!! tip "Which marginal-likelihood estimator?"
+    - **SMC** (`method=:smc`): the tempering-path estimate is a by-product — use it.
+    - **RWMH chains**: prefer **bridge sampling** over harmonic-mean estimators; it is consistent with much lighter tail conditions.
+    - **Quick model comparison at the mode**: the Laplace approximation from `posterior_mode` is instantaneous and accurate when the posterior is approximately Gaussian.
+
 ```@example dsge_estimation
 # Prior vs posterior comparison table
 tbl = prior_posterior_table(result_smc)
