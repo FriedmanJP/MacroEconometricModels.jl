@@ -727,6 +727,8 @@ prior_predictive
 PriorPredictiveResult
 posterior_predictive_check
 PosteriorPredictiveCheck
+dynare_prior
+InverseGamma1
 ```
 
 ### Occasionally Binding Constraints

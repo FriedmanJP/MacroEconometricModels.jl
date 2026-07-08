@@ -371,6 +371,7 @@ include("dsge/estimation.jl")
 
 # DSGE Bayesian estimation (after estimation.jl, needs DSGESpec, solve, ParameterTransform)
 include("dsge/bayes_types.jl")
+include("dsge/priors.jl")
 include("dsge/kalman_dsge.jl")
 include("dsge/particle_filter.jl")
 include("dsge/smc.jl")
@@ -500,6 +501,7 @@ export learning_rate_check, LearningRateCheck
 export prior_posterior_overlap, PriorPosteriorOverlap
 export prior_predictive, PriorPredictiveResult
 export posterior_predictive_check, PosteriorPredictiveCheck
+export dynare_prior, InverseGamma1
 
 # Macro
 export @dsge

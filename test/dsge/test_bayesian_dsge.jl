@@ -3309,4 +3309,130 @@ end
     end
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Dynare prior-convention shims (T239 / #338)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "dynare_prior: moment-matched constructors (#338)" begin
+    # normal — passthrough
+    d = dynare_prior(:normal, 0.3, 0.05)
+    @test d isa Normal
+    @test mean(d) ≈ 0.3 && std(d) ≈ 0.05
+
+    # gamma — k = m²/s², θ = s²/m
+    g = dynare_prior(:gamma, 1.5, 0.25)
+    @test g isa Gamma
+    @test mean(g) ≈ 1.5 atol=1e-12
+    @test std(g) ≈ 0.25 atol=1e-12
+    @test g.α ≈ 1.5^2 / 0.25^2 atol=1e-10
+
+    # beta — analytic shape parameters
+    b = dynare_prior(:beta, 0.7, 0.1)
+    @test b isa Beta
+    @test mean(b) ≈ 0.7 atol=1e-12
+    @test std(b) ≈ 0.1 atol=1e-12
+    k0 = 0.7 * 0.3 / 0.01 - 1
+    @test b.α ≈ 0.7 * k0 atol=1e-10
+    @test b.β ≈ 0.3 * k0 atol=1e-10
+
+    # generalized beta on (p3, p4) = (0, 0.9)
+    bs = dynare_prior(:beta, 0.5, 0.1; lower=0.0, upper=0.9)
+    @test mean(bs) ≈ 0.5 atol=1e-10
+    @test std(bs) ≈ 0.1 atol=1e-10
+    @test minimum(bs) ≈ 0.0 atol=1e-12
+    @test maximum(bs) ≈ 0.9 atol=1e-12
+
+    # uniform — from (mean, std) or explicit (lower, upper)
+    u = dynare_prior(:uniform, 0.5, 0.1)
+    @test u isa Uniform
+    @test mean(u) ≈ 0.5 && std(u) ≈ 0.1
+    @test dynare_prior(:uniform, 0.0, 0.0; lower=1.0, upper=3.0) == Uniform(1.0, 3.0)
+
+    # validation
+    @test_throws ArgumentError dynare_prior(:beta, 0.5, 0.6)     # std² ≥ m(1−m)
+    @test_throws ArgumentError dynare_prior(:beta, 1.2, 0.1)     # mean outside (0,1)
+    @test_throws ArgumentError dynare_prior(:gamma, -1.0, 1.0)
+    @test_throws ArgumentError dynare_prior(:uniform, 0.0, 0.0; lower=2.0, upper=1.0)
+    @test_throws ArgumentError dynare_prior(:bogus, 1.0, 1.0)
+end
+
+@testset "dynare_prior: inverse gamma on σ (InverseGamma1) (#338)" begin
+    # (mean, std) → (s, ν) inversion reproduces the requested σ-moments
+    ig = dynare_prior(:inv_gamma, 0.02, 0.05)
+    @test ig isa InverseGamma1
+    @test mean(ig) ≈ 0.02 rtol=1e-6
+    @test std(ig) ≈ 0.05 rtol=1e-6
+
+    # The density is Dynare's TYPE-1 kernel on σ (NOT σ²):
+    # log p(x₁) − log p(x₂) = −(ν+1)Δlog x − (s/2)Δ(1/x²)
+    x1, x2 = 0.03, 0.08
+    lhs = logpdf(ig, x1) - logpdf(ig, x2)
+    rhs = -(ig.nu + 1) * (log(x1) - log(x2)) - ig.s / 2 * (1 / x1^2 - 1 / x2^2)
+    @test lhs ≈ rhs rtol=1e-10
+
+    # σ² ~ InverseGamma(ν/2, s/2) — the exact Dynare correspondence
+    @test cdf(ig, 0.05) ≈ cdf(InverseGamma(ig.nu / 2, ig.s / 2), 0.05^2) rtol=1e-10
+
+    # ... and this differs from naively putting the numbers into InverseGamma
+    naive = InverseGamma(0.02, 0.05)
+    @test !(logpdf(ig, 0.05) ≈ logpdf(naive, 0.05))
+
+    # proper density: integrates to 1, quantile/cdf round trip, support
+    xs = range(1e-6, 2.0; length=200_000)
+    @test sum(pdf.(Ref(ig), xs)) * step(xs) ≈ 1.0 atol=5e-3
+    @test cdf(ig, quantile(ig, 0.3)) ≈ 0.3 rtol=1e-8
+    @test logpdf(ig, -0.1) == -Inf
+    @test minimum(ig) == 0.0 && maximum(ig) == Inf
+
+    # draw-based moments on a milder prior (ν ≈ 14.7 — 4th moment exists)
+    ig_mild = dynare_prior(:inv_gamma, 0.5, 0.1)
+    rng = Random.MersenneTwister(1)
+    draws = [rand(rng, ig_mild) for _ in 1:100_000]
+    @test mean(draws) ≈ 0.5 rtol=0.02
+    @test std(draws) ≈ 0.1 rtol=0.05
+
+    # :inv_gamma2 is on the variance with matched moments
+    igv = dynare_prior(:inv_gamma2, 0.004, 0.002)
+    @test igv isa InverseGamma
+    @test mean(igv) ≈ 0.004 rtol=1e-12
+    @test std(igv) ≈ 0.002 rtol=1e-12
+
+    # direct (s, ν) constructor validation
+    @test_throws ArgumentError InverseGamma1(-1.0, 3.0)
+    @test_throws ArgumentError InverseGamma1(1.0, -3.0)
+end
+
+@testset "dynare_prior: end-to-end in estimate_dsge_bayes (#338)" begin
+    _suppress_warnings() do
+    rng = Random.MersenneTwister(42)
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    ts = @dsge begin
+        parameters: ρ = 0.8, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    ts = compute_steady_state(ts)
+    data = simulate(solve(ts; method=:gensys), 200; rng=rng)'
+
+    priors = Dict{Symbol,Distribution}(
+        :ρ => dynare_prior(:beta, 0.5, 0.2),
+        :σ => dynare_prior(:inv_gamma, 0.5, 0.3))
+    fit = estimate_dsge_bayes(spec, data, [0.5, 0.5];
+        priors=priors, method=:smc, n_smc=200, observables=[:y],
+        rng=Random.MersenneTwister(3))
+    ps = posterior_summary(fit)
+    @test abs(ps[:ρ][:mean] - 0.8) < 0.25
+    @test abs(ps[:σ][:mean] - 0.5) < 0.2
+    end
+end
+
 end  # @testset "Bayesian DSGE"

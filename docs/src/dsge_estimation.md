@@ -254,6 +254,29 @@ nothing # hide
 | `Normal(mu, sigma)` | ``(-\infty, \infty)`` | Unbounded parameters |
 | `Uniform(a, b)` | ``[a, b]`` | Weakly informative, bounded |
 
+#### Porting Dynare Priors
+
+Published priors are almost always declared in Dynare's **(mean, std)** convention. `dynare_prior` converts them into correctly parameterized `Distributions` objects — solving the moment-matching equations and, crucially, handling the inverse-gamma convention mismatch:
+
+| Dynare pdf | `dynare_prior` call | Returns |
+|---|---|---|
+| `normal_pdf(m, s)` | `dynare_prior(:normal, m, s)` | `Normal(m, s)` |
+| `gamma_pdf(m, s)` | `dynare_prior(:gamma, m, s)` | `Gamma(m²/s², s²/m)` |
+| `beta_pdf(m, s)` | `dynare_prior(:beta, m, s)` | moment-matched `Beta(α, β)` |
+| `beta_pdf(m, s, p3, p4)` | `dynare_prior(:beta, m, s; lower=p3, upper=p4)` | shifted/scaled Beta on `(p3, p4)` |
+| `inv_gamma_pdf(m, s)` | `dynare_prior(:inv_gamma, m, s)` | `InverseGamma1` **on σ** |
+| `inv_gamma2_pdf(m, s)` | `dynare_prior(:inv_gamma2, m, s)` | `InverseGamma` **on σ²** |
+| `uniform_pdf(...)` | `dynare_prior(:uniform, m, s)` or `; lower=a, upper=b` | `Uniform(a, b)` |
+
+```@example dsge_estimation
+priors_dynare = Dict{Symbol,Distribution}(
+    :rho => dynare_prior(:beta, 0.7, 0.1))
+mean(priors_dynare[:rho]), std(priors_dynare[:rho])
+```
+
+!!! danger "Dynare's inverse gamma is on σ, not σ²"
+    Dynare's `inv_gamma_pdf` is the **type-1** inverse gamma on the *standard deviation*; `Distributions.InverseGamma` is on the *variance*. Feeding Dynare's numbers straight into `Distributions.InverseGamma` — the natural-looking port — silently produces a completely different prior. `dynare_prior(:inv_gamma, m, s)` returns an [`InverseGamma1`](@ref) whose draws are σ values with exactly the requested mean and standard deviation (`σ² ~ InverseGamma(ν/2, s/2)` internally, matching Dynare's `(s, ν)` parameterization).
+
 ### Sequential Monte Carlo (Herbst & Schorfheide 2014)
 
 **SMC** draws from a sequence of tempered distributions that bridge the prior to the posterior:
