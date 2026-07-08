@@ -21,6 +21,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      # Threaded example blocks (pvar bootstrap) parallelize on the runner's 4 vCPUs,
+      # and verify_examples.jl needs >=2 threads for its per-block timeout watchdog.
+      JULIA_NUM_THREADS: "4"
     steps:
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3
@@ -39,6 +42,10 @@ jobs:
       # (any example failure) fails the job before deploy. No continue-on-error.
       - name: Verify documentation examples
         run: julia --project=docs docs/verify_examples.jl --all
+        env:
+          # Hosted runners are ~2x slower than local; 240 s still backstops real hangs
+          # (heaviest legitimate blocks: pvar.md bootstrap, tests_unitroot_advanced.md grid searches).
+          DOCS_VERIFY_TIMEOUT: "240"
       - uses: julia-actions/julia-docdeploy@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

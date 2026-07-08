@@ -21,6 +21,7 @@ _df.id = _pd_raw.group_id
 _df.time = _pd_raw.time_id
 _mask = [all(isfinite, row) for row in eachrow(Matrix(_df[:, _dep_vars]))]
 _df = _df[_mask, :]
+_df = _df[_df.time .> maximum(_df.time) - 30, :]
 pd = xtset(_df, :id, :time)
 ```
 
