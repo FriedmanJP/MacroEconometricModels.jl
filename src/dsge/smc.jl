@@ -162,16 +162,28 @@ end
 # =============================================================================
 
 """
-    _adaptive_tempering(log_liks, phi_old, ess_target, N)
+    _adaptive_tempering(log_liks, log_weights, phi_old, ess_target, N)
 
-Find `phi_new` via bisection such that the ESS of the incremental importance
-weights `exp((phi_new - phi_old) * log_liks)` equals `ess_target * N`.
+Find `phi_new` via bisection such that the ESS of the **updated cumulative**
+importance weights `W_{n−1,j} · exp((phi_new − phi_old) · ll_j)` equals
+`ess_target · N`.
 
-If ESS at `phi = 1.0` exceeds the target, returns `1.0` (final step).
-Maximum 50 bisection iterations.
+The tempering reweight multiplies into the incoming (possibly non-uniform)
+cumulative weights `log_weights`, so the ESS that governs the step size and the
+resample decision must be evaluated on `log_weights .+ Δφ .* log_liks`, not on
+`Δφ .* log_liks` alone (E-10 / #133). In the log domain, for `lw = log_weights
+.+ Δφ .* log_liks`,
+
+    log ESS(Δφ) = 2·logsumexp(lw) − logsumexp(2·lw).
+
+Under uniform incoming weights this reduces to the old incremental-only form.
+If ESS at `phi = 1.0` exceeds the target, returns `1.0` (final step). Maximum
+50 bisection iterations.
 
 # Arguments
 - `log_liks::Vector{T}` — per-particle log-likelihoods
+- `log_weights::Vector{T}` — current cumulative (unnormalized) log-weights carried
+  into this stage, **before** folding in the tempering reweight
 - `phi_old::T` — current tempering parameter
 - `ess_target::Real` — target ESS as fraction of N (e.g., 0.5)
 - `N::Int` — number of particles
@@ -179,18 +191,18 @@ Maximum 50 bisection iterations.
 # Returns
 `phi_new::T` — next tempering parameter in `(phi_old, 1.0]`.
 """
-function _adaptive_tempering(log_liks::AbstractVector{T}, phi_old::T,
-                              ess_target::Real, N::Int) where {T<:AbstractFloat}
+function _adaptive_tempering(log_liks::AbstractVector{T}, log_weights::AbstractVector{T},
+                              phi_old::T, ess_target::Real, N::Int) where {T<:AbstractFloat}
     target_ess = T(ess_target) * N
 
-    # Helper: compute ESS at a given phi
+    # Helper: ESS of the updated cumulative weights at a given phi.
     function _compute_ess(phi)
         delta_phi = phi - phi_old
-        inc_log_w = delta_phi .* log_liks
-        # Normalize in log space
-        lse = _logsumexp(inc_log_w)
-        w = exp.(inc_log_w .- lse)
-        return one(T) / sum(abs2, w)
+        lw = log_weights .+ delta_phi .* log_liks
+        a = _logsumexp(lw)
+        isfinite(a) || return zero(T)            # all weights collapsed
+        b = _logsumexp(T(2) .* lw)
+        return exp(T(2) * a - b)
     end
 
     # Check if we can jump straight to phi = 1
@@ -224,6 +236,51 @@ function _adaptive_tempering(log_liks::AbstractVector{T}, phi_old::T,
     end
 
     return phi_new
+end
+
+"""
+    _terminal_resample!(state, N, rng) -> Bool
+
+Systematic resample of the SMC particles at termination (E-09 / #132).
+
+When the final tempering stage reaches φ=1 without triggering a resample, the
+stored θ-particles carry **non-uniform** terminal weights. Downstream consumers
+(`posterior_summary` order-statistic quantiles, and the `irf`/`fevd`/`simulate`
+draw selectors that pick particles uniformly) treat `theta_draws` as equally
+weighted, biasing medians, credible intervals and posterior bands. Resampling
+once on the normalized final weights and resetting weights to uniform makes the
+stored draws equal-weighted samples from the φ=1 posterior.
+
+Returns `true` if a resample was performed, `false` when the weights are already
+(numerically) uniform — e.g. the final stage did resample — so there is no
+redundant double resample. Resamples `theta_particles`, `log_likelihoods` and
+`log_priors` (the fields `_smc_state_to_bayesian_dsge` consumes).
+"""
+function _terminal_resample!(state::SMCState{T}, N::Int,
+                              rng::AbstractRNG) where {T<:AbstractFloat}
+    weights = Vector{T}(undef, N)
+    _normalize_log_weights!(weights, state.log_weights)
+    ess = one(T) / sum(abs2, weights)
+    ess >= N * (one(T) - T(1e-8)) && return false   # already uniform → no-op
+
+    ancestors = collect(1:N)
+    cumweights = zeros(T, N)
+    _systematic_resample!(ancestors, weights, cumweights, N, rng)
+
+    theta_new = similar(state.theta_particles)
+    ll_new = similar(state.log_likelihoods)
+    lp_new = similar(state.log_priors)
+    @inbounds for j in 1:N
+        a = ancestors[j]
+        theta_new[:, j] = state.theta_particles[:, a]
+        ll_new[j] = state.log_likelihoods[a]
+        lp_new[j] = state.log_priors[a]
+    end
+    state.theta_particles .= theta_new
+    state.log_likelihoods .= ll_new
+    state.log_priors .= lp_new
+    fill!(state.log_weights, -log(T(N)))
+    return true
 end
 
 # =============================================================================
@@ -511,7 +568,7 @@ function _smc_sample(spec::DSGESpec{T}, data::AbstractMatrix,
             end
         end
 
-        phi_new = _adaptive_tempering(valid_lls, phi, ess_target, N)
+        phi_new = _adaptive_tempering(valid_lls, state.log_weights, phi, ess_target, N)
         delta_phi = phi_new - phi
 
         # Compute incremental log weights
@@ -523,8 +580,14 @@ function _smc_sample(spec::DSGESpec{T}, data::AbstractMatrix,
             end
         end
 
-        # Update log marginal likelihood: log p(Y) += log(1/N * sum exp(inc_log_w))
-        state.log_marginal_likelihood += _logsumexp(inc_log_w) - log(T(N))
+        # Update log marginal likelihood with the ratio increment (E-08 / #131):
+        #   ΔlogML = logsumexp(log_weights + inc) − logsumexp(log_weights)
+        # using the (unnormalized) cumulative log-weights carried INTO this stage —
+        # i.e. BEFORE folding inc_log_w into state.log_weights below. This reduces to
+        # logsumexp(inc) − log N only when the incoming weights are uniform (right after
+        # a resample); the old uniform form biased logML after any non-resampled stage.
+        state.log_marginal_likelihood +=
+            _logsumexp(state.log_weights .+ inc_log_w) - _logsumexp(state.log_weights)
 
         # Update particle log weights
         state.log_weights .+= inc_log_w
@@ -569,6 +632,9 @@ function _smc_sample(spec::DSGESpec{T}, data::AbstractMatrix,
 
         phi = phi_new
     end
+
+    # Terminal resample so the stored draws are equal-weighted (E-09 / #132).
+    _terminal_resample!(state, N, rng)
 
     return state
 end
@@ -1110,7 +1176,7 @@ function _smc2_sample(spec::DSGESpec{T}, data::AbstractMatrix,
             end
         end
 
-        phi_new = _adaptive_tempering(valid_lls, phi, ess_target, N)
+        phi_new = _adaptive_tempering(valid_lls, state.log_weights, phi, ess_target, N)
         delta_phi = phi_new - phi
 
         # Compute incremental log weights
@@ -1121,8 +1187,13 @@ function _smc2_sample(spec::DSGESpec{T}, data::AbstractMatrix,
             end
         end
 
-        # Update log marginal likelihood
-        state.log_marginal_likelihood += _logsumexp(inc_log_w) - log(T(N))
+        # Update log marginal likelihood with the ratio increment (E-08 / #131):
+        #   ΔlogML = logsumexp(log_weights + inc) − logsumexp(log_weights)
+        # using the (unnormalized) cumulative log-weights carried INTO this stage —
+        # BEFORE folding inc_log_w into state.log_weights below. Reduces to the old
+        # logsumexp(inc) − log N only under uniform incoming weights (post-resample).
+        state.log_marginal_likelihood +=
+            _logsumexp(state.log_weights .+ inc_log_w) - _logsumexp(state.log_weights)
 
         # Update particle log weights
         state.log_weights .+= inc_log_w
@@ -1311,6 +1382,9 @@ function _smc2_sample(spec::DSGESpec{T}, data::AbstractMatrix,
 
         phi = phi_new
     end
+
+    # Terminal resample so the stored draws are equal-weighted (E-09 / #132).
+    _terminal_resample!(state, N, rng)
 
     return state
 end

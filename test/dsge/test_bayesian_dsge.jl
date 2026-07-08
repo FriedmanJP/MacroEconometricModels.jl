@@ -914,18 +914,17 @@ end
 @testset "Adaptive tempering bisection" begin
     N = 100
     log_liks = randn(Random.MersenneTwister(123), N)
+    log_weights = fill(-log(N), N)          # uniform incoming weights (5-arg signature, #133)
     phi_old = 0.0
     ess_target = 0.5
 
-    phi_new = MacroEconometricModels._adaptive_tempering(log_liks, phi_old, ess_target, N)
+    phi_new = MacroEconometricModels._adaptive_tempering(log_liks, log_weights, phi_old, ess_target, N)
     @test phi_new > phi_old
     @test phi_new <= 1.0
 
-    # Check ESS at this phi
-    delta_phi = phi_new - phi_old
-    inc_log_w = delta_phi .* log_liks
-    inc_log_w .-= MacroEconometricModels._logsumexp(inc_log_w) - log(N)
-    w = exp.(inc_log_w)
+    # ESS of the cumulative weights at this phi (reduces to incremental under uniform incoming)
+    lw = log_weights .+ (phi_new - phi_old) .* log_liks
+    w = exp.(lw .- MacroEconometricModels._logsumexp(lw))
     w ./= sum(w)
     ess = 1.0 / sum(abs2, w)
     @test abs(ess - ess_target * N) < 5.0
@@ -1435,6 +1434,117 @@ end
     # miss by ≈ 2.5 and fail this bound.
     @test isapprox(ml_smc, ml_mh; atol=2.0)
     end
+end
+
+# ── E-08 / #131: SMC marginal-likelihood increment under non-uniform weights ──
+
+@testset "SMC log marginal likelihood: ratio increment (resample-invariant)" begin
+    # The per-stage ML increment must be logsumexp(lw+inc)−logsumexp(lw), the
+    # weighted-average tempering factor, NOT logsumexp(inc)−log N (valid only when
+    # incoming weights are uniform). A low ess_target takes few, large tempering
+    # steps that leave many stages *un*-resampled (non-uniform incoming weights),
+    # while a high ess_target resamples almost every stage. Both configurations
+    # estimate the *same* marginal likelihood, so their log-ML must agree within
+    # Monte Carlo error. Pre-fix (uniform form) the two configs disagreed by ≈0.36;
+    # the ratio form brings them to ≈0.05 (well inside MC noise).
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 1.0
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    true_spec = @dsge begin
+        parameters: ρ = 0.7, σ = 1.0
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    true_spec = compute_steady_state(true_spec)
+    sol_true = solve(true_spec; method=:gensys)
+    sim_data = simulate(sol_true, 150; rng=Random.MersenneTwister(99))
+    priors = Dict(:ρ => Beta(2, 2), :σ => Gamma(2, 0.5))
+
+    run_cfg(ess) = [marginal_likelihood(estimate_dsge_bayes(spec, sim_data, [0.5, 1.0];
+                        priors=priors, method=:smc, observables=[:y], n_smc=400,
+                        ess_target=ess, rng=Random.MersenneTwister(sd)))
+                    for sd in 1:6]
+
+    ml_lo = run_cfg(0.50)   # few, large steps → non-resampled stages
+    ml_hi = run_cfg(0.90)   # many, small steps → resamples ≈ every stage
+    @test all(isfinite, ml_lo)
+    @test all(isfinite, ml_hi)
+    @test all(<(0), ml_lo)
+    # Resample-invariance of the marginal-likelihood estimate. Documented MC
+    # tolerance 0.3; the pre-fix uniform form biased ml_lo by ≈0.36 and fails this.
+    @test isapprox(sum(ml_lo)/6, sum(ml_hi)/6; atol=0.3)
+    end
+end
+
+# ── E-10 / #133: adaptive tempering targets ESS of the CUMULATIVE weights ──
+
+@testset "_adaptive_tempering: ESS on cumulative weights (no overshoot)" begin
+    lse = MacroEconometricModels._logsumexp
+    N = 300
+    rng = Random.MersenneTwister(7)
+    log_liks = 1.5 .* randn(rng, N)
+    log_weights = 0.7 .* randn(rng, N)      # non-uniform incoming cumulative weights
+    phi_old = 0.3
+    ess_target = 0.5
+
+    ess_cum(phi) = (lw = log_weights .+ (phi - phi_old) .* log_liks;
+                    w = exp.(lw .- lse(lw)); 1.0 / sum(abs2, w))
+    ess_inc(phi) = (inc = (phi - phi_old) .* log_liks;
+                    w = exp.(inc .- lse(inc)); 1.0 / sum(abs2, w))
+
+    # Valid bracket: cumulative ESS starts above target and drops below it by φ=1.
+    @test ess_cum(phi_old) > ess_target * N
+    @test ess_cum(1.0) < ess_target * N
+
+    phi_new = MacroEconometricModels._adaptive_tempering(
+        log_liks, log_weights, phi_old, ess_target, N)
+    @test phi_old < phi_new <= 1.0
+    # Realized ESS on the CUMULATIVE weights hits the target (bisection tol ≈1 in ESS units).
+    @test isapprox(ess_cum(phi_new), ess_target * N; atol=2.0)
+    # The uniform-base (incremental-only) ESS at this φ is materially different — the old
+    # computation would have chosen a different φ and overshot the cumulative ESS target.
+    @test abs(ess_inc(phi_new) - ess_cum(phi_new)) > 5.0
+end
+
+# ── E-09 / #132: terminal resample → stored SMC draws are equal-weighted ──
+
+@testset "_terminal_resample!: unweighted quantiles match weighted pre-resample set" begin
+    lse = MacroEconometricModels._logsumexp
+    np, Np = 2, 500
+    rng = Random.MersenneTwister(11)
+    theta = randn(rng, np, Np); theta[1, :] .+= 3.0
+    lw0 = 1.2 .* randn(rng, Np)              # deliberately non-uniform terminal weights
+    state = MacroEconometricModels.SMCState{Float64}(
+        copy(theta), copy(lw0), randn(rng, Np), randn(rng, Np),
+        Float64[0.0, 1.0], Float64[], Float64[], 0.0,
+        MacroEconometricModels.PFWorkspace{Float64}[], Matrix{Float64}(I, np, np))
+
+    # weighted median of param 1 on the pre-resample particle set
+    w = exp.(lw0 .- lse(lw0))
+    perm = sortperm(theta[1, :]); cw = cumsum(w[perm]); cw ./= cw[end]
+    wq50_before = theta[1, perm][findfirst(>=(0.5), cw)]
+
+    did = MacroEconometricModels._terminal_resample!(state, Np, Random.MersenneTwister(123))
+    @test did                                                    # non-uniform → resampled
+    weights_after = exp.(state.log_weights .- lse(state.log_weights))
+    @test all(≈(1 / Np), weights_after)                          # stored weights uniform
+    # plain (unweighted) median of resampled draws ≈ weighted median of the original set
+    @test isapprox(quantile(state.theta_particles[1, :], 0.5), wq50_before; atol=0.3)
+
+    # No-op when weights are already uniform (e.g. the final stage resampled) — no double resample.
+    state_u = MacroEconometricModels.SMCState{Float64}(
+        copy(theta), fill(-log(Float64(Np)), Np), zeros(Np), zeros(Np),
+        Float64[0.0, 1.0], Float64[], Float64[], 0.0,
+        MacroEconometricModels.PFWorkspace{Float64}[], Matrix{Float64}(I, np, np))
+    @test MacroEconometricModels._terminal_resample!(state_u, Np, Random.MersenneTwister(1)) == false
 end
 
 # ─────────────────────────────────────────────────────────────────────────────

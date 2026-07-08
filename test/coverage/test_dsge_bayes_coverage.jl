@@ -305,20 +305,23 @@ end
     N = 25
     rng = Random.MersenneTwister(7002)
 
+    # 5-arg signature (#133): pass uniform incoming cumulative weights.
+    uw = fill(-log(N), N)
+
     # Case: uniform log-likelihoods => can jump to phi=1
     log_liks_uniform = fill(0.0, N)
-    phi = M._adaptive_tempering(log_liks_uniform, 0.0, 0.5, N)
+    phi = M._adaptive_tempering(log_liks_uniform, uw, 0.0, 0.5, N)
     @test phi == 1.0
 
     # Case: highly dispersed => needs many small steps
     log_liks_dispersed = randn(rng, N) * 100.0
-    phi2 = M._adaptive_tempering(log_liks_dispersed, 0.0, 0.9, N)
+    phi2 = M._adaptive_tempering(log_liks_dispersed, uw, 0.0, 0.9, N)
     @test phi2 > 0.0
     @test phi2 <= 1.0
 
     # Case: starting from phi_old > 0
     log_liks_mild = randn(rng, N)
-    phi3 = M._adaptive_tempering(log_liks_mild, 0.5, 0.5, N)
+    phi3 = M._adaptive_tempering(log_liks_mild, uw, 0.5, 0.5, N)
     @test phi3 >= 0.5
     @test phi3 <= 1.0
 end
