@@ -63,6 +63,78 @@ function _infer_prior_bounds(d::Distribution)
 end
 
 # =============================================================================
+# Helper: resolve theta0 (positional / Dict / NamedTuple) onto sorted params
+# =============================================================================
+
+"""
+    _resolve_theta0(theta0, param_names, ::Type{T}) -> Vector{T}
+
+Resolve the initial parameter vector against the (alphabetically sorted) prior
+parameter names (E-12 / H-12 / #136).
+
+- `Dict{Symbol}` / `NamedTuple`: build the internal vector by looking up each name
+  in `param_names`, so the input is **order-independent**. Errors if any prior
+  parameter is missing from `theta0`, or if `theta0` names a parameter not in the
+  priors.
+- `AbstractVector`: used positionally and **must be in sorted prior-key order**;
+  its length must equal `length(param_names)`, else an `ArgumentError` naming the
+  expected parameters is thrown (previously a wrong length failed opaquely much
+  later, and a mis-ordered vector was silently permuted onto the wrong parameters).
+"""
+function _resolve_theta0(theta0, param_names::Vector{Symbol}, ::Type{T}) where {T}
+    if theta0 isa AbstractDict || theta0 isa NamedTuple
+        for k in keys(theta0)
+            k in param_names || throw(ArgumentError(
+                "theta0 names unknown parameter :$k; the estimated parameters " *
+                "(sorted) are $(param_names)."))
+        end
+        out = Vector{T}(undef, length(param_names))
+        for (i, pn) in enumerate(param_names)
+            haskey(theta0, pn) || throw(ArgumentError(
+                "theta0 is missing parameter :$pn; provide all of $(param_names)."))
+            out[i] = T(theta0[pn])
+        end
+        return out
+    else
+        v = collect(theta0)
+        length(v) == length(param_names) || throw(ArgumentError(
+            "theta0 has length $(length(v)) but the model has $(length(param_names)) " *
+            "estimated parameters. Pass a positional vector in sorted prior-key order " *
+            "$(param_names), or a Dict/NamedTuple (order-independent)."))
+        return T.(v)
+    end
+end
+
+"""
+    _orient_data(data, n_obs, ::Type{T}) -> Matrix{T}
+
+Resolve data orientation by matching a dimension to `n_obs` (the number of
+observables), NOT by comparing the two dimensions (E-18 / #142). The public
+convention is `T×n` (time in rows, variables in columns); the Kalman/PF routines
+expect `n_obs × T_obs` internally, so:
+
+- `size(data, 2) == n_obs`  → `T×n`, transpose to `n_obs × T_obs`;
+- `size(data, 1) == n_obs`  → already `n_obs × T_obs`, use as-is;
+- otherwise                 → `ArgumentError` naming `n_obs` and the received shape.
+
+The only genuinely ambiguous case is `T == n_obs` (both dimensions equal `n_obs`);
+it is resolved as `T×n` (rows = time), consistent with the package convention.
+"""
+function _orient_data(data::AbstractMatrix, n_obs::Int, ::Type{T}) where {T}
+    dm = Matrix{T}(data)
+    nrows, ncols = size(dm)
+    if ncols == n_obs
+        return Matrix{T}(dm')          # T×n (convention) → n_obs × T_obs
+    elseif nrows == n_obs
+        return dm                       # already n_obs × T_obs
+    else
+        throw(ArgumentError(
+            "data has shape $(size(data)) but neither dimension equals the number of " *
+            "observables n_obs=$n_obs. Pass data as T×n (time in rows, variables in columns)."))
+    end
+end
+
+# =============================================================================
 # Main public API
 # =============================================================================
 
@@ -74,8 +146,13 @@ SMC², or Random-Walk Metropolis-Hastings (RWMH).
 
 # Arguments
 - `spec::DSGESpec{T}` — model specification from `@dsge` macro
-- `data::AbstractMatrix` — observed data (T_obs × n_obs or n_obs × T_obs, auto-detected)
-- `θ0::AbstractVector{<:Real}` — initial parameter guess (length must match number of priors)
+- `data::AbstractMatrix` — observed data in `T×n` (time in rows, variables in columns),
+  the package convention; orientation is resolved by matching a dimension to the number
+  of observables (an `n×T` matrix is accepted and transposed internally).
+- `θ0` — initial parameter guess. Preferred: a `Dict{Symbol}`/`NamedTuple` keyed by
+  parameter name (order-independent). A positional `AbstractVector` is also accepted but
+  **must be in sorted (alphabetical) prior-key order** and its length must equal the
+  number of estimated parameters (otherwise an informative `ArgumentError` is thrown).
 
 # Keywords
 - `priors::Dict{Symbol,<:Distribution}` — prior distributions keyed by parameter name
@@ -109,7 +186,8 @@ SMC², or Random-Walk Metropolis-Hastings (RWMH).
   *Econometric Reviews*, 26(2-4), 113-172.
 """
 function estimate_dsge_bayes(spec::DSGESpec{T}, data::AbstractMatrix,
-                              theta0::AbstractVector{<:Real};
+                              theta0::Union{AbstractVector{<:Real},
+                                            AbstractDict{Symbol,<:Real},NamedTuple};
                               priors::Dict{Symbol,<:Distribution},
                               method::Symbol=:smc,
                               observables::Vector{Symbol}=Symbol[],
@@ -142,10 +220,9 @@ function estimate_dsge_bayes(spec::DSGESpec{T}, data::AbstractMatrix,
     # ── 2. Sort param_names to match DSGEPrior ordering ──────────────────
     param_names = prior.param_names  # already sorted by DSGEPrior constructor
 
-    # Sort theta0 to match param_names ordering
-    prior_keys_sorted = param_names
-    # theta0 is provided in the same order as the sorted prior keys
-    theta0_sorted = T.(theta0)
+    # Resolve theta0: Dict/NamedTuple by name (order-independent), or a positional
+    # vector in sorted prior-key order with length validation (E-12 / #136).
+    theta0_sorted = _resolve_theta0(theta0, param_names, T)
 
     # ── 3. Handle observables ────────────────────────────────────────────
     if isempty(observables)
@@ -153,20 +230,9 @@ function estimate_dsge_bayes(spec::DSGESpec{T}, data::AbstractMatrix,
     end
     n_obs = length(observables)
 
-    # ── 4. Data handling: ensure n_obs × T_obs format ────────────────────
-    data_mat = Matrix{T}(data)
-    nrows, ncols = size(data_mat)
-    # The Kalman filter expects n_obs × T_obs (each column is one time period)
-    # simulate() returns T_periods × n_endog
-    # If data has more rows than columns and nrows != n_obs, transpose
-    if nrows != n_obs && ncols == n_obs
-        data_mat = Matrix{T}(data_mat')
-    elseif nrows != n_obs && ncols != n_obs
-        # Neither dimension matches n_obs; try best guess: if nrows > ncols, transpose
-        if nrows > ncols
-            data_mat = Matrix{T}(data_mat')
-        end
-    end
+    # ── 4. Data handling: resolve orientation by matching n_obs (E-18 / #142) ─
+    # Public convention is T×n; Kalman/PF expect n_obs × T_obs internally.
+    data_mat = _orient_data(data, n_obs, T)
 
     # ── 5. Validate method ───────────────────────────────────────────────
     if method ∉ (:smc, :smc2, :mh)

@@ -1271,6 +1271,90 @@ end
     end
 end
 
+# ── E-12 / H-12 / #136: theta0 as Dict/NamedTuple + length validation ──
+
+@testset "_resolve_theta0: order-independent Dict/NamedTuple + length validation" begin
+    _rt = MacroEconometricModels._resolve_theta0
+    pnames = [:alpha, :rho, :sigma]                        # sorted prior keys
+
+    # Dict / NamedTuple in scrambled order → values land on the RIGHT parameters.
+    @test _rt(Dict(:sigma => 0.3, :alpha => 0.1, :rho => 0.9), pnames, Float64) == [0.1, 0.9, 0.3]
+    @test _rt((sigma = 0.3, alpha = 0.1, rho = 0.9), pnames, Float64) == [0.1, 0.9, 0.3]
+    # Positional vector (must already be in sorted order) passes through.
+    @test _rt([0.1, 0.9, 0.3], pnames, Float64) == [0.1, 0.9, 0.3]
+    # Type conversion.
+    @test _rt(Dict(:alpha => 0.1, :rho => 0.9, :sigma => 0.3), pnames, Float32) isa Vector{Float32}
+    # Wrong-length positional vector → informative ArgumentError (was a late opaque failure).
+    @test_throws ArgumentError _rt([0.1, 0.9], pnames, Float64)
+    # Dict missing a parameter → ArgumentError.
+    @test_throws ArgumentError _rt(Dict(:alpha => 0.1, :rho => 0.9), pnames, Float64)
+    # Dict with an unknown parameter → ArgumentError.
+    @test_throws ArgumentError _rt(
+        Dict(:alpha => 0.1, :rho => 0.9, :sigma => 0.3, :bogus => 0.0), pnames, Float64)
+end
+
+@testset "estimate_dsge_bayes: accepts Dict theta0, errors on wrong length (#136)" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:gensys)
+    sim_data = simulate(sol, 100; rng=Random.MersenneTwister(42))
+    priors = Dict(:ρ => Beta(2, 2), :σ => InverseGamma(3.0, 1.0))
+
+    # Dict theta0 in scrambled order runs end-to-end (order-independent).
+    r = estimate_dsge_bayes(spec, sim_data, Dict(:σ => 0.5, :ρ => 0.5);
+        priors=priors, method=:smc, observables=[:y], n_smc=100,
+        rng=Random.MersenneTwister(1))
+    @test r isa BayesianDSGE{Float64}
+    # Wrong-length positional vector errors before sampling.
+    @test_throws ArgumentError estimate_dsge_bayes(spec, sim_data, [0.5];
+        priors=priors, method=:smc, observables=[:y], n_smc=100,
+        rng=Random.MersenneTwister(1))
+    end
+end
+
+# ── E-18 / #142: data orientation resolved by matching n_obs (T×n convention) ──
+
+@testset "_orient_data: orientation by n_obs, not by size comparison" begin
+    _od = MacroEconometricModels._orient_data
+    @test size(_od(reshape(collect(1.0:20), 10, 2), 2, Float64)) == (2, 10)   # T×n → n_obs×T_obs
+    @test size(_od(reshape(collect(1.0:20), 2, 10), 2, Float64)) == (2, 10)    # n×T → as-is
+    A = randn(Random.MersenneTwister(1), 40, 3)
+    @test _od(A, 3, Float64) == _od(permutedims(A), 3, Float64)                 # same internal matrix
+    # Neither dimension equals n_obs → informative ArgumentError (was a silent best-guess).
+    @test_throws ArgumentError _od(randn(3, 100), 1, Float64)
+end
+
+@testset "estimate_dsge_bayes: T×n and n×T give the same likelihood (#142)" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sim = simulate(solve(spec; method=:gensys), 100; rng=Random.MersenneTwister(42))  # 100×1 (T×n)
+    priors = Dict(:ρ => Beta(2, 2))
+
+    r_tn = estimate_dsge_bayes(spec, sim, [0.5]; priors=priors, method=:smc,
+        observables=[:y], n_smc=100, rng=Random.MersenneTwister(5))
+    r_nt = estimate_dsge_bayes(spec, permutedims(sim), [0.5]; priors=priors, method=:smc,
+        observables=[:y], n_smc=100, rng=Random.MersenneTwister(5))
+    @test r_tn.log_marginal_likelihood ≈ r_nt.log_marginal_likelihood
+    # A shape where neither dimension equals n_obs errors instead of guessing.
+    @test_throws ArgumentError estimate_dsge_bayes(spec, randn(3, 100), [0.5];
+        priors=priors, method=:smc, observables=[:y], n_smc=50)
+    end
+end
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Section 7: Posterior Analysis
 # ─────────────────────────────────────────────────────────────────────────────

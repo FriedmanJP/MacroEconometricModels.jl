@@ -952,6 +952,32 @@ end
         ps = posterior_summary(result)
         @test haskey(ps, :alpha)
         @test isfinite(ps[:alpha][:mean])
+
+        # #136: theta0 as a Dict (order-independent) is accepted through the HA method;
+        # a wrong-length positional vector errors informatively before any solve.
+        result_dict = estimate_dsge_bayes(
+            spec, reshape(data_K, T_data, 1), Dict(:alpha => 0.36);
+            priors=priors, observables=[:K], n_draws=10, burnin=2,
+            ha_method=:ssj, ha_kwargs=(T_horizon=30, n_reduced=10),
+            proposal_scale=0.001, adapt_interval=50, rng=Random.MersenneTwister(7))
+        @test result_dict isa BayesianDSGE{Float64}
+        @test_throws ArgumentError estimate_dsge_bayes(
+            spec, reshape(data_K, T_data, 1), [0.36, 0.9];   # length 2, but 1 prior
+            priors=priors, observables=[:K], n_draws=10,
+            ha_method=:ssj, ha_kwargs=(T_horizon=30, n_reduced=10))
+
+        # #142: n×T data (1×T_data) resolves identically to T×n (same internal matrix →
+        # identical draws under the same rng); a shape matching neither dim to n_obs errors.
+        result_nt = estimate_dsge_bayes(
+            spec, reshape(data_K, 1, T_data), Dict(:alpha => 0.36);
+            priors=priors, observables=[:K], n_draws=10, burnin=2,
+            ha_method=:ssj, ha_kwargs=(T_horizon=30, n_reduced=10),
+            proposal_scale=0.001, adapt_interval=50, rng=Random.MersenneTwister(7))
+        @test result_nt.theta_draws ≈ result_dict.theta_draws
+        @test_throws ArgumentError estimate_dsge_bayes(
+            spec, randn(3, T_data), [0.36];                  # neither dim == n_obs (1)
+            priors=priors, observables=[:K], n_draws=10,
+            ha_method=:ssj, ha_kwargs=(T_horizon=30, n_reduced=10))
     end
 end
 

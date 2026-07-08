@@ -238,8 +238,11 @@ and the Kalman filter is evaluated on the reduced linear system. This is the
 
 # Arguments
 - `spec::HADSGESpec{T}` — HA-DSGE model specification
-- `data::AbstractMatrix` — observed aggregate data (T_obs × n_obs or n_obs × T_obs)
-- `θ0::AbstractVector{<:Real}` — initial parameter guess (length matches priors)
+- `data::AbstractMatrix` — observed aggregate data in `T×n` (time in rows); orientation is
+  resolved by matching a dimension to the number of observables (`n×T` transposed internally).
+- `θ0` — initial parameter guess. Preferred: a `Dict{Symbol}`/`NamedTuple` keyed by parameter
+  name (order-independent). A positional `AbstractVector` must be in sorted (alphabetical)
+  prior-key order and length-matched, else an informative `ArgumentError` is thrown.
 
 # Keywords
 - `priors::Dict{Symbol,<:Distribution}` — prior distributions keyed by parameter name
@@ -266,7 +269,8 @@ the posterior-mean HA solution.
   *Journal of Applied Econometrics*, 29(7), 1073-1098.
 """
 function estimate_dsge_bayes(spec::HADSGESpec{T}, data::AbstractMatrix,
-                              theta0::AbstractVector{<:Real};
+                              theta0::Union{AbstractVector{<:Real},
+                                            AbstractDict{Symbol,<:Real},NamedTuple};
                               priors::Dict{Symbol,<:Distribution},
                               observables::Vector{Symbol}=Symbol[],
                               n_draws::Int=5000,
@@ -296,20 +300,17 @@ function estimate_dsge_bayes(spec::HADSGESpec{T}, data::AbstractMatrix,
     end
     n_obs = length(observables)
 
-    # ── 3. Data handling: ensure n_obs × T_obs format ────────────────────
-    data_mat = Matrix{T}(data)
-    nrows, ncols = size(data_mat)
-    if nrows != n_obs && ncols == n_obs
-        data_mat = Matrix{T}(data_mat')
-    elseif nrows != n_obs && ncols != n_obs
-        if nrows > ncols
-            data_mat = Matrix{T}(data_mat')
-        end
-    end
+    # ── 3. Data handling: resolve orientation by matching n_obs (E-18 / #142) ─
+    # Public convention is T×n; the Kalman filter on the reduced system expects
+    # n_obs × T_obs internally.
+    data_mat = _orient_data(data, n_obs, T)
 
-    # ── 4. Sort theta0 to match prior ordering ───────────────────────────
+    # ── 4. Resolve theta0 against sorted prior keys ──────────────────────
+    # Dict/NamedTuple resolved by name (order-independent); a positional vector must be
+    # in sorted prior-key order and is length-validated (E-12 / H-12 / #136). (The old
+    # comment claimed a reordering that never happened — it only cast T.(theta0).)
     n_params = length(param_names)
-    theta0_sorted = T.(theta0)
+    theta0_sorted = _resolve_theta0(theta0, param_names, T)
 
     # ── 5. Build HA likelihood function ──────────────────────────────────
     ll_fn = _build_ha_likelihood_fn(spec, param_names, data_mat, observables,
