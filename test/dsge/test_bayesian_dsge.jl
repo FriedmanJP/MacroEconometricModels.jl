@@ -1389,6 +1389,33 @@ end
     end
 end
 
+@testset "posterior_summary: quantiles equal Statistics.quantile (#144)" begin
+    _suppress_warnings() do
+    rng = Random.MersenneTwister(42)
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sim_data = simulate(solve(spec; method=:gensys), 200; rng=rng)
+    priors = Dict(:ρ => Beta(2, 2))
+    result = estimate_dsge_bayes(spec, sim_data, [0.5];
+        priors=priors, method=:smc, observables=[:y],
+        n_smc=300, rng=Random.MersenneTwister(1))
+
+    ps = posterior_summary(result)
+    d = result.theta_draws[:, 1]
+    # Reported median/CI bounds are interpolated Statistics.quantile of the (unweighted,
+    # post-terminal-resample) draws — the old order-statistic indexing did not match.
+    @test ps[:ρ][:median]   ≈ quantile(d, 0.5)
+    @test ps[:ρ][:ci_lower] ≈ quantile(d, 0.025)
+    @test ps[:ρ][:ci_upper] ≈ quantile(d, 0.975)
+    end
+end
+
 @testset "marginal_likelihood" begin
     _suppress_warnings() do
     spec = @dsge begin

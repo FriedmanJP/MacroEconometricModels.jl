@@ -525,20 +525,16 @@ function posterior_summary(result::BayesianDSGE{T}) where {T<:AbstractFloat}
     for i in 1:n_params
         pn = result.param_names[i]
         draws_i = result.theta_draws[:, i]
-        sorted = sort(draws_i)
-        n = length(sorted)
 
-        # Quantile indices
-        idx_025 = max(1, round(Int, 0.025 * n))
-        idx_50 = max(1, round(Int, 0.50 * n))
-        idx_975 = min(n, round(Int, 0.975 * n))
-
+        # Interpolated quantiles via Statistics.quantile rather than ad-hoc order-statistic
+        # indexing (E-20 / #144). The stored draws are unweighted after the SMC terminal
+        # resample (E-09 / #132), so a plain quantile is correct.
         summary[pn] = Dict{Symbol, T}(
             :mean => mean(draws_i),
-            :median => sorted[idx_50],
+            :median => quantile(draws_i, 0.5),
             :std => std(draws_i),
-            :ci_lower => sorted[idx_025],
-            :ci_upper => sorted[idx_975]
+            :ci_lower => quantile(draws_i, 0.025),
+            :ci_upper => quantile(draws_i, 0.975)
         )
     end
 
