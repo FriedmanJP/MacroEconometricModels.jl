@@ -3219,6 +3219,25 @@ end
     ppc_d = posterior_predictive_check(fit; data=Matrix(data'), n_draws=50,
                                        rng=Random.MersenneTwister(5))
     @test ppc_d.observed ≈ ppc.observed
+
+    # Regression: model with MORE endogenous series than observables — the
+    # default stats must index by the observables, not by the data columns
+    spec2 = @dsge begin
+        parameters: ρ2 = 0.5, φ2 = 1.5
+        endogenous: y, i
+        exogenous: e
+        y[t] = ρ2 * y[t-1] + e[t]
+        i[t] = φ2 * y[t]
+    end
+    spec2 = compute_steady_state(spec2)
+    data2 = simulate(solve(spec2; method=:gensys), 150; rng=Random.MersenneTwister(6))
+    fit2 = estimate_dsge_bayes(spec2, data2, [0.5];
+        priors=Dict(:ρ2 => Beta(2, 2)), method=:smc, n_smc=100,
+        observables=[:y], rng=Random.MersenneTwister(13))
+    ppc2 = posterior_predictive_check(fit2; n_draws=25,
+                                      rng=Random.MersenneTwister(14))
+    @test ppc2.stat_names == ["mean_y", "var_y", "ar1_y"]   # no phantom cross-corrs
+    @test all(isfinite, ppc2.observed)
     end
 end
 

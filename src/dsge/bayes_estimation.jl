@@ -1033,7 +1033,7 @@ function _make_default_stats(observables::Vector{Symbol})
     return function (Y::AbstractMatrix)
         names = String[]
         vals = Float64[]
-        n = size(Y, 2)
+        n = length(observables)
         for (j, o) in enumerate(observables)
             yj = @view Y[:, j]
             push!(names, "mean_$o");
