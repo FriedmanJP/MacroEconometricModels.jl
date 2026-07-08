@@ -765,7 +765,7 @@ export optimal_weighting_matrix, identity_weighting
 export j_test, numerical_gradient
 export estimate_lp_gmm, lp_gmm_moments
 export linear_gmm_solve, gmm_sandwich_vcov, andrews_lu_mmsc
-export ParameterTransform, to_unconstrained, to_constrained, transform_jacobian
+export ParameterTransform, to_unconstrained, to_constrained, transform_jacobian, log_jacobian
 export SMMModel, estimate_smm, autocovariance_moments
 
 # =============================================================================

@@ -142,6 +142,11 @@ SMC², or Random-Walk Metropolis-Hastings (RWMH).
   runs [`posterior_mode`](@ref) and seeds the chain at the mode with proposal covariance
   `c²·H⁻¹` where `c = 2.38/√d` (Roberts & Rosenthal 2001 optimal scaling) and `H` is the
   negative-log-posterior Hessian at the mode.
+- `transform::Bool=true` — RWMH walks in the prior-transformed unconstrained space
+  (`:mh` only): log for positive supports, logit for bounded intervals, with the
+  log-Jacobian added to the target so the θ-space posterior is preserved. No proposal
+  is ever wasted outside the parameter support. `transform=false` restores the
+  natural-space walk.
 - `rng::AbstractRNG=Random.default_rng()` — random number generator
 
 # Returns
@@ -172,6 +177,7 @@ function estimate_dsge_bayes(spec::DSGESpec{T}, data::AbstractMatrix,
                               delayed_acceptance::Bool=false,
                               n_screen::Int=200,
                               proposal::Symbol=:adaptive,
+                              transform::Bool=true,
                               rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
 
     # ── 1. Build DSGEPrior from priors dict (bounds inferred from support) ─
@@ -237,6 +243,16 @@ function estimate_dsge_bayes(spec::DSGESpec{T}, data::AbstractMatrix,
             c2 = T(2.38)^2 / T(length(param_names))
             init_proposal_cov = c2 .* pm.inv_hessian
             theta_init = pm.mode
+            if transform
+                # The walk runs in y-space: map the θ-space covariance through
+                # the inverse Jacobian at the mode, Σ_y = D⁻¹ Σ_θ D⁻¹
+                pt = ParameterTransform(prior.lower, prior.upper)
+                y_mode = to_unconstrained(pt, pm.mode)
+                D = transform_jacobian(pt, y_mode)
+                Dinv = Diagonal([D[i, i] != 0 ? 1 / D[i, i] : one(T)
+                                 for i in 1:size(D, 1)])
+                init_proposal_cov = Matrix{T}(Dinv * init_proposal_cov * Dinv)
+            end
         end
         draws, log_posterior, acceptance_rate = _mh_sample(
             spec, data_mat, param_names, prior, theta_init;
@@ -244,7 +260,7 @@ function estimate_dsge_bayes(spec::DSGESpec{T}, data::AbstractMatrix,
             observables=observables,
             measurement_error=measurement_error,
             solver=solver, solver_kwargs=solver_kwargs,
-            init_proposal_cov=init_proposal_cov, rng=rng)
+            init_proposal_cov=init_proposal_cov, transform=transform, rng=rng)
         # Discard burn-in so posterior summaries exclude the transient. The burnin kwarg was
         # previously a no-op for :mh (all draws stored). keep_burnin=true retains the full
         # chain (e.g. for trace plots) without affecting the default summaries (E-03 / #122).
@@ -789,8 +805,9 @@ function bridge_sampling_ml(result::BayesianDSGE{T};
     g = proposal == :normal ? MvNormal(mu_g, Sigma_pd) :
                               MvTDist(T(df), mu_g, Sigma_pd)
 
-    # log |J(φ)| — Jacobian of the unconstrained → constrained map
-    log_jac(phiv) = sum(log(abs(transform_jacobian(pt, phiv)[k, k])) for k in 1:d)
+    # log |J(φ)| — Jacobian of the unconstrained → constrained map (shared,
+    # numerically stable implementation)
+    log_jac(phiv) = log_jacobian(pt, phiv)
 
     # ℓ₁: posterior-kernel over proposal at the bridge half (kernel values stored)
     l1 = zeros(T, n1)

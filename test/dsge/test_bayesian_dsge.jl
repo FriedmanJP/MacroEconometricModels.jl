@@ -3222,4 +3222,91 @@ end
     end
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Parameter transformations for samplers (T238 / #337)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "sampler transforms: round trip + log-Jacobian (#337)" begin
+    # Positive (0,∞), interval (0,1), unbounded, shifted interval (2,5)
+    pt = ParameterTransform([0.0, 0.0, -Inf, 2.0], [1.0, Inf, Inf, 5.0])
+    theta = [0.3, 1.7, -0.4, 4.2]
+    y = to_unconstrained(pt, theta)
+    @test to_constrained(pt, y) ≈ theta rtol=1e-12
+
+    # log_jacobian equals the log-abs product of the diagonal Jacobian
+    J = transform_jacobian(pt, y)
+    @test log_jacobian(pt, y) ≈ sum(log(abs(J[i, i])) for i in 1:4) rtol=1e-10
+
+    # Finite-difference check of log|dθᵢ/dyᵢ| coordinate by coordinate
+    h = 1e-6
+    for i in 1:4
+        yp = copy(y); yp[i] += h
+        ym = copy(y); ym[i] -= h
+        d_num = (to_constrained(pt, yp)[i] - to_constrained(pt, ym)[i]) / (2h)
+        @test log(abs(J[i, i])) ≈ log(abs(d_num)) atol=1e-6
+    end
+
+    # Numerically stable at extreme y where naive σ(y)(1-σ(y)) under/overflows
+    yext = [-800.0, -800.0, -800.0, 900.0]
+    @test isfinite(log_jacobian(pt, yext))
+end
+
+@testset "RWMH transform=true: boundary-safe walk (#337)" begin
+    _suppress_warnings() do
+    rng = Random.MersenneTwister(42)
+
+    # σ = 0.05 sits near the zero boundary of its positive support
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.05
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    true_spec = @dsge begin
+        parameters: ρ = 0.8, σ = 0.05
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    true_spec = compute_steady_state(true_spec)
+    data = simulate(solve(true_spec; method=:gensys), 300; rng=rng)'
+    priors = Dict(:ρ => Beta(2, 2), :σ => InverseGamma(3.0, 0.2))
+
+    fit_t = estimate_dsge_bayes(spec, data, [0.5, 0.1];
+        priors=priors, method=:mh, transform=true,
+        n_draws=3000, burnin=1000, observables=[:y],
+        rng=Random.MersenneTwister(7))
+    fit_u = estimate_dsge_bayes(spec, data, [0.5, 0.1];
+        priors=priors, method=:mh, transform=false,
+        n_draws=3000, burnin=1000, observables=[:y],
+        rng=Random.MersenneTwister(7))
+
+    # Posterior means agree across parameterizations within Monte Carlo error
+    mt = vec(mean(fit_t.theta_draws; dims=1))
+    mu = vec(mean(fit_u.theta_draws; dims=1))
+    @test abs(mt[1] - mu[1]) < 0.1
+    @test abs(mt[2] - mu[2]) < 0.05
+    # ... and recover the truth (ρ = 0.8, σ = 0.05)
+    @test abs(mt[1] - 0.8) < 0.15
+    @test abs(mt[2] - 0.05) < 0.05
+    @test fit_t.acceptance_rate > 0.1
+
+    # The transformed walk never leaves the support by construction —
+    # no proposal is wasted on out-of-bounds values
+    @test all(fit_t.theta_draws[:, 2] .> 0)
+    @test all(0 .< fit_t.theta_draws[:, 1] .< 1)
+
+    # transform composes with the mode-seeded proposal (Σ mapped through D⁻¹)
+    fit_mt = estimate_dsge_bayes(spec, data, [0.5, 0.1];
+        priors=priors, method=:mh, transform=true, proposal=:mode,
+        n_draws=1500, burnin=500, observables=[:y],
+        rng=Random.MersenneTwister(9))
+    @test 0.1 < fit_mt.acceptance_rate < 0.6
+    @test abs(mean(fit_mt.theta_draws[:, 1]) - 0.8) < 0.15
+    end
+end
+
 end  # @testset "Bayesian DSGE"

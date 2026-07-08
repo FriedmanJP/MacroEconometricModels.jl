@@ -101,6 +101,44 @@ function to_constrained(pt::ParameterTransform{T}, phi::AbstractVector) where {T
 end
 
 """
+    _log1pexp(x) -> log(1 + exp(x)), numerically stable
+
+Stable softplus: returns `x` for large `x` (where `log1p(exp(x))` would overflow)
+and `log1p(exp(x))` otherwise.
+"""
+_log1pexp(x::T) where {T<:AbstractFloat} = x > T(35) ? x : log1p(exp(x))
+
+"""
+    log_jacobian(pt::ParameterTransform, phi::AbstractVector) -> T
+
+Summed log absolute Jacobian `Σᵢ log|dθᵢ/dφᵢ|` of the inverse transform
+(unconstrained → constrained) at `φ`, evaluated stably:
+
+- identity: `0`
+- `(a, ∞)` / `(-∞, b)` (exp-based): `φᵢ`
+- `(a, b)` (logistic): `log(b−a) − log(1+e^{−φᵢ}) − log(1+e^{φᵢ})`
+
+This is the Jacobian correction added to a log density when sampling in the
+unconstrained space (Stan reference manual, constrained-parameter transforms).
+"""
+function log_jacobian(pt::ParameterTransform{T}, phi::AbstractVector) where {T<:AbstractFloat}
+    lj = zero(T)
+    for i in eachindex(phi)
+        lo, hi = pt.lower[i], pt.upper[i]
+        p = T(phi[i])
+        if isinf(lo) && isinf(hi)
+            # identity: log|1| = 0
+        elseif isinf(hi) || isinf(lo)
+            # exp-based one-sided transforms: |dθ/dφ| = e^φ
+            lj += p
+        else
+            lj += log(hi - lo) - _log1pexp(-p) - _log1pexp(p)
+        end
+    end
+    return lj
+end
+
+"""
     transform_jacobian(pt::ParameterTransform, phi::AbstractVector) -> Matrix
 
 Diagonal Jacobian ∂θ/∂φ of the inverse transform (unconstrained → constrained).
