@@ -571,6 +571,48 @@ round.(a.acf; digits=2)
 !!! note "SMC draws are not a chain"
     `mcmc_diagnostics` assumes Markov chain draws. Calling it on `:smc`/`:smc2` results (weighted particle systems) emits a warning — the SMC-native convergence measures are the ESS history (`result.ess_history`) and the tempering schedule (`result.phi_schedule`).
 
+### Identification Diagnostics
+
+Estimating a DSGE whose parameters are not identified by the chosen observables produces confident-looking but meaningless posteriors. Three diagnostics catch this failure mode — one before estimation, two after:
+
+**Iskrev (2010) rank test** (pre-estimation). The parameters are locally identified from the data iff the Jacobian ``J(\theta) = \partial m(\theta) / \partial \theta'`` of the model-implied data moments has full column rank. The moment vector ``m(\theta)`` stacks the observable steady-state means, the lower triangle of the contemporaneous covariance, and the autocovariance matrices at lags ``1..L`` computed from the first-order state-space solution via the Lyapunov equation. Rank deficiency names the unidentified directions through the null space of ``J``:
+
+```@example dsge_estimation
+# a and b enter the model only as the product a·b — not separately identified
+spec_bad = @dsge begin
+    parameters: a = 0.5, b = 0.9, sigma = 0.5
+    endogenous: y
+    exogenous: e
+    y[t] = a * b * y[t-1] + sigma * e[t]
+    steady_state = [0.0]
+end
+spec_bad = compute_steady_state(spec_bad)
+idd = identification_diagnostics(spec_bad, [:a, :b]; observables=[:y])
+idd
+```
+
+**Koop-Pesaran-Smith (2013) learning-rate check** (post-estimation). For an identified parameter the posterior variance shrinks at the ``1/T`` rate; `learning_rate_check` re-estimates on nested subsamples and reports the implied rate ``\alpha`` in ``\mathrm{var} \propto T^{-\alpha}`` — ``\alpha \approx 1`` is healthy, ``\alpha \approx 0`` flags a parameter whose posterior barely updates.
+
+**Prior/posterior overlap** (post-estimation). `prior_posterior_overlap` computes ``\int \min(\pi(\theta_i), p(\theta_i|Y))\,d\theta_i`` per parameter; overlap near 1 means the data never moved the prior.
+
+```julia
+lrc = learning_rate_check(fit; fractions=[0.5, 1.0], n_smc=300)  # re-estimates per subsample
+ppo = prior_posterior_overlap(fit)                                # instantaneous
+```
+
+**Keywords and return values**:
+
+| Function | Key keywords | Returns |
+|----------|--------------|---------|
+| `identification_diagnostics(spec, params; ...)` | `theta`, `observables`, `n_lags=2`, `tol_rel=√eps` | `IdentificationDiagnostics`: `rank`, `n_params`, `singular_values`, `null_space`, `identified` |
+| `learning_rate_check(result; ...)` | `fractions=[0.5,1.0]`, `n_smc=300`, `threshold=0.2` | `LearningRateCheck`: `sample_sizes`, `post_vars`, `learning_rate` (α), `flagged` |
+| `prior_posterior_overlap(result; ...)` | `n_grid=0` (auto ≈√N), `threshold=0.8` | `PriorPosteriorOverlap`: `overlap` ∈ [0,1], `flagged` |
+
+All three emit a warning naming the offending parameters when something looks unidentified; none of them throws.
+
+!!! warning "Identification is observables-dependent"
+    A parameter can be perfectly identified with one observable set and unidentified with another. Re-run `identification_diagnostics` with exactly the `observables` you pass to `estimate_dsge_bayes`, and check several `n_lags` horizons (Iskrev's recommendation).
+
 ### Posterior IRFs and FEVD (Herbst & Schorfheide 2015)
 
 Bayesian DSGE estimation quantifies parameter uncertainty. `irf` and `fevd` propagate this uncertainty into impulse responses and variance decompositions by re-solving the model at posterior parameter draws and computing pointwise credible bands.

@@ -716,6 +716,12 @@ posterior_predictive
 mcmc_diagnostics
 MCMCDiagnostics
 trace
+identification_diagnostics
+IdentificationDiagnostics
+learning_rate_check
+LearningRateCheck
+prior_posterior_overlap
+PriorPosteriorOverlap
 ```
 
 ### Occasionally Binding Constraints

@@ -3024,4 +3024,117 @@ end
     end
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Identification diagnostics (T236 / #335)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "identification_diagnostics: Iskrev rank test (#335)" begin
+    # Well-identified AR(1): ρ and σ identified from mean/variance/autocovariance
+    spec_ok = @dsge begin
+        parameters: ρ = 0.6, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec_ok = compute_steady_state(spec_ok)
+    idd = identification_diagnostics(spec_ok, [:ρ, :σ]; observables=[:y])
+    @test idd isa IdentificationDiagnostics{Float64}
+    @test idd.identified
+    @test idd.rank == 2
+    @test idd.n_params == 2
+    @test isempty(idd.null_space) || size(idd.null_space, 2) == 0
+    @test minimum(idd.singular_values) > idd.tol
+
+    # Deliberately unidentified: a and b enter only as the product a·b
+    spec_bad = @dsge begin
+        parameters: a = 0.5, b = 0.9, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = a * b * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec_bad = compute_steady_state(spec_bad)
+    idd2 = @test_logs (:warn, r"unidentified") match_mode=:any begin
+        identification_diagnostics(spec_bad, [:a, :b]; observables=[:y])
+    end
+    @test !idd2.identified
+    @test idd2.rank == 1
+    @test size(idd2.null_space, 2) == 1
+    # Null direction ∝ (a, -b) = (0.5, -0.9) up to sign and normalization
+    v = idd2.null_space[:, 1]
+    v = v / v[1]
+    @test v[2] ≈ -0.9 / 0.5 atol=1e-3
+
+    # show names the unidentified combination
+    io = IOBuffer()
+    show(io, idd2)
+    out = String(take!(io))
+    @test occursin("Unidentified direction", out)
+    @test occursin("NO", out)
+
+    # Input validation
+    @test_throws ArgumentError identification_diagnostics(spec_ok, Symbol[])
+    @test_throws ArgumentError identification_diagnostics(spec_ok, [:ρ]; observables=[:zzz])
+    @test_throws ArgumentError identification_diagnostics(spec_ok, [:ρ]; theta=[0.5, 0.5])
+end
+
+@testset "learning_rate_check + prior_posterior_overlap (#335)" begin
+    _suppress_warnings() do
+    rng = Random.MersenneTwister(42)
+
+    # κ multiplies a zero regressor → data are uninformative about κ
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5, κ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + κ * 0.0 * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    true_spec = @dsge begin
+        parameters: ρ = 0.8, σ = 0.5, κ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + κ * 0.0 * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    true_spec = compute_steady_state(true_spec)
+    data = simulate(solve(true_spec; method=:gensys), 300; rng=rng)'
+
+    priors = Dict(:ρ => Beta(2, 2), :κ => Beta(2, 2))
+    fit = estimate_dsge_bayes(spec, data, [0.5, 0.5];
+        priors=priors, method=:smc, n_smc=300, observables=[:y],
+        rng=Random.MersenneTwister(11))
+
+    # Overlap: κ's posterior is essentially the prior; ρ's is not
+    ppo = prior_posterior_overlap(fit)
+    @test ppo isa PriorPosteriorOverlap{Float64}
+    ik = findfirst(==(:κ), ppo.param_names)
+    ir = findfirst(==(:ρ), ppo.param_names)
+    @test ppo.flagged[ik]
+    @test !ppo.flagged[ir]
+    @test ppo.overlap[ik] > 0.8
+    @test ppo.overlap[ir] < 0.5
+    io = IOBuffer()
+    show(io, ppo)
+    @test occursin("Overlap", String(take!(io)))
+
+    # KPS learning rate: ρ's posterior variance shrinks with T, κ's does not
+    lrc = learning_rate_check(fit; fractions=[0.4, 1.0], n_smc=200,
+                              rng=Random.MersenneTwister(3))
+    @test lrc isa LearningRateCheck{Float64}
+    @test lrc.flagged[findfirst(==(:κ), lrc.param_names)]
+    @test lrc.learning_rate[findfirst(==(:ρ), lrc.param_names)] > 0.2
+    @test size(lrc.post_vars) == (2, 2)
+    io2 = IOBuffer()
+    show(io2, lrc)
+    @test occursin("Learning-Rate", String(take!(io2)))
+
+    # Validation
+    @test_throws ArgumentError learning_rate_check(fit; fractions=[0.5])
+    @test_throws ArgumentError learning_rate_check(fit; fractions=[0.0, 1.0])
+    end
+end
+
 end  # @testset "Bayesian DSGE"
