@@ -2801,4 +2801,132 @@ end
     end
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# MCMC convergence diagnostics (T234 / #333)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "MCMC diagnostics internals: rank-normalized R̂/ESS/Geweke (#333)" begin
+    M = MacroEconometricModels
+    rng = Random.MersenneTwister(2026)
+
+    # Tied ranks average
+    @test M._tied_ranks([1.0, 2.0, 2.0, 3.0]) == [1.0, 2.5, 2.5, 4.0]
+
+    # Rank normalization: monotone, mean ≈ 0
+    z = M._rank_normalize(reshape(collect(1.0:100.0), 50, 2))
+    @test size(z) == (50, 2)
+    @test abs(mean(z)) < 1e-10
+    @test issorted(vec(z))
+
+    # iid chain: R̂ ≈ 1, ESS ≈ S, Geweke accepts
+    x = randn(rng, 4000)
+    @test M._rhat_rank(x) < 1.02
+    @test 0.5 * 4000 < M._ess_bulk(x) < 2.0 * 4000
+    @test M._ess_tail(x) > 400
+    @test abs(M._geweke_z(x)) < 3.5
+
+    # Sticky AR(1) chain (φ = 0.99): ESS collapses
+    y = zeros(4000)
+    for t in 2:4000
+        y[t] = 0.99 * y[t-1] + 0.1 * randn(rng)
+    end
+    @test M._ess_bulk(y) < 0.2 * 4000
+
+    # Drifting chain: Geweke rejects
+    drift = collect(range(0.0, 3.0; length=2000)) .+ 0.1 .* randn(rng, 2000)
+    @test abs(M._geweke_z(drift)) > 3.0
+
+    # Degenerate constant chain → NaN diagnostics (no crash)
+    @test isnan(M._ess_bulk(fill(1.0, 100)))
+    @test isnan(M._rhat_rank(fill(1.0, 100)))
+    @test isnan(M._ess_tail(fill(1.0, 100)))
+end
+
+@testset "mcmc_diagnostics + trace/acf accessors + low-ESS warning (#333)" begin
+    _suppress_warnings() do
+    rng = Random.MersenneTwister(42)
+
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    true_spec = @dsge begin
+        parameters: ρ = 0.8, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    true_spec = compute_steady_state(true_spec)
+    sol_true = solve(true_spec; method=:gensys)
+    data = simulate(sol_true, 200; rng=rng)'
+
+    priors = Dict(:ρ => Beta(2, 2))
+    fit = estimate_dsge_bayes(spec, data, [0.5];
+        priors=priors, method=:mh, n_draws=2000, burnin=500,
+        observables=[:y], rng=Random.MersenneTwister(123))
+
+    # mcmc_diagnostics returns per-parameter stats on the retained chain
+    d = mcmc_diagnostics(fit)
+    @test d isa MCMCDiagnostics{Float64}
+    @test d.param_names == [:ρ]
+    @test d.n_draws == 1500                    # burnin discarded
+    @test isfinite(d.rhat[1])
+    @test d.rhat[1] < 1.2                      # short but reasonably mixed chain
+    @test 0 < d.ess_bulk[1] <= 1500 * log10(1500.0)
+    @test 0 < d.ess_tail[1]
+    @test isfinite(d.geweke_z[1])
+    @test 0 <= d.geweke_p[1] <= 1
+    @test abs(d.mean[1] - 0.8) < 0.3
+
+    # show does not error and prints the table
+    io = IOBuffer()
+    show(io, d)
+    out = String(take!(io))
+    @test occursin("R-hat", out)
+    @test occursin("ESS", out)
+
+    # trace accessor
+    tr = trace(fit, :ρ)
+    @test tr == fit.theta_draws[:, 1]
+    @test length(tr) == 1500
+    @test_throws ArgumentError trace(fit, :bogus)
+
+    # acf accessor dispatches to the spectral acf
+    a = acf(fit, :ρ; lags=10)
+    @test length(a.acf) == 10
+    @test all(abs.(a.acf) .<= 1.0 .+ 1e-12)
+
+    # low-ESS warning path: an impossible threshold forces the flag
+    ps = @test_logs (:warn, r"bulk ESS below") match_mode=:any begin
+        posterior_summary(fit; min_ess=10^9)
+    end
+    @test ps[:ρ][:low_ess] == 1.0
+    @test haskey(ps[:ρ], :ess_bulk)
+    pt = prior_posterior_table(fit; min_ess=10^9)
+    @test pt[1].low_ess === true
+
+    # relaxed threshold: no flag
+    ps0 = posterior_summary(fit; min_ess=0)
+    @test ps0[:ρ][:low_ess] == 0.0
+
+    # SMC results carry no ESS annotation (weighted particles, not a chain)
+    smc_fit = estimate_dsge_bayes(spec, data, [0.5];
+        priors=priors, method=:smc, n_smc=100,
+        observables=[:y], rng=Random.MersenneTwister(5))
+    pss = posterior_summary(smc_fit)
+    @test !haskey(pss[:ρ], :ess_bulk)
+    # mcmc_diagnostics on SMC draws warns but still computes
+    d2 = @test_logs (:warn, r"not a Markov chain") match_mode=:any begin
+        mcmc_diagnostics(smc_fit)
+    end
+    @test d2 isa MCMCDiagnostics{Float64}
+    end
+end
+
 end  # @testset "Bayesian DSGE"

@@ -375,6 +375,7 @@ include("dsge/kalman_dsge.jl")
 include("dsge/particle_filter.jl")
 include("dsge/smc.jl")
 include("dsge/bayes_estimation.jl")
+include("dsge/mcmc_diagnostics.jl")
 include("dsge/smoother.jl")
 include("dsge/hd.jl")
 
@@ -491,6 +492,7 @@ export BayesianDSGE, BayesianDSGESimulation
 export estimate_dsge_bayes, posterior_summary, marginal_likelihood, bayes_factor
 export prior_posterior_table, posterior_predictive
 export posterior_mode, PosteriorMode
+export mcmc_diagnostics, MCMCDiagnostics, trace
 
 # Macro
 export @dsge

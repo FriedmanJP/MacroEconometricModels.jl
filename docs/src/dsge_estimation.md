@@ -494,6 +494,59 @@ size(Y_pred)
 
 `posterior_summary` returns a `Dict{Symbol, Dict{Symbol, T}}` with keys `:mean`, `:median`, `:std`, `:ci_lower` (2.5th percentile), and `:ci_upper` (97.5th percentile) for each parameter. `prior_posterior_table` returns a vector of named tuples suitable for tabular display, comparing prior and posterior moments side by side. `posterior_predictive` draws `n_sim` parameter vectors from the posterior, solves the model at each, and simulates forward, returning an `n_sim x T_periods x n_vars` array of simulated paths.
 
+For RWMH chains, `posterior_summary` additionally annotates each parameter with its bulk effective sample size (`:ess_bulk`) and a `:low_ess` flag, and **warns** when any parameter's ESS falls below `min_ess` (default 400, per Vehtari et al. 2021) rather than silently presenting unreliable credible intervals. `prior_posterior_table` carries the same flag in a `low_ess` column.
+
+### Convergence Diagnostics
+
+Credible intervals from an MCMC chain are only as good as the chain's mixing. `mcmc_diagnostics` computes the modern standard set of per-parameter convergence diagnostics on the retained (post-burn-in) draws:
+
+- **Rank-normalized split-``\hat{R}``** (Vehtari et al. 2021): the chain is split in half, pooled draws are rank-normalized (rank → z-score via the inverse normal CDF), and ``\hat{R} = \sqrt{\widehat{\mathrm{var}}^+ / W}`` is computed from the between/within half-chain variances. The reported value is the maximum of the bulk statistic and the *folded* statistic on ``|\theta - \mathrm{median}|``, which catches scale (not just location) non-convergence. Values ``\lesssim 1.01`` indicate convergence.
+- **Bulk / tail ESS**: effective sample size from the integrated autocorrelation time ``\mathrm{ESS} = S / (1 + 2\sum_k \hat\rho_k)`` with Geyer's initial-monotone-sequence truncation. Bulk-ESS is computed on rank-normalized draws; tail-ESS is the minimum ESS of the 5% and 95% quantile indicators. Vehtari et al. recommend ESS ``\geq 400`` before trusting reported intervals.
+- **Geweke (1992) z**: spectral test comparing the mean of the first 10% against the last 50% of the chain, with numerical-standard-error variance estimates; under convergence ``z \sim N(0,1)``.
+
+```@example dsge_estimation
+diag = mcmc_diagnostics(result_mode_mh)
+diag
+```
+
+`trace` and `acf` expose the raw per-parameter draw sequence and its autocorrelation function for plotting:
+
+```@example dsge_estimation
+tr = trace(result_mode_mh, :rho)      # retained draw sequence
+length(tr)
+```
+
+```@example dsge_estimation
+a = acf(result_mode_mh, :rho; lags=5) # ACFResult (spectral acf on the chain)
+round.(a.acf; digits=2)
+```
+
+**Keywords / accessors**:
+
+| Function | Arguments | Returns |
+|----------|-----------|---------|
+| `mcmc_diagnostics(result)` | `BayesianDSGE` | `MCMCDiagnostics` (see field table below) |
+| `trace(result, param)` | result + parameter `Symbol` | `Vector{T}` of retained draws |
+| `acf(result, param; lags, conf_level)` | result + parameter `Symbol` | `ACFResult` (see [Spectral Analysis](@ref spectral_page)) |
+| `posterior_summary(result; min_ess=400)` | ESS warning threshold | summary dict + `:ess_bulk`/`:low_ess` keys (RWMH) |
+
+**Return value** (`MCMCDiagnostics` fields):
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `param_names` | `Vector{Symbol}` | Parameter names |
+| `rhat` | `Vector{T}` | Rank-normalized split-``\hat{R}`` (max of bulk and folded) |
+| `ess_bulk` | `Vector{T}` | Bulk effective sample size |
+| `ess_tail` | `Vector{T}` | Tail effective sample size (min of 5%/95% indicators) |
+| `geweke_z` | `Vector{T}` | Geweke z-statistic |
+| `geweke_p` | `Vector{T}` | Two-sided Geweke p-value |
+| `mean`, `sd` | `Vector{T}` | Posterior mean and standard deviation |
+| `n_draws` | `Int` | Retained draws used |
+| `method` | `Symbol` | Sampler that produced the draws |
+
+!!! note "SMC draws are not a chain"
+    `mcmc_diagnostics` assumes Markov chain draws. Calling it on `:smc`/`:smc2` results (weighted particle systems) emits a warning — the SMC-native convergence measures are the ESS history (`result.ess_history`) and the tempering schedule (`result.phi_schedule`).
+
 ### Posterior IRFs and FEVD (Herbst & Schorfheide 2015)
 
 Bayesian DSGE estimation quantifies parameter uncertainty. `irf` and `fevd` propagate this uncertainty into impulse responses and variance decompositions by re-solving the model at posterior parameter draws and computing pointwise credible bands.

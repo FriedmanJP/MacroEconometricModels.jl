@@ -712,6 +712,9 @@ marginal_likelihood
 bayes_factor
 prior_posterior_table
 posterior_predictive
+mcmc_diagnostics
+MCMCDiagnostics
+trace
 ```
 
 ### Occasionally Binding Constraints

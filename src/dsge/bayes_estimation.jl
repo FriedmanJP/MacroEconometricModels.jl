@@ -588,7 +588,7 @@ end
 # =============================================================================
 
 """
-    posterior_summary(result::BayesianDSGE{T}) → Dict{Symbol, Dict{Symbol, T}}
+    posterior_summary(result::BayesianDSGE{T}; min_ess::Real=400) → Dict{Symbol, Dict{Symbol, T}}
 
 Compute posterior summary statistics for each estimated parameter.
 
@@ -598,8 +598,16 @@ Returns a dictionary keyed by parameter name, each containing:
 - `:std` — posterior standard deviation
 - `:ci_lower` — 2.5th percentile (lower bound of 95% credible interval)
 - `:ci_upper` — 97.5th percentile (upper bound of 95% credible interval)
+
+For RWMH chains (`method == :rwmh`), each entry additionally carries
+- `:ess_bulk` — rank-normalized bulk effective sample size (Vehtari et al. 2021)
+- `:low_ess` — `1.0` when `ess_bulk < min_ess` (default 400, the Vehtari et al.
+  recommendation), else `0.0`
+
+and a warning names the offending parameters — credible intervals from a chain
+with low ESS are not reliable. Pass a smaller `min_ess` to relax the check.
 """
-function posterior_summary(result::BayesianDSGE{T}) where {T<:AbstractFloat}
+function posterior_summary(result::BayesianDSGE{T}; min_ess::Real=400) where {T<:AbstractFloat}
     n_params = length(result.param_names)
     summary = Dict{Symbol, Dict{Symbol, T}}()
 
@@ -621,6 +629,26 @@ function posterior_summary(result::BayesianDSGE{T}) where {T<:AbstractFloat}
             :ci_lower => sorted[idx_025],
             :ci_upper => sorted[idx_975]
         )
+    end
+
+    # ESS reliability check — MCMC chains only (SMC draws are weighted particle
+    # systems where autocorrelation-based ESS does not apply)
+    if result.method == :rwmh
+        low = Symbol[]
+        for i in 1:n_params
+            pn = result.param_names[i]
+            ess_i = _ess_bulk(result.theta_draws[:, i])
+            summary[pn][:ess_bulk] = ess_i
+            is_low = isfinite(ess_i) && ess_i < min_ess
+            summary[pn][:low_ess] = is_low ? one(T) : zero(T)
+            is_low && push!(low, pn)
+        end
+        if !isempty(low)
+            @warn "posterior_summary: bulk ESS below $min_ess for " *
+                  join(string.(low), ", ") *
+                  " — credible intervals may be unreliable; run a longer chain, " *
+                  "seed the proposal via proposal=:mode, or use method=:smc"
+        end
     end
 
     return summary
@@ -669,9 +697,11 @@ Each row contains:
 - `post_std` — posterior standard deviation
 - `ci_lower` — posterior 2.5th percentile
 - `ci_upper` — posterior 97.5th percentile
+- `low_ess` — `true` when the parameter's bulk ESS falls below `min_ess`
+  (RWMH chains only; always `false` for SMC results)
 """
-function prior_posterior_table(result::BayesianDSGE{T}) where {T<:AbstractFloat}
-    ps = posterior_summary(result)
+function prior_posterior_table(result::BayesianDSGE{T}; min_ess::Real=400) where {T<:AbstractFloat}
+    ps = posterior_summary(result; min_ess=min_ess)
     n_params = length(result.param_names)
 
     rows = NamedTuple[]
@@ -686,7 +716,8 @@ function prior_posterior_table(result::BayesianDSGE{T}) where {T<:AbstractFloat}
             post_mean = ps[pn][:mean],
             post_std = ps[pn][:std],
             ci_lower = ps[pn][:ci_lower],
-            ci_upper = ps[pn][:ci_upper]
+            ci_upper = ps[pn][:ci_upper],
+            low_ess = get(ps[pn], :low_ess, zero(T)) == one(T)
         )
         push!(rows, row)
     end
@@ -1011,8 +1042,9 @@ function Base.show(io::IO, result::BayesianDSGE{T}) where {T}
         column_labels=["", ""],
         alignment=[:l, :r])
 
-    # Posterior summary table
-    pnames = [string(s) for s in result.param_names]
+    # Posterior summary table — mark low-ESS parameters (RWMH only) with †
+    pnames = [string(s) * (get(ps[s], :low_ess, zero(T)) == one(T) ? " †" : "")
+              for s in result.param_names]
     means = [ps[n][:mean] for n in result.param_names]
     stds = [ps[n][:std] for n in result.param_names]
     medians = [ps[n][:median] for n in result.param_names]
@@ -1027,8 +1059,12 @@ function Base.show(io::IO, result::BayesianDSGE{T}) where {T}
         column_labels=["Parameter", "Mean", "Std", "Median", "2.5%", "97.5%"],
         alignment=[:l, :r, :r, :r, :r, :r])
 
-    # Prior vs posterior table
-    pt = prior_posterior_table(result)
+    if any(get(ps[s], :low_ess, zero(T)) == one(T) for s in result.param_names)
+        println(io, "† bulk ESS below threshold — credible intervals may be unreliable.")
+    end
+
+    # Prior vs posterior table (min_ess=0: the ESS warning already fired above)
+    pt = prior_posterior_table(result; min_ess=0)
     if !isempty(pt)
         n_rows = length(pt)
         pp_data = Matrix{Any}(undef, n_rows, 8)
