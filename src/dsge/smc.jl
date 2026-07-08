@@ -239,6 +239,27 @@ function _adaptive_tempering(log_liks::AbstractVector{T}, log_weights::AbstractV
 end
 
 """
+    _chunk_ranges(N, k) -> Vector{UnitRange{Int}}
+
+Partition `1:N` into `k` contiguous, near-equal chunks (trailing ranges are empty
+when `N < k`). Used to give each parallel task a **stable, dedicated** workspace by
+chunk index rather than `threadid()` — the latter is unsafe under Julia's dynamic
+scheduler, where a migrated task's `threadid()` can collide with another live task's
+and alias the same particle-filter workspace (E-06 / #134; generalized in #146).
+"""
+function _chunk_ranges(N::Int, k::Int)
+    ranges = Vector{UnitRange{Int}}(undef, k)
+    base, rem = divrem(N, k)
+    start = 1
+    @inbounds for c in 1:k
+        len = base + (c <= rem ? 1 : 0)
+        ranges[c] = start:(start + len - 1)
+        start += len
+    end
+    return ranges
+end
+
+"""
     _terminal_resample!(state, N, rng) -> Bool
 
 Systematic resample of the SMC particles at termination (E-09 / #132).
@@ -1252,114 +1273,128 @@ function _smc2_sample(spec::DSGESpec{T}, data::AbstractMatrix,
         # (MersenneTwister is NOT thread-safe)
         particle_seeds_mut = [hash((j, phi_new, rand(rng, UInt64))) for j in 1:N]
 
-        Threads.@threads for j in 1:N
-            thread_rng = Random.MersenneTwister(particle_seeds_mut[j])
-            ws = pool[mod1(Threads.threadid(), n_pool)]
+        # PMMH mutation (E-06 / #134). Each θ-particle's move is a particle-marginal
+        # Metropolis-Hastings step: a FRESH unconditional bootstrap PF gives an unbiased
+        # likelihood estimate for θ*, compared against the stored incumbent PF estimate for
+        # θ_j (kept noisy on accept — Andrieu-Doucet-Holenstein 2010). The old conditional-SMC
+        # (CSMC) path is dropped from acceptance: CSMC estimates are conditional on a reference
+        # trajectory and biased for parameter inference, and the pooled reference trajectory was
+        # additionally contaminated across θ-particles via threadid()-indexed workspaces.
+        #
+        # Parallelism is chunk-based: partition the θ-particles into n_pool contiguous chunks,
+        # one PF workspace per chunk, so no workspace is shared across concurrently-running tasks.
+        chunk_ranges = _chunk_ranges(N, n_pool)
 
-            theta_j = state.theta_particles[:, j]
-            ll_j = state.log_likelihoods[j]
-            lp_j = state.log_priors[j]
+        Threads.@threads for c in eachindex(chunk_ranges)
+            ws = pool[c]
+            ws_screen = delayed_acceptance ? screen_pool[c] : ws
+            for j in chunk_ranges[c]
+                thread_rng = Random.MersenneTwister(particle_seeds_mut[j])
 
-            for _ in 1:n_mh_steps
-                # Propose: theta_star = theta_j + L * z
-                z = randn(thread_rng, T, n_params)
-                theta_star = theta_j + L * z
+                theta_j = state.theta_particles[:, j]
+                ll_j = state.log_likelihoods[j]   # incumbent unbiased PF estimate (PMMH)
+                lp_j = state.log_priors[j]
 
-                # Evaluate prior
-                lp_star = _log_prior(theta_star, prior)
-                if lp_star == T(-Inf)
+                for _ in 1:n_mh_steps
+                    # Propose: theta_star = theta_j + L * z (symmetric RW ⇒ q-terms cancel)
+                    z = randn(thread_rng, T, n_params)
+                    theta_star = theta_j + L * z
+
+                    # Evaluate prior
+                    lp_star = _log_prior(theta_star, prior)
+                    if lp_star == T(-Inf)
+                        Threads.atomic_add!(total_proposed, 1)
+                        continue
+                    end
+
+                    # Build solver_kwargs with warm-starting from cached solution
+                    mh_solver_kwargs = if solver in (:projection, :pfi) && solutions[j] isa ProjectionSolution
+                        merge(solver_kwargs, (initial_coeffs=solutions[j].coefficients,))
+                    else
+                        solver_kwargs
+                    end
+
+                    if delayed_acceptance
+                        # ── Two-stage delayed acceptance (Christen & Fox 2005) on top of PMMH ──
+                        # Stage 1: cheap bootstrap-PF screen.
+                        ll_cheap_star = _solve_and_run_pf(
+                            spec, param_names, theta_star, observables, measurement_error,
+                            solver, mh_solver_kwargs, ws_screen, data, T_obs, thread_rng)
+
+                        if ll_cheap_star == T(-Inf)
+                            Threads.atomic_add!(total_proposed, 1)
+                            continue
+                        end
+
+                        # Stage 1 acceptance ratio (using cheap likelihoods)
+                        log_alpha_1 = (phi_new * ll_cheap_star + lp_star) -
+                                      (phi_new * ll_cheap[j] + lp_j)
+
+                        if log(rand(thread_rng, T)) >= log_alpha_1
+                            # Stage 1 rejects — skip the expensive PF
+                            Threads.atomic_add!(total_proposed, 1)
+                            continue
+                        end
+
+                        # Stage 2: fresh UNCONDITIONAL bootstrap PF (unbiased ⇒ PMMH-exact).
+                        ll_star, sol_star = _solve_and_run_pf(
+                            spec, param_names, theta_star, observables, measurement_error,
+                            solver, mh_solver_kwargs, ws, data, T_obs, thread_rng;
+                            use_csmc=false, return_solution=true)
+
+                        if ll_star == T(-Inf)
+                            Threads.atomic_add!(total_proposed, 1)
+                            continue
+                        end
+
+                        # Stage 2 acceptance ratio (delayed-acceptance correction term)
+                        log_alpha_2 = phi_new * (ll_star - ll_cheap_star) -
+                                      phi_new * (ll_j - ll_cheap[j])
+
+                        if log(rand(thread_rng, T)) < log_alpha_2
+                            theta_j = theta_star
+                            ll_j = ll_star
+                            lp_j = lp_star
+                            ll_cheap[j] = ll_cheap_star
+                            if sol_star isa ProjectionSolution
+                                solutions[j] = sol_star
+                            end
+                            Threads.atomic_add!(total_accepted, 1)
+                        end
+                    else
+                        # ── Standard single-stage PMMH: fresh unconditional bootstrap PF ──
+                        ll_star, sol_star = _solve_and_run_pf(
+                            spec, param_names, theta_star, observables, measurement_error,
+                            solver, mh_solver_kwargs, ws, data, T_obs, thread_rng;
+                            use_csmc=false, return_solution=true)
+
+                        if ll_star == T(-Inf)
+                            Threads.atomic_add!(total_proposed, 1)
+                            continue
+                        end
+
+                        # PMMH acceptance: unbiased PF estimate for θ* vs stored incumbent for θ_j.
+                        log_alpha = (phi_new * ll_star + lp_star) - (phi_new * ll_j + lp_j)
+
+                        if log(rand(thread_rng, T)) < log_alpha
+                            theta_j = theta_star
+                            ll_j = ll_star   # keep the noisy accepted estimate (PMMH)
+                            lp_j = lp_star
+                            if sol_star isa ProjectionSolution
+                                solutions[j] = sol_star
+                            end
+                            Threads.atomic_add!(total_accepted, 1)
+                        end
+                    end
+
                     Threads.atomic_add!(total_proposed, 1)
-                    continue
                 end
 
-                # Build solver_kwargs with warm-starting from cached solution
-                mh_solver_kwargs = if solver in (:projection, :pfi) && solutions[j] isa ProjectionSolution
-                    merge(solver_kwargs, (initial_coeffs=solutions[j].coefficients,))
-                else
-                    solver_kwargs
-                end
-
-                if delayed_acceptance
-                    # ── Two-stage delayed acceptance (Christen & Fox 2005) ──
-                    # Stage 1: cheap bootstrap PF screening
-                    ws_screen = screen_pool[mod1(Threads.threadid(), length(screen_pool))]
-                    ll_cheap_star = _solve_and_run_pf(
-                        spec, param_names, theta_star, observables, measurement_error,
-                        solver, mh_solver_kwargs, ws_screen, data, T_obs, thread_rng)
-
-                    if ll_cheap_star == T(-Inf)
-                        Threads.atomic_add!(total_proposed, 1)
-                        continue
-                    end
-
-                    # Stage 1 acceptance ratio (using cheap likelihoods)
-                    log_alpha_1 = (phi_new * ll_cheap_star + lp_star) -
-                                  (phi_new * ll_cheap[j] + lp_j)
-
-                    if log(rand(thread_rng, T)) >= log_alpha_1
-                        # Stage 1 rejects — skip expensive CSMC
-                        Threads.atomic_add!(total_proposed, 1)
-                        continue
-                    end
-
-                    # Stage 2: full CSMC (only reached if Stage 1 accepts)
-                    ll_star, sol_star = _solve_and_run_pf(
-                        spec, param_names, theta_star, observables, measurement_error,
-                        solver, mh_solver_kwargs, ws, data, T_obs, thread_rng;
-                        use_csmc=true, return_solution=true)
-
-                    if ll_star == T(-Inf)
-                        Threads.atomic_add!(total_proposed, 1)
-                        continue
-                    end
-
-                    # Stage 2 acceptance ratio (correction term)
-                    log_alpha_2 = phi_new * (ll_star - ll_cheap_star) -
-                                  phi_new * (ll_j - ll_cheap[j])
-
-                    if log(rand(thread_rng, T)) < log_alpha_2
-                        theta_j = theta_star
-                        ll_j = ll_star
-                        lp_j = lp_star
-                        ll_cheap[j] = ll_cheap_star
-                        if sol_star isa ProjectionSolution
-                            solutions[j] = sol_star
-                        end
-                        Threads.atomic_add!(total_accepted, 1)
-                    end
-                else
-                    # ── Standard single-stage MH ──
-                    ll_star, sol_star = _solve_and_run_pf(
-                        spec, param_names, theta_star, observables, measurement_error,
-                        solver, mh_solver_kwargs, ws, data, T_obs, thread_rng;
-                        use_csmc=true, return_solution=true)
-
-                    if ll_star == T(-Inf)
-                        Threads.atomic_add!(total_proposed, 1)
-                        continue
-                    end
-
-                    # MH acceptance ratio (tempered)
-                    log_alpha = (phi_new * ll_star + lp_star) - (phi_new * ll_j + lp_j)
-
-                    if log(rand(thread_rng, T)) < log_alpha
-                        theta_j = theta_star
-                        ll_j = ll_star
-                        lp_j = lp_star
-                        if sol_star isa ProjectionSolution
-                            solutions[j] = sol_star
-                        end
-                        Threads.atomic_add!(total_accepted, 1)
-                    end
-                end
-
-                Threads.atomic_add!(total_proposed, 1)
+                # Write back
+                state.theta_particles[:, j] = theta_j
+                state.log_likelihoods[j] = ll_j
+                state.log_priors[j] = lp_j
             end
-
-            # Write back
-            state.theta_particles[:, j] = theta_j
-            state.log_likelihoods[j] = ll_j
-            state.log_priors[j] = lp_j
         end
 
         # Record acceptance rate

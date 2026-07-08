@@ -1547,6 +1547,67 @@ end
     @test MacroEconometricModels._terminal_resample!(state_u, Np, Random.MersenneTwister(1)) == false
 end
 
+# ── E-06 / #134: SMC² PMMH mutation (chunked workspaces, unconditional PF) ──
+
+@testset "_chunk_ranges: contiguous non-overlapping partition of 1:N" begin
+    _cr = MacroEconometricModels._chunk_ranges
+    # Even/uneven splits cover exactly 1:N with no overlap, no threadid() aliasing.
+    for (N, k) in ((100, 4), (101, 4), (7, 3), (10, 1), (5, 5))
+        rgs = _cr(N, k)
+        @test length(rgs) == k
+        @test reduce(vcat, collect.(rgs)) == collect(1:N)   # covers 1:N in order, once each
+        @test maximum(length.(rgs)) - minimum(length.(rgs)) <= 1   # near-equal
+    end
+    # N < k → trailing chunks are empty (no phantom particles)
+    rgs = _cr(3, 8)
+    @test length(rgs) == 8
+    @test count(!isempty, rgs) == 3
+    @test reduce(vcat, collect.(rgs)) == collect(1:3)
+end
+
+@testset "SMC² PMMH recovers the Kalman posterior (linear model)" begin
+    # On a linear model the bootstrap PF is a noisy estimator of the exact Kalman
+    # likelihood, so the redesigned PMMH SMC² kernel must recover the same posterior
+    # as :smc (exact Kalman). Verifies the mutation targets the correct distribution.
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    true_spec = @dsge begin
+        parameters: ρ = 0.7, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    true_spec = compute_steady_state(true_spec)
+    sol_true = solve(true_spec; method=:gensys)
+    sim_data = simulate(sol_true, 120; rng=Random.MersenneTwister(2026))
+    priors = Dict(:ρ => Beta(2, 2))
+    merr = [0.1]
+
+    r_smc = estimate_dsge_bayes(spec, sim_data, [0.5]; priors=priors, method=:smc,
+        observables=[:y], n_smc=300, measurement_error=merr,
+        rng=Random.MersenneTwister(1))
+    r_smc2 = estimate_dsge_bayes(spec, sim_data, [0.5]; priors=priors, method=:smc2,
+        observables=[:y], n_smc=200, n_particles=200, n_mh_steps=2,
+        measurement_error=merr, solver=:gensys,
+        rng=Random.MersenneTwister(101))
+
+    ρ_smc = mean(r_smc.theta_draws[:, 1])
+    ρ_smc2 = mean(r_smc2.theta_draws[:, 1])
+    # Both recover the true ρ region (data posterior ≈ 0.69, well away from prior mean 0.5).
+    @test ρ_smc2 > 0.6
+    # SMC² PMMH agrees with the exact-Kalman SMC reference within MC error (observed ≈ 0.002).
+    @test isapprox(ρ_smc2, ρ_smc; atol=0.05)
+    end
+end
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Section 8: Display, Report, Refs, Plot
 # ─────────────────────────────────────────────────────────────────────────────
