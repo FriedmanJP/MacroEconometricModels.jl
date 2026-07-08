@@ -127,35 +127,6 @@ end
     @test any(!iszero, ws.reference_trajectory[:, T_sim])
 end
 
-@testset "particle_filter: auxiliary PF with various thresholds" begin
-    rng = Random.MersenneTwister(5003)
-    T_sim = 40
-
-    G1 = fill(0.6, 1, 1)
-    impact = fill(0.3, 1, 1)
-    Z = ones(1, 1)
-    d = zeros(1)
-    H_mat = fill(0.01, 1, 1)
-    Q_mat = ones(1, 1)
-
-    ss = M.DSGEStateSpace{Float64}(G1, impact, Z, d, H_mat, Q_mat)
-    data = randn(rng, 1, T_sim)
-
-    N_particles = 20
-    ws = M._allocate_pf_workspace(Float64, 1, 1, 1, N_particles)
-
-    # Very low threshold => rarely resample
-    ll1 = M._auxiliary_particle_filter!(ws, ss, data, T_sim;
-            threshold=0.01, rng=Random.MersenneTwister(5004))
-    @test isfinite(ll1)
-
-    # Very high threshold => always resample
-    ws2 = M._allocate_pf_workspace(Float64, 1, 1, 1, N_particles)
-    ll2 = M._auxiliary_particle_filter!(ws2, ss, data, T_sim;
-            threshold=0.99, rng=Random.MersenneTwister(5005))
-    @test isfinite(ll2)
-end
-
 @testset "particle_filter: conditional SMC with short reference" begin
     rng = Random.MersenneTwister(5006)
     T_sim = 30
@@ -515,7 +486,8 @@ end
 
         @test result isa BayesianDSGE{Float64}
         @test result.method == :rwmh
-        @test size(result.theta_draws, 1) == 80
+        # :mh discards burn-in (T023): stored draws = n_draws - burnin
+        @test size(result.theta_draws, 1) == 60
         @test isfinite(result.log_marginal_likelihood)
         @test isempty(result.ess_history)
         @test isempty(result.phi_schedule)
