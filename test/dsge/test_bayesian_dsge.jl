@@ -1608,6 +1608,109 @@ end
     end
 end
 
+# ── E-11 / #135: SMC² N_x adaptation on estimator variance + exchange step ──
+
+@testset "_pf_estimator_variance: estimator noise, not posterior spread (#135)" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    true_spec = @dsge begin
+        parameters: ρ = 0.7, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    true_spec = compute_steady_state(true_spec)
+    sol_true = solve(true_spec; method=:gensys)
+    sim = simulate(sol_true, 80; rng=Random.MersenneTwister(7))
+    data = Matrix(reshape(sim[:, 1], 1, :))          # n_obs × T_obs
+    T_obs = size(data, 2)
+    merr = [0.4]
+    n_states = spec.n_endog; n_shocks = spec.n_exog
+    mkpool(N_x, k=1) = [MacroEconometricModels._allocate_pf_workspace(
+        Float64, n_states, 1, n_shocks, N_x; T_obs=T_obs) for _ in 1:k]
+
+    # A DIFFUSE θ-population: ρ ranges widely, so the likelihood level varies a lot
+    # across particles ⇒ var(ll across θ) is large (this is what the OLD trigger fired on).
+    diffuse = reshape(collect(range(0.2, 0.9; length=40)), 1, 40)
+    rng = Random.MersenneTwister(123)
+
+    est400 = MacroEconometricModels._pf_estimator_variance(
+        spec, [:ρ], diffuse, [:y], merr, :gensys, NamedTuple(), mkpool(400),
+        data, T_obs, rng; n_probe=10, n_rep=3)
+    est50 = MacroEconometricModels._pf_estimator_variance(
+        spec, [:ρ], diffuse, [:y], merr, :gensys, NamedTuple(), mkpool(50),
+        data, T_obs, rng; n_probe=10, n_rep=3)
+
+    # var(ll across θ) — the OLD (wrong) trigger quantity — on the same diffuse set.
+    ws = mkpool(400)[1]; lls = Float64[]
+    for i in 1:size(diffuse, 2)
+        rr = Random.MersenneTwister(hash((:av, i)))
+        ll = MacroEconometricModels._solve_and_run_pf(
+            spec, [:ρ], diffuse[:, i], [:y], merr, :gensys, NamedTuple(),
+            ws, data, T_obs, rr)
+        isfinite(ll) && push!(lls, ll)
+    end
+    var_across = var(lls)
+
+    @test var_across > 10                 # OLD trigger (threshold 10) would double N_x here
+    @test est400 < 3                      # NEW estimator-variance trigger does NOT (Chopin ≈1–3)
+    @test est50 > est400                  # estimator variance falls with more inner particles
+    # Decision: on this diffuse-but-well-estimated posterior, N_x stays put (no spurious doubling).
+    @test MacroEconometricModels._adapt_n_particles(400, est400, 3.0) == 400
+    end
+end
+
+@testset "_exchange_step!: recomputes all θ-likelihoods at the new N_x (#135)" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    true_spec = @dsge begin
+        parameters: ρ = 0.7, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    true_spec = compute_steady_state(true_spec)
+    sim = simulate(solve(true_spec; method=:gensys), 60; rng=Random.MersenneTwister(3))
+    data = Matrix(reshape(sim[:, 1], 1, :)); T_obs = size(data, 2)
+    merr = [0.4]; N = 20; N_x = 200
+    n_states = spec.n_endog; n_shocks = spec.n_exog
+    npool = max(Threads.nthreads(), 1)
+    pool = [MacroEconometricModels._allocate_pf_workspace(
+        Float64, n_states, 1, n_shocks, N_x; T_obs=T_obs) for _ in 1:npool]
+
+    thetas = reshape(collect(range(0.55, 0.85; length=N)), 1, N)
+    SENTINEL = -1.0e5
+    state = MacroEconometricModels.SMCState{Float64}(
+        copy(thetas), fill(-log(Float64(N)), N),
+        fill(SENTINEL, N), zeros(N),          # stale (old-N_x) sentinel likelihoods
+        Float64[0.0, 1.0], Float64[], Float64[], 0.0,
+        MacroEconometricModels.PFWorkspace{Float64}[], Matrix{Float64}(I, 1, 1))
+
+    MacroEconometricModels._exchange_step!(
+        state, spec, [:ρ], [:y], merr, :gensys, NamedTuple(),
+        pool, data, T_obs, Random.MersenneTwister(99))
+
+    @test all(isfinite, state.log_likelihoods)          # all recomputed to finite values
+    @test all(state.log_likelihoods .!= SENTINEL)       # no stale (old-N_x) estimate remains
+    end
+end
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Section 8: Display, Report, Refs, Plot
 # ─────────────────────────────────────────────────────────────────────────────

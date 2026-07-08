@@ -828,14 +828,83 @@ end
 # =============================================================================
 
 """
-    _adapt_n_particles(N_x::Int, var_ll::Real, threshold::Real) → Int
+    _adapt_n_particles(N_x::Int, est_var::Real, threshold::Real) → Int
 
-Adapt the number of internal particles for SMC². If the variance of
-log-likelihood estimates across θ-particles exceeds `threshold`, double `N_x`.
-Otherwise return `N_x` unchanged.
+Adapt the number of inner state particles for SMC². If the **PF estimator
+variance** at fixed θ (see [`_pf_estimator_variance`](@ref)) exceeds `threshold`,
+double `N_x`; otherwise return `N_x` unchanged. Chopin et al. (2013) §3.4 target a
+log-likelihood-estimator variance of roughly 1–3.
 """
-function _adapt_n_particles(N_x::Int, var_ll::Real, threshold::Real)
-    return var_ll > threshold ? 2 * N_x : N_x
+function _adapt_n_particles(N_x::Int, est_var::Real, threshold::Real)
+    return est_var > threshold ? 2 * N_x : N_x
+end
+
+"""
+    _pf_estimator_variance(spec, param_names, theta_particles, observables,
+                           measurement_error, solver, solver_kwargs, pool, data,
+                           T_obs, rng; n_probe, n_rep) -> T
+
+Estimate the variance of the particle-filter log-likelihood estimator **at fixed θ**
+(Chopin et al. 2013 §3.4) — the quantity that should trigger `N_x` adaptation.
+
+Probes `n_probe` θ-particles (evenly spaced through the population) with `n_rep`
+fresh, independent bootstrap PFs each, and returns the mean over probes of the
+per-θ variance of `log p̂(y|θ)`. This measures the **estimator noise** at a fixed
+parameter, NOT `var(ll across θ)` — the spread of the likelihood across the
+θ-population, which is large on any diffuse posterior and would trigger spurious
+doubling (E-11 / #135). Returns `0` when fewer than two finite replicates exist.
+"""
+function _pf_estimator_variance(spec::DSGESpec{T}, param_names::Vector{Symbol},
+        theta_particles::AbstractMatrix{T}, observables::Vector{Symbol},
+        measurement_error, solver::Symbol, solver_kwargs::NamedTuple,
+        pool::Vector{PFWorkspace{T}}, data::Matrix{T}, T_obs::Int,
+        rng::AbstractRNG; n_probe::Int=8, n_rep::Int=2) where {T<:AbstractFloat}
+    N = size(theta_particles, 2)
+    n_probe = min(n_probe, N)
+    (n_probe < 1 || n_rep < 2) && return zero(T)
+    idx = unique(round.(Int, range(1, N; length=n_probe)))
+    ws = pool[1]
+    per_theta = T[]
+    for i in idx
+        theta_i = Vector{T}(theta_particles[:, i])
+        reps = T[]
+        for r in 1:n_rep
+            rr = Random.MersenneTwister(hash((:nx_probe, i, r, rand(rng, UInt64))))
+            ll = _solve_and_run_pf(spec, param_names, theta_i, observables,
+                measurement_error, solver, solver_kwargs, ws, data, T_obs, rr)
+            isfinite(ll) && push!(reps, ll)
+        end
+        length(reps) >= 2 && push!(per_theta, var(reps))
+    end
+    return isempty(per_theta) ? zero(T) : mean(per_theta)
+end
+
+"""
+    _exchange_step!(state, spec, param_names, observables, measurement_error,
+                    solver, solver_kwargs, pool, data, T_obs, rng) -> Nothing
+
+Chopin et al. (2013) §3.4 **exchange step**: after `N_x` changes, re-run a fresh
+unconditional bootstrap PF for EVERY θ-particle at the new `N_x` (the `pool`
+workspaces must already be resized) and replace the stored `log_likelihoods`, so
+the outer θ-weights are not a mix of estimates computed at two different `N_x`.
+"""
+function _exchange_step!(state::SMCState{T}, spec::DSGESpec{T},
+        param_names::Vector{Symbol}, observables::Vector{Symbol}, measurement_error,
+        solver::Symbol, solver_kwargs::NamedTuple, pool::Vector{PFWorkspace{T}},
+        data::Matrix{T}, T_obs::Int, rng::AbstractRNG) where {T<:AbstractFloat}
+    N = size(state.theta_particles, 2)
+    ranges = _chunk_ranges(N, length(pool))
+    seeds = [hash((:exchange, j, rand(rng, UInt64))) for j in 1:N]
+    Threads.@threads for c in eachindex(ranges)
+        ws = pool[c]
+        for j in ranges[c]
+            rr = Random.MersenneTwister(seeds[j])
+            state.log_likelihoods[j] = _solve_and_run_pf(spec, param_names,
+                Vector{T}(state.theta_particles[:, j]), observables, measurement_error,
+                solver, solver_kwargs, ws, data, T_obs, rr)
+        end
+    end
+    return nothing
 end
 
 """
@@ -1402,16 +1471,29 @@ function _smc2_sample(spec::DSGESpec{T}, data::AbstractMatrix,
         acc_rate = tp > 0 ? T(total_accepted[]) / T(tp) : zero(T)
         push!(state.acceptance_rates, acc_rate)
 
-        # Adapt N_x if log-likelihood variance is too high
-        finite_lls = filter(isfinite, state.log_likelihoods)
-        if length(finite_lls) > 1
-            var_ll = var(finite_lls)
-            N_x_new = _adapt_n_particles(N_x, var_ll, T(10))
+        # Adapt N_x on the PF ESTIMATOR variance at fixed θ (Chopin et al. 2013 §3.4),
+        # NOT var(ll across θ) which just reflects posterior spread and doubles N_x
+        # spuriously on any diffuse posterior (E-11 / #135).
+        #
+        # A cheap gate keeps the common case free: only when the PMMH acceptance rate
+        # collapses (the signature of a too-noisy likelihood estimate) do we spend the
+        # duplicate-run variance probe. A healthy chain — including on a diffuse posterior
+        # with good acceptance — skips the probe entirely and N_x is left unchanged, so
+        # N_x is never doubled merely because the posterior is diffuse.
+        if acc_rate < T(0.15)
+            est_var = _pf_estimator_variance(spec, param_names, state.theta_particles,
+                observables, measurement_error, solver, solver_kwargs, pool, data, T_obs,
+                rng; n_probe=min(N, 8), n_rep=2)   # target estimator variance ≈ 1–3
+            N_x_new = _adapt_n_particles(N_x, est_var, T(3))
             if N_x_new > N_x
                 N_x = N_x_new
                 for ws in pool
                     _resize_pf_workspace!(ws, N_x)
                 end
+                # Exchange step: recompute ALL θ-likelihoods at the new N_x so the outer
+                # weights are not a mix of estimates from two different N_x (no stale values).
+                _exchange_step!(state, spec, param_names, observables, measurement_error,
+                    solver, solver_kwargs, pool, data, T_obs, rng)
             end
         end
 
