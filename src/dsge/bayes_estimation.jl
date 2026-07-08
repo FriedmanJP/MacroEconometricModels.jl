@@ -271,6 +271,87 @@ function _smc_state_to_bayesian_dsge(state::SMCState{T}, prior::DSGEPrior{T},
 end
 
 # =============================================================================
+# Internal: Geweke (1999) modified harmonic mean marginal-likelihood estimator
+# =============================================================================
+
+"""
+    _geweke_mhm(draws, log_post_kernel; p=0.5) -> T
+
+Geweke (1999) modified harmonic mean (MHM) estimator of the **log marginal
+likelihood** from posterior draws — the Dynare-standard estimator for MCMC output.
+
+Arguments
+- `draws::AbstractMatrix{T}` — `S×d` matrix of post-burn-in posterior draws
+  (rows = draws, columns = parameters). Relies on burn-in already being
+  discarded (see [T023]).
+- `log_post_kernel::AbstractVector{T}` — per-draw log posterior *kernel*
+  `log L(θ⁽ˢ⁾) + log π(θ⁽ˢ⁾)` (log likelihood + log prior). Any additive
+  constant in the likelihood cancels in the ratio and shifts the estimate by
+  that same constant, so the estimate is on the **same additive scale as the
+  SMC tempering-path estimator** (the Kalman log-likelihood carries its own
+  normalizing constant in both paths) — `:mh` and `:smc` marginal likelihoods,
+  and Bayes factors between them, are therefore comparable.
+
+Method. With posterior sample mean `θ̄` and covariance `Σ`, the weighting
+density `f` is a truncated multivariate normal on the `p`-probability ellipsoid
+`{θ : (θ−θ̄)'Σ⁻¹(θ−θ̄) ≤ χ²_{d,p}}`, normalized by the truncation mass `τ = p`:
+
+    log f(θ) = −log p − (d/2) log(2π) − ½ log|Σ| − ½ (θ−θ̄)'Σ⁻¹(θ−θ̄)   (inside)
+             = −∞                                                        (outside)
+
+and the estimator is
+
+    log p̂(y) = log S − logsumexp_s( log f(θ⁽ˢ⁾) − log_post_kernel(θ⁽ˢ⁾) ).
+
+Returns `NaN` (with a `@warn`) when the effective (finite-kernel) chain is too
+short (`S < 10·d`) or when no draw falls inside the truncation region.
+
+Reference: Geweke (1999), *Econometric Reviews* 18(1), 1–73.
+"""
+function _geweke_mhm(draws::AbstractMatrix{T}, log_post_kernel::AbstractVector{T};
+                     p::Real=0.5) where {T<:AbstractFloat}
+    d = size(draws, 2)
+    finite = findall(isfinite, log_post_kernel)
+    if length(finite) < 10 * d
+        @warn "Geweke MHM: effective post-burn-in chain too short " *
+              "(finite draws = $(length(finite)) < 10·d = $(10*d)); returning NaN. " *
+              "Increase n_draws or reduce burnin for a usable marginal likelihood."
+        return T(NaN)
+    end
+    D = Matrix{T}(draws[finite, :])
+    L = Vector{T}(log_post_kernel[finite])
+    S = length(finite)
+
+    # Posterior mean and (unbiased) covariance of the sampled draws.
+    θbar = vec(mean(D; dims=1))
+    Σ = d == 1 ? reshape([var(vec(D))], 1, 1) : cov(D)
+    Σsym = Symmetric(Matrix{T}(Σ))
+    Σinv = Matrix{T}(robust_inv(Σsym; silent=true))
+    logdetΣ = logdet_safe(Σsym)
+
+    # Truncated-normal weighting density constants; τ = p is the truncation mass.
+    thresh = T(quantile(Chisq(d), p))
+    log_const = -log(T(p)) - T(d) / 2 * log(T(2π)) - logdetΣ / 2
+
+    terms = fill(T(-Inf), S)
+    n_inside = 0
+    @inbounds for s in 1:S
+        δ = @view(D[s, :]) .- θbar
+        q = dot(δ, Σinv, δ)
+        if q <= thresh
+            terms[s] = (log_const - q / 2) - L[s]   # log f(θ) − log kernel(θ)
+            n_inside += 1
+        end
+    end
+    if n_inside == 0
+        @warn "Geweke MHM: no draws fell inside the p=$(p) truncation region; " *
+              "returning NaN (degenerate or extremely diffuse posterior sample)."
+        return T(NaN)
+    end
+    return log(T(S)) - _logsumexp(terms)
+end
+
+# =============================================================================
 # Internal: convert MH output to BayesianDSGE
 # =============================================================================
 
@@ -297,18 +378,12 @@ function _mh_to_bayesian_dsge(draws::Matrix{T}, log_posterior::Vector{T},
                                         observables, measurement_error,
                                         solver, solver_kwargs)
 
-    # Approximate log marginal likelihood via harmonic mean estimator
-    # log p(Y) ≈ -log(1/n * sum(1/p(Y|θ_i))) = -log(mean(exp(-log_lik)))
-    # This is a simple approximation; SMC gives better estimates
-    finite_lp = filter(isfinite, log_posterior)
-    log_ml = if length(finite_lp) > 0
-        # Harmonic mean: 1/p(Y) ≈ E[1/L(θ)] under posterior
-        # Use log_posterior which includes prior, so extract log_lik estimate
-        # Simple approximation: max log posterior
-        T(maximum(finite_lp))
-    else
-        T(-Inf)
-    end
+    # Log marginal likelihood via Geweke (1999) modified harmonic mean (E-04 / #130).
+    # `log_posterior` stores the per-draw kernel log L(θ) + log π(θ), on the same
+    # additive scale as the SMC tempering-path estimator, so :mh and :smc marginal
+    # likelihoods (and Bayes factors between them) are comparable. Returns NaN + @warn
+    # when the post-burn-in chain is too short.
+    log_ml = _geweke_mhm(draws, log_posterior)
 
     BayesianDSGE{T}(
         draws, log_posterior, param_names, prior,
@@ -409,8 +484,16 @@ end
 
 Return the log marginal likelihood (model evidence) from Bayesian estimation.
 
-For SMC methods, this is the normalizing constant estimate from the
-adaptive tempering schedule. For RWMH, this is an approximation.
+For SMC methods, this is the normalizing-constant estimate from the adaptive
+tempering schedule (preferred when available). For RWMH (`:mh`), it is the
+Geweke (1999) modified harmonic mean (MHM) estimate computed from the
+post-burn-in draws — the Dynare standard — on the same additive scale as the
+SMC estimate. The MHM returns `NaN` (with a warning) when the chain is too
+short to form a usable estimate.
+
+# References
+- Geweke, J. (1999). Using simulation methods for Bayesian econometric models.
+  *Econometric Reviews*, 18(1), 1-73.
 """
 function marginal_likelihood(result::BayesianDSGE)
     return result.log_marginal_likelihood
@@ -424,6 +507,10 @@ Compute the log Bayes factor comparing model 1 to model 2:
 
 A positive value favors model 1; negative favors model 2.
 Following Kass & Raftery (1995), `2 * log BF > 6` is strong evidence.
+
+Both marginal likelihoods must be on the same additive scale: SMC (tempering
+path) and `:mh` (Geweke MHM) estimates are comparable by construction, but
+compare estimators consistently and prefer SMC when available.
 
 # References
 - Kass, R. E. & Raftery, A. E. (1995). Bayes Factors.

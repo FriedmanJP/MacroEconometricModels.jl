@@ -1355,6 +1355,88 @@ end
     end
 end
 
+# ── E-04 / #130: RWMH marginal likelihood = Geweke (1999) modified harmonic mean ──
+
+@testset "_geweke_mhm: recovers analytic Gaussian marginal likelihood" begin
+    # If the posterior is exactly N(μ, Σ) and the kernel is c·N(θ;μ,Σ), then the
+    # marginal likelihood (integral of the kernel) equals c, so log ML = log c.
+    # The MHM estimator applied to draws from N(μ,Σ) must recover log c — this is
+    # the precise, deterministic check that the estimator (not just "some finite
+    # number") is correct.
+    rng = Random.MersenneTwister(20260708)
+    μ = [0.5, -0.3]
+    Σ = [0.04 0.01; 0.01 0.09]
+    mvn = MvNormal(μ, Σ)
+    S = 20_000
+    draws = Matrix(rand(rng, mvn, S)')          # S×d
+    log_c = -50.0
+    kernel = [log_c + logpdf(mvn, draws[s, :]) for s in 1:S]
+
+    est = MacroEconometricModels._geweke_mhm(draws, kernel)
+    @test isfinite(est)
+    @test isapprox(est, log_c; atol=0.3)         # observed ≈ -49.99
+
+    # Truncation fraction p should not materially move the estimate (Geweke's point).
+    est_p9 = MacroEconometricModels._geweke_mhm(draws, kernel; p=0.9)
+    est_p1 = MacroEconometricModels._geweke_mhm(draws, kernel; p=0.1)
+    @test isapprox(est_p9, log_c; atol=0.4)
+    @test isapprox(est_p1, log_c; atol=0.4)
+end
+
+@testset "_geweke_mhm: short-chain / degenerate guards return NaN" begin
+    _suppress_warnings() do
+        # S < 10·d → NaN, not a silently wrong number.
+        short = randn(Random.MersenneTwister(1), 5, 2)
+        @test isnan(MacroEconometricModels._geweke_mhm(short, fill(-1.0, 5)))
+        # No finite kernel value → NaN.
+        big = randn(Random.MersenneTwister(2), 100, 1)
+        @test isnan(MacroEconometricModels._geweke_mhm(big, fill(-Inf, 100)))
+    end
+end
+
+@testset "marginal_likelihood: :mh MHM agrees with :smc (not max log posterior)" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    true_spec = @dsge begin
+        parameters: ρ = 0.8, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    true_spec = compute_steady_state(true_spec)
+    sol_true = solve(true_spec; method=:gensys)
+    sim_data = simulate(sol_true, 200; rng=Random.MersenneTwister(2024))
+
+    priors = Dict(:ρ => Beta(2, 2))
+    r_smc = estimate_dsge_bayes(spec, sim_data, [0.5]; priors=priors, method=:smc,
+        observables=[:y], n_smc=400, rng=Random.MersenneTwister(11))
+    r_mh = estimate_dsge_bayes(spec, sim_data, [0.5]; priors=priors, method=:mh,
+        observables=[:y], n_draws=6000, burnin=2000, rng=Random.MersenneTwister(12))
+
+    ml_smc = marginal_likelihood(r_smc)
+    ml_mh  = marginal_likelihood(r_mh)
+    @test isfinite(ml_smc)
+    @test isfinite(ml_mh)
+    # Regression against the old behaviour: the estimator is a genuine evidence
+    # estimate strictly below the max log posterior kernel (the peaked-posterior
+    # Occam factor), NOT `maximum(log_posterior)` (≈ -128.4 here) as before.
+    @test ml_mh < maximum(r_mh.log_posterior)
+    # SMC (tempering path) and MHM estimate the same log marginal likelihood and
+    # agree within a documented Monte Carlo tolerance: the observed gap is ≈ 0.5
+    # (within SMC's own ≈ 0.5 cross-seed spread); the old max-log-posterior would
+    # miss by ≈ 2.5 and fail this bound.
+    @test isapprox(ml_smc, ml_mh; atol=2.0)
+    end
+end
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Section 8: Display, Report, Refs, Plot
 # ─────────────────────────────────────────────────────────────────────────────

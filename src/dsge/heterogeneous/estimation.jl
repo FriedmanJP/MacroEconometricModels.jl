@@ -437,9 +437,11 @@ function estimate_dsge_bayes(spec::HADSGESpec{T}, data::AbstractMatrix,
         Z, d, H = _build_ha_observation_equation(sol_mean, observables, measurement_error)
         ss_result = _build_state_space(linear_sol, Z, d, H)
 
-        # Approximate log marginal likelihood via max log posterior
-        finite_lp = filter(isfinite, post_log_posterior)
-        log_ml = isempty(finite_lp) ? T(-Inf) : T(maximum(finite_lp))
+        # Log marginal likelihood via Geweke (1999) modified harmonic mean (E-04 / #130).
+        # `post_log_posterior` stores the per-draw kernel log L(θ) + log π(θ); the MHM is
+        # on the same additive scale as the SMC estimator. Returns NaN + @warn on a chain
+        # too short to build the truncated-normal weighting density.
+        log_ml = _geweke_mhm(post_draws, post_log_posterior)
 
         return BayesianDSGE{T}(
             post_draws, post_log_posterior, param_names, prior,
