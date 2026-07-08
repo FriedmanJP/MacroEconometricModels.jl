@@ -231,6 +231,40 @@ end
     @test ws.reference_ancestors === nothing
 end
 
+@testset "Particle-filter likelihood correct under adaptive resampling (#128)" begin
+    # On a small linear-Gaussian state space the Kalman likelihood is exact. The bootstrap PF
+    # log-likelihood must match it even when adaptive resampling SKIPS steps (low threshold):
+    # the ratio-form increment logsumexp(L_t)-logsumexp(L_{t-1}) keeps the carried non-uniform
+    # weights, whereas the pre-fix logsumexp(log g_t)-log N increment biased every skipped step.
+    ns, no, nsh = 2, 1, 1
+    G1 = [0.6 0.0; 0.0 0.4]
+    impact = reshape([1.0, 0.5], ns, nsh)
+    Z = [1.0 1.0]
+    d = [0.0]
+    H = reshape([0.05], no, no)
+    Q = reshape([1.0], nsh, nsh)
+    ss = MacroEconometricModels.DSGEStateSpace{Float64}(G1, impact, Z, d, H, Q)
+    T_obs = 50
+    data = let rng = MersenneTwister(1), x = zeros(ns), dat = zeros(no, T_obs), Hc = sqrt(H[1, 1])
+        for t in 1:T_obs
+            x = G1 * x + impact * randn(rng, nsh)
+            dat[:, t] = Z * x .+ d .+ Hc * randn(rng, no)
+        end
+        dat
+    end
+    ll_kalman = MacroEconometricModels._kalman_loglikelihood(ss, data)
+    N = 2500
+    for thr in (0.1, 0.5, 1.0)   # 0.1 skips most resamples yet must still match Kalman
+        lls = Float64[]
+        for s in 1:50
+            ws = MacroEconometricModels._allocate_pf_workspace(Float64, ns, no, nsh, N)
+            push!(lls, MacroEconometricModels._bootstrap_particle_filter!(
+                ws, ss, data, T_obs; threshold=thr, rng=MersenneTwister(1000 + s)))
+        end
+        @test isapprox(mean(lls), ll_kalman; rtol=0.05)
+    end
+end
+
 @testset "PFWorkspace allocation — order 2" begin
     n_states = 4
     n_obs = 2

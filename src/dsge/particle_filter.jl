@@ -148,6 +148,24 @@ function _normalize_log_weights!(weights::Vector{T}, log_weights::Vector{T}) whe
 end
 
 """
+    _pf_increment!(ws::PFWorkspace) -> T
+
+Unbiased incremental log-likelihood factor under adaptive resampling. `ws.cumweights` holds
+the fresh per-particle observation log-densities `log g_t` (written by `_pf_log_weights!`);
+fold them into the running unnormalized cumulative log-weights `ws.log_weights` and return the
+ratio-form increment `logsumexp(L_t) - logsumexp(L_{t-1})`. The plain `logsumexp(log g_t)-log N`
+increment is unbiased only when the incoming weights are uniform (a resample happened last
+step); when adaptive resampling skips a step the carried non-uniform weights must be kept, not
+overwritten (audit R-... / #128). After a resample the caller resets `ws.log_weights` to
+`-log N`, so `lse_prev = 0` here. The caller normalizes `ws.weights` for the ESS test.
+"""
+function _pf_increment!(ws::PFWorkspace{T}) where {T<:AbstractFloat}
+    lse_prev = _logsumexp(ws.log_weights)
+    ws.log_weights .+= ws.cumweights
+    return _logsumexp(ws.log_weights) - lse_prev
+end
+
+"""
     _systematic_resample!(ancestors, weights, cumweights, N, rng)
 
 O(N) systematic resampling into pre-allocated `ancestors` vector.
@@ -281,11 +299,13 @@ function _bootstrap_particle_filter!(ws::PFWorkspace{T}, ss::DSGEStateSpace{T},
 
         # Compute log weights
         y_t = @view data[:, t]
-        _pf_log_weights!(ws.log_weights, ws.innovations, ws.tmp_obs,
+        # Fresh observation log-densities into the cumweights scratch (do NOT overwrite the
+        # carried non-uniform weights — #128); cumweights is free until resampling.
+        _pf_log_weights!(ws.cumweights, ws.innovations, ws.tmp_obs,
                           ws.particles, y_t, ss.Z, ss.d, ss.H_inv, ss.log_det_H)
 
         # Accumulate log-likelihood: log(1/N * sum_k exp(log_w_k))
-        log_lik += _logsumexp(ws.log_weights) - log_N
+        log_lik += _pf_increment!(ws)   # ratio-form increment, correct under adaptive resampling (#128)
 
         # Normalize weights
         _normalize_log_weights!(ws.weights, ws.log_weights)
@@ -480,11 +500,12 @@ function _conditional_smc!(ws::PFWorkspace{T}, ss::DSGEStateSpace{T},
 
         # Compute log weights
         y_t = @view data[:, t]
-        _pf_log_weights!(ws.log_weights, ws.innovations, ws.tmp_obs,
+        # Fresh observation log-densities into the cumweights scratch (#128).
+        _pf_log_weights!(ws.cumweights, ws.innovations, ws.tmp_obs,
                           ws.particles, y_t, ss.Z, ss.d, ss.H_inv, ss.log_det_H)
 
         # Accumulate log-likelihood
-        log_lik += _logsumexp(ws.log_weights) - log_N
+        log_lik += _pf_increment!(ws)   # ratio-form increment, correct under adaptive resampling (#128)
 
         # Normalize weights
         _normalize_log_weights!(ws.weights, ws.log_weights)
@@ -949,11 +970,11 @@ function _bootstrap_particle_filter!(ws::PFWorkspace{T}, nlss::NonlinearStateSpa
 
         # Compute log weights using full endogenous particles
         y_t = @view data[:, t]
-        _pf_log_weights!(ws.log_weights, ws.innovations, ws.tmp_obs,
+        _pf_log_weights!(ws.cumweights, ws.innovations, ws.tmp_obs,   # scratch, not overwrite (#128)
                           ws.particles, y_t, nlss.Z, nlss.d, nlss.H_inv, nlss.log_det_H)
 
         # Accumulate log-likelihood
-        log_lik += _logsumexp(ws.log_weights) - log_N
+        log_lik += _pf_increment!(ws)   # ratio-form increment, correct under adaptive resampling (#128)
 
         # Normalize weights
         _normalize_log_weights!(ws.weights, ws.log_weights)
@@ -1052,11 +1073,11 @@ function _conditional_smc!(ws::PFWorkspace{T}, nlss::NonlinearStateSpace{T},
 
         # Compute log weights
         y_t = @view data[:, t]
-        _pf_log_weights!(ws.log_weights, ws.innovations, ws.tmp_obs,
+        _pf_log_weights!(ws.cumweights, ws.innovations, ws.tmp_obs,   # scratch, not overwrite (#128)
                           ws.particles, y_t, nlss.Z, nlss.d, nlss.H_inv, nlss.log_det_H)
 
         # Accumulate log-likelihood
-        log_lik += _logsumexp(ws.log_weights) - log_N
+        log_lik += _pf_increment!(ws)   # ratio-form increment, correct under adaptive resampling (#128)
 
         # Normalize weights
         _normalize_log_weights!(ws.weights, ws.log_weights)
@@ -1290,11 +1311,11 @@ function _bootstrap_particle_filter!(ws::PFWorkspace{T}, pss::ProjectionStateSpa
 
         # Compute observation log-weights
         y_t = @view data[:, t]
-        _pf_log_weights!(ws.log_weights, ws.innovations, ws.tmp_obs,
+        _pf_log_weights!(ws.cumweights, ws.innovations, ws.tmp_obs,   # scratch, not overwrite (#128)
                           ws.particles, y_t, pss.Z, pss.d, pss.H_inv, pss.log_det_H)
 
         # Accumulate log-likelihood
-        log_lik += _logsumexp(ws.log_weights) - log_N
+        log_lik += _pf_increment!(ws)   # ratio-form increment, correct under adaptive resampling (#128)
 
         # Normalize weights
         _normalize_log_weights!(ws.weights, ws.log_weights)
@@ -1310,6 +1331,10 @@ function _bootstrap_particle_filter!(ws::PFWorkspace{T}, pss::ProjectionStateSpa
             _systematic_resample!(ws.ancestors, ws.weights, ws.cumweights, N, rng)
             _resample_particles!(ws.particles_new, ws.particles, ws.ancestors)
             ws.particles, ws.particles_new = ws.particles_new, ws.particles
+            # Resampled particles are uniformly weighted — reset so the next ratio-form
+            # increment's lse_prev = 0 (the projection filters previously omitted this because
+            # the old code overwrote log_weights each step; #128 needs it).
+            fill!(ws.log_weights, -log(T(N)))
         end
     end
 
@@ -1367,11 +1392,11 @@ function _conditional_smc!(ws::PFWorkspace{T}, pss::ProjectionStateSpace{T},
 
         # Compute observation log-weights
         y_t = @view data[:, t]
-        _pf_log_weights!(ws.log_weights, ws.innovations, ws.tmp_obs,
+        _pf_log_weights!(ws.cumweights, ws.innovations, ws.tmp_obs,   # scratch, not overwrite (#128)
                           ws.particles, y_t, pss.Z, pss.d, pss.H_inv, pss.log_det_H)
 
         # Accumulate log-likelihood
-        log_lik += _logsumexp(ws.log_weights) - log_N
+        log_lik += _pf_increment!(ws)   # ratio-form increment, correct under adaptive resampling (#128)
 
         # Normalize weights
         _normalize_log_weights!(ws.weights, ws.log_weights)
@@ -1388,6 +1413,7 @@ function _conditional_smc!(ws::PFWorkspace{T}, pss::ProjectionStateSpace{T},
             ws.ancestors[N] = N  # Reference particle always survives
             _resample_particles!(ws.particles_new, ws.particles, ws.ancestors)
             ws.particles, ws.particles_new = ws.particles_new, ws.particles
+            fill!(ws.log_weights, -log(T(N)))   # uniform after resampling for the ratio-form increment (#128)
         end
 
         # Store trajectory for backward sampling
