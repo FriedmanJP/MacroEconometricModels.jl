@@ -705,6 +705,8 @@ estimate_dsge
 
 ```@docs
 estimate_dsge_bayes
+posterior_mode
+PosteriorMode
 posterior_summary
 marginal_likelihood
 bayes_factor

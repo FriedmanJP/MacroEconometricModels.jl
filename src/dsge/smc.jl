@@ -597,6 +597,8 @@ acceptance rate (Roberts & Rosenthal 2001).
 - `burnin::Int=1000` — burn-in length. `_mh_sample` returns the FULL chain; the caller
   (`estimate_dsge_bayes`) discards the first `burnin` draws unless `keep_burnin=true`.
 - `adapt_interval::Int=100` — adapt proposal covariance every N draws
+- `init_proposal_cov::Union{Nothing,AbstractMatrix}=nothing` — initial proposal
+  covariance (already scaled, e.g. `c²·H⁻¹` from `posterior_mode`); default `c²·I`
 - `observables::Vector{Symbol}` — observed variables
 - `measurement_error` — measurement error SDs or `nothing`
 - `solver::Symbol=:gensys` — DSGE solver method
@@ -617,6 +619,7 @@ function _mh_sample(spec::DSGESpec{T}, data::AbstractMatrix,
                      theta0::AbstractVector{T};
                      n_draws::Int=5000, burnin::Int=1000,
                      adapt_interval::Int=100,
+                     init_proposal_cov::Union{Nothing,AbstractMatrix}=nothing,
                      observables::Vector{Symbol}=spec.endog,
                      measurement_error=nothing,
                      solver::Symbol=:gensys,
@@ -657,13 +660,19 @@ function _mh_sample(spec::DSGESpec{T}, data::AbstractMatrix,
     draws = zeros(T, n_draws, n_params)
     log_posterior = zeros(T, n_draws)
 
-    # Proposal covariance: start with identity, scale by c²
+    # Proposal covariance: caller-supplied (already scaled, e.g. c²·H⁻¹ from
+    # posterior_mode) or identity scaled by c²
     c2 = T(2.38)^2 / T(n_params)
-    proposal_cov = c2 * Matrix{T}(I, n_params, n_params)
+    proposal_cov = init_proposal_cov === nothing ?
+        c2 * Matrix{T}(I, n_params, n_params) : Matrix{T}(init_proposal_cov)
     scale_factor = one(T)
 
     # Cholesky of proposal
-    proposal_L = cholesky(Hermitian(proposal_cov)).L
+    proposal_L = try
+        cholesky(Hermitian(proposal_cov)).L
+    catch
+        cholesky(Hermitian(proposal_cov + T(1e-8) * I)).L
+    end
 
     total_accepted = 0
 

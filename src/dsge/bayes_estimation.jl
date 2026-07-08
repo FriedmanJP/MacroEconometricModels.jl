@@ -9,6 +9,7 @@ Public API for Bayesian DSGE estimation and posterior analysis functions.
 
 Provides:
 - `estimate_dsge_bayes` — main estimation entry point (SMC, SMC², RWMH)
+- `posterior_mode` — posterior mode + Laplace marginal likelihood + RWMH proposal seed
 - `posterior_summary` — posterior mean, median, std, credible intervals
 - `marginal_likelihood` — log marginal likelihood accessor
 - `bayes_factor` — log Bayes factor between two models
@@ -62,6 +63,44 @@ function _infer_prior_bounds(d::Distribution)
     end
 end
 
+"""
+    _build_bayes_prior(priors::Dict{Symbol,<:Distribution}) → DSGEPrior
+
+Build a `DSGEPrior` from a priors dict, auto-inferring parameter bounds from
+each distribution's support via `_infer_prior_bounds`.
+"""
+function _build_bayes_prior(priors::Dict{Symbol,<:Distribution})
+    lower_dict = Dict{Symbol,Float64}()
+    upper_dict = Dict{Symbol,Float64}()
+    for (pn, d) in priors
+        lo, hi = _infer_prior_bounds(d)
+        lower_dict[pn] = lo
+        upper_dict[pn] = hi
+    end
+    return DSGEPrior(priors; lower=lower_dict, upper=upper_dict)
+end
+
+"""
+    _orient_bayes_data(data, n_obs, ::Type{T}) → Matrix{T}
+
+Convert `data` to an `n_obs × T_obs` matrix (each column one time period), the
+orientation the Kalman/particle filters expect. Transposes when the column
+count matches `n_obs`, or best-guesses (more rows than columns → transpose)
+when neither dimension matches.
+"""
+function _orient_bayes_data(data::AbstractMatrix, n_obs::Int, ::Type{T}) where {T<:AbstractFloat}
+    data_mat = Matrix{T}(data)
+    nrows, ncols = size(data_mat)
+    if nrows != n_obs && ncols == n_obs
+        data_mat = Matrix{T}(data_mat')
+    elseif nrows != n_obs && ncols != n_obs
+        if nrows > ncols
+            data_mat = Matrix{T}(data_mat')
+        end
+    end
+    return data_mat
+end
+
 # =============================================================================
 # Main public API
 # =============================================================================
@@ -97,6 +136,11 @@ SMC², or Random-Walk Metropolis-Hastings (RWMH).
   (Christen & Fox 2005). Pre-screens proposals with a cheap bootstrap PF to avoid
   expensive CSMC evaluations on proposals that would be rejected. Exact posterior.
 - `n_screen::Int=200` — particles for screening PF (only used when `delayed_acceptance=true`)
+- `proposal::Symbol=:adaptive` — RWMH proposal initialization (`:mh` only). `:adaptive`
+  keeps the current behavior (identity proposal, adapted along the chain). `:mode` first
+  runs [`posterior_mode`](@ref) and seeds the chain at the mode with proposal covariance
+  `c²·H⁻¹` where `c = 2.38/√d` (Roberts & Rosenthal 2001 optimal scaling) and `H` is the
+  negative-log-posterior Hessian at the mode.
 - `rng::AbstractRNG=Random.default_rng()` — random number generator
 
 # Returns
@@ -126,24 +170,15 @@ function estimate_dsge_bayes(spec::DSGESpec{T}, data::AbstractMatrix,
                               solver_kwargs::NamedTuple=NamedTuple(),
                               delayed_acceptance::Bool=false,
                               n_screen::Int=200,
+                              proposal::Symbol=:adaptive,
                               rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
 
-    # ── 1. Build DSGEPrior from priors dict ──────────────────────────────
-    # Auto-infer bounds from distribution support
-    lower_dict = Dict{Symbol,Float64}()
-    upper_dict = Dict{Symbol,Float64}()
-    for (pn, d) in priors
-        lo, hi = _infer_prior_bounds(d)
-        lower_dict[pn] = lo
-        upper_dict[pn] = hi
-    end
-    prior = DSGEPrior(priors; lower=lower_dict, upper=upper_dict)
+    # ── 1. Build DSGEPrior from priors dict (bounds inferred from support) ─
+    prior = _build_bayes_prior(priors)
 
     # ── 2. Sort param_names to match DSGEPrior ordering ──────────────────
     param_names = prior.param_names  # already sorted by DSGEPrior constructor
 
-    # Sort theta0 to match param_names ordering
-    prior_keys_sorted = param_names
     # theta0 is provided in the same order as the sorted prior keys
     theta0_sorted = T.(theta0)
 
@@ -154,23 +189,16 @@ function estimate_dsge_bayes(spec::DSGESpec{T}, data::AbstractMatrix,
     n_obs = length(observables)
 
     # ── 4. Data handling: ensure n_obs × T_obs format ────────────────────
-    data_mat = Matrix{T}(data)
-    nrows, ncols = size(data_mat)
-    # The Kalman filter expects n_obs × T_obs (each column is one time period)
-    # simulate() returns T_periods × n_endog
-    # If data has more rows than columns and nrows != n_obs, transpose
-    if nrows != n_obs && ncols == n_obs
-        data_mat = Matrix{T}(data_mat')
-    elseif nrows != n_obs && ncols != n_obs
-        # Neither dimension matches n_obs; try best guess: if nrows > ncols, transpose
-        if nrows > ncols
-            data_mat = Matrix{T}(data_mat')
-        end
-    end
+    # The Kalman filter expects n_obs × T_obs (each column is one time period);
+    # simulate() returns T_periods × n_endog.
+    data_mat = _orient_bayes_data(data, n_obs, T)
 
-    # ── 5. Validate method ───────────────────────────────────────────────
+    # ── 5. Validate method / proposal ────────────────────────────────────
     if method ∉ (:smc, :smc2, :mh)
         throw(ArgumentError("method must be :smc, :smc2, or :mh, got :$method"))
+    end
+    if proposal ∉ (:adaptive, :mode)
+        throw(ArgumentError("proposal must be :adaptive or :mode, got :$proposal"))
     end
 
     # ── 6. Dispatch to sampler ───────────────────────────────────────────
@@ -198,12 +226,24 @@ function estimate_dsge_bayes(spec::DSGESpec{T}, data::AbstractMatrix,
                                             solver, solver_kwargs)
 
     else  # :mh
+        theta_init = theta0_sorted
+        init_proposal_cov = nothing
+        if proposal == :mode
+            pm = posterior_mode(spec, data_mat, theta0_sorted;
+                                priors=priors, observables=observables,
+                                measurement_error=measurement_error,
+                                solver=solver, solver_kwargs=solver_kwargs)
+            c2 = T(2.38)^2 / T(length(param_names))
+            init_proposal_cov = c2 .* pm.inv_hessian
+            theta_init = pm.mode
+        end
         draws, log_posterior, acceptance_rate = _mh_sample(
-            spec, data_mat, param_names, prior, theta0_sorted;
+            spec, data_mat, param_names, prior, theta_init;
             n_draws=n_draws, burnin=burnin,
             observables=observables,
             measurement_error=measurement_error,
-            solver=solver, solver_kwargs=solver_kwargs, rng=rng)
+            solver=solver, solver_kwargs=solver_kwargs,
+            init_proposal_cov=init_proposal_cov, rng=rng)
         # Discard burn-in so posterior summaries exclude the transient. The burnin kwarg was
         # previously a no-op for :mh (all draws stored). keep_burnin=true retains the full
         # chain (e.g. for trace plots) without affecting the default summaries (E-03 / #122).
@@ -217,6 +257,188 @@ function estimate_dsge_bayes(spec::DSGESpec{T}, data::AbstractMatrix,
                                      observables, measurement_error,
                                      solver, solver_kwargs)
     end
+end
+
+# =============================================================================
+# Posterior mode finding + Laplace marginal likelihood (Dynare-style workflow)
+# =============================================================================
+
+"""
+    posterior_mode(spec, data, θ0; priors, kwargs...) → PosteriorMode
+
+Find the posterior mode of a DSGE model by numerically maximizing
+`log p(θ|Y) ∝ log L(θ) + log π(θ)`, and compute the Laplace approximation of
+the log marginal likelihood plus the inverse Hessian at the mode (the
+asymptotic posterior covariance, usable as an RWMH proposal via
+`estimate_dsge_bayes(...; method=:mh, proposal=:mode)`).
+
+Optimization runs in a prior-transformed unconstrained space by default
+(log for positive supports, logit for bounded intervals, via
+[`ParameterTransform`](@ref)), so bounded parameters never hit their
+boundaries; the returned mode is in the natural parameter space. The
+transform only reparameterizes the optimizer — the objective is the
+natural-space log posterior, so the maximizer is the natural-space mode.
+
+The Laplace approximation is
+```math
+\\log \\hat p(Y) = \\log L(\\theta^*) + \\log \\pi(\\theta^*)
+    + \\tfrac{d}{2}\\log(2\\pi) - \\tfrac{1}{2}\\log\\det H,
+```
+where `H` is the Hessian of the negative log posterior at the mode `θ*` and
+`d` the number of estimated parameters (Tierney & Kadane 1986). If `H` is not
+finite and positive definite, `laplace_log_ml` is `NaN`, a warning is emitted,
+and `inv_hessian` falls back to a diagonal matrix.
+
+# Arguments
+- `spec::DSGESpec{T}` — model specification from `@dsge`
+- `data::AbstractMatrix` — observed data (`T_obs × n_obs` or `n_obs × T_obs`, auto-detected)
+- `θ0::AbstractVector{<:Real}` — initial guess, ordered like the sorted prior keys
+
+# Keywords
+- `priors::Dict{Symbol,<:Distribution}` — prior distributions keyed by parameter name
+- `observables::Vector{Symbol}=Symbol[]` — observed endogenous variables (default: all)
+- `measurement_error=nothing` — measurement error SDs
+- `solver::Symbol=:gensys` — DSGE solver method
+- `solver_kwargs::NamedTuple=NamedTuple()` — additional solver kwargs
+- `transform::Bool=true` — optimize in the unconstrained (prior-transformed) space
+- `optimizer=Optim.LBFGS()` — any `Optim.jl` first-order optimizer
+- `f_reltol::Real=1e-8` — relative objective tolerance (`Optim.Options` `f_reltol`)
+- `max_iter::Int=500` — maximum optimizer iterations
+
+# Returns
+[`PosteriorMode`](@ref) carrying the mode, inverse Hessian, log posterior at
+the mode, and the Laplace log marginal likelihood.
+
+# References
+- Tierney, L. & Kadane, J. B. (1986). Accurate Approximations for Posterior
+  Moments and Marginal Densities. *JASA*, 81(393), 82-86.
+- Roberts, G. O. & Rosenthal, J. S. (2001). Optimal Scaling for Various
+  Metropolis-Hastings Algorithms. *Statistical Science*, 16(4), 351-367.
+"""
+function posterior_mode(spec::DSGESpec{T}, data::AbstractMatrix,
+                        theta0::AbstractVector{<:Real};
+                        priors::Dict{Symbol,<:Distribution},
+                        observables::Vector{Symbol}=Symbol[],
+                        measurement_error=nothing,
+                        solver::Symbol=:gensys,
+                        solver_kwargs::NamedTuple=NamedTuple(),
+                        transform::Bool=true,
+                        optimizer=Optim.LBFGS(),
+                        f_reltol::Real=1e-8,
+                        max_iter::Int=500) where {T<:AbstractFloat}
+    prior = _build_bayes_prior(priors)
+    param_names = prior.param_names
+    d = length(param_names)
+    length(theta0) == d ||
+        throw(ArgumentError("theta0 has length $(length(theta0)), expected $d (one per prior)"))
+
+    if isempty(observables)
+        observables = copy(spec.endog)
+    end
+    data_mat = _orient_bayes_data(data, length(observables), T)
+
+    # Same likelihood closure the samplers use, so mode and chain see identical evaluations
+    ll_fn = _build_likelihood_fn(spec, param_names, data_mat, observables,
+                                 measurement_error, solver, solver_kwargs)
+
+    penalty = T(1e10)
+    function logpost(theta::Vector{T})
+        lp = _log_prior(theta, prior)
+        isfinite(lp) || return -penalty
+        ll = ll_fn(theta)
+        isfinite(ll) || return -penalty
+        return ll + lp
+    end
+
+    # Nudge θ0 strictly inside the prior support so the transform is finite
+    theta_start = Vector{T}(theta0)
+    for i in 1:d
+        lo, hi = prior.lower[i], prior.upper[i]
+        span = isfinite(lo) && isfinite(hi) ? hi - lo : one(T)
+        margin = T(1e-8) * span
+        if isfinite(lo) && theta_start[i] <= lo
+            theta_start[i] = lo + margin
+        end
+        if isfinite(hi) && theta_start[i] >= hi
+            theta_start[i] = hi - margin
+        end
+    end
+
+    opts = Optim.Options(f_reltol=T(f_reltol), iterations=max_iter)
+    local res, theta_star
+    if transform
+        pt = ParameterTransform(prior.lower, prior.upper)
+        phi0 = to_unconstrained(pt, theta_start)
+        obj_phi = phi -> -logpost(to_constrained(pt, phi))
+        res = Optim.optimize(obj_phi, phi0, optimizer, opts)
+        theta_star = to_constrained(pt, Optim.minimizer(res))
+    else
+        obj = theta -> -logpost(Vector{T}(theta))
+        res = Optim.optimize(obj, theta_start, optimizer, opts)
+        theta_star = Vector{T}(Optim.minimizer(res))
+    end
+
+    ll_star = ll_fn(theta_star)
+    lpost_star = logpost(theta_star)
+
+    # Hessian of the NEGATIVE log posterior at the mode, in the natural space.
+    # ForwardDiff first (fast if the likelihood path is Dual-compatible), falling
+    # back to central finite differences (the QZ-based solvers are not).
+    negpost = theta -> -logpost(Vector{T}(theta))
+    H = try
+        ForwardDiff.hessian(negpost, theta_star)
+    catch
+        _numerical_hessian(negpost, theta_star; eps_step=T(1e-4))
+    end
+    H = Matrix{T}((H + H') / 2)
+
+    Hh = Hermitian(H)
+    hessian_ok = all(isfinite, H) && isposdef(Hh)
+    local inv_H, laplace_log_ml
+    if hessian_ok
+        inv_H = Matrix{T}(robust_inv(Hh))
+        laplace_log_ml = lpost_star + T(d) / 2 * log(T(2) * T(pi)) - logdet_safe(H) / 2
+    else
+        @warn "posterior_mode: Hessian at the mode is not finite positive definite; " *
+              "Laplace log-ML set to NaN and inv_hessian falls back to a diagonal matrix"
+        diag_fallback = ones(T, d)
+        for i in 1:d
+            hii = H[i, i]
+            if isfinite(hii) && hii > 0
+                diag_fallback[i] = one(T) / hii
+            end
+        end
+        inv_H = Matrix{T}(Diagonal(diag_fallback))
+        laplace_log_ml = T(NaN)
+    end
+
+    return PosteriorMode{T}(theta_star, inv_H, H, lpost_star, ll_star,
+                            laplace_log_ml, param_names,
+                            Optim.converged(res), Optim.iterations(res))
+end
+
+function Base.show(io::IO, pm::PosteriorMode{T}) where {T}
+    d = length(pm.param_names)
+    spec_data = Any[
+        "Parameters"           d;
+        "Log posterior"        round(pm.log_posterior; digits=4);
+        "Log likelihood"       round(pm.log_likelihood; digits=4);
+        "Laplace log-ML"       round(pm.laplace_log_ml; digits=4);
+        "Converged"            pm.converged;
+        "Iterations"           pm.n_iterations;
+    ]
+    _pretty_table(io, spec_data;
+        title="DSGE Posterior Mode (Laplace)",
+        column_labels=["", ""],
+        alignment=[:l, :r])
+
+    sds = [pm.inv_hessian[i, i] > 0 ? sqrt(pm.inv_hessian[i, i]) : T(NaN) for i in 1:d]
+    mode_data = hcat([string(p) for p in pm.param_names],
+                     round.(pm.mode; digits=4), round.(sds; digits=4))
+    _pretty_table(io, mode_data;
+        title="Posterior Mode",
+        column_labels=["Parameter", "Mode", "Std (Laplace)"],
+        alignment=[:l, :r, :r])
 end
 
 # =============================================================================

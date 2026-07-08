@@ -575,3 +575,38 @@ struct BayesianDSGESimulation{T<:AbstractFloat}
     quantile_levels::Vector{T}
     all_paths::Array{T,3}
 end
+
+# =============================================================================
+# PosteriorMode — posterior mode + Laplace approximation result
+# =============================================================================
+
+"""
+    PosteriorMode{T}
+
+Posterior mode result for Bayesian DSGE estimation (Dynare-style mode finding).
+
+Fields:
+- `mode::Vector{T}` — posterior mode in the natural (constrained) parameter space
+- `inv_hessian::Matrix{T}` — inverse Hessian of the negative log posterior at the
+  mode (asymptotic posterior covariance); diagonal fallback if the Hessian is not
+  positive definite
+- `hessian::Matrix{T}` — Hessian of the negative log posterior at the mode
+- `log_posterior::T` — log posterior (log-likelihood + log prior) at the mode
+- `log_likelihood::T` — log-likelihood at the mode
+- `laplace_log_ml::T` — Laplace approximation of the log marginal likelihood
+  (`NaN` if the Hessian is not positive definite)
+- `param_names::Vector{Symbol}` — parameter names (sorted, matching `DSGEPrior`)
+- `converged::Bool` — optimizer convergence flag
+- `n_iterations::Int` — optimizer iteration count
+"""
+struct PosteriorMode{T<:AbstractFloat}
+    mode::Vector{T}
+    inv_hessian::Matrix{T}
+    hessian::Matrix{T}
+    log_posterior::T
+    log_likelihood::T
+    laplace_log_ml::T
+    param_names::Vector{Symbol}
+    converged::Bool
+    n_iterations::Int
+end

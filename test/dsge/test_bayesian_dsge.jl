@@ -2651,4 +2651,154 @@ end
     @test !(d_eff[1] ≈ 0.0)
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Posterior mode + Laplace ML + mode-seeded RWMH proposal (T233 / #332)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "posterior_mode: mode finding + Laplace ML (#332)" begin
+    _suppress_warnings() do
+    rng = Random.MersenneTwister(42)
+
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    true_spec = @dsge begin
+        parameters: ρ = 0.8, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    true_spec = compute_steady_state(true_spec)
+    sol_true = solve(true_spec; method=:gensys)
+    data = simulate(sol_true, 300; rng=rng)'
+
+    priors = Dict(:ρ => Beta(2, 2))
+
+    pm = posterior_mode(spec, data, [0.5]; priors=priors, observables=[:y])
+
+    @test pm isa PosteriorMode{Float64}
+    @test length(pm.mode) == 1
+    @test pm.param_names == [:ρ]
+    @test pm.converged
+    # Mode recovers the true ρ = 0.8 from T=300 simulated observations
+    @test abs(pm.mode[1] - 0.8) < 0.15
+    # Hessian/inverse-Hessian are PD scalars here
+    @test pm.hessian[1, 1] > 0
+    @test pm.inv_hessian[1, 1] > 0
+    @test pm.inv_hessian[1, 1] ≈ 1 / pm.hessian[1, 1] rtol=1e-6
+    @test isfinite(pm.log_posterior)
+    @test isfinite(pm.log_likelihood)
+    @test isfinite(pm.laplace_log_ml)
+    # Laplace ML must be below the log posterior maximum plus the Gaussian volume
+    # term only when det H > 1; sanity: it is finite and differs from log posterior
+    @test pm.laplace_log_ml != pm.log_posterior
+
+    # Mode is a maximizer: log posterior at the mode ≥ at nearby points
+    ll_fn = MacroEconometricModels._build_likelihood_fn(
+        spec, [:ρ], Matrix{Float64}(data), [:y], nothing, :gensys, NamedTuple())
+    prior = MacroEconometricModels._build_bayes_prior(priors)
+    lp(θ) = ll_fn([θ]) + MacroEconometricModels._log_prior([θ], prior)
+    @test pm.log_posterior ≥ lp(pm.mode[1] + 0.05) - 1e-8
+    @test pm.log_posterior ≥ lp(pm.mode[1] - 0.05) - 1e-8
+
+    # transform=false path reaches the same interior mode
+    pm2 = posterior_mode(spec, data, [0.5]; priors=priors, observables=[:y],
+                         transform=false)
+    @test abs(pm2.mode[1] - pm.mode[1]) < 0.02
+
+    # Laplace log-ML agrees with the SMC tempering-path log-ML (documented
+    # tolerance: 1.0 nat on this 1-parameter linear-Gaussian model)
+    smc_fit = estimate_dsge_bayes(spec, data, [0.5];
+        priors=priors, method=:smc, observables=[:y],
+        n_smc=300, rng=Random.MersenneTwister(11))
+    @test abs(pm.laplace_log_ml - marginal_likelihood(smc_fit)) < 1.0
+
+    # show does not error
+    io = IOBuffer()
+    show(io, pm)
+    out = String(take!(io))
+    @test occursin("Posterior Mode", out)
+    end
+end
+
+@testset "posterior_mode: RWMH proposal seeding (proposal=:mode)" begin
+    _suppress_warnings() do
+    rng = Random.MersenneTwister(42)
+
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    true_spec = @dsge begin
+        parameters: ρ = 0.8, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    true_spec = compute_steady_state(true_spec)
+    sol_true = solve(true_spec; method=:gensys)
+    data = simulate(sol_true, 300; rng=rng)'
+
+    priors = Dict(:ρ => Beta(2, 2))
+
+    fit = estimate_dsge_bayes(spec, data, [0.5];
+        priors=priors, method=:mh, proposal=:mode,
+        n_draws=1500, burnin=500, observables=[:y],
+        rng=Random.MersenneTwister(7))
+
+    @test fit isa BayesianDSGE{Float64}
+    # Mode-seeded inverse-Hessian proposal achieves a reasonable acceptance rate
+    # (documented target 0.2–0.4; assert a safe envelope)
+    @test 0.10 < fit.acceptance_rate < 0.60
+    # Posterior mean near truth
+    @test abs(mean(fit.theta_draws[:, 1]) - 0.8) < 0.2
+
+    # Invalid proposal symbol throws
+    @test_throws ArgumentError estimate_dsge_bayes(spec, data, [0.5];
+        priors=priors, method=:mh, proposal=:bogus,
+        n_draws=10, burnin=2, observables=[:y])
+    end
+end
+
+@testset "posterior_mode: non-PD Hessian fallback (flat posterior)" begin
+    _suppress_warnings() do
+    rng = Random.MersenneTwister(42)
+
+    # κ multiplies a zero regressor: the likelihood is flat in κ, and the
+    # Uniform(0,1) prior contributes zero curvature → H ≈ 0 → not PD
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5, κ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + κ * 0.0 * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:gensys)
+    data = simulate(sol, 100; rng=rng)'
+
+    priors = Dict(:κ => Uniform(0.0, 1.0))
+    pm = @test_logs (:warn, r"not finite positive definite") match_mode=:any begin
+        posterior_mode(spec, data, [0.5]; priors=priors, observables=[:y])
+    end
+    @test isnan(pm.laplace_log_ml)
+    # Diagonal fallback proposal is still usable
+    @test isfinite(pm.inv_hessian[1, 1])
+    @test pm.inv_hessian[1, 1] > 0
+    end
+end
+
 end  # @testset "Bayesian DSGE"

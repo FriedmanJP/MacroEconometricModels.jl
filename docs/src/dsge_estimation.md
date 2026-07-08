@@ -370,6 +370,68 @@ report(result_mh)
 
 RWMH is simple to implement and diagnose but converges slowly for high-dimensional parameter spaces. For models with more than 5--10 parameters, SMC is strongly preferred.
 
+### Posterior Mode and Laplace Marginal Likelihood
+
+`posterior_mode` implements the standard Dynare-style first step of Bayesian estimation: numerically maximize the log posterior, report the mode together with a Laplace approximation of the marginal likelihood, and expose the inverse Hessian at the mode as an RWMH proposal covariance.
+
+```math
+\theta^* = \arg\max_\theta \; \big[\log \mathcal{L}(Y|\theta) + \log \pi(\theta)\big]
+```
+
+The optimizer works in a **prior-transformed unconstrained space** (log for positive supports, logit for bounded intervals, via `ParameterTransform`), so bounded parameters never collide with their boundaries; the reported mode is mapped back to the natural parameter space. The Laplace approximation of the log marginal likelihood is
+
+```math
+\log \hat{p}(Y) = \log \mathcal{L}(\theta^*) + \log \pi(\theta^*) + \frac{d}{2}\log(2\pi) - \frac{1}{2}\log\det H
+```
+
+where ``H`` is the Hessian of the negative log posterior at the mode and ``d`` the number of estimated parameters (Tierney & Kadane 1986). If ``H`` is not positive definite, `laplace_log_ml` is `NaN` (with a warning) and the inverse Hessian falls back to a diagonal matrix, so downstream proposal seeding never receives a garbage covariance.
+
+```@example dsge_estimation
+pm = posterior_mode(spec, Y_data, [0.9];
+    priors=Dict(:rho => Beta(5, 2)), observables=[:y])
+pm
+```
+
+**Keywords** (`posterior_mode`):
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `priors` | `Dict{Symbol, Distribution}` | required | Prior distributions keyed by parameter name |
+| `observables` | `Vector{Symbol}` | `spec.endog` | Observed endogenous variables |
+| `measurement_error` | `Vector{<:Real}` | `nothing` | Measurement error standard deviations |
+| `solver` | `Symbol` | `:gensys` | DSGE solver method |
+| `solver_kwargs` | `NamedTuple` | `()` | Additional solver keyword arguments |
+| `transform` | `Bool` | `true` | Optimize in the unconstrained (prior-transformed) space |
+| `optimizer` | `Optim` method | `Optim.LBFGS()` | Any first-order `Optim.jl` optimizer |
+| `f_reltol` | `Real` | `1e-8` | Relative objective tolerance |
+| `max_iter` | `Int` | `500` | Maximum optimizer iterations |
+
+**Return value** (`PosteriorMode` fields):
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `mode` | `Vector{T}` | Posterior mode in the natural parameter space |
+| `inv_hessian` | `Matrix{T}` | Inverse Hessian at the mode (asymptotic posterior covariance) |
+| `hessian` | `Matrix{T}` | Hessian of the negative log posterior at the mode |
+| `log_posterior` | `T` | Log posterior at the mode |
+| `log_likelihood` | `T` | Log-likelihood at the mode |
+| `laplace_log_ml` | `T` | Laplace log marginal likelihood (`NaN` if Hessian not PD) |
+| `param_names` | `Vector{Symbol}` | Parameter names (sorted prior order) |
+| `converged` | `Bool` | Optimizer convergence flag |
+| `n_iterations` | `Int` | Optimizer iterations used |
+
+To seed RWMH from the mode, pass `proposal=:mode`: the chain starts at ``\theta^*`` with proposal covariance ``c^2 H^{-1}``, ``c = 2.38/\sqrt{d}`` (Roberts & Rosenthal 2001), which typically lands the acceptance rate in the 0.2--0.4 range without hand-tuning:
+
+```@example dsge_estimation
+result_mode_mh = estimate_dsge_bayes(spec, Y_data, [0.9];
+    priors=Dict(:rho => Beta(5, 2)),
+    method=:mh, proposal=:mode, observables=[:y],
+    n_draws=50, burnin=25)
+round(result_mode_mh.acceptance_rate; digits=2)
+```
+
+The Laplace log-ML is on the same additive-constant convention as the SMC tempering-path estimate, so the two are directly comparable via `bayes_factor` (on a small linear model they agree to within about one nat).
+
 ### Bayesian Keywords
 
 | Keyword | Type | Default | Description |
@@ -388,6 +450,8 @@ RWMH is simple to implement and diagnose but converges slowly for high-dimension
 | `solver_kwargs` | `NamedTuple` | `()` | Additional solver keyword arguments |
 | `delayed_acceptance` | `Bool` | `false` | Two-stage delayed acceptance (SMC``^2`` only) |
 | `n_screen` | `Int` | `200` | Screening PF particles (delayed acceptance only) |
+| `keep_burnin` | `Bool` | `false` | Retain the full RWMH chain including burnin (e.g. for trace plots) |
+| `proposal` | `Symbol` | `:adaptive` | RWMH proposal init: `:adaptive` or `:mode` (seed from `posterior_mode`) |
 
 !!! note "Pre-Linearized Models"
     For `DSGESpec` with `linear=true` (e.g., Smets & Wouters 2007), the Kalman filter automatically computes the observation equation offset as ``d = (I - G_1)^{-1} C_{\text{sol}}``, where ``C_{\text{sol}}`` contains the constant terms from gensys. This handles models where observation equations include trend growth, steady-state inflation, or other constant offsets that are absent from the zero steady state. No user intervention is required --- `estimate_dsge_bayes` detects and handles `linear=true` models transparently.
