@@ -665,12 +665,16 @@ end
 # =============================================================================
 
 """
-    _mh_sample(spec, data, param_names, prior, θ0; kwargs...) → (draws, log_posterior, acceptance_rate)
+    _mh_sample(spec, data, param_names, prior, θ0; kwargs...) → (draws, log_posterior, acceptance_rate, diagnostics)
 
 Adaptive Random-Walk Metropolis-Hastings sampler for Bayesian DSGE estimation.
 
-Adapts the proposal covariance every `adapt_interval` steps, targeting 23.4%
-acceptance rate (Roberts & Rosenthal 2001).
+Adapts the proposal covariance and scale every `adapt_interval` steps **during
+burn-in only**, targeting 23.4% acceptance (Roberts & Rosenthal 2001). The proposal
+is frozen at `draw == burnin`, so — with the burn-in discarded by the caller — the
+retained chain runs a fixed proposal and targets the exact posterior (adaptive-MCMC
+validity, Roberts & Rosenthal 2007). The scale is tuned from a **trailing-window**
+acceptance rate (over the last `adapt_interval` draws), not the stale cumulative rate.
 
 # Arguments
 - `spec::DSGESpec{T}` — model specification
@@ -694,10 +698,16 @@ acceptance rate (Roberts & Rosenthal 2001).
 - `draws::Matrix{T}` — `n_draws × n_params` matrix of posterior draws
 - `log_posterior::Vector{T}` — log posterior at each draw
 - `acceptance_rate::T` — overall acceptance rate
+- `diagnostics::NamedTuple` — the frozen end-of-burn-in proposal (`proposal_L_at_burnin`,
+  `scale_at_burnin`), the final proposal (`proposal_L`, `scale_factor`), and the
+  per-interval trailing-window vs cumulative acceptance signals (`window_acc_history`,
+  `cum_acc_history`)
 
 # References
 - Roberts, G. O. & Rosenthal, J. S. (2001). Optimal Scaling for Various
   Metropolis-Hastings Algorithms. *Statistical Science*, 16(4), 351-367.
+- Roberts, G. O. & Rosenthal, J. S. (2007). Coupling and Ergodicity of Adaptive
+  Markov Chain Monte Carlo Algorithms. *Journal of Applied Probability*, 44(2), 458-475.
 """
 function _mh_sample(spec::DSGESpec{T}, data::AbstractMatrix,
                      param_names::Vector{Symbol}, prior::DSGEPrior{T},
@@ -753,6 +763,13 @@ function _mh_sample(spec::DSGESpec{T}, data::AbstractMatrix,
     proposal_L = cholesky(Hermitian(proposal_cov)).L
 
     total_accepted = 0
+    window_accepted = 0
+    # Adaptation is confined to burn-in (Roberts & Rosenthal 2007): the proposal is
+    # frozen at draw == burnin so the retained chain targets the exact posterior.
+    proposal_L_at_burnin = copy(proposal_L)
+    scale_at_burnin = scale_factor
+    window_acc_history = T[]
+    cum_acc_history = T[]
 
     for draw in 1:n_draws
         # Propose
@@ -774,6 +791,7 @@ function _mh_sample(spec::DSGESpec{T}, data::AbstractMatrix,
                     ll_current = ll_star
                     lp_current = lp_star
                     total_accepted += 1
+                    window_accepted += 1
                 end
             end
         end
@@ -782,45 +800,65 @@ function _mh_sample(spec::DSGESpec{T}, data::AbstractMatrix,
         draws[draw, :] = theta_current
         log_posterior[draw] = ll_current + lp_current
 
-        # Adapt proposal covariance
-        if draw % adapt_interval == 0 && draw >= 2 * adapt_interval
-            # Use recent draws to update proposal covariance
-            recent_start = max(1, draw - 5 * adapt_interval)
-            recent_draws = draws[recent_start:draw, :]
+        # Adapt proposal covariance and scale — ONLY during burn-in (frozen after).
+        if draw <= burnin && draw % adapt_interval == 0
+            # Trailing-window acceptance signal (not the stale cumulative rate); the
+            # covariance adapts to recent draws, so the scale must too.
+            window_acc = T(window_accepted) / T(adapt_interval)
+            push!(window_acc_history, window_acc)
+            push!(cum_acc_history, T(total_accepted) / T(draw))
+            window_accepted = 0
 
-            if size(recent_draws, 1) > n_params + 1
-                sample_cov = cov(recent_draws)
-                # Ensure positive definiteness
-                sample_cov = (sample_cov + sample_cov') / 2
-                for i in 1:n_params
-                    if sample_cov[i, i] < T(1e-10)
-                        sample_cov[i, i] = T(1e-10)
+            if draw >= 2 * adapt_interval
+                # Use recent draws to update proposal covariance
+                recent_start = max(1, draw - 5 * adapt_interval)
+                recent_draws = draws[recent_start:draw, :]
+
+                if size(recent_draws, 1) > n_params + 1
+                    sample_cov = cov(recent_draws)
+                    # Ensure positive definiteness
+                    sample_cov = (sample_cov + sample_cov') / 2
+                    for i in 1:n_params
+                        if sample_cov[i, i] < T(1e-10)
+                            sample_cov[i, i] = T(1e-10)
+                        end
                     end
+
+                    proposal_cov = c2 * sample_cov
+                    proposal_L_try = try
+                        cholesky(Hermitian(proposal_cov)).L
+                    catch
+                        proposal_cov += T(1e-6) * I
+                        cholesky(Hermitian(proposal_cov)).L
+                    end
+                    proposal_L = proposal_L_try
                 end
 
-                proposal_cov = c2 * sample_cov
-                proposal_L_try = try
-                    cholesky(Hermitian(proposal_cov)).L
-                catch
-                    proposal_cov += T(1e-6) * I
-                    cholesky(Hermitian(proposal_cov)).L
+                # Adapt scale factor to target 23.4% acceptance (trailing window)
+                if window_acc > T(0.30)
+                    scale_factor *= T(1.1)  # accepting too much → increase step size
+                elseif window_acc < T(0.15)
+                    scale_factor *= T(0.9)  # accepting too little → decrease step size
                 end
-                proposal_L = proposal_L_try
             end
+        end
 
-            # Adapt scale factor to target 23.4% acceptance
-            recent_acc = total_accepted / draw
-            if recent_acc > T(0.30)
-                scale_factor *= T(1.1)  # accepting too much → increase step size
-            elseif recent_acc < T(0.15)
-                scale_factor *= T(0.9)  # accepting too little → decrease step size
-            end
+        # Freeze the proposal at the end of burn-in for the retained chain.
+        if draw == burnin
+            proposal_L_at_burnin = copy(proposal_L)
+            scale_at_burnin = scale_factor
         end
     end
 
     acceptance_rate = T(total_accepted) / T(n_draws)
 
-    return draws, log_posterior, acceptance_rate
+    diagnostics = (proposal_L = proposal_L, scale_factor = scale_factor,
+                   proposal_L_at_burnin = proposal_L_at_burnin,
+                   scale_at_burnin = scale_at_burnin,
+                   window_acc_history = window_acc_history,
+                   cum_acc_history = cum_acc_history)
+
+    return draws, log_posterior, acceptance_rate, diagnostics
 end
 
 # =============================================================================

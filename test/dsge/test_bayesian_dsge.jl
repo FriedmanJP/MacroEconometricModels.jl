@@ -1068,6 +1068,59 @@ end
     end
 end
 
+@testset "RWMH freezes proposal after burn-in and windows the acceptance signal (T038)" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    true_spec = @dsge begin
+        parameters: ρ = 0.8, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    true_spec = compute_steady_state(true_spec)
+    data = simulate(solve(true_spec; method=:gensys), 200; rng=Random.MersenneTwister(42))'
+
+    prior = MacroEconometricModels.DSGEPrior(Dict(:ρ => Beta(2, 2));
+        lower=Dict(:ρ => 0.01), upper=Dict(:ρ => 0.99))
+
+    # burnin=300 ≥ 2*adapt_interval ⇒ adaptation fires at 100,150,…,300 then freezes;
+    # n_draws=1500 ≫ burnin so an un-frozen sampler would keep moving the proposal.
+    draws, log_post, acc_rate, diag = MacroEconometricModels._mh_sample(
+        spec, data, [:ρ], prior, [0.5];
+        n_draws=1500, burnin=300, adapt_interval=50,
+        observables=[:y], measurement_error=nothing,
+        solver=:gensys, solver_kwargs=NamedTuple(),
+        rng=Random.MersenneTwister(123))
+
+    # 1. FREEZE: proposal at end of burn-in == proposal at end of run.
+    @test diag.proposal_L_at_burnin ≈ diag.proposal_L
+    @test diag.scale_at_burnin == diag.scale_factor
+
+    # 2. Adaptation actually occurred (so the freeze is meaningful): the burn-in proposal
+    #    has moved away from the initial c2·I.
+    init_L = cholesky(Hermitian((2.38^2) * Matrix{Float64}(I, 1, 1))).L
+    @test !isapprox(diag.proposal_L_at_burnin, init_L)
+
+    # 3. WINDOWED SIGNAL: recorded, in [0,1], and NOT equal to the cumulative signal.
+    @test !isempty(diag.window_acc_history)
+    @test all(0.0 .<= diag.window_acc_history .<= 1.0)
+    @test diag.window_acc_history != diag.cum_acc_history
+
+    # 4. Recovery sanity.
+    @test 0.0 < acc_rate < 1.0
+    @test abs(mean(draws[301:end, 1]) - 0.8) < 0.3
+    end
+end
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Section 5: SMC² (Nested PF inside SMC)
 # ─────────────────────────────────────────────────────────────────────────────

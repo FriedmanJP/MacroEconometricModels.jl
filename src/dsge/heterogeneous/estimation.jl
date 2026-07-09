@@ -351,6 +351,7 @@ function estimate_dsge_bayes(spec::HADSGESpec{T}, data::AbstractMatrix,
     proposal_L = cholesky(Hermitian(proposal_cov)).L
 
     total_accepted = 0
+    window_accepted = 0
 
     for draw in 1:n_draws
         # Propose
@@ -373,6 +374,7 @@ function estimate_dsge_bayes(spec::HADSGESpec{T}, data::AbstractMatrix,
                     ll_current = ll_star
                     lp_current = lp_star
                     total_accepted += 1
+                    window_accepted += 1
                 end
             end
         end
@@ -381,35 +383,41 @@ function estimate_dsge_bayes(spec::HADSGESpec{T}, data::AbstractMatrix,
         draws[draw, :] = theta_current
         log_posterior[draw] = ll_current + lp_current
 
-        # Adapt proposal covariance
-        if draw % adapt_interval == 0 && draw >= 2 * adapt_interval
-            recent_start = max(1, draw - 5 * adapt_interval)
-            recent_draws = draws[recent_start:draw, :]
+        # Adapt proposal covariance and scale — ONLY during burn-in (frozen after), so the
+        # burn-in-discarded retained chain targets the exact posterior (Roberts & Rosenthal 2007).
+        if draw <= burnin && draw % adapt_interval == 0
+            # Trailing-window acceptance signal (not the stale cumulative rate).
+            window_acc = T(window_accepted) / T(adapt_interval)
+            window_accepted = 0
 
-            if size(recent_draws, 1) > n_params + 1
-                sample_cov = cov(recent_draws)
-                sample_cov = (sample_cov + sample_cov') / 2
-                for i in 1:n_params
-                    if sample_cov[i, i] < T(1e-10)
-                        sample_cov[i, i] = T(1e-10)
+            if draw >= 2 * adapt_interval
+                recent_start = max(1, draw - 5 * adapt_interval)
+                recent_draws = draws[recent_start:draw, :]
+
+                if size(recent_draws, 1) > n_params + 1
+                    sample_cov = cov(recent_draws)
+                    sample_cov = (sample_cov + sample_cov') / 2
+                    for i in 1:n_params
+                        if sample_cov[i, i] < T(1e-10)
+                            sample_cov[i, i] = T(1e-10)
+                        end
+                    end
+
+                    proposal_cov = c2 * sample_cov
+                    proposal_L = try
+                        cholesky(Hermitian(proposal_cov)).L
+                    catch
+                        proposal_cov += T(1e-6) * I
+                        cholesky(Hermitian(proposal_cov)).L
                     end
                 end
 
-                proposal_cov = c2 * sample_cov
-                proposal_L = try
-                    cholesky(Hermitian(proposal_cov)).L
-                catch
-                    proposal_cov += T(1e-6) * I
-                    cholesky(Hermitian(proposal_cov)).L
+                # Adapt scale factor targeting ~23.4% acceptance (trailing window)
+                if window_acc > T(0.30)
+                    scale_factor *= T(1.1)
+                elseif window_acc < T(0.15)
+                    scale_factor *= T(0.9)
                 end
-            end
-
-            # Adapt scale factor targeting ~23.4% acceptance
-            recent_acc = total_accepted / draw
-            if recent_acc > T(0.30)
-                scale_factor *= T(1.1)
-            elseif recent_acc < T(0.15)
-                scale_factor *= T(0.9)
             end
         end
     end

@@ -264,7 +264,7 @@ function estimate_dsge_bayes(spec::DSGESpec{T}, data::AbstractMatrix,
                                             solver, solver_kwargs)
 
     else  # :mh
-        draws, log_posterior, acceptance_rate = _mh_sample(
+        draws, log_posterior, acceptance_rate, _mh_diag = _mh_sample(
             spec, data_mat, param_names, prior, theta0_sorted;
             n_draws=n_draws, burnin=burnin,
             observables=observables,
