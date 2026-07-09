@@ -153,25 +153,30 @@ estimate_smooth_lp(Y::AbstractMatrix, shock_var::Int, horizon::Int; kwargs...) =
     estimate_smooth_lp(Float64.(Y), shock_var, horizon; kwargs...)
 
 """
-    cross_validate_lambda(Y::AbstractMatrix{T}, shock_var::Int, horizon::Int;
-                          lambda_grid::Vector{T}=T.(10.0 .^ (-4:0.5:2)),
-                          k_folds::Int=5, kwargs...) -> T
+    _smooth_lp_cv_errors(Y, shock_var, horizon; lambda_grid, k_folds, kwargs...) -> Vector
 
-Select optimal λ via k-fold cross-validation.
+k-fold cross-validation errors, one per λ in `lambda_grid`. For each fold the smooth LP is
+fit on the training rows and scored against the HELD-OUT unrestricted-LP point IRF (not
+against its own fit): `mean((lp_irf(estimate_lp(test)).values .- model.irf_values).^2)`.
+Folds too small to form the horizon regression score `Inf` and are excluded; a λ whose
+folds are all `Inf` gets `Inf`.
 """
-function cross_validate_lambda(Y::AbstractMatrix{T}, shock_var::Int, horizon::Int;
-                               lambda_grid::Vector{T}=T.(10.0 .^ (-4:0.5:2)),
-                               k_folds::Int=5, kwargs...) where {T<:AbstractFloat}
+function _smooth_lp_cv_errors(Y::AbstractMatrix{T}, shock_var::Int, horizon::Int;
+                              lambda_grid::AbstractVector{T}=T.(10.0 .^ (-4:0.5:2)),
+                              k_folds::Int=5, kwargs...) where {T<:AbstractFloat}
     T_obs = size(Y, 1)
     lags = get(kwargs, :lags, 4)
+    resp = get(kwargs, :response_vars, collect(1:size(Y, 2)))
+    cvt = get(kwargs, :cov_type, :newey_west)
+    bw = get(kwargs, :bandwidth, 0)
     t_start, t_end = compute_horizon_bounds(T_obs, horizon, lags)
     n_usable = t_end - t_start + 1
     fold_size = n_usable ÷ k_folds
 
-    cv_errors = zeros(T, length(lambda_grid))
+    cv_errors = fill(T(Inf), length(lambda_grid))
 
     for (i, lam) in enumerate(lambda_grid)
-        fold_mse = zeros(T, k_folds)
+        fold_mse = fill(T(Inf), k_folds)
         for k in 1:k_folds
             start_k = t_start + (k - 1) * fold_size
             end_k = k == k_folds ? t_end : start_k + fold_size - 1
@@ -183,18 +188,38 @@ function cross_validate_lambda(Y::AbstractMatrix{T}, shock_var::Int, horizon::In
             end
             train_idx = findall(train_mask)
 
-            length(train_idx) < lags + horizon + 10 && continue
+            (length(train_idx) < lags + horizon + 10 ||
+             length(test_idx) < lags + horizon + 10) && continue
 
             try
                 model = estimate_smooth_lp(Y[train_idx, :], shock_var, horizon; lambda=lam, kwargs...)
-                fold_mse[k] = mean((model.irf_values .- model.spline_basis.basis_matrix * model.theta).^2)
+                heldout = lp_irf(estimate_lp(Y[test_idx, :], shock_var, horizon;
+                                             lags=lags, response_vars=resp, cov_type=cvt, bandwidth=bw))
+                fold_mse[k] = mean((heldout.values .- model.irf_values) .^ 2)
             catch
                 fold_mse[k] = T(Inf)
             end
         end
-        cv_errors[i] = mean(fold_mse[fold_mse .< Inf])
+        finite = fold_mse[fold_mse .< Inf]
+        cv_errors[i] = isempty(finite) ? T(Inf) : mean(finite)
     end
 
+    cv_errors
+end
+
+"""
+    cross_validate_lambda(Y::AbstractMatrix{T}, shock_var::Int, horizon::Int;
+                          lambda_grid::Vector{T}=T.(10.0 .^ (-4:0.5:2)),
+                          k_folds::Int=5, kwargs...) -> T
+
+Select the optimal smoothing λ by k-fold cross-validation — the λ minimizing the held-out
+error from [`_smooth_lp_cv_errors`](@ref).
+"""
+function cross_validate_lambda(Y::AbstractMatrix{T}, shock_var::Int, horizon::Int;
+                               lambda_grid::Vector{T}=T.(10.0 .^ (-4:0.5:2)),
+                               k_folds::Int=5, kwargs...) where {T<:AbstractFloat}
+    cv_errors = _smooth_lp_cv_errors(Y, shock_var, horizon;
+                                     lambda_grid=lambda_grid, k_folds=k_folds, kwargs...)
     lambda_grid[argmin(cv_errors)]
 end
 

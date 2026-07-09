@@ -669,6 +669,27 @@ using Random
         @test optimal_lambda > 0
     end
 
+    @testset "Smooth LP cross-validation scores held-out data (T092 #191)" begin
+        # Regression guard: CV must score the smoothed training fit against a HELD-OUT
+        # unrestricted LP IRF. The old loss compared the fit to itself (B*theta vs B*theta ≡ 0),
+        # so every fold MSE was 0 and CV always returned lambda_grid[1] regardless of the data.
+        Random.seed!(2718)
+        T_cv2, n_cv2 = 220, 2
+        Y_hld = zeros(T_cv2, n_cv2)
+        for t in 2:T_cv2
+            Y_hld[t, :] = 0.6 * Y_hld[t-1, :] + randn(n_cv2)
+        end
+        grid = collect(10.0 .^ (-4:1.0:2))
+        errs = MacroEconometricModels._smooth_lp_cv_errors(Y_hld, 1, 6; lambda_grid=grid, k_folds=5, lags=2)
+        @test length(errs) == length(grid)
+        @test all(isfinite, errs)
+        @test all(errs .>= 0)
+        @test maximum(errs) > 0                             # not the degenerate all-zero objective
+        @test length(unique(round.(errs, digits=10))) > 1   # genuinely varies across lambda
+        lam = cross_validate_lambda(Y_hld, 1, 6; lambda_grid=grid, k_folds=5, lags=2)
+        @test lam == grid[argmin(errs)]
+    end
+
     @testset "Smooth LP Comparison Function" begin
         Random.seed!(99999)
         T_cmp = 150
