@@ -292,6 +292,12 @@ function pretrend_test(result::DIDResult{T}) where {T<:AbstractFloat}
     pre_mask = result.event_times .< 0 .&& result.event_times .!= result.reference_period
     pre_coefs = result.att[pre_mask]
     pre_ses = result.se[pre_mask]
+    # Prefer the full-covariance joint Wald when the estimator supplies a cross-horizon
+    # covariance; fall back to the diagonal form otherwise (no covariance available).
+    if result.att_vcov !== nothing
+        pre_V = result.att_vcov[pre_mask, pre_mask]
+        return _compute_pretrend_test(pre_coefs, pre_ses, pre_V)
+    end
     _compute_pretrend_test(pre_coefs, pre_ses)
 end
 
@@ -306,8 +312,10 @@ function _compute_pretrend_test(pre_coefs::Vector{T}, pre_ses::Vector{T}) where 
     K = length(pre_coefs)
     K == 0 && return PretrendTestResult{T}(zero(T), one(T), 0, pre_coefs, pre_ses, :f_test)
 
-    # Wald test: beta' V^{-1} beta ~ chi^2(K)
-    # Using diagonal V (conservative, ignores cross-horizon covariance)
+    # Diagonal-only Wald fallback (used only when no cross-horizon covariance is available):
+    # W = Σ(bᵢ/seᵢ)². This ignores off-diagonal covariance and is NOT conservative — under
+    # positively-correlated, same-sign pre-coefs it OVERSTATES W. The covariance-aware method
+    # below (with att_vcov) is exact; this branch is the graceful degradation.
     valid = pre_ses .> 0
     if !any(valid)
         return PretrendTestResult{T}(zero(T), one(T), K, pre_coefs, pre_ses, :wald)
@@ -317,6 +325,35 @@ function _compute_pretrend_test(pre_coefs::Vector{T}, pre_ses::Vector{T}) where 
     pval = 1 - cdf(Chisq(count(valid)), wald_stat)
 
     PretrendTestResult{T}(wald_stat, T(pval), count(valid), pre_coefs, pre_ses, :wald)
+end
+
+"""
+    _compute_pretrend_test(pre_coefs, pre_ses, pre_V) -> PretrendTestResult
+
+Covariance-aware joint pre-trend Wald: W = b' V⁻¹ b ~ χ²(df), where `V` is the FULL
+covariance of the pre-period event-study coefficients (its off-diagonal Cov(bᵢ,bⱼ) is the
+information the diagonal `Σ(bᵢ/seᵢ)²` form throws away). `V` is symmetrized and inverted with
+`robust_inv`; coefficients with a zero SE (e.g. the reference period) are dropped.
+"""
+function _compute_pretrend_test(pre_coefs::Vector{T}, pre_ses::Vector{T},
+                                pre_V::AbstractMatrix{T}) where {T<:AbstractFloat}
+    K = length(pre_coefs)
+    K == 0 && return PretrendTestResult{T}(zero(T), one(T), 0, pre_coefs, pre_ses, :wald)
+
+    valid = pre_ses .> 0
+    if !any(valid)
+        return PretrendTestResult{T}(zero(T), one(T), K, pre_coefs, pre_ses, :wald)
+    end
+
+    b = pre_coefs[valid]
+    Vv = pre_V[valid, valid]
+    Vsym = Symmetric((Vv .+ Vv') ./ 2)
+    Vinv = robust_inv(Vsym; silent=true)
+    wald_stat = max(dot(b, Vinv * b), zero(T))
+    df = count(valid)
+    pval = 1 - cdf(Chisq(df), wald_stat)
+
+    PretrendTestResult{T}(T(wald_stat), T(pval), df, pre_coefs, pre_ses, :wald)
 end
 
 # =============================================================================

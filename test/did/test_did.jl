@@ -750,10 +750,30 @@ end
         # estimation-error term W_e'M⁺W_e > 0).
         @test var_e(3) > sig2 / 2
 
+        # T068: the stored att_vcov carries the FULL cross-horizon IF covariance, not just
+        # the diagonal. Cov(τ̂(0),τ̂(1)) = σ̂² W_0'M⁺W_1 (shared untreated FE estimate), pinned.
+        function cov_ee(t1, t2)
+            W1 = zeros(K); W1[ucol[3]] += 0.5; W1[ucol[4]] += 0.5; W1[tcol[t1]] += 1.0
+            W2 = zeros(K); W2[ucol[3]] += 0.5; W2[ucol[4]] += 0.5; W2[tcol[t2]] += 1.0
+            sig2 * dot(W1, Mp * W2)
+        end
+        V0 = vcov(bjs0)
+        i0 = findfirst(==(0), et); i1 = findfirst(==(1), et)
+        @test V0 isa Matrix{Float64}
+        @test isapprox(V0, V0'; atol=1e-12)                          # symmetric
+        @test isapprox(V0[i0, i0], var_e(3); atol=1e-10)             # diagonal == Prop-6 var
+        @test isapprox(V0[i1, i1], var_e(4); atol=1e-10)
+        @test isapprox(V0[i0, i1], cov_ee(3, 4); atol=1e-10)         # off-diagonal IF cov
+        @test abs(cov_ee(3, 4)) > 1e-8                               # genuinely nonzero
+
         # Cluster-robust default path stays finite and positive.
         bjs1 = MacroEconometricModels._estimate_bjs(pd, 1, 2; leads=2, horizon=1, cluster=:unit)
         @test all(isfinite, bjs1.se)
         @test bjs1.se[findfirst(==(0), bjs1.event_times)] > 0
+        # Clustered att_vcov = Ψ'Ψ; its diagonal reproduces the reported clustered SEs.
+        V1 = vcov(bjs1)
+        @test isapprox(V1, V1'; atol=1e-12)
+        @test isapprox(sqrt.(max.(diag(V1), 0.0)), bjs1.se; atol=1e-10)
     end
 
     @testset "BJS Imputation" begin
@@ -1311,6 +1331,65 @@ end
         @test_throws ArgumentError estimate_did(pd, "lemp", "first_treat";
                                                 method=:callaway_santanna,
                                                 base_period=:invalid)
+    end
+
+    @testset "DiD covariance aggregation & pre-trend Wald (T068/T069)" begin
+        pd, te = _make_did_panel(seed=3100, n_units=90, n_periods=20)
+
+        # ----- TWFE: att_vcov populated from the pooled clustered vcov -----
+        did = estimate_did(pd, "outcome", "treat_time"; method=:twfe, leads=3, horizon=4)
+        V = vcov(did)                                  # StatsAPI.vcov -> att_vcov
+        @test V isa Matrix{Float64}
+        @test V === did.att_vcov
+        E = length(did.event_times)
+        @test size(V) == (E, E)
+        @test isapprox(V, V'; atol=1e-10)                                   # symmetric
+        @test minimum(eigvals(Symmetric(V))) > -1e-8                        # PSD up to FP
+        @test isapprox(sqrt.(max.(diag(V), 0.0)), did.se; atol=1e-10)       # diag == se²
+
+        # overall_se == covariance contrast sqrt(w'V_post w) (NOT the old sqrt(Σse²)/n_post)
+        post_idx = findall(>=(0), did.event_times)
+        np = length(post_idx)
+        w = fill(1.0 / np, np)
+        Vpost = V[post_idx, post_idx]
+        @test isapprox(did.overall_se, sqrt(max(dot(w, Vpost * w), 0.0)); atol=1e-10)
+        # off-diagonal covariance is genuinely present (shared controls) → fix is load-bearing
+        @test any(abs.(Vpost .- Diagonal(diag(Vpost))) .> 1e-8)
+
+        # ----- Pre-trend joint Wald uses the full covariance b' V_pre⁻¹ b -----
+        pt = pretrend_test(did)
+        @test pt.test_type == :wald
+        @test pt.statistic >= 0 && isfinite(pt.statistic)
+        pre_mask = (did.event_times .< 0) .& (did.event_times .!= did.reference_period)
+        b = did.att[pre_mask]
+        Vpre = Symmetric((V[pre_mask, pre_mask] .+ V[pre_mask, pre_mask]') ./ 2)
+        wald_ref = dot(b, MacroEconometricModels.robust_inv(Vpre; silent=true) * b)
+        @test isapprox(pt.statistic, wald_ref; atol=1e-8)
+        # differs from the diagonal-only Σ(b/se)² form under cross-horizon covariance
+        diag_wald = sum((b ./ did.se[pre_mask]) .^ 2)
+        @test !isapprox(pt.statistic, diag_wald; rtol=1e-3)
+
+        # ----- dCDH: empirical bootstrap covariance stored; diag == bootstrap se² -----
+        dcdh = estimate_did(pd, "outcome", "treat_time"; method=:did_multiplegt,
+                            leads=3, horizon=4, n_boot=200)
+        Vd = vcov(dcdh)
+        @test Vd isa Matrix{Float64}
+        @test isapprox(Vd, Vd'; atol=1e-10)
+        @test isapprox(sqrt.(max.(diag(Vd), 0.0)), dcdh.se; atol=1e-10)
+        @test dcdh.overall_se >= 0 && isfinite(dcdh.overall_se)
+
+        # ----- Pre-trend fallback: att_vcov === nothing → diagonal Wald (graceful) -----
+        r0 = DIDResult{Float64}([0.3, -0.2, 0.0, 1.0, 1.2],
+                                [0.1, 0.15, 0.0, 0.3, 0.3],
+                                zeros(5), zeros(5), [-3, -2, -1, 0, 1], -1,
+                                nothing, nothing, 1.0, 0.2, 100, 20, 10, 10,
+                                :twfe, "y", "d", :never_treated, :unit, 0.95)
+        @test r0.att_vcov === nothing                                       # outer ctor default
+        @test vcov(r0) === nothing
+        pt0 = pretrend_test(r0)
+        @test pt0.test_type == :wald
+        @test pt0.df == 2
+        @test isapprox(pt0.statistic, (0.3 / 0.1)^2 + (0.2 / 0.15)^2; atol=1e-10)
     end
 
 end  # @testset "Difference-in-Differences"

@@ -292,40 +292,61 @@ function _estimate_bjs(pd::PanelData{T}, outcome_col::Int, treat_col::Int;
     evt_of = [treated_t[k] - treated_cohort[k] for k in 1:n_treat]
     xrow = zeros(T, K_fe)
 
+    # Build the FULL E×E influence-function covariance of the event-study ATT vector,
+    # not just its diagonal. The cross-horizon terms are non-zero because every τ̂(e)
+    # shares the SAME untreated two-way-FE estimate β̂ (→ common −W_e'β̂ term); the treated
+    # idiosyncratic errors are disjoint across e (each treated obs has a unique event time),
+    # so they contribute only on the diagonal. Store W_e per horizon (homoskedastic form)
+    # and, for unit clustering, the per-unit IF score columns Ψ (att_vcov = Ψ'Ψ).
+    E = length(event_times_all)
+    We_mat = zeros(T, K_fe, E)                     # column ei = W_e (0 for reference / empty e)
+    Ne_vec = zeros(Int, E)
+    all_units = sort(unique(vcat(treated_g, control_g)))
+    unit_idx = Dict(g => i for (i, g) in enumerate(all_units))
+    Psi = use_cluster ? zeros(T, length(all_units), E) : Matrix{T}(undef, 0, 0)
+
     for (ei, e) in enumerate(event_times_all)
         e == reference_period && continue
         Te = findall(==(e), evt_of)
         Ne = length(Te)
         Ne == 0 && continue
+        Ne_vec[ei] = Ne
 
         att_agg[ei] = mean(@view tau[Te])          # simple mean of imputed effects (= old value)
 
-        We = zeros(T, K_fe)
+        We = @view We_mat[:, ei]
         for k in Te
             We .+= _treat_row!(xrow, treated_g[k], treated_t[k])
         end
         We ./= Ne
 
-        var_e = if use_cluster
-            # Cluster-robust IF variance: aggregate the per-obs IF scores c_e(i)·ê_i within
-            # each unit, then sum of squares over units. Treated obs k∈T_e contribute
-            # (1/N_e)(τ_k−τ̂(e)); untreated obs o contribute −(x_o'M⁺W_e)·ê0_o.
+        if use_cluster
+            # Per-unit IF scores c_e(i)·ê_i: treated obs k∈T_e contribute (1/N_e)(τ_k−τ̂(e))
+            # to unit treated_g[k]; untreated obs o contribute −(x_o'M⁺W_e)·ê0_o to unit
+            # control_g[o]. Summing within units gives the clustered score column Ψ[:,ei].
             u_e = Mpinv * We
             proj = X0 * u_e
-            acc = Dict{Int,T}()
             for k in Te
-                acc[treated_g[k]] = get(acc, treated_g[k], zero(T)) + (tau[k] - att_agg[ei]) / Ne
+                Psi[unit_idx[treated_g[k]], ei] += (tau[k] - att_agg[ei]) / Ne
             end
             for o in 1:n_ctrl
-                acc[control_g[o]] = get(acc, control_g[o], zero(T)) - proj[o] * resid0[o]
+                Psi[unit_idx[control_g[o]], ei] -= proj[o] * resid0[o]
             end
-            sum(abs2, values(acc))
-        else
-            # Homoskedastic Prop.-6 plug-in: σ̂²(1/N_e + W_e'M⁺W_e) = σ̂²·Σ_i c_e(i)².
-            sigma2 * (one(T) / Ne + dot(We, Mpinv * We))
         end
-        se_agg[ei] = sqrt(max(var_e, zero(T)))
     end
+
+    if use_cluster
+        att_vcov = Psi' * Psi
+    else
+        # Homoskedastic Prop.-6: Cov(τ̂(e),τ̂(e')) = σ̂² W_e'M⁺W_{e'}, plus σ̂²/N_e on the
+        # diagonal from the disjoint treated errors ⇒ Var(τ̂(e)) = σ̂²(1/N_e + W_e'M⁺W_e).
+        att_vcov = sigma2 .* (We_mat' * (Mpinv * We_mat))
+        for ei in 1:E
+            Ne_vec[ei] > 0 && (att_vcov[ei, ei] += sigma2 / Ne_vec[ei])
+        end
+    end
+    att_vcov = (att_vcov .+ att_vcov') ./ 2         # symmetrize FP asymmetry
+    se_agg = sqrt.(max.(diag(att_vcov), zero(T)))   # diagonal = the Prop-6 per-horizon SEs
 
     # =========================================================================
     # Step 6: CIs and overall ATT
@@ -335,15 +356,17 @@ function _estimate_bjs(pd::PanelData{T}, outcome_col::Int, treat_col::Int;
     ci_lower = att_agg .- z .* se_agg
     ci_upper = att_agg .+ z .* se_agg
 
-    # Overall ATT: average of post-treatment (e >= 0) ATTs with nonzero SEs
-    post_mask = event_times_all .>= 0
-    post_att = att_agg[post_mask]
-    post_se = se_agg[post_mask]
-    nonzero_post = post_se .> 0
-    if any(nonzero_post)
-        n_post = count(nonzero_post)
-        overall_att = mean(post_att[nonzero_post])
-        overall_se = sqrt(sum(post_se[nonzero_post] .^ 2)) / n_post
+    # Overall ATT: equal-weighted mean of post-treatment (e >= 0) ATTs with nonzero SE.
+    # SE via the full IF covariance sub-block: sqrt(w'V_post w), w = 1/n_post — the old
+    # sqrt(sum(se^2))/n_post assumed independence across horizons and understated it.
+    post_idx = findall(>=(0), event_times_all)
+    valid_post = post_idx[se_agg[post_idx] .> 0]
+    if !isempty(valid_post)
+        n_post = length(valid_post)
+        overall_att = mean(att_agg[valid_post])
+        w = fill(one(T) / n_post, n_post)
+        Vp = att_vcov[valid_post, valid_post]
+        overall_se = sqrt(max(dot(w, Vp * w), zero(T)))
     else
         overall_att = zero(T)
         overall_se = zero(T)
@@ -353,5 +376,5 @@ function _estimate_bjs(pd::PanelData{T}, outcome_col::Int, treat_col::Int;
                  group_time_att, cohorts, overall_att, overall_se,
                  pd.T_obs, pd.n_groups, n_treated, n_control,
                  :bjs, pd.varnames[outcome_col], pd.varnames[treat_col],
-                 control_group, cluster, T(conf_level))
+                 control_group, cluster, T(conf_level), att_vcov)
 end

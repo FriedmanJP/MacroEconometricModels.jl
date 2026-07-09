@@ -278,14 +278,21 @@ function _estimate_did_multiplegt(pd::PanelData{T}, outcome_col::Int, treat_col:
         push!(boot_atts, boot_att)
     end
 
-    # Compute SEs from bootstrap distribution
+    # Compute SEs + full cross-horizon covariance from the bootstrap distribution.
+    # The empirical covariance of the event-time ATT vector across unit-block bootstrap
+    # replications carries the off-diagonal Cov(ATT_h,ATT_k) that a per-horizon std drops;
+    # its diagonal reproduces the old per-horizon bootstrap SEs exactly. Stored in
+    # DIDResult.att_vcov for covariance-based overall-ATT SE (T068) and pre-trend Wald (T069).
     n_valid_boot = length(boot_atts)
     se = zeros(T, n_evt)
+    att_vcov = nothing
     if n_valid_boot > 1
-        for ei in 1:n_evt
-            boot_vals = T[boot_atts[b][ei] for b in 1:n_valid_boot]
-            se[ei] = std(boot_vals)
+        B = Matrix{T}(undef, n_valid_boot, n_evt)
+        @inbounds for b in 1:n_valid_boot, ei in 1:n_evt
+            B[b, ei] = boot_atts[b][ei]
         end
+        att_vcov = Matrix{T}(cov(B))          # n_evt × n_evt, observations in rows
+        se = sqrt.(max.(diag(att_vcov), zero(T)))
     end
 
     # CIs
@@ -293,17 +300,17 @@ function _estimate_did_multiplegt(pd::PanelData{T}, outcome_col::Int, treat_col:
     ci_lower = att .- z .* se
     ci_upper = att .+ z .* se
 
-    # Overall ATT: average of post-treatment coefficients
-    post_mask = event_times_all .>= 0
-    post_att = att[post_mask]
-    post_se = se[post_mask]
-    nonzero_post = post_se .> 0
-    if any(nonzero_post)
-        n_post = count(nonzero_post)
-        overall_att = mean(post_att[nonzero_post])
-        overall_se = sqrt(sum(post_se[nonzero_post] .^ 2)) / n_post
+    # Overall ATT: equal-weighted average of post-treatment (e>=0) ATTs with nonzero SE.
+    post_idx = findall(>=(0), event_times_all)
+    valid_post = post_idx[se[post_idx] .> 0]
+    if !isempty(valid_post)
+        overall_att = mean(att[valid_post])
+        # SE = std of the per-draw overall means (= sqrt(w'cov(boot)w), w=1/n_post),
+        # honoring cross-horizon covariance instead of sqrt(sum(se^2))/n_post.
+        overall_draws = T[mean(@view boot_atts[b][valid_post]) for b in 1:n_valid_boot]
+        overall_se = n_valid_boot > 1 ? std(overall_draws) : zero(T)
     else
-        overall_att = isempty(post_att) ? zero(T) : mean(post_att)
+        overall_att = isempty(post_idx) ? zero(T) : mean(att[post_idx])
         overall_se = zero(T)
     end
 
@@ -311,5 +318,5 @@ function _estimate_did_multiplegt(pd::PanelData{T}, outcome_col::Int, treat_col:
                  group_time_att, cohorts, overall_att, overall_se,
                  pd.T_obs, pd.n_groups, n_treated, n_control,
                  :did_multiplegt, pd.varnames[outcome_col], pd.varnames[treat_col],
-                 control_group, cluster, T(conf_level))
+                 control_group, cluster, T(conf_level), att_vcov)
 end
