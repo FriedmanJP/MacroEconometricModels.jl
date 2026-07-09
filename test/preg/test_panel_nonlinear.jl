@@ -1,4 +1,4 @@
-using Test, MacroEconometricModels, DataFrames, Distributions, Random, Statistics
+using Test, MacroEconometricModels, DataFrames, Distributions, Random, Statistics, LinearAlgebra
 using StatsAPI: coef, vcov, predict, nobs, stderror, confint, loglikelihood, aic, bic, dof, islinear
 
 @testset "estimate_xtlogit -- pooled" begin
@@ -120,6 +120,50 @@ end
     @test all(isfinite, coef(m2))
     @test isapprox(coef(m2)[1], coef(m1)[1] / 50.0; rtol=1e-4)
     @test isapprox(loglikelihood(m1), loglikelihood(m2); rtol=1e-5)
+end
+
+@testset "RE/CRE logit adaptive-GH + honest convergence (T087)" begin
+    FD = MacroEconometricModels.ForwardDiff
+    ghnw = MacroEconometricModels._gauss_hermite_nodes_weights
+    agh = MacroEconometricModels._re_logit_agh_loglik
+    fixed = MacroEconometricModels._re_logit_loglik
+
+    rng = Random.MersenneTwister(3071); N = 100; Tp = 8; nn = N * Tp
+    ids = repeat(1:N, inner=Tp); ts = repeat(1:Tp, N)
+    x1 = randn(rng, nn); alpha = repeat(randn(rng, N) .* 1.0, inner=Tp)
+    y = Float64.(rand(rng, nn) .< 1.0 ./ (1.0 .+ exp.(-(alpha .+ 0.7 .* x1))))
+    pd = xtset(DataFrame(id=ids, t=ts, x1=x1, y=y), :id, :t)
+    m = estimate_xtlogit(pd, :y, [:x1]; model=:re)
+    @test m.converged
+    @test all(stderror(m) .> 0)
+
+    # (1) genuine FOC: the reported optimum has a near-zero gradient of the AGH nll
+    X_c = hcat(ones(nn), x1); ug = sort(unique(ids))
+    gobs = Dict(g => findall(==(g), ids) for g in ug)
+    nodes, weights = ghnw(12)
+    nll(th) = -agh(th, y, X_c, ug, gobs, nodes, weights)
+    @test norm(FD.gradient(nll, vcat(coef(m), log(m.sigma_u)))) < 1e-4
+
+    # (3) adaptive-vs-fixed accuracy on a large-σ_u (=3) fixture where fixed GH under-resolves
+    rng2 = Random.MersenneTwister(3072); N2 = 150; Tp2 = 8; n2 = N2 * Tp2
+    ids2 = repeat(1:N2, inner=Tp2)
+    x2 = randn(rng2, n2); a2 = repeat(randn(rng2, N2) .* 3.0, inner=Tp2)
+    y2 = Float64.(rand(rng2, n2) .< 1.0 ./ (1.0 .+ exp.(-(a2 .+ 0.5 .* x2))))
+    Xc2 = hcat(ones(n2), x2); ug2 = sort(unique(ids2))
+    gobs2 = Dict(g => findall(==(g), ids2) for g in ug2)
+    theta_true = [0.0, 0.5, log(3.0)]
+    n12, w12 = ghnw(12); n60, w60 = ghnw(60)
+    ll_ref = agh(theta_true, y2, Xc2, ug2, gobs2, n60, w60)         # high-accuracy AGH-60
+    ll_agh12 = agh(theta_true, y2, Xc2, ug2, gobs2, n12, w12)
+    ll_fix12 = fixed(theta_true, y2, Xc2, ids2, ug2, gobs2, n12, w12)[1]  # old non-adaptive GH-12
+    @test abs(ll_agh12 - ll_ref) < 0.05
+    @test abs(ll_fix12 - ll_ref) > 10 * abs(ll_agh12 - ll_ref)     # AGH substantially beats fixed GH
+
+    # CRE analog: honest convergence, finite SEs, loglik recomputed at the optimum (not stale)
+    mc = estimate_xtlogit(pd, :y, [:x1]; model=:cre)
+    @test mc.converged
+    @test all(stderror(mc) .> 0)
+    @test isfinite(loglikelihood(mc))
 end
 
 @testset "estimate_xtlogit -- RE" begin

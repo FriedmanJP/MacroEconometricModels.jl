@@ -425,6 +425,79 @@ function _re_logit_loglik(theta::Vector{T}, y::Vector{T}, X_c::Matrix{T},
     return loglik, grad
 end
 
+"""
+    _re_logit_agh_loglik(theta, y, X_c, unique_groups, group_obs, x_nodes, w_nodes;
+                         agh_newton_iters=8) -> S
+
+Adaptive Gauss-Hermite marginal log-likelihood for the RE/CRE logit. Generic in the element
+type `S` of `theta = [β; log σ_u]` so ForwardDiff can differentiate through it. For each
+group the integrand over `α ~ N(0, σ_u²)` is recentered at its posterior mode `μ̂` (scalar
+Newton) and rescaled by the curvature `σ̂` (Liu & Pierce 1994; Rabe-Hesketh, Skrondal &
+Pickles 2005): nodes `a_q = μ̂ + √2·σ̂·x_q`, log-weights `log(√2·σ̂) + log(w_q) + x_q²`
+(the `+x_q²` cancels the `e^{-x²}` baked into the standard GH weights). Reduces to the
+Laplace approximation at `length(x_nodes)==1`.
+"""
+function _re_logit_agh_loglik(theta::AbstractVector{S}, y::Vector{T}, X_c::Matrix{T},
+                              unique_groups::Vector{Int}, group_obs::Dict{Int,Vector{Int}},
+                              x_nodes::Vector{Float64}, w_nodes::Vector{Float64};
+                              agh_newton_iters::Int=8) where {S,T}
+    k = size(X_c, 2)
+    beta = theta[1:k]
+    sigma_u = exp(theta[k+1])
+    s2 = sigma_u^2
+    nq = length(x_nodes)
+    half_log2pi = S(0.5 * log(2π))
+    log_sqrt2 = S(0.5 * log(2.0))
+    total = zero(S)
+
+    for g in unique_groups
+        idx = group_obs[g]
+        eta = @view(X_c[idx, :]) * beta           # Vector{S}
+        yg = @view y[idx]
+
+        # (a) posterior mode μ̂ of h(α) = ℓ_g(α) − α²/(2σ²) via scalar Newton from 0
+        alpha = zero(S)
+        for _ in 1:agh_newton_iters
+            hp = -alpha / s2
+            hpp = -one(S) / s2
+            @inbounds for j in eachindex(eta)
+                mu = one(S) / (one(S) + exp(-(eta[j] + alpha)))
+                hp += yg[j] - mu
+                hpp -= mu * (one(S) - mu)
+            end
+            alpha -= hp / hpp                      # h''<0 ⇒ stable Newton toward the mode
+            abs(hp) < S(1e-10) && break
+        end
+        info = one(S) / s2                          # curvature σ̂ = 1/√(−h''(μ̂))
+        @inbounds for j in eachindex(eta)
+            mu = one(S) / (one(S) + exp(-(eta[j] + alpha)))
+            info += mu * (one(S) - mu)
+        end
+        sighat = one(S) / sqrt(info)
+
+        # (b,c) adaptive nodes + stable logsumexp of logω_q + ℓ_g(a_q) + logφ(a_q;0,σ²)
+        logvals = Vector{S}(undef, nq)
+        @inbounds for q in 1:nq
+            a = alpha + sqrt(S(2)) * sighat * S(x_nodes[q])
+            logw = log_sqrt2 + log(sighat) + log(S(w_nodes[q])) + S(x_nodes[q])^2
+            ll = zero(S)
+            for j in eachindex(eta)
+                mu = clamp(one(S) / (one(S) + exp(-(eta[j] + a))), S(1e-12), one(S) - S(1e-12))
+                ll += yg[j] * log(mu) + (one(S) - yg[j]) * log(one(S) - mu)
+            end
+            logphi = -half_log2pi - log(sigma_u) - a^2 / (2 * s2)
+            logvals[q] = logw + ll + logphi
+        end
+        mx = maximum(logvals)
+        acc = zero(S)
+        @inbounds for q in 1:nq
+            acc += exp(logvals[q] - mx)
+        end
+        total += mx + log(acc)
+    end
+    total
+end
+
 function _xtlogit_re(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
                      groups::Vector{Int}, unique_groups::Vector{Int},
                      N::Int, n::Int, k::Int, indepvars::Vector{Symbol},
@@ -446,66 +519,29 @@ function _xtlogit_re(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
 
     # Initialize: pooled logit coefficients + log(sigma_u) = log(1)
     beta_init, _, _, _, _, _ = _irls_logit(y, X_c; maxiter=50, tol=T(1e-6))
-    theta = vcat(beta_init, zero(T))  # [beta; log_sigma_u]
+    theta0 = vcat(beta_init, zero(T))  # [beta; log_sigma_u]
 
-    loglik_old = T(-Inf)
-    converged = false
-    iterations = 0
-
-    # BFGS-like optimization via gradient ascent with step size control
-    for iter in 1:maxiter
-        iterations = iter
-
-        loglik, grad = _re_logit_loglik(theta, y, X_c, groups, unique_groups,
-                                         group_obs, nodes, weights)
-
-        if abs(loglik - loglik_old) < tol * (abs(loglik_old) + one(T))
-            converged = true
-            loglik_old = loglik
-            break
-        end
-        loglik_old = loglik
-
-        # Simple gradient ascent with adaptive step size
-        step_size = T(0.5)
-        for _ in 1:20
-            theta_new = theta .+ step_size .* grad
-            ll_new, _ = _re_logit_loglik(theta_new, y, X_c, groups, unique_groups,
-                                          group_obs, nodes, weights)
-            if ll_new > loglik
-                theta = theta_new
-                break
-            end
-            step_size *= T(0.5)
-        end
-    end
+    # Maximize the adaptive-GH marginal loglik with LBFGS on ForwardDiff gradients (replaces
+    # the ad-hoc gradient ascent whose function-value stopping rule reported false convergence).
+    nll(th) = -_re_logit_agh_loglik(th, y, X_c, unique_groups, group_obs, nodes, weights)
+    g!(G, th) = (G .= ForwardDiff.gradient(nll, th))
+    res = Optim.optimize(nll, g!, theta0, Optim.LBFGS(),
+                         Optim.Options(g_tol=T(1e-8), iterations=maxiter, f_reltol=tol))
+    theta = Optim.minimizer(res)
+    iterations = Optim.iterations(res)
 
     beta = theta[1:k_full]
     sigma_u = exp(theta[k_full + 1])
+    loglik_final = _re_logit_agh_loglik(theta, y, X_c, unique_groups, group_obs, nodes, weights)
 
-    # Numerical Hessian for covariance
-    loglik_final, _ = _re_logit_loglik(theta, y, X_c, groups, unique_groups,
-                                        group_obs, nodes, weights)
+    # Honest convergence: reported only when the true gradient norm is near zero.
+    converged = Optim.converged(res) && norm(ForwardDiff.gradient(nll, theta)) < T(1e-5)
 
+    # SEs from observed information = Hessian of the NEGATIVE loglik (no sign flip).
     n_params = k_full + 1
-    hess = zeros(T, n_params, n_params)
-    eps_h = T(1e-4)
-    for i in 1:n_params
-        theta_p = copy(theta)
-        theta_m = copy(theta)
-        theta_p[i] += eps_h
-        theta_m[i] -= eps_h
-        _, g_p = _re_logit_loglik(theta_p, y, X_c, groups, unique_groups,
-                                   group_obs, nodes, weights)
-        _, g_m = _re_logit_loglik(theta_m, y, X_c, groups, unique_groups,
-                                   group_obs, nodes, weights)
-        hess[:, i] .= (g_p .- g_m) ./ (2 * eps_h)
-    end
-    hess = (hess .+ hess') ./ 2
-
-    # Covariance of beta only (not log_sigma_u)
+    H = ForwardDiff.hessian(nll, theta)
     vcov_full = try
-        robust_inv(-hess)
+        Matrix{T}(robust_inv(Hermitian((H .+ H') ./ 2)))
     catch
         zeros(T, n_params, n_params)
     end
@@ -594,60 +630,26 @@ function _xtlogit_cre(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
 
     # Initialize
     beta_init, _, _, _, _, _ = _irls_logit(y, X_c; maxiter=50, tol=T(1e-6))
-    theta = vcat(beta_init, zero(T))
+    theta0 = vcat(beta_init, zero(T))
 
-    loglik_old = T(-Inf)
-    converged = false
-    iterations = 0
-
-    for iter in 1:maxiter
-        iterations = iter
-        loglik, grad = _re_logit_loglik(theta, y, X_c, groups, unique_groups,
-                                         group_obs, nodes, weights)
-
-        if abs(loglik - loglik_old) < tol * (abs(loglik_old) + one(T))
-            converged = true
-            loglik_old = loglik
-            break
-        end
-        loglik_old = loglik
-
-        step_size = T(0.5)
-        for _ in 1:20
-            theta_new = theta .+ step_size .* grad
-            ll_new, _ = _re_logit_loglik(theta_new, y, X_c, groups, unique_groups,
-                                          group_obs, nodes, weights)
-            if ll_new > loglik
-                theta = theta_new
-                break
-            end
-            step_size *= T(0.5)
-        end
-    end
+    nll(th) = -_re_logit_agh_loglik(th, y, X_c, unique_groups, group_obs, nodes, weights)
+    g!(G, th) = (G .= ForwardDiff.gradient(nll, th))
+    res = Optim.optimize(nll, g!, theta0, Optim.LBFGS(),
+                         Optim.Options(g_tol=T(1e-8), iterations=maxiter, f_reltol=tol))
+    theta = Optim.minimizer(res)
+    iterations = Optim.iterations(res)
 
     beta = theta[1:k_full]
     sigma_u = exp(theta[k_full + 1])
-    loglik_final = loglik_old
+    # Recompute the loglik at the optimum (the old code reused loglik_old — a stale value).
+    loglik_final = _re_logit_agh_loglik(theta, y, X_c, unique_groups, group_obs, nodes, weights)
 
-    # Numerical Hessian
+    converged = Optim.converged(res) && norm(ForwardDiff.gradient(nll, theta)) < T(1e-5)
+
     n_params = k_full + 1
-    hess = zeros(T, n_params, n_params)
-    eps_h = T(1e-4)
-    for i in 1:n_params
-        theta_p = copy(theta)
-        theta_m = copy(theta)
-        theta_p[i] += eps_h
-        theta_m[i] -= eps_h
-        _, g_p = _re_logit_loglik(theta_p, y, X_c, groups, unique_groups,
-                                   group_obs, nodes, weights)
-        _, g_m = _re_logit_loglik(theta_m, y, X_c, groups, unique_groups,
-                                   group_obs, nodes, weights)
-        hess[:, i] .= (g_p .- g_m) ./ (2 * eps_h)
-    end
-    hess = (hess .+ hess') ./ 2
-
+    H = ForwardDiff.hessian(nll, theta)
     vcov_full = try
-        robust_inv(-hess)
+        Matrix{T}(robust_inv(Hermitian((H .+ H') ./ 2)))
     catch
         zeros(T, n_params, n_params)
     end
