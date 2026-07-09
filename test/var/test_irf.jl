@@ -181,6 +181,32 @@ end
 # =============================================================================
 # compute_irf exported (Issue #20)
 # =============================================================================
+@testset "Bootstrap is uncorrected residual bootstrap (T060)" begin
+    Random.seed!(606)
+    Tn, n, p = 200, 2, 1
+    A = [0.5 0.1; 0.0 0.4]
+    Y = zeros(Tn, n)
+    for t in 2:Tn
+        Y[t, :] = A * Y[t-1, :] + randn(n)
+    end
+    model = estimate_var(Y, p)
+    H = 6
+    reps = 400
+    res = irf(model, H; method=:cholesky, ci_type=:bootstrap, stationary_only=true, reps=reps)
+
+    @test res.ci_type == :bootstrap
+    @test res._draws !== nothing
+    @test all(isfinite, res._draws)
+
+    # Uncorrected residual bootstrap ⇒ draws are centered at the estimated B̂, so the
+    # bootstrap mean tracks the point IRF. A bias-corrected (Kilian 1998) bootstrap would
+    # shift the draws away from the point estimate; this guard locks the current behavior.
+    n_draws = size(res._draws, 1)
+    boot_mean = dropdims(sum(res._draws; dims=1); dims=1) ./ n_draws
+    scale = maximum(abs, res.values)
+    @test isapprox(boot_mean, res.values; atol=3 * scale / sqrt(n_draws) + 0.03)
+end
+
 @testset "compute_irf exported" begin
     Random.seed!(42)
     Y = randn(200, 3)
