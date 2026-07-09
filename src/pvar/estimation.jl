@@ -241,6 +241,10 @@ function estimate_pvar(d::PanelData{T}, p::Int;
 
     n_inst = size(group_Z[1], 2)
 
+    if n_inst > N
+        @warn "Too many instruments: PVAR GMM has n_inst=$(n_inst) moment conditions > N=$(N) groups (ratio $(round(n_inst / N, digits=2))). Instrument proliferation overfits the endogenous regressors, biases the two-step weighting matrix toward singularity, and pushes the Hansen J-test toward non-rejection (Roodman 2009, OBES 71(1):135-158). Consider collapse=true or a smaller max_lag_endo." maxlog=1
+    end
+
     # Aggregate cross-products for equation-by-equation GMM
     # Each equation: y_eq = X * phi_eq + error
     # Stacked: vec(Y') = (I_m ⊗ X) vec(Phi') + vec(E')

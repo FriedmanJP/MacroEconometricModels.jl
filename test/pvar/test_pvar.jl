@@ -5,6 +5,7 @@
 # Licensed under GPL-3.0-or-later. See LICENSE for details.
 
 using Test, MacroEconometricModels, Random, DataFrames, LinearAlgebra, Statistics, Distributions
+using Logging: with_logger
 
 # =============================================================================
 # Helper: generate balanced panel DGP
@@ -740,4 +741,25 @@ end
     mf = estimate_pvar(dgpg.pd, 1; transformation=:fod, max_lag_endo=3)
     @test maximum(diag(mf.Sigma)) < 0.05
     @test norm(diag(mg.Sigma) .- diag(mf.Sigma)) < 0.02
+end
+
+@testset "Too-many-instruments warning (Roodman 2009, T084)" begin
+    # Capture with respect_maxlog=false so the check is independent of the maxlog=1 counter
+    # (the warning may already have fired in earlier testsets this session).
+    # (a) short-N / long-T ⇒ n_inst ≫ N ⇒ warning fires
+    dgp = _make_panel_dgp(N=8, T_total=14, m=2, p=1, rng=MersenneTwister(4084))
+    tl = Test.TestLogger(respect_maxlog=false)
+    m = with_logger(() -> estimate_pvar(dgp.pd, 1; steps=:twostep), tl)
+    @test any(r -> occursin("Too many instruments", r.message), tl.logs)
+    @test m.n_instruments > m.n_groups
+    @test m.n_groups == 8
+    @test m.n_instruments == size(m.instruments[1], 2)
+    @test occursin("groups:", sprint(show, m))
+
+    # (b) wide-N / short-T ⇒ n_inst ≤ N ⇒ no too-many-instruments warning
+    dgp2 = _make_panel_dgp(N=60, T_total=5, m=1, p=1, rng=MersenneTwister(4085))
+    tl2 = Test.TestLogger(respect_maxlog=false)
+    m2 = with_logger(() -> estimate_pvar(dgp2.pd, 1), tl2)
+    @test !any(r -> occursin("Too many instruments", r.message), tl2.logs)
+    @test m2.n_instruments <= m2.n_groups
 end

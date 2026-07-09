@@ -168,7 +168,10 @@ function Base.show(io::IO, model::PVARModel{T}) where {T}
         "Observations"    model.n_obs;
     ]
     if model.method != :fe_ols
-        spec = vcat(spec, Any["Instruments" model.n_instruments])
+        inst_str = model.n_instruments > model.n_groups ?
+            "$(model.n_instruments) (groups: $(model.n_groups)) ⚠ too many" :
+            "$(model.n_instruments) (groups: $(model.n_groups))"
+        spec = vcat(spec, Any["Instruments" inst_str])
     end
 
     _pretty_table(io, spec;
