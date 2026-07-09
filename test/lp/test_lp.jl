@@ -810,11 +810,14 @@ using Random
         # point and :nlls returned gamma_init unchanged.
         Random.seed!(4242)
         T_dd = 200
-        z_dd = randn(T_dd)
+        z_dd = zeros(T_dd)
+        for t in 2:T_dd
+            z_dd[t] = 0.9 * z_dd[t-1] + randn()      # persistent state
+        end
         Y_dd = zeros(T_dd, 2)
         for t in 2:T_dd
-            F_t = 1 / (1 + exp(-2.5 * z_dd[t]))     # increasing transition
-            rho = F_t * 0.8 + (1 - F_t) * 0.2       # regime-dependent persistence
+            F_t = 1 / (1 + exp(-2.5 * z_dd[t-1]))    # predetermined key — matches the estimator
+            rho = F_t * 0.8 + (1 - F_t) * 0.2        # regime-dependent persistence
             Y_dd[t, :] = rho * Y_dd[t-1, :] + randn(2)
         end
 
@@ -843,6 +846,13 @@ using Random
         ssr_nlls_dd = MacroEconometricModels._state_lp_transition_ssr(z_dd, Y_dd, 1,
                                                                       res_nlls_dd.gamma, res_nlls_dd.c; lags=2)
         @test ssr_nlls_dd <= best_ssr + 1e-6
+
+        # n == 1: the single series is both shock and sole response, so the h=0 own response is
+        # fit mechanically and (γ, c) is unidentified — this must error, not silently guess.
+        Y_uni = reshape(Y_dd[:, 1], :, 1)
+        @test_throws ArgumentError MacroEconometricModels.estimate_transition_params(
+            z_dd, Y_uni, 1; method=:nlls, lags=2)
+        @test_throws ArgumentError estimate_state_lp(Y_uni, 1, z_dd, 4)
     end
 
     @testset "State-Dependent LP — predetermined transition weight (T100 #199)" begin
@@ -887,6 +897,23 @@ using Random
         # Bug-exposure: the contemporaneous design differs, and the fit must NOT match it.
         B_con = build(:con)
         @test !isapprox(m_pd.B_expansion[1], B_con[1:kpr, :]; atol=1e-6)
+    end
+
+    @testset "State-Dependent LP — lags=0 predetermined-weight guard (T100 #199)" begin
+        # With lags=0, compute_horizon_bounds gives t_start=1; the predetermined weight F[t-1]
+        # needs t-1>=1, so the guard bumps t_start to 2. The fit must run and drop exactly one
+        # leading observation: T_eff[h+1] == T_obs - 1 - h.
+        Random.seed!(313)
+        T_l0 = 60
+        z_l0 = randn(T_l0)
+        Y_l0 = zeros(T_l0, 2)
+        for t in 2:T_l0
+            Y_l0[t, :] = 0.5 * Y_l0[t-1, :] + randn(2)
+        end
+        m0 = estimate_state_lp(Y_l0, 1, z_l0, 3; gamma=1.5, threshold=0.0, lags=0)
+        for h in 0:3
+            @test m0.T_eff[h+1] == T_l0 - 1 - h
+        end
     end
 
     @testset "State-Dependent LP - Regime IRFs" begin

@@ -85,7 +85,18 @@ function _state_lp_transition_ssr(state_var::AbstractVector{T}, Y::AbstractMatri
     end
     B = robust_inv(X' * X) * (X' * Ymat)
     resid = Ymat - X * B
-    sum(abs2, resid)
+    # The shock variable's own horizon-0 equation is fit mechanically — its two regime columns
+    # sum to Y[t, shock_var] for any (gamma, c) — so it carries no information about the
+    # transition. Exclude it from the objective. For n == 1 there is no other response and the
+    # transition is unidentified at h = 0 (guarded in estimate_transition_params).
+    ssr = zero(T)
+    for var in 1:n
+        var == shock_var && continue
+        for i in 1:T_h
+            ssr += abs2(resid[i, var])
+        end
+    end
+    ssr
 end
 
 """
@@ -102,6 +113,11 @@ function estimate_transition_params(state_var::AbstractVector{T}, Y::AbstractMat
                                     gamma_init::T=T(1.5), lags::Int=4,
                                     c_init::Union{T,Symbol}=:median) where {T<:AbstractFloat}
     @assert length(state_var) == size(Y, 1)
+    size(Y, 2) == 1 && throw(ArgumentError(
+        "estimate_transition_params: cannot identify the state-dependent transition (γ, c) from a " *
+        "single series that is also the shock — its horizon-0 own response is fit mechanically for " *
+        "any (γ, c). Pass fixed gamma/threshold to estimate_state_lp, or include a response " *
+        "variable other than the shock."))
 
     c0 = c_init isa Symbol ? (c_init == :median ? median(state_var) :
                                c_init == :mean ? mean(state_var) : zero(T)) : c_init
