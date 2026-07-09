@@ -144,127 +144,68 @@ end
 # =============================================================================
 
 """
-    _clogit_dp_logsum(X_g, beta, s) -> (log_denom, grad, hess)
+    _clogit_dp_logsum(X_g, beta, s) -> (log_denom, prob)
 
-Dynamic programming to compute log(sum of exp(d' X_g beta)) over all binary vectors d
-of length T_g with sum(d) = s, plus gradient and Hessian contributions.
+Fixed-effects conditional-logit partition function via a forward/backward dynamic program
+in LOG SPACE. Returns `log_denom = log Σ_{d: Σd=s} exp(d'X_gβ)` and, for each observation
+`t`, `prob[t] = P(d_t = 1 ∣ Σd = s)`. The group conditional log-likelihood is
+`y_g'X_gβ − log_denom` with gradient `X_g'(y_g − prob)` and Hessian
+`−X_g' diag(prob(1−prob)) X_g`.
 
-Uses the recursion:
-    f(t, j) = f(t-1, j) + f(t-1, j-1) * exp(x_t' beta)
-where f(0,0) = 1, f(0, j>0) = 0.
-
-We also track gradient terms via the chain rule.
+The recursion `f(t,j) = f(t-1,j) + f(t-1,j-1)·e^{η_t}` is carried on the log scale via
+`logaddexp` so that `|η_t|` on the order of 700+ (raw `exp` overflows to `Inf` in Float64)
+no longer produces `Inf`/`NaN`.
 """
 function _clogit_dp_logsum(X_g::AbstractMatrix{T}, beta::Vector{T}, s::Int) where {T}
     T_g = size(X_g, 1)
-    k = length(beta)
-
-    # DP table for the partition function
-    # f[j+1] = sum over subsets of {1,...,t} with exactly j elements
-    # We store log-scale values using log-sum-exp for stability
-    # But for gradient/Hessian we need the actual sums, so use probability approach
-
-    # Compute eta_t = x_t' beta for each t
     eta = X_g * beta
-    exp_eta = exp.(eta)
+    NEG = T(-Inf)
+    # Stable scalar log-add-exp with -Inf handling (logaddexp(-Inf,-Inf) = -Inf).
+    la(a, b) = a == NEG ? b : (b == NEG ? a :
+               (a > b ? a + log1p(exp(b - a)) : b + log1p(exp(a - b))))
 
-    # Forward pass: f[t][j] = sum over subsets of {1,...,t} with j ones of prod exp(eta_i * d_i)
-    # f[0][0] = 1, f[0][j>0] = 0
-    # f[t][j] = f[t-1][j] + f[t-1][j-1] * exp(eta_t)
-
-    # We need f[T_g][s] = denominator
-    # Use 0-indexed j: j = 0, ..., s
-    f_prev = zeros(T, s + 1)
-    f_prev[1] = one(T)  # f[0][0] = 1
-
+    # Forward log-DP: lfwd[t+1][j+1] = log Σ over subsets of {1..t} with j ones of exp(Σ d·η).
+    lfwd = Vector{Vector{T}}(undef, T_g + 1)
+    lfwd[1] = fill(NEG, s + 1); lfwd[1][1] = zero(T)   # log f(0,0)=0, others -Inf
     for t in 1:T_g
-        f_curr = zeros(T, s + 1)
-        f_curr[1] = f_prev[1]  # j=0: don't include obs t
+        prev = lfwd[t]
+        cur = fill(NEG, s + 1)
+        cur[1] = prev[1]                                # j=0: exclude obs t
         for j in 1:min(s, t)
-            f_curr[j + 1] = f_prev[j + 1] + f_prev[j] * exp_eta[t]
+            cur[j + 1] = la(prev[j + 1], prev[j] + eta[t])
         end
-        f_prev = f_curr
+        lfwd[t + 1] = cur
     end
+    log_denom = lfwd[T_g + 1][s + 1]
 
-    denom = f_prev[s + 1]
-
-    # For gradient: d log(denom) / d beta = (1/denom) * d(denom)/d(beta)
-    # d(denom)/d(beta_p) = sum over valid d of [sum_t d_t x_{t,p}] * exp(d' eta)
-    #                    = sum_t x_{t,p} * g_t
-    # where g_t = sum over d with sum=s and d_t=1 of exp(d' eta)
-    # g_t = exp(eta_t) * f_{-t}[s-1]
-    # f_{-t}[s-1] = sum over subsets of {1,...,T}\{t} with s-1 ones
-
-    # To get g_t we can use forward-backward DP
-    # Forward: fwd[t][j] = sum over subsets of {1,...,t} with j ones
-    # Backward: bwd[t][j] = sum over subsets of {t,...,T} with j ones
-    # Then f_{-t}[s-1] = sum_{j=0}^{s-1} fwd[t-1][j] * bwd[t+1][s-1-j]
-
-    # Forward tables
-    fwd = Vector{Vector{T}}(undef, T_g + 1)
-    fwd[1] = zeros(T, s + 1)
-    fwd[1][1] = one(T)
-    for t in 1:T_g
-        fwd[t + 1] = zeros(T, s + 1)
-        fwd[t + 1][1] = fwd[t][1]
-        for j in 1:min(s, t)
-            fwd[t + 1][j + 1] = fwd[t][j + 1] + fwd[t][j] * exp_eta[t]
-        end
-    end
-
-    # Backward tables
-    bwd = Vector{Vector{T}}(undef, T_g + 2)
-    bwd[T_g + 2] = zeros(T, s + 1)
-    bwd[T_g + 2][1] = one(T)
+    # Backward log-DP: lbwd[t][j+1] = log Σ over subsets of {t..T_g} with j ones.
+    lbwd = Vector{Vector{T}}(undef, T_g + 1)
+    lbwd[T_g + 1] = fill(NEG, s + 1); lbwd[T_g + 1][1] = zero(T)
     for t in T_g:-1:1
-        bwd[t] = zeros(T, s + 1)  # bwd[t] = backward from t
-        # Don't include t: bwd[t][j] = bwd[t+1][j] (skip) + bwd[t+1][j-1]*exp_eta[t] (include)
-        # Wait, backward should be: sum over subsets of {t,...,T_g} with j ones
-        # bwd[T_g+1][0] = 1
-        # bwd[t][j] = bwd[t+1][j] + bwd[t+1][j-1] * exp_eta[t]
-    end
-    # Redo backward properly
-    bwd[T_g + 1] = zeros(T, s + 1)
-    bwd[T_g + 1][1] = one(T)
-    for t in T_g:-1:1
-        bwd[t] = zeros(T, s + 1)
-        bwd[t][1] = bwd[t + 1][1]
+        nxt = lbwd[t + 1]
+        cur = fill(NEG, s + 1)
+        cur[1] = nxt[1]
         remaining = T_g - t + 1
         for j in 1:min(s, remaining)
-            bwd[t][j + 1] = bwd[t + 1][j + 1] + bwd[t + 1][j] * exp_eta[t]
+            cur[j + 1] = la(nxt[j + 1], nxt[j] + eta[t])
         end
+        lbwd[t] = cur
     end
 
-    # Compute g_t = P(d_t = 1 | sum = s) * denom = exp(eta_t) * f_{-t}(s-1)
-    # f_{-t}(s-1) = sum_{j=0}^{s-1} fwd[t][j+1] * bwd[t+1][s-1-j+1]
-    # (fwd[t] is forward up to t-1, i.e., fwd[t] = fwd over {1,...,t-1})
-    g = zeros(T, T_g)
-    for t in 1:T_g
-        val = zero(T)
-        for j in 0:min(s - 1, t - 1)
-            bwd_idx = s - 1 - j  # need bwd[t+1][bwd_idx]
-            remaining_after_t = T_g - t
-            if bwd_idx <= remaining_after_t && bwd_idx >= 0
-                val += fwd[t][j + 1] * bwd[t + 1][bwd_idx + 1]
+    # prob[t] = exp(η_t + logf_{-t}(s-1) − log_denom), where lfwd[t] spans {1..t-1} and
+    # lbwd[t+1] spans {t+1..T_g}: logf_{-t}(s-1) = logsumexp_j lfwd[t][j+1] + lbwd[t+1][s-1-j+1].
+    prob = zeros(T, T_g)
+    if isfinite(log_denom)
+        for t in 1:T_g
+            acc = NEG
+            for j in 0:min(s - 1, t - 1)
+                bidx = s - 1 - j
+                (0 <= bidx <= T_g - t) || continue
+                acc = la(acc, lfwd[t][j + 1] + lbwd[t + 1][bidx + 1])
             end
+            prob[t] = acc == NEG ? zero(T) : exp(eta[t] + acc - log_denom)
         end
-        g[t] = exp_eta[t] * val
     end
-
-    # prob_t = g_t / denom = P(d_t = 1 | sum_d = s)
-    prob = denom > zero(T) ? g ./ denom : zeros(T, T_g)
-
-    # Gradient of log-likelihood for this group:
-    # ll_g = sum_t y_t * eta_t - log(denom)
-    # d ll_g / d beta = X_g' * (y_g - prob)  (but we only need the denom gradient part)
-    # Actually the full conditional log-lik for group:
-    # ll_g = y_g' * X_g * beta - log(denom)
-    # grad_g = X_g' * y_g - X_g' * prob = X_g' * (y_g - prob)
-
-    # Hessian: -X_g' * diag(prob .* (1 .- prob)) * X_g
-    # (This is the expected Hessian from the conditional distribution)
-
-    log_denom = log(max(denom, T(1e-300)))
 
     return log_denom, prob
 end
