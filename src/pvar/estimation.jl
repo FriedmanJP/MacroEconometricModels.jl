@@ -16,6 +16,19 @@ GMM with Windmeijer (2005) finite-sample corrected standard errors.
 # =============================================================================
 
 """
+    _ab_h_matrix(T, r) -> Matrix{T}
+
+Arellano-Bond (1991) band matrix for one-step first-difference GMM weighting: an `r × r`
+matrix with `2` on the main diagonal and `-1` on the first off-diagonals — the covariance
+structure (up to scale) of the MA(1) errors induced by first differencing. Used to form
+the efficient one-step weight `W₁ = (Σ_i Z_i' H Z_i)^{-1}`.
+"""
+function _ab_h_matrix(::Type{T}, r::Int) where {T<:AbstractFloat}
+    r <= 0 && return zeros(T, 0, 0)
+    Matrix(SymTridiagonal(fill(T(2), r), fill(T(-1), max(r - 1, 0))))
+end
+
+"""
     estimate_pvar(d::PanelData{T}, p::Int; kwargs...) -> PVARModel{T}
 
 Estimate Panel VAR(p) via GMM.
@@ -262,19 +275,26 @@ function estimate_pvar(d::PanelData{T}, p::Int;
     group_resid_trans = Vector{Matrix{T}}(undef, N)
     W_final = Matrix{T}(undef, 0, 0)
 
+    # One-step GMM weighting matrix W1 = (1/N Σ_g Z_g' H_g Z_g)^{-1} (Arellano-Bond 1991).
+    # First differencing induces an MA(1) error whose covariance is proportional to the band
+    # matrix H_g (2 on the diagonal, -1 on the first off-diagonals); this is the efficient
+    # one-step weight and matches xtabond2. Forward orthogonal deviations yield homoskedastic
+    # errors (H = I), for which Z'Z is already optimal. W1 is equation-invariant, so it is
+    # built once here rather than per equation.
+    W1_accum = zeros(T, n_inst, n_inst)
+    for g in 1:N
+        Z_g = group_Z[g]
+        if transformation == :fd
+            W1_accum .+= Z_g' * (_ab_h_matrix(T, size(Z_g, 1)) * Z_g)
+        else
+            W1_accum .+= Z_g' * Z_g
+        end
+    end
+    W1_accum ./= N
+    W1 = Matrix{T}(robust_inv(Hermitian((W1_accum + W1_accum') / 2)))
+
     for eq in 1:m_dim
         s_zy_eq = S_Zy[:, eq]
-
-        # Step 1: One-step GMM with H matrix as weighting
-        # For FD: H = (1/N) Σ_i Z_i' H_fd Z_i where H_fd is banded matrix
-        # Simplification: use identity or Z'Z as initial weighting
-        W1 = zeros(T, n_inst, n_inst)
-        for g in 1:N
-            Z_g = group_Z[g]
-            W1 .+= Z_g' * Z_g
-        end
-        W1 ./= N
-        W1 = Matrix{T}(robust_inv(Hermitian((W1 + W1') / 2)))
 
         # Solve one-step
         phi1 = linear_gmm_solve(S_ZX, s_zy_eq, W1)

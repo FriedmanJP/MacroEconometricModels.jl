@@ -657,3 +657,61 @@ end
     # coefficients finite (padded zero columns contribute nothing to the moment sums)
     @test all(isfinite, coef(m))
 end
+
+@testset "PVAR one-step GMM Arellano-Bond H matrix (T081)" begin
+    A = MacroEconometricModels
+    # (1) H band matrix structure: 2 on the diagonal, -1 on the first off-diagonals
+    H = A._ab_h_matrix(Float64, 4)
+    @test H == [2.0 -1 0 0; -1 2 -1 0; 0 -1 2 -1; 0 0 -1 2]
+    @test issymmetric(H)
+    @test A._ab_h_matrix(Float64, 1) == reshape([2.0], 1, 1)
+
+    # Balanced univariate panel, p=1
+    rng = MersenneTwister(4081)
+    N = 40; Tt = 8
+    ids = Int[]; times = Int[]; ys = Float64[]
+    grp = Matrix{Float64}[]
+    for i in 1:N
+        y = zeros(Tt)
+        for t in 2:Tt
+            y[t] = 0.5 * y[t-1] + randn(rng)
+        end
+        push!(grp, reshape(y, :, 1))
+        append!(ids, fill(i, Tt)); append!(times, 1:Tt); append!(ys, y)
+    end
+    pd = xtset(DataFrame(id=ids, t=times, y=ys), :id, :t)
+    m = estimate_pvar(pd, 1; steps=:onestep, min_lag_endo=2, max_lag_endo=99)
+
+    # (2) EXACT-EQUIVALENCE: reconstruct the one-step FD-GMM using the package's own
+    # helpers, with the H weight (useH=true) or the old Z'Z weight (useH=false).
+    function recon(useH)
+        Zs = Matrix{Float64}[]; Xs = Matrix{Float64}[]; Ys = Matrix{Float64}[]
+        for gl in grp
+            Yeff, Xlag = A._panel_lag_levels(gl, 1)
+            Ytr = A._panel_first_difference(Yeff)
+            Xtr = A._panel_first_difference(Xlag)
+            Zg = A._build_instruments_fd(gl, 1, 1; min_lag=2, max_lag=99, collapse=false)
+            Tc = min(size(Ytr, 1), size(Zg, 1))
+            push!(Ys, Ytr[end-Tc+1:end, :]); push!(Xs, Xtr[end-Tc+1:end, :]); push!(Zs, Zg[end-Tc+1:end, :])
+        end
+        ninst = maximum(size(Z, 2) for Z in Zs)
+        SZX = zeros(ninst, 1); SZy = zeros(ninst, 1); W = zeros(ninst, ninst)
+        for g in 1:N
+            SZX .+= Zs[g]' * Xs[g]; SZy .+= Zs[g]' * Ys[g]
+            W .+= useH ? Zs[g]' * (A._ab_h_matrix(Float64, size(Zs[g], 1)) * Zs[g]) : Zs[g]' * Zs[g]
+        end
+        W ./= N
+        Winv = Matrix(A.robust_inv(Hermitian((W + W') / 2)))
+        A.linear_gmm_solve(SZX, SZy[:, 1], Winv)
+    end
+    phi_H = recon(true); phi_ZZ = recon(false)
+    @test isapprox(coef(m)[1], phi_H[1]; atol=1e-7)     # matches the H-weighted one-step
+    @test !isapprox(phi_H[1], phi_ZZ[1]; atol=1e-6)      # H genuinely differs from Z'Z (the fix)
+
+    # (3) FOD path: homoskedastic ⇒ H not applied; still finite
+    mf = estimate_pvar(pd, 1; steps=:onestep, transformation=:fod, min_lag_endo=2, max_lag_endo=99)
+    @test all(isfinite, coef(mf))
+    # (4) two-step still produces finite estimates (regression guard)
+    m2 = estimate_pvar(pd, 1; steps=:twostep, min_lag_endo=2, max_lag_endo=99)
+    @test all(isfinite, coef(m2))
+end
