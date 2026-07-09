@@ -180,6 +180,16 @@ using Random
         @test isfinite(ld_sing) || ld_sing == -Inf
     end
 
+    @testset "logdet_safe pseudo-fallback warns (T062 C-13)" begin
+        # Indefinite matrix: logdet throws (log of negative), fallback keeps only the
+        # positive eigenvalue (+1) ⇒ log(1) = 0, and warns that the result is a pseudo-logdet.
+        A = [1.0 0.0; 0.0 -1.0]
+        @test MacroEconometricModels.logdet_safe(A) == 0.0
+        @test_logs (:warn,) match_mode = :any MacroEconometricModels.logdet_safe(A)
+        # PD matrix: exact logdet, no warning.
+        @test @test_nowarn(MacroEconometricModels.logdet_safe(Matrix{Float64}(I, 3, 3))) == 0.0
+    end
+
     # ==========================================================================
     # VAR Matrix Construction Tests
     # ==========================================================================

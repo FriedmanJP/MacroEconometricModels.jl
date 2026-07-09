@@ -190,6 +190,7 @@ function logdet_safe(A::AbstractMatrix{T}) where {T<:AbstractFloat}
     try
         logdet(A)
     catch
+        @warn "logdet_safe: matrix not positive-definite; returning pseudo-logdet (sum of logs of positive eigenvalues only); downstream likelihood values are approximate." maxlog=3
         eigenvals = eigvals(Hermitian(A))
         pos = filter(x -> x > zero(T), eigenvals)
         isempty(pos) ? T(-Inf) : sum(log, pos)

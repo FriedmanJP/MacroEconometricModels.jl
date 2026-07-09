@@ -34,6 +34,8 @@ function fevd(model::VARModel{T}, horizon::Int;
     transition_var::Union{Nothing,AbstractVector}=nothing,
     regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing
 ) where {T<:AbstractFloat}
+    _validate_data(model.Sigma, "Sigma")
+    _validate_data(model.B, "B")
     irf_result = irf(model, horizon; method, check_func, narrative_check,
                      transition_var=transition_var, regime_indicator=regime_indicator)
     # The impact matrix P = IRF[1,:,:] = chol(Σ)·Q; the squared-IRF FEVD accumulation is a

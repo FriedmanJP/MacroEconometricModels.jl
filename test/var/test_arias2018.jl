@@ -128,6 +128,16 @@ end
     # Zero Restrictions Tests
     # ==========================================================================
 
+    @testset "weighted quantile with Float32 eps(T) (T062 C-17)" begin
+        vals = Float32[1, 2, 3, 4]
+        w = Float32[1, 1, 1, 1]
+        q = MacroEconometricModels._weighted_quantile(vals, w, 0.5f0)
+        @test isfinite(q)
+        @test 1 ≤ q ≤ 4
+        # a zero-weight tie (cw[idx]==cw[idx-1]) must not blow up thanks to the eps(T) floor
+        @test isfinite(MacroEconometricModels._weighted_quantile(Float32[1, 2, 3], Float32[1, 0, 1], 0.5f0))
+    end
+
     @testset "Narrowed identification catch (T059)" begin
         # (1) predicate: numeric-degeneracy errors are rejectable; genuine bugs are not
         @test MacroEconometricModels._is_rejectable_draw_error(LinearAlgebra.SingularException(1))

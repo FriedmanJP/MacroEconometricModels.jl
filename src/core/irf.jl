@@ -47,6 +47,8 @@ function irf(model::VARModel{T}, horizon::Int;
     regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing
 ) where {T<:AbstractFloat}
 
+    _validate_data(model.Sigma, "Sigma")
+    _validate_data(model.B, "B")
     n = nvars(model)
     Q = compute_Q(model, method, horizon, check_func, narrative_check;
                   transition_var=transition_var, regime_indicator=regime_indicator)

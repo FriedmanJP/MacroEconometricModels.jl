@@ -97,6 +97,16 @@ using LinearAlgebra
         @test norm(x_upd - x_pred) < norm(x_true)  # update moved toward observation
     end
 
+    @testset "Lyapunov stability & convergence warns (T062 C-12)" begin
+        # Analytic converged value: diagonal Lyapunov P = Q/(1−0.5²) = (1/0.75)·I.
+        P = MacroEconometricModels._solve_discrete_lyapunov(
+            0.5 * Matrix{Float64}(I, 2, 2), Matrix{Float64}(I, 2, 2))
+        @test Matrix(P) ≈ (1 / 0.75) * Matrix{Float64}(I, 2, 2) atol = 1e-8
+        # Unstable transition (ρ=1.01 ≥ 1) ⇒ spectral-radius warning.
+        @test_logs (:warn,) match_mode = :any MacroEconometricModels._solve_discrete_lyapunov(
+            1.01 * Matrix{Float64}(I, 2, 2), Matrix{Float64}(I, 2, 2); max_iter=5)
+    end
+
     @testset "Joseph-form measurement update (T058)" begin
         Random.seed!(4242)
         x_pred, P_pred = MacroEconometricModels._kalman_predict(x0, P0, F, Q)

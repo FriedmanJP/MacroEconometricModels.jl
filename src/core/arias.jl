@@ -651,7 +651,7 @@ function _weighted_quantile(vals::AbstractVector{T}, weights::AbstractVector{S},
     idx = searchsortedfirst(cw, q)
     idx == 1 && return sv[1]
     idx > length(sv) && return sv[end]
-    t = (q - cw[idx-1]) / (cw[idx] - cw[idx-1] + eps())
+    t = (q - cw[idx-1]) / (cw[idx] - cw[idx-1] + eps(T))
     (1 - t) * sv[idx-1] + t * sv[idx]
 end
 

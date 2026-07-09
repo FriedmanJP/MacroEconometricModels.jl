@@ -26,7 +26,10 @@ identify_cholesky(model::VARModel{T}) where {T<:AbstractFloat} = safe_cholesky(m
 function generate_Q(n::Int, ::Type{T}=Float64) where {T<:AbstractFloat}
     X = randn(T, n, n)
     Q, R = qr(X)
-    Matrix(Q) * Diagonal(sign.(diag(R)))
+    # Sign-normalize columns by the QR pivots. Use an explicit ±1 map (not `sign`, whose
+    # sign(0.0)=0.0 would zero an entire rotation column when a pivot is exactly 0).
+    d = [r < zero(T) ? -one(T) : one(T) for r in diag(R)]
+    Matrix(Q) * Diagonal(d)
 end
 
 # =============================================================================
@@ -59,8 +62,8 @@ end
 
 """Compute structural shocks: εₜ = Q'L⁻¹uₜ."""
 function compute_structural_shocks(model::VARModel{T}, Q::AbstractMatrix{T}) where {T<:AbstractFloat}
-    L = safe_cholesky(model.Sigma)
-    (Q' * robust_inv(Matrix(L)) * model.U')'
+    L = safe_cholesky(model.Sigma)          # lower-triangular Cholesky factor
+    (Q' * (L \ model.U'))'                    # L \ U' = L⁻¹U' via triangular backsolve
 end
 
 # =============================================================================
@@ -190,15 +193,18 @@ reference `iresponse_longrun.m` normalizes only the impact sign of the first sho
 function identify_long_run(model::VARModel{T}) where {T<:AbstractFloat}
     n, p = nvars(model), model.p
     A_sum = sum(extract_ar_coefficients(model.B, n, p))
-    inv_lag = robust_inv(I(n) - A_sum)
+    M = Matrix{T}(I(n) - A_sum)
+    cM = cond(M)
+    cM > one(T) / sqrt(eps(T)) && @warn "identify_long_run: (I − ΣAᵢ) is near-singular (cond ≈ $(cM)); the VAR is near a unit root, so the long-run impact matrix is numerically unstable." maxlog = 1
+    inv_lag = robust_inv(M; silent=true)
     V_LR = inv_lag * model.Sigma * inv_lag'
     D = Matrix(safe_cholesky(V_LR))   # lower-triangular; D == long-run cumulative impact matrix
     # Sign-normalize: long-run own-effect (diag of D) non-negative for every shock.
     @inbounds for j in 1:n
         D[j, j] < zero(T) && (@views D[:, j] .*= -one(T))
     end
-    P = (I(n) - A_sum) * D
-    robust_inv(Matrix(safe_cholesky(model.Sigma))) * P
+    P = M * D
+    safe_cholesky(model.Sigma) \ P     # L⁻¹P via triangular backsolve
 end
 
 # =============================================================================

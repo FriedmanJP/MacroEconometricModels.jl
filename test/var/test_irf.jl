@@ -207,6 +207,37 @@ end
     @test isapprox(boot_mean, res.values; atol=3 * scale / sqrt(n_draws) + 0.03)
 end
 
+@testset "Core numerics batch (T062: C-14/C-16/C-18)" begin
+    # C-14: generate_Q never zeroes a rotation column (explicit ±1 map, not sign(0)=0)
+    Random.seed!(614)
+    Q4 = MacroEconometricModels.generate_Q(4)
+    @test Q4' * Q4 ≈ I(4) atol = 1e-10
+    @test rank(Q4) == 4
+    Rdiag = [0.0, -2.0, 3.0]
+    d = [r < 0 ? -1.0 : 1.0 for r in Rdiag]
+    @test all(!iszero, d)
+    @test d == [1.0, -1.0, 1.0]      # old sign.(Rdiag) would give [0,-1,1]
+
+    # C-16: triangular solves reproduce the inverse-based results exactly, and the
+    #       long-run rotation stays orthonormal (L⁻¹(I−ΣA)D · (...)' = I).
+    Random.seed!(615)
+    Y = zeros(200, 3)
+    for t in 2:200
+        Y[t, :] = 0.4 * Y[t-1, :] + randn(3)
+    end
+    model = estimate_var(Y, 1)
+    Q = MacroEconometricModels.generate_Q(3)
+    L = MacroEconometricModels.safe_cholesky(model.Sigma)
+    eps_shocks = MacroEconometricModels.compute_structural_shocks(model, Q)
+    @test eps_shocks ≈ (Q' * inv(Matrix(L)) * model.U')' atol = 1e-9
+    Q_lr = MacroEconometricModels.identify_long_run(model)
+    @test Q_lr * Q_lr' ≈ I(3) atol = 1e-8
+
+    # C-18: the irf/fevd/hd input-validation guard rejects NaN/Inf in model matrices
+    @test_throws ArgumentError MacroEconometricModels._validate_data([1.0 NaN; 2.0 3.0], "Sigma")
+    @test_throws ArgumentError MacroEconometricModels._validate_data([Inf, 1.0], "B")
+end
+
 @testset "compute_irf exported" begin
     Random.seed!(42)
     Y = randn(200, 3)

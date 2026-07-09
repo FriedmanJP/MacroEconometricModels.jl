@@ -837,6 +837,16 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
     # 7. Summary Statistics
     # =========================================================================
     @testset "Summary Statistics" begin
+        @testset "population skew/kurtosis convention (T062 C-15)" begin
+            # x = [2,4,4,4,5,5,7,9]: mean 5, m2=32/8=4, m3=42/8=5.25, m4=356/8=44.5.
+            # population skew = m3/m2^1.5 = 5.25/8 = 0.65625; excess kurt = m4/m2² − 3 = −0.21875.
+            x = [2.0, 4, 4, 4, 5, 5, 7, 9]
+            s = describe_data(TimeSeriesData(reshape(x, :, 1); varnames=["x"]))
+            @test s.skewness[1] ≈ 5.25 / 4^1.5 atol = 1e-10
+            @test s.kurtosis[1] ≈ 44.5 / 4^2 - 3.0 atol = 1e-10
+            @test s.std[1] ≈ std(x)   # reported Std column stays the sample SD (divisor n-1)
+        end
+
         @testset "describe_data basic" begin
             Random.seed!(42)
             d = TimeSeriesData(randn(200, 3); varnames=["GDP", "CPI", "FFR"],

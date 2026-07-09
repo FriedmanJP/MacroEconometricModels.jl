@@ -24,21 +24,29 @@ Solve the discrete Lyapunov equation P = T * P * T' + Q by iteration.
 Returns the steady-state covariance matrix P as `Hermitian`.
 
 Used for initializing Kalman filter state covariance when the system is stationary.
-The iteration starts from P = Q and converges when the element-wise maximum
-absolute change is below `tol`.
+The iteration starts from P = I and converges when the element-wise maximum
+absolute change is below `tol`. Warns (but does not error) when the transition matrix
+is not stable (spectral radius ≥ 1) — no finite stationary solution exists — or when
+the iteration does not converge within `max_iter`.
 """
 function _solve_discrete_lyapunov(T_mat::AbstractMatrix{T}, Q::AbstractMatrix{T};
                                    max_iter::Int=1000, tol::Real=1e-10) where {T<:AbstractFloat}
     n = size(T_mat, 1)
+    rho = maximum(abs, eigvals(Matrix(T_mat)))
+    rho >= one(T) && @warn "Discrete Lyapunov: transition matrix not stable (spectral radius $(rho) ≥ 1); P = T·P·T'+Q has no finite stationary solution. Consider diffuse initialization." maxlog = 1
     P = Matrix{T}(I(n))
+    P_new = P
+    delta = T(Inf)
     for _ in 1:max_iter
         P_new = T_mat * P * T_mat' + Q
-        if norm(P_new - P) < tol * max(norm(P), one(T))
+        delta = norm(P_new - P)
+        if delta < tol * max(norm(P), one(T))
             return Hermitian(P_new)
         end
         P = P_new
     end
-    return Hermitian(P)
+    @warn "Discrete Lyapunov iteration did not converge to tol=$(tol) in $(max_iter) iterations (last change $(delta))." maxlog = 1
+    return Hermitian(P_new)
 end
 
 # =============================================================================

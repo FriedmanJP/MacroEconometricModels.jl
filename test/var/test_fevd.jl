@@ -124,6 +124,10 @@ end
     @test all(fevd_result.decomposition .>= -1e-10)
 end
 
+@testset "fevd input validation (T062 C-18)" begin
+    @test_throws ArgumentError MacroEconometricModels._validate_data([1.0 NaN; 0.0 2.0], "Sigma")
+end
+
 @testset "FEVD orthogonality guard (T061)" begin
     Random.seed!(61)
     Y = zeros(200, 3)
