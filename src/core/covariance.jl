@@ -19,6 +19,8 @@ References:
 - Newey, W. K., & West, K. D. (1987). A Simple, Positive Semi-definite, Heteroskedasticity
   and Autocorrelation Consistent Covariance Matrix.
 - Newey, W. K., & West, K. D. (1994). Automatic Lag Selection in Covariance Matrix Estimation.
+- Andrews, D. W. K., & Monahan, J. C. (1992). An Improved Heteroskedasticity and
+  Autocorrelation Consistent Covariance Matrix Estimator. Econometrica 60(4):953-966.
 - Driscoll, J. C., & Kraay, A. C. (1998). Consistent Covariance Matrix Estimation with
   Spatially Dependent Panel Data.
 """
@@ -207,6 +209,34 @@ end
 # =============================================================================
 
 """
+    _prewhiten_moments(G::AbstractMatrix{T}; radius_cap=0.97) -> (Ghat, A)
+
+Andrews–Monahan (1992) VAR(1) prewhitening of the moment matrix `G` (rows `g_t`,
+`n × k`). Fits `g_t = A g_{t-1} + ε_t` by multivariate least squares and returns
+the `(n-1) × k` whitened residuals `Ĝ = Glead − Glag·B` together with the VAR(1)
+matrix `A = B'` (where `B = (Glag'Glag)^{-1} Glag'Glead`). The whitened series is
+NOT spliced with a first observation — it has exactly `n-1` rows.
+
+Returns `(nothing, nothing)` when the fitted VAR(1) is not stable (spectral radius
+`≥ radius_cap`), so the caller can fall back to no prewhitening rather than
+recolor through a near-singular `(I − A)^{-1}`.
+"""
+function _prewhiten_moments(G::AbstractMatrix{T}; radius_cap::T=T(0.97)) where {T<:AbstractFloat}
+    n = size(G, 1)
+    n ≤ 2 && return (nothing, nothing)
+    Glag  = @view G[1:n-1, :]
+    Glead = @view G[2:n, :]
+    # Multiple-response LS: g_t' ≈ g_{t-1}' B ⇒ B = (Glag'Glag)^{-1}(Glag'Glead) (k×k),
+    # so the VAR(1) matrix in g_t = A g_{t-1} + ε_t is A = B'.
+    B = robust_inv(Glag' * Glag) * (Glag' * Glead)
+    A = Matrix{T}(B')
+    ev = maximum(abs, eigvals(A))
+    (isfinite(ev) && ev < radius_cap) || return (nothing, nothing)
+    Ghat = Glead .- Glag * B                 # (n-1)×k whitened residuals (no spliced row)
+    return (Ghat, A)
+end
+
+"""
     newey_west(X::AbstractMatrix{T}, residuals::AbstractVector{T};
                bandwidth::Int=0, kernel::Symbol=:bartlett, prewhiten::Bool=false,
                XtX_inv::Union{Nothing,AbstractMatrix{T}}=nothing) -> Matrix{T}
@@ -221,7 +251,9 @@ where S = Γ₀ + Σⱼ₌₁ᵐ w(j) (Γⱼ + Γⱼ')
 - `residuals`: Residuals vector (n × 1)
 - `bandwidth`: Truncation lag (0 = automatic selection)
 - `kernel`: Kernel function
-- `prewhiten`: Use AR(1) prewhitening
+- `prewhiten`: Andrews–Monahan (1992) VAR(1) prewhitening of the moment vector
+  `x_t·u_t` with matrix recoloring `S = D S* D'`, `D = (I − Â)^{-1}`; skipped with
+  a warning when the fitted moment VAR(1) is near-unit-root (non-stable)
 - `XtX_inv`: Pre-computed (X'X)^{-1} for performance (optional)
 
 # Returns
@@ -239,46 +271,45 @@ function newey_west(X::AbstractMatrix{T}, residuals::AbstractVector{T};
 
     bw = bandwidth == 0 ? optimal_bandwidth_nw(residuals; kernel=kernel) : bandwidth
 
-    # Prewhitening
-    u, X_use = if prewhiten && n > 2
-        u_lag = @view residuals[1:end-1]
-        u_lead = @view residuals[2:end]
-        rho = dot(u_lag, u_lead) / dot(u_lag, u_lag)
-        u_pw = residuals[2:end] .- rho .* residuals[1:end-1]
-        (vcat([residuals[1]], u_pw), X)
-    else
-        (residuals, X)
+    # Bread uses the ORIGINAL design matrix — moment prewhitening does not change X'X.
+    XtX_inv_use = isnothing(XtX_inv) ? robust_inv(X' * X) : XtX_inv
+
+    # Moment matrix g_t = x_t·u_t (rows), n × k.
+    G = X .* residuals
+
+    # Andrews–Monahan (1992) VAR(1) prewhitening of the moment vector. Fall back to the
+    # raw moments (with a warning) if the fitted VAR(1) is near a unit root.
+    M = G
+    recolor_A = nothing
+    if prewhiten
+        Ghat, A = _prewhiten_moments(G)
+        if Ghat === nothing
+            @warn "Andrews–Monahan prewhitening skipped: moment VAR(1) is non-stable (near unit root); falling back to no prewhitening." maxlog=1
+        else
+            M = Ghat
+            recolor_A = A
+        end
     end
 
-    # Use cached XtX_inv if provided, otherwise compute
-    XtX_inv_use = isnothing(XtX_inv) ? robust_inv(X_use' * X_use) : XtX_inv
-
-    # Compute S = long-run variance of X'u using optimized BLAS operations
-    # Pre-compute X .* u for vectorized access
-    Xu = X_use .* u  # n × k matrix
-
-    # Lag-0 autocovariance: Γ₀ = Σₜ (xₜuₜ)(xₜuₜ)'
-    S = (Xu' * Xu)  # k × k, more efficient than loop
-
-    # Add weighted lag autocovariances using BLAS. The quadratic-spectral kernel has
-    # infinite support, so sum all lags to n-1 (O(n²)); compact kernels truncate at bw.
-    jmax = kernel == :quadratic_spectral ? (n - 1) : bw
+    # Long-run variance S* of the (possibly whitened) moments.
+    m = size(M, 1)
+    S = M' * M
+    # QS kernel has infinite support → sum all lags to m-1; compact kernels truncate at bw.
+    jmax = kernel == :quadratic_spectral ? (m - 1) : bw
     @inbounds for j in 1:jmax
         w = kernel_weight(j, bw, kernel, T)
         w == 0 && continue
-        # Γⱼ = Σₜ (xₜuₜ)(xₜ₋ⱼuₜ₋ⱼ)'
-        Xu_t = @view Xu[(j+1):n, :]
-        Xu_tj = @view Xu[1:(n-j), :]
-        Gamma_j = Xu_t' * Xu_tj  # k × k
+        Mt  = @view M[(j+1):m, :]
+        Mtj = @view M[1:(m-j), :]
+        Gamma_j = Mt' * Mtj  # k × k
         S .+= w * (Gamma_j + Gamma_j')
     end
 
-    # Recolor if prewhitened
-    if prewhiten && n > 2
-        u_lag = @view residuals[1:end-1]
-        u_lead = @view residuals[2:end]
-        rho = dot(u_lag, u_lead) / dot(u_lag, u_lag)
-        S ./= (1 - rho)^2
+    # Recolor: S = D S* D', D = (I − Â)^{-1}.
+    if recolor_A !== nothing
+        D = robust_inv(Matrix{T}(I, k, k) - recolor_A)
+        S = D * S * D'
+        S = (S + S') / 2
     end
 
     V = XtX_inv_use * S * XtX_inv_use

@@ -191,6 +191,91 @@ using Random
         end
     end
 
+    @testset "Andrews–Monahan prewhitening (T054)" begin
+        # (A) Scalar reduction (k=1, X=ones): the VAR(1) collapses to a scalar AR(1)
+        #     with ρ = Σu_{t-1}u_t / Σu_{t-1}², whitened û_t = u_t − ρ u_{t-1} (t=2..n,
+        #     length n−1, NOT spliced with u[1]), recolored by 1/(1−ρ)².
+        Random.seed!(71)
+        n = 300
+        u = zeros(n); u[1] = randn()
+        for t in 2:n
+            u[t] = 0.6 * u[t-1] + randn()
+        end
+        bw = 5
+        ulag = @view u[1:n-1]; ulead = @view u[2:n]
+        rho = dot(ulag, ulead) / dot(ulag, ulag)
+        uhat = ulead .- rho .* ulag                 # length n-1
+        mh = length(uhat)
+        Sstar = sum(abs2, uhat)
+        for j in 1:bw
+            w = MacroEconometricModels.kernel_weight(j, bw, :bartlett)
+            Sstar += 2 * w * sum(@view(uhat[j+1:mh]) .* @view(uhat[1:mh-j]))
+        end
+        V_ref = (1 / n) * (Sstar / (1 - rho)^2) * (1 / n)
+        V_scalar = MacroEconometricModels.newey_west(reshape(ones(n), n, 1), u;
+                                                     prewhiten=true, bandwidth=bw)
+        @test V_scalar[1, 1] ≈ V_ref rtol = 1e-9
+
+        # (B) Multivariate: the new VAR(1) prewhitening genuinely differs from both the
+        #     non-prewhitened estimate and the OLD scalar-AR(1) prewhitening.
+        Random.seed!(72)
+        xreg = zeros(n); xreg[1] = randn()
+        for t in 2:n
+            xreg[t] = 0.7 * xreg[t-1] + randn()
+        end
+        X = hcat(ones(n), xreg)
+        uu = zeros(n); uu[1] = randn()
+        for t in 2:n
+            uu[t] = 0.5 * uu[t-1] + randn()
+        end
+        V_new = MacroEconometricModels.newey_west(X, uu; prewhiten=true, bandwidth=bw)
+        V_noprew = MacroEconometricModels.newey_west(X, uu; prewhiten=false, bandwidth=bw)
+        # inline reconstruction of the OLD scalar-AR(1) prewhitening (spliced first obs)
+        rl = @view uu[1:n-1]; ld = @view uu[2:n]
+        rho_s = dot(rl, ld) / dot(rl, rl)
+        u_pw = vcat([uu[1]], uu[2:n] .- rho_s .* uu[1:n-1])
+        Xu_old = X .* u_pw
+        S_old = Xu_old' * Xu_old
+        for j in 1:bw
+            w = MacroEconometricModels.kernel_weight(j, bw, :bartlett)
+            Gj = @view(Xu_old[j+1:n, :])' * @view(Xu_old[1:n-j, :])
+            S_old .+= w * (Gj + Gj')
+        end
+        S_old ./= (1 - rho_s)^2
+        XtXi = inv(X'X)
+        V_old = XtXi * S_old * XtXi
+        @test !isapprox(V_new, V_noprew; rtol=1e-3)
+        @test !isapprox(V_new, V_old; rtol=1e-3)
+        @test isapprox(V_new, V_new'; atol=1e-10)
+
+        # (C) Stability guard: a near-unit-root moment VAR(1) → warned fallback to no
+        #     prewhitening (bit-for-bit equal to prewhiten=false).
+        Random.seed!(99)
+        m = 500
+        u_rw = zeros(m); u_rw[1] = randn()
+        for t in 2:m
+            u_rw[t] = 0.995 * u_rw[t-1] + randn()
+        end
+        Xc = reshape(ones(m), m, 1)
+        V_fallback = @test_logs (:warn,) match_mode = :any MacroEconometricModels.newey_west(
+            Xc, u_rw; prewhiten=true, bandwidth=4)
+        @test V_fallback ≈ MacroEconometricModels.newey_west(Xc, u_rw; prewhiten=false, bandwidth=4)
+
+        # (D) Helper contract: stable moments → (n-1)×k whitened + k×k A; near-unit-root → nothing.
+        Random.seed!(7)
+        Gm = randn(300, 2)
+        Ghat, A = MacroEconometricModels._prewhiten_moments(Gm)
+        @test size(Ghat) == (299, 2)
+        @test size(A) == (2, 2)
+        g1 = zeros(m); g1[1] = randn(); g2 = zeros(m); g2[1] = randn()
+        for t in 2:m
+            g1[t] = 0.995 * g1[t-1] + randn()
+            g2[t] = 0.99 * g2[t-1] + randn()
+        end
+        Gh2, _ = MacroEconometricModels._prewhiten_moments(hcat(g1, g2); radius_cap=0.97)
+        @test Gh2 === nothing
+    end
+
     # =========================================================================
     # Newey-West HAC Estimator
     # =========================================================================
