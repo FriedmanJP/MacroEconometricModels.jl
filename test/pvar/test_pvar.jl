@@ -628,3 +628,32 @@ end
     ratio = median(ses) / robsd
     @test 0.6 < ratio < 1.6   # corrected two-step SE tracks the empirical sampling SD
 end
+
+@testset "PVAR GMM unbalanced instrument zero-padding (T080)" begin
+    # Unbalanced univariate panel: group lengths [6, 6, 8]. The AB block-diagonal FD
+    # instruments have per-group widths that differ; the fix zero-pads every group to the
+    # MAX width (keeping longer units' later-period moments) instead of truncating to MIN.
+    rng = MersenneTwister(4080)
+    Tlens = [6, 6, 8]
+    ids = Int[]; times = Int[]; ys = Float64[]
+    grp_levels = Matrix{Float64}[]
+    for (g, Tg) in enumerate(Tlens)
+        y = zeros(Tg)
+        for t in 2:Tg
+            y[t] = 0.5 * y[t-1] + randn(rng)
+        end
+        push!(grp_levels, reshape(y, :, 1))
+        append!(ids, fill(g, Tg)); append!(times, 1:Tg); append!(ys, y)
+    end
+    pd = xtset(DataFrame(id=ids, t=times, y=ys), :id, :t)
+    m = estimate_pvar(pd, 1; steps=:onestep, min_lag_endo=2, max_lag_endo=99)
+
+    # Per-group AB-FD instrument widths, computed independently
+    widths = [size(MacroEconometricModels._build_instruments_fd(gl, 1, 1;
+                    min_lag=2, max_lag=99, collapse=false), 2) for gl in grp_levels]
+    @test maximum(widths) != minimum(widths)      # panel is genuinely unbalanced in width
+    @test m.n_instruments == maximum(widths)       # zero-pad to MAX (was: truncate to MIN)
+    @test m.n_instruments != minimum(widths)
+    # coefficients finite (padded zero columns contribute nothing to the moment sums)
+    @test all(isfinite, coef(m))
+end

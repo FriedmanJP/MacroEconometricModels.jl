@@ -197,9 +197,11 @@ function estimate_pvar(d::PanelData{T}, p::Int;
         group_Z[g] = Z_g
     end
 
-    # Determine common instrument dimension (use minimum across groups for non-system)
+    # Align the per-group instrument blocks to a common width.
     if system_instruments
-        # For system GMM, align dimensions
+        # System GMM [Z_fd | Z_lev]: the level block sits at the right end, so simple
+        # right-padding would misalign it — the [T081/M-13] non-system fix does not apply
+        # here. Kept as min-truncation (tracked separately).
         min_z_cols = minimum(size(Z, 2) for Z in group_Z)
         for g in 1:N
             if size(group_Z[g], 2) > min_z_cols
@@ -207,10 +209,19 @@ function estimate_pvar(d::PanelData{T}, p::Int;
             end
         end
     else
-        min_z_cols = minimum(size(Z, 2) for Z in group_Z)
+        # Arellano-Bond block-diagonal instruments are NESTED across groups of different
+        # length: block s occupies the same leading column range for every group (its width
+        # depends only on p/min_lag/max_lag/s, not on T_i), so the leading columns already
+        # align. Zero-pad each shorter group to the common (maximum) width so longer units
+        # KEEP their later-period moment conditions. Padded zeros contribute exactly zero to
+        # every moment sum (Σ_g Z_g'X_g, Σ_g Z_g'y_g, Σ_g Z_g'Z_g), so a moment condition
+        # present in only k<N units is automatically averaged over its k contributing units
+        # (was: truncate to min width, discarding every longer unit's later moments).
+        max_z_cols = maximum(size(Z, 2) for Z in group_Z)
         for g in 1:N
-            if size(group_Z[g], 2) > min_z_cols
-                group_Z[g] = group_Z[g][:, 1:min_z_cols]
+            ncur = size(group_Z[g], 2)
+            if ncur < max_z_cols
+                group_Z[g] = hcat(group_Z[g], zeros(T, size(group_Z[g], 1), max_z_cols - ncur))
             end
         end
     end
