@@ -772,6 +772,48 @@ using Random
         @test all(0 .<= F_grid .<= 1)
     end
 
+    @testset "State Transition Parameter Estimation — data-driven (T091 #190)" begin
+        # Regression guard: the transition objective must genuinely depend on (γ, c).
+        # The previous inline objective reduced to (1-F)*shock + F*shock ≡ shock, i.e. was
+        # constant up to floating-point noise, so :grid_search returned an arbitrary boundary
+        # point and :nlls returned gamma_init unchanged.
+        Random.seed!(4242)
+        T_dd = 200
+        z_dd = randn(T_dd)
+        Y_dd = zeros(T_dd, 2)
+        for t in 2:T_dd
+            F_t = 1 / (1 + exp(-2.5 * z_dd[t]))     # increasing transition
+            rho = F_t * 0.8 + (1 - F_t) * 0.2       # regime-dependent persistence
+            Y_dd[t, :] = rho * Y_dd[t-1, :] + randn(2)
+        end
+
+        # (i) the exposed objective varies MEANINGFULLY with γ, not at the FP-noise level.
+        ssr_lo = MacroEconometricModels._state_lp_transition_ssr(z_dd, Y_dd, 1, 1.0, 0.0; lags=2)
+        ssr_hi = MacroEconometricModels._state_lp_transition_ssr(z_dd, Y_dd, 1, 5.0, 0.0; lags=2)
+        @test isfinite(ssr_lo) && isfinite(ssr_hi)
+        @test abs(ssr_lo - ssr_hi) > 1e-3 * abs(ssr_lo)
+
+        # (ii) :grid_search actually minimizes that objective over its internal grid.
+        res_grid_dd = MacroEconometricModels.estimate_transition_params(z_dd, Y_dd, 1;
+                                                                        method=:grid_search, lags=2)
+        gamma_grid = collect(range(0.5, 5.0, length=20))
+        c_grid = quantile(z_dd, range(0.1, 0.9, length=20))
+        best_ssr, best_gamma = Inf, NaN
+        for g in gamma_grid, c in c_grid
+            s = MacroEconometricModels._state_lp_transition_ssr(z_dd, Y_dd, 1, g, c; lags=2)
+            s < best_ssr && ((best_ssr, best_gamma) = (s, g))
+        end
+        @test res_grid_dd.gamma == best_gamma
+
+        # (iii) :nlls no longer returns gamma_init and is at least as good as the grid.
+        res_nlls_dd = MacroEconometricModels.estimate_transition_params(z_dd, Y_dd, 1;
+                                                                        method=:nlls, gamma_init=1.5, lags=2)
+        @test res_nlls_dd.gamma != 1.5
+        ssr_nlls_dd = MacroEconometricModels._state_lp_transition_ssr(z_dd, Y_dd, 1,
+                                                                      res_nlls_dd.gamma, res_nlls_dd.c; lags=2)
+        @test ssr_nlls_dd <= best_ssr + 1e-6
+    end
+
     @testset "State-Dependent LP - Regime IRFs" begin
         Random.seed!(30303)
         T_reg = 250

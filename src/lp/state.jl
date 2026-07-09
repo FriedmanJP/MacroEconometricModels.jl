@@ -37,33 +37,73 @@ Sharp indicator transition: F(z) = 1 if z ≥ c, else 0
 indicator_transition(z::AbstractVector{T}, c::T) where {T<:AbstractFloat} = T.(z .>= c)
 
 """
-    estimate_transition_params(state_var::AbstractVector{T}, Y::AbstractMatrix{T},
-                               shock_var::Int; method::Symbol=:nlls, ...) -> NamedTuple
+    _state_lp_transition_ssr(state_var, Y, shock_var, gamma, c; lags=4) -> T
 
-Estimate smooth transition parameters (γ, c).
+Sum of squared residuals of the horizon-0 state-dependent LP fit for a candidate transition
+`(gamma, c)`. Mirrors the two-regime interacted design built in [`estimate_state_lp`](@ref):
+`Y[t, :]` is regressed on an expansion block weighted by `F(z; gamma, c)` and a recession
+block weighted by `1 - F`, each carrying `[1, shock_t, lagged Y]`. This is the objective that
+[`estimate_transition_params`](@ref) minimizes over `(gamma, c)`. Exposing it makes the
+transition estimation genuinely data-driven — the previous inline objective reduced to
+`(1 - F)*shock + F*shock ≡ shock`, i.e. constant in `(gamma, c)` up to floating-point noise.
+"""
+function _state_lp_transition_ssr(state_var::AbstractVector{T}, Y::AbstractMatrix{T},
+                                  shock_var::Int, gamma::T, c::T;
+                                  lags::Int=4) where {T<:AbstractFloat}
+    F = logistic_transition(state_var, gamma, c)
+    T_obs, n = size(Y)
+    t_start = lags + 1
+    t_end = T_obs
+    t_end < t_start && return T(Inf)
+    T_h = t_end - t_start + 1
+    k_per_regime = 2 + n * lags
+    k_total = 2 * k_per_regime
+    X = Matrix{T}(undef, T_h, k_total)
+    Ymat = Matrix{T}(undef, T_h, n)
+    @inbounds for (i, t) in enumerate(t_start:t_end)
+        F_t = F[t]                         # contemporaneous weight (predetermined F[t-1] in T100/#199)
+        X[i, 1] = F_t
+        X[i, 2] = F_t * Y[t, shock_var]
+        col = 3
+        for lag in 1:lags, var in 1:n
+            X[i, col] = F_t * Y[t - lag, var]
+            col += 1
+        end
+        X[i, k_per_regime + 1] = one(T) - F_t
+        X[i, k_per_regime + 2] = (one(T) - F_t) * Y[t, shock_var]
+        col = k_per_regime + 3
+        for lag in 1:lags, var in 1:n
+            X[i, col] = (one(T) - F_t) * Y[t - lag, var]
+            col += 1
+        end
+        for var in 1:n
+            Ymat[i, var] = Y[t, var]
+        end
+    end
+    B = robust_inv(X' * X) * (X' * Ymat)
+    resid = Ymat - X * B
+    sum(abs2, resid)
+end
+
+"""
+    estimate_transition_params(state_var::AbstractVector{T}, Y::AbstractMatrix{T},
+                               shock_var::Int; method::Symbol=:nlls, lags::Int=4, ...) -> NamedTuple
+
+Estimate smooth transition parameters (γ, c) by minimizing the horizon-0 state-dependent LP
+SSR ([`_state_lp_transition_ssr`](@ref)) over `(γ, c)` via `:nlls` (Nelder–Mead in an
+unconstrained reparameterization) or `:grid_search`. `lags` should match the lag order of the
+downstream [`estimate_state_lp`](@ref) fit so the objective mirrors it.
 """
 function estimate_transition_params(state_var::AbstractVector{T}, Y::AbstractMatrix{T},
                                     shock_var::Int; method::Symbol=:nlls,
-                                    gamma_init::T=T(1.5),
+                                    gamma_init::T=T(1.5), lags::Int=4,
                                     c_init::Union{T,Symbol}=:median) where {T<:AbstractFloat}
     @assert length(state_var) == size(Y, 1)
 
     c0 = c_init isa Symbol ? (c_init == :median ? median(state_var) :
                                c_init == :mean ? mean(state_var) : zero(T)) : c_init
 
-    compute_ssr(gamma, c) = begin
-        F = logistic_transition(state_var, gamma, c)
-        T_obs, n = size(Y)
-        ssr = zero(T)
-        for t in 2:T_obs
-            shock_t = Y[t-1, shock_var]
-            for var in 1:n
-                pred = (1 - F[t-1]) * shock_t + F[t-1] * shock_t
-                ssr += (Y[t, var] - pred)^2
-            end
-        end
-        ssr
-    end
+    compute_ssr(gamma, c) = _state_lp_transition_ssr(state_var, Y, shock_var, gamma, c; lags=lags)
 
     if method == :grid_search
         gamma_grid = T.(range(0.5, 5.0, length=20))
@@ -126,7 +166,7 @@ function estimate_state_lp(Y::AbstractMatrix{T}, shock_var::Int, state_var::Abst
 
     # Estimate or set transition parameters
     gamma_val, c_val, F_values = if gamma == :estimate || threshold == :estimate
-        result = estimate_transition_params(state_var, Y, shock_var;
+        result = estimate_transition_params(state_var, Y, shock_var; lags=lags,
                                             c_init=threshold isa Symbol ? :median : threshold)
         (gamma == :estimate ? result.gamma : gamma,
          threshold == :estimate ? result.c : (threshold isa Symbol ? result.c : threshold),
