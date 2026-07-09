@@ -526,6 +526,49 @@ end
     @test ll_correct > ll_wrong  # correct model should have higher log-likelihood
 end
 
+@testset "Kalman diffuse init: scale-invariant under a unit root (T040)" begin
+    # Transition with one unit root (random walk) + one stationary direction.
+    G1 = [1.0 0.0; 0.0 0.6]
+    impact = [0.4 0.0; 0.0 0.3]
+    Z = Matrix{Float64}(I, 2, 2)
+    d = zeros(2)
+    H = 1e-6 * Matrix{Float64}(I, 2, 2)
+    Q = Matrix{Float64}(I, 2, 2)
+
+    x = zeros(2, 200); rng = Random.MersenneTwister(20240709)
+    for t in 2:200; x[:, t] = G1 * x[:, t-1] + impact * randn(rng, 2); end
+    data = x
+
+    ss = MacroEconometricModels.DSGEStateSpace{Float64}(G1, impact, Z, d, H, Q)
+    ll = _suppress_warnings() do
+        MacroEconometricModels._kalman_loglikelihood(ss, data)
+    end
+    @test isfinite(ll)
+
+    # Rescale ONLY the nonstationary STATE direction (Z compensates), so the OBSERVED
+    # process is unchanged ⇒ the likelihood must be (near-)invariant. G1 diagonal ⇒
+    # D*G1*Dinv == G1, so the transition is unchanged.
+    c = 100.0; D = [c 0.0; 0.0 1.0]; Dinv = [1/c 0.0; 0.0 1.0]
+    ss_scaled = MacroEconometricModels.DSGEStateSpace{Float64}(G1, D*impact, Z*Dinv, d, H, Q)
+    ll_scaled = _suppress_warnings() do
+        MacroEconometricModels._kalman_loglikelihood(ss_scaled, data)
+    end
+    # κ=1e6 diffuse init leaves an O(log c)≈4.6 residual; P0=10*I blows up (fails atol=15).
+    @test isapprox(ll, ll_scaled; atol=15.0)
+end
+
+@testset "Kalman init: non-stability error propagates, not swallowed (T040)" begin
+    G1 = fill(0.5, 1, 1)             # stationary ⇒ takes the solve_lyapunov branch
+    impact_bad = zeros(2, 1)         # 2 rows vs n_states=1 ⇒ solve_lyapunov throws
+    Z = ones(1, 1); d = zeros(1); H = fill(1e-6, 1, 1); Q = ones(1, 1)
+    ss_bad = MacroEconometricModels.DSGEStateSpace{Float64}(G1, impact_bad, Z, d, H, Q)
+    data = reshape(randn(Random.MersenneTwister(1), 20), 1, 20)
+    # Old code swallowed this into P0=10I and returned a finite ll; now it propagates.
+    @test_throws ArgumentError _suppress_warnings() do
+        MacroEconometricModels._kalman_loglikelihood(ss_bad, data)
+    end
+end
+
 @testset "Kalman loglikelihood: 2D with missing data" begin
     Random.seed!(123)
 

@@ -209,9 +209,10 @@ end
     _pf_initialize_stationary!(ws, ss)
 
 Initialize particles from the stationary distribution of the linear state space.
-Computes P0 = solve_lyapunov(G1, impact), takes Cholesky factor L, and draws
-particles[:, i] = L * randn(n_states). Falls back to diffuse initialization
-(10 * I) if Lyapunov fails.
+Computes P0 = solve_lyapunov(G1, impact) when all `|eig(G1)| < 1`, takes Cholesky
+factor L, and draws particles[:, i] = L * randn(n_states). For unit roots
+(`|eig(G1)| ≥ 1 - 1e-6`) uses `_diffuse_initial_covariance` (κ = 1e6 on the
+nonstationary subspace), never a silent 10*I; non-stability errors propagate.
 """
 function _pf_initialize_stationary!(ws::PFWorkspace{T},
                                      ss::DSGEStateSpace{T};
@@ -219,10 +220,11 @@ function _pf_initialize_stationary!(ws::PFWorkspace{T},
     n_states = size(ws.particles, 1)
     N = size(ws.particles, 2)
 
-    P0 = try
+    RQR = ss.impact * ss.Q * ss.impact'
+    P0 = if maximum(abs, eigvals(ss.G1)) >= one(T) - T(1e-6)
+        _diffuse_initial_covariance(ss.G1, RQR)
+    else
         solve_lyapunov(ss.G1, ss.impact)
-    catch
-        T(10) * Matrix{T}(I, n_states, n_states)
     end
 
     # Ensure symmetry and positive definiteness
@@ -500,11 +502,14 @@ function _pf_initialize_nonlinear!(ws::PFWorkspace{T},
     eta_x = nx > 0 ? nlss.hx[:, nx+1:nv] : zeros(T, 0, n_eps)
     gx_state = ny > 0 ? nlss.gx[:, 1:nx] : zeros(T, 0, nx)
 
-    # Compute P0 from first-order Lyapunov equation
-    P0 = try
+    # Compute P0 from first-order Lyapunov equation (diffuse for unit roots; nx==0 → 0×0).
+    RQR_x = eta_x * eta_x'
+    P0 = if nx == 0
+        zeros(T, 0, 0)
+    elseif maximum(abs, eigvals(hx_state)) >= one(T) - T(1e-6)
+        _diffuse_initial_covariance(hx_state, RQR_x)
+    else
         solve_lyapunov(hx_state, eta_x)
-    catch
-        T(10) * Matrix{T}(I, nx, nx)
     end
     P0 = (P0 + P0') / 2
     C = cholesky(Hermitian(P0); check=false)
