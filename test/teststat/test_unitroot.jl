@@ -137,6 +137,56 @@ using Statistics
         @test_throws ArgumentError MacroEconometricModels._mackinnon_pvalue(-2.0, :bogus)
     end
 
+    @testset "M-12 ADF fixed-sample lag selection (Ng-Perron 1995)" begin
+        A = MacroEconometricModels
+        # AR(2) fixture with an early mean shift: the fixed-sample IC (correct) picks the
+        # theoretically right lag while the old variable-sample IC is badly biased.
+        rng = MersenneTwister(2079)
+        n = 120; max_p = 8
+        e = randn(rng, n)
+        y = zeros(n)
+        for t in 3:n
+            y[t] = 0.6 * y[t-1] + 0.3 * y[t-2] + e[t]
+        end
+        y[1:15] .+= 8.0
+        dy = diff(y)
+
+        # (a) IDENTITY ORACLE: independent fixed-sample IC (all p on dy[max_p+1:end])
+        Yfix = dy[(max_p+1):end]; Nfix = n - 1 - max_p
+        fixed_ic = function (p, crit)
+            Xf = A._build_adf_matrix(y, dy, p, :constant)
+            X = Xf[(max_p - p + 1):end, :]
+            k = size(X, 2)
+            B = X \ Yfix
+            r = Yfix - X * B
+            s2 = sum(abs2, r) / (Nfix - k)
+            ll = -Nfix / 2 * (log(2π) + log(s2) + 1)
+            crit == :aic ? -2ll + 2k : -2ll + k * log(Nfix)
+        end
+        exp_aic = argmin([fixed_ic(p, :aic) for p in 0:max_p]) - 1
+        exp_bic = argmin([fixed_ic(p, :bic) for p in 0:max_p]) - 1
+        @test A.adf_select_lags(y, max_p, :constant, :aic) == exp_aic
+        @test A.adf_select_lags(y, max_p, :constant, :bic) == exp_bic
+
+        # (b) BUG EXPOSURE: the old variable-sample argmin picks a DIFFERENT lag
+        var_ic = function (p, crit)
+            Xf = A._build_adf_matrix(y, dy, p, :constant)
+            Yv = dy[(p+1):end]; m = length(Yv); k = size(Xf, 2)
+            B = Xf \ Yv; r = Yv - Xf * B; s2 = sum(abs2, r) / (m - k)
+            ll = -m / 2 * (log(2π) + log(s2) + 1)
+            crit == :aic ? -2ll + 2k : -2ll + k * log(m)
+        end
+        var_aic = argmin([var_ic(p, :aic) for p in 0:max_p]) - 1
+        @test exp_aic != var_aic
+
+        # (c) SANITY on a pure AR(1): a small lag, always within bounds
+        Random.seed!(778)
+        ys = generate_stationary(200; rho=0.5)
+        lag = A.adf_select_lags(ys, 12, :constant, :aic)
+        @test 0 <= lag <= 12
+        @test lag <= 3
+    end
+
     # ==========================================================================
     # KPSS Test
     # ==========================================================================

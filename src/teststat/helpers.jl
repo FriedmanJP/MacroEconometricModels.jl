@@ -118,43 +118,60 @@ end
 # ADF Lag Selection & Regression Matrix
 # =============================================================================
 
-"""Compute optimal lag length for ADF test using information criterion."""
+"""
+Compute the optimal ADF augmentation lag by information criterion.
+
+All candidate lags are scored on a SINGLE fixed sample of `(n-1)-max_lags` observations
+(Ng & Perron 1995), so the AIC/BIC/HQIC are comparable across candidates — scoring each
+`p` on its own `(n-1)-p` sample (dropping `p` leading rows) compares criteria across
+different sample sizes and biases the choice toward too-few lags. The final ADF statistic
+is then computed by `adf_test` on the selected lag's natural sample (statsmodels
+`adfuller` convention).
+"""
 function adf_select_lags(y::AbstractVector{T}, max_lags::Int, regression::Symbol,
                          criterion::Symbol) where {T<:AbstractFloat}
     n = length(y)
     dy = diff(y)
-    y_lag = y[1:end-1]
+
+    # Coefficient count for a candidate with p lagged differences (matches _build_adf_matrix)
+    base = regression == :none ? 1 : regression == :constant ? 2 : 3
+    ncoef(p) = base + p
+
+    # Cap max_lags so the LARGEST model keeps ≥1 residual df on the fixed sample
+    while max_lags > 0 && (n - 1 - max_lags) - ncoef(max_lags) < 1
+        max_lags -= 1
+    end
+    nobs_fixed = n - 1 - max_lags
+    nobs_fixed < 10 && return 0   # degenerate short series ⇒ no augmentation
+
+    # Fixed dependent rows: dy observations (max_lags+1 : n-1), identical span for every p
+    Y = dy[(max_lags+1):end]
 
     best_ic = T(Inf)
     best_lag = 0
-
     for p in 0:max_lags
-        nobs_eff = n - 1 - p
-        nobs_eff < 10 && continue
-
-        # Build regression matrix
-        X = _build_adf_matrix(y, dy, p, regression)
-        Y = dy[(p+1):end]
+        # Right-aligned design has (n-1)-p rows ending at dy[n-1]; drop the leading
+        # (max_lags-p) rows so every candidate uses the same time span as Y.
+        Xfull = _build_adf_matrix(y, dy, p, regression)
+        ndrop = max_lags - p
+        X = @view Xfull[(ndrop+1):end, :]
 
         k = size(X, 2)
-        nobs_eff = length(Y)
-
-        # OLS estimation
         XtX = X'X
         det(XtX) ≈ 0 && continue
         B = XtX \ (X'Y)
         resid = Y - X * B
-        sse = sum(resid.^2)
-        sigma2 = sse / (nobs_eff - k)
+        sse = sum(abs2, resid)
+        sigma2 = sse / (nobs_fixed - k)
+        (!isfinite(sigma2) || sigma2 <= zero(T)) && continue
 
-        # Information criterion
-        ll = -nobs_eff/2 * (log(2π) + log(sigma2) + 1)
+        ll = -nobs_fixed / 2 * (log(2π) + log(sigma2) + 1)
         ic = if criterion == :aic
             -2ll + 2k
         elseif criterion == :bic
-            -2ll + k * log(nobs_eff)
+            -2ll + k * log(nobs_fixed)
         else  # :hqic
-            -2ll + 2k * log(log(nobs_eff))
+            -2ll + 2k * log(log(nobs_fixed))
         end
 
         if ic < best_ic
