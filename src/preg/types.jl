@@ -80,6 +80,9 @@ struct PanelRegModel{T<:AbstractFloat} <: StatsAPI.RegressionModel
     n_periods_avg::T
     group_effects::Union{Nothing,Vector{T}}
     data::PanelData{T}
+    # Arellano-Bond/Blundell-Bond dynamic-panel diagnostics (AR(1)/AR(2), Hansen J);
+    # `nothing` for static estimators (FE/RE/FD/Between/CRE).
+    dynamic_diagnostics::Union{Nothing,NamedTuple}
 end
 
 # =============================================================================
@@ -416,11 +419,25 @@ function Base.show(io::IO, m::PanelRegModel{T}) where {T}
     if m.theta !== nothing
         spec = vcat(spec, Any["theta" _fmt(m.theta)])
     end
+    if m.dynamic_diagnostics !== nothing
+        d = m.dynamic_diagnostics
+        spec = vcat(spec, Any[
+            "AR(1) z"        _fmt(d.ar1; digits=3);
+            "AR(1) p"        _format_pvalue(d.ar1_p);
+            "AR(2) z"        _fmt(d.ar2; digits=3);
+            "AR(2) p"        _format_pvalue(d.ar2_p);
+            "Hansen J"       _fmt(d.hansen; digits=2);
+            "Hansen df"      d.hansen_df;
+            "Hansen p"       _format_pvalue(d.hansen_p);
+            "# instruments"  d.n_instruments
+        ])
+    end
 
     _pretty_table(io, spec;
         title = "Panel Regression — $method_str$twoway_str",
         column_labels = ["Specification", ""],
         alignment = [:l, :r],
+        display_size = (-1, -1),   # never vertically crop the model-summary table (non-TTY)
     )
 
     _coef_table(io, "Coefficients", m.varnames, m.beta, stderror(m);

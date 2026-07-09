@@ -308,6 +308,7 @@ include("teststat/pvar_lag_selection.jl")
 
 # Panel Regression (FE/RE/FD/Between/CRE, IV, Logit, Probit)
 include("preg/types.jl")
+include("teststat/pvar_ar_test.jl")   # after preg/types (needs PanelRegModel), before preg/estimation (calls _pvar_ar_stats)
 include("preg/covariance.jl")
 include("preg/estimation.jl")
 include("preg/tests.jl")
@@ -776,7 +777,7 @@ export pvar_oirf, pvar_girf, pvar_fevd, pvar_stability
 export pvar_bootstrap_irf
 
 # Specification tests
-export pvar_hansen_j, pvar_mmsc, pvar_lag_selection
+export pvar_hansen_j, pvar_mmsc, pvar_lag_selection, arellano_bond_ar_test
 
 # =============================================================================
 # Exports - Panel Regression

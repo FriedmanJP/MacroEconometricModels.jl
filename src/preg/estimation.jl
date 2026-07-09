@@ -430,7 +430,7 @@ function _estimate_fe(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
         loglik, aic_val, bic_val,
         vn, :fe, twoway, cov_type,
         n, N, n_periods_avg,
-        group_effects, pd
+        group_effects, pd, nothing
     )
 end
 
@@ -569,7 +569,7 @@ function _estimate_re(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
         loglik, aic_val, bic_val,
         vn, :re, false, cov_type,
         n, N, n_periods_avg,
-        nothing, pd  # no group_effects for RE
+        nothing, pd, nothing  # no group_effects for RE
     )
 end
 
@@ -708,7 +708,7 @@ function _estimate_fd(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
         loglik, aic_val, bic_val,
         vn, :fd, false, cov_type,
         n_fd, N_fd, n_periods_avg,
-        nothing, pd
+        nothing, pd, nothing
     )
 end
 
@@ -786,7 +786,7 @@ function _estimate_between(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
         loglik, aic_val, bic_val,
         vn, :between, false, cov_type,
         N, N, n_periods_avg,  # n_obs = N for between
-        nothing, pd
+        nothing, pd, nothing
     )
 end
 
@@ -946,7 +946,7 @@ function _estimate_cre(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
         loglik, aic_val, bic_val,
         vn_all, :cre, false, cov_type,
         n, N, n_periods_avg,
-        nothing, pd
+        nothing, pd, nothing
     )
 end
 
@@ -997,9 +997,10 @@ function _estimate_dynamic_panel(pd::PanelData{T}, depvar::Symbol, indepvars::Ve
 
     k_total = length(phi_row)
 
-    # Construct vcov as diagonal from SEs (we don't have the full vcov from PVAR per-equation)
-    vcov_mat = Diagonal(se_row .^ 2)
-    vcov_mat_dense = Matrix{T}(vcov_mat)
+    # Full per-equation GMM coefficient covariance (Windmeijer-corrected two-step). Its
+    # diagonal reproduces se_row.^2, but the off-diagonals are now retained so the joint
+    # Wald/F test below uses the GMM cross-coefficient covariances (was: diagonal-only).
+    vcov_mat_dense = Matrix{T}(m_pvar.coef_vcov[1])
 
     # Dummy residuals and fitted (not directly available from PVAR wrapper)
     resid_dummy = zeros(T, m_pvar.n_obs)
@@ -1022,6 +1023,19 @@ function _estimate_dynamic_panel(pd::PanelData{T}, depvar::Symbol, indepvars::Ve
 
     n_periods_avg = T(m_pvar.n_obs) / T(N)
 
+    # Dynamic-panel diagnostics: Arellano-Bond AR(1)/AR(2) on the FD residuals + Hansen J.
+    ar = _pvar_ar_stats(pd, depvar, indepvars, phi_row, 1, vcov_mat_dense)
+    hj = try
+        pvar_hansen_j(m_pvar)
+    catch
+        nothing
+    end
+    dynamic_diagnostics = (ar1=ar.m1, ar1_p=ar.p1, ar2=ar.m2, ar2_p=ar.p2,
+                           hansen = hj === nothing ? T(NaN) : hj.statistic,
+                           hansen_df = hj === nothing ? 0 : hj.df,
+                           hansen_p = hj === nothing ? one(T) : hj.pvalue,
+                           n_instruments=m_pvar.n_instruments)
+
     PanelRegModel{T}(
         phi_row, vcov_mat_dense, resid_dummy, fitted_dummy, y_dummy, X_dummy,
         zero(T), zero(T), zero(T),  # r2_within, r2_between, r2_overall
@@ -1031,6 +1045,6 @@ function _estimate_dynamic_panel(pd::PanelData{T}, depvar::Symbol, indepvars::Ve
         zero(T), zero(T), zero(T),  # loglik, aic, bic
         vn, method, false, :cluster,
         m_pvar.n_obs, N, n_periods_avg,
-        nothing, pd
+        nothing, pd, dynamic_diagnostics
     )
 end

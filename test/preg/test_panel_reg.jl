@@ -1,5 +1,6 @@
 using Test, MacroEconometricModels, DataFrames, Distributions, Random, Statistics
 using StatsAPI: coef, vcov, residuals, predict, nobs, stderror, confint, r2
+using LinearAlgebra
 
 @testset "Panel Covariance" begin
     # Setup: small panel N=10, T=20
@@ -547,6 +548,39 @@ end
     # Coefficients should be near DGP (0.3, 0.5)
     @test abs(coef(m)[1] - 0.3) < 0.15
     @test abs(coef(m)[2] - 0.5) < 0.15
+
+    # (T083) Full GMM coefficient covariance (was diagonal-only)
+    V = vcov(m)
+    @test size(V) == (length(coef(m)), length(coef(m)))
+    @test isapprox(V, V')                                  # symmetric
+    @test isapprox(diag(V), stderror(m) .^ 2)              # SEs unchanged (diagonal)
+    @test any(abs.(V - Diagonal(diag(V))) .> 0)            # off-diagonals nonzero — the fix
+    # joint Wald now uses the off-diagonals ⇒ differs from the diagonal-only version
+    W_full = coef(m)' * inv(V) * coef(m)
+    W_diag = sum(coef(m) .^ 2 ./ diag(V))
+    @test !isapprox(W_full, W_diag; rtol=1e-6)
+
+    # (T083) Arellano-Bond serial-correlation diagnostics: reject AR(1), not AR(2)
+    d = m.dynamic_diagnostics
+    @test d !== nothing
+    @test d.ar1_p < 0.05          # FD of iid error is MA(1) ⇒ negative AR(1) ⇒ reject
+    @test abs(d.ar1) > 2
+    @test d.ar2_p > 0.05          # zero lag-2 autocovariance ⇒ do NOT reject
+    @test abs(d.ar2) < 2.5
+    ar2 = arellano_bond_ar_test(m; order=2)
+    @test ar2.statistic == d.ar2 && ar2.pvalue == d.ar2_p
+    @test arellano_bond_ar_test(m; order=1).statistic == d.ar1
+
+    # (T083) Hansen J overidentification
+    @test d.hansen_df == d.n_instruments - length(coef(m))
+    @test d.hansen_df > 0
+    @test 0 <= d.hansen_p <= 1
+    @test d.hansen_p > 0.01       # valid instruments in this correctly-specified DGP
+
+    # (T083) report surfaces the diagnostics
+    io = IOBuffer(); show(io, m); s = String(take!(io))
+    @test occursin("AR(2)", s)
+    @test occursin("Hansen", s)
 end
 
 @testset "estimate_xtreg -- Blundell-Bond" begin
@@ -579,4 +613,14 @@ end
     # Coefficients should be near DGP (0.3, 0.5)
     @test abs(coef(m)[1] - 0.3) < 0.15
     @test abs(coef(m)[2] - 0.5) < 0.15
+
+    # (T083) full vcov + diagnostics also populated for Blundell-Bond
+    V = vcov(m)
+    @test size(V) == (length(coef(m)), length(coef(m)))
+    @test any(abs.(V - Diagonal(diag(V))) .> 0)
+    d = m.dynamic_diagnostics
+    @test d !== nothing
+    @test d.ar1_p < 0.05
+    @test d.ar2_p > 0.05
+    @test d.hansen_df == d.n_instruments - length(coef(m))
 end

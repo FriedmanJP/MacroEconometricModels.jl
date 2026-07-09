@@ -297,6 +297,8 @@ function estimate_pvar(d::PanelData{T}, p::Int;
     W1_accum ./= N
     W1 = Matrix{T}(robust_inv(Hermitian((W1_accum + W1_accum') / 2)))
 
+    coef_vcov = [zeros(T, K, K) for _ in 1:m_dim]   # full per-equation K×K GMM covariance
+
     for eq in 1:m_dim
         s_zy_eq = S_Zy[:, eq]
 
@@ -318,6 +320,7 @@ function estimate_pvar(d::PanelData{T}, p::Int;
                 D_e .+= Ze * Ze'
             end
             V = gmm_sandwich_vcov(S_ZX, W1, D_e)
+            coef_vcov[eq] = V
             Phi[eq, :] = phi1
             se_eq = sqrt.(max.(diag(V), zero(T)))
             SE[eq, :] = se_eq
@@ -374,6 +377,7 @@ function estimate_pvar(d::PanelData{T}, p::Int;
             V_corrected = _windmeijer_correct(S_ZX, W_final, group_Z, group_X_trans,
                                                group_Y_trans, phi1, phi_curr, eq, K, N, V1, bread_inv)
 
+            coef_vcov[eq] = V_corrected
             Phi[eq, :] = phi_curr
             se_eq = sqrt.(max.(diag(V_corrected), zero(T)))
             SE[eq, :] = se_eq
@@ -417,7 +421,7 @@ function estimate_pvar(d::PanelData{T}, p::Int;
         N, n_periods_max, total_obs,
         (min=min_obs, avg=avg_obs, max=max_obs),
         group_Z, group_resid_trans, W_final, n_inst,
-        d
+        d, coef_vcov
     )
 end
 
@@ -640,6 +644,7 @@ function estimate_pvar_feols(d::PanelData{T}, p::Int;
     PVAL = Matrix{T}(undef, m_dim, K)
 
     XtX_inv = robust_inv(X_pool' * X_pool)
+    coef_vcov = [zeros(T, K, K) for _ in 1:m_dim]   # full per-equation cluster-robust covariance
 
     for eq in 1:m_dim
         y_eq = Y_pool[:, eq]
@@ -659,6 +664,7 @@ function estimate_pvar_feols(d::PanelData{T}, p::Int;
         n_eff = total_obs
         correction = T(N) / T(N - 1) * T(n_eff - 1) / T(n_eff - K)
         V_cluster = correction * XtX_inv * meat * XtX_inv
+        coef_vcov[eq] = V_cluster
 
         Phi[eq, :] = phi_eq
         SE[eq, :] = sqrt.(max.(diag(V_cluster), zero(T)))
@@ -687,6 +693,6 @@ function estimate_pvar_feols(d::PanelData{T}, p::Int;
         N, n_periods_max, total_obs,
         (min=minimum(eff_obs), avg=mean(eff_obs), max=maximum(eff_obs)),
         empty_Z, empty_E, zeros(T, 0, 0), 0,
-        d
+        d, coef_vcov
     )
 end
