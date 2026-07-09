@@ -257,51 +257,74 @@ function _estimate_bjs(pd::PanelData{T}, outcome_col::Int, treat_col::Int;
     att_agg = zeros(T, n_evt)
     se_agg = zeros(T, n_evt)
 
+    # =========================================================================
+    # BJS (2024) Prop.-6 influence-function variance.
+    # The imputation τ̂(e) = (1/N_e) Σ_{o∈treated(e)} (y_o − x_o'β̂) is LINEAR in Y, so its
+    # exact variance includes the FE estimation-error term W_e'M⁺W_e that the naive
+    # var(τ)/n omits (it treats the fitted α̂_i, γ̂_t as known). Build the untreated
+    # two-way-FE design X0 (rank-deficient by 1), its Gram pseudo-inverse M⁺, and the
+    # untreated residuals. Point estimates att_agg are unchanged (= mean(τ) over treated(e)).
+    # =========================================================================
+    ctrl_U = length(ctrl_groups_unique)
+    ctrl_P = length(ctrl_times_unique)
+    K_fe = ctrl_U + ctrl_P
+    unit_col = Dict(g => i for (i, g) in enumerate(ctrl_groups_unique))
+    time_col = Dict(t => ctrl_U + j for (j, t) in enumerate(ctrl_times_unique))
+    X0 = zeros(T, n_ctrl, K_fe)
+    @inbounds for o in 1:n_ctrl
+        X0[o, unit_col[control_g[o]]] = one(T)
+        X0[o, time_col[control_t[o]]] = one(T)
+    end
+    Mpinv = Matrix{T}(robust_inv(Hermitian(X0' * X0); silent=true))  # handles the rank-1 deficiency
+    beta_fe = Mpinv * (X0' * control_y)
+    resid0 = control_y .- X0 * beta_fe
+    dof0 = max(n_ctrl - (K_fe - 1), 1)                              # two-way FE rank = U+P-1
+    sigma2 = sum(abs2, resid0) / dof0
+
+    _treat_row!(x, g, t) = begin
+        fill!(x, zero(T))
+        haskey(unit_col, g) && (x[unit_col[g]] = one(T))
+        haskey(time_col, t) && (x[time_col[t]] = one(T))
+        x
+    end
+
+    use_cluster = cluster === :unit
+    evt_of = [treated_t[k] - treated_cohort[k] for k in 1:n_treat]
+    xrow = zeros(T, K_fe)
+
     for (ei, e) in enumerate(event_times_all)
-        if e == reference_period
-            att_agg[ei] = zero(T)
-            se_agg[ei] = zero(T)
-            continue
+        e == reference_period && continue
+        Te = findall(==(e), evt_of)
+        Ne = length(Te)
+        Ne == 0 && continue
+
+        att_agg[ei] = mean(@view tau[Te])          # simple mean of imputed effects (= old value)
+
+        We = zeros(T, K_fe)
+        for k in Te
+            We .+= _treat_row!(xrow, treated_g[k], treated_t[k])
         end
+        We ./= Ne
 
-        # Collect per-cohort contributions
-        att_vals = T[]
-        var_vals = T[]
-        weights_e = T[]
-
-        for (ci, g_time) in enumerate(cohorts)
-            t_target = g_time + e
-            ti = findfirst(==(t_target), all_times)
-            ti === nothing && continue
-            isnan(group_time_att[ci, ti]) && continue
-
-            # Collect individual tau for this cohort at event-time e
-            tau_ge = T[]
-            for k in 1:n_treat
-                if treated_cohort[k] == g_time && treated_t[k] == t_target
-                    push!(tau_ge, tau[k])
-                end
+        var_e = if use_cluster
+            # Cluster-robust IF variance: aggregate the per-obs IF scores c_e(i)·ê_i within
+            # each unit, then sum of squares over units. Treated obs k∈T_e contribute
+            # (1/N_e)(τ_k−τ̂(e)); untreated obs o contribute −(x_o'M⁺W_e)·ê0_o.
+            u_e = Mpinv * We
+            proj = X0 * u_e
+            acc = Dict{Int,T}()
+            for k in Te
+                acc[treated_g[k]] = get(acc, treated_g[k], zero(T)) + (tau[k] - att_agg[ei]) / Ne
             end
-            isempty(tau_ge) && continue
-
-            n_g = T(length(tau_ge))
-
-            push!(att_vals, mean(tau_ge))
-            # Variance of cohort-level ATT at this event-time
-            # Guard single-observation variance: use zero when n=1
-            v_g = length(tau_ge) > 1 ? var(tau_ge) / n_g : zero(T)
-            push!(var_vals, v_g)
-            push!(weights_e, n_g)
+            for o in 1:n_ctrl
+                acc[control_g[o]] = get(acc, control_g[o], zero(T)) - proj[o] * resid0[o]
+            end
+            sum(abs2, values(acc))
+        else
+            # Homoskedastic Prop.-6 plug-in: σ̂²(1/N_e + W_e'M⁺W_e) = σ̂²·Σ_i c_e(i)².
+            sigma2 * (one(T) / Ne + dot(We, Mpinv * We))
         end
-
-        if !isempty(att_vals)
-            w_total = sum(weights_e)
-            w_norm = weights_e ./ w_total
-            att_agg[ei] = sum(w_norm .* att_vals)
-            # SE: sqrt(sum w_g^2 * var(tau_g(e)) / n_g)
-            # var_vals already contains var(tau_g) / n_g
-            se_agg[ei] = sqrt(sum((w_norm .^ 2) .* var_vals))
-        end
+        se_agg[ei] = sqrt(max(var_e, zero(T)))
     end
 
     # =========================================================================

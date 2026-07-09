@@ -8,7 +8,7 @@
 # Tests for: estimate_did (TWFE, CS), estimate_event_study_lp, estimate_lp_did,
 #            bacon_decomposition, pretrend_test, negative_weight_check, plotting, refs
 
-using Test, Random, Statistics
+using Test, Random, Statistics, LinearAlgebra
 using MacroEconometricModels
 
 # =============================================================================
@@ -702,6 +702,60 @@ end
     # =========================================================================
     # Phase 2: BJS (2024) Imputation
     # =========================================================================
+    @testset "BJS Prop-6 influence-function variance (T066)" begin
+        # Analytic fixture: 4 units × 4 periods; units 1-2 never-treated, units 3-4 treated
+        # at t=3. The homoskedastic Prop-6 IF variance is Var(τ̂(e)) = σ̂²(1/N_e + W_e'M⁺W_e),
+        # where M⁺ is the untreated two-way-FE Gram pseudo-inverse, W_e the mean treated
+        # design row, and σ̂² the untreated residual variance.
+        rng = Random.MersenneTwister(2266)
+        gid = Int[]; tid = Int[]; yv = Float64[]; gtime = Float64[]
+        alpha = [0.0, 1.0, 2.0, 3.0]
+        treat_time = [0, 0, 3, 3]
+        for u in 1:4, t in 1:4
+            te = (treat_time[u] > 0 && t >= treat_time[u]) ? 2.0 : 0.0
+            push!(gid, u); push!(tid, t)
+            push!(yv, alpha[u] + 0.1 * t + te + 0.3 * randn(rng))
+            push!(gtime, Float64(treat_time[u]))
+        end
+        data = hcat(yv, gtime)
+        pd = PanelData{Float64}(data, ["outcome", "treat_time"], Quarterly, [1, 1],
+                                gid, tid, nothing, ["u1", "u2", "u3", "u4"],
+                                4, 2, 16, true, ["fixture"], Dict{String,String}(), Symbol[])
+
+        # Homoskedastic path (cluster=:none) matches the closed-form plug-in exactly.
+        bjs0 = MacroEconometricModels._estimate_bjs(pd, 1, 2; leads=2, horizon=1, cluster=:none)
+
+        # Independent reconstruction of the Prop-6 plug-in variance.
+        untreated = [(gid[o], tid[o], yv[o]) for o in 1:16 if !(treat_time[gid[o]] > 0 && tid[o] >= treat_time[gid[o]])]
+        ug = sort(unique(first.(untreated))); ut = sort(unique(getindex.(untreated, 2)))
+        U = length(ug); P = length(ut); K = U + P
+        ucol = Dict(g => i for (i, g) in enumerate(ug)); tcol = Dict(t => U + j for (j, t) in enumerate(ut))
+        N0 = length(untreated)
+        X0 = zeros(N0, K); y0 = zeros(N0)
+        for (o, (g, t, y)) in enumerate(untreated)
+            X0[o, ucol[g]] = 1.0; X0[o, tcol[t]] = 1.0; y0[o] = y
+        end
+        Mp = Matrix(MacroEconometricModels.robust_inv(Hermitian(X0'X0); silent=true))
+        resid = y0 .- X0 * (Mp * (X0'y0))
+        sig2 = sum(abs2, resid) / (N0 - (K - 1))
+        function var_e(tt)   # treated units 3,4 at period tt
+            We = zeros(K); We[ucol[3]] += 0.5; We[ucol[4]] += 0.5; We[tcol[tt]] += 1.0
+            sig2 * (1 / 2 + dot(We, Mp * We))
+        end
+        et = bjs0.event_times
+        @test bjs0.se[findfirst(==(0), et)] ≈ sqrt(var_e(3)) atol = 1e-10   # e=0 ⇒ t=3
+        @test bjs0.se[findfirst(==(1), et)] ≈ sqrt(var_e(4)) atol = 1e-10   # e=1 ⇒ t=4
+
+        # The Prop-6 variance strictly exceeds the naive Var(τ)/n (which omits the FE
+        # estimation-error term W_e'M⁺W_e > 0).
+        @test var_e(3) > sig2 / 2
+
+        # Cluster-robust default path stays finite and positive.
+        bjs1 = MacroEconometricModels._estimate_bjs(pd, 1, 2; leads=2, horizon=1, cluster=:unit)
+        @test all(isfinite, bjs1.se)
+        @test bjs1.se[findfirst(==(0), bjs1.event_times)] > 0
+    end
+
     @testset "BJS Imputation" begin
         pd, te = _make_did_panel(seed=2200, n_units=60, n_periods=20)
 
