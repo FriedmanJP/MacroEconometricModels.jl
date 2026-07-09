@@ -176,6 +176,14 @@ halflife(garch)                 # Half-life in periods
 unconditional_variance(garch)   # Long-run variance level
 ```
 
+!!! note "Robust standard errors by default"
+    GARCH, EGARCH, and GJR-GARCH standard errors are **Bollerslev–Wooldridge (1992)
+    QMLE-robust** by default (the sandwich ``H^{-1}(S'S)H^{-1}``), consistent even when the
+    innovations are fat-tailed and the Gaussian likelihood is only a quasi-likelihood.
+    Pass `cov_type=:hessian` to `stderror`/`vcov`/`confint` to recover the classical
+    inverse-observed-information errors (valid only under correct Gaussian specification):
+    `stderror(garch; cov_type=:hessian)`.
+
 The persistence ``\alpha_1 + \beta_1`` for equity returns typically falls between 0.9 and 0.99, implying that volatility shocks are highly persistent. A half-life of 13 periods means that half the impact of a volatility shock dissipates after 13 time units. The unconditional variance provides the long-run level to which the conditional variance mean-reverts.
 
 ### EGARCH(p,q)
@@ -602,7 +610,7 @@ All volatility models implement the standard StatsAPI interface:
 | `bic(m)` | Bayesian Information Criterion |
 | `dof(m)` | Number of estimated parameters |
 | `islinear(m)` | `false` (all volatility models are nonlinear) |
-| `stderror(m)` | Standard errors via numerical Hessian and delta method |
+| `stderror(m; cov_type=:robust)` | Standard errors: Bollerslev–Wooldridge QMLE-robust sandwich (default) or `:hessian` (inverse observed information) |
 | `confint(m)` | Confidence intervals for parameters |
 | `vcov(m)` | Variance-covariance matrix of parameter estimates |
 

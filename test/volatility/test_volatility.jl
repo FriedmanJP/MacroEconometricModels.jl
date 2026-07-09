@@ -8,6 +8,7 @@ using Test
 using MacroEconometricModels
 using Random
 using Statistics
+using LinearAlgebra
 if !@isdefined(FAST)
     const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
 end
@@ -58,6 +59,25 @@ function simulate_gjr11(n::Int; omega=0.01, alpha1=0.03, gamma1=0.07, beta1=0.85
         indicator = eps < 0.0 ? 1.0 : 0.0
         h[t] = omega + (alpha1 + gamma1 * indicator) * eps^2 + beta1 * h[t-1]
         y[t] = mu + sqrt(h[t]) * randn()
+    end
+    y
+end
+
+# =============================================================================
+# Helper: standardized innovation draw (unit variance): Gaussian or Student-t(5)
+# =============================================================================
+_std_innov(rng, innov) = innov === :t5 ?
+    (randn(rng) / sqrt(sum(abs2, randn(rng, 5)) / 5)) / sqrt(5 / 3) :  # standardized t(5): Var[t5]=5/3
+    randn(rng)
+
+# rng-controllable GARCH(1,1) simulator with selectable innovation distribution
+function simulate_garch11_rng(rng, n; omega=0.01, alpha1=0.05, beta1=0.90, mu=0.0, innov=:gauss)
+    y = zeros(n); h = zeros(n)
+    h[1] = omega / (1.0 - alpha1 - beta1)
+    y[1] = mu + sqrt(h[1]) * _std_innov(rng, innov)
+    for t in 2:n
+        h[t] = omega + alpha1 * (y[t-1] - mu)^2 + beta1 * h[t-1]
+        y[t] = mu + sqrt(h[t]) * _std_innov(rng, innov)
     end
     y
 end
@@ -639,4 +659,81 @@ end
         @test occursin("Stochastic Volatility", output)
         @test occursin("φ", output)
     end
+end
+
+# =============================================================================
+# GARCH-family QMLE sandwich SEs (Bollerslev–Wooldridge 1992) — T074 / #173
+# =============================================================================
+@testset "GARCH QMLE sandwich SEs (BW 1992)" begin
+    Mod = MacroEconometricModels
+
+    # (a) Backward-compat: cov_type=:hessian reproduces the OLD inverse-Hessian formula
+    yg = simulate_garch11_rng(MersenneTwister(11), 1500)
+    mg = estimate_garch(yg, 1, 1)
+    params_opt = vcat(mg.mu, log(mg.omega), log.(mg.alpha), log.(mg.beta))
+    Hn = Mod._numerical_hessian(p -> Mod._garch_negloglik(p, mg.y, 1, 1), params_opt)
+    Cn = Mod.robust_inv(Hn)
+    se_h = stderror(mg; cov_type=:hessian)
+    @test se_h[1] ≈ sqrt(max(Cn[1, 1], 0.0)) rtol=1e-8
+    @test se_h[2] ≈ mg.omega   * sqrt(max(Cn[2, 2], 0.0)) rtol=1e-8
+    @test se_h[3] ≈ mg.alpha[1] * sqrt(max(Cn[3, 3], 0.0)) rtol=1e-8
+    @test se_h[4] ≈ mg.beta[1]  * sqrt(max(Cn[4, 4], 0.0)) rtol=1e-8
+
+    # (b) Structural: default == :robust; transform-space sandwich is symmetric & PSD
+    @test stderror(mg) ≈ stderror(mg; cov_type=:robust)
+    se_r = stderror(mg; cov_type=:robust)
+    @test all(isfinite, se_r) && all(se_r .> 0)
+    S = Mod.ForwardDiff.jacobian(θ -> Mod._garch_loglik_contribs(θ, mg.y, 1, 1), params_opt)
+    V = Mod._qmle_sandwich_cov(Hn, S)
+    @test V ≈ V' rtol=1e-8
+    @test all(diag(V) .>= 0)
+    # invalid cov_type errors
+    @test_throws ArgumentError stderror(mg; cov_type=:bogus)
+
+    # (c) Correct-spec (Gaussian, large n): robust ≈ hessian up to sampling noise
+    mg2 = estimate_garch(simulate_garch11_rng(MersenneTwister(77), 4000), 1, 1)
+    sr2 = stderror(mg2; cov_type=:robust)
+    sh2 = stderror(mg2; cov_type=:hessian)
+    @test 0.6 <= sr2[3] / sh2[3] <= 1.6
+    @test 0.6 <= sr2[4] / sh2[4] <= 1.6
+
+    # (d) Fat-tail divergence (the point of the fix): t(5) innovations inflate the OPG
+    #     meat B relative to H, so robust α/β SEs exceed the inverse-Hessian ones.
+    mt = estimate_garch(simulate_garch11_rng(MersenneTwister(2024), 3000;
+                                             omega=0.02, alpha1=0.08, beta1=0.90, innov=:t5), 1, 1)
+    srt = stderror(mt; cov_type=:robust)
+    sht = stderror(mt; cov_type=:hessian)
+    @test all(isfinite, srt) && all(srt .> 0)
+    @test max(abs(srt[3] - sht[3]) / sht[3], abs(srt[4] - sht[4]) / sht[4]) > 0.05
+    @test srt[3] > sht[3]
+    @test srt[4] > sht[4]
+
+    # (e) Monte-Carlo dispersion oracle: under misspecification the inverse-Hessian SE
+    #     understates the true sampling dispersion; the robust SE tracks it better.
+    R = 120; nrep = 1200
+    ahat = Float64[]; ser = Float64[]; seh = Float64[]
+    for r in 1:R
+        yr = simulate_garch11_rng(MersenneTwister(3000 + r), nrep;
+                                  omega=0.02, alpha1=0.08, beta1=0.90, innov=:t5)
+        mr = try; estimate_garch(yr, 1, 1); catch; continue; end
+        mr.converged || continue
+        a = stderror(mr; cov_type=:robust); b = stderror(mr; cov_type=:hessian)
+        (all(isfinite, a) && all(isfinite, b)) || continue
+        push!(ahat, mr.alpha[1]); push!(ser, a[3]); push!(seh, b[3])
+    end
+    @test length(ahat) >= 25
+    sigma_mc = std(ahat)
+    @test abs(mean(ser) - sigma_mc) < abs(mean(seh) - sigma_mc)
+    @test mean(seh) < sigma_mc
+
+    # EGARCH / GJR smoke: robust SE finite, positive, correct length, ≠ hessian
+    ye = simulate_garch11_rng(MersenneTwister(303), 1200)
+    me = estimate_egarch(ye, 1, 1)
+    se_e = stderror(me; cov_type=:robust)
+    @test length(se_e) == 2 + 2 * 1 + 1 && all(isfinite, se_e) && all(se_e .> 0)
+    @test any(se_e .!= stderror(me; cov_type=:hessian))
+    mj = estimate_gjr_garch(ye, 1, 1)
+    se_j = stderror(mj; cov_type=:robust)
+    @test length(se_j) == 2 + 2 * 1 + 1 && all(isfinite, se_j) && all(se_j .> 0)
+    @test any(se_j .!= stderror(mj; cov_type=:hessian))
 end

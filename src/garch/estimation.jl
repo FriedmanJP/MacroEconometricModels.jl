@@ -185,6 +185,50 @@ function _gjr_negloglik(params::Vector{T}, y::Vector{T}, p::Int, q::Int) where {
 end
 
 # =============================================================================
+# Per-observation log-likelihood contributions (for QMLE sandwich scores)
+# =============================================================================
+# Mirror the negloglik unpack + filter WITHOUT the scalar stationarity penalty guard
+# (evaluated at the stationary MLE, so the guard is inactive) and return the vector of
+# per-observation Gaussian log-lik contributions. ForwardDiff.jacobian of these gives the
+# n×k score matrix S; the filters are generic `where {T}` so Duals propagate.
+
+function _garch_loglik_contribs(params, y, p::Int, q::Int)
+    mu = params[1]
+    omega = exp(params[2])
+    alpha = exp.(params[3:2+q])
+    beta = exp.(params[3+q:2+q+p])
+    resid = y .- mu
+    rsq = resid .^ 2
+    h = _garch_filter(omega, alpha, beta, rsq)
+    _volatility_loglik_contribs(h, rsq)
+end
+
+function _egarch_loglik_contribs(params, y, p::Int, q::Int)
+    mu = params[1]
+    omega = params[2]
+    alpha = params[3:2+q]
+    gamma = params[3+q:2+2q]
+    beta = params[3+2q:2+2q+p]
+    resid = y .- mu
+    backcast_logh = log(var(resid; corrected=false))
+    h, _, _ = _egarch_filter(omega, alpha, gamma, beta, resid, backcast_logh)
+    rsq = resid .^ 2
+    _volatility_loglik_contribs(h, rsq)
+end
+
+function _gjr_loglik_contribs(params, y, p::Int, q::Int)
+    mu = params[1]
+    omega = exp(params[2])
+    alpha = exp.(params[3:2+q])
+    gamma = exp.(params[3+q:2+2q])
+    beta = exp.(params[3+2q:2+2q+p])
+    resid = y .- mu
+    h = _gjr_garch_filter(omega, alpha, gamma, beta, resid)
+    rsq = resid .^ 2
+    _volatility_loglik_contribs(h, rsq)
+end
+
+# =============================================================================
 # GARCH Estimation
 # =============================================================================
 
@@ -251,21 +295,40 @@ end
 estimate_garch(y::AbstractVector, p::Int=1, q::Int=1; kwargs...) = estimate_garch(Float64.(y), p, q; kwargs...)
 
 """
-    StatsAPI.stderror(m::GARCHModel{T}) -> Vector{T}
+    StatsAPI.stderror(m::GARCHModel{T}; cov_type=:robust) -> Vector{T}
 
-MLE standard errors for GARCH model via numerical Hessian + delta method.
-Returns SE vector matching `coef(m)` = [μ, ω, α₁..αq, β₁..βp].
+Standard errors for a GARCH model via the numerical observed-information Hessian +
+delta method. Returns an SE vector matching `coef(m)` = [μ, ω, α₁..αq, β₁..βp].
+
+`cov_type`:
+- `:robust` (default, aliases `:qmle`/`:sandwich`/`:bw`) — Bollerslev–Wooldridge (1992)
+  QMLE sandwich `H⁻¹(S'S)H⁻¹`, consistent under non-Gaussian (fat-tailed) innovations.
+- `:hessian` (alias `:opg_hessian`) — inverse observed information `H⁻¹` (valid only
+  under correct Gaussian specification).
 """
-function StatsAPI.stderror(m::GARCHModel{T}) where {T}
+function StatsAPI.stderror(m::GARCHModel{T}; cov_type::Symbol=:robust) where {T}
     p, q = m.p, m.q
     params_opt = vcat(m.mu, log(m.omega), log.(m.alpha), log.(m.beta))
+    n_params = 2 + q + p
 
     obj = params -> _garch_negloglik(params, m.y, p, q)
     H = _numerical_hessian(obj, params_opt)
 
-    C_opt = try; robust_inv(H); catch; return fill(T(NaN), 2 + q + p); end
+    C_opt = try
+        if cov_type in (:robust, :qmle, :sandwich, :bw)
+            S = ForwardDiff.jacobian(θ -> _garch_loglik_contribs(θ, m.y, p, q), params_opt)
+            _qmle_sandwich_cov(H, S)
+        elseif cov_type in (:hessian, :opg_hessian)
+            robust_inv(H)
+        else
+            throw(ArgumentError("cov_type must be :robust or :hessian, got :$cov_type"))
+        end
+    catch e
+        e isa ArgumentError && rethrow(e)
+        return fill(T(NaN), n_params)
+    end
 
-    se = Vector{T}(undef, 2 + q + p)
+    se = Vector{T}(undef, n_params)
     se[1] = sqrt(max(C_opt[1, 1], zero(T)))             # mu
     se[2] = m.omega * sqrt(max(C_opt[2, 2], zero(T)))   # omega
     for i in 1:q
@@ -345,22 +408,35 @@ end
 estimate_egarch(y::AbstractVector, p::Int=1, q::Int=1; kwargs...) = estimate_egarch(Float64.(y), p, q; kwargs...)
 
 """
-    StatsAPI.stderror(m::EGARCHModel{T}) -> Vector{T}
+    StatsAPI.stderror(m::EGARCHModel{T}; cov_type=:robust) -> Vector{T}
 
-MLE standard errors for EGARCH model via numerical Hessian.
-EGARCH params are unconstrained — no delta method needed.
-Returns SE vector matching `coef(m)` = [μ, ω, α₁..αq, γ₁..γq, β₁..βp].
+Standard errors for an EGARCH model via the numerical observed-information Hessian.
+EGARCH params are unconstrained — no delta method needed. Returns an SE vector matching
+`coef(m)` = [μ, ω, α₁..αq, γ₁..γq, β₁..βp]. `cov_type`: `:robust` (default) uses the
+Bollerslev–Wooldridge QMLE sandwich `H⁻¹(S'S)H⁻¹`; `:hessian` uses inverse information.
 """
-function StatsAPI.stderror(m::EGARCHModel{T}) where {T}
+function StatsAPI.stderror(m::EGARCHModel{T}; cov_type::Symbol=:robust) where {T}
     p, q = m.p, m.q
     # EGARCH parameters are all unconstrained in optimization space
     params_opt = vcat(m.mu, m.omega, m.alpha, m.gamma, m.beta)
+    n_params = 2 + 2q + p
 
     obj = params -> _egarch_negloglik(params, m.y, p, q)
     H = _numerical_hessian(obj, params_opt)
 
-    n_params = 2 + 2q + p
-    C_opt = try; robust_inv(H); catch; return fill(T(NaN), n_params); end
+    C_opt = try
+        if cov_type in (:robust, :qmle, :sandwich, :bw)
+            S = ForwardDiff.jacobian(θ -> _egarch_loglik_contribs(θ, m.y, p, q), params_opt)
+            _qmle_sandwich_cov(H, S)
+        elseif cov_type in (:hessian, :opg_hessian)
+            robust_inv(H)
+        else
+            throw(ArgumentError("cov_type must be :robust or :hessian, got :$cov_type"))
+        end
+    catch e
+        e isa ArgumentError && rethrow(e)
+        return fill(T(NaN), n_params)
+    end
 
     se = sqrt.(max.(diag(C_opt), zero(T)))
     se
@@ -434,20 +510,34 @@ end
 estimate_gjr_garch(y::AbstractVector, p::Int=1, q::Int=1; kwargs...) = estimate_gjr_garch(Float64.(y), p, q; kwargs...)
 
 """
-    StatsAPI.stderror(m::GJRGARCHModel{T}) -> Vector{T}
+    StatsAPI.stderror(m::GJRGARCHModel{T}; cov_type=:robust) -> Vector{T}
 
-MLE standard errors for GJR-GARCH model via numerical Hessian + delta method.
-Returns SE vector matching `coef(m)` = [μ, ω, α₁..αq, γ₁..γq, β₁..βp].
+Standard errors for a GJR-GARCH model via the numerical observed-information Hessian +
+delta method. Returns an SE vector matching `coef(m)` = [μ, ω, α₁..αq, γ₁..γq, β₁..βp].
+`cov_type`: `:robust` (default) uses the Bollerslev–Wooldridge QMLE sandwich
+`H⁻¹(S'S)H⁻¹`; `:hessian` uses inverse observed information.
 """
-function StatsAPI.stderror(m::GJRGARCHModel{T}) where {T}
+function StatsAPI.stderror(m::GJRGARCHModel{T}; cov_type::Symbol=:robust) where {T}
     p, q = m.p, m.q
     params_opt = vcat(m.mu, log(m.omega), log.(m.alpha), log.(m.gamma), log.(m.beta))
+    n_params = 2 + 2q + p
 
     obj = params -> _gjr_negloglik(params, m.y, p, q)
     H = _numerical_hessian(obj, params_opt)
 
-    n_params = 2 + 2q + p
-    C_opt = try; robust_inv(H); catch; return fill(T(NaN), n_params); end
+    C_opt = try
+        if cov_type in (:robust, :qmle, :sandwich, :bw)
+            S = ForwardDiff.jacobian(θ -> _gjr_loglik_contribs(θ, m.y, p, q), params_opt)
+            _qmle_sandwich_cov(H, S)
+        elseif cov_type in (:hessian, :opg_hessian)
+            robust_inv(H)
+        else
+            throw(ArgumentError("cov_type must be :robust or :hessian, got :$cov_type"))
+        end
+    catch e
+        e isa ArgumentError && rethrow(e)
+        return fill(T(NaN), n_params)
+    end
 
     se = Vector{T}(undef, n_params)
     se[1] = sqrt(max(C_opt[1, 1], zero(T)))                # mu (untransformed)

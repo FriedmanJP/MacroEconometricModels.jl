@@ -54,6 +54,36 @@ function _volatility_negloglik(h::Vector{T}, eps_sq::Vector{T}, n::Int) where {T
     -ll
 end
 
+"""
+    _volatility_loglik_contribs(h, resid_sq) -> Vector
+
+Per-observation Gaussian log-likelihood contributions
+`ℓ_t = -0.5*(log(2π) + log(h_t) + resid_sq_t/h_t)`. Element type follows `h` so
+`ForwardDiff.Dual`s propagate — used to build the QMLE score matrix `S = ∇_θ ℓ`.
+"""
+function _volatility_loglik_contribs(h, resid_sq)
+    ll = similar(h)
+    @inbounds for t in eachindex(h)
+        ll[t] = -(log(oftype(h[t], 2π)) + log(h[t]) + resid_sq[t] / h[t]) / 2
+    end
+    ll
+end
+
+"""
+    _qmle_sandwich_cov(H, S) -> Matrix
+
+Bollerslev–Wooldridge (1992) QMLE sandwich covariance in the optimization (transform)
+parameterization: `V = H⁻¹ (S'S) H⁻¹`, where `H` is the observed-information Hessian of
+the NEGATIVE log-likelihood (`A = -Σ∇²ℓ_t`) and `S` is the `n × k` matrix of per-obs
+scores `s_t = ∇_θ ℓ_t` (so `B = Σ s_t s_t' = S'S`). Robust to a near-singular `H` via
+`robust_inv`.
+"""
+function _qmle_sandwich_cov(H, S)
+    Hinv = robust_inv(H)
+    B = S' * S
+    Hinv * B * Hinv
+end
+
 # =============================================================================
 # ARCH Filter
 # =============================================================================
