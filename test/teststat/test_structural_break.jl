@@ -155,16 +155,22 @@ using Random
         @test haskey(MacroEconometricModels.ANDREWS_PLOBERGER_MEAN_CV, 10)
         @test MacroEconometricModels.ANDREWS_PLOBERGER_MEAN_CV[1][5] == 3.72
 
-        # Bai-Perron sup-F
-        @test haskey(MacroEconometricModels.BAIPERRON_SUPF_CV, 1)
-        @test haskey(MacroEconometricModels.BAIPERRON_SUPF_CV, 5)
-        @test haskey(MacroEconometricModels.BAIPERRON_SUPF_CV[1], 5)
-        @test MacroEconometricModels.BAIPERRON_SUPF_CV[1][5] == 8.58
+        # Bai-Perron sup-F (q- and trimming-indexed, T086/#185)
+        supf_q = MacroEconometricModels.BAIPERRON_SUPF_CV_Q
+        @test sort(collect(keys(supf_q))) == [0.05, 0.10, 0.15, 0.20, 0.25]
+        @test supf_q[0.15][0.05][1, 1] == 8.58    # q=1, l=1, 5% — canonical value
+        @test supf_q[0.15][0.01][1, 1] == 12.29
+        @test supf_q[0.15][0.10][1, 1] == 7.04
+        @test size(supf_q[0.15][0.05]) == (10, 5)  # q=1..10, l=1..5 at ε=0.15
+        @test size(supf_q[0.05][0.05]) == (10, 9)  # l up to 9 at ε=0.05
+        # CVs increase with q at fixed l
+        @test all(diff(supf_q[0.15][0.05][:, 1]) .> 0)
 
-        # Bai-Perron sequential
-        @test haskey(MacroEconometricModels.BAIPERRON_SEQF_CV, 1)
-        @test haskey(MacroEconometricModels.BAIPERRON_SEQF_CV, 5)
-        @test MacroEconometricModels.BAIPERRON_SEQF_CV[2][5] == 10.13
+        # Bai-Perron sequential (column j = supF(j | j-1))
+        seqf_q = MacroEconometricModels.BAIPERRON_SEQF_CV_Q
+        @test seqf_q[0.15][0.05][1, 2] == 10.13   # q=1, seqF(2|1), 5%
+        @test seqf_q[0.15][0.05][1, 1] == 8.58    # seqF(1|0) == supF(1)
+        @test size(seqf_q[0.15][0.05]) == (10, 10)
 
         # Pesaran CIPS
         @test haskey(MacroEconometricModels.PESARAN_CIPS_CV, :constant)
@@ -521,5 +527,62 @@ end
 
     @testset "Error handling" begin
         @test_throws ArgumentError moon_perron_test(randn(5, 2); r=1)
+    end
+end
+
+# =============================================================================
+# T086 (#185): Bai-Perron q-indexed critical values
+# =============================================================================
+
+@testset "T086: Bai-Perron q-indexed p-values" begin
+    MEM = MacroEconometricModels
+
+    @testset "q changes the p-value (old code used q=1 for all)" begin
+        # supF(1) = 10.0 at ε=0.15: significant for q=1 (5% cv 8.58) but not
+        # for q=3 (5% cv 13.47-ish) — the q=1-only table was too liberal
+        p_q1 = MEM._baiperron_pvalue(10.0, 1, 1, 0.15, :supf)
+        p_q3 = MEM._baiperron_pvalue(10.0, 1, 3, 0.15, :supf)
+        @test p_q1 < 0.05
+        @test p_q3 > 0.05
+        @test p_q1 < p_q3   # same stat, more breaking regressors -> less evidence
+    end
+
+    @testset "level interpolation pins" begin
+        # exactly at tabulated CVs the p-value equals the nominal level
+        supf = MEM.BAIPERRON_SUPF_CV_Q[0.15]
+        for (lvl, p_expect) in ((0.10, 0.10), (0.05, 0.05), (0.025, 0.025))
+            for q in (1, 2, 5), l in (1, 3)
+                @test MEM._baiperron_pvalue(supf[lvl][q, l], l, q, 0.15, :supf) ≈ p_expect atol = 1e-10
+            end
+        end
+        @test MEM._baiperron_pvalue(supf[0.01][2, 2], 2, 2, 0.15, :supf) ≈ 0.01 atol = 1e-10
+    end
+
+    @testset "trimming axis + guards" begin
+        # different tabulated trimmings give different p-values
+        p15 = MEM._baiperron_pvalue(9.0, 1, 1, 0.15, :supf)
+        p05 = MEM._baiperron_pvalue(9.0, 1, 1, 0.05, :supf)
+        @test p15 != p05
+        # q out of range errors informatively
+        @test_throws ArgumentError MEM._baiperron_pvalue(9.0, 1, 11, 0.15, :supf)
+        # beyond tabulated breaks for large trimming -> NaN
+        @test isnan(MEM._baiperron_pvalue(9.0, 4, 1, 0.25, :supf))
+    end
+
+    @testset "bai_perron_test threads q = k" begin
+        rng = Random.MersenneTwister(18501)
+        n = 200
+        x = randn(rng, n)
+        y = vcat(0.5 .+ 0.3 .* x[1:100], 2.5 .+ 0.3 .* x[101:200]) .+ 0.4 .* randn(rng, n)
+        X = hcat(ones(n), x)   # k = q = 2
+        r = bai_perron_test(y, X; max_breaks=3)
+        # p-value of supF(1) equals the q=2 table lookup
+        @test r.supf_pvalues[1] ≈
+              MEM._baiperron_pvalue(r.supf_stats[1], 1, 2, 0.15, :supf) atol = 1e-12
+        @test r.n_breaks >= 1   # the level shift is found
+
+        # q = k is genuinely threaded: 11 regressors exceed the tabulated range
+        X11 = hcat(ones(n), randn(rng, n, 10))
+        @test_throws ArgumentError bai_perron_test(y, X11; max_breaks=1)
     end
 end
