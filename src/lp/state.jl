@@ -55,7 +55,7 @@ function _state_lp_transition_ssr(state_var::AbstractVector{T}, Y::AbstractMatri
                                   lags::Int=4) where {T<:AbstractFloat}
     F = logistic_transition(state_var, gamma, c)
     T_obs, n = size(Y)
-    t_start = lags + 1
+    t_start = max(lags + 1, 2)   # predetermined weight F(z_{t-1}) needs t-1 >= 1
     t_end = T_obs
     t_end < t_start && return T(Inf)
     T_h = t_end - t_start + 1
@@ -64,7 +64,7 @@ function _state_lp_transition_ssr(state_var::AbstractVector{T}, Y::AbstractMatri
     X = Matrix{T}(undef, T_h, k_total)
     Ymat = Matrix{T}(undef, T_h, n)
     @inbounds for (i, t) in enumerate(t_start:t_end)
-        F_t = F[t]                         # contemporaneous weight (predetermined F[t-1] in T100/#199)
+        F_t = F[t - 1]                     # predetermined state weight (Auerbach–Gorodnichenko)
         X[i, 1] = F_t
         X[i, 2] = F_t * Y[t, shock_var]
         col = 3
@@ -197,6 +197,7 @@ function estimate_state_lp(Y::AbstractMatrix{T}, shock_var::Int, state_var::Abst
 
     for h in 0:horizon
         t_start, t_end = compute_horizon_bounds(T_obs, h, lags)
+        t_start = max(t_start, 2)  # predetermined weight F(z_{t-1}) needs t-1 >= 1 (guards lags=0)
         T_h = t_end - t_start + 1
         T_eff[h + 1] = T_h
 
@@ -207,7 +208,7 @@ function estimate_state_lp(Y::AbstractMatrix{T}, shock_var::Int, state_var::Abst
         X_h = Matrix{T}(undef, T_h, k_total)
 
         @inbounds for (i, t) in enumerate(t_start:t_end)
-            F_t = F_values[t]
+            F_t = F_values[t - 1]  # predetermined state weight (Auerbach–Gorodnichenko)
 
             # Expansion regime (F_t)
             X_h[i, 1] = F_t

@@ -845,6 +845,50 @@ using Random
         @test ssr_nlls_dd <= best_ssr + 1e-6
     end
 
+    @testset "State-Dependent LP — predetermined transition weight (T100 #199)" begin
+        # The h=0 fit must weight the regime blocks by the predetermined F(z_{t-1}), not the
+        # contemporaneous F(z_t). Pin against a manual predetermined-design reconstruction and
+        # expose the bug by showing the fit does NOT match the contemporaneous design.
+        Random.seed!(5150)
+        T_pd, n_pd = 150, 2
+        z_pd = randn(T_pd)
+        Y_pd = zeros(T_pd, n_pd)
+        for t in 2:T_pd
+            Y_pd[t, :] = 0.4 * Y_pd[t-1, :] + randn(n_pd)
+        end
+        gamma_pd, c_pd, lags_pd = 2.0, 0.0, 2
+        m_pd = estimate_state_lp(Y_pd, 1, z_pd, 0; gamma=gamma_pd, threshold=c_pd, lags=lags_pd)
+
+        F = MacroEconometricModels.logistic_transition(z_pd, gamma_pd, c_pd)
+        n = n_pd; lags = lags_pd
+        t_start = max(lags + 1, 2); t_end = T_pd
+        kpr = 2 + n * lags; ktot = 2 * kpr
+        T_h = t_end - t_start + 1
+        build(weight) = begin
+            X = zeros(T_h, ktot); Ym = zeros(T_h, n)
+            for (i, t) in enumerate(t_start:t_end)
+                Ft = weight == :pre ? F[t-1] : F[t]
+                X[i, 1] = Ft; X[i, 2] = Ft * Y_pd[t, 1]; col = 3
+                for lag in 1:lags, var in 1:n
+                    X[i, col] = Ft * Y_pd[t-lag, var]; col += 1
+                end
+                X[i, kpr+1] = 1 - Ft; X[i, kpr+2] = (1 - Ft) * Y_pd[t, 1]; col = kpr + 3
+                for lag in 1:lags, var in 1:n
+                    X[i, col] = (1 - Ft) * Y_pd[t-lag, var]; col += 1
+                end
+                Ym[i, :] = Y_pd[t, :]
+            end
+            MacroEconometricModels.robust_inv(X'X) * (X'Ym)
+        end
+        B_pre = build(:pre)
+        @test m_pd.B_expansion[1] ≈ B_pre[1:kpr, :] atol=1e-8
+        @test m_pd.B_recession[1] ≈ B_pre[kpr+1:end, :] atol=1e-8
+
+        # Bug-exposure: the contemporaneous design differs, and the fit must NOT match it.
+        B_con = build(:con)
+        @test !isapprox(m_pd.B_expansion[1], B_con[1:kpr, :]; atol=1e-6)
+    end
+
     @testset "State-Dependent LP - Regime IRFs" begin
         Random.seed!(30303)
         T_reg = 250
