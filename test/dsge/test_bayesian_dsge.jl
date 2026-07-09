@@ -2123,6 +2123,56 @@ end
     end
 end
 
+@testset "SMC² init likelihoods: threaded chunks == serial (#146 #147)" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    true_spec = @dsge begin
+        parameters: ρ = 0.7, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    true_spec = compute_steady_state(true_spec)
+    sim = simulate(solve(true_spec; method=:gensys), 60; rng=Random.MersenneTwister(3))
+    data = Matrix(reshape(sim[:, 1], 1, :)); T_obs = size(data, 2)
+    merr = [0.4]; N = 12; N_x = 200
+    n_states = spec.n_endog; n_shocks = spec.n_exog
+    npool = max(Threads.nthreads(), 1)
+
+    pf_ll_fn = MacroEconometricModels._build_pf_likelihood_fn(spec, [:ρ], data, [:y],
+        merr, :gensys, NamedTuple(), N_x)
+    thetas = reshape(collect(range(0.55, 0.85; length=N)), 1, N)
+    # Fixed per-particle seeds ⇒ threaded and serial must agree exactly.
+    seeds = UInt64[hash((j, UInt64(0x5EED))) for j in 1:N]
+
+    # THREADED: chunked helper with one PF workspace per chunk.
+    pool = [MacroEconometricModels._allocate_pf_workspace(
+        Float64, n_states, 1, n_shocks, N_x; T_obs=T_obs) for _ in 1:npool]
+    ll_thr = fill(-Inf, N); sols_thr = Vector{Any}(undef, N); fill!(sols_thr, nothing)
+    MacroEconometricModels._smc2_init_likelihoods!(ll_thr, sols_thr, thetas, spec, [:ρ],
+        [:y], merr, :gensys, NamedTuple(), pf_ll_fn, pool, data, T_obs, seeds)
+
+    # SERIAL reference: single workspace, same per-particle seeds and closure.
+    ws = MacroEconometricModels._allocate_pf_workspace(Float64, n_states, 1, n_shocks, N_x; T_obs=T_obs)
+    ll_ser = fill(-Inf, N)
+    for j in 1:N
+        rr = Random.MersenneTwister(seeds[j])
+        ll_ser[j] = pf_ll_fn(Vector{Float64}(thetas[:, j]), ws, rr)
+    end
+
+    @test ll_thr == ll_ser              # bit-identical, thread-count-independent (#146/#147)
+    @test all(isfinite, ll_thr)
+    end
+end
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Section 8: Display, Report, Refs, Plot
 # ─────────────────────────────────────────────────────────────────────────────

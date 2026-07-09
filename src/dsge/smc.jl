@@ -1134,6 +1134,53 @@ function _build_pf_likelihood_fn(spec::DSGESpec{T}, param_names::Vector{Symbol},
 end
 
 """
+    _smc2_init_likelihoods!(log_likelihoods, solutions, theta_particles, spec,
+                            param_names, observables, measurement_error, solver,
+                            solver_kwargs, pf_ll_fn, pool, data, T_obs, seeds;
+                            failures, evals) -> Nothing
+
+Evaluate each SMC² θ-particle's initial PF log-likelihood in parallel (E-23 / #147).
+Partitions the particles into `length(pool)` contiguous chunks (`_chunk_ranges`), gives
+each chunk its **own** PF workspace (chunk-indexed, never `threadid()`-indexed — safe
+under Julia's dynamic scheduler, #146), and seeds each particle's PF from the
+caller-supplied pre-generated `seeds[j]`. The result is therefore **identical to a
+serial run regardless of thread count**. `pf_ll_fn` and the projection-branch
+`_solve_and_run_pf` share the sampler's failure/eval atomics via `failures`/`evals`.
+"""
+function _smc2_init_likelihoods!(log_likelihoods::Vector{T}, solutions::Vector{Any},
+        theta_particles::AbstractMatrix{T}, spec::DSGESpec{T},
+        param_names::Vector{Symbol}, observables::Vector{Symbol}, measurement_error,
+        solver::Symbol, solver_kwargs::NamedTuple, pf_ll_fn,
+        pool::Vector{PFWorkspace{T}}, data::Matrix{T}, T_obs::Int,
+        seeds::AbstractVector{<:Integer};
+        failures::Threads.Atomic{Int}=Threads.Atomic{Int}(0),
+        evals::Threads.Atomic{Int}=Threads.Atomic{Int}(0)) where {T<:AbstractFloat}
+    N = size(theta_particles, 2)
+    ranges = _chunk_ranges(N, length(pool))
+    Threads.@threads for c in eachindex(ranges)
+        ws = pool[c]
+        for j in ranges[c]
+            thread_rng = Random.MersenneTwister(seeds[j])
+            if solver in (:projection, :pfi)
+                ll_j, sol_j = _solve_and_run_pf(spec, param_names,
+                    Vector{T}(theta_particles[:, j]), observables,
+                    measurement_error, solver, solver_kwargs,
+                    ws, data, T_obs, thread_rng;
+                    store_trajectory=true, return_solution=true,
+                    failures=failures, evals=evals)
+                log_likelihoods[j] = ll_j
+                if sol_j isa ProjectionSolution
+                    solutions[j] = sol_j
+                end
+            else
+                log_likelihoods[j] = pf_ll_fn(Vector{T}(theta_particles[:, j]), ws, thread_rng)
+            end
+        end
+    end
+    return nothing
+end
+
+"""
     _smc2_sample(spec, data, param_names, prior, θ0; kwargs...) → SMCState
 
 SMC² algorithm (Chopin, Jacob & Papaspiliopoulos 2013) that nests a particle
@@ -1314,37 +1361,30 @@ function _smc2_sample(spec::DSGESpec{T}, data::AbstractMatrix,
     # Initialize weights uniformly
     log_weights = fill(-log(T(N)), N)
 
-    # Evaluate log-likelihoods via PF (and cache solutions for warm-starting)
+    # Evaluate log-likelihoods via PF (and cache solutions for warm-starting), threaded
+    # with per-chunk workspaces (#147). Pre-generate the per-particle seeds BEFORE threading,
+    # in j-order, so the rng-consumption order — and hence the result and downstream rng state
+    # — are bit-identical to the old serial loop and independent of thread count.
     log_likelihoods = fill(T(-Inf), N)
-    for j in 1:N
-        ws_idx = mod1(j, n_pool)
-        thread_rng = Random.MersenneTwister(hash((j, rand(rng, UInt64))))
-        if solver in (:projection, :pfi)
-            ll_j, sol_j = _solve_and_run_pf(spec, param_names,
-                                              theta_particles[:, j], observables,
-                                              measurement_error, solver, solver_kwargs,
-                                              pool[ws_idx], data, T_obs, thread_rng;
-                                              store_trajectory=true, return_solution=true,
-                                              failures=lik_failures, evals=lik_evals)
-            log_likelihoods[j] = ll_j
-            if sol_j isa ProjectionSolution
-                solutions[j] = sol_j
-            end
-        else
-            log_likelihoods[j] = pf_ll_fn(theta_particles[:, j], pool[ws_idx], thread_rng)
-        end
-    end
+    init_seeds = UInt64[hash((j, rand(rng, UInt64))) for j in 1:N]
+    _smc2_init_likelihoods!(log_likelihoods, solutions, theta_particles, spec,
+        param_names, observables, measurement_error, solver, solver_kwargs, pf_ll_fn,
+        pool, data, T_obs, init_seeds; failures=lik_failures, evals=lik_evals)
 
-    # Compute cheap screening likelihoods for delayed acceptance
+    # Compute cheap screening likelihoods for delayed acceptance (same chunked pattern).
     if delayed_acceptance
-        for j in 1:N
-            ws_idx = mod1(j, n_pool)
-            screen_rng = Random.MersenneTwister(hash((j, UInt64(0xDA), rand(rng, UInt64))))
-            ll_cheap[j] = _solve_and_run_pf(spec, param_names,
-                                              theta_particles[:, j], observables,
-                                              measurement_error, solver, solver_kwargs,
-                                              screen_pool[ws_idx], data, T_obs, screen_rng;
-                                              store_trajectory=false)
+        screen_ranges = _chunk_ranges(N, n_pool)
+        screen_seeds = UInt64[hash((j, UInt64(0xDA), rand(rng, UInt64))) for j in 1:N]
+        Threads.@threads for c in eachindex(screen_ranges)
+            ws = screen_pool[c]
+            for j in screen_ranges[c]
+                screen_rng = Random.MersenneTwister(screen_seeds[j])
+                ll_cheap[j] = _solve_and_run_pf(spec, param_names,
+                                                  Vector{T}(theta_particles[:, j]), observables,
+                                                  measurement_error, solver, solver_kwargs,
+                                                  ws, data, T_obs, screen_rng;
+                                                  store_trajectory=false)
+            end
         end
     end
 
