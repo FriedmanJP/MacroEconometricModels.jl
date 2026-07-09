@@ -724,6 +724,14 @@ using Random
         @test all(0 .<= F_logistic .<= 1)
         @test MacroEconometricModels.logistic_transition(c, gamma, c) ≈ 0.5  # At threshold, F = 0.5
 
+        # T101 #200: F is INCREASING in z (Auerbach–Gorodnichenko convention) — high states
+        # map to expansion (F → 1), low states to recession (F → 0).
+        @test MacroEconometricModels.logistic_transition([10.0], gamma, c)[1] > 0.99
+        @test MacroEconometricModels.logistic_transition([-10.0], gamma, c)[1] < 0.01
+        @test MacroEconometricModels.logistic_transition(5.0, gamma, c) >
+              MacroEconometricModels.logistic_transition(-5.0, gamma, c)
+        @test issorted(MacroEconometricModels.logistic_transition(sort(z), gamma, c))
+
         # Exponential transition
         F_exp = MacroEconometricModels.exponential_transition(z, gamma, c)
         @test all(0 .<= F_exp .<= 1)
@@ -733,6 +741,29 @@ using Random
         F_ind = MacroEconometricModels.indicator_transition(z, c)
         @test all(F_ind .== 0.0 .|| F_ind .== 1.0)
         @test sum(F_ind) == sum(z .>= c)
+    end
+
+    @testset "State-Dependent LP — regime label orientation (T101 #200)" begin
+        # With F increasing in z, regime=:expansion must return the HIGH-state response.
+        # Build a persistent state with a strongly regime-dependent persistence: expansion
+        # (high z) is persistent (ρ≈0.8), recession (low z) is weak (ρ≈0.1). The expansion
+        # IRF must then have the larger cumulative response.
+        Random.seed!(9090)
+        T_lab = 400
+        z_lab = zeros(T_lab)
+        for t in 2:T_lab
+            z_lab[t] = 0.9 * z_lab[t-1] + randn()
+        end
+        Y_lab = zeros(T_lab, 1)
+        for t in 2:T_lab
+            F = 1 / (1 + exp(-3.0 * z_lab[t-1]))
+            rho = F * 0.8 + (1 - F) * 0.1
+            Y_lab[t, 1] = rho * Y_lab[t-1, 1] + randn()
+        end
+        m_lab = estimate_state_lp(Y_lab, 1, z_lab, 6; gamma=3.0, threshold=0.0, lags=1)
+        irf_e = state_irf(m_lab; regime=:expansion)
+        irf_r = state_irf(m_lab; regime=:recession)
+        @test sum(irf_e.values) > sum(irf_r.values)
     end
 
     @testset "State Transition Parameter Estimation" begin

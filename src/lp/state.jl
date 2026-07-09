@@ -13,13 +13,16 @@ using LinearAlgebra, Statistics, Distributions
 """
     logistic_transition(z::AbstractVector{T}, gamma::T, c::T) -> Vector{T}
 
-Logistic transition function: F(z) = exp(-γ(z - c)) / (1 + exp(-γ(z - c)))
+Logistic transition function, increasing in `z` (Auerbach–Gorodnichenko convention):
+F(z) = 1 / (1 + exp(-γ(z - c))). F → 1 for high states (expansion), F → 0 for low states
+(recession), and F(c) = 0.5. The F-weighted regressor block is therefore the expansion
+regime and the (1 - F)-weighted block the recession regime.
 """
 logistic_transition(z::AbstractVector{T}, gamma::T, c::T) where {T<:AbstractFloat} =
-    @. exp(-gamma * (z - c)) / (1 + exp(-gamma * (z - c)))
+    @. one(T) / (one(T) + exp(-gamma * (z - c)))
 
 logistic_transition(z::T, gamma::T, c::T) where {T<:AbstractFloat} =
-    exp(-gamma * (z - c)) / (1 + exp(-gamma * (z - c)))
+    one(T) / (one(T) + exp(-gamma * (z - c)))
 
 """
     exponential_transition(z::AbstractVector{T}, gamma::T, c::T) -> Vector{T}

@@ -383,20 +383,20 @@ y_{t+h} = F(z_t) \left[ \alpha_E + \beta_E \, x_t + \gamma_E' \, w_t \right] + (
 where:
 - ``F(z_t)`` is the logistic smooth transition function
 - ``z_t`` is the state variable (e.g., moving average of GDP growth)
-- ``\beta_E`` is the expansion regime impulse response (``F \to 0``)
-- ``\beta_R`` is the recession regime impulse response (``F \to 1``)
+- ``\beta_E`` is the expansion regime impulse response (``F \to 1``)
+- ``\beta_R`` is the recession regime impulse response (``F \to 0``)
 
 ### Logistic Transition Function
 
 ```math
-F(z_t) = \frac{\exp(-\gamma(z_t - c))}{1 + \exp(-\gamma(z_t - c))}
+F(z_t) = \frac{1}{1 + \exp(-\gamma(z_t - c))}
 ```
 
 where:
 - ``\gamma > 0`` controls the transition speed (higher = sharper regime switching)
 - ``c`` is the threshold parameter (often 0 for standardized ``z_t``)
 
-The function satisfies ``F(z) \to 1`` as ``z \to -\infty`` (deep recession), ``F(z) \to 0`` as ``z \to +\infty`` (strong expansion), and ``F(c) = 0.5`` (neutral state).
+The function satisfies ``F(z) \to 0`` as ``z \to -\infty`` (deep recession), ``F(z) \to 1`` as ``z \to +\infty`` (strong expansion), and ``F(c) = 0.5`` (neutral state).
 
 ### Regime Difference Test
 
