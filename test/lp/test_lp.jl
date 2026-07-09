@@ -304,6 +304,31 @@ using Random
         @test dr_model isa PropensityLPModel
     end
 
+    @testset "Doubly-robust LP applies HAC to overlapping influence functions (T102 #201)" begin
+        # DR-LP influence functions are MA(h)-correlated across overlapping horizon windows, so
+        # the old iid std(psi)/sqrt(T_h) understated the SE and ignored cov_type entirely. With
+        # a persistent outcome the influence functions are positively autocorrelated, so the
+        # Newey-West HAC SE must exceed the near-iid White SE at some horizons — a gap that was
+        # exactly zero in the buggy code (both cov_types gave the identical iid SE).
+        rng = Random.MersenneTwister(77)
+        T_p, H_p = 400, 6
+        Xp = randn(rng, T_p, 2)
+        latent = 0.4 .* Xp[:, 1] .+ 0.3 .* Xp[:, 2]
+        Dp = rand(rng, T_p) .< (1.0 ./ (1.0 .+ exp.(-latent)))
+        Yp = zeros(T_p, 1)
+        for t in 2:T_p
+            Yp[t, 1] = 0.8 * Yp[t-1, 1] + 0.5 * Xp[t, 1] + Dp[t] * 1.0 + randn(rng)
+        end
+        m_nw = doubly_robust_lp(Yp, Dp, Xp, H_p; lags=2, cov_type=:newey_west)
+        m_wh = doubly_robust_lp(Yp, Dp, Xp, H_p; lags=2, cov_type=:white)
+        @test all(isfinite, m_nw.ate_se)
+        @test all(m_nw.ate_se .>= 0)
+        # The SE now depends on cov_type via the HAC path; pre-fix both cov_types produced the
+        # identical iid std(psi)/sqrt(T_h), so this difference was exactly zero.
+        reldiff = maximum(abs.(m_nw.ate_se[:, 1] .- m_wh.ate_se[:, 1]) ./ (m_wh.ate_se[:, 1] .+ eps()))
+        @test reldiff > 0.03
+    end
+
     @testset "IPW vs Doubly Robust LP produce different ATEs" begin
         # DGP with confounding where outcome regression adjustment matters:
         # - Propensity model is slightly misspecified (nonlinear treatment assignment)
