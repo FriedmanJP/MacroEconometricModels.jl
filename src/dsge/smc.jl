@@ -77,12 +77,15 @@ Closure `(θ::Vector{T}) → T` returning log-likelihood or `-Inf`.
 function _build_likelihood_fn(spec::DSGESpec{T}, param_names::Vector{Symbol},
                                data::AbstractMatrix, observables::Vector{Symbol},
                                measurement_error, solver::Symbol,
-                               solver_kwargs::NamedTuple) where {T<:AbstractFloat}
+                               solver_kwargs::NamedTuple;
+                               failures::Threads.Atomic{Int}=Threads.Atomic{Int}(0),
+                               evals::Threads.Atomic{Int}=Threads.Atomic{Int}(0)) where {T<:AbstractFloat}
     data = Matrix{T}(data)  # convert Adjoint/SubArray to concrete Matrix
     # Pre-build observation equation from spec (indices don't change across θ)
     # But steady state changes, so we rebuild each time
 
     function ll_fn(theta::Vector{T})
+        Threads.atomic_add!(evals, 1)
         try
             # Update parameter values
             new_pv = copy(spec.param_values)
@@ -99,11 +102,13 @@ function _build_likelihood_fn(spec::DSGESpec{T}, param_names::Vector{Symbol},
             # Solve model
             sol = solve(new_spec; method=solver, solver_kwargs...)
             if !is_determined(sol)
+                Threads.atomic_add!(failures, 1)
                 return T(-Inf)
             end
 
             # Guard: Kalman filter only valid for linear (1st-order) solutions
             if sol isa PerturbationSolution && sol.order >= 2
+                Threads.atomic_add!(failures, 1)
                 return T(-Inf)  # use :smc2 method for nonlinear models
             end
 
@@ -119,9 +124,19 @@ function _build_likelihood_fn(spec::DSGESpec{T}, param_names::Vector{Symbol},
             # Evaluate Kalman log-likelihood
             ll = _kalman_loglikelihood(ss, data)
 
-            return isfinite(ll) ? ll : T(-Inf)
-        catch
-            return T(-Inf)
+            if isfinite(ll)
+                return ll
+            else
+                Threads.atomic_add!(failures, 1)
+                return T(-Inf)
+            end
+        catch e
+            # Only benign per-θ numeric failures become -Inf (counted); bugs propagate.
+            if _benign_solve_error(e)
+                Threads.atomic_add!(failures, 1)
+                return T(-Inf)
+            end
+            rethrow(e)
         end
     end
 
@@ -520,9 +535,12 @@ function _smc_sample(spec::DSGESpec{T}, data::AbstractMatrix,
     n_params = length(param_names)
     N = n_smc
 
-    # Build likelihood function
+    # Build likelihood function (tracking failed/total likelihood evaluations)
+    lik_failures = Threads.Atomic{Int}(0)
+    lik_evals = Threads.Atomic{Int}(0)
     ll_fn = _build_likelihood_fn(spec, param_names, data, observables,
-                                  measurement_error, solver, solver_kwargs)
+                                  measurement_error, solver, solver_kwargs;
+                                  failures=lik_failures, evals=lik_evals)
 
     # Initialize particles from prior
     theta_particles = zeros(T, n_params, N)
@@ -657,6 +675,8 @@ function _smc_sample(spec::DSGESpec{T}, data::AbstractMatrix,
     # Terminal resample so the stored draws are equal-weighted (E-09 / #132).
     _terminal_resample!(state, N, rng)
 
+    state.n_lik_failures = lik_failures[]
+    state.n_lik_evals = lik_evals[]
     return state
 end
 
@@ -722,9 +742,12 @@ function _mh_sample(spec::DSGESpec{T}, data::AbstractMatrix,
     data = Matrix{T}(data)  # convert Adjoint/SubArray to concrete Matrix
     n_params = length(param_names)
 
-    # Build likelihood function
+    # Build likelihood function (tracking failed/total likelihood evaluations)
+    lik_failures = Threads.Atomic{Int}(0)
+    lik_evals = Threads.Atomic{Int}(0)
     ll_fn = _build_likelihood_fn(spec, param_names, data, observables,
-                                  measurement_error, solver, solver_kwargs)
+                                  measurement_error, solver, solver_kwargs;
+                                  failures=lik_failures, evals=lik_evals)
 
     # Initialize
     theta_current = copy(theta0)
@@ -856,7 +879,8 @@ function _mh_sample(spec::DSGESpec{T}, data::AbstractMatrix,
                    proposal_L_at_burnin = proposal_L_at_burnin,
                    scale_at_burnin = scale_at_burnin,
                    window_acc_history = window_acc_history,
-                   cum_acc_history = cum_acc_history)
+                   cum_acc_history = cum_acc_history,
+                   n_failed = lik_failures[], n_evals = lik_evals[])
 
     return draws, log_posterior, acceptance_rate, diagnostics
 end
@@ -970,8 +994,11 @@ function _solve_and_run_pf(spec::DSGESpec{T}, param_names::Vector{Symbol},
                             rng::AbstractRNG;
                             use_csmc::Bool=false,
                             store_trajectory::Bool=false,
-                            return_solution::Bool=false) where {T<:AbstractFloat}
+                            return_solution::Bool=false,
+                            failures::Threads.Atomic{Int}=Threads.Atomic{Int}(0),
+                            evals::Threads.Atomic{Int}=Threads.Atomic{Int}(0)) where {T<:AbstractFloat}
     fail = return_solution ? (T(-Inf), nothing) : T(-Inf)
+    Threads.atomic_add!(evals, 1)
     try
         # Update parameter values
         new_pv = copy(spec.param_values)
@@ -986,6 +1013,7 @@ function _solve_and_run_pf(spec::DSGESpec{T}, param_names::Vector{Symbol},
         new_spec = compute_steady_state(new_spec)
         sol = solve(new_spec; method=solver, solver_kwargs...)
         if !is_determined(sol)
+            Threads.atomic_add!(failures, 1)
             return fail
         end
 
@@ -1013,10 +1041,17 @@ function _solve_and_run_pf(spec::DSGESpec{T}, param_names::Vector{Symbol},
                                               store_trajectory=store_trajectory, rng=rng)
         end
 
-        ll = isfinite(ll) ? ll : T(-Inf)
+        if !isfinite(ll)
+            Threads.atomic_add!(failures, 1)
+            ll = T(-Inf)
+        end
         return return_solution ? (ll, sol) : ll
-    catch
-        return fail
+    catch e
+        if _benign_solve_error(e)
+            Threads.atomic_add!(failures, 1)
+            return fail
+        end
+        rethrow(e)
     end
 end
 
@@ -1049,7 +1084,9 @@ function _build_pf_likelihood_fn(spec::DSGESpec{T}, param_names::Vector{Symbol},
                                    data::AbstractMatrix, observables::Vector{Symbol},
                                    measurement_error, solver::Symbol,
                                    solver_kwargs::NamedTuple,
-                                   n_particles::Int) where {T<:AbstractFloat}
+                                   n_particles::Int;
+                                   failures::Threads.Atomic{Int}=Threads.Atomic{Int}(0),
+                                   evals::Threads.Atomic{Int}=Threads.Atomic{Int}(0)) where {T<:AbstractFloat}
     data = Matrix{T}(data)
     T_obs = size(data, 2)
 
@@ -1057,7 +1094,8 @@ function _build_pf_likelihood_fn(spec::DSGESpec{T}, param_names::Vector{Symbol},
         return _solve_and_run_pf(spec, param_names, theta, observables,
                                   measurement_error, solver, solver_kwargs,
                                   ws, data, T_obs, rng;
-                                  store_trajectory=true)
+                                  store_trajectory=true,
+                                  failures=failures, evals=evals)
     end
 
     return pf_ll_fn
@@ -1185,9 +1223,12 @@ function _smc2_sample(spec::DSGESpec{T}, data::AbstractMatrix,
         end
     end
 
-    # Build PF likelihood function
+    # Build PF likelihood function (tracking failed/total authoritative likelihood evals)
+    lik_failures = Threads.Atomic{Int}(0)
+    lik_evals = Threads.Atomic{Int}(0)
     pf_ll_fn = _build_pf_likelihood_fn(spec, param_names, data, observables,
-                                        measurement_error, solver, solver_kwargs, N_x)
+                                        measurement_error, solver, solver_kwargs, N_x;
+                                        failures=lik_failures, evals=lik_evals)
 
     # Create workspace pool (one per thread for parallelism)
     n_pool = max(Threads.nthreads(), 1)
@@ -1250,7 +1291,8 @@ function _smc2_sample(spec::DSGESpec{T}, data::AbstractMatrix,
                                               theta_particles[:, j], observables,
                                               measurement_error, solver, solver_kwargs,
                                               pool[ws_idx], data, T_obs, thread_rng;
-                                              store_trajectory=true, return_solution=true)
+                                              store_trajectory=true, return_solution=true,
+                                              failures=lik_failures, evals=lik_evals)
             log_likelihoods[j] = ll_j
             if sol_j isa ProjectionSolution
                 solutions[j] = sol_j
@@ -1447,7 +1489,8 @@ function _smc2_sample(spec::DSGESpec{T}, data::AbstractMatrix,
                         ll_star, sol_star = _solve_and_run_pf(
                             spec, param_names, theta_star, observables, measurement_error,
                             solver, mh_solver_kwargs, ws, data, T_obs, thread_rng;
-                            use_csmc=false, return_solution=true)
+                            use_csmc=false, return_solution=true,
+                            failures=lik_failures, evals=lik_evals)
 
                         if ll_star == T(-Inf)
                             Threads.atomic_add!(total_proposed, 1)
@@ -1473,7 +1516,8 @@ function _smc2_sample(spec::DSGESpec{T}, data::AbstractMatrix,
                         ll_star, sol_star = _solve_and_run_pf(
                             spec, param_names, theta_star, observables, measurement_error,
                             solver, mh_solver_kwargs, ws, data, T_obs, thread_rng;
-                            use_csmc=false, return_solution=true)
+                            use_csmc=false, return_solution=true,
+                            failures=lik_failures, evals=lik_evals)
 
                         if ll_star == T(-Inf)
                             Threads.atomic_add!(total_proposed, 1)
@@ -1541,5 +1585,7 @@ function _smc2_sample(spec::DSGESpec{T}, data::AbstractMatrix,
     # Terminal resample so the stored draws are equal-weighted (E-09 / #132).
     _terminal_resample!(state, N, rng)
 
+    state.n_lik_failures = lik_failures[]
+    state.n_lik_evals = lik_evals[]
     return state
 end

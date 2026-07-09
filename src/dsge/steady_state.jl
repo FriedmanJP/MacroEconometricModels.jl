@@ -313,7 +313,9 @@ function _nlopt_steady_state(spec::DSGESpec{T}, constraints::Vector;
     (min_val, min_x, ret) = NLopt.optimize(opt, y0)
 
     if ret ∉ (:SUCCESS, :FTOL_REACHED, :XTOL_REACHED, :STOPVAL_REACHED)
-        throw(ErrorException(
+        # DSGESolveError (not ErrorException): steady-state non-convergence is a legitimate
+        # per-θ failure that Bayesian likelihood closures catch and count, not a code bug.
+        throw(DSGESolveError(
             "NLopt steady state solver did not converge (return code: $ret). " *
             "Try solver=:ipopt with JuMP + Ipopt for large-scale NLP."))
     end

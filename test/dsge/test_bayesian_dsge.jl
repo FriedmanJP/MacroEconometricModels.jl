@@ -1023,6 +1023,86 @@ end
     end
 end
 
+@testset "Likelihood closure: narrow catch + failure counting (T041)" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:gensys)
+    good = simulate(sol, 100; rng=Random.MersenneTwister(42))'   # 1×100
+
+    # (a) A genuine bug (dimension mismatch: 2-row data vs 1 observable) PROPAGATES
+    #     rather than being swallowed to -Inf.
+    bad = vcat(good, good)   # 2×100
+    ll_fn_bad = MacroEconometricModels._build_likelihood_fn(spec, [:ρ], bad,
+        [:y], nothing, :gensys, NamedTuple())
+    @test_throws DimensionMismatch ll_fn_bad([0.5])
+
+    # (b) A legitimate indeterminacy is caught, returns -Inf, and is COUNTED.
+    fails = Threads.Atomic{Int}(0); evals = Threads.Atomic{Int}(0)
+    ll_fn = MacroEconometricModels._build_likelihood_fn(spec, [:ρ], good,
+        [:y], nothing, :gensys, NamedTuple(); failures=fails, evals=evals)
+    @test ll_fn([1.5]) == -Inf          # explosive ⇒ !is_determined
+    @test fails[] == 1 && evals[] == 1
+    @test isfinite(ll_fn([0.6]))
+    @test fails[] == 1 && evals[] == 2
+    end
+end
+
+@testset "SMC records and surfaces the likelihood failure count (T041)" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:gensys)
+    data = simulate(sol, 200; rng=Random.MersenneTwister(7))'
+    # Uniform(0,1.4) prior ⇒ ~29% of particles are explosive (ρ>1) ⇒ many failed evals.
+    priors = Dict(:ρ => Uniform(0.0, 1.4))
+    result = estimate_dsge_bayes(spec, data, [0.5];
+        priors=priors, method=:smc, observables=[:y],
+        n_smc=200, n_mh_steps=1, rng=Random.MersenneTwister(123))
+    @test result.n_lik_evals > 0
+    @test result.n_failed_draws > 0
+    @test occursin("Failed lik. evals", sprint(show, result))
+    end
+end
+
+@testset "posterior_predictive drops failed draws, no zero-fill (T041)" begin
+    # NOTE: not wrapped in _suppress_warnings — @test_warn must see the "dropped" @warn.
+    spec = _suppress_warnings() do
+        s = @dsge begin
+            parameters: ρ = 0.5, σ = 0.5
+            endogenous: y
+            exogenous: ε
+            y[t] = ρ * y[t-1] + σ * ε[t]
+            steady_state = [0.0]
+        end
+        compute_steady_state(s)
+    end
+    sol, ss = MacroEconometricModels._build_solution_at_theta(spec, [:ρ], [0.5],
+        [:y], nothing, :gensys, NamedTuple())
+    # Half the draws are explosive (ρ=1.5, indeterminate ⇒ dropped), half valid (ρ=0.5).
+    n = 40
+    td = reshape(vcat(fill(0.5, 20), fill(1.5, 20)), 40, 1)
+    prior = MacroEconometricModels.DSGEPrior{Float64}([:ρ], [Uniform(0.0, 2.0)], [0.0], [2.0])
+    post = BayesianDSGE{Float64}(td, zeros(n), [:ρ], prior, 0.0, :smc, 0.5,
+        Float64[], Float64[], spec, sol, ss)   # 12-arg compat ctor
+    Y = @test_warn r"dropped" posterior_predictive(post, 30; T_periods=25,
+        rng=Random.MersenneTwister(9))
+    @test size(Y, 1) < 30                                    # dropped, not zero-filled to 30
+    @test all(any(!iszero, Y[s, :, :]) for s in 1:size(Y, 1))   # no zero path survived
+end
+
 @testset "SMC with Kalman: AR(1) recovery" begin
     _suppress_warnings() do
     rng = Random.MersenneTwister(42)

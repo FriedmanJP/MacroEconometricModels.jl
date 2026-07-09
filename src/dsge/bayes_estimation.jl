@@ -281,7 +281,8 @@ function estimate_dsge_bayes(spec::DSGESpec{T}, data::AbstractMatrix,
         return _mh_to_bayesian_dsge(draws, log_posterior, acceptance_rate,
                                      prior, param_names, spec,
                                      observables, measurement_error,
-                                     solver, solver_kwargs)
+                                     solver, solver_kwargs,
+                                     _mh_diag.n_failed, _mh_diag.n_evals)
     end
 end
 
@@ -332,7 +333,8 @@ function _smc_state_to_bayesian_dsge(state::SMCState{T}, prior::DSGEPrior{T},
         theta_draws, log_posterior, param_names, prior,
         state.log_marginal_likelihood, method_sym, acceptance_rate,
         state.ess_history, state.phi_schedule,
-        spec, sol, ss
+        spec, sol, ss,
+        state.n_lik_failures, state.n_lik_evals
     )
 end
 
@@ -436,7 +438,9 @@ function _mh_to_bayesian_dsge(draws::Matrix{T}, log_posterior::Vector{T},
                                 observables::Vector{Symbol},
                                 measurement_error,
                                 solver::Symbol,
-                                solver_kwargs::NamedTuple) where {T<:AbstractFloat}
+                                solver_kwargs::NamedTuple,
+                                n_failed::Int=0,
+                                n_evals::Int=0) where {T<:AbstractFloat}
     # Posterior mean from draws
     theta_mean = vec(mean(draws; dims=1))
 
@@ -455,7 +459,8 @@ function _mh_to_bayesian_dsge(draws::Matrix{T}, log_posterior::Vector{T},
         draws, log_posterior, param_names, prior,
         log_ml, :rwmh, acceptance_rate,
         T[], T[],  # no ESS history or phi schedule for MH
-        spec, sol, ss
+        spec, sol, ss,
+        n_failed, n_evals
     )
 end
 
@@ -652,7 +657,9 @@ function posterior_predictive(result::BayesianDSGE{T}, n_sim::Int;
     # Determine number of variables from spec
     n_vars = spec.augmented ? length(spec.original_endog) : spec.n_endog
 
-    paths = zeros(T, n_sim, T_periods, n_vars)
+    # Collect one path per SUCCESSFUL draw; failed draws are DROPPED (not zero-filled,
+    # which would bias the predictive distribution toward zero).
+    paths_list = Vector{Matrix{T}}()
 
     for s in 1:n_sim
         # Randomly select a posterior draw
@@ -671,14 +678,24 @@ function posterior_predictive(result::BayesianDSGE{T}, n_sim::Int;
             new_spec = compute_steady_state(new_spec)
             sol = solve(new_spec; method=:gensys)
             if is_determined(sol)
-                sim = simulate(sol, T_periods; rng=rng)
-                # simulate returns T_periods × n_vars
-                paths[s, :, :] = sim
+                sim = simulate(sol, T_periods; rng=rng)  # T_periods × n_vars
+                push!(paths_list, Matrix{T}(sim))
             end
-        catch
-            # Leave as zeros for failed simulations
+        catch e
+            _benign_solve_error(e) || rethrow(e)
             continue
         end
+    end
+
+    n_valid = length(paths_list)
+    n_dropped = n_sim - n_valid
+    n_dropped > 0 && @warn "posterior_predictive: dropped $(n_dropped)/$(n_sim) draws " *
+        "($(round(100*n_dropped/n_sim; digits=1))%) that failed to solve."
+
+    # Stack into (n_valid × T_periods × n_vars); first dim is successful draws only.
+    paths = Array{T,3}(undef, n_valid, T_periods, n_vars)
+    for s in 1:n_valid
+        paths[s, :, :] = paths_list[s]
     end
 
     return paths
@@ -741,12 +758,16 @@ function irf(result::BayesianDSGE{T}, horizon::Int;
                 irf_i = irf(sol, horizon)
                 push!(all_irfs, irf_i.values)
             end
-        catch
+        catch e
+            _benign_solve_error(e) || rethrow(e)
             continue
         end
     end
 
     n_valid = length(all_irfs)
+    n_skipped = n_sim - n_valid
+    n_skipped > 0 && @warn "Bayesian IRF: skipped $(n_skipped)/$(n_sim) posterior draws " *
+        "($(round(100*n_skipped/n_sim; digits=1))%) that failed to solve; bands conditioned on $(n_valid) draws."
     n_valid == 0 && error("All posterior draws failed to produce valid IRFs")
 
     # Stack into (n_valid x H x n_vars x n_shocks) array
@@ -815,12 +836,16 @@ function fevd(result::BayesianDSGE{T}, horizon::Int;
                 fevd_i = fevd(sol, horizon)
                 push!(all_fevds, fevd_i.proportions)
             end
-        catch
+        catch e
+            _benign_solve_error(e) || rethrow(e)
             continue
         end
     end
 
     n_valid = length(all_fevds)
+    n_skipped = n_sim - n_valid
+    n_skipped > 0 && @warn "Bayesian FEVD: skipped $(n_skipped)/$(n_sim) posterior draws " *
+        "($(round(100*n_skipped/n_sim; digits=1))%) that failed to solve; bands conditioned on $(n_valid) draws."
     n_valid == 0 && error("All posterior draws failed to produce valid FEVDs")
 
     # Stack: FEVD proportions are (n_vars x n_shocks x horizon)
@@ -889,12 +914,16 @@ function simulate(result::BayesianDSGE{T}, T_periods::Int;
                 sim = simulate(sol, T_periods; rng=rng)
                 push!(all_paths_list, sim)
             end
-        catch
+        catch e
+            _benign_solve_error(e) || rethrow(e)
             continue
         end
     end
 
     n_valid = length(all_paths_list)
+    n_skipped = n_sim - n_valid
+    n_skipped > 0 && @warn "Bayesian simulate: skipped $(n_skipped)/$(n_sim) posterior draws " *
+        "($(round(100*n_skipped/n_sim; digits=1))%) that failed to solve; bands conditioned on $(n_valid) draws."
     n_valid == 0 && error("All posterior draws failed to produce valid simulations")
 
     # Stack into (n_valid x T_periods x n_vars)
@@ -925,6 +954,8 @@ function Base.show(io::IO, result::BayesianDSGE{T}) where {T}
     ps = posterior_summary(result)
 
     # Summary table
+    fail_share = result.n_lik_evals > 0 ?
+        round(100 * result.n_failed_draws / result.n_lik_evals; digits=1) : 0.0
     spec_data = Any[
         "Method"                string(result.method);
         "Parameters"            n_params;
@@ -932,6 +963,8 @@ function Base.show(io::IO, result::BayesianDSGE{T}) where {T}
         "Log marginal lik."    round(result.log_marginal_likelihood; digits=4);
         "Acceptance rate"      round(result.acceptance_rate; digits=4);
         "Tempering stages"     length(result.phi_schedule);
+        "Failed lik. evals"    string(result.n_failed_draws, " / ", result.n_lik_evals,
+                                        " (", fail_share, "%)");
     ]
     _pretty_table(io, spec_data;
         title="Bayesian DSGE Estimation",

@@ -182,10 +182,13 @@ Returns `-Inf` on any failure (non-convergence, singular matrices, etc.).
 function _build_ha_likelihood_fn(spec::HADSGESpec{T}, param_names::Vector{Symbol},
                                   data::AbstractMatrix, observables::Vector{Symbol},
                                   measurement_error, ha_method::Symbol,
-                                  ha_kwargs::NamedTuple) where {T<:AbstractFloat}
+                                  ha_kwargs::NamedTuple;
+                                  failures::Threads.Atomic{Int}=Threads.Atomic{Int}(0),
+                                  evals::Threads.Atomic{Int}=Threads.Atomic{Int}(0)) where {T<:AbstractFloat}
     data_mat = Matrix{T}(data)
 
     function ll_fn(theta::Vector{T})
+        Threads.atomic_add!(evals, 1)
         try
             # Update parameters in both aggregate_spec and het_params
             new_spec = _update_ha_params(spec, param_names, theta)
@@ -195,15 +198,18 @@ function _build_ha_likelihood_fn(spec::HADSGESpec{T}, param_names::Vector{Symbol
 
             # Validate solution
             if !(sol isa HADSGESolution)
+                Threads.atomic_add!(failures, 1)
                 return T(-Inf)
             end
             if !is_determined(sol)
+                Threads.atomic_add!(failures, 1)
                 return T(-Inf)
             end
 
             # Extract the reduced linear system
             linear_sol = sol.linear_solution
             if linear_sol === nothing
+                Threads.atomic_add!(failures, 1)
                 return T(-Inf)
             end
 
@@ -213,9 +219,18 @@ function _build_ha_likelihood_fn(spec::HADSGESpec{T}, param_names::Vector{Symbol
 
             # Evaluate Kalman log-likelihood
             ll = _kalman_loglikelihood(ss, data_mat)
-            return isfinite(ll) ? ll : T(-Inf)
-        catch
-            return T(-Inf)
+            if isfinite(ll)
+                return ll
+            else
+                Threads.atomic_add!(failures, 1)
+                return T(-Inf)
+            end
+        catch e
+            if _benign_solve_error(e)
+                Threads.atomic_add!(failures, 1)
+                return T(-Inf)
+            end
+            rethrow(e)
         end
     end
 
@@ -312,9 +327,12 @@ function estimate_dsge_bayes(spec::HADSGESpec{T}, data::AbstractMatrix,
     n_params = length(param_names)
     theta0_sorted = _resolve_theta0(theta0, param_names, T)
 
-    # ── 5. Build HA likelihood function ──────────────────────────────────
+    # ── 5. Build HA likelihood function (tracking failed/total likelihood evals) ──
+    lik_failures = Threads.Atomic{Int}(0)
+    lik_evals = Threads.Atomic{Int}(0)
     ll_fn = _build_ha_likelihood_fn(spec, param_names, data_mat, observables,
-                                     measurement_error, ha_method, ha_kwargs)
+                                     measurement_error, ha_method, ha_kwargs;
+                                     failures=lik_failures, evals=lik_evals)
 
     # ── 6. Random-Walk Metropolis-Hastings ───────────────────────────────
     # Initialize
@@ -456,7 +474,8 @@ function estimate_dsge_bayes(spec::HADSGESpec{T}, data::AbstractMatrix,
             post_draws, post_log_posterior, param_names, prior,
             log_ml, :rwmh, acceptance_rate,
             T[], T[],  # no ESS history or phi schedule for MH
-            linear_sol.spec, linear_sol, ss_result
+            linear_sol.spec, linear_sol, ss_result,
+            lik_failures[], lik_evals[]
         )
     else
         # KrusellSmithSolution or other — build a minimal DSGESolution
