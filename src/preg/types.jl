@@ -105,9 +105,12 @@ Panel instrumental-variables regression model (FE-IV, RE-IV, FD-IV, Hausman-Tayl
 - `sigma_u::T` — between-group standard deviation
 - `sigma_e::T` — within-group standard deviation
 - `rho::T` — fraction of variance due to u_i
-- `first_stage_f::T` — first-stage F-statistic
+- `first_stage_f::T` — minimum excluded-instrument partial first-stage F
 - `sargan_stat::Union{Nothing,T}` — Sargan overidentification statistic
 - `sargan_pval::Union{Nothing,T}` — Sargan test p-value
+- `cragg_donald_f::Union{Nothing,T}` — Cragg-Donald F (nothing on transformed panel sets)
+- `kleibergen_paap_f::Union{Nothing,T}` — Kleibergen-Paap rk Wald F (nothing on transformed sets)
+- `stock_yogo_10pct::Union{Nothing,T}` — Stock-Yogo 10% critical value (nothing on transformed sets)
 - `varnames::Vector{String}` — coefficient names
 - `endog_names::Vector{String}` — endogenous variable names
 - `instrument_names::Vector{String}` — instrument names
@@ -138,6 +141,9 @@ struct PanelIVModel{T<:AbstractFloat} <: StatsAPI.RegressionModel
     first_stage_f::T
     sargan_stat::Union{Nothing,T}
     sargan_pval::Union{Nothing,T}
+    cragg_donald_f::Union{Nothing,T}
+    kleibergen_paap_f::Union{Nothing,T}
+    stock_yogo_10pct::Union{Nothing,T}
     varnames::Vector{String}
     endog_names::Vector{String}
     instrument_names::Vector{String}
@@ -452,6 +458,12 @@ function Base.show(io::IO, m::PanelIVModel{T}) where {T}
             "Sargan p-val" _format_pvalue(m.sargan_pval)
         ])
     end
+    m.cragg_donald_f !== nothing && (spec = vcat(spec, Any[
+        "Cragg-Donald F" _fmt(m.cragg_donald_f; digits=2)]))
+    m.kleibergen_paap_f !== nothing && (spec = vcat(spec, Any[
+        "Kleibergen-Paap F" _fmt(m.kleibergen_paap_f; digits=2)]))
+    m.stock_yogo_10pct !== nothing && (spec = vcat(spec, Any[
+        "Stock-Yogo 10%" _fmt(m.stock_yogo_10pct; digits=2)]))
 
     _pretty_table(io, spec;
         title = "Panel IV Regression — $method_str",

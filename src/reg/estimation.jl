@@ -180,7 +180,8 @@ function estimate_reg(y::AbstractVector{T}, X::AbstractMatrix{T};
         loglik, aic_val, bic_val,
         vn, method, cov_type, w,
         nothing, nothing,     # Z, endogenous (not IV)
-        nothing, nothing, nothing  # first_stage_f, sargan_stat, sargan_pval
+        nothing, nothing, nothing,  # first_stage_f, sargan_stat, sargan_pval
+        nothing, nothing, nothing   # cragg_donald_f, kleibergen_paap_f, stock_yogo_10pct
     )
 end
 

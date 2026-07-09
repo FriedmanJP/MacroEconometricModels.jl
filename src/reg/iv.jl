@@ -16,51 +16,141 @@ using LinearAlgebra, Statistics, Distributions
 # =============================================================================
 
 """
+    _partial_out(A, W) -> residuals of A on W
+
+Residualize each column of `A` on the included-exogenous matrix `W` (M_W·A). Returns a
+copy of `A` when `W` has no columns.
+"""
+function _partial_out(A::AbstractMatrix{T}, W::AbstractMatrix{T}) where {T<:AbstractFloat}
+    size(W, 2) == 0 && return Matrix{T}(A)
+    A .- W * (robust_inv(W' * W) * (W' * A))
+end
+_partial_out(a::AbstractVector{T}, W::AbstractMatrix{T}) where {T<:AbstractFloat} =
+    vec(_partial_out(reshape(a, :, 1), W))
+
+"""
     _first_stage_f(X, Z, endogenous) -> T
 
-Compute the minimum first-stage F-statistic across all endogenous regressors.
+Minimum EXCLUDED-instrument partial first-stage F across the endogenous regressors.
 
-For each endogenous variable x_j, regress x_j on Z and compute the F-statistic
-for joint significance of excluded instruments. Reports the minimum across
-all endogenous variables as a diagnostic for weak instruments.
+For each endogenous x_j, partial out the included exogenous W = X[:, non-endogenous] and test
+the joint significance of the excluded instruments:
+    F_j = ((SSR_restricted − SSR_unrestricted) / q) / (SSR_unrestricted / (n − m)),
+with SSR_restricted from x_j ~ W, SSR_unrestricted from x_j ~ Z (all m instruments), and
+q = m − #W = number of excluded instruments. This is the correct weak-instrument diagnostic;
+the previous overall-F (all of Z about the grand mean, q = m) mechanically inflated as the
+included controls W predicted x_j.
 
 # References
-- Stock, J. H. & Yogo, M. (2005). *Identification and Inference for Econometric
-  Models*. Cambridge University Press, ch. 5.
+- Stock, J. H. & Yogo, M. (2005). *Identification and Inference for Econometric Models*, ch. 5.
 """
 function _first_stage_f(X::Matrix{T}, Z::Matrix{T},
                         endogenous::Vector{Int}) where {T<:AbstractFloat}
     n, m = size(Z)
-    k_endog = length(endogenous)
-    k_endog == 0 && return T(Inf)
+    k = size(X, 2)
+    length(endogenous) == 0 && return T(Inf)
 
-    f_min = T(Inf)
+    incl = setdiff(1:k, endogenous)
+    W = X[:, incl]
+    n_incl = length(incl)
+    q = m - n_incl                 # number of EXCLUDED instruments
+    df2 = n - m
+    (q <= 0 || df2 <= 0) && return T(NaN)
 
     ZtZinv = robust_inv(Z' * Z)
-
+    f_min = T(Inf)
     for j in endogenous
         x_j = X[:, j]
-        # Regress x_j on Z
-        gamma = ZtZinv * (Z' * x_j)
-        resid_j = x_j .- Z * gamma
-        ssr_j = dot(resid_j, resid_j)
+        # Unrestricted: x_j on ALL instruments Z
+        resid_u = x_j .- Z * (ZtZinv * (Z' * x_j))
+        ssr_u = dot(resid_u, resid_u)
+        # Restricted: x_j on the included exogenous W only
+        resid_r = n_incl == 0 ? x_j : _partial_out(x_j, W)
+        ssr_r = dot(resid_r, resid_r)
 
-        # Total sum of squares
-        x_bar = mean(x_j)
-        tss_j = sum((xi - x_bar)^2 for xi in x_j)
-        tss_j = max(tss_j, T(1e-300))
-
-        # F-statistic: ((TSS - SSR) / q) / (SSR / (n - m))
-        # where q = m - (k_exog) but simplified: use all Z columns
-        q = m
-        df2 = n - m
-        df2 > 0 || continue
-
-        f_j = ((tss_j - ssr_j) / T(q)) / (ssr_j / T(df2))
+        f_j = ((ssr_r - ssr_u) / T(q)) / (ssr_u / T(df2))
         f_min = min(f_min, f_j)
     end
-
     f_min
+end
+
+"""
+    _cragg_donald_f(X, Z, endogenous) -> T
+
+Cragg-Donald (1993) weak-instrument F: the minimum generalized eigenvalue of the concentration
+matrix, scaled by the number of excluded instruments q. Generalizes the partial first-stage F
+to multiple endogenous regressors under homoskedasticity; for a single endogenous regressor it
+equals `_first_stage_f`. Returns `NaN` if under-identified.
+"""
+function _cragg_donald_f(X::Matrix{T}, Z::Matrix{T},
+                         endogenous::Vector{Int}) where {T<:AbstractFloat}
+    n, m = size(Z); k = size(X, 2); k_endog = length(endogenous)
+    k_endog == 0 && return T(NaN)
+    incl = setdiff(1:k, endogenous)
+    W = X[:, incl]; Xen = X[:, endogenous]
+    q = m - length(incl); df2 = n - m
+    (q < k_endog || df2 <= 0) && return T(NaN)
+
+    Xt = _partial_out(Xen, W)                       # M_W · X_endog
+    Zt = _partial_out(Z, W)                         # M_W · Z (rank q, so Zt'Zt is rank-deficient)
+    PztXt = Zt * (robust_inv(Zt' * Zt; silent=true) * (Zt' * Xt))
+    ESS = Matrix{T}(Xt' * PztXt)                     # explained SS (= SSR_r − SSR_u)
+    Xhat = Z * (robust_inv(Z' * Z) * (Z' * Xen))
+    Vr = Xen .- Xhat
+    Sigma = Matrix{T}((Vr' * Vr) ./ T(df2))          # first-stage residual covariance
+    lambda = eigvals(Symmetric(ESS), Symmetric(Sigma))
+    minimum(real.(lambda)) / T(q)
+end
+
+"""
+    _kleibergen_paap_f(X, Z, endogenous; cov_type=:hc1) -> T
+
+Kleibergen-Paap (2006) rk Wald F: the heteroskedasticity-robust weak-instrument F. For a single
+endogenous regressor this is exactly the HC-robust first-stage F (reduces to Cragg-Donald under
+homoskedasticity); with several endogenous regressors the per-regressor minimum robust F is
+reported. Returns `NaN` if under-identified.
+"""
+function _kleibergen_paap_f(X::Matrix{T}, Z::Matrix{T}, endogenous::Vector{Int};
+                            cov_type::Symbol=:hc1) where {T<:AbstractFloat}
+    n, m = size(Z); k = size(X, 2)
+    length(endogenous) == 0 && return T(NaN)
+    incl = setdiff(1:k, endogenous)
+    W = X[:, incl]
+    q = m - length(incl); df2 = n - m
+    (q <= 0 || df2 <= 0) && return T(NaN)
+
+    Zt = _partial_out(Z, W)
+    U, S, _ = svd(Zt)
+    tol = maximum(S) * n * eps(T)
+    r = count(>(tol), S)
+    r == 0 && return T(NaN)
+    Zb = Matrix{T}(U[:, 1:r])                        # orthonormal basis of excluded space
+    f_min = T(Inf)
+    for j in endogenous
+        xt = _partial_out(X[:, j], W)                # M_W · x_j
+        gamma = Zb' * xt                             # Zb'Zb = I ⇒ OLS coefs
+        ehat = xt .- Zb * gamma
+        Vg = zeros(T, r, r)                           # robust cov: Σ_i Zb_i ê_i² Zb_iᵀ
+        @inbounds for i in 1:n
+            w2 = ehat[i]^2
+            for a in 1:r, b in 1:r
+                Vg[a, b] += Zb[i, a] * Zb[i, b] * w2
+            end
+        end
+        cov_type == :hc1 && (Vg .*= T(n) / T(n - m))
+        wald = dot(gamma, robust_inv(Symmetric(Vg)) * gamma)
+        f_min = min(f_min, wald / T(r))
+    end
+    f_min
+end
+
+# Stock & Yogo (2005) Table 5.2 — 10% maximal-size 2SLS critical values, one endogenous
+# regressor, by number of excluded instruments q. Returns `nothing` outside the tabulated range.
+const _STOCK_YOGO_10PCT_1ENDOG = Dict(1 => 16.38, 2 => 19.93, 3 => 22.30, 4 => 24.58, 5 => 26.87)
+
+function _stock_yogo_cv(n_endog::Int, q::Int)
+    n_endog == 1 || return nothing
+    get(_STOCK_YOGO_10PCT_1ENDOG, q, nothing)
 end
 
 # =============================================================================
@@ -233,8 +323,16 @@ function estimate_iv(y::AbstractVector{T}, X::AbstractMatrix{T},
         vcov_mat = _reg_vcov(X_hat, resid, cov_type, XhXinv)
     end
 
-    # ---- Diagnostics: first-stage F ----
-    fs_f = _first_stage_f(Xm, Zm, endogenous)
+    # ---- Weak-instrument diagnostics ----
+    fs_f = _first_stage_f(Xm, Zm, endogenous)                       # excluded-instrument partial F
+    cd_f = _cragg_donald_f(Xm, Zm, endogenous)                     # Cragg-Donald F
+    kp_cov = cov_type == :ols ? :hc1 : cov_type
+    kp_f = _kleibergen_paap_f(Xm, Zm, endogenous; cov_type=kp_cov)  # Kleibergen-Paap rk Wald F
+    q_excl = m - (k - length(endogenous))
+    sy = _stock_yogo_cv(length(endogenous), q_excl)                # Stock-Yogo 10% critical value
+    cd_val = (cd_f === nothing || isnan(cd_f)) ? nothing : cd_f
+    kp_val = (kp_f === nothing || isnan(kp_f)) ? nothing : kp_f
+    sy_val = sy === nothing ? nothing : T(sy)
 
     # ---- Diagnostics: Sargan-Hansen test ----
     sargan_s, sargan_p = _sargan_test(resid, Zm, length(endogenous), k)
@@ -247,7 +345,8 @@ function estimate_iv(y::AbstractVector{T}, X::AbstractMatrix{T},
         vn, :iv, cov_type,
         nothing,                        # weights
         Zm, endogenous,                 # Z, endogenous
-        fs_f, sargan_s, sargan_p        # first_stage_f, sargan_stat, sargan_pval
+        fs_f, sargan_s, sargan_p,       # first_stage_f, sargan_stat, sargan_pval
+        cd_val, kp_val, sy_val          # cragg_donald_f, kleibergen_paap_f, stock_yogo_10pct
     )
 end
 

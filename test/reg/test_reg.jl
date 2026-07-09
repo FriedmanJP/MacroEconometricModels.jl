@@ -516,6 +516,52 @@ end
         @test m.first_stage_f > 10.0
     end
 
+    @testset "Excluded-instrument partial F + CD/KP/Stock-Yogo (T072)" begin
+        rng = MersenneTwister(5099)
+        n = 800
+        z1, z2 = randn(rng, n), randn(rng, n)
+        w = randn(rng, n)                        # included exogenous control
+        v = randn(rng, n)
+        u = 0.5 * v + randn(rng, n)
+        x_endog = 1.5 * w + 0.6 * z1 + 0.5 * z2 + v   # w STRONGLY predicts x
+        y = 1.0 .+ 2.0 * x_endog .+ 0.8 * w .+ u
+        X = hcat(ones(n), w, x_endog)            # [intercept, included exog, endogenous]
+        Z = hcat(ones(n), w, z1, z2)             # W = [intercept, w] appears in Z too
+        m = estimate_iv(y, X, Z; endogenous=[3])
+
+        # Manual excluded-instrument partial F: partial out W = [1, w]; q = m - #W = 4 - 2 = 2.
+        W = X[:, [1, 2]]; xj = X[:, 3]
+        Mw = I - W * (inv(W' * W) * W')
+        xt = Mw * xj
+        ssr_r = dot(xt, xt)
+        ssr_u = let r = xj - Z * (inv(Z' * Z) * (Z' * xj)); dot(r, r) end
+        df2 = n - 4
+        F_partial = ((ssr_r - ssr_u) / 2) / (ssr_u / df2)
+        @test isapprox(m.first_stage_f, F_partial; atol=1e-6)
+
+        # The old overall-F (TSS about the mean, q = m) is inflated by w predicting x_endog.
+        xbar = sum(xj) / n; tss = sum((xi - xbar)^2 for xi in xj)
+        F_overall_old = ((tss - ssr_u) / 4) / (ssr_u / df2)
+        @test F_overall_old > m.first_stage_f                       # the bug's inflation
+
+        # Cragg-Donald == partial F for a single endogenous regressor.
+        @test isapprox(m.cragg_donald_f, m.first_stage_f; atol=1e-6)
+
+        # Kleibergen-Paap == HC1-robust first-stage F (single endog): reconstruct manually.
+        Zt = Mw * Z
+        U, S, _ = svd(Zt); r = count(>(maximum(S) * n * eps()), S)
+        Zb = U[:, 1:r]
+        gamma = Zb' * xt
+        eh = xt - Zb * gamma
+        Vg = (Zb' * Diagonal(eh .^ 2) * Zb) .* (n / (n - 4))
+        KP_manual = dot(gamma, inv(Vg) * gamma) / r
+        @test r == 2
+        @test isapprox(m.kleibergen_paap_f, KP_manual; atol=1e-6)
+
+        # Stock-Yogo 10% maximal-size critical value: 1 endogenous, q = 2 excluded ⇒ 19.93.
+        @test m.stock_yogo_10pct == 19.93
+    end
+
     @testset "Sargan test: overidentified has stat, exactly identified is nothing" begin
         rng = MersenneTwister(5003)
         n = 500
