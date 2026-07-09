@@ -318,9 +318,29 @@ function newey_west(X::AbstractMatrix{T}, residuals::AbstractVector{T};
 end
 
 """
+    _psd_project(S) -> Matrix
+
+Symmetrize and project a HAC meat matrix onto the PSD cone (zero out negative
+eigenvalues). Bartlett is PSD by construction; Parzen/QS/Tukey–Hanning may not be.
+Mirrors the projection used in `long_run_covariance`.
+"""
+function _psd_project(S::AbstractMatrix{T}) where {T<:AbstractFloat}
+    S_sym = Hermitian((S + S') / 2)
+    F = eigen(S_sym)
+    minimum(F.values) < 0 ?
+        Matrix{T}(F.vectors * Diagonal(max.(F.values, zero(T))) * F.vectors') :
+        Matrix{T}(S_sym)
+end
+
+"""
     newey_west(X::AbstractMatrix{T}, residuals::AbstractMatrix{T}; ...) -> Matrix{T}
 
-Multivariate version for systems of equations.
+Multivariate ("system") Newey-West for a set of equations that share the design `X`.
+Cross-equation (off-diagonal) blocks are populated via the stacked moment vector
+`g_t = [x_t·u_{1,t}; …; x_t·u_{n_eq,t}]`, so the returned `(k·n_eq)×(k·n_eq)` matrix
+supports cross-equation Wald tests. Under automatic bandwidth (`bandwidth=0`) a single
+system bandwidth is used, so a diagonal block may differ slightly from the corresponding
+single-equation call that selects its own bandwidth. The bread is `I(n_eq) ⊗ (X'X)^{-1}`.
 """
 function newey_west(X::AbstractMatrix{T}, residuals::AbstractMatrix{T};
                     bandwidth::Int=0, kernel::Symbol=:bartlett) where {T<:AbstractFloat}
@@ -328,13 +348,29 @@ function newey_west(X::AbstractMatrix{T}, residuals::AbstractMatrix{T};
     n_eq == 1 && return newey_west(X, vec(residuals); bandwidth, kernel)
 
     k = size(X, 2)
-    V_full = zeros(T, k * n_eq, k * n_eq)
+    bw = bandwidth == 0 ? optimal_bandwidth_nw(residuals; kernel=kernel) : bandwidth
+
+    # Stacked moment matrix: column block eq holds x_t·u_{eq,t}.
+    Xu = zeros(T, n, k * n_eq)
     for eq in 1:n_eq
-        V_eq = newey_west(X, @view(residuals[:, eq]); bandwidth, kernel)
         idx = ((eq-1)*k + 1):(eq*k)
-        V_full[idx, idx] .= V_eq
+        @views Xu[:, idx] .= X .* residuals[:, eq]
     end
-    V_full
+
+    S = Xu' * Xu
+    jmax = kernel == :quadratic_spectral ? (n - 1) : bw
+    @inbounds for j in 1:jmax
+        w = kernel_weight(j, bw, kernel, T)
+        w == 0 && continue
+        Gamma_j = @view(Xu[(j+1):n, :])' * @view(Xu[1:(n-j), :])
+        S .+= w * (Gamma_j + Gamma_j')
+    end
+    S = _psd_project(S)
+
+    XtX_inv = robust_inv(X' * X)
+    Bread = kron(Matrix{T}(I, n_eq, n_eq), XtX_inv)
+    V = Bread * S * Bread
+    (V + V') / 2
 end
 
 # =============================================================================
@@ -410,21 +446,43 @@ end
 """
     white_vcov(X::AbstractMatrix{T}, residuals::AbstractMatrix{T}; ...) -> Matrix{T}
 
-Multivariate version.
+Multivariate ("system") White estimator for equations sharing the design `X`.
+Cross-equation blocks are populated via the stacked moment `g_t=[x_t·u_{1,t};…]`, so the
+returned matrix supports cross-equation Wald tests. The per-observation HC scaling
+(hc0/hc1/hc2/hc3) uses the common leverage of `X`; the bread is `I(n_eq)⊗(X'X)^{-1}`.
 """
 function white_vcov(X::AbstractMatrix{T}, residuals::AbstractMatrix{T};
                     variant::Symbol=:hc0) where {T<:AbstractFloat}
     n, n_eq = size(residuals)
     n_eq == 1 && return white_vcov(X, vec(residuals); variant)
 
+    variant in (:hc0, :hc1, :hc2, :hc3) || throw(ArgumentError("Unknown HC variant: $variant"))
     k = size(X, 2)
-    V_full = zeros(T, k * n_eq, k * n_eq)
-    for eq in 1:n_eq
-        V_eq = white_vcov(X, @view(residuals[:, eq]); variant)
-        idx = ((eq-1)*k + 1):(eq*k)
-        V_full[idx, idx] .= V_eq
+    XtX_inv = robust_inv(X' * X)
+
+    # Per-observation residual scaling s_t, shared across equations (X leverage is common):
+    #   hc0/hc1 → 1 ; hc2 → 1/sqrt(1-h_t) ; hc3 → 1/(1-h_t).
+    s = if variant == :hc2
+        h = diag(X * XtX_inv * X')
+        one(T) ./ sqrt.(one(T) .- h)
+    elseif variant == :hc3
+        h = diag(X * XtX_inv * X')
+        one(T) ./ (one(T) .- h)
+    else
+        ones(T, n)
     end
-    V_full
+
+    Xu = zeros(T, n, k * n_eq)
+    for eq in 1:n_eq
+        idx = ((eq-1)*k + 1):(eq*k)
+        @views Xu[:, idx] .= (X .* residuals[:, eq]) .* s
+    end
+    S = Xu' * Xu
+    variant == :hc1 && (S .*= T(n) / T(n - k))
+
+    Bread = kron(Matrix{T}(I, n_eq, n_eq), XtX_inv)
+    V = Bread * S * Bread
+    (V + V') / 2
 end
 
 # =============================================================================
@@ -485,20 +543,25 @@ end
     driscoll_kraay(X::AbstractMatrix{T}, U::AbstractMatrix{T};
                    bandwidth::Int=0, kernel::Symbol=:bartlett) -> Matrix{T}
 
-Driscoll-Kraay standard errors for multi-equation system.
+Driscoll-Kraay standard errors for a multi-equation system. Cross-equation blocks are
+populated via the stacked moment `g_t=[x_t·u_{1,t};…]`; `S=long_run_covariance(G)` and
+`V = n · (I(n_eq)⊗(X'X)^{-1}) S (I(n_eq)⊗(X'X)^{-1})`. Supports cross-equation Wald tests.
 """
 function driscoll_kraay(X::AbstractMatrix{T}, U::AbstractMatrix{T};
                         bandwidth::Int=0, kernel::Symbol=:bartlett) where {T<:AbstractFloat}
     n, k = size(X)
     n_eq = size(U, 2)
 
-    V = zeros(T, k * n_eq, k * n_eq)
-    @inbounds for eq in 1:n_eq
-        V_eq = driscoll_kraay(X, @view(U[:, eq]); bandwidth=bandwidth, kernel=kernel)
+    G = zeros(T, n, k * n_eq)
+    for eq in 1:n_eq
         idx = ((eq-1)*k + 1):(eq*k)
-        V[idx, idx] .= V_eq
+        @views G[:, idx] .= X .* U[:, eq]
     end
-    V
+    S = long_run_covariance(G; bandwidth=bandwidth, kernel=kernel)  # /n + PSD-projected internally
+    XtX_inv = robust_inv(X' * X)
+    Bread = kron(Matrix{T}(I, n_eq, n_eq), XtX_inv)
+    V = n * Bread * S * Bread
+    (V + V') / 2
 end
 
 # =============================================================================

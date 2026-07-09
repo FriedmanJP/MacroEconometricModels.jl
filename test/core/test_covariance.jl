@@ -276,6 +276,61 @@ using Random
         @test Gh2 === nothing
     end
 
+    @testset "System HAC cross-equation blocks (T055)" begin
+        Random.seed!(313)
+        n = 300; k = 2; n_eq = 2
+        X = hcat(ones(n), randn(n))
+        fac = randn(n)                       # common factor → correlated equations
+        u1 = randn(n) .+ fac
+        u2 = randn(n) .+ fac
+        U = hcat(u1, u2)
+        bw = 4
+        XtXinv = inv(X'X)
+        blk1 = 1:k; blk2 = (k+1):(2k)
+
+        # (a) newey_west — nonzero cross-block, symmetric, PSD, diagonal-block backward compat
+        Vnw = MacroEconometricModels.newey_west(X, U; bandwidth=bw)
+        @test size(Vnw) == (k * n_eq, k * n_eq)
+        @test isapprox(Vnw, Vnw'; atol=1e-10)
+        @test minimum(eigvals(Symmetric(Vnw))) ≥ -1e-8
+        @test opnorm(Vnw[blk1, blk2]) > 1e-6
+        @test Vnw[blk1, blk1] ≈ MacroEconometricModels.newey_west(X, u1; bandwidth=bw) atol = 1e-9
+        @test Vnw[blk2, blk2] ≈ MacroEconometricModels.newey_west(X, u2; bandwidth=bw) atol = 1e-9
+
+        # (b) white_vcov — all HC variants
+        for variant in (:hc0, :hc1, :hc2, :hc3)
+            Vw = MacroEconometricModels.white_vcov(X, U; variant=variant)
+            @test isapprox(Vw, Vw'; atol=1e-10)
+            @test minimum(eigvals(Symmetric(Vw))) ≥ -1e-8
+            @test opnorm(Vw[blk1, blk2]) > 1e-6
+            @test Vw[blk1, blk1] ≈ MacroEconometricModels.white_vcov(X, u1; variant=variant) atol = 1e-9
+            @test Vw[blk2, blk2] ≈ MacroEconometricModels.white_vcov(X, u2; variant=variant) atol = 1e-9
+        end
+        # exact cross-block identity (HC0): V[1:k, k+1:2k] = (X'X)^{-1}(Xu1'Xu2)(X'X)^{-1}
+        Xu1 = X .* u1; Xu2 = X .* u2
+        V0 = MacroEconometricModels.white_vcov(X, U; variant=:hc0)
+        @test V0[blk1, blk2] ≈ XtXinv * (Xu1' * Xu2) * XtXinv atol = 1e-10
+
+        # (c) driscoll_kraay
+        Vdk = MacroEconometricModels.driscoll_kraay(X, U; bandwidth=bw)
+        @test isapprox(Vdk, Vdk'; atol=1e-10)
+        @test opnorm(Vdk[blk1, blk2]) > 1e-6
+        @test Vdk[blk1, blk1] ≈ MacroEconometricModels.driscoll_kraay(X, u1; bandwidth=bw) atol = 1e-9
+        @test Vdk[blk2, blk2] ≈ MacroEconometricModels.driscoll_kraay(X, u2; bandwidth=bw) atol = 1e-9
+
+        # Perfectly-correlated equations ⇒ all four k×k blocks equal (HC0)
+        Vd = MacroEconometricModels.white_vcov(X, hcat(u1, u1); variant=:hc0)
+        @test Vd[blk1, blk1] ≈ Vd[blk1, blk2] atol = 1e-10
+        @test Vd[blk1, blk2] ≈ Vd[blk2, blk2] atol = 1e-10
+
+        # Independent equations ⇒ cross-block small relative to diagonal
+        Random.seed!(314)
+        ni = 2000
+        Xi = hcat(ones(ni), randn(ni))
+        Vi = MacroEconometricModels.white_vcov(Xi, hcat(randn(ni), randn(ni)); variant=:hc0)
+        @test opnorm(Vi[blk1, blk2]) < 0.15 * opnorm(Vi[blk1, blk1])
+    end
+
     # =========================================================================
     # Newey-West HAC Estimator
     # =========================================================================
