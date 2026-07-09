@@ -345,6 +345,39 @@ using LinearAlgebra, Statistics, Random, Distributions
         @test all(abs.(coef(m) .- beta_true) .< 0.5)
     end
 
+    @testset "WLS covariance equivalence (T075)" begin
+        # Primary oracle: WLS(weights=w) ≡ OLS on the √W-transformed data (√w·y, √w·X)
+        # for coefficients AND the FULL covariance, for every cov_type.
+        rng = MersenneTwister(505)
+        n = 200
+        X = hcat(ones(n), randn(rng, n, 2))
+        beta_true = [1.0, 2.0, -1.0]
+        sigma_i = 0.3 .+ 2.0 .* X[:, 2].^2
+        y = X * beta_true + sqrt.(sigma_i) .* randn(rng, n)
+        w = 1.0 ./ sigma_i
+        sw = sqrt.(w)
+        for ct in (:ols, :hc0, :hc1, :hc2, :hc3)
+            m  = estimate_reg(y, X; weights=w, cov_type=ct)
+            mt = estimate_reg(sw .* y, sw .* X; cov_type=ct)   # OLS on transformed data
+            @test isapprox(coef(m), coef(mt); atol=1e-10)
+            @test isapprox(vcov(m), vcov(mt); atol=1e-10)
+            @test isapprox(stderror(m), stderror(mt); atol=1e-10)
+            # Scale invariance: scaling all weights by a constant leaves vcov unchanged
+            m2 = estimate_reg(y, X; weights=100.0 .* w, cov_type=ct)
+            @test isapprox(vcov(m), vcov(m2); rtol=1e-9)
+        end
+        # Closed-form classical WLS: y=[1,2,4], X=[1 0;1 1;1 2], w=[1,4,9]
+        yc = [1.0, 2.0, 4.0]
+        Xc = [1.0 0.0; 1.0 1.0; 1.0 2.0]
+        wc = [1.0, 4.0, 9.0]
+        XtWX = Xc' * Diagonal(wc) * Xc          # [14 40; 40 112]
+        betac = XtWX \ (Xc' * Diagonal(wc) * yc)
+        ec = yc .- Xc * betac
+        sig2 = dot(ec, wc .* ec) / 1            # n-k = 3-2 = 1
+        Vref = sig2 * inv(XtWX)
+        @test isapprox(vcov(estimate_reg(yc, Xc; weights=wc, cov_type=:ols)), Vref; atol=1e-10)
+    end
+
     @testset "Intercept-only model" begin
         rng = MersenneTwister(606)
         n = 100
@@ -589,6 +622,7 @@ end
         @test m_exact.sargan_stat === nothing
         @test m_exact.sargan_pval === nothing
     end
+
 
     @testset "IV — robust covariance types" begin
         rng = MersenneTwister(5004)
