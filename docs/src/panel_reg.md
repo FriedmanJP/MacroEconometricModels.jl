@@ -418,6 +418,13 @@ ht = hausman_test(m_fe2, m_re2)
 report(ht)
 ```
 
+The statistic uses the Moore-Penrose generalized inverse of ``V_{FE} - V_{RE}`` with
+degrees of freedom equal to its numerical rank. In finite samples this difference is often
+not positive semidefinite; when that happens the reported statistic can be **negative**
+(the test emits a warning and cannot reject ``H_0``) and the degrees of freedom may fall
+below the number of coefficients — matching Stata's `hausman`. A negative statistic
+indicates the asymptotic Hausman assumption is violated in the sample, not evidence for RE.
+
 ### Breusch-Pagan LM Test
 
 Tests for the presence of random effects: ``H_0: \sigma_u^2 = 0`` (Breusch & Pagan 1980). Rejection suggests pooled OLS is inefficient and RE or FE is preferred.

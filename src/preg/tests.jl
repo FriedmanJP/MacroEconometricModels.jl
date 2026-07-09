@@ -36,6 +36,23 @@ on the common slope coefficients (intercept excluded from RE).
 # References
 - Hausman, J. A. (1978). *Econometrica* 46(6), 1251-1271.
 """
+# Hausman quadratic form via the Moore-Penrose generalized inverse.
+# Returns (chi2, df, nonpsd): chi2 = db'·pinv(dV)·db (NO abs), df = numerical rank of the
+# positive part of dV, nonpsd flags a materially negative eigenvalue (indefinite dV). When
+# dV is full-rank PSD, pinv == inv and df == k, so this reduces to the classical statistic.
+function _hausman_quadratic_form(db::AbstractVector{T}, dV::AbstractMatrix{T}) where {T<:AbstractFloat}
+    k = length(db)
+    dV_sym = Symmetric((dV .+ dV') ./ 2)
+    lambda = eigvals(dV_sym)
+    lmax = isempty(lambda) ? zero(T) : maximum(abs, lambda)
+    tol = T(k) * eps(T) * max(lmax, one(T))
+    r = count(x -> x > tol, lambda)              # numerical rank (positive eigenvalues)
+    nonpsd = any(x -> x < -tol, lambda)          # any materially negative eigenvalue
+    dV_inv = pinv(Matrix{T}(dV_sym))             # Moore-Penrose generalized inverse
+    chi2 = dot(db, dV_inv * db)                  # NO abs() — a genuinely negative form stays negative
+    return (chi2, max(r, 1), nonpsd)
+end
+
 function hausman_test(fe::PanelRegModel{T}, re::PanelRegModel{T}) where {T}
     fe.method == :fe || throw(ArgumentError("First argument must be a FE model (got :$(fe.method))"))
     re.method == :re || throw(ArgumentError("Second argument must be a RE model (got :$(re.method))"))
@@ -104,18 +121,23 @@ function hausman_test(fe::PanelRegModel{T}, re::PanelRegModel{T}) where {T}
     V_re = V_re_full[2:end, 2:end]
 
     # ---- Hausman statistic ----
-    # Under H0, Var(b_FE - b_RE) = Var(b_FE) - Var(b_RE)
-    # is PSD. But numerically it can fail, so we use |chi2|.
+    # Under H0, Var(b_FE - b_RE) = Var(b_FE) - Var(b_RE) is PSD; in finite samples it can be
+    # indefinite. Use the Moore-Penrose generalized inverse with df = rank(dV) (Stata `hausman`
+    # convention) rather than masking a negative quadratic form with abs() and a fixed df=k.
     db = b_fe .- b_re
     dV = V_fe .- V_re
-    dV_inv = Matrix{T}(robust_inv(dV; silent=true))
-    chi2 = abs(dot(db, dV_inv * db))
-    df = k
-    pval = T(1 - cdf(Chisq(df), chi2))
+    chi2, df, nonpsd = _hausman_quadratic_form(db, dV)
+    if nonpsd
+        @warn "Hausman test: V_FE - V_RE is not positive semidefinite (a common finite-sample " *
+              "outcome; the asymptotic assumption that RE is efficient under H0 may be violated). " *
+              "Reporting the generalized-inverse statistic with df = rank(dV) = $(df); the statistic " *
+              "may be negative — interpret with caution (cf. Stata `hausman`)." maxlog=1
+    end
+    pval = chi2 > zero(T) ? T(1 - cdf(Chisq(df), chi2)) : one(T)
 
-    desc = pval < T(0.05) ?
+    desc = (nonpsd ? "[non-PSD dV] " : "") * (pval < T(0.05) ?
         "Reject H0: RE inconsistent, use FE (p=$(round(pval; digits=4)))" :
-        "Fail to reject H0: RE is consistent (p=$(round(pval; digits=4)))"
+        "Fail to reject H0: RE is consistent (p=$(round(pval; digits=4)))")
 
     PanelTestResult{T}("Hausman test", chi2, pval, df, desc)
 end
