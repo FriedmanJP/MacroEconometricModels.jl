@@ -36,7 +36,8 @@ The observation equation is: `y_t = Z * x_t + d + v_t`, where `v_t ~ N(0, H)`.
 - `spec` — DSGE model specification
 - `observables` — symbols identifying which endogenous variables are observed
 - `measurement_error` — vector of measurement error standard deviations, or `nothing`
-  for default (1e-4 * I)
+  for zero measurement error (the model-implied covariance is used; requires
+  `n_obs ≤ n_shocks`, else a `StochasticSingularityError` is thrown)
 
 # Returns
 - `Z::Matrix{T}` — n_obs x n_states selection matrix (ones at observable positions)
@@ -71,9 +72,18 @@ function _build_observation_equation(spec::DSGESpec{T}, observables::Vector{Symb
         d = T[spec.steady_state[j] for j in obs_indices]
     end
 
-    # H: measurement error covariance
+    # H: measurement error covariance. Default is ZERO (use the model covariance); a
+    # nonzero default would mask stochastic singularity when n_obs > n_shocks.
     if measurement_error === nothing
-        H = T(1e-4) * Matrix{T}(I, n_obs, n_obs)
+        H = zeros(T, n_obs, n_obs)
+        n_shocks = spec.n_exog
+        if n_obs > n_shocks
+            throw(StochasticSingularityError(
+                "$n_obs observables exceed $n_shocks structural shocks; the model-implied " *
+                "observation covariance is singular and the likelihood is ill-defined. " *
+                "Add measurement error (measurement_error=:auto or a vector of SDs) or " *
+                "reduce the number of observables."))
+        end
     else
         me = Vector{T}(measurement_error)
         length(me) == n_obs || throw(ArgumentError(

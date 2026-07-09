@@ -9,6 +9,21 @@ Type definitions for Bayesian DSGE estimation — priors, state spaces, particle
 workspace, SMC state, and posterior result container.
 """
 
+"""
+    StochasticSingularityError <: Exception
+
+Raised when a DSGE observation equation is stochastically singular — more observables
+than structural shocks (`n_obs > n_shocks`) with no measurement error — so the
+model-implied observation covariance is singular and the likelihood is ill-defined.
+Distinct from a per-θ numeric failure: it is a model/data misspecification the user
+must fix (add measurement error or reduce observables), so it is NOT swallowed to
+-Inf by the likelihood closures (it is not in `_benign_solve_error`).
+"""
+struct StochasticSingularityError <: Exception
+    msg::String
+end
+Base.showerror(io::IO, e::StochasticSingularityError) = print(io, "StochasticSingularityError: ", e.msg)
+
 # =============================================================================
 # DSGEPrior — prior specification for Bayesian DSGE
 # =============================================================================

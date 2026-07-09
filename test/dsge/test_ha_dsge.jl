@@ -911,13 +911,18 @@ end
         @test length(d) == 1
         @test size(H) == (1, 1)
         @test d[1] ≈ K_ss atol=1.0  # steady state K
-        @test H[1, 1] > 0  # positive measurement error
+        @test H[1, 1] == 0  # zero default measurement error (T042)
+        @test all(iszero, H)
 
         # Custom measurement error
         Z2, d2, H2 = MacroEconometricModels._build_ha_observation_equation(
             sol, [:K], [0.5]
         )
         @test H2[1, 1] ≈ 0.25  # 0.5^2
+
+        # Stochastic singularity: 2 observables > 1 aggregate reduced shock, no ME (T042).
+        @test_throws MacroEconometricModels.StochasticSingularityError MacroEconometricModels._build_ha_observation_equation(
+            sol, [:K, :Y], nothing)
     end
 
     @testset "estimate_dsge_bayes dispatch" begin

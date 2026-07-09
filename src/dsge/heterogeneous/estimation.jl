@@ -147,9 +147,19 @@ function _build_ha_observation_equation(sol::HADSGESolution{T},
         end
     end
 
-    # H: measurement error covariance
+    # H: measurement error covariance. Default is ZERO; a nonzero default would mask
+    # stochastic singularity (the reduced HA system has size(linear.impact,2) aggregate
+    # shocks — architecturally 1 for SSJ/Reiter).
     if measurement_error === nothing
-        H = T(1e-4) * Matrix{T}(I, n_obs, n_obs)
+        H = zeros(T, n_obs, n_obs)
+        n_shocks = size(linear.impact, 2)
+        if n_obs > n_shocks
+            throw(StochasticSingularityError(
+                "$n_obs observables exceed $n_shocks aggregate structural shock(s) in the " *
+                "reduced HA system; the model-implied observation covariance is singular and " *
+                "the likelihood is ill-defined. Add measurement error (measurement_error=:auto " *
+                "or a vector of SDs) or reduce the number of observables."))
+        end
     else
         me = Vector{T}(measurement_error)
         length(me) == n_obs || throw(ArgumentError(
@@ -264,7 +274,10 @@ and the Kalman filter is evaluated on the reduced linear system. This is the
 - `observables::Vector{Symbol}` — which aggregate variables are observed (e.g., `[:K]`)
 - `n_draws::Int=5000` — total MH draws (including burnin)
 - `burnin::Int=1000` — number of burnin draws to discard
-- `measurement_error::Union{Nothing,Vector{<:Real}}=nothing` — measurement error SDs
+- `measurement_error::Union{Nothing,Symbol,Vector{<:Real}}=nothing` — measurement error SDs;
+  `nothing` means zero ME (requires `n_obs ≤ n_shocks`, else a `StochasticSingularityError`
+  is thrown on the first likelihood evaluation); `:auto` adds per-observable ME at 10% of
+  each series' variance with a warning
 - `ha_method::Symbol=:ssj` — HA solution method (`:ssj` or `:reiter`)
 - `ha_kwargs::NamedTuple=(T_horizon=50, n_reduced=15)` — HA solver options
 - `proposal_scale::Float64=0.01` — initial RWMH proposal scale (σ² for proposal cov)
@@ -290,7 +303,7 @@ function estimate_dsge_bayes(spec::HADSGESpec{T}, data::AbstractMatrix,
                               observables::Vector{Symbol}=Symbol[],
                               n_draws::Int=5000,
                               burnin::Int=1000,
-                              measurement_error::Union{Nothing,Vector{<:Real}}=nothing,
+                              measurement_error::Union{Nothing,Symbol,Vector{<:Real}}=nothing,
                               ha_method::Symbol=:ssj,
                               ha_kwargs::NamedTuple=(T_horizon=50, n_reduced=15),
                               proposal_scale::Float64=0.01,
@@ -319,6 +332,12 @@ function estimate_dsge_bayes(spec::HADSGESpec{T}, data::AbstractMatrix,
     # Public convention is T×n; the Kalman filter on the reduced system expects
     # n_obs × T_obs internally.
     data_mat = _orient_data(data, n_obs, T)
+
+    # Resolve :auto measurement error against data variance (per-observable). (#141/T042)
+    # The stochastic-singularity error itself is raised by _build_ha_observation_equation
+    # and rethrown from ll_fn's narrow catch on the first evaluation (HA has no cheap
+    # pre-solve shock count).
+    measurement_error = _resolve_measurement_error(measurement_error, data_mat, observables)
 
     # ── 4. Resolve theta0 against sorted prior keys ──────────────────────
     # Dict/NamedTuple resolved by name (order-independent); a positional vector must be

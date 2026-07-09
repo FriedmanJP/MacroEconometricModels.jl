@@ -134,6 +134,34 @@ function _orient_data(data::AbstractMatrix, n_obs::Int, ::Type{T}) where {T}
     end
 end
 
+"""
+    _resolve_measurement_error(measurement_error, data_mat, observables) -> Union{Nothing, Vector}
+
+Resolve the `measurement_error` keyword before it reaches the observation-equation
+builders. `nothing` passes through (zero ME). `:auto` scales measurement error to
+each observable's own variance — √(0.1·var(yᵢ)) per series (DSGE.jl/Dynare heuristic),
+which fixes the HA magnitude problem where aggregate observables span different scales
+— and emits a warning. A vector passes through as-is. Any other symbol errors.
+`data_mat` is n_obs × T_obs.
+"""
+function _resolve_measurement_error(measurement_error, data_mat::AbstractMatrix{T},
+                                     observables::Vector{Symbol}) where {T<:AbstractFloat}
+    measurement_error === nothing && return nothing
+    if measurement_error isa Symbol
+        measurement_error === :auto || throw(ArgumentError(
+            "measurement_error Symbol must be :auto, got :$measurement_error"))
+        n = size(data_mat, 1)
+        me = Vector{T}(undef, n)
+        for i in 1:n
+            me[i] = sqrt(T(0.1) * var(view(data_mat, i, :)))
+        end
+        @warn "measurement_error=:auto: added per-observable measurement error at 10% of " *
+              "each series' variance" observables sds=me
+        return me
+    end
+    return Vector{T}(measurement_error)
+end
+
 # =============================================================================
 # Main public API
 # =============================================================================
@@ -166,7 +194,9 @@ SMC², or Random-Walk Metropolis-Hastings (RWMH).
 - `burnin::Int=5000` — burn-in draws discarded from `:mh` output; the posterior uses `n_draws - burnin`
 - `keep_burnin::Bool=false` — if true, retain the full `:mh` chain (e.g. for trace plots)
 - `ess_target::Float64=0.5` — target ESS fraction for adaptive tempering
-- `measurement_error::Union{Nothing,Vector{<:Real}}=nothing` — measurement error SDs
+- `measurement_error::Union{Nothing,Symbol,Vector{<:Real}}=nothing` — measurement error SDs;
+  `nothing` means zero ME (requires `n_obs ≤ n_shocks`, else a `StochasticSingularityError`
+  is thrown); `:auto` adds per-observable ME at 10% of each series' variance with a warning
 - `likelihood::Symbol=:auto` — likelihood evaluation method (currently auto = Kalman)
 - `solver::Symbol=:gensys` — DSGE solver method
 - `solver_kwargs::NamedTuple=NamedTuple()` — additional solver keyword arguments
@@ -198,7 +228,7 @@ function estimate_dsge_bayes(spec::DSGESpec{T}, data::AbstractMatrix,
                               burnin::Int=5000,
                               keep_burnin::Bool=false,
                               ess_target::Float64=0.5,
-                              measurement_error::Union{Nothing,Vector{<:Real}}=nothing,
+                              measurement_error::Union{Nothing,Symbol,Vector{<:Real}}=nothing,
                               likelihood::Symbol=:auto,
                               solver::Symbol=:gensys,
                               solver_kwargs::NamedTuple=NamedTuple(),
@@ -233,6 +263,21 @@ function estimate_dsge_bayes(spec::DSGESpec{T}, data::AbstractMatrix,
     # ── 4. Data handling: resolve orientation by matching n_obs (E-18 / #142) ─
     # Public convention is T×n; Kalman/PF expect n_obs × T_obs internally.
     data_mat = _orient_data(data, n_obs, T)
+
+    # Resolve :auto measurement error against data variance (per-observable). (#141/T042)
+    measurement_error = _resolve_measurement_error(measurement_error, data_mat, observables)
+
+    # Stochastic-singularity guard: with no measurement error and more observables than
+    # structural shocks, the model-implied observation covariance is singular. Checked
+    # eagerly here (spec.n_exog is exact and free) because the sampler closures would
+    # otherwise swallow the builder-thrown error via their per-θ catch. (#141/T042)
+    if measurement_error === nothing && n_obs > spec.n_exog
+        throw(StochasticSingularityError(
+            "$n_obs observables exceed $(spec.n_exog) structural shocks; the model-implied " *
+            "observation covariance is singular and the likelihood is ill-defined. " *
+            "Add measurement error (measurement_error=:auto or a vector of SDs) or " *
+            "reduce the number of observables."))
+    end
 
     # ── 5. Validate method ───────────────────────────────────────────────
     if method ∉ (:smc, :smc2, :mh)

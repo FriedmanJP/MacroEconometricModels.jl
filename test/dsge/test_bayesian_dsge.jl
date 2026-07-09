@@ -416,12 +416,11 @@ end
     @test d2[1] == spec_ss.steady_state[1]
     @test d2[2] == spec_ss.steady_state[3]
 
-    # H should be positive definite (default 1e-4 * I)
+    # H defaults to ZERO measurement error (T042); n_obs=2 ≤ n_shocks=3, no singularity.
     @test size(H) == (2, 2)
-    @test H[1, 1] > 0.0
-    @test H[2, 2] > 0.0
+    @test all(iszero, H)
+    @test H == zeros(2, 2)
     @test H[1, 2] == 0.0
-    @test H ≈ 1e-4 * I(2)
 
     # Error: unknown observable
     @test_throws ArgumentError MacroEconometricModels._build_observation_equation(
@@ -454,6 +453,58 @@ end
     # Wrong length measurement error
     @test_throws ArgumentError MacroEconometricModels._build_observation_equation(
         spec, [:y, :c], [0.1])
+end
+
+@testset "Stochastic singularity & auto measurement error (T042)" begin
+    spec1 = _suppress_warnings() do
+        @dsge begin
+            parameters: rho = 0.5
+            endogenous: y, k
+            exogenous: eps
+            y[t] = rho * y[t-1] + eps[t]
+            k[t] = 0.5 * k[t-1] + y[t]
+            steady_state = [0.0, 0.0]
+        end
+    end
+
+    _suppress_warnings() do
+        # (a) Default zero ME when n_obs ≤ n_shocks (2 obs, 2 shocks).
+        spec2 = @dsge begin
+            parameters: rho = 0.8
+            endogenous: y, c
+            exogenous: eps_y, eps_c
+            y[t] = rho * y[t-1] + eps_y[t]
+            c[t] = rho * c[t-1] + eps_c[t]
+        end
+        _, _, H0 = MacroEconometricModels._build_observation_equation(spec2, [:y, :c], nothing)
+        @test all(iszero, H0)
+
+        # (b) Builder throws on stochastic singularity (2 obs > 1 shock).
+        @test_throws MacroEconometricModels.StochasticSingularityError MacroEconometricModels._build_observation_equation(
+            spec1, [:y, :k], nothing)
+
+        # (c) Explicit vector ME with n_obs>n_shocks does NOT throw.
+        _, _, Hv = MacroEconometricModels._build_observation_equation(spec1, [:y, :k], [0.01, 0.01])
+        @test Hv ≈ diagm([1e-4, 1e-4])
+
+        # (d) Entry-point singularity check fires before sampling.
+        spec1c = compute_steady_state(spec1)
+        data1 = simulate(solve(spec1c; method=:gensys), 50; rng=Random.MersenneTwister(1))
+        @test_throws MacroEconometricModels.StochasticSingularityError estimate_dsge_bayes(
+            spec1c, data1, [0.5]; priors=Dict(:rho => Beta(2, 2)),
+            method=:smc, observables=[:y, :k], measurement_error=nothing,
+            n_smc=20, rng=Random.MersenneTwister(0))
+    end
+
+    # (e) :auto scales per-observable to √(0.1·var) and warns (outside suppression).
+    dm = reshape(Float64[1.0, 2.0, 3.0, 4.0, 5.0], 1, 5)
+    me = @test_logs (:warn,) match_mode=:any MacroEconometricModels._resolve_measurement_error(
+        :auto, dm, [:y])
+    @test me[1] ≈ sqrt(0.1 * var(dm[1, :]))
+    # per-observable scaling: a higher-variance series gets a larger SD
+    dm2 = [ones(1, 5); 10.0 .* Float64[1.0 2.0 3.0 4.0 5.0]]
+    me2 = MacroEconometricModels._resolve_measurement_error(:auto, dm2, [:a, :b])
+    @test me2[2] > me2[1]
 end
 
 @testset "Build state space from DSGESolution" begin
@@ -1273,8 +1324,10 @@ end
     sol = solve(spec; method=:gensys)
     data_mat = simulate(sol, 50; rng=Random.MersenneTwister(42))'
 
+    # Bootstrap PF needs nonzero measurement error to weight particles (T042 default is
+    # zero ME); [0.01] reproduces the former 1e-4·I default (0.01² = 1e-4).
     pf_ll_fn = MacroEconometricModels._build_pf_likelihood_fn(spec, [:ρ], data_mat,
-        [:y], nothing, :gensys, NamedTuple(), 100)
+        [:y], [0.01], :gensys, NamedTuple(), 100)
 
     ws = MacroEconometricModels._allocate_pf_workspace(Float64, 1, 1, 1, 100; T_obs=50)
     rng = Random.MersenneTwister(123)
@@ -2211,8 +2264,10 @@ end
         :ρ => Beta(2, 2),
         :α => Normal(0.3, 0.1)
     )
+    # 1 shock but 2 observables ⇒ n_obs>n_shocks: must supply explicit ME (T042).
     result = estimate_dsge_bayes(spec, data, [0.5, 0.3];
         priors=priors, method=:smc, observables=[:y, :k],
+        measurement_error=[0.01, 0.01],
         n_smc=300, n_mh_steps=1,
         rng=Random.MersenneTwister(123))
 
@@ -2485,7 +2540,9 @@ end
     data_sim = simulate(sol, 50; rng=Random.MersenneTwister(1))
     data = Matrix{Float64}(data_sim')  # n_obs x T_obs
 
-    Z, d, H = MacroEconometricModels._build_observation_equation(spec, [:y], nothing)
+    # Bootstrap PF needs nonzero measurement error (T042 default is zero ME);
+    # [0.01] reproduces the former 1e-4·I default.
+    Z, d, H = MacroEconometricModels._build_observation_equation(spec, [:y], [0.01])
     nlss = MacroEconometricModels._build_nonlinear_state_space(sol, Z, d, H)
 
     nx = length(sol.state_indices)
@@ -2521,7 +2578,8 @@ end
     data_sim = simulate(sol, T_obs; rng=Random.MersenneTwister(1))
     data = Matrix{Float64}(data_sim')
 
-    Z, d, H = MacroEconometricModels._build_observation_equation(spec, [:y], nothing)
+    # Bootstrap PF/CSMC need nonzero measurement error (T042 default is zero ME).
+    Z, d, H = MacroEconometricModels._build_observation_equation(spec, [:y], [0.01])
     nlss = MacroEconometricModels._build_nonlinear_state_space(sol, Z, d, H)
 
     nx = length(sol.state_indices)
@@ -2568,8 +2626,9 @@ end
     data_sim = simulate(sol_lin, T_obs; rng=Random.MersenneTwister(1))
     data = Matrix{Float64}(data_sim')
 
-    # Kalman log-likelihood
-    Z, d, H = MacroEconometricModels._build_observation_equation(spec, [:y], nothing)
+    # Kalman log-likelihood. Bootstrap PF needs nonzero measurement error (T042 default
+    # is zero ME); use the same H for both so the PF-vs-Kalman comparison is fair.
+    Z, d, H = MacroEconometricModels._build_observation_equation(spec, [:y], [0.01])
     ss = MacroEconometricModels._build_state_space(sol_lin, Z, d, H)
     ll_kalman = MacroEconometricModels._kalman_loglikelihood(ss, data)
 
