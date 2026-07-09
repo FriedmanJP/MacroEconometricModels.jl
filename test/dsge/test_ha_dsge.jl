@@ -944,6 +944,7 @@ end
         )
 
         @test result isa BayesianDSGE{Float64}
+        @test result.solved_at === :posterior_mean  # normal path (#149/T050)
         @test size(result.theta_draws, 2) == 1  # one parameter
         @test size(result.theta_draws, 1) == 15  # n_draws - burnin = 20 - 5
         @test length(result.log_posterior) == 15
@@ -983,6 +984,48 @@ end
             spec, randn(3, T_data), [0.36];                  # neither dim == n_obs (1)
             priors=priors, observables=[:K], n_draws=10,
             ha_method=:ssj, ha_kwargs=(T_horizon=30, n_reduced=10))
+    end
+
+    @testset "T049: default T_horizon >= 300 (truncation)" begin
+        # (A) Pin the signature default cheaply (no horizon-300 solve — those cost minutes):
+        #     the signature's ha_kwargs default uses this const.
+        @test MacroEconometricModels._HA_DEFAULT_T_HORIZON >= 300
+
+        # (B) Truncation is non-negligible: the likelihood depends on the horizon (compared
+        #     at cheap horizons; KS ρ_z=0.95 ⇒ 0.95^30≈0.21 vs 0.95^60≈0.046 tail alive).
+        ll30 = MacroEconometricModels._build_ha_likelihood_fn(
+            spec, [:alpha], reshape(data_K, 1, :), [:K], nothing, :ssj,
+            (T_horizon=30, n_reduced=15))([0.36])
+        ll60 = MacroEconometricModels._build_ha_likelihood_fn(
+            spec, [:alpha], reshape(data_K, 1, :), [:K], nothing, :ssj,
+            (T_horizon=60, n_reduced=15))([0.36])
+        @test isfinite(ll30) && isfinite(ll60)
+        @test abs(ll30 - ll60) > 1e-6
+    end
+
+    @testset "posterior-mean solution built at the mean, marked (#149/T050)" begin
+        # KS always yields a determinate, finite reduced solution for ANY θ (even NaN/Inf),
+        # so the mean-solve-fails → highest-posterior-draw branch — which mirrors the
+        # unit-tested aggregate [T044]/#143 path — is not reachable with this fast example.
+        # We verify the reachable guarantees of the fix: (a) the container is built at the
+        # POSTERIOR MEAN θ and marked, NOT silently at the original pre-estimation spec (the
+        # removed E-25 bug); (b) when no candidate yields a supported HADSGESolution the
+        # helper errors LOUDLY rather than silently substituting.
+        post_draws = reshape([0.4, 0.5, 0.6], 3, 1)   # mean = 0.5 (≠ spec's alpha=0.36)
+        post_lp    = [-3.0, -1.0, -2.0]
+        linear_sol, ss_result, solved_at, theta_used =
+            MacroEconometricModels._build_ha_result_solution(
+                spec, [:alpha], post_draws, post_lp, [:K], nothing,
+                :ssj, (T_horizon=30, n_reduced=10))
+        @test solved_at === :posterior_mean
+        @test theta_used ≈ [0.5]                    # built at the mean, not spec's 0.36
+        @test all(isfinite, linear_sol.G1)
+
+        # No candidate solves (unsupported method ⇒ no HADSGESolution) ⇒ loud error, never a
+        # silent original-spec substitution.
+        @test_throws ErrorException MacroEconometricModels._build_ha_result_solution(
+            spec, [:alpha], reshape([0.36], 1, 1), [0.0], [:K], nothing,
+            :badmethod, NamedTuple())
     end
 end
 
