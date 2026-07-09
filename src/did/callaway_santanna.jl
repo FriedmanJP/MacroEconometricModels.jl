@@ -76,9 +76,18 @@ function _estimate_callaway_santanna(pd::PanelData{T}, outcome_col::Int, treat_c
         panel[g][t] = pd.data[i, outcome_col]
     end
 
-    # Compute group-time ATTs
+    # Compute group-time ATTs + per-cell unit influence-function contributions.
+    # ATT(g,t) = mean(ΔY_treated) − mean(ΔY_control) is a difference in means, whose exact
+    # (unit-clustered) variance comes from per-unit scores c_gt(i): a treated unit i∈g
+    # contributes (ΔY_i − mean_g)/n_g and a control unit i∈C contributes −(ΔY_i − mean_c)/n_c,
+    # with Σ_i c_gt(i) = 0 by construction. Cross-(g,t) covariance is non-zero because cells
+    # SHARE the same control units (and, within a cohort, the same treated units), so the
+    # diagonal-only se_agg = sqrt(Σ w²se²) understates event-time and overall SEs.
     group_time_att = fill(T(NaN), n_cohorts, n_times)
     group_time_se = fill(T(NaN), n_cohorts, n_times)
+    n_units = pd.n_groups
+    # (ci,ti) -> (unit_ids, per-unit influence contributions c_gt(i))
+    cell_infl = Dict{Tuple{Int,Int}, Tuple{Vector{Int}, Vector{T}}}()
 
     for (ci, g_time) in enumerate(cohorts)
         # Units in this cohort
@@ -112,53 +121,64 @@ function _estimate_callaway_santanna(pd::PanelData{T}, outcome_col::Int, treat_c
             end
             isempty(ctrl_units) && continue
 
-            # Compute ATT(g,t) = mean(DeltaY_treated) - mean(DeltaY_control)
-            # where DeltaY = Y_t - Y_{base}
-            dy_treated = T[]
+            # Compute ATT(g,t) = mean(DeltaY_treated) - mean(DeltaY_control), DeltaY = Y_t - Y_base,
+            # tracking unit ids so per-unit influence scores can be formed.
+            t_units = Int[]; dy_treated = T[]
             for u in cohort_units
-                haskey(panel[u], t) && haskey(panel[u], base_t) &&
-                    push!(dy_treated, panel[u][t] - panel[u][base_t])
+                if haskey(panel[u], t) && haskey(panel[u], base_t)
+                    push!(t_units, u); push!(dy_treated, panel[u][t] - panel[u][base_t])
+                end
             end
             isempty(dy_treated) && continue
 
-            dy_control = T[]
+            c_units = Int[]; dy_control = T[]
             for u in ctrl_units
-                haskey(panel[u], t) && haskey(panel[u], base_t) &&
-                    push!(dy_control, panel[u][t] - panel[u][base_t])
+                if haskey(panel[u], t) && haskey(panel[u], base_t)
+                    push!(c_units, u); push!(dy_control, panel[u][t] - panel[u][base_t])
+                end
             end
             isempty(dy_control) && continue
 
-            att_gt = mean(dy_treated) - mean(dy_control)
-            # SE: sqrt(var_treated/n_treated + var_control/n_control)
-            # Guard single-observation case where var() returns NaN (Bessel n-1=0)
-            v_treat = length(dy_treated) > 1 ? var(dy_treated) / length(dy_treated) : zero(T)
-            v_ctrl = length(dy_control) > 1 ? var(dy_control) / length(dy_control) : zero(T)
-            se_gt = sqrt(v_treat + v_ctrl)
+            mean_t = mean(dy_treated); mean_c = mean(dy_control)
+            att_gt = mean_t - mean_c
+            n_gt = length(dy_treated); n_ct = length(dy_control)
+
+            # Per-unit influence scores (ATT̂ − ATT = Σ_i c_gt(i)); treated ∪ control are disjoint.
+            infl_units = Vector{Int}(undef, n_gt + n_ct)
+            infl_vals = Vector{T}(undef, n_gt + n_ct)
+            @inbounds for j in 1:n_gt
+                infl_units[j] = t_units[j]
+                infl_vals[j] = (dy_treated[j] - mean_t) / n_gt
+            end
+            @inbounds for j in 1:n_ct
+                infl_units[n_gt + j] = c_units[j]
+                infl_vals[n_gt + j] = -(dy_control[j] - mean_c) / n_ct
+            end
 
             group_time_att[ci, ti] = att_gt
-            group_time_se[ci, ti] = se_gt
+            group_time_se[ci, ti] = sqrt(max(sum(abs2, infl_vals), zero(T)))
+            cell_infl[(ci, ti)] = (infl_units, infl_vals)
         end
     end
 
-    # Aggregate to event-time
+    # Aggregate to event-time, accumulating the weighted per-unit influence into Φ.
     reference_period = -1
     event_times_all = collect(-leads:horizon)
     n_evt = length(event_times_all)
     att_agg = zeros(T, n_evt)
-    se_agg = zeros(T, n_evt)
+    Phi = zeros(T, n_units, n_evt)   # Φ[i,ei] = per-unit influence of the event-time-e ATT
 
     for (ei, e) in enumerate(event_times_all)
         # With universal base, reference period e=-1 is zero by construction
         if base_period == :universal && e == reference_period
             att_agg[ei] = zero(T)
-            se_agg[ei] = zero(T)
-            continue
+            continue                                     # Φ column stays 0 ⇒ se = 0
         end
 
-        # Aggregate across cohorts for event-time e
+        # Aggregate across cohorts for event-time e (cohort-size weights, unchanged point est.)
         att_vals = T[]
-        se_vals = T[]
         weights_e = T[]
+        cells_e = Tuple{Int,Int}[]
 
         for (ci, g_time) in enumerate(cohorts)
             t_target = g_time + e
@@ -166,36 +186,50 @@ function _estimate_callaway_santanna(pd::PanelData{T}, outcome_col::Int, treat_c
             ti === nothing && continue
             isnan(group_time_att[ci, ti]) && continue
 
-            # Weight = cohort size
             n_g = T(count(g -> timing[g] == g_time, keys(timing)))
             push!(att_vals, group_time_att[ci, ti])
-            push!(se_vals, group_time_se[ci, ti])
             push!(weights_e, n_g)
+            push!(cells_e, (ci, ti))
         end
 
         if !isempty(att_vals)
-            w_total = sum(weights_e)
-            w_norm = weights_e ./ w_total
+            w_norm = weights_e ./ sum(weights_e)
             att_agg[ei] = sum(w_norm .* att_vals)
-            # SE of weighted average (assuming independence across cohorts)
-            se_agg[ei] = sqrt(sum((w_norm .^ 2) .* (se_vals .^ 2)))
+            @inbounds for (m, cell) in enumerate(cells_e)
+                us, vs = cell_infl[cell]
+                a = w_norm[m]
+                for (u, v) in zip(us, vs)
+                    Phi[u, ei] += a * v
+                end
+            end
         end
     end
+
+    # Event-time ATT covariance V_evt = Φ'Φ (unit-clustered by construction). Coarser
+    # clustering is non-standard for CS (cross-sectional asymptotics) → warn, use unit level.
+    if cluster != :unit
+        @warn "Callaway-Sant'Anna variance uses unit-level (cross-sectional) influence-function " *
+              "clustering; cluster=:$cluster is treated as unit-level." maxlog=1
+    end
+    att_vcov = Phi' * Phi
+    att_vcov = (att_vcov .+ att_vcov') ./ 2               # symmetrize FP asymmetry
+    se_agg = sqrt.(max.(diag(att_vcov), zero(T)))
 
     # CIs
     z = T(quantile(Normal(), 1 - (1 - conf_level) / 2))
     ci_lower = att_agg .- z .* se_agg
     ci_upper = att_agg .+ z .* se_agg
 
-    # Overall ATT
-    post_mask = event_times_all .>= 0
-    post_att = att_agg[post_mask]
-    post_se = se_agg[post_mask]
-    nonzero_post = post_se .> 0
-    if any(nonzero_post)
-        n_post = count(nonzero_post)
-        overall_att = mean(post_att[nonzero_post])
-        overall_se = sqrt(sum(post_se[nonzero_post] .^ 2)) / n_post
+    # Overall ATT: equal-weighted mean of post ATTs with nonzero SE; SE via the full
+    # covariance sub-block sqrt(w'V_post w), w = 1/n_post (T068).
+    post_idx = findall(>=(0), event_times_all)
+    valid_post = post_idx[se_agg[post_idx] .> 0]
+    if !isempty(valid_post)
+        n_post = length(valid_post)
+        overall_att = mean(att_agg[valid_post])
+        w = fill(one(T) / n_post, n_post)
+        Vp = att_vcov[valid_post, valid_post]
+        overall_se = sqrt(max(dot(w, Vp * w), zero(T)))
     else
         overall_att = zero(T)
         overall_se = zero(T)
@@ -209,5 +243,5 @@ function _estimate_callaway_santanna(pd::PanelData{T}, outcome_col::Int, treat_c
                  pd.T_obs, pd.n_groups, n_treated, n_control,
                  :callaway_santanna,
                  pd.varnames[outcome_col], pd.varnames[treat_col],
-                 control_group, cluster, T(conf_level))
+                 control_group, cluster, T(conf_level), att_vcov)
 end

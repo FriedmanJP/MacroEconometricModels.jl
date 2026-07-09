@@ -206,6 +206,82 @@ end
         @test did_nyt.overall_att > 0
     end
 
+    @testset "Callaway-Sant'Anna influence-function covariance (T065)" begin
+        # 6 units × 4 periods. Units 1-3 never-treated; unit 4 treated at g=3;
+        # units 5-6 treated at g=4. Universal base ⇒ base_t = g-1 for every (g,t), so the
+        # cells are analytically simple and the event-time IF covariance V_evt = Φ'Φ can be
+        # reconstructed independently from the difference-in-means influence function.
+        rng = MersenneTwister(6501)
+        treat_time = [0, 0, 0, 3, 4, 4]
+        gid = Int[]; tid = Int[]; yv = Float64[]; gt = Float64[]
+        alpha = [0.0, 0.4, 0.9, 1.3, 1.8, 2.2]
+        for u in 1:6, t in 1:4
+            te = (treat_time[u] > 0 && t >= treat_time[u]) ? 1.5 : 0.0
+            push!(gid, u); push!(tid, t); push!(gt, Float64(treat_time[u]))
+            push!(yv, alpha[u] + 0.1t + te + 0.3 * randn(rng))
+        end
+        data = hcat(yv, gt)
+        pd = PanelData{Float64}(data, ["outcome", "treat_time"], Quarterly, [1, 1],
+                                gid, tid, nothing, ["u$i" for i in 1:6],
+                                6, 2, 24, true, ["fx"], Dict{String,String}(), Symbol[])
+        cs = MacroEconometricModels._estimate_callaway_santanna(pd, 1, 2;
+                 leads=0, horizon=1, control_group=:never_treated, base_period=:universal)
+
+        # Independent reconstruction: per-cell diff-in-means influence, aggregated by cohort
+        # size, then V_evt = Φ'Φ over the 6 units.
+        Yd = Dict((gid[k], tid[k]) => yv[k] for k in eachindex(yv))
+        controls = [1, 2, 3]
+        function cell_c(coh_units, t, base_t)         # -> Dict(unit => c_gt(i))
+            dyt = [(u, Yd[(u, t)] - Yd[(u, base_t)]) for u in coh_units]
+            dyc = [(u, Yd[(u, t)] - Yd[(u, base_t)]) for u in controls]
+            mt = mean(last.(dyt)); mc = mean(last.(dyc))
+            d = Dict{Int,Float64}()
+            for (u, v) in dyt; d[u] = get(d, u, 0.0) + (v - mt) / length(dyt); end
+            for (u, v) in dyc; d[u] = get(d, u, 0.0) - (v - mc) / length(dyc); end
+            d
+        end
+        evt = cs.event_times                          # [0, 1]
+        Phi = zeros(6, length(evt))
+        function accum!(ei, cells)                    # cells :: (coh_units, t, base, size)
+            w = [c[4] for c in cells]; w ./= sum(w)
+            for (m, c) in enumerate(cells)
+                for (u, v) in cell_c(c[1], c[2], c[3]); Phi[u, ei] += w[m] * v; end
+            end
+        end
+        i0 = findfirst(==(0), evt); i1 = findfirst(==(1), evt)
+        # e=0: cohort g=3 (t=3, base=2, size 1) + cohort g=4 (t=4, base=3, size 2) — shared controls
+        accum!(i0, [([4], 3, 2, 1.0), ([5, 6], 4, 3, 2.0)])
+        # e=1: only cohort g=3 (t=4, base=g-1=2); cohort g=4 would need t=5 (absent)
+        accum!(i1, [([4], 4, 2, 1.0)])
+        Vref = Phi' * Phi
+
+        V = vcov(cs)
+        @test V isa Matrix{Float64}
+        @test isapprox(V, Vref; atol=1e-10)                          # full covariance pinned
+        @test isapprox(cs.se, sqrt.(max.(diag(Vref), 0.0)); atol=1e-10)
+        @test isapprox(V, V'; atol=1e-12)
+        @test minimum(eigvals(Symmetric(V))) > -1e-10                # PSD (Φ'Φ)
+
+        # e=0 pools two cohorts sharing controls {1,2,3} → cross-cell control covariance is
+        # real; the aggregate variance is NOT the independence sum of the two cells' variances.
+        c3 = cell_c([4], 3, 2); c4 = cell_c([5, 6], 4, 3)
+        indep = (1/3)^2 * sum(abs2, collect(values(c3))) + (2/3)^2 * sum(abs2, collect(values(c4)))
+        @test !isapprox(Vref[i0, i0], indep; rtol=1e-6)              # shared-control covariance
+
+        # ---- real-panel invariants + overall/vcov wiring ----
+        pd_big, _ = _make_did_panel(seed=3200, n_units=90)
+        did = estimate_did(pd_big, "outcome", "treat_time";
+                           method=:callaway_santanna, leads=3, horizon=4)
+        Vr = vcov(did)
+        @test Vr === did.att_vcov
+        @test isapprox(Vr, Vr'; atol=1e-10)
+        @test isapprox(sqrt.(max.(diag(Vr), 0.0)), did.se; atol=1e-10)
+        post_idx = findall(>=(0), did.event_times)
+        vp = post_idx[did.se[post_idx] .> 0]
+        wv = fill(1.0 / length(vp), length(vp))
+        @test isapprox(did.overall_se, sqrt(max(dot(wv, Vr[vp, vp] * wv), 0.0)); atol=1e-10)
+    end
+
     # =========================================================================
     # Event Study LP
     # =========================================================================
