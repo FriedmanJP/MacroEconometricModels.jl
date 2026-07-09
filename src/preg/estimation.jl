@@ -16,6 +16,22 @@ using LinearAlgebra, Statistics, Distributions
 # =============================================================================
 
 """
+    _group_index_map(ids) -> Dict{Int,Vector{Int}}
+
+Build a group -> observation-indices map in one O(N) forward pass. Buckets fill
+in ascending index order, so `_group_index_map(ids)[g] == findall(==(g), ids)`
+exactly — group means and demeaning writes are bit-for-bit unchanged while
+avoiding the O(G*N) rescan of one `findall` per group.
+"""
+function _group_index_map(ids::AbstractVector{Int})
+    m = Dict{Int,Vector{Int}}()
+    @inbounds for i in eachindex(ids)
+        push!(get!(() -> Int[], m, ids[i]), i)
+    end
+    m
+end
+
+"""
     _within_demean(v, groups, unique_groups) -> (demeaned, group_means)
 
 Demean vector `v` by subtracting group means. Returns the demeaned vector
@@ -27,8 +43,9 @@ function _within_demean(v::AbstractVector{T}, groups::AbstractVector{Int},
     demeaned = similar(v)
     group_means = Dict{Int,T}()
 
+    gmap = _group_index_map(groups)
     for g in unique_groups
-        idx = findall(==(g), groups)
+        idx = gmap[g]
         gm = mean(@view v[idx])
         group_means[g] = gm
         for i in idx
@@ -51,8 +68,9 @@ function _within_demean_matrix(X::AbstractMatrix{T}, groups::AbstractVector{Int}
     # group_means_matrix[g] = k-vector of means for group g
     group_means = Dict{Int,Vector{T}}()
 
+    gmap = _group_index_map(groups)
     for g in unique_groups
-        idx = findall(==(g), groups)
+        idx = gmap[g]
         gm = vec(mean(@view(X[idx, :]); dims=1))
         group_means[g] = gm
         for i in idx
@@ -85,8 +103,9 @@ function _twoway_demean!(y_dm::Vector{T}, X_dm::Matrix{T},
     # Entity means
     entity_mean_y = Dict{Int,T}()
     entity_mean_X = Dict{Int,Vector{T}}()
+    gmap = _group_index_map(groups)
     for g in unique_groups
-        idx = findall(==(g), groups)
+        idx = gmap[g]
         entity_mean_y[g] = mean(@view y[idx])
         entity_mean_X[g] = vec(mean(@view(X[idx, :]); dims=1))
     end
@@ -94,8 +113,9 @@ function _twoway_demean!(y_dm::Vector{T}, X_dm::Matrix{T},
     # Time means
     time_mean_y = Dict{Int,T}()
     time_mean_X = Dict{Int,Vector{T}}()
+    tmap = _group_index_map(time_ids)
     for t in unique_times
-        idx = findall(==(t), time_ids)
+        idx = tmap[t]
         time_mean_y[t] = mean(@view y[idx])
         time_mean_X[t] = vec(mean(@view(X[idx, :]); dims=1))
     end
@@ -129,8 +149,9 @@ function _between_regression(y::Vector{T}, X::Matrix{T},
 
     y_bar = zeros(T, N)
     X_bar = zeros(T, N, k)
+    gmap = _group_index_map(groups)
     for (j, g) in enumerate(unique_groups)
-        idx = findall(==(g), groups)
+        idx = gmap[g]
         y_bar[j] = mean(@view y[idx])
         X_bar[j, :] .= vec(mean(@view(X[idx, :]); dims=1))
     end
@@ -170,8 +191,9 @@ function _panel_r2(y::Vector{T}, fitted::Vector{T},
     # Between R²: corr(ȳᵢ, ŷ̄ᵢ)²
     y_bar_g = zeros(T, N)
     yhat_bar_g = zeros(T, N)
+    gmap = _group_index_map(groups)
     for (j, g) in enumerate(unique_groups)
-        idx = findall(==(g), groups)
+        idx = gmap[g]
         y_bar_g[j] = mean(@view y[idx])
         yhat_bar_g[j] = mean(@view fitted[idx])
     end
@@ -331,8 +353,9 @@ function _estimate_fe(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
         end
     else
         # For two-way FE, recover from original data
+        gmap = _group_index_map(groups)
         for (j, g) in enumerate(unique_groups)
-            idx = findall(==(g), groups)
+            idx = gmap[g]
             ym = mean(@view y[idx])
             xm = vec(mean(@view(X[idx, :]); dims=1))
             group_effects[j] = ym - dot(xm, beta)
@@ -359,8 +382,9 @@ function _estimate_fe(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
     # Between R^2: corr(y_bar_i, x_bar_i' beta + alpha_i)^2
     y_bar_g = zeros(T, N)
     yhat_bar_g = zeros(T, N)
+    gmap = _group_index_map(groups)
     for (j, g) in enumerate(unique_groups)
-        idx = findall(==(g), groups)
+        idx = gmap[g]
         y_bar_g[j] = mean(@view y[idx])
         yhat_bar_g[j] = mean(@view fitted_full[idx])
     end
@@ -490,8 +514,9 @@ function _estimate_re(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
     # ỹᵢₜ = yᵢₜ - θᵢȳᵢ, X̃ᵢₜ = Xᵢₜ - θᵢX̄ᵢ
     y_qd = copy(y)
     X_qd = copy(X)
+    gmap = _group_index_map(groups)
     for (j, g) in enumerate(unique_groups)
-        idx = findall(==(g), groups)
+        idx = gmap[g]
         th = theta_vec[j]
         ym = y_group_means[g]
         xm = X_group_means[g]
@@ -591,8 +616,9 @@ function _estimate_fd(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
     dgroups = Int[]
     dtimes = Int[]
 
+    gmap = _group_index_map(groups)
     for g in unique_groups
-        idx = findall(==(g), groups)
+        idx = gmap[g]
         # Sort by time within group
         t_g = time_ids[idx]
         perm = sortperm(t_g)
@@ -650,8 +676,9 @@ function _estimate_fd(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
 
     y_bar_g = zeros(T, N_fd)
     yhat_bar_g = zeros(T, N_fd)
+    dmap = _group_index_map(dgroups)
     for (j, g) in enumerate(unique_dgroups)
-        idx = findall(==(g), dgroups)
+        idx = dmap[g]
         y_bar_g[j] = mean(@view dy[idx])
         yhat_bar_g[j] = mean(@view fitted_fd[idx])
     end
@@ -807,8 +834,9 @@ function _estimate_cre(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
     # Step 1: Compute group means X̄ᵢ for all regressors
     X_group_means = Dict{Int,Vector{T}}()
     y_group_means = Dict{Int,T}()
+    gmap = _group_index_map(groups)
     for g in unique_groups
-        idx = findall(==(g), groups)
+        idx = gmap[g]
         X_group_means[g] = vec(mean(@view(X[idx, :]); dims=1))
         y_group_means[g] = mean(@view y[idx])
     end
@@ -864,8 +892,9 @@ function _estimate_cre(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
     # Quasi-demean the augmented data
     y_qd = copy(y)
     X_aug_qd = copy(X_aug)
+    gmap = _group_index_map(groups)
     for (j, g) in enumerate(unique_groups)
-        idx = findall(==(g), groups)
+        idx = gmap[g]
         th = theta_vec[j]
         ym = y_group_means[g]
         # Group means for augmented X: original vars + mean vars

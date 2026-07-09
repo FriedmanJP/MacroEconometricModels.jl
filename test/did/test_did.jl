@@ -1560,4 +1560,30 @@ end
         @test all(diag(V1) .> diag(V0))
     end
 
+
+    # =========================================================================
+    # T090 (#189) SUB-3: CS dense panel lookup == Dict-based ATT (exact)
+    # =========================================================================
+
+    @testset "T090 SUB-3: CS dense-lookup ATT equals manual Dict computation" begin
+        pd3, _ = _make_did_panel(n_units=30, n_periods=8, n_cohorts=1, seed=19003)
+        # cohort period = 5; units 1..15 treated at t=5, 16..30 never treated
+        r = estimate_did(pd3, :outcome, :treat_time; method=:callaway_santanna)
+
+        # manual Dict-based ATT(g=5, t=5), base = 4 (pre-change algorithm)
+        panel = Dict{Int,Dict{Int,Float64}}()
+        for i in 1:pd3.T_obs
+            get!(panel, pd3.group_id[i], Dict{Int,Float64}())[pd3.time_id[i]] = pd3.data[i, 1]
+        end
+        treated_units = [u for u in 1:30 if pd3.data[findfirst(==(u), pd3.group_id), 2] == 5.0]
+        control_units = [u for u in 1:30 if pd3.data[findfirst(==(u), pd3.group_id), 2] == 0.0]
+        dy_t = [panel[u][5] - panel[u][4] for u in treated_units]
+        dy_c = [panel[u][5] - panel[u][4] for u in control_units]
+        att_manual = mean(dy_t) - mean(dy_c)
+
+        ci = findfirst(==(5), r.cohorts)
+        ti = 5  # times are 1..8, so column 5 is t=5
+        @test r.group_time_att[ci, ti] ≈ att_manual atol = 1e-12
+    end
+
 end  # @testset "Difference-in-Differences"

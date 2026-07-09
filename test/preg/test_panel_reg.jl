@@ -685,3 +685,37 @@ end
     end
 
 end
+
+# =============================================================================
+# T090 (#189) SUB-1: group-index map equivalence (perf refactor, exact)
+# =============================================================================
+
+@testset "T090 SUB-1: _group_index_map == findall" begin
+    rng = Random.MersenneTwister(19001)
+    ids = rand(rng, [3, 7, 1, 12, 5], 500)  # unsorted, repeated group labels
+    gmap = MacroEconometricModels._group_index_map(ids)
+    @test sort(collect(keys(gmap))) == sort(unique(ids))
+    for g in unique(ids)
+        @test gmap[g] == findall(==(g), ids)  # exact: ascending order preserved
+    end
+
+    # End-to-end: FE via estimate_xtreg equals a manual findall-based within-demean OLS
+    N_g = 15; T_p = 8; n = N_g * T_p
+    groups = repeat(1:N_g, inner=T_p)
+    ts = repeat(1:T_p, N_g)
+    x1 = randn(rng, n)
+    y = repeat(randn(rng, N_g), inner=T_p) .+ 1.3 .* x1 .+ 0.4 .* randn(rng, n)
+    df = DataFrame(id=groups, t=ts, x1=x1, y=y)
+    pd = xtset(df, :id, :t)
+    m_fe = estimate_xtreg(pd, :y, [:x1]; model=:fe, cov_type=:ols)
+
+    # manual pre-change algorithm (findall per group)
+    y_dm = similar(y); x_dm = similar(x1)
+    for g in 1:N_g
+        idx = findall(==(g), groups)
+        y_dm[idx] = y[idx] .- mean(y[idx])
+        x_dm[idx] = x1[idx] .- mean(x1[idx])
+    end
+    beta_manual = (x_dm' * x_dm) \ (x_dm' * y_dm)
+    @test coef(m_fe)[1] ≈ beta_manual atol = 1e-12
+end

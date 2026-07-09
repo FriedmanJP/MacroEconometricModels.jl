@@ -64,16 +64,17 @@ function _estimate_callaway_santanna(pd::PanelData{T}, outcome_col::Int, treat_c
         throw(ArgumentError("No never-treated units found. Use control_group=:not_yet_treated"))
     end
 
-    # Build panel: for each unit, extract outcome time series
-    # Store as Dict{Int, Dict{Int, T}} -- group -> time -> outcome
-    panel = Dict{Int, Dict{Int, T}}()
+    # Build panel lookup: dense (unit x time-position) outcome matrix + presence
+    # mask indexed by integer position — replaces nested Dict hashing in the
+    # cohort x time x unit triple loop below (values identical, last write wins)
+    tpos = Dict{Int,Int}(tv => k for (k, tv) in enumerate(all_times))
+    Ymat = Matrix{T}(undef, pd.n_groups, n_times)
+    present = falses(pd.n_groups, n_times)
     for i in 1:pd.T_obs
         g = pd.group_id[i]
-        t = pd.time_id[i]
-        if !haskey(panel, g)
-            panel[g] = Dict{Int, T}()
-        end
-        panel[g][t] = pd.data[i, outcome_col]
+        k = tpos[pd.time_id[i]]
+        Ymat[g, k] = pd.data[i, outcome_col]
+        present[g, k] = true
     end
 
     # Compute group-time ATTs + per-cell unit influence-function contributions.
@@ -123,18 +124,20 @@ function _estimate_callaway_santanna(pd::PanelData{T}, outcome_col::Int, treat_c
 
             # Compute ATT(g,t) = mean(DeltaY_treated) - mean(DeltaY_control), DeltaY = Y_t - Y_base,
             # tracking unit ids so per-unit influence scores can be formed.
+            kt = tpos[t]
+            kb = tpos[base_t]
             t_units = Int[]; dy_treated = T[]
             for u in cohort_units
-                if haskey(panel[u], t) && haskey(panel[u], base_t)
-                    push!(t_units, u); push!(dy_treated, panel[u][t] - panel[u][base_t])
+                if present[u, kt] && present[u, kb]
+                    push!(t_units, u); push!(dy_treated, Ymat[u, kt] - Ymat[u, kb])
                 end
             end
             isempty(dy_treated) && continue
 
             c_units = Int[]; dy_control = T[]
             for u in ctrl_units
-                if haskey(panel[u], t) && haskey(panel[u], base_t)
-                    push!(c_units, u); push!(dy_control, panel[u][t] - panel[u][base_t])
+                if present[u, kt] && present[u, kb]
+                    push!(c_units, u); push!(dy_control, Ymat[u, kt] - Ymat[u, kb])
                 end
             end
             isempty(dy_control) && continue

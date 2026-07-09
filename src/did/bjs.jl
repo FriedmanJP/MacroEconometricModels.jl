@@ -169,6 +169,15 @@ function _estimate_bjs(pd::PanelData{T}, outcome_col::Int, treat_col::Int;
     unit_fe = Dict{Int, T}(g => zero(T) for g in ctrl_groups_unique)
     time_fe = Dict{Int, T}(t => zero(T) for t in ctrl_times_unique)
 
+    # Index buckets (ascending k, so accumulation order — and hence every FE
+    # iterate — is bit-identical to the previous full 1:n_ctrl scans)
+    ctrl_by_time = Dict{Int, Vector{Int}}()
+    ctrl_by_group = Dict{Int, Vector{Int}}()
+    for k in 1:n_ctrl
+        push!(get!(() -> Int[], ctrl_by_time, control_t[k]), k)
+        push!(get!(() -> Int[], ctrl_by_group, control_g[k]), k)
+    end
+
     for iter in 1:100
         max_change = zero(T)
 
@@ -176,11 +185,9 @@ function _estimate_bjs(pd::PanelData{T}, outcome_col::Int, treat_col::Int;
         for t in ctrl_times_unique
             sum_val = zero(T)
             count_val = 0
-            for k in 1:n_ctrl
-                if control_t[k] == t
-                    sum_val += control_y[k] - get(unit_fe, control_g[k], zero(T))
-                    count_val += 1
-                end
+            for k in ctrl_by_time[t]
+                sum_val += control_y[k] - get(unit_fe, control_g[k], zero(T))
+                count_val += 1
             end
             if count_val > 0
                 new_val = sum_val / T(count_val)
@@ -193,11 +200,9 @@ function _estimate_bjs(pd::PanelData{T}, outcome_col::Int, treat_col::Int;
         for g in ctrl_groups_unique
             sum_val = zero(T)
             count_val = 0
-            for k in 1:n_ctrl
-                if control_g[k] == g
-                    sum_val += control_y[k] - get(time_fe, control_t[k], zero(T))
-                    count_val += 1
-                end
+            for k in ctrl_by_group[g]
+                sum_val += control_y[k] - get(time_fe, control_t[k], zero(T))
+                count_val += 1
             end
             if count_val > 0
                 new_val = sum_val / T(count_val)
@@ -232,17 +237,18 @@ function _estimate_bjs(pd::PanelData{T}, outcome_col::Int, treat_col::Int;
 
     group_time_att = fill(T(NaN), n_cohorts, n_times)
 
+    # Bucket treated obs by (cohort, time) once — ascending k preserves the
+    # accumulation order of the previous per-cell 1:n_treat scans exactly
+    treated_by_cell = Dict{Tuple{Int,Int}, Vector{Int}}()
+    for k in 1:n_treat
+        push!(get!(() -> Int[], treated_by_cell, (treated_cohort[k], treated_t[k])), k)
+    end
+
     for (ci, g_time) in enumerate(cohorts)
         for (ti, t) in enumerate(all_times)
-            # Collect tau for this (cohort, time) cell
-            tau_cell = T[]
-            for k in 1:n_treat
-                if treated_cohort[k] == g_time && treated_t[k] == t
-                    push!(tau_cell, tau[k])
-                end
-            end
-            if !isempty(tau_cell)
-                group_time_att[ci, ti] = mean(tau_cell)
+            cell = get(treated_by_cell, (g_time, t), nothing)
+            if cell !== nothing
+                group_time_att[ci, ti] = mean(@view tau[cell])
             end
         end
     end

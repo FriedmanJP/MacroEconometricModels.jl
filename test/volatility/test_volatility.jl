@@ -737,3 +737,72 @@ end
     @test length(se_j) == 2 + 2 * 1 + 1 && all(isfinite, se_j) && all(se_j .> 0)
     @test any(se_j .!= stderror(mj; cov_type=:hessian))
 end
+
+# =============================================================================
+# T090 (#189) SUB-4/SUB-5: SV layout + GARCH covariance cache (exact)
+# =============================================================================
+
+@testset "T090: SV contiguous layout + GARCH covariance cache" begin
+
+    @testset "SUB-4: SV h_draws deterministic and correctly shaped" begin
+        rng_y = MersenneTwister(19004)
+        y_sv = 0.05 .* randn(rng_y, 300)
+        Random.seed!(42)
+        m1 = estimate_sv(y_sv; n_samples=20, burnin=10)
+        Random.seed!(42)
+        m2 = estimate_sv(y_sv; n_samples=20, burnin=10)
+        @test size(m1.h_draws) == (20, 300)         # public shape unchanged
+        @test isequal(m1.h_draws, m2.h_draws)       # pure data movement: bit-identical
+        @test isequal(m1.volatility_mean, m2.volatility_mean)
+    end
+
+    @testset "SUB-5: GARCH/EGARCH/GJR covariance cache" begin
+        rng = MersenneTwister(19005)
+        n = 400
+        h = zeros(n); yv = zeros(n)
+        h[1] = 0.1
+        for t in 2:n
+            h[t] = 0.05 + 0.10 * yv[t-1]^2 + 0.80 * h[t-1]
+            yv[t] = sqrt(h[t]) * randn(rng)
+        end
+
+        for (est, kfun) in ((y -> estimate_garch(y, 1, 1), m -> 2 + m.q + m.p),
+                            (y -> estimate_egarch(y, 1, 1), m -> 2 + 2m.q + m.p),
+                            (y -> estimate_gjr_garch(y, 1, 1), m -> 2 + 2m.q + m.p))
+            m = est(yv)
+            k = kfun(m)
+            @test size(m.param_vcov) == (k, k)
+            @test all(isfinite, m.param_vcov)        # cache populated at estimation
+
+            se_cached = stderror(m)                  # reads the cache
+            @test se_cached == stderror(m)           # deterministic
+
+            # Back-compat ctor (NaN cache) forces the recompute path == old behavior;
+            # cached SEs must equal the from-scratch (pre-change) computation exactly
+            m_nocache = if m isa GARCHModel
+                GARCHModel(m.y, m.p, m.q, m.mu, m.omega, m.alpha, m.beta,
+                           m.conditional_variance, m.standardized_residuals,
+                           m.residuals, m.fitted, m.loglik, m.aic, m.bic,
+                           m.method, m.converged, m.iterations)
+            elseif m isa EGARCHModel
+                EGARCHModel(m.y, m.p, m.q, m.mu, m.omega, m.alpha, m.gamma, m.beta,
+                            m.conditional_variance, m.standardized_residuals,
+                            m.residuals, m.fitted, m.loglik, m.aic, m.bic,
+                            m.method, m.converged, m.iterations)
+            else
+                GJRGARCHModel(m.y, m.p, m.q, m.mu, m.omega, m.alpha, m.gamma, m.beta,
+                              m.conditional_variance, m.standardized_residuals,
+                              m.residuals, m.fitted, m.loglik, m.aic, m.bic,
+                              m.method, m.converged, m.iterations)
+            end
+            @test all(isnan, m_nocache.param_vcov)
+            se_recomputed = stderror(m_nocache)
+            @test se_cached == se_recomputed
+
+            # :hessian path still works and differs from the sandwich in general
+            se_h = stderror(m; cov_type=:hessian)
+            @test length(se_h) == k
+        end
+    end
+
+end
