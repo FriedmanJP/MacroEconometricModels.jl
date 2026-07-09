@@ -150,6 +150,47 @@ using Random
         end
     end
 
+    @testset "QS kernel infinite support (T053)" begin
+        # (A) analytic pin: QS weight is nonzero for lags beyond the bandwidth.
+        #     x = 10/(3+1) = 2.5, z = 6π·2.5/5 = 3π ⇒ sin(3π)=0, cos(3π)=−1
+        #     ⇒ w = 25/(12π²·6.25)·1 = 1/(3π²).
+        w_qs = MacroEconometricModels.kernel_weight(10, 3, :quadratic_spectral)
+        @test w_qs ≈ 1 / (3π^2) atol = 1e-12
+        @test w_qs > 0
+        # Compact-support kernels still truncate to exactly 0 at |x|>1.
+        for k in (:bartlett, :parzen, :tukey_hanning)
+            @test MacroEconometricModels.kernel_weight(10, 3, k) == 0.0
+        end
+
+        # AR(1), ρ=0.7 (project convention: explicit MersenneTwister seed).
+        rng = Random.MersenneTwister(53)
+        n = 200
+        x = zeros(n); x[1] = randn(rng)
+        for t in 2:n
+            x[t] = 0.7 * x[t-1] + randn(rng)
+        end
+        xd = x .- Statistics.mean(x)
+        bw = 4
+        γ(j) = sum(@view(xd[j+1:n]) .* @view(xd[1:n-j])) / n
+        wqs(j) = MacroEconometricModels.kernel_weight(j, bw, :quadratic_spectral)
+
+        # (B) QS full-range summation (to n−1) differs from the old bw-truncated sum.
+        lrv_qs = MacroEconometricModels.long_run_variance(x; bandwidth=bw, kernel=:quadratic_spectral)
+        S0 = sum(abs2, xd) / n
+        trunc_qs = S0 + sum(2 * wqs(j) * γ(j) for j in 1:bw)
+        tail = sum(2 * wqs(j) * γ(j) for j in (bw+1):(n-1))
+        @test !isapprox(lrv_qs, trunc_qs; rtol=1e-6)   # summation range genuinely changed
+        @test lrv_qs > trunc_qs                         # positive serial corr ⇒ positive tail mass
+        @test abs(tail) > 0
+        @test lrv_qs ≈ trunc_qs + tail atol = 1e-10     # exact reconstruction
+
+        # (C) compact kernels are a strict no-op off the QS path (jmax==bw).
+        for k in (:bartlett, :parzen, :tukey_hanning)
+            manual = S0 + sum(2 * MacroEconometricModels.kernel_weight(j, bw, k) * γ(j) for j in 1:bw)
+            @test MacroEconometricModels.long_run_variance(x; bandwidth=bw, kernel=k) ≈ manual rtol = 1e-12
+        end
+    end
+
     # =========================================================================
     # Newey-West HAC Estimator
     # =========================================================================

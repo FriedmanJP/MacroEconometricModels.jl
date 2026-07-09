@@ -107,7 +107,9 @@ Kernels:
 function kernel_weight(j::Int, bandwidth::Int, kernel::Symbol, ::Type{T}=Float64) where {T<:AbstractFloat}
     bandwidth == 0 && return zero(T)
     x = T(j) / T(bandwidth + 1)
-    abs(x) > 1 && return zero(T)
+    # Only compact-support kernels truncate at |x|>1. The quadratic-spectral kernel
+    # has infinite support and is nonzero for all x, so it must NOT short-circuit here.
+    kernel != :quadratic_spectral && abs(x) > 1 && return zero(T)
 
     if kernel == :bartlett
         one(T) - abs(x)
@@ -258,8 +260,10 @@ function newey_west(X::AbstractMatrix{T}, residuals::AbstractVector{T};
     # Lag-0 autocovariance: Γ₀ = Σₜ (xₜuₜ)(xₜuₜ)'
     S = (Xu' * Xu)  # k × k, more efficient than loop
 
-    # Add weighted lag autocovariances using BLAS
-    @inbounds for j in 1:bw
+    # Add weighted lag autocovariances using BLAS. The quadratic-spectral kernel has
+    # infinite support, so sum all lags to n-1 (O(n²)); compact kernels truncate at bw.
+    jmax = kernel == :quadratic_spectral ? (n - 1) : bw
+    @inbounds for j in 1:jmax
         w = kernel_weight(j, bw, kernel, T)
         w == 0 && continue
         # Γⱼ = Σₜ (xₜuₜ)(xₜ₋ⱼuₜ₋ⱼ)'
@@ -563,7 +567,9 @@ function long_run_variance(x::AbstractVector{T}; bandwidth::Int=0,
     x_demean = x .- mean(x)
     S = sum(x_demean.^2) / n
 
-    @inbounds for j in 1:bw
+    # QS kernel has infinite support → sum all lags to n-1; compact kernels truncate at bw.
+    jmax = kernel == :quadratic_spectral ? (n - 1) : bw
+    @inbounds for j in 1:jmax
         w = kernel_weight(j, bw, kernel, T)
         w == 0 && continue
         gamma_j = sum(x_demean[j+1:n] .* x_demean[1:n-j]) / n
@@ -600,9 +606,11 @@ function long_run_covariance(X::AbstractMatrix{T}; bandwidth::Int=0,
     # Lag-0 autocovariance using BLAS
     S = (X_demean' * X_demean) / n
 
-    # Pre-allocate for weighted lag autocovariances
-    # Using views into X_demean for efficient BLAS operations
-    @inbounds for j in 1:bw
+    # Pre-allocate for weighted lag autocovariances. Using views into X_demean for
+    # efficient BLAS operations. QS kernel has infinite support → sum all lags to n-1;
+    # compact kernels truncate at bw.
+    jmax = kernel == :quadratic_spectral ? (n - 1) : bw
+    @inbounds for j in 1:jmax
         w = kernel_weight(j, bw, kernel, T)
         w == 0 && continue
         # Γⱼ = (1/n) X[j+1:n,:]' * X[1:n-j,:]
