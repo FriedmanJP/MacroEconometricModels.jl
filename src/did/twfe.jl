@@ -156,20 +156,34 @@ function _estimate_twfe(pd::PanelData{T}, outcome_col::Int, treat_col::Int;
     ci_lower = att .- z .* se
     ci_upper = att .+ z .* se
 
-    # Overall ATT: average of post-treatment coefficients
-    post_mask = event_times_all .>= 0
-    post_att = att[post_mask]
-    post_se = se[post_mask]
-    n_post = count(post_mask)
-    overall_att = mean(post_att)
-    # SE of average: sqrt(sum(se^2)/K^2) assuming independence across horizons
-    overall_se = sqrt(sum(post_se.^2)) / n_post
+    # Full covariance of the event-study ATT vector (aligned to event_times_all).
+    # V (the clustered vcov of beta) has its first n_dummies rows/cols = event-time
+    # dummy coefficients ordered by event_times_est; the omitted reference period maps
+    # to a zero row/col. Populates DIDResult.att_vcov so overall-ATT aggregation (T068)
+    # and the joint pre-trend Wald test (T069) reuse the cross-horizon covariance.
+    E = length(event_times_all)
+    att_vcov = zeros(T, E, E)
+    dummy_pos = [findfirst(==(e), event_times_all) for e in event_times_est]
+    @inbounds for a in 1:n_dummies, b in 1:n_dummies
+        att_vcov[dummy_pos[a], dummy_pos[b]] = V[a, b]
+    end
+
+    # Overall ATT: equal-weighted average of post-treatment (event_time >= 0) ATTs.
+    post_idx = findall(>=(0), event_times_all)
+    n_post = length(post_idx)
+    overall_att = mean(att[post_idx])
+    # SE via the full covariance of the contrast: sqrt(w'V_post w), w = 1/n_post.
+    # The old sqrt(sum(se^2))/n_post dropped every cross-horizon Cov(ATT_h,ATT_k),
+    # biasing the overall SE downward (shared units/controls => positive off-diagonals).
+    w = fill(one(T) / n_post, n_post)
+    V_post = att_vcov[post_idx, post_idx]
+    overall_se = sqrt(max(dot(w, V_post * w), zero(T)))
 
     DIDResult{T}(att, se, ci_lower, ci_upper, event_times_all, reference_period,
                  nothing, nothing, overall_att, overall_se,
                  N_obs, pd.n_groups, n_treated, n_control,
                  :twfe, pd.varnames[outcome_col], pd.varnames[treat_col],
-                 control_group, cluster, T(conf_level))
+                 control_group, cluster, T(conf_level), att_vcov)
 end
 
 # =============================================================================

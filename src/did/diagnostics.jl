@@ -167,12 +167,16 @@ function _bacon_2x2(panel, treated, control, g_time, all_times, n_total)
 
     dd = (mean(post_treat) - mean(pre_treat)) - (mean(post_ctrl) - mean(pre_ctrl))
 
-    # Weight proportional to subsample size x variance of treatment
+    # Goodman-Bacon (2021) weight s^k_kU = n_sub² · p(1-p) · D̄_k(1-D̄_k):
+    # subsample treatment-share variance p(1-p) TIMES the treated-time-share variance
+    # D̄_k(1-D̄_k) that the old formula omitted. (Global 1/n_total drop: normalized below.)
     n_k = length(treated)
     n_u = length(control)
     n_sub = n_k + n_u
     p_k = n_k / n_sub
-    w = T_type(n_sub) / T_type(n_total) * p_k * (1 - p_k)
+    n_times = length(all_times)
+    Dk = count(t -> t >= g_time, all_times) / n_times
+    w = T_type(n_sub)^2 * p_k * (1 - p_k) * Dk * (1 - Dk)
 
     dd, w
 end
@@ -215,11 +219,16 @@ function _bacon_2x2_timing(panel, early_units, late_units, g_early, g_late,
 
     dd = (mean(post_early) - mean(pre_early)) - (mean(post_late) - mean(pre_late))
 
+    # Goodman-Bacon (2021) earlier-vs-later weight s^k_kl = n_sub² · p(1-p) · (1-D̄_k)(D̄_k-D̄_l),
+    # early is treated / late not-yet in the [g_early, g_late) window. D̄_k>D̄_l>0 ⇒ w>0.
     n_e = length(early_units)
     n_l = length(late_units)
     n_sub = n_e + n_l
     p_e = n_e / n_sub
-    w = T_type(n_sub) / T_type(n_total) * p_e * (1 - p_e)
+    n_times = length(all_times)
+    Dk = count(t -> t >= g_early, all_times) / n_times
+    Dl = count(t -> t >= g_late, all_times) / n_times
+    w = T_type(n_sub)^2 * p_e * (1 - p_e) * (1 - Dk) * (Dk - Dl)
 
     dd, w
 end
@@ -263,11 +272,16 @@ function _bacon_2x2_later_vs_earlier(panel, late_units, early_units, g_late, g_e
 
     dd = (mean(post_late) - mean(pre_late)) - (mean(post_early) - mean(pre_early))
 
+    # Goodman-Bacon (2021) later-vs-earlier weight s^l_kl = n_sub² · p(1-p) · D̄_l(D̄_k-D̄_l),
+    # late is treated / early already treated in the [g_late, end) window. p(1-p) symmetric.
     n_l = length(late_units)
     n_e = length(early_units)
     n_sub = n_l + n_e
     p_l = n_l / n_sub
-    w = T_type(n_sub) / T_type(n_total) * p_l * (1 - p_l)
+    n_times = length(all_times)
+    Dk = count(t -> t >= g_early, all_times) / n_times
+    Dl = count(t -> t >= g_late, all_times) / n_times
+    w = T_type(n_sub)^2 * p_l * (1 - p_l) * Dl * (Dk - Dl)
 
     dd, w
 end
@@ -292,6 +306,12 @@ function pretrend_test(result::DIDResult{T}) where {T<:AbstractFloat}
     pre_mask = result.event_times .< 0 .&& result.event_times .!= result.reference_period
     pre_coefs = result.att[pre_mask]
     pre_ses = result.se[pre_mask]
+    # Prefer the full-covariance joint Wald when the estimator supplies a cross-horizon
+    # covariance; fall back to the diagonal form otherwise (no covariance available).
+    if result.att_vcov !== nothing
+        pre_V = result.att_vcov[pre_mask, pre_mask]
+        return _compute_pretrend_test(pre_coefs, pre_ses, pre_V)
+    end
     _compute_pretrend_test(pre_coefs, pre_ses)
 end
 
@@ -306,8 +326,10 @@ function _compute_pretrend_test(pre_coefs::Vector{T}, pre_ses::Vector{T}) where 
     K = length(pre_coefs)
     K == 0 && return PretrendTestResult{T}(zero(T), one(T), 0, pre_coefs, pre_ses, :f_test)
 
-    # Wald test: beta' V^{-1} beta ~ chi^2(K)
-    # Using diagonal V (conservative, ignores cross-horizon covariance)
+    # Diagonal-only Wald fallback (used only when no cross-horizon covariance is available):
+    # W = Σ(bᵢ/seᵢ)². This ignores off-diagonal covariance and is NOT conservative — under
+    # positively-correlated, same-sign pre-coefs it OVERSTATES W. The covariance-aware method
+    # below (with att_vcov) is exact; this branch is the graceful degradation.
     valid = pre_ses .> 0
     if !any(valid)
         return PretrendTestResult{T}(zero(T), one(T), K, pre_coefs, pre_ses, :wald)
@@ -317,6 +339,35 @@ function _compute_pretrend_test(pre_coefs::Vector{T}, pre_ses::Vector{T}) where 
     pval = 1 - cdf(Chisq(count(valid)), wald_stat)
 
     PretrendTestResult{T}(wald_stat, T(pval), count(valid), pre_coefs, pre_ses, :wald)
+end
+
+"""
+    _compute_pretrend_test(pre_coefs, pre_ses, pre_V) -> PretrendTestResult
+
+Covariance-aware joint pre-trend Wald: W = b' V⁻¹ b ~ χ²(df), where `V` is the FULL
+covariance of the pre-period event-study coefficients (its off-diagonal Cov(bᵢ,bⱼ) is the
+information the diagonal `Σ(bᵢ/seᵢ)²` form throws away). `V` is symmetrized and inverted with
+`robust_inv`; coefficients with a zero SE (e.g. the reference period) are dropped.
+"""
+function _compute_pretrend_test(pre_coefs::Vector{T}, pre_ses::Vector{T},
+                                pre_V::AbstractMatrix{T}) where {T<:AbstractFloat}
+    K = length(pre_coefs)
+    K == 0 && return PretrendTestResult{T}(zero(T), one(T), 0, pre_coefs, pre_ses, :wald)
+
+    valid = pre_ses .> 0
+    if !any(valid)
+        return PretrendTestResult{T}(zero(T), one(T), K, pre_coefs, pre_ses, :wald)
+    end
+
+    b = pre_coefs[valid]
+    Vv = pre_V[valid, valid]
+    Vsym = Symmetric((Vv .+ Vv') ./ 2)
+    Vinv = robust_inv(Vsym; silent=true)
+    wald_stat = max(dot(b, Vinv * b), zero(T))
+    df = count(valid)
+    pval = 1 - cdf(Chisq(df), wald_stat)
+
+    PretrendTestResult{T}(T(wald_stat), T(pval), df, pre_coefs, pre_ses, :wald)
 end
 
 # =============================================================================

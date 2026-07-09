@@ -516,14 +516,19 @@ The output table shows N, Mean, Std, Min, P25, Median, P75, Max, Skewness, and K
 | `varnames` | `Vector{String}` | Variable names |
 | `n` | `Vector{Int}` | Non-NaN observation count per variable |
 | `mean` | `Vector{Float64}` | Mean of finite values |
-| `std` | `Vector{Float64}` | Standard deviation |
+| `std` | `Vector{Float64}` | Standard deviation (sample, divisor ``n-1``) |
 | `min` | `Vector{Float64}` | Minimum |
 | `p25` | `Vector{Float64}` | 25th percentile |
 | `median` | `Vector{Float64}` | 50th percentile |
 | `p75` | `Vector{Float64}` | 75th percentile |
 | `max` | `Vector{Float64}` | Maximum |
-| `skewness` | `Vector{Float64}` | Skewness |
-| `kurtosis` | `Vector{Float64}` | Excess kurtosis |
+| `skewness` | `Vector{Float64}` | Skewness (population / method-of-moments, divisor ``n``) |
+| `kurtosis` | `Vector{Float64}` | Excess kurtosis (population / method-of-moments, divisor ``n``) |
+
+The `std` column reports the sample standard deviation (divisor ``n-1``), while `skewness`
+and `kurtosis` use the population (method-of-moments) convention with the population
+variance ``m_2 = \frac{1}{n}\sum (x_i-\bar x)^2`` as the scale, so their numerator and
+denominator share one divisor: ``\text{skew}=m_3/m_2^{3/2}``, ``\text{kurt}=m_4/m_2^2-3``.
 
 ---
 

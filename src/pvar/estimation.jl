@@ -16,6 +16,19 @@ GMM with Windmeijer (2005) finite-sample corrected standard errors.
 # =============================================================================
 
 """
+    _ab_h_matrix(T, r) -> Matrix{T}
+
+Arellano-Bond (1991) band matrix for one-step first-difference GMM weighting: an `r × r`
+matrix with `2` on the main diagonal and `-1` on the first off-diagonals — the covariance
+structure (up to scale) of the MA(1) errors induced by first differencing. Used to form
+the efficient one-step weight `W₁ = (Σ_i Z_i' H Z_i)^{-1}`.
+"""
+function _ab_h_matrix(::Type{T}, r::Int) where {T<:AbstractFloat}
+    r <= 0 && return zeros(T, 0, 0)
+    Matrix(SymTridiagonal(fill(T(2), r), fill(T(-1), max(r - 1, 0))))
+end
+
+"""
     estimate_pvar(d::PanelData{T}, p::Int; kwargs...) -> PVARModel{T}
 
 Estimate Panel VAR(p) via GMM.
@@ -197,9 +210,11 @@ function estimate_pvar(d::PanelData{T}, p::Int;
         group_Z[g] = Z_g
     end
 
-    # Determine common instrument dimension (use minimum across groups for non-system)
+    # Align the per-group instrument blocks to a common width.
     if system_instruments
-        # For system GMM, align dimensions
+        # System GMM [Z_fd | Z_lev]: the level block sits at the right end, so simple
+        # right-padding would misalign it — the [T081/M-13] non-system fix does not apply
+        # here. Kept as min-truncation (tracked separately).
         min_z_cols = minimum(size(Z, 2) for Z in group_Z)
         for g in 1:N
             if size(group_Z[g], 2) > min_z_cols
@@ -207,15 +222,28 @@ function estimate_pvar(d::PanelData{T}, p::Int;
             end
         end
     else
-        min_z_cols = minimum(size(Z, 2) for Z in group_Z)
+        # Arellano-Bond block-diagonal instruments are NESTED across groups of different
+        # length: block s occupies the same leading column range for every group (its width
+        # depends only on p/min_lag/max_lag/s, not on T_i), so the leading columns already
+        # align. Zero-pad each shorter group to the common (maximum) width so longer units
+        # KEEP their later-period moment conditions. Padded zeros contribute exactly zero to
+        # every moment sum (Σ_g Z_g'X_g, Σ_g Z_g'y_g, Σ_g Z_g'Z_g), so a moment condition
+        # present in only k<N units is automatically averaged over its k contributing units
+        # (was: truncate to min width, discarding every longer unit's later moments).
+        max_z_cols = maximum(size(Z, 2) for Z in group_Z)
         for g in 1:N
-            if size(group_Z[g], 2) > min_z_cols
-                group_Z[g] = group_Z[g][:, 1:min_z_cols]
+            ncur = size(group_Z[g], 2)
+            if ncur < max_z_cols
+                group_Z[g] = hcat(group_Z[g], zeros(T, size(group_Z[g], 1), max_z_cols - ncur))
             end
         end
     end
 
     n_inst = size(group_Z[1], 2)
+
+    if n_inst > N
+        @warn "Too many instruments: PVAR GMM has n_inst=$(n_inst) moment conditions > N=$(N) groups (ratio $(round(n_inst / N, digits=2))). Instrument proliferation overfits the endogenous regressors, biases the two-step weighting matrix toward singularity, and pushes the Hansen J-test toward non-rejection (Roodman 2009, OBES 71(1):135-158). Consider collapse=true or a smaller max_lag_endo." maxlog=1
+    end
 
     # Aggregate cross-products for equation-by-equation GMM
     # Each equation: y_eq = X * phi_eq + error
@@ -251,19 +279,28 @@ function estimate_pvar(d::PanelData{T}, p::Int;
     group_resid_trans = Vector{Matrix{T}}(undef, N)
     W_final = Matrix{T}(undef, 0, 0)
 
+    # One-step GMM weighting matrix W1 = (1/N Σ_g Z_g' H_g Z_g)^{-1} (Arellano-Bond 1991).
+    # First differencing induces an MA(1) error whose covariance is proportional to the band
+    # matrix H_g (2 on the diagonal, -1 on the first off-diagonals); this is the efficient
+    # one-step weight and matches xtabond2. Forward orthogonal deviations yield homoskedastic
+    # errors (H = I), for which Z'Z is already optimal. W1 is equation-invariant, so it is
+    # built once here rather than per equation.
+    W1_accum = zeros(T, n_inst, n_inst)
+    for g in 1:N
+        Z_g = group_Z[g]
+        if transformation == :fd
+            W1_accum .+= Z_g' * (_ab_h_matrix(T, size(Z_g, 1)) * Z_g)
+        else
+            W1_accum .+= Z_g' * Z_g
+        end
+    end
+    W1_accum ./= N
+    W1 = Matrix{T}(robust_inv(Hermitian((W1_accum + W1_accum') / 2)))
+
+    coef_vcov = [zeros(T, K, K) for _ in 1:m_dim]   # full per-equation K×K GMM covariance
+
     for eq in 1:m_dim
         s_zy_eq = S_Zy[:, eq]
-
-        # Step 1: One-step GMM with H matrix as weighting
-        # For FD: H = (1/N) Σ_i Z_i' H_fd Z_i where H_fd is banded matrix
-        # Simplification: use identity or Z'Z as initial weighting
-        W1 = zeros(T, n_inst, n_inst)
-        for g in 1:N
-            Z_g = group_Z[g]
-            W1 .+= Z_g' * Z_g
-        end
-        W1 ./= N
-        W1 = Matrix{T}(robust_inv(Hermitian((W1 + W1') / 2)))
 
         # Solve one-step
         phi1 = linear_gmm_solve(S_ZX, s_zy_eq, W1)
@@ -283,6 +320,7 @@ function estimate_pvar(d::PanelData{T}, p::Int;
                 D_e .+= Ze * Ze'
             end
             V = gmm_sandwich_vcov(S_ZX, W1, D_e)
+            coef_vcov[eq] = V
             Phi[eq, :] = phi1
             se_eq = sqrt.(max.(diag(V), zero(T)))
             SE[eq, :] = se_eq
@@ -339,6 +377,7 @@ function estimate_pvar(d::PanelData{T}, p::Int;
             V_corrected = _windmeijer_correct(S_ZX, W_final, group_Z, group_X_trans,
                                                group_Y_trans, phi1, phi_curr, eq, K, N, V1, bread_inv)
 
+            coef_vcov[eq] = V_corrected
             Phi[eq, :] = phi_curr
             se_eq = sqrt.(max.(diag(V_corrected), zero(T)))
             SE[eq, :] = se_eq
@@ -364,7 +403,8 @@ function estimate_pvar(d::PanelData{T}, p::Int;
 
     # Residual covariance from level residuals (for structural analysis)
     # Use untransformed residuals from level equation
-    Sigma = _compute_level_sigma(group_Y_levels, Phi, m_dim, p, K, N)
+    Sigma = _compute_innovation_sigma(group_Y_levels, group_X_predet, group_X_exog,
+                                       Phi, transformation, m_dim, p, K, N, n_predet, n_exog)
 
     # Panel descriptors
     eff_obs = [size(group_Y_trans[g], 1) for g in 1:N]
@@ -381,7 +421,7 @@ function estimate_pvar(d::PanelData{T}, p::Int;
         N, n_periods_max, total_obs,
         (min=min_obs, avg=avg_obs, max=max_obs),
         group_Z, group_resid_trans, W_final, n_inst,
-        d
+        d, coef_vcov
     )
 end
 
@@ -456,26 +496,47 @@ function _windmeijer_correct(S_ZX::Matrix{T}, W::Matrix{T},
 end
 
 """Compute level residual covariance Sigma for structural analysis."""
-function _compute_level_sigma(group_Y_levels::Vector{Matrix{T}}, Phi::Matrix{T},
-                               m_dim::Int, p::Int, K::Int, N::Int) where {T}
+function _compute_innovation_sigma(group_Y_levels::Vector{Matrix{T}},
+                                    group_X_predet, group_X_exog,
+                                    Phi::Matrix{T}, transformation::Symbol,
+                                    m_dim::Int, p::Int, K::Int, N::Int,
+                                    n_predet::Int, n_exog::Int) where {T}
+    # Structural Σ for IRF/FEVD must be the covariance of the idiosyncratic innovation ε,
+    # NOT of the level residual α_i + ε (which inflates Σ by Var(α_i) on the diagonal and
+    # by between-unit cross terms off-diagonal). Recompute from the SAME transformation used
+    # for estimation, then map the transformed-residual covariance back to the level scale.
     Sigma = zeros(T, m_dim, m_dim)
     total = 0
     for g in 1:N
         Y_g = group_Y_levels[g]
-        Ti = size(Y_g, 1)
-        Ti <= p && continue
-        Y_eff = Y_g[(p+1):end, :]
-        X_lag = _panel_lag(Y_g, p)
-        # If Phi has more columns than X_lag, pad X_lag
-        X_use = X_lag[:, 1:min(size(X_lag, 2), K)]
-        if size(X_use, 2) < K
-            X_use = hcat(X_use, zeros(T, size(X_use, 1), K - size(X_use, 2)))
+        size(Y_g, 1) <= p + 1 && continue
+        Y_eff, X_lag = _panel_lag_levels(Y_g, p)
+        X_full = X_lag
+        if n_predet > 0
+            X_full = hcat(X_full, group_X_predet[g][(p+1):end, :])
         end
-        E_g = Y_eff - X_use * Phi'
-        Sigma .+= E_g' * E_g
-        total += size(E_g, 1)
+        if n_exog > 0
+            X_full = hcat(X_full, group_X_exog[g][(p+1):end, :])
+        end
+        if transformation == :fd
+            Yt = _panel_first_difference(Y_eff)
+            Xt = _panel_first_difference(X_full)
+        else
+            Yt = _panel_fod(Y_eff)
+            Xt = _panel_fod(X_full)
+        end
+        Xu = Xt[:, 1:min(size(Xt, 2), K)]
+        if size(Xu, 2) < K
+            Xu = hcat(Xu, zeros(T, size(Xu, 1), K - size(Xu, 2)))
+        end
+        E = Yt - Xu * Phi'
+        Sigma .+= E' * E
+        total += size(E, 1)
     end
-    total > 0 ? Sigma ./ total : Sigma
+    # FD: E[Δε_t Δε_t'] = 2Σ (ε iid, homoskedastic) ⇒ scale 0.5. FOD/Helmert is orthonormal
+    # ⇒ transformed-error covariance = Σ exactly ⇒ scale 1.0.
+    scale = transformation == :fd ? T(0.5) : one(T)
+    total > 0 ? scale .* (Sigma ./ total) : Sigma
 end
 
 # =============================================================================
@@ -583,6 +644,7 @@ function estimate_pvar_feols(d::PanelData{T}, p::Int;
     PVAL = Matrix{T}(undef, m_dim, K)
 
     XtX_inv = robust_inv(X_pool' * X_pool)
+    coef_vcov = [zeros(T, K, K) for _ in 1:m_dim]   # full per-equation cluster-robust covariance
 
     for eq in 1:m_dim
         y_eq = Y_pool[:, eq]
@@ -602,6 +664,7 @@ function estimate_pvar_feols(d::PanelData{T}, p::Int;
         n_eff = total_obs
         correction = T(N) / T(N - 1) * T(n_eff - 1) / T(n_eff - K)
         V_cluster = correction * XtX_inv * meat * XtX_inv
+        coef_vcov[eq] = V_cluster
 
         Phi[eq, :] = phi_eq
         SE[eq, :] = sqrt.(max.(diag(V_cluster), zero(T)))
@@ -611,22 +674,11 @@ function estimate_pvar_feols(d::PanelData{T}, p::Int;
         end
     end
 
-    # Sigma from level residuals
-    Sigma = zeros(T, m_dim, m_dim)
-    for g in 1:N
-        gd = group_data(d, g)
-        Y_g = Matrix{T}(gd.data[:, dep_idx])
-        Ti = size(Y_g, 1)
-        Ti <= p && continue
-        Y_eff = Y_g[(p+1):end, :]
-        X_lag = _panel_lag(Y_g, p)
-        X_full = X_lag
-        if n_predet > 0; X_full = hcat(X_full, gd.data[(p+1):end, predet_idx]); end
-        if n_exog > 0; X_full = hcat(X_full, gd.data[(p+1):end, exog_idx]); end
-        E_g = Y_eff - X_full * Phi'
-        Sigma .+= E_g' * E_g
-    end
-    Sigma ./= max(total_obs, 1)
+    # Sigma from WITHIN residuals: Y_pool/X_pool are already within-demeaned (lines above),
+    # so the unit fixed effect α_i is annihilated and Σ estimates the innovation covariance
+    # (not Var(α_i) + Σ, as the old level-residual reconstruction did).
+    E_pool = Y_pool - X_pool * Phi'
+    Sigma = (E_pool' * E_pool) ./ max(total_obs, 1)
 
     eff_obs = [length(group_ranges[g]) for g in 1:N if isassigned(group_ranges, g)]
     n_periods_max = maximum(obs_counts)
@@ -641,6 +693,6 @@ function estimate_pvar_feols(d::PanelData{T}, p::Int;
         N, n_periods_max, total_obs,
         (min=minimum(eff_obs), avg=mean(eff_obs), max=maximum(eff_obs)),
         empty_Z, empty_E, zeros(T, 0, 0), 0,
-        d
+        d, coef_vcov
     )
 end

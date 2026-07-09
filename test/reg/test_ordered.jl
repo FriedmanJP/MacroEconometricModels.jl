@@ -262,6 +262,71 @@ using LinearAlgebra, Statistics, Random, Distributions
         @test stderror(mp_ols) != stderror(mp_hc1)
     end
 
+    @testset "Observed-information Hessian matches numeric (T071)" begin
+        # The analytic Hessian must equal the numeric derivative of the (correct) analytic
+        # score — at the optimum AND away from it (where -H ≠ OPG, the old BHHH bug).
+        for (link, Fc, Fp, Fdp) in (
+                (:logit, MacroEconometricModels._logistic_cdf,
+                 MacroEconometricModels._logistic_pdf, MacroEconometricModels._logistic_pdf_deriv),
+                (:probit, MacroEconometricModels._normal_cdf,
+                 MacroEconometricModels._normal_pdf, MacroEconometricModels._normal_pdf_deriv))
+            rng = MersenneTwister(11)
+            n = 400
+            y, X = generate_ordered_data(rng, n, [0.8, -0.4], [-0.3, 0.9]; link=link)
+            J = 3; K = 2; P = K + (J - 1)
+            m = link == :logit ? estimate_ologit(y, X; cov_type=:ols) :
+                                  estimate_oprobit(y, X; cov_type=:ols)
+            theta_hat = vcat(coef(m), m.cutpoints)
+
+            score_at(th) = MacroEconometricModels._ordered_loglik_score_hessian(
+                y, X, th[1:K], th[K+1:end], J, Fc, Fp, Fdp)[2]
+            function num_hess(th)
+                hh = 1e-5
+                Hn = zeros(P, P)
+                for p in 1:P
+                    ep = zeros(P); ep[p] = hh
+                    Hn[:, p] = (score_at(th .+ ep) .- score_at(th .- ep)) ./ (2hh)
+                end
+                (Hn .+ Hn') ./ 2
+            end
+
+            H = MacroEconometricModels._ordered_loglik_score_hessian(
+                y, X, coef(m), m.cutpoints, J, Fc, Fp, Fdp)[3]
+            @test maximum(abs, H .- num_hess(theta_hat)) < 1e-5      # at the optimum
+
+            theta_p = theta_hat .+ 0.15 .* randn(rng, P)
+            theta_p[K+2] = max(theta_p[K+2], theta_p[K+1] + 0.1)     # keep cutpoints ordered
+            Hp = MacroEconometricModels._ordered_loglik_score_hessian(
+                y, X, theta_p[1:K], theta_p[K+1:end], J, Fc, Fp, Fdp)[3]
+            @test maximum(abs, Hp .- num_hess(theta_p)) < 1e-5      # away from the optimum
+        end
+    end
+
+    @testset "Classical SE = observed information; HC0 robust differs (T071)" begin
+        rng = MersenneTwister(7777)
+        n = 2000
+        y, X = generate_ordered_data(rng, n, [1.0, -0.5], [0.0, 1.5]; link=:logit)
+        J = 3
+        Fc = MacroEconometricModels._logistic_cdf
+        Fp = MacroEconometricModels._logistic_pdf
+        Fdp = MacroEconometricModels._logistic_pdf_deriv
+
+        m_ols = estimate_ologit(y, X; cov_type=:ols)
+        m_hc0 = estimate_ologit(y, X; cov_type=:hc0)
+        # Previously the sandwich collapsed to OPG⁻¹ and was bit-identical to :ols.
+        @test maximum(abs.(stderror(m_hc0) .- stderror(m_ols))) > 1e-6
+
+        # Classical vcov is the observed-information inverse (-H)⁻¹ …
+        H = MacroEconometricModels._ordered_loglik_score_hessian(
+            y, X, coef(m_ols), m_ols.cutpoints, J, Fc, Fp, Fdp)[3]
+        @test isapprox(vcov(m_ols), Matrix(MacroEconometricModels.robust_inv(Hermitian(-H)));
+                       atol=1e-8)
+        # … and NOT the OPG inverse (which is what the BHHH bug produced).
+        Sm = MacroEconometricModels._ordered_score_matrix(
+            y, X, coef(m_ols), m_ols.cutpoints, J, Fc, Fp)
+        @test norm(vcov(m_ols) .- inv(Sm' * Sm)) > 1e-4
+    end
+
     # =========================================================================
     # Category remapping
     # =========================================================================

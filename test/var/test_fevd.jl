@@ -124,6 +124,33 @@ end
     @test all(fevd_result.decomposition .>= -1e-10)
 end
 
+@testset "fevd input validation (T062 C-18)" begin
+    @test_throws ArgumentError MacroEconometricModels._validate_data([1.0 NaN; 0.0 2.0], "Sigma")
+end
+
+@testset "FEVD orthogonality guard (T061)" begin
+    Random.seed!(61)
+    Y = zeros(200, 3)
+    for t in 2:200
+        Y[t, :] = 0.5 * Y[t-1, :] + randn(3)
+    end
+    model = estimate_var(Y, 1)
+    L = Matrix(MacroEconometricModels.safe_cholesky(model.Sigma))
+
+    # (1) orthonormal impact matrix (cholesky, Q=I) ⇒ guard true, no warning, props sum to 1
+    @test MacroEconometricModels._check_fevd_orthogonality(L, model.Sigma; method=:cholesky)
+    fe = @test_nowarn fevd(model, 8; method=:cholesky)
+    for h in 1:8, i in 1:3
+        @test sum(fe.proportions[i, :, h]) ≈ 1.0 atol = 1e-10
+    end
+
+    # (2) non-orthonormal impact matrix (P = L·diag(2,1,1)) ⇒ guard false + one warning
+    P_bad = copy(L); P_bad[:, 1] .*= 2.0
+    got = @test_logs (:warn,) match_mode = :any MacroEconometricModels._check_fevd_orthogonality(
+        P_bad, model.Sigma; method=:garch)
+    @test got == false
+end
+
 @testset "FEVD Methods" begin
     Random.seed!(456)
 

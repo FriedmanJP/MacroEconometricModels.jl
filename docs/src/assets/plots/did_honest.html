@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>HonestDiD: Robust CI (breakdown = 0.44819666053276)</title>
+<title>Honest DiD: Robust CI (breakdown = 0.3569017511735435)</title>
 <style>* { margin: 0; padding: 0; box-sizing: border-box; }
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
@@ -67,9 +67,9 @@ svg { overflow: visible; }
 </style>
 </head>
 <body>
-<div class="figure-title">HonestDiD: Robust CI (breakdown = 0.44819666053276)</div>
+<div class="figure-title">Honest DiD: Robust CI (breakdown = 0.3569017511735435)</div>
 <div class="panel">
-<div class="panel-title">HonestDiD Sensitivity (M̅ = 1.0)</div>
+<div class="panel-title">Honest DiD Sensitivity (Δ^RM, M̅ = 1.0)</div>
 <div id="honest_did_171"></div>
 </div>
 <div class="tooltip" id="tooltip"></div>
@@ -88,12 +88,12 @@ function showTip(evt, html) {
 function hideTip() { tooltip.style('opacity',0); }
 
 (function() {
-    const data = [{"x":0,"att":2.140828690583581,"orig_lo":1.2429162644854463,"orig_hi":3.0387411166817158,"robust_lo":0.24291626448544634,"robust_hi":4.038741116681716,"zero":0},
-{"x":1,"att":2.1993053303336465,"orig_lo":1.3026087474557135,"orig_hi":3.0960019132115795,"robust_lo":-0.6973912525442865,"robust_hi":5.0960019132115795,"zero":0},
-{"x":2,"att":2.93556881168434,"orig_lo":1.9954350156531693,"orig_hi":3.8757026077155112,"robust_lo":-1.0045649843468307,"robust_hi":6.875702607715511,"zero":0},
-{"x":3,"att":2.96572972935485,"orig_lo":2.145639705917513,"orig_hi":3.785819752792187,"robust_lo":-1.854360294082487,"robust_hi":7.785819752792187,"zero":0},
-{"x":4,"att":3.1866540755581623,"orig_lo":2.2791815542599663,"orig_hi":4.094126596856358,"robust_lo":-2.7208184457400337,"robust_hi":9.09412659685636,"zero":0},
-{"x":5,"att":3.5519732639909147,"orig_lo":2.68917996319656,"orig_hi":4.414766564785269,"robust_lo":-3.31082003680344,"robust_hi":10.41476656478527,"zero":0}];
+    const data = [{"x":0,"att":2.140828690583581,"orig_lo":1.342756487560265,"orig_hi":2.9389008936068968,"robust_lo":0.34400701567822267,"robust_hi":3.8864984452565423,"zero":0},
+{"x":1,"att":2.1993053303336465,"orig_lo":1.597673714798542,"orig_hi":2.800936945868751,"robust_lo":-0.7396165238640975,"robust_hi":5.32216316555359,"zero":0},
+{"x":2,"att":2.93556881168434,"orig_lo":2.059846595695482,"orig_hi":3.811291027673198,"robust_lo":-1.7228658346082348,"robust_hi":7.354650011885506,"zero":0},
+{"x":3,"att":2.96572972935485,"orig_lo":2.3856278181103368,"orig_hi":3.545831640599363,"robust_lo":-3.089897455632197,"robust_hi":8.736809104269959,"zero":0},
+{"x":4,"att":3.1866540755581623,"orig_lo":2.50591057454007,"orig_hi":3.8673975765762547,"robust_lo":-4.190233367390396,"robust_hi":10.586325516567431,"zero":0},
+{"x":5,"att":3.5519732639909147,"orig_lo":2.8084137870898687,"orig_hi":4.295532740891961,"robust_lo":-5.601617073876518,"robust_hi":12.091813139343436,"zero":0}];
     const series = [{"name":"ATT","color":"#1f77b4","key":"att","dash":""}];
     const bands = [{"lo_key":"robust_lo","hi_key":"robust_hi","color":"#ff7f0e","alpha":0.15},{"lo_key":"orig_lo","hi_key":"orig_hi","color":"#1f77b4","alpha":0.15}];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];

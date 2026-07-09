@@ -128,6 +128,44 @@ end
     # Zero Restrictions Tests
     # ==========================================================================
 
+    @testset "weighted quantile with Float32 eps(T) (T062 C-17)" begin
+        vals = Float32[1, 2, 3, 4]
+        w = Float32[1, 1, 1, 1]
+        q = MacroEconometricModels._weighted_quantile(vals, w, 0.5f0)
+        @test isfinite(q)
+        @test 1 ≤ q ≤ 4
+        # a zero-weight tie (cw[idx]==cw[idx-1]) must not blow up thanks to the eps(T) floor
+        @test isfinite(MacroEconometricModels._weighted_quantile(Float32[1, 2, 3], Float32[1, 0, 1], 0.5f0))
+    end
+
+    @testset "Narrowed identification catch (T059)" begin
+        # (1) predicate: numeric-degeneracy errors are rejectable; genuine bugs are not
+        @test MacroEconometricModels._is_rejectable_draw_error(LinearAlgebra.SingularException(1))
+        @test MacroEconometricModels._is_rejectable_draw_error(LinearAlgebra.PosDefException(1))
+        @test MacroEconometricModels._is_rejectable_draw_error(DomainError(-1.0))
+        @test !MacroEconometricModels._is_rejectable_draw_error(BoundsError())
+        @test !MacroEconometricModels._is_rejectable_draw_error(MethodError(sqrt, ("x",)))
+        @test !MacroEconometricModels._is_rejectable_draw_error(DimensionMismatch("x"))
+
+        Random.seed!(2018)
+        Y = zeros(150, 3)
+        for t in 2:150
+            Y[t, :] = 0.5 * Y[t-1, :] + randn(3)
+        end
+        model = estimate_var(Y, 1)
+
+        # (2) regression: a satisfiable sign-restricted run still succeeds
+        ok = SVARRestrictions(3; signs=[sign_restriction(1, 1, :positive)])
+        res = identify_arias(model, ok, 8; n_draws=5, n_rotations=100)
+        @test length(res.Q_draws) ≥ 1
+        @test 0 < res.acceptance_rate ≤ 1
+
+        # (3) a genuine bug (out-of-range restriction index → BoundsError) now propagates
+        #     instead of being swallowed into "No valid identification after N attempts"
+        bogus = SVARRestrictions(3; signs=[SignRestriction(999, 1, 0, 1)])
+        @test_throws BoundsError identify_arias(model, bogus, 8; n_draws=5, n_rotations=100)
+    end
+
     @testset "Pure Zero Restrictions (Cholesky-like)" begin
         Random.seed!(23456)
 

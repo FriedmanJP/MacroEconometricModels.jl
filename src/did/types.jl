@@ -50,6 +50,10 @@ group-time ATTs for Callaway-Sant'Anna. All DiD methods return this type.
 - `control_group::Symbol` — :never_treated or :not_yet_treated
 - `cluster::Symbol` — clustering level (:unit, :time, :twoway)
 - `conf_level::T` — confidence level
+- `att_vcov::Union{Matrix{T}, Nothing}` — full covariance of the `att` event-study
+  vector (rows/cols aligned 1:1 with `att`/`event_times`), or `nothing` when the
+  estimator does not (yet) supply a cross-horizon covariance. Consumed by the
+  covariance-based overall-ATT SE and the joint pre-trend Wald test.
 
 # References
 - Callaway, B. & Sant'Anna, P. H. C. (2021). *JoE* 225(2), 200-230.
@@ -76,6 +80,21 @@ struct DIDResult{T<:AbstractFloat} <: AbstractFrequentistResult
     control_group::Symbol
     cluster::Symbol
     conf_level::T
+    att_vcov::Union{Matrix{T}, Nothing}
+end
+
+# Back-compat outer constructor: legacy 20-arg positional calls (through `conf_level`)
+# default `att_vcov` to `nothing`, so estimators that do not supply a cross-horizon
+# covariance (and any hand-built DIDResult) compile UNCHANGED. Only estimators that
+# populate the covariance pass the 21st argument explicitly.
+function DIDResult{T}(att, se, ci_lower, ci_upper, event_times, reference_period,
+                      group_time_att, cohorts, overall_att, overall_se, n_obs,
+                      n_groups, n_treated, n_control, method, outcome_var,
+                      treatment_var, control_group, cluster, conf_level) where {T<:AbstractFloat}
+    DIDResult{T}(att, se, ci_lower, ci_upper, event_times, reference_period,
+                 group_time_att, cohorts, overall_att, overall_se, n_obs,
+                 n_groups, n_treated, n_control, method, outcome_var,
+                 treatment_var, control_group, cluster, conf_level, nothing)
 end
 
 # StatsAPI interface
@@ -83,6 +102,7 @@ StatsAPI.nobs(r::DIDResult) = r.n_obs
 StatsAPI.coef(r::DIDResult) = r.att
 StatsAPI.stderror(r::DIDResult) = r.se
 StatsAPI.confint(r::DIDResult) = hcat(r.ci_lower, r.ci_upper)
+StatsAPI.vcov(r::DIDResult) = r.att_vcov
 
 # =============================================================================
 # EventStudyLP — LP-based event study with panel FE
@@ -324,24 +344,32 @@ end
 """
     HonestDiDResult{T<:AbstractFloat}
 
-Rambachan & Roth (2023) HonestDiD sensitivity analysis result.
+Rambachan & Roth (2023) honest DiD sensitivity analysis result.
 
-Provides robust confidence sets under bounded violations of parallel trends.
-The `Mbar` parameter controls the maximum allowed violation magnitude.
+Robust confidence sets for post-treatment effects under bounded violations of
+parallel trends. Two restriction sets are supported: relative magnitudes
+`Delta^RM(Mbar)` (post-period trend violations no larger than `Mbar` times the
+largest observed pre-period violation; `Mbar` dimensionless) and second
+differences `Delta^SD(M)` (slope changes bounded by `M` in outcome units),
+the latter via the Armstrong-Kolesár fixed-length CI.
 
 # Fields
-- `Mbar::T` — violation bound used
+- `Mbar::T` — relative-magnitudes bound (active when `restriction == :rm`)
 - `robust_ci_lower::Vector{T}` — robust CI lower bounds per post-period
 - `robust_ci_upper::Vector{T}` — robust CI upper bounds per post-period
-- `original_ci_lower::Vector{T}` — original CIs for comparison
+- `original_ci_lower::Vector{T}` — conventional CIs for comparison
 - `original_ci_upper::Vector{T}`
-- `breakdown_value::T` — smallest Mbar making result insignificant
+- `breakdown_value::T` — smallest bound (Mbar or M) making the result insignificant
 - `post_event_times::Vector{Int}` — post-treatment event-time grid
 - `post_att::Vector{T}` — post-treatment point estimates
 - `conf_level::T`
+- `restriction::Symbol` — `:rm` (relative magnitudes) or `:sd` (second differences)
+- `M::T` — smoothness bound (active when `restriction == :sd`)
+- `method::Symbol` — `:flci` (Δ^SD) or `:delta_id` (Δ^RM identified set + delta CI)
 
-# Reference
-Rambachan, A. & Roth, J. (2023). *RES* 90(5), 2555-2591.
+# References
+- Rambachan, A. & Roth, J. (2023). *RES* 90(5), 2555-2591.
+- Armstrong, T. & Kolesár, M. (2018). *Econometrica* 86(2), 655-683.
 """
 struct HonestDiDResult{T<:AbstractFloat}
     Mbar::T
@@ -353,6 +381,9 @@ struct HonestDiDResult{T<:AbstractFloat}
     post_event_times::Vector{Int}
     post_att::Vector{T}
     conf_level::T
+    restriction::Symbol
+    M::T
+    method::Symbol
 end
 
 # =============================================================================
@@ -554,14 +585,19 @@ function Base.show(io::IO, r::HonestDiDResult{T}) where {T}
         data[i, 4] = "[$(_fmt(r.robust_ci_lower[i])), $(_fmt(r.robust_ci_upper[i]))]"
         data[i, 5] = (r.robust_ci_lower[i] > 0 || r.robust_ci_upper[i] < 0) ? "***" : ""
     end
+    restr_str = r.restriction == :sd ?
+        "Δ^SD, M = $(_fmt(r.M))" : "Δ^RM, M̄ = $(_fmt(r.Mbar))"
     _pretty_table(io, data;
-        title = "HonestDiD Sensitivity Analysis (Mbar = $(_fmt(r.Mbar)))",
+        title = "Honest DiD Sensitivity Analysis ($restr_str)",
         column_labels = ["Period", "ATT", "Original CI", "Robust CI", "Sig"],
         alignment = [:l, :r, :r, :r, :c],
     )
     println(io)
+    bound_label = r.restriction == :sd ? "M (Δ^SD)" : "M̄ (Δ^RM)"
+    bound_value = r.restriction == :sd ? r.M : r.Mbar
     summary_data = Any[
-        "Mbar"              _fmt(r.Mbar);
+        bound_label         _fmt(bound_value);
+        "Method"            (r.method == :flci ? "FLCI (Armstrong-Kolesár)" : "identified set + delta CI");
         "Breakdown value"   _fmt(r.breakdown_value);
         "Conf. level"       _fmt(r.conf_level);
     ]

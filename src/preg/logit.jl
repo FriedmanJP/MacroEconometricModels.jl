@@ -144,127 +144,68 @@ end
 # =============================================================================
 
 """
-    _clogit_dp_logsum(X_g, beta, s) -> (log_denom, grad, hess)
+    _clogit_dp_logsum(X_g, beta, s) -> (log_denom, prob)
 
-Dynamic programming to compute log(sum of exp(d' X_g beta)) over all binary vectors d
-of length T_g with sum(d) = s, plus gradient and Hessian contributions.
+Fixed-effects conditional-logit partition function via a forward/backward dynamic program
+in LOG SPACE. Returns `log_denom = log Σ_{d: Σd=s} exp(d'X_gβ)` and, for each observation
+`t`, `prob[t] = P(d_t = 1 ∣ Σd = s)`. The group conditional log-likelihood is
+`y_g'X_gβ − log_denom` with gradient `X_g'(y_g − prob)` and Hessian
+`−X_g' diag(prob(1−prob)) X_g`.
 
-Uses the recursion:
-    f(t, j) = f(t-1, j) + f(t-1, j-1) * exp(x_t' beta)
-where f(0,0) = 1, f(0, j>0) = 0.
-
-We also track gradient terms via the chain rule.
+The recursion `f(t,j) = f(t-1,j) + f(t-1,j-1)·e^{η_t}` is carried on the log scale via
+`logaddexp` so that `|η_t|` on the order of 700+ (raw `exp` overflows to `Inf` in Float64)
+no longer produces `Inf`/`NaN`.
 """
 function _clogit_dp_logsum(X_g::AbstractMatrix{T}, beta::Vector{T}, s::Int) where {T}
     T_g = size(X_g, 1)
-    k = length(beta)
-
-    # DP table for the partition function
-    # f[j+1] = sum over subsets of {1,...,t} with exactly j elements
-    # We store log-scale values using log-sum-exp for stability
-    # But for gradient/Hessian we need the actual sums, so use probability approach
-
-    # Compute eta_t = x_t' beta for each t
     eta = X_g * beta
-    exp_eta = exp.(eta)
+    NEG = T(-Inf)
+    # Stable scalar log-add-exp with -Inf handling (logaddexp(-Inf,-Inf) = -Inf).
+    la(a, b) = a == NEG ? b : (b == NEG ? a :
+               (a > b ? a + log1p(exp(b - a)) : b + log1p(exp(a - b))))
 
-    # Forward pass: f[t][j] = sum over subsets of {1,...,t} with j ones of prod exp(eta_i * d_i)
-    # f[0][0] = 1, f[0][j>0] = 0
-    # f[t][j] = f[t-1][j] + f[t-1][j-1] * exp(eta_t)
-
-    # We need f[T_g][s] = denominator
-    # Use 0-indexed j: j = 0, ..., s
-    f_prev = zeros(T, s + 1)
-    f_prev[1] = one(T)  # f[0][0] = 1
-
+    # Forward log-DP: lfwd[t+1][j+1] = log Σ over subsets of {1..t} with j ones of exp(Σ d·η).
+    lfwd = Vector{Vector{T}}(undef, T_g + 1)
+    lfwd[1] = fill(NEG, s + 1); lfwd[1][1] = zero(T)   # log f(0,0)=0, others -Inf
     for t in 1:T_g
-        f_curr = zeros(T, s + 1)
-        f_curr[1] = f_prev[1]  # j=0: don't include obs t
+        prev = lfwd[t]
+        cur = fill(NEG, s + 1)
+        cur[1] = prev[1]                                # j=0: exclude obs t
         for j in 1:min(s, t)
-            f_curr[j + 1] = f_prev[j + 1] + f_prev[j] * exp_eta[t]
+            cur[j + 1] = la(prev[j + 1], prev[j] + eta[t])
         end
-        f_prev = f_curr
+        lfwd[t + 1] = cur
     end
+    log_denom = lfwd[T_g + 1][s + 1]
 
-    denom = f_prev[s + 1]
-
-    # For gradient: d log(denom) / d beta = (1/denom) * d(denom)/d(beta)
-    # d(denom)/d(beta_p) = sum over valid d of [sum_t d_t x_{t,p}] * exp(d' eta)
-    #                    = sum_t x_{t,p} * g_t
-    # where g_t = sum over d with sum=s and d_t=1 of exp(d' eta)
-    # g_t = exp(eta_t) * f_{-t}[s-1]
-    # f_{-t}[s-1] = sum over subsets of {1,...,T}\{t} with s-1 ones
-
-    # To get g_t we can use forward-backward DP
-    # Forward: fwd[t][j] = sum over subsets of {1,...,t} with j ones
-    # Backward: bwd[t][j] = sum over subsets of {t,...,T} with j ones
-    # Then f_{-t}[s-1] = sum_{j=0}^{s-1} fwd[t-1][j] * bwd[t+1][s-1-j]
-
-    # Forward tables
-    fwd = Vector{Vector{T}}(undef, T_g + 1)
-    fwd[1] = zeros(T, s + 1)
-    fwd[1][1] = one(T)
-    for t in 1:T_g
-        fwd[t + 1] = zeros(T, s + 1)
-        fwd[t + 1][1] = fwd[t][1]
-        for j in 1:min(s, t)
-            fwd[t + 1][j + 1] = fwd[t][j + 1] + fwd[t][j] * exp_eta[t]
-        end
-    end
-
-    # Backward tables
-    bwd = Vector{Vector{T}}(undef, T_g + 2)
-    bwd[T_g + 2] = zeros(T, s + 1)
-    bwd[T_g + 2][1] = one(T)
+    # Backward log-DP: lbwd[t][j+1] = log Σ over subsets of {t..T_g} with j ones.
+    lbwd = Vector{Vector{T}}(undef, T_g + 1)
+    lbwd[T_g + 1] = fill(NEG, s + 1); lbwd[T_g + 1][1] = zero(T)
     for t in T_g:-1:1
-        bwd[t] = zeros(T, s + 1)  # bwd[t] = backward from t
-        # Don't include t: bwd[t][j] = bwd[t+1][j] (skip) + bwd[t+1][j-1]*exp_eta[t] (include)
-        # Wait, backward should be: sum over subsets of {t,...,T_g} with j ones
-        # bwd[T_g+1][0] = 1
-        # bwd[t][j] = bwd[t+1][j] + bwd[t+1][j-1] * exp_eta[t]
-    end
-    # Redo backward properly
-    bwd[T_g + 1] = zeros(T, s + 1)
-    bwd[T_g + 1][1] = one(T)
-    for t in T_g:-1:1
-        bwd[t] = zeros(T, s + 1)
-        bwd[t][1] = bwd[t + 1][1]
+        nxt = lbwd[t + 1]
+        cur = fill(NEG, s + 1)
+        cur[1] = nxt[1]
         remaining = T_g - t + 1
         for j in 1:min(s, remaining)
-            bwd[t][j + 1] = bwd[t + 1][j + 1] + bwd[t + 1][j] * exp_eta[t]
+            cur[j + 1] = la(nxt[j + 1], nxt[j] + eta[t])
         end
+        lbwd[t] = cur
     end
 
-    # Compute g_t = P(d_t = 1 | sum = s) * denom = exp(eta_t) * f_{-t}(s-1)
-    # f_{-t}(s-1) = sum_{j=0}^{s-1} fwd[t][j+1] * bwd[t+1][s-1-j+1]
-    # (fwd[t] is forward up to t-1, i.e., fwd[t] = fwd over {1,...,t-1})
-    g = zeros(T, T_g)
-    for t in 1:T_g
-        val = zero(T)
-        for j in 0:min(s - 1, t - 1)
-            bwd_idx = s - 1 - j  # need bwd[t+1][bwd_idx]
-            remaining_after_t = T_g - t
-            if bwd_idx <= remaining_after_t && bwd_idx >= 0
-                val += fwd[t][j + 1] * bwd[t + 1][bwd_idx + 1]
+    # prob[t] = exp(η_t + logf_{-t}(s-1) − log_denom), where lfwd[t] spans {1..t-1} and
+    # lbwd[t+1] spans {t+1..T_g}: logf_{-t}(s-1) = logsumexp_j lfwd[t][j+1] + lbwd[t+1][s-1-j+1].
+    prob = zeros(T, T_g)
+    if isfinite(log_denom)
+        for t in 1:T_g
+            acc = NEG
+            for j in 0:min(s - 1, t - 1)
+                bidx = s - 1 - j
+                (0 <= bidx <= T_g - t) || continue
+                acc = la(acc, lfwd[t][j + 1] + lbwd[t + 1][bidx + 1])
             end
+            prob[t] = acc == NEG ? zero(T) : exp(eta[t] + acc - log_denom)
         end
-        g[t] = exp_eta[t] * val
     end
-
-    # prob_t = g_t / denom = P(d_t = 1 | sum_d = s)
-    prob = denom > zero(T) ? g ./ denom : zeros(T, T_g)
-
-    # Gradient of log-likelihood for this group:
-    # ll_g = sum_t y_t * eta_t - log(denom)
-    # d ll_g / d beta = X_g' * (y_g - prob)  (but we only need the denom gradient part)
-    # Actually the full conditional log-lik for group:
-    # ll_g = y_g' * X_g * beta - log(denom)
-    # grad_g = X_g' * y_g - X_g' * prob = X_g' * (y_g - prob)
-
-    # Hessian: -X_g' * diag(prob .* (1 .- prob)) * X_g
-    # (This is the expected Hessian from the conditional distribution)
-
-    log_denom = log(max(denom, T(1e-300)))
 
     return log_denom, prob
 end
@@ -484,6 +425,79 @@ function _re_logit_loglik(theta::Vector{T}, y::Vector{T}, X_c::Matrix{T},
     return loglik, grad
 end
 
+"""
+    _re_logit_agh_loglik(theta, y, X_c, unique_groups, group_obs, x_nodes, w_nodes;
+                         agh_newton_iters=8) -> S
+
+Adaptive Gauss-Hermite marginal log-likelihood for the RE/CRE logit. Generic in the element
+type `S` of `theta = [β; log σ_u]` so ForwardDiff can differentiate through it. For each
+group the integrand over `α ~ N(0, σ_u²)` is recentered at its posterior mode `μ̂` (scalar
+Newton) and rescaled by the curvature `σ̂` (Liu & Pierce 1994; Rabe-Hesketh, Skrondal &
+Pickles 2005): nodes `a_q = μ̂ + √2·σ̂·x_q`, log-weights `log(√2·σ̂) + log(w_q) + x_q²`
+(the `+x_q²` cancels the `e^{-x²}` baked into the standard GH weights). Reduces to the
+Laplace approximation at `length(x_nodes)==1`.
+"""
+function _re_logit_agh_loglik(theta::AbstractVector{S}, y::Vector{T}, X_c::Matrix{T},
+                              unique_groups::Vector{Int}, group_obs::Dict{Int,Vector{Int}},
+                              x_nodes::Vector{Float64}, w_nodes::Vector{Float64};
+                              agh_newton_iters::Int=8) where {S,T}
+    k = size(X_c, 2)
+    beta = theta[1:k]
+    sigma_u = exp(theta[k+1])
+    s2 = sigma_u^2
+    nq = length(x_nodes)
+    half_log2pi = S(0.5 * log(2π))
+    log_sqrt2 = S(0.5 * log(2.0))
+    total = zero(S)
+
+    for g in unique_groups
+        idx = group_obs[g]
+        eta = @view(X_c[idx, :]) * beta           # Vector{S}
+        yg = @view y[idx]
+
+        # (a) posterior mode μ̂ of h(α) = ℓ_g(α) − α²/(2σ²) via scalar Newton from 0
+        alpha = zero(S)
+        for _ in 1:agh_newton_iters
+            hp = -alpha / s2
+            hpp = -one(S) / s2
+            @inbounds for j in eachindex(eta)
+                mu = one(S) / (one(S) + exp(-(eta[j] + alpha)))
+                hp += yg[j] - mu
+                hpp -= mu * (one(S) - mu)
+            end
+            alpha -= hp / hpp                      # h''<0 ⇒ stable Newton toward the mode
+            abs(hp) < S(1e-10) && break
+        end
+        info = one(S) / s2                          # curvature σ̂ = 1/√(−h''(μ̂))
+        @inbounds for j in eachindex(eta)
+            mu = one(S) / (one(S) + exp(-(eta[j] + alpha)))
+            info += mu * (one(S) - mu)
+        end
+        sighat = one(S) / sqrt(info)
+
+        # (b,c) adaptive nodes + stable logsumexp of logω_q + ℓ_g(a_q) + logφ(a_q;0,σ²)
+        logvals = Vector{S}(undef, nq)
+        @inbounds for q in 1:nq
+            a = alpha + sqrt(S(2)) * sighat * S(x_nodes[q])
+            logw = log_sqrt2 + log(sighat) + log(S(w_nodes[q])) + S(x_nodes[q])^2
+            ll = zero(S)
+            for j in eachindex(eta)
+                mu = clamp(one(S) / (one(S) + exp(-(eta[j] + a))), S(1e-12), one(S) - S(1e-12))
+                ll += yg[j] * log(mu) + (one(S) - yg[j]) * log(one(S) - mu)
+            end
+            logphi = -half_log2pi - log(sigma_u) - a^2 / (2 * s2)
+            logvals[q] = logw + ll + logphi
+        end
+        mx = maximum(logvals)
+        acc = zero(S)
+        @inbounds for q in 1:nq
+            acc += exp(logvals[q] - mx)
+        end
+        total += mx + log(acc)
+    end
+    total
+end
+
 function _xtlogit_re(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
                      groups::Vector{Int}, unique_groups::Vector{Int},
                      N::Int, n::Int, k::Int, indepvars::Vector{Symbol},
@@ -505,66 +519,29 @@ function _xtlogit_re(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
 
     # Initialize: pooled logit coefficients + log(sigma_u) = log(1)
     beta_init, _, _, _, _, _ = _irls_logit(y, X_c; maxiter=50, tol=T(1e-6))
-    theta = vcat(beta_init, zero(T))  # [beta; log_sigma_u]
+    theta0 = vcat(beta_init, zero(T))  # [beta; log_sigma_u]
 
-    loglik_old = T(-Inf)
-    converged = false
-    iterations = 0
-
-    # BFGS-like optimization via gradient ascent with step size control
-    for iter in 1:maxiter
-        iterations = iter
-
-        loglik, grad = _re_logit_loglik(theta, y, X_c, groups, unique_groups,
-                                         group_obs, nodes, weights)
-
-        if abs(loglik - loglik_old) < tol * (abs(loglik_old) + one(T))
-            converged = true
-            loglik_old = loglik
-            break
-        end
-        loglik_old = loglik
-
-        # Simple gradient ascent with adaptive step size
-        step_size = T(0.5)
-        for _ in 1:20
-            theta_new = theta .+ step_size .* grad
-            ll_new, _ = _re_logit_loglik(theta_new, y, X_c, groups, unique_groups,
-                                          group_obs, nodes, weights)
-            if ll_new > loglik
-                theta = theta_new
-                break
-            end
-            step_size *= T(0.5)
-        end
-    end
+    # Maximize the adaptive-GH marginal loglik with LBFGS on ForwardDiff gradients (replaces
+    # the ad-hoc gradient ascent whose function-value stopping rule reported false convergence).
+    nll(th) = -_re_logit_agh_loglik(th, y, X_c, unique_groups, group_obs, nodes, weights)
+    g!(G, th) = (G .= ForwardDiff.gradient(nll, th))
+    res = Optim.optimize(nll, g!, theta0, Optim.LBFGS(),
+                         Optim.Options(g_tol=T(1e-8), iterations=maxiter, f_reltol=tol))
+    theta = Optim.minimizer(res)
+    iterations = Optim.iterations(res)
 
     beta = theta[1:k_full]
     sigma_u = exp(theta[k_full + 1])
+    loglik_final = _re_logit_agh_loglik(theta, y, X_c, unique_groups, group_obs, nodes, weights)
 
-    # Numerical Hessian for covariance
-    loglik_final, _ = _re_logit_loglik(theta, y, X_c, groups, unique_groups,
-                                        group_obs, nodes, weights)
+    # Honest convergence: reported only when the true gradient norm is near zero.
+    converged = Optim.converged(res) && norm(ForwardDiff.gradient(nll, theta)) < T(1e-5)
 
+    # SEs from observed information = Hessian of the NEGATIVE loglik (no sign flip).
     n_params = k_full + 1
-    hess = zeros(T, n_params, n_params)
-    eps_h = T(1e-4)
-    for i in 1:n_params
-        theta_p = copy(theta)
-        theta_m = copy(theta)
-        theta_p[i] += eps_h
-        theta_m[i] -= eps_h
-        _, g_p = _re_logit_loglik(theta_p, y, X_c, groups, unique_groups,
-                                   group_obs, nodes, weights)
-        _, g_m = _re_logit_loglik(theta_m, y, X_c, groups, unique_groups,
-                                   group_obs, nodes, weights)
-        hess[:, i] .= (g_p .- g_m) ./ (2 * eps_h)
-    end
-    hess = (hess .+ hess') ./ 2
-
-    # Covariance of beta only (not log_sigma_u)
+    H = ForwardDiff.hessian(nll, theta)
     vcov_full = try
-        robust_inv(-hess)
+        Matrix{T}(robust_inv(Hermitian((H .+ H') ./ 2)))
     catch
         zeros(T, n_params, n_params)
     end
@@ -653,60 +630,26 @@ function _xtlogit_cre(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
 
     # Initialize
     beta_init, _, _, _, _, _ = _irls_logit(y, X_c; maxiter=50, tol=T(1e-6))
-    theta = vcat(beta_init, zero(T))
+    theta0 = vcat(beta_init, zero(T))
 
-    loglik_old = T(-Inf)
-    converged = false
-    iterations = 0
-
-    for iter in 1:maxiter
-        iterations = iter
-        loglik, grad = _re_logit_loglik(theta, y, X_c, groups, unique_groups,
-                                         group_obs, nodes, weights)
-
-        if abs(loglik - loglik_old) < tol * (abs(loglik_old) + one(T))
-            converged = true
-            loglik_old = loglik
-            break
-        end
-        loglik_old = loglik
-
-        step_size = T(0.5)
-        for _ in 1:20
-            theta_new = theta .+ step_size .* grad
-            ll_new, _ = _re_logit_loglik(theta_new, y, X_c, groups, unique_groups,
-                                          group_obs, nodes, weights)
-            if ll_new > loglik
-                theta = theta_new
-                break
-            end
-            step_size *= T(0.5)
-        end
-    end
+    nll(th) = -_re_logit_agh_loglik(th, y, X_c, unique_groups, group_obs, nodes, weights)
+    g!(G, th) = (G .= ForwardDiff.gradient(nll, th))
+    res = Optim.optimize(nll, g!, theta0, Optim.LBFGS(),
+                         Optim.Options(g_tol=T(1e-8), iterations=maxiter, f_reltol=tol))
+    theta = Optim.minimizer(res)
+    iterations = Optim.iterations(res)
 
     beta = theta[1:k_full]
     sigma_u = exp(theta[k_full + 1])
-    loglik_final = loglik_old
+    # Recompute the loglik at the optimum (the old code reused loglik_old — a stale value).
+    loglik_final = _re_logit_agh_loglik(theta, y, X_c, unique_groups, group_obs, nodes, weights)
 
-    # Numerical Hessian
+    converged = Optim.converged(res) && norm(ForwardDiff.gradient(nll, theta)) < T(1e-5)
+
     n_params = k_full + 1
-    hess = zeros(T, n_params, n_params)
-    eps_h = T(1e-4)
-    for i in 1:n_params
-        theta_p = copy(theta)
-        theta_m = copy(theta)
-        theta_p[i] += eps_h
-        theta_m[i] -= eps_h
-        _, g_p = _re_logit_loglik(theta_p, y, X_c, groups, unique_groups,
-                                   group_obs, nodes, weights)
-        _, g_m = _re_logit_loglik(theta_m, y, X_c, groups, unique_groups,
-                                   group_obs, nodes, weights)
-        hess[:, i] .= (g_p .- g_m) ./ (2 * eps_h)
-    end
-    hess = (hess .+ hess') ./ 2
-
+    H = ForwardDiff.hessian(nll, theta)
     vcov_full = try
-        robust_inv(-hess)
+        Matrix{T}(robust_inv(Hermitian((H .+ H') ./ 2)))
     catch
         zeros(T, n_params, n_params)
     end

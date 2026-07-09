@@ -249,6 +249,8 @@ The `n_breaks` field reports the selected number of breaks. The `break_dates` ve
 
 The sequential testing procedure starts from the null of zero breaks: if sup-F(1) rejects, test sup-F(2|1), and continue until the first non-rejection. BIC and LWZ provide complementary model selection. BIC tends to select more breaks in large samples, while LWZ is more conservative.
 
+P-values interpolate the Bai & Perron (1998, 2003) critical-value tables, indexed by the number of breaking regressors ``q`` (every regressor breaks in this pure structural-change model, so ``q = k``) and the trimming fraction ``\varepsilon \in \{0.05, 0.10, 0.15, 0.20, 0.25\}`` (requested trimmings snap to the nearest tabulated value). The tables cover ``q \leq 10``; sup-F critical values are tabulated up to 9, 8, 5, 3, and 2 breaks for the five trimmings respectively.
+
 ### Options
 
 | Argument | Type | Default | Description |

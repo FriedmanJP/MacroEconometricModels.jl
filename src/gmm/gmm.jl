@@ -100,7 +100,8 @@ struct GMMModel{T<:AbstractFloat} <: AbstractGMMModel
         @assert length(g_bar) == n_moments
         @assert n_moments >= n_params "GMM requires at least as many moments as parameters"
         @assert J_stat >= 0
-        @assert 0 <= J_pvalue <= 1
+        # NaN marks an invalid p-value (J is not χ² under :identity weighting)
+        @assert isnan(J_pvalue) || 0 <= J_pvalue <= 1
         new{T}(theta, vcov, n_moments, n_params, n_obs, weighting, W, g_bar,
                J_stat, J_pvalue, converged, iterations)
     end
@@ -129,9 +130,10 @@ function Base.show(io::IO, m::GMMModel{T}) where {T}
     _coef_table(io, "Coefficients", param_names, m.theta, se; dist=:z)
     # J-test
     if is_overidentified(m)
+        pv_str = isnan(m.J_pvalue) ? "n/a" : _format_pvalue(m.J_pvalue)
         j_data = Any[
             "J-statistic" _fmt(m.J_stat);
-            "P-value"     _format_pvalue(m.J_pvalue);
+            "P-value"     pv_str;
             "DF"          overid_df(m)
         ]
         _pretty_table(io, j_data;
@@ -139,6 +141,10 @@ function Base.show(io::IO, m::GMMModel{T}) where {T}
             column_labels = ["", ""],
             alignment = [:l, :r],
         )
+        if isnan(m.J_pvalue)
+            println(io, "Note: the J-statistic under identity weighting is not χ²-distributed;")
+            println(io, "the p-value is invalid — use two-step/optimal weighting for the J-test.")
+        end
     end
 end
 
@@ -161,19 +167,19 @@ end
 # =============================================================================
 
 """
-    numerical_gradient(f::Function, x::AbstractVector{T}; eps::T=T(1e-7)) -> Matrix{T}
+    numerical_gradient(f::Function, x::AbstractVector{T}; step::T=T(1e-7)) -> Matrix{T}
 
 Compute numerical gradient (Jacobian) of function f at point x using central differences.
 
 Arguments:
 - f: Function that takes vector x and returns vector (moment conditions)
 - x: Point at which to evaluate gradient
-- eps: Step size for finite differences
+- step: Step size for finite differences
 
 Returns:
 - Jacobian matrix (n_moments × n_params)
 """
-function numerical_gradient(f::Function, x::AbstractVector{T}; eps::T=T(1e-7)) where {T<:AbstractFloat}
+function numerical_gradient(f::Function, x::AbstractVector{T}; step::T=T(1e-7)) where {T<:AbstractFloat}
     n = length(x)
     f0 = f(x)
     m = length(f0)
@@ -183,10 +189,10 @@ function numerical_gradient(f::Function, x::AbstractVector{T}; eps::T=T(1e-7)) w
     @inbounds for j in 1:n
         x_plus = copy(x)
         x_minus = copy(x)
-        x_plus[j] += eps
-        x_minus[j] -= eps
+        x_plus[j] += step
+        x_minus[j] -= step
 
-        J[:, j] = (f(x_plus) - f(x_minus)) / (2 * eps)
+        J[:, j] = (f(x_plus) - f(x_minus)) / (2 * step)
     end
 
     J
@@ -477,11 +483,14 @@ function estimate_gmm(moment_fn::Function, theta0::AbstractVector{T}, data;
         vcov = J_transform * vcov * J_transform'
     end
 
-    # Hansen's J-test for overidentification
+    # Hansen's J-test for overidentification. The χ²(m−k) limit requires efficient
+    # weighting W = Ω̂⁻¹ (Hansen 1982); under :identity the quadratic form is a
+    # weighted sum of χ²(1) variables, so no valid p-value exists — return NaN.
     J_stat, J_pvalue = if n_moments > n_params
         J = n_obs * (g_bar' * W_final * g_bar)
         df = n_moments - n_params
-        (J, 1 - cdf(Chisq(df), J))
+        pv = weighting in (:optimal, :two_step, :iterated) ? T(1 - cdf(Chisq(df), J)) : T(NaN)
+        (J, pv)
     else
         (zero(T), one(T))  # Just identified
     end
@@ -514,6 +523,12 @@ function j_test(model::GMMModel{T}) where {T<:AbstractFloat}
     if df <= 0
         return (J_stat=zero(T), p_value=one(T), df=0, reject_05=false,
                 message="Model is just-identified, J-test not applicable")
+    end
+
+    if model.weighting.method == :identity
+        return (J_stat=model.J_stat, p_value=model.J_pvalue, df=df, reject_05=false,
+                message="J-statistic under identity weighting is not χ²-distributed; " *
+                        "p-value invalid — re-estimate with :two_step/:optimal weighting")
     end
 
     (J_stat=model.J_stat, p_value=model.J_pvalue, df=df,

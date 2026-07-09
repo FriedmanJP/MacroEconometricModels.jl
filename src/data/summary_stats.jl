@@ -152,11 +152,15 @@ function _compute_summary(mat::Matrix{<:AbstractFloat}, vn::Vector{String},
             p75s[j] = _quantile(sorted, 0.75)
 
             if nf > 2
-                s = stds[j]
-                if s > 0
-                    centered = sorted .- m
-                    skews[j] = mean(centered .^ 3) / s^3
-                    kurts[j] = mean(centered .^ 4) / s^4 - 3.0
+                # Population (method-of-moments) skewness & excess kurtosis: use the
+                # population variance m2 (divisor n) for the scale so numerator and
+                # denominator share one convention. The reported Std column keeps the
+                # sample SD (std, divisor n-1) above.
+                centered = sorted .- m
+                m2 = mean(centered .^ 2)
+                if m2 > 0
+                    skews[j] = mean(centered .^ 3) / m2^1.5
+                    kurts[j] = mean(centered .^ 4) / m2^2 - 3.0
                 else
                     skews[j] = 0.0
                     kurts[j] = 0.0

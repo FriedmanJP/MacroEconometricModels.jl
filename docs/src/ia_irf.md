@@ -107,7 +107,7 @@ where:
 !!! note "Technical Note"
     The `ci_lower` and `ci_upper` arrays are populated only when `ci_type=:bootstrap` or `ci_type=:theoretical`. With `ci_type=:none` (the default), these arrays contain zeros. Always check `result.ci_type` before interpreting confidence bands.
 
-The following example estimates a three-variable monetary policy VAR from FRED-MD data and computes Cholesky-identified IRFs with bootstrap confidence intervals (Kilian 1998).
+The following example estimates a three-variable monetary policy VAR from FRED-MD data and computes Cholesky-identified IRFs with nonparametric residual-bootstrap confidence intervals.
 
 ```@example ia_irf
 # Cholesky IRF with bootstrap 95% confidence intervals
@@ -134,7 +134,7 @@ The recursive ordering INDPRO, CPIAUCSL, FEDFUNDS implies that monetary policy s
 | `ci_type` | `Symbol` | `:none` | CI method: `:none`, `:bootstrap`, or `:theoretical` |
 | `reps` | `Int` | `200` | Number of bootstrap or simulation replications |
 | `conf_level` | `Real` | `0.95` | Confidence level for interval construction |
-| `stationary_only` | `Bool` | `false` | Reject explosive bootstrap draws (Kilian 1998) |
+| `stationary_only` | `Bool` | `false` | Reject explosive bootstrap draws (Kilian & Lütkepohl 2017) |
 | `check_func` | `Function` | `nothing` | Sign restriction check function (required for `:sign`) |
 | `narrative_check` | `Function` | `nothing` | Narrative restriction check (required for `:narrative`) |
 
@@ -293,7 +293,7 @@ For full LP estimation details, including LP-IV, smooth LP, and state-dependent 
 
 ## Stationarity Filtering
 
-The residual bootstrap of Kilian (1998) can produce explosive bootstrap draws when the companion matrix has eigenvalues near the unit circle. Setting `stationary_only=true` rejects any draw whose companion matrix has ``|\lambda_{\max}| \geq 1`` and redraws, ensuring all bootstrap IRFs come from stationary parameter configurations.
+The residual bootstrap can produce explosive bootstrap draws when the companion matrix has eigenvalues near the unit circle. Setting `stationary_only=true` rejects any draw whose companion matrix has ``|\lambda_{\max}| \geq 1`` and redraws, ensuring all bootstrap IRFs come from stationary parameter configurations.
 
 !!! note "Technical Note"
     The algorithm draws up to ``10 \times \text{reps}`` candidates to collect the requested number of stationary replications. If fewer than `reps` stationary draws are obtained, a warning is emitted. In practice, well-specified models with moderate sample sizes produce rejection rates below 10%.
@@ -305,7 +305,7 @@ result_stat = irf(model, 20; ci_type=:bootstrap, reps=50,
 report(result_stat)
 ```
 
-Stationarity filtering removes the heavy tails in bootstrap IRF distributions caused by near-unit-root draws. The filtered confidence bands are typically narrower and more symmetric, reflecting the prior belief that the data-generating process is covariance-stationary. Kilian (1998) demonstrates that this improves finite-sample coverage of bootstrap confidence intervals in monetary VARs.
+Stationarity filtering removes the heavy tails in bootstrap IRF distributions caused by near-unit-root draws. The filtered confidence bands are typically narrower and more symmetric, reflecting the prior belief that the data-generating process is covariance-stationary. Rejecting explosive draws is the default recommendation of Kilian & Lütkepohl (2017, Chapter 12). This implementation is an *uncorrected* residual bootstrap; the bias-corrected (bootstrap-after-bootstrap) and wild bootstraps of Kilian (1998) are planned (roadmap task T271).
 
 ---
 

@@ -19,18 +19,26 @@ using LinearAlgebra
 # =============================================================================
 
 """
-    _hat_diag(X::Matrix{T}, XtXinv::Matrix{T}) -> Vector{T}
+    _hat_diag(X::Matrix{T}, XtXinv::Matrix{T}; weights=nothing) -> Vector{T}
 
 Compute the diagonal of the hat (projection) matrix H = X (X'X)^{-1} X'.
 
 Element h_ii measures the leverage of observation i. Used by HC2 and HC3.
+
+For GLM/IRLS fits pass the working weights `w` (and `XtXinv = (X'WX)^{-1}`), giving
+the GLM leverage h_ii = w_i x_i'(X'WX)^{-1} x_i, the diagonal of
+H = W^{1/2} X (X'WX)^{-1} X' W^{1/2} (McCullagh & Nelder 1989).
 """
-function _hat_diag(X::Matrix{T}, XtXinv::Matrix{T}) where {T<:AbstractFloat}
+function _hat_diag(X::Matrix{T}, XtXinv::Matrix{T};
+                   weights::Union{Nothing,Vector{T}}=nothing) where {T<:AbstractFloat}
     n = size(X, 1)
     h = Vector{T}(undef, n)
     @inbounds for i in 1:n
         xi = @view X[i, :]
         h[i] = dot(xi, XtXinv * xi)
+        if weights !== nothing
+            h[i] *= weights[i]
+        end
         # Clamp to [0, 1) for numerical safety
         h[i] = clamp(h[i], zero(T), one(T) - T(1e-10))
     end
@@ -108,6 +116,8 @@ Compute the variance-covariance matrix of OLS/WLS coefficients.
 - `cov_type::Symbol` — covariance estimator type
 - `XtXinv::Matrix{T}` — precomputed (X'X)^{-1}
 - `clusters` — cluster assignments (required if `cov_type == :cluster`)
+- `weights` — GLM/IRLS working weights for the HC2/HC3 leverage (h_ii = w_i x_i'(X'WX)^{-1}x_i);
+  leave `nothing` for OLS/WLS on (transformed) designs
 
 # References
 - White, H. (1980). *Econometrica* 48(4), 817-838.
@@ -115,7 +125,8 @@ Compute the variance-covariance matrix of OLS/WLS coefficients.
 """
 function _reg_vcov(X::Matrix{T}, resid::Vector{T}, cov_type::Symbol,
                    XtXinv::Matrix{T};
-                   clusters::Union{Nothing,AbstractVector}=nothing) where {T<:AbstractFloat}
+                   clusters::Union{Nothing,AbstractVector}=nothing,
+                   weights::Union{Nothing,Vector{T}}=nothing) where {T<:AbstractFloat}
     n, k = size(X)
 
     if cov_type == :ols
@@ -134,7 +145,7 @@ function _reg_vcov(X::Matrix{T}, resid::Vector{T}, cov_type::Symbol,
         throw(ArgumentError("cov_type must be :ols, :hc0, :hc1, :hc2, :hc3, or :cluster; got :$cov_type"))
 
     # Compute leverage if needed
-    h = (cov_type == :hc2 || cov_type == :hc3) ? _hat_diag(X, XtXinv) : nothing
+    h = (cov_type == :hc2 || cov_type == :hc3) ? _hat_diag(X, XtXinv; weights=weights) : nothing
 
     # Build the meat matrix S = X' Omega X
     S = zeros(T, k, k)

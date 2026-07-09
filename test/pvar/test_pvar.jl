@@ -5,6 +5,7 @@
 # Licensed under GPL-3.0-or-later. See LICENSE for details.
 
 using Test, MacroEconometricModels, Random, DataFrames, LinearAlgebra, Statistics, Distributions
+using Logging: with_logger
 
 # =============================================================================
 # Helper: generate balanced panel DGP
@@ -627,4 +628,138 @@ end
     robsd = 1.4826 * median(abs.(bs .- median(bs)))
     ratio = median(ses) / robsd
     @test 0.6 < ratio < 1.6   # corrected two-step SE tracks the empirical sampling SD
+end
+
+@testset "PVAR GMM unbalanced instrument zero-padding (T080)" begin
+    # Unbalanced univariate panel: group lengths [6, 6, 8]. The AB block-diagonal FD
+    # instruments have per-group widths that differ; the fix zero-pads every group to the
+    # MAX width (keeping longer units' later-period moments) instead of truncating to MIN.
+    rng = MersenneTwister(4080)
+    Tlens = [6, 6, 8]
+    ids = Int[]; times = Int[]; ys = Float64[]
+    grp_levels = Matrix{Float64}[]
+    for (g, Tg) in enumerate(Tlens)
+        y = zeros(Tg)
+        for t in 2:Tg
+            y[t] = 0.5 * y[t-1] + randn(rng)
+        end
+        push!(grp_levels, reshape(y, :, 1))
+        append!(ids, fill(g, Tg)); append!(times, 1:Tg); append!(ys, y)
+    end
+    pd = xtset(DataFrame(id=ids, t=times, y=ys), :id, :t)
+    m = estimate_pvar(pd, 1; steps=:onestep, min_lag_endo=2, max_lag_endo=99)
+
+    # Per-group AB-FD instrument widths, computed independently
+    widths = [size(MacroEconometricModels._build_instruments_fd(gl, 1, 1;
+                    min_lag=2, max_lag=99, collapse=false), 2) for gl in grp_levels]
+    @test maximum(widths) != minimum(widths)      # panel is genuinely unbalanced in width
+    @test m.n_instruments == maximum(widths)       # zero-pad to MAX (was: truncate to MIN)
+    @test m.n_instruments != minimum(widths)
+    # coefficients finite (padded zero columns contribute nothing to the moment sums)
+    @test all(isfinite, coef(m))
+end
+
+@testset "PVAR one-step GMM Arellano-Bond H matrix (T081)" begin
+    A = MacroEconometricModels
+    # (1) H band matrix structure: 2 on the diagonal, -1 on the first off-diagonals
+    H = A._ab_h_matrix(Float64, 4)
+    @test H == [2.0 -1 0 0; -1 2 -1 0; 0 -1 2 -1; 0 0 -1 2]
+    @test issymmetric(H)
+    @test A._ab_h_matrix(Float64, 1) == reshape([2.0], 1, 1)
+
+    # Balanced univariate panel, p=1
+    rng = MersenneTwister(4081)
+    N = 40; Tt = 8
+    ids = Int[]; times = Int[]; ys = Float64[]
+    grp = Matrix{Float64}[]
+    for i in 1:N
+        y = zeros(Tt)
+        for t in 2:Tt
+            y[t] = 0.5 * y[t-1] + randn(rng)
+        end
+        push!(grp, reshape(y, :, 1))
+        append!(ids, fill(i, Tt)); append!(times, 1:Tt); append!(ys, y)
+    end
+    pd = xtset(DataFrame(id=ids, t=times, y=ys), :id, :t)
+    m = estimate_pvar(pd, 1; steps=:onestep, min_lag_endo=2, max_lag_endo=99)
+
+    # (2) EXACT-EQUIVALENCE: reconstruct the one-step FD-GMM using the package's own
+    # helpers, with the H weight (useH=true) or the old Z'Z weight (useH=false).
+    function recon(useH)
+        Zs = Matrix{Float64}[]; Xs = Matrix{Float64}[]; Ys = Matrix{Float64}[]
+        for gl in grp
+            Yeff, Xlag = A._panel_lag_levels(gl, 1)
+            Ytr = A._panel_first_difference(Yeff)
+            Xtr = A._panel_first_difference(Xlag)
+            Zg = A._build_instruments_fd(gl, 1, 1; min_lag=2, max_lag=99, collapse=false)
+            Tc = min(size(Ytr, 1), size(Zg, 1))
+            push!(Ys, Ytr[end-Tc+1:end, :]); push!(Xs, Xtr[end-Tc+1:end, :]); push!(Zs, Zg[end-Tc+1:end, :])
+        end
+        ninst = maximum(size(Z, 2) for Z in Zs)
+        SZX = zeros(ninst, 1); SZy = zeros(ninst, 1); W = zeros(ninst, ninst)
+        for g in 1:N
+            SZX .+= Zs[g]' * Xs[g]; SZy .+= Zs[g]' * Ys[g]
+            W .+= useH ? Zs[g]' * (A._ab_h_matrix(Float64, size(Zs[g], 1)) * Zs[g]) : Zs[g]' * Zs[g]
+        end
+        W ./= N
+        Winv = Matrix(A.robust_inv(Hermitian((W + W') / 2)))
+        A.linear_gmm_solve(SZX, SZy[:, 1], Winv)
+    end
+    phi_H = recon(true); phi_ZZ = recon(false)
+    @test isapprox(coef(m)[1], phi_H[1]; atol=1e-7)     # matches the H-weighted one-step
+    @test !isapprox(phi_H[1], phi_ZZ[1]; atol=1e-6)      # H genuinely differs from Z'Z (the fix)
+
+    # (3) FOD path: homoskedastic ⇒ H not applied; still finite
+    mf = estimate_pvar(pd, 1; steps=:onestep, transformation=:fod, min_lag_endo=2, max_lag_endo=99)
+    @test all(isfinite, coef(mf))
+    # (4) two-step still produces finite estimates (regression guard)
+    m2 = estimate_pvar(pd, 1; steps=:twostep, min_lag_endo=2, max_lag_endo=99)
+    @test all(isfinite, coef(m2))
+end
+
+@testset "PVAR Σ removes fixed effects (T082)" begin
+    # DGP: Var(α_i) ≈ 1, innovation sd 0.1 ⇒ Σ_true = 0.01·I. Level residuals would give
+    # diag ≈ Var(α_i) + Σ ≈ 1.01; the fix uses transformation-consistent innovations ⇒ ≈0.01.
+    dgp = _make_panel_dgp(N=50, T_total=100, m=2, p=1, rng=MersenneTwister(400))
+    # (a) FE-OLS within residuals annihilate the unit fixed effect α_i
+    mfe = estimate_pvar_feols(dgp.pd, 1)
+    @test maximum(diag(mfe.Sigma)) < 0.05                      # α_i removed (old ≈1.01 fails this)
+    @test norm(diag(mfe.Sigma) .- 0.01) / 0.01 < 0.20
+    # (b) OIRF impact diagonal = innovation sd ≈ 0.1, NOT sqrt(Var(α_i)+Σ) ≈ 1.0
+    oirf = pvar_oirf(mfe, 4)
+    @test all(0.07 .< [oirf[1, j, j] for j in 1:2] .< 0.14)
+    # (c) FEVD rows sum to 1 (scale-invariant — a guard that shape is preserved)
+    fe = pvar_fevd(mfe, 4)
+    @test all(abs(sum(fe[end, l, :]) - 1) < 1e-6 for l in 1:2)
+
+    # (d) GMM FD (scale 0.5) and FOD (scale 1.0) both recover Σ_true ≈ 0.01. Capped
+    # instrument lags keep the GMM tractable (full lags on a long panel explode n_inst).
+    dgpg = _make_panel_dgp(N=50, T_total=30, m=2, p=1, rng=MersenneTwister(401))
+    mg = estimate_pvar(dgpg.pd, 1; max_lag_endo=3)
+    @test maximum(diag(mg.Sigma)) < 0.05
+    @test norm(diag(mg.Sigma) .- 0.01) / 0.01 < 0.45
+    mf = estimate_pvar(dgpg.pd, 1; transformation=:fod, max_lag_endo=3)
+    @test maximum(diag(mf.Sigma)) < 0.05
+    @test norm(diag(mg.Sigma) .- diag(mf.Sigma)) < 0.02
+end
+
+@testset "Too-many-instruments warning (Roodman 2009, T084)" begin
+    # Capture with respect_maxlog=false so the check is independent of the maxlog=1 counter
+    # (the warning may already have fired in earlier testsets this session).
+    # (a) short-N / long-T ⇒ n_inst ≫ N ⇒ warning fires
+    dgp = _make_panel_dgp(N=8, T_total=14, m=2, p=1, rng=MersenneTwister(4084))
+    tl = Test.TestLogger(respect_maxlog=false)
+    m = with_logger(() -> estimate_pvar(dgp.pd, 1; steps=:twostep), tl)
+    @test any(r -> occursin("Too many instruments", r.message), tl.logs)
+    @test m.n_instruments > m.n_groups
+    @test m.n_groups == 8
+    @test m.n_instruments == size(m.instruments[1], 2)
+    @test occursin("groups:", sprint(show, m))
+
+    # (b) wide-N / short-T ⇒ n_inst ≤ N ⇒ no too-many-instruments warning
+    dgp2 = _make_panel_dgp(N=60, T_total=5, m=1, p=1, rng=MersenneTwister(4085))
+    tl2 = Test.TestLogger(respect_maxlog=false)
+    m2 = with_logger(() -> estimate_pvar(dgp2.pd, 1), tl2)
+    @test !any(r -> occursin("Too many instruments", r.message), tl2.logs)
+    @test m2.n_instruments <= m2.n_groups
 end

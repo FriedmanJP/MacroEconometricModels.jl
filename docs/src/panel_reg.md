@@ -224,6 +224,19 @@ m_bb = estimate_xtreg(pd_dyn, :growth, [:invest, :output]; model=:bb)
 report(m_bb)
 ```
 
+Dynamic-panel `report()` output includes GMM diagnostics: the Arellano-Bond AR(1)/AR(2)
+serial-correlation tests on the first-differenced residuals and the Hansen J
+overidentification test. A correctly specified model *rejects* AR(1) (the first-differenced
+idiosyncratic error is MA(1)) but does *not* reject AR(2). Retrieve the AR tests
+programmatically with [`arellano_bond_ar_test`](@ref):
+
+```@example preg
+arellano_bond_ar_test(m_ab; order=2)   # expect a non-significant p-value
+```
+
+The coefficient covariance (`vcov(m)`) is the full Windmeijer-corrected GMM covariance, so
+joint Wald tests across coefficients use the cross-coefficient (off-diagonal) terms.
+
 ### Keywords
 
 | Keyword | Type | Default | Description |
@@ -404,6 +417,13 @@ m_re2 = estimate_xtreg(pd_pwt, :lngdppc, [:hc, :lnk]; model=:re)
 ht = hausman_test(m_fe2, m_re2)
 report(ht)
 ```
+
+The statistic uses the Moore-Penrose generalized inverse of ``V_{FE} - V_{RE}`` with
+degrees of freedom equal to its numerical rank. In finite samples this difference is often
+not positive semidefinite; when that happens the reported statistic can be **negative**
+(the test emits a warning and cannot reject ``H_0``) and the degrees of freedom may fall
+below the number of coefficients — matching Stata's `hausman`. A negative statistic
+indicates the asymptotic Hausman assumption is violated in the sample, not evidence for RE.
 
 ### Breusch-Pagan LM Test
 

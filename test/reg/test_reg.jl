@@ -345,6 +345,39 @@ using LinearAlgebra, Statistics, Random, Distributions
         @test all(abs.(coef(m) .- beta_true) .< 0.5)
     end
 
+    @testset "WLS covariance equivalence (T075)" begin
+        # Primary oracle: WLS(weights=w) ≡ OLS on the √W-transformed data (√w·y, √w·X)
+        # for coefficients AND the FULL covariance, for every cov_type.
+        rng = MersenneTwister(505)
+        n = 200
+        X = hcat(ones(n), randn(rng, n, 2))
+        beta_true = [1.0, 2.0, -1.0]
+        sigma_i = 0.3 .+ 2.0 .* X[:, 2].^2
+        y = X * beta_true + sqrt.(sigma_i) .* randn(rng, n)
+        w = 1.0 ./ sigma_i
+        sw = sqrt.(w)
+        for ct in (:ols, :hc0, :hc1, :hc2, :hc3)
+            m  = estimate_reg(y, X; weights=w, cov_type=ct)
+            mt = estimate_reg(sw .* y, sw .* X; cov_type=ct)   # OLS on transformed data
+            @test isapprox(coef(m), coef(mt); atol=1e-10)
+            @test isapprox(vcov(m), vcov(mt); atol=1e-10)
+            @test isapprox(stderror(m), stderror(mt); atol=1e-10)
+            # Scale invariance: scaling all weights by a constant leaves vcov unchanged
+            m2 = estimate_reg(y, X; weights=100.0 .* w, cov_type=ct)
+            @test isapprox(vcov(m), vcov(m2); rtol=1e-9)
+        end
+        # Closed-form classical WLS: y=[1,2,4], X=[1 0;1 1;1 2], w=[1,4,9]
+        yc = [1.0, 2.0, 4.0]
+        Xc = [1.0 0.0; 1.0 1.0; 1.0 2.0]
+        wc = [1.0, 4.0, 9.0]
+        XtWX = Xc' * Diagonal(wc) * Xc          # [14 40; 40 112]
+        betac = XtWX \ (Xc' * Diagonal(wc) * yc)
+        ec = yc .- Xc * betac
+        sig2 = dot(ec, wc .* ec) / 1            # n-k = 3-2 = 1
+        Vref = sig2 * inv(XtWX)
+        @test isapprox(vcov(estimate_reg(yc, Xc; weights=wc, cov_type=:ols)), Vref; atol=1e-10)
+    end
+
     @testset "Intercept-only model" begin
         rng = MersenneTwister(606)
         n = 100
@@ -516,6 +549,52 @@ end
         @test m.first_stage_f > 10.0
     end
 
+    @testset "Excluded-instrument partial F + CD/KP/Stock-Yogo (T072)" begin
+        rng = MersenneTwister(5099)
+        n = 800
+        z1, z2 = randn(rng, n), randn(rng, n)
+        w = randn(rng, n)                        # included exogenous control
+        v = randn(rng, n)
+        u = 0.5 * v + randn(rng, n)
+        x_endog = 1.5 * w + 0.6 * z1 + 0.5 * z2 + v   # w STRONGLY predicts x
+        y = 1.0 .+ 2.0 * x_endog .+ 0.8 * w .+ u
+        X = hcat(ones(n), w, x_endog)            # [intercept, included exog, endogenous]
+        Z = hcat(ones(n), w, z1, z2)             # W = [intercept, w] appears in Z too
+        m = estimate_iv(y, X, Z; endogenous=[3])
+
+        # Manual excluded-instrument partial F: partial out W = [1, w]; q = m - #W = 4 - 2 = 2.
+        W = X[:, [1, 2]]; xj = X[:, 3]
+        Mw = I - W * (inv(W' * W) * W')
+        xt = Mw * xj
+        ssr_r = dot(xt, xt)
+        ssr_u = let r = xj - Z * (inv(Z' * Z) * (Z' * xj)); dot(r, r) end
+        df2 = n - 4
+        F_partial = ((ssr_r - ssr_u) / 2) / (ssr_u / df2)
+        @test isapprox(m.first_stage_f, F_partial; atol=1e-6)
+
+        # The old overall-F (TSS about the mean, q = m) is inflated by w predicting x_endog.
+        xbar = sum(xj) / n; tss = sum((xi - xbar)^2 for xi in xj)
+        F_overall_old = ((tss - ssr_u) / 4) / (ssr_u / df2)
+        @test F_overall_old > m.first_stage_f                       # the bug's inflation
+
+        # Cragg-Donald == partial F for a single endogenous regressor.
+        @test isapprox(m.cragg_donald_f, m.first_stage_f; atol=1e-6)
+
+        # Kleibergen-Paap == HC1-robust first-stage F (single endog): reconstruct manually.
+        Zt = Mw * Z
+        U, S, _ = svd(Zt); r = count(>(maximum(S) * n * eps()), S)
+        Zb = U[:, 1:r]
+        gamma = Zb' * xt
+        eh = xt - Zb * gamma
+        Vg = (Zb' * Diagonal(eh .^ 2) * Zb) .* (n / (n - 4))
+        KP_manual = dot(gamma, inv(Vg) * gamma) / r
+        @test r == 2
+        @test isapprox(m.kleibergen_paap_f, KP_manual; atol=1e-6)
+
+        # Stock-Yogo 10% maximal-size critical value: 1 endogenous, q = 2 excluded ⇒ 19.93.
+        @test m.stock_yogo_10pct == 19.93
+    end
+
     @testset "Sargan test: overidentified has stat, exactly identified is nothing" begin
         rng = MersenneTwister(5003)
         n = 500
@@ -543,6 +622,46 @@ end
         @test m_exact.sargan_stat === nothing
         @test m_exact.sargan_pval === nothing
     end
+
+    @testset "IV overid: Hansen J under robust weighting (T076)" begin
+        rng = MersenneTwister(7601)
+        n = 2000
+        z1 = randn(rng, n); z2 = randn(rng, n)
+        v = randn(rng, n)
+        # Strong heteroskedasticity in the structural error (variance grows with z1)
+        u = randn(rng, n) .* (1.0 .+ 2.0 .* abs.(z1))
+        x_endog = 0.6 .* z1 .+ 0.5 .* z2 .+ v
+        y = 1.0 .+ 1.5 .* x_endog .+ u
+        X = hcat(ones(n), x_endog)              # k = 2
+        Z = hcat(ones(n), z1, z2)               # m = 3 ⇒ df = 1
+
+        m_r = estimate_iv(y, X, Z; endogenous=[2], cov_type=:hc1)
+        m_o = estimate_iv(y, X, Z; endogenous=[2], cov_type=:ols)
+
+        # (b) robust Hansen J differs from the classical Sargan under heteroskedasticity
+        @test m_r.sargan_stat != m_o.sargan_stat
+        # (c) EXACT reproduction of the HC0-meat Hansen J: J = g'S⁻¹g, S = Z'diag(e²)Z
+        e = residuals(m_r)
+        g = Z' * e
+        S = Z' * Diagonal(e .^ 2) * Z
+        Jref = dot(g, S \ g)
+        @test isapprox(m_r.sargan_stat, Jref; atol=1e-8)
+        # (f) p-value ∈ [0,1]; valid instruments ⇒ not rejected
+        @test 0.0 <= m_r.sargan_pval <= 1.0
+        @test m_r.sargan_pval > 0.05
+
+        # (d) homoskedastic collapse: eᵢ² ≡ const ⇒ HC0 Hansen J == classical Sargan
+        e_const = ifelse.(rand(rng, n) .< 0.5, -1.0, 1.0)   # ±1 ⇒ e² ≡ 1
+        j_ols = MacroEconometricModels._sargan_test(e_const, Z, 1, 2, :ols)[1]
+        j_hc0 = MacroEconometricModels._sargan_test(e_const, Z, 1, 2, :hc0)[1]
+        @test isapprox(j_ols, j_hc0; atol=1e-8)
+
+        # (e) exactly-identified ⇒ (nothing, nothing) even under robust cov_type
+        m_x = estimate_iv(y, X, hcat(ones(n), z1); endogenous=[2], cov_type=:hc1)
+        @test m_x.sargan_stat === nothing
+        @test m_x.sargan_pval === nothing
+    end
+
 
     @testset "IV — robust covariance types" begin
         rng = MersenneTwister(5004)
@@ -991,12 +1110,13 @@ end
         @test me.conf_level == 0.95
         @test me.varnames == ["const", "x1", "x2"]
 
-        # SEs should be positive
-        @test all(me.se .> 0)
+        # Intercept has no marginal effect (NaN); slopes have positive SEs
+        @test isnan(me.effects[1]) && isnan(me.se[1])
+        @test all(me.se[2:end] .> 0)
 
-        # CIs should bracket effects
-        @test all(me.ci_lower .< me.effects)
-        @test all(me.ci_upper .> me.effects)
+        # CIs should bracket effects (non-intercept)
+        @test all(me.ci_lower[2:end] .< me.effects[2:end])
+        @test all(me.ci_upper[2:end] .> me.effects[2:end])
 
         # AME for slope coefficients should be non-trivial
         # For logit: AME_j ≈ mean(p*(1-p)) * beta_j
@@ -1011,9 +1131,9 @@ end
 
         @test me.type == :mem
         @test length(me.effects) == 3
-        @test all(me.se .> 0)
-        @test all(me.ci_lower .< me.effects)
-        @test all(me.ci_upper .> me.effects)
+        @test all(me.se[2:end] .> 0)
+        @test all(me.ci_lower[2:end] .< me.effects[2:end])
+        @test all(me.ci_upper[2:end] .> me.effects[2:end])
 
         # MEM should have same sign as AME for monotone link
         me_ame = marginal_effects(m_logit; type=:ame)
@@ -1027,7 +1147,7 @@ end
 
         @test me.type == :mer
         @test length(me.effects) == 3
-        @test all(me.se .> 0)
+        @test all(me.se[2:end] .> 0)
     end
 
     @testset "MER error — missing at argument" begin
@@ -1047,9 +1167,10 @@ end
 
         @test me.type == :ame
         @test length(me.effects) == 3
-        @test all(me.se .> 0)
-        @test all(me.ci_lower .< me.effects)
-        @test all(me.ci_upper .> me.effects)
+        @test isnan(me.effects[1]) && isnan(me.se[1])
+        @test all(me.se[2:end] .> 0)
+        @test all(me.ci_lower[2:end] .< me.effects[2:end])
+        @test all(me.ci_upper[2:end] .> me.effects[2:end])
 
         # Probit AME for x1 (beta=1.0) should be positive
         @test me.effects[2] > 0
@@ -1083,7 +1204,7 @@ end
         me_95 = marginal_effects(m_logit; conf_level=0.95)
         me_99 = marginal_effects(m_logit; conf_level=0.99)
 
-        for j in 1:3
+        for j in 2:3  # intercept ME is NaN
             w90 = me_90.ci_upper[j] - me_90.ci_lower[j]
             w95 = me_95.ci_upper[j] - me_95.ci_lower[j]
             w99 = me_99.ci_upper[j] - me_99.ci_lower[j]
@@ -1159,6 +1280,149 @@ end
         # Delta method: SE(OR_j) = OR_j * SE(beta_j)
         expected_se = result.or .* se_beta
         @test result.se ≈ expected_se
+    end
+
+end
+
+# =============================================================================
+# T089 (#188): separation warning, discrete-change ME, GLM weighted leverage
+# =============================================================================
+
+@testset "T089: separation / discrete-change ME / GLM leverage" begin
+
+    @testset "M-27: perfect separation warning (logit + probit)" begin
+        n = 60
+        x = vcat(range(-2.0, -0.1; length=30), range(0.1, 2.0; length=30))
+        y = Float64.(x .> 0)  # perfectly separated at x = 0
+        X = hcat(ones(n), collect(x))
+
+        @test_logs (:warn, r"separation") estimate_logit(y, X)
+        @test_logs (:warn, r"separation") estimate_probit(y, X)
+
+        # Overlapping (non-separated) design must not warn
+        rng = MersenneTwister(18801)
+        n2 = 300
+        x2 = randn(rng, n2)
+        p2 = 1.0 ./ (1.0 .+ exp.(-0.5 .* x2))
+        y2 = Float64.(rand(rng, n2) .< p2)
+        X2 = hcat(ones(n2), x2)
+        @test_logs estimate_logit(y2, X2)
+        @test_logs estimate_probit(y2, X2)
+    end
+
+    @testset "M-28: discrete-change AME/MEM for binary regressors" begin
+        rng = MersenneTwister(18802)
+        n = 800
+        x1 = randn(rng, n)
+        d = Float64.(rand(rng, n) .< 0.4)  # genuine {0,1} dummy
+        X = hcat(ones(n), x1, d)
+        beta_dgp = [-0.2, 1.0, 0.7]
+        p = 1.0 ./ (1.0 .+ exp.(-X * beta_dgp))
+        y = Float64.(rand(rng, n) .< p)
+
+        dist = Normal()
+        for (est, F, f) in ((estimate_logit,
+                             eta -> 1 / (1 + exp(-eta)),
+                             eta -> (q = 1 / (1 + exp(-eta)); q * (1 - q))),
+                            (estimate_probit,
+                             eta -> cdf(dist, eta),
+                             eta -> pdf(dist, eta)))
+            m = est(y, X)
+            b = coef(m)
+            me = marginal_effects(m)  # AME
+
+            eta = m.X * b
+            eta1 = eta .+ (1.0 .- X[:, 3]) .* b[3]
+            eta0 = eta .- X[:, 3] .* b[3]
+
+            # Oracle: discrete change == mean_i [F(eta | d=1) - F(eta | d=0)]
+            ame_d = mean(F.(eta1) .- F.(eta0))
+            @test me.effects[3] ≈ ame_d atol = 1e-10
+
+            # ... and it differs from the continuous formula f(eta)*b_d
+            @test abs(me.effects[3] - mean(f.(eta)) * b[3]) > 1e-6
+
+            # Continuous column keeps the derivative formula
+            @test me.effects[2] ≈ mean(f.(eta)) * b[2] atol = 1e-10
+
+            # Intercept has no ME
+            @test isnan(me.effects[1]) && isnan(me.se[1]) && isnan(me.p_values[1])
+            @test isnan(me.ci_lower[1]) && isnan(me.ci_upper[1])
+
+            # Delta-method SE for the binary column: G row = [mean(f1-f0), mean((f1-f0)x), mean(f1)]
+            f1 = f.(eta1)
+            f0 = f.(eta0)
+            G_row = [mean(f1 .- f0), mean((f1 .- f0) .* X[:, 2]), mean(f1)]
+            se_d = sqrt(dot(G_row, m.vcov_mat * G_row))
+            @test me.se[3] ≈ se_d atol = 1e-10
+            @test me.se[3] > 0
+
+            # MEM discrete change at the mean
+            me_mem = marginal_effects(m; type = :mem)
+            xbar = vec(mean(X, dims = 1))
+            eta_bar = dot(xbar, b)
+            mem_d = F(eta_bar + (1 - xbar[3]) * b[3]) - F(eta_bar - xbar[3] * b[3])
+            @test me_mem.effects[3] ≈ mem_d atol = 1e-10
+            @test isnan(me_mem.effects[1])
+        end
+    end
+
+    @testset "M-32: GLM weighted leverage for HC2/HC3" begin
+        rng = MersenneTwister(18803)
+        n = 200
+        x = randn(rng, n)
+        X = hcat(ones(n), x)
+        p = 1.0 ./ (1.0 .+ exp.(-(0.3 .+ 0.9 .* x)))
+        y = Float64.(rand(rng, n) .< p)
+
+        m = estimate_logit(y, X; cov_type = :hc2)
+        mu = m.fitted
+        w = mu .* (1 .- mu)  # logit IRLS weights at the MLE
+        info_inv = MacroEconometricModels.robust_inv(X' * Diagonal(w) * X)
+
+        # Trace identity: GLM hat H = W^{1/2}X(X'WX)^{-1}X'W^{1/2} has trace k
+        h_w = MacroEconometricModels._hat_diag(X, Matrix(info_inv); weights = w)
+        @test sum(h_w) ≈ 2.0 atol = 1e-8
+
+        # The old unweighted leverage on (X, (X'WX)^{-1}) violates the identity
+        h_uw = MacroEconometricModels._hat_diag(X, Matrix(info_inv))
+        @test abs(sum(h_uw) - 2.0) > 1e-3
+
+        # Exact hand-built weighted HC2/HC3 reference on synthetic inputs
+        rng2 = MersenneTwister(18804)
+        n3 = 40
+        X3 = hcat(ones(n3), randn(rng2, n3, 2))
+        w3 = 0.05 .+ 0.9 .* rand(rng2, n3)
+        e3 = randn(rng2, n3)
+        A3 = Matrix(MacroEconometricModels.robust_inv(X3' * Diagonal(w3) * X3))
+        h3 = [w3[i] * dot(X3[i, :], A3 * X3[i, :]) for i in 1:n3]
+        for (ct, dexp) in ((:hc2, 1), (:hc3, 2))
+            S3 = zeros(3, 3)
+            for i in 1:n3
+                S3 .+= (e3[i]^2 / (1 - h3[i])^dexp) .* (X3[i, :] * X3[i, :]')
+            end
+            V_ref = A3 * S3 * A3
+            V_impl = MacroEconometricModels._reg_vcov(X3, e3, ct, A3; weights = w3)
+            @test V_impl ≈ V_ref atol = 1e-12
+        end
+
+        # Integration: estimated HC2/HC3 use the weighted hat, not the unweighted one
+        # (IRLS weights are one iteration stale vs m.fitted, so compare with rtol)
+        score_resid = y .- mu
+        for ct in (:hc2, :hc3)
+            m_ct = estimate_logit(y, X; cov_type = ct)
+            V_old = MacroEconometricModels._reg_vcov(X, score_resid, ct, Matrix(info_inv))
+            V_new = MacroEconometricModels._reg_vcov(X, score_resid, ct, Matrix(info_inv); weights = w)
+            @test m_ct.vcov_mat ≈ V_new rtol = 1e-2
+            @test norm(m_ct.vcov_mat - V_new) < norm(m_ct.vcov_mat - V_old)
+        end
+
+        # Leverage monotonicity: SE(hc3) > SE(hc2) > SE(hc0) elementwise
+        se_hc0 = sqrt.(diag(estimate_logit(y, X; cov_type = :hc0).vcov_mat))
+        se_hc2 = sqrt.(diag(estimate_logit(y, X; cov_type = :hc2).vcov_mat))
+        se_hc3 = sqrt.(diag(estimate_logit(y, X; cov_type = :hc3).vcov_mat))
+        @test all(se_hc3 .> se_hc2)
+        @test all(se_hc2 .> se_hc0)
     end
 
 end

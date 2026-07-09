@@ -175,6 +175,11 @@ function estimate_probit(y::AbstractVector{T}, X::AbstractMatrix{T};
     beta, mu, w, loglik_val, converged, iterations = _irls_probit(yv, Xm;
                                                                     maxiter=maxiter, tol=tol)
 
+    # ---- Separation check (Albert & Anderson 1984) ----
+    if _detect_separation(yv, Xm * beta, mu, beta)
+        @warn "perfect (quasi-)separation detected in probit estimation; the MLE does not exist or lies on the boundary — coefficients and standard errors are unreliable"
+    end
+
     # ---- Null model log-likelihood ----
     p_bar = mean(yv)
     p_bar = clamp(p_bar, T(1e-10), one(T) - T(1e-10))
@@ -207,7 +212,8 @@ function estimate_probit(y::AbstractVector{T}, X::AbstractMatrix{T};
             denom_i = max(mu[i] * (one(T) - mu[i]), T(1e-10))
             score_resid[i] = phi_i * (yv[i] - mu[i]) / denom_i
         end
-        vcov_mat = _reg_vcov(Xm, score_resid, cov_type, info_inv; clusters=clusters)
+        # HC2/HC3 leverage needs the Fisher-scoring weights: h_ii = w_i x_i'(X'WX)^{-1}x_i.
+        vcov_mat = _reg_vcov(Xm, score_resid, cov_type, info_inv; clusters=clusters, weights=w)
     end
 
     # ---- Deviance residuals (same formula as logit) ----

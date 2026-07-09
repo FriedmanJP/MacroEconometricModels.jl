@@ -96,7 +96,7 @@ All six methods integrate seamlessly with `irf()`, `fevd()`, and `historical_dec
 
 For detailed treatment of each tool --- theory, equations, return value tables, and advanced usage:
 
-- [Impulse Responses](@ref ia_irf_page) --- IRF definition, companion form representation, cumulative IRFs, bootstrap and Bayesian confidence intervals, stationarity filtering (Kilian 1998), LP-based IRFs
+- [Impulse Responses](@ref ia_irf_page) --- IRF definition, companion form representation, cumulative IRFs, bootstrap and Bayesian confidence intervals, stationarity filtering (Kilian & Lütkepohl 2017), LP-based IRFs
 - [Variance Decomposition](@ref ia_fevd_page) --- FEVD definition, properties, LP-FEVD (Gorodnichenko & Lee 2019), Bayesian FEVD, bootstrap CIs
 - [Historical Decomposition](@ref ia_hd_page) --- HD definition, decomposition identity, shock contributions, LP-based HD, display and table output
 

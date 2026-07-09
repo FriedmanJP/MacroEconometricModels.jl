@@ -308,6 +308,7 @@ include("teststat/pvar_lag_selection.jl")
 
 # Panel Regression (FE/RE/FD/Between/CRE, IV, Logit, Probit)
 include("preg/types.jl")
+include("teststat/pvar_ar_test.jl")   # after preg/types (needs PanelRegModel), before preg/estimation (calls _pvar_ar_stats)
 include("preg/covariance.jl")
 include("preg/estimation.jl")
 include("preg/tests.jl")
@@ -707,6 +708,7 @@ export favar_panel_irf, favar_panel_forecast, sdfm_panel_irf
 
 export robust_inv
 export safe_cholesky
+export safe_cholesky_jitter
 export construct_var_matrices
 export extract_ar_coefficients
 export companion_matrix
@@ -756,7 +758,7 @@ export j_test, numerical_gradient
 export estimate_lp_gmm, lp_gmm_moments
 export linear_gmm_solve, gmm_sandwich_vcov, andrews_lu_mmsc
 export ParameterTransform, to_unconstrained, to_constrained, transform_jacobian
-export SMMModel, estimate_smm, autocovariance_moments
+export SMMModel, estimate_smm, autocovariance_moments, autocovariance_moment_contributions
 
 # =============================================================================
 # Exports - Panel VAR
@@ -775,7 +777,7 @@ export pvar_oirf, pvar_girf, pvar_fevd, pvar_stability
 export pvar_bootstrap_irf
 
 # Specification tests
-export pvar_hansen_j, pvar_mmsc, pvar_lag_selection
+export pvar_hansen_j, pvar_mmsc, pvar_lag_selection, arellano_bond_ar_test
 
 # =============================================================================
 # Exports - Panel Regression

@@ -402,13 +402,22 @@ end
 # Distance Covariance
 # =============================================================================
 
-"""Compute distance covariance between two vectors."""
-function _distance_covariance(x::AbstractVector{T}, y::AbstractVector{T}) where {T<:AbstractFloat}
+"""
+Compute distance covariance between two vectors, filling the preallocated
+T_obs x T_obs scratch buffers `A`, `B`, `C` in place. Arithmetic is identical
+to the allocating form (same fill values, same `mean`/`sum` reduction paths),
+so results are bit-for-bit unchanged while the objective loop reuses one set
+of buffers across all pairs and evaluations.
+"""
+function _distance_covariance!(A::Matrix{T}, B::Matrix{T}, C::Matrix{T},
+                               x::AbstractVector{T}, y::AbstractVector{T}) where {T<:AbstractFloat}
     n = length(x)
 
-    # Compute distance matrices
-    A = [abs(x[i] - x[j]) for i in 1:n, j in 1:n]
-    B = [abs(y[i] - y[j]) for i in 1:n, j in 1:n]
+    # Compute distance matrices (in place)
+    @inbounds for j in 1:n, i in 1:n
+        A[i, j] = abs(x[i] - x[j])
+        B[i, j] = abs(y[i] - y[j])
+    end
 
     # Double-center
     A_row = mean(A, dims=2)
@@ -424,20 +433,40 @@ function _distance_covariance(x::AbstractVector{T}, y::AbstractVector{T}) where 
     end
 
     # dCov² = (1/n²) Σᵢⱼ Aᵢⱼ Bᵢⱼ
-    dcov2 = sum(A .* B) / n^2
+    C .= A .* B
+    dcov2 = sum(C) / n^2
     max(dcov2, zero(T))
 end
 
-"""Objective: sum of pairwise distance covariances (to minimize)."""
-function _dcov_objective(angles::AbstractVector{T}, Z::Matrix{T}, n::Int) where {T<:AbstractFloat}
+"""Compute distance covariance between two vectors."""
+function _distance_covariance(x::AbstractVector{T}, y::AbstractVector{T}) where {T<:AbstractFloat}
+    n = length(x)
+    A = Matrix{T}(undef, n, n)
+    B = Matrix{T}(undef, n, n)
+    C = Matrix{T}(undef, n, n)
+    _distance_covariance!(A, B, C, x, y)
+end
+
+"""Objective: sum of pairwise distance covariances (to minimize). The buffered
+method reuses the scratch matrices `A`, `B`, `C` across pairs."""
+function _dcov_objective(angles::AbstractVector{T}, Z::Matrix{T}, n::Int,
+                         A::Matrix{T}, B::Matrix{T}, C::Matrix{T}) where {T<:AbstractFloat}
     Q = _givens_to_orthogonal(angles, n)
     S = Z * Q'  # rotated sources
 
     obj = zero(T)
     for i in 1:n-1, j in (i+1):n
-        obj += _distance_covariance(@view(S[:, i]), @view(S[:, j]))
+        obj += _distance_covariance!(A, B, C, @view(S[:, i]), @view(S[:, j]))
     end
     obj
+end
+
+function _dcov_objective(angles::AbstractVector{T}, Z::Matrix{T}, n::Int) where {T<:AbstractFloat}
+    T_obs = size(Z, 1)
+    A = Matrix{T}(undef, T_obs, T_obs)
+    B = Matrix{T}(undef, T_obs, T_obs)
+    C = Matrix{T}(undef, T_obs, T_obs)
+    _dcov_objective(angles, Z, n, A, B, C)
 end
 
 """
@@ -458,7 +487,12 @@ function identify_dcov(model::VARModel{T}; max_iter::Int=200,
     n_angles = n * (n - 1) ÷ 2
     angles0 = zeros(T, n_angles)
 
-    result = Optim.optimize(a -> _dcov_objective(a, Z, n), angles0,
+    # Preallocate the T_obs x T_obs scratch once; reused by every objective evaluation
+    T_obs = size(Z, 1)
+    Abuf = Matrix{T}(undef, T_obs, T_obs)
+    Bbuf = Matrix{T}(undef, T_obs, T_obs)
+    Cbuf = Matrix{T}(undef, T_obs, T_obs)
+    result = Optim.optimize(a -> _dcov_objective(a, Z, n, Abuf, Bbuf, Cbuf), angles0,
                             Optim.NelderMead(),
                             Optim.Options(iterations=max_iter, g_tol=tol))
 
@@ -474,35 +508,73 @@ end
 # HSIC (Hilbert-Schmidt Independence Criterion)
 # =============================================================================
 
-"""Compute HSIC statistic between two vectors using Gaussian kernel."""
-function _hsic_statistic(x::AbstractVector{T}, y::AbstractVector{T};
+"""
+Compute the HSIC statistic with preallocated scratch. `H` is the (parameter-
+invariant) centering matrix `I - ones(n,n)/n`, hoisted out of the objective
+loop; `K`, `L`, `Kc`, `Lc`, `tmp`, `P` are reusable n x n buffers. The
+products are evaluated with the same `mul!` calls/associations as the
+allocating form `H*K*H` / `tr(Kc*Lc)`, so results are bit-for-bit unchanged.
+"""
+function _hsic_statistic!(K::Matrix{T}, L::Matrix{T}, Kc::Matrix{T}, Lc::Matrix{T},
+                          tmp::Matrix{T}, P::Matrix{T}, H::Matrix{T},
+                          x::AbstractVector{T}, y::AbstractVector{T};
                           sigma::T=T(1.0)) where {T<:AbstractFloat}
     n = length(x)
     s2 = 2 * sigma^2
 
-    # Gaussian kernel matrices
-    K = [exp(-(x[i] - x[j])^2 / s2) for i in 1:n, j in 1:n]
-    L = [exp(-(y[i] - y[j])^2 / s2) for i in 1:n, j in 1:n]
+    # Gaussian kernel matrices (in place)
+    @inbounds for j in 1:n, i in 1:n
+        K[i, j] = exp(-(x[i] - x[j])^2 / s2)
+        L[i, j] = exp(-(y[i] - y[j])^2 / s2)
+    end
 
-    # Center kernel matrices
-    H = I - ones(T, n, n) / n
-    Kc = H * K * H
-    Lc = H * L * H
+    # Center kernel matrices: Kc = (H*K)*H, Lc = (H*L)*H
+    mul!(tmp, H, K)
+    mul!(Kc, tmp, H)
+    mul!(tmp, H, L)
+    mul!(Lc, tmp, H)
 
-    tr(Kc * Lc) / (n - 1)^2
+    mul!(P, Kc, Lc)
+    tr(P) / (n - 1)^2
 end
 
-"""Objective: sum of pairwise HSIC (to minimize)."""
-function _hsic_objective(angles::AbstractVector{T}, Z::Matrix{T}, n::Int;
+"""Compute HSIC statistic between two vectors using Gaussian kernel."""
+function _hsic_statistic(x::AbstractVector{T}, y::AbstractVector{T};
                           sigma::T=T(1.0)) where {T<:AbstractFloat}
+    n = length(x)
+    H = I - ones(T, n, n) / n
+    K = Matrix{T}(undef, n, n)
+    L = Matrix{T}(undef, n, n)
+    Kc = Matrix{T}(undef, n, n)
+    Lc = Matrix{T}(undef, n, n)
+    tmp = Matrix{T}(undef, n, n)
+    P = Matrix{T}(undef, n, n)
+    _hsic_statistic!(K, L, Kc, Lc, tmp, P, H, x, y; sigma=sigma)
+end
+
+"""Objective: sum of pairwise HSIC (to minimize). The buffered method reuses
+the hoisted centering matrix `H` and six n x n scratch buffers across pairs."""
+function _hsic_objective(angles::AbstractVector{T}, Z::Matrix{T}, n::Int,
+                         K::Matrix{T}, L::Matrix{T}, Kc::Matrix{T}, Lc::Matrix{T},
+                         tmp::Matrix{T}, P::Matrix{T}, H::Matrix{T};
+                         sigma::T=T(1.0)) where {T<:AbstractFloat}
     Q = _givens_to_orthogonal(angles, n)
     S = Z * Q'
 
     obj = zero(T)
     for i in 1:n-1, j in (i+1):n
-        obj += _hsic_statistic(@view(S[:, i]), @view(S[:, j]); sigma=sigma)
+        obj += _hsic_statistic!(K, L, Kc, Lc, tmp, P, H,
+                                @view(S[:, i]), @view(S[:, j]); sigma=sigma)
     end
     obj
+end
+
+function _hsic_objective(angles::AbstractVector{T}, Z::Matrix{T}, n::Int;
+                          sigma::T=T(1.0)) where {T<:AbstractFloat}
+    T_obs = size(Z, 1)
+    H = I - ones(T, T_obs, T_obs) / T_obs
+    bufs = ntuple(_ -> Matrix{T}(undef, T_obs, T_obs), 6)
+    _hsic_objective(angles, Z, n, bufs..., H; sigma=sigma)
 end
 
 """
@@ -536,7 +608,12 @@ function identify_hsic(model::VARModel{T}; kernel::Symbol=:gaussian,
     n_angles = n * (n - 1) ÷ 2
     angles0 = zeros(T, n_angles)
 
-    result = Optim.optimize(a -> _hsic_objective(a, Z, n; sigma=sigma), angles0,
+    # Hoist the invariant centering matrix and the T_obs x T_obs scratch buffers
+    # out of the objective — reused by every evaluation and pair
+    T_obs = size(Z, 1)
+    H = I - ones(T, T_obs, T_obs) / T_obs
+    bufs = ntuple(_ -> Matrix{T}(undef, T_obs, T_obs), 6)
+    result = Optim.optimize(a -> _hsic_objective(a, Z, n, bufs..., H; sigma=sigma), angles0,
                             Optim.NelderMead(),
                             Optim.Options(iterations=max_iter, g_tol=tol))
 

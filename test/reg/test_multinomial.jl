@@ -344,9 +344,18 @@ using LinearAlgebra, Statistics, Random, Distributions
         # Model should fit better than null
         @test m.loglik > m.loglik_null
 
-        # Null log-likelihood = n * log(1/J)
+        # Null log-likelihood = constants-only baseline Σⱼ nⱼ·log(nⱼ/n) (Stata mlogit)
         J = length(m.categories)
-        @test m.loglik_null ≈ n * log(1.0 / J)
+        nj = [count(==(c), y) for c in m.categories]
+        ll0 = sum(nj[j] > 0 ? nj[j] * log(nj[j] / n) : 0.0 for j in 1:J)
+        @test m.loglik_null ≈ ll0
+        # Empirical-share null strictly dominates the old uniform 1/J null
+        @test m.loglik_null > n * log(1.0 / J)
+        # Analytic identity: the intercept-only fit reproduces the constants-only null
+        m0 = estimate_mlogit(y, ones(n, 1))
+        @test m0.loglik ≈ m.loglik_null atol=1e-6
+        # Reported pseudo-R² is below the value the (biased) uniform null would give
+        @test m.pseudo_r2 < 1 - m.loglik / (n * log(1.0 / J))
 
         # AIC = -2*loglik + 2*K
         @test m.aic ≈ -2 * m.loglik + 2 * dof(m)

@@ -200,69 +200,116 @@ end
 autocovariance_moments(data::AbstractMatrix{<:Real}; kwargs...) =
     autocovariance_moments(Float64.(data); kwargs...)
 
+"""
+    autocovariance_moment_contributions(data::AbstractMatrix{T}; lags::Int=1) -> Matrix{T}
+
+Per-observation moment contributions matching [`autocovariance_moments`](@ref).
+
+Returns an `n × q` matrix `H` whose per-column mean is *exactly* the moment vector
+`autocovariance_moments(data; lags)` (same column ordering: variance-covariance block
+`i ≤ j` first, then the diagonal autocovariance block for each lag). This decomposes
+each moment into the per-observation influence contributions needed for a valid SMM
+long-run (HAC) moment covariance `Ω` — evaluating a demeaning moment function one row
+at a time yields identically-zero rows and a degenerate `Ω`.
+
+For `k` variables and `L` lags: `q = k*(k+1)/2 + k*L` columns. The variance-covariance
+contribution is `(x_{t,i} − x̄_i)(x_{t,j} − x̄_j)`; the lag-`ℓ` autocovariance
+contribution is `(x_{t,i} − x̄_i)(x_{t−ℓ,i} − x̄_i)` for `t > ℓ` and `0` otherwise (so
+the `/n` divisor of `autocovariance_moments` is reproduced by the column mean).
+
+# Arguments
+- `data` --- T_obs × k data matrix
+- `lags` --- number of autocovariance lags (default: 1)
+"""
+function autocovariance_moment_contributions(data::AbstractMatrix{T}; lags::Int=1) where {T<:AbstractFloat}
+    n, k = size(data)
+    means  = vec(mean(data, dims=1))
+    data_c = data .- means'
+    q = k * (k + 1) ÷ 2 + k * lags
+    H = zeros(T, n, q)
+    col = 0
+    # Variance-covariance block, i <= j (matches autocovariance_moments loop order)
+    for i in 1:k
+        for j in i:k
+            col += 1
+            @views H[:, col] .= data_c[:, i] .* data_c[:, j]
+        end
+    end
+    # Diagonal autocovariance block, same order as autocovariance_moments
+    for lag in 1:lags
+        for i in 1:k
+            col += 1
+            @inbounds for t in (lag+1):n
+                H[t, col] = data_c[t, i] * data_c[t-lag, i]  # 0 for t<=lag ⇒ column mean uses /n divisor
+            end
+        end
+    end
+    H
+end
+
+autocovariance_moment_contributions(data::AbstractMatrix{<:Real}; kwargs...) =
+    autocovariance_moment_contributions(Float64.(data); kwargs...)
+
 # =============================================================================
 # Weighting Matrix
 # =============================================================================
 
 """
-    _moment_covariance(data, moments_fn; hac, bandwidth) -> Matrix{T}
+    _moment_covariance(H; hac, bandwidth) -> Matrix{T}
 
-Internal: Compute long-run covariance of per-observation moment contributions.
-Shared by `smm_weighting_matrix` (inverted) and `smm_data_covariance` (raw).
+Internal: long-run covariance of the per-observation moment contributions `H`
+(an `n × q` matrix). Shared by `smm_weighting_matrix` (inverted) and
+`smm_data_covariance` (raw). `long_run_covariance` demeans internally.
 """
-function _moment_covariance(data::AbstractMatrix{T}, moments_fn::Function;
+function _moment_covariance(H::AbstractMatrix{T};
                              hac::Bool=true, bandwidth::Int=0) where {T<:AbstractFloat}
-    n = size(data, 1)
-    m_full = moments_fn(data)
-    q = length(m_full)
-
-    G = Matrix{T}(undef, n, q)
-    for t in 1:n
-        G[t, :] = moments_fn(data[t:t, :])
-    end
-    G_demean = G .- mean(G, dims=1)
-
     if hac
-        long_run_covariance(G_demean; bandwidth=bandwidth, kernel=:bartlett)
+        long_run_covariance(H; bandwidth=bandwidth, kernel=:bartlett)
     else
-        (G_demean' * G_demean) / n
+        Hc = H .- mean(H, dims=1)
+        (Hc' * Hc) / size(H, 1)
     end
 end
 
 """
-    smm_weighting_matrix(data::AbstractMatrix{T}, moments_fn::Function;
+    smm_weighting_matrix(data::AbstractMatrix{T}, contributions_fn::Function;
                           hac::Bool=true, bandwidth::Int=0) -> Matrix{T}
 
-Compute optimal SMM weighting matrix from data moment contributions.
-Centers the per-observation moment contributions and applies HAC with Bartlett kernel.
+Compute the optimal SMM weighting matrix `W = Ω⁻¹` from per-observation moment
+contributions. `Ω` is the long-run (Bartlett-HAC) covariance of `contributions_fn(data)`.
 
 # Arguments
 - `data` — T_obs × k data matrix
-- `moments_fn` — function computing moment vector from data
-- `hac` — use HAC correction (default: true)
-- `bandwidth` — HAC bandwidth, 0 = automatic: `floor(4*(n/100)^(2/9))`
+- `contributions_fn` — function returning the `n × q` matrix of per-observation moment
+  contributions whose column-mean equals the moment vector (e.g.
+  [`autocovariance_moment_contributions`](@ref)); NOT the mean moment vector
+- `hac` — use HAC (Newey-West/Bartlett) long-run covariance (default: true)
+- `bandwidth` — HAC bandwidth, 0 = automatic (Newey-West 1994)
+
+Inversion uses `safe_cholesky` (minimal jitter only if `Ω` is not positive-definite),
+replacing the previous blanket `1e-8·I` regularization.
 """
-function smm_weighting_matrix(data::AbstractMatrix{T}, moments_fn::Function;
+function smm_weighting_matrix(data::AbstractMatrix{T}, contributions_fn::Function;
                                hac::Bool=true, bandwidth::Int=0) where {T<:AbstractFloat}
-    Omega = _moment_covariance(data, moments_fn; hac=hac, bandwidth=bandwidth)
+    Omega = _moment_covariance(contributions_fn(data); hac=hac, bandwidth=bandwidth)
     Omega_sym = Hermitian((Omega + Omega') / 2)
-    eigvals_O = eigvals(Omega_sym)
-    if minimum(eigvals_O) < eps(T)
-        Omega_reg = Omega_sym + T(1e-8) * I
-        return Matrix{T}(inv(Omega_reg))
-    end
-    robust_inv(Matrix(Omega_sym))
+    # Guarded inversion: safe_cholesky adds minimal scale-relative jitter ONLY if Ω is
+    # not positive-definite (removes the old 1e-8·I blanket fallback). W = Ω⁻¹ = L⁻ᵀL⁻¹.
+    L = safe_cholesky(Matrix{T}(Omega_sym); silent=true)
+    Linv = inv(L)
+    Matrix{T}(Linv' * Linv)
 end
 
 """
-    smm_data_covariance(data::AbstractMatrix{T}, moments_fn::Function;
+    smm_data_covariance(data::AbstractMatrix{T}, contributions_fn::Function;
                           hac::Bool=true, bandwidth::Int=0) -> Matrix{T}
 
-Compute long-run covariance Ω of data moment contributions for sandwich SE formula.
+Compute the long-run covariance `Ω` of the per-observation moment contributions
+`contributions_fn(data)` (`n × q`) for the sandwich SE formula.
 """
-function smm_data_covariance(data::AbstractMatrix{T}, moments_fn::Function;
+function smm_data_covariance(data::AbstractMatrix{T}, contributions_fn::Function;
                               hac::Bool=true, bandwidth::Int=0) where {T<:AbstractFloat}
-    _moment_covariance(data, moments_fn; hac=hac, bandwidth=bandwidth)
+    _moment_covariance(contributions_fn(data); hac=hac, bandwidth=bandwidth)
 end
 
 # =============================================================================
@@ -291,6 +338,11 @@ Minimizes `Q(theta) = (m_data - m_sim(theta))' W (m_data - m_sim(theta))` where
 - `sim_ratio::Int=5` --- tau = simulation periods / data periods
 - `burn::Int=100` --- burn-in periods for simulator
 - `weighting::Symbol=:two_step` --- `:identity` or `:two_step`
+- `contributions_fn::Union{Nothing,Function}=nothing` --- returns the `n × q` matrix of
+  per-observation moment contributions whose column-mean equals `moments_fn(data)`
+  (e.g. `d -> autocovariance_moment_contributions(d; lags=1)`). Required for a valid
+  two-step optimal weighting matrix `Ω⁻¹` and the sandwich SEs; when `nothing`, two-step
+  falls back to identity weighting (with a warning) and SEs use `Ω = I`.
 - `bounds::Union{Nothing,ParameterTransform}=nothing` --- parameter bounds
 - `hac::Bool=true` --- HAC for weighting matrix
 - `bandwidth::Int=0` --- HAC bandwidth (0 = automatic)
@@ -305,6 +357,7 @@ function estimate_smm(simulator_fn::Function, moments_fn::Function,
                       theta0::AbstractVector, data::AbstractMatrix;
                       sim_ratio::Int=5, burn::Int=100,
                       weighting::Symbol=:two_step,
+                      contributions_fn::Union{Nothing,Function}=nothing,
                       bounds::Union{Nothing,ParameterTransform}=nothing,
                       hac::Bool=true, bandwidth::Int=0,
                       max_iter::Int=1000, tol::Real=1e-8,
@@ -318,12 +371,11 @@ function estimate_smm(simulator_fn::Function, moments_fn::Function,
     n_params = length(theta0_T)
     T_sim = sim_ratio * n_obs
 
-    # Default bandwidth: Andrews (1991) plug-in rule when bandwidth=0
-    # Per-observation moment contributions from autocovariance-type functions are
-    # often degenerate (a single row has zero variance), which causes the automatic
-    # bandwidth estimator in long_run_covariance to produce NaN. Compute a safe
-    # default from the data dimensions.
-    bw = bandwidth > 0 ? bandwidth : max(1, floor(Int, 4 * (n_obs / 100)^(2/9)))
+    # HAC bandwidth: with genuine per-observation moment contributions the automatic
+    # Newey-West (1994) selector inside long_run_covariance is well-defined, so pass the
+    # requested bandwidth through (0 ⇒ auto-select). (The old ad-hoc default worked
+    # around a NaN caused by the degenerate single-row contribution bug, now fixed.)
+    bw = bandwidth
 
     # Compute data moments
     m_data = moments_fn(data_T)
@@ -377,10 +429,14 @@ function estimate_smm(simulator_fn::Function, moments_fn::Function,
     iterations = Optim.iterations(result1)
 
     # ------------------------------------------------------------------
-    # Step 2: Optimal weighting (if two_step)
+    # Step 2: Optimal weighting (if two_step AND contributions_fn available)
     # ------------------------------------------------------------------
-    if weighting == :two_step
-        W2 = smm_weighting_matrix(data_T, moments_fn; hac=hac, bandwidth=bw)
+    if weighting == :two_step && contributions_fn === nothing
+        @warn "estimate_smm: two-step weighting requires `contributions_fn` (per-observation moment contributions whose column-mean equals moments_fn(data)) for a valid Ω; falling back to identity weighting." maxlog=1
+    end
+    use_optimal = weighting == :two_step && contributions_fn !== nothing
+    if use_optimal
+        W2 = smm_weighting_matrix(data_T, contributions_fn; hac=hac, bandwidth=bw)
 
         obj2(phi) = smm_objective(phi, W2)
         result2 = Optim.optimize(obj2, phi_hat, Optim.NelderMead(),
@@ -445,21 +501,26 @@ function estimate_smm(simulator_fn::Function, moments_fn::Function,
     end
     bread_inv = robust_inv(bread)
 
-    if weighting == :two_step
-        # Efficient GMM (W approx Omega^{-1}): V = (1 + 1/tau) * (D'WD)^{-1} / n
+    if use_optimal
+        # Efficient GMM (W = Omega^{-1}): V = (1 + 1/tau) * (D'WD)^{-1} / n
         vcov = sim_correction * bread_inv / T_type(n_obs)
     else
         # Sandwich: V = (1 + 1/tau) * (D'WD)^{-1} D'W Omega W D (D'WD)^{-1} / n
-        Omega = smm_data_covariance(data_T, moments_fn; hac=hac, bandwidth=bw)
+        # Ω from per-observation contributions when available; else the degenerate Ω = I
+        # (documented, keeps SEs finite for legacy identity-weighting callers).
+        Omega = contributions_fn !== nothing ?
+            smm_data_covariance(data_T, contributions_fn; hac=hac, bandwidth=bw) :
+            Matrix{T_type}(I, n_moments, n_moments)
         meat = D' * W_final * Omega * W_final * D
         vcov = sim_correction * (bread_inv * meat * bread_inv) / T_type(n_obs)
     end
 
-    # Delta method SE correction for transforms
-    if has_bounds
-        J_transform = transform_jacobian(bounds, phi_hat)
-        vcov = J_transform * vcov * J_transform'
-    end
+    # NOTE: `D = ∂m_sim/∂θ` is already differentiated w.r.t. the CONSTRAINED parameters
+    # `θ` (the simulator receives constrained values), so `vcov = (D'WD)^{-1}/n` is the
+    # asymptotic covariance of θ̂ directly. No transform-Jacobian correction is applied:
+    # doing so (`J θθ' with J=∂θ/∂φ`) would double-count the bounds map and deflate the
+    # SEs by (∂θ/∂φ)² — a pre-existing bug that was masked by the previously-degenerate
+    # weighting matrix (fixed alongside the optimal-weighting correction, #172).
 
     # Ensure symmetric
     vcov = (vcov + vcov') / 2

@@ -146,7 +146,7 @@ function bai_perron_test(y::AbstractVector{T}, X::AbstractMatrix{T};
         else
             supf_stats[l] = zero(T)
         end
-        supf_pvalues[l] = _baiperron_pvalue(supf_stats[l], l, :supf)
+        supf_pvalues[l] = _baiperron_pvalue(supf_stats[l], l, k, T(trimming), :supf)
     end
 
     # -------------------------------------------------------------------------
@@ -169,7 +169,7 @@ function bai_perron_test(y::AbstractVector{T}, X::AbstractMatrix{T};
         else
             sequential_stats[l] = zero(T)
         end
-        sequential_pvalues[l] = _baiperron_pvalue(sequential_stats[l], l + 1, :seqf)
+        sequential_pvalues[l] = _baiperron_pvalue(sequential_stats[l], l + 1, k, T(trimming), :seqf)
     end
 
     # -------------------------------------------------------------------------
@@ -418,35 +418,50 @@ function _break_segments(break_dates::Vector{Int}, n::Int)
 end
 
 """
-    _baiperron_pvalue(stat, l, test_type)
+    _baiperron_pvalue(stat, l, q, trimming, test_type)
 
-Approximate p-value for Bai-Perron statistics using critical value tables.
-Interpolates between 1%, 5%, 10% levels.
+Approximate p-value for the Bai-Perron sup-F(l) (`:supf`) or sequential
+sup-F(l+1|l) (`:seqf`, pass `l+1`) statistic from the Bai & Perron (1998, 2003)
+critical-value tables indexed by the number of breaking regressors `q` (pure
+structural change: q = number of regressors) and the trimming fraction.
+Interpolates between the tabulated 10%, 5%, 2.5%, and 1% levels. Requested
+trimmings between the tabulated ε grid snap to the nearest value (warned).
+Returns NaN when `l` exceeds the tabulated number of breaks for the trimming
+(sup-F is tabulated up to 9/8/5/3/2 breaks for ε = 0.05/0.10/0.15/0.20/0.25).
 """
-function _baiperron_pvalue(stat::T, l::Int, test_type::Symbol) where {T<:AbstractFloat}
-    cv_table = test_type == :supf ? BAIPERRON_SUPF_CV : BAIPERRON_SEQF_CV
-    l_clamped = clamp(l, 1, 5)
+function _baiperron_pvalue(stat::T, l::Int, q::Int, trimming::T,
+                           test_type::Symbol) where {T<:AbstractFloat}
+    q > 10 && throw(ArgumentError(
+        "Bai-Perron critical values are tabulated for at most 10 breaking " *
+        "regressors; got q=$q. Reduce the number of regressors."))
+    q < 1 && throw(ArgumentError("q must be >= 1; got $q"))
 
-    if !haskey(cv_table, l_clamped)
-        return T(NaN)
+    tbl_by_eps = test_type == :supf ? BAIPERRON_SUPF_CV_Q : BAIPERRON_SEQF_CV_Q
+    eps_keys = sort(collect(keys(tbl_by_eps)))
+    eps_used = eps_keys[argmin(abs.(eps_keys .- Float64(trimming)))]
+    if abs(eps_used - Float64(trimming)) > 1e-8
+        @warn "Bai-Perron critical values are tabulated for trimming ∈ $(eps_keys); " *
+              "using ε=$(eps_used) for requested trimming=$(trimming)" maxlog = 1
     end
+    tbl = tbl_by_eps[eps_used]
+    (1 <= l <= size(tbl[0.05], 2)) || return T(NaN)
 
-    cv = cv_table[l_clamped]
-    cv1 = T(cv[1])   # 1% critical value
-    cv5 = T(cv[5])   # 5% critical value
-    cv10 = T(cv[10]) # 10% critical value
+    cv10 = T(tbl[0.10][q, l])
+    cv5 = T(tbl[0.05][q, l])
+    cv25 = T(tbl[0.025][q, l])
+    cv1 = T(tbl[0.01][q, l])
 
-    # Larger stat = more evidence for breaks (reject H₀: no breaks)
-    if stat >= cv1
+    # Larger stat = more evidence for breaks (reject H₀)
+    if stat > cv1
         return T(0.001)
+    elseif stat >= cv25
+        return T(0.01 + 0.015 * (cv1 - stat) / (cv1 - cv25))
     elseif stat >= cv5
-        # Interpolate between 1% and 5%
-        return T(0.01 + 0.04 * (cv1 - stat) / (cv1 - cv5))
+        return T(0.025 + 0.025 * (cv25 - stat) / (cv25 - cv5))
     elseif stat >= cv10
-        # Interpolate between 5% and 10%
         return T(0.05 + 0.05 * (cv5 - stat) / (cv5 - cv10))
     else
-        # Below 10% critical value
+        # Below the 10% critical value
         return T(min(1.0, 0.10 + 0.90 * max(zero(T), (cv10 - stat) / cv10)))
     end
 end

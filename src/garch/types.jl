@@ -36,6 +36,7 @@ GARCH(p,q) model (Bollerslev 1986):
 - `method::Symbol`: Estimation method
 - `converged::Bool`: Whether optimization converged
 - `iterations::Int`: Number of iterations
+- `param_vcov::Matrix{T}`: Cached QMLE sandwich covariance in optimization (transform) space
 """
 struct GARCHModel{T<:AbstractFloat} <: AbstractVolatilityModel
     y::Vector{T}
@@ -55,6 +56,20 @@ struct GARCHModel{T<:AbstractFloat} <: AbstractVolatilityModel
     method::Symbol
     converged::Bool
     iterations::Int
+    param_vcov::Matrix{T}
+end
+
+# Backward-compatible constructor (no cached covariance): stderror recomputes on demand
+function GARCHModel(y::Vector{T}, p::Int, q::Int, mu::T, omega::T,
+                    alpha::Vector{T}, beta::Vector{T},
+                    conditional_variance::Vector{T}, standardized_residuals::Vector{T},
+                    residuals::Vector{T}, fitted::Vector{T},
+                    loglik::T, aic::T, bic::T,
+                    method::Symbol, converged::Bool, iterations::Int) where {T<:AbstractFloat}
+    k = 2 + q + p
+    GARCHModel{T}(y, p, q, mu, omega, alpha, beta, conditional_variance,
+                  standardized_residuals, residuals, fitted, loglik, aic, bic,
+                  method, converged, iterations, fill(T(NaN), k, k))
 end
 
 # =============================================================================
@@ -89,6 +104,20 @@ struct EGARCHModel{T<:AbstractFloat} <: AbstractVolatilityModel
     method::Symbol
     converged::Bool
     iterations::Int
+    param_vcov::Matrix{T}
+end
+
+# Backward-compatible constructor (no cached covariance): stderror recomputes on demand
+function EGARCHModel(y::Vector{T}, p::Int, q::Int, mu::T, omega::T,
+                     alpha::Vector{T}, gamma::Vector{T}, beta::Vector{T},
+                     conditional_variance::Vector{T}, standardized_residuals::Vector{T},
+                     residuals::Vector{T}, fitted::Vector{T},
+                     loglik::T, aic::T, bic::T,
+                     method::Symbol, converged::Bool, iterations::Int) where {T<:AbstractFloat}
+    k = 2 + 2q + p
+    EGARCHModel{T}(y, p, q, mu, omega, alpha, gamma, beta, conditional_variance,
+                   standardized_residuals, residuals, fitted, loglik, aic, bic,
+                   method, converged, iterations, fill(T(NaN), k, k))
 end
 
 # =============================================================================
@@ -122,6 +151,20 @@ struct GJRGARCHModel{T<:AbstractFloat} <: AbstractVolatilityModel
     method::Symbol
     converged::Bool
     iterations::Int
+    param_vcov::Matrix{T}
+end
+
+# Backward-compatible constructor (no cached covariance): stderror recomputes on demand
+function GJRGARCHModel(y::Vector{T}, p::Int, q::Int, mu::T, omega::T,
+                       alpha::Vector{T}, gamma::Vector{T}, beta::Vector{T},
+                       conditional_variance::Vector{T}, standardized_residuals::Vector{T},
+                       residuals::Vector{T}, fitted::Vector{T},
+                       loglik::T, aic::T, bic::T,
+                       method::Symbol, converged::Bool, iterations::Int) where {T<:AbstractFloat}
+    k = 2 + 2q + p
+    GJRGARCHModel{T}(y, p, q, mu, omega, alpha, gamma, beta, conditional_variance,
+                     standardized_residuals, residuals, fitted, loglik, aic, bic,
+                     method, converged, iterations, fill(T(NaN), k, k))
 end
 
 # =============================================================================

@@ -42,13 +42,18 @@ Linear regression model estimated via OLS, WLS, or IV/2SLS.
 - `weights::Union{Nothing,Vector{T}}` — WLS weights (nothing for OLS)
 - `Z::Union{Nothing,Matrix{T}}` — instrument matrix (IV only)
 - `endogenous::Union{Nothing,Vector{Int}}` — indices of endogenous regressors (IV only)
-- `first_stage_f::Union{Nothing,T}` — first-stage F-statistic (IV only)
+- `first_stage_f::Union{Nothing,T}` — minimum excluded-instrument partial F (IV only)
 - `sargan_stat::Union{Nothing,T}` — Sargan overidentification statistic (IV only)
 - `sargan_pval::Union{Nothing,T}` — Sargan test p-value (IV only)
+- `cragg_donald_f::Union{Nothing,T}` — Cragg-Donald weak-instrument F (IV only)
+- `kleibergen_paap_f::Union{Nothing,T}` — Kleibergen-Paap rk Wald F, robust (IV only)
+- `stock_yogo_10pct::Union{Nothing,T}` — Stock-Yogo 10% maximal-size critical value (IV only)
 
 # References
 - White, H. (1980). *Econometrica* 48(4), 817-838.
 - MacKinnon, J. G. & White, H. (1985). *JBES* 3(3), 305-314.
+- Stock, J. H. & Yogo, M. (2005). *Identification and Inference for Econometric Models*, ch. 5.
+- Kleibergen, F. & Paap, R. (2006). *Journal of Econometrics* 133(1), 97-126.
 """
 struct RegModel{T<:AbstractFloat} <: StatsAPI.RegressionModel
     y::Vector{T}
@@ -75,6 +80,21 @@ struct RegModel{T<:AbstractFloat} <: StatsAPI.RegressionModel
     first_stage_f::Union{Nothing,T}
     sargan_stat::Union{Nothing,T}
     sargan_pval::Union{Nothing,T}
+    cragg_donald_f::Union{Nothing,T}
+    kleibergen_paap_f::Union{Nothing,T}
+    stock_yogo_10pct::Union{Nothing,T}
+end
+
+# Back-compat outer constructor: legacy 24-arg positional calls (through `sargan_pval`)
+# default the three weak-instrument diagnostic fields to `nothing`.
+function RegModel{T}(y, X, beta, vcov_mat, residuals, fitted, ssr, tss, r2, adj_r2,
+                     f_stat, f_pval, loglik, aic, bic, varnames, method, cov_type,
+                     weights, Z, endogenous, first_stage_f, sargan_stat,
+                     sargan_pval) where {T<:AbstractFloat}
+    RegModel{T}(y, X, beta, vcov_mat, residuals, fitted, ssr, tss, r2, adj_r2,
+                f_stat, f_pval, loglik, aic, bic, varnames, method, cov_type,
+                weights, Z, endogenous, first_stage_f, sargan_stat, sargan_pval,
+                nothing, nothing, nothing)
 end
 
 # =============================================================================
@@ -293,6 +313,12 @@ function Base.show(io::IO, m::RegModel{T}) where {T}
         spec = vcat(spec, Any[
             "1st-stage F" _fmt(m.first_stage_f; digits=2)
         ])
+        m.cragg_donald_f !== nothing && (spec = vcat(spec, Any[
+            "Cragg-Donald F" _fmt(m.cragg_donald_f; digits=2)]))
+        m.kleibergen_paap_f !== nothing && (spec = vcat(spec, Any[
+            "Kleibergen-Paap F" _fmt(m.kleibergen_paap_f; digits=2)]))
+        m.stock_yogo_10pct !== nothing && (spec = vcat(spec, Any[
+            "Stock-Yogo 10%" _fmt(m.stock_yogo_10pct; digits=2)]))
     end
 
     _pretty_table(io, spec;

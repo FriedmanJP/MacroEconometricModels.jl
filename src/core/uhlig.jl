@@ -193,7 +193,8 @@ function _uhlig_penalty(theta_all::AbstractVector{T}, restrictions::SVARRestrict
 
     Q = try
         _uhlig_build_Q(theta_all, restrictions, Phi, L, n)
-    catch
+    catch err
+        _is_rejectable_draw_error(err) || rethrow(err)
         return T(1e10)
     end
 
@@ -339,8 +340,8 @@ function identify_uhlig(model::VARModel{T}, restrictions::SVARRestrictions, hori
             Optim.optimize(obj, theta0, Optim.NelderMead(),
                 Optim.Options(iterations=max_iter_coarse,
                               f_reltol=tol_coarse))
-        catch
-            nothing
+        catch err
+            _is_rejectable_draw_error(err) ? nothing : rethrow(err)
         end
 
         if res !== nothing
@@ -373,8 +374,8 @@ function identify_uhlig(model::VARModel{T}, restrictions::SVARRestrictions, hori
             Optim.optimize(obj, theta0, Optim.NelderMead(),
                 Optim.Options(iterations=max_iter_fine,
                               f_reltol=tol_fine))
-        catch
-            nothing
+        catch err
+            _is_rejectable_draw_error(err) ? nothing : rethrow(err)
         end
 
         if res !== nothing

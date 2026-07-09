@@ -1,5 +1,6 @@
 using Test, MacroEconometricModels, DataFrames, Distributions, Random, Statistics
 using StatsAPI: coef, vcov, residuals, predict, nobs, stderror, confint, r2
+using LinearAlgebra
 
 @testset "Panel Covariance" begin
     # Setup: small panel N=10, T=20
@@ -547,6 +548,39 @@ end
     # Coefficients should be near DGP (0.3, 0.5)
     @test abs(coef(m)[1] - 0.3) < 0.15
     @test abs(coef(m)[2] - 0.5) < 0.15
+
+    # (T083) Full GMM coefficient covariance (was diagonal-only)
+    V = vcov(m)
+    @test size(V) == (length(coef(m)), length(coef(m)))
+    @test isapprox(V, V')                                  # symmetric
+    @test isapprox(diag(V), stderror(m) .^ 2)              # SEs unchanged (diagonal)
+    @test any(abs.(V - Diagonal(diag(V))) .> 0)            # off-diagonals nonzero — the fix
+    # joint Wald now uses the off-diagonals ⇒ differs from the diagonal-only version
+    W_full = coef(m)' * inv(V) * coef(m)
+    W_diag = sum(coef(m) .^ 2 ./ diag(V))
+    @test !isapprox(W_full, W_diag; rtol=1e-6)
+
+    # (T083) Arellano-Bond serial-correlation diagnostics: reject AR(1), not AR(2)
+    d = m.dynamic_diagnostics
+    @test d !== nothing
+    @test d.ar1_p < 0.05          # FD of iid error is MA(1) ⇒ negative AR(1) ⇒ reject
+    @test abs(d.ar1) > 2
+    @test d.ar2_p > 0.05          # zero lag-2 autocovariance ⇒ do NOT reject
+    @test abs(d.ar2) < 2.5
+    ar2 = arellano_bond_ar_test(m; order=2)
+    @test ar2.statistic == d.ar2 && ar2.pvalue == d.ar2_p
+    @test arellano_bond_ar_test(m; order=1).statistic == d.ar1
+
+    # (T083) Hansen J overidentification
+    @test d.hansen_df == d.n_instruments - length(coef(m))
+    @test d.hansen_df > 0
+    @test 0 <= d.hansen_p <= 1
+    @test d.hansen_p > 0.01       # valid instruments in this correctly-specified DGP
+
+    # (T083) report surfaces the diagnostics
+    io = IOBuffer(); show(io, m); s = String(take!(io))
+    @test occursin("AR(2)", s)
+    @test occursin("Hansen", s)
 end
 
 @testset "estimate_xtreg -- Blundell-Bond" begin
@@ -579,4 +613,109 @@ end
     # Coefficients should be near DGP (0.3, 0.5)
     @test abs(coef(m)[1] - 0.3) < 0.15
     @test abs(coef(m)[2] - 0.5) < 0.15
+
+    # (T083) full vcov + diagnostics also populated for Blundell-Bond
+    V = vcov(m)
+    @test size(V) == (length(coef(m)), length(coef(m)))
+    @test any(abs.(V - Diagonal(diag(V))) .> 0)
+    d = m.dynamic_diagnostics
+    @test d !== nothing
+    @test d.ar1_p < 0.05
+    @test d.ar2_p > 0.05
+    @test d.hansen_df == d.n_instruments - length(coef(m))
+end
+
+# =============================================================================
+# T089 (#188): M-33 absorbed-FE cluster dof, M-35 between cov_type warning
+# =============================================================================
+
+@testset "T089: panel cluster dof + between cov_type warning" begin
+
+    @testset "M-33: n_absorbed scales the cluster correction" begin
+        rng = Random.MersenneTwister(18933)
+        N_g = 8; T_p = 12; n = N_g * T_p; k = 2
+        X = randn(rng, n, k)
+        resid = randn(rng, n)
+        groups = repeat(1:N_g, inner=T_p)
+        time_ids = repeat(1:T_p, N_g)
+        XtXinv = Matrix(MacroEconometricModels.robust_inv(X' * X))
+
+        V0 = MacroEconometricModels._panel_cluster_vcov(X, resid, XtXinv, groups)
+        n_abs = 5
+        V1 = MacroEconometricModels._panel_cluster_vcov(X, resid, XtXinv, groups; n_absorbed=n_abs)
+
+        # The correction rescales the whole matrix by (n-k)/(n-k-n_absorbed)
+        ratio = (n - k) / (n - k - n_abs)
+        @test V1 ≈ V0 .* ratio atol = 1e-12
+        # Every clustered SE strictly increases by sqrt(ratio)
+        @test all(sqrt.(diag(V1)) .≈ sqrt.(diag(V0)) .* sqrt(ratio))
+
+        # Threaded through _panel_vcov (:cluster branch)
+        V2 = MacroEconometricModels._panel_vcov(X, resid, XtXinv, groups, time_ids, :cluster;
+                                                n_absorbed=n_abs)
+        @test V2 ≈ V1 atol = 1e-12
+
+        # Default is inert
+        V3 = MacroEconometricModels._panel_vcov(X, resid, XtXinv, groups, time_ids, :cluster)
+        @test V3 ≈ V0 atol = 1e-12
+
+        # Time-cluster variant takes the same kwarg
+        Vt0 = MacroEconometricModels._panel_time_cluster_vcov(X, resid, XtXinv, time_ids)
+        Vt1 = MacroEconometricModels._panel_time_cluster_vcov(X, resid, XtXinv, time_ids; n_absorbed=n_abs)
+        @test Vt1 ≈ Vt0 .* ratio atol = 1e-12
+    end
+
+    @testset "M-35: between estimator warns when cov_type is ignored" begin
+        rng = Random.MersenneTwister(18935)
+        N_g = 12; T_p = 6; n = N_g * T_p
+        ids = repeat(1:N_g, inner=T_p)
+        ts = repeat(1:T_p, N_g)
+        x1 = repeat(randn(rng, N_g), inner=T_p) .+ 0.5 .* randn(rng, n)
+        y = 2.0 .* x1 .+ repeat(randn(rng, N_g), inner=T_p) .+ 0.3 .* randn(rng, n)
+        df = DataFrame(id=ids, t=ts, x1=x1, y=y)
+        pd = xtset(df, :id, :t)
+
+        # Default cov_type=:cluster is silently classical -> now warns
+        m_warn = @test_logs (:warn, r"between estimator uses classical") estimate_xtreg(
+            pd, :y, [:x1]; model=:between)
+        # Explicit :ols does not warn
+        m_ols = @test_logs estimate_xtreg(pd, :y, [:x1]; model=:between, cov_type=:ols)
+        # Both return the same (classical) covariance
+        @test vcov(m_warn) ≈ vcov(m_ols) atol = 1e-12
+    end
+
+end
+
+# =============================================================================
+# T090 (#189) SUB-1: group-index map equivalence (perf refactor, exact)
+# =============================================================================
+
+@testset "T090 SUB-1: _group_index_map == findall" begin
+    rng = Random.MersenneTwister(19001)
+    ids = rand(rng, [3, 7, 1, 12, 5], 500)  # unsorted, repeated group labels
+    gmap = MacroEconometricModels._group_index_map(ids)
+    @test sort(collect(keys(gmap))) == sort(unique(ids))
+    for g in unique(ids)
+        @test gmap[g] == findall(==(g), ids)  # exact: ascending order preserved
+    end
+
+    # End-to-end: FE via estimate_xtreg equals a manual findall-based within-demean OLS
+    N_g = 15; T_p = 8; n = N_g * T_p
+    groups = repeat(1:N_g, inner=T_p)
+    ts = repeat(1:T_p, N_g)
+    x1 = randn(rng, n)
+    y = repeat(randn(rng, N_g), inner=T_p) .+ 1.3 .* x1 .+ 0.4 .* randn(rng, n)
+    df = DataFrame(id=groups, t=ts, x1=x1, y=y)
+    pd = xtset(df, :id, :t)
+    m_fe = estimate_xtreg(pd, :y, [:x1]; model=:fe, cov_type=:ols)
+
+    # manual pre-change algorithm (findall per group)
+    y_dm = similar(y); x_dm = similar(x1)
+    for g in 1:N_g
+        idx = findall(==(g), groups)
+        y_dm[idx] = y[idx] .- mean(y[idx])
+        x_dm[idx] = x1[idx] .- mean(x1[idx])
+    end
+    beta_manual = (x_dm' * x_dm) \ (x_dm' * y_dm)
+    @test coef(m_fe)[1] ≈ beta_manual atol = 1e-12
 end

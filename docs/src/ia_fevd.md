@@ -30,7 +30,7 @@ report(decomp)
 **Recipe 2: FEVD with bootstrap confidence intervals**
 
 ```@example ia_fevd
-# Bootstrap CI via IRF bootstrap (Kilian 1998)
+# Bootstrap CI via IRF residual bootstrap
 irfs_ci = irf(model, 20; ci_type=:bootstrap, reps=50)
 report(irfs_ci)
 ```

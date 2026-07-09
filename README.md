@@ -141,7 +141,7 @@ Pkg.add("MacroEconometricModels")
   - Borusyak, Jaravel & Spiess (2024) imputation estimator via counterfactual prediction
   - de Chaisemartin & D'Haultfoeuille (2020) first-difference DID with bootstrap SEs
   - Diagnostics: Bacon decomposition (Goodman-Bacon 2021), pre-trend testing, negative weight checks
-  - HonestDiD sensitivity analysis with relative magnitudes bounds and breakdown values (Rambachan & Roth 2023)
+  - Honest DiD sensitivity analysis: relative-magnitudes and second-difference restriction sets with Armstrong-Kolesár FLCIs and breakdown values (Rambachan & Roth 2023)
 - **Event Study LP** - Local projection event study for panel data:
   - Switching indicator treatment with time-only FE (Acemoglu et al. 2019)
   - Flexible lead/lag window specification with clustered standard errors

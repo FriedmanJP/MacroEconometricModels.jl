@@ -446,47 +446,47 @@ Negative weights mean the TWFE estimate can have the opposite sign of every unde
 
 ---
 
-## HonestDiD Sensitivity Analysis
+## Honest DiD Sensitivity Analysis
 
-The Rambachan & Roth (2023) HonestDiD framework constructs **robust confidence intervals** that remain valid even if parallel trends are violated by a bounded amount. The key parameter ``\bar{M}`` controls the maximum allowed violation magnitude per period:
+The Rambachan & Roth (2023) framework constructs **robust confidence sets** that remain valid under bounded violations of parallel trends. The event-study coefficients satisfy ``\hat{\beta} \sim N(\tau + \delta, \Sigma)`` with ``\tau_{\text{pre}} = 0``, so the observed pre-treatment coefficients reveal ``\delta_{\text{pre}}`` and discipline the possible post-treatment bias ``\delta_{\text{post}}``. Two restriction sets are supported.
+
+**Relative magnitudes** ``\Delta^{RM}(\bar{M})`` (`restriction=:rm`, default) bounds post-treatment trend violations by ``\bar{M}`` times the largest observed pre-treatment violation:
 
 ```math
-\left|\delta_{t+1} - \delta_t\right| \leq \bar{M}
+\left|\delta_{t+1} - \delta_t\right| \leq \bar{M} \cdot \max_{s < 0}\left|\delta_{s+1} - \delta_s\right|, \quad t \geq 0
 ```
 
 where:
 - ``\delta_t = \mathbb{E}[Y_{it}(0) \mid G_i = g] - \mathbb{E}[Y_{it}(0) \mid G_i = \infty]`` is the trend violation at time ``t``
+- ``\bar{M}`` is dimensionless: ``\bar{M} = 1`` allows post-treatment violations as large as the worst pre-trend
 
-Under this relative magnitudes restriction, the worst-case bias at post-treatment event-time ``e \geq 0`` accumulates as ``\bar{M} \cdot (e + 1)``, widening the confidence interval:
+The identified set for the period-``e`` effect follows in closed form from the observed pre-period first differences, and the robust CI widens the identified set by delta-method standard errors of its endpoints. Both the set and the CI scale one-for-one with the outcome and depend on the pre-treatment coefficients — perturbing a pre-period estimate moves the robust CI.
 
-```math
-\text{Robust CI}_e = \left[\hat{\beta}_e - \bar{M}(e+1) - z_{\alpha/2} \cdot \text{SE}_e, \quad \hat{\beta}_e + \bar{M}(e+1) + z_{\alpha/2} \cdot \text{SE}_e\right]
-```
-
-where:
-- ``\hat{\beta}_e`` is the point estimate at event-time ``e``
-- ``\text{SE}_e`` is the standard error
-- ``z_{\alpha/2}`` is the critical value for confidence level ``1 - \alpha``
-
-The **breakdown value** ``\bar{M}^*`` is the smallest violation bound at which the robust confidence interval for at least one post-treatment period includes zero:
+**Second differences** ``\Delta^{SD}(M)`` (`restriction=:sd`) bounds the change in the slope of ``\delta`` by ``M`` (in outcome units per period squared):
 
 ```math
-\bar{M}^* = \min_e \frac{\max\left(|\hat{\beta}_e| - z_{\alpha/2} \cdot \text{SE}_e,\; 0\right)}{e + 1}
+\left|\delta_{t+1} - 2\delta_t + \delta_{t-1}\right| \leq M
 ```
 
-where:
-- ``\hat{\beta}_e`` is the point estimate at post-treatment event-time ``e``
-- ``\text{SE}_e`` is the standard error of the event-time estimate
-- ``z_{\alpha/2}`` is the critical value for the chosen confidence level
+Inference uses the Armstrong & Kolesár (2018) **fixed-length confidence interval** (FLCI): an affine estimator ``\hat{\theta} = a'\hat{\beta}_{\text{pre}} + l'\hat{\beta}_{\text{post}}`` whose pre-period weights cancel the unbounded linear-trend direction, with the worst-case bias over ``\Delta^{SD}(M)`` traded off against variance and the half-length ``cv_\alpha(\text{bias}/\text{sd}) \cdot \text{sd}`` minimized over the bias–variance frontier (``cv_\alpha(b)`` is the ``1-\alpha`` quantile of ``|N(b,1)|``).
 
-A large breakdown value indicates that the result is robust to substantial departures from parallel trends.
+The **breakdown value** is the smallest bound (``\bar{M}^*`` or ``M^*``) at which the robust confidence interval for at least one post-treatment period includes zero. A large breakdown value indicates that the result is robust to substantial departures from parallel trends.
+
+`honest_did` uses the joint event-study covariance stored by the estimator (`att_vcov`) when available and falls back to a diagonal covariance from the per-period standard errors otherwise (with a warning).
 
 ```@example did
 pd = load_example(:mpdta)
 did = estimate_did(pd, "lemp", "first_treat"; method=:callaway_santanna,
                    leads=3, horizon=3)
 
-h = honest_did(did; Mbar=1.0, conf_level=0.95)
+h = honest_did(did; restriction=:rm, Mbar=1.0, conf_level=0.95)
+report(h)
+```
+
+The smoothness restriction is selected with `restriction=:sd` and its bound `M`:
+
+```@example did
+h_sd = honest_did(did; restriction=:sd, M=0.01)
 nothing # hide
 ```
 
@@ -499,19 +499,24 @@ plot_result(h)
 ```
 
 !!! note "Choosing Mbar"
-    ``\bar{M} = 0`` recovers the original (unconditional) confidence interval. ``\bar{M} = 1`` allows violations equal to the pre-trend slope. Start with ``\bar{M} \in \{0.5, 1.0, 2.0\}`` to explore sensitivity. If the breakdown value exceeds the magnitude of pre-treatment coefficient fluctuations, the result is credibly robust.
+    ``\bar{M} = 0`` recovers the original (conventional) confidence interval. ``\bar{M} = 1`` allows post-treatment violations equal to the worst pre-treatment violation. Start with ``\bar{M} \in \{0.5, 1.0, 2.0\}`` to explore sensitivity; the result is credibly robust when the breakdown value exceeds the violation magnitudes considered plausible.
+
+The core method `honest_did(betahat, sigma; num_pre, num_post, ...)` accepts raw event-study coefficients (pre-periods first, reference period omitted) with their joint covariance, mirroring the R `HonestDiD` package, and returns the robust CI for a user-chosen linear combination `l_vec` of post-period effects.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `Mbar` | `T` | Violation bound used |
+| `Mbar` | `T` | Relative-magnitudes bound (active for `:rm`) |
 | `robust_ci_lower` | `Vector{T}` | Robust CI lower bounds per post-period |
 | `robust_ci_upper` | `Vector{T}` | Robust CI upper bounds per post-period |
-| `original_ci_lower` | `Vector{T}` | Original CIs for comparison |
-| `original_ci_upper` | `Vector{T}` | Original CIs for comparison |
-| `breakdown_value` | `T` | Smallest ``\bar{M}`` that overturns significance |
+| `original_ci_lower` | `Vector{T}` | Conventional CIs for comparison |
+| `original_ci_upper` | `Vector{T}` | Conventional CIs for comparison |
+| `breakdown_value` | `T` | Smallest bound that overturns significance |
 | `post_event_times` | `Vector{Int}` | Post-treatment event-time grid |
 | `post_att` | `Vector{T}` | Post-treatment ATT point estimates |
 | `conf_level` | `T` | Confidence level |
+| `restriction` | `Symbol` | `:rm` (relative magnitudes) or `:sd` (second differences) |
+| `M` | `T` | Smoothness bound (active for `:sd`) |
+| `method` | `Symbol` | `:flci` (``\Delta^{SD}``) or `:delta_id` (``\Delta^{RM}``) |
 
 ---
 
@@ -652,6 +657,9 @@ The TWFE estimator produces biased event-study coefficients when treatment effec
 
 - Goodman-Bacon, Andrew. 2021. "Difference-in-Differences with Variation in Treatment Timing."
   *Journal of Econometrics* 225 (2): 254--277. [DOI](https://doi.org/10.1016/j.jeconom.2021.03.014)
+
+- Armstrong, Timothy B., and Michal Kolesár. 2018. "Optimal Inference in a Class of Regression Models."
+  *Econometrica* 86 (2): 655--683. [DOI](https://doi.org/10.3982/ECTA14434)
 
 - Rambachan, Ashesh, and Jonathan Roth. 2023. "A More Credible Approach to Parallel Trends."
   *Review of Economic Studies* 90 (5): 2555--2591. [DOI](https://doi.org/10.1093/restud/rdad018)

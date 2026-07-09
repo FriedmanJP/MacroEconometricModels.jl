@@ -107,6 +107,86 @@ using Statistics
         @test cv_p8[5] > cv_p0[5]   # Higher lag count → less negative CV (wider)
     end
 
+    @testset "MacKinnon ADF p-values (T078)" begin
+        ap = MacroEconometricModels.adf_pvalue
+        # Analytic pins from the small-p surface p = Φ(2.1659 + 1.4412τ + 0.038269τ²), :constant
+        @test isapprox(ap(-3.4335, :constant, 200, 0), 0.0100; atol=0.003)
+        @test isapprox(ap(-2.8621, :constant, 200, 0), 0.0500; atol=0.003)
+        @test isapprox(ap(-2.5671, :constant, 200, 0), 0.0999; atol=0.003)
+        @test isapprox(ap(-2.0,    :constant, 200, 0), 0.2866; atol=0.003)
+        @test isapprox(ap(-1.61,   :constant, 200, 0), 0.478;  atol=0.003)
+        # Anchor identity: at the asymptotic DF critical values the surface returns ~1/5/10%
+        for (cvs, reg) in (((-2.5658, -1.9393, -1.6156), :none),
+                           ((-3.9638, -3.4126, -3.1279), :trend))
+            @test isapprox(ap(cvs[1], reg, 200, 0), 0.01; atol=0.006)
+            @test isapprox(ap(cvs[2], reg, 200, 0), 0.05; atol=0.006)
+            @test isapprox(ap(cvs[3], reg, 200, 0), 0.10; atol=0.006)
+        end
+        # Regression tests for the FIXED bug (dropped the invalid Normal tail):
+        grid = collect(-6.0:0.25:2.0)
+        pv = [ap(t, :constant, 200, 0) for t in grid]
+        # p is continuous & STRICTLY INCREASING in τ (more-negative τ ⇒ stronger rejection
+        # ⇒ smaller p); the old code had a discontinuous jump at the 10% CV.
+        @test all(diff(pv) .> 0)
+        @test all(0.0 .<= pv .<= 1.0)
+        # Beyond-10% region: NOT the old normal tail (~0.124); should be ~0.29 at τ=-2
+        @test ap(-2.0, :constant, 200, 0) > 0.25
+        @test !isapprox(ap(-1.94, :constant, 200, 0), 0.1236; atol=0.05)  # old normal-tail value
+        @test ap(0.0, :constant, 200, 0) > 0.95
+        @test ap(1.0, :constant, 200, 0) > 0.99
+        @test_throws ArgumentError MacroEconometricModels._mackinnon_pvalue(-2.0, :bogus)
+    end
+
+    @testset "M-12 ADF fixed-sample lag selection (Ng-Perron 1995)" begin
+        A = MacroEconometricModels
+        # AR(2) fixture with an early mean shift: the fixed-sample IC (correct) picks the
+        # theoretically right lag while the old variable-sample IC is badly biased.
+        rng = MersenneTwister(2079)
+        n = 120; max_p = 8
+        e = randn(rng, n)
+        y = zeros(n)
+        for t in 3:n
+            y[t] = 0.6 * y[t-1] + 0.3 * y[t-2] + e[t]
+        end
+        y[1:15] .+= 8.0
+        dy = diff(y)
+
+        # (a) IDENTITY ORACLE: independent fixed-sample IC (all p on dy[max_p+1:end])
+        Yfix = dy[(max_p+1):end]; Nfix = n - 1 - max_p
+        fixed_ic = function (p, crit)
+            Xf = A._build_adf_matrix(y, dy, p, :constant)
+            X = Xf[(max_p - p + 1):end, :]
+            k = size(X, 2)
+            B = X \ Yfix
+            r = Yfix - X * B
+            s2 = sum(abs2, r) / (Nfix - k)
+            ll = -Nfix / 2 * (log(2π) + log(s2) + 1)
+            crit == :aic ? -2ll + 2k : -2ll + k * log(Nfix)
+        end
+        exp_aic = argmin([fixed_ic(p, :aic) for p in 0:max_p]) - 1
+        exp_bic = argmin([fixed_ic(p, :bic) for p in 0:max_p]) - 1
+        @test A.adf_select_lags(y, max_p, :constant, :aic) == exp_aic
+        @test A.adf_select_lags(y, max_p, :constant, :bic) == exp_bic
+
+        # (b) BUG EXPOSURE: the old variable-sample argmin picks a DIFFERENT lag
+        var_ic = function (p, crit)
+            Xf = A._build_adf_matrix(y, dy, p, :constant)
+            Yv = dy[(p+1):end]; m = length(Yv); k = size(Xf, 2)
+            B = Xf \ Yv; r = Yv - Xf * B; s2 = sum(abs2, r) / (m - k)
+            ll = -m / 2 * (log(2π) + log(s2) + 1)
+            crit == :aic ? -2ll + 2k : -2ll + k * log(m)
+        end
+        var_aic = argmin([var_ic(p, :aic) for p in 0:max_p]) - 1
+        @test exp_aic != var_aic
+
+        # (c) SANITY on a pure AR(1): a small lag, always within bounds
+        Random.seed!(778)
+        ys = generate_stationary(200; rho=0.5)
+        lag = A.adf_select_lags(ys, 12, :constant, :aic)
+        @test 0 <= lag <= 12
+        @test lag <= 3
+    end
+
     # ==========================================================================
     # KPSS Test
     # ==========================================================================
@@ -571,4 +651,77 @@ using Statistics
         @test length(results_za) == 3
     end
 
+end
+
+# =============================================================================
+# T078 (#177) Johansen: Doornik (1998) gamma-approximation p-values
+# =============================================================================
+
+@testset "MHM Johansen p-values (Doornik gamma approximation)" begin
+    MEM = MacroEconometricModels
+
+    @testset "reference values (independent scipy implementation)" begin
+        # (stat, m, deterministic, test) -> p, computed from the same Doornik
+        # response surfaces with scipy.stats.gamma — pins the transcription
+        # and the Gamma(mean²/var, var/mean) parameterization
+        for (stat, m, det, test, pref) in (
+                (3.5,   1, :none,     :trace, 0.0709697630),
+                (20.16, 2, :constant, :trace, 0.0500610501),
+                (53.94, 4, :constant, :trace, 0.0500491847),
+                (25.73, 2, :trend,    :trace, 0.0500154525),
+                (15.0,  2, :constant, :max,   0.0675404161),
+                (9.0,   1, :trend,    :max,   0.1849100718),
+                (40.0,  4, :none,     :max,   0.0000611059))
+            @test MEM._johansen_pvalue(stat, m, det, test) ≈ pref atol = 1e-8
+        end
+    end
+
+    @testset "nominal levels at MHM critical values" begin
+        # statsmodels c_sjt/c_sja tables are MacKinnon-Haug-Michelis-generated;
+        # our OL tables drift low for large m, so validate the surface against
+        # the case we can pin analytically: p at the OL 95% CV within [0.03, 0.09]
+        # for m ≤ 8 across the three deterministic cases (trace test)
+        cv95 = Dict(
+            (:none, 1) => 3.84,  (:none, 2) => 12.53,
+            (:constant, 1) => 9.24, (:constant, 2) => 19.96, (:constant, 4) => 53.12,
+            (:trend, 1) => 12.53, (:trend, 2) => 25.32, (:trend, 4) => 62.99)
+        for ((det, m), cv) in cv95
+            p = MEM._johansen_pvalue(cv, m, det, :trace)
+            @test 0.03 <= p <= 0.09
+        end
+    end
+
+    @testset "p-value properties" begin
+        MEMp = MacroEconometricModels._johansen_pvalue
+        # monotone decreasing in the statistic
+        for det in (:none, :constant, :trend), test in (:trace, :max)
+            ps = [MEMp(s, 2, det, test) for s in (1.0, 5.0, 15.0, 30.0, 60.0)]
+            @test issorted(ps; rev=true)
+            @test all(0 .<= ps .<= 1)
+        end
+        # degenerate inputs
+        @test MEMp(0.0, 2, :constant, :trace) == 1.0
+        @test MEMp(-1.0, 2, :constant, :trace) == 1.0
+        @test MEMp(1e6, 2, :constant, :trace) < 1e-10
+    end
+
+    @testset "johansen_test p-values are Doornik-based" begin
+        rng = Random.MersenneTwister(17701)
+        Tn = 200
+        x = cumsum(randn(rng, Tn))
+        Y = hcat(x .+ 0.2 .* randn(rng, Tn), x .+ 0.2 .* randn(rng, Tn),
+                 cumsum(randn(rng, Tn)))
+        res = johansen_test(Y, 2; deterministic=:constant)
+        # p-values match the surface applied to the reported statistics
+        for r in 1:3
+            m = 3 - (r - 1)
+            @test res.trace_pvalues[r] ≈
+                  MacroEconometricModels._johansen_pvalue(res.trace_stats[r], m, :constant, :trace) atol = 1e-12
+            @test res.max_eigen_pvalues[r] ≈
+                  MacroEconometricModels._johansen_pvalue(res.max_eigen_stats[r], m, :constant, :max) atol = 1e-12
+        end
+        # cointegrated pair -> rank 0 rejected decisively
+        @test res.trace_pvalues[1] < 0.01
+        @test all(isfinite.(res.trace_pvalues)) && all(isfinite.(res.max_eigen_pvalues))
+    end
 end
