@@ -82,12 +82,13 @@ function dsge_smoother(ss::DSGEStateSpace{T}, data::Matrix{T}) where {T<:Abstrac
     # =====================================================================
     x = zeros(T, n_states)  # initial state mean (deviation from SS = 0)
 
-    # Stationary covariance via Lyapunov equation; diffuse fallback
+    # Stationary covariance via Lyapunov equation; eigenvalue-partitioned diffuse
+    # initialization for unit roots (never a silent P0=10I; non-stability errors propagate).
     RQR = ss.impact * ss.Q * ss.impact'
-    P = try
+    P = if maximum(abs, eigvals(ss.G1)) >= one(T) - T(1e-6)
+        _diffuse_initial_covariance(ss.G1, RQR)
+    else
         solve_lyapunov(ss.G1, ss.impact)
-    catch
-        T(10) * Matrix{T}(I, n_states, n_states)
     end
 
     # =====================================================================

@@ -8,14 +8,12 @@
 Particle filter compute kernels for Bayesian DSGE estimation.
 
 All functions operate on pre-allocated `PFWorkspace` buffers for zero inner-loop
-allocation. Provides bootstrap particle filter, auxiliary particle filter (Pitt &
-Shephard 1999), and conditional SMC (Andrieu, Doucet & Holenstein 2010).
+allocation. Provides the bootstrap particle filter and conditional SMC (Andrieu,
+Doucet & Holenstein 2010).
 
 References:
 - Gordon, N. J., Salmond, D. J. & Smith, A. F. M. (1993). Novel approach to
   nonlinear/non-Gaussian Bayesian state estimation. IEE Proceedings F, 140(2), 107-113.
-- Pitt, M. K. & Shephard, N. (1999). Filtering via simulation: Auxiliary particle
-  filters. Journal of the American Statistical Association, 94(446), 590-599.
 - Andrieu, C., Doucet, A. & Holenstein, R. (2010). Particle Markov chain Monte Carlo
   methods. Journal of the Royal Statistical Society: Series B, 72(3), 269-342.
 """
@@ -148,6 +146,24 @@ function _normalize_log_weights!(weights::Vector{T}, log_weights::Vector{T}) whe
 end
 
 """
+    _pf_increment!(ws::PFWorkspace) -> T
+
+Unbiased incremental log-likelihood factor under adaptive resampling. `ws.cumweights` holds
+the fresh per-particle observation log-densities `log g_t` (written by `_pf_log_weights!`);
+fold them into the running unnormalized cumulative log-weights `ws.log_weights` and return the
+ratio-form increment `logsumexp(L_t) - logsumexp(L_{t-1})`. The plain `logsumexp(log g_t)-log N`
+increment is unbiased only when the incoming weights are uniform (a resample happened last
+step); when adaptive resampling skips a step the carried non-uniform weights must be kept, not
+overwritten (audit R-... / #128). After a resample the caller resets `ws.log_weights` to
+`-log N`, so `lse_prev = 0` here. The caller normalizes `ws.weights` for the ESS test.
+"""
+function _pf_increment!(ws::PFWorkspace{T}) where {T<:AbstractFloat}
+    lse_prev = _logsumexp(ws.log_weights)
+    ws.log_weights .+= ws.cumweights
+    return _logsumexp(ws.log_weights) - lse_prev
+end
+
+"""
     _systematic_resample!(ancestors, weights, cumweights, N, rng)
 
 O(N) systematic resampling into pre-allocated `ancestors` vector.
@@ -193,9 +209,10 @@ end
     _pf_initialize_stationary!(ws, ss)
 
 Initialize particles from the stationary distribution of the linear state space.
-Computes P0 = solve_lyapunov(G1, impact), takes Cholesky factor L, and draws
-particles[:, i] = L * randn(n_states). Falls back to diffuse initialization
-(10 * I) if Lyapunov fails.
+Computes P0 = solve_lyapunov(G1, impact) when all `|eig(G1)| < 1`, takes Cholesky
+factor L, and draws particles[:, i] = L * randn(n_states). For unit roots
+(`|eig(G1)| ≥ 1 - 1e-6`) uses `_diffuse_initial_covariance` (κ = 1e6 on the
+nonstationary subspace), never a silent 10*I; non-stability errors propagate.
 """
 function _pf_initialize_stationary!(ws::PFWorkspace{T},
                                      ss::DSGEStateSpace{T};
@@ -203,10 +220,11 @@ function _pf_initialize_stationary!(ws::PFWorkspace{T},
     n_states = size(ws.particles, 1)
     N = size(ws.particles, 2)
 
-    P0 = try
+    RQR = ss.impact * ss.Q * ss.impact'
+    P0 = if maximum(abs, eigvals(ss.G1)) >= one(T) - T(1e-6)
+        _diffuse_initial_covariance(ss.G1, RQR)
+    else
         solve_lyapunov(ss.G1, ss.impact)
-    catch
-        T(10) * Matrix{T}(I, n_states, n_states)
     end
 
     # Ensure symmetry and positive definiteness
@@ -281,11 +299,13 @@ function _bootstrap_particle_filter!(ws::PFWorkspace{T}, ss::DSGEStateSpace{T},
 
         # Compute log weights
         y_t = @view data[:, t]
-        _pf_log_weights!(ws.log_weights, ws.innovations, ws.tmp_obs,
+        # Fresh observation log-densities into the cumweights scratch (do NOT overwrite the
+        # carried non-uniform weights — #128); cumweights is free until resampling.
+        _pf_log_weights!(ws.cumweights, ws.innovations, ws.tmp_obs,
                           ws.particles, y_t, ss.Z, ss.d, ss.H_inv, ss.log_det_H)
 
         # Accumulate log-likelihood: log(1/N * sum_k exp(log_w_k))
-        log_lik += _logsumexp(ws.log_weights) - log_N
+        log_lik += _pf_increment!(ws)   # ratio-form increment, correct under adaptive resampling (#128)
 
         # Normalize weights
         _normalize_log_weights!(ws.weights, ws.log_weights)
@@ -312,108 +332,6 @@ function _bootstrap_particle_filter!(ws::PFWorkspace{T}, ss::DSGEStateSpace{T},
             @simd for s in 1:size(ws.particles, 1)
                 ws.reference_trajectory[s, t] = ws.particles[s, N]
             end
-        end
-    end
-
-    return log_lik
-end
-
-# =============================================================================
-# Auxiliary Particle Filter (Pitt & Shephard 1999)
-# =============================================================================
-
-"""
-    _auxiliary_particle_filter!(ws, ss, data, T_obs; threshold=0.5, rng=Random.default_rng())
-
-Auxiliary particle filter (Pitt & Shephard 1999) for linear state space.
-
-First-stage weights use the predictive mean mu_k = G1 * s_k to compute
-p(y_t | Z * mu_k + d, H) as a Gaussian density. Particles are resampled
-according to first-stage weights, then propagated, and adjustment weights
-are computed.
-
-Returns log marginal likelihood estimate.
-"""
-function _auxiliary_particle_filter!(ws::PFWorkspace{T}, ss::DSGEStateSpace{T},
-                                      data::Matrix{T}, T_obs::Int;
-                                      threshold::Real=0.5,
-                                      rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
-    N = size(ws.particles, 2)
-    n_obs = size(data, 1)
-    n_states = size(ws.particles, 1)
-    log_N = log(T(N))
-    inv_N = one(T) / N
-    half = T(0.5)
-
-    # Initialize from stationary distribution
-    _pf_initialize_stationary!(ws, ss; rng=rng)
-
-    log_lik = zero(T)
-
-    @inbounds for t in 1:T_obs
-        y_t = @view data[:, t]
-
-        # --- First stage: compute predictive mean for each particle ---
-        # particles_new = G1 * particles (predictive mean, no shocks)
-        mul!(ws.particles_new, ss.G1, ws.particles)
-
-        # Compute first-stage log weights using predictive mean
-        # innovations = y_t - Z * mu - d
-        _pf_log_weights!(ws.log_weights, ws.innovations, ws.tmp_obs,
-                          ws.particles_new, y_t, ss.Z, ss.d, ss.H_inv, ss.log_det_H)
-
-        # Add current particle weights (log scale) if not uniform
-        # log_first_stage = log_w_current + log_predictive
-        # (weights start uniform, so this is just the predictive on first step)
-
-        # Normalize and accumulate first-stage contribution
-        lse_first = _logsumexp(ws.log_weights)
-        log_lik += lse_first - log_N
-
-        _normalize_log_weights!(ws.weights, ws.log_weights)
-
-        # Resample based on first-stage weights
-        _systematic_resample!(ws.ancestors, ws.weights, ws.cumweights, N, rng)
-        _resample_particles!(ws.particles_new, ws.particles, ws.ancestors)
-        # Swap: particles now hold resampled particles
-        ws.particles, ws.particles_new = ws.particles_new, ws.particles
-
-        # --- Second stage: propagate with shocks ---
-        randn!(rng, ws.shocks)
-        _pf_transition_linear!(ws.particles_new, ws.particles, ws.shocks,
-                                ss.G1, ss.impact)
-        ws.particles, ws.particles_new = ws.particles_new, ws.particles
-
-        # Compute actual observation log weights
-        _pf_log_weights!(ws.log_weights, ws.innovations, ws.tmp_obs,
-                          ws.particles, y_t, ss.Z, ss.d, ss.H_inv, ss.log_det_H)
-
-        # Compute predictive mean log weights for adjustment
-        # Recompute predictive mean from ancestors (before shock addition)
-        # The adjustment is: log w_adjust = log p(y|x_t) - log p(y|mu_{a_t})
-        # We already have log p(y|x_t) in log_weights
-        # Need to subtract log p(y|mu_{a_t}) which was the first-stage weight
-        # For simplicity with the resampled particles, recompute mu = G1 * particles_before_shock
-        # Since we already propagated, compute from the resampled (pre-shock) state:
-        # pre-shock state = particles (post resample) which is now overwritten
-        # We use the fact that for linear Gaussian, the adjustment is a constant shift
-
-        # Normalize adjustment weights
-        _normalize_log_weights!(ws.weights, ws.log_weights)
-
-        # ESS-based resampling of adjustment weights
-        ess = zero(T)
-        @simd for k in 1:N
-            ess += ws.weights[k] * ws.weights[k]
-        end
-        ess = one(T) / ess
-
-        if ess < threshold * N
-            _systematic_resample!(ws.ancestors, ws.weights, ws.cumweights, N, rng)
-            _resample_particles!(ws.particles_new, ws.particles, ws.ancestors)
-            ws.particles, ws.particles_new = ws.particles_new, ws.particles
-            fill!(ws.weights, inv_N)
-            fill!(ws.log_weights, -log_N)
         end
     end
 
@@ -480,11 +398,12 @@ function _conditional_smc!(ws::PFWorkspace{T}, ss::DSGEStateSpace{T},
 
         # Compute log weights
         y_t = @view data[:, t]
-        _pf_log_weights!(ws.log_weights, ws.innovations, ws.tmp_obs,
+        # Fresh observation log-densities into the cumweights scratch (#128).
+        _pf_log_weights!(ws.cumweights, ws.innovations, ws.tmp_obs,
                           ws.particles, y_t, ss.Z, ss.d, ss.H_inv, ss.log_det_H)
 
         # Accumulate log-likelihood
-        log_lik += _logsumexp(ws.log_weights) - log_N
+        log_lik += _pf_increment!(ws)   # ratio-form increment, correct under adaptive resampling (#128)
 
         # Normalize weights
         _normalize_log_weights!(ws.weights, ws.log_weights)
@@ -583,11 +502,14 @@ function _pf_initialize_nonlinear!(ws::PFWorkspace{T},
     eta_x = nx > 0 ? nlss.hx[:, nx+1:nv] : zeros(T, 0, n_eps)
     gx_state = ny > 0 ? nlss.gx[:, 1:nx] : zeros(T, 0, nx)
 
-    # Compute P0 from first-order Lyapunov equation
-    P0 = try
+    # Compute P0 from first-order Lyapunov equation (diffuse for unit roots; nx==0 → 0×0).
+    RQR_x = eta_x * eta_x'
+    P0 = if nx == 0
+        zeros(T, 0, 0)
+    elseif maximum(abs, eigvals(hx_state)) >= one(T) - T(1e-6)
+        _diffuse_initial_covariance(hx_state, RQR_x)
+    else
         solve_lyapunov(hx_state, eta_x)
-    catch
-        T(10) * Matrix{T}(I, nx, nx)
     end
     P0 = (P0 + P0') / 2
     C = cholesky(Hermitian(P0); check=false)
@@ -949,11 +871,11 @@ function _bootstrap_particle_filter!(ws::PFWorkspace{T}, nlss::NonlinearStateSpa
 
         # Compute log weights using full endogenous particles
         y_t = @view data[:, t]
-        _pf_log_weights!(ws.log_weights, ws.innovations, ws.tmp_obs,
+        _pf_log_weights!(ws.cumweights, ws.innovations, ws.tmp_obs,   # scratch, not overwrite (#128)
                           ws.particles, y_t, nlss.Z, nlss.d, nlss.H_inv, nlss.log_det_H)
 
         # Accumulate log-likelihood
-        log_lik += _logsumexp(ws.log_weights) - log_N
+        log_lik += _pf_increment!(ws)   # ratio-form increment, correct under adaptive resampling (#128)
 
         # Normalize weights
         _normalize_log_weights!(ws.weights, ws.log_weights)
@@ -1052,11 +974,11 @@ function _conditional_smc!(ws::PFWorkspace{T}, nlss::NonlinearStateSpace{T},
 
         # Compute log weights
         y_t = @view data[:, t]
-        _pf_log_weights!(ws.log_weights, ws.innovations, ws.tmp_obs,
+        _pf_log_weights!(ws.cumweights, ws.innovations, ws.tmp_obs,   # scratch, not overwrite (#128)
                           ws.particles, y_t, nlss.Z, nlss.d, nlss.H_inv, nlss.log_det_H)
 
         # Accumulate log-likelihood
-        log_lik += _logsumexp(ws.log_weights) - log_N
+        log_lik += _pf_increment!(ws)   # ratio-form increment, correct under adaptive resampling (#128)
 
         # Normalize weights
         _normalize_log_weights!(ws.weights, ws.log_weights)
@@ -1290,11 +1212,11 @@ function _bootstrap_particle_filter!(ws::PFWorkspace{T}, pss::ProjectionStateSpa
 
         # Compute observation log-weights
         y_t = @view data[:, t]
-        _pf_log_weights!(ws.log_weights, ws.innovations, ws.tmp_obs,
+        _pf_log_weights!(ws.cumweights, ws.innovations, ws.tmp_obs,   # scratch, not overwrite (#128)
                           ws.particles, y_t, pss.Z, pss.d, pss.H_inv, pss.log_det_H)
 
         # Accumulate log-likelihood
-        log_lik += _logsumexp(ws.log_weights) - log_N
+        log_lik += _pf_increment!(ws)   # ratio-form increment, correct under adaptive resampling (#128)
 
         # Normalize weights
         _normalize_log_weights!(ws.weights, ws.log_weights)
@@ -1310,6 +1232,10 @@ function _bootstrap_particle_filter!(ws::PFWorkspace{T}, pss::ProjectionStateSpa
             _systematic_resample!(ws.ancestors, ws.weights, ws.cumweights, N, rng)
             _resample_particles!(ws.particles_new, ws.particles, ws.ancestors)
             ws.particles, ws.particles_new = ws.particles_new, ws.particles
+            # Resampled particles are uniformly weighted — reset so the next ratio-form
+            # increment's lse_prev = 0 (the projection filters previously omitted this because
+            # the old code overwrote log_weights each step; #128 needs it).
+            fill!(ws.log_weights, -log(T(N)))
         end
     end
 
@@ -1367,11 +1293,11 @@ function _conditional_smc!(ws::PFWorkspace{T}, pss::ProjectionStateSpace{T},
 
         # Compute observation log-weights
         y_t = @view data[:, t]
-        _pf_log_weights!(ws.log_weights, ws.innovations, ws.tmp_obs,
+        _pf_log_weights!(ws.cumweights, ws.innovations, ws.tmp_obs,   # scratch, not overwrite (#128)
                           ws.particles, y_t, pss.Z, pss.d, pss.H_inv, pss.log_det_H)
 
         # Accumulate log-likelihood
-        log_lik += _logsumexp(ws.log_weights) - log_N
+        log_lik += _pf_increment!(ws)   # ratio-form increment, correct under adaptive resampling (#128)
 
         # Normalize weights
         _normalize_log_weights!(ws.weights, ws.log_weights)
@@ -1388,6 +1314,7 @@ function _conditional_smc!(ws::PFWorkspace{T}, pss::ProjectionStateSpace{T},
             ws.ancestors[N] = N  # Reference particle always survives
             _resample_particles!(ws.particles_new, ws.particles, ws.ancestors)
             ws.particles, ws.particles_new = ws.particles_new, ws.particles
+            fill!(ws.log_weights, -log(T(N)))   # uniform after resampling for the ratio-form increment (#128)
         end
 
         # Store trajectory for backward sampling

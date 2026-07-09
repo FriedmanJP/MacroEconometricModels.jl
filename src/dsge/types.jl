@@ -657,3 +657,33 @@ end
 
 report(oirf::OccBinIRF) = show(stdout, oirf)
 
+# =============================================================================
+# Exception taxonomy for Bayesian DSGE solve/likelihood failures
+# =============================================================================
+
+"""
+    DSGESolveError <: Exception
+
+Internal DSGE solve/estimation failure that legitimately implies zero posterior
+mass (indeterminacy, no-solution, steady-state non-convergence) — as opposed to a
+code bug. Likelihood closures catch this (and the concrete numeric-failure types in
+[`_benign_solve_error`](@ref)) and return `-Inf`, counting the draw as failed;
+everything else is rethrown.
+"""
+struct DSGESolveError <: Exception
+    msg::String
+end
+Base.showerror(io::IO, e::DSGESolveError) = print(io, "DSGESolveError: ", e.msg)
+
+"""
+    _benign_solve_error(e) -> Bool
+
+True when `e` is a legitimate per-θ numeric failure that should be caught and
+counted as a failed draw (return `-Inf`), rather than a bug that must propagate.
+"""
+_benign_solve_error(e) = e isa DSGESolveError ||
+                         e isa DomainError ||
+                         e isa LinearAlgebra.SingularException ||
+                         e isa LinearAlgebra.PosDefException ||
+                         e isa LinearAlgebra.LAPACKException
+

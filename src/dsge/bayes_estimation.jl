@@ -63,6 +63,106 @@ function _infer_prior_bounds(d::Distribution)
 end
 
 # =============================================================================
+# Helper: resolve theta0 (positional / Dict / NamedTuple) onto sorted params
+# =============================================================================
+
+"""
+    _resolve_theta0(theta0, param_names, ::Type{T}) -> Vector{T}
+
+Resolve the initial parameter vector against the (alphabetically sorted) prior
+parameter names (E-12 / H-12 / #136).
+
+- `Dict{Symbol}` / `NamedTuple`: build the internal vector by looking up each name
+  in `param_names`, so the input is **order-independent**. Errors if any prior
+  parameter is missing from `theta0`, or if `theta0` names a parameter not in the
+  priors.
+- `AbstractVector`: used positionally and **must be in sorted prior-key order**;
+  its length must equal `length(param_names)`, else an `ArgumentError` naming the
+  expected parameters is thrown (previously a wrong length failed opaquely much
+  later, and a mis-ordered vector was silently permuted onto the wrong parameters).
+"""
+function _resolve_theta0(theta0, param_names::Vector{Symbol}, ::Type{T}) where {T}
+    if theta0 isa AbstractDict || theta0 isa NamedTuple
+        for k in keys(theta0)
+            k in param_names || throw(ArgumentError(
+                "theta0 names unknown parameter :$k; the estimated parameters " *
+                "(sorted) are $(param_names)."))
+        end
+        out = Vector{T}(undef, length(param_names))
+        for (i, pn) in enumerate(param_names)
+            haskey(theta0, pn) || throw(ArgumentError(
+                "theta0 is missing parameter :$pn; provide all of $(param_names)."))
+            out[i] = T(theta0[pn])
+        end
+        return out
+    else
+        v = collect(theta0)
+        length(v) == length(param_names) || throw(ArgumentError(
+            "theta0 has length $(length(v)) but the model has $(length(param_names)) " *
+            "estimated parameters. Pass a positional vector in sorted prior-key order " *
+            "$(param_names), or a Dict/NamedTuple (order-independent)."))
+        return T.(v)
+    end
+end
+
+"""
+    _orient_data(data, n_obs, ::Type{T}) -> Matrix{T}
+
+Resolve data orientation by matching a dimension to `n_obs` (the number of
+observables), NOT by comparing the two dimensions (E-18 / #142). The public
+convention is `T×n` (time in rows, variables in columns); the Kalman/PF routines
+expect `n_obs × T_obs` internally, so:
+
+- `size(data, 2) == n_obs`  → `T×n`, transpose to `n_obs × T_obs`;
+- `size(data, 1) == n_obs`  → already `n_obs × T_obs`, use as-is;
+- otherwise                 → `ArgumentError` naming `n_obs` and the received shape.
+
+The only genuinely ambiguous case is `T == n_obs` (both dimensions equal `n_obs`);
+it is resolved as `T×n` (rows = time), consistent with the package convention.
+"""
+function _orient_data(data::AbstractMatrix, n_obs::Int, ::Type{T}) where {T}
+    dm = Matrix{T}(data)
+    nrows, ncols = size(dm)
+    if ncols == n_obs
+        return Matrix{T}(dm')          # T×n (convention) → n_obs × T_obs
+    elseif nrows == n_obs
+        return dm                       # already n_obs × T_obs
+    else
+        throw(ArgumentError(
+            "data has shape $(size(data)) but neither dimension equals the number of " *
+            "observables n_obs=$n_obs. Pass data as T×n (time in rows, variables in columns)."))
+    end
+end
+
+"""
+    _resolve_measurement_error(measurement_error, data_mat, observables) -> Union{Nothing, Vector}
+
+Resolve the `measurement_error` keyword before it reaches the observation-equation
+builders. `nothing` passes through (zero ME). `:auto` scales measurement error to
+each observable's own variance — √(0.1·var(yᵢ)) per series (DSGE.jl/Dynare heuristic),
+which fixes the HA magnitude problem where aggregate observables span different scales
+— and emits a warning. A vector passes through as-is. Any other symbol errors.
+`data_mat` is n_obs × T_obs.
+"""
+function _resolve_measurement_error(measurement_error, data_mat::AbstractMatrix{T},
+                                     observables::Vector{Symbol}) where {T<:AbstractFloat}
+    measurement_error === nothing && return nothing
+    if measurement_error isa Symbol
+        measurement_error === :auto || throw(ArgumentError(
+            "measurement_error Symbol must be :auto, got :$measurement_error"))
+        n = size(data_mat, 1)
+        me = Vector{T}(undef, n)
+        for i in 1:n
+            me[i] = sqrt(T(0.1) * var(view(data_mat, i, :)))
+        end
+        @warn "measurement_error=:auto: added per-observable measurement error at 10% of " *
+              "each series' variance" observables sds=me
+        return me
+    end
+    return Vector{T}(measurement_error)
+end
+
+# =============================================================================
 # Main public API
 # =============================================================================
 
@@ -74,8 +174,13 @@ SMC², or Random-Walk Metropolis-Hastings (RWMH).
 
 # Arguments
 - `spec::DSGESpec{T}` — model specification from `@dsge` macro
-- `data::AbstractMatrix` — observed data (T_obs × n_obs or n_obs × T_obs, auto-detected)
-- `θ0::AbstractVector{<:Real}` — initial parameter guess (length must match number of priors)
+- `data::AbstractMatrix` — observed data in `T×n` (time in rows, variables in columns),
+  the package convention; orientation is resolved by matching a dimension to the number
+  of observables (an `n×T` matrix is accepted and transposed internally).
+- `θ0` — initial parameter guess. Preferred: a `Dict{Symbol}`/`NamedTuple` keyed by
+  parameter name (order-independent). A positional `AbstractVector` is also accepted but
+  **must be in sorted (alphabetical) prior-key order** and its length must equal the
+  number of estimated parameters (otherwise an informative `ArgumentError` is thrown).
 
 # Keywords
 - `priors::Dict{Symbol,<:Distribution}` — prior distributions keyed by parameter name
@@ -89,7 +194,9 @@ SMC², or Random-Walk Metropolis-Hastings (RWMH).
 - `burnin::Int=5000` — burn-in draws discarded from `:mh` output; the posterior uses `n_draws - burnin`
 - `keep_burnin::Bool=false` — if true, retain the full `:mh` chain (e.g. for trace plots)
 - `ess_target::Float64=0.5` — target ESS fraction for adaptive tempering
-- `measurement_error::Union{Nothing,Vector{<:Real}}=nothing` — measurement error SDs
+- `measurement_error::Union{Nothing,Symbol,Vector{<:Real}}=nothing` — measurement error SDs;
+  `nothing` means zero ME (requires `n_obs ≤ n_shocks`, else a `StochasticSingularityError`
+  is thrown); `:auto` adds per-observable ME at 10% of each series' variance with a warning
 - `likelihood::Symbol=:auto` — likelihood evaluation method (currently auto = Kalman)
 - `solver::Symbol=:gensys` — DSGE solver method
 - `solver_kwargs::NamedTuple=NamedTuple()` — additional solver keyword arguments
@@ -97,6 +204,14 @@ SMC², or Random-Walk Metropolis-Hastings (RWMH).
   (Christen & Fox 2005). Pre-screens proposals with a cheap bootstrap PF to avoid
   expensive CSMC evaluations on proposals that would be rejected. Exact posterior.
 - `n_screen::Int=200` — particles for screening PF (only used when `delayed_acceptance=true`)
+- `max_stages::Int=500` — hard cap on adaptive-tempering stages (`:smc`/`:smc2`); exceeding
+  it raises an error, guarding a degenerate likelihood that never advances φ→1 (Herbst &
+  Schorfheide 2016 use ~200–500 fixed stages)
+- `min_dphi::Real=1e-10` — minimum tempering step (`:smc`/`:smc2`); if the adaptive Δφ falls
+  below this while φ<1, estimation aborts with an informative error rather than spinning. The
+  default is deliberately small: informative likelihoods legitimately take small first steps
+  (e.g. ~1e-8), so this only trips on genuine numerical degeneracy (the bisection returning
+  ~1e-12); `max_stages` is the primary loop bound
 - `rng::AbstractRNG=Random.default_rng()` — random number generator
 
 # Returns
@@ -109,7 +224,8 @@ SMC², or Random-Walk Metropolis-Hastings (RWMH).
   *Econometric Reviews*, 26(2-4), 113-172.
 """
 function estimate_dsge_bayes(spec::DSGESpec{T}, data::AbstractMatrix,
-                              theta0::AbstractVector{<:Real};
+                              theta0::Union{AbstractVector{<:Real},
+                                            AbstractDict{Symbol,<:Real},NamedTuple};
                               priors::Dict{Symbol,<:Distribution},
                               method::Symbol=:smc,
                               observables::Vector{Symbol}=Symbol[],
@@ -120,12 +236,13 @@ function estimate_dsge_bayes(spec::DSGESpec{T}, data::AbstractMatrix,
                               burnin::Int=5000,
                               keep_burnin::Bool=false,
                               ess_target::Float64=0.5,
-                              measurement_error::Union{Nothing,Vector{<:Real}}=nothing,
+                              measurement_error::Union{Nothing,Symbol,Vector{<:Real}}=nothing,
                               likelihood::Symbol=:auto,
                               solver::Symbol=:gensys,
                               solver_kwargs::NamedTuple=NamedTuple(),
                               delayed_acceptance::Bool=false,
                               n_screen::Int=200,
+                              max_stages::Int=500, min_dphi::Real=1e-10,
                               rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
 
     # ── 1. Build DSGEPrior from priors dict ──────────────────────────────
@@ -142,10 +259,9 @@ function estimate_dsge_bayes(spec::DSGESpec{T}, data::AbstractMatrix,
     # ── 2. Sort param_names to match DSGEPrior ordering ──────────────────
     param_names = prior.param_names  # already sorted by DSGEPrior constructor
 
-    # Sort theta0 to match param_names ordering
-    prior_keys_sorted = param_names
-    # theta0 is provided in the same order as the sorted prior keys
-    theta0_sorted = T.(theta0)
+    # Resolve theta0: Dict/NamedTuple by name (order-independent), or a positional
+    # vector in sorted prior-key order with length validation (E-12 / #136).
+    theta0_sorted = _resolve_theta0(theta0, param_names, T)
 
     # ── 3. Handle observables ────────────────────────────────────────────
     if isempty(observables)
@@ -153,19 +269,23 @@ function estimate_dsge_bayes(spec::DSGESpec{T}, data::AbstractMatrix,
     end
     n_obs = length(observables)
 
-    # ── 4. Data handling: ensure n_obs × T_obs format ────────────────────
-    data_mat = Matrix{T}(data)
-    nrows, ncols = size(data_mat)
-    # The Kalman filter expects n_obs × T_obs (each column is one time period)
-    # simulate() returns T_periods × n_endog
-    # If data has more rows than columns and nrows != n_obs, transpose
-    if nrows != n_obs && ncols == n_obs
-        data_mat = Matrix{T}(data_mat')
-    elseif nrows != n_obs && ncols != n_obs
-        # Neither dimension matches n_obs; try best guess: if nrows > ncols, transpose
-        if nrows > ncols
-            data_mat = Matrix{T}(data_mat')
-        end
+    # ── 4. Data handling: resolve orientation by matching n_obs (E-18 / #142) ─
+    # Public convention is T×n; Kalman/PF expect n_obs × T_obs internally.
+    data_mat = _orient_data(data, n_obs, T)
+
+    # Resolve :auto measurement error against data variance (per-observable). (#141/T042)
+    measurement_error = _resolve_measurement_error(measurement_error, data_mat, observables)
+
+    # Stochastic-singularity guard: with no measurement error and more observables than
+    # structural shocks, the model-implied observation covariance is singular. Checked
+    # eagerly here (spec.n_exog is exact and free) because the sampler closures would
+    # otherwise swallow the builder-thrown error via their per-θ catch. (#141/T042)
+    if measurement_error === nothing && n_obs > spec.n_exog
+        throw(StochasticSingularityError(
+            "$n_obs observables exceed $(spec.n_exog) structural shocks; the model-implied " *
+            "observation covariance is singular and the likelihood is ill-defined. " *
+            "Add measurement error (measurement_error=:auto or a vector of SDs) or " *
+            "reduce the number of observables."))
     end
 
     # ── 5. Validate method ───────────────────────────────────────────────
@@ -179,7 +299,8 @@ function estimate_dsge_bayes(spec::DSGESpec{T}, data::AbstractMatrix,
                              n_smc=n_smc, n_mh_steps=n_mh_steps,
                              ess_target=ess_target, observables=observables,
                              measurement_error=measurement_error,
-                             solver=solver, solver_kwargs=solver_kwargs, rng=rng)
+                             solver=solver, solver_kwargs=solver_kwargs,
+                             max_stages=max_stages, min_dphi=min_dphi, rng=rng)
         return _smc_state_to_bayesian_dsge(state, prior, param_names, spec, :smc,
                                             observables, measurement_error,
                                             solver, solver_kwargs)
@@ -192,13 +313,14 @@ function estimate_dsge_bayes(spec::DSGESpec{T}, data::AbstractMatrix,
                               measurement_error=measurement_error,
                               solver=solver, solver_kwargs=solver_kwargs,
                               delayed_acceptance=delayed_acceptance,
-                              n_screen=n_screen, rng=rng)
+                              n_screen=n_screen,
+                              max_stages=max_stages, min_dphi=min_dphi, rng=rng)
         return _smc_state_to_bayesian_dsge(state, prior, param_names, spec, :smc2,
                                             observables, measurement_error,
                                             solver, solver_kwargs)
 
     else  # :mh
-        draws, log_posterior, acceptance_rate = _mh_sample(
+        draws, log_posterior, acceptance_rate, _mh_diag = _mh_sample(
             spec, data_mat, param_names, prior, theta0_sorted;
             n_draws=n_draws, burnin=burnin,
             observables=observables,
@@ -215,7 +337,8 @@ function estimate_dsge_bayes(spec::DSGESpec{T}, data::AbstractMatrix,
         return _mh_to_bayesian_dsge(draws, log_posterior, acceptance_rate,
                                      prior, param_names, spec,
                                      observables, measurement_error,
-                                     solver, solver_kwargs)
+                                     solver, solver_kwargs,
+                                     _mh_diag.n_failed, _mh_diag.n_evals)
     end
 end
 
@@ -258,16 +381,99 @@ function _smc_state_to_bayesian_dsge(state::SMCState{T}, prior::DSGEPrior{T},
         end
     end
 
-    sol, ss = _build_solution_at_theta(spec, param_names, theta_mean,
-                                        observables, measurement_error,
-                                        solver, solver_kwargs)
+    sol, ss, solved_at = _build_solution_mean_or_hpd(spec, param_names, theta_mean,
+                                                      theta_draws, log_posterior,
+                                                      observables, measurement_error,
+                                                      solver, solver_kwargs)
 
     BayesianDSGE{T}(
         theta_draws, log_posterior, param_names, prior,
         state.log_marginal_likelihood, method_sym, acceptance_rate,
         state.ess_history, state.phi_schedule,
-        spec, sol, ss
+        spec, sol, ss,
+        state.n_lik_failures, state.n_lik_evals, solved_at
     )
+end
+
+# =============================================================================
+# Internal: Geweke (1999) modified harmonic mean marginal-likelihood estimator
+# =============================================================================
+
+"""
+    _geweke_mhm(draws, log_post_kernel; p=0.5) -> T
+
+Geweke (1999) modified harmonic mean (MHM) estimator of the **log marginal
+likelihood** from posterior draws — the Dynare-standard estimator for MCMC output.
+
+Arguments
+- `draws::AbstractMatrix{T}` — `S×d` matrix of post-burn-in posterior draws
+  (rows = draws, columns = parameters). Relies on burn-in already being
+  discarded (see [T023]).
+- `log_post_kernel::AbstractVector{T}` — per-draw log posterior *kernel*
+  `log L(θ⁽ˢ⁾) + log π(θ⁽ˢ⁾)` (log likelihood + log prior). Any additive
+  constant in the likelihood cancels in the ratio and shifts the estimate by
+  that same constant, so the estimate is on the **same additive scale as the
+  SMC tempering-path estimator** (the Kalman log-likelihood carries its own
+  normalizing constant in both paths) — `:mh` and `:smc` marginal likelihoods,
+  and Bayes factors between them, are therefore comparable.
+
+Method. With posterior sample mean `θ̄` and covariance `Σ`, the weighting
+density `f` is a truncated multivariate normal on the `p`-probability ellipsoid
+`{θ : (θ−θ̄)'Σ⁻¹(θ−θ̄) ≤ χ²_{d,p}}`, normalized by the truncation mass `τ = p`:
+
+    log f(θ) = −log p − (d/2) log(2π) − ½ log|Σ| − ½ (θ−θ̄)'Σ⁻¹(θ−θ̄)   (inside)
+             = −∞                                                        (outside)
+
+and the estimator is
+
+    log p̂(y) = log S − logsumexp_s( log f(θ⁽ˢ⁾) − log_post_kernel(θ⁽ˢ⁾) ).
+
+Returns `NaN` (with a `@warn`) when the effective (finite-kernel) chain is too
+short (`S < 10·d`) or when no draw falls inside the truncation region.
+
+Reference: Geweke (1999), *Econometric Reviews* 18(1), 1–73.
+"""
+function _geweke_mhm(draws::AbstractMatrix{T}, log_post_kernel::AbstractVector{T};
+                     p::Real=0.5) where {T<:AbstractFloat}
+    d = size(draws, 2)
+    finite = findall(isfinite, log_post_kernel)
+    if length(finite) < 10 * d
+        @warn "Geweke MHM: effective post-burn-in chain too short " *
+              "(finite draws = $(length(finite)) < 10·d = $(10*d)); returning NaN. " *
+              "Increase n_draws or reduce burnin for a usable marginal likelihood."
+        return T(NaN)
+    end
+    D = Matrix{T}(draws[finite, :])
+    L = Vector{T}(log_post_kernel[finite])
+    S = length(finite)
+
+    # Posterior mean and (unbiased) covariance of the sampled draws.
+    θbar = vec(mean(D; dims=1))
+    Σ = d == 1 ? reshape([var(vec(D))], 1, 1) : cov(D)
+    Σsym = Symmetric(Matrix{T}(Σ))
+    Σinv = Matrix{T}(robust_inv(Σsym; silent=true))
+    logdetΣ = logdet_safe(Σsym)
+
+    # Truncated-normal weighting density constants; τ = p is the truncation mass.
+    thresh = T(quantile(Chisq(d), p))
+    log_const = -log(T(p)) - T(d) / 2 * log(T(2π)) - logdetΣ / 2
+
+    terms = fill(T(-Inf), S)
+    n_inside = 0
+    @inbounds for s in 1:S
+        δ = @view(D[s, :]) .- θbar
+        q = dot(δ, Σinv, δ)
+        if q <= thresh
+            terms[s] = (log_const - q / 2) - L[s]   # log f(θ) − log kernel(θ)
+            n_inside += 1
+        end
+    end
+    if n_inside == 0
+        @warn "Geweke MHM: no draws fell inside the p=$(p) truncation region; " *
+              "returning NaN (degenerate or extremely diffuse posterior sample)."
+        return T(NaN)
+    end
+    return log(T(S)) - _logsumexp(terms)
 end
 
 # =============================================================================
@@ -289,32 +495,30 @@ function _mh_to_bayesian_dsge(draws::Matrix{T}, log_posterior::Vector{T},
                                 observables::Vector{Symbol},
                                 measurement_error,
                                 solver::Symbol,
-                                solver_kwargs::NamedTuple) where {T<:AbstractFloat}
+                                solver_kwargs::NamedTuple,
+                                n_failed::Int=0,
+                                n_evals::Int=0) where {T<:AbstractFloat}
     # Posterior mean from draws
     theta_mean = vec(mean(draws; dims=1))
 
-    sol, ss = _build_solution_at_theta(spec, param_names, theta_mean,
-                                        observables, measurement_error,
-                                        solver, solver_kwargs)
+    sol, ss, solved_at = _build_solution_mean_or_hpd(spec, param_names, theta_mean,
+                                                      draws, log_posterior,
+                                                      observables, measurement_error,
+                                                      solver, solver_kwargs)
 
-    # Approximate log marginal likelihood via harmonic mean estimator
-    # log p(Y) ≈ -log(1/n * sum(1/p(Y|θ_i))) = -log(mean(exp(-log_lik)))
-    # This is a simple approximation; SMC gives better estimates
-    finite_lp = filter(isfinite, log_posterior)
-    log_ml = if length(finite_lp) > 0
-        # Harmonic mean: 1/p(Y) ≈ E[1/L(θ)] under posterior
-        # Use log_posterior which includes prior, so extract log_lik estimate
-        # Simple approximation: max log posterior
-        T(maximum(finite_lp))
-    else
-        T(-Inf)
-    end
+    # Log marginal likelihood via Geweke (1999) modified harmonic mean (E-04 / #130).
+    # `log_posterior` stores the per-draw kernel log L(θ) + log π(θ), on the same
+    # additive scale as the SMC tempering-path estimator, so :mh and :smc marginal
+    # likelihoods (and Bayes factors between them) are comparable. Returns NaN + @warn
+    # when the post-burn-in chain is too short.
+    log_ml = _geweke_mhm(draws, log_posterior)
 
     BayesianDSGE{T}(
         draws, log_posterior, param_names, prior,
         log_ml, :rwmh, acceptance_rate,
         T[], T[],  # no ESS history or phi schedule for MH
-        spec, sol, ss
+        spec, sol, ss,
+        n_failed, n_evals, solved_at
     )
 end
 
@@ -361,6 +565,66 @@ function _build_solution_at_theta(spec::DSGESpec{T}, param_names::Vector{Symbol}
     return sol, ss
 end
 
+"""
+    _try_build_solution(spec, param_names, theta, observables, measurement_error,
+                         solver, solver_kwargs) -> Union{Nothing, Tuple}
+
+Build the solution/state space at `theta`, returning `nothing` on a narrow DSGE-solve
+failure — a benign per-θ numeric error (`_benign_solve_error`) OR a returned-but-
+indeterminate linear solution (an indeterminate model does NOT throw; `solve` returns
+a `DSGESolution` with `is_determined == false`). Non-benign exceptions propagate.
+"""
+function _try_build_solution(spec::DSGESpec{T}, param_names::Vector{Symbol},
+                              theta::Vector{T}, observables::Vector{Symbol},
+                              measurement_error, solver::Symbol,
+                              solver_kwargs::NamedTuple) where {T<:AbstractFloat}
+    local sol, ss
+    try
+        sol, ss = _build_solution_at_theta(spec, param_names, theta,
+                                            observables, measurement_error,
+                                            solver, solver_kwargs)
+    catch err
+        _benign_solve_error(err) && return nothing
+        rethrow(err)
+    end
+    if sol isa DSGESolution && !is_determined(sol)
+        return nothing
+    end
+    return (sol, ss)
+end
+
+"""
+    _build_solution_mean_or_hpd(spec, param_names, theta_mean, theta_draws,
+                                 log_posterior, observables, measurement_error,
+                                 solver, solver_kwargs) -> (sol, ss, solved_at)
+
+Build the result-container solution at the posterior mean; if the mean is
+indeterminate / fails to solve (common for multimodal or boundary posteriors), fall
+back to the **highest-posterior draw** — the whole estimation no longer errors after
+sampling succeeded. Returns the solution, state space, and a `solved_at` marker
+(`:posterior_mean` or `:highest_posterior_draw`).
+"""
+function _build_solution_mean_or_hpd(spec::DSGESpec{T}, param_names::Vector{Symbol},
+                                      theta_mean::Vector{T}, theta_draws::Matrix{T},
+                                      log_posterior::Vector{T}, observables::Vector{Symbol},
+                                      measurement_error, solver::Symbol,
+                                      solver_kwargs::NamedTuple) where {T<:AbstractFloat}
+    result = _try_build_solution(spec, param_names, theta_mean, observables,
+                                  measurement_error, solver, solver_kwargs)
+    if result !== nothing
+        sol, ss = result
+        return sol, ss, :posterior_mean
+    end
+    idx = argmax(log_posterior)
+    theta_hpd = Vector{T}(@view theta_draws[idx, :])
+    @warn "Posterior-mean solve failed/indeterminate; building the result container at " *
+          "the highest-posterior draw (index $idx). IRFs/FEVDs reflect that draw, not the " *
+          "posterior mean — see result.solved_at."
+    sol, ss = _build_solution_at_theta(spec, param_names, theta_hpd, observables,
+                                        measurement_error, solver, solver_kwargs)
+    return sol, ss, :highest_posterior_draw
+end
+
 # =============================================================================
 # Posterior analysis functions
 # =============================================================================
@@ -384,20 +648,16 @@ function posterior_summary(result::BayesianDSGE{T}) where {T<:AbstractFloat}
     for i in 1:n_params
         pn = result.param_names[i]
         draws_i = result.theta_draws[:, i]
-        sorted = sort(draws_i)
-        n = length(sorted)
 
-        # Quantile indices
-        idx_025 = max(1, round(Int, 0.025 * n))
-        idx_50 = max(1, round(Int, 0.50 * n))
-        idx_975 = min(n, round(Int, 0.975 * n))
-
+        # Interpolated quantiles via Statistics.quantile rather than ad-hoc order-statistic
+        # indexing (E-20 / #144). The stored draws are unweighted after the SMC terminal
+        # resample (E-09 / #132), so a plain quantile is correct.
         summary[pn] = Dict{Symbol, T}(
             :mean => mean(draws_i),
-            :median => sorted[idx_50],
+            :median => quantile(draws_i, 0.5),
             :std => std(draws_i),
-            :ci_lower => sorted[idx_025],
-            :ci_upper => sorted[idx_975]
+            :ci_lower => quantile(draws_i, 0.025),
+            :ci_upper => quantile(draws_i, 0.975)
         )
     end
 
@@ -409,8 +669,16 @@ end
 
 Return the log marginal likelihood (model evidence) from Bayesian estimation.
 
-For SMC methods, this is the normalizing constant estimate from the
-adaptive tempering schedule. For RWMH, this is an approximation.
+For SMC methods, this is the normalizing-constant estimate from the adaptive
+tempering schedule (preferred when available). For RWMH (`:mh`), it is the
+Geweke (1999) modified harmonic mean (MHM) estimate computed from the
+post-burn-in draws — the Dynare standard — on the same additive scale as the
+SMC estimate. The MHM returns `NaN` (with a warning) when the chain is too
+short to form a usable estimate.
+
+# References
+- Geweke, J. (1999). Using simulation methods for Bayesian econometric models.
+  *Econometric Reviews*, 18(1), 1-73.
 """
 function marginal_likelihood(result::BayesianDSGE)
     return result.log_marginal_likelihood
@@ -424,6 +692,10 @@ Compute the log Bayes factor comparing model 1 to model 2:
 
 A positive value favors model 1; negative favors model 2.
 Following Kass & Raftery (1995), `2 * log BF > 6` is strong evidence.
+
+Both marginal likelihoods must be on the same additive scale: SMC (tempering
+path) and `:mh` (Geweke MHM) estimates are comparable by construction, but
+compare estimators consistently and prefer SMC when available.
 
 # References
 - Kass, R. E. & Raftery, A. E. (1995). Bayes Factors.
@@ -503,7 +775,9 @@ function posterior_predictive(result::BayesianDSGE{T}, n_sim::Int;
     # Determine number of variables from spec
     n_vars = spec.augmented ? length(spec.original_endog) : spec.n_endog
 
-    paths = zeros(T, n_sim, T_periods, n_vars)
+    # Collect one path per SUCCESSFUL draw; failed draws are DROPPED (not zero-filled,
+    # which would bias the predictive distribution toward zero).
+    paths_list = Vector{Matrix{T}}()
 
     for s in 1:n_sim
         # Randomly select a posterior draw
@@ -522,14 +796,24 @@ function posterior_predictive(result::BayesianDSGE{T}, n_sim::Int;
             new_spec = compute_steady_state(new_spec)
             sol = solve(new_spec; method=:gensys)
             if is_determined(sol)
-                sim = simulate(sol, T_periods; rng=rng)
-                # simulate returns T_periods × n_vars
-                paths[s, :, :] = sim
+                sim = simulate(sol, T_periods; rng=rng)  # T_periods × n_vars
+                push!(paths_list, Matrix{T}(sim))
             end
-        catch
-            # Leave as zeros for failed simulations
+        catch e
+            _benign_solve_error(e) || rethrow(e)
             continue
         end
+    end
+
+    n_valid = length(paths_list)
+    n_dropped = n_sim - n_valid
+    n_dropped > 0 && @warn "posterior_predictive: dropped $(n_dropped)/$(n_sim) draws " *
+        "($(round(100*n_dropped/n_sim; digits=1))%) that failed to solve."
+
+    # Stack into (n_valid × T_periods × n_vars); first dim is successful draws only.
+    paths = Array{T,3}(undef, n_valid, T_periods, n_vars)
+    for s in 1:n_valid
+        paths[s, :, :] = paths_list[s]
     end
 
     return paths
@@ -592,12 +876,16 @@ function irf(result::BayesianDSGE{T}, horizon::Int;
                 irf_i = irf(sol, horizon)
                 push!(all_irfs, irf_i.values)
             end
-        catch
+        catch e
+            _benign_solve_error(e) || rethrow(e)
             continue
         end
     end
 
     n_valid = length(all_irfs)
+    n_skipped = n_sim - n_valid
+    n_skipped > 0 && @warn "Bayesian IRF: skipped $(n_skipped)/$(n_sim) posterior draws " *
+        "($(round(100*n_skipped/n_sim; digits=1))%) that failed to solve; bands conditioned on $(n_valid) draws."
     n_valid == 0 && error("All posterior draws failed to produce valid IRFs")
 
     # Stack into (n_valid x H x n_vars x n_shocks) array
@@ -666,12 +954,16 @@ function fevd(result::BayesianDSGE{T}, horizon::Int;
                 fevd_i = fevd(sol, horizon)
                 push!(all_fevds, fevd_i.proportions)
             end
-        catch
+        catch e
+            _benign_solve_error(e) || rethrow(e)
             continue
         end
     end
 
     n_valid = length(all_fevds)
+    n_skipped = n_sim - n_valid
+    n_skipped > 0 && @warn "Bayesian FEVD: skipped $(n_skipped)/$(n_sim) posterior draws " *
+        "($(round(100*n_skipped/n_sim; digits=1))%) that failed to solve; bands conditioned on $(n_valid) draws."
     n_valid == 0 && error("All posterior draws failed to produce valid FEVDs")
 
     # Stack: FEVD proportions are (n_vars x n_shocks x horizon)
@@ -740,12 +1032,16 @@ function simulate(result::BayesianDSGE{T}, T_periods::Int;
                 sim = simulate(sol, T_periods; rng=rng)
                 push!(all_paths_list, sim)
             end
-        catch
+        catch e
+            _benign_solve_error(e) || rethrow(e)
             continue
         end
     end
 
     n_valid = length(all_paths_list)
+    n_skipped = n_sim - n_valid
+    n_skipped > 0 && @warn "Bayesian simulate: skipped $(n_skipped)/$(n_sim) posterior draws " *
+        "($(round(100*n_skipped/n_sim; digits=1))%) that failed to solve; bands conditioned on $(n_valid) draws."
     n_valid == 0 && error("All posterior draws failed to produce valid simulations")
 
     # Stack into (n_valid x T_periods x n_vars)
@@ -776,6 +1072,8 @@ function Base.show(io::IO, result::BayesianDSGE{T}) where {T}
     ps = posterior_summary(result)
 
     # Summary table
+    fail_share = result.n_lik_evals > 0 ?
+        round(100 * result.n_failed_draws / result.n_lik_evals; digits=1) : 0.0
     spec_data = Any[
         "Method"                string(result.method);
         "Parameters"            n_params;
@@ -783,6 +1081,9 @@ function Base.show(io::IO, result::BayesianDSGE{T}) where {T}
         "Log marginal lik."    round(result.log_marginal_likelihood; digits=4);
         "Acceptance rate"      round(result.acceptance_rate; digits=4);
         "Tempering stages"     length(result.phi_schedule);
+        "Failed lik. evals"    string(result.n_failed_draws, " / ", result.n_lik_evals,
+                                        " (", fail_share, "%)");
+        "Solution built at"    string(result.solved_at);
     ]
     _pretty_table(io, spec_data;
         title="Bayesian DSGE Estimation",

@@ -36,7 +36,8 @@ The observation equation is: `y_t = Z * x_t + d + v_t`, where `v_t ~ N(0, H)`.
 - `spec` — DSGE model specification
 - `observables` — symbols identifying which endogenous variables are observed
 - `measurement_error` — vector of measurement error standard deviations, or `nothing`
-  for default (1e-4 * I)
+  for zero measurement error (the model-implied covariance is used; requires
+  `n_obs ≤ n_shocks`, else a `StochasticSingularityError` is thrown)
 
 # Returns
 - `Z::Matrix{T}` — n_obs x n_states selection matrix (ones at observable positions)
@@ -71,9 +72,18 @@ function _build_observation_equation(spec::DSGESpec{T}, observables::Vector{Symb
         d = T[spec.steady_state[j] for j in obs_indices]
     end
 
-    # H: measurement error covariance
+    # H: measurement error covariance. Default is ZERO (use the model covariance); a
+    # nonzero default would mask stochastic singularity when n_obs > n_shocks.
     if measurement_error === nothing
-        H = T(1e-4) * Matrix{T}(I, n_obs, n_obs)
+        H = zeros(T, n_obs, n_obs)
+        n_shocks = spec.n_exog
+        if n_obs > n_shocks
+            throw(StochasticSingularityError(
+                "$n_obs observables exceed $n_shocks structural shocks; the model-implied " *
+                "observation covariance is singular and the likelihood is ill-defined. " *
+                "Add measurement error (measurement_error=:auto or a vector of SDs) or " *
+                "reduce the number of observables."))
+        end
     else
         me = Vector{T}(measurement_error)
         length(me) == n_obs || throw(ArgumentError(
@@ -175,8 +185,13 @@ prediction error decomposition (Harvey 1989, Hamilton 1994 Ch. 13).
 Scalar log-likelihood (sum over t of log p(y_t | y_{1:t-1})).
 
 # Implementation notes
-- **Initialization**: stationary distribution via `solve_lyapunov`; falls back to
-  diffuse initialization (P0 = 10 * I) if Lyapunov equation fails (e.g., unit root).
+- **Initialization**: stationary distribution via `solve_lyapunov` when all transition
+  eigenvalues have modulus `< 1`. For unit roots (any `|eig(G1)| ≥ 1 - 1e-6`), the
+  initial covariance uses a finite Lyapunov solution on the stationary subspace plus
+  a large diffuse variance (κ = 1e6) on the nonstationary subspace, via
+  `_diffuse_initial_covariance` (Durbin & Koopman 2012, ch. 5), emitting a one-time
+  warning — never a silent `P0 = 10*I`. Non-stability exceptions (`MethodError`,
+  `DimensionMismatch`, etc.) propagate rather than being swallowed.
 - **Pre-allocation**: all workspace matrices allocated once before the loop.
 - **BLAS**: uses `mul!` for matrix-vector and matrix-matrix products (Level 2/3 BLAS).
 - **Missing data**: NaN entries in `data` are handled by reducing the observation
@@ -191,12 +206,13 @@ function _kalman_loglikelihood(ss::DSGEStateSpace{T}, data::Matrix{T}) where {T<
     # --- Initialization ---
     x = zeros(T, n_states)  # initial state mean (deviation from SS = 0)
 
-    # Stationary covariance via Lyapunov equation; diffuse fallback
+    # Stationary covariance via Lyapunov equation; eigenvalue-partitioned diffuse
+    # initialization for unit roots (never a silent P0=10I; non-stability errors propagate).
     RQR = ss.impact * ss.Q * ss.impact'
-    P = try
+    P = if maximum(abs, eigvals(ss.G1)) >= one(T) - T(1e-6)
+        _diffuse_initial_covariance(ss.G1, RQR)
+    else
         solve_lyapunov(ss.G1, ss.impact)
-    catch
-        T(10) * Matrix{T}(I, n_states, n_states)
     end
 
     # --- Pre-allocate workspace (zero inner-loop allocation for full obs) ---

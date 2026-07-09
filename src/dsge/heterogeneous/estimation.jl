@@ -147,9 +147,19 @@ function _build_ha_observation_equation(sol::HADSGESolution{T},
         end
     end
 
-    # H: measurement error covariance
+    # H: measurement error covariance. Default is ZERO; a nonzero default would mask
+    # stochastic singularity (the reduced HA system has size(linear.impact,2) aggregate
+    # shocks — architecturally 1 for SSJ/Reiter).
     if measurement_error === nothing
-        H = T(1e-4) * Matrix{T}(I, n_obs, n_obs)
+        H = zeros(T, n_obs, n_obs)
+        n_shocks = size(linear.impact, 2)
+        if n_obs > n_shocks
+            throw(StochasticSingularityError(
+                "$n_obs observables exceed $n_shocks aggregate structural shock(s) in the " *
+                "reduced HA system; the model-implied observation covariance is singular and " *
+                "the likelihood is ill-defined. Add measurement error (measurement_error=:auto " *
+                "or a vector of SDs) or reduce the number of observables."))
+        end
     else
         me = Vector{T}(measurement_error)
         length(me) == n_obs || throw(ArgumentError(
@@ -182,10 +192,13 @@ Returns `-Inf` on any failure (non-convergence, singular matrices, etc.).
 function _build_ha_likelihood_fn(spec::HADSGESpec{T}, param_names::Vector{Symbol},
                                   data::AbstractMatrix, observables::Vector{Symbol},
                                   measurement_error, ha_method::Symbol,
-                                  ha_kwargs::NamedTuple) where {T<:AbstractFloat}
+                                  ha_kwargs::NamedTuple;
+                                  failures::Threads.Atomic{Int}=Threads.Atomic{Int}(0),
+                                  evals::Threads.Atomic{Int}=Threads.Atomic{Int}(0)) where {T<:AbstractFloat}
     data_mat = Matrix{T}(data)
 
     function ll_fn(theta::Vector{T})
+        Threads.atomic_add!(evals, 1)
         try
             # Update parameters in both aggregate_spec and het_params
             new_spec = _update_ha_params(spec, param_names, theta)
@@ -195,15 +208,18 @@ function _build_ha_likelihood_fn(spec::HADSGESpec{T}, param_names::Vector{Symbol
 
             # Validate solution
             if !(sol isa HADSGESolution)
+                Threads.atomic_add!(failures, 1)
                 return T(-Inf)
             end
             if !is_determined(sol)
+                Threads.atomic_add!(failures, 1)
                 return T(-Inf)
             end
 
             # Extract the reduced linear system
             linear_sol = sol.linear_solution
             if linear_sol === nothing
+                Threads.atomic_add!(failures, 1)
                 return T(-Inf)
             end
 
@@ -213,18 +229,82 @@ function _build_ha_likelihood_fn(spec::HADSGESpec{T}, param_names::Vector{Symbol
 
             # Evaluate Kalman log-likelihood
             ll = _kalman_loglikelihood(ss, data_mat)
-            return isfinite(ll) ? ll : T(-Inf)
-        catch
-            return T(-Inf)
+            if isfinite(ll)
+                return ll
+            else
+                Threads.atomic_add!(failures, 1)
+                return T(-Inf)
+            end
+        catch e
+            if _benign_solve_error(e)
+                Threads.atomic_add!(failures, 1)
+                return T(-Inf)
+            end
+            rethrow(e)
         end
     end
 
     return ll_fn
 end
 
+"""
+    _build_ha_result_solution(spec, param_names, post_draws, post_log_posterior,
+                              observables, measurement_error, ha_method, ha_kwargs)
+        -> (linear_sol, ss_result, solved_at, theta_used)
+
+Build the HA result-container solution at the posterior mean; if that fails to produce a
+valid (finite) reduced solution, fall back to the **highest-posterior draw** — marked as
+such (`solved_at`), never the old silent substitution of the ORIGINAL pre-estimation spec
+(E-25 / #149). The validity gate (`isfinite` on the reduced `G1`/`impact`) is intentionally
+looser than the likelihood's determinacy gate so a previously-accepted posterior-mean
+solution is not newly demoted to the fallback; it also rejects a NaN-filled solution
+returned without throwing. Errors loudly if neither candidate solves. Aligns the
+`solved_at` convention with the aggregate fallback ([T044]/#143).
+"""
+function _build_ha_result_solution(spec::HADSGESpec{T}, param_names::Vector{Symbol},
+        post_draws::AbstractMatrix{<:Real}, post_log_posterior::AbstractVector{<:Real},
+        observables::Vector{Symbol}, measurement_error, ha_method::Symbol,
+        ha_kwargs::NamedTuple) where {T<:AbstractFloat}
+    theta_mean = Vector{T}(vec(mean(post_draws; dims=1)))
+    best_idx = argmax(post_log_posterior)
+    theta_hpd = Vector{T}(post_draws[best_idx, :])
+    candidates = ((theta_mean, :posterior_mean), (theta_hpd, :highest_posterior_draw))
+    for (theta_c, tag) in candidates
+        # A bad-θ (e.g. NaN-mean) solve may THROW or return a NaN-filled solution; both are
+        # rejected. The final error() below guarantees no silent wrong result.
+        sol_c = try
+            solve(_update_ha_params(spec, param_names, theta_c); method=ha_method, ha_kwargs...)
+        catch
+            nothing
+        end
+        if sol_c isa HADSGESolution &&
+           all(isfinite, sol_c.linear_solution.G1) &&
+           all(isfinite, sol_c.linear_solution.impact)
+            if tag === :highest_posterior_draw
+                @warn "HA Bayesian estimation: posterior-mean solve failed; result container " *
+                      "built at the highest-posterior draw (θ index $best_idx). IRFs/FEVD " *
+                      "reflect that draw, not the posterior mean — see result.solved_at."
+            end
+            linear_sol = sol_c.linear_solution
+            Z, d, H = _build_ha_observation_equation(sol_c, observables, measurement_error)
+            ss_result = _build_state_space(linear_sol, Z, d, H)
+            return linear_sol, ss_result, tag, theta_c
+        end
+    end
+    error("HA Bayesian estimation: neither the posterior mean nor the highest-posterior " *
+          "draw produced a valid (finite) reduced solution — check the prior support / " *
+          "model determinacy in that region, and that :ssj or :reiter was used " *
+          "(KrusellSmithSolution is unsupported).")
+end
+
 # =============================================================================
 # estimate_dsge_bayes(::HADSGESpec, ...) — main entry point
 # =============================================================================
+
+# Default sequence-space (SSJ) truncation length for HA Bayesian estimation. Auclert,
+# Bardóczy, Rognlie & Straub (2021) use 300; too-small values truncate persistent HA
+# Jacobians and bias the Kalman likelihood (E-24 / #148).
+const _HA_DEFAULT_T_HORIZON = 300
 
 """
     estimate_dsge_bayes(spec::HADSGESpec{T}, data, θ0; priors, kwargs...) → BayesianDSGE{T}
@@ -238,17 +318,29 @@ and the Kalman filter is evaluated on the reduced linear system. This is the
 
 # Arguments
 - `spec::HADSGESpec{T}` — HA-DSGE model specification
-- `data::AbstractMatrix` — observed aggregate data (T_obs × n_obs or n_obs × T_obs)
-- `θ0::AbstractVector{<:Real}` — initial parameter guess (length matches priors)
+- `data::AbstractMatrix` — observed aggregate data in `T×n` (time in rows); orientation is
+  resolved by matching a dimension to the number of observables (`n×T` transposed internally).
+- `θ0` — initial parameter guess. Preferred: a `Dict{Symbol}`/`NamedTuple` keyed by parameter
+  name (order-independent). A positional `AbstractVector` must be in sorted (alphabetical)
+  prior-key order and length-matched, else an informative `ArgumentError` is thrown.
 
 # Keywords
 - `priors::Dict{Symbol,<:Distribution}` — prior distributions keyed by parameter name
 - `observables::Vector{Symbol}` — which aggregate variables are observed (e.g., `[:K]`)
 - `n_draws::Int=5000` — total MH draws (including burnin)
 - `burnin::Int=1000` — number of burnin draws to discard
-- `measurement_error::Union{Nothing,Vector{<:Real}}=nothing` — measurement error SDs
+- `measurement_error::Union{Nothing,Symbol,Vector{<:Real}}=nothing` — measurement error SDs;
+  `nothing` means zero ME (requires `n_obs ≤ n_shocks`, else a `StochasticSingularityError`
+  is thrown on the first likelihood evaluation); `:auto` adds per-observable ME at 10% of
+  each series' variance with a warning
 - `ha_method::Symbol=:ssj` — HA solution method (`:ssj` or `:reiter`)
-- `ha_kwargs::NamedTuple=(T_horizon=50, n_reduced=15)` — HA solver options
+- `ha_kwargs::NamedTuple=(T_horizon=300, n_reduced=15)` — HA solver options. `T_horizon`
+  sets the sequence-space (SSJ) truncation length: the HA Jacobians must decay before this
+  horizon or the model-implied autocovariances (and hence the Kalman likelihood) are biased.
+  The default of 300 follows Auclert, Bardóczy, Rognlie & Straub (2021); too-small values
+  (e.g. 50) truncate persistent HA dynamics prematurely, while larger horizons cost more
+  (Jacobian construction scales with the horizon). Only the default changes — `T_horizon`
+  remains user-overridable.
 - `proposal_scale::Float64=0.01` — initial RWMH proposal scale (σ² for proposal cov)
 - `adapt_interval::Int=100` — adapt proposal covariance every N draws
 - `rng::AbstractRNG=Random.default_rng()` — random number generator
@@ -266,14 +358,15 @@ the posterior-mean HA solution.
   *Journal of Applied Econometrics*, 29(7), 1073-1098.
 """
 function estimate_dsge_bayes(spec::HADSGESpec{T}, data::AbstractMatrix,
-                              theta0::AbstractVector{<:Real};
+                              theta0::Union{AbstractVector{<:Real},
+                                            AbstractDict{Symbol,<:Real},NamedTuple};
                               priors::Dict{Symbol,<:Distribution},
                               observables::Vector{Symbol}=Symbol[],
                               n_draws::Int=5000,
                               burnin::Int=1000,
-                              measurement_error::Union{Nothing,Vector{<:Real}}=nothing,
+                              measurement_error::Union{Nothing,Symbol,Vector{<:Real}}=nothing,
                               ha_method::Symbol=:ssj,
-                              ha_kwargs::NamedTuple=(T_horizon=50, n_reduced=15),
+                              ha_kwargs::NamedTuple=(T_horizon=_HA_DEFAULT_T_HORIZON, n_reduced=15),
                               proposal_scale::Float64=0.01,
                               adapt_interval::Int=100,
                               rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
@@ -296,24 +389,30 @@ function estimate_dsge_bayes(spec::HADSGESpec{T}, data::AbstractMatrix,
     end
     n_obs = length(observables)
 
-    # ── 3. Data handling: ensure n_obs × T_obs format ────────────────────
-    data_mat = Matrix{T}(data)
-    nrows, ncols = size(data_mat)
-    if nrows != n_obs && ncols == n_obs
-        data_mat = Matrix{T}(data_mat')
-    elseif nrows != n_obs && ncols != n_obs
-        if nrows > ncols
-            data_mat = Matrix{T}(data_mat')
-        end
-    end
+    # ── 3. Data handling: resolve orientation by matching n_obs (E-18 / #142) ─
+    # Public convention is T×n; the Kalman filter on the reduced system expects
+    # n_obs × T_obs internally.
+    data_mat = _orient_data(data, n_obs, T)
 
-    # ── 4. Sort theta0 to match prior ordering ───────────────────────────
+    # Resolve :auto measurement error against data variance (per-observable). (#141/T042)
+    # The stochastic-singularity error itself is raised by _build_ha_observation_equation
+    # and rethrown from ll_fn's narrow catch on the first evaluation (HA has no cheap
+    # pre-solve shock count).
+    measurement_error = _resolve_measurement_error(measurement_error, data_mat, observables)
+
+    # ── 4. Resolve theta0 against sorted prior keys ──────────────────────
+    # Dict/NamedTuple resolved by name (order-independent); a positional vector must be
+    # in sorted prior-key order and is length-validated (E-12 / H-12 / #136). (The old
+    # comment claimed a reordering that never happened — it only cast T.(theta0).)
     n_params = length(param_names)
-    theta0_sorted = T.(theta0)
+    theta0_sorted = _resolve_theta0(theta0, param_names, T)
 
-    # ── 5. Build HA likelihood function ──────────────────────────────────
+    # ── 5. Build HA likelihood function (tracking failed/total likelihood evals) ──
+    lik_failures = Threads.Atomic{Int}(0)
+    lik_evals = Threads.Atomic{Int}(0)
     ll_fn = _build_ha_likelihood_fn(spec, param_names, data_mat, observables,
-                                     measurement_error, ha_method, ha_kwargs)
+                                     measurement_error, ha_method, ha_kwargs;
+                                     failures=lik_failures, evals=lik_evals)
 
     # ── 6. Random-Walk Metropolis-Hastings ───────────────────────────────
     # Initialize
@@ -350,6 +449,7 @@ function estimate_dsge_bayes(spec::HADSGESpec{T}, data::AbstractMatrix,
     proposal_L = cholesky(Hermitian(proposal_cov)).L
 
     total_accepted = 0
+    window_accepted = 0
 
     for draw in 1:n_draws
         # Propose
@@ -372,6 +472,7 @@ function estimate_dsge_bayes(spec::HADSGESpec{T}, data::AbstractMatrix,
                     ll_current = ll_star
                     lp_current = lp_star
                     total_accepted += 1
+                    window_accepted += 1
                 end
             end
         end
@@ -380,35 +481,41 @@ function estimate_dsge_bayes(spec::HADSGESpec{T}, data::AbstractMatrix,
         draws[draw, :] = theta_current
         log_posterior[draw] = ll_current + lp_current
 
-        # Adapt proposal covariance
-        if draw % adapt_interval == 0 && draw >= 2 * adapt_interval
-            recent_start = max(1, draw - 5 * adapt_interval)
-            recent_draws = draws[recent_start:draw, :]
+        # Adapt proposal covariance and scale — ONLY during burn-in (frozen after), so the
+        # burn-in-discarded retained chain targets the exact posterior (Roberts & Rosenthal 2007).
+        if draw <= burnin && draw % adapt_interval == 0
+            # Trailing-window acceptance signal (not the stale cumulative rate).
+            window_acc = T(window_accepted) / T(adapt_interval)
+            window_accepted = 0
 
-            if size(recent_draws, 1) > n_params + 1
-                sample_cov = cov(recent_draws)
-                sample_cov = (sample_cov + sample_cov') / 2
-                for i in 1:n_params
-                    if sample_cov[i, i] < T(1e-10)
-                        sample_cov[i, i] = T(1e-10)
+            if draw >= 2 * adapt_interval
+                recent_start = max(1, draw - 5 * adapt_interval)
+                recent_draws = draws[recent_start:draw, :]
+
+                if size(recent_draws, 1) > n_params + 1
+                    sample_cov = cov(recent_draws)
+                    sample_cov = (sample_cov + sample_cov') / 2
+                    for i in 1:n_params
+                        if sample_cov[i, i] < T(1e-10)
+                            sample_cov[i, i] = T(1e-10)
+                        end
+                    end
+
+                    proposal_cov = c2 * sample_cov
+                    proposal_L = try
+                        cholesky(Hermitian(proposal_cov)).L
+                    catch
+                        proposal_cov += T(1e-6) * I
+                        cholesky(Hermitian(proposal_cov)).L
                     end
                 end
 
-                proposal_cov = c2 * sample_cov
-                proposal_L = try
-                    cholesky(Hermitian(proposal_cov)).L
-                catch
-                    proposal_cov += T(1e-6) * I
-                    cholesky(Hermitian(proposal_cov)).L
+                # Adapt scale factor targeting ~23.4% acceptance (trailing window)
+                if window_acc > T(0.30)
+                    scale_factor *= T(1.1)
+                elseif window_acc < T(0.15)
+                    scale_factor *= T(0.9)
                 end
-            end
-
-            # Adapt scale factor targeting ~23.4% acceptance
-            recent_acc = total_accepted / draw
-            if recent_acc > T(0.30)
-                scale_factor *= T(1.1)
-            elseif recent_acc < T(0.15)
-                scale_factor *= T(0.9)
             end
         end
     end
@@ -419,37 +526,24 @@ function estimate_dsge_bayes(spec::HADSGESpec{T}, data::AbstractMatrix,
     post_draws = draws[burnin+1:end, :]
     post_log_posterior = log_posterior[burnin+1:end]
 
-    # ── 8. Build solution at posterior mean ───────────────────────────────
-    theta_mean = vec(mean(post_draws; dims=1))
-    new_spec_mean = _update_ha_params(spec, param_names, theta_mean)
+    # ── 8. Build solution at posterior mean (else the highest-posterior draw, marked) ──
+    # No longer silently re-solves the ORIGINAL spec on failure (the E-25/#149 bug); the
+    # helper marks which θ the stored solution was built at and errors loudly if none solve.
+    linear_sol, ss_result, solved_at, _theta_used = _build_ha_result_solution(
+        spec, param_names, post_draws, post_log_posterior,
+        observables, measurement_error, ha_method, ha_kwargs)
 
-    # Solve at posterior mean for the result container
-    sol_mean = try
-        solve(new_spec_mean; method=ha_method, ha_kwargs...)
-    catch
-        # Fallback: solve at initial theta
-        solve(spec; method=ha_method, ha_kwargs...)
-    end
+    # Log marginal likelihood via Geweke (1999) modified harmonic mean (E-04 / #130).
+    # `post_log_posterior` stores the per-draw kernel log L(θ) + log π(θ); the MHM is on
+    # the same additive scale as the SMC estimator. Returns NaN + @warn on a chain too
+    # short to build the truncated-normal weighting density.
+    log_ml = _geweke_mhm(post_draws, post_log_posterior)
 
-    # Extract the linear solution and build state space
-    if sol_mean isa HADSGESolution
-        linear_sol = sol_mean.linear_solution
-        Z, d, H = _build_ha_observation_equation(sol_mean, observables, measurement_error)
-        ss_result = _build_state_space(linear_sol, Z, d, H)
-
-        # Approximate log marginal likelihood via max log posterior
-        finite_lp = filter(isfinite, post_log_posterior)
-        log_ml = isempty(finite_lp) ? T(-Inf) : T(maximum(finite_lp))
-
-        return BayesianDSGE{T}(
-            post_draws, post_log_posterior, param_names, prior,
-            log_ml, :rwmh, acceptance_rate,
-            T[], T[],  # no ESS history or phi schedule for MH
-            linear_sol.spec, linear_sol, ss_result
-        )
-    else
-        # KrusellSmithSolution or other — build a minimal DSGESolution
-        error("Bayesian estimation requires :ssj or :reiter method " *
-              "(produces HADSGESolution with a linear system for Kalman filter)")
-    end
+    return BayesianDSGE{T}(
+        post_draws, post_log_posterior, param_names, prior,
+        log_ml, :rwmh, acceptance_rate,
+        T[], T[],  # no ESS history or phi schedule for MH
+        linear_sol.spec, linear_sol, ss_result,
+        lik_failures[], lik_evals[], solved_at
+    )
 end

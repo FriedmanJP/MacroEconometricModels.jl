@@ -9,6 +9,21 @@ Type definitions for Bayesian DSGE estimation — priors, state spaces, particle
 workspace, SMC state, and posterior result container.
 """
 
+"""
+    StochasticSingularityError <: Exception
+
+Raised when a DSGE observation equation is stochastically singular — more observables
+than structural shocks (`n_obs > n_shocks`) with no measurement error — so the
+model-implied observation covariance is singular and the likelihood is ill-defined.
+Distinct from a per-θ numeric failure: it is a model/data misspecification the user
+must fix (add measurement error or reduce observables), so it is NOT swallowed to
+-Inf by the likelihood closures (it is not in `_benign_solve_error`).
+"""
+struct StochasticSingularityError <: Exception
+    msg::String
+end
+Base.showerror(io::IO, e::StochasticSingularityError) = print(io, "StochasticSingularityError: ", e.msg)
+
 # =============================================================================
 # DSGEPrior — prior specification for Bayesian DSGE
 # =============================================================================
@@ -485,6 +500,8 @@ Fields:
 - `log_marginal_likelihood::T` — cumulative log marginal likelihood estimate
 - `pf_workspace_pool::Vector{PFWorkspace{T}}` — reusable PF workspace pool
 - `proposal_cov::Matrix{T}` — MCMC mutation proposal covariance
+- `n_lik_failures::Int` — number of likelihood evaluations that failed (returned -Inf)
+- `n_lik_evals::Int` — total number of likelihood evaluations
 """
 mutable struct SMCState{T<:AbstractFloat}
     theta_particles::Matrix{T}
@@ -497,7 +514,14 @@ mutable struct SMCState{T<:AbstractFloat}
     log_marginal_likelihood::T
     pf_workspace_pool::Vector{PFWorkspace{T}}
     proposal_cov::Matrix{T}
+    n_lik_failures::Int
+    n_lik_evals::Int
 end
+
+# Backward-compatible 10-arg constructor (failure counters default to 0); the samplers
+# build with this form and set n_lik_failures / n_lik_evals post-hoc.
+SMCState{T}(tp, lw, ll, lp, phi, ess, ar, lml, pool, pcov) where {T<:AbstractFloat} =
+    SMCState{T}(tp, lw, ll, lp, phi, ess, ar, lml, pool, pcov, 0, 0)
 
 # =============================================================================
 # BayesianDSGE — posterior result container
@@ -521,6 +545,11 @@ Fields:
 - `spec::DSGESpec{T}` — model specification
 - `solution::Union{DSGESolution{T}, PerturbationSolution{T}}` — solution at posterior mode
 - `state_space::Union{DSGEStateSpace{T}, NonlinearStateSpace{T}}` — state space at posterior mode
+- `n_failed_draws::Int` — number of likelihood evaluations that failed during sampling
+- `n_lik_evals::Int` — total number of likelihood evaluations during sampling
+- `solved_at::Symbol` — which θ the stored `solution`/`state_space` was built at
+  (`:posterior_mean` normally; `:highest_posterior_draw` when the posterior-mean solve
+  failed and the container was built at the highest-posterior draw instead)
 """
 struct BayesianDSGE{T<:AbstractFloat} <: AbstractDSGEModel
     theta_draws::Matrix{T}
@@ -535,20 +564,37 @@ struct BayesianDSGE{T<:AbstractFloat} <: AbstractDSGEModel
     spec::DSGESpec{T}
     solution::Union{DSGESolution{T}, PerturbationSolution{T}, ProjectionSolution{T}}
     state_space::Union{DSGEStateSpace{T}, NonlinearStateSpace{T}, ProjectionStateSpace{T}}
+    n_failed_draws::Int
+    n_lik_evals::Int
+    solved_at::Symbol
 
     function BayesianDSGE{T}(theta_draws, log_posterior, param_names, priors,
                               log_marginal_likelihood, method, acceptance_rate,
                               ess_history, phi_schedule, spec, solution,
-                              state_space) where {T<:AbstractFloat}
+                              state_space, n_failed_draws, n_lik_evals,
+                              solved_at) where {T<:AbstractFloat}
         n_draws, n_params = size(theta_draws)
         @assert length(log_posterior) == n_draws "log_posterior length must match n_draws"
         @assert length(param_names) == n_params "param_names length must match n_params"
         @assert method in (:smc, :rwmh, :csmc, :smc2, :importance) "unknown method: $method"
+        @assert solved_at in (:posterior_mean, :highest_posterior_draw) "solved_at must be :posterior_mean or :highest_posterior_draw"
         new{T}(theta_draws, log_posterior, param_names, priors,
                log_marginal_likelihood, method, acceptance_rate,
-               ess_history, phi_schedule, spec, solution, state_space)
+               ess_history, phi_schedule, spec, solution, state_space,
+               n_failed_draws, n_lik_evals, solved_at)
     end
 end
+
+# Backward-compatible 12-arg constructor (failure counters default to 0, solved_at to
+# :posterior_mean); keeps direct 12-arg construction sites (e.g. HD tests) compiling.
+BayesianDSGE{T}(theta_draws, log_posterior, param_names, priors,
+                log_marginal_likelihood, method, acceptance_rate,
+                ess_history, phi_schedule, spec, solution,
+                state_space) where {T<:AbstractFloat} =
+    BayesianDSGE{T}(theta_draws, log_posterior, param_names, priors,
+                    log_marginal_likelihood, method, acceptance_rate,
+                    ess_history, phi_schedule, spec, solution, state_space,
+                    0, 0, :posterior_mean)
 
 # =============================================================================
 # BayesianDSGESimulation — posterior predictive simulation with credible bands
