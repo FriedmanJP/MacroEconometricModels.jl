@@ -395,7 +395,8 @@ function estimate_pvar(d::PanelData{T}, p::Int;
 
     # Residual covariance from level residuals (for structural analysis)
     # Use untransformed residuals from level equation
-    Sigma = _compute_level_sigma(group_Y_levels, Phi, m_dim, p, K, N)
+    Sigma = _compute_innovation_sigma(group_Y_levels, group_X_predet, group_X_exog,
+                                       Phi, transformation, m_dim, p, K, N, n_predet, n_exog)
 
     # Panel descriptors
     eff_obs = [size(group_Y_trans[g], 1) for g in 1:N]
@@ -487,26 +488,47 @@ function _windmeijer_correct(S_ZX::Matrix{T}, W::Matrix{T},
 end
 
 """Compute level residual covariance Sigma for structural analysis."""
-function _compute_level_sigma(group_Y_levels::Vector{Matrix{T}}, Phi::Matrix{T},
-                               m_dim::Int, p::Int, K::Int, N::Int) where {T}
+function _compute_innovation_sigma(group_Y_levels::Vector{Matrix{T}},
+                                    group_X_predet, group_X_exog,
+                                    Phi::Matrix{T}, transformation::Symbol,
+                                    m_dim::Int, p::Int, K::Int, N::Int,
+                                    n_predet::Int, n_exog::Int) where {T}
+    # Structural Σ for IRF/FEVD must be the covariance of the idiosyncratic innovation ε,
+    # NOT of the level residual α_i + ε (which inflates Σ by Var(α_i) on the diagonal and
+    # by between-unit cross terms off-diagonal). Recompute from the SAME transformation used
+    # for estimation, then map the transformed-residual covariance back to the level scale.
     Sigma = zeros(T, m_dim, m_dim)
     total = 0
     for g in 1:N
         Y_g = group_Y_levels[g]
-        Ti = size(Y_g, 1)
-        Ti <= p && continue
-        Y_eff = Y_g[(p+1):end, :]
-        X_lag = _panel_lag(Y_g, p)
-        # If Phi has more columns than X_lag, pad X_lag
-        X_use = X_lag[:, 1:min(size(X_lag, 2), K)]
-        if size(X_use, 2) < K
-            X_use = hcat(X_use, zeros(T, size(X_use, 1), K - size(X_use, 2)))
+        size(Y_g, 1) <= p + 1 && continue
+        Y_eff, X_lag = _panel_lag_levels(Y_g, p)
+        X_full = X_lag
+        if n_predet > 0
+            X_full = hcat(X_full, group_X_predet[g][(p+1):end, :])
         end
-        E_g = Y_eff - X_use * Phi'
-        Sigma .+= E_g' * E_g
-        total += size(E_g, 1)
+        if n_exog > 0
+            X_full = hcat(X_full, group_X_exog[g][(p+1):end, :])
+        end
+        if transformation == :fd
+            Yt = _panel_first_difference(Y_eff)
+            Xt = _panel_first_difference(X_full)
+        else
+            Yt = _panel_fod(Y_eff)
+            Xt = _panel_fod(X_full)
+        end
+        Xu = Xt[:, 1:min(size(Xt, 2), K)]
+        if size(Xu, 2) < K
+            Xu = hcat(Xu, zeros(T, size(Xu, 1), K - size(Xu, 2)))
+        end
+        E = Yt - Xu * Phi'
+        Sigma .+= E' * E
+        total += size(E, 1)
     end
-    total > 0 ? Sigma ./ total : Sigma
+    # FD: E[Δε_t Δε_t'] = 2Σ (ε iid, homoskedastic) ⇒ scale 0.5. FOD/Helmert is orthonormal
+    # ⇒ transformed-error covariance = Σ exactly ⇒ scale 1.0.
+    scale = transformation == :fd ? T(0.5) : one(T)
+    total > 0 ? scale .* (Sigma ./ total) : Sigma
 end
 
 # =============================================================================
@@ -642,22 +664,11 @@ function estimate_pvar_feols(d::PanelData{T}, p::Int;
         end
     end
 
-    # Sigma from level residuals
-    Sigma = zeros(T, m_dim, m_dim)
-    for g in 1:N
-        gd = group_data(d, g)
-        Y_g = Matrix{T}(gd.data[:, dep_idx])
-        Ti = size(Y_g, 1)
-        Ti <= p && continue
-        Y_eff = Y_g[(p+1):end, :]
-        X_lag = _panel_lag(Y_g, p)
-        X_full = X_lag
-        if n_predet > 0; X_full = hcat(X_full, gd.data[(p+1):end, predet_idx]); end
-        if n_exog > 0; X_full = hcat(X_full, gd.data[(p+1):end, exog_idx]); end
-        E_g = Y_eff - X_full * Phi'
-        Sigma .+= E_g' * E_g
-    end
-    Sigma ./= max(total_obs, 1)
+    # Sigma from WITHIN residuals: Y_pool/X_pool are already within-demeaned (lines above),
+    # so the unit fixed effect α_i is annihilated and Σ estimates the innovation covariance
+    # (not Var(α_i) + Σ, as the old level-residual reconstruction did).
+    E_pool = Y_pool - X_pool * Phi'
+    Sigma = (E_pool' * E_pool) ./ max(total_obs, 1)
 
     eff_obs = [length(group_ranges[g]) for g in 1:N if isassigned(group_ranges, g)]
     n_periods_max = maximum(obs_counts)

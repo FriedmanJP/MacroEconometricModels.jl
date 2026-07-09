@@ -715,3 +715,29 @@ end
     m2 = estimate_pvar(pd, 1; steps=:twostep, min_lag_endo=2, max_lag_endo=99)
     @test all(isfinite, coef(m2))
 end
+
+@testset "PVAR Σ removes fixed effects (T082)" begin
+    # DGP: Var(α_i) ≈ 1, innovation sd 0.1 ⇒ Σ_true = 0.01·I. Level residuals would give
+    # diag ≈ Var(α_i) + Σ ≈ 1.01; the fix uses transformation-consistent innovations ⇒ ≈0.01.
+    dgp = _make_panel_dgp(N=50, T_total=100, m=2, p=1, rng=MersenneTwister(400))
+    # (a) FE-OLS within residuals annihilate the unit fixed effect α_i
+    mfe = estimate_pvar_feols(dgp.pd, 1)
+    @test maximum(diag(mfe.Sigma)) < 0.05                      # α_i removed (old ≈1.01 fails this)
+    @test norm(diag(mfe.Sigma) .- 0.01) / 0.01 < 0.20
+    # (b) OIRF impact diagonal = innovation sd ≈ 0.1, NOT sqrt(Var(α_i)+Σ) ≈ 1.0
+    oirf = pvar_oirf(mfe, 4)
+    @test all(0.07 .< [oirf[1, j, j] for j in 1:2] .< 0.14)
+    # (c) FEVD rows sum to 1 (scale-invariant — a guard that shape is preserved)
+    fe = pvar_fevd(mfe, 4)
+    @test all(abs(sum(fe[end, l, :]) - 1) < 1e-6 for l in 1:2)
+
+    # (d) GMM FD (scale 0.5) and FOD (scale 1.0) both recover Σ_true ≈ 0.01. Capped
+    # instrument lags keep the GMM tractable (full lags on a long panel explode n_inst).
+    dgpg = _make_panel_dgp(N=50, T_total=30, m=2, p=1, rng=MersenneTwister(401))
+    mg = estimate_pvar(dgpg.pd, 1; max_lag_endo=3)
+    @test maximum(diag(mg.Sigma)) < 0.05
+    @test norm(diag(mg.Sigma) .- 0.01) / 0.01 < 0.45
+    mf = estimate_pvar(dgpg.pd, 1; transformation=:fod, max_lag_endo=3)
+    @test maximum(diag(mf.Sigma)) < 0.05
+    @test norm(diag(mg.Sigma) .- diag(mf.Sigma)) < 0.02
+end
