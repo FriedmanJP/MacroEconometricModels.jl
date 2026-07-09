@@ -370,16 +370,17 @@ function _smc_state_to_bayesian_dsge(state::SMCState{T}, prior::DSGEPrior{T},
         end
     end
 
-    sol, ss = _build_solution_at_theta(spec, param_names, theta_mean,
-                                        observables, measurement_error,
-                                        solver, solver_kwargs)
+    sol, ss, solved_at = _build_solution_mean_or_hpd(spec, param_names, theta_mean,
+                                                      theta_draws, log_posterior,
+                                                      observables, measurement_error,
+                                                      solver, solver_kwargs)
 
     BayesianDSGE{T}(
         theta_draws, log_posterior, param_names, prior,
         state.log_marginal_likelihood, method_sym, acceptance_rate,
         state.ess_history, state.phi_schedule,
         spec, sol, ss,
-        state.n_lik_failures, state.n_lik_evals
+        state.n_lik_failures, state.n_lik_evals, solved_at
     )
 end
 
@@ -489,9 +490,10 @@ function _mh_to_bayesian_dsge(draws::Matrix{T}, log_posterior::Vector{T},
     # Posterior mean from draws
     theta_mean = vec(mean(draws; dims=1))
 
-    sol, ss = _build_solution_at_theta(spec, param_names, theta_mean,
-                                        observables, measurement_error,
-                                        solver, solver_kwargs)
+    sol, ss, solved_at = _build_solution_mean_or_hpd(spec, param_names, theta_mean,
+                                                      draws, log_posterior,
+                                                      observables, measurement_error,
+                                                      solver, solver_kwargs)
 
     # Log marginal likelihood via Geweke (1999) modified harmonic mean (E-04 / #130).
     # `log_posterior` stores the per-draw kernel log L(θ) + log π(θ), on the same
@@ -505,7 +507,7 @@ function _mh_to_bayesian_dsge(draws::Matrix{T}, log_posterior::Vector{T},
         log_ml, :rwmh, acceptance_rate,
         T[], T[],  # no ESS history or phi schedule for MH
         spec, sol, ss,
-        n_failed, n_evals
+        n_failed, n_evals, solved_at
     )
 end
 
@@ -550,6 +552,66 @@ function _build_solution_at_theta(spec::DSGESpec{T}, param_names::Vector{Symbol}
     end
 
     return sol, ss
+end
+
+"""
+    _try_build_solution(spec, param_names, theta, observables, measurement_error,
+                         solver, solver_kwargs) -> Union{Nothing, Tuple}
+
+Build the solution/state space at `theta`, returning `nothing` on a narrow DSGE-solve
+failure — a benign per-θ numeric error (`_benign_solve_error`) OR a returned-but-
+indeterminate linear solution (an indeterminate model does NOT throw; `solve` returns
+a `DSGESolution` with `is_determined == false`). Non-benign exceptions propagate.
+"""
+function _try_build_solution(spec::DSGESpec{T}, param_names::Vector{Symbol},
+                              theta::Vector{T}, observables::Vector{Symbol},
+                              measurement_error, solver::Symbol,
+                              solver_kwargs::NamedTuple) where {T<:AbstractFloat}
+    local sol, ss
+    try
+        sol, ss = _build_solution_at_theta(spec, param_names, theta,
+                                            observables, measurement_error,
+                                            solver, solver_kwargs)
+    catch err
+        _benign_solve_error(err) && return nothing
+        rethrow(err)
+    end
+    if sol isa DSGESolution && !is_determined(sol)
+        return nothing
+    end
+    return (sol, ss)
+end
+
+"""
+    _build_solution_mean_or_hpd(spec, param_names, theta_mean, theta_draws,
+                                 log_posterior, observables, measurement_error,
+                                 solver, solver_kwargs) -> (sol, ss, solved_at)
+
+Build the result-container solution at the posterior mean; if the mean is
+indeterminate / fails to solve (common for multimodal or boundary posteriors), fall
+back to the **highest-posterior draw** — the whole estimation no longer errors after
+sampling succeeded. Returns the solution, state space, and a `solved_at` marker
+(`:posterior_mean` or `:highest_posterior_draw`).
+"""
+function _build_solution_mean_or_hpd(spec::DSGESpec{T}, param_names::Vector{Symbol},
+                                      theta_mean::Vector{T}, theta_draws::Matrix{T},
+                                      log_posterior::Vector{T}, observables::Vector{Symbol},
+                                      measurement_error, solver::Symbol,
+                                      solver_kwargs::NamedTuple) where {T<:AbstractFloat}
+    result = _try_build_solution(spec, param_names, theta_mean, observables,
+                                  measurement_error, solver, solver_kwargs)
+    if result !== nothing
+        sol, ss = result
+        return sol, ss, :posterior_mean
+    end
+    idx = argmax(log_posterior)
+    theta_hpd = Vector{T}(@view theta_draws[idx, :])
+    @warn "Posterior-mean solve failed/indeterminate; building the result container at " *
+          "the highest-posterior draw (index $idx). IRFs/FEVDs reflect that draw, not the " *
+          "posterior mean — see result.solved_at."
+    sol, ss = _build_solution_at_theta(spec, param_names, theta_hpd, observables,
+                                        measurement_error, solver, solver_kwargs)
+    return sol, ss, :highest_posterior_draw
 end
 
 # =============================================================================
@@ -1010,6 +1072,7 @@ function Base.show(io::IO, result::BayesianDSGE{T}) where {T}
         "Tempering stages"     length(result.phi_schedule);
         "Failed lik. evals"    string(result.n_failed_draws, " / ", result.n_lik_evals,
                                         " (", fail_share, "%)");
+        "Solution built at"    string(result.solved_at);
     ]
     _pretty_table(io, spec_data;
         title="Bayesian DSGE Estimation",

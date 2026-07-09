@@ -494,7 +494,7 @@ function estimate_dsge_bayes(spec::HADSGESpec{T}, data::AbstractMatrix,
             log_ml, :rwmh, acceptance_rate,
             T[], T[],  # no ESS history or phi schedule for MH
             linear_sol.spec, linear_sol, ss_result,
-            lik_failures[], lik_evals[]
+            lik_failures[], lik_evals[], :posterior_mean  # solved_at refined in [T050]/#149
         )
     else
         # KrusellSmithSolution or other — build a minimal DSGESolution

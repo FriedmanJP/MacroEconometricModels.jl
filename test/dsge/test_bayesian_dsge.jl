@@ -3337,4 +3337,44 @@ end
     @test !(d_eff[1] ≈ 0.0)
 end
 
+@testset "Posterior-mean solve failure falls back to highest-posterior draw (T044)" begin
+    _suppress_warnings() do
+    # Forward-looking model: a_ ≤ 0.9 determinate, a_ ≥ 1.2 indeterminate (verified).
+    spec = @dsge begin
+        parameters: a_ = 0.5, s = 0.5
+        endogenous: y
+        exogenous: eps
+        y[t] = a_ * y[t+1] + s * eps[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    prior = MacroEconometricModels.DSGEPrior{Float64}([:a_], [Uniform(0.0, 3.0)], [0.0], [3.0])
+
+    # Mean of [0.5, 1.6, 1.7] = 1.27 is INDETERMINATE ⇒ fall back to the highest-posterior
+    # draw (argmax log-posterior = index 1 ⇒ a_=0.5, determinate). The whole call must still
+    # return a usable BayesianDSGE rather than erroring after sampling.
+    result = MacroEconometricModels._mh_to_bayesian_dsge(
+        reshape([0.5, 1.6, 1.7], 3, 1), [5.0, 1.0, 0.5], 0.4, prior, [:a_],
+        spec, [:y], nothing, :gensys, NamedTuple())
+    @test result isa BayesianDSGE{Float64}
+    @test result.solved_at == :highest_posterior_draw
+    @test is_determined(result.solution)
+    @test occursin("Solution built at", sprint(show, result))
+
+    # Control: a determinate mean stays :posterior_mean.
+    result2 = MacroEconometricModels._mh_to_bayesian_dsge(
+        reshape([0.5, 0.6, 0.7], 3, 1), [1.0, 2.0, 3.0], 0.4, prior, [:a_],
+        spec, [:y], nothing, :gensys, NamedTuple())
+    @test result2.solved_at == :posterior_mean
+    @test is_determined(result2.solution)
+
+    # Shared helper directly (SMC path uses the same seam).
+    sol, ss, tag = MacroEconometricModels._build_solution_mean_or_hpd(
+        spec, [:a_], [1.5], reshape([0.5, 1.5], 2, 1), [3.0, 0.1],
+        [:y], nothing, :gensys, NamedTuple())
+    @test tag == :highest_posterior_draw
+    @test is_determined(sol)
+    end
+end
+
 end  # @testset "Bayesian DSGE"
