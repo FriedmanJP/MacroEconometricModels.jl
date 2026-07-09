@@ -64,24 +64,42 @@ end
 # =============================================================================
 
 """
-    _panel_sargan_test(resid, Z, k_regressors) -> (stat, pval) or (nothing, nothing)
+    _panel_sargan_test(resid, Z, k_regressors, cov_type, groups) -> (stat, pval) or (nothing, nothing)
 
-Sargan-Hansen J-test for overidentifying restrictions in panel IV.
+Overidentification test for panel IV. Under `cov_type=:ols` this is the classical
+homoskedastic Sargan statistic `J = e'P_Z e / σ̂²`; under `:cluster`/`:twoway`/
+`:driscoll_kraay` it is the entity-clustered Hansen J `J = g' Ω̂⁻¹ g` with `g = Z'e` and
+`Ω̂ = Σ_g s_g s_g'`, `s_g = Z_g'e_g` — consistent under within-entity dependence/
+heteroskedasticity. `resid`/`Z` must be the SAME transformed objects (demeaned for FE,
+differenced for FD, quasi-demeaned for RE/HT) that produced the 2SLS β, and `groups` the
+matching entity index (differenced-panel groups for FD). A fully two-way / DK-HAC overid
+statistic is out of scope: `:twoway`/`:driscoll_kraay` reuse the entity-cluster meat.
 """
 function _panel_sargan_test(resid::Vector{T}, Z::Matrix{T},
-                            k_regressors::Int) where {T<:AbstractFloat}
+                            k_regressors::Int, cov_type::Symbol,
+                            groups::AbstractVector{Int}) where {T<:AbstractFloat}
     n, m = size(Z)
     dof_sargan = m - k_regressors
     dof_sargan <= 0 && return (nothing, nothing)
 
-    ZtZinv = robust_inv(Z' * Z)
-    P_Z_e = Z * (ZtZinv * (Z' * resid))
-    sigma2 = dot(resid, resid) / T(n)
-    sigma2 = max(sigma2, T(1e-300))
+    j_stat = if cov_type == :ols
+        ZtZinv = robust_inv(Z' * Z)
+        P_Z_e = Z * (ZtZinv * (Z' * resid))
+        sigma2 = max(dot(resid, resid) / T(n), T(1e-300))
+        dot(resid, P_Z_e) / sigma2
+    else
+        # Clustered-by-entity Hansen J (raw GMM weighting; no G/(G-1)·(n-1)/(n-k) factor).
+        g = Z' * resid
+        S = zeros(T, m, m)
+        for g_id in unique(groups)
+            idx = findall(==(g_id), groups)
+            s_g = Z[idx, :]' * resid[idx]
+            S .+= s_g * s_g'
+        end
+        dot(g, robust_inv(S) * g)
+    end
 
-    j_stat = dot(resid, P_Z_e) / sigma2
     j_pval = T(1 - cdf(Chisq(dof_sargan), max(j_stat, zero(T))))
-
     (j_stat, j_pval)
 end
 
@@ -142,7 +160,7 @@ function _estimate_fe_iv(pd::PanelData{T}, y::Vector{T}, X_exog::Matrix{T},
     first_stage_f = _panel_first_stage_f(X_endog_dm, Z_dm; n_incl=size(X_exog, 2))
 
     # Sargan test
-    sargan_s, sargan_p = _panel_sargan_test(resid_dm, Z_dm, k)
+    sargan_s, sargan_p = _panel_sargan_test(resid_dm, Z_dm, k, cov_type, groups)
 
     # Fitted and residuals on original scale
     # Recover group effects: alpha_i = y_bar_i - x_bar_i' * beta
@@ -285,7 +303,7 @@ function _estimate_fd_iv(pd::PanelData{T}, y::Vector{T}, X_exog::Matrix{T},
     first_stage_f = _panel_first_stage_f(dX_endog, dZ_c; n_incl=1 + size(X_exog, 2))
 
     # Sargan test
-    sargan_s, sargan_p = _panel_sargan_test(resid_fd, dZ_c, k_full)
+    sargan_s, sargan_p = _panel_sargan_test(resid_fd, dZ_c, k_full, cov_type, dgroups)
 
     # Vcov — extract slope portion
     vcov_full = _panel_vcov(X_hat, resid_fd, XhXinv, dgroups, dtimes, cov_type)
@@ -430,7 +448,7 @@ function _estimate_re_iv(pd::PanelData{T}, y::Vector{T}, X_exog::Matrix{T},
     first_stage_f = _panel_first_stage_f(X_endog_qd, Z_ec2sls_c; n_incl=1 + size(X_exog, 2))
 
     # Sargan test
-    sargan_s, sargan_p = _panel_sargan_test(resid_qd, Z_ec2sls_c, k_full)
+    sargan_s, sargan_p = _panel_sargan_test(resid_qd, Z_ec2sls_c, k_full, cov_type, groups)
 
     # R-squared
     r2_within, r2_between, r2_overall = _panel_r2(y, fitted_full, groups, unique_groups)
@@ -639,7 +657,7 @@ function _estimate_hausman_taylor(pd::PanelData{T}, y::Vector{T},
     first_stage_f = _panel_first_stage_f(X_endog_qd, Z_qd_c; n_incl=1)
 
     # Sargan test
-    sargan_s, sargan_p = _panel_sargan_test(resid_qd, Z_qd_c, k_full)
+    sargan_s, sargan_p = _panel_sargan_test(resid_qd, Z_qd_c, k_full, cov_type, groups)
 
     # R-squared
     r2_within, r2_between, r2_overall = _panel_r2(y, fitted_full, groups, unique_groups)

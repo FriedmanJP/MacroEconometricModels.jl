@@ -453,9 +453,11 @@ function Base.show(io::IO, m::PanelIVModel{T}) where {T}
         "Cov. type"        string(m.cov_type)
     ]
     if m.sargan_stat !== nothing
+        # Robust cov_type ⇒ the overid statistic is the clustered Hansen J, not Sargan.
+        overid_label = m.cov_type == :ols ? "Sargan" : "Hansen J"
         spec = vcat(spec, Any[
-            "Sargan stat." _fmt(m.sargan_stat; digits=2);
-            "Sargan p-val" _format_pvalue(m.sargan_pval)
+            "$overid_label stat." _fmt(m.sargan_stat; digits=2);
+            "$overid_label p-val" _format_pvalue(m.sargan_pval)
         ])
     end
     m.cragg_donald_f !== nothing && (spec = vcat(spec, Any[

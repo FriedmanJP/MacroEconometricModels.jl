@@ -623,6 +623,45 @@ end
         @test m_exact.sargan_pval === nothing
     end
 
+    @testset "IV overid: Hansen J under robust weighting (T076)" begin
+        rng = MersenneTwister(7601)
+        n = 2000
+        z1 = randn(rng, n); z2 = randn(rng, n)
+        v = randn(rng, n)
+        # Strong heteroskedasticity in the structural error (variance grows with z1)
+        u = randn(rng, n) .* (1.0 .+ 2.0 .* abs.(z1))
+        x_endog = 0.6 .* z1 .+ 0.5 .* z2 .+ v
+        y = 1.0 .+ 1.5 .* x_endog .+ u
+        X = hcat(ones(n), x_endog)              # k = 2
+        Z = hcat(ones(n), z1, z2)               # m = 3 ⇒ df = 1
+
+        m_r = estimate_iv(y, X, Z; endogenous=[2], cov_type=:hc1)
+        m_o = estimate_iv(y, X, Z; endogenous=[2], cov_type=:ols)
+
+        # (b) robust Hansen J differs from the classical Sargan under heteroskedasticity
+        @test m_r.sargan_stat != m_o.sargan_stat
+        # (c) EXACT reproduction of the HC0-meat Hansen J: J = g'S⁻¹g, S = Z'diag(e²)Z
+        e = residuals(m_r)
+        g = Z' * e
+        S = Z' * Diagonal(e .^ 2) * Z
+        Jref = dot(g, S \ g)
+        @test isapprox(m_r.sargan_stat, Jref; atol=1e-8)
+        # (f) p-value ∈ [0,1]; valid instruments ⇒ not rejected
+        @test 0.0 <= m_r.sargan_pval <= 1.0
+        @test m_r.sargan_pval > 0.05
+
+        # (d) homoskedastic collapse: eᵢ² ≡ const ⇒ HC0 Hansen J == classical Sargan
+        e_const = ifelse.(rand(rng, n) .< 0.5, -1.0, 1.0)   # ±1 ⇒ e² ≡ 1
+        j_ols = MacroEconometricModels._sargan_test(e_const, Z, 1, 2, :ols)[1]
+        j_hc0 = MacroEconometricModels._sargan_test(e_const, Z, 1, 2, :hc0)[1]
+        @test isapprox(j_ols, j_hc0; atol=1e-8)
+
+        # (e) exactly-identified ⇒ (nothing, nothing) even under robust cov_type
+        m_x = estimate_iv(y, X, hcat(ones(n), z1); endogenous=[2], cov_type=:hc1)
+        @test m_x.sargan_stat === nothing
+        @test m_x.sargan_pval === nothing
+    end
+
 
     @testset "IV — robust covariance types" begin
         rng = MersenneTwister(5004)

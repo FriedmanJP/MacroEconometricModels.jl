@@ -173,7 +173,7 @@ no overidentifying restrictions).
 - Hansen, L. P. (1982). *Econometrica* 50(4), 1029-1054.
 """
 function _sargan_test(resid::Vector{T}, Z::Matrix{T},
-                      k_endog::Int, k_regressors::Int) where {T<:AbstractFloat}
+                      k_endog::Int, k_regressors::Int, cov_type::Symbol) where {T<:AbstractFloat}
     n, m = size(Z)
 
     # Degrees of freedom = number of overidentifying restrictions = m - k
@@ -181,16 +181,22 @@ function _sargan_test(resid::Vector{T}, Z::Matrix{T},
     dof_sargan = m - k_regressors
     dof_sargan <= 0 && return (nothing, nothing)
 
-    # J = n * R^2 from regression of residuals on instruments
-    # Equivalently: J = e' P_Z e / sigma^2
-    ZtZinv = robust_inv(Z' * Z)
-    P_Z_e = Z * (ZtZinv * (Z' * resid))
-    sigma2 = dot(resid, resid) / T(n)
+    j_stat = if cov_type == :ols
+        # Classical Sargan (homoskedastic): J = e'P_Z e / σ̂²  (= n·R² of e on Z)
+        ZtZinv = robust_inv(Z' * Z)
+        P_Z_e = Z * (ZtZinv * (Z' * resid))
+        sigma2 = dot(resid, resid) / T(n)
+        dot(resid, P_Z_e) / sigma2
+    else
+        # Robust Hansen J (HC0 moment-covariance meat, matching Stata ivreg2):
+        # J = g' Ω̂⁻¹ g,  g = Z'e (length m),  Ω̂ = Σᵢ eᵢ² ZᵢZᵢ' = Z' diag(e²) Z.
+        # No n/(n−m) or hc1 scaling — the small-sample factors cancel in N·ḡ'Ŵ⁻¹ḡ.
+        g = Z' * resid
+        S = Z' * Diagonal(resid .^ 2) * Z
+        dot(g, robust_inv(S) * g)
+    end
 
-    j_stat = dot(resid, P_Z_e) / sigma2
-
-    j_pval = T(1 - cdf(Chisq(dof_sargan), j_stat))
-
+    j_pval = T(1 - cdf(Chisq(dof_sargan), max(j_stat, zero(T))))
     (j_stat, j_pval)
 end
 
@@ -335,7 +341,7 @@ function estimate_iv(y::AbstractVector{T}, X::AbstractMatrix{T},
     sy_val = sy === nothing ? nothing : T(sy)
 
     # ---- Diagnostics: Sargan-Hansen test ----
-    sargan_s, sargan_p = _sargan_test(resid, Zm, length(endogenous), k)
+    sargan_s, sargan_p = _sargan_test(resid, Zm, length(endogenous), k, cov_type)
 
     RegModel{T}(
         yv, Xm, beta, vcov_mat,
