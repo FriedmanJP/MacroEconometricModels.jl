@@ -23,25 +23,35 @@ function adf_critical_values(regression::Symbol, nobs::Int, lags::Int=0, ::Type{
     )
 end
 
-"""Approximate p-value for ADF test using MacKinnon (1994) interpolation."""
-function adf_pvalue(stat::T, regression::Symbol, nobs::Int, lags::Int=0) where {T<:AbstractFloat}
-    # Get critical values at standard levels
-    cv = adf_critical_values(regression, nobs, lags, T)
+"""
+    _mackinnon_pvalue(stat, regression) -> T
 
-    # Simple interpolation between critical values
-    if stat <= cv[1]
-        return T(0.001)  # Below 1% critical value
-    elseif stat <= cv[5]
-        # Interpolate between 1% and 5%
-        return T(0.01 + 0.04 * (stat - cv[1]) / (cv[5] - cv[1]))
-    elseif stat <= cv[10]
-        # Interpolate between 5% and 10%
-        return T(0.05 + 0.05 * (stat - cv[5]) / (cv[10] - cv[5]))
+MacKinnon (1996) response-surface asymptotic p-value for the ADF/DF τ statistic (N=1).
+Returns `p = Φ(P(τ))` where the polynomial link `P` is a quadratic for `τ ≤ τ*` and a
+cubic above it, saturating to 0/1 outside the tabulated `[τ_min, τ_max]` range. The
+Normal CDF here is the response-surface LINK, not a tail on the raw statistic (the
+Dickey-Fuller limiting distribution is not Normal).
+"""
+function _mackinnon_pvalue(stat::T, regression::Symbol) where {T<:AbstractFloat}
+    haskey(MACKINNON_PVAL_SMALLP, regression) ||
+        throw(ArgumentError("regression must be :none, :constant, or :trend; got :$regression"))
+    stat > MACKINNON_PVAL_TAUMAX[regression] && return one(T)
+    stat < MACKINNON_PVAL_TAUMIN[regression] && return zero(T)
+    poly = if stat <= MACKINNON_PVAL_TAUSTAR[regression]
+        c = MACKINNON_PVAL_SMALLP[regression]
+        c[1] + c[2] * stat + c[3] * stat^2
     else
-        # Above 10% critical value - use normal approximation for large values
-        # The ADF statistic converges to standard normal under stationarity
-        return T(min(1.0, 0.10 + 0.90 * (1 - cdf(Normal(), -stat))))
+        c = MACKINNON_PVAL_LARGEP[regression]
+        c[1] + c[2] * stat + c[3] * stat^2 + c[4] * stat^3
     end
+    T(cdf(Normal(), poly))
+end
+
+"""MacKinnon (1996) response-surface asymptotic p-value for the ADF/DF τ statistic
+(also used by Phillips-Perron — same limiting distribution). `nobs`/`lags` are accepted
+for call-site compatibility but unused: the surface is asymptotic (N=1)."""
+function adf_pvalue(stat::T, regression::Symbol, nobs::Int, lags::Int=0) where {T<:AbstractFloat}
+    _mackinnon_pvalue(stat, regression)
 end
 
 """Approximate p-value for KPSS test."""

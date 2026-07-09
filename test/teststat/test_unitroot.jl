@@ -107,6 +107,36 @@ using Statistics
         @test cv_p8[5] > cv_p0[5]   # Higher lag count → less negative CV (wider)
     end
 
+    @testset "MacKinnon ADF p-values (T078)" begin
+        ap = MacroEconometricModels.adf_pvalue
+        # Analytic pins from the small-p surface p = Φ(2.1659 + 1.4412τ + 0.038269τ²), :constant
+        @test isapprox(ap(-3.4335, :constant, 200, 0), 0.0100; atol=0.003)
+        @test isapprox(ap(-2.8621, :constant, 200, 0), 0.0500; atol=0.003)
+        @test isapprox(ap(-2.5671, :constant, 200, 0), 0.0999; atol=0.003)
+        @test isapprox(ap(-2.0,    :constant, 200, 0), 0.2866; atol=0.003)
+        @test isapprox(ap(-1.61,   :constant, 200, 0), 0.478;  atol=0.003)
+        # Anchor identity: at the asymptotic DF critical values the surface returns ~1/5/10%
+        for (cvs, reg) in (((-2.5658, -1.9393, -1.6156), :none),
+                           ((-3.9638, -3.4126, -3.1279), :trend))
+            @test isapprox(ap(cvs[1], reg, 200, 0), 0.01; atol=0.006)
+            @test isapprox(ap(cvs[2], reg, 200, 0), 0.05; atol=0.006)
+            @test isapprox(ap(cvs[3], reg, 200, 0), 0.10; atol=0.006)
+        end
+        # Regression tests for the FIXED bug (dropped the invalid Normal tail):
+        grid = collect(-6.0:0.25:2.0)
+        pv = [ap(t, :constant, 200, 0) for t in grid]
+        # p is continuous & STRICTLY INCREASING in τ (more-negative τ ⇒ stronger rejection
+        # ⇒ smaller p); the old code had a discontinuous jump at the 10% CV.
+        @test all(diff(pv) .> 0)
+        @test all(0.0 .<= pv .<= 1.0)
+        # Beyond-10% region: NOT the old normal tail (~0.124); should be ~0.29 at τ=-2
+        @test ap(-2.0, :constant, 200, 0) > 0.25
+        @test !isapprox(ap(-1.94, :constant, 200, 0), 0.1236; atol=0.05)  # old normal-tail value
+        @test ap(0.0, :constant, 200, 0) > 0.95
+        @test ap(1.0, :constant, 200, 0) > 0.99
+        @test_throws ArgumentError MacroEconometricModels._mackinnon_pvalue(-2.0, :bogus)
+    end
+
     # ==========================================================================
     # KPSS Test
     # ==========================================================================

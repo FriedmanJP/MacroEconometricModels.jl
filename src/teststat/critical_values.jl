@@ -35,6 +35,29 @@ const MACKINNON_ADF_COEFS = Dict(
     )
 )
 
+# =============================================================================
+# MacKinnon (1996) response-surface p-value coefficients for the ADF/DF τ statistic
+# (asymptotic, N=1). The asymptotic CDF is P(τ ≤ x) = Φ(P(x)) with a low-order
+# polynomial link P: a quadratic in the small-p region (τ ≤ τ*) and a cubic in the
+# large-p region (τ > τ*). Values transcribe statsmodels tsa/adfvalues.py (BSD-licensed,
+# itself a transcription of MacKinnon 1996). Keyed by the deterministic case
+# (:none = "nc", :constant = "c", :trend = "ct"). Shared by ADF and Phillips-Perron
+# (same Dickey-Fuller limiting distribution). The small-p coefficients reproduce the
+# tabulated 0.01/0.05/0.10 quantiles at the asymptotic critical values.
+const MACKINNON_PVAL_SMALLP = Dict(
+    :none     => (0.6344, 1.2378, 0.032496),
+    :constant => (2.1659, 1.4412, 0.038269),
+    :trend    => (3.2512, 1.6047, 0.049588),
+)
+const MACKINNON_PVAL_LARGEP = Dict(
+    :none     => (0.4797, 0.093557, -0.067154, 0.013874),
+    :constant => (1.7339, 0.93202, -0.12745, 0.027448),
+    :trend    => (2.5261, 1.2857, -0.17092, 0.031943),
+)
+const MACKINNON_PVAL_TAUSTAR = Dict(:none => -1.04,   :constant => -1.61,   :trend => -2.89)
+const MACKINNON_PVAL_TAUMIN  = Dict(:none => -19.04,  :constant => -18.83,  :trend => -16.18)
+const MACKINNON_PVAL_TAUMAX  = Dict(:none => Inf,     :constant => 2.74,    :trend => 0.70)
+
 # KPSS critical values (Kwiatkowski et al. 1992, Table 1)
 const KPSS_CRITICAL_VALUES = Dict(
     :constant => Dict(1 => 0.739, 5 => 0.463, 10 => 0.347),
