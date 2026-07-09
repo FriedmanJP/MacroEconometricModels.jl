@@ -36,6 +36,9 @@ function fevd(model::VARModel{T}, horizon::Int;
 ) where {T<:AbstractFloat}
     irf_result = irf(model, horizon; method, check_func, narrative_check,
                      transition_var=transition_var, regime_indicator=regime_indicator)
+    # The impact matrix P = IRF[1,:,:] = chol(Σ)·Q; the squared-IRF FEVD accumulation is a
+    # proper variance decomposition only when P is Σ-orthonormal (P*P' = Σ ⇔ Q*Q' = I).
+    _check_fevd_orthogonality(@view(irf_result.values[1, :, :]), model.Sigma; method=method)
     decomp, props = _compute_fevd(irf_result.values, nvars(model), horizon)
     snames = isnothing(shock_names) ? model.varnames : shock_names
     FEVD{T}(decomp, props, model.varnames, snames)
@@ -59,6 +62,29 @@ function _compute_fevd(irfs::Array{T,3}, n::Int, horizon::Int) where {T<:Abstrac
         end
     end
     decomp, props
+end
+
+"""
+    _check_fevd_orthogonality(P, Sigma; method=:cholesky) -> Bool
+
+Check that the impact matrix `P` is Σ-orthonormal (`P*P' ≈ Σ`). The squared-IRF FEVD
+accumulation is a proper forecast-error-variance decomposition only when the structural
+shocks are orthonormal. Some statistical-identification methods (ICA / heteroskedasticity)
+may return a rotation `Q` that is not exactly orthonormal, in which case the returned
+proportions do not sum to one across shocks. Warns (once) when the invariant fails;
+use a generalized (Pesaran-Shin 1998) FEVD for genuinely non-orthogonal identifications.
+"""
+function _check_fevd_orthogonality(P::AbstractMatrix{T}, Sigma::AbstractMatrix{T};
+                                   method::Symbol=:cholesky) where {T<:AbstractFloat}
+    n = size(P, 1)
+    resid = norm(P * P' - Sigma)
+    tol = sqrt(eps(T)) * n * norm(Sigma)
+    ok = resid <= tol
+    ok || @warn string("fevd: impact matrix for method=:", method,
+        " is not orthonormal in the Σ-metric (‖PP′−Σ‖=", resid, " > tol=", tol,
+        "); the returned proportions are NOT a proper forecast-error-variance ",
+        "decomposition. Use a generalized (Pesaran–Shin 1998) FEVD instead.") maxlog = 1
+    return ok
 end
 
 # =============================================================================
