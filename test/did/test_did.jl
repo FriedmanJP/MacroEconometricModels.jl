@@ -1062,7 +1062,7 @@ end
     @testset "HonestDiD" begin
         pd, te = _make_did_panel(seed=2400, n_units=60, n_periods=20)
 
-        # Test with DIDResult
+        # Test with DIDResult (default restriction = :rm)
         did = estimate_did(pd, "outcome", "treat_time";
                            method=:callaway_santanna, leads=3, horizon=5)
         hd = honest_did(did; Mbar=1.0, conf_level=0.95)
@@ -1070,6 +1070,8 @@ end
         @test hd isa HonestDiDResult{Float64}
         @test hd.Mbar == 1.0
         @test hd.conf_level == 0.95
+        @test hd.restriction == :rm
+        @test hd.method == :delta_id
         @test hd.breakdown_value >= 0
 
         # Post-event times should be non-negative
@@ -1084,29 +1086,41 @@ end
         @test length(hd.original_ci_upper) == n_post
         @test length(hd.post_att) == n_post
 
-        # Robust CIs should be at least as wide as original CIs
-        for i in 1:n_post
-            @test hd.robust_ci_lower[i] <= hd.original_ci_lower[i] + 1e-10
-            @test hd.robust_ci_upper[i] >= hd.original_ci_upper[i] - 1e-10
-        end
-
-        # CIs bracket point estimates
+        # Robust CIs contain the identified set around the point estimates
         @test all(hd.robust_ci_lower .<= hd.post_att)
         @test all(hd.robust_ci_upper .>= hd.post_att)
+        @test all(hd.robust_ci_upper .- hd.robust_ci_lower .>=
+                  hd.original_ci_upper .- hd.original_ci_lower .- 1e-10)
 
-        # With Mbar=0, robust CIs should equal original CIs
-        hd0 = honest_did(did; Mbar=0.0)
+        # With Mbar=0 the Delta^RM robust CI collapses to the conventional CI
+        hd0 = honest_did(did; restriction=:rm, Mbar=0.0)
         for i in 1:length(hd0.post_event_times)
             @test isapprox(hd0.robust_ci_lower[i], hd0.original_ci_lower[i]; atol=1e-10)
             @test isapprox(hd0.robust_ci_upper[i], hd0.original_ci_upper[i]; atol=1e-10)
         end
 
+        # Nesting: robust CIs widen with Mbar
+        hd2 = honest_did(did; restriction=:rm, Mbar=2.0)
+        @test all(hd2.robust_ci_lower .<= hd.robust_ci_lower .+ 1e-10)
+        @test all(hd2.robust_ci_upper .>= hd.robust_ci_upper .- 1e-10)
+
+        # Delta^SD FLCI path on the same result
+        hd_sd = honest_did(did; restriction=:sd, M=0.01)
+        @test hd_sd.restriction == :sd
+        @test hd_sd.method == :flci
+        @test hd_sd.M == 0.01
+        @test all(isfinite.(hd_sd.robust_ci_lower))
+        @test all(hd_sd.robust_ci_upper .> hd_sd.robust_ci_lower)
+
         # Display
         io = IOBuffer()
         show(io, hd)
         s = String(take!(io))
-        @test occursin("HonestDiD", s)
+        @test occursin("Honest DiD", s)
         @test occursin("Breakdown", s)
+        io2 = IOBuffer()
+        show(io2, hd_sd)
+        @test occursin("FLCI", String(take!(io2)))
     end
 
     # =========================================================================
@@ -1196,7 +1210,7 @@ end
         hd = honest_did(sa; Mbar=1.0)
         p_hd = plot_result(hd)
         @test p_hd isa PlotOutput
-        @test occursin("HonestDiD", p_hd.html)
+        @test occursin("Honest DiD", p_hd.html)
     end
 
     # =========================================================================
@@ -1584,6 +1598,121 @@ end
         ci = findfirst(==(5), r.cohorts)
         ti = 5  # times are 1..8, so column 5 is t=5
         @test r.group_time_att[ci, ti] ≈ att_manual atol = 1e-12
+    end
+
+    # =========================================================================
+    # T064 (#163): Rambachan-Roth honest DiD — core (betahat, sigma) method
+    # =========================================================================
+
+    @testset "HonestDiD RR (betahat/sigma core)" begin
+        betahat = [0.05, -0.10, 0.08, 0.15, 0.25, 0.30]  # 3 pre, 3 post
+        sigma = [0.01 * 0.5^abs(i - j) for i in 1:6, j in 1:6]
+
+        @testset "Delta^SD FLCI matches R HonestDiD" begin
+            # R HonestDiD::.findOptimalFLCI_helper on (betahat, sigma), alpha=0.05.
+            # R's folded-normal cv is simulated with 1e6 draws (MC noise ~2e-3);
+            # ours is exact via NoncentralChisq — compare at atol 5e-3.
+            r_flci_e1 = Dict(0.0  => (-0.0746475725, 0.3160442338),
+                             0.02 => (-0.1018395313, 0.3270227396),
+                             0.05 => (-0.1778374773, 0.3638093457))
+            for (M, (lb, ub)) in r_flci_e1
+                r = honest_did(betahat, sigma; num_pre=3, num_post=3,
+                               restriction=:sd, M=M)
+                @test r.ci_lower ≈ lb atol = 5e-3
+                @test r.ci_upper ≈ ub atol = 5e-3
+                @test r.method == :flci
+            end
+            r_flci_e2 = Dict(0.0  => (0.0073599200, 0.4847787921),
+                             0.02 => (-0.0655127233, 0.5344024372))
+            for (M, (lb, ub)) in r_flci_e2
+                r = honest_did(betahat, sigma; num_pre=3, num_post=3,
+                               restriction=:sd, M=M, l_vec=[0.0, 1.0, 0.0])
+                @test r.ci_lower ≈ lb atol = 5e-3
+                @test r.ci_upper ≈ ub atol = 5e-3
+            end
+            # FLCI half-length is nondecreasing in M
+            hls = [honest_did(betahat, sigma; num_pre=3, num_post=3,
+                              restriction=:sd, M=M).ci_upper -
+                   honest_did(betahat, sigma; num_pre=3, num_post=3,
+                              restriction=:sd, M=M).ci_lower for M in (0.0, 0.02, 0.05)]
+            @test hls[1] <= hls[2] + 1e-8 && hls[2] <= hls[3] + 1e-8
+        end
+
+        @testset "Delta^RM identified set matches R HonestDiD exactly" begin
+            # R HonestDiD::.compute_IDset_DeltaRM (union of LPs) — closed form here
+            MEM = MacroEconometricModels
+            for (Mb, lb, ub) in ((0.5, 0.06, 0.24), (1.0, -0.03, 0.33), (2.0, -0.21, 0.51))
+                idlb, idub = MEM._deltarm_identified_set(betahat, 3, 3; Mbar=Mb)
+                @test idlb ≈ lb atol = 1e-10
+                @test idub ≈ ub atol = 1e-10
+            end
+            for (Mb, lb, ub) in ((0.5, 0.03, 0.57), (1.0, -0.24, 0.84))
+                idlb, idub = MEM._deltarm_identified_set(betahat, 3, 3; Mbar=Mb,
+                                                         l_vec=[0.0, 0.0, 1.0])
+                @test idlb ≈ lb atol = 1e-10
+                @test idub ≈ ub atol = 1e-10
+            end
+        end
+
+        @testset "Conventional CI matches R constructOriginalCS" begin
+            r = honest_did(betahat, sigma; num_pre=3, num_post=3, restriction=:rm, Mbar=1.0)
+            @test r.original_ci_lower ≈ -0.0459963985 atol = 1e-8
+            @test r.original_ci_upper ≈ 0.3459963985 atol = 1e-8
+            # The delta-CI interim must CONTAIN the identified set
+            MEM = MacroEconometricModels
+            idlb, idub = MEM._deltarm_identified_set(betahat, 3, 3; Mbar=1.0)
+            @test r.ci_lower <= idlb && r.ci_upper >= idub
+        end
+
+        @testset "Pre-period dependence (M-01 regression catcher)" begin
+            b2 = copy(betahat); b2[2] += 0.5
+            for restriction in (:rm, :sd)
+                kw = restriction == :rm ? (Mbar=1.0,) : (M=0.02,)
+                r1 = honest_did(betahat, sigma; num_pre=3, num_post=3,
+                                restriction=restriction, kw...)
+                r2 = honest_did(b2, sigma; num_pre=3, num_post=3,
+                                restriction=restriction, kw...)
+                @test !isapprox(r1.ci_lower, r2.ci_lower; atol=1e-6) ||
+                      !isapprox(r1.ci_upper, r2.ci_upper; atol=1e-6)
+            end
+        end
+
+        @testset "Delta^RM scale covariance (Mbar dimensionless)" begin
+            c = 3.0
+            r1 = honest_did(betahat, sigma; num_pre=3, num_post=3, restriction=:rm, Mbar=1.0)
+            r2 = honest_did(c .* betahat, c^2 .* sigma; num_pre=3, num_post=3,
+                            restriction=:rm, Mbar=1.0)
+            @test r2.ci_lower ≈ c * r1.ci_lower atol = 1e-8
+            @test r2.ci_upper ≈ c * r1.ci_upper atol = 1e-8
+            @test r2.breakdown ≈ r1.breakdown atol = 1e-6
+        end
+
+        @testset "Breakdown value brackets zero-crossing" begin
+            # Fixture whose conventional CI excludes zero
+            b_sig = [0.05, -0.10, 0.08, 0.5, 0.6, 0.7]
+            r = honest_did(b_sig, sigma; num_pre=3, num_post=3, restriction=:rm, Mbar=1.0)
+            bd = r.breakdown
+            @test bd > 0 && isfinite(bd)
+            r_over = honest_did(b_sig, sigma; num_pre=3, num_post=3,
+                                restriction=:rm, Mbar=bd + 1e-3)
+            r_under = honest_did(b_sig, sigma; num_pre=3, num_post=3,
+                                 restriction=:rm, Mbar=max(bd - 1e-3, 0.0))
+            @test r_over.ci_lower <= 0.0 <= r_over.ci_upper
+            @test !(r_under.ci_lower <= 0.0 <= r_under.ci_upper)
+        end
+
+        @testset "Folded-normal critical value" begin
+            MEM = MacroEconometricModels
+            @test MEM._fold_normal_cv(0.0, 0.05) ≈ 1.959963984540054 atol = 1e-10  # z_{0.975}
+            @test MEM._fold_normal_cv(1.0, 0.05) > MEM._fold_normal_cv(0.0, 0.05)
+        end
+
+        @testset "Input validation" begin
+            @test_throws ArgumentError honest_did(betahat, sigma; num_pre=3, num_post=3,
+                                                  restriction=:bogus)
+            @test_throws ArgumentError honest_did(betahat[1:5], sigma; num_pre=3, num_post=3)
+            @test_throws ArgumentError honest_did(betahat, sigma; num_pre=0, num_post=6)
+        end
     end
 
 end  # @testset "Difference-in-Differences"

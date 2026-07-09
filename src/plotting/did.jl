@@ -395,11 +395,13 @@ function plot_result(hd::HonestDiDResult{T};
                          bands_json=bands, ref_lines_json=refs,
                          xlabel="Event Time", ylabel="ATT")
 
-    ptitle = "HonestDiD Sensitivity (M\u0305 = $(_json(hd.Mbar)))"
+    ptitle = hd.restriction == :sd ?
+        "Honest DiD Sensitivity (\u0394^SD, M = $(_json(hd.M)))" :
+        "Honest DiD Sensitivity (\u0394^RM, M\u0305 = $(_json(hd.Mbar)))"
     panel = _PanelSpec(id, ptitle, js)
 
     if isempty(title)
-        title = "HonestDiD: Robust CI (breakdown = $(_json(hd.breakdown_value)))"
+        title = "Honest DiD: Robust CI (breakdown = $(_json(hd.breakdown_value)))"
     end
 
     p = _make_plot([panel]; title=title, ncols=1)
