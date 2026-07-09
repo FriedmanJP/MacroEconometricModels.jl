@@ -1198,6 +1198,78 @@ end
     end
 end
 
+@testset "SMC tempering: max_stages guard (#145 T046)" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    true_spec = @dsge begin
+        parameters: ρ = 0.8, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    true_spec = compute_steady_state(true_spec)
+    data = simulate(solve(true_spec; method=:gensys), 200; rng=Random.MersenneTwister(42))'
+    prior = MacroEconometricModels.DSGEPrior(Dict(:ρ => Beta(2, 2));
+        lower=Dict(:ρ => 0.01), upper=Dict(:ρ => 0.99))
+    # An informative 200-obs AR(1) SMC needs many tempering stages; capping at 2 must raise.
+    @test_throws ErrorException MacroEconometricModels._smc_sample(
+        spec, data, [:ρ], prior, [0.5];
+        n_smc=100, n_mh_steps=1, ess_target=0.5, observables=[:y],
+        solver=:gensys, max_stages=2, rng=Random.MersenneTwister(123))
+    end
+end
+
+@testset "_check_tempering_progress: min_dphi + max_stages guards (#145 T046)" begin
+    # A degenerate step Δφ < min_dphi while φ < 1 raises (stall).
+    @test_throws ErrorException MacroEconometricModels._check_tempering_progress(
+        3, 500, 0.5, 0.5 + 1e-9, 1e-6)
+    # Exceeding the stage cap raises.
+    @test_throws ErrorException MacroEconometricModels._check_tempering_progress(
+        501, 500, 0.9, 0.95, 1e-6)
+    # A legitimate final jump to exactly φ=1 is never flagged, even if the step is small.
+    @test MacroEconometricModels._check_tempering_progress(10, 500, 0.9999, 1.0, 1e-6) === nothing
+    # Normal within-schedule progress does not raise.
+    @test MacroEconometricModels._check_tempering_progress(5, 500, 0.3, 0.5, 1e-6) === nothing
+end
+
+@testset "SMC² tempering: max_stages guard (#145 T046)" begin
+    FAST && return
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    true_spec = @dsge begin
+        parameters: ρ = 0.8, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    true_spec = compute_steady_state(true_spec)
+    data = simulate(solve(true_spec; method=:gensys), 100; rng=Random.MersenneTwister(42))'
+    prior = MacroEconometricModels.DSGEPrior(Dict(:ρ => Beta(2, 2));
+        lower=Dict(:ρ => 0.01), upper=Dict(:ρ => 0.99))
+    @test_throws ErrorException MacroEconometricModels._smc2_sample(
+        spec, data, [:ρ], prior, [0.5];
+        n_smc=40, n_particles=20, n_mh_steps=1, ess_target=0.5,
+        observables=[:y], measurement_error=[0.5], solver=:gensys,
+        max_stages=2, rng=Random.MersenneTwister(5))
+    end
+end
+
 @testset "Adaptive RWMH: AR(1) recovery" begin
     _suppress_warnings() do
     rng = Random.MersenneTwister(42)

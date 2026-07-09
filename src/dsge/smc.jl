@@ -254,6 +254,32 @@ function _adaptive_tempering(log_liks::AbstractVector{T}, log_weights::AbstractV
 end
 
 """
+    _check_tempering_progress(stage, max_stages, phi, phi_new, min_dphi)
+
+Guard the adaptive-tempering `while` loops against a degenerate likelihood that never
+advances φ to 1 (E-21 / #145). Throws an informative `ErrorException` when either the
+stage count exceeds `max_stages` or the chosen step `phi_new - phi < min_dphi` while
+`phi_new < 1` (a legitimate final jump returns exactly `phi_new == 1`, never flagged).
+Herbst & Schorfheide (2016) use a fixed ~200–500-stage schedule; `max_stages` bounds
+the adaptive analogue.
+"""
+function _check_tempering_progress(stage::Int, max_stages::Int, phi::T,
+                                    phi_new::T, min_dphi::T) where {T<:AbstractFloat}
+    if stage > max_stages
+        error("SMC tempering did not reach φ=1 within max_stages=$(max_stages) stages " *
+              "(stalled at φ=$(phi)). The likelihood likely degenerated (mis-specified " *
+              "model or bad data slice); raise max_stages only if the schedule is " *
+              "legitimately long.")
+    end
+    if phi_new < one(T) && (phi_new - phi) < min_dphi
+        error("SMC tempering stalled: adaptive step Δφ=$(phi_new - phi) < min_dphi=" *
+              "$(min_dphi) at φ=$(phi) (stage $(stage)). The likelihood degenerated — " *
+              "the model/data are likely mis-specified. Aborting rather than spinning.")
+    end
+    return nothing
+end
+
+"""
     _chunk_ranges(N, k) -> Vector{UnitRange{Int}}
 
 Partition `1:N` into `k` contiguous, near-equal chunks (trailing ranges are empty
@@ -530,6 +556,7 @@ function _smc_sample(spec::DSGESpec{T}, data::AbstractMatrix,
                       measurement_error=nothing,
                       solver::Symbol=:gensys,
                       solver_kwargs::NamedTuple=NamedTuple(),
+                      max_stages::Int=500, min_dphi::Real=1e-10,
                       rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     data = Matrix{T}(data)  # convert Adjoint/SubArray to concrete Matrix
     n_params = length(param_names)
@@ -596,8 +623,11 @@ function _smc_sample(spec::DSGESpec{T}, data::AbstractMatrix,
 
     # Adaptive tempering loop
     phi = zero(T)
+    stage = 0
+    min_step = T(min_dphi)
 
     while phi < one(T)
+        stage += 1
         # Find next tempering parameter
         # Only use particles with finite log-likelihoods for tempering
         valid_lls = copy(state.log_likelihoods)
@@ -608,6 +638,8 @@ function _smc_sample(spec::DSGESpec{T}, data::AbstractMatrix,
         end
 
         phi_new = _adaptive_tempering(valid_lls, state.log_weights, phi, ess_target, N)
+        # Abort a degenerate-likelihood stall before paying for the expensive mutation (#145).
+        _check_tempering_progress(stage, max_stages, phi, phi_new, min_step)
         delta_phi = phi_new - phi
 
         # Compute incremental log weights
@@ -1167,6 +1199,7 @@ function _smc2_sample(spec::DSGESpec{T}, data::AbstractMatrix,
                        solver_kwargs::NamedTuple=NamedTuple(),
                        delayed_acceptance::Bool=false,
                        n_screen::Int=200,
+                       max_stages::Int=500, min_dphi::Real=1e-10,
                        rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     data = Matrix{T}(data)
     n_params = length(param_names)
@@ -1336,8 +1369,11 @@ function _smc2_sample(spec::DSGESpec{T}, data::AbstractMatrix,
 
     # Adaptive tempering loop
     phi = zero(T)
+    stage = 0
+    min_step = T(min_dphi)
 
     while phi < one(T)
+        stage += 1
         # Find next tempering parameter
         valid_lls = copy(state.log_likelihoods)
         for j in 1:N
@@ -1347,6 +1383,8 @@ function _smc2_sample(spec::DSGESpec{T}, data::AbstractMatrix,
         end
 
         phi_new = _adaptive_tempering(valid_lls, state.log_weights, phi, ess_target, N)
+        # Abort a degenerate-likelihood stall before paying for the expensive PF mutation (#145).
+        _check_tempering_progress(stage, max_stages, phi, phi_new, min_step)
         delta_phi = phi_new - phi
 
         # Compute incremental log weights

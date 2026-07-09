@@ -204,6 +204,14 @@ SMC², or Random-Walk Metropolis-Hastings (RWMH).
   (Christen & Fox 2005). Pre-screens proposals with a cheap bootstrap PF to avoid
   expensive CSMC evaluations on proposals that would be rejected. Exact posterior.
 - `n_screen::Int=200` — particles for screening PF (only used when `delayed_acceptance=true`)
+- `max_stages::Int=500` — hard cap on adaptive-tempering stages (`:smc`/`:smc2`); exceeding
+  it raises an error, guarding a degenerate likelihood that never advances φ→1 (Herbst &
+  Schorfheide 2016 use ~200–500 fixed stages)
+- `min_dphi::Real=1e-10` — minimum tempering step (`:smc`/`:smc2`); if the adaptive Δφ falls
+  below this while φ<1, estimation aborts with an informative error rather than spinning. The
+  default is deliberately small: informative likelihoods legitimately take small first steps
+  (e.g. ~1e-8), so this only trips on genuine numerical degeneracy (the bisection returning
+  ~1e-12); `max_stages` is the primary loop bound
 - `rng::AbstractRNG=Random.default_rng()` — random number generator
 
 # Returns
@@ -234,6 +242,7 @@ function estimate_dsge_bayes(spec::DSGESpec{T}, data::AbstractMatrix,
                               solver_kwargs::NamedTuple=NamedTuple(),
                               delayed_acceptance::Bool=false,
                               n_screen::Int=200,
+                              max_stages::Int=500, min_dphi::Real=1e-10,
                               rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
 
     # ── 1. Build DSGEPrior from priors dict ──────────────────────────────
@@ -290,7 +299,8 @@ function estimate_dsge_bayes(spec::DSGESpec{T}, data::AbstractMatrix,
                              n_smc=n_smc, n_mh_steps=n_mh_steps,
                              ess_target=ess_target, observables=observables,
                              measurement_error=measurement_error,
-                             solver=solver, solver_kwargs=solver_kwargs, rng=rng)
+                             solver=solver, solver_kwargs=solver_kwargs,
+                             max_stages=max_stages, min_dphi=min_dphi, rng=rng)
         return _smc_state_to_bayesian_dsge(state, prior, param_names, spec, :smc,
                                             observables, measurement_error,
                                             solver, solver_kwargs)
@@ -303,7 +313,8 @@ function estimate_dsge_bayes(spec::DSGESpec{T}, data::AbstractMatrix,
                               measurement_error=measurement_error,
                               solver=solver, solver_kwargs=solver_kwargs,
                               delayed_acceptance=delayed_acceptance,
-                              n_screen=n_screen, rng=rng)
+                              n_screen=n_screen,
+                              max_stages=max_stages, min_dphi=min_dphi, rng=rng)
         return _smc_state_to_bayesian_dsge(state, prior, param_names, spec, :smc2,
                                             observables, measurement_error,
                                             solver, solver_kwargs)
