@@ -707,6 +707,7 @@ export favar_panel_irf, favar_panel_forecast, sdfm_panel_irf
 
 export robust_inv
 export safe_cholesky
+export safe_cholesky_jitter
 export construct_var_matrices
 export extract_ar_coefficients
 export companion_matrix

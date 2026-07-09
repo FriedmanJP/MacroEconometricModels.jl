@@ -113,37 +113,76 @@ _suppress_warnings(f) = Base.CoreLogging.with_logger(f, Base.CoreLogging.NullLog
 # Matrix Utilities
 # =============================================================================
 
-"""Compute inverse with fallback to pseudo-inverse for singular matrices.
-Pass `silent=true` to suppress the warning (e.g., in internal loops where singularity is expected)."""
-function robust_inv(A::AbstractMatrix{T}; silent::Bool=false) where {T<:AbstractFloat}
+"""Compute inverse with fallback to pseudo-inverse for singular OR near-singular matrices.
+
+The near-singular guard uses the 1-norm condition estimate `κ = ‖A‖₁‖A⁻¹‖₁` (reusing the
+already-computed inverse, O(n²)) and switches to `pinv` when `κ > 1/rcond_tol`, catching
+matrices that `inv` factors "successfully" into garbage. Pass `rcond_tol=0` to disable the
+guard (hot loops), `silent=true` to suppress the warning. The caught exception set is
+narrowed to genuine singularity types (no bare `ErrorException`)."""
+function robust_inv(A::AbstractMatrix{T}; silent::Bool=false,
+                    rcond_tol::T=sqrt(eps(T))) where {T<:AbstractFloat}
     try
-        inv(A)
+        Ai = inv(A)
+        # Near-singularity guard: reuse Ai for a cheap 1-norm condition estimate.
+        kappa = opnorm(A, 1) * opnorm(Ai, 1)
+        if !isfinite(kappa) || kappa > one(T) / rcond_tol
+            silent || @warn "Matrix near-singular (1-norm cond ≈ $(kappa)). Using pseudo-inverse." maxlog=3
+            return pinv(A; rtol=rcond_tol)
+        end
+        return Ai   # preserves the inverse's type (e.g. inv(Hermitian)::Hermitian)
     catch e
-        if e isa LinearAlgebra.SingularException || e isa LinearAlgebra.LAPACKException || e isa ErrorException
-            silent || @warn "Matrix singular or near-singular. Using pseudo-inverse."
-            pinv(A)
+        if e isa LinearAlgebra.SingularException || e isa LinearAlgebra.LAPACKException
+            silent || @warn "Matrix singular. Using pseudo-inverse." maxlog=3
+            return pinv(A; rtol=rcond_tol)
         else
             rethrow(e)
         end
     end
 end
-robust_inv(A::AbstractMatrix; silent::Bool=false) = robust_inv(float.(A); silent=silent)
+robust_inv(A::AbstractMatrix; kwargs...) = robust_inv(float.(A); kwargs...)
 
-"""Cholesky decomposition with automatic jitter for numerical stability.
-Pass `silent=true` to suppress the jitter warning."""
-function safe_cholesky(A::AbstractMatrix{T}; jitter::T=T(1e-8), silent::Bool=false) where {T<:AbstractFloat}
+"""
+    safe_cholesky_jitter(A; rel_jitter=1e-10, silent=false) -> (L, applied_jitter)
+
+Lower Cholesky factor of `A` with **scale-relative** jitter. If `cholesky(Hermitian(A))`
+fails, adds `applied·I` where the base jitter is `rel_jitter · tr(A)/n` — proportional to
+the matrix's magnitude rather than a fixed absolute constant — escalating by ×10 until it
+factors. Returns the factor together with the actual jitter applied (`0` when none was
+needed). For a degenerate (non-positive mean-diagonal) input, falls back to an absolute
+`rel_jitter` floor. Pass `silent=true` to suppress the warning."""
+function safe_cholesky_jitter(A::AbstractMatrix{T}; rel_jitter::T=T(1e-10),
+                              silent::Bool=false) where {T<:AbstractFloat}
     try
-        return cholesky(Hermitian(A)).L
+        return cholesky(Hermitian(A)).L, zero(T)
     catch
-        for scale in [1, 10, 100, 1000]
+        n = size(A, 1)
+        s = tr(A) / n                                   # mean diagonal = matrix scale
+        base = s > zero(T) ? rel_jitter * s : rel_jitter
+        s_ref = s > zero(T) ? s : one(T)
+        # Escalate up to 1e5·base so the worst-case ceiling matches the old absolute path
+        # (old: 1e-8·[1..1000] = 1e-5 for a scale-1 matrix; new: 1e-10·[1..1e5] = 1e-5).
+        for scale in (1, 10, 100, 1_000, 10_000, 100_000)
+            applied = T(scale) * base
             try
-                result = cholesky(Hermitian(A + scale * jitter * I)).L
-                silent || @warn "Covariance matrix required jitter ($(scale * jitter)) for Cholesky decomposition. Results may be affected by near-collinearity." maxlog=3
-                return result
-            catch; continue; end
+                L = cholesky(Hermitian(A + applied * I)).L
+                silent || @warn "Covariance matrix required jitter (absolute=$(applied), relative=$(applied / s_ref), mean diagonal=$(s)) for Cholesky decomposition. Results may be affected by near-collinearity." maxlog=3
+                return L, applied
+            catch
+                continue
+            end
         end
-        error("Failed to compute Cholesky decomposition even with regularization")
+        error("Failed to compute Cholesky decomposition even with scale-relative regularization")
     end
+end
+
+"""Cholesky decomposition with automatic scale-relative jitter for numerical stability.
+Returns the lower factor `L`; the `jitter` kwarg is the relative coefficient (∝ tr(A)/n).
+Use [`safe_cholesky_jitter`](@ref) to also obtain the applied jitter. Pass `silent=true`
+to suppress the warning."""
+function safe_cholesky(A::AbstractMatrix{T}; jitter::T=T(1e-10), silent::Bool=false) where {T<:AbstractFloat}
+    L, _ = safe_cholesky_jitter(A; rel_jitter=jitter, silent=silent)
+    return L
 end
 
 """Log determinant with eigenvalue fallback for numerical issues."""
