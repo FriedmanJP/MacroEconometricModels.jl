@@ -9,6 +9,7 @@ using MacroEconometricModels
 using Statistics
 using LinearAlgebra
 using Random
+import StatsAPI
 
 @testset "GMM Estimation" begin
 
@@ -564,6 +565,66 @@ using Random
         result = estimate_gmm(moment_fn, zeros(2), data; weighting=:two_step)
         @test StatsAPI.nobs(result) == n
         @test length(StatsAPI.coef(result)) == 2
+    end
+
+end
+
+# =============================================================================
+# T089 (#188): M-29 identity-weighting J p-value, M-31 numerical_gradient step
+# =============================================================================
+
+@testset "T089: GMM identity J p-value + numerical_gradient step kwarg" begin
+
+    @testset "M-29: J p-value invalid under identity weighting" begin
+        Random.seed!(18901)
+        n = 300
+        X = randn(n, 2)
+        y = X * [1.0, -0.5] + randn(n)
+        Z = hcat(X, randn(n))  # extra instrument -> overidentified
+        data = hcat(y, X, Z)
+
+        moment_fn(theta, d) = begin
+            y_d = d[:, 1]
+            X_d = d[:, 2:3]
+            Z_d = d[:, 4:6]
+            resid = y_d - X_d * theta
+            Z_d .* resid
+        end
+
+        r_id = estimate_gmm(moment_fn, zeros(2), data; weighting=:identity)
+        @test MacroEconometricModels.is_overidentified(r_id)
+        @test r_id.J_stat >= 0 && isfinite(r_id.J_stat)
+        @test isnan(r_id.J_pvalue)
+
+        jt = MacroEconometricModels.j_test(r_id)
+        @test isnan(jt.p_value)
+        @test jt.reject_05 == false
+        @test haskey(jt, :message) && occursin("identity", jt.message)
+
+        io = IOBuffer()
+        show(io, r_id)
+        out = String(take!(io))
+        @test occursin("n/a", out)
+        @test occursin("identity weighting", out)
+
+        # Efficient weighting keeps a valid chi-squared p-value
+        r_ts = estimate_gmm(moment_fn, zeros(2), data; weighting=:two_step)
+        @test 0.0 <= r_ts.J_pvalue <= 1.0
+        io2 = IOBuffer()
+        show(io2, r_ts)
+        @test !occursin("n/a", String(take!(io2)))
+    end
+
+    @testset "M-31: numerical_gradient step kwarg" begin
+        f(x) = [x[1]^2 + 2x[2], 3x[1] * x[2]]
+        x0 = [1.0, 2.0]
+        analytic = [2.0 2.0; 6.0 3.0]
+
+        J_default = numerical_gradient(f, x0)
+        @test J_default ≈ analytic atol = 1e-6
+
+        J_step = numerical_gradient(f, x0; step=1e-5)
+        @test J_step ≈ analytic atol = 1e-6
     end
 
 end

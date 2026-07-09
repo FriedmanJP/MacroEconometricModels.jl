@@ -125,11 +125,11 @@ function _arch_negloglik(params::Vector{T}, y::Vector{T}, q::Int) where {T}
     # Stationarity check
     sum(alpha) >= one(T) && return T(1e10)
 
-    eps = y .- mu
-    eps_sq = eps .^ 2
-    h = _arch_filter(omega, alpha, eps_sq)
+    resid = y .- mu
+    resid_sq = resid .^ 2
+    h = _arch_filter(omega, alpha, resid_sq)
 
-    _volatility_negloglik(h, eps_sq, n)
+    _volatility_negloglik(h, resid_sq, n)
 end
 
 # =============================================================================
@@ -189,10 +189,10 @@ function estimate_arch(y::AbstractVector{T}, q::Int; method::Symbol=:mle) where 
     omega = exp(params_opt[2])
     alpha = exp.(params_opt[3:2+q])
 
-    eps = y_vec .- mu
-    eps_sq = eps .^ 2
-    h = _arch_filter(omega, alpha, eps_sq)
-    z = eps ./ sqrt.(h)
+    resid = y_vec .- mu
+    resid_sq = resid .^ 2
+    h = _arch_filter(omega, alpha, resid_sq)
+    z = resid ./ sqrt.(h)
 
     negll = Optim.minimum(result)
     loglik = -negll
@@ -202,7 +202,7 @@ function estimate_arch(y::AbstractVector{T}, q::Int; method::Symbol=:mle) where 
     converged = Optim.converged(result)
     iterations = Optim.iterations(result)
 
-    ARCHModel(y_vec, q, mu, omega, alpha, h, z, eps, fill(mu, n), loglik,
+    ARCHModel(y_vec, q, mu, omega, alpha, h, z, resid, fill(mu, n), loglik,
               aic_val, bic_val, method, converged, iterations)
 end
 

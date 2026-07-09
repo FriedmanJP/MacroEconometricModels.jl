@@ -305,6 +305,8 @@ report(me_mer)
 
 The AME for `x1` represents the average change in the predicted probability of ``y = 1`` for a one-unit increase in `x1`, averaged over the observed distribution of all regressors. The MEM evaluates this same derivative at the sample means. The MER evaluates at a profile where `x1 = 0` (with other variables at their means), which is useful for reporting effects at a baseline covariate value.
 
+For binary ``\{0,1\}`` regressors, `marginal_effects` reports the **discrete change** ``F(\eta \mid x_j = 1) - F(\eta \mid x_j = 0)`` — the change in the predicted probability from switching the dummy on — rather than the continuous derivative, matching Stata's `margins, dydx(*)` treatment of factor variables. The intercept column has no marginal effect; its entries are `NaN`.
+
 ### Keyword Arguments
 
 | Keyword | Type | Default | Description |

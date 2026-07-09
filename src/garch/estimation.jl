@@ -47,15 +47,15 @@ end
 # =============================================================================
 
 """
-    _egarch_filter(omega, alpha, gamma, beta, eps, backcast_logh)
+    _egarch_filter(omega, alpha, gamma, beta, resid, backcast_logh)
 
 Compute EGARCH conditional variances via log(h_t) recursion:
 log(h_t) = ω + Σα_i(|z_{t-i}| - E|z|) + Σγ_i z_{t-i} + Σβ_j log(h_{t-j})
 where z_t = ε_t / σ_t and E|z| = √(2/π) for Gaussian.
 """
 function _egarch_filter(omega::T, alpha::Vector{T}, gamma::Vector{T},
-                         beta::Vector{T}, eps::Vector{T}, backcast_logh::T) where {T}
-    n = length(eps)
+                         beta::Vector{T}, resid::Vector{T}, backcast_logh::T) where {T}
+    n = length(resid)
     q = length(alpha)
     p = length(beta)
     h = Vector{T}(undef, n)
@@ -80,7 +80,7 @@ function _egarch_filter(omega::T, alpha::Vector{T}, gamma::Vector{T},
         # Clamp to prevent overflow/underflow
         log_h[t] = clamp(log_h[t], T(-50), T(50))
         h[t] = exp(log_h[t])
-        z[t] = eps[t] / sqrt(h[t])
+        z[t] = resid[t] / sqrt(h[t])
     end
     h, z, log_h
 end
@@ -90,7 +90,7 @@ end
 # =============================================================================
 
 """
-    _gjr_garch_filter(omega, alpha, gamma, beta, eps)
+    _gjr_garch_filter(omega, alpha, gamma, beta, resid)
 
 Compute GJR-GARCH conditional variances:
 h_t = ω + Σ(α_i + γ_i I(ε_{t-i}<0)) ε²_{t-i} + Σβ_j h_{t-j}
@@ -141,10 +141,10 @@ function _garch_negloglik(params::Vector{T}, y::Vector{T}, p::Int, q::Int) where
     # Stationarity check
     sum(alpha) + sum(beta) >= one(T) && return T(1e10)
 
-    eps = y .- mu
-    eps_sq = eps .^ 2
-    h = _garch_filter(omega, alpha, beta, eps_sq)
-    _volatility_negloglik(h, eps_sq, n)
+    resid = y .- mu
+    resid_sq = resid .^ 2
+    h = _garch_filter(omega, alpha, beta, resid_sq)
+    _volatility_negloglik(h, resid_sq, n)
 end
 
 function _egarch_negloglik(params::Vector{T}, y::Vector{T}, p::Int, q::Int) where {T}
@@ -159,11 +159,11 @@ function _egarch_negloglik(params::Vector{T}, y::Vector{T}, p::Int, q::Int) wher
     # Stationarity of log-variance check
     sum(abs.(beta)) >= one(T) && return T(1e10)
 
-    eps = y .- mu
-    backcast_logh = log(var(eps; corrected=false))
-    h, _, _ = _egarch_filter(omega, alpha, gamma, beta, eps, backcast_logh)
-    eps_sq = eps .^ 2
-    _volatility_negloglik(h, eps_sq, n)
+    resid = y .- mu
+    backcast_logh = log(var(resid; corrected=false))
+    h, _, _ = _egarch_filter(omega, alpha, gamma, beta, resid, backcast_logh)
+    resid_sq = resid .^ 2
+    _volatility_negloglik(h, resid_sq, n)
 end
 
 function _gjr_negloglik(params::Vector{T}, y::Vector{T}, p::Int, q::Int) where {T}
@@ -279,16 +279,16 @@ function estimate_garch(y::AbstractVector{T}, p::Int=1, q::Int=1; method::Symbol
     alpha = exp.(params_opt[3:2+q])
     beta = exp.(params_opt[3+q:2+q+p])
 
-    eps = y_vec .- mu
-    eps_sq = eps .^ 2
-    h = _garch_filter(omega, alpha, beta, eps_sq)
-    z = eps ./ sqrt.(h)
+    resid = y_vec .- mu
+    resid_sq = resid .^ 2
+    h = _garch_filter(omega, alpha, beta, resid_sq)
+    z = resid ./ sqrt.(h)
 
     loglik = -Optim.minimum(result)
     k = 2 + q + p
     aic_val, bic_val = _compute_aic_bic(loglik, k, n)
 
-    GARCHModel(y_vec, p, q, mu, omega, alpha, beta, h, z, eps, fill(mu, n),
+    GARCHModel(y_vec, p, q, mu, omega, alpha, beta, h, z, resid, fill(mu, n),
                loglik, aic_val, bic_val, method, Optim.converged(result), Optim.iterations(result))
 end
 
@@ -393,15 +393,15 @@ function estimate_egarch(y::AbstractVector{T}, p::Int=1, q::Int=1; method::Symbo
     gamma = params_opt[3+q:2+2q]
     beta = params_opt[3+2q:2+2q+p]
 
-    eps = y_vec .- mu
-    backcast_logh = log(var(eps; corrected=false))
-    h, z, _ = _egarch_filter(omega, alpha, gamma, beta, eps, backcast_logh)
+    resid = y_vec .- mu
+    backcast_logh = log(var(resid; corrected=false))
+    h, z, _ = _egarch_filter(omega, alpha, gamma, beta, resid, backcast_logh)
 
     loglik = -Optim.minimum(result)
     k = 2 + 2q + p
     aic_val, bic_val = _compute_aic_bic(loglik, k, n)
 
-    EGARCHModel(y_vec, p, q, mu, omega, alpha, gamma, beta, h, z, eps, fill(mu, n),
+    EGARCHModel(y_vec, p, q, mu, omega, alpha, gamma, beta, h, z, resid, fill(mu, n),
                 loglik, aic_val, bic_val, method, Optim.converged(result), Optim.iterations(result))
 end
 

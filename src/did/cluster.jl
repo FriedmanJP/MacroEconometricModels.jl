@@ -19,23 +19,32 @@ using LinearAlgebra
 
 """
     _cluster_vcov(X::Matrix{T}, resid::Vector{T}, cluster_ids::Vector{Int};
-                  type::Symbol=:unit) where {T}
+                  n_absorbed::Int=0) where {T}
 
 Compute cluster-robust variance-covariance matrix.
 
 Implements the sandwich estimator V = (X'X)^{-1} M (X'X)^{-1} where
-M = sum_g (X_g' u_g)(X_g' u_g)' with small-sample correction G/(G-1) * (N-1)/(N-K).
+M = sum_g (X_g' u_g)(X_g' u_g)' with small-sample correction
+G/(G-1) * (N-1)/(N-K-n_absorbed).
+
+`n_absorbed` counts fixed-effect parameters absorbed by a within-transformation
+that do not appear as columns of `X`. Following the reghdfe convention, absorbed
+FE that are NESTED within the clustering dimension (e.g. unit FE clustered on
+unit) must NOT be counted — pass only the absorbed parameters from non-nested
+dimensions.
 
 # Arguments
 - `X`: N x K regressor matrix
 - `resid`: N x 1 residual vector
 - `cluster_ids`: N x 1 integer cluster membership
+- `n_absorbed`: absorbed (non-nested) FE parameters for the dof correction
 
 # Returns
 K x K cluster-robust VCV matrix.
 """
 function _cluster_vcov(X::Matrix{T}, resid::Vector{T},
-                       cluster_ids::Vector{Int}) where {T<:AbstractFloat}
+                       cluster_ids::Vector{Int};
+                       n_absorbed::Int=0) where {T<:AbstractFloat}
     N, K = size(X)
     clusters = unique(cluster_ids)
     G = length(clusters)
@@ -52,8 +61,8 @@ function _cluster_vcov(X::Matrix{T}, resid::Vector{T},
         meat .+= score_g * score_g'
     end
 
-    # Small-sample correction: G/(G-1) * (N-1)/(N-K)
-    correction = T(G) / T(G - 1) * T(N - 1) / T(N - K)
+    # Small-sample correction: G/(G-1) * (N-1)/(N-K-n_absorbed)
+    correction = T(G) / T(G - 1) * T(N - 1) / T(max(N - K - n_absorbed, 1))
 
     Matrix{T}(XtX_inv * (correction .* meat) * XtX_inv)
 end

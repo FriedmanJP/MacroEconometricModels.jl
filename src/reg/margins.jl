@@ -58,6 +58,82 @@ function _probit_pdf_deriv(eta::T) where {T<:AbstractFloat}
     -eta * _probit_pdf(eta)
 end
 
+"""
+    _logit_cdf(eta) -> F(eta)
+
+Logistic CDF: F(eta) = 1 / (1 + exp(-eta)).
+"""
+function _logit_cdf(eta::T) where {T<:AbstractFloat}
+    one(T) / (one(T) + exp(-eta))
+end
+
+"""
+    _probit_cdf(eta) -> Phi(eta)
+
+Standard normal CDF evaluated at eta.
+"""
+function _probit_cdf(eta::T) where {T<:AbstractFloat}
+    T(cdf(Normal(zero(T), one(T)), eta))
+end
+
+"""
+    _me_column_kinds(X) -> Vector{Symbol}
+
+Classify each regressor column for marginal-effect computation:
+`:intercept` (all ones), `:binary` (all values in {0,1}), or `:continuous`.
+"""
+function _me_column_kinds(X::Matrix{T}) where {T<:AbstractFloat}
+    k = size(X, 2)
+    kinds = Vector{Symbol}(undef, k)
+    @inbounds for j in 1:k
+        col = @view X[:, j]
+        if all(==(one(T)), col)
+            kinds[j] = :intercept
+        elseif all(v -> v == zero(T) || v == one(T), col)
+            kinds[j] = :binary
+        else
+            kinds[j] = :continuous
+        end
+    end
+    kinds
+end
+
+# Marginal effects and delta-method Jacobian rows at a single evaluation point x0
+# (used by MEM and MER). Continuous: me_j = f(eta)*beta_j. Binary: discrete change
+# me_j = F(eta | x_j=1) - F(eta | x_j=0). Intercept: row left at zero (NaN assigned
+# by the caller after the delta-method variance is formed).
+function _me_at_point!(me::Vector{T}, G::Matrix{T}, x0::Vector{T}, beta::Vector{T},
+                       kinds::Vector{Symbol}, f_pdf::Function, f_pdf_deriv::Function,
+                       f_cdf::Function) where {T<:AbstractFloat}
+    k = length(beta)
+    eta_pt = dot(x0, beta)
+    f_pt = f_pdf(eta_pt)
+    fp_pt = f_pdf_deriv(eta_pt)
+    @inbounds for j in 1:k
+        if kinds[j] == :continuous
+            me[j] = f_pt * beta[j]
+            for l in 1:k
+                G[j, l] = (j == l ? f_pt : zero(T)) + fp_pt * beta[j] * x0[l]
+            end
+        elseif kinds[j] == :binary
+            eta1 = eta_pt + (one(T) - x0[j]) * beta[j]
+            eta0 = eta_pt - x0[j] * beta[j]
+            me[j] = f_cdf(eta1) - f_cdf(eta0)
+            f1 = f_pdf(eta1)
+            f0 = f_pdf(eta0)
+            for l in 1:k
+                G[j, l] = l == j ? f1 : (f1 - f0) * x0[l]
+            end
+        else  # :intercept
+            me[j] = zero(T)
+            for l in 1:k
+                G[j, l] = zero(T)
+            end
+        end
+    end
+    nothing
+end
+
 # =============================================================================
 # Shared Implementation
 # =============================================================================
@@ -75,9 +151,16 @@ Shared implementation for computing marginal effects from binary response models
 - `conf_level::Real` — confidence level for CIs
 
 # Formulas
+Continuous regressors:
 - AME: (1/N) sum_i f(X_i beta) * beta_j
 - MEM: f(X_bar beta) * beta_j
 - MER: f(x_0 beta) * beta_j at user-specified x_0
+
+Binary {0,1} regressors use the discrete change (Stata `margins, dydx(*)` factor
+variables): ME_j = F(eta | x_j = 1) - F(eta | x_j = 0), averaged over observations
+for AME or evaluated at the point for MEM/MER, with F the link CDF.
+
+The intercept column (all ones) has no marginal effect: its entries are NaN.
 
 Delta method: Var(ME) = G' Var(beta) G where G = d(marginal effect)/d(beta).
 """
@@ -89,17 +172,24 @@ function _marginal_effects_impl(m, link::Symbol, type::Symbol,
     V = m.vcov_mat
     n, k = size(X)
 
-    # Select PDF and its derivative based on link
+    # Select PDF, its derivative, and CDF based on link
     f_pdf = link == :logit ? _logit_pdf : _probit_pdf
     f_pdf_deriv = link == :logit ? _logit_pdf_deriv : _probit_pdf_deriv
+    f_cdf = link == :logit ? _logit_cdf : _probit_cdf
+
+    kinds = _me_column_kinds(X)
 
     # ---- Compute marginal effects and Jacobian G ----
     me = Vector{T}(undef, k)
     G = Matrix{T}(undef, k, k)
 
     if type == :ame
-        # Average Marginal Effects: (1/N) sum_i f(eta_i) * beta_j
-        # G[j,l] = (1/N) sum_i [(j==l ? f_i : 0) + f'(eta_i) * beta_j * x_il]
+        # Average Marginal Effects.
+        # Continuous j: (1/N) sum_i f(eta_i) * beta_j,
+        #   G[j,l] = (1/N) sum_i [(j==l ? f_i : 0) + f'(eta_i) * beta_j * x_il]
+        # Binary j: (1/N) sum_i [F(eta_i | x_j=1) - F(eta_i | x_j=0)],
+        #   G[j,l] = (1/N) sum_i [(f(eta1_i) - f(eta0_i)) * x_il]  (l != j),
+        #   G[j,j] = (1/N) sum_i f(eta1_i)
 
         me .= zero(T)
         G .= zero(T)
@@ -111,10 +201,22 @@ function _marginal_effects_impl(m, link::Symbol, type::Symbol,
             fp_i = f_pdf_deriv(eta_i)
 
             for j in 1:k
-                me[j] += f_i * beta[j]
-                for l in 1:k
-                    G[j, l] += (j == l ? f_i : zero(T)) + fp_i * beta[j] * xi[l]
+                if kinds[j] == :continuous
+                    me[j] += f_i * beta[j]
+                    for l in 1:k
+                        G[j, l] += (j == l ? f_i : zero(T)) + fp_i * beta[j] * xi[l]
+                    end
+                elseif kinds[j] == :binary
+                    eta1 = eta_i + (one(T) - xi[j]) * beta[j]
+                    eta0 = eta_i - xi[j] * beta[j]
+                    me[j] += f_cdf(eta1) - f_cdf(eta0)
+                    f1 = f_pdf(eta1)
+                    f0 = f_pdf(eta0)
+                    for l in 1:k
+                        G[j, l] += l == j ? f1 : (f1 - f0) * xi[l]
+                    end
                 end
+                # :intercept — row stays zero; NaN assigned after the delta method
             end
         end
 
@@ -122,18 +224,9 @@ function _marginal_effects_impl(m, link::Symbol, type::Symbol,
         G ./= T(n)
 
     elseif type == :mem
-        # Marginal Effects at the Mean: f(X_bar beta) * beta_j
+        # Marginal Effects at the Mean
         x_bar = vec(mean(X, dims=1))
-        eta_bar = dot(x_bar, beta)
-        f_bar = f_pdf(eta_bar)
-        fp_bar = f_pdf_deriv(eta_bar)
-
-        @inbounds for j in 1:k
-            me[j] = f_bar * beta[j]
-            for l in 1:k
-                G[j, l] = (j == l ? f_bar : zero(T)) + fp_bar * beta[j] * x_bar[l]
-            end
-        end
+        _me_at_point!(me, G, x_bar, beta, kinds, f_pdf, f_pdf_deriv, f_cdf)
 
     elseif type == :mer
         # Marginal Effects at Representative values
@@ -146,22 +239,13 @@ function _marginal_effects_impl(m, link::Symbol, type::Symbol,
             x_0[col_idx] = T(val)
         end
 
-        eta_0 = dot(x_0, beta)
-        f_0 = f_pdf(eta_0)
-        fp_0 = f_pdf_deriv(eta_0)
-
-        @inbounds for j in 1:k
-            me[j] = f_0 * beta[j]
-            for l in 1:k
-                G[j, l] = (j == l ? f_0 : zero(T)) + fp_0 * beta[j] * x_0[l]
-            end
-        end
+        _me_at_point!(me, G, x_0, beta, kinds, f_pdf, f_pdf_deriv, f_cdf)
     else
         throw(ArgumentError("type must be :ame, :mem, or :mer; got :$type"))
     end
 
     # ---- Delta-method standard errors ----
-    # Var(ME) = G V G'
+    # Var(ME) = G V G'  (intercept rows of G are zero, so they do not pollute others)
     var_me = G * V * G'
     se = sqrt.(max.(diag(var_me), zero(T)))
 
@@ -177,6 +261,18 @@ function _marginal_effects_impl(m, link::Symbol, type::Symbol,
     z_crit = T(quantile(Normal(), 1 - (1 - conf_level) / 2))
     ci_lower = me .- z_crit .* se
     ci_upper = me .+ z_crit .* se
+
+    # ---- Intercept has no marginal effect ----
+    @inbounds for j in 1:k
+        if kinds[j] == :intercept
+            me[j] = T(NaN)
+            se[j] = T(NaN)
+            z_stat[j] = T(NaN)
+            p_values[j] = T(NaN)
+            ci_lower[j] = T(NaN)
+            ci_upper[j] = T(NaN)
+        end
+    end
 
     MarginalEffects{T}(
         me, se, z_stat, p_values,
@@ -200,6 +296,10 @@ Compute marginal effects from a logistic regression model with delta-method SEs.
 - `:mer` — Marginal Effects at Representative values: f(x_0 beta) * beta_j
 
 where f(eta) = logistic PDF = p(1-p) and p = 1/(1+exp(-eta)).
+
+Binary {0,1} regressors get the discrete change F(eta | x_j=1) - F(eta | x_j=0)
+(as Stata `margins, dydx(*)` for factor variables), with F the logistic CDF.
+The intercept column has no marginal effect: its entries are `NaN`.
 
 # Arguments
 - `m::LogitModel{T}` — estimated logit model
@@ -240,6 +340,10 @@ Compute marginal effects from a probit regression model with delta-method SEs.
 - `:mer` — Marginal Effects at Representative values: phi(x_0 beta) * beta_j
 
 where phi(eta) = standard normal PDF.
+
+Binary {0,1} regressors get the discrete change Phi(eta | x_j=1) - Phi(eta | x_j=0)
+(as Stata `margins, dydx(*)` for factor variables).
+The intercept column has no marginal effect: its entries are `NaN`.
 
 # Arguments
 - `m::ProbitModel{T}` — estimated probit model

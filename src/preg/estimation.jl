@@ -751,6 +751,9 @@ function _estimate_between(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
 
     # ---- Covariance: OLS on group means ----
     # For between estimator, use OLS vcov (no clustering at group level — each obs is a group)
+    if cov_type != :ols
+        @warn "between estimator uses classical (OLS) standard errors on the group-means regression; requested cov_type=:$cov_type is ignored"
+    end
     sigma2_ols = ssr / T(max(N - k_full, 1))
     vcov_full = sigma2_ols .* XtXinv
     vcov_mat = vcov_full[2:end, 2:end]

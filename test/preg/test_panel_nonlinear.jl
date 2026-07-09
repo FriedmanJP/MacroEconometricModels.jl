@@ -510,3 +510,27 @@ end
     @test contains(s_probit, "Probit")
     @test contains(s_probit, "Pooled")
 end
+
+# =============================================================================
+# T089 (#188): M-36 — xtprobit :fe rejected (incidental parameters)
+# =============================================================================
+
+@testset "T089 M-36: xtprobit :fe throws (incidental parameters)" begin
+    rng = Random.MersenneTwister(18936)
+    N_g = 10; T_p = 8; n = N_g * T_p
+    ids = repeat(1:N_g, inner=T_p)
+    ts = repeat(1:T_p, N_g)
+    x1 = randn(rng, n)
+    y = Float64.(x1 .+ 0.5 .* randn(rng, n) .> 0)
+    df = DataFrame(id=ids, t=ts, x1=x1, y=y)
+    pd = xtset(df, :id, :t)
+
+    err = try
+        estimate_xtprobit(pd, :y, [:x1]; model=:fe)
+        nothing
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    @test occursin("incidental parameters", err.msg)
+end

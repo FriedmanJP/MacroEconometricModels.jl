@@ -3997,7 +3997,7 @@ end
         # Parameter should be recovered within CI
         @test abs(est.theta[1] - 0.85) < 0.15
         @test est.J_stat >= 0.0
-        @test 0.0 <= est.J_pvalue <= 1.0
+        @test isnan(est.J_pvalue)  # identity weighting: J not chi-squared (T089 M-29)
     end
 
     @testset "Innovation variance 2nd order" begin

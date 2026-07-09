@@ -624,3 +624,64 @@ end
     @test d.ar2_p > 0.05
     @test d.hansen_df == d.n_instruments - length(coef(m))
 end
+
+# =============================================================================
+# T089 (#188): M-33 absorbed-FE cluster dof, M-35 between cov_type warning
+# =============================================================================
+
+@testset "T089: panel cluster dof + between cov_type warning" begin
+
+    @testset "M-33: n_absorbed scales the cluster correction" begin
+        rng = Random.MersenneTwister(18933)
+        N_g = 8; T_p = 12; n = N_g * T_p; k = 2
+        X = randn(rng, n, k)
+        resid = randn(rng, n)
+        groups = repeat(1:N_g, inner=T_p)
+        time_ids = repeat(1:T_p, N_g)
+        XtXinv = Matrix(MacroEconometricModels.robust_inv(X' * X))
+
+        V0 = MacroEconometricModels._panel_cluster_vcov(X, resid, XtXinv, groups)
+        n_abs = 5
+        V1 = MacroEconometricModels._panel_cluster_vcov(X, resid, XtXinv, groups; n_absorbed=n_abs)
+
+        # The correction rescales the whole matrix by (n-k)/(n-k-n_absorbed)
+        ratio = (n - k) / (n - k - n_abs)
+        @test V1 ≈ V0 .* ratio atol = 1e-12
+        # Every clustered SE strictly increases by sqrt(ratio)
+        @test all(sqrt.(diag(V1)) .≈ sqrt.(diag(V0)) .* sqrt(ratio))
+
+        # Threaded through _panel_vcov (:cluster branch)
+        V2 = MacroEconometricModels._panel_vcov(X, resid, XtXinv, groups, time_ids, :cluster;
+                                                n_absorbed=n_abs)
+        @test V2 ≈ V1 atol = 1e-12
+
+        # Default is inert
+        V3 = MacroEconometricModels._panel_vcov(X, resid, XtXinv, groups, time_ids, :cluster)
+        @test V3 ≈ V0 atol = 1e-12
+
+        # Time-cluster variant takes the same kwarg
+        Vt0 = MacroEconometricModels._panel_time_cluster_vcov(X, resid, XtXinv, time_ids)
+        Vt1 = MacroEconometricModels._panel_time_cluster_vcov(X, resid, XtXinv, time_ids; n_absorbed=n_abs)
+        @test Vt1 ≈ Vt0 .* ratio atol = 1e-12
+    end
+
+    @testset "M-35: between estimator warns when cov_type is ignored" begin
+        rng = Random.MersenneTwister(18935)
+        N_g = 12; T_p = 6; n = N_g * T_p
+        ids = repeat(1:N_g, inner=T_p)
+        ts = repeat(1:T_p, N_g)
+        x1 = repeat(randn(rng, N_g), inner=T_p) .+ 0.5 .* randn(rng, n)
+        y = 2.0 .* x1 .+ repeat(randn(rng, N_g), inner=T_p) .+ 0.3 .* randn(rng, n)
+        df = DataFrame(id=ids, t=ts, x1=x1, y=y)
+        pd = xtset(df, :id, :t)
+
+        # Default cov_type=:cluster is silently classical -> now warns
+        m_warn = @test_logs (:warn, r"between estimator uses classical") estimate_xtreg(
+            pd, :y, [:x1]; model=:between)
+        # Explicit :ols does not warn
+        m_ols = @test_logs estimate_xtreg(pd, :y, [:x1]; model=:between, cov_type=:ols)
+        # Both return the same (classical) covariance
+        @test vcov(m_warn) ≈ vcov(m_ols) atol = 1e-12
+    end
+
+end

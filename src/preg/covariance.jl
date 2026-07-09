@@ -16,25 +16,33 @@ using LinearAlgebra
 # =============================================================================
 
 """
-    _panel_cluster_vcov(X, resid, XtXinv, groups) -> Matrix{T}
+    _panel_cluster_vcov(X, resid, XtXinv, groups; n_absorbed=0) -> Matrix{T}
 
 Entity cluster-robust variance-covariance estimator for panel data.
 
 V = (X'X)^{-1} B (X'X)^{-1}, where B = sum_g (X_g' e_g)(X_g' e_g)'.
-Includes G/(G-1) * (n-1)/(n-k) finite-sample correction.
+Includes G/(G-1) * (n-1)/(n-k-n_absorbed) finite-sample correction.
+
+`n_absorbed` counts fixed-effect parameters absorbed by the within-transformation
+that are not columns of `X`. Following the reghdfe convention, absorbed FE nested
+within the clustering dimension (entity FE clustered on entity — the default panel
+setup) are excluded, so the default `n_absorbed=0` reproduces the standard
+correction; pass the absorbed count only for non-nested dimensions.
 
 # Arguments
 - `X::Matrix{T}` — demeaned regressor matrix (n x k)
 - `resid::Vector{T}` — residuals (n)
 - `XtXinv::Matrix{T}` — (X'X)^{-1}
 - `groups::AbstractVector{Int}` — group assignment for each observation
+- `n_absorbed::Int` — absorbed (non-nested) FE parameters for the dof correction
 
 # References
 - Arellano, M. (1987). *Oxford Bulletin of Economics and Statistics* 49(4), 431-434.
 - Cameron, A. C. & Miller, D. L. (2015). *JPE* 50, 327-372.
 """
 function _panel_cluster_vcov(X::Matrix{T}, resid::Vector{T},
-                             XtXinv::Matrix{T}, groups::AbstractVector{Int}) where {T<:AbstractFloat}
+                             XtXinv::Matrix{T}, groups::AbstractVector{Int};
+                             n_absorbed::Int=0) where {T<:AbstractFloat}
     n, k = size(X)
     unique_groups = unique(groups)
     G = length(unique_groups)
@@ -49,7 +57,7 @@ function _panel_cluster_vcov(X::Matrix{T}, resid::Vector{T},
         B .+= score_g * score_g'
     end
 
-    correction = T(G) / T(G - 1) * T(n - 1) / T(n - k)
+    correction = T(G) / T(G - 1) * T(n - 1) / T(max(n - k - n_absorbed, 1))
     B .*= correction
 
     XtXinv * B * XtXinv
@@ -77,7 +85,8 @@ Same formula as entity-cluster but grouping by time.
 - Cameron, A. C. & Miller, D. L. (2015). *JPE* 50, 327-372.
 """
 function _panel_time_cluster_vcov(X::Matrix{T}, resid::Vector{T},
-                                  XtXinv::Matrix{T}, time_ids::AbstractVector{Int}) where {T<:AbstractFloat}
+                                  XtXinv::Matrix{T}, time_ids::AbstractVector{Int};
+                                  n_absorbed::Int=0) where {T<:AbstractFloat}
     n, k = size(X)
     unique_times = unique(time_ids)
     G = length(unique_times)
@@ -92,7 +101,7 @@ function _panel_time_cluster_vcov(X::Matrix{T}, resid::Vector{T},
         B .+= score_t * score_t'
     end
 
-    correction = T(G) / T(G - 1) * T(n - 1) / T(n - k)
+    correction = T(G) / T(G - 1) * T(n - 1) / T(max(n - k - n_absorbed, 1))
     B .*= correction
 
     XtXinv * B * XtXinv
@@ -223,7 +232,8 @@ end
 # =============================================================================
 
 """
-    _panel_vcov(X, resid, XtXinv, groups, time_ids, cov_type; bandwidth=nothing) -> Matrix{T}
+    _panel_vcov(X, resid, XtXinv, groups, time_ids, cov_type;
+                bandwidth=nothing, n_absorbed=0) -> Matrix{T}
 
 Dispatch to the appropriate panel covariance estimator.
 
@@ -232,18 +242,23 @@ Dispatch to the appropriate panel covariance estimator.
 - `:cluster` — entity cluster-robust (default)
 - `:twoway` — two-way cluster (Cameron-Gelbach-Miller 2011)
 - `:driscoll_kraay` — Driscoll-Kraay (1998) HAC
+
+`n_absorbed` is forwarded to the `:cluster` small-sample dof correction — count
+only absorbed FE parameters NOT nested within the entity clustering dimension
+(reghdfe convention); entity FE clustered on entity contribute 0.
 """
 function _panel_vcov(X::Matrix{T}, resid::Vector{T}, XtXinv::Matrix{T},
                      groups::AbstractVector{Int}, time_ids::AbstractVector{Int},
                      cov_type::Symbol;
-                     bandwidth::Union{Nothing,Int}=nothing) where {T<:AbstractFloat}
+                     bandwidth::Union{Nothing,Int}=nothing,
+                     n_absorbed::Int=0) where {T<:AbstractFloat}
     n, k = size(X)
 
     if cov_type == :ols
         sigma2 = dot(resid, resid) / T(n - k)
         return sigma2 .* XtXinv
     elseif cov_type == :cluster
-        return _panel_cluster_vcov(X, resid, XtXinv, groups)
+        return _panel_cluster_vcov(X, resid, XtXinv, groups; n_absorbed=n_absorbed)
     elseif cov_type == :twoway
         return _panel_twoway_vcov(X, resid, XtXinv, groups, time_ids)
     elseif cov_type == :driscoll_kraay

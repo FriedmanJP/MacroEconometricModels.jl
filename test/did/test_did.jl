@@ -1539,4 +1539,25 @@ end
         @test isapprox(pt0.statistic, (0.3 / 0.1)^2 + (0.2 / 0.15)^2; atol=1e-10)
     end
 
+
+    # =========================================================================
+    # T089 (#188) M-33: absorbed-FE dof in the DiD cluster correction
+    # =========================================================================
+
+    @testset "T089 M-33: _cluster_vcov n_absorbed kwarg" begin
+        rng = Random.MersenneTwister(18937)
+        N = 90; K = 2
+        X = randn(rng, N, K)
+        resid = randn(rng, N)
+        cluster_ids = repeat(1:9, inner=10)
+
+        V0 = MacroEconometricModels._cluster_vcov(X, resid, cluster_ids)
+        n_abs = 6
+        V1 = MacroEconometricModels._cluster_vcov(X, resid, cluster_ids; n_absorbed=n_abs)
+
+        ratio = (N - K) / (N - K - n_abs)
+        @test V1 ≈ V0 .* ratio atol = 1e-12
+        @test all(diag(V1) .> diag(V0))
+    end
+
 end  # @testset "Difference-in-Differences"
