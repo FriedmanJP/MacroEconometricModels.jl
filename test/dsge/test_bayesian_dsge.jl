@@ -1198,6 +1198,40 @@ end
     end
 end
 
+@testset "SMC prior init errors on exhausted retries (T051 #150)" begin
+    _suppress_warnings() do
+        spec = @dsge begin
+            parameters: ρ = 0.5, σ = 0.5
+            endogenous: y
+            exogenous: ε
+            y[t] = ρ * y[t-1] + σ * ε[t]
+            steady_state = [0.0]
+        end
+        spec = compute_steady_state(spec)
+        sol = solve(spec; method=:gensys)
+        data = simulate(sol, 50; rng=Random.MersenneTwister(7))'  # n_obs × T
+
+        # Prior support (Normal(5.0, 0.01)) lies entirely OUTSIDE the [0.01, 0.99] bounds →
+        # every draw is rejected → the initializer must fail loudly, not substitute a midpoint.
+        bad_prior = MacroEconometricModels.DSGEPrior(
+            Dict(:ρ => Normal(5.0, 0.01));
+            lower=Dict(:ρ => 0.01), upper=Dict(:ρ => 0.99))
+
+        err = try
+            MacroEconometricModels._smc_sample(spec, data, [:ρ], bad_prior, [0.5];
+                n_smc=4, observables=[:y], solver=:gensys,
+                rng=Random.MersenneTwister(123))
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        msg = sprint(showerror, err)
+        @test occursin("ρ", msg)     # names the offending parameter
+        @test occursin("100", msg)   # names the rejection count
+    end
+end
+
 @testset "SMC tempering: max_stages guard (#145 T046)" begin
     _suppress_warnings() do
     spec = @dsge begin

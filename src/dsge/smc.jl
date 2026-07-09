@@ -583,10 +583,15 @@ function _smc_sample(spec::DSGESpec{T}, data::AbstractMatrix,
                     break
                 end
                 if attempt == 100
-                    # Fallback to midpoint
-                    lo = isfinite(prior.lower[i]) ? prior.lower[i] : T(0)
-                    hi = isfinite(prior.upper[i]) ? prior.upper[i] : T(1)
-                    theta_particles[i, j] = (lo + hi) / 2
+                    # Fail loudly rather than silently substituting the interval midpoint,
+                    # which would distort the prior and hide a pathological prior/model
+                    # region where draws never land in bounds (#150).
+                    throw(ArgumentError(
+                        "SMC prior initialization failed: parameter `$(param_names[i])` " *
+                        "(prior $(prior.distributions[i]), support bounds " *
+                        "[$(prior.lower[i]), $(prior.upper[i])]) produced 100 consecutive " *
+                        "out-of-bounds draws. Check the prior support and model determinacy " *
+                        "in that region."))
                 end
             end
         end
@@ -1349,9 +1354,13 @@ function _smc2_sample(spec::DSGESpec{T}, data::AbstractMatrix,
                     break
                 end
                 if attempt == 100
-                    lo = isfinite(prior.lower[i]) ? prior.lower[i] : T(0)
-                    hi = isfinite(prior.upper[i]) ? prior.upper[i] : T(1)
-                    theta_particles[i, j] = (lo + hi) / 2
+                    # Fail loudly rather than silently substituting the interval midpoint (#150).
+                    throw(ArgumentError(
+                        "SMC prior initialization failed: parameter `$(param_names[i])` " *
+                        "(prior $(prior.distributions[i]), support bounds " *
+                        "[$(prior.lower[i]), $(prior.upper[i])]) produced 100 consecutive " *
+                        "out-of-bounds draws. Check the prior support and model determinacy " *
+                        "in that region."))
                 end
             end
         end
