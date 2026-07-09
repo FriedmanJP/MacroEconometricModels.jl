@@ -390,6 +390,19 @@ end
         # Overall ATT is the weighted average
         @test isapprox(bd.overall_att, sum(bd.estimates .* bd.weights); atol=1e-10)
 
+        # Goodman-Bacon (2021) identity (T070): Σ weight·component == the static single-
+        # coefficient TWFE β on D_it = 1{t >= treat_time} (exact for this balanced panel).
+        # The old weights omitted the D̄(1-D̄) timing-window factors and violated this.
+        gid = pd.group_id; tid = pd.time_id
+        Dit = Float64[(pd.data[i, 2] > 0 && tid[i] >= pd.data[i, 2]) ? 1.0 : 0.0
+                      for i in 1:pd.T_obs]
+        y_dm = MacroEconometricModels._double_demean(pd.data[:, 1], gid, tid)
+        D_dm = MacroEconometricModels._double_demean(Dit, gid, tid)
+        beta_twfe = dot(D_dm, y_dm) / dot(D_dm, D_dm)
+        @test isapprox(sum(bd.estimates .* bd.weights), beta_twfe; atol=1e-8)
+        @test isapprox(bd.overall_att, beta_twfe; atol=1e-8)
+        @test all(bd.weights .>= 0)                  # interior cohorts ⇒ no negative weights
+
         # Display
         io = IOBuffer()
         show(io, bd)

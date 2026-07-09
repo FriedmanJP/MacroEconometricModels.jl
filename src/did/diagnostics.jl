@@ -167,12 +167,16 @@ function _bacon_2x2(panel, treated, control, g_time, all_times, n_total)
 
     dd = (mean(post_treat) - mean(pre_treat)) - (mean(post_ctrl) - mean(pre_ctrl))
 
-    # Weight proportional to subsample size x variance of treatment
+    # Goodman-Bacon (2021) weight s^k_kU = n_sub² · p(1-p) · D̄_k(1-D̄_k):
+    # subsample treatment-share variance p(1-p) TIMES the treated-time-share variance
+    # D̄_k(1-D̄_k) that the old formula omitted. (Global 1/n_total drop: normalized below.)
     n_k = length(treated)
     n_u = length(control)
     n_sub = n_k + n_u
     p_k = n_k / n_sub
-    w = T_type(n_sub) / T_type(n_total) * p_k * (1 - p_k)
+    n_times = length(all_times)
+    Dk = count(t -> t >= g_time, all_times) / n_times
+    w = T_type(n_sub)^2 * p_k * (1 - p_k) * Dk * (1 - Dk)
 
     dd, w
 end
@@ -215,11 +219,16 @@ function _bacon_2x2_timing(panel, early_units, late_units, g_early, g_late,
 
     dd = (mean(post_early) - mean(pre_early)) - (mean(post_late) - mean(pre_late))
 
+    # Goodman-Bacon (2021) earlier-vs-later weight s^k_kl = n_sub² · p(1-p) · (1-D̄_k)(D̄_k-D̄_l),
+    # early is treated / late not-yet in the [g_early, g_late) window. D̄_k>D̄_l>0 ⇒ w>0.
     n_e = length(early_units)
     n_l = length(late_units)
     n_sub = n_e + n_l
     p_e = n_e / n_sub
-    w = T_type(n_sub) / T_type(n_total) * p_e * (1 - p_e)
+    n_times = length(all_times)
+    Dk = count(t -> t >= g_early, all_times) / n_times
+    Dl = count(t -> t >= g_late, all_times) / n_times
+    w = T_type(n_sub)^2 * p_e * (1 - p_e) * (1 - Dk) * (Dk - Dl)
 
     dd, w
 end
@@ -263,11 +272,16 @@ function _bacon_2x2_later_vs_earlier(panel, late_units, early_units, g_late, g_e
 
     dd = (mean(post_late) - mean(pre_late)) - (mean(post_early) - mean(pre_early))
 
+    # Goodman-Bacon (2021) later-vs-earlier weight s^l_kl = n_sub² · p(1-p) · D̄_l(D̄_k-D̄_l),
+    # late is treated / early already treated in the [g_late, end) window. p(1-p) symmetric.
     n_l = length(late_units)
     n_e = length(early_units)
     n_sub = n_l + n_e
     p_l = n_l / n_sub
-    w = T_type(n_sub) / T_type(n_total) * p_l * (1 - p_l)
+    n_times = length(all_times)
+    Dk = count(t -> t >= g_early, all_times) / n_times
+    Dl = count(t -> t >= g_late, all_times) / n_times
+    w = T_type(n_sub)^2 * p_l * (1 - p_l) * Dl * (Dk - Dl)
 
     dd, w
 end
