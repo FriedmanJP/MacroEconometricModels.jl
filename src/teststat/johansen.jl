@@ -10,6 +10,40 @@ Johansen cointegration test for VAR systems.
 
 using LinearAlgebra
 
+
+"""
+    _johansen_pvalue(stat, m, deterministic, test) -> p
+
+Asymptotic p-value for the Johansen trace or maximum-eigenvalue statistic via
+the Doornik (1998) gamma approximation: the asymptotic distribution for
+`m = n - r` common trends under the null is approximated by
+`Gamma(mean^2/var, var/mean)` with `mean` and `var` from case-specific response
+surfaces, reproducing the MacKinnon-Haug-Michelis (1999) numerical
+distributions to simulation accuracy.
+
+Deterministic cases map to Doornik/gretl rows: `:none` -> no constant,
+`:constant` -> restricted constant, `:trend` -> restricted trend (matching the
+Osterwald-Lenum critical-value tables used for the rank decision).
+"""
+function _johansen_pvalue(stat::T, m::Int, deterministic::Symbol,
+                          test::Symbol) where {T<:AbstractFloat}
+    case = deterministic == :none ? 1 :
+           deterministic == :constant ? 2 : 4
+    x = (Float64(m)^2, Float64(m), 1.0,
+         m == 1 ? 1.0 : 0.0, m == 2 ? 1.0 : 0.0, sqrt(Float64(m)))
+    local mn::Float64, vr::Float64
+    if test == :trace
+        mn = sum(x[i] * JOHANSEN_TRACE_M_COEF[case, i] for i in 1:6)
+        vr = sum(x[i] * JOHANSEN_TRACE_V_COEF[case, i] for i in 1:6)
+    else
+        mn = sum(x[i+1] * JOHANSEN_MAXEV_M_COEF[case, i] for i in 1:5)
+        vr = sum(x[i+1] * JOHANSEN_MAXEV_V_COEF[case, i] for i in 1:5)
+    end
+    (isfinite(stat) && stat > zero(T)) || return one(T)
+    p = 1.0 - cdf(Gamma(mn^2 / vr, vr / mn), Float64(stat))
+    clamp(T(p), zero(T), one(T))
+end
+
 """
     johansen_test(Y, p; deterministic=:constant) -> JohansenResult
 
@@ -46,6 +80,10 @@ result.rank  # Should detect 1 or 2 cointegrating relations
   vectors in Gaussian vector autoregressive models. Econometrica, 59(6), 1551-1580.
 - Osterwald-Lenum, M. (1992). A note with quantiles of the asymptotic
   distribution of the ML cointegration rank test statistics. Oxford BEJM.
+- MacKinnon, J.G., Haug, A.A. & Michelis, L. (1999). Numerical distribution
+  functions of likelihood ratio tests for cointegration. JAE, 14(5), 563-577.
+- Doornik, J.A. (1998). Approximations to the asymptotic distributions of
+  cointegration tests. Journal of Economic Surveys, 12(5), 573-593.
 """
 function johansen_test(Y::AbstractMatrix{T}, p::Int;
                        deterministic::Symbol=:constant) where {T<:AbstractFloat}
@@ -170,36 +208,18 @@ function johansen_test(Y::AbstractMatrix{T}, p::Int;
         end
     end
 
-    # P-values (approximate, based on critical value interpolation)
+    # P-values: Doornik (1998) gamma approximation to the MHM (1999) asymptotic
+    # distributions (m = n - r common trends under each null). The rank decision
+    # below still uses the tabulated Osterwald-Lenum critical values, which can
+    # differ slightly from the asymptotic surfaces (OL simulations drift low for
+    # large m), so p-values near a CV need not equal the nominal level exactly.
     trace_pvalues = Vector{T}(undef, n)
     max_pvalues = Vector{T}(undef, n)
 
     for r in 1:n
-        # Trace test p-value
-        stat = trace_stats[r]
-        cv = cv_trace[r, :]
-        if stat >= cv[3]
-            trace_pvalues[r] = T(0.01)
-        elseif stat >= cv[2]
-            trace_pvalues[r] = T(0.01 + 0.04 * (cv[3] - stat) / (cv[3] - cv[2]))
-        elseif stat >= cv[1]
-            trace_pvalues[r] = T(0.05 + 0.05 * (cv[2] - stat) / (cv[2] - cv[1]))
-        else
-            trace_pvalues[r] = T(min(1.0, 0.10 + 0.40 * (cv[1] - stat) / cv[1]))
-        end
-
-        # Max eigenvalue p-value
-        stat = max_eigen_stats[r]
-        cv = cv_max[r, :]
-        if stat >= cv[3]
-            max_pvalues[r] = T(0.01)
-        elseif stat >= cv[2]
-            max_pvalues[r] = T(0.01 + 0.04 * (cv[3] - stat) / (cv[3] - cv[2]))
-        elseif stat >= cv[1]
-            max_pvalues[r] = T(0.05 + 0.05 * (cv[2] - stat) / (cv[2] - cv[1]))
-        else
-            max_pvalues[r] = T(min(1.0, 0.10 + 0.40 * (cv[1] - stat) / cv[1]))
-        end
+        m_ct = n - (r - 1)
+        trace_pvalues[r] = _johansen_pvalue(trace_stats[r], m_ct, deterministic, :trace)
+        max_pvalues[r] = _johansen_pvalue(max_eigen_stats[r], m_ct, deterministic, :max)
     end
 
     # Determine rank (using trace test at 5% level)

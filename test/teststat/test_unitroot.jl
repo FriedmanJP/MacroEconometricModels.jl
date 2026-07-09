@@ -652,3 +652,76 @@ using Statistics
     end
 
 end
+
+# =============================================================================
+# T078 (#177) Johansen: Doornik (1998) gamma-approximation p-values
+# =============================================================================
+
+@testset "MHM Johansen p-values (Doornik gamma approximation)" begin
+    MEM = MacroEconometricModels
+
+    @testset "reference values (independent scipy implementation)" begin
+        # (stat, m, deterministic, test) -> p, computed from the same Doornik
+        # response surfaces with scipy.stats.gamma — pins the transcription
+        # and the Gamma(mean²/var, var/mean) parameterization
+        for (stat, m, det, test, pref) in (
+                (3.5,   1, :none,     :trace, 0.0709697630),
+                (20.16, 2, :constant, :trace, 0.0500610501),
+                (53.94, 4, :constant, :trace, 0.0500491847),
+                (25.73, 2, :trend,    :trace, 0.0500154525),
+                (15.0,  2, :constant, :max,   0.0675404161),
+                (9.0,   1, :trend,    :max,   0.1849100718),
+                (40.0,  4, :none,     :max,   0.0000611059))
+            @test MEM._johansen_pvalue(stat, m, det, test) ≈ pref atol = 1e-8
+        end
+    end
+
+    @testset "nominal levels at MHM critical values" begin
+        # statsmodels c_sjt/c_sja tables are MacKinnon-Haug-Michelis-generated;
+        # our OL tables drift low for large m, so validate the surface against
+        # the case we can pin analytically: p at the OL 95% CV within [0.03, 0.09]
+        # for m ≤ 8 across the three deterministic cases (trace test)
+        cv95 = Dict(
+            (:none, 1) => 3.84,  (:none, 2) => 12.53,
+            (:constant, 1) => 9.24, (:constant, 2) => 19.96, (:constant, 4) => 53.12,
+            (:trend, 1) => 12.53, (:trend, 2) => 25.32, (:trend, 4) => 62.99)
+        for ((det, m), cv) in cv95
+            p = MEM._johansen_pvalue(cv, m, det, :trace)
+            @test 0.03 <= p <= 0.09
+        end
+    end
+
+    @testset "p-value properties" begin
+        MEMp = MacroEconometricModels._johansen_pvalue
+        # monotone decreasing in the statistic
+        for det in (:none, :constant, :trend), test in (:trace, :max)
+            ps = [MEMp(s, 2, det, test) for s in (1.0, 5.0, 15.0, 30.0, 60.0)]
+            @test issorted(ps; rev=true)
+            @test all(0 .<= ps .<= 1)
+        end
+        # degenerate inputs
+        @test MEMp(0.0, 2, :constant, :trace) == 1.0
+        @test MEMp(-1.0, 2, :constant, :trace) == 1.0
+        @test MEMp(1e6, 2, :constant, :trace) < 1e-10
+    end
+
+    @testset "johansen_test p-values are Doornik-based" begin
+        rng = Random.MersenneTwister(17701)
+        Tn = 200
+        x = cumsum(randn(rng, Tn))
+        Y = hcat(x .+ 0.2 .* randn(rng, Tn), x .+ 0.2 .* randn(rng, Tn),
+                 cumsum(randn(rng, Tn)))
+        res = johansen_test(Y, 2; deterministic=:constant)
+        # p-values match the surface applied to the reported statistics
+        for r in 1:3
+            m = 3 - (r - 1)
+            @test res.trace_pvalues[r] ≈
+                  MacroEconometricModels._johansen_pvalue(res.trace_stats[r], m, :constant, :trace) atol = 1e-12
+            @test res.max_eigen_pvalues[r] ≈
+                  MacroEconometricModels._johansen_pvalue(res.max_eigen_stats[r], m, :constant, :max) atol = 1e-12
+        end
+        # cointegrated pair -> rank 0 rejected decisively
+        @test res.trace_pvalues[1] < 0.01
+        @test all(isfinite.(res.trace_pvalues)) && all(isfinite.(res.max_eigen_pvalues))
+    end
+end

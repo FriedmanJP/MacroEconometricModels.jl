@@ -525,3 +525,49 @@ const GREGORY_HANSEN_CV = Dict(
     (:CT, 4)  => Dict(:ADF => Dict(1=>-6.36, 5=>-5.83, 10=>-5.59), :Za => Dict(1=>-76.95, 5=>-65.44, 10=>-60.12)),
     (:CS, 4)  => Dict(:ADF => Dict(1=>-6.92, 5=>-6.41, 10=>-6.17), :Za => Dict(1=>-90.35, 5=>-78.52, 10=>-72.56)),
 )
+
+# =============================================================================
+# Doornik (1998) gamma-approximation response surfaces — Johansen p-values
+# =============================================================================
+# Doornik (1998, Journal of Economic Surveys 12(5), 573-593) approximates the
+# asymptotic Johansen trace / max-eigenvalue distributions by Gamma
+# distributions whose mean and variance follow response surfaces in
+# m = n - r (common trends under the null). Coefficients transcribed
+# programmatically from gretl (GPL-3) plugin/johansen.c; they reproduce the
+# MacKinnon-Haug-Michelis (1999) quantiles to simulation accuracy.
+# Rows = Johansen deterministic cases 1..5: no constant, restricted constant,
+# unrestricted constant, restricted trend, unrestricted trend.
+# Trace regressors: [m^2, m, 1, m==1, m==2, sqrt(m)];
+# max-eigenvalue regressors: [m, 1, m==1, m==2, sqrt(m)].
+
+const JOHANSEN_TRACE_M_COEF = [
+    2.0  -1.00   0.07   0.07   0.00  0.00;
+    2.0   2.01   0.00   0.06   0.05  0.00;
+    2.0   1.05  -1.55  -0.50  -0.23  0.00;
+    2.0   4.05   0.50  -0.23  -0.07  0.00;
+    2.0   2.85  -5.10  -0.10  -0.06  1.35
+]
+
+const JOHANSEN_TRACE_V_COEF = [
+    3.0  -0.33  -0.55   0.0   0.00  0.0;
+    3.0   3.60   0.75  -0.4  -0.30  0.0;
+    3.0   1.80   0.00  -2.8  -1.10  0.0;
+    3.0   5.70   3.20  -1.3  -0.50  0.0;
+    3.0   4.00   0.80  -5.8  -2.66  0.0
+]
+
+const JOHANSEN_MAXEV_M_COEF = [
+    6.0019  -2.75580   0.67185   0.114900  -2.77640;
+    5.9498   0.43402   0.04836   0.018198  -2.36690;
+    5.8271  -1.64870  -1.61180  -0.259490  -1.56660;
+    5.8658   2.55950  -0.34443  -0.077991  -1.75520;
+    5.6364  -0.90531  -3.51660  -0.479660  -0.21447
+]
+
+const JOHANSEN_MAXEV_V_COEF = [
+    1.8806  -15.4990   1.11360   0.070508  14.714;
+    2.2231   -7.9064   0.58592  -0.034324  12.058;
+    2.0785   -9.7846  -3.36800  -0.245280  13.074;
+    1.9955   -5.5428   1.24250   0.419490  12.841;
+    2.0899   -5.3303  -7.15230  -0.252600  12.393
+]
