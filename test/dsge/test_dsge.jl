@@ -1384,6 +1384,9 @@ end
     @test est.converged
     @test abs(est.theta[1] - 0.7) < 0.25  # reasonable recovery
     @test is_determined(est.solution)
+    # Corrected two-step weighting (#172): valid Ω⁻¹ ⇒ finite, positive-variance vcov
+    @test all(isfinite, est.vcov)
+    @test all(diag(est.vcov) .> 0)
     end
 end
 

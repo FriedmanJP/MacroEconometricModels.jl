@@ -757,7 +757,7 @@ export j_test, numerical_gradient
 export estimate_lp_gmm, lp_gmm_moments
 export linear_gmm_solve, gmm_sandwich_vcov, andrews_lu_mmsc
 export ParameterTransform, to_unconstrained, to_constrained, transform_jacobian
-export SMMModel, estimate_smm, autocovariance_moments
+export SMMModel, estimate_smm, autocovariance_moments, autocovariance_moment_contributions
 
 # =============================================================================
 # Exports - Panel VAR
