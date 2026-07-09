@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Bacon Decomposition (TWFE = 2.5314916755754475)</title>
+<title>Bacon Decomposition (TWFE = 2.8433217202437753)</title>
 <style>* { margin: 0; padding: 0; box-sizing: border-box; }
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
@@ -67,7 +67,7 @@ svg { overflow: visible; }
 </style>
 </head>
 <body>
-<div class="figure-title">Bacon Decomposition (TWFE = 2.5314916755754475)</div>
+<div class="figure-title">Bacon Decomposition (TWFE = 2.8433217202437753)</div>
 <div class="panel">
 <div class="panel-title">Estimate vs Weight</div>
 <div id="bacon_170"></div>
@@ -88,12 +88,12 @@ function showTip(evt, html) {
 function hideTip() { tooltip.style('opacity',0); }
 
 (function() {
-    const data = [{"x":3.989377271793137,"y":0.25,"group":"Treated vs Untreated"},
-{"x":2.752466985979776,"y":0.25,"group":"Earlier vs Later"},
-{"x":0.6177246941144863,"y":0.25,"group":"Later vs Earlier"},
-{"x":2.766397750414392,"y":0.25,"group":"Treated vs Untreated"}];
+    const data = [{"x":3.989377271793137,"y":0.34210526315789475,"group":"Treated vs Untreated"},
+{"x":2.752466985979776,"y":0.15789473684210528,"group":"Earlier vs Later"},
+{"x":0.6177246941144863,"y":0.15789473684210528,"group":"Later vs Earlier"},
+{"x":2.766397750414392,"y":0.34210526315789475,"group":"Treated vs Untreated"}];
     const groups = [{"name":"Treated vs Untreated","color":"#1f77b4"},{"name":"Earlier vs Later","color":"#ff7f0e"},{"name":"Later vs Earlier","color":"#2ca02c"}];
-    const refLines = [{"value":2.5314916755754475,"color":"#d62728","dash":"6,3","axis":"x"}];
+    const refLines = [{"value":2.8433217202437753,"color":"#d62728","dash":"6,3","axis":"x"}];
 
     const container = d3.select('#bacon_170');
     const W = Math.max(container.node().clientWidth - 24, 280);
