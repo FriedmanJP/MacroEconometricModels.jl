@@ -207,6 +207,25 @@ end
     @test isapprox(boot_mean, res.values; atol=3 * scale / sqrt(n_draws) + 0.03)
 end
 
+@testset "compute_irf buffer rewrite equivalence (T063)" begin
+    # The preallocated-buffer/mul! rewrite must reproduce the analytic VAR(1) IRF
+    # IRF[h] = A₁^(h-1)·P exactly (behavior-preserving).
+    Random.seed!(63)
+    A1 = [0.5 0.1; 0.0 0.4]
+    Y = zeros(200, 2)
+    for t in 2:200
+        Y[t, :] = A1 * Y[t-1, :] + randn(2)
+    end
+    model = estimate_var(Y, 1)
+    Q = Matrix{Float64}(I, 2, 2)
+    IRF = MacroEconometricModels.compute_irf(model, Q, 5)
+    P = Matrix(MacroEconometricModels.safe_cholesky(model.Sigma)) * Q
+    A1hat = MacroEconometricModels.extract_ar_coefficients(model.B, 2, 1)[1]
+    @test IRF[1, :, :] ≈ P
+    @test IRF[2, :, :] ≈ A1hat * P atol = 1e-12
+    @test IRF[3, :, :] ≈ A1hat * A1hat * P atol = 1e-12
+end
+
 @testset "Core numerics batch (T062: C-14/C-16/C-18)" begin
     # C-14: generate_Q never zeroes a rotation column (explicit ±1 map, not sign(0)=0)
     Random.seed!(614)

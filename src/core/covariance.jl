@@ -715,11 +715,12 @@ function long_run_covariance(X::AbstractMatrix{T}; bandwidth::Int=0,
         @. S += w * (Gamma_j + Gamma_j')
     end
 
-    # Ensure positive semi-definite using eigendecomposition
-    # Only compute if needed (check for negative eigenvalues)
+    # Ensure positive semi-definite. Only run the O(n³) eigendecomposition when the
+    # symmetrized meat is not already PD (cheap Cholesky gate); on the PD path S is
+    # returned unchanged (raw accumulator), matching the previous behavior exactly.
     S_sym = Hermitian((S + S') / 2)
-    F = eigen(S_sym)
-    if minimum(F.values) < 0
+    if !isposdef(S_sym)
+        F = eigen(S_sym)
         D = max.(F.values, zero(T))
         S = F.vectors * Diagonal(D) * F.vectors'
     end

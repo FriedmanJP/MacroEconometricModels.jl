@@ -276,6 +276,18 @@ using Random
         @test Gh2 === nothing
     end
 
+    @testset "long_run_covariance PSD gate (T063 SUB-2)" begin
+        # The isposdef gate is behavior-preserving: the result is symmetric + PSD on both
+        # the Bartlett (PD) and QS (may be non-PD → projected) paths.
+        Random.seed!(63)
+        X = hcat(ones(200), randn(200, 2))
+        for k in (:bartlett, :quadratic_spectral)
+            S = MacroEconometricModels.long_run_covariance(X; bandwidth=4, kernel=k)
+            @test isapprox(S, S'; atol=1e-12)
+            @test minimum(eigvals(Symmetric(S))) ≥ -1e-10
+        end
+    end
+
     @testset "System HAC cross-equation blocks (T055)" begin
         Random.seed!(313)
         n = 300; k = 2; n_eq = 2

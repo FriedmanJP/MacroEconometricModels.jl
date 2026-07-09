@@ -45,17 +45,24 @@ IRF[h, i, j] = response of variable i to shock j at horizon h-1.
 function compute_irf(model::VARModel{T}, Q::AbstractMatrix{T}, horizon::Int) where {T<:AbstractFloat}
     n, p = nvars(model), model.p
     P = safe_cholesky(model.Sigma) * Q
+    A = extract_ar_coefficients(model.B, n, p)      # Vector{Matrix{T}} (contiguous n×n)
 
-    IRF, Phi = zeros(T, horizon, n, n), zeros(T, horizon, n, n)
-    Phi[1, :, :], IRF[1, :, :] = I(n), P
+    IRF = zeros(T, horizon, n, n)
+    Phi = [zeros(T, n, n) for _ in 1:horizon]       # per-horizon contiguous buffers
+    temp = zeros(T, n, n)
+    scratch = zeros(T, n, n)
+    copyto!(Phi[1], I(n))
+    IRF[1, :, :] = P
 
-    A = extract_ar_coefficients(model.B, n, p)
     @inbounds for h in 2:horizon
-        temp = zeros(T, n, n)
+        fill!(temp, zero(T))
         for j in 1:min(p, h-1)
-            temp .+= A[j] * @view(Phi[h-j, :, :])
+            mul!(scratch, A[j], Phi[h-j])           # in-place gemm, no A[j]*view alloc
+            temp .+= scratch
         end
-        Phi[h, :, :], IRF[h, :, :] = temp, temp * P
+        Phi[h] .= temp
+        mul!(scratch, temp, P)
+        IRF[h, :, :] = scratch
     end
     IRF
 end
