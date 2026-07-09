@@ -775,6 +775,64 @@ end
         @test all(sa_nyt.se .>= 0)
     end
 
+    @testset "Sun-Abraham joint regression + period weights (T067)" begin
+        # --- Oracle: with a SINGLE treated cohort and a reporting window covering the full
+        # relative-period support, the SA saturated regression IS the TWFE event-study
+        # regression, so att and the joint clustered SEs must match TWFE exactly. ---
+        rng = MersenneTwister(6701)
+        treat1 = [0, 0, 0, 4, 4, 4]                 # units 1-3 never, 4-6 cohort g=4
+        gid = Int[]; tid = Int[]; yv = Float64[]; gt = Float64[]
+        a1 = [0.0, 0.5, 1.0, 1.5, 2.0, 2.5]
+        for u in 1:6, t in 1:8
+            te = (treat1[u] > 0 && t >= treat1[u]) ? 1.5 * (1 + 0.1 * (t - treat1[u])) : 0.0
+            push!(gid, u); push!(tid, t); push!(gt, Float64(treat1[u]))
+            push!(yv, a1[u] + 0.1t + te + 0.3 * randn(rng))
+        end
+        pd1 = PanelData{Float64}(hcat(yv, gt), ["outcome", "treat_time"], Quarterly, [1, 1],
+                                 gid, tid, nothing, ["u$i" for i in 1:6],
+                                 6, 2, 48, true, ["fx"], Dict{String,String}(), Symbol[])
+        # g=4, periods 1:8 ⇒ support l ∈ -3:4 ⇒ leads=3, horizon=4 spans it exactly.
+        sa1 = estimate_did(pd1, "outcome", "treat_time"; method=:sun_abraham, leads=3, horizon=4)
+        tw1 = estimate_did(pd1, "outcome", "treat_time"; method=:twfe, leads=3, horizon=4)
+        @test isapprox(sa1.att, tw1.att; atol=1e-8)           # saturated single-cohort == TWFE
+        @test isapprox(sa1.se, tw1.se; atol=1e-8)             # joint clustered SE == TWFE
+        @test vcov(sa1) isa Matrix{Float64}
+        @test isapprox(sqrt.(max.(diag(vcov(sa1)), 0.0)), sa1.se; atol=1e-10)
+
+        # --- Period-specific weights: at a relative period where only ONE cohort is present,
+        # that cohort must get weight 1 (the old code used a CONSTANT global cohort share and
+        # blended in the absent cohort's zero coefficient). ---
+        treat2 = [0, 0, 3, 3, 5, 5, 5]              # cohort g=3 (size 2), g=5 (size 3)
+        gid = Int[]; tid = Int[]; yv = Float64[]; gt = Float64[]
+        a2 = [0.0, 0.3, 0.7, 1.1, 1.5, 1.9, 2.3]
+        for u in 1:7, t in 1:7
+            te = (treat2[u] > 0 && t >= treat2[u]) ? 1.5 : 0.0
+            push!(gid, u); push!(tid, t); push!(gt, Float64(treat2[u]))
+            push!(yv, a2[u] + 0.1t + te + 0.3 * randn(rng))
+        end
+        pd2 = PanelData{Float64}(hcat(yv, gt), ["outcome", "treat_time"], Quarterly, [1, 1],
+                                 gid, tid, nothing, ["u$i" for i in 1:7],
+                                 7, 2, 49, true, ["fx"], Dict{String,String}(), Symbol[])
+        sa2 = estimate_did(pd2, "outcome", "treat_time"; method=:sun_abraham, leads=1, horizon=3)
+        # cohorts sorted [3, 5]; at l=3, g=3⇒t=6 (present), g=5⇒t=8 (absent, max period 7).
+        r3 = findfirst(==(3), sa2.event_times)
+        @test isapprox(sa2.att[r3], sa2.group_time_att[1, r3]; atol=1e-10)  # weight 1 on g=3
+        @test sa2.group_time_att[2, r3] == 0.0                             # g=5 absent ⇒ no col
+
+        # --- Real-panel covariance invariants + overall/vcov wiring ---
+        pd, _ = _make_did_panel(seed=3300, n_units=150, n_periods=25)
+        sa = estimate_did(pd, "outcome", "treat_time"; method=:sun_abraham, leads=3, horizon=5)
+        V = vcov(sa)
+        @test V === sa.att_vcov
+        @test isapprox(V, V'; atol=1e-10)
+        @test minimum(eigvals(Symmetric(V))) > -1e-8
+        @test isapprox(sqrt.(max.(diag(V), 0.0)), sa.se; atol=1e-10)
+        post_idx = findall(>=(0), sa.event_times)
+        vp = post_idx[sa.se[post_idx] .> 0]
+        wv = fill(1.0 / length(vp), length(vp))
+        @test isapprox(sa.overall_se, sqrt(max(dot(wv, V[vp, vp] * wv), 0.0)); atol=1e-10)
+    end
+
     # =========================================================================
     # Phase 2: BJS (2024) Imputation
     # =========================================================================
