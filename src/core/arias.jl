@@ -8,6 +8,16 @@
 # Arias, Rubio-Ramírez, Waggoner (2018) - Zero + Sign Restrictions
 # =============================================================================
 
+# Errors that legitimately indicate a *rejectable* random draw / failed optimization
+# (numerical degeneracy), as opposed to a genuine bug (BoundsError, MethodError,
+# DimensionMismatch, ...) which must propagate rather than be silently swallowed.
+# Shared by the Arias and Uhlig identification loops.
+_is_rejectable_draw_error(err) =
+    err isa LinearAlgebra.SingularException ||
+    err isa LinearAlgebra.PosDefException ||
+    err isa LinearAlgebra.LAPACKException ||
+    err isa DomainError
+
 """Zero restriction: variable doesn't respond to shock at horizon."""
 struct ZeroRestriction
     variable::Int
@@ -524,6 +534,7 @@ function identify_arias(model::VARModel{T}, restrictions::SVARRestrictions, hori
     Q_draws, irf_draws, weights = Matrix{T}[], Array{T,3}[], T[]
     has_zeros = !isempty(restrictions.zeros)
     n_attempts = 0
+    last_err = nothing
 
     # Create setup once for zero restrictions (W matrices fixed for all draws)
     setup = has_zeros ? _AriasSVARSetup(restrictions, n, T) : nothing
@@ -548,10 +559,16 @@ function identify_arias(model::VARModel{T}, restrictions::SVARRestrictions, hori
             else
                 push!(weights, one(T))
             end
-        catch; continue; end
+        catch err
+            _is_rejectable_draw_error(err) || rethrow(err)
+            last_err = err
+            continue
+        end
     end
 
-    isempty(Q_draws) && error("No valid identification after $n_attempts attempts")
+    isempty(Q_draws) && error("No valid identification after $n_attempts attempts" *
+        (last_err === nothing ? "" :
+         "; last rejectable failure: $(typeof(last_err)): $(sprint(showerror, last_err))"))
 
     n_acc = length(Q_draws)
     irf_array = zeros(T, n_acc, horizon, n, n)
@@ -592,7 +609,8 @@ function identify_arias_bayesian(post::BVARPosterior, restrictions::SVARRestrict
                 push!(all_weights, w)
             end
             acc_rates[s] = result.acceptance_rate
-        catch
+        catch err
+            _is_rejectable_draw_error(err) || rethrow(err)
             acc_rates[s] = 0.0
         end
     end
