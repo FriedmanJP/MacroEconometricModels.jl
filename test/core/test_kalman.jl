@@ -96,4 +96,43 @@ using LinearAlgebra
         # With near-zero observation noise, updated state should be close to predicted
         @test norm(x_upd - x_pred) < norm(x_true)  # update moved toward observation
     end
+
+    @testset "Joseph-form measurement update (T058)" begin
+        Random.seed!(4242)
+        x_pred, P_pred = MacroEconometricModels._kalman_predict(x0, P0, F, Q)
+        y = H * x_pred + 0.1 * randn(m)
+        x_upd, P_upd, v, S, K = MacroEconometricModels._kalman_update(x_pred, P_pred, y, H, R)
+
+        # (a) Joseph P_upd is symmetric and PSD by construction; S is returned exact.
+        @test norm(P_upd - P_upd') < 1e-12
+        @test minimum(eigvals(Symmetric(P_upd))) ≥ -1e-10
+        @test S ≈ H * P_pred * H' + R
+
+        # (c) Algebraic equivalence at the optimal gain (matches explicit-inverse form).
+        S_inv = inv(Symmetric(H * P_pred * H' + R))
+        K_ref = P_pred * H' * S_inv
+        @test K ≈ K_ref atol = 1e-9
+        P_naive = (I - K_ref * H) * P_pred
+        @test P_upd ≈ (P_naive + P_naive') / 2 atol = 1e-9
+        @test x_upd ≈ x_pred + K_ref * v atol = 1e-10
+
+        # (b) On an ill-conditioned filter covariance (eigenvalue spread 1e11), the Joseph
+        #     form stays symmetric + PSD across many steps.
+        Random.seed!(77)
+        U = qr(randn(n, n)).Q
+        P = Matrix(U * Diagonal([1.0, 1e-4, 1e-8, 1e-11]) * U')
+        x = zeros(n)
+        Qsmall = 1e-10 * Matrix{Float64}(I(n))
+        worst_asym = 0.0
+        worst_negeig = 0.0
+        for _ in 1:300
+            x, P = MacroEconometricModels._kalman_predict(x, P, F, Qsmall)
+            y = H * x + 0.1 * randn(m)
+            x, P, _, _, _ = MacroEconometricModels._kalman_update(x, P, y, H, R)
+            worst_asym = max(worst_asym, norm(P - P'))
+            worst_negeig = min(worst_negeig, minimum(eigvals(Symmetric(P))))
+        end
+        @test worst_asym < 1e-10
+        @test worst_negeig ≥ -1e-8
+    end
 end

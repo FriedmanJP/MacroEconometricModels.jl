@@ -72,20 +72,28 @@ Kalman filter measurement update step.
 
 Returns `(x_upd, P_upd, v, S, K)` where:
 - `v = y - H * x_pred` -- innovation
-- `S = H * P_pred * H' + R` -- innovation covariance
-- `K = P_pred * H' * S^{-1}` -- Kalman gain
+- `S = H * P_pred * H' + R` -- innovation covariance (returned unsymmetrized/exact)
+- `K = P_pred * H' * S^{-1}` -- Kalman gain, formed via triangular solves on `chol(S)`
 - `x_upd = x_pred + K * v` -- updated state
-- `P_upd = (I - K * H) * P_pred` -- updated covariance
+- `P_upd = (I-KH) P_pred (I-KH)' + K R K'` -- Joseph-stabilized covariance (symmetrized)
+
+The Joseph form keeps `P_upd` symmetric and PSD under finite precision even away from
+the exact optimal gain, unlike the shorthand `(I - K H) P_pred`.
 """
 function _kalman_update(x_pred::AbstractVector{T}, P_pred::AbstractMatrix{T},
                         y::AbstractVector{T}, H::AbstractMatrix{T},
                         R::AbstractMatrix{T}) where {T<:AbstractFloat}
     v = y - H * x_pred
     S = H * P_pred * H' + R
-    S_inv = robust_inv(Hermitian(S))
-    K = P_pred * H' * Matrix{T}(S_inv)
+    Ssym = (S + S') / 2                          # symmetrize before factoring
+    Sc = safe_cholesky(Hermitian(Ssym))          # lower factor, Ssym = Sc*Sc'
+    # Gain K = P_pred H' S^{-1} via triangular solves: K' = Sc' \ (Sc \ (H * P_pred')).
+    Kt = Sc' \ (Sc \ (H * P_pred'))
+    K = Matrix{T}(Kt')
     x_upd = x_pred + K * v
-    P_upd = (I - K * H) * P_pred
+    IKH = I - K * H
+    P_upd = IKH * P_pred * IKH' + K * R * K'     # Joseph stabilized form
+    P_upd = (P_upd + P_upd') / 2                 # symmetrize
     return x_upd, Matrix{T}(P_upd), v, S, K
 end
 
