@@ -98,6 +98,58 @@ using Random
         @test bw_empty == 0
     end
 
+    @testset "optimal_bandwidth_nw — Andrews (1991) plug-in (T052)" begin
+        # Persistent AR(1) with ρ≈0.5 so the plug-in bandwidth comfortably exceeds
+        # the old degenerate floor(n^(1/3))=5 clamp but stays under the Schwert cap.
+        Random.seed!(4242)
+        n = 200
+        x = zeros(n); x[1] = randn()
+        for t in 2:n
+            x[t] = 0.5 * x[t-1] + randn()
+        end
+        # Recompute ρ̂ with the SAME estimator the function uses → the pins are exact
+        # regardless of the realized draw.
+        rho = dot(@view(x[1:end-1]), @view(x[2:end])) / dot(@view(x[1:end-1]), @view(x[1:end-1]))
+        ra = min(abs(rho), 0.99)
+        schwert = floor(Int, 12 * (n / 100)^(1 / 4))          # = 14 for n=200
+
+        # (1) Bartlett exact pin: α(1)=4ρ²/(1−ρ²)², constant 1.1447, exponent 1/3
+        a1 = 4ra^2 / (1 - ra^2)^2
+        exp_bart = min(ceil(Int, 1.1447 * (a1 * n)^(1 / 3)), schwert)
+        @test MacroEconometricModels.optimal_bandwidth_nw(x) == exp_bart
+        @test MacroEconometricModels.optimal_bandwidth_nw(x; kernel=:bartlett) == exp_bart
+
+        # (2) q=2 kernels: α(2)=4ρ²/(1−ρ)⁴ with kernel-specific Andrews constants
+        a2 = 4ra^2 / (1 - ra)^4
+        @test MacroEconometricModels.optimal_bandwidth_nw(x; kernel=:parzen) ==
+              min(ceil(Int, 2.6614 * (a2 * n)^(1 / 5)), schwert)
+        @test MacroEconometricModels.optimal_bandwidth_nw(x; kernel=:quadratic_spectral) ==
+              min(ceil(Int, 1.3221 * (a2 * n)^(1 / 5)), schwert)
+        @test MacroEconometricModels.optimal_bandwidth_nw(x; kernel=:tukey_hanning) ==
+              min(ceil(Int, 1.7462 * (a2 * n)^(1 / 5)), schwert)
+
+        # (3) Truncation-cap fix: bandwidth now exceeds the old floor(n^(1/3)) clamp
+        @test MacroEconometricModels.optimal_bandwidth_nw(x) > floor(Int, n^(1 / 3))
+
+        # (4) Unknown kernel throws
+        @test_throws ArgumentError MacroEconometricModels.optimal_bandwidth_nw(x; kernel=:bogus)
+
+        # (5) Mislabel/α-gap: the old code paired the Bartlett constant/exponent with
+        #     the α(2) plug-in → a strictly larger (uncapped) bandwidth than the
+        #     kernel-consistent Bartlett value.
+        old_uncapped = ceil(Int, 1.1447 * (a2 * n)^(1 / 3))
+        new_uncapped = ceil(Int, 1.1447 * (a1 * n)^(1 / 3))
+        @test new_uncapped < old_uncapped
+
+        # (6) Smoke: every kernel flows finitely through the public estimators
+        X = hcat(ones(n), randn(n, 2)); u = randn(n)
+        for k in (:bartlett, :parzen, :quadratic_spectral, :tukey_hanning)
+            @test all(isfinite, MacroEconometricModels.newey_west(X, u; kernel=k))
+            @test isfinite(MacroEconometricModels.long_run_variance(x; kernel=k))
+            @test all(isfinite, MacroEconometricModels.long_run_covariance(X; kernel=k))
+        end
+    end
+
     # =========================================================================
     # Newey-West HAC Estimator
     # =========================================================================

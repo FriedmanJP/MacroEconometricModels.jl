@@ -130,35 +130,74 @@ end
 # =============================================================================
 
 """
-    optimal_bandwidth_nw(residuals::AbstractVector{T}) -> Int
+    optimal_bandwidth_nw(residuals::AbstractVector{T}; kernel::Symbol=:bartlett) -> Int
 
-Compute optimal bandwidth using Newey-West (1994) automatic selection.
+Automatic HAC truncation-lag selection via the Andrews (1991) parametric AR(1)
+plug-in:
+
+    m = ĉ_kernel · (α̂(q) · n)^{1/(2q+1)}
+
+where `q` is the kernel's characteristic (Parzen) exponent — `q=1` for Bartlett,
+`q=2` for Parzen / quadratic-spectral / Tukey–Hanning — `ĉ_kernel` is the Andrews
+(1991, Table I) kernel constant, and `α̂(q)` is the AR(1) plug-in
+
+    α̂(1) = 4ρ̂² / (1−ρ̂²)²     (Bartlett)
+    α̂(2) = 4ρ̂² / (1−ρ̂)⁴      (Parzen / QS / Tukey–Hanning)
+
+`kernel` MUST match the kernel used to weight the sample autocovariances, so the
+selected bandwidth is kernel-consistent (earlier versions always used the
+Bartlett constant with the `q=2` plug-in regardless of kernel — a mislabel).
+
+A loose Schwert (1989) ceiling `⌊12·(n/100)^{1/4}⌋` guards against runaway
+bandwidths on near-integrated series; this replaces the earlier degenerate
+`⌊n^{1/3}⌋` clamp, which bound almost always and threw away the plug-in.
+
+Reference: Andrews, D.W.K. (1991), *Econometrica* 59(3):817–858, Table I.
 """
-function optimal_bandwidth_nw(residuals::AbstractVector{T}) where {T<:AbstractFloat}
+function optimal_bandwidth_nw(residuals::AbstractVector{T};
+                              kernel::Symbol=:bartlett) where {T<:AbstractFloat}
     n = length(residuals)
     n < 4 && return 0
 
-    # Estimate AR(1) coefficient
+    # AR(1) coefficient (same estimator the prewhitening path uses)
     r_lag = @view residuals[1:end-1]
     r_lead = @view residuals[2:end]
     rho = dot(r_lag, r_lead) / dot(r_lag, r_lag)
-
-    # Newey-West (1994) formula for Bartlett kernel
     rho_abs = min(abs(rho), T(0.99))
-    alpha = 4rho_abs^2 / (1 - rho_abs)^4
-    m = ceil(Int, 1.1447 * (alpha * n)^(1/3))
-    min(m, floor(Int, n^(1/3)))
+
+    # Andrews (1991) plug-in: kernel-specific constant + characteristic exponent q
+    m = if kernel == :bartlett
+        alpha = 4rho_abs^2 / (1 - rho_abs^2)^2                # α(1), q=1
+        ceil(Int, T(1.1447) * (alpha * n)^(one(T) / 3))
+    elseif kernel == :parzen
+        alpha = 4rho_abs^2 / (1 - rho_abs)^4                  # α(2), q=2
+        ceil(Int, T(2.6614) * (alpha * n)^(one(T) / 5))
+    elseif kernel == :quadratic_spectral
+        alpha = 4rho_abs^2 / (1 - rho_abs)^4
+        ceil(Int, T(1.3221) * (alpha * n)^(one(T) / 5))
+    elseif kernel == :tukey_hanning
+        alpha = 4rho_abs^2 / (1 - rho_abs)^4
+        ceil(Int, T(1.7462) * (alpha * n)^(one(T) / 5))
+    else
+        throw(ArgumentError("Unknown kernel: $kernel"))
+    end
+
+    m = max(m, 0)
+    # Loose Schwert (1989) safety ceiling (not the degenerate n^(1/3) clamp)
+    schwert = floor(Int, 12 * (T(n) / 100)^(one(T) / 4))
+    min(m, schwert)
 end
 
 """
-    optimal_bandwidth_nw(residuals::AbstractMatrix{T}) -> Int
+    optimal_bandwidth_nw(residuals::AbstractMatrix{T}; kernel::Symbol=:bartlett) -> Int
 
-Multivariate version: average optimal bandwidth across columns.
+Multivariate version: average the kernel-consistent optimal bandwidth across columns.
 """
-function optimal_bandwidth_nw(residuals::AbstractMatrix{T}) where {T<:AbstractFloat}
+function optimal_bandwidth_nw(residuals::AbstractMatrix{T};
+                              kernel::Symbol=:bartlett) where {T<:AbstractFloat}
     n_vars = size(residuals, 2)
     n_vars == 0 && return 0
-    round(Int, mean(optimal_bandwidth_nw(@view residuals[:, j]) for j in 1:n_vars))
+    round(Int, mean(optimal_bandwidth_nw(@view residuals[:, j]; kernel=kernel) for j in 1:n_vars))
 end
 
 # =============================================================================
@@ -196,7 +235,7 @@ function newey_west(X::AbstractMatrix{T}, residuals::AbstractVector{T};
     n, k = size(X)
     @assert length(residuals) == n "X and residuals must have same number of rows"
 
-    bw = bandwidth == 0 ? optimal_bandwidth_nw(residuals) : bandwidth
+    bw = bandwidth == 0 ? optimal_bandwidth_nw(residuals; kernel=kernel) : bandwidth
 
     # Prewhitening
     u, X_use = if prewhiten && n > 2
@@ -520,7 +559,7 @@ function long_run_variance(x::AbstractVector{T}; bandwidth::Int=0,
     n = length(x)
     n < 2 && return var(x)
 
-    bw = bandwidth == 0 ? optimal_bandwidth_nw(x) : bandwidth
+    bw = bandwidth == 0 ? optimal_bandwidth_nw(x; kernel=kernel) : bandwidth
     x_demean = x .- mean(x)
     S = sum(x_demean.^2) / n
 
@@ -555,7 +594,7 @@ function long_run_covariance(X::AbstractMatrix{T}; bandwidth::Int=0,
     n, k = size(X)
     n < 2 && return cov(X)
 
-    bw = bandwidth == 0 ? optimal_bandwidth_nw(X) : bandwidth
+    bw = bandwidth == 0 ? optimal_bandwidth_nw(X; kernel=kernel) : bandwidth
     X_demean = X .- mean(X, dims=1)
 
     # Lag-0 autocovariance using BLAS
