@@ -90,7 +90,12 @@ end
                        lags::Int=4, response_vars::Vector{Int}=collect(1:size(Y,2)),
                        cov_type::Symbol=:newey_west, bandwidth::Int=0) -> SmoothLPModel{T}
 
-Estimate Smooth LP with B-spline parameterization (Barnichon & Brownlees 2019).
+Estimate Smooth LP by a two-step "smooth-the-point-IRF" procedure (NOT the one-step
+Barnichon & Brownlees 2019 penalized regression): fit per-horizon LP point IRFs, then fit a
+penalized B-spline to them. Inference propagates the FULL cross-horizon covariance of the LP
+point IRFs (an overlapping-horizon HAC via [`_lp_shock_irf_covariance`](@ref)), not a
+per-horizon diagonal, so the reported bands account for the strong correlation between
+overlapping LP horizons.
 """
 function estimate_smooth_lp(Y::AbstractMatrix{T}, shock_var::Int, horizon::Int;
                             degree::Int=3, n_knots::Int=4, lambda::T=T(0.0),
@@ -127,7 +132,11 @@ function estimate_smooth_lp(Y::AbstractMatrix{T}, shock_var::Int, horizon::Int;
         theta[:, j] = reg_mat \ (B_mat' * W * beta_hat[:, j])
 
         reg_inv = inv(reg_mat)
-        Sigma_beta = Diagonal(beta_se[:, j].^2)
+        # Full cross-horizon covariance of the LP point IRF (overlapping-horizon HAC), not the
+        # diagonal beta_se.^2 — overlapping LP horizons are strongly correlated, so a diagonal
+        # covariance systematically understates the smooth-LP bands.
+        Sigma_beta = _lp_shock_irf_covariance(Y, shock_var, horizon, lags, response_vars,
+                                              cov_estimator, j)
         vcov_theta_blocks[j] = reg_inv * (B_mat' * W * Sigma_beta * W * B_mat) * reg_inv
     end
 
@@ -151,6 +160,63 @@ end
 
 estimate_smooth_lp(Y::AbstractMatrix, shock_var::Int, horizon::Int; kwargs...) =
     estimate_smooth_lp(Float64.(Y), shock_var, horizon; kwargs...)
+
+"""
+    _lp_shock_irf_covariance(Y, shock_var, horizon, lags, response_vars, cov_estimator, jcol) -> Matrix
+
+Full `(horizon+1)×(horizon+1)` covariance of the LP shock-coefficient IRF for response column
+`jcol`, across horizons. Overlapping LP horizons share future windows and so induce strong
+cross-horizon correlation (an MA structure in the overlapping residuals). The diagonal
+reproduces the per-horizon Newey–West `beta_se²`; the off-diagonals are the Bartlett-HAC
+cross-covariances of the shock-coefficient influence functions
+`ψ_{h,t} = (XtXinv[shock, :] · x_{h,t}) · u_{h,t}`, aligned by absolute time `t`. Replacing the
+former diagonal-only covariance fixes the systematically too-narrow smooth-LP bands.
+"""
+function _lp_shock_irf_covariance(Y::AbstractMatrix{T}, shock_var::Int, horizon::Int, lags::Int,
+                                  response_vars::Vector{Int}, cov_estimator::AbstractCovarianceEstimator,
+                                  jcol::Int) where {T<:AbstractFloat}
+    T_obs = size(Y, 1)
+    Hp1 = horizon + 1
+    shock_idx = 2
+    psi = [zeros(T, T_obs) for _ in 1:Hp1]     # absolute-t influence series, one per horizon
+    bw = Vector{Int}(undef, Hp1)
+    fixed_bw = cov_estimator isa NeweyWestEstimator ? cov_estimator.bandwidth : 0
+    for h in 0:horizon
+        Y_h, X_h, valid_idx = construct_lp_matrices(Y, shock_var, h, lags; response_vars=response_vars)
+        XtXinv = robust_inv(X_h' * X_h)
+        B_h = XtXinv * (X_h' * Y_h)
+        u = Y_h[:, jcol] - X_h * B_h[:, jcol]
+        c = XtXinv[shock_idx, :]
+        @inbounds for (i, t) in enumerate(valid_idx)
+            psi[h + 1][t] = dot(c, @view X_h[i, :]) * u[i]
+        end
+        bw[h + 1] = fixed_bw > 0 ? fixed_bw : max(optimal_bandwidth_nw(u), h + 1)
+    end
+    Sigma = zeros(T, Hp1, Hp1)
+    for a in 0:horizon, b in a:horizon
+        rng = (lags + 1):(T_obs - b)          # b >= a ⇒ max(a, b) = b; common sample
+        L = max(bw[a + 1], bw[b + 1])
+        sa = psi[a + 1]; sb = psi[b + 1]
+        omega = zero(T)
+        @inbounds for t in rng
+            omega += sa[t] * sb[t]
+        end
+        for j in 1:L
+            wj = kernel_weight(j, L, :bartlett, T)
+            wj == 0 && continue
+            acc = zero(T)
+            @inbounds for t in rng
+                if t - j >= lags + 1
+                    acc += sa[t] * sb[t - j] + sa[t - j] * sb[t]
+                end
+            end
+            omega += wj * acc
+        end
+        Sigma[a + 1, b + 1] = omega
+        Sigma[b + 1, a + 1] = omega
+    end
+    Sigma
+end
 
 """
     _smooth_lp_cv_errors(Y, shock_var, horizon; lambda_grid, k_folds, kwargs...) -> Vector

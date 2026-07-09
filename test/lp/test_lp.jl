@@ -690,6 +690,45 @@ using Random
         @test lam == grid[argmin(errs)]
     end
 
+    @testset "Smooth LP full cross-horizon covariance (T103 #202)" begin
+        # The smooth-LP band must propagate the FULL cross-horizon covariance of the LP point
+        # IRFs, not a per-horizon diagonal. Overlapping LP horizons are strongly correlated, so
+        # the off-diagonals are non-negligible and materially change the reported bands.
+        Random.seed!(1234)
+        T_sc = 200
+        Y_sc = zeros(T_sc, 2)
+        for t in 2:T_sc
+            Y_sc[t, :] = 0.6 * Y_sc[t-1, :] + randn(2)
+        end
+        H = 8
+        ce = MacroEconometricModels.create_cov_estimator(:newey_west, Float64)
+        Sig = MacroEconometricModels._lp_shock_irf_covariance(Y_sc, 1, H, 2, [1, 2], ce, 1)
+        @test size(Sig) == (H + 1, H + 1)
+        @test issymmetric(Sig)
+
+        # (1) Consistency/degenerate: the diagonal reproduces the per-horizon LP beta_se^2.
+        lp_res = MacroEconometricModels.lp_irf(MacroEconometricModels.estimate_lp(Y_sc, 1, H; lags=2))
+        bse = lp_res.se[:, 1]
+        @test diag(Sig) ≈ bse .^ 2 atol=1e-10
+
+        # (2) Off-diagonals are non-negligible (overlapping-horizon correlation).
+        @test maximum(abs.(Sig - Diagonal(diag(Sig)))) > 0.2 * maximum(diag(Sig))
+
+        # (3) The reported smooth-LP band uses the full covariance and DIFFERS from the
+        #     diagonal-only band the old code produced.
+        m = estimate_smooth_lp(Y_sc, 1, H; lambda=1.0, lags=2)
+        B = m.spline_basis.basis_matrix
+        R = MacroEconometricModels.roughness_penalty_matrix(m.spline_basis)
+        W = Diagonal(1 ./ (bse .^ 2 .+ eps()))
+        reg_inv = inv(B' * W * B + 1.0 * R)
+        V_full = reg_inv * (B' * W * Sig * W * B) * reg_inv
+        V_diag = reg_inv * (B' * W * Diagonal(diag(Sig)) * W * B) * reg_inv
+        se_full = [sqrt(B[h, :]' * V_full * B[h, :]) for h in 1:(H + 1)]
+        se_diag = [sqrt(B[h, :]' * V_diag * B[h, :]) for h in 1:(H + 1)]
+        @test !isapprox(se_full, se_diag; rtol=1e-3)     # off-diagonals materially change the band
+        @test m.irf_se[:, 1] ≈ se_full atol=1e-8         # model reports the full-covariance band
+    end
+
     @testset "Smooth LP Comparison Function" begin
         Random.seed!(99999)
         T_cmp = 150
