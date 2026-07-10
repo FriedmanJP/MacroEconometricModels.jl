@@ -28,6 +28,24 @@ References:
 using LinearAlgebra, Random, Statistics
 
 """
+    _resolve_me_hd(measurement_error, spec, data, observables) -> Union{Nothing, Vector}
+
+Resolve `measurement_error=:auto` against the observable columns of `data`
+(T_obs × n_endog, levels) before the observation equation is built, so that the
+`historical_decomposition` methods accept the same `:auto` convention as
+`estimate_dsge_bayes`. `nothing` and explicit vectors pass through unchanged.
+"""
+function _resolve_me_hd(measurement_error, spec::DSGESpec{T}, data::AbstractMatrix,
+                         observables::Vector{Symbol}) where {T<:AbstractFloat}
+    measurement_error isa Symbol || return measurement_error
+    obs_indices = [findfirst(==(obs), spec.endog) for obs in observables]
+    # Unknown observables fall through: _build_observation_equation raises the error
+    any(isnothing, obs_indices) && return measurement_error
+    data_obs = permutedims(Matrix{T}(T.(data[:, Vector{Int}(obs_indices)])))
+    return _resolve_measurement_error(measurement_error, data_obs, observables)
+end
+
+"""
     historical_decomposition(sol::DSGESolution{T}, data::AbstractMatrix,
                               observables::Vector{Symbol};
                               states=:observables, measurement_error=nothing) -> HistoricalDecomposition{T}
@@ -44,7 +62,8 @@ using the Kalman smoother to extract smoothed shocks and the structural MA repre
 
 # Keyword Arguments
 - `states::Symbol=:observables`: Decompose `:observables` (default) or `:all` states
-- `measurement_error`: Vector of measurement error std devs, or `nothing` (default: small diagonal)
+- `measurement_error`: Vector of measurement error std devs, `:auto` (per-observable,
+  10% of each series' variance), or `nothing` for zero ME (requires `n_obs ≤ n_shocks`)
 
 # Returns
 `HistoricalDecomposition{T}` with:
@@ -83,6 +102,7 @@ function historical_decomposition(sol::DSGESolution{T}, data::AbstractMatrix,
     # =========================================================================
     # Step 1: Build state space
     # =========================================================================
+    measurement_error = _resolve_me_hd(measurement_error, spec, data, observables)
     Z, d, H = _build_observation_equation(spec, observables, measurement_error)
     ss = _build_state_space(sol, Z, d, H)
     n_obs = length(observables)
@@ -211,7 +231,8 @@ Contribution of shock j = baseline - counterfactual_without_j.
 
 # Keyword Arguments
 - `states::Symbol=:observables`: Decompose `:observables` (default) or `:all` states
-- `measurement_error`: Vector of measurement error std devs, or `nothing`
+- `measurement_error`: Vector of measurement error std devs, `:auto` (per-observable,
+  10% of each series' variance), or `nothing` for zero ME (requires `n_obs ≤ n_shocks`)
 - `N::Int=1000`: Number of forward particles for the smoother
 - `N_back::Int=100`: Number of backward trajectories for the smoother
 - `rng::AbstractRNG`: Random number generator
@@ -236,6 +257,7 @@ function historical_decomposition(sol::PerturbationSolution{T}, data::AbstractMa
     # =========================================================================
     # Step 1: Build nonlinear state space
     # =========================================================================
+    measurement_error = _resolve_me_hd(measurement_error, spec, data, observables)
     Z, d, H = _build_observation_equation(spec, observables, measurement_error)
     nss = _build_nonlinear_state_space(sol, Z, d, H)
     n_obs = length(observables)
@@ -362,7 +384,8 @@ computes the historical decomposition. Reports pointwise posterior mean and quan
   returning `HistoricalDecomposition{T}` with `method=:dsge_bayes_mode`
 - `n_draws::Int=200`: Number of posterior draws to subsample for full Bayesian HD
 - `quantiles::Vector{<:Real}=[0.16, 0.5, 0.84]`: Quantile levels for credible bands
-- `measurement_error`: Vector of measurement error std devs, or `nothing`
+- `measurement_error`: Vector of measurement error std devs, `:auto` (per-observable,
+  10% of each series' variance), or `nothing` for zero ME (requires `n_obs ≤ n_shocks`)
 - `states::Symbol=:observables`: Decompose `:observables` (default) or `:all` states
 
 # Returns
@@ -380,6 +403,9 @@ function historical_decomposition(post::BayesianDSGE{T}, data::AbstractMatrix,
                                    quantiles::Vector{<:Real}=T[0.16, 0.5, 0.84],
                                    measurement_error=nothing,
                                    states::Symbol=:observables) where {T<:AbstractFloat}
+    # Resolve :auto once here so per-draw inner calls receive a plain vector
+    # (and the resolver's warning fires once, not once per draw).
+    measurement_error = _resolve_me_hd(measurement_error, post.spec, data, observables)
 
     # =========================================================================
     # Fast path: mode_only — use posterior mode solution directly
