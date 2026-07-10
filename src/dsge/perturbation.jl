@@ -71,22 +71,23 @@ function perturbation_solver(spec::DSGESpec{T};
     # -------------------------------------------------------------------------
     ld = linearize(spec)
 
-    # Use QZ for eigenvalue analysis + UC solver for robust solution (same as solve())
-    qz_result = gensys(ld.Gamma0, ld.Gamma1, ld.C, ld.Psi, ld.Pi)
+    # Companion-QZ for correct determinacy/solution (raw gensys drops f_lead) + UC solver for a
+    # robust primary solution — same split as solve(:gensys).
+    f_0 = _dsge_jacobian(spec, spec.steady_state, :current)
+    f_1 = _dsge_jacobian(spec, spec.steady_state, :lag)
+    f_lead = _dsge_jacobian(spec, spec.steady_state, :lead)
+    qz_result = _solve_qz_quadratic(f_0, f_1, f_lead, -ld.Psi)
 
     uc_ok = false
     local uc_result
     try
         uc_result = _solve_undetermined_coefficients(spec)
-        f_0 = _dsge_jacobian(spec, spec.steady_state, :current)
-        f_1 = _dsge_jacobian(spec, spec.steady_state, :lag)
-        f_lead = _dsge_jacobian(spec, spec.steady_state, :lead)
         resid_uc = (f_0 + f_lead * uc_result.G1) * uc_result.G1 + f_1
         uc_ok = maximum(abs.(resid_uc)) < T(1e-8) && uc_result.converged
     catch
     end
 
-    G1 = uc_ok ? uc_result.G1 : qz_result.G1
+    G1 = uc_ok ? uc_result.G1 : qz_result.G
     impact = uc_ok ? uc_result.impact : qz_result.impact
     eu = qz_result.eu
 

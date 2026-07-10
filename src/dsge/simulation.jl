@@ -185,8 +185,7 @@ function simulate(sol::ProjectionSolution{T}, T_periods::Int;
     x_state = copy(ss[sol.state_indices])
 
     # Get linear impact matrix for shock propagation
-    result_lin = gensys(sol.linear.Gamma0, sol.linear.Gamma1,
-                        sol.linear.C, sol.linear.Psi, sol.linear.Pi)
+    result_lin = _gensys_qz(sol.spec, sol.linear)
     impact = result_lin.impact
 
     for t in 1:T_periods
@@ -237,8 +236,7 @@ function irf(sol::ProjectionSolution{T}, horizon::Int;
     ss = sol.steady_state
 
     # Get linear impact matrix for shock propagation
-    result_lin = gensys(sol.linear.Gamma0, sol.linear.Gamma1,
-                        sol.linear.C, sol.linear.Psi, sol.linear.Pi)
+    result_lin = _gensys_qz(sol.spec, sol.linear)
     impact = result_lin.impact
 
     point_irf = zeros(T, horizon, n, n_eps)

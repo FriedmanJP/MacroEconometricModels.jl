@@ -699,6 +699,33 @@ end
     @test sol.eu[2] == 1  # unique
 end
 
+@testset "Solvers route through companion-QZ core (T112 #211)" begin
+    # For a forward-looking model the raw gensys pencil drops the lead Jacobian and mis-counts
+    # determinacy; the perturbation/projection solvers now route through _solve_qz_quadratic, so
+    # their determinacy flag matches solve(:gensys).
+    spec = @dsge begin
+        parameters: β = 0.5
+        endogenous: x
+        exogenous: ε
+        x[t] = β * E[t](x[t+1]) + ε[t]
+    end
+    spec = compute_steady_state(spec)
+    sg = solve(spec; method=:gensys)
+    sp = solve(spec; method=:perturbation)
+    @test sp.eu == sg.eu
+    @test sp.eu == [1, 1]
+
+    # a persistent forward+backward model exercises a nonzero routed solution
+    spec2 = @dsge begin
+        parameters: ρ = 0.7, β = 0.3
+        endogenous: y
+        exogenous: e
+        y[t] = ρ * y[t-1] + β * E[t](y[t+1]) + e[t]
+    end
+    spec2 = compute_steady_state(spec2)
+    @test solve(spec2; method=:perturbation).eu == solve(spec2; method=:gensys).eu == [1, 1]
+end
+
 @testset "Gensys: default method" begin
     spec = @dsge begin
         parameters: ρ = 0.9
@@ -3589,21 +3616,26 @@ end
         @test size(ir.values) == (40, 2, 1)
         @test all(isfinite.(ir.values))
 
-        # FEVD — single shock should explain 100% of variance for both variables
+        # FEVD — single shock. c (variable 2) responds to the shock, so it explains 100% of c's
+        # variance. k (variable 1) is a unit-root state whose ε-response cancels in equilibrium
+        # (c_t = 0.5·k_{t-1} + σε exactly offsets the σε in the k equation), so k has ~zero shock
+        # variance and its single-shock FEVD is the degenerate 0/0 case. This is the correct RE
+        # solution via the companion-QZ core (T112 #211): the old raw-gensys solver dropped the
+        # lead term, wrongly giving k no persistence (hx=0) so its FEVD spuriously read 1.0.
         fv = fevd(sol2, 40)
         @test all(isfinite.(fv.proportions))
-        for h in 1:40, i in 1:2
-            @test fv.proportions[i, 1, h] ≈ 1.0 atol=1e-8
+        @test maximum(abs, ir.values[:, 1, 1]) < 1e-8        # k has ~zero shock impact (correct)
+        for h in 1:40
+            @test fv.proportions[2, 1, h] ≈ 1.0 atol=1e-8    # c: single shock explains 100%
         end
 
-        # Unconditional FEVD (order=2 augmented Lyapunov)
+        # Unconditional FEVD (order=2 augmented Lyapunov). Only c has nonzero shock variance;
+        # k is the degenerate zero-variance case (see above).
         fv_uc = fevd(sol2, 1; unconditional=true)
         @test all(isfinite.(fv_uc.proportions))
         @test size(fv_uc.proportions, 3) == 1
-        for i in 1:2
-            @test fv_uc.proportions[i, 1, 1] ≈ 1.0 atol=1e-6
-            @test sum(fv_uc.proportions[i, :, 1]) ≈ 1.0 atol=1e-6
-        end
+        @test fv_uc.proportions[2, 1, 1] ≈ 1.0 atol=1e-6
+        @test sum(fv_uc.proportions[2, :, 1]) ≈ 1.0 atol=1e-6
 
         # Moments
         mom = analytical_moments(sol2; lags=2)

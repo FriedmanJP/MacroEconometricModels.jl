@@ -271,8 +271,8 @@ Returns nx x 2 matrix with [lower upper] per state.
 function _compute_state_bounds(spec::DSGESpec{T}, linear::LinearDSGE{T},
                                 state_idx::Vector{Int}, scale::Real) where {T}
     nx = length(state_idx)
-    result = gensys(linear.Gamma0, linear.Gamma1, linear.C, linear.Psi, linear.Pi)
-    G1 = result.G1
+    result = _gensys_qz(spec, linear)
+    G1 = result.G
     impact = result.impact
 
     # Unconditional variance via Lyapunov equation
@@ -505,8 +505,8 @@ function collocation_solver(spec::DSGESpec{T};
     if initial_coeffs !== nothing && size(initial_coeffs) == (n_vars, n_basis)
         coeffs = Matrix{T}(initial_coeffs)
     else
-        result_1st = gensys(ld.Gamma0, ld.Gamma1, ld.C, ld.Psi, ld.Pi)
-        G1 = result_1st.G1
+        result_1st = _gensys_qz(spec, ld)
+        G1 = result_1st.G
 
         coeffs = zeros(T, n_vars, n_basis)
         for v in 1:n_vars
@@ -520,7 +520,7 @@ function collocation_solver(spec::DSGESpec{T};
     end
 
     # First-order shock-impact matrix for genuine quadrature over next-period shocks (S-02 / #120)
-    impact_mat = gensys(ld.Gamma0, ld.Gamma1, ld.C, ld.Psi, ld.Pi).impact
+    impact_mat = _gensys_qz(spec, ld).impact
 
     # Step 6: Newton iteration
     coeffs_vec = vec(coeffs)
@@ -714,7 +714,7 @@ function max_euler_error(sol::ProjectionSolution{T}; n_test::Int=1000,
     # First-order shock impact so the Euler-error diagnostic integrates over next-period
     # shocks too (else it cannot detect the certainty-equivalent failure — S-02 / #120).
     ld_lin = linearize(spec)
-    impact_mat = gensys(ld_lin.Gamma0, ld_lin.Gamma1, ld_lin.C, ld_lin.Psi, ld_lin.Pi).impact
+    impact_mat = _gensys_qz(spec, ld_lin).impact
 
     max_err = zero(T)
 

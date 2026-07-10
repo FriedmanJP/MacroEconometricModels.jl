@@ -81,3 +81,16 @@ function _solve_qz_quadratic(f_0::AbstractMatrix{T}, f_1::AbstractMatrix{T},
     (G=G, impact=impact, eigenvalues=Vector{ComplexF64}(λ),
      n_stable=n_stable, eu=eu, residual=residual)
 end
+
+"""
+    _gensys_qz(spec, ld) -> (; G, impact, eu, …)
+
+Route a linearized DSGE through the companion-QZ core ([`_solve_qz_quadratic`]). `gensys()`
+counts determinacy from the (Γ0,Γ1) pencil, which folds the lead Jacobian into Π and drops it,
+so its `eu`/`G1`/`impact` are wrong for any forward-looking model. This recovers the raw
+Jacobians (`f_0 = Γ0`, `f_1 = -Γ1`, `f_lead` directly from `spec`, `f_ε = -Ψ`) and solves the
+correct companion pencil — mirroring the split already used in `solve(:gensys)`. Use `.G` (not
+`.G1`), `.impact`, `.eu`.
+"""
+_gensys_qz(spec, ld) = _solve_qz_quadratic(ld.Gamma0, -ld.Gamma1,
+    _dsge_jacobian(spec, spec.steady_state, :lead), -ld.Psi)

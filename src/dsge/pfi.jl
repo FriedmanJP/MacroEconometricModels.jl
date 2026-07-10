@@ -233,8 +233,8 @@ function pfi_solver(spec::DSGESpec{T};
     quad_weights = Vector{T}(quad_weights)
 
     # Step 2: Initial guess from first-order perturbation
-    result_1st = gensys(ld.Gamma0, ld.Gamma1, ld.C, ld.Psi, ld.Pi)
-    G1 = result_1st.G1
+    result_1st = _gensys_qz(spec, ld)
+    G1 = result_1st.G
     impact = result_1st.impact
 
     if initial_coeffs !== nothing && size(initial_coeffs) == (n_vars, n_basis)
