@@ -723,8 +723,13 @@ end
     end
     @test length(ahat) >= 25
     sigma_mc = std(ahat)
-    @test abs(mean(ser) - sigma_mc) < abs(mean(seh) - sigma_mc)
+    # The inverse-Hessian SE systematically understates the true sampling dispersion
+    # under t(5) misspecification; the robust SE must recover at least half of the
+    # understatement. (An absolute-distance comparison is knife-edge: with only ~40
+    # surviving replications sigma_mc is noisy and the converged set is platform-
+    # dependent — Windows resolves a different set — while both claims below are stable.)
     @test mean(seh) < sigma_mc
+    @test mean(ser) - mean(seh) > 0.5 * (sigma_mc - mean(seh))
 
     # EGARCH / GJR smoke: robust SE finite, positive, correct length, ≠ hessian
     ye = simulate_garch11_rng(MersenneTwister(303), 1200)
