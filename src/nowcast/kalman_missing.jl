@@ -79,6 +79,7 @@ function _kalman_filter_missing(y::AbstractMatrix{T}, A::AbstractMatrix{T},
 
     x_t = copy(x0)
     P_t = Matrix{T}(P0)
+    warned_nonpd = false
 
     for t in 1:T_obs
         # Prediction step
@@ -103,12 +104,17 @@ function _kalman_filter_missing(y::AbstractMatrix{T}, A::AbstractMatrix{T},
             x_filt[:, t] = x_pred[:, t] + K_t * v_t
             P_filt[:, :, t] = (I(state_dim) - K_t * C_obs) * P_pred[:, :, t]
 
-            # Log-likelihood contribution
+            # Log-likelihood contribution. Use a robust logdet and ALWAYS add the term:
+            # the old `det(F_t) > 0` gate silently dropped observations whose innovation
+            # covariance was ill-conditioned, biasing the likelihood. `logabsdet` avoids
+            # the overflow of a raw determinant; a non-PD F_t is warned once.
             n_obs = length(obs_idx)
-            det_F = det(F_t)
-            if det_F > 0
-                loglik -= T(0.5) * (n_obs * log(T(2π)) + log(det_F) + v_t' * F_inv * v_t)
+            logdet_F, sgn = logabsdet(F_t)
+            if sgn <= 0 && !warned_nonpd
+                @warn "Non-positive-definite innovation covariance in Kalman filter; using log|det| for the log-likelihood."
+                warned_nonpd = true
             end
+            loglik -= T(0.5) * (n_obs * log(T(2π)) + logdet_F + v_t' * F_inv * v_t)
         end
 
         x_t = x_filt[:, t]

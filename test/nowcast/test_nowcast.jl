@@ -291,6 +291,22 @@ end
         @test !any(isnan, m.X_sm)
     end
 
+    @testset "Fewer series than factors: N < r·n_blocks (#209 R-30)" begin
+        # N = 4 series but r·n_blocks = 2·3 = 6 requested factors. Init extracts only
+        # n_eig = min(6,4) = 4; the EM M-step must use the SAME factor count or its
+        # factor-block indexing diverges from init. Before the fix it used
+        # min(r·n_blocks, state_dim) = 6 and disagreed.
+        Y, _, _, _ = _make_nowcast_data(T_obs=80, nM=3, nQ=1, r=2, seed=777)
+        blocks = zeros(Int, 4, 3)
+        blocks[1, 1] = 1
+        blocks[2, 2] = 1
+        blocks[3, 3] = 1
+        blocks[4, 1] = 1
+        m = nowcast_dfm(Y, 3, 1; r=2, p=1, blocks=blocks, max_iter=15, thresh=1e-3)
+        @test size(m.blocks) == (4, 3)
+        @test !any(isnan, m.X_sm)
+    end
+
     @testset "IID idiosyncratic" begin
         Y, _, _, _ = _make_nowcast_data(T_obs=60, nM=4, nQ=1, r=1, seed=333)
 

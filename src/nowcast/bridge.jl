@@ -217,10 +217,11 @@ function _bridge_build_equation(Xm_q::Matrix{T}, Xq::Matrix{T}, Y_target::Vector
     n_obs = length(valid)
     regressors = ones(T, n_obs, 1)  # intercept
 
-    # Monthly indicator lags
+    # Monthly indicator lags. `unique` collapses univariate equations (m1 == m2), which
+    # would otherwise enter the same indicator twice and make the design rank-deficient.
     nM_cols = size(Xm_q, 2)
     for lag in 0:lagM
-        for m in [m1, m2]
+        for m in unique((m1, m2))
             if m <= nM_cols
                 col = zeros(T, n_obs)
                 for (i, t) in enumerate(valid)
