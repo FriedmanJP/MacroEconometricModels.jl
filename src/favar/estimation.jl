@@ -122,8 +122,9 @@ function estimate_favar(X::AbstractMatrix{T}, Y_key::AbstractMatrix{T}, r::Int, 
     F_raw = fm.factors           # T_obs x r
     Lambda = fm.loadings         # N x r
 
-    # Step 2: Remove double-counting (slow-moving factors)
-    F_tilde = _remove_double_counting(F_raw, Y_key)
+    # Step 2: Remove double-counting (slow-moving factors); B_y are the Y_key slopes per factor
+    F_tilde, B_y = _remove_double_counting(F_raw, Y_key)
+    Lambda_y = Lambda * B_y'      # N x n_key implied direct panel loadings on Y_key
 
     # Step 3: Estimate VAR on [F_tilde, Y_key]
     Y_aug = hcat(F_tilde, Y_key)
@@ -151,6 +152,7 @@ function estimate_favar(X::AbstractMatrix{T}, Y_key::AbstractMatrix{T}, r::Int, 
         n_key,
         F_tilde,
         Lambda,
+        Lambda_y,
         fm,
         var_model.aic,
         var_model.bic,
@@ -215,6 +217,7 @@ function estimate_favar(X::AbstractMatrix{T}, key_indices::Vector{Int}, r::Int, 
         result.n_key,
         result.factors,
         result.loadings,
+        result.Lambda_y,
         result.factor_model,
         result.aic,
         result.bic,
@@ -280,13 +283,15 @@ function _remove_double_counting(F_raw::Matrix{T}, Y_key::AbstractMatrix{T}) whe
     ZtZ_inv = Matrix{T}(robust_inv(Z'Z))
 
     F_tilde = Matrix{T}(undef, T_obs, r)
+    B_y = Matrix{T}(undef, n_key, r)          # per-factor Y_key slopes (intercept dropped)
     for j in 1:r
         f_j = @view F_raw[:, j]
         beta = ZtZ_inv * (Z' * f_j)
         F_tilde[:, j] = f_j - Z * beta
+        B_y[:, j] = beta[2:end]
     end
 
-    F_tilde
+    (F_tilde, B_y)
 end
 
 # =============================================================================

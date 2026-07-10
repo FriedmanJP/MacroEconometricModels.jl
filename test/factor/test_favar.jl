@@ -317,6 +317,46 @@ using MacroEconometricModels
         @test panel_irf.variables == favar.panel_varnames
     end
 
+    @testset "favar_panel_irf includes direct Y-channel (T099 #198)" begin
+        rng = Random.MersenneTwister(909)
+        T_f, N, r_true = 300, 8, 2
+        F = zeros(T_f, r_true)
+        for t in 2:T_f
+            F[t, :] = 0.6 .* F[t-1, :] .+ randn(rng, r_true)
+        end
+        Yk = zeros(T_f)
+        for t in 2:T_f
+            Yk[t] = 0.5 * Yk[t-1] + randn(rng)
+        end
+        Lf = randn(rng, N - 1, r_true)
+        ly = zeros(N - 1); ly[1] = 3.0                 # panel row 1 loads directly on the key var
+        Xobs = F * Lf' .+ Yk * ly' .+ 0.1 .* randn(rng, T_f, N - 1)
+        X = hcat(Xobs, Yk)                             # column N is the key variable
+
+        favar = estimate_favar(X, [N], r_true, 2)
+        r = favar.n_factors; nk = favar.n_key
+        @test size(favar.Lambda_y) == (N, nk)
+        @test maximum(abs.(favar.Lambda_y)) > 1e-3     # implied direct Y-loading retained
+
+        irf_aug = irf(favar, 8)
+        panel = favar_panel_irf(favar, irf_aug)
+        Lam = favar.loadings
+        nonkey = setdiff(1:N, favar.Y_key_indices)
+        # For a shock to the key variable (augmented index r+1), the non-key panel rows must
+        # equal Lambda*factor_irf + Lambda_y*y_irf — including the direct Y-channel the old code
+        # dropped (it mapped only Lambda*factor_irf).
+        for h in 1:8
+            fj = irf_aug.values[h, 1:r, r+1]
+            yj = irf_aug.values[h, (r+1):(r+nk), r+1]
+            expected_with = Lam * fj .+ favar.Lambda_y * yj
+            @test panel.values[h, nonkey, r+1] ≈ expected_with[nonkey] atol=1e-8
+        end
+        # The Y-channel materially changes row 1 (which loads on the key var) at impact.
+        fj0 = irf_aug.values[1, 1:r, r+1]
+        yj0 = irf_aug.values[1, (r+1):(r+nk), r+1]
+        @test !isapprox((Lam*fj0)[1], (Lam*fj0 .+ favar.Lambda_y*yj0)[1]; atol=1e-6)
+    end
+
     @testset "favar_panel_irf key variable override" begin
         X, _ = make_favar_data(N=30)
         favar = estimate_favar(X, [1, 5], 2, 2)
@@ -352,15 +392,18 @@ using MacroEconometricModels
 
         panel_irf = favar_panel_irf(favar, irf_aug)
 
-        # For non-key variables, IRF should equal Lambda * factor_irf
+        # For non-key variables, IRF equals Lambda*factor_irf + Lambda_y*y_irf (the direct
+        # Y-channel via the implied loadings; T099 #198).
         Lambda = favar.loadings
         r = favar.n_factors
+        n_key = favar.n_key
         key_set = Set(favar.Y_key_indices)
         for i in 1:30
             if !(i in key_set)
                 for h in 1:10, j in 1:4
                     factor_irfs = irf_aug.values[h, 1:r, j]
-                    expected = dot(Lambda[i, :], factor_irfs)
+                    y_irfs = irf_aug.values[h, (r+1):(r+n_key), j]
+                    expected = dot(Lambda[i, :], factor_irfs) + dot(favar.Lambda_y[i, :], y_irfs)
                     @test isapprox(panel_irf.values[h, i, j], expected; atol=1e-10)
                 end
             end
