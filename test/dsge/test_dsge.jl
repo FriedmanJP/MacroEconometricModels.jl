@@ -735,6 +735,62 @@ end
     @test is_determined(sol)
 end
 
+@testset "GMRES Sylvester residual guard (#215)" begin
+    M = MacroEconometricModels
+    rng = Random.MersenneTwister(215)
+    n = 80
+    nvd = 80                                   # total = 6400 > 5000 → matrix-free GMRES branch
+    f_c = Matrix{Float64}(3.0I, n, n) .+ 0.02 .* randn(rng, n, n)   # diagonally dominant
+    f_f = 0.02 .* randn(rng, n, n)
+    Mkd = 0.02 .* randn(rng, n, n)
+    RHS = randn(rng, n, nvd)
+    # Default solve satisfies the Sylvester equation f_c·X + f_f·X·Mkd = -RHS
+    X = M._solve_kronecker_sylvester(f_c, f_f, Mkd, RHS, n, nvd)
+    @test norm(f_c * X + f_f * (X * Mkd) + RHS) / norm(RHS) < 1e-6
+    # An unreachable tolerance warns instead of silently returning the last iterate
+    @test_logs (:warn,) match_mode = :any M._solve_kronecker_sylvester(
+        f_c, f_f, Mkd, RHS, n, nvd; gmres_max_outer=1, gmres_tol=1e-18)
+    # rhs = 0 → zeros, not 0/0 = NaN
+    Z = M._solve_kronecker_sylvester(f_c, f_f, Mkd, zeros(n, nvd), n, nvd)
+    @test all(iszero, Z)
+end
+
+@testset "Smolyak grid unisolvency (#218)" begin
+    M = MacroEconometricModels
+    # nodes and polynomial multi-index set come from the SAME combination loop ⇒ square
+    for (nx, mu) in ((2, 1), (2, 2), (2, 3), (3, 2))
+        nodes, mi = M._smolyak_grid(nx, mu)
+        @test size(mi, 1) == size(nodes, 1)
+    end
+    # d=2, μ=1 index pin: the collinear (1,1) is absent; (2,0)/(0,2) are present
+    _, mi = M._smolyak_grid(2, 1)
+    rows = [mi[i, :] for i in 1:size(mi, 1)]
+    @test [1, 1] ∉ rows
+    @test [2, 0] ∈ rows
+    @test [0, 2] ∈ rows
+end
+
+@testset "Lyapunov doubling (#220)" begin
+    M = MacroEconometricModels
+    # scalar AR(1): Σ = s²/(1-a²)
+    @test M.solve_lyapunov(reshape([0.9], 1, 1), reshape([1.0], 1, 1))[1, 1] ≈ 1 / (1 - 0.81) rtol = 1e-10
+    # near-unit-root does NOT throw (a=0.999 → ≈500.25)
+    @test M.solve_lyapunov(reshape([0.999], 1, 1), reshape([1.0], 1, 1))[1, 1] ≈ 1 / (1 - 0.999^2) rtol = 1e-8
+    # matrix case: doubling matches the dense kron solution
+    rng = Random.MersenneTwister(220)
+    n = 6
+    G = randn(rng, n, n)
+    G ./= (2 * opnorm(G))                       # spectral radius ≤ 0.5 < 1
+    Bm = randn(rng, n, 2)
+    Sig = M.solve_lyapunov(G, Bm)
+    Q = Bm * Bm'
+    Sig_ref = reshape((Matrix{Float64}(I, n * n, n * n) - kron(G, G)) \ vec(Q), n, n)
+    @test Sig ≈ (Sig_ref + Sig_ref') / 2 rtol = 1e-8
+    @test issymmetric(Sig)
+    # genuine unit root → throw (no unconditional covariance)
+    @test_throws ArgumentError M.solve_lyapunov(reshape([1.0], 1, 1), reshape([1.0], 1, 1))
+end
+
 @testset "Steady-state residual guard + cached eigenvalues (#214/#224)" begin
     M = MacroEconometricModels
     # #214: a nonlinear model with NO real steady state (y = y² + 1) must be rejected, not

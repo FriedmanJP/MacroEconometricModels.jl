@@ -41,6 +41,10 @@ Compute a perturbation approximation to the policy functions of a DSGE model.
 # Keywords
 - `order::Int=2` — perturbation order (1, 2, or 3)
 - `method::Symbol=:gensys` — first-order solver (`:gensys` or `:blanchard_kahn`)
+- `gmres_tol::T=1e-8` — relative tolerance for the matrix-free GMRES Sylvester solve used for
+  the order-2/3 coefficients on large systems (`n·nvᵈ > 5000`); a warning is emitted if it is
+  not reached within `gmres_max_outer` restarts
+- `gmres_max_outer::Int=20` — maximum GMRES outer (restart) iterations
 
 # Returns
 A `PerturbationSolution{T}` containing the policy function coefficients:
@@ -61,7 +65,9 @@ A `PerturbationSolution{T}` containing the policy function coefficients:
 """
 function perturbation_solver(spec::DSGESpec{T};
                               order::Int=2,
-                              method::Symbol=:gensys) where {T<:AbstractFloat}
+                              method::Symbol=:gensys,
+                              gmres_tol::T=T(1e-8),
+                              gmres_max_outer::Int=20) where {T<:AbstractFloat}
     order in (1, 2, 3) || throw(ArgumentError("order must be 1, 2, or 3; got $order"))
     isempty(spec.steady_state) &&
         throw(ArgumentError("Must compute steady state first (call compute_steady_state)"))
@@ -273,7 +279,8 @@ function perturbation_solver(spec::DSGESpec{T};
 
     if nv > 0
         MkM = kron(M, M)  # nv^2 x nv^2
-        fvv = _solve_kronecker_sylvester(f_c, f_f, MkM, RHS, n, nv2)
+        fvv = _solve_kronecker_sylvester(f_c, f_f, MkM, RHS, n, nv2;
+                                         gmres_tol=gmres_tol, gmres_max_outer=gmres_max_outer)
     else
         fvv = zeros(T, n, 0)
     end
@@ -420,7 +427,8 @@ function perturbation_solver(spec::DSGESpec{T};
 
     if nv > 0
         MkMkM = kron(MkM, M)  # nv³ × nv³
-        fvvv = _solve_kronecker_sylvester(f_c, f_f, MkMkM, RHS_3, n, nv3)
+        fvvv = _solve_kronecker_sylvester(f_c, f_f, MkMkM, RHS_3, n, nv3;
+                                          gmres_tol=gmres_tol, gmres_max_outer=gmres_max_outer)
     else
         fvvv = zeros(T, n, 0)
     end
@@ -869,7 +877,8 @@ For larger systems, uses matrix-free GMRES to avoid forming the (n*nvd)² system
 Memory: O(n·nvd) instead of O(n²·nvd²).
 """
 function _solve_kronecker_sylvester(f_c::Matrix{T}, f_f::Matrix{T},
-        Mkd::Matrix{T}, RHS::Matrix{T}, n::Int, nvd::Int) where {T<:AbstractFloat}
+        Mkd::Matrix{T}, RHS::Matrix{T}, n::Int, nvd::Int;
+        gmres_tol::T=T(1e-8), gmres_max_outer::Int=20) where {T<:AbstractFloat}
     total = n * nvd
 
     if total <= 5000
@@ -880,6 +889,8 @@ function _solve_kronecker_sylvester(f_c::Matrix{T}, f_f::Matrix{T},
 
     # Matrix-free GMRES: apply A*x = [(I⊗f_c) + (Mkd'⊗f_f)] * x without forming A
     rhs = -vec(RHS)
+    rhs_norm = norm(rhs)
+    rhs_norm == 0 && return zeros(T, n, nvd)   # trivial RHS; avoids the r./beta = 0/0 → NaN below
 
     function matvec!(y::AbstractVector, x::AbstractVector)
         X = reshape(x, n, nvd)
@@ -892,9 +903,11 @@ function _solve_kronecker_sylvester(f_c::Matrix{T}, f_f::Matrix{T},
     r = copy(rhs)
     matvec_buf = similar(r)
 
-    max_outer = 20
+    max_outer = gmres_max_outer
     restart = min(200, total)
-    tol = T(1e-12) * norm(rhs)
+    # Inner break tolerance uses the exposed gmres_tol (default 1e-8, a deliberate loosening of
+    # the former hard-wired 1e-12 to match the resid_uc tolerance).
+    tol = gmres_tol * rhs_norm
 
     for outer in 1:max_outer
         matvec!(matvec_buf, x)
@@ -946,6 +959,15 @@ function _solve_kronecker_sylvester(f_c::Matrix{T}, f_f::Matrix{T},
 
         x .+= V[:, 1:k] * y
     end
+
+    # Post-loop residual guard: `gmres_max_outer` may be exhausted before reaching tol, in
+    # which case the last iterate is returned silently. Recompute the true relative residual
+    # and warn so wrong order-2/3 coefficients are not used unnoticed (#215).
+    matvec!(matvec_buf, x)
+    rel = norm(rhs .- matvec_buf) / max(rhs_norm, eps(T))
+    rel > gmres_tol && @warn "GMRES Sylvester solve did not converge (relative residual " *
+        "$rel > gmres_tol $gmres_tol after $gmres_max_outer outer iterations); order-2/3 " *
+        "perturbation coefficients may be inaccurate — raise gmres_max_outer or loosen gmres_tol."
 
     return reshape(x, n, nvd)
 end

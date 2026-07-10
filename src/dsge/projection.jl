@@ -177,29 +177,13 @@ function _smolyak_grid(nx::Int, mu::Int)
         end
     end
 
-    max_sum = mu + nx
-
-    # Generate multi-indices with |alpha|_1 <= max_sum
-    function _gen_multi_indices(ndim, max_s)
-        if ndim == 1
-            return reshape(collect(0:max_s), max_s + 1, 1)
-        end
-        sub = _gen_multi_indices(ndim - 1, max_s)
-        result = Matrix{Int}(undef, 0, ndim)
-        for i in 0:max_s
-            valid = sub[vec(sum(sub; dims=2)) .<= max_s - i, :]
-            if !isempty(valid)
-                col_i = fill(i, size(valid, 1))
-                result = vcat(result, hcat(col_i, valid))
-            end
-        end
-        return result
-    end
-
-    mi = _gen_multi_indices(nx, max_sum)
-
-    # Build Smolyak grid points using the combination technique
+    # Build the Smolyak nodes AND the matching polynomial multi-index set from the SAME
+    # combination technique, so the collocation basis is unisolvent on the sparse grid. The old
+    # code took the full total-degree set |α|₁ ≤ μ+nx and clipped it by row-sum, which is NOT
+    # unisolvent (e.g. d=2,μ=1 kept (1,1), whose x·y basis is zero at every one of the 5 nodes →
+    # singular collocation, while dropping (2,0)/(0,2)). #218
     all_points = Set{Vector{Float64}}()
+    index_set = Set{Vector{Int}}()
 
     function _gen_level_combos(ndim, target_sum_max, min_level)
         if ndim == 1
@@ -230,13 +214,16 @@ function _smolyak_grid(nx::Int, mu::Int)
         n_combo = prod(sizes)
         for idx in 0:(n_combo - 1)
             pt = zeros(nx)
+            alpha = zeros(Int, nx)
             rem = idx
             for d in nx:-1:1
                 j = rem % sizes[d]
                 rem = div(rem, sizes[d])
                 pt[d] = pts_per_dim[d][j + 1]
+                alpha[d] = j                 # admissible degree 0:(m_d-1) for this tensor block
             end
             push!(all_points, round.(pt; digits=14))
+            push!(index_set, alpha)
         end
     end
 
@@ -248,12 +235,14 @@ function _smolyak_grid(nx::Int, mu::Int)
         nodes[i, :] = pt
     end
 
-    # Filter multi-indices to match grid size
-    mi_sums = vec(sum(mi; dims=2))
-    perm = sortperm(mi_sums)
-    mi_sorted = mi[perm, :]
-    n_basis = min(n_nodes, size(mi_sorted, 1))
-    mi_final = mi_sorted[1:n_basis, :]
+    # Multi-index set from the same combination loop — square with the node set by construction
+    # (a nested Clenshaw-Curtis level l contributes both m_l points and degrees 0:(m_l-1)).
+    mi_list = sort(collect(index_set))
+    n_basis = length(mi_list)
+    mi_final = zeros(Int, n_basis, nx)
+    for (i, a) in enumerate(mi_list)
+        mi_final[i, :] = a
+    end
 
     return nodes, mi_final
 end
@@ -275,8 +264,16 @@ function _compute_state_bounds(spec::DSGESpec{T}, linear::LinearDSGE{T},
     G1 = result.G
     impact = result.impact
 
-    # Unconditional variance via Lyapunov equation
-    Var_y = solve_lyapunov(G1, impact)
+    # Unconditional variance via Lyapunov equation. A unit-root/explosive first-order solution
+    # has no finite unconditional covariance (solve_lyapunov throws); fall back to zero variance
+    # so the min_half floor below still supplies finite, usable state bounds (#220).
+    Var_y = try
+        solve_lyapunov(G1, impact)
+    catch
+        @warn "State-bounds Lyapunov solve failed (non-stationary first-order solution); " *
+              "falling back to the minimum-width floor for state bounds."
+        zeros(T, size(G1, 1), size(G1, 1))
+    end
 
     ss = spec.steady_state
     bounds = zeros(T, nx, 2)
