@@ -29,7 +29,9 @@ Fields:
 - `n_endog::Int` — number of endogenous variables (including auxiliaries)
 - `n_exog::Int` — number of exogenous shocks
 - `n_params::Int` — number of parameters
-- `n_expect::Int` — number of expectation errors (forward-looking variables)
+- `n_expect::Int` — number of forward-looking *equations* (expectation errors η); this is the
+  count of forward equations, which need not equal the number of distinct lead variables that
+  form the Π columns (see `linearize`) — #223
 - `forward_indices::Vector{Int}` — indices of equations with `[t+1]` terms
 - `steady_state::Vector{T}` — steady state values
 - `varnames::Vector{String}` — display names
