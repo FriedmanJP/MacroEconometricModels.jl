@@ -407,6 +407,23 @@ end
         @test !any(isnan, m.X_sm[56:60, 3:4])
     end
 
+    @testset "Ragged-edge fill conditions on observed variables (T105 #204)" begin
+        # 2-var VAR(1), B_1 = diag(0.5), strong contemporaneous innovation correlation
+        # sigma_12 = 0.9. When var1 is observed and var2 missing, the Kalman-smoothed var2 equals
+        # the conditional expectation sigma_21/sigma_11 * u1 (= 0.9 * observed); the old
+        # interpolation + deterministic-projection fill ignored the observed var1 and gave 0.
+        beta = zeros(3, 2); beta[2, 1] = 0.5; beta[3, 2] = 0.5
+        sigma = [1.0 0.9; 0.9 1.0]
+        Yp = zeros(6, 2); Yp[4, 1] = 3.0; Yp[4, 2] = NaN
+        Xp = MacroEconometricModels._bvar_smooth_missing(Yp, beta, sigma, 1, 6)
+        @test Xp[4, 1] == 3.0                    # observed entries preserved exactly
+        @test Xp[4, 2] ≈ 2.7 atol=1e-3           # conditioned on the observed correlated variable
+        Yn = zeros(6, 2); Yn[4, 1] = -3.0; Yn[4, 2] = NaN
+        Xn = MacroEconometricModels._bvar_smooth_missing(Yn, beta, sigma, 1, 6)
+        @test Xn[4, 2] ≈ -2.7 atol=1e-3          # sign follows the observed variable
+        @test all(isfinite, Xp) && all(isfinite, Xn)
+    end
+
     @testset "Hyperparameter optimization" begin
         rng = Random.MersenneTwister(300)
         Y = randn(rng, 100, 6)
