@@ -75,7 +75,8 @@ forward-looking, backward-looking, and mixed models).
 # Returns
 `DSGESolution{T}` with `method=:klein`; `eu=[1,1]` signals determinacy.
 """
-function klein(ld::LinearDSGE{T}, spec::DSGESpec{T}; div::Real=1.0 + 1e-8) where {T<:AbstractFloat}
+function klein(ld::LinearDSGE{T}, spec::DSGESpec{T};
+               div::Real=1.0 + 1e-8, cluster_tol::Real=1e-6) where {T<:AbstractFloat}
     n = spec.n_endog
 
     f_0 = ld.Gamma0
@@ -83,7 +84,7 @@ function klein(ld::LinearDSGE{T}, spec::DSGESpec{T}; div::Real=1.0 + 1e-8) where
     f_ε = -ld.Psi
     f_lead = _dsge_jacobian(spec, spec.steady_state, :lead)
 
-    res = _solve_qz_quadratic(f_0, f_1, f_lead, f_ε; div=div)
+    res = _solve_qz_quadratic(f_0, f_1, f_lead, f_ε; div=div, cluster_tol=cluster_tol)
     G1 = res.G
     impact = res.impact
 

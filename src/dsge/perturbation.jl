@@ -83,7 +83,10 @@ function perturbation_solver(spec::DSGESpec{T};
     try
         uc_result = _solve_undetermined_coefficients(spec)
         resid_uc = (f_0 + f_lead * uc_result.G1) * uc_result.G1 + f_1
-        uc_ok = maximum(abs.(resid_uc)) < T(1e-8) && uc_result.converged
+        # Accept the UC solvent only if it is also stable — a converged-but-explosive G1
+        # must fall back to the stable QZ solvent (#213).
+        uc_ok = maximum(abs.(resid_uc)) < T(1e-8) && uc_result.converged &&
+                maximum(abs.(eigvals(uc_result.G1)); init=zero(T)) < T(1) + T(1e-8)
     catch
     end
 

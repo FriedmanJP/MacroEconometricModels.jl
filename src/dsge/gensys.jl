@@ -26,7 +26,7 @@ Returns `(G1, impact, C_sol, eu, eigenvalues)` where:
 """
 function gensys(Gamma0::AbstractMatrix{T}, Gamma1::AbstractMatrix{T},
                 C::AbstractVector{T}, Psi::AbstractMatrix{T}, Pi::AbstractMatrix{T};
-                div::Real=1.0 + 1e-8,
+                div::Real=1.0 + 1e-8, cluster_tol::Real=1e-6,
                 f_lead::Union{Nothing,AbstractMatrix{T}}=nothing) where {T<:AbstractFloat}
     n = size(Gamma0, 1)
     eu = [0, 0]
@@ -40,7 +40,8 @@ function gensys(Gamma0::AbstractMatrix{T}, Gamma1::AbstractMatrix{T},
         gev_mag[i] = abs(S[i,i]) > eps(T) ? abs(TT[i,i] / S[i,i]) : Inf
     end
 
-    stable_select = BitVector(gev_mag .< div)
+    divhat = _place_divhat(gev_mag, div, cluster_tol)   # exact |λ|=1 → unstable (shared with QZ core)
+    stable_select = BitVector(gev_mag .< divhat)
     F_ordered = ordschur(F, stable_select)
     S = F_ordered.S; TT = F_ordered.T
     Q = F_ordered.Q; Z = F_ordered.Z
@@ -71,8 +72,8 @@ function gensys(Gamma0::AbstractMatrix{T}, Gamma1::AbstractMatrix{T},
             eu[1] = 1
         end
 
-        # Count finite unstable eigenvalues for BK condition
-        n_finite_unstable = count(i -> !isinf(abs(eigenvalues[i])) && abs(eigenvalues[i]) >= div,
+        # Count finite unstable eigenvalues for BK condition (same adaptive boundary)
+        n_finite_unstable = count(i -> !isinf(abs(eigenvalues[i])) && abs(eigenvalues[i]) >= divhat,
                                    1:n)
         if n_finite_unstable == n_fwd || (consistent && n_finite_unstable <= n_fwd)
             eu[2] = 1
@@ -206,16 +207,22 @@ function solve(spec::DSGESpec{T}; method::Symbol=:gensys, kwargs...) where {T<:A
         f_ε = -ld.Psi
         f_lead = _dsge_jacobian(spec, spec.steady_state, :lead)
 
-        # Companion-QZ for correct determinacy + a robust solution fallback
-        qz_core = _solve_qz_quadratic(f_0, f_1, f_lead, f_ε)
+        div = T(get(kwargs, :div, 1 + 1e-8))
+        cluster_tol = T(get(kwargs, :cluster_tol, 1e-6))
 
-        # Primary solution via undetermined coefficients (robust to many static vars)
+        # Companion-QZ for correct determinacy + a robust solution fallback
+        qz_core = _solve_qz_quadratic(f_0, f_1, f_lead, f_ε; div=div, cluster_tol=cluster_tol)
+
+        # Primary solution via undetermined coefficients (robust to many static vars). Accept
+        # it only if the residual/convergence AND stability hold: a converged-but-explosive
+        # solvent (max|eigvals(G1)| ≥ div) must fall back to the stable QZ solvent (#213).
         uc_ok = false
         local uc_result
         try
             uc_result = _solve_undetermined_coefficients(spec)
             resid = (f_0 + f_lead * uc_result.G1) * uc_result.G1 + f_1
-            uc_ok = maximum(abs.(resid)) < T(1e-8) && uc_result.converged
+            uc_ok = maximum(abs.(resid)) < T(1e-8) && uc_result.converged &&
+                    maximum(abs.(eigvals(uc_result.G1)); init=zero(T)) < div
         catch
             # UC failed (SingularException or non-convergence) — fall through to qz_core
         end
@@ -239,12 +246,14 @@ function solve(spec::DSGESpec{T}; method::Symbol=:gensys, kwargs...) where {T<:A
         )
     elseif method == :blanchard_kahn
         ld = linearize(spec)
-        return blanchard_kahn(ld, spec)
+        return blanchard_kahn(ld, spec; div=get(kwargs, :div, 1.0 + 1e-8),
+                              cluster_tol=get(kwargs, :cluster_tol, 1e-6))
     elseif method == :perfect_foresight
         return perfect_foresight(spec; kwargs...)
     elseif method == :klein
         ld = linearize(spec)
-        return klein(ld, spec)
+        return klein(ld, spec; div=get(kwargs, :div, 1.0 + 1e-8),
+                     cluster_tol=get(kwargs, :cluster_tol, 1e-6))
     elseif method == :perturbation
         order = get(kwargs, :order, 2)
         return perturbation_solver(spec; order=order)

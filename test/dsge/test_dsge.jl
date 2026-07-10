@@ -699,6 +699,42 @@ end
     @test sol.eu[2] == 1  # unique
 end
 
+@testset "Exposed div/cluster_tol + UC stability gate (#222/#213)" begin
+    M = MacroEconometricModels
+    d = 1.0 + 1e-8
+    # --- _place_divhat: nominal div preserved (Sims convention); warn only on clustering (#222) ---
+    @test M._place_divhat([0.5, 1.5], d, 1e-6) == d          # well-separated → nominal
+    @test M._place_divhat([0.3, 0.9], d, 1e-6) == d          # all stable → nominal
+    @test M._place_divhat(Float64[], d, 1e-6) == d           # empty → nominal
+    @test M._place_divhat([0.5, 1.0, 2.0], d, 1e-6) == d     # a lone unit root is left to div
+    for m in (1.0, 1.0 - 1e-12, 1.0 + 1e-12)                 # isolated near-unit root: no warn, nominal
+        @test M._place_divhat([0.5, m], d, 1e-6) == d
+    end
+    @test_logs (:warn,) match_mode = :any M._place_divhat([1.0, 1.0 - 5e-7, 0.5], d, 1e-6)  # cluster → warn
+
+    # --- div forwarding flips the stable-root count (#222) ---
+    # scalar quadratic G² - 1.5G + 0.5 = (G-0.5)(G-1.0): companion roots {0.5, 1.0}
+    args = (reshape([-1.5], 1, 1), reshape([0.5], 1, 1), reshape([1.0], 1, 1), reshape([1.0], 1, 1))
+    @test M._solve_qz_quadratic(args...; div=1.5).n_stable == 2   # both roots below 1.5
+    @test M._solve_qz_quadratic(args...; div=0.9).n_stable == 1   # only 0.5 below 0.9
+
+    # --- solve() forwards div; klein and gensys agree ---
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 1.0
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+    end
+    spec = compute_steady_state(spec)
+    @test solve(spec; method=:gensys).eu == solve(spec; method=:klein).eu == [1, 1]
+    @test solve(spec; method=:gensys, div=0.5).eu == [0, 0]  # custom div excludes the 0.9 root
+
+    # --- #213: any accepted first-order G1 is stable (max|eigvals| < div) ---
+    sol = solve(spec; method=:gensys)
+    @test maximum(abs.(eigvals(sol.G1))) < d
+    @test is_determined(sol)
+end
+
 @testset "Solvers route through companion-QZ core (T112 #211)" begin
     # For a forward-looking model the raw gensys pencil drops the lead Jacobian and mis-counts
     # determinacy; the perturbation/projection solvers now route through _solve_qz_quadratic, so
