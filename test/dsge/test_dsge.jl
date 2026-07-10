@@ -4685,6 +4685,25 @@ end
     @test abs(irfs.values[20, 1, 1]) < abs(irfs.values[1, 1, 1])
 end
 
+@testset "Projection GIRF reproducibility (#217)" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:projection, degree=5, verbose=false)
+    # GIRF is reproducible for a fixed rng (per-rep MersenneTwister seeds derive from it)
+    ir1 = irf(sol, 15; n_sim=100, rng=Random.MersenneTwister(217))
+    ir2 = irf(sol, 15; n_sim=100, rng=Random.MersenneTwister(217))
+    @test ir1.values == ir2.values
+    # h=0 (t=1) response is deterministic — independent of n_sim / rng (no future shock yet)
+    ir3 = irf(sol, 15; n_sim=300, rng=Random.MersenneTwister(999))
+    @test ir1.values[1, 1, 1] ≈ ir3.values[1, 1, 1] atol = 1e-12
+end
+
 @testset "API integration" begin
     spec = @dsge begin
         parameters: ρ = 0.9, σ = 0.01
