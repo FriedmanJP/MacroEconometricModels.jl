@@ -86,6 +86,7 @@ include("core/tolerances.jl")
 include("core/types.jl")
 include("core/display.jl")
 include("core/kalman.jl")
+include("core/kalman_kernel.jl")
 include("core/quadrature.jl")
 
 # Data containers, validation, transforms, panel, summary stats, examples

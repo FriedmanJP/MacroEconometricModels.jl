@@ -145,4 +145,74 @@ using LinearAlgebra
         @test worst_asym < 1e-10
         @test worst_negeig ≥ -1e-8
     end
+
+    @testset "Consolidated kernel (T147/#246) matches the core primitive" begin
+        MEM = MacroEconometricModels
+        rng = Random.MersenneTwister(246)
+        # small stable linear-Gaussian system WITH both intercepts (b state, d obs)
+        Tt = [0.5 0.1; -0.2 0.4]
+        RQR = [0.30 0.05; 0.05 0.20]
+        Z = [1.0 0.0; 0.3 1.0]
+        Hobs = [0.10 0.0; 0.0 0.15]
+        b = [0.2, -0.1]; d = [0.05, 0.02]
+        n_state = 2; n_obs = 2; T_obs = 40
+        a0, P0 = MEM._kalman_init(:stationary, Tt, RQR, n_state)
+        LR = cholesky(Symmetric(RQR)).L; LH = cholesky(Symmetric(Hobs)).L
+        y = Matrix{Float64}(undef, n_obs, T_obs); x = copy(a0)
+        for t in 1:T_obs
+            x = b + Tt * x + LR * randn(rng, n_state)
+            y[:, t] = d + Z * x + LH * randn(rng, n_obs)
+        end
+
+        # reference forward filter assembled from the core _kalman_update primitive
+        function ref_filter(y, Z, Tt, RQR, Hobs, b, d, a0, P0; skip=0)
+            xr = copy(a0); Pr = Matrix(P0); ll = 0.0
+            for t in 1:size(y, 2)
+                x_pred = b + Tt * xr
+                P_pred = Tt * Pr * Tt' + RQR; P_pred = (P_pred + P_pred') / 2
+                if t == skip
+                    xr = x_pred; Pr = P_pred; continue
+                end
+                xu, Pu, v, S, _ = MEM._kalman_update(x_pred, P_pred, y[:, t] - d, Z, Hobs)
+                L = cholesky(Symmetric((S + S') / 2)).L
+                ll += -0.5 * (length(v) * log(2π) + 2sum(log, diag(L)) + sum(abs2, L \ v))
+                xr = xu; Pr = Pu
+            end
+            return ll, xr, Pr
+        end
+        ll_ref, xf_ref, Pf_ref = ref_filter(y, Z, Tt, RQR, Hobs, b, d, a0, P0)
+
+        store = MEM.KalmanFilterStore{Float64}(n_state, T_obs)
+        ll_k = MEM._kalman_filter!(store, y, Z, Tt, RQR, Hobs; d=d, b=b, a0=a0, P0=P0, scalar=false)
+        @test ll_k ≈ ll_ref rtol = 1e-10
+        @test store.a_filt[:, end] ≈ xf_ref rtol = 1e-9
+        @test store.P_filt[:, :, end] ≈ Pf_ref rtol = 1e-9
+        @test norm(store.P_filt[:, :, end] - store.P_filt[:, :, end]') < 1e-12
+        @test minimum(eigvals(Symmetric(store.P_filt[:, :, end]))) ≥ -1e-10
+
+        # scalar rank-1 path == multivariate path on a single-observation series
+        Zs = reshape([1.0, 0.4], 1, 2); Hs = reshape([0.12], 1, 1); ds = [0.03]
+        ys = Matrix{Float64}(undef, 1, T_obs); xs = copy(a0)
+        for t in 1:T_obs
+            xs = b + Tt * xs + LR * randn(rng, 2)
+            ys[1, t] = ds[1] + (Zs * xs)[1] + sqrt(Hs[1, 1]) * randn(rng)
+        end
+        ll_scalar = MEM._kalman_filter!(nothing, ys, Zs, Tt, RQR, Hs; d=ds, b=b, a0=a0, P0=P0, scalar=true)
+        ll_multiv = MEM._kalman_filter!(nothing, ys, Zs, Tt, RQR, Hs; d=ds, b=b, a0=a0, P0=P0, scalar=false)
+        @test ll_scalar ≈ ll_multiv rtol = 1e-10
+
+        # missing data: an all-NaN step contributes 0 to the log-likelihood
+        y_miss = copy(y); y_miss[:, 10] .= NaN
+        ll_miss = MEM._kalman_filter!(nothing, y_miss, Z, Tt, RQR, Hobs; d=d, b=b, a0=a0, P0=P0, scalar=false)
+        @test ll_miss ≈ ref_filter(y, Z, Tt, RQR, Hobs, b, d, a0, P0; skip=10)[1] rtol = 1e-10
+
+        # init modes
+        Ps = MEM._kalman_init(:stationary, Tt, RQR, 2)[2]
+        @test norm(Ps - (Tt * Ps * Tt' + RQR)) < 1e-8                       # Lyapunov fixed point
+        @test MEM._kalman_init(:kappa, Tt, RQR, 2; kappa=1e6)[2] ≈ 1e6 * Matrix(I, 2, 2)
+        a_e, P_e = MEM._kalman_init(:explicit, Tt, RQR, 2; a0=[1.0, 2.0], P0=[2.0 0.0; 0.0 3.0])
+        @test a_e == [1.0, 2.0] && P_e == [2.0 0.0; 0.0 3.0]
+        @test_throws ArgumentError MEM._kalman_init(:bogus, Tt, RQR, 2)
+        @test_throws ArgumentError MEM._kalman_init(:stationary, [1.01 0.0; 0.0 0.5], RQR, 2)
+    end
 end
