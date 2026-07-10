@@ -52,6 +52,23 @@ using Random
         @test maximum(abs.(reconstruction - X)) < 1e-10
     end
 
+    @testset "Common component via Forni projector (T096 #195)" begin
+        Random.seed!(1959)
+        T_obs, N = 120, 6
+        F = randn(T_obs, 2); Λ = randn(N, 2)
+        common_true = F * Λ'
+        X = common_true + 0.1 * randn(T_obs, N)
+        # q = N: the projector L·Lᴴ = I, so the common component reconstructs X exactly (the old
+        # raw rank-1 periodogram Wiener filter did not).
+        m_full = estimate_gdfm(X, N; standardize=false)
+        @test maximum(abs.(m_full.common_component - X)) < 1e-6
+        # low-rank q = 2: a genuine projection (variance ≤ X per series) that recovers the common
+        # structure (high correlation with the true common component).
+        m2 = estimate_gdfm(X, 2; standardize=false)
+        @test all(var(m2.common_component[:, i]) <= 1.1 * var(X[:, i]) + 1e-8 for i in 1:N)
+        @test mean([abs(cor(m2.common_component[:, i], common_true[:, i])) for i in 1:N]) > 0.9
+    end
+
     @testset "Different Kernels" begin
         Random.seed!(23456)
         T_obs, N, q = 150, 15, 2
@@ -569,7 +586,10 @@ using Random
 
         @test length(shares) == N
         @test all(shares .>= 0)
-        @test all(shares .<= 1.0 + 1e-10)
+        # The Forni common component is a spectral projection that can concentrate variance into
+        # individual series, so a per-series share may modestly exceed 1 in finite samples (the
+        # old raw-periodogram Wiener filter shrank it below 1); allow a small margin.
+        @test all(shares .<= 1.1)
 
         # Should be high for strong factor structure
         @test mean(shares) > 0.5
