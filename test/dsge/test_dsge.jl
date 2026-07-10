@@ -2053,6 +2053,25 @@ end
     end
 end
 
+@testset "OccBin defining-equation collision (#219)" begin
+    spec = @dsge begin
+        parameters: rho = 0.5, phi = 1.5
+        endogenous: y, i
+        exogenous: e
+        y[t] = rho * y[t-1] + e[t]
+        i[t] = phi * y[t]
+    end
+    spec = compute_steady_state(spec)
+    M = MacroEconometricModels
+    # under the sensitivity heuristic BOTH y and i map to equation 2 (i = phi·y)
+    @test M._defining_equation_index(spec, 1)[1] == 2
+    @test M._defining_equation_index(spec, 2)[1] == 2
+    # the two-constraint default must refuse (collision detected on the ORIGINAL spec)
+    c_y = parse_constraint(:(y[t] >= -10.0), spec)
+    c_i = parse_constraint(:(i[t] >= 0.0), spec)
+    @test_throws ArgumentError occbin_solve(spec, c_y, c_i; shock_path=zeros(10, 1), nperiods=10)
+end
+
 @testset "OccBin: two-constraint no-binding" begin
     _suppress_warnings() do
     spec = @dsge begin

@@ -126,41 +126,61 @@ end
 # =============================================================================
 
 """
-    _derive_alternative_regime(spec::DSGESpec{T}, constraint::OccBinConstraint{T}) → DSGESpec{T}
+    _defining_equation_index(spec, var_idx) -> (eq_idx, jac_col)
+
+Index of the equation that DEFINES endogenous variable `var_idx` — the one with the largest
+|∂f_i/∂y_t[var_idx]| entry — together with the finite-difference Jacobian column. Returns
+`(var_idx, zeros)` when the steady state is not yet computed.
+"""
+function _defining_equation_index(spec::DSGESpec{T}, var_idx::Int) where {T}
+    n = spec.n_endog
+    y_ss = spec.steady_state
+    isempty(y_ss) && return (var_idx, zeros(T, n))
+    jac_col = zeros(T, n)
+    θ = spec.param_values
+    ε_zero = zeros(T, spec.n_exog)
+    h = max(T(1e-6), sqrt(eps(T)))
+    for i in 1:n
+        y_plus = copy(y_ss); y_plus[var_idx] += h
+        y_minus = copy(y_ss); y_minus[var_idx] -= h
+        f_plus = spec.residual_fns[i](y_plus, y_ss, y_ss, ε_zero, θ)
+        f_minus = spec.residual_fns[i](y_minus, y_ss, y_ss, ε_zero, θ)
+        jac_col[i] = (f_plus - f_minus) / (2h)
+    end
+    (argmax(abs.(jac_col)), jac_col)
+end
+
+"""
+    _derive_alternative_regime(spec, constraint; warn_ambiguous=true, decisiveness_tol=0.9) → DSGESpec{T}
 
 Construct the alternative (binding) regime specification by replacing the constrained
-variable's equation with `var[t] = bound`.
-
-When the constraint binds:
-1. The equation for the constrained variable is replaced with `var[t] = bound`
-2. The corresponding residual function becomes `y_t[var_idx] - bound`
-3. Forward-looking indices are updated (binding equation is never forward-looking)
+variable's defining equation with `var[t] = bound` (residual `y_t[var_idx] - bound`) and
+dropping it from the forward-looking set. The defining equation is picked by the sensitivity
+heuristic [`_defining_equation_index`](@ref); when `warn_ambiguous` and that pick is not
+decisive (runner-up/top > `decisiveness_tol`), a warning suggests the explicit
+`Dict(variable => equation_index)` overload.
 """
-function _derive_alternative_regime(spec::DSGESpec{T}, constraint::OccBinConstraint{T}) where {T}
+function _derive_alternative_regime(spec::DSGESpec{T}, constraint::OccBinConstraint{T};
+                                    warn_ambiguous::Bool=true, decisiveness_tol::Real=0.9) where {T}
     var_idx = findfirst(==(constraint.variable), spec.endog)
     var_idx === nothing && throw(ArgumentError(
         "Variable :$(constraint.variable) not found in endogenous variables"))
 
     bound = constraint.bound
 
-    # Find the equation that defines the constrained variable:
-    # The "defining equation" has the largest |∂f_i/∂y_t[var_idx]| entry
-    y_ss = spec.steady_state
-    n = spec.n_endog
-    eq_idx = var_idx  # default fallback
-    if !isempty(y_ss)
-        jac_col = zeros(T, n)
-        θ = spec.param_values
-        ε_zero = zeros(T, spec.n_exog)
-        h = max(T(1e-6), sqrt(eps(T)))
-        for i in 1:n
-            y_plus = copy(y_ss); y_plus[var_idx] += h
-            y_minus = copy(y_ss); y_minus[var_idx] -= h
-            f_plus = spec.residual_fns[i](y_plus, y_ss, y_ss, ε_zero, θ)
-            f_minus = spec.residual_fns[i](y_minus, y_ss, y_ss, ε_zero, θ)
-            jac_col[i] = (f_plus - f_minus) / (2h)
-        end
-        eq_idx = argmax(abs.(jac_col))
+    # Defining equation for the constrained variable (heuristic: largest sensitivity column).
+    eq_idx, jac_col = _defining_equation_index(spec, var_idx)
+    # Decisiveness: if the runner-up equation is nearly as sensitive, the heuristic pick is
+    # ambiguous — steer to the explicit Dict(variable => equation) overload. Emitted only from
+    # this heuristic path (#219).
+    if warn_ambiguous && spec.n_endog > 1 && !isempty(spec.steady_state)
+        mags = abs.(jac_col)
+        top = maximum(mags)
+        runner = partialsort(mags, 2; rev=true)
+        top > zero(T) && runner / top > T(decisiveness_tol) && @warn "OccBin: the defining " *
+            "equation for :$(constraint.variable) is ambiguous (runner-up/top = " *
+            "$(round(runner / top; digits=3)) > $decisiveness_tol); pass an explicit " *
+            "Dict(variable => equation_index) to disambiguate."
     end
 
     # Build new equations vector: replace the defining equation
@@ -1057,6 +1077,21 @@ function occbin_solve(spec::DSGESpec{T}, c1::OccBinConstraint{T}, c2::OccBinCons
 
     P = sol.G1       # n × n state transition
     Q = sol.impact    # n × n_shocks impact
+
+    # Collision guard on the ORIGINAL spec: if both constraints define the SAME equation, the
+    # sequential alt12 build (c1 then c2, deriving c2 on the already-modified alt1_spec) silently
+    # mis-assigns c2's binding — the check must run on `spec`, not `alt1_spec` where c2's row has
+    # zero sensitivity and the collision can never fire. Require the explicit Dict overload. #219
+    var_c1 = findfirst(==(c1.variable), spec.endog)
+    var_c2 = findfirst(==(c2.variable), spec.endog)
+    if var_c1 !== nothing && var_c2 !== nothing && !isempty(spec.steady_state)
+        eq1 = _defining_equation_index(spec, var_c1)[1]
+        eq2 = _defining_equation_index(spec, var_c2)[1]
+        eq1 == eq2 && throw(ArgumentError(
+            "OccBin: constraints on :$(c1.variable) and :$(c2.variable) map to the same defining " *
+            "equation ($eq1); the two-constraint heuristic cannot separate them. Pass an explicit " *
+            "Dict(variable => equation_index) via the Dict overload of occbin_solve."))
+    end
 
     # Derive 3 alternative regime specifications
     alt1_spec = _derive_alternative_regime(spec, c1)      # only c1 binding
