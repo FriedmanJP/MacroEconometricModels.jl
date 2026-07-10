@@ -154,7 +154,10 @@ function _kalman_smoother_dfm(Y::AbstractMatrix{T}, Λ::AbstractMatrix{T}, A::Ve
         J_t = P_filt[t, :, :] * T_mat' * P_pred_inv
         a_smooth[t, :] = a_filt[t, :] + J_t * (a_smooth[t+1, :] - a_pred[t+1, :])
         P_smooth[t, :, :] = P_filt[t, :, :] + J_t * (P_smooth[t+1, :, :] - P_pred[t+1, :, :]) * J_t'
-        t < T_obs && (Pt_smooth[t, :, :] = J_t * P_smooth[t+1, :, :])
+        # Exact lag-one smoother cross-covariance Cov(α_{t+1}, α_t | Y) = P_smooth[t+1]·J_t'
+        # (the loop already guarantees t ≤ T_obs-1). The old J_t·P_smooth[t+1] transposed the
+        # time order, corrupting the DFM EM VAR/Σ_η updates that consume it.
+        Pt_smooth[t, :, :] = P_smooth[t+1, :, :] * J_t'
     end
 
     a_smooth, P_smooth, Pt_smooth, loglik
