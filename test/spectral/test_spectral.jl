@@ -1109,3 +1109,22 @@ end
     r6 = ccf(y_int, x64)
     @test r6 isa MacroEconometricModels.ACFResult{Float64}
 end
+
+@testset "cross_spectrum single-segment warn (#209 R-32)" begin
+    rng = Random.MersenneTwister(3209)
+    x = randn(rng, 40)
+    y = randn(rng, 40)
+    # segment_length == n ⇒ exactly one segment ⇒ squared coherence ≡ 1 ⇒ must warn
+    @test_logs (:warn,) match_mode = :any cross_spectrum(x, y; segment_length=40)
+    cs = cross_spectrum(x, y; segment_length=40)
+    @test all(cs.coherence .>= 1 - 1e-8)
+end
+
+@testset "fisher_test large-n BigFloat p-value (#209 R-33)" begin
+    rng = Random.MersenneTwister(3309)
+    # Large m: the old Float64 term C(m,k)·(1-kg)^{m-1} overflows to Inf·0 = NaN.
+    y = randn(rng, 5000)
+    ft = fisher_test(y)
+    @test isfinite(ft.pvalue)
+    @test 0.0 <= ft.pvalue <= 1.0
+end

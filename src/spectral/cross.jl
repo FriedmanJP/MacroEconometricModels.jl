@@ -82,6 +82,8 @@ function cross_spectrum(x::AbstractVector{T}, y::AbstractVector{T};
     end
 
     n_segments == 0 && throw(ArgumentError("No complete segments; reduce segment_length"))
+    n_segments == 1 && @warn "Squared coherence is identically 1 with a single segment (no " *
+        "averaging over segments); reduce segment_length or increase overlap for a meaningful estimate."
 
     # Average
     Sxx ./= n_segments
