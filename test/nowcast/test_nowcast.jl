@@ -597,6 +597,50 @@ end
         @test total ≈ decomp atol=1e-8
     end
 
+    @testset "Joint news fully explains the revision (T094 #194)" begin
+        Y, _, _, _ = _make_nowcast_data(T_obs=80, nM=4, nQ=1, r=1, seed=717)
+        m = nowcast_dfm(Y, 4, 1; r=1, p=1, max_iter=30, thresh=1e-4)
+        X_old = copy(Y)
+        X_old[74:80, 1:3] .= NaN                 # withhold several recent releases across periods
+        news = nowcast_news(Y, X_old, m, 78; target_var=5)
+        @test length(news.impact_news) > 1
+        # The joint weights B = Cov(F,I)·Var(I)^{-1} make the news explain the ENTIRE smoothed
+        # revision, so the re-estimation residual is ~0. The old per-release scalar gains split
+        # overlapping information wrongly and dumped a large residual into impact_reestimation.
+        rev = news.new_nowcast - news.old_nowcast
+        @test abs(news.impact_reestimation) <= 1e-6 * (abs(rev) + 1)
+    end
+
+    @testset "Kalman lagged smoother cross-covariance recursion (T094 #194)" begin
+        # Plag[j][:,:,t] = Cov(x_t, x_{t-j} | Y_T) must match the analytic joint-Gaussian
+        # posterior covariance. The old j>=2 recursion J_{t-1}·Plag[j-1][t-1] was wrong; the
+        # correct one is Plag[j-1][t]·J_{t-j}'.
+        Random.seed!(7)
+        A = [0.7 0.1; 0.0 0.5]; C = reshape([1.0, 0.5], 1, 2)
+        Q = [0.3 0.0; 0.0 0.2]; R = reshape([0.4], 1, 1)
+        x0 = [0.2, -0.1]; P0 = [1.0 0.2; 0.2 0.8]
+        Tn, sd, N = 6, 2, 1
+        y = randn(N, Tn)
+        _, _, Plag, _ = MacroEconometricModels._kalman_smoother_lag(y, A, C, Q, R, x0, P0, Tn - 1)
+        Vt = Vector{Matrix{Float64}}(undef, Tn); Vt[1] = A * P0 * A' + Q
+        for t in 2:Tn; Vt[t] = A * Vt[t-1] * A' + Q; end
+        SX = zeros(sd * Tn, sd * Tn)
+        for t in 1:Tn, s in 1:Tn
+            if t >= s
+                Mm = copy(Vt[s]); for _ in 1:(t - s); Mm = A * Mm; end
+                SX[(t-1)*sd+1:t*sd, (s-1)*sd+1:s*sd] = Mm
+                SX[(s-1)*sd+1:s*sd, (t-1)*sd+1:t*sd] = Mm'
+            end
+        end
+        H = zeros(N * Tn, sd * Tn); for t in 1:Tn; H[(t-1)*N+1:t*N, (t-1)*sd+1:t*sd] = C; end
+        Rb = zeros(N * Tn, N * Tn); for t in 1:Tn; Rb[(t-1)*N+1:t*N, (t-1)*N+1:t*N] = R; end
+        Spost = SX - SX * H' * inv(H * SX * H' + Rb) * H * SX
+        for j in 1:3, t in (j + 1):Tn
+            blk = Spost[(t-1)*sd+1:t*sd, (t-j-1)*sd+1:(t-j)*sd]
+            @test Plag[j][:, :, t] ≈ blk atol=1e-9
+        end
+    end
+
     @testset "Input validation" begin
         Y, _, _, _ = _make_nowcast_data(T_obs=60, nM=4, nQ=1, r=1, seed=1000)
         m = nowcast_dfm(Y, 4, 1; r=1, p=1, max_iter=10, thresh=1e-2)

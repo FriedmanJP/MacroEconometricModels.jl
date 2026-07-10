@@ -230,11 +230,13 @@ function _kalman_smoother_lag(y::AbstractMatrix{T}, A::AbstractMatrix{T},
         Plag[1][:, :, t] = P_smooth[:, :, t] * J[:, :, t - 1]'
     end
 
-    # Higher lags via recursion: P_{t,t-j|T} = P_{t,t-1|T} * inv(P_{t-1|T}) * P_{t-1,t-j|T}
-    # Simplified: P_{t,t-j} = J_{t-1} * P_{t-1,t-j+1}  (backward recursion)
+    # Higher lags: Cov(x_t, x_{t-j}|Y_T) = Cov(x_t, x_{t-j+1}|Y_T) * J_{t-j}'. Conditional on
+    # Y_T the smoothed states are backward-Markov: x_{t-j} = E[x_{t-j}|Y_T] +
+    # J_{t-j}(x_{t-j+1} - E[x_{t-j+1}|Y_T]) + noise independent of the future, so the lag-j
+    # cross-covariance is the lag-(j-1) one right-multiplied by J_{t-j}'.
     for j in 2:k
         for t in (j + 1):T_obs
-            Plag[j][:, :, t] = J[:, :, t - 1] * Plag[j - 1][:, :, t - 1]
+            Plag[j][:, :, t] = Plag[j - 1][:, :, t] * J[:, :, t - j]'
         end
     end
 

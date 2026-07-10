@@ -72,8 +72,13 @@ function nowcast_news(X_new::AbstractMatrix, X_old::AbstractMatrix,
     Z_0, V_0 = model.Z_0, model.V_0
     state_dim = size(A, 1)
 
-    x_smooth_old, P_smooth_old, _, _ = _kalman_smoother_missing(y_old, A, C, Q, R, Z_0, V_0)
-    x_smooth_new, P_smooth_new, _, _ = _kalman_smoother_missing(y_new, A, C, Q, R, Z_0, V_0)
+    # Old-vintage smoother WITH lagged cross-covariances (needed for the joint news system);
+    # the new vintage only needs the smoothed target.
+    release_times = [idx[1] for idx in i_new]
+    all_times = vcat(target_period, release_times)
+    kmax = max(min(maximum(all_times) - minimum(all_times), T_obs - 1), 1)
+    x_smooth_old, P_smooth_old, Plag_old, _ = _kalman_smoother_lag(y_old, A, C, Q, R, Z_0, V_0, kmax)
+    x_smooth_new, _, _, _ = _kalman_smoother_missing(y_new, A, C, Q, R, Z_0, V_0)
 
     # Old and new nowcasts (unstandardized)
     now_old = dot(C[target_var, :], x_smooth_old[:, target_period]) * model.Wx[target_var] + model.Mx[target_var]
@@ -85,25 +90,38 @@ function nowcast_news(X_new::AbstractMatrix, X_old::AbstractMatrix,
     variable_names = String[]
 
     if n_releases > 0
-        # For each new release, compute its weight and innovation
-        for (k, idx) in enumerate(i_new)
-            t_k = idx[1]  # time of release
-            v_k = idx[2]  # variable of release
-
+        # Joint news system (Bańbura–Modugno): with innovation vector I (new data minus its
+        # old-vintage forecast), the smoothed-target revision equals B·I where the news weights
+        # are B = Cov(F, I)·Var(I)^{-1}. This splits overlapping information across releases
+        # correctly (order-invariant), unlike a per-release scalar Kalman gain.
+        release_var = [idx[2] for idx in i_new]
+        # Cov(state_ta, state_tb) from the lagged smoother covariances (Plag[j][:,:,t]=Cov(x_t,x_{t-j})).
+        function _xcov(ta::Int, tb::Int)
+            ta == tb && return P_smooth_old[:, :, ta]
+            ta > tb && return Plag_old[ta - tb][:, :, ta]
+            return permutedims(Plag_old[tb - ta][:, :, tb])
+        end
+        I_vec = zeros(T, n_releases)
+        for k in 1:n_releases
+            t_k, v_k = release_times[k], release_var[k]
             push!(variable_names, "Var$(v_k)_t$(t_k)")
-
-            # Innovation: actual - forecast
-            forecast_k = dot(C[v_k, :], x_smooth_old[:, t_k])
-            actual_k = x_new[t_k, v_k]
-            innovation_k = actual_k - forecast_k
-
-            # Weight: proportional to cross-covariance between target and release
-            # Simplified: use Kalman gain approximation
-            cov_target_release = C[target_var, :]' * P_smooth_old[:, :, t_k] * C[v_k, :]
-            var_release = C[v_k, :]' * P_smooth_old[:, :, t_k] * C[v_k, :] + R[v_k, v_k]
-            weight = cov_target_release / max(var_release, T(1e-10))
-
-            impact_news[k] = weight * innovation_k * model.Wx[target_var]
+            I_vec[k] = x_new[t_k, v_k] - dot(C[v_k, :], x_smooth_old[:, t_k])
+        end
+        VarI = zeros(T, n_releases, n_releases)
+        for k in 1:n_releases, l in 1:n_releases
+            t_k, v_k = release_times[k], release_var[k]
+            t_l, v_l = release_times[l], release_var[l]
+            VarI[k, l] = C[v_k, :]' * _xcov(t_k, t_l) * C[v_l, :]
+            (t_k == t_l) && (VarI[k, l] += R[v_k, v_l])
+        end
+        CovFI = zeros(T, n_releases)
+        for k in 1:n_releases
+            t_k, v_k = release_times[k], release_var[k]
+            CovFI[k] = C[target_var, :]' * _xcov(target_period, t_k) * C[v_k, :]
+        end
+        Bw = robust_inv(Symmetric(VarI)) * CovFI     # = Var(I)^{-1} Cov(I, F); news weight per release
+        for k in 1:n_releases
+            impact_news[k] = Bw[k] * I_vec[k] * model.Wx[target_var]
         end
     end
 
