@@ -364,10 +364,10 @@ function _backward_iteration(ref::OccBinRegime{T}, alt::OccBinRegime{T},
         P_tv[:, :, t] = -invmat * rgm.A
 
         if maximum(abs.(P_tv[:, :, t])) > T(1e10)
-            error("OccBin backward iteration diverged (max|P_tv| > 1e10 at period $t). " *
+            throw(ConvergenceError("OccBin backward iteration diverged (max|P_tv| > 1e10 at period $t). " *
                   "The alternative (binding) regime is likely indeterminate. " *
                   "This commonly occurs in simple NK models at the ZLB. " *
-                  "Consider adding model frictions (habits, investment adj. costs) or reducing shock magnitude.")
+                  "Consider adding model frictions (habits, investment adj. costs) or reducing shock magnitude."))
         end
 
         # Constant: D_tv_t = -invmat * (D · ε_t + d + C · D_tv_{t+1})
@@ -900,9 +900,9 @@ function _backward_iteration_two(ref::OccBinRegime{T}, alt1::OccBinRegime{T},
         P_tv[:, :, t] = -invmat * rgm.A
 
         if maximum(abs.(P_tv[:, :, t])) > T(1e10)
-            error("OccBin backward iteration diverged (max|P_tv| > 1e10 at period $t). " *
+            throw(ConvergenceError("OccBin backward iteration diverged (max|P_tv| > 1e10 at period $t). " *
                   "The alternative (binding) regime is likely indeterminate. " *
-                  "Consider adding model frictions or reducing shock magnitude.")
+                  "Consider adding model frictions or reducing shock magnitude."))
         end
 
         # Constant: D_tv_t = -invmat * (D · ε_t + d + C · D_tv_{t+1})

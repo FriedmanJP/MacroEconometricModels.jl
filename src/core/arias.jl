@@ -566,9 +566,9 @@ function identify_arias(model::VARModel{T}, restrictions::SVARRestrictions, hori
         end
     end
 
-    isempty(Q_draws) && error("No valid identification after $n_attempts attempts" *
+    isempty(Q_draws) && throw(IdentificationError("No valid identification after $n_attempts attempts" *
         (last_err === nothing ? "" :
-         "; last rejectable failure: $(typeof(last_err)): $(sprint(showerror, last_err))"))
+         "; last rejectable failure: $(typeof(last_err)): $(sprint(showerror, last_err))")))
 
     n_acc = length(Q_draws)
     irf_array = zeros(T, n_acc, horizon, n, n)
@@ -615,7 +615,7 @@ function identify_arias_bayesian(post::BVARPosterior, restrictions::SVARRestrict
         end
     end
 
-    isempty(all_irfs) && error("No valid identifications across posterior")
+    isempty(all_irfs) && throw(IdentificationError("No valid identifications across posterior"))
 
     n_acc = length(all_irfs)
     irf_array = zeros(n_acc, horizon, n, n)

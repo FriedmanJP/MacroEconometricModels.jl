@@ -1417,7 +1417,7 @@ end
         restrictions = SVARRestrictions(ZeroRestriction[], signs, n, n)
 
         # Should error after max attempts
-        @test_throws ErrorException identify_arias(model, restrictions, 5; n_draws=1, n_rotations=10)
+        @test_throws IdentificationError identify_arias(model, restrictions, 5; n_draws=1, n_rotations=10)
     end
 
     @testset "Dimension Mismatch" begin

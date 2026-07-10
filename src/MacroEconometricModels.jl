@@ -80,6 +80,7 @@ import Optim
 # =============================================================================
 
 # Core infrastructure
+include("core/exceptions.jl")
 include("core/utils.jl")
 include("core/tolerances.jl")
 include("core/types.jl")
@@ -674,6 +675,7 @@ export table, print_table
 export point_estimate, has_uncertainty, uncertainty_bounds
 export set_display_backend, get_display_backend
 export default_abstol, default_reltol
+export MacroModelError, ConvergenceError, IdentificationError, SingularSystemError
 
 # =============================================================================
 # Exports - Factor Models

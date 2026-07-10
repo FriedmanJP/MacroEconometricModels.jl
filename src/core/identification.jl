@@ -98,7 +98,7 @@ function identify_sign(model::VARModel{T}, horizon::Int, check_func::Function;
             irf_result = compute_irf(model, Q, horizon)
             check_func(irf_result) && return Q, irf_result
         end
-        error("No valid Q found after $max_draws draws")
+        throw(IdentificationError("No valid Q found after $max_draws draws"))
     end
 
     # Full identified set: collect ALL valid rotations
@@ -115,7 +115,7 @@ function identify_sign(model::VARModel{T}, horizon::Int, check_func::Function;
     end
 
     n_accepted = length(accepted_Q)
-    n_accepted == 0 && error("No valid Q found after $max_draws draws")
+    n_accepted == 0 && throw(IdentificationError("No valid Q found after $max_draws draws"))
 
     # Stack IRFs into 4D array (n_accepted × horizon × n × n)
     irf_draws = zeros(T, n_accepted, horizon, n, n)
@@ -183,7 +183,7 @@ function identify_narrative(model::VARModel{T}, horizon::Int, sign_check::Functi
             narrative_check(shocks) && return Q, irf, shocks
         end
     end
-    error("No valid Q found after $max_draws draws")
+    throw(IdentificationError("No valid Q found after $max_draws draws"))
 end
 
 # =============================================================================
