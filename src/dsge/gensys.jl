@@ -184,7 +184,7 @@ Solve a DSGE model.
 - `:perturbation` -- Higher-order perturbation (Schmitt-Grohe & Uribe 2004); pass `order=2` for second-order
 - `:projection` -- Chebyshev collocation (Judd 1998); pass `degree=5` for polynomial degree
 - `:pfi` -- Policy Function Iteration / Time Iteration (Coleman 1990); pass `degree=5`, `damping=1.0`
-- `:vfi` -- Value Function Iteration (Stokey-Lucas-Prescott 1989); pass `degree=5`, `howard_steps=0`
+- `:vfi` -- Euler-equation time iteration (Coleman 1990), equivalent to `:pfi` (the name is historical, not value-function iteration); pass `degree=5`, `howard_steps=0`
 - `:perfect_foresight` -- deterministic Newton solver
 """
 function solve(spec::DSGESpec{T}; method::Symbol=:gensys, kwargs...) where {T<:AbstractFloat}
