@@ -103,21 +103,40 @@ end
 """
     _eval_bound(rhs, ::Type{T}) → T
 
-Evaluate the RHS bound of a constraint to a numeric value.
+Evaluate the RHS bound of a constraint to a numeric value of type `T`.
+
+Uses a small recursive numeric evaluator (NOT `eval`) that supports only numeric
+literals, unary `+`/`-`, and binary `+ - * / ^`. Runtime `eval` is avoided because
+it runs in module global scope (world-age hazard, silent symbol resolution against
+package globals, and — worst — it would happily evaluate arbitrary calls such as
+`sin(1)`). Each numeric literal leaf is converted to `T` immediately so all
+arithmetic runs in `T`; this makes `:(2^-3)` evaluate as `2.0^-3.0 == 0.125`
+instead of throwing the `DomainError` that runtime `^(Int, negative Int)` raises.
 """
 function _eval_bound(rhs, ::Type{T}) where {T}
     if rhs isa Number
-        return T(rhs)
-    elseif rhs isa Expr
-        # Try to evaluate simple expressions (e.g., -1.0, 1/400)
-        try
-            val = eval(rhs)
-            return T(val)
-        catch
-            throw(ArgumentError("Cannot evaluate constraint bound expression: $rhs"))
+        return T(rhs)                       # leaf → float immediately
+    elseif rhs isa Expr && rhs.head === :call && length(rhs.args) >= 2
+        op = rhs.args[1]
+        vals = [_eval_bound(a, T) for a in rhs.args[2:end]]   # recurse; Symbol/ref leaves throw
+        if op === :+
+            length(vals) == 1 && return +(vals[1])
+            length(vals) == 2 && return vals[1] + vals[2]
+        elseif op === :-
+            length(vals) == 1 && return -(vals[1])
+            length(vals) == 2 && return vals[1] - vals[2]
+        elseif op === :* && length(vals) == 2
+            return vals[1] * vals[2]
+        elseif op === :/ && length(vals) == 2
+            return vals[1] / vals[2]
+        elseif op === :^ && length(vals) == 2
+            return vals[1] ^ vals[2]
         end
+        throw(ArgumentError("Unsupported operator/arity in constraint bound: $rhs " *
+            "(only unary ± and binary + - * / ^ on numeric literals are allowed)"))
     else
-        throw(ArgumentError("Constraint bound must be a numeric value, got: $rhs ($(typeof(rhs)))"))
+        throw(ArgumentError("Constraint bound must be a numeric literal expression, " *
+            "got: $rhs ($(typeof(rhs)))"))
     end
 end
 
