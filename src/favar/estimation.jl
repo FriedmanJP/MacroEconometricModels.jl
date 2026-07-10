@@ -313,7 +313,8 @@ end
 
 Carter–Kohn forward-filter / backward-sample of the FAVAR factor path. Casts the factors in
 companion state-space form — state `s_t = [F_t; …; F_{t-p+1}]`, transition from the F→F VAR
-blocks `A_lags` with innovation covariance `Sigma_eta` (rank `r`), observation
+blocks `A_lags` with innovation covariance `Sigma_eta` (rank `r`) plus a known per-t `drift`
+(the intercept and lagged-Y_key feedback of the augmented VAR), observation
 `X_std[t] = Lambda·F_t + e_t`, `e_t ~ N(0, diag(sigma2_e))` — runs the Kalman filter, then
 draws the path backward. Because the companion state noise is singular (only the top `r`
 rows carry innovations), each backward step conditions on the top-`r` block `F_{t+1}` of the
@@ -321,7 +322,8 @@ next state only (Kim–Nelson). Returns the sampled factors (T_obs × r).
 """
 function _favar_ffbs(X_std::AbstractMatrix{T}, Lambda::AbstractMatrix{T},
                      A_lags::Vector{Matrix{T}}, Sigma_eta::AbstractMatrix{T},
-                     sigma2_e::AbstractVector{T}, r::Int, p::Int) where {T<:AbstractFloat}
+                     sigma2_e::AbstractVector{T}, r::Int, p::Int,
+                     drift::AbstractMatrix{T}) where {T<:AbstractFloat}
     T_obs, N = size(X_std)
     sd = r * p
 
@@ -342,6 +344,9 @@ function _favar_ffbs(X_std::AbstractMatrix{T}, Lambda::AbstractMatrix{T},
     P_t = all(isfinite, P0) ? Matrix{T}(P0) : Matrix{T}(I, sd, sd) * T(1e6)
     for t in 1:T_obs
         a_pred = T_mat * a_t
+        @inbounds for i in 1:r
+            a_pred[i] += drift[t, i]      # known intercept + Y_key feedback in the top-r rows
+        end
         P_pred = T_mat * P_t * T_mat' + Q
         ZP = Z * P_pred                       # N × sd
         F_obs = ZP * Z'                       # N × N
@@ -371,7 +376,8 @@ function _favar_ffbs(X_std::AbstractMatrix{T}, Lambda::AbstractMatrix{T},
         Fbk = FPf * Fstar' + Sigma_eta        # r × r  (= top-r block of P_pred[t+1])
         Fbk = T(0.5) * (Fbk + Fbk')
         gain = Pf * Fstar' * robust_inv(Fbk)  # sd × r
-        m_full = af + gain * (F_samp[t+1, :] - Fstar * af)
+        # predicted top-r mean of s_{t+1} includes the known drift at t+1
+        m_full = af + gain * (F_samp[t+1, :] - (drift[t+1, :] + Fstar * af))
         C_full = Pf - gain * FPf              # sd × sd
         CF = Matrix{T}(C_full[1:r, 1:r])
         F_samp[t, :] = m_full[1:r] + _favar_state_chol(CF) * randn(T, r)
@@ -455,7 +461,10 @@ function _estimate_favar_bayesian(X::Matrix{T}, Y_key::Matrix{T}, r::Int, p::Int
             B_hat = Matrix{T}(var_model.B)
             S_post = Matrix{T}(var_model.U' * var_model.U)
             S_post = T(0.5) * (S_post + S_post')
-            Sigma_curr = _draw_inverse_wishart(T_eff_var, S_post)
+            # Flat-prior marginal: Σ ~ IW(T_eff - k, U'U). Integrating B out of the matrix-normal
+            # likelihood shifts the degrees of freedom by k = #regressors/equation (not T_eff).
+            nu_sigma = max(T_eff_var - k, n_var + 2)
+            Sigma_curr = _draw_inverse_wishart(nu_sigma, S_post)
             B_curr = B_hat + safe_cholesky(XtX_inv) * randn(T, k, n_var) * safe_cholesky(Sigma_curr)'
 
             # === Block 2: Draw Λ | F, X ===
@@ -486,17 +495,30 @@ function _estimate_favar_bayesian(X::Matrix{T}, Y_key::Matrix{T}, r::Int, p::Int
             end
 
             # === Block 3: Draw F | Λ, B, Σ, X_std via Carter–Kohn FFBS ===
-            # Extract the F→F companion blocks from B_curr (rows: 1 = intercept, then n_var per
-            # lag; columns = equations). A_lags[l][a,b] = coefficient of F_{t-l}[b] in equation a.
+            # Extract from B_curr (rows: 1 = intercept, then n_var per lag; columns = equations):
+            #  - the F→F companion blocks A_lags[l][a,b] = coef of F_{t-l}[b] in equation a;
+            #  - the F←Y_key feedback blocks + the intercept, which enter the state equation as a
+            #    KNOWN deterministic drift (Y_key is observed) — omitting it would make the factor
+            #    draw inconsistent with the augmented VAR just drawn in Block 1 and bias F.
             A_lags = Vector{Matrix{T}}(undef, p)
+            AFY = Vector{Matrix{T}}(undef, p)
             for l in 1:p
                 r0 = 2 + (l - 1) * n_var
-                block_ff = Matrix{T}(B_curr[r0:(r0 + r - 1), 1:r])   # [m,j] = coef F_{t-l}[m] in eq j
-                A_lags[l] = permutedims(block_ff)                    # -> [j,m]
+                A_lags[l] = permutedims(Matrix{T}(B_curr[r0:(r0 + r - 1), 1:r]))            # r × r
+                AFY[l]    = permutedims(Matrix{T}(B_curr[(r0 + r):(r0 + n_var - 1), 1:r]))   # r × n_key
+            end
+            c_F = Vector{T}(B_curr[1, 1:r])
+            drift = Matrix{T}(undef, T_obs, r)
+            for t in 1:T_obs
+                u = copy(c_F)
+                for l in 1:p
+                    t - l >= 1 && (u .+= AFY[l] * @view(Y_key[t - l, :]))
+                end
+                drift[t, :] = u
             end
             Sigma_eta = Matrix{T}(Sigma_curr[1:r, 1:r])
             Sigma_eta = T(0.5) * (Sigma_eta + Sigma_eta')
-            F_curr = _favar_ffbs(X_std, Lambda_curr, A_lags, Sigma_eta, sigma2_e, r, p)
+            F_curr = _favar_ffbs(X_std, Lambda_curr, A_lags, Sigma_eta, sigma2_e, r, p, drift)
 
             # === Store draws after burnin ===
             if iter > eff_burnin

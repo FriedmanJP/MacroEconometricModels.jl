@@ -566,6 +566,20 @@ using MacroEconometricModels
         acs = [cor(bf.factor_draws[s, 2:end, 1], bf.factor_draws[s, 1:end-1, 1])
                for s in 1:size(bf.factor_draws, 1)]
         @test mean(acs) > 0.4
+
+        # (3) The FFBS incorporates the known per-t drift (intercept + Y_key feedback). With a
+        #     large constant drift, tiny innovations, and uninformative observations, the sampled
+        #     factors must track the drift level (~2) — the pre-remediation transition dropped it
+        #     and would leave the factors near 0.
+        Random.seed!(5)
+        Tt = 60
+        Xz = zeros(Tt, 3)
+        Lam1 = [1.0 0.0; 0.0 1.0; 0.5 0.5]
+        Alag = [zeros(2, 2)]
+        drift_big = fill(2.0, Tt, 2)
+        Fdraw = MacroEconometricModels._favar_ffbs(Xz, Lam1, Alag, Matrix(1e-4I, 2, 2),
+                                                   fill(1e6, 3), 2, 1, drift_big)
+        @test mean(Fdraw) ≈ 2.0 atol=0.3
     end
 
     @testset "Bayesian FAVAR types and finite values" begin
