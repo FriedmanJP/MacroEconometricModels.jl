@@ -368,7 +368,11 @@ function _favar_ffbs(X_std::AbstractMatrix{T}, Lambda::AbstractMatrix{T},
     F_samp = Matrix{T}(undef, T_obs, r)
     Fstar = Matrix{T}(T_mat[1:r, :])          # r × sd (top rows of the transition)
     CT = Matrix{T}(P_filt[T_obs, 1:r, 1:r])
-    F_samp[T_obs, :] = a_filt[T_obs, 1:r] + _favar_state_chol(CT) * randn(T, r)
+    # Reused per-step standard-normal shock buffer; `randn!` draws from the same global stream
+    # as `randn(T, r)`, so the sampled path is unchanged. (#210 box D)
+    z_state = Vector{T}(undef, r)
+    randn!(z_state)
+    F_samp[T_obs, :] = a_filt[T_obs, 1:r] + _favar_state_chol(CT) * z_state
     for t in (T_obs - 1):-1:1
         af = a_filt[t, :]
         Pf = Matrix{T}(P_filt[t, :, :])
@@ -380,7 +384,8 @@ function _favar_ffbs(X_std::AbstractMatrix{T}, Lambda::AbstractMatrix{T},
         m_full = af + gain * (F_samp[t+1, :] - (drift[t+1, :] + Fstar * af))
         C_full = Pf - gain * FPf              # sd × sd
         CF = Matrix{T}(C_full[1:r, 1:r])
-        F_samp[t, :] = m_full[1:r] + _favar_state_chol(CF) * randn(T, r)
+        randn!(z_state)
+        F_samp[t, :] = m_full[1:r] + _favar_state_chol(CF) * z_state
     end
     F_samp
 end
@@ -441,6 +446,10 @@ function _estimate_favar_bayesian(X::Matrix{T}, Y_key::Matrix{T}, r::Int, p::Int
 
     # Pre-allocate workspace
     Y_aug = Matrix{T}(undef, T_obs, n_var)
+    # Reused per-sweep standard-normal shock buffers; `randn!` draws from the same global stream
+    # as the previous `randn(T, …)` calls, so every draw is unchanged. (#210 box D)
+    Z_Bdraw = Matrix{T}(undef, k, n_var)   # Block 1: (B | Σ) matrix-normal shock
+    z_lambda = Vector{T}(undef, r)         # Block 2: per-equation loading shock
     draw_idx = 0
 
     for iter in 1:total_iters
@@ -465,7 +474,8 @@ function _estimate_favar_bayesian(X::Matrix{T}, Y_key::Matrix{T}, r::Int, p::Int
             # likelihood shifts the degrees of freedom by k = #regressors/equation (not T_eff).
             nu_sigma = max(T_eff_var - k, n_var + 2)
             Sigma_curr = _draw_inverse_wishart(nu_sigma, S_post)
-            B_curr = B_hat + safe_cholesky(XtX_inv) * randn(T, k, n_var) * safe_cholesky(Sigma_curr)'
+            randn!(Z_Bdraw)
+            B_curr = B_hat + safe_cholesky(XtX_inv) * Z_Bdraw * safe_cholesky(Sigma_curr)'
 
             # === Block 2: Draw Λ | F, X ===
             # Equation-by-equation: X_i = F * λ_i + e_i
@@ -491,7 +501,8 @@ function _estimate_favar_bayesian(X::Matrix{T}, Y_key::Matrix{T}, r::Int, p::Int
                 sigma2_e[j] = sigma2_j
 
                 # Draw λ_i from posterior
-                Lambda_curr[j, :] = beta_hat + sqrt(sigma2_j) * L_FtF_inv * randn(T, r)
+                randn!(z_lambda)
+                Lambda_curr[j, :] = beta_hat + sqrt(sigma2_j) * L_FtF_inv * z_lambda
             end
 
             # === Block 3: Draw F | Λ, B, Σ, X_std via Carter–Kohn FFBS ===

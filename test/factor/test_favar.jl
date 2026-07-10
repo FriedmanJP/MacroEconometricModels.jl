@@ -733,3 +733,56 @@ using MacroEconometricModels
     end
 
 end  # @testset "FAVAR Tests"
+
+@testset "Bayesian FAVAR randn! shock buffers (#210 box D)" begin
+    # Box D preallocates the per-sweep / per-t standard-normal shock buffers in the Gibbs sampler
+    # (`_estimate_favar_bayesian`) and the Carter–Kohn FFBS (`_favar_ffbs`) and fills them with
+    # `randn!` instead of allocating fresh `randn(T, …)` arrays. Because `randn!(rng, buf)` draws
+    # from the same stream as `randn(rng, T, size...)`, every draw is bit-for-bit unchanged.
+    #
+    # NOTE: the plan's box D also mentioned "compute Λ'Σ⁻¹Λ once/sweep + mul!" — that targeted the
+    # pre-#192/#196 DFM-EM structure. The current post-rewrite FFBS/Gibbs code has no Λ'Σ⁻¹Λ term,
+    # so only the (bit-identical) randn! buffer optimization applies here.
+
+    # (1) Primitive equivalence: `randn!` into a reused buffer == fresh `randn(T, n)` on the same
+    #     seed, for both the vector and matrix shapes used by the sampler.
+    for (shape, mk) in ((5, () -> Vector{Float64}(undef, 5)),
+                        ((4, 3), () -> Matrix{Float64}(undef, 4, 3)))
+        Random.seed!(9)
+        a = shape isa Tuple ? randn(Float64, shape...) : randn(Float64, shape)
+        Random.seed!(9)
+        b = mk(); randn!(b)
+        @test a == b
+    end
+
+    # (2) `_favar_ffbs` reproduces its sampled path on a fixed seed (exercises the reused buffer).
+    Random.seed!(5)
+    Tt = 40; Xz = zeros(Tt, 3)
+    Lam1 = [1.0 0.0; 0.0 1.0; 0.5 0.5]
+    Alag = [0.5 .* Matrix{Float64}(I, 2, 2)]
+    drift = fill(0.3, Tt, 2)
+    Random.seed!(123)
+    F1 = MacroEconometricModels._favar_ffbs(Xz, Lam1, Alag, Matrix(0.1I, 2, 2), fill(1.0, 3), 2, 1, drift)
+    Random.seed!(123)
+    F2 = MacroEconometricModels._favar_ffbs(Xz, Lam1, Alag, Matrix(0.1I, 2, 2), fill(1.0, 3), 2, 1, drift)
+    @test F1 == F2
+    @test all(isfinite, F1)
+
+    # (3) Integration before/after: the full Bayesian FAVAR is deterministic on a fixed seed — the
+    #     buffer refactor changed neither the RNG stream nor any arithmetic.
+    rng = Random.MersenneTwister(11)
+    T_obs, N, r = 100, 10, 2
+    F = zeros(T_obs, r)
+    for t in 2:T_obs
+        F[t, :] = 0.7 .* F[t-1, :] .+ randn(rng, r)
+    end
+    Lam = randn(rng, N, r)
+    X = F * Lam' .+ 0.5 .* randn(rng, T_obs, N)
+    Random.seed!(54321); bf1 = estimate_favar(X, [1, 2], r, 1; method=:bayesian, n_draws=40, burnin=25)
+    Random.seed!(54321); bf2 = estimate_favar(X, [1, 2], r, 1; method=:bayesian, n_draws=40, burnin=25)
+    @test bf1.B_draws == bf2.B_draws
+    @test bf1.Sigma_draws == bf2.Sigma_draws
+    @test bf1.factor_draws == bf2.factor_draws
+    @test bf1.loadings_draws == bf2.loadings_draws
+    @test all(isfinite, bf1.B_draws) && all(isfinite, bf1.factor_draws)
+end
