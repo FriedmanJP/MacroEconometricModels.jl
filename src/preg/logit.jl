@@ -498,6 +498,47 @@ function _re_logit_agh_loglik(theta::AbstractVector{S}, y::Vector{T}, X_c::Matri
     total
 end
 
+"""
+    _agh_newton_polish(nll, theta) -> (theta, gnorm)
+
+Damped-Newton polish of the adaptive-GH marginal negative loglik around the LBFGS
+minimizer. Optim's `f_reltol` stopping can halt with `‖∇nll‖` marginally above the
+honest-convergence FOC threshold (the exact stopping point varies across Optim
+versions); a few backtracking Newton steps on the exact ForwardDiff Hessian drive
+the gradient to numerical zero whenever the solution is a genuine local optimum.
+Returns the (possibly improved) parameter vector and the final gradient norm.
+"""
+function _agh_newton_polish(nll::F, theta::Vector{T}) where {F,T<:AbstractFloat}
+    g = ForwardDiff.gradient(nll, theta)
+    for _ in 1:5
+        gnorm = norm(g)
+        (isfinite(gnorm) && gnorm >= T(1e-8)) || break
+        H = ForwardDiff.hessian(nll, theta)
+        step = try
+            -(Hermitian((H .+ H') ./ 2) \ g)
+        catch
+            break
+        end
+        all(isfinite, step) || break
+        f0 = nll(theta)
+        lam = one(T)
+        accepted = false
+        for _ in 1:20
+            cand = theta .+ lam .* step
+            fc = nll(cand)
+            if isfinite(fc) && fc <= f0
+                theta = cand
+                accepted = true
+                break
+            end
+            lam /= 2
+        end
+        accepted || break
+        g = ForwardDiff.gradient(nll, theta)
+    end
+    return theta, norm(g)
+end
+
 function _xtlogit_re(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
                      groups::Vector{Int}, unique_groups::Vector{Int},
                      N::Int, n::Int, k::Int, indepvars::Vector{Symbol},
@@ -529,13 +570,14 @@ function _xtlogit_re(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
                          Optim.Options(g_tol=T(1e-8), iterations=maxiter, f_reltol=tol))
     theta = Optim.minimizer(res)
     iterations = Optim.iterations(res)
+    theta, gnorm = _agh_newton_polish(nll, theta)
 
     beta = theta[1:k_full]
     sigma_u = exp(theta[k_full + 1])
     loglik_final = _re_logit_agh_loglik(theta, y, X_c, unique_groups, group_obs, nodes, weights)
 
     # Honest convergence: reported only when the true gradient norm is near zero.
-    converged = Optim.converged(res) && norm(ForwardDiff.gradient(nll, theta)) < T(1e-5)
+    converged = isfinite(gnorm) && gnorm < T(1e-5)
 
     # SEs from observed information = Hessian of the NEGATIVE loglik (no sign flip).
     n_params = k_full + 1
@@ -638,13 +680,14 @@ function _xtlogit_cre(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
                          Optim.Options(g_tol=T(1e-8), iterations=maxiter, f_reltol=tol))
     theta = Optim.minimizer(res)
     iterations = Optim.iterations(res)
+    theta, gnorm = _agh_newton_polish(nll, theta)
 
     beta = theta[1:k_full]
     sigma_u = exp(theta[k_full + 1])
     # Recompute the loglik at the optimum (the old code reused loglik_old — a stale value).
     loglik_final = _re_logit_agh_loglik(theta, y, X_c, unique_groups, group_obs, nodes, weights)
 
-    converged = Optim.converged(res) && norm(ForwardDiff.gradient(nll, theta)) < T(1e-5)
+    converged = isfinite(gnorm) && gnorm < T(1e-5)
 
     n_params = k_full + 1
     H = ForwardDiff.hessian(nll, theta)
