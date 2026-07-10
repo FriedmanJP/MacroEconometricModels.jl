@@ -110,8 +110,7 @@ makedocs(;
     warnonly=[:missing_docs, :cross_references],
 )
 
-deploydocs(;
-    repo="github.com/FriedmanJP/MacroEconometricModels.jl",
-    devbranch="main",
-    cname="api.friedman.jp",
-)
+# Since v0.6.x docs are NOT built or deployed by CI (Documentation.yml removed
+# 2026-07-10). gh-pages is updated manually with docs/deploy_local.jl, which builds
+# this site and maintains the version folders/symlinks/versions.js itself — so no
+# deploydocs() call here.
