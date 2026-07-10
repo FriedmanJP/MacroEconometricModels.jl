@@ -645,18 +645,23 @@ using Random
         @test sargan_result.df == 1  # 2 instruments - 1 endogenous = 1 df
         @test sargan_result.valid == true
 
-        # Regression (audit R-02 / #112): reported Sargan J must equal the textbook
-        # J = (Z'u)'(Z'Z)⁻¹(Z'u)/σ̂², σ̂² = u'u/T_h. Pre-fix a stray leading T_h inflated it
-        # by the horizon sample size, forcing p≈0 (spurious overid rejection) for valid instruments.
+        # Regression: reported Sargan J equals the Frisch-Waugh textbook form
+        # J = (Z̃'u)'(Z̃'Z̃)⁻¹(Z̃'u)/σ̂² with Z̃ = M_W Z (the included exogenous controls
+        # W = [intercept, lagged Y] partialled out of the instruments, #209 R-26),
+        # σ̂² = u'u/T_h. It must NOT be the pre-R-02 T_h-inflated value.
         let h0 = 0
             U_h = model_sar.residuals[h0 + 1]
             T_h = model_sar.T_eff[h0 + 1]
             t0, t1 = MacroEconometricModels.compute_horizon_bounds(size(model_sar.Y, 1), h0, model_sar.lags)
             Zc = model_sar.instruments[t0:t1, :]
-            ZtZ_inv = MacroEconometricModels.robust_inv(Zc' * Zc)
+            nvar = size(model_sar.Y, 2)
+            W = ones(size(Zc, 1), 1 + nvar * model_sar.lags)
+            MacroEconometricModels.build_control_columns!(W, model_sar.Y, t0, t1, model_sar.lags, 2)
+            Ztil = Zc .- W * (MacroEconometricModels.robust_inv(W' * W) * (W' * Zc))
+            ZtZ_inv = MacroEconometricModels.robust_inv(Ztil' * Ztil)
             nresp = size(U_h, 2)
             J_textbook = sum(begin
-                u = U_h[:, eq]; Zu = Zc' * u
+                u = U_h[:, eq]; Zu = Ztil' * u
                 (Zu' * ZtZ_inv * Zu) / (sum(u .^ 2) / T_h)
             end for eq in 1:nresp) / nresp
             @test sargan_result.J_stat ≈ J_textbook rtol=1e-8

@@ -219,4 +219,18 @@ using Statistics
         @test fc.horizon == 1
         @test size(fc.forecast) == (1, n)
     end
+
+    @testset "Forecast control origin off-by-one (#209 R-27)" begin
+        M = MacroEconometricModels
+        rng = Random.MersenneTwister(2709)
+        Y = randn(rng, 80, 2)
+        lags = 3
+        lp = estimate_lp(Y, 1, 4; lags=lags)
+        T_obs = size(Y, 1)
+        ctrl = M._build_forecast_controls(lp)
+        # controls are the lags predetermined at origin T: [y_{T-1}, y_{T-2}, …, y_{T-lags}]
+        @test ctrl ≈ vcat([Y[T_obs - lag, :] for lag in 1:lags]...)
+        # and NOT the old off-by-one block starting at y_T
+        @test !(ctrl ≈ vcat([Y[T_obs - lag + 1, :] for lag in 1:lags]...))
+    end
 end
