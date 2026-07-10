@@ -457,6 +457,36 @@ end
         @test result.best_q_bic in [0, 1]
     end
 
+    @testset "CSS common conditioning window for order comparability (T108 #207)" begin
+        Random.seed!(4242)
+        y = zeros(300)
+        for t in 3:300
+            y[t] = 0.6 * y[t-1] - 0.2 * y[t-2] + randn()
+        end
+        m1 = estimate_arma(y, 1, 0; method=:css, include_intercept=true)
+        m2 = estimate_arma(y, 2, 2; method=:css, include_intercept=true)
+        m_max = 2
+        # _css_ic scores every order on the SAME window residuals[m_max+1:end].
+        for m in (m1, m2)
+            r = m.residuals[m_max+1:end]; N = length(r); s2 = sum(abs2, r) / N
+            ll = -N / 2 * (log(2π * s2) + 1)
+            k = MacroEconometricModels._count_params(m.p, m.q; include_intercept=true)
+            @test MacroEconometricModels._css_ic(m, m_max, :aic, true) ≈ -2ll + 2k atol=1e-8
+            @test MacroEconometricModels._css_ic(m, m_max, :bic, true) ≈ -2ll + k * log(N) atol=1e-8
+        end
+        @test length(m1.residuals) - m_max == length(m2.residuals) - m_max   # identical N
+
+        # Part A: a single :css model's BIC now uses n_eff = n - max(p,q).
+        kA = MacroEconometricModels._count_params(m2.p, m2.q; include_intercept=true)
+        n_eff = length(m2.residuals) - max(m2.p, m2.q)
+        @test m2.bic ≈ -2 * m2.loglik + kA * log(n_eff) atol=1e-6
+
+        # select_arima_order with :css produces finite, comparable IC and a valid order.
+        res = select_arima_order(y, 2, 2; method=:css, criterion=:bic, include_intercept=true)
+        @test all(isfinite, res.bic_matrix)
+        @test 0 <= res.best_p_bic <= 2
+    end
+
     @testset "IC matrix dimensions" begin
         y = randn(200)
         result = select_arima_order(y, 1, 1)
