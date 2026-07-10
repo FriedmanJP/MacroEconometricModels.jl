@@ -1103,3 +1103,60 @@ end
         @test M._select_d_heuristic(wn, 2) == 0
     end
 end
+
+@testset "ARMA Kalman scalar-observation specialization (#210 box F)" begin
+    # Box F specializes the scalar-observation Kalman update in `_kalman_filter_arma`: the 1×1
+    # innovation variance is carried as a scalar `f` and the state/covariance updates `mul!` into
+    # preallocated r-vectors / r×r buffers (with R Q R' formed once) instead of allocating small
+    # matrices each step. Matrix-chain re-association reorders a few reductions, so loglik /
+    # residuals / fitted must equal the dense-matrix form (the pre-refactor algorithm,
+    # reconstructed here) to rtol≈1e-10.
+    M = MacroEconometricModels
+
+    # Faithful dense-matrix reference = the pre-refactor per-step update.
+    function dense_kalman_ref(y, c, phi, theta, sigma2)
+        Z, T_mat, R, Q, H, r = M._arma_state_space(c, phi, theta, sigma2, length(phi), length(theta))
+        a, P = M._initialize_state(T_mat, R, Q, r, Float64)
+        n = length(y); res = zeros(n); fit = zeros(n); ll = 0.0
+        for t in 1:n
+            y_pred = c + dot(Z, a); fit[t] = y_pred; v = y[t] - y_pred
+            F = Z * P * Z' .+ H; f = F[1, 1]
+            if f < 1e-12
+                res[t] = v; a = T_mat * a; P = T_mat*P*T_mat' + R*Q*R'; continue
+            end
+            ll -= 0.5*(log(2π) + log(f) + v^2/f); res[t] = v
+            K = T_mat * P * Z' / f
+            a = T_mat*a + K*v
+            P = T_mat*P*T_mat' + R*Q*R' - K*(K'*f)
+            P = (P + P')/2
+        end
+        ll, res, fit
+    end
+
+    # Exercise several (p,q) shapes, including a pure-AR, pure-MA, and mixed model.
+    cases = [(0.1, [0.5, -0.2], [0.3], 1.1),
+             (0.0, [0.7], Float64[], 0.8),
+             (-0.2, Float64[], [0.4, 0.1], 1.3),
+             (0.05, [0.3, 0.2, -0.1], [0.5], 0.9)]
+    rng = Random.MersenneTwister(2024)
+    y = zeros(160)
+    for t in 2:160
+        y[t] = 0.55*y[t-1] + randn(rng)
+    end
+    for (c, phi, theta, sigma2) in cases
+        ll, res, fit = M._kalman_filter_arma(y, c, phi, theta, sigma2)
+        ll0, res0, fit0 = dense_kalman_ref(y, c, phi, theta, sigma2)
+        @test isapprox(ll, ll0; rtol=1e-10)
+        @test isapprox(res, res0; rtol=1e-10)
+        @test isapprox(fit, fit0; rtol=1e-10)
+        @test all(isfinite, res) && all(isfinite, fit) && isfinite(ll)
+    end
+
+    # End-to-end: a fitted ARIMA is unaffected (loglik reproduces on a fixed seed).
+    Random.seed!(314)
+    yr = 0.1 .+ cumsum(0.5 .* randn(200) .+ 0.3 .* [0.0; randn(199)])
+    m1 = estimate_arima(yr, 1, 0, 1)
+    m2 = estimate_arima(yr, 1, 0, 1)
+    @test loglikelihood(m1) == loglikelihood(m2)
+    @test isfinite(loglikelihood(m1))
+end

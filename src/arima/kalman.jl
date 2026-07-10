@@ -143,21 +143,41 @@ function _kalman_filter_arma(y::Vector{T}, c::T, phi::Vector{T}, theta::Vector{T
     fitted = zeros(T, n)
     loglik = zero(T)
 
+    # Scalar-observation specialization: the observation row `Z` is 1×r, so the innovation
+    # variance `F` is 1×1 — carry it as a scalar `f` and `mul!` into preallocated r-vectors /
+    # r×r buffers rather than allocating 1×1 / r×1 temporaries every step. `R Q R'` is
+    # time-invariant, so it is formed once. The `f < 1e-12` skip and the symmetry step are
+    # preserved. Matrix-chain re-association reorders a few reductions, so loglik/residuals/
+    # fitted match the dense form to rtol≈1e-10 rather than bit-for-bit. (#210 box F)
+    Zv = vec(Z)                       # r-vector view of the 1×r observation row
+    H11 = H[1, 1]
+    RQR = R * Q * R'                  # r×r, time-invariant state-noise covariance
+    PZv = Vector{T}(undef, r)
+    TmatP = Matrix{T}(undef, r, r)
+    Ta = Vector{T}(undef, r)
+    Kvec = Vector{T}(undef, r)
+    Pnew = Matrix{T}(undef, r, r)
+
     @inbounds for t in 1:n
         # Prediction error
-        y_pred = c + dot(Z, a)
+        y_pred = c + dot(Zv, a)
         fitted[t] = y_pred
         v = y[t] - y_pred
 
-        # Prediction error variance
-        F = Z * P * Z' .+ H
-        f = F[1, 1]
+        # Prediction error variance f = Z P Z' + H  (scalar)
+        mul!(PZv, P, Zv)
+        f = dot(Zv, PZv) + H11
+
+        mul!(TmatP, T_mat, P)         # T_mat P — reused by the state/covariance updates
+        mul!(Ta, T_mat, a)            # T_mat a
 
         # Skip if variance is too small (numerical issues)
         if f < T(1e-12)
             residuals[t] = v
-            a = T_mat * a
-            P = T_mat * P * T_mat' + R * Q * R'
+            a = copy(Ta)
+            mul!(Pnew, TmatP, transpose(T_mat))   # (T_mat P) T_mat'
+            Pnew .+= RQR
+            P = copy(Pnew)
             continue
         end
 
@@ -165,15 +185,22 @@ function _kalman_filter_arma(y::Vector{T}, c::T, phi::Vector{T}, theta::Vector{T
         loglik -= T(0.5) * (log(T(2π)) + log(f) + v^2 / f)
         residuals[t] = v
 
-        # Kalman gain
-        K = T_mat * P * Z' / f
+        # Kalman gain K = T_mat P Z' / f = (T_mat P) Z' / f
+        mul!(Kvec, TmatP, Zv)
+        Kvec ./= f
 
-        # Update state
-        a = T_mat * a + K * v
-        P = T_mat * P * T_mat' + R * Q * R' - K * (K' * f)
+        # Update state a = T_mat a + K v
+        a = Ta .+ Kvec .* v
+
+        # Update covariance P = T_mat P T_mat' + R Q R' - K K' f
+        mul!(Pnew, TmatP, transpose(T_mat))
+        Pnew .+= RQR
+        for jc in 1:r, ic in 1:r
+            Pnew[ic, jc] -= f * Kvec[ic] * Kvec[jc]
+        end
 
         # Ensure symmetry
-        P = (P + P') / 2
+        P = (Pnew .+ transpose(Pnew)) ./ 2
     end
 
     loglik, residuals, fitted
