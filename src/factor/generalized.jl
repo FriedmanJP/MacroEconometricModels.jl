@@ -396,12 +396,10 @@ function forecast(model::GeneralizedDynamicFactorModel{T}, h::Int; method::Symbo
     idio_var = vec(var(model.idiosyncratic, dims=1))
 
     if ci_method == :none
-        z = zeros(T, h, q)
-        zx = zeros(T, h, N)
-        if model.standardized
-            _unstandardize_factor_forecast!(X_fc, zx, zx, zx, model.X)
-        end
-        return _build_factor_forecast(F_fc, X_fc, z, z, zx, copy(zx), z, copy(zx), h, conf_T, :none)
+        model.standardized && _unstandardize_point!(X_fc, model.X)
+        return _build_factor_forecast(F_fc, X_fc,
+            zeros(T, h, q), zeros(T, h, q), zeros(T, h, N), zeros(T, h, N),
+            zeros(T, h, q), zeros(T, h, N), h, conf_T, :none)
     end
 
     if ci_method == :theoretical

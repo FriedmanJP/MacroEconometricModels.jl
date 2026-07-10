@@ -307,6 +307,16 @@ function _unstandardize_factor_forecast!(X_fc::Matrix{T}, X_lo::Matrix{T}, X_hi:
     nothing
 end
 
+"""Unstandardize only the point forecast in place (μ, σ from `X_original`). Used by the
+`ci_method=:none` path so the zero bound/se buffers are never fed through the affine unstan-
+dardizer — passing one shared zero array as lower/upper/se corrupted it into nonzero garbage."""
+function _unstandardize_point!(X_fc::Matrix{T}, X_original::AbstractMatrix{T}) where {T<:AbstractFloat}
+    μ = vec(mean(X_original, dims=1))
+    σ = max.(vec(std(X_original, dims=1)), T(1e-10))
+    X_fc .= X_fc .* σ' .+ μ'
+    nothing
+end
+
 """
     _build_factor_forecast(F_fc, X_fc, F_lo, F_hi, X_lo, X_hi, F_se, X_se, h, conf_level, ci_method) -> FactorForecast{T}
 

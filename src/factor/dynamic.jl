@@ -391,12 +391,10 @@ function forecast(m::DynamicFactorModel{T}, h::Int; ci_method::Symbol=:theoretic
     conf_T = T(conf_level)
 
     if ci_method == :none
-        z = zeros(T, h, r)
-        zx = zeros(T, h, N)
-        if m.standardized
-            _unstandardize_factor_forecast!(X_fc, zx, zx, zx, m.X)
-        end
-        return _build_factor_forecast(F_fc, X_fc, z, z, zx, copy(zx), z, copy(zx), h, conf_T, :none)
+        m.standardized && _unstandardize_point!(X_fc, m.X)
+        return _build_factor_forecast(F_fc, X_fc,
+            zeros(T, h, r), zeros(T, h, r), zeros(T, h, N), zeros(T, h, N),
+            zeros(T, h, r), zeros(T, h, N), h, conf_T, :none)
     end
 
     if ci_method == :theoretical
