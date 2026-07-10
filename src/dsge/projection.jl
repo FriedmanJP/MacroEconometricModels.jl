@@ -347,6 +347,7 @@ function _collocation_residual(coeffs_vec::AbstractVector{T},
         # Compute expected next-period variables via quadrature
         y_lead_expected = zeros(T, n_eq)
         for q in 1:n_quad
+            iszero(quad_weights[q]) && continue   # center node contributes 0 (S-19 / #224)
             # Next-period states = current policy state components (deviation)
             x_next_dev = zeros(T, nx)
             for (ii, si) in enumerate(state_idx)
@@ -735,6 +736,7 @@ function max_euler_error(sol::ProjectionSolution{T}; n_test::Int=1000,
 
         y_lead_exp = zeros(T, n_eq)
         for q in 1:size(quad_nodes, 1)
+            iszero(quad_weights[q]) && continue   # center node contributes 0 (S-19 / #224)
             x_next_dev = y_t[sol.state_indices] .- ss[sol.state_indices]
             x_next_level = x_next_dev .+ ss[sol.state_indices]
             # Integrate over the next-period shock at this quadrature node (S-02 / #120)

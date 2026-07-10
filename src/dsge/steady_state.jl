@@ -8,6 +8,23 @@
 Numerical steady-state computation for DSGE models via NonlinearSolve.jl.
 """
 
+"""Max-abs steady-state residual tolerance ‖F(y_ss)‖∞ (shared by the numerical/Optim/NLopt paths)."""
+const SS_RESIDUAL_TOL = 1e-6
+
+"""
+    _ss_residual_norm(spec, y_ss) -> (resnorm, bad_indices)
+
+Evaluate the steady-state residual `F[i] = f_i(y_ss, y_ss, y_ss, 0, θ)` and return the max-abs
+norm `‖F‖∞` together with the indices of equations whose residual exceeds `SS_RESIDUAL_TOL`.
+"""
+function _ss_residual_norm(spec::DSGESpec{T}, y_ss::AbstractVector{T}) where {T<:AbstractFloat}
+    θ = spec.param_values
+    ε0 = zeros(T, spec.n_exog)
+    res = T[abs(T(spec.residual_fns[i](y_ss, y_ss, y_ss, ε0, θ))) for i in eachindex(spec.residual_fns)]
+    resnorm = isempty(res) ? zero(T) : maximum(res)
+    (resnorm, findall(r -> r > T(SS_RESIDUAL_TOL), res))
+end
+
 """
     compute_steady_state(spec::DSGESpec{T}; initial_guess=nothing, method=:auto,
                           ss_fn=nothing, constraints=DSGEConstraint[],
@@ -107,11 +124,19 @@ function compute_steady_state(spec::DSGESpec{T};
         return _update_steady_state(spec, y_ss)
     end
 
-    # Numerical: use NonlinearSolve (unconstrained, infinite bounds)
+    # Numerical: use NonlinearSolve (unconstrained, infinite bounds). This entry has NO
+    # escalation path (the constrained :nonlinearsolve branch handles its own Optim fallback),
+    # so verify the equilibrium conditions and reject a non-solution rather than returning a
+    # silently-wrong steady state (#214).
     lower = fill(T(-Inf), n)
     upper = fill(T(Inf), n)
     y_ss = _nonlinearsolve_steady_state(spec, lower, upper;
                 initial_guess=initial_guess, algorithm=algorithm)
+    resnorm, bad = _ss_residual_norm(spec, y_ss)
+    resnorm > T(SS_RESIDUAL_TOL) && throw(DSGESolveError(
+        "Numerical steady state did not satisfy the equilibrium conditions " *
+        "(‖F‖∞ = $resnorm > $(SS_RESIDUAL_TOL); offending equation index/indices: $bad). " *
+        "Supply an analytical ss_fn or a better initial_guess, or add bounds via a constrained solver."))
 
     _update_steady_state(spec, y_ss)
 end

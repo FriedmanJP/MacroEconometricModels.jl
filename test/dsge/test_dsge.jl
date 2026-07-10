@@ -735,6 +735,32 @@ end
     @test is_determined(sol)
 end
 
+@testset "Steady-state residual guard + cached eigenvalues (#214/#224)" begin
+    M = MacroEconometricModels
+    # #214: a nonlinear model with NO real steady state (y = y² + 1) must be rejected, not
+    # returned as a silently-wrong SS.
+    spec_bad = @dsge begin
+        parameters: c = 1.0
+        endogenous: y
+        exogenous: ε
+        y[t] = y[t-1]^2 + c + ε[t]
+    end
+    @test_throws M.DSGESolveError compute_steady_state(spec_bad)
+
+    # S-17 (#224): is_stable / show read the cached eigenvalues, equal to recomputing eigvals(G1)
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 1.0
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:gensys)
+    @test maximum(abs.(sol.eigenvalues)) ≈ maximum(abs.(eigvals(sol.G1)))
+    @test M.is_stable(sol) == (maximum(abs.(eigvals(sol.G1))) < 1.0)
+    @test M.is_stable(sol)
+end
+
 @testset "Solvers route through companion-QZ core (T112 #211)" begin
     # For a forward-looking model the raw gensys pencil drops the lead Jacobian and mis-counts
     # determinacy; the perturbation/projection solvers now route through _solve_qz_quadratic, so

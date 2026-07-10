@@ -110,6 +110,7 @@ function _pfi_compute_expectations(coeffs::Matrix{T}, n_vars::Int, n_basis::Int,
 
     @inbounds for j in 1:n_nodes
         for q in 1:n_quad
+            iszero(quad_weights[q]) && continue   # center node contributes 0 (S-19 / #224)
             # Next-period states from current policy
             x_next_level = zeros(T, nx)
             for (ii, si) in enumerate(state_idx)

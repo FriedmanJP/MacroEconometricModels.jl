@@ -513,10 +513,12 @@ function _guess_verify_one(ref::OccBinRegime{T}, alt::OccBinRegime{T},
     path = zeros(T, nperiods, n)
     converged = false
     iterations = 0
+    seen = BitVector[]                    # regime patterns already visited (cycle detection)
 
     for iter in 1:maxiter
         iterations = iter
         violvec_old = copy(violvec)
+        push!(seen, BitVector(violvec_old))
 
         # Backward iteration to get time-varying decision rules
         P_tv, D_tv, _ = _backward_iteration(ref, alt, d_ref, d_alt, P, Q, violvec, shock_path)
@@ -537,6 +539,14 @@ function _guess_verify_one(ref::OccBinRegime{T}, alt::OccBinRegime{T},
         # Check convergence: violvec hasn't changed
         if violvec == violvec_old
             converged = true
+            break
+        end
+        # Oscillation: the new guess repeats an earlier (non-immediate) regime pattern, so
+        # the fixed-point iteration is cycling and will never settle (S-21 / #224).
+        if any(v -> v == violvec, seen)
+            @warn "OccBin guess-and-verify is oscillating between regime patterns; " *
+                  "stopping without convergence (try curb_retrench or a longer horizon)"
+            converged = false
             break
         end
     end
