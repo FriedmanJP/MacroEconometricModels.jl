@@ -297,28 +297,14 @@ function _uc_kalman_loglik(y::Vector{T}, mu::T, phi::Vector{T},
         P[2:3, 2:3] = P_c
     end
 
-    # Kalman filter
-    ll = zero(T)
-    for t in 1:T_obs
-        # Prediction error
-        v = y[t] - dot(Z[1, :], a)
-        F = dot(Z[1, :], P * Z[1, :])
-
-        F < T(1e-12) && return T(-Inf)
-
-        # Log-likelihood contribution
-        ll -= T(0.5) * (log(T(2π)) + log(F) + v^2 / F)
-
-        # Kalman gain
-        K = (TT * P * Z') / F
-
-        # Update
-        a = c_vec + TT * a + K[:, 1] * v
-        P = TT * P * TT' + Q_cov - K * F * K'
-        P = (P + P') / 2  # symmetrize
-    end
-
-    ll
+    # Route the recursion through the consolidated Kalman kernel (T147/#246) scalar path.
+    # The UC state seeds the trend at y[1] (a0 = a_{1|0}) and skips the first predict
+    # (predict_first=false); the state intercept is the drift `c_vec`; there is no
+    # observation noise (Hobs = 0). Byte-stable vs the old combined-form recursion up to
+    # Joseph-vs-shorthand roundoff.
+    Hobs = zeros(T, 1, 1)
+    return _kalman_filter!(nothing, reshape(y, 1, T_obs), Z, TT, Q_cov, Hobs;
+                           b=c_vec, a0=a, P0=P, scalar=true, predict_first=false)
 end
 
 """Solve 2×2 discrete Lyapunov equation P = A P A' + Q."""
@@ -361,72 +347,29 @@ function _uc_kalman_smoother(y::Vector{T}, mu::T, phi::Vector{T},
     Q_cov[1, 2] = sig_eta_eps
     Q_cov[2, 1] = sig_eta_eps
 
-    # Forward pass (Kalman filter) — store predictions
-    a_pred = zeros(T, T_obs + 1, ns)
-    P_pred = zeros(T, ns, ns, T_obs + 1)
-    a_filt = zeros(T, T_obs, ns)
-    P_filt = zeros(T, ns, ns, T_obs)
-
-    # Initialize
-    a_pred[1, 1] = y[1]
-    P_pred[1, 1, 1] = T(1e6)
+    # Build the prior: a_{1|0} seeds the trend at y[1]; P_{1|0} is the diffuse-trend +
+    # stationary-cycle partition.
+    a0 = zeros(T, ns); a0[1] = y[1]
+    P0 = zeros(T, ns, ns); P0[1, 1] = T(1e6)
     if ar_order == 1
-        P_pred[2, 2, 1] = sig2_eps / max(one(T) - phi[1]^2, T(0.01))
+        P0[2, 2] = sig2_eps / max(one(T) - phi[1]^2, T(0.01))
     elseif ar_order == 2
-        A_c = zeros(T, 2, 2)
-        A_c[1, 1] = phi[1]; A_c[1, 2] = phi[2]
-        A_c[2, 1] = one(T)
-        Q_c = zeros(T, 2, 2)
-        Q_c[1, 1] = sig2_eps
-        P_c = _solve_lyapunov_2x2(A_c, Q_c)
-        P_pred[2:3, 2:3, 1] = P_c
+        A_c = zeros(T, 2, 2); A_c[1, 1] = phi[1]; A_c[1, 2] = phi[2]; A_c[2, 1] = one(T)
+        Q_c = zeros(T, 2, 2); Q_c[1, 1] = sig2_eps
+        P0[2:3, 2:3] = _solve_lyapunov_2x2(A_c, Q_c)
     end
 
-    for t in 1:T_obs
-        a_t = a_pred[t, :]
-        P_t = P_pred[:, :, t]
+    # Forward filter (kernel, scalar path) + RTS backward pass (T147/#246). predict_first=false
+    # since a0 is the prior a_{1|0}; the stored a_pred already carries the c_vec intercept, so
+    # the smoother needs no separate intercept term.
+    Hobs = zeros(T, 1, 1)
+    store = KalmanFilterStore{T}(ns, T_obs)
+    _kalman_filter!(store, reshape(y, 1, T_obs), Z, TT, Q_cov, Hobs;
+                    b=c_vec, a0=a0, P0=P0, scalar=true, predict_first=false)
+    a_smooth, _ = _rts_smoother(store, TT)
 
-        # Innovation
-        v = y[t] - dot(Z[1, :], a_t)
-        F = dot(Z[1, :], P_t * Z[1, :])
-        F = max(F, T(1e-12))
-
-        # Kalman gain
-        K_t = P_t * Z[1, :] / F
-
-        # Filtered state
-        a_filt[t, :] = a_t + K_t * v
-        P_filt[:, :, t] = P_t - K_t * Z[1, :]' * P_t
-        P_filt[:, :, t] = (P_filt[:, :, t] + P_filt[:, :, t]') / 2
-
-        # Predicted next state
-        if t < T_obs
-            a_pred[t+1, :] = c_vec + TT * a_filt[t, :]
-            P_pred[:, :, t+1] = TT * P_filt[:, :, t] * TT' + Q_cov
-            P_pred[:, :, t+1] = (P_pred[:, :, t+1] + P_pred[:, :, t+1]') / 2
-        end
-    end
-
-    # Backward pass (RTS smoother)
-    a_smooth = zeros(T, T_obs, ns)
-    a_smooth[T_obs, :] = a_filt[T_obs, :]
-
-    for t in (T_obs-1):-1:1
-        P_f = P_filt[:, :, t]
-        P_p = TT * P_f * TT' + Q_cov
-        P_p = (P_p + P_p') / 2
-
-        # Smoother gain
-        P_p_inv = robust_inv(P_p)
-        J_t = P_f * TT' * P_p_inv
-
-        a_smooth[t, :] = a_filt[t, :] + J_t * (a_smooth[t+1, :] - c_vec - TT * a_filt[t, :])
-    end
-
-    # Extract trend and cycle
-    tau = a_smooth[:, 1]
-    cyc = a_smooth[:, 2]
-
+    tau = a_smooth[1, :]
+    cyc = a_smooth[2, :]
     (tau, cyc)
 end
 

@@ -206,6 +206,39 @@ using LinearAlgebra
         ll_miss = MEM._kalman_filter!(nothing, y_miss, Z, Tt, RQR, Hobs; d=d, b=b, a0=a0, P0=P0, scalar=false)
         @test ll_miss ≈ ref_filter(y, Z, Tt, RQR, Hobs, b, d, a0, P0; skip=10)[1] rtol = 1e-10
 
+        # predict_first=false: a0/P0 are the prior a_{1|0}/P_{1|0} (BN-style seed at first obs)
+        a1 = [0.3, -0.2]; P1 = [0.5 0.1; 0.1 0.4]
+        function ref_pf_false(y, Z, Tt, RQR, Hobs, b, d, a1, P1)
+            ll = 0.0; xr = copy(a1); Pr = Matrix(P1)
+            for t in 1:size(y, 2)
+                if t > 1
+                    x_pred = b + Tt * xr; P_pred = Tt * Pr * Tt' + RQR; P_pred = (P_pred + P_pred') / 2
+                else
+                    x_pred = copy(xr); P_pred = (Pr + Pr') / 2       # a1/P1 taken as a_{1|0}
+                end
+                xu, Pu, v, S, _ = MEM._kalman_update(x_pred, P_pred, y[:, t] - d, Z, Hobs)
+                L = cholesky(Symmetric((S + S') / 2)).L
+                ll += -0.5 * (length(v) * log(2π) + 2sum(log, diag(L)) + sum(abs2, L \ v))
+                xr = xu; Pr = Pu
+            end
+            return ll
+        end
+        ll_pf = MEM._kalman_filter!(nothing, y, Z, Tt, RQR, Hobs; d=d, b=b, a0=a1, P0=P1,
+                                    scalar=false, predict_first=false)
+        @test ll_pf ≈ ref_pf_false(y, Z, Tt, RQR, Hobs, b, d, a1, P1) rtol = 1e-10
+
+        # _rts_smoother reproduces a reference RTS backward pass over the stored moments
+        store2 = MEM.KalmanFilterStore{Float64}(n_state, T_obs)
+        MEM._kalman_filter!(store2, y, Z, Tt, RQR, Hobs; d=d, b=b, a0=a0, P0=P0, scalar=false)
+        as, Ps = MEM._rts_smoother(store2, Tt)
+        as_ref = similar(store2.a_filt); as_ref[:, end] = store2.a_filt[:, end]
+        for t in (T_obs-1):-1:1
+            J = store2.P_filt[:, :, t] * Tt' * inv(Symmetric(store2.P_pred[:, :, t+1]))
+            as_ref[:, t] = store2.a_filt[:, t] + J * (as_ref[:, t+1] - store2.a_pred[:, t+1])
+        end
+        @test as ≈ as_ref rtol = 1e-9
+        @test as[:, end] == store2.a_filt[:, end]
+
         # init modes
         Ps = MEM._kalman_init(:stationary, Tt, RQR, 2)[2]
         @test norm(Ps - (Tt * Ps * Tt' + RQR)) < 1e-8                       # Lyapunov fixed point

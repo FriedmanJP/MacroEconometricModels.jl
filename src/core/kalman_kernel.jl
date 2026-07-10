@@ -96,7 +96,8 @@ observation specialization (auto for `n_obs == 1`).
 function _kalman_filter!(store, y::AbstractMatrix{T}, Z::AbstractMatrix{T},
                          Tt::AbstractMatrix{T}, RQR::AbstractMatrix{T}, Hobs::AbstractMatrix{T};
                          d=nothing, b=nothing, a0::AbstractVector{T}, P0::AbstractMatrix{T},
-                         scalar::Bool=(size(y, 1) == 1)) where {T<:AbstractFloat}
+                         scalar::Bool=(size(y, 1) == 1),
+                         predict_first::Bool=true) where {T<:AbstractFloat}
     n_obs, T_obs = size(y)
     x = Vector{T}(a0)
     P = Matrix{T}(P0)
@@ -106,10 +107,16 @@ function _kalman_filter!(store, y::AbstractMatrix{T}, Z::AbstractMatrix{T},
     log2pi = T(log(2 * pi))
     keep_innov = store !== nothing && store.v !== nothing
     for t in 1:T_obs
-        # --- predict ---
-        x_pred = b_vec === nothing ? Tt * x : b_vec + Tt * x
-        P_pred = Tt * P * Tt' + RQR
-        P_pred = (P_pred + P_pred') / 2
+        # --- predict (skipped at t=1 when predict_first=false: a0/P0 are the prior
+        #     a_{1|0}/P_{1|0} directly, e.g. filters that seed the state at the first obs) ---
+        if t == 1 && !predict_first
+            x_pred = copy(x)
+            P_pred = (P + P') / 2
+        else
+            x_pred = b_vec === nothing ? Tt * x : b_vec + Tt * x
+            P_pred = Tt * P * Tt' + RQR
+            P_pred = (P_pred + P_pred') / 2
+        end
         yt = view(y, :, t)
         if scalar
             yi = @inbounds yt[1]
@@ -174,4 +181,31 @@ function _kalman_filter!(store, y::AbstractMatrix{T}, Z::AbstractMatrix{T},
         end
     end
     return ll
+end
+
+"""
+    _rts_smoother(store, Tt) -> (a_smooth, P_smooth)
+
+Rauch-Tung-Striebel fixed-interval smoother consuming a `KalmanFilterStore` filled by
+`_kalman_filter!` (needs `a_pred`/`P_pred`/`a_filt`/`P_filt`). Time-last `[:,:,t]`
+layout. The stored `a_pred` already includes any state intercept `b` (the kernel added
+it during prediction), so no intercept is threaded here:
+
+    a_{t|T} = a_{t|t} + J_t (a_{t+1|T} - a_{t+1|t}),   J_t = P_{t|t} Tt' P_{t+1|t}^{-1}
+    P_{t|T} = P_{t|t} + J_t (P_{t+1|T} - P_{t+1|t}) J_t'
+"""
+function _rts_smoother(store::KalmanFilterStore{T}, Tt::AbstractMatrix{T}) where {T<:AbstractFloat}
+    n_state, T_obs = size(store.a_filt)
+    a_smooth = similar(store.a_filt)
+    P_smooth = similar(store.P_filt)
+    @inbounds a_smooth[:, T_obs] = store.a_filt[:, T_obs]
+    @inbounds P_smooth[:, :, T_obs] = store.P_filt[:, :, T_obs]
+    for t in (T_obs-1):-1:1
+        Pf = @view store.P_filt[:, :, t]
+        Jt = _rts_smoother_gain(Matrix{T}(Pf), Tt, store.P_pred[:, :, t+1])
+        @inbounds a_smooth[:, t] = store.a_filt[:, t] + Jt * (a_smooth[:, t+1] - store.a_pred[:, t+1])
+        Ps = Matrix{T}(Pf) + Jt * (P_smooth[:, :, t+1] - store.P_pred[:, :, t+1]) * Jt'
+        @inbounds P_smooth[:, :, t] = (Ps + Ps') / 2
+    end
+    return a_smooth, P_smooth
 end
