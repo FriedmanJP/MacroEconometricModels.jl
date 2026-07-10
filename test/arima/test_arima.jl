@@ -361,6 +361,38 @@ end
         @test abs(fc.forecast[1] - y[end]) < 2 * fc.se[1]
     end
 
+    @testset "ARIMA(d>=1) intervals via nondifferenced psi-weights (T094 #193)" begin
+        Random.seed!(321)
+        # ARIMA(0,1,0) random walk: forecast-error variance is σ²·h, and the band must be
+        # forecast ± z·se. The old code integrated the differenced CI arrays (half-width linear
+        # in h) but reported se = sqrt(cumsum(se_diff.^2)) (sqrt in h), so ci ≠ forecast ± z·se.
+        y = cumsum(randn(300))
+        m = estimate_arima(y, 0, 1, 0; include_intercept=false)
+        fc = forecast(m, 10; conf_level=0.95)
+        z = 1.959963984540054   # Φ⁻¹(0.975)
+        @test fc.ci_lower ≈ fc.forecast .- z .* fc.se atol=1e-10
+        @test fc.ci_upper ≈ fc.forecast .+ z .* fc.se atol=1e-10
+        @test fc.se ≈ sqrt(m.sigma2) .* sqrt.(1.0:10.0) rtol=1e-8
+        @test issorted(fc.se)
+
+        # ARIMA(1,1,0): the expanded operator φ*(L) = φ(L)(1-L) = [1+φ₁, -φ₁] carries the ψ
+        # cross-terms the old _integrate_se dropped.
+        e = zeros(300)
+        for t in 2:300
+            e[t] = 0.4 * e[t-1] + randn()
+        end
+        y2 = cumsum(e)
+        m2 = estimate_arima(y2, 1, 1, 0; include_intercept=false)
+        fc2 = forecast(m2, 8)
+        phistar = MacroEconometricModels._expand_ar_with_differencing(m2.phi, 1)
+        @test phistar ≈ [1 + m2.phi[1], -m2.phi[1]] atol=1e-12
+        psi = MacroEconometricModels._compute_psi_weights(phistar, m2.theta, 8)
+        se_expected = sqrt.(MacroEconometricModels._forecast_variance(m2.sigma2, psi, 8))
+        @test fc2.se ≈ se_expected atol=1e-10
+        @test fc2.ci_lower ≈ fc2.forecast .- z .* fc2.se atol=1e-10
+        @test fc2.ci_upper .- fc2.forecast ≈ fc2.forecast .- fc2.ci_lower atol=1e-12
+    end
+
     @testset "Confidence interval coverage" begin
         # Generate known process
         phi = 0.5

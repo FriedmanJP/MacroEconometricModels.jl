@@ -92,6 +92,29 @@ function _forecast_variance(sigma2::T, psi::Vector{T}, h::Int) where {T<:Abstrac
     var_fc
 end
 
+"""
+    _expand_ar_with_differencing(phi, d) -> Vector{T}
+
+Expand the AR operator with `d` unit roots: φ*(L) = φ(L)(1-L)^d, of order `p+d`. Both `phi`
+and the result are in the recursion convention (yₜ = Σ φᵢ yₜ₋ᵢ, characteristic polynomial
+a(L) = 1 - Σ φᵢ Lⁱ). Used to compute forecast-error variances on the original (nondifferenced)
+scale for ARIMA(d≥1) models.
+"""
+function _expand_ar_with_differencing(phi::Vector{T}, d::Int) where {T<:AbstractFloat}
+    d == 0 && return copy(phi)
+    p = length(phi)
+    a = zeros(T, p + 1); a[1] = one(T)
+    for i in 1:p
+        a[i+1] = -phi[i]
+    end
+    b = T[binomial(d, k) * (-1)^k for k in 0:d]     # (1-L)^d coefficients
+    ab = zeros(T, p + d + 1)
+    for i in 0:p, k in 0:d
+        ab[i+k+1] += a[i+1] * b[k+1]
+    end
+    T[-ab[j] for j in 2:(p+d+1)]                     # recursion-convention φ* = -ab[2:end]
+end
+
 # =============================================================================
 # Unified ARMA Forecasting
 # =============================================================================
@@ -190,9 +213,14 @@ function forecast(model::ARIMAModel{T}, h::Int; conf_level::Real=0.95) where {T<
     model.d == 0 && return fc_diff
 
     forecasts = _integrate_forecasts(model.y, fc_diff.forecast, model.d)
-    ci_lower = _integrate_forecasts(model.y, fc_diff.ci_lower, model.d)
-    ci_upper = _integrate_forecasts(model.y, fc_diff.ci_upper, model.d)
-    se = _integrate_se(fc_diff.se, model.d)
+    # Forecast-error variance on the ORIGINAL scale from the ψ-weights of the nondifferenced
+    # operator φ*(L) = φ(L)(1-L)^d — the old code integrated the differenced CI arrays and
+    # reported sqrt(cumsum(se_diff.^2)) separately, so ci ≠ forecast ± z·se and neither was
+    # the correct variance (it dropped the ψ cross-terms of the full operator).
+    phi_star = _expand_ar_with_differencing(model.phi, model.d)
+    psi_full = _compute_psi_weights(phi_star, model.theta, h)
+    se = sqrt.(_forecast_variance(model.sigma2, psi_full, h))
+    ci_lower, ci_upper = _confidence_band(forecasts, se, conf_level)
 
     ARIMAForecast(forecasts, ci_lower, ci_upper, se, h, conf_level)
 end
