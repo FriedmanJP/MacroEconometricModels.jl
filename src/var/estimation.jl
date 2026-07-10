@@ -113,6 +113,8 @@ function StatsAPI.predict(model::VARModel{T}, steps::Int) where {T}
     forecasts = Matrix{T}(undef, steps, n)
     intercept = @view B[1, :]
     A = extract_ar_coefficients(B, n, p)
+    # History ring buffer (last `p` observations); shifted in place each step rather than
+    # rebuilt with `vcat`. (#210 box C)
     history = copy(model.Y[(end-p+1):end, :])
 
     @inbounds for h in 1:steps
@@ -121,7 +123,11 @@ function StatsAPI.predict(model::VARModel{T}, steps::Int) where {T}
             y_hat .+= A[lag] * @view(history[end-lag+1, :])
         end
         forecasts[h, :] = y_hat
-        history = vcat(@view(history[2:end, :]), y_hat')
+        # In-place ring shift: drop the oldest row, append `y_hat` as the newest.
+        for r in 1:(p - 1)
+            @views history[r, :] .= history[r + 1, :]
+        end
+        @views history[p, :] .= y_hat
     end
     forecasts
 end

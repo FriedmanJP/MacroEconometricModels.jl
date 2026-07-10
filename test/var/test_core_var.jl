@@ -542,3 +542,36 @@ using Random
         @test_throws ArgumentError forecast(m, 3; ci_method=:bogus)
     end
 end
+
+@testset "VAR predict in-place history ring (#210 box C)" begin
+    # Box C replaces the per-step `vcat` history ring in `predict(model, steps)` with an in-place
+    # row shift. The point-forecast recursion is deterministic, so it must be bit-for-bit identical
+    # to a naive `vcat`-based recursion (the pre-refactor algorithm) reconstructed here.
+    rng = Random.MersenneTwister(7)
+    n, p, Tn = 3, 2, 120
+    A1 = [0.4 0.1 0.0; 0.0 0.3 0.1; 0.1 0.0 0.2]
+    Y = zeros(Tn, n)
+    for t in 3:Tn
+        Y[t, :] = A1 * Y[t-1, :] .+ 0.5 .* A1 * Y[t-2, :] .+ randn(rng, n)
+    end
+    model = estimate_var(Y, p)
+    steps = 15
+    fc = predict(model, steps)
+
+    # naive vcat reference (pre-refactor algorithm)
+    B = model.B
+    A = MacroEconometricModels.extract_ar_coefficients(B, n, p)
+    intercept = B[1, :]
+    hist = copy(model.Y[(end-p+1):end, :])
+    ref = Matrix{Float64}(undef, steps, n)
+    for h in 1:steps
+        y_hat = copy(intercept)
+        for lag in 1:p
+            y_hat .+= A[lag] * hist[end-lag+1, :]
+        end
+        ref[h, :] = y_hat
+        hist = vcat(hist[2:end, :], y_hat')
+    end
+
+    @test fc == ref              # bit-identical to the vcat recursion
+end
