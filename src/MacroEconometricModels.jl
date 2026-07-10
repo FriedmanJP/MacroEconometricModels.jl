@@ -81,6 +81,7 @@ import Optim
 
 # Core infrastructure
 include("core/utils.jl")
+include("core/tolerances.jl")
 include("core/types.jl")
 include("core/display.jl")
 include("core/kalman.jl")
@@ -672,6 +673,7 @@ export report, refs
 export table, print_table
 export point_estimate, has_uncertainty, uncertainty_bounds
 export set_display_backend, get_display_backend
+export default_abstol, default_reltol
 
 # =============================================================================
 # Exports - Factor Models
