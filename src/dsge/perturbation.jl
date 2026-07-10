@@ -676,14 +676,18 @@ Compute all 20 unique third-derivative tensors for the 4 argument slots
 other orderings can be obtained by axis permutation via `_lookup_third_derivative`.
 """
 function _compute_all_third_derivatives(spec::DSGESpec{T}, y_ss::Vector{T}) where {T}
+    D3full = _full_third(spec, y_ss)           # build the full tensor ONCE, slice all blocks
     slots = [:current, :lag, :lead, :shock]
     result = Dict{Tuple{Symbol,Symbol,Symbol}, Array{T,4}}()
 
     for a in 1:length(slots)
+        s1 = slots[a]; o1 = _slot_offset(spec, s1); d1 = _slot_dim(spec, s1)
         for b in a:length(slots)
+            s2 = slots[b]; o2 = _slot_offset(spec, s2); d2 = _slot_dim(spec, s2)
             for c in b:length(slots)
-                s1, s2, s3 = slots[a], slots[b], slots[c]
-                result[(s1, s2, s3)] = _third_derivative(spec, y_ss, s1, s2, s3)
+                s3 = slots[c]; o3 = _slot_offset(spec, s3); d3 = _slot_dim(spec, s3)
+                result[(s1, s2, s3)] =
+                    D3full[:, (o1 + 1):(o1 + d1), (o2 + 1):(o2 + d2), (o3 + 1):(o3 + d3)]
             end
         end
     end

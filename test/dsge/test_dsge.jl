@@ -735,6 +735,30 @@ end
     @test is_determined(sol)
 end
 
+@testset "Exact AD derivative tensors (#212)" begin
+    M = MacroEconometricModels
+    # residual f = y_t - y_lag² - a·e  ⇒ ∂²f/∂y_lag² = -2 exactly; all other 2nd/3rd derivs 0
+    spec = @dsge begin
+        parameters: a = 1.0
+        endogenous: y
+        exogenous: e
+        y[t] = y[t-1]^2 + a * e[t]
+    end
+    spec = compute_steady_state(spec)
+    y_ss = spec.steady_state
+    @test M._compute_hessian(spec, y_ss, :lag, :lag)[1, 1, 1] ≈ -2.0 atol = 1e-10
+    @test abs(M._compute_hessian(spec, y_ss, :current, :current)[1, 1, 1]) < 1e-12
+    @test abs(M._compute_hessian(spec, y_ss, :current, :lag)[1, 1, 1]) < 1e-12
+    @test abs(M._third_derivative(spec, y_ss, :lag, :lag, :lag)[1, 1, 1, 1]) < 1e-10
+    # symmetry of the full Hessian tensor in its last two axes
+    Hfull = M._full_hessian(spec, y_ss)
+    @test Hfull ≈ permutedims(Hfull, (1, 3, 2)) atol = 1e-12
+    # build-once path returns all 10 blocks, consistent with the single-block slice
+    allH = M._compute_all_hessians(spec, y_ss)
+    @test length(allH) == 10
+    @test allH[(:lag, :lag)] ≈ M._compute_hessian(spec, y_ss, :lag, :lag)
+end
+
 @testset "GMRES Sylvester residual guard (#215)" begin
     M = MacroEconometricModels
     rng = Random.MersenneTwister(215)
