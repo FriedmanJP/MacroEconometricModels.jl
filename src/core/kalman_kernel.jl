@@ -184,7 +184,7 @@ function _kalman_filter!(store, y::AbstractMatrix{T}, Z::AbstractMatrix{T},
 end
 
 """
-    _rts_smoother(store, Tt) -> (a_smooth, P_smooth)
+    _rts_smoother(store, Tt; nlag=0) -> (a_smooth, P_smooth, Plag)
 
 Rauch-Tung-Striebel fixed-interval smoother consuming a `KalmanFilterStore` filled by
 `_kalman_filter!` (needs `a_pred`/`P_pred`/`a_filt`/`P_filt`). Time-last `[:,:,t]`
@@ -193,19 +193,40 @@ it during prediction), so no intercept is threaded here:
 
     a_{t|T} = a_{t|t} + J_t (a_{t+1|T} - a_{t+1|t}),   J_t = P_{t|t} Tt' P_{t+1|t}^{-1}
     P_{t|T} = P_{t|t} + J_t (P_{t+1|T} - P_{t+1|t}) J_t'
+
+`nlag > 0` additionally returns lag-`j` smoothed cross-covariances `Plag[j]` with
+`Plag[j][:,:,t] = Cov(x_t, x_{t-j} | Y_T)`, via the backward-Markov recursion
+`Plag[1][:,:,t] = P_{t|T} J_{t-1}'`, `Plag[j][:,:,t] = Plag[j-1][:,:,t] J_{t-j}'`
+(consumed e.g. by the DFM EM M-step and nowcast news decomposition). `Plag` is empty
+when `nlag == 0`.
 """
-function _rts_smoother(store::KalmanFilterStore{T}, Tt::AbstractMatrix{T}) where {T<:AbstractFloat}
+function _rts_smoother(store::KalmanFilterStore{T}, Tt::AbstractMatrix{T};
+                       nlag::Int=0) where {T<:AbstractFloat}
     n_state, T_obs = size(store.a_filt)
     a_smooth = similar(store.a_filt)
     P_smooth = similar(store.P_filt)
+    J = nlag > 0 ? Array{T,3}(undef, n_state, n_state, T_obs) : Array{T,3}(undef, 0, 0, 0)
     @inbounds a_smooth[:, T_obs] = store.a_filt[:, T_obs]
     @inbounds P_smooth[:, :, T_obs] = store.P_filt[:, :, T_obs]
     for t in (T_obs-1):-1:1
-        Pf = @view store.P_filt[:, :, t]
-        Jt = _rts_smoother_gain(Matrix{T}(Pf), Tt, store.P_pred[:, :, t+1])
+        Pf = Matrix{T}(@view store.P_filt[:, :, t])
+        Jt = _rts_smoother_gain(Pf, Tt, store.P_pred[:, :, t+1])
+        nlag > 0 && (@inbounds J[:, :, t] = Jt)
         @inbounds a_smooth[:, t] = store.a_filt[:, t] + Jt * (a_smooth[:, t+1] - store.a_pred[:, t+1])
-        Ps = Matrix{T}(Pf) + Jt * (P_smooth[:, :, t+1] - store.P_pred[:, :, t+1]) * Jt'
+        Ps = Pf + Jt * (P_smooth[:, :, t+1] - store.P_pred[:, :, t+1]) * Jt'
         @inbounds P_smooth[:, :, t] = (Ps + Ps') / 2
     end
-    return a_smooth, P_smooth
+    Plag = Vector{Array{T,3}}(undef, nlag)
+    for j in 1:nlag
+        Plag[j] = zeros(T, n_state, n_state, T_obs)
+    end
+    if nlag >= 1
+        @inbounds for t in 2:T_obs
+            Plag[1][:, :, t] = P_smooth[:, :, t] * J[:, :, t-1]'
+        end
+        @inbounds for j in 2:nlag, t in (j+1):T_obs
+            Plag[j][:, :, t] = Plag[j-1][:, :, t] * J[:, :, t-j]'
+        end
+    end
+    return a_smooth, P_smooth, Plag
 end

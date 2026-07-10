@@ -239,6 +239,15 @@ using LinearAlgebra
         @test as ≈ as_ref rtol = 1e-9
         @test as[:, end] == store2.a_filt[:, end]
 
+        # nlag: lag-1 smoothed cross-cov Plag[1][:,:,t] = Cov(x_t,x_{t-1}|Y_T) = P_{t|T} J_{t-1}'
+        _, Ps_n, Plag = MEM._rts_smoother(store2, Tt; nlag=1)
+        @test length(Plag) == 1
+        @test all(Plag[1][:, :, 1] .== 0)                 # no lag-1 cross-cov at t=1
+        for t in 2:T_obs
+            Jm1 = store2.P_filt[:, :, t-1] * Tt' * inv(Symmetric(store2.P_pred[:, :, t]))
+            @test Plag[1][:, :, t] ≈ Ps_n[:, :, t] * Jm1' rtol = 1e-9
+        end
+
         # init modes
         Ps = MEM._kalman_init(:stationary, Tt, RQR, 2)[2]
         @test norm(Ps - (Tt * Ps * Tt' + RQR)) < 1e-8                       # Lyapunov fixed point
