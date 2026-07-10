@@ -629,6 +629,7 @@ function collocation_solver(spec::DSGESpec{T};
         quadrature,
         spec,
         ld,
+        impact_mat,
         ss,
         state_idx,
         control_idx,

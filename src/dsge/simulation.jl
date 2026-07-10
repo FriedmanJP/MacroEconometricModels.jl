@@ -184,9 +184,8 @@ function simulate(sol::ProjectionSolution{T}, T_periods::Int;
     levels = zeros(T, T_periods, n)
     x_state = copy(ss[sol.state_indices])
 
-    # Get linear impact matrix for shock propagation
-    result_lin = _gensys_qz(sol.spec, sol.linear)
-    impact = result_lin.impact
+    # Cached first-order shock-impact matrix (companion-QZ); no per-call re-solve (#225).
+    impact = sol.impact
 
     for t in 1:T_periods
         # Evaluate policy at current state
@@ -241,9 +240,8 @@ function irf(sol::ProjectionSolution{T}, horizon::Int;
     nx = nstates(sol)
     ss = sol.steady_state
 
-    # Companion-QZ linear impact for shock propagation (correct for forward-looking models, #211).
-    result_lin = _gensys_qz(sol.spec, sol.linear)
-    impact = result_lin.impact
+    # Cached first-order shock-impact matrix (companion-QZ); no per-call re-solve (#225, #211).
+    impact = sol.impact
 
     point_irf = zeros(T, horizon, n, n_eps)
     base_seed = rand(rng, UInt64)          # one entropy draw ⇒ reproducible per (shock, rep)

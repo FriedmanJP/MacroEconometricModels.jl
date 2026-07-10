@@ -87,7 +87,8 @@ function perturbation_solver(spec::DSGESpec{T};
     uc_ok = false
     local uc_result
     try
-        uc_result = _solve_undetermined_coefficients(spec)
+        # Reuse the first-order Jacobians already computed above (#225).
+        uc_result = _solve_undetermined_coefficients(spec; f_0=f_0, f_1=f_1, f_lead=f_lead)
         resid_uc = (f_0 + f_lead * uc_result.G1) * uc_result.G1 + f_1
         # Accept the UC solvent only if it is also stable — a converged-but-explosive G1
         # must fall back to the stable QZ solvent (#213).

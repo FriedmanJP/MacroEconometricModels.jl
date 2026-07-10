@@ -282,6 +282,7 @@ function vfi_solver(spec::DSGESpec{T};
         quadrature,
         spec,
         ld,
+        impact,
         ss,
         state_idx,
         control_idx,

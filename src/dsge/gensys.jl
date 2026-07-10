@@ -142,12 +142,18 @@ The iteration G1_{k+1} = -(f₀ + f_lead·G1_k)⁻¹·f₁ converges to the uniq
 solution. This method is robust to models with many static variables.
 """
 function _solve_undetermined_coefficients(spec::DSGESpec{T};
-        maxiter::Int=10000, tol::Real=1e-13) where {T<:AbstractFloat}
+        maxiter::Int=10000, tol::Real=1e-13,
+        f_0::Union{Nothing,AbstractMatrix{T}}=nothing,
+        f_1::Union{Nothing,AbstractMatrix{T}}=nothing,
+        f_lead::Union{Nothing,AbstractMatrix{T}}=nothing,
+        f_eps::Union{Nothing,AbstractMatrix{T}}=nothing) where {T<:AbstractFloat}
     y_ss = spec.steady_state
-    f_0 = _dsge_jacobian(spec, y_ss, :current)
-    f_1 = _dsge_jacobian(spec, y_ss, :lag)
-    f_lead = _dsge_jacobian(spec, y_ss, :lead)
-    f_eps = _dsge_jacobian_shocks(spec, y_ss)
+    # Reuse caller-supplied Jacobians when given (avoids recomputing them a second time in the
+    # perturbation path, now that #212 makes each _dsge_jacobian an exact AD pass); #225.
+    f_0 = f_0 === nothing ? _dsge_jacobian(spec, y_ss, :current) : f_0
+    f_1 = f_1 === nothing ? _dsge_jacobian(spec, y_ss, :lag) : f_1
+    f_lead = f_lead === nothing ? _dsge_jacobian(spec, y_ss, :lead) : f_lead
+    f_eps = f_eps === nothing ? _dsge_jacobian_shocks(spec, y_ss) : f_eps
     n = spec.n_endog
 
     # Iterative solution: G1_{k+1} = -(f_0 + f_lead * G1_k)^{-1} * f_1

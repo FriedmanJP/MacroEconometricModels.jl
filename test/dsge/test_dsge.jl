@@ -4704,6 +4704,24 @@ end
     @test ir1.values[1, 1, 1] ≈ ir3.values[1, 1, 1] atol = 1e-12
 end
 
+@testset "ProjectionSolution.impact cached (#225)" begin
+    M = MacroEconometricModels
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:projection, degree=5, verbose=false)
+    # the cached field equals a fresh companion-QZ solve (what irf/simulate used to recompute)
+    @test sol.impact ≈ M._gensys_qz(sol.spec, sol.linear).impact
+    @test size(sol.impact) == (nvars(sol), nshocks(sol))
+    # simulate/irf now read sol.impact; zero shocks ⇒ stay at steady state
+    @test all(abs.(simulate(sol, 30; shock_draws=zeros(30, 1))) .< 1e-8)
+end
+
 @testset "API integration" begin
     spec = @dsge begin
         parameters: ρ = 0.9, σ = 0.01

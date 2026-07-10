@@ -402,6 +402,8 @@ Fields:
 - `quadrature` — `:gauss_hermite` or `:monomial`
 - `spec` — model specification
 - `linear` — linearized form
+- `impact` — first-order shock-impact matrix (companion-QZ), cached so `irf`/`simulate` need
+  not re-solve the first-order system on every call
 - `steady_state` — cached steady state vector
 - `state_indices, control_indices` — variable partition
 - `converged` — Newton convergence flag
@@ -420,6 +422,7 @@ struct ProjectionSolution{T<:AbstractFloat}
     quadrature::Symbol              # :gauss_hermite or :monomial
     spec::DSGESpec{T}
     linear::LinearDSGE{T}
+    impact::Matrix{T}               # first-order shock-impact matrix (companion-QZ), cached
     steady_state::Vector{T}
     state_indices::Vector{Int}
     control_indices::Vector{Int}
