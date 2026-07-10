@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OccBin Piecewise-Linear Solution</title>
+<style>* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+    background: #fff;
+    color: #333;
+    padding: 20px;
+}
+.figure-title {
+    font-size: 18px;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 16px;
+    color: #222;
+}
+.figure-source {
+    font-size: 11px;
+    color: #888;
+    text-align: center;
+    margin-top: 8px;
+}
+.panel-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    justify-content: center;
+}
+.panel {
+    width: calc(33% - 16px);
+    min-width: 300px;
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 12px;
+}
+.panel-title {
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 8px;
+    color: #444;
+}
+.axis text { font-size: 11px; fill: #666; }
+.axis line, .axis path { stroke: #ccc; }
+.grid line { stroke: #f0f0f0; stroke-dasharray: 2,2; }
+.grid .domain { stroke: none; }
+.tooltip {
+    position: absolute;
+    background: rgba(0,0,0,0.8);
+    color: #fff;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 1000;
+}
+.legend { font-size: 11px; }
+.legend rect { rx: 2; }
+svg { overflow: visible; }
+</style>
+</head>
+<body>
+<div class="figure-title">OccBin Piecewise-Linear Solution</div>
+<div class="panel-grid">
+<div class="panel">
+<div class="panel-title">b</div>
+<div id="osol_166"></div>
+</div>
+<div class="panel">
+<div class="panel-title">c</div>
+<div id="osol_167"></div>
+</div>
+<div class="panel">
+<div class="panel-title">y</div>
+<div id="osol_168"></div>
+</div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script>
+// Shared utilities
+const tooltip = d3.select('#tooltip');
+function fmt(v) {
+    if (v === null || v === undefined) return '';
+    return Math.abs(v) >= 1000 ? v.toFixed(1) : (Math.abs(v) >= 1 ? v.toFixed(3) : v.toFixed(4));
+}
+function showTip(evt, html) {
+    tooltip.html(html).style('opacity',1)
+        .style('left',(evt.pageX+12)+'px').style('top',(evt.pageY-28)+'px');
+}
+function hideTip() { tooltip.style('opacity',0); }
+
+(function() {
+    const data_osol_166 = [{"h":1,"lin":1.3333333778865264,"pw":0.9999999999712443,"bind":1},
+{"h":2,"lin":2.5333334270312706,"pw":0.9999999999712443,"bind":1},
+{"h":3,"lin":3.61333348022718,"pw":0.9999999999712443,"bind":1},
+{"h":4,"lin":4.585333536995864,"pw":0.9999999999712443,"bind":1},
+{"h":5,"lin":5.4601335969140985,"pw":0.9999999999712443,"bind":1},
+{"h":6,"lin":6.247453659607575,"pw":0.9999999999712443,"bind":1},
+{"h":7,"lin":6.956041724745352,"pw":0.9999999999712443,"bind":1},
+{"h":8,"lin":7.593770992034924,"pw":0.9999999999712443,"bind":1},
+{"h":9,"lin":8.167727341217843,"pw":0.9999999999712443,"bind":1},
+{"h":10,"lin":8.684288064065834,"pw":0.9999999999712443,"bind":1},
+{"h":11,"lin":9.149192723177343,"pw":0.9999999999712443,"bind":1},
+{"h":12,"lin":9.567606924894475,"pw":0.9999999999712443,"bind":1},
+{"h":13,"lin":9.94417971492828,"pw":0.9999999999712443,"bind":1},
+{"h":14,"lin":10.283095234421543,"pw":0.9999999999712443,"bind":1},
+{"h":15,"lin":10.588119210405322,"pw":0.9999999999712443,"bind":1},
+{"h":16,"lin":10.86264079720987,"pw":0.9999999999712443,"bind":1},
+{"h":17,"lin":11.109710233734488,"pw":0.9999999999712443,"bind":1},
+{"h":18,"lin":11.332072734990401,"pw":0.9999999999712443,"bind":1},
+{"h":19,"lin":11.532198994489397,"pw":0.9999999999712443,"bind":1},
+{"h":20,"lin":11.71231263639359,"pw":0.9999999999712443,"bind":1},
+{"h":21,"lin":11.874414922450237,"pw":0.9999999999712443,"bind":1},
+{"h":22,"lin":12.020306988233097,"pw":0.9999999999712443,"bind":1},
+{"h":23,"lin":12.151609855759649,"pw":0.9999999999712443,"bind":1},
+{"h":24,"lin":12.269782444846616,"pw":0.9999999999712443,"bind":1},
+{"h":25,"lin":12.37613778332994,"pw":0.9999999999712443,"bind":1},
+{"h":26,"lin":12.471857596262767,"pw":0.9999999999712443,"bind":1},
+{"h":27,"lin":12.558005436193655,"pw":0.9999999999712443,"bind":1},
+{"h":28,"lin":12.635538500416951,"pw":0.9999999999712443,"bind":1},
+{"h":29,"lin":12.705318266498155,"pw":0.9999999999712443,"bind":1},
+{"h":30,"lin":12.768120064246741,"pw":0.9999999999712443,"bind":1},
+{"h":31,"lin":12.824641690491712,"pw":0.9999999999712443,"bind":1},
+{"h":32,"lin":12.875511162379592,"pw":0.9999999999712443,"bind":1},
+{"h":33,"lin":12.92129369534264,"pw":0.9999999999712443,"bind":1},
+{"h":34,"lin":12.962497983270234,"pw":0.9999999999712443,"bind":1},
+{"h":35,"lin":12.999581850663123,"pw":0.9999999999712443,"bind":1},
+{"h":36,"lin":13.032957339572262,"pw":0.9999999999712443,"bind":1},
+{"h":37,"lin":13.06299528784376,"pw":0.9999999999712443,"bind":1},
+{"h":38,"lin":13.090029449539346,"pw":0.9999999999712443,"bind":1},
+{"h":39,"lin":13.114360203314774,"pw":0.9999999999712443,"bind":1},
+{"h":40,"lin":13.136257889960412,"pw":0.9999999999712443,"bind":1},
+{"h":41,"lin":13.15596581618775,"pw":0.9999999999712443,"bind":1},
+{"h":42,"lin":13.173702958037286,"pw":0.9999999999712443,"bind":1},
+{"h":43,"lin":13.189666393945592,"pw":0.9999999999712443,"bind":1},
+{"h":44,"lin":13.20403349450571,"pw":0.9999999999712443,"bind":1},
+{"h":45,"lin":13.216963893251483,"pw":0.9999999999712443,"bind":1},
+{"h":46,"lin":13.22860126036347,"pw":0.9999999999712443,"bind":1},
+{"h":47,"lin":13.23907489900426,"pw":0.9999999999712443,"bind":1},
+{"h":48,"lin":13.24850118202026,"pw":0.9999999999712443,"bind":1},
+{"h":49,"lin":13.25698484497331,"pw":0.9999999999712443,"bind":1},
+{"h":50,"lin":13.264620149869131,"pw":0.9999999999712443,"bind":1},
+{"h":51,"lin":13.271491932512927,"pw":0.9999999999712443,"bind":1},
+{"h":52,"lin":13.277676545129435,"pw":0.9999999999712443,"bind":1},
+{"h":53,"lin":13.283242704720964,"pw":0.9999999999712443,"bind":1},
+{"h":54,"lin":13.288252256589635,"pw":0.9999999999712443,"bind":1},
+{"h":55,"lin":13.292760861507391,"pw":0.9999999999712443,"bind":1},
+{"h":56,"lin":13.296818614169021,"pw":0.9999999999712443,"bind":1},
+{"h":57,"lin":13.300470599799862,"pw":0.9999999999712443,"bind":1},
+{"h":58,"lin":13.303757395102743,"pw":0.9999999999712443,"bind":1},
+{"h":59,"lin":13.306715519110238,"pw":0.9999999999712443,"bind":1},
+{"h":60,"lin":13.309377838951686,"pw":0.9999999999712443,"bind":1}];
+    const container_osol_166 = d3.select('#osol_166');
+    const W_osol_166 = Math.max(container_osol_166.node().clientWidth - 24, 280);
+    const margin_osol_166 = {top:10, right:15, bottom:35, left:55};
+    const w_osol_166 = W_osol_166 - margin_osol_166.left - margin_osol_166.right;
+    const h_osol_166 = Math.min(w_osol_166 * 0.6, 250);
+
+    const svg_osol_166 = container_osol_166.append('svg')
+        .attr('width', W_osol_166)
+        .attr('height', h_osol_166 + margin_osol_166.top + margin_osol_166.bottom);
+    const g_osol_166 = svg_osol_166.append('g')
+        .attr('transform', 'translate('+margin_osol_166.left+','+margin_osol_166.top+')');
+
+    // Compute domains
+    const xVals_osol_166 = data_osol_166.map(d => d.h);
+    const allY_osol_166 = [];
+    data_osol_166.forEach(d => {
+        if(d.lin!==null) allY_osol_166.push(d.lin);
+        if(d.pw!==null) allY_osol_166.push(d.pw);
+    });
+    allY_osol_166.push(0);
+
+    const x_osol_166 = d3.scaleLinear().domain(d3.extent(xVals_osol_166)).range([0, w_osol_166]);
+    const yExt_osol_166 = d3.extent(allY_osol_166);
+    const yPad_osol_166 = (yExt_osol_166[1] - yExt_osol_166[0]) * 0.08 || 0.1;
+    const y_osol_166 = d3.scaleLinear()
+        .domain([yExt_osol_166[0] - yPad_osol_166, yExt_osol_166[1] + yPad_osol_166])
+        .range([h_osol_166, 0]);
+
+    // Grid
+    g_osol_166.append('g').attr('class','grid')
+        .call(d3.axisLeft(y_osol_166).tickSize(-w_osol_166).tickFormat(''));
+
+    // Binding-period shaded rectangles
+    const xStep_osol_166 = w_osol_166 / Math.max(xVals_osol_166.length - 1, 1);
+    data_osol_166.forEach((d, i) => {
+        if(d.bind === 1) {
+            const x0_osol_166 = x_osol_166(d.h) - xStep_osol_166 * 0.5;
+            const x1_osol_166 = x_osol_166(d.h) + xStep_osol_166 * 0.5;
+            g_osol_166.append('rect')
+                .attr('x', Math.max(0, x0_osol_166))
+                .attr('y', 0)
+                .attr('width', Math.min(x1_osol_166, w_osol_166) - Math.max(0, x0_osol_166))
+                .attr('height', h_osol_166)
+                .attr('fill', '#d62728')
+                .attr('opacity', 0.08);
+        }
+    });
+
+    // Zero reference line
+    g_osol_166.append('line')
+        .attr('x1', 0).attr('x2', w_osol_166)
+        .attr('y1', y_osol_166(0)).attr('y2', y_osol_166(0))
+        .attr('stroke', '#999').attr('stroke-width', 1)
+        .attr('stroke-dasharray', '4,3');
+
+    // Linear line (dashed)
+    const linLine_osol_166 = d3.line().x(d => x_osol_166(d.h)).y(d => y_osol_166(d.lin))
+        .defined(d => d.lin !== null);
+    g_osol_166.append('path').datum(data_osol_166).attr('d', linLine_osol_166)
+        .attr('fill', 'none').attr('stroke', '#2ca02c')
+        .attr('stroke-width', 1.8).attr('stroke-dasharray', '6,3');
+
+    // Piecewise line (solid)
+    const pwLine_osol_166 = d3.line().x(d => x_osol_166(d.h)).y(d => y_osol_166(d.pw))
+        .defined(d => d.pw !== null);
+    g_osol_166.append('path').datum(data_osol_166).attr('d', pwLine_osol_166)
+        .attr('fill', 'none').attr('stroke', '#1f77b4')
+        .attr('stroke-width', 1.8);
+
+    // Axes
+    g_osol_166.append('g').attr('class','axis')
+        .attr('transform', 'translate(0,'+h_osol_166+')')
+        .call(d3.axisBottom(x_osol_166).ticks(Math.min(xVals_osol_166.length, 8)));
+    g_osol_166.append('g').attr('class','axis')
+        .call(d3.axisLeft(y_osol_166).ticks(6));
+
+    if('Period') g_osol_166.append('text')
+        .attr('x', w_osol_166/2).attr('y', h_osol_166+30)
+        .attr('text-anchor','middle').attr('font-size','11px')
+        .attr('fill','#666').text('Period');
+    if('b') g_osol_166.append('text')
+        .attr('transform','rotate(-90)')
+        .attr('x', -h_osol_166/2).attr('y', -42)
+        .attr('text-anchor','middle').attr('font-size','11px')
+        .attr('fill','#666').text('b');
+
+    // Legend
+    const leg_osol_166 = g_osol_166.append('g').attr('class','legend')
+        .attr('transform','translate(5,-5)');
+    // Linear (dashed)
+    const g1_osol_166 = leg_osol_166.append('g').attr('transform','translate(0,0)');
+    g1_osol_166.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+        .attr('stroke','#2ca02c').attr('stroke-width',2)
+        .attr('stroke-dasharray','6,3');
+    g1_osol_166.append('text').attr('x',20).attr('y',4)
+        .attr('font-size','10px').attr('fill','#555').text('Linear');
+    // Piecewise (solid)
+    const g2_osol_166 = leg_osol_166.append('g').attr('transform','translate(80,0)');
+    g2_osol_166.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+        .attr('stroke','#1f77b4').attr('stroke-width',2);
+    g2_osol_166.append('text').attr('x',20).attr('y',4)
+        .attr('font-size','10px').attr('fill','#555').text('Piecewise');
+    // Binding
+    const g3_osol_166 = leg_osol_166.append('g').attr('transform','translate(175,0)');
+    g3_osol_166.append('rect').attr('width',12).attr('height',10).attr('y',-5)
+        .attr('fill','#d62728').attr('opacity',0.15);
+    g3_osol_166.append('text').attr('x',16).attr('y',4)
+        .attr('font-size','10px').attr('fill','#555').text('Binding');
+
+    // Tooltip
+    svg_osol_166.append('rect')
+        .attr('width', W_osol_166)
+        .attr('height', h_osol_166 + margin_osol_166.top + margin_osol_166.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g_osol_166.node());
+            const x0 = x_osol_166.invert(mx);
+            const idx = d3.minIndex(data_osol_166, d => Math.abs(d.h - x0));
+            const d = data_osol_166[idx];
+            let html = '<b>h='+d.h+'</b>';
+            if(d.lin!==null) html += '<br>Linear: '+fmt(d.lin);
+            if(d.pw!==null) html += '<br>Piecewise: '+fmt(d.pw);
+            if(d.bind===1) html += '<br><span style="color:#d62728">Binding</span>';
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+
+(function() {
+    const data_osol_167 = [{"h":1,"lin":-0.6666666099010203,"pw":-0.9999999878163024,"bind":1},
+{"h":2,"lin":-0.6666666103126863,"pw":-1.8499999904783997,"bind":1},
+{"h":3,"lin":-0.6666666110946353,"pw":-1.669999992554517,"bind":1},
+{"h":4,"lin":-0.6666666122100341,"pw":-1.5079999943131104,"bind":1},
+{"h":5,"lin":-0.6666666136255376,"pw":-1.3621999957969235,"bind":1},
+{"h":6,"lin":-0.6666666153111352,"pw":-1.2309799970433266,"bind":1},
+{"h":7,"lin":-0.6666666172398179,"pw":-1.1128819980849634,"bind":1},
+{"h":8,"lin":-0.6666666193872767,"pw":-1.0065937989503233,"bind":1},
+{"h":9,"lin":-0.6666666217316343,"pw":-0.9109344196642448,"bind":1},
+{"h":10,"lin":-0.6666666242532007,"pw":-0.8248409782483628,"bind":1},
+{"h":11,"lin":-0.666666626934255,"pw":-0.7473568809214983,"bind":1},
+{"h":12,"lin":-0.6666666297588486,"pw":-0.6776211932800065,"bind":1},
+{"h":13,"lin":-0.6666666327126274,"pw":-0.6148590743600819,"bind":1},
+{"h":14,"lin":-0.6666666357826729,"pw":-0.5583731672938257,"bind":1},
+{"h":15,"lin":-0.6666666389573584,"pw":-0.5075358508997037,"bind":1},
+{"h":16,"lin":-0.6666666422262202,"pw":-0.46178226611395123,"bind":1},
+{"h":17,"lin":-0.6666666455798402,"pw":-0.420604039778836,"bind":1},
+{"h":18,"lin":-0.6666666490097429,"pw":-0.38354363605208786,"bind":1},
+{"h":19,"lin":-0.6666666525083,"pw":-0.3501892726753846,"bind":1},
+{"h":20,"lin":-0.666666656068646,"pw":-0.3201703456159848,"bind":1},
+{"h":21,"lin":-0.666666659684602,"pw":-0.29315331124419464,"bind":1},
+{"h":22,"lin":-0.6666666633506071,"pw":-0.26883798029308625,"bind":1},
+{"h":23,"lin":-0.6666666670616562,"pw":-0.24695418242224143,"bind":1},
+{"h":24,"lin":-0.6666666708132452,"pw":-0.22725876432511827,"bind":1},
+{"h":25,"lin":-0.6666666746013198,"pw":-0.20953288802568082,"bind":1},
+{"h":26,"lin":-0.6666666784222316,"pw":-0.1935795993453635,"bind":1},
+{"h":27,"lin":-0.666666682272697,"pw":-0.17922163952333636,"bind":1},
+{"h":28,"lin":-0.6666666861497603,"pw":-0.16629947567474446,"bind":1},
+{"h":29,"lin":-0.6666666900507621,"pw":-0.1546695282031214,"bind":1},
+{"h":30,"lin":-0.6666666939733082,"pw":-0.14420257547155924,"bind":1},
+{"h":31,"lin":-0.6666666979152445,"pw":-0.13478231800676177,"bind":1},
+{"h":32,"lin":-0.6666667018746316,"pw":-0.12630408628269185,"bind":1},
+{"h":33,"lin":-0.6666667058497249,"pw":-0.11867367772585191,"bind":1},
+{"h":34,"lin":-0.6666667098389534,"pw":-0.1118063100200366,"bind":1},
+{"h":35,"lin":-0.6666667138409037,"pw":-0.1056256790806096,"bind":1},
+{"h":36,"lin":-0.6666667178543036,"pw":-0.10006311123135125,"bind":1},
+{"h":37,"lin":-0.6666667218780082,"pw":-0.09505680016362206,"bind":1},
+{"h":38,"lin":-0.6666667259109871,"pw":-0.09055112019960876,"bind":1},
+{"h":39,"lin":-0.6666667299523127,"pw":-0.08649600822924564,"bind":1},
+{"h":40,"lin":-0.6666667340011505,"pw":-0.08284640745344252,"bind":1},
+{"h":41,"lin":-0.666666738056749,"pw":-0.07956176675299131,"bind":1},
+{"h":42,"lin":-0.6666667421184326,"pw":-0.07660559012057955,"bind":1},
+{"h":43,"lin":-0.6666667461855924,"pw":-0.07394503114960371,"bind":1},
+{"h":44,"lin":-0.6666667502576809,"pw":-0.0715505280741009,"bind":1},
+{"h":45,"lin":-0.6666667543342053,"pw":-0.06939547530468637,"bind":1},
+{"h":46,"lin":-0.6666667584147219,"pw":-0.06745592781089726,"bind":1},
+{"h":47,"lin":-0.6666667624988315,"pw":-0.06571033506530277,"bind":1},
+{"h":48,"lin":-0.6666667665861749,"pw":-0.06413930159320191,"bind":1},
+{"h":49,"lin":-0.6666667706764285,"pw":-0.06272537146735169,"bind":1},
+{"h":50,"lin":-0.6666667747693017,"pw":-0.06145283435322324,"bind":1},
+{"h":51,"lin":-0.6666667788645321,"pw":-0.06030755094973039,"bind":1},
+{"h":52,"lin":-0.6666667829618841,"pw":-0.059276795885887745,"bind":1},
+{"h":53,"lin":-0.6666667870611457,"pw":-0.05834911632779982,"bind":1},
+{"h":54,"lin":-0.6666667911621259,"pw":-0.057514204724954165,"bind":1},
+{"h":55,"lin":-0.6666667952646528,"pw":-0.056762784281883416,"bind":1},
+{"h":56,"lin":-0.6666667993685718,"pw":-0.05608650588266073,"bind":1},
+{"h":57,"lin":-0.6666668034737434,"pw":-0.05547785532294758,"bind":1},
+{"h":58,"lin":-0.6666668075800427,"pw":-0.05493006981883397,"bind":1},
+{"h":59,"lin":-0.6666668116873566,"pw":-0.054437062864797214,"bind":1},
+{"h":60,"lin":-0.6666668157955841,"pw":-0.05399335660586302,"bind":1}];
+    const container_osol_167 = d3.select('#osol_167');
+    const W_osol_167 = Math.max(container_osol_167.node().clientWidth - 24, 280);
+    const margin_osol_167 = {top:10, right:15, bottom:35, left:55};
+    const w_osol_167 = W_osol_167 - margin_osol_167.left - margin_osol_167.right;
+    const h_osol_167 = Math.min(w_osol_167 * 0.6, 250);
+
+    const svg_osol_167 = container_osol_167.append('svg')
+        .attr('width', W_osol_167)
+        .attr('height', h_osol_167 + margin_osol_167.top + margin_osol_167.bottom);
+    const g_osol_167 = svg_osol_167.append('g')
+        .attr('transform', 'translate('+margin_osol_167.left+','+margin_osol_167.top+')');
+
+    // Compute domains
+    const xVals_osol_167 = data_osol_167.map(d => d.h);
+    const allY_osol_167 = [];
+    data_osol_167.forEach(d => {
+        if(d.lin!==null) allY_osol_167.push(d.lin);
+        if(d.pw!==null) allY_osol_167.push(d.pw);
+    });
+    allY_osol_167.push(0);
+
+    const x_osol_167 = d3.scaleLinear().domain(d3.extent(xVals_osol_167)).range([0, w_osol_167]);
+    const yExt_osol_167 = d3.extent(allY_osol_167);
+    const yPad_osol_167 = (yExt_osol_167[1] - yExt_osol_167[0]) * 0.08 || 0.1;
+    const y_osol_167 = d3.scaleLinear()
+        .domain([yExt_osol_167[0] - yPad_osol_167, yExt_osol_167[1] + yPad_osol_167])
+        .range([h_osol_167, 0]);
+
+    // Grid
+    g_osol_167.append('g').attr('class','grid')
+        .call(d3.axisLeft(y_osol_167).tickSize(-w_osol_167).tickFormat(''));
+
+    // Binding-period shaded rectangles
+    const xStep_osol_167 = w_osol_167 / Math.max(xVals_osol_167.length - 1, 1);
+    data_osol_167.forEach((d, i) => {
+        if(d.bind === 1) {
+            const x0_osol_167 = x_osol_167(d.h) - xStep_osol_167 * 0.5;
+            const x1_osol_167 = x_osol_167(d.h) + xStep_osol_167 * 0.5;
+            g_osol_167.append('rect')
+                .attr('x', Math.max(0, x0_osol_167))
+                .attr('y', 0)
+                .attr('width', Math.min(x1_osol_167, w_osol_167) - Math.max(0, x0_osol_167))
+                .attr('height', h_osol_167)
+                .attr('fill', '#d62728')
+                .attr('opacity', 0.08);
+        }
+    });
+
+    // Zero reference line
+    g_osol_167.append('line')
+        .attr('x1', 0).attr('x2', w_osol_167)
+        .attr('y1', y_osol_167(0)).attr('y2', y_osol_167(0))
+        .attr('stroke', '#999').attr('stroke-width', 1)
+        .attr('stroke-dasharray', '4,3');
+
+    // Linear line (dashed)
+    const linLine_osol_167 = d3.line().x(d => x_osol_167(d.h)).y(d => y_osol_167(d.lin))
+        .defined(d => d.lin !== null);
+    g_osol_167.append('path').datum(data_osol_167).attr('d', linLine_osol_167)
+        .attr('fill', 'none').attr('stroke', '#2ca02c')
+        .attr('stroke-width', 1.8).attr('stroke-dasharray', '6,3');
+
+    // Piecewise line (solid)
+    const pwLine_osol_167 = d3.line().x(d => x_osol_167(d.h)).y(d => y_osol_167(d.pw))
+        .defined(d => d.pw !== null);
+    g_osol_167.append('path').datum(data_osol_167).attr('d', pwLine_osol_167)
+        .attr('fill', 'none').attr('stroke', '#1f77b4')
+        .attr('stroke-width', 1.8);
+
+    // Axes
+    g_osol_167.append('g').attr('class','axis')
+        .attr('transform', 'translate(0,'+h_osol_167+')')
+        .call(d3.axisBottom(x_osol_167).ticks(Math.min(xVals_osol_167.length, 8)));
+    g_osol_167.append('g').attr('class','axis')
+        .call(d3.axisLeft(y_osol_167).ticks(6));
+
+    if('Period') g_osol_167.append('text')
+        .attr('x', w_osol_167/2).attr('y', h_osol_167+30)
+        .attr('text-anchor','middle').attr('font-size','11px')
+        .attr('fill','#666').text('Period');
+    if('c') g_osol_167.append('text')
+        .attr('transform','rotate(-90)')
+        .attr('x', -h_osol_167/2).attr('y', -42)
+        .attr('text-anchor','middle').attr('font-size','11px')
+        .attr('fill','#666').text('c');
+
+    // Legend
+    const leg_osol_167 = g_osol_167.append('g').attr('class','legend')
+        .attr('transform','translate(5,-5)');
+    // Linear (dashed)
+    const g1_osol_167 = leg_osol_167.append('g').attr('transform','translate(0,0)');
+    g1_osol_167.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+        .attr('stroke','#2ca02c').attr('stroke-width',2)
+        .attr('stroke-dasharray','6,3');
+    g1_osol_167.append('text').attr('x',20).attr('y',4)
+        .attr('font-size','10px').attr('fill','#555').text('Linear');
+    // Piecewise (solid)
+    const g2_osol_167 = leg_osol_167.append('g').attr('transform','translate(80,0)');
+    g2_osol_167.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+        .attr('stroke','#1f77b4').attr('stroke-width',2);
+    g2_osol_167.append('text').attr('x',20).attr('y',4)
+        .attr('font-size','10px').attr('fill','#555').text('Piecewise');
+    // Binding
+    const g3_osol_167 = leg_osol_167.append('g').attr('transform','translate(175,0)');
+    g3_osol_167.append('rect').attr('width',12).attr('height',10).attr('y',-5)
+        .attr('fill','#d62728').attr('opacity',0.15);
+    g3_osol_167.append('text').attr('x',16).attr('y',4)
+        .attr('font-size','10px').attr('fill','#555').text('Binding');
+
+    // Tooltip
+    svg_osol_167.append('rect')
+        .attr('width', W_osol_167)
+        .attr('height', h_osol_167 + margin_osol_167.top + margin_osol_167.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g_osol_167.node());
+            const x0 = x_osol_167.invert(mx);
+            const idx = d3.minIndex(data_osol_167, d => Math.abs(d.h - x0));
+            const d = data_osol_167[idx];
+            let html = '<b>h='+d.h+'</b>';
+            if(d.lin!==null) html += '<br>Linear: '+fmt(d.lin);
+            if(d.pw!==null) html += '<br>Piecewise: '+fmt(d.pw);
+            if(d.bind===1) html += '<br><span style="color:#d62728">Binding</span>';
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+
+(function() {
+    const data_osol_168 = [{"h":1,"lin":-1.9999999877875467,"pw":-1.9999999877875467,"bind":1},
+{"h":2,"lin":-1.7999999902300374,"pw":-1.7999999902300374,"bind":1},
+{"h":3,"lin":-1.6199999923061545,"pw":-1.6199999923061545,"bind":1},
+{"h":4,"lin":-1.457999994064748,"pw":-1.457999994064748,"bind":1},
+{"h":5,"lin":-1.312199995548561,"pw":-1.312199995548561,"bind":1},
+{"h":6,"lin":-1.1809799967949641,"pw":-1.1809799967949641,"bind":1},
+{"h":7,"lin":-1.0628819978366009,"pw":-1.0628819978366009,"bind":1},
+{"h":8,"lin":-0.9565937987019606,"pw":-0.9565937987019606,"bind":1},
+{"h":9,"lin":-0.8609344194158824,"pw":-0.8609344194158824,"bind":1},
+{"h":10,"lin":-0.7748409780000003,"pw":-0.7748409780000003,"bind":1},
+{"h":11,"lin":-0.6973568806731357,"pw":-0.6973568806731357,"bind":1},
+{"h":12,"lin":-0.6276211930316441,"pw":-0.6276211930316441,"bind":1},
+{"h":13,"lin":-0.5648590741117194,"pw":-0.5648590741117194,"bind":1},
+{"h":14,"lin":-0.5083731670454632,"pw":-0.5083731670454632,"bind":1},
+{"h":15,"lin":-0.45753585065134106,"pw":-0.45753585065134106,"bind":1},
+{"h":16,"lin":-0.41178226586558875,"pw":-0.41178226586558875,"bind":1},
+{"h":17,"lin":-0.37060403953047344,"pw":-0.37060403953047344,"bind":1},
+{"h":18,"lin":-0.3335436358037253,"pw":-0.3335436358037253,"bind":1},
+{"h":19,"lin":-0.3001892724270221,"pw":-0.3001892724270221,"bind":1},
+{"h":20,"lin":-0.27017034536762224,"pw":-0.27017034536762224,"bind":1},
+{"h":21,"lin":-0.24315331099583215,"pw":-0.24315331099583215,"bind":1},
+{"h":22,"lin":-0.21883798004472385,"pw":-0.21883798004472385,"bind":1},
+{"h":23,"lin":-0.1969541821738789,"pw":-0.1969541821738789,"bind":1},
+{"h":24,"lin":-0.1772587640767557,"pw":-0.1772587640767557,"bind":1},
+{"h":25,"lin":-0.15953288777731836,"pw":-0.15953288777731836,"bind":1},
+{"h":26,"lin":-0.14357959909700094,"pw":-0.14357959909700094,"bind":1},
+{"h":27,"lin":-0.1292216392749738,"pw":-0.1292216392749738,"bind":1},
+{"h":28,"lin":-0.11629947542638208,"pw":-0.11629947542638208,"bind":1},
+{"h":29,"lin":-0.10466952795475898,"pw":-0.10466952795475898,"bind":1},
+{"h":30,"lin":-0.09420257522319667,"pw":-0.09420257522319667,"bind":1},
+{"h":31,"lin":-0.08478231775839923,"pw":-0.08478231775839923,"bind":1},
+{"h":32,"lin":-0.07630408603432931,"pw":-0.07630408603432931,"bind":1},
+{"h":33,"lin":-0.06867367747748938,"pw":-0.06867367747748938,"bind":1},
+{"h":34,"lin":-0.06180630977167415,"pw":-0.06180630977167415,"bind":1},
+{"h":35,"lin":-0.055625678832247075,"pw":-0.055625678832247075,"bind":1},
+{"h":36,"lin":-0.05006311098298867,"pw":-0.05006311098298867,"bind":1},
+{"h":37,"lin":-0.045056799915259474,"pw":-0.045056799915259474,"bind":1},
+{"h":38,"lin":-0.04055111995124623,"pw":-0.04055111995124623,"bind":1},
+{"h":39,"lin":-0.03649600798088304,"pw":-0.03649600798088304,"bind":1},
+{"h":40,"lin":-0.032846407205080023,"pw":-0.032846407205080023,"bind":1},
+{"h":41,"lin":-0.029561766504628783,"pw":-0.029561766504628783,"bind":1},
+{"h":42,"lin":-0.02660558987221699,"pw":-0.02660558987221699,"bind":1},
+{"h":43,"lin":-0.023945030901241265,"pw":-0.023945030901241265,"bind":1},
+{"h":44,"lin":-0.021550527825738516,"pw":-0.021550527825738516,"bind":1},
+{"h":45,"lin":-0.019395475056323906,"pw":-0.019395475056323906,"bind":1},
+{"h":46,"lin":-0.017455927562534834,"pw":-0.017455927562534834,"bind":1},
+{"h":47,"lin":-0.015710334816940338,"pw":-0.015710334816940338,"bind":1},
+{"h":48,"lin":-0.014139301344839391,"pw":-0.014139301344839391,"bind":1},
+{"h":49,"lin":-0.01272537121898923,"pw":-0.01272537121898923,"bind":1},
+{"h":50,"lin":-0.011452834104860707,"pw":-0.011452834104860707,"bind":1},
+{"h":51,"lin":-0.010307550701367997,"pw":-0.010307550701367997,"bind":1},
+{"h":52,"lin":-0.009276795637525221,"pw":-0.009276795637525221,"bind":1},
+{"h":53,"lin":-0.008349116079437321,"pw":-0.008349116079437321,"bind":1},
+{"h":54,"lin":-0.007514204476591749,"pw":-0.007514204476591749,"bind":1},
+{"h":55,"lin":-0.006762784033520918,"pw":-0.006762784033520918,"bind":1},
+{"h":56,"lin":-0.006086505634298335,"pw":-0.006086505634298335,"bind":1},
+{"h":57,"lin":-0.00547785507458506,"pw":-0.00547785507458506,"bind":1},
+{"h":58,"lin":-0.004930069570471456,"pw":-0.004930069570471456,"bind":1},
+{"h":59,"lin":-0.004437062616434723,"pw":-0.004437062616434723,"bind":1},
+{"h":60,"lin":-0.003993356357500622,"pw":-0.003993356357500622,"bind":1}];
+    const container_osol_168 = d3.select('#osol_168');
+    const W_osol_168 = Math.max(container_osol_168.node().clientWidth - 24, 280);
+    const margin_osol_168 = {top:10, right:15, bottom:35, left:55};
+    const w_osol_168 = W_osol_168 - margin_osol_168.left - margin_osol_168.right;
+    const h_osol_168 = Math.min(w_osol_168 * 0.6, 250);
+
+    const svg_osol_168 = container_osol_168.append('svg')
+        .attr('width', W_osol_168)
+        .attr('height', h_osol_168 + margin_osol_168.top + margin_osol_168.bottom);
+    const g_osol_168 = svg_osol_168.append('g')
+        .attr('transform', 'translate('+margin_osol_168.left+','+margin_osol_168.top+')');
+
+    // Compute domains
+    const xVals_osol_168 = data_osol_168.map(d => d.h);
+    const allY_osol_168 = [];
+    data_osol_168.forEach(d => {
+        if(d.lin!==null) allY_osol_168.push(d.lin);
+        if(d.pw!==null) allY_osol_168.push(d.pw);
+    });
+    allY_osol_168.push(0);
+
+    const x_osol_168 = d3.scaleLinear().domain(d3.extent(xVals_osol_168)).range([0, w_osol_168]);
+    const yExt_osol_168 = d3.extent(allY_osol_168);
+    const yPad_osol_168 = (yExt_osol_168[1] - yExt_osol_168[0]) * 0.08 || 0.1;
+    const y_osol_168 = d3.scaleLinear()
+        .domain([yExt_osol_168[0] - yPad_osol_168, yExt_osol_168[1] + yPad_osol_168])
+        .range([h_osol_168, 0]);
+
+    // Grid
+    g_osol_168.append('g').attr('class','grid')
+        .call(d3.axisLeft(y_osol_168).tickSize(-w_osol_168).tickFormat(''));
+
+    // Binding-period shaded rectangles
+    const xStep_osol_168 = w_osol_168 / Math.max(xVals_osol_168.length - 1, 1);
+    data_osol_168.forEach((d, i) => {
+        if(d.bind === 1) {
+            const x0_osol_168 = x_osol_168(d.h) - xStep_osol_168 * 0.5;
+            const x1_osol_168 = x_osol_168(d.h) + xStep_osol_168 * 0.5;
+            g_osol_168.append('rect')
+                .attr('x', Math.max(0, x0_osol_168))
+                .attr('y', 0)
+                .attr('width', Math.min(x1_osol_168, w_osol_168) - Math.max(0, x0_osol_168))
+                .attr('height', h_osol_168)
+                .attr('fill', '#d62728')
+                .attr('opacity', 0.08);
+        }
+    });
+
+    // Zero reference line
+    g_osol_168.append('line')
+        .attr('x1', 0).attr('x2', w_osol_168)
+        .attr('y1', y_osol_168(0)).attr('y2', y_osol_168(0))
+        .attr('stroke', '#999').attr('stroke-width', 1)
+        .attr('stroke-dasharray', '4,3');
+
+    // Linear line (dashed)
+    const linLine_osol_168 = d3.line().x(d => x_osol_168(d.h)).y(d => y_osol_168(d.lin))
+        .defined(d => d.lin !== null);
+    g_osol_168.append('path').datum(data_osol_168).attr('d', linLine_osol_168)
+        .attr('fill', 'none').attr('stroke', '#2ca02c')
+        .attr('stroke-width', 1.8).attr('stroke-dasharray', '6,3');
+
+    // Piecewise line (solid)
+    const pwLine_osol_168 = d3.line().x(d => x_osol_168(d.h)).y(d => y_osol_168(d.pw))
+        .defined(d => d.pw !== null);
+    g_osol_168.append('path').datum(data_osol_168).attr('d', pwLine_osol_168)
+        .attr('fill', 'none').attr('stroke', '#1f77b4')
+        .attr('stroke-width', 1.8);
+
+    // Axes
+    g_osol_168.append('g').attr('class','axis')
+        .attr('transform', 'translate(0,'+h_osol_168+')')
+        .call(d3.axisBottom(x_osol_168).ticks(Math.min(xVals_osol_168.length, 8)));
+    g_osol_168.append('g').attr('class','axis')
+        .call(d3.axisLeft(y_osol_168).ticks(6));
+
+    if('Period') g_osol_168.append('text')
+        .attr('x', w_osol_168/2).attr('y', h_osol_168+30)
+        .attr('text-anchor','middle').attr('font-size','11px')
+        .attr('fill','#666').text('Period');
+    if('y') g_osol_168.append('text')
+        .attr('transform','rotate(-90)')
+        .attr('x', -h_osol_168/2).attr('y', -42)
+        .attr('text-anchor','middle').attr('font-size','11px')
+        .attr('fill','#666').text('y');
+
+    // Legend
+    const leg_osol_168 = g_osol_168.append('g').attr('class','legend')
+        .attr('transform','translate(5,-5)');
+    // Linear (dashed)
+    const g1_osol_168 = leg_osol_168.append('g').attr('transform','translate(0,0)');
+    g1_osol_168.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+        .attr('stroke','#2ca02c').attr('stroke-width',2)
+        .attr('stroke-dasharray','6,3');
+    g1_osol_168.append('text').attr('x',20).attr('y',4)
+        .attr('font-size','10px').attr('fill','#555').text('Linear');
+    // Piecewise (solid)
+    const g2_osol_168 = leg_osol_168.append('g').attr('transform','translate(80,0)');
+    g2_osol_168.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+        .attr('stroke','#1f77b4').attr('stroke-width',2);
+    g2_osol_168.append('text').attr('x',20).attr('y',4)
+        .attr('font-size','10px').attr('fill','#555').text('Piecewise');
+    // Binding
+    const g3_osol_168 = leg_osol_168.append('g').attr('transform','translate(175,0)');
+    g3_osol_168.append('rect').attr('width',12).attr('height',10).attr('y',-5)
+        .attr('fill','#d62728').attr('opacity',0.15);
+    g3_osol_168.append('text').attr('x',16).attr('y',4)
+        .attr('font-size','10px').attr('fill','#555').text('Binding');
+
+    // Tooltip
+    svg_osol_168.append('rect')
+        .attr('width', W_osol_168)
+        .attr('height', h_osol_168 + margin_osol_168.top + margin_osol_168.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g_osol_168.node());
+            const x0 = x_osol_168.invert(mx);
+            const idx = d3.minIndex(data_osol_168, d => Math.abs(d.h - x0));
+            const d = data_osol_168[idx];
+            let html = '<b>h='+d.h+'</b>';
+            if(d.lin!==null) html += '<br>Linear: '+fmt(d.lin);
+            if(d.pw!==null) html += '<br>Piecewise: '+fmt(d.pw);
+            if(d.bind===1) html += '<br><span style="color:#d62728">Binding</span>';
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+
+</script>
+</body>
+</html>
