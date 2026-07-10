@@ -331,6 +331,29 @@ end
     @test length(tf_ham.gain) == 256
 end
 
+@testset "transfer_function HP sin^4 half-power (#206)" begin
+    # The HP penalty is on the SECOND difference, so the cyclical gain must be a
+    # sin^4 response: G(ω) = 16λ sin^4(ω/2) / (1 + 16λ sin^4(ω/2)). Its half-power
+    # (gain = 0.5) period is ≈39.7 quarters at λ=1600 — the erroneous sin^2 form
+    # gives ≈251q. Analytic crossing: ω* = 2·asin((16λ)^{-1/4}).
+    for (lambda, target_period) in ((1600.0, 39.70), (6.25, 9.77))
+        tf = transfer_function(:hp; lambda=lambda, n_freq=2048)
+        g = tf.gain
+        f = tf.freq
+        k = findfirst(i -> g[i] >= 0.5, eachindex(g))
+        @test k !== nothing && k > 1
+        ω = f[k-1] + (0.5 - g[k-1]) / (g[k] - g[k-1]) * (f[k] - f[k-1])
+        @test isapprox(2π / ω, target_period; atol=0.3)   # rules out the ~251q sin^2 bug
+        ω_star = 2 * asin((16 * lambda)^(-1 / 4))
+        @test isapprox(ω, ω_star; atol=1e-2)
+    end
+    # endpoints preserved + monotone increasing in ω
+    tf = transfer_function(:hp; lambda=1600)
+    @test tf.gain[1] == 0.0
+    @test tf.gain[end] > 0.99
+    @test all(diff(tf.gain) .>= -1e-12)
+end
+
 @testset "Display (show methods)" begin
     rng = Random.MersenneTwister(12001)
     y = randn(rng, 200)

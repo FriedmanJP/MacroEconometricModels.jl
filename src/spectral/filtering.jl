@@ -107,11 +107,14 @@ function transfer_function(filter::Symbol; lambda::Real=1600, K::Int=12,
     phase_vals = zeros(T, n_freq)
 
     if filter == :hp
-        # HP filter gain: G(ω) = 4λ sin²(ω/2) / (1 + 4λ sin²(ω/2))
-        # This is the gain for the CYCLE (high-pass component)
+        # HP cyclical (high-pass) gain: G(ω) = 4λ(1-cos ω)² / (1 + 4λ(1-cos ω)²)
+        #   = 16λ sin⁴(ω/2) / (1 + 16λ sin⁴(ω/2))
+        # The HP penalty is on the SECOND difference, whose transfer is (1-e^{-iω})²
+        # with squared modulus (2 sin(ω/2))² · (2 sin(ω/2))² = 16 sin⁴(ω/2), i.e. a
+        # sin⁴ (not sin²) response. At λ=1600 the half-power period is ≈39.7 quarters.
         for k in 1:n_freq
-            s2 = sin(freq[k] / 2)^2
-            gain_vals[k] = 4 * lambda * s2 / (1 + 4 * lambda * s2)
+            d = 1 - cos(freq[k])          # = 2 sin²(ω/2)
+            gain_vals[k] = 4 * lambda * d^2 / (1 + 4 * lambda * d^2)
         end
         # HP filter has zero phase (symmetric)
 
