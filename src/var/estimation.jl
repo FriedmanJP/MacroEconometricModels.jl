@@ -156,19 +156,38 @@ end
 # =============================================================================
 
 """
-    forecast(model::VARModel, h; ci_method=:bootstrap, reps=500, conf_level=0.95) -> VARForecast{T}
+    forecast(model::VARModel, h; ci_method=:bootstrap, reps=500, conf_level=0.95,
+             stationary_only=false, rng=Random.default_rng()) -> VARForecast{T}
 
-Forecast from VAR model for `h` steps ahead with optional bootstrap CIs.
+Forecast from VAR model for `h` steps ahead with optional confidence intervals.
 
-Iterates the VAR recursion forward using the estimated coefficients and the
-last `p` observations as initial conditions.
+The point forecast iterates the VAR recursion forward using the estimated
+coefficients and the last `p` observations. Confidence bands are formed by one
+of:
+
+- `:bootstrap` (default) — **Kilian (1998) bootstrap-B**. Each replication draws
+  a pseudo-sample `Y*` by resampling the residuals and iterating the VAR with the
+  point estimate, **re-estimates** the coefficients on `Y*`, and then simulates
+  the future path from the *true* last-`p` observations using the re-estimated
+  coefficients plus fresh resampled future shocks. This propagates both future
+  innovation uncertainty and coefficient-estimation uncertainty, so the bands are
+  wider (and closer to nominal coverage in small samples) than a residual-only
+  bootstrap. Cost: `reps` VAR re-estimations.
+- `:analytic` — Lütkepohl (2005, §3.5) known-coefficient forecast MSE
+  `Σ_y(h) = Σ_{i=0}^{h-1} Φ_i Σ_u Φ_i'` with symmetric Gaussian bands
+  `point ± z·√diag`. This ignores coefficient-estimation uncertainty (the leading
+  asymptotic term); use `:bootstrap` for finite-sample parameter uncertainty.
+- `:none` — point forecast only (zero-width bands).
 
 # Arguments
 - `model`: Estimated VAR model
 - `h`: Forecast horizon (number of steps ahead)
-- `ci_method`: `:bootstrap` (default) or `:none`
+- `ci_method`: `:bootstrap` (default), `:analytic`, or `:none`
 - `reps`: Number of bootstrap replications (default 500)
 - `conf_level`: Confidence level for intervals (default 0.95)
+- `stationary_only`: reject bootstrap draws whose re-estimated companion matrix is
+  non-stationary (default `false`)
+- `rng`: random number generator for the bootstrap (default `Random.default_rng()`)
 
 # Returns
 `VARForecast{T}` with point forecasts and CIs.
@@ -176,18 +195,21 @@ last `p` observations as initial conditions.
 # Example
 ```julia
 model = estimate_var(Y, 4)
-fc = forecast(model, 12)  # 12-step ahead forecast with bootstrap CIs
+fc = forecast(model, 12)  # 12-step ahead forecast with bootstrap-B CIs
 ```
 """
 function forecast(model::VARModel{T}, h::Int;
                   ci_method::Symbol=:bootstrap,
                   reps::Int=500,
-                  conf_level::Real=0.95) where {T}
+                  conf_level::Real=0.95,
+                  stationary_only::Bool=false,
+                  rng::AbstractRNG=Random.default_rng()) where {T}
     h < 1 && throw(ArgumentError("Forecast horizon must be positive"))
-    ci_method ∈ (:none, :bootstrap) ||
-        throw(ArgumentError("ci_method must be :none or :bootstrap"))
+    ci_method ∈ (:none, :bootstrap, :analytic) ||
+        throw(ArgumentError("ci_method must be :none, :bootstrap, or :analytic"))
 
     n = nvars(model)
+    p = model.p
     point = predict(model, h)
 
     ci_lower = zeros(T, h, n)
@@ -195,26 +217,32 @@ function forecast(model::VARModel{T}, h::Int;
 
     if ci_method == :bootstrap
         T_eff = effective_nobs(model)
+        Y_init = model.Y[1:p, :]                     # first p obs seed the pseudo-sample
+        last_p = model.Y[(end - p + 1):end, :]       # true origin for the forward path
         sim = Array{T,3}(undef, reps, h, n)
 
-        p_lag = model.p
-        A = extract_ar_coefficients(model.B, n, p_lag)
-        intercept = @view model.B[1, :]
-
-        for rep in 1:reps
-            idx = rand(1:T_eff, h)
-            shocks = model.U[idx, :]
-            history = copy(model.Y[(end - p_lag + 1):end, :])
-
-            @inbounds for step in 1:h
-                y_hat = copy(intercept)
-                for lag in 1:p_lag
-                    y_hat .+= A[lag] * @view(history[end - lag + 1, :])
-                end
-                y_hat .+= shocks[step, :]
-                sim[rep, step, :] = y_hat
-                history = vcat(@view(history[2:end, :]), y_hat')
+        rep = 0
+        attempts = 0
+        max_attempts = stationary_only ? 20 * reps : reps
+        while rep < reps && attempts < max_attempts
+            attempts += 1
+            # Bootstrap-B: rebuild a pseudo-sample from the point estimate, re-estimate.
+            U_boot = model.U[rand(rng, 1:T_eff, T_eff), :]
+            Y_boot = _simulate_var(Y_init, model.B, U_boot, T_eff + p)
+            m_star = estimate_var(Y_boot, p; check_stability=false)
+            if stationary_only
+                max_mod = maximum(abs.(eigvals(companion_matrix(m_star.B, n, p))))
+                max_mod >= one(T) && continue        # discard explosive re-estimate
             end
+            # Forward path from the TRUE last-p obs with the re-estimated coefficients.
+            future = model.U[rand(rng, 1:T_eff, h), :]
+            path = _simulate_var(last_p, m_star.B, future, p + h)
+            rep += 1
+            @inbounds sim[rep, :, :] = @view path[(p + 1):(p + h), :]
+        end
+        if rep < reps
+            @warn "Only $rep/$reps $(stationary_only ? "stationary " : "")bootstrap forecast draws obtained after $attempts attempts"
+            sim = sim[1:max(rep, 1), :, :]
         end
 
         alpha_half = (1 - T(conf_level)) / 2
@@ -222,6 +250,30 @@ function forecast(model::VARModel{T}, h::Int;
             d = @view sim[:, hi, j]
             ci_lower[hi, j] = quantile(d, alpha_half)
             ci_upper[hi, j] = quantile(d, 1 - alpha_half)
+        end
+
+    elseif ci_method == :analytic
+        # Lütkepohl §3.5 known-coefficient forecast MSE via the MA(∞) coefficients
+        # Φ_0 = I, Φ_i = Σ_{j=1}^{min(i,p)} Φ_{i-j} A_j (eq. 2.1.22).
+        A = extract_ar_coefficients(model.B, n, p)
+        Phi = Vector{Matrix{T}}(undef, h)            # Phi[i+1] = Φ_i, i = 0 … h-1
+        Phi[1] = Matrix{T}(I, n, n)
+        for i in 1:(h - 1)
+            acc = zeros(T, n, n)
+            for j in 1:min(i, p)
+                acc .+= Phi[i - j + 1] * A[j]
+            end
+            Phi[i + 1] = acc
+        end
+        z = T(quantile(Normal(), 1 - (1 - T(conf_level)) / 2))
+        mse = zeros(T, n, n)
+        for hi in 1:h
+            mse .+= Phi[hi] * model.Sigma * Phi[hi]'
+            for j in 1:n
+                se = sqrt(max(mse[j, j], zero(T)))
+                ci_lower[hi, j] = point[hi, j] - z * se
+                ci_upper[hi, j] = point[hi, j] + z * se
+            end
         end
     end
 
