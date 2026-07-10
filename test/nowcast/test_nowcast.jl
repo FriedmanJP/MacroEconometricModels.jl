@@ -506,6 +506,20 @@ end
         @test !all(isnan, m.Y_nowcast)
     end
 
+    @testset "Bridge nowcasts the incomplete current quarter (T104 #203)" begin
+        rng = Random.MersenneTwister(203)
+        T_obs = 92                          # NOT a multiple of 3 → a partial current quarter
+        Y = randn(rng, T_obs, 5)            # 3 monthly + 2 quarterly
+        for t in 1:T_obs
+            mod(t, 3) != 0 && (Y[t, 4:5] .= NaN)
+        end
+        m = nowcast_bridge(Y, 3, 2; lagM=1, lagQ=1, lagY=1)
+        # ceil-division emits a row for the incomplete quarter (floor ÷ dropped it: 30 → 31).
+        @test length(m.Y_nowcast) == cld(T_obs, 3)
+        @test length(m.Y_nowcast) == 31
+        @test isfinite(m.Y_nowcast[end])    # the current partial quarter is actually nowcast
+    end
+
     @testset "Equation combination" begin
         # With 4 monthly variables, should have C(4,2) + 4 = 10 equations
         combos = MacroEconometricModels._bridge_combinations(4, 1)

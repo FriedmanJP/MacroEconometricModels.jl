@@ -54,17 +54,18 @@ function nowcast_bridge(Y::AbstractMatrix, nM::Int, nQ::Int;
     # Fill missing monthly values via forward-fill + interpolation
     X_sm = _bridge_fill_monthly(Ymat, nM)
 
-    # Aggregate monthly to quarterly (3-month averages)
-    n_quarters = T_obs ÷ 3
+    # Aggregate monthly to quarterly (3-month averages). Use ceil-division so the current,
+    # partially-observed quarter — the very quarter a nowcast exists to produce — gets a row;
+    # _bridge_m2q already averages only the observed months of a short final quarter.
+    n_quarters = cld(T_obs, 3)
     Xm_q = _bridge_m2q(X_sm[:, 1:nM], n_quarters)  # n_quarters × nM
 
-    # Quarterly variables (sampled every 3rd month)
+    # Quarterly variables (sampled at the quarter-end month, or the last available for a
+    # partial final quarter).
     Xq = zeros(Tf, n_quarters, nQ)
     for q in 1:n_quarters
-        t_end = q * 3
-        if t_end <= T_obs
-            Xq[q, :] = X_sm[t_end, (nM + 1):N]
-        end
+        t_end = min(q * 3, T_obs)
+        Xq[q, :] = X_sm[t_end, (nM + 1):N]
     end
 
     # Target variable: last quarterly variable
