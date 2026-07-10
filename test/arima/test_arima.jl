@@ -1071,4 +1071,35 @@ end
         @test ar_order(m) == 0
         @test ma_order(m) == 0
     end
+
+    @testset "d≥3 forecast integration exact (#209 R-22)" begin
+        M = MacroEconometricModels
+        # A degree-d polynomial trend is continued EXACTLY when its constant d-th
+        # difference is integrated back. The previous d≥3 branch used a wrong binomial
+        # boundary term.
+        for d in 1:4
+            f(t) = float(t)^d - 2.0 * t + 7.0        # degree exactly d for d ≥ 1
+            n = 14
+            h = 6
+            y = Float64[f(t) for t in 1:n]
+            dvec = copy(y)
+            for _ in 1:d
+                dvec = diff(dvec)
+            end
+            fc_diff = fill(dvec[end], h)             # true constant d-th difference
+            fc = M._integrate_forecasts(y, fc_diff, d)
+            @test isapprox(fc, Float64[f(n + j) for j in 1:h]; rtol=1e-7)
+        end
+    end
+
+    @testset "_select_d_heuristic ADF iteration (#209 R-24)" begin
+        M = MacroEconometricModels
+        rng = Random.MersenneTwister(2409)
+        # I(1) random walk → ADF fails to reject at d=0, rejects after one difference ⇒ d ≥ 1
+        rw = cumsum(randn(rng, 150))
+        @test M._select_d_heuristic(rw, 2) >= 1
+        # I(0) white noise → ADF rejects immediately ⇒ d = 0
+        wn = randn(rng, 150)
+        @test M._select_d_heuristic(wn, 2) == 0
+    end
 end

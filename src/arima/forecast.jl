@@ -233,35 +233,29 @@ Integrate d-differenced forecasts back to original scale.
 function _integrate_forecasts(y::Vector{T}, fc_diff::Vector{T}, d::Int) where {T<:AbstractFloat}
     d == 0 && return fc_diff
 
-    h = length(fc_diff)
-    n = length(y)
-
-    # Build chain of cumulative sums
-    fc = copy(fc_diff)
-
-    for _ in 1:d
-        # Get last value from original series (after accounting for previous integrations)
-        # For d=1: yₜ₊ₕ = yₜ + Σⱼ₌₁ʰ Δyₜ₊ⱼ
+    # Invert d-fold differencing by successive integration. The forecast of the
+    # (d-k)-th difference is the running sum of the forecast of the (d-k+1)-th
+    # difference, seeded by the last observed (d-k)-th difference:
+    #   f[Δ^{d-k} y] = cumsum(f[Δ^{d-k+1} y]) + (Δ^{d-k} y)[end].
+    # This reproduces the d=1 (+y[end]) and d=2 (level + linear trend) closed forms
+    # and, unlike the previous binomial boundary term, is exact for d ≥ 3 (a degree-d
+    # polynomial trend is continued exactly).
+    fc = copy(fc_diff)                         # forecast of Δ^d y
+    for k in 1:d
+        m = d - k                              # restore the level of the m-th difference
         fc = cumsum(fc)
+        fc .+= _last_difference(y, m)          # (Δ^m y)[end]
     end
-
-    # Add the reference levels
-    if d == 1
-        fc .+= y[end]
-    elseif d == 2
-        # For d=2, need to account for both level and trend
-        fc .+= y[end]
-        # Add linear trend from last two observations
-        trend = y[end] - y[end-1]
-        fc .+= trend .* (1:h)
-    else
-        # General case: use polynomial extrapolation
-        for i in 1:d
-            fc .+= y[end - d + i] * binomial(d, i-1)
-        end
-    end
-
     fc
+end
+
+"""`(Δ^m y)[end]` — last value of the m-th backward difference of `y`."""
+function _last_difference(y::AbstractVector{T}, m::Int) where {T<:AbstractFloat}
+    s = zero(T)
+    for i in 0:m
+        s += T((-1)^i * binomial(m, i)) * y[end - i]
+    end
+    s
 end
 
 """

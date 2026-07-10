@@ -301,27 +301,26 @@ end
 """
     _select_d_heuristic(y, max_d) -> Int
 
-Select integration order d using simple variance heuristic.
-
-Differences until variance stops decreasing significantly.
+Select the integration order `d` by iterating an Augmented Dickey-Fuller unit-root
+test: difference while ADF fails to reject a unit root (p > 0.05), up to `max_d`.
+Falls back to a variance-decrease rule when the (differenced) series is too short
+for a reliable ADF test (< 20 observations) or the test errors.
 """
 function _select_d_heuristic(y::Vector{T}, max_d::Int) where {T<:AbstractFloat}
     max_d == 0 && return 0
 
     y_curr = copy(y)
-    var_prev = var(y_curr)
-
-    for d in 1:max_d
-        y_curr = diff(y_curr)
-        var_curr = var(y_curr)
-
-        # If variance increased or decreased by less than 10%, stop
-        if var_curr >= var_prev || var_curr > T(0.9) * var_prev
-            return d - 1
+    for d in 0:(max_d - 1)
+        length(y_curr) < 20 && return d          # too short for a reliable ADF test
+        has_unit_root = try
+            adf_test(y_curr; regression=:constant).pvalue > T(0.05)
+        catch
+            # Degenerate series → variance rule: a unit root shrinks the variance.
+            var(diff(y_curr)) < T(0.9) * var(y_curr)
         end
-        var_prev = var_curr
+        has_unit_root || return d                 # stationary at this order
+        y_curr = diff(y_curr)
     end
-
     max_d
 end
 
