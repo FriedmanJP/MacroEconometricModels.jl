@@ -259,6 +259,20 @@ end
 # Estimation Function
 # =============================================================================
 
+# Constants-only (intercept-only) null log-likelihood. The intercept-only MLE
+# probabilities equal the empirical category shares p̄ⱼ = nⱼ/n, so
+# LL₀ = Σⱼ nⱼ·log(nⱼ/n) exactly (no optimization needed) — the standard McFadden /
+# Stata `mlogit` baseline. `yint` is the remapped 1:J integer label vector.
+function _mlogit_null_loglik(yint::Vector{Int}, J::Int, ::Type{T}) where {T<:AbstractFloat}
+    n = length(yint)
+    ll = zero(T)
+    for j in 1:J
+        n_j = count(==(j), yint)
+        n_j > 0 && (ll += T(n_j) * log(T(n_j) / T(n)))
+    end
+    ll
+end
+
 """
     estimate_mlogit(y, X; cov_type=:ols, varnames=nothing, clusters=nothing, maxiter=200, tol=1e-8) -> MultinomialLogitModel{T}
 
@@ -298,20 +312,6 @@ report(m)
 - McFadden, D. (1974). Conditional logit analysis of qualitative choice behavior.
 - Train, K. E. (2009). *Discrete Choice Methods with Simulation*. 2nd ed. Cambridge Univ. Press.
 """
-# Constants-only (intercept-only) null log-likelihood. The intercept-only MLE
-# probabilities equal the empirical category shares p̄ⱼ = nⱼ/n, so
-# LL₀ = Σⱼ nⱼ·log(nⱼ/n) exactly (no optimization needed) — the standard McFadden /
-# Stata `mlogit` baseline. `yint` is the remapped 1:J integer label vector.
-function _mlogit_null_loglik(yint::Vector{Int}, J::Int, ::Type{T}) where {T<:AbstractFloat}
-    n = length(yint)
-    ll = zero(T)
-    for j in 1:J
-        n_j = count(==(j), yint)
-        n_j > 0 && (ll += T(n_j) * log(T(n_j) / T(n)))
-    end
-    ll
-end
-
 function estimate_mlogit(y::AbstractVector, X::AbstractMatrix{T};
                          cov_type::Symbol=:ols,
                          varnames::Union{Nothing,Vector{String}}=nothing,
