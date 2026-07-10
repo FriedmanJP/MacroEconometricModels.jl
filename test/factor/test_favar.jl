@@ -541,6 +541,33 @@ using MacroEconometricModels
         @test bfavar.Y_key_indices == [1, 5]
     end
 
+    @testset "Bayesian FAVAR draws (B,Σ) and FFBS factors (T093 #192)" begin
+        rng = Random.MersenneTwister(11)
+        T_obs, N, r = 120, 12, 2
+        F = zeros(T_obs, r)
+        for t in 2:T_obs
+            F[t, :] = 0.7 .* F[t-1, :] .+ randn(rng, r)
+        end
+        Lam = randn(rng, N, r)
+        X = F * Lam' .+ 0.5 .* randn(rng, T_obs, N)
+        bf = estimate_favar(X, [1, 2], r, 1; method=:bayesian, n_draws=120, burnin=80)
+
+        # (1) Conjugate NIW draw: (B, Σ) genuinely vary across sweeps. The old code reused the
+        #     fixed OLS point estimate every sweep, so this variance was ~0.
+        @test mean(var(bf.B_draws; dims=1)) > 1e-3
+        @test mean(var(bf.Sigma_draws; dims=1)) > 1e-6
+        @test all(isfinite, bf.B_draws) && all(isfinite, bf.Sigma_draws)
+
+        # (2) Carter–Kohn FFBS: sampled factor paths inherit the VAR transition's serial
+        #     dependence (the true AR is 0.7). The old independent per-t draws gave ~0
+        #     autocorrelation. Autocorrelation is sign-invariant, so factor-identification
+        #     sign flips across sweeps do not affect it.
+        @test all(isfinite, bf.factor_draws)
+        acs = [cor(bf.factor_draws[s, 2:end, 1], bf.factor_draws[s, 1:end-1, 1])
+               for s in 1:size(bf.factor_draws, 1)]
+        @test mean(acs) > 0.4
+    end
+
     @testset "Bayesian FAVAR types and finite values" begin
         X, _ = make_favar_data(T_obs=100, N=15)
         bfavar = estimate_favar(X, [1, 3], 2, 1; method=:bayesian, n_draws=30, burnin=10)

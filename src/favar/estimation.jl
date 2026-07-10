@@ -298,6 +298,87 @@ end
 # Bayesian FAVAR Estimation (BBE 2005, Section IV)
 # =============================================================================
 
+# PSD-robust matrix square root L (L*L' = PSD projection of M) for the FFBS conditional-
+# covariance draws. Conditional covariances are PSD in exact arithmetic but a poor Gibbs draw
+# (near-singular Σ_ηη or a near-explosive VAR) can make them slightly indefinite; clipping the
+# eigenvalues at zero keeps the sampler from throwing on a single bad sweep.
+function _favar_state_chol(M::AbstractMatrix{T}) where {T<:AbstractFloat}
+    Ms = T(0.5) * (M + M')
+    E = eigen(Symmetric(Ms))
+    E.vectors * Diagonal(sqrt.(max.(E.values, zero(T))))
+end
+
+"""
+    _favar_ffbs(X_std, Lambda, A_lags, Sigma_eta, sigma2_e, r, p) -> Matrix
+
+Carter–Kohn forward-filter / backward-sample of the FAVAR factor path. Casts the factors in
+companion state-space form — state `s_t = [F_t; …; F_{t-p+1}]`, transition from the F→F VAR
+blocks `A_lags` with innovation covariance `Sigma_eta` (rank `r`), observation
+`X_std[t] = Lambda·F_t + e_t`, `e_t ~ N(0, diag(sigma2_e))` — runs the Kalman filter, then
+draws the path backward. Because the companion state noise is singular (only the top `r`
+rows carry innovations), each backward step conditions on the top-`r` block `F_{t+1}` of the
+next state only (Kim–Nelson). Returns the sampled factors (T_obs × r).
+"""
+function _favar_ffbs(X_std::AbstractMatrix{T}, Lambda::AbstractMatrix{T},
+                     A_lags::Vector{Matrix{T}}, Sigma_eta::AbstractMatrix{T},
+                     sigma2_e::AbstractVector{T}, r::Int, p::Int) where {T<:AbstractFloat}
+    T_obs, N = size(X_std)
+    sd = r * p
+
+    # Companion state-space matrices
+    Z = zeros(T, N, sd); Z[:, 1:r] = Lambda
+    T_mat = zeros(T, sd, sd)
+    for l in 1:p
+        T_mat[1:r, ((l-1)*r+1):(l*r)] = A_lags[l]
+    end
+    p > 1 && (T_mat[(r+1):sd, 1:(sd-r)] = Matrix{T}(I, sd - r, sd - r))
+    Q = zeros(T, sd, sd); Q[1:r, 1:r] = Sigma_eta
+
+    # Forward Kalman filter (store filtered mean/cov)
+    a_filt = zeros(T, T_obs, sd)
+    P_filt = Array{T,3}(undef, T_obs, sd, sd)
+    a_t = zeros(T, sd)
+    P0 = _compute_unconditional_covariance(T_mat, Q, sd)
+    P_t = all(isfinite, P0) ? Matrix{T}(P0) : Matrix{T}(I, sd, sd) * T(1e6)
+    for t in 1:T_obs
+        a_pred = T_mat * a_t
+        P_pred = T_mat * P_t * T_mat' + Q
+        ZP = Z * P_pred                       # N × sd
+        F_obs = ZP * Z'                       # N × N
+        @inbounds for j in 1:N
+            F_obs[j, j] += sigma2_e[j]
+        end
+        F_obs = T(0.5) * (F_obs + F_obs')
+        F_inv = robust_inv(F_obs)
+        K = P_pred * Z' * F_inv               # sd × N
+        v = @view(X_std[t, :]) .- Z * a_pred
+        a_t = a_pred + K * v
+        P_t = P_pred - K * ZP
+        P_t = T(0.5) * (P_t + P_t')
+        a_filt[t, :] = a_t
+        P_filt[t, :, :] = P_t
+    end
+
+    # Backward sampling: F_t | F_{t+1}, data_{1:t}, conditioning on the top-r block only
+    F_samp = Matrix{T}(undef, T_obs, r)
+    Fstar = Matrix{T}(T_mat[1:r, :])          # r × sd (top rows of the transition)
+    CT = Matrix{T}(P_filt[T_obs, 1:r, 1:r])
+    F_samp[T_obs, :] = a_filt[T_obs, 1:r] + _favar_state_chol(CT) * randn(T, r)
+    for t in (T_obs - 1):-1:1
+        af = a_filt[t, :]
+        Pf = Matrix{T}(P_filt[t, :, :])
+        FPf = Fstar * Pf                      # r × sd
+        Fbk = FPf * Fstar' + Sigma_eta        # r × r  (= top-r block of P_pred[t+1])
+        Fbk = T(0.5) * (Fbk + Fbk')
+        gain = Pf * Fstar' * robust_inv(Fbk)  # sd × r
+        m_full = af + gain * (F_samp[t+1, :] - Fstar * af)
+        C_full = Pf - gain * FPf              # sd × sd
+        CF = Matrix{T}(C_full[1:r, 1:r])
+        F_samp[t, :] = m_full[1:r] + _favar_state_chol(CF) * randn(T, r)
+    end
+    F_samp
+end
+
 """
     _estimate_favar_bayesian(X, Y_key, r, p, n_draws, burnin, pvn, Y_key_indices, aug_varnames) -> BayesianFAVAR
 
@@ -363,17 +444,19 @@ function _estimate_favar_bayesian(X::Matrix{T}, Y_key::Matrix{T}, r::Int, p::Int
             Y_aug[:, 1:r] = F_curr
             Y_aug[:, (r+1):n_var] = Y_key
 
-            # Estimate VAR on augmented system
+            # Draw (B, Σ) from the conjugate Normal–Inverse-Wishart posterior with a flat prior:
+            #   Σ ~ IW(T_eff, S),  vec(B) | Σ ~ N(vec(B_hat), Σ ⊗ (X'X)^{-1})
+            # reusing the BVAR direct-sampler formulas (S = residual SSR, B_hat = OLS).
             var_model = estimate_var(Y_aug, p; check_stability=false, varnames=aug_varnames)
-
-            B_curr = Matrix{T}(var_model.B)
-            Sigma_curr = Matrix{T}(var_model.Sigma)
-
-            # Add small jitter to ensure positive definiteness
-            Sigma_curr = T(0.5) * (Sigma_curr + Sigma_curr')
-            for i in 1:n_var
-                Sigma_curr[i, i] = max(Sigma_curr[i, i], T(1e-10))
-            end
+            _, X_reg = construct_var_matrices(Y_aug, p)
+            T_eff_var = size(X_reg, 1)
+            XtX_inv = Matrix{T}(robust_inv(X_reg' * X_reg))
+            XtX_inv = T(0.5) * (XtX_inv + XtX_inv')
+            B_hat = Matrix{T}(var_model.B)
+            S_post = Matrix{T}(var_model.U' * var_model.U)
+            S_post = T(0.5) * (S_post + S_post')
+            Sigma_curr = _draw_inverse_wishart(T_eff_var, S_post)
+            B_curr = B_hat + safe_cholesky(XtX_inv) * randn(T, k, n_var) * safe_cholesky(Sigma_curr)'
 
             # === Block 2: Draw Λ | F, X ===
             # Equation-by-equation: X_i = F * λ_i + e_i
@@ -402,52 +485,18 @@ function _estimate_favar_bayesian(X::Matrix{T}, Y_key::Matrix{T}, r::Int, p::Int
                 Lambda_curr[j, :] = beta_hat + sqrt(sigma2_j) * L_FtF_inv * randn(T, r)
             end
 
-            # === Block 3: Draw F | Λ, B, Σ, X, Y_key ===
-            # Simplified regression approach:
-            # Observation: X_std[t,:] = Λ * F[t,:] + e[t,:]
-            # Posterior for F[t,:]:
-            #   Precision = Λ' Σ_e^{-1} Λ + I
-            #   Mean = Precision^{-1} * Λ' Σ_e^{-1} X_std[t,:]
-            Sigma_e_inv_diag = Vector{T}(undef, N)
-            for j in 1:N
-                Sigma_e_inv_diag[j] = one(T) / max(sigma2_e[j], T(1e-10))
+            # === Block 3: Draw F | Λ, B, Σ, X_std via Carter–Kohn FFBS ===
+            # Extract the F→F companion blocks from B_curr (rows: 1 = intercept, then n_var per
+            # lag; columns = equations). A_lags[l][a,b] = coefficient of F_{t-l}[b] in equation a.
+            A_lags = Vector{Matrix{T}}(undef, p)
+            for l in 1:p
+                r0 = 2 + (l - 1) * n_var
+                block_ff = Matrix{T}(B_curr[r0:(r0 + r - 1), 1:r])   # [m,j] = coef F_{t-l}[m] in eq j
+                A_lags[l] = permutedims(block_ff)                    # -> [j,m]
             end
-
-            # Λ' Σ_e^{-1} Λ (r x r)
-            LtSinvL = zeros(T, r, r)
-            for j in 1:N
-                w = Sigma_e_inv_diag[j]
-                lam_j = @view Lambda_curr[j, :]
-                for a in 1:r, b in 1:r
-                    LtSinvL[a, b] += w * lam_j[a] * lam_j[b]
-                end
-            end
-
-            # Posterior precision and covariance
-            F_precision = LtSinvL + Matrix{T}(I, r, r)
-            F_precision = T(0.5) * (F_precision + F_precision')
-            F_cov = Matrix{T}(robust_inv(F_precision))
-            F_cov = T(0.5) * (F_cov + F_cov')
-            for i in 1:r
-                F_cov[i, i] = max(F_cov[i, i], T(1e-10))
-            end
-            L_F_cov = safe_cholesky(F_cov)
-
-            # Λ' Σ_e^{-1} (r x N)
-            LtSinv = zeros(T, r, N)
-            for j in 1:N
-                w = Sigma_e_inv_diag[j]
-                for a in 1:r
-                    LtSinv[a, j] = w * Lambda_curr[j, a]
-                end
-            end
-
-            # Draw F[t,:] for each t
-            for t in 1:T_obs
-                x_t = @view X_std[t, :]
-                f_mean = F_cov * (LtSinv * x_t)
-                F_curr[t, :] = f_mean + L_F_cov * randn(T, r)
-            end
+            Sigma_eta = Matrix{T}(Sigma_curr[1:r, 1:r])
+            Sigma_eta = T(0.5) * (Sigma_eta + Sigma_eta')
+            F_curr = _favar_ffbs(X_std, Lambda_curr, A_lags, Sigma_eta, sigma2_e, r, p)
 
             # === Store draws after burnin ===
             if iter > eff_burnin
