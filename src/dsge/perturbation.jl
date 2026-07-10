@@ -279,8 +279,8 @@ function perturbation_solver(spec::DSGESpec{T};
     nv2 = nv * nv
 
     if nv > 0
-        MkM = kron(M, M)  # nv^2 x nv^2
-        fvv = _solve_kronecker_sylvester(f_c, f_f, MkM, RHS, n, nv2;
+        # Matrix-free Kronecker power: never forms kron(M,M) (nv²×nv²) on the GMRES path (#225).
+        fvv = _solve_kronecker_sylvester(f_c, f_f, M, RHS, n, nv2, 2;
                                          gmres_tol=gmres_tol, gmres_max_outer=gmres_max_outer)
     else
         fvv = zeros(T, n, 0)
@@ -381,7 +381,7 @@ function perturbation_solver(spec::DSGESpec{T};
     #   shock slot:   no second-order (shocks are exogenous)
 
     D2_current = fvv                    # n × nv²
-    D2_lead = fvv * MkM                 # n × nv² (fvv * kron(M,M))
+    D2_lead = _apply_kron_power(fvv, M, 2)   # n × nv² (fvv * kron(M,M), matrix-free — #225)
 
     # For each Hessian H_{a,b}, the mixed contribution has the form:
     # H_{a,b}[i,j,k] * fvv_a[j, (s-1)*nv + t] * mapping_for_first_index[s, p] * Db[k, q]
@@ -427,8 +427,9 @@ function perturbation_solver(spec::DSGESpec{T};
     # Vectorizing: [(I_{nv³} ⊗ f_c) + (kron(M,M,M)' ⊗ f_f)] * vec(fvvv) = -vec(RHS_3)
 
     if nv > 0
-        MkMkM = kron(MkM, M)  # nv³ × nv³
-        fvvv = _solve_kronecker_sylvester(f_c, f_f, MkMkM, RHS_3, n, nv3;
+        # Matrix-free: the nv³×nv³ operator kron(M,M,M) is never materialized (#225) — this is
+        # what makes order-3 tractable for large models (forming it can need >100 GB).
+        fvvv = _solve_kronecker_sylvester(f_c, f_f, M, RHS_3, n, nv3, 3;
                                           gmres_tol=gmres_tol, gmres_max_outer=gmres_max_outer)
     else
         fvvv = zeros(T, n, 0)
@@ -869,40 +870,61 @@ function _accumulate_mixed_rhs!(RHS_3::Matrix{T},
 end
 
 """
-    _solve_kronecker_sylvester(f_c, f_f, Mkd, RHS, n, nvd) → Matrix{T}
+    _kron_power(M, d) → Matrix{T}
 
-Solve the Kronecker-Sylvester system:
-    f_c * X + f_f * X * Mkd = -RHS
-where X is n × nvd (nvd = nv^d for d-th order).
-
-Vectorized form: [(I_{nvd} ⊗ f_c) + (Mkd' ⊗ f_f)] * vec(X) = -vec(RHS)
-
-For small systems (n*nvd ≤ 5000), uses direct dense solve.
-For larger systems, uses matrix-free GMRES to avoid forming the (n*nvd)² system matrix.
-Memory: O(n·nvd) instead of O(n²·nvd²).
+Explicit Kronecker power `kron(M, M, …, M)` (`d` factors), matching Julia's
+left-associative `kron` ordering (`kron(M,M,M) == kron(kron(M,M), M)`). Used only on
+the small-system dense path, where forming the `nv^d × nv^d` matrix is affordable.
 """
-function _solve_kronecker_sylvester(f_c::Matrix{T}, f_f::Matrix{T},
-        Mkd::Matrix{T}, RHS::Matrix{T}, n::Int, nvd::Int;
+function _kron_power(M::AbstractMatrix{T}, d::Int) where {T<:AbstractFloat}
+    d <= 1 && return Matrix{T}(M)
+    return kron(_kron_power(M, d - 1), M)
+end
+
+"""
+    _apply_kron_power(X, M, d) → Matrix{T}
+
+Compute `X * kron(M, M, …, M)` (`d` factors) for `X` of size `n × nv^d` and `M` of
+size `nv × nv`, **without ever forming** the `nv^d × nv^d` Kronecker matrix. Uses the
+mixed-product split `kron(P, M) = kron(P, I_nv) · kron(I_p, M)` (with `P = kron(M,…,M)`
+of `d-1` factors, `p = nv^{d-1}`) recursively: right-multiply each contiguous `nv`-column
+block by `M`, then recurse on the block index. Work is `O(d · n · nv^{d+1})` and peak
+allocation `O(n · nv^d)` instead of `O(nv^{2d})`. Matches dense `X * kron(M,…,M)` to
+floating-point tolerance (the order-3 `nv³ × nv³` operator is never materialized).
+"""
+function _apply_kron_power(X::AbstractMatrix{T}, M::AbstractMatrix{T}, d::Int) where {T<:AbstractFloat}
+    d <= 0 && return Matrix{T}(X)
+    d == 1 && return Matrix{T}(X * M)
+    n  = size(X, 1)
+    nv = size(M, 1)
+    p  = nv^(d - 1)
+    # Step 1: XM = X * kron(I_p, M) — right-multiply each contiguous nv-column block by M.
+    XM = Matrix{T}(undef, n, p * nv)
+    @inbounds for i in 1:p
+        cols = ((i - 1) * nv + 1):(i * nv)
+        mul!(view(XM, :, cols), view(X, :, cols), M)
+    end
+    # Step 2: XM * kron(P, I_nv). Column col = (i-1)*nv + c (block i slow, local c fast);
+    # reshape to rows=(n·nv, encoding (r,c)), cols=p (block index i) turns the block-combine
+    # sum_i P[i,i'] XM_i into a right-multiply by P — i.e. a recursive apply on the block index.
+    C  = reshape(XM, n * nv, p)
+    CP = _apply_kron_power(C, M, d - 1)   # (n·nv) × p  ==  C * kron(M,…,M)[d-1 factors]
+    return reshape(CP, n, p * nv)
+end
+
+"""
+    _gmres_solve!(matvec!, rhs, total; gmres_tol, gmres_max_outer) → Vector{T}
+
+Matrix-free restarted GMRES for `A·x = rhs`, where the linear operator `A` is applied
+through `matvec!(y, x)` (computes `y ← A·x`). Shared by both `_solve_kronecker_sylvester`
+methods. Includes the post-loop residual guard (#215): if the outer restarts are
+exhausted before reaching `gmres_tol`, it recomputes the true relative residual and
+`@warn`s rather than silently returning an inaccurate iterate.
+"""
+function _gmres_solve!(matvec!, rhs::AbstractVector{T}, total::Int;
         gmres_tol::T=T(1e-8), gmres_max_outer::Int=20) where {T<:AbstractFloat}
-    total = n * nvd
-
-    if total <= 5000
-        LHS = kron(Matrix{T}(I, nvd, nvd), f_c) + kron(Mkd', f_f)
-        x = LHS \ (-vec(RHS))
-        return reshape(x, n, nvd)
-    end
-
-    # Matrix-free GMRES: apply A*x = [(I⊗f_c) + (Mkd'⊗f_f)] * x without forming A
-    rhs = -vec(RHS)
     rhs_norm = norm(rhs)
-    rhs_norm == 0 && return zeros(T, n, nvd)   # trivial RHS; avoids the r./beta = 0/0 → NaN below
-
-    function matvec!(y::AbstractVector, x::AbstractVector)
-        X = reshape(x, n, nvd)
-        Y = f_c * X + f_f * (X * Mkd)
-        copyto!(y, vec(Y))
-        return y
-    end
+    rhs_norm == 0 && return zeros(T, total)   # trivial RHS; avoids the r./beta = 0/0 → NaN below
 
     x = zeros(T, total)
     r = copy(rhs)
@@ -974,5 +996,77 @@ function _solve_kronecker_sylvester(f_c::Matrix{T}, f_f::Matrix{T},
         "$rel > gmres_tol $gmres_tol after $gmres_max_outer outer iterations); order-2/3 " *
         "perturbation coefficients may be inaccurate — raise gmres_max_outer or loosen gmres_tol."
 
+    return x
+end
+
+"""
+    _solve_kronecker_sylvester(f_c, f_f, Mkd, RHS, n, nvd) → Matrix{T}
+
+Solve the Kronecker-Sylvester system for a **general** operator `Mkd` (nvd × nvd):
+    f_c * X + f_f * X * Mkd = -RHS
+where X is n × nvd.
+
+Vectorized form: [(I_{nvd} ⊗ f_c) + (Mkd' ⊗ f_f)] * vec(X) = -vec(RHS)
+
+For small systems (n*nvd ≤ 5000), uses a direct dense solve.
+For larger systems, uses matrix-free GMRES to avoid forming the (n*nvd)² system matrix.
+Memory: O(n·nvd) instead of O(n²·nvd²).
+"""
+function _solve_kronecker_sylvester(f_c::Matrix{T}, f_f::Matrix{T},
+        Mkd::Matrix{T}, RHS::Matrix{T}, n::Int, nvd::Int;
+        gmres_tol::T=T(1e-8), gmres_max_outer::Int=20) where {T<:AbstractFloat}
+    total = n * nvd
+
+    if total <= 5000
+        LHS = kron(Matrix{T}(I, nvd, nvd), f_c) + kron(Mkd', f_f)
+        return reshape(LHS \ (-vec(RHS)), n, nvd)
+    end
+
+    # Matrix-free GMRES: apply A*x = [(I⊗f_c) + (Mkd'⊗f_f)] * x without forming A.
+    rhs = -vec(RHS)
+    matvec! = function (y::AbstractVector, x::AbstractVector)
+        X = reshape(x, n, nvd)
+        Y = f_c * X + f_f * (X * Mkd)
+        copyto!(y, vec(Y))
+        return y
+    end
+    x = _gmres_solve!(matvec!, rhs, total; gmres_tol=gmres_tol, gmres_max_outer=gmres_max_outer)
+    return reshape(x, n, nvd)
+end
+
+"""
+    _solve_kronecker_sylvester(f_c, f_f, M, RHS, n, nvd, order) → Matrix{T}
+
+Order-aware variant of the Kronecker-Sylvester solve where the operator is a Kronecker
+power `Mkd = kron(M, M, …, M)` (`order` factors, `nvd = nv^order`):
+    f_c * X + f_f * X * kron(M,…,M) = -RHS
+
+Identical result to the general method with `Mkd = kron(M,…,M)`, but the matrix-free
+GMRES path applies the operator via `_apply_kron_power` — the `nv^order × nv^order`
+Kronecker matrix is **never formed** (this is what makes order-3 tractable for large
+models: forming `kron(M,M,M)` for n≈35, nv≈14 would need ~120 GB). The small-system
+dense path reconstructs `kron(M,…,M)` via `_kron_power`, so its result is bit-identical
+to the general method.
+"""
+function _solve_kronecker_sylvester(f_c::Matrix{T}, f_f::Matrix{T},
+        M::Matrix{T}, RHS::Matrix{T}, n::Int, nvd::Int, order::Int;
+        gmres_tol::T=T(1e-8), gmres_max_outer::Int=20) where {T<:AbstractFloat}
+    total = n * nvd
+
+    if total <= 5000
+        Mkd = _kron_power(M, order)   # nvd × nvd — affordable when small
+        LHS = kron(Matrix{T}(I, nvd, nvd), f_c) + kron(Mkd', f_f)
+        return reshape(LHS \ (-vec(RHS)), n, nvd)
+    end
+
+    # Matrix-free GMRES; the matvec applies X·kron(M,…,M) without materializing the operator.
+    rhs = -vec(RHS)
+    matvec! = function (y::AbstractVector, x::AbstractVector)
+        X = reshape(x, n, nvd)
+        Y = f_c * X + f_f * _apply_kron_power(X, M, order)
+        copyto!(y, vec(Y))
+        return y
+    end
+    x = _gmres_solve!(matvec!, rhs, total; gmres_tol=gmres_tol, gmres_max_outer=gmres_max_outer)
     return reshape(x, n, nvd)
 end

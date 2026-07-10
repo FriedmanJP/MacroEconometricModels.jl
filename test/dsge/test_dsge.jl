@@ -779,6 +779,53 @@ end
     @test all(iszero, Z)
 end
 
+@testset "Matrix-free Kronecker power (#225 part 1)" begin
+    M = MacroEconometricModels
+    rng = Random.MersenneTwister(1225)
+
+    # _kron_power reproduces Julia's left-associative kron exactly.
+    A = randn(rng, 4, 4)
+    @test M._kron_power(A, 1) == A
+    @test M._kron_power(A, 2) == kron(A, A)
+    @test M._kron_power(A, 3) == kron(kron(A, A), A)
+
+    # _apply_kron_power(X, M, d) == X * kron(M,…,M) to fp tol, for orders 1–3, without ever
+    # forming the nv^d × nv^d Kronecker operator.
+    for (nv, nrow) in ((3, 5), (6, 7), (8, 4))
+        Mm = 0.2 .* randn(rng, nv, nv)
+        for d in 1:3
+            X = randn(rng, nrow, nv^d)
+            ref = X * M._kron_power(Mm, d)
+            got = M._apply_kron_power(X, Mm, d)
+            @test size(got) == (nrow, nv^d)
+            @test got ≈ ref rtol = 1e-10
+        end
+    end
+
+    # The order-aware Sylvester solve equals the general method with an explicit Kronecker
+    # power on the dense (small) branch — bit-identical, since both build the same operator.
+    n, nv = 4, 3
+    nv2 = nv^2                                    # total = 36 ≤ 5000 → dense
+    f_c = Matrix{Float64}(3.0I, n, n) .+ 0.05 .* randn(rng, n, n)
+    f_f = 0.05 .* randn(rng, n, n)
+    Mm = 0.2 .* randn(rng, nv, nv)
+    RHS = randn(rng, n, nv2)
+    X_gen = M._solve_kronecker_sylvester(f_c, f_f, kron(Mm, Mm), RHS, n, nv2)
+    X_ord = M._solve_kronecker_sylvester(f_c, f_f, Mm, RHS, n, nv2, 2)
+    @test X_ord ≈ X_gen rtol = 1e-12
+
+    # Large system (total > 5000) exercises the matrix-free GMRES matvec on a Kronecker power.
+    n2, nvL = 80, 9
+    nvL2 = nvL^2                                  # total = 6480 > 5000 → GMRES
+    f_cL = Matrix{Float64}(3.0I, n2, n2) .+ 0.02 .* randn(rng, n2, n2)
+    f_fL = 0.02 .* randn(rng, n2, n2)
+    MmL = 0.1 .* randn(rng, nvL, nvL)
+    RHSL = randn(rng, n2, nvL2)
+    X_ordL = M._solve_kronecker_sylvester(f_cL, f_fL, MmL, RHSL, n2, nvL2, 2)
+    resid = f_cL * X_ordL + f_fL * (X_ordL * kron(MmL, MmL)) + RHSL
+    @test norm(resid) / norm(RHSL) < 1e-6
+end
+
 @testset "Smolyak grid unisolvency (#218)" begin
     M = MacroEconometricModels
     # nodes and polynomial multi-index set come from the SAME combination loop ⇒ square
@@ -4720,6 +4767,33 @@ end
     @test size(sol.impact) == (nvars(sol), nshocks(sol))
     # simulate/irf now read sol.impact; zero shocks ⇒ stay at steady state
     @test all(abs.(simulate(sol, 30; shock_draws=zeros(30, 1))) .< 1e-8)
+end
+
+@testset "Collocation QR step == normal equations (#225 part 2)" begin
+    M = MacroEconometricModels
+    rng = Random.MersenneTwister(2252)
+    # For the same well-conditioned Jacobian and residual, the column-pivoted QR least-squares
+    # step equals the former J'J normal-equations step to tight tolerance (the collocation
+    # Newton solver now uses the QR form to avoid squaring cond(J)).
+    m = 20
+    J = Matrix{Float64}(2.0I, m, m) .+ 0.3 .* randn(rng, m, m)   # well-conditioned, square
+    R = randn(rng, m)
+    delta_qr = -(qr(J, ColumnNorm()) \ R)
+    delta_ne = -(M.robust_inv(J' * J) * (J' * R))
+    @test delta_qr ≈ delta_ne rtol = 1e-8
+
+    # End-to-end: the reused-Jacobian + QR solver still converges to a small residual.
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:projection, degree=5, verbose=false)
+    @test sol.converged
+    @test sol.residual_norm < 1e-8
 end
 
 @testset "API integration" begin

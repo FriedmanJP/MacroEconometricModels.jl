@@ -529,6 +529,14 @@ function collocation_solver(spec::DSGESpec{T};
     nodes_phys_T = Matrix{T}(nodes_phys)
     state_bounds_T = Matrix{T}(state_bounds)
 
+    # The per-iteration finite-difference Jacobian costs one residual evaluation per unknown
+    # and dominates the solve. Reuse it as a chord (modified-Newton) step, recomputing only on
+    # a fresh start, periodically, or when a reused step stalls. The QR least-squares step below
+    # (column-pivoted, rank-revealing) replaces the former J'J normal equations. (#225 part 2)
+    J = Matrix{T}(undef, 0, 0)
+    jac_stale = true
+    jac_refresh_period = 5
+
     for k in 1:max_iter
         iter = k
 
@@ -549,40 +557,42 @@ function collocation_solver(spec::DSGESpec{T};
             break
         end
 
-        # Jacobian via finite differences
-        n_unknowns = length(coeffs_vec)
-        n_residuals = length(R)
-        J = zeros(T, n_residuals, n_unknowns)
-        h_fd = max(T(1e-7), sqrt(eps(T)))
+        # (Re)compute the finite-difference Jacobian only when needed (chord-step reuse — #225).
+        if jac_stale || (k % jac_refresh_period == 0)
+            n_unknowns = length(coeffs_vec)
+            n_residuals = length(R)
+            J = zeros(T, n_residuals, n_unknowns)
+            h_fd = max(T(1e-7), sqrt(eps(T)))
 
-        if threaded && Threads.nthreads() > 1
-            Threads.@threads for i in 1:n_unknowns
-                c_plus = copy(coeffs_vec)
-                c_plus[i] += h_fd
-                R_plus = _collocation_residual(c_plus, n_vars, n_basis,
-                                                basis_matrix, nodes_phys_T,
-                                                state_idx, control_idx, spec,
-                                                quad_nodes, quad_weights,
-                                                state_bounds_T, multi_indices, ss, impact_mat)
-                J[:, i] = (R_plus .- R) ./ h_fd
+            if threaded && Threads.nthreads() > 1
+                Threads.@threads for i in 1:n_unknowns
+                    c_plus = copy(coeffs_vec)
+                    c_plus[i] += h_fd
+                    R_plus = _collocation_residual(c_plus, n_vars, n_basis,
+                                                    basis_matrix, nodes_phys_T,
+                                                    state_idx, control_idx, spec,
+                                                    quad_nodes, quad_weights,
+                                                    state_bounds_T, multi_indices, ss, impact_mat)
+                    J[:, i] = (R_plus .- R) ./ h_fd
+                end
+            else
+                for i in 1:n_unknowns
+                    c_plus = copy(coeffs_vec)
+                    c_plus[i] += h_fd
+                    R_plus = _collocation_residual(c_plus, n_vars, n_basis,
+                                                    basis_matrix, nodes_phys_T,
+                                                    state_idx, control_idx, spec,
+                                                    quad_nodes, quad_weights,
+                                                    state_bounds_T, multi_indices, ss, impact_mat)
+                    J[:, i] = (R_plus .- R) ./ h_fd
+                end
             end
-        else
-            for i in 1:n_unknowns
-                c_plus = copy(coeffs_vec)
-                c_plus[i] += h_fd
-                R_plus = _collocation_residual(c_plus, n_vars, n_basis,
-                                                basis_matrix, nodes_phys_T,
-                                                state_idx, control_idx, spec,
-                                                quad_nodes, quad_weights,
-                                                state_bounds_T, multi_indices, ss, impact_mat)
-                J[:, i] = (R_plus .- R) ./ h_fd
-            end
+            jac_stale = false
         end
 
-        # Gauss-Newton step with line search
-        JtJ = J' * J
-        JtR = J' * R
-        delta = -(robust_inv(JtJ) * JtR)
+        # Gauss-Newton step via column-pivoted QR least squares (solves min‖J·δ + R‖; avoids
+        # squaring cond(J) through the former J'J normal equations — #225 part 2).
+        delta = -(qr(J, ColumnNorm()) \ R)
 
         # Line search
         alpha = one(T)
@@ -607,6 +617,11 @@ function collocation_solver(spec::DSGESpec{T};
             coeffs_vec .+= best_alpha .* delta
         else
             coeffs_vec .+= T(0.01) .* delta
+            jac_stale = true      # no descent with the reused Jacobian ⇒ refresh next iteration
+        end
+        # A reused (chord) step that barely reduces the residual signals a stale Jacobian.
+        if best_norm > T(0.9) * residual_norm
+            jac_stale = true
         end
     end
 
