@@ -265,19 +265,40 @@ function estimate_lp(Y::AbstractMatrix{T}, shock_var::Int, horizon::Int;
     vcov = Vector{Matrix{T}}(undef, horizon + 1)
     T_eff = Vector{Int}(undef, horizon + 1)
 
+    # The regressor sample shrinks by exactly one row per horizon: `construct_lp_matrices`
+    # uses a fixed start `t_start = lags+1` and `t_end = T_obs - h`, and each regressor row
+    # depends only on `t` (not `h`). So `X_h` at horizon `h` is `X_{h-1}` with its last row
+    # dropped, and the Gram matrix downdates by rank one:
+    #   X_h'X_h = X_{h-1}'X_{h-1} - x_last x_last'.
+    # We carry `XtX` across horizons and apply the downdate in place instead of recomputing the
+    # O(T·k²) product each horizon; the response `X_h'Y_h` still changes with `h` (y_{t+h}) and
+    # is recomputed. `robust_inv` is reused unchanged, so the per-horizon inverse reproduces the
+    # direct `robust_inv(X_h'X_h)` to rtol≈1e-10 (rank-1 downdate reorders the reduction). (#210 box E)
+    XtX = Matrix{T}(undef, 0, 0)   # persists across horizons; initialized at h == 0
+    X_prev = Matrix{T}(undef, 0, 0)
+
     for h in 0:horizon
         Y_h, X_h, valid_idx = construct_lp_matrices(Y, shock_var, h, lags;
                                                      response_vars=response_vars)
         T_eff[h + 1] = length(valid_idx)
 
+        if h == 0
+            XtX = X_h' * X_h
+        else
+            # Rank-1 downdate by the row dropped from the previous horizon (t = T_obs - h + 1).
+            x_last = X_prev[end, :]
+            mul!(XtX, x_last, x_last', -one(T), one(T))   # XtX -= x_last x_last'
+        end
+
         # OLS: B_h = (X'X)^{-1} X'Y
-        XtX_inv = robust_inv(X_h' * X_h)
+        XtX_inv = robust_inv(XtX)
         B_h = XtX_inv * (X_h' * Y_h)
         U_h = Y_h - X_h * B_h
 
         B[h + 1] = B_h
         residuals[h + 1] = U_h
         vcov[h + 1] = _lp_robust_vcov(X_h, U_h, cov_estimator, h)
+        X_prev = X_h
     end
 
     LPModel(Matrix{T}(Y), shock_var, response_vars, horizon, lags,

@@ -1818,3 +1818,43 @@ using Random
         delete!(MacroEconometricModels._COV_REGISTRY, :newey_west_test)
     end
 end
+
+@testset "LP Gram rank-1 downdate (#210 box E)" begin
+    # Box E carries the Gram matrix `X_h'X_h` across horizons and applies a rank-1 downdate
+    # (dropping the one row that leaves the shrinking sample) instead of recomputing the product
+    # each horizon. The rank-1 downdate legitimately reorders the reduction, so the resulting
+    # per-horizon inverse — and the LP coefficients/vcov derived from it — must equal the direct
+    # `robust_inv(X_h'X_h)` computation to rtol≈1e-10 (not necessarily bit-for-bit).
+    Random.seed!(4242)
+    Tn, n = 220, 3
+    Y = zeros(Tn, n)
+    for t in 2:Tn
+        Y[t, :] = 0.6 .* Y[t-1, :] .+ randn(n)
+    end
+    horizon, lags = 12, 4
+    model = estimate_lp(Y, 1, horizon; lags=lags, cov_type=:newey_west)
+
+    maxrel_inv = 0.0
+    maxrel_B = 0.0
+    maxrel_V = 0.0
+    for h in 0:horizon
+        Y_h, X_h, _ = MacroEconometricModels.construct_lp_matrices(Y, 1, h, lags;
+                                                                   response_vars=collect(1:n))
+        # direct (pre-refactor) per-horizon inverse and OLS coefficients
+        XtX_inv_direct = MacroEconometricModels.robust_inv(X_h' * X_h)
+        B_direct = XtX_inv_direct * (X_h' * Y_h)
+        U_direct = Y_h - X_h * B_direct
+        V_direct = MacroEconometricModels._lp_robust_vcov(X_h, U_direct,
+                        model.cov_estimator, h)
+
+        rel(a, b) = maximum(abs.(a .- b)) / max(1e-12, maximum(abs.(b)))
+        # the downdated inverse must match the direct inverse to rtol 1e-10
+        maxrel_inv = max(maxrel_inv, rel(MacroEconometricModels.robust_inv(X_h' * X_h), XtX_inv_direct))
+        maxrel_B = max(maxrel_B, rel(model.B[h + 1], B_direct))
+        maxrel_V = max(maxrel_V, rel(model.vcov[h + 1], V_direct))
+        @test isapprox(model.B[h + 1], B_direct; rtol=1e-10)
+        @test isapprox(model.vcov[h + 1], V_direct; rtol=1e-10)
+    end
+    @test maxrel_B < 1e-10
+    @test maxrel_V < 1e-10
+end
