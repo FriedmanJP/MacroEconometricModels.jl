@@ -42,8 +42,11 @@ _data_hd = simulate(_sol_hd, 100)
 sol = solve(_spec_hd)
 data = simulate(sol, 100)
 
-# Decompose observed data into shock contributions
-hd = historical_decomposition(sol, data, [:Y, :C, :K, :A])
+# Decompose observed data into shock contributions. With more observables (4)
+# than structural shocks (1), measurement error is required to keep the
+# observation covariance nonsingular.
+hd = historical_decomposition(sol, data, [:Y, :C, :K, :A];
+                              measurement_error=fill(0.01, 4))
 report(hd)
 ```
 
@@ -57,7 +60,8 @@ verified = verify_decomposition(hd)
 **Recipe 3: HD visualization**
 
 ```@example dsge_hd
-hd_plot = historical_decomposition(_sol_hd, _data_hd, [:Y, :C, :K, :A])
+hd_plot = historical_decomposition(_sol_hd, _data_hd, [:Y, :C, :K, :A];
+                                   measurement_error=fill(0.01, 4))
 nothing # hide
 ```
 
@@ -91,7 +95,8 @@ The decomposition satisfies an exact additive identity --- the sum of all shock 
 
 ```@example dsge_hd
 # Linear HD with Cholesky-ordered state space
-hd_lin = historical_decomposition(sol, data, [:Y, :C, :K, :A])
+hd_lin = historical_decomposition(sol, data, [:Y, :C, :K, :A];
+                                  measurement_error=fill(0.01, 4))
 
 # Verify the additive identity
 verify_decomposition(hd_lin)
@@ -113,7 +118,8 @@ The single-shock RBC model attributes all output movements to the technology sho
 By default, only observed variables are decomposed. To decompose all state variables including latent states:
 
 ```@example dsge_hd
-hd_all = historical_decomposition(sol, data, [:Y, :C, :K, :A]; states=:all)
+hd_all = historical_decomposition(sol, data, [:Y, :C, :K, :A]; states=:all,
+                                  measurement_error=fill(0.01, 4))
 report(hd_all)
 ```
 
@@ -122,7 +128,7 @@ report(hd_all)
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
 | `states` | `Symbol` | `:observables` | Decompose `:observables` only or `:all` states |
-| `measurement_error` | `Vector` | `nothing` | Measurement error standard deviations (small diagonal default) |
+| `measurement_error` | `Vector`/`Symbol` | `nothing` | Measurement error std devs, `:auto` (10% of each series' variance), or `nothing` for zero ME (requires `n_obs ≤ n_shocks`) |
 
 ### Return Values
 
@@ -164,8 +170,10 @@ where:
 # Second-order perturbation solution
 psol = perturbation_solver(_spec_hd; order=2)
 
-# Nonlinear HD via counterfactual simulation
+# Nonlinear HD via counterfactual simulation (2 observables vs 1 shock:
+# measurement error keeps the observation covariance nonsingular)
 hd_nl = historical_decomposition(psol, _data_hd, [:Y, :A];
+                                  measurement_error=[0.01, 0.01],
                                   N=200, N_back=50, rng=Random.MersenneTwister(42))
 report(hd_nl)
 ```
@@ -177,7 +185,7 @@ Since the RBC model has a single shock, the counterfactual approach reduces to z
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
 | `states` | `Symbol` | `:observables` | Decompose `:observables` only or `:all` states |
-| `measurement_error` | `Vector` | `nothing` | Measurement error standard deviations |
+| `measurement_error` | `Vector`/`Symbol` | `nothing` | Measurement error std devs, `:auto`, or `nothing` for zero ME (requires `n_obs ≤ n_shocks`) |
 | `N` | `Int` | `1000` | Number of forward particles |
 | `N_back` | `Int` | `100` | Number of backward simulation trajectories |
 | `rng` | `AbstractRNG` | `default_rng()` | Random number generator |
@@ -198,19 +206,23 @@ Two modes are available:
 Y_bayes = simulate(_sol_hd, 100)
 Y_obs = Y_bayes[:, [1, 4]]  # observe Y and A
 
+# 2 observables vs 1 structural shock: :auto adds per-observable
+# measurement error scaled to each series' variance
 bayes = estimate_dsge_bayes(_spec_hd, Y_obs, [0.9];
     priors=Dict(:ρ => Beta(5, 2)),
     method=:mh, n_draws=2000, burnin=1000,
-    observables=[:Y, :A])
+    observables=[:Y, :A], measurement_error=:auto)
 
 # Fast path: posterior mode only
-hd_mode = historical_decomposition(bayes, Y_bayes, [:Y, :A]; mode_only=true)
+hd_mode = historical_decomposition(bayes, Y_bayes, [:Y, :A]; mode_only=true,
+                                   measurement_error=[0.01, 0.01])
 report(hd_mode)
 ```
 
 ```@example dsge_hd
 # Full posterior: re-solve at each draw with credible bands
 hd_bayes = historical_decomposition(bayes, Y_bayes, [:Y, :A];
+                                     measurement_error=[0.01, 0.01],
                                      n_draws=50, quantiles=[0.16, 0.5, 0.84])
 report(hd_bayes)
 ```
@@ -224,7 +236,7 @@ The `mode_only` path is orders of magnitude faster --- it calls the linear HD ex
 | `mode_only` | `Bool` | `false` | Use posterior mode only (fast, no credible bands) |
 | `n_draws` | `Int` | `200` | Number of posterior draws to subsample |
 | `quantiles` | `Vector{<:Real}` | `[0.16, 0.5, 0.84]` | Quantile levels for credible bands |
-| `measurement_error` | `Vector` | `nothing` | Measurement error standard deviations |
+| `measurement_error` | `Vector`/`Symbol` | `nothing` | Measurement error std devs, `:auto`, or `nothing` for zero ME (requires `n_obs ≤ n_shocks`) |
 | `states` | `Symbol` | `:observables` | Decompose `:observables` only or `:all` states |
 
 ---
@@ -242,9 +254,11 @@ The Kalman and particle smoothers can be used independently of the historical de
     full decomposition.
 
 ```@example dsge_hd
-# Build the state space (internal helpers — subject to change)
+# Build the state space (internal helpers — subject to change).
+# Zero measurement error requires n_obs ≤ n_shocks, so pass explicit
+# measurement-error SDs for the 2-observable, 1-shock setup.
 observables = [:Y, :A]
-Z, d, H = MacroEconometricModels._build_observation_equation(_spec_hd, observables, nothing)
+Z, d, H = MacroEconometricModels._build_observation_equation(_spec_hd, observables, [0.01, 0.01])
 ss = MacroEconometricModels._build_state_space(_sol_hd, Z, d, H)
 
 # Data in deviations from steady state (n_obs × T_obs)
@@ -311,8 +325,9 @@ end
 sol_ce = solve(spec)
 data_ce = simulate(sol_ce, 100)
 
-# Historical decomposition
-hd_ce = historical_decomposition(sol_ce, data_ce, [:Y, :C, :K, :A])
+# Historical decomposition (4 observables vs 1 shock: add measurement error)
+hd_ce = historical_decomposition(sol_ce, data_ce, [:Y, :C, :K, :A];
+                                 measurement_error=fill(0.01, 4))
 report(hd_ce)
 ```
 
@@ -349,6 +364,8 @@ The stacked bar chart shows the technology shock's contribution to each variable
 4. **Particle smoother is stochastic.** The FFBSi smoother produces different results across runs. Set `rng=Random.MersenneTwister(seed)` for reproducibility. Increase `N` and `N_back` to reduce Monte Carlo variance.
 
 5. **Bayesian HD discards indeterminate draws.** When re-solving at posterior parameter draws, any draw that produces an indeterminate solution is silently discarded. If many draws are discarded, the credible bands may be too narrow. Check that the prior supports the determinacy region.
+
+6. **More observables than shocks requires measurement error.** With zero measurement error the model-implied observation covariance is singular whenever `n_obs > n_shocks`, and the smoother throws a `StochasticSingularityError`. Pass `measurement_error` as a vector of standard deviations (or `:auto` for 10% of each series' variance) or reduce the observable set.
 
 ---
 

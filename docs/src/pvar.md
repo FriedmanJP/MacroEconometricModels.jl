@@ -82,8 +82,8 @@ model = estimate_pvar(pd, 1; dependent_vars=dep_vars, steps=:twostep)
 irfs = pvar_oirf(model, 10)
 decomp = pvar_fevd(model, 10)
 
-# Bootstrap confidence intervals
-boot = pvar_bootstrap_irf(model, 10; n_draws=50, ci=0.90)
+# Bootstrap confidence intervals (n_draws=20 for a fast build; use 500+ in applied work)
+boot = pvar_bootstrap_irf(model, 10; n_draws=20, ci=0.90)
 ```
 
 ---
@@ -374,9 +374,10 @@ Group-level block bootstrap preserves the within-group time structure. For each 
 ```@example pvar
 model = estimate_pvar(pd, 1; dependent_vars=["rgdpna", "emp", "hc"], steps=:twostep)
 
+# n_draws=20 keeps the documentation build fast; use 500+ in applied work
 boot = pvar_bootstrap_irf(model, 20;
     irf_type=:oirf,   # or :girf
-    n_draws=50,
+    n_draws=20,
     ci=0.95
 )
 nothing # hide
@@ -497,8 +498,8 @@ report(stab)
 irfs = pvar_oirf(model, 10)
 decomp = pvar_fevd(model, 10)
 
-# Bootstrap confidence intervals
-boot = pvar_bootstrap_irf(model, 10; n_draws=50, ci=0.90)
+# Bootstrap confidence intervals (n_draws=20 for a fast build; use 500+ in applied work)
+boot = pvar_bootstrap_irf(model, 10; n_draws=20, ci=0.90)
 
 # Academic references
 refs(model)

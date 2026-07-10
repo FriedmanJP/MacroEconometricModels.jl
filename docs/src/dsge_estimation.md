@@ -16,6 +16,7 @@ end
 spec = compute_steady_state(spec)
 sol = solve(spec; method=:gensys)
 Y_data = simulate(sol, 200)
+y_obs = Y_data[:, [1]]  # observed series for :y — data must be T × n_obs
 ```
 
 ## Quick Start
@@ -31,7 +32,7 @@ report(est)
 **Recipe 2: Bayesian SMC**
 
 ```@example dsge_estimation
-result = estimate_dsge_bayes(spec, Y_data, [0.9];
+result = estimate_dsge_bayes(spec, y_obs, [0.9];
     priors=Dict(:rho => Beta(5, 2)),
     method=:smc, observables=[:y], n_smc=50)
 report(result)
@@ -40,7 +41,7 @@ report(result)
 **Recipe 3: SMC``^2`` with projection solver**
 
 ```julia
-result = estimate_dsge_bayes(spec, Y_data, [0.9];
+result = estimate_dsge_bayes(spec, y_obs, [0.9];
     priors=Dict(:rho => Beta(5, 2)),
     method=:smc2, observables=[:y], n_smc=200, n_particles=100,
     solver=:projection, solver_kwargs=(degree=5,))
@@ -279,7 +280,7 @@ The algorithm proceeds in six steps:
 The adaptive tempering schedule selects ``\phi_s`` to maintain the effective sample size at the target fraction (default: 50%). This avoids both degenerate weights (too large a step) and unnecessary computation (too small a step).
 
 ```@example dsge_estimation
-result_smc = estimate_dsge_bayes(spec, Y_data, [0.9];
+result_smc = estimate_dsge_bayes(spec, y_obs, [0.9];
     priors=Dict(:rho => Beta(5, 2)),
     method=:smc, observables=[:y], n_smc=50)
 report(result_smc)
@@ -300,7 +301,7 @@ The particle filter estimates the likelihood as:
 where ``M`` is the number of inner particles (set via `n_particles`) and ``w_t^{(j)}`` are the importance weights at time ``t``.
 
 ```julia
-result = estimate_dsge_bayes(spec, Y_data, [0.9];
+result = estimate_dsge_bayes(spec, y_obs, [0.9];
     priors=Dict(:rho => Beta(5, 2)),
     method=:smc2, observables=[:y],
     n_smc=200, n_particles=100,
@@ -337,7 +338,7 @@ where:
 The product ``\alpha_1 \cdot \alpha_2`` equals the standard MH acceptance probability in expectation, so the chain targets the exact posterior. The computational savings come from rejecting bad proposals cheaply at Stage 1 without ever running the full CSMC.
 
 ```julia
-result = estimate_dsge_bayes(spec, Y_data, [0.9];
+result = estimate_dsge_bayes(spec, y_obs, [0.9];
     priors=Dict(:rho => Beta(5, 2)),
     method=:smc2, observables=[:y],
     n_smc=200, n_particles=500,
@@ -361,7 +362,7 @@ where:
 - ``c`` is the step-size scalar adapted to target 23.4% acceptance
 
 ```@example dsge_estimation
-result_mh = estimate_dsge_bayes(spec, Y_data, [0.9];
+result_mh = estimate_dsge_bayes(spec, y_obs, [0.9];
     priors=Dict(:rho => Beta(5, 2)),
     method=:mh, observables=[:y],
     n_draws=50, burnin=25)
@@ -383,7 +384,7 @@ RWMH is simple to implement and diagnose but converges slowly for high-dimension
 | `n_draws` | `Int` | `10000` | Total draws for RWMH (including burnin) |
 | `burnin` | `Int` | `5000` | Burnin draws for RWMH |
 | `ess_target` | `Float64` | `0.5` | Target ESS fraction for adaptive tempering |
-| `measurement_error` | `Vector{<:Real}` | `nothing` | Measurement error standard deviations |
+| `measurement_error` | `Vector{<:Real}`/`Symbol` | `nothing` | Measurement error std devs, `:auto` (10% of each series' variance), or `nothing` for zero ME (requires `n_obs ≤ n_shocks`) |
 | `solver` | `Symbol` | `:gensys` | DSGE solver method |
 | `solver_kwargs` | `NamedTuple` | `()` | Additional solver keyword arguments |
 | `delayed_acceptance` | `Bool` | `false` | Two-stage delayed acceptance (SMC``^2`` only) |
@@ -553,10 +554,12 @@ est_gmm = estimate_dsge(spec, Y_data, [:ρ, :σ];
                          method=:irf_matching, var_lags=4, irf_horizon=20)
 report(est_gmm)
 
-# 4. Bayesian: SMC estimation
+# 4. Bayesian: SMC estimation. Data must be T × n_obs (only the observed
+#    columns), and 2 observables vs 1 shock requires measurement error.
 priors = Dict(:ρ => Beta(5, 2), :σ => InverseGamma(2, 0.01))
-est_bayes = estimate_dsge_bayes(spec, Y_data, [0.9, 0.01];
-    priors=priors, method=:smc, observables=[:Y, :C], n_smc=2000)
+est_bayes = estimate_dsge_bayes(spec, Y_data[:, [1, 2]], [0.9, 0.01];
+    priors=priors, method=:smc, observables=[:Y, :C], n_smc=2000,
+    measurement_error=:auto)
 report(est_bayes)
 
 # 5. Posterior analysis

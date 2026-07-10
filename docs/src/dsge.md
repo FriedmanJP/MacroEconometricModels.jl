@@ -121,7 +121,7 @@ nothing # hide
 using Distributions
 result = estimate_dsge_bayes(spec, data, [0.99, 0.9, 0.01];
     priors=Dict(:β => Beta(99, 1), :ρ => Beta(5, 2), :σ => InverseGamma(2, 0.01)),
-    method=:smc2, observables=[:y], n_smc=200, n_particles=100,
+    method=:smc2, observables=[:Y], n_smc=200, n_particles=100,
     solver=:projection, solver_kwargs=(degree=5,))
 report(result)
 ```
@@ -130,7 +130,10 @@ report(result)
 
 ```@example dsge_overview
 data_hd = simulate(sol, 100)
-hd = historical_decomposition(sol, data_hd, [:Y, :C, :K, :A])
+# 4 observables vs 1 structural shock: measurement error keeps the
+# observation covariance nonsingular
+hd = historical_decomposition(sol, data_hd, [:Y, :C, :K, :A];
+                              measurement_error=fill(0.01, 4))
 report(hd)
 ```
 
