@@ -1,24 +1,157 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Panel VAR · MacroEconometricModels.jl</title><meta name="title" content="Panel VAR · MacroEconometricModels.jl"/><meta property="og:title" content="Panel VAR · MacroEconometricModels.jl"/><meta property="twitter:title" content="Panel VAR · MacroEconometricModels.jl"/><meta name="description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:description" content="Documentation for MacroEconometricModels.jl."/><meta property="twitter:description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:url" content="https://FriedmanJP.github.io/MacroEconometricModels.jl/pvar/"/><meta property="twitter:url" content="https://FriedmanJP.github.io/MacroEconometricModels.jl/pvar/"/><link rel="canonical" href="https://FriedmanJP.github.io/MacroEconometricModels.jl/pvar/"/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script><link href="../assets/custom.css" rel="stylesheet" type="text/css"/><script src="../assets/theme-toggle.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">MacroEconometricModels.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><a class="tocitem" href="../data/">Data Management</a></li><li><span class="tocitem">Univariate Models</span><ul><li><a class="tocitem" href="../filters/">Time Series Filters</a></li><li><a class="tocitem" href="../x13/">X-13ARIMA-SEATS</a></li><li><a class="tocitem" href="../spectral/">Spectral Analysis</a></li><li><a class="tocitem" href="../arima/">ARIMA</a></li><li><a class="tocitem" href="../volatility/">Volatility Models</a></li></ul></li><li><span class="tocitem">Multivariate Models</span><ul><li><a class="tocitem" href="../manual/">VAR</a></li><li><a class="tocitem" href="../bayesian/">Bayesian VAR</a></li><li><a class="tocitem" href="../vecm/">VECM</a></li><li><a class="tocitem" href="../lp/">Local Projections</a></li><li><a class="tocitem" href="../factormodels/">Factor Models</a></li><li><a class="tocitem" href="../favar/">FAVAR</a></li></ul></li><li><span class="tocitem">Cross-Sectional Models</span><ul><li><a class="tocitem" href="../regression/">Linear Regression</a></li><li><a class="tocitem" href="../binary_choice/">Binary Choice Models</a></li><li><a class="tocitem" href="../ordered_multinomial/">Ordered &amp; Multinomial</a></li></ul></li><li><span class="tocitem">Panel Models</span><ul><li class="is-active"><a class="tocitem" href>Panel VAR</a><ul class="internal"><li><a class="tocitem" href="#Quick-Start"><span>Quick Start</span></a></li><li><a class="tocitem" href="#Model-Specification"><span>Model Specification</span></a></li><li><a class="tocitem" href="#Panel-Data-Preparation"><span>Panel Data Preparation</span></a></li><li><a class="tocitem" href="#GMM-Estimation"><span>GMM Estimation</span></a></li><li><a class="tocitem" href="#Fixed-Effects-OLS"><span>Fixed-Effects OLS</span></a></li><li><a class="tocitem" href="#Instrument-Management"><span>Instrument Management</span></a></li><li><a class="tocitem" href="#Structural-Analysis"><span>Structural Analysis</span></a></li><li><a class="tocitem" href="#Bootstrap-Confidence-Intervals"><span>Bootstrap Confidence Intervals</span></a></li><li><a class="tocitem" href="#Specification-Tests"><span>Specification Tests</span></a></li><li><a class="tocitem" href="#Lag-Selection"><span>Lag Selection</span></a></li><li><a class="tocitem" href="#Complete-Example"><span>Complete Example</span></a></li><li><a class="tocitem" href="#Common-Pitfalls"><span>Common Pitfalls</span></a></li><li><a class="tocitem" href="#References"><span>References</span></a></li></ul></li><li><a class="tocitem" href="../panel_reg/">Panel Regression</a></li><li><a class="tocitem" href="../did/">Difference-in-Differences</a></li><li><a class="tocitem" href="../event_study/">Event Study LP</a></li></ul></li><li><span class="tocitem">DSGE Models</span><ul><li><a class="tocitem" href="../dsge/">Overview</a></li><li><a class="tocitem" href="../dsge_linear/">Linear Solvers</a></li><li><a class="tocitem" href="../dsge_nonlinear/">Nonlinear Methods</a></li><li><a class="tocitem" href="../dsge_constraints/">Constraints</a></li><li><a class="tocitem" href="../dsge_estimation/">Estimation</a></li><li><a class="tocitem" href="../dsge_hd/">Historical Decomposition</a></li><li><a class="tocitem" href="../dsge_ha/">Heterogeneous Agents</a></li></ul></li><li><span class="tocitem">Innovation Accounting</span><ul><li><a class="tocitem" href="../innovation_accounting/">Overview</a></li><li><a class="tocitem" href="../ia_irf/">Impulse Responses</a></li><li><a class="tocitem" href="../ia_fevd/">Variance Decomposition</a></li><li><a class="tocitem" href="../ia_hd/">Historical Decomposition</a></li></ul></li><li><a class="tocitem" href="../structural_identification/">Structural Identification</a></li><li><span class="tocitem">Statistical Identification</span><ul><li><a class="tocitem" href="../nongaussian/">Overview</a></li><li><a class="tocitem" href="../id_nongaussian/">Non-Gaussian Methods</a></li><li><a class="tocitem" href="../id_heteroskedastic/">Heteroskedasticity</a></li><li><a class="tocitem" href="../id_testing/">Testing</a></li></ul></li><li><span class="tocitem">Nowcasting</span><ul><li><a class="tocitem" href="../nowcast/">Overview</a></li><li><a class="tocitem" href="../nowcast_dfm/">DFM Nowcasting</a></li><li><a class="tocitem" href="../nowcast_bvar/">BVAR Nowcasting</a></li><li><a class="tocitem" href="../nowcast_bridge/">Bridge Equations</a></li><li><a class="tocitem" href="../nowcast_news/">News Decomposition</a></li></ul></li><li><span class="tocitem">Hypothesis Tests</span><ul><li><a class="tocitem" href="../tests/">Overview</a></li><li><a class="tocitem" href="../tests_unitroot/">Unit Root &amp; Cointegration</a></li><li><a class="tocitem" href="../tests_unitroot_advanced/">Advanced Unit Root</a></li><li><a class="tocitem" href="../tests_breaks/">Structural Breaks</a></li><li><a class="tocitem" href="../tests_panel/">Panel Tests</a></li><li><a class="tocitem" href="../tests_diagnostics/">Model Diagnostics</a></li></ul></li><li><a class="tocitem" href="../plotting/">Visualization</a></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../api/">Overview</a></li><li><a class="tocitem" href="../api_types/">Types</a></li><li><a class="tocitem" href="../api_functions/">Functions</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Panel Models</a></li><li class="is-active"><a href>Panel VAR</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Panel VAR</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/FriedmanJP/MacroEconometricModels.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/FriedmanJP/MacroEconometricModels.jl/blob/main/docs/src/pvar.md#" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="pvar_page"><a class="docs-heading-anchor" href="#pvar_page">Panel VAR</a><a id="pvar_page-1"></a><a class="docs-heading-anchor-permalink" href="#pvar_page" title="Permalink"></a></h1><p><strong>MacroEconometricModels.jl</strong> provides a complete Panel VAR (PVAR) implementation for dynamic panel data analysis. The package supports GMM estimation via Arellano-Bond first-difference and Blundell-Bond system instruments, fixed-effects OLS, and a full suite of structural analysis and specification tests.</p><ul><li><strong>GMM estimation</strong>: First-difference (Arellano &amp; Bond 1991) and system (Blundell &amp; Bond 1998) with Windmeijer (2005) corrected standard errors</li><li><strong>FE-OLS</strong>: Within estimator with cluster-robust standard errors for large-<span>$T$</span> panels</li><li><strong>Transformations</strong>: First-differencing and forward orthogonal deviations (Arellano &amp; Bover 1995)</li><li><strong>Structural analysis</strong>: Orthogonalized IRF (Cholesky), generalized IRF (Pesaran &amp; Shin 1998), FEVD, and stability diagnostics</li><li><strong>Bootstrap inference</strong>: Group-level block bootstrap for IRF confidence intervals</li><li><strong>Specification tests</strong>: Hansen (1982) J-test, Andrews-Lu (2001) MMSC, and lag selection</li></ul><pre><code class="language-julia hljs">using MacroEconometricModels, Random, DataFrames
-Random.seed!(42)
-pwt = load_example(:pwt)
-_pd_raw = apply_tcode(pwt, 5)
-_dep_vars = [&quot;rgdpna&quot;, &quot;emp&quot;, &quot;hc&quot;]
-_dep_idx = [findfirst(==(v), _pd_raw.varnames) for v in _dep_vars]
-_df = DataFrame(_pd_raw.data[:, _dep_idx], _dep_vars)
-_df.id = _pd_raw.group_id
-_df.time = _pd_raw.time_id
-_mask = [all(isfinite, row) for row in eachrow(Matrix(_df[:, _dep_vars]))]
-_df = _df[_mask, :]
-pd = xtset(_df, :id, :time)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">&lt;&lt; @setup-block not executed in draft mode &gt;&gt;</code></pre><h2 id="Quick-Start"><a class="docs-heading-anchor" href="#Quick-Start">Quick Start</a><a id="Quick-Start-1"></a><a class="docs-heading-anchor-permalink" href="#Quick-Start" title="Permalink"></a></h2><p><strong>Recipe 1: FD-GMM with two-step estimation</strong></p><pre><code class="language-julia hljs"># PWT panel data (pre-loaded in setup: log first-differenced, NaN-filtered)
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Panel VAR · MacroEconometricModels.jl</title><meta name="title" content="Panel VAR · MacroEconometricModels.jl"/><meta property="og:title" content="Panel VAR · MacroEconometricModels.jl"/><meta property="twitter:title" content="Panel VAR · MacroEconometricModels.jl"/><meta name="description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:description" content="Documentation for MacroEconometricModels.jl."/><meta property="twitter:description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:url" content="https://FriedmanJP.github.io/MacroEconometricModels.jl/pvar/"/><meta property="twitter:url" content="https://FriedmanJP.github.io/MacroEconometricModels.jl/pvar/"/><link rel="canonical" href="https://FriedmanJP.github.io/MacroEconometricModels.jl/pvar/"/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script><link href="../assets/custom.css" rel="stylesheet" type="text/css"/><script src="../assets/theme-toggle.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">MacroEconometricModels.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><a class="tocitem" href="../data/">Data Management</a></li><li><span class="tocitem">Univariate Models</span><ul><li><a class="tocitem" href="../filters/">Time Series Filters</a></li><li><a class="tocitem" href="../x13/">X-13ARIMA-SEATS</a></li><li><a class="tocitem" href="../spectral/">Spectral Analysis</a></li><li><a class="tocitem" href="../arima/">ARIMA</a></li><li><a class="tocitem" href="../volatility/">Volatility Models</a></li></ul></li><li><span class="tocitem">Multivariate Models</span><ul><li><a class="tocitem" href="../manual/">VAR</a></li><li><a class="tocitem" href="../bayesian/">Bayesian VAR</a></li><li><a class="tocitem" href="../vecm/">VECM</a></li><li><a class="tocitem" href="../lp/">Local Projections</a></li><li><a class="tocitem" href="../factormodels/">Factor Models</a></li><li><a class="tocitem" href="../favar/">FAVAR</a></li></ul></li><li><span class="tocitem">Cross-Sectional Models</span><ul><li><a class="tocitem" href="../regression/">Linear Regression</a></li><li><a class="tocitem" href="../binary_choice/">Binary Choice Models</a></li><li><a class="tocitem" href="../ordered_multinomial/">Ordered &amp; Multinomial</a></li></ul></li><li><span class="tocitem">Panel Models</span><ul><li class="is-active"><a class="tocitem" href>Panel VAR</a><ul class="internal"><li><a class="tocitem" href="#Quick-Start"><span>Quick Start</span></a></li><li><a class="tocitem" href="#Model-Specification"><span>Model Specification</span></a></li><li><a class="tocitem" href="#Panel-Data-Preparation"><span>Panel Data Preparation</span></a></li><li><a class="tocitem" href="#GMM-Estimation"><span>GMM Estimation</span></a></li><li><a class="tocitem" href="#Fixed-Effects-OLS"><span>Fixed-Effects OLS</span></a></li><li><a class="tocitem" href="#Instrument-Management"><span>Instrument Management</span></a></li><li><a class="tocitem" href="#Structural-Analysis"><span>Structural Analysis</span></a></li><li><a class="tocitem" href="#Bootstrap-Confidence-Intervals"><span>Bootstrap Confidence Intervals</span></a></li><li><a class="tocitem" href="#Specification-Tests"><span>Specification Tests</span></a></li><li><a class="tocitem" href="#Lag-Selection"><span>Lag Selection</span></a></li><li><a class="tocitem" href="#Complete-Example"><span>Complete Example</span></a></li><li><a class="tocitem" href="#Common-Pitfalls"><span>Common Pitfalls</span></a></li><li><a class="tocitem" href="#References"><span>References</span></a></li></ul></li><li><a class="tocitem" href="../panel_reg/">Panel Regression</a></li><li><a class="tocitem" href="../did/">Difference-in-Differences</a></li><li><a class="tocitem" href="../event_study/">Event Study LP</a></li></ul></li><li><span class="tocitem">DSGE Models</span><ul><li><a class="tocitem" href="../dsge/">Overview</a></li><li><a class="tocitem" href="../dsge_linear/">Linear Solvers</a></li><li><a class="tocitem" href="../dsge_nonlinear/">Nonlinear Methods</a></li><li><a class="tocitem" href="../dsge_constraints/">Constraints</a></li><li><a class="tocitem" href="../dsge_estimation/">Estimation</a></li><li><a class="tocitem" href="../dsge_hd/">Historical Decomposition</a></li><li><a class="tocitem" href="../dsge_ha/">Heterogeneous Agents</a></li></ul></li><li><span class="tocitem">Innovation Accounting</span><ul><li><a class="tocitem" href="../innovation_accounting/">Overview</a></li><li><a class="tocitem" href="../ia_irf/">Impulse Responses</a></li><li><a class="tocitem" href="../ia_fevd/">Variance Decomposition</a></li><li><a class="tocitem" href="../ia_hd/">Historical Decomposition</a></li></ul></li><li><a class="tocitem" href="../structural_identification/">Structural Identification</a></li><li><span class="tocitem">Statistical Identification</span><ul><li><a class="tocitem" href="../nongaussian/">Overview</a></li><li><a class="tocitem" href="../id_nongaussian/">Non-Gaussian Methods</a></li><li><a class="tocitem" href="../id_heteroskedastic/">Heteroskedasticity</a></li><li><a class="tocitem" href="../id_testing/">Testing</a></li></ul></li><li><span class="tocitem">Nowcasting</span><ul><li><a class="tocitem" href="../nowcast/">Overview</a></li><li><a class="tocitem" href="../nowcast_dfm/">DFM Nowcasting</a></li><li><a class="tocitem" href="../nowcast_bvar/">BVAR Nowcasting</a></li><li><a class="tocitem" href="../nowcast_bridge/">Bridge Equations</a></li><li><a class="tocitem" href="../nowcast_news/">News Decomposition</a></li></ul></li><li><span class="tocitem">Hypothesis Tests</span><ul><li><a class="tocitem" href="../tests/">Overview</a></li><li><a class="tocitem" href="../tests_unitroot/">Unit Root &amp; Cointegration</a></li><li><a class="tocitem" href="../tests_unitroot_advanced/">Advanced Unit Root</a></li><li><a class="tocitem" href="../tests_breaks/">Structural Breaks</a></li><li><a class="tocitem" href="../tests_panel/">Panel Tests</a></li><li><a class="tocitem" href="../tests_diagnostics/">Model Diagnostics</a></li></ul></li><li><a class="tocitem" href="../plotting/">Visualization</a></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../api/">Overview</a></li><li><a class="tocitem" href="../api_types/">Types</a></li><li><a class="tocitem" href="../api_functions/">Functions</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Panel Models</a></li><li class="is-active"><a href>Panel VAR</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Panel VAR</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/FriedmanJP/MacroEconometricModels.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/FriedmanJP/MacroEconometricModels.jl/blob/main/docs/src/pvar.md#" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="pvar_page"><a class="docs-heading-anchor" href="#pvar_page">Panel VAR</a><a id="pvar_page-1"></a><a class="docs-heading-anchor-permalink" href="#pvar_page" title="Permalink"></a></h1><p><strong>MacroEconometricModels.jl</strong> provides a complete Panel VAR (PVAR) implementation for dynamic panel data analysis. The package supports GMM estimation via Arellano-Bond first-difference and Blundell-Bond system instruments, fixed-effects OLS, and a full suite of structural analysis and specification tests.</p><ul><li><strong>GMM estimation</strong>: First-difference (Arellano &amp; Bond 1991) and system (Blundell &amp; Bond 1998) with Windmeijer (2005) corrected standard errors</li><li><strong>FE-OLS</strong>: Within estimator with cluster-robust standard errors for large-<span>$T$</span> panels</li><li><strong>Transformations</strong>: First-differencing and forward orthogonal deviations (Arellano &amp; Bover 1995)</li><li><strong>Structural analysis</strong>: Orthogonalized IRF (Cholesky), generalized IRF (Pesaran &amp; Shin 1998), FEVD, and stability diagnostics</li><li><strong>Bootstrap inference</strong>: Group-level block bootstrap for IRF confidence intervals</li><li><strong>Specification tests</strong>: Hansen (1982) J-test, Andrews-Lu (2001) MMSC, and lag selection</li></ul><h2 id="Quick-Start"><a class="docs-heading-anchor" href="#Quick-Start">Quick Start</a><a id="Quick-Start-1"></a><a class="docs-heading-anchor-permalink" href="#Quick-Start" title="Permalink"></a></h2><p><strong>Recipe 1: FD-GMM with two-step estimation</strong></p><pre><code class="language-julia hljs"># PWT panel data (pre-loaded in setup: log first-differenced, NaN-filtered)
 # Arellano-Bond two-step GMM
 model = estimate_pvar(pd, 2; dependent_vars=[&quot;rgdpna&quot;, &quot;emp&quot;, &quot;hc&quot;], steps=:twostep)
-report(model)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">&lt;&lt; @example-block not executed in draft mode &gt;&gt;</code></pre><p><strong>Recipe 2: System GMM (Blundell-Bond)</strong></p><pre><code class="language-julia hljs"># System GMM adds level equations instrumented by lagged differences
+report(model)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">        Panel VAR(2) — FD-GMM
+
+
+
+  Method                      FD-GMM
+  Transformation    First-Difference
+  Steps                      twostep
+  Endogenous vars                  3
+  Lags                             2
+  Parameters                      18
+  Groups                          38
+  Obs/group               30/62.5/70
+  Observations                  2375
+  Instruments                   1485
+
+                                Equation: rgdpna
+
+                 Coef.   Std.Err.                  z    P&gt;|z|       [95%       ⋯
+
+  L1.rgdpna     14.865        0.0     6.3639203433e6   &lt;0.001     14.865     1 ⋯
+  L1.emp      -35.1773        0.0    -3.6103751573e6   &lt;0.001   -35.1773   -35 ⋯
+  L1.hc        365.957        0.0   8.884099672153e8   &lt;0.001    365.957    36 ⋯
+  L2.rgdpna    13.8451        0.0     2.6446290545e6   &lt;0.001    13.8451    13 ⋯
+  L2.emp      -15.8697        0.0    -2.4078610977e6   &lt;0.001   -15.8697   -15 ⋯
+  L2.hc       -63.4304        0.0    -1.5591986799e6   &lt;0.001   -63.4304   -63 ⋯
+
+                                                               2 columns omitted
+                                 Equation: emp
+
+                 Coef.   Std.Err.              z    P&gt;|z|       [95%        CI ⋯
+
+  L1.rgdpna     8.8902        0.0    493492.0516   &lt;0.001     8.8902     8.890 ⋯
+  L1.emp      -23.6274        0.0   -502832.3414   &lt;0.001   -23.6275   -23.627 ⋯
+  L1.hc         201.26     0.0004      483375.55   &lt;0.001    201.259    201.26 ⋯
+  L2.rgdpna     8.5249        0.0    499607.6049   &lt;0.001     8.5249     8.524 ⋯
+  L2.emp       -9.1529        0.0   -508323.9883   &lt;0.001    -9.1529    -9.152 ⋯
+  L2.hc        -26.827     0.0001   -445851.8414   &lt;0.001   -26.8271   -26.826 ⋯
+
+                                                               2 columns omitted
+                                  Equation: hc
+
+                Coef.   Std.Err.                    z    P&gt;|z|      [95%       ⋯
+
+  L1.rgdpna    0.0321        0.0      2.17792269407e7   &lt;0.001    0.0321    0. ⋯
+  L1.emp      -0.0841        0.0   -1.8295470990287e9   &lt;0.001   -0.0841   -0. ⋯
+  L1.hc        0.3963        0.0     1.738605883484e9   &lt;0.001    0.3963    0. ⋯
+  L2.rgdpna    0.0162        0.0      1.98626201162e7   &lt;0.001    0.0162    0. ⋯
+  L2.emp       0.0035        0.0       2.6832557823e6   &lt;0.001    0.0035    0. ⋯
+  L2.hc       -0.2356        0.0                    —        —   -0.2356   -0. ⋯
+
+                                                               2 columns omitted</code></pre><p><strong>Recipe 2: System GMM (Blundell-Bond)</strong></p><pre><code class="language-julia hljs"># System GMM adds level equations instrumented by lagged differences
 model_sys = estimate_pvar(pd, 2; dependent_vars=[&quot;rgdpna&quot;, &quot;emp&quot;, &quot;hc&quot;],
                           system_instruments=true, steps=:twostep)
-report(model_sys)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">&lt;&lt; @example-block not executed in draft mode &gt;&gt;</code></pre><p><strong>Recipe 3: Fixed-effects OLS</strong></p><pre><code class="language-julia hljs"># Within estimator with cluster-robust SEs
+report(model_sys)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">      Panel VAR(2) — System GMM
+
+
+
+  Method                  System GMM
+  Transformation    First-Difference
+  Steps                      twostep
+  Endogenous vars                  3
+  Lags                             2
+  Parameters                      18
+  Groups                          38
+  Obs/group             60/125.0/140
+  Observations                  4750
+  Instruments                   1489
+
+                                Equation: rgdpna
+
+                 Coef.   Std.Err.                 z    P&gt;|z|       [95%        ⋯
+
+  L1.rgdpna     -2.888        0.0   -9.3960365812e6   &lt;0.001     -2.888     -2 ⋯
+  L1.emp       15.7792        0.0     7.287955222e6   &lt;0.001    15.7792    15. ⋯
+  L1.hc       -35.5968        0.0   -4.5523592976e6   &lt;0.001   -35.5968   -35. ⋯
+  L2.rgdpna    -4.2956        0.0   -9.2087883979e6   &lt;0.001    -4.2956    -4. ⋯
+  L2.emp        5.6968        0.0   1.29347768105e7   &lt;0.001     5.6968     5. ⋯
+  L2.hc        34.8843        0.0   1.14546246182e7   &lt;0.001    34.8843    34. ⋯
+
+                                                               2 columns omitted
+                             Equation: emp
+
+                 Coef.   Std.Err.   z   P&gt;|z|       [95%        CI]
+
+  L1.rgdpna    -0.9845        0.0   —       —    -0.9845    -0.9845
+  L1.emp        5.5093        0.0   —       —     5.5093     5.5093
+  L1.hc       -23.5903        0.0   —       —   -23.5903   -23.5903
+  L2.rgdpna    -1.7216        0.0   —       —    -1.7216    -1.7216
+  L2.emp        2.8443        0.0   —       —     2.8443     2.8443
+  L2.hc        21.0249        0.0   —       —    21.0249    21.0249
+
+                                  Equation: hc
+
+                Coef.   Std.Err.                   z    P&gt;|z|      [95%        ⋯
+
+  L1.rgdpna    0.0324        0.0   1.7353250021456e9   &lt;0.001    0.0324    0.0 ⋯
+  L1.emp      -0.0748        0.0    -4.39215638888e7   &lt;0.001   -0.0748   -0.0 ⋯
+  L1.hc        0.6893        0.0                   —        —    0.6893    0.6 ⋯
+  L2.rgdpna    0.0274        0.0   2.1150314835142e9   &lt;0.001    0.0274    0.0 ⋯
+  L2.emp      -0.0084        0.0     -5.2032980143e6   &lt;0.001   -0.0084   -0.0 ⋯
+  L2.hc       -0.1856        0.0    -2.75383421855e7   &lt;0.001   -0.1856   -0.1 ⋯
+
+                                                               2 columns omitted</code></pre><p><strong>Recipe 3: Fixed-effects OLS</strong></p><pre><code class="language-julia hljs"># Within estimator with cluster-robust SEs
 model_fe = estimate_pvar_feols(pd, 2; dependent_vars=[&quot;rgdpna&quot;, &quot;emp&quot;, &quot;hc&quot;])
-report(model_fe)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">&lt;&lt; @example-block not executed in draft mode &gt;&gt;</code></pre><p><strong>Recipe 4: Specification tests and lag selection</strong></p><pre><code class="language-julia hljs">dep_vars = [&quot;rgdpna&quot;, &quot;emp&quot;, &quot;hc&quot;]
+report(model_fe)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">        Panel VAR(2) — FE-OLS
+
+
+
+  Method                      FE-OLS
+  Transformation    Within Demeaning
+  Steps                            —
+  Endogenous vars                  3
+  Lags                             2
+  Parameters                      18
+  Groups                          38
+  Obs/group               31/63.5/71
+  Observations                  2413
+
+                               Equation: rgdpna
+
+                Coef.   Std.Err.         z    P&gt;|z|      [95%       CI]
+
+  L1.rgdpna    0.3399     0.0428    7.9407   &lt;0.001     0.256    0.4238   ***
+  L1.emp      -0.1477      0.056   -2.6366   0.0084   -0.2574   -0.0379   ***
+  L1.hc        0.1504     0.1621    0.9277   0.3536   -0.1674    0.4682
+  L2.rgdpna    0.0682      0.029    2.3501   0.0188    0.0113    0.1251   **
+  L2.emp       -0.137     0.0444   -3.0871    0.002    -0.224     -0.05   ***
+  L2.hc        0.1298      0.165     0.787   0.4313   -0.1935    0.4531
+
+                                Equation: emp
+
+                Coef.   Std.Err.         z    P&gt;|z|      [95%      CI]
+
+  L1.rgdpna    0.1109     0.0175     6.333   &lt;0.001    0.0766   0.1452   ***
+  L1.emp       0.2996     0.0463    6.4669   &lt;0.001    0.2088   0.3903   ***
+  L1.hc        0.0558     0.0633    0.8819   0.3778   -0.0683   0.1799
+  L2.rgdpna     -0.03     0.0182   -1.6462   0.0997   -0.0658   0.0057   *
+  L2.emp      -0.0103     0.0392   -0.2638   0.7919   -0.0871   0.0664
+  L2.hc        -0.067     0.0705   -0.9497   0.3423   -0.2052   0.0712
+
+                                 Equation: hc
+
+                Coef.   Std.Err.         z    P&gt;|z|      [95%      CI]
+
+  L1.rgdpna       0.0     0.0022    0.0222   0.9823   -0.0042   0.0043
+  L1.emp        0.002     0.0057    0.3456   0.7297   -0.0092   0.0132
+  L1.hc        0.6232     0.0988    6.3054   &lt;0.001    0.4295    0.817   ***
+  L2.rgdpna   -0.0022     0.0024   -0.9167   0.3593   -0.0068   0.0025
+  L2.emp       0.0026     0.0052     0.495   0.6206   -0.0076   0.0128
+  L2.hc         0.122     0.0765    1.5946   0.1108    -0.028    0.272</code></pre><p><strong>Recipe 4: Specification tests and lag selection</strong></p><pre><code class="language-julia hljs">dep_vars = [&quot;rgdpna&quot;, &quot;emp&quot;, &quot;hc&quot;]
 
 model = estimate_pvar(pd, 2; dependent_vars=dep_vars, steps=:twostep)
 
@@ -30,7 +163,229 @@ report(j)
 mmsc = pvar_mmsc(model)
 
 # Lag selection across candidate models
-sel = pvar_lag_selection(pd, 4; dependent_vars=dep_vars)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">&lt;&lt; @example-block not executed in draft mode &gt;&gt;</code></pre><p><strong>Recipe 5: Structural analysis with bootstrap CIs</strong></p><pre><code class="language-julia hljs">dep_vars = [&quot;rgdpna&quot;, &quot;emp&quot;, &quot;hc&quot;]
+sel = pvar_lag_selection(pd, 4; dependent_vars=dep_vars)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(table = Any[1 -10923.1536 -2327.0439 -5758.2781; 2 -10860.8317 -2322.9304 -5733.9647; 3 -8536.91 -74.6737 -3458.5386; 4 -11242.6283 -2873.3737 -6223.1372], best_bic = 4, best_aic = 4, best_hqic = 4, models = PVARModel{Float64}[<span class="sgr1">        Panel VAR(1) — FD-GMM</span>
+
+ <span class="sgr1">                 </span> <span class="sgr1">                  </span>
+
+  Method                      FD-GMM
+  Transformation    First-Difference
+  Steps                      twostep
+  Endogenous vars                  3
+  Lags                             1
+  Parameters                       9
+  Groups                          38
+  Obs/group               31/63.5/71
+  Observations                  2413
+  Instruments                   1488
+
+<span class="sgr1">                                Equation: rgdpna</span>
+
+ <span class="sgr1">           </span> <span class="sgr1">    Coef. </span> <span class="sgr1"> Std.Err. </span> <span class="sgr1">                 z </span> <span class="sgr1">  P&gt;|z| </span> <span class="sgr1">     [95% </span> <span class="sgr1">   </span> ⋯
+
+  L1.rgdpna     0.3007        0.0    1.122925988717e8   &lt;0.001     0.3007      ⋯
+  L1.emp        0.5289        0.0     5.03334715881e7   &lt;0.001     0.5289      ⋯
+  L1.hc       -16.9821        0.0   -1.485331518151e8   &lt;0.001   -16.9821   -1 ⋯
+
+<span class="sgr36">                                                               2 columns omitted</span>
+<span class="sgr1">                                 Equation: emp</span>
+
+ <span class="sgr1">           </span> <span class="sgr1">   Coef. </span> <span class="sgr1"> Std.Err. </span> <span class="sgr1">                z </span> <span class="sgr1">  P&gt;|z| </span> <span class="sgr1">    [95% </span> <span class="sgr1">     C</span> ⋯
+
+  L1.rgdpna    0.3599        0.0    5.49152869308e7   &lt;0.001    0.3599    0.35 ⋯
+  L1.emp      -0.0175        0.0   -9.62341627416e7   &lt;0.001   -0.0175   -0.01 ⋯
+  L1.hc        3.3964        0.0    1.66250977064e7   &lt;0.001    3.3964    3.39 ⋯
+
+<span class="sgr36">                                                               2 columns omitted</span>
+<span class="sgr1">                                  Equation: hc</span>
+
+ <span class="sgr1">           </span> <span class="sgr1">   Coef. </span> <span class="sgr1"> Std.Err. </span> <span class="sgr1">           z </span> <span class="sgr1">  P&gt;|z| </span> <span class="sgr1">    [95% </span> <span class="sgr1">     CI] </span> <span class="sgr1"> </span> ⋯
+
+  L1.rgdpna    0.0048        0.0     30791.584   &lt;0.001    0.0048    0.0048    ⋯
+  L1.emp       0.0054        0.0   317716.2867   &lt;0.001    0.0054    0.0054    ⋯
+  L1.hc       -0.1364        0.0   -31863.1512   &lt;0.001   -0.1365   -0.1364    ⋯
+
+<span class="sgr36">                                                                1 column omitted</span>
+, <span class="sgr1">        Panel VAR(2) — FD-GMM</span>
+
+ <span class="sgr1">                 </span> <span class="sgr1">                  </span>
+
+  Method                      FD-GMM
+  Transformation    First-Difference
+  Steps                      twostep
+  Endogenous vars                  3
+  Lags                             2
+  Parameters                      18
+  Groups                          38
+  Obs/group               30/62.5/70
+  Observations                  2375
+  Instruments                   1485
+
+<span class="sgr1">                                Equation: rgdpna</span>
+
+ <span class="sgr1">           </span> <span class="sgr1">    Coef. </span> <span class="sgr1"> Std.Err. </span> <span class="sgr1">                z </span> <span class="sgr1">  P&gt;|z| </span> <span class="sgr1">     [95% </span> <span class="sgr1">    </span> ⋯
+
+  L1.rgdpna     14.865        0.0     6.3639203433e6   &lt;0.001     14.865     1 ⋯
+  L1.emp      -35.1773        0.0    -3.6103751573e6   &lt;0.001   -35.1773   -35 ⋯
+  L1.hc        365.957        0.0   8.884099672153e8   &lt;0.001    365.957    36 ⋯
+  L2.rgdpna    13.8451        0.0     2.6446290545e6   &lt;0.001    13.8451    13 ⋯
+  L2.emp      -15.8697        0.0    -2.4078610977e6   &lt;0.001   -15.8697   -15 ⋯
+  L2.hc       -63.4304        0.0    -1.5591986799e6   &lt;0.001   -63.4304   -63 ⋯
+
+<span class="sgr36">                                                               2 columns omitted</span>
+<span class="sgr1">                                 Equation: emp</span>
+
+ <span class="sgr1">           </span> <span class="sgr1">    Coef. </span> <span class="sgr1"> Std.Err. </span> <span class="sgr1">            z </span> <span class="sgr1">  P&gt;|z| </span> <span class="sgr1">     [95% </span> <span class="sgr1">      CI</span> ⋯
+
+  L1.rgdpna     8.8902        0.0    493492.0516   &lt;0.001     8.8902     8.890 ⋯
+  L1.emp      -23.6274        0.0   -502832.3414   &lt;0.001   -23.6275   -23.627 ⋯
+  L1.hc         201.26     0.0004      483375.55   &lt;0.001    201.259    201.26 ⋯
+  L2.rgdpna     8.5249        0.0    499607.6049   &lt;0.001     8.5249     8.524 ⋯
+  L2.emp       -9.1529        0.0   -508323.9883   &lt;0.001    -9.1529    -9.152 ⋯
+  L2.hc        -26.827     0.0001   -445851.8414   &lt;0.001   -26.8271   -26.826 ⋯
+
+<span class="sgr36">                                                               2 columns omitted</span>
+<span class="sgr1">                                  Equation: hc</span>
+
+ <span class="sgr1">           </span> <span class="sgr1">   Coef. </span> <span class="sgr1"> Std.Err. </span> <span class="sgr1">                  z </span> <span class="sgr1">  P&gt;|z| </span> <span class="sgr1">    [95% </span> <span class="sgr1">    </span> ⋯
+
+  L1.rgdpna    0.0321        0.0      2.17792269407e7   &lt;0.001    0.0321    0. ⋯
+  L1.emp      -0.0841        0.0   -1.8295470990287e9   &lt;0.001   -0.0841   -0. ⋯
+  L1.hc        0.3963        0.0     1.738605883484e9   &lt;0.001    0.3963    0. ⋯
+  L2.rgdpna    0.0162        0.0      1.98626201162e7   &lt;0.001    0.0162    0. ⋯
+  L2.emp       0.0035        0.0       2.6832557823e6   &lt;0.001    0.0035    0. ⋯
+  L2.hc       -0.2356        0.0                    —        —   -0.2356   -0. ⋯
+
+<span class="sgr36">                                                               2 columns omitted</span>
+, <span class="sgr1">        Panel VAR(3) — FD-GMM</span>
+
+ <span class="sgr1">                 </span> <span class="sgr1">                  </span>
+
+  Method                      FD-GMM
+  Transformation    First-Difference
+  Steps                      twostep
+  Endogenous vars                  3
+  Lags                             3
+  Parameters                      27
+  Groups                          38
+  Obs/group               29/61.5/69
+  Observations                  2337
+  Instruments                   1479
+
+<span class="sgr1">                                Equation: rgdpna</span>
+
+ <span class="sgr1">           </span> <span class="sgr1">    Coef. </span> <span class="sgr1"> Std.Err. </span> <span class="sgr1">                 z </span> <span class="sgr1">  P&gt;|z| </span> <span class="sgr1">     [95% </span> <span class="sgr1">   </span> ⋯
+
+  L1.rgdpna     3.6964        0.0      5.5774269669e6   &lt;0.001     3.6964      ⋯
+  L1.emp        0.9356        0.0      4.3384293798e6   &lt;0.001     0.9356      ⋯
+  L1.hc       -26.6079        0.0   -4.042863009778e8   &lt;0.001   -26.6079   -2 ⋯
+  L2.rgdpna     8.1045        0.0      7.2445050529e6   &lt;0.001     8.1045      ⋯
+  L2.emp       -14.602        0.0     -8.0002801138e6   &lt;0.001    -14.602    - ⋯
+  L2.hc        -7.0243        0.0       -1.93246336e6   &lt;0.001    -7.0243    - ⋯
+  L3.rgdpna     3.9627        0.0      9.3617692349e6   &lt;0.001     3.9627      ⋯
+  L3.emp        4.0326        0.0     1.09206541101e7   &lt;0.001     4.0326      ⋯
+  L3.hc          3.785        0.0      4.2940043968e6   &lt;0.001      3.785      ⋯
+
+<span class="sgr36">                                                               2 columns omitted</span>
+<span class="sgr1">                                 Equation: emp</span>
+
+ <span class="sgr1">           </span> <span class="sgr1">    Coef. </span> <span class="sgr1"> Std.Err. </span> <span class="sgr1">                 z </span> <span class="sgr1">  P&gt;|z| </span> <span class="sgr1">     [95% </span> <span class="sgr1">   </span> ⋯
+
+  L1.rgdpna     7.2867        0.0    2.330020537097e8   &lt;0.001     7.2867      ⋯
+  L1.emp       -1.7474        0.0   -1.721687885939e8   &lt;0.001    -1.7474    - ⋯
+  L1.hc        30.8274        0.0     2.17401755872e8   &lt;0.001    30.8274    3 ⋯
+  L2.rgdpna     4.5688        0.0    2.238270906166e8   &lt;0.001     4.5688      ⋯
+  L2.emp       -7.7074        0.0    -2.21042794586e8   &lt;0.001    -7.7074    - ⋯
+  L2.hc       -36.1153        0.0     -2.2834108139e6   &lt;0.001   -36.1154   -3 ⋯
+  L3.rgdpna    -0.4437        0.0   -1.146647325116e8   &lt;0.001    -0.4437    - ⋯
+  L3.emp       -7.9858        0.0   -1.885260650243e8   &lt;0.001    -7.9858    - ⋯
+  L3.hc         3.2455        0.0         647177.0635   &lt;0.001     3.2455      ⋯
+
+<span class="sgr36">                                                               2 columns omitted</span>
+<span class="sgr1">                                  Equation: hc</span>
+
+ <span class="sgr1">           </span> <span class="sgr1">   Coef. </span> <span class="sgr1"> Std.Err. </span> <span class="sgr1">                z </span> <span class="sgr1">  P&gt;|z| </span> <span class="sgr1">    [95% </span> <span class="sgr1">     C</span> ⋯
+
+  L1.rgdpna    0.0121        0.0     5.7588232084e6   &lt;0.001    0.0121    0.01 ⋯
+  L1.emp      -0.0183        0.0    -2.3453094702e6   &lt;0.001   -0.0183   -0.01 ⋯
+  L1.hc        0.3311        0.0    1.85307992042e7   &lt;0.001    0.3311    0.33 ⋯
+  L2.rgdpna   -0.0382        0.0   -6.53766745664e7   &lt;0.001   -0.0382   -0.03 ⋯
+  L2.emp       0.0745        0.0    1.29672506599e7   &lt;0.001    0.0745    0.07 ⋯
+  L2.hc        -0.176        0.0    -5.5658577841e6   &lt;0.001    -0.176    -0.1 ⋯
+  L3.rgdpna   -0.0455        0.0   -2.38926809987e7   &lt;0.001   -0.0455   -0.04 ⋯
+  L3.emp      -0.0492        0.0    -5.4710227713e6   &lt;0.001   -0.0492   -0.04 ⋯
+  L3.hc        0.1366        0.0     7.9094202091e6   &lt;0.001    0.1366    0.13 ⋯
+
+<span class="sgr36">                                                               2 columns omitted</span>
+, <span class="sgr1">        Panel VAR(4) — FD-GMM</span>
+
+ <span class="sgr1">                 </span> <span class="sgr1">                  </span>
+
+  Method                      FD-GMM
+  Transformation    First-Difference
+  Steps                      twostep
+  Endogenous vars                  3
+  Lags                             4
+  Parameters                      36
+  Groups                          38
+  Obs/group               28/60.5/68
+  Observations                  2299
+  Instruments                   1470
+
+<span class="sgr1">                                Equation: rgdpna</span>
+
+ <span class="sgr1">           </span> <span class="sgr1">   Coef. </span> <span class="sgr1"> Std.Err. </span> <span class="sgr1">                  z </span> <span class="sgr1">  P&gt;|z| </span> <span class="sgr1">    [95% </span> <span class="sgr1">    </span> ⋯
+
+  L1.rgdpna    0.9869        0.0     5.068877500583e8   &lt;0.001    0.9869    0. ⋯
+  L1.emp       2.3956        0.0      1.90549454228e7   &lt;0.001    2.3956    2. ⋯
+  L1.hc       -4.4152        0.0     -1.05080108815e7   &lt;0.001   -4.4152   -4. ⋯
+  L2.rgdpna    0.7739        0.0     4.242189630028e8   &lt;0.001    0.7739    0. ⋯
+  L2.emp       -2.217        0.0     -2.41113096062e7   &lt;0.001    -2.217    -2 ⋯
+  L2.hc        -8.096        0.0   -3.1681797155146e9   &lt;0.001    -8.096    -8 ⋯
+  L3.rgdpna    0.4655        0.0    2.1505281231219e9   &lt;0.001    0.4655    0. ⋯
+  L3.emp       1.1656        0.0     6.431083167966e8   &lt;0.001    1.1656    1. ⋯
+  L3.hc       -3.6427        0.0     -1.21892382122e7   &lt;0.001   -3.6427   -3. ⋯
+  L4.rgdpna   -0.7666        0.0     -2.69895287137e7   &lt;0.001   -0.7666   -0. ⋯
+  L4.emp        0.734        0.0       1.0428614713e7   &lt;0.001     0.734     0 ⋯
+  L4.hc       -7.6272        0.0    -8.931048235222e8   &lt;0.001   -7.6272   -7. ⋯
+
+<span class="sgr36">                                                               2 columns omitted</span>
+<span class="sgr1">                                 Equation: emp</span>
+
+ <span class="sgr1">           </span> <span class="sgr1">   Coef. </span> <span class="sgr1"> Std.Err. </span> <span class="sgr1">                 z </span> <span class="sgr1">  P&gt;|z| </span> <span class="sgr1">    [95% </span> <span class="sgr1">     </span> ⋯
+
+  L1.rgdpna    0.7058        0.0     1.78305024402e7   &lt;0.001    0.7058    0.7 ⋯
+  L1.emp      -0.6725        0.0                   —        —   -0.6725   -0.6 ⋯
+  L1.hc       -3.8111        0.0     -8.5849341684e6   &lt;0.001   -3.8111   -3.8 ⋯
+  L2.rgdpna    0.4454        0.0                   —        —    0.4454    0.4 ⋯
+  L2.emp      -0.9631        0.0    -2.16392163091e7   &lt;0.001   -0.9631   -0.9 ⋯
+  L2.hc       -3.1834        0.0    -1.76736468965e7   &lt;0.001   -3.1834   -3.1 ⋯
+  L3.rgdpna    0.2432        0.0                   —        —    0.2432    0.2 ⋯
+  L3.emp      -0.1265        0.0     -1.5277935103e6   &lt;0.001   -0.1265   -0.1 ⋯
+  L3.hc       -0.7042        0.0    -8.04210383227e8   &lt;0.001   -0.7042   -0.7 ⋯
+  L4.rgdpna   -0.1487        0.0     -2.8375299007e6   &lt;0.001   -0.1487   -0.1 ⋯
+  L4.emp       0.1751        0.0      4.0689645304e6   &lt;0.001    0.1751    0.1 ⋯
+  L4.hc       -0.4079        0.0   -1.830083830881e8   &lt;0.001   -0.4079   -0.4 ⋯
+
+<span class="sgr36">                                                               2 columns omitted</span>
+<span class="sgr1">                                  Equation: hc</span>
+
+ <span class="sgr1">           </span> <span class="sgr1">   Coef. </span> <span class="sgr1"> Std.Err. </span> <span class="sgr1">                 z </span> <span class="sgr1">  P&gt;|z| </span> <span class="sgr1">    [95% </span> <span class="sgr1">     </span> ⋯
+
+  L1.rgdpna    0.0473        0.0       1.426574911e7   &lt;0.001    0.0473    0.0 ⋯
+  L1.emp      -0.1198        0.0     -1.3795916284e7   &lt;0.001   -0.1198   -0.1 ⋯
+  L1.hc       -0.2023        0.0    -2.25026487723e8   &lt;0.001   -0.2023   -0.2 ⋯
+  L2.rgdpna   -0.0445        0.0    -1.19564139296e7   &lt;0.001   -0.0445   -0.0 ⋯
+  L2.emp       0.0014        0.0         168571.2387   &lt;0.001    0.0014    0.0 ⋯
+  L2.hc       -0.0805        0.0    -1.02048694791e7   &lt;0.001   -0.0805   -0.0 ⋯
+  L3.rgdpna   -0.0415        0.0   -4.026285673783e8   &lt;0.001   -0.0415   -0.0 ⋯
+  L3.emp       0.0184        0.0     9.39766235195e7   &lt;0.001    0.0184    0.0 ⋯
+  L3.hc        0.1005        0.0    2.210233409082e8   &lt;0.001    0.1005    0.1 ⋯
+  L4.rgdpna    0.0094        0.0    1.403246922837e8   &lt;0.001    0.0094    0.0 ⋯
+  L4.emp      -0.1242        0.0    -1.58332572519e7   &lt;0.001   -0.1242   -0.1 ⋯
+  L4.hc        0.4486        0.0     1.63998860847e7   &lt;0.001    0.4486    0.4 ⋯
+
+<span class="sgr36">                                                               2 columns omitted</span>
+])</code></pre><p><strong>Recipe 5: Structural analysis with bootstrap CIs</strong></p><pre><code class="language-julia hljs">dep_vars = [&quot;rgdpna&quot;, &quot;emp&quot;, &quot;hc&quot;]
 
 model = estimate_pvar(pd, 1; dependent_vars=dep_vars, steps=:twostep)
 
@@ -39,17 +394,23 @@ irfs = pvar_oirf(model, 10)
 decomp = pvar_fevd(model, 10)
 
 # Bootstrap confidence intervals
-boot = pvar_bootstrap_irf(model, 10; n_draws=50, ci=0.90)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">&lt;&lt; @example-block not executed in draft mode &gt;&gt;</code></pre><hr/><h2 id="Model-Specification"><a class="docs-heading-anchor" href="#Model-Specification">Model Specification</a><a id="Model-Specification-1"></a><a class="docs-heading-anchor-permalink" href="#Model-Specification" title="Permalink"></a></h2><p>The Panel VAR(p) model for entity <span>$i$</span> at time <span>$t$</span> is:</p><p class="math-container">\[\mathbf{y}_{i,t} = \boldsymbol{\mu}_i + \sum_{l=1}^{p} \mathbf{A}_l \, \mathbf{y}_{i,t-l} + \boldsymbol{\varepsilon}_{i,t}, \quad i = 1, \ldots, N, \quad t = 1, \ldots, T_i\]</p><p>where:</p><ul><li><span>$\mathbf{y}_{i,t} \in \mathbb{R}^m$</span> is the <span>$m \times 1$</span> vector of endogenous variables for entity <span>$i$</span></li><li><span>$\boldsymbol{\mu}_i \in \mathbb{R}^m$</span> is an entity-specific <strong>fixed effect</strong></li><li><span>$\mathbf{A}_l$</span> is the <span>$m \times m$</span> coefficient matrix for lag <span>$l$</span></li><li><span>$\boldsymbol{\varepsilon}_{i,t} \sim (0, \Sigma)$</span> are i.i.d. innovations</li><li><span>$N$</span> is the number of panel units and <span>$T_i$</span> is the time dimension for unit <span>$i$</span></li></ul><p>The fixed effect <span>$\boldsymbol{\mu}_i$</span> is correlated with <span>$\mathbf{y}_{i,t-l}$</span> by construction, making OLS on the level equation inconsistent. Two strategies address this:</p><ol><li><strong>Transform away the fixed effect</strong> (first-differencing or forward orthogonal deviations) and estimate by GMM using lagged levels as instruments</li><li><strong>Demean within groups</strong> (within estimator) and estimate by OLS –- consistent for large <span>$T$</span> but subject to Nickell (1981) bias when <span>$T$</span> is small relative to <span>$N$</span></li></ol><div class="admonition is-info" id="Fixed-Effects-and-Nickell-Bias-8a62b0ee76598c0a"><header class="admonition-header">Fixed Effects and Nickell Bias<a class="admonition-anchor" href="#Fixed-Effects-and-Nickell-Bias-8a62b0ee76598c0a" title="Permalink"></a></header><div class="admonition-body"><p>The within estimator (FE-OLS) is biased of order <span>$O(1/T)$</span> in dynamic panels (Nickell 1981). For panels with small <span>$T$</span> (e.g., <span>$T &lt; 20$</span>), GMM estimation is strongly preferred. For larger <span>$T$</span>, FE-OLS and GMM converge to the same estimates.</p></div></div><hr/><h2 id="Panel-Data-Preparation"><a class="docs-heading-anchor" href="#Panel-Data-Preparation">Panel Data Preparation</a><a id="Panel-Data-Preparation-1"></a><a class="docs-heading-anchor-permalink" href="#Panel-Data-Preparation" title="Permalink"></a></h2><p>Panel VAR estimation requires a <code>PanelData</code> object. The built-in Penn World Table provides a balanced panel of 38 OECD countries with annual macroeconomic indicators:</p><pre><code class="language-julia hljs"># Load PWT --- already a PanelData object
+boot = pvar_bootstrap_irf(model, 10; n_draws=50, ci=0.90)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(irf = [0.16722061992119217 -0.028047140887825173 0.008834953461038136; -0.11458247889605064 0.09067367288960575 -0.0005509775646489767; … ; -8.862568655314089e-5 -2.2144433451374267e-5 -1.057950763717391e-6; -2.039634279515266e-5 -3.5099791858993745e-5 -4.0187450071174813e-7;;; 0.0 0.022679271244492153 -0.0008888661728899262; 0.027088879416040008 -0.0034149995637959094 0.00024343930009569767; … ; 4.470537546782741e-5 2.972601136295285e-5 6.316223954294641e-7; 1.8438259256490206e-5 1.7714027188613587e-5 2.8929849398774695e-7;;; 0.0 0.0 0.0037649082814174956; -0.06393586736098336 0.012787129059636406 -0.0005137006831686622; … ; -0.00010064791817843063 -6.526061364209674e-5 -1.4132283793880849e-6; -4.0780616421578216e-5 -3.987988453494836e-5 -6.435539672157584e-7], lower = [0.05510333043322477 -0.06309058272887871 -0.029197560220813497; -4.2972173940937735 -1.1324557404662465 -0.22624743750626314; … ; -5.943318287600853e8 -7.418447975366041e7 -2.317438403684001e8; -1292.3784371423233 -4.826726533188225e7 -4.777882909951696e7;;; 0.0 0.016063389522759982 -0.005278409079990124; -1.2636387276791599 -0.8054829060571341 -0.04553782095999756; … ; -8.460944164398472e7 -6.086857778436099e7 -5.090358656428043e6; -6.172062461693471e7 -1.347226726648325 -39206.803005051595;;; 0.0 0.0 0.003309431433421073; -0.23791959132377088 -0.11378380240619357 -0.04102180344682863; … ; -8.322427088641743e6 -253818.84476248443 -1.3407125106047995e7; -2.6024054465002254e7 -45951.95419152888 -6374.303998557416], upper = [0.8692730723479032 0.2538022141412268 0.053275044629134946; 1.7332434878736662 1.0088298497823394 0.07254838437080659; … ; 4.014944459911847e6 6.568595199041255e6 5623.5844343462495; 1.3455932068610645e11 4.581337385404913e9 4.2829814853200895e8;;; 0.0 0.16798473865187075 0.011674965892412683; 0.4149772143749718 0.07510324130373233 0.032693843320526515; … ; 7.470985889499492e6 7199.164680901376 6342.557376846158; 9.448952526509552e8 1.3849551449575375e10 6.221995291240311e7;;; 0.0 0.0 0.012155241456521776; 0.21763759564045515 0.08728698954008586 0.017204348553848007; … ; 3.1522562752249003e6 2.0278011876069206e8 2583.9191115776393; 7.850337352935917e8 1.0180030335454423e7 1.1288946968907451e7], draws = [0.08619437714742287 -0.08781230867986553 … -1.550868992882613 2.368593464551795; 0.15182185240537346 -0.693193941465872 … -167781.43961553267 789540.0747313035; … ; 0.08140969097414975 -0.07329681416056501 … -6.147567230355201 10.716643471379403; 0.060670522397691135 -0.10569828970129272 … -141.28749512392793 349.5569462606702;;; 0.01389735421793409 0.005009981910375985 … 0.9615849801248701 -1.482347701081835; -0.049387819862440833 0.2460726326051515 … 58834.63620690343 -276861.988860936; … ; 0.0065771742166342165 0.020380970385742502 … 1.7820950598824767 -3.1066071174758427; -0.038806159283393635 0.13750590561777157 … 198.7514032185934 -491.7274070694476;;; 0.014911670427719976 -0.0189375679272958 … -0.35159584999589744 0.5370919385191699; 0.013704672770729821 -0.054719646641096215 … -13255.552057682538 62377.5167640307; … ; 0.004820475851789019 0.0017616581340979258 … 0.1736590647516092 -0.3027282383185467; -0.007126843423302117 0.01617532011423613 … 22.543657671231593 -55.774873287016284;;;; 0.0 0.015562049040331202 … 1.155893455511241 -1.7794126759463404; 0.0 0.2287661914974922 … 52194.39244658203 -245614.56022093055; … ; 0.0 0.0653788629052912 … 5.496750861146829 -9.582117599148505; 0.0 0.17440136299954387 … 277.48114004524103 -686.5112875159789;;; 0.03372734237032776 -0.040449526457752585 … -0.7471307998043484 1.1413313193897594; 0.028111381692598626 -0.07205979913903618 … -18302.609022503966 86127.78225505298; … ; 0.028175386804767957 -0.018112748125121085 … -1.5934319107256503 2.777723869845943; 0.1349426170644212 -0.31265427959534753 … -390.3372076913006 965.726525877938;;; -0.0002690895055632321 0.0037756001788054753 … 0.2622963579459775 -0.4037148955060281; -0.001951279065899967 0.018708285664207285 … 4123.611573699363 -19404.7482045534; … ; 0.005893457684434399 -0.00198839356101204 … -0.1552745003749813 0.2706796859606589; 0.014069304634804297 -0.029801428542267177 … -44.27454692544538 109.5388905726121;;;; 0.0 -0.028672401442047215 … -0.33705063320295253 0.5105699613038326; 0.0 -0.0361579657584088 … -11241.733577511957 52900.95969009659; … ; 0.0 -0.012426880496211226 … 0.5998634792963637 -1.0457084144404079; 0.0 0.027607425652517895 … 46.06249026353317 -113.96241035781392;;; 0.0 -0.007609379327646917 … 0.19988987438652894 -0.3112558142346839; 0.0 0.019409080898882637 … 3942.0528727182036 -18550.375566672148; … ; 0.0 -0.012034435485589908 … -0.17389467705902104 0.30313558531131446; 0.0 -0.05994323121399943 … -64.79685076733728 160.31276469865233;;; 0.00919640659872595 -0.007583887670887842 … -0.07633922311357665 0.11570801445330034; 0.007085757381595851 -0.0030031192762963056 … -888.1517822472596 4179.433831889436; … ; 0.007154786320778787 -0.0010413523885691117 … -0.016945363418575016 0.02953955254565431; 0.004030931055368808 -0.00438939342439697 … -7.349673846325396 18.18370102846472])</code></pre><hr/><h2 id="Model-Specification"><a class="docs-heading-anchor" href="#Model-Specification">Model Specification</a><a id="Model-Specification-1"></a><a class="docs-heading-anchor-permalink" href="#Model-Specification" title="Permalink"></a></h2><p>The Panel VAR(p) model for entity <span>$i$</span> at time <span>$t$</span> is:</p><p class="math-container">\[\mathbf{y}_{i,t} = \boldsymbol{\mu}_i + \sum_{l=1}^{p} \mathbf{A}_l \, \mathbf{y}_{i,t-l} + \boldsymbol{\varepsilon}_{i,t}, \quad i = 1, \ldots, N, \quad t = 1, \ldots, T_i\]</p><p>where:</p><ul><li><span>$\mathbf{y}_{i,t} \in \mathbb{R}^m$</span> is the <span>$m \times 1$</span> vector of endogenous variables for entity <span>$i$</span></li><li><span>$\boldsymbol{\mu}_i \in \mathbb{R}^m$</span> is an entity-specific <strong>fixed effect</strong></li><li><span>$\mathbf{A}_l$</span> is the <span>$m \times m$</span> coefficient matrix for lag <span>$l$</span></li><li><span>$\boldsymbol{\varepsilon}_{i,t} \sim (0, \Sigma)$</span> are i.i.d. innovations</li><li><span>$N$</span> is the number of panel units and <span>$T_i$</span> is the time dimension for unit <span>$i$</span></li></ul><p>The fixed effect <span>$\boldsymbol{\mu}_i$</span> is correlated with <span>$\mathbf{y}_{i,t-l}$</span> by construction, making OLS on the level equation inconsistent. Two strategies address this:</p><ol><li><strong>Transform away the fixed effect</strong> (first-differencing or forward orthogonal deviations) and estimate by GMM using lagged levels as instruments</li><li><strong>Demean within groups</strong> (within estimator) and estimate by OLS –- consistent for large <span>$T$</span> but subject to Nickell (1981) bias when <span>$T$</span> is small relative to <span>$N$</span></li></ol><div class="admonition is-info" id="Fixed-Effects-and-Nickell-Bias-8a62b0ee76598c0a"><header class="admonition-header">Fixed Effects and Nickell Bias<a class="admonition-anchor" href="#Fixed-Effects-and-Nickell-Bias-8a62b0ee76598c0a" title="Permalink"></a></header><div class="admonition-body"><p>The within estimator (FE-OLS) is biased of order <span>$O(1/T)$</span> in dynamic panels (Nickell 1981). For panels with small <span>$T$</span> (e.g., <span>$T &lt; 20$</span>), GMM estimation is strongly preferred. For larger <span>$T$</span>, FE-OLS and GMM converge to the same estimates.</p></div></div><hr/><h2 id="Panel-Data-Preparation"><a class="docs-heading-anchor" href="#Panel-Data-Preparation">Panel Data Preparation</a><a id="Panel-Data-Preparation-1"></a><a class="docs-heading-anchor-permalink" href="#Panel-Data-Preparation" title="Permalink"></a></h2><p>Panel VAR estimation requires a <code>PanelData</code> object. The built-in Penn World Table provides a balanced panel of 38 OECD countries with annual macroeconomic indicators:</p><pre><code class="language-julia hljs"># Load PWT --- already a PanelData object
 pwt_demo = load_example(:pwt)
 
 # Convert to growth rates for stationarity
-pd_demo = apply_tcode(pwt_demo, 5)  # tcode 5 = log first difference
-nothing # hide</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">&lt;&lt; @example-block not executed in draft mode &gt;&gt;</code></pre><p>All numeric columns are treated as potential endogenous variables. Use the <code>dependent_vars</code> keyword to select a subset:</p><pre><code class="language-julia hljs">model = estimate_pvar(pd, 2; dependent_vars=[&quot;rgdpna&quot;, &quot;emp&quot;, &quot;hc&quot;])
-nothing # hide</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">&lt;&lt; @example-block not executed in draft mode &gt;&gt;</code></pre><p>For custom panel data, construct a <code>PanelData</code> object via <code>xtset</code>:</p><pre><code class="language-julia hljs">df = DataFrame(country=repeat(1:20, inner=30), year=repeat(1:30, outer=20),
+pd_demo = apply_tcode(pwt_demo, 5)  # tcode 5 = log first difference</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">┌ Warning: Variable &#39;csh_m&#39; (tcode=5): tcode 5 requires strictly positive data. Falling back to tcode 2 (first difference).
+└ @ MacroEconometricModels /private/tmp/claude-501/-Users-chung-Desktop-CODES-MacroEconometricModels/a2924f94-b24b-40d2-8309-6e0b21363a4f/scratchpad/wt-v0.5.0/src/data/transform.jl:112
+┌ Warning: Variable &#39;csh_r&#39; (tcode=5): tcode 5 requires strictly positive data. Falling back to tcode 2 (first difference).
+└ @ MacroEconometricModels /private/tmp/claude-501/-Users-chung-Desktop-CODES-MacroEconometricModels/a2924f94-b24b-40d2-8309-6e0b21363a4f/scratchpad/wt-v0.5.0/src/data/transform.jl:112
+┌ Warning: Variable &#39;csh_m&#39; (tcode=5): tcode 5 requires strictly positive data. Falling back to tcode 2 (first difference).
+└ @ MacroEconometricModels /private/tmp/claude-501/-Users-chung-Desktop-CODES-MacroEconometricModels/a2924f94-b24b-40d2-8309-6e0b21363a4f/scratchpad/wt-v0.5.0/src/data/transform.jl:112
+┌ Warning: Variable &#39;csh_r&#39; (tcode=5): tcode 5 requires strictly positive data. Falling back to tcode 2 (first difference).
+└ @ MacroEconometricModels /private/tmp/claude-501/-Users-chung-Desktop-CODES-MacroEconometricModels/a2924f94-b24b-40d2-8309-6e0b21363a4f/scratchpad/wt-v0.5.0/src/data/transform.jl:112
+┌ Warning: Variable &#39;csh_m&#39; (tcode=5): tcode 5 requires strictly positive data. Falling back to tcode 2 (first difference).
+└ @ MacroEconometricModels /private/tmp/claude-501/-Users-chung-Desktop-CODES-MacroEconometricModels/a2924f94-b24b-40d2-8309-6e0b21363a4f/scratchpad/wt-v0.5.0/src/data/transform.jl:112</code></pre><p>All numeric columns are treated as potential endogenous variables. Use the <code>dependent_vars</code> keyword to select a subset:</p><pre><code class="language-julia hljs">model = estimate_pvar(pd, 2; dependent_vars=[&quot;rgdpna&quot;, &quot;emp&quot;, &quot;hc&quot;])</code></pre><p>For custom panel data, construct a <code>PanelData</code> object via <code>xtset</code>:</p><pre><code class="language-julia hljs">df = DataFrame(country=repeat(1:20, inner=30), year=repeat(1:30, outer=20),
                gdp=randn(600), inv=randn(600), cons=randn(600))
 pd_custom = xtset(df, :country, :year)
-model_custom = estimate_pvar(pd_custom, 2; dependent_vars=[&quot;gdp&quot;, &quot;inv&quot;, &quot;cons&quot;])
-nothing # hide</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">&lt;&lt; @example-block not executed in draft mode &gt;&gt;</code></pre><h3 id="Data-Cleaning"><a class="docs-heading-anchor" href="#Data-Cleaning">Data Cleaning</a><a id="Data-Cleaning-1"></a><a class="docs-heading-anchor-permalink" href="#Data-Cleaning" title="Permalink"></a></h3><p><code>apply_tcode</code> removes rows lost to differencing but does <strong>not</strong> drop rows with pre-existing NaN values. If your raw data contains missing observations, clean the transformed panel before estimation:</p><pre><code class="language-julia hljs">pd = apply_tcode(pwt, 5)
+model_custom = estimate_pvar(pd_custom, 2; dependent_vars=[&quot;gdp&quot;, &quot;inv&quot;, &quot;cons&quot;])</code></pre><h3 id="Data-Cleaning"><a class="docs-heading-anchor" href="#Data-Cleaning">Data Cleaning</a><a id="Data-Cleaning-1"></a><a class="docs-heading-anchor-permalink" href="#Data-Cleaning" title="Permalink"></a></h3><p><code>apply_tcode</code> removes rows lost to differencing but does <strong>not</strong> drop rows with pre-existing NaN values. If your raw data contains missing observations, clean the transformed panel before estimation:</p><pre><code class="language-julia hljs">pd = apply_tcode(pwt, 5)
 
 # Option 1: drop all rows with NaN/Inf
 pd_clean = dropna(pd)
@@ -68,13 +429,104 @@ m2 = estimate_pvar(pd, 2; dependent_vars=dep_vars, steps=:twostep)
 
 # Forward orthogonal deviations (Arellano &amp; Bover 1995)
 m3 = estimate_pvar(pd, 2; dependent_vars=dep_vars,
-                   transformation=:fod, steps=:twostep)
-nothing # hide</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">&lt;&lt; @example-block not executed in draft mode &gt;&gt;</code></pre><p>The forward orthogonal deviations (FOD) transformation preserves orthogonality of the transformed errors, making the initial weighting matrix more efficient than first-differencing when the panel is unbalanced.</p><h3 id="System-GMM-(Blundell-Bond)"><a class="docs-heading-anchor" href="#System-GMM-(Blundell-Bond)">System GMM (Blundell-Bond)</a><a id="System-GMM-(Blundell-Bond)-1"></a><a class="docs-heading-anchor-permalink" href="#System-GMM-(Blundell-Bond)" title="Permalink"></a></h3><p>System GMM adds level equations instrumented by lagged <strong>differences</strong>, improving efficiency when the data are persistent (Blundell &amp; Bond 1998):</p><p class="math-container">\[\underbrace{\begin{pmatrix} \Delta \mathbf{y}_{i,t} \\ \mathbf{y}_{i,t} \end{pmatrix}}_{\text{stacked}} = \mathbf{X}_{i,t} \, \boldsymbol{\Phi} + \begin{pmatrix} \Delta \boldsymbol{\varepsilon}_{i,t} \\ \boldsymbol{\varepsilon}_{i,t} \end{pmatrix}\]</p><p>where:</p><ul><li>The top block uses lagged levels <span>$\mathbf{y}_{i,t-2}, \ldots$</span> as instruments (as in FD-GMM)</li><li>The bottom block uses lagged differences <span>$\Delta \mathbf{y}_{i,t-1}$</span> as instruments for the level equation</li></ul><pre><code class="language-julia hljs">
-m_sys = estimate_pvar(pd, 2; dependent_vars=[&quot;rgdpna&quot;, &quot;emp&quot;, &quot;hc&quot;],
+                   transformation=:fod, steps=:twostep)</code></pre><p>The forward orthogonal deviations (FOD) transformation preserves orthogonality of the transformed errors, making the initial weighting matrix more efficient than first-differencing when the panel is unbalanced.</p><h3 id="System-GMM-(Blundell-Bond)"><a class="docs-heading-anchor" href="#System-GMM-(Blundell-Bond)">System GMM (Blundell-Bond)</a><a id="System-GMM-(Blundell-Bond)-1"></a><a class="docs-heading-anchor-permalink" href="#System-GMM-(Blundell-Bond)" title="Permalink"></a></h3><p>System GMM adds level equations instrumented by lagged <strong>differences</strong>, improving efficiency when the data are persistent (Blundell &amp; Bond 1998):</p><p class="math-container">\[\underbrace{\begin{pmatrix} \Delta \mathbf{y}_{i,t} \\ \mathbf{y}_{i,t} \end{pmatrix}}_{\text{stacked}} = \mathbf{X}_{i,t} \, \boldsymbol{\Phi} + \begin{pmatrix} \Delta \boldsymbol{\varepsilon}_{i,t} \\ \boldsymbol{\varepsilon}_{i,t} \end{pmatrix}\]</p><p>where:</p><ul><li>The top block uses lagged levels <span>$\mathbf{y}_{i,t-2}, \ldots$</span> as instruments (as in FD-GMM)</li><li>The bottom block uses lagged differences <span>$\Delta \mathbf{y}_{i,t-1}$</span> as instruments for the level equation</li></ul><pre><code class="language-julia hljs">m_sys = estimate_pvar(pd, 2; dependent_vars=[&quot;rgdpna&quot;, &quot;emp&quot;, &quot;hc&quot;],
                       system_instruments=true, steps=:twostep)
-report(m_sys)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">&lt;&lt; @example-block not executed in draft mode &gt;&gt;</code></pre><p>The system estimator exploits additional moment conditions but requires the assumption that first differences are uncorrelated with fixed effects.</p><h3 id="Keyword-Arguments"><a class="docs-heading-anchor" href="#Keyword-Arguments">Keyword Arguments</a><a id="Keyword-Arguments-1"></a><a class="docs-heading-anchor-permalink" href="#Keyword-Arguments" title="Permalink"></a></h3><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>dependent_vars</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right"><code>nothing</code></td><td style="text-align: right">Endogenous variable names (default: all columns)</td></tr><tr><td style="text-align: right"><code>predet_vars</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right"><code>String[]</code></td><td style="text-align: right">Predetermined variable names</td></tr><tr><td style="text-align: right"><code>exog_vars</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right"><code>String[]</code></td><td style="text-align: right">Strictly exogenous variable names</td></tr><tr><td style="text-align: right"><code>transformation</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:fd</code></td><td style="text-align: right"><code>:fd</code> (first-difference) or <code>:fod</code> (forward orthogonal deviations)</td></tr><tr><td style="text-align: right"><code>steps</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:twostep</code></td><td style="text-align: right"><code>:onestep</code>, <code>:twostep</code>, or <code>:mstep</code> (iterated)</td></tr><tr><td style="text-align: right"><code>system_instruments</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>false</code></td><td style="text-align: right">Use System GMM (Blundell-Bond)</td></tr><tr><td style="text-align: right"><code>system_constant</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>true</code></td><td style="text-align: right">Include constant in level equation (System GMM)</td></tr><tr><td style="text-align: right"><code>min_lag_endo</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>2</code></td><td style="text-align: right">Minimum instrument lag for endogenous variables</td></tr><tr><td style="text-align: right"><code>max_lag_endo</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>99</code></td><td style="text-align: right">Maximum instrument lag (99 = all available)</td></tr><tr><td style="text-align: right"><code>collapse</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>false</code></td><td style="text-align: right">Collapse instruments to limit proliferation</td></tr><tr><td style="text-align: right"><code>pca_instruments</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>false</code></td><td style="text-align: right">Apply PCA reduction to instruments</td></tr><tr><td style="text-align: right"><code>pca_max_components</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>0</code></td><td style="text-align: right">Maximum PCA components (0 = auto)</td></tr><tr><td style="text-align: right"><code>max_iter</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>100</code></td><td style="text-align: right">Maximum iterations for iterated GMM</td></tr></table><h3 id="Return-Value"><a class="docs-heading-anchor" href="#Return-Value">Return Value</a><a id="Return-Value-1"></a><a class="docs-heading-anchor-permalink" href="#Return-Value" title="Permalink"></a></h3><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>Phi</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right"><span>$m \times K$</span> coefficient matrix</td></tr><tr><td style="text-align: right"><code>Sigma</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right"><span>$m \times m$</span> residual covariance</td></tr><tr><td style="text-align: right"><code>se</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right">Robust standard errors (same shape as <code>Phi</code>)</td></tr><tr><td style="text-align: right"><code>pvalues</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right">P-values (same shape as <code>Phi</code>)</td></tr><tr><td style="text-align: right"><code>m</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of endogenous variables</td></tr><tr><td style="text-align: right"><code>p</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of lags</td></tr><tr><td style="text-align: right"><code>varnames</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right">Endogenous variable names</td></tr><tr><td style="text-align: right"><code>method</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:fd_gmm</code>, <code>:system_gmm</code>, or <code>:fe_ols</code></td></tr><tr><td style="text-align: right"><code>transformation</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:fd</code>, <code>:fod</code>, or <code>:demean</code></td></tr><tr><td style="text-align: right"><code>steps</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:onestep</code>, <code>:twostep</code>, or <code>:mstep</code></td></tr><tr><td style="text-align: right"><code>n_groups</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of panel groups</td></tr><tr><td style="text-align: right"><code>n_obs</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Total effective observations</td></tr><tr><td style="text-align: right"><code>n_instruments</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of moment conditions</td></tr></table><hr/><h2 id="Fixed-Effects-OLS"><a class="docs-heading-anchor" href="#Fixed-Effects-OLS">Fixed-Effects OLS</a><a id="Fixed-Effects-OLS-1"></a><a class="docs-heading-anchor-permalink" href="#Fixed-Effects-OLS" title="Permalink"></a></h2><p>For panels with large <span>$T$</span>, the within (FE-OLS) estimator provides a simpler alternative. The estimator demeans each entity&#39;s data (removing <span>$\boldsymbol{\mu}_i$</span>) and runs pooled OLS on the stacked system with cluster-robust standard errors at the group level:</p><pre><code class="language-julia hljs">
-m_fe = estimate_pvar_feols(pd, 2; dependent_vars=[&quot;rgdpna&quot;, &quot;emp&quot;, &quot;hc&quot;])
-report(m_fe)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">&lt;&lt; @example-block not executed in draft mode &gt;&gt;</code></pre><p>The FE-OLS estimator accepts the same <code>dependent_vars</code>, <code>predet_vars</code>, and <code>exog_vars</code> keywords as the GMM estimator. Standard errors are clustered at the group level by default.</p><hr/><h2 id="Instrument-Management"><a class="docs-heading-anchor" href="#Instrument-Management">Instrument Management</a><a id="Instrument-Management-1"></a><a class="docs-heading-anchor-permalink" href="#Instrument-Management" title="Permalink"></a></h2><p>When the number of instruments is large relative to <span>$N$</span>, standard errors become unreliable and the Hansen J-test loses power. Several options control instrument proliferation:</p><pre><code class="language-julia hljs">dep_vars = [&quot;rgdpna&quot;, &quot;emp&quot;, &quot;hc&quot;]
+report(m_sys)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">      Panel VAR(2) — System GMM
+
+
+
+  Method                  System GMM
+  Transformation    First-Difference
+  Steps                      twostep
+  Endogenous vars                  3
+  Lags                             2
+  Parameters                      18
+  Groups                          38
+  Obs/group             60/125.0/140
+  Observations                  4750
+  Instruments                   1489
+
+                                Equation: rgdpna
+
+                 Coef.   Std.Err.                 z    P&gt;|z|       [95%        ⋯
+
+  L1.rgdpna     -2.888        0.0   -9.3960365812e6   &lt;0.001     -2.888     -2 ⋯
+  L1.emp       15.7792        0.0     7.287955222e6   &lt;0.001    15.7792    15. ⋯
+  L1.hc       -35.5968        0.0   -4.5523592976e6   &lt;0.001   -35.5968   -35. ⋯
+  L2.rgdpna    -4.2956        0.0   -9.2087883979e6   &lt;0.001    -4.2956    -4. ⋯
+  L2.emp        5.6968        0.0   1.29347768105e7   &lt;0.001     5.6968     5. ⋯
+  L2.hc        34.8843        0.0   1.14546246182e7   &lt;0.001    34.8843    34. ⋯
+
+                                                               2 columns omitted
+                             Equation: emp
+
+                 Coef.   Std.Err.   z   P&gt;|z|       [95%        CI]
+
+  L1.rgdpna    -0.9845        0.0   —       —    -0.9845    -0.9845
+  L1.emp        5.5093        0.0   —       —     5.5093     5.5093
+  L1.hc       -23.5903        0.0   —       —   -23.5903   -23.5903
+  L2.rgdpna    -1.7216        0.0   —       —    -1.7216    -1.7216
+  L2.emp        2.8443        0.0   —       —     2.8443     2.8443
+  L2.hc        21.0249        0.0   —       —    21.0249    21.0249
+
+                                  Equation: hc
+
+                Coef.   Std.Err.                   z    P&gt;|z|      [95%        ⋯
+
+  L1.rgdpna    0.0324        0.0   1.7353250021456e9   &lt;0.001    0.0324    0.0 ⋯
+  L1.emp      -0.0748        0.0    -4.39215638888e7   &lt;0.001   -0.0748   -0.0 ⋯
+  L1.hc        0.6893        0.0                   —        —    0.6893    0.6 ⋯
+  L2.rgdpna    0.0274        0.0   2.1150314835142e9   &lt;0.001    0.0274    0.0 ⋯
+  L2.emp      -0.0084        0.0     -5.2032980143e6   &lt;0.001   -0.0084   -0.0 ⋯
+  L2.hc       -0.1856        0.0    -2.75383421855e7   &lt;0.001   -0.1856   -0.1 ⋯
+
+                                                               2 columns omitted</code></pre><p>The system estimator exploits additional moment conditions but requires the assumption that first differences are uncorrelated with fixed effects.</p><h3 id="Keyword-Arguments"><a class="docs-heading-anchor" href="#Keyword-Arguments">Keyword Arguments</a><a id="Keyword-Arguments-1"></a><a class="docs-heading-anchor-permalink" href="#Keyword-Arguments" title="Permalink"></a></h3><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>dependent_vars</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right"><code>nothing</code></td><td style="text-align: right">Endogenous variable names (default: all columns)</td></tr><tr><td style="text-align: right"><code>predet_vars</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right"><code>String[]</code></td><td style="text-align: right">Predetermined variable names</td></tr><tr><td style="text-align: right"><code>exog_vars</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right"><code>String[]</code></td><td style="text-align: right">Strictly exogenous variable names</td></tr><tr><td style="text-align: right"><code>transformation</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:fd</code></td><td style="text-align: right"><code>:fd</code> (first-difference) or <code>:fod</code> (forward orthogonal deviations)</td></tr><tr><td style="text-align: right"><code>steps</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:twostep</code></td><td style="text-align: right"><code>:onestep</code>, <code>:twostep</code>, or <code>:mstep</code> (iterated)</td></tr><tr><td style="text-align: right"><code>system_instruments</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>false</code></td><td style="text-align: right">Use System GMM (Blundell-Bond)</td></tr><tr><td style="text-align: right"><code>system_constant</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>true</code></td><td style="text-align: right">Include constant in level equation (System GMM)</td></tr><tr><td style="text-align: right"><code>min_lag_endo</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>2</code></td><td style="text-align: right">Minimum instrument lag for endogenous variables</td></tr><tr><td style="text-align: right"><code>max_lag_endo</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>99</code></td><td style="text-align: right">Maximum instrument lag (99 = all available)</td></tr><tr><td style="text-align: right"><code>collapse</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>false</code></td><td style="text-align: right">Collapse instruments to limit proliferation</td></tr><tr><td style="text-align: right"><code>pca_instruments</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>false</code></td><td style="text-align: right">Apply PCA reduction to instruments</td></tr><tr><td style="text-align: right"><code>pca_max_components</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>0</code></td><td style="text-align: right">Maximum PCA components (0 = auto)</td></tr><tr><td style="text-align: right"><code>max_iter</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>100</code></td><td style="text-align: right">Maximum iterations for iterated GMM</td></tr></table><h3 id="Return-Value"><a class="docs-heading-anchor" href="#Return-Value">Return Value</a><a id="Return-Value-1"></a><a class="docs-heading-anchor-permalink" href="#Return-Value" title="Permalink"></a></h3><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>Phi</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right"><span>$m \times K$</span> coefficient matrix</td></tr><tr><td style="text-align: right"><code>Sigma</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right"><span>$m \times m$</span> residual covariance</td></tr><tr><td style="text-align: right"><code>se</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right">Robust standard errors (same shape as <code>Phi</code>)</td></tr><tr><td style="text-align: right"><code>pvalues</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right">P-values (same shape as <code>Phi</code>)</td></tr><tr><td style="text-align: right"><code>m</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of endogenous variables</td></tr><tr><td style="text-align: right"><code>p</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of lags</td></tr><tr><td style="text-align: right"><code>varnames</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right">Endogenous variable names</td></tr><tr><td style="text-align: right"><code>method</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:fd_gmm</code>, <code>:system_gmm</code>, or <code>:fe_ols</code></td></tr><tr><td style="text-align: right"><code>transformation</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:fd</code>, <code>:fod</code>, or <code>:demean</code></td></tr><tr><td style="text-align: right"><code>steps</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:onestep</code>, <code>:twostep</code>, or <code>:mstep</code></td></tr><tr><td style="text-align: right"><code>n_groups</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of panel groups</td></tr><tr><td style="text-align: right"><code>n_obs</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Total effective observations</td></tr><tr><td style="text-align: right"><code>n_instruments</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of moment conditions</td></tr></table><hr/><h2 id="Fixed-Effects-OLS"><a class="docs-heading-anchor" href="#Fixed-Effects-OLS">Fixed-Effects OLS</a><a id="Fixed-Effects-OLS-1"></a><a class="docs-heading-anchor-permalink" href="#Fixed-Effects-OLS" title="Permalink"></a></h2><p>For panels with large <span>$T$</span>, the within (FE-OLS) estimator provides a simpler alternative. The estimator demeans each entity&#39;s data (removing <span>$\boldsymbol{\mu}_i$</span>) and runs pooled OLS on the stacked system with cluster-robust standard errors at the group level:</p><pre><code class="language-julia hljs">m_fe = estimate_pvar_feols(pd, 2; dependent_vars=[&quot;rgdpna&quot;, &quot;emp&quot;, &quot;hc&quot;])
+report(m_fe)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">        Panel VAR(2) — FE-OLS
+
+
+
+  Method                      FE-OLS
+  Transformation    Within Demeaning
+  Steps                            —
+  Endogenous vars                  3
+  Lags                             2
+  Parameters                      18
+  Groups                          38
+  Obs/group               31/63.5/71
+  Observations                  2413
+
+                               Equation: rgdpna
+
+                Coef.   Std.Err.         z    P&gt;|z|      [95%       CI]
+
+  L1.rgdpna    0.3399     0.0428    7.9407   &lt;0.001     0.256    0.4238   ***
+  L1.emp      -0.1477      0.056   -2.6366   0.0084   -0.2574   -0.0379   ***
+  L1.hc        0.1504     0.1621    0.9277   0.3536   -0.1674    0.4682
+  L2.rgdpna    0.0682      0.029    2.3501   0.0188    0.0113    0.1251   **
+  L2.emp       -0.137     0.0444   -3.0871    0.002    -0.224     -0.05   ***
+  L2.hc        0.1298      0.165     0.787   0.4313   -0.1935    0.4531
+
+                                Equation: emp
+
+                Coef.   Std.Err.         z    P&gt;|z|      [95%      CI]
+
+  L1.rgdpna    0.1109     0.0175     6.333   &lt;0.001    0.0766   0.1452   ***
+  L1.emp       0.2996     0.0463    6.4669   &lt;0.001    0.2088   0.3903   ***
+  L1.hc        0.0558     0.0633    0.8819   0.3778   -0.0683   0.1799
+  L2.rgdpna     -0.03     0.0182   -1.6462   0.0997   -0.0658   0.0057   *
+  L2.emp      -0.0103     0.0392   -0.2638   0.7919   -0.0871   0.0664
+  L2.hc        -0.067     0.0705   -0.9497   0.3423   -0.2052   0.0712
+
+                                 Equation: hc
+
+                Coef.   Std.Err.         z    P&gt;|z|      [95%      CI]
+
+  L1.rgdpna       0.0     0.0022    0.0222   0.9823   -0.0042   0.0043
+  L1.emp        0.002     0.0057    0.3456   0.7297   -0.0092   0.0132
+  L1.hc        0.6232     0.0988    6.3054   &lt;0.001    0.4295    0.817   ***
+  L2.rgdpna   -0.0022     0.0024   -0.9167   0.3593   -0.0068   0.0025
+  L2.emp       0.0026     0.0052     0.495   0.6206   -0.0076   0.0128
+  L2.hc         0.122     0.0765    1.5946   0.1108    -0.028    0.272</code></pre><p>The FE-OLS estimator accepts the same <code>dependent_vars</code>, <code>predet_vars</code>, and <code>exog_vars</code> keywords as the GMM estimator. Standard errors are clustered at the group level by default.</p><hr/><h2 id="Instrument-Management"><a class="docs-heading-anchor" href="#Instrument-Management">Instrument Management</a><a id="Instrument-Management-1"></a><a class="docs-heading-anchor-permalink" href="#Instrument-Management" title="Permalink"></a></h2><p>When the number of instruments is large relative to <span>$N$</span>, standard errors become unreliable and the Hansen J-test loses power. Several options control instrument proliferation:</p><pre><code class="language-julia hljs">dep_vars = [&quot;rgdpna&quot;, &quot;emp&quot;, &quot;hc&quot;]
 
 # Restrict instrument lags to avoid proliferation
 m = estimate_pvar(pd, 2; dependent_vars=dep_vars,
@@ -84,31 +536,243 @@ m = estimate_pvar(pd, 2; dependent_vars=dep_vars,
 m = estimate_pvar(pd, 2; dependent_vars=dep_vars, collapse=true)
 
 # PCA instrument reduction
-m = estimate_pvar(pd, 2; dependent_vars=dep_vars, pca_instruments=true)
-nothing # hide</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">&lt;&lt; @example-block not executed in draft mode &gt;&gt;</code></pre><div class="admonition is-warning" id="Instrument-Proliferation-14046278b26ad60a"><header class="admonition-header">Instrument Proliferation<a class="admonition-anchor" href="#Instrument-Proliferation-14046278b26ad60a" title="Permalink"></a></header><div class="admonition-body"><p>A rule of thumb: the number of instruments should not exceed <span>$N$</span> (the number of groups). When it does, the two-step GMM weighting matrix overfits the moment conditions, inflating the J-statistic and producing misleadingly small standard errors. Consider collapsing instruments or restricting lag depth.</p></div></div><hr/><h2 id="Structural-Analysis"><a class="docs-heading-anchor" href="#Structural-Analysis">Structural Analysis</a><a id="Structural-Analysis-1"></a><a class="docs-heading-anchor-permalink" href="#Structural-Analysis" title="Permalink"></a></h2><h3 id="Impulse-Response-Functions"><a class="docs-heading-anchor" href="#Impulse-Response-Functions">Impulse Response Functions</a><a id="Impulse-Response-Functions-1"></a><a class="docs-heading-anchor-permalink" href="#Impulse-Response-Functions" title="Permalink"></a></h3><p><strong>Orthogonalized IRFs</strong> use the Cholesky decomposition of the residual covariance <span>$\Sigma = PP&#39;$</span>. The impulse responses are computed from the companion form <span>$\Phi_h = J A^h J&#39;$</span> and the Cholesky factor <span>$P$</span>:</p><p class="math-container">\[\Psi_h = \Phi_h \cdot P\]</p><p>where:</p><ul><li><span>$\Phi_h$</span> is the <span>$m \times m$</span> moving-average coefficient at horizon <span>$h$</span></li><li><span>$P$</span> is the lower-triangular Cholesky factor of <span>$\Sigma$</span></li><li><span>$J = [I_m \mid 0 \cdots 0]$</span> is the <span>$m \times mp$</span> selection matrix</li></ul><pre><code class="language-julia hljs">model = estimate_pvar(pd, 1; dependent_vars=[&quot;rgdpna&quot;, &quot;emp&quot;, &quot;hc&quot;], steps=:twostep)
+m = estimate_pvar(pd, 2; dependent_vars=dep_vars, pca_instruments=true)</code></pre><div class="admonition is-warning" id="Instrument-Proliferation-14046278b26ad60a"><header class="admonition-header">Instrument Proliferation<a class="admonition-anchor" href="#Instrument-Proliferation-14046278b26ad60a" title="Permalink"></a></header><div class="admonition-body"><p>A rule of thumb: the number of instruments should not exceed <span>$N$</span> (the number of groups). When it does, the two-step GMM weighting matrix overfits the moment conditions, inflating the J-statistic and producing misleadingly small standard errors. Consider collapsing instruments or restricting lag depth.</p></div></div><hr/><h2 id="Structural-Analysis"><a class="docs-heading-anchor" href="#Structural-Analysis">Structural Analysis</a><a id="Structural-Analysis-1"></a><a class="docs-heading-anchor-permalink" href="#Structural-Analysis" title="Permalink"></a></h2><h3 id="Impulse-Response-Functions"><a class="docs-heading-anchor" href="#Impulse-Response-Functions">Impulse Response Functions</a><a id="Impulse-Response-Functions-1"></a><a class="docs-heading-anchor-permalink" href="#Impulse-Response-Functions" title="Permalink"></a></h3><p><strong>Orthogonalized IRFs</strong> use the Cholesky decomposition of the residual covariance <span>$\Sigma = PP&#39;$</span>. The impulse responses are computed from the companion form <span>$\Phi_h = J A^h J&#39;$</span> and the Cholesky factor <span>$P$</span>:</p><p class="math-container">\[\Psi_h = \Phi_h \cdot P\]</p><p>where:</p><ul><li><span>$\Phi_h$</span> is the <span>$m \times m$</span> moving-average coefficient at horizon <span>$h$</span></li><li><span>$P$</span> is the lower-triangular Cholesky factor of <span>$\Sigma$</span></li><li><span>$J = [I_m \mid 0 \cdots 0]$</span> is the <span>$m \times mp$</span> selection matrix</li></ul><pre><code class="language-julia hljs">model = estimate_pvar(pd, 1; dependent_vars=[&quot;rgdpna&quot;, &quot;emp&quot;, &quot;hc&quot;], steps=:twostep)
 
-irfs = pvar_oirf(model, 20)   # H+1 x m x m array</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">&lt;&lt; @example-block not executed in draft mode &gt;&gt;</code></pre><p><strong>Generalized IRFs</strong> (Pesaran &amp; Shin 1998) do not depend on variable ordering:</p><p class="math-container">\[\text{GIRF}_h(\mathbf{e}_j) = \frac{\Phi_h \, \Sigma \, \mathbf{e}_j}{\sqrt{\sigma_{jj}}}\]</p><p>where:</p><ul><li><span>$\mathbf{e}_j$</span> is the <span>$j$</span>-th unit vector</li><li><span>$\sigma_{jj} = \Sigma[j,j]$</span> is the variance of the <span>$j$</span>-th variable</li></ul><pre><code class="language-julia hljs">girfs = pvar_girf(model, 20)   # H+1 x m x m array</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">&lt;&lt; @example-block not executed in draft mode &gt;&gt;</code></pre><h3 id="Forecast-Error-Variance-Decomposition"><a class="docs-heading-anchor" href="#Forecast-Error-Variance-Decomposition">Forecast Error Variance Decomposition</a><a id="Forecast-Error-Variance-Decomposition-1"></a><a class="docs-heading-anchor-permalink" href="#Forecast-Error-Variance-Decomposition" title="Permalink"></a></h3><p>FEVD quantifies the share of forecast error variance of variable <span>$l$</span> attributable to shock <span>$k$</span> at horizon <span>$h$</span>:</p><p class="math-container">\[\Omega_{l,k,h} = \frac{\sum_{j=0}^{h} (\Psi_j)_{l,k}^2}{\text{MSE}_{h,ll}}\]</p><p>where:</p><ul><li><span>$\Psi_j$</span> is the orthogonalized impulse response at horizon <span>$j$</span></li><li><span>$\text{MSE}_{h,ll} = \sum_{j=0}^{h} (\Phi_j \Sigma \Phi_j&#39;)_{ll}$</span> is the forecast error variance of variable <span>$l$</span></li></ul><p>Each row sums to 1 (100% of forecast error variance accounted for).</p><pre><code class="language-julia hljs">decomp = pvar_fevd(model, 20)   # H+1 x m x m array</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">&lt;&lt; @example-block not executed in draft mode &gt;&gt;</code></pre><h3 id="Stability-Analysis"><a class="docs-heading-anchor" href="#Stability-Analysis">Stability Analysis</a><a id="Stability-Analysis-1"></a><a class="docs-heading-anchor-permalink" href="#Stability-Analysis" title="Permalink"></a></h3><p>The system is stable if all eigenvalues of the companion matrix lie inside the unit circle:</p><pre><code class="language-julia hljs">stab = pvar_stability(model)
+irfs = pvar_oirf(model, 20)   # H+1 x m x m array</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">21×3×3 Array{Float64, 3}:
+[:, :, 1] =
+  0.167221     -0.0280471     0.00883495
+ -0.114582      0.0906737    -0.000550978
+  0.0228533    -0.044689      1.15845e-5
+ -0.0169585     0.00904386   -0.000132197
+  0.00192819   -0.0067097    -1.49454e-5
+ -0.00271483    0.0007603    -2.48126e-5
+  7.06364e-6   -0.00107452   -5.59774e-6
+ -0.000471085   2.2946e-6    -4.98996e-6
+ -5.57102e-5   -0.000186515  -1.57621e-6
+ -8.86257e-5   -2.21444e-5   -1.05795e-6
+  ⋮                          
+ -5.70572e-6   -7.07969e-6   -9.79602e-8
+ -3.79639e-6   -2.26237e-6   -5.22545e-8
+ -1.45072e-6   -1.50416e-6   -2.33449e-8
+ -8.35297e-7   -5.75085e-7   -1.19054e-8
+ -3.53148e-7   -3.30987e-7   -5.49717e-9
+ -1.87889e-7   -1.39976e-7   -2.73402e-9
+ -8.40998e-8   -7.44562e-8   -1.28606e-9
+ -4.2827e-8    -3.33323e-8   -6.30716e-10
+ -1.9796e-8    -1.6972e-8    -2.99798e-10
+
+[:, :, 2] =
+ 0.0           0.0226793    -0.000888866
+ 0.0270889    -0.003415      0.000243439
+ 0.00220594    0.0106348     7.88885e-5
+ 0.00494797    0.000876059   5.71458e-5
+ 0.000980797   0.00195939    2.0758e-5
+ 0.000978668   0.00038924    1.24466e-5
+ 0.000288786   0.000387664   5.11298e-6
+ 0.000205033   0.00011452    2.78167e-6
+ 7.49834e-5    8.12321e-5    1.22504e-6
+ 4.47054e-5    2.9726e-5     6.31622e-7
+ ⋮                          
+ 4.41392e-6    3.96271e-6    6.77881e-8
+ 2.27187e-6    1.74945e-6    3.3359e-8
+ 1.0419e-6     9.00315e-7    1.58161e-8
+ 5.20865e-7    4.12937e-7    7.71066e-9
+ 2.44075e-7    2.06418e-7    3.68138e-9
+ 1.20046e-7    9.67328e-8    1.78535e-9
+ 5.69388e-8    4.75749e-8    8.55749e-10
+ 2.77505e-8    2.25659e-8    4.13792e-10
+ 1.32522e-8    1.09977e-8    1.98774e-10
+
+[:, :, 3] =
+  0.0           0.0           0.00376491
+ -0.0639359     0.0127871    -0.000513701
+ -0.00374035   -0.0249763    -0.000169039
+ -0.0114631    -0.00148397   -0.000129486
+ -0.00203302   -0.00453903   -4.55482e-5
+ -0.00223836   -0.000807047  -2.8028e-5
+ -0.000623955  -0.000886609  -1.13059e-5
+ -0.000464526  -0.000247456  -6.23882e-6
+ -0.000164612  -0.000184035  -2.71946e-6
+ -0.000100648  -6.52606e-5   -1.41323e-6
+  ⋮                          
+ -9.79965e-6   -8.88639e-6   -1.50968e-7
+ -5.08281e-6   -3.88412e-6   -7.44756e-8
+ -2.31788e-6   -2.01424e-6   -3.52455e-8
+ -1.16373e-6   -9.18657e-7   -1.72066e-8
+ -5.4359e-7    -4.61185e-7   -8.20668e-9
+ -2.68002e-7   -2.15438e-7   -3.98306e-9
+ -1.26889e-7   -1.0621e-7    -1.90804e-9
+ -6.19252e-8   -5.02884e-8   -9.23021e-10
+ -2.95426e-8   -2.45415e-8   -4.43251e-10</code></pre><p><strong>Generalized IRFs</strong> (Pesaran &amp; Shin 1998) do not depend on variable ordering:</p><p class="math-container">\[\text{GIRF}_h(\mathbf{e}_j) = \frac{\Phi_h \, \Sigma \, \mathbf{e}_j}{\sqrt{\sigma_{jj}}}\]</p><p>where:</p><ul><li><span>$\mathbf{e}_j$</span> is the <span>$j$</span>-th unit vector</li><li><span>$\sigma_{jj} = \Sigma[j,j]$</span> is the variance of the <span>$j$</span>-th variable</li></ul><pre><code class="language-julia hljs">girfs = pvar_girf(model, 20)   # H+1 x m x m array</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">21×3×3 Array{Float64, 3}:
+[:, :, 1] =
+  0.167221     -0.0280471     0.00883495
+ -0.114582      0.0906737    -0.000550978
+  0.0228533    -0.044689      1.15845e-5
+ -0.0169585     0.00904386   -0.000132197
+  0.00192819   -0.0067097    -1.49454e-5
+ -0.00271483    0.0007603    -2.48126e-5
+  7.06364e-6   -0.00107452   -5.59774e-6
+ -0.000471085   2.2946e-6    -4.98996e-6
+ -5.57102e-5   -0.000186515  -1.57621e-6
+ -8.86257e-5   -2.21444e-5   -1.05795e-6
+  ⋮                          
+ -5.70572e-6   -7.07969e-6   -9.79602e-8
+ -3.79639e-6   -2.26237e-6   -5.22545e-8
+ -1.45072e-6   -1.50416e-6   -2.33449e-8
+ -8.35297e-7   -5.75085e-7   -1.19054e-8
+ -3.53148e-7   -3.30987e-7   -5.49717e-9
+ -1.87889e-7   -1.39976e-7   -2.73402e-9
+ -8.40998e-8   -7.44562e-8   -1.28606e-9
+ -4.2827e-8    -3.33323e-8   -6.30716e-10
+ -1.9796e-8    -1.6972e-8    -2.99798e-10
+
+[:, :, 2] =
+ -0.130029      0.0360693    -0.00742888
+  0.106131     -0.0726543     0.000581503
+ -0.0163835     0.0414366     4.05948e-5
+  0.0162979    -0.00648159    0.000138727
+ -0.000882646   0.00644941    2.46735e-5
+  0.00272639   -0.000346461   2.71201e-5
+  0.000176087   0.00107929    7.56764e-6
+  0.000495231   7.02224e-5    5.62917e-6
+  9.04671e-5    0.000196109   1.99591e-6
+  9.7024e-5     3.59101e-5    1.2198e-6
+  ⋮                          
+  7.21206e-6    7.99674e-6    1.18796e-7
+  4.38052e-6    2.8592e-6     6.16078e-8
+  1.78318e-6    1.73571e-6    2.80975e-8
+  9.77024e-7    7.06823e-7    1.41058e-8
+  4.28072e-7    3.87162e-7    6.58929e-9
+  2.21583e-7    1.69667e-7    3.24853e-9
+  1.01197e-7    8.78102e-8    1.5381e-9
+  5.07505e-8    4.01077e-8    7.50619e-10
+  2.37258e-8    2.01123e-8    3.58104e-10
+
+[:, :, 3] =
+  0.153181     -0.0277824     0.00964474
+ -0.132416      0.0883669    -0.00072768
+  0.0192711    -0.0516667    -6.26445e-5
+ -0.0204654     0.00762451   -0.00017691
+  0.000882295  -0.00809877   -3.33838e-5
+ -0.00345085    0.000345554  -3.48174e-5
+ -0.000263711  -0.00136613   -1.00123e-5
+ -0.00063176   -0.000105049  -7.26273e-6
+ -0.000122201  -0.000250181  -2.61833e-6
+ -0.000124593  -4.84998e-5   -1.579e-6
+  ⋮                          
+ -9.45883e-6   -1.03194e-5   -1.54915e-7
+ -5.67113e-6   -3.74984e-6   -8.00137e-8
+ -2.32974e-6   -2.24712e-6   -3.66009e-8
+ -1.26744e-6   -9.23462e-7   -1.83332e-8
+ -5.58187e-7   -5.02248e-7   -8.57845e-9
+ -2.87794e-7   -2.21237e-7   -4.22383e-9
+ -1.31818e-7   -1.14049e-7   -2.00177e-9
+ -6.59617e-8   -5.22439e-8   -9.76205e-10
+ -3.08874e-8   -2.61405e-8   -4.65972e-10</code></pre><h3 id="Forecast-Error-Variance-Decomposition"><a class="docs-heading-anchor" href="#Forecast-Error-Variance-Decomposition">Forecast Error Variance Decomposition</a><a id="Forecast-Error-Variance-Decomposition-1"></a><a class="docs-heading-anchor-permalink" href="#Forecast-Error-Variance-Decomposition" title="Permalink"></a></h3><p>FEVD quantifies the share of forecast error variance of variable <span>$l$</span> attributable to shock <span>$k$</span> at horizon <span>$h$</span>:</p><p class="math-container">\[\Omega_{l,k,h} = \frac{\sum_{j=0}^{h} (\Psi_j)_{l,k}^2}{\text{MSE}_{h,ll}}\]</p><p>where:</p><ul><li><span>$\Psi_j$</span> is the orthogonalized impulse response at horizon <span>$j$</span></li><li><span>$\text{MSE}_{h,ll} = \sum_{j=0}^{h} (\Phi_j \Sigma \Phi_j&#39;)_{ll}$</span> is the forecast error variance of variable <span>$l$</span></li></ul><p>Each row sums to 1 (100% of forecast error variance accounted for).</p><pre><code class="language-julia hljs">decomp = pvar_fevd(model, 20)   # H+1 x m x m array</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">21×3×3 Array{Float64, 3}:
+[:, :, 1] =
+ 1.0       0.604648  0.839126
+ 0.894985  0.9289    0.836752
+ 0.895802  0.88526   0.836442
+ 0.893464  0.8858    0.836294
+ 0.893375  0.884488  0.836272
+ 0.893278  0.884437  0.836264
+ 0.893269  0.884382  0.836263
+ 0.893265  0.884376  0.836263
+ 0.893264  0.884374  0.836263
+ 0.893264  0.884374  0.836262
+ ⋮                   
+ 0.893264  0.884373  0.836262
+ 0.893264  0.884373  0.836262
+ 0.893264  0.884373  0.836262
+ 0.893264  0.884373  0.836262
+ 0.893264  0.884373  0.836262
+ 0.893264  0.884373  0.836262
+ 0.893264  0.884373  0.836262
+ 0.893264  0.884373  0.836262
+ 0.893264  0.884373  0.836262
+
+[:, :, 2] =
+ 0.0        0.395352   0.0084936
+ 0.0159824  0.0542399  0.00906958
+ 0.015901   0.0514089  0.00913263
+ 0.0162726  0.0511221  0.00916382
+ 0.0162901  0.051145   0.00916815
+ 0.0163059  0.0511514  0.00916965
+ 0.0163075  0.0511548  0.00916991
+ 0.0163082  0.0511556  0.00916999
+ 0.0163083  0.0511558  0.00917
+ 0.0163084  0.0511558  0.00917001
+ ⋮                     
+ 0.0163084  0.0511559  0.00917001
+ 0.0163084  0.0511559  0.00917001
+ 0.0163084  0.0511559  0.00917001
+ 0.0163084  0.0511559  0.00917001
+ 0.0163084  0.0511559  0.00917001
+ 0.0163084  0.0511559  0.00917001
+ 0.0163084  0.0511559  0.00917001
+ 0.0163084  0.0511559  0.00917001
+ 0.0163084  0.0511559  0.00917001
+
+[:, :, 3] =
+ 0.0        0.0        0.15238
+ 0.0890326  0.0168605  0.154178
+ 0.0882966  0.0633312  0.154426
+ 0.0902635  0.0630783  0.154543
+ 0.0903347  0.0643671  0.15456
+ 0.0904158  0.0644118  0.154566
+ 0.0904232  0.0644635  0.154567
+ 0.0904269  0.064468   0.154567
+ 0.0904274  0.0644703  0.154567
+ 0.0904275  0.0644706  0.154568
+ ⋮                     
+ 0.0904276  0.0644707  0.154568
+ 0.0904276  0.0644707  0.154568
+ 0.0904276  0.0644707  0.154568
+ 0.0904276  0.0644707  0.154568
+ 0.0904276  0.0644707  0.154568
+ 0.0904276  0.0644707  0.154568
+ 0.0904276  0.0644707  0.154568
+ 0.0904276  0.0644707  0.154568
+ 0.0904276  0.0644707  0.154568</code></pre><h3 id="Stability-Analysis"><a class="docs-heading-anchor" href="#Stability-Analysis">Stability Analysis</a><a id="Stability-Analysis-1"></a><a class="docs-heading-anchor-permalink" href="#Stability-Analysis" title="Permalink"></a></h3><p>The system is stable if all eigenvalues of the companion matrix lie inside the unit circle:</p><pre><code class="language-julia hljs">stab = pvar_stability(model)
 stab.is_stable      # true if all |lambda| &lt; 1
 stab.moduli          # moduli of eigenvalues (sorted descending)
-report(stab)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">&lt;&lt; @example-block not executed in draft mode &gt;&gt;</code></pre><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>eigenvalues</code></td><td style="text-align: right"><code>Vector{Complex{T}}</code></td><td style="text-align: right">Eigenvalues of companion matrix</td></tr><tr><td style="text-align: right"><code>moduli</code></td><td style="text-align: right"><code>Vector{T}</code></td><td style="text-align: right">Moduli sorted in descending order</td></tr><tr><td style="text-align: right"><code>is_stable</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>true</code> if all moduli are strictly less than 1</td></tr></table><hr/><h2 id="Bootstrap-Confidence-Intervals"><a class="docs-heading-anchor" href="#Bootstrap-Confidence-Intervals">Bootstrap Confidence Intervals</a><a id="Bootstrap-Confidence-Intervals-1"></a><a class="docs-heading-anchor-permalink" href="#Bootstrap-Confidence-Intervals" title="Permalink"></a></h2><p>Group-level block bootstrap preserves the within-group time structure. For each bootstrap draw, <span>$N$</span> groups are resampled with replacement, the PVAR is re-estimated, and IRFs are computed. Quantile-based confidence intervals are constructed from the bootstrap distribution:</p><pre><code class="language-julia hljs">model = estimate_pvar(pd, 1; dependent_vars=[&quot;rgdpna&quot;, &quot;emp&quot;, &quot;hc&quot;], steps=:twostep)
+report(stab)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">  PVAR Stability (STABLE)
+
+  #      |λ|   Unit Circle
+
+  1   0.4817   Inside
+  2   0.3609   Inside
+  3   0.0259   Inside</code></pre><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>eigenvalues</code></td><td style="text-align: right"><code>Vector{Complex{T}}</code></td><td style="text-align: right">Eigenvalues of companion matrix</td></tr><tr><td style="text-align: right"><code>moduli</code></td><td style="text-align: right"><code>Vector{T}</code></td><td style="text-align: right">Moduli sorted in descending order</td></tr><tr><td style="text-align: right"><code>is_stable</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>true</code> if all moduli are strictly less than 1</td></tr></table><hr/><h2 id="Bootstrap-Confidence-Intervals"><a class="docs-heading-anchor" href="#Bootstrap-Confidence-Intervals">Bootstrap Confidence Intervals</a><a id="Bootstrap-Confidence-Intervals-1"></a><a class="docs-heading-anchor-permalink" href="#Bootstrap-Confidence-Intervals" title="Permalink"></a></h2><p>Group-level block bootstrap preserves the within-group time structure. For each bootstrap draw, <span>$N$</span> groups are resampled with replacement, the PVAR is re-estimated, and IRFs are computed. Quantile-based confidence intervals are constructed from the bootstrap distribution:</p><pre><code class="language-julia hljs">model = estimate_pvar(pd, 1; dependent_vars=[&quot;rgdpna&quot;, &quot;emp&quot;, &quot;hc&quot;], steps=:twostep)
 
 boot = pvar_bootstrap_irf(model, 20;
     irf_type=:oirf,   # or :girf
     n_draws=50,
     ci=0.95
-)
-nothing # hide</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">&lt;&lt; @example-block not executed in draft mode &gt;&gt;</code></pre><p>The returned named tuple contains <code>boot.irf</code> (point estimate), <code>boot.lower</code> and <code>boot.upper</code> (CI bounds), and <code>boot.draws</code> (all bootstrap draws). All arrays have shape <span>$(H+1) \times m \times m$</span>.</p><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>irf_type</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:oirf</code></td><td style="text-align: right"><code>:oirf</code> (orthogonalized) or <code>:girf</code> (generalized)</td></tr><tr><td style="text-align: right"><code>n_draws</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>500</code></td><td style="text-align: right">Number of bootstrap replications</td></tr><tr><td style="text-align: right"><code>ci</code></td><td style="text-align: right"><code>Real</code></td><td style="text-align: right"><code>0.95</code></td><td style="text-align: right">Confidence level</td></tr></table><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>irf</code></td><td style="text-align: right"><code>Array{T,3}</code></td><td style="text-align: right">Point estimate <span>$(H+1) \times m \times m$</span></td></tr><tr><td style="text-align: right"><code>lower</code></td><td style="text-align: right"><code>Array{T,3}</code></td><td style="text-align: right">Lower CI bound</td></tr><tr><td style="text-align: right"><code>upper</code></td><td style="text-align: right"><code>Array{T,3}</code></td><td style="text-align: right">Upper CI bound</td></tr><tr><td style="text-align: right"><code>draws</code></td><td style="text-align: right"><code>Array{T,4}</code></td><td style="text-align: right">All bootstrap draws <span>$n_{\text{draws}} \times (H+1) \times m \times m$</span></td></tr></table><hr/><h2 id="Specification-Tests"><a class="docs-heading-anchor" href="#Specification-Tests">Specification Tests</a><a id="Specification-Tests-1"></a><a class="docs-heading-anchor-permalink" href="#Specification-Tests" title="Permalink"></a></h2><h3 id="Hansen-J-Test"><a class="docs-heading-anchor" href="#Hansen-J-Test">Hansen J-Test</a><a id="Hansen-J-Test-1"></a><a class="docs-heading-anchor-permalink" href="#Hansen-J-Test" title="Permalink"></a></h3><p>The Hansen (1982) J-test evaluates whether the overidentifying restrictions (moment conditions) are valid. Under <span>$H_0$</span>: all moment conditions are correctly specified.</p><p class="math-container">\[J = N \cdot \bar{g}(\hat{\theta})&#39; \, \hat{W} \, \bar{g}(\hat{\theta}) \sim \chi^2(c - b)\]</p><p>where:</p><ul><li><span>$\bar{g}(\hat{\theta})$</span> is the <span>$c \times 1$</span> vector of sample moment conditions evaluated at the GMM estimate</li><li><span>$\hat{W}$</span> is the optimal weighting matrix</li><li><span>$c$</span> is the number of instruments and <span>$b$</span> is the number of estimated parameters</li></ul><pre><code class="language-julia hljs">model = estimate_pvar(pd, 1; dependent_vars=[&quot;rgdpna&quot;, &quot;emp&quot;, &quot;hc&quot;], steps=:twostep)
+)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">┌ Warning: Matrix singular or near-singular. Using pseudo-inverse.
+└ @ MacroEconometricModels /private/tmp/claude-501/-Users-chung-Desktop-CODES-MacroEconometricModels/a2924f94-b24b-40d2-8309-6e0b21363a4f/scratchpad/wt-v0.5.0/src/core/utils.jl:123
+┌ Warning: Matrix singular or near-singular. Using pseudo-inverse.
+└ @ MacroEconometricModels /private/tmp/claude-501/-Users-chung-Desktop-CODES-MacroEconometricModels/a2924f94-b24b-40d2-8309-6e0b21363a4f/scratchpad/wt-v0.5.0/src/core/utils.jl:123
+┌ Warning: Matrix singular or near-singular. Using pseudo-inverse.
+└ @ MacroEconometricModels /private/tmp/claude-501/-Users-chung-Desktop-CODES-MacroEconometricModels/a2924f94-b24b-40d2-8309-6e0b21363a4f/scratchpad/wt-v0.5.0/src/core/utils.jl:123</code></pre><p>The returned named tuple contains <code>boot.irf</code> (point estimate), <code>boot.lower</code> and <code>boot.upper</code> (CI bounds), and <code>boot.draws</code> (all bootstrap draws). All arrays have shape <span>$(H+1) \times m \times m$</span>.</p><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>irf_type</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:oirf</code></td><td style="text-align: right"><code>:oirf</code> (orthogonalized) or <code>:girf</code> (generalized)</td></tr><tr><td style="text-align: right"><code>n_draws</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>500</code></td><td style="text-align: right">Number of bootstrap replications</td></tr><tr><td style="text-align: right"><code>ci</code></td><td style="text-align: right"><code>Real</code></td><td style="text-align: right"><code>0.95</code></td><td style="text-align: right">Confidence level</td></tr></table><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>irf</code></td><td style="text-align: right"><code>Array{T,3}</code></td><td style="text-align: right">Point estimate <span>$(H+1) \times m \times m$</span></td></tr><tr><td style="text-align: right"><code>lower</code></td><td style="text-align: right"><code>Array{T,3}</code></td><td style="text-align: right">Lower CI bound</td></tr><tr><td style="text-align: right"><code>upper</code></td><td style="text-align: right"><code>Array{T,3}</code></td><td style="text-align: right">Upper CI bound</td></tr><tr><td style="text-align: right"><code>draws</code></td><td style="text-align: right"><code>Array{T,4}</code></td><td style="text-align: right">All bootstrap draws <span>$n_{\text{draws}} \times (H+1) \times m \times m$</span></td></tr></table><hr/><h2 id="Specification-Tests"><a class="docs-heading-anchor" href="#Specification-Tests">Specification Tests</a><a id="Specification-Tests-1"></a><a class="docs-heading-anchor-permalink" href="#Specification-Tests" title="Permalink"></a></h2><h3 id="Hansen-J-Test"><a class="docs-heading-anchor" href="#Hansen-J-Test">Hansen J-Test</a><a id="Hansen-J-Test-1"></a><a class="docs-heading-anchor-permalink" href="#Hansen-J-Test" title="Permalink"></a></h3><p>The Hansen (1982) J-test evaluates whether the overidentifying restrictions (moment conditions) are valid. Under <span>$H_0$</span>: all moment conditions are correctly specified.</p><p class="math-container">\[J = N \cdot \bar{g}(\hat{\theta})&#39; \, \hat{W} \, \bar{g}(\hat{\theta}) \sim \chi^2(c - b)\]</p><p>where:</p><ul><li><span>$\bar{g}(\hat{\theta})$</span> is the <span>$c \times 1$</span> vector of sample moment conditions evaluated at the GMM estimate</li><li><span>$\hat{W}$</span> is the optimal weighting matrix</li><li><span>$c$</span> is the number of instruments and <span>$b$</span> is the number of estimated parameters</li></ul><pre><code class="language-julia hljs">model = estimate_pvar(pd, 1; dependent_vars=[&quot;rgdpna&quot;, &quot;emp&quot;, &quot;hc&quot;], steps=:twostep)
 
 j = pvar_hansen_j(model)
-report(j)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">&lt;&lt; @example-block not executed in draft mode &gt;&gt;</code></pre><p>Rejection suggests instrument invalidity or model misspecification. Non-rejection does not validate the instruments –- it only means the data cannot reject the moment conditions at the given sample size.</p><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>test_name</code></td><td style="text-align: right"><code>String</code></td><td style="text-align: right"><code>&quot;Hansen J-test&quot;</code></td></tr><tr><td style="text-align: right"><code>statistic</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">J-statistic</td></tr><tr><td style="text-align: right"><code>pvalue</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">P-value (<span>$\chi^2$</span> distribution)</td></tr><tr><td style="text-align: right"><code>df</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Degrees of freedom <span>$c - b$</span></td></tr><tr><td style="text-align: right"><code>n_instruments</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of moment conditions <span>$c$</span></td></tr><tr><td style="text-align: right"><code>n_params</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of estimated parameters <span>$b$</span></td></tr></table><h3 id="Andrews-Lu-MMSC"><a class="docs-heading-anchor" href="#Andrews-Lu-MMSC">Andrews-Lu MMSC</a><a id="Andrews-Lu-MMSC-1"></a><a class="docs-heading-anchor-permalink" href="#Andrews-Lu-MMSC" title="Permalink"></a></h3><p>Andrews &amp; Lu (2001) Model and Moment Selection Criteria extend information criteria to GMM settings:</p><p class="math-container">\[\text{MMSC-BIC} = J - (c - b) \ln(n), \quad
+report(j)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">         Hansen J-test
+
+
+
+  Test          Hansen J-test
+  Statistic           642.956
+  P-value              &gt;0.999
+  DF                     1485
+  Instruments            1488
+  Parameters                3</code></pre><p>Rejection suggests instrument invalidity or model misspecification. Non-rejection does not validate the instruments –- it only means the data cannot reject the moment conditions at the given sample size.</p><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>test_name</code></td><td style="text-align: right"><code>String</code></td><td style="text-align: right"><code>&quot;Hansen J-test&quot;</code></td></tr><tr><td style="text-align: right"><code>statistic</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">J-statistic</td></tr><tr><td style="text-align: right"><code>pvalue</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">P-value (<span>$\chi^2$</span> distribution)</td></tr><tr><td style="text-align: right"><code>df</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Degrees of freedom <span>$c - b$</span></td></tr><tr><td style="text-align: right"><code>n_instruments</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of moment conditions <span>$c$</span></td></tr><tr><td style="text-align: right"><code>n_params</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of estimated parameters <span>$b$</span></td></tr></table><h3 id="Andrews-Lu-MMSC"><a class="docs-heading-anchor" href="#Andrews-Lu-MMSC">Andrews-Lu MMSC</a><a id="Andrews-Lu-MMSC-1"></a><a class="docs-heading-anchor-permalink" href="#Andrews-Lu-MMSC" title="Permalink"></a></h3><p>Andrews &amp; Lu (2001) Model and Moment Selection Criteria extend information criteria to GMM settings:</p><p class="math-container">\[\text{MMSC-BIC} = J - (c - b) \ln(n), \quad
 \text{MMSC-AIC} = J - 2(c - b)\]</p><p>where:</p><ul><li><span>$J$</span> is the Hansen J-statistic</li><li><span>$c$</span> is the number of instruments, <span>$b$</span> is the number of parameters, <span>$n$</span> is the number of observations</li></ul><p>Lower values are preferred. These criteria penalize overidentification, balancing model fit against instrument proliferation.</p><pre><code class="language-julia hljs">mmsc = pvar_mmsc(model)
 mmsc.bic     # MMSC-BIC
 mmsc.aic     # MMSC-AIC
-mmsc.hqic    # MMSC-HQIC</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">&lt;&lt; @example-block not executed in draft mode &gt;&gt;</code></pre><hr/><h2 id="Lag-Selection"><a class="docs-heading-anchor" href="#Lag-Selection">Lag Selection</a><a id="Lag-Selection-1"></a><a class="docs-heading-anchor-permalink" href="#Lag-Selection" title="Permalink"></a></h2><p>The <code>pvar_lag_selection</code> function compares MMSC criteria across candidate lag orders to select the optimal specification:</p><pre><code class="language-julia hljs">
-sel = pvar_lag_selection(pd, 4; dependent_vars=[&quot;rgdpna&quot;, &quot;emp&quot;, &quot;hc&quot;])
+mmsc.hqic    # MMSC-HQIC</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">-5758.278085533175</code></pre><hr/><h2 id="Lag-Selection"><a class="docs-heading-anchor" href="#Lag-Selection">Lag Selection</a><a id="Lag-Selection-1"></a><a class="docs-heading-anchor-permalink" href="#Lag-Selection" title="Permalink"></a></h2><p>The <code>pvar_lag_selection</code> function compares MMSC criteria across candidate lag orders to select the optimal specification:</p><pre><code class="language-julia hljs">sel = pvar_lag_selection(pd, 4; dependent_vars=[&quot;rgdpna&quot;, &quot;emp&quot;, &quot;hc&quot;])
 sel.best_bic    # optimal lag by BIC
 sel.best_aic    # optimal lag by AIC
-sel.best_hqic   # optimal lag by HQIC</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">&lt;&lt; @example-block not executed in draft mode &gt;&gt;</code></pre><p>The function estimates PVAR models for lags 1 through the maximum candidate, computes MMSC criteria for each, and returns the lag order that minimizes each criterion.</p><hr/><h2 id="Complete-Example"><a class="docs-heading-anchor" href="#Complete-Example">Complete Example</a><a id="Complete-Example-1"></a><a class="docs-heading-anchor-permalink" href="#Complete-Example" title="Permalink"></a></h2><pre><code class="language-julia hljs"># Load Penn World Table and convert to growth rates
+sel.best_hqic   # optimal lag by HQIC</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">4</code></pre><p>The function estimates PVAR models for lags 1 through the maximum candidate, computes MMSC criteria for each, and returns the lag order that minimizes each criterion.</p><hr/><h2 id="Complete-Example"><a class="docs-heading-anchor" href="#Complete-Example">Complete Example</a><a id="Complete-Example-1"></a><a class="docs-heading-anchor-permalink" href="#Complete-Example" title="Permalink"></a></h2><pre><code class="language-julia hljs"># Load Penn World Table and convert to growth rates
 dep_vars = [&quot;rgdpna&quot;, &quot;emp&quot;, &quot;hc&quot;]
 
 # Lag selection
@@ -134,4 +798,4 @@ decomp = pvar_fevd(model, 10)
 boot = pvar_bootstrap_irf(model, 10; n_draws=50, ci=0.90)
 
 # Academic references
-refs(model)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">&lt;&lt; @example-block not executed in draft mode &gt;&gt;</code></pre><p>The <code>model</code> object stores the GMM coefficient estimates with Windmeijer-corrected standard errors, per-equation coefficient tables, and all GMM internals needed for specification testing. The Hansen J-test evaluates instrument validity, while the stability analysis confirms that the companion matrix eigenvalues lie inside the unit circle. The orthogonalized IRFs trace out the dynamic transmission of shocks through the GDP-employment-human capital system, and the bootstrap provides pointwise confidence intervals that account for estimation uncertainty. The FEVD quantifies how much of the forecast error variance in each variable is attributable to each structural shock at different horizons.</p><hr/><h2 id="Common-Pitfalls"><a class="docs-heading-anchor" href="#Common-Pitfalls">Common Pitfalls</a><a id="Common-Pitfalls-1"></a><a class="docs-heading-anchor-permalink" href="#Common-Pitfalls" title="Permalink"></a></h2><ol><li><p><strong>Nickell bias in FE-OLS</strong>: The within estimator is biased of order <span>$O(1/T)$</span> in dynamic panels (Nickell 1981). For panels with <span>$T &lt; 20$</span>, FE-OLS overestimates the persistence of the lagged dependent variable. Use GMM estimation (<code>estimate_pvar</code>) instead of <code>estimate_pvar_feols</code> when the time dimension is short relative to the cross-section.</p></li><li><p><strong>Instrument count exceeding N</strong>: When the number of instruments exceeds <span>$N$</span> (the number of groups), the Hansen J-test loses power and standard errors become unreliable. Use <code>collapse=true</code>, restrict <code>max_lag_endo</code>, or apply <code>pca_instruments=true</code> to reduce instrument count. A rule of thumb: keep the instrument count below <span>$N$</span>.</p></li><li><p><strong>Hansen J-test interpretation</strong>: A high p-value (non-rejection) does not prove instrument validity –- it only means the data cannot reject the moment conditions. Conversely, with many instruments, the J-test almost never rejects even when some instruments are invalid. Always report the instrument count alongside the J-statistic.</p></li><li><p><strong>Unbalanced panels</strong>: First-differencing loses one observation per gap in the panel. Forward orthogonal deviations (<code>transformation=:fod</code>) handle unbalanced panels more efficiently by preserving orthogonality of the transformed errors. Use <code>:fod</code> when the panel has missing periods or unequal group sizes.</p></li><li><p><strong>System GMM stationarity assumption</strong>: Blundell-Bond system GMM requires that first differences are uncorrelated with fixed effects –- a mean stationarity condition. If the data exhibit trending behavior or structural breaks, the additional level-equation instruments are invalid and FD-GMM is preferred.</p></li></ol><hr/><h2 id="References"><a class="docs-heading-anchor" href="#References">References</a><a id="References-1"></a><a class="docs-heading-anchor-permalink" href="#References" title="Permalink"></a></h2><ul><li><p>Arellano, Manuel, and Stephen Bond. 1991. &quot;Some Tests of Specification for Panel Data.&quot; <em>Review of Economic Studies</em> 58 (2): 277–297. <a href="https://doi.org/10.2307/2297968">DOI</a></p></li><li><p>Arellano, Manuel, and Olympia Bover. 1995. &quot;Another Look at the Instrumental Variable Estimation of Error-Components Models.&quot; <em>Journal of Econometrics</em> 68 (1): 29–51. <a href="https://doi.org/10.1016/0304-4076(94)01642-D">DOI</a></p></li><li><p>Andrews, Donald W. K., and Biao Lu. 2001. &quot;Consistent Model and Moment Selection Procedures for GMM Estimation with Application to Dynamic Panel Data Models.&quot; <em>Journal of Econometrics</em> 101 (1): 123–164. <a href="https://doi.org/10.1016/S0304-4076(00)00077-4">DOI</a></p></li><li><p>Blundell, Richard, and Stephen Bond. 1998. &quot;Initial Conditions and Moment Restrictions in Dynamic Panel Data Models.&quot; <em>Journal of Econometrics</em> 87 (1): 115–143. <a href="https://doi.org/10.1016/S0304-4076(98)00009-8">DOI</a></p></li><li><p>Hansen, Lars Peter. 1982. &quot;Large Sample Properties of Generalized Method of Moments Estimators.&quot; <em>Econometrica</em> 50 (4): 1029–1054. <a href="https://doi.org/10.2307/1912775">DOI</a></p></li><li><p>Holtz-Eakin, Douglas, Whitney Newey, and Harvey S. Rosen. 1988. &quot;Estimating Vector Autoregressions with Panel Data.&quot; <em>Econometrica</em> 56 (6): 1371–1395. <a href="https://doi.org/10.2307/1913103">DOI</a></p></li><li><p>Nickell, Stephen. 1981. &quot;Biases in Dynamic Models with Fixed Effects.&quot; <em>Econometrica</em> 49 (6): 1417–1426. <a href="https://doi.org/10.2307/1911408">DOI</a></p></li><li><p>Pesaran, M. Hashem, and Yongcheol Shin. 1998. &quot;Generalized Impulse Response Analysis in Linear Multivariate Models.&quot; <em>Economics Letters</em> 58 (1): 17–29. <a href="https://doi.org/10.1016/S0165-1765(97)00214-0">DOI</a></p></li><li><p>Windmeijer, Frank. 2005. &quot;A Finite Sample Correction for the Variance of Linear Efficient Two-Step GMM Estimators.&quot; <em>Journal of Econometrics</em> 126 (1): 25–51. <a href="https://doi.org/10.1016/j.jeconom.2004.02.005">DOI</a></p></li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../ordered_multinomial/">« Ordered &amp; Multinomial</a><a class="docs-footer-nextpage" href="../panel_reg/">Panel Regression »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Saturday 6 June 2026 23:27">Saturday 6 June 2026</span>. Using Julia version 1.10.11.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+refs(model)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">&quot;Holtz-Eakin, Douglas and Newey, Whitney and Rosen, Harvey S. 1988. \&quot;Estimating Vector Autoregressions with Panel Data.\&quot; Econometrica 56 (6): 1371–1395.\n  DOI: https://doi.org/10.2307/1913103\nArellano, Manuel and Bond, Stephen 1991. \&quot;Some Tests of Specification for Panel Da&quot;<span class="sgr93"><span class="sgr1"> ⋯ 90 bytes ⋯ </span></span>&quot;tudies 58 (2): 277–297.\n  DOI: https://doi.org/10.2307/2297968\nBlundell, Richard and Bond, Stephen 1998. \&quot;Initial Conditions and Moment Restrictions in Dynamic Panel Data Models.\&quot; Journal of Econometrics 87 (1): 115–143.\n  DOI: https://doi.org/10.1016/S0304-4076(98)00009-8\n&quot;</code></pre><p>The <code>model</code> object stores the GMM coefficient estimates with Windmeijer-corrected standard errors, per-equation coefficient tables, and all GMM internals needed for specification testing. The Hansen J-test evaluates instrument validity, while the stability analysis confirms that the companion matrix eigenvalues lie inside the unit circle. The orthogonalized IRFs trace out the dynamic transmission of shocks through the GDP-employment-human capital system, and the bootstrap provides pointwise confidence intervals that account for estimation uncertainty. The FEVD quantifies how much of the forecast error variance in each variable is attributable to each structural shock at different horizons.</p><hr/><h2 id="Common-Pitfalls"><a class="docs-heading-anchor" href="#Common-Pitfalls">Common Pitfalls</a><a id="Common-Pitfalls-1"></a><a class="docs-heading-anchor-permalink" href="#Common-Pitfalls" title="Permalink"></a></h2><ol><li><p><strong>Nickell bias in FE-OLS</strong>: The within estimator is biased of order <span>$O(1/T)$</span> in dynamic panels (Nickell 1981). For panels with <span>$T &lt; 20$</span>, FE-OLS overestimates the persistence of the lagged dependent variable. Use GMM estimation (<code>estimate_pvar</code>) instead of <code>estimate_pvar_feols</code> when the time dimension is short relative to the cross-section.</p></li><li><p><strong>Instrument count exceeding N</strong>: When the number of instruments exceeds <span>$N$</span> (the number of groups), the Hansen J-test loses power and standard errors become unreliable. Use <code>collapse=true</code>, restrict <code>max_lag_endo</code>, or apply <code>pca_instruments=true</code> to reduce instrument count. A rule of thumb: keep the instrument count below <span>$N$</span>.</p></li><li><p><strong>Hansen J-test interpretation</strong>: A high p-value (non-rejection) does not prove instrument validity –- it only means the data cannot reject the moment conditions. Conversely, with many instruments, the J-test almost never rejects even when some instruments are invalid. Always report the instrument count alongside the J-statistic.</p></li><li><p><strong>Unbalanced panels</strong>: First-differencing loses one observation per gap in the panel. Forward orthogonal deviations (<code>transformation=:fod</code>) handle unbalanced panels more efficiently by preserving orthogonality of the transformed errors. Use <code>:fod</code> when the panel has missing periods or unequal group sizes.</p></li><li><p><strong>System GMM stationarity assumption</strong>: Blundell-Bond system GMM requires that first differences are uncorrelated with fixed effects –- a mean stationarity condition. If the data exhibit trending behavior or structural breaks, the additional level-equation instruments are invalid and FD-GMM is preferred.</p></li></ol><hr/><h2 id="References"><a class="docs-heading-anchor" href="#References">References</a><a id="References-1"></a><a class="docs-heading-anchor-permalink" href="#References" title="Permalink"></a></h2><ul><li><p>Arellano, Manuel, and Stephen Bond. 1991. &quot;Some Tests of Specification for Panel Data.&quot; <em>Review of Economic Studies</em> 58 (2): 277–297. <a href="https://doi.org/10.2307/2297968">DOI</a></p></li><li><p>Arellano, Manuel, and Olympia Bover. 1995. &quot;Another Look at the Instrumental Variable Estimation of Error-Components Models.&quot; <em>Journal of Econometrics</em> 68 (1): 29–51. <a href="https://doi.org/10.1016/0304-4076(94)01642-D">DOI</a></p></li><li><p>Andrews, Donald W. K., and Biao Lu. 2001. &quot;Consistent Model and Moment Selection Procedures for GMM Estimation with Application to Dynamic Panel Data Models.&quot; <em>Journal of Econometrics</em> 101 (1): 123–164. <a href="https://doi.org/10.1016/S0304-4076(00)00077-4">DOI</a></p></li><li><p>Blundell, Richard, and Stephen Bond. 1998. &quot;Initial Conditions and Moment Restrictions in Dynamic Panel Data Models.&quot; <em>Journal of Econometrics</em> 87 (1): 115–143. <a href="https://doi.org/10.1016/S0304-4076(98)00009-8">DOI</a></p></li><li><p>Hansen, Lars Peter. 1982. &quot;Large Sample Properties of Generalized Method of Moments Estimators.&quot; <em>Econometrica</em> 50 (4): 1029–1054. <a href="https://doi.org/10.2307/1912775">DOI</a></p></li><li><p>Holtz-Eakin, Douglas, Whitney Newey, and Harvey S. Rosen. 1988. &quot;Estimating Vector Autoregressions with Panel Data.&quot; <em>Econometrica</em> 56 (6): 1371–1395. <a href="https://doi.org/10.2307/1913103">DOI</a></p></li><li><p>Nickell, Stephen. 1981. &quot;Biases in Dynamic Models with Fixed Effects.&quot; <em>Econometrica</em> 49 (6): 1417–1426. <a href="https://doi.org/10.2307/1911408">DOI</a></p></li><li><p>Pesaran, M. Hashem, and Yongcheol Shin. 1998. &quot;Generalized Impulse Response Analysis in Linear Multivariate Models.&quot; <em>Economics Letters</em> 58 (1): 17–29. <a href="https://doi.org/10.1016/S0165-1765(97)00214-0">DOI</a></p></li><li><p>Windmeijer, Frank. 2005. &quot;A Finite Sample Correction for the Variance of Linear Efficient Two-Step GMM Estimators.&quot; <em>Journal of Econometrics</em> 126 (1): 25–51. <a href="https://doi.org/10.1016/j.jeconom.2004.02.005">DOI</a></p></li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../ordered_multinomial/">« Ordered &amp; Multinomial</a><a class="docs-footer-nextpage" href="../panel_reg/">Panel Regression »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Friday 10 July 2026 15:15">Friday 10 July 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
