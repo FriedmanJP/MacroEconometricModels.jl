@@ -470,10 +470,15 @@ function Base.show(io::IO, f::LPFEVD{T}) where {T}
 
     method_str = f.method == :r2 ? "R²" : f.method == :lp_a ? "LP-A" : "LP-B"
     bc_str = f.bias_correction ? "Yes (VAR bootstrap)" : "No"
-    _show_spec_table(io, "LP-FEVD (Gorodnichenko & Lee 2019)",
-        ["Variables" => n_vars, "Shocks" => n_shocks, "Horizon" => H,
-         "Estimator" => method_str, "Bias corrected" => bc_str,
-         "Bootstrap reps" => f.n_boot, "Conf. level" => _fmt_pct(f.conf_level)])
+    spec_pairs = Pair{String,Any}[
+        "Variables" => n_vars, "Shocks" => n_shocks, "Horizon" => H,
+        "Estimator" => method_str, "Bias corrected" => bc_str,
+        "Bootstrap reps" => f.n_boot, "Conf. level" => _fmt_pct(f.conf_level)]
+    # MC honesty (#244): surface usable vs dropped bootstrap draws when any were dropped.
+    if f.n_requested > 0 && f.n_failed > 0
+        push!(spec_pairs, "Effective draws" => "$(f.n_effective)/$(f.n_requested) ($(f.n_failed) dropped)")
+    end
+    _show_spec_table(io, "LP-FEVD (Gorodnichenko & Lee 2019)", spec_pairs)
 
     # Use bias-corrected values if available
     vals = f.bias_correction ? f.bias_corrected : f.proportions

@@ -286,7 +286,20 @@ struct LPFEVD{T<:AbstractFloat} <: AbstractFEVD
     bias_correction::Bool
     variables::Vector{String}
     shocks::Vector{String}
+    # Monte-Carlo honesty counts (#244): total bootstrap draws attempted across all
+    # (shock, response) cells, how many were usable, and how many were dropped by the
+    # recoverable-error catch in the bootstrap loop. n_requested==0 when n_boot==0.
+    n_requested::Int
+    n_effective::Int
+    n_failed::Int
 end
+
+# Backward-compatible constructor (pre-#244 call sites without MC counts): assumes no
+# dropped draws (n_effective == n_requested, n_failed == 0), n_requested == n_boot.
+LPFEVD{T}(proportions, bias_corrected, se, ci_lower, ci_upper, method, horizon, n_boot,
+          conf_level, bias_correction, variables, shocks) where {T} =
+    LPFEVD{T}(proportions, bias_corrected, se, ci_lower, ci_upper, method, horizon, n_boot,
+              conf_level, bias_correction, variables, shocks, n_boot, n_boot, 0)
 
 # =============================================================================
 # StatsAPI Interface for LP Models
