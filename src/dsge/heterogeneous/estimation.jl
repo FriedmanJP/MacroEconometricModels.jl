@@ -113,28 +113,29 @@ function _build_ha_observation_equation(sol::HADSGESolution{T},
     n_obs = length(observables)
     n_obs == 0 && throw(ArgumentError("observables must be non-empty"))
 
-    # Try to map observables to state indices via the linear solution's spec
-    obs_indices = Int[]
-    for obs in observables
-        idx = findfirst(==(obs), linear.spec.endog)
-        if idx !== nothing && idx <= n_states
-            push!(obs_indices, idx)
-        else
-            # Fallback: assign to states from the end of the reduced system.
-            # In the SSJ Ho-Kalman realization, the leading singular values
-            # capture the dominant aggregate dynamics. Use the first available
-            # state that has not been assigned yet.
-            fallback_idx = min(length(obs_indices) + 1, n_states)
-            push!(obs_indices, fallback_idx)
-        end
-    end
+    # Build Z from the Ho-Kalman/Reiter observation map C_obs (#227/#228): the
+    # reduced SSJ/Reiter system is expressed in synthetic coordinates x_1..x_n, so
+    # matching observables against `linear.spec.endog` always failed for real
+    # aggregates and the old code fell back to an arbitrary reduced-state index with
+    # a unit loading — Z and d referenced incompatible coordinates and the
+    # likelihood was meaningless. Instead, select the C_obs row whose aggregate name
+    # matches each requested observable; if none matches, error loudly (this
+    # ErrorException correctly rethrows out of the likelihood rather than degrading
+    # to -Inf) instead of silently assigning a wrong loading.
+    C_obs = sol.C_obs
+    agg_names = _ha_obs_names(sol)                 # one name per row of C_obs
+    @assert size(C_obs, 2) == n_states "C_obs column count must match the reduced state dimension"
+    @assert size(C_obs, 1) == length(agg_names) "C_obs row count must match the aggregate-name list"
 
-    # Build Z: selection matrix
     Z = zeros(T, n_obs, n_states)
-    for (i, j) in enumerate(obs_indices)
-        if j <= n_states
-            Z[i, j] = one(T)
+    for (i, obs) in enumerate(observables)
+        row = findfirst(==(string(obs)), agg_names)
+        if row === nothing
+            error("observable :$obs has no match in the reduced system's aggregate " *
+                  "outputs $(agg_names); cannot build a valid observation equation. " *
+                  "The reduced HA (SSJ/Reiter) system exposes only those aggregates.")
         end
+        Z[i, :] .= @view C_obs[row, :]
     end
 
     # d: steady-state values of observables

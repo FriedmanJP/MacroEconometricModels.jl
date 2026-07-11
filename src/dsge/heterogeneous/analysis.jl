@@ -26,38 +26,129 @@ using Random
 # irf / fevd / simulate — delegate to linear_solution
 # =============================================================================
 
+# Names of the aggregate outputs carried by the Ho-Kalman observation map C_obs.
+# SSJ realizes a single aggregate (the general r→K path reports K; Huggett clears
+# and reports the rate r); Reiter uses the identity map over its reduced system
+# (K and Z are explicit states), so its coordinate names are reported.
+function _ha_obs_names(sol::HADSGESolution)
+    n_out = size(sol.C_obs, 1)
+    if sol.method === :ssj
+        name = sol.spec.model === :huggett ? "r" : "K"
+        return n_out == 1 ? [name] : ["obs_$i" for i in 1:n_out]
+    else
+        endog = sol.linear_solution.spec.endog
+        return n_out == length(endog) ? [string(s) for s in endog] :
+               ["x_$i" for i in 1:n_out]
+    end
+end
+
 """
     irf(sol::HADSGESolution{T}, horizon::Int; kwargs...) -> ImpulseResponse{T}
 
-Compute impulse response functions for a linearized HA-DSGE solution by
-delegating to the embedded `linear_solution` (a `DSGESolution{T}`).
+Impulse responses of the **aggregate outputs** of a linearized HA-DSGE solution.
 
-All keyword arguments are forwarded to `irf(::DSGESolution, ...)`.
+The Ho-Kalman/Reiter reduced system is `x_{t+1} = A x_t + B ε_t`, `y_t = C_obs x_t
++ D_obs ε_t` (`x_0 = 0`). The reported aggregate response reproduces the realized
+IRF sequence `h[k]` of the output: the impact (`h=1`) is the direct feed-through
+`D_obs = h[0]`, and horizon `h ≥ 2` is `C_obs · A^(h-2) · B = h[h-1]` — i.e. in
+`(K, r, Y, …)` coordinates, not the abstract reduced state `x_1..x_n` the raw
+`linear_solution` would return.
 """
-function irf(sol::HADSGESolution{T}, horizon::Int; kwargs...) where {T}
-    return irf(sol.linear_solution, horizon; kwargs...)
+function irf(sol::HADSGESolution{T}, horizon::Int;
+             ci_type::Symbol=:none, kwargs...) where {T<:AbstractFloat}
+    lsol = sol.linear_solution
+    G1 = lsol.G1
+    B = lsol.impact
+    n_state = size(G1, 1)
+    n_shocks = size(B, 2)
+    C = sol.C_obs
+    D = sol.D_obs
+    n_out = size(C, 1)
+
+    point_irf = zeros(T, horizon, n_out, n_shocks)
+    Gpow = Matrix{T}(I, n_state, n_state)   # at horizon h>=2, Gpow = G1^(h-2)
+    for h in 1:horizon
+        if h == 1
+            Y_h = D                          # impact = h[0] = D_obs feed-through
+        else
+            Y_h = C * (Gpow * B)             # h[h-1] = C·A^(h-2)·B
+            Gpow = Gpow * G1
+        end
+        for j in 1:n_shocks
+            point_irf[h, :, j] = Y_h[:, j]
+        end
+    end
+
+    var_names = _ha_obs_names(sol)
+    shock_names = [string(s) for s in lsol.spec.exog]
+    length(shock_names) == n_shocks || (shock_names = ["shock_$j" for j in 1:n_shocks])
+    ci_lower = zeros(T, horizon, n_out, n_shocks)
+    ci_upper = zeros(T, horizon, n_out, n_shocks)
+    return ImpulseResponse{T}(point_irf, ci_lower, ci_upper, horizon,
+                              var_names, shock_names, ci_type)
 end
 
 """
     fevd(sol::HADSGESolution{T}, horizon::Int; kwargs...) -> FEVD{T}
 
-Compute forecast error variance decomposition for a linearized HA-DSGE
-solution by delegating to the embedded `linear_solution`.
+Forecast error variance decomposition of the aggregate outputs (built from the
+observation-mapped `irf`).
 """
-function fevd(sol::HADSGESolution{T}, horizon::Int; kwargs...) where {T}
-    return fevd(sol.linear_solution, horizon; kwargs...)
+function fevd(sol::HADSGESolution{T}, horizon::Int; kwargs...) where {T<:AbstractFloat}
+    ir = irf(sol, horizon)
+    n_vars = length(ir.variables)
+    n_e = length(ir.shocks)
+
+    decomp = zeros(T, n_vars, n_e, horizon)
+    props  = zeros(T, n_vars, n_e, horizon)
+    @inbounds for h in 1:horizon
+        for i in 1:n_vars
+            total = zero(T)
+            for j in 1:n_e
+                prev = h == 1 ? zero(T) : decomp[i, j, h-1]
+                decomp[i, j, h] = prev + ir.values[h, i, j]^2
+                total += decomp[i, j, h]
+            end
+            total > 0 && (props[i, :, h] = decomp[i, :, h] ./ total)
+        end
+    end
+    return FEVD{T}(decomp, props, ir.variables, ir.shocks)
 end
 
 """
     simulate(sol::HADSGESolution{T}, T_periods::Int; kwargs...) -> Matrix{T}
 
-Simulate the linearized HA-DSGE model by delegating to the embedded
-`linear_solution`.
-
-All keyword arguments (e.g., `shock_draws`, `rng`) are forwarded.
+Simulate the aggregate-output deviation path `y_t = C_obs x_t + D_obs ε_t` of the
+reduced HA-DSGE system. Returns a `T_periods × n_out` matrix of aggregate
+deviations. `shock_draws`/`rng` are forwarded.
 """
-function simulate(sol::HADSGESolution{T}, T_periods::Int; kwargs...) where {T}
-    return simulate(sol.linear_solution, T_periods; kwargs...)
+function simulate(sol::HADSGESolution{T}, T_periods::Int;
+                  shock_draws::Union{Nothing,AbstractMatrix}=nothing,
+                  rng=Random.default_rng()) where {T<:AbstractFloat}
+    lsol = sol.linear_solution
+    G1 = lsol.G1
+    B = lsol.impact
+    n_state = size(G1, 1)
+    n_shocks = size(B, 2)
+    C = sol.C_obs
+    D = sol.D_obs
+    n_out = size(C, 1)
+
+    if shock_draws !== nothing
+        @assert size(shock_draws) == (T_periods, n_shocks) "shock_draws must be ($T_periods, $n_shocks)"
+        e = T.(shock_draws)
+    else
+        e = randn(rng, T, T_periods, n_shocks)
+    end
+
+    x = zeros(T, n_state)                      # x_0 = 0
+    out = zeros(T, T_periods, n_out)
+    for t in 1:T_periods
+        e_t = e[t, :]
+        out[t, :] = C * x .+ D * e_t           # y_t = C·x_t + D·ε_t (feed-through, x pre-shock)
+        x = G1 * x .+ B * e_t                  # x_{t+1} = A·x_t + B·ε_t
+    end
+    return out
 end
 
 # =============================================================================
@@ -90,6 +181,11 @@ the reduced system in `G1`.
 function distribution_irf(sol::HADSGESolution{T}, horizon::Int;
                            shock_index::Int=1,
                            shock_size::Real=1.0) where {T<:AbstractFloat}
+    # SSJ/Ho-Kalman has no distribution reduction basis — its reduced coordinates are
+    # abstract minimal-realization states (reduction_basis is genuinely identity in
+    # those coords), so there is no map back to the (asset × income) histogram.
+    sol.method === :ssj && error("distribution IRFs are unavailable for method=:ssj " *
+        "(the Ho-Kalman realization has no distribution basis); use method=:reiter.")
     lsol = sol.linear_solution
     G1 = lsol.G1
     impact = lsol.impact

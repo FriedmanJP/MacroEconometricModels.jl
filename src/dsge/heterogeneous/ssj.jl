@@ -25,37 +25,149 @@ using SparseArrays
 using LinearAlgebra
 
 # =============================================================================
-# _ssj_jacobian — numerical Jacobian via brute-force finite differences
+# Fake-news helpers (Auclert, Bardóczy, Rognlie & Straub 2021)
+# =============================================================================
+
+"""
+    _ssj_outcome_vector(output_var, c_pol, a_pol) → Vector{T}
+
+Individual-level outcome that is aggregated to `output_var`, flattened to an
+`N = n_a·n_e` vector (column-major, income slowest — matching the transition
+matrix index convention). Asset/capital/bond aggregates (`:K`, `:A`, `:B`,
+`:assets`, `:a`, `:savings`) use the savings policy `a'(a,e)`; consumption
+aggregates (`:C`, `:c`, `:consumption`) use the consumption policy `c(a,e)`.
+
+This threads `output_var` through the aggregation (closing #240/H-16 for the SSJ
+path), replacing the old hardcoded `_aggregate(...; var_index=1)` asset-only
+aggregation.
+"""
+function _ssj_outcome_vector(output_var::Symbol, c_pol::AbstractMatrix{T},
+                             a_pol::AbstractMatrix{T}) where {T<:AbstractFloat}
+    if output_var in (:C, :c, :consumption)
+        return vec(c_pol)
+    else
+        # :K, :A, :B, :assets, :a, :savings → asset/savings aggregate
+        return vec(a_pol)
+    end
+end
+
+"""
+    _egm_backward_step(ip, grid, income, prices, c_next) → (c_now, a_now)
+
+Perform ONE Endogenous Grid Method backward step: given the *continuation*
+consumption policy `c_next` (`n_a × n_e`, the policy in force next period) and the
+*current* prices, return the current-period consumption and savings policies.
+
+This is the single-iteration kernel of `_egm_solve`; iterating it to a fixed point
+reproduces `_egm_solve`, while applying it a fixed number of times backward from
+the terminal steady state produces the anticipation effects the fake-news
+sequence-space Jacobian needs (households respond *before* an announced future
+price change).
+"""
+function _egm_backward_step(ip::IndividualProblem{T}, grid::HAGrid{T},
+                            income::IncomeProcess{T}, prices::Dict{Symbol,T},
+                            c_next::AbstractMatrix{T}) where {T<:AbstractFloat}
+    a_grid = grid.grids[1]
+    n_a = length(a_grid)
+    n_e = length(income.states)
+    a_min = ip.borrowing_constraint[1]
+
+    beta = ip.beta
+    u_prime = ip.utility_prime
+    u_prime_inv = ip.utility_prime_inv
+    Pi = income.transition
+    e_vals = income.states
+    r = prices[:r]
+    w = prices[:w]
+
+    c_now = zeros(T, n_a, n_e)
+    a_now = zeros(T, n_a, n_e)
+    emu = zeros(T, n_a)
+    c_endo = zeros(T, n_a)
+    a_endo = zeros(T, n_a)
+
+    @inbounds for j in 1:n_e
+        fill!(emu, zero(T))
+        for jp in 1:n_e
+            for i in 1:n_a
+                c_tomorrow = _linear_interp(a_grid, view(c_next, :, jp), a_grid[i])
+                emu[i] += Pi[j, jp] * u_prime(c_tomorrow)
+            end
+        end
+        for i in 1:n_a
+            c_endo[i] = u_prime_inv(beta * (one(T) + r) * emu[i])
+        end
+        for i in 1:n_a
+            a_endo[i] = (c_endo[i] + a_grid[i] - w * e_vals[j]) / (one(T) + r)
+        end
+        for i in 1:n_a
+            a_val = a_grid[i]
+            if a_val < a_endo[1]
+                coh = ip.budget_fn(a_val, e_vals[j], prices)
+                c_now[i, j] = max(coh - a_min, T(1e-10))
+                a_now[i, j] = a_min
+            else
+                c_now[i, j] = _linear_interp(a_endo, c_endo, a_val)
+                coh = ip.budget_fn(a_val, e_vals[j], prices)
+                a_now[i, j] = max(coh - c_now[i, j], a_min)
+            end
+        end
+    end
+    return c_now, a_now
+end
+
+# =============================================================================
+# _ssj_jacobian — fake-news sequence-space Jacobian (Auclert et al. 2021)
 # =============================================================================
 
 """
     _ssj_jacobian(ss, ip, grid, income, input_var, output_var; T_horizon=300, dx=1e-4)
         → Matrix{T}
 
-Compute the T×T Jacobian of `output_var` w.r.t. `input_var` sequences using
-brute-force numerical finite differences.
+Compute the `T×T` sequence-space Jacobian `J[t,s] = ∂O_t/∂I_s` of aggregate output
+`output_var` with respect to the price sequence `input_var` using the **fake-news
+algorithm** of Auclert, Bardóczy, Rognlie & Straub (2021).
 
-For each column s ∈ 1:T, perturb the price `input_var` at time s relative to the
-steady state, solve the EGM to get perturbed policies, simulate the distribution
-path forward, and aggregate to obtain the output variable path.  The Jacobian
-column J[:,s] = (output_path − output_ss) / dx.
+The aggregate output at date `t` is `O_t = Σ_{a,e} y_t(a,e)·D_t(a,e)`, where `y_t`
+is the individual policy in force at date `t` (the savings policy `a'` for asset
+aggregates, the consumption policy for consumption aggregates) and `D_t` is the
+distribution entering date `t`. A one-date-`s` MIT price shock affects `O_t`
+through two channels: the **policy** channel (households at every date `t ≤ s`
+respond to the anticipated shock) and the **distribution** channel (perturbed
+past policies shift `D_t` for `t ≥ 1`). The resulting Jacobian is therefore
+**dense** — in particular `J[t,s] ≠ 0` for `t < s` (anticipation of a future
+price change) — not the lower-triangular Toeplitz matrix a naive brute force with
+`t<s` zeroed would produce.
 
-This brute-force approach is O(T² × EGM_cost) but is numerically robust.  For
-`T_horizon ≤ 100` it runs in seconds; the "fake news" optimization described in
-Auclert et al. (2021) can be layered on top.
+# Algorithm (fake news)
+1. **Backward** — for anticipation horizon `s = 0, …, T-1`, iterate the household
+   problem one EGM step backward from the terminal steady state (perturbing the
+   current price only at horizon 0, otherwise carrying the perturbed continuation)
+   to obtain the date-0 policy response. Record the aggregate-output response `dY[s]`
+   (policy channel, distribution held at `D*`) and the induced one-step distribution
+   change `dD[s] = (Λ(a^{(s)}) − Λ*)·D*`. This is `O(T)` backward steps, not `T`
+   full re-solves.
+2. **Expectation vectors** — `curlyE[u] = (Λ*')^u · y*` propagate the steady-state
+   outcome vector under the steady-state dynamics.
+3. **Fake-news matrix** — `F[0,s] = dY[s]`, `F[t,s] = curlyE[t-1]'·dD[s]` for `t ≥ 1`.
+4. **Jacobian** — the cumulative-sum recursion `J[t,s] = J[t-1,s-1] + F[t,s]`
+   (base `J[t,s] = F[t,s]` on the first row/column).
+
+Because both `Λ(a^{(s)})` and `Λ*` are column-stochastic, `dD[s]` conserves mass
+(`sum(dD[s]) ≈ 0`) and the forward push needs no renormalization.
 
 # Arguments
 - `ss::HASteadyState{T}` — stationary equilibrium
 - `ip::IndividualProblem{T}` — household problem
 - `grid::HAGrid{T}` — asset grid
 - `income::IncomeProcess{T}` — income process
-- `input_var::Symbol` — price to perturb (e.g., `:r`)
-- `output_var::Symbol` — aggregate to measure (e.g., `:K`)
+- `input_var::Symbol` — price to perturb (e.g., `:r`, `:w`)
+- `output_var::Symbol` — aggregate to measure (`:K`/`:A`/`:B` → savings, `:C` → consumption)
 - `T_horizon::Int` — sequence length (default 300)
 - `dx::Real` — finite-difference step (default 1e-4)
 
 # Returns
-- `J::Matrix{T}` — T_horizon × T_horizon Jacobian matrix
+- `J::Matrix{T}` — `T_horizon × T_horizon` dense Jacobian matrix
 
 # References
 - Auclert, A., Bardóczy, B., Rognlie, M., & Straub, L. (2021). Using the
@@ -71,96 +183,69 @@ function _ssj_jacobian(ss::HASteadyState{T}, ip::IndividualProblem{T},
     @assert haskey(ss.prices, input_var) "Input variable :$input_var not found in steady-state prices"
 
     dx_T = T(dx)
-    n_a = grid.n_points[1]
-    n_e = grid.n_income
-    N = n_a * n_e
+    Th = T_horizon
 
-    # Steady-state objects
+    # ── Steady-state objects ────────────────────────────────────────────────
     prices_ss = copy(ss.prices)
+    c_pol_ss = ss.policies[:consumption]         # continuation seed for backward iteration
     a_pol_ss = ss.policies[:savings]
-    dist_ss_2d = ss.distribution          # N_a × N_e
-    dist_ss = vec(dist_ss_2d)             # N-vector (column-major: income varies slowest)
+    D_ss = vec(ss.distribution)                  # N-vector (column-major: income slowest)
+    sD = sum(D_ss)
+    sD > zero(T) && (D_ss = D_ss ./ sD)          # keep a probability vector
 
-    # Steady-state transition matrix
     Lambda_ss = _build_transition_matrix(a_pol_ss, grid, income)
 
-    # Steady-state aggregate for output_var
-    agg_ss = _aggregate(dist_ss, grid; var_index=1)  # currently only asset aggregation
+    # Outcome vector aggregated to output_var (savings for asset aggregates).
+    y_out_ss = _ssj_outcome_vector(output_var, c_pol_ss, a_pol_ss)
 
-    # Allocate Jacobian
-    J = zeros(T, T_horizon, T_horizon)
+    # ── Expectation vectors: curlyE[u] = (Λ*')^{u-1} y_out_ss ────────────────
+    curlyE = Vector{Vector{T}}(undef, Th)
+    curlyE[1] = copy(y_out_ss)
+    for u in 2:Th
+        curlyE[u] = Lambda_ss' * curlyE[u-1]
+    end
 
-    # For each perturbation time s, compute the column J[:, s]
-    for s in 1:T_horizon
-        # === Step 1: Perturbed policies at time s ===
-        prices_pert = copy(prices_ss)
-        prices_pert[input_var] += dx_T
+    # ── Backward iteration: policy + distribution response per horizon ───────
+    # For anticipation horizon s-1 (1-indexed s = 1..Th):
+    #   dY[s] = Σ (y(a^{(s)}) − y*)·D*/dx   (date-0 aggregate response, dist held at D*)
+    #   dD[s] = (Λ(a^{(s)}) − Λ*)·D*/dx     (one-step distribution change)
+    dY = zeros(T, Th)
+    dD = Vector{Vector{T}}(undef, Th)
+    c_cont = c_pol_ss                            # perturbed continuation policy
+    for s in 1:Th
+        prices_step = copy(prices_ss)
+        if s == 1
+            prices_step[input_var] = prices_ss[input_var] + dx_T   # contemporaneous shock
+        end
+        c_now, a_now = _egm_backward_step(ip, grid, income, prices_step, c_cont)
+        y_now = _ssj_outcome_vector(output_var, c_now, a_now)
+        dY[s] = dot(y_now .- y_out_ss, D_ss) / dx_T
+        Lambda_now = _build_transition_matrix(a_now, grid, income)
+        dD[s] = (Lambda_now * D_ss .- Lambda_ss * D_ss) ./ dx_T
+        c_cont = c_now
+    end
 
-        # Solve EGM at perturbed prices
-        _, a_pol_pert = _egm_solve(ip, grid, income, prices_pert;
-                                    max_iter=1000, tol=T(1e-10))
+    # ── Fake-news matrix F ───────────────────────────────────────────────────
+    F = zeros(T, Th, Th)
+    @inbounds for s in 1:Th
+        F[1, s] = dY[s]
+    end
+    @inbounds for t in 2:Th
+        e = curlyE[t-1]
+        for s in 1:Th
+            F[t, s] = dot(e, dD[s])
+        end
+    end
 
-        # Perturbed transition matrix
-        Lambda_pert = _build_transition_matrix(a_pol_pert, grid, income)
-
-        # === Step 2: Simulate distribution path forward from steady state ===
-        # Before time s: distribution evolves under Lambda_ss
-        # At time s: transition uses Lambda_pert (perturbed policies in effect)
-        # After time s: transition reverts to Lambda_ss
-        #
-        # The distribution at the start of the simulation is dist_ss.
-
-        # Evolve forward: at time s the shock hits (one-period perturbation)
-        # d_s = Lambda_ss^{s-1} * dist_ss  (before shock, this equals dist_ss since
-        # dist_ss is stationary)
-        # d_{s+1} = Lambda_pert * d_s = Lambda_pert * dist_ss  (the shock period)
-        # d_{s+k} = Lambda_ss^{k-1} * d_{s+1}  for k >= 1
-
-        # Since dist_ss is stationary under Lambda_ss, the distribution right before
-        # the shock at time s is simply dist_ss, regardless of s.
-        d_after_shock = Lambda_pert * dist_ss   # distribution at time s+1
-
-        # Aggregate at each time t
-        for t in 1:T_horizon
-            if t < s
-                # Before the shock: distribution is at steady state
-                # No change in aggregate → J[t,s] = 0
-                continue
-            elseif t == s
-                # At the shock period: policies are perturbed but distribution
-                # has not yet changed.  The aggregate output changes because
-                # the perturbed savings policy applies to the steady-state
-                # distribution.
-                #
-                # Aggregate = Σ a_pol_pert[i,j] * dist_ss[i,j]
-                agg_t = zero(T)
-                @inbounds for j in 1:n_e
-                    offset = (j - 1) * n_a
-                    for i in 1:n_a
-                        agg_t += a_pol_pert[i, j] * dist_ss[offset + i]
-                    end
-                end
-                J[t, s] = (agg_t - agg_ss) / dx_T
-            else
-                # After the shock (t > s): policies revert to steady state,
-                # but the distribution has been shifted by the one-period
-                # perturbation at time s.
-                # The distribution at time t is Lambda_ss^{t-s-1} * d_after_shock.
-                steps = t - s - 1
-                d_t = d_after_shock
-                for _ in 1:steps
-                    d_t = Lambda_ss * d_t
-                    # Normalize to prevent drift
-                    s_val = sum(d_t)
-                    if s_val > zero(T)
-                        d_t ./= s_val
-                    end
-                end
-
-                # Aggregate under steady-state policies
-                agg_t = _aggregate(d_t, grid; var_index=1)
-                J[t, s] = (agg_t - agg_ss) / dx_T
-            end
+    # ── Jacobian via the cumulative-sum recursion ────────────────────────────
+    J = zeros(T, Th, Th)
+    @inbounds for s in 1:Th
+        J[1, s] = F[1, s]
+    end
+    @inbounds for t in 2:Th
+        J[t, 1] = F[t, 1]
+        for s in 2:Th
+            J[t, s] = J[t-1, s-1] + F[t, s]
         end
     end
 
@@ -291,7 +376,13 @@ function _ho_kalman(irf_sequence::Vector{Matrix{T}}, n_vars::Int,
 
     eigenvalues = eigvals(ComplexF64.(G1))
 
-    return G1, impact, C_sol, eu, eigenvalues
+    # Direct feed-through D = h[0] — the impact IRF element the block-Hankel
+    # deliberately skips (idx+1 indexing above starts at h[1]). Carrying it (with
+    # the output map C_mat) lets `irf`/`fevd`/`simulate` report the aggregate
+    # C·A^(h-1)·B + D response in (K, r, Y, …) coordinates instead of discarding it.
+    D = Matrix{T}(irf_sequence[1])   # n_vars × n_shocks
+
+    return G1, impact, C_sol, eu, eigenvalues, C_mat, D
 end
 
 # =============================================================================
@@ -299,16 +390,19 @@ end
 # =============================================================================
 
 """
-    _wrap_hadsge_solution(spec, ss, G1, impact, C_sol, eu, eigenvalues, jacobians,
-                          T_horizon, method; explained_variance=1.0) → HADSGESolution{T}
+    _wrap_hadsge_solution(spec, ss, G1, impact, C_sol, eu, eigenvalues, C_obs, D_obs,
+                          jacobians, T_horizon, method; explained_variance=1.0)
+        → HADSGESolution{T}
 
-Wrap a reduced first-order state-space realization `(G1, impact)` into the
-`DSGESolution`/`HADSGESolution` types so the standard `irf`/`fevd`/`simulate`
-dispatch applies. Used by the Huggett SSJ general-equilibrium path.
+Wrap a reduced first-order state-space realization `(G1, impact)` plus its
+Ho-Kalman observation map `(C_obs, D_obs)` into the `DSGESolution`/`HADSGESolution`
+types so the standard `irf`/`fevd`/`simulate` dispatch reports aggregate outputs.
+Used by the Huggett SSJ general-equilibrium path.
 """
 function _wrap_hadsge_solution(spec::HADSGESpec{T}, ss::HASteadyState{T},
                                G1::Matrix{T}, impact::Matrix{T}, C_sol::Vector{T},
                                eu::Vector{Int}, eigenvalues::Vector{ComplexF64},
+                               C_obs::Matrix{T}, D_obs::Matrix{T},
                                jacobians::Dict{Symbol,Matrix{T}},
                                T_horizon::Int, method::Symbol;
                                explained_variance::T=one(T)) where {T<:AbstractFloat}
@@ -327,7 +421,8 @@ function _wrap_hadsge_solution(spec::HADSGESpec{T}, ss::HASteadyState{T},
                                 dummy_spec, linear)
     reduction_basis = Matrix{T}(I, n_red, n_red)
     return HADSGESolution{T}(ss, dsge_sol, method, spec, reduction_basis,
-                              T_horizon, n_red, explained_variance, jacobians)
+                              T_horizon, n_red, explained_variance, jacobians,
+                              C_obs, D_obs)
 end
 
 # =============================================================================
@@ -382,7 +477,7 @@ function _ssj_solve(spec::HADSGESpec{T}, ss::HASteadyState{T};
 
         irf_seq = [reshape([dr[t]], 1, 1) for t in 1:T_horizon]
         k = max(min(n_reduced, div(T_horizon, 2) - 1), 1)
-        G1, impact, C_sol, eu, eig = _ho_kalman(irf_seq, 1, 1, k)
+        G1, impact, C_sol, eu, eig, C_mat, D = _ho_kalman(irf_seq, 1, 1, k)
         # Ho-Kalman realizations can land marginally outside the unit circle;
         # contract onto it (mirrors the Reiter stabilization) since the rate IRF
         # is genuinely stable (decays at the shock persistence ρ).
@@ -392,7 +487,7 @@ function _ssj_solve(spec::HADSGESpec{T}, ss::HASteadyState{T};
             eig = eigvals(ComplexF64.(G1))
         end
         return _wrap_hadsge_solution(spec, ss, G1, impact, C_sol, eu, eig,
-                                     jacobians, T_horizon, :ssj)
+                                     C_mat, D, jacobians, T_horizon, :ssj)
     end
 
     # Primary Jacobian: r → K
@@ -417,7 +512,7 @@ function _ssj_solve(spec::HADSGESpec{T}, ss::HASteadyState{T};
     # Step 3: Ho-Kalman realization
     k = min(n_reduced, div(T_horizon, 2) - 1)
     k = max(k, 1)
-    G1, impact, C_sol, eu, eigenvalues = _ho_kalman(irf_seq, n_vars, n_shocks, k)
+    G1, impact, C_sol, eu, eigenvalues, C_mat, D = _ho_kalman(irf_seq, n_vars, n_shocks, k)
 
     # Step 4: Build dummy DSGESpec and LinearDSGE for the reduced system
     n_red = size(G1, 1)
@@ -474,6 +569,8 @@ function _ssj_solve(spec::HADSGESpec{T}, ss::HASteadyState{T};
         T_horizon,         # n_full_states
         n_red,             # n_reduced
         explained_variance,
-        jacobians
+        jacobians,
+        C_mat,             # C_obs: reduced-state → aggregate K
+        D                  # D_obs: direct shock feed-through (h[0])
     )
 end

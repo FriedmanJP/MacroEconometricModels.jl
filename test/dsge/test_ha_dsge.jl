@@ -431,7 +431,12 @@ end
 
 @testset "Krusell-Smith simulation" begin
     grid = HAGrid(assets=(0.0, 200.0, 80), income_states=3)
-    inc = rouwenhorst(0.966, 0.5, 3)
+    # Normalized income (#231): positive states, E[e]=1. The raw log grid has
+    # negative states → negative labor income → the household policy collapses to
+    # the borrowing constraint and the KS dynamics are degenerate.
+    ir = rouwenhorst(0.966, 0.5, 3)
+    e_norm = exp.(ir.states); e_norm ./= dot(ir.stationary_dist, e_norm)
+    inc = IncomeProcess{Float64}(ir.transition, e_norm, ir.stationary_dist, :income)
     ip = IndividualProblem{Float64}(
         c -> log(c), c -> 1.0/c, m -> 1.0/m, 0.99,
         (a, e, prices) -> (1 + prices[:r]) * a + prices[:w] * e,
@@ -457,6 +462,36 @@ end
     @test haskey(result.r_squared, :K)
     @test result.r_squared[:K] > 0.9  # KS typically gets R² > 0.999
     @test result.iterations <= 3
+
+    # #229/T130: the household policy — and hence the realized capital path — is a
+    # genuine function of the PLM b. Perturbing b, re-solving the (a,e,K,z) policy and
+    # re-simulating the cross-section must MOVE {K_t}. The old myopic solver re-solved a
+    # stationary EGM at realized prices, so its path was independent of the PLM (the
+    # outer loop was vacuous). This assertion fails on that old solver.
+    n_z = 3; n_K = 5
+    zg, zt = MacroEconometricModels._ks_build_z_grid(0.95, 0.02, n_z)
+    Kss = ss.aggregates[:K]
+    Kg = Kss .* exp.(collect(range(-0.4, 0.4; length=n_K)))
+    css = ss.policies[:consumption]
+    c0 = Array{Float64,4}(undef, size(css, 1), size(css, 2), n_K, n_z)
+    for lz in 1:n_z, kK in 1:n_K
+        @views c0[:, :, kK, lz] .= css
+    end
+    rng_ks = Random.MersenneTwister(11)
+    T_s = 150; zidx = zeros(Int, T_s); zidx[1] = 2; zc = cumsum(zt; dims=2)
+    for t in 2:T_s
+        u = rand(rng_ks)
+        zidx[t] = clamp(searchsortedfirst(view(zc, zidx[t-1], :), u), 1, n_z)
+    end
+    cA, _ = MacroEconometricModels._ks_egm_solve(ip, grid, inc, [0.0, 1.0, 0.0],
+        zg, zt, Kg, price_fn, params; max_iter=1000, tol=1e-6, init_policy=c0)
+    KA = MacroEconometricModels._ks_simulate(cA, ss, grid, inc, zidx, zg, Kg, price_fn, params)
+    cB, _ = MacroEconometricModels._ks_egm_solve(ip, grid, inc, [0.3, 0.85, 0.05],
+        zg, zt, Kg, price_fn, params; max_iter=1000, tol=1e-6, init_policy=c0)
+    KB = MacroEconometricModels._ks_simulate(cB, ss, grid, inc, zidx, zg, Kg, price_fn, params)
+    @test maximum(abs.(cA .- cB)) > 1e-4    # different PLM → materially different policy
+    @test maximum(abs.(KA .- KB)) > 1e-3    # different PLM → different realized path
+    @test all(isfinite, KA) && all(KA .> 0)
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -489,6 +524,26 @@ end
     @test abs(J[1,1]) > 1e-8
     # Effects should decay
     @test abs(J[T_h, 1]) < abs(J[1, 1]) + 1.0  # loose: just not exploding
+
+    # #226/T127: the fake-news Jacobian is DENSE with anticipation — households
+    # respond BEFORE an announced future price change — so J[t,s] != 0 for some
+    # t < s. The old brute force zeroed the t<s block (lower-triangular Toeplitz).
+    @test any(abs(J[t, s]) > 1e-10 for t in 1:T_h for s in (t+1):T_h)
+    @test !isapprox(J, LowerTriangular(J))
+    # Mass conservation of the one-step forward push (column-stochastic Λ, no renorm).
+    prices_p = copy(ss.prices); prices_p[:r] += 1e-4
+    _, a_pol_p = MacroEconometricModels._egm_solve(ip, grid, inc, prices_p;
+                                                   max_iter=200, tol=1e-10)
+    Lam_p = MacroEconometricModels._build_transition_matrix(a_pol_p, grid, inc)
+    d_ss = vec(ss.distribution); d_ss ./= sum(d_ss)
+    @test sum(Lam_p * d_ss) ≈ 1.0 atol=1e-10
+    # output_var threading (#240/H-16): a consumption aggregate differs from the
+    # asset aggregate (the old code ignored output_var, hardcoding asset aggregation).
+    Jc = MacroEconometricModels._ssj_jacobian(ss, ip, grid, inc, :r, :C;
+                                              T_horizon=T_h, dx=1e-4)
+    @test size(Jc) == (T_h, T_h)
+    @test all(isfinite.(Jc))
+    @test !isapprox(Jc, J)
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -501,7 +556,8 @@ end
     T_len = 50
     irf_seq = [reshape([0.9^t], 1, 1) for t in 0:T_len-1]
 
-    G1, impact, C_sol, eu, eigenvalues = MacroEconometricModels._ho_kalman(irf_seq, 1, 1, 5)
+    G1, impact, C_sol, eu, eigenvalues, C_mat, D =
+        MacroEconometricModels._ho_kalman(irf_seq, 1, 1, 5)
 
     @test size(G1, 1) == size(G1, 2)  # square
     @test size(impact, 2) == 1         # one shock
@@ -513,6 +569,56 @@ end
     # The dominant eigenvalue should be close to 0.9
     max_eig = maximum(abs.(eigenvalues))
     @test abs(max_eig - 0.9) < 0.1
+
+    # #227/T128: _ho_kalman now also returns the output map C (n_vars × k) and the
+    # direct feed-through D = h[0]. The realization reproduces the geometric IRF:
+    # h[0] = D = 0.9^0, h[k] = C·A^(k-1)·B = 0.9^k.
+    @test size(C_mat) == (1, size(G1, 1))
+    @test size(D) == (1, 1)
+    @test D[1, 1] ≈ 1.0 atol=1e-8
+    Ah = Matrix{Float64}(I, size(G1)...)   # at horizon h>=2, Ah = G1^(h-2)
+    for h in 1:8
+        y_h = h == 1 ? D[1, 1] : (C_mat * (Ah * impact))[1, 1]
+        @test isapprox(y_h, 0.9^(h-1); atol=1e-3)
+        h >= 2 && (Ah = Ah * G1)
+    end
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 14b: HA observation map (#227)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "HA observation map irf/fevd/simulate (#227)" begin
+    # An SSJ solution carries the Ho-Kalman observation map C_obs/D_obs, so
+    # irf/fevd/simulate report the AGGREGATE output (rate r for Huggett), not the
+    # abstract reduced state x_1..x_n the old delegating code returned.
+    spec = MacroEconometricModels._huggett_example(; credit_limit=-2.0, a_max=8.0, n_a=120)
+    ss = compute_steady_state(spec; max_iter=100, tol=1e-3)
+    sol = solve(spec; method=:ssj, ss=ss, T_horizon=80, n_reduced=15)
+
+    n_red = size(sol.linear_solution.G1, 1)
+    @test size(sol.C_obs) == (1, n_red)
+    @test size(sol.D_obs) == (1, 1)
+    @test n_red > 1                                  # abstract state is multi-dimensional
+
+    ir = irf(sol, 20)
+    @test size(ir.values) == (20, 1, 1)              # ONE aggregate (r), NOT n_red states
+    @test ir.variables == ["r"]
+
+    B = sol.linear_solution.impact; G1 = sol.linear_solution.G1; C = sol.C_obs
+    # Reproduces the realized rate IRF: impact = D_obs = h[0]; h>=2 = C·A^(h-2)·B.
+    @test ir.values[1, 1, 1] ≈ sol.D_obs[1, 1] atol=1e-10
+    @test ir.values[2, 1, 1] ≈ (C * B)[1, 1] atol=1e-10
+    @test ir.values[3, 1, 1] ≈ (C * G1 * B)[1, 1] atol=1e-10
+
+    fv = fevd(sol, 20)
+    @test length(fv.variables) == 1
+    @test all(isfinite.(fv.decomposition))
+
+    # simulate reports the aggregate deviation path; a unit impulse gives D_obs.
+    sim = simulate(sol, 30; shock_draws=reshape([1.0; zeros(29)], 30, 1))
+    @test size(sim) == (30, 1)
+    @test sim[1, 1] ≈ sol.D_obs[1, 1] atol=1e-10
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -533,12 +639,12 @@ end
         w = (1-alpha) * K^alpha
         Dict(:r => r, :w => w)
     end
-    params = Dict(:alpha => 0.36, :delta => 0.025, :Z => 1.0, :L => 1.0)
+    params = Dict(:alpha => 0.36, :delta => 0.025, :Z => 1.0, :L => 1.0, :rho_z => 0.95)
     ss = MacroEconometricModels._ha_steady_state(ip, grid, inc, price_fn_reiter, params;
         K_init=10.0, r_bounds=(-0.02, 0.04), max_iter=60, tol=1e-3)
 
     G1, impact, n_red, explained = MacroEconometricModels._reiter_linearize(
-        ss, ip, grid, inc; n_reduced=15
+        ss, ip, grid, inc; n_reduced=15, model=:aiyagari, het_params=params
     )
     @test size(G1, 1) == size(G1, 2)  # square
     @test size(G1, 1) <= 15 + 5  # reduced dim + aggregates
@@ -546,6 +652,34 @@ end
     @test explained > 0.95
     @test maximum(abs.(eigvals(G1))) < 1.0 + 0.01  # approximately stable
     @test size(impact, 1) == size(G1, 1)
+
+    # #230/T131: Aiyagari GE price feedback. The K state column (n_red+1) must be
+    # populated — capital feeds back into the distribution via the firm-FOC price
+    # channel. The old code left G1[:, n_red+1] identically zero (r never responded).
+    @test any(!iszero, G1[1:n_red, n_red + 1])
+
+    # Firm-FOC signs: a higher predetermined K lowers r and raises w.
+    dr_dK, dw_dK, dr_dZ, dw_dZ = MacroEconometricModels._aiyagari_foc_derivatives(
+        ss.prices[:r], ss.prices[:w], ss.aggregates[:K],
+        params[:alpha], params[:delta], params[:Z])
+    @test dr_dK < 0
+    @test dw_dK > 0
+    @test dr_dZ > 0
+    @test dw_dZ > 0
+
+    # #236/T137: alpha/delta/rho_z are read from the spec, not hardcoded literals.
+    # Varying rho_z changes G1 (the TFP AR(1) diagonal), proving it is read.
+    params_lo = merge(params, Dict(:rho_z => 0.80))
+    G1b, _, _, _ = MacroEconometricModels._reiter_linearize(
+        ss, ip, grid, inc; n_reduced=15, model=:aiyagari, het_params=params_lo)
+    @test !(G1 ≈ G1b)
+    # A missing required parameter errors informatively (no magic-number default).
+    @test_throws ErrorException MacroEconometricModels._reiter_linearize(
+        ss, ip, grid, inc; n_reduced=15, model=:aiyagari,
+        het_params=Dict(:alpha => 0.36, :delta => 0.025, :Z => 1.0))   # no :rho_z
+    @test_throws ErrorException MacroEconometricModels._reiter_linearize(
+        ss, ip, grid, inc; n_reduced=15, model=:aiyagari,
+        het_params=Dict(:delta => 0.025, :rho_z => 0.95, :Z => 1.0))   # no :alpha
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -636,6 +770,41 @@ end
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Section 17b: distribution/inequality IRF reduction basis (#233)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "distribution IRF reduction basis (#233)" begin
+    spec = load_ha_example(:krusell_smith)
+    ss = compute_steady_state(spec; r_bounds=(-0.02, 0.04), max_iter=60, tol=1e-3)
+    n_a = spec.grid.n_points[1]; n_e = spec.grid.n_income
+    reiter_sol = solve(spec; method=:reiter, ss=ss, n_reduced=12)
+
+    # (c) reduction_basis is the REAL U_k: N × n_red with orthonormal columns
+    # (was Matrix{T}(I, n_red, n_red), whose row count never equalled n_a·n_e).
+    U = reiter_sol.reduction_basis
+    @test size(U, 1) == n_a * n_e
+    @test size(U, 2) == reiter_sol.n_reduced
+    @test U' * U ≈ Matrix{Float64}(I, reiter_sol.n_reduced, reiter_sol.n_reduced) atol=1e-8
+
+    # (a) distribution IRF has nonzero entries after a shock (was identically zero
+    # because the projection guard n_full == n_a·n_e always failed on the identity).
+    dirf = distribution_irf(reiter_sol, 10)
+    @test size(dirf) == (n_a, n_e, 10)
+    @test any(!iszero, dirf)
+
+    # (e) inequality IRF: finite Gini in [0,1], p90 >= p50
+    ineq = inequality_irf(reiter_sol, 10)
+    @test all(0 .<= ineq[:gini] .<= 1)
+    @test all(isfinite, ineq[:gini])
+    @test all(ineq[:p90] .>= ineq[:p50])
+
+    # (d) SSJ/Ho-Kalman has no distribution basis → both throw informatively.
+    ssj_sol = solve(spec; method=:ssj, ss=ss, T_horizon=40, n_reduced=12)
+    @test_throws ErrorException distribution_irf(ssj_sol, 10)
+    @test_throws ErrorException inequality_irf(ssj_sol, 10)
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Section 18: Built-in examples
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -696,6 +865,29 @@ end
 
     @testset "Invalid example" begin
         @test_throws ErrorException load_ha_example(:nonexistent)
+    end
+
+    @testset "Income normalization (#231/T132)" begin
+        # All four examples must ship a strictly positive income multiplier e
+        # (the raw log grid gives half the states negative labor income).
+        for name in (:krusell_smith, :one_asset_hank, :two_asset_hank, :huggett)
+            spec = load_ha_example(name)
+            @test all(spec.income.states .> 0)
+        end
+
+        # The three Rouwenhorst examples must have unit-mean income E[e] = 1.
+        for name in (:krusell_smith, :one_asset_hank, :two_asset_hank)
+            spec = load_ha_example(name)
+            @test dot(spec.income.stationary_dist, spec.income.states) ≈ 1.0 atol=1e-10
+        end
+
+        # Huggett keeps its bespoke {1.0, 0.1} endowment (mean ≈ 0.8826), NOT normalized.
+        spec_h = load_ha_example(:huggett)
+        @test dot(spec_h.income.stationary_dist, spec_h.income.states) ≈ 0.8826 atol=1e-3
+
+        # rouwenhorst/tauchen direct calls must still return the symmetric log grid.
+        inc = rouwenhorst(0.966, 0.5, 7)
+        @test inc.states[1] ≈ -inc.states[end] atol=1e-12
     end
 end
 
@@ -914,15 +1106,29 @@ end
         @test H[1, 1] == 0  # zero default measurement error (T042)
         @test all(iszero, H)
 
+        # #228/T129: Z is the C_obs row for the matched aggregate (:K), NOT a silent
+        # unit-loading at an arbitrary reduced-state index.
+        @test Z ≈ reshape(sol.C_obs[1, :], 1, :)
+
         # Custom measurement error
         Z2, d2, H2 = MacroEconometricModels._build_ha_observation_equation(
             sol, [:K], [0.5]
         )
         @test H2[1, 1] ≈ 0.25  # 0.5^2
 
-        # Stochastic singularity: 2 observables > 1 aggregate reduced shock, no ME (T042).
-        @test_throws MacroEconometricModels.StochasticSingularityError MacroEconometricModels._build_ha_observation_equation(
-            sol, [:K, :Y], nothing)
+        # #228/T129: an observable absent from the reduced system's aggregate outputs
+        # raises an informative error naming it (the SSJ realization exposes only :K),
+        # instead of the old silent arbitrary-index fallback.
+        err = try
+            MacroEconometricModels._build_ha_observation_equation(sol, [:K, :Y], nothing)
+            nothing
+        catch e
+            e
+        end
+        @test err isa ErrorException
+        @test occursin("Y", err.msg)
+        @test_throws ErrorException MacroEconometricModels._build_ha_observation_equation(
+            sol, [:nonexistent], nothing)
     end
 
     @testset "estimate_dsge_bayes dispatch" begin
