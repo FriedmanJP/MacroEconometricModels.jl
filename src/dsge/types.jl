@@ -29,7 +29,9 @@ Fields:
 - `n_endog::Int` — number of endogenous variables (including auxiliaries)
 - `n_exog::Int` — number of exogenous shocks
 - `n_params::Int` — number of parameters
-- `n_expect::Int` — number of expectation errors (forward-looking variables)
+- `n_expect::Int` — number of forward-looking *equations* (expectation errors η); this is the
+  count of forward equations, which need not equal the number of distinct lead variables that
+  form the Π columns (see `linearize`) — #223
 - `forward_indices::Vector{Int}` — indices of equations with `[t+1]` terms
 - `steady_state::Vector{T}` — steady state values
 - `varnames::Vector{String}` — display names
@@ -215,7 +217,8 @@ end
 nvars(sol::DSGESolution) = sol.spec.n_endog
 nshocks(sol::DSGESolution) = sol.spec.n_exog
 is_determined(sol::DSGESolution) = sol.eu[1] == 1 && sol.eu[2] == 1
-is_stable(sol::DSGESolution) = maximum(abs.(eigvals(sol.G1))) < 1.0
+# Reuse the cached eigenvalues (all ctors store eigvals(G1)) instead of recomputing (S-17 / #224).
+is_stable(sol::DSGESolution) = maximum(abs.(sol.eigenvalues); init=0.0) < 1.0
 
 function Base.show(io::IO, sol::DSGESolution{T}) where {T}
     n = nvars(sol)
@@ -223,7 +226,7 @@ function Base.show(io::IO, sol::DSGESolution{T}) where {T}
     n_unstable = length(sol.eigenvalues) - n_stable
     exist_str = sol.eu[1] == 1 ? "Yes" : "No"
     unique_str = sol.eu[2] == 1 ? "Yes" : "No"
-    max_eig = maximum(abs.(eigvals(sol.G1)))
+    max_eig = maximum(abs.(sol.eigenvalues); init=0.0)
 
     spec_data = Any[
         "Variables"        n;
@@ -401,6 +404,8 @@ Fields:
 - `quadrature` — `:gauss_hermite` or `:monomial`
 - `spec` — model specification
 - `linear` — linearized form
+- `impact` — first-order shock-impact matrix (companion-QZ), cached so `irf`/`simulate` need
+  not re-solve the first-order system on every call
 - `steady_state` — cached steady state vector
 - `state_indices, control_indices` — variable partition
 - `converged` — Newton convergence flag
@@ -419,6 +424,7 @@ struct ProjectionSolution{T<:AbstractFloat}
     quadrature::Symbol              # :gauss_hermite or :monomial
     spec::DSGESpec{T}
     linear::LinearDSGE{T}
+    impact::Matrix{T}               # first-order shock-impact matrix (companion-QZ), cached
     steady_state::Vector{T}
     state_indices::Vector{Int}
     control_indices::Vector{Int}

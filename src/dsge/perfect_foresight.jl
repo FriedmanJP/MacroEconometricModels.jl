@@ -114,6 +114,17 @@ function perfect_foresight(spec::DSGESpec{FT};
                 max_iter=max_iter, tol=tol, algorithm=algorithm)
 end
 
+"""Warn when a perfect-foresight path has not returned to the steady state by the terminal
+period (`‖deviations[end,:]‖∞` ≫ tol), which signals the horizon `T_periods` is too short (S-20 / #224)."""
+function _pf_terminal_warn(deviations_full::AbstractMatrix{T}, tol::Real) where {T<:AbstractFloat}
+    isempty(deviations_full) && return nothing
+    terminal_resid = maximum(abs.(@view deviations_full[end, :]))
+    terminal_resid > 100 * T(tol) && @warn "Perfect-foresight path has not returned to the " *
+        "steady state by the terminal period (‖deviation‖∞ = $terminal_resid ≫ $(100 * T(tol))); " *
+        "increase the horizon T for an accurate transition."
+    return nothing
+end
+
 # =============================================================================
 # NonlinearSolve-based perfect foresight solver
 # =============================================================================
@@ -195,6 +206,7 @@ function _nonlinearsolve_perfect_foresight(spec::DSGESpec{FT}, T_periods::Int,
         deviations = Matrix{FT}(deviations_full)
     end
 
+    _pf_terminal_warn(deviations_full, tol)
     PerfectForesightPath{FT}(path, deviations, converged, iter, spec)
 end
 
@@ -283,9 +295,12 @@ function _projected_newton_pf(spec::DSGESpec{FT}, T_periods::Int,
     end
 
     if !converged
+        # `merit` was never defined here → the old throw itself raised UndefVarError. Report
+        # the same NCP residual the convergence test (line 279) uses.
+        final_resid = _ncp_residual(x, F)
         throw(ErrorException(
             "Projected Newton PF did not converge after $max_iter iterations " *
-            "(||F|| = $(sqrt(merit))). Try solver=:ipopt with JuMP + Ipopt."))
+            "(||F||_NCP = $(final_resid)). Try solver=:ipopt with JuMP + Ipopt."))
     end
 
     # Reshape solution
@@ -301,6 +316,7 @@ function _projected_newton_pf(spec::DSGESpec{FT}, T_periods::Int,
         deviations = Matrix{FT}(deviations_full)
     end
 
+    _pf_terminal_warn(deviations_full, tol)
     PerfectForesightPath{FT}(path, deviations, converged, iter, spec)
 end
 
@@ -416,6 +432,7 @@ function _nlopt_perfect_foresight(spec::DSGESpec{FT}, T_periods::Int,
         deviations = Matrix{FT}(deviations_full)
     end
 
+    _pf_terminal_warn(deviations_full, FT(1e-6))
     PerfectForesightPath{FT}(path, deviations, converged, 0, spec)
 end
 

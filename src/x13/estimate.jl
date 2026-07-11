@@ -98,6 +98,10 @@ function _x13_estimate!(model::_X13ARIMAModel, y::Vector{Float64}, X::Matrix{Flo
             @inbounds for i in 1:nfill; fvec[i] = filtered_y[i]; end
             @inbounds for i in (nfill+1):m; fvec[i] = 0.0; end
         end
+        # NOTE (#205, false positive): `lndtcv ≡ 0` here — `_x13_armafl!` is a pure CSS filter
+        # and never sets a transformation-covariance determinant, so this scaling branch is dead
+        # code (kept as the hook for a future exact-ML transformation term). No determinant is
+        # double-counted.
         if lndtcv != 0.0 && nout > 0
             fac = exp(lndtcv / (2.0 * nout))
             @inbounds for i in 1:m; fvec[i] *= fac; end
@@ -116,6 +120,8 @@ function _x13_estimate!(model::_X13ARIMAModel, y::Vector{Float64}, X::Matrix{Flo
     apa = 0.0; @inbounds for i in 1:m_lm; apa += final_fvec[i]^2; end
     lndtcv = lndtcv_ref[]
     model.sigma2 = apa / na
+    # `lndtcv ≡ 0` (CSS, not exact-ML): the `+ lndtcv` term adds nothing — it is the reserved
+    # slot for a future exact-ML transformation-covariance log-determinant (#205, false positive).
     model.loglik = -(lndtcv + na * (log(2π * model.sigma2) + 1.0)) / 2.0
     k = nestpm + ncx
     model.aic = -2.0 * model.loglik + 2.0 * k

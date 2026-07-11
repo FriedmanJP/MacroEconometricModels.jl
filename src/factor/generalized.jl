@@ -101,7 +101,7 @@ function estimate_gdfm(X::AbstractMatrix{T}, q::Int;
     eigenvalues, eigenvectors = _spectral_eigendecomposition(spectral_X)
     loadings = eigenvectors[:, 1:q, :]
     spectral_chi = _compute_common_spectral_density(loadings, eigenvalues[1:q, :])
-    common = _reconstruct_time_domain(spectral_chi, X_proc)
+    common = _reconstruct_time_domain(loadings, X_proc)
     factors = _extract_time_domain_factors(X_proc, loadings, frequencies)
     var_explained = _compute_variance_explained(eigenvalues, q)
 
@@ -233,16 +233,18 @@ function _compute_common_spectral_density(loadings::Array{Complex{T},3}, eigenva
 end
 
 """Reconstruct common component in time domain via inverse FFT."""
-function _reconstruct_time_domain(spectral_chi::Array{Complex{T},3}, X::AbstractMatrix{T}) where {T}
+function _reconstruct_time_domain(loadings::Array{Complex{T},3}, X::AbstractMatrix{T}) where {T}
     T_obs, N = size(X)
-    n_freq = size(spectral_chi, 3)
+    n_freq = size(loadings, 3)
     X_fft = FFTW.fft(X, 1)
     chi_fft = zeros(Complex{T}, T_obs, N)
 
     @inbounds for j in 1:n_freq
-        S_chi, S_X = spectral_chi[:, :, j], X_fft[j, :] * X_fft[j, :]' / T_obs
-        P = S_chi * inv(Hermitian(S_X + T(1e-10) * I))
-        chi_fft[j, :] = P * X_fft[j, :]
+        # Forni idempotent dynamic-principal-component projector on the leading-q eigenvectors of
+        # the SMOOTHED spectrum: χ(ω_j) = (Σ_k v_k v_k^H) X_fft(ω_j) = L Lᴴ X_fft(ω_j). The old
+        # code inverted the raw rank-1 periodogram X_fft·X_fftᴴ/T — a degenerate/noisy filter.
+        L = @view loadings[:, :, j]        # N × q, columns orthonormal (LᴴL ≈ I_q)
+        chi_fft[j, :] = L * (L' * @view(X_fft[j, :]))
         j > 1 && j < n_freq && (chi_fft[T_obs - j + 2, :] = conj(chi_fft[j, :]))
     end
     real(FFTW.ifft(chi_fft, 1))
@@ -396,12 +398,10 @@ function forecast(model::GeneralizedDynamicFactorModel{T}, h::Int; method::Symbo
     idio_var = vec(var(model.idiosyncratic, dims=1))
 
     if ci_method == :none
-        z = zeros(T, h, q)
-        zx = zeros(T, h, N)
-        if model.standardized
-            _unstandardize_factor_forecast!(X_fc, zx, zx, zx, model.X)
-        end
-        return _build_factor_forecast(F_fc, X_fc, z, z, zx, copy(zx), z, copy(zx), h, conf_T, :none)
+        model.standardized && _unstandardize_point!(X_fc, model.X)
+        return _build_factor_forecast(F_fc, X_fc,
+            zeros(T, h, q), zeros(T, h, q), zeros(T, h, N), zeros(T, h, N),
+            zeros(T, h, q), zeros(T, h, N), h, conf_T, :none)
     end
 
     if ci_method == :theoretical

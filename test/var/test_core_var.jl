@@ -483,4 +483,95 @@ using Random
         fevd_result = fevd(m2, 10)
         @test !any(isnan, fevd_result.proportions)
     end
+
+    # =================================================================
+    # Forecast bands: parameter uncertainty (#208)
+    # =================================================================
+    @testset "VAR forecast parameter uncertainty (#208)" begin
+        rng = Random.MersenneTwister(2208)
+        n = 2
+        Atrue = [0.5 0.1; 0.0 0.4]
+        Lσ = cholesky([1.0 0.2; 0.2 1.0]).L
+        Tn = 60
+        Y = zeros(Tn, n)
+        for t in 2:Tn
+            Y[t, :] = Atrue * Y[t-1, :] + Lσ * randn(rng, n)
+        end
+        m = estimate_var(Y, 1)
+        H = 6
+        A1 = MacroEconometricModels.extract_ar_coefficients(m.B, n, 1)[1]
+
+        # --- :analytic exact MSE cross-check (Lütkepohl §3.5; VAR(1) ⇒ Φ_i = A^i) ---
+        z90 = 1.6448536269514722          # quantile(Normal(), 0.95)
+        fa = forecast(m, H; ci_method=:analytic, conf_level=0.90)
+        @test fa.ci_method == :analytic
+        mse = copy(m.Sigma); Φ = Matrix{Float64}(I, n, n)
+        for hi in 1:H
+            if hi > 1
+                Φ = A1 * Φ                 # Φ = A^{hi-1}
+                mse = mse .+ Φ * m.Sigma * Φ'
+            end
+            for j in 1:n
+                hw = z90 * sqrt(mse[j, j])
+                @test isapprox(fa.ci_upper[hi, j] - fa.forecast[hi, j], hw; rtol=1e-10)
+                @test isapprox(fa.forecast[hi, j] - fa.ci_lower[hi, j], hw; rtol=1e-10)
+            end
+        end
+        # h=1 half-width is exactly z·√Σ_jj
+        for j in 1:n
+            @test isapprox(fa.ci_upper[1, j] - fa.forecast[1, j], z90 * sqrt(m.Sigma[j, j]); rtol=1e-10)
+        end
+
+        # --- bootstrap-B reproducibility under a fixed rng ---
+        fb1 = forecast(m, H; ci_method=:bootstrap, reps=800, rng=Random.MersenneTwister(7))
+        fb2 = forecast(m, H; ci_method=:bootstrap, reps=800, rng=Random.MersenneTwister(7))
+        @test fb1.ci_lower == fb2.ci_lower
+        @test fb1.ci_upper == fb2.ci_upper
+
+        # --- bootstrap-B adds coefficient uncertainty ⇒ wider than innovation-only analytic ---
+        fa95 = forecast(m, H; ci_method=:analytic)
+        fb95 = forecast(m, H; ci_method=:bootstrap, reps=4000, rng=Random.MersenneTwister(11))
+        @test sum(fb95.ci_upper .- fb95.ci_lower) > sum(fa95.ci_upper .- fa95.ci_lower)
+
+        # --- stationary_only, :none, and validation ---
+        fs = forecast(m, H; ci_method=:bootstrap, reps=300, stationary_only=true,
+                      rng=Random.MersenneTwister(3))
+        @test all(fs.ci_upper .>= fs.ci_lower)
+        fn = forecast(m, 3; ci_method=:none)
+        @test all(fn.ci_lower .== 0) && all(fn.ci_upper .== 0)
+        @test_throws ArgumentError forecast(m, 3; ci_method=:bogus)
+    end
+end
+
+@testset "VAR predict in-place history ring (#210 box C)" begin
+    # Box C replaces the per-step `vcat` history ring in `predict(model, steps)` with an in-place
+    # row shift. The point-forecast recursion is deterministic, so it must be bit-for-bit identical
+    # to a naive `vcat`-based recursion (the pre-refactor algorithm) reconstructed here.
+    rng = Random.MersenneTwister(7)
+    n, p, Tn = 3, 2, 120
+    A1 = [0.4 0.1 0.0; 0.0 0.3 0.1; 0.1 0.0 0.2]
+    Y = zeros(Tn, n)
+    for t in 3:Tn
+        Y[t, :] = A1 * Y[t-1, :] .+ 0.5 .* A1 * Y[t-2, :] .+ randn(rng, n)
+    end
+    model = estimate_var(Y, p)
+    steps = 15
+    fc = predict(model, steps)
+
+    # naive vcat reference (pre-refactor algorithm)
+    B = model.B
+    A = MacroEconometricModels.extract_ar_coefficients(B, n, p)
+    intercept = B[1, :]
+    hist = copy(model.Y[(end-p+1):end, :])
+    ref = Matrix{Float64}(undef, steps, n)
+    for h in 1:steps
+        y_hat = copy(intercept)
+        for lag in 1:p
+            y_hat .+= A[lag] * hist[end-lag+1, :]
+        end
+        ref[h, :] = y_hat
+        hist = vcat(hist[2:end, :], y_hat')
+    end
+
+    @test fc == ref              # bit-identical to the vcat recursion
 end

@@ -122,8 +122,9 @@ function estimate_favar(X::AbstractMatrix{T}, Y_key::AbstractMatrix{T}, r::Int, 
     F_raw = fm.factors           # T_obs x r
     Lambda = fm.loadings         # N x r
 
-    # Step 2: Remove double-counting (slow-moving factors)
-    F_tilde = _remove_double_counting(F_raw, Y_key)
+    # Step 2: Remove double-counting (slow-moving factors); B_y are the Y_key slopes per factor
+    F_tilde, B_y = _remove_double_counting(F_raw, Y_key)
+    Lambda_y = Lambda * B_y'      # N x n_key implied direct panel loadings on Y_key
 
     # Step 3: Estimate VAR on [F_tilde, Y_key]
     Y_aug = hcat(F_tilde, Y_key)
@@ -151,6 +152,7 @@ function estimate_favar(X::AbstractMatrix{T}, Y_key::AbstractMatrix{T}, r::Int, 
         n_key,
         F_tilde,
         Lambda,
+        Lambda_y,
         fm,
         var_model.aic,
         var_model.bic,
@@ -215,6 +217,7 @@ function estimate_favar(X::AbstractMatrix{T}, key_indices::Vector{Int}, r::Int, 
         result.n_key,
         result.factors,
         result.loadings,
+        result.Lambda_y,
         result.factor_model,
         result.aic,
         result.bic,
@@ -280,18 +283,112 @@ function _remove_double_counting(F_raw::Matrix{T}, Y_key::AbstractMatrix{T}) whe
     ZtZ_inv = Matrix{T}(robust_inv(Z'Z))
 
     F_tilde = Matrix{T}(undef, T_obs, r)
+    B_y = Matrix{T}(undef, n_key, r)          # per-factor Y_key slopes (intercept dropped)
     for j in 1:r
         f_j = @view F_raw[:, j]
         beta = ZtZ_inv * (Z' * f_j)
         F_tilde[:, j] = f_j - Z * beta
+        B_y[:, j] = beta[2:end]
     end
 
-    F_tilde
+    (F_tilde, B_y)
 end
 
 # =============================================================================
 # Bayesian FAVAR Estimation (BBE 2005, Section IV)
 # =============================================================================
+
+# PSD-robust matrix square root L (L*L' = PSD projection of M) for the FFBS conditional-
+# covariance draws. Conditional covariances are PSD in exact arithmetic but a poor Gibbs draw
+# (near-singular Σ_ηη or a near-explosive VAR) can make them slightly indefinite; clipping the
+# eigenvalues at zero keeps the sampler from throwing on a single bad sweep.
+function _favar_state_chol(M::AbstractMatrix{T}) where {T<:AbstractFloat}
+    Ms = T(0.5) * (M + M')
+    E = eigen(Symmetric(Ms))
+    E.vectors * Diagonal(sqrt.(max.(E.values, zero(T))))
+end
+
+"""
+    _favar_ffbs(X_std, Lambda, A_lags, Sigma_eta, sigma2_e, r, p) -> Matrix
+
+Carter–Kohn forward-filter / backward-sample of the FAVAR factor path. Casts the factors in
+companion state-space form — state `s_t = [F_t; …; F_{t-p+1}]`, transition from the F→F VAR
+blocks `A_lags` with innovation covariance `Sigma_eta` (rank `r`) plus a known per-t `drift`
+(the intercept and lagged-Y_key feedback of the augmented VAR), observation
+`X_std[t] = Lambda·F_t + e_t`, `e_t ~ N(0, diag(sigma2_e))` — runs the Kalman filter, then
+draws the path backward. Because the companion state noise is singular (only the top `r`
+rows carry innovations), each backward step conditions on the top-`r` block `F_{t+1}` of the
+next state only (Kim–Nelson). Returns the sampled factors (T_obs × r).
+"""
+function _favar_ffbs(X_std::AbstractMatrix{T}, Lambda::AbstractMatrix{T},
+                     A_lags::Vector{Matrix{T}}, Sigma_eta::AbstractMatrix{T},
+                     sigma2_e::AbstractVector{T}, r::Int, p::Int,
+                     drift::AbstractMatrix{T}) where {T<:AbstractFloat}
+    T_obs, N = size(X_std)
+    sd = r * p
+
+    # Companion state-space matrices
+    Z = zeros(T, N, sd); Z[:, 1:r] = Lambda
+    T_mat = zeros(T, sd, sd)
+    for l in 1:p
+        T_mat[1:r, ((l-1)*r+1):(l*r)] = A_lags[l]
+    end
+    p > 1 && (T_mat[(r+1):sd, 1:(sd-r)] = Matrix{T}(I, sd - r, sd - r))
+    Q = zeros(T, sd, sd); Q[1:r, 1:r] = Sigma_eta
+
+    # Forward Kalman filter (store filtered mean/cov)
+    a_filt = zeros(T, T_obs, sd)
+    P_filt = Array{T,3}(undef, T_obs, sd, sd)
+    a_t = zeros(T, sd)
+    P0 = _compute_unconditional_covariance(T_mat, Q, sd)
+    P_t = all(isfinite, P0) ? Matrix{T}(P0) : Matrix{T}(I, sd, sd) * T(1e6)
+    for t in 1:T_obs
+        a_pred = T_mat * a_t
+        @inbounds for i in 1:r
+            a_pred[i] += drift[t, i]      # known intercept + Y_key feedback in the top-r rows
+        end
+        P_pred = T_mat * P_t * T_mat' + Q
+        ZP = Z * P_pred                       # N × sd
+        F_obs = ZP * Z'                       # N × N
+        @inbounds for j in 1:N
+            F_obs[j, j] += sigma2_e[j]
+        end
+        F_obs = T(0.5) * (F_obs + F_obs')
+        F_inv = robust_inv(F_obs)
+        K = P_pred * Z' * F_inv               # sd × N
+        v = @view(X_std[t, :]) .- Z * a_pred
+        a_t = a_pred + K * v
+        P_t = P_pred - K * ZP
+        P_t = T(0.5) * (P_t + P_t')
+        a_filt[t, :] = a_t
+        P_filt[t, :, :] = P_t
+    end
+
+    # Backward sampling: F_t | F_{t+1}, data_{1:t}, conditioning on the top-r block only
+    F_samp = Matrix{T}(undef, T_obs, r)
+    Fstar = Matrix{T}(T_mat[1:r, :])          # r × sd (top rows of the transition)
+    CT = Matrix{T}(P_filt[T_obs, 1:r, 1:r])
+    # Reused per-step standard-normal shock buffer; `randn!` draws from the same global stream
+    # as `randn(T, r)`, so the sampled path is unchanged. (#210 box D)
+    z_state = Vector{T}(undef, r)
+    randn!(z_state)
+    F_samp[T_obs, :] = a_filt[T_obs, 1:r] + _favar_state_chol(CT) * z_state
+    for t in (T_obs - 1):-1:1
+        af = a_filt[t, :]
+        Pf = Matrix{T}(P_filt[t, :, :])
+        FPf = Fstar * Pf                      # r × sd
+        Fbk = FPf * Fstar' + Sigma_eta        # r × r  (= top-r block of P_pred[t+1])
+        Fbk = T(0.5) * (Fbk + Fbk')
+        gain = Pf * Fstar' * robust_inv(Fbk)  # sd × r
+        # predicted top-r mean of s_{t+1} includes the known drift at t+1
+        m_full = af + gain * (F_samp[t+1, :] - (drift[t+1, :] + Fstar * af))
+        C_full = Pf - gain * FPf              # sd × sd
+        CF = Matrix{T}(C_full[1:r, 1:r])
+        randn!(z_state)
+        F_samp[t, :] = m_full[1:r] + _favar_state_chol(CF) * z_state
+    end
+    F_samp
+end
 
 """
     _estimate_favar_bayesian(X, Y_key, r, p, n_draws, burnin, pvn, Y_key_indices, aug_varnames) -> BayesianFAVAR
@@ -349,6 +446,10 @@ function _estimate_favar_bayesian(X::Matrix{T}, Y_key::Matrix{T}, r::Int, p::Int
 
     # Pre-allocate workspace
     Y_aug = Matrix{T}(undef, T_obs, n_var)
+    # Reused per-sweep standard-normal shock buffers; `randn!` draws from the same global stream
+    # as the previous `randn(T, …)` calls, so every draw is unchanged. (#210 box D)
+    Z_Bdraw = Matrix{T}(undef, k, n_var)   # Block 1: (B | Σ) matrix-normal shock
+    z_lambda = Vector{T}(undef, r)         # Block 2: per-equation loading shock
     draw_idx = 0
 
     for iter in 1:total_iters
@@ -358,17 +459,23 @@ function _estimate_favar_bayesian(X::Matrix{T}, Y_key::Matrix{T}, r::Int, p::Int
             Y_aug[:, 1:r] = F_curr
             Y_aug[:, (r+1):n_var] = Y_key
 
-            # Estimate VAR on augmented system
+            # Draw (B, Σ) from the conjugate Normal–Inverse-Wishart posterior with a flat prior:
+            #   Σ ~ IW(T_eff, S),  vec(B) | Σ ~ N(vec(B_hat), Σ ⊗ (X'X)^{-1})
+            # reusing the BVAR direct-sampler formulas (S = residual SSR, B_hat = OLS).
             var_model = estimate_var(Y_aug, p; check_stability=false, varnames=aug_varnames)
-
-            B_curr = Matrix{T}(var_model.B)
-            Sigma_curr = Matrix{T}(var_model.Sigma)
-
-            # Add small jitter to ensure positive definiteness
-            Sigma_curr = T(0.5) * (Sigma_curr + Sigma_curr')
-            for i in 1:n_var
-                Sigma_curr[i, i] = max(Sigma_curr[i, i], T(1e-10))
-            end
+            _, X_reg = construct_var_matrices(Y_aug, p)
+            T_eff_var = size(X_reg, 1)
+            XtX_inv = Matrix{T}(robust_inv(X_reg' * X_reg))
+            XtX_inv = T(0.5) * (XtX_inv + XtX_inv')
+            B_hat = Matrix{T}(var_model.B)
+            S_post = Matrix{T}(var_model.U' * var_model.U)
+            S_post = T(0.5) * (S_post + S_post')
+            # Flat-prior marginal: Σ ~ IW(T_eff - k, U'U). Integrating B out of the matrix-normal
+            # likelihood shifts the degrees of freedom by k = #regressors/equation (not T_eff).
+            nu_sigma = max(T_eff_var - k, n_var + 2)
+            Sigma_curr = _draw_inverse_wishart(nu_sigma, S_post)
+            randn!(Z_Bdraw)
+            B_curr = B_hat + safe_cholesky(XtX_inv) * Z_Bdraw * safe_cholesky(Sigma_curr)'
 
             # === Block 2: Draw Λ | F, X ===
             # Equation-by-equation: X_i = F * λ_i + e_i
@@ -394,55 +501,35 @@ function _estimate_favar_bayesian(X::Matrix{T}, Y_key::Matrix{T}, r::Int, p::Int
                 sigma2_e[j] = sigma2_j
 
                 # Draw λ_i from posterior
-                Lambda_curr[j, :] = beta_hat + sqrt(sigma2_j) * L_FtF_inv * randn(T, r)
+                randn!(z_lambda)
+                Lambda_curr[j, :] = beta_hat + sqrt(sigma2_j) * L_FtF_inv * z_lambda
             end
 
-            # === Block 3: Draw F | Λ, B, Σ, X, Y_key ===
-            # Simplified regression approach:
-            # Observation: X_std[t,:] = Λ * F[t,:] + e[t,:]
-            # Posterior for F[t,:]:
-            #   Precision = Λ' Σ_e^{-1} Λ + I
-            #   Mean = Precision^{-1} * Λ' Σ_e^{-1} X_std[t,:]
-            Sigma_e_inv_diag = Vector{T}(undef, N)
-            for j in 1:N
-                Sigma_e_inv_diag[j] = one(T) / max(sigma2_e[j], T(1e-10))
+            # === Block 3: Draw F | Λ, B, Σ, X_std via Carter–Kohn FFBS ===
+            # Extract from B_curr (rows: 1 = intercept, then n_var per lag; columns = equations):
+            #  - the F→F companion blocks A_lags[l][a,b] = coef of F_{t-l}[b] in equation a;
+            #  - the F←Y_key feedback blocks + the intercept, which enter the state equation as a
+            #    KNOWN deterministic drift (Y_key is observed) — omitting it would make the factor
+            #    draw inconsistent with the augmented VAR just drawn in Block 1 and bias F.
+            A_lags = Vector{Matrix{T}}(undef, p)
+            AFY = Vector{Matrix{T}}(undef, p)
+            for l in 1:p
+                r0 = 2 + (l - 1) * n_var
+                A_lags[l] = permutedims(Matrix{T}(B_curr[r0:(r0 + r - 1), 1:r]))            # r × r
+                AFY[l]    = permutedims(Matrix{T}(B_curr[(r0 + r):(r0 + n_var - 1), 1:r]))   # r × n_key
             end
-
-            # Λ' Σ_e^{-1} Λ (r x r)
-            LtSinvL = zeros(T, r, r)
-            for j in 1:N
-                w = Sigma_e_inv_diag[j]
-                lam_j = @view Lambda_curr[j, :]
-                for a in 1:r, b in 1:r
-                    LtSinvL[a, b] += w * lam_j[a] * lam_j[b]
-                end
-            end
-
-            # Posterior precision and covariance
-            F_precision = LtSinvL + Matrix{T}(I, r, r)
-            F_precision = T(0.5) * (F_precision + F_precision')
-            F_cov = Matrix{T}(robust_inv(F_precision))
-            F_cov = T(0.5) * (F_cov + F_cov')
-            for i in 1:r
-                F_cov[i, i] = max(F_cov[i, i], T(1e-10))
-            end
-            L_F_cov = safe_cholesky(F_cov)
-
-            # Λ' Σ_e^{-1} (r x N)
-            LtSinv = zeros(T, r, N)
-            for j in 1:N
-                w = Sigma_e_inv_diag[j]
-                for a in 1:r
-                    LtSinv[a, j] = w * Lambda_curr[j, a]
-                end
-            end
-
-            # Draw F[t,:] for each t
+            c_F = Vector{T}(B_curr[1, 1:r])
+            drift = Matrix{T}(undef, T_obs, r)
             for t in 1:T_obs
-                x_t = @view X_std[t, :]
-                f_mean = F_cov * (LtSinv * x_t)
-                F_curr[t, :] = f_mean + L_F_cov * randn(T, r)
+                u = copy(c_F)
+                for l in 1:p
+                    t - l >= 1 && (u .+= AFY[l] * @view(Y_key[t - l, :]))
+                end
+                drift[t, :] = u
             end
+            Sigma_eta = Matrix{T}(Sigma_curr[1:r, 1:r])
+            Sigma_eta = T(0.5) * (Sigma_eta + Sigma_eta')
+            F_curr = _favar_ffbs(X_std, Lambda_curr, A_lags, Sigma_eta, sigma2_e, r, p, drift)
 
             # === Store draws after burnin ===
             if iter > eff_burnin

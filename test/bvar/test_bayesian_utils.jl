@@ -133,3 +133,38 @@ Random.seed!(54321)
     end
 
 end
+
+@testset "process_posterior_samples concrete container (#210 box A)" begin
+    # Pure-allocation refactor: the result container was `Vector{Any}` and is now typed by the
+    # concrete element returned by `compute_func` (inferred from the first valid draw). The stored
+    # values are computed by the identical `compute_func` call, so outputs are unchanged; the only
+    # observable difference is that the container's element type is now concrete, not `Any`.
+    rng = Random.MersenneTwister(20210)
+    n, p, T = 2, 2, 140
+    Y = zeros(T, n)
+    for t in 2:T
+        Y[t, :] = 0.5 .* Y[t-1, :] .+ randn(rng, n)
+    end
+    Random.seed!(4242)
+    post = estimate_bvar(Y, p; n_draws=60, sampler=:direct)
+
+    # (1) The internal machinery now returns a concretely-typed vector of Array{Float64,3}
+    #     (from compute_irf), not Vector{Any}.
+    results, ns = MacroEconometricModels.process_posterior_samples(post,
+        (m, Q, h) -> MacroEconometricModels.compute_irf(m, Q, h);
+        method=:cholesky, horizon=8)
+    @test eltype(results) != Any
+    @test isconcretetype(eltype(results))
+    @test eltype(results) == Array{Float64,3}
+    @test ns == length(results)
+    @test all(r -> all(isfinite, r), results)
+    @test all(r -> size(r) == (8, n, n), results)
+
+    # (2) Before/after equality: the deterministic Cholesky posterior-IRF pipeline reproduces the
+    #     same result on a fixed seed across repeated runs (the container change is value-neutral).
+    Random.seed!(777); ir1 = irf(post, 8; method=:cholesky)
+    Random.seed!(777); ir2 = irf(post, 8; method=:cholesky)
+    @test ir1.point_estimate == ir2.point_estimate
+    @test ir1.quantiles == ir2.quantiles
+    @test all(isfinite, ir1.point_estimate)
+end

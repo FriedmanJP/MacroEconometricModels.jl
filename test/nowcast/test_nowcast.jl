@@ -291,6 +291,22 @@ end
         @test !any(isnan, m.X_sm)
     end
 
+    @testset "Fewer series than factors: N < r·n_blocks (#209 R-30)" begin
+        # N = 4 series but r·n_blocks = 2·3 = 6 requested factors. Init extracts only
+        # n_eig = min(6,4) = 4; the EM M-step must use the SAME factor count or its
+        # factor-block indexing diverges from init. Before the fix it used
+        # min(r·n_blocks, state_dim) = 6 and disagreed.
+        Y, _, _, _ = _make_nowcast_data(T_obs=80, nM=3, nQ=1, r=2, seed=777)
+        blocks = zeros(Int, 4, 3)
+        blocks[1, 1] = 1
+        blocks[2, 2] = 1
+        blocks[3, 3] = 1
+        blocks[4, 1] = 1
+        m = nowcast_dfm(Y, 3, 1; r=2, p=1, blocks=blocks, max_iter=15, thresh=1e-3)
+        @test size(m.blocks) == (4, 3)
+        @test !any(isnan, m.X_sm)
+    end
+
     @testset "IID idiosyncratic" begin
         Y, _, _, _ = _make_nowcast_data(T_obs=60, nM=4, nQ=1, r=1, seed=333)
 
@@ -407,6 +423,23 @@ end
         @test !any(isnan, m.X_sm[56:60, 3:4])
     end
 
+    @testset "Ragged-edge fill conditions on observed variables (T105 #204)" begin
+        # 2-var VAR(1), B_1 = diag(0.5), strong contemporaneous innovation correlation
+        # sigma_12 = 0.9. When var1 is observed and var2 missing, the Kalman-smoothed var2 equals
+        # the conditional expectation sigma_21/sigma_11 * u1 (= 0.9 * observed); the old
+        # interpolation + deterministic-projection fill ignored the observed var1 and gave 0.
+        beta = zeros(3, 2); beta[2, 1] = 0.5; beta[3, 2] = 0.5
+        sigma = [1.0 0.9; 0.9 1.0]
+        Yp = zeros(6, 2); Yp[4, 1] = 3.0; Yp[4, 2] = NaN
+        Xp = MacroEconometricModels._bvar_smooth_missing(Yp, beta, sigma, 1, 6)
+        @test Xp[4, 1] == 3.0                    # observed entries preserved exactly
+        @test Xp[4, 2] ≈ 2.7 atol=1e-3           # conditioned on the observed correlated variable
+        Yn = zeros(6, 2); Yn[4, 1] = -3.0; Yn[4, 2] = NaN
+        Xn = MacroEconometricModels._bvar_smooth_missing(Yn, beta, sigma, 1, 6)
+        @test Xn[4, 2] ≈ -2.7 atol=1e-3          # sign follows the observed variable
+        @test all(isfinite, Xp) && all(isfinite, Xn)
+    end
+
     @testset "Hyperparameter optimization" begin
         rng = Random.MersenneTwister(300)
         Y = randn(rng, 100, 6)
@@ -506,6 +539,20 @@ end
         @test !all(isnan, m.Y_nowcast)
     end
 
+    @testset "Bridge nowcasts the incomplete current quarter (T104 #203)" begin
+        rng = Random.MersenneTwister(203)
+        T_obs = 92                          # NOT a multiple of 3 → a partial current quarter
+        Y = randn(rng, T_obs, 5)            # 3 monthly + 2 quarterly
+        for t in 1:T_obs
+            mod(t, 3) != 0 && (Y[t, 4:5] .= NaN)
+        end
+        m = nowcast_bridge(Y, 3, 2; lagM=1, lagQ=1, lagY=1)
+        # ceil-division emits a row for the incomplete quarter (floor ÷ dropped it: 30 → 31).
+        @test length(m.Y_nowcast) == cld(T_obs, 3)
+        @test length(m.Y_nowcast) == 31
+        @test isfinite(m.Y_nowcast[end])    # the current partial quarter is actually nowcast
+    end
+
     @testset "Equation combination" begin
         # With 4 monthly variables, should have C(4,2) + 4 = 10 equations
         combos = MacroEconometricModels._bridge_combinations(4, 1)
@@ -595,6 +642,50 @@ end
         decomp = sum(news.impact_news) + news.impact_revision + news.impact_reestimation
 
         @test total ≈ decomp atol=1e-8
+    end
+
+    @testset "Joint news fully explains the revision (T094 #194)" begin
+        Y, _, _, _ = _make_nowcast_data(T_obs=80, nM=4, nQ=1, r=1, seed=717)
+        m = nowcast_dfm(Y, 4, 1; r=1, p=1, max_iter=30, thresh=1e-4)
+        X_old = copy(Y)
+        X_old[74:80, 1:3] .= NaN                 # withhold several recent releases across periods
+        news = nowcast_news(Y, X_old, m, 78; target_var=5)
+        @test length(news.impact_news) > 1
+        # The joint weights B = Cov(F,I)·Var(I)^{-1} make the news explain the ENTIRE smoothed
+        # revision, so the re-estimation residual is ~0. The old per-release scalar gains split
+        # overlapping information wrongly and dumped a large residual into impact_reestimation.
+        rev = news.new_nowcast - news.old_nowcast
+        @test abs(news.impact_reestimation) <= 1e-6 * (abs(rev) + 1)
+    end
+
+    @testset "Kalman lagged smoother cross-covariance recursion (T094 #194)" begin
+        # Plag[j][:,:,t] = Cov(x_t, x_{t-j} | Y_T) must match the analytic joint-Gaussian
+        # posterior covariance. The old j>=2 recursion J_{t-1}·Plag[j-1][t-1] was wrong; the
+        # correct one is Plag[j-1][t]·J_{t-j}'.
+        Random.seed!(7)
+        A = [0.7 0.1; 0.0 0.5]; C = reshape([1.0, 0.5], 1, 2)
+        Q = [0.3 0.0; 0.0 0.2]; R = reshape([0.4], 1, 1)
+        x0 = [0.2, -0.1]; P0 = [1.0 0.2; 0.2 0.8]
+        Tn, sd, N = 6, 2, 1
+        y = randn(N, Tn)
+        _, _, Plag, _ = MacroEconometricModels._kalman_smoother_lag(y, A, C, Q, R, x0, P0, Tn - 1)
+        Vt = Vector{Matrix{Float64}}(undef, Tn); Vt[1] = A * P0 * A' + Q
+        for t in 2:Tn; Vt[t] = A * Vt[t-1] * A' + Q; end
+        SX = zeros(sd * Tn, sd * Tn)
+        for t in 1:Tn, s in 1:Tn
+            if t >= s
+                Mm = copy(Vt[s]); for _ in 1:(t - s); Mm = A * Mm; end
+                SX[(t-1)*sd+1:t*sd, (s-1)*sd+1:s*sd] = Mm
+                SX[(s-1)*sd+1:s*sd, (t-1)*sd+1:t*sd] = Mm'
+            end
+        end
+        H = zeros(N * Tn, sd * Tn); for t in 1:Tn; H[(t-1)*N+1:t*N, (t-1)*sd+1:t*sd] = C; end
+        Rb = zeros(N * Tn, N * Tn); for t in 1:Tn; Rb[(t-1)*N+1:t*N, (t-1)*N+1:t*N] = R; end
+        Spost = SX - SX * H' * inv(H * SX * H' + Rb) * H * SX
+        for j in 1:3, t in (j + 1):Tn
+            blk = Spost[(t-1)*sd+1:t*sd, (t-j-1)*sd+1:(t-j)*sd]
+            @test Plag[j][:, :, t] ≈ blk atol=1e-9
+        end
     end
 
     @testset "Input validation" begin

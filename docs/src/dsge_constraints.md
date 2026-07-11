@@ -311,6 +311,9 @@ occ_sol = occbin_solve(spec, zlb, borrow; shock_path=shocks)
 
 The `regime_history` matrix has two columns --- one per constraint --- recording which regimes are active in each period. An optional `curb_retrench=true` keyword limits constraint relaxation to one period per iteration, which helps prevent oscillation in difficult two-constraint problems.
 
+!!! note "Defining-equation assignment"
+    Each constrained variable's binding regime replaces its *defining equation* --- picked heuristically as the equation most sensitive to that variable. When the pick is not decisive (a runner-up equation of nearly equal sensitivity), OccBin warns. If **both** constraints map to the same defining equation, the two-constraint solver cannot separate them and raises an `ArgumentError`; pass an explicit assignment through the `Dict(variable => equation_index)` overload of `occbin_solve` to disambiguate.
+
 ### OccBin IRFs
 
 OccBin impulse responses compare the linear and constrained paths for a given shock:
@@ -410,7 +413,7 @@ The unconstrained IRF shows optimal consumption smoothing: the agent borrows fre
 
 1. **Non-convergence in perfect foresight**: Increase `T_periods` or reduce the shock magnitude. The terminal condition assumes return to steady state --- if the shock is too persistent or too large, the horizon must be long enough for the economy to converge back.
 
-2. **OccBin regime cycling**: The guess-and-verify algorithm can cycle between regime sequences without converging. For one-constraint problems, increase `maxiter`. For two-constraint problems, set `curb_retrench=true` to limit relaxation to one period per iteration.
+2. **OccBin regime cycling**: The guess-and-verify algorithm can cycle between regime sequences without converging. OccBin now detects a repeated regime pattern and stops with a warning and `converged=false` rather than spinning to `maxiter`. For one-constraint problems, increase `maxiter`; for two-constraint problems, set `curb_retrench=true` to limit relaxation to one period per iteration.
 
 3. **NLopt PF limits**: NLopt's SLSQP is a dense method that struggles with large perfect foresight problems. For models with T × n > 1000 variables, use `solver=:ipopt` with JuMP + Ipopt. For box-constrained PF, the built-in projected Newton solver handles large problems efficiently.
 

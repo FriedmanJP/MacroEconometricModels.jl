@@ -146,9 +146,10 @@ function favar_panel_irf(favar::FAVARModel{T}, irf_result::ImpulseResponse{T}) w
 
     for h in 1:H
         for j in 1:n_shocks
-            # Factor contribution: Lambda * [factor IRFs at horizon h for shock j]
+            # Factor contribution plus the direct Y_key channel via the implied loadings.
             factor_irfs_h = @view irf_result.values[h, 1:r, j]
-            panel_values[h, :, j] = Lambda * factor_irfs_h
+            y_irfs_h = @view irf_result.values[h, (r + 1):(r + n_key), j]
+            panel_values[h, :, j] = Lambda * factor_irfs_h + favar.Lambda_y * y_irfs_h
         end
     end
 
@@ -173,8 +174,10 @@ function favar_panel_irf(favar::FAVARModel{T}, irf_result::ImpulseResponse{T}) w
         for h in 1:H, j in 1:n_shocks
             factor_lo = @view irf_result.ci_lower[h, 1:r, j]
             factor_hi = @view irf_result.ci_upper[h, 1:r, j]
-            panel_ci_lower[h, :, j] = Lambda * factor_lo
-            panel_ci_upper[h, :, j] = Lambda * factor_hi
+            y_lo = @view irf_result.ci_lower[h, (r + 1):(r + n_key), j]
+            y_hi = @view irf_result.ci_upper[h, (r + 1):(r + n_key), j]
+            panel_ci_lower[h, :, j] = Lambda * factor_lo + favar.Lambda_y * y_lo
+            panel_ci_upper[h, :, j] = Lambda * factor_hi + favar.Lambda_y * y_hi
         end
 
         # Override key variable CIs
@@ -320,12 +323,15 @@ function favar_panel_forecast(favar::FAVARModel{T}, fc::VARForecast{T}) where {T
 
     for step in 1:h
         factor_fc = @view fc.forecast[step, 1:r]
-        panel_fc[step, :] = Lambda * factor_fc
+        y_fc = @view fc.forecast[step, (r + 1):(r + n_key)]
+        panel_fc[step, :] = Lambda * factor_fc + favar.Lambda_y * y_fc
 
         factor_lo = @view fc.ci_lower[step, 1:r]
         factor_hi = @view fc.ci_upper[step, 1:r]
-        panel_lo[step, :] = Lambda * factor_lo
-        panel_hi[step, :] = Lambda * factor_hi
+        y_lo = @view fc.ci_lower[step, (r + 1):(r + n_key)]
+        y_hi = @view fc.ci_upper[step, (r + 1):(r + n_key)]
+        panel_lo[step, :] = Lambda * factor_lo + favar.Lambda_y * y_lo
+        panel_hi[step, :] = Lambda * factor_hi + favar.Lambda_y * y_hi
     end
 
     # Override key variables with direct forecasts

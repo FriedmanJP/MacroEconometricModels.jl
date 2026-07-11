@@ -372,25 +372,32 @@ function forecast(post::BVARPosterior{T}, h::Int;
     sim = Array{T,3}(undef, n_use, h, n)
     valid = 0
 
+    # Preallocate the companion matrix once. The lower identity sub-block is invariant across
+    # draws, so write it a single time; each draw overwrites only the top AR blocks (which fully
+    # cover the top `n` rows) before `eigvals`, giving the identical companion per draw. (#210 box B)
+    companion = zeros(T, n * p, n * p)
+    if p > 1
+        companion[n+1:end, 1:n*(p-1)] = Matrix{T}(I, n*(p-1), n*(p-1))
+    end
+    # Preallocate the forecast history ring buffer (last `p` observations); shifted in place
+    # each step instead of rebuilt with `vcat`. (#210 box C)
+    history = Matrix{T}(undef, p, n)
+
     for s in 1:n_use
         B_s = post.B_draws[s, :, :]   # k × n
         Sigma_s = post.Sigma_draws[s, :, :]  # n × n
 
         # Skip non-stationary draws
         A_list = extract_ar_coefficients(B_s, n, p)
-        companion = zeros(T, n * p, n * p)
         for lag in 1:p
             companion[1:n, (lag-1)*n+1:lag*n] = A_list[lag]
-        end
-        if p > 1
-            companion[n+1:end, 1:n*(p-1)] = Matrix{T}(I, n*(p-1), n*(p-1))
         end
         max_eig = maximum(abs.(eigvals(companion)))
         max_eig >= one(T) && continue
 
         valid += 1
         intercept = @view B_s[1, :]
-        history = copy(post.data[(end - p + 1):end, :])
+        copyto!(history, @view post.data[(end - p + 1):end, :])
 
         # Draw shocks from posterior covariance
         L = safe_cholesky(Sigma_s)
@@ -402,7 +409,11 @@ function forecast(post::BVARPosterior{T}, h::Int;
             end
             y_hat .+= L * randn(T, n)
             sim[valid, step, :] = y_hat
-            history = vcat(@view(history[2:end, :]), y_hat')
+            # In-place ring shift: drop the oldest row, append `y_hat` as the newest.
+            for r in 1:(p - 1)
+                @views history[r, :] .= history[r + 1, :]
+            end
+            @views history[p, :] .= y_hat
         end
     end
 

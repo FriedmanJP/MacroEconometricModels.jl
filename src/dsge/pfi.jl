@@ -110,6 +110,7 @@ function _pfi_compute_expectations(coeffs::Matrix{T}, n_vars::Int, n_basis::Int,
 
     @inbounds for j in 1:n_nodes
         for q in 1:n_quad
+            iszero(quad_weights[q]) && continue   # center node contributes 0 (S-19 / #224)
             # Next-period states from current policy
             x_next_level = zeros(T, nx)
             for (ii, si) in enumerate(state_idx)
@@ -233,8 +234,8 @@ function pfi_solver(spec::DSGESpec{T};
     quad_weights = Vector{T}(quad_weights)
 
     # Step 2: Initial guess from first-order perturbation
-    result_1st = gensys(ld.Gamma0, ld.Gamma1, ld.C, ld.Psi, ld.Pi)
-    G1 = result_1st.G1
+    result_1st = _gensys_qz(spec, ld)
+    G1 = result_1st.G
     impact = result_1st.impact
 
     if initial_coeffs !== nothing && size(initial_coeffs) == (n_vars, n_basis)
@@ -376,6 +377,7 @@ function pfi_solver(spec::DSGESpec{T};
         quadrature,
         spec,
         ld,
+        impact,
         ss,
         state_idx,
         control_idx,

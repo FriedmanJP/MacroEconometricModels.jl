@@ -16,8 +16,9 @@ using LinearAlgebra, Statistics, Distributions
 
 First-stage regression for 2SLS with HAC-robust F-statistic for instrument relevance.
 
-At LP horizon h > 0, residuals have MA(h-1) autocorrelation by construction (Jordà 2005),
-so the F-statistic uses Newey-West HAC variance with bandwidth ≥ h+1.
+The first-stage residuals carry no h-horizon overlap (that lives in the second-stage
+LP residuals), so the F-statistic uses the data-driven Newey-West bandwidth without
+an h+1 floor.
 """
 function first_stage_regression(endog::AbstractVector{T}, instruments::AbstractMatrix{T},
                                  controls::AbstractMatrix{T}; h::Int=0) where {T<:AbstractFloat}
@@ -32,11 +33,12 @@ function first_stage_regression(endog::AbstractVector{T}, instruments::AbstractM
     fitted = X * beta
     resid = endog - fitted
 
-    # HAC-robust F-statistic: use Newey-West sandwich variance
-    # Bandwidth = max(auto_bw, h+1) to account for MA(h-1) autocorrelation
+    # HAC-robust F-statistic: use Newey-West sandwich variance. The FIRST-STAGE
+    # regression (endogenous regressor on instruments + controls) has no h-horizon
+    # MA structure — that overlap lives in the second-stage LP residuals, not here —
+    # so use the data-driven bandwidth without the h+1 floor.
     auto_bw = optimal_bandwidth_nw(resid)
-    effective_bw = h > 0 ? max(auto_bw, h + 1) : auto_bw
-    V_nw = newey_west(X, resid; bandwidth=effective_bw, XtX_inv=XtX_inv)
+    V_nw = newey_west(X, resid; bandwidth=auto_bw, XtX_inv=XtX_inv)
 
     # Extract instrument block of the HAC variance
     inst_idx = 2:(n_inst + 1)
@@ -198,12 +200,21 @@ function sargan_test(model::LPIVModel{T}, h::Int) where {T<:AbstractFloat}
     t_start, t_end = compute_horizon_bounds(size(model.Y, 1), h, model.lags)
     Z = model.instruments[t_start:t_end, :]
 
+    # Frisch-Waugh: partial the included exogenous regressors W = [intercept, lagged Y]
+    # out of the instruments before forming the Sargan J. The 2SLS residuals are already
+    # orthogonal to W, so leaving Z un-residualized lets the part of Z spanned by W inflate
+    # the statistic. Z̃ = M_W Z uses the SAME controls the second stage conditions on.
+    nvar = size(model.Y, 2)
+    W = ones(T, size(Z, 1), 1 + nvar * model.lags)
+    build_control_columns!(W, model.Y, t_start, t_end, model.lags, 2)
+    Ztil = Z .- W * (robust_inv(W' * W) * (W' * Z))
+
     J_stats = [begin
         u = @view U_h[:, eq]
         sigma2 = sum(u.^2) / T_h
-        Zu = Z' * u
-        ZtZ_inv = robust_inv(Z' * Z)
-        # Sargan J = (Z'u)'(Z'Z)⁻¹(Z'u)/σ̂², σ̂² = u'u/T_h. σ̂² already carries the sample
+        Zu = Ztil' * u
+        ZtZ_inv = robust_inv(Ztil' * Ztil)
+        # Sargan J = (Z̃'u)'(Z̃'Z̃)⁻¹(Z̃'u)/σ̂², σ̂² = u'u/T_h. σ̂² already carries the sample
         # size in its denominator; do NOT multiply by T_h again (audit R-02 / #112).
         (Zu' * ZtZ_inv * Zu) / sigma2
     end for eq in 1:n_resp]

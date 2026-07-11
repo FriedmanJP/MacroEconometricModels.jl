@@ -184,10 +184,8 @@ function simulate(sol::ProjectionSolution{T}, T_periods::Int;
     levels = zeros(T, T_periods, n)
     x_state = copy(ss[sol.state_indices])
 
-    # Get linear impact matrix for shock propagation
-    result_lin = gensys(sol.linear.Gamma0, sol.linear.Gamma1,
-                        sol.linear.C, sol.linear.Psi, sol.linear.Pi)
-    impact = result_lin.impact
+    # Cached first-order shock-impact matrix (companion-QZ); no per-call re-solve (#225).
+    impact = sol.impact
 
     for t in 1:T_periods
         # Evaluate policy at current state
@@ -217,50 +215,64 @@ end
 """
     irf(sol::ProjectionSolution{T}, horizon::Int; kwargs...) -> ImpulseResponse{T}
 
-Monte Carlo IRF: compare paths with/without initial shock.
+Generalized IRF (Koop-Pesaran-Potter). For each shock and replication, draw a SHARED future
+shock path and simulate a baseline and an impulse-shocked path over it; the impulse is applied
+to the INITIAL state (`impact[·,j]·shock_size`, preserving the h=0 convention) and the two
+paths share the same future shocks, so their difference isolates the impulse on the nonlinear
+policy. Averaging over `n_sim` replications gives the GIRF. For a linear policy the shared
+future shocks cancel exactly and the GIRF reduces to the deterministic IRF.
 
 # Arguments
 - `sol`: projection solution from Chebyshev collocation
 - `horizon`: number of IRF periods
 
 # Keyword Arguments
-- `n_sim::Int=500`: number of simulation paths for averaging
+- `n_sim::Int=500`: number of GIRF replications to average
 - `shock_size::Real=1.0`: impulse size in standard deviations
-- `ci_type::Symbol=:none`: confidence interval type
+- `ci_type::Symbol=:none`: confidence interval type (bands are zero unless `:none`)
+- `rng`: random number generator; results are reproducible for a fixed `rng`
 """
 function irf(sol::ProjectionSolution{T}, horizon::Int;
              n_sim::Int=500, shock_size::Real=1.0,
-             ci_type::Symbol=:none, kwargs...) where {T<:AbstractFloat}
+             ci_type::Symbol=:none, rng=Random.default_rng(), kwargs...) where {T<:AbstractFloat}
     n = nvars(sol)
     n_eps = nshocks(sol)
     nx = nstates(sol)
     ss = sol.steady_state
 
-    # Get linear impact matrix for shock propagation
-    result_lin = gensys(sol.linear.Gamma0, sol.linear.Gamma1,
-                        sol.linear.C, sol.linear.Psi, sol.linear.Pi)
-    impact = result_lin.impact
+    # Cached first-order shock-impact matrix (companion-QZ); no per-call re-solve (#225, #211).
+    impact = sol.impact
 
     point_irf = zeros(T, horizon, n, n_eps)
+    base_seed = rand(rng, UInt64)          # one entropy draw ⇒ reproducible per (shock, rep)
+
+    # Simulate the policy `horizon` periods from initial state `x0`, propagating the shared
+    # future shocks `e` through the linear impact rows (mirrors `simulate`).
+    function _girf_path(x0, e)
+        x = copy(x0)
+        path = zeros(T, horizon, n)
+        for t in 1:horizon
+            y = evaluate_policy(sol, x)
+            path[t, :] = y
+            x = y[sol.state_indices]
+            for (ii, si) in enumerate(sol.state_indices), k in 1:n_eps
+                x[ii] += impact[si, k] * e[t, k]
+            end
+            for d in 1:nx
+                x[d] = clamp(x[d], sol.state_bounds[d, 1], sol.state_bounds[d, 2])
+            end
+        end
+        path
+    end
 
     for j in 1:n_eps
         irf_sum = zeros(T, horizon, n)
-
         for s in 1:n_sim
-            # Baseline path (from steady state, no shocks)
-            x_base = copy(ss[sol.state_indices])
-            path_base = zeros(T, horizon, n)
-            for t in 1:horizon
-                y = evaluate_policy(sol, x_base)
-                path_base[t, :] = y
-                x_base = y[sol.state_indices]
-                # Clamp
-                for d in 1:nx
-                    x_base[d] = clamp(x_base[d], sol.state_bounds[d, 1], sol.state_bounds[d, 2])
-                end
-            end
+            rep_rng = Random.MersenneTwister(hash((j, s, base_seed)))
+            e = randn(rep_rng, T, horizon, n_eps)   # shared future shocks for this replication
 
-            # Shocked path: initial shock to shock j
+            x_base = copy(ss[sol.state_indices])
+            # Impulse to shock j on the INITIAL state (h=0 convention), same future shocks.
             x_shock = copy(ss[sol.state_indices])
             for (ii, si) in enumerate(sol.state_indices)
                 x_shock[ii] += impact[si, j] * T(shock_size)
@@ -269,19 +281,8 @@ function irf(sol::ProjectionSolution{T}, horizon::Int;
                 x_shock[d] = clamp(x_shock[d], sol.state_bounds[d, 1], sol.state_bounds[d, 2])
             end
 
-            path_shock = zeros(T, horizon, n)
-            for t in 1:horizon
-                y = evaluate_policy(sol, x_shock)
-                path_shock[t, :] = y
-                x_shock = y[sol.state_indices]
-                for d in 1:nx
-                    x_shock[d] = clamp(x_shock[d], sol.state_bounds[d, 1], sol.state_bounds[d, 2])
-                end
-            end
-
-            irf_sum .+= (path_shock .- path_base)
+            irf_sum .+= (_girf_path(x_shock, e) .- _girf_path(x_base, e))
         end
-
         point_irf[:, :, j] = irf_sum ./ n_sim
     end
 

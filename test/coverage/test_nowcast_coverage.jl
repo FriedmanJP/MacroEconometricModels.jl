@@ -166,7 +166,12 @@ end
 
 @testset "Direct _bvar_smooth_missing coverage" begin
 
-    @testset "Interior NaN: linear interpolation with both neighbors" begin
+    # NOTE: #204 replaced `_bvar_smooth_missing`'s nearest-neighbor / linear interpolation with a
+    # real Kalman smoother. With the degenerate zero-coefficient BVAR (beta = 0, no dynamics to
+    # carry neighbor information) the smoother preserves observed entries and fills missing ones
+    # with the prior mean (0) — so the old interpolation value assertions below are updated.
+
+    @testset "Interior NaN: Kalman-smoothed fill (#204)" begin
         rng = Random.MersenneTwister(9200)
         T_obs = 20
         N = 2
@@ -179,15 +184,15 @@ end
         beta = zeros(Float64, k, N)
         sigma = Matrix{Float64}(I(N))
 
-        # Set t_complete = T_obs so the interior loop processes row 10
         X_sm = MacroEconometricModels._bvar_smooth_missing(Y, beta, sigma, lags, T_obs)
 
         @test !any(isnan, X_sm)
-        expected = Y[9, 1] + (Y[11, 1] - Y[9, 1]) * 1.0 / 2.0
-        @test X_sm[10, 1] ≈ expected
+        @test abs(X_sm[10, 1]) < 1e-8            # missing → prior mean (beta = 0)
+        @test X_sm[9, 1] ≈ Y[9, 1] atol = 1e-6   # observed preserved
+        @test X_sm[11, 1] ≈ Y[11, 1] atol = 1e-6
     end
 
-    @testset "First-row NaN: right neighbor only (elseif hi <= T_obs)" begin
+    @testset "First-row NaN: Kalman-smoothed fill (#204)" begin
         rng = Random.MersenneTwister(9210)
         T_obs = 15
         N = 2
@@ -203,10 +208,11 @@ end
         X_sm = MacroEconometricModels._bvar_smooth_missing(Y, beta, sigma, lags, T_obs)
 
         @test !any(isnan, X_sm)
-        @test X_sm[1, 1] ≈ Y[2, 1]
+        @test abs(X_sm[1, 1]) < 1e-8             # missing → prior mean (beta = 0)
+        @test X_sm[2, 1] ≈ Y[2, 1] atol = 1e-6   # observed preserved
     end
 
-    @testset "Last-row NaN within t_complete: left neighbor only (elseif lo >= 1)" begin
+    @testset "Last-row NaN within t_complete: Kalman-smoothed fill (#204)" begin
         rng = Random.MersenneTwister(9220)
         T_obs = 15
         N = 2
@@ -222,7 +228,8 @@ end
         X_sm = MacroEconometricModels._bvar_smooth_missing(Y, beta, sigma, lags, T_obs)
 
         @test !any(isnan, X_sm)
-        @test X_sm[T_obs, 1] ≈ Y[T_obs - 1, 1]
+        @test abs(X_sm[T_obs, 1]) < 1e-8                 # missing → prior mean (beta = 0)
+        @test X_sm[T_obs - 1, 1] ≈ Y[T_obs - 1, 1] atol = 1e-6
     end
 
     @testset "Entire column NaN: column mean fallback (else branch)" begin
@@ -244,7 +251,7 @@ end
         @test all(X_sm[:, 2] .== 0.0)
     end
 
-    @testset "Consecutive NaN block: lo/hi while loops traverse multiple rows" begin
+    @testset "Consecutive NaN block: Kalman-smoothed fill (#204)" begin
         rng = Random.MersenneTwister(9240)
         T_obs = 20
         N = 2
@@ -260,12 +267,11 @@ end
         X_sm = MacroEconometricModels._bvar_smooth_missing(Y, beta, sigma, lags, T_obs)
 
         @test !any(isnan, X_sm)
-        lo_val = Y[7, 1]
-        hi_val = Y[13, 1]
         for t in 8:12
-            expected = lo_val + (hi_val - lo_val) * Float64(t - 7) / Float64(13 - 7)
-            @test X_sm[t, 1] ≈ expected
+            @test abs(X_sm[t, 1]) < 1e-8         # missing block → prior mean (beta = 0)
         end
+        @test X_sm[7, 1] ≈ Y[7, 1] atol = 1e-6   # observed neighbors preserved
+        @test X_sm[13, 1] ≈ Y[13, 1] atol = 1e-6
     end
 
     @testset "Ragged edge: t_complete < T_obs with t_lag < 1 zeros fallback" begin
@@ -307,14 +313,16 @@ end
         X_sm = MacroEconometricModels._bvar_smooth_missing(Y, beta, sigma, lags, T_obs)
 
         @test !any(isnan, X_sm)
-        # Col 1 rows 1-3: filled from right neighbor (row 4)
-        @test X_sm[1, 1] ≈ Y[4, 1]
-        @test X_sm[2, 1] ≈ Y[4, 1]
-        @test X_sm[3, 1] ≈ Y[4, 1]
-        # Col 3 rows 18-20: filled from left neighbor (row 17)
-        @test X_sm[18, 3] ≈ Y[17, 3]
-        @test X_sm[19, 3] ≈ Y[17, 3]
-        @test X_sm[20, 3] ≈ Y[17, 3]
+        # #204 Kalman smoother: missing entries → prior mean (beta = 0); observed preserved.
+        for t in 1:3
+            @test abs(X_sm[t, 1]) < 1e-8         # leading NaN block, col 1
+        end
+        for t in 18:20
+            @test abs(X_sm[t, 3]) < 1e-8         # trailing NaN block, col 3
+        end
+        @test abs(X_sm[10, 2]) < 1e-8            # single interior NaN, col 2
+        @test X_sm[4, 1] ≈ Y[4, 1] atol = 1e-6   # observed neighbors preserved
+        @test X_sm[17, 3] ≈ Y[17, 3] atol = 1e-6
     end
 end
 

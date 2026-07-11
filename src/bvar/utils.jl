@@ -25,7 +25,7 @@ using LinearAlgebra, Statistics
 """
     process_posterior_samples(post::BVARPosterior, compute_func::Function;
                               data, method, horizon, check_func, narrative_check,
-                              max_draws, transition_var, regime_indicator) -> (Vector{Any}, Int)
+                              max_draws, transition_var, regime_indicator) -> (Vector, Int)
 
 Generic framework for processing posterior samples from BVARPosterior.
 
@@ -50,7 +50,8 @@ Generic framework for processing posterior samples from BVARPosterior.
 - `regime_indicator`: Regime indicator (for method=:external_volatility)
 
 # Returns
-- `results::Vector{Any}`: Vector of results from `compute_func` for each sample
+- `results::Vector`: Vector of results from `compute_func` for each sample; the element type is
+  the concrete type returned by `compute_func` (inferred from the first valid draw, not `Any`)
 - `n_samples::Int`: Number of samples processed
 
 # Example
@@ -78,7 +79,11 @@ function process_posterior_samples(post::BVARPosterior, compute_func::Function;
     p, n = post.p, post.n
     b_vecs, sigmas = extract_chain_parameters(post)
 
-    results = Vector{Any}(undef, samples)
+    # Concrete-typed result container: `compute_func` returns the same concrete type for every
+    # draw (e.g. `Array{T,3}` from core/irf.jl and core/fevd.jl, consumed by
+    # `stack_posterior_results`), so infer the element type from the first valid result instead
+    # of boxing everything into a `Vector{Any}`. (#210 box A)
+    local results
     valid_count = 0
 
     for s in 1:samples
@@ -89,8 +94,10 @@ function process_posterior_samples(post::BVARPosterior, compute_func::Function;
         try
             Q = compute_Q(m, method, horizon, check_func, narrative_check;
                           max_draws=max_draws, transition_var=transition_var, regime_indicator=regime_indicator)
+            res = compute_func(m, Q, horizon)
             valid_count += 1
-            results[valid_count] = compute_func(m, Q, horizon)
+            valid_count == 1 && (results = Vector{typeof(res)}(undef, samples))
+            results[valid_count] = res
         catch e
             # Skip draws where identification fails (e.g., no valid Q found for sign restrictions)
             e isa ErrorException && contains(e.msg, "No valid Q found") && continue

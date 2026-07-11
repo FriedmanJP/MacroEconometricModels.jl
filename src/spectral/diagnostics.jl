@@ -100,14 +100,16 @@ function fisher_test(y::AbstractVector{T}) where {T<:AbstractFloat}
     peak_idx = argmax(I)
     peak_freq = T(2π * peak_idx / n)
 
-    # Fisher's exact p-value: P(g > x) ≈ Σ_{k=1}^{⌊1/x⌋} (-1)^{k+1} C(m,k) (1-kx)^{m-1}
-    pval = zero(T)
+    # Fisher's exact p-value: P(g > x) = Σ_{k=1}^{⌊1/x⌋} (-1)^{k+1} C(m,k) (1-kx)^{m-1}.
+    # Accumulate in BigFloat: for large m the C(m,k) grow astronomically while (1-kg)^{m-1}
+    # underflows, so a Float64 term is Inf·0 = NaN. BigFloat keeps the alternating sum finite.
+    pval_big = BigFloat(0)
     kmax = min(m, floor(Int, 1 / g))
     for k in 1:kmax
-        term = T((-1)^(k + 1)) * binomial(BigInt(m), BigInt(k)) * (1 - k * g)^(m - 1)
-        pval += T(term)
+        sgn = isodd(k) ? BigFloat(1) : BigFloat(-1)
+        pval_big += sgn * binomial(BigInt(m), BigInt(k)) * BigFloat(1 - k * g)^(m - 1)
     end
-    pval = clamp(pval, zero(T), one(T))
+    pval = clamp(T(pval_big), zero(T), one(T))
 
     FisherTestResult{T}(g, pval, peak_freq, n)
 end

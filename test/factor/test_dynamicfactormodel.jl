@@ -734,4 +734,39 @@ using MacroEconometricModels
         @test model.cumulative_variance[r_true] > 0.5
     end
 
+    @testset "Lag-one smoother cross-covariance (T097 #196)" begin
+        # Pt_smooth[t] must equal the EXACT lag-one smoother cross-covariance
+        # Cov(alpha_{t+1}, alpha_t | Y) = P_smooth[t+1]·J_t'. The old J_t·P_smooth[t+1]
+        # transposed the time order, corrupting the DFM EM VAR / Sigma_eta updates.
+        Random.seed!(11)
+        r, p, N, Tn = 1, 2, 2, 6
+        sd = r * p
+        Λ = reshape([1.0, 0.7], N, r)
+        A = [reshape([0.5], 1, 1), reshape([0.2], 1, 1)]
+        Sigma_eta = reshape([0.3], 1, 1)
+        Sigma_e = [0.4 0.0; 0.0 0.5]
+        Y = randn(Tn, N)
+        _, _, Pt, _ = MacroEconometricModels._kalman_smoother_dfm(Y, Λ, A, Sigma_eta, Sigma_e, r, p)
+        T_mat = zeros(sd, sd); T_mat[1:r, 1:r] = A[1]; T_mat[1:r, r+1:2r] = A[2]
+        T_mat[r+1:sd, 1:sd-r] = Matrix(I, sd-r, sd-r)
+        Q = zeros(sd, sd); Q[1:r, 1:r] = Sigma_eta
+        Z = zeros(N, sd); Z[:, 1:r] = Λ
+        Sinf = MacroEconometricModels._compute_unconditional_covariance(T_mat, Q, sd)
+        SX = zeros(sd * Tn, sd * Tn)
+        for t in 1:Tn, s in 1:Tn
+            if t >= s
+                Mm = copy(Sinf); for _ in 1:(t - s); Mm = T_mat * Mm; end
+                SX[(t-1)*sd+1:t*sd, (s-1)*sd+1:s*sd] = Mm
+                SX[(s-1)*sd+1:s*sd, (t-1)*sd+1:t*sd] = Mm'
+            end
+        end
+        H = zeros(N * Tn, sd * Tn); for t in 1:Tn; H[(t-1)*N+1:t*N, (t-1)*sd+1:t*sd] = Z; end
+        Rb = zeros(N * Tn, N * Tn); for t in 1:Tn; Rb[(t-1)*N+1:t*N, (t-1)*N+1:t*N] = Sigma_e; end
+        Spost = SX - SX * H' * inv(H * SX * H' + Rb) * H * SX
+        for t in 1:(Tn - 1)
+            blk = Spost[t*sd+1:(t+1)*sd, (t-1)*sd+1:t*sd]   # Cov(alpha_{t+1}, alpha_t)
+            @test Pt[t, :, :] ≈ blk atol=1e-8
+        end
+    end
+
 end

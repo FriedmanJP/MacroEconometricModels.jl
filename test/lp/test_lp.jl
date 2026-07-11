@@ -304,6 +304,31 @@ using Random
         @test dr_model isa PropensityLPModel
     end
 
+    @testset "Doubly-robust LP applies HAC to overlapping influence functions (T102 #201)" begin
+        # DR-LP influence functions are MA(h)-correlated across overlapping horizon windows, so
+        # the old iid std(psi)/sqrt(T_h) understated the SE and ignored cov_type entirely. With
+        # a persistent outcome the influence functions are positively autocorrelated, so the
+        # Newey-West HAC SE must exceed the near-iid White SE at some horizons — a gap that was
+        # exactly zero in the buggy code (both cov_types gave the identical iid SE).
+        rng = Random.MersenneTwister(77)
+        T_p, H_p = 400, 6
+        Xp = randn(rng, T_p, 2)
+        latent = 0.4 .* Xp[:, 1] .+ 0.3 .* Xp[:, 2]
+        Dp = rand(rng, T_p) .< (1.0 ./ (1.0 .+ exp.(-latent)))
+        Yp = zeros(T_p, 1)
+        for t in 2:T_p
+            Yp[t, 1] = 0.8 * Yp[t-1, 1] + 0.5 * Xp[t, 1] + Dp[t] * 1.0 + randn(rng)
+        end
+        m_nw = doubly_robust_lp(Yp, Dp, Xp, H_p; lags=2, cov_type=:newey_west)
+        m_wh = doubly_robust_lp(Yp, Dp, Xp, H_p; lags=2, cov_type=:white)
+        @test all(isfinite, m_nw.ate_se)
+        @test all(m_nw.ate_se .>= 0)
+        # The SE now depends on cov_type via the HAC path; pre-fix both cov_types produced the
+        # identical iid std(psi)/sqrt(T_h), so this difference was exactly zero.
+        reldiff = maximum(abs.(m_nw.ate_se[:, 1] .- m_wh.ate_se[:, 1]) ./ (m_wh.ate_se[:, 1] .+ eps()))
+        @test reldiff > 0.03
+    end
+
     @testset "IPW vs Doubly Robust LP produce different ATEs" begin
         # DGP with confounding where outcome regression adjustment matters:
         # - Propensity model is slightly misspecified (nonlinear treatment assignment)
@@ -620,18 +645,23 @@ using Random
         @test sargan_result.df == 1  # 2 instruments - 1 endogenous = 1 df
         @test sargan_result.valid == true
 
-        # Regression (audit R-02 / #112): reported Sargan J must equal the textbook
-        # J = (Z'u)'(Z'Z)⁻¹(Z'u)/σ̂², σ̂² = u'u/T_h. Pre-fix a stray leading T_h inflated it
-        # by the horizon sample size, forcing p≈0 (spurious overid rejection) for valid instruments.
+        # Regression: reported Sargan J equals the Frisch-Waugh textbook form
+        # J = (Z̃'u)'(Z̃'Z̃)⁻¹(Z̃'u)/σ̂² with Z̃ = M_W Z (the included exogenous controls
+        # W = [intercept, lagged Y] partialled out of the instruments, #209 R-26),
+        # σ̂² = u'u/T_h. It must NOT be the pre-R-02 T_h-inflated value.
         let h0 = 0
             U_h = model_sar.residuals[h0 + 1]
             T_h = model_sar.T_eff[h0 + 1]
             t0, t1 = MacroEconometricModels.compute_horizon_bounds(size(model_sar.Y, 1), h0, model_sar.lags)
             Zc = model_sar.instruments[t0:t1, :]
-            ZtZ_inv = MacroEconometricModels.robust_inv(Zc' * Zc)
+            nvar = size(model_sar.Y, 2)
+            W = ones(size(Zc, 1), 1 + nvar * model_sar.lags)
+            MacroEconometricModels.build_control_columns!(W, model_sar.Y, t0, t1, model_sar.lags, 2)
+            Ztil = Zc .- W * (MacroEconometricModels.robust_inv(W' * W) * (W' * Zc))
+            ZtZ_inv = MacroEconometricModels.robust_inv(Ztil' * Ztil)
             nresp = size(U_h, 2)
             J_textbook = sum(begin
-                u = U_h[:, eq]; Zu = Zc' * u
+                u = U_h[:, eq]; Zu = Ztil' * u
                 (Zu' * ZtZ_inv * Zu) / (sum(u .^ 2) / T_h)
             end for eq in 1:nresp) / nresp
             @test sargan_result.J_stat ≈ J_textbook rtol=1e-8
@@ -667,6 +697,66 @@ using Random
         )
         @test optimal_lambda in lambda_grid
         @test optimal_lambda > 0
+    end
+
+    @testset "Smooth LP cross-validation scores held-out data (T092 #191)" begin
+        # Regression guard: CV must score the smoothed training fit against a HELD-OUT
+        # unrestricted LP IRF. The old loss compared the fit to itself (B*theta vs B*theta ≡ 0),
+        # so every fold MSE was 0 and CV always returned lambda_grid[1] regardless of the data.
+        Random.seed!(2718)
+        T_cv2, n_cv2 = 220, 2
+        Y_hld = zeros(T_cv2, n_cv2)
+        for t in 2:T_cv2
+            Y_hld[t, :] = 0.6 * Y_hld[t-1, :] + randn(n_cv2)
+        end
+        grid = collect(10.0 .^ (-4:1.0:2))
+        errs = MacroEconometricModels._smooth_lp_cv_errors(Y_hld, 1, 6; lambda_grid=grid, k_folds=5, lags=2)
+        @test length(errs) == length(grid)
+        @test all(isfinite, errs)
+        @test all(errs .>= 0)
+        @test maximum(errs) > 0                             # not the degenerate all-zero objective
+        @test length(unique(round.(errs, digits=10))) > 1   # genuinely varies across lambda
+        lam = cross_validate_lambda(Y_hld, 1, 6; lambda_grid=grid, k_folds=5, lags=2)
+        @test lam == grid[argmin(errs)]
+    end
+
+    @testset "Smooth LP full cross-horizon covariance (T103 #202)" begin
+        # The smooth-LP band must propagate the FULL cross-horizon covariance of the LP point
+        # IRFs, not a per-horizon diagonal. Overlapping LP horizons are strongly correlated, so
+        # the off-diagonals are non-negligible and materially change the reported bands.
+        Random.seed!(1234)
+        T_sc = 200
+        Y_sc = zeros(T_sc, 2)
+        for t in 2:T_sc
+            Y_sc[t, :] = 0.6 * Y_sc[t-1, :] + randn(2)
+        end
+        H = 8
+        ce = MacroEconometricModels.create_cov_estimator(:newey_west, Float64)
+        Sig = MacroEconometricModels._lp_shock_irf_covariance(Y_sc, 1, H, 2, [1, 2], ce, 1)
+        @test size(Sig) == (H + 1, H + 1)
+        @test issymmetric(Sig)
+
+        # (1) Consistency/degenerate: the diagonal reproduces the per-horizon LP beta_se^2.
+        lp_res = MacroEconometricModels.lp_irf(MacroEconometricModels.estimate_lp(Y_sc, 1, H; lags=2))
+        bse = lp_res.se[:, 1]
+        @test diag(Sig) ≈ bse .^ 2 atol=1e-10
+
+        # (2) Off-diagonals are non-negligible (overlapping-horizon correlation).
+        @test maximum(abs.(Sig - Diagonal(diag(Sig)))) > 0.2 * maximum(diag(Sig))
+
+        # (3) The reported smooth-LP band uses the full covariance and DIFFERS from the
+        #     diagonal-only band the old code produced.
+        m = estimate_smooth_lp(Y_sc, 1, H; lambda=1.0, lags=2)
+        B = m.spline_basis.basis_matrix
+        R = MacroEconometricModels.roughness_penalty_matrix(m.spline_basis)
+        W = Diagonal(1 ./ (bse .^ 2 .+ eps()))
+        reg_inv = inv(B' * W * B + 1.0 * R)
+        V_full = reg_inv * (B' * W * Sig * W * B) * reg_inv
+        V_diag = reg_inv * (B' * W * Diagonal(diag(Sig)) * W * B) * reg_inv
+        se_full = [sqrt(B[h, :]' * V_full * B[h, :]) for h in 1:(H + 1)]
+        se_diag = [sqrt(B[h, :]' * V_diag * B[h, :]) for h in 1:(H + 1)]
+        @test !isapprox(se_full, se_diag; rtol=1e-3)     # off-diagonals materially change the band
+        @test m.irf_se[:, 1] ≈ se_full atol=1e-8         # model reports the full-covariance band
     end
 
     @testset "Smooth LP Comparison Function" begin
@@ -724,6 +814,14 @@ using Random
         @test all(0 .<= F_logistic .<= 1)
         @test MacroEconometricModels.logistic_transition(c, gamma, c) ≈ 0.5  # At threshold, F = 0.5
 
+        # T101 #200: F is INCREASING in z (Auerbach–Gorodnichenko convention) — high states
+        # map to expansion (F → 1), low states to recession (F → 0).
+        @test MacroEconometricModels.logistic_transition([10.0], gamma, c)[1] > 0.99
+        @test MacroEconometricModels.logistic_transition([-10.0], gamma, c)[1] < 0.01
+        @test MacroEconometricModels.logistic_transition(5.0, gamma, c) >
+              MacroEconometricModels.logistic_transition(-5.0, gamma, c)
+        @test issorted(MacroEconometricModels.logistic_transition(sort(z), gamma, c))
+
         # Exponential transition
         F_exp = MacroEconometricModels.exponential_transition(z, gamma, c)
         @test all(0 .<= F_exp .<= 1)
@@ -733,6 +831,29 @@ using Random
         F_ind = MacroEconometricModels.indicator_transition(z, c)
         @test all(F_ind .== 0.0 .|| F_ind .== 1.0)
         @test sum(F_ind) == sum(z .>= c)
+    end
+
+    @testset "State-Dependent LP — regime label orientation (T101 #200)" begin
+        # With F increasing in z, regime=:expansion must return the HIGH-state response.
+        # Build a persistent state with a strongly regime-dependent persistence: expansion
+        # (high z) is persistent (ρ≈0.8), recession (low z) is weak (ρ≈0.1). The expansion
+        # IRF must then have the larger cumulative response.
+        Random.seed!(9090)
+        T_lab = 400
+        z_lab = zeros(T_lab)
+        for t in 2:T_lab
+            z_lab[t] = 0.9 * z_lab[t-1] + randn()
+        end
+        Y_lab = zeros(T_lab, 1)
+        for t in 2:T_lab
+            F = 1 / (1 + exp(-3.0 * z_lab[t-1]))
+            rho = F * 0.8 + (1 - F) * 0.1
+            Y_lab[t, 1] = rho * Y_lab[t-1, 1] + randn()
+        end
+        m_lab = estimate_state_lp(Y_lab, 1, z_lab, 6; gamma=3.0, threshold=0.0, lags=1)
+        irf_e = state_irf(m_lab; regime=:expansion)
+        irf_r = state_irf(m_lab; regime=:recession)
+        @test sum(irf_e.values) > sum(irf_r.values)
     end
 
     @testset "State Transition Parameter Estimation" begin
@@ -770,6 +891,119 @@ using Random
         F_grid = MacroEconometricModels.logistic_transition(z_st, result_grid.gamma, result_grid.c)
         @test all(0 .<= F_nlls .<= 1)
         @test all(0 .<= F_grid .<= 1)
+    end
+
+    @testset "State Transition Parameter Estimation — data-driven (T091 #190)" begin
+        # Regression guard: the transition objective must genuinely depend on (γ, c).
+        # The previous inline objective reduced to (1-F)*shock + F*shock ≡ shock, i.e. was
+        # constant up to floating-point noise, so :grid_search returned an arbitrary boundary
+        # point and :nlls returned gamma_init unchanged.
+        Random.seed!(4242)
+        T_dd = 200
+        z_dd = zeros(T_dd)
+        for t in 2:T_dd
+            z_dd[t] = 0.9 * z_dd[t-1] + randn()      # persistent state
+        end
+        Y_dd = zeros(T_dd, 2)
+        for t in 2:T_dd
+            F_t = 1 / (1 + exp(-2.5 * z_dd[t-1]))    # predetermined key — matches the estimator
+            rho = F_t * 0.8 + (1 - F_t) * 0.2        # regime-dependent persistence
+            Y_dd[t, :] = rho * Y_dd[t-1, :] + randn(2)
+        end
+
+        # (i) the exposed objective varies MEANINGFULLY with γ, not at the FP-noise level.
+        ssr_lo = MacroEconometricModels._state_lp_transition_ssr(z_dd, Y_dd, 1, 1.0, 0.0; lags=2)
+        ssr_hi = MacroEconometricModels._state_lp_transition_ssr(z_dd, Y_dd, 1, 5.0, 0.0; lags=2)
+        @test isfinite(ssr_lo) && isfinite(ssr_hi)
+        @test abs(ssr_lo - ssr_hi) > 1e-3 * abs(ssr_lo)
+
+        # (ii) :grid_search actually minimizes that objective over its internal grid.
+        res_grid_dd = MacroEconometricModels.estimate_transition_params(z_dd, Y_dd, 1;
+                                                                        method=:grid_search, lags=2)
+        gamma_grid = collect(range(0.5, 5.0, length=20))
+        c_grid = quantile(z_dd, range(0.1, 0.9, length=20))
+        best_ssr, best_gamma = Inf, NaN
+        for g in gamma_grid, c in c_grid
+            s = MacroEconometricModels._state_lp_transition_ssr(z_dd, Y_dd, 1, g, c; lags=2)
+            s < best_ssr && ((best_ssr, best_gamma) = (s, g))
+        end
+        @test res_grid_dd.gamma == best_gamma
+
+        # (iii) :nlls no longer returns gamma_init and is at least as good as the grid.
+        res_nlls_dd = MacroEconometricModels.estimate_transition_params(z_dd, Y_dd, 1;
+                                                                        method=:nlls, gamma_init=1.5, lags=2)
+        @test res_nlls_dd.gamma != 1.5
+        ssr_nlls_dd = MacroEconometricModels._state_lp_transition_ssr(z_dd, Y_dd, 1,
+                                                                      res_nlls_dd.gamma, res_nlls_dd.c; lags=2)
+        @test ssr_nlls_dd <= best_ssr + 1e-6
+
+        # n == 1: the single series is both shock and sole response, so the h=0 own response is
+        # fit mechanically and (γ, c) is unidentified — this must error, not silently guess.
+        Y_uni = reshape(Y_dd[:, 1], :, 1)
+        @test_throws ArgumentError MacroEconometricModels.estimate_transition_params(
+            z_dd, Y_uni, 1; method=:nlls, lags=2)
+        @test_throws ArgumentError estimate_state_lp(Y_uni, 1, z_dd, 4)
+    end
+
+    @testset "State-Dependent LP — predetermined transition weight (T100 #199)" begin
+        # The h=0 fit must weight the regime blocks by the predetermined F(z_{t-1}), not the
+        # contemporaneous F(z_t). Pin against a manual predetermined-design reconstruction and
+        # expose the bug by showing the fit does NOT match the contemporaneous design.
+        Random.seed!(5150)
+        T_pd, n_pd = 150, 2
+        z_pd = randn(T_pd)
+        Y_pd = zeros(T_pd, n_pd)
+        for t in 2:T_pd
+            Y_pd[t, :] = 0.4 * Y_pd[t-1, :] + randn(n_pd)
+        end
+        gamma_pd, c_pd, lags_pd = 2.0, 0.0, 2
+        m_pd = estimate_state_lp(Y_pd, 1, z_pd, 0; gamma=gamma_pd, threshold=c_pd, lags=lags_pd)
+
+        F = MacroEconometricModels.logistic_transition(z_pd, gamma_pd, c_pd)
+        n = n_pd; lags = lags_pd
+        t_start = max(lags + 1, 2); t_end = T_pd
+        kpr = 2 + n * lags; ktot = 2 * kpr
+        T_h = t_end - t_start + 1
+        build(weight) = begin
+            X = zeros(T_h, ktot); Ym = zeros(T_h, n)
+            for (i, t) in enumerate(t_start:t_end)
+                Ft = weight == :pre ? F[t-1] : F[t]
+                X[i, 1] = Ft; X[i, 2] = Ft * Y_pd[t, 1]; col = 3
+                for lag in 1:lags, var in 1:n
+                    X[i, col] = Ft * Y_pd[t-lag, var]; col += 1
+                end
+                X[i, kpr+1] = 1 - Ft; X[i, kpr+2] = (1 - Ft) * Y_pd[t, 1]; col = kpr + 3
+                for lag in 1:lags, var in 1:n
+                    X[i, col] = (1 - Ft) * Y_pd[t-lag, var]; col += 1
+                end
+                Ym[i, :] = Y_pd[t, :]
+            end
+            MacroEconometricModels.robust_inv(X'X) * (X'Ym)
+        end
+        B_pre = build(:pre)
+        @test m_pd.B_expansion[1] ≈ B_pre[1:kpr, :] atol=1e-8
+        @test m_pd.B_recession[1] ≈ B_pre[kpr+1:end, :] atol=1e-8
+
+        # Bug-exposure: the contemporaneous design differs, and the fit must NOT match it.
+        B_con = build(:con)
+        @test !isapprox(m_pd.B_expansion[1], B_con[1:kpr, :]; atol=1e-6)
+    end
+
+    @testset "State-Dependent LP — lags=0 predetermined-weight guard (T100 #199)" begin
+        # With lags=0, compute_horizon_bounds gives t_start=1; the predetermined weight F[t-1]
+        # needs t-1>=1, so the guard bumps t_start to 2. The fit must run and drop exactly one
+        # leading observation: T_eff[h+1] == T_obs - 1 - h.
+        Random.seed!(313)
+        T_l0 = 60
+        z_l0 = randn(T_l0)
+        Y_l0 = zeros(T_l0, 2)
+        for t in 2:T_l0
+            Y_l0[t, :] = 0.5 * Y_l0[t-1, :] + randn(2)
+        end
+        m0 = estimate_state_lp(Y_l0, 1, z_l0, 3; gamma=1.5, threshold=0.0, lags=0)
+        for h in 0:3
+            @test m0.T_eff[h+1] == T_l0 - 1 - h
+        end
     end
 
     @testset "State-Dependent LP - Regime IRFs" begin
@@ -1583,4 +1817,44 @@ using Random
         @test haskey(MacroEconometricModels._COV_REGISTRY, :newey_west_test)
         delete!(MacroEconometricModels._COV_REGISTRY, :newey_west_test)
     end
+end
+
+@testset "LP Gram rank-1 downdate (#210 box E)" begin
+    # Box E carries the Gram matrix `X_h'X_h` across horizons and applies a rank-1 downdate
+    # (dropping the one row that leaves the shrinking sample) instead of recomputing the product
+    # each horizon. The rank-1 downdate legitimately reorders the reduction, so the resulting
+    # per-horizon inverse — and the LP coefficients/vcov derived from it — must equal the direct
+    # `robust_inv(X_h'X_h)` computation to rtol≈1e-10 (not necessarily bit-for-bit).
+    Random.seed!(4242)
+    Tn, n = 220, 3
+    Y = zeros(Tn, n)
+    for t in 2:Tn
+        Y[t, :] = 0.6 .* Y[t-1, :] .+ randn(n)
+    end
+    horizon, lags = 12, 4
+    model = estimate_lp(Y, 1, horizon; lags=lags, cov_type=:newey_west)
+
+    maxrel_inv = 0.0
+    maxrel_B = 0.0
+    maxrel_V = 0.0
+    for h in 0:horizon
+        Y_h, X_h, _ = MacroEconometricModels.construct_lp_matrices(Y, 1, h, lags;
+                                                                   response_vars=collect(1:n))
+        # direct (pre-refactor) per-horizon inverse and OLS coefficients
+        XtX_inv_direct = MacroEconometricModels.robust_inv(X_h' * X_h)
+        B_direct = XtX_inv_direct * (X_h' * Y_h)
+        U_direct = Y_h - X_h * B_direct
+        V_direct = MacroEconometricModels._lp_robust_vcov(X_h, U_direct,
+                        model.cov_estimator, h)
+
+        rel(a, b) = maximum(abs.(a .- b)) / max(1e-12, maximum(abs.(b)))
+        # the downdated inverse must match the direct inverse to rtol 1e-10
+        maxrel_inv = max(maxrel_inv, rel(MacroEconometricModels.robust_inv(X_h' * X_h), XtX_inv_direct))
+        maxrel_B = max(maxrel_B, rel(model.B[h + 1], B_direct))
+        maxrel_V = max(maxrel_V, rel(model.vcov[h + 1], V_direct))
+        @test isapprox(model.B[h + 1], B_direct; rtol=1e-10)
+        @test isapprox(model.vcov[h + 1], V_direct; rtol=1e-10)
+    end
+    @test maxrel_B < 1e-10
+    @test maxrel_V < 1e-10
 end

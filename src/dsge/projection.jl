@@ -177,29 +177,13 @@ function _smolyak_grid(nx::Int, mu::Int)
         end
     end
 
-    max_sum = mu + nx
-
-    # Generate multi-indices with |alpha|_1 <= max_sum
-    function _gen_multi_indices(ndim, max_s)
-        if ndim == 1
-            return reshape(collect(0:max_s), max_s + 1, 1)
-        end
-        sub = _gen_multi_indices(ndim - 1, max_s)
-        result = Matrix{Int}(undef, 0, ndim)
-        for i in 0:max_s
-            valid = sub[vec(sum(sub; dims=2)) .<= max_s - i, :]
-            if !isempty(valid)
-                col_i = fill(i, size(valid, 1))
-                result = vcat(result, hcat(col_i, valid))
-            end
-        end
-        return result
-    end
-
-    mi = _gen_multi_indices(nx, max_sum)
-
-    # Build Smolyak grid points using the combination technique
+    # Build the Smolyak nodes AND the matching polynomial multi-index set from the SAME
+    # combination technique, so the collocation basis is unisolvent on the sparse grid. The old
+    # code took the full total-degree set |α|₁ ≤ μ+nx and clipped it by row-sum, which is NOT
+    # unisolvent (e.g. d=2,μ=1 kept (1,1), whose x·y basis is zero at every one of the 5 nodes →
+    # singular collocation, while dropping (2,0)/(0,2)). #218
     all_points = Set{Vector{Float64}}()
+    index_set = Set{Vector{Int}}()
 
     function _gen_level_combos(ndim, target_sum_max, min_level)
         if ndim == 1
@@ -230,13 +214,16 @@ function _smolyak_grid(nx::Int, mu::Int)
         n_combo = prod(sizes)
         for idx in 0:(n_combo - 1)
             pt = zeros(nx)
+            alpha = zeros(Int, nx)
             rem = idx
             for d in nx:-1:1
                 j = rem % sizes[d]
                 rem = div(rem, sizes[d])
                 pt[d] = pts_per_dim[d][j + 1]
+                alpha[d] = j                 # admissible degree 0:(m_d-1) for this tensor block
             end
             push!(all_points, round.(pt; digits=14))
+            push!(index_set, alpha)
         end
     end
 
@@ -248,12 +235,14 @@ function _smolyak_grid(nx::Int, mu::Int)
         nodes[i, :] = pt
     end
 
-    # Filter multi-indices to match grid size
-    mi_sums = vec(sum(mi; dims=2))
-    perm = sortperm(mi_sums)
-    mi_sorted = mi[perm, :]
-    n_basis = min(n_nodes, size(mi_sorted, 1))
-    mi_final = mi_sorted[1:n_basis, :]
+    # Multi-index set from the same combination loop — square with the node set by construction
+    # (a nested Clenshaw-Curtis level l contributes both m_l points and degrees 0:(m_l-1)).
+    mi_list = sort(collect(index_set))
+    n_basis = length(mi_list)
+    mi_final = zeros(Int, n_basis, nx)
+    for (i, a) in enumerate(mi_list)
+        mi_final[i, :] = a
+    end
 
     return nodes, mi_final
 end
@@ -271,12 +260,20 @@ Returns nx x 2 matrix with [lower upper] per state.
 function _compute_state_bounds(spec::DSGESpec{T}, linear::LinearDSGE{T},
                                 state_idx::Vector{Int}, scale::Real) where {T}
     nx = length(state_idx)
-    result = gensys(linear.Gamma0, linear.Gamma1, linear.C, linear.Psi, linear.Pi)
-    G1 = result.G1
+    result = _gensys_qz(spec, linear)
+    G1 = result.G
     impact = result.impact
 
-    # Unconditional variance via Lyapunov equation
-    Var_y = solve_lyapunov(G1, impact)
+    # Unconditional variance via Lyapunov equation. A unit-root/explosive first-order solution
+    # has no finite unconditional covariance (solve_lyapunov throws); fall back to zero variance
+    # so the min_half floor below still supplies finite, usable state bounds (#220).
+    Var_y = try
+        solve_lyapunov(G1, impact)
+    catch
+        @warn "State-bounds Lyapunov solve failed (non-stationary first-order solution); " *
+              "falling back to the minimum-width floor for state bounds."
+        zeros(T, size(G1, 1), size(G1, 1))
+    end
 
     ss = spec.steady_state
     bounds = zeros(T, nx, 2)
@@ -347,6 +344,7 @@ function _collocation_residual(coeffs_vec::AbstractVector{T},
         # Compute expected next-period variables via quadrature
         y_lead_expected = zeros(T, n_eq)
         for q in 1:n_quad
+            iszero(quad_weights[q]) && continue   # center node contributes 0 (S-19 / #224)
             # Next-period states = current policy state components (deviation)
             x_next_dev = zeros(T, nx)
             for (ii, si) in enumerate(state_idx)
@@ -505,8 +503,8 @@ function collocation_solver(spec::DSGESpec{T};
     if initial_coeffs !== nothing && size(initial_coeffs) == (n_vars, n_basis)
         coeffs = Matrix{T}(initial_coeffs)
     else
-        result_1st = gensys(ld.Gamma0, ld.Gamma1, ld.C, ld.Psi, ld.Pi)
-        G1 = result_1st.G1
+        result_1st = _gensys_qz(spec, ld)
+        G1 = result_1st.G
 
         coeffs = zeros(T, n_vars, n_basis)
         for v in 1:n_vars
@@ -520,7 +518,7 @@ function collocation_solver(spec::DSGESpec{T};
     end
 
     # First-order shock-impact matrix for genuine quadrature over next-period shocks (S-02 / #120)
-    impact_mat = gensys(ld.Gamma0, ld.Gamma1, ld.C, ld.Psi, ld.Pi).impact
+    impact_mat = _gensys_qz(spec, ld).impact
 
     # Step 6: Newton iteration
     coeffs_vec = vec(coeffs)
@@ -530,6 +528,14 @@ function collocation_solver(spec::DSGESpec{T};
 
     nodes_phys_T = Matrix{T}(nodes_phys)
     state_bounds_T = Matrix{T}(state_bounds)
+
+    # The per-iteration finite-difference Jacobian costs one residual evaluation per unknown
+    # and dominates the solve. Reuse it as a chord (modified-Newton) step, recomputing only on
+    # a fresh start, periodically, or when a reused step stalls. The QR least-squares step below
+    # (column-pivoted, rank-revealing) replaces the former J'J normal equations. (#225 part 2)
+    J = Matrix{T}(undef, 0, 0)
+    jac_stale = true
+    jac_refresh_period = 5
 
     for k in 1:max_iter
         iter = k
@@ -551,40 +557,42 @@ function collocation_solver(spec::DSGESpec{T};
             break
         end
 
-        # Jacobian via finite differences
-        n_unknowns = length(coeffs_vec)
-        n_residuals = length(R)
-        J = zeros(T, n_residuals, n_unknowns)
-        h_fd = max(T(1e-7), sqrt(eps(T)))
+        # (Re)compute the finite-difference Jacobian only when needed (chord-step reuse — #225).
+        if jac_stale || (k % jac_refresh_period == 0)
+            n_unknowns = length(coeffs_vec)
+            n_residuals = length(R)
+            J = zeros(T, n_residuals, n_unknowns)
+            h_fd = max(T(1e-7), sqrt(eps(T)))
 
-        if threaded && Threads.nthreads() > 1
-            Threads.@threads for i in 1:n_unknowns
-                c_plus = copy(coeffs_vec)
-                c_plus[i] += h_fd
-                R_plus = _collocation_residual(c_plus, n_vars, n_basis,
-                                                basis_matrix, nodes_phys_T,
-                                                state_idx, control_idx, spec,
-                                                quad_nodes, quad_weights,
-                                                state_bounds_T, multi_indices, ss, impact_mat)
-                J[:, i] = (R_plus .- R) ./ h_fd
+            if threaded && Threads.nthreads() > 1
+                Threads.@threads for i in 1:n_unknowns
+                    c_plus = copy(coeffs_vec)
+                    c_plus[i] += h_fd
+                    R_plus = _collocation_residual(c_plus, n_vars, n_basis,
+                                                    basis_matrix, nodes_phys_T,
+                                                    state_idx, control_idx, spec,
+                                                    quad_nodes, quad_weights,
+                                                    state_bounds_T, multi_indices, ss, impact_mat)
+                    J[:, i] = (R_plus .- R) ./ h_fd
+                end
+            else
+                for i in 1:n_unknowns
+                    c_plus = copy(coeffs_vec)
+                    c_plus[i] += h_fd
+                    R_plus = _collocation_residual(c_plus, n_vars, n_basis,
+                                                    basis_matrix, nodes_phys_T,
+                                                    state_idx, control_idx, spec,
+                                                    quad_nodes, quad_weights,
+                                                    state_bounds_T, multi_indices, ss, impact_mat)
+                    J[:, i] = (R_plus .- R) ./ h_fd
+                end
             end
-        else
-            for i in 1:n_unknowns
-                c_plus = copy(coeffs_vec)
-                c_plus[i] += h_fd
-                R_plus = _collocation_residual(c_plus, n_vars, n_basis,
-                                                basis_matrix, nodes_phys_T,
-                                                state_idx, control_idx, spec,
-                                                quad_nodes, quad_weights,
-                                                state_bounds_T, multi_indices, ss, impact_mat)
-                J[:, i] = (R_plus .- R) ./ h_fd
-            end
+            jac_stale = false
         end
 
-        # Gauss-Newton step with line search
-        JtJ = J' * J
-        JtR = J' * R
-        delta = -(robust_inv(JtJ) * JtR)
+        # Gauss-Newton step via column-pivoted QR least squares (solves min‖J·δ + R‖; avoids
+        # squaring cond(J) through the former J'J normal equations — #225 part 2).
+        delta = -(qr(J, ColumnNorm()) \ R)
 
         # Line search
         alpha = one(T)
@@ -609,6 +617,11 @@ function collocation_solver(spec::DSGESpec{T};
             coeffs_vec .+= best_alpha .* delta
         else
             coeffs_vec .+= T(0.01) .* delta
+            jac_stale = true      # no descent with the reused Jacobian ⇒ refresh next iteration
+        end
+        # A reused (chord) step that barely reduces the residual signals a stale Jacobian.
+        if best_norm > T(0.9) * residual_norm
+            jac_stale = true
         end
     end
 
@@ -631,6 +644,7 @@ function collocation_solver(spec::DSGESpec{T};
         quadrature,
         spec,
         ld,
+        impact_mat,
         ss,
         state_idx,
         control_idx,
@@ -714,7 +728,7 @@ function max_euler_error(sol::ProjectionSolution{T}; n_test::Int=1000,
     # First-order shock impact so the Euler-error diagnostic integrates over next-period
     # shocks too (else it cannot detect the certainty-equivalent failure — S-02 / #120).
     ld_lin = linearize(spec)
-    impact_mat = gensys(ld_lin.Gamma0, ld_lin.Gamma1, ld_lin.C, ld_lin.Psi, ld_lin.Pi).impact
+    impact_mat = _gensys_qz(spec, ld_lin).impact
 
     max_err = zero(T)
 
@@ -735,6 +749,7 @@ function max_euler_error(sol::ProjectionSolution{T}; n_test::Int=1000,
 
         y_lead_exp = zeros(T, n_eq)
         for q in 1:size(quad_nodes, 1)
+            iszero(quad_weights[q]) && continue   # center node contributes 0 (S-19 / #224)
             x_next_dev = y_t[sol.state_indices] .- ss[sol.state_indices]
             x_next_level = x_next_dev .+ ss[sol.state_indices]
             # Integrate over the next-period shock at this quadrature node (S-02 / #120)

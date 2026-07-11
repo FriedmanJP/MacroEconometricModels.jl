@@ -20,7 +20,8 @@ using LinearAlgebra
 
 Solve the discrete Lyapunov equation: `Sigma = G1 * Sigma * G1' + impact * impact'`.
 
-Uses Kronecker vectorization: `vec(Sigma) = (I - G1 kron G1)^{-1} * vec(impact * impact')`.
+Uses the smart-doubling (squaring) iteration [`_dlyap_doubling`](@ref) — O(n³ log(1/ε)) — instead
+of the dense `(I - G1 ⊗ G1)⁻¹` solve, which is O(n⁶) and forms an n²×n² system.
 
 Returns the unconditional covariance matrix `Sigma` (n x n, symmetric positive semi-definite).
 
@@ -31,21 +32,13 @@ function solve_lyapunov(G1::AbstractMatrix{T}, impact::AbstractMatrix{T}) where 
     size(G1) == (n, n) || throw(ArgumentError("G1 must be square, got $(size(G1))"))
     size(impact, 1) == n || throw(ArgumentError("impact must have $n rows, got $(size(impact, 1))"))
 
-    # Check stability
-    max_eig = maximum(abs.(eigvals(G1)))
+    # Check stability — a unit-root/explosive G1 has no unconditional covariance.
+    max_eig = maximum(abs.(eigvals(G1)); init=zero(T))
     max_eig >= one(T) && throw(ArgumentError(
         "G1 is not stable (max |eigenvalue| = $(max_eig)). Lyapunov equation has no solution."))
 
-    Q = impact * impact'
-    # Vectorize: vec(Sigma) = (I_n^2 - G1 kron G1)^{-1} * vec(Q)
-    n2 = n * n
-    A = Matrix{T}(I, n2, n2) - kron(G1, G1)
-    sigma_vec = A \ vec(Q)
-    Sigma = reshape(sigma_vec, n, n)
-
-    # Enforce exact symmetry
-    Sigma = (Sigma + Sigma') / 2
-    return Sigma
+    Sigma = _dlyap_doubling(G1, impact * impact')
+    return (Sigma + Sigma') / 2   # enforce exact symmetry
 end
 
 # Float64 fallback

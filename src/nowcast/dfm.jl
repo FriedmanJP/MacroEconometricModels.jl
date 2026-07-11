@@ -182,6 +182,10 @@ function _dfm_init_cond(xNaN::Matrix{T}, r::Int, p::Int, blocks::Matrix{Int},
     n_eig = min(n_factors_total, length(eig.values))
     F0 = Xc * eig.vectors[:, 1:n_eig]  # T_obs × n_eig
     Lambda0 = eig.vectors[:, 1:n_eig]  # N × n_eig
+    # Number of factors actually extractable given N series. The EM M-step MUST use the
+    # SAME value (= min(r*n_blocks, N)) or its factor-block indexing diverges from init
+    # whenever N < r*n_blocks. Computed once here and mirrored in `_dfm_em_step`.
+    n_f = min(n_eig, r * n_blocks)
 
     # Build state dimension
     # Mariano-Murasawa [1,2,3,2,1] requires 5 factor lags for quarterly variables
@@ -196,7 +200,6 @@ function _dfm_init_cond(xNaN::Matrix{T}, r::Int, p::Int, blocks::Matrix{Int},
 
     # Factor VAR: estimate from initial factors
     if n_eig >= 1
-        n_f = min(n_eig, r * n_blocks)
         if T_obs > p + 1
             # Simple VAR(p) on initial factors
             Y_f = F0[(p + 1):end, 1:n_f]
@@ -217,7 +220,6 @@ function _dfm_init_cond(xNaN::Matrix{T}, r::Int, p::Int, blocks::Matrix{Int},
         end
     end
 
-    n_f = min(n_eig, r * n_blocks)
     factor_block_end = n_f * p_eff
 
     # Idiosyncratic AR(1) for monthly variables
@@ -352,7 +354,10 @@ function _dfm_em_step(xNaN::Matrix{T}, A::Matrix{T}, C::Matrix{T},
     nM = N - nQ
     state_dim = size(A, 1)
     n_blocks = size(blocks, 2)
-    n_f = min(r * n_blocks, state_dim)
+    # Mirror _dfm_init_cond exactly: min(r*n_blocks, N), NOT min(r*n_blocks, state_dim).
+    # state_dim ≥ r*n_blocks always, so the old form ignored the N < r*n_blocks case and
+    # disagreed with the factor block that init actually built.
+    n_f = min(r * n_blocks, N)
     p_eff = nQ > 0 ? max(p, 5) : p
 
     # E-step: Kalman smoother

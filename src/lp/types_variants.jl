@@ -171,7 +171,7 @@ end
 
 Smooth state transition function for state-dependent LP.
 
-F(z_t) = exp(-γ(z_t - c)) / (1 + exp(-γ(z_t - c)))
+F(z_t) = 1 / (1 + exp(-γ(z_t - c)))  (increasing in z: F → 1 for high/expansion states)
 
 Fields:
 - state_var: State variable values (standardized)
@@ -195,7 +195,7 @@ struct StateTransition{T<:AbstractFloat}
 
         # Compute F values
         F_values = if method == :logistic
-            @. exp(-gamma * (state_var - threshold)) / (1 + exp(-gamma * (state_var - threshold)))
+            @. one(T) / (one(T) + exp(-gamma * (state_var - threshold)))
         elseif method == :exponential
             @. 1 - exp(-gamma * (state_var - threshold)^2)
         else  # :indicator

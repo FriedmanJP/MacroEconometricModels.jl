@@ -5,7 +5,37 @@
 # Licensed under GPL-3.0-or-later. See LICENSE for details.
 
 """
-    _solve_qz_quadratic(f_0, f_1, f_lead, f_ε; div=1.0 + 1e-8)
+    _place_divhat(mags, div, cluster_tol) -> divhat
+
+Determinacy boundary for stable-root counting. `mags` are the moduli of the generalized
+eigenvalues. Returns the caller's nominal `div` unchanged, but emits a WARNING when MULTIPLE
+eigenvalues cluster within `cluster_tol` of the unit circle — the case where the
+stable/unstable split is numerically delicate and the count can flip under tiny perturbations.
+
+The nominal `div = 1 + 1e-8` is the Sims (2002) convention that treats a lone unit root as
+non-explosive (stable); deliberately reclassifying every `|λ| = 1` as unstable would break
+legitimate unit-root models (e.g. a random-walk technology, or a knife-edge ρ+β=1 forward
+model), so the resolution is left to the caller: pass an explicit `div` (e.g. `div < 1`) to
+`_solve_qz_quadratic`/`gensys`/`klein`/`blanchard_kahn` to force a strict split, and read the
+warning to know when it matters.
+
+This is the SINGLE boundary helper shared by `gensys()` and `_solve_qz_quadratic`, so every
+determinacy path agrees on the threshold and the warning.
+"""
+function _place_divhat(mags::AbstractVector{<:Real}, div::Real, cluster_tol::Real)
+    Tf = float(promote_type(eltype(mags), typeof(div), typeof(cluster_tol)))
+    dv = Tf(div)
+    finite = filter(isfinite, mags)
+    isempty(finite) && return dv
+    near_unit = count(m -> abs(m - one(Tf)) <= Tf(cluster_tol), finite)
+    near_unit >= 2 && @warn "DSGE determinacy: $near_unit generalized eigenvalues cluster " *
+        "within cluster_tol=$cluster_tol of |λ|=1; the stable/unstable split is numerically " *
+        "delicate — pass an explicit `div` to force a deterministic classification."
+    dv
+end
+
+"""
+    _solve_qz_quadratic(f_0, f_1, f_lead, f_ε; div=1.0 + 1e-8, cluster_tol=1e-6)
         → (G, impact, eigenvalues, n_stable, eu, residual)
 
 Solve the quadratic matrix equation `f_lead·G² + f_0·G + f_1 = 0` for the unique stable
@@ -34,7 +64,7 @@ only); do NOT reorder them — wrappers report `eigvals(G1)` separately.
 """
 function _solve_qz_quadratic(f_0::AbstractMatrix{T}, f_1::AbstractMatrix{T},
         f_lead::AbstractMatrix{T}, f_ε::AbstractMatrix{T};
-        div::Real=1.0 + 1e-8) where {T<:AbstractFloat}
+        div::Real=1.0 + 1e-8, cluster_tol::Real=1e-6) where {T<:AbstractFloat}
     f0 = Matrix{T}(f_0); f1 = Matrix{T}(f_1); flead = Matrix{T}(f_lead); fε = Matrix{T}(f_ε)
     n = size(f0, 1)
     N = 2n
@@ -50,7 +80,9 @@ function _solve_qz_quadratic(f_0::AbstractMatrix{T}, f_1::AbstractMatrix{T},
     F = schur(complex(L), complex(M))
     λ = F.values                                   # 2n generalized eigenvalues (NaN for infinite roots from singular M)
 
-    stable_select = BitVector(abs.(λ) .< T(div))
+    mags = abs.(λ)
+    divhat = _place_divhat(mags, div, cluster_tol) # exact |λ|=1 → unstable; standard models unchanged
+    stable_select = BitVector(mags .< T(divhat))
     n_stable = count(stable_select)
 
     eu = n_stable == n ? [1, 1] : (n_stable > n ? [1, 0] : [0, 0])
@@ -81,3 +113,16 @@ function _solve_qz_quadratic(f_0::AbstractMatrix{T}, f_1::AbstractMatrix{T},
     (G=G, impact=impact, eigenvalues=Vector{ComplexF64}(λ),
      n_stable=n_stable, eu=eu, residual=residual)
 end
+
+"""
+    _gensys_qz(spec, ld) -> (; G, impact, eu, …)
+
+Route a linearized DSGE through the companion-QZ core ([`_solve_qz_quadratic`]). `gensys()`
+counts determinacy from the (Γ0,Γ1) pencil, which folds the lead Jacobian into Π and drops it,
+so its `eu`/`G1`/`impact` are wrong for any forward-looking model. This recovers the raw
+Jacobians (`f_0 = Γ0`, `f_1 = -Γ1`, `f_lead` directly from `spec`, `f_ε = -Ψ`) and solves the
+correct companion pencil — mirroring the split already used in `solve(:gensys)`. Use `.G` (not
+`.G1`), `.impact`, `.eu`.
+"""
+_gensys_qz(spec, ld) = _solve_qz_quadratic(ld.Gamma0, -ld.Gamma1,
+    _dsge_jacobian(spec, spec.steady_state, :lead), -ld.Psi)

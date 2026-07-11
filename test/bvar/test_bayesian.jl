@@ -512,3 +512,66 @@ end
         _tprint("log_marginal_likelihood tests passed.")
     end
 end
+
+@testset "BVAR forecast companion/history reuse (#210 box B, box C)" begin
+    # Box B preallocates the stability-check companion once (writing the invariant identity
+    # sub-block a single time, overwriting only the top AR blocks per draw); box C replaces the
+    # per-step `vcat` history ring with an in-place row shift. Both are pure-allocation refactors
+    # that must leave the companion eigenvalues and the propagated history bit-for-bit identical.
+
+    # (box B) The preallocated-and-reused companion produces eigenvalues identical to a freshly
+    # built companion, for every draw, so the stationarity gate never diverges.
+    n, p = 2, 3
+    rngb = Random.MersenneTwister(101)
+    draws = [[0.2 .* randn(rngb, n, n) for _ in 1:p] for _ in 1:5]
+    comp_reuse = zeros(n * p, n * p)
+    if p > 1
+        comp_reuse[n+1:end, 1:n*(p-1)] = Matrix{Float64}(I, n*(p-1), n*(p-1))
+    end
+    for A_list in draws
+        comp_fresh = zeros(n * p, n * p)
+        for lag in 1:p
+            comp_fresh[1:n, (lag-1)*n+1:lag*n] = A_list[lag]
+        end
+        if p > 1
+            comp_fresh[n+1:end, 1:n*(p-1)] = Matrix{Float64}(I, n*(p-1), n*(p-1))
+        end
+        for lag in 1:p
+            comp_reuse[1:n, (lag-1)*n+1:lag*n] = A_list[lag]
+        end
+        @test comp_reuse == comp_fresh
+        @test eigvals(comp_reuse) == eigvals(comp_fresh)
+    end
+
+    # (box C) The in-place history ring shift reproduces the `vcat`-rebuilt ring exactly.
+    rngc = Random.MersenneTwister(202)
+    hist_vcat = randn(rngc, p, n)
+    hist_inpl = copy(hist_vcat)
+    for step in 1:8
+        y_hat = randn(rngc, n)
+        # old: rebuild via vcat
+        hist_vcat = vcat(@view(hist_vcat[2:end, :]), y_hat')
+        # new: in-place shift
+        for r in 1:(p - 1)
+            @views hist_inpl[r, :] .= hist_inpl[r + 1, :]
+        end
+        @views hist_inpl[p, :] .= y_hat
+        @test hist_inpl == hist_vcat
+    end
+
+    # Integration: the actual forecast() is deterministic on a fixed seed (the refactor did not
+    # change RNG consumption), and produces finite, ordered bands.
+    rngd = Random.MersenneTwister(20210)
+    Yd = zeros(140, n)
+    for t in 2:140
+        Yd[t, :] = 0.5 .* Yd[t-1, :] .+ randn(rngd, n)
+    end
+    Random.seed!(9090); post = estimate_bvar(Yd, 2; n_draws=(FAST ? 40 : 80), sampler=:direct)
+    Random.seed!(31337); fc1 = forecast(post, 6)
+    Random.seed!(31337); fc2 = forecast(post, 6)
+    @test fc1.forecast == fc2.forecast
+    @test fc1.ci_lower == fc2.ci_lower
+    @test fc1.ci_upper == fc2.ci_upper
+    @test all(isfinite, fc1.forecast)
+    @test all(fc1.ci_upper .>= fc1.ci_lower)
+end

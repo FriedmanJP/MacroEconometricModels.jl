@@ -303,7 +303,7 @@ where:
 
 ### Penalized Estimation
 
-Estimation proceeds in two steps. First, standard LP produces ``\hat{\beta}_h`` and ``\text{Var}(\hat{\beta}_h)`` at each horizon. Second, a weighted penalized spline fit imposes smoothness:
+Estimation proceeds in two steps — a "smooth-the-point-IRF" approximation to the one-step Barnichon & Brownlees penalized regression. First, standard LP produces ``\hat{\beta}_h`` at each horizon together with the **full cross-horizon covariance** ``\text{Cov}(\hat{\beta}_h, \hat{\beta}_{h'})`` (overlapping LP horizons share future windows and are strongly correlated). Second, a weighted penalized spline fit imposes smoothness:
 
 ```math
 \hat{\theta} = \left( B' W B + \lambda R \right)^{-1} B' W \hat{\beta}
@@ -314,6 +314,8 @@ where:
 - ``W = \text{diag}(1/\text{Var}(\hat{\beta}_h))`` is the precision-weight matrix
 - ``R`` is the ``J \times J`` roughness penalty matrix with ``R_{ij} = \int B_i''(x) \, B_j''(x) \, dx``
 - ``\lambda \geq 0`` is the smoothing parameter (``\lambda = 0`` gives unpenalized fit)
+
+Reported confidence bands propagate the full cross-horizon covariance of ``\hat{\beta}`` through the spline map, ``\text{Var}(\hat{\theta}) = (B'WB+\lambda R)^{-1} B'W\,\text{Cov}(\hat{\beta})\,WB(B'WB+\lambda R)^{-1}``, rather than a per-horizon diagonal — otherwise the strong correlation between overlapping horizons would make the bands systematically too narrow.
 
 The smoothing parameter ``\lambda`` controls the bias-variance trade-off. Larger values impose more smoothness, shrinking the IRF toward a low-frequency polynomial. Cross-validation selects the ``\lambda`` that minimizes out-of-sample prediction error.
 
@@ -383,20 +385,20 @@ y_{t+h} = F(z_t) \left[ \alpha_E + \beta_E \, x_t + \gamma_E' \, w_t \right] + (
 where:
 - ``F(z_t)`` is the logistic smooth transition function
 - ``z_t`` is the state variable (e.g., moving average of GDP growth)
-- ``\beta_E`` is the expansion regime impulse response (``F \to 0``)
-- ``\beta_R`` is the recession regime impulse response (``F \to 1``)
+- ``\beta_E`` is the expansion regime impulse response (``F \to 1``)
+- ``\beta_R`` is the recession regime impulse response (``F \to 0``)
 
 ### Logistic Transition Function
 
 ```math
-F(z_t) = \frac{\exp(-\gamma(z_t - c))}{1 + \exp(-\gamma(z_t - c))}
+F(z_t) = \frac{1}{1 + \exp(-\gamma(z_t - c))}
 ```
 
 where:
 - ``\gamma > 0`` controls the transition speed (higher = sharper regime switching)
 - ``c`` is the threshold parameter (often 0 for standardized ``z_t``)
 
-The function satisfies ``F(z) \to 1`` as ``z \to -\infty`` (deep recession), ``F(z) \to 0`` as ``z \to +\infty`` (strong expansion), and ``F(c) = 0.5`` (neutral state).
+The function satisfies ``F(z) \to 0`` as ``z \to -\infty`` (deep recession), ``F(z) \to 1`` as ``z \to +\infty`` (strong expansion), and ``F(c) = 0.5`` (neutral state).
 
 ### Regime Difference Test
 
