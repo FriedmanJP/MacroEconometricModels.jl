@@ -64,6 +64,29 @@ using LinearAlgebra
         @test count(<(1.0 - 1e-9), abs.(sol.eigenvalues)) == 1       # one stable root
     end
 
+    @testset "λ and γ→1 Ramsey limit (#240/H-20)" begin
+        beta = 0.96
+        # Independent references (Blanchard 1985): the individual marginal
+        # propensity to consume out of wealth is 1 − βγ, and as γ → 1 the model
+        # collapses to the representative-agent Ramsey economy (the wedge λ → 0,
+        # r* → 1/β − 1, k* → k_ramsey).
+        for gamma in (0.90, 0.95, 0.99)
+            m = BlanchardOLG(; gamma=gamma, beta=beta, alpha=0.36, delta=0.08, Z=1.0)
+            ss = blanchard_steady_state(m)
+            @test isapprox(ss.mpc, 1 - beta * gamma; atol=1e-12)   # MPC = 1 − βγ
+            @test ss.r > 1 / beta - 1                               # finite horizon raises r
+        end
+        # γ → 1 continuity: k* → Ramsey k evaluated at r = 1/β − 1
+        r_ram = 1 / beta - 1
+        k_ram = (0.36 / (r_ram + 0.08))^(1 / (1 - 0.36))
+        ks = [blanchard_steady_state(BlanchardOLG(; gamma=g, beta=beta, alpha=0.36, delta=0.08)).k
+              for g in (0.98, 0.995, 0.999)]
+        @test issorted(ks)                                          # k → k_ramsey as γ → 1
+        @test abs(ks[end] - k_ram) < abs(ks[1] - k_ram)
+        @test isapprox(blanchard_steady_state(BlanchardOLG(; gamma=1.0, beta=beta, alpha=0.36, delta=0.08)).k,
+                       k_ram; rtol=1e-4)                            # γ = 1 IS Ramsey
+    end
+
     @testset "Saddle-path dynamics" begin
         m = BlanchardOLG(; gamma=0.98, beta=0.96)
         ss = blanchard_steady_state(m)

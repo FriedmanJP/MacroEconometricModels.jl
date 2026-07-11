@@ -121,10 +121,11 @@ end
 # =============================================================================
 
 """
-    _stationary_dist_young(Lambda; max_iter=10000, tol=1e-12) → Vector{T}
+    _stationary_dist_young(Lambda; max_iter=10000, tol=1e-12) → (Vector{T}, Bool)
 
 Compute the stationary distribution d* satisfying d* = Λ d* via power
-iteration.  The returned vector is non-negative and sums to 1.
+iteration.  Returns the distribution (non-negative, sums to 1) and a `converged`
+flag (`true` iff ‖d_{t+1} − d_t‖_∞ met `tol` before exhausting `max_iter`; #240/H-17).
 
 # Arguments
 - `Lambda::SparseMatrixCSC{T}` — transition matrix (columns sum to 1)
@@ -148,14 +149,15 @@ function _stationary_dist_young(Lambda::SparseMatrixCSC{T};
         end
 
         if maximum(abs.(d_new .- d)) < tol_T
-            return d_new
+            return d_new, true
         end
         d = d_new
     end
 
-    # Return best available even if not converged
+    # Return best available even if not converged, with the flag surfaced (#240/H-17)
+    # instead of silently returning an under-converged distribution.
     d ./= sum(d)
-    return d
+    return d, false
 end
 
 # =============================================================================

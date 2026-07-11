@@ -455,10 +455,14 @@ end
         @test sum(Lambda[:, col]) ≈ 1.0 atol=1e-10
     end
 
-    dist = MacroEconometricModels._stationary_dist_young(Lambda)
+    dist, dist_conv = MacroEconometricModels._stationary_dist_young(Lambda)
     @test length(dist) == 300
     @test sum(dist) ≈ 1.0 atol=1e-10
     @test all(dist .>= 0)
+    @test dist_conv == true                                              # #240/H-17
+    # convergence flag is false when max_iter is exhausted
+    _, dist_conv1 = MacroEconometricModels._stationary_dist_young(Lambda; max_iter=1)
+    @test dist_conv1 == false
 
     # Forward iteration preserves mass
     dist2 = MacroEconometricModels._forward_iterate(Lambda, dist)
@@ -728,6 +732,37 @@ end
     rho = @test_logs (:warn,) MacroEconometricModels._reiter_warn_unstable(
         [2.0 0.0; 0.0 0.5], "explosive")
     @test rho ≈ 2.0
+end
+
+@testset "HA low-severity batch (#240/T141)" begin
+    # H-16: the SSJ Jacobian threads output_var via _ssj_outcome_vector (the old
+    # code hardcoded asset aggregation; the bug was latent). Consumption vs
+    # savings outputs route to the right policy.
+    cpol = Float64[1 4; 2 5; 3 6]; apol = Float64[11 14; 12 15; 13 16]
+    @test MacroEconometricModels._ssj_outcome_vector(:C, cpol, apol) == vec(cpol)
+    @test MacroEconometricModels._ssj_outcome_vector(:K, cpol, apol) == vec(apol)
+    @test MacroEconometricModels._ssj_outcome_vector(:A, cpol, apol) == vec(apol)
+
+    # H-18: _ha_steady_state verifies the r-interval brackets a clearing rate
+    # (excess demand K_s − K_d must change sign) instead of returning a spurious
+    # midpoint.
+    grid = HAGrid(assets=(0.0, 200.0, 40), income_states=3)
+    inc = rouwenhorst(0.966, 0.5, 3)
+    ip = IndividualProblem{Float64}(c -> log(c), c -> 1.0/c, m -> 1.0/m, 0.99,
+            (a, e, pr) -> (1 + pr[:r]) * a + pr[:w] * e, [0.0], nothing, 1)
+    pf(K, p) = Dict(:r => p[:alpha]*K^(p[:alpha]-1) - p[:delta],
+                    :w => (1-p[:alpha])*K^p[:alpha])
+    params = Dict(:alpha => 0.36, :delta => 0.025, :Z => 1.0, :L => 1.0)
+    _hass = MacroEconometricModels._ha_steady_state
+    # valid bracket → converges
+    @test _hass(ip, grid, inc, pf, params; K_init=10.0, r_bounds=(-0.02, 0.04),
+                max_iter=60, tol=1e-4) isa MacroEconometricModels.HASteadyState
+    # non-bracketed interval (both rates above equilibrium ⇒ excess > 0) → error
+    @test_throws ErrorException _hass(ip, grid, inc, pf, params; K_init=10.0,
+                r_bounds=(0.03, 0.05), max_iter=60, tol=1e-4)
+    # non-finite K_d at r_lo (r + δ < 0) is guarded, not thrown
+    @test _hass(ip, grid, inc, pf, params; K_init=10.0, r_bounds=(-0.03, 0.04),
+                max_iter=60, tol=1e-4) isa MacroEconometricModels.HASteadyState
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
