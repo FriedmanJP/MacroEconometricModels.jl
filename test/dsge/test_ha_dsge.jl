@@ -521,7 +521,8 @@ end
     T_len = 50
     irf_seq = [reshape([0.9^t], 1, 1) for t in 0:T_len-1]
 
-    G1, impact, C_sol, eu, eigenvalues = MacroEconometricModels._ho_kalman(irf_seq, 1, 1, 5)
+    G1, impact, C_sol, eu, eigenvalues, C_mat, D =
+        MacroEconometricModels._ho_kalman(irf_seq, 1, 1, 5)
 
     @test size(G1, 1) == size(G1, 2)  # square
     @test size(impact, 2) == 1         # one shock
@@ -533,6 +534,56 @@ end
     # The dominant eigenvalue should be close to 0.9
     max_eig = maximum(abs.(eigenvalues))
     @test abs(max_eig - 0.9) < 0.1
+
+    # #227/T128: _ho_kalman now also returns the output map C (n_vars × k) and the
+    # direct feed-through D = h[0]. The realization reproduces the geometric IRF:
+    # h[0] = D = 0.9^0, h[k] = C·A^(k-1)·B = 0.9^k.
+    @test size(C_mat) == (1, size(G1, 1))
+    @test size(D) == (1, 1)
+    @test D[1, 1] ≈ 1.0 atol=1e-8
+    Ah = Matrix{Float64}(I, size(G1)...)   # at horizon h>=2, Ah = G1^(h-2)
+    for h in 1:8
+        y_h = h == 1 ? D[1, 1] : (C_mat * (Ah * impact))[1, 1]
+        @test isapprox(y_h, 0.9^(h-1); atol=1e-3)
+        h >= 2 && (Ah = Ah * G1)
+    end
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 14b: HA observation map (#227)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "HA observation map irf/fevd/simulate (#227)" begin
+    # An SSJ solution carries the Ho-Kalman observation map C_obs/D_obs, so
+    # irf/fevd/simulate report the AGGREGATE output (rate r for Huggett), not the
+    # abstract reduced state x_1..x_n the old delegating code returned.
+    spec = MacroEconometricModels._huggett_example(; credit_limit=-2.0, a_max=8.0, n_a=120)
+    ss = compute_steady_state(spec; max_iter=100, tol=1e-3)
+    sol = solve(spec; method=:ssj, ss=ss, T_horizon=80, n_reduced=15)
+
+    n_red = size(sol.linear_solution.G1, 1)
+    @test size(sol.C_obs) == (1, n_red)
+    @test size(sol.D_obs) == (1, 1)
+    @test n_red > 1                                  # abstract state is multi-dimensional
+
+    ir = irf(sol, 20)
+    @test size(ir.values) == (20, 1, 1)              # ONE aggregate (r), NOT n_red states
+    @test ir.variables == ["r"]
+
+    B = sol.linear_solution.impact; G1 = sol.linear_solution.G1; C = sol.C_obs
+    # Reproduces the realized rate IRF: impact = D_obs = h[0]; h>=2 = C·A^(h-2)·B.
+    @test ir.values[1, 1, 1] ≈ sol.D_obs[1, 1] atol=1e-10
+    @test ir.values[2, 1, 1] ≈ (C * B)[1, 1] atol=1e-10
+    @test ir.values[3, 1, 1] ≈ (C * G1 * B)[1, 1] atol=1e-10
+
+    fv = fevd(sol, 20)
+    @test length(fv.variables) == 1
+    @test all(isfinite.(fv.decomposition))
+
+    # simulate reports the aggregate deviation path; a unit impulse gives D_obs.
+    sim = simulate(sol, 30; shock_draws=reshape([1.0; zeros(29)], 30, 1))
+    @test size(sim) == (30, 1)
+    @test sim[1, 1] ≈ sol.D_obs[1, 1] atol=1e-10
 end
 
 # ─────────────────────────────────────────────────────────────────────────────

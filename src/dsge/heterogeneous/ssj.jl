@@ -376,7 +376,13 @@ function _ho_kalman(irf_sequence::Vector{Matrix{T}}, n_vars::Int,
 
     eigenvalues = eigvals(ComplexF64.(G1))
 
-    return G1, impact, C_sol, eu, eigenvalues
+    # Direct feed-through D = h[0] — the impact IRF element the block-Hankel
+    # deliberately skips (idx+1 indexing above starts at h[1]). Carrying it (with
+    # the output map C_mat) lets `irf`/`fevd`/`simulate` report the aggregate
+    # C·A^(h-1)·B + D response in (K, r, Y, …) coordinates instead of discarding it.
+    D = Matrix{T}(irf_sequence[1])   # n_vars × n_shocks
+
+    return G1, impact, C_sol, eu, eigenvalues, C_mat, D
 end
 
 # =============================================================================
@@ -384,16 +390,19 @@ end
 # =============================================================================
 
 """
-    _wrap_hadsge_solution(spec, ss, G1, impact, C_sol, eu, eigenvalues, jacobians,
-                          T_horizon, method; explained_variance=1.0) → HADSGESolution{T}
+    _wrap_hadsge_solution(spec, ss, G1, impact, C_sol, eu, eigenvalues, C_obs, D_obs,
+                          jacobians, T_horizon, method; explained_variance=1.0)
+        → HADSGESolution{T}
 
-Wrap a reduced first-order state-space realization `(G1, impact)` into the
-`DSGESolution`/`HADSGESolution` types so the standard `irf`/`fevd`/`simulate`
-dispatch applies. Used by the Huggett SSJ general-equilibrium path.
+Wrap a reduced first-order state-space realization `(G1, impact)` plus its
+Ho-Kalman observation map `(C_obs, D_obs)` into the `DSGESolution`/`HADSGESolution`
+types so the standard `irf`/`fevd`/`simulate` dispatch reports aggregate outputs.
+Used by the Huggett SSJ general-equilibrium path.
 """
 function _wrap_hadsge_solution(spec::HADSGESpec{T}, ss::HASteadyState{T},
                                G1::Matrix{T}, impact::Matrix{T}, C_sol::Vector{T},
                                eu::Vector{Int}, eigenvalues::Vector{ComplexF64},
+                               C_obs::Matrix{T}, D_obs::Matrix{T},
                                jacobians::Dict{Symbol,Matrix{T}},
                                T_horizon::Int, method::Symbol;
                                explained_variance::T=one(T)) where {T<:AbstractFloat}
@@ -412,7 +421,8 @@ function _wrap_hadsge_solution(spec::HADSGESpec{T}, ss::HASteadyState{T},
                                 dummy_spec, linear)
     reduction_basis = Matrix{T}(I, n_red, n_red)
     return HADSGESolution{T}(ss, dsge_sol, method, spec, reduction_basis,
-                              T_horizon, n_red, explained_variance, jacobians)
+                              T_horizon, n_red, explained_variance, jacobians,
+                              C_obs, D_obs)
 end
 
 # =============================================================================
@@ -467,7 +477,7 @@ function _ssj_solve(spec::HADSGESpec{T}, ss::HASteadyState{T};
 
         irf_seq = [reshape([dr[t]], 1, 1) for t in 1:T_horizon]
         k = max(min(n_reduced, div(T_horizon, 2) - 1), 1)
-        G1, impact, C_sol, eu, eig = _ho_kalman(irf_seq, 1, 1, k)
+        G1, impact, C_sol, eu, eig, C_mat, D = _ho_kalman(irf_seq, 1, 1, k)
         # Ho-Kalman realizations can land marginally outside the unit circle;
         # contract onto it (mirrors the Reiter stabilization) since the rate IRF
         # is genuinely stable (decays at the shock persistence ρ).
@@ -477,7 +487,7 @@ function _ssj_solve(spec::HADSGESpec{T}, ss::HASteadyState{T};
             eig = eigvals(ComplexF64.(G1))
         end
         return _wrap_hadsge_solution(spec, ss, G1, impact, C_sol, eu, eig,
-                                     jacobians, T_horizon, :ssj)
+                                     C_mat, D, jacobians, T_horizon, :ssj)
     end
 
     # Primary Jacobian: r → K
@@ -502,7 +512,7 @@ function _ssj_solve(spec::HADSGESpec{T}, ss::HASteadyState{T};
     # Step 3: Ho-Kalman realization
     k = min(n_reduced, div(T_horizon, 2) - 1)
     k = max(k, 1)
-    G1, impact, C_sol, eu, eigenvalues = _ho_kalman(irf_seq, n_vars, n_shocks, k)
+    G1, impact, C_sol, eu, eigenvalues, C_mat, D = _ho_kalman(irf_seq, n_vars, n_shocks, k)
 
     # Step 4: Build dummy DSGESpec and LinearDSGE for the reduced system
     n_red = size(G1, 1)
@@ -559,6 +569,8 @@ function _ssj_solve(spec::HADSGESpec{T}, ss::HASteadyState{T};
         T_horizon,         # n_full_states
         n_red,             # n_reduced
         explained_variance,
-        jacobians
+        jacobians,
+        C_mat,             # C_obs: reduced-state → aggregate K
+        D                  # D_obs: direct shock feed-through (h[0])
     )
 end

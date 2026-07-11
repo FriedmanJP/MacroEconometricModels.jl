@@ -475,6 +475,8 @@ Fields:
 - `n_reduced::Int` — reduced state dimension
 - `explained_variance::T` — fraction of variance captured by reduction
 - `jacobians::Union{Nothing,Dict{Symbol,Matrix{T}}}` — optional Jacobian matrices
+- `C_obs::Matrix{T}` — reduced-state → aggregate-output map (Ho-Kalman `C`; identity for Reiter)
+- `D_obs::Matrix{T}` — direct shock feed-through to aggregate outputs (`D = h[0]`)
 """
 struct HADSGESolution{T<:AbstractFloat}
     steady_state::HASteadyState{T}
@@ -486,6 +488,8 @@ struct HADSGESolution{T<:AbstractFloat}
     n_reduced::Int
     explained_variance::T
     jacobians::Union{Nothing,Dict{Symbol,Matrix{T}}}
+    C_obs::Matrix{T}
+    D_obs::Matrix{T}
 end
 
 # Accessors — delegate to linear_solution

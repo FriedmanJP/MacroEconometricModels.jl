@@ -562,9 +562,14 @@ function solve(spec::HADSGESpec{T}; method::Symbol=:ssj,
         dsge_sol = DSGESolution{T}(G1, impact, C_sol, eu, :reiter, eigenvalues,
                                     dummy_spec_inner, linear)
         reduction_basis = Matrix{T}(I, n_red, n_red)
+        # Reiter reports the reduced system in its own coordinates (K and Z are
+        # explicit states), so the observation map is the identity with no
+        # feed-through — carried explicitly, not silently zeroed (#227).
+        C_obs = Matrix{T}(I, n_sys, n_sys)
+        D_obs = zeros(T, n_sys, size(impact, 2))
         return HADSGESolution{T}(ss, dsge_sol, :reiter, spec, reduction_basis,
                                   spec.grid.total_individual_states, n_red,
-                                  explained, nothing)
+                                  explained, nothing, C_obs, D_obs)
 
     elseif method === :krusell_smith
         # Extract KS-specific kwargs
