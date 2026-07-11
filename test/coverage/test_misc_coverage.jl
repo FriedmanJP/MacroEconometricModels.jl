@@ -145,8 +145,25 @@ Random.seed!(9004)
         y_const = fill(3.0, 100)
         phi = MacroEconometricModels._yule_walker(y_const, 2)
         @test length(phi) == 2
-        # Should return fallback small coefficients
+        # Fallback is a finite small INIT for the optimizer (not a fabricated fit); the
+        # catch is narrowed so a genuine singular system still hits it.
         @test all(isfinite, phi)
+    end
+
+    @testset "_suppress_warnings surfaces @error, hides @warn/@info (#244)" begin
+        logger = Test.TestLogger()
+        Base.CoreLogging.with_logger(logger) do
+            MacroEconometricModels._suppress_warnings() do
+                @warn "hidden warning"
+                @error "surfaced error"
+                @info "hidden info"
+            end
+        end
+        levels = [r.level for r in logger.logs]
+        @test Base.CoreLogging.Error in levels          # @error survives
+        @test !(Base.CoreLogging.Warn in levels)        # @warn suppressed
+        @test !(Base.CoreLogging.Info in levels)        # @info suppressed
+        @test any(r -> occursin("surfaced error", string(r.message)), logger.logs)
     end
 
     # =========================================================================
