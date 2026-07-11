@@ -79,6 +79,24 @@ function _aiyagari_foc_derivatives(r_ss::T, w_ss::T, K_ss::T, alpha::T, delta::T
     return dr_dK, dw_dK, dr_dZ, dw_dZ
 end
 
+# Diagnose reduced-transition stability WITHOUT mutating G1 (#234). The previous
+# code silently shrank every eigenvalue by `0.999/ρ` whenever the spectral radius
+# ρ exceeded 1, uniformly distorting all dynamics to mask a missing-GE-block /
+# wrong-Jacobian bug and reporting determinacy on a genuinely explosive system.
+# #229/#230 restore genuine stability (ρ ≈ 0.9 Huggett, 0.9997 Aiyagari/KS), so
+# this diagnostic should stay silent for the shipped examples; if it fires, the
+# reduced HA system really is indeterminate/explosive and must be investigated.
+function _reiter_warn_unstable(G1::AbstractMatrix{T}, label::AbstractString) where {T<:AbstractFloat}
+    rho = maximum(abs, eigvals(G1))
+    if rho >= one(T) + T(1e-8)
+        @warn "Reiter ($label): reduced HA transition spectral radius ρ = " *
+              "$(round(rho; digits=8)) ≥ 1 — the reduced system is indeterminate " *
+              "or explosive (likely an incomplete GE block or a mis-scaled " *
+              "Jacobian). No silent eigenvalue rescaling is applied (#234)."
+    end
+    return rho
+end
+
 # =============================================================================
 # _reiter_linearize — SVD-reduced linearization of the HA model
 # =============================================================================
@@ -161,7 +179,10 @@ function _reiter_linearize(ss::HASteadyState{T}, ip::IndividualProblem{T},
     # Λ' on the capital aggregation vector.  The SVD of their combination
     # captures the directions most relevant for aggregate dynamics.
 
-    Lambda_dense = Matrix{T}(Lambda_ss)
+    # Λ_ss is an N×N sparse transition (N = n_a·n_e). Only sparse mat-vec/mat-mat
+    # and a tall-thin SVD of the (dense, N×n_obs) observability matrix are needed,
+    # so we never densify Λ_ss (#242). The economy `svd(O_mat)` below is kept
+    # deterministic (NOT swapped for a randomized SVD).
 
     # Build the capital aggregation vector
     a_vec_pre = zeros(T, N)
@@ -179,7 +200,7 @@ function _reiter_linearize(ss::HASteadyState{T}, ip::IndividualProblem{T},
     v_obs = copy(a_vec_pre)
     for k in 1:n_obs
         O_mat[:, k] .= v_obs
-        v_obs = Lambda_dense' * v_obs
+        v_obs = Lambda_ss' * v_obs          # sparse transpose mat-vec
     end
 
     # SVD of O_mat to get the dominant observable directions
@@ -199,7 +220,7 @@ function _reiter_linearize(ss::HASteadyState{T}, ip::IndividualProblem{T},
     # ── Step 3: Build reduced distribution transition ─────────────────────────
     # G1_dist = U_k' Λ_ss U_k  (project transition into reduced coordinates)
 
-    G1_dist = U_k' * Lambda_dense * U_k   # n_red × n_red
+    G1_dist = U_k' * (Lambda_ss * U_k)    # n_red × n_red (sparse×dense, then project)
 
     # ── Step 4: Capital loading ───────────────────────────────────────────────
     # K is a linear function of the distribution: K = a_grid' * d
@@ -231,7 +252,7 @@ function _reiter_linearize(ss::HASteadyState{T}, ip::IndividualProblem{T},
         delta_test = dx_T .* noise
 
         # Full response
-        dK_full = dot(a_vec, Lambda_dense * delta_test)
+        dK_full = dot(a_vec, Lambda_ss * delta_test)   # sparse mat-vec
 
         # Reduced response
         d_tilde = U_k' * delta_test
@@ -289,9 +310,7 @@ function _reiter_linearize(ss::HASteadyState{T}, ip::IndividualProblem{T},
         impact_vec[n_red + 1, 1] = one(T)
         impact_vec[1:n_red, 1] .= channel_w
 
-        eigs = eigvals(G1)
-        me = maximum(abs.(eigs))
-        me > one(T) && (G1 .*= T(0.999) / me)
+        _reiter_warn_unstable(G1, "Huggett")
 
         return G1, impact_vec, n_red, explained, U_k
     end
@@ -358,12 +377,8 @@ function _reiter_linearize(ss::HASteadyState{T}, ip::IndividualProblem{T},
     impact_vec[1:n_red, 1] .= Z_column
     impact_vec[n_red + 1, 1] = dot(K_loading, Z_column)
 
-    # ── Step 8: Stabilize if needed (numerical guard; removed in #234) ────────
-    eigs = eigvals(G1)
-    max_eig = maximum(abs.(eigs))
-    if max_eig > one(T)
-        G1 .*= T(0.999) / max_eig
-    end
+    # ── Step 8: Diagnose stability (no silent rescale; #234) ──────────────────
+    _reiter_warn_unstable(G1, "Aiyagari")
 
     return G1, impact_vec, n_red, explained, U_k
 end

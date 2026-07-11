@@ -149,8 +149,12 @@ function _ha_steady_state(ip::IndividualProblem{T}, grid::HAGrid{T},
     # original behavior exactly when no explicit closure is supplied.
     clr = isnothing(clearing_fn) ? _aiyagari_clearing(price_fn) : clearing_fn
 
-    # Validate bounds: at r_lo capital supply should exceed demand,
-    # at r_hi demand should exceed supply (standard Aiyagari setup)
+    # Validate bounds. excess(r) = K_s(r) − K_d(r) is INCREASING in r (a higher
+    # rate raises household saving and lowers firm capital demand), so a valid
+    # bracket needs excess(r_lo) ≤ 0 ≤ excess(r_hi). The old code only checked
+    # r_lo < r_hi and then returned the closest midpoint even when the interval
+    # bracketed no root — a spurious rate (#240/H-18). The sign-change check is
+    # done below, after the excess closure is defined.
     @assert r_lo < r_hi "r_bounds must satisfy r_lo < r_hi"
 
     n_a = grid.n_points[1]
@@ -166,6 +170,56 @@ function _ha_steady_state(ip::IndividualProblem{T}, grid::HAGrid{T},
     best_excess = T(Inf)
     converged = false
     final_iter = 0
+    warm_c = nothing  # warm-start the inner EGM across bisection iterations (#238)
+
+    # Evaluate excess demand K_s − K_d at a trial rate. A non-finite K_d (firm
+    # demand diverges at a too-low rate) is mapped to excess = −∞ (raise r),
+    # guarding the escalation path so a valid setup does not throw (#240/H-18).
+    function eval_excess(r::T, warm)
+        K_d, prices = clr(r, params)
+        isfinite(K_d) || return (excess=T(-Inf), K_d=K_d, prices=prices,
+                                 c_pol=nothing, a_pol=nothing, dist=nothing, K_s=T(NaN))
+        c_pol, a_pol, _ = _egm_solve(ip, grid, income, prices;
+                                     max_iter=1000, tol=T(1e-10), init_policy=warm)
+        Lambda = _build_transition_matrix(a_pol, grid, income)
+        dist, _ = _stationary_dist_young(Lambda; max_iter=10_000, tol=T(1e-12))
+        K_s = _aggregate(dist, grid; var_index=1)
+        return (excess=K_s - K_d, K_d=K_d, prices=prices,
+                c_pol=c_pol, a_pol=a_pol, dist=dist, K_s=K_s)
+    end
+
+    # Bracket check + bounded widening (#240/H-18). excess(r) = K_s − K_d is
+    # increasing in r, so a market-clearing rate needs excess(r_lo) ≤ 0 ≤
+    # excess(r_hi). The old code only asserted r_lo < r_hi and then returned the
+    # closest midpoint even when the interval bracketed no root (a spurious rate).
+    # If the supplied interval does not bracket, EXPAND it — downward for a
+    # too-high r_lo, upward (capped just below 1/β−1, where household saving
+    # diverges) for a too-low r_hi — before giving up. This finds the true
+    # equilibrium of a valid model whose rate lies outside the default bounds
+    # rather than throwing or returning a spurious midpoint.
+    r_cap = one(T) / ip.beta - one(T) - T(1e-6)
+    res_lo = eval_excess(r_lo, nothing)
+    res_hi = eval_excess(r_hi, res_lo.c_pol)
+    widen = 0
+    while res_lo.excess > zero(T) && widen < 60
+        r_lo -= max(r_hi - r_lo, T(1e-3))          # expand downward
+        res_lo = eval_excess(r_lo, res_lo.c_pol)
+        widen += 1
+    end
+    widen = 0
+    while res_hi.excess < zero(T) && r_hi < r_cap && widen < 60
+        r_hi = min(r_hi + max(r_hi - r_lo, T(1e-3)), r_cap)   # expand upward, capped
+        res_hi = eval_excess(r_hi, res_hi.c_pol === nothing ? res_lo.c_pol : res_hi.c_pol)
+        widen += 1
+    end
+    if !(res_lo.excess <= zero(T) <= res_hi.excess)
+        error("_ha_steady_state: could not bracket a market-clearing rate after " *
+              "widening r_bounds to ($r_lo, $r_hi) — excess demand K_s − K_d does " *
+              "not change sign (excess(r_lo) = $(res_lo.excess), " *
+              "excess(r_hi) = $(res_hi.excess)). The model may admit no interior " *
+              "stationary equilibrium.")
+    end
+    warm_c = res_lo.c_pol !== nothing ? res_lo.c_pol : res_hi.c_pol
 
     for iter in 1:max_iter
         final_iter = iter
@@ -173,43 +227,30 @@ function _ha_steady_state(ip::IndividualProblem{T}, grid::HAGrid{T},
         # Bisection midpoint
         r_mid = (r_lo + r_hi) / T(2)
 
-        # Market-clearing closure: trial rate → (asset demand, prices).
-        # Aiyagari: K_d from the inverted firm FOC. Huggett: K_d = 0 (zero net supply).
-        K_d, prices = clr(r_mid, params)
-        if !isfinite(K_d)
+        res = eval_excess(r_mid, warm_c)
+        if res.c_pol === nothing
             # Demand diverges (e.g. r below the marginal-product floor) → raise r.
             r_lo = r_mid
             continue
         end
-
-        # Solve individual problem via EGM
-        c_pol, a_pol = _egm_solve(ip, grid, income, prices; max_iter=1000, tol=T(1e-10))
-
-        # Build transition matrix and compute stationary distribution
-        Lambda = _build_transition_matrix(a_pol, grid, income)
-        dist = _stationary_dist_young(Lambda; max_iter=10_000, tol=T(1e-12))
-
-        # Compute capital supply = aggregate savings
-        K_s = _aggregate(dist, grid; var_index=1)
-
-        # Excess: K_s - K_d
-        excess = K_s - K_d
+        warm_c = res.c_pol
+        excess = res.excess
 
         if verbose
             @info "Bisection iter $iter: r = $(round(r_mid; digits=6)), " *
-                  "K_s = $(round(K_s; digits=4)), K_d = $(round(K_d; digits=4)), " *
+                  "K_s = $(round(res.K_s; digits=4)), K_d = $(round(res.K_d; digits=4)), " *
                   "excess = $(round(excess; digits=6))"
         end
 
         # Store best solution
         if abs(excess) < abs(best_excess)
             best_excess = excess
-            copyto!(best_c_pol, c_pol)
-            copyto!(best_a_pol, a_pol)
-            copyto!(best_dist, dist)
-            best_prices = copy(prices)
-            best_K_s = K_s
-            best_K_d = K_d
+            copyto!(best_c_pol, res.c_pol)
+            copyto!(best_a_pol, res.a_pol)
+            copyto!(best_dist, res.dist)
+            best_prices = copy(res.prices)
+            best_K_s = res.K_s
+            best_K_d = res.K_d
         end
 
         # Check convergence
@@ -218,15 +259,7 @@ function _ha_steady_state(ip::IndividualProblem{T}, grid::HAGrid{T},
             break
         end
 
-        # Update bisection bounds
-        # When K_s > K_d (excess > 0), households save too much.
-        # A higher r would raise K_d (lower it via firm FOC) and also change
-        # savings — but the key channel is that higher r lowers K_d, so excess
-        # shrinks if we raise r. Actually in Aiyagari:
-        # - Higher r → higher savings (K_s up) but also K_d down.
-        #   The net effect: from firm side K_d = f(r) is decreasing in r.
-        #   So if K_s > K_d, we need r lower to raise K_d and/or reduce K_s.
-        # Standard Aiyagari bisection: if excess > 0, r is too high.
+        # Bisection update: excess is increasing in r, so excess > 0 ⇒ r too high.
         if excess > zero(T)
             r_hi = r_mid
         else

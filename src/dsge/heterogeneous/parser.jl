@@ -168,11 +168,30 @@ function _parse_heterogeneous!(stmt::Expr, het_info::Dict{Symbol,Any})
         if k === :n_grid
             het_info[:n_grid] = Int(v)
         elseif k === :utility
-            het_info[:utility] = v isa Symbol ? v : Symbol(v)
+            # `utility = log`, `utility = crra`, or `utility = crra(σ)` (#239). The
+            # last is an AST call; capture the curvature σ (a literal Number or a
+            # parameter Symbol, resolved later against the declared parameters).
+            if v isa Symbol
+                het_info[:utility] = v
+            elseif v isa Expr && v.head === :call && v.args[1] === :crra
+                het_info[:utility] = :crra
+                het_info[:sigma_c] = v.args[2]
+            else
+                error("@dsge heterogeneous: unrecognized utility '$v' " *
+                      "(use `log`, `crra`, or `crra(σ)`)")
+            end
+        elseif k === :crra || k === :sigma_c
+            # `crra = σ` / `sigma_c = σ` also select CRRA with curvature σ.
+            het_info[:utility] = :crra
+            het_info[:sigma_c] = v
         elseif k === :discount
             het_info[:discount] = v  # could be Symbol or Float64
         elseif k === :borrowing
             het_info[:borrowing] = Float64(v)
+        elseif k === :budget
+            het_info[:budget] = v isa Symbol ? v : Symbol(v)
+        elseif k === :model
+            het_info[:model] = v isa Symbol ? v : Symbol(v)
         else
             error("@dsge heterogeneous: unknown key '$k'")
         end
@@ -385,8 +404,11 @@ function _parse_ha_dsge(block::Expr)
     asset_max = het_info[:asset_max]
     n_grid = het_info[:n_grid]
     utility_type = het_info[:utility]
+    utility_sigma = get(het_info, :sigma_c, nothing)   # raw σ (Number/Symbol/nothing)
     discount_sym = het_info[:discount]
     borrowing_lb = het_info[:borrowing]
+    budget_choice = get(het_info, :budget, :ks)        # :ks (default) or :hank1
+    model_choice = get(het_info, :model, :aiyagari)    # :aiyagari (default) or :huggett
 
     shock_name = idio_info[:shock_name]
     income_method = idio_info[:method]
@@ -409,12 +431,30 @@ function _parse_ha_dsge(block::Expr)
     # Build het_params from all parameter defaults
     param_pairs = [Expr(:call, :(=>), QuoteNode(p), param_defaults[p]) for p in params]
 
-    # Determine CRRA sigma from utility type
+    # Determine CRRA curvature σ from the declared utility (#239). Previously this
+    # was always 1.0 (log), discarding any declared curvature.
     sigma_c_val = if utility_type === :log
         1.0
+    elseif utility_type === :crra
+        if utility_sigma isa Symbol && haskey(param_defaults, utility_sigma)
+            Float64(param_defaults[utility_sigma])
+        elseif utility_sigma isa Number
+            Float64(utility_sigma)
+        else
+            error("@dsge (HA): `utility = crra` requires a curvature σ " *
+                  "(e.g. `utility = crra(2.0)` or `crra = 2.0`)")
+        end
     else
-        # Default to 1.0 (log utility) if not recognized
-        1.0
+        error("@dsge (HA): unknown utility '$utility_type' (use `log` or `crra(σ)`)")
+    end
+
+    # Select the household budget hook (#239); default is the KS/Aiyagari budget.
+    budget_expr = if budget_choice === :ks || budget_choice === :aiyagari
+        :(MacroEconometricModels._ks_budget)
+    elseif budget_choice === :hank1
+        :(MacroEconometricModels._hank1_budget)
+    else
+        error("@dsge (HA): unknown budget '$budget_choice' (use `ks` or `hank1`)")
     end
 
     # Build the constructor expression
@@ -435,8 +475,8 @@ function _parse_ha_dsge(block::Expr)
         # Utility functions (CRRA with sigma_c)
         local _u_, _up_, _upi_ = MacroEconometricModels._crra_utility($sigma_c_val)
 
-        # Budget function: c + a' = (1+r)*a + w*e
-        local _budget_fn_ = MacroEconometricModels._ks_budget
+        # Budget function (selectable; default c + a' = (1+r)*a + w*e)
+        local _budget_fn_ = $budget_expr
 
         # Individual problem
         local _individual_ = IndividualProblem{Float64}(
@@ -468,7 +508,8 @@ function _parse_ha_dsge(block::Expr)
         end
 
         HADSGESpec{Float64}(_agg_spec_, _individual_, _income_, _grid_,
-                             _aggregation_, _het_params_)
+                             _aggregation_, _het_params_;
+                             model=$(QuoteNode(model_choice)))
     end
 
     return esc(result)
@@ -561,7 +602,12 @@ function solve(spec::HADSGESpec{T}; method::Symbol=:ssj,
         )
         C_sol = zeros(T, n_sys)
         eigenvalues = eigvals(G1)
-        eu = [1, 1]
+        # Determinacy read off the TRUE (un-mutated) spectral radius (#234): a
+        # reduced Reiter transition with ρ ≥ 1 is not a stable/determinate
+        # solution. Previously eu was hardcoded [1,1] on a silently-rescaled G1,
+        # so is_determined reported determinate even for an explosive system.
+        rho = maximum(abs, eigenvalues)
+        eu = rho < one(T) + T(1e-8) ? [1, 1] : [0, 0]
         Gamma0 = Matrix{T}(I, n_sys, n_sys)
         linear = LinearDSGE{T}(Gamma0, copy(G1), zeros(T, n_sys), copy(impact),
                                 zeros(T, n_sys, 0), dummy_spec_inner)

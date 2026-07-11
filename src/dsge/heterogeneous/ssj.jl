@@ -90,8 +90,9 @@ function _egm_backward_step(ip::IndividualProblem{T}, grid::HAGrid{T},
         fill!(emu, zero(T))
         for jp in 1:n_e
             for i in 1:n_a
-                c_tomorrow = _linear_interp(a_grid, view(c_next, :, jp), a_grid[i])
-                emu[i] += Pi[j, jp] * u_prime(c_tomorrow)
+                # a'_i is a grid node ⇒ the interpolation is the exact indexed
+                # value c_next[i, jp] (#242 no-op interp).
+                emu[i] += Pi[j, jp] * u_prime(c_next[i, jp])
             end
         end
         for i in 1:n_a
@@ -372,9 +373,14 @@ function _ho_kalman(irf_sequence::Vector{Matrix{T}}, n_vars::Int,
     G1 = A
     impact = B
     C_sol = zeros(T, k)
-    eu = [1, 1]
 
     eigenvalues = eigvals(ComplexF64.(G1))
+    # Determinacy from the realization's spectral radius (#234), not a hardcoded
+    # [1,1]. Ho-Kalman realizations of a genuinely-stable (decaying) IRF can land
+    # marginally outside the unit circle by numerical roundoff, so allow a small
+    # slack (mirrors the Huggett SSJ stability slack) before flagging as explosive.
+    rho = maximum(abs, eigenvalues)
+    eu = rho <= one(T) + T(1e-6) ? [1, 1] : [0, 0]
 
     # Direct feed-through D = h[0] — the impact IRF element the block-Hankel
     # deliberately skips (idx+1 indexing above starts at h[1]). Carrying it (with

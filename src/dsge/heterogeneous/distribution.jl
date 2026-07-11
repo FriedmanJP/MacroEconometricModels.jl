@@ -121,10 +121,11 @@ end
 # =============================================================================
 
 """
-    _stationary_dist_young(Lambda; max_iter=10000, tol=1e-12) → Vector{T}
+    _stationary_dist_young(Lambda; max_iter=10000, tol=1e-12) → (Vector{T}, Bool)
 
 Compute the stationary distribution d* satisfying d* = Λ d* via power
-iteration.  The returned vector is non-negative and sums to 1.
+iteration.  Returns the distribution (non-negative, sums to 1) and a `converged`
+flag (`true` iff ‖d_{t+1} − d_t‖_∞ met `tol` before exhausting `max_iter`; #240/H-17).
 
 # Arguments
 - `Lambda::SparseMatrixCSC{T}` — transition matrix (columns sum to 1)
@@ -135,27 +136,47 @@ function _stationary_dist_young(Lambda::SparseMatrixCSC{T};
                                  max_iter::Int=10_000,
                                  tol::Real=1e-12) where {T<:AbstractFloat}
     N = size(Lambda, 1)
-    d = fill(one(T) / N, N)
-
     tol_T = T(tol)
 
+    # The stationary distribution is the RIGHT eigenvector of the column-stochastic
+    # transition Λ for eigenvalue 1 (Λ d = d, d ≥ 0, Σd = 1). Solve it in ONE sparse
+    # LU solve instead of thousands of power-iteration mat-vecs (#242): (I − Λ) is
+    # singular, so replace one equation with the mass normalization Σg = 1. (NOTE:
+    # transposing to (I − Λ')g = 0 gives the LEFT eigenvector = the all-ones vector
+    # ⇒ the uniform distribution, which is WRONG for a column-stochastic Λ.)
+    local g
+    solved = false
+    try
+        A = spdiagm(0 => ones(T, N)) - Lambda
+        A[N, :] .= one(T)                      # replace last row with Σg = 1
+        b = zeros(T, N); b[N] = one(T)
+        g = A \ b
+        solved = all(isfinite, g) && sum(g) > zero(T)
+    catch
+        solved = false
+    end
+
+    if solved
+        @inbounds for i in eachindex(g)         # project onto the simplex
+            g[i] < zero(T) && (g[i] = zero(T))
+        end
+        g ./= sum(g)
+        return g, true
+    end
+
+    # Fallback: power iteration (robustness guard if the LU solve fails).
+    d = fill(one(T) / N, N)
     for _ in 1:max_iter
         d_new = Lambda * d
-        # Normalize to avoid drift
         s = sum(d_new)
-        if s > zero(T)
-            d_new ./= s
-        end
-
+        s > zero(T) && (d_new ./= s)
         if maximum(abs.(d_new .- d)) < tol_T
-            return d_new
+            return d_new, true
         end
         d = d_new
     end
-
-    # Return best available even if not converged
     d ./= sum(d)
-    return d
+    return d, false
 end
 
 # =============================================================================

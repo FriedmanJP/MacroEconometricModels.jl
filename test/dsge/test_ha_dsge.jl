@@ -255,6 +255,71 @@ end
     end
 end
 
+@testset "EGM Euler inversion through budget_fn (#235/T136)" begin
+    # The interior endogenous-grid mapping must read the non-asset ("net") income
+    # from ip.budget_fn, not a hardcoded `w*e`. Otherwise a nonzero `div` in
+    # _hank1_budget is silently dropped and the interior consumption policy is
+    # inconsistent (Euler residual ~ div/(1+r)). div=0 must be a no-op.
+    grid = HAGrid(assets=(0.0, 50.0, 300), income_states=3)
+    ir = rouwenhorst(0.9, 0.2, 3)
+    el = exp.(ir.states); el ./= dot(ir.stationary_dist, el)
+    inc = IncomeProcess{Float64}(ir.transition, el, ir.stationary_dist, :income)
+    ip = IndividualProblem{Float64}(c -> log(c), c -> 1.0/c, m -> 1.0/m, 0.96,
+                                    MacroEconometricModels._hank1_budget, [0.0], nothing, 1)
+
+    function _max_euler(ip, grid, inc, prices)
+        c_pol, a_pol = MacroEconometricModels._egm_solve(ip, grid, inc, prices;
+                                                          max_iter=2000, tol=1e-12)
+        ag = grid.grids[1]; n_a = length(ag)
+        r = prices[:r]; beta = ip.beta; mx = 0.0
+        for j in 1:3, i in 20:(n_a-20)
+            a_pol[i, j] <= 0.5 && continue
+            emu = sum(inc.transition[j, jp] /
+                      MacroEconometricModels._linear_interp(ag, view(c_pol, :, jp), a_pol[i, j])
+                      for jp in 1:3)
+            mx = max(mx, abs(1 - beta * (1 + r) * emu * c_pol[i, j]))
+        end
+        return mx, c_pol
+    end
+
+    m0, c0 = _max_euler(ip, grid, inc, Dict(:r => 0.02, :w => 1.0, :div => 0.0))
+    md, cd = _max_euler(ip, grid, inc, Dict(:r => 0.02, :w => 1.0, :div => 0.5))
+    @test m0 < 1e-4              # div = 0: unchanged, tight Euler
+    @test md < 1e-4              # div = 0.5: still tight (old code gave ~0.17)
+    @test mean(cd) > mean(c0)    # the dividend is real income
+end
+
+@testset "EGM warm-start + convergence flag (#238/T139)" begin
+    # _egm_solve gains an optional init_policy warm start and returns a trailing
+    # convergence flag (Julia drops trailing tuple elements, so 2-tuple call sites
+    # are unaffected).
+    grid = HAGrid(assets=(0.0, 100.0, 200), income_states=3)
+    ir = rouwenhorst(0.9, 0.2, 3); el = exp.(ir.states); el ./= dot(ir.stationary_dist, el)
+    inc = IncomeProcess{Float64}(ir.transition, el, ir.stationary_dist, :income)
+    ip = IndividualProblem{Float64}(c -> log(c), c -> 1.0/c, m -> 1.0/m, 0.95,
+            (a, e, pr) -> (1 + pr[:r]) * a + pr[:w] * e, [0.0], nothing, 1)
+    prices = Dict(:r => 0.02, :w => 1.0)
+
+    # Convergence flag reflects convergence
+    _, _, conv1 = MacroEconometricModels._egm_solve(ip, grid, inc, prices; max_iter=1, tol=1e-10)
+    @test conv1 == false
+    cN, _, convN = MacroEconometricModels._egm_solve(ip, grid, inc, prices; max_iter=2000, tol=1e-12)
+    @test convN == true
+
+    # 2-tuple destructuring still works (flag dropped)
+    c2, a2 = MacroEconometricModels._egm_solve(ip, grid, inc, prices; max_iter=2000, tol=1e-12)
+    @test size(c2) == (200, 3) && size(a2) == (200, 3)
+
+    # Cold vs warm converge to the SAME policy; a seeded solve converges at once
+    cw, _, convw = MacroEconometricModels._egm_solve(ip, grid, inc, prices;
+                        max_iter=2000, tol=1e-12, init_policy=cN)
+    @test convw == true
+    @test maximum(abs.(cw .- cN)) < 1e-9
+    _, _, conv_seed = MacroEconometricModels._egm_solve(ip, grid, inc, prices;
+                        max_iter=3, tol=1e-8, init_policy=cN)
+    @test conv_seed == true
+end
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Section 7: Two-asset nested EGM
 # ─────────────────────────────────────────────────────────────────────────────
@@ -277,8 +342,68 @@ end
     @test size(result[:consumption]) == (30, 20, 3)
     @test size(result[:liquid_savings]) == (30, 20, 3)
     @test size(result[:deposit]) == (30, 20, 3)
-    # Consumption should be positive
+    # Consumption should be positive and finite
     @test all(result[:consumption] .> 0)
+    @test all(isfinite, result[:consumption])
+    @test all(isfinite, result[:deposit])
+end
+
+@testset "Two-asset nested EGM: state-dependent deposit (#232/T133)" begin
+    # The rewritten solver must (a) yield a genuinely state-dependent deposit
+    # d(b,a,e) that varies across the liquid index b (the old code stored a single
+    # scalar deposit per (a,e)); and (b) return policies whose *liquid* Euler
+    # residual is small (the old code returned near-seed policies with O(1)
+    # residuals). Use a well-posed calibration β(1+r_a) < 1 (the r_a=0.02/β=0.99
+    # standard case above is explosive for the illiquid asset).
+    beta = 0.95
+    grid2 = HAGrid(; liquid=(0.0, 20.0, 30), illiquid=(0.0, 50.0, 20), income_states=3)
+    inc = rouwenhorst(0.966, 0.5, 3)
+    ip2 = IndividualProblem{Float64}(
+        c -> log(c), c -> 1.0/c, m -> 1.0/m, beta,
+        (b, a, e, prices) -> (1 + prices[:r_b]) * b + prices[:w] * e,
+        [0.0, 0.0], MacroEconometricModels._hank2_adjustment_cost, 2
+    )
+    prices2 = Dict(:r => 0.01, :r_b => 0.01, :r_a => 0.015, :w => 1.0)
+    res = MacroEconometricModels._two_asset_egm_solve(ip2, grid2, inc, prices2;
+        max_iter=400, tol=1e-6, n_deposit=10)
+    c = res[:consumption]; b = res[:liquid_savings]; d = res[:deposit]
+    b_grid = grid2.grids[1]; a_grid = grid2.grids[2]; e_vals = inc.states
+    n_b, n_a, n_e = size(c)
+    r_b = prices2[:r_b]; r_a = prices2[:r_a]
+
+    @test res[:converged][1] == 1.0
+    @test all(c .> 0)
+    # Interior consumption (not the degenerate deposit-everything corner)
+    @test count(>(0.1), c) / length(c) > 0.5
+
+    # (1) deposit is NON-constant across the liquid index b for some (a,e)
+    nonconst = false
+    for je in 1:n_e, ia in 1:n_a
+        col = @view d[:, ia, je]
+        if maximum(col) - minimum(col) > 1e-6
+            nonconst = true; break
+        end
+    end
+    @test nonconst
+
+    # (2) liquid Euler residual is small at genuinely-interior states
+    resids = Float64[]
+    for je in 1:n_e, ia in 3:(n_a-2), ib in 1:n_b
+        bprime = b[ib, ia, je]
+        bprime <= b_grid[1] + 1e-6 && continue
+        bprime >= b_grid[end] - 1e-6 && continue
+        c[ib, ia, je] < 1e-2 && continue
+        aprime = (1 + r_a) * a_grid[ia] + d[ib, ia, je]
+        cps = [MacroEconometricModels._bilinear_interp(b_grid, a_grid,
+                   view(c, :, :, jep), bprime, aprime) for jep in 1:n_e]
+        minimum(cps) < 1e-2 && continue
+        emu = sum(inc.transition[je, jep] / cps[jep] for jep in 1:n_e)
+        push!(resids, abs(1 - beta * (1 + r_b) * emu * c[ib, ia, je]))
+    end
+    sort!(resids)
+    @test length(resids) > 100
+    @test resids[cld(length(resids), 2)] < 1e-2          # median
+    @test resids[cld(9 * length(resids), 10)] < 1.2e-1   # p90 (illiquid grid limited)
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -330,10 +455,11 @@ end
         @test sum(Lambda[:, col]) ≈ 1.0 atol=1e-10
     end
 
-    dist = MacroEconometricModels._stationary_dist_young(Lambda)
+    dist, dist_conv = MacroEconometricModels._stationary_dist_young(Lambda)
     @test length(dist) == 300
     @test sum(dist) ≈ 1.0 atol=1e-10
     @test all(dist .>= 0)
+    @test dist_conv == true                                              # #240/H-17, #242
 
     # Forward iteration preserves mass
     dist2 = MacroEconometricModels._forward_iterate(Lambda, dist)
@@ -582,6 +708,94 @@ end
         @test isapprox(y_h, 0.9^(h-1); atol=1e-3)
         h >= 2 && (Ah = Ah * G1)
     end
+end
+
+@testset "No silent G1 rescale; truthful determinacy (#234/T135)" begin
+    # _ho_kalman derives eu from the realization's spectral radius (not a hardcoded
+    # [1,1]): a decaying IRF is stable/determinate, a growing IRF is explosive.
+    stable = [reshape([0.9^t], 1, 1) for t in 0:49]
+    _, _, _, eu_s, eig_s, _, _ = MacroEconometricModels._ho_kalman(stable, 1, 1, 5)
+    @test eu_s == [1, 1]
+    @test maximum(abs.(eig_s)) < 1
+    explosive = [reshape([1.3^t], 1, 1) for t in 0:20]
+    _, _, _, eu_x, eig_x, _, _ = MacroEconometricModels._ho_kalman(explosive, 1, 1, 5)
+    @test maximum(abs.(eig_x)) > 1
+    @test eu_x == [0, 0]              # OLD code hardcoded [1,1] even when explosive
+
+    # _reiter_warn_unstable diagnoses instead of rescaling: warns iff ρ ≥ 1, and
+    # returns the TRUE spectral radius (no 0.999/ρ mutation).
+    @test_logs MacroEconometricModels._reiter_warn_unstable(
+        [0.8 0.0; 0.0 0.5], "stable")                                     # no logs
+    rho = @test_logs (:warn,) MacroEconometricModels._reiter_warn_unstable(
+        [2.0 0.0; 0.0 0.5], "explosive")
+    @test rho ≈ 2.0
+end
+
+@testset "HA low-severity batch (#240/T141)" begin
+    # H-16: the SSJ Jacobian threads output_var via _ssj_outcome_vector (the old
+    # code hardcoded asset aggregation; the bug was latent). Consumption vs
+    # savings outputs route to the right policy.
+    cpol = Float64[1 4; 2 5; 3 6]; apol = Float64[11 14; 12 15; 13 16]
+    @test MacroEconometricModels._ssj_outcome_vector(:C, cpol, apol) == vec(cpol)
+    @test MacroEconometricModels._ssj_outcome_vector(:K, cpol, apol) == vec(apol)
+    @test MacroEconometricModels._ssj_outcome_vector(:A, cpol, apol) == vec(apol)
+
+    # H-18: _ha_steady_state verifies the r-interval brackets a clearing rate
+    # (excess demand K_s − K_d must change sign) instead of returning a spurious
+    # midpoint.
+    grid = HAGrid(assets=(0.0, 200.0, 40), income_states=3)
+    inc = rouwenhorst(0.966, 0.5, 3)
+    ip = IndividualProblem{Float64}(c -> log(c), c -> 1.0/c, m -> 1.0/m, 0.99,
+            (a, e, pr) -> (1 + pr[:r]) * a + pr[:w] * e, [0.0], nothing, 1)
+    pf(K, p) = Dict(:r => p[:alpha]*K^(p[:alpha]-1) - p[:delta],
+                    :w => (1-p[:alpha])*K^p[:alpha])
+    params = Dict(:alpha => 0.36, :delta => 0.025, :Z => 1.0, :L => 1.0)
+    _hass = MacroEconometricModels._ha_steady_state
+    # valid bracket → converges
+    ss_valid = _hass(ip, grid, inc, pf, params; K_init=10.0, r_bounds=(-0.02, 0.04),
+                     max_iter=80, tol=1e-4)
+    @test ss_valid isa MacroEconometricModels.HASteadyState
+    @test abs(ss_valid.excess_demand) < 1e-3
+    # offset interval (both rates above the equilibrium ⇒ excess > 0 at both):
+    # the solver WIDENS down to the TRUE clearing rate rather than returning a
+    # spurious midpoint of (0.03, 0.05).
+    ss_off = _hass(ip, grid, inc, pf, params; K_init=10.0, r_bounds=(0.03, 0.05),
+                   max_iter=80, tol=1e-4)
+    @test abs(ss_off.excess_demand) < 1e-3
+    @test isapprox(ss_off.prices[:r], ss_valid.prices[:r]; atol=1e-3)   # same root, not 0.04
+    # non-finite K_d at r_lo (r + δ < 0) is guarded, not thrown
+    @test _hass(ip, grid, inc, pf, params; K_init=10.0, r_bounds=(-0.03, 0.04),
+                max_iter=80, tol=1e-4) isa MacroEconometricModels.HASteadyState
+end
+
+@testset "Stationary distribution single-solve (#242/T143)" begin
+    # `_stationary_dist_young` now solves the RIGHT eigenvector of the
+    # column-stochastic Λ in ONE sparse LU solve instead of power iteration. It
+    # must equal the power-iteration output (the wrong (I−Λ')g=0 transpose would
+    # instead give the LEFT eigenvector = uniform, which power iteration rejects).
+    grid = HAGrid(assets=(0.0, 200.0, 120), income_states=5)
+    inc = rouwenhorst(0.966, 0.5, 5)
+    ip = IndividualProblem{Float64}(c -> log(c), c -> 1.0/c, m -> 1.0/m, 0.99,
+            (a, e, pr) -> (1 + pr[:r]) * a + pr[:w] * e, [0.0], nothing, 1)
+    _, a_pol, _ = MacroEconometricModels._egm_solve(ip, grid, inc,
+            Dict(:r => 0.01, :w => 1.0); max_iter=1000, tol=1e-12)
+    Lambda = MacroEconometricModels._build_transition_matrix(a_pol, grid, inc)
+
+    g, conv = MacroEconometricModels._stationary_dist_young(Lambda)
+    @test conv == true
+    @test sum(g) ≈ 1.0 atol=1e-12
+    @test all(g .>= 0)
+    @test maximum(abs.(Lambda * g .- g)) < 1e-10        # stationary: Λg = g
+
+    # matches an independent power-iteration reference (not the uniform vector)
+    d = fill(1.0 / length(g), length(g))
+    for _ in 1:200_000
+        dn = Lambda * d; dn ./= sum(dn)
+        maximum(abs.(dn .- d)) < 1e-14 && (d = dn; break)
+        d = dn
+    end
+    @test maximum(abs.(g .- d)) < 1e-8
+    @test maximum(abs.(g .- fill(1.0/length(g), length(g)))) > 1e-3   # NOT uniform
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1016,6 +1230,50 @@ end
         end
         @test spec_std isa DSGESpec{Float64}
     end
+
+    @testset "CRRA curvature and model routing (#239/T140)" begin
+        # σ ≠ 1 CRRA is parsed (old code always forced σ = 1.0 / log utility)
+        spec = @dsge begin
+            parameters: alpha = 0.36, beta_hh = 0.99, delta = 0.025, rho_z = 0.95, sigma_z = 0.007
+            endogenous: Y, K, r, w, Z
+            exogenous: eps_Z
+            heterogeneous: a in [0.0, 200.0], n_grid = 60, utility = crra(1.5), discount = beta_hh, borrowing = 0.0
+            idiosyncratic: e ~ Rouwenhorst(0.966, 0.5, 5)
+            aggregation: K = sum(a)
+            Y[t] = Z[t] * K[t-1]^alpha
+            r[t] = alpha * Z[t] * K[t-1]^(alpha-1) - delta
+            w[t] = (1 - alpha) * Z[t] * K[t-1]^alpha
+            Z[t] = rho_z * Z[t-1] + sigma_z * eps_Z[t]
+        end
+        @test spec.individual.utility_prime(2.0) ≈ 2.0^(-1.5)
+        @test spec.individual.utility(2.0) ≈ 2.0^(1 - 1.5) / (1 - 1.5)
+        @test spec.model == :aiyagari    # default model field
+
+        # model = huggett routes into the ctor; macro-controlled fields match
+        spec_h = @dsge begin
+            parameters: alpha = 0.36, beta_hh = 0.99322, delta = 0.025, rho_z = 0.9, sigma_z = 0.01
+            endogenous: Y, K, r, w, Z
+            exogenous: eps_Z
+            heterogeneous: a in [-2.0, 4.0], n_grid = 80, utility = crra(1.5), discount = beta_hh, borrowing = -2.0, model = huggett
+            idiosyncratic: e ~ Rouwenhorst(0.9, 0.1, 3)
+            aggregation: K = sum(a)
+            Y[t] = Z[t] * K[t-1]^alpha
+            r[t] = alpha * Z[t] * K[t-1]^(alpha-1) - delta
+            w[t] = (1 - alpha) * Z[t] * K[t-1]^alpha
+            Z[t] = rho_z * Z[t-1] + sigma_z * eps_Z[t]
+        end
+        @test spec_h.model == :huggett
+        @test spec_h.grid.bounds[1] == (-2.0, 4.0)
+        @test spec_h.individual.borrowing_constraint[1] ≈ -2.0
+        @test spec_h.individual.beta ≈ 0.99322
+        @test spec_h.individual.utility_prime(2.0) ≈ 2.0^(-1.5)
+
+        # the built Huggett spec solves
+        ss = compute_steady_state(spec_h; max_iter=80, tol=1e-3)
+        sol = solve(spec_h; method=:ssj, ss=ss, T_horizon=80, n_reduced=15)
+        @test sol isa HADSGESolution
+        @test sol.method === :ssj
+    end
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1309,6 +1567,10 @@ end
     @test sol isa HADSGESolution
     @test sol.method === :reiter
     @test maximum(abs.(eigvals(sol.linear_solution.G1))) <= 1 + 1e-6   # stable
+    # #234: eu is now derived from the true spectral radius, so a genuinely stable
+    # reduced system reports determinate (not a hardcoded [1,1] on a rescaled G1).
+    @test MacroEconometricModels.is_determined(sol.linear_solution)
+    @test MacroEconometricModels.is_stable(sol.linear_solution)
     @test sol.explained_variance > 0.5
     @test size(sol.linear_solution.G1, 1) == sol.n_reduced + 1         # state [d̃; w]
 end
