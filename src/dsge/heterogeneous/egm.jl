@@ -164,9 +164,17 @@ function _egm_solve(ip::IndividualProblem{T}, grid::HAGrid{T},
                 c_endo[i] = u_prime_inv(beta * (one(T) + r) * emu[i])
             end
 
-            # Step 3: Endogenous beginning-of-period assets
+            # Step 3: Endogenous beginning-of-period assets.
+            # Route the non-asset ("net") income through budget_fn so any offset
+            # (e.g. `div` in _hank1_budget) is honoured — the hardcoded `w*e`
+            # here silently dropped `div` (#235/H-09). budget_fn is affine in own
+            # assets, so net_income = budget_fn(0, e, prices) and the gross return
+            # factor is its own-asset slope budget_fn(1,e)-budget_fn(0,e); both are
+            # read from the same hook rather than re-inlining `w*e`/`(1+r)`.
+            net_income = ip.budget_fn(zero(T), e_vals[j], prices)
+            gross_R = ip.budget_fn(one(T), e_vals[j], prices) - net_income
             for i in 1:n_a
-                a_endo[i] = (c_endo[i] + a_grid[i] - w * e_vals[j]) / (one(T) + r)
+                a_endo[i] = (c_endo[i] + a_grid[i] - net_income) / gross_R
             end
 
             # Step 4: Interpolate back to exogenous grid + borrowing constraint

@@ -255,6 +255,40 @@ end
     end
 end
 
+@testset "EGM Euler inversion through budget_fn (#235/T136)" begin
+    # The interior endogenous-grid mapping must read the non-asset ("net") income
+    # from ip.budget_fn, not a hardcoded `w*e`. Otherwise a nonzero `div` in
+    # _hank1_budget is silently dropped and the interior consumption policy is
+    # inconsistent (Euler residual ~ div/(1+r)). div=0 must be a no-op.
+    grid = HAGrid(assets=(0.0, 50.0, 300), income_states=3)
+    ir = rouwenhorst(0.9, 0.2, 3)
+    el = exp.(ir.states); el ./= dot(ir.stationary_dist, el)
+    inc = IncomeProcess{Float64}(ir.transition, el, ir.stationary_dist, :income)
+    ip = IndividualProblem{Float64}(c -> log(c), c -> 1.0/c, m -> 1.0/m, 0.96,
+                                    MacroEconometricModels._hank1_budget, [0.0], nothing, 1)
+
+    function _max_euler(ip, grid, inc, prices)
+        c_pol, a_pol = MacroEconometricModels._egm_solve(ip, grid, inc, prices;
+                                                          max_iter=2000, tol=1e-12)
+        ag = grid.grids[1]; n_a = length(ag)
+        r = prices[:r]; beta = ip.beta; mx = 0.0
+        for j in 1:3, i in 20:(n_a-20)
+            a_pol[i, j] <= 0.5 && continue
+            emu = sum(inc.transition[j, jp] /
+                      MacroEconometricModels._linear_interp(ag, view(c_pol, :, jp), a_pol[i, j])
+                      for jp in 1:3)
+            mx = max(mx, abs(1 - beta * (1 + r) * emu * c_pol[i, j]))
+        end
+        return mx, c_pol
+    end
+
+    m0, c0 = _max_euler(ip, grid, inc, Dict(:r => 0.02, :w => 1.0, :div => 0.0))
+    md, cd = _max_euler(ip, grid, inc, Dict(:r => 0.02, :w => 1.0, :div => 0.5))
+    @test m0 < 1e-4              # div = 0: unchanged, tight Euler
+    @test md < 1e-4              # div = 0.5: still tight (old code gave ~0.17)
+    @test mean(cd) > mean(c0)    # the dividend is real income
+end
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Section 7: Two-asset nested EGM
 # ─────────────────────────────────────────────────────────────────────────────
