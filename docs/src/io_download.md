@@ -36,7 +36,28 @@ download_exiobase3("mrio"; system="pxp")
 download_eora26("mrio"; email="you@example.com", password="…")
 ```
 
-Downloads skip files that already exist unless `overwrite_existing=true`.
+Downloads skip files that already exist unless `overwrite_existing=true`. All
+source URLs use HTTPS.
+
+## Integrity verification
+
+Each download is checked against a registry of expected SHA-256 digests,
+`MacroEconometricModels.IO_CHECKSUMS`. When a URL has a registered digest and the
+downloaded bytes do not match, `download_io` throws — the archive is corrupt or
+has been substituted. When a URL has *no* registered digest (the default, until
+maintainers populate the registry), the file downloads with a warning that its
+integrity was not verified. Pass `verify=false` to skip the check entirely.
+
+```julia
+# default: verify=true — a mismatch throws, an unregistered URL warns
+download_io(:oecd; storage_folder="mrio", version="v2016", years=[2000])
+
+# skip integrity checks
+download_io(:oecd; storage_folder="mrio", version="v2016", years=[2000], verify=false)
+
+# compute a freshly downloaded archive's digest to add to the registry
+io_file_digest("mrio/ICIO_v2016_2000.zip")
+```
 
 ## Parsing archives into `IOData`
 
@@ -63,6 +84,7 @@ download_wiod
 download_exiobase3
 download_eora26
 download_gloria
+io_file_digest
 parse_io
 IOMetaData
 ```

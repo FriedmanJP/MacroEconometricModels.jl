@@ -1,7 +1,7 @@
 # sources.jl — per-source downloaders (URL tables transcribed from pymrio)
 
 # --- OECD ICIO fixed URL tables (verbatim from pymrio iodownloader OECD_CONFIG) --
-const _OECD_FILEVIEW = "http://stats.oecd.org/wbos/fileview2.aspx?IDFile="
+const _OECD_FILEVIEW = "https://stats.oecd.org/wbos/fileview2.aspx?IDFile="
 const OECD_URLS = Dict(
     "v2016" => Dict(string(y) => "https://www.oecd.org/sti/ind/ICIO2016_$(y).zip"
                     for y in 1995:2011),
@@ -34,8 +34,8 @@ const OECD_URLS = Dict(
     ),
 )
 
-const WIOD_VIEW = "http://www.wiod.org/database/wiots13"
-const WIOD_REGEX = r"http://www\.wiod\.org/protected3/data13/\S+?wiot\d\d\S+?xlsx"
+const WIOD_VIEW = "https://www.wiod.org/database/wiots13"
+const WIOD_REGEX = r"https://www\.wiod\.org/protected3/data13/\S+?wiot\d\d\S+?xlsx"
 const EXIO3_ZENODO = "https://zenodo.org/record/5589597"     # EXIOBASE 3.8.2 record
 const EXIO3_REGEX = r"https://zenodo\.org/record/\d+/files/IOT_\d{4}_[ip]x[ip]\.zip"
 # Representative GLORIA release-053 MRIO zip URLs (subset transcribed from pymrio;
@@ -60,14 +60,16 @@ _match_year(key::AbstractString, years) =
 Download OECD ICIO tables for `version` into `folder`. `years` filters the files.
 """
 function download_oecd(folder; version::AbstractString="v2023", years=nothing,
-                       overwrite_existing::Bool=false, fetch=fetch_file)
+                       overwrite_existing::Bool=false, fetch=fetch_file, verify::Bool=true)
     haskey(OECD_URLS, version) ||
         throw(ArgumentError("unknown OECD version $version; have $(sort(collect(keys(OECD_URLS))))"))
     meta = IOMetaData(; source="OECD ICIO", version=version)
     for (key, url) in sort(collect(OECD_URLS[version]))
         _match_year(key, years) || continue
         fn = "ICIO_$(version)_$(key).zip"
-        fetch(url, joinpath(folder, fn); overwrite=overwrite_existing)
+        dest = joinpath(folder, fn)
+        fetch(url, dest; overwrite=overwrite_existing)
+        verify && _verify_download(url, dest)
         _log_download!(meta, url, fn)
     end
     meta
@@ -79,12 +81,14 @@ end
 Download WIOD 2013 release national IO tables (`wiot*.xlsx`) into `folder`.
 """
 function download_wiod(folder; years=nothing, overwrite_existing::Bool=false,
-                       fetch=fetch_file, fetch_text=fetch_text)
+                       fetch=fetch_file, fetch_text=fetch_text, verify::Bool=true)
     meta = IOMetaData(; source="WIOD 2013", version="2013")
     html = fetch_text(WIOD_VIEW)
     for url in scrape_links(html, WIOD_REGEX)
         fn = _url_filename(url)
-        fetch(url, joinpath(folder, fn); overwrite=overwrite_existing)
+        dest = joinpath(folder, fn)
+        fetch(url, dest; overwrite=overwrite_existing)
+        verify && _verify_download(url, dest)
         _log_download!(meta, url, fn)
     end
     meta
@@ -98,7 +102,7 @@ Download EXIOBASE 3 IO tables from Zenodo into `folder`. `system` is `"pxp"`
 """
 function download_exiobase3(folder; years=nothing, system::AbstractString="pxp",
                             overwrite_existing::Bool=false,
-                            fetch=fetch_file, fetch_text=fetch_text)
+                            fetch=fetch_file, fetch_text=fetch_text, verify::Bool=true)
     meta = IOMetaData(; source="EXIOBASE3", version="3.8.2")
     html = fetch_text(EXIO3_ZENODO)
     for url in scrape_links(html, EXIO3_REGEX)
@@ -106,7 +110,9 @@ function download_exiobase3(folder; years=nothing, system::AbstractString="pxp",
         m = match(r"IOT_(\d{4})_", url)
         (m === nothing || _match_year(m.captures[1], years)) || continue
         fn = _url_filename(url)
-        fetch(url, joinpath(folder, fn); overwrite=overwrite_existing)
+        dest = joinpath(folder, fn)
+        fetch(url, dest; overwrite=overwrite_existing)
+        verify && _verify_download(url, dest)
         _log_download!(meta, url, fn)
     end
     meta
@@ -133,11 +139,13 @@ end
 Download GLORIA MRIO tables into `folder` (URL set populated from the registry).
 """
 function download_gloria(folder; years=nothing, overwrite_existing::Bool=false,
-                         fetch=fetch_file)
+                         fetch=fetch_file, verify::Bool=true)
     meta = IOMetaData(; source="GLORIA", version="053")
     for url in GLORIA_URLS
         fn = _url_filename(url)
-        fetch(url, joinpath(folder, fn); overwrite=overwrite_existing)
+        dest = joinpath(folder, fn)
+        fetch(url, dest; overwrite=overwrite_existing)
+        verify && _verify_download(url, dest)
         _log_download!(meta, url, fn)
     end
     meta
@@ -149,6 +157,11 @@ end
 
 Dispatch to the per-source downloader for `source` (`:oecd`, `:wiod`,
 `:exiobase3`, `:eora26`, `:gloria`). Returns the [`IOMetaData`](@ref) log.
+
+Pass `verify=true` (default) to check each downloaded archive's SHA-256 against
+[`IO_CHECKSUMS`](@ref): a registered digest that mismatches throws (corrupt or
+substituted file), while a URL with no registered digest downloads with a warning.
+Set `verify=false` to skip integrity checks entirely.
 """
 function download_io(source::Symbol; storage_folder, years=nothing,
                      overwrite_existing::Bool=false, version=nothing,

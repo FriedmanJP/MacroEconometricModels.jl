@@ -69,6 +69,7 @@ using SparseArrays
 using FFTW
 using Dates
 using Downloads
+import SHA
 using DelimitedFiles
 import ForwardDiff
 import NLopt
@@ -442,6 +443,7 @@ export add_extension!, intensities, emission_multipliers, footprint
 export domar_weights, baqaee_farhi
 export list_io_sources, download_io, download_oecd, download_wiod
 export download_exiobase3, download_eora26, download_gloria, parse_io
+export io_file_digest
 
 # Abstract types
 export AbstractAnalysisResult, AbstractFrequentistResult, AbstractBayesianResult
