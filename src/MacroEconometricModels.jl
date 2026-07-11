@@ -674,7 +674,7 @@ export contribution, total_shock_contribution, verify_decomposition
 export report, refs
 export table, print_table
 export point_estimate, has_uncertainty, uncertainty_bounds
-export set_display_backend, get_display_backend
+export set_display_backend, get_display_backend, with_display_backend
 export default_abstol, default_reltol
 export MacroModelError, ConvergenceError, IdentificationError, SingularSystemError
 
