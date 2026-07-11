@@ -50,9 +50,14 @@ For perfect foresight: evaluated at each period `t`.
 - `fn::Function` — `(y, y_lag, y_lead, e, theta) -> scalar` (must be <= 0 when satisfied)
 - `label::String` — display label for diagnostics
 """
-struct NonlinearConstraint{T} <: DSGEConstraint{T}
-    fn::Function
+struct NonlinearConstraint{T,F} <: DSGEConstraint{T}
+    fn::F
     label::String
+    # Parameterize on the concrete function type (#254 G-14): a function that receives a
+    # NonlinearConstraint specializes on `fn` instead of dispatching through abstract ::Function.
+    # Leading {T} preserved — NonlinearConstraint{T}(fn, label) infers F, and
+    # ::NonlinearConstraint{T} dispatch still matches (partial parameterization).
+    NonlinearConstraint{T}(fn, label) where {T} = new{T,typeof(fn)}(fn, label)
 end
 
 """
