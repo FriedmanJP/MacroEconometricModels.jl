@@ -105,3 +105,39 @@ jobs:
           fail_ci_if_error: false
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  # RNG-everywhere lint (#243): every drawing function must thread an rng; no bare
+  # rand/randn on the global RNG in src/. Dependency-free (no Julia), so it runs fast.
+  rng-lint:
+    name: RNG-everywhere lint (#243)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Ban bare rand/randn on the global RNG in src/
+        run: |
+          # Docstring-aware: skips content inside """...""" blocks and # comment lines, so
+          # docstring `# Examples` (randn(n), randn(200,3), rand(1:k), …) are not flagged.
+          # Whitelist on real-code lines: rng-threaded draws (rand(rng,…)/randn(local_rng,…)/
+          # any *_rng local), MersenneTwister/Random.default_rng seeds, and an explicit
+          # `# rng-lint: ignore` opt-out. Everything else drawing bare on the global RNG fails.
+          viol=$(awk '
+            FNR==1 { indoc=0 }
+            {
+              tmp=$0; c=gsub(/"""/,"",tmp); startin=indoc
+              k=c; while (k-- > 0) indoc=!indoc
+              if (startin || (c % 2 == 1)) next
+              if ($0 ~ /^[[:space:]]*#/) next
+              if ($0 !~ /(^|[^A-Za-z_.])(rand|randn|randn!)\(/) next
+              line=$0
+              if (line ~ /\((rng|local_rng|thread_rng|rep_rng|rng_actual|rng_draw|boot_rng|thread_local_rng)[,)]/) next
+              if (line ~ /(MersenneTwister|Random\.default_rng|rand\(UInt)/) next
+              if (line ~ /# *rng-lint: *ignore/) next
+              printf("%s:%d:%s\n", FILENAME, FNR, $0)
+            }
+          ' $(find src -name "*.jl" | sort))
+          if [ -n "$viol" ]; then
+            echo "::error::Bare rand/randn drawing on the global RNG (see #243 rng-everywhere policy):"
+            echo "$viol"
+            exit 1
+          fi
+          echo "rng-lint OK — no bare rand/randn in src/"
