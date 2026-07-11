@@ -5,12 +5,20 @@
 # Licensed under GPL-3.0-or-later. See LICENSE for details.
 
 """
-Shared Kalman filter building blocks.
+Shared Kalman filter building blocks — the correct primitives underlying the
+consolidated kernel in `core/kalman_kernel.jl`: `_kalman_predict`, `_kalman_update`
+(Joseph form + `safe_cholesky` + triangular solves, T058), `_rts_smoother_gain`,
+and `_solve_discrete_lyapunov`.
 
-Provides reusable primitives for the domain-specific Kalman filter implementations
-in `factor/kalman.jl`, `arima/kalman.jl`, and `nowcast/kalman_missing.jl`.
-
-These are documented utilities, not replacements for the domain-specific filters.
+Since T147/#246 the consolidated `_kalman_filter!` / `_rts_smoother` back the ARIMA,
+Beveridge-Nelson, dynamic-factor, and nowcast filters/smoothers (retiring their
+divergent non-Joseph updates, `robust_inv`/`det`-gated likelihoods, and hard-coded
+`1e6·I`/`10·I` inits). The DSGE `_kalman_loglikelihood` deliberately keeps its
+hand-tuned zero-allocation forward pass — it is the Bayesian-estimation hot loop, and a
+kernel migration was measured byte-equivalent but 2.4x slower / 29x allocation — and is
+guarded byte-equivalent to the kernel by a regression test in `test/core/test_kalman.jl`.
+(A follow-on that preallocates the kernel's multivariate path would let the DSGE filter
+migrate without regression and unlock the steady-state gain-freeze dividend.)
 """
 
 # =============================================================================

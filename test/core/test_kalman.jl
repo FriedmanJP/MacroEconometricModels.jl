@@ -248,6 +248,26 @@ using LinearAlgebra
             @test Plag[1][:, :, t] ≈ Ps_n[:, :, t] * Jm1' rtol = 1e-9
         end
 
+        # DSGE _kalman_loglikelihood is kept hand-tuned (a measured perf exception: a kernel
+        # migration is byte-equivalent but 2.4x slower / 29x allocation on the Bayesian MLE
+        # hot loop). This guards it byte-equivalent to the consolidated kernel so it cannot
+        # drift from the shared numerics.
+        nsd, nobs2, nshk = 6, 3, 3
+        Gd = randn(rng, nsd, nsd); Gd = 0.6 * Gd / maximum(abs, eigvals(Gd))
+        imp = randn(rng, nsd, nshk); Zd = randn(rng, nobs2, nsd)
+        dd = zeros(nobs2); Hd = Matrix(0.1 * I, nobs2, nobs2); Qd = Matrix(1.0 * I, nshk, nshk)
+        ssd = MEM.DSGEStateSpace{Float64}(Gd, imp, Zd, dd, Hd, Qd)
+        RQRd = imp * Qd * imp'
+        datad = zeros(nobs2, 50); xd = zeros(nsd)
+        for tt in 1:50
+            xd = Gd * xd + imp * randn(rng, nshk)
+            datad[:, tt] = Zd * xd + cholesky(Symmetric(Hd)).L * randn(rng, nobs2)
+        end
+        P0d = Matrix(MEM.solve_lyapunov(Gd, imp))
+        ll_dsge = MEM._kalman_loglikelihood(ssd, datad)
+        ll_kern = MEM._kalman_filter!(nothing, datad, Zd, Gd, RQRd, Hd; d=dd, a0=zeros(nsd), P0=P0d, scalar=false)
+        @test ll_dsge ≈ ll_kern rtol = 1e-10
+
         # init modes
         Ps = MEM._kalman_init(:stationary, Tt, RQR, 2)[2]
         @test norm(Ps - (Tt * Ps * Tt' + RQR)) < 1e-8                       # Lyapunov fixed point
