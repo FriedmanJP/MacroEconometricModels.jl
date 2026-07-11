@@ -81,7 +81,19 @@ struct BayesianHistoricalDecomposition{T<:AbstractFloat} <: AbstractHistoricalDe
     shock_names::Vector{String}
     quantile_levels::Vector{T}
     method::Symbol
+    # MC honesty counts (#244): posterior/rotation draws requested, usable, and dropped.
+    n_requested::Int
+    n_effective::Int
+    n_failed::Int
 end
+
+# Backward-compatible constructor (pre-#244, no MC counts ⇒ untracked, no dropped draws).
+BayesianHistoricalDecomposition{T}(quantiles, point_estimate, initial_quantiles,
+        initial_point_estimate, shocks_point_estimate, actual, T_eff, variables,
+        shock_names, quantile_levels, method) where {T} =
+    BayesianHistoricalDecomposition{T}(quantiles, point_estimate, initial_quantiles,
+        initial_point_estimate, shocks_point_estimate, actual, T_eff, variables,
+        shock_names, quantile_levels, method, 0, 0, 0)
 
 # =============================================================================
 # Helper Functions
@@ -408,9 +420,11 @@ function historical_decomposition(post::BVARPosterior, horizon::Int=0;
     end
 
     snames = isnothing(shock_names) ? post.varnames : shock_names
+    # MC honesty (#244): non-stationary posterior draws are skipped (valid_count usable).
     BayesianHistoricalDecomposition{ET}(
         contrib_q, contrib_m, initial_q, initial_m, shocks_m, actual, T_eff,
-        post.varnames, snames, q_vec, method
+        post.varnames, snames, q_vec, method,
+        samples, valid_count, samples - valid_count
     )
 end
 
@@ -517,9 +531,11 @@ function historical_decomposition(model::VARModel{T}, restrictions::SVARRestrict
     end
 
     snames = isnothing(shock_names) ? model.varnames : shock_names
+    # MC honesty (#244): n_acc rotations survived Arias sign/zero restrictions out of n_draws.
     BayesianHistoricalDecomposition{T}(
         contrib_q, contrib_m, initial_q, initial_m, shocks_m, actual, T_eff,
-        model.varnames, snames, q_vec, :arias
+        model.varnames, snames, q_vec, :arias,
+        n_draws, n_acc, max(0, n_draws - n_acc)
     )
 end
 
@@ -713,13 +729,17 @@ function Base.show(io::IO, hd::BayesianHistoricalDecomposition{T}) where {T}
 
     # Specification table
     q_str = join([string(round(q * 100, digits=0), "%") for q in hd.quantile_levels], ", ")
-    spec_data = [
+    spec_data = Any[
         "Identification method" string(hd.method);
         "Variables" n_vars;
         "Shocks" n_shocks;
         "Time periods" hd.T_eff;
         "Quantiles" q_str
     ]
+    if hd.n_requested > 0 && hd.n_failed > 0   # MC honesty (#244)
+        spec_data = vcat(spec_data,
+            Any["Effective draws" "$(hd.n_effective)/$(hd.n_requested) ($(hd.n_failed) dropped)"])
+    end
     _pretty_table(io, spec_data;
         title = "Bayesian Historical Decomposition",
         column_labels = ["Specification", ""],

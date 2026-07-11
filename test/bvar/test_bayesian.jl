@@ -612,4 +612,18 @@ end
     sf = sprint(show, f_drop)
     @test occursin("70/100", sf) && occursin("30 dropped", sf)
     @test !occursin("Effective draws", sprint(show, f))
+
+    # --- BayesianHistoricalDecomposition counts ---
+    hd = historical_decomposition(post; method=:cholesky)
+    @test hd.n_requested == 80
+    @test hd.n_effective + hd.n_failed == hd.n_requested
+    Te = hd.T_eff; q4 = zeros(Te, 2, 2, 3); p3 = zeros(Te, 2, 2); q3 = zeros(Te, 2, 3); m2 = zeros(Te, 2)
+    h11 = MacroEconometricModels.BayesianHistoricalDecomposition{Float64}(
+        q4, p3, q3, m2, m2, m2, Te, vars, shk, ql, :cholesky)
+    @test (h11.n_requested, h11.n_effective, h11.n_failed) == (0, 0, 0)
+    hd_drop = MacroEconometricModels.BayesianHistoricalDecomposition{Float64}(
+        q4, p3, q3, m2, m2, m2, Te, vars, shk, ql, :cholesky, 100, 70, 30)
+    sh = sprint(show, hd_drop)
+    @test occursin("70/100", sh) && occursin("30 dropped", sh)
+    @test !occursin("Effective draws", sprint(show, hd))
 end

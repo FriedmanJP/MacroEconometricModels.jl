@@ -531,6 +531,7 @@ function historical_decomposition(post::BayesianDSGE{T}, data::AbstractMatrix,
 
     return BayesianHistoricalDecomposition{T}(
         contrib_q, contrib_m, initial_q, initial_m, shocks_m, actual, T_obs,
-        var_names, shock_names, q_vec, :dsge_bayes
+        var_names, shock_names, q_vec, :dsge_bayes,
+        n_sim, n_valid, n_sim - n_valid
     )
 end
