@@ -69,7 +69,7 @@ With log utility the marginal propensity to consume out of total (financial plus
 ```math
 \begin{aligned}
 C_{t+1} &= (1+r_{t+1}) \left[ \beta\, C_t - \lambda\,(k_{t+1} + b) \right], \qquad \lambda = \frac{(1-\beta\gamma)(1-\gamma)}{\gamma} \\
-k_{t+1} &= (1+r_t)\, k_t + w_t - r_t\, b - C_t
+k_{t+1} &= (1+r_t)\, k_t + w_t - C_t
 \end{aligned}
 ```
 
@@ -84,7 +84,7 @@ The correction term is the discrete-time analog of Blanchard's continuous-time w
 
 ## Steady State
 
-`blanchard_steady_state` solves for capital by bracketed bisection, equating the budget-implied consumption ``C = r k + w - r b`` with the Euler-implied consumption ``C = (1+r)\lambda(k+b)/[\beta(1+r)-1]``. The solver selects the high-capital root continuously connected to the Ramsey economy.
+`blanchard_steady_state` solves for capital by bracketed bisection, equating the budget-implied consumption ``C = r k + w`` (``= f(k) - \delta k``; debt is net wealth and taxes ``r b`` service it, so the debt-service terms cancel in aggregate) with the Euler-implied consumption ``C = (1+r)\lambda(k+b)/[\beta(1+r)-1]``. The solver selects the high-capital root continuously connected to the Ramsey economy.
 
 ```@example olg
 ss = blanchard_steady_state(BlanchardOLG(; gamma=0.96))

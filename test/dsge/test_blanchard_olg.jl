@@ -46,6 +46,24 @@ using LinearAlgebra
         @test ss1.k < ss0.k && ss2.k < ss1.k                     # debt crowds out capital
     end
 
+    @testset "Debt-service C correction (#237/T137)" begin
+        # Aggregate consumption is C = r·k + w = f(k) − δk: debt is net wealth and
+        # taxes r·b service it, so the debt-service terms cancel. The old code
+        # subtracted a spurious −r·b, wrong for b ≠ 0 (a no-op only at b = 0).
+        mb = BlanchardOLG(; gamma=0.98, beta=0.96, alpha=0.36, delta=0.08, Z=1.0, b=0.1)
+        ss = blanchard_steady_state(mb)
+        @test ss.converged
+        @test isapprox(ss.C, ss.r * ss.k + ss.w; rtol=1e-8)          # NOT r·k+w−r·b
+        @test isapprox(ss.C, mb.Z * ss.k^mb.alpha - mb.delta * ss.k; rtol=1e-8)  # f(k)−δk
+        @test !isapprox(ss.C, ss.r * ss.k + ss.w - ss.r * mb.b; rtol=1e-6)  # ≠ old value
+        # Human wealth H keeps −r·b (after-tax labour income): legitimate reduction.
+        @test isapprox(ss.H, (ss.w - ss.r * mb.b) * (1 + ss.r) / (1 + ss.r - mb.gamma); rtol=1e-8)
+        # M[1,1] must stay (1+r) — the issue's proposed −b·r'(k) term is WRONG.
+        sol = blanchard_solve(mb, ss)
+        @test isapprox(sol.M[1, 1], 1 + ss.r)
+        @test count(<(1.0 - 1e-9), abs.(sol.eigenvalues)) == 1       # one stable root
+    end
+
     @testset "Saddle-path dynamics" begin
         m = BlanchardOLG(; gamma=0.98, beta=0.96)
         ss = blanchard_steady_state(m)
