@@ -277,8 +277,68 @@ end
     @test size(result[:consumption]) == (30, 20, 3)
     @test size(result[:liquid_savings]) == (30, 20, 3)
     @test size(result[:deposit]) == (30, 20, 3)
-    # Consumption should be positive
+    # Consumption should be positive and finite
     @test all(result[:consumption] .> 0)
+    @test all(isfinite, result[:consumption])
+    @test all(isfinite, result[:deposit])
+end
+
+@testset "Two-asset nested EGM: state-dependent deposit (#232/T133)" begin
+    # The rewritten solver must (a) yield a genuinely state-dependent deposit
+    # d(b,a,e) that varies across the liquid index b (the old code stored a single
+    # scalar deposit per (a,e)); and (b) return policies whose *liquid* Euler
+    # residual is small (the old code returned near-seed policies with O(1)
+    # residuals). Use a well-posed calibration β(1+r_a) < 1 (the r_a=0.02/β=0.99
+    # standard case above is explosive for the illiquid asset).
+    beta = 0.95
+    grid2 = HAGrid(; liquid=(0.0, 20.0, 30), illiquid=(0.0, 50.0, 20), income_states=3)
+    inc = rouwenhorst(0.966, 0.5, 3)
+    ip2 = IndividualProblem{Float64}(
+        c -> log(c), c -> 1.0/c, m -> 1.0/m, beta,
+        (b, a, e, prices) -> (1 + prices[:r_b]) * b + prices[:w] * e,
+        [0.0, 0.0], MacroEconometricModels._hank2_adjustment_cost, 2
+    )
+    prices2 = Dict(:r => 0.01, :r_b => 0.01, :r_a => 0.015, :w => 1.0)
+    res = MacroEconometricModels._two_asset_egm_solve(ip2, grid2, inc, prices2;
+        max_iter=400, tol=1e-6, n_deposit=10)
+    c = res[:consumption]; b = res[:liquid_savings]; d = res[:deposit]
+    b_grid = grid2.grids[1]; a_grid = grid2.grids[2]; e_vals = inc.states
+    n_b, n_a, n_e = size(c)
+    r_b = prices2[:r_b]; r_a = prices2[:r_a]
+
+    @test res[:converged][1] == 1.0
+    @test all(c .> 0)
+    # Interior consumption (not the degenerate deposit-everything corner)
+    @test count(>(0.1), c) / length(c) > 0.5
+
+    # (1) deposit is NON-constant across the liquid index b for some (a,e)
+    nonconst = false
+    for je in 1:n_e, ia in 1:n_a
+        col = @view d[:, ia, je]
+        if maximum(col) - minimum(col) > 1e-6
+            nonconst = true; break
+        end
+    end
+    @test nonconst
+
+    # (2) liquid Euler residual is small at genuinely-interior states
+    resids = Float64[]
+    for je in 1:n_e, ia in 3:(n_a-2), ib in 1:n_b
+        bprime = b[ib, ia, je]
+        bprime <= b_grid[1] + 1e-6 && continue
+        bprime >= b_grid[end] - 1e-6 && continue
+        c[ib, ia, je] < 1e-2 && continue
+        aprime = (1 + r_a) * a_grid[ia] + d[ib, ia, je]
+        cps = [MacroEconometricModels._bilinear_interp(b_grid, a_grid,
+                   view(c, :, :, jep), bprime, aprime) for jep in 1:n_e]
+        minimum(cps) < 1e-2 && continue
+        emu = sum(inc.transition[je, jep] / cps[jep] for jep in 1:n_e)
+        push!(resids, abs(1 - beta * (1 + r_b) * emu * c[ib, ia, je]))
+    end
+    sort!(resids)
+    @test length(resids) > 100
+    @test resids[cld(length(resids), 2)] < 1e-2          # median
+    @test resids[cld(9 * length(resids), 10)] < 1.2e-1   # p90 (illiquid grid limited)
 end
 
 # ─────────────────────────────────────────────────────────────────────────────

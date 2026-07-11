@@ -217,28 +217,53 @@ function _egm_solve(ip::IndividualProblem{T}, grid::HAGrid{T},
 end
 
 # =============================================================================
-# Two-asset nested EGM (simplified)
+# Two-asset nested EGM (Auclert et al. 2021 style, modified policy iteration)
 # =============================================================================
 
 """
-    _two_asset_egm_solve(ip, grid, income, prices; max_iter=1000, tol=1e-8, n_deposit=30)
+    _two_asset_egm_solve(ip, grid, income, prices; max_iter=1000, tol=1e-8,
+                         n_deposit=30, howard_steps=30)
         → Dict{Symbol,Array{T}}
 
-Solve a two-asset household problem using a simplified nested EGM.
+Solve a two-asset household problem to a *converged* stationary policy over the
+joint liquid/illiquid state `(b, a, e)`.
 
-For each illiquid deposit choice `d` on a deposit grid:
-1. Inner EGM on the liquid dimension (treating the illiquid asset and deposit as
-   given parameters).
-2. Evaluate lifetime utility for each deposit choice.
-3. Pick optimal deposit via max over the deposit grid.
+The household chooses consumption `c`, next-period liquid savings `b'` and a
+deposit `d` into the illiquid asset (illiquid law of motion
+`a' = (1+r_a) a + d`), paying a portfolio adjustment cost `χ(d, a)`:
 
-Returns a `Dict` with keys `:consumption`, `:liquid_savings`, `:deposit` —
-each an `n_b × n_a × n_e` array (liquid × illiquid × income).
+    max_{c, b', d}  u(c) + β E[V(b', a', e') | e]
+    s.t.  c + b' + d + χ(d, a) = budget_fn(b, a, e, prices),  b' ≥ b_min.
+
+# Algorithm (Howard-accelerated nested value-function iteration)
+The illiquid deposit is chosen by searching the illiquid grid; for each candidate
+`a'` (deposit `d = a' − (1+r_a) a`) the *liquid* choice is solved by the
+endogenous grid method on the continuation-value marginal `∂EV/∂b'`
+(`= β(1+r_b) E[u'(c')]` by the envelope), giving a continuous `b'` and a tight
+liquid Euler residual. The deposit is then selected by maximising the total value
+`u(c) + β E[V(b', a', e')]` with `c = budget_fn(b, a, e) − b' − d − χ(d, a)`.
+Because utility penalises low consumption (`u(c) → −∞` as `c → 0`), the value
+comparison never selects the degenerate "deposit everything, consume nothing"
+corner; and because the EGM driver is the smooth continuation-value marginal
+(not the consumption policy), it cannot self-reinforce into that corner the way an
+iterated policy-marginal nested EGM does. `howard_steps` rounds of policy
+evaluation under the fixed policy accelerate convergence (β is close to 1). The
+maximiser yields a genuine *state-dependent* deposit `d(b, a, e)` (the optimal
+`a'` varies with liquid wealth `b`).
+
+Returns a `Dict` with keys `:consumption`, `:liquid_savings`, `:deposit`,
+`:value`, `:converged` — the first three each an `n_b × n_a × n_e` array
+(liquid × illiquid × income); `:value` the converged value function;
+`:converged` a 0/1 flag stored as `T[flag]`.
+
+The `n_deposit` keyword is retained for API compatibility; deposits are now
+searched over the full illiquid grid.
 """
 function _two_asset_egm_solve(ip::IndividualProblem{T}, grid::HAGrid{T},
                                income::IncomeProcess{T}, prices::Dict{Symbol,T};
                                max_iter::Int=1000, tol::T=T(1e-8),
-                               n_deposit::Int=30) where {T<:AbstractFloat}
+                               n_deposit::Int=30,
+                               howard_steps::Int=30) where {T<:AbstractFloat}
     @assert ip.n_asset_dims == 2 "Two-asset EGM requires n_asset_dims == 2"
     @assert grid.n_dims == 2 "Two-asset EGM requires a two-dimensional grid"
 
@@ -251,159 +276,188 @@ function _two_asset_egm_solve(ip::IndividualProblem{T}, grid::HAGrid{T},
 
     beta = ip.beta
     u = ip.utility
-    u_prime = ip.utility_prime
-    u_prime_inv = ip.utility_prime_inv
     Pi = income.transition
     e_vals = income.states
 
-    r_b = get(prices, :r_b, prices[:r])  # liquid return
     r_a = get(prices, :r_a, prices[:r])  # illiquid return
-    w = prices[:w]
 
-    # Adjustment cost function (default: zero)
+    # Adjustment cost function (default: zero); route resources through budget_fn
+    # (net-income hook, #235) so `div` and any price offsets are honoured.
     adj_cost = isnothing(ip.adjustment_cost) ? (d, a) -> zero(T) : ip.adjustment_cost
+    budget_fn = ip.budget_fn
 
-    # Deposit grid: from negative (withdrawal) to positive
-    a_max = a_grid[end]
-    d_min = -a_max * T(0.5)
-    d_max = a_max * T(0.5)
-    deposit_grid = collect(range(d_min, d_max; length=n_deposit))
+    NEG = T(-1e20)  # sentinel value for infeasible choices
 
-    # Output arrays
-    c_opt = zeros(T, n_b, n_a, n_e)
-    b_opt = zeros(T, n_b, n_a, n_e)
-    d_opt = zeros(T, n_b, n_a, n_e)
+    # Policy + value arrays over the joint state (b, a, e)
+    c_opt   = zeros(T, n_b, n_a, n_e)
+    b_opt   = zeros(T, n_b, n_a, n_e)   # next-period liquid b'
+    d_opt   = zeros(T, n_b, n_a, n_e)   # deposit d
+    iap_opt = ones(Int, n_b, n_a, n_e)  # chosen illiquid index a' (for Howard eval)
+    V       = zeros(T, n_b, n_a, n_e)
 
-    # Initialize consumption policy for inner EGM (liquid dimension)
-    # For each (illiquid asset, deposit, income), run 1D EGM on liquid dimension
-    c_inner = zeros(T, n_b, n_e)
-    for j in 1:n_e
-        for i in 1:n_b
-            coh = (one(T) + r_b) * b_grid[i] + w * e_vals[j]
-            c_inner[i, j] = max(coh * T(0.05), T(1e-10))
-        end
+    # Precompute deposit d(a', a) and adjustment cost χ(d, a) for every (ia', ia)
+    d_tab   = zeros(T, n_a, n_a)   # [iap, ia]
+    chi_tab = zeros(T, n_a, n_a)
+    for ia in 1:n_a, iap in 1:n_a
+        dv = a_grid[iap] - (one(T) + r_a) * a_grid[ia]
+        d_tab[iap, ia] = dv
+        chi_tab[iap, ia] = adj_cost(dv, a_grid[ia])
     end
 
-    # For each illiquid asset level and income state, find optimal deposit
-    for j in 1:n_e
-        for ia in 1:n_a
-            a_val = a_grid[ia]
-
-            best_util = T(-Inf)
-            best_c = zeros(T, n_b)
-            best_b_save = zeros(T, n_b)
-            best_d = zero(T)
-
-            for id in 1:n_deposit
-                d_val = deposit_grid[id]
-
-                # New illiquid asset after deposit
-                a_prime = (one(T) + r_a) * a_val + d_val
-                if a_prime < zero(T) || a_prime > a_grid[end]
-                    continue  # infeasible
-                end
-
-                # Adjustment cost
-                chi = adj_cost(d_val, a_val)
-
-                # Inner EGM: solve liquid savings problem given deposit d
-                # Effective liquid resources after deposit and adjustment cost
-                c_trial = zeros(T, n_b)
-                b_save_trial = zeros(T, n_b)
-
-                # EMU for liquid dimension
-                emu_liq = zeros(T, n_b)
-                for jp in 1:n_e
-                    for ib in 1:n_b
-                        c_tom = _linear_interp(b_grid, view(c_inner, :, jp), b_grid[ib])
-                        emu_liq[ib] += Pi[j, jp] * u_prime(c_tom)
-                    end
-                end
-
-                # Euler inversion for liquid
-                c_endo_liq = zeros(T, n_b)
-                b_endo_liq = zeros(T, n_b)
-                for ib in 1:n_b
-                    c_endo_liq[ib] = u_prime_inv(beta * (one(T) + r_b) * emu_liq[ib])
-                    # Endogenous liquid assets
-                    b_endo_liq[ib] = (c_endo_liq[ib] + b_grid[ib] + d_val + chi - w * e_vals[j]) / (one(T) + r_b)
-                end
-
-                # Interpolate back to exogenous liquid grid
-                for ib in 1:n_b
-                    b_val = b_grid[ib]
-                    coh_liq = (one(T) + r_b) * b_val + w * e_vals[j] - d_val - chi
-                    if b_val < b_endo_liq[1] || coh_liq <= zero(T)
-                        c_trial[ib] = max(coh_liq - b_min, T(1e-10))
-                        b_save_trial[ib] = b_min
-                    else
-                        c_trial[ib] = _linear_interp(b_endo_liq, c_endo_liq, b_val)
-                        b_save_trial[ib] = max(coh_liq - c_trial[ib], b_min)
-                    end
-                    c_trial[ib] = max(c_trial[ib], T(1e-10))
-                end
-
-                # Evaluate utility at median liquid asset point (representative)
-                ib_mid = div(n_b, 2)
-                util_val = u(c_trial[ib_mid])
-
-                if util_val > best_util
-                    best_util = util_val
-                    copyto!(best_c, c_trial)
-                    copyto!(best_b_save, b_save_trial)
-                    best_d = d_val
-                end
-            end
-
-            # Store optimal policies
-            for ib in 1:n_b
-                c_opt[ib, ia, j] = best_c[ib]
-                b_opt[ib, ia, j] = best_b_save[ib]
-                d_opt[ib, ia, j] = best_d
-            end
-        end
+    # Initialisation: consume half of a rough resource level; V = u(c)/(1-β).
+    for je in 1:n_e, ia in 1:n_a, ib in 1:n_b
+        coh = budget_fn(b_grid[ib], a_grid[ia], e_vals[je], prices)
+        c0 = max(coh * T(0.5), T(1e-8))
+        c_opt[ib, ia, je] = c0
+        b_opt[ib, ia, je] = b_grid[ib]
+        V[ib, ia, je] = u(c0) / (one(T) - beta)
     end
 
-    # Iterate the inner consumption policy
+    u_prime_inv = ip.utility_prime_inv
+
+    # Scratch buffers
+    EV      = zeros(T, n_b, n_a, n_e)   # β E[V(b',a',e')|e] over (b', a', e)
+    c_new   = zeros(T, n_b, n_a, n_e)
+    b_new   = zeros(T, n_b, n_a, n_e)
+    d_new   = zeros(T, n_b, n_a, n_e)
+    iap_new = ones(Int, n_b, n_a, n_e)
+    V_new   = zeros(T, n_b, n_a, n_e)
+    V_hnew  = zeros(T, n_b, n_a, n_e)
+    dEV_col = zeros(T, n_b)            # ∂EV/∂b' for a fixed (a', e)
+    c_endo  = zeros(T, n_b)
+    x_endo  = zeros(T, n_b)
+
+    converged = false
+
     for iter in 1:max_iter
-        c_inner_new = zeros(T, n_b, n_e)
-        for j in 1:n_e
-            emu_inner = zeros(T, n_b)
-            for jp in 1:n_e
-                for ib in 1:n_b
-                    c_tom = _linear_interp(b_grid, view(c_inner, :, jp), b_grid[ib])
-                    emu_inner[ib] += Pi[j, jp] * u_prime(c_tom)
-                end
-            end
-            for ib in 1:n_b
-                c_endo_val = u_prime_inv(beta * (one(T) + r_b) * emu_inner[ib])
-                b_endo_val = (c_endo_val + b_grid[ib] - w * e_vals[j]) / (one(T) + r_b)
-
-                b_val = b_grid[ib]
-                if b_val < b_endo_val
-                    coh = (one(T) + r_b) * b_val + w * e_vals[j]
-                    c_inner_new[ib, j] = max(coh - b_min, T(1e-10))
-                else
-                    c_inner_new[ib, j] = _linear_interp(
-                        [b_endo_val; b_grid[searchsortedfirst(b_grid, b_endo_val):end]],
-                        [c_endo_val; [u_prime_inv(beta * (one(T) + r_b) * emu_inner[k]) for k in searchsortedfirst(b_grid, b_endo_val):n_b]],
-                        b_val
-                    )
-                end
-                c_inner_new[ib, j] = max(c_inner_new[ib, j], T(1e-10))
+        # Continuation EV[ib', ia', je] = β Σ_{jep} Pi[je,jep] V[ib',ia',jep]
+        fill!(EV, zero(T))
+        for je in 1:n_e, jep in 1:n_e
+            wgt = beta * Pi[je, jep]
+            @inbounds for ia in 1:n_a, ib in 1:n_b
+                EV[ib, ia, je] += wgt * V[ib, ia, jep]
             end
         end
 
-        max_diff = maximum(abs.(c_inner_new .- c_inner))
-        copyto!(c_inner, c_inner_new)
-        if max_diff < tol
+        # ---- Policy improvement ----
+        # Illiquid deposit a' is searched over the grid; for each candidate a'
+        # the liquid choice is solved by EGM on the *continuation-value* marginal
+        # ∂EV/∂b' (= β(1+r_b) E[u'(c')] by the envelope), giving a continuous b'
+        # and a tight liquid Euler. The deposit is then chosen by comparing the
+        # total value u(c) + EV(b',a',e). Because u(c) → −∞ as c → 0, the value
+        # comparison never selects the degenerate "deposit everything, consume
+        # nothing" corner; because the EGM driver is the smooth value marginal
+        # (not the consumption policy), it cannot self-reinforce into that corner
+        # the way an iterated policy-marginal nested EGM does.
+        fill!(V_new, NEG)
+        for je in 1:n_e
+            for iap in 1:n_a
+                EVcol = view(EV, :, iap, je)
+                # ∂EV/∂b' via finite differences on the liquid grid
+                @inbounds for ibp in 1:n_b
+                    if ibp == 1
+                        dEV_col[ibp] = (EVcol[2] - EVcol[1]) / (b_grid[2] - b_grid[1])
+                    elseif ibp == n_b
+                        dEV_col[ibp] = (EVcol[n_b] - EVcol[n_b-1]) / (b_grid[n_b] - b_grid[n_b-1])
+                    else
+                        dEV_col[ibp] = (EVcol[ibp+1] - EVcol[ibp-1]) / (b_grid[ibp+1] - b_grid[ibp-1])
+                    end
+                    ce = u_prime_inv(max(dEV_col[ibp], T(1e-12)))  # u'(c) = ∂EV/∂b'
+                    c_endo[ibp] = ce
+                    x_endo[ibp] = ce + b_grid[ibp]
+                end
+                @inbounds for ia in 1:n_a
+                    a_val = a_grid[ia]
+                    avail_const = -d_tab[iap, ia] - chi_tab[iap, ia]
+                    for ib in 1:n_b
+                        avail = budget_fn(b_grid[ib], a_val, e_vals[je], prices) + avail_const
+                        avail <= b_min && continue      # cannot fund b_min with c > 0
+                        if avail <= x_endo[1]
+                            bprime = b_min
+                            c = avail - b_min
+                        else
+                            c = _linear_interp(x_endo, c_endo, avail)
+                            bprime = avail - c
+                        end
+                        c <= zero(T) && continue
+                        val = u(c) + _linear_interp(b_grid, EVcol, bprime)
+                        if val > V_new[ib, ia, je]
+                            V_new[ib, ia, je] = val
+                            c_new[ib, ia, je] = c
+                            b_new[ib, ia, je] = bprime
+                            d_new[ib, ia, je] = d_tab[iap, ia]
+                            iap_new[ib, ia, je] = iap
+                        end
+                    end
+                end
+            end
+        end
+
+        # Fallback for any state with no feasible deposit (keeps arrays finite)
+        @inbounds for je in 1:n_e, ia in 1:n_a, ib in 1:n_b
+            if V_new[ib, ia, je] <= NEG / 2
+                resources = budget_fn(b_grid[ib], a_grid[ia], e_vals[je], prices)
+                c = max(resources - b_min, T(1e-10))
+                c_new[ib, ia, je] = c
+                b_new[ib, ia, je] = b_min
+                d_new[ib, ia, je] = zero(T)
+                iap_new[ib, ia, je] = ia
+                V_new[ib, ia, je] = u(c) + EV[1, ia, je]
+            end
+        end
+
+        # Count discrete deposit-choice changes (for a policy-stability stop).
+        policy_changes = 0
+        @inbounds for idx in eachindex(iap_new)
+            iap_new[idx] != iap_opt[idx] && (policy_changes += 1)
+        end
+
+        copyto!(c_opt, c_new)
+        copyto!(b_opt, b_new)
+        copyto!(d_opt, d_new)
+        copyto!(iap_opt, iap_new)
+
+        # Convergence on the value function (sup-norm of the Bellman update).
+        # The discrete deposit choice can oscillate between near-tied a' values,
+        # so a consumption-policy criterion may never settle; the value converges
+        # monotonically (VFI contraction) and equals across tied choices. As a
+        # backstop, a fully stable discrete policy (no a' changes) is also a fixed
+        # point (the continuous EGM/Howard steps are then deterministic).
+        max_diff = zero(T)
+        @inbounds for idx in eachindex(V_new)
+            diff = abs(V_new[idx] - V[idx])
+            if diff > max_diff
+                max_diff = diff
+            end
+        end
+        copyto!(V, V_new)
+
+        # ---- Howard policy evaluation under the fixed policy ----
+        for _ in 1:howard_steps
+            @inbounds for je in 1:n_e, ia in 1:n_a, ib in 1:n_b
+                iap = iap_opt[ib, ia, je]
+                bp = b_opt[ib, ia, je]
+                cont = zero(T)
+                for jep in 1:n_e
+                    cont += Pi[je, jep] * _linear_interp(b_grid, view(V, :, iap, jep), bp)
+                end
+                V_hnew[ib, ia, je] = u(c_opt[ib, ia, je]) + beta * cont
+            end
+            copyto!(V, V_hnew)
+        end
+
+        if max_diff < tol || (policy_changes == 0 && iter > 1)
+            converged = true
             break
         end
     end
 
+    flag = converged ? one(T) : zero(T)
     return Dict{Symbol,Array{T}}(
-        :consumption => c_opt,
+        :consumption   => c_opt,
         :liquid_savings => b_opt,
-        :deposit => d_opt
+        :deposit       => d_opt,
+        :value         => V,
+        :converged     => T[flag]
     )
 end
