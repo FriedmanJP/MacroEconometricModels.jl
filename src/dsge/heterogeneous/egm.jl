@@ -169,9 +169,9 @@ function _egm_solve(ip::IndividualProblem{T}, grid::HAGrid{T},
             fill!(emu, zero(T))
             for jp in 1:n_e
                 for i in 1:n_a
-                    # Consumption tomorrow at (a'_i, e_jp) by interpolation on current policy
-                    c_tomorrow = _linear_interp(a_grid, view(c_pol, :, jp), a_grid[i])
-                    emu[i] += Pi[j, jp] * u_prime(c_tomorrow)
+                    # a'_i is a grid node, so interpolating the current policy there
+                    # returns the exact indexed value c_pol[i, jp] (#242 no-op interp).
+                    emu[i] += Pi[j, jp] * u_prime(c_pol[i, jp])
                 end
             end
 

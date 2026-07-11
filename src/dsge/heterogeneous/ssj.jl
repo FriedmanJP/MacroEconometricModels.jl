@@ -90,8 +90,9 @@ function _egm_backward_step(ip::IndividualProblem{T}, grid::HAGrid{T},
         fill!(emu, zero(T))
         for jp in 1:n_e
             for i in 1:n_a
-                c_tomorrow = _linear_interp(a_grid, view(c_next, :, jp), a_grid[i])
-                emu[i] += Pi[j, jp] * u_prime(c_tomorrow)
+                # a'_i is a grid node ⇒ the interpolation is the exact indexed
+                # value c_next[i, jp] (#242 no-op interp).
+                emu[i] += Pi[j, jp] * u_prime(c_next[i, jp])
             end
         end
         for i in 1:n_a

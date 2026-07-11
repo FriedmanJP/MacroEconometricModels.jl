@@ -179,7 +179,10 @@ function _reiter_linearize(ss::HASteadyState{T}, ip::IndividualProblem{T},
     # Λ' on the capital aggregation vector.  The SVD of their combination
     # captures the directions most relevant for aggregate dynamics.
 
-    Lambda_dense = Matrix{T}(Lambda_ss)
+    # Λ_ss is an N×N sparse transition (N = n_a·n_e). Only sparse mat-vec/mat-mat
+    # and a tall-thin SVD of the (dense, N×n_obs) observability matrix are needed,
+    # so we never densify Λ_ss (#242). The economy `svd(O_mat)` below is kept
+    # deterministic (NOT swapped for a randomized SVD).
 
     # Build the capital aggregation vector
     a_vec_pre = zeros(T, N)
@@ -197,7 +200,7 @@ function _reiter_linearize(ss::HASteadyState{T}, ip::IndividualProblem{T},
     v_obs = copy(a_vec_pre)
     for k in 1:n_obs
         O_mat[:, k] .= v_obs
-        v_obs = Lambda_dense' * v_obs
+        v_obs = Lambda_ss' * v_obs          # sparse transpose mat-vec
     end
 
     # SVD of O_mat to get the dominant observable directions
@@ -217,7 +220,7 @@ function _reiter_linearize(ss::HASteadyState{T}, ip::IndividualProblem{T},
     # ── Step 3: Build reduced distribution transition ─────────────────────────
     # G1_dist = U_k' Λ_ss U_k  (project transition into reduced coordinates)
 
-    G1_dist = U_k' * Lambda_dense * U_k   # n_red × n_red
+    G1_dist = U_k' * (Lambda_ss * U_k)    # n_red × n_red (sparse×dense, then project)
 
     # ── Step 4: Capital loading ───────────────────────────────────────────────
     # K is a linear function of the distribution: K = a_grid' * d
@@ -249,7 +252,7 @@ function _reiter_linearize(ss::HASteadyState{T}, ip::IndividualProblem{T},
         delta_test = dx_T .* noise
 
         # Full response
-        dK_full = dot(a_vec, Lambda_dense * delta_test)
+        dK_full = dot(a_vec, Lambda_ss * delta_test)   # sparse mat-vec
 
         # Reduced response
         d_tilde = U_k' * delta_test

@@ -241,7 +241,9 @@ function ct_kfe(A::SparseMatrixCSC{T,Int}, I::Int, da::T) where {T<:AbstractFloa
     AT[1, :] .= zero(T)
     AT[1, 1] = one(T)
     b[1] = one(T)
-    g_vec = Matrix(AT) \ b
+    # Sparse LU on the SparseMatrixCSC directly — never materialise the dense
+    # 2I×2I matrix (#242).
+    g_vec = lu(AT) \ b
     g_vec = max.(g_vec, zero(T))
     mass = sum(g_vec) * da
     g_vec ./= mass

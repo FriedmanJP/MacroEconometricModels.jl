@@ -765,6 +765,36 @@ end
                 max_iter=60, tol=1e-4) isa MacroEconometricModels.HASteadyState
 end
 
+@testset "Stationary distribution single-solve (#242/T143)" begin
+    # `_stationary_dist_young` now solves the RIGHT eigenvector of the
+    # column-stochastic Λ in ONE sparse LU solve instead of power iteration. It
+    # must equal the power-iteration output (the wrong (I−Λ')g=0 transpose would
+    # instead give the LEFT eigenvector = uniform, which power iteration rejects).
+    grid = HAGrid(assets=(0.0, 200.0, 120), income_states=5)
+    inc = rouwenhorst(0.966, 0.5, 5)
+    ip = IndividualProblem{Float64}(c -> log(c), c -> 1.0/c, m -> 1.0/m, 0.99,
+            (a, e, pr) -> (1 + pr[:r]) * a + pr[:w] * e, [0.0], nothing, 1)
+    _, a_pol, _ = MacroEconometricModels._egm_solve(ip, grid, inc,
+            Dict(:r => 0.01, :w => 1.0); max_iter=1000, tol=1e-12)
+    Lambda = MacroEconometricModels._build_transition_matrix(a_pol, grid, inc)
+
+    g, conv = MacroEconometricModels._stationary_dist_young(Lambda)
+    @test conv == true
+    @test sum(g) ≈ 1.0 atol=1e-12
+    @test all(g .>= 0)
+    @test maximum(abs.(Lambda * g .- g)) < 1e-10        # stationary: Λg = g
+
+    # matches an independent power-iteration reference (not the uniform vector)
+    d = fill(1.0 / length(g), length(g))
+    for _ in 1:200_000
+        dn = Lambda * d; dn ./= sum(dn)
+        maximum(abs.(dn .- d)) < 1e-14 && (d = dn; break)
+        d = dn
+    end
+    @test maximum(abs.(g .- d)) < 1e-8
+    @test maximum(abs.(g .- fill(1.0/length(g), length(g)))) > 1e-3   # NOT uniform
+end
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Section 14b: HA observation map (#227)
 # ─────────────────────────────────────────────────────────────────────────────
