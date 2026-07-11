@@ -1162,6 +1162,50 @@ end
         end
         @test spec_std isa DSGESpec{Float64}
     end
+
+    @testset "CRRA curvature and model routing (#239/T140)" begin
+        # σ ≠ 1 CRRA is parsed (old code always forced σ = 1.0 / log utility)
+        spec = @dsge begin
+            parameters: alpha = 0.36, beta_hh = 0.99, delta = 0.025, rho_z = 0.95, sigma_z = 0.007
+            endogenous: Y, K, r, w, Z
+            exogenous: eps_Z
+            heterogeneous: a in [0.0, 200.0], n_grid = 60, utility = crra(1.5), discount = beta_hh, borrowing = 0.0
+            idiosyncratic: e ~ Rouwenhorst(0.966, 0.5, 5)
+            aggregation: K = sum(a)
+            Y[t] = Z[t] * K[t-1]^alpha
+            r[t] = alpha * Z[t] * K[t-1]^(alpha-1) - delta
+            w[t] = (1 - alpha) * Z[t] * K[t-1]^alpha
+            Z[t] = rho_z * Z[t-1] + sigma_z * eps_Z[t]
+        end
+        @test spec.individual.utility_prime(2.0) ≈ 2.0^(-1.5)
+        @test spec.individual.utility(2.0) ≈ 2.0^(1 - 1.5) / (1 - 1.5)
+        @test spec.model == :aiyagari    # default model field
+
+        # model = huggett routes into the ctor; macro-controlled fields match
+        spec_h = @dsge begin
+            parameters: alpha = 0.36, beta_hh = 0.99322, delta = 0.025, rho_z = 0.9, sigma_z = 0.01
+            endogenous: Y, K, r, w, Z
+            exogenous: eps_Z
+            heterogeneous: a in [-2.0, 4.0], n_grid = 80, utility = crra(1.5), discount = beta_hh, borrowing = -2.0, model = huggett
+            idiosyncratic: e ~ Rouwenhorst(0.9, 0.1, 3)
+            aggregation: K = sum(a)
+            Y[t] = Z[t] * K[t-1]^alpha
+            r[t] = alpha * Z[t] * K[t-1]^(alpha-1) - delta
+            w[t] = (1 - alpha) * Z[t] * K[t-1]^alpha
+            Z[t] = rho_z * Z[t-1] + sigma_z * eps_Z[t]
+        end
+        @test spec_h.model == :huggett
+        @test spec_h.grid.bounds[1] == (-2.0, 4.0)
+        @test spec_h.individual.borrowing_constraint[1] ≈ -2.0
+        @test spec_h.individual.beta ≈ 0.99322
+        @test spec_h.individual.utility_prime(2.0) ≈ 2.0^(-1.5)
+
+        # the built Huggett spec solves
+        ss = compute_steady_state(spec_h; max_iter=80, tol=1e-3)
+        sol = solve(spec_h; method=:ssj, ss=ss, T_horizon=80, n_reduced=15)
+        @test sol isa HADSGESolution
+        @test sol.method === :ssj
+    end
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
