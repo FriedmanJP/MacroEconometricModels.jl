@@ -1008,15 +1008,29 @@ end
         @test H[1, 1] == 0  # zero default measurement error (T042)
         @test all(iszero, H)
 
+        # #228/T129: Z is the C_obs row for the matched aggregate (:K), NOT a silent
+        # unit-loading at an arbitrary reduced-state index.
+        @test Z ≈ reshape(sol.C_obs[1, :], 1, :)
+
         # Custom measurement error
         Z2, d2, H2 = MacroEconometricModels._build_ha_observation_equation(
             sol, [:K], [0.5]
         )
         @test H2[1, 1] ≈ 0.25  # 0.5^2
 
-        # Stochastic singularity: 2 observables > 1 aggregate reduced shock, no ME (T042).
-        @test_throws MacroEconometricModels.StochasticSingularityError MacroEconometricModels._build_ha_observation_equation(
-            sol, [:K, :Y], nothing)
+        # #228/T129: an observable absent from the reduced system's aggregate outputs
+        # raises an informative error naming it (the SSJ realization exposes only :K),
+        # instead of the old silent arbitrary-index fallback.
+        err = try
+            MacroEconometricModels._build_ha_observation_equation(sol, [:K, :Y], nothing)
+            nothing
+        catch e
+            e
+        end
+        @test err isa ErrorException
+        @test occursin("Y", err.msg)
+        @test_throws ErrorException MacroEconometricModels._build_ha_observation_equation(
+            sol, [:nonexistent], nothing)
     end
 
     @testset "estimate_dsge_bayes dispatch" begin
