@@ -1094,13 +1094,27 @@ end
 
     @testset "_select_d_heuristic ADF iteration (#209 R-24)" begin
         M = MacroEconometricModels
-        rng = Random.MersenneTwister(2409)
+        # `randn(::MersenneTwister)` is NOT stream-stable across Julia versions
+        # (the 1.10 vs 1.11+ streams differ), and this is a unit-root test decided
+        # right at the 5% threshold — a seeded random draw therefore spuriously
+        # rejected the unit root on Julia LTS. Build the innovations from a
+        # self-contained LCG (UInt64 arithmetic wraps mod 2^64) so the series, and
+        # hence the ADF verdict, are identical on every Julia version and platform.
+        _lcg_uniform(n::Int, seed::UInt64) = begin
+            x = seed
+            out = Vector{Float64}(undef, n)
+            for i in 1:n
+                x = 0x5851f42d4c957f2d * x + 0x14057b7ef767814f
+                out[i] = Float64(x >> 11) / Float64(UInt64(1) << 53) - 0.5   # U(-0.5, 0.5)
+            end
+            out
+        end
+        innov = _lcg_uniform(180, UInt64(2409))
         # I(1) random walk → ADF fails to reject at d=0, rejects after one difference ⇒ d ≥ 1
-        rw = cumsum(randn(rng, 150))
+        rw = cumsum(innov)
         @test M._select_d_heuristic(rw, 2) >= 1
-        # I(0) white noise → ADF rejects immediately ⇒ d = 0
-        wn = randn(rng, 150)
-        @test M._select_d_heuristic(wn, 2) == 0
+        # I(0) innovations → ADF rejects immediately ⇒ d = 0
+        @test M._select_d_heuristic(innov, 2) == 0
     end
 end
 
