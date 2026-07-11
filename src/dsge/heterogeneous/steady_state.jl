@@ -188,14 +188,36 @@ function _ha_steady_state(ip::IndividualProblem{T}, grid::HAGrid{T},
                 c_pol=c_pol, a_pol=a_pol, dist=dist, K_s=K_s)
     end
 
-    # Bracket check (#240/H-18): the interval must bracket a market-clearing rate.
+    # Bracket check + bounded widening (#240/H-18). excess(r) = K_s − K_d is
+    # increasing in r, so a market-clearing rate needs excess(r_lo) ≤ 0 ≤
+    # excess(r_hi). The old code only asserted r_lo < r_hi and then returned the
+    # closest midpoint even when the interval bracketed no root (a spurious rate).
+    # If the supplied interval does not bracket, EXPAND it — downward for a
+    # too-high r_lo, upward (capped just below 1/β−1, where household saving
+    # diverges) for a too-low r_hi — before giving up. This finds the true
+    # equilibrium of a valid model whose rate lies outside the default bounds
+    # rather than throwing or returning a spurious midpoint.
+    r_cap = one(T) / ip.beta - one(T) - T(1e-6)
     res_lo = eval_excess(r_lo, nothing)
     res_hi = eval_excess(r_hi, res_lo.c_pol)
+    widen = 0
+    while res_lo.excess > zero(T) && widen < 60
+        r_lo -= max(r_hi - r_lo, T(1e-3))          # expand downward
+        res_lo = eval_excess(r_lo, res_lo.c_pol)
+        widen += 1
+    end
+    widen = 0
+    while res_hi.excess < zero(T) && r_hi < r_cap && widen < 60
+        r_hi = min(r_hi + max(r_hi - r_lo, T(1e-3)), r_cap)   # expand upward, capped
+        res_hi = eval_excess(r_hi, res_hi.c_pol === nothing ? res_lo.c_pol : res_hi.c_pol)
+        widen += 1
+    end
     if !(res_lo.excess <= zero(T) <= res_hi.excess)
-        error("_ha_steady_state: r_bounds = ($r_lo, $r_hi) do not bracket a " *
-              "market-clearing rate — excess demand K_s − K_d does not change " *
-              "sign (excess(r_lo) = $(res_lo.excess), excess(r_hi) = $(res_hi.excess)). " *
-              "Widen r_bounds so the low rate has excess ≤ 0 and the high rate ≥ 0.")
+        error("_ha_steady_state: could not bracket a market-clearing rate after " *
+              "widening r_bounds to ($r_lo, $r_hi) — excess demand K_s − K_d does " *
+              "not change sign (excess(r_lo) = $(res_lo.excess), " *
+              "excess(r_hi) = $(res_hi.excess)). The model may admit no interior " *
+              "stationary equilibrium.")
     end
     warm_c = res_lo.c_pol !== nothing ? res_lo.c_pol : res_hi.c_pol
 

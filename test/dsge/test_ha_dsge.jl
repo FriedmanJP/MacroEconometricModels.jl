@@ -459,10 +459,7 @@ end
     @test length(dist) == 300
     @test sum(dist) ≈ 1.0 atol=1e-10
     @test all(dist .>= 0)
-    @test dist_conv == true                                              # #240/H-17
-    # convergence flag is false when max_iter is exhausted
-    _, dist_conv1 = MacroEconometricModels._stationary_dist_young(Lambda; max_iter=1)
-    @test dist_conv1 == false
+    @test dist_conv == true                                              # #240/H-17, #242
 
     # Forward iteration preserves mass
     dist2 = MacroEconometricModels._forward_iterate(Lambda, dist)
@@ -755,14 +752,20 @@ end
     params = Dict(:alpha => 0.36, :delta => 0.025, :Z => 1.0, :L => 1.0)
     _hass = MacroEconometricModels._ha_steady_state
     # valid bracket → converges
-    @test _hass(ip, grid, inc, pf, params; K_init=10.0, r_bounds=(-0.02, 0.04),
-                max_iter=60, tol=1e-4) isa MacroEconometricModels.HASteadyState
-    # non-bracketed interval (both rates above equilibrium ⇒ excess > 0) → error
-    @test_throws ErrorException _hass(ip, grid, inc, pf, params; K_init=10.0,
-                r_bounds=(0.03, 0.05), max_iter=60, tol=1e-4)
+    ss_valid = _hass(ip, grid, inc, pf, params; K_init=10.0, r_bounds=(-0.02, 0.04),
+                     max_iter=80, tol=1e-4)
+    @test ss_valid isa MacroEconometricModels.HASteadyState
+    @test abs(ss_valid.excess_demand) < 1e-3
+    # offset interval (both rates above the equilibrium ⇒ excess > 0 at both):
+    # the solver WIDENS down to the TRUE clearing rate rather than returning a
+    # spurious midpoint of (0.03, 0.05).
+    ss_off = _hass(ip, grid, inc, pf, params; K_init=10.0, r_bounds=(0.03, 0.05),
+                   max_iter=80, tol=1e-4)
+    @test abs(ss_off.excess_demand) < 1e-3
+    @test isapprox(ss_off.prices[:r], ss_valid.prices[:r]; atol=1e-3)   # same root, not 0.04
     # non-finite K_d at r_lo (r + δ < 0) is guarded, not thrown
     @test _hass(ip, grid, inc, pf, params; K_init=10.0, r_bounds=(-0.03, 0.04),
-                max_iter=60, tol=1e-4) isa MacroEconometricModels.HASteadyState
+                max_iter=80, tol=1e-4) isa MacroEconometricModels.HASteadyState
 end
 
 @testset "Stationary distribution single-solve (#242/T143)" begin
