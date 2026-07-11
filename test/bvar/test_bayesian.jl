@@ -575,3 +575,30 @@ end
     @test all(isfinite, fc1.forecast)
     @test all(fc1.ci_upper .>= fc1.ci_lower)
 end
+
+@testset "BVAR IRF MC honesty counts (#244)" begin
+    Random.seed!(4244)
+    Y = randn(120, 2)
+    post = estimate_bvar(Y, 2; n_draws=80, sampler=:direct)
+    b = irf(post, 8; method=:cholesky)
+    @test b.n_requested == 80
+    @test b.n_effective + b.n_failed == b.n_requested
+    @test 0 <= b.n_failed <= b.n_requested
+
+    # cumulation is a deterministic transform of the same draws — counts propagate
+    bc = cumulative_irf(b)
+    @test (bc.n_requested, bc.n_effective, bc.n_failed) == (b.n_requested, b.n_effective, b.n_failed)
+
+    # backward-compatible constructors: 6-arg ⇒ zero counts; 7-arg infers from draw count
+    q = zeros(8, 2, 2, 3); pe = zeros(8, 2, 2); vars = ["y1", "y2"]; shk = ["s1", "s2"]; ql = [0.16, 0.5, 0.84]
+    b6 = MacroEconometricModels.BayesianImpulseResponse{Float64}(q, pe, 8, vars, shk, ql)
+    @test (b6.n_requested, b6.n_effective, b6.n_failed) == (0, 0, 0)
+    b7 = MacroEconometricModels.BayesianImpulseResponse{Float64}(q, pe, 8, vars, shk, ql, zeros(50, 8, 2, 2))
+    @test (b7.n_requested, b7.n_effective, b7.n_failed) == (50, 50, 0)
+
+    # display surfaces dropped draws only when some were dropped
+    b_drop = MacroEconometricModels.BayesianImpulseResponse{Float64}(q, pe, 8, vars, shk, ql, nothing, 100, 60, 40)
+    s = sprint(show, b_drop)
+    @test occursin("Effective draws", s) && occursin("60/100", s) && occursin("40 dropped", s)
+    @test !occursin("Effective draws", sprint(show, b))
+end

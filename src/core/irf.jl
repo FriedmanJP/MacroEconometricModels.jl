@@ -260,7 +260,10 @@ function irf(post::BVARPosterior, horizon::Int;
     irf_q, irf_m = compute_posterior_quantiles(all_irfs, q_vec; threaded=use_threaded, central=point_estimate)
 
     snames = isnothing(shock_names) ? post.varnames : shock_names
-    BayesianImpulseResponse{ET}(irf_q, irf_m, horizon, post.varnames, snames, q_vec, all_irfs)
+    # MC honesty (#244): process_posterior_samples drops non-stationary / unidentified draws.
+    n_req = post.n_draws
+    BayesianImpulseResponse{ET}(irf_q, irf_m, horizon, post.varnames, snames, q_vec, all_irfs,
+                                n_req, samples, n_req - samples)
 end
 
 # Deprecated wrapper for old (chain, p, n, horizon) signature
@@ -394,6 +397,8 @@ function cumulative_irf(irf_result::BayesianImpulseResponse{T}) where {T<:Abstra
         cum_quantiles = cumsum(irf_result.quantiles, dims=1)
     end
 
+    # Cumulation is a deterministic transform of the same draws — propagate the MC counts.
     BayesianImpulseResponse{T}(cum_quantiles, cum_pe, irf_result.horizon,
-                               irf_result.variables, irf_result.shocks, irf_result.quantile_levels)
+                               irf_result.variables, irf_result.shocks, irf_result.quantile_levels,
+                               nothing, irf_result.n_requested, irf_result.n_effective, irf_result.n_failed)
 end

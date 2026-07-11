@@ -286,7 +286,11 @@ function favar_panel_irf(bfavar::BayesianFAVAR{T}, irf_result::BayesianImpulseRe
         panel_var_names,
         shock_names,
         irf_result.quantile_levels,
-        nothing  # no raw draws for panel mapping
+        nothing,  # no raw draws for panel mapping
+        # deterministic loadings projection of the source draws — propagate MC counts (#244)
+        irf_result.n_requested,
+        irf_result.n_effective,
+        irf_result.n_failed
     )
 end
 

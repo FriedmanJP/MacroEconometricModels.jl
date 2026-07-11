@@ -268,8 +268,12 @@ function Base.show(io::IO, irf::BayesianImpulseResponse{T}) where {T}
     nq = length(irf.quantile_levels)
 
     q_str = join([_fmt_pct(q; digits=0) for q in irf.quantile_levels], ", ")
-    _show_spec_table(io, "Bayesian Impulse Response Functions",
-        ["Variables" => n_vars, "Shocks" => n_shocks, "Horizon" => H, "Quantiles" => q_str])
+    spec_pairs = Pair{String,Any}[
+        "Variables" => n_vars, "Shocks" => n_shocks, "Horizon" => H, "Quantiles" => q_str]
+    if irf.n_requested > 0 && irf.n_failed > 0   # MC honesty (#244)
+        push!(spec_pairs, "Effective draws" => "$(irf.n_effective)/$(irf.n_requested) ($(irf.n_failed) dropped)")
+    end
+    _show_spec_table(io, "Bayesian Impulse Response Functions", spec_pairs)
 
     horizons_show = _select_horizons(H)
     median_idx = nq >= 3 ? 2 : 1

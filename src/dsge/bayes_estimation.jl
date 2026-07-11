@@ -905,7 +905,8 @@ function irf(result::BayesianDSGE{T}, horizon::Int;
     q_vec = T.(quantiles)
     irf_q, irf_m = compute_posterior_quantiles(stacked, q_vec)
 
-    BayesianImpulseResponse{T}(irf_q, irf_m, horizon, var_names, shock_names, q_vec, stacked)
+    BayesianImpulseResponse{T}(irf_q, irf_m, horizon, var_names, shock_names, q_vec, stacked,
+                               n_sim, n_valid, n_skipped)
 end
 
 # =============================================================================
