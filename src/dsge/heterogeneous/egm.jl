@@ -90,14 +90,18 @@ end
 # =============================================================================
 
 """
-    _egm_solve(ip, grid, income, prices; max_iter=1000, tol=1e-10)
-        → (c_policy::Matrix{T}, a_policy::Matrix{T})
+    _egm_solve(ip, grid, income, prices; max_iter=1000, tol=1e-10, init_policy=nothing)
+        → (c_policy::Matrix{T}, a_policy::Matrix{T}, converged::Bool)
 
 Solve a one-asset household savings problem using the Endogenous Grid Method
 (Carroll 2006).
 
 Returns `N_a × N_e` consumption and savings policy matrices on the exogenous
-asset grid.
+asset grid, plus a `converged` flag (`true` iff the fixed-point iteration met
+`tol` before exhausting `max_iter`). The flag is the LAST element so existing
+`c_pol, a_pol = _egm_solve(...)` / `_, a_pol = _egm_solve(...)` call sites are
+unaffected. Pass `init_policy` (an `N_a × N_e` consumption matrix) to warm-start
+from a previous solution at nearby prices.
 
 # Algorithm
 For each iteration, for each income state `j`:
@@ -111,7 +115,8 @@ For each iteration, for each income state `j`:
 """
 function _egm_solve(ip::IndividualProblem{T}, grid::HAGrid{T},
                      income::IncomeProcess{T}, prices::Dict{Symbol,T};
-                     max_iter::Int=1000, tol::T=T(1e-10)) where {T<:AbstractFloat}
+                     max_iter::Int=1000, tol::T=T(1e-10),
+                     init_policy::Union{Nothing,AbstractMatrix{T}}=nothing) where {T<:AbstractFloat}
     @assert ip.n_asset_dims == 1 "One-asset EGM requires n_asset_dims == 1"
     @assert grid.n_dims == 1 "One-asset EGM requires a one-dimensional grid"
 
@@ -127,12 +132,22 @@ function _egm_solve(ip::IndividualProblem{T}, grid::HAGrid{T},
     Pi = income.transition  # n_e × n_e, row-stochastic
     e_vals = income.states
 
-    # Initialize consumption policy: consume a fraction of cash-on-hand
+    # Initialize consumption policy. When a previous solution is supplied
+    # (`init_policy`, #238), warm-start from it — successive EGM solves at nearby
+    # prices then reach the fixed point in far fewer iterations. Otherwise fall
+    # back to the cold 5%-of-cash-on-hand seed.
     c_pol = zeros(T, n_a, n_e)
-    for j in 1:n_e
-        for i in 1:n_a
-            coh = ip.budget_fn(a_grid[i], e_vals[j], prices)
-            c_pol[i, j] = max(coh * T(0.05), T(1e-10))
+    if init_policy !== nothing && size(init_policy) == (n_a, n_e)
+        copyto!(c_pol, init_policy)
+        @inbounds for j in 1:n_e, i in 1:n_a
+            c_pol[i, j] = max(c_pol[i, j], T(1e-10))
+        end
+    else
+        for j in 1:n_e
+            for i in 1:n_a
+                coh = ip.budget_fn(a_grid[i], e_vals[j], prices)
+                c_pol[i, j] = max(coh * T(0.05), T(1e-10))
+            end
         end
     end
 
@@ -146,6 +161,7 @@ function _egm_solve(ip::IndividualProblem{T}, grid::HAGrid{T},
     r = prices[:r]
     w = prices[:w]
 
+    converged = false
     for iter in 1:max_iter
         # For each income state, run the EGM step
         for j in 1:n_e
@@ -208,6 +224,7 @@ function _egm_solve(ip::IndividualProblem{T}, grid::HAGrid{T},
         copyto!(c_pol, c_new)
 
         if max_diff < tol
+            converged = true
             break
         end
     end
@@ -221,7 +238,11 @@ function _egm_solve(ip::IndividualProblem{T}, grid::HAGrid{T},
         end
     end
 
-    return c_pol, a_pol
+    # `converged` is appended as the LAST return value (#238/H-17). Julia drops
+    # trailing tuple elements, so existing `c_pol, a_pol = _egm_solve(...)` and
+    # `_, a_pol = _egm_solve(...)` call sites keep working unchanged; callers that
+    # want the flag destructure the third element.
+    return c_pol, a_pol, converged
 end
 
 # =============================================================================

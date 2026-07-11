@@ -289,6 +289,37 @@ end
     @test mean(cd) > mean(c0)    # the dividend is real income
 end
 
+@testset "EGM warm-start + convergence flag (#238/T139)" begin
+    # _egm_solve gains an optional init_policy warm start and returns a trailing
+    # convergence flag (Julia drops trailing tuple elements, so 2-tuple call sites
+    # are unaffected).
+    grid = HAGrid(assets=(0.0, 100.0, 200), income_states=3)
+    ir = rouwenhorst(0.9, 0.2, 3); el = exp.(ir.states); el ./= dot(ir.stationary_dist, el)
+    inc = IncomeProcess{Float64}(ir.transition, el, ir.stationary_dist, :income)
+    ip = IndividualProblem{Float64}(c -> log(c), c -> 1.0/c, m -> 1.0/m, 0.95,
+            (a, e, pr) -> (1 + pr[:r]) * a + pr[:w] * e, [0.0], nothing, 1)
+    prices = Dict(:r => 0.02, :w => 1.0)
+
+    # Convergence flag reflects convergence
+    _, _, conv1 = MacroEconometricModels._egm_solve(ip, grid, inc, prices; max_iter=1, tol=1e-10)
+    @test conv1 == false
+    cN, _, convN = MacroEconometricModels._egm_solve(ip, grid, inc, prices; max_iter=2000, tol=1e-12)
+    @test convN == true
+
+    # 2-tuple destructuring still works (flag dropped)
+    c2, a2 = MacroEconometricModels._egm_solve(ip, grid, inc, prices; max_iter=2000, tol=1e-12)
+    @test size(c2) == (200, 3) && size(a2) == (200, 3)
+
+    # Cold vs warm converge to the SAME policy; a seeded solve converges at once
+    cw, _, convw = MacroEconometricModels._egm_solve(ip, grid, inc, prices;
+                        max_iter=2000, tol=1e-12, init_policy=cN)
+    @test convw == true
+    @test maximum(abs.(cw .- cN)) < 1e-9
+    _, _, conv_seed = MacroEconometricModels._egm_solve(ip, grid, inc, prices;
+                        max_iter=3, tol=1e-8, init_policy=cN)
+    @test conv_seed == true
+end
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Section 7: Two-asset nested EGM
 # ─────────────────────────────────────────────────────────────────────────────

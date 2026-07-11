@@ -166,6 +166,7 @@ function _ha_steady_state(ip::IndividualProblem{T}, grid::HAGrid{T},
     best_excess = T(Inf)
     converged = false
     final_iter = 0
+    warm_c = nothing  # warm-start the inner EGM across bisection iterations (#238)
 
     for iter in 1:max_iter
         final_iter = iter
@@ -182,8 +183,15 @@ function _ha_steady_state(ip::IndividualProblem{T}, grid::HAGrid{T},
             continue
         end
 
-        # Solve individual problem via EGM
-        c_pol, a_pol = _egm_solve(ip, grid, income, prices; max_iter=1000, tol=T(1e-10))
+        # Solve individual problem via EGM, warm-started from the previous
+        # bisection iterate (prices move little between iterations). The inner
+        # convergence flag is intentionally not surfaced here: at intermediate
+        # trial rates the household policy need not reach `tol`, and the outer
+        # market-clearing `converged` flag reports the equilibrium's convergence.
+        c_pol, a_pol, _ = _egm_solve(ip, grid, income, prices;
+                                     max_iter=1000, tol=T(1e-10),
+                                     init_policy=warm_c)
+        warm_c = c_pol
 
         # Build transition matrix and compute stationary distribution
         Lambda = _build_transition_matrix(a_pol, grid, income)
