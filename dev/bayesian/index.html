@@ -110,15 +110,16 @@ report(post_opt)</code></pre><pre class="documenter-example-output"><code class=
   CPI      -0.0001    0.0138   -0.0003
   FFR       0.0002   -0.0003    0.0243</code></pre><p><strong>Recipe 3: Bayesian IRFs with Cholesky identification</strong></p><pre><code class="language-julia hljs">birf = irf(post, 20; method=:cholesky)
 report(birf)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">┌ Warning: 97/100 posterior draws non-stationary, skipped
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/bvar/utils.jl:108
-Bayesian Impulse Response Functions
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/bvar/utils.jl:108
+   Bayesian Impulse Response Functions
 
 
 
-  Variables                     3
-  Shocks                        3
-  Horizon                      20
-  Quantiles   16.0%, 50.0%, 84.0%
+  Variables                           3
+  Shocks                              3
+  Horizon                            20
+  Quantiles         16.0%, 50.0%, 84.0%
+  Effective draws    3/100 (97 dropped)
 
                      Shock: INDPRO (50.0%)
 
@@ -150,17 +151,18 @@ Bayesian Impulse Response Functions
   Note   * Credible interval excludes zero</code></pre><pre><code class="language-julia hljs">plot_result(birf)</code></pre><iframe src="../assets/plots/irf_bayesian.html" style="width:100%; height:520px; border:none;"></iframe><p><strong>Recipe 4: Bayesian FEVD and historical decomposition</strong></p><pre><code class="language-julia hljs">bfevd = fevd(post, 20; method=:cholesky)
 bhd = historical_decomposition(post; method=:cholesky)
 report(bfevd)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">┌ Warning: 97/100 posterior draws non-stationary, skipped
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/bvar/utils.jl:108
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/bvar/utils.jl:108
 ┌ Warning: 97/100 posterior draws non-stationary, skipped
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/hd.jl:377
-  Bayesian FEVD (posterior mean)
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/hd.jl:390
+     Bayesian FEVD (posterior mean)
 
 
 
-  Variables                     3
-  Shocks                        3
-  Horizon                      20
-  Quantiles   16.0%, 50.0%, 84.0%
+  Variables                           3
+  Shocks                              3
+  Horizon                            20
+  Quantiles         16.0%, 50.0%, 84.0%
+  Effective draws    3/100 (97 dropped)
 
                h = 1
 
@@ -202,7 +204,7 @@ report(bfevd)</code></pre><pre class="documenter-example-output"><code class="no
   CPI       21.3%   75.7%    3.0%
   FFR       25.8%   43.5%   30.7%</code></pre><p><strong>Recipe 5: Multi-step forecasting with credible intervals</strong></p><pre><code class="language-julia hljs">fc = forecast(post, 12; conf_level=0.95)
 report(fc)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">┌ Warning: 97/100 posterior draws non-stationary, skipped
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/bvar/estimation.jl:421
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/bvar/estimation.jl:426
  Bayesian VAR Forecast
 
   Specification
@@ -269,15 +271,15 @@ X = X[all.(isfinite, eachrow(X)), 1:min(20, size(X, 2))]
 best_full, ml = optimize_hyperparameters_full(X, 4)
 post_large = estimate_bvar(X, 4; n_draws=100, prior=:minnesota, hyper=best_full)
 report(post_large)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">┌ Warning: Matrix near-singular (1-norm cond ≈ 7.27056252208027e10). Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:130
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:152
 ┌ Warning: Matrix near-singular (1-norm cond ≈ 4.194655533216561e10). Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:130
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:152
 ┌ Warning: Matrix near-singular (1-norm cond ≈ 7.259915940677635e10). Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:130
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:152
 ┌ Warning: Matrix near-singular (1-norm cond ≈ 8.981670681753418e9). Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:130
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:152
 ┌ Warning: Covariance matrix required jitter (absolute=5.060181949949481e-12, relative=1.0e-10, mean diagonal=0.05060181949949481) for Cholesky decomposition. Results may be affected by near-collinearity.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:169
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:191
    Bayesian VAR — BVAR(4)
 
   Specification
@@ -1099,15 +1101,16 @@ irfs_mean = irf(mean_model, 20; method=:cholesky)</code></pre><pre class="docume
 
   Significance   *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>The <code>posterior_mean_model</code> averages <span>$B$</span> and <span>$\Sigma$</span> across all posterior draws, providing a point estimate that integrates over parameter uncertainty. The <code>posterior_median_model</code> uses the element-wise median, which is more robust to outlier draws. The <code>BVARPosterior</code> stores the original data, so residuals are computed automatically for downstream analyses such as <code>historical_decomposition</code>.</p><hr/><h2 id="Bayesian-Impulse-Response-Functions"><a class="docs-heading-anchor" href="#Bayesian-Impulse-Response-Functions">Bayesian Impulse Response Functions</a><a id="Bayesian-Impulse-Response-Functions-1"></a><a class="docs-heading-anchor-permalink" href="#Bayesian-Impulse-Response-Functions" title="Permalink"></a></h2><p>For each posterior draw <span>$(B^{(s)}, \Sigma^{(s)})$</span>, the package computes impulse responses from the VMA representation, yielding a full posterior distribution over IRFs. The central tendency (posterior median by default) and credible intervals (16th–84th percentile by default) are reported.</p><h3 id="Cholesky-Identification"><a class="docs-heading-anchor" href="#Cholesky-Identification">Cholesky Identification</a><a id="Cholesky-Identification-1"></a><a class="docs-heading-anchor-permalink" href="#Cholesky-Identification" title="Permalink"></a></h3><pre><code class="language-julia hljs">birf_chol = irf(post, 20; method=:cholesky)
 report(birf_chol)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">┌ Warning: 97/100 posterior draws non-stationary, skipped
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/bvar/utils.jl:108
-Bayesian Impulse Response Functions
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/bvar/utils.jl:108
+   Bayesian Impulse Response Functions
 
 
 
-  Variables                     3
-  Shocks                        3
-  Horizon                      20
-  Quantiles   16.0%, 50.0%, 84.0%
+  Variables                           3
+  Shocks                              3
+  Horizon                            20
+  Quantiles         16.0%, 50.0%, 84.0%
+  Effective draws    3/100 (97 dropped)
 
                      Shock: INDPRO (50.0%)
 
@@ -1145,15 +1148,16 @@ end
 
 birf_sign = irf(post, 20; method=:sign, check_func=check_monetary, max_draws=5000)
 report(birf_sign)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">┌ Warning: 97/100 posterior draws non-stationary, skipped
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/bvar/utils.jl:108
-Bayesian Impulse Response Functions
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/bvar/utils.jl:108
+   Bayesian Impulse Response Functions
 
 
 
-  Variables                     3
-  Shocks                        3
-  Horizon                      20
-  Quantiles   16.0%, 50.0%, 84.0%
+  Variables                           3
+  Shocks                              3
+  Horizon                            20
+  Quantiles         16.0%, 50.0%, 84.0%
+  Effective draws    3/100 (97 dropped)
 
                    Shock: INDPRO (50.0%)
 
@@ -1184,15 +1188,16 @@ Bayesian Impulse Response Functions
 
   Note   * Credible interval excludes zero</code></pre><p>The sign-restricted credible intervals combine both parameter uncertainty (from posterior draws of <span>$(B, \Sigma)$</span>) and identification uncertainty (from the rotation <span>$Q$</span>). The sign restrictions ensure a contractionary monetary shock raises the federal funds rate and lowers output and prices on impact, consistent with conventional monetary transmission.</p><h3 id="irf-Keyword-Arguments-(BVAR-dispatch)"><a class="docs-heading-anchor" href="#irf-Keyword-Arguments-(BVAR-dispatch)"><code>irf</code> Keyword Arguments (BVAR dispatch)</a><a id="irf-Keyword-Arguments-(BVAR-dispatch)-1"></a><a class="docs-heading-anchor-permalink" href="#irf-Keyword-Arguments-(BVAR-dispatch)" title="Permalink"></a></h3><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>method</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:cholesky</code></td><td style="text-align: right">Identification method (<code>:cholesky</code>, <code>:sign</code>, <code>:narrative</code>, etc.)</td></tr><tr><td style="text-align: right"><code>quantiles</code></td><td style="text-align: right"><code>Vector{Real}</code></td><td style="text-align: right"><code>[0.16, 0.5, 0.84]</code></td><td style="text-align: right">Quantile levels for credible bands</td></tr><tr><td style="text-align: right"><code>point_estimate</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:mean</code></td><td style="text-align: right">Central tendency (<code>:mean</code> or <code>:median</code>)</td></tr><tr><td style="text-align: right"><code>check_func</code></td><td style="text-align: right"><code>Function</code></td><td style="text-align: right"><code>nothing</code></td><td style="text-align: right">Sign restriction check function</td></tr><tr><td style="text-align: right"><code>narrative_check</code></td><td style="text-align: right"><code>Function</code></td><td style="text-align: right"><code>nothing</code></td><td style="text-align: right">Narrative restriction check function</td></tr><tr><td style="text-align: right"><code>threaded</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>false</code></td><td style="text-align: right">Use threaded quantile computation</td></tr></table><h3 id="BayesianImpulseResponse{T}-Fields"><a class="docs-heading-anchor" href="#BayesianImpulseResponse{T}-Fields"><code>BayesianImpulseResponse{T}</code> Fields</a><a id="BayesianImpulseResponse{T}-Fields-1"></a><a class="docs-heading-anchor-permalink" href="#BayesianImpulseResponse{T}-Fields" title="Permalink"></a></h3><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>quantiles</code></td><td style="text-align: right"><code>Array{T,4}</code></td><td style="text-align: right"><span>$(H+1) \times n \times n \times n_q$</span>: posterior quantiles of IRFs</td></tr><tr><td style="text-align: right"><code>point_estimate</code></td><td style="text-align: right"><code>Array{T,3}</code></td><td style="text-align: right"><span>$(H+1) \times n \times n$</span> posterior point estimate (mean or median)</td></tr><tr><td style="text-align: right"><code>horizon</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Maximum IRF horizon</td></tr><tr><td style="text-align: right"><code>variables</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right">Variable names</td></tr><tr><td style="text-align: right"><code>shocks</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right">Shock names</td></tr><tr><td style="text-align: right"><code>quantile_levels</code></td><td style="text-align: right"><code>Vector{T}</code></td><td style="text-align: right">Quantile levels used</td></tr></table><hr/><h2 id="Bayesian-FEVD"><a class="docs-heading-anchor" href="#Bayesian-FEVD">Bayesian FEVD</a><a id="Bayesian-FEVD-1"></a><a class="docs-heading-anchor-permalink" href="#Bayesian-FEVD" title="Permalink"></a></h2><p>The <strong>forecast error variance decomposition</strong> (FEVD) measures the share of each variable&#39;s forecast error variance attributable to each structural shock. For each posterior draw, the FEVD is computed from the VMA coefficients, yielding a posterior distribution over variance shares.</p><pre><code class="language-julia hljs">bfevd_sec = fevd(post, 20; method=:cholesky)
 report(bfevd_sec)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">┌ Warning: 97/100 posterior draws non-stationary, skipped
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/bvar/utils.jl:108
-  Bayesian FEVD (posterior mean)
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/bvar/utils.jl:108
+     Bayesian FEVD (posterior mean)
 
 
 
-  Variables                     3
-  Shocks                        3
-  Horizon                      20
-  Quantiles   16.0%, 50.0%, 84.0%
+  Variables                           3
+  Shocks                              3
+  Horizon                            20
+  Quantiles         16.0%, 50.0%, 84.0%
+  Effective draws    3/100 (97 dropped)
 
                h = 1
 
@@ -1234,7 +1239,7 @@ report(bfevd_sec)</code></pre><pre class="documenter-example-output"><code class
   CPI       21.3%   75.7%    3.0%
   FFR       25.8%   43.5%   30.7%</code></pre><pre><code class="language-julia hljs">plot_result(bfevd_sec)</code></pre><iframe src="../assets/plots/fevd_bayesian.html" style="width:100%; height:520px; border:none;"></iframe><p>At short horizons, the monetary shock (shock 3) explains a small fraction of INDPRO forecast error variance –- consistent with the Cholesky ordering where INDPRO does not respond on impact. As the horizon increases, the monetary transmission mechanism operates through lagged effects, and the monetary shock&#39;s contribution grows. The wide credible intervals at long horizons reflect cumulating parameter uncertainty through the VMA representation.</p><h3 id="BayesianFEVD{T}-Fields"><a class="docs-heading-anchor" href="#BayesianFEVD{T}-Fields"><code>BayesianFEVD{T}</code> Fields</a><a id="BayesianFEVD{T}-Fields-1"></a><a class="docs-heading-anchor-permalink" href="#BayesianFEVD{T}-Fields" title="Permalink"></a></h3><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>quantiles</code></td><td style="text-align: right"><code>Array{T,4}</code></td><td style="text-align: right"><span>$H \times n \times n \times n_q$</span>: posterior quantiles of FEVD shares</td></tr><tr><td style="text-align: right"><code>point_estimate</code></td><td style="text-align: right"><code>Array{T,3}</code></td><td style="text-align: right"><span>$H \times n \times n$</span> posterior point estimate FEVD proportions</td></tr><tr><td style="text-align: right"><code>horizon</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Maximum horizon</td></tr><tr><td style="text-align: right"><code>variables</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right">Variable names</td></tr><tr><td style="text-align: right"><code>shocks</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right">Shock names</td></tr><tr><td style="text-align: right"><code>quantile_levels</code></td><td style="text-align: right"><code>Vector{T}</code></td><td style="text-align: right">Quantile levels used</td></tr></table><hr/><h2 id="Bayesian-Historical-Decomposition"><a class="docs-heading-anchor" href="#Bayesian-Historical-Decomposition">Bayesian Historical Decomposition</a><a id="Bayesian-Historical-Decomposition-1"></a><a class="docs-heading-anchor-permalink" href="#Bayesian-Historical-Decomposition" title="Permalink"></a></h2><p>The <strong>historical decomposition</strong> decomposes the actual realization of each variable into contributions from each structural shock and an initial condition component. For each posterior draw, structural shocks are recovered and cumulated through the VMA representation.</p><pre><code class="language-julia hljs">bhd_sec = historical_decomposition(post; method=:cholesky)
 report(bhd_sec)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">┌ Warning: 97/100 posterior draws non-stationary, skipped
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/hd.jl:377
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/hd.jl:390
        Bayesian Historical Decomposition
 
   Specification
@@ -1244,6 +1249,7 @@ report(bhd_sec)</code></pre><pre class="documenter-example-output"><code class="
   Shocks                                    3
   Time periods                             58
   Quantiles               16.0%, 50.0%, 84.0%
+  Effective draws          3/100 (97 dropped)
 
 Posterior Mean Contribution Summary (mean absolute)
 
@@ -1253,7 +1259,7 @@ Posterior Mean Contribution Summary (mean absolute)
   CPI        0.0084   0.0155   0.0093    0.0229
   FFR        0.1315   0.1397   0.1222    0.2588</code></pre><pre><code class="language-julia hljs">plot_result(bhd_sec)</code></pre><iframe src="../assets/plots/hd_bayesian.html" style="width:100%; height:520px; border:none;"></iframe><p>The historical decomposition reveals which structural shocks drove each variable&#39;s movements at each point in time. Credible intervals on the shock contributions reflect posterior uncertainty in both the VAR parameters and the structural identification. For the [INDPRO, CPI, FFR] system, the decomposition shows how supply, demand, and monetary policy shocks combine to explain the observed dynamics of output, prices, and the policy rate.</p><h3 id="BayesianHistoricalDecomposition{T}-Fields"><a class="docs-heading-anchor" href="#BayesianHistoricalDecomposition{T}-Fields"><code>BayesianHistoricalDecomposition{T}</code> Fields</a><a id="BayesianHistoricalDecomposition{T}-Fields-1"></a><a class="docs-heading-anchor-permalink" href="#BayesianHistoricalDecomposition{T}-Fields" title="Permalink"></a></h3><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>quantiles</code></td><td style="text-align: right"><code>Array{T,4}</code></td><td style="text-align: right"><span>$T_{\text{eff}} \times n \times n_{\text{shocks}} \times n_q$</span>: shock contribution quantiles</td></tr><tr><td style="text-align: right"><code>point_estimate</code></td><td style="text-align: right"><code>Array{T,3}</code></td><td style="text-align: right"><span>$T_{\text{eff}} \times n \times n_{\text{shocks}}$</span> point estimate contributions</td></tr><tr><td style="text-align: right"><code>initial_quantiles</code></td><td style="text-align: right"><code>Array{T,3}</code></td><td style="text-align: right"><span>$T_{\text{eff}} \times n \times n_q$</span>: initial condition quantiles</td></tr><tr><td style="text-align: right"><code>initial_point_estimate</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right"><span>$T_{\text{eff}} \times n$</span> initial condition point estimate</td></tr><tr><td style="text-align: right"><code>actual</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right"><span>$T_{\text{eff}} \times n$</span> actual observed values</td></tr><tr><td style="text-align: right"><code>T_eff</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Effective sample size</td></tr><tr><td style="text-align: right"><code>variables</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right">Variable names</td></tr><tr><td style="text-align: right"><code>shock_names</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right">Shock names</td></tr><tr><td style="text-align: right"><code>method</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right">Identification method used</td></tr></table><hr/><h2 id="Forecasting"><a class="docs-heading-anchor" href="#Forecasting">Forecasting</a><a id="Forecasting-1"></a><a class="docs-heading-anchor-permalink" href="#Forecasting" title="Permalink"></a></h2><p>The BVAR forecast integrates over parameter uncertainty by iterating the VAR recursion forward for each posterior draw. For each draw <span>$(B^{(s)}, \Sigma^{(s)})$</span>, future shocks are drawn from <span>$N(0, \Sigma^{(s)})$</span> and the VAR is simulated forward <span>$h$</span> steps. The distribution of forecast paths across draws produces posterior credible intervals.</p><pre><code class="language-julia hljs">fc_sec = forecast(post, 12; conf_level=0.90, point_estimate=:median)
 report(fc_sec)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">┌ Warning: 97/100 posterior draws non-stationary, skipped
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/bvar/estimation.jl:421
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/bvar/estimation.jl:426
  Bayesian VAR Forecast
 
   Specification
@@ -1329,11 +1335,11 @@ hyper_large = MinnesotaHyperparameters(
 
 post_lg = estimate_bvar(X_lg, 4; n_draws=100, prior=:minnesota, hyper=hyper_large)
 report(post_lg)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">┌ Warning: Matrix near-singular (1-norm cond ≈ 1.3589633582525005e11). Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:130
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:152
 ┌ Warning: Covariance matrix required jitter (absolute=1.9642633899396804e-13, relative=1.0e-10, mean diagonal=0.0019642633899396803) for Cholesky decomposition. Results may be affected by near-collinearity.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:169
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:191
 ┌ Warning: Matrix near-singular (1-norm cond ≈ 6.854577274366784e7). Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:130
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:152
    Bayesian VAR — BVAR(4)
 
   Specification
@@ -1853,4 +1859,4 @@ stab_ce = is_stationary(mean_model_ce)</code></pre><pre class="documenter-exampl
   Stationary                                                        Yes
   Result                  VAR is STATIONARY (all eigenvalue moduli &lt; 1)
 
-</code></pre><p>This workflow demonstrates the complete Bayesian pipeline: hyperparameter optimization selects the optimal shrinkage <span>$\tau$</span> via marginal likelihood, the conjugate NIW sampler produces 1000 posterior draws, and the structural analysis functions compute IRFs, FEVD, and historical decomposition with credible intervals. The Cholesky ordering [INDPRO, CPI, FFR] identifies a monetary policy shock as the third innovation. The forecast integrates over the full posterior distribution of <span>$(B, \Sigma)$</span>, providing credible intervals that account for both parameter and shock uncertainty. The posterior mean model confirms stationarity of the system.</p><hr/><h2 id="Common-Pitfalls"><a class="docs-heading-anchor" href="#Common-Pitfalls">Common Pitfalls</a><a id="Common-Pitfalls-1"></a><a class="docs-heading-anchor-permalink" href="#Common-Pitfalls" title="Permalink"></a></h2><ol><li><p><strong>Too few posterior draws</strong>: With <code>n_draws=100</code>, credible intervals are noisy and quantile estimates are unreliable. Use at least <code>n_draws=1000</code> for stable inference. For sign restrictions, which discard non-conforming draws, increase to <code>n_draws=5000</code> or more.</p></li><li><p><strong>Prior sensitivity with diffuse prior</strong>: Setting <code>prior=:normal</code> (the default) uses a diffuse NIW prior that provides minimal regularization. For systems with more than 5 variables, switch to <code>prior=:minnesota</code> to avoid overfitting. The diffuse prior is appropriate only for small, well-identified systems with ample data.</p></li><li><p><strong>Minnesota prior assumes random walk</strong>: The Minnesota prior centers on a random walk –- each variable&#39;s own first lag is 1, all others are 0. For stationary variables (e.g., interest rates, unemployment), the prior mean is inappropriate. Consider demeaning or detrending before estimation, or use a lower <code>tau</code> to let the data dominate.</p></li><li><p><strong>Hyperparameter optimization convergence</strong>: The <code>optimize_hyperparameters</code> function uses a discrete grid search, so the result depends on <code>grid_size</code> and <code>tau_range</code>. If the optimal <span>$\tau$</span> is at a grid boundary, widen <code>tau_range</code>. Increase <code>grid_size</code> for finer resolution.</p></li><li><p><strong>Non-stationary posterior draws</strong>: The forecast function automatically filters out non-stationary draws (those with companion matrix eigenvalues at or above unity). If more than half the draws are non-stationary, estimation raises a warning. This typically indicates the prior is too diffuse –- increase shrinkage by lowering <code>tau</code>.</p></li><li><p><strong>Gibbs sampler autocorrelation</strong>: The <code>:gibbs</code> sampler produces correlated draws. Without thinning, effective sample size is smaller than <code>n_draws</code>. Use <code>thin=5</code> or <code>thin=10</code> and increase <code>burnin</code> to at least 500 for reliable posterior summaries. The <code>:direct</code> sampler avoids this issue entirely.</p></li></ol><hr/><h2 id="References"><a class="docs-heading-anchor" href="#References">References</a><a id="References-1"></a><a class="docs-heading-anchor-permalink" href="#References" title="Permalink"></a></h2><ul><li><p>Banbura, M., Giannone, D., &amp; Reichlin, L. (2010). Large Bayesian Vector Auto Regressions. <em>Journal of Applied Econometrics</em>, 25(1), 71-92. <a href="https://doi.org/10.1002/jae.1137">DOI</a></p></li><li><p>Carriero, A., Clark, T. E., &amp; Marcellino, M. (2015). Bayesian VARs: Specification Choices and Forecast Accuracy. <em>Journal of Applied Econometrics</em>, 30(1), 46-73. <a href="https://doi.org/10.1002/jae.2315">DOI</a></p></li><li><p>Doan, T., Litterman, R., &amp; Sims, C. (1984). Forecasting and Conditional Projection Using Realistic Prior Distributions. <em>Econometric Reviews</em>, 3(1), 1-100. <a href="https://doi.org/10.1080/07474938408800053">DOI</a></p></li><li><p>Giannone, D., Lenza, M., &amp; Primiceri, G. E. (2015). Prior Selection for Vector Autoregressions. <em>Review of Economics and Statistics</em>, 97(2), 436-451. <a href="https://doi.org/10.1162/REST_a_00483">DOI</a></p></li><li><p>Kadiyala, K. R., &amp; Karlsson, S. (1997). Numerical Methods for Estimation and Inference in Bayesian VAR-Models. <em>Journal of Applied Econometrics</em>, 12(2), 99-132. <a href="https://doi.org/10.1002/(SICI)1099-1255(199703)12:2&lt;99::AID-JAE429&gt;3.0.CO;2-A">DOI</a></p></li><li><p>Litterman, R. B. (1986). Forecasting with Bayesian Vector Autoregressions –- Five Years of Experience. <em>Journal of Business &amp; Economic Statistics</em>, 4(1), 25-38. <a href="https://doi.org/10.1080/07350015.1986.10509491">DOI</a></p></li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../manual/">« VAR</a><a class="docs-footer-nextpage" href="../vecm/">VECM »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Friday 10 July 2026 21:43">Friday 10 July 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+</code></pre><p>This workflow demonstrates the complete Bayesian pipeline: hyperparameter optimization selects the optimal shrinkage <span>$\tau$</span> via marginal likelihood, the conjugate NIW sampler produces 1000 posterior draws, and the structural analysis functions compute IRFs, FEVD, and historical decomposition with credible intervals. The Cholesky ordering [INDPRO, CPI, FFR] identifies a monetary policy shock as the third innovation. The forecast integrates over the full posterior distribution of <span>$(B, \Sigma)$</span>, providing credible intervals that account for both parameter and shock uncertainty. The posterior mean model confirms stationarity of the system.</p><hr/><h2 id="Common-Pitfalls"><a class="docs-heading-anchor" href="#Common-Pitfalls">Common Pitfalls</a><a id="Common-Pitfalls-1"></a><a class="docs-heading-anchor-permalink" href="#Common-Pitfalls" title="Permalink"></a></h2><ol><li><p><strong>Too few posterior draws</strong>: With <code>n_draws=100</code>, credible intervals are noisy and quantile estimates are unreliable. Use at least <code>n_draws=1000</code> for stable inference. For sign restrictions, which discard non-conforming draws, increase to <code>n_draws=5000</code> or more.</p></li><li><p><strong>Prior sensitivity with diffuse prior</strong>: Setting <code>prior=:normal</code> (the default) uses a diffuse NIW prior that provides minimal regularization. For systems with more than 5 variables, switch to <code>prior=:minnesota</code> to avoid overfitting. The diffuse prior is appropriate only for small, well-identified systems with ample data.</p></li><li><p><strong>Minnesota prior assumes random walk</strong>: The Minnesota prior centers on a random walk –- each variable&#39;s own first lag is 1, all others are 0. For stationary variables (e.g., interest rates, unemployment), the prior mean is inappropriate. Consider demeaning or detrending before estimation, or use a lower <code>tau</code> to let the data dominate.</p></li><li><p><strong>Hyperparameter optimization convergence</strong>: The <code>optimize_hyperparameters</code> function uses a discrete grid search, so the result depends on <code>grid_size</code> and <code>tau_range</code>. If the optimal <span>$\tau$</span> is at a grid boundary, widen <code>tau_range</code>. Increase <code>grid_size</code> for finer resolution.</p></li><li><p><strong>Non-stationary posterior draws</strong>: The forecast function automatically filters out non-stationary draws (those with companion matrix eigenvalues at or above unity). If more than half the draws are non-stationary, estimation raises a warning. This typically indicates the prior is too diffuse –- increase shrinkage by lowering <code>tau</code>.</p></li><li><p><strong>Gibbs sampler autocorrelation</strong>: The <code>:gibbs</code> sampler produces correlated draws. Without thinning, effective sample size is smaller than <code>n_draws</code>. Use <code>thin=5</code> or <code>thin=10</code> and increase <code>burnin</code> to at least 500 for reliable posterior summaries. The <code>:direct</code> sampler avoids this issue entirely.</p></li></ol><hr/><h2 id="References"><a class="docs-heading-anchor" href="#References">References</a><a id="References-1"></a><a class="docs-heading-anchor-permalink" href="#References" title="Permalink"></a></h2><ul><li><p>Banbura, M., Giannone, D., &amp; Reichlin, L. (2010). Large Bayesian Vector Auto Regressions. <em>Journal of Applied Econometrics</em>, 25(1), 71-92. <a href="https://doi.org/10.1002/jae.1137">DOI</a></p></li><li><p>Carriero, A., Clark, T. E., &amp; Marcellino, M. (2015). Bayesian VARs: Specification Choices and Forecast Accuracy. <em>Journal of Applied Econometrics</em>, 30(1), 46-73. <a href="https://doi.org/10.1002/jae.2315">DOI</a></p></li><li><p>Doan, T., Litterman, R., &amp; Sims, C. (1984). Forecasting and Conditional Projection Using Realistic Prior Distributions. <em>Econometric Reviews</em>, 3(1), 1-100. <a href="https://doi.org/10.1080/07474938408800053">DOI</a></p></li><li><p>Giannone, D., Lenza, M., &amp; Primiceri, G. E. (2015). Prior Selection for Vector Autoregressions. <em>Review of Economics and Statistics</em>, 97(2), 436-451. <a href="https://doi.org/10.1162/REST_a_00483">DOI</a></p></li><li><p>Kadiyala, K. R., &amp; Karlsson, S. (1997). Numerical Methods for Estimation and Inference in Bayesian VAR-Models. <em>Journal of Applied Econometrics</em>, 12(2), 99-132. <a href="https://doi.org/10.1002/(SICI)1099-1255(199703)12:2&lt;99::AID-JAE429&gt;3.0.CO;2-A">DOI</a></p></li><li><p>Litterman, R. B. (1986). Forecasting with Bayesian Vector Autoregressions –- Five Years of Experience. <em>Journal of Business &amp; Economic Statistics</em>, 4(1), 25-38. <a href="https://doi.org/10.1080/07350015.1986.10509491">DOI</a></p></li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../manual/">« VAR</a><a class="docs-footer-nextpage" href="../vecm/">VECM »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Saturday 11 July 2026 23:37">Saturday 11 July 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

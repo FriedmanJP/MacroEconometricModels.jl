@@ -58,13 +58,13 @@ report(irfs_ci)</code></pre><pre class="documenter-example-output"><code class="
   Horizon            20
   CI          bootstrap
 
-                        Shock: INDPRO
+                         Shock: INDPRO
 
-                 h=1       h=4       h=8      h=12      h=20
+                 h=1        h=4       h=8      h=12      h=20
 
-  INDPRO     0.0138*   -0.0024   -0.0002       0.0       0.0
-  CPIAUCSL   0.0008*    0.0001       0.0       0.0      -0.0
-  FEDFUNDS    0.0408   -0.0045   -0.0018   -0.0006   -0.0001
+  INDPRO     0.0138*   -0.0024*   -0.0002       0.0       0.0
+  CPIAUCSL   0.0008*     0.0001       0.0       0.0      -0.0
+  FEDFUNDS   0.0408*    -0.0045   -0.0018   -0.0006   -0.0001
 
                      Shock: CPIAUCSL
 
@@ -74,28 +74,29 @@ report(irfs_ci)</code></pre><pre class="documenter-example-output"><code class="
   CPIAUCSL   0.0022*    0.0003     0.0     -0.0     -0.0
   FEDFUNDS    0.0238    0.0067   0.003   0.0016   0.0003
 
-                       Shock: FEDFUNDS
+                        Shock: FEDFUNDS
 
-                 h=1        h=4       h=8     h=12     h=20
+                 h=1        h=4       h=8      h=12      h=20
 
-  INDPRO         0.0   -0.0027*   -0.0001     -0.0     -0.0
-  CPIAUCSL       0.0   -0.0004*   -0.0001     -0.0     -0.0
-  FEDFUNDS   0.1362*    0.0426*   0.0207*   0.0082   0.0013
+  INDPRO         0.0   -0.0027*   -0.0001      -0.0      -0.0
+  CPIAUCSL       0.0   -0.0004*   -0.0001      -0.0      -0.0
+  FEDFUNDS   0.1362*    0.0426*   0.0207*   0.0082*   0.0013*
 
 
 
 
   Note   * CI excludes zero</code></pre><p><strong>Recipe 3: Bayesian FEVD with credible intervals</strong></p><pre><code class="language-julia hljs">bfevd = fevd(post, 20; method=:cholesky)
 report(bfevd)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">┌ Warning: 419/500 posterior draws non-stationary, skipped
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/bvar/utils.jl:108
-  Bayesian FEVD (posterior mean)
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/bvar/utils.jl:108
+      Bayesian FEVD (posterior mean)
 
 
 
-  Variables                     3
-  Shocks                        3
-  Horizon                      20
-  Quantiles   16.0%, 50.0%, 84.0%
+  Variables                            3
+  Shocks                               3
+  Horizon                             20
+  Quantiles          16.0%, 50.0%, 84.0%
+  Effective draws   81/500 (419 dropped)
 
                    h = 1
 
@@ -149,45 +150,45 @@ report(lp_decomp)</code></pre><pre class="documenter-example-output"><code class
   Bootstrap reps                    50
   Conf. level                    95.0%
 
-                         h = 1
+                          h = 1
 
-                   y1              y2               y3
+                   y1               y2               y3
 
-  y1   63.0% (0.0836)   0.0% (0.0187)    0.0% (0.0161)
-  y2   11.4% (0.0626)   83.4% (0.084)    0.0% (0.0164)
-  y3    8.9% (0.0531)   2.3% (0.0238)   94.0% (0.0439)
+  y1   63.7% (0.0845)     0.0% (0.021)    0.0% (0.0185)
+  y2   11.2% (0.0651)   82.9% (0.0759)    0.0% (0.0144)
+  y3    9.0% (0.0472)    2.0% (0.0257)   93.7% (0.0498)
 
                          h = 4
 
-                  y1               y2               y3
+                  y1              y2               y3
 
-  y1   49.2% (0.079)    3.6% (0.0607)   40.5% (0.0924)
-  y2   6.9% (0.0863)   72.1% (0.0783)    3.6% (0.0529)
-  y3   0.2% (0.0564)    0.0% (0.0492)   92.5% (0.0608)
+  y1   50.9% (0.087)   3.7% (0.0657)   41.1% (0.0891)
+  y2   6.4% (0.0925)    71.3% (0.08)    3.7% (0.0477)
+  y3   0.0% (0.0597)   0.0% (0.0477)   92.1% (0.0642)
 
                           h = 8
 
                    y1               y2               y3
 
-  y1   50.6% (0.0759)    1.3% (0.0685)   40.3% (0.0941)
-  y2    8.2% (0.0951)   67.8% (0.0603)    4.4% (0.0744)
-  y3    0.0% (0.0857)     1.5% (0.058)   95.9% (0.0831)
+  y1   51.3% (0.0882)    0.8% (0.0754)   40.7% (0.0928)
+  y2    7.0% (0.0961)   69.1% (0.0714)    4.8% (0.0676)
+  y3    0.0% (0.0951)    1.1% (0.0576)   95.9% (0.0783)
 
                          h = 12
 
                    y1               y2               y3
 
-  y1   61.8% (0.0727)     0.0% (0.069)   42.3% (0.0975)
-  y2   10.7% (0.0931)   69.4% (0.0714)    0.0% (0.0788)
-  y3    0.0% (0.1109)    4.6% (0.0657)   93.6% (0.0652)
+  y1   62.1% (0.0733)    0.0% (0.0754)   43.1% (0.0916)
+  y2     9.2% (0.098)   71.3% (0.0748)    0.0% (0.0753)
+  y3    0.0% (0.1084)    2.7% (0.0753)   93.6% (0.0616)
 
                          h = 20
 
                    y1               y2               y3
 
-  y1   64.7% (0.0835)    6.2% (0.0907)   34.5% (0.0942)
-  y2   15.2% (0.0956)   68.9% (0.0698)    0.0% (0.0893)
-  y3    0.0% (0.1012)   19.7% (0.0944)   74.2% (0.0677)</code></pre><p><strong>Recipe 5: FEVD table output at selected horizons</strong></p><pre><code class="language-julia hljs">decomp = fevd(model, 20)
+  y1   64.8% (0.0799)    7.3% (0.0659)   35.8% (0.0822)
+  y2   14.5% (0.1154)   70.3% (0.0681)    0.0% (0.0914)
+  y3    0.0% (0.1194)   19.3% (0.0974)   76.7% (0.0993)</code></pre><p><strong>Recipe 5: FEVD table output at selected horizons</strong></p><pre><code class="language-julia hljs">decomp = fevd(model, 20)
 print_table(stdout, decomp, &quot;INDPRO&quot;; horizons=[1, 4, 8, 12, 20])</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">            FEVD: INDPRO
 
    h   INDPRO   CPIAUCSL   FEDFUNDS
@@ -291,41 +292,41 @@ report(lp_decomp)</code></pre><pre class="documenter-example-output"><code class
 
                    y1               y2               y3
 
-  y1   62.9% (0.0628)    0.0% (0.0182)    0.0% (0.0247)
-  y2   14.2% (0.0633)   82.8% (0.0696)    0.0% (0.0127)
-  y3    8.9% (0.0572)    2.1% (0.0234)   95.6% (0.0497)
+  y1    63.6% (0.063)    0.0% (0.0127)     0.0% (0.015)
+  y2   14.1% (0.0676)   83.0% (0.0676)    0.0% (0.0164)
+  y3    8.3% (0.0735)    2.4% (0.0221)   95.8% (0.0558)
 
                           h = 4
 
                    y1               y2               y3
 
-  y1   50.0% (0.0713)    4.1% (0.0673)   38.0% (0.1065)
-  y2     9.8% (0.082)   72.7% (0.0719)    3.7% (0.0497)
-  y3    0.8% (0.0583)    0.0% (0.0448)   93.3% (0.0751)
+  y1   50.6% (0.0711)    4.5% (0.0617)   39.1% (0.0956)
+  y2    9.2% (0.0861)   73.4% (0.0675)    3.6% (0.0496)
+  y3    0.5% (0.0716)    0.0% (0.0554)   93.8% (0.0734)
 
                           h = 8
 
                    y1               y2               y3
 
-  y1   49.3% (0.0689)    1.4% (0.0829)   37.9% (0.0979)
-  y2   10.4% (0.0913)   68.6% (0.0621)    5.4% (0.0683)
-  y3     0.0% (0.076)    0.0% (0.0791)   97.7% (0.0873)
+  y1   50.8% (0.0687)    1.9% (0.0765)   39.8% (0.0937)
+  y2    9.4% (0.0859)   70.0% (0.0621)    5.6% (0.0669)
+  y3     0.0% (0.082)    0.0% (0.0812)   99.1% (0.0944)
 
                          h = 12
 
                    y1               y2               y3
 
-  y1   59.3% (0.0652)    0.0% (0.0835)    38.4% (0.094)
-  y2   12.2% (0.0833)   70.6% (0.0783)    0.0% (0.0709)
-  y3    0.0% (0.1007)    0.9% (0.0923)   95.6% (0.0731)
+  y1   61.6% (0.0691)    0.0% (0.0809)   40.6% (0.0929)
+  y2   11.2% (0.0927)   69.7% (0.0662)    0.0% (0.0709)
+  y3    0.0% (0.0887)    0.0% (0.1091)   96.2% (0.0793)
 
                          h = 20
 
                    y1               y2               y3
 
-  y1   64.7% (0.0568)    7.3% (0.0994)   31.8% (0.0949)
-  y2   18.1% (0.0923)    72.3% (0.068)    0.0% (0.0835)
-  y3    0.7% (0.1055)   18.7% (0.1127)    75.1% (0.074)</code></pre><p>The LP-FEVD produces variance shares that are numerically close to VAR-based FEVD under correct specification, but the LP estimates have wider confidence intervals because each horizon is estimated independently. The bias-corrected shares are bounded to <span>$[0, 1]$</span> and clamped to ensure non-negativity.</p><iframe src="../assets/plots/fevd_lp.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe><p>For full details on structural LP estimation, see <a href="../lp/#lp_page">Local Projections</a>.</p><h3 id="LPFEVD-Return-Values"><a class="docs-heading-anchor" href="#LPFEVD-Return-Values">LPFEVD Return Values</a><a id="LPFEVD-Return-Values-1"></a><a class="docs-heading-anchor-permalink" href="#LPFEVD-Return-Values" title="Permalink"></a></h3><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>proportions</code></td><td style="text-align: right"><code>Array{T,3}</code></td><td style="text-align: right"><span>$n \times n \times H$</span> raw R²-based variance shares</td></tr><tr><td style="text-align: right"><code>bias_corrected</code></td><td style="text-align: right"><code>Array{T,3}</code></td><td style="text-align: right"><span>$n \times n \times H$</span> bias-corrected shares</td></tr><tr><td style="text-align: right"><code>se</code></td><td style="text-align: right"><code>Array{T,3}</code></td><td style="text-align: right"><span>$n \times n \times H$</span> bootstrap standard errors</td></tr><tr><td style="text-align: right"><code>ci_lower</code></td><td style="text-align: right"><code>Array{T,3}</code></td><td style="text-align: right"><span>$n \times n \times H$</span> lower CI bound</td></tr><tr><td style="text-align: right"><code>ci_upper</code></td><td style="text-align: right"><code>Array{T,3}</code></td><td style="text-align: right"><span>$n \times n \times H$</span> upper CI bound</td></tr><tr><td style="text-align: right"><code>method</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right">Estimator used (<code>:r2</code>, <code>:lp_a</code>, <code>:lp_b</code>)</td></tr><tr><td style="text-align: right"><code>horizon</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Maximum FEVD horizon</td></tr><tr><td style="text-align: right"><code>n_boot</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of bootstrap replications</td></tr><tr><td style="text-align: right"><code>conf_level</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Confidence level</td></tr><tr><td style="text-align: right"><code>bias_correction</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right">Whether bias correction was applied</td></tr><tr><td style="text-align: right"><code>variables</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right">Variable names</td></tr><tr><td style="text-align: right"><code>shocks</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right">Shock names</td></tr></table><h3 id="Keyword-Arguments-3"><a class="docs-heading-anchor" href="#Keyword-Arguments-3">Keyword Arguments</a><a class="docs-heading-anchor-permalink" href="#Keyword-Arguments-3" title="Permalink"></a></h3><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>method</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:r2</code></td><td style="text-align: right">Estimator (<code>:r2</code>, <code>:lp_a</code>, <code>:lp_b</code>)</td></tr><tr><td style="text-align: right"><code>bias_correct</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>true</code></td><td style="text-align: right">Apply VAR-based bootstrap bias correction</td></tr><tr><td style="text-align: right"><code>n_boot</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>500</code></td><td style="text-align: right">Number of bootstrap replications</td></tr><tr><td style="text-align: right"><code>conf_level</code></td><td style="text-align: right"><code>Real</code></td><td style="text-align: right"><code>0.95</code></td><td style="text-align: right">Confidence level for CIs</td></tr><tr><td style="text-align: right"><code>var_lags</code></td><td style="text-align: right"><code>Union{Nothing,Int}</code></td><td style="text-align: right"><code>nothing</code></td><td style="text-align: right">VAR lag order for bias correction (default: HQIC-selected)</td></tr></table><hr/><h2 id="Complete-Example"><a class="docs-heading-anchor" href="#Complete-Example">Complete Example</a><a id="Complete-Example-1"></a><a class="docs-heading-anchor-permalink" href="#Complete-Example" title="Permalink"></a></h2><p>This example computes frequentist, Bayesian, and LP-based FEVD for a three-variable monetary policy VAR using FRED-MD data, then compares the variance shares across methods.</p><pre><code class="language-julia hljs"># --- Frequentist FEVD ---
+  y1   65.0% (0.0591)    8.8% (0.0952)   33.8% (0.0918)
+  y2    17.2% (0.097)   70.8% (0.0699)    0.0% (0.0914)
+  y3    0.0% (0.0946)    17.0% (0.128)   74.9% (0.0757)</code></pre><p>The LP-FEVD produces variance shares that are numerically close to VAR-based FEVD under correct specification, but the LP estimates have wider confidence intervals because each horizon is estimated independently. The bias-corrected shares are bounded to <span>$[0, 1]$</span> and clamped to ensure non-negativity.</p><iframe src="../assets/plots/fevd_lp.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe><p>For full details on structural LP estimation, see <a href="../lp/#lp_page">Local Projections</a>.</p><h3 id="LPFEVD-Return-Values"><a class="docs-heading-anchor" href="#LPFEVD-Return-Values">LPFEVD Return Values</a><a id="LPFEVD-Return-Values-1"></a><a class="docs-heading-anchor-permalink" href="#LPFEVD-Return-Values" title="Permalink"></a></h3><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>proportions</code></td><td style="text-align: right"><code>Array{T,3}</code></td><td style="text-align: right"><span>$n \times n \times H$</span> raw R²-based variance shares</td></tr><tr><td style="text-align: right"><code>bias_corrected</code></td><td style="text-align: right"><code>Array{T,3}</code></td><td style="text-align: right"><span>$n \times n \times H$</span> bias-corrected shares</td></tr><tr><td style="text-align: right"><code>se</code></td><td style="text-align: right"><code>Array{T,3}</code></td><td style="text-align: right"><span>$n \times n \times H$</span> bootstrap standard errors</td></tr><tr><td style="text-align: right"><code>ci_lower</code></td><td style="text-align: right"><code>Array{T,3}</code></td><td style="text-align: right"><span>$n \times n \times H$</span> lower CI bound</td></tr><tr><td style="text-align: right"><code>ci_upper</code></td><td style="text-align: right"><code>Array{T,3}</code></td><td style="text-align: right"><span>$n \times n \times H$</span> upper CI bound</td></tr><tr><td style="text-align: right"><code>method</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right">Estimator used (<code>:r2</code>, <code>:lp_a</code>, <code>:lp_b</code>)</td></tr><tr><td style="text-align: right"><code>horizon</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Maximum FEVD horizon</td></tr><tr><td style="text-align: right"><code>n_boot</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of bootstrap replications</td></tr><tr><td style="text-align: right"><code>conf_level</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Confidence level</td></tr><tr><td style="text-align: right"><code>bias_correction</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right">Whether bias correction was applied</td></tr><tr><td style="text-align: right"><code>variables</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right">Variable names</td></tr><tr><td style="text-align: right"><code>shocks</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right">Shock names</td></tr></table><h3 id="Keyword-Arguments-3"><a class="docs-heading-anchor" href="#Keyword-Arguments-3">Keyword Arguments</a><a class="docs-heading-anchor-permalink" href="#Keyword-Arguments-3" title="Permalink"></a></h3><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>method</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:r2</code></td><td style="text-align: right">Estimator (<code>:r2</code>, <code>:lp_a</code>, <code>:lp_b</code>)</td></tr><tr><td style="text-align: right"><code>bias_correct</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>true</code></td><td style="text-align: right">Apply VAR-based bootstrap bias correction</td></tr><tr><td style="text-align: right"><code>n_boot</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>500</code></td><td style="text-align: right">Number of bootstrap replications</td></tr><tr><td style="text-align: right"><code>conf_level</code></td><td style="text-align: right"><code>Real</code></td><td style="text-align: right"><code>0.95</code></td><td style="text-align: right">Confidence level for CIs</td></tr><tr><td style="text-align: right"><code>var_lags</code></td><td style="text-align: right"><code>Union{Nothing,Int}</code></td><td style="text-align: right"><code>nothing</code></td><td style="text-align: right">VAR lag order for bias correction (default: HQIC-selected)</td></tr></table><hr/><h2 id="Complete-Example"><a class="docs-heading-anchor" href="#Complete-Example">Complete Example</a><a id="Complete-Example-1"></a><a class="docs-heading-anchor-permalink" href="#Complete-Example" title="Permalink"></a></h2><p>This example computes frequentist, Bayesian, and LP-based FEVD for a three-variable monetary policy VAR using FRED-MD data, then compares the variance shares across methods.</p><pre><code class="language-julia hljs"># --- Frequentist FEVD ---
 freq_fevd = fevd(model, 20)
 report(freq_fevd)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Forecast Error Variance Decomposition
 
@@ -376,15 +377,16 @@ report(freq_fevd)</code></pre><pre class="documenter-example-output"><code class
   FEDFUNDS     4.7%       4.0%      91.3%</code></pre><pre><code class="language-julia hljs"># --- Bayesian FEVD ---
 bayes_fevd = fevd(post, 20; method=:cholesky)
 report(bayes_fevd)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">┌ Warning: 419/500 posterior draws non-stationary, skipped
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/bvar/utils.jl:108
-  Bayesian FEVD (posterior mean)
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/bvar/utils.jl:108
+      Bayesian FEVD (posterior mean)
 
 
 
-  Variables                     3
-  Shocks                        3
-  Horizon                      20
-  Quantiles   16.0%, 50.0%, 84.0%
+  Variables                            3
+  Shocks                               3
+  Horizon                             20
+  Quantiles          16.0%, 50.0%, 84.0%
+  Effective draws   81/500 (419 dropped)
 
                    h = 1
 
@@ -446,41 +448,41 @@ print_table(stdout, freq_fevd, 1; horizons=[1, 4, 8, 20])</code></pre><pre class
 
                    y1               y2               y3
 
-  y1   63.6% (0.0648)    0.0% (0.0205)    0.0% (0.0172)
-  y2   13.1% (0.0621)   82.0% (0.0708)    0.0% (0.0126)
-  y3   10.1% (0.0479)    2.0% (0.0248)   93.5% (0.0493)
+  y1   63.0% (0.0763)    0.0% (0.0148)    0.0% (0.0219)
+  y2   13.3% (0.0602)   82.5% (0.0672)    0.0% (0.0185)
+  y3   10.6% (0.0481)    2.3% (0.0231)   93.2% (0.0466)
 
                           h = 4
 
                    y1               y2               y3
 
-  y1   50.5% (0.0721)    3.9% (0.0558)   39.9% (0.0886)
-  y2    8.6% (0.0772)   71.9% (0.0685)    3.2% (0.0603)
-  y3    0.9% (0.0539)    0.0% (0.0535)   92.6% (0.0704)
+  y1   49.4% (0.0757)    4.8% (0.0569)    40.5% (0.086)
+  y2     8.9% (0.081)   71.1% (0.0576)    2.2% (0.0574)
+  y3    1.0% (0.0587)    0.0% (0.0531)   91.7% (0.0697)
 
-                         h = 8
+                          h = 8
 
-                   y1              y2               y3
+                   y1               y2               y3
 
-  y1   49.9% (0.0727)   2.8% (0.0605)   39.9% (0.0796)
-  y2    9.0% (0.0853)   67.9% (0.073)    3.6% (0.0837)
-  y3    0.0% (0.0934)   0.5% (0.0676)   97.0% (0.0783)
+  y1   48.9% (0.0707)    2.8% (0.0672)   40.6% (0.0786)
+  y2    8.8% (0.0918)   67.3% (0.0671)    4.1% (0.0699)
+  y3    0.0% (0.0849)    0.7% (0.0743)   96.0% (0.0772)
 
                          h = 12
 
                    y1               y2               y3
 
-  y1   62.2% (0.0716)    1.3% (0.0714)   40.9% (0.0756)
-  y2    12.3% (0.104)   68.1% (0.0676)    0.0% (0.0912)
-  y3    0.0% (0.0926)    2.7% (0.0912)   96.0% (0.0777)
+  y1   62.2% (0.0692)     0.7% (0.074)   42.1% (0.0814)
+  y2   10.4% (0.1037)   68.6% (0.0582)    0.0% (0.0839)
+  y3    0.0% (0.1019)    3.3% (0.0886)   95.1% (0.0649)
 
                          h = 20
 
                    y1               y2               y3
 
-  y1   64.6% (0.0655)    8.1% (0.0864)     35.7% (0.08)
-  y2   16.7% (0.1069)   69.7% (0.0673)    0.0% (0.0984)
-  y3    0.0% (0.1191)   19.0% (0.1198)   74.2% (0.0682)
+  y1   63.8% (0.0653)    9.6% (0.0767)    35.6% (0.076)
+  y2   15.9% (0.1054)   69.9% (0.0654)    0.0% (0.0849)
+  y3    0.1% (0.1192)   19.8% (0.1171)   73.0% (0.0727)
 
             FEVD: INDPRO
 
@@ -491,4 +493,4 @@ print_table(stdout, freq_fevd, 1; horizons=[1, 4, 8, 20])</code></pre><pre class
    8    69.3%       7.6%      23.1%
   20    69.3%       7.6%      23.1%</code></pre><pre><code class="language-julia hljs">plot_result(freq_fevd)
 plot_result(bayes_fevd)
-plot_result(lp_fevd_result)</code></pre><iframe src="../assets/plots/fevd_freq.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe><p>The frequentist FEVD provides point estimates at each horizon. The Bayesian FEVD adds credible intervals reflecting parameter uncertainty. The LP-FEVD offers robustness to VAR lag misspecification at the cost of wider confidence bands. All three methods agree on the qualitative pattern: own shocks dominate at short horizons, while cross-variable transmission mechanisms become visible at longer horizons.</p><hr/><h2 id="Common-Pitfalls"><a class="docs-heading-anchor" href="#Common-Pitfalls">Common Pitfalls</a><a id="Common-Pitfalls-1"></a><a class="docs-heading-anchor-permalink" href="#Common-Pitfalls" title="Permalink"></a></h2><ol><li><p><strong>FEVD depends on identification ordering.</strong> With Cholesky identification, the FEVD is sensitive to the variable ordering. Placing a variable first gives it maximum contemporaneous explanatory power. Always report the ordering and justify it on economic grounds.</p></li><li><p><strong>Row sums equal one only for correctly identified systems.</strong> If the structural impact matrix <span>$P$</span> is not orthogonal (e.g., with partial identification), the FEVD rows may not sum to exactly one. The package enforces normalization, but economically the shares are only meaningful under valid identification.</p></li><li><p><strong>LP-FEVD shares can exceed one before bias correction.</strong> The raw R²-based LP-FEVD estimates individual shock shares independently, so they are not constrained to sum to one across shocks. The bias correction mitigates this but does not impose the adding-up constraint. Compare with VAR-FEVD to assess magnitude.</p></li><li><p><strong>Short samples inflate Bayesian FEVD uncertainty.</strong> With fewer than 100 observations, the Minnesota prior dominates the posterior and the FEVD credible intervals may be uninformatively wide. Increase <code>n_draws</code> and check prior sensitivity.</p></li><li><p><strong>Horizon must not exceed effective sample size.</strong> For LP-FEVD, each additional horizon reduces the effective sample by one observation. With <span>$T = 200$</span> and <span>$H = 40$</span>, only 160 observations remain at the longest horizon, reducing estimation precision.</p></li></ol><hr/><h2 id="References"><a class="docs-heading-anchor" href="#References">References</a><a id="References-1"></a><a class="docs-heading-anchor-permalink" href="#References" title="Permalink"></a></h2><ul><li>Lutkepohl, Helmut. 2005. <em>New Introduction to Multiple Time Series Analysis</em>. Berlin: Springer. ISBN 978-3-540-40172-8.</li><li>Kilian, Lutz, and Helmut Lutkepohl. 2017. <em>Structural Vector Autoregressive Analysis</em>. Cambridge: Cambridge University Press. <a href="https://doi.org/10.1017/9781108164818">DOI: 10.1017/9781108164818</a></li><li>Gorodnichenko, Yuriy, and Byoungchan Lee. 2019. &quot;Forecast Error Variance Decompositions with Local Projections.&quot; <em>NBER Working Paper</em> No. 25380. <a href="https://doi.org/10.3386/w25380">DOI: 10.3386/w25380</a></li><li>Plagborg-Moller, Mikkel, and Christian K. Wolf. 2021. &quot;Local Projections and VARs Estimate the Same Impulse Responses.&quot; <em>Econometrica</em>, 89(2), 955–980. <a href="https://doi.org/10.3982/ECTA17813">DOI: 10.3982/ECTA17813</a></li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../ia_irf/">« Impulse Responses</a><a class="docs-footer-nextpage" href="../ia_hd/">Historical Decomposition »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Friday 10 July 2026 21:43">Friday 10 July 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+plot_result(lp_fevd_result)</code></pre><iframe src="../assets/plots/fevd_freq.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe><p>The frequentist FEVD provides point estimates at each horizon. The Bayesian FEVD adds credible intervals reflecting parameter uncertainty. The LP-FEVD offers robustness to VAR lag misspecification at the cost of wider confidence bands. All three methods agree on the qualitative pattern: own shocks dominate at short horizons, while cross-variable transmission mechanisms become visible at longer horizons.</p><hr/><h2 id="Common-Pitfalls"><a class="docs-heading-anchor" href="#Common-Pitfalls">Common Pitfalls</a><a id="Common-Pitfalls-1"></a><a class="docs-heading-anchor-permalink" href="#Common-Pitfalls" title="Permalink"></a></h2><ol><li><p><strong>FEVD depends on identification ordering.</strong> With Cholesky identification, the FEVD is sensitive to the variable ordering. Placing a variable first gives it maximum contemporaneous explanatory power. Always report the ordering and justify it on economic grounds.</p></li><li><p><strong>Row sums equal one only for correctly identified systems.</strong> If the structural impact matrix <span>$P$</span> is not orthogonal (e.g., with partial identification), the FEVD rows may not sum to exactly one. The package enforces normalization, but economically the shares are only meaningful under valid identification.</p></li><li><p><strong>LP-FEVD shares can exceed one before bias correction.</strong> The raw R²-based LP-FEVD estimates individual shock shares independently, so they are not constrained to sum to one across shocks. The bias correction mitigates this but does not impose the adding-up constraint. Compare with VAR-FEVD to assess magnitude.</p></li><li><p><strong>Short samples inflate Bayesian FEVD uncertainty.</strong> With fewer than 100 observations, the Minnesota prior dominates the posterior and the FEVD credible intervals may be uninformatively wide. Increase <code>n_draws</code> and check prior sensitivity.</p></li><li><p><strong>Horizon must not exceed effective sample size.</strong> For LP-FEVD, each additional horizon reduces the effective sample by one observation. With <span>$T = 200$</span> and <span>$H = 40$</span>, only 160 observations remain at the longest horizon, reducing estimation precision.</p></li></ol><hr/><h2 id="References"><a class="docs-heading-anchor" href="#References">References</a><a id="References-1"></a><a class="docs-heading-anchor-permalink" href="#References" title="Permalink"></a></h2><ul><li>Lutkepohl, Helmut. 2005. <em>New Introduction to Multiple Time Series Analysis</em>. Berlin: Springer. ISBN 978-3-540-40172-8.</li><li>Kilian, Lutz, and Helmut Lutkepohl. 2017. <em>Structural Vector Autoregressive Analysis</em>. Cambridge: Cambridge University Press. <a href="https://doi.org/10.1017/9781108164818">DOI: 10.1017/9781108164818</a></li><li>Gorodnichenko, Yuriy, and Byoungchan Lee. 2019. &quot;Forecast Error Variance Decompositions with Local Projections.&quot; <em>NBER Working Paper</em> No. 25380. <a href="https://doi.org/10.3386/w25380">DOI: 10.3386/w25380</a></li><li>Plagborg-Moller, Mikkel, and Christian K. Wolf. 2021. &quot;Local Projections and VARs Estimate the Same Impulse Responses.&quot; <em>Econometrica</em>, 89(2), 955–980. <a href="https://doi.org/10.3982/ECTA17813">DOI: 10.3982/ECTA17813</a></li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../ia_irf/">« Impulse Responses</a><a class="docs-footer-nextpage" href="../ia_hd/">Historical Decomposition »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Saturday 11 July 2026 23:37">Saturday 11 July 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

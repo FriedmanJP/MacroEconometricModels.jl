@@ -103,19 +103,19 @@ pd = xtset(df, :id, :time)
 model = estimate_pvar(pd, 2; steps=:twostep)
 j = pvar_hansen_j(model)
 report(j)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">┌ Warning: Too many instruments: PVAR GMM has n_inst=510 moment conditions &gt; N=50 groups (ratio 10.2). Instrument proliferation overfits the endogenous regressors, biases the two-step weighting matrix toward singularity, and pushes the Hansen J-test toward non-rejection (Roodman 2009, OBES 71(1):135-158). Consider collapse=true or a smaller max_lag_endo.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/pvar/estimation.jl:245
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/pvar/estimation.jl:245
 ┌ Warning: Matrix singular. Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:136
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:158
 ┌ Warning: Matrix singular. Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:136
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:158
 ┌ Warning: Matrix singular. Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:136
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:158
 ┌ Warning: Matrix singular. Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:136
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:158
 ┌ Warning: Matrix singular. Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:136
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:158
 ┌ Warning: Matrix singular. Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:136
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:158
          Hansen J-test
 
 
@@ -406,19 +406,19 @@ pd2 = xtset(df2, :id, :time)
 model = estimate_pvar(pd2, 2; steps=:twostep)
 j = pvar_hansen_j(model)
 report(j)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">┌ Warning: Too many instruments: PVAR GMM has n_inst=510 moment conditions &gt; N=50 groups (ratio 10.2). Instrument proliferation overfits the endogenous regressors, biases the two-step weighting matrix toward singularity, and pushes the Hansen J-test toward non-rejection (Roodman 2009, OBES 71(1):135-158). Consider collapse=true or a smaller max_lag_endo.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/pvar/estimation.jl:245
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/pvar/estimation.jl:245
 ┌ Warning: Matrix singular. Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:136
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:158
 ┌ Warning: Matrix singular. Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:136
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:158
 ┌ Warning: Matrix singular. Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:136
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:158
 ┌ Warning: Matrix singular. Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:136
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:158
 ┌ Warning: Matrix singular. Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:136
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:158
 ┌ Warning: Matrix singular. Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:136
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:158
          Hansen J-test
 
 
@@ -432,22 +432,22 @@ report(j)</code></pre><pre class="documenter-example-output"><code class="nohigh
 println(&quot;MMSC-BIC: &quot;, round(mmsc.bic, digits=2),
         &quot;, MMSC-AIC: &quot;, round(mmsc.aic, digits=2),
         &quot;, MMSC-HQIC: &quot;, round(mmsc.hqic, digits=2))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">┌ Warning: Matrix singular. Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:136
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:158
 ┌ Warning: Matrix singular. Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:136
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:158
 ┌ Warning: Matrix singular. Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:136
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:158
 MMSC-BIC: -3349.6, MMSC-AIC: -958.0, MMSC-HQIC: -1970.31</code></pre><h3 id="Lag-Selection"><a class="docs-heading-anchor" href="#Lag-Selection">Lag Selection</a><a id="Lag-Selection-1"></a><a class="docs-heading-anchor-permalink" href="#Lag-Selection" title="Permalink"></a></h3><p>The <code>pvar_lag_selection</code> function estimates Panel VAR models for lag orders <span>$p = 1, \ldots, p_{max}$</span> and compares them using Andrews-Lu MMSC criteria. This automates the model comparison workflow and returns the optimal lag order under each criterion.</p><pre><code class="language-julia hljs">sel = pvar_lag_selection(pd2, 4)
 println(&quot;Optimal lag (BIC): &quot;, sel.best_bic,
         &quot;, (AIC): &quot;, sel.best_aic,
         &quot;, (HQIC): &quot;, sel.best_hqic)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">┌ Warning: Too many instruments: PVAR GMM has n_inst=513 moment conditions &gt; N=50 groups (ratio 10.26). Instrument proliferation overfits the endogenous regressors, biases the two-step weighting matrix toward singularity, and pushes the Hansen J-test toward non-rejection (Roodman 2009, OBES 71(1):135-158). Consider collapse=true or a smaller max_lag_endo.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/pvar/estimation.jl:245
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/pvar/estimation.jl:245
 ┌ Warning: Matrix singular. Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:136
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:158
 ┌ Warning: Matrix singular. Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:136
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:158
 ┌ Warning: Matrix singular. Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:136
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:158
 Optimal lag (BIC): 1, (AIC): 1, (HQIC): 1</code></pre><p>The <code>table</code> field contains a <span>$p_{max} \times 4$</span> matrix with columns for the lag order and the three MMSC values. The <code>models</code> vector stores all estimated <code>PVARModel</code> objects for further analysis.</p><hr/><h2 id="Complete-Example"><a class="docs-heading-anchor" href="#Complete-Example">Complete Example</a><a id="Complete-Example-1"></a><a class="docs-heading-anchor-permalink" href="#Complete-Example" title="Permalink"></a></h2><p>This example demonstrates a full panel diagnostics workflow: test for unit roots with all three second-generation tests, estimate a Panel VAR, and validate the specification with GMM diagnostics.</p><pre><code class="language-julia hljs"># --- Step 1: Generate panel data with a common factor ---
 N_ce, T_obs = 30, 60
 r_true = 1
@@ -682,19 +682,19 @@ Common Factor Unit Root Tests (ADF)
                                                                 1 column omitted
 
 ┌ Warning: Too many instruments: PVAR GMM has n_inst=510 moment conditions &gt; N=50 groups (ratio 10.2). Instrument proliferation overfits the endogenous regressors, biases the two-step weighting matrix toward singularity, and pushes the Hansen J-test toward non-rejection (Roodman 2009, OBES 71(1):135-158). Consider collapse=true or a smaller max_lag_endo.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/pvar/estimation.jl:245
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/pvar/estimation.jl:245
 ┌ Warning: Matrix singular. Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:136
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:158
 ┌ Warning: Matrix singular. Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:136
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:158
 ┌ Warning: Matrix singular. Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:136
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:158
 ┌ Warning: Matrix singular. Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:136
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:158
 ┌ Warning: Matrix singular. Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:136
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:158
 ┌ Warning: Matrix singular. Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:136
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:158
          Hansen J-test
 
 
@@ -707,18 +707,18 @@ Common Factor Unit Root Tests (ADF)
   Parameters                6
 
 ┌ Warning: Matrix singular. Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:136
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:158
 ┌ Warning: Matrix singular. Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:136
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:158
 ┌ Warning: Matrix singular. Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:136
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:158
 MMSC-BIC: -3349.6, MMSC-AIC: -958.0, MMSC-HQIC: -1970.31
 ┌ Warning: Too many instruments: PVAR GMM has n_inst=513 moment conditions &gt; N=50 groups (ratio 10.26). Instrument proliferation overfits the endogenous regressors, biases the two-step weighting matrix toward singularity, and pushes the Hansen J-test toward non-rejection (Roodman 2009, OBES 71(1):135-158). Consider collapse=true or a smaller max_lag_endo.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/pvar/estimation.jl:245
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/pvar/estimation.jl:245
 ┌ Warning: Matrix singular. Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:136
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:158
 ┌ Warning: Matrix singular. Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:136
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:158
 ┌ Warning: Matrix singular. Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:136
-Optimal lag (BIC): 1, (AIC): 1, (HQIC): 1</code></pre><p>The PANIC test separates the common factor (I(1)) from the stationary idiosyncratic errors, providing a nuanced view that the composite tests (CIPS, Moon-Perron) cannot. The Panel VAR diagnostics confirm that the GMM instruments are valid and identify the preferred lag order.</p><hr/><h2 id="Common-Pitfalls"><a class="docs-heading-anchor" href="#Common-Pitfalls">Common Pitfalls</a><a id="Common-Pitfalls-1"></a><a class="docs-heading-anchor-permalink" href="#Common-Pitfalls" title="Permalink"></a></h2><ol><li><p><strong>Too few cross-sectional units.</strong> Panel unit root tests rely on <span>$N \to \infty$</span> asymptotics. With <span>$N &lt; 20$</span>, all three tests (PANIC, CIPS, Moon-Perron) have reduced size and power. Use at least 20 cross-sectional units for reliable inference.</p></li><li><p><strong>Sensitivity of automatic factor selection.</strong> The <code>:auto</code> option for <code>r</code> in PANIC and Moon-Perron uses the Bai-Ng IC2 criterion, which can be sensitive to the signal-to-noise ratio. Always compare results with different fixed values of <code>r</code> (e.g., <code>r=1</code>, <code>r=2</code>, <code>r=3</code>) to check robustness.</p></li><li><p><strong>CIPS truncation with unbalanced panels.</strong> The CADF t-statistics are truncated at <span>$\pm 6.19$</span> to ensure finite moments. In heavily unbalanced panels where some units have very short time series, truncation binds frequently, reducing the test&#39;s discriminatory power. Ensure adequate time dimension for all units.</p></li><li><p><strong>J-test low power with many instruments.</strong> In Panel VAR, the number of GMM instruments grows quadratically with the time dimension. When <span>$q \gg k$</span>, the J-test almost never rejects, even when some instruments are invalid. Non-rejection does not validate the instrument set. Use <code>system_instruments=false</code> and shorter lag windows to keep the instrument count manageable.</p></li></ol><hr/><h2 id="References"><a class="docs-heading-anchor" href="#References">References</a><a id="References-1"></a><a class="docs-heading-anchor-permalink" href="#References" title="Permalink"></a></h2><ul><li><p>Andrews, D. W. K., &amp; Lu, B. (2001). Consistent Model and Moment Selection Procedures for GMM Estimation with Application to Dynamic Panel Data Models. <em>Journal of Econometrics</em>, 101(1), 123-164. <a href="https://doi.org/10.1016/S0304-4076(00)00077-4">DOI</a></p></li><li><p>Bai, J., &amp; Ng, S. (2002). Determining the Number of Factors in Approximate Factor Models. <em>Econometrica</em>, 70(1), 191-221. <a href="https://doi.org/10.1111/1468-0262.00273">DOI</a></p></li><li><p>Bai, J., &amp; Ng, S. (2004). A PANIC Attack on Unit Roots and Cointegration. <em>Econometrica</em>, 72(4), 1127-1177. <a href="https://doi.org/10.1111/j.1468-0262.2004.00528.x">DOI</a></p></li><li><p>Bai, J., &amp; Ng, S. (2010). Panel Unit Root Tests with Cross-Section Dependence: A Further Investigation. <em>Econometric Theory</em>, 26(4), 1088-1114. <a href="https://doi.org/10.1017/S0266466609990478">DOI</a></p></li><li><p>Hansen, L. P. (1982). Large Sample Properties of Generalized Method of Moments Estimators. <em>Econometrica</em>, 50(4), 1029-1054. <a href="https://doi.org/10.2307/1912775">DOI</a></p></li><li><p>Moon, H. R., &amp; Perron, B. (2004). Testing for a Unit Root in Panels with Dynamic Factors. <em>Journal of Econometrics</em>, 122(1), 81-126. <a href="https://doi.org/10.1016/j.jeconom.2003.10.020">DOI</a></p></li><li><p>Pesaran, M. H. (2007). A Simple Panel Unit Root Test in the Presence of Cross-Section Dependence. <em>Journal of Applied Econometrics</em>, 22(2), 265-312. <a href="https://doi.org/10.1002/jae.951">DOI</a></p></li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../tests_breaks/">« Structural Breaks</a><a class="docs-footer-nextpage" href="../tests_diagnostics/">Model Diagnostics »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Friday 10 July 2026 21:43">Friday 10 July 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:158
+Optimal lag (BIC): 1, (AIC): 1, (HQIC): 1</code></pre><p>The PANIC test separates the common factor (I(1)) from the stationary idiosyncratic errors, providing a nuanced view that the composite tests (CIPS, Moon-Perron) cannot. The Panel VAR diagnostics confirm that the GMM instruments are valid and identify the preferred lag order.</p><hr/><h2 id="Common-Pitfalls"><a class="docs-heading-anchor" href="#Common-Pitfalls">Common Pitfalls</a><a id="Common-Pitfalls-1"></a><a class="docs-heading-anchor-permalink" href="#Common-Pitfalls" title="Permalink"></a></h2><ol><li><p><strong>Too few cross-sectional units.</strong> Panel unit root tests rely on <span>$N \to \infty$</span> asymptotics. With <span>$N &lt; 20$</span>, all three tests (PANIC, CIPS, Moon-Perron) have reduced size and power. Use at least 20 cross-sectional units for reliable inference.</p></li><li><p><strong>Sensitivity of automatic factor selection.</strong> The <code>:auto</code> option for <code>r</code> in PANIC and Moon-Perron uses the Bai-Ng IC2 criterion, which can be sensitive to the signal-to-noise ratio. Always compare results with different fixed values of <code>r</code> (e.g., <code>r=1</code>, <code>r=2</code>, <code>r=3</code>) to check robustness.</p></li><li><p><strong>CIPS truncation with unbalanced panels.</strong> The CADF t-statistics are truncated at <span>$\pm 6.19$</span> to ensure finite moments. In heavily unbalanced panels where some units have very short time series, truncation binds frequently, reducing the test&#39;s discriminatory power. Ensure adequate time dimension for all units.</p></li><li><p><strong>J-test low power with many instruments.</strong> In Panel VAR, the number of GMM instruments grows quadratically with the time dimension. When <span>$q \gg k$</span>, the J-test almost never rejects, even when some instruments are invalid. Non-rejection does not validate the instrument set. Use <code>system_instruments=false</code> and shorter lag windows to keep the instrument count manageable.</p></li></ol><hr/><h2 id="References"><a class="docs-heading-anchor" href="#References">References</a><a id="References-1"></a><a class="docs-heading-anchor-permalink" href="#References" title="Permalink"></a></h2><ul><li><p>Andrews, D. W. K., &amp; Lu, B. (2001). Consistent Model and Moment Selection Procedures for GMM Estimation with Application to Dynamic Panel Data Models. <em>Journal of Econometrics</em>, 101(1), 123-164. <a href="https://doi.org/10.1016/S0304-4076(00)00077-4">DOI</a></p></li><li><p>Bai, J., &amp; Ng, S. (2002). Determining the Number of Factors in Approximate Factor Models. <em>Econometrica</em>, 70(1), 191-221. <a href="https://doi.org/10.1111/1468-0262.00273">DOI</a></p></li><li><p>Bai, J., &amp; Ng, S. (2004). A PANIC Attack on Unit Roots and Cointegration. <em>Econometrica</em>, 72(4), 1127-1177. <a href="https://doi.org/10.1111/j.1468-0262.2004.00528.x">DOI</a></p></li><li><p>Bai, J., &amp; Ng, S. (2010). Panel Unit Root Tests with Cross-Section Dependence: A Further Investigation. <em>Econometric Theory</em>, 26(4), 1088-1114. <a href="https://doi.org/10.1017/S0266466609990478">DOI</a></p></li><li><p>Hansen, L. P. (1982). Large Sample Properties of Generalized Method of Moments Estimators. <em>Econometrica</em>, 50(4), 1029-1054. <a href="https://doi.org/10.2307/1912775">DOI</a></p></li><li><p>Moon, H. R., &amp; Perron, B. (2004). Testing for a Unit Root in Panels with Dynamic Factors. <em>Journal of Econometrics</em>, 122(1), 81-126. <a href="https://doi.org/10.1016/j.jeconom.2003.10.020">DOI</a></p></li><li><p>Pesaran, M. H. (2007). A Simple Panel Unit Root Test in the Presence of Cross-Section Dependence. <em>Journal of Applied Econometrics</em>, 22(2), 265-312. <a href="https://doi.org/10.1002/jae.951">DOI</a></p></li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../tests_breaks/">« Structural Breaks</a><a class="docs-footer-nextpage" href="../tests_diagnostics/">Model Diagnostics »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Saturday 11 July 2026 23:37">Saturday 11 July 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

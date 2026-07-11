@@ -43,13 +43,13 @@ report(result)</code></pre><pre class="documenter-example-output"><code class="n
   Horizon            20
   CI          bootstrap
 
-                        Shock: INDPRO
+                         Shock: INDPRO
 
-                 h=1       h=4       h=8      h=12      h=20
+                 h=1        h=4       h=8      h=12      h=20
 
-  INDPRO     0.0138*   -0.0024   -0.0002       0.0       0.0
-  CPIAUCSL   0.0008*    0.0001       0.0       0.0      -0.0
-  FEDFUNDS    0.0408   -0.0045   -0.0018   -0.0006   -0.0001
+  INDPRO     0.0138*   -0.0024*   -0.0002       0.0       0.0
+  CPIAUCSL   0.0008*     0.0001       0.0       0.0      -0.0
+  FEDFUNDS   0.0408*    -0.0045   -0.0018   -0.0006   -0.0001
 
                      Shock: CPIAUCSL
 
@@ -59,13 +59,13 @@ report(result)</code></pre><pre class="documenter-example-output"><code class="n
   CPIAUCSL   0.0022*    0.0003     0.0     -0.0     -0.0
   FEDFUNDS    0.0238    0.0067   0.003   0.0016   0.0003
 
-                       Shock: FEDFUNDS
+                        Shock: FEDFUNDS
 
-                 h=1        h=4       h=8     h=12     h=20
+                 h=1        h=4       h=8      h=12      h=20
 
-  INDPRO         0.0   -0.0027*   -0.0001     -0.0     -0.0
-  CPIAUCSL       0.0   -0.0004*   -0.0001     -0.0     -0.0
-  FEDFUNDS   0.1362*    0.0426*   0.0207*   0.0082   0.0013
+  INDPRO         0.0   -0.0027*   -0.0001      -0.0      -0.0
+  CPIAUCSL       0.0   -0.0004*   -0.0001      -0.0      -0.0
+  FEDFUNDS   0.1362*    0.0426*   0.0207*   0.0082*   0.0013*
 
 
 
@@ -102,7 +102,7 @@ report(cum_result)</code></pre><pre class="documenter-example-output"><code clas
 
                  h=1       h=4       h=8      h=12      h=20
 
-  INDPRO         0.0   0.0047*     0.004    0.0034    0.0032
+  INDPRO         0.0    0.0047     0.004    0.0034    0.0032
   CPIAUCSL       0.0   -0.0006   -0.0006   -0.0006   -0.0007
   FEDFUNDS   0.1362*   0.3316*    0.448*   0.4936*   0.5198*
 
@@ -112,15 +112,16 @@ report(cum_result)</code></pre><pre class="documenter-example-output"><code clas
   Note   * CI excludes zero</code></pre><p><strong>Recipe 4: Bayesian IRF (BVAR)</strong></p><pre><code class="language-julia hljs"># Bayesian IRF with 68% credible bands
 result = irf(post, 20)
 report(result)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">┌ Warning: 419/500 posterior draws non-stationary, skipped
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/bvar/utils.jl:108
-Bayesian Impulse Response Functions
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/bvar/utils.jl:108
+   Bayesian Impulse Response Functions
 
 
 
-  Variables                     3
-  Shocks                        3
-  Horizon                      20
-  Quantiles   16.0%, 50.0%, 84.0%
+  Variables                            3
+  Shocks                               3
+  Horizon                             20
+  Quantiles          16.0%, 50.0%, 84.0%
+  Effective draws   81/500 (419 dropped)
 
                    Shock: INDPRO (50.0%)
 
@@ -161,29 +162,29 @@ report(result)</code></pre><pre class="documenter-example-output"><code class="n
   Horizon       20
   CI          None
 
-                        Shock: INDPRO
+                      Shock: INDPRO
+
+                h=1       h=4       h=8     h=12    h=20
+
+  INDPRO     0.0081   -0.0037   -0.0002      0.0    -0.0
+  CPIAUCSL   0.0006   -0.0003      -0.0     -0.0    -0.0
+  FEDFUNDS   0.1352    0.0322    0.0158   0.0063   0.001
+
+                       Shock: CPIAUCSL
 
                  h=1       h=4       h=8      h=12      h=20
 
-  INDPRO      0.0092   -0.0004   -0.0001       0.0       0.0
-  CPIAUCSL    0.0015    0.0004    0.0001       0.0       0.0
-  FEDFUNDS   -0.0476   -0.0267   -0.0128   -0.0048   -0.0008
-
-                      Shock: CPIAUCSL
-
-                h=1       h=4       h=8     h=12     h=20
-
-  INDPRO     0.0103   -0.0031   -0.0002      0.0     -0.0
-  CPIAUCSL     -0.0   -0.0003      -0.0      0.0     -0.0
-  FEDFUNDS   0.1046    0.0201    0.0101   0.0039   0.0006
+  INDPRO      0.0107   -0.0006   -0.0001       0.0       0.0
+  CPIAUCSL    0.0013    0.0004    0.0001       0.0       0.0
+  FEDFUNDS   -0.0394   -0.0259   -0.0123   -0.0047   -0.0007
 
                        Shock: FEDFUNDS
 
-                 h=1       h=4       h=8      h=12      h=20
+                 h=1       h=4      h=8      h=12      h=20
 
-  INDPRO      0.0009    0.0022       0.0      -0.0       0.0
-  CPIAUCSL   -0.0018      -0.0       0.0       0.0       0.0
-  FEDFUNDS    -0.087   -0.0277   -0.0132   -0.0055   -0.0009</code></pre><p><strong>Recipe 6: Structural LP IRF</strong></p><pre><code class="language-julia hljs"># Structural LP: Cholesky identification + LP estimation
+  INDPRO      0.0035    0.0009     -0.0       0.0       0.0
+  CPIAUCSL   -0.0019   -0.0002      0.0       0.0       0.0
+  FEDFUNDS   -0.0306   -0.0131   -0.006   -0.0027   -0.0004</code></pre><p><strong>Recipe 6: Structural LP IRF</strong></p><pre><code class="language-julia hljs"># Structural LP: Cholesky identification + LP estimation
 slp = structural_lp(Y, 20; method=:cholesky, lags=4)
 result = irf(slp)
 report(result)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Impulse Response Functions
@@ -240,7 +241,7 @@ report(result)</code></pre><pre class="documenter-example-output"><code class="n
 
   INDPRO     0.0138*   -0.0024*   -0.0002       0.0       0.0
   CPIAUCSL   0.0008*     0.0001       0.0       0.0      -0.0
-  FEDFUNDS    0.0408    -0.0045   -0.0018   -0.0006   -0.0001
+  FEDFUNDS   0.0408*    -0.0045   -0.0018   -0.0006   -0.0001
 
                      Shock: CPIAUCSL
 
@@ -281,23 +282,23 @@ report(cum_result)</code></pre><pre class="documenter-example-output"><code clas
 
   INDPRO     0.0138*   0.0123*   0.0136*   0.0135*   0.0135*
   CPIAUCSL   0.0008*    0.0001    0.0003    0.0004    0.0004
-  FEDFUNDS    0.0408    0.0185    0.0119    0.0081    0.0063
+  FEDFUNDS   0.0408*    0.0185    0.0119    0.0081    0.0063
 
                        Shock: CPIAUCSL
 
                  h=1       h=4       h=8      h=12      h=20
 
-  INDPRO         0.0   0.0043*   0.0037*   0.0035*   0.0034*
+  INDPRO         0.0   0.0043*   0.0037*    0.0035    0.0034
   CPIAUCSL   0.0022*   0.0012*   0.0012*   0.0012*   0.0012*
   FEDFUNDS    0.0238    0.0689    0.0884    0.0975    0.1029
 
-                        Shock: FEDFUNDS
+                         Shock: FEDFUNDS
 
-                 h=1        h=4       h=8      h=12      h=20
+                 h=1        h=4        h=8       h=12       h=20
 
-  INDPRO         0.0    0.0047*     0.004    0.0034    0.0032
-  CPIAUCSL       0.0   -0.0006*   -0.0006   -0.0006   -0.0007
-  FEDFUNDS   0.1362*    0.3316*    0.448*   0.4936*   0.5198*
+  INDPRO         0.0     0.0047      0.004     0.0034     0.0032
+  CPIAUCSL       0.0   -0.0006*   -0.0006*   -0.0006*   -0.0007*
+  FEDFUNDS   0.1362*    0.3316*     0.448*    0.4936*    0.5198*
 
 
 
@@ -305,15 +306,16 @@ report(cum_result)</code></pre><pre class="documenter-example-output"><code clas
   Note   * CI excludes zero</code></pre><p>The cumulative response of INDPRO to a federal funds rate shock shows the total level effect of a monetary tightening. Since INDPRO enters the VAR in growth rates (transformation code 5 in FRED-MD), the cumulative IRF translates the growth-rate response into the implied level response. A persistently negative cumulative response indicates that a one-time monetary contraction permanently reduces the level of industrial production.</p><hr/><h2 id="Bayesian-IRF"><a class="docs-heading-anchor" href="#Bayesian-IRF">Bayesian IRF</a><a id="Bayesian-IRF-1"></a><a class="docs-heading-anchor-permalink" href="#Bayesian-IRF" title="Permalink"></a></h2><p>Bayesian IRFs replace bootstrap confidence intervals with posterior credible bands derived from the BVAR posterior distribution. For each posterior draw of <span>$(B^{(d)}, \Sigma^{(d)})$</span>, the algorithm computes the full IRF and then reports posterior quantiles across draws.</p><p class="math-container">\[\Theta_h^{(d)} = \Phi_h^{(d)} \cdot B_0^{(d)}, \qquad d = 1, \ldots, D\]</p><p>where:</p><ul><li><span>$\Theta_h^{(d)}$</span> is the IRF at horizon <span>$h$</span> for posterior draw <span>$d$</span></li><li><span>$D$</span> is the number of posterior draws</li><li><span>$B_0^{(d)} = L^{(d)} Q$</span> with <span>$L^{(d)}$</span> the Cholesky factor of <span>$\Sigma^{(d)}$</span></li></ul><p>The returned quantiles (default: 16th, 50th, 84th percentiles) form 68% pointwise credible bands. The point estimate is the posterior mean by default; pass <code>point_estimate=:median</code> for the posterior median.</p><pre><code class="language-julia hljs"># Bayesian IRFs with default 68% credible bands
 bayes_result = irf(post, 20)
 report(bayes_result)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">┌ Warning: 419/500 posterior draws non-stationary, skipped
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/bvar/utils.jl:108
-Bayesian Impulse Response Functions
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/bvar/utils.jl:108
+   Bayesian Impulse Response Functions
 
 
 
-  Variables                     3
-  Shocks                        3
-  Horizon                      20
-  Quantiles   16.0%, 50.0%, 84.0%
+  Variables                            3
+  Shocks                               3
+  Horizon                             20
+  Quantiles          16.0%, 50.0%, 84.0%
+  Effective draws   81/500 (419 dropped)
 
                    Shock: INDPRO (50.0%)
 
@@ -404,13 +406,13 @@ report(result_stat)</code></pre><pre class="documenter-example-output"><code cla
   Horizon            20
   CI          bootstrap
 
-                        Shock: INDPRO
+                         Shock: INDPRO
 
-                 h=1       h=4       h=8      h=12      h=20
+                 h=1        h=4       h=8      h=12      h=20
 
-  INDPRO     0.0138*   -0.0024   -0.0002       0.0       0.0
-  CPIAUCSL   0.0008*    0.0001       0.0       0.0      -0.0
-  FEDFUNDS   0.0408*   -0.0045   -0.0018   -0.0006   -0.0001
+  INDPRO     0.0138*   -0.0024*   -0.0002       0.0       0.0
+  CPIAUCSL   0.0008*     0.0001       0.0       0.0      -0.0
+  FEDFUNDS   0.0408*    -0.0045   -0.0018   -0.0006   -0.0001
 
                      Shock: CPIAUCSL
 
@@ -420,13 +422,13 @@ report(result_stat)</code></pre><pre class="documenter-example-output"><code cla
   CPIAUCSL   0.0022*    0.0003     0.0     -0.0     -0.0
   FEDFUNDS    0.0238    0.0067   0.003   0.0016   0.0003
 
-                        Shock: FEDFUNDS
+                       Shock: FEDFUNDS
 
-                 h=1        h=4        h=8      h=12     h=20
+                 h=1        h=4       h=8      h=12     h=20
 
-  INDPRO         0.0   -0.0027*    -0.0001      -0.0     -0.0
-  CPIAUCSL       0.0   -0.0004*   -0.0001*      -0.0     -0.0
-  FEDFUNDS   0.1362*    0.0426*    0.0207*   0.0082*   0.0013
+  INDPRO         0.0   -0.0027*   -0.0001      -0.0     -0.0
+  CPIAUCSL       0.0   -0.0004*   -0.0001      -0.0     -0.0
+  FEDFUNDS   0.1362*    0.0426*   0.0207*   0.0082*   0.0013
 
 
 
@@ -448,13 +450,13 @@ print_table(stdout, freq_irf, &quot;INDPRO&quot;, &quot;FEDFUNDS&quot;; horizons
   Horizon            20
   CI          bootstrap
 
-                        Shock: INDPRO
+                         Shock: INDPRO
 
-                 h=1       h=4       h=8      h=12      h=20
+                 h=1        h=4       h=8      h=12      h=20
 
-  INDPRO     0.0138*   -0.0024   -0.0002       0.0       0.0
-  CPIAUCSL   0.0008*    0.0001       0.0       0.0      -0.0
-  FEDFUNDS    0.0408   -0.0045   -0.0018   -0.0006   -0.0001
+  INDPRO     0.0138*   -0.0024*   -0.0002       0.0       0.0
+  CPIAUCSL   0.0008*     0.0001       0.0       0.0      -0.0
+  FEDFUNDS   0.0408*    -0.0045   -0.0018   -0.0006   -0.0001
 
                      Shock: CPIAUCSL
 
@@ -466,11 +468,11 @@ print_table(stdout, freq_irf, &quot;INDPRO&quot;, &quot;FEDFUNDS&quot;; horizons
 
                         Shock: FEDFUNDS
 
-                 h=1        h=4        h=8     h=12      h=20
+                 h=1        h=4        h=8      h=12     h=20
 
-  INDPRO         0.0   -0.0027*    -0.0001     -0.0      -0.0
-  CPIAUCSL       0.0   -0.0004*   -0.0001*     -0.0      -0.0
-  FEDFUNDS   0.1362*    0.0426*    0.0207*   0.0082   0.0013*
+  INDPRO         0.0   -0.0027*    -0.0001      -0.0     -0.0
+  CPIAUCSL       0.0   -0.0004*   -0.0001*      -0.0     -0.0
+  FEDFUNDS   0.1362*    0.0426*    0.0207*   0.0082*   0.0013
 
 
 
@@ -482,21 +484,22 @@ print_table(stdout, freq_irf, &quot;INDPRO&quot;, &quot;FEDFUNDS&quot;; horizons
      h           IRF          Lower         Upper
 
    1.0           0.0            0.0           0.0
-   4.0   -0.00274193    -0.00544428   -0.00055743
-   8.0   -9.15496e-5    -0.00069213   0.000389523
-  12.0   -8.65528e-6   -0.000185299   0.000164609
-  20.0   -1.09552e-5    -5.82884e-5    1.69855e-5</code></pre><pre><code class="language-julia hljs"># ── Bayesian BVAR IRF ────────────────────────────────────────────────
+   4.0   -0.00274193    -0.00522507   -0.00111339
+   8.0   -9.15496e-5   -0.000645888   0.000389525
+  12.0   -8.65528e-6   -0.000191068   0.000207512
+  20.0   -1.09552e-5    -5.68598e-5    1.49209e-5</code></pre><pre><code class="language-julia hljs"># ── Bayesian BVAR IRF ────────────────────────────────────────────────
 bayes_irf = irf(post, 20)
 report(bayes_irf)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">┌ Warning: 419/500 posterior draws non-stationary, skipped
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/bvar/utils.jl:108
-Bayesian Impulse Response Functions
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/bvar/utils.jl:108
+   Bayesian Impulse Response Functions
 
 
 
-  Variables                     3
-  Shocks                        3
-  Horizon                      20
-  Quantiles   16.0%, 50.0%, 84.0%
+  Variables                            3
+  Shocks                               3
+  Horizon                             20
+  Quantiles          16.0%, 50.0%, 84.0%
+  Effective draws   81/500 (419 dropped)
 
                    Shock: INDPRO (50.0%)
 
@@ -564,4 +567,4 @@ report(lp_full)</code></pre><pre class="documenter-example-output"><code class="
 
 
 
-  Note   * CI excludes zero</code></pre><p>The three approaches produce qualitatively similar IRFs under correct specification, but differ in their uncertainty quantification. The bootstrap CI on the frequentist IRF reflects sampling variability in the OLS estimates. The Bayesian credible bands incorporate prior information from the Minnesota prior, which stabilizes long-horizon responses. The structural LP bands are the widest because LP does not impose the VAR&#39;s cross-horizon coefficient restrictions. Comparing all three provides a robustness check: if the qualitative shape and sign of the response are consistent across methods, the structural conclusion is credible.</p><hr/><h2 id="Common-Pitfalls"><a class="docs-heading-anchor" href="#Common-Pitfalls">Common Pitfalls</a><a id="Common-Pitfalls-1"></a><a class="docs-heading-anchor-permalink" href="#Common-Pitfalls" title="Permalink"></a></h2><ol><li><p><strong>Explosive bootstrap draws.</strong> Near-unit-root VARs produce bootstrap draws with <span>$|\lambda_{\max}| &gt; 1$</span>, causing IRF confidence bands to diverge at long horizons. Use <code>stationary_only=true</code> to filter these draws. This is the default recommendation in Kilian &amp; Lütkepohl (2017, Chapter 12).</p></li><li><p><strong>Cumulating pointwise quantiles.</strong> Never cumulate the upper and lower CI bounds directly. The correct approach is to cumulate each bootstrap draw and then extract quantiles. The <code>cumulative_irf()</code> function handles this automatically when raw draws are available.</p></li><li><p><strong>Interpreting Cholesky ordering.</strong> The recursive identification assigns economic meaning based on variable ordering. Placing the federal funds rate last assumes monetary policy does not contemporaneously affect output or prices. Reversing the ordering changes the identified shocks entirely.</p></li><li><p><strong>Confusing array indexing.</strong> The IRF array uses <code>values[h, i, j]</code> where the first index corresponds to horizon <span>$h-1$</span> (i.e., <code>values[1, :, :]</code> is the impact response at <span>$h=0$</span>). This 1-based indexing matches Julia&#39;s convention.</p></li><li><p><strong>Insufficient bootstrap replications.</strong> The default <code>reps=200</code> is adequate for point estimates but not for tight confidence bands. Use <code>reps=1000</code> or higher for publication-quality inference. Sign-restricted IRFs require even more draws because accepted rotations are a subset of all draws.</p></li></ol><hr/><h2 id="References"><a class="docs-heading-anchor" href="#References">References</a><a id="References-1"></a><a class="docs-heading-anchor-permalink" href="#References" title="Permalink"></a></h2><ul><li><p>Jordà, Òscar. 2005. &quot;Estimation and Inference of Impulse Responses by Local Projections.&quot; <em>American Economic Review</em>, 95(1), 161–182. <a href="https://doi.org/10.1257/0002828053828518">DOI</a></p></li><li><p>Kilian, Lutz. 1998. &quot;Small-Sample Confidence Intervals for Impulse Response Functions.&quot; <em>Review of Economics and Statistics</em>, 80(2), 218–230. <a href="https://doi.org/10.1162/003465398557465">DOI</a></p></li><li><p>Kilian, Lutz, and Helmut Lütkepohl. 2017. <em>Structural Vector Autoregressive Analysis</em>. Cambridge: Cambridge University Press. <a href="https://doi.org/10.1017/9781108164818">DOI</a></p></li><li><p>Lütkepohl, Helmut. 2005. <em>New Introduction to Multiple Time Series Analysis</em>. Berlin: Springer. ISBN 978-3-540-40172-8.</p></li><li><p>Plagborg-Møller, Mikkel, and Christian K. Wolf. 2021. &quot;Local Projections and VARs Estimate the Same Impulse Responses.&quot; <em>Econometrica</em>, 89(2), 955–980. <a href="https://doi.org/10.3982/ECTA17813">DOI</a></p></li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../innovation_accounting/">« Overview</a><a class="docs-footer-nextpage" href="../ia_fevd/">Variance Decomposition »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Friday 10 July 2026 21:43">Friday 10 July 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+  Note   * CI excludes zero</code></pre><p>The three approaches produce qualitatively similar IRFs under correct specification, but differ in their uncertainty quantification. The bootstrap CI on the frequentist IRF reflects sampling variability in the OLS estimates. The Bayesian credible bands incorporate prior information from the Minnesota prior, which stabilizes long-horizon responses. The structural LP bands are the widest because LP does not impose the VAR&#39;s cross-horizon coefficient restrictions. Comparing all three provides a robustness check: if the qualitative shape and sign of the response are consistent across methods, the structural conclusion is credible.</p><hr/><h2 id="Common-Pitfalls"><a class="docs-heading-anchor" href="#Common-Pitfalls">Common Pitfalls</a><a id="Common-Pitfalls-1"></a><a class="docs-heading-anchor-permalink" href="#Common-Pitfalls" title="Permalink"></a></h2><ol><li><p><strong>Explosive bootstrap draws.</strong> Near-unit-root VARs produce bootstrap draws with <span>$|\lambda_{\max}| &gt; 1$</span>, causing IRF confidence bands to diverge at long horizons. Use <code>stationary_only=true</code> to filter these draws. This is the default recommendation in Kilian &amp; Lütkepohl (2017, Chapter 12).</p></li><li><p><strong>Cumulating pointwise quantiles.</strong> Never cumulate the upper and lower CI bounds directly. The correct approach is to cumulate each bootstrap draw and then extract quantiles. The <code>cumulative_irf()</code> function handles this automatically when raw draws are available.</p></li><li><p><strong>Interpreting Cholesky ordering.</strong> The recursive identification assigns economic meaning based on variable ordering. Placing the federal funds rate last assumes monetary policy does not contemporaneously affect output or prices. Reversing the ordering changes the identified shocks entirely.</p></li><li><p><strong>Confusing array indexing.</strong> The IRF array uses <code>values[h, i, j]</code> where the first index corresponds to horizon <span>$h-1$</span> (i.e., <code>values[1, :, :]</code> is the impact response at <span>$h=0$</span>). This 1-based indexing matches Julia&#39;s convention.</p></li><li><p><strong>Insufficient bootstrap replications.</strong> The default <code>reps=200</code> is adequate for point estimates but not for tight confidence bands. Use <code>reps=1000</code> or higher for publication-quality inference. Sign-restricted IRFs require even more draws because accepted rotations are a subset of all draws.</p></li></ol><hr/><h2 id="References"><a class="docs-heading-anchor" href="#References">References</a><a id="References-1"></a><a class="docs-heading-anchor-permalink" href="#References" title="Permalink"></a></h2><ul><li><p>Jordà, Òscar. 2005. &quot;Estimation and Inference of Impulse Responses by Local Projections.&quot; <em>American Economic Review</em>, 95(1), 161–182. <a href="https://doi.org/10.1257/0002828053828518">DOI</a></p></li><li><p>Kilian, Lutz. 1998. &quot;Small-Sample Confidence Intervals for Impulse Response Functions.&quot; <em>Review of Economics and Statistics</em>, 80(2), 218–230. <a href="https://doi.org/10.1162/003465398557465">DOI</a></p></li><li><p>Kilian, Lutz, and Helmut Lütkepohl. 2017. <em>Structural Vector Autoregressive Analysis</em>. Cambridge: Cambridge University Press. <a href="https://doi.org/10.1017/9781108164818">DOI</a></p></li><li><p>Lütkepohl, Helmut. 2005. <em>New Introduction to Multiple Time Series Analysis</em>. Berlin: Springer. ISBN 978-3-540-40172-8.</p></li><li><p>Plagborg-Møller, Mikkel, and Christian K. Wolf. 2021. &quot;Local Projections and VARs Estimate the Same Impulse Responses.&quot; <em>Econometrica</em>, 89(2), 955–980. <a href="https://doi.org/10.3982/ECTA17813">DOI</a></p></li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../innovation_accounting/">« Overview</a><a class="docs-footer-nextpage" href="../ia_fevd/">Variance Decomposition »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Saturday 11 July 2026 23:37">Saturday 11 July 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

@@ -114,29 +114,29 @@ p_aic = select_lag_order(Y, 13; criterion=:aic)
 
 model = estimate_var(Y, p_bic)
 report(model)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">┌ Warning: Matrix near-singular (1-norm cond ≈ 7.826201527222449e7). Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:130
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:152
 ┌ Warning: Matrix near-singular (1-norm cond ≈ 1.3976828671341679e8). Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:130
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:152
 ┌ Warning: Estimated VAR is non-stationary (max eigenvalue modulus = 1.0378). Consider differencing the data or using a VECM specification.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/var/estimation.jl:63
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/var/estimation.jl:63
 ┌ Warning: Matrix near-singular (1-norm cond ≈ 2.8597039257582015e8). Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:130
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:152
 ┌ Warning: Estimated VAR is non-stationary (max eigenvalue modulus = 1.0642). Consider differencing the data or using a VECM specification.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/var/estimation.jl:63
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/var/estimation.jl:63
 ┌ Warning: Matrix near-singular (1-norm cond ≈ 7.826201527222449e7). Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:130
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:152
 ┌ Warning: Matrix near-singular (1-norm cond ≈ 1.3976828671341679e8). Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:130
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:152
 ┌ Warning: Estimated VAR is non-stationary (max eigenvalue modulus = 1.0378). Consider differencing the data or using a VECM specification.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/var/estimation.jl:63
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/var/estimation.jl:63
 ┌ Warning: Matrix near-singular (1-norm cond ≈ 2.8597039257582015e8). Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:130
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:152
 ┌ Warning: Estimated VAR is non-stationary (max eigenvalue modulus = 1.0642). Consider differencing the data or using a VECM specification.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/var/estimation.jl:63
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/var/estimation.jl:63
 ┌ Warning: Matrix near-singular (1-norm cond ≈ 2.8597039257582015e8). Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:130
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:152
 ┌ Warning: Estimated VAR is non-stationary (max eigenvalue modulus = 1.0642). Consider differencing the data or using a VECM specification.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/var/estimation.jl:63
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/var/estimation.jl:63
  Vector Autoregression — VAR(13)
 
   Specification
@@ -147,7 +147,7 @@ report(model)</code></pre><pre class="documenter-example-output"><code class="no
   Parameters per equation    40
 
 ┌ Warning: Matrix near-singular (1-norm cond ≈ 2.8597039257582015e8). Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:130
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:152
                     Equation Summary
 
   Equation   Parms     RMSE       R²   Adj. R²   F-stat
@@ -269,13 +269,13 @@ result = irf(model, 20; method=:cholesky, ci_type=:bootstrap, reps=50)</code></p
   Horizon            20
   CI          bootstrap
 
-<span class="sgr1">                      Shock: y1</span>
+<span class="sgr1">                       Shock: y1</span>
 
- <span class="sgr1">    </span> <span class="sgr1">     h=1 </span> <span class="sgr1">    h=4 </span> <span class="sgr1">     h=8 </span> <span class="sgr1">   h=12 </span> <span class="sgr1">    h=20 </span>
+ <span class="sgr1">    </span> <span class="sgr1">     h=1 </span> <span class="sgr1">     h=4 </span> <span class="sgr1">     h=8 </span> <span class="sgr1">   h=12 </span> <span class="sgr1">    h=20 </span>
 
-  y1   0.0067*   0.0001   -0.0003     -0.0      -0.0
-  y2       0.0   0.0002   -0.0002     -0.0       0.0
-  y3    0.0223   0.0402    0.0167   0.0058   -0.0016
+  y1   0.0067*    0.0001   -0.0003     -0.0      -0.0
+  y2       0.0    0.0002   -0.0002     -0.0       0.0
+  y3   0.0223*   0.0402*    0.0167   0.0058   -0.0016
 
 <span class="sgr1">                      Shock: y2</span>
 
@@ -311,29 +311,29 @@ result = irf(model, 20; method=:sign, check_func=check)</code></pre><pre class="
   Horizon       20
   CI          None
 
-<span class="sgr1">                       Shock: y1</span>
+<span class="sgr1">                      Shock: y1</span>
 
- <span class="sgr1">    </span> <span class="sgr1">     h=1 </span> <span class="sgr1">     h=4 </span> <span class="sgr1">     h=8 </span> <span class="sgr1">    h=12 </span> <span class="sgr1">   h=20 </span>
+ <span class="sgr1">    </span> <span class="sgr1">     h=1 </span> <span class="sgr1">     h=4 </span> <span class="sgr1">     h=8 </span> <span class="sgr1">    h=12 </span> <span class="sgr1">  h=20 </span>
 
-  y1   -0.0045   -0.0004    0.0005    0.0002     -0.0
-  y2     0.001    0.0002    0.0001       0.0      0.0
-  y3   -0.0569   -0.0761   -0.0409   -0.0069   0.0026
+  y1    0.0015   -0.0001       0.0   -0.0002     0.0
+  y2   -0.0018   -0.0007       0.0      -0.0    -0.0
+  y3   -0.0475   -0.0226   -0.0043   -0.0056   0.002
 
 <span class="sgr1">                      Shock: y2</span>
 
- <span class="sgr1">    </span> <span class="sgr1">     h=1 </span> <span class="sgr1">    h=4 </span> <span class="sgr1">     h=8 </span> <span class="sgr1">   h=12 </span> <span class="sgr1">    h=20 </span>
+ <span class="sgr1">    </span> <span class="sgr1">   h=1 </span> <span class="sgr1">    h=4 </span> <span class="sgr1">     h=8 </span> <span class="sgr1">    h=12 </span> <span class="sgr1">    h=20 </span>
 
-  y1   -0.0007   0.0002   -0.0001   0.0001      -0.0
-  y2    0.0016   0.0006   -0.0001      0.0       0.0
-  y3     0.063   0.0417    0.0148   0.0073   -0.0027
+  y1   0.006   0.0003   -0.0005   -0.0001       0.0
+  y2    -0.0   0.0002   -0.0002       0.0       0.0
+  y3   0.055   0.0697    0.0325    0.0085   -0.0028
 
-<span class="sgr1">                      Shock: y3</span>
+<span class="sgr1">                       Shock: y3</span>
 
- <span class="sgr1">    </span> <span class="sgr1">     h=1 </span> <span class="sgr1">     h=4 </span> <span class="sgr1">    h=8 </span> <span class="sgr1">    h=12 </span> <span class="sgr1">   h=20 </span>
+ <span class="sgr1">    </span> <span class="sgr1">     h=1 </span> <span class="sgr1">     h=4 </span> <span class="sgr1">     h=8 </span> <span class="sgr1">    h=12 </span> <span class="sgr1">    h=20 </span>
 
-  y1   -0.0049    0.0001      0.0   -0.0002      0.0
-  y2   -0.0012   -0.0005   0.0001      -0.0     -0.0
-  y3    0.0122    0.0084   0.0123   -0.0026   0.0002
+  y1   -0.0025    0.0003   -0.0002   -0.0003       0.0
+  y2   -0.0012   -0.0004       0.0      -0.0      -0.0
+  y3    0.0455    0.0473    0.0312    0.0019   -0.0014
 
 </code></pre><pre><code class="language-julia hljs">plot_result(result)</code></pre><iframe src="../assets/plots/irf_sign.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe><p><strong>Recipe 5: Arias identification</strong></p><pre><code class="language-julia hljs">model_short = estimate_var(Y[end-59:end, :], 2)
 
@@ -345,14 +345,14 @@ restrictions = SVARRestrictions(3;
 result = identify_arias(model_short, restrictions, 20; n_draws=500)
 result</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">Arias et al. (2018) SVAR Result</span>
 
- <span class="sgr1">                   </span> <span class="sgr1">        </span>
+ <span class="sgr1">                   </span> <span class="sgr1">       </span>
 
-  Accepted draws         500
-  Acceptance rate     24.74%
-  Zero restrictions        0
-  Sign restrictions        2
-  Variables                3
-  Shocks                   3
+  Accepted draws        500
+  Acceptance rate     24.8%
+  Zero restrictions       0
+  Sign restrictions       2
+  Variables               3
+  Shocks                  3
 
 </code></pre><p><strong>Recipe 6: Uhlig identification</strong></p><pre><code class="language-julia hljs">model_short = estimate_var(Y[end-59:end, :], 2)
 
@@ -377,7 +377,7 @@ result</code></pre><pre class="documenter-example-output"><code class="nohighlig
 
  <span class="sgr1"> Shock   </span> <span class="sgr1"> Restrictions   </span> <span class="sgr1">  Penalty </span>
 
-  Shock 1   0 zero, 1 sign   -99.6221
+  Shock 1   0 zero, 1 sign   -99.6222
   Shock 2   0 zero, 0 sign        0.0
   Shock 3   0 zero, 1 sign   -99.6222
 
@@ -534,29 +534,29 @@ p_aic = select_lag_order(Y, 13; criterion=:aic)
 
 model = estimate_var(Y, p_bic)
 report(model)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">┌ Warning: Matrix near-singular (1-norm cond ≈ 7.826201527222449e7). Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:130
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:152
 ┌ Warning: Matrix near-singular (1-norm cond ≈ 1.3976828671341679e8). Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:130
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:152
 ┌ Warning: Estimated VAR is non-stationary (max eigenvalue modulus = 1.0378). Consider differencing the data or using a VECM specification.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/var/estimation.jl:63
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/var/estimation.jl:63
 ┌ Warning: Matrix near-singular (1-norm cond ≈ 2.8597039257582015e8). Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:130
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:152
 ┌ Warning: Estimated VAR is non-stationary (max eigenvalue modulus = 1.0642). Consider differencing the data or using a VECM specification.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/var/estimation.jl:63
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/var/estimation.jl:63
 ┌ Warning: Matrix near-singular (1-norm cond ≈ 7.826201527222449e7). Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:130
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:152
 ┌ Warning: Matrix near-singular (1-norm cond ≈ 1.3976828671341679e8). Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:130
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:152
 ┌ Warning: Estimated VAR is non-stationary (max eigenvalue modulus = 1.0378). Consider differencing the data or using a VECM specification.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/var/estimation.jl:63
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/var/estimation.jl:63
 ┌ Warning: Matrix near-singular (1-norm cond ≈ 2.8597039257582015e8). Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:130
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:152
 ┌ Warning: Estimated VAR is non-stationary (max eigenvalue modulus = 1.0642). Consider differencing the data or using a VECM specification.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/var/estimation.jl:63
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/var/estimation.jl:63
 ┌ Warning: Matrix near-singular (1-norm cond ≈ 2.8597039257582015e8). Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:130
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:152
 ┌ Warning: Estimated VAR is non-stationary (max eigenvalue modulus = 1.0642). Consider differencing the data or using a VECM specification.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/var/estimation.jl:63
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/var/estimation.jl:63
  Vector Autoregression — VAR(13)
 
   Specification
@@ -567,7 +567,7 @@ report(model)</code></pre><pre class="documenter-example-output"><code class="no
   Parameters per equation    40
 
 ┌ Warning: Matrix near-singular (1-norm cond ≈ 2.8597039257582015e8). Using pseudo-inverse.
-└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/.claude/worktrees/delightful-beaming-koala/src/core/utils.jl:130
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:152
                     Equation Summary
 
   Equation   Parms     RMSE       R²   Adj. R²   F-stat
@@ -729,7 +729,7 @@ id_set
 
 # Pointwise median and 68% credible bands
 med = irf_median(id_set)
-lower, upper = irf_bounds(id_set; quantiles=[0.16, 0.84])</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">([-0.0044271801846161585 -0.0014543252493391275 -0.06544988133438724; -0.0032207771365755306 -0.0012088825800760802 -0.05678435237628238; … ; -3.1564707115346465e-5 -1.4257965253899777e-5 -0.00279997464022944; -1.235557340675828e-5 -3.0319112039184825e-6 -0.002707536694862424;;; -0.004779515601970284 -0.0015769031482321086 -0.05994561814337092; -0.0033889876643819878 -0.0010778915923793262 -0.05275426103997341; … ; -2.903512368689433e-5 -1.3348705243649563e-5 -0.0028793920072098323; -1.111479400088903e-5 -2.993527770318499e-6 -0.002728894713460504;;; -0.005050068995342068 -0.0017465509902290855 0.01126893298335265; -0.00035635736651615024 -4.087382577770167e-5 0.01015443723306214; … ; 2.77232163296531e-5 7.806049946320007e-6 -0.002992630952325337; 1.429298204948988e-5 -2.711986632342173e-6 -0.0022776654451872745], [0.004693801466558739 0.001610429019028546 0.059824673782133166; 0.003109369765294624 0.0011548466326732952 0.05005037073932478; … ; 3.031051610497509e-5 1.411819933366164e-5 0.003147586007862835; 1.1462496773367005e-5 3.166258218689255e-6 0.0030291451013600753;;; 0.00507008029387177 0.0014902023918833616 0.059674298433026844; 0.00330381681297398 0.001115985748536214 0.051767163335643546; … ; 3.2281227565636357e-5 1.4516635539581126e-5 0.002918538631249269; 1.250937433129048e-5 2.8977009226492554e-6 0.0028378356121024845;;; -0.0007744112804468123 -0.0003421357914857751 0.06351899250418455; 0.0025079947394757362 0.0009633534509973117 0.054889379234194846; … ; 5.272333260186316e-5 2.0303553077438887e-5 -0.0005054599236076486; 2.2885624446228082e-5 1.8811210408865253e-9 0.00014670474491159917])</code></pre><p>The acceptance rate indicates what fraction of random draws satisfy all sign conditions simultaneously. Rates below 1% suggest the restrictions may be overly stringent or nearly contradictory.</p><h3 id="Narrative-Restrictions"><a class="docs-heading-anchor" href="#Narrative-Restrictions">Narrative Restrictions</a><a id="Narrative-Restrictions-1"></a><a class="docs-heading-anchor-permalink" href="#Narrative-Restrictions" title="Permalink"></a></h3><p>Narrative restrictions augment sign restrictions with historical information about specific shocks at particular dates, following Antolín-Díaz &amp; Rubio-Ramírez (2018). Two types of narrative constraints are supported:</p><ol><li><strong>Shock sign narrative</strong>: at date <span>$t^*$</span>, structural shock <span>$j$</span> was positive (or negative)</li><li><strong>Shock contribution narrative</strong>: at date <span>$t^*$</span>, shock <span>$j$</span> was the dominant driver of variable <span>$i$</span></li></ol><pre><code class="language-julia hljs">model = estimate_var(Y, 4)
+lower, upper = irf_bounds(id_set; quantiles=[0.16, 0.84])</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">([-0.004426328437487384 -0.0014501749963005191 -0.06530792009885607; -0.003343592772422344 -0.0011883709155988088 -0.05672642692337527; … ; -3.143988132267043e-5 -1.4207039194882633e-5 -0.002822306269721216; -1.2337057935510402e-5 -3.000442361432331e-6 -0.002707491551748639;;; -0.00493651140266707 -0.0015731797268884148 -0.059929185762511404; -0.003341319328231453 -0.00114445853277331 -0.052323252356299255; … ; -2.8216967496885987e-5 -1.3346849645247266e-5 -0.002919728838357749; -1.1012789845406731e-5 -2.951285382255354e-6 -0.0028503296158760016;;; -0.005000515688034507 -0.0017454767472398726 0.01121900387750025; -0.00036083193676187395 -3.280238564528165e-5 0.01005343449107256; … ; 2.8287114781931215e-5 7.887745225522487e-6 -0.002981755822207648; 1.4469171064347151e-5 -2.7114238414358264e-6 -0.0022384036393970166], [0.004868899279315387 0.0015833920037344365 0.059421847904016556; 0.0031209187958997874 0.0011497528979652893 0.05050787788538355; … ; 3.023897410809705e-5 1.4081163616898646e-5 0.003147272040273494; 1.1440443068158086e-5 3.1489448341216003e-6 0.0030246330304494013;;; 0.005014411340046623 0.0015076466607610597 0.061691146712863444; 0.0033261138486411035 0.0011130926770071812 0.05268192706299123; … ; 3.2083734521793274e-5 1.4313669171011099e-5 0.002888975242289507; 1.2118391550675726e-5 2.989883613964832e-6 0.0028438087373194422;;; -0.0008404949501264857 -0.00034711328617615436 0.06311403577779309; 0.0024528485617694253 0.00096316073295111 0.054723737879922664; … ; 5.274809565046e-5 2.0332785750204754e-5 -0.0004997523799624977; 2.2894967410036086e-5 -3.793515134129465e-8 0.0001467522283403838])</code></pre><p>The acceptance rate indicates what fraction of random draws satisfy all sign conditions simultaneously. Rates below 1% suggest the restrictions may be overly stringent or nearly contradictory.</p><h3 id="Narrative-Restrictions"><a class="docs-heading-anchor" href="#Narrative-Restrictions">Narrative Restrictions</a><a id="Narrative-Restrictions-1"></a><a class="docs-heading-anchor-permalink" href="#Narrative-Restrictions" title="Permalink"></a></h3><p>Narrative restrictions augment sign restrictions with historical information about specific shocks at particular dates, following Antolín-Díaz &amp; Rubio-Ramírez (2018). Two types of narrative constraints are supported:</p><ol><li><strong>Shock sign narrative</strong>: at date <span>$t^*$</span>, structural shock <span>$j$</span> was positive (or negative)</li><li><strong>Shock contribution narrative</strong>: at date <span>$t^*$</span>, shock <span>$j$</span> was the dominant driver of variable <span>$i$</span></li></ol><pre><code class="language-julia hljs">model = estimate_var(Y, 4)
 
 # Sign restrictions on impact
 sign_check = irf -&gt; irf[1, 3, 3] &gt; 0 &amp;&amp; irf[1, 1, 3] &lt; 0
@@ -1061,8 +1061,8 @@ fc</code></pre><pre class="documenter-example-output"><code class="nohighlight h
    4       -0.0     -0.0052      0.0047
    5       -0.0     -0.0057      0.0061
    6     0.0001     -0.0062      0.0079
-   7     0.0003     -0.0064      0.0045
-   8       -0.0     -0.0062      0.0054
+   7     0.0003     -0.0064      0.0054
+   8       -0.0     -0.0068      0.0054
    9    -0.0001      -0.007      0.0081
   10     0.0001     -0.0086      0.0059
   11        0.0     -0.0051      0.0067
@@ -1078,12 +1078,12 @@ fc</code></pre><pre class="documenter-example-output"><code class="nohighlight h
    4    -0.0329     -0.3198      0.2517
    5    -0.0211     -0.3536      0.3263
    6    -0.0386     -0.3819      0.2828
-   7      0.006     -0.3351      0.4078
+   7      0.006     -0.3351      0.4151
    8     0.0236     -0.2659      0.4332
-   9      0.018     -0.3604      0.5382
+   9      0.018     -0.3604      0.5481
   10     0.0408     -0.2746        0.55
-  11     0.0514     -0.3219      0.4781
-  12     0.0502     -0.3118      0.3807
+  11     0.0514     -0.3219      0.4917
+  12     0.0502     -0.3118      0.3962
 
 </code></pre><p>The forecast object displays per-variable tables with point forecasts and confidence interval bounds at each horizon. The bootstrap intervals account for both parameter uncertainty and future shock uncertainty.</p><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>ci_method</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:bootstrap</code></td><td style="text-align: right">Confidence interval method: <code>:bootstrap</code> or <code>:none</code></td></tr><tr><td style="text-align: right"><code>reps</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>500</code></td><td style="text-align: right">Number of bootstrap replications</td></tr><tr><td style="text-align: right"><code>conf_level</code></td><td style="text-align: right"><code>Real</code></td><td style="text-align: right"><code>0.95</code></td><td style="text-align: right">Confidence level for intervals</td></tr></table><hr/><h2 id="Innovation-Accounting-and-Bayesian-VAR"><a class="docs-heading-anchor" href="#Innovation-Accounting-and-Bayesian-VAR">Innovation Accounting and Bayesian VAR</a><a id="Innovation-Accounting-and-Bayesian-VAR-1"></a><a class="docs-heading-anchor-permalink" href="#Innovation-Accounting-and-Bayesian-VAR" title="Permalink"></a></h2><p>For detailed coverage of impulse response functions, forecast error variance decomposition, and historical decomposition, see the dedicated <a href="../innovation_accounting/">Innovation Accounting</a> page. For Bayesian VAR estimation with Minnesota priors, conjugate NIW sampling, and hyperparameter optimization, see <a href="../bayesian/">Bayesian VAR</a>.</p><hr/><h2 id="Complete-Example"><a class="docs-heading-anchor" href="#Complete-Example">Complete Example</a><a id="Complete-Example-1"></a><a class="docs-heading-anchor-permalink" href="#Complete-Example" title="Permalink"></a></h2><p>This example demonstrates an end-to-end VAR workflow from data loading through structural analysis using FRED-MD monetary policy variables.</p><pre><code class="language-julia hljs"># Step 1: Select lag order
 p_opt = select_lag_order(Y, 13)
@@ -1107,13 +1107,13 @@ result = irf(model, 20; method=:cholesky, ci_type=:bootstrap, reps=50)</code></p
   Horizon            20
   CI          bootstrap
 
-<span class="sgr1">                       Shock: INDPRO</span>
+<span class="sgr1">                      Shock: INDPRO</span>
 
- <span class="sgr1">        </span> <span class="sgr1">     h=1 </span> <span class="sgr1">      h=4 </span> <span class="sgr1">    h=8 </span> <span class="sgr1">    h=12 </span> <span class="sgr1">   h=20 </span>
+ <span class="sgr1">        </span> <span class="sgr1">     h=1 </span> <span class="sgr1">     h=4 </span> <span class="sgr1">    h=8 </span> <span class="sgr1">    h=12 </span> <span class="sgr1">   h=20 </span>
 
-  INDPRO   0.0014*   -0.0009*      0.0   -0.0003   0.0004
-  CPI      -0.0004    -0.0004   0.0002   -0.0002   0.0001
-  FFR       0.0191     0.0158   0.0152    0.0283   0.0034
+  INDPRO   0.0014*   -0.0009      0.0   -0.0003   0.0004
+  CPI      -0.0004   -0.0004   0.0002   -0.0002   0.0001
+  FFR       0.0191    0.0158   0.0152    0.0283   0.0034
 
 <span class="sgr1">                        Shock: CPI</span>
 
@@ -1123,13 +1123,13 @@ result = irf(model, 20; method=:cholesky, ci_type=:bootstrap, reps=50)</code></p
   CPI      0.0009*   0.0003   -0.0001   -0.0001   -0.0002
   FFR       0.0191   0.0212     0.007    0.0083   -0.0265
 
-<span class="sgr1">                          Shock: FFR</span>
+<span class="sgr1">                         Shock: FFR</span>
 
- <span class="sgr1">        </span> <span class="sgr1">     h=1 </span> <span class="sgr1">      h=4 </span> <span class="sgr1">     h=8 </span> <span class="sgr1">     h=12 </span> <span class="sgr1">    h=20 </span>
+ <span class="sgr1">        </span> <span class="sgr1">     h=1 </span> <span class="sgr1">     h=4 </span> <span class="sgr1">     h=8 </span> <span class="sgr1">    h=12 </span> <span class="sgr1">    h=20 </span>
 
-  INDPRO       0.0   -0.0007*   -0.0003   -0.0006*   -0.0003
-  CPI          0.0    -0.0003   -0.0001    -0.0002    0.0002
-  FFR      0.0339*    0.0292*    0.0172     0.0012   -0.0069
+  INDPRO       0.0   -0.0007   -0.0003   -0.0006   -0.0003
+  CPI          0.0   -0.0003   -0.0001   -0.0002    0.0002
+  FFR      0.0339*   0.0292*    0.0172    0.0012   -0.0069
 
 
  <span class="sgr1">      </span> <span class="sgr1">                    </span>
@@ -1159,51 +1159,51 @@ fc</code></pre><pre class="documenter-example-output"><code class="nohighlight h
 
  <span class="sgr1">  h </span> <span class="sgr1"> Forecast </span> <span class="sgr1"> Lower 95% </span> <span class="sgr1"> Upper 95% </span>
 
-   1    -0.0078     -0.0135     -0.0018
-   2     0.0023     -0.0062      0.0097
-   3     0.0082      -0.001      0.0183
-   4    -0.0013     -0.0118      0.0098
-   5     0.0069     -0.0057      0.0187
-   6     0.0076     -0.0041      0.0213
-   7    -0.0034     -0.0163      0.0106
-   8     0.0013     -0.0116      0.0152
-   9    -0.0048     -0.0201      0.0087
-  10    -0.0035     -0.0186      0.0115
-  11     -0.008     -0.0235      0.0067
-  12    -0.0046     -0.0206      0.0123
+   1    -0.0078     -0.0138     -0.0019
+   2     0.0023     -0.0056      0.0101
+   3     0.0082     -0.0019      0.0173
+   4    -0.0013     -0.0113      0.0117
+   5     0.0069      -0.006      0.0175
+   6     0.0076     -0.0042      0.0227
+   7    -0.0034     -0.0182      0.0092
+   8     0.0013     -0.0135      0.0169
+   9    -0.0048     -0.0214      0.0094
+  10    -0.0035     -0.0178      0.0155
+  11     -0.008     -0.0259      0.0066
+  12    -0.0046      -0.019      0.0117
 
 <span class="sgr1">                   CPI</span>
 
  <span class="sgr1">  h </span> <span class="sgr1"> Forecast </span> <span class="sgr1"> Lower 95% </span> <span class="sgr1"> Upper 95% </span>
 
-   1    -0.0017     -0.0059      0.0025
-   2    -0.0008     -0.0053       0.006
-   3     0.0058      0.0006      0.0104
-   4    -0.0054      -0.011         0.0
-   5     0.0023     -0.0023      0.0083
-   6    -0.0042     -0.0102      0.0012
-   7    -0.0016     -0.0077      0.0033
-   8    -0.0023     -0.0078      0.0048
-   9     0.0029     -0.0049      0.0092
-  10     0.0005     -0.0069      0.0081
-  11     0.0023     -0.0051      0.0104
-  12    -0.0041     -0.0115      0.0035
+   1    -0.0017     -0.0061      0.0021
+   2    -0.0008     -0.0052      0.0049
+   3     0.0058      0.0011      0.0108
+   4    -0.0054     -0.0104      0.0006
+   5     0.0023     -0.0026      0.0083
+   6    -0.0042       -0.01      0.0014
+   7    -0.0016     -0.0079      0.0041
+   8    -0.0023     -0.0087      0.0039
+   9     0.0029     -0.0047      0.0098
+  10     0.0005     -0.0077      0.0078
+  11     0.0023     -0.0045       0.009
+  12    -0.0041      -0.012      0.0036
 
 <span class="sgr1">                   FFR</span>
 
  <span class="sgr1">  h </span> <span class="sgr1"> Forecast </span> <span class="sgr1"> Lower 95% </span> <span class="sgr1"> Upper 95% </span>
 
-   1    -0.0282     -0.2342      0.1222
-   2     0.0215     -0.2722      0.2354
-   3     0.1844     -0.1815      0.4698
-   4     0.1513     -0.2252      0.4813
-   5     0.5563      0.1206      0.9105
-   6     0.4822       0.011      0.9211
-   7     0.4956      0.0309       1.021
-   8     0.4252     -0.0558      0.9126
-   9     0.3852     -0.1167      0.9199
-  10     0.3202     -0.1736      0.8631
-  11     0.3851     -0.1269      0.9101
-  12     0.0848     -0.4302      0.6094
+   1    -0.0282     -0.2358      0.1177
+   2     0.0215     -0.2429        0.23
+   3     0.1844     -0.1985      0.4629
+   4     0.1513     -0.2391      0.4608
+   5     0.5563      0.0829      0.9126
+   6     0.4822      0.0243      0.9056
+   7     0.4956      0.0296      0.9702
+   8     0.4252      0.0097      0.8912
+   9     0.3852      -0.069      0.8954
+  10     0.3202      -0.092      0.8207
+  11     0.3851     -0.0577      0.8691
+  12     0.0848     -0.3998      0.5979
 
-</code></pre><p>The BIC selects a parsimonious lag order for the 3-variable system. The Cholesky ordering [INDPRO, CPI, FFR] implements the standard recursive identification of Christiano, Eichenbaum &amp; Evans (1999): a monetary policy shock (shock 3) raises the federal funds rate on impact while output and prices respond with a lag. The FEVD reveals the fraction of industrial production forecast error variance attributable to monetary shocks at each horizon. The historical decomposition identity <span>$y_t = \sum_j \text{HD}_j(t) + \text{initial}(t)$</span> holds exactly up to numerical precision, verified by <code>verify_decomposition</code>.</p><hr/><h2 id="Common-Pitfalls"><a class="docs-heading-anchor" href="#Common-Pitfalls">Common Pitfalls</a><a id="Common-Pitfalls-1"></a><a class="docs-heading-anchor-permalink" href="#Common-Pitfalls" title="Permalink"></a></h2><ol><li><p><strong>Variable ordering matters for Cholesky identification.</strong> The Cholesky decomposition imposes a recursive causal structure where variable <span>$i$</span> responds contemporaneously only to shocks <span>$1, \ldots, i$</span>. Reordering the columns of <span>$Y$</span> changes the economic interpretation of the structural shocks. The standard monetary VAR ordering places slow-moving variables first (output, prices) and the policy instrument last.</p></li><li><p><strong>Non-stationary VAR produces unreliable inference.</strong> If <code>is_stationary</code> returns <code>false</code>, the companion matrix has unit-root eigenvalues and the asymptotic distribution theory underlying OLS standard errors and bootstrap confidence intervals is invalid. Consider differencing the data, applying the appropriate transformation codes via <code>apply_tcode</code>, or estimating a <a href="../vecm/">VECM</a> for cointegrated systems.</p></li><li><p><strong>Too many lags exhaust degrees of freedom.</strong> Each additional lag adds <span>$n^2$</span> parameters. For an <span>$n = 7$</span> variable system, each lag costs 49 parameters. With moderate sample sizes (<span>$T &lt; 200$</span>), overfitting degrades forecast accuracy and inflates IRF confidence intervals. Use <code>select_lag_order</code> with BIC for parsimony.</p></li><li><p><strong>Low acceptance rate for sign restrictions.</strong> When <code>identify_sign</code> or <code>identify_arias</code> reports an acceptance rate below 1%, the imposed sign conditions are difficult to satisfy jointly. This may indicate contradictory economic restrictions or an overidentified specification. Relaxing some conditions (e.g., restricting only impact responses rather than multiple horizons) typically improves acceptance.</p></li><li><p><strong>Uhlig penalty function finds local minima.</strong> The <code>identify_uhlig</code> optimizer uses multi-start Nelder-Mead, but non-convexity of the penalty landscape means the solution depends on initial conditions. If <code>converged</code> is <code>false</code>, increase <code>n_starts</code> or verify that the sign restrictions are economically coherent.</p></li></ol><hr/><h2 id="References"><a class="docs-heading-anchor" href="#References">References</a><a id="References-1"></a><a class="docs-heading-anchor-permalink" href="#References" title="Permalink"></a></h2><ul><li><p>Andrews, D. W. K. (1991). Heteroskedasticity and Autocorrelation Consistent Covariance Matrix Estimation. <em>Econometrica</em>, 59(3), 817-858. <a href="https://doi.org/10.2307/2938229">DOI</a></p></li><li><p>Antolín-Díaz, J., &amp; Rubio-Ramírez, J. F. (2018). Narrative Sign Restrictions for SVARs. <em>American Economic Review</em>, 108(10), 2802-2829. <a href="https://doi.org/10.1257/aer.20161852">DOI</a></p></li><li><p>Arias, J. E., Rubio-Ramírez, J. F., &amp; Waggoner, D. F. (2018). Inference Based on Structural Vector Autoregressions Identified with Sign and Zero Restrictions: Theory and Applications. <em>Econometrica</em>, 86(2), 685-720. <a href="https://doi.org/10.3982/ECTA14468">DOI</a></p></li><li><p>Baumeister, C., &amp; Hamilton, J. D. (2015). Sign Restrictions, Structural Vector Autoregressions, and Useful Prior Information. <em>Econometrica</em>, 83(5), 1963-1999. <a href="https://doi.org/10.3982/ECTA12356">DOI</a></p></li><li><p>Blanchard, O. J., &amp; Quah, D. (1989). The Dynamic Effects of Aggregate Demand and Supply Disturbances. <em>American Economic Review</em>, 79(4), 655-673. <a href="https://doi.org/10.3386/w2737">DOI</a></p></li><li><p>Christiano, L. J., Eichenbaum, M., &amp; Evans, C. L. (1999). Monetary Policy Shocks: What Have We Learned and to What End? In <em>Handbook of Macroeconomics</em>, Vol. 1, edited by J. B. Taylor &amp; M. Woodford, 65-148. Amsterdam: Elsevier. <a href="https://doi.org/10.1016/S1574-0048(99)01005-8">DOI</a></p></li><li><p>Driscoll, J. C., &amp; Kraay, A. C. (1998). Consistent Covariance Matrix Estimation with Spatially Dependent Panel Data. <em>Review of Economics and Statistics</em>, 80(4), 549-560. <a href="https://doi.org/10.1162/003465398557825">DOI</a></p></li><li><p>Hamilton, J. D. (1994). <em>Time Series Analysis</em>. Princeton, NJ: Princeton University Press. ISBN 978-0-691-04289-3.</p></li><li><p>Kilian, L., &amp; Lütkepohl, H. (2017). <em>Structural Vector Autoregressive Analysis</em>. Cambridge: Cambridge University Press. <a href="https://doi.org/10.1017/9781108164818">DOI</a></p></li><li><p>Lütkepohl, H. (2005). <em>New Introduction to Multiple Time Series Analysis</em>. Berlin: Springer. <a href="https://doi.org/10.1007/978-3-540-27752-1">DOI</a></p></li><li><p>Mountford, A., &amp; Uhlig, H. (2009). What Are the Effects of Fiscal Policy Shocks? <em>Journal of Applied Econometrics</em>, 24(6), 960-992. <a href="https://doi.org/10.1002/jae.1079">DOI</a></p></li><li><p>Newey, W. K., &amp; West, K. D. (1987). A Simple, Positive Semi-Definite, Heteroskedasticity and Autocorrelation Consistent Covariance Matrix. <em>Econometrica</em>, 55(3), 703-708. <a href="https://doi.org/10.2307/1913610">DOI</a></p></li><li><p>Newey, W. K., &amp; West, K. D. (1994). Automatic Lag Selection in Covariance Matrix Estimation. <em>Review of Economic Studies</em>, 61(4), 631-653. <a href="https://doi.org/10.2307/2297912">DOI</a></p></li><li><p>Rubio-Ramírez, J. F., Waggoner, D. F., &amp; Zha, T. (2010). Structural Vector Autoregressions: Theory of Identification and Algorithms for Inference. <em>Review of Economic Studies</em>, 77(2), 665-696. <a href="https://doi.org/10.1111/j.1467-937X.2009.00578.x">DOI</a></p></li><li><p>Sims, C. A. (1980). Macroeconomics and Reality. <em>Econometrica</em>, 48(1), 1-48. <a href="https://doi.org/10.2307/1912017">DOI</a></p></li><li><p>Uhlig, H. (2005). What Are the Effects of Monetary Policy on Output? Results from an Agnostic Identification Procedure. <em>Journal of Monetary Economics</em>, 52(2), 381-419. <a href="https://doi.org/10.1016/j.jmoneco.2004.05.007">DOI</a></p></li><li><p>White, H. (1980). A Heteroskedasticity-Consistent Covariance Matrix Estimator and a Direct Test for Heteroskedasticity. <em>Econometrica</em>, 48(4), 817-838. <a href="https://doi.org/10.2307/1912934">DOI</a></p></li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../volatility/">« Volatility Models</a><a class="docs-footer-nextpage" href="../bayesian/">Bayesian VAR »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Friday 10 July 2026 21:43">Friday 10 July 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+</code></pre><p>The BIC selects a parsimonious lag order for the 3-variable system. The Cholesky ordering [INDPRO, CPI, FFR] implements the standard recursive identification of Christiano, Eichenbaum &amp; Evans (1999): a monetary policy shock (shock 3) raises the federal funds rate on impact while output and prices respond with a lag. The FEVD reveals the fraction of industrial production forecast error variance attributable to monetary shocks at each horizon. The historical decomposition identity <span>$y_t = \sum_j \text{HD}_j(t) + \text{initial}(t)$</span> holds exactly up to numerical precision, verified by <code>verify_decomposition</code>.</p><hr/><h2 id="Common-Pitfalls"><a class="docs-heading-anchor" href="#Common-Pitfalls">Common Pitfalls</a><a id="Common-Pitfalls-1"></a><a class="docs-heading-anchor-permalink" href="#Common-Pitfalls" title="Permalink"></a></h2><ol><li><p><strong>Variable ordering matters for Cholesky identification.</strong> The Cholesky decomposition imposes a recursive causal structure where variable <span>$i$</span> responds contemporaneously only to shocks <span>$1, \ldots, i$</span>. Reordering the columns of <span>$Y$</span> changes the economic interpretation of the structural shocks. The standard monetary VAR ordering places slow-moving variables first (output, prices) and the policy instrument last.</p></li><li><p><strong>Non-stationary VAR produces unreliable inference.</strong> If <code>is_stationary</code> returns <code>false</code>, the companion matrix has unit-root eigenvalues and the asymptotic distribution theory underlying OLS standard errors and bootstrap confidence intervals is invalid. Consider differencing the data, applying the appropriate transformation codes via <code>apply_tcode</code>, or estimating a <a href="../vecm/">VECM</a> for cointegrated systems.</p></li><li><p><strong>Too many lags exhaust degrees of freedom.</strong> Each additional lag adds <span>$n^2$</span> parameters. For an <span>$n = 7$</span> variable system, each lag costs 49 parameters. With moderate sample sizes (<span>$T &lt; 200$</span>), overfitting degrades forecast accuracy and inflates IRF confidence intervals. Use <code>select_lag_order</code> with BIC for parsimony.</p></li><li><p><strong>Low acceptance rate for sign restrictions.</strong> When <code>identify_sign</code> or <code>identify_arias</code> reports an acceptance rate below 1%, the imposed sign conditions are difficult to satisfy jointly. This may indicate contradictory economic restrictions or an overidentified specification. Relaxing some conditions (e.g., restricting only impact responses rather than multiple horizons) typically improves acceptance.</p></li><li><p><strong>Uhlig penalty function finds local minima.</strong> The <code>identify_uhlig</code> optimizer uses multi-start Nelder-Mead, but non-convexity of the penalty landscape means the solution depends on initial conditions. If <code>converged</code> is <code>false</code>, increase <code>n_starts</code> or verify that the sign restrictions are economically coherent.</p></li></ol><hr/><h2 id="References"><a class="docs-heading-anchor" href="#References">References</a><a id="References-1"></a><a class="docs-heading-anchor-permalink" href="#References" title="Permalink"></a></h2><ul><li><p>Andrews, D. W. K. (1991). Heteroskedasticity and Autocorrelation Consistent Covariance Matrix Estimation. <em>Econometrica</em>, 59(3), 817-858. <a href="https://doi.org/10.2307/2938229">DOI</a></p></li><li><p>Antolín-Díaz, J., &amp; Rubio-Ramírez, J. F. (2018). Narrative Sign Restrictions for SVARs. <em>American Economic Review</em>, 108(10), 2802-2829. <a href="https://doi.org/10.1257/aer.20161852">DOI</a></p></li><li><p>Arias, J. E., Rubio-Ramírez, J. F., &amp; Waggoner, D. F. (2018). Inference Based on Structural Vector Autoregressions Identified with Sign and Zero Restrictions: Theory and Applications. <em>Econometrica</em>, 86(2), 685-720. <a href="https://doi.org/10.3982/ECTA14468">DOI</a></p></li><li><p>Baumeister, C., &amp; Hamilton, J. D. (2015). Sign Restrictions, Structural Vector Autoregressions, and Useful Prior Information. <em>Econometrica</em>, 83(5), 1963-1999. <a href="https://doi.org/10.3982/ECTA12356">DOI</a></p></li><li><p>Blanchard, O. J., &amp; Quah, D. (1989). The Dynamic Effects of Aggregate Demand and Supply Disturbances. <em>American Economic Review</em>, 79(4), 655-673. <a href="https://doi.org/10.3386/w2737">DOI</a></p></li><li><p>Christiano, L. J., Eichenbaum, M., &amp; Evans, C. L. (1999). Monetary Policy Shocks: What Have We Learned and to What End? In <em>Handbook of Macroeconomics</em>, Vol. 1, edited by J. B. Taylor &amp; M. Woodford, 65-148. Amsterdam: Elsevier. <a href="https://doi.org/10.1016/S1574-0048(99)01005-8">DOI</a></p></li><li><p>Driscoll, J. C., &amp; Kraay, A. C. (1998). Consistent Covariance Matrix Estimation with Spatially Dependent Panel Data. <em>Review of Economics and Statistics</em>, 80(4), 549-560. <a href="https://doi.org/10.1162/003465398557825">DOI</a></p></li><li><p>Hamilton, J. D. (1994). <em>Time Series Analysis</em>. Princeton, NJ: Princeton University Press. ISBN 978-0-691-04289-3.</p></li><li><p>Kilian, L., &amp; Lütkepohl, H. (2017). <em>Structural Vector Autoregressive Analysis</em>. Cambridge: Cambridge University Press. <a href="https://doi.org/10.1017/9781108164818">DOI</a></p></li><li><p>Lütkepohl, H. (2005). <em>New Introduction to Multiple Time Series Analysis</em>. Berlin: Springer. <a href="https://doi.org/10.1007/978-3-540-27752-1">DOI</a></p></li><li><p>Mountford, A., &amp; Uhlig, H. (2009). What Are the Effects of Fiscal Policy Shocks? <em>Journal of Applied Econometrics</em>, 24(6), 960-992. <a href="https://doi.org/10.1002/jae.1079">DOI</a></p></li><li><p>Newey, W. K., &amp; West, K. D. (1987). A Simple, Positive Semi-Definite, Heteroskedasticity and Autocorrelation Consistent Covariance Matrix. <em>Econometrica</em>, 55(3), 703-708. <a href="https://doi.org/10.2307/1913610">DOI</a></p></li><li><p>Newey, W. K., &amp; West, K. D. (1994). Automatic Lag Selection in Covariance Matrix Estimation. <em>Review of Economic Studies</em>, 61(4), 631-653. <a href="https://doi.org/10.2307/2297912">DOI</a></p></li><li><p>Rubio-Ramírez, J. F., Waggoner, D. F., &amp; Zha, T. (2010). Structural Vector Autoregressions: Theory of Identification and Algorithms for Inference. <em>Review of Economic Studies</em>, 77(2), 665-696. <a href="https://doi.org/10.1111/j.1467-937X.2009.00578.x">DOI</a></p></li><li><p>Sims, C. A. (1980). Macroeconomics and Reality. <em>Econometrica</em>, 48(1), 1-48. <a href="https://doi.org/10.2307/1912017">DOI</a></p></li><li><p>Uhlig, H. (2005). What Are the Effects of Monetary Policy on Output? Results from an Agnostic Identification Procedure. <em>Journal of Monetary Economics</em>, 52(2), 381-419. <a href="https://doi.org/10.1016/j.jmoneco.2004.05.007">DOI</a></p></li><li><p>White, H. (1980). A Heteroskedasticity-Consistent Covariance Matrix Estimator and a Direct Test for Heteroskedasticity. <em>Econometrica</em>, 48(4), 817-838. <a href="https://doi.org/10.2307/1912934">DOI</a></p></li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../volatility/">« Volatility Models</a><a class="docs-footer-nextpage" href="../bayesian/">Bayesian VAR »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Saturday 11 July 2026 23:37">Saturday 11 July 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
