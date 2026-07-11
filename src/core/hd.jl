@@ -201,7 +201,8 @@ function historical_decomposition(model::VARModel{T}, horizon::Int=effective_nob
     max_draws::Int=1000,
     shock_names::Union{Nothing,Vector{String}}=nothing,
     transition_var::Union{Nothing,AbstractVector}=nothing,
-    regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing
+    regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing,
+    rng::AbstractRNG=Random.default_rng()
 ) where {T<:AbstractFloat}
 
     _validate_data(model.Sigma, "Sigma")
@@ -214,7 +215,7 @@ function historical_decomposition(model::VARModel{T}, horizon::Int=effective_nob
 
     # Get identification matrix Q
     Q = compute_Q(model, method, horizon, check_func, narrative_check;
-                  max_draws=max_draws, transition_var=transition_var, regime_indicator=regime_indicator)
+                  max_draws=max_draws, transition_var=transition_var, regime_indicator=regime_indicator, rng=rng)
 
     # Compute structural shocks: ε_t = Q' L^{-1} u_t
     shocks = compute_structural_shocks(model, Q)
@@ -449,7 +450,8 @@ hd = historical_decomposition(model, r, 198; n_draws=500)
 function historical_decomposition(model::VARModel{T}, restrictions::SVARRestrictions, horizon::Int=effective_nobs(model);
     n_draws::Int=1000, n_rotations::Int=1000,
     quantiles::Vector{<:Real}=[0.16, 0.5, 0.84],
-    shock_names::Union{Nothing,Vector{String}}=nothing
+    shock_names::Union{Nothing,Vector{String}}=nothing,
+    rng::AbstractRNG=Random.default_rng()
 ) where {T<:AbstractFloat}
 
     n = nvars(model)
@@ -460,7 +462,7 @@ function historical_decomposition(model::VARModel{T}, restrictions::SVARRestrict
     actual = model.Y[(model.p + 1):end, :]
 
     # Use identify_arias to get valid Q draws with weights
-    arias_result = identify_arias(model, restrictions, horizon; n_draws=n_draws, n_rotations=n_rotations)
+    arias_result = identify_arias(model, restrictions, horizon; n_draws=n_draws, n_rotations=n_rotations, rng=rng)
 
     n_acc = length(arias_result.Q_draws)
     weights = arias_result.weights

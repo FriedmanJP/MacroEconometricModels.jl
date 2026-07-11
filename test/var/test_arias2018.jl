@@ -1435,4 +1435,16 @@ end
 
 end
 
+@testset "Arias rng reproducibility (#243/T144)" begin
+    Random.seed!(7)
+    Y = randn(150, 3)
+    model = estimate_var(Y, 2)
+    restr = SVARRestrictions(3; signs=[sign_restriction(1, 1, :positive)])
+    r1 = identify_arias(model, restr, 8; n_draws=10, n_rotations=100, rng=Random.MersenneTwister(11))
+    r2 = identify_arias(model, restr, 8; n_draws=10, n_rotations=100, rng=Random.MersenneTwister(11))
+    @test r1.Q_draws == r2.Q_draws          # same seed -> bitwise-identical rotations
+    r3 = identify_arias(model, restr, 8; n_draws=10, n_rotations=100, rng=Random.MersenneTwister(99))
+    @test r1.Q_draws != r3.Q_draws          # different seed -> different draws
+end
+
 _tprint("Arias et al. (2018) tests completed.")
