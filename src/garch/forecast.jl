@@ -20,7 +20,8 @@ Forecast conditional variance from a GARCH(p,q) model.
 Uses analytical iteration for point forecasts and simulation for CIs.
 Point forecasts converge to unconditional variance as h → ∞.
 """
-function forecast(m::GARCHModel{T}, h::Int; conf_level::Real=0.95, n_sim::Int=10000) where {T}
+function forecast(m::GARCHModel{T}, h::Int; conf_level::Real=0.95, n_sim::Int=10000,
+                  rng::AbstractRNG=Random.default_rng()) where {T}
     conf_level = T(conf_level)
     h < 1 && throw(ArgumentError("Forecast horizon must be ≥ 1"))
 
@@ -48,7 +49,7 @@ function forecast(m::GARCHModel{T}, h::Int; conf_level::Real=0.95, n_sim::Int=10
                 ht += m.beta[j] * (idx >= 1 ? h_buf[idx] : mean(last_h))
             end
             ht = max(ht, eps(T))
-            z = randn(T)
+            z = randn(rng, T)
             new_eps_sq = ht * z^2
             push!(eps_sq_buf, new_eps_sq)
             push!(h_buf, ht)
@@ -68,7 +69,8 @@ end
 
 Forecast conditional variance from an EGARCH(p,q) model via simulation.
 """
-function forecast(m::EGARCHModel{T}, h::Int; conf_level::Real=0.95, n_sim::Int=10000) where {T}
+function forecast(m::EGARCHModel{T}, h::Int; conf_level::Real=0.95, n_sim::Int=10000,
+                  rng::AbstractRNG=Random.default_rng()) where {T}
     conf_level = T(conf_level)
     h < 1 && throw(ArgumentError("Forecast horizon must be ≥ 1"))
 
@@ -96,7 +98,7 @@ function forecast(m::EGARCHModel{T}, h::Int; conf_level::Real=0.95, n_sim::Int=1
             end
             lht = clamp(lht, T(-50), T(50))
             ht = exp(lht)
-            z = randn(T)
+            z = randn(rng, T)
             push!(z_buf, z)
             push!(lh_buf, lht)
             paths[s, t] = ht
@@ -115,7 +117,8 @@ end
 
 Forecast conditional variance from a GJR-GARCH(p,q) model via simulation.
 """
-function forecast(m::GJRGARCHModel{T}, h::Int; conf_level::Real=0.95, n_sim::Int=10000) where {T}
+function forecast(m::GJRGARCHModel{T}, h::Int; conf_level::Real=0.95, n_sim::Int=10000,
+                  rng::AbstractRNG=Random.default_rng()) where {T}
     conf_level = T(conf_level)
     h < 1 && throw(ArgumentError("Forecast horizon must be ≥ 1"))
 
@@ -146,7 +149,7 @@ function forecast(m::GJRGARCHModel{T}, h::Int; conf_level::Real=0.95, n_sim::Int
                 ht += m.beta[j] * (idx >= 1 ? h_buf[idx] : mean(last_h))
             end
             ht = max(ht, eps(T))
-            z = randn(T)
+            z = randn(rng, T)
             new_eps = sqrt(ht) * z
             push!(eps_buf, new_eps)
             push!(h_buf, ht)

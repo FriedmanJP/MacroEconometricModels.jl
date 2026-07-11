@@ -22,7 +22,8 @@ Confidence intervals are computed via simulation.
 - `conf_level`: Confidence level for intervals (default 0.95)
 - `n_sim`: Number of simulation paths for CIs (default 10000)
 """
-function forecast(m::ARCHModel{T}, h::Int; conf_level::Real=0.95, n_sim::Int=10000) where {T}
+function forecast(m::ARCHModel{T}, h::Int; conf_level::Real=0.95, n_sim::Int=10000,
+                  rng::AbstractRNG=Random.default_rng()) where {T}
     conf_level = T(conf_level)
     h < 1 && throw(ArgumentError("Forecast horizon must be ≥ 1"))
 
@@ -47,7 +48,7 @@ function forecast(m::ARCHModel{T}, h::Int; conf_level::Real=0.95, n_sim::Int=100
                 ht += alpha[i] * (idx >= 1 ? eps_sq_buf[idx] : mean(last_eps_sq))
             end
             ht = max(ht, eps(T))
-            z = randn(T)
+            z = randn(rng, T)
             new_eps_sq = ht * z^2
             push!(eps_sq_buf, new_eps_sq)
             paths[s, t] = ht
