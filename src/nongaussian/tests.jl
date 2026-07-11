@@ -191,26 +191,27 @@ distance between bootstrap and original B₀. Small distances indicate strong id
 Returns: test statistic = median Procrustes distance, p-value from distribution.
 """
 function test_identification_strength(model::VARModel{T}; method::Symbol=:fastica,
-                                       n_bootstrap::Int=999) where {T<:AbstractFloat}
+                                       n_bootstrap::Int=999,
+                                       rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     n = nvars(model)
     T_obs = size(model.U, 1)
 
     # Get reference B₀
     ref_result = if method == :fastica
-        identify_fastica(model)
+        identify_fastica(model; rng=rng)
     elseif method == :jade
         identify_jade(model)
     elseif method == :sobi
         identify_sobi(model)
     else
-        identify_fastica(model)
+        identify_fastica(model; rng=rng)
     end
     B0_ref = ref_result.B0
 
     # Bootstrap
     distances = T[]
     for _ in 1:n_bootstrap
-        idx = rand(1:T_obs, T_obs)
+        idx = rand(rng, 1:T_obs, T_obs)
         U_boot = model.U[idx, :]
         Sigma_boot = cov(U_boot)
 
@@ -220,13 +221,13 @@ function test_identification_strength(model::VARModel{T}; method::Symbol=:fastic
 
         try
             boot_result = if method == :fastica
-                identify_fastica(boot_model)
+                identify_fastica(boot_model; rng=rng)
             elseif method == :jade
                 identify_jade(boot_model)
             elseif method == :sobi
                 identify_sobi(boot_model)
             else
-                identify_fastica(boot_model)
+                identify_fastica(boot_model; rng=rng)
             end
             push!(distances, _procrustes_distance(boot_result.B0, B0_ref))
         catch
@@ -407,7 +408,8 @@ Uses a bootstrap approach: compares the restricted log-likelihood to bootstrap d
 """
 function test_overidentification(model::VARModel{T}, result::AbstractNonGaussianSVAR;
                                   restrictions::Union{Nothing, Function}=nothing,
-                                  n_bootstrap::Int=499) where {T<:AbstractFloat}
+                                  n_bootstrap::Int=499,
+                                  rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     n = nvars(model)
     T_obs = size(model.U, 1)
 
@@ -427,7 +429,7 @@ function test_overidentification(model::VARModel{T}, result::AbstractNonGaussian
     # Bootstrap under the null
     boot_stats = T[]
     for _ in 1:n_bootstrap
-        idx = rand(1:T_obs, T_obs)
+        idx = rand(rng, 1:T_obs, T_obs)
         U_boot = model.U[idx, :]
         Sigma_boot = cov(U_boot) + eps(T) * I
 

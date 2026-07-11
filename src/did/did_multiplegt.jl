@@ -192,7 +192,8 @@ function _estimate_did_multiplegt(pd::PanelData{T}, outcome_col::Int, treat_col:
                                    control_group::Symbol=:never_treated,
                                    cluster::Symbol=:unit,
                                    conf_level::Real=0.95,
-                                   n_boot::Int=200) where {T<:AbstractFloat}
+                                   n_boot::Int=200,
+                                   rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
 
     timing = _extract_treatment_timing(pd, treat_col)
 
@@ -242,7 +243,8 @@ function _estimate_did_multiplegt(pd::PanelData{T}, outcome_col::Int, treat_col:
     # -----------------------------------------------------------------
     # Bootstrap SEs
     # -----------------------------------------------------------------
-    rng = Random.MersenneTwister(1234)
+    # rng is caller-supplied (#243). Default is Random.default_rng(); pass
+    # rng=MersenneTwister(1234) to reproduce the previous fixed-seed bootstrap SEs.
     unit_ids = collect(keys(timing))
     n_units = length(unit_ids)
     boot_atts = Vector{Vector{T}}()

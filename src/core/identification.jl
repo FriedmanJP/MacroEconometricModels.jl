@@ -266,7 +266,9 @@ function compute_Q(model::VARModel{T}, method::Symbol, horizon::Int, check_func,
     method == :long_run && return identify_long_run(model)
 
     # Non-Gaussian ICA methods (defined in nongaussian_ica.jl, loaded after this file)
-    method == :fastica       && return identify_fastica(model).Q
+    # :fastica is the only statistical-identification method that draws (random init);
+    # jade/sobi/dcov/hsic + all ML/heteroskedastic methods are deterministic (#243).
+    method == :fastica       && return identify_fastica(model; rng=rng).Q
     method == :jade          && return identify_jade(model).Q
     method == :sobi          && return identify_sobi(model).Q
     method == :dcov          && return identify_dcov(model).Q
