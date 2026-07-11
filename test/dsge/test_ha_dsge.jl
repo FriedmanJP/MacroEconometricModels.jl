@@ -489,6 +489,26 @@ end
     @test abs(J[1,1]) > 1e-8
     # Effects should decay
     @test abs(J[T_h, 1]) < abs(J[1, 1]) + 1.0  # loose: just not exploding
+
+    # #226/T127: the fake-news Jacobian is DENSE with anticipation — households
+    # respond BEFORE an announced future price change — so J[t,s] != 0 for some
+    # t < s. The old brute force zeroed the t<s block (lower-triangular Toeplitz).
+    @test any(abs(J[t, s]) > 1e-10 for t in 1:T_h for s in (t+1):T_h)
+    @test !isapprox(J, LowerTriangular(J))
+    # Mass conservation of the one-step forward push (column-stochastic Λ, no renorm).
+    prices_p = copy(ss.prices); prices_p[:r] += 1e-4
+    _, a_pol_p = MacroEconometricModels._egm_solve(ip, grid, inc, prices_p;
+                                                   max_iter=200, tol=1e-10)
+    Lam_p = MacroEconometricModels._build_transition_matrix(a_pol_p, grid, inc)
+    d_ss = vec(ss.distribution); d_ss ./= sum(d_ss)
+    @test sum(Lam_p * d_ss) ≈ 1.0 atol=1e-10
+    # output_var threading (#240/H-16): a consumption aggregate differs from the
+    # asset aggregate (the old code ignored output_var, hardcoding asset aggregation).
+    Jc = MacroEconometricModels._ssj_jacobian(ss, ip, grid, inc, :r, :C;
+                                              T_horizon=T_h, dx=1e-4)
+    @test size(Jc) == (T_h, T_h)
+    @test all(isfinite.(Jc))
+    @test !isapprox(Jc, J)
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
