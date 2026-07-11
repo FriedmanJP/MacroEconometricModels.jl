@@ -462,13 +462,17 @@ function structural_lp(Y::AbstractMatrix{T}, horizon::Int;
         lp_models, n, horizon, ET; conf_level=conf_level)
     ci_sym = :analytical
 
-    # Step 6: Bootstrap CIs if requested (overrides analytical)
+    # Step 6: Bootstrap CIs if requested (overrides analytical). MC honesty counts (#244):
+    # only the bootstrap path draws; :none/:analytical leave the counts at zero.
+    n_req = 0
+    n_fail = 0
     if ci_type == :bootstrap
-        ci_lower, ci_upper = _structural_lp_bootstrap(Matrix{ET}(Y), horizon, n, p, method,
+        ci_lower, ci_upper, n_fail = _structural_lp_bootstrap(Matrix{ET}(Y), horizon, n, p, method,
                                                        lags, cov_type, reps, ET(conf_level),
                                                        check_func, narrative_check, max_draws;
                                                        transition_var=transition_var,
                                                        regime_indicator=regime_indicator, rng=rng)
+        n_req = reps
         ci_sym = :bootstrap
     end
 
@@ -477,7 +481,7 @@ function structural_lp(Y::AbstractMatrix{T}, horizon::Int;
                                       var_model.varnames, snames, ci_sym)
 
     StructuralLP{ET}(irf_result, Matrix{ET}(eps), var_model, Matrix{ET}(Q), method,
-                     lags, cov_type, se_arr, lp_models)
+                     lags, cov_type, se_arr, lp_models, n_req, n_req - n_fail, n_fail)
 end
 
 # Float fallback
@@ -527,6 +531,8 @@ function _structural_lp_bootstrap(Y::AbstractMatrix{T}, horizon::Int, n::Int, p:
     # thread-count invariant: each fixed r-slot draws only on its own local_rng, threaded
     # into BOTH the block resample and the sign/narrative rejection sampler (#243).
     seeds = rand(rng, UInt64, reps)
+    n_failed = Threads.Atomic{Int}(0)     # dropped draws (#244 MC honesty count; atomic total
+                                          # is thread-count invariant like the seeded slots)
     Threads.@threads for r in 1:reps
         local_rng = Random.MersenneTwister(seeds[r])
         # Block bootstrap on Y
@@ -553,6 +559,7 @@ function _structural_lp_bootstrap(Y::AbstractMatrix{T}, horizon::Int, n::Int, p:
             # A recoverable failed bootstrap draw (e.g. singular matrix) is skipped; a
             # programming error (MethodError/BoundsError/…) propagates (T145/#244).
             _is_recoverable_draw_error(e) || rethrow(e)
+            Threads.atomic_add!(n_failed, 1)
             continue
         end
     end
@@ -565,7 +572,7 @@ function _structural_lp_bootstrap(Y::AbstractMatrix{T}, horizon::Int, n::Int, p:
         ci_lower[h, v, s] = quantile(d, alpha)
         ci_upper[h, v, s] = quantile(d, 1 - alpha)
     end
-    ci_lower, ci_upper
+    ci_lower, ci_upper, n_failed[]
 end
 
 """Generate a block bootstrap sample from matrix Y."""

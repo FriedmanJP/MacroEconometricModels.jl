@@ -362,11 +362,14 @@ function Base.show(io::IO, slp::StructuralLP{T}) where {T}
     H = size(slp.irf.values, 1)
 
     ci_str = slp.irf.ci_type == :none ? "None" : string(slp.irf.ci_type)
-    _show_spec_table(io, "Structural Local Projections",
-        ["Identification" => string(slp.method), "Variables" => n,
-         "IRF horizon" => H, "LP lags" => slp.lags,
-         "HAC estimator" => string(slp.cov_type), "CI" => ci_str];
-        left_label="Specification")
+    spec_pairs = Pair{String,Any}[
+        "Identification" => string(slp.method), "Variables" => n,
+        "IRF horizon" => H, "LP lags" => slp.lags,
+        "HAC estimator" => string(slp.cov_type), "CI" => ci_str]
+    if slp.n_requested > 0 && slp.n_failed > 0   # MC honesty (#244)
+        push!(spec_pairs, "Effective draws" => "$(slp.n_effective)/$(slp.n_requested) ($(slp.n_failed) dropped)")
+    end
+    _show_spec_table(io, "Structural Local Projections", spec_pairs; left_label="Specification")
 
     # Show IRF summary at selected horizons
     horizons_show = _select_horizons(H)
