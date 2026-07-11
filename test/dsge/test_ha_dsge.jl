@@ -697,6 +697,29 @@ end
     @testset "Invalid example" begin
         @test_throws ErrorException load_ha_example(:nonexistent)
     end
+
+    @testset "Income normalization (#231/T132)" begin
+        # All four examples must ship a strictly positive income multiplier e
+        # (the raw log grid gives half the states negative labor income).
+        for name in (:krusell_smith, :one_asset_hank, :two_asset_hank, :huggett)
+            spec = load_ha_example(name)
+            @test all(spec.income.states .> 0)
+        end
+
+        # The three Rouwenhorst examples must have unit-mean income E[e] = 1.
+        for name in (:krusell_smith, :one_asset_hank, :two_asset_hank)
+            spec = load_ha_example(name)
+            @test dot(spec.income.stationary_dist, spec.income.states) ≈ 1.0 atol=1e-10
+        end
+
+        # Huggett keeps its bespoke {1.0, 0.1} endowment (mean ≈ 0.8826), NOT normalized.
+        spec_h = load_ha_example(:huggett)
+        @test dot(spec_h.income.stationary_dist, spec_h.income.states) ≈ 0.8826 atol=1e-3
+
+        # rouwenhorst/tauchen direct calls must still return the symmetric log grid.
+        inc = rouwenhorst(0.966, 0.5, 7)
+        @test inc.states[1] ≈ -inc.states[end] atol=1e-12
+    end
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
