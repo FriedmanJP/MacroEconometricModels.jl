@@ -39,3 +39,26 @@ octave --no-gui test/oracle/octave/ref_<name>.m
   **constant in the last row(s)**. Returns `B, u, xxi=(X'X)⁻¹, y, X`. Σ is computed by the caller.
 - `lambda` (co-persistence) and `mu` (own-persistence) dummy observations are applied **inside
   `rfvar3`**, not in `varprior`.
+
+## HA / sequence-jacobian cross-check (`checks_ha_ssj.jl`)
+
+A second, **Python-based** oracle validates the heterogeneous-agent SSJ block
+(Krusell–Smith + one-asset HANK + Huggett) against the `sequence-jacobian`
+toolkit (Auclert, Bardóczy, Rognlie & Straub 2021). It is a **manual / weekly**
+harness — guarded by `MACRO_ORACLE_TESTS` and NOT wired into `runtests.jl`.
+
+- `python/gen_ha_ssj_reference.py` — pinned generator (`sequence-jacobian==1.0.0`);
+  run it OFFLINE (the package is not installable in CI/agent) and commit the CSVs
+  it writes to `ha_ssj_ref/`. The calibration mirrors `examples.jl` exactly,
+  including the `#231` income normalization `e = exp(z)/E[exp(z)]`.
+- `ha_ssj_ref/*.csv` — committed reference Jacobians (`ks_J_r_A`, `hank_J_r_A`, …).
+- `checks_ha_ssj.jl` — solves the same models via `method=:ssj` and diffs against
+  the fixtures when present. When they are absent it still runs the in-env
+  consistency checks (anticipation `J[t,s]≠0` for `t<s` — the discriminator for
+  the `#226` fake-news fix; Ho-Kalman realization consistency `#227`; steady-state
+  market clearing; the Huggett `H_U \ (H_Z·dw)` GE-clearing identity) and reports
+  per-quantity max abs/rel deviations.
+
+```bash
+MACRO_ORACLE_TESTS=1 "$JULIA" --project=. test/oracle/checks_ha_ssj.jl
+```
