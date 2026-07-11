@@ -181,6 +181,11 @@ the reduced system in `G1`.
 function distribution_irf(sol::HADSGESolution{T}, horizon::Int;
                            shock_index::Int=1,
                            shock_size::Real=1.0) where {T<:AbstractFloat}
+    # SSJ/Ho-Kalman has no distribution reduction basis — its reduced coordinates are
+    # abstract minimal-realization states (reduction_basis is genuinely identity in
+    # those coords), so there is no map back to the (asset × income) histogram.
+    sol.method === :ssj && error("distribution IRFs are unavailable for method=:ssj " *
+        "(the Ho-Kalman realization has no distribution basis); use method=:reiter.")
     lsol = sol.linear_solution
     G1 = lsol.G1
     impact = lsol.impact

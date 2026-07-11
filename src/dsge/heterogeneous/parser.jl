@@ -544,7 +544,7 @@ function solve(spec::HADSGESpec{T}; method::Symbol=:ssj,
         reiter_params = merge(
             Dict{Symbol,T}(k => T(v) for (k, v) in spec.aggregate_spec.param_values),
             spec.het_params)
-        G1, impact, n_red, explained = _reiter_linearize(
+        G1, impact, n_red, explained, U_k = _reiter_linearize(
             ss, spec.individual, spec.grid, spec.income; n_reduced=n_reduced,
             model=spec.model, het_params=reiter_params
         )
@@ -567,7 +567,13 @@ function solve(spec::HADSGESpec{T}; method::Symbol=:ssj,
                                 zeros(T, n_sys, 0), dummy_spec_inner)
         dsge_sol = DSGESolution{T}(G1, impact, C_sol, eu, :reiter, eigenvalues,
                                     dummy_spec_inner, linear)
-        reduction_basis = Matrix{T}(I, n_red, n_red)
+        # Store the REAL reduction basis U_k (N × n_red, N = n_a·n_e) so
+        # distribution_irf/inequality_irf can project reduced-state deviations back to
+        # the full (asset × income) distribution: d_dev = U_k · d̃ (#233). Previously
+        # this was Matrix{T}(I, n_red, n_red), whose row count (n_red) never equalled
+        # n_a·n_e, so the projection guard always failed and distribution IRFs were
+        # identically zero.
+        reduction_basis = U_k
         # Reiter reports the reduced system in its own coordinates (K and Z are
         # explicit states), so the observation map is the identity with no
         # feed-through — carried explicitly, not silently zeroed (#227).

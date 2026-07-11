@@ -116,6 +116,8 @@ parameters (`het_params[:rho_z]`; #236).
 - `impact::Matrix{T}` — `(n_red + n_agg) × 1` shock impact vector
 - `n_reduced_actual::Int` — actual number of retained singular vectors
 - `explained_variance::T` — fraction of variance captured by retained vectors
+- `U_k::Matrix{T}` — the `N × n_red` reduction basis (`N = n_a·n_e`), so callers can
+  project reduced-state deviations back to the full distribution (`d_dev = U_k·d̃`)
 
 # References
 - Reiter, M. (2009). Solving heterogeneous-agent models by projection and
@@ -291,7 +293,7 @@ function _reiter_linearize(ss::HASteadyState{T}, ip::IndividualProblem{T},
         me = maximum(abs.(eigs))
         me > one(T) && (G1 .*= T(0.999) / me)
 
-        return G1, impact_vec, n_red, explained
+        return G1, impact_vec, n_red, explained, U_k
     end
 
     # ── Step 6: Aiyagari general-equilibrium block (#230) ─────────────────────
@@ -363,5 +365,5 @@ function _reiter_linearize(ss::HASteadyState{T}, ip::IndividualProblem{T},
         G1 .*= T(0.999) / max_eig
     end
 
-    return G1, impact_vec, n_red, explained
+    return G1, impact_vec, n_red, explained, U_k
 end

@@ -735,6 +735,41 @@ end
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Section 17b: distribution/inequality IRF reduction basis (#233)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "distribution IRF reduction basis (#233)" begin
+    spec = load_ha_example(:krusell_smith)
+    ss = compute_steady_state(spec; r_bounds=(-0.02, 0.04), max_iter=60, tol=1e-3)
+    n_a = spec.grid.n_points[1]; n_e = spec.grid.n_income
+    reiter_sol = solve(spec; method=:reiter, ss=ss, n_reduced=12)
+
+    # (c) reduction_basis is the REAL U_k: N × n_red with orthonormal columns
+    # (was Matrix{T}(I, n_red, n_red), whose row count never equalled n_a·n_e).
+    U = reiter_sol.reduction_basis
+    @test size(U, 1) == n_a * n_e
+    @test size(U, 2) == reiter_sol.n_reduced
+    @test U' * U ≈ Matrix{Float64}(I, reiter_sol.n_reduced, reiter_sol.n_reduced) atol=1e-8
+
+    # (a) distribution IRF has nonzero entries after a shock (was identically zero
+    # because the projection guard n_full == n_a·n_e always failed on the identity).
+    dirf = distribution_irf(reiter_sol, 10)
+    @test size(dirf) == (n_a, n_e, 10)
+    @test any(!iszero, dirf)
+
+    # (e) inequality IRF: finite Gini in [0,1], p90 >= p50
+    ineq = inequality_irf(reiter_sol, 10)
+    @test all(0 .<= ineq[:gini] .<= 1)
+    @test all(isfinite, ineq[:gini])
+    @test all(ineq[:p90] .>= ineq[:p50])
+
+    # (d) SSJ/Ho-Kalman has no distribution basis → both throw informatively.
+    ssj_sol = solve(spec; method=:ssj, ss=ss, T_horizon=40, n_reduced=12)
+    @test_throws ErrorException distribution_irf(ssj_sol, 10)
+    @test_throws ErrorException inequality_irf(ssj_sol, 10)
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Section 18: Built-in examples
 # ─────────────────────────────────────────────────────────────────────────────
 
