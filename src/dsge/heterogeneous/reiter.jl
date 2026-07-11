@@ -98,7 +98,8 @@ singular vectors of the resulting deviation matrix.
 
 The reduced state is `[d̃_t; K_t; Z_t]` where `d̃ = U_k' (d − d_ss)` are
 the SVD-compressed distribution deviations, `K` is aggregate capital, and `Z`
-is a TFP shock following an AR(1) with persistence `ρ_z = 0.95`.
+is a TFP shock following an AR(1) with persistence `ρ_z` read from the spec
+parameters (`het_params[:rho_z]`; #236).
 
 # Arguments
 - `ss::HASteadyState{T}` — stationary equilibrium
@@ -308,10 +309,18 @@ function _reiter_linearize(ss::HASteadyState{T}, ip::IndividualProblem{T},
     n_agg = 2  # K and Z
     n_total = n_red + n_agg
 
-    alpha_val = T(get(het_params, :alpha, 0.36))
-    delta_val = T(get(het_params, :delta, 0.025))
-    Z_val     = T(get(het_params, :Z, 1.0))
-    rho_z     = T(get(het_params, :rho_z, 0.95))
+    # Read alpha/delta/rho_z from the spec (no magic-number literals). solve(:reiter)
+    # merges the aggregate-spec parameters into het_params, so examples (which store
+    # these in agg_spec) and @dsge models (which store them in het_params) both work
+    # (#236). A genuinely missing key errors informatively rather than defaulting.
+    for k in (:alpha, :delta, :rho_z)
+        haskey(het_params, k) ||
+            error("Reiter (Aiyagari) linearization requires parameter :$k in spec params")
+    end
+    alpha_val = T(het_params[:alpha])
+    delta_val = T(het_params[:delta])
+    Z_val     = T(get(het_params, :Z, one(T)))   # SS TFP level, defaults to 1
+    rho_z     = T(het_params[:rho_z])
 
     r_ss = ss.prices[:r]
     w_ss = ss.prices[:w]

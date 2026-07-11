@@ -604,7 +604,7 @@ end
         w = (1-alpha) * K^alpha
         Dict(:r => r, :w => w)
     end
-    params = Dict(:alpha => 0.36, :delta => 0.025, :Z => 1.0, :L => 1.0)
+    params = Dict(:alpha => 0.36, :delta => 0.025, :Z => 1.0, :L => 1.0, :rho_z => 0.95)
     ss = MacroEconometricModels._ha_steady_state(ip, grid, inc, price_fn_reiter, params;
         K_init=10.0, r_bounds=(-0.02, 0.04), max_iter=60, tol=1e-3)
 
@@ -631,6 +631,20 @@ end
     @test dw_dK > 0
     @test dr_dZ > 0
     @test dw_dZ > 0
+
+    # #236/T137: alpha/delta/rho_z are read from the spec, not hardcoded literals.
+    # Varying rho_z changes G1 (the TFP AR(1) diagonal), proving it is read.
+    params_lo = merge(params, Dict(:rho_z => 0.80))
+    G1b, _, _, _ = MacroEconometricModels._reiter_linearize(
+        ss, ip, grid, inc; n_reduced=15, model=:aiyagari, het_params=params_lo)
+    @test !(G1 ≈ G1b)
+    # A missing required parameter errors informatively (no magic-number default).
+    @test_throws ErrorException MacroEconometricModels._reiter_linearize(
+        ss, ip, grid, inc; n_reduced=15, model=:aiyagari,
+        het_params=Dict(:alpha => 0.36, :delta => 0.025, :Z => 1.0))   # no :rho_z
+    @test_throws ErrorException MacroEconometricModels._reiter_linearize(
+        ss, ip, grid, inc; n_reduced=15, model=:aiyagari,
+        het_params=Dict(:delta => 0.025, :rho_z => 0.95, :Z => 1.0))   # no :alpha
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
