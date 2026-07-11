@@ -609,7 +609,7 @@ end
         K_init=10.0, r_bounds=(-0.02, 0.04), max_iter=60, tol=1e-3)
 
     G1, impact, n_red, explained = MacroEconometricModels._reiter_linearize(
-        ss, ip, grid, inc; n_reduced=15
+        ss, ip, grid, inc; n_reduced=15, model=:aiyagari, het_params=params
     )
     @test size(G1, 1) == size(G1, 2)  # square
     @test size(G1, 1) <= 15 + 5  # reduced dim + aggregates
@@ -617,6 +617,20 @@ end
     @test explained > 0.95
     @test maximum(abs.(eigvals(G1))) < 1.0 + 0.01  # approximately stable
     @test size(impact, 1) == size(G1, 1)
+
+    # #230/T131: Aiyagari GE price feedback. The K state column (n_red+1) must be
+    # populated — capital feeds back into the distribution via the firm-FOC price
+    # channel. The old code left G1[:, n_red+1] identically zero (r never responded).
+    @test any(!iszero, G1[1:n_red, n_red + 1])
+
+    # Firm-FOC signs: a higher predetermined K lowers r and raises w.
+    dr_dK, dw_dK, dr_dZ, dw_dZ = MacroEconometricModels._aiyagari_foc_derivatives(
+        ss.prices[:r], ss.prices[:w], ss.aggregates[:K],
+        params[:alpha], params[:delta], params[:Z])
+    @test dr_dK < 0
+    @test dw_dK > 0
+    @test dr_dZ > 0
+    @test dw_dZ > 0
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
