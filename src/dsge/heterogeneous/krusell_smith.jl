@@ -24,43 +24,202 @@ the simulated path.
 using Random, Statistics
 
 # =============================================================================
-# _simulate_explicit_K — explicit Young simulation of the realized capital path
+# Krusell-Smith household policy over the extended state (a, e, K, z)
 # =============================================================================
+#
+# The bug this fixes: the old solver re-solved a STATIONARY EGM at each period's
+# contemporaneous realized prices, so the household policy — and the simulated
+# capital path — were completely independent of the perceived law of motion (PLM).
+# The outer loop was therefore vacuous (iterating the PLM changed nothing).
+#
+# The correct Krusell-Smith (1998) household conditions on the aggregate state
+# (K, z) and forecasts next-period capital K' through the PLM
+# `log K' = b1 + b2 log K + b3 z`. Its policy is a genuine function c(a, e, K, z):
+# in the EGM backward step the continuation marginal utility is evaluated at the
+# NEXT-period prices r(K', z'), w(K', z') implied by the PLM forecast K' and the
+# aggregate-shock transition z→z', so perturbing b re-solves to a different policy.
 
 """
-    _simulate_explicit_K(ss, ip, grid, income, price_fn, params, z) → Vector
+    _ks_build_z_grid(rho_z, sigma_z, n_z) → (z_grid::Vector, z_trans::Matrix)
 
-Simulate the realized aggregate capital path of an Aiyagari economy by explicitly
-iterating the cross-sectional distribution (Young 2010) under the aggregate TFP shock
-path `z`. Prices come from the realized capital `K_t · exp(z_t)`; the policy is re-solved
-only when prices move (warm-started from the steady state). This is the **reference**
-path for the Den Haan (2010) accuracy test, and the per-iteration simulation reused by
-`_krusell_smith_solve`.
+Discretize the aggregate log-TFP AR(1) `z' = ρ_z z + σ_z ε` onto an `n_z`-state
+Rouwenhorst grid for the Krusell-Smith aggregate state.
 """
-function _simulate_explicit_K(ss::HASteadyState{T}, ip::IndividualProblem{T},
-                               grid::HAGrid{T}, income::IncomeProcess{T},
-                               price_fn::Function, params::Dict{Symbol,T},
-                               z::AbstractVector{T}) where {T<:AbstractFloat}
-    T_sim = length(z)
+function _ks_build_z_grid(rho_z::T, sigma_z::T, n_z::Int) where {T<:AbstractFloat}
+    proc = rouwenhorst(rho_z, sigma_z, n_z)
+    return T.(proc.states), T.(proc.transition)
+end
+
+"""
+    _ks_egm_solve(ip, grid, income, b, z_grid, z_trans, K_grid, price_fn, params;
+                  max_iter=100, tol=1e-6, init_policy=nothing) → (c_pol, converged)
+
+Solve the Krusell-Smith household policy `c(a, e, K, z)` by EGM, given the PLM
+coefficients `b` (`log K' = b[1] + b[2] log K + b[3] z`). Prices at an aggregate node
+`(K, z)` come from the firm FOC at effective capital `K·exp(z)` (matching the
+simulation convention); the Euler continuation is taken at the PLM-forecast
+`K' = exp(b·[1, log K, z])` and integrated over the idiosyncratic (`Π`) and aggregate
+(`z_trans`) transitions with the next-period gross return `1 + r(K', z')`.
+
+Returns the `n_a × n_e × n_K × n_z` consumption policy and a convergence flag.
+"""
+function _ks_egm_solve(ip::IndividualProblem{T}, grid::HAGrid{T},
+                       income::IncomeProcess{T}, b::AbstractVector{T},
+                       z_grid::AbstractVector{T}, z_trans::AbstractMatrix{T},
+                       K_grid::AbstractVector{T}, price_fn::Function,
+                       params::Dict{Symbol,T};
+                       max_iter::Int=100, tol::T=T(1e-6),
+                       init_policy=nothing) where {T<:AbstractFloat}
+    a_grid = grid.grids[1]
+    n_a = length(a_grid)
+    n_e = length(income.states)
+    e_vals = income.states
+    n_z = length(z_grid)
+    n_K = length(K_grid)
+    a_min = ip.borrowing_constraint[1]
+    beta = ip.beta
+    up = ip.utility_prime
+    upi = ip.utility_prime_inv
+    Pi = income.transition
+
+    # Prices at each aggregate node (K, z): firm FOC at effective capital K·exp(z).
+    r_node = zeros(T, n_K, n_z)
+    w_node = zeros(T, n_K, n_z)
+    for lz in 1:n_z, kK in 1:n_K
+        p = price_fn(K_grid[kK] * exp(z_grid[lz]), params)
+        r_node[kK, lz] = p[:r]
+        w_node[kK, lz] = p[:w]
+    end
+    # PLM capital forecast K'(K, z), and next-period rate r(K', z') for each z'.
+    Kp_node = zeros(T, n_K, n_z)
+    rp_node = zeros(T, n_K, n_z, n_z)   # [kK, lz, lp] → r(K'(K,z), z')
+    for lz in 1:n_z, kK in 1:n_K
+        Kp = exp(b[1] + b[2] * log(K_grid[kK]) + b[3] * z_grid[lz])
+        Kp_node[kK, lz] = Kp
+        for lp in 1:n_z
+            rp_node[kK, lz, lp] = price_fn(Kp * exp(z_grid[lp]), params)[:r]
+        end
+    end
+
+    c_pol = zeros(T, n_a, n_e, n_K, n_z)
+    if init_policy !== nothing
+        copyto!(c_pol, init_policy)
+    else
+        for lz in 1:n_z, kK in 1:n_K, je in 1:n_e, ia in 1:n_a
+            coh = (one(T) + r_node[kK, lz]) * a_grid[ia] + w_node[kK, lz] * e_vals[je]
+            c_pol[ia, je, kK, lz] = max(T(0.05) * coh, T(1e-10))
+        end
+    end
+
+    c_new = similar(c_pol)
+    emu = zeros(T, n_a)
+    c_endo = zeros(T, n_a)
+    a_endo = zeros(T, n_a)
+    converged = false
+    for _ in 1:max_iter
+        for lz in 1:n_z
+            for kK in 1:n_K
+                r = r_node[kK, lz]
+                w = w_node[kK, lz]
+                Kp = Kp_node[kK, lz]
+                for je in 1:n_e
+                    fill!(emu, zero(T))
+                    @inbounds for i in 1:n_a         # a' index (on a_grid)
+                        acc = zero(T)
+                        for jp in 1:n_e
+                            Pje = Pi[je, jp]
+                            Pje < T(1e-20) && continue
+                            for lp in 1:n_z
+                                ztr = z_trans[lz, lp]
+                                ztr < T(1e-20) && continue
+                                # c'(a', e'=jp, K', z'=lp): interpolate in K at K'
+                                cp = _linear_interp(K_grid, view(c_pol, i, jp, :, lp), Kp)
+                                acc += Pje * ztr * (one(T) + rp_node[kK, lz, lp]) * up(cp)
+                            end
+                        end
+                        emu[i] = acc
+                    end
+                    for i in 1:n_a
+                        c_endo[i] = upi(beta * emu[i])
+                        a_endo[i] = (c_endo[i] + a_grid[i] - w * e_vals[je]) / (one(T) + r)
+                    end
+                    for i in 1:n_a
+                        a_val = a_grid[i]
+                        if a_val < a_endo[1]
+                            coh = (one(T) + r) * a_val + w * e_vals[je]
+                            c_new[i, je, kK, lz] = max(coh - a_min, T(1e-10))
+                        else
+                            c_new[i, je, kK, lz] = _linear_interp(a_endo, c_endo, a_val)
+                        end
+                    end
+                end
+            end
+        end
+        max_diff = maximum(abs.(c_new .- c_pol))
+        copyto!(c_pol, c_new)
+        if max_diff < tol
+            converged = true
+            break
+        end
+    end
+    return c_pol, converged
+end
+
+"""
+    _ks_savings_at(c_pol, K_t, lz, a_grid, e_vals, K_grid, r_kz, w_kz, a_min) → Matrix
+
+Extract the 2-D savings policy `a'(a, e)` at the realized aggregate state
+`(K_t, z_index lz)` from the 4-D consumption policy by interpolating in the `K`
+dimension at `K_t`.
+"""
+function _ks_savings_at(c_pol::Array{T,4}, K_t::T, lz::Int,
+                        a_grid::AbstractVector{T}, e_vals::AbstractVector{T},
+                        K_grid::AbstractVector{T}, r_kz::T, w_kz::T,
+                        a_min::T) where {T<:AbstractFloat}
+    n_a = length(a_grid)
+    n_e = length(e_vals)
+    a_pol = zeros(T, n_a, n_e)
+    @inbounds for je in 1:n_e
+        for ia in 1:n_a
+            c = _linear_interp(K_grid, view(c_pol, ia, je, :, lz), K_t)
+            coh = (one(T) + r_kz) * a_grid[ia] + w_kz * e_vals[je]
+            a_pol[ia, je] = max(coh - c, a_min)
+        end
+    end
+    return a_pol
+end
+
+"""
+    _ks_simulate(c_pol, ss, grid, income, z_idx_path, z_grid, K_grid, price_fn, params)
+        → K_series
+
+Simulate the realized aggregate capital path under the converged Krusell-Smith
+household policy `c_pol(a,e,K,z)` and a discrete aggregate-shock index path
+`z_idx_path` (indices into `z_grid`). Each period the savings policy at the realized
+`(K_t, z_t)` is obtained by K-interpolation, the Young cross-section is advanced one
+period, and `K_{t+1}` is the resulting aggregate — so the path genuinely depends on
+the PLM baked into `c_pol`.
+"""
+function _ks_simulate(c_pol::Array{T,4}, ss::HASteadyState{T}, grid::HAGrid{T},
+                      income::IncomeProcess{T}, z_idx_path::AbstractVector{Int},
+                      z_grid::AbstractVector{T}, K_grid::AbstractVector{T},
+                      price_fn::Function, params::Dict{Symbol,T}) where {T<:AbstractFloat}
+    T_sim = length(z_idx_path)
+    a_grid = grid.grids[1]
+    e_vals = income.states
+    a_min = ss.grid.grids[1][1]
     K_ss = ss.aggregates[:K]
     K_series = zeros(T, T_sim)
     K_series[1] = K_ss
-
     dist = vec(ss.distribution); dist = dist ./ sum(dist)
-    last_r = ss.prices[:r]; last_w = ss.prices[:w]
-    a_pol = copy(ss.policies[:savings])
-    Lambda = _build_transition_matrix(a_pol, grid, income)
 
     for t in 1:(T_sim - 1)
-        K_eff = K_series[t] * exp(z[t])
-        prices = price_fn(K_eff, params)
-        r_new = prices[:r]; w_new = prices[:w]
-        if abs(r_new - last_r) > T(1e-8) || abs(w_new - last_w) > T(1e-8)
-            _, a_pol_new = _egm_solve(ip, grid, income, prices; max_iter=50, tol=T(1e-8))
-            copyto!(a_pol, a_pol_new)
-            Lambda = _build_transition_matrix(a_pol, grid, income)
-            last_r = r_new; last_w = w_new
-        end
+        K_t = K_series[t]
+        lz = z_idx_path[t]
+        p = price_fn(K_t * exp(z_grid[lz]), params)
+        a_pol = _ks_savings_at(c_pol, K_t, lz, a_grid, e_vals, K_grid,
+                               p[:r], p[:w], a_min)
+        Lambda = _build_transition_matrix(a_pol, grid, income)
         dist = _forward_iterate(Lambda, dist)
         K_next = max(_aggregate(dist, grid; var_index=1), T(1e-6))
         isfinite(K_next) || (K_next = K_ss)
@@ -139,6 +298,8 @@ function _krusell_smith_solve(ss::HASteadyState{T},
                                model::Symbol=:aiyagari,
                                rho_e::Real=0.9,
                                sigma_e::Real=0.01,
+                               n_z::Int=3,
+                               n_K::Int=5,
                                seed::Int=1234) where {T<:AbstractFloat}
     @assert grid.n_dims == 1 "Krusell-Smith solver requires a one-asset grid"
     @assert ip.n_asset_dims == 1 "Krusell-Smith solver requires a one-asset individual problem"
@@ -156,84 +317,82 @@ function _krusell_smith_solve(ss::HASteadyState{T},
     damping_T = T(damping)
 
     rng = Random.MersenneTwister(seed)
-
-    # Extract steady-state aggregate capital
     K_ss = ss.aggregates[:K]
-    log_K_ss = log(K_ss)
 
-    # Initialize PLM coefficients: log K' = b[1] + b[2] * log K + b[3] * z
-    # Start near identity: K' ≈ K → log K' ≈ 0 + 1 * log K + 0 * z
-    b = T[zero(T), one(T), zero(T)]
+    # Aggregate-state grids: log-TFP z (Rouwenhorst) and capital K (log-spaced ±40%).
+    z_grid, z_trans = _ks_build_z_grid(rho_z_T, sigma_z_T, n_z)
+    K_grid = K_ss .* exp.(T.(collect(range(-T(0.4), T(0.4); length=n_K))))
 
-    # Pre-generate aggregate shock path (fixed across outer iterations for stability)
-    z_path = zeros(T, T_sim)
-    innovations = randn(rng, T, T_sim)
+    # Discrete aggregate-shock index path (Markov chain on z_grid), fixed across outer
+    # iterations. Its realized z levels drive both the policy-consistent simulation and
+    # the PLM regression.
+    z_idx = zeros(Int, T_sim)
+    z_idx[1] = div(n_z + 1, 2)                       # start at the central (z≈0) state
+    z_cdf = cumsum(z_trans; dims=2)
     for t in 2:T_sim
-        z_path[t] = rho_z_T * z_path[t-1] + sigma_z_T * innovations[t]
+        u = rand(rng, T)
+        j = z_idx[t-1]
+        z_idx[t] = clamp(searchsortedfirst(view(z_cdf, j, :), u), 1, n_z)
     end
+    z_real = T[z_grid[z_idx[t]] for t in 1:T_sim]    # realized z levels
 
-    # Storage for simulation
-    log_K_series = zeros(T, T_sim)
-    K_series = zeros(T, T_sim)
+    # Initialize PLM: log K' = b[1] + b[2] log K + b[3] z (start at the identity law).
+    b = T[zero(T), one(T), zero(T)]
 
     converged = false
     final_iter = 0
     best_r2 = zero(T)
 
+    # Warm-start the 4-D policy from the steady-state consumption policy broadcast
+    # across the (K, z) nodes — close to the solution for K near K_ss, so the EGM
+    # (which contracts only at rate β ≈ 0.99 from a cold start) converges quickly.
+    c_ss = ss.policies[:consumption]
+    n_a0 = size(c_ss, 1); n_e0 = size(c_ss, 2)
+    c_pol = Array{T,4}(undef, n_a0, n_e0, n_K, n_z)
+    for lz in 1:n_z, kK in 1:n_K
+        @views c_pol[:, :, kK, lz] .= c_ss
+    end
+
     for outer in 1:max_outer
         final_iter = outer
 
-        # Explicit cross-sectional (Young) simulation of the realized capital path.
-        # The realized path is independent of the PLM (prices use realized K · exp(z)),
-        # so this also serves as the Den Haan reference path.
-        K_series = _simulate_explicit_K(ss, ip, grid, income, price_fn, params, z_path)
+        # Solve the household policy c(a,e,K,z) at the CURRENT PLM (warm-started), then
+        # simulate the Young cross-section forward with that policy. Unlike the old
+        # myopic re-solve at realized prices, this realized path genuinely depends on
+        # the PLM b (perturbing b re-solves to a different policy and a different path).
+        c_pol, _ = _ks_egm_solve(ip, grid, income, b, z_grid, z_trans, K_grid,
+                                 price_fn, params; max_iter=1000, tol=T(1e-6),
+                                 init_policy=c_pol)
+        K_series = _ks_simulate(c_pol, ss, grid, income, z_idx, z_grid, K_grid,
+                                price_fn, params)
         log_K_series = log.(K_series)
 
-        # OLS regression: log K_{t+1} = b[1] + b[2] * log K_t + b[3] * z_t
-        # Including the aggregate shock z makes the law of motion forecastable in the
-        # Den Haan (2010) sense (a z-free PLM yields a degenerate constant path).
-        # Use only post-burn-in observations
-        n_obs = T_sim - T_burn - 1  # number of (K_t, K_{t+1}) pairs after burn-in
-        if n_obs < 10
-            # Not enough data — cannot regress
-            break
-        end
+        n_obs = T_sim - T_burn - 1
+        n_obs < 10 && break
 
         idx_start = T_burn + 1
         idx_end = T_sim - 1
-
-        # Construct OLS matrices
-        y_ols = log_K_series[(idx_start + 1):(idx_end + 1)]   # log K_{t+1}
+        y_ols = log_K_series[(idx_start + 1):(idx_end + 1)]        # log K_{t+1}
         X_ols = hcat(ones(T, n_obs), log_K_series[idx_start:idx_end],
-                     z_path[idx_start:idx_end])               # [1, log K_t, z_t]
-
-        # Solve via least squares: b_new = (X'X) \ (X'y)
+                     z_real[idx_start:idx_end])                    # [1, log K_t, z_t]
         b_new = X_ols \ y_ols
 
-        # Compute R²
         y_hat = X_ols * b_new
-        resid_vec = y_ols .- y_hat
-        ss_res = sum(resid_vec .^ 2)
-        y_mean = mean(y_ols)
-        ss_tot = sum((y_ols .- y_mean) .^ 2)
-        r2 = ss_tot > zero(T) ? one(T) - ss_res / ss_tot : one(T)
-        best_r2 = r2
+        ss_res = sum((y_ols .- y_hat) .^ 2)
+        ss_tot = sum((y_ols .- mean(y_ols)) .^ 2)
+        best_r2 = ss_tot > zero(T) ? one(T) - ss_res / ss_tot : one(T)
 
-        # Check convergence
         coef_diff = maximum(abs.(b_new .- b))
         if coef_diff < tol_T
             converged = true
             b = b_new
             break
         end
-
-        # Damped update
         b = damping_T .* b_new .+ (one(T) - damping_T) .* b
     end
 
     plm_coefficients = Dict{Symbol,Vector{T}}(:K => copy(b))
     r_squared = Dict{Symbol,T}(:K => best_r2)
-
     return (; plm_coefficients, r_squared, converged, iterations=final_iter)
 end
 
@@ -439,16 +598,38 @@ function den_haan_test(ks::KrusellSmithSolution{T};
     b = ks.plm_coefficients[:K]
     @assert length(b) == 3 "den_haan_test expects a z-augmented PLM (log K' = b1 + b2 log K + b3 z)"
 
-    z = zeros(T, T_sim); innov = randn(rng, T, T_sim)
+    # Aggregate-state grids (same discretization the solver used) and a discrete
+    # aggregate-shock index path (Markov chain on z_grid).
+    n_z = 3; n_K = 5
+    z_grid, z_trans = _ks_build_z_grid(T(rho_z), T(sigma_z), n_z)
+    K_ss = ss.aggregates[:K]
+    K_grid = K_ss .* exp.(T.(collect(range(-T(0.4), T(0.4); length=n_K))))
+    z_idx = zeros(Int, T_sim); z_idx[1] = div(n_z + 1, 2)
+    z_cdf = cumsum(z_trans; dims=2)
     for t in 2:T_sim
-        z[t] = T(rho_z) * z[t-1] + T(sigma_z) * innov[t]
+        u = rand(rng, T); j = z_idx[t-1]
+        z_idx[t] = clamp(searchsortedfirst(view(z_cdf, j, :), u), 1, n_z)
     end
+    z_real = T[z_grid[z_idx[t]] for t in 1:T_sim]
 
-    K_ref = _simulate_explicit_K(ss, ip, grid, income,
-                                 _default_cobb_douglas_price_fn, params, z)  # reference
-    logK_plm = zeros(T, T_sim); logK_plm[1] = log(ss.aggregates[:K])         # PLM-only
+    # Reference path: the PLM-DEPENDENT cross-sectional simulation under the household
+    # policy re-solved at the fitted PLM b (not a myopic re-solve at realized prices),
+    # warm-started from the SS policy for fast EGM convergence.
+    c_ss = ss.policies[:consumption]
+    c0 = Array{T,4}(undef, size(c_ss, 1), size(c_ss, 2), n_K, n_z)
+    for lz in 1:n_z, kK in 1:n_K
+        @views c0[:, :, kK, lz] .= c_ss
+    end
+    c_pol, _ = _ks_egm_solve(ip, grid, income, b, z_grid, z_trans, K_grid,
+                             _default_cobb_douglas_price_fn, params;
+                             max_iter=1000, tol=T(1e-6), init_policy=c0)
+    K_ref = _ks_simulate(c_pol, ss, grid, income, z_idx, z_grid, K_grid,
+                         _default_cobb_douglas_price_fn, params)
+
+    # PLM-only path: iterate the fitted law on its own forecasts (no cross-section).
+    logK_plm = zeros(T, T_sim); logK_plm[1] = log(K_ss)
     for t in 1:(T_sim - 1)
-        logK_plm[t+1] = b[1] + b[2] * logK_plm[t] + b[3] * z[t]
+        logK_plm[t+1] = b[1] + b[2] * logK_plm[t] + b[3] * z_real[t]
     end
     K_plm = exp.(logK_plm)
 

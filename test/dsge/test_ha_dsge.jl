@@ -431,7 +431,12 @@ end
 
 @testset "Krusell-Smith simulation" begin
     grid = HAGrid(assets=(0.0, 200.0, 80), income_states=3)
-    inc = rouwenhorst(0.966, 0.5, 3)
+    # Normalized income (#231): positive states, E[e]=1. The raw log grid has
+    # negative states → negative labor income → the household policy collapses to
+    # the borrowing constraint and the KS dynamics are degenerate.
+    ir = rouwenhorst(0.966, 0.5, 3)
+    e_norm = exp.(ir.states); e_norm ./= dot(ir.stationary_dist, e_norm)
+    inc = IncomeProcess{Float64}(ir.transition, e_norm, ir.stationary_dist, :income)
     ip = IndividualProblem{Float64}(
         c -> log(c), c -> 1.0/c, m -> 1.0/m, 0.99,
         (a, e, prices) -> (1 + prices[:r]) * a + prices[:w] * e,
@@ -457,6 +462,36 @@ end
     @test haskey(result.r_squared, :K)
     @test result.r_squared[:K] > 0.9  # KS typically gets R² > 0.999
     @test result.iterations <= 3
+
+    # #229/T130: the household policy — and hence the realized capital path — is a
+    # genuine function of the PLM b. Perturbing b, re-solving the (a,e,K,z) policy and
+    # re-simulating the cross-section must MOVE {K_t}. The old myopic solver re-solved a
+    # stationary EGM at realized prices, so its path was independent of the PLM (the
+    # outer loop was vacuous). This assertion fails on that old solver.
+    n_z = 3; n_K = 5
+    zg, zt = MacroEconometricModels._ks_build_z_grid(0.95, 0.02, n_z)
+    Kss = ss.aggregates[:K]
+    Kg = Kss .* exp.(collect(range(-0.4, 0.4; length=n_K)))
+    css = ss.policies[:consumption]
+    c0 = Array{Float64,4}(undef, size(css, 1), size(css, 2), n_K, n_z)
+    for lz in 1:n_z, kK in 1:n_K
+        @views c0[:, :, kK, lz] .= css
+    end
+    rng_ks = Random.MersenneTwister(11)
+    T_s = 150; zidx = zeros(Int, T_s); zidx[1] = 2; zc = cumsum(zt; dims=2)
+    for t in 2:T_s
+        u = rand(rng_ks)
+        zidx[t] = clamp(searchsortedfirst(view(zc, zidx[t-1], :), u), 1, n_z)
+    end
+    cA, _ = MacroEconometricModels._ks_egm_solve(ip, grid, inc, [0.0, 1.0, 0.0],
+        zg, zt, Kg, price_fn, params; max_iter=1000, tol=1e-6, init_policy=c0)
+    KA = MacroEconometricModels._ks_simulate(cA, ss, grid, inc, zidx, zg, Kg, price_fn, params)
+    cB, _ = MacroEconometricModels._ks_egm_solve(ip, grid, inc, [0.3, 0.85, 0.05],
+        zg, zt, Kg, price_fn, params; max_iter=1000, tol=1e-6, init_policy=c0)
+    KB = MacroEconometricModels._ks_simulate(cB, ss, grid, inc, zidx, zg, Kg, price_fn, params)
+    @test maximum(abs.(cA .- cB)) > 1e-4    # different PLM → materially different policy
+    @test maximum(abs.(KA .- KB)) > 1e-3    # different PLM → different realized path
+    @test all(isfinite, KA) && all(KA .> 0)
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
