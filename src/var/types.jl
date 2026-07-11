@@ -210,7 +210,15 @@ struct BayesianFEVD{T<:AbstractFloat} <: AbstractFEVD
     variables::Vector{String}
     shocks::Vector{String}
     quantile_levels::Vector{T}
+    # MC honesty counts (#244): posterior draws requested, usable, and dropped.
+    n_requested::Int
+    n_effective::Int
+    n_failed::Int
 end
+
+# Backward-compatible constructor (pre-#244, no MC counts ⇒ untracked, no dropped draws).
+BayesianFEVD{T}(quantiles, point_estimate, horizon, variables, shocks, quantile_levels) where {T} =
+    BayesianFEVD{T}(quantiles, point_estimate, horizon, variables, shocks, quantile_levels, 0, 0, 0)
 
 # =============================================================================
 # Priors

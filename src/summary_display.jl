@@ -329,8 +329,12 @@ function Base.show(io::IO, f::BayesianFEVD{T}) where {T}
     H = f.horizon
 
     q_str = join([_fmt_pct(q; digits=0) for q in f.quantile_levels], ", ")
-    _show_spec_table(io, "Bayesian FEVD (posterior mean)",
-        ["Variables" => n_vars, "Shocks" => n_shocks, "Horizon" => H, "Quantiles" => q_str])
+    spec_pairs = Pair{String,Any}[
+        "Variables" => n_vars, "Shocks" => n_shocks, "Horizon" => H, "Quantiles" => q_str]
+    if f.n_requested > 0 && f.n_failed > 0   # MC honesty (#244)
+        push!(spec_pairs, "Effective draws" => "$(f.n_effective)/$(f.n_requested) ($(f.n_failed) dropped)")
+    end
+    _show_spec_table(io, "Bayesian FEVD (posterior mean)", spec_pairs)
 
     for h in _select_horizons(H)
         data = Matrix{Any}(undef, n_vars, n_shocks + 1)

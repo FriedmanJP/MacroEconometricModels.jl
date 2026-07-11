@@ -987,7 +987,8 @@ function fevd(result::BayesianDSGE{T}, horizon::Int;
     q_vec = T.(quantiles)
     fevd_q, fevd_m = compute_posterior_quantiles(stacked, q_vec)
 
-    BayesianFEVD{T}(fevd_q, fevd_m, horizon, var_names, shock_names, q_vec)
+    BayesianFEVD{T}(fevd_q, fevd_m, horizon, var_names, shock_names, q_vec,
+                    n_sim, n_valid, n_skipped)
 end
 
 # =============================================================================

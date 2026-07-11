@@ -601,4 +601,15 @@ end
     s = sprint(show, b_drop)
     @test occursin("Effective draws", s) && occursin("60/100", s) && occursin("40 dropped", s)
     @test !occursin("Effective draws", sprint(show, b))
+
+    # --- BayesianFEVD counts ---
+    f = fevd(post, 8; method=:cholesky)
+    @test f.n_requested == 80
+    @test f.n_effective + f.n_failed == f.n_requested
+    f6 = MacroEconometricModels.BayesianFEVD{Float64}(q, pe, 8, vars, shk, ql)
+    @test (f6.n_requested, f6.n_effective, f6.n_failed) == (0, 0, 0)
+    f_drop = MacroEconometricModels.BayesianFEVD{Float64}(q, pe, 8, vars, shk, ql, 100, 70, 30)
+    sf = sprint(show, f_drop)
+    @test occursin("70/100", sf) && occursin("30 dropped", sf)
+    @test !occursin("Effective draws", sprint(show, f))
 end

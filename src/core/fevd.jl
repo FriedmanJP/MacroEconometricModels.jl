@@ -156,7 +156,10 @@ function fevd(post::BVARPosterior, horizon::Int;
     fevd_q, fevd_m = compute_posterior_quantiles(all_fevds, q_vec; threaded=use_threaded, central=point_estimate)
 
     snames = isnothing(shock_names) ? post.varnames : shock_names
-    BayesianFEVD{ET}(fevd_q, fevd_m, horizon, post.varnames, snames, q_vec)
+    # MC honesty (#244): process_posterior_samples drops non-stationary / unidentified draws.
+    n_req = post.n_draws
+    BayesianFEVD{ET}(fevd_q, fevd_m, horizon, post.varnames, snames, q_vec,
+                     n_req, samples, n_req - samples)
 end
 
 # Deprecated wrapper for old (chain, p, n, horizon) signature
