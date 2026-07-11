@@ -337,4 +337,10 @@ end
     # different seed -> different draws
     b3 = irf(model, 10; ci_type=:bootstrap, reps=50, rng=Random.MersenneTwister(99))
     @test b1.ci_lower != b3.ci_lower
+    # :sign identification now threads rng through compute_Q -> identify_sign -> generate_Q
+    # (previously the rotation draw leaked to the global RNG, so sign CIs were non-reproducible)
+    check = ir -> ir[1, 1, 1] > 0
+    sg1 = irf(model, 8; ci_type=:bootstrap, method=:sign, check_func=check, reps=20, rng=mkrng())
+    sg2 = irf(model, 8; ci_type=:bootstrap, method=:sign, check_func=check, reps=20, rng=mkrng())
+    @test sg1.ci_lower == sg2.ci_lower
 end
