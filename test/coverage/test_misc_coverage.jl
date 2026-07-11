@@ -226,4 +226,18 @@ Random.seed!(9004)
         @test occursin("Post. Mean", str)
     end
 
+    @testset "particle-filter kron buffer bounds guards (#254 G-19)" begin
+        kb  = MacroEconometricModels._fill_kron_buffer!
+        kb3 = MacroEconometricModels._fill_kron3_buffer!
+        V = randn(3, 4)                       # nv=3, N=4
+        # correctly sized buffers do not throw
+        @test (kb(zeros(9, 4), V, 3);  true)  # nv^2 = 9
+        @test (kb3(zeros(27, 4), V, 3); true) # nv^3 = 27
+        # mis-sized buffers raise a clean DimensionMismatch instead of corrupting memory
+        @test_throws DimensionMismatch kb(zeros(4, 4), V, 3)     # too few rows
+        @test_throws DimensionMismatch kb(zeros(9, 2), V, 3)     # too few cols
+        @test_throws DimensionMismatch kb(zeros(9, 4), randn(2, 4), 3)  # V too small
+        @test_throws DimensionMismatch kb3(zeros(10, 4), V, 3)
+    end
+
 end

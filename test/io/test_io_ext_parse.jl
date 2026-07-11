@@ -11,6 +11,10 @@ using Test, MacroEconometricModels
         print(f, "150.0,500.0,350.0\n200.0,100.0,1700.0\n"); close(w)
         io = MacroEconometricModels._parse_zip_io(zp; n_sectors=2, n_fd=1, member="io.csv")
         @test io.x ≈ [1000.0, 2000.0]
+        # G-15 (#254): zip-bomb guard — a member declaring more than max_uncompressed
+        # bytes is refused before it is read into memory.
+        @test_throws ErrorException MacroEconometricModels._parse_zip_io(
+            zp; n_sectors=2, n_fd=1, member="io.csv", max_uncompressed=3)
     else
         @test_broken false  # ZipFile not installed in this environment
     end

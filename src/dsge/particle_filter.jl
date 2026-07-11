@@ -48,6 +48,11 @@ Fill the nv^2 x N Kronecker product buffer: buffer[(i-1)*nv+j, k] = V[i,k] * V[j
 """
 function _fill_kron_buffer!(buffer::Matrix{T}, V::Matrix{T}, nv::Int) where {T<:AbstractFloat}
     N = size(V, 2)
+    # G-19 (#254): the @inbounds/@simd loop trusts the caller-supplied nv; verify V and the
+    # buffer are large enough so a mis-sized call errors cleanly instead of corrupting memory.
+    size(V, 1) >= nv || throw(DimensionMismatch("V has $(size(V,1)) rows, need >= nv=$nv"))
+    size(buffer, 1) >= nv^2 || throw(DimensionMismatch("buffer has $(size(buffer,1)) rows, need >= nv^2=$(nv^2)"))
+    size(buffer, 2) >= N || throw(DimensionMismatch("buffer has $(size(buffer,2)) cols, need >= $N"))
     @inbounds for i in 1:nv, j in 1:nv
         idx = (i - 1) * nv + j
         @simd for k in 1:N
@@ -66,6 +71,10 @@ Fill the nv^3 x N triple Kronecker product buffer:
 function _fill_kron3_buffer!(buffer::Matrix{T}, V::Matrix{T}, nv::Int) where {T<:AbstractFloat}
     N = size(V, 2)
     nv2 = nv * nv
+    # G-19 (#254): guard the caller-supplied nv before the @inbounds triple loop.
+    size(V, 1) >= nv || throw(DimensionMismatch("V has $(size(V,1)) rows, need >= nv=$nv"))
+    size(buffer, 1) >= nv2 * nv || throw(DimensionMismatch("buffer has $(size(buffer,1)) rows, need >= nv^3=$(nv2*nv)"))
+    size(buffer, 2) >= N || throw(DimensionMismatch("buffer has $(size(buffer,2)) cols, need >= $N"))
     @inbounds for i in 1:nv, j in 1:nv, l in 1:nv
         idx = (i - 1) * nv2 + (j - 1) * nv + l
         @simd for k in 1:N

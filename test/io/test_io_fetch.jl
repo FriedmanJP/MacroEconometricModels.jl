@@ -10,6 +10,10 @@ using MacroEconometricModels: scrape_links, _log_download!, IO_HEADERS, IOMetaDa
     @test urls == ["http://x/IOT_2010_pxp.zip", "http://x/IOT_2011_pxp.zip"]
 
     @test haskey(IO_HEADERS, "User-Agent")
+    # G-16 (#254): honest User-Agent, not a spoofed browser string.
+    ua = IO_HEADERS["User-Agent"]
+    @test !occursin("Mozilla", ua) && !occursin("Firefox", ua)
+    @test occursin("MacroEconometricModels", ua)
 
     meta = IOMetaData(; source="test")
     _log_download!(meta, "http://x/file.zip", "file.zip")

@@ -42,6 +42,9 @@ Aqua = "0.8"
 DataFrames = "1"
 Dates = "1"
 DelimitedFiles = "1"
+# Distributions is pre-1.0 (0.x): SemVer gives no breaking-change guarantee across 0.25.x
+# minor bumps, so this pin is intentionally to the 0.25 minor line. Revisit on a 0.26/1.0
+# release. (#254 G-18)
 Distributions = "0.25"
 Documenter = "1"
 Downloads = "1"
