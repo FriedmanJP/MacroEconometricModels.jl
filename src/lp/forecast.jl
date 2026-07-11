@@ -52,7 +52,8 @@ where controls_T are the last `lags` observations of Y.
 """
 function forecast(lp::LPModel{T}, shock_path::AbstractVector{<:Real};
                   ci_method::Symbol=:analytical, conf_level::Real=0.95,
-                  n_boot::Int=500) where {T<:AbstractFloat}
+                  n_boot::Int=500,
+                  rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     H = lp.horizon
     @assert length(shock_path) == H "shock_path must have length H=$H"
     @assert ci_method ∈ (:analytical, :bootstrap, :none) "ci_method must be :analytical, :bootstrap, or :none"
@@ -104,7 +105,7 @@ function forecast(lp::LPModel{T}, shock_path::AbstractVector{<:Real};
 
     if ci_method == :bootstrap
         ci_lower, ci_upper, se_mat = _lp_forecast_bootstrap(lp, shock_path_T,
-                                                              x_controls, n_boot, T(conf_level))
+                                                              x_controls, n_boot, T(conf_level), rng)
     end
 
     LPForecast(forecasts, ci_lower, ci_upper, se_mat, H,
@@ -148,7 +149,8 @@ end
 """Bootstrap CIs for LP forecasts via residual resampling."""
 function _lp_forecast_bootstrap(lp::LPModel{T}, shock_path::Vector{T},
                                  x_controls::Vector{T}, n_boot::Int,
-                                 conf_level::T) where {T<:AbstractFloat}
+                                 conf_level::T,
+                                 rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     H = lp.horizon
     n_response = length(lp.response_vars)
     boot_forecasts = zeros(T, n_boot, H, n_response)
@@ -169,7 +171,7 @@ function _lp_forecast_bootstrap(lp::LPModel{T}, shock_path::Vector{T},
             end
 
             # Add resampled residual
-            resid_idx = rand(1:size(U_h, 1))
+            resid_idx = rand(rng, 1:size(U_h, 1))
             for j in 1:n_response
                 boot_forecasts[b, h, j] = dot(x_h, @view(B_h[:, j])) + U_h[resid_idx, j]
             end
@@ -215,10 +217,11 @@ orthogonalized shock.
 function forecast(slp::StructuralLP{T}, shock_idx::Int,
                   shock_path::AbstractVector{<:Real};
                   ci_method::Symbol=:analytical, conf_level::Real=0.95,
-                  n_boot::Int=500) where {T<:AbstractFloat}
+                  n_boot::Int=500,
+                  rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     n = nvars(slp)
     @assert 1 <= shock_idx <= n "shock_idx must be in 1:$n"
 
     lp_model = slp.lp_models[shock_idx]
-    forecast(lp_model, shock_path; ci_method=ci_method, conf_level=conf_level, n_boot=n_boot)
+    forecast(lp_model, shock_path; ci_method=ci_method, conf_level=conf_level, n_boot=n_boot, rng=rng)
 end

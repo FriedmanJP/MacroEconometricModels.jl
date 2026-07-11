@@ -234,7 +234,8 @@ Returns (f_lo, f_hi, o_lo, o_hi, f_se, o_se).
 """
 function _factor_forecast_bootstrap(F_last::Vector{Vector{T}}, A::Vector{<:AbstractMatrix{T}},
     resids::AbstractMatrix{T}, Sigma_e::AbstractMatrix{T}, Lambda::AbstractMatrix{T},
-    h::Int, r::Int, p::Int, n_boot::Int, conf_level::T) where {T<:AbstractFloat}
+    h::Int, r::Int, p::Int, n_boot::Int, conf_level::T,
+    rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
 
     N = size(Lambda, 1)
     T_resid = size(resids, 1)
@@ -247,9 +248,9 @@ function _factor_forecast_bootstrap(F_last::Vector{Vector{T}}, A::Vector{<:Abstr
         for step in 1:h
             # VAR forecast with resampled innovation
             F_h = sum(A[lag] * (step - lag >= 1 ? F_boot[b, step - lag, :] : F_last[lag - step + 1]) for lag in 1:p)
-            boot_idx = rand(1:T_resid)
+            boot_idx = rand(rng, 1:T_resid)
             F_boot[b, step, :] = F_h + resids[boot_idx, :]
-            X_boot[b, step, :] = Lambda * F_boot[b, step, :] + L_e * randn(T, N)
+            X_boot[b, step, :] = Lambda * F_boot[b, step, :] + L_e * randn(rng, T, N)
         end
     end
 

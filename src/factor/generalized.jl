@@ -362,7 +362,8 @@ Forecast h steps ahead using AR extrapolation of factors.
 `FactorForecast` with factor and observable forecasts (and CIs if requested).
 """
 function forecast(model::GeneralizedDynamicFactorModel{T}, h::Int; method::Symbol=:ar,
-    ci_method::Symbol=:theoretical, conf_level::Real=0.95, n_boot::Int=1000) where {T}
+    ci_method::Symbol=:theoretical, conf_level::Real=0.95, n_boot::Int=1000,
+    rng::AbstractRNG=Random.default_rng()) where {T}
 
     h < 1 && throw(ArgumentError("h must be positive"))
     method ∉ (:ar, :spectral) && throw(ArgumentError("method must be :ar or :spectral"))
@@ -446,13 +447,13 @@ function forecast(model::GeneralizedDynamicFactorModel{T}, h::Int; method::Symbo
         for i in 1:q
             f = factors[end, i]
             for t in 1:h
-                boot_idx = rand(1:(T_obs-1))
+                boot_idx = rand(rng, 1:(T_obs-1))
                 f = phi[i] * f + resids_per_factor[i][boot_idx]
                 F_boot[b, t, i] = f
             end
         end
         for t in 1:h
-            X_boot[b, t, :] = L_avg * F_boot[b, t, :] .+ idio_std .* randn(T, N)
+            X_boot[b, t, :] = L_avg * F_boot[b, t, :] .+ idio_std .* randn(rng, T, N)
         end
     end
 

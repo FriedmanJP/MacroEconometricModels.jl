@@ -31,7 +31,8 @@ forecast path.
 function forecast(vecm::VECMModel{T}, h::Int;
                   ci_method::Symbol=:none,
                   reps::Int=500,
-                  conf_level::Real=0.95) where {T}
+                  conf_level::Real=0.95,
+                  rng::AbstractRNG=Random.default_rng()) where {T}
 
     h < 1 && throw(ArgumentError("Forecast horizon must be positive"))
     ci_method ∈ (:none, :bootstrap, :simulation) ||
@@ -52,9 +53,9 @@ function forecast(vecm::VECMModel{T}, h::Int;
         sim_forecasts = Matrix{T}(undef, reps, h * n)
 
         if ci_method == :bootstrap
-            _vecm_bootstrap_forecast!(sim_forecasts, vecm, h, reps)
+            _vecm_bootstrap_forecast!(sim_forecasts, vecm, h, reps, rng)
         else  # :simulation
-            _vecm_simulation_forecast!(sim_forecasts, vecm, h, reps)
+            _vecm_simulation_forecast!(sim_forecasts, vecm, h, reps, rng)
         end
 
         for hi in 1:h, j in 1:n
@@ -114,13 +115,14 @@ function _vecm_point_forecast(vecm::VECMModel{T}, h::Int) where {T}
 end
 
 function _vecm_bootstrap_forecast!(sim_forecasts::Matrix{T},
-                                    vecm::VECMModel{T}, h::Int, reps::Int) where {T}
+                                    vecm::VECMModel{T}, h::Int, reps::Int,
+                                    rng::AbstractRNG=Random.default_rng()) where {T}
     n = nvars(vecm)
     T_eff = effective_nobs(vecm)
 
     for rep in 1:reps
         # Resample residuals with replacement
-        idx = rand(1:T_eff, h)
+        idx = rand(rng, 1:T_eff, h)
         shocks = vecm.U[idx, :]
 
         forecast_path = _vecm_simulate_path(vecm, h, shocks)
@@ -131,14 +133,15 @@ function _vecm_bootstrap_forecast!(sim_forecasts::Matrix{T},
 end
 
 function _vecm_simulation_forecast!(sim_forecasts::Matrix{T},
-                                     vecm::VECMModel{T}, h::Int, reps::Int) where {T}
+                                     vecm::VECMModel{T}, h::Int, reps::Int,
+                                     rng::AbstractRNG=Random.default_rng()) where {T}
     n = nvars(vecm)
     L = safe_cholesky(vecm.Sigma)
 
     for rep in 1:reps
         shocks = Matrix{T}(undef, h, n)
         for step in 1:h
-            shocks[step, :] = L * randn(T, n)
+            shocks[step, :] = L * randn(rng, T, n)
         end
 
         forecast_path = _vecm_simulate_path(vecm, h, shocks)

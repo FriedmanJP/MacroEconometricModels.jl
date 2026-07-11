@@ -54,7 +54,8 @@ function lp_fevd(slp::StructuralLP{T}, horizon::Int;
                  bias_correct::Bool=true,
                  n_boot::Int=500,
                  conf_level::Real=0.95,
-                 var_lags::Union{Nothing,Int}=nothing) where {T<:AbstractFloat}
+                 var_lags::Union{Nothing,Int}=nothing,
+                 rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
 
     @assert method ∈ (:r2, :lp_a, :lp_b) "method must be :r2, :lp_a, or :lp_b"
 
@@ -88,7 +89,7 @@ function lp_fevd(slp::StructuralLP{T}, horizon::Int;
             if n_boot > 0
                 bc, se_h, ci_lo, ci_hi = _lp_fevd_bootstrap(
                     shock_eps, Y_eff[:, resp], H, lp_model.lags,
-                    raw_vals, n_boot, T(conf_level), var_lags)
+                    raw_vals, n_boot, T(conf_level), var_lags, rng)
 
                 bias_corrected[resp, shock, :] = bias_correct ? bc : raw_vals
                 se_arr[resp, shock, :] = se_h
@@ -293,7 +294,8 @@ function _lp_fevd_bootstrap(shock::Vector{T}, response::Vector{T},
                              H::Int, lp_lags::Int,
                              raw_vals::Vector{T},
                              n_boot::Int, conf_level::T,
-                             var_lags_opt::Union{Nothing,Int}) where {T}
+                             var_lags_opt::Union{Nothing,Int},
+                             rng::AbstractRNG=Random.default_rng()) where {T}
     T_obs = length(shock)
 
     # 1. Fit bivariate VAR on w = (z, y)
@@ -323,7 +325,7 @@ function _lp_fevd_bootstrap(shock::Vector{T}, response::Vector{T},
     for b in 1:n_boot
         try
             _suppress_warnings() do
-                W_sim = _simulate_from_var(var_model, T_obs)
+                W_sim = _simulate_from_var(var_model, T_obs; rng=rng)
                 z_sim = W_sim[:, 1]
                 y_sim = W_sim[:, 2]
 
@@ -376,7 +378,8 @@ end
 
 """Simulate T_sim observations from a VAR model with burn-in."""
 function _simulate_from_var(model::VARModel{T}, T_sim::Int;
-                             burn::Int=100) where {T}
+                             burn::Int=100,
+                             rng::AbstractRNG=Random.default_rng()) where {T}
     n = nvars(model)
     p = model.p
     B = model.B       # (1+n*p) × n
@@ -395,7 +398,7 @@ function _simulate_from_var(model::VARModel{T}, T_sim::Int;
                 x[(l-1)*n + v + 1] = Y[t-l, v]
             end
         end
-        noise = L * randn(T, n)
+        noise = L * randn(rng, T, n)
         for v in 1:n
             Y[t, v] = dot(@view(B[:, v]), x) + noise[v]
         end
