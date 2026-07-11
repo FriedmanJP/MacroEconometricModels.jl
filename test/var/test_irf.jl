@@ -309,3 +309,32 @@ end
     @test occursin("Sign-Identified Set", output)
     @test occursin("50", output)
 end
+
+@testset "irf bootstrap CI is reproducible + thread-invariant (C-02/#243)" begin
+    mkrng() = Random.MersenneTwister(7)
+    Random.seed!(123)
+    Y = zeros(120, 2)
+    for t in 2:120
+        Y[t, 1] = 0.5Y[t-1, 1] + 0.1Y[t-1, 2] + randn()
+        Y[t, 2] = -0.2Y[t-1, 1] + 0.4Y[t-1, 2] + randn()
+    end
+    model = estimate_var(Y, 2)
+    # Same seed -> bitwise-identical CI bands. The rejection loops now seed each iteration by
+    # index and stage by index, so the kept subset is invariant to thread scheduling / thread
+    # count (the old atomic accept-counter kept a scheduling-dependent subset).
+    b1 = irf(model, 10; ci_type=:bootstrap, reps=50, rng=mkrng())
+    b2 = irf(model, 10; ci_type=:bootstrap, reps=50, rng=mkrng())
+    @test b1.ci_lower == b2.ci_lower
+    @test b1.ci_upper == b2.ci_upper
+    # stationary-only rejection path (the C-02 site) is deterministic too
+    s1 = irf(model, 10; ci_type=:bootstrap, stationary_only=true, reps=30, rng=mkrng())
+    s2 = irf(model, 10; ci_type=:bootstrap, stationary_only=true, reps=30, rng=mkrng())
+    @test s1.ci_lower == s2.ci_lower && s1.ci_upper == s2.ci_upper
+    # theoretical path
+    t1 = irf(model, 10; ci_type=:theoretical, reps=50, rng=mkrng())
+    t2 = irf(model, 10; ci_type=:theoretical, reps=50, rng=mkrng())
+    @test t1.ci_lower == t2.ci_lower
+    # different seed -> different draws
+    b3 = irf(model, 10; ci_type=:bootstrap, reps=50, rng=Random.MersenneTwister(99))
+    @test b1.ci_lower != b3.ci_lower
+end
