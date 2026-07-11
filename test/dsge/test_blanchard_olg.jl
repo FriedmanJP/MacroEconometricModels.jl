@@ -30,6 +30,13 @@ using LinearAlgebra
         @test ss.k > 0 && ss.C > 0
     end
 
+    @testset "report is io-routed (#254 G-17)" begin
+        ss = blanchard_steady_state(BlanchardOLG(; gamma=0.98, beta=0.96))
+        iob = IOBuffer(); report(iob, ss)
+        @test occursin("Blanchard", String(take!(iob)))
+        @test (redirect_stdout(devnull) do; report(ss); end; true)   # stdout convenience form
+    end
+
     @testset "Interest rate rises with mortality" begin
         rs = [blanchard_steady_state(BlanchardOLG(; gamma=g, beta=0.96)).r
               for g in (0.99, 0.97, 0.95, 0.93)]
