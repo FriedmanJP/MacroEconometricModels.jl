@@ -42,3 +42,20 @@
     # test/var/test_arias2018.jl, co-edited in this commit).
     @test IdentificationError("x") isa Exception
 end
+
+# T145 / #244 — recoverable-draw-error classifier (narrows bare MC/bootstrap catches)
+@testset "T145: _is_recoverable_draw_error (#244)" begin
+    rde = MacroEconometricModels._is_recoverable_draw_error
+    # Recoverable: singular / non-PD / non-convergent / typed model errors → caught + skipped
+    @test rde(LinearAlgebra.SingularException(1))
+    @test rde(LinearAlgebra.PosDefException(1))
+    @test rde(DomainError(-1.0, "x"))
+    @test rde(ConvergenceError("nc"))
+    @test rde(SingularSystemError("sing"))
+    @test rde(IdentificationError("ni"))
+    # NOT recoverable: genuine programming errors must propagate, not be swallowed
+    @test !rde(MethodError(sin, (1,)))
+    @test !rde(BoundsError([1], 5))
+    @test !rde(UndefVarError(:x))
+    @test !rde(ErrorException("generic"))
+end

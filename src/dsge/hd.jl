@@ -479,7 +479,10 @@ function historical_decomposition(post::BayesianDSGE{T}, data::AbstractMatrix,
                 push!(all_initial, hd_i.initial_conditions)
                 push!(all_shocks, hd_i.shocks)
             end
-        catch
+        catch e
+            # A recoverable failed posterior HD draw is skipped; a programming error
+            # (MethodError/BoundsError/…) propagates rather than being swallowed (T145/#244).
+            _is_recoverable_draw_error(e) || rethrow(e)
             continue
         end
     end

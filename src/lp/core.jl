@@ -542,8 +542,10 @@ function _structural_lp_bootstrap(Y::AbstractMatrix{T}, horizon::Int, n::Int, p:
                     end
                 end
             end
-        catch
-            # If bootstrap draw fails (e.g., singular matrix), skip
+        catch e
+            # A recoverable failed bootstrap draw (e.g. singular matrix) is skipped; a
+            # programming error (MethodError/BoundsError/…) propagates (T145/#244).
+            _is_recoverable_draw_error(e) || rethrow(e)
             continue
         end
     end

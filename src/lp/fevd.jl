@@ -331,8 +331,10 @@ function _lp_fevd_bootstrap(shock::Vector{T}, response::Vector{T},
                     boot_vals[b, h] = _scalar_lp_fevd_r2(z_sim, y_sim, h, lp_lags)
                 end
             end
-        catch
-            # Failed bootstrap draw — leave as NaN, will be filtered
+        catch e
+            # A recoverable failed draw (singular system, non-convergence) is left as NaN and
+            # filtered; a programming error (MethodError/BoundsError/…) propagates (T145/#244).
+            _is_recoverable_draw_error(e) || rethrow(e)
             continue
         end
     end

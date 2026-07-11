@@ -74,3 +74,22 @@ function Base.showerror(io::IO, e::SingularSystemError)
     print(io, "SingularSystemError: ", e.msg)
     e.cond === nothing || print(io, " (cond≈", e.cond, ")")
 end
+
+"""
+    _is_recoverable_draw_error(e) -> Bool
+
+True for exceptions that legitimately arise from a single failed Monte-Carlo / bootstrap /
+posterior draw — a singular system, a non-convergent solve, an indeterminate or
+stochastically-singular DSGE solution. Such draws are caught, counted, and skipped in
+resampling loops. Programming errors (`MethodError`, `BoundsError`, `UndefVarError`, …) are
+NOT recoverable and must propagate rather than be silently swallowed (T145/#244). The DSGE
+types (`DSGESolveError`/`StochasticSingularityError`) are resolved at call time.
+"""
+_is_recoverable_draw_error(e) =
+    e isa MacroModelError ||
+    e isa LinearAlgebra.SingularException ||
+    e isa LinearAlgebra.PosDefException ||
+    e isa LinearAlgebra.LAPACKException ||
+    e isa DomainError ||
+    e isa DSGESolveError ||
+    e isa StochasticSingularityError
