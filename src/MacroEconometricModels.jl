@@ -1106,4 +1106,7 @@ function __init__()
     end
 end
 
+# PrecompileTools workload — LAST, after every entry point is defined (#253).
+include("precompile.jl")
+
 end # module
