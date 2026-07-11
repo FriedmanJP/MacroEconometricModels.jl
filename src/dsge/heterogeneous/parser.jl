@@ -561,7 +561,12 @@ function solve(spec::HADSGESpec{T}; method::Symbol=:ssj,
         )
         C_sol = zeros(T, n_sys)
         eigenvalues = eigvals(G1)
-        eu = [1, 1]
+        # Determinacy read off the TRUE (un-mutated) spectral radius (#234): a
+        # reduced Reiter transition with ρ ≥ 1 is not a stable/determinate
+        # solution. Previously eu was hardcoded [1,1] on a silently-rescaled G1,
+        # so is_determined reported determinate even for an explosive system.
+        rho = maximum(abs, eigenvalues)
+        eu = rho < one(T) + T(1e-8) ? [1, 1] : [0, 0]
         Gamma0 = Matrix{T}(I, n_sys, n_sys)
         linear = LinearDSGE{T}(Gamma0, copy(G1), zeros(T, n_sys), copy(impact),
                                 zeros(T, n_sys, 0), dummy_spec_inner)

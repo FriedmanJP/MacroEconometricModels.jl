@@ -79,6 +79,24 @@ function _aiyagari_foc_derivatives(r_ss::T, w_ss::T, K_ss::T, alpha::T, delta::T
     return dr_dK, dw_dK, dr_dZ, dw_dZ
 end
 
+# Diagnose reduced-transition stability WITHOUT mutating G1 (#234). The previous
+# code silently shrank every eigenvalue by `0.999/ρ` whenever the spectral radius
+# ρ exceeded 1, uniformly distorting all dynamics to mask a missing-GE-block /
+# wrong-Jacobian bug and reporting determinacy on a genuinely explosive system.
+# #229/#230 restore genuine stability (ρ ≈ 0.9 Huggett, 0.9997 Aiyagari/KS), so
+# this diagnostic should stay silent for the shipped examples; if it fires, the
+# reduced HA system really is indeterminate/explosive and must be investigated.
+function _reiter_warn_unstable(G1::AbstractMatrix{T}, label::AbstractString) where {T<:AbstractFloat}
+    rho = maximum(abs, eigvals(G1))
+    if rho >= one(T) + T(1e-8)
+        @warn "Reiter ($label): reduced HA transition spectral radius ρ = " *
+              "$(round(rho; digits=8)) ≥ 1 — the reduced system is indeterminate " *
+              "or explosive (likely an incomplete GE block or a mis-scaled " *
+              "Jacobian). No silent eigenvalue rescaling is applied (#234)."
+    end
+    return rho
+end
+
 # =============================================================================
 # _reiter_linearize — SVD-reduced linearization of the HA model
 # =============================================================================
@@ -289,9 +307,7 @@ function _reiter_linearize(ss::HASteadyState{T}, ip::IndividualProblem{T},
         impact_vec[n_red + 1, 1] = one(T)
         impact_vec[1:n_red, 1] .= channel_w
 
-        eigs = eigvals(G1)
-        me = maximum(abs.(eigs))
-        me > one(T) && (G1 .*= T(0.999) / me)
+        _reiter_warn_unstable(G1, "Huggett")
 
         return G1, impact_vec, n_red, explained, U_k
     end
@@ -358,12 +374,8 @@ function _reiter_linearize(ss::HASteadyState{T}, ip::IndividualProblem{T},
     impact_vec[1:n_red, 1] .= Z_column
     impact_vec[n_red + 1, 1] = dot(K_loading, Z_column)
 
-    # ── Step 8: Stabilize if needed (numerical guard; removed in #234) ────────
-    eigs = eigvals(G1)
-    max_eig = maximum(abs.(eigs))
-    if max_eig > one(T)
-        G1 .*= T(0.999) / max_eig
-    end
+    # ── Step 8: Diagnose stability (no silent rescale; #234) ──────────────────
+    _reiter_warn_unstable(G1, "Aiyagari")
 
     return G1, impact_vec, n_red, explained, U_k
 end

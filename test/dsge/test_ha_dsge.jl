@@ -709,6 +709,27 @@ end
     end
 end
 
+@testset "No silent G1 rescale; truthful determinacy (#234/T135)" begin
+    # _ho_kalman derives eu from the realization's spectral radius (not a hardcoded
+    # [1,1]): a decaying IRF is stable/determinate, a growing IRF is explosive.
+    stable = [reshape([0.9^t], 1, 1) for t in 0:49]
+    _, _, _, eu_s, eig_s, _, _ = MacroEconometricModels._ho_kalman(stable, 1, 1, 5)
+    @test eu_s == [1, 1]
+    @test maximum(abs.(eig_s)) < 1
+    explosive = [reshape([1.3^t], 1, 1) for t in 0:20]
+    _, _, _, eu_x, eig_x, _, _ = MacroEconometricModels._ho_kalman(explosive, 1, 1, 5)
+    @test maximum(abs.(eig_x)) > 1
+    @test eu_x == [0, 0]              # OLD code hardcoded [1,1] even when explosive
+
+    # _reiter_warn_unstable diagnoses instead of rescaling: warns iff ρ ≥ 1, and
+    # returns the TRUE spectral radius (no 0.999/ρ mutation).
+    @test_logs MacroEconometricModels._reiter_warn_unstable(
+        [0.8 0.0; 0.0 0.5], "stable")                                     # no logs
+    rho = @test_logs (:warn,) MacroEconometricModels._reiter_warn_unstable(
+        [2.0 0.0; 0.0 0.5], "explosive")
+    @test rho ≈ 2.0
+end
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Section 14b: HA observation map (#227)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1434,6 +1455,10 @@ end
     @test sol isa HADSGESolution
     @test sol.method === :reiter
     @test maximum(abs.(eigvals(sol.linear_solution.G1))) <= 1 + 1e-6   # stable
+    # #234: eu is now derived from the true spectral radius, so a genuinely stable
+    # reduced system reports determinate (not a hardcoded [1,1] on a rescaled G1).
+    @test MacroEconometricModels.is_determined(sol.linear_solution)
+    @test MacroEconometricModels.is_stable(sol.linear_solution)
     @test sol.explained_variance > 0.5
     @test size(sol.linear_solution.G1, 1) == sol.n_reduced + 1         # state [d̃; w]
 end
