@@ -29,10 +29,12 @@ end
 """
     _show_note(io, text)
 
-Display a note row (e.g., significance legend) as a 2-column table.
+Print a note as a plain text line — not a 2-column table, so it cannot inherit the
+stray empty-header band or the horizontal-crop truncation that tables suffer. Callers
+pass a complete sentence (e.g. "* CI excludes zero"). (S7/T162)
 """
 function _show_note(io::IO, text::String)
-    _pretty_table(io, Any["Note" text]; column_labels=["", ""], alignment=[:l, :l])
+    println(io, text)
 end
 
 # =============================================================================

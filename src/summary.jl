@@ -205,8 +205,7 @@ function report(model::VARModel{T}) where {T}
     )
 
     # --- Notes ---
-    note_data = Any["Significance" "*** p<0.01, ** p<0.05, * p<0.10"]
-    _pretty_table(stdout, note_data; column_labels=["",""], alignment=[:l,:l])
+    _sig_legend(stdout)
 end
 
 """
@@ -304,8 +303,7 @@ function report(m::VECMModel{T}) where {T}
         col_labels=m.varnames)
 
     # --- Notes ---
-    note_data = Any["Note" "Standard errors for α/β not available (asymptotic SEs: future release)"]
-    _pretty_table(stdout, note_data; column_labels=["",""], alignment=[:l,:l])
+    println(stdout, "Note: Standard errors for α/β not available (asymptotic SEs: future release)")
 end
 
 """

@@ -424,3 +424,37 @@ end
 
     set_display_backend(:text)
 end
+
+@testset "Empty-header suppression + legend-as-text (S7/T162)" begin
+    set_display_backend(:text)
+
+    # (A) _sig_legend is a single plain line, not a multi-line table.
+    s = sprint(MacroEconometricModels._sig_legend)
+    @test occursin("Significance: *** p<0.01, ** p<0.05, * p<0.10", s)
+    @test count(==('\n'), s) <= 1
+
+    # (B) _show_note is plain text, not a 2-column "Note | text" table.
+    s = sprint(MacroEconometricModels._show_note, "* CI excludes zero")
+    @test occursin("* CI excludes zero", s)
+    @test !occursin("Note", s)          # the old wrapper cell is gone
+    @test count(==('\n'), s) <= 1
+
+    # (C) All-empty column labels suppress the header row (no stray blank band); a
+    #     key/value spec table still prints its data rows.
+    s = sprint(Any["Stationary" "Yes"; "Max |λ|" "0.9"]) do io, d
+        MacroEconometricModels._pretty_table(io, d;
+            title = "Stationarity", column_labels = ["", ""], alignment = [:l, :r])
+    end
+    @test occursin("Stationary", s) && occursin("0.9", s)   # data rows survive
+    @test !occursin("\n\n\n", s)                            # no extra empty-header blank band
+                                                            # (one blank after the title is the format's own spacing)
+
+    # (D) Non-empty labels are untouched — a real header still renders.
+    s = sprint(Any[1 2 3]) do io, d
+        MacroEconometricModels._pretty_table(io, d;
+            column_labels = ["", "Coef.", "SE"], alignment = [:l, :r, :r])
+    end
+    @test occursin("Coef.", s)
+
+    set_display_backend(:text)
+end

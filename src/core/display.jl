@@ -93,6 +93,18 @@ For `:text` backend, applies `_TEXT_TABLE_FORMAT` automatically.
 For `:latex` and `:html` backends, omits text-only formatting options.
 """
 function _pretty_table(io::IO, data; kwargs...)
+    kw = Dict{Symbol,Any}(kwargs)
+    # Suppress the column-label row entirely when every label is empty (spec/stationarity/
+    # note blocks pass column_labels=["",""]); otherwise PrettyTables prints a stray empty
+    # header row plus its separator rule → multi-blank-line bands after every title. Only
+    # fully-empty label vectors are suppressed — _coef_table (["","Coef.",…]) and
+    # _matrix_table (vcat([""],labels)) keep their real headers. (S7/T162)
+    if !haskey(kw, :show_column_labels) && haskey(kw, :column_labels)
+        cl = kw[:column_labels]
+        if !isempty(cl) && all(isequal(""), cl)
+            kw[:show_column_labels] = false
+        end
+    end
     be = get_display_backend()
     if be == :text
         # Disable PrettyTables v3 fit-to-display cropping so significance/CI columns and
@@ -100,11 +112,11 @@ function _pretty_table(io::IO, data; kwargs...)
         # CI logs). A publication table must never truncate its own stars column. (S1/T161)
         pretty_table(io, data; backend = :text, table_format = _TEXT_TABLE_FORMAT,
                      fit_table_in_display_horizontally = false,
-                     fit_table_in_display_vertically = false, kwargs...)
+                     fit_table_in_display_vertically = false, kw...)
     elseif be == :latex
-        pretty_table(io, data; backend = :latex, kwargs...)
+        pretty_table(io, data; backend = :latex, kw...)
     else
-        pretty_table(io, data; backend = :html, kwargs...)
+        pretty_table(io, data; backend = :html, kw...)
     end
 end
 
@@ -185,10 +197,10 @@ function _coef_table(io::IO, title::String, names::Vector{String},
     )
 end
 
-"""Print significance legend footer."""
+"""Print the significance legend as a plain text line — never a table, so it cannot
+inherit the empty-header band or the horizontal-crop truncation. (S7/T162)"""
 function _sig_legend(io::IO)
-    _pretty_table(io, Any["Significance" "*** p<0.01, ** p<0.05, * p<0.10"];
-        column_labels=["",""], alignment=[:l,:l])
+    println(io, "Significance: *** p<0.01, ** p<0.05, * p<0.10")
 end
 
 """Print a labeled matrix as a PrettyTables table."""
