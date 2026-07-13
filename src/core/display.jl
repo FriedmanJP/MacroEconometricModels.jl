@@ -302,6 +302,53 @@ function _degenerate_fit_banner(io::IO, coefs::AbstractVector)
     end
 end
 
+"""Representative IRF/forecast horizons including the impact period `h=0`. (S4/T168)"""
+_irf_horizons(H::Int) = unique!(sort(vcat([0], _select_horizons(H))))
+
+"""
+    _irf_horizon_table(io, values, se, row_labels, title; horizons, z=1.96)
+
+Shared horizon-summary renderer for IRFs/forecasts with significance marks (S4/T168).
+`values` and `se` are `(H+1) × n_row`, indexed from `h=0` (row `h+1`). A cell is marked
+`*` when `|value| > z·se`. Callers append `_show_note(io, "* significant …")`.
+"""
+function _irf_horizon_table(io::IO, values::AbstractMatrix, se::AbstractMatrix,
+                            row_labels::Vector{String}, title::String;
+                            horizons::Vector{Int}=_irf_horizons(size(values, 1) - 1),
+                            z::Real=1.96)
+    n_row = size(values, 2)
+    data = Matrix{Any}(undef, n_row, length(horizons) + 1)
+    for r in 1:n_row
+        data[r, 1] = row_labels[r]
+        for (c, h) in enumerate(horizons)
+            v = values[h+1, r]; s = se[h+1, r]
+            star = (isfinite(s) && s > 0 && abs(v) > z * s) ? "*" : ""
+            data[r, c+1] = string(_fmt(v), star)
+        end
+    end
+    _pretty_table(io, data; title = title,
+        column_labels = vcat([""], ["h=$h" for h in horizons]),
+        alignment = vcat([:l], fill(:r, length(horizons))))
+end
+
+"""Values-only horizon-summary renderer (no SE, no significance marks) — for point IRFs
+(Uhlig/Arias). `values` is `(H+1) × n_row`, indexed from `h=0`. (S4/T168)"""
+function _irf_points_table(io::IO, values::AbstractMatrix,
+                           row_labels::Vector{String}, title::String;
+                           horizons::Vector{Int}=_irf_horizons(size(values, 1) - 1))
+    n_row = size(values, 2)
+    data = Matrix{Any}(undef, n_row, length(horizons) + 1)
+    for r in 1:n_row
+        data[r, 1] = row_labels[r]
+        for (c, h) in enumerate(horizons)
+            data[r, c+1] = _fmt(values[h+1, r])
+        end
+    end
+    _pretty_table(io, data; title = title,
+        column_labels = vcat([""], ["h=$h" for h in horizons]),
+        alignment = vcat([:l], fill(:r, length(horizons))))
+end
+
 """Print a labeled matrix as a PrettyTables table."""
 function _matrix_table(io::IO, M::AbstractMatrix, title::String;
                        row_labels=nothing, col_labels=nothing, digits::Int=4)

@@ -30,6 +30,9 @@ function Base.show(io::IO, m::NowcastDFM{T}) where {T}
         column_labels = ["", ""],
         alignment = [:l, :r],
     )
+    # The headline the model exists to produce (default target = last variable). (S4/T168)
+    _pretty_table(io, Any["Current nowcast" _fmt(m.X_sm[end, end])];
+        title = "Nowcast", column_labels = ["", ""], alignment = [:l, :r])
 end
 
 function Base.show(io::IO, m::NowcastBVAR{T}) where {T}
@@ -53,6 +56,9 @@ function Base.show(io::IO, m::NowcastBVAR{T}) where {T}
         column_labels = ["", ""],
         alignment = [:l, :r],
     )
+    # The headline the model exists to produce (default target = last variable). (S4/T168)
+    _pretty_table(io, Any["Current nowcast" _fmt(m.X_sm[end, end])];
+        title = "Nowcast", column_labels = ["", ""], alignment = [:l, :r])
 end
 
 function Base.show(io::IO, m::NowcastBridge{T}) where {T}

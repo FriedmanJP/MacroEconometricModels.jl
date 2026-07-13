@@ -700,6 +700,12 @@ print_table(irf::LPImpulseResponse, var_name::String) =
 # Base.show Methods for LP Types
 # =============================================================================
 
+# Response/shock labels for LP models, tolerant of variants without a varnames field. (S4/T168)
+_lp_resp_labels(m) = hasproperty(m, :varnames) ? String.(m.varnames[m.response_vars]) :
+                     ["y$i" for i in m.response_vars]
+_lp_shock_label(m) = hasproperty(m, :varnames) ? string(m.varnames[m.shock_var]) : "var $(m.shock_var)"
+const _LP_IRF_NOTE = "* significant at 5% (|IRF/SE| > 1.96)"
+
 function Base.show(io::IO, m::LPModel)
     cov_name = m.cov_estimator isa NeweyWestEstimator ? "Newey-West" :
                m.cov_estimator isa WhiteEstimator ? "White (HC0)" : "Driscoll-Kraay"
@@ -707,6 +713,10 @@ function Base.show(io::IO, m::LPModel)
         ["Variables" => nvars(m), "Shock variable" => m.shock_var,
          "Response variables" => length(m.response_vars), "Horizon" => m.horizon,
          "Lags" => m.lags, "Observations" => size(m.Y, 1), "Covariance" => cov_name])
+    ir = extract_shock_irf(m.B, m.vcov, m.response_vars, 2)
+    _irf_horizon_table(io, ir.values, ir.se, _lp_resp_labels(m),
+        "Impulse Responses (shock: $(_lp_shock_label(m)))")
+    _show_note(io, _LP_IRF_NOTE)
 end
 
 function Base.show(io::IO, m::LPIVModel)
@@ -720,6 +730,10 @@ function Base.show(io::IO, m::LPIVModel)
          "Lags" => m.lags, "Observations" => size(m.Y, 1),
          "First-stage F (min)" => min_F, "First-stage F (max)" => max_F,
          "Covariance" => cov_name])
+    ir = extract_shock_irf(m.B, m.vcov, m.response_vars, 2)
+    _irf_horizon_table(io, ir.values, ir.se, _lp_resp_labels(m),
+        "Impulse Responses (shock: $(_lp_shock_label(m)))")
+    _show_note(io, _LP_IRF_NOTE)
 end
 
 nvars(m::LPIVModel) = size(m.Y, 2)
@@ -735,6 +749,9 @@ function Base.show(io::IO, m::SmoothLPModel)
          "Lambda (penalty)" => _fmt(m.lambda),
          "Basis functions" => n_basis(m.spline_basis),
          "Observations" => size(m.Y, 1), "Covariance" => cov_name])
+    _irf_horizon_table(io, m.irf_values, m.irf_se, _lp_resp_labels(m),
+        "Impulse Responses (shock: $(_lp_shock_label(m)))")
+    _show_note(io, _LP_IRF_NOTE)
 end
 
 function Base.show(io::IO, m::StateLPModel)
@@ -749,6 +766,14 @@ function Base.show(io::IO, m::StateLPModel)
          "Threshold" => _fmt(m.state.threshold),
          "% in expansion" => string(pct_exp, "%"),
          "Observations" => size(m.Y, 1), "Covariance" => cov_name])
+    shock = _lp_shock_label(m); rows = _lp_resp_labels(m)
+    ir_e = extract_shock_irf(m.B_expansion, m.vcov_expansion, m.response_vars, 2)
+    _irf_horizon_table(io, ir_e.values, ir_e.se, rows,
+        "Impulse Responses — Expansion (shock: $shock)")
+    ir_r = extract_shock_irf(m.B_recession, m.vcov_recession, m.response_vars, 2)
+    _irf_horizon_table(io, ir_r.values, ir_r.se, rows,
+        "Impulse Responses — Recession (shock: $shock)")
+    _show_note(io, _LP_IRF_NOTE)
 end
 
 function Base.show(io::IO, m::PropensityLPModel)
@@ -763,6 +788,10 @@ function Base.show(io::IO, m::PropensityLPModel)
          "PS method" => string(m.config.method),
          "Trimming" => string(m.config.trimming),
          "Observations" => size(m.Y, 1), "Covariance" => cov_name])
+    # PropensityLPModel is treatment-based (no shock_var) — report the IPW ATE path.
+    _irf_horizon_table(io, m.ate, m.ate_se, _lp_resp_labels(m),
+        "Average Treatment Effects (IPW)")
+    _show_note(io, _LP_IRF_NOTE)
 end
 
 function Base.show(io::IO, irf::LPImpulseResponse)
@@ -771,6 +800,9 @@ function Base.show(io::IO, irf::LPImpulseResponse)
         ["Shock" => irf.shock_var, "Response variables" => length(irf.response_vars),
          "Horizon" => irf.horizon, "CI type" => string(irf.cov_type),
          "Confidence level" => string(ci_pct, "%")])
+    _irf_horizon_table(io, irf.values, irf.se, irf.response_vars,
+        "Impulse Responses (shock: $(irf.shock_var))")
+    _show_note(io, _LP_IRF_NOTE)
 end
 
 function Base.show(io::IO, b::BSplineBasis)

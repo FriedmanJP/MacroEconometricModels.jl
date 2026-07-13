@@ -575,3 +575,15 @@ end
     end
     set_display_backend(:text)
 end
+
+@testset "report() ends with an estimates table (S4/T168 pt1)" begin
+    set_display_backend(:text)
+    Random.seed!(11)
+    Y = randn(120, 3)
+    # LP report now appends an IRF horizon table (was spec-table only) including impact h=0.
+    m = estimate_lp(Y, 1, 8)
+    s = sprint(show, m)
+    @test occursin("Impulse Responses", s)
+    @test occursin("h=0", s)
+    set_display_backend(:text)
+end
