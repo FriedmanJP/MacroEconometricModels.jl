@@ -3,22 +3,22 @@
  Specification
 
  Method OLS
- Observations 120
- Covariates 3
+ Observations N
+ Covariates N
  R-squared N
  Adj. R-sq. N
  F-statistic N
- F p-value <N
+ F p-value N
  AIC N
  BIC N
- Cov. type HC1 (robust)
+ Cov. type HCN (robust)
 
  Coefficients
 
  Coef. Std.Err. t P>|t| CI lower CI upper
 
- x1 N N N <N N N ***
- x2 N N N <N N N ***
- x3 N N N <N N N ***
+ xN N N N N N N
+ xN N N N N N N
+ xN N N N N N N
 
-Significance: *** p<N, ** p<N, * p<N
+Significance: pN, pN, pN

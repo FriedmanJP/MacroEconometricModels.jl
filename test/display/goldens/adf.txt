@@ -5,8 +5,8 @@
  H₀ Series has a unit root (non-stationary)
  H₁ Series is stationary
  Deterministic terms Constant
- Lag length 0
- Observations 149
+ Lag length N
+ Observations N
 
  Results
 
@@ -17,10 +17,10 @@
 
  Critical Values
 
- 1% 5% 10%
+ N% N% N%
 
  N N N
 
 
  Conclusion Fail to reject H₀ (series appears non-stationary)
- Note *** p<N, ** p<N, * p<N
+ Note pN, pN, pN

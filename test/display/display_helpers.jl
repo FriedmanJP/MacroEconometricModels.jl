@@ -74,25 +74,38 @@ end
 """
     _canonicalize(s) -> String
 
-Reduce a rendered table to its platform-stable structural skeleton:
+Reduce a rendered table to its platform-stable structural skeleton. Everything
+that is DERIVED from floating-point arithmetic — and therefore drifts in the last
+ulp across BLAS/LAPACK/OS/Julia versions — is masked away, because a display
+golden must survive Julia 1.10 (LTS) vs 1.12 CI without churn. In order:
 
-  * every floating-point cell (`-?\\d+\\.\\d+`, optional exponent) → `N` — the
-    estimated numbers drift in the last ulp across BLAS/OS and are NOT what a
-    display golden should pin; the invariants suite checks the numeric formatting
-    rules separately on the raw string;
-  * runs of ≥2 spaces → a single space — column padding depends on the widest
-    (masked-away) cell width, so it is not stable either;
+  * floating-point cells (`-?\\d+\\.\\d+`, optional exponent) → `N`;
+  * p-value threshold prefixes `<N`/`>N` (a value straddling 0.001/0.999 flips the
+    `<0.001`/`>0.999` rendering) → `N`;
+  * remaining integers → `N` — sample sizes are stable, but iteration counts,
+    auto-selected lag orders, and loading ranks are algorithm-path-dependent and
+    differ across environments, and the two cannot be told apart generically;
+  * significance stars (`*`) stripped — a coefficient whose p-value straddles a
+    0.01/0.05/0.10 boundary flips its stars across environments. The invariants
+    suite checks star PRESENCE on the raw string; the golden locks structure only;
+  * runs of ≥2 spaces → one space (column padding tracks the masked-away widths);
   * trailing whitespace and leading/trailing blank lines trimmed.
 
-What survives — and what the golden therefore LOCKS — is every non-numeric token:
-titles, column headers, row labels, notes, `%`/integer labels, significance stars,
-`—`/`(ref)` markers, `Yes`/`No`, dialect markers, and the line/section structure.
+What survives — and what the golden therefore LOCKS — is the environment-invariant
+text skeleton: titles, column headers, row labels, notes, legends, `%` symbols,
+`—`/`(ref)` markers, `Yes`/`No`, dialect markers, section order, row counts, and
+the overall line structure. The numeric VALUES and significance are locked instead
+by `test_display_invariants.jl` and the per-issue unit tests in
+`test/core/test_display_backends.jl`.
 """
 function _canonicalize(s::AbstractString)
     out = String[]
     for raw in split(String(s), '\n')
-        ln = replace(String(raw), r"-?\d+\.\d+(?:[eE][-+]?\d+)?" => "N")
-        ln = replace(ln, r"[ \t]{2,}" => " ")
+        ln = replace(String(raw), r"-?\d+\.\d+(?:[eE][-+]?\d+)?" => "N")  # decimals/scientific
+        ln = replace(ln, r"[<>]N" => "N")                                 # <0.001 / >0.999 threshold prefix
+        ln = replace(ln, r"\d+" => "N")                                   # remaining (algorithm-path) integers
+        ln = replace(ln, "*" => "")                                       # significance stars (p-value-derived)
+        ln = replace(ln, r"[ \t]{2,}" => " ")                             # column padding
         push!(out, rstrip(ln))
     end
     while !isempty(out) && isempty(out[1]);   popfirst!(out); end

@@ -1,49 +1,49 @@
-Vector Error Correction Model — VECM(1), Rank 1
+Vector Error Correction Model — VECM(N), Rank N
 
  Specification
 
- Variables 2
- VAR order (p) 2
- Lagged differences 1
- Cointegrating rank (r) 1
- Observations (effective) 88
+ Variables N
+ VAR order (p) N
+ Lagged differences N
+ Cointegrating rank (r) N
+ Observations (effective) N
  Deterministic constant
  Method johansen
 
 Cointegrating Vectors (β)
 
- β1
+ βN
 
- y1 N
- y2 N
+ yN N
+ yN N
 
 Adjustment Coefficients (α)
 
- α1
+ αN
 
- y1 N
- y2 N
+ yN N
+ yN N
 
 Long-Run Matrix (Π = αβ')
 
- y1 y2
+ yN yN
 
- y1 N N
- y2 N N
+ yN N N
+ yN N N
 
- Short-Run Dynamics Γ1
+ Short-Run Dynamics ΓN
 
- y1 y2
+ yN yN
 
- y1 N N
- y2 N N
+ yN N N
+ yN N N
 
  Intercept (μ)
 
  Variable Value
 
- y1 N
- y2 N
+ yN N
+ yN N
 
  Information Criteria
 
@@ -56,16 +56,16 @@ Long-Run Matrix (Π = αβ')
 
 Residual Covariance (Σ)
 
- y1 y2
+ yN yN
 
- y1 N N
- y2 N N
+ yN N N
+ yN N N
 
  Residual Correlation
 
- y1 y2
+ yN yN
 
- y1 N N
- y2 N N
+ yN N N
+ yN N N
 
 Note: Standard errors for α/β not available (asymptotic SEs: future release)

@@ -1,6 +1,6 @@
  DSGE Estimation — GMM
 
- Parameters 1
+ Parameters N
  Method irf_matching
  J-statistic N
  J p-value N
@@ -11,20 +11,20 @@
 
  Coef. Std.Err. z P>|z| CI lower CI upper
 
- ρ N N N <N N N ***
+ ρ N N N N N N
 
-Significance: *** p<N, ** p<N, * p<N
+Significance: pN, pN, pN
 
  DSGE Solution
 
- Variables 1
- Shocks 1
+ Variables N
+ Shocks N
  Method gensys
  Existence Yes
  Uniqueness Yes
- Stable eigenvalues 1
- Unstable eigenvalues 0
- Max |eigenvalue(G1)| N
+ Stable eigenvalues N
+ Unstable eigenvalues N
+ Max |eigenvalue(GN)| N
 
  Steady State
 

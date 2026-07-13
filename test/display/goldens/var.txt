@@ -1,38 +1,38 @@
- Vector Autoregression — VAR(2)
+ Vector Autoregression — VAR(N)
 
  Specification
 
- Variables 2
- Lags 2
- Observations (effective) 78
- Parameters per equation 5
+ Variables N
+ Lags N
+ Observations (effective) N
+ Parameters per equation N
 
  Equation Summary
 
  Equation Parms RMSE R² Adj. R² F-stat
 
- y1 5 N N N N
- y2 5 N N N N
+ yN N N N N N
+ yN N N N N N
 
- Equation: y1
-
- Coef. Std.Err. t P>|t| CI lower CI upper
-
- (Intercept) N N N N N N *
- y1.L1 N N N <N N N ***
- y2.L1 N N N N N N
- y1.L2 N N N N N N
- y2.L2 N N N N N N
-
- Equation: y2
+ Equation: yN
 
  Coef. Std.Err. t P>|t| CI lower CI upper
 
  (Intercept) N N N N N N
- y1.L1 N N N N N N **
- y2.L1 N N N <N N N ***
- y1.L2 N N N N N N
- y2.L2 N N N N N N **
+ yN.LN N N N N N N
+ yN.LN N N N N N N
+ yN.LN N N N N N N
+ yN.LN N N N N N N
+
+ Equation: yN
+
+ Coef. Std.Err. t P>|t| CI lower CI upper
+
+ (Intercept) N N N N N N
+ yN.LN N N N N N N
+ yN.LN N N N N N N
+ yN.LN N N N N N N
+ yN.LN N N N N N N
 
  Information Criteria
 
@@ -45,21 +45,21 @@
 
  Residual Covariance (Σ)
 
- y1 y2
+ yN yN
 
- y1 N N
- y2 N N
+ yN N N
+ yN N N
 
  Residual Correlation
 
- y1 y2
+ yN yN
 
- y1 N N
- y2 N N
+ yN N N
+ yN N N
 
  Stationarity
 
  Stationary Yes
  Max |λ| N
 
-Significance: *** p<N, ** p<N, * p<N
+Significance: pN, pN, pN

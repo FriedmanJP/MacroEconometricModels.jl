@@ -3,21 +3,21 @@
  Specification
 
  Model Probit
- Observations 300
- Covariates 2
+ Observations N
+ Covariates N
  Log-lik. N
  Log-lik. null N
  Pseudo R-sq. N
  AIC N
  BIC N
  Converged Yes
- Iterations 6
+ Iterations N
 
  Coefficients
 
  Coef. Std.Err. z P>|z| CI lower CI upper
 
- x1 N N N <N N N ***
- x2 N N N <N N N ***
+ xN N N N N N N
+ xN N N N N N N
 
-Significance: *** p<N, ** p<N, * p<N
+Significance: pN, pN, pN

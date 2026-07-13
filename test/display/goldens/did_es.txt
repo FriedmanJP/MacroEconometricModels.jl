@@ -5,24 +5,24 @@ Difference-in-Differences — Two-Way Fixed Effects
  Treatment treat_time
  Clustering Unit-clustered
  Control group never_treated
- Groups 30
- Treated units 20
- Control units 10
- Observations 480
+ Groups N
+ Treated units N
+ Control units N
+ Observations N
 
  Event-Study Coefficients
 
  Coef. Std.Err. z P>|z| CI lower CI upper
 
- e=-3 N N N <N N N ***
- e=-2 N N N <N N N ***
- e=-1 (ref) — — — — — —
- e=0 N N N N N N *
- e=1 N N N N N N
- e=2 N N N <N N N ***
- e=3 N N N N N N *
- e=4 N N N N N N
- e=5 N N N <N N N ***
+ e=-N N N N N N N
+ e=-N N N N N N N
+ e=-N (ref) — — — — — —
+ e=N N N N N N N
+ e=N N N N N N N
+ e=N N N N N N N
+ e=N N N N N N N
+ e=N N N N N N N
+ e=N N N N N N N
 
 
 Aggregate Treatment Effect
@@ -30,4 +30,4 @@ Aggregate Treatment Effect
  Overall ATT N
  SE N
  z N
- P>|z| <N
+ P>|z| N

@@ -3,30 +3,30 @@
  Specification
 
  Model Ordered Logit
- Observations 800
- Covariates 2
- Categories 3
- Parameters 4
+ Observations N
+ Covariates N
+ Categories N
+ Parameters N
  Log-lik. N
  Log-lik. null N
  Pseudo R-sq. N
  AIC N
  BIC N
  Converged Yes
- Iterations 6
+ Iterations N
 
  Coefficients
 
  Coef. Std.Err. z P>|z| CI lower CI upper
 
- x1 N N N <N N N ***
- x2 N N N <N N N ***
+ xN N N N N N N
+ xN N N N N N N
 
  Cutpoints
 
  Coef. Std.Err. z P>|z| CI lower CI upper
 
- cut1 N N N <N N N ***
- cut2 N N N <N N N ***
+ cutN N N N N N N
+ cutN N N N N N N
 
-Significance: *** p<N, ** p<N, * p<N
+Significance: pN, pN, pN

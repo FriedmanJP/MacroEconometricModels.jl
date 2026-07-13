@@ -1,16 +1,16 @@
- GARCH(1,1) Model
+ GARCH(N,N) Model
 
  Coef. Std.Err. z P>|z| CI lower CI upper
 
  μ (mean) N N N N N N
  ω (intercept) N N N N N N
- α[1] N N N N N N
- β[1] N N N <N N N ***
+ α[N] N N N N N N
+ β[N] N N N N N N
 
 
  Fit Value
 
- Observations 500
+ Observations N
  Log-likelihood N
  AIC N
  BIC N
@@ -18,4 +18,4 @@
  Unconditional σ² N
  Converged Yes
 
-Significance: *** p<N, ** p<N, * p<N
+Significance: pN, pN, pN

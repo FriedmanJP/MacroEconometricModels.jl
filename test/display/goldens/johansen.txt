@@ -3,32 +3,32 @@
  Specification
 
  Deterministic terms Constant in cointegrating equation
- Lags in VECM 2
- Observations 118
- Number of variables 3
+ Lags in VECM N
+ Observations N
+ Number of variables N
 
  Trace Test
 
- H₀: rank ≤ r Statistic 5% CV P-value Decision
+ H₀: rank ≤ r Statistic N% CV P-value Decision
 
- 0 N *** N <N Reject
- 1 N N N
- 2 N N N
+ N N N N Reject
+ N N N N
+ N N N N
 
  Maximum Eigenvalue Test
 
- H₀: rank = r Statistic 5% CV P-value Decision
+ H₀: rank = r Statistic N% CV P-value Decision
 
- 0 N *** N <N Reject
- 1 N N N
- 2 N N N
+ N N N N Reject
+ N N N N
+ N N N N
 
  Eigenvalues
 
- λ1 λ2 λ3
+ λN λN λN
 
  N N N
 
 
- Conclusion Estimated cointegration rank = 1
- Note *** p<N, ** p<N, * p<N
+ Conclusion Estimated cointegration rank = N
+ Note pN, pN, pN

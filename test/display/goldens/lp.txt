@@ -1,19 +1,19 @@
-Local Projection Model (Jordà 2005)
+Local Projection Model (Jordà N)
 
- Variables 3
- Shock variable 1
- Response variables 3
- Horizon 8
- Lags 4
- Observations 120
+ Variables N
+ Shock variable N
+ Response variables N
+ Horizon N
+ Lags N
+ Observations N
  Covariance Newey-West
 
- Impulse Responses (shock: y1)
+ Impulse Responses (shock: yN)
 
- h=0 h=1 h=4 h=8
+ h=N h=N h=N h=N
 
- y1 N* N* N* N
- y2 N N N N
- y3 N N N N
+ yN N N N N
+ yN N N N N
+ yN N N N N
 
-* significant at 5% (|IRF/SE| > N)
+ significant at N% (|IRF/SE| > N)

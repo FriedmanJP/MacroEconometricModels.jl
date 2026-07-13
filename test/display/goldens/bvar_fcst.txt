@@ -2,24 +2,24 @@
 
  Specification
 
- Horizon 4
- Variables 2
- Credibility 95%
+ Horizon N
+ Variables N
+ Credibility N%
 
- y1
-
- h Post. Mean N% N%
-
- 1 N N N
- 2 N N N
- 3 N N N
- 4 N N N
-
- y2
+ yN
 
  h Post. Mean N% N%
 
- 1 N N N
- 2 N N N
- 3 N N N
- 4 N N N
+ N N N N
+ N N N N
+ N N N N
+ N N N N
+
+ yN
+
+ h Post. Mean N% N%
+
+ N N N N
+ N N N N
+ N N N N
+ N N N N
