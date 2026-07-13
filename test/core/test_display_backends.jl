@@ -124,7 +124,7 @@ end
         # Verify publication-quality columns in text mode
         buf = IOBuffer(); show(buf, ar); out = String(take!(buf))
         @test occursin("Std.Err.", out)
-        @test occursin("CI]", out)
+        @test occursin("CI upper", out)   # CI header merged from split "[95%|CI]" (S10/T175)
     end
 
     @testset "Unit root tests render in all backends" begin
@@ -612,6 +612,18 @@ end
     bp = estimate_bvar(randn(80, 2), 2; n_draws = 100)
     s = sprint(show, forecast(bp, 4))
     @test occursin("2.5%", s) && occursin("97.5%", s)
+    set_display_backend(:text)
+end
+
+@testset "LaTeX backend compilable (S10/T175)" begin
+    MEM = MacroEconometricModels
+    s = with_display_backend(:latex) do
+        sprint(io -> MEM._coef_table(io, "T", ["x1"], [0.5], [0.001]))
+    end
+    @test occursin("\\midrule", s) && occursin("\\bottomrule", s)   # booktabs rules
+    @test !occursin("\\hline", s) && !occursin("|r|", s)            # no grid rules / vertical bars
+    @test occursin("\$P>|", s)                                      # P>|z| header math-moded
+    @test occursin("\$<0.001\$", s)                                 # p-value cell math-moded
     set_display_backend(:text)
 end
 

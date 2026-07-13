@@ -114,7 +114,13 @@ function _pretty_table(io::IO, data; kwargs...)
                      fit_table_in_display_horizontally = false,
                      fit_table_in_display_vertically = false, kw...)
     elseif be == :latex
-        pretty_table(io, data; backend = :latex, kw...)
+        # Booktabs rules (no vertical bars, matching the borderless text aesthetic),
+        # math-mode any OT1-unsafe header, and math-mode p-value cells. (S10/T175)
+        haskey(kw, :column_labels) && (kw[:column_labels] = map(_latex_header, kw[:column_labels]))
+        _f = get(kw, :formatters, nothing)
+        kw[:formatters] = _f === nothing ? Any[_latex_mathify_cell] : vcat(_f, _latex_mathify_cell)
+        pretty_table(io, data; backend = :latex,
+                     table_format = PrettyTables.latex_table_format__booktabs, kw...)
     else
         pretty_table(io, data; backend = :html, kw...)
     end
@@ -205,6 +211,17 @@ const _INTERCEPT_LABEL = "(Intercept)"
 _display_intercept(name::AbstractString) =
     name in ("const", "_cons", "Intercept (c)", "(Intercept)") ? _INTERCEPT_LABEL : name
 
+# ---- LaTeX-safe rendering (S10/T175) ----
+# `<`, `>`, `|` misrender under OT1 (as ¡ ¿ —); wrap any header/cell containing them in
+# math mode so the :latex backend compiles. LatexCell is a raw passthrough that bypasses
+# PrettyTables' own escaping (which correctly handles % & _ #).
+_needs_math(s::AbstractString) = occursin('<', s) || occursin('>', s) || occursin('|', s)
+_latex_header(s::AbstractString) = _needs_math(s) ? PrettyTables.LatexCell("\$" * s * "\$") : s
+_latex_header(s) = s
+# PrettyTables cell formatter (v, i, j): math-mode p-value cells like "<0.001"/">0.999".
+_latex_mathify_cell(v, _i, _j) = (v isa AbstractString && _needs_math(v)) ?
+    PrettyTables.LatexCell("\$" * v * "\$") : v
+
 """Select representative horizons for display.
 
 `unique` drops the duplicated endpoint when `H` coincides with a fixed anchor (e.g. `H=8`
@@ -236,7 +253,6 @@ function _coef_table(io::IO, title::String, names::Vector{String},
     z_crit = dist == :z ? T(quantile(Normal(), 1 - alpha/2)) :
                           T(quantile(TDist(dof_r), 1 - alpha/2))
     stat_label = dist == :z ? "z" : "t"
-    ci_pct = round(Int, 100 * level)
     tol = sqrt(eps(T))
 
     data = Matrix{Any}(undef, n, 8)
@@ -278,7 +294,7 @@ function _coef_table(io::IO, title::String, names::Vector{String},
 
     _pretty_table(io, data;
         title = title,
-        column_labels = ["", coef_label, "Std.Err.", stat_label, "P>|$stat_label|", "[$ci_pct%", "CI]", ""],
+        column_labels = ["", coef_label, "Std.Err.", stat_label, "P>|$stat_label|", "CI lower", "CI upper", ""],
         alignment = [:l, :r, :r, :r, :r, :r, :r, :l],
     )
 end
