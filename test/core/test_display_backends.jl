@@ -382,3 +382,45 @@ end
         @test !occursin("tabular", a) && !occursin("<table>", a)
     end
 end
+
+@testset "Non-TTY cropping disabled (S1/T161)" begin
+    set_display_backend(:text)
+
+    # (A) Wide 8-column coefficient table at a NARROW width. With PrettyTables' fit-to-
+    #     display crop ON (the pre-fix default) the trailing significance/CI columns are
+    #     dropped with a "N columns omitted" footer. Crop OFF renders the full table.
+    Random.seed!(1)
+    X = randn(200, 4)
+    y = X * [1.0, -0.8, 0.6, 0.4] .+ 0.1 .* randn(200)
+    mr = estimate_reg(y, X)
+    buf = IOBuffer(); show(IOContext(buf, :displaysize => (24, 50), :color => false), mr)
+    out = String(take!(buf))
+    @test !occursin("omitted", out)          # horizontal crop off → no dropped columns
+    @test occursin("Std.Err.", out)          # full-width table present
+    @test occursin("P>|", out)               # p-value column (last-but-two) survives
+
+    # (B) GARCH show spans >24 lines → the pre-fix vertical crop drops interior rows.
+    Random.seed!(2)
+    mg = estimate_garch(randn(400))
+    buf = IOBuffer(); show(IOContext(buf, :displaysize => (24, 80), :color => false), mg)
+    out = String(take!(buf))
+    @test !occursin("omitted", out)          # vertical crop off
+
+    # (C) ACF with 25 lags → long table (audit V04 vertical-crop victim).
+    ra = acf(randn(300); lags = 25)
+    buf = IOBuffer(); show(IOContext(buf, :displaysize => (24, 80), :color => false), ra)
+    out = String(take!(buf))
+    @test !occursin("omitted", out)
+    @test count(==('\n'), out) > 20          # all 25 lag rows rendered, not clipped to a 24-line box
+
+    # (D) Regression guard: the :latex/:html branches must still render (they must NOT
+    #     receive the text-only fit_table_in_display_* kwargs, which would error there).
+    for be in (:latex, :html)
+        s = with_display_backend(be) do
+            sprint(show, mr)
+        end
+        @test length(s) > 0
+    end
+
+    set_display_backend(:text)
+end

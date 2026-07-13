@@ -95,7 +95,12 @@ For `:latex` and `:html` backends, omits text-only formatting options.
 function _pretty_table(io::IO, data; kwargs...)
     be = get_display_backend()
     if be == :text
-        pretty_table(io, data; backend = :text, table_format = _TEXT_TABLE_FORMAT, kwargs...)
+        # Disable PrettyTables v3 fit-to-display cropping so significance/CI columns and
+        # note rows are never silently dropped in non-TTY output (files, pipes, Documenter,
+        # CI logs). A publication table must never truncate its own stars column. (S1/T161)
+        pretty_table(io, data; backend = :text, table_format = _TEXT_TABLE_FORMAT,
+                     fit_table_in_display_horizontally = false,
+                     fit_table_in_display_vertically = false, kwargs...)
     elseif be == :latex
         pretty_table(io, data; backend = :latex, kwargs...)
     else
