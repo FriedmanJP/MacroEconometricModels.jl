@@ -506,7 +506,7 @@ function Base.show(io::IO, f::LPFEVD{T}) where {T}
                 v = vals[i, j, h]
                 if f.n_boot > 0
                     se = f.se[i, j, h]
-                    data[i, j + 1] = string(_fmt_pct(v), " (", _fmt(se), ")")
+                    data[i, j + 1] = string(_fmt_pct(v), " (", _fmt_pct(se), ")")  # SE in % to match the point estimate (S9/T170)
                 else
                     data[i, j + 1] = _fmt_pct(v)
                 end
@@ -600,6 +600,8 @@ function print_table(io::IO, fc::VolatilityForecast{T}) where {T}
         column_labels = ["h", "σ² Forecast", "Std. Err.", "Lower", "Upper"],
         alignment = fill(:r, 5),
     )
+    println(io, "Note: CI bounds are empirical quantiles of the simulated σ² paths " *
+                "(asymmetric); Std. Err. is the path std. dev., not a symmetric ±z·SE band.")  # (S9/T170)
 end
 
 print_table(fc::VolatilityForecast) = print_table(stdout, fc)

@@ -242,4 +242,6 @@ function Base.show(io::IO, f::VolatilityForecast)
         column_labels = ["h", "σ² Forecast", "Std. Err.", "Lower", "Upper"],
         alignment = [:r, :r, :r, :r, :r],
     )
+    println(io, "Note: CI bounds are empirical quantiles of the simulated σ² paths " *
+                "(asymmetric); Std. Err. is the path std. dev., not a symmetric ±z·SE band.")  # (S9/T170)
 end

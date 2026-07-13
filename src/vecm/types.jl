@@ -146,7 +146,7 @@ function Base.show(io::IO, f::VECMForecast{T}) where {T}
         end
     end
     _pretty_table(io, data;
-        title = "VECM Forecast (levels, $(f.ci_method) CI)",
+        title = "VECM Forecast — levels ($(f.ci_method == :none ? "no CI" : "$(f.ci_method) CI"))",
         column_labels = vcat(["Horizon"], [f.varnames[j] for j in 1:n]),
         alignment = vcat([:l], fill(:r, n)),
     )

@@ -600,3 +600,17 @@ end
     @test occursin("h=0", s) && occursin("IRF", s)
     set_display_backend(:text)
 end
+
+@testset "CI/quantile/SE labels (S9/T170)" begin
+    set_display_backend(:text)
+    MEM = MacroEconometricModels
+    # band-label formula: a 95% CI reads 2.5%/97.5%, not round(Int, 2.5000…)=3%
+    @test MEM._fmt_pct((1 - 0.95) / 2) == "2.5%"
+    @test MEM._fmt_pct((1 + 0.95) / 2) == "97.5%"
+    # end-to-end: the BVAR forecast table now labels the band 2.5%/97.5%
+    Random.seed!(9)
+    bp = estimate_bvar(randn(80, 2), 2; n_draws = 100)
+    s = sprint(show, forecast(bp, 4))
+    @test occursin("2.5%", s) && occursin("97.5%", s)
+    set_display_backend(:text)
+end

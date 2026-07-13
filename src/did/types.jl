@@ -609,4 +609,5 @@ function Base.show(io::IO, r::HonestDiDResult{T}) where {T}
         column_labels = ["", ""],
         alignment = [:l, :r],
     )
+    println(io, "Sig: *** = robust CI excludes 0.")  # legend for the (already-populated) Sig column (S9/T170)
 end
