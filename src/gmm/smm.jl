@@ -114,6 +114,7 @@ function Base.show(io::IO, m::SMMModel{T}) where {T}
     se = stderror(m)
     param_names = ["θ[$i]" for i in 1:m.n_params]
     _coef_table(io, "Coefficients", param_names, m.theta, se; dist=:z)
+    _degenerate_fit_banner(io, m.theta)
     if is_overidentified(m)
         j_data = Any[
             "J-statistic" _fmt(m.J_stat);

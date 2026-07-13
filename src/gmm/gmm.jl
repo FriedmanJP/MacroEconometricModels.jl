@@ -128,6 +128,7 @@ function Base.show(io::IO, m::GMMModel{T}) where {T}
     se = sqrt.(max.(diag(m.vcov), zero(T)))
     param_names = ["θ[$i]" for i in 1:m.n_params]
     _coef_table(io, "Coefficients", param_names, m.theta, se; dist=:z)
+    _degenerate_fit_banner(io, m.theta)
     # J-test
     if is_overidentified(m)
         pv_str = isnan(m.J_pvalue) ? "n/a" : _format_pvalue(m.J_pvalue)

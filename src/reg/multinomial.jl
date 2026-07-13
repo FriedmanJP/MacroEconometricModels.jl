@@ -512,6 +512,7 @@ function Base.show(io::IO, m::MultinomialLogitModel{T}) where {T}
                     _display_intercept.(m.varnames), beta_j, se_j; dist=:z)
     end
 
+    _degenerate_fit_banner(io, vec(m.beta))
     _sig_legend(io)
 end
 

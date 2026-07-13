@@ -495,3 +495,43 @@ end
     @test MEM._display_intercept("gdp") == "gdp"
     set_display_backend(:text)
 end
+
+@testset "_select_horizons deduplication (B2/T165)" begin
+    MEM = MacroEconometricModels
+    # endpoint no longer doubled when H coincides with a fixed anchor
+    @test MEM._select_horizons(8) == [1, 4, 8]        # was [1, 4, 8, 8]
+    @test MEM._select_horizons(12) == [1, 4, 8, 12]
+    @test MEM._select_horizons(4) == [1, 2, 3, 4]
+    @test MEM._select_horizons(24) == [1, 4, 8, 12, 24]
+    @test MEM._select_horizons(40) == [1, 4, 8, 12, 24, 40]
+    # no duplicated horizons for any H (the doubled-row defect)
+    @test all(allunique(MEM._select_horizons(H)) for H in 1:60)
+end
+
+@testset "Dust/reference-row guard + degenerate-fit banner (S6/T164)" begin
+    set_display_backend(:text)
+    MEM = MacroEconometricModels
+
+    # (A) A genuinely-estimated dust row (huge z from se≈1e-15) must NOT print a computed
+    #     stat/p/stars ("significant zero"); the real row above it keeps its stars.
+    s = sprint(io -> MEM._coef_table(io, "T", ["a", "dust"],
+                    [1.0, 8.145e-15], [0.2, 1.0e-15]))
+    @test occursin("*", s)                                   # the real row keeps stars
+    dust_line = only(filter(l -> occursin("dust", l), split(s, '\n')))
+    @test occursin("—", dust_line) && !occursin("*", dust_line)
+
+    # (B) Reference row labeled "(ref)" with dashed estimate/stat.
+    s = sprint(io -> MEM._coef_table(io, "T", ["e=-1", "e=0"],
+                    [0.0, 0.5], [0.0, 0.1]; ref_rows=[1]))
+    @test occursin("(ref)", s)
+    ref_line = only(filter(l -> occursin("(ref)", l), split(s, '\n')))
+    @test occursin("—", ref_line) && !occursin("*", ref_line)
+
+    # (C) Degenerate-fit banner fires on exploded/non-finite coefficients, silent on a
+    #     healthy fit; a finite coefficient (any SE) never triggers it.
+    @test occursin("degenerate fit", sprint(io -> MEM._degenerate_fit_banner(io, [4.72533e114, 1.0])))
+    @test occursin("degenerate fit", sprint(io -> MEM._degenerate_fit_banner(io, [NaN, 1.0])))
+    @test isempty(strip(sprint(io -> MEM._degenerate_fit_banner(io, [0.5, -0.3, 1.2]))))
+    @test isempty(strip(sprint(io -> MEM._degenerate_fit_banner(io, [0.5, 0.0]))))
+    set_display_backend(:text)
+end

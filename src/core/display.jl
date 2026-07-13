@@ -205,12 +205,18 @@ const _INTERCEPT_LABEL = "(Intercept)"
 _display_intercept(name::AbstractString) =
     name in ("const", "_cons", "Intercept (c)", "(Intercept)") ? _INTERCEPT_LABEL : name
 
-"""Select representative horizons for display."""
+"""Select representative horizons for display.
+
+`unique` drops the duplicated endpoint when `H` coincides with a fixed anchor (e.g. `H=8`
+gave `[1,4,8,8]` → a doubled row in forecast/IRF tables). `unique` preserves
+first-occurrence order and never reorders. (B2/T165) NOTE follow-up: for `H` in `6:7` the
+anchor `8` exceeds `H`; that pre-existing quirk is out of T165 scope."""
 function _select_horizons(H::Int)
     H <= 5 && return collect(1:H)
-    H <= 12 && return [1, 4, 8, H]
-    H <= 24 && return [1, 4, 8, 12, H]
-    return [1, 4, 8, 12, 24, H]
+    hs = H <= 12 ? [1, 4, 8, H] :
+         H <= 24 ? [1, 4, 8, 12, H] :
+                   [1, 4, 8, 12, 24, H]
+    return unique(hs)
 end
 
 """
@@ -222,37 +228,51 @@ Columns: Name | Coef. | Std.Err. | z/t | P>|z/t| | [95% CI lower | CI upper] | s
 """
 function _coef_table(io::IO, title::String, names::Vector{String},
                      coefs::Vector{T}, se::Vector{T};
-                     dist::Symbol=:z, dof_r::Int=0, level::Real=0.95) where {T}
+                     dist::Symbol=:z, dof_r::Int=0, level::Real=0.95,
+                     ref_rows::Union{Nothing,AbstractVector{Int}}=nothing) where {T}
     n = length(names)
     alpha = 1 - level
     z_crit = dist == :z ? T(quantile(Normal(), 1 - alpha/2)) :
                           T(quantile(TDist(dof_r), 1 - alpha/2))
     stat_label = dist == :z ? "z" : "t"
     ci_pct = round(Int, 100 * level)
+    tol = sqrt(eps(T))
 
     data = Matrix{Any}(undef, n, 8)
     for i in 1:n
         est = coefs[i]
         se_i = se[i]
-        stat = se_i > 0 ? est / se_i : T(NaN)
-        pval = if isnan(stat)
-            T(NaN)
-        elseif dist == :z
-            T(2) * (one(T) - cdf(Normal(), abs(stat)))
+        is_ref = ref_rows !== nothing && i in ref_rows
+        # Guard against "significant zero" rows (S6/T164): a row is degenerate when it is a
+        # reference period, when its z-ratio would be astronomically large (se is dust
+        # relative to |est|, i.e. only z ≳ 1/√eps), when both est and se are ~0, or when
+        # either is non-finite. Degenerate rows must never print a computed stat/p/stars.
+        degen = is_ref ||
+                se_i <= tol * max(abs(est), one(T)) ||
+                (abs(est) <= tol && se_i <= tol) ||
+                !isfinite(est) || !isfinite(se_i)
+        if degen
+            data[i, 1] = is_ref ? names[i] * " (ref)" : names[i]
+            data[i, 2] = is_ref ? "—" : _fmt(est)   # ref rows carry no estimate; keep raw dust otherwise
+            data[i, 3] = is_ref ? "—" : _fmt(se_i)
+            data[i, 4] = "—"        # stat
+            data[i, 5] = "—"        # p-value
+            data[i, 6] = "—"        # CI lower (meaningless here)
+            data[i, 7] = "—"        # CI upper
+            data[i, 8] = ""         # no stars
         else
-            T(2) * (one(T) - cdf(TDist(dof_r), abs(stat)))
+            stat = est / se_i
+            pval = dist == :z ? T(2) * (one(T) - cdf(Normal(), abs(stat))) :
+                                T(2) * (one(T) - cdf(TDist(dof_r), abs(stat)))
+            data[i, 1] = names[i]
+            data[i, 2] = _fmt(est)
+            data[i, 3] = _fmt(se_i)
+            data[i, 4] = string(_fmt(stat))
+            data[i, 5] = _format_pvalue(pval)
+            data[i, 6] = _fmt(est - z_crit * se_i)
+            data[i, 7] = _fmt(est + z_crit * se_i)
+            data[i, 8] = _significance_stars(pval)
         end
-        ci_lo = est - z_crit * se_i
-        ci_hi = est + z_crit * se_i
-        stars = isnan(pval) ? "" : _significance_stars(pval)
-        data[i, 1] = names[i]
-        data[i, 2] = _fmt(est)
-        data[i, 3] = _fmt(se_i)
-        data[i, 4] = isnan(stat) ? "—" : string(_fmt(stat))
-        data[i, 5] = isnan(pval) ? "—" : _format_pvalue(pval)
-        data[i, 6] = _fmt(ci_lo)
-        data[i, 7] = _fmt(ci_hi)
-        data[i, 8] = stars
     end
 
     _pretty_table(io, data;
@@ -266,6 +286,19 @@ end
 inherit the empty-header band or the horizontal-crop truncation. (S7/T162)"""
 function _sig_legend(io::IO)
     println(io, "Significance: *** p<0.01, ** p<0.05, * p<0.10")
+end
+
+"""Emit a one-line degenerate-fit warning when any coefficient is non-finite or exploded
+(`|coef| > 1e10`) — a symptom of perfect separation or severe collinearity — so a report
+can never silently certify such a fit as "Converged Yes". Plain text, not a table. The
+zero-SE symptom is deliberately NOT a trigger (it false-fires on legitimately
+boundary-pinned GMM/SMM parameters); the exploded/non-finite coefficient is the reliable
+signal. (S6/T164)"""
+function _degenerate_fit_banner(io::IO, coefs::AbstractVector)
+    if any(!isfinite, coefs) || any(c -> abs(c) > 1e10, coefs)
+        println(io, "WARNING: degenerate fit — non-finite or exploded coefficients " *
+                    "(possible perfect separation / collinearity); standard errors unreliable.")
+    end
 end
 
 """Print a labeled matrix as a PrettyTables table."""

@@ -360,6 +360,7 @@ function Base.show(io::IO, m::LogitModel{T}) where {T}
 
     _coef_table(io, "Coefficients", m.varnames, m.beta, stderror(m);
         dist = :z)
+    _degenerate_fit_banner(io, m.beta)
     _sig_legend(io)
 end
 
@@ -391,6 +392,7 @@ function Base.show(io::IO, m::ProbitModel{T}) where {T}
 
     _coef_table(io, "Coefficients", m.varnames, m.beta, stderror(m);
         dist = :z)
+    _degenerate_fit_banner(io, m.beta)
     _sig_legend(io)
 end
 

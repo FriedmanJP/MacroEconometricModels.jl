@@ -422,7 +422,8 @@ function Base.show(io::IO, r::DIDResult{T}) where {T}
     n_evt = length(r.event_times)
     evt_names = ["e=" * string(e) for e in r.event_times]
     _coef_table(io, "Event-Study Coefficients", evt_names,
-                T.(r.att), T.(r.se); dist=:z)
+                T.(r.att), T.(r.se); dist=:z,
+                ref_rows=findall(==(r.reference_period), r.event_times))
 
     # Overall ATT
     println(io)
@@ -466,7 +467,8 @@ function Base.show(io::IO, r::EventStudyLP{T}) where {T}
 
     evt_names = ["h=" * string(e) for e in r.event_times]
     _coef_table(io, "Dynamic Treatment Effects", evt_names,
-                T.(r.coefficients), T.(r.se); dist=:z)
+                T.(r.coefficients), T.(r.se); dist=:z,
+                ref_rows=findall(==(r.reference_period), r.event_times))
 end
 
 function Base.show(io::IO, r::LPDiDResult{T}) where {T}
@@ -503,7 +505,8 @@ function Base.show(io::IO, r::LPDiDResult{T}) where {T}
 
     evt_names = ["h=" * string(e) for e in r.event_times]
     _coef_table(io, "Dynamic Treatment Effects", evt_names,
-                T.(r.coefficients), T.(r.se); dist=:z)
+                T.(r.coefficients), T.(r.se); dist=:z,
+                ref_rows=findall(==(r.reference_period), r.event_times))
 
     if r.pooled_post !== nothing || r.pooled_pre !== nothing
         println(io)
