@@ -458,3 +458,16 @@ end
 
     set_display_backend(:text)
 end
+
+@testset "Fixed-decimal number formatting (S2/T163)" begin
+    set_display_backend(:text)
+    # _matrix_table routes every cell through _fmt → constant 4-decimal columns; the A01
+    # ragged case (round() printed "1.0 / -0.033 / 0.1829") is fixed.
+    M = [1.0 -0.033; 0.1829 1.0]
+    s = sprint(io -> MacroEconometricModels._matrix_table(io, M, "Residual Correlation";
+                        row_labels = ["y1", "y2"], col_labels = ["y1", "y2"]))
+    @test occursin("1.0000", s)      # was "1.0"
+    @test occursin("-0.0330", s)     # was "-0.033"
+    @test occursin("0.1829", s)
+    set_display_backend(:text)
+end

@@ -124,7 +124,34 @@ end
 # Formatting Helpers
 # =============================================================================
 
-_fmt(x::Real; digits::Int=4) = round(x, digits=digits)
+"""
+    _fmt(x; digits=4) -> String
+
+Fixed-decimal string formatter for table cells (S2/T163). Always returns a `String`
+with exactly `digits` decimals so a column's decimal points align (Stata/EViews style),
+normalizes `-0.0`→`0.0`, and falls back to `%.3g` scientific notation when `|x|` is
+below `5e-5` (would otherwise print as all-zeros) or `≥ 1e6` (would print an unreadable
+integer run). `NaN`/`Inf` render as `"NaN"`/`"Inf"`/`"-Inf"`. Routing every table cell
+through this one formatter removes the ragged decimals, `-0.0` leaks, and collapsed/raw
+exponential numbers that `round()` produced.
+"""
+function _fmt(x::Real; digits::Int=4)
+    isnan(x) && return "NaN"
+    isinf(x) && return x > 0 ? "Inf" : "-Inf"
+    xf = float(x)
+    xf == 0 && (xf = zero(xf))                      # -0.0 -> +0.0 (exact zero)
+    ax = abs(xf)
+    if xf != 0 && (ax < 5e-5 || ax >= 1e6)
+        return Printf.format(Printf.Format("%.3g"), xf)   # e.g. 4.73e+114, 1.23e-06
+    end
+    s = Printf.format(Printf.Format("%.$(digits)f"), xf)
+    # Residual "-0.00.." guard: sub-threshold-but-nonzero values rounded at digits<4 can
+    # still render a signed all-zero string; strip the leading minus in that case.
+    if startswith(s, "-") && all(c -> c == '0' || c == '.', @view s[nextind(s, 1):end])
+        s = s[nextind(s, 1):end]
+    end
+    return s
+end
 _fmt_pct(x::Real; digits::Int=1) = string(round(x * 100, digits=digits), "%")
 
 function _format_pvalue(pval::Real)
@@ -213,7 +240,7 @@ function _matrix_table(io::IO, M::AbstractMatrix, title::String;
     for i in 1:n
         data[i, 1] = row_labels[i]
         for j in 1:m
-            data[i, j+1] = round(M[i, j], digits=digits)
+            data[i, j+1] = _fmt(M[i, j]; digits=digits)   # share the fixed-decimal convention (S2/T163)
         end
     end
     _pretty_table(io, data;
