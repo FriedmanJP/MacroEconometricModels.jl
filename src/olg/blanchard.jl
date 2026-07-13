@@ -307,15 +307,11 @@ Print the Blanchard OLG steady state: capital, consumption, prices, human wealth
 log-utility MPC, debt, and convergence.
 """
 function report(io::IO, ss::BlanchardOLGSteadyState{T}) where {T}
-    println(io, "Blanchard (1985) Perpetual-Youth OLG — Steady State")
-    println(io, "  Capital        k = ", round(ss.k; digits=6))
-    println(io, "  Consumption    C = ", round(ss.C; digits=6))
-    println(io, "  Interest rate  r = ", round(ss.r; digits=6))
-    println(io, "  Wage           w = ", round(ss.w; digits=6))
-    println(io, "  Human wealth   H = ", round(ss.H; digits=6))
-    println(io, "  MPC (1 − βγ)     = ", round(ss.mpc; digits=6))
-    println(io, "  Govt debt      b = ", round(ss.b; digits=6))
-    println(io, "  Converged        = ", _yesno(ss.converged))
+    _show_spec_table(io, "Blanchard (1985) Perpetual-Youth OLG — Steady State",
+        ["Capital k" => _fmt(ss.k; digits=6), "Consumption C" => _fmt(ss.C; digits=6),
+         "Interest rate r" => _fmt(ss.r; digits=6), "Wage w" => _fmt(ss.w; digits=6),
+         "Human wealth H" => _fmt(ss.H; digits=6), "MPC (1 − βγ)" => _fmt(ss.mpc; digits=6),
+         "Govt debt b" => _fmt(ss.b; digits=6), "Converged" => _yesno(ss.converged)])
     return nothing
 end
 report(ss::BlanchardOLGSteadyState) = report(stdout, ss)   # G-17 (#254): io-routed report

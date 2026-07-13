@@ -97,28 +97,29 @@ function Base.show(io::IO, m::SVModel{T}) where {T}
     m.leverage && (title *= " (with leverage)")
     m.dist == :studentt && (title *= " (Student-t)")
 
+    # Specification first, then the parameter estimates (package-wide section order). (S5/T169)
+    info_data = Any[
+        "Observations"     nobs(m);
+        "Posterior samples" m.n_samples;
+        "Distribution"     _label(m.dist);
+        "Leverage"         _yesno(m.leverage);
+        "Persistence (φ̄)" _fmt(mean(m.phi_post));
+        "Unconditional σ²" _fmt(unconditional_variance(m))
+    ]
+    _pretty_table(io, info_data;
+        title = title,
+        column_labels = ["Specification", ""],
+        alignment = [:l, :r],
+    )
+
     data = Any[
         "μ"   _fmt(mu_m)  _fmt(mu_s)  _fmt(mu_q[1])  _fmt(mu_q[2])  _fmt(mu_q[3]);
         "φ"   _fmt(phi_m) _fmt(phi_s) _fmt(phi_q[1])  _fmt(phi_q[2])  _fmt(phi_q[3]);
         "σ_η" _fmt(se_m)  _fmt(se_s)  _fmt(se_q[1])  _fmt(se_q[2])  _fmt(se_q[3])
     ]
-
     _pretty_table(io, data;
-        title = title,
+        title = "Parameters",
         column_labels = ["Parameter", "Mean", "Std", "2.5%", "50%", "97.5%"],
         alignment = [:l, :r, :r, :r, :r, :r],
-    )
-
-    info_data = Any[
-        "Observations"     nobs(m);
-        "Posterior samples" m.n_samples;
-        "Distribution"     string(m.dist);
-        "Leverage"         m.leverage ? "Yes" : "No";
-        "Persistence (φ̄)" _fmt(mean(m.phi_post));
-        "Unconditional σ²" _fmt(unconditional_variance(m))
-    ]
-    _pretty_table(io, info_data;
-        column_labels = ["Specification", ""],
-        alignment = [:l, :r],
     )
 end

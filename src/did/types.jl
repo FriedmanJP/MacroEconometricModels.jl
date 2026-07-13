@@ -413,7 +413,7 @@ function Base.show(io::IO, r::DIDResult{T}) where {T}
     ]
 
     _pretty_table(io, spec;
-        title = "Difference-in-Differences -- $method_str",
+        title = "Difference-in-Differences — $method_str",
         column_labels = ["", ""],
         alignment = [:l, :r],
     )
@@ -498,7 +498,7 @@ function Base.show(io::IO, r::LPDiDResult{T}) where {T}
     ]
 
     _pretty_table(io, spec;
-        title = "LP-DiD Estimation -- Dube, Girardi, Jorda & Taylor (2025)",
+        title = "LP-DiD Estimation — Dube, Girardi, Jorda & Taylor (2025)",
         column_labels = ["", ""],
         alignment = [:l, :r],
     )

@@ -304,9 +304,8 @@ function panel_unit_root_summary(io::IO, X::AbstractMatrix; r::Union{Int,Symbol}
 end
 
 function Base.show(io::IO, s::PanelUnitRootSummary)
-    println(io, "\n", "="^60)
-    println(io, "  Panel Unit Root Test Battery")
-    println(io, "="^60, "\n")
+    # Borderless title (dropped the ='^60 ASCII banner for dialect consistency). (S5/T169)
+    println(io, "\n  Panel Unit Root Test Battery\n")
     s.panic !== nothing && (show(io, s.panic); println(io))
     s.cips !== nothing && (show(io, s.cips); println(io))
     s.moon_perron !== nothing && (show(io, s.moon_perron); println(io))
