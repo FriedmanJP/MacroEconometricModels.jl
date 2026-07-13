@@ -3,9 +3,9 @@
  Test Statistic P-value H₀ (N%)
 
  Jarque–Bera (multivariate) N N Reject
- Jarque–Bera (component-wise) N N Fail to reject
- Mardia skewness N N Fail to reject
- Mardia kurtosis N N Fail to reject
- Mardia Both N N Fail to reject
+ Jarque–Bera (component-wise) N N Reject
+ Mardia skewness N N Reject
+ Mardia kurtosis N N Reject
+ Mardia Both N N Reject
  Doornik–Hansen N N Reject
  Henze–Zirkler N N Reject

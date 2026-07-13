@@ -315,7 +315,12 @@ function build_display_fixtures()
     push!(fx, (name = "factor",     obj = estimate_factors(make_factor_data(T = 100, N = 12, r = 3).X, 3),    stars = false, ref = false))
     push!(fx, (name = "lp",         obj = estimate_lp(make_var1_data(T = 120, n = 3), 1, 8),                  stars = false, ref = false))
     push!(fx, (name = "bvar_fcst",  obj = forecast(estimate_bvar(make_var1_data(T = 90, n = 2), 2; n_draws = 200), 4), stars = false, ref = false))
-    push!(fx, (name = "normality",  obj = normality_test_suite(randn(MersenneTwister(94), 200, 3)),           stars = false, ref = false))
+    # Decisively non-normal data (randexp: skewness ≈ 2, excess kurtosis ≈ 6) so EVERY
+    # test rejects with a statistic in the thousands (p ≪ 0.001). Gaussian data sat on the
+    # decision boundary, and `randn`'s stream is not stable across Julia versions, so the
+    # H₀-decision word flipped 1.10↔1.12 (a numerically-derived categorical the golden
+    # canonicalizer cannot mask). A decisive fixture keeps every decision stable everywhere.
+    push!(fx, (name = "normality",  obj = normality_test_suite(randexp(MersenneTwister(94), 200, 3)),        stars = false, ref = false))
     push!(fx, (name = "dsge_est",   obj = _dsge_est_fixture(),                                                stars = false, ref = false))
     return fx
 end
