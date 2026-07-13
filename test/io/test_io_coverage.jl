@@ -86,7 +86,7 @@ end
     calls = String[]
     mf = (u, d; kwargs...) -> (push!(calls, u); touch(d); d)
     # WIOD: mock the HTML page and the file fetch
-    wiod_html = """<a href="http://www.wiod.org/protected3/data13/AUS/wiot09_row_apr12.xlsx">x</a>"""
+    wiod_html = """<a href="https://www.wiod.org/protected3/data13/AUS/wiot09_row_apr12.xlsx">x</a>"""
     mt = (u; kwargs...) -> wiod_html
     m1 = download_wiod(dir; fetch=mf, fetch_text=mt)
     @test length(m1.files) == 1

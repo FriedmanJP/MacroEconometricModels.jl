@@ -72,7 +72,8 @@ function estimate_did(pd::PanelData{T}, outcome::Union{String,Symbol},
                       cluster::Symbol=:unit,
                       conf_level::Real=0.95,
                       n_boot::Int=200,
-                      base_period::Symbol=:varying) where {T<:AbstractFloat}
+                      base_period::Symbol=:varying,
+                      rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     # Validate inputs
     outcome_col = _resolve_varindex(pd, outcome)
     treat_col = _resolve_varindex(pd, treatment)
@@ -111,7 +112,7 @@ function estimate_did(pd::PanelData{T}, outcome::Union{String,Symbol},
         _estimate_did_multiplegt(pd, outcome_col, treat_col;
                                  leads=leads, horizon=horizon,
                                  control_group=control_group,
-                                 conf_level=conf_level, n_boot=n_boot)
+                                 conf_level=conf_level, n_boot=n_boot, rng=rng)
     else
         throw(ArgumentError("Unknown DiD method :$method. " *
             "Available: :twfe, :callaway_santanna, :sun_abraham, :bjs, :did_multiplegt"))

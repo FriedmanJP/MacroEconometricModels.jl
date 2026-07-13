@@ -260,4 +260,25 @@ using Statistics
         slp = structural_lp(Y, 8; method=:cholesky, lags=4)
         @test nvars(slp) == n
     end
+
+    # =========================================================================
+    @testset "MC honesty counts (#244)" begin
+        # bootstrap path: n_requested == reps, invariant holds
+        slp = structural_lp(Y, 6; method=:cholesky, lags=2, ci_type=:bootstrap,
+                            reps=30, rng=MersenneTwister(1))
+        @test slp.n_requested == 30
+        @test slp.n_effective + slp.n_failed == slp.n_requested
+        @test 0 <= slp.n_failed <= slp.n_requested
+        # count is reproducible under a fixed seed (atomic total is thread-count invariant)
+        slp2 = structural_lp(Y, 6; method=:cholesky, lags=2, ci_type=:bootstrap,
+                             reps=30, rng=MersenneTwister(1))
+        @test slp.n_failed == slp2.n_failed
+        # no bootstrap ⇒ zero counts
+        slp0 = structural_lp(Y, 6; method=:cholesky, lags=2, ci_type=:none)
+        @test (slp0.n_requested, slp0.n_effective, slp0.n_failed) == (0, 0, 0)
+        # backward-compatible 9-arg constructor
+        b = MacroEconometricModels.StructuralLP{Float64}(slp.irf, slp.structural_shocks,
+            slp.var_model, slp.Q, slp.method, slp.lags, slp.cov_type, slp.se, slp.lp_models)
+        @test (b.n_requested, b.n_effective, b.n_failed) == (0, 0, 0)
+    end
 end

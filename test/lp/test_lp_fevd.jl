@@ -213,3 +213,46 @@ using Statistics
         @test width_99 >= width_90 * 0.8  # allow some tolerance for bootstrap noise
     end
 end
+
+@testset "LP-FEVD MC honesty counts (#244)" begin
+    Random.seed!(4244)
+    Y = randn(120, 2)
+    slp = structural_lp(Y, 5; method=:cholesky, lags=2)
+
+    @testset "counts on a real bootstrap" begin
+        nb = 30
+        f = lp_fevd(slp, 4; n_boot=nb)
+        n = length(f.variables)
+        @test f.n_requested == nb * n * n            # one n_boot run per (shock, response)
+        @test f.n_effective + f.n_failed == f.n_requested
+        @test 0 <= f.n_failed <= f.n_requested
+        @test f.n_effective >= 0
+    end
+
+    @testset "no bootstrap ⇒ zero counts" begin
+        f0 = lp_fevd(slp, 4; n_boot=0)
+        @test f0.n_requested == 0 && f0.n_effective == 0 && f0.n_failed == 0
+    end
+
+    @testset "backward-compatible 12-arg constructor" begin
+        z = zeros(2, 2, 4)
+        f = MacroEconometricModels.LPFEVD{Float64}(
+            z, z, z, z, z, :r2, 4, 50, 0.95, true, ["y1", "y2"], ["s1", "s2"])
+        @test f.n_requested == 50 && f.n_effective == 50 && f.n_failed == 0
+    end
+
+    @testset "display surfaces dropped draws" begin
+        z = zeros(2, 2, 3)
+        # full 15-arg ctor with a fabricated drop: 80/120 usable, 40 dropped
+        f = MacroEconometricModels.LPFEVD{Float64}(
+            z, z, z, z, z, :r2, 3, 60, 0.95, true, ["y1", "y2"], ["s1", "s2"], 120, 80, 40)
+        s = sprint(show, f)
+        @test occursin("Effective draws", s)
+        @test occursin("80/120", s)
+        @test occursin("40 dropped", s)
+        # a clean result omits the line
+        f_clean = MacroEconometricModels.LPFEVD{Float64}(
+            z, z, z, z, z, :r2, 3, 60, 0.95, true, ["y1", "y2"], ["s1", "s2"], 120, 120, 0)
+        @test !occursin("Effective draws", sprint(show, f_clean))
+    end
+end

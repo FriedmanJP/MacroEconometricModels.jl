@@ -996,7 +996,7 @@ end
 
         dcdh = estimate_did(pd, "outcome", "treat_time";
                             method=:did_multiplegt, leads=3, horizon=5,
-                            n_boot=50)
+                            n_boot=50, rng=MersenneTwister(1234))
 
         @test dcdh isa DIDResult{Float64}
         @test dcdh.method == :did_multiplegt
@@ -1048,7 +1048,8 @@ end
 
         dcdh_nyt = estimate_did(pd, "outcome", "treat_time";
                                 method=:did_multiplegt, leads=2, horizon=4,
-                                control_group=:not_yet_treated, n_boot=30)
+                                control_group=:not_yet_treated, n_boot=30,
+                                rng=MersenneTwister(1234))
 
         @test dcdh_nyt isa DIDResult{Float64}
         @test dcdh_nyt.method == :did_multiplegt
@@ -1154,7 +1155,7 @@ end
 
         # All methods should produce positive overall ATT for a large effect
         for meth in (:callaway_santanna, :sun_abraham, :bjs, :did_multiplegt)
-            kwargs = meth == :did_multiplegt ? (; n_boot=30) : (;)
+            kwargs = meth == :did_multiplegt ? (; n_boot=30, rng=MersenneTwister(1234)) : (;)
             did = estimate_did(pd, "outcome", "treat_time";
                                method=meth, leads=2, horizon=4, kwargs...)
             @test did.overall_att > 0
@@ -1169,7 +1170,7 @@ end
         pd, te = _make_did_panel(seed=2700, n_units=60, n_periods=20)
 
         for meth in (:sun_abraham, :bjs, :did_multiplegt)
-            kwargs = meth == :did_multiplegt ? (; n_boot=30) : (;)
+            kwargs = meth == :did_multiplegt ? (; n_boot=30, rng=MersenneTwister(1234)) : (;)
             did = estimate_did(pd, "outcome", "treat_time";
                                method=meth, leads=3, horizon=5, kwargs...)
             pt = pretrend_test(did)
@@ -1201,7 +1202,8 @@ end
 
         # dCDH plot
         dcdh = estimate_did(pd, "outcome", "treat_time";
-                            method=:did_multiplegt, leads=2, horizon=3, n_boot=30)
+                            method=:did_multiplegt, leads=2, horizon=3, n_boot=30,
+                            rng=MersenneTwister(1234))
         p_dcdh = plot_result(dcdh)
         @test p_dcdh isa PlotOutput
         @test occursin("dCDH", p_dcdh.html)
@@ -1245,7 +1247,8 @@ end
         @test bjs_single isa DIDResult{Float64}
 
         dcdh_single = estimate_did(pd_single, "outcome", "treat_time";
-                                   method=:did_multiplegt, leads=2, horizon=3, n_boot=20)
+                                   method=:did_multiplegt, leads=2, horizon=3, n_boot=20,
+                                   rng=MersenneTwister(1234))
         @test dcdh_single isa DIDResult{Float64}
 
         # Updated error message includes new methods
@@ -1268,7 +1271,7 @@ end
         pd, te = _make_did_panel(seed=3200, n_units=60, n_periods=20)
 
         for meth in (:sun_abraham, :bjs, :did_multiplegt)
-            kwargs = meth == :did_multiplegt ? (; n_boot=30) : (;)
+            kwargs = meth == :did_multiplegt ? (; n_boot=30, rng=MersenneTwister(1234)) : (;)
             did = estimate_did(pd, "outcome", "treat_time";
                                method=meth, leads=2, horizon=3, kwargs...)
             @test nobs(did) == did.n_obs
@@ -1339,7 +1342,7 @@ end
 
         # dCDH (uses bootstrap, test it runs)
         did_dcdh = estimate_did(pd_c, "y", "tt"; method=:did_multiplegt,
-                                leads=1, horizon=2, n_boot=20)
+                                leads=1, horizon=2, n_boot=20, rng=MersenneTwister(1234))
         @test did_dcdh isa DIDResult{Float64}
 
         # Event study LP
@@ -1532,7 +1535,7 @@ end
 
         # ----- dCDH: empirical bootstrap covariance stored; diag == bootstrap se² -----
         dcdh = estimate_did(pd, "outcome", "treat_time"; method=:did_multiplegt,
-                            leads=3, horizon=4, n_boot=200)
+                            leads=3, horizon=4, n_boot=200, rng=MersenneTwister(1234))
         Vd = vcov(dcdh)
         @test Vd isa Matrix{Float64}
         @test isapprox(Vd, Vd'; atol=1e-10)

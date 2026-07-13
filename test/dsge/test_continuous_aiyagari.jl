@@ -69,7 +69,10 @@ const _CT = MacroEconometricModels
         ss = ct_steady_state(m; tol=1e-4)
         io = IOBuffer(); show(io, ss)
         @test occursin("CTSteadyState", String(take!(io)))
-        report(ss)                                  # smoke test
+        # G-17 (#254): report is io-routed (report(io, obj)); stdout convenience form still works
+        iob = IOBuffer(); report(iob, ss)
+        @test occursin("Continuous-Time Aiyagari", String(take!(iob)))
+        @test (redirect_stdout(devnull) do; report(ss); end; true)
     end
 
     @testset "MIT-shock transition" begin

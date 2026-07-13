@@ -21,6 +21,83 @@ vectors, yielding a tractable linear system.
 using SparseArrays, LinearAlgebra, Random
 
 # =============================================================================
+# Shared GE-closure helpers for _reiter_linearize
+# =============================================================================
+
+"""
+    _price_sensitivity_reduced(ss, ip, grid, income, U_k, dist_ss, Lambda_ss;
+                               dr_step=1e-5, dw_step=1e-5) → (g_r_red, g_w_red)
+
+Reduced-space distribution response to a unit change in the interest rate `r` and
+the wage `w`: `g_r = ∂Λ/∂r · d_ss` and `g_w = ∂Λ/∂w · d_ss`, each projected onto the
+reduction basis `U_k`. Computed by finite-difference re-solves of the EGM policy
+(perturb one price, re-solve, difference the transition matrix).
+
+This is the price→distribution kernel shared by the Huggett and Aiyagari closures of
+`_reiter_linearize`. The *closures* differ (Huggett clears the bond market ∫a'=0;
+Aiyagari uses the firm FOC with predetermined `K`), but the way household policies —
+hence the distribution — respond to prices is common.
+"""
+function _price_sensitivity_reduced(ss::HASteadyState{T}, ip::IndividualProblem{T},
+                                     grid::HAGrid{T}, income::IncomeProcess{T},
+                                     U_k::AbstractMatrix{T}, dist_ss::AbstractVector{T},
+                                     Lambda_ss::AbstractMatrix{T};
+                                     dr_step::T=T(1e-5),
+                                     dw_step::T=T(1e-5)) where {T<:AbstractFloat}
+    prices_r = copy(ss.prices); prices_r[:r] = ss.prices[:r] + dr_step
+    _, a_pol_r = _egm_solve(ip, grid, income, prices_r; max_iter=1000, tol=T(1e-10))
+    Lambda_r = _build_transition_matrix(a_pol_r, grid, income)
+
+    prices_w = copy(ss.prices); prices_w[:w] = ss.prices[:w] + dw_step
+    _, a_pol_w = _egm_solve(ip, grid, income, prices_w; max_iter=1000, tol=T(1e-10))
+    Lambda_w = _build_transition_matrix(a_pol_w, grid, income)
+
+    g_r = (Lambda_r * dist_ss .- Lambda_ss * dist_ss) ./ dr_step
+    g_w = (Lambda_w * dist_ss .- Lambda_ss * dist_ss) ./ dw_step
+    return U_k' * g_r, U_k' * g_w
+end
+
+"""
+    _aiyagari_foc_derivatives(r_ss, w_ss, K_ss, alpha, delta, Z_val)
+        → (dr_dK, dw_dK, dr_dZ, dw_dZ)
+
+Firm-FOC price sensitivities for the Aiyagari GE closure with predetermined capital
+`K`: `r = α Z (K/L)^(α-1) − δ`, `w = (1−α) Z (K/L)^α`. In steady-state form,
+
+    ∂r/∂K = (α−1)(r+δ)/K < 0,   ∂w/∂K = α w/K > 0,
+    ∂r/∂Z = (r+δ)/Z,            ∂w/∂Z = w/Z.
+
+A higher predetermined capital lowers the rate and raises the wage — the GE feedback
+the reduced Reiter system must carry through the `K` state column.
+"""
+function _aiyagari_foc_derivatives(r_ss::T, w_ss::T, K_ss::T, alpha::T, delta::T,
+                                   Z_val::T) where {T<:AbstractFloat}
+    dr_dK = (alpha - one(T)) * (r_ss + delta) / K_ss
+    dw_dK = alpha * w_ss / K_ss
+    dr_dZ = (r_ss + delta) / Z_val
+    dw_dZ = w_ss / Z_val
+    return dr_dK, dw_dK, dr_dZ, dw_dZ
+end
+
+# Diagnose reduced-transition stability WITHOUT mutating G1 (#234). The previous
+# code silently shrank every eigenvalue by `0.999/ρ` whenever the spectral radius
+# ρ exceeded 1, uniformly distorting all dynamics to mask a missing-GE-block /
+# wrong-Jacobian bug and reporting determinacy on a genuinely explosive system.
+# #229/#230 restore genuine stability (ρ ≈ 0.9 Huggett, 0.9997 Aiyagari/KS), so
+# this diagnostic should stay silent for the shipped examples; if it fires, the
+# reduced HA system really is indeterminate/explosive and must be investigated.
+function _reiter_warn_unstable(G1::AbstractMatrix{T}, label::AbstractString) where {T<:AbstractFloat}
+    rho = maximum(abs, eigvals(G1))
+    if rho >= one(T) + T(1e-8)
+        @warn "Reiter ($label): reduced HA transition spectral radius ρ = " *
+              "$(round(rho; digits=8)) ≥ 1 — the reduced system is indeterminate " *
+              "or explosive (likely an incomplete GE block or a mis-scaled " *
+              "Jacobian). No silent eigenvalue rescaling is applied (#234)."
+    end
+    return rho
+end
+
+# =============================================================================
 # _reiter_linearize — SVD-reduced linearization of the HA model
 # =============================================================================
 
@@ -39,7 +116,8 @@ singular vectors of the resulting deviation matrix.
 
 The reduced state is `[d̃_t; K_t; Z_t]` where `d̃ = U_k' (d − d_ss)` are
 the SVD-compressed distribution deviations, `K` is aggregate capital, and `Z`
-is a TFP shock following an AR(1) with persistence `ρ_z = 0.95`.
+is a TFP shock following an AR(1) with persistence `ρ_z` read from the spec
+parameters (`het_params[:rho_z]`; #236).
 
 # Arguments
 - `ss::HASteadyState{T}` — stationary equilibrium
@@ -56,6 +134,8 @@ is a TFP shock following an AR(1) with persistence `ρ_z = 0.95`.
 - `impact::Matrix{T}` — `(n_red + n_agg) × 1` shock impact vector
 - `n_reduced_actual::Int` — actual number of retained singular vectors
 - `explained_variance::T` — fraction of variance captured by retained vectors
+- `U_k::Matrix{T}` — the `N × n_red` reduction basis (`N = n_a·n_e`), so callers can
+  project reduced-state deviations back to the full distribution (`d_dev = U_k·d̃`)
 
 # References
 - Reiter, M. (2009). Solving heterogeneous-agent models by projection and
@@ -99,7 +179,10 @@ function _reiter_linearize(ss::HASteadyState{T}, ip::IndividualProblem{T},
     # Λ' on the capital aggregation vector.  The SVD of their combination
     # captures the directions most relevant for aggregate dynamics.
 
-    Lambda_dense = Matrix{T}(Lambda_ss)
+    # Λ_ss is an N×N sparse transition (N = n_a·n_e). Only sparse mat-vec/mat-mat
+    # and a tall-thin SVD of the (dense, N×n_obs) observability matrix are needed,
+    # so we never densify Λ_ss (#242). The economy `svd(O_mat)` below is kept
+    # deterministic (NOT swapped for a randomized SVD).
 
     # Build the capital aggregation vector
     a_vec_pre = zeros(T, N)
@@ -117,7 +200,7 @@ function _reiter_linearize(ss::HASteadyState{T}, ip::IndividualProblem{T},
     v_obs = copy(a_vec_pre)
     for k in 1:n_obs
         O_mat[:, k] .= v_obs
-        v_obs = Lambda_dense' * v_obs
+        v_obs = Lambda_ss' * v_obs          # sparse transpose mat-vec
     end
 
     # SVD of O_mat to get the dominant observable directions
@@ -137,7 +220,7 @@ function _reiter_linearize(ss::HASteadyState{T}, ip::IndividualProblem{T},
     # ── Step 3: Build reduced distribution transition ─────────────────────────
     # G1_dist = U_k' Λ_ss U_k  (project transition into reduced coordinates)
 
-    G1_dist = U_k' * Lambda_dense * U_k   # n_red × n_red
+    G1_dist = U_k' * (Lambda_ss * U_k)    # n_red × n_red (sparse×dense, then project)
 
     # ── Step 4: Capital loading ───────────────────────────────────────────────
     # K is a linear function of the distribution: K = a_grid' * d
@@ -169,7 +252,7 @@ function _reiter_linearize(ss::HASteadyState{T}, ip::IndividualProblem{T},
         delta_test = dx_T .* noise
 
         # Full response
-        dK_full = dot(a_vec, Lambda_dense * delta_test)
+        dK_full = dot(a_vec, Lambda_ss * delta_test)   # sparse mat-vec
 
         # Reduced response
         d_tilde = U_k' * delta_test
@@ -227,93 +310,75 @@ function _reiter_linearize(ss::HASteadyState{T}, ip::IndividualProblem{T},
         impact_vec[n_red + 1, 1] = one(T)
         impact_vec[1:n_red, 1] .= channel_w
 
-        eigs = eigvals(G1)
-        me = maximum(abs.(eigs))
-        me > one(T) && (G1 .*= T(0.999) / me)
+        _reiter_warn_unstable(G1, "Huggett")
 
-        return G1, impact_vec, n_red, explained
+        return G1, impact_vec, n_red, explained, U_k
     end
 
-    # ── Step 6: Assemble full system ──────────────────────────────────────────
-    # Aggregate variables: K (capital) and Z (TFP shock)
-    # State: [d̃_t (n_red); K_t (1); Z_t (1)]
-    #
-    # Transition:
-    #   d̃_{t+1} = G1_dist * d̃_t  + impact_dist * Z_t
-    #   K_{t+1}  = K_loading' * d̃_{t+1}  (derived from distribution)
-    #   Z_{t+1}  = rho_z * Z_t
-    #
-    # To write as a first-order system x_{t+1} = G1 x_t + impact ε_t:
-
+    # ── Step 6: Aiyagari general-equilibrium block (#230) ─────────────────────
+    # State [d̃_t (n_red); K_t (1); Z_t (1)]. Prices come from the firm FOC with a
+    # PREDETERMINED capital K, so the interest rate responds to capital:
+    #   r = α Z (K/L)^(α-1) − δ,  w = (1−α) Z (K/L)^α,
+    #   dr = (∂r/∂K) dK + (∂r/∂Z) dZ,   dw = (∂w/∂K) dK + (∂w/∂Z) dZ,
+    #   ∂r/∂K < 0,  ∂w/∂K > 0  (see _aiyagari_foc_derivatives).
+    # The distribution responds to prices via the shared price-sensitivity kernel:
+    #   d̃_{t+1} = G1_dist·d̃_t + g_r·dr_t + g_w·dw_t
+    #           = G1_dist·d̃_t + (g_r ∂r/∂K + g_w ∂w/∂K)·dK_t
+    #                         + (g_r ∂r/∂Z + g_w ∂w/∂Z)·dZ_t.
+    # Populating the K column (g_r ∂r/∂K + g_w ∂w/∂K) is exactly the GE feedback the
+    # old code omitted — capital fed back into nothing and r never responded.
     n_agg = 2  # K and Z
     n_total = n_red + n_agg
-    rho_z = T(0.95)
+
+    # Read alpha/delta/rho_z from the spec (no magic-number literals). solve(:reiter)
+    # merges the aggregate-spec parameters into het_params, so examples (which store
+    # these in agg_spec) and @dsge models (which store them in het_params) both work
+    # (#236). A genuinely missing key errors informatively rather than defaulting.
+    for k in (:alpha, :delta, :rho_z)
+        haskey(het_params, k) ||
+            error("Reiter (Aiyagari) linearization requires parameter :$k in spec params")
+    end
+    alpha_val = T(het_params[:alpha])
+    delta_val = T(het_params[:delta])
+    Z_val     = T(get(het_params, :Z, one(T)))   # SS TFP level, defaults to 1
+    rho_z     = T(het_params[:rho_z])
+
+    r_ss = ss.prices[:r]
+    w_ss = ss.prices[:w]
+
+    # Firm-FOC price sensitivities (predetermined K).
+    dr_dK, dw_dK, dr_dZ, dw_dZ =
+        _aiyagari_foc_derivatives(r_ss, w_ss, K_ss, alpha_val, delta_val, Z_val)
+
+    # Reduced distribution response to r and w (shared kernel, as in Huggett).
+    g_r_red, g_w_red = _price_sensitivity_reduced(ss, ip, grid, income, U_k,
+                                                  dist_ss, Lambda_ss)
+
+    # Reduced-distribution columns for the K and Z aggregate states.
+    K_column = g_r_red .* dr_dK .+ g_w_red .* dw_dK   # ∂d̃_{t+1}/∂K_t (GE feedback)
+    Z_column = g_r_red .* dr_dZ .+ g_w_red .* dw_dZ   # ∂d̃_{t+1}/∂Z_t
 
     G1 = zeros(T, n_total, n_total)
-
-    # Distribution block: d̃_{t+1} = G1_dist * d̃_t
     G1[1:n_red, 1:n_red] .= G1_dist
+    G1[1:n_red, n_red + 1] .= K_column          # K feeds back via the price channel
+    G1[1:n_red, n_red + 2] .= Z_column
 
-    # TFP shock feeds into distribution dynamics.
-    # A positive Z shock shifts savings policy → perturbs the distribution.
-    # Approximate the distribution response to Z by a finite-difference on Λ.
-    # Perturb prices as if Z changes, re-solve policies, compare transition matrices.
-    prices_ss = copy(ss.prices)
-    r_ss = prices_ss[:r]
-    w_ss = prices_ss[:w]
-
-    # Approximate: dΛ/dZ via price channels
-    # Under Cobb-Douglas: dr/dZ = alpha * K^(alpha-1), dw/dZ = (1-alpha)*K^alpha
-    # Use a small Z perturbation and re-solve EGM
-    dz = T(1e-4)
-    prices_pert = copy(prices_ss)
-    # Perturb both r and w consistently
-    alpha_val = T(0.36)
-    delta_val = T(0.025)
-    # At steady state: r = alpha*Z*K^(alpha-1) - delta, w = (1-alpha)*Z*K^alpha
-    prices_pert[:r] = r_ss + alpha_val * K_ss^(alpha_val - one(T)) * dz
-    prices_pert[:w] = w_ss + (one(T) - alpha_val) * K_ss^alpha_val * dz
-
-    _, a_pol_pert = _egm_solve(ip, grid, income, prices_pert; max_iter=1000, tol=T(1e-10))
-    Lambda_pert = _build_transition_matrix(a_pol_pert, grid, income)
-
-    # Distribution response to Z: dΛ/dZ * dist_ss
-    d_response_Z = (Lambda_pert * dist_ss .- Lambda_ss * dist_ss) ./ dz
-
-    # Normalize the response
-    # Project into reduced space
-    impact_dist_Z = U_k' * d_response_Z    # n_red vector
-
-    # Distribution block: Z channel
-    G1[1:n_red, n_red + 2] .= impact_dist_Z
-
-    # Capital row: K_{t+1} = K_ss + K_loading' * d̃_{t+1}
-    # Substitute: K_{t+1} = K_loading' * G1_dist * d̃_t + K_loading' * impact_dist_Z * Z_t
+    # Capital row: K_{t+1} = K_loading' · d̃_{t+1}.
     G1[n_red + 1, 1:n_red] .= vec(K_loading' * G1_dist)
-    G1[n_red + 1, n_red + 2] = dot(K_loading, impact_dist_Z)
+    G1[n_red + 1, n_red + 1] = dot(K_loading, K_column)
+    G1[n_red + 1, n_red + 2] = dot(K_loading, Z_column)
 
-    # Z row: Z_{t+1} = rho_z * Z_t
+    # TFP AR(1): Z_{t+1} = ρ_z · Z_t + ε.
     G1[n_red + 2, n_red + 2] = rho_z
 
-    # ── Step 7: Impact vector ─────────────────────────────────────────────────
-    # Shock ε_t enters only through Z: Z_t = rho_z * Z_{t-1} + ε_t
+    # ── Step 7: Impact vector (shock ε enters through Z) ──────────────────────
     impact_vec = zeros(T, n_total, 1)
     impact_vec[n_red + 2, 1] = one(T)
+    impact_vec[1:n_red, 1] .= Z_column
+    impact_vec[n_red + 1, 1] = dot(K_loading, Z_column)
 
-    # Also propagate the shock to d̃ and K via Z channel
-    impact_vec[1:n_red, 1] .= impact_dist_Z
-    impact_vec[n_red + 1, 1] = dot(K_loading, impact_dist_Z)
+    # ── Step 8: Diagnose stability (no silent rescale; #234) ──────────────────
+    _reiter_warn_unstable(G1, "Aiyagari")
 
-    # ── Step 8: Stabilize if needed ───────────────────────────────────────────
-    # Check eigenvalues — if any are barely above 1, dampen
-    eigs = eigvals(G1)
-    max_eig = maximum(abs.(eigs))
-
-    if max_eig > one(T)
-        # Scale down to ensure stability (unit circle contraction)
-        scale = T(0.999) / max_eig
-        G1 .*= scale
-    end
-
-    return G1, impact_vec, n_red, explained
+    return G1, impact_vec, n_red, explained, U_k
 end

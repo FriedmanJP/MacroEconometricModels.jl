@@ -129,8 +129,15 @@ function _ks_example()
     # CRRA with sigma = 1 (log utility)
     u, up, upi = _crra_utility(1.0)
 
-    # Income process: Rouwenhorst(0.966, 0.5, 7)
-    income = rouwenhorst(0.966, 0.5, 7)
+    # Income process: Rouwenhorst(0.966, 0.5, 7), normalized to a unit-mean
+    # multiplier e = exp(z) / E[exp(z)] so that E[e] = 1 and every state gives
+    # strictly positive labor income w*e (the raw grid is a symmetric log grid
+    # about 0, which would make half the states have negative labor income).
+    inc_raw = rouwenhorst(0.966, 0.5, 7)
+    e_norm = exp.(inc_raw.states)
+    e_norm ./= dot(inc_raw.stationary_dist, e_norm)
+    income = IncomeProcess{Float64}(inc_raw.transition, e_norm,
+                                    inc_raw.stationary_dist, :income)
 
     # Asset grid: [0, 200] with 200 points
     grid = HAGrid(; assets=(0.0, 200.0, 200), income_states=7)
@@ -173,8 +180,15 @@ function _one_asset_hank_example()
     # CRRA utility
     u, up, upi = _crra_utility(sigma_c)
 
-    # Income process: Rouwenhorst(0.966, 0.5, 7)
-    income = rouwenhorst(0.966, 0.5, 7)
+    # Income process: Rouwenhorst(0.966, 0.5, 7), normalized to a unit-mean
+    # multiplier e = exp(z) / E[exp(z)] so that E[e] = 1 and every state gives
+    # strictly positive labor income w*e (the raw grid is a symmetric log grid
+    # about 0, which would make half the states have negative labor income).
+    inc_raw = rouwenhorst(0.966, 0.5, 7)
+    e_norm = exp.(inc_raw.states)
+    e_norm ./= dot(inc_raw.stationary_dist, e_norm)
+    income = IncomeProcess{Float64}(inc_raw.transition, e_norm,
+                                    inc_raw.stationary_dist, :income)
 
     # Asset grid: [-2, 50] with 200 points (allows borrowing)
     grid = HAGrid(; assets=(-2.0, 50.0, 200), income_states=7)
@@ -217,8 +231,15 @@ function _two_asset_hank_example()
     # CRRA utility
     u, up, upi = _crra_utility(sigma_c)
 
-    # Income process: Rouwenhorst(0.966, 0.5, 7)
-    income = rouwenhorst(0.966, 0.5, 7)
+    # Income process: Rouwenhorst(0.966, 0.5, 7), normalized to a unit-mean
+    # multiplier e = exp(z) / E[exp(z)] so that E[e] = 1 and every state gives
+    # strictly positive labor income w*e (the raw grid is a symmetric log grid
+    # about 0, which would make half the states have negative labor income).
+    inc_raw = rouwenhorst(0.966, 0.5, 7)
+    e_norm = exp.(inc_raw.states)
+    e_norm ./= dot(inc_raw.stationary_dist, e_norm)
+    income = IncomeProcess{Float64}(inc_raw.transition, e_norm,
+                                    inc_raw.stationary_dist, :income)
 
     # Two-asset grid: liquid [-2, 50] (50 pts), illiquid [0, 100] (50 pts)
     grid = HAGrid(; liquid=(-2.0, 50.0, 50), illiquid=(0.0, 100.0, 50),

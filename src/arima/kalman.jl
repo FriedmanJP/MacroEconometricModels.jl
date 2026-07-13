@@ -132,78 +132,55 @@ function _kalman_filter_arma(y::Vector{T}, c::T, phi::Vector{T}, theta::Vector{T
         return loglik, residuals, fitted
     end
 
-    # Build state-space matrices
+    # Route the recursion through the consolidated Kalman kernel (T147/#246) scalar
+    # rank-1 path. The observation intercept is `c` (the ARMA state carries none), and
+    # the init is the unconditional (stationary) covariance from `_initialize_state` —
+    # identical to the pre-#246 filter, so loglik/residuals/fitted are byte-stable up to
+    # Joseph-vs-shorthand roundoff (≈1e-10). Predicted state `a_{t|t-1}` = `store.a_pred`,
+    # innovations `v = y - c - Z a_{t|t-1}` = residuals, fitted = one-step predictions.
+    ym, Z, T_mat, RQR, H, a0, P0, r = _arma_kernel_setup(y, c, phi, theta, sigma2, p, q, n)
+    store = KalmanFilterStore{T}(r, n; innovations=true)
+    loglik = _kalman_filter!(store, ym, Z, T_mat, RQR, H; d=T[c], a0=a0, P0=P0, scalar=true)
+    residuals = T[store.v[t][1] for t in 1:n]
+    fitted = y .- residuals
+    return loglik, residuals, fitted
+end
+
+"""
+    _arma_kernel_setup(y, c, phi, theta, sigma2, p, q, n)
+        -> (ym, Z, T_mat, RQR, H, a0, P0, r)
+
+Build the (row-matrix data, state-space, pre-formed state-noise cov, unconditional init)
+shared by the ARMA log-likelihood/residual entry points that route through the kernel.
+"""
+function _arma_kernel_setup(y::Vector{T}, c::T, phi::Vector{T}, theta::Vector{T},
+                            sigma2::T, p::Int, q::Int, n::Int) where {T<:AbstractFloat}
     Z, T_mat, R, Q, H, r = _arma_state_space(c, phi, theta, sigma2, p, q)
+    RQR = R * Q * R'
+    a0, P0 = _initialize_state(T_mat, R, Q, r, T)
+    return reshape(y, 1, n), Z, T_mat, RQR, H, a0, P0, r
+end
 
-    # Initialize state
-    a, P = _initialize_state(T_mat, R, Q, r, T)
+"""
+    _arma_loglik(y, c, phi, theta, sigma2) -> loglik
 
-    # Storage
-    residuals = zeros(T, n)
-    fitted = zeros(T, n)
-    loglik = zero(T)
-
-    # Scalar-observation specialization: the observation row `Z` is 1×r, so the innovation
-    # variance `F` is 1×1 — carry it as a scalar `f` and `mul!` into preallocated r-vectors /
-    # r×r buffers rather than allocating 1×1 / r×1 temporaries every step. `R Q R'` is
-    # time-invariant, so it is formed once. The `f < 1e-12` skip and the symmetry step are
-    # preserved. Matrix-chain re-association reorders a few reductions, so loglik/residuals/
-    # fitted match the dense form to rtol≈1e-10 rather than bit-for-bit. (#210 box F)
-    Zv = vec(Z)                       # r-vector view of the 1×r observation row
-    H11 = H[1, 1]
-    RQR = R * Q * R'                  # r×r, time-invariant state-noise covariance
-    PZv = Vector{T}(undef, r)
-    TmatP = Matrix{T}(undef, r, r)
-    Ta = Vector{T}(undef, r)
-    Kvec = Vector{T}(undef, r)
-    Pnew = Matrix{T}(undef, r, r)
-
-    @inbounds for t in 1:n
-        # Prediction error
-        y_pred = c + dot(Zv, a)
-        fitted[t] = y_pred
-        v = y[t] - y_pred
-
-        # Prediction error variance f = Z P Z' + H  (scalar)
-        mul!(PZv, P, Zv)
-        f = dot(Zv, PZv) + H11
-
-        mul!(TmatP, T_mat, P)         # T_mat P — reused by the state/covariance updates
-        mul!(Ta, T_mat, a)            # T_mat a
-
-        # Skip if variance is too small (numerical issues)
-        if f < T(1e-12)
-            residuals[t] = v
-            a = copy(Ta)
-            mul!(Pnew, TmatP, transpose(T_mat))   # (T_mat P) T_mat'
-            Pnew .+= RQR
-            P = copy(Pnew)
-            continue
+Log-likelihood-only ARMA filter (no residual/fitted storage) for the MLE hot loop —
+routes through the kernel with `store=nothing` so no per-step moment arrays are
+allocated. Shares the white-noise closed form and state-space build with
+`_kalman_filter_arma`.
+"""
+function _arma_loglik(y::Vector{T}, c::T, phi::Vector{T}, theta::Vector{T}, sigma2::T) where {T<:AbstractFloat}
+    n = length(y)
+    p, q = length(phi), length(theta)
+    if p == 0 && q == 0
+        ss = zero(T)
+        @inbounds for i in 1:n
+            ss += abs2(y[i] - c)
         end
-
-        # Log-likelihood contribution
-        loglik -= T(0.5) * (log(T(2π)) + log(f) + v^2 / f)
-        residuals[t] = v
-
-        # Kalman gain K = T_mat P Z' / f = (T_mat P) Z' / f
-        mul!(Kvec, TmatP, Zv)
-        Kvec ./= f
-
-        # Update state a = T_mat a + K v
-        a = Ta .+ Kvec .* v
-
-        # Update covariance P = T_mat P T_mat' + R Q R' - K K' f
-        mul!(Pnew, TmatP, transpose(T_mat))
-        Pnew .+= RQR
-        for jc in 1:r, ic in 1:r
-            Pnew[ic, jc] -= f * Kvec[ic] * Kvec[jc]
-        end
-
-        # Ensure symmetry
-        P = (Pnew .+ transpose(Pnew)) ./ 2
+        return -T(n / 2) * log(T(2π)) - T(n / 2) * log(sigma2) - ss / (2 * sigma2)
     end
-
-    loglik, residuals, fitted
+    ym, Z, T_mat, RQR, H, a0, P0, _ = _arma_kernel_setup(y, c, phi, theta, sigma2, p, q, n)
+    return _kalman_filter!(nothing, ym, Z, T_mat, RQR, H; d=T[c], a0=a0, P0=P0, scalar=true)
 end
 
 """
@@ -297,8 +274,8 @@ function _arma_negloglik(params::Vector{T}, y::Vector{T}, p::Int, q::Int; includ
     !_is_stationary(phi) && return penalty
     !_is_invertible(theta) && return penalty
 
-    # Compute log-likelihood via Kalman filter
-    loglik, _, _ = _kalman_filter_arma(y, c, phi, theta, sigma2)
+    # Compute log-likelihood via the consolidated Kalman kernel (loglik-only fast path)
+    loglik = _arma_loglik(y, c, phi, theta, sigma2)
 
     # Handle numerical issues
     isnan(loglik) && return penalty

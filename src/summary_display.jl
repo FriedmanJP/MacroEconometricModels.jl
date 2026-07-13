@@ -268,8 +268,12 @@ function Base.show(io::IO, irf::BayesianImpulseResponse{T}) where {T}
     nq = length(irf.quantile_levels)
 
     q_str = join([_fmt_pct(q; digits=0) for q in irf.quantile_levels], ", ")
-    _show_spec_table(io, "Bayesian Impulse Response Functions",
-        ["Variables" => n_vars, "Shocks" => n_shocks, "Horizon" => H, "Quantiles" => q_str])
+    spec_pairs = Pair{String,Any}[
+        "Variables" => n_vars, "Shocks" => n_shocks, "Horizon" => H, "Quantiles" => q_str]
+    if irf.n_requested > 0 && irf.n_failed > 0   # MC honesty (#244)
+        push!(spec_pairs, "Effective draws" => "$(irf.n_effective)/$(irf.n_requested) ($(irf.n_failed) dropped)")
+    end
+    _show_spec_table(io, "Bayesian Impulse Response Functions", spec_pairs)
 
     horizons_show = _select_horizons(H)
     median_idx = nq >= 3 ? 2 : 1
@@ -325,8 +329,12 @@ function Base.show(io::IO, f::BayesianFEVD{T}) where {T}
     H = f.horizon
 
     q_str = join([_fmt_pct(q; digits=0) for q in f.quantile_levels], ", ")
-    _show_spec_table(io, "Bayesian FEVD (posterior mean)",
-        ["Variables" => n_vars, "Shocks" => n_shocks, "Horizon" => H, "Quantiles" => q_str])
+    spec_pairs = Pair{String,Any}[
+        "Variables" => n_vars, "Shocks" => n_shocks, "Horizon" => H, "Quantiles" => q_str]
+    if f.n_requested > 0 && f.n_failed > 0   # MC honesty (#244)
+        push!(spec_pairs, "Effective draws" => "$(f.n_effective)/$(f.n_requested) ($(f.n_failed) dropped)")
+    end
+    _show_spec_table(io, "Bayesian FEVD (posterior mean)", spec_pairs)
 
     for h in _select_horizons(H)
         data = Matrix{Any}(undef, n_vars, n_shocks + 1)
@@ -354,11 +362,14 @@ function Base.show(io::IO, slp::StructuralLP{T}) where {T}
     H = size(slp.irf.values, 1)
 
     ci_str = slp.irf.ci_type == :none ? "None" : string(slp.irf.ci_type)
-    _show_spec_table(io, "Structural Local Projections",
-        ["Identification" => string(slp.method), "Variables" => n,
-         "IRF horizon" => H, "LP lags" => slp.lags,
-         "HAC estimator" => string(slp.cov_type), "CI" => ci_str];
-        left_label="Specification")
+    spec_pairs = Pair{String,Any}[
+        "Identification" => string(slp.method), "Variables" => n,
+        "IRF horizon" => H, "LP lags" => slp.lags,
+        "HAC estimator" => string(slp.cov_type), "CI" => ci_str]
+    if slp.n_requested > 0 && slp.n_failed > 0   # MC honesty (#244)
+        push!(spec_pairs, "Effective draws" => "$(slp.n_effective)/$(slp.n_requested) ($(slp.n_failed) dropped)")
+    end
+    _show_spec_table(io, "Structural Local Projections", spec_pairs; left_label="Specification")
 
     # Show IRF summary at selected horizons
     horizons_show = _select_horizons(H)
@@ -470,10 +481,15 @@ function Base.show(io::IO, f::LPFEVD{T}) where {T}
 
     method_str = f.method == :r2 ? "R²" : f.method == :lp_a ? "LP-A" : "LP-B"
     bc_str = f.bias_correction ? "Yes (VAR bootstrap)" : "No"
-    _show_spec_table(io, "LP-FEVD (Gorodnichenko & Lee 2019)",
-        ["Variables" => n_vars, "Shocks" => n_shocks, "Horizon" => H,
-         "Estimator" => method_str, "Bias corrected" => bc_str,
-         "Bootstrap reps" => f.n_boot, "Conf. level" => _fmt_pct(f.conf_level)])
+    spec_pairs = Pair{String,Any}[
+        "Variables" => n_vars, "Shocks" => n_shocks, "Horizon" => H,
+        "Estimator" => method_str, "Bias corrected" => bc_str,
+        "Bootstrap reps" => f.n_boot, "Conf. level" => _fmt_pct(f.conf_level)]
+    # MC honesty (#244): surface usable vs dropped bootstrap draws when any were dropped.
+    if f.n_requested > 0 && f.n_failed > 0
+        push!(spec_pairs, "Effective draws" => "$(f.n_effective)/$(f.n_requested) ($(f.n_failed) dropped)")
+    end
+    _show_spec_table(io, "LP-FEVD (Gorodnichenko & Lee 2019)", spec_pairs)
 
     # Use bias-corrected values if available
     vals = f.bias_correction ? f.bias_corrected : f.proportions

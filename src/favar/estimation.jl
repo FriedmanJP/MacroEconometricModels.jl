@@ -70,7 +70,8 @@ function estimate_favar(X::AbstractMatrix{T}, Y_key::AbstractMatrix{T}, r::Int, 
     method::Symbol=:two_step,
     panel_varnames::Union{Nothing, Vector{String}}=nothing,
     n_draws::Int=5000,
-    burnin::Int=1000) where {T<:AbstractFloat}
+    burnin::Int=1000,
+    rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
 
     # --- Validate inputs ---
     _validate_data(X, "X")
@@ -112,7 +113,7 @@ function estimate_favar(X::AbstractMatrix{T}, Y_key::AbstractMatrix{T}, r::Int, 
 
     if method == :bayesian
         return _estimate_favar_bayesian(Matrix{T}(X), Matrix{T}(Y_key), r, p,
-            n_draws, burnin, pvn, Y_key_indices, aug_varnames)
+            n_draws, burnin, pvn, Y_key_indices, aug_varnames, rng)
     end
 
     # --- Two-Step Estimation ---
@@ -323,7 +324,8 @@ next state only (Kim–Nelson). Returns the sampled factors (T_obs × r).
 function _favar_ffbs(X_std::AbstractMatrix{T}, Lambda::AbstractMatrix{T},
                      A_lags::Vector{Matrix{T}}, Sigma_eta::AbstractMatrix{T},
                      sigma2_e::AbstractVector{T}, r::Int, p::Int,
-                     drift::AbstractMatrix{T}) where {T<:AbstractFloat}
+                     drift::AbstractMatrix{T},
+                     rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     T_obs, N = size(X_std)
     sd = r * p
 
@@ -371,7 +373,7 @@ function _favar_ffbs(X_std::AbstractMatrix{T}, Lambda::AbstractMatrix{T},
     # Reused per-step standard-normal shock buffer; `randn!` draws from the same global stream
     # as `randn(T, r)`, so the sampled path is unchanged. (#210 box D)
     z_state = Vector{T}(undef, r)
-    randn!(z_state)
+    randn!(rng, z_state)
     F_samp[T_obs, :] = a_filt[T_obs, 1:r] + _favar_state_chol(CT) * z_state
     for t in (T_obs - 1):-1:1
         af = a_filt[t, :]
@@ -384,7 +386,7 @@ function _favar_ffbs(X_std::AbstractMatrix{T}, Lambda::AbstractMatrix{T},
         m_full = af + gain * (F_samp[t+1, :] - (drift[t+1, :] + Fstar * af))
         C_full = Pf - gain * FPf              # sd × sd
         CF = Matrix{T}(C_full[1:r, 1:r])
-        randn!(z_state)
+        randn!(rng, z_state)
         F_samp[t, :] = m_full[1:r] + _favar_state_chol(CF) * z_state
     end
     F_samp
@@ -405,7 +407,8 @@ Algorithm:
 """
 function _estimate_favar_bayesian(X::Matrix{T}, Y_key::Matrix{T}, r::Int, p::Int,
     n_draws::Int, burnin::Int, pvn::Vector{String},
-    Y_key_indices::Vector{Int}, aug_varnames::Vector{String}) where {T<:AbstractFloat}
+    Y_key_indices::Vector{Int}, aug_varnames::Vector{String},
+    rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
 
     T_obs, N = size(X)
     n_key = size(Y_key, 2)
@@ -473,8 +476,8 @@ function _estimate_favar_bayesian(X::Matrix{T}, Y_key::Matrix{T}, r::Int, p::Int
             # Flat-prior marginal: Σ ~ IW(T_eff - k, U'U). Integrating B out of the matrix-normal
             # likelihood shifts the degrees of freedom by k = #regressors/equation (not T_eff).
             nu_sigma = max(T_eff_var - k, n_var + 2)
-            Sigma_curr = _draw_inverse_wishart(nu_sigma, S_post)
-            randn!(Z_Bdraw)
+            Sigma_curr = _draw_inverse_wishart(nu_sigma, S_post, rng)
+            randn!(rng, Z_Bdraw)
             B_curr = B_hat + safe_cholesky(XtX_inv) * Z_Bdraw * safe_cholesky(Sigma_curr)'
 
             # === Block 2: Draw Λ | F, X ===
@@ -501,7 +504,7 @@ function _estimate_favar_bayesian(X::Matrix{T}, Y_key::Matrix{T}, r::Int, p::Int
                 sigma2_e[j] = sigma2_j
 
                 # Draw λ_i from posterior
-                randn!(z_lambda)
+                randn!(rng, z_lambda)
                 Lambda_curr[j, :] = beta_hat + sqrt(sigma2_j) * L_FtF_inv * z_lambda
             end
 
@@ -529,7 +532,7 @@ function _estimate_favar_bayesian(X::Matrix{T}, Y_key::Matrix{T}, r::Int, p::Int
             end
             Sigma_eta = Matrix{T}(Sigma_curr[1:r, 1:r])
             Sigma_eta = T(0.5) * (Sigma_eta + Sigma_eta')
-            F_curr = _favar_ffbs(X_std, Lambda_curr, A_lags, Sigma_eta, sigma2_e, r, p, drift)
+            F_curr = _favar_ffbs(X_std, Lambda_curr, A_lags, Sigma_eta, sigma2_e, r, p, drift, rng)
 
             # === Store draws after burnin ===
             if iter > eff_burnin

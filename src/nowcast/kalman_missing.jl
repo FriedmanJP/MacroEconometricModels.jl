@@ -71,57 +71,16 @@ function _kalman_filter_missing(y::AbstractMatrix{T}, A::AbstractMatrix{T},
     N, T_obs = size(y)
     state_dim = length(x0)
 
-    x_pred = zeros(T, state_dim, T_obs)
-    P_pred = zeros(T, state_dim, state_dim, T_obs)
-    x_filt = zeros(T, state_dim, T_obs)
-    P_filt = zeros(T, state_dim, state_dim, T_obs)
-    loglik = zero(T)
-
-    x_t = copy(x0)
-    P_t = Matrix{T}(P0)
-    warned_nonpd = false
-
-    for t in 1:T_obs
-        # Prediction step
-        x_pred[:, t] = A * x_t
-        P_pred[:, :, t] = A * P_t * A' + Q
-
-        # Handle missing data
-        y_obs, C_obs, R_obs, obs_idx = _miss_data(y[:, t], C, R)
-
-        if isempty(obs_idx)
-            # All observations missing — skip update
-            x_filt[:, t] = x_pred[:, t]
-            P_filt[:, :, t] = P_pred[:, :, t]
-        else
-            # Innovation
-            v_t = y_obs - C_obs * x_pred[:, t]
-            F_t = Symmetric(C_obs * P_pred[:, :, t] * C_obs' + R_obs)
-            F_inv = robust_inv(F_t)
-            K_t = P_pred[:, :, t] * C_obs' * F_inv
-
-            # Update
-            x_filt[:, t] = x_pred[:, t] + K_t * v_t
-            P_filt[:, :, t] = (I(state_dim) - K_t * C_obs) * P_pred[:, :, t]
-
-            # Log-likelihood contribution. Use a robust logdet and ALWAYS add the term:
-            # the old `det(F_t) > 0` gate silently dropped observations whose innovation
-            # covariance was ill-conditioned, biasing the likelihood. `logabsdet` avoids
-            # the overflow of a raw determinant; a non-PD F_t is warned once.
-            n_obs = length(obs_idx)
-            logdet_F, sgn = logabsdet(F_t)
-            if sgn <= 0 && !warned_nonpd
-                @warn "Non-positive-definite innovation covariance in Kalman filter; using log|det| for the log-likelihood."
-                warned_nonpd = true
-            end
-            loglik -= T(0.5) * (n_obs * log(T(2π)) + logdet_F + v_t' * F_inv * v_t)
-        end
-
-        x_t = x_filt[:, t]
-        P_t = P_filt[:, :, t]
-    end
-
-    return x_pred, P_pred, x_filt, P_filt, loglik
+    # Route through the consolidated Kalman kernel (T147/#246). State x_t = A x_{t-1} + η (Q),
+    # obs y_t = C x_t + ν (R); NaN entries are treated as missing (row-dropped per step). The
+    # caller supplies the initial x0/P0 (predict-at-top, x0 = a_{0|0}). The kernel's store fields
+    # are already in this filter's time-last [:,:,t] layout, so they are returned verbatim.
+    # Byte-stable vs the old filter (Joseph replaces (I-KC)P; safe_cholesky + triangular solves
+    # replace robust_inv; the always-add likelihood is unchanged).
+    store = KalmanFilterStore{T}(state_dim, T_obs)
+    loglik = _kalman_filter!(store, y, C, A, Q, Matrix{T}(R);
+                             a0=x0, P0=Matrix{T}(P0), scalar=false)
+    return store.a_pred, store.P_pred, store.a_filt, store.P_filt, loglik
 end
 
 # =============================================================================
@@ -148,33 +107,21 @@ function _kalman_smoother_missing(y::AbstractMatrix{T}, A::AbstractMatrix{T},
     N, T_obs = size(y)
     state_dim = length(x0)
 
-    # Forward pass
-    x_pred, P_pred, x_filt, P_filt, loglik = _kalman_filter_missing(
-        y, A, C, Q, R, x0, P0)
+    # Forward filter (kernel) + RTS smoother with lag-1 cross-cov (T147/#246). Byte-stable vs
+    # the old smoother; kernel store fields stay in this filter's time-last [:,:,t] layout.
+    store = KalmanFilterStore{T}(state_dim, T_obs)
+    loglik = _kalman_filter!(store, y, C, A, Q, Matrix{T}(R);
+                             a0=x0, P0=Matrix{T}(P0), scalar=false)
+    x_smooth, P_smooth, Plag = _rts_smoother(store, A; nlag=1)
 
-    # Backward pass
-    x_smooth = zeros(T, state_dim, T_obs)
-    P_smooth = zeros(T, state_dim, state_dim, T_obs)
+    # Uncentered second moment E[x_t x_{t-1}'] for the EM sufficient statistics:
+    #   PP[:,:,t] = Cov(x_t,x_{t-1}|Y) + x_smooth[t] x_smooth[t-1]'   (t ≥ 2)
+    #   PP[:,:,1] = P_smooth[1] J_0' + x_smooth[1] x0'                (t=1, using the initial x0/P0)
     PP_smooth = zeros(T, state_dim, state_dim, T_obs)
-
-    x_smooth[:, T_obs] = x_filt[:, T_obs]
-    P_smooth[:, :, T_obs] = P_filt[:, :, T_obs]
-
-    for t in (T_obs - 1):-1:1
-        P_pred_inv = robust_inv(P_pred[:, :, t + 1])
-        J_t = P_filt[:, :, t] * A' * P_pred_inv
-
-        x_smooth[:, t] = x_filt[:, t] + J_t * (x_smooth[:, t + 1] - x_pred[:, t + 1])
-        P_smooth[:, :, t] = P_filt[:, :, t] + J_t * (P_smooth[:, :, t + 1] - P_pred[:, :, t + 1]) * J_t'
-
-        # Cross-covariance for EM sufficient statistics
-        PP_smooth[:, :, t + 1] = P_smooth[:, :, t + 1] * J_t' + x_smooth[:, t + 1] * x_smooth[:, t]'
+    for t in 2:T_obs
+        PP_smooth[:, :, t] = Plag[1][:, :, t] + x_smooth[:, t] * x_smooth[:, t-1]'
     end
-
-    # First time step cross-covariance (using initial conditions)
-    P0_mat = Matrix{T}(P0)
-    P_pred_1_inv = robust_inv(P_pred[:, :, 1])
-    J_0 = P0_mat * A' * P_pred_1_inv
+    J_0 = Matrix{T}(P0) * A' * robust_inv(store.P_pred[:, :, 1])
     PP_smooth[:, :, 1] = P_smooth[:, :, 1] * J_0' + x_smooth[:, 1] * x0'
 
     return x_smooth, P_smooth, PP_smooth, loglik
@@ -204,47 +151,13 @@ function _kalman_smoother_lag(y::AbstractMatrix{T}, A::AbstractMatrix{T},
     N, T_obs = size(y)
     state_dim = length(x0)
 
-    # Forward pass
-    x_pred, P_pred, x_filt, P_filt, loglik = _kalman_filter_missing(
-        y, A, C, Q, R, x0, P0)
-
-    # Standard backward smoother
-    x_smooth = zeros(T, state_dim, T_obs)
-    P_smooth = zeros(T, state_dim, state_dim, T_obs)
-    J = zeros(T, state_dim, state_dim, T_obs)
-
-    x_smooth[:, T_obs] = x_filt[:, T_obs]
-    P_smooth[:, :, T_obs] = P_filt[:, :, T_obs]
-
-    for t in (T_obs - 1):-1:1
-        P_pred_inv = robust_inv(P_pred[:, :, t + 1])
-        J[:, :, t] = P_filt[:, :, t] * A' * P_pred_inv
-        x_smooth[:, t] = x_filt[:, t] + J[:, :, t] * (x_smooth[:, t + 1] - x_pred[:, t + 1])
-        P_smooth[:, :, t] = P_filt[:, :, t] + J[:, :, t] * (P_smooth[:, :, t + 1] - P_pred[:, :, t + 1]) * J[:, :, t]'
-    end
-
-    # Compute lagged cross-covariances
-    # Plag[j][s,s',t] = Cov(x_t, x_{t-j})
-    Plag = Vector{Array{T,3}}(undef, k)
-    for j in 1:k
-        Plag[j] = zeros(T, state_dim, state_dim, T_obs)
-    end
-
-    # Lag 1: P_{t,t-1|T} = P_{t|T} * J_{t-1}'
-    # But we also need the full recursion for higher lags
-    for t in 2:T_obs
-        Plag[1][:, :, t] = P_smooth[:, :, t] * J[:, :, t - 1]'
-    end
-
-    # Higher lags: Cov(x_t, x_{t-j}|Y_T) = Cov(x_t, x_{t-j+1}|Y_T) * J_{t-j}'. Conditional on
-    # Y_T the smoothed states are backward-Markov: x_{t-j} = E[x_{t-j}|Y_T] +
-    # J_{t-j}(x_{t-j+1} - E[x_{t-j+1}|Y_T]) + noise independent of the future, so the lag-j
-    # cross-covariance is the lag-(j-1) one right-multiplied by J_{t-j}'.
-    for j in 2:k
-        for t in (j + 1):T_obs
-            Plag[j][:, :, t] = Plag[j - 1][:, :, t] * J[:, :, t - j]'
-        end
-    end
+    # Forward filter (kernel) + RTS smoother with lag-k cross-covariances (T147/#246). The
+    # kernel's _rts_smoother returns exactly the centered Cov(x_t, x_{t-j}|Y_T) this news
+    # decomposition (Bańbura & Modugno 2014) consumes. Byte-stable vs the old smoother.
+    store = KalmanFilterStore{T}(state_dim, T_obs)
+    loglik = _kalman_filter!(store, y, C, A, Q, Matrix{T}(R);
+                             a0=x0, P0=Matrix{T}(P0), scalar=false)
+    x_smooth, P_smooth, Plag = _rts_smoother(store, A; nlag=k)
 
     return x_smooth, P_smooth, Plag, loglik
 end

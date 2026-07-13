@@ -32,12 +32,13 @@ function fevd(model::VARModel{T}, horizon::Int;
     method::Symbol=:cholesky, check_func=nothing, narrative_check=nothing,
     shock_names::Union{Nothing,Vector{String}}=nothing,
     transition_var::Union{Nothing,AbstractVector}=nothing,
-    regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing
+    regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing,
+    rng::AbstractRNG=Random.default_rng()
 ) where {T<:AbstractFloat}
     _validate_data(model.Sigma, "Sigma")
     _validate_data(model.B, "B")
     irf_result = irf(model, horizon; method, check_func, narrative_check,
-                     transition_var=transition_var, regime_indicator=regime_indicator)
+                     transition_var=transition_var, regime_indicator=regime_indicator, rng=rng)
     # The impact matrix P = IRF[1,:,:] = chol(Σ)·Q; the squared-IRF FEVD accumulation is a
     # proper variance decomposition only when P is Σ-orthonormal (P*P' = Σ ⇔ Q*Q' = I).
     _check_fevd_orthogonality(@view(irf_result.values[1, :, :]), model.Sigma; method=method)
@@ -155,7 +156,10 @@ function fevd(post::BVARPosterior, horizon::Int;
     fevd_q, fevd_m = compute_posterior_quantiles(all_fevds, q_vec; threaded=use_threaded, central=point_estimate)
 
     snames = isnothing(shock_names) ? post.varnames : shock_names
-    BayesianFEVD{ET}(fevd_q, fevd_m, horizon, post.varnames, snames, q_vec)
+    # MC honesty (#244): process_posterior_samples drops non-stationary / unidentified draws.
+    n_req = post.n_draws
+    BayesianFEVD{ET}(fevd_q, fevd_m, horizon, post.varnames, snames, q_vec,
+                     n_req, samples, n_req - samples)
 end
 
 # Deprecated wrapper for old (chain, p, n, horizon) signature

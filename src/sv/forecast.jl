@@ -21,7 +21,8 @@ h_{T+1}, ..., h_{T+h} and returns quantiles of exp(hₜ).
 - `h`: Forecast horizon
 - `conf_level`: Confidence level for intervals (default 0.95)
 """
-function forecast(m::SVModel{T}, h::Int; conf_level::Real=0.95) where {T}
+function forecast(m::SVModel{T}, h::Int; conf_level::Real=0.95,
+                  rng::AbstractRNG=Random.default_rng()) where {T}
     conf_level = T(conf_level)
     h < 1 && throw(ArgumentError("Forecast horizon must be ≥ 1"))
 
@@ -39,7 +40,7 @@ function forecast(m::SVModel{T}, h::Int; conf_level::Real=0.95) where {T}
 
         h_prev = h_last
         for t in 1:h
-            h_t = mu + phi * (h_prev - mu) + sigma_eta * randn(T)
+            h_t = mu + phi * (h_prev - mu) + sigma_eta * randn(rng, T)
             paths[s, t] = exp(h_t)
             h_prev = h_t
         end

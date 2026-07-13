@@ -44,14 +44,15 @@ function irf(model::VARModel{T}, horizon::Int;
     stationary_only::Bool=false,
     shock_names::Union{Nothing,Vector{String}}=nothing,
     transition_var::Union{Nothing,AbstractVector}=nothing,
-    regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing
+    regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing,
+    rng::AbstractRNG=Random.default_rng()
 ) where {T<:AbstractFloat}
 
     _validate_data(model.Sigma, "Sigma")
     _validate_data(model.B, "B")
     n = nvars(model)
     Q = compute_Q(model, method, horizon, check_func, narrative_check;
-                  transition_var=transition_var, regime_indicator=regime_indicator)
+                  transition_var=transition_var, regime_indicator=regime_indicator, rng=rng)
     point_irf = compute_irf(model, Q, horizon)
 
     ci_lower, ci_upper = zeros(T, horizon, n, n), zeros(T, horizon, n, n)
@@ -59,7 +60,8 @@ function irf(model::VARModel{T}, horizon::Int;
     if ci_type != :none
         sim_irfs = _simulate_irfs(model, method, horizon, check_func, narrative_check, ci_type, reps;
                                   stationary_only=stationary_only,
-                                  transition_var=transition_var, regime_indicator=regime_indicator)
+                                  transition_var=transition_var, regime_indicator=regime_indicator,
+                                  rng=rng)
         alpha = (1 - T(conf_level)) / 2
         @inbounds for h in 1:horizon, v in 1:n, s in 1:n
             d = @view sim_irfs[:, h, v, s]
@@ -78,7 +80,8 @@ function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
     check_func, narrative_check, ci_type::Symbol, reps::Int;
     stationary_only::Bool=false,
     transition_var::Union{Nothing,AbstractVector}=nothing,
-    regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing
+    regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing,
+    rng::AbstractRNG=Random.default_rng()
 ) where {T<:AbstractFloat}
     n, p = nvars(model), model.p
 
@@ -87,85 +90,93 @@ function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
         Y_init = model.Y[1:p, :]
 
         if stationary_only
-            # Sequential loop with stationarity check and rejection
+            # Rejection sampling with DETERMINISTIC slot assignment (C-02): seed each of the
+            # 1:max_iter iterations by its index, write each passing draw into a staging buffer
+            # at its iteration index, then keep the first `reps` passing draws IN INDEX ORDER.
+            # Result is invariant to thread scheduling / JULIA_NUM_THREADS.
             max_iter = 10 * reps
-            sim_irfs = zeros(T, reps, horizon, n, n)
-            valid = Threads.Atomic{Int}(0)
-            iter = Threads.Atomic{Int}(0)
-
-            Threads.@threads for _ in 1:max_iter
-                Threads.atomic_add!(iter, 1)
-                v = valid[]
-                v >= reps && continue
+            staging = zeros(T, max_iter, horizon, n, n)
+            passed = fill(false, max_iter)
+            seeds = rand(rng, UInt64, max_iter)
+            Threads.@threads for it in 1:max_iter
+                local_rng = Random.MersenneTwister(seeds[it])
                 _suppress_warnings() do
-                    U_boot = U[rand(1:T_eff, T_eff), :]
+                    U_boot = U[rand(local_rng, 1:T_eff, T_eff), :]
                     Y_boot = _simulate_var(Y_init, model.B, U_boot, T_eff + p)
                     m = estimate_var(Y_boot, p; check_stability=false)
                     F = companion_matrix(m.B, n, p)
-                    max_mod = maximum(abs.(eigvals(F)))
-                    max_mod >= one(T) && return  # reject non-stationary draw
-                    idx = Threads.atomic_add!(valid, 1) + 1
-                    idx > reps && return
+                    maximum(abs.(eigvals(F))) >= one(T) && return  # reject non-stationary draw
                     Q = compute_Q(m, method, horizon, check_func, narrative_check;
-                                  transition_var=transition_var, regime_indicator=regime_indicator)
-                    sim_irfs[idx, :, :, :] = compute_irf(m, Q, horizon)
+                                  transition_var=transition_var, regime_indicator=regime_indicator, rng=local_rng)
+                    staging[it, :, :, :] = compute_irf(m, Q, horizon)
+                    passed[it] = true
                 end
             end
-            n_valid = min(valid[], reps)
-            n_valid < reps && @warn "Only $n_valid/$reps stationary bootstrap draws obtained after $(iter[]) iterations"
-            return sim_irfs[1:max(n_valid, 1), :, :, :]
+            kept = findall(passed)
+            n_valid = min(length(kept), reps)
+            n_valid < reps && @warn "Only $n_valid/$reps stationary bootstrap draws obtained after $max_iter iterations"
+            sim_irfs = zeros(T, max(n_valid, 1), horizon, n, n)
+            @inbounds for j in 1:n_valid
+                sim_irfs[j, :, :, :] = staging[kept[j], :, :, :]
+            end
+            return sim_irfs
         else
             sim_irfs = zeros(T, reps, horizon, n, n)
+            seeds = rand(rng, UInt64, reps)
             Threads.@threads for r in 1:reps
+                local_rng = Random.MersenneTwister(seeds[r])
                 _suppress_warnings() do
-                    U_boot = U[rand(1:T_eff, T_eff), :]
+                    U_boot = U[rand(local_rng, 1:T_eff, T_eff), :]
                     Y_boot = _simulate_var(Y_init, model.B, U_boot, T_eff + p)
                     m = estimate_var(Y_boot, p; check_stability=false)
                     Q = compute_Q(m, method, horizon, check_func, narrative_check;
-                                  transition_var=transition_var, regime_indicator=regime_indicator)
+                                  transition_var=transition_var, regime_indicator=regime_indicator, rng=local_rng)
                     sim_irfs[r, :, :, :] = compute_irf(m, Q, horizon)
                 end
             end
             return sim_irfs
         end
     elseif ci_type == :theoretical
-        sim_irfs = zeros(T, reps, horizon, n, n)
         _, X = construct_var_matrices(model.Y, p)
         L_V, L_S = safe_cholesky(robust_inv(X'X)), safe_cholesky(model.Sigma)
         k = ncoefs(model)
 
         if stationary_only
             max_iter = 10 * reps
-            valid = Threads.Atomic{Int}(0)
-            iter = Threads.Atomic{Int}(0)
-
-            Threads.@threads for _ in 1:max_iter
-                Threads.atomic_add!(iter, 1)
-                v = valid[]
-                v >= reps && continue
+            staging = zeros(T, max_iter, horizon, n, n)
+            passed = fill(false, max_iter)
+            seeds = rand(rng, UInt64, max_iter)
+            Threads.@threads for it in 1:max_iter
+                local_rng = Random.MersenneTwister(seeds[it])
                 _suppress_warnings() do
-                    B_star = model.B + L_V * randn(T, k, n) * L_S'
+                    B_star = model.B + L_V * randn(local_rng, T, k, n) * L_S'
                     F = companion_matrix(B_star, n, p)
-                    max_mod = maximum(abs.(eigvals(F)))
-                    max_mod >= one(T) && return  # reject non-stationary draw
-                    idx = Threads.atomic_add!(valid, 1) + 1
-                    idx > reps && return
+                    maximum(abs.(eigvals(F))) >= one(T) && return  # reject non-stationary draw
                     m = VARModel(zeros(T, 0, n), p, B_star, zeros(T, 0, n), model.Sigma, zero(T), zero(T), zero(T))
                     Q = compute_Q(m, method, horizon, check_func, narrative_check;
-                                  transition_var=transition_var, regime_indicator=regime_indicator)
-                    sim_irfs[idx, :, :, :] = compute_irf(m, Q, horizon)
+                                  transition_var=transition_var, regime_indicator=regime_indicator, rng=local_rng)
+                    staging[it, :, :, :] = compute_irf(m, Q, horizon)
+                    passed[it] = true
                 end
             end
-            n_valid = min(valid[], reps)
-            n_valid < reps && @warn "Only $n_valid/$reps stationary theoretical draws obtained after $(iter[]) iterations"
-            return sim_irfs[1:max(n_valid, 1), :, :, :]
+            kept = findall(passed)
+            n_valid = min(length(kept), reps)
+            n_valid < reps && @warn "Only $n_valid/$reps stationary theoretical draws obtained after $max_iter iterations"
+            sim_irfs = zeros(T, max(n_valid, 1), horizon, n, n)
+            @inbounds for j in 1:n_valid
+                sim_irfs[j, :, :, :] = staging[kept[j], :, :, :]
+            end
+            return sim_irfs
         else
+            sim_irfs = zeros(T, reps, horizon, n, n)
+            seeds = rand(rng, UInt64, reps)
             Threads.@threads for r in 1:reps
+                local_rng = Random.MersenneTwister(seeds[r])
                 _suppress_warnings() do
-                    B_star = model.B + L_V * randn(T, k, n) * L_S'
+                    B_star = model.B + L_V * randn(local_rng, T, k, n) * L_S'
                     m = VARModel(zeros(T, 0, n), p, B_star, zeros(T, 0, n), model.Sigma, zero(T), zero(T), zero(T))
                     Q = compute_Q(m, method, horizon, check_func, narrative_check;
-                                  transition_var=transition_var, regime_indicator=regime_indicator)
+                                  transition_var=transition_var, regime_indicator=regime_indicator, rng=local_rng)
                     sim_irfs[r, :, :, :] = compute_irf(m, Q, horizon)
                 end
             end
@@ -249,7 +260,10 @@ function irf(post::BVARPosterior, horizon::Int;
     irf_q, irf_m = compute_posterior_quantiles(all_irfs, q_vec; threaded=use_threaded, central=point_estimate)
 
     snames = isnothing(shock_names) ? post.varnames : shock_names
-    BayesianImpulseResponse{ET}(irf_q, irf_m, horizon, post.varnames, snames, q_vec, all_irfs)
+    # MC honesty (#244): process_posterior_samples drops non-stationary / unidentified draws.
+    n_req = post.n_draws
+    BayesianImpulseResponse{ET}(irf_q, irf_m, horizon, post.varnames, snames, q_vec, all_irfs,
+                                n_req, samples, n_req - samples)
 end
 
 # Deprecated wrapper for old (chain, p, n, horizon) signature
@@ -383,6 +397,8 @@ function cumulative_irf(irf_result::BayesianImpulseResponse{T}) where {T<:Abstra
         cum_quantiles = cumsum(irf_result.quantiles, dims=1)
     end
 
+    # Cumulation is a deterministic transform of the same draws — propagate the MC counts.
     BayesianImpulseResponse{T}(cum_quantiles, cum_pe, irf_result.horizon,
-                               irf_result.variables, irf_result.shocks, irf_result.quantile_levels)
+                               irf_result.variables, irf_result.shocks, irf_result.quantile_levels,
+                               nothing, irf_result.n_requested, irf_result.n_effective, irf_result.n_failed)
 end

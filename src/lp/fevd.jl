@@ -54,7 +54,8 @@ function lp_fevd(slp::StructuralLP{T}, horizon::Int;
                  bias_correct::Bool=true,
                  n_boot::Int=500,
                  conf_level::Real=0.95,
-                 var_lags::Union{Nothing,Int}=nothing) where {T<:AbstractFloat}
+                 var_lags::Union{Nothing,Int}=nothing,
+                 rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
 
     @assert method ∈ (:r2, :lp_a, :lp_b) "method must be :r2, :lp_a, or :lp_b"
 
@@ -72,6 +73,11 @@ function lp_fevd(slp::StructuralLP{T}, horizon::Int;
     ci_lower = zeros(T, n, n, H)
     ci_upper = zeros(T, n, n, H)
 
+    # MC honesty counts (#244): every (shock, response) cell runs its own n_boot bootstrap;
+    # aggregate the total draws attempted and dropped across all cells.
+    n_req_total = 0
+    n_fail_total = 0
+
     for shock in 1:n
         lp_model = slp.lp_models[shock]
         shock_eps = eps_mat[:, shock]
@@ -86,10 +92,12 @@ function lp_fevd(slp::StructuralLP{T}, horizon::Int;
 
             # Step 2: Bootstrap bias correction and CIs
             if n_boot > 0
-                bc, se_h, ci_lo, ci_hi = _lp_fevd_bootstrap(
+                bc, se_h, ci_lo, ci_hi, n_fail = _lp_fevd_bootstrap(
                     shock_eps, Y_eff[:, resp], H, lp_model.lags,
-                    raw_vals, n_boot, T(conf_level), var_lags)
+                    raw_vals, n_boot, T(conf_level), var_lags, rng)
 
+                n_req_total += n_boot
+                n_fail_total += n_fail
                 bias_corrected[resp, shock, :] = bias_correct ? bc : raw_vals
                 se_arr[resp, shock, :] = se_h
                 ci_lower[resp, shock, :] = ci_lo
@@ -100,9 +108,16 @@ function lp_fevd(slp::StructuralLP{T}, horizon::Int;
         end
     end
 
+    n_eff_total = n_req_total - n_fail_total
+    if n_req_total > 0 && n_eff_total < n_req_total ÷ 2
+        @warn "LP-FEVD bootstrap: only $n_eff_total of $n_req_total draws usable " *
+              "($n_fail_total dropped); confidence intervals are unreliable."
+    end
+
     LPFEVD{T}(proportions, bias_corrected, se_arr, ci_lower, ci_upper,
               method, H, n_boot, T(conf_level), bias_correct,
-              slp.var_model.varnames, slp.irf.shocks)
+              slp.var_model.varnames, slp.irf.shocks,
+              n_req_total, n_eff_total, n_fail_total)
 end
 
 """
@@ -293,7 +308,8 @@ function _lp_fevd_bootstrap(shock::Vector{T}, response::Vector{T},
                              H::Int, lp_lags::Int,
                              raw_vals::Vector{T},
                              n_boot::Int, conf_level::T,
-                             var_lags_opt::Union{Nothing,Int}) where {T}
+                             var_lags_opt::Union{Nothing,Int},
+                             rng::AbstractRNG=Random.default_rng()) where {T}
     T_obs = length(shock)
 
     # 1. Fit bivariate VAR on w = (z, y)
@@ -319,11 +335,12 @@ function _lp_fevd_bootstrap(shock::Vector{T}, response::Vector{T},
 
     # 3. Bootstrap: simulate from VAR, compute LP-FEVD
     boot_vals = fill(T(NaN), n_boot, H)
+    n_failed = 0                          # dropped draws (#244 MC honesty count)
 
     for b in 1:n_boot
         try
             _suppress_warnings() do
-                W_sim = _simulate_from_var(var_model, T_obs)
+                W_sim = _simulate_from_var(var_model, T_obs; rng=rng)
                 z_sim = W_sim[:, 1]
                 y_sim = W_sim[:, 2]
 
@@ -331,8 +348,11 @@ function _lp_fevd_bootstrap(shock::Vector{T}, response::Vector{T},
                     boot_vals[b, h] = _scalar_lp_fevd_r2(z_sim, y_sim, h, lp_lags)
                 end
             end
-        catch
-            # Failed bootstrap draw — leave as NaN, will be filtered
+        catch e
+            # A recoverable failed draw (singular system, non-convergence) is left as NaN and
+            # filtered; a programming error (MethodError/BoundsError/…) propagates (T145/#244).
+            _is_recoverable_draw_error(e) || rethrow(e)
+            n_failed += 1
             continue
         end
     end
@@ -365,7 +385,7 @@ function _lp_fevd_bootstrap(shock::Vector{T}, response::Vector{T},
         ci_hi[h] = clamp(bc[h] + q_hi, zero(T), one(T))
     end
 
-    bc, se_arr, ci_lo, ci_hi
+    bc, se_arr, ci_lo, ci_hi, n_failed
 end
 
 # =============================================================================
@@ -374,7 +394,8 @@ end
 
 """Simulate T_sim observations from a VAR model with burn-in."""
 function _simulate_from_var(model::VARModel{T}, T_sim::Int;
-                             burn::Int=100) where {T}
+                             burn::Int=100,
+                             rng::AbstractRNG=Random.default_rng()) where {T}
     n = nvars(model)
     p = model.p
     B = model.B       # (1+n*p) × n
@@ -393,7 +414,7 @@ function _simulate_from_var(model::VARModel{T}, T_sim::Int;
                 x[(l-1)*n + v + 1] = Y[t-l, v]
             end
         end
-        noise = L * randn(T, n)
+        noise = L * randn(rng, T, n)
         for v in 1:n
             Y[t, v] = dot(@view(B[:, v]), x) + noise[v]
         end

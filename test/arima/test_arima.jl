@@ -1166,6 +1166,11 @@ end
         @test all(isfinite, res) && all(isfinite, fit) && isfinite(ll)
     end
 
+    # Loglik-only MLE fast path (kernel with store=nothing) agrees with the full filter (T147/#246).
+    for (c, phi, theta, sigma2) in cases
+        @test M._arma_loglik(y, c, phi, theta, sigma2) ≈ M._kalman_filter_arma(y, c, phi, theta, sigma2)[1]
+    end
+
     # End-to-end: a fitted ARIMA is unaffected (loglik reproduces on a fixed seed).
     Random.seed!(314)
     yr = 0.1 .+ cumsum(0.5 .* randn(200) .+ 0.3 .* [0.0; randn(199)])

@@ -115,49 +115,24 @@ function _kalman_smoother_dfm(Y::AbstractMatrix{T}, Λ::AbstractMatrix{T}, A::Ve
     # Initialize from unconditional distribution
     a0, P0 = zeros(T, state_dim), _compute_unconditional_covariance(T_mat, Q, state_dim)
 
-    # Forward pass: Kalman filter
-    a_filt = zeros(T, T_obs, state_dim)
-    P_filt = zeros(T, T_obs, state_dim, state_dim)
-    a_pred = zeros(T, T_obs, state_dim)
-    P_pred = zeros(T, T_obs, state_dim, state_dim)
-    loglik, a_t, P_t = zero(T), a0, P0
+    # Forward filter (kernel, multivariate) + RTS smoother with lag-1 cross-covariance
+    # (T147/#246). The DFM predicts-at-top with a0 = 0 (a_{0|0}); the existing unconditional
+    # init is kept, so smoothed states / loglik are byte-stable vs the pre-#246 filter (Joseph
+    # replaces the (I-KZ)P shorthand; safe_cholesky + triangular solves replace robust_inv;
+    # always-add replaces the det_F>0 gate — all agree on the well-conditioned stationary path).
+    # Kernel outputs are time-last [:,:,t]; transpose them back to the EM's time-first [t,:,:]
+    # layout at the wrapper boundary so `_em_mstep` is unchanged.
+    store = KalmanFilterStore{T}(state_dim, T_obs)
+    loglik = _kalman_filter!(store, permutedims(Y), Z, T_mat, Q, Matrix{T}(H);
+                             a0=a0, P0=P0, scalar=false)
+    a_sm, P_sm, Plag = _rts_smoother(store, T_mat; nlag=1)
 
-    for t in 1:T_obs
-        # Prediction step
-        a_pred[t, :] = T_mat * a_t
-        P_pred[t, :, :] = T_mat * P_t * T_mat' + Q
-
-        # Update step
-        v_t = Y[t, :] - Z * a_pred[t, :]
-        F_t = Symmetric(Z * P_pred[t, :, :] * Z' + H)
-        F_inv = robust_inv(F_t)
-        K_t = P_pred[t, :, :] * Z' * F_inv
-
-        a_filt[t, :] = a_pred[t, :] + K_t * v_t
-        P_filt[t, :, :] = (I(state_dim) - K_t * Z) * P_pred[t, :, :]
-
-        # Log-likelihood contribution
-        det_F = det(F_t)
-        det_F > 0 && (loglik -= 0.5 * (N * log(2π) + log(det_F) + v_t' * F_inv * v_t))
-        a_t, P_t = a_filt[t, :], P_filt[t, :, :]
-    end
-
-    # Backward pass: Kalman smoother
-    a_smooth = zeros(T, T_obs, state_dim)
-    P_smooth = zeros(T, T_obs, state_dim, state_dim)
-    Pt_smooth = zeros(T, T_obs-1, state_dim, state_dim)
-
-    a_smooth[T_obs, :], P_smooth[T_obs, :, :] = a_filt[T_obs, :], P_filt[T_obs, :, :]
-
-    for t in (T_obs-1):-1:1
-        P_pred_inv = robust_inv(P_pred[t+1, :, :])
-        J_t = P_filt[t, :, :] * T_mat' * P_pred_inv
-        a_smooth[t, :] = a_filt[t, :] + J_t * (a_smooth[t+1, :] - a_pred[t+1, :])
-        P_smooth[t, :, :] = P_filt[t, :, :] + J_t * (P_smooth[t+1, :, :] - P_pred[t+1, :, :]) * J_t'
-        # Exact lag-one smoother cross-covariance Cov(α_{t+1}, α_t | Y) = P_smooth[t+1]·J_t'
-        # (the loop already guarantees t ≤ T_obs-1). The old J_t·P_smooth[t+1] transposed the
-        # time order, corrupting the DFM EM VAR/Σ_η updates that consume it.
-        Pt_smooth[t, :, :] = P_smooth[t+1, :, :] * J_t'
+    a_smooth = permutedims(a_sm)                    # state_dim×T_obs → T_obs×state_dim
+    P_smooth = permutedims(P_sm, (3, 1, 2))         # sd×sd×T_obs → T_obs×sd×sd
+    Pt_smooth = zeros(T, T_obs - 1, state_dim, state_dim)
+    @inbounds for t in 1:(T_obs-1)
+        # OLD Pt_smooth[t] = Cov(α_{t+1}, α_t | Y) = kernel lag-1 Plag[1][:,:,t+1]
+        Pt_smooth[t, :, :] = Plag[1][:, :, t+1]
     end
 
     a_smooth, P_smooth, Pt_smooth, loglik
@@ -259,7 +234,8 @@ Returns (f_lo, f_hi, o_lo, o_hi, f_se, o_se).
 """
 function _factor_forecast_bootstrap(F_last::Vector{Vector{T}}, A::Vector{<:AbstractMatrix{T}},
     resids::AbstractMatrix{T}, Sigma_e::AbstractMatrix{T}, Lambda::AbstractMatrix{T},
-    h::Int, r::Int, p::Int, n_boot::Int, conf_level::T) where {T<:AbstractFloat}
+    h::Int, r::Int, p::Int, n_boot::Int, conf_level::T,
+    rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
 
     N = size(Lambda, 1)
     T_resid = size(resids, 1)
@@ -272,9 +248,9 @@ function _factor_forecast_bootstrap(F_last::Vector{Vector{T}}, A::Vector{<:Abstr
         for step in 1:h
             # VAR forecast with resampled innovation
             F_h = sum(A[lag] * (step - lag >= 1 ? F_boot[b, step - lag, :] : F_last[lag - step + 1]) for lag in 1:p)
-            boot_idx = rand(1:T_resid)
+            boot_idx = rand(rng, 1:T_resid)
             F_boot[b, step, :] = F_h + resids[boot_idx, :]
-            X_boot[b, step, :] = Lambda * F_boot[b, step, :] + L_e * randn(T, N)
+            X_boot[b, step, :] = Lambda * F_boot[b, step, :] + L_e * randn(rng, T, N)
         end
     end
 

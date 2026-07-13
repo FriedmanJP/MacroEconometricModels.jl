@@ -367,7 +367,7 @@ fc.observables_lower # h×N lower CI bounds
 """
 function forecast(m::DynamicFactorModel{T}, h::Int; ci_method::Symbol=:theoretical,
     conf_level::Real=0.95, n_boot::Int=1000,
-    ci::Bool=false) where {T}
+    ci::Bool=false, rng::AbstractRNG=Random.default_rng()) where {T}
 
     h < 1 && throw(ArgumentError("h must be ≥ 1"))
 
@@ -422,7 +422,7 @@ function forecast(m::DynamicFactorModel{T}, h::Int; ci_method::Symbol=:theoretic
         factor_resids = m.factor_residuals
         Sigma_e = m.Sigma_e
         f_lo, f_hi, o_lo, o_hi, f_se, o_se = _factor_forecast_bootstrap(
-            F_last, m.A, factor_resids, Sigma_e, m.loadings, h, r, p, n_boot, conf_T)
+            F_last, m.A, factor_resids, Sigma_e, m.loadings, h, r, p, n_boot, conf_T, rng)
 
         if m.standardized
             _unstandardize_factor_forecast!(X_fc, o_lo, o_hi, o_se, m.X)
@@ -439,8 +439,8 @@ function forecast(m::DynamicFactorModel{T}, h::Int; ci_method::Symbol=:theoretic
     for sim in 1:n_sim
         for step in 1:h
             F_h = sum(m.A[lag] * (step - lag >= 1 ? F_sims[sim, step - lag, :] : F_last[lag - step + 1]) for lag in 1:p)
-            F_sims[sim, step, :] = F_h + L_eta * randn(T, r)
-            X_sims[sim, step, :] = m.loadings * F_sims[sim, step, :] + L_e * randn(T, N)
+            F_sims[sim, step, :] = F_h + L_eta * randn(rng, T, r)
+            X_sims[sim, step, :] = m.loadings * F_sims[sim, step, :] + L_e * randn(rng, T, N)
         end
     end
 

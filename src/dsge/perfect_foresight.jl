@@ -32,7 +32,8 @@ Uses NonlinearSolve.jl as the default Newton solver with block-tridiagonal spars
 - `T_periods::Int=100` — number of simulation periods
 - `shock_path::Matrix` — T_periods × n_exog matrix of shock realizations
 - `max_iter::Int=100` — Newton iteration limit
-- `tol::Real=1e-8` — convergence tolerance (max abs residual)
+- `tol::Real=1e-8` — convergence tolerance (max abs residual); default is `default_abstol(Float64)`
+- `abstol::Real=tol` — absolute residual gate passed to the solver; overrides `tol` for the convergence test
 - `constraints::Vector{<:DSGEConstraint}` — variable bounds and nonlinear inequalities
 - `solver::Symbol` — `:nonlinearsolve` (default), `:nlopt` (SLSQP), `:ipopt` (NLP), or `:path` (MCP); auto-detected
 - `algorithm` — NonlinearSolve.jl algorithm (default: `NewtonRaphson()`); passed through to chosen backend
@@ -41,7 +42,8 @@ function perfect_foresight(spec::DSGESpec{FT};
         T_periods::Int=100,
         shock_path::Union{Nothing,AbstractMatrix}=nothing,
         max_iter::Int=100,
-        tol::Real=1e-8,
+        tol::Real=default_abstol(Float64),
+        abstol::Real=tol,
         constraints::Vector=DSGEConstraint[],
         solver::Union{Nothing,Symbol}=nothing,
         algorithm=nothing) where {FT<:AbstractFloat}
@@ -75,7 +77,7 @@ function perfect_foresight(spec::DSGESpec{FT};
                     "Use solver=:nlopt (default) or solver=:ipopt for nonlinear inequality constraints."))
             lower, upper = _extract_bounds(spec, constraints)
             pf = _nonlinearsolve_perfect_foresight(spec, T_periods, shocks;
-                        max_iter=max_iter, tol=tol, algorithm=algorithm)
+                        max_iter=max_iter, tol=tol, abstol=abstol, algorithm=algorithm)
             # Check if bounds are violated in the unconstrained solution
             bounds_ok = true
             for t in 1:T_periods, i in 1:n
@@ -89,7 +91,7 @@ function perfect_foresight(spec::DSGESpec{FT};
             bounds_ok && return pf
             # Escalate to projected Newton (always available)
             return _projected_newton_pf(spec, T_periods, shocks, lower, upper;
-                        max_iter=max_iter, tol=tol)
+                        max_iter=max_iter, tol=tol, abstol=abstol)
         elseif chosen == :nlopt
             return _nlopt_perfect_foresight(spec, T_periods, shocks, constraints;
                         algorithm=algorithm)
@@ -111,7 +113,7 @@ function perfect_foresight(spec::DSGESpec{FT};
 
     # Unconstrained: use NonlinearSolve
     return _nonlinearsolve_perfect_foresight(spec, T_periods, shocks;
-                max_iter=max_iter, tol=tol, algorithm=algorithm)
+                max_iter=max_iter, tol=tol, abstol=abstol, algorithm=algorithm)
 end
 
 """Warn when a perfect-foresight path has not returned to the steady state by the terminal
@@ -140,7 +142,7 @@ sparse system. Default algorithm is `NewtonRaphson()`.
 """
 function _nonlinearsolve_perfect_foresight(spec::DSGESpec{FT}, T_periods::Int,
         shocks::Matrix{FT};
-        max_iter::Int=100, tol::Real=1e-8, algorithm=nothing) where {FT<:AbstractFloat}
+        max_iter::Int=100, tol::Real=1e-8, abstol::Real=tol, algorithm=nothing) where {FT<:AbstractFloat}
 
     n = spec.n_endog
     N = T_periods * n  # total unknowns
@@ -176,7 +178,7 @@ function _nonlinearsolve_perfect_foresight(spec::DSGESpec{FT}, T_periods::Int,
     prob = NonlinearSolve.NonlinearProblem(nlfn, x0, nothing)
 
     alg = algorithm !== nothing ? algorithm : NonlinearSolve.NewtonRaphson()
-    sol = NonlinearSolve.solve(prob, alg; abstol=FT(tol), maxiters=max_iter)
+    sol = NonlinearSolve.solve(prob, alg; abstol=FT(abstol), maxiters=max_iter)
 
     converged = NonlinearSolve.SciMLBase.successful_retcode(sol.retcode)
     if !converged
@@ -225,7 +227,7 @@ Newton step, then clamps to bounds. Preserves O(T·n) sparsity structure.
 """
 function _projected_newton_pf(spec::DSGESpec{FT}, T_periods::Int,
         shocks::Matrix{FT}, lower::Vector{FT}, upper::Vector{FT};
-        max_iter::Int=100, tol::Real=1e-8) where {FT<:AbstractFloat}
+        max_iter::Int=100, tol::Real=1e-8, abstol::Real=tol) where {FT<:AbstractFloat}
 
     n = spec.n_endog
     N = T_periods * n
@@ -279,7 +281,7 @@ function _projected_newton_pf(spec::DSGESpec{FT}, T_periods::Int,
             x_trial .= clamp.(x .+ α .* d, lower_stacked, upper_stacked)
             _pf_residual!(F_trial, x_trial, spec, shocks, T_periods)
             ncp_new = _ncp_residual(x_trial, F_trial)
-            if ncp_new < ncp_old || ncp_new < FT(tol)
+            if ncp_new < ncp_old || ncp_new < FT(abstol)
                 break
             end
             α *= FT(0.5)
@@ -288,7 +290,7 @@ function _projected_newton_pf(spec::DSGESpec{FT}, T_periods::Int,
         x .= clamp.(x .+ α .* d, lower_stacked, upper_stacked)
         _pf_residual!(F, x, spec, shocks, T_periods)
 
-        if _ncp_residual(x, F) < FT(tol)
+        if _ncp_residual(x, F) < FT(abstol)
             converged = true
             break
         end
