@@ -218,3 +218,56 @@ StatsAPI.predict(m::NowcastBridge) = m.X_sm
 StatsAPI.nobs(m::NowcastDFM) = size(m.data, 1)
 StatsAPI.nobs(m::NowcastBVAR) = size(m.data, 1)
 StatsAPI.nobs(m::NowcastBridge) = size(m.data, 1)
+
+# =============================================================================
+# NowcastForecast — display wrapper for forecast() output (S3/T167)
+# =============================================================================
+
+"""
+    NowcastForecast{T}
+
+Wraps a nowcast forecast so the result has a `show`/`report` display (the headline
+nowcast value is otherwise invisible). `values` is a length-`h` `Vector` when a
+`target_var` is given, else an `h × N` `Matrix`. The wrapper forwards
+`size`/`length`/`getindex`/`iterate` to `values`, so it behaves like the underlying array
+for existing numeric consumers.
+"""
+struct NowcastForecast{T<:AbstractFloat}
+    values::Union{Vector{T},Matrix{T}}
+    h::Int
+    target_var::Union{Int,Nothing}
+    varnames::Union{Vector{String},Nothing}
+end
+
+Base.size(f::NowcastForecast) = size(f.values)
+Base.size(f::NowcastForecast, d::Integer) = size(f.values, d)
+Base.length(f::NowcastForecast) = length(f.values)
+Base.getindex(f::NowcastForecast, i...) = getindex(f.values, i...)
+Base.iterate(f::NowcastForecast, state...) = iterate(f.values, state...)
+Base.eltype(::Type{NowcastForecast{T}}) where {T} = T
+
+function Base.show(io::IO, f::NowcastForecast{T}) where {T}
+    v = f.values
+    if f.target_var !== nothing
+        _pretty_table(io, Any["Horizons" f.h; "Target variable" f.target_var];
+            title = "Nowcast Forecast", column_labels = ["", ""], alignment = [:l, :r])
+        data = Matrix{Any}(undef, length(v), 2)
+        for i in 1:length(v)
+            data[i, 1] = "h=$i"; data[i, 2] = _fmt(v[i])
+        end
+        _pretty_table(io, data; title = "Forecast Path",
+            column_labels = ["", "Value"], alignment = [:r, :r])
+    else
+        hh, N = size(v)
+        _pretty_table(io, Any["Horizons" hh; "Variables" N];
+            title = "Nowcast Forecast", column_labels = ["", ""], alignment = [:l, :r])
+        labels = f.varnames === nothing ? ["y$j" for j in 1:N] : f.varnames
+        data = Matrix{Any}(undef, hh, N + 1)
+        for i in 1:hh
+            data[i, 1] = "h=$i"
+            for j in 1:N; data[i, j+1] = _fmt(v[i, j]); end
+        end
+        _pretty_table(io, data; title = "Forecast Path",
+            column_labels = vcat([""], labels), alignment = vcat([:r], fill(:r, N)))
+    end
+end

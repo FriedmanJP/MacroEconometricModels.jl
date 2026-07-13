@@ -132,9 +132,9 @@ function forecast(model::NowcastDFM{T}, h::Int;
     end
 
     if target_var !== nothing
-        return fc[:, target_var]
+        return NowcastForecast{T}(fc[:, target_var], h, target_var, nothing)
     end
-    return fc
+    return NowcastForecast{T}(fc, h, nothing, nothing)
 end
 
 function forecast(model::NowcastBVAR{T}, h::Int;
@@ -159,7 +159,7 @@ function forecast(model::NowcastBVAR{T}, h::Int;
     end
 
     if target_var !== nothing
-        return fc[:, target_var]
+        return NowcastForecast{T}(fc[:, target_var], h, target_var, nothing)
     end
-    return fc
+    return NowcastForecast{T}(fc, h, nothing, nothing)
 end

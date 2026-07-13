@@ -229,7 +229,8 @@ Columns: Name | Coef. | Std.Err. | z/t | P>|z/t| | [95% CI lower | CI upper] | s
 function _coef_table(io::IO, title::String, names::Vector{String},
                      coefs::Vector{T}, se::Vector{T};
                      dist::Symbol=:z, dof_r::Int=0, level::Real=0.95,
-                     ref_rows::Union{Nothing,AbstractVector{Int}}=nothing) where {T}
+                     ref_rows::Union{Nothing,AbstractVector{Int}}=nothing,
+                     coef_label::String="Coef.") where {T}
     n = length(names)
     alpha = 1 - level
     z_crit = dist == :z ? T(quantile(Normal(), 1 - alpha/2)) :
@@ -277,7 +278,7 @@ function _coef_table(io::IO, title::String, names::Vector{String},
 
     _pretty_table(io, data;
         title = title,
-        column_labels = ["", "Coef.", "Std.Err.", stat_label, "P>|$stat_label|", "[$ci_pct%", "CI]", ""],
+        column_labels = ["", coef_label, "Std.Err.", stat_label, "P>|$stat_label|", "[$ci_pct%", "CI]", ""],
         alignment = [:l, :r, :r, :r, :r, :r, :r, :l],
     )
 end

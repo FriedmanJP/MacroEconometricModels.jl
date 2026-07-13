@@ -547,3 +547,31 @@ end
         @test hasmethod(report, Tuple{T})
     end
 end
+
+@testset "Bare-return display wrappers (S3/T167 pt2)" begin
+    set_display_backend(:text)
+    MEM = MacroEconometricModels
+    # OddsRatio: NamedTuple-compatible fields; show omits the intercept row
+    orr = OddsRatio([1.5, 2.0, 0.8], [0.1, 0.2, 0.05], [1.2, 1.5, 0.7],
+                    [1.9, 2.7, 0.95], ["const", "x1", "x2"], 0.95)
+    @test length(orr.or) == 3 && orr.varnames == ["const", "x1", "x2"]
+    s = sprint(show, orr)
+    @test occursin("Odds Ratio", s) && occursin("x1", s) && !occursin("const", s)
+
+    # NowcastForecast forwards the array interface (keeps numeric consumers green)
+    nf = MEM.NowcastForecast([1.0, 2.0, 3.0], 3, 1, nothing)
+    @test length(nf) == 3 && nf[2] == 2.0 && !any(isnan, nf)
+    @test occursin("Nowcast Forecast", sprint(show, nf))
+    @test size(MEM.NowcastForecast([1.0 2.0; 3.0 4.0], 2, nothing, nothing)) == (2, 2)
+
+    # MultinomialMarginalEffects: per-category dy/dx blocks
+    mme = MEM.MultinomialMarginalEffects([0.0 0.1 -0.1; 0.0 0.2 -0.2], nothing,
+                                         ["const", "x1"], ["A", "B", "C"])
+    @test occursin("dy/dx", sprint(show, mme))
+
+    # report() dispatches exist for all four wrappers
+    for Tp in (OddsRatio, MEM.MultinomialMarginalEffects, NowcastForecast, PanelUnitRootSummary)
+        @test hasmethod(report, Tuple{Tp})
+    end
+    set_display_backend(:text)
+end

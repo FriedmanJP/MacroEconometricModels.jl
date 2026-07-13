@@ -377,7 +377,7 @@ end
 # =============================================================================
 
 """
-    odds_ratio(m::LogitModel{T}; conf_level=0.95) -> NamedTuple
+    odds_ratio(m::LogitModel{T}; conf_level=0.95) -> OddsRatio{T}
 
 Compute odds ratios from a logistic regression model with delta-method CIs.
 
@@ -422,6 +422,5 @@ function odds_ratio(m::LogitModel{T}; conf_level::Real=0.95) where {T<:AbstractF
     ci_lower = exp.(beta .- z_crit .* se_beta)
     ci_upper = exp.(beta .+ z_crit .* se_beta)
 
-    (or=or, se=se_or, ci_lower=ci_lower, ci_upper=ci_upper,
-     varnames=copy(m.varnames))
+    OddsRatio{T}(or, se_or, ci_lower, ci_upper, copy(m.varnames), T(conf_level))
 end

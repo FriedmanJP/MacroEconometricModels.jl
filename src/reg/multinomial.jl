@@ -579,7 +579,45 @@ function marginal_effects(m::MultinomialLogitModel{T}) where {T<:AbstractFloat}
 
     ame ./= T(n)
 
-    (effects=ame, varnames=copy(m.varnames), categories=copy(m.categories))
+    MultinomialMarginalEffects{T}(ame, nothing, copy(m.varnames), string.(m.categories))
+end
+
+# =============================================================================
+# MultinomialMarginalEffects — display type for mlogit AME (S3/T167)
+# =============================================================================
+
+"""
+    MultinomialMarginalEffects{T}
+
+Average marginal effects for a multinomial logit: `effects` is K variables × J categories
+(base category in column 1). `se` is `nothing` — delta-method standard errors are deferred
+(the softmax likelihood is not ForwardDiff-ready). Replaces the former bare NamedTuple so
+the result carries a `show`/`report` display.
+"""
+struct MultinomialMarginalEffects{T<:AbstractFloat}
+    effects::Matrix{T}
+    se::Union{Matrix{T},Nothing}
+    varnames::Vector{String}
+    categories::Vector{String}
+end
+
+function Base.show(io::IO, me::MultinomialMarginalEffects{T}) where {T}
+    K, J = size(me.effects)
+    # omit the intercept row (its marginal effect is not interpretable)
+    keep = findall(v -> _display_intercept(v) != _INTERCEPT_LABEL, me.varnames)
+    isempty(keep) && (keep = collect(1:K))
+    for j in 2:J   # skip base category (column 1 is all zeros by construction)
+        data = Matrix{Any}(undef, length(keep), 2)
+        for (row, i) in enumerate(keep)
+            data[row, 1] = me.varnames[i]
+            data[row, 2] = _fmt(me.effects[i, j])
+        end
+        _pretty_table(io, data;
+            title = "Marginal Effects — $(me.categories[j]) (vs $(me.categories[1]))",
+            column_labels = ["", "dy/dx"],
+            alignment = [:l, :r])
+    end
+    println(io, "Note: standard errors for multinomial AME are not reported (delta method deferred).")
 end
 
 # =============================================================================

@@ -405,7 +405,49 @@ function Base.show(io::IO, me::MarginalEffects{T}) where {T}
                me.type == :mem ? "Marginal Effects at Mean" :
                "Marginal Effects at Representative"
 
-    _coef_table(io, type_str, me.varnames, me.effects, me.se;
-        dist = :z, level = me.conf_level)
+    # Intercept rows carry a NaN marginal effect (not defined) — omit them, like Stata,
+    # and label the estimate column dy/dx rather than "Coef.". (S3/T167)
+    keep = findall(isfinite, me.effects)
+    _coef_table(io, type_str, me.varnames[keep], me.effects[keep], me.se[keep];
+        dist = :z, level = me.conf_level, coef_label = "dy/dx")
     _sig_legend(io)
+end
+
+# =============================================================================
+# OddsRatio — logit odds ratios with SEs (S3/T167)
+# =============================================================================
+
+"""
+    OddsRatio{T}
+
+Odds ratios for a logit model with delta-method standard errors and log-scale confidence
+intervals. Fields mirror the former `odds_ratio` NamedTuple (`or`, `se`, `ci_lower`,
+`ci_upper`, `varnames`) plus `conf_level`, so field access is unchanged.
+"""
+struct OddsRatio{T<:AbstractFloat}
+    or::Vector{T}
+    se::Vector{T}
+    ci_lower::Vector{T}
+    ci_upper::Vector{T}
+    varnames::Vector{String}
+    conf_level::T
+end
+
+function Base.show(io::IO, r::OddsRatio{T}) where {T}
+    ci_pct = round(Int, 100 * r.conf_level)
+    # omit the intercept row (its odds ratio is not interpretable)
+    keep = findall(v -> _display_intercept(v) != _INTERCEPT_LABEL, r.varnames)
+    isempty(keep) && (keep = collect(eachindex(r.varnames)))
+    data = Matrix{Any}(undef, length(keep), 5)
+    for (row, i) in enumerate(keep)
+        data[row, 1] = r.varnames[i]
+        data[row, 2] = _fmt(r.or[i])
+        data[row, 3] = _fmt(r.se[i])
+        data[row, 4] = _fmt(r.ci_lower[i])
+        data[row, 5] = _fmt(r.ci_upper[i])
+    end
+    _pretty_table(io, data;
+        title = "Odds Ratios",
+        column_labels = ["", "Odds Ratio", "Std.Err.", "[$ci_pct%", "CI]"],
+        alignment = [:l, :r, :r, :r, :r])
 end

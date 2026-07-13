@@ -490,6 +490,12 @@ report(x::LRTestResult) = show(stdout, x)
 report(x::LMTestResult) = show(stdout, x)
 report(x::PretrendTestResult) = show(stdout, x)
 
+# --- Wrapped bare-return display types (S3/T167) ---
+report(x::OddsRatio) = show(stdout, x)
+report(x::MultinomialMarginalEffects) = show(stdout, x)
+report(x::NowcastForecast) = show(stdout, x)
+report(x::PanelUnitRootSummary) = show(stdout, x)
+
 # =============================================================================
 # Split Files (table extraction, display, references, nowcasting)
 # =============================================================================
