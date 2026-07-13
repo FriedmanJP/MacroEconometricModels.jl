@@ -475,6 +475,21 @@ report(x::ExtractionResult) = show(stdout, x)
 report(x::BaqaeeFarhiResult) = show(stdout, x)
 report(x::FootprintResult) = show(stdout, x)
 
+# --- Show-existing types that lacked a report() dispatch (S3/T167) ---
+report(x::GrangerCausalityResult) = show(stdout, x)
+report(x::FAVARModel) = show(stdout, x)
+report(x::BayesianFAVAR) = show(stdout, x)
+report(x::ACFResult) = show(stdout, x)
+report(x::SpectralDensityResult) = show(stdout, x)
+report(x::CrossSpectrumResult) = show(stdout, x)
+report(x::TransferFunctionResult) = show(stdout, x)
+report(x::LjungBoxResult) = show(stdout, x)
+report(x::BoxPierceResult) = show(stdout, x)
+report(x::DurbinWatsonResult) = show(stdout, x)
+report(x::LRTestResult) = show(stdout, x)
+report(x::LMTestResult) = show(stdout, x)
+report(x::PretrendTestResult) = show(stdout, x)
+
 # =============================================================================
 # Split Files (table extraction, display, references, nowcasting)
 # =============================================================================

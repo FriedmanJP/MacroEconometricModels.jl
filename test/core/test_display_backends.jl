@@ -535,3 +535,15 @@ end
     @test isempty(strip(sprint(io -> MEM._degenerate_fit_banner(io, [0.5, 0.0]))))
     set_display_backend(:text)
 end
+
+@testset "Missing report() dispatches (S3/T167)" begin
+    MEM = MacroEconometricModels
+    # every show-existing type now has a report() dispatch (no MethodError)
+    for T in (MEM.GrangerCausalityResult, MEM.FAVARModel, MEM.BayesianFAVAR,
+              MEM.ACFResult, MEM.SpectralDensityResult, MEM.CrossSpectrumResult,
+              MEM.TransferFunctionResult, MEM.LjungBoxResult, MEM.BoxPierceResult,
+              MEM.DurbinWatsonResult, MEM.LRTestResult, MEM.LMTestResult,
+              MEM.PretrendTestResult)
+        @test hasmethod(report, Tuple{T})
+    end
+end
