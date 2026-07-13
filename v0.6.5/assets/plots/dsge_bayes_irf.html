@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bayesian IRF (5%–95% posterior band)</title>
+<style>* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+    background: #fff;
+    color: #333;
+    padding: 20px;
+}
+.figure-title {
+    font-size: 18px;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 16px;
+    color: #222;
+}
+.figure-source {
+    font-size: 11px;
+    color: #888;
+    text-align: center;
+    margin-top: 8px;
+}
+.panel-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    justify-content: center;
+}
+.panel {
+    width: calc(100% - 16px);
+    min-width: 300px;
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 12px;
+}
+.panel-title {
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 8px;
+    color: #444;
+}
+.axis text { font-size: 11px; fill: #666; }
+.axis line, .axis path { stroke: #ccc; }
+.grid line { stroke: #f0f0f0; stroke-dasharray: 2,2; }
+.grid .domain { stroke: none; }
+.tooltip {
+    position: absolute;
+    background: rgba(0,0,0,0.8);
+    color: #fff;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 1000;
+}
+.legend { font-size: 11px; }
+.legend rect { rx: 2; }
+svg { overflow: visible; }
+</style>
+</head>
+<body>
+<div class="figure-title">Bayesian IRF (5%–95% posterior band)</div>
+<div class="panel-grid">
+<div class="panel">
+<div class="panel-title">Y ← ε_A</div>
+<div id="birf_326"></div>
+</div>
+<div class="panel">
+<div class="panel-title">C ← ε_A</div>
+<div id="birf_327"></div>
+</div>
+<div class="panel">
+<div class="panel-title">K ← ε_A</div>
+<div id="birf_328"></div>
+</div>
+<div class="panel">
+<div class="panel-title">A ← ε_A</div>
+<div id="birf_329"></div>
+</div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script>
+// Shared utilities
+const tooltip = d3.select('#tooltip');
+function fmt(v) {
+    if (v === null || v === undefined) return '';
+    return Math.abs(v) >= 1000 ? v.toFixed(1) : (Math.abs(v) >= 1 ? v.toFixed(3) : v.toFixed(4));
+}
+function showTip(evt, html) {
+    tooltip.html(html).style('opacity',1)
+        .style('left',(evt.pageX+12)+'px').style('top',(evt.pageY-28)+'px');
+}
+function hideTip() { tooltip.style('opacity',0); }
+
+(function() {
+    const data = [{"x":0,"irf":0.03704058708946325,"ci_lo":0.03704058708946325,"ci_hi":0.03704058708946325,"zero":0},
+{"x":1,"irf":0.033810464309287164,"ci_lo":0.03250680492143656,"ci_hi":0.035317702855847864,"zero":0},
+{"x":2,"irf":0.030947267502897054,"ci_lo":0.0286282262194177,"ci_hi":0.03368744567806761,"zero":0},
+{"x":3,"irf":0.028403934879907444,"ci_lo":0.025305777523720083,"ci_hi":0.03214413526122532,"zero":0},
+{"x":4,"irf":0.026139794973729407,"ci_lo":0.022455531899524844,"ci_hi":0.030682473633993616,"zero":0},
+{"x":5,"irf":0.02411966696617664,"ci_lo":0.020006386864551647,"ci_hi":0.029297517969905956,"zero":0},
+{"x":6,"irf":0.022313091496817955,"ci_lo":0.017898098625136742,"ci_hi":0.02798465539677713,"zero":0},
+{"x":7,"irf":0.020693672510519165,"ci_lo":0.01607961792202697,"ci_hi":0.02673957964676317,"zero":0},
+{"x":8,"irf":0.019238513669591017,"ci_lo":0.014507681187308828,"ci_hi":0.025558269410585772,"zero":0},
+{"x":9,"irf":0.017927735364503608,"ci_lo":0.013145617823557203,"ci_hi":0.02443696826963629,"zero":0},
+{"x":10,"irf":0.016744060473713955,"ci_lo":0.011962340433815872,"ci_hi":0.02337216608910067,"zero":0},
+{"x":11,"irf":0.015672458811100052,"ci_lo":0.01093148992423283,"ci_hi":0.022360581763967345,"zero":0},
+{"x":12,"irf":0.014699841710986235,"ci_lo":0.010030711712094204,"ci_hi":0.021399147217847345,"zero":0},
+{"x":13,"irf":0.013814799479508234,"ci_lo":0.009241042920825896,"ci_hi":0.020484992561999267,"zero":0},
+{"x":14,"irf":0.013007375523767796,"ci_lo":0.008546393531984558,"ci_hi":0.019615432328856194,"zero":0},
+{"x":15,"irf":0.012268871887633091,"ci_lo":0.007933107078427513,"ci_hi":0.01878795270073934,"zero":0},
+{"x":16,"irf":0.011591681700986083,"ci_lo":0.0073895886755936755,"ci_hi":0.018000199660352694,"zero":0},
+{"x":17,"irf":0.010969144709410452,"ci_lo":0.00690599006080694,"ci_hi":0.01724996799512031,"zero":0},
+{"x":18,"irf":0.010395422612007212,"ci_lo":0.006473942895917541,"ci_hi":0.01653519109248603,"zero":0},
+{"x":19,"irf":0.009865391411581081,"ci_lo":0.006086332930594483,"ci_hi":0.015853931467975316,"zero":0},
+{"x":20,"irf":0.00937454838679417,"ci_lo":0.005737108759556025,"ci_hi":0.015204371972148533,"zero":0},
+{"x":21,"irf":0.00891893164093594,"ci_lo":0.005421119868614795,"ci_hi":0.014584807626581214,"zero":0},
+{"x":22,"irf":0.008495050475902719,"ci_lo":0.005133979478398731,"ci_hi":0.013993638042713072,"zero":0},
+{"x":23,"irf":0.008099825090575684,"ci_lo":0.004871948383653567,"ci_hi":0.013429360380837087,"zero":0},
+{"x":24,"irf":0.007730534316585857,"ci_lo":0.004631836569321252,"ci_hi":0.01289056280967307,"zero":0},
+{"x":25,"irf":0.0073847702869976484,"ci_lo":0.004410919878358506,"ci_hi":0.012375918429906067,"zero":0},
+{"x":26,"irf":0.007060399089413514,"ci_lo":0.004206869424254323,"ci_hi":0.011884179627786706,"zero":0},
+{"x":27,"irf":0.006755526588367819,"ci_lo":0.004017691795057189,"ci_hi":0.01141417282740435,"zero":0},
+{"x":28,"irf":0.006468468715997047,"ci_lo":0.003841678395278626,"ci_hi":0.01096479361257005,"zero":0},
+{"x":29,"irf":0.006197725627694672,"ci_lo":0.0036773625256336312,"ci_hi":0.010535002191398708,"zero":0},
+{"x":30,"irf":0.005941959203198488,"ci_lo":0.0035234830152652643,"ci_hi":0.010123819178671757,"zero":0},
+{"x":31,"irf":0.005699973445367265,"ci_lo":0.003378953402851558,"ci_hi":0.009730321672904902,"zero":0},
+{"x":32,"irf":0.005470697390525827,"ci_lo":0.003242835816862635,"ci_hi":0.00935363960675119,"zero":0},
+{"x":33,"irf":0.0052531701971745,"ci_lo":0.003114318835503132,"ci_hi":0.008992952350948314,"zero":0},
+{"x":34,"irf":0.005046528125332148,"ci_lo":0.00299269871716149,"ci_hi":0.008647485553480033,"zero":0},
+{"x":35,"irf":0.004849993157884931,"ci_lo":0.002877363485559323,"ci_hi":0.008316508196973552,"zero":0},
+{"x":36,"irf":0.004662863048961182,"ci_lo":0.002767779432846068,"ci_hi":0.00799932985860625,"zero":0},
+{"x":37,"irf":0.004484502613326319,"ci_lo":0.0026634796708135196,"ci_hi":0.007695298157953204,"zero":0},
+{"x":38,"irf":0.004314336095756776,"ci_lo":0.0025640544170712756,"ci_hi":0.007403796379279093,"zero":0},
+{"x":39,"irf":0.004151840480877082,"ci_lo":0.0024691427510020467,"ci_hi":0.007124241255770213,"zero":0}];
+    const series = [{"name":"Posterior median","color":"#1f77b4","key":"irf","dash":""}];
+    const bands = [{"lo_key":"ci_lo","hi_key":"ci_hi","color":"#1f77b4","alpha":0.15}];
+    const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
+
+    const container = d3.select('#birf_326');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    // Compute domains
+    const xVals = data.map(d => d.x);
+    const allYVals = [];
+    series.forEach(s => data.forEach(d => { if(d[s.key]!==null) allYVals.push(d[s.key]); }));
+    bands.forEach(b => data.forEach(d => {
+        if(d[b.lo_key]!==null) allYVals.push(d[b.lo_key]);
+        if(d[b.hi_key]!==null) allYVals.push(d[b.hi_key]);
+    }));
+    refLines.forEach(r => allYVals.push(r.value));
+
+    const x = d3.scaleLinear().domain(d3.extent(xVals)).range([0,w]);
+    const yExt = d3.extent(allYVals);
+    const yPad = (yExt[1]-yExt[0])*0.08 || 1;
+    const y = d3.scaleLinear().domain([yExt[0]-yPad, yExt[1]+yPad]).range([h,0]);
+
+    // Grid
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+
+    // Bands
+    bands.forEach(b => {
+        const area = d3.area()
+            .x(d => x(d.x))
+            .y0(d => y(d[b.lo_key]!==null ? d[b.lo_key] : 0))
+            .y1(d => y(d[b.hi_key]!==null ? d[b.hi_key] : 0))
+            .defined(d => d[b.lo_key]!==null && d[b.hi_key]!==null);
+        g.append('path').datum(data).attr('d',area)
+            .attr('fill',b.color).attr('opacity',b.alpha||0.15);
+    });
+
+    // Reference lines
+    refLines.forEach(r => {
+        g.append('line').attr('x1',0).attr('x2',w)
+            .attr('y1',y(r.value)).attr('y2',y(r.value))
+            .attr('stroke',r.color||'#999').attr('stroke-width',1)
+            .attr('stroke-dasharray',r.dash||'4,3');
+    });
+
+    // Lines
+    series.forEach(s => {
+        const line = d3.line().x(d=>x(d.x)).y(d=>y(d[s.key]))
+            .defined(d=>d[s.key]!==null);
+        g.append('path').datum(data).attr('d',line)
+            .attr('fill','none').attr('stroke',s.color).attr('stroke-width',1.8)
+            .attr('stroke-dasharray',s.dash||'');
+    });
+
+    // Axes
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+        .call(d3.axisBottom(x).ticks(Math.min(xVals.length,8)));
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+
+    if('Horizon') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Horizon');
+    if('Response') g.append('text').attr('transform','rotate(-90)')
+        .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Response');
+
+    // Legend
+    if(series.length > 1) {
+        const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
+        series.forEach((s,i) => {
+            const gi = leg.append('g').attr('transform','translate('+(i*100)+',0)');
+            gi.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+                .attr('stroke',s.color).attr('stroke-width',2)
+                .attr('stroke-dasharray',s.dash||'');
+            gi.append('text').attr('x',20).attr('y',4).attr('font-size','10px')
+                .attr('fill','#555').text(s.name);
+        });
+    }
+
+    // Tooltip overlay
+    svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g.node());
+            const x0 = x.invert(mx);
+            const idx = d3.minIndex(data, d => Math.abs(d.x - x0));
+            const d = data[idx];
+            let html = '<b>x='+fmt(d.x)+'</b>';
+            series.forEach(s => { if(d[s.key]!==null) html += '<br>'+s.name+': '+fmt(d[s.key]); });
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+
+(function() {
+    const data = [{"x":0,"irf":0.0054934207754335175,"ci_lo":0.0045571150772794194,"ci_hi":0.0068685222363967175,"zero":0},
+{"x":1,"irf":0.006287600944563115,"ci_lo":0.005315249691856146,"ci_hi":0.007705113979313982,"zero":0},
+{"x":2,"irf":0.006940440068511772,"ci_lo":0.0059066994900491086,"ci_hi":0.008431911162422135,"zero":0},
+{"x":3,"irf":0.007470745894406257,"ci_lo":0.006358758543355086,"ci_hi":0.009058790741445031,"zero":0},
+{"x":4,"irf":0.007894897048997767,"ci_lo":0.006694476814113873,"ci_hi":0.009594831216618707,"zero":0},
+{"x":5,"irf":0.00822716310739566,"ci_lo":0.006933312950633224,"ci_hi":0.01004837456965578,"zero":0},
+{"x":6,"irf":0.008479981183921608,"ci_lo":0.007091686892621985,"ci_hi":0.010427083480369853,"zero":0},
+{"x":7,"irf":0.008664195139177414,"ci_lo":0.0071834476603464,"ci_hi":0.01073799417987915,"zero":0},
+{"x":8,"irf":0.008789262617176701,"ci_lo":0.007220269341485124,"ci_hi":0.010987565270418165,"zero":0},
+{"x":9,"irf":0.008863434376946493,"ci_lo":0.00721198629244526,"ci_hi":0.011181722816917495,"zero":0},
+{"x":10,"irf":0.008893909744402153,"ci_lo":0.0071668768802875225,"ci_hi":0.011325901992514048,"zero":0},
+{"x":11,"irf":0.008886971465700867,"ci_lo":0.007091903660310917,"ci_hi":0.011425085538886081,"zero":0},
+{"x":12,"irf":0.008848102778469315,"ci_lo":0.006992916672916422,"ci_hi":0.01148383928263973,"zero":0},
+{"x":13,"irf":0.00878208912026915,"ci_lo":0.006874825517876084,"ci_hi":0.011506344930785756,"zero":0},
+{"x":14,"irf":0.00869310655425274,"ci_lo":0.006741744996030629,"ci_hi":0.01149643035152587,"zero":0},
+{"x":15,"irf":0.008584798701575953,"ci_lo":0.006597118373561631,"ci_hi":0.011457597531014215,"zero":0},
+{"x":16,"irf":0.008460343721494916,"ci_lo":0.006443821701880851,"ci_hi":0.011393048382376416,"zero":0},
+{"x":17,"irf":0.008322512667009506,"ci_lo":0.006284252099537813,"ci_hi":0.011305708569967848,"zero":0},
+{"x":18,"irf":0.008173720361193458,"ci_lo":0.006120402456713859,"ci_hi":0.011198249499553291,"zero":0},
+{"x":19,"irf":0.008016069782526298,"ci_lo":0.005953924645443295,"ci_hi":0.011073108613716364,"zero":0},
+{"x":20,"irf":0.007851390812840264,"ci_lo":0.005786182999181055,"ci_hi":0.01093250812128968,"zero":0},
+{"x":21,"irf":0.007681274085706066,"ci_lo":0.005618299554834565,"ci_hi":0.01077847227987112,"zero":0},
+{"x":22,"irf":0.007507100573473223,"ci_lo":0.005451192321372452,"ci_hi":0.010612843341498208,"zero":0},
+{"x":23,"irf":0.00733006746542719,"ci_lo":0.005285607645246727,"ci_hi":0.010437296263236735,"zero":0},
+{"x":24,"irf":0.007151210815644169,"ci_lo":0.005122147578727634,"ci_hi":0.01025335227674983,"zero":0},
+{"x":25,"irf":0.006971425375424051,"ci_lo":0.004961293018288661,"ci_hi":0.01006239140380336,"zero":0},
+{"x":26,"irf":0.00679148197021869,"ci_lo":0.004803423262530533,"ci_hi":0.009865663998088556,"zero":0},
+{"x":27,"irf":0.006612042733513608,"ci_lo":0.004648832539527695,"ci_hi":0.009664301387663384,"zero":0},
+{"x":28,"irf":0.006433674469111666,"ci_lo":0.00449774396915072,"ci_hi":0.00945932568669262,"zero":0},
+{"x":29,"irf":0.006256860377805393,"ci_lo":0.004350321354520209,"ci_hi":0.009251658839969028,"zero":0},
+{"x":30,"irf":0.006082010353737952,"ci_lo":0.004206679136298237,"ci_hi":0.009042130958891934,"zero":0},
+{"x":31,"irf":0.0059094700291792415,"ci_lo":0.004066890792343121,"ci_hi":0.008831488003135813,"zero":0},
+{"x":32,"irf":0.005739528723416174,"ci_lo":0.00393099592192051,"ci_hi":0.008620398858132908,"zero":0},
+{"x":33,"irf":0.0055724264314871794,"ci_lo":0.003799006216975048,"ci_hi":0.008409461854695049,"zero":0},
+{"x":34,"irf":0.005408359971162608,"ci_lo":0.003670910491903238,"ci_hi":0.008199210773587543,"zero":0},
+{"x":35,"irf":0.0052474883915253345,"ci_lo":0.0035466789169670424,"ci_hi":0.007990120374620649,"zero":0},
+{"x":36,"irf":0.005089937733430253,"ci_lo":0.0034262665782188936,"ci_hi":0.007782611486821829,"zero":0},
+{"x":37,"irf":0.004935805220751586,"ci_lo":0.0033096164679539807,"ci_hi":0.007577055693476166,"zero":0},
+{"x":38,"irf":0.004785162951433797,"ci_lo":0.003196661993741354,"ci_hi":0.007373779643256131,"zero":0},
+{"x":39,"irf":0.004638061148747836,"ci_lo":0.0030873290805685035,"ci_hi":0.007173069016289319,"zero":0}];
+    const series = [{"name":"Posterior median","color":"#1f77b4","key":"irf","dash":""}];
+    const bands = [{"lo_key":"ci_lo","hi_key":"ci_hi","color":"#1f77b4","alpha":0.15}];
+    const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
+
+    const container = d3.select('#birf_327');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    // Compute domains
+    const xVals = data.map(d => d.x);
+    const allYVals = [];
+    series.forEach(s => data.forEach(d => { if(d[s.key]!==null) allYVals.push(d[s.key]); }));
+    bands.forEach(b => data.forEach(d => {
+        if(d[b.lo_key]!==null) allYVals.push(d[b.lo_key]);
+        if(d[b.hi_key]!==null) allYVals.push(d[b.hi_key]);
+    }));
+    refLines.forEach(r => allYVals.push(r.value));
+
+    const x = d3.scaleLinear().domain(d3.extent(xVals)).range([0,w]);
+    const yExt = d3.extent(allYVals);
+    const yPad = (yExt[1]-yExt[0])*0.08 || 1;
+    const y = d3.scaleLinear().domain([yExt[0]-yPad, yExt[1]+yPad]).range([h,0]);
+
+    // Grid
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+
+    // Bands
+    bands.forEach(b => {
+        const area = d3.area()
+            .x(d => x(d.x))
+            .y0(d => y(d[b.lo_key]!==null ? d[b.lo_key] : 0))
+            .y1(d => y(d[b.hi_key]!==null ? d[b.hi_key] : 0))
+            .defined(d => d[b.lo_key]!==null && d[b.hi_key]!==null);
+        g.append('path').datum(data).attr('d',area)
+            .attr('fill',b.color).attr('opacity',b.alpha||0.15);
+    });
+
+    // Reference lines
+    refLines.forEach(r => {
+        g.append('line').attr('x1',0).attr('x2',w)
+            .attr('y1',y(r.value)).attr('y2',y(r.value))
+            .attr('stroke',r.color||'#999').attr('stroke-width',1)
+            .attr('stroke-dasharray',r.dash||'4,3');
+    });
+
+    // Lines
+    series.forEach(s => {
+        const line = d3.line().x(d=>x(d.x)).y(d=>y(d[s.key]))
+            .defined(d=>d[s.key]!==null);
+        g.append('path').datum(data).attr('d',line)
+            .attr('fill','none').attr('stroke',s.color).attr('stroke-width',1.8)
+            .attr('stroke-dasharray',s.dash||'');
+    });
+
+    // Axes
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+        .call(d3.axisBottom(x).ticks(Math.min(xVals.length,8)));
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+
+    if('Horizon') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Horizon');
+    if('Response') g.append('text').attr('transform','rotate(-90)')
+        .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Response');
+
+    // Legend
+    if(series.length > 1) {
+        const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
+        series.forEach((s,i) => {
+            const gi = leg.append('g').attr('transform','translate('+(i*100)+',0)');
+            gi.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+                .attr('stroke',s.color).attr('stroke-width',2)
+                .attr('stroke-dasharray',s.dash||'');
+            gi.append('text').attr('x',20).attr('y',4).attr('font-size','10px')
+                .attr('fill','#555').text(s.name);
+        });
+    }
+
+    // Tooltip overlay
+    svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g.node());
+            const x0 = x.invert(mx);
+            const idx = d3.minIndex(data, d => Math.abs(d.x - x0));
+            const d = data[idx];
+            let html = '<b>x='+fmt(d.x)+'</b>';
+            series.forEach(s => { if(d[s.key]!==null) html += '<br>'+s.name+': '+fmt(d[s.key]); });
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+
+(function() {
+    const data = [{"x":0,"irf":0.031547166034073086,"ci_lo":0.030172064576167574,"ci_hi":0.0324834717301452,"zero":0},
+{"x":1,"irf":0.05828134998490755,"ci_lo":0.05703035156697267,"ci_hi":0.05885646187238032,"zero":0},
+{"x":2,"irf":0.08083114342191805,"ci_lo":0.0790116819703855,"ci_hi":0.08138752555805928,"zero":0},
+{"x":3,"irf":0.09974355358797901,"ci_lo":0.09705708935678828,"ci_hi":0.10189587426688361,"zero":0},
+{"x":4,"irf":0.11549486245173098,"ci_lo":0.11039171701427045,"ci_hi":0.12034176023460103,"zero":0},
+{"x":5,"irf":0.12849999453945618,"ci_lo":0.12070499782430802,"ci_hi":0.13670106644779945,"zero":0},
+{"x":6,"irf":0.1391206047896591,"ci_lo":0.1284937844462974,"ci_hi":0.15084111146071327,"zero":0},
+{"x":7,"irf":0.14767206685175938,"ci_lo":0.1341776099439014,"ci_hi":0.16307166890466512,"zero":0},
+{"x":8,"irf":0.15442951605233698,"ci_lo":0.1381105813988292,"ci_hi":0.17356558109167147,"zero":0},
+{"x":9,"irf":0.1596330789663353,"ci_lo":0.14059144826211012,"ci_hi":0.18248168679239546,"zero":0},
+{"x":10,"irf":0.16349240255693961,"ci_lo":0.14187212548464662,"ci_hi":0.1899659085002704,"zero":0},
+{"x":11,"irf":0.16619057968104017,"ci_lo":0.14216490849455862,"ci_hi":0.1961522567996932,"zero":0},
+{"x":12,"irf":0.1678875539708583,"ci_lo":0.14164858071126796,"ci_hi":0.20116375810744622,"zero":0},
+{"x":13,"irf":0.16872307533643202,"ci_lo":0.14047358349246686,"ci_hi":0.2051133115841318,"zero":0},
+{"x":14,"irf":0.16881926728403987,"ci_lo":0.13876639234270788,"ci_hi":0.2081044805755612,"zero":0},
+{"x":15,"irf":0.16828285865505255,"ci_lo":0.13663322114567955,"ci_hi":0.21023222354006135,"zero":0},
+{"x":16,"irf":0.1672071250404643,"ci_lo":0.13416315750206848,"ci_hi":0.21158356904407388,"zero":0},
+{"x":17,"irf":0.16567357883410672,"ci_lo":0.13143081644137217,"ci_hi":0.21223823906294348,"zero":0},
+{"x":18,"irf":0.16375344149601745,"ci_lo":0.1284985863890658,"ci_hi":0.2122692245043065,"zero":0},
+{"x":19,"irf":0.16150892697408015,"ci_lo":0.1254185299376616,"ci_hi":0.2117433165760469,"zero":0},
+{"x":20,"irf":0.15899436126433067,"ci_lo":0.12223399237615604,"ci_hi":0.2107215973475768,"zero":0},
+{"x":21,"irf":0.15625715968263948,"ci_lo":0.11898096281025496,"ci_hi":0.20925989260054872,"zero":0},
+{"x":22,"irf":0.15333868049154234,"ci_lo":0.11568922582970555,"ci_hi":0.20740918983147433,"zero":0},
+{"x":23,"irf":0.15027497100662074,"ci_lo":0.11238333585782653,"ci_hi":0.20521602405267866,"zero":0},
+{"x":24,"irf":0.14709742013813343,"ci_lo":0.10908344139004386,"ci_hi":0.20272283383823458,"zero":0},
+{"x":25,"irf":0.14383332945535784,"ci_lo":0.10580598215589698,"ci_hi":0.19996828987678195,"zero":0},
+{"x":26,"irf":0.14050641325049973,"ci_lo":0.10256427870658898,"ci_hi":0.19698759812230401,"zero":0},
+{"x":27,"irf":0.13713723668951722,"ci_lo":0.0993690309395289,"ci_hi":0.1938127794759661,"zero":0},
+{"x":28,"irf":0.13374359993756088,"ci_lo":0.096228739539342,"ci_hi":0.19047292778605118,"zero":0},
+{"x":29,"irf":0.13034087511026052,"ci_lo":0.09315006217114144,"ci_hi":0.18699444781795788,"zero":0},
+{"x":30,"irf":0.1269423020059564,"ci_lo":0.09013811444690159,"ci_hi":0.18340127472133308,"zero":0},
+{"x":31,"irf":0.12355924779862487,"ci_lo":0.0871967241491242,"ci_hi":0.17971507640592477,"zero":0},
+{"x":32,"irf":0.1202014351999362,"ci_lo":0.08432864589495921,"ci_hi":0.17595544013095923,"zero":0},
+{"x":33,"irf":0.11687714301723574,"ci_lo":0.0815357423223933,"ci_hi":0.17214004451410944,"zero":0},
+{"x":34,"irf":0.11359338252993827,"ci_lo":0.07881913694746036,"ci_hi":0.16828481807482643,"zero":0},
+{"x":35,"irf":0.1103560526692806,"ci_lo":0.07617934305175747,"ci_hi":0.1644040853423936,"zero":0},
+{"x":36,"irf":0.1071700766064961,"ci_lo":0.07361637229094273,"ci_hi":0.1605107014810137,"zero":0},
+{"x":37,"irf":0.10403952202443201,"ci_lo":0.07112982614878294,"ci_hi":0.15661617631207647,"zero":0},
+{"x":38,"irf":0.10096770706069969,"ci_lo":0.0687189728819945,"ci_hi":0.15273078854703062,"zero":0},
+{"x":39,"irf":0.09795729366082707,"ci_lo":0.06638281219527405,"ci_hi":0.14886369098259938,"zero":0}];
+    const series = [{"name":"Posterior median","color":"#1f77b4","key":"irf","dash":""}];
+    const bands = [{"lo_key":"ci_lo","hi_key":"ci_hi","color":"#1f77b4","alpha":0.15}];
+    const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
+
+    const container = d3.select('#birf_328');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    // Compute domains
+    const xVals = data.map(d => d.x);
+    const allYVals = [];
+    series.forEach(s => data.forEach(d => { if(d[s.key]!==null) allYVals.push(d[s.key]); }));
+    bands.forEach(b => data.forEach(d => {
+        if(d[b.lo_key]!==null) allYVals.push(d[b.lo_key]);
+        if(d[b.hi_key]!==null) allYVals.push(d[b.hi_key]);
+    }));
+    refLines.forEach(r => allYVals.push(r.value));
+
+    const x = d3.scaleLinear().domain(d3.extent(xVals)).range([0,w]);
+    const yExt = d3.extent(allYVals);
+    const yPad = (yExt[1]-yExt[0])*0.08 || 1;
+    const y = d3.scaleLinear().domain([yExt[0]-yPad, yExt[1]+yPad]).range([h,0]);
+
+    // Grid
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+
+    // Bands
+    bands.forEach(b => {
+        const area = d3.area()
+            .x(d => x(d.x))
+            .y0(d => y(d[b.lo_key]!==null ? d[b.lo_key] : 0))
+            .y1(d => y(d[b.hi_key]!==null ? d[b.hi_key] : 0))
+            .defined(d => d[b.lo_key]!==null && d[b.hi_key]!==null);
+        g.append('path').datum(data).attr('d',area)
+            .attr('fill',b.color).attr('opacity',b.alpha||0.15);
+    });
+
+    // Reference lines
+    refLines.forEach(r => {
+        g.append('line').attr('x1',0).attr('x2',w)
+            .attr('y1',y(r.value)).attr('y2',y(r.value))
+            .attr('stroke',r.color||'#999').attr('stroke-width',1)
+            .attr('stroke-dasharray',r.dash||'4,3');
+    });
+
+    // Lines
+    series.forEach(s => {
+        const line = d3.line().x(d=>x(d.x)).y(d=>y(d[s.key]))
+            .defined(d=>d[s.key]!==null);
+        g.append('path').datum(data).attr('d',line)
+            .attr('fill','none').attr('stroke',s.color).attr('stroke-width',1.8)
+            .attr('stroke-dasharray',s.dash||'');
+    });
+
+    // Axes
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+        .call(d3.axisBottom(x).ticks(Math.min(xVals.length,8)));
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+
+    if('Horizon') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Horizon');
+    if('Response') g.append('text').attr('transform','rotate(-90)')
+        .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Response');
+
+    // Legend
+    if(series.length > 1) {
+        const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
+        series.forEach((s,i) => {
+            const gi = leg.append('g').attr('transform','translate('+(i*100)+',0)');
+            gi.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+                .attr('stroke',s.color).attr('stroke-width',2)
+                .attr('stroke-dasharray',s.dash||'');
+            gi.append('text').attr('x',20).attr('y',4).attr('font-size','10px')
+                .attr('fill','#555').text(s.name);
+        });
+    }
+
+    // Tooltip overlay
+    svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g.node());
+            const x0 = x.invert(mx);
+            const idx = d3.minIndex(data, d => Math.abs(d.x - x0));
+            const d = data[idx];
+            let html = '<b>x='+fmt(d.x)+'</b>';
+            series.forEach(s => { if(d[s.key]!==null) html += '<br>'+s.name+': '+fmt(d[s.key]); });
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+
+(function() {
+    const data = [{"x":0,"irf":0.009999999716893129,"ci_lo":0.009999999716893129,"ci_hi":0.009999999716893129,"zero":0},
+{"x":1,"irf":0.008828997745160409,"ci_lo":0.008468170681999242,"ci_hi":0.009248944099940329,"zero":0},
+{"x":2,"irf":0.0078026658592799236,"ci_lo":0.007171073383305568,"ci_hi":0.008554297953489014,"zero":0},
+{"x":3,"irf":0.0069023418314363575,"ci_lo":0.006072725944595268,"ci_hi":0.007911824459933683,"zero":0},
+{"x":4,"irf":0.006111861778612147,"ci_lo":0.005142664029199013,"ci_hi":0.007317605027433838,"zero":0},
+{"x":5,"irf":0.005417214369185375,"ci_lo":0.004355094478617323,"ci_hi":0.006768015387666299,"zero":0},
+{"x":6,"irf":0.0048062443883794045,"ci_lo":0.0036881788226658403,"ci_hi":0.006259703488931082,"zero":0},
+{"x":7,"irf":0.004268398410680394,"ci_lo":0.003123426726033669,"ci_hi":0.005789569049755186,"zero":0},
+{"x":8,"irf":0.003794506422042561,"ci_lo":0.0026451824971830606,"ci_hi":0.005354744648268355,"zero":0},
+{"x":9,"irf":0.0033765941599346694,"ci_lo":0.0022401903763780845,"ci_hi":0.004952578231993658,"zero":0},
+{"x":10,"irf":0.003007721721895062,"ci_lo":0.0018972265125543186,"ci_hi":0.004580616941360773,"zero":0},
+{"x":11,"irf":0.0026818446557636223,"ci_lo":0.0016067873948707135,"ci_hi":0.004236592148263973,"zero":0},
+{"x":12,"irf":0.002393694306025094,"ci_lo":0.0013608260758615472,"ci_hi":0.003918405618399029,"zero":0},
+{"x":13,"irf":0.002138674666575585,"ci_lo":0.0011525288529218932,"ci_hi":0.0036241167129685537,"zero":0},
+{"x":14,"irf":0.001912773394023215,"ci_lo":0.0009761262004755261,"ci_hi":0.003351930551685839,"zero":0},
+{"x":15,"irf":0.0017124849785436914,"ci_lo":0.0008267326979561197,"ci_hi":0.003100187064871315,"zero":0},
+{"x":16,"irf":0.0015347443607441342,"ci_lo":0.000700211505227617,"ci_hi":0.0028673508678595215,"zero":0},
+{"x":17,"irf":0.0013768695308673834,"ci_lo":0.0005930596197456281,"ci_hi":0.0026520018959507,"zero":0},
+{"x":18,"irf":0.0012365118576694353,"ci_lo":0.0005023107276346074,"ci_hi":0.0024528267427806347,"zero":0},
+{"x":19,"irf":0.0011116130740524825,"ci_lo":0.0004254529500198851,"ci_hi":0.0022686106492733186,"zero":0},
+{"x":20,"irf":0.0010003679997836387,"ci_lo":0.0003603592000315119,"ci_hi":0.0020982300943097154,"zero":0},
+{"x":21,"irf":0.0009011922123841698,"ci_lo":0.000305228216417857,"ci_hi":0.0019406459419164203,"zero":0},
+{"x":22,"irf":0.0008126939889239071,"ci_lo":0.000258534636429665,"ci_hi":0.0017948971031728853,"zero":0},
+{"x":23,"irf":0.0007336499368655264,"ci_lo":0.00021898672181954205,"ci_hi":0.001660094674175701,"zero":0},
+{"x":24,"irf":0.0006629838136982122,"ci_lo":0.00018549056443885407,"ci_hi":0.0015354165143024296,"zero":0},
+{"x":25,"irf":0.0005997481049334927,"ci_lo":0.00015711977792129232,"ci_hi":0.0014201022317033387,"zero":0},
+{"x":26,"irf":0.0005431079898483539,"ci_lo":0.00013308983432872007,"ci_hi":0.001313448545433497,"zero":0},
+{"x":27,"irf":0.0004923273756285663,"ci_lo":0.00011273633364002568,"ci_hi":0.0012148049959352187,"zero":0},
+{"x":28,"irf":0.0004467567245419106,"ci_lo":9.549660317627075e-5,"ci_hi":0.001123569977705781,"zero":0},
+{"x":29,"irf":0.00040582243652143246,"ci_lo":8.08941165131238e-5,"ci_hi":0.0010391870699506718,"zero":0},
+{"x":30,"irf":0.0003690175819683106,"ci_lo":6.85252997057335e-5,"ci_hi":0.0009611416428403302,"zero":0},
+{"x":31,"irf":0.0003358938074626281,"ci_lo":5.804835891839522e-5,"ci_hi":0.0008889577186695188,"zero":0},
+{"x":32,"irf":0.00030605426105417306,"ci_lo":4.917381965404938e-5,"ci_hi":0.0008221950687733427,"zero":0},
+{"x":33,"irf":0.00027914740445323364,"ci_lo":4.165651527645518e-5,"ci_hi":0.0007604465284920515,"zero":0},
+{"x":34,"irf":0.00025486159722979204,"ci_lo":3.528880273105031e-5,"ci_hi":0.0007033355138068154,"zero":0},
+{"x":35,"irf":0.00023292035346529093,"ci_lo":2.989481741664826e-5,"ci_hi":0.0006505137244988517,"zero":0},
+{"x":36,"irf":0.0002130781845316019,"ci_lo":2.5325607985328155e-5,"ci_hi":0.0006016590198220387,"zero":0},
+{"x":37,"irf":0.0001951169530938506,"ci_lo":2.145501625303612e-5,"ci_hi":0.0005564734537314648,"zero":0},
+{"x":38,"irf":0.00017884267330125282,"ci_lo":1.8176188066541168e-5,"ci_hi":0.00051468145768362,"zero":0},
+{"x":39,"irf":0.00016408270066043214,"ci_lo":1.539861846743478e-5,"ci_hi":0.00047602815992410275,"zero":0}];
+    const series = [{"name":"Posterior median","color":"#1f77b4","key":"irf","dash":""}];
+    const bands = [{"lo_key":"ci_lo","hi_key":"ci_hi","color":"#1f77b4","alpha":0.15}];
+    const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
+
+    const container = d3.select('#birf_329');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    // Compute domains
+    const xVals = data.map(d => d.x);
+    const allYVals = [];
+    series.forEach(s => data.forEach(d => { if(d[s.key]!==null) allYVals.push(d[s.key]); }));
+    bands.forEach(b => data.forEach(d => {
+        if(d[b.lo_key]!==null) allYVals.push(d[b.lo_key]);
+        if(d[b.hi_key]!==null) allYVals.push(d[b.hi_key]);
+    }));
+    refLines.forEach(r => allYVals.push(r.value));
+
+    const x = d3.scaleLinear().domain(d3.extent(xVals)).range([0,w]);
+    const yExt = d3.extent(allYVals);
+    const yPad = (yExt[1]-yExt[0])*0.08 || 1;
+    const y = d3.scaleLinear().domain([yExt[0]-yPad, yExt[1]+yPad]).range([h,0]);
+
+    // Grid
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+
+    // Bands
+    bands.forEach(b => {
+        const area = d3.area()
+            .x(d => x(d.x))
+            .y0(d => y(d[b.lo_key]!==null ? d[b.lo_key] : 0))
+            .y1(d => y(d[b.hi_key]!==null ? d[b.hi_key] : 0))
+            .defined(d => d[b.lo_key]!==null && d[b.hi_key]!==null);
+        g.append('path').datum(data).attr('d',area)
+            .attr('fill',b.color).attr('opacity',b.alpha||0.15);
+    });
+
+    // Reference lines
+    refLines.forEach(r => {
+        g.append('line').attr('x1',0).attr('x2',w)
+            .attr('y1',y(r.value)).attr('y2',y(r.value))
+            .attr('stroke',r.color||'#999').attr('stroke-width',1)
+            .attr('stroke-dasharray',r.dash||'4,3');
+    });
+
+    // Lines
+    series.forEach(s => {
+        const line = d3.line().x(d=>x(d.x)).y(d=>y(d[s.key]))
+            .defined(d=>d[s.key]!==null);
+        g.append('path').datum(data).attr('d',line)
+            .attr('fill','none').attr('stroke',s.color).attr('stroke-width',1.8)
+            .attr('stroke-dasharray',s.dash||'');
+    });
+
+    // Axes
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+        .call(d3.axisBottom(x).ticks(Math.min(xVals.length,8)));
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+
+    if('Horizon') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Horizon');
+    if('Response') g.append('text').attr('transform','rotate(-90)')
+        .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
+        .attr('font-size','11px').attr('fill','#666').text('Response');
+
+    // Legend
+    if(series.length > 1) {
+        const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
+        series.forEach((s,i) => {
+            const gi = leg.append('g').attr('transform','translate('+(i*100)+',0)');
+            gi.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+                .attr('stroke',s.color).attr('stroke-width',2)
+                .attr('stroke-dasharray',s.dash||'');
+            gi.append('text').attr('x',20).attr('y',4).attr('font-size','10px')
+                .attr('fill','#555').text(s.name);
+        });
+    }
+
+    // Tooltip overlay
+    svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g.node());
+            const x0 = x.invert(mx);
+            const idx = d3.minIndex(data, d => Math.abs(d.x - x0));
+            const d = data[idx];
+            let html = '<b>x='+fmt(d.x)+'</b>';
+            series.forEach(s => { if(d[s.key]!==null) html += '<br>'+s.name+': '+fmt(d[s.key]); });
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+
+</script>
+</body>
+</html>
