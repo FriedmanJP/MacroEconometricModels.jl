@@ -136,8 +136,8 @@ function hausman_test(fe::PanelRegModel{T}, re::PanelRegModel{T}) where {T}
     pval = chi2 > zero(T) ? T(1 - cdf(Chisq(df), chi2)) : one(T)
 
     desc = (nonpsd ? "[non-PSD dV] " : "") * (pval < T(0.05) ?
-        "Reject H0: RE inconsistent, use FE (p=$(round(pval; digits=4)))" :
-        "Fail to reject H0: RE is consistent (p=$(round(pval; digits=4)))")
+        "Reject H0: RE inconsistent, use FE (p=$(_format_pvalue(pval)))" :
+        "Fail to reject H0: RE is consistent (p=$(_format_pvalue(pval)))")
 
     PanelTestResult{T}("Hausman test", chi2, pval, df, desc)
 end
@@ -200,8 +200,8 @@ function breusch_pagan_test(re::PanelRegModel{T}) where {T}
     pval = T(1 - cdf(Chisq(1), LM))
 
     desc = pval < T(0.05) ?
-        "Reject H0: Random effects needed (p=$(round(pval; digits=4)))" :
-        "Fail to reject H0: Pooled OLS adequate (p=$(round(pval; digits=4)))"
+        "Reject H0: Random effects needed (p=$(_format_pvalue(pval)))" :
+        "Fail to reject H0: Pooled OLS adequate (p=$(_format_pvalue(pval)))"
 
     PanelTestResult{T}("Breusch-Pagan LM test", LM, pval, 1, desc)
 end
@@ -261,8 +261,8 @@ function f_test_fe(fe::PanelRegModel{T}) where {T}
     pval = T(1 - cdf(FDist(df1, df2), f_stat))
 
     desc = pval < T(0.05) ?
-        "Reject H0: Entity effects significant, use FE (p=$(round(pval; digits=4)))" :
-        "Fail to reject H0: Pooled OLS adequate (p=$(round(pval; digits=4)))"
+        "Reject H0: Entity effects significant, use FE (p=$(_format_pvalue(pval)))" :
+        "Fail to reject H0: Pooled OLS adequate (p=$(_format_pvalue(pval)))"
 
     PanelTestResult{T}("F-test for fixed effects", f_stat, pval, (df1, df2), desc)
 end
@@ -341,8 +341,8 @@ function pesaran_cd_test(m::PanelRegModel{T}) where {T}
     pval = T(2 * (1 - cdf(Normal(), abs(CD))))
 
     desc = pval < T(0.05) ?
-        "Reject H0: Cross-sectional dependence detected (p=$(round(pval; digits=4)))" :
-        "Fail to reject H0: No cross-sectional dependence (p=$(round(pval; digits=4)))"
+        "Reject H0: Cross-sectional dependence detected (p=$(_format_pvalue(pval)))" :
+        "Fail to reject H0: No cross-sectional dependence (p=$(_format_pvalue(pval)))"
 
     PanelTestResult{T}("Pesaran CD test", CD, pval, 1, desc)
 end
@@ -448,8 +448,8 @@ function wooldridge_ar_test(fe::PanelRegModel{T}) where {T}
     pval = T(1 - cdf(FDist(df1, df2), f_stat))
 
     desc = pval < T(0.05) ?
-        "Reject H0: Serial correlation detected (p=$(round(pval; digits=4)))" :
-        "Fail to reject H0: No serial correlation (p=$(round(pval; digits=4)))"
+        "Reject H0: Serial correlation detected (p=$(_format_pvalue(pval)))" :
+        "Fail to reject H0: No serial correlation (p=$(_format_pvalue(pval)))"
 
     PanelTestResult{T}("Wooldridge AR(1) test", f_stat, pval, (df1, df2), desc)
 end
@@ -510,8 +510,8 @@ function modified_wald_test(fe::PanelRegModel{T}) where {T}
     pval = T(1 - cdf(Chisq(N), W))
 
     desc = pval < T(0.05) ?
-        "Reject H0: Groupwise heteroskedasticity detected (p=$(round(pval; digits=4)))" :
-        "Fail to reject H0: Homoskedasticity across groups (p=$(round(pval; digits=4)))"
+        "Reject H0: Groupwise heteroskedasticity detected (p=$(_format_pvalue(pval)))" :
+        "Fail to reject H0: Homoskedasticity across groups (p=$(_format_pvalue(pval)))"
 
     PanelTestResult{T}("Modified Wald test", W, pval, N, desc)
 end

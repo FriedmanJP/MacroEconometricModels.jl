@@ -338,7 +338,7 @@ StatsAPI.islinear(::AbstractARIMAModel) = true
 function _show_arima_model(io::IO, header::String, m::AbstractARIMAModel;
                            phi::Vector=Float64[], theta::Vector=Float64[])
     # Build parameter names and values
-    param_names = String["Intercept (c)"]
+    param_names = String[_INTERCEPT_LABEL]
     param_vals = eltype(m.y)[m.c]
     for (i, p) in enumerate(phi)
         push!(param_names, "φ[$i]")
@@ -381,7 +381,7 @@ function _show_arima_model(io::IO, header::String, m::AbstractARIMAModel;
         "BIC"            _fmt(m.bic; digits=4);
         "R²"             _fmt(r2_val);
         "S.E. of regression" _fmt(sqrt(m.sigma2));
-        "Method"         string(m.method);
+        "Method"         _label(m.method);
         "Converged"      m.converged ? "Yes" : "No"
     ]
     _pretty_table(io, fit_data;

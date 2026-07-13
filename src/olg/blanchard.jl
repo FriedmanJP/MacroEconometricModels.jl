@@ -315,7 +315,7 @@ function report(io::IO, ss::BlanchardOLGSteadyState{T}) where {T}
     println(io, "  Human wealth   H = ", round(ss.H; digits=6))
     println(io, "  MPC (1 − βγ)     = ", round(ss.mpc; digits=6))
     println(io, "  Govt debt      b = ", round(ss.b; digits=6))
-    println(io, "  Converged        = ", ss.converged)
+    println(io, "  Converged        = ", _yesno(ss.converged))
     return nothing
 end
 report(ss::BlanchardOLGSteadyState) = report(stdout, ss)   # G-17 (#254): io-routed report

@@ -306,7 +306,7 @@ function Base.show(io::IO, m::RegModel{T}) where {T}
         "F p-value"    _format_pvalue(m.f_pval);
         "AIC"          _fmt(m.aic; digits=2);
         "BIC"          _fmt(m.bic; digits=2);
-        "Cov. type"    string(m.cov_type)
+        "Cov. type"    _label(m.cov_type)
     ]
 
     if m.method == :iv && m.first_stage_f !== nothing

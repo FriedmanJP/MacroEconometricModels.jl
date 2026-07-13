@@ -205,7 +205,7 @@ function _show_volatility_model(io::IO, header::String, m;
         "BIC"              _fmt(m.bic; digits=4);
         "Persistence"      _fmt(pers);
         "Unconditional σ²" (isfinite(uv) ? _fmt(uv) : "∞");
-        "Converged"        string(m.converged)
+        "Converged"        _yesno(m.converged)
     ]
     _pretty_table(io, fit_data;
         column_labels = ["Fit", "Value"],

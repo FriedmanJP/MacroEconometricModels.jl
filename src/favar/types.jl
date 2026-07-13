@@ -170,7 +170,7 @@ function Base.show(io::IO, m::FAVARModel{T}) where {T}
         "VAR lags (p)"      m.p;
         "Observations"      T_obs;
         "Effective obs"     effective_nobs(m);
-        "AIC"               _fmt(m.aic; digits=2);
+        "AIC (per obs.)"    _fmt(m.aic; digits=2);
         "BIC"               _fmt(m.bic; digits=2);
         "Log-lik"           _fmt(m.loglik; digits=4)
     ]

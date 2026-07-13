@@ -290,7 +290,7 @@ using LinearAlgebra, Statistics, Random, Distributions
         @test occursin("Multinomial Logit", output)
         @test occursin("Categories", output)
         @test occursin("Alternative", output)
-        @test occursin("const", output)
+        @test occursin("(Intercept)", output)
         @test occursin("x1", output)
         @test occursin("x2", output)
 

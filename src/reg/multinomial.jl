@@ -509,7 +509,7 @@ function Base.show(io::IO, m::MultinomialLogitModel{T}) where {T}
         se_j = se_all[offset+1:offset+K]
         cat_label = string(m.categories[j + 1])
         _coef_table(io, "Alternative $cat_label (vs $(m.categories[1]))",
-                    m.varnames, beta_j, se_j; dist=:z)
+                    _display_intercept.(m.varnames), beta_j, se_j; dist=:z)
     end
 
     _sig_legend(io)

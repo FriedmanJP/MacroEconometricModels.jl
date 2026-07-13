@@ -167,6 +167,44 @@ function _significance_stars(pvalue::Real)
     return ""
 end
 
+# =============================================================================
+# Shared display conventions (S8/T166)
+# =============================================================================
+
+const _LABELS = Dict{Symbol,String}(
+    :hc0 => "HC0 (robust)", :hc1 => "HC1 (robust)", :hc2 => "HC2 (robust)", :hc3 => "HC3 (robust)",
+    :ols => "OLS", :cluster => "Cluster-robust", :newey_west => "Newey–West (HAC)", :robust => "Robust (QMLE)",
+    :css => "CSS", :mle => "MLE", :css_mle => "CSS-MLE",
+    :normal => "Normal", :direct => "Direct (NIW)", :gibbs => "Gibbs", :minnesota => "Minnesota",
+    :ar1 => "AR(1)", :iid => "i.i.d.", :none => "None",
+    :jarque_bera => "Jarque–Bera", :doornik_hansen => "Doornik–Hansen",
+    :mardia_skewness => "Mardia skewness", :mardia_kurtosis => "Mardia kurtosis",
+    :henze_zirkler => "Henze–Zirkler",
+)
+
+"""
+    _label(s) -> String
+
+Map a publication Symbol/String to a human-readable display name (S8/T166). Unknown
+symbols are prettified (title-case, underscores→spaces) rather than dumped raw.
+"""
+_label(s::Symbol) = get(_LABELS, s) do
+    join(uppercasefirst.(split(String(s), '_')), " ")
+end
+_label(s::AbstractString) = _label(Symbol(s))
+
+"""Render a Bool as Yes/No for publication tables (S8/T166)."""
+_yesno(b::Bool) = b ? "Yes" : "No"
+
+# Single canonical p-value formatter name (S8/T166); _format_pvalue is the implementation.
+const _fmt_pvalue = _format_pvalue
+
+# Intercept display convention (S8/T166): show "(Intercept)" everywhere. Internal tokens
+# ("const"/"_cons") stay intact for margins/detection logic — map only at render time.
+const _INTERCEPT_LABEL = "(Intercept)"
+_display_intercept(name::AbstractString) =
+    name in ("const", "_cons", "Intercept (c)", "(Intercept)") ? _INTERCEPT_LABEL : name
+
 """Select representative horizons for display."""
 function _select_horizons(H::Int)
     H <= 5 && return collect(1:H)

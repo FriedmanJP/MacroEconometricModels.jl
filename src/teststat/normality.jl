@@ -65,7 +65,7 @@ function Base.show(io::IO, r::NormalityTestResult{T}) where {T}
         "Observations"       r.n_obs
     ]
     _pretty_table(io, data;
-        title = "Normality Test: $(r.test_name)",
+        title = "Normality Test: $(_label(r.test_name))",
         column_labels = ["", ""],
         alignment = [:l, :r],
     )
@@ -97,7 +97,7 @@ end
 function Base.show(io::IO, s::NormalityTestSuite{T}) where {T}
     data = Matrix{Any}(undef, length(s.results), 4)
     for (i, r) in enumerate(s.results)
-        data[i, 1] = string(r.test_name)
+        data[i, 1] = _label(r.test_name)
         data[i, 2] = _fmt(r.statistic)
         data[i, 3] = _format_pvalue(r.pvalue)
         data[i, 4] = r.pvalue < 0.05 ? "Reject" : "Fail to reject"

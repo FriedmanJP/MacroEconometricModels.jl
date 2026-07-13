@@ -62,6 +62,7 @@ function print_table(io::IO, irf::ImpulseResponse{T}, var::Int, shock::Int;
         column_labels = col_labels,
         alignment = fill(:r, size(raw, 2)),
     )
+    _show_note(io, "Note: h=1 denotes the impact period (h=0 in Dynare/textbook convention).")
 end
 
 print_table(irf::ImpulseResponse, var, shock; kwargs...) =
@@ -87,6 +88,7 @@ function print_table(io::IO, irf::BayesianImpulseResponse{T}, var::Int, shock::I
         column_labels = col_labels,
         alignment = fill(:r, size(raw, 2)),
     )
+    _show_note(io, "Note: h=1 denotes the impact period (h=0 in Dynare/textbook convention).")
 end
 
 print_table(irf::BayesianImpulseResponse, var, shock; kwargs...) =

@@ -105,8 +105,8 @@ function Base.show(io::IO, post::BVARPosterior{T}) where {T}
         "Variables"     post.n;
         "Lags"          post.p;
         "Draws"         post.n_draws;
-        "Prior"         string(post.prior);
-        "Sampler"       string(post.sampler);
+        "Prior"         _label(post.prior);
+        "Sampler"       _label(post.sampler);
         "Parameters/eq" k
     ]
     _pretty_table(io, spec_data;
@@ -117,7 +117,7 @@ function Base.show(io::IO, post::BVARPosterior{T}) where {T}
 
     # Build coefficient names
     vn = post.varnames
-    coef_names = String["const"]
+    coef_names = String[_INTERCEPT_LABEL]
     for l in 1:post.p
         for v in 1:post.n
             push!(coef_names, "$(vn[v]).L$l")

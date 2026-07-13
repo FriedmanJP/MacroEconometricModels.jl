@@ -471,7 +471,7 @@ function report(io::IO, ss::CTSteadyState{T}) where {T}
     println(io, "  Effective labor L = ", round(ss.L; digits=6))
     println(io, "  Mean wealth       = ", round(mean_a; digits=6))
     println(io, "  At constraint     = ", round(constrained; digits=6))
-    println(io, "  Converged         = ", ss.converged)
+    println(io, "  Converged         = ", _yesno(ss.converged))
     return nothing
 end
 report(ss::CTSteadyState) = report(stdout, ss)   # G-17 (#254): io-routed report

@@ -152,7 +152,7 @@ function report(model::VARModel{T}) where {T}
     )
 
     # --- Per-equation coefficient tables ---
-    coef_names = String["const"]
+    coef_names = String[_INTERCEPT_LABEL]
     for l in 1:p
         for v in 1:n
             push!(coef_names, "$(model.varnames[v]).L$l")
@@ -172,9 +172,9 @@ function report(model::VARModel{T}) where {T}
     logdet_Sigma = logdet(model.Sigma)
     loglik_val = -T(T_eff * n) / 2 * log(T(2π)) - T(T_eff) / 2 * logdet_Sigma - T(T_eff * n) / 2
     ic_data = ["Log-likelihood" _fmt(loglik_val; digits=4);
-               "AIC" _fmt(model.aic; digits=4);
-               "BIC" _fmt(model.bic; digits=4);
-               "HQIC" _fmt(model.hqic; digits=4)]
+               "AIC (per obs.)" _fmt(model.aic; digits=4);
+               "BIC (per obs.)" _fmt(model.bic; digits=4);
+               "HQIC (per obs.)" _fmt(model.hqic; digits=4)]
     _pretty_table(stdout, ic_data;
         title = "Information Criteria",
         column_labels = ["Criterion", "Value"],
@@ -281,9 +281,9 @@ function report(m::VECMModel{T}) where {T}
 
     # --- Information Criteria ---
     ic_data = ["Log-likelihood" _fmt(m.loglik; digits=4);
-               "AIC" _fmt(m.aic; digits=4);
-               "BIC" _fmt(m.bic; digits=4);
-               "HQIC" _fmt(m.hqic; digits=4)]
+               "AIC (per obs.)" _fmt(m.aic; digits=4);
+               "BIC (per obs.)" _fmt(m.bic; digits=4);
+               "HQIC (per obs.)" _fmt(m.hqic; digits=4)]
     _pretty_table(stdout, ic_data;
         title = "Information Criteria",
         column_labels = ["Criterion", "Value"],

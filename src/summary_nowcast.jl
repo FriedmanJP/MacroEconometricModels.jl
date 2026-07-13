@@ -19,7 +19,7 @@ function Base.show(io::IO, m::NowcastDFM{T}) where {T}
         "Observations"  T_obs;
         "Factors"       m.r;
         "Factor lags"   m.p;
-        "Idiosyncratic" string(m.idio);
+        "Idiosyncratic" _label(m.idio);
         "Blocks"        size(m.blocks, 2);
         "EM iterations" m.n_iter;
         "Log-likelihood" _fmt(m.loglik);

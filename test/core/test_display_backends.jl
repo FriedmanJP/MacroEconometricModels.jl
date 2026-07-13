@@ -471,3 +471,27 @@ end
     @test occursin("0.1829", s)
     set_display_backend(:text)
 end
+
+@testset "Shared display conventions (S8/T166)" begin
+    set_display_backend(:text)
+    MEM = MacroEconometricModels
+    # label dictionary + prettify fallback for unknown symbols
+    @test MEM._label(:hc1) == "HC1 (robust)"
+    @test MEM._label(:css_mle) == "CSS-MLE"
+    @test MEM._label(:ar1) == "AR(1)"
+    @test MEM._label(:jarque_bera) == "Jarque–Bera"
+    @test MEM._label(:some_unknown_thing) == "Some Unknown Thing"   # prettified, not raw
+    @test MEM._label("normal") == "Normal"                          # String dispatch
+    # Yes/No booleans (no raw true/false)
+    @test MEM._yesno(true) == "Yes" && MEM._yesno(false) == "No"
+    # one canonical p-value formatter
+    @test MEM._fmt_pvalue(0.0001) == "<0.001"
+    @test MEM._fmt_pvalue === MEM._format_pvalue
+    # intercept convention: internal tokens map to (Intercept), others pass through
+    @test MEM._INTERCEPT_LABEL == "(Intercept)"
+    @test MEM._display_intercept("const") == "(Intercept)"
+    @test MEM._display_intercept("_cons") == "(Intercept)"
+    @test MEM._display_intercept("Intercept (c)") == "(Intercept)"
+    @test MEM._display_intercept("gdp") == "gdp"
+    set_display_backend(:text)
+end
