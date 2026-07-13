@@ -1,0 +1,15 @@
+ GMM Estimation Result
+
+ Parameters 2
+ Moments 2
+ Observations 300
+ Weighting two_step
+ Converged Yes
+ Iterations 2
+
+ Coefficients
+
+ Coef. Std.Err. z P>|z| CI lower CI upper
+
+ θ[1] N N N <N N N ***
+ θ[2] N N N <N N N ***

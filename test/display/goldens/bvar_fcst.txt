@@ -1,0 +1,25 @@
+ Bayesian VAR Forecast
+
+ Specification
+
+ Horizon 4
+ Variables 2
+ Credibility 95%
+
+ y1
+
+ h Post. Mean N% N%
+
+ 1 N N N
+ 2 N N N
+ 3 N N N
+ 4 N N N
+
+ y2
+
+ h Post. Mean N% N%
+
+ 1 N N N
+ 2 N N N
+ 3 N N N
+ 4 N N N

@@ -1,0 +1,24 @@
+ OLS Regression
+
+ Specification
+
+ Method OLS
+ Observations 120
+ Covariates 3
+ R-squared N
+ Adj. R-sq. N
+ F-statistic N
+ F p-value <N
+ AIC N
+ BIC N
+ Cov. type HC1 (robust)
+
+ Coefficients
+
+ Coef. Std.Err. t P>|t| CI lower CI upper
+
+ x1 N N N <N N N ***
+ x2 N N N <N N N ***
+ x3 N N N <N N N ***
+
+Significance: *** p<N, ** p<N, * p<N

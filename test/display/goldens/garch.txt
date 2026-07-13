@@ -1,0 +1,21 @@
+ GARCH(1,1) Model
+
+ Coef. Std.Err. z P>|z| CI lower CI upper
+
+ μ (mean) N N N N N N
+ ω (intercept) N N N N N N
+ α[1] N N N N N N
+ β[1] N N N <N N N ***
+
+
+ Fit Value
+
+ Observations 500
+ Log-likelihood N
+ AIC N
+ BIC N
+ Persistence N
+ Unconditional σ² N
+ Converged Yes
+
+Significance: *** p<N, ** p<N, * p<N

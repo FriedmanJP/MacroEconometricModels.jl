@@ -1,0 +1,47 @@
+Static Factor Model (r=3)
+
+ Specification
+
+ Factors 3
+ Variables 12
+ Observations 100
+ Standardized Yes
+ Estimation PCA
+
+ Variance Explained
+
+ Variance Cumulative
+
+ Factor 1 N% N%
+ Factor 2 N% N%
+ Factor 3 N% N%
+
+Top Loadings — Factor 1
+
+ Variable Loading
+
+ Var 5 N
+ Var 4 N
+ Var 3 N
+ Var 9 N
+ Var 6 N
+
+Top Loadings — Factor 2
+
+ Variable Loading
+
+ Var 2 N
+ Var 11 N
+ Var 8 N
+ Var 6 N
+ Var 10 N
+
+Top Loadings — Factor 3
+
+ Variable Loading
+
+ Var 1 N
+ Var 7 N
+ Var 8 N
+ Var 12 N
+ Var 9 N

@@ -1,0 +1,65 @@
+ Vector Autoregression — VAR(2)
+
+ Specification
+
+ Variables 2
+ Lags 2
+ Observations (effective) 78
+ Parameters per equation 5
+
+ Equation Summary
+
+ Equation Parms RMSE R² Adj. R² F-stat
+
+ y1 5 N N N N
+ y2 5 N N N N
+
+ Equation: y1
+
+ Coef. Std.Err. t P>|t| CI lower CI upper
+
+ (Intercept) N N N N N N *
+ y1.L1 N N N <N N N ***
+ y2.L1 N N N N N N
+ y1.L2 N N N N N N
+ y2.L2 N N N N N N
+
+ Equation: y2
+
+ Coef. Std.Err. t P>|t| CI lower CI upper
+
+ (Intercept) N N N N N N
+ y1.L1 N N N N N N **
+ y2.L1 N N N <N N N ***
+ y1.L2 N N N N N N
+ y2.L2 N N N N N N **
+
+ Information Criteria
+
+ Criterion Value
+
+ Log-likelihood N
+ AIC (per obs.) N
+ BIC (per obs.) N
+ HQIC (per obs.) N
+
+ Residual Covariance (Σ)
+
+ y1 y2
+
+ y1 N N
+ y2 N N
+
+ Residual Correlation
+
+ y1 y2
+
+ y1 N N
+ y2 N N
+
+ Stationarity
+
+ Stationary Yes
+ Max |λ| N
+
+Significance: *** p<N, ** p<N, * p<N
