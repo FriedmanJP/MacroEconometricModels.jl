@@ -220,6 +220,32 @@ is_determined(sol::DSGESolution) = sol.eu[1] == 1 && sol.eu[2] == 1
 # Reuse the cached eigenvalues (all ctors store eigvals(G1)) instead of recomputing (S-17 / #224).
 is_stable(sol::DSGESolution) = maximum(abs.(sol.eigenvalues); init=0.0) < 1.0
 
+"""Render a variable→steady-state two-column table (S4/T168). Skips silently if empty."""
+function _ss_table(io::IO, varnames::Vector{String}, ss::AbstractVector; title::String="Steady State")
+    n = min(length(varnames), length(ss))
+    n == 0 && return
+    data = Matrix{Any}(undef, n, 2)
+    for i in 1:n
+        data[i, 1] = varnames[i]
+        data[i, 2] = _fmt(ss[i]; digits=6)
+    end
+    _pretty_table(io, data; title = title, column_labels = ["", ""], alignment = [:l, :r])
+end
+
+"""Steady state for a DSGESolution: `spec.steady_state`, or the linear observation offset
+`(I - G1)\\C_sol` for pre-linearized (linear=true) models whose spec SS auto-zeros."""
+function _dsge_solution_ss(sol::DSGESolution)
+    ss = sol.spec.steady_state
+    (!isempty(ss) && !all(iszero, ss)) && return ss
+    if !isempty(sol.C_sol) && size(sol.G1, 1) == length(sol.C_sol)
+        try
+            return (I - sol.G1) \ sol.C_sol
+        catch
+        end
+    end
+    return ss
+end
+
 function Base.show(io::IO, sol::DSGESolution{T}) where {T}
     n = nvars(sol)
     n_stable = count(x -> abs(x) < 1.0, sol.eigenvalues)
@@ -243,6 +269,7 @@ function Base.show(io::IO, sol::DSGESolution{T}) where {T}
         column_labels = ["", ""],
         alignment = [:l, :r],
     )
+    _ss_table(io, sol.spec.varnames, _dsge_solution_ss(sol))
 end
 
 # =============================================================================
@@ -340,6 +367,7 @@ function Base.show(io::IO, sol::PerturbationSolution{T}) where {T}
         column_labels = ["", ""],
         alignment = [:l, :r],
     )
+    _ss_table(io, sol.spec.varnames, sol.steady_state)
 end
 
 # =============================================================================
@@ -378,6 +406,23 @@ function Base.show(io::IO, pf::PerfectForesightPath{T}) where {T}
         column_labels = ["", ""],
         alignment = [:l, :r],
     )
+    # Path summary: steady state, terminal value, and max deviation per variable. (S4/T168)
+    ss = pf.spec.steady_state
+    vn = pf.spec.varnames
+    np = min(length(vn), size(pf.path, 2))
+    if np > 0
+        pdata = Matrix{Any}(undef, np, 4)
+        for i in 1:np
+            s = (!isempty(ss) && i <= length(ss)) ? ss[i] : zero(T)
+            pdata[i, 1] = vn[i]
+            pdata[i, 2] = _fmt(s; digits=6)
+            pdata[i, 3] = _fmt(pf.path[end, i]; digits=6)
+            pdata[i, 4] = _fmt(maximum(abs.(pf.path[:, i] .- s)); digits=6)
+        end
+        _pretty_table(io, pdata; title = "Path Summary",
+            column_labels = ["", "Steady state", "Terminal", "Max |dev|"],
+            alignment = [:l, :r, :r, :r])
+    end
 end
 
 # =============================================================================
@@ -464,6 +509,7 @@ function Base.show(io::IO, sol::ProjectionSolution{T}) where {T}
         column_labels = ["", ""],
         alignment = [:l, :r],
     )
+    _ss_table(io, sol.spec.varnames, sol.steady_state)
 end
 
 # =============================================================================
@@ -620,6 +666,7 @@ function Base.show(io::IO, sol::OccBinSolution{T}) where {T}
         column_labels = ["", ""],
         alignment = [:l, :r],
     )
+    _ss_table(io, sol.varnames, sol.steady_state)
 end
 
 report(sol::OccBinSolution) = show(stdout, sol)

@@ -587,3 +587,16 @@ end
     @test occursin("h=0", s)
     set_display_backend(:text)
 end
+
+@testset "content-standard renderers (S4/T168 pt2)" begin
+    set_display_backend(:text)
+    MEM = MacroEconometricModels
+    # _ss_table: variable → steady-state value
+    s = sprint(io -> MEM._ss_table(io, ["k", "c"], [1.5, 0.9]))
+    @test occursin("Steady State", s) && occursin("k", s) && occursin("1.5", s)
+    # _irf_points_table: values-only horizon summary with impact h=0
+    vals = reshape(collect(1.0:9.0), 3, 3)   # (H+1=3) × n_row=3
+    s = sprint(io -> MEM._irf_points_table(io, vals, ["a", "b", "c"], "IRF"))
+    @test occursin("h=0", s) && occursin("IRF", s)
+    set_display_backend(:text)
+end
