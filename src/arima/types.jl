@@ -436,4 +436,18 @@ function Base.show(io::IO, r::ARIMAOrderSelection)
         column_labels = ["Criterion", "p", "q", "Value"],
         alignment = [:l, :r, :r, :r],
     )
+    # BIC criterion grid over (p, q) with the winning cell marked — was two rows only. (J05/T174)
+    P, Q = size(r.bic_matrix)
+    grid = Matrix{Any}(undef, P, Q + 1)
+    for p in 1:P
+        grid[p, 1] = "p=$(p-1)"
+        for q in 1:Q
+            v = _fmt(r.bic_matrix[p, q]; digits=2)
+            grid[p, q+1] = (p - 1 == r.best_p_bic && q - 1 == r.best_q_bic) ? "[$v]" : v
+        end
+    end
+    _pretty_table(io, grid;
+        title = "BIC grid (ARMA p×q; [·] = selected)",
+        column_labels = vcat([""], ["q=$(q-1)" for q in 1:Q]),
+        alignment = vcat([:l], fill(:r, Q)))
 end

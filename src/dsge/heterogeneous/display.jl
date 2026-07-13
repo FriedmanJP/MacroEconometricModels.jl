@@ -192,7 +192,7 @@ function report(ss::HASteadyState{T}) where {T}
         "Converged"       ss.converged ? "Yes" : "No";
         "Iterations"      ss.iterations;
         "Excess demand"   _fmt(ss.excess_demand; digits=6);
-        "Euler error"     _fmt(ss.euler_error; digits=4)
+        "Euler error (log10)"  _fmt(ss.euler_error; digits=4)
     ]
     _pretty_table(io, conv_data;
         title="Convergence",

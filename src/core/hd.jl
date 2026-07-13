@@ -705,7 +705,7 @@ function Base.show(io::IO, hd::HistoricalDecomposition{T}) where {T}
         summary_data[i, end] = round(mean(abs.(hd.initial_conditions[:, i])), digits=4)
     end
 
-    col_labels = vcat(["Variable"], hd.shock_names, ["Initial"])
+    col_labels = vcat(["Variable"], ["shock: " * s for s in hd.shock_names], ["Initial"])
     _pretty_table(io, summary_data;
         title = "Contribution Summary (mean absolute contribution)",
         column_labels = col_labels,
@@ -756,7 +756,7 @@ function Base.show(io::IO, hd::BayesianHistoricalDecomposition{T}) where {T}
         summary_data[i, end] = round(mean(abs.(hd.initial_point_estimate[:, i])), digits=4)
     end
 
-    col_labels = vcat(["Variable"], hd.shock_names, ["Initial"])
+    col_labels = vcat(["Variable"], ["shock: " * s for s in hd.shock_names], ["Initial"])
     _pretty_table(io, summary_data;
         title = "Posterior Mean Contribution Summary (mean absolute)",
         column_labels = col_labels,

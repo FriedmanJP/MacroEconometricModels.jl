@@ -614,3 +614,13 @@ end
     @test occursin("2.5%", s) && occursin("97.5%", s)
     set_display_backend(:text)
 end
+
+@testset "Display one-offs (T174)" begin
+    set_display_backend(:text)
+    # V09: the normality suite disambiguates its two Jarque–Bera rows
+    s = sprint(show, normality_test_suite(randn(Random.MersenneTwister(3), 200, 3)))
+    @test occursin("Jarque–Bera (multivariate)", s)
+    @test occursin("Jarque–Bera (component-wise)", s)
+    @test !occursin("jarque_bera", s)
+    set_display_backend(:text)
+end

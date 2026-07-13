@@ -94,10 +94,17 @@ struct NormalityTestSuite{T<:AbstractFloat}
     n_obs::Int
 end
 
+# Disambiguate the two Jarque–Bera rows in the suite (multivariate vs component-wise). (V09/T174)
+function _normality_test_label(r::NormalityTestResult)
+    base = _label(r.test_name)
+    r.test_name == :jarque_bera || return base
+    return base * (r.components === nothing ? " (multivariate)" : " (component-wise)")
+end
+
 function Base.show(io::IO, s::NormalityTestSuite{T}) where {T}
     data = Matrix{Any}(undef, length(s.results), 4)
     for (i, r) in enumerate(s.results)
-        data[i, 1] = _label(r.test_name)
+        data[i, 1] = _normality_test_label(r)
         data[i, 2] = _fmt(r.statistic)
         data[i, 3] = _format_pvalue(r.pvalue)
         data[i, 4] = r.pvalue < 0.05 ? "Reject" : "Fail to reject"
