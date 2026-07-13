@@ -129,7 +129,11 @@ function _check_golden(name::AbstractString, s::AbstractString)
         return true
     end
     isfile(path) || error("golden missing: $path — regenerate with MACRO_UPDATE_GOLDENS=1")
-    expected = rstrip(read(path, String), '\n')
+    # Normalize line endings before comparing: Git's autocrlf checks the golden `.txt`
+    # files out with CRLF on Windows, so `read` returns `\r\n`-terminated lines while the
+    # canonicalized render is LF-only. (`.gitattributes` pins these to LF; this read-side
+    # normalization is belt-and-suspenders for any stray CRLF checkout.)
+    expected = rstrip(replace(read(path, String), "\r\n" => "\n", "\r" => "\n"), '\n')
     ok = canon == expected
     if !ok
         # Surface the first divergence to make CI logs actionable.

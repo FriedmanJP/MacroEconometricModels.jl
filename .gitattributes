@@ -1,0 +1,4 @@
+# Display goldens (#275) are byte-compared against a canonicalized render that is
+# always LF. Pin them to LF so Git's autocrlf never checks them out with CRLF on
+# Windows (which would make every golden line mismatch on a trailing \r).
+test/display/goldens/*.txt text eol=lf
