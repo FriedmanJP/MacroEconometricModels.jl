@@ -1,0 +1,19 @@
+Local Projection Model (Jordà N)
+
+ Variables N
+ Shock variable N
+ Response variables N
+ Horizon N
+ Lags N
+ Observations N
+ Covariance Newey-West
+
+ Impulse Responses (shock: yN)
+
+ h=N h=N h=N h=N
+
+ yN N N N N
+ yN N N N N
+ yN N N N N
+
+ significant at N% (|IRF/SE| > N)

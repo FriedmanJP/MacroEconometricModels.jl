@@ -68,6 +68,7 @@ using Distributions
 using SparseArrays
 using FFTW
 using Dates
+using Printf
 using Downloads
 import SHA
 using DelimitedFiles
@@ -468,7 +469,7 @@ export AbstractFactorModel, FactorModel, DynamicFactorModel, GeneralizedDynamicF
 
 # Nowcasting types
 export AbstractNowcastModel
-export NowcastDFM, NowcastBVAR, NowcastBridge, NowcastResult, NowcastNews
+export NowcastDFM, NowcastBVAR, NowcastBridge, NowcastResult, NowcastNews, NowcastForecast
 
 # Nowcasting estimation
 export nowcast_dfm, nowcast_bvar, nowcast_bridge
@@ -574,7 +575,7 @@ export johansen_test
 export andrews_test, bai_perron_test
 
 # Panel unit root tests
-export panic_test, pesaran_cips_test, moon_perron_test, panel_unit_root_summary
+export panic_test, pesaran_cips_test, moon_perron_test, panel_unit_root_summary, PanelUnitRootSummary
 
 # Factor model structural break tests
 export factor_break_test
@@ -992,7 +993,7 @@ export MultinomialLogitModel, estimate_mlogit
 export estimate_reg, estimate_iv, estimate_logit, estimate_probit
 
 # Marginal effects, diagnostics, prediction
-export marginal_effects, odds_ratio, vif, classification_table
+export marginal_effects, odds_ratio, vif, classification_table, OddsRatio, MultinomialMarginalEffects
 export brant_test, hausman_iia
 
 # =============================================================================

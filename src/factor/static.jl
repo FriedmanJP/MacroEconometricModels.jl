@@ -274,17 +274,16 @@ function Base.show(io::IO, m::FactorModel{T}) where {T}
         loadings_f = m.loadings[:, f]
         sorted_idx = sortperm(abs.(loadings_f); rev=true)
         top_idx = sorted_idx[1:n_top]
-        load_data = Matrix{Any}(undef, n_top, 3)
+        load_data = Matrix{Any}(undef, n_top, 2)
         for (row, idx) in enumerate(top_idx)
             load_data[row, 1] = "Var $idx"
-            load_data[row, 2] = _fmt(loadings_f[idx])
-            load_data[row, 3] = _fmt(abs(loadings_f[idx]))
+            load_data[row, 2] = _fmt(loadings_f[idx])   # sorted by |loading|; the sort key is internal (I01/T174)
         end
         ftitle = m.block_names !== nothing ? "Top Loadings — $(m.block_names[f])" : "Top Loadings — Factor $f"
         _pretty_table(io, load_data;
             title = ftitle,
-            column_labels = ["Variable", "Loading", "|Loading|"],
-            alignment = [:l, :r, :r],
+            column_labels = ["Variable", "Loading"],
+            alignment = [:l, :r],
         )
     end
 end

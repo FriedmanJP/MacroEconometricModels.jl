@@ -440,7 +440,7 @@ function Base.show(io::IO, m::PanelRegModel{T}) where {T}
         display_size = (-1, -1),   # never vertically crop the model-summary table (non-TTY)
     )
 
-    _coef_table(io, "Coefficients", m.varnames, m.beta, stderror(m);
+    _coef_table(io, "Coefficients", _display_intercept.(m.varnames), m.beta, stderror(m);
         dist = :t, dof_r = dof_residual(m))
     _sig_legend(io)
 end
@@ -490,7 +490,7 @@ function Base.show(io::IO, m::PanelIVModel{T}) where {T}
         alignment = [:l, :r],
     )
 
-    _coef_table(io, "Coefficients", m.varnames, m.beta, stderror(m);
+    _coef_table(io, "Coefficients", _display_intercept.(m.varnames), m.beta, stderror(m);
         dist = :t, dof_r = dof_residual(m))
     _sig_legend(io)
 end
@@ -529,7 +529,7 @@ function Base.show(io::IO, m::PanelLogitModel{T}) where {T}
         alignment = [:l, :r],
     )
 
-    _coef_table(io, "Coefficients", m.varnames, m.beta, stderror(m);
+    _coef_table(io, "Coefficients", _display_intercept.(m.varnames), m.beta, stderror(m);
         dist = :z)
     _sig_legend(io)
 end
@@ -568,7 +568,7 @@ function Base.show(io::IO, m::PanelProbitModel{T}) where {T}
         alignment = [:l, :r],
     )
 
-    _coef_table(io, "Coefficients", m.varnames, m.beta, stderror(m);
+    _coef_table(io, "Coefficients", _display_intercept.(m.varnames), m.beta, stderror(m);
         dist = :z)
     _sig_legend(io)
 end

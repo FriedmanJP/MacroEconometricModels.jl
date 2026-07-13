@@ -996,7 +996,7 @@ Random.seed!(9010)
 
         # Direct PanelData dispatch
         result = panel_unit_root_summary(pd; r=1, lags=1)
-        @test result === nothing
+        @test result isa PanelUnitRootSummary
     end
 
 end

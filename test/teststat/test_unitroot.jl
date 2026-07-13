@@ -451,6 +451,24 @@ using Statistics
         @test all(isfinite, result_trend4.trace_stats)
     end
 
+    @testset "Johansen rank selection (B1/T171)" begin
+        rng = MersenneTwister(11)
+        tr = cumsum(randn(rng, 300, 1); dims=1)          # one common stochastic trend
+        Y = hcat(tr, tr .+ 0.1 .* randn(rng, 300), tr .+ 0.1 .* randn(rng, 300))
+        res = johansen_test(Y, 2)
+        # rank == number of LEADING trace rejections (self-consistent with the decision
+        # column). The old code set rank = r (one too low) on rejection of H0: rank ≤ r.
+        expected = 0
+        for i in 1:3
+            res.trace_stats[i] > res.critical_values_trace[i, 2] ? (expected = i) : break
+        end
+        @test res.rank == expected
+        @test res.rank >= 1                              # genuine common-trend system
+        # VECM auto-selector agrees with johansen_test on identical data (deduped selector)
+        m = estimate_vecm(Y, 2; rank=:auto)
+        @test m.johansen_result.rank == res.rank
+    end
+
     # ==========================================================================
     # VAR Stationarity Check
     # ==========================================================================

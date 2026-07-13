@@ -338,7 +338,7 @@ StatsAPI.islinear(::AbstractARIMAModel) = true
 function _show_arima_model(io::IO, header::String, m::AbstractARIMAModel;
                            phi::Vector=Float64[], theta::Vector=Float64[])
     # Build parameter names and values
-    param_names = String["Intercept (c)"]
+    param_names = String[_INTERCEPT_LABEL]
     param_vals = eltype(m.y)[m.c]
     for (i, p) in enumerate(phi)
         push!(param_names, "φ[$i]")
@@ -381,7 +381,7 @@ function _show_arima_model(io::IO, header::String, m::AbstractARIMAModel;
         "BIC"            _fmt(m.bic; digits=4);
         "R²"             _fmt(r2_val);
         "S.E. of regression" _fmt(sqrt(m.sigma2));
-        "Method"         string(m.method);
+        "Method"         _label(m.method);
         "Converged"      m.converged ? "Yes" : "No"
     ]
     _pretty_table(io, fit_data;
@@ -436,4 +436,18 @@ function Base.show(io::IO, r::ARIMAOrderSelection)
         column_labels = ["Criterion", "p", "q", "Value"],
         alignment = [:l, :r, :r, :r],
     )
+    # BIC criterion grid over (p, q) with the winning cell marked — was two rows only. (J05/T174)
+    P, Q = size(r.bic_matrix)
+    grid = Matrix{Any}(undef, P, Q + 1)
+    for p in 1:P
+        grid[p, 1] = "p=$(p-1)"
+        for q in 1:Q
+            v = _fmt(r.bic_matrix[p, q]; digits=2)
+            grid[p, q+1] = (p - 1 == r.best_p_bic && q - 1 == r.best_q_bic) ? "[$v]" : v
+        end
+    end
+    _pretty_table(io, grid;
+        title = "BIC grid (ARMA p×q; [·] = selected)",
+        column_labels = vcat([""], ["q=$(q-1)" for q in 1:Q]),
+        alignment = vcat([:l], fill(:r, Q)))
 end

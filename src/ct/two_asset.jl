@@ -307,11 +307,9 @@ fraction of (poor) hand-to-mouth households (low liquid wealth).
 function report(io::IO, s::CTTwoAssetSolution{T}) where {T}
     total = s.B + s.A
     illiq_share = total > zero(T) ? s.A / total : zero(T)
-    println(io, "Continuous-Time Two-Asset HANK (KMV-style) — Stationary Solution")
-    println(io, "  Aggregate liquid    B = ", round(s.B; digits=6))
-    println(io, "  Aggregate illiquid  A = ", round(s.A; digits=6))
-    println(io, "  Illiquid wealth share = ", round(illiq_share; digits=4))
-    println(io, "  HJB converged         = ", s.hjb_converged)
+    _show_spec_table(io, "Continuous-Time Two-Asset HANK (KMV-style) — Stationary Solution",
+        ["Aggregate liquid B" => _fmt(s.B; digits=6), "Aggregate illiquid A" => _fmt(s.A; digits=6),
+         "Illiquid wealth share" => _fmt(illiq_share; digits=4), "HJB converged" => _yesno(s.hjb_converged)])
     return nothing
 end
 report(s::CTTwoAssetSolution) = report(stdout, s)   # G-17 (#254): io-routed report

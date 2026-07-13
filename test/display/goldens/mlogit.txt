@@ -1,0 +1,35 @@
+ Multinomial Logit Regression
+
+ Specification
+
+ Model Multinomial Logit
+ Observations N
+ Covariates N
+ Categories N
+ Base category N
+ Parameters N
+ Log-lik. N
+ Log-lik. null N
+ Pseudo R-sq. N
+ AIC N
+ BIC N
+ Converged Yes
+ Iterations N
+
+ Alternative N (vs N)
+
+ Coef. Std.Err. z P>|z| CI lower CI upper
+
+ (Intercept) N N N N N N
+ xN N N N N N N
+ xN N N N N N N
+
+ Alternative N (vs N)
+
+ Coef. Std.Err. z P>|z| CI lower CI upper
+
+ (Intercept) N N N N N N
+ xN N N N N N N
+ xN N N N N N N
+
+Significance: pN, pN, pN

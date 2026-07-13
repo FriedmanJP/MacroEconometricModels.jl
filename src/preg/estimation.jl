@@ -177,10 +177,12 @@ end
 Compute within, between, and overall R-squared from full residuals.
 """
 function _panel_r2(y::Vector{T}, fitted::Vector{T},
-                   groups::Vector{Int}, unique_groups::Vector{Int}) where {T}
+                   groups::Vector{Int}, unique_groups::Vector{Int};
+                   xb::AbstractVector=fitted) where {T}
     N = length(unique_groups)
 
-    # Within R²: from demeaned data
+    # Within R²: from demeaned data (α_i is group-constant → removed by demeaning, so
+    # using `fitted` here is correct and unchanged by the between/overall fix).
     y_dm, _ = _within_demean(y, groups, unique_groups)
     f_dm, _ = _within_demean(fitted, groups, unique_groups)
     ssr_w = dot(y_dm .- f_dm, y_dm .- f_dm)
@@ -188,24 +190,26 @@ function _panel_r2(y::Vector{T}, fitted::Vector{T},
     tss_w = max(tss_w, T(1e-300))
     r2_within = one(T) - ssr_w / tss_w
 
-    # Between R²: corr(ȳᵢ, ŷ̄ᵢ)²
+    # Between R²: corr(ȳᵢ, x̄ᵢ'β̂)². Use the regressor prediction `xb` (Stata xtreg
+    # convention), EXCLUDING the entity fixed effect — otherwise mean(fitted)=ȳᵢ once α_i
+    # is added back and the group-mean fit is trivially perfect (=1). (B3/T172)
     y_bar_g = zeros(T, N)
-    yhat_bar_g = zeros(T, N)
+    xb_bar_g = zeros(T, N)
     gmap = _group_index_map(groups)
     for (j, g) in enumerate(unique_groups)
         idx = gmap[g]
         y_bar_g[j] = mean(@view y[idx])
-        yhat_bar_g[j] = mean(@view fitted[idx])
+        xb_bar_g[j] = mean(@view xb[idx])
     end
-    r2_between = if std(y_bar_g) > T(1e-10) && std(yhat_bar_g) > T(1e-10)
-        cor(y_bar_g, yhat_bar_g)^2
+    r2_between = if std(y_bar_g) > T(1e-10) && std(xb_bar_g) > T(1e-10)
+        cor(y_bar_g, xb_bar_g)^2
     else
         zero(T)
     end
 
-    # Overall R²: corr(yᵢₜ, ŷᵢₜ)²
-    r2_overall = if std(y) > T(1e-10) && std(fitted) > T(1e-10)
-        cor(y, fitted)^2
+    # Overall R²: corr(yᵢₜ, xᵢₜ'β̂)² — same regressor-prediction convention.
+    r2_overall = if std(y) > T(1e-10) && std(xb) > T(1e-10)
+        cor(y, xb)^2
     else
         zero(T)
     end
@@ -379,24 +383,27 @@ function _estimate_fe(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
     tss_within = max(tss_within, T(1e-300))
     r2_within = one(T) - ssr_within / tss_within
 
-    # Between R^2: corr(y_bar_i, x_bar_i' beta + alpha_i)^2
+    # Between/Overall R² use the regressor prediction xb = X·β̂ (Stata xtreg convention),
+    # EXCLUDING the entity fixed effect α_i — otherwise mean(fitted_full)=ȳᵢ and the
+    # group-mean fit is trivially perfect (=1). (B3/T172)
+    xb = X * beta
     y_bar_g = zeros(T, N)
-    yhat_bar_g = zeros(T, N)
+    xb_bar_g = zeros(T, N)
     gmap = _group_index_map(groups)
     for (j, g) in enumerate(unique_groups)
         idx = gmap[g]
         y_bar_g[j] = mean(@view y[idx])
-        yhat_bar_g[j] = mean(@view fitted_full[idx])
+        xb_bar_g[j] = mean(@view xb[idx])
     end
-    r2_between = if std(y_bar_g) > T(1e-10) && std(yhat_bar_g) > T(1e-10)
-        cor(y_bar_g, yhat_bar_g)^2
+    r2_between = if std(y_bar_g) > T(1e-10) && std(xb_bar_g) > T(1e-10)
+        cor(y_bar_g, xb_bar_g)^2
     else
         zero(T)
     end
 
-    # Overall R^2: corr(y_it, yhat_it)^2
-    r2_overall = if std(y) > T(1e-10) && std(fitted_full) > T(1e-10)
-        cor(y, fitted_full)^2
+    # Overall R^2: corr(y_it, x_it'β̂)^2 — same regressor-prediction convention.
+    r2_overall = if std(y) > T(1e-10) && std(xb) > T(1e-10)
+        cor(y, xb)^2
     else
         zero(T)
     end

@@ -1,0 +1,34 @@
+ Johansen Cointegration Test
+
+ Specification
+
+ Deterministic terms Constant in cointegrating equation
+ Lags in VECM N
+ Observations N
+ Number of variables N
+
+ Trace Test
+
+ H₀: rank ≤ r Statistic N% CV P-value Decision
+
+ N N N N Reject
+ N N N N
+ N N N N
+
+ Maximum Eigenvalue Test
+
+ H₀: rank = r Statistic N% CV P-value Decision
+
+ N N N N Reject
+ N N N N
+ N N N N
+
+ Eigenvalues
+
+ λN λN λN
+
+ N N N
+
+
+ Conclusion Estimated cointegration rank = N
+ Note pN, pN, pN

@@ -205,7 +205,7 @@ function _show_volatility_model(io::IO, header::String, m;
         "BIC"              _fmt(m.bic; digits=4);
         "Persistence"      _fmt(pers);
         "Unconditional σ²" (isfinite(uv) ? _fmt(uv) : "∞");
-        "Converged"        string(m.converged)
+        "Converged"        _yesno(m.converged)
     ]
     _pretty_table(io, fit_data;
         column_labels = ["Fit", "Value"],
@@ -242,4 +242,6 @@ function Base.show(io::IO, f::VolatilityForecast)
         column_labels = ["h", "σ² Forecast", "Std. Err.", "Lower", "Upper"],
         alignment = [:r, :r, :r, :r, :r],
     )
+    println(io, "Note: CI bounds are empirical quantiles of the simulated σ² paths " *
+                "(asymmetric); Std. Err. is the path std. dev., not a symmetric ±z·SE band.")  # (S9/T170)
 end

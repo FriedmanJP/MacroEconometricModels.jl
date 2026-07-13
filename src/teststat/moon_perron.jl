@@ -237,10 +237,48 @@ end
 # =============================================================================
 
 """
-    panel_unit_root_summary(X; r=:auto, lags=:auto) -> Nothing
+    PanelUnitRootSummary
 
-Print a summary of three panel unit root tests: PANIC (Bai-Ng 2004),
-Pesaran CIPS (2007), and Moon-Perron (2004).
+Container for the panel unit-root test battery (PANIC / Pesaran CIPS / Moon-Perron),
+returned by `panel_unit_root_summary` so the battery can be composed, re-displayed, and
+inspected — not just printed once. Any sub-test that errors is recorded in `errors` and
+skipped. (S3/T167)
+"""
+struct PanelUnitRootSummary
+    panic::Union{PANICResult,Nothing}
+    cips::Union{PesaranCIPSResult,Nothing}
+    moon_perron::Union{MoonPerronResult,Nothing}
+    errors::Vector{String}
+end
+
+function _build_panel_unit_root_summary(X::AbstractMatrix; r::Union{Int,Symbol}=:auto,
+                                        lags::Union{Int,Symbol}=:auto)
+    panic = nothing; cips = nothing; mp = nothing
+    errors = String[]
+    try
+        panic = panic_test(X; r=r, method=:pooled)
+    catch e
+        push!(errors, "PANIC test failed: " * sprint(showerror, e))
+    end
+    try
+        cips = pesaran_cips_test(X; lags=lags, deterministic=:constant)
+    catch e
+        push!(errors, "Pesaran CIPS test failed: " * sprint(showerror, e))
+    end
+    try
+        mp = moon_perron_test(X; r=r)
+    catch e
+        push!(errors, "Moon-Perron test failed: " * sprint(showerror, e))
+    end
+    return PanelUnitRootSummary(panic, cips, mp, errors)
+end
+
+"""
+    panel_unit_root_summary(X; r=:auto, lags=:auto) -> PanelUnitRootSummary
+
+Run the three panel unit-root tests — PANIC (Bai-Ng 2004), Pesaran CIPS (2007), and
+Moon-Perron (2004) — and return a [`PanelUnitRootSummary`](@ref). Pass an `io` first
+argument to also print the battery.
 
 # Arguments
 - `X::AbstractMatrix`: Panel data (T × N)
@@ -250,48 +288,31 @@ Pesaran CIPS (2007), and Moon-Perron (2004).
 # Example
 ```julia
 X = randn(100, 20)
-panel_unit_root_summary(X; r=1)
+s = panel_unit_root_summary(X; r=1)
 ```
 """
 function panel_unit_root_summary(X::AbstractMatrix; r::Union{Int,Symbol}=:auto,
                                   lags::Union{Int,Symbol}=:auto)
-    panel_unit_root_summary(stdout, X; r=r, lags=lags)
+    return _build_panel_unit_root_summary(X; r=r, lags=lags)
 end
 
 function panel_unit_root_summary(io::IO, X::AbstractMatrix; r::Union{Int,Symbol}=:auto,
                                   lags::Union{Int,Symbol}=:auto)
-    println(io, "\n", "="^60)
-    println(io, "  Panel Unit Root Test Battery")
-    println(io, "="^60, "\n")
+    s = _build_panel_unit_root_summary(X; r=r, lags=lags)
+    show(io, s)
+    return s
+end
 
-    # PANIC
-    try
-        r_panic = panic_test(X; r=r, method=:pooled)
-        show(io, r_panic)
-        println(io)
-    catch e
-        println(io, "PANIC test failed: ", sprint(showerror, e))
+function Base.show(io::IO, s::PanelUnitRootSummary)
+    # Borderless title (dropped the ='^60 ASCII banner for dialect consistency). (S5/T169)
+    println(io, "\n  Panel Unit Root Test Battery\n")
+    s.panic !== nothing && (show(io, s.panic); println(io))
+    s.cips !== nothing && (show(io, s.cips); println(io))
+    s.moon_perron !== nothing && (show(io, s.moon_perron); println(io))
+    for e in s.errors
+        println(io, e)
     end
-
-    # Pesaran CIPS
-    try
-        r_cips = pesaran_cips_test(X; lags=lags, deterministic=:constant)
-        show(io, r_cips)
-        println(io)
-    catch e
-        println(io, "Pesaran CIPS test failed: ", sprint(showerror, e))
-    end
-
-    # Moon-Perron
-    try
-        r_mp = moon_perron_test(X; r=r)
-        show(io, r_mp)
-        println(io)
-    catch e
-        println(io, "Moon-Perron test failed: ", sprint(showerror, e))
-    end
-
-    nothing
+    return nothing
 end
 
 # PanelData dispatch

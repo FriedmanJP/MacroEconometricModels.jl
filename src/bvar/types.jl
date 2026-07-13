@@ -75,9 +75,10 @@ function Base.show(io::IO, fc::BVARForecast{T}) where {T}
         alignment = [:l, :r],
     )
 
-    # Per-variable forecast table
-    lo_pct = round(Int, 100 * (1 - fc.conf_level) / 2)
-    hi_pct = 100 - lo_pct
+    # Per-variable forecast table. Label the band with one decimal so a 95% CI reads
+    # 2.5%/97.5% (round(Int, 2.5000…) gave the mislabeled 3%/97%). (S9/T170)
+    lo_label = _fmt_pct((1 - fc.conf_level) / 2)
+    hi_label = _fmt_pct((1 + fc.conf_level) / 2)
     for vi in 1:n_vars
         data = Matrix{Any}(undef, fc.horizon, 4)
         for h in 1:fc.horizon
@@ -88,7 +89,7 @@ function Base.show(io::IO, fc::BVARForecast{T}) where {T}
         end
         _pretty_table(io, data;
             title = "$(fc.varnames[vi])",
-            column_labels = ["h", fc.point_estimate == :median ? "Post. Median" : "Post. Mean", "$(lo_pct)%", "$(hi_pct)%"],
+            column_labels = ["h", fc.point_estimate == :median ? "Post. Median" : "Post. Mean", lo_label, hi_label],
             alignment = [:r, :r, :r, :r],
         )
     end
@@ -105,8 +106,8 @@ function Base.show(io::IO, post::BVARPosterior{T}) where {T}
         "Variables"     post.n;
         "Lags"          post.p;
         "Draws"         post.n_draws;
-        "Prior"         string(post.prior);
-        "Sampler"       string(post.sampler);
+        "Prior"         _label(post.prior);
+        "Sampler"       _label(post.sampler);
         "Parameters/eq" k
     ]
     _pretty_table(io, spec_data;
@@ -117,7 +118,7 @@ function Base.show(io::IO, post::BVARPosterior{T}) where {T}
 
     # Build coefficient names
     vn = post.varnames
-    coef_names = String["const"]
+    coef_names = String[_INTERCEPT_LABEL]
     for l in 1:post.p
         for v in 1:post.n
             push!(coef_names, "$(vn[v]).L$l")

@@ -290,7 +290,7 @@ using LinearAlgebra, Statistics, Random, Distributions
         @test occursin("Multinomial Logit", output)
         @test occursin("Categories", output)
         @test occursin("Alternative", output)
-        @test occursin("const", output)
+        @test occursin("(Intercept)", output)
         @test occursin("x1", output)
         @test occursin("x2", output)
 
@@ -379,10 +379,11 @@ using LinearAlgebra, Statistics, Random, Distributions
         m = estimate_mlogit(y, X; varnames=["const", "x1", "x2"])
         me = marginal_effects(m)
 
-        # Returns a NamedTuple with effects, varnames, categories
-        @test haskey(me, :effects)
-        @test haskey(me, :varnames)
-        @test haskey(me, :categories)
+        # Returns a MultinomialMarginalEffects display type (S3/T167)
+        @test me isa MultinomialMarginalEffects
+        @test me.effects isa AbstractMatrix
+        @test me.varnames isa Vector{String}
+        @test me.categories isa Vector{String}
 
         # K x J matrix
         K = size(m.X, 2)

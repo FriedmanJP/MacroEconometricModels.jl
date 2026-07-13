@@ -308,20 +308,8 @@ end
 # Internal Helpers
 # =============================================================================
 
-function _select_rank_trace(joh::JohansenResult{T}, significance::Real) where {T}
-    n = length(joh.trace_stats)
-    # Use 5% column (index 2) by default
-    cv_col = significance <= 0.01 ? 3 : significance <= 0.05 ? 2 : 1
-    r = 0
-    for i in 0:(n-1)
-        if joh.trace_stats[i+1] > joh.critical_values_trace[i+1, cv_col]
-            r = i + 1
-        else
-            break
-        end
-    end
-    r
-end
+# _select_rank_trace relocated to src/teststat/johansen.jl as the single source of the
+# trace-rank rule (shared with johansen_test via _rank_from_trace). (B1/T171)
 
 function _select_rank_max_eigen(joh::JohansenResult{T}, significance::Real) where {T}
     n = length(joh.max_eigen_stats)

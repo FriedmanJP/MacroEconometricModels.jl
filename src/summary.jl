@@ -106,7 +106,8 @@ Print comprehensive VAR model summary including specification, per-equation
 coefficient estimates with standard errors and significance, information
 criteria, residual covariance, and stationarity check.
 """
-function report(model::VARModel{T}) where {T}
+report(model::VARModel) = report(stdout, model)
+function report(io::IO, model::VARModel{T}) where {T}
     n, p = nvars(model), model.p
     T_eff = effective_nobs(model)
     k = ncoefs(model)
@@ -117,7 +118,7 @@ function report(model::VARModel{T}) where {T}
         "Observations (effective)" T_eff;
         "Parameters per equation" k
     ]
-    _pretty_table(stdout, spec_data;
+    _pretty_table(io, spec_data;
         title = "Vector Autoregression — VAR($p)",
         column_labels = ["Specification", ""],
         alignment = [:l, :r],
@@ -145,14 +146,14 @@ function report(model::VARModel{T}) where {T}
         eq_data[j, 5] = _fmt(adj_r2)
         eq_data[j, 6] = _fmt(f_stat; digits=3)
     end
-    _pretty_table(stdout, eq_data;
+    _pretty_table(io, eq_data;
         title = "Equation Summary",
         column_labels = ["Equation", "Parms", "RMSE", "R²", "Adj. R²", "F-stat"],
         alignment = [:l, :r, :r, :r, :r, :r],
     )
 
     # --- Per-equation coefficient tables ---
-    coef_names = String["const"]
+    coef_names = String[_INTERCEPT_LABEL]
     for l in 1:p
         for v in 1:n
             push!(coef_names, "$(model.varnames[v]).L$l")
@@ -163,7 +164,7 @@ function report(model::VARModel{T}) where {T}
     for j in 1:n
         se_j = sqrt.(max.(diag(XtX_inv) .* model.Sigma[j, j], zero(T)))
         coef_vals = model.B[:, j]
-        _coef_table(stdout, "Equation: $(model.varnames[j])", coef_names, coef_vals, se_j;
+        _coef_table(io, "Equation: $(model.varnames[j])", coef_names, coef_vals, se_j;
                     dist=:t, dof_r=dof_r)
     end
 
@@ -172,24 +173,24 @@ function report(model::VARModel{T}) where {T}
     logdet_Sigma = logdet(model.Sigma)
     loglik_val = -T(T_eff * n) / 2 * log(T(2π)) - T(T_eff) / 2 * logdet_Sigma - T(T_eff * n) / 2
     ic_data = ["Log-likelihood" _fmt(loglik_val; digits=4);
-               "AIC" _fmt(model.aic; digits=4);
-               "BIC" _fmt(model.bic; digits=4);
-               "HQIC" _fmt(model.hqic; digits=4)]
-    _pretty_table(stdout, ic_data;
+               "AIC (per obs.)" _fmt(model.aic; digits=4);
+               "BIC (per obs.)" _fmt(model.bic; digits=4);
+               "HQIC (per obs.)" _fmt(model.hqic; digits=4)]
+    _pretty_table(io, ic_data;
         title = "Information Criteria",
         column_labels = ["Criterion", "Value"],
         alignment = [:l, :r],
     )
 
     # --- Residual Covariance ---
-    _matrix_table(stdout, model.Sigma, "Residual Covariance (Σ)";
+    _matrix_table(io, model.Sigma, "Residual Covariance (Σ)";
         row_labels=model.varnames,
         col_labels=model.varnames)
 
     # --- Residual Correlation ---
     D_inv = Diagonal(one(T) ./ sqrt.(max.(diag(model.Sigma), eps(T))))
     corr_mat = D_inv * model.Sigma * D_inv
-    _matrix_table(stdout, corr_mat, "Residual Correlation";
+    _matrix_table(io, corr_mat, "Residual Correlation";
         row_labels=model.varnames,
         col_labels=model.varnames)
 
@@ -198,15 +199,14 @@ function report(model::VARModel{T}) where {T}
     max_mod = maximum(abs.(eigvals(F)))
     stable = max_mod < 1 ? "Yes" : "No"
     stab_data = Any["Stationary" stable; "Max |λ|" _fmt(max_mod)]
-    _pretty_table(stdout, stab_data;
+    _pretty_table(io, stab_data;
         title = "Stationarity",
         column_labels = ["", ""],
         alignment = [:l, :r],
     )
 
     # --- Notes ---
-    note_data = Any["Significance" "*** p<0.01, ** p<0.05, * p<0.10"]
-    _pretty_table(stdout, note_data; column_labels=["",""], alignment=[:l,:l])
+    _sig_legend(io)
 end
 
 """
@@ -222,7 +222,8 @@ report(post::BVARPosterior) = show(stdout, post)
 Print comprehensive VECM summary including cointegrating vectors, adjustment
 coefficients, short-run dynamics, and diagnostics.
 """
-function report(m::VECMModel{T}) where {T}
+report(m::VECMModel) = report(stdout, m)
+function report(io::IO, m::VECMModel{T}) where {T}
     n = nvars(m)
     r = m.rank
     p_diff = m.p - 1
@@ -238,7 +239,7 @@ function report(m::VECMModel{T}) where {T}
         "Deterministic" string(m.deterministic);
         "Method" string(m.method)
     ]
-    _pretty_table(stdout, spec_data;
+    _pretty_table(io, spec_data;
         title = "Vector Error Correction Model — VECM($p_diff), Rank $r",
         column_labels = ["Specification", ""],
         alignment = [:l, :r],
@@ -246,24 +247,24 @@ function report(m::VECMModel{T}) where {T}
 
     # --- Cointegrating vectors (β) ---
     if r > 0
-        _matrix_table(stdout, m.beta, "Cointegrating Vectors (β)";
+        _matrix_table(io, m.beta, "Cointegrating Vectors (β)";
             row_labels=m.varnames,
             col_labels=["β$j" for j in 1:r])
 
         # --- Adjustment coefficients (α) ---
-        _matrix_table(stdout, m.alpha, "Adjustment Coefficients (α)";
+        _matrix_table(io, m.alpha, "Adjustment Coefficients (α)";
             row_labels=m.varnames,
             col_labels=["α$j" for j in 1:r])
 
         # --- Long-run matrix (Π = αβ') ---
-        _matrix_table(stdout, m.Pi, "Long-Run Matrix (Π = αβ')";
+        _matrix_table(io, m.Pi, "Long-Run Matrix (Π = αβ')";
             row_labels=m.varnames,
             col_labels=m.varnames)
     end
 
     # --- Short-run dynamics ---
     for (i, Gi) in enumerate(m.Gamma)
-        _matrix_table(stdout, Gi, "Short-Run Dynamics Γ$i";
+        _matrix_table(io, Gi, "Short-Run Dynamics Γ$i";
             row_labels=m.varnames,
             col_labels=m.varnames)
     end
@@ -274,7 +275,7 @@ function report(m::VECMModel{T}) where {T}
         mu_data[i, 1] = m.varnames[i]
         mu_data[i, 2] = _fmt(m.mu[i])
     end
-    _pretty_table(stdout, mu_data;
+    _pretty_table(io, mu_data;
         title = "Intercept (μ)",
         column_labels = ["Variable", "Value"],
         alignment = [:l, :r],
@@ -282,30 +283,29 @@ function report(m::VECMModel{T}) where {T}
 
     # --- Information Criteria ---
     ic_data = ["Log-likelihood" _fmt(m.loglik; digits=4);
-               "AIC" _fmt(m.aic; digits=4);
-               "BIC" _fmt(m.bic; digits=4);
-               "HQIC" _fmt(m.hqic; digits=4)]
-    _pretty_table(stdout, ic_data;
+               "AIC (per obs.)" _fmt(m.aic; digits=4);
+               "BIC (per obs.)" _fmt(m.bic; digits=4);
+               "HQIC (per obs.)" _fmt(m.hqic; digits=4)]
+    _pretty_table(io, ic_data;
         title = "Information Criteria",
         column_labels = ["Criterion", "Value"],
         alignment = [:l, :r],
     )
 
     # --- Residual Covariance ---
-    _matrix_table(stdout, m.Sigma, "Residual Covariance (Σ)";
+    _matrix_table(io, m.Sigma, "Residual Covariance (Σ)";
         row_labels=m.varnames,
         col_labels=m.varnames)
 
     # --- Residual Correlation ---
     D_inv = Diagonal(one(T) ./ sqrt.(max.(diag(m.Sigma), eps(T))))
     corr_mat = D_inv * m.Sigma * D_inv
-    _matrix_table(stdout, corr_mat, "Residual Correlation";
+    _matrix_table(io, corr_mat, "Residual Correlation";
         row_labels=m.varnames,
         col_labels=m.varnames)
 
     # --- Notes ---
-    note_data = Any["Note" "Standard errors for α/β not available (asymptotic SEs: future release)"]
-    _pretty_table(stdout, note_data; column_labels=["",""], alignment=[:l,:l])
+    println(io, "Note: Standard errors for α/β not available (asymptotic SEs: future release)")
 end
 
 """
@@ -440,10 +440,11 @@ report(x::PerturbationSolution) = show(stdout, x)
 report(x::ProjectionSolution) = show(stdout, x)
 report(x::PerfectForesightPath) = show(stdout, x)
 report(x::DSGESpec) = show(stdout, x)
-function report(x::DSGEEstimation)
-    show(stdout, x)
-    println(stdout)
-    show(stdout, x.solution)
+report(x::DSGEEstimation) = report(stdout, x)
+function report(io::IO, x::DSGEEstimation)
+    show(io, x)
+    println(io)
+    show(io, x.solution)
 end
 report(x::BayesianDSGE) = show(stdout, x)
 report(x::BayesianDSGESimulation) = show(stdout, x)
@@ -476,6 +477,27 @@ report(x::SDAResult) = show(stdout, x)
 report(x::ExtractionResult) = show(stdout, x)
 report(x::BaqaeeFarhiResult) = show(stdout, x)
 report(x::FootprintResult) = show(stdout, x)
+
+# --- Show-existing types that lacked a report() dispatch (S3/T167) ---
+report(x::GrangerCausalityResult) = show(stdout, x)
+report(x::FAVARModel) = show(stdout, x)
+report(x::BayesianFAVAR) = show(stdout, x)
+report(x::ACFResult) = show(stdout, x)
+report(x::SpectralDensityResult) = show(stdout, x)
+report(x::CrossSpectrumResult) = show(stdout, x)
+report(x::TransferFunctionResult) = show(stdout, x)
+report(x::LjungBoxResult) = show(stdout, x)
+report(x::BoxPierceResult) = show(stdout, x)
+report(x::DurbinWatsonResult) = show(stdout, x)
+report(x::LRTestResult) = show(stdout, x)
+report(x::LMTestResult) = show(stdout, x)
+report(x::PretrendTestResult) = show(stdout, x)
+
+# --- Wrapped bare-return display types (S3/T167) ---
+report(x::OddsRatio) = show(stdout, x)
+report(x::MultinomialMarginalEffects) = show(stdout, x)
+report(x::NowcastForecast) = show(stdout, x)
+report(x::PanelUnitRootSummary) = show(stdout, x)
 
 # =============================================================================
 # Split Files (table extraction, display, references, nowcasting)

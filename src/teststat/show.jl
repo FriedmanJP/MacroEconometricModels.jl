@@ -84,12 +84,13 @@ function Base.show(io::IO, r::KPSSResult)
         alignment = [:l, :r],
     )
     cv_data = Matrix{Any}(undef, 1, 3)
-    cv_data[1, :] = [round(r.critical_values[10], digits=3),
-                     round(r.critical_values[5], digits=3),
-                     round(r.critical_values[1], digits=3)]
+    # Critical-value order standardized to 1% / 5% / 10% package-wide (S8/T166).
+    cv_data[1, :] = [_fmt(r.critical_values[1]; digits=3),
+                     _fmt(r.critical_values[5]; digits=3),
+                     _fmt(r.critical_values[10]; digits=3)]
     _pretty_table(io, cv_data;
         title = "Critical Values",
-        column_labels = ["10%", "5%", "1%"],
+        column_labels = ["1%", "5%", "10%"],
         alignment = :r,
     )
     reject_1 = r.statistic > r.critical_values[1]
@@ -295,7 +296,7 @@ function Base.show(io::IO, r::JohansenResult)
         reject_1 = stat > r.critical_values_trace[i, 3]
         reject_10 = stat > r.critical_values_trace[i, 1]
         stars = reject_1 ? "***" : (reject_5 ? "**" : (reject_10 ? "*" : ""))
-        pval_str = pval < 0.001 ? "<0.001" : string(round(pval, digits=4))
+        pval_str = _format_pvalue(pval)
         trace_data[i, 1] = rank
         trace_data[i, 2] = string(round(stat, digits=2), " ", stars)
         trace_data[i, 3] = round(cv, digits=2)
@@ -317,7 +318,7 @@ function Base.show(io::IO, r::JohansenResult)
         reject_1 = stat > r.critical_values_max[i, 3]
         reject_10 = stat > r.critical_values_max[i, 1]
         stars = reject_1 ? "***" : (reject_5 ? "**" : (reject_10 ? "*" : ""))
-        pval_str = pval < 0.001 ? "<0.001" : string(round(pval, digits=4))
+        pval_str = _format_pvalue(pval)
         max_data[i, 1] = rank
         max_data[i, 2] = string(round(stat, digits=2), " ", stars)
         max_data[i, 3] = round(cv, digits=2)

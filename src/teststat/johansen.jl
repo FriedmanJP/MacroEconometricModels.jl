@@ -86,7 +86,8 @@ result.rank  # Should detect 1 or 2 cointegrating relations
   cointegration tests. Journal of Economic Surveys, 12(5), 573-593.
 """
 function johansen_test(Y::AbstractMatrix{T}, p::Int;
-                       deterministic::Symbol=:constant) where {T<:AbstractFloat}
+                       deterministic::Symbol=:constant,
+                       significance::Real=0.05) where {T<:AbstractFloat}
 
     deterministic ∈ (:none, :constant, :trend) ||
         throw(ArgumentError("deterministic must be :none, :constant, or :trend"))
@@ -222,15 +223,10 @@ function johansen_test(Y::AbstractMatrix{T}, p::Int;
         max_pvalues[r] = _johansen_pvalue(max_eigen_stats[r], m_ct, deterministic, :max)
     end
 
-    # Determine rank (using trace test at 5% level)
-    rank = 0
-    for r in 0:(n-1)
-        if trace_stats[r+1] > cv_trace[r+1, 2]  # 5% critical value
-            rank = r
-        else
-            break
-        end
-    end
+    # Estimated cointegration rank = number of leading trace-test rejections (B1/T171):
+    # rejecting H₀: rank ≤ r (trace stat > CV) implies rank ≥ r+1. Shared with the VECM
+    # selector so the two never disagree.
+    rank = _rank_from_trace(trace_stats, cv_trace, significance)
 
     # Cointegrating vectors and adjustment coefficients
     # For augmented systems, extract only the n variable rows from eigenvectors
@@ -249,3 +245,22 @@ function johansen_test(Y::AbstractMatrix{T}, p::Int;
 end
 
 johansen_test(Y::AbstractMatrix, p::Int; kwargs...) = johansen_test(Float64.(Y), p; kwargs...)
+
+# Estimated cointegration rank = number of leading trace-test rejections (B1/T171).
+# Rejecting H₀: rank ≤ r (trace stat > CV) implies rank ≥ r+1. Single source shared by
+# johansen_test and estimate_vecm(rank=:auto) so the reported rank never disagrees.
+function _rank_from_trace(trace_stats::AbstractVector, cv_trace::AbstractMatrix, significance::Real)
+    cv_col = significance <= 0.01 ? 3 : significance <= 0.05 ? 2 : 1
+    r = 0
+    for i in 0:(length(trace_stats) - 1)
+        if trace_stats[i+1] > cv_trace[i+1, cv_col]
+            r = i + 1
+        else
+            break
+        end
+    end
+    r
+end
+
+_select_rank_trace(joh::JohansenResult, significance::Real) =
+    _rank_from_trace(joh.trace_stats, joh.critical_values_trace, significance)

@@ -177,8 +177,10 @@ function _estimate_fe_iv(pd::PanelData{T}, y::Vector{T}, X_exog::Matrix{T},
         resid_full[i] = y[i] - fitted_full[i]
     end
 
-    # R-squared variants
-    r2_within, r2_between, r2_overall = _panel_r2(y, fitted_full, groups, unique_groups)
+    # R-squared variants. Between/overall use the regressor prediction X·β̂, excluding the
+    # entity fixed effect α_i (Stata xtreg convention) so between-R² is not trivially 1. (B3/T172)
+    xb = X_full * beta
+    r2_within, r2_between, r2_overall = _panel_r2(y, fitted_full, groups, unique_groups; xb=xb)
 
     # Variance components
     dof_fe = max(n - N - k, 1)
