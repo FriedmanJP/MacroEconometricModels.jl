@@ -59,6 +59,12 @@ function Base.show(io::IO, m::NowcastBVAR{T}) where {T}
     # The headline the model exists to produce (default target = last variable). (S4/T168)
     _pretty_table(io, Any["Current nowcast" _fmt(m.X_sm[end, end])];
         title = "Nowcast", column_labels = ["", ""], alignment = [:l, :r])
+    # Sanity flag: a boundary-hit optimizer parks λ at exp(5)≈148.4 — never present it bare. (B4/T173)
+    if !m.converged
+        println(io, "WARNING: GLP hyperparameters hit the |log-param| ≤ 5 box edge " *
+                    "(λ = exp(5) ≈ 148.4) — the marginal-likelihood optimizer did not reach " *
+                    "an interior optimum; treat the shrinkage values with caution.")
+    end
 end
 
 function Base.show(io::IO, m::NowcastBridge{T}) where {T}

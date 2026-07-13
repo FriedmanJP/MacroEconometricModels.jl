@@ -395,6 +395,18 @@ end
 # =============================================================================
 
 @testset "BVAR Nowcasting" begin
+    @testset "GLP hyperparameter sanity flag (B4/T173)" begin
+        # N >> T reliably parks the marginal-likelihood optimizer at the exp(5) box edge.
+        m = nowcast_bvar(randn(Random.MersenneTwister(9), 50, 10), 6, 4; lags=5)
+        @test m.lambda > 140
+        @test !m.converged
+        @test occursin("WARNING", sprint(show, m))
+        # A well-conditioned interior fit converges and does NOT warn.
+        m2 = nowcast_bvar(randn(Random.MersenneTwister(300), 100, 6), 4, 2; lags=3, max_iter=50)
+        @test m2.converged
+        @test !occursin("WARNING", sprint(show, m2))
+    end
+
     @testset "Basic estimation" begin
         rng = Random.MersenneTwister(100)
         Y = randn(rng, 80, 5)

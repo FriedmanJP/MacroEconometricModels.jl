@@ -104,6 +104,7 @@ struct NowcastBVAR{T<:AbstractFloat} <: AbstractNowcastModel
     nM::Int
     nQ::Int
     data::Matrix{T}
+    converged::Bool   # GLP hyperparameter optimizer reached an interior optimum (not the box edge)
 end
 
 # =============================================================================
