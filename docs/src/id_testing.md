@@ -2,6 +2,8 @@
 
 Before relying on statistical identification, the practitioner must verify that the identifying conditions hold in the data. This page covers the diagnostic tests for non-Gaussian and heteroskedasticity-based SVAR identification: multivariate normality tests, shock gaussianity and independence tests, likelihood ratio tests, and bootstrap identification strength assessments.
 
+For an overview and method comparison, see [Statistical Identification](@ref nongaussian_page). For the non-Gaussian estimators these tests validate, see [Non-Gaussian Methods](@ref id_nongaussian_page).
+
 ```@setup id_test
 using MacroEconometricModels, Random
 Random.seed!(42)
@@ -164,7 +166,7 @@ Rejecting ``H_0`` supports non-Gaussian identification. Available distributions:
 Independence of recovered shocks is necessary for valid identification. This test combines two measures via Fisher's method:
 
 1. **Cross-correlation portmanteau**: ``Q = T \sum_{i < j} \sum_{\ell=0}^{L} r_{ij,\ell}^2 \sim \chi^2\bigl(\binom{n}{2}(L+1)\bigr)``
-2. **Distance covariance** (Szekely et al. 2007): permutation-based p-value (199 replicates)
+2. **Distance covariance** (Székely et al. 2007): permutation-based p-value (199 replicates)
 
 Fisher's method: ``\chi^2_F = -2 \sum_k \ln p_k \sim \chi^2(2K)``. Failing to reject (``p \geq 0.05``) indicates independent shocks.
 
@@ -287,6 +289,8 @@ end
 - Doornik, Jurgen A., and Henrik Hansen. 2008. "An Omnibus Test for Univariate and Multivariate Normality." *Oxford Bulletin of Economics and Statistics* 70: 927--939. [DOI](https://doi.org/10.1111/j.1468-0084.2008.00537.x)
 
 - Henze, Norbert, and Bernhard Zirkler. 1990. "A Class of Invariant Consistent Tests for Multivariate Normality." *Communications in Statistics - Theory and Methods* 19 (10): 3595--3617. [DOI](https://doi.org/10.1080/03610929008830400)
+
+- Székely, Gábor J., Maria L. Rizzo, and Nail K. Bakirov. 2007. "Measuring and Testing Dependence by Correlation of Distances." *Annals of Statistics* 35 (6): 2769--2794. [DOI](https://doi.org/10.1214/009053607000000505)
 
 - Lewis, Daniel J. 2022. "Robust Inference in Models Identified via Heteroskedasticity." *Review of Economics and Statistics* 104 (3): 510--524. [DOI](https://doi.org/10.1162/rest_a_00977)
 

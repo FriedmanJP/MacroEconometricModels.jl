@@ -75,16 +75,7 @@ report(lp_irfs)
 
 ## Structural Identification Overview
 
-Innovation accounting requires choosing an identification scheme to recover ``B_0`` from the reduced-form covariance ``\Sigma = B_0 B_0'``. The package implements six methods spanning point-identified and set-identified approaches:
-
-| Identification Method | Function | Point/Set ID | Key Feature |
-|---|---|---|---|
-| Cholesky | `irf(model, H)` | Point | Recursive ordering |
-| Sign restrictions | `irf(model, H; method=:sign, ...)` | Set | Agnostic about magnitudes |
-| Narrative | `identify_narrative(model, H, ...)` | Set | Incorporates historical events |
-| Long-run | `irf(model, H; method=:long_run)` | Point | Blanchard-Quah decomposition |
-| Arias et al. | `identify_arias(model, ...)` | Set | Zero + sign restrictions |
-| Uhlig penalty | `identify_uhlig(model, ...)` | Point | Penalty function approach |
+Innovation accounting requires choosing an identification scheme to recover ``B_0`` from the reduced-form covariance ``\Sigma = B_0 B_0'``. The package implements six methods spanning point-identified and set-identified approaches --- Cholesky (recursive), sign restrictions, narrative restrictions, long-run (Blanchard-Quah), Arias et al. (zero + sign), and Uhlig penalty. These schemes, together with their functions and keyword arguments, are documented in full on the [Structural Identification](@ref structural_identification_page) page.
 
 **Point identification** (Cholesky, long-run, Uhlig) produces a unique ``B_0`` and hence unique IRFs. **Set identification** (sign, narrative, Arias et al.) produces a set of admissible ``B_0`` matrices; the reported IRFs are the median across the admissible set, with the range reflected in wider confidence/credible bands.
 

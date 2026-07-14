@@ -2,15 +2,17 @@
 
 The **impulse response function** (IRF) traces the dynamic effect of a one-unit structural shock on each endogenous variable over time. MacroEconometricModels.jl computes IRFs from VAR, BVAR, and Local Projection models with bootstrap confidence intervals, Bayesian credible bands, cumulation for growth-rate variables, and stationarity-filtered inference.
 
+For an overview and method comparison, see [Innovation Accounting](@ref innovation_accounting_page). For variance decomposition, see [Variance Decomposition](@ref ia_fevd_page).
+
 ```@setup ia_irf
 using MacroEconometricModels, Random
 Random.seed!(42)
 fred = load_example(:fred_md)
 Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
 Y = Y[all.(isfinite, eachrow(Y)), :]
-Y = Y[end-99:end, :]
+Y = Y[end-59:end, :]
 model = estimate_var(Y, 2; varnames=["INDPRO", "CPIAUCSL", "FEDFUNDS"])
-post = estimate_bvar(Y, 2; n_draws=500, varnames=["INDPRO", "CPIAUCSL", "FEDFUNDS"])
+post = estimate_bvar(Y, 2; n_draws=100, varnames=["INDPRO", "CPIAUCSL", "FEDFUNDS"])
 ```
 
 ## Quick Start

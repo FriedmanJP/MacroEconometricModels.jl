@@ -9,7 +9,7 @@ Structural identification recovers the mapping from reduced-form VAR residuals t
 - **Zero + sign restrictions** --- exact zero restrictions with sign constraints and importance-weighted inference (Arias, Rubio-Ramírez & Waggoner 2018)
 - **Penalty function (Mountford-Uhlig)** --- point-identified rotation via constrained optimization (Mountford & Uhlig 2009)
 
-For statistical identification via non-Gaussianity or heteroskedasticity (13 additional methods: 5 ICA + 4 ML + 4 heteroskedasticity), see [Statistical Identification](@ref nongaussian_page).
+For statistical identification via non-Gaussianity or heteroskedasticity (13 additional methods: 5 ICA + 4 ML + 4 heteroskedasticity), see [Statistical Identification](@ref nongaussian_page). Once ``B_0`` is identified, the impact matrix feeds the impulse responses, variance decompositions, and historical decompositions of [Innovation Accounting](@ref innovation_accounting_page).
 
 ```@setup sid
 using MacroEconometricModels, Random

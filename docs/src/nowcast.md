@@ -1,6 +1,6 @@
 # [Nowcasting](@id nowcast_page)
 
-Central banks and forecasters need current-quarter GDP estimates weeks before official release. Nowcasting bridges this gap by extracting signal from timely high-frequency indicators --- monthly industrial production, employment, and financial data --- to produce real-time estimates of quarterly aggregates. **MacroEconometricModels.jl** implements three complementary approaches:
+Central banks and forecasters need current-quarter GDP estimates weeks before official release. Nowcasting bridges this gap by extracting signal from timely high-frequency indicators --- monthly industrial production, employment, and financial data --- to produce real-time estimates of quarterly aggregates. **MacroEconometricModels.jl** implements four complementary approaches:
 
 - **Dynamic Factor Model (DFM)**: EM + Kalman smoother on latent factors with Mariano-Murasawa temporal aggregation; native news decomposition; see [DFM Nowcasting](@ref nowcast_dfm_page)
 - **Large Bayesian VAR**: GLP-style Normal-Inverse-Wishart prior with hyperparameter optimization via marginal likelihood; see [BVAR Nowcasting](@ref nowcast_bvar_page)

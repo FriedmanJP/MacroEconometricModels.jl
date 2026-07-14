@@ -3,7 +3,7 @@
 Statistical identification recovers the structural impact matrix ``B_0`` from higher-moment information --- time-varying variances (heteroskedasticity) or non-Gaussian shock distributions --- without imposing recursive orderings, sign restrictions, or zero restrictions. The classification follows Lewis (2025), the definitive survey of higher-moment identification in macroeconometrics.
 
 - **13 identification methods**: 5 ICA + 4 ML (non-Gaussianity) and 4 heteroskedasticity estimators
-- **5 diagnostic tests**: normality suite, shock Gaussianity, LR test, independence, identification strength
+- **6 diagnostic tests**: normality suite, shock Gaussianity, LR test, independence, identification strength, overidentification
 - **Full pipeline integration**: all methods produce a rotation ``Q`` consumed by `irf()`, `fevd()`, `historical_decomposition()`
 - **Sub-pages**: [Non-Gaussian Methods](@ref id_nongaussian_page) | [Heteroskedasticity](@ref id_heteroskedastic_page) | [Testing](@ref id_testing_page)
 

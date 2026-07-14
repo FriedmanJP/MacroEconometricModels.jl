@@ -2,9 +2,11 @@
 
 Forecast Error Variance Decomposition (FEVD) quantifies the proportion of each variable's forecast error variance attributable to each structural shock at a given horizon. FEVD answers the question "which shocks matter most for which variables?" and is a cornerstone of structural VAR analysis alongside impulse response functions and historical decomposition.
 
-- **Frequentist FEVD**: VMA-based decomposition with optional bootstrap confidence intervals
+- **Frequentist FEVD**: VMA-based decomposition (point estimate)
 - **Bayesian FEVD**: Posterior distributions over variance shares with credible intervals
 - **LP-Based FEVD**: R²-based estimator robust to VAR dynamic misspecification (Gorodnichenko & Lee 2019)
+
+For an overview and method comparison, see [Innovation Accounting](@ref innovation_accounting_page). For impulse responses, see [Impulse Responses](@ref ia_irf_page).
 
 ```@setup ia_fevd
 using MacroEconometricModels, Random
@@ -12,9 +14,9 @@ Random.seed!(42)
 fred = load_example(:fred_md)
 Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
 Y = Y[all.(isfinite, eachrow(Y)), :]
-Y = Y[end-99:end, :]
+Y = Y[end-59:end, :]
 model = estimate_var(Y, 2; varnames=["INDPRO", "CPIAUCSL", "FEDFUNDS"])
-post = estimate_bvar(Y, 2; n_draws=500, varnames=["INDPRO", "CPIAUCSL", "FEDFUNDS"])
+post = estimate_bvar(Y, 2; n_draws=100, varnames=["INDPRO", "CPIAUCSL", "FEDFUNDS"])
 ```
 
 ## Quick Start
@@ -27,12 +29,13 @@ decomp = fevd(model, 20)
 report(decomp)
 ```
 
-**Recipe 2: FEVD with bootstrap confidence intervals**
+**Recipe 2: Frequentist FEVD is a point estimate**
 
 ```@example ia_fevd
-# Bootstrap CI via IRF residual bootstrap
-irfs_ci = irf(model, 20; ci_type=:bootstrap, reps=50)
-report(irfs_ci)
+# Frequentist FEVD has no confidence bands; use the Bayesian (Recipe 3)
+# or LP-based (Recipe 4) estimators for uncertainty quantification
+decomp8 = fevd(model, 8)
+report(decomp8)
 ```
 
 **Recipe 3: Bayesian FEVD with credible intervals**

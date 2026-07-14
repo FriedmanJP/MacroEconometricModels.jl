@@ -7,7 +7,7 @@ This page covers two complementary approaches:
 - **ICA-based methods** (nonparametric): FastICA, JADE, SOBI, distance covariance, HSIC
 - **Maximum likelihood methods** (parametric): Student-t, mixture of normals, PML, skew-normal
 
-For heteroskedasticity-based identification, see [Heteroskedasticity](@ref id_heteroskedastic_page). For identifiability diagnostics, see [Testing](@ref id_testing_page).
+For an overview and method comparison, see [Statistical Identification](@ref nongaussian_page). For heteroskedasticity-based identification, see [Heteroskedasticity](@ref id_heteroskedastic_page). For identifiability diagnostics, see [Testing](@ref id_testing_page).
 
 ```@setup id_ng
 using MacroEconometricModels, Random
@@ -432,3 +432,6 @@ The ICA approach provides a quick nonparametric identification. The ML approach 
 
 - Keweloh, Sascha A. 2021. "A Generalized Method of Moments Estimator for Structural Vector Autoregressions Based on Higher Moments."
   *Journal of Business & Economic Statistics* 39 (3): 772--882. [DOI](https://doi.org/10.1080/07350015.2020.1730858)
+
+- Lanne, Markku, and Jani Luoto. 2021. "GMM Estimation of Non-Gaussian Structural Vector Autoregression."
+  *Journal of Business & Economic Statistics* 39 (1): 69--81. [DOI](https://doi.org/10.1080/07350015.2019.1629940)
