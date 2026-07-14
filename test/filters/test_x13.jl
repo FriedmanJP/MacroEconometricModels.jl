@@ -11,8 +11,12 @@ using LinearAlgebra
     seasonal_c = 10.0 .* sin.(2π .* (1:n) ./ 12) .+ 5.0 .* cos.(2π .* (1:n) ./ 6)
     y = 100.0 .+ trend_c .+ seasonal_c .+ randn(n)
 
+    # Shared X-11 fit reused by the deterministic same-input testsets below
+    # (each asserts a distinct property of this single result).
+    r_x11 = x13_filter(y; frequency=12, method=:x11)
+
     @testset "basic X-11 functionality" begin
-        r = x13_filter(y; frequency=12, method=:x11)
+        r = r_x11
         @test r isa X13FilterResult{Float64}
         @test r.method == :x11
         @test r.T_obs == n
@@ -37,20 +41,20 @@ using LinearAlgebra
     end
 
     @testset "seasonally adjusted preserves trend" begin
-        r = x13_filter(y; frequency=12, method=:x11)
+        r = r_x11
         sa_std = std(diff(r.adjusted))
         orig_std = std(diff(y))
         @test sa_std < orig_std
     end
 
     @testset "seasonal component captures periodicity" begin
-        r = x13_filter(y; frequency=12, method=:x11)
+        r = r_x11
         @test std(r.seasonal) > 0.01
         @test std(r.irregular) < std(y)
     end
 
     @testset "unified accessors" begin
-        r = x13_filter(y; frequency=12, method=:x11)
+        r = r_x11
         @test trend(r) === r.trend
         @test cycle(r) === r.irregular
         @test seasonal(r) === r.seasonal
@@ -110,7 +114,7 @@ using LinearAlgebra
     end
 
     @testset "display and refs" begin
-        r = x13_filter(y; frequency=12, method=:x11)
+        r = r_x11
         io = IOBuffer()
         show(io, r)
         s = String(take!(io))
@@ -124,12 +128,12 @@ using LinearAlgebra
     end
 
     @testset "report" begin
-        r = x13_filter(y; frequency=12, method=:x11)
+        r = r_x11
         report(r)
     end
 
     @testset "plot_result" begin
-        r = x13_filter(y; frequency=12, method=:x11)
+        r = r_x11
         p = plot_result(r)
         @test p isa PlotOutput
     end

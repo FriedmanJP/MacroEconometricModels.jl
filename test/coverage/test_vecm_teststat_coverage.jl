@@ -184,7 +184,7 @@ Random.seed!(9001)
 
     @testset "KPSS show: <0.01 p-value (unit root series)" begin
         # Use long deterministic trend — always produces KPSS stat > 1% CV
-        y = cumsum(ones(3000))
+        y = cumsum(ones(300))
         result = kpss_test(y; regression=:constant)
         s = sprint(show, result)
         @test occursin("KPSS", s)

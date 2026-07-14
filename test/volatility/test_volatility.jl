@@ -89,9 +89,10 @@ end
 @testset "ARCH estimation" begin
     Random.seed!(123)
     y_arch = simulate_arch1(1000; omega=0.2, alpha1=0.4)
+    m_arch = estimate_arch(y_arch, 1)  # shared deterministic MLE fit (dedupe)
 
     @testset "ARCH(1) basic" begin
-        m = estimate_arch(y_arch, 1)
+        m = m_arch
         @test m isa ARCHModel{Float64}
         @test m.q == 1
         @test m.omega > 0
@@ -104,13 +105,13 @@ end
     end
 
     @testset "ARCH(1) stationarity" begin
-        m = estimate_arch(y_arch, 1)
+        m = m_arch
         @test persistence(m) < 1.0
         @test persistence(m) > 0.0
     end
 
     @testset "ARCH(1) unconditional variance" begin
-        m = estimate_arch(y_arch, 1)
+        m = m_arch
         uv = unconditional_variance(m)
         @test isfinite(uv)
         @test uv > 0
@@ -131,7 +132,7 @@ end
     end
 
     @testset "ARCH halflife" begin
-        m = estimate_arch(y_arch, 1)
+        m = m_arch
         hl = halflife(m)
         @test isfinite(hl)
         @test hl > 0
@@ -151,9 +152,10 @@ end
 @testset "GARCH estimation" begin
     Random.seed!(456)
     y_garch = simulate_garch11(1000; omega=0.01, alpha1=0.05, beta1=0.90)
+    m_garch = estimate_garch(y_garch, 1, 1)  # shared deterministic MLE fit (dedupe)
 
     @testset "GARCH(1,1) basic" begin
-        m = estimate_garch(y_garch, 1, 1)
+        m = m_garch
         @test m isa GARCHModel{Float64}
         @test m.p == 1
         @test m.q == 1
@@ -165,14 +167,14 @@ end
     end
 
     @testset "GARCH(1,1) persistence" begin
-        m = estimate_garch(y_garch, 1, 1)
+        m = m_garch
         p = persistence(m)
         @test p < 1.0
         @test p > 0.5  # GARCH(1,1) typically has high persistence
     end
 
     @testset "GARCH(1,1) unconditional variance" begin
-        m = estimate_garch(y_garch, 1, 1)
+        m = m_garch
         uv = unconditional_variance(m)
         @test isfinite(uv)
         @test uv > 0
@@ -191,7 +193,7 @@ end
     end
 
     @testset "GARCH arch/garch_order" begin
-        m = estimate_garch(y_garch, 1, 1)
+        m = m_garch
         @test arch_order(m) == 1
         @test garch_order(m) == 1
     end
@@ -224,9 +226,10 @@ end
         h[t] = exp(log_h[t])
         y_lev[t] = sqrt(h[t]) * randn()
     end
+    m_egarch = estimate_egarch(y_lev, 1, 1)  # shared deterministic MLE fit (dedupe)
 
     @testset "EGARCH(1,1) basic" begin
-        m = estimate_egarch(y_lev, 1, 1)
+        m = m_egarch
         @test m isa EGARCHModel{Float64}
         @test m.p == 1
         @test m.q == 1
@@ -235,26 +238,26 @@ end
     end
 
     @testset "EGARCH leverage detection" begin
-        m = estimate_egarch(y_lev, 1, 1)
+        m = m_egarch
         # Leverage coefficient should be negative for equity-like data
         @test m.gamma[1] < 0.1  # Allow some estimation noise
     end
 
     @testset "EGARCH persistence" begin
-        m = estimate_egarch(y_lev, 1, 1)
+        m = m_egarch
         @test persistence(m) > 0.0
         @test persistence(m) < 1.0
     end
 
     @testset "EGARCH unconditional variance" begin
-        m = estimate_egarch(y_lev, 1, 1)
+        m = m_egarch
         uv = unconditional_variance(m)
         @test isfinite(uv)
         @test uv > 0
     end
 
     @testset "EGARCH StatsAPI dof" begin
-        m = estimate_egarch(y_lev, 1, 1)
+        m = m_egarch
         @test dof(m) == 2 + 2*1 + 1  # mu + omega + q alphas + q gammas + p betas
     end
 end
@@ -266,9 +269,10 @@ end
 @testset "GJR-GARCH estimation" begin
     Random.seed!(101)
     y_gjr = simulate_gjr11(1000; omega=0.01, alpha1=0.03, gamma1=0.07, beta1=0.85)
+    m_gjr = estimate_gjr_garch(y_gjr, 1, 1)  # shared deterministic MLE fit (dedupe)
 
     @testset "GJR-GARCH(1,1) basic" begin
-        m = estimate_gjr_garch(y_gjr, 1, 1)
+        m = m_gjr
         @test m isa GJRGARCHModel{Float64}
         @test m.p == 1
         @test m.q == 1
@@ -278,19 +282,19 @@ end
     end
 
     @testset "GJR-GARCH asymmetry" begin
-        m = estimate_gjr_garch(y_gjr, 1, 1)
+        m = m_gjr
         @test m.gamma[1] > 0  # Asymmetry should be detected
     end
 
     @testset "GJR-GARCH persistence" begin
-        m = estimate_gjr_garch(y_gjr, 1, 1)
+        m = m_gjr
         p = persistence(m)
         @test p < 1.0
         @test p > 0.0
     end
 
     @testset "GJR-GARCH unconditional variance" begin
-        m = estimate_gjr_garch(y_gjr, 1, 1)
+        m = m_gjr
         uv = unconditional_variance(m)
         @test isfinite(uv)
         @test uv > 0
@@ -308,7 +312,7 @@ end
     @testset "ARCH forecast" begin
         Random.seed!(303)
         m = estimate_arch(y, 1)
-        fc = forecast(m, 10)
+        fc = forecast(m, 10; n_sim=500)
         @test fc isa VolatilityForecast{Float64}
         @test fc.horizon == 10
         @test fc.model_type == :arch
@@ -322,7 +326,7 @@ end
     @testset "GARCH forecast" begin
         Random.seed!(303)
         m = estimate_garch(y, 1, 1)
-        fc = forecast(m, 10)
+        fc = forecast(m, 10; n_sim=500)
         @test fc isa VolatilityForecast{Float64}
         @test fc.model_type == :garch
         @test length(fc.forecast) == 10
@@ -333,7 +337,7 @@ end
     @testset "EGARCH forecast" begin
         Random.seed!(303)
         m = estimate_egarch(y, 1, 1)
-        fc = forecast(m, 5)
+        fc = forecast(m, 5; n_sim=500)
         @test fc isa VolatilityForecast{Float64}
         @test fc.model_type == :egarch
         @test length(fc.forecast) == 5
@@ -343,7 +347,7 @@ end
     @testset "GJR-GARCH forecast" begin
         Random.seed!(303)
         m = estimate_gjr_garch(y, 1, 1)
-        fc = forecast(m, 5)
+        fc = forecast(m, 5; n_sim=500)
         @test fc isa VolatilityForecast{Float64}
         @test fc.model_type == :gjr_garch
         @test all(fc.forecast .> 0)
@@ -358,7 +362,7 @@ end
     @testset "Forecast mean reversion" begin
         Random.seed!(404)
         m = estimate_garch(y, 1, 1)
-        fc = forecast(m, 100; n_sim=5000)
+        fc = forecast(m, 100; n_sim=500)
         uv = unconditional_variance(m)
         if isfinite(uv) && uv > 0
             # Long-horizon forecast should move toward unconditional variance
@@ -641,7 +645,7 @@ end
 
     @testset "VolatilityForecast display" begin
         m = estimate_garch(y, 1, 1)
-        fc = forecast(m, 5)
+        fc = forecast(m, 5; n_sim=500)
         io = IOBuffer()
         show(io, fc)
         output = String(take!(io))

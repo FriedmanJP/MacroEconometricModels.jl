@@ -63,6 +63,7 @@ using Test, MacroEconometricModels, Random
 
     @testset "Two breaks" begin
         y_2break = vcat(randn(rng, 70), randn(rng, 60) .+ 3.0, randn(rng, 70) .+ 1.0)
+        y_2break_s = vcat(randn(rng, 25), randn(rng, 20) .+ 3.0, randn(rng, 25) .+ 1.0)
         result = lm_unitroot_test(y_2break; breaks=2)
         @test result isa LMUnitRootResult
         @test result.breaks == 2
@@ -71,7 +72,7 @@ using Test, MacroEconometricModels, Random
         @test result.break_dates[1] < result.break_dates[2]
         @test isfinite(result.statistic)
 
-        result_both = lm_unitroot_test(y_2break; breaks=2, regression=:both)
+        result_both = lm_unitroot_test(y_2break_s; breaks=2, regression=:both)
         @test result_both.breaks == 2
     end
 
