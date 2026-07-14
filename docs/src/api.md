@@ -32,7 +32,7 @@ Typed data containers, built-in datasets (FRED-MD, FRED-QD, Penn World Table), a
 | `desc(d)` / `vardesc(d, name)` | Dataset and per-variable descriptions |
 | `set_desc!(d, text)` / `set_vardesc!(d, name, text)` | Set descriptions |
 | `rename_vars!(d, old => new)` | Rename variables |
-| `load_example(:fred_md)` / `load_example(:fred_qd)` / `load_example(:pwt)` | Load built-in datasets (FRED-MD, FRED-QD, PWT) |
+| `load_example(:fred_md)` / `load_example(:fred_qd)` / `load_example(:pwt)` / `load_example(:ddcg)` / `load_example(:mpdta)` / `load_example(:wiot)` | Load built-in datasets: FRED-MD, FRED-QD, PWT, DDCG (Acemoglu et al. 2019 → `PanelData`), mpdta (Callaway & Sant'Anna 2021 → `PanelData`), WIOT (WIOD → `IOData`) |
 
 AR, MA, ARMA, and ARIMA model estimation with automatic order selection. See [ARIMA Models](arima.md) for estimation methods, forecasting, and model selection.
 

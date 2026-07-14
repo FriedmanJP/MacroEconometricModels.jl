@@ -832,7 +832,7 @@ display_plot
 
 ```@autodocs
 Modules = [MacroEconometricModels]
-Pages   = ["plotting/irf.jl", "plotting/fevd.jl", "plotting/hd.jl", "plotting/filters.jl", "plotting/forecast.jl", "plotting/models.jl", "plotting/nowcast.jl", "plotting/did.jl", "plotting/reg.jl"]
+Pages   = ["plotting/irf.jl", "plotting/fevd.jl", "plotting/hd.jl", "plotting/filters.jl", "plotting/forecast.jl", "plotting/models.jl", "plotting/nowcast.jl", "plotting/did.jl", "plotting/reg.jl", "plotting/spectral.jl"]
 Order   = [:function]
 ```
 

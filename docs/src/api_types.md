@@ -405,7 +405,19 @@ AbstractUnitRootTest <: StatsAPI.HypothesisTest
 ├── PPResult{T}
 ├── ZAResult{T}
 ├── NgPerronResult{T}
-└── JohansenResult{T}
+├── FourierADFResult{T}
+├── FourierKPSSResult{T}
+├── DFGLSResult{T}
+├── LMUnitRootResult{T}
+├── ADF2BreakResult{T}
+├── GregoryHansenResult{T}
+├── JohansenResult{T}
+├── AndrewsResult{T}
+├── BaiPerronResult{T}
+├── PANICResult{T}
+├── PesaranCIPSResult{T}
+├── MoonPerronResult{T}
+└── FactorBreakResult{T}
 
 VARStationarityResult{T}
 
