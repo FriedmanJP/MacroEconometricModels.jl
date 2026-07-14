@@ -188,7 +188,7 @@ ma = estimate_ma(y, 1; method=:css_mle)
 report(ma)
 ```
 
-The MA(1) coefficient ``\theta_1`` captures one-period serial correlation in shocks to CPI inflation. A positive ``\theta_1`` indicates that a positive surprise this month raises the forecast for next month beyond the unconditional mean.
+The estimated MA(1) coefficient ``\hat\theta_1 \approx 0.60`` captures one-period serial correlation in shocks to CPI inflation. Its positive sign indicates that a positive inflation surprise this month raises the forecast for next month beyond the unconditional mean.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -240,7 +240,7 @@ arma = estimate_arma(y, 1, 1; method=:css_mle)
 report(arma)
 ```
 
-The ARMA(1,1) model captures both the autoregressive persistence in CPI inflation (through ``\phi_1``) and the one-period shock amplification (through ``\theta_1``). An ARMA(1,1) often achieves a lower BIC than a pure AR model of comparable fit because the MA component absorbs short-run dynamics that would otherwise require additional AR lags.
+The ARMA(1,1) model captures both the autoregressive persistence in CPI inflation (``\hat\phi_1 \approx 0.23``) and the one-period shock amplification (``\hat\theta_1 \approx 0.41``). Its BIC of about ``-908`` improves on the AR(2) model estimated above (BIC ``\approx -888``), because the MA component absorbs short-run dynamics that would otherwise require additional AR lags.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -471,7 +471,7 @@ sel = select_arima_order(y, 4, 4)
 report(sel)
 ```
 
-The BIC-optimal order typically selects a more parsimonious model than AIC because BIC penalizes free parameters more heavily (penalty ``k \log n`` vs. ``2k``). For forecasting applications, BIC-selected models often outperform AIC-selected models at longer horizons due to reduced parameter estimation uncertainty.
+Here the AIC selects an ARMA(1,2) while the BIC selects the more parsimonious ARMA(0,1), because BIC penalizes free parameters more heavily (penalty ``k \log n`` vs. ``2k``). For forecasting applications, BIC-selected models often outperform AIC-selected models at longer horizons due to reduced parameter estimation uncertainty.
 
 !!! note "CSS order comparability"
     Under `:css` estimation the conditional likelihood is evaluated over ``n - \max(p,q)`` observations, a window that varies with the candidate order. `select_arima_order` therefore rescores every `:css` candidate's AIC/BIC on a **common conditioning window** ``n - \max(\text{max\_p}, \text{max\_q})`` so the criteria are comparable across orders; MLE / CSS-MLE candidates already use the full sample.

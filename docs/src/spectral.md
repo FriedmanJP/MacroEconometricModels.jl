@@ -357,7 +357,7 @@ show(stdout, result)
 
 ```@example spectral
 sd = spectral_density(y; method=:welch)
-power = band_power(sd, 2π/32, 2π/6)  # business-cycle band (6–32 quarters)
+power = band_power(sd, 2π/32, 2π/6)  # 6–32 months
 ```
 
 ---
@@ -392,7 +392,7 @@ show(stdout, result)
 
 ### Durbin-Watson Test
 
-The Durbin-Watson test (Durbin & Watson 1950, 1951) detects first-order autocorrelation in regression residuals:
+The Durbin-Watson test (Durbin & Watson 1950) detects first-order autocorrelation in regression residuals:
 
 ```math
 DW = \frac{\sum_{t=2}^{n}(e_t - e_{t-1})^2}{\sum_{t=1}^{n} e_t^2} \approx 2(1 - \hat{\rho}_1)
