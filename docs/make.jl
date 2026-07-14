@@ -50,6 +50,7 @@ makedocs(;
             "Difference-in-Differences" => "did.md",
             "Event Study LP" => "event_study.md",
         ],
+        "GMM & SMM" => "gmm.md",
         "DSGE Models" => [
             "Overview" => "dsge.md",
             "Linear Solvers" => "dsge_linear.md",
