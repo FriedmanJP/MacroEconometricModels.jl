@@ -1264,7 +1264,8 @@ end
         y[t] = ρ * y[t-1] + ε[t]
     end
 
-    est = estimate_dsge(spec, Y, [:ρ]; method=:irf_matching, irf_horizon=10)
+    est = estimate_dsge(spec, Y, [:ρ]; method=:irf_matching, irf_horizon=10,
+                        n_boot = FAST ? 20 : 40)
     @test est isa DSGEEstimation{Float64}
     @test est.converged
     @test est.theta[1] ≈ 0.8 atol=0.15
