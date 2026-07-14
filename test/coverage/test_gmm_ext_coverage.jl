@@ -185,6 +185,7 @@ end
             result = estimate_smm(sim_ar1, d -> autocovariance_moments(d; lags=2),
                                   [0.5, 0.3], data;
                                   sim_ratio=3, burn=50, weighting=:identity,
+                                  max_iter=200,
                                   rng=Random.MersenneTwister(42))
 
             @test result isa SMMModel{Float64}
@@ -226,6 +227,7 @@ end
             result = estimate_smm(sim_fn, d -> autocovariance_moments(d; lags=1),
                                   [0.3], data;
                                   sim_ratio=3, burn=25, weighting=:identity,
+                                  max_iter=200,
                                   rng=Random.MersenneTwister(55))
             @test result isa SMMModel{Float64}
             @test result.weighting.method == :identity
@@ -405,7 +407,7 @@ end
             result = estimate_smm(sim_bounded, d -> autocovariance_moments(d; lags=1),
                                   [0.3], data;
                                   sim_ratio=3, burn=25, weighting=:identity,
-                                  bounds=bounds,
+                                  bounds=bounds, max_iter=200,
                                   rng=Random.MersenneTwister(42))
             @test result isa SMMModel{Float64}
             @test -1.0 < result.theta[1] < 1.0
