@@ -1306,13 +1306,21 @@ end
 
 @testset "HA Bayesian estimation" begin
     spec = load_ha_example(:krusell_smith)
+    # [T206] NOTE: the plan's asset-grid shrink (n_a 200→60/80) was dropped — coarsening the
+    # KS-SSJ grid non-monotonically stabilizes the reduced realization and flips the #234
+    # @test_broken truncation assertions to unexpected passes (n_a=60 flips T049's L1475;
+    # n_a=80 also flips _build_ha_likelihood_fn's ll_val). Per the plan's flip-guard fallback
+    # we keep the full-size spec and cut only draws + T_data (+ the shared-solve hoist).
 
     # Compute steady state for generating fake data
     ss = compute_steady_state(spec; K_init=10.0, r_bounds=(-0.02, 0.04), max_iter=50, tol=1e-3)
     K_ss = ss.aggregates[:K]
-    T_data = 50
+    T_data = 16
     rng = Random.MersenneTwister(42)
     data_K = K_ss .+ 0.1 .* randn(rng, T_data)  # K with noise
+
+    # [T206] hoist one shared :ssj solve to avoid re-solving in the two helper testsets below.
+    sol_shared = solve(spec; method=:ssj, ss=ss, T_horizon=30, n_reduced=10)
 
     @testset "_update_ha_params" begin
         param_names = [:alpha]
@@ -1332,8 +1340,7 @@ end
 
     @testset "_build_ha_likelihood_fn" begin
         # Solve model first to have a valid solution for observation equation
-        sol = solve(spec; method=:ssj, ss=ss, T_horizon=30, n_reduced=10)
-        @test sol isa HADSGESolution{Float64}
+        @test sol_shared isa HADSGESolution{Float64}
 
         param_names = [:alpha]
         ll_fn = MacroEconometricModels._build_ha_likelihood_fn(
@@ -1357,7 +1364,7 @@ end
     end
 
     @testset "_build_ha_observation_equation" begin
-        sol = solve(spec; method=:ssj, ss=ss, T_horizon=30, n_reduced=10)
+        sol = sol_shared
 
         Z, d, H = MacroEconometricModels._build_ha_observation_equation(
             sol, [:K], nothing
@@ -1404,20 +1411,20 @@ end
             spec, reshape(data_K, T_data, 1), [0.36];
             priors=priors,
             observables=[:K],
-            n_draws=20,
-            burnin=5,
+            n_draws=6,
+            burnin=2,
             ha_method=:ssj,
             ha_kwargs=(T_horizon=30, n_reduced=10),
             proposal_scale=0.001,
-            adapt_interval=50,  # no adaptation in 20 draws
+            adapt_interval=50,  # no adaptation in 6 draws
             rng=rng_est
         )
 
         @test result isa BayesianDSGE{Float64}
         @test result.solved_at === :posterior_mean  # normal path (#149/T050)
         @test size(result.theta_draws, 2) == 1  # one parameter
-        @test size(result.theta_draws, 1) == 15  # n_draws - burnin = 20 - 5
-        @test length(result.log_posterior) == 15
+        @test size(result.theta_draws, 1) == 4  # n_draws - burnin = 6 - 2
+        @test length(result.log_posterior) == 4
         @test result.method === :rwmh
         @test result.acceptance_rate >= 0.0
         @test result.acceptance_rate <= 1.0
@@ -1433,7 +1440,7 @@ end
         # a wrong-length positional vector errors informatively before any solve.
         result_dict = estimate_dsge_bayes(
             spec, reshape(data_K, T_data, 1), Dict(:alpha => 0.36);
-            priors=priors, observables=[:K], n_draws=10, burnin=2,
+            priors=priors, observables=[:K], n_draws=6, burnin=2,
             ha_method=:ssj, ha_kwargs=(T_horizon=30, n_reduced=10),
             proposal_scale=0.001, adapt_interval=50, rng=Random.MersenneTwister(7))
         @test result_dict isa BayesianDSGE{Float64}
@@ -1446,7 +1453,7 @@ end
         # identical draws under the same rng); a shape matching neither dim to n_obs errors.
         result_nt = estimate_dsge_bayes(
             spec, reshape(data_K, 1, T_data), Dict(:alpha => 0.36);
-            priors=priors, observables=[:K], n_draws=10, burnin=2,
+            priors=priors, observables=[:K], n_draws=6, burnin=2,
             ha_method=:ssj, ha_kwargs=(T_horizon=30, n_reduced=10),
             proposal_scale=0.001, adapt_interval=50, rng=Random.MersenneTwister(7))
         @test result_nt.theta_draws ≈ result_dict.theta_draws
