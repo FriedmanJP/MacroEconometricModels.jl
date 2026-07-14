@@ -88,7 +88,7 @@ Innovation accounting requires choosing an identification scheme to recover ``B_
 
 **Point identification** (Cholesky, long-run, Uhlig) produces a unique ``B_0`` and hence unique IRFs. **Set identification** (sign, narrative, Arias et al.) produces a set of admissible ``B_0`` matrices; the reported IRFs are the median across the admissible set, with the range reflected in wider confidence/credible bands.
 
-All six methods integrate seamlessly with `irf()`, `fevd()`, and `historical_decomposition()` via the `method` keyword or by passing a pre-identified rotation matrix. For statistical identification via heteroskedasticity or non-Gaussianity (18 additional methods), see [Statistical Identification](@ref nongaussian_page).
+All six methods integrate seamlessly with `irf()`, `fevd()`, and `historical_decomposition()` via the `method` keyword or by passing a pre-identified rotation matrix. For statistical identification via heteroskedasticity or non-Gaussianity (13 additional methods: 5 ICA + 4 ML + 4 heteroskedasticity), see [Statistical Identification](@ref nongaussian_page).
 
 ---
 

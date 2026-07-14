@@ -9,7 +9,7 @@ Structural identification recovers the mapping from reduced-form VAR residuals t
 - **Zero + sign restrictions** --- exact zero restrictions with sign constraints and importance-weighted inference (Arias, Rubio-Ramírez & Waggoner 2018)
 - **Penalty function (Mountford-Uhlig)** --- point-identified rotation via constrained optimization (Mountford & Uhlig 2009)
 
-For statistical identification via non-Gaussianity or heteroskedasticity (18 additional methods), see [Statistical Identification](@ref nongaussian_page).
+For statistical identification via non-Gaussianity or heteroskedasticity (13 additional methods: 5 ICA + 4 ML + 4 heteroskedasticity), see [Statistical Identification](@ref nongaussian_page).
 
 ```@setup sid
 using MacroEconometricModels, Random
@@ -322,7 +322,7 @@ result
 | Long-run neutrality | Blanchard-Quah | Natural for supply vs demand |
 | Exact zero + sign constraints | Arias et al. | Importance-weighted inference |
 | Single optimal rotation | Uhlig penalty | Fast, deterministic |
-| Non-Gaussian shocks | [Statistical ID](@ref nongaussian_page) | 18 methods via `compute_Q` |
+| Non-Gaussian shocks | [Statistical ID](@ref nongaussian_page) | 13 methods via `compute_Q` (5 ICA + 4 ML + 4 heteroskedasticity) |
 
 ---
 
