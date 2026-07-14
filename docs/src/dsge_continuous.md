@@ -57,7 +57,7 @@ where:
 r = 0.03
 kl = (0.36 / (r + 0.05))^(1 / 0.64)
 w = 0.64 * kl^0.36
-v, c, s, A, a, converged = MacroEconometricModels.ct_hjb(m, r, w)
+v, c, s, A, a, converged = ct_hjb(m, r, w)
 (hjb_converged = converged,
  generator_row_sums = round(maximum(abs.(vec(sum(A; dims=2)))), sigdigits=2))
 ```
@@ -72,7 +72,7 @@ The stationary density ``g(a,z)`` solves ``A^\top g = 0`` subject to ``\int g\, 
 
 ```@example ct
 da = a[2] - a[1]
-g = MacroEconometricModels.ct_kfe(A, m.I, da)
+g = ct_kfe(A, m.I, da)
 (density_nonnegative = minimum(g) >= -1e-10,
  integrates_to_one = round(sum(g) * da, digits=8))
 ```
@@ -93,6 +93,15 @@ The density is nonnegative and integrates to one. Mass piles up at the borrowing
 ```
 
 The equilibrium interest rate lies strictly below the discount rate ``\rho``: incomplete markets and precautionary saving push the supply of capital up and the return down, exactly as in the discrete-time Aiyagari (1994) economy.
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `r_bounds` | `Tuple` | `(0.0001, ρ-1e-4)` | Bisection bracket for the equilibrium interest rate |
+| `max_iter` | `Int` | `100` | Maximum interest-rate bisection iterations |
+| `tol` | `Real` | ``10^{-6}`` | Convergence tolerance on capital market clearing |
+| `hjb_max_iter` | `Int` | `100` | Maximum HJB value-function iterations per rate |
+| `hjb_tol` | `Real` | ``10^{-6}`` | HJB convergence tolerance |
+| `Delta` | `Real` | `1000.0` | Implicit HJB time step (speed only, not the solution) |
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -164,12 +173,22 @@ The vast majority of wealth is held in the illiquid asset: the higher return mor
     returns. It is numerically stable for moderate adjustment costs ``\chi``; very small
     ``\chi`` makes the optimal deposit large and the HJB iteration unstable.
 
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `max_iter` | `Int` | `200` | Maximum HJB value-function iterations |
+| `tol` | `Real` | ``10^{-6}`` | Convergence tolerance on the value function |
+| `Delta` | `Real` | `1000.0` | Implicit HJB time step (speed only, not the solution) |
+
 | Field | Type | Description |
 |-------|------|-------------|
-| `B`, `A` | `T` | Aggregate liquid and illiquid holdings (``\int b\,g``, ``\int a\,g``) |
-| `g` | `Array{T,3}` | Stationary joint density over ``(b, a, z)`` (``I_b \times I_a \times 2``) |
+| `b`, `a` | `Vector{T}` | Liquid and illiquid asset grids |
+| `V` | `Array{T,3}` | Value function over ``(b, a, z)`` (``I_b \times I_a \times 2``) |
 | `c`, `d` | `Array{T,3}` | Consumption and deposit policies |
+| `sb`, `sa` | `Array{T,3}` | Liquid and illiquid saving drifts |
+| `g` | `Array{T,3}` | Stationary joint density over ``(b, a, z)`` (``I_b \times I_a \times 2``) |
+| `B`, `A` | `T` | Aggregate liquid and illiquid holdings (``\int b\,g``, ``\int a\,g``) |
 | `gen` | `SparseMatrixCSC{T}` | Infinitesimal generator (``2 I_b I_a`` square) |
+| `hjb_converged` | `Bool` | Whether the HJB iteration converged |
 
 ---
 

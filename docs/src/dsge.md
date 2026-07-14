@@ -14,7 +14,7 @@
 - **Heterogeneous Agents**: Krusell-Smith and one- and two-asset HANK models via sequence-space Jacobian, Reiter, and Krusell-Smith solvers; see [Heterogeneous Agents](@ref dsge_ha)
 - **Overlapping Generations**: Blanchard (1985) perpetual-youth OLG models; see [Overlapping Generations](@ref dsge_olg)
 - **Continuous Time**: Achdou et al. (2022) continuous-time heterogeneous-agent models via HJB and Kolmogorov-Forward finite differences; see [Continuous Time](@ref dsge_continuous)
-- **Dynare Replication**: 27-model replication suite validated against Dynare 6.5+ reference values for steady states, IRFs, variance decomposition, and theoretical moments; includes Smets & Wouters (2007) Bayesian estimation pipeline
+- **Dynare Replication**: 24-model replication suite validated against Dynare 6.5+ reference values for steady states, IRFs, variance decomposition, and theoretical moments; includes Smets & Wouters (2007) Bayesian estimation pipeline
 
 All results integrate with `plot_result()` for interactive D3.js visualization and `report()` for publication-quality output.
 
@@ -93,12 +93,13 @@ nothing # hide
 ```julia
 est = estimate_dsge(spec, Y_data, [:β, :α, :ρ];
                     method=:irf_matching, var_lags=4, irf_horizon=20)
-report(est)
 ```
 
 **Recipe 4: OccBin with ZLB**
 
 ```julia
+# Illustrative signatures: `R` is an interest-rate variable declared in the
+# model and `shocks` a user-supplied shock path.
 constraint = parse_constraint(:(R[t] >= 0), spec)
 occ_sol = occbin_solve(spec, constraint; shock_path=shocks)
 occ_irf = occbin_irf(spec, constraint, 1, 40)
@@ -126,7 +127,6 @@ result = estimate_dsge_bayes(spec, data, [0.99, 0.9, 0.01];
     priors=Dict(:β => Beta(99, 1), :ρ => Beta(5, 2), :σ => InverseGamma(2, 0.01)),
     method=:smc2, observables=[:Y], n_smc=200, n_particles=100,
     solver=:projection, solver_kwargs=(degree=5,))
-report(result)
 ```
 
 **Recipe 7: Historical decomposition**
@@ -139,6 +139,24 @@ hd = historical_decomposition(sol, data_hd, [:Y, :C, :K, :A];
                               measurement_error=fill(0.01, 4))
 report(hd)
 ```
+
+---
+
+## Solution Methods
+
+`solve(spec; method=...)` is the single entry point for the first-order and global DSGE solvers. Seven distinct algorithms are available, spanning linear, higher-order, and global approaches:
+
+| `method` | Class | Algorithm | Page |
+|----------|-------|-----------|------|
+| `:gensys` | Linear | Sims (2002) QZ decomposition (default) | [Linear Solvers](@ref dsge_linear) |
+| `:blanchard_kahn` | Linear | Blanchard & Kahn (1980) eigenvalue counting | [Linear Solvers](@ref dsge_linear) |
+| `:klein` | Linear | Klein (2000) generalized Schur decomposition | [Linear Solvers](@ref dsge_linear) |
+| `:perturbation` | Higher-order | Schmitt-Grohe & Uribe (2004), orders 1--3 with pruning | [Nonlinear Methods](@ref dsge_nonlinear) |
+| `:projection` | Global | Chebyshev collocation (Judd 1998) | [Nonlinear Methods](@ref dsge_nonlinear) |
+| `:pfi` | Global | Policy function iteration / Euler-equation time iteration (Coleman 1990) | [Nonlinear Methods](@ref dsge_nonlinear) |
+| `:perfect_foresight` | Deterministic | Newton solver for perfect-foresight paths | [Constraints](@ref dsge_constraints) |
+
+The symbol `:vfi` is accepted as a historical alias of `:pfi` (Euler-equation time iteration, Coleman 1990) --- despite the name it does **not** perform value function iteration. Heterogeneous-agent, overlapping-generations, and continuous-time models use their own solvers; see the child pages linked in the feature list above.
 
 ---
 
@@ -387,7 +405,7 @@ The `spec` object stores the parsed model. `linearize` produces the Sims (2002) 
 
 ## Dynare Replication Suite
 
-The package includes a 27-model replication suite that validates solutions against [Dynare](https://www.dynare.org/) 6.5+ reference values. The reference `.mod` files come from [Johannes Pfeifer's DSGE\_mod collection](https://github.com/JohannesPfeifer/DSGE_mod), a widely-used repository of Dynare model files for textbook and published DSGE models.
+The package includes a 24-model replication suite that validates solutions against [Dynare](https://www.dynare.org/) 6.5+ reference values. The reference `.mod` files come from [Johannes Pfeifer's DSGE\_mod collection](https://github.com/JohannesPfeifer/DSGE_mod), a widely-used repository of Dynare model files for textbook and published DSGE models.
 
 Each replication script specifies the model using `@dsge` (or programmatic `DSGESpec` construction for large models), solves it, and compares the results against Dynare's `.mat` output for:
 

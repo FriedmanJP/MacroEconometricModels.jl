@@ -369,6 +369,17 @@ The stacked bar chart shows the technology shock's contribution to each variable
 
 ---
 
+## API Reference
+
+```@docs
+historical_decomposition
+dsge_smoother
+dsge_particle_smoother
+KalmanSmootherResult
+```
+
+---
+
 ## References
 
 - Canova, F. (2007). *Methods for Applied Macroeconomic Research*.
@@ -382,10 +393,3 @@ The stacked bar chart shows the technology shock's contribution to each variable
 
 - Rauch, H. E., Tung, F., & Striebel, C. T. (1965). Maximum Likelihood Estimates of Linear Dynamic Systems.
   *AIAA Journal*, 3(8), 1445--1450. [DOI](https://doi.org/10.2514/3.3166)
-
-```@docs
-historical_decomposition
-dsge_smoother
-dsge_particle_smoother
-KalmanSmootherResult
-```

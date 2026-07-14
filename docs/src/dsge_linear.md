@@ -69,19 +69,15 @@ nothing # hide
 
 ## Unified Solver Interface
 
-The `solve(spec; method=:gensys)` function is the single entry point for all DSGE solution methods. The `method` keyword selects the algorithm:
+The `solve(spec; method=:gensys)` function is the single entry point for all DSGE solution methods. This page covers the three **linear** (first-order) methods, selected by the `method` keyword:
 
 | `method` | Algorithm |
 |----------|-----------|
 | `:gensys` | Sims (2002) QZ decomposition (default) |
 | `:blanchard_kahn` | Blanchard & Kahn (1980) eigenvalue counting |
 | `:klein` | Klein (2000) generalized Schur decomposition |
-| `:perturbation` | Higher-order perturbation (Schmitt-Grohe & Uribe 2004) |
-| `:projection` | Chebyshev collocation (Judd 1998) |
-| `:pfi` | Policy function iteration (Coleman 1990) |
-| `:perfect_foresight` | Deterministic Newton solver |
 
-This page covers the three **linear** (first-order) methods: `:gensys`, `:blanchard_kahn`, and `:klein`. All three solve the same linearized system and return a `DSGESolution{T}`. For higher-order perturbation, global projection, and policy function iteration, see [Nonlinear Methods](@ref dsge_nonlinear).
+All three solve the same linearized system and return a `DSGESolution{T}`. For the full set of `solve()` methods --- including higher-order perturbation, global projection, policy function iteration, and perfect foresight --- see [DSGE Models](@ref dsge_page).
 
 ### Solver Comparison
 

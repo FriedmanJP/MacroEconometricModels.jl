@@ -458,13 +458,10 @@ Four canonical models are available via `load_ha_example`:
 | `:huggett` | 1 (``a \in [-2, 8]``) | 300 pts | 2 states | Pure exchange, bond in zero net supply |
 
 ```@example dsge_ha
-for name in [:krusell_smith, :one_asset_hank, :two_asset_hank, :huggett]
-    s = load_ha_example(name)
-    n = s.grid.n_dims
-    g = join(s.grid.n_points, "×")
-    println(rpad(name, 20), n, "-asset   β=", s.individual.beta, "   grid=", g)
-end
-nothing # hide
+[let s = load_ha_example(name)
+    (model = name, assets = s.grid.n_dims, beta = s.individual.beta,
+     grid = join(s.grid.n_points, "×"))
+ end for name in [:krusell_smith, :one_asset_hank, :two_asset_hank, :huggett]]
 ```
 
 The Krusell-Smith economy is the simplest benchmark with a single asset and Cobb-Douglas production. The one-asset HANK adds New Keynesian features (sticky prices, monetary policy, dividends) and allows borrowing. The two-asset HANK introduces portfolio choice between liquid and illiquid assets, capturing the empirical finding that most household wealth is illiquid.
