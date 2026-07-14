@@ -14,6 +14,7 @@
 - **ARIMA**: AR, MA, ARMA, ARIMA estimation via OLS, CSS, MLE (Kalman filter), and CSS-MLE; automatic order selection (`auto_arima`); multi-step forecasting with confidence intervals
 - **Volatility Models**: ARCH (Engle 1982), GARCH (Bollerslev 1986), EGARCH (Nelson 1991), GJR-GARCH (Glosten et al. 1993) via MLE; Stochastic Volatility via Kim-Shephard-Chib (1998) Gibbs sampler (basic, leverage, Student-t variants); news impact curves, ARCH-LM diagnostics, multi-step forecasting
 - **Spectral Analysis**: Periodogram, Welch method, smoothed periodogram, AR spectral estimation; cross-spectrum with coherence, phase, gain functions; ACF/PACF/CCF with Ljung-Box/Box-Pierce/Durbin-Watson portmanteau tests
+- **X-13ARIMA-SEATS**: Pure-Julia seasonal adjustment via X-11 (Henderson trend filters, seasonal moving averages) and SEATS (Gómez & Maravall 1996) Wiener-Kolmogorov signal extraction; TRAMO-style automatic ARIMA identification; additive-outlier, level-shift, and temporary-change detection; trading-day and Easter calendar regressors; unified `trend()`/`cycle()`/`seasonal()`/`adjusted()` accessors
 
 **Multivariate Models**
 
@@ -89,7 +90,7 @@
 
 **Visualization**
 
-- **D3.js Plotting**: Zero-dependency interactive visualization via D3.js v7 with 41 plot dispatches; IRF, FEVD, historical decomposition, filter output, forecasts, model diagnostics, DiD event studies, nowcast fan charts
+- **D3.js Plotting**: Zero-dependency interactive visualization via D3.js v7 with interactive plot dispatches; IRF, FEVD, historical decomposition, filter output, forecasts, model diagnostics, DiD event studies, nowcast fan charts
 - **Output Formats**: Self-contained HTML files with Solarized Light/Dark themes; embeddable in documentation and presentations
 
 **Data Management**
@@ -105,7 +106,7 @@
 
 - Display backends: switchable text, LaTeX, and HTML table output via `set_display_backend()`
 - Publication-quality tables: `report()`, `table()`, `print_table()`
-- Bibliographic references: `refs(model)` in AEA text, BibTeX, LaTeX, or HTML format (209 entries)
+- Bibliographic references: `refs(model)` in AEA text, BibTeX, LaTeX, or HTML format
 
 ## Installation
 
@@ -130,6 +131,7 @@ The package is organized into the following modules:
 | `core/` | Shared infrastructure: types, utilities, display backends, covariance estimators |
 | `arima/` | ARIMA suite: types, Kalman filter, estimation (CSS/MLE), forecasting, order selection |
 | `filters/` | Time series filters: HP, Hamilton, Beveridge-Nelson, Baxter-King, boosted HP |
+| `x13/` | X-13ARIMA-SEATS seasonal adjustment: X-11 decomposition, SEATS signal extraction, TRAMO auto-ARIMA, outlier detection, calendar effects |
 | `arch/` | ARCH(q) estimation via MLE, volatility forecasting |
 | `garch/` | GARCH, EGARCH, GJR-GARCH estimation via MLE, news impact curves, forecasting |
 | `sv/` | Stochastic Volatility via KSC (1998) Gibbs sampler, posterior predictive forecasts |
@@ -149,7 +151,7 @@ The package is organized into the following modules:
 | `dsge/` | DSGE: specification, linearization, solution (Gensys/BK/Klein/perturbation/projection/PFI/VFI), constrained solvers (Optim/NLopt/projected Newton), OccBin, Bayesian estimation (SMC/SMC²/MH) |
 | `gmm/` | Generalized Method of Moments and Simulated Method of Moments |
 | `nowcast/` | Nowcasting: DFM (EM + Kalman), large BVAR, bridge equations, news decomposition |
-| `plotting/` | D3.js interactive visualization: 41 plot dispatches, Solarized Light/Dark themes |
+| `plotting/` | D3.js interactive visualization: plot dispatches across model families, Solarized Light/Dark themes |
 | `summary.jl` | Publication-quality summary tables and `refs()` bibliographic references |
 
 ## Mathematical Notation
@@ -165,7 +167,7 @@ Throughout this documentation, we use the following notation conventions:
 | ``\Sigma`` | ``n \times n`` reduced-form error covariance |
 | ``B_0`` | ``n \times n`` contemporaneous impact matrix |
 | ``\varepsilon_t`` | ``n \times 1`` structural shocks |
-| ``u_t`` | ``n \times n`` reduced-form residuals |
+| ``u_t`` | ``n \times 1`` reduced-form residuals |
 | ``h`` | Forecast/impulse response horizon |
 | ``H`` | Maximum horizon |
 
@@ -304,6 +306,6 @@ Contributions are welcome! Please see the [GitHub repository](https://github.com
 ## Contents
 
 ```@contents
-Pages = ["data.md", "filters.md", "arima.md", "volatility.md", "manual.md", "bayesian.md", "vecm.md", "lp.md", "factormodels.md", "favar.md", "regression.md", "binary_choice.md", "pvar.md", "did.md", "event_study.md", "dsge.md", "dsge_linear.md", "dsge_nonlinear.md", "dsge_constraints.md", "dsge_estimation.md", "innovation_accounting.md", "ia_irf.md", "ia_fevd.md", "ia_hd.md", "nongaussian.md", "id_nongaussian.md", "id_heteroskedastic.md", "id_testing.md", "nowcast.md", "nowcast_dfm.md", "nowcast_bvar.md", "nowcast_bridge.md", "nowcast_news.md", "tests.md", "tests_unitroot.md", "tests_unitroot_advanced.md", "tests_breaks.md", "tests_panel.md", "tests_diagnostics.md", "plotting.md", "api.md", "api_types.md", "api_functions.md"]
+Pages = ["data.md", "filters.md", "x13.md", "spectral.md", "arima.md", "volatility.md", "manual.md", "bayesian.md", "vecm.md", "lp.md", "factormodels.md", "favar.md", "regression.md", "binary_choice.md", "ordered_multinomial.md", "pvar.md", "panel_reg.md", "did.md", "event_study.md", "dsge.md", "dsge_linear.md", "dsge_nonlinear.md", "dsge_constraints.md", "dsge_estimation.md", "dsge_hd.md", "dsge_ha.md", "dsge_olg.md", "dsge_continuous.md", "io.md", "io_classical.md", "io_environmental.md", "io_baqaee_farhi.md", "io_download.md", "innovation_accounting.md", "ia_irf.md", "ia_fevd.md", "ia_hd.md", "structural_identification.md", "nongaussian.md", "id_nongaussian.md", "id_heteroskedastic.md", "id_testing.md", "nowcast.md", "nowcast_dfm.md", "nowcast_bvar.md", "nowcast_bridge.md", "nowcast_news.md", "tests.md", "tests_unitroot.md", "tests_unitroot_advanced.md", "tests_breaks.md", "tests_panel.md", "tests_diagnostics.md", "plotting.md", "api.md", "api_types.md", "api_functions.md"]
 Depth = 2
 ```
