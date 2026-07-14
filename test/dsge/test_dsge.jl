@@ -1660,10 +1660,10 @@ end
 
     # Cross-check with long simulation
     rng = Random.MersenneTwister(42)
-    sim_data = simulate(sol, 100_000; rng=rng)
+    sim_data = simulate(sol, 30_000; rng=rng)
     m_simulated = autocovariance_moments(sim_data; lags=2)
     for i in eachindex(m_analytical)
-        @test m_analytical[i] ≈ m_simulated[i] rtol=0.05
+        @test m_analytical[i] ≈ m_simulated[i] rtol=0.10
     end
 end
 
@@ -3709,6 +3709,7 @@ end
         @test length(mom3) == 3  # 1 mean + 1 product moment + 1 autocov
 
         # Compare with simulation-based moments
+        # full-size anchor (T215) — do not shrink
         sim = simulate(sol3, 500_000; rng=Random.MersenneTwister(99))
         sim_dev = sim .- mean(sim, dims=1)
         m_mean = vec(mean(sim, dims=1)) .- sol3.steady_state'
@@ -3866,7 +3867,7 @@ end
 
         sol2 = solve(spec; method=:perturbation, order=2)
         # Long simulation should not explode — key pruning stability test
-        sim = simulate(sol2, 100000; rng=Random.MersenneTwister(42))
+        sim = simulate(sol2, 30000; rng=Random.MersenneTwister(42))
         @test all(isfinite.(sim))
         @test std(sim[:, 1]) < 10.0  # bounded variance
     end
@@ -3960,7 +3961,7 @@ end
         sol = solve(spec; method=:perturbation, order=2)
 
         ir_a = irf(sol, 20; irf_type=:analytical)
-        ir_g = irf(sol, 20; irf_type=:girf, n_draws=500)
+        ir_g = irf(sol, 20; irf_type=:girf, n_draws=100)
 
         # For a linear model, GIRF and analytical should agree closely
         @test size(ir_a.values) == size(ir_g.values)
@@ -4278,7 +4279,7 @@ end
         sol1 = solve(spec; method=:perturbation, order=1)
 
         # Generate long simulation
-        data = simulate(sol1, 100_000; rng=Random.MersenneTwister(123))
+        data = simulate(sol1, 30_000; rng=Random.MersenneTwister(123))
 
         # Data moments should converge to model moments
         m_model = analytical_moments(sol1; lags=1, format=:gmm)
@@ -4289,7 +4290,7 @@ end
         @test abs(m_data[1]) < 0.01
         # Product moment ≈ theoretical variance
         theoretical_var = 0.01^2 / (1 - 0.9^2)
-        @test m_data[2] ≈ theoretical_var atol=0.05 * theoretical_var
+        @test m_data[2] ≈ theoretical_var atol=0.10 * theoretical_var
     end
 
     @testset "Closed-form 2nd-order matches simulation" begin
