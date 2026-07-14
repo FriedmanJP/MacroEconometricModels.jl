@@ -26,8 +26,8 @@ makedocs(;
         "Getting Started" => [
             "Installation & First Model" => "getting_started.md",
             "Choosing a Method" => "method_guide.md",
+            "Data Management" => "data.md",
         ],
-        "Data Management" => "data.md",
         "Univariate Models" => [
             "Time Series Filters" => "filters.md",
             "X-13ARIMA-SEATS" => "x13.md",
@@ -43,14 +43,12 @@ makedocs(;
             "Factor Models" => "factormodels.md",
             "FAVAR" => "favar.md",
         ],
-        "Cross-Sectional Models" => [
+        "Cross-Section & Panel" => [
             "Linear Regression" => "regression.md",
             "Binary Choice Models" => "binary_choice.md",
             "Ordered & Multinomial" => "ordered_multinomial.md",
-        ],
-        "Panel Models" => [
-            "Panel VAR" => "pvar.md",
             "Panel Regression" => "panel_reg.md",
+            "Panel VAR" => "pvar.md",
             "Difference-in-Differences" => "did.md",
             "Event Study LP" => "event_study.md",
         ],
@@ -73,18 +71,20 @@ makedocs(;
             "Baqaee & Farhi (2019)" => "io_baqaee_farhi.md",
             "Downloading Data" => "io_download.md",
         ],
-        "Innovation Accounting" => [
-            "Overview" => "innovation_accounting.md",
-            "Impulse Responses" => "ia_irf.md",
-            "Variance Decomposition" => "ia_fevd.md",
-            "Historical Decomposition" => "ia_hd.md",
-        ],
-        "Structural Identification" => "structural_identification.md",
-        "Statistical Identification" => [
-            "Overview" => "nongaussian.md",
-            "Non-Gaussian Methods" => "id_nongaussian.md",
-            "Heteroskedasticity" => "id_heteroskedastic.md",
-            "Testing" => "id_testing.md",
+        "Structural Analysis" => [
+            "Structural Identification" => "structural_identification.md",
+            "Statistical Identification" => [
+                "Overview" => "nongaussian.md",
+                "Non-Gaussian Methods" => "id_nongaussian.md",
+                "Heteroskedasticity" => "id_heteroskedastic.md",
+                "Testing" => "id_testing.md",
+            ],
+            "Innovation Accounting" => [
+                "Overview" => "innovation_accounting.md",
+                "Impulse Responses" => "ia_irf.md",
+                "Variance Decomposition" => "ia_fevd.md",
+                "Historical Decomposition" => "ia_hd.md",
+            ],
         ],
         "Nowcasting" => [
             "Overview" => "nowcast.md",
