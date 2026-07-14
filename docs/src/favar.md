@@ -300,10 +300,11 @@ r_chol = irf(favar_panel, 20; method=:cholesky)
 report(r_chol)
 ```
 
-```julia
+```@example favar
 # Sign restrictions via check function (irf_matrix is H × n × n)
 check_fn(irf_matrix) = irf_matrix[1, 1, 1] > 0 && irf_matrix[1, 3, 1] < 0
 r_sign_favar = irf(favar_panel, 20; method=:sign, check_func=check_fn)
+report(r_sign_favar)
 ```
 
 The Cholesky identification places the slow-moving factors before the fast-moving key variables, consistent with the Bernanke, Boivin & Eliasz (2005) identification scheme where monetary policy (the key variable) responds contemporaneously to factor movements but not vice versa. For a detailed treatment of identification methods, see [Innovation Accounting](@ref innovation_accounting_page).

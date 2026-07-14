@@ -80,7 +80,7 @@ plot_result(result)
 **Recipe 5: Arias identification**
 
 ```@example var
-model_short = estimate_var(Y[end-59:end, :], 2)
+model_short = estimate_var(Y, 2)
 
 # Sign restrictions on the monetary policy shock (shock 3)
 restrictions = SVARRestrictions(3;
@@ -94,7 +94,7 @@ result
 **Recipe 6: Uhlig identification**
 
 ```@example var
-model_short = estimate_var(Y[end-59:end, :], 2)
+model_short = estimate_var(Y, 2)
 
 # Mountford-Uhlig penalty function: one optimal rotation
 restrictions = SVARRestrictions(3;
@@ -394,7 +394,7 @@ The algorithm constructs ``Q`` column-by-column via QR decomposition in the null
 | Sign | `sign_restriction(var, shock, :positive; horizon=0)` | Response has required sign at `horizon` |
 
 ```@example var
-model_short = estimate_var(Y[end-59:end, :], 2)
+model_short = estimate_var(Y, 2)
 
 # Monetary policy shock (shock 3):
 # Sign: FFR rises on impact, output rises to demand shock
@@ -448,7 +448,7 @@ where:
     Use `identify_uhlig` when a single point-identified rotation is needed --- for example, as a starting point for policy analysis. Use `identify_arias` when the full identified set is required for inference with credible intervals.
 
 ```@example var
-model_short = estimate_var(Y[end-59:end, :], 2)
+model_short = estimate_var(Y, 2)
 
 # Fiscal vs monetary separation
 restrictions = SVARRestrictions(3;
@@ -697,7 +697,7 @@ The BIC selects a parsimonious lag order for the 3-variable system. The Cholesky
   *Econometrica*, 83(5), 1963-1999. [DOI](https://doi.org/10.3982/ECTA12356)
 
 - Blanchard, O. J., & Quah, D. (1989). The Dynamic Effects of Aggregate Demand and Supply Disturbances.
-  *American Economic Review*, 79(4), 655-673. [DOI](https://doi.org/10.3386/w2737)
+  *American Economic Review*, 79(4), 655-673. [DOI](https://doi.org/10.2307/1827924)
 
 - Christiano, L. J., Eichenbaum, M., & Evans, C. L. (1999). Monetary Policy Shocks: What Have We Learned and to What End?
   In *Handbook of Macroeconomics*, Vol. 1, edited by J. B. Taylor & M. Woodford, 65-148. Amsterdam: Elsevier. [DOI](https://doi.org/10.1016/S1574-0048(99)01005-8)

@@ -622,6 +622,8 @@ The 3D IRF array stores ``\Theta[h, i, j] = \hat{\beta}_{i,h}^{(j)}`` for ``h = 
 | Mixture-normal ML | `:mixture_normal` | Gaussian mixture ML |
 | PML | `:pml` | Pseudo maximum likelihood |
 
+The statistical (non-Gaussian) schemes — FastICA, JADE, SOBI, dCov, HSIC, and the maximum-likelihood variants — are documented in full on the [Statistical Identification](@ref nongaussian_page) hub and its [Non-Gaussian Methods](@ref id_nongaussian_page) child.
+
 ```@example lp
 # Structural LP with Cholesky identification
 slp = structural_lp(Y, 20; method=:cholesky, lags=4)
@@ -659,7 +661,7 @@ hd = historical_decomposition(slp)
 | `lags` | `Int` | `4` | Number of LP control lags |
 | `cov_type` | `Symbol` | `:newey_west` | HAC estimator type |
 | `ci_type` | `Symbol` | `:none` | CI method (`:none`, `:bootstrap`) |
-| `reps` | `Int` | `500` | Bootstrap replications |
+| `reps` | `Int` | `200` | Bootstrap replications |
 | `check_func` | `Function` | `nothing` | Sign restriction check function |
 
 ### Return Values (`StructuralLP`)
@@ -821,7 +823,7 @@ The raw FEVD proportions in `lfevd.proportions[i, j, h]` give the R² from regre
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
 | `method` | `Symbol` | `:r2` | Estimator (`:r2`, `:lp_a`, `:lp_b`) |
-| `bias_correct` | `Bool` | `false` | Apply bootstrap bias correction |
+| `bias_correct` | `Bool` | `true` | Apply bootstrap bias correction |
 | `n_boot` | `Int` | `500` | Number of bootstrap replications |
 | `conf_level` | `Real` | `0.95` | Confidence level for CIs |
 

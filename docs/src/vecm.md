@@ -251,7 +251,7 @@ var_model = to_var(vecm)
 report(var_model)
 ```
 
-This conversion is critical because it enables all 18 identification methods (Cholesky, sign restrictions, ICA, narrative, etc.) to work automatically with VECM models. The `irf`, `fevd`, and `historical_decomposition` functions dispatch through `to_var()` internally, so `VECMModel` objects can be passed directly.
+This conversion is critical because it enables all 18 identification methods (Cholesky, sign restrictions, ICA, narrative, etc.) to work automatically with VECM models. The `irf`, `fevd`, and `historical_decomposition` functions dispatch through `to_var()` internally, so `VECMModel` objects can be passed directly. The statistical (non-Gaussian) schemes are documented on the [Statistical Identification](@ref nongaussian_page) hub and its [Non-Gaussian Methods](@ref id_nongaussian_page) child.
 
 ---
 
