@@ -18,6 +18,28 @@ end
 
 const _suppress_warnings = MacroEconometricModels._suppress_warnings
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Shared canonical AR(1) fixtures (T211 / #310).
+# Boilerplate display/accessor/bridge testsets repoint to these instead of
+# re-parsing the same @dsge spec ~dozens of times. Kept UNCONDITIONAL (outside
+# any FAST guard) so #328-gated blocks still compile. DSGESpec is immutable, so
+# sharing a single parsed spec/solution is safe — repointing changes only WHERE
+# the model comes from, never any downstream numerical resolution.
+const AR1_SPEC = @dsge begin
+    parameters: ρ = 0.9, σ = 1.0
+    endogenous: y
+    exogenous: ε
+    y[t] = ρ * y[t-1] + σ * ε[t]
+end
+const AR1_SPEC_SS = compute_steady_state(AR1_SPEC)
+const AR1_SOL = solve(AR1_SPEC_SS)  # default gensys DSGESolution{Float64}
+const AR1_SPEC_SIGMA_LOW = @dsge begin
+    parameters: ρ = 0.9, σ = 0.01
+    endogenous: y
+    exogenous: ε
+    y[t] = ρ * y[t-1] + σ * ε[t]
+end
+
 @testset "DSGE Module" begin
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -411,12 +433,7 @@ end
 end
 
 @testset "Parser: residual functions" begin
-    spec = @dsge begin
-        parameters: ρ = 0.9, σ = 1.0
-        endogenous: y
-        exogenous: ε
-        y[t] = ρ * y[t-1] + σ * ε[t]
-    end
+    spec = AR1_SPEC
     fn = spec.residual_fns[1]
     # At SS (y=0, ε=0): residual = 0 - 0.9*0 - 1.0*0 = 0
     @test fn([0.0], [0.0], [0.0], [0.0], spec.param_values) ≈ 0.0 atol=1e-12
@@ -497,12 +514,7 @@ end
 # ─────────────────────────────────────────────────────────────────────────────
 
 @testset "Steady state: AR(1)" begin
-    spec = @dsge begin
-        parameters: ρ = 0.9, σ = 0.01
-        endogenous: y
-        exogenous: ε
-        y[t] = ρ * y[t-1] + σ * ε[t]
-    end
+    spec = AR1_SPEC_SIGMA_LOW
     spec2 = compute_steady_state(spec)
     @test spec2 isa DSGESpec
     @test length(spec2.steady_state) == 1
@@ -573,12 +585,7 @@ end
 end
 
 @testset "Steady state: NonlinearSolve algorithm kwarg" begin
-    spec = @dsge begin
-        parameters: ρ = 0.9, σ = 0.01
-        endogenous: y
-        exogenous: ε
-        y[t] = ρ * y[t-1] + σ * ε[t]
-    end
+    spec = AR1_SPEC_SIGMA_LOW
     spec2 = compute_steady_state(spec)
     @test spec2.steady_state[1] ≈ 0.0 atol=1e-6
 
@@ -1151,12 +1158,7 @@ end
 # ─────────────────────────────────────────────────────────────────────────────
 
 @testset "Simulate: stochastic" begin
-    spec = @dsge begin
-        parameters: ρ = 0.9, σ = 0.01
-        endogenous: y
-        exogenous: ε
-        y[t] = ρ * y[t-1] + σ * ε[t]
-    end
+    spec = AR1_SPEC_SIGMA_LOW
     sol = solve(spec)
     Random.seed!(42)
     sim = simulate(sol, 200)
@@ -1166,13 +1168,7 @@ end
 end
 
 @testset "Simulate: deterministic (given shocks)" begin
-    spec = @dsge begin
-        parameters: ρ = 0.9, σ = 1.0
-        endogenous: y
-        exogenous: ε
-        y[t] = ρ * y[t-1] + σ * ε[t]
-    end
-    sol = solve(spec)
+    sol = AR1_SOL
     shocks = zeros(10, 1)
     shocks[1, 1] = 1.0
     sim = simulate(sol, 10; shock_draws=shocks)
@@ -1181,13 +1177,7 @@ end
 end
 
 @testset "IRF bridge to ImpulseResponse" begin
-    spec = @dsge begin
-        parameters: ρ = 0.9, σ = 1.0
-        endogenous: y
-        exogenous: ε
-        y[t] = ρ * y[t-1] + σ * ε[t]
-    end
-    sol = solve(spec)
+    sol = AR1_SOL
     irf_result = irf(sol, 20)
     @test irf_result isa ImpulseResponse{Float64}
     @test irf_result.horizon == 20
@@ -1198,13 +1188,7 @@ end
 end
 
 @testset "FEVD bridge to FEVD type" begin
-    spec = @dsge begin
-        parameters: ρ = 0.9, σ = 1.0
-        endogenous: y
-        exogenous: ε
-        y[t] = ρ * y[t-1] + σ * ε[t]
-    end
-    sol = solve(spec)
+    sol = AR1_SOL
     fevd_result = fevd(sol, 20)
     @test fevd_result isa FEVD{Float64}
     # Single shock -> 100% variance explained at all horizons
@@ -1438,12 +1422,7 @@ end
 # ─────────────────────────────────────────────────────────────────────────────
 
 @testset "Full workflow: specify → solve → analyze" begin
-    spec = @dsge begin
-        parameters: ρ = 0.9, σ = 0.01
-        endogenous: y
-        exogenous: ε
-        y[t] = ρ * y[t-1] + σ * ε[t]
-    end
+    spec = AR1_SPEC_SIGMA_LOW
 
     # Solve
     sol = solve(spec)
@@ -1498,12 +1477,7 @@ end
 end
 
 @testset "Full workflow: perfect foresight" begin
-    spec = @dsge begin
-        parameters: ρ = 0.9, σ = 1.0
-        endogenous: y
-        exogenous: ε
-        y[t] = ρ * y[t-1] + σ * ε[t]
-    end
+    spec = AR1_SPEC
     shocks = zeros(50, 1)
     shocks[1, 1] = 1.0
     pf = solve(spec; method=:perfect_foresight, T_periods=50, shock_path=shocks)
