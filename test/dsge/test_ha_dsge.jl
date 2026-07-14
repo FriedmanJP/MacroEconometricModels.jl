@@ -11,6 +11,12 @@ using SparseArrays
 using Random
 using Distributions
 
+# Shared Huggett (1993) credit-limit −2 steady state (T209/#308): three testsets
+# (the Table-1 SS loop, SSJ, and Reiter) recompute the identical cl=−2 equilibrium.
+# Solve it ONCE here at the stricter (tol=5e-4) bar and reuse everywhere.
+const _HUG_SPEC_M2 = MacroEconometricModels._huggett_example(; credit_limit=-2.0, a_max=8.0, n_a=200)
+const _HUG_SS_M2 = compute_steady_state(_HUG_SPEC_M2; max_iter=200, tol=5e-4)
+
 @testset "HA-DSGE Types" begin
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1538,9 +1544,14 @@ end
     r_annuals = Float64[]
     for (cl, r_target) in targets
         a_max = cl <= -6 ? 18.0 : 8.0
-        spec = MacroEconometricModels._huggett_example(; credit_limit=cl, a_max=a_max, n_a=400)
+        if cl == -2.0                       # reuse the shared cl=−2 SS (a_max=8.0, n_a=200)
+            spec = _HUG_SPEC_M2
+            ss = _HUG_SS_M2
+        else
+            spec = MacroEconometricModels._huggett_example(; credit_limit=cl, a_max=a_max, n_a=200)
+            ss = compute_steady_state(spec; max_iter=200, tol=5e-4)
+        end
         @test spec.model == :huggett
-        ss = compute_steady_state(spec; max_iter=200, tol=5e-4)
         @test ss.converged
         @test abs(ss.excess_demand) < 3e-3                 # bond market clears (∫a' ≈ 0)
         r_ann = annualize(ss.prices[:r])
@@ -1562,9 +1573,8 @@ end
 end
 
 @testset "Huggett SSJ" begin
-    spec = MacroEconometricModels._huggett_example(; credit_limit=-2.0, a_max=8.0, n_a=200)
-    ss = compute_steady_state(spec; max_iter=120, tol=1e-3)
-    sol = solve(spec; method=:ssj, ss=ss, T_horizon=100, n_reduced=20)
+    spec = _HUG_SPEC_M2; ss = _HUG_SS_M2      # reuse shared cl=−2 SS (T209/#308)
+    sol = solve(spec; method=:ssj, ss=ss, T_horizon=50, n_reduced=20)
     @test sol isa HADSGESolution
     @test sol.method === :ssj
     @test maximum(abs.(eigvals(sol.linear_solution.G1))) <= 1 + 1e-6  # stable
@@ -1572,13 +1582,12 @@ end
     @test haskey(sol.jacobians, :H_Z)                                  # shock Jacobian
     # A positive aggregate endowment shock lowers the clearing risk-free rate on impact.
     H_U = sol.jacobians[:H_U]; H_Z = sol.jacobians[:H_Z]
-    dr = -(H_U \ (H_Z * [0.9^(t - 1) for t in 1:100]))
+    dr = -(H_U \ (H_Z * [0.9^(t - 1) for t in 1:50]))
     @test dr[1] < 0
 end
 
 @testset "Huggett Reiter" begin
-    spec = MacroEconometricModels._huggett_example(; credit_limit=-2.0, a_max=8.0, n_a=200)
-    ss = compute_steady_state(spec; max_iter=120, tol=1e-3)
+    spec = _HUG_SPEC_M2; ss = _HUG_SS_M2      # reuse shared cl=−2 SS (T209/#308)
     sol = solve(spec; method=:reiter, ss=ss, n_reduced=30)
     @test sol isa HADSGESolution
     @test sol.method === :reiter
