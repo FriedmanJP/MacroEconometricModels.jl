@@ -297,7 +297,7 @@ Throughout this documentation, we use the following notation conventions:
 
 ## License
 
-This package is released under the [GNU General Public License v3.0](https://www.gnu.org/licenses/gpl-3.0.en.html).
+This package is released under the [GNU General Public License v3.0](https://www.gnu.org/licenses/gpl-3.0.en.html). The GPL warranty-disclaimer and redistribution-condition notices are available at the REPL via [`warranty`](@ref) and [`conditions`](@ref).
 
 ## Contributing
 

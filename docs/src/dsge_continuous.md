@@ -83,7 +83,7 @@ The density is nonnegative and integrates to one. Mass piles up at the borrowing
 
 ## Stationary Equilibrium
 
-`ct_steady_state` bisects on the interest rate ``r`` until household-supplied capital ``\int a\, g`` equals firm capital demand from the Cobb-Douglas first-order condition ``r = \alpha Z (K/L)^{\alpha-1} - \delta``, with the wage ``w = (1-\alpha) Z (K/L)^{\alpha}`` and effective labor ``L = \int z\, g``.
+`ct_steady_state` bisects on the interest rate ``r`` until household-supplied capital ``\int a\, g`` equals firm capital demand from the Cobb-Douglas first-order condition ``r = \alpha Z (K/L)^{\alpha-1} - \delta``, with the wage ``w = (1-\alpha) Z (K/L)^{\alpha}`` and effective labor ``L = \int z\, g``. It returns a [`CTSteadyState`](@ref) holding the value function, stationary density, prices, and aggregates. The idiosyncratic income state follows a [`CTPoissonIncome`](@ref) two-state Poisson process.
 
 ```@example ct
 (interest_rate = round(ss.r, digits=5),
@@ -123,6 +123,8 @@ An **MIT shock** is an unanticipated, deterministic aggregate disturbance: the e
 3. Solve the KFE **forward** from the initial distribution ``g(\cdot,0)``.
 4. Update ``K_t = \int a\, g_t`` by relaxation until the path converges.
 
+The converged prices, aggregates, and time-varying densities are returned in a [`CTTransition`](@ref).
+
 ```@example ct
 m2 = CTAiyagari(; sigma=2.0, rho=0.05, delta=0.05, a_max=30.0, I=120)
 ss0 = ct_steady_state(m2; tol=1e-6)
@@ -156,7 +158,7 @@ The two-asset model adds a second, **illiquid** asset ``a`` (return ``r_a``) alo
 \rho V(b,a,z) = \max_{c,d}\; u(c) + V_b\,(w z + r_b b - d - \tfrac{\chi}{2}d^2 - c) + V_a\,(r_a a + d) + \sum_{z'}\lambda_{z\to z'}[V(b,a,z')-V(b,a,z)]
 ```
 
-where the first-order conditions are ``c = (V_b)^{-1/\sigma}`` and ``d = (V_a/V_b - 1)/\chi``. The HJB is a two-dimensional PDE solved by upwind finite differences in both ``b`` and ``a``; the stationary joint density of ``(b,a,z)`` solves the Kolmogorov-Forward equation.
+where the first-order conditions are ``c = (V_b)^{-1/\sigma}`` and ``d = (V_a/V_b - 1)/\chi``. The HJB is a two-dimensional PDE solved by upwind finite differences in both ``b`` and ``a``; the stationary joint density of ``(b,a,z)`` solves the Kolmogorov-Forward equation. `ct_two_asset_solve` returns a [`CTTwoAssetSolution`](@ref) with the value function, deposit and consumption policies, joint density, and aggregates.
 
 ```@example ct
 tw = CTTwoAsset(; r_a=0.05, r_b=0.02, chi=2.0, rho=0.08, Ib=30, Ia=30)

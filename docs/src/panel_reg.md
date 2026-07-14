@@ -410,7 +410,7 @@ report(me)
 
 ## Specification Tests
 
-Six specification tests help choose between estimators and diagnose violations of model assumptions.
+Six specification tests help choose between estimators and diagnose violations of model assumptions. Each returns a [`PanelTestResult`](@ref) carrying the test statistic, p-value, and degrees of freedom.
 
 ### Hausman Test (FE vs RE)
 

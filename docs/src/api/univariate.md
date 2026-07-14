@@ -35,6 +35,7 @@ cycle
 ```@docs
 x13_filter
 seasonal
+adjusted
 ```
 
 ---
@@ -189,8 +190,13 @@ MacroEconometricModels.StatsAPI.nobs(::SVModel)
 MacroEconometricModels.StatsAPI.coef(::SVModel)
 MacroEconometricModels.StatsAPI.residuals(::SVModel)
 MacroEconometricModels.StatsAPI.islinear(::SVModel)
-MacroEconometricModels.StatsAPI.stderror(m::GJRGARCHModel)
+MacroEconometricModels.StatsAPI.stderror(::GJRGARCHModel{T}) where {T}
 MacroEconometricModels.StatsAPI.confint(m::AbstractVolatilityModel)
+MacroEconometricModels.StatsAPI.vcov(::AbstractVolatilityModel)
+MacroEconometricModels.StatsAPI.dof_residual(::ARCHModel)
+MacroEconometricModels.StatsAPI.dof_residual(::GARCHModel)
+MacroEconometricModels.StatsAPI.dof_residual(::EGARCHModel)
+MacroEconometricModels.StatsAPI.dof_residual(::GJRGARCHModel)
 ```
 
 ---

@@ -11,6 +11,8 @@ RegModel
 LogitModel
 ProbitModel
 MarginalEffects
+MultinomialMarginalEffects
+OddsRatio
 ```
 
 ---

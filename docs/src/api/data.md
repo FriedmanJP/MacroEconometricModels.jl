@@ -24,6 +24,8 @@ DataSummary
 diagnose
 fix
 validate_for_model
+dropna
+keeprows
 ```
 
 ---
@@ -71,6 +73,8 @@ panel_summary
 ```@docs
 MacroEconometricModels.StatsAPI.nobs(::TimeSeriesData)
 nvars
+nlags
+ncoefs
 varnames
 frequency
 time_index

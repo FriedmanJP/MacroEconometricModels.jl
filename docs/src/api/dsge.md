@@ -77,6 +77,12 @@ Pages   = ["dsge/simulation.jl", "dsge/pruning.jl"]
 Order   = [:function]
 ```
 
+```@docs
+irf(::OccBinSolution{T}, ::Int) where {T<:AbstractFloat}
+irf(::BayesianDSGE{T}, ::Int) where {T<:AbstractFloat}
+fevd(::BayesianDSGE{T}, ::Int) where {T<:AbstractFloat}
+```
+
 ### Simulation and Analysis
 
 ```@docs
@@ -131,6 +137,7 @@ nonlinear_constraint
 HADSGESpec
 HAGrid
 IncomeProcess
+IndividualProblem
 HASteadyState
 HADSGESolution
 KrusellSmithSolution
@@ -147,6 +154,9 @@ distribution_irf
 inequality_irf
 simulate_panel
 den_haan_test
+irf(::HADSGESolution{T}, ::Int) where {T<:AbstractFloat}
+fevd(::HADSGESolution{T}, ::Int) where {T<:AbstractFloat}
+report(::DenHaanAccuracy{T}) where {T}
 ```
 
 ---
@@ -170,6 +180,8 @@ ct_kfe
 ct_steady_state
 ct_mit_shock
 ct_two_asset_solve
+report(::IO, ::CTSteadyState{T}) where {T}
+report(::IO, ::CTTwoAssetSolution{T}) where {T}
 ```
 
 ---
@@ -188,4 +200,5 @@ BlanchardOLGSolution
 blanchard_steady_state
 blanchard_solve
 blanchard_transition
+report(::IO, ::BlanchardOLGSteadyState{T}) where {T}
 ```

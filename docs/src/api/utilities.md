@@ -58,3 +58,30 @@ Modules = [MacroEconometricModels]
 Pages   = ["core/utils.jl"]
 Order   = [:function]
 ```
+
+### Numerical Tolerances
+
+```@docs
+default_abstol
+default_reltol
+```
+
+---
+
+## Exceptions
+
+```@docs
+MacroModelError
+ConvergenceError
+IdentificationError
+SingularSystemError
+```
+
+---
+
+## License
+
+```@docs
+warranty
+conditions
+```

@@ -95,7 +95,7 @@ The correction term is the discrete-time analog of Blanchard's continuous-time w
 
 ## Steady State
 
-`blanchard_steady_state` solves for capital by bracketed bisection, equating the budget-implied consumption ``C = r k + w`` (``= f(k) - \delta k``; debt is net wealth and taxes ``r b`` service it, so the debt-service terms cancel in aggregate) with the Euler-implied consumption ``C = (1+r)\lambda(k+b)/[\beta(1+r)-1]``. The solver selects the high-capital root continuously connected to the Ramsey economy.
+`blanchard_steady_state` solves for capital by bracketed bisection, equating the budget-implied consumption ``C = r k + w`` (``= f(k) - \delta k``; debt is net wealth and taxes ``r b`` service it, so the debt-service terms cancel in aggregate) with the Euler-implied consumption ``C = (1+r)\lambda(k+b)/[\beta(1+r)-1]``. The solver selects the high-capital root continuously connected to the Ramsey economy and returns a [`BlanchardOLGSteadyState`](@ref).
 
 ```@example olg
 ss = blanchard_steady_state(BlanchardOLG(; gamma=0.96))
@@ -134,7 +134,7 @@ The interest rate rises and capital falls monotonically with debt — Ricardian 
 
 ## Transitional Dynamics
 
-`blanchard_solve` linearizes the ``(k, C)`` system around the steady state and solves the saddle path. The 2×2 transition has one eigenvalue inside the unit circle (the stable convergence rate) and one outside, confirming determinacy. `blanchard_transition` then simulates convergence from an arbitrary initial capital stock.
+`blanchard_solve` linearizes the ``(k, C)`` system around the steady state and solves the saddle path, returning a [`BlanchardOLGSolution`](@ref) that carries the policy matrix and eigenvalues. The 2×2 transition has one eigenvalue inside the unit circle (the stable convergence rate) and one outside, confirming determinacy. `blanchard_transition` then simulates convergence from an arbitrary initial capital stock.
 
 ```@example olg
 m = BlanchardOLG(; gamma=0.98)

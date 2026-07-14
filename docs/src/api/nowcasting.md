@@ -13,6 +13,7 @@ NowcastBVAR
 NowcastBridge
 NowcastResult
 NowcastNews
+NowcastForecast
 ```
 
 ---

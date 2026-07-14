@@ -327,6 +327,18 @@ favar_panel_irf
 favar_panel_forecast
 ```
 
+### FAVAR/SDFM Structural Analysis
+
+```@docs
+irf(::FAVARModel{T}, ::Int) where {T}
+irf(::BayesianFAVAR{T}, ::Int) where {T}
+irf(::StructuralDFM{T}, ::Int) where {T}
+fevd(::FAVARModel{T}, ::Int) where {T}
+fevd(::BayesianFAVAR{T}, ::Int) where {T}
+fevd(::StructuralDFM{T}, ::Int) where {T}
+forecast(::FAVARModel{T}, ::Int) where {T}
+```
+
 ---
 
 ## Structural Dynamic Factor Models

@@ -25,6 +25,25 @@ PanelProbitModel
 
 ---
 
+## Panel Test Result Types
+
+```@docs
+PanelTestResult
+PanelUnitRootSummary
+```
+
+### Panel Display
+
+```@docs
+report(::PanelRegModel)
+report(::PanelIVModel)
+report(::PanelLogitModel)
+report(::PanelProbitModel)
+report(::PanelTestResult)
+```
+
+---
+
 ## Difference-in-Differences Types
 
 ```@docs
