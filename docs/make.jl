@@ -105,6 +105,8 @@ makedocs(;
         "Project" => [
             "Notation" => "notation.md",
             "Bibliography" => "bibliography.md",
+            "Changelog" => "changelog.md",
+            "How to Cite" => "citation.md",
         ],
         "API Reference" => [
             "Overview" => "api.md",
