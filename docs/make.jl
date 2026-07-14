@@ -102,6 +102,10 @@ makedocs(;
             "Model Diagnostics" => "tests_diagnostics.md",
         ],
         "Visualization" => "plotting.md",
+        "Project" => [
+            "Notation" => "notation.md",
+            "Bibliography" => "bibliography.md",
+        ],
         "API Reference" => [
             "Overview" => "api.md",
             "Data Management" => "api/data.md",
