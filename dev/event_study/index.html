@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Event Study LP · MacroEconometricModels.jl</title><meta name="title" content="Event Study LP · MacroEconometricModels.jl"/><meta property="og:title" content="Event Study LP · MacroEconometricModels.jl"/><meta property="twitter:title" content="Event Study LP · MacroEconometricModels.jl"/><meta name="description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:description" content="Documentation for MacroEconometricModels.jl."/><meta property="twitter:description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:url" content="https://FriedmanJP.github.io/MacroEconometricModels.jl/event_study/"/><meta property="twitter:url" content="https://FriedmanJP.github.io/MacroEconometricModels.jl/event_study/"/><link rel="canonical" href="https://FriedmanJP.github.io/MacroEconometricModels.jl/event_study/"/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script><link href="../assets/custom.css" rel="stylesheet" type="text/css"/><script src="../assets/theme-toggle.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">MacroEconometricModels.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><a class="tocitem" href="../data/">Data Management</a></li><li><span class="tocitem">Univariate Models</span><ul><li><a class="tocitem" href="../filters/">Time Series Filters</a></li><li><a class="tocitem" href="../x13/">X-13ARIMA-SEATS</a></li><li><a class="tocitem" href="../spectral/">Spectral Analysis</a></li><li><a class="tocitem" href="../arima/">ARIMA</a></li><li><a class="tocitem" href="../volatility/">Volatility Models</a></li></ul></li><li><span class="tocitem">Multivariate Models</span><ul><li><a class="tocitem" href="../manual/">VAR</a></li><li><a class="tocitem" href="../bayesian/">Bayesian VAR</a></li><li><a class="tocitem" href="../vecm/">VECM</a></li><li><a class="tocitem" href="../lp/">Local Projections</a></li><li><a class="tocitem" href="../factormodels/">Factor Models</a></li><li><a class="tocitem" href="../favar/">FAVAR</a></li></ul></li><li><span class="tocitem">Cross-Sectional Models</span><ul><li><a class="tocitem" href="../regression/">Linear Regression</a></li><li><a class="tocitem" href="../binary_choice/">Binary Choice Models</a></li><li><a class="tocitem" href="../ordered_multinomial/">Ordered &amp; Multinomial</a></li></ul></li><li><span class="tocitem">Panel Models</span><ul><li><a class="tocitem" href="../pvar/">Panel VAR</a></li><li><a class="tocitem" href="../panel_reg/">Panel Regression</a></li><li><a class="tocitem" href="../did/">Difference-in-Differences</a></li><li class="is-active"><a class="tocitem" href>Event Study LP</a><ul class="internal"><li><a class="tocitem" href="#Quick-Start"><span>Quick Start</span></a></li><li><a class="tocitem" href="#Model-Specification"><span>Model Specification</span></a></li><li><a class="tocitem" href="#Event-Study-LP"><span>Event Study LP</span></a></li><li><a class="tocitem" href="#LP-DiD-(Dube-et-al.-2025)"><span>LP-DiD (Dube et al. 2025)</span></a></li><li><a class="tocitem" href="#DDCG-Dataset"><span>DDCG Dataset</span></a></li><li><a class="tocitem" href="#Panel-Utilities"><span>Panel Utilities</span></a></li><li><a class="tocitem" href="#Clustering"><span>Clustering</span></a></li><li><a class="tocitem" href="#Diagnostics"><span>Diagnostics</span></a></li><li><a class="tocitem" href="#Visualization"><span>Visualization</span></a></li><li><a class="tocitem" href="#Complete-Example"><span>Complete Example</span></a></li><li><a class="tocitem" href="#Common-Pitfalls"><span>Common Pitfalls</span></a></li><li><a class="tocitem" href="#References"><span>References</span></a></li></ul></li></ul></li><li><span class="tocitem">DSGE Models</span><ul><li><a class="tocitem" href="../dsge/">Overview</a></li><li><a class="tocitem" href="../dsge_linear/">Linear Solvers</a></li><li><a class="tocitem" href="../dsge_nonlinear/">Nonlinear Methods</a></li><li><a class="tocitem" href="../dsge_constraints/">Constraints</a></li><li><a class="tocitem" href="../dsge_estimation/">Estimation</a></li><li><a class="tocitem" href="../dsge_hd/">Historical Decomposition</a></li><li><a class="tocitem" href="../dsge_ha/">Heterogeneous Agents</a></li><li><a class="tocitem" href="../dsge_olg/">Overlapping Generations</a></li><li><a class="tocitem" href="../dsge_continuous/">Continuous Time</a></li></ul></li><li><span class="tocitem">Input-Output Analysis</span><ul><li><a class="tocitem" href="../io/">Overview</a></li><li><a class="tocitem" href="../io_classical/">Classical Analysis</a></li><li><a class="tocitem" href="../io_environmental/">Environmental Extensions</a></li><li><a class="tocitem" href="../io_baqaee_farhi/">Baqaee &amp; Farhi (2019)</a></li><li><a class="tocitem" href="../io_download/">Downloading Data</a></li></ul></li><li><span class="tocitem">Innovation Accounting</span><ul><li><a class="tocitem" href="../innovation_accounting/">Overview</a></li><li><a class="tocitem" href="../ia_irf/">Impulse Responses</a></li><li><a class="tocitem" href="../ia_fevd/">Variance Decomposition</a></li><li><a class="tocitem" href="../ia_hd/">Historical Decomposition</a></li></ul></li><li><a class="tocitem" href="../structural_identification/">Structural Identification</a></li><li><span class="tocitem">Statistical Identification</span><ul><li><a class="tocitem" href="../nongaussian/">Overview</a></li><li><a class="tocitem" href="../id_nongaussian/">Non-Gaussian Methods</a></li><li><a class="tocitem" href="../id_heteroskedastic/">Heteroskedasticity</a></li><li><a class="tocitem" href="../id_testing/">Testing</a></li></ul></li><li><span class="tocitem">Nowcasting</span><ul><li><a class="tocitem" href="../nowcast/">Overview</a></li><li><a class="tocitem" href="../nowcast_dfm/">DFM Nowcasting</a></li><li><a class="tocitem" href="../nowcast_bvar/">BVAR Nowcasting</a></li><li><a class="tocitem" href="../nowcast_bridge/">Bridge Equations</a></li><li><a class="tocitem" href="../nowcast_news/">News Decomposition</a></li></ul></li><li><span class="tocitem">Hypothesis Tests</span><ul><li><a class="tocitem" href="../tests/">Overview</a></li><li><a class="tocitem" href="../tests_unitroot/">Unit Root &amp; Cointegration</a></li><li><a class="tocitem" href="../tests_unitroot_advanced/">Advanced Unit Root</a></li><li><a class="tocitem" href="../tests_breaks/">Structural Breaks</a></li><li><a class="tocitem" href="../tests_panel/">Panel Tests</a></li><li><a class="tocitem" href="../tests_diagnostics/">Model Diagnostics</a></li></ul></li><li><a class="tocitem" href="../plotting/">Visualization</a></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../api/">Overview</a></li><li><a class="tocitem" href="../api_types/">Types</a></li><li><a class="tocitem" href="../api_functions/">Functions</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Panel Models</a></li><li class="is-active"><a href>Event Study LP</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Event Study LP</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/FriedmanJP/MacroEconometricModels.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/FriedmanJP/MacroEconometricModels.jl/blob/main/docs/src/event_study.md#" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="event_study_page"><a class="docs-heading-anchor" href="#event_study_page">Event Study LP</a><a id="event_study_page-1"></a><a class="docs-heading-anchor-permalink" href="#event_study_page" title="Permalink"></a></h1><p><strong>MacroEconometricModels.jl</strong> provides two LP-based event study estimators for causal inference in panel settings: the <strong>Event Study LP</strong> (Jorda 2005; Acemoglu, Naidu, Restrepo &amp; Robinson 2019) and the <strong>LP-DiD</strong> estimator (Dube, Girardi, Jorda &amp; Taylor 2025) with clean control samples, switching indicator treatment, and time-only fixed effects. The package achieves full parity with Stata <code>lpdid</code> v1.0.2.</p><ul><li><strong>Event Study LP</strong>: Horizon-by-horizon local projections with switching indicator treatment and time-only FE</li><li><strong>LP-DiD</strong>: Clean control sample restrictions (absorbing/non-absorbing/one-off), pre-mean differencing, IPW reweighting, pooled estimates</li><li><strong>DDCG dataset</strong>: Built-in Acemoglu et al. (2019) democracy-GDP panel (184 countries, 1960–2010)</li><li><strong>Panel utilities</strong>: <code>panel_lag</code>, <code>panel_lead</code>, <code>panel_diff</code> for within-group transformations</li><li><strong>Diagnostics</strong>: Pre-trend tests and HonestDiD sensitivity analysis</li></ul><h2 id="Quick-Start"><a class="docs-heading-anchor" href="#Quick-Start">Quick Start</a><a id="Quick-Start-1"></a><a class="docs-heading-anchor-permalink" href="#Quick-Start" title="Permalink"></a></h2><p><strong>Recipe 1: Standard Event Study LP</strong></p><pre><code class="language-julia hljs">N, T_per = 50, 20
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Event Study LP · MacroEconometricModels.jl</title><meta name="title" content="Event Study LP · MacroEconometricModels.jl"/><meta property="og:title" content="Event Study LP · MacroEconometricModels.jl"/><meta property="twitter:title" content="Event Study LP · MacroEconometricModels.jl"/><meta name="description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:description" content="Documentation for MacroEconometricModels.jl."/><meta property="twitter:description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:url" content="https://FriedmanJP.github.io/MacroEconometricModels.jl/event_study/"/><meta property="twitter:url" content="https://FriedmanJP.github.io/MacroEconometricModels.jl/event_study/"/><link rel="canonical" href="https://FriedmanJP.github.io/MacroEconometricModels.jl/event_study/"/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script><link href="../assets/custom.css" rel="stylesheet" type="text/css"/><script src="../assets/theme-toggle.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">MacroEconometricModels.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><span class="tocitem">Getting Started</span><ul><li><a class="tocitem" href="../getting_started/">Installation &amp; First Model</a></li><li><a class="tocitem" href="../method_guide/">Choosing a Method</a></li><li><a class="tocitem" href="../data/">Data Management</a></li></ul></li><li><span class="tocitem">Univariate Models</span><ul><li><a class="tocitem" href="../filters/">Time Series Filters</a></li><li><a class="tocitem" href="../x13/">X-13ARIMA-SEATS</a></li><li><a class="tocitem" href="../spectral/">Spectral Analysis</a></li><li><a class="tocitem" href="../arima/">ARIMA</a></li><li><a class="tocitem" href="../volatility/">Volatility Models</a></li></ul></li><li><span class="tocitem">Multivariate Models</span><ul><li><a class="tocitem" href="../manual/">VAR</a></li><li><a class="tocitem" href="../bayesian/">Bayesian VAR</a></li><li><a class="tocitem" href="../vecm/">VECM</a></li><li><a class="tocitem" href="../lp/">Local Projections</a></li><li><a class="tocitem" href="../factormodels/">Factor Models</a></li><li><a class="tocitem" href="../favar/">FAVAR</a></li></ul></li><li><span class="tocitem">Cross-Section &amp; Panel</span><ul><li><a class="tocitem" href="../regression/">Linear Regression</a></li><li><a class="tocitem" href="../binary_choice/">Binary Choice Models</a></li><li><a class="tocitem" href="../ordered_multinomial/">Ordered &amp; Multinomial</a></li><li><a class="tocitem" href="../panel_reg/">Panel Regression</a></li><li><a class="tocitem" href="../pvar/">Panel VAR</a></li><li><a class="tocitem" href="../did/">Difference-in-Differences</a></li><li class="is-active"><a class="tocitem" href>Event Study LP</a><ul class="internal"><li><a class="tocitem" href="#Quick-Start"><span>Quick Start</span></a></li><li><a class="tocitem" href="#Model-Specification"><span>Model Specification</span></a></li><li><a class="tocitem" href="#Event-Study-LP"><span>Event Study LP</span></a></li><li><a class="tocitem" href="#LP-DiD-(Dube-et-al.-2025)"><span>LP-DiD (Dube et al. 2025)</span></a></li><li><a class="tocitem" href="#DDCG-Dataset"><span>DDCG Dataset</span></a></li><li><a class="tocitem" href="#Panel-Utilities"><span>Panel Utilities</span></a></li><li><a class="tocitem" href="#Clustering"><span>Clustering</span></a></li><li><a class="tocitem" href="#Diagnostics"><span>Diagnostics</span></a></li><li><a class="tocitem" href="#Visualization"><span>Visualization</span></a></li><li><a class="tocitem" href="#Complete-Example"><span>Complete Example</span></a></li><li><a class="tocitem" href="#Common-Pitfalls"><span>Common Pitfalls</span></a></li><li><a class="tocitem" href="#References"><span>References</span></a></li></ul></li></ul></li><li><a class="tocitem" href="../gmm/">GMM &amp; SMM</a></li><li><span class="tocitem">DSGE Models</span><ul><li><a class="tocitem" href="../dsge/">Overview</a></li><li><a class="tocitem" href="../dsge_linear/">Linear Solvers</a></li><li><a class="tocitem" href="../dsge_nonlinear/">Nonlinear Methods</a></li><li><a class="tocitem" href="../dsge_constraints/">Constraints</a></li><li><a class="tocitem" href="../dsge_estimation/">Estimation</a></li><li><a class="tocitem" href="../dsge_hd/">Historical Decomposition</a></li><li><a class="tocitem" href="../dsge_ha/">Heterogeneous Agents</a></li><li><a class="tocitem" href="../dsge_olg/">Overlapping Generations</a></li><li><a class="tocitem" href="../dsge_continuous/">Continuous Time</a></li></ul></li><li><span class="tocitem">Input-Output Analysis</span><ul><li><a class="tocitem" href="../io/">Overview</a></li><li><a class="tocitem" href="../io_classical/">Classical Analysis</a></li><li><a class="tocitem" href="../io_environmental/">Environmental Extensions</a></li><li><a class="tocitem" href="../io_baqaee_farhi/">Baqaee &amp; Farhi (2019)</a></li><li><a class="tocitem" href="../io_download/">Downloading Data</a></li></ul></li><li><span class="tocitem">Structural Analysis</span><ul><li><a class="tocitem" href="../structural_identification/">Structural Identification</a></li><li><input class="collapse-toggle" id="menuitem-9-2" type="checkbox"/><label class="tocitem" for="menuitem-9-2"><span class="docs-label">Statistical Identification</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../nongaussian/">Overview</a></li><li><a class="tocitem" href="../id_nongaussian/">Non-Gaussian Methods</a></li><li><a class="tocitem" href="../id_heteroskedastic/">Heteroskedasticity</a></li><li><a class="tocitem" href="../id_testing/">Testing</a></li></ul></li><li><input class="collapse-toggle" id="menuitem-9-3" type="checkbox"/><label class="tocitem" for="menuitem-9-3"><span class="docs-label">Innovation Accounting</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../innovation_accounting/">Overview</a></li><li><a class="tocitem" href="../ia_irf/">Impulse Responses</a></li><li><a class="tocitem" href="../ia_fevd/">Variance Decomposition</a></li><li><a class="tocitem" href="../ia_hd/">Historical Decomposition</a></li></ul></li></ul></li><li><span class="tocitem">Nowcasting</span><ul><li><a class="tocitem" href="../nowcast/">Overview</a></li><li><a class="tocitem" href="../nowcast_dfm/">DFM Nowcasting</a></li><li><a class="tocitem" href="../nowcast_bvar/">BVAR Nowcasting</a></li><li><a class="tocitem" href="../nowcast_bridge/">Bridge Equations</a></li><li><a class="tocitem" href="../nowcast_news/">News Decomposition</a></li></ul></li><li><span class="tocitem">Hypothesis Tests</span><ul><li><a class="tocitem" href="../tests/">Overview</a></li><li><a class="tocitem" href="../tests_unitroot/">Unit Root &amp; Cointegration</a></li><li><a class="tocitem" href="../tests_unitroot_advanced/">Advanced Unit Root</a></li><li><a class="tocitem" href="../tests_breaks/">Structural Breaks</a></li><li><a class="tocitem" href="../tests_panel/">Panel Tests</a></li><li><a class="tocitem" href="../tests_diagnostics/">Model Diagnostics</a></li></ul></li><li><a class="tocitem" href="../plotting/">Visualization</a></li><li><span class="tocitem">Project</span><ul><li><a class="tocitem" href="../notation/">Notation</a></li><li><a class="tocitem" href="../bibliography/">Bibliography</a></li><li><a class="tocitem" href="../changelog/">Changelog</a></li><li><a class="tocitem" href="../citation/">How to Cite</a></li></ul></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../api/">Overview</a></li><li><a class="tocitem" href="../api/data/">Data Management</a></li><li><a class="tocitem" href="../api/univariate/">Univariate Models</a></li><li><a class="tocitem" href="../api/multivariate/">Multivariate Models</a></li><li><a class="tocitem" href="../api/cross_section/">Cross-Sectional Models</a></li><li><a class="tocitem" href="../api/panel/">Panel Models</a></li><li><a class="tocitem" href="../api/dsge/">DSGE Models</a></li><li><a class="tocitem" href="../api/structural/">Structural &amp; Statistical Identification</a></li><li><a class="tocitem" href="../api/gmm/">GMM &amp; SMM</a></li><li><a class="tocitem" href="../api/tests/">Hypothesis Tests</a></li><li><a class="tocitem" href="../api/nowcasting/">Nowcasting</a></li><li><a class="tocitem" href="../api/visualization/">Visualization</a></li><li><a class="tocitem" href="../api/utilities/">Utilities &amp; Display</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Cross-Section &amp; Panel</a></li><li class="is-active"><a href>Event Study LP</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Event Study LP</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/FriedmanJP/MacroEconometricModels.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/FriedmanJP/MacroEconometricModels.jl/blob/main/docs/src/event_study.md#" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="event_study_page"><a class="docs-heading-anchor" href="#event_study_page">Event Study LP</a><a id="event_study_page-1"></a><a class="docs-heading-anchor-permalink" href="#event_study_page" title="Permalink"></a></h1><p><strong>MacroEconometricModels.jl</strong> provides two LP-based event study estimators for causal inference in panel settings: the <strong>Event Study LP</strong> (Jorda 2005; Acemoglu, Naidu, Restrepo &amp; Robinson 2019) and the <strong>LP-DiD</strong> estimator (Dube, Girardi, Jorda &amp; Taylor 2025) with clean control samples, switching indicator treatment, and time-only fixed effects. The package achieves full parity with Stata <code>lpdid</code> v1.0.2.</p><ul><li><strong>Event Study LP</strong>: Horizon-by-horizon local projections with switching indicator treatment and time-only FE</li><li><strong>LP-DiD</strong>: Clean control sample restrictions (absorbing/non-absorbing/one-off), pre-mean differencing, IPW reweighting, pooled estimates</li><li><strong>DDCG dataset</strong>: Built-in Acemoglu et al. (2019) democracy-GDP panel (184 countries, 1960–2010)</li><li><strong>Panel utilities</strong>: <code>panel_lag</code>, <code>panel_lead</code>, <code>panel_diff</code> for within-group transformations</li><li><strong>Diagnostics</strong>: Pre-trend tests and HonestDiD sensitivity analysis</li></ul><h2 id="Quick-Start"><a class="docs-heading-anchor" href="#Quick-Start">Quick Start</a><a id="Quick-Start-1"></a><a class="docs-heading-anchor-permalink" href="#Quick-Start" title="Permalink"></a></h2><p><strong>Recipe 1: Standard Event Study LP</strong></p><pre><code class="language-julia hljs">N, T_per = 50, 20
 df = DataFrame(
     group = repeat(1:N, inner=T_per),
     time = repeat(1:T_per, outer=N),
@@ -11,8 +11,6 @@ pd = xtset(df, :group, :time)
 eslp = estimate_event_study_lp(pd, :outcome, :treat, 5; leads=3, lags=2)
 report(eslp)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">    Event Study LP Estimation
 
-
-
   Method         Event Study LP
   Outcome               outcome
   Treatment               treat
@@ -23,19 +21,19 @@ report(eslp)</code></pre><pre class="documenter-example-output"><code class="noh
   Groups                     50
   Observations             1000
 
-                        Dynamic Treatment Effects
+                             Dynamic Treatment Effects
 
-           Coef.   Std.Err.         z    P&gt;|z|      [95%      CI]
+                   Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
 
-  h=-3   -0.2392     0.2927   -0.8175   0.4137   -0.8128   0.3344
-  h=-2      -0.0        0.0    -0.801   0.4232      -0.0      0.0
-  h=-1       0.0        0.0         —        —       0.0      0.0
-  h=0     1.0218      0.288    3.5474   &lt;0.001    0.4573   1.5864   ***
-  h=1     0.8657     0.2414    3.5869   &lt;0.001    0.3927   1.3388   ***
-  h=2      1.131     0.2913    3.8827   &lt;0.001    0.5601   1.7019   ***
-  h=3     1.2408     0.2439     5.088   &lt;0.001    0.7629   1.7188   ***
-  h=4     0.8516     0.2706    3.1471   0.0016    0.3212   1.3819   ***
-  h=5     0.9736     0.2931    3.3219   &lt;0.001    0.3992    1.548   ***</code></pre><p><strong>Recipe 2: LP-DiD with absorbing treatment</strong></p><pre><code class="language-julia hljs">N, T_per = 50, 20
+  h=-3           -0.2392     0.2927   -0.8175   0.4137    -0.8128     0.3344
+  h=-2         -8.52e-17   1.06e-16         —        —          —          —
+  h=-1 (ref)           —          —         —        —          —          —
+  h=0             1.0218     0.2880    3.5474   &lt;0.001     0.4573     1.5864   ***
+  h=1             0.8657     0.2414    3.5869   &lt;0.001     0.3927     1.3388   ***
+  h=2             1.1310     0.2913    3.8827   &lt;0.001     0.5601     1.7019   ***
+  h=3             1.2408     0.2439    5.0880   &lt;0.001     0.7629     1.7188   ***
+  h=4             0.8516     0.2706    3.1471   0.0016     0.3212     1.3819   ***
+  h=5             0.9736     0.2931    3.3219   &lt;0.001     0.3992     1.5480   ***</code></pre><p><strong>Recipe 2: LP-DiD with absorbing treatment</strong></p><pre><code class="language-julia hljs">N, T_per = 50, 20
 df = DataFrame(
     group = repeat(1:N, inner=T_per),
     time = repeat(1:T_per, outer=N),
@@ -46,9 +44,7 @@ df = DataFrame(
 pd = xtset(df, :group, :time)
 
 r = estimate_lp_did(pd, :outcome, :treat, 5; pre_window=3, ylags=2)
-report(r)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">LP-DiD Estimation -- Dube, Girardi, Jorda &amp; Taylor (2025)
-
-
+report(r)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">LP-DiD Estimation — Dube, Girardi, Jorda &amp; Taylor (2025)
 
   Method          LP-DiD (Dube et al. 2025)
   Treatment                       Absorbing
@@ -64,24 +60,22 @@ report(r)</code></pre><pre class="documenter-example-output"><code class="nohigh
   Groups                                 50
   Observations                         1000
 
-                       Dynamic Treatment Effects
+                            Dynamic Treatment Effects
 
-          Coef.   Std.Err.        z    P&gt;|z|      [95%      CI]
+                  Coef.   Std.Err.        z    P&gt;|z|   CI lower   CI upper
 
-  h=-3   0.0157     0.3041   0.0517   0.9587   -0.5803   0.6117
-  h=-2      0.0        0.0   0.4403   0.6597      -0.0      0.0
-  h=-1      0.0        0.0        —        —       0.0      0.0
-  h=0    1.1411      0.264   4.3222   &lt;0.001    0.6236   1.6585   ***
-  h=1    0.6001     0.3082   1.9473   0.0515   -0.0039   1.2041   *
-  h=2    0.7277     0.2335    3.117   0.0018    0.2701   1.1853   ***
-  h=3    1.1299      0.293   3.8556   &lt;0.001    0.5555   1.7042   ***
-  h=4    1.2746     0.2878   4.4288   &lt;0.001    0.7105   1.8387   ***
-  h=5    0.7721     0.2839   2.7198   0.0065    0.2157   1.3286   ***</code></pre><p><strong>Recipe 3: LP-DiD on DDCG dataset</strong></p><pre><code class="language-julia hljs"># Democracy and GDP: Acemoglu et al. (2019)
+  h=-3           0.0157     0.3041   0.0517   0.9587    -0.5803     0.6117
+  h=-2         3.83e-17    8.7e-17        —        —          —          —
+  h=-1 (ref)          —          —        —        —          —          —
+  h=0            1.1411     0.2640   4.3222   &lt;0.001     0.6236     1.6585   ***
+  h=1            0.6001     0.3082   1.9473   0.0515    -0.0039     1.2041   *
+  h=2            0.7277     0.2335   3.1170   0.0018     0.2701     1.1853   ***
+  h=3            1.1299     0.2930   3.8556   &lt;0.001     0.5555     1.7042   ***
+  h=4            1.2746     0.2878   4.4288   &lt;0.001     0.7105     1.8387   ***
+  h=5            0.7721     0.2839   2.7198   0.0065     0.2157     1.3286   ***</code></pre><p><strong>Recipe 3: LP-DiD on DDCG dataset</strong></p><pre><code class="language-julia hljs"># Democracy and GDP: Acemoglu et al. (2019)
 ddcg = load_example(:ddcg)
 r = estimate_lp_did(ddcg, :y, :dem, 10; pre_window=5, ylags=1)
-report(r)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">LP-DiD Estimation -- Dube, Girardi, Jorda &amp; Taylor (2025)
-
-
+report(r)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">LP-DiD Estimation — Dube, Girardi, Jorda &amp; Taylor (2025)
 
   Method          LP-DiD (Dube et al. 2025)
   Treatment                       Absorbing
@@ -97,32 +91,30 @@ report(r)</code></pre><pre class="documenter-example-output"><code class="nohigh
   Groups                                184
   Observations                         9384
 
-                        Dynamic Treatment Effects
+                            Dynamic Treatment Effects
 
-           Coef.   Std.Err.         z    P&gt;|z|      [95%       CI]
+                 Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
 
-  h=-5     6.529     2.0689    3.1558   0.0016     2.474   10.5839   ***
-  h=-4    5.6319     1.6527    3.4076   &lt;0.001    2.3926    8.8712   ***
-  h=-3    4.7031     1.2233    3.8446   &lt;0.001    2.3055    7.1006   ***
-  h=-2    2.2548      0.842    2.6779   0.0074    0.6045     3.905   ***
-  h=-1       0.0        0.0         —        —       0.0       0.0
-  h=0    -1.1547     0.6697   -1.7242   0.0847   -2.4674    0.1579   *
-  h=1    -1.0779     1.2511   -0.8616   0.3889   -3.5299    1.3741
-  h=2     -1.074     1.7426   -0.6163   0.5377   -4.4894    2.3414
-  h=3    -1.1012     2.1423    -0.514   0.6072      -5.3    3.0975
-  h=4    -1.3833     2.5036   -0.5525   0.5806   -6.2901    3.5236
-  h=5    -1.9388     2.7808   -0.6972   0.4857   -7.3891    3.5115
-  h=6    -1.7383      3.114   -0.5582   0.5767   -7.8417    4.3651
-  h=7    -1.6497     3.4343   -0.4804    0.631   -8.3807    5.0813
-  h=8    -1.6494     3.7772   -0.4367   0.6624   -9.0525    5.7538
-  h=9    -0.4766     4.0876   -0.1166   0.9072   -8.4881    7.5348
-  h=10   -0.3325     4.3976   -0.0756   0.9397   -8.9516    8.2866</code></pre><pre><code class="language-julia hljs">plot_result(r; title=&quot;Democracy -&gt; GDP (DDCG)&quot;)</code></pre><iframe src="../assets/plots/eslp_event_study.html" style="width:100%;height:420px;border:1px solid #eee;border-radius:8px;" loading="lazy"></iframe><p><strong>Recipe 4: LP-DiD with PMD and IPW reweighting</strong></p><pre><code class="language-julia hljs">ddcg = load_example(:ddcg)
+  h=-5          6.5290     2.0689    3.1558   0.0016     2.4740    10.5839   ***
+  h=-4          5.6319     1.6527    3.4076   &lt;0.001     2.3926     8.8712   ***
+  h=-3          4.7031     1.2233    3.8446   &lt;0.001     2.3055     7.1006   ***
+  h=-2          2.2548     0.8420    2.6779   0.0074     0.6045     3.9050   ***
+  h=-1 (ref)         —          —         —        —          —          —
+  h=0          -1.1547     0.6697   -1.7242   0.0847    -2.4674     0.1579   *
+  h=1          -1.0779     1.2511   -0.8616   0.3889    -3.5299     1.3741
+  h=2          -1.0740     1.7426   -0.6163   0.5377    -4.4894     2.3414
+  h=3          -1.1012     2.1423   -0.5140   0.6072    -5.3000     3.0975
+  h=4          -1.3833     2.5036   -0.5525   0.5806    -6.2901     3.5236
+  h=5          -1.9388     2.7808   -0.6972   0.4857    -7.3891     3.5115
+  h=6          -1.7383     3.1140   -0.5582   0.5767    -7.8417     4.3651
+  h=7          -1.6497     3.4343   -0.4804    0.631    -8.3807     5.0813
+  h=8          -1.6494     3.7772   -0.4367   0.6624    -9.0525     5.7538
+  h=9          -0.4766     4.0876   -0.1166   0.9072    -8.4881     7.5348
+  h=10         -0.3325     4.3976   -0.0756   0.9397    -8.9516     8.2866</code></pre><pre><code class="language-julia hljs">plot_result(r; title=&quot;Democracy -&gt; GDP (DDCG)&quot;)</code></pre><p><strong>Recipe 4: LP-DiD with PMD and IPW reweighting</strong></p><pre><code class="language-julia hljs">ddcg = load_example(:ddcg)
 
 # Pre-mean differencing + inverse probability weighting
 r_pmd = estimate_lp_did(ddcg, :y, :dem, 10; pre_window=5, pmd=:max, reweight=true)
-report(r_pmd)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">LP-DiD Estimation -- Dube, Girardi, Jorda &amp; Taylor (2025)
-
-
+report(r_pmd)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">LP-DiD Estimation — Dube, Girardi, Jorda &amp; Taylor (2025)
 
   Method          LP-DiD (Dube et al. 2025)
   Treatment                       Absorbing
@@ -138,34 +130,32 @@ report(r_pmd)</code></pre><pre class="documenter-example-output"><code class="no
   Groups                                184
   Observations                         9384
 
-                         Dynamic Treatment Effects
+                            Dynamic Treatment Effects
 
-            Coef.   Std.Err.         z    P&gt;|z|       [95%       CI]
+                  Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
 
-  h=-5    -1.7408     3.0102   -0.5783   0.5631    -7.6406    4.1591
-  h=-4    -2.6857     3.2129   -0.8359   0.4032    -8.9829    3.6114
-  h=-3    -3.6366     3.4034   -1.0685   0.2853   -10.3072    3.0339
-  h=-2    -6.0281     3.6453   -1.6537   0.0982   -13.1728    1.1165   *
-  h=-1        0.0        0.0         —        —        0.0       0.0
-  h=0     -9.3453     4.0951   -2.2821   0.0225   -17.3715   -1.3191   **
-  h=1     -8.9202     4.3996   -2.0275   0.0426   -17.5432   -0.2971   **
-  h=2      -9.394     4.8422     -1.94   0.0524   -18.8845    0.0965   *
-  h=3    -10.7688     5.0334   -2.1395   0.0324   -20.6341   -0.9036   **
-  h=4    -11.1558     5.4531   -2.0458   0.0408   -21.8435    -0.468   **
-  h=5    -11.7499     5.7446   -2.0454   0.0408   -23.0092   -0.4907   **
-  h=6    -11.4112     5.9746     -1.91   0.0561   -23.1211    0.2988   *
-  h=7      -9.917     6.4514   -1.5372   0.1242   -22.5615    2.7275
-  h=8     -9.7791      6.771   -1.4443   0.1487   -23.0499    3.4918
-  h=9     -8.4091     7.1097   -1.1828   0.2369   -22.3439    5.5258
-  h=10    -7.8383     7.3982   -1.0595   0.2894   -22.3385     6.662</code></pre><p><strong>Recipe 5: Pooled estimates</strong></p><pre><code class="language-julia hljs">ddcg = load_example(:ddcg)
+  h=-5          -1.7408     3.0102   -0.5783   0.5631    -7.6406     4.1591
+  h=-4          -2.6857     3.2129   -0.8359   0.4032    -8.9829     3.6114
+  h=-3          -3.6366     3.4034   -1.0685   0.2853   -10.3072     3.0339
+  h=-2          -6.0281     3.6453   -1.6537   0.0982   -13.1728     1.1165   *
+  h=-1 (ref)          —          —         —        —          —          —
+  h=0           -9.3453     4.0951   -2.2821   0.0225   -17.3715    -1.3191   **
+  h=1           -8.9202     4.3996   -2.0275   0.0426   -17.5432    -0.2971   **
+  h=2           -9.3940     4.8422   -1.9400   0.0524   -18.8845     0.0965   *
+  h=3          -10.7688     5.0334   -2.1395   0.0324   -20.6341    -0.9036   **
+  h=4          -11.1558     5.4531   -2.0458   0.0408   -21.8435    -0.4680   **
+  h=5          -11.7499     5.7446   -2.0454   0.0408   -23.0092    -0.4907   **
+  h=6          -11.4112     5.9746   -1.9100   0.0561   -23.1211     0.2988   *
+  h=7           -9.9170     6.4514   -1.5372   0.1242   -22.5615     2.7275
+  h=8           -9.7791     6.7710   -1.4443   0.1487   -23.0499     3.4918
+  h=9           -8.4091     7.1097   -1.1828   0.2369   -22.3439     5.5258
+  h=10          -7.8383     7.3982   -1.0595   0.2894   -22.3385     6.6620</code></pre><p><strong>Recipe 5: Pooled estimates</strong></p><pre><code class="language-julia hljs">ddcg = load_example(:ddcg)
 
 r = estimate_lp_did(ddcg, :y, :dem, 10;
     post_pooled=(0, 5),   # Average effect over h=0,...,5
     pre_pooled=(1, 5)     # Pre-treatment placebo over h=-5,...,-1
 )
-report(r)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">LP-DiD Estimation -- Dube, Girardi, Jorda &amp; Taylor (2025)
-
-
+report(r)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">LP-DiD Estimation — Dube, Girardi, Jorda &amp; Taylor (2025)
 
   Method          LP-DiD (Dube et al. 2025)
   Treatment                       Absorbing
@@ -181,32 +171,32 @@ report(r)</code></pre><pre class="documenter-example-output"><code class="nohigh
   Groups                                184
   Observations                         9384
 
-                        Dynamic Treatment Effects
+                            Dynamic Treatment Effects
 
-           Coef.   Std.Err.         z    P&gt;|z|      [95%      CI]
+                 Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
 
-  h=-3     4.887     1.2252    3.9886   &lt;0.001    2.4856   7.2884   ***
-  h=-2    2.3218     0.8456    2.7458    0.006    0.6645   3.9791   ***
-  h=-1       0.0        0.0         —        —       0.0      0.0
-  h=0    -1.1792     0.6704    -1.759   0.0786   -2.4931   0.1347   *
-  h=1    -1.1041     1.2569   -0.8784   0.3797   -3.5677   1.3594
-  h=2    -1.0997     1.7541   -0.6269   0.5307   -4.5376   2.3382
-  h=3    -1.1305     2.1583   -0.5238   0.6004   -5.3607   3.0997
-  h=4    -1.4032     2.5355   -0.5534     0.58   -6.3727   3.5662
-  h=5    -1.9168     2.8201   -0.6797   0.4967   -7.4441   3.6104
-  h=6    -1.6725     3.1584   -0.5295   0.5964   -7.8629   4.5179
-  h=7    -1.5197     3.4935    -0.435   0.6636   -8.3667   5.3274
-  h=8    -1.4392     3.8526   -0.3736   0.7087   -8.9901   6.1117
-  h=9    -0.1928     4.1754   -0.0462   0.9632   -8.3765   7.9909
-  h=10    0.0338     4.5076    0.0075    0.994   -8.8009   8.8685
+  h=-3          4.8870     1.2252    3.9886   &lt;0.001     2.4856     7.2884   ***
+  h=-2          2.3218     0.8456    2.7458    0.006     0.6645     3.9791   ***
+  h=-1 (ref)         —          —         —        —          —          —
+  h=0          -1.1792     0.6704   -1.7590   0.0786    -2.4931     0.1347   *
+  h=1          -1.1041     1.2569   -0.8784   0.3797    -3.5677     1.3594
+  h=2          -1.0997     1.7541   -0.6269   0.5307    -4.5376     2.3382
+  h=3          -1.1305     2.1583   -0.5238   0.6004    -5.3607     3.0997
+  h=4          -1.4032     2.5355   -0.5534     0.58    -6.3727     3.5662
+  h=5          -1.9168     2.8201   -0.6797   0.4967    -7.4441     3.6104
+  h=6          -1.6725     3.1584   -0.5295   0.5964    -7.8629     4.5179
+  h=7          -1.5197     3.4935   -0.4350   0.6636    -8.3667     5.3274
+  h=8          -1.4392     3.8526   -0.3736   0.7087    -8.9901     6.1117
+  h=9          -0.1928     4.1754   -0.0462   0.9632    -8.3765     7.9909
+  h=10          0.0338     4.5076    0.0075    0.994    -8.8009     8.8685
 
 
-                               Pooled Estimates
+                                 Pooled Estimates
 
-                 Coef.   Std.Err.         z    P&gt;|z|     [95%      CI]
+                  Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
 
-  Pre-pooled    3.7911     0.9907    3.8268   &lt;0.001   1.8494   5.7327   ***
-  Post-pooled   -1.529     1.8353   -0.8331   0.4048   -5.126   2.0681</code></pre><hr/><h2 id="Model-Specification"><a class="docs-heading-anchor" href="#Model-Specification">Model Specification</a><a id="Model-Specification-1"></a><a class="docs-heading-anchor-permalink" href="#Model-Specification" title="Permalink"></a></h2><p>Both estimators run separate regressions for each event-time horizon <span>$h \in \{-K, \ldots, -1, 0, 1, \ldots, H\}$</span>:</p><p class="math-container">\[Y_{i,t+h} - Y_{i,t-1} = \gamma_t^h + \beta_h \, \Delta D_{it} + \mathbf{X}_{it}&#39;\boldsymbol{\delta}^h + \varepsilon_{i,t+h}\]</p><p>where:</p><ul><li><span>$Y_{i,t+h} - Y_{i,t-1}$</span> is the long-differenced outcome (absorbs unit fixed effects)</li><li><span>$\Delta D_{it} = D_{it} - D_{i,t-1}$</span> is the <strong>switching indicator</strong> (equals 1 only at treatment onset)</li><li><span>$\gamma_t^h$</span> is a time fixed effect (absorbed by within-time demeaning)</li><li><span>$\mathbf{X}_{it}$</span> includes lagged outcomes <span>$L_1.Y, \ldots, L_k.Y$</span>, differenced lags <span>$\Delta Y_{t-l}$</span>, and optional covariates</li><li><span>$\beta_h$</span> is the <strong>dynamic treatment effect</strong> at horizon <span>$h$</span></li></ul><p>The reference period <span>$h = -1$</span> is normalized to zero.</p><div class="admonition is-info" id="Time-Only-Fixed-Effects-28d4e7f549ce6c77"><header class="admonition-header">Time-Only Fixed Effects<a class="admonition-anchor" href="#Time-Only-Fixed-Effects-28d4e7f549ce6c77" title="Permalink"></a></header><div class="admonition-body"><p>Long differencing <span>$Y_{i,t+h} - Y_{i,t-1}$</span> absorbs unit fixed effects, so only time FE remain. This is consistent with both the Acemoglu et al. (2019) specification and the Stata <code>lpdid</code> package.</p></div></div><div class="admonition is-info" id="Switching-Indicator-vs-Treatment-Level-af5f30013d2749"><header class="admonition-header">Switching Indicator vs Treatment Level<a class="admonition-anchor" href="#Switching-Indicator-vs-Treatment-Level-af5f30013d2749" title="Permalink"></a></header><div class="admonition-body"><p>The treatment regressor is the first difference <span>$\Delta D_{it}$</span>, not the treatment level <span>$D_{it}$</span>. This ensures that only the treatment onset contributes to identification. Already-treated observations with <span>$\Delta D = 0$</span> and <span>$D = 1$</span> are excluded from the sample.</p></div></div><hr/><h2 id="Event-Study-LP"><a class="docs-heading-anchor" href="#Event-Study-LP">Event Study LP</a><a id="Event-Study-LP-1"></a><a class="docs-heading-anchor-permalink" href="#Event-Study-LP" title="Permalink"></a></h2><p>The standard estimator uses all switching (<span>$\Delta D = 1$</span>) and control (<span>$D = 0$</span>) observations at each horizon:</p><pre><code class="language-julia hljs">N, T_per = 50, 20
+  Pre-pooled     3.7911     0.9907    3.8268   &lt;0.001     1.8494     5.7327   ***
+  Post-pooled   -1.5290     1.8353   -0.8331   0.4048    -5.1260     2.0681</code></pre><hr/><h2 id="Model-Specification"><a class="docs-heading-anchor" href="#Model-Specification">Model Specification</a><a id="Model-Specification-1"></a><a class="docs-heading-anchor-permalink" href="#Model-Specification" title="Permalink"></a></h2><p>Both estimators run separate regressions for each event-time horizon <span>$h \in \{-K, \ldots, -1, 0, 1, \ldots, H\}$</span>:</p><p class="math-container">\[Y_{i,t+h} - Y_{i,t-1} = \gamma_t^h + \beta_h \, \Delta D_{it} + \mathbf{X}_{it}&#39;\boldsymbol{\delta}^h + \varepsilon_{i,t+h}\]</p><p>where:</p><ul><li><span>$Y_{i,t+h} - Y_{i,t-1}$</span> is the long-differenced outcome (absorbs unit fixed effects)</li><li><span>$\Delta D_{it} = D_{it} - D_{i,t-1}$</span> is the <strong>switching indicator</strong> (equals 1 only at treatment onset)</li><li><span>$\gamma_t^h$</span> is a time fixed effect (absorbed by within-time demeaning)</li><li><span>$\mathbf{X}_{it}$</span> includes lagged outcomes <span>$L_1.Y, \ldots, L_k.Y$</span>, differenced lags <span>$\Delta Y_{t-l}$</span>, and optional covariates</li><li><span>$\beta_h$</span> is the <strong>dynamic treatment effect</strong> at horizon <span>$h$</span></li></ul><p>The reference period <span>$h = -1$</span> is normalized to zero.</p><div class="admonition is-info" id="Time-Only-Fixed-Effects-28d4e7f549ce6c77"><header class="admonition-header">Time-Only Fixed Effects<a class="admonition-anchor" href="#Time-Only-Fixed-Effects-28d4e7f549ce6c77" title="Permalink"></a></header><div class="admonition-body"><p>Long differencing <span>$Y_{i,t+h} - Y_{i,t-1}$</span> absorbs unit fixed effects, so only time FE remain. This is consistent with both the Acemoglu et al. (2019) specification and the Stata <code>lpdid</code> package.</p></div></div><div class="admonition is-info" id="Switching-Indicator-vs-Treatment-Level-af5f30013d2749"><header class="admonition-header">Switching Indicator vs Treatment Level<a class="admonition-anchor" href="#Switching-Indicator-vs-Treatment-Level-af5f30013d2749" title="Permalink"></a></header><div class="admonition-body"><p>The treatment regressor is the first difference <span>$\Delta D_{it}$</span>, not the treatment level <span>$D_{it}$</span>. This ensures that only the treatment onset contributes to identification. Already-treated observations with <span>$\Delta D = 0$</span> and <span>$D = 1$</span> are excluded from the sample.</p></div></div><hr/><h2 id="Event-Study-LP"><a class="docs-heading-anchor" href="#Event-Study-LP">Event Study LP</a><a id="Event-Study-LP-1"></a><a class="docs-heading-anchor-permalink" href="#Event-Study-LP" title="Permalink"></a></h2><p>The standard estimator uses all switching (<span>$\Delta D = 1$</span>) and control (<span>$D = 0$</span>) observations at each horizon:</p><pre><code class="language-julia hljs">N, T_per = 50, 20
 df = DataFrame(
     group = repeat(1:N, inner=T_per),
     time = repeat(1:T_per, outer=N),
@@ -224,8 +214,6 @@ eslp = estimate_event_study_lp(pd, :outcome, :treat, 5;
 )
 report(eslp)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">    Event Study LP Estimation
 
-
-
   Method         Event Study LP
   Outcome               outcome
   Treatment               treat
@@ -236,23 +224,21 @@ report(eslp)</code></pre><pre class="documenter-example-output"><code class="noh
   Groups                     50
   Observations             1000
 
-                       Dynamic Treatment Effects
+                            Dynamic Treatment Effects
 
-          Coef.   Std.Err.        z    P&gt;|z|      [95%      CI]
+                  Coef.   Std.Err.        z    P&gt;|z|   CI lower   CI upper
 
-  h=-3   0.0171     0.2729   0.0626   0.9501   -0.5177   0.5519
-  h=-2      0.0        0.0   1.5454   0.1223      -0.0      0.0
-  h=-1      0.0        0.0        —        —       0.0      0.0
-  h=0    1.0973     0.2614   4.1974   &lt;0.001    0.5849   1.6097   ***
-  h=1    0.8992     0.2272   3.9574   &lt;0.001    0.4539   1.3445   ***
-  h=2    1.2339     0.2789   4.4236   &lt;0.001    0.6872   1.7806   ***
-  h=3    0.8816     0.2681   3.2882    0.001    0.3561   1.4071   ***
-  h=4     0.941     0.2772   3.3944   &lt;0.001    0.3976   1.4843   ***
-  h=5    0.8429     0.2465   3.4198   &lt;0.001    0.3598   1.3259   ***</code></pre><pre><code class="language-julia hljs">plot_result(eslp)</code></pre><iframe src="../assets/plots/eslp_event_study.html" style="width:100%;height:420px;border:1px solid #eee;border-radius:8px;" loading="lazy"></iframe><p>The <code>estimate_event_study_lp</code> function runs <span>$K + H + 1$</span> separate OLS regressions (one per event-time horizon), each with cluster-robust standard errors. The resulting coefficients <span>$\beta_h$</span> trace out the dynamic treatment effect path.</p><h3 id="Keyword-Arguments"><a class="docs-heading-anchor" href="#Keyword-Arguments">Keyword Arguments</a><a id="Keyword-Arguments-1"></a><a class="docs-heading-anchor-permalink" href="#Keyword-Arguments" title="Permalink"></a></h3><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>leads</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>3</code></td><td style="text-align: right">Pre-treatment horizons <span>$K$</span></td></tr><tr><td style="text-align: right"><code>lags</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>0</code></td><td style="text-align: right">Lagged outcome controls</td></tr><tr><td style="text-align: right"><code>covariates</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right"><code>String[]</code></td><td style="text-align: right">Additional control variables</td></tr><tr><td style="text-align: right"><code>cluster</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:unit</code></td><td style="text-align: right">SE clustering: <code>:unit</code>, <code>:time</code>, or <code>:twoway</code></td></tr><tr><td style="text-align: right"><code>conf_level</code></td><td style="text-align: right"><code>Real</code></td><td style="text-align: right"><code>0.95</code></td><td style="text-align: right">Confidence level</td></tr></table><h3 id="Return-Value-(EventStudyLP{T})"><a class="docs-heading-anchor" href="#Return-Value-(EventStudyLP{T})">Return Value (<code>EventStudyLP{T}</code>)</a><a id="Return-Value-(EventStudyLP{T})-1"></a><a class="docs-heading-anchor-permalink" href="#Return-Value-(EventStudyLP{T})" title="Permalink"></a></h3><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>coefficients</code></td><td style="text-align: right"><code>Vector{T}</code></td><td style="text-align: right">Treatment effect <span>$\beta_h$</span> at each event-time</td></tr><tr><td style="text-align: right"><code>se</code></td><td style="text-align: right"><code>Vector{T}</code></td><td style="text-align: right">Cluster-robust standard errors</td></tr><tr><td style="text-align: right"><code>ci_lower</code></td><td style="text-align: right"><code>Vector{T}</code></td><td style="text-align: right">Lower confidence interval bounds</td></tr><tr><td style="text-align: right"><code>ci_upper</code></td><td style="text-align: right"><code>Vector{T}</code></td><td style="text-align: right">Upper confidence interval bounds</td></tr><tr><td style="text-align: right"><code>event_times</code></td><td style="text-align: right"><code>Vector{Int}</code></td><td style="text-align: right">Event-time grid <span>$[-K, \ldots, H]$</span></td></tr><tr><td style="text-align: right"><code>reference_period</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Omitted period (<span>$-1$</span>)</td></tr><tr><td style="text-align: right"><code>B</code></td><td style="text-align: right"><code>Vector{Matrix{T}}</code></td><td style="text-align: right">Full coefficient vectors per horizon</td></tr><tr><td style="text-align: right"><code>residuals_per_h</code></td><td style="text-align: right"><code>Vector{Matrix{T}}</code></td><td style="text-align: right">OLS residuals per horizon</td></tr><tr><td style="text-align: right"><code>vcov</code></td><td style="text-align: right"><code>Vector{Matrix{T}}</code></td><td style="text-align: right">Variance-covariance matrices per horizon</td></tr><tr><td style="text-align: right"><code>T_eff</code></td><td style="text-align: right"><code>Vector{Int}</code></td><td style="text-align: right">Effective sample size per horizon</td></tr><tr><td style="text-align: right"><code>n_obs</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Total panel observations</td></tr><tr><td style="text-align: right"><code>lags</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of lagged controls</td></tr><tr><td style="text-align: right"><code>leads</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Pre-treatment window</td></tr><tr><td style="text-align: right"><code>horizon</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Maximum horizon <span>$H$</span></td></tr><tr><td style="text-align: right"><code>cluster</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right">Clustering level</td></tr></table><hr/><h2 id="LP-DiD-(Dube-et-al.-2025)"><a class="docs-heading-anchor" href="#LP-DiD-(Dube-et-al.-2025)">LP-DiD (Dube et al. 2025)</a><a id="LP-DiD-(Dube-et-al.-2025)-1"></a><a class="docs-heading-anchor-permalink" href="#LP-DiD-(Dube-et-al.-2025)" title="Permalink"></a></h2><p>The LP-DiD estimator adds <strong>clean control sample</strong> (CCS) restrictions. At each horizon <span>$h$</span>, the control group contains only units whose treatment status does not change between <span>$t$</span> and <span>$t + h$</span>. This prevents already-treated units from contaminating the control group under heterogeneous treatment effects.</p><h3 id="Clean-Control-Samples"><a class="docs-heading-anchor" href="#Clean-Control-Samples">Clean Control Samples</a><a id="Clean-Control-Samples-1"></a><a class="docs-heading-anchor-permalink" href="#Clean-Control-Samples" title="Permalink"></a></h3><p>Three CCS specifications match the Stata <code>lpdid</code> package:</p><p><strong>Absorbing treatment</strong> (default): A <span>$(i, t)$</span> pair belongs to CCS at horizon <span>$h$</span> if the unit is switching (<span>$\Delta D_{it} = 1$</span>) or treatment status remains at zero through <span>$t + h$</span>:</p><pre><code class="language-julia hljs">ddcg = load_example(:ddcg)
+  h=-3           0.0171     0.2729   0.0626   0.9501    -0.5177     0.5519
+  h=-2         1.56e-16   1.01e-16        —        —          —          —
+  h=-1 (ref)          —          —        —        —          —          —
+  h=0            1.0973     0.2614   4.1974   &lt;0.001     0.5849     1.6097   ***
+  h=1            0.8992     0.2272   3.9574   &lt;0.001     0.4539     1.3445   ***
+  h=2            1.2339     0.2789   4.4236   &lt;0.001     0.6872     1.7806   ***
+  h=3            0.8816     0.2681   3.2882    0.001     0.3561     1.4071   ***
+  h=4            0.9410     0.2772   3.3944   &lt;0.001     0.3976     1.4843   ***
+  h=5            0.8429     0.2465   3.4198   &lt;0.001     0.3598     1.3259   ***</code></pre><pre><code class="language-julia hljs">plot_result(eslp)</code></pre><p>The <code>estimate_event_study_lp</code> function runs <span>$K + H + 1$</span> separate OLS regressions (one per event-time horizon), each with cluster-robust standard errors. The resulting coefficients <span>$\beta_h$</span> trace out the dynamic treatment effect path.</p><h3 id="Keyword-Arguments"><a class="docs-heading-anchor" href="#Keyword-Arguments">Keyword Arguments</a><a id="Keyword-Arguments-1"></a><a class="docs-heading-anchor-permalink" href="#Keyword-Arguments" title="Permalink"></a></h3><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>leads</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>3</code></td><td style="text-align: right">Pre-treatment horizons <span>$K$</span></td></tr><tr><td style="text-align: right"><code>lags</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>4</code></td><td style="text-align: right">Lagged outcome controls</td></tr><tr><td style="text-align: right"><code>covariates</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right"><code>String[]</code></td><td style="text-align: right">Additional control variables</td></tr><tr><td style="text-align: right"><code>cluster</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:unit</code></td><td style="text-align: right">SE clustering: <code>:unit</code>, <code>:time</code>, or <code>:twoway</code></td></tr><tr><td style="text-align: right"><code>conf_level</code></td><td style="text-align: right"><code>Real</code></td><td style="text-align: right"><code>0.95</code></td><td style="text-align: right">Confidence level</td></tr></table><h3 id="Return-Value-(EventStudyLP{T})"><a class="docs-heading-anchor" href="#Return-Value-(EventStudyLP{T})">Return Value (<code>EventStudyLP{T}</code>)</a><a id="Return-Value-(EventStudyLP{T})-1"></a><a class="docs-heading-anchor-permalink" href="#Return-Value-(EventStudyLP{T})" title="Permalink"></a></h3><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>coefficients</code></td><td style="text-align: right"><code>Vector{T}</code></td><td style="text-align: right">Treatment effect <span>$\beta_h$</span> at each event-time</td></tr><tr><td style="text-align: right"><code>se</code></td><td style="text-align: right"><code>Vector{T}</code></td><td style="text-align: right">Cluster-robust standard errors</td></tr><tr><td style="text-align: right"><code>ci_lower</code></td><td style="text-align: right"><code>Vector{T}</code></td><td style="text-align: right">Lower confidence interval bounds</td></tr><tr><td style="text-align: right"><code>ci_upper</code></td><td style="text-align: right"><code>Vector{T}</code></td><td style="text-align: right">Upper confidence interval bounds</td></tr><tr><td style="text-align: right"><code>event_times</code></td><td style="text-align: right"><code>Vector{Int}</code></td><td style="text-align: right">Event-time grid <span>$[-K, \ldots, H]$</span></td></tr><tr><td style="text-align: right"><code>reference_period</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Omitted period (<span>$-1$</span>)</td></tr><tr><td style="text-align: right"><code>B</code></td><td style="text-align: right"><code>Vector{Matrix{T}}</code></td><td style="text-align: right">Full coefficient vectors per horizon</td></tr><tr><td style="text-align: right"><code>residuals_per_h</code></td><td style="text-align: right"><code>Vector{Matrix{T}}</code></td><td style="text-align: right">OLS residuals per horizon</td></tr><tr><td style="text-align: right"><code>vcov</code></td><td style="text-align: right"><code>Vector{Matrix{T}}</code></td><td style="text-align: right">Variance-covariance matrices per horizon</td></tr><tr><td style="text-align: right"><code>T_eff</code></td><td style="text-align: right"><code>Vector{Int}</code></td><td style="text-align: right">Effective sample size per horizon</td></tr><tr><td style="text-align: right"><code>n_obs</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Total panel observations</td></tr><tr><td style="text-align: right"><code>lags</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of lagged controls</td></tr><tr><td style="text-align: right"><code>leads</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Pre-treatment window</td></tr><tr><td style="text-align: right"><code>horizon</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Maximum horizon <span>$H$</span></td></tr><tr><td style="text-align: right"><code>cluster</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right">Clustering level</td></tr></table><hr/><h2 id="LP-DiD-(Dube-et-al.-2025)"><a class="docs-heading-anchor" href="#LP-DiD-(Dube-et-al.-2025)">LP-DiD (Dube et al. 2025)</a><a id="LP-DiD-(Dube-et-al.-2025)-1"></a><a class="docs-heading-anchor-permalink" href="#LP-DiD-(Dube-et-al.-2025)" title="Permalink"></a></h2><p>The LP-DiD estimator adds <strong>clean control sample</strong> (CCS) restrictions. At each horizon <span>$h$</span>, the control group contains only units whose treatment status does not change between <span>$t$</span> and <span>$t + h$</span>. This prevents already-treated units from contaminating the control group under heterogeneous treatment effects.</p><h3 id="Clean-Control-Samples"><a class="docs-heading-anchor" href="#Clean-Control-Samples">Clean Control Samples</a><a id="Clean-Control-Samples-1"></a><a class="docs-heading-anchor-permalink" href="#Clean-Control-Samples" title="Permalink"></a></h3><p>Three CCS specifications match the Stata <code>lpdid</code> package:</p><p><strong>Absorbing treatment</strong> (default): A <span>$(i, t)$</span> pair belongs to CCS at horizon <span>$h$</span> if the unit is switching (<span>$\Delta D_{it} = 1$</span>) or treatment status remains at zero through <span>$t + h$</span>:</p><pre><code class="language-julia hljs">ddcg = load_example(:ddcg)
 r = estimate_lp_did(ddcg, :y, :dem, 10)  # Absorbing is default
-report(r)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">LP-DiD Estimation -- Dube, Girardi, Jorda &amp; Taylor (2025)
-
-
+report(r)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">LP-DiD Estimation — Dube, Girardi, Jorda &amp; Taylor (2025)
 
   Method          LP-DiD (Dube et al. 2025)
   Treatment                       Absorbing
@@ -268,24 +254,24 @@ report(r)</code></pre><pre class="documenter-example-output"><code class="nohigh
   Groups                                184
   Observations                         9384
 
-                        Dynamic Treatment Effects
+                            Dynamic Treatment Effects
 
-           Coef.   Std.Err.         z    P&gt;|z|      [95%      CI]
+                 Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
 
-  h=-3     4.887     1.2252    3.9886   &lt;0.001    2.4856   7.2884   ***
-  h=-2    2.3218     0.8456    2.7458    0.006    0.6645   3.9791   ***
-  h=-1       0.0        0.0         —        —       0.0      0.0
-  h=0    -1.1792     0.6704    -1.759   0.0786   -2.4931   0.1347   *
-  h=1    -1.1041     1.2569   -0.8784   0.3797   -3.5677   1.3594
-  h=2    -1.0997     1.7541   -0.6269   0.5307   -4.5376   2.3382
-  h=3    -1.1305     2.1583   -0.5238   0.6004   -5.3607   3.0997
-  h=4    -1.4032     2.5355   -0.5534     0.58   -6.3727   3.5662
-  h=5    -1.9168     2.8201   -0.6797   0.4967   -7.4441   3.6104
-  h=6    -1.6725     3.1584   -0.5295   0.5964   -7.8629   4.5179
-  h=7    -1.5197     3.4935    -0.435   0.6636   -8.3667   5.3274
-  h=8    -1.4392     3.8526   -0.3736   0.7087   -8.9901   6.1117
-  h=9    -0.1928     4.1754   -0.0462   0.9632   -8.3765   7.9909
-  h=10    0.0338     4.5076    0.0075    0.994   -8.8009   8.8685</code></pre><p><strong>Non-absorbing treatment</strong>: Treatment may reverse. A pair belongs to CCS if no switches occurred in the stabilization window of <span>$L$</span> periods before <span>$t$</span>:</p><pre><code class="language-julia hljs">r = estimate_lp_did(ddcg, :y, :dem, 10; nonabsorbing=5)</code></pre><p><strong>One-off treatment</strong>: Treatment lasts exactly one period. Requires <code>nonabsorbing</code>:</p><pre><code class="language-julia hljs">r = estimate_lp_did(ddcg, :y, :dem, 10; nonabsorbing=3, oneoff=true)</code></pre><h3 id="Pre-Mean-Differencing-(PMD)"><a class="docs-heading-anchor" href="#Pre-Mean-Differencing-(PMD)">Pre-Mean Differencing (PMD)</a><a id="Pre-Mean-Differencing-(PMD)-1"></a><a class="docs-heading-anchor-permalink" href="#Pre-Mean-Differencing-(PMD)" title="Permalink"></a></h3><p>Instead of long differencing <span>$Y_{t+h} - Y_{t-1}$</span>, PMD uses the average of pre-treatment outcomes as baseline. This reduces noise from a single pre-treatment period:</p><p class="math-container">\[Y_{i,t+h} - \bar{Y}_{i,\text{pre}} = \gamma_t^h + \beta_h \, \Delta D_{it} + \mathbf{X}_{it}&#39;\boldsymbol{\delta}^h + \varepsilon_{i,t+h}\]</p><p>where:</p><ul><li><span>$\bar{Y}_{i,\text{pre}}$</span> is the average of <span>$Y_{i,t-1}, Y_{i,t-2}, \ldots$</span> over a window of pre-treatment periods</li></ul><pre><code class="language-julia hljs">ddcg = load_example(:ddcg)
+  h=-3          4.8870     1.2252    3.9886   &lt;0.001     2.4856     7.2884   ***
+  h=-2          2.3218     0.8456    2.7458    0.006     0.6645     3.9791   ***
+  h=-1 (ref)         —          —         —        —          —          —
+  h=0          -1.1792     0.6704   -1.7590   0.0786    -2.4931     0.1347   *
+  h=1          -1.1041     1.2569   -0.8784   0.3797    -3.5677     1.3594
+  h=2          -1.0997     1.7541   -0.6269   0.5307    -4.5376     2.3382
+  h=3          -1.1305     2.1583   -0.5238   0.6004    -5.3607     3.0997
+  h=4          -1.4032     2.5355   -0.5534     0.58    -6.3727     3.5662
+  h=5          -1.9168     2.8201   -0.6797   0.4967    -7.4441     3.6104
+  h=6          -1.6725     3.1584   -0.5295   0.5964    -7.8629     4.5179
+  h=7          -1.5197     3.4935   -0.4350   0.6636    -8.3667     5.3274
+  h=8          -1.4392     3.8526   -0.3736   0.7087    -8.9901     6.1117
+  h=9          -0.1928     4.1754   -0.0462   0.9632    -8.3765     7.9909
+  h=10          0.0338     4.5076    0.0075    0.994    -8.8009     8.8685</code></pre><p><strong>Non-absorbing treatment</strong>: Treatment may reverse. A pair belongs to CCS if no switches occurred in the stabilization window of <span>$L$</span> periods before <span>$t$</span>:</p><pre><code class="language-julia hljs">r = estimate_lp_did(ddcg, :y, :dem, 10; nonabsorbing=5)</code></pre><p><strong>One-off treatment</strong>: Treatment lasts exactly one period. Requires <code>nonabsorbing</code>:</p><pre><code class="language-julia hljs">r = estimate_lp_did(ddcg, :y, :dem, 10; nonabsorbing=3, oneoff=true)</code></pre><h3 id="Pre-Mean-Differencing-(PMD)"><a class="docs-heading-anchor" href="#Pre-Mean-Differencing-(PMD)">Pre-Mean Differencing (PMD)</a><a id="Pre-Mean-Differencing-(PMD)-1"></a><a class="docs-heading-anchor-permalink" href="#Pre-Mean-Differencing-(PMD)" title="Permalink"></a></h3><p>Instead of long differencing <span>$Y_{t+h} - Y_{t-1}$</span>, PMD uses the average of pre-treatment outcomes as baseline. This reduces noise from a single pre-treatment period:</p><p class="math-container">\[Y_{i,t+h} - \bar{Y}_{i,\text{pre}} = \gamma_t^h + \beta_h \, \Delta D_{it} + \mathbf{X}_{it}&#39;\boldsymbol{\delta}^h + \varepsilon_{i,t+h}\]</p><p>where:</p><ul><li><span>$\bar{Y}_{i,\text{pre}}$</span> is the average of <span>$Y_{i,t-1}, Y_{i,t-2}, \ldots$</span> over a window of pre-treatment periods</li></ul><pre><code class="language-julia hljs">ddcg = load_example(:ddcg)
 
 # Use cumulative pre-treatment mean
 r = estimate_lp_did(ddcg, :y, :dem, 10; pmd=:max)
@@ -297,9 +283,7 @@ r = estimate_lp_did(ddcg, :y, :dem, 10;
     post_pooled=(0, 5),   # Average effect over h=0,...,5
     pre_pooled=(1, 3)     # Pre-treatment placebo over h=-3,...,-1
 )
-report(r)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">LP-DiD Estimation -- Dube, Girardi, Jorda &amp; Taylor (2025)
-
-
+report(r)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">LP-DiD Estimation — Dube, Girardi, Jorda &amp; Taylor (2025)
 
   Method          LP-DiD (Dube et al. 2025)
   Treatment                       Absorbing
@@ -315,38 +299,36 @@ report(r)</code></pre><pre class="documenter-example-output"><code class="nohigh
   Groups                                184
   Observations                         9384
 
-                        Dynamic Treatment Effects
+                            Dynamic Treatment Effects
 
-           Coef.   Std.Err.         z    P&gt;|z|      [95%      CI]
+                 Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
 
-  h=-3     4.887     1.2252    3.9886   &lt;0.001    2.4856   7.2884   ***
-  h=-2    2.3218     0.8456    2.7458    0.006    0.6645   3.9791   ***
-  h=-1       0.0        0.0         —        —       0.0      0.0
-  h=0    -1.1792     0.6704    -1.759   0.0786   -2.4931   0.1347   *
-  h=1    -1.1041     1.2569   -0.8784   0.3797   -3.5677   1.3594
-  h=2    -1.0997     1.7541   -0.6269   0.5307   -4.5376   2.3382
-  h=3    -1.1305     2.1583   -0.5238   0.6004   -5.3607   3.0997
-  h=4    -1.4032     2.5355   -0.5534     0.58   -6.3727   3.5662
-  h=5    -1.9168     2.8201   -0.6797   0.4967   -7.4441   3.6104
-  h=6    -1.6725     3.1584   -0.5295   0.5964   -7.8629   4.5179
-  h=7    -1.5197     3.4935    -0.435   0.6636   -8.3667   5.3274
-  h=8    -1.4392     3.8526   -0.3736   0.7087   -8.9901   6.1117
-  h=9    -0.1928     4.1754   -0.0462   0.9632   -8.3765   7.9909
-  h=10    0.0338     4.5076    0.0075    0.994   -8.8009   8.8685
+  h=-3          4.8870     1.2252    3.9886   &lt;0.001     2.4856     7.2884   ***
+  h=-2          2.3218     0.8456    2.7458    0.006     0.6645     3.9791   ***
+  h=-1 (ref)         —          —         —        —          —          —
+  h=0          -1.1792     0.6704   -1.7590   0.0786    -2.4931     0.1347   *
+  h=1          -1.1041     1.2569   -0.8784   0.3797    -3.5677     1.3594
+  h=2          -1.0997     1.7541   -0.6269   0.5307    -4.5376     2.3382
+  h=3          -1.1305     2.1583   -0.5238   0.6004    -5.3607     3.0997
+  h=4          -1.4032     2.5355   -0.5534     0.58    -6.3727     3.5662
+  h=5          -1.9168     2.8201   -0.6797   0.4967    -7.4441     3.6104
+  h=6          -1.6725     3.1584   -0.5295   0.5964    -7.8629     4.5179
+  h=7          -1.5197     3.4935   -0.4350   0.6636    -8.3667     5.3274
+  h=8          -1.4392     3.8526   -0.3736   0.7087    -8.9901     6.1117
+  h=9          -0.1928     4.1754   -0.0462   0.9632    -8.3765     7.9909
+  h=10          0.0338     4.5076    0.0075    0.994    -8.8009     8.8685
 
 
-                               Pooled Estimates
+                                 Pooled Estimates
 
-                 Coef.   Std.Err.         z    P&gt;|z|     [95%      CI]
+                  Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
 
-  Pre-pooled    2.2794     0.6357    3.5856   &lt;0.001   1.0334   3.5254   ***
-  Post-pooled   -1.529     1.8353   -0.8331   0.4048   -5.126   2.0681</code></pre><p>The pooled estimates are stored in <code>r.pooled_post</code> and <code>r.pooled_pre</code> as named tuples with fields <code>coef</code>, <code>se</code>, <code>ci_lower</code>, <code>ci_upper</code>, and <code>nobs</code>.</p><h3 id="Full-Keyword-Arguments"><a class="docs-heading-anchor" href="#Full-Keyword-Arguments">Full Keyword Arguments</a><a id="Full-Keyword-Arguments-1"></a><a class="docs-heading-anchor-permalink" href="#Full-Keyword-Arguments" title="Permalink"></a></h3><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>pre_window</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>3</code></td><td style="text-align: right">Pre-treatment event-time <span>$K$</span></td></tr><tr><td style="text-align: right"><code>post_window</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>H</code></td><td style="text-align: right">Post-treatment event-time</td></tr><tr><td style="text-align: right"><code>ylags</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>0</code></td><td style="text-align: right">Outcome lags (<span>$L_1.Y, \ldots, L_k.Y$</span>)</td></tr><tr><td style="text-align: right"><code>dylags</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>0</code></td><td style="text-align: right">Differenced outcome lags (<span>$L_1.\Delta Y, \ldots$</span>)</td></tr><tr><td style="text-align: right"><code>covariates</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right"><code>String[]</code></td><td style="text-align: right">Additional covariates</td></tr><tr><td style="text-align: right"><code>nonabsorbing</code></td><td style="text-align: right"><code>Union{Int,Nothing}</code></td><td style="text-align: right"><code>nothing</code></td><td style="text-align: right">Stabilization window <span>$L$</span> for non-absorbing CCS</td></tr><tr><td style="text-align: right"><code>oneoff</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>false</code></td><td style="text-align: right">One-off treatment (requires <code>nonabsorbing</code>)</td></tr><tr><td style="text-align: right"><code>notyet</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>false</code></td><td style="text-align: right">Restrict to not-yet-treated controls</td></tr><tr><td style="text-align: right"><code>nevertreated</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>false</code></td><td style="text-align: right">Restrict to never-treated controls</td></tr><tr><td style="text-align: right"><code>firsttreat</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>false</code></td><td style="text-align: right">Use only first treatment event per unit</td></tr><tr><td style="text-align: right"><code>pmd</code></td><td style="text-align: right"><code>Union{Symbol,Int,Nothing}</code></td><td style="text-align: right"><code>nothing</code></td><td style="text-align: right">Pre-mean differencing (<code>:max</code> or integer <span>$k$</span>)</td></tr><tr><td style="text-align: right"><code>reweight</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>false</code></td><td style="text-align: right">IPW for equally weighted ATE across time</td></tr><tr><td style="text-align: right"><code>nocomp</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>false</code></td><td style="text-align: right">Restrict to obs in CCS at all horizons</td></tr><tr><td style="text-align: right"><code>cluster</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:unit</code></td><td style="text-align: right">SE clustering: <code>:unit</code>, <code>:time</code>, or <code>:twoway</code></td></tr><tr><td style="text-align: right"><code>conf_level</code></td><td style="text-align: right"><code>Real</code></td><td style="text-align: right"><code>0.95</code></td><td style="text-align: right">Confidence level</td></tr><tr><td style="text-align: right"><code>post_pooled</code></td><td style="text-align: right"><code>Union{Tuple,Nothing}</code></td><td style="text-align: right"><code>nothing</code></td><td style="text-align: right"><span>$(start, end)$</span> for pooled post-treatment</td></tr><tr><td style="text-align: right"><code>pre_pooled</code></td><td style="text-align: right"><code>Union{Tuple,Nothing}</code></td><td style="text-align: right"><code>nothing</code></td><td style="text-align: right"><span>$(start, end)$</span> for pooled pre-treatment</td></tr><tr><td style="text-align: right"><code>only_pooled</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>false</code></td><td style="text-align: right">Skip event study, compute only pooled</td></tr><tr><td style="text-align: right"><code>only_event</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>false</code></td><td style="text-align: right">Skip pooled, compute only event study</td></tr></table><h3 id="Return-Value-(LPDiDResult{T})"><a class="docs-heading-anchor" href="#Return-Value-(LPDiDResult{T})">Return Value (<code>LPDiDResult{T}</code>)</a><a id="Return-Value-(LPDiDResult{T})-1"></a><a class="docs-heading-anchor-permalink" href="#Return-Value-(LPDiDResult{T})" title="Permalink"></a></h3><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>coefficients</code></td><td style="text-align: right"><code>Vector{T}</code></td><td style="text-align: right">Treatment effect <span>$\beta_h$</span> at each event-time</td></tr><tr><td style="text-align: right"><code>se</code></td><td style="text-align: right"><code>Vector{T}</code></td><td style="text-align: right">Cluster-robust standard errors</td></tr><tr><td style="text-align: right"><code>ci_lower</code></td><td style="text-align: right"><code>Vector{T}</code></td><td style="text-align: right">Lower confidence interval bounds</td></tr><tr><td style="text-align: right"><code>ci_upper</code></td><td style="text-align: right"><code>Vector{T}</code></td><td style="text-align: right">Upper confidence interval bounds</td></tr><tr><td style="text-align: right"><code>event_times</code></td><td style="text-align: right"><code>Vector{Int}</code></td><td style="text-align: right">Event-time grid <span>$[-K, \ldots, H]$</span></td></tr><tr><td style="text-align: right"><code>reference_period</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Omitted period (<span>$-1$</span>)</td></tr><tr><td style="text-align: right"><code>nobs_per_horizon</code></td><td style="text-align: right"><code>Vector{Int}</code></td><td style="text-align: right">Effective sample size per horizon</td></tr><tr><td style="text-align: right"><code>pooled_post</code></td><td style="text-align: right"><code>NamedTuple</code> or <code>nothing</code></td><td style="text-align: right">Pooled post-treatment estimate</td></tr><tr><td style="text-align: right"><code>pooled_pre</code></td><td style="text-align: right"><code>NamedTuple</code> or <code>nothing</code></td><td style="text-align: right">Pooled pre-treatment estimate</td></tr><tr><td style="text-align: right"><code>vcov</code></td><td style="text-align: right"><code>Vector{Matrix{T}}</code></td><td style="text-align: right">Variance-covariance matrices per horizon</td></tr><tr><td style="text-align: right"><code>specification</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:absorbing</code>, <code>:nonabsorbing</code>, or <code>:oneoff</code></td></tr><tr><td style="text-align: right"><code>pmd</code></td><td style="text-align: right">varies</td><td style="text-align: right">PMD specification (<code>nothing</code>, <code>:max</code>, or <code>Int</code>)</td></tr><tr><td style="text-align: right"><code>reweight</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right">IPW reweighting flag</td></tr><tr><td style="text-align: right"><code>cluster</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right">Clustering level</td></tr></table><hr/><h2 id="DDCG-Dataset"><a class="docs-heading-anchor" href="#DDCG-Dataset">DDCG Dataset</a><a id="DDCG-Dataset-1"></a><a class="docs-heading-anchor-permalink" href="#DDCG-Dataset" title="Permalink"></a></h2><p>The built-in DDCG dataset contains 184 countries from 1960–2010 with log GDP per capita and a binary democracy indicator from Acemoglu, Naidu, Restrepo &amp; Robinson (2019):</p><pre><code class="language-julia hljs">ddcg = load_example(:ddcg)
+  Pre-pooled     2.2794     0.6357    3.5856   &lt;0.001     1.0334     3.5254   ***
+  Post-pooled   -1.5290     1.8353   -0.8331   0.4048    -5.1260     2.0681</code></pre><p>The pooled estimates are stored in <code>r.pooled_post</code> and <code>r.pooled_pre</code> as named tuples with fields <code>coef</code>, <code>se</code>, <code>ci_lower</code>, <code>ci_upper</code>, and <code>nobs</code>.</p><h3 id="Full-Keyword-Arguments"><a class="docs-heading-anchor" href="#Full-Keyword-Arguments">Full Keyword Arguments</a><a id="Full-Keyword-Arguments-1"></a><a class="docs-heading-anchor-permalink" href="#Full-Keyword-Arguments" title="Permalink"></a></h3><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>pre_window</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>3</code></td><td style="text-align: right">Pre-treatment event-time <span>$K$</span></td></tr><tr><td style="text-align: right"><code>post_window</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>H</code></td><td style="text-align: right">Post-treatment event-time</td></tr><tr><td style="text-align: right"><code>ylags</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>0</code></td><td style="text-align: right">Outcome lags (<span>$L_1.Y, \ldots, L_k.Y$</span>)</td></tr><tr><td style="text-align: right"><code>dylags</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>0</code></td><td style="text-align: right">Differenced outcome lags (<span>$L_1.\Delta Y, \ldots$</span>)</td></tr><tr><td style="text-align: right"><code>covariates</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right"><code>String[]</code></td><td style="text-align: right">Additional covariates</td></tr><tr><td style="text-align: right"><code>nonabsorbing</code></td><td style="text-align: right"><code>Union{Int,Nothing}</code></td><td style="text-align: right"><code>nothing</code></td><td style="text-align: right">Stabilization window <span>$L$</span> for non-absorbing CCS</td></tr><tr><td style="text-align: right"><code>oneoff</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>false</code></td><td style="text-align: right">One-off treatment (requires <code>nonabsorbing</code>)</td></tr><tr><td style="text-align: right"><code>notyet</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>false</code></td><td style="text-align: right">Restrict to not-yet-treated controls</td></tr><tr><td style="text-align: right"><code>nevertreated</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>false</code></td><td style="text-align: right">Restrict to never-treated controls</td></tr><tr><td style="text-align: right"><code>firsttreat</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>false</code></td><td style="text-align: right">Use only first treatment event per unit</td></tr><tr><td style="text-align: right"><code>pmd</code></td><td style="text-align: right"><code>Union{Symbol,Int,Nothing}</code></td><td style="text-align: right"><code>nothing</code></td><td style="text-align: right">Pre-mean differencing (<code>:max</code> or integer <span>$k$</span>)</td></tr><tr><td style="text-align: right"><code>reweight</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>false</code></td><td style="text-align: right">IPW for equally weighted ATE across time</td></tr><tr><td style="text-align: right"><code>nocomp</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>false</code></td><td style="text-align: right">Restrict to obs in CCS at all horizons</td></tr><tr><td style="text-align: right"><code>cluster</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:unit</code></td><td style="text-align: right">SE clustering: <code>:unit</code>, <code>:time</code>, or <code>:twoway</code></td></tr><tr><td style="text-align: right"><code>conf_level</code></td><td style="text-align: right"><code>Real</code></td><td style="text-align: right"><code>0.95</code></td><td style="text-align: right">Confidence level</td></tr><tr><td style="text-align: right"><code>post_pooled</code></td><td style="text-align: right"><code>Union{Tuple,Nothing}</code></td><td style="text-align: right"><code>nothing</code></td><td style="text-align: right"><span>$(start, end)$</span> for pooled post-treatment</td></tr><tr><td style="text-align: right"><code>pre_pooled</code></td><td style="text-align: right"><code>Union{Tuple,Nothing}</code></td><td style="text-align: right"><code>nothing</code></td><td style="text-align: right"><span>$(start, end)$</span> for pooled pre-treatment</td></tr><tr><td style="text-align: right"><code>only_pooled</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>false</code></td><td style="text-align: right">Skip event study, compute only pooled</td></tr><tr><td style="text-align: right"><code>only_event</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>false</code></td><td style="text-align: right">Skip pooled, compute only event study</td></tr></table><h3 id="Return-Value-(LPDiDResult{T})"><a class="docs-heading-anchor" href="#Return-Value-(LPDiDResult{T})">Return Value (<code>LPDiDResult{T}</code>)</a><a id="Return-Value-(LPDiDResult{T})-1"></a><a class="docs-heading-anchor-permalink" href="#Return-Value-(LPDiDResult{T})" title="Permalink"></a></h3><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>coefficients</code></td><td style="text-align: right"><code>Vector{T}</code></td><td style="text-align: right">Treatment effect <span>$\beta_h$</span> at each event-time</td></tr><tr><td style="text-align: right"><code>se</code></td><td style="text-align: right"><code>Vector{T}</code></td><td style="text-align: right">Cluster-robust standard errors</td></tr><tr><td style="text-align: right"><code>ci_lower</code></td><td style="text-align: right"><code>Vector{T}</code></td><td style="text-align: right">Lower confidence interval bounds</td></tr><tr><td style="text-align: right"><code>ci_upper</code></td><td style="text-align: right"><code>Vector{T}</code></td><td style="text-align: right">Upper confidence interval bounds</td></tr><tr><td style="text-align: right"><code>event_times</code></td><td style="text-align: right"><code>Vector{Int}</code></td><td style="text-align: right">Event-time grid <span>$[-K, \ldots, H]$</span></td></tr><tr><td style="text-align: right"><code>reference_period</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Omitted period (<span>$-1$</span>)</td></tr><tr><td style="text-align: right"><code>nobs_per_horizon</code></td><td style="text-align: right"><code>Vector{Int}</code></td><td style="text-align: right">Effective sample size per horizon</td></tr><tr><td style="text-align: right"><code>pooled_post</code></td><td style="text-align: right"><code>NamedTuple</code> or <code>nothing</code></td><td style="text-align: right">Pooled post-treatment estimate</td></tr><tr><td style="text-align: right"><code>pooled_pre</code></td><td style="text-align: right"><code>NamedTuple</code> or <code>nothing</code></td><td style="text-align: right">Pooled pre-treatment estimate</td></tr><tr><td style="text-align: right"><code>vcov</code></td><td style="text-align: right"><code>Vector{Matrix{T}}</code></td><td style="text-align: right">Variance-covariance matrices per horizon</td></tr><tr><td style="text-align: right"><code>specification</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:absorbing</code>, <code>:nonabsorbing</code>, or <code>:oneoff</code></td></tr><tr><td style="text-align: right"><code>pmd</code></td><td style="text-align: right">varies</td><td style="text-align: right">PMD specification (<code>nothing</code>, <code>:max</code>, or <code>Int</code>)</td></tr><tr><td style="text-align: right"><code>reweight</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right">IPW reweighting flag</td></tr><tr><td style="text-align: right"><code>cluster</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right">Clustering level</td></tr></table><hr/><h2 id="DDCG-Dataset"><a class="docs-heading-anchor" href="#DDCG-Dataset">DDCG Dataset</a><a id="DDCG-Dataset-1"></a><a class="docs-heading-anchor-permalink" href="#DDCG-Dataset" title="Permalink"></a></h2><p>The built-in DDCG dataset contains 184 countries from 1960–2010 with log GDP per capita and a binary democracy indicator from Acemoglu, Naidu, Restrepo &amp; Robinson (2019):</p><pre><code class="language-julia hljs">ddcg = load_example(:ddcg)
 
 r = estimate_lp_did(ddcg, :y, :dem, 25;
     pre_window=5, ylags=1, post_pooled=(0, 25))
-report(r)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">LP-DiD Estimation -- Dube, Girardi, Jorda &amp; Taylor (2025)
-
-
+report(r)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">LP-DiD Estimation — Dube, Girardi, Jorda &amp; Taylor (2025)
 
   Method          LP-DiD (Dube et al. 2025)
   Treatment                       Absorbing
@@ -362,34 +344,48 @@ report(r)</code></pre><pre class="documenter-example-output"><code class="nohigh
   Groups                                184
   Observations                         9384
 
-                        Dynamic Treatment Effects
+                            Dynamic Treatment Effects
 
-           Coef.   Std.Err.         z    P&gt;|z|      [95%       CI]
+                 Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
 
-  h=-5     6.529     2.0689    3.1558   0.0016     2.474   10.5839   ***
-  h=-4    5.6319     1.6527    3.4076   &lt;0.001    2.3926    8.8712   ***
-  h=-3    4.7031     1.2233    3.8446   &lt;0.001    2.3055    7.1006   ***
-  h=-2    2.2548      0.842    2.6779   0.0074    0.6045     3.905   ***
-  h=-1       0.0        0.0         —        —       0.0       0.0
-  h=0    -1.1547     0.6697   -1.7242   0.0847   -2.4674    0.1579   *
-  h=1    -1.0779     1.2511   -0.8616   0.3889   -3.5299    1.3741
-  h=2     -1.074     1.7426   -0.6163   0.5377   -4.4894    2.3414
-  h=3    -1.1012     2.1423    -0.514   0.6072      -5.3    3.0975
-  h=4    -1.3833     2.5036   -0.5525   0.5806   -6.2901    3.5236
-  h=5    -1.9388     2.7808   -0.6972   0.4857   -7.3891    3.5115
-  h=6    -1.7383      3.114   -0.5582   0.5767   -7.8417    4.3651
-  h=7    -1.6497     3.4343   -0.4804    0.631   -8.3807    5.0813
-  h=8    -1.6494     3.7772   -0.4367   0.6624   -9.0525    5.7538
-  h=9    -0.4766     4.0876   -0.1166   0.9072   -8.4881    7.5348
-  ⋮            ⋮          ⋮         ⋮        ⋮         ⋮         ⋮   ⋮
+  h=-5          6.5290     2.0689    3.1558   0.0016     2.4740    10.5839   ***
+  h=-4          5.6319     1.6527    3.4076   &lt;0.001     2.3926     8.8712   ***
+  h=-3          4.7031     1.2233    3.8446   &lt;0.001     2.3055     7.1006   ***
+  h=-2          2.2548     0.8420    2.6779   0.0074     0.6045     3.9050   ***
+  h=-1 (ref)         —          —         —        —          —          —
+  h=0          -1.1547     0.6697   -1.7242   0.0847    -2.4674     0.1579   *
+  h=1          -1.0779     1.2511   -0.8616   0.3889    -3.5299     1.3741
+  h=2          -1.0740     1.7426   -0.6163   0.5377    -4.4894     2.3414
+  h=3          -1.1012     2.1423   -0.5140   0.6072    -5.3000     3.0975
+  h=4          -1.3833     2.5036   -0.5525   0.5806    -6.2901     3.5236
+  h=5          -1.9388     2.7808   -0.6972   0.4857    -7.3891     3.5115
+  h=6          -1.7383     3.1140   -0.5582   0.5767    -7.8417     4.3651
+  h=7          -1.6497     3.4343   -0.4804    0.631    -8.3807     5.0813
+  h=8          -1.6494     3.7772   -0.4367   0.6624    -9.0525     5.7538
+  h=9          -0.4766     4.0876   -0.1166   0.9072    -8.4881     7.5348
+  h=10         -0.3325     4.3976   -0.0756   0.9397    -8.9516     8.2866
+  h=11          1.2823     4.8880    0.2623   0.7931    -8.2980    10.8625
+  h=12          2.3574     5.2916    0.4455    0.656    -8.0139    12.7287
+  h=13          2.2434     5.5885    0.4014   0.6881    -8.7100    13.1967
+  h=14          3.8345     5.9655    0.6428   0.5204    -7.8575    15.5266
+  h=15          5.9629     6.2741    0.9504   0.3419    -6.3341    18.2600
+  h=16          4.1183     6.6210    0.6220   0.5339    -8.8586    17.0953
+  h=17          7.3439     6.9727    1.0532   0.2922    -6.3223    21.0101
+  h=18          8.6611     7.6129    1.1377   0.2552    -6.2599    23.5820
+  h=19          7.2083     8.2324    0.8756   0.3812    -8.9269    23.3436
+  h=20          7.6066     9.4255    0.8070   0.4197   -10.8671    26.0803
+  h=21         12.1214    10.3482    1.1713   0.2415    -8.1608    32.4036
+  h=22         13.0366    10.6690    1.2219   0.2217    -7.8743    33.9475
+  h=23         12.6763    11.1159    1.1404   0.2541    -9.1106    34.4632
+  h=24         13.7695    11.3365    1.2146   0.2245    -8.4497    35.9886
+  h=25         12.3358    12.4713    0.9891   0.3226   -12.1075    36.7791
 
-                                                           16 rows omitted
 
-                              Pooled Estimates
+                               Pooled Estimates
 
-                 Coef.   Std.Err.        z    P&gt;|z|       [95%       CI]
+                 Coef.   Std.Err.        z    P&gt;|z|   CI lower   CI upper
 
-  Post-pooled   2.4348     7.3716   0.3303   0.7412   -12.0133   16.8829</code></pre><table><tr><th style="text-align: right">Variable</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>y</code></td><td style="text-align: right">Log GDP per capita</td></tr><tr><td style="text-align: right"><code>dem</code></td><td style="text-align: right">Democracy indicator (0/1)</td></tr></table><p>The dataset is organized as a balanced panel with country-year observations. The <code>dem</code> variable records democratic transitions (0 to 1) and reversals (1 to 0), making this a non-absorbing treatment setting suitable for <code>nonabsorbing</code> CCS.</p><hr/><h2 id="Panel-Utilities"><a class="docs-heading-anchor" href="#Panel-Utilities">Panel Utilities</a><a id="Panel-Utilities-1"></a><a class="docs-heading-anchor-permalink" href="#Panel-Utilities" title="Permalink"></a></h2><p>Within-group lag, lead, and difference operations for <code>PanelData</code>:</p><pre><code class="language-julia hljs">ddcg = load_example(:ddcg)
+  Post-pooled   2.4348     7.3716   0.3303   0.7412   -12.0133    16.8829</code></pre><table><tr><th style="text-align: right">Variable</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>y</code></td><td style="text-align: right">Log GDP per capita</td></tr><tr><td style="text-align: right"><code>dem</code></td><td style="text-align: right">Democracy indicator (0/1)</td></tr></table><p>The dataset is organized as a balanced panel with country-year observations. The <code>dem</code> variable records democratic transitions (0 to 1) and reversals (1 to 0), making this a non-absorbing treatment setting suitable for <code>nonabsorbing</code> CCS.</p><hr/><h2 id="Panel-Utilities"><a class="docs-heading-anchor" href="#Panel-Utilities">Panel Utilities</a><a id="Panel-Utilities-1"></a><a class="docs-heading-anchor-permalink" href="#Panel-Utilities" title="Permalink"></a></h2><p>Within-group lag, lead, and difference operations for <code>PanelData</code>:</p><pre><code class="language-julia hljs">ddcg = load_example(:ddcg)
 
 # Compute lag/lead/diff vectors
 l1 = panel_lag(ddcg, :y, 1)     # L1.y
@@ -401,9 +397,7 @@ ddcg2 = add_panel_lag(ddcg, :y, 1)    # adds &quot;lag1_y&quot;
 ddcg3 = add_panel_lead(ddcg, :y, 1)   # adds &quot;lead1_y&quot;
 ddcg4 = add_panel_diff(ddcg, :y)      # adds &quot;d_y&quot;</code></pre><p>These functions respect panel group boundaries –- lags, leads, and differences do not cross from one unit to another.</p><hr/><h2 id="Clustering"><a class="docs-heading-anchor" href="#Clustering">Clustering</a><a id="Clustering-1"></a><a class="docs-heading-anchor-permalink" href="#Clustering" title="Permalink"></a></h2><p>Both estimators support three clustering options for standard error computation:</p><ul><li><strong><code>:unit</code></strong> (default) –- accounts for serial correlation within units</li><li><strong><code>:time</code></strong> –- accounts for cross-sectional correlation within periods</li><li><strong><code>:twoway</code></strong> –- two-way clustering (Cameron, Gelbach &amp; Miller 2011): <span>$V_{\text{twoway}} = V_{\text{unit}} + V_{\text{time}} - V_{\text{het}}$</span></li></ul><pre><code class="language-julia hljs">ddcg = load_example(:ddcg)
 r = estimate_lp_did(ddcg, :y, :dem, 10; cluster=:twoway)
-report(r)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">LP-DiD Estimation -- Dube, Girardi, Jorda &amp; Taylor (2025)
-
-
+report(r)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">LP-DiD Estimation — Dube, Girardi, Jorda &amp; Taylor (2025)
 
   Method          LP-DiD (Dube et al. 2025)
   Treatment                       Absorbing
@@ -419,24 +413,24 @@ report(r)</code></pre><pre class="documenter-example-output"><code class="nohigh
   Groups                                184
   Observations                         9384
 
-                        Dynamic Treatment Effects
+                            Dynamic Treatment Effects
 
-           Coef.   Std.Err.         z    P&gt;|z|      [95%      CI]
+                 Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
 
-  h=-3     4.887     1.1015    4.4365   &lt;0.001     2.728    7.046   ***
-  h=-2    2.3218     0.7851    2.9573   0.0031     0.783   3.8606   ***
-  h=-1       0.0        0.0         —        —       0.0      0.0
-  h=0    -1.1792     0.6437   -1.8319    0.067   -2.4408   0.0824   *
-  h=1    -1.1041     1.0736   -1.0285   0.3037   -3.2083      1.0
-  h=2    -1.0997      1.564   -0.7031    0.482   -4.1651   1.9658
-  h=3    -1.1305     1.9231   -0.5878   0.5566   -4.8997   2.6387
-  h=4    -1.4032     2.5631   -0.5475   0.5841   -6.4269   3.6204
-  h=5    -1.9168     2.8828   -0.6649   0.5061    -7.567   3.7333
-  h=6    -1.6725     3.2649   -0.5123   0.6085   -8.0716   4.7266
-  h=7    -1.5197     3.6628   -0.4149   0.6782   -8.6986   5.6593
-  h=8    -1.4392     4.1123     -0.35   0.7264   -9.4991   6.6207
-  h=9    -0.1928     4.4261   -0.0436   0.9653   -8.8678   8.4822
-  h=10    0.0338     4.7848    0.0071   0.9944   -9.3443    9.412</code></pre><p>Two-way clustering is recommended when both serial correlation (within units) and cross-sectional correlation (across units within periods) are present, as in macroeconomic panels where common shocks affect all countries simultaneously.</p><hr/><h2 id="Diagnostics"><a class="docs-heading-anchor" href="#Diagnostics">Diagnostics</a><a id="Diagnostics-1"></a><a class="docs-heading-anchor-permalink" href="#Diagnostics" title="Permalink"></a></h2><h3 id="Pre-Trend-Test"><a class="docs-heading-anchor" href="#Pre-Trend-Test">Pre-Trend Test</a><a id="Pre-Trend-Test-1"></a><a class="docs-heading-anchor-permalink" href="#Pre-Trend-Test" title="Permalink"></a></h3><p>Joint Wald test that all pre-treatment coefficients are zero:</p><p class="math-container">\[H_0: \beta_{-K} = \beta_{-K+1} = \cdots = \beta_{-2} = 0\]</p><p>where:</p><ul><li><span>$\beta_k$</span> is the LP coefficient at event-time <span>$k$</span></li></ul><pre><code class="language-julia hljs">N, T_per = 50, 20
+  h=-3          4.8870     1.1015    4.4365   &lt;0.001     2.7280     7.0460   ***
+  h=-2          2.3218     0.7851    2.9573   0.0031     0.7830     3.8606   ***
+  h=-1 (ref)         —          —         —        —          —          —
+  h=0          -1.1792     0.6437   -1.8319    0.067    -2.4408     0.0824   *
+  h=1          -1.1041     1.0736   -1.0285   0.3037    -3.2083     1.0000
+  h=2          -1.0997     1.5640   -0.7031    0.482    -4.1651     1.9658
+  h=3          -1.1305     1.9231   -0.5878   0.5566    -4.8997     2.6387
+  h=4          -1.4032     2.5631   -0.5475   0.5841    -6.4269     3.6204
+  h=5          -1.9168     2.8828   -0.6649   0.5061    -7.5670     3.7333
+  h=6          -1.6725     3.2649   -0.5123   0.6085    -8.0716     4.7266
+  h=7          -1.5197     3.6628   -0.4149   0.6782    -8.6986     5.6593
+  h=8          -1.4392     4.1123   -0.3500   0.7264    -9.4991     6.6207
+  h=9          -0.1928     4.4261   -0.0436   0.9653    -8.8678     8.4822
+  h=10          0.0338     4.7848    0.0071   0.9944    -9.3443     9.4120</code></pre><p>Two-way clustering is recommended when both serial correlation (within units) and cross-sectional correlation (across units within periods) are present, as in macroeconomic panels where common shocks affect all countries simultaneously.</p><hr/><h2 id="Diagnostics"><a class="docs-heading-anchor" href="#Diagnostics">Diagnostics</a><a id="Diagnostics-1"></a><a class="docs-heading-anchor-permalink" href="#Diagnostics" title="Permalink"></a></h2><h3 id="Pre-Trend-Test"><a class="docs-heading-anchor" href="#Pre-Trend-Test">Pre-Trend Test</a><a id="Pre-Trend-Test-1"></a><a class="docs-heading-anchor-permalink" href="#Pre-Trend-Test" title="Permalink"></a></h3><p>Joint Wald test that all pre-treatment coefficients are zero:</p><p class="math-container">\[H_0: \beta_{-K} = \beta_{-K+1} = \cdots = \beta_{-2} = 0\]</p><p>where:</p><ul><li><span>$\beta_k$</span> is the LP coefficient at event-time <span>$k$</span></li></ul><pre><code class="language-julia hljs">N, T_per = 50, 20
 df = DataFrame(
     group = repeat(1:N, inner=T_per),
     time = repeat(1:T_per, outer=N),
@@ -448,8 +442,6 @@ pd = xtset(df, :group, :time)
 eslp = estimate_event_study_lp(pd, :outcome, :treat, 5; leads=3, lags=2)
 
 pt = pretrend_test(eslp)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">      Pre-Trend Test</span>
-
- <span class="sgr1">             </span> <span class="sgr1">           </span>
 
   Test          Wald test
   Statistic        0.7549
@@ -468,7 +460,7 @@ df = DataFrame(
 )
 pd = xtset(df, :group, :time)
 eslp = estimate_event_study_lp(pd, :outcome, :treat, 5; leads=3, lags=2)</code></pre><pre><code class="language-julia hljs">p = plot_result(eslp)
-save_plot(p, &quot;event_study.html&quot;)</code></pre><iframe src="../assets/plots/eslp_event_study.html" style="width:100%;height:420px;border:1px solid #eee;border-radius:8px;" loading="lazy"></iframe><hr/><h2 id="Complete-Example"><a class="docs-heading-anchor" href="#Complete-Example">Complete Example</a><a id="Complete-Example-1"></a><a class="docs-heading-anchor-permalink" href="#Complete-Example" title="Permalink"></a></h2><pre><code class="language-julia hljs"># Load DDCG democracy-GDP dataset (Acemoglu et al. 2019)
+save_plot(p, &quot;eslp_event_study.html&quot;)</code></pre><iframe src="../assets/plots/eslp_event_study.html" style="width:100%;height:420px;border:1px solid #eee;border-radius:8px;" loading="lazy"></iframe><hr/><h2 id="Complete-Example"><a class="docs-heading-anchor" href="#Complete-Example">Complete Example</a><a id="Complete-Example-1"></a><a class="docs-heading-anchor-permalink" href="#Complete-Example" title="Permalink"></a></h2><pre><code class="language-julia hljs"># Load DDCG democracy-GDP dataset (Acemoglu et al. 2019)
 ddcg = load_example(:ddcg)
 
 # LP-DiD: effect of democracy on log GDP per capita
@@ -483,9 +475,7 @@ report(r)
 # Robustness: PMD + reweighting
 r_pmd = estimate_lp_did(ddcg, :y, :dem, 25;
     pre_window=5, ylags=1, pmd=:max, reweight=true)
-report(r_pmd)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">LP-DiD Estimation -- Dube, Girardi, Jorda &amp; Taylor (2025)
-
-
+report(r_pmd)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">LP-DiD Estimation — Dube, Girardi, Jorda &amp; Taylor (2025)
 
   Method          LP-DiD (Dube et al. 2025)
   Treatment                       Absorbing
@@ -501,39 +491,51 @@ report(r_pmd)</code></pre><pre class="documenter-example-output"><code class="no
   Groups                                184
   Observations                         9384
 
-                        Dynamic Treatment Effects
+                            Dynamic Treatment Effects
 
-           Coef.   Std.Err.         z    P&gt;|z|      [95%       CI]
+                 Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
 
-  h=-5     6.529     2.0689    3.1558   0.0016     2.474   10.5839   ***
-  h=-4    5.6319     1.6527    3.4076   &lt;0.001    2.3926    8.8712   ***
-  h=-3    4.7031     1.2233    3.8446   &lt;0.001    2.3055    7.1006   ***
-  h=-2    2.2548      0.842    2.6779   0.0074    0.6045     3.905   ***
-  h=-1       0.0        0.0         —        —       0.0       0.0
-  h=0    -1.1547     0.6697   -1.7242   0.0847   -2.4674    0.1579   *
-  h=1    -1.0779     1.2511   -0.8616   0.3889   -3.5299    1.3741
-  h=2     -1.074     1.7426   -0.6163   0.5377   -4.4894    2.3414
-  h=3    -1.1012     2.1423    -0.514   0.6072      -5.3    3.0975
-  h=4    -1.3833     2.5036   -0.5525   0.5806   -6.2901    3.5236
-  h=5    -1.9388     2.7808   -0.6972   0.4857   -7.3891    3.5115
-  h=6    -1.7383      3.114   -0.5582   0.5767   -7.8417    4.3651
-  h=7    -1.6497     3.4343   -0.4804    0.631   -8.3807    5.0813
-  h=8    -1.6494     3.7772   -0.4367   0.6624   -9.0525    5.7538
-  h=9    -0.4766     4.0876   -0.1166   0.9072   -8.4881    7.5348
-  ⋮            ⋮          ⋮         ⋮        ⋮         ⋮         ⋮   ⋮
+  h=-5          6.5290     2.0689    3.1558   0.0016     2.4740    10.5839   ***
+  h=-4          5.6319     1.6527    3.4076   &lt;0.001     2.3926     8.8712   ***
+  h=-3          4.7031     1.2233    3.8446   &lt;0.001     2.3055     7.1006   ***
+  h=-2          2.2548     0.8420    2.6779   0.0074     0.6045     3.9050   ***
+  h=-1 (ref)         —          —         —        —          —          —
+  h=0          -1.1547     0.6697   -1.7242   0.0847    -2.4674     0.1579   *
+  h=1          -1.0779     1.2511   -0.8616   0.3889    -3.5299     1.3741
+  h=2          -1.0740     1.7426   -0.6163   0.5377    -4.4894     2.3414
+  h=3          -1.1012     2.1423   -0.5140   0.6072    -5.3000     3.0975
+  h=4          -1.3833     2.5036   -0.5525   0.5806    -6.2901     3.5236
+  h=5          -1.9388     2.7808   -0.6972   0.4857    -7.3891     3.5115
+  h=6          -1.7383     3.1140   -0.5582   0.5767    -7.8417     4.3651
+  h=7          -1.6497     3.4343   -0.4804    0.631    -8.3807     5.0813
+  h=8          -1.6494     3.7772   -0.4367   0.6624    -9.0525     5.7538
+  h=9          -0.4766     4.0876   -0.1166   0.9072    -8.4881     7.5348
+  h=10         -0.3325     4.3976   -0.0756   0.9397    -8.9516     8.2866
+  h=11          1.2823     4.8880    0.2623   0.7931    -8.2980    10.8625
+  h=12          2.3574     5.2916    0.4455    0.656    -8.0139    12.7287
+  h=13          2.2434     5.5885    0.4014   0.6881    -8.7100    13.1967
+  h=14          3.8345     5.9655    0.6428   0.5204    -7.8575    15.5266
+  h=15          5.9629     6.2741    0.9504   0.3419    -6.3341    18.2600
+  h=16          4.1183     6.6210    0.6220   0.5339    -8.8586    17.0953
+  h=17          7.3439     6.9727    1.0532   0.2922    -6.3223    21.0101
+  h=18          8.6611     7.6129    1.1377   0.2552    -6.2599    23.5820
+  h=19          7.2083     8.2324    0.8756   0.3812    -8.9269    23.3436
+  h=20          7.6066     9.4255    0.8070   0.4197   -10.8671    26.0803
+  h=21         12.1214    10.3482    1.1713   0.2415    -8.1608    32.4036
+  h=22         13.0366    10.6690    1.2219   0.2217    -7.8743    33.9475
+  h=23         12.6763    11.1159    1.1404   0.2541    -9.1106    34.4632
+  h=24         13.7695    11.3365    1.2146   0.2245    -8.4497    35.9886
+  h=25         12.3358    12.4713    0.9891   0.3226   -12.1075    36.7791
 
-                                                           16 rows omitted
 
                                 Pooled Estimates
 
-                 Coef.   Std.Err.        z    P&gt;|z|       [95%       CI]
+                 Coef.   Std.Err.        z    P&gt;|z|   CI lower   CI upper
 
-  Pre-pooled    3.6607      0.982   3.7279   &lt;0.001     1.7361    5.5853   ***
-  Post-pooled   2.4348     7.3716   0.3303   0.7412   -12.0133   16.8829
+  Pre-pooled    3.6607     0.9820   3.7279   &lt;0.001     1.7361     5.5853   ***
+  Post-pooled   2.4348     7.3716   0.3303   0.7412   -12.0133    16.8829
 
-LP-DiD Estimation -- Dube, Girardi, Jorda &amp; Taylor (2025)
-
-
+LP-DiD Estimation — Dube, Girardi, Jorda &amp; Taylor (2025)
 
   Method          LP-DiD (Dube et al. 2025)
   Treatment                       Absorbing
@@ -549,25 +551,38 @@ LP-DiD Estimation -- Dube, Girardi, Jorda &amp; Taylor (2025)
   Groups                                184
   Observations                         9384
 
-                         Dynamic Treatment Effects
+                            Dynamic Treatment Effects
 
-            Coef.   Std.Err.         z    P&gt;|z|       [95%       CI]
+                  Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
 
-  h=-5    -0.6499     2.7235   -0.2386   0.8114    -5.9879    4.6881
-  h=-4     -1.524     2.9135   -0.5231   0.6009    -7.2343    4.1864
-  h=-3    -2.6443     3.1277   -0.8454   0.3979    -8.7745    3.4859
-  h=-2    -5.1332     3.3961   -1.5115   0.1307   -11.7895     1.523
-  h=-1        0.0        0.0         —        —        0.0       0.0
-  h=0     -8.5507     3.8358   -2.2292   0.0258   -16.0686   -1.0327   **
-  h=1     -8.4782     4.1764     -2.03   0.0424   -16.6637   -0.2926   **
-  h=2     -9.1019     4.5914   -1.9824   0.0474    -18.101   -0.1028   **
-  h=3    -10.5064     4.7918   -2.1926   0.0283   -19.8981   -1.1146   **
-  h=4    -11.0025     5.1625   -2.1312   0.0331   -21.1207   -0.8842   **
-  h=5     -11.894     5.4419   -2.1856   0.0288   -22.5599   -1.2282   **
-  h=6      -11.79       5.68   -2.0757   0.0379   -22.9226   -0.6573   **
-  h=7    -10.5694     6.1237    -1.726   0.0844   -22.5717    1.4328   *
-  h=8     -10.735     6.4482   -1.6648    0.096   -23.3732    1.9032   *
-  h=9     -9.5862     6.8073   -1.4082   0.1591   -22.9283    3.7559
-  ⋮             ⋮          ⋮         ⋮        ⋮          ⋮         ⋮   ⋮
-
-                                                            16 rows omitted</code></pre><pre><code class="language-julia hljs">plot_result(r; title=&quot;Democracy -&gt; GDP (LP-DiD, DDCG)&quot;)</code></pre><iframe src="../assets/plots/eslp_event_study.html" style="width:100%;height:420px;border:1px solid #eee;border-radius:8px;" loading="lazy"></iframe><p>The baseline LP-DiD specification estimates the causal effect of democratic transitions on log GDP per capita using a switching indicator and clean control samples. The pooled post-treatment estimate averages the dynamic treatment effect over horizons 0 through 25, providing a single summary measure of democracy&#39;s long-run GDP impact. The pre-treatment pooled estimate serves as a placebo –- a value near zero supports the parallel trends assumption. The PMD + IPW robustness check uses pre-mean differencing to reduce noise from a single baseline period and inverse probability weighting to ensure equal representation across time periods, confirming that the baseline result is not driven by compositional changes in the sample.</p><hr/><h2 id="Common-Pitfalls"><a class="docs-heading-anchor" href="#Common-Pitfalls">Common Pitfalls</a><a id="Common-Pitfalls-1"></a><a class="docs-heading-anchor-permalink" href="#Common-Pitfalls" title="Permalink"></a></h2><ol><li><p><strong>Treatment column format</strong>: <code>estimate_lp_did</code> auto-detects binary (0/1) vs timing (year values). Mixing formats (e.g., 0, 1, 2019) causes misclassification. Ensure the treatment column is consistently encoded.</p></li><li><p><strong>Small effective samples at long horizons</strong>: CCS restrictions reduce the sample at each horizon as more units switch treatment status. Monitor <code>r.nobs_per_horizon</code> and reduce <span>$H$</span> if counts drop below approximately 30 observations.</p></li><li><p><strong>Combining <code>notyet</code> and <code>nevertreated</code></strong>: These are mutually exclusive. <code>notyet</code> uses units not yet treated at <span>$t+h$</span> as controls; <code>nevertreated</code> uses only units with <span>$G_i = 0$</span>. Specifying both raises an error.</p></li><li><p><strong><code>oneoff</code> requires <code>nonabsorbing</code></strong>: One-off treatment is a special case of non-absorbing treatment where the treatment indicator lasts exactly one period. Calling <code>oneoff=true</code> without setting <code>nonabsorbing</code> raises an error.</p></li><li><p><strong>PMD with short pre-treatment windows</strong>: <code>pmd=:max</code> uses all available pre-treatment data. With few pre-treatment periods, the average baseline may be noisy. Consider <code>pmd=k</code> with a small <span>$k$</span> to use a fixed window.</p></li></ol><hr/><h2 id="References"><a class="docs-heading-anchor" href="#References">References</a><a id="References-1"></a><a class="docs-heading-anchor-permalink" href="#References" title="Permalink"></a></h2><ul><li><p>Acemoglu, Daron, Suresh Naidu, Pascual Restrepo, and James A. Robinson. 2019. &quot;Democracy Does Cause Growth.&quot; <em>Journal of Political Economy</em> 127 (1): 47–100. <a href="https://doi.org/10.1086/700936">DOI</a></p></li><li><p>Cameron, A. Colin, Jonah B. Gelbach, and Douglas L. Miller. 2011. &quot;Robust Inference with Multiway Clustering.&quot; <em>Journal of Business &amp; Economic Statistics</em> 29 (2): 238–249. <a href="https://doi.org/10.1198/jbes.2010.07136">DOI</a></p></li><li><p>Dube, Arindrajit, Daniele Girardi, Oscar Jorda, and Alan M. Taylor. 2025. &quot;A Local Projections Approach to Difference-in-Differences.&quot; <em>Journal of Applied Econometrics</em>. <a href="https://doi.org/10.1002/jae.3117">DOI</a></p></li><li><p>Jorda, Oscar. 2005. &quot;Estimation and Inference of Impulse Responses by Local Projections.&quot; <em>American Economic Review</em> 95 (1): 161–182. <a href="https://doi.org/10.1257/0002828053828518">DOI</a></p></li><li><p>Rambachan, Ashesh, and Jonathan Roth. 2023. &quot;A More Credible Approach to Parallel Trends.&quot; <em>Review of Economic Studies</em> 90 (5): 2555–2591. <a href="https://doi.org/10.1093/restud/rdad018">DOI</a></p></li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../did/">« Difference-in-Differences</a><a class="docs-footer-nextpage" href="../dsge/">Overview »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Saturday 11 July 2026 23:37">Saturday 11 July 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+  h=-5          -0.6499     2.7235   -0.2386   0.8114    -5.9879     4.6881
+  h=-4          -1.5240     2.9135   -0.5231   0.6009    -7.2343     4.1864
+  h=-3          -2.6443     3.1277   -0.8454   0.3979    -8.7745     3.4859
+  h=-2          -5.1332     3.3961   -1.5115   0.1307   -11.7895     1.5230
+  h=-1 (ref)          —          —         —        —          —          —
+  h=0           -8.5507     3.8358   -2.2292   0.0258   -16.0686    -1.0327   **
+  h=1           -8.4782     4.1764   -2.0300   0.0424   -16.6637    -0.2926   **
+  h=2           -9.1019     4.5914   -1.9824   0.0474   -18.1010    -0.1028   **
+  h=3          -10.5064     4.7918   -2.1926   0.0283   -19.8981    -1.1146   **
+  h=4          -11.0025     5.1625   -2.1312   0.0331   -21.1207    -0.8842   **
+  h=5          -11.8940     5.4419   -2.1856   0.0288   -22.5599    -1.2282   **
+  h=6          -11.7900     5.6800   -2.0757   0.0379   -22.9226    -0.6573   **
+  h=7          -10.5694     6.1237   -1.7260   0.0844   -22.5717     1.4328   *
+  h=8          -10.7350     6.4482   -1.6648    0.096   -23.3732     1.9032   *
+  h=9           -9.5862     6.8073   -1.4082   0.1591   -22.9283     3.7559
+  h=10          -9.2463     7.1130   -1.2999   0.1936   -23.1875     4.6949
+  h=11          -7.3142     7.5482   -0.9690   0.3325   -22.1084     7.4800
+  h=12          -7.6935     7.8835   -0.9759   0.3291   -23.1449     7.7579
+  h=13          -8.2014     8.0965   -1.0130   0.3111   -24.0702     7.6674
+  h=14          -6.7047     8.5651   -0.7828   0.4337   -23.4920    10.0825
+  h=15          -4.1853     9.1010   -0.4599   0.6456   -22.0230    13.6524
+  h=16          -4.7405     9.4988   -0.4991   0.6177   -23.3579    13.8769
+  h=17          -1.4718    10.0228   -0.1468   0.8833   -21.1161    18.1725
+  h=18           1.9317    10.8275    0.1784   0.8584   -19.2898    23.1531
+  h=19           0.5247    10.9509    0.0479   0.9618   -20.9386    21.9881
+  h=20           1.1577    12.4534    0.0930   0.9259   -23.2505    25.5660
+  h=21           6.4700    13.4080    0.4825   0.6294   -19.8092    32.7492
+  h=22           8.2599    13.6937    0.6032   0.5464   -18.5792    35.0991
+  h=23           4.6435    13.7332    0.3381   0.7353   -22.2730    31.5600
+  h=24           5.8001    13.9300    0.4164   0.6771   -21.5023    33.1024
+  h=25           4.7933    15.1501    0.3164   0.7517   -24.9003    34.4869</code></pre><pre><code class="language-julia hljs">plot_result(r; title=&quot;Democracy -&gt; GDP (LP-DiD, DDCG)&quot;)</code></pre><p>The baseline LP-DiD specification estimates the causal effect of democratic transitions on log GDP per capita using a switching indicator and clean control samples. The pooled post-treatment estimate averages the dynamic treatment effect over horizons 0 through 25, providing a single summary measure of democracy&#39;s long-run GDP impact. The pre-treatment pooled estimate serves as a placebo –- a value near zero supports the parallel trends assumption. The PMD + IPW robustness check uses pre-mean differencing to reduce noise from a single baseline period and inverse probability weighting to ensure equal representation across time periods, confirming that the baseline result is not driven by compositional changes in the sample.</p><hr/><h2 id="Common-Pitfalls"><a class="docs-heading-anchor" href="#Common-Pitfalls">Common Pitfalls</a><a id="Common-Pitfalls-1"></a><a class="docs-heading-anchor-permalink" href="#Common-Pitfalls" title="Permalink"></a></h2><ol><li><p><strong>Treatment column format</strong>: <code>estimate_lp_did</code> auto-detects binary (0/1) vs timing (year values). Mixing formats (e.g., 0, 1, 2019) causes misclassification. Ensure the treatment column is consistently encoded.</p></li><li><p><strong>Small effective samples at long horizons</strong>: CCS restrictions reduce the sample at each horizon as more units switch treatment status. Monitor <code>r.nobs_per_horizon</code> and reduce <span>$H$</span> if counts drop below approximately 30 observations.</p></li><li><p><strong>Combining <code>notyet</code> and <code>nevertreated</code></strong>: These are mutually exclusive. <code>notyet</code> uses units not yet treated at <span>$t+h$</span> as controls; <code>nevertreated</code> uses only units with <span>$G_i = 0$</span>. Specifying both raises an error.</p></li><li><p><strong><code>oneoff</code> requires <code>nonabsorbing</code></strong>: One-off treatment is a special case of non-absorbing treatment where the treatment indicator lasts exactly one period. Calling <code>oneoff=true</code> without setting <code>nonabsorbing</code> raises an error.</p></li><li><p><strong>PMD with short pre-treatment windows</strong>: <code>pmd=:max</code> uses all available pre-treatment data. With few pre-treatment periods, the average baseline may be noisy. Consider <code>pmd=k</code> with a small <span>$k$</span> to use a fixed window.</p></li></ol><hr/><h2 id="References"><a class="docs-heading-anchor" href="#References">References</a><a id="References-1"></a><a class="docs-heading-anchor-permalink" href="#References" title="Permalink"></a></h2><ul><li><p>Acemoglu, Daron, Suresh Naidu, Pascual Restrepo, and James A. Robinson. 2019. &quot;Democracy Does Cause Growth.&quot; <em>Journal of Political Economy</em> 127 (1): 47–100. <a href="https://doi.org/10.1086/700936">DOI</a></p></li><li><p>Cameron, A. Colin, Jonah B. Gelbach, and Douglas L. Miller. 2011. &quot;Robust Inference with Multiway Clustering.&quot; <em>Journal of Business &amp; Economic Statistics</em> 29 (2): 238–249. <a href="https://doi.org/10.1198/jbes.2010.07136">DOI</a></p></li><li><p>Dube, Arindrajit, Daniele Girardi, Oscar Jorda, and Alan M. Taylor. 2025. &quot;A Local Projections Approach to Difference-in-Differences.&quot; <em>Journal of Applied Econometrics</em>. <a href="https://doi.org/10.1002/jae.3117">DOI</a></p></li><li><p>Jorda, Oscar. 2005. &quot;Estimation and Inference of Impulse Responses by Local Projections.&quot; <em>American Economic Review</em> 95 (1): 161–182. <a href="https://doi.org/10.1257/0002828053828518">DOI</a></p></li><li><p>Rambachan, Ashesh, and Jonathan Roth. 2023. &quot;A More Credible Approach to Parallel Trends.&quot; <em>Review of Economic Studies</em> 90 (5): 2555–2591. <a href="https://doi.org/10.1093/restud/rdad018">DOI</a></p></li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../did/">« Difference-in-Differences</a><a class="docs-footer-nextpage" href="../gmm/">GMM &amp; SMM »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Tuesday 14 July 2026 19:06">Tuesday 14 July 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

@@ -1,15 +1,14 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Data Management · MacroEconometricModels.jl</title><meta name="title" content="Data Management · MacroEconometricModels.jl"/><meta property="og:title" content="Data Management · MacroEconometricModels.jl"/><meta property="twitter:title" content="Data Management · MacroEconometricModels.jl"/><meta name="description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:description" content="Documentation for MacroEconometricModels.jl."/><meta property="twitter:description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:url" content="https://FriedmanJP.github.io/MacroEconometricModels.jl/data/"/><meta property="twitter:url" content="https://FriedmanJP.github.io/MacroEconometricModels.jl/data/"/><link rel="canonical" href="https://FriedmanJP.github.io/MacroEconometricModels.jl/data/"/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script><link href="../assets/custom.css" rel="stylesheet" type="text/css"/><script src="../assets/theme-toggle.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">MacroEconometricModels.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li class="is-active"><a class="tocitem" href>Data Management</a><ul class="internal"><li><a class="tocitem" href="#Quick-Start"><span>Quick Start</span></a></li><li><a class="tocitem" href="#Data-Containers"><span>Data Containers</span></a></li><li><a class="tocitem" href="#Accessors-and-Indexing"><span>Accessors and Indexing</span></a></li><li><a class="tocitem" href="#Visualization"><span>Visualization</span></a></li><li><a class="tocitem" href="#Validation"><span>Validation</span></a></li><li><a class="tocitem" href="#FRED-Transformation-Codes"><span>FRED Transformation Codes</span></a></li><li><a class="tocitem" href="#panel_data_section"><span>Panel Data</span></a></li><li><a class="tocitem" href="#Summary-Statistics"><span>Summary Statistics</span></a></li><li><a class="tocitem" href="#Estimation-Dispatch"><span>Estimation Dispatch</span></a></li><li><a class="tocitem" href="#Filtering"><span>Filtering</span></a></li><li><a class="tocitem" href="#Example-Datasets"><span>Example Datasets</span></a></li><li><a class="tocitem" href="#Complete-Example"><span>Complete Example</span></a></li><li><a class="tocitem" href="#Common-Pitfalls"><span>Common Pitfalls</span></a></li><li><a class="tocitem" href="#References"><span>References</span></a></li></ul></li><li><span class="tocitem">Univariate Models</span><ul><li><a class="tocitem" href="../filters/">Time Series Filters</a></li><li><a class="tocitem" href="../x13/">X-13ARIMA-SEATS</a></li><li><a class="tocitem" href="../spectral/">Spectral Analysis</a></li><li><a class="tocitem" href="../arima/">ARIMA</a></li><li><a class="tocitem" href="../volatility/">Volatility Models</a></li></ul></li><li><span class="tocitem">Multivariate Models</span><ul><li><a class="tocitem" href="../manual/">VAR</a></li><li><a class="tocitem" href="../bayesian/">Bayesian VAR</a></li><li><a class="tocitem" href="../vecm/">VECM</a></li><li><a class="tocitem" href="../lp/">Local Projections</a></li><li><a class="tocitem" href="../factormodels/">Factor Models</a></li><li><a class="tocitem" href="../favar/">FAVAR</a></li></ul></li><li><span class="tocitem">Cross-Sectional Models</span><ul><li><a class="tocitem" href="../regression/">Linear Regression</a></li><li><a class="tocitem" href="../binary_choice/">Binary Choice Models</a></li><li><a class="tocitem" href="../ordered_multinomial/">Ordered &amp; Multinomial</a></li></ul></li><li><span class="tocitem">Panel Models</span><ul><li><a class="tocitem" href="../pvar/">Panel VAR</a></li><li><a class="tocitem" href="../panel_reg/">Panel Regression</a></li><li><a class="tocitem" href="../did/">Difference-in-Differences</a></li><li><a class="tocitem" href="../event_study/">Event Study LP</a></li></ul></li><li><span class="tocitem">DSGE Models</span><ul><li><a class="tocitem" href="../dsge/">Overview</a></li><li><a class="tocitem" href="../dsge_linear/">Linear Solvers</a></li><li><a class="tocitem" href="../dsge_nonlinear/">Nonlinear Methods</a></li><li><a class="tocitem" href="../dsge_constraints/">Constraints</a></li><li><a class="tocitem" href="../dsge_estimation/">Estimation</a></li><li><a class="tocitem" href="../dsge_hd/">Historical Decomposition</a></li><li><a class="tocitem" href="../dsge_ha/">Heterogeneous Agents</a></li><li><a class="tocitem" href="../dsge_olg/">Overlapping Generations</a></li><li><a class="tocitem" href="../dsge_continuous/">Continuous Time</a></li></ul></li><li><span class="tocitem">Input-Output Analysis</span><ul><li><a class="tocitem" href="../io/">Overview</a></li><li><a class="tocitem" href="../io_classical/">Classical Analysis</a></li><li><a class="tocitem" href="../io_environmental/">Environmental Extensions</a></li><li><a class="tocitem" href="../io_baqaee_farhi/">Baqaee &amp; Farhi (2019)</a></li><li><a class="tocitem" href="../io_download/">Downloading Data</a></li></ul></li><li><span class="tocitem">Innovation Accounting</span><ul><li><a class="tocitem" href="../innovation_accounting/">Overview</a></li><li><a class="tocitem" href="../ia_irf/">Impulse Responses</a></li><li><a class="tocitem" href="../ia_fevd/">Variance Decomposition</a></li><li><a class="tocitem" href="../ia_hd/">Historical Decomposition</a></li></ul></li><li><a class="tocitem" href="../structural_identification/">Structural Identification</a></li><li><span class="tocitem">Statistical Identification</span><ul><li><a class="tocitem" href="../nongaussian/">Overview</a></li><li><a class="tocitem" href="../id_nongaussian/">Non-Gaussian Methods</a></li><li><a class="tocitem" href="../id_heteroskedastic/">Heteroskedasticity</a></li><li><a class="tocitem" href="../id_testing/">Testing</a></li></ul></li><li><span class="tocitem">Nowcasting</span><ul><li><a class="tocitem" href="../nowcast/">Overview</a></li><li><a class="tocitem" href="../nowcast_dfm/">DFM Nowcasting</a></li><li><a class="tocitem" href="../nowcast_bvar/">BVAR Nowcasting</a></li><li><a class="tocitem" href="../nowcast_bridge/">Bridge Equations</a></li><li><a class="tocitem" href="../nowcast_news/">News Decomposition</a></li></ul></li><li><span class="tocitem">Hypothesis Tests</span><ul><li><a class="tocitem" href="../tests/">Overview</a></li><li><a class="tocitem" href="../tests_unitroot/">Unit Root &amp; Cointegration</a></li><li><a class="tocitem" href="../tests_unitroot_advanced/">Advanced Unit Root</a></li><li><a class="tocitem" href="../tests_breaks/">Structural Breaks</a></li><li><a class="tocitem" href="../tests_panel/">Panel Tests</a></li><li><a class="tocitem" href="../tests_diagnostics/">Model Diagnostics</a></li></ul></li><li><a class="tocitem" href="../plotting/">Visualization</a></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../api/">Overview</a></li><li><a class="tocitem" href="../api_types/">Types</a></li><li><a class="tocitem" href="../api_functions/">Functions</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Data Management</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Data Management</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/FriedmanJP/MacroEconometricModels.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/FriedmanJP/MacroEconometricModels.jl/blob/main/docs/src/data.md#" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="data_page"><a class="docs-heading-anchor" href="#data_page">Data Management</a><a id="data_page-1"></a><a class="docs-heading-anchor-permalink" href="#data_page" title="Permalink"></a></h1><p><strong>MacroEconometricModels.jl</strong> provides typed data containers that track metadata, validate inputs, transform series to stationarity, and dispatch directly to estimation functions. The data module eliminates manual bookkeeping between loading raw data and fitting models.</p><ul><li><strong>Containers</strong>: <code>TimeSeriesData</code>, <code>PanelData</code>, and <code>CrossSectionData</code> wrap numeric matrices with variable names, frequency, transformation codes, and bibliographic references</li><li><strong>Built-in Datasets</strong>: Five curated datasets –- FRED-MD, FRED-QD, Penn World Table, DDCG democracy panel, and Callaway &amp; Sant&#39;Anna minimum wage panel –- load with a single call</li><li><strong>Transformations</strong>: FRED transformation codes 1–7 convert raw levels to stationary series; <code>inverse_tcode</code> recovers original levels</li><li><strong>Validation</strong>: <code>diagnose</code> detects NaN, Inf, and constant columns; <code>fix</code> repairs them via listwise deletion, interpolation, or mean imputation</li><li><strong>Filtering</strong>: <code>apply_filter</code> applies HP, Hamilton, BN, BK, or Boosted HP filters per-variable to extract trend or cycle components</li><li><strong>Panel Operations</strong>: Stata-style <code>xtset</code> for panel construction, within-group lag/lead/diff, group extraction, and balance detection</li><li><strong>Estimation Dispatch</strong>: All estimators accept <code>TimeSeriesData</code> and <code>PanelData</code> directly –- no manual conversion required</li></ul><h2 id="Quick-Start"><a class="docs-heading-anchor" href="#Quick-Start">Quick Start</a><a id="Quick-Start-1"></a><a class="docs-heading-anchor-permalink" href="#Quick-Start" title="Permalink"></a></h2><p><strong>Recipe 1: Load FRED-MD and explore</strong></p><pre><code class="language-julia hljs"># Load the January 2026 vintage (126 variables, 804 months)
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Data Management · MacroEconometricModels.jl</title><meta name="title" content="Data Management · MacroEconometricModels.jl"/><meta property="og:title" content="Data Management · MacroEconometricModels.jl"/><meta property="twitter:title" content="Data Management · MacroEconometricModels.jl"/><meta name="description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:description" content="Documentation for MacroEconometricModels.jl."/><meta property="twitter:description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:url" content="https://FriedmanJP.github.io/MacroEconometricModels.jl/data/"/><meta property="twitter:url" content="https://FriedmanJP.github.io/MacroEconometricModels.jl/data/"/><link rel="canonical" href="https://FriedmanJP.github.io/MacroEconometricModels.jl/data/"/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script><link href="../assets/custom.css" rel="stylesheet" type="text/css"/><script src="../assets/theme-toggle.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">MacroEconometricModels.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><span class="tocitem">Getting Started</span><ul><li><a class="tocitem" href="../getting_started/">Installation &amp; First Model</a></li><li><a class="tocitem" href="../method_guide/">Choosing a Method</a></li><li class="is-active"><a class="tocitem" href>Data Management</a><ul class="internal"><li><a class="tocitem" href="#Quick-Start"><span>Quick Start</span></a></li><li><a class="tocitem" href="#Data-Containers"><span>Data Containers</span></a></li><li><a class="tocitem" href="#Accessors-and-Indexing"><span>Accessors and Indexing</span></a></li><li><a class="tocitem" href="#Visualization"><span>Visualization</span></a></li><li><a class="tocitem" href="#Validation"><span>Validation</span></a></li><li><a class="tocitem" href="#FRED-Transformation-Codes"><span>FRED Transformation Codes</span></a></li><li><a class="tocitem" href="#panel_data_section"><span>Panel Data</span></a></li><li><a class="tocitem" href="#Summary-Statistics"><span>Summary Statistics</span></a></li><li><a class="tocitem" href="#Estimation-Dispatch"><span>Estimation Dispatch</span></a></li><li><a class="tocitem" href="#Filtering"><span>Filtering</span></a></li><li><a class="tocitem" href="#Example-Datasets"><span>Example Datasets</span></a></li><li><a class="tocitem" href="#Complete-Example"><span>Complete Example</span></a></li><li><a class="tocitem" href="#Common-Pitfalls"><span>Common Pitfalls</span></a></li><li><a class="tocitem" href="#References"><span>References</span></a></li></ul></li></ul></li><li><span class="tocitem">Univariate Models</span><ul><li><a class="tocitem" href="../filters/">Time Series Filters</a></li><li><a class="tocitem" href="../x13/">X-13ARIMA-SEATS</a></li><li><a class="tocitem" href="../spectral/">Spectral Analysis</a></li><li><a class="tocitem" href="../arima/">ARIMA</a></li><li><a class="tocitem" href="../volatility/">Volatility Models</a></li></ul></li><li><span class="tocitem">Multivariate Models</span><ul><li><a class="tocitem" href="../manual/">VAR</a></li><li><a class="tocitem" href="../bayesian/">Bayesian VAR</a></li><li><a class="tocitem" href="../vecm/">VECM</a></li><li><a class="tocitem" href="../lp/">Local Projections</a></li><li><a class="tocitem" href="../factormodels/">Factor Models</a></li><li><a class="tocitem" href="../favar/">FAVAR</a></li></ul></li><li><span class="tocitem">Cross-Section &amp; Panel</span><ul><li><a class="tocitem" href="../regression/">Linear Regression</a></li><li><a class="tocitem" href="../binary_choice/">Binary Choice Models</a></li><li><a class="tocitem" href="../ordered_multinomial/">Ordered &amp; Multinomial</a></li><li><a class="tocitem" href="../panel_reg/">Panel Regression</a></li><li><a class="tocitem" href="../pvar/">Panel VAR</a></li><li><a class="tocitem" href="../did/">Difference-in-Differences</a></li><li><a class="tocitem" href="../event_study/">Event Study LP</a></li></ul></li><li><a class="tocitem" href="../gmm/">GMM &amp; SMM</a></li><li><span class="tocitem">DSGE Models</span><ul><li><a class="tocitem" href="../dsge/">Overview</a></li><li><a class="tocitem" href="../dsge_linear/">Linear Solvers</a></li><li><a class="tocitem" href="../dsge_nonlinear/">Nonlinear Methods</a></li><li><a class="tocitem" href="../dsge_constraints/">Constraints</a></li><li><a class="tocitem" href="../dsge_estimation/">Estimation</a></li><li><a class="tocitem" href="../dsge_hd/">Historical Decomposition</a></li><li><a class="tocitem" href="../dsge_ha/">Heterogeneous Agents</a></li><li><a class="tocitem" href="../dsge_olg/">Overlapping Generations</a></li><li><a class="tocitem" href="../dsge_continuous/">Continuous Time</a></li></ul></li><li><span class="tocitem">Input-Output Analysis</span><ul><li><a class="tocitem" href="../io/">Overview</a></li><li><a class="tocitem" href="../io_classical/">Classical Analysis</a></li><li><a class="tocitem" href="../io_environmental/">Environmental Extensions</a></li><li><a class="tocitem" href="../io_baqaee_farhi/">Baqaee &amp; Farhi (2019)</a></li><li><a class="tocitem" href="../io_download/">Downloading Data</a></li></ul></li><li><span class="tocitem">Structural Analysis</span><ul><li><a class="tocitem" href="../structural_identification/">Structural Identification</a></li><li><input class="collapse-toggle" id="menuitem-9-2" type="checkbox"/><label class="tocitem" for="menuitem-9-2"><span class="docs-label">Statistical Identification</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../nongaussian/">Overview</a></li><li><a class="tocitem" href="../id_nongaussian/">Non-Gaussian Methods</a></li><li><a class="tocitem" href="../id_heteroskedastic/">Heteroskedasticity</a></li><li><a class="tocitem" href="../id_testing/">Testing</a></li></ul></li><li><input class="collapse-toggle" id="menuitem-9-3" type="checkbox"/><label class="tocitem" for="menuitem-9-3"><span class="docs-label">Innovation Accounting</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../innovation_accounting/">Overview</a></li><li><a class="tocitem" href="../ia_irf/">Impulse Responses</a></li><li><a class="tocitem" href="../ia_fevd/">Variance Decomposition</a></li><li><a class="tocitem" href="../ia_hd/">Historical Decomposition</a></li></ul></li></ul></li><li><span class="tocitem">Nowcasting</span><ul><li><a class="tocitem" href="../nowcast/">Overview</a></li><li><a class="tocitem" href="../nowcast_dfm/">DFM Nowcasting</a></li><li><a class="tocitem" href="../nowcast_bvar/">BVAR Nowcasting</a></li><li><a class="tocitem" href="../nowcast_bridge/">Bridge Equations</a></li><li><a class="tocitem" href="../nowcast_news/">News Decomposition</a></li></ul></li><li><span class="tocitem">Hypothesis Tests</span><ul><li><a class="tocitem" href="../tests/">Overview</a></li><li><a class="tocitem" href="../tests_unitroot/">Unit Root &amp; Cointegration</a></li><li><a class="tocitem" href="../tests_unitroot_advanced/">Advanced Unit Root</a></li><li><a class="tocitem" href="../tests_breaks/">Structural Breaks</a></li><li><a class="tocitem" href="../tests_panel/">Panel Tests</a></li><li><a class="tocitem" href="../tests_diagnostics/">Model Diagnostics</a></li></ul></li><li><a class="tocitem" href="../plotting/">Visualization</a></li><li><span class="tocitem">Project</span><ul><li><a class="tocitem" href="../notation/">Notation</a></li><li><a class="tocitem" href="../bibliography/">Bibliography</a></li><li><a class="tocitem" href="../changelog/">Changelog</a></li><li><a class="tocitem" href="../citation/">How to Cite</a></li></ul></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../api/">Overview</a></li><li><a class="tocitem" href="../api/data/">Data Management</a></li><li><a class="tocitem" href="../api/univariate/">Univariate Models</a></li><li><a class="tocitem" href="../api/multivariate/">Multivariate Models</a></li><li><a class="tocitem" href="../api/cross_section/">Cross-Sectional Models</a></li><li><a class="tocitem" href="../api/panel/">Panel Models</a></li><li><a class="tocitem" href="../api/dsge/">DSGE Models</a></li><li><a class="tocitem" href="../api/structural/">Structural &amp; Statistical Identification</a></li><li><a class="tocitem" href="../api/gmm/">GMM &amp; SMM</a></li><li><a class="tocitem" href="../api/tests/">Hypothesis Tests</a></li><li><a class="tocitem" href="../api/nowcasting/">Nowcasting</a></li><li><a class="tocitem" href="../api/visualization/">Visualization</a></li><li><a class="tocitem" href="../api/utilities/">Utilities &amp; Display</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Getting Started</a></li><li class="is-active"><a href>Data Management</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Data Management</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/FriedmanJP/MacroEconometricModels.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/FriedmanJP/MacroEconometricModels.jl/blob/main/docs/src/data.md#" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="data_page"><a class="docs-heading-anchor" href="#data_page">Data Management</a><a id="data_page-1"></a><a class="docs-heading-anchor-permalink" href="#data_page" title="Permalink"></a></h1><p><strong>MacroEconometricModels.jl</strong> provides typed data containers that track metadata, validate inputs, transform series to stationarity, and dispatch directly to estimation functions. The data module eliminates manual bookkeeping between loading raw data and fitting models.</p><ul><li><strong>Containers</strong>: <code>TimeSeriesData</code>, <code>PanelData</code>, and <code>CrossSectionData</code> wrap numeric matrices with variable names, frequency, transformation codes, and bibliographic references</li><li><strong>Built-in Datasets</strong>: Five curated datasets –- FRED-MD, FRED-QD, Penn World Table, DDCG democracy panel, and Callaway &amp; Sant&#39;Anna minimum wage panel –- load with a single call</li><li><strong>Transformations</strong>: FRED transformation codes 1–7 convert raw levels to stationary series; <code>inverse_tcode</code> recovers original levels</li><li><strong>Validation</strong>: <code>diagnose</code> detects NaN, Inf, and constant columns; <code>fix</code> repairs them via listwise deletion, interpolation, or mean imputation</li><li><strong>Filtering</strong>: <code>apply_filter</code> applies HP, Hamilton, BN, BK, or Boosted HP filters per-variable to extract trend or cycle components</li><li><strong>Panel Operations</strong>: Stata-style <code>xtset</code> for panel construction, within-group lag/lead/diff, group extraction, and balance detection</li><li><strong>Estimation Dispatch</strong>: All estimators accept <code>TimeSeriesData</code> and <code>PanelData</code> directly –- no manual conversion required</li></ul><h2 id="Quick-Start"><a class="docs-heading-anchor" href="#Quick-Start">Quick Start</a><a id="Quick-Start-1"></a><a class="docs-heading-anchor-permalink" href="#Quick-Start" title="Permalink"></a></h2><p><strong>Recipe 1: Load FRED-MD and explore</strong></p><pre><code class="language-julia hljs"># Load the January 2026 vintage (126 variables, 804 months)
 fred = load_example(:fred_md)
 describe_data(fred[:, [&quot;INDPRO&quot;, &quot;CPIAUCSL&quot;, &quot;FEDFUNDS&quot;]])</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Summary Statistics — Monthly (804 × 3)
 
- <span class="sgr1"> Variable </span> <span class="sgr1">   N </span> <span class="sgr1">    Mean </span> <span class="sgr1">     Std </span> <span class="sgr1">     Min </span> <span class="sgr1">     P25 </span> <span class="sgr1">  Median </span> <span class="sgr1">     P75 </span>  ⋯
+ <span class="sgr1"> Variable </span> <span class="sgr1">   N </span> <span class="sgr1">    Mean </span> <span class="sgr1">     Std </span> <span class="sgr1">     Min </span> <span class="sgr1">     P25 </span> <span class="sgr1">  Median </span> <span class="sgr1">     P75 </span> <span class="sgr1">    Max </span> <span class="sgr1">    Skew </span> <span class="sgr1">    Kurt </span>
 
-  INDPRO     804   68.1642   26.8467   21.9998   45.2183   63.2488   96.4869   ⋯
-  CPIAUCSL   803   141.404   85.7799     28.97     54.75     140.1   215.327   ⋯
-  FEDFUNDS   804    4.7683    3.5945      0.05       2.0     4.645      6.44   ⋯
+  INDPRO     804   68.1642   26.8467   21.9998   45.2183   63.2488   96.4869    104.1   -0.1113   -1.4673
+  CPIAUCSL   803   141.404   85.7799     28.97     54.75     140.1   215.327   326.03    0.2502   -1.0909
+  FEDFUNDS   804    4.7683    3.5945      0.05       2.0     4.645      6.44     19.1    0.9906    1.5189
 
-<span class="sgr36">                                                               3 columns omitted</span>
 </code></pre><p><strong>Recipe 2: Transform to stationarity and clean</strong></p><pre><code class="language-julia hljs">sub = fred[:, [&quot;INDPRO&quot;, &quot;CPIAUCSL&quot;, &quot;FEDFUNDS&quot;]]
 
 # Apply recommended FRED transformation codes
@@ -19,13 +18,12 @@ d = apply_tcode(sub)
 d_clean = fix(d)
 describe_data(d_clean)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Summary Statistics — Monthly (799 × 3)
 
- <span class="sgr1"> Variable </span> <span class="sgr1">   N </span> <span class="sgr1">   Mean </span> <span class="sgr1">    Std </span> <span class="sgr1">     Min </span> <span class="sgr1">     P25 </span> <span class="sgr1"> Median </span> <span class="sgr1">    P75 </span> <span class="sgr1">    </span> ⋯
+ <span class="sgr1"> Variable </span> <span class="sgr1">   N </span> <span class="sgr1">   Mean </span> <span class="sgr1">    Std </span> <span class="sgr1">     Min </span> <span class="sgr1">     P25 </span> <span class="sgr1"> Median </span> <span class="sgr1">    P75 </span> <span class="sgr1">    Max </span> <span class="sgr1">    Skew </span> <span class="sgr1">    Kurt </span>
 
-  INDPRO     799   0.0019   0.0099   -0.1414    -0.002   0.0023   0.0064   0.0 ⋯
-  CPIAUCSL   799      0.0   0.0027   -0.0135   -0.0014     -0.0   0.0015   0.0 ⋯
-  FEDFUNDS   799   0.0022    0.493     -6.63     -0.08      0.0     0.12     3 ⋯
+  INDPRO     799   0.0019   0.0099   -0.1414    -0.002   0.0023   0.0064   0.0635   -3.7267   59.0297
+  CPIAUCSL   799      0.0   0.0027   -0.0135   -0.0014     -0.0   0.0015   0.0179   -0.0856    4.9838
+  FEDFUNDS   799   0.0022    0.493     -6.63     -0.08      0.0     0.12     3.06   -2.4118   50.8508
 
-<span class="sgr36">                                                               3 columns omitted</span>
 </code></pre><p><strong>Recipe 3: Estimate directly from a data container</strong></p><pre><code class="language-julia hljs">d = fix(apply_tcode(fred[:, [&quot;INDPRO&quot;, &quot;CPIAUCSL&quot;, &quot;FEDFUNDS&quot;]]))
 
 # No manual to_matrix() needed --- dispatch handles it
@@ -45,95 +43,86 @@ report(model)</code></pre><pre class="documenter-example-output"><code class="no
 
   INDPRO         7   0.0093   0.1069    0.1001   15.758
   CPIAUCSL       7   0.0025   0.1511    0.1447   23.439
-  FEDFUNDS       7    0.442   0.1966    0.1905   32.225
+  FEDFUNDS       7   0.4420   0.1966    0.1905   32.225
 
-                                Equation: INDPRO
+                                 Equation: INDPRO
 
-                  Coef.   Std.Err.         t    P&gt;|t|      [95%       CI]      ⋯
+                  Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
 
-  const          0.0015     0.0003    4.3038   &lt;0.001    0.0008    0.0021   ** ⋯
-  INDPRO.L1      0.2765     0.0358    7.7234   &lt;0.001    0.2062    0.3468   ** ⋯
-  CPIAUCSL.L1    0.4064     0.1283    3.1676   0.0016    0.1546    0.6583   ** ⋯
-  FEDFUNDS.L1    0.0019     0.0007    2.5608   0.0106    0.0004    0.0034   ** ⋯
-  INDPRO.L2     -0.0723     0.0356   -2.0295   0.0427   -0.1423   -0.0024   ** ⋯
-  CPIAUCSL.L2    0.0358     0.1286    0.2782   0.7809   -0.2167    0.2883      ⋯
-  FEDFUNDS.L2    0.0001     0.0007    0.1808   0.8566   -0.0013    0.0016      ⋯
+  (Intercept)    0.0015     0.0003    4.3038   &lt;0.001     0.0008     0.0021   ***
+  INDPRO.L1      0.2765     0.0358    7.7234   &lt;0.001     0.2062     0.3468   ***
+  CPIAUCSL.L1    0.4064     0.1283    3.1676   0.0016     0.1546     0.6583   ***
+  FEDFUNDS.L1    0.0019     0.0007    2.5608   0.0106     0.0004     0.0034   **
+  INDPRO.L2     -0.0723     0.0356   -2.0295   0.0427    -0.1423    -0.0024   **
+  CPIAUCSL.L2    0.0358     0.1286    0.2782   0.7809    -0.2167     0.2883
+  FEDFUNDS.L2    0.0001     0.0007    0.1808   0.8566    -0.0013     0.0016
 
-                                                                1 column omitted
-                               Equation: CPIAUCSL
+                                 Equation: CPIAUCSL
 
-                  Coef.   Std.Err.          t    P&gt;|t|      [95%       CI]     ⋯
+                   Coef.   Std.Err.          t    P&gt;|t|   CI lower   CI upper
 
-  const             0.0     0.0001     0.3534   0.7239   -0.0001    0.0002     ⋯
-  INDPRO.L1     -0.0039     0.0096    -0.4017    0.688   -0.0227     0.015     ⋯
-  CPIAUCSL.L1   -0.3621     0.0344   -10.5322   &lt;0.001   -0.4296   -0.2946   * ⋯
-  FEDFUNDS.L1    0.0006     0.0002     3.2433   0.0012    0.0003     0.001   * ⋯
-  INDPRO.L2     -0.0106     0.0096     -1.114   0.2656   -0.0294    0.0081     ⋯
-  CPIAUCSL.L2   -0.2553     0.0345    -7.4064   &lt;0.001    -0.323   -0.1877   * ⋯
-  FEDFUNDS.L2    0.0002     0.0002     0.7895     0.43   -0.0002    0.0005     ⋯
+  (Intercept)   3.22e-05     0.0001     0.3534   0.7239    -0.0001     0.0002
+  INDPRO.L1      -0.0039     0.0096    -0.4017    0.688    -0.0227     0.0150
+  CPIAUCSL.L1    -0.3621     0.0344   -10.5322   &lt;0.001    -0.4296    -0.2946   ***
+  FEDFUNDS.L1     0.0006     0.0002     3.2433   0.0012     0.0003     0.0010   ***
+  INDPRO.L2      -0.0106     0.0096    -1.1140   0.2656    -0.0294     0.0081
+  CPIAUCSL.L2    -0.2553     0.0345    -7.4064   &lt;0.001    -0.3230    -0.1877   ***
+  FEDFUNDS.L2     0.0002     0.0002     0.7895     0.43    -0.0002     0.0005
 
-                                                                1 column omitted
-                               Equation: FEDFUNDS
+                                Equation: FEDFUNDS
 
-                  Coef.   Std.Err.         t    P&gt;|t|       [95%       CI]     ⋯
+                  Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
 
-  const         -0.0147     0.0161   -0.9087   0.3638    -0.0463     0.017     ⋯
-  INDPRO.L1      4.6257     1.6968    2.7262   0.0065      1.295    7.9564   * ⋯
-  CPIAUCSL.L1   11.5841     6.0806    1.9051   0.0571    -0.3518   23.5201   * ⋯
-  FEDFUNDS.L1    0.4293     0.0352   12.2084   &lt;0.001     0.3603    0.4983   * ⋯
-  INDPRO.L2      3.7478     1.6893    2.2186   0.0268     0.4318    7.0638   * ⋯
-  CPIAUCSL.L2   -2.7653     6.0964   -0.4536   0.6503   -14.7324    9.2019     ⋯
-  FEDFUNDS.L2    -0.188     0.0351   -5.3499   &lt;0.001     -0.257    -0.119   * ⋯
+  (Intercept)   -0.0147     0.0161   -0.9087   0.3638    -0.0463     0.0170
+  INDPRO.L1      4.6257     1.6968    2.7262   0.0065     1.2950     7.9564   ***
+  CPIAUCSL.L1   11.5841     6.0806    1.9051   0.0571    -0.3518    23.5201   *
+  FEDFUNDS.L1    0.4293     0.0352   12.2084   &lt;0.001     0.3603     0.4983   ***
+  INDPRO.L2      3.7478     1.6893    2.2186   0.0268     0.4318     7.0638   **
+  CPIAUCSL.L2   -2.7653     6.0964   -0.4536   0.6503   -14.7324     9.2019
+  FEDFUNDS.L2   -0.1880     0.0351   -5.3499   &lt;0.001    -0.2570    -0.1190   ***
 
-                                                                1 column omitted
-    Information Criteria
+     Information Criteria
 
-  Criterion           Value
+  Criterion             Value
 
-  Log-likelihood    5773.22
-  AIC              -22.9835
-  BIC              -22.9423
-  HQIC             -22.9677
+  Log-likelihood    5773.2237
+  AIC (per obs.)     -22.9835
+  BIC (per obs.)     -22.9423
+  HQIC (per obs.)    -22.9677
 
-          Residual Covariance (Σ)
+           Residual Covariance (Σ)
 
-             INDPRO   CPIAUCSL   FEDFUNDS
+               INDPRO   CPIAUCSL   FEDFUNDS
 
-  INDPRO     0.0001        0.0     0.0007
-  CPIAUCSL      0.0        0.0        0.0
-  FEDFUNDS   0.0007        0.0     0.1954
+  INDPRO       0.0001   2.15e-06     0.0007
+  CPIAUCSL   2.15e-06   6.25e-06   4.32e-05
+  FEDFUNDS     0.0007   4.32e-05     0.1954
 
            Residual Correlation
 
              INDPRO   CPIAUCSL   FEDFUNDS
 
-  INDPRO        1.0     0.0921     0.1593
-  CPIAUCSL   0.0921        1.0     0.0391
-  FEDFUNDS   0.1593     0.0391        1.0
+  INDPRO     1.0000     0.0921     0.1593
+  CPIAUCSL   0.0921     1.0000     0.0391
+  FEDFUNDS   0.1593     0.0391     1.0000
 
      Stationarity
 
+  Stationary      Yes
+  Max |λ|      0.4970
 
-
-  Stationary     Yes
-  Max |λ|      0.497
-
-
-
-
-  Significance   *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p><strong>Recipe 4: Panel data with Penn World Table</strong></p><pre><code class="language-julia hljs">pwt = load_example(:pwt)
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p><strong>Recipe 4: Panel data with Penn World Table</strong></p><pre><code class="language-julia hljs">pwt = load_example(:pwt)
 panel_summary(pwt)
 
 # Extract a single country as TimeSeriesData
 usa = group_data(pwt, &quot;USA&quot;)
 describe_data(usa[:, [&quot;rgdpna&quot;, &quot;rconna&quot;]])</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Summary Statistics — Yearly (74 × 2)
 
- <span class="sgr1"> Variable </span> <span class="sgr1">  N </span> <span class="sgr1">      Mean </span> <span class="sgr1">       Std </span> <span class="sgr1">       Min </span> <span class="sgr1">       P25 </span> <span class="sgr1">    Median </span> <span class="sgr1"> </span> ⋯
+ <span class="sgr1"> Variable </span> <span class="sgr1">  N </span> <span class="sgr1">      Mean </span> <span class="sgr1">       Std </span> <span class="sgr1">       Min </span> <span class="sgr1">       P25 </span> <span class="sgr1">    Median </span> <span class="sgr1">       P75 </span> <span class="sgr1">       Max </span> <span class="sgr1">   Skew </span> <span class="sgr1">    Kurt </span>
 
-  rgdpna     74    1.1337e7   6.62238e6   2.70903e6   5.71188e6   9.89913e6    ⋯
-  rconna     74   9.43566e6   5.38916e6   2.35113e6   4.88393e6   8.34801e6    ⋯
+  rgdpna     74    1.1337e7   6.62238e6   2.70903e6   5.71188e6   9.89913e6    1.7466e7   2.49772e7   0.4307   -1.1152
+  rconna     74   9.43566e6   5.38916e6   2.35113e6   4.88393e6   8.34801e6   1.45116e7   2.05537e7   0.4243   -1.1228
 
-<span class="sgr36">                                                               4 columns omitted</span>
 </code></pre><p><strong>Recipe 5: Apply filters to data containers</strong></p><pre><code class="language-julia hljs">d_filt = TimeSeriesData(
     log.(to_matrix(fred[:, [&quot;INDPRO&quot;, &quot;PAYEMS&quot;]]));
     varnames=[&quot;INDPRO&quot;, &quot;PAYEMS&quot;], frequency=Monthly)
@@ -143,12 +132,11 @@ d_filt = fix(d_filt)
 d_cycle = apply_filter(d_filt, :hp; component=:cycle, lambda=129600.0)
 describe_data(d_cycle)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Summary Statistics — Monthly (804 × 2)
 
- <span class="sgr1"> Variable </span> <span class="sgr1">   N </span> <span class="sgr1"> Mean </span> <span class="sgr1">    Std </span> <span class="sgr1">     Min </span> <span class="sgr1">     P25 </span> <span class="sgr1"> Median </span> <span class="sgr1">    P75 </span> <span class="sgr1">    Ma</span> ⋯
+ <span class="sgr1"> Variable </span> <span class="sgr1">   N </span> <span class="sgr1"> Mean </span> <span class="sgr1">    Std </span> <span class="sgr1">     Min </span> <span class="sgr1">     P25 </span> <span class="sgr1"> Median </span> <span class="sgr1">    P75 </span> <span class="sgr1">    Max </span> <span class="sgr1">    Skew </span> <span class="sgr1">   Kurt </span>
 
-  INDPRO     804    0.0   0.0314   -0.1656   -0.0158   0.0027   0.0197    0.07 ⋯
-  PAYEMS     804    0.0   0.0152   -0.1254    -0.009   0.0013   0.0103   0.030 ⋯
+  INDPRO     804    0.0   0.0314   -0.1656   -0.0158   0.0027   0.0197    0.071   -0.8395   1.9867
+  PAYEMS     804    0.0   0.0152   -0.1254    -0.009   0.0013   0.0103   0.0305   -1.5564   8.6597
 
-<span class="sgr36">                                                               3 columns omitted</span>
 </code></pre><p><strong>Recipe 6: Panel lag/lead/diff operations</strong></p><pre><code class="language-julia hljs">ddcg = load_example(:ddcg)
 
 # Stata-style within-group transformations
@@ -243,7 +231,7 @@ diag = diagnose(d_diag)
 diag.is_clean      # false --- NaN rows from differencing
 diag.n_nan         # NaN count per variable
 diag.is_constant   # [false, false, false]
-diag.is_short      # false</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">false</code></pre><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>n_nan</code></td><td style="text-align: right"><code>Vector{Int}</code></td><td style="text-align: right">NaN count per variable</td></tr><tr><td style="text-align: right"><code>n_inf</code></td><td style="text-align: right"><code>Vector{Int}</code></td><td style="text-align: right">Inf count per variable</td></tr><tr><td style="text-align: right"><code>is_constant</code></td><td style="text-align: right"><code>Vector{Bool}</code></td><td style="text-align: right">True if variable has zero variance</td></tr><tr><td style="text-align: right"><code>is_short</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right">True if fewer than 10 observations</td></tr><tr><td style="text-align: right"><code>is_clean</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right">True if no issues detected</td></tr></table><h3 id="Fixing-Issues"><a class="docs-heading-anchor" href="#Fixing-Issues">Fixing Issues</a><a id="Fixing-Issues-1"></a><a class="docs-heading-anchor-permalink" href="#Fixing-Issues" title="Permalink"></a></h3><p><code>fix()</code> returns a clean copy using one of three methods:</p><pre><code class="language-julia hljs"># Drop rows with any NaN/Inf (default)
+diag.is_short      # false</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">false</code></pre><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>n_nan</code></td><td style="text-align: right"><code>Vector{Int}</code></td><td style="text-align: right">NaN count per variable</td></tr><tr><td style="text-align: right"><code>n_inf</code></td><td style="text-align: right"><code>Vector{Int}</code></td><td style="text-align: right">Inf count per variable</td></tr><tr><td style="text-align: right"><code>is_constant</code></td><td style="text-align: right"><code>Vector{Bool}</code></td><td style="text-align: right">True if variable has zero variance</td></tr><tr><td style="text-align: right"><code>is_short</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right">True if fewer than 10 observations</td></tr><tr><td style="text-align: right"><code>is_clean</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right">True if no issues detected</td></tr></table><h3 id="Fixing-Issues"><a class="docs-heading-anchor" href="#Fixing-Issues">Fixing Issues</a><a id="Fixing-Issues-1"></a><a class="docs-heading-anchor-permalink" href="#Fixing-Issues" title="Permalink"></a></h3><p>For row-level control, <a href="../api/data/#MacroEconometricModels.dropna"><code>dropna</code></a> removes every row containing a <code>NaN</code>/<code>Inf</code>, and <a href="../api/data/#MacroEconometricModels.keeprows"><code>keeprows</code></a> subsets a <code>TimeSeriesData</code> to an explicit boolean mask while keeping metadata aligned.</p><p><code>fix()</code> returns a clean copy using one of three methods:</p><pre><code class="language-julia hljs"># Drop rows with any NaN/Inf (default)
 d_clean2 = fix(d_diag; method=:listwise)
 
 # Linear interpolation for interior NaN, forward-fill edges
@@ -312,13 +300,12 @@ ddcg3 = add_panel_diff(ddcg, :dem)   # adds &quot;d_dem&quot; column</code></pre
 isbalanced(pd_bal)   # true</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">true</code></pre><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>method</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:dfm</code></td><td style="text-align: right">Fill method (currently only <code>:dfm</code>)</td></tr><tr><td style="text-align: right"><code>r</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>3</code></td><td style="text-align: right">Number of factors for DFM</td></tr><tr><td style="text-align: right"><code>p</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>2</code></td><td style="text-align: right">VAR lags in DFM factor dynamics</td></tr></table><hr/><h2 id="Summary-Statistics"><a class="docs-heading-anchor" href="#Summary-Statistics">Summary Statistics</a><a id="Summary-Statistics-1"></a><a class="docs-heading-anchor-permalink" href="#Summary-Statistics" title="Permalink"></a></h2><p><code>describe_data()</code> computes per-variable descriptive statistics and displays them via PrettyTables. For <code>PanelData</code>, it additionally prints panel dimensions.</p><pre><code class="language-julia hljs">d_ss = fix(apply_tcode(fred[:, [&quot;INDPRO&quot;, &quot;CPIAUCSL&quot;, &quot;FEDFUNDS&quot;]]))
 s = describe_data(d_ss)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Summary Statistics — Monthly (799 × 3)
 
- <span class="sgr1"> Variable </span> <span class="sgr1">   N </span> <span class="sgr1">   Mean </span> <span class="sgr1">    Std </span> <span class="sgr1">     Min </span> <span class="sgr1">     P25 </span> <span class="sgr1"> Median </span> <span class="sgr1">    P75 </span> <span class="sgr1">    </span> ⋯
+ <span class="sgr1"> Variable </span> <span class="sgr1">   N </span> <span class="sgr1">   Mean </span> <span class="sgr1">    Std </span> <span class="sgr1">     Min </span> <span class="sgr1">     P25 </span> <span class="sgr1"> Median </span> <span class="sgr1">    P75 </span> <span class="sgr1">    Max </span> <span class="sgr1">    Skew </span> <span class="sgr1">    Kurt </span>
 
-  INDPRO     799   0.0019   0.0099   -0.1414    -0.002   0.0023   0.0064   0.0 ⋯
-  CPIAUCSL   799      0.0   0.0027   -0.0135   -0.0014     -0.0   0.0015   0.0 ⋯
-  FEDFUNDS   799   0.0022    0.493     -6.63     -0.08      0.0     0.12     3 ⋯
+  INDPRO     799   0.0019   0.0099   -0.1414    -0.002   0.0023   0.0064   0.0635   -3.7267   59.0297
+  CPIAUCSL   799      0.0   0.0027   -0.0135   -0.0014     -0.0   0.0015   0.0179   -0.0856    4.9838
+  FEDFUNDS   799   0.0022    0.493     -6.63     -0.08      0.0     0.12     3.06   -2.4118   50.8508
 
-<span class="sgr36">                                                               3 columns omitted</span>
 </code></pre><p>The output table shows N, Mean, Std, Min, P25, Median, P75, Max, Skewness, and Kurtosis for each variable. For INDPRO (log first difference), a positive mean indicates trend growth in industrial production. The skewness and excess kurtosis columns reveal departures from normality common in macroeconomic data.</p><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>varnames</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right">Variable names</td></tr><tr><td style="text-align: right"><code>n</code></td><td style="text-align: right"><code>Vector{Int}</code></td><td style="text-align: right">Non-NaN observation count per variable</td></tr><tr><td style="text-align: right"><code>mean</code></td><td style="text-align: right"><code>Vector{Float64}</code></td><td style="text-align: right">Mean of finite values</td></tr><tr><td style="text-align: right"><code>std</code></td><td style="text-align: right"><code>Vector{Float64}</code></td><td style="text-align: right">Standard deviation (sample, divisor <span>$n-1$</span>)</td></tr><tr><td style="text-align: right"><code>min</code></td><td style="text-align: right"><code>Vector{Float64}</code></td><td style="text-align: right">Minimum</td></tr><tr><td style="text-align: right"><code>p25</code></td><td style="text-align: right"><code>Vector{Float64}</code></td><td style="text-align: right">25th percentile</td></tr><tr><td style="text-align: right"><code>median</code></td><td style="text-align: right"><code>Vector{Float64}</code></td><td style="text-align: right">50th percentile</td></tr><tr><td style="text-align: right"><code>p75</code></td><td style="text-align: right"><code>Vector{Float64}</code></td><td style="text-align: right">75th percentile</td></tr><tr><td style="text-align: right"><code>max</code></td><td style="text-align: right"><code>Vector{Float64}</code></td><td style="text-align: right">Maximum</td></tr><tr><td style="text-align: right"><code>skewness</code></td><td style="text-align: right"><code>Vector{Float64}</code></td><td style="text-align: right">Skewness (population / method-of-moments, divisor <span>$n$</span>)</td></tr><tr><td style="text-align: right"><code>kurtosis</code></td><td style="text-align: right"><code>Vector{Float64}</code></td><td style="text-align: right">Excess kurtosis (population / method-of-moments, divisor <span>$n$</span>)</td></tr></table><p>The <code>std</code> column reports the sample standard deviation (divisor <span>$n-1$</span>), while <code>skewness</code> and <code>kurtosis</code> use the population (method-of-moments) convention with the population variance <span>$m_2 = \frac{1}{n}\sum (x_i-\bar x)^2$</span> as the scale, so their numerator and denominator share one divisor: <span>$\text{skew}=m_3/m_2^{3/2}$</span>, <span>$\text{kurt}=m_4/m_2^2-3$</span>.</p><hr/><h2 id="Estimation-Dispatch"><a class="docs-heading-anchor" href="#Estimation-Dispatch">Estimation Dispatch</a><a id="Estimation-Dispatch-1"></a><a class="docs-heading-anchor-permalink" href="#Estimation-Dispatch" title="Permalink"></a></h2><p>All estimation functions accept <code>TimeSeriesData</code> directly via thin dispatch wrappers. This avoids manual conversion and preserves variable names through to the output:</p><pre><code class="language-julia hljs">d_ed = fix(apply_tcode(fred[:, [&quot;INDPRO&quot;, &quot;CPIAUCSL&quot;, &quot;FEDFUNDS&quot;]]))
 
 # Multivariate --- automatically extracts to_matrix(d)
@@ -460,83 +447,75 @@ report(model_ce)</code></pre><pre class="documenter-example-output"><code class=
 
   INDPRO         7   0.0093   0.1069    0.1001   15.758
   CPIAUCSL       7   0.0025   0.1511    0.1447   23.439
-  FEDFUNDS       7    0.442   0.1966    0.1905   32.225
+  FEDFUNDS       7   0.4420   0.1966    0.1905   32.225
 
-                                Equation: INDPRO
+                                 Equation: INDPRO
 
-                  Coef.   Std.Err.         t    P&gt;|t|      [95%       CI]      ⋯
+                  Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
 
-  const          0.0015     0.0003    4.3038   &lt;0.001    0.0008    0.0021   ** ⋯
-  INDPRO.L1      0.2765     0.0358    7.7234   &lt;0.001    0.2062    0.3468   ** ⋯
-  CPIAUCSL.L1    0.4064     0.1283    3.1676   0.0016    0.1546    0.6583   ** ⋯
-  FEDFUNDS.L1    0.0019     0.0007    2.5608   0.0106    0.0004    0.0034   ** ⋯
-  INDPRO.L2     -0.0723     0.0356   -2.0295   0.0427   -0.1423   -0.0024   ** ⋯
-  CPIAUCSL.L2    0.0358     0.1286    0.2782   0.7809   -0.2167    0.2883      ⋯
-  FEDFUNDS.L2    0.0001     0.0007    0.1808   0.8566   -0.0013    0.0016      ⋯
+  (Intercept)    0.0015     0.0003    4.3038   &lt;0.001     0.0008     0.0021   ***
+  INDPRO.L1      0.2765     0.0358    7.7234   &lt;0.001     0.2062     0.3468   ***
+  CPIAUCSL.L1    0.4064     0.1283    3.1676   0.0016     0.1546     0.6583   ***
+  FEDFUNDS.L1    0.0019     0.0007    2.5608   0.0106     0.0004     0.0034   **
+  INDPRO.L2     -0.0723     0.0356   -2.0295   0.0427    -0.1423    -0.0024   **
+  CPIAUCSL.L2    0.0358     0.1286    0.2782   0.7809    -0.2167     0.2883
+  FEDFUNDS.L2    0.0001     0.0007    0.1808   0.8566    -0.0013     0.0016
 
-                                                                1 column omitted
-                               Equation: CPIAUCSL
+                                 Equation: CPIAUCSL
 
-                  Coef.   Std.Err.          t    P&gt;|t|      [95%       CI]     ⋯
+                   Coef.   Std.Err.          t    P&gt;|t|   CI lower   CI upper
 
-  const             0.0     0.0001     0.3534   0.7239   -0.0001    0.0002     ⋯
-  INDPRO.L1     -0.0039     0.0096    -0.4017    0.688   -0.0227     0.015     ⋯
-  CPIAUCSL.L1   -0.3621     0.0344   -10.5322   &lt;0.001   -0.4296   -0.2946   * ⋯
-  FEDFUNDS.L1    0.0006     0.0002     3.2433   0.0012    0.0003     0.001   * ⋯
-  INDPRO.L2     -0.0106     0.0096     -1.114   0.2656   -0.0294    0.0081     ⋯
-  CPIAUCSL.L2   -0.2553     0.0345    -7.4064   &lt;0.001    -0.323   -0.1877   * ⋯
-  FEDFUNDS.L2    0.0002     0.0002     0.7895     0.43   -0.0002    0.0005     ⋯
+  (Intercept)   3.22e-05     0.0001     0.3534   0.7239    -0.0001     0.0002
+  INDPRO.L1      -0.0039     0.0096    -0.4017    0.688    -0.0227     0.0150
+  CPIAUCSL.L1    -0.3621     0.0344   -10.5322   &lt;0.001    -0.4296    -0.2946   ***
+  FEDFUNDS.L1     0.0006     0.0002     3.2433   0.0012     0.0003     0.0010   ***
+  INDPRO.L2      -0.0106     0.0096    -1.1140   0.2656    -0.0294     0.0081
+  CPIAUCSL.L2    -0.2553     0.0345    -7.4064   &lt;0.001    -0.3230    -0.1877   ***
+  FEDFUNDS.L2     0.0002     0.0002     0.7895     0.43    -0.0002     0.0005
 
-                                                                1 column omitted
-                               Equation: FEDFUNDS
+                                Equation: FEDFUNDS
 
-                  Coef.   Std.Err.         t    P&gt;|t|       [95%       CI]     ⋯
+                  Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
 
-  const         -0.0147     0.0161   -0.9087   0.3638    -0.0463     0.017     ⋯
-  INDPRO.L1      4.6257     1.6968    2.7262   0.0065      1.295    7.9564   * ⋯
-  CPIAUCSL.L1   11.5841     6.0806    1.9051   0.0571    -0.3518   23.5201   * ⋯
-  FEDFUNDS.L1    0.4293     0.0352   12.2084   &lt;0.001     0.3603    0.4983   * ⋯
-  INDPRO.L2      3.7478     1.6893    2.2186   0.0268     0.4318    7.0638   * ⋯
-  CPIAUCSL.L2   -2.7653     6.0964   -0.4536   0.6503   -14.7324    9.2019     ⋯
-  FEDFUNDS.L2    -0.188     0.0351   -5.3499   &lt;0.001     -0.257    -0.119   * ⋯
+  (Intercept)   -0.0147     0.0161   -0.9087   0.3638    -0.0463     0.0170
+  INDPRO.L1      4.6257     1.6968    2.7262   0.0065     1.2950     7.9564   ***
+  CPIAUCSL.L1   11.5841     6.0806    1.9051   0.0571    -0.3518    23.5201   *
+  FEDFUNDS.L1    0.4293     0.0352   12.2084   &lt;0.001     0.3603     0.4983   ***
+  INDPRO.L2      3.7478     1.6893    2.2186   0.0268     0.4318     7.0638   **
+  CPIAUCSL.L2   -2.7653     6.0964   -0.4536   0.6503   -14.7324     9.2019
+  FEDFUNDS.L2   -0.1880     0.0351   -5.3499   &lt;0.001    -0.2570    -0.1190   ***
 
-                                                                1 column omitted
-    Information Criteria
+     Information Criteria
 
-  Criterion           Value
+  Criterion             Value
 
-  Log-likelihood    5773.22
-  AIC              -22.9835
-  BIC              -22.9423
-  HQIC             -22.9677
+  Log-likelihood    5773.2237
+  AIC (per obs.)     -22.9835
+  BIC (per obs.)     -22.9423
+  HQIC (per obs.)    -22.9677
 
-          Residual Covariance (Σ)
+           Residual Covariance (Σ)
 
-             INDPRO   CPIAUCSL   FEDFUNDS
+               INDPRO   CPIAUCSL   FEDFUNDS
 
-  INDPRO     0.0001        0.0     0.0007
-  CPIAUCSL      0.0        0.0        0.0
-  FEDFUNDS   0.0007        0.0     0.1954
+  INDPRO       0.0001   2.15e-06     0.0007
+  CPIAUCSL   2.15e-06   6.25e-06   4.32e-05
+  FEDFUNDS     0.0007   4.32e-05     0.1954
 
            Residual Correlation
 
              INDPRO   CPIAUCSL   FEDFUNDS
 
-  INDPRO        1.0     0.0921     0.1593
-  CPIAUCSL   0.0921        1.0     0.0391
-  FEDFUNDS   0.1593     0.0391        1.0
+  INDPRO     1.0000     0.0921     0.1593
+  CPIAUCSL   0.0921     1.0000     0.0391
+  FEDFUNDS   0.1593     0.0391     1.0000
 
      Stationarity
 
+  Stationary      Yes
+  Max |λ|      0.4970
 
-
-  Stationary     Yes
-  Max |λ|      0.497
-
-
-
-
-  Significance   *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><pre><code class="language-julia hljs"># Step 8: Structural analysis --- Cholesky-identified IRFs
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><pre><code class="language-julia hljs"># Step 8: Structural analysis --- Cholesky-identified IRFs
 irfs = irf(model_ce, 20; method=:cholesky)
 plot_result(irfs)</code></pre><iframe src="../assets/plots/irf_freq.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe><pre><code class="language-julia hljs"># Step 9: Panel workflow with Penn World Table
 panel_summary(pwt)
@@ -572,9 +551,9 @@ end</code></pre><pre class="documenter-example-output"><code class="nohighlight 
 
  Hodrick-Prescott Filter
 
-                  Value
+                   Value
 
-  Observations       74
-  Lambda         1600.0
-  Trend mean     14.701
-  Cycle std      0.0404</code></pre><p>The pipeline starts with <code>load_example(:fred_md)</code>, which returns a <code>TimeSeriesData</code> with 126 variables, transformation codes, and descriptions pre-loaded. <code>apply_tcode(sub)</code> applies the per-variable codes stored in <code>tcode</code> (code 5 for INDPRO and CPIAUCSL, code 1 for FEDFUNDS), producing log growth rates for the first two and leaving the federal funds rate in levels. The differencing step introduces NaN in the first two rows, which <code>fix(d)</code> removes via listwise deletion. The cleaned container passes directly to <code>estimate_var</code>, which extracts the data matrix and variable names automatically. The Penn World Table loop demonstrates extracting individual countries from a panel container for univariate analysis.</p><hr/><h2 id="Common-Pitfalls"><a class="docs-heading-anchor" href="#Common-Pitfalls">Common Pitfalls</a><a id="Common-Pitfalls-1"></a><a class="docs-heading-anchor-permalink" href="#Common-Pitfalls" title="Permalink"></a></h2><ol><li><p><strong>NaN from differencing</strong>: <code>apply_tcode</code> with codes 2, 3, 5, 6, or 7 produces NaN in the first 1–2 rows because differencing requires prior values. Always follow <code>apply_tcode</code> with <code>fix(d)</code> or manually drop NaN rows before estimation. Passing data with NaN to <code>estimate_var</code> or other estimators produces invalid results silently.</p></li><li><p><strong>Log of non-positive values</strong>: Codes 4–7 require strictly positive data. If a series contains zeros or negatives, <code>apply_tcode</code> falls back to code 2 (first difference) with a warning. Check <code>d.tcode</code> after transformation to verify which codes were actually applied.</p></li><li><p><strong>Panel vs time series dispatch</strong>: Passing a <code>PanelData</code> to <code>estimate_var</code> does not work –- VAR estimators expect <code>TimeSeriesData</code> or raw matrices. Extract a single group with <code>group_data(pd, &quot;USA&quot;)</code> first, then estimate.</p></li><li><p><strong>Forgetting to filter NaN rows</strong>: <code>diagnose(d).is_clean</code> returns <code>false</code> if any NaN exists. Do not assume <code>apply_tcode</code> produces clean output. The <code>fix</code> step is not optional for downstream estimation.</p></li><li><p><strong>tcode metadata mismatch after subsetting</strong>: When subsetting columns with <code>d[:, [&quot;INDPRO&quot;, &quot;FEDFUNDS&quot;]]</code>, the <code>tcode</code> vector is automatically sliced to match. However, if you construct <code>TimeSeriesData</code> manually from a subset of columns, you must provide the correct <code>tcode</code> vector yourself.</p></li><li><p><strong>Unbalanced panels from filtering</strong>: Applying Hamilton or Baxter-King filters to <code>PanelData</code> via <code>apply_filter</code> trims each group independently. If groups have different time spans, the resulting panel becomes unbalanced even if the input was balanced.</p></li></ol><hr/><h2 id="References"><a class="docs-heading-anchor" href="#References">References</a><a id="References-1"></a><a class="docs-heading-anchor-permalink" href="#References" title="Permalink"></a></h2><ul><li><p>McCracken, M. W., &amp; Ng, S. (2016). FRED-MD: A Monthly Database for Macroeconomic Research. <em>Journal of Business &amp; Economic Statistics</em>, 34(4), 574–589. <a href="https://doi.org/10.1080/07350015.2015.1086655">DOI</a></p></li><li><p>McCracken, M. W., &amp; Ng, S. (2020). FRED-QD: A Quarterly Database for Macroeconomic Research. <em>Federal Reserve Bank of St. Louis Working Paper</em>, 2020-005. <a href="https://doi.org/10.20955/wp.2020.005">DOI</a></p></li><li><p>Feenstra, R. C., Inklaar, R., &amp; Timmer, M. P. (2015). The Next Generation of the Penn World Table. <em>American Economic Review</em>, 105(10), 3150–3182. <a href="https://doi.org/10.1257/aer.20130954">DOI</a></p></li><li><p>Acemoglu, D., Naidu, S., Restrepo, P., &amp; Robinson, J. A. (2019). Democracy Does Cause Growth. <em>Journal of Political Economy</em>, 127(1), 47–100. <a href="https://doi.org/10.1086/700936">DOI</a></p></li><li><p>Callaway, B., &amp; Sant&#39;Anna, P. H. C. (2021). Difference-in-Differences with Multiple Time Periods. <em>Journal of Econometrics</em>, 225(2), 200–230. <a href="https://doi.org/10.1016/j.jeconom.2020.12.001">DOI</a></p></li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« Home</a><a class="docs-footer-nextpage" href="../filters/">Time Series Filters »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Saturday 11 July 2026 23:37">Saturday 11 July 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+  Observations        74
+  Lambda          1600.0
+  Trend mean     14.7010
+  Cycle std       0.0404</code></pre><p>The pipeline starts with <code>load_example(:fred_md)</code>, which returns a <code>TimeSeriesData</code> with 126 variables, transformation codes, and descriptions pre-loaded. <code>apply_tcode(sub)</code> applies the per-variable codes stored in <code>tcode</code> (code 5 for INDPRO and CPIAUCSL, code 1 for FEDFUNDS), producing log growth rates for the first two and leaving the federal funds rate in levels. The differencing step introduces NaN in the first two rows, which <code>fix(d)</code> removes via listwise deletion. The cleaned container passes directly to <code>estimate_var</code>, which extracts the data matrix and variable names automatically. The Penn World Table loop demonstrates extracting individual countries from a panel container for univariate analysis.</p><hr/><h2 id="Common-Pitfalls"><a class="docs-heading-anchor" href="#Common-Pitfalls">Common Pitfalls</a><a id="Common-Pitfalls-1"></a><a class="docs-heading-anchor-permalink" href="#Common-Pitfalls" title="Permalink"></a></h2><ol><li><p><strong>NaN from differencing</strong>: <code>apply_tcode</code> with codes 2, 3, 5, 6, or 7 produces NaN in the first 1–2 rows because differencing requires prior values. Always follow <code>apply_tcode</code> with <code>fix(d)</code> or manually drop NaN rows before estimation. Passing data with NaN to <code>estimate_var</code> or other estimators produces invalid results silently.</p></li><li><p><strong>Log of non-positive values</strong>: Codes 4–7 require strictly positive data. If a series contains zeros or negatives, <code>apply_tcode</code> falls back to code 2 (first difference) with a warning. Check <code>d.tcode</code> after transformation to verify which codes were actually applied.</p></li><li><p><strong>Panel vs time series dispatch</strong>: Passing a <code>PanelData</code> to <code>estimate_var</code> does not work –- VAR estimators expect <code>TimeSeriesData</code> or raw matrices. Extract a single group with <code>group_data(pd, &quot;USA&quot;)</code> first, then estimate.</p></li><li><p><strong>Forgetting to filter NaN rows</strong>: <code>diagnose(d).is_clean</code> returns <code>false</code> if any NaN exists. Do not assume <code>apply_tcode</code> produces clean output. The <code>fix</code> step is not optional for downstream estimation.</p></li><li><p><strong>tcode metadata mismatch after subsetting</strong>: When subsetting columns with <code>d[:, [&quot;INDPRO&quot;, &quot;FEDFUNDS&quot;]]</code>, the <code>tcode</code> vector is automatically sliced to match. However, if you construct <code>TimeSeriesData</code> manually from a subset of columns, you must provide the correct <code>tcode</code> vector yourself.</p></li><li><p><strong>Unbalanced panels from filtering</strong>: Applying Hamilton or Baxter-King filters to <code>PanelData</code> via <code>apply_filter</code> trims each group independently. If groups have different time spans, the resulting panel becomes unbalanced even if the input was balanced.</p></li></ol><hr/><h2 id="References"><a class="docs-heading-anchor" href="#References">References</a><a id="References-1"></a><a class="docs-heading-anchor-permalink" href="#References" title="Permalink"></a></h2><ul><li><p>McCracken, M. W., &amp; Ng, S. (2016). FRED-MD: A Monthly Database for Macroeconomic Research. <em>Journal of Business &amp; Economic Statistics</em>, 34(4), 574–589. <a href="https://doi.org/10.1080/07350015.2015.1086655">DOI</a></p></li><li><p>McCracken, M. W., &amp; Ng, S. (2020). FRED-QD: A Quarterly Database for Macroeconomic Research. <em>Federal Reserve Bank of St. Louis Working Paper</em>, 2020-005. <a href="https://doi.org/10.20955/wp.2020.005">DOI</a></p></li><li><p>Feenstra, R. C., Inklaar, R., &amp; Timmer, M. P. (2015). The Next Generation of the Penn World Table. <em>American Economic Review</em>, 105(10), 3150–3182. <a href="https://doi.org/10.1257/aer.20130954">DOI</a></p></li><li><p>Acemoglu, D., Naidu, S., Restrepo, P., &amp; Robinson, J. A. (2019). Democracy Does Cause Growth. <em>Journal of Political Economy</em>, 127(1), 47–100. <a href="https://doi.org/10.1086/700936">DOI</a></p></li><li><p>Callaway, B., &amp; Sant&#39;Anna, P. H. C. (2021). Difference-in-Differences with Multiple Time Periods. <em>Journal of Econometrics</em>, 225(2), 200–230. <a href="https://doi.org/10.1016/j.jeconom.2020.12.001">DOI</a></p></li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../method_guide/">« Choosing a Method</a><a class="docs-footer-nextpage" href="../filters/">Time Series Filters »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Tuesday 14 July 2026 19:06">Tuesday 14 July 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

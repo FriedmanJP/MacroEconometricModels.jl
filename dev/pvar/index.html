@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Panel VAR · MacroEconometricModels.jl</title><meta name="title" content="Panel VAR · MacroEconometricModels.jl"/><meta property="og:title" content="Panel VAR · MacroEconometricModels.jl"/><meta property="twitter:title" content="Panel VAR · MacroEconometricModels.jl"/><meta name="description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:description" content="Documentation for MacroEconometricModels.jl."/><meta property="twitter:description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:url" content="https://FriedmanJP.github.io/MacroEconometricModels.jl/pvar/"/><meta property="twitter:url" content="https://FriedmanJP.github.io/MacroEconometricModels.jl/pvar/"/><link rel="canonical" href="https://FriedmanJP.github.io/MacroEconometricModels.jl/pvar/"/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script><link href="../assets/custom.css" rel="stylesheet" type="text/css"/><script src="../assets/theme-toggle.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">MacroEconometricModels.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><a class="tocitem" href="../data/">Data Management</a></li><li><span class="tocitem">Univariate Models</span><ul><li><a class="tocitem" href="../filters/">Time Series Filters</a></li><li><a class="tocitem" href="../x13/">X-13ARIMA-SEATS</a></li><li><a class="tocitem" href="../spectral/">Spectral Analysis</a></li><li><a class="tocitem" href="../arima/">ARIMA</a></li><li><a class="tocitem" href="../volatility/">Volatility Models</a></li></ul></li><li><span class="tocitem">Multivariate Models</span><ul><li><a class="tocitem" href="../manual/">VAR</a></li><li><a class="tocitem" href="../bayesian/">Bayesian VAR</a></li><li><a class="tocitem" href="../vecm/">VECM</a></li><li><a class="tocitem" href="../lp/">Local Projections</a></li><li><a class="tocitem" href="../factormodels/">Factor Models</a></li><li><a class="tocitem" href="../favar/">FAVAR</a></li></ul></li><li><span class="tocitem">Cross-Sectional Models</span><ul><li><a class="tocitem" href="../regression/">Linear Regression</a></li><li><a class="tocitem" href="../binary_choice/">Binary Choice Models</a></li><li><a class="tocitem" href="../ordered_multinomial/">Ordered &amp; Multinomial</a></li></ul></li><li><span class="tocitem">Panel Models</span><ul><li class="is-active"><a class="tocitem" href>Panel VAR</a><ul class="internal"><li><a class="tocitem" href="#Quick-Start"><span>Quick Start</span></a></li><li><a class="tocitem" href="#Model-Specification"><span>Model Specification</span></a></li><li><a class="tocitem" href="#Panel-Data-Preparation"><span>Panel Data Preparation</span></a></li><li><a class="tocitem" href="#GMM-Estimation"><span>GMM Estimation</span></a></li><li><a class="tocitem" href="#Fixed-Effects-OLS"><span>Fixed-Effects OLS</span></a></li><li><a class="tocitem" href="#Instrument-Management"><span>Instrument Management</span></a></li><li><a class="tocitem" href="#Structural-Analysis"><span>Structural Analysis</span></a></li><li><a class="tocitem" href="#Bootstrap-Confidence-Intervals"><span>Bootstrap Confidence Intervals</span></a></li><li><a class="tocitem" href="#Specification-Tests"><span>Specification Tests</span></a></li><li><a class="tocitem" href="#Lag-Selection"><span>Lag Selection</span></a></li><li><a class="tocitem" href="#Complete-Example"><span>Complete Example</span></a></li><li><a class="tocitem" href="#Common-Pitfalls"><span>Common Pitfalls</span></a></li><li><a class="tocitem" href="#References"><span>References</span></a></li></ul></li><li><a class="tocitem" href="../panel_reg/">Panel Regression</a></li><li><a class="tocitem" href="../did/">Difference-in-Differences</a></li><li><a class="tocitem" href="../event_study/">Event Study LP</a></li></ul></li><li><span class="tocitem">DSGE Models</span><ul><li><a class="tocitem" href="../dsge/">Overview</a></li><li><a class="tocitem" href="../dsge_linear/">Linear Solvers</a></li><li><a class="tocitem" href="../dsge_nonlinear/">Nonlinear Methods</a></li><li><a class="tocitem" href="../dsge_constraints/">Constraints</a></li><li><a class="tocitem" href="../dsge_estimation/">Estimation</a></li><li><a class="tocitem" href="../dsge_hd/">Historical Decomposition</a></li><li><a class="tocitem" href="../dsge_ha/">Heterogeneous Agents</a></li><li><a class="tocitem" href="../dsge_olg/">Overlapping Generations</a></li><li><a class="tocitem" href="../dsge_continuous/">Continuous Time</a></li></ul></li><li><span class="tocitem">Input-Output Analysis</span><ul><li><a class="tocitem" href="../io/">Overview</a></li><li><a class="tocitem" href="../io_classical/">Classical Analysis</a></li><li><a class="tocitem" href="../io_environmental/">Environmental Extensions</a></li><li><a class="tocitem" href="../io_baqaee_farhi/">Baqaee &amp; Farhi (2019)</a></li><li><a class="tocitem" href="../io_download/">Downloading Data</a></li></ul></li><li><span class="tocitem">Innovation Accounting</span><ul><li><a class="tocitem" href="../innovation_accounting/">Overview</a></li><li><a class="tocitem" href="../ia_irf/">Impulse Responses</a></li><li><a class="tocitem" href="../ia_fevd/">Variance Decomposition</a></li><li><a class="tocitem" href="../ia_hd/">Historical Decomposition</a></li></ul></li><li><a class="tocitem" href="../structural_identification/">Structural Identification</a></li><li><span class="tocitem">Statistical Identification</span><ul><li><a class="tocitem" href="../nongaussian/">Overview</a></li><li><a class="tocitem" href="../id_nongaussian/">Non-Gaussian Methods</a></li><li><a class="tocitem" href="../id_heteroskedastic/">Heteroskedasticity</a></li><li><a class="tocitem" href="../id_testing/">Testing</a></li></ul></li><li><span class="tocitem">Nowcasting</span><ul><li><a class="tocitem" href="../nowcast/">Overview</a></li><li><a class="tocitem" href="../nowcast_dfm/">DFM Nowcasting</a></li><li><a class="tocitem" href="../nowcast_bvar/">BVAR Nowcasting</a></li><li><a class="tocitem" href="../nowcast_bridge/">Bridge Equations</a></li><li><a class="tocitem" href="../nowcast_news/">News Decomposition</a></li></ul></li><li><span class="tocitem">Hypothesis Tests</span><ul><li><a class="tocitem" href="../tests/">Overview</a></li><li><a class="tocitem" href="../tests_unitroot/">Unit Root &amp; Cointegration</a></li><li><a class="tocitem" href="../tests_unitroot_advanced/">Advanced Unit Root</a></li><li><a class="tocitem" href="../tests_breaks/">Structural Breaks</a></li><li><a class="tocitem" href="../tests_panel/">Panel Tests</a></li><li><a class="tocitem" href="../tests_diagnostics/">Model Diagnostics</a></li></ul></li><li><a class="tocitem" href="../plotting/">Visualization</a></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../api/">Overview</a></li><li><a class="tocitem" href="../api_types/">Types</a></li><li><a class="tocitem" href="../api_functions/">Functions</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Panel Models</a></li><li class="is-active"><a href>Panel VAR</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Panel VAR</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/FriedmanJP/MacroEconometricModels.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/FriedmanJP/MacroEconometricModels.jl/blob/main/docs/src/pvar.md#" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="pvar_page"><a class="docs-heading-anchor" href="#pvar_page">Panel VAR</a><a id="pvar_page-1"></a><a class="docs-heading-anchor-permalink" href="#pvar_page" title="Permalink"></a></h1><p><strong>MacroEconometricModels.jl</strong> provides a complete Panel VAR (PVAR) implementation for dynamic panel data analysis. The package supports GMM estimation via Arellano-Bond first-difference and Blundell-Bond system instruments, fixed-effects OLS, and a full suite of structural analysis and specification tests.</p><ul><li><strong>GMM estimation</strong>: First-difference (Arellano &amp; Bond 1991) and system (Blundell &amp; Bond 1998) with Windmeijer (2005) corrected standard errors</li><li><strong>FE-OLS</strong>: Within estimator with cluster-robust standard errors for large-<span>$T$</span> panels</li><li><strong>Transformations</strong>: First-differencing and forward orthogonal deviations (Arellano &amp; Bover 1995)</li><li><strong>Structural analysis</strong>: Orthogonalized IRF (Cholesky), generalized IRF (Pesaran &amp; Shin 1998), FEVD, and stability diagnostics</li><li><strong>Bootstrap inference</strong>: Group-level block bootstrap for IRF confidence intervals</li><li><strong>Specification tests</strong>: Hansen (1982) J-test, Andrews-Lu (2001) MMSC, and lag selection</li></ul><h2 id="Quick-Start"><a class="docs-heading-anchor" href="#Quick-Start">Quick Start</a><a id="Quick-Start-1"></a><a class="docs-heading-anchor-permalink" href="#Quick-Start" title="Permalink"></a></h2><p><strong>Recipe 1: FD-GMM with two-step estimation</strong></p><pre><code class="language-julia hljs"># PWT panel data (pre-loaded in setup: log first-differenced, NaN-filtered)
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Panel VAR · MacroEconometricModels.jl</title><meta name="title" content="Panel VAR · MacroEconometricModels.jl"/><meta property="og:title" content="Panel VAR · MacroEconometricModels.jl"/><meta property="twitter:title" content="Panel VAR · MacroEconometricModels.jl"/><meta name="description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:description" content="Documentation for MacroEconometricModels.jl."/><meta property="twitter:description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:url" content="https://FriedmanJP.github.io/MacroEconometricModels.jl/pvar/"/><meta property="twitter:url" content="https://FriedmanJP.github.io/MacroEconometricModels.jl/pvar/"/><link rel="canonical" href="https://FriedmanJP.github.io/MacroEconometricModels.jl/pvar/"/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script><link href="../assets/custom.css" rel="stylesheet" type="text/css"/><script src="../assets/theme-toggle.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">MacroEconometricModels.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><span class="tocitem">Getting Started</span><ul><li><a class="tocitem" href="../getting_started/">Installation &amp; First Model</a></li><li><a class="tocitem" href="../method_guide/">Choosing a Method</a></li><li><a class="tocitem" href="../data/">Data Management</a></li></ul></li><li><span class="tocitem">Univariate Models</span><ul><li><a class="tocitem" href="../filters/">Time Series Filters</a></li><li><a class="tocitem" href="../x13/">X-13ARIMA-SEATS</a></li><li><a class="tocitem" href="../spectral/">Spectral Analysis</a></li><li><a class="tocitem" href="../arima/">ARIMA</a></li><li><a class="tocitem" href="../volatility/">Volatility Models</a></li></ul></li><li><span class="tocitem">Multivariate Models</span><ul><li><a class="tocitem" href="../manual/">VAR</a></li><li><a class="tocitem" href="../bayesian/">Bayesian VAR</a></li><li><a class="tocitem" href="../vecm/">VECM</a></li><li><a class="tocitem" href="../lp/">Local Projections</a></li><li><a class="tocitem" href="../factormodels/">Factor Models</a></li><li><a class="tocitem" href="../favar/">FAVAR</a></li></ul></li><li><span class="tocitem">Cross-Section &amp; Panel</span><ul><li><a class="tocitem" href="../regression/">Linear Regression</a></li><li><a class="tocitem" href="../binary_choice/">Binary Choice Models</a></li><li><a class="tocitem" href="../ordered_multinomial/">Ordered &amp; Multinomial</a></li><li><a class="tocitem" href="../panel_reg/">Panel Regression</a></li><li class="is-active"><a class="tocitem" href>Panel VAR</a><ul class="internal"><li><a class="tocitem" href="#Quick-Start"><span>Quick Start</span></a></li><li><a class="tocitem" href="#Model-Specification"><span>Model Specification</span></a></li><li><a class="tocitem" href="#Panel-Data-Preparation"><span>Panel Data Preparation</span></a></li><li><a class="tocitem" href="#GMM-Estimation"><span>GMM Estimation</span></a></li><li><a class="tocitem" href="#Fixed-Effects-OLS"><span>Fixed-Effects OLS</span></a></li><li><a class="tocitem" href="#Instrument-Management"><span>Instrument Management</span></a></li><li><a class="tocitem" href="#Structural-Analysis"><span>Structural Analysis</span></a></li><li><a class="tocitem" href="#Bootstrap-Confidence-Intervals"><span>Bootstrap Confidence Intervals</span></a></li><li><a class="tocitem" href="#Specification-Tests"><span>Specification Tests</span></a></li><li><a class="tocitem" href="#Lag-Selection"><span>Lag Selection</span></a></li><li><a class="tocitem" href="#Complete-Example"><span>Complete Example</span></a></li><li><a class="tocitem" href="#Common-Pitfalls"><span>Common Pitfalls</span></a></li><li><a class="tocitem" href="#References"><span>References</span></a></li></ul></li><li><a class="tocitem" href="../did/">Difference-in-Differences</a></li><li><a class="tocitem" href="../event_study/">Event Study LP</a></li></ul></li><li><a class="tocitem" href="../gmm/">GMM &amp; SMM</a></li><li><span class="tocitem">DSGE Models</span><ul><li><a class="tocitem" href="../dsge/">Overview</a></li><li><a class="tocitem" href="../dsge_linear/">Linear Solvers</a></li><li><a class="tocitem" href="../dsge_nonlinear/">Nonlinear Methods</a></li><li><a class="tocitem" href="../dsge_constraints/">Constraints</a></li><li><a class="tocitem" href="../dsge_estimation/">Estimation</a></li><li><a class="tocitem" href="../dsge_hd/">Historical Decomposition</a></li><li><a class="tocitem" href="../dsge_ha/">Heterogeneous Agents</a></li><li><a class="tocitem" href="../dsge_olg/">Overlapping Generations</a></li><li><a class="tocitem" href="../dsge_continuous/">Continuous Time</a></li></ul></li><li><span class="tocitem">Input-Output Analysis</span><ul><li><a class="tocitem" href="../io/">Overview</a></li><li><a class="tocitem" href="../io_classical/">Classical Analysis</a></li><li><a class="tocitem" href="../io_environmental/">Environmental Extensions</a></li><li><a class="tocitem" href="../io_baqaee_farhi/">Baqaee &amp; Farhi (2019)</a></li><li><a class="tocitem" href="../io_download/">Downloading Data</a></li></ul></li><li><span class="tocitem">Structural Analysis</span><ul><li><a class="tocitem" href="../structural_identification/">Structural Identification</a></li><li><input class="collapse-toggle" id="menuitem-9-2" type="checkbox"/><label class="tocitem" for="menuitem-9-2"><span class="docs-label">Statistical Identification</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../nongaussian/">Overview</a></li><li><a class="tocitem" href="../id_nongaussian/">Non-Gaussian Methods</a></li><li><a class="tocitem" href="../id_heteroskedastic/">Heteroskedasticity</a></li><li><a class="tocitem" href="../id_testing/">Testing</a></li></ul></li><li><input class="collapse-toggle" id="menuitem-9-3" type="checkbox"/><label class="tocitem" for="menuitem-9-3"><span class="docs-label">Innovation Accounting</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../innovation_accounting/">Overview</a></li><li><a class="tocitem" href="../ia_irf/">Impulse Responses</a></li><li><a class="tocitem" href="../ia_fevd/">Variance Decomposition</a></li><li><a class="tocitem" href="../ia_hd/">Historical Decomposition</a></li></ul></li></ul></li><li><span class="tocitem">Nowcasting</span><ul><li><a class="tocitem" href="../nowcast/">Overview</a></li><li><a class="tocitem" href="../nowcast_dfm/">DFM Nowcasting</a></li><li><a class="tocitem" href="../nowcast_bvar/">BVAR Nowcasting</a></li><li><a class="tocitem" href="../nowcast_bridge/">Bridge Equations</a></li><li><a class="tocitem" href="../nowcast_news/">News Decomposition</a></li></ul></li><li><span class="tocitem">Hypothesis Tests</span><ul><li><a class="tocitem" href="../tests/">Overview</a></li><li><a class="tocitem" href="../tests_unitroot/">Unit Root &amp; Cointegration</a></li><li><a class="tocitem" href="../tests_unitroot_advanced/">Advanced Unit Root</a></li><li><a class="tocitem" href="../tests_breaks/">Structural Breaks</a></li><li><a class="tocitem" href="../tests_panel/">Panel Tests</a></li><li><a class="tocitem" href="../tests_diagnostics/">Model Diagnostics</a></li></ul></li><li><a class="tocitem" href="../plotting/">Visualization</a></li><li><span class="tocitem">Project</span><ul><li><a class="tocitem" href="../notation/">Notation</a></li><li><a class="tocitem" href="../bibliography/">Bibliography</a></li><li><a class="tocitem" href="../changelog/">Changelog</a></li><li><a class="tocitem" href="../citation/">How to Cite</a></li></ul></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../api/">Overview</a></li><li><a class="tocitem" href="../api/data/">Data Management</a></li><li><a class="tocitem" href="../api/univariate/">Univariate Models</a></li><li><a class="tocitem" href="../api/multivariate/">Multivariate Models</a></li><li><a class="tocitem" href="../api/cross_section/">Cross-Sectional Models</a></li><li><a class="tocitem" href="../api/panel/">Panel Models</a></li><li><a class="tocitem" href="../api/dsge/">DSGE Models</a></li><li><a class="tocitem" href="../api/structural/">Structural &amp; Statistical Identification</a></li><li><a class="tocitem" href="../api/gmm/">GMM &amp; SMM</a></li><li><a class="tocitem" href="../api/tests/">Hypothesis Tests</a></li><li><a class="tocitem" href="../api/nowcasting/">Nowcasting</a></li><li><a class="tocitem" href="../api/visualization/">Visualization</a></li><li><a class="tocitem" href="../api/utilities/">Utilities &amp; Display</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Cross-Section &amp; Panel</a></li><li class="is-active"><a href>Panel VAR</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Panel VAR</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/FriedmanJP/MacroEconometricModels.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/FriedmanJP/MacroEconometricModels.jl/blob/main/docs/src/pvar.md#" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="pvar_page"><a class="docs-heading-anchor" href="#pvar_page">Panel VAR</a><a id="pvar_page-1"></a><a class="docs-heading-anchor-permalink" href="#pvar_page" title="Permalink"></a></h1><p><strong>MacroEconometricModels.jl</strong> provides a complete Panel VAR (PVAR) implementation for dynamic panel data analysis. The package supports GMM estimation via Arellano-Bond first-difference and Blundell-Bond system instruments, fixed-effects OLS, and a full suite of structural analysis and specification tests.</p><ul><li><strong>GMM estimation</strong>: First-difference (Arellano &amp; Bond 1991) and system (Blundell &amp; Bond 1998) with Windmeijer (2005) corrected standard errors</li><li><strong>FE-OLS</strong>: Within estimator with cluster-robust standard errors for large-<span>$T$</span> panels</li><li><strong>Transformations</strong>: First-differencing and forward orthogonal deviations (Arellano &amp; Bover 1995)</li><li><strong>Structural analysis</strong>: Orthogonalized IRF (Cholesky), generalized IRF (Pesaran &amp; Shin 1998), FEVD, and stability diagnostics</li><li><strong>Bootstrap inference</strong>: Group-level block bootstrap for IRF confidence intervals</li><li><strong>Specification tests</strong>: Hansen (1982) J-test, Andrews-Lu (2001) MMSC, and lag selection</li></ul><h2 id="Quick-Start"><a class="docs-heading-anchor" href="#Quick-Start">Quick Start</a><a id="Quick-Start-1"></a><a class="docs-heading-anchor-permalink" href="#Quick-Start" title="Permalink"></a></h2><p><strong>Recipe 1: FD-GMM with two-step estimation</strong></p><pre><code class="language-julia hljs"># PWT panel data (pre-loaded in setup: log first-differenced, NaN-filtered)
 # Arellano-Bond two-step GMM
 model = estimate_pvar(pd, 2; dependent_vars=[&quot;rgdpna&quot;, &quot;emp&quot;, &quot;hc&quot;], steps=:twostep)
 report(model)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">┌ Warning: Too many instruments: PVAR GMM has n_inst=1215 moment conditions &gt; N=38 groups (ratio 31.97). Instrument proliferation overfits the endogenous regressors, biases the two-step weighting matrix toward singularity, and pushes the Hansen J-test toward non-rejection (Roodman 2009, OBES 71(1):135-158). Consider collapse=true or a smaller max_lag_endo.
@@ -12,8 +12,6 @@ report(model)</code></pre><pre class="documenter-example-output"><code class="no
 └ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:152
               Panel VAR(2) — FD-GMM
 
-
-
   Method                                  FD-GMM
   Transformation                First-Difference
   Steps                                  twostep
@@ -25,38 +23,38 @@ report(model)</code></pre><pre class="documenter-example-output"><code class="no
   Observations                              1026
   Instruments       1215 (groups: 38) ⚠ too many
 
-                             Equation: rgdpna
+                               Equation: rgdpna
 
-                Coef.   Std.Err.         z    P&gt;|z|      [95%      CI]
+                Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
 
-  L1.rgdpna    0.1752       0.24      0.73   0.4654   -0.2952   0.6457
-  L1.emp      -0.1677     0.3758   -0.4462   0.6555   -0.9043   0.5689
-  L1.hc        0.6668     1.4593    0.4569   0.6477   -2.1935    3.527
-  L2.rgdpna    -0.061     0.1665   -0.3664   0.7141   -0.3872   0.2653
-  L2.emp      -0.0769     0.2485   -0.3096   0.7569    -0.564   0.4101
-  L2.hc       -0.0313     1.9535    -0.016   0.9872   -3.8601   3.7975
+  L1.rgdpna    0.1752     0.2400    0.7300   0.4654    -0.2952     0.6457
+  L1.emp      -0.1677     0.3758   -0.4462   0.6555    -0.9043     0.5689
+  L1.hc        0.6668     1.4593    0.4569   0.6477    -2.1935     3.5270
+  L2.rgdpna   -0.0610     0.1665   -0.3664   0.7141    -0.3872     0.2653
+  L2.emp      -0.0769     0.2485   -0.3096   0.7569    -0.5640     0.4101
+  L2.hc       -0.0313     1.9535   -0.0160   0.9872    -3.8601     3.7975
 
-                               Equation: emp
+                                Equation: emp
 
-                Coef.   Std.Err.         z    P&gt;|z|      [95%      CI]
+                Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
 
-  L1.rgdpna    0.1474     0.1092    1.3503   0.1769   -0.0666   0.3614
-  L1.emp       0.1836     0.1995    0.9203   0.3574   -0.2074   0.5746
-  L1.hc       -0.5499     0.9471   -0.5806   0.5615   -2.4063   1.3065
-  L2.rgdpna   -0.0907     0.0669   -1.3556   0.1752   -0.2218   0.0404
-  L2.emp      -0.0376      0.091   -0.4124     0.68    -0.216   0.1409
-  L2.hc       -0.1694      0.984   -0.1721   0.8633   -2.0981   1.7593
+  L1.rgdpna    0.1474     0.1092    1.3503   0.1769    -0.0666     0.3614
+  L1.emp       0.1836     0.1995    0.9203   0.3574    -0.2074     0.5746
+  L1.hc       -0.5499     0.9471   -0.5806   0.5615    -2.4063     1.3065
+  L2.rgdpna   -0.0907     0.0669   -1.3556   0.1752    -0.2218     0.0404
+  L2.emp      -0.0376     0.0910   -0.4124     0.68    -0.2160     0.1409
+  L2.hc       -0.1694     0.9840   -0.1721   0.8633    -2.0981     1.7593
 
-                                Equation: hc
+                                 Equation: hc
 
-                Coef.   Std.Err.         z    P&gt;|z|      [95%      CI]
+                Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
 
-  L1.rgdpna    0.0023     0.0047    0.4916    0.623   -0.0069   0.0115
-  L1.emp      -0.0016     0.0097   -0.1611    0.872   -0.0206   0.0175
-  L1.hc        0.2345     0.1382    1.6967   0.0898   -0.0364   0.5054   *
-  L2.rgdpna   -0.0013     0.0056   -0.2259   0.8213   -0.0123   0.0098
-  L2.emp      -0.0022     0.0113   -0.1994    0.842   -0.0243   0.0198
-  L2.hc        0.0945     0.0981    0.9629   0.3356   -0.0979   0.2869</code></pre><p><strong>Recipe 2: System GMM (Blundell-Bond)</strong></p><pre><code class="language-julia hljs"># System GMM adds level equations instrumented by lagged differences
+  L1.rgdpna    0.0023     0.0047    0.4916    0.623    -0.0069     0.0115
+  L1.emp      -0.0016     0.0097   -0.1611    0.872    -0.0206     0.0175
+  L1.hc        0.2345     0.1382    1.6967   0.0898    -0.0364     0.5054   *
+  L2.rgdpna   -0.0013     0.0056   -0.2259   0.8213    -0.0123     0.0098
+  L2.emp      -0.0022     0.0113   -0.1994    0.842    -0.0243     0.0198
+  L2.hc        0.0945     0.0981    0.9629   0.3356    -0.0979     0.2869</code></pre><p><strong>Recipe 2: System GMM (Blundell-Bond)</strong></p><pre><code class="language-julia hljs"># System GMM adds level equations instrumented by lagged differences
 model_sys = estimate_pvar(pd, 2; dependent_vars=[&quot;rgdpna&quot;, &quot;emp&quot;, &quot;hc&quot;],
                           system_instruments=true, steps=:twostep)
 report(model_sys)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">┌ Warning: Too many instruments: PVAR GMM has n_inst=1219 moment conditions &gt; N=38 groups (ratio 32.08). Instrument proliferation overfits the endogenous regressors, biases the two-step weighting matrix toward singularity, and pushes the Hansen J-test toward non-rejection (Roodman 2009, OBES 71(1):135-158). Consider collapse=true or a smaller max_lag_endo.
@@ -69,8 +67,6 @@ report(model_sys)</code></pre><pre class="documenter-example-output"><code class
 └ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:152
             Panel VAR(2) — System GMM
 
-
-
   Method                              System GMM
   Transformation                First-Difference
   Steps                                  twostep
@@ -82,42 +78,40 @@ report(model_sys)</code></pre><pre class="documenter-example-output"><code class
   Observations                              2052
   Instruments       1219 (groups: 38) ⚠ too many
 
-                             Equation: rgdpna
+                               Equation: rgdpna
 
-                Coef.   Std.Err.         z    P&gt;|z|      [95%      CI]
+                Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
 
-  L1.rgdpna     0.249      0.188     1.324   0.1855   -0.1196   0.6175
-  L1.emp      -0.1573     0.3025   -0.5202   0.6029   -0.7502   0.4355
-  L1.hc        2.1053     1.3735    1.5328   0.1253   -0.5868   4.7973
-  L2.rgdpna   -0.0123     0.1617   -0.0763   0.9392   -0.3292   0.3045
-  L2.emp      -0.0542     0.2777   -0.1952   0.8453   -0.5984     0.49
-  L2.hc        1.6635     1.0771    1.5444   0.1225   -0.4476   3.7745
+  L1.rgdpna    0.2490     0.1880    1.3240   0.1855    -0.1196     0.6175
+  L1.emp      -0.1573     0.3025   -0.5202   0.6029    -0.7502     0.4355
+  L1.hc        2.1053     1.3735    1.5328   0.1253    -0.5868     4.7973
+  L2.rgdpna   -0.0123     0.1617   -0.0763   0.9392    -0.3292     0.3045
+  L2.emp      -0.0542     0.2777   -0.1952   0.8453    -0.5984     0.4900
+  L2.hc        1.6635     1.0771    1.5444   0.1225    -0.4476     3.7745
 
-                                Equation: emp
+                                 Equation: emp
 
-                Coef.   Std.Err.         z    P&gt;|z|      [95%      CI]
+                Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
 
-  L1.rgdpna    0.1911     0.0885    2.1593   0.0308    0.0176   0.3646   **
-  L1.emp       0.1562     0.1689    0.9248   0.3551   -0.1748   0.4871
-  L1.hc        0.3501     0.4278    0.8183   0.4132   -0.4884   1.1886
-  L2.rgdpna   -0.0692     0.0723   -0.9563   0.3389   -0.2109   0.0726
-  L2.emp      -0.0054     0.0942    -0.057   0.9546     -0.19   0.1792
-  L2.hc        0.7805     0.4936    1.5813   0.1138   -0.1869   1.7479
+  L1.rgdpna    0.1911     0.0885    2.1593   0.0308     0.0176     0.3646   **
+  L1.emp       0.1562     0.1689    0.9248   0.3551    -0.1748     0.4871
+  L1.hc        0.3501     0.4278    0.8183   0.4132    -0.4884     1.1886
+  L2.rgdpna   -0.0692     0.0723   -0.9563   0.3389    -0.2109     0.0726
+  L2.emp      -0.0054     0.0942   -0.0570   0.9546    -0.1900     0.1792
+  L2.hc        0.7805     0.4936    1.5813   0.1138    -0.1869     1.7479
 
-                                Equation: hc
+                                  Equation: hc
 
-               Coef.   Std.Err.         z    P&gt;|z|      [95%      CI]
+                Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
 
-  L1.rgdpna   0.0143     0.0096    1.4814   0.1385   -0.0046   0.0332
-  L1.emp      -0.005     0.0115   -0.4351   0.6635   -0.0275   0.0175
-  L1.hc        0.507     0.1014    5.0001   &lt;0.001    0.3082   0.7057   ***
-  L2.rgdpna   0.0029     0.0086    0.3343   0.7382   -0.0139   0.0197
-  L2.emp      0.0118     0.0114    1.0399   0.2984   -0.0105   0.0342
-  L2.hc       0.3872     0.0836    4.6291   &lt;0.001    0.2232   0.5511   ***</code></pre><p><strong>Recipe 3: Fixed-effects OLS</strong></p><pre><code class="language-julia hljs"># Within estimator with cluster-robust SEs
+  L1.rgdpna    0.0143     0.0096    1.4814   0.1385    -0.0046     0.0332
+  L1.emp      -0.0050     0.0115   -0.4351   0.6635    -0.0275     0.0175
+  L1.hc        0.5070     0.1014    5.0001   &lt;0.001     0.3082     0.7057   ***
+  L2.rgdpna    0.0029     0.0086    0.3343   0.7382    -0.0139     0.0197
+  L2.emp       0.0118     0.0114    1.0399   0.2984    -0.0105     0.0342
+  L2.hc        0.3872     0.0836    4.6291   &lt;0.001     0.2232     0.5511   ***</code></pre><p><strong>Recipe 3: Fixed-effects OLS</strong></p><pre><code class="language-julia hljs"># Within estimator with cluster-robust SEs
 model_fe = estimate_pvar_feols(pd, 2; dependent_vars=[&quot;rgdpna&quot;, &quot;emp&quot;, &quot;hc&quot;])
 report(model_fe)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">        Panel VAR(2) — FE-OLS
-
-
 
   Method                      FE-OLS
   Transformation    Within Demeaning
@@ -129,38 +123,38 @@ report(model_fe)</code></pre><pre class="documenter-example-output"><code class=
   Obs/group               28/28.0/28
   Observations                  1064
 
-                               Equation: rgdpna
+                                Equation: rgdpna
 
-                Coef.   Std.Err.         z    P&gt;|z|      [95%      CI]
+                Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
 
-  L1.rgdpna     0.258     0.0612     4.212   &lt;0.001    0.1379    0.378   ***
-  L1.emp      -0.1901     0.0954   -1.9918   0.0464   -0.3771   -0.003   **
-  L1.hc        0.0684     0.2566    0.2667   0.7897   -0.4345   0.5714
-  L2.rgdpna   -0.0506     0.0357   -1.4154    0.157   -0.1206   0.0195
-  L2.emp      -0.0343     0.0614   -0.5577   0.5771   -0.1547   0.0862
-  L2.hc        0.3595     0.2073    1.7348   0.0828   -0.0467   0.7657   *
+  L1.rgdpna    0.2580     0.0612    4.2120   &lt;0.001     0.1379     0.3780   ***
+  L1.emp      -0.1901     0.0954   -1.9918   0.0464    -0.3771    -0.0030   **
+  L1.hc        0.0684     0.2566    0.2667   0.7897    -0.4345     0.5714
+  L2.rgdpna   -0.0506     0.0357   -1.4154    0.157    -0.1206     0.0195
+  L2.emp      -0.0343     0.0614   -0.5577   0.5771    -0.1547     0.0862
+  L2.hc        0.3595     0.2073    1.7348   0.0828    -0.0467     0.7657   *
 
-                                 Equation: emp
+                                  Equation: emp
 
-                Coef.   Std.Err.         z    P&gt;|z|      [95%       CI]
+                Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
 
-  L1.rgdpna    0.1799     0.0368    4.8861   &lt;0.001    0.1077     0.252   ***
-  L1.emp       0.1358     0.0834    1.6272   0.1037   -0.0278    0.2993
-  L1.hc       -0.1716     0.1352   -1.2693   0.2043   -0.4366    0.0934
-  L2.rgdpna   -0.0759      0.032   -2.3752   0.0175   -0.1386   -0.0133   **
-  L2.emp      -0.0464     0.0503   -0.9224   0.3563    -0.145    0.0522
-  L2.hc       -0.0441     0.1689   -0.2608   0.7943   -0.3752    0.2871
+  L1.rgdpna    0.1799     0.0368    4.8861   &lt;0.001     0.1077     0.2520   ***
+  L1.emp       0.1358     0.0834    1.6272   0.1037    -0.0278     0.2993
+  L1.hc       -0.1716     0.1352   -1.2693   0.2043    -0.4366     0.0934
+  L2.rgdpna   -0.0759     0.0320   -2.3752   0.0175    -0.1386    -0.0133   **
+  L2.emp      -0.0464     0.0503   -0.9224   0.3563    -0.1450     0.0522
+  L2.hc       -0.0441     0.1689   -0.2608   0.7943    -0.3752     0.2871
 
-                                 Equation: hc
+                                  Equation: hc
 
-                Coef.   Std.Err.         z    P&gt;|z|      [95%      CI]
+                Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
 
-  L1.rgdpna    0.0049     0.0034    1.4245   0.1543   -0.0018   0.0116
-  L1.emp      -0.0059     0.0087   -0.6767   0.4986    -0.023   0.0112
-  L1.hc        0.2686     0.1239    2.1689   0.0301    0.0259   0.5114   **
-  L2.rgdpna   -0.0029     0.0052   -0.5631   0.5734   -0.0131   0.0073
-  L2.emp       0.0017     0.0082    0.2056   0.8371   -0.0144   0.0177
-  L2.hc        0.1556     0.0432    3.5986   &lt;0.001    0.0709   0.2404   ***</code></pre><p><strong>Recipe 4: Specification tests and lag selection</strong></p><pre><code class="language-julia hljs">dep_vars = [&quot;rgdpna&quot;, &quot;emp&quot;, &quot;hc&quot;]
+  L1.rgdpna    0.0049     0.0034    1.4245   0.1543    -0.0018     0.0116
+  L1.emp      -0.0059     0.0087   -0.6767   0.4986    -0.0230     0.0112
+  L1.hc        0.2686     0.1239    2.1689   0.0301     0.0259     0.5114   **
+  L2.rgdpna   -0.0029     0.0052   -0.5631   0.5734    -0.0131     0.0073
+  L2.emp       0.0017     0.0082    0.2056   0.8371    -0.0144     0.0177
+  L2.hc        0.1556     0.0432    3.5986   &lt;0.001     0.0709     0.2404   ***</code></pre><p><strong>Recipe 4: Specification tests and lag selection</strong></p><pre><code class="language-julia hljs">dep_vars = [&quot;rgdpna&quot;, &quot;emp&quot;, &quot;hc&quot;]
 
 model = estimate_pvar(pd, 2; dependent_vars=dep_vars, steps=:twostep)
 
@@ -172,9 +166,7 @@ report(j)
 mmsc = pvar_mmsc(model)
 
 # Lag selection across candidate models
-sel = pvar_lag_selection(pd, 4; dependent_vars=dep_vars)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(table = Any[1 -8430.2957 -2392.0 -4915.9546; 2 -8344.5084 -2380.0 -4878.2082; 3 -8236.8192 -2362.0 -4827.8567; 4 -8107.4768 -2338.0 -4764.9679], best_bic = 1, best_aic = 1, best_hqic = 1, models = PVARModel{Float64}[<span class="sgr1">              Panel VAR(1) — FD-GMM</span>
-
- <span class="sgr1">                 </span> <span class="sgr1">                              </span>
+sel = pvar_lag_selection(pd, 4; dependent_vars=dep_vars)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(table = Any[1 &quot;-8430.2957&quot; &quot;-2392.0000&quot; &quot;-4915.9546&quot;; 2 &quot;-8344.5084&quot; &quot;-2380.0000&quot; &quot;-4878.2082&quot;; 3 &quot;-8236.8192&quot; &quot;-2362.0000&quot; &quot;-4827.8567&quot;; 4 &quot;-8107.4768&quot; &quot;-2338.0000&quot; &quot;-4764.9679&quot;], best_bic = 1, best_aic = 1, best_hqic = 1, models = PVARModel{Float64}[<span class="sgr1">              Panel VAR(1) — FD-GMM</span>
 
   Method                                  FD-GMM
   Transformation                First-Difference
@@ -187,33 +179,31 @@ sel = pvar_lag_selection(pd, 4; dependent_vars=dep_vars)</code></pre><pre class=
   Observations                              1064
   Instruments       1218 (groups: 38) ⚠ too many
 
-<span class="sgr1">                               Equation: rgdpna</span>
+<span class="sgr1">                                Equation: rgdpna</span>
 
- <span class="sgr1">           </span> <span class="sgr1">   Coef. </span> <span class="sgr1"> Std.Err. </span> <span class="sgr1">       z </span> <span class="sgr1">  P&gt;|z| </span> <span class="sgr1">    [95% </span> <span class="sgr1">    CI] </span> <span class="sgr1">     </span>
+ <span class="sgr1">           </span> <span class="sgr1">   Coef. </span> <span class="sgr1"> Std.Err. </span> <span class="sgr1">       z </span> <span class="sgr1">  P&gt;|z| </span> <span class="sgr1"> CI lower </span> <span class="sgr1"> CI upper </span> <span class="sgr1">     </span>
 
-  L1.rgdpna     0.249     0.0829    3.0023   0.0027    0.0864   0.4115   ***
-  L1.emp      -0.2724      0.146   -1.8667   0.0619   -0.5585   0.0136   *
-  L1.hc        0.8166     1.3541     0.603   0.5465   -1.8374   3.4705
+  L1.rgdpna    0.2490     0.0829    3.0023   0.0027     0.0864     0.4115   ***
+  L1.emp      -0.2724     0.1460   -1.8667   0.0619    -0.5585     0.0136   *
+  L1.hc        0.8166     1.3541    0.6030   0.5465    -1.8374     3.4705
 
-<span class="sgr1">                                Equation: emp</span>
+<span class="sgr1">                                  Equation: emp</span>
 
- <span class="sgr1">           </span> <span class="sgr1">   Coef. </span> <span class="sgr1"> Std.Err. </span> <span class="sgr1">       z </span> <span class="sgr1">  P&gt;|z| </span> <span class="sgr1">    [95% </span> <span class="sgr1">    CI] </span> <span class="sgr1">     </span>
+ <span class="sgr1">           </span> <span class="sgr1">   Coef. </span> <span class="sgr1"> Std.Err. </span> <span class="sgr1">       z </span> <span class="sgr1">  P&gt;|z| </span> <span class="sgr1"> CI lower </span> <span class="sgr1"> CI upper </span> <span class="sgr1">     </span>
 
-  L1.rgdpna     0.177     0.0548    3.2274   0.0012    0.0695   0.2845   ***
-  L1.emp       0.0923     0.0953     0.969   0.3326   -0.0944    0.279
-  L1.hc       -0.4788     0.6741   -0.7103   0.4775   -1.8001   0.8425
+  L1.rgdpna    0.1770     0.0548    3.2274   0.0012     0.0695     0.2845   ***
+  L1.emp       0.0923     0.0953    0.9690   0.3326    -0.0944     0.2790
+  L1.hc       -0.4788     0.6741   -0.7103   0.4775    -1.8001     0.8425
 
-<span class="sgr1">                                Equation: hc</span>
+<span class="sgr1">                                 Equation: hc</span>
 
- <span class="sgr1">           </span> <span class="sgr1">   Coef. </span> <span class="sgr1"> Std.Err. </span> <span class="sgr1">       z </span> <span class="sgr1">  P&gt;|z| </span> <span class="sgr1">    [95% </span> <span class="sgr1">    CI] </span> <span class="sgr1">   </span>
+ <span class="sgr1">           </span> <span class="sgr1">   Coef. </span> <span class="sgr1"> Std.Err. </span> <span class="sgr1">       z </span> <span class="sgr1">  P&gt;|z| </span> <span class="sgr1"> CI lower </span> <span class="sgr1"> CI upper </span> <span class="sgr1">   </span>
 
-  L1.rgdpna    0.0051      0.003    1.6958   0.0899   -0.0008    0.011   *
-  L1.emp      -0.0097     0.0066   -1.4767   0.1398   -0.0226   0.0032
-  L1.hc        0.3152     0.1623    1.9421   0.0521   -0.0029   0.6333   *
+  L1.rgdpna    0.0051     0.0030    1.6958   0.0899    -0.0008     0.0110   *
+  L1.emp      -0.0097     0.0066   -1.4767   0.1398    -0.0226     0.0032
+  L1.hc        0.3152     0.1623    1.9421   0.0521    -0.0029     0.6333   *
 
 , <span class="sgr1">              Panel VAR(2) — FD-GMM</span>
-
- <span class="sgr1">                 </span> <span class="sgr1">                              </span>
 
   Method                                  FD-GMM
   Transformation                First-Difference
@@ -226,42 +216,40 @@ sel = pvar_lag_selection(pd, 4; dependent_vars=dep_vars)</code></pre><pre class=
   Observations                              1026
   Instruments       1215 (groups: 38) ⚠ too many
 
-<span class="sgr1">                             Equation: rgdpna</span>
+<span class="sgr1">                               Equation: rgdpna</span>
 
- <span class="sgr1">           </span> <span class="sgr1">   Coef. </span> <span class="sgr1"> Std.Err. </span> <span class="sgr1">       z </span> <span class="sgr1">  P&gt;|z| </span> <span class="sgr1">    [95% </span> <span class="sgr1">    CI] </span> <span class="sgr1">  </span>
+ <span class="sgr1">           </span> <span class="sgr1">   Coef. </span> <span class="sgr1"> Std.Err. </span> <span class="sgr1">       z </span> <span class="sgr1">  P&gt;|z| </span> <span class="sgr1"> CI lower </span> <span class="sgr1"> CI upper </span> <span class="sgr1">  </span>
 
-  L1.rgdpna    0.1752       0.24      0.73   0.4654   -0.2952   0.6457
-  L1.emp      -0.1677     0.3758   -0.4462   0.6555   -0.9043   0.5689
-  L1.hc        0.6668     1.4593    0.4569   0.6477   -2.1935    3.527
-  L2.rgdpna    -0.061     0.1665   -0.3664   0.7141   -0.3872   0.2653
-  L2.emp      -0.0769     0.2485   -0.3096   0.7569    -0.564   0.4101
-  L2.hc       -0.0313     1.9535    -0.016   0.9872   -3.8601   3.7975
+  L1.rgdpna    0.1752     0.2400    0.7300   0.4654    -0.2952     0.6457
+  L1.emp      -0.1677     0.3758   -0.4462   0.6555    -0.9043     0.5689
+  L1.hc        0.6668     1.4593    0.4569   0.6477    -2.1935     3.5270
+  L2.rgdpna   -0.0610     0.1665   -0.3664   0.7141    -0.3872     0.2653
+  L2.emp      -0.0769     0.2485   -0.3096   0.7569    -0.5640     0.4101
+  L2.hc       -0.0313     1.9535   -0.0160   0.9872    -3.8601     3.7975
 
-<span class="sgr1">                               Equation: emp</span>
+<span class="sgr1">                                Equation: emp</span>
 
- <span class="sgr1">           </span> <span class="sgr1">   Coef. </span> <span class="sgr1"> Std.Err. </span> <span class="sgr1">       z </span> <span class="sgr1">  P&gt;|z| </span> <span class="sgr1">    [95% </span> <span class="sgr1">    CI] </span> <span class="sgr1">  </span>
+ <span class="sgr1">           </span> <span class="sgr1">   Coef. </span> <span class="sgr1"> Std.Err. </span> <span class="sgr1">       z </span> <span class="sgr1">  P&gt;|z| </span> <span class="sgr1"> CI lower </span> <span class="sgr1"> CI upper </span> <span class="sgr1">  </span>
 
-  L1.rgdpna    0.1474     0.1092    1.3503   0.1769   -0.0666   0.3614
-  L1.emp       0.1836     0.1995    0.9203   0.3574   -0.2074   0.5746
-  L1.hc       -0.5499     0.9471   -0.5806   0.5615   -2.4063   1.3065
-  L2.rgdpna   -0.0907     0.0669   -1.3556   0.1752   -0.2218   0.0404
-  L2.emp      -0.0376      0.091   -0.4124     0.68    -0.216   0.1409
-  L2.hc       -0.1694      0.984   -0.1721   0.8633   -2.0981   1.7593
+  L1.rgdpna    0.1474     0.1092    1.3503   0.1769    -0.0666     0.3614
+  L1.emp       0.1836     0.1995    0.9203   0.3574    -0.2074     0.5746
+  L1.hc       -0.5499     0.9471   -0.5806   0.5615    -2.4063     1.3065
+  L2.rgdpna   -0.0907     0.0669   -1.3556   0.1752    -0.2218     0.0404
+  L2.emp      -0.0376     0.0910   -0.4124     0.68    -0.2160     0.1409
+  L2.hc       -0.1694     0.9840   -0.1721   0.8633    -2.0981     1.7593
 
-<span class="sgr1">                                Equation: hc</span>
+<span class="sgr1">                                 Equation: hc</span>
 
- <span class="sgr1">           </span> <span class="sgr1">   Coef. </span> <span class="sgr1"> Std.Err. </span> <span class="sgr1">       z </span> <span class="sgr1">  P&gt;|z| </span> <span class="sgr1">    [95% </span> <span class="sgr1">    CI] </span> <span class="sgr1">   </span>
+ <span class="sgr1">           </span> <span class="sgr1">   Coef. </span> <span class="sgr1"> Std.Err. </span> <span class="sgr1">       z </span> <span class="sgr1">  P&gt;|z| </span> <span class="sgr1"> CI lower </span> <span class="sgr1"> CI upper </span> <span class="sgr1">   </span>
 
-  L1.rgdpna    0.0023     0.0047    0.4916    0.623   -0.0069   0.0115
-  L1.emp      -0.0016     0.0097   -0.1611    0.872   -0.0206   0.0175
-  L1.hc        0.2345     0.1382    1.6967   0.0898   -0.0364   0.5054   *
-  L2.rgdpna   -0.0013     0.0056   -0.2259   0.8213   -0.0123   0.0098
-  L2.emp      -0.0022     0.0113   -0.1994    0.842   -0.0243   0.0198
-  L2.hc        0.0945     0.0981    0.9629   0.3356   -0.0979   0.2869
+  L1.rgdpna    0.0023     0.0047    0.4916    0.623    -0.0069     0.0115
+  L1.emp      -0.0016     0.0097   -0.1611    0.872    -0.0206     0.0175
+  L1.hc        0.2345     0.1382    1.6967   0.0898    -0.0364     0.5054   *
+  L2.rgdpna   -0.0013     0.0056   -0.2259   0.8213    -0.0123     0.0098
+  L2.emp      -0.0022     0.0113   -0.1994    0.842    -0.0243     0.0198
+  L2.hc        0.0945     0.0981    0.9629   0.3356    -0.0979     0.2869
 
 , <span class="sgr1">              Panel VAR(3) — FD-GMM</span>
-
- <span class="sgr1">                 </span> <span class="sgr1">                              </span>
 
   Method                                  FD-GMM
   Transformation                First-Difference
@@ -274,51 +262,49 @@ sel = pvar_lag_selection(pd, 4; dependent_vars=dep_vars)</code></pre><pre class=
   Observations                               988
   Instruments       1209 (groups: 38) ⚠ too many
 
-<span class="sgr1">                             Equation: rgdpna</span>
+<span class="sgr1">                               Equation: rgdpna</span>
 
- <span class="sgr1">           </span> <span class="sgr1">   Coef. </span> <span class="sgr1"> Std.Err. </span> <span class="sgr1">       z </span> <span class="sgr1">  P&gt;|z| </span> <span class="sgr1">    [95% </span> <span class="sgr1">    CI] </span> <span class="sgr1">  </span>
+ <span class="sgr1">           </span> <span class="sgr1">   Coef. </span> <span class="sgr1"> Std.Err. </span> <span class="sgr1">       z </span> <span class="sgr1">  P&gt;|z| </span> <span class="sgr1"> CI lower </span> <span class="sgr1"> CI upper </span> <span class="sgr1">  </span>
 
-  L1.rgdpna    0.1536     0.2788    0.5511   0.5816   -0.3928   0.7001
-  L1.emp      -0.1419     0.4291   -0.3306    0.741   -0.9828   0.6991
-  L1.hc        0.4688      2.155    0.2175   0.8278    -3.755   4.6926
-  L2.rgdpna   -0.0909      0.246   -0.3697   0.7116    -0.573   0.3912
-  L2.emp      -0.0658     0.3766   -0.1748   0.8612   -0.8038   0.6722
-  L2.hc       -0.3713     2.5431    -0.146   0.8839   -5.3556    4.613
-  L3.rgdpna    0.0526     0.1951    0.2693   0.7877   -0.3299    0.435
-  L3.emp      -0.1408     0.2982   -0.4724   0.6366   -0.7252   0.4435
-  L3.hc        0.0987     2.6092    0.0378   0.9698   -5.0152   5.2126
+  L1.rgdpna    0.1536     0.2788    0.5511   0.5816    -0.3928     0.7001
+  L1.emp      -0.1419     0.4291   -0.3306    0.741    -0.9828     0.6991
+  L1.hc        0.4688     2.1550    0.2175   0.8278    -3.7550     4.6926
+  L2.rgdpna   -0.0909     0.2460   -0.3697   0.7116    -0.5730     0.3912
+  L2.emp      -0.0658     0.3766   -0.1748   0.8612    -0.8038     0.6722
+  L2.hc       -0.3713     2.5431   -0.1460   0.8839    -5.3556     4.6130
+  L3.rgdpna    0.0526     0.1951    0.2693   0.7877    -0.3299     0.4350
+  L3.emp      -0.1408     0.2982   -0.4724   0.6366    -0.7252     0.4435
+  L3.hc        0.0987     2.6092    0.0378   0.9698    -5.0152     5.2126
 
-<span class="sgr1">                               Equation: emp</span>
+<span class="sgr1">                                Equation: emp</span>
 
- <span class="sgr1">           </span> <span class="sgr1">   Coef. </span> <span class="sgr1"> Std.Err. </span> <span class="sgr1">       z </span> <span class="sgr1">  P&gt;|z| </span> <span class="sgr1">    [95% </span> <span class="sgr1">    CI] </span> <span class="sgr1">  </span>
+ <span class="sgr1">           </span> <span class="sgr1">   Coef. </span> <span class="sgr1"> Std.Err. </span> <span class="sgr1">       z </span> <span class="sgr1">  P&gt;|z| </span> <span class="sgr1"> CI lower </span> <span class="sgr1"> CI upper </span> <span class="sgr1">  </span>
 
-  L1.rgdpna    0.1465     0.1312    1.1161   0.2644   -0.1107   0.4037
-  L1.emp       0.1872     0.2359    0.7936   0.4274   -0.2751   0.6494
-  L1.hc       -0.3707      1.261    -0.294   0.7688   -2.8421   2.1007
-  L2.rgdpna   -0.1031     0.1449   -0.7113   0.4769   -0.3871    0.181
-  L2.emp       0.0114     0.1775    0.0643   0.9488   -0.3365   0.3593
-  L2.hc        0.1526     1.7332     0.088   0.9299   -3.2445   3.5496
-  L3.rgdpna   -0.0677     0.0932    -0.726   0.4678   -0.2504    0.115
-  L3.emp       0.0622     0.2155    0.2888   0.7727   -0.3602   0.4846
-  L3.hc       -0.0244     1.4964   -0.0163    0.987   -2.9573   2.9085
+  L1.rgdpna    0.1465     0.1312    1.1161   0.2644    -0.1107     0.4037
+  L1.emp       0.1872     0.2359    0.7936   0.4274    -0.2751     0.6494
+  L1.hc       -0.3707     1.2610   -0.2940   0.7688    -2.8421     2.1007
+  L2.rgdpna   -0.1031     0.1449   -0.7113   0.4769    -0.3871     0.1810
+  L2.emp       0.0114     0.1775    0.0643   0.9488    -0.3365     0.3593
+  L2.hc        0.1526     1.7332    0.0880   0.9299    -3.2445     3.5496
+  L3.rgdpna   -0.0677     0.0932   -0.7260   0.4678    -0.2504     0.1150
+  L3.emp       0.0622     0.2155    0.2888   0.7727    -0.3602     0.4846
+  L3.hc       -0.0244     1.4964   -0.0163    0.987    -2.9573     2.9085
 
-<span class="sgr1">                               Equation: hc</span>
+<span class="sgr1">                                 Equation: hc</span>
 
- <span class="sgr1">           </span> <span class="sgr1">   Coef. </span> <span class="sgr1"> Std.Err. </span> <span class="sgr1">       z </span> <span class="sgr1">  P&gt;|z| </span> <span class="sgr1">    [95% </span> <span class="sgr1">    CI] </span> <span class="sgr1">  </span>
+ <span class="sgr1">           </span> <span class="sgr1">   Coef. </span> <span class="sgr1"> Std.Err. </span> <span class="sgr1">       z </span> <span class="sgr1">  P&gt;|z| </span> <span class="sgr1"> CI lower </span> <span class="sgr1"> CI upper </span> <span class="sgr1">  </span>
 
-  L1.rgdpna   -0.0009      0.006   -0.1459    0.884   -0.0126   0.0109
-  L1.emp       0.0067     0.0139    0.4825   0.6294   -0.0206   0.0341
-  L1.hc        0.1522     0.1686    0.9031   0.3665   -0.1781   0.4826
-  L2.rgdpna   -0.0067     0.0111   -0.5999   0.5486   -0.0285   0.0151
-  L2.emp       0.0081     0.0187    0.4337   0.6645   -0.0285   0.0448
-  L2.hc        0.1183     0.0865    1.3682   0.1713   -0.0512   0.2877
-  L3.rgdpna    0.0009     0.0068    0.1269    0.899   -0.0125   0.0143
-  L3.emp       0.0018      0.012    0.1499   0.8808   -0.0218   0.0254
-  L3.hc        0.0465     0.0795    0.5844    0.559   -0.1094   0.2024
+  L1.rgdpna   -0.0009     0.0060   -0.1459    0.884    -0.0126     0.0109
+  L1.emp       0.0067     0.0139    0.4825   0.6294    -0.0206     0.0341
+  L1.hc        0.1522     0.1686    0.9031   0.3665    -0.1781     0.4826
+  L2.rgdpna   -0.0067     0.0111   -0.5999   0.5486    -0.0285     0.0151
+  L2.emp       0.0081     0.0187    0.4337   0.6645    -0.0285     0.0448
+  L2.hc        0.1183     0.0865    1.3682   0.1713    -0.0512     0.2877
+  L3.rgdpna    0.0009     0.0068    0.1269    0.899    -0.0125     0.0143
+  L3.emp       0.0018     0.0120    0.1499   0.8808    -0.0218     0.0254
+  L3.hc        0.0465     0.0795    0.5844    0.559    -0.1094     0.2024
 
 , <span class="sgr1">              Panel VAR(4) — FD-GMM</span>
-
- <span class="sgr1">                 </span> <span class="sgr1">                              </span>
 
   Method                                  FD-GMM
   Transformation                First-Difference
@@ -331,56 +317,56 @@ sel = pvar_lag_selection(pd, 4; dependent_vars=dep_vars)</code></pre><pre class=
   Observations                               950
   Instruments       1200 (groups: 38) ⚠ too many
 
-<span class="sgr1">                              Equation: rgdpna</span>
+<span class="sgr1">                               Equation: rgdpna</span>
 
- <span class="sgr1">           </span> <span class="sgr1">   Coef. </span> <span class="sgr1"> Std.Err. </span> <span class="sgr1">       z </span> <span class="sgr1">  P&gt;|z| </span> <span class="sgr1">     [95% </span> <span class="sgr1">    CI] </span> <span class="sgr1">  </span>
+ <span class="sgr1">           </span> <span class="sgr1">   Coef. </span> <span class="sgr1"> Std.Err. </span> <span class="sgr1">       z </span> <span class="sgr1">  P&gt;|z| </span> <span class="sgr1"> CI lower </span> <span class="sgr1"> CI upper </span> <span class="sgr1">  </span>
 
-  L1.rgdpna    0.3135     0.3279    0.9563   0.3389    -0.3291   0.9562
-  L1.emp      -0.7892      0.648   -1.2179   0.2233    -2.0592   0.4808
-  L1.hc       -2.0506     2.6644   -0.7696   0.4415    -7.2728   3.1715
-  L2.rgdpna    0.1844     0.3738    0.4934   0.6217    -0.5481    0.917
-  L2.emp      -0.6287     0.6027   -1.0431   0.2969    -1.8098   0.5525
-  L2.hc       -3.6663     3.5096   -1.0447   0.2962   -10.5451   3.2124
-  L3.rgdpna    0.4839     0.4539    1.0662   0.2863    -0.4056   1.3735
-  L3.emp      -1.0856     0.8226   -1.3198   0.1869    -2.6978   0.5266
-  L3.hc       -4.6695      4.014   -1.1633   0.2447   -12.5368   3.1978
-  L4.rgdpna     0.339     0.2655    1.2768   0.2017    -0.1814   0.8595
-  L4.emp      -0.4158     0.2807   -1.4815   0.1385    -0.9659   0.1343
-  L4.hc       -5.5566     3.5589   -1.5614   0.1184   -12.5319   1.4186
+  L1.rgdpna    0.3135     0.3279    0.9563   0.3389    -0.3291     0.9562
+  L1.emp      -0.7892     0.6480   -1.2179   0.2233    -2.0592     0.4808
+  L1.hc       -2.0506     2.6644   -0.7696   0.4415    -7.2728     3.1715
+  L2.rgdpna    0.1844     0.3738    0.4934   0.6217    -0.5481     0.9170
+  L2.emp      -0.6287     0.6027   -1.0431   0.2969    -1.8098     0.5525
+  L2.hc       -3.6663     3.5096   -1.0447   0.2962   -10.5451     3.2124
+  L3.rgdpna    0.4839     0.4539    1.0662   0.2863    -0.4056     1.3735
+  L3.emp      -1.0856     0.8226   -1.3198   0.1869    -2.6978     0.5266
+  L3.hc       -4.6695     4.0140   -1.1633   0.2447   -12.5368     3.1978
+  L4.rgdpna    0.3390     0.2655    1.2768   0.2017    -0.1814     0.8595
+  L4.emp      -0.4158     0.2807   -1.4815   0.1385    -0.9659     0.1343
+  L4.hc       -5.5566     3.5589   -1.5614   0.1184   -12.5319     1.4186
 
-<span class="sgr1">                                Equation: emp</span>
+<span class="sgr1">                                 Equation: emp</span>
 
- <span class="sgr1">           </span> <span class="sgr1">   Coef. </span> <span class="sgr1"> Std.Err. </span> <span class="sgr1">       z </span> <span class="sgr1">  P&gt;|z| </span> <span class="sgr1">    [95% </span> <span class="sgr1">    CI] </span> <span class="sgr1">    </span>
+ <span class="sgr1">           </span> <span class="sgr1">   Coef. </span> <span class="sgr1"> Std.Err. </span> <span class="sgr1">       z </span> <span class="sgr1">  P&gt;|z| </span> <span class="sgr1"> CI lower </span> <span class="sgr1"> CI upper </span> <span class="sgr1">    </span>
 
-  L1.rgdpna    0.3343     0.1568    2.1319    0.033     0.027   0.6416   **
-  L1.emp      -0.2418      0.322    -0.751   0.4526   -0.8728   0.3892
-  L1.hc       -1.4449     1.1522    -1.254   0.2098   -3.7032   0.8134
-  L2.rgdpna    0.1904     0.2085    0.9134   0.3611   -0.2182   0.5991
-  L2.emp       -0.426     0.3353   -1.2704   0.2039   -1.0833   0.2312
-  L2.hc       -1.4551     1.3922   -1.0451    0.296   -4.1837   1.2736
-  L3.rgdpna    0.2197     0.2892    0.7595   0.4475   -0.3472   0.7866
-  L3.emp      -0.4163     0.5257   -0.7918   0.4285   -1.4467   0.6141
-  L3.hc       -1.5708     1.5536   -1.0111    0.312   -4.6158   1.4742
-  L4.rgdpna    0.1527     0.1342    1.1374   0.2554   -0.1104   0.4158
-  L4.emp      -0.2217     0.1349   -1.6435   0.1003   -0.4861   0.0427
-  L4.hc       -1.2017     1.1488   -1.0461   0.2955   -3.4532   1.0499
+  L1.rgdpna    0.3343     0.1568    2.1319    0.033     0.0270     0.6416   **
+  L1.emp      -0.2418     0.3220   -0.7510   0.4526    -0.8728     0.3892
+  L1.hc       -1.4449     1.1522   -1.2540   0.2098    -3.7032     0.8134
+  L2.rgdpna    0.1904     0.2085    0.9134   0.3611    -0.2182     0.5991
+  L2.emp      -0.4260     0.3353   -1.2704   0.2039    -1.0833     0.2312
+  L2.hc       -1.4551     1.3922   -1.0451    0.296    -4.1837     1.2736
+  L3.rgdpna    0.2197     0.2892    0.7595   0.4475    -0.3472     0.7866
+  L3.emp      -0.4163     0.5257   -0.7918   0.4285    -1.4467     0.6141
+  L3.hc       -1.5708     1.5536   -1.0111    0.312    -4.6158     1.4742
+  L4.rgdpna    0.1527     0.1342    1.1374   0.2554    -0.1104     0.4158
+  L4.emp      -0.2217     0.1349   -1.6435   0.1003    -0.4861     0.0427
+  L4.hc       -1.2017     1.1488   -1.0461   0.2955    -3.4532     1.0499
 
-<span class="sgr1">                               Equation: hc</span>
+<span class="sgr1">                                 Equation: hc</span>
 
- <span class="sgr1">           </span> <span class="sgr1">   Coef. </span> <span class="sgr1"> Std.Err. </span> <span class="sgr1">       z </span> <span class="sgr1">  P&gt;|z| </span> <span class="sgr1">    [95% </span> <span class="sgr1">    CI] </span> <span class="sgr1">  </span>
+ <span class="sgr1">           </span> <span class="sgr1">   Coef. </span> <span class="sgr1"> Std.Err. </span> <span class="sgr1">       z </span> <span class="sgr1">  P&gt;|z| </span> <span class="sgr1"> CI lower </span> <span class="sgr1"> CI upper </span> <span class="sgr1">  </span>
 
-  L1.rgdpna   -0.0024     0.0082   -0.2868   0.7743   -0.0185   0.0138
-  L1.emp       0.0016     0.0166    0.0938   0.9253    -0.031   0.0341
-  L1.hc        0.0329     0.1895    0.1736   0.8622   -0.3386   0.4044
-  L2.rgdpna    0.0036     0.0138    0.2641   0.7917   -0.0234   0.0307
-  L2.emp      -0.0097     0.0243   -0.3992   0.6897   -0.0572   0.0379
-  L2.hc       -0.0356     0.1184   -0.3006   0.7638   -0.2677   0.1965
-  L3.rgdpna    0.0189     0.0178    1.0621   0.2882    -0.016   0.0539
-  L3.emp       -0.028     0.0283   -0.9903    0.322   -0.0834   0.0274
-  L3.hc       -0.0702     0.1647   -0.4264   0.6698   -0.3931   0.2527
-  L4.rgdpna    0.0074     0.0092    0.8013   0.4229   -0.0107   0.0255
-  L4.emp       -0.004     0.0119    -0.335   0.7376   -0.0274   0.0194
-  L4.hc       -0.1358     0.1773   -0.7657   0.4439   -0.4833   0.2118
+  L1.rgdpna   -0.0024     0.0082   -0.2868   0.7743    -0.0185     0.0138
+  L1.emp       0.0016     0.0166    0.0938   0.9253    -0.0310     0.0341
+  L1.hc        0.0329     0.1895    0.1736   0.8622    -0.3386     0.4044
+  L2.rgdpna    0.0036     0.0138    0.2641   0.7917    -0.0234     0.0307
+  L2.emp      -0.0097     0.0243   -0.3992   0.6897    -0.0572     0.0379
+  L2.hc       -0.0356     0.1184   -0.3006   0.7638    -0.2677     0.1965
+  L3.rgdpna    0.0189     0.0178    1.0621   0.2882    -0.0160     0.0539
+  L3.emp      -0.0280     0.0283   -0.9903    0.322    -0.0834     0.0274
+  L3.hc       -0.0702     0.1647   -0.4264   0.6698    -0.3931     0.2527
+  L4.rgdpna    0.0074     0.0092    0.8013   0.4229    -0.0107     0.0255
+  L4.emp      -0.0040     0.0119   -0.3350   0.7376    -0.0274     0.0194
+  L4.hc       -0.1358     0.1773   -0.7657   0.4439    -0.4833     0.2118
 
 ])</code></pre><p><strong>Recipe 5: Structural analysis with bootstrap CIs</strong></p><pre><code class="language-julia hljs">dep_vars = [&quot;rgdpna&quot;, &quot;emp&quot;, &quot;hc&quot;]
 
@@ -471,8 +457,6 @@ report(m_sys)</code></pre><pre class="documenter-example-output"><code class="no
 └ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:152
             Panel VAR(2) — System GMM
 
-
-
   Method                              System GMM
   Transformation                First-Difference
   Steps                                  twostep
@@ -484,41 +468,39 @@ report(m_sys)</code></pre><pre class="documenter-example-output"><code class="no
   Observations                              2052
   Instruments       1219 (groups: 38) ⚠ too many
 
-                             Equation: rgdpna
+                               Equation: rgdpna
 
-                Coef.   Std.Err.         z    P&gt;|z|      [95%      CI]
+                Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
 
-  L1.rgdpna     0.249      0.188     1.324   0.1855   -0.1196   0.6175
-  L1.emp      -0.1573     0.3025   -0.5202   0.6029   -0.7502   0.4355
-  L1.hc        2.1053     1.3735    1.5328   0.1253   -0.5868   4.7973
-  L2.rgdpna   -0.0123     0.1617   -0.0763   0.9392   -0.3292   0.3045
-  L2.emp      -0.0542     0.2777   -0.1952   0.8453   -0.5984     0.49
-  L2.hc        1.6635     1.0771    1.5444   0.1225   -0.4476   3.7745
+  L1.rgdpna    0.2490     0.1880    1.3240   0.1855    -0.1196     0.6175
+  L1.emp      -0.1573     0.3025   -0.5202   0.6029    -0.7502     0.4355
+  L1.hc        2.1053     1.3735    1.5328   0.1253    -0.5868     4.7973
+  L2.rgdpna   -0.0123     0.1617   -0.0763   0.9392    -0.3292     0.3045
+  L2.emp      -0.0542     0.2777   -0.1952   0.8453    -0.5984     0.4900
+  L2.hc        1.6635     1.0771    1.5444   0.1225    -0.4476     3.7745
 
-                                Equation: emp
+                                 Equation: emp
 
-                Coef.   Std.Err.         z    P&gt;|z|      [95%      CI]
+                Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
 
-  L1.rgdpna    0.1911     0.0885    2.1593   0.0308    0.0176   0.3646   **
-  L1.emp       0.1562     0.1689    0.9248   0.3551   -0.1748   0.4871
-  L1.hc        0.3501     0.4278    0.8183   0.4132   -0.4884   1.1886
-  L2.rgdpna   -0.0692     0.0723   -0.9563   0.3389   -0.2109   0.0726
-  L2.emp      -0.0054     0.0942    -0.057   0.9546     -0.19   0.1792
-  L2.hc        0.7805     0.4936    1.5813   0.1138   -0.1869   1.7479
+  L1.rgdpna    0.1911     0.0885    2.1593   0.0308     0.0176     0.3646   **
+  L1.emp       0.1562     0.1689    0.9248   0.3551    -0.1748     0.4871
+  L1.hc        0.3501     0.4278    0.8183   0.4132    -0.4884     1.1886
+  L2.rgdpna   -0.0692     0.0723   -0.9563   0.3389    -0.2109     0.0726
+  L2.emp      -0.0054     0.0942   -0.0570   0.9546    -0.1900     0.1792
+  L2.hc        0.7805     0.4936    1.5813   0.1138    -0.1869     1.7479
 
-                                Equation: hc
+                                  Equation: hc
 
-               Coef.   Std.Err.         z    P&gt;|z|      [95%      CI]
+                Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
 
-  L1.rgdpna   0.0143     0.0096    1.4814   0.1385   -0.0046   0.0332
-  L1.emp      -0.005     0.0115   -0.4351   0.6635   -0.0275   0.0175
-  L1.hc        0.507     0.1014    5.0001   &lt;0.001    0.3082   0.7057   ***
-  L2.rgdpna   0.0029     0.0086    0.3343   0.7382   -0.0139   0.0197
-  L2.emp      0.0118     0.0114    1.0399   0.2984   -0.0105   0.0342
-  L2.hc       0.3872     0.0836    4.6291   &lt;0.001    0.2232   0.5511   ***</code></pre><p>The system estimator exploits additional moment conditions but requires the assumption that first differences are uncorrelated with fixed effects.</p><h3 id="Keyword-Arguments"><a class="docs-heading-anchor" href="#Keyword-Arguments">Keyword Arguments</a><a id="Keyword-Arguments-1"></a><a class="docs-heading-anchor-permalink" href="#Keyword-Arguments" title="Permalink"></a></h3><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>dependent_vars</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right"><code>nothing</code></td><td style="text-align: right">Endogenous variable names (default: all columns)</td></tr><tr><td style="text-align: right"><code>predet_vars</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right"><code>String[]</code></td><td style="text-align: right">Predetermined variable names</td></tr><tr><td style="text-align: right"><code>exog_vars</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right"><code>String[]</code></td><td style="text-align: right">Strictly exogenous variable names</td></tr><tr><td style="text-align: right"><code>transformation</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:fd</code></td><td style="text-align: right"><code>:fd</code> (first-difference) or <code>:fod</code> (forward orthogonal deviations)</td></tr><tr><td style="text-align: right"><code>steps</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:twostep</code></td><td style="text-align: right"><code>:onestep</code>, <code>:twostep</code>, or <code>:mstep</code> (iterated)</td></tr><tr><td style="text-align: right"><code>system_instruments</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>false</code></td><td style="text-align: right">Use System GMM (Blundell-Bond)</td></tr><tr><td style="text-align: right"><code>system_constant</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>true</code></td><td style="text-align: right">Include constant in level equation (System GMM)</td></tr><tr><td style="text-align: right"><code>min_lag_endo</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>2</code></td><td style="text-align: right">Minimum instrument lag for endogenous variables</td></tr><tr><td style="text-align: right"><code>max_lag_endo</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>99</code></td><td style="text-align: right">Maximum instrument lag (99 = all available)</td></tr><tr><td style="text-align: right"><code>collapse</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>false</code></td><td style="text-align: right">Collapse instruments to limit proliferation</td></tr><tr><td style="text-align: right"><code>pca_instruments</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>false</code></td><td style="text-align: right">Apply PCA reduction to instruments</td></tr><tr><td style="text-align: right"><code>pca_max_components</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>0</code></td><td style="text-align: right">Maximum PCA components (0 = auto)</td></tr><tr><td style="text-align: right"><code>max_iter</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>100</code></td><td style="text-align: right">Maximum iterations for iterated GMM</td></tr></table><h3 id="Return-Value"><a class="docs-heading-anchor" href="#Return-Value">Return Value</a><a id="Return-Value-1"></a><a class="docs-heading-anchor-permalink" href="#Return-Value" title="Permalink"></a></h3><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>Phi</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right"><span>$m \times K$</span> coefficient matrix</td></tr><tr><td style="text-align: right"><code>Sigma</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right"><span>$m \times m$</span> residual covariance</td></tr><tr><td style="text-align: right"><code>se</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right">Robust standard errors (same shape as <code>Phi</code>)</td></tr><tr><td style="text-align: right"><code>pvalues</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right">P-values (same shape as <code>Phi</code>)</td></tr><tr><td style="text-align: right"><code>m</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of endogenous variables</td></tr><tr><td style="text-align: right"><code>p</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of lags</td></tr><tr><td style="text-align: right"><code>varnames</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right">Endogenous variable names</td></tr><tr><td style="text-align: right"><code>method</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:fd_gmm</code>, <code>:system_gmm</code>, or <code>:fe_ols</code></td></tr><tr><td style="text-align: right"><code>transformation</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:fd</code>, <code>:fod</code>, or <code>:demean</code></td></tr><tr><td style="text-align: right"><code>steps</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:onestep</code>, <code>:twostep</code>, or <code>:mstep</code></td></tr><tr><td style="text-align: right"><code>n_groups</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of panel groups</td></tr><tr><td style="text-align: right"><code>n_obs</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Total effective observations</td></tr><tr><td style="text-align: right"><code>n_instruments</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of moment conditions</td></tr></table><hr/><h2 id="Fixed-Effects-OLS"><a class="docs-heading-anchor" href="#Fixed-Effects-OLS">Fixed-Effects OLS</a><a id="Fixed-Effects-OLS-1"></a><a class="docs-heading-anchor-permalink" href="#Fixed-Effects-OLS" title="Permalink"></a></h2><p>For panels with large <span>$T$</span>, the within (FE-OLS) estimator provides a simpler alternative. The estimator demeans each entity&#39;s data (removing <span>$\boldsymbol{\mu}_i$</span>) and runs pooled OLS on the stacked system with cluster-robust standard errors at the group level:</p><pre><code class="language-julia hljs">m_fe = estimate_pvar_feols(pd, 2; dependent_vars=[&quot;rgdpna&quot;, &quot;emp&quot;, &quot;hc&quot;])
+  L1.rgdpna    0.0143     0.0096    1.4814   0.1385    -0.0046     0.0332
+  L1.emp      -0.0050     0.0115   -0.4351   0.6635    -0.0275     0.0175
+  L1.hc        0.5070     0.1014    5.0001   &lt;0.001     0.3082     0.7057   ***
+  L2.rgdpna    0.0029     0.0086    0.3343   0.7382    -0.0139     0.0197
+  L2.emp       0.0118     0.0114    1.0399   0.2984    -0.0105     0.0342
+  L2.hc        0.3872     0.0836    4.6291   &lt;0.001     0.2232     0.5511   ***</code></pre><p>The system estimator exploits additional moment conditions but requires the assumption that first differences are uncorrelated with fixed effects.</p><h3 id="Keyword-Arguments"><a class="docs-heading-anchor" href="#Keyword-Arguments">Keyword Arguments</a><a id="Keyword-Arguments-1"></a><a class="docs-heading-anchor-permalink" href="#Keyword-Arguments" title="Permalink"></a></h3><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>dependent_vars</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right"><code>nothing</code></td><td style="text-align: right">Endogenous variable names (default: all columns)</td></tr><tr><td style="text-align: right"><code>predet_vars</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right"><code>String[]</code></td><td style="text-align: right">Predetermined variable names</td></tr><tr><td style="text-align: right"><code>exog_vars</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right"><code>String[]</code></td><td style="text-align: right">Strictly exogenous variable names</td></tr><tr><td style="text-align: right"><code>transformation</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:fd</code></td><td style="text-align: right"><code>:fd</code> (first-difference) or <code>:fod</code> (forward orthogonal deviations)</td></tr><tr><td style="text-align: right"><code>steps</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:twostep</code></td><td style="text-align: right"><code>:onestep</code>, <code>:twostep</code>, or <code>:mstep</code> (iterated)</td></tr><tr><td style="text-align: right"><code>system_instruments</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>false</code></td><td style="text-align: right">Use System GMM (Blundell-Bond)</td></tr><tr><td style="text-align: right"><code>system_constant</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>true</code></td><td style="text-align: right">Include constant in level equation (System GMM)</td></tr><tr><td style="text-align: right"><code>min_lag_endo</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>2</code></td><td style="text-align: right">Minimum instrument lag for endogenous variables</td></tr><tr><td style="text-align: right"><code>max_lag_endo</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>99</code></td><td style="text-align: right">Maximum instrument lag (99 = all available)</td></tr><tr><td style="text-align: right"><code>collapse</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>false</code></td><td style="text-align: right">Collapse instruments to limit proliferation</td></tr><tr><td style="text-align: right"><code>pca_instruments</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>false</code></td><td style="text-align: right">Apply PCA reduction to instruments</td></tr><tr><td style="text-align: right"><code>pca_max_components</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>0</code></td><td style="text-align: right">Maximum PCA components (0 = auto)</td></tr><tr><td style="text-align: right"><code>max_iter</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>100</code></td><td style="text-align: right">Maximum iterations for iterated GMM</td></tr></table><h3 id="Return-Value"><a class="docs-heading-anchor" href="#Return-Value">Return Value</a><a id="Return-Value-1"></a><a class="docs-heading-anchor-permalink" href="#Return-Value" title="Permalink"></a></h3><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>Phi</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right"><span>$m \times K$</span> coefficient matrix</td></tr><tr><td style="text-align: right"><code>Sigma</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right"><span>$m \times m$</span> residual covariance</td></tr><tr><td style="text-align: right"><code>se</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right">Robust standard errors (same shape as <code>Phi</code>)</td></tr><tr><td style="text-align: right"><code>pvalues</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right">P-values (same shape as <code>Phi</code>)</td></tr><tr><td style="text-align: right"><code>m</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of endogenous variables</td></tr><tr><td style="text-align: right"><code>p</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of lags</td></tr><tr><td style="text-align: right"><code>varnames</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right">Endogenous variable names</td></tr><tr><td style="text-align: right"><code>method</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:fd_gmm</code>, <code>:system_gmm</code>, or <code>:fe_ols</code></td></tr><tr><td style="text-align: right"><code>transformation</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:fd</code>, <code>:fod</code>, or <code>:demean</code></td></tr><tr><td style="text-align: right"><code>steps</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:onestep</code>, <code>:twostep</code>, or <code>:mstep</code></td></tr><tr><td style="text-align: right"><code>n_groups</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of panel groups</td></tr><tr><td style="text-align: right"><code>n_obs</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Total effective observations</td></tr><tr><td style="text-align: right"><code>n_instruments</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of moment conditions</td></tr></table><hr/><h2 id="Fixed-Effects-OLS"><a class="docs-heading-anchor" href="#Fixed-Effects-OLS">Fixed-Effects OLS</a><a id="Fixed-Effects-OLS-1"></a><a class="docs-heading-anchor-permalink" href="#Fixed-Effects-OLS" title="Permalink"></a></h2><p>For panels with large <span>$T$</span>, the within (FE-OLS) estimator provides a simpler alternative. The estimator demeans each entity&#39;s data (removing <span>$\boldsymbol{\mu}_i$</span>) and runs pooled OLS on the stacked system with cluster-robust standard errors at the group level:</p><pre><code class="language-julia hljs">m_fe = estimate_pvar_feols(pd, 2; dependent_vars=[&quot;rgdpna&quot;, &quot;emp&quot;, &quot;hc&quot;])
 report(m_fe)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">        Panel VAR(2) — FE-OLS
-
-
 
   Method                      FE-OLS
   Transformation    Within Demeaning
@@ -530,38 +512,38 @@ report(m_fe)</code></pre><pre class="documenter-example-output"><code class="noh
   Obs/group               28/28.0/28
   Observations                  1064
 
-                               Equation: rgdpna
+                                Equation: rgdpna
 
-                Coef.   Std.Err.         z    P&gt;|z|      [95%      CI]
+                Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
 
-  L1.rgdpna     0.258     0.0612     4.212   &lt;0.001    0.1379    0.378   ***
-  L1.emp      -0.1901     0.0954   -1.9918   0.0464   -0.3771   -0.003   **
-  L1.hc        0.0684     0.2566    0.2667   0.7897   -0.4345   0.5714
-  L2.rgdpna   -0.0506     0.0357   -1.4154    0.157   -0.1206   0.0195
-  L2.emp      -0.0343     0.0614   -0.5577   0.5771   -0.1547   0.0862
-  L2.hc        0.3595     0.2073    1.7348   0.0828   -0.0467   0.7657   *
+  L1.rgdpna    0.2580     0.0612    4.2120   &lt;0.001     0.1379     0.3780   ***
+  L1.emp      -0.1901     0.0954   -1.9918   0.0464    -0.3771    -0.0030   **
+  L1.hc        0.0684     0.2566    0.2667   0.7897    -0.4345     0.5714
+  L2.rgdpna   -0.0506     0.0357   -1.4154    0.157    -0.1206     0.0195
+  L2.emp      -0.0343     0.0614   -0.5577   0.5771    -0.1547     0.0862
+  L2.hc        0.3595     0.2073    1.7348   0.0828    -0.0467     0.7657   *
 
-                                 Equation: emp
+                                  Equation: emp
 
-                Coef.   Std.Err.         z    P&gt;|z|      [95%       CI]
+                Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
 
-  L1.rgdpna    0.1799     0.0368    4.8861   &lt;0.001    0.1077     0.252   ***
-  L1.emp       0.1358     0.0834    1.6272   0.1037   -0.0278    0.2993
-  L1.hc       -0.1716     0.1352   -1.2693   0.2043   -0.4366    0.0934
-  L2.rgdpna   -0.0759      0.032   -2.3752   0.0175   -0.1386   -0.0133   **
-  L2.emp      -0.0464     0.0503   -0.9224   0.3563    -0.145    0.0522
-  L2.hc       -0.0441     0.1689   -0.2608   0.7943   -0.3752    0.2871
+  L1.rgdpna    0.1799     0.0368    4.8861   &lt;0.001     0.1077     0.2520   ***
+  L1.emp       0.1358     0.0834    1.6272   0.1037    -0.0278     0.2993
+  L1.hc       -0.1716     0.1352   -1.2693   0.2043    -0.4366     0.0934
+  L2.rgdpna   -0.0759     0.0320   -2.3752   0.0175    -0.1386    -0.0133   **
+  L2.emp      -0.0464     0.0503   -0.9224   0.3563    -0.1450     0.0522
+  L2.hc       -0.0441     0.1689   -0.2608   0.7943    -0.3752     0.2871
 
-                                 Equation: hc
+                                  Equation: hc
 
-                Coef.   Std.Err.         z    P&gt;|z|      [95%      CI]
+                Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
 
-  L1.rgdpna    0.0049     0.0034    1.4245   0.1543   -0.0018   0.0116
-  L1.emp      -0.0059     0.0087   -0.6767   0.4986    -0.023   0.0112
-  L1.hc        0.2686     0.1239    2.1689   0.0301    0.0259   0.5114   **
-  L2.rgdpna   -0.0029     0.0052   -0.5631   0.5734   -0.0131   0.0073
-  L2.emp       0.0017     0.0082    0.2056   0.8371   -0.0144   0.0177
-  L2.hc        0.1556     0.0432    3.5986   &lt;0.001    0.0709   0.2404   ***</code></pre><p>The FE-OLS estimator accepts the same <code>dependent_vars</code>, <code>predet_vars</code>, and <code>exog_vars</code> keywords as the GMM estimator. Standard errors are clustered at the group level by default.</p><hr/><h2 id="Instrument-Management"><a class="docs-heading-anchor" href="#Instrument-Management">Instrument Management</a><a id="Instrument-Management-1"></a><a class="docs-heading-anchor-permalink" href="#Instrument-Management" title="Permalink"></a></h2><p>When the number of instruments is large relative to <span>$N$</span>, standard errors become unreliable and the Hansen J-test loses power. Several options control instrument proliferation:</p><pre><code class="language-julia hljs">dep_vars = [&quot;rgdpna&quot;, &quot;emp&quot;, &quot;hc&quot;]
+  L1.rgdpna    0.0049     0.0034    1.4245   0.1543    -0.0018     0.0116
+  L1.emp      -0.0059     0.0087   -0.6767   0.4986    -0.0230     0.0112
+  L1.hc        0.2686     0.1239    2.1689   0.0301     0.0259     0.5114   **
+  L2.rgdpna   -0.0029     0.0052   -0.5631   0.5734    -0.0131     0.0073
+  L2.emp       0.0017     0.0082    0.2056   0.8371    -0.0144     0.0177
+  L2.hc        0.1556     0.0432    3.5986   &lt;0.001     0.0709     0.2404   ***</code></pre><p>The FE-OLS estimator accepts the same <code>dependent_vars</code>, <code>predet_vars</code>, and <code>exog_vars</code> keywords as the GMM estimator. Standard errors are clustered at the group level by default.</p><hr/><h2 id="Instrument-Management"><a class="docs-heading-anchor" href="#Instrument-Management">Instrument Management</a><a id="Instrument-Management-1"></a><a class="docs-heading-anchor-permalink" href="#Instrument-Management" title="Permalink"></a></h2><p>When the number of instruments is large relative to <span>$N$</span>, standard errors become unreliable and the Hansen J-test loses power. Several options control instrument proliferation:</p><pre><code class="language-julia hljs">dep_vars = [&quot;rgdpna&quot;, &quot;emp&quot;, &quot;hc&quot;]
 
 # Restrict instrument lags to avoid proliferation
 m = estimate_pvar(pd, 2; dependent_vars=dep_vars,
@@ -833,21 +815,15 @@ report(j)</code></pre><pre class="documenter-example-output"><code class="nohigh
 └ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:152
          Hansen J-test
 
-
-
   Test          Hansen J-test
-  Statistic              38.0
+  Statistic           38.0000
   P-value              &gt;0.999
   DF                     1215
   Instruments            1218
   Parameters                3</code></pre><p>Rejection suggests instrument invalidity or model misspecification. Non-rejection does not validate the instruments –- it only means the data cannot reject the moment conditions at the given sample size.</p><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>test_name</code></td><td style="text-align: right"><code>String</code></td><td style="text-align: right"><code>&quot;Hansen J-test&quot;</code></td></tr><tr><td style="text-align: right"><code>statistic</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">J-statistic</td></tr><tr><td style="text-align: right"><code>pvalue</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">P-value (<span>$\chi^2$</span> distribution)</td></tr><tr><td style="text-align: right"><code>df</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Degrees of freedom <span>$c - b$</span></td></tr><tr><td style="text-align: right"><code>n_instruments</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of moment conditions <span>$c$</span></td></tr><tr><td style="text-align: right"><code>n_params</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of estimated parameters <span>$b$</span></td></tr></table><h3 id="Andrews-Lu-MMSC"><a class="docs-heading-anchor" href="#Andrews-Lu-MMSC">Andrews-Lu MMSC</a><a id="Andrews-Lu-MMSC-1"></a><a class="docs-heading-anchor-permalink" href="#Andrews-Lu-MMSC" title="Permalink"></a></h3><p>Andrews &amp; Lu (2001) Model and Moment Selection Criteria extend information criteria to GMM settings:</p><p class="math-container">\[\text{MMSC-BIC} = J - (c - b) \ln(n), \quad
 \text{MMSC-AIC} = J - 2(c - b)\]</p><p>where:</p><ul><li><span>$J$</span> is the Hansen J-statistic</li><li><span>$c$</span> is the number of instruments, <span>$b$</span> is the number of parameters, <span>$n$</span> is the number of observations</li></ul><p>Lower values are preferred. These criteria penalize overidentification, balancing model fit against instrument proliferation.</p><pre><code class="language-julia hljs">mmsc = pvar_mmsc(model)
-mmsc.bic     # MMSC-BIC
-mmsc.aic     # MMSC-AIC
-mmsc.hqic    # MMSC-HQIC</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">-4915.954615624271</code></pre><hr/><h2 id="Lag-Selection"><a class="docs-heading-anchor" href="#Lag-Selection">Lag Selection</a><a id="Lag-Selection-1"></a><a class="docs-heading-anchor-permalink" href="#Lag-Selection" title="Permalink"></a></h2><p>The <code>pvar_lag_selection</code> function compares MMSC criteria across candidate lag orders to select the optimal specification:</p><pre><code class="language-julia hljs">sel = pvar_lag_selection(pd, 4; dependent_vars=[&quot;rgdpna&quot;, &quot;emp&quot;, &quot;hc&quot;])
-sel.best_bic    # optimal lag by BIC
-sel.best_aic    # optimal lag by AIC
-sel.best_hqic   # optimal lag by HQIC</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">1</code></pre><p>The function estimates PVAR models for lags 1 through the maximum candidate, computes MMSC criteria for each, and returns the lag order that minimizes each criterion.</p><hr/><h2 id="Complete-Example"><a class="docs-heading-anchor" href="#Complete-Example">Complete Example</a><a id="Complete-Example-1"></a><a class="docs-heading-anchor-permalink" href="#Complete-Example" title="Permalink"></a></h2><pre><code class="language-julia hljs"># Load Penn World Table and convert to growth rates
+(bic = mmsc.bic, aic = mmsc.aic, hqic = mmsc.hqic)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(bic = -8430.295663930432, aic = -2392.0, hqic = -4915.954615624271)</code></pre><hr/><h2 id="Lag-Selection"><a class="docs-heading-anchor" href="#Lag-Selection">Lag Selection</a><a id="Lag-Selection-1"></a><a class="docs-heading-anchor-permalink" href="#Lag-Selection" title="Permalink"></a></h2><p>The <code>pvar_lag_selection</code> function compares MMSC criteria across candidate lag orders to select the optimal specification:</p><pre><code class="language-julia hljs">sel = pvar_lag_selection(pd, 4; dependent_vars=[&quot;rgdpna&quot;, &quot;emp&quot;, &quot;hc&quot;])
+(best_bic = sel.best_bic, best_aic = sel.best_aic, best_hqic = sel.best_hqic)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(best_bic = 1, best_aic = 1, best_hqic = 1)</code></pre><p>The function estimates PVAR models for lags 1 through the maximum candidate, computes MMSC criteria for each, and returns the lag order that minimizes each criterion.</p><hr/><h2 id="Complete-Example"><a class="docs-heading-anchor" href="#Complete-Example">Complete Example</a><a id="Complete-Example-1"></a><a class="docs-heading-anchor-permalink" href="#Complete-Example" title="Permalink"></a></h2><pre><code class="language-julia hljs"># Load Penn World Table and convert to growth rates
 dep_vars = [&quot;rgdpna&quot;, &quot;emp&quot;, &quot;hc&quot;]
 
 # Lag selection
@@ -873,4 +849,4 @@ decomp = pvar_fevd(model, 10)
 boot = pvar_bootstrap_irf(model, 10; n_draws=20, ci=0.90)
 
 # Academic references
-refs(model)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">&quot;Holtz-Eakin, Douglas and Newey, Whitney and Rosen, Harvey S. 1988. \&quot;Estimating Vector Autoregressions with Panel Data.\&quot; Econometrica 56 (6): 1371–1395.\n  DOI: https://doi.org/10.2307/1913103\nArellano, Manuel and Bond, Stephen 1991. \&quot;Some Tests of Specification for Panel Da&quot;<span class="sgr93"><span class="sgr1"> ⋯ 90 bytes ⋯ </span></span>&quot;tudies 58 (2): 277–297.\n  DOI: https://doi.org/10.2307/2297968\nBlundell, Richard and Bond, Stephen 1998. \&quot;Initial Conditions and Moment Restrictions in Dynamic Panel Data Models.\&quot; Journal of Econometrics 87 (1): 115–143.\n  DOI: https://doi.org/10.1016/S0304-4076(98)00009-8\n&quot;</code></pre><p>The <code>model</code> object stores the GMM coefficient estimates with Windmeijer-corrected standard errors, per-equation coefficient tables, and all GMM internals needed for specification testing. The Hansen J-test evaluates instrument validity, while the stability analysis confirms that the companion matrix eigenvalues lie inside the unit circle. The orthogonalized IRFs trace out the dynamic transmission of shocks through the GDP-employment-human capital system, and the bootstrap provides pointwise confidence intervals that account for estimation uncertainty. The FEVD quantifies how much of the forecast error variance in each variable is attributable to each structural shock at different horizons.</p><hr/><h2 id="Common-Pitfalls"><a class="docs-heading-anchor" href="#Common-Pitfalls">Common Pitfalls</a><a id="Common-Pitfalls-1"></a><a class="docs-heading-anchor-permalink" href="#Common-Pitfalls" title="Permalink"></a></h2><ol><li><p><strong>Nickell bias in FE-OLS</strong>: The within estimator is biased of order <span>$O(1/T)$</span> in dynamic panels (Nickell 1981). For panels with <span>$T &lt; 20$</span>, FE-OLS overestimates the persistence of the lagged dependent variable. Use GMM estimation (<code>estimate_pvar</code>) instead of <code>estimate_pvar_feols</code> when the time dimension is short relative to the cross-section.</p></li><li><p><strong>Instrument count exceeding N</strong>: When the number of instruments exceeds <span>$N$</span> (the number of groups), the Hansen J-test loses power and standard errors become unreliable. Use <code>collapse=true</code>, restrict <code>max_lag_endo</code>, or apply <code>pca_instruments=true</code> to reduce instrument count. A rule of thumb: keep the instrument count below <span>$N$</span>.</p></li><li><p><strong>Hansen J-test interpretation</strong>: A high p-value (non-rejection) does not prove instrument validity –- it only means the data cannot reject the moment conditions. Conversely, with many instruments, the J-test almost never rejects even when some instruments are invalid. Always report the instrument count alongside the J-statistic.</p></li><li><p><strong>Unbalanced panels</strong>: First-differencing loses one observation per gap in the panel. Forward orthogonal deviations (<code>transformation=:fod</code>) handle unbalanced panels more efficiently by preserving orthogonality of the transformed errors. Use <code>:fod</code> when the panel has missing periods or unequal group sizes.</p></li><li><p><strong>System GMM stationarity assumption</strong>: Blundell-Bond system GMM requires that first differences are uncorrelated with fixed effects –- a mean stationarity condition. If the data exhibit trending behavior or structural breaks, the additional level-equation instruments are invalid and FD-GMM is preferred.</p></li></ol><hr/><h2 id="References"><a class="docs-heading-anchor" href="#References">References</a><a id="References-1"></a><a class="docs-heading-anchor-permalink" href="#References" title="Permalink"></a></h2><ul><li><p>Arellano, Manuel, and Stephen Bond. 1991. &quot;Some Tests of Specification for Panel Data.&quot; <em>Review of Economic Studies</em> 58 (2): 277–297. <a href="https://doi.org/10.2307/2297968">DOI</a></p></li><li><p>Arellano, Manuel, and Olympia Bover. 1995. &quot;Another Look at the Instrumental Variable Estimation of Error-Components Models.&quot; <em>Journal of Econometrics</em> 68 (1): 29–51. <a href="https://doi.org/10.1016/0304-4076(94)01642-D">DOI</a></p></li><li><p>Andrews, Donald W. K., and Biao Lu. 2001. &quot;Consistent Model and Moment Selection Procedures for GMM Estimation with Application to Dynamic Panel Data Models.&quot; <em>Journal of Econometrics</em> 101 (1): 123–164. <a href="https://doi.org/10.1016/S0304-4076(00)00077-4">DOI</a></p></li><li><p>Blundell, Richard, and Stephen Bond. 1998. &quot;Initial Conditions and Moment Restrictions in Dynamic Panel Data Models.&quot; <em>Journal of Econometrics</em> 87 (1): 115–143. <a href="https://doi.org/10.1016/S0304-4076(98)00009-8">DOI</a></p></li><li><p>Hansen, Lars Peter. 1982. &quot;Large Sample Properties of Generalized Method of Moments Estimators.&quot; <em>Econometrica</em> 50 (4): 1029–1054. <a href="https://doi.org/10.2307/1912775">DOI</a></p></li><li><p>Holtz-Eakin, Douglas, Whitney Newey, and Harvey S. Rosen. 1988. &quot;Estimating Vector Autoregressions with Panel Data.&quot; <em>Econometrica</em> 56 (6): 1371–1395. <a href="https://doi.org/10.2307/1913103">DOI</a></p></li><li><p>Nickell, Stephen. 1981. &quot;Biases in Dynamic Models with Fixed Effects.&quot; <em>Econometrica</em> 49 (6): 1417–1426. <a href="https://doi.org/10.2307/1911408">DOI</a></p></li><li><p>Pesaran, M. Hashem, and Yongcheol Shin. 1998. &quot;Generalized Impulse Response Analysis in Linear Multivariate Models.&quot; <em>Economics Letters</em> 58 (1): 17–29. <a href="https://doi.org/10.1016/S0165-1765(97)00214-0">DOI</a></p></li><li><p>Windmeijer, Frank. 2005. &quot;A Finite Sample Correction for the Variance of Linear Efficient Two-Step GMM Estimators.&quot; <em>Journal of Econometrics</em> 126 (1): 25–51. <a href="https://doi.org/10.1016/j.jeconom.2004.02.005">DOI</a></p></li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../ordered_multinomial/">« Ordered &amp; Multinomial</a><a class="docs-footer-nextpage" href="../panel_reg/">Panel Regression »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Saturday 11 July 2026 23:37">Saturday 11 July 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+refs(model)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">&quot;Holtz-Eakin, Douglas and Newey, Whitney and Rosen, Harvey S. 1988. \&quot;Estimating Vector Autoregressions with Panel Data.\&quot; Econometrica 56 (6): 1371–1395.\n  DOI: https://doi.org/10.2307/1913103\nArellano, Manuel and Bond, Stephen 1991. \&quot;Some Tests of Specification for Panel Da&quot;<span class="sgr93"><span class="sgr1"> ⋯ 90 bytes ⋯ </span></span>&quot;tudies 58 (2): 277–297.\n  DOI: https://doi.org/10.2307/2297968\nBlundell, Richard and Bond, Stephen 1998. \&quot;Initial Conditions and Moment Restrictions in Dynamic Panel Data Models.\&quot; Journal of Econometrics 87 (1): 115–143.\n  DOI: https://doi.org/10.1016/S0304-4076(98)00009-8\n&quot;</code></pre><p>The <code>model</code> object stores the GMM coefficient estimates with Windmeijer-corrected standard errors, per-equation coefficient tables, and all GMM internals needed for specification testing. The Hansen J-test evaluates instrument validity, while the stability analysis confirms that the companion matrix eigenvalues lie inside the unit circle. The orthogonalized IRFs trace out the dynamic transmission of shocks through the GDP-employment-human capital system, and the bootstrap provides pointwise confidence intervals that account for estimation uncertainty. The FEVD quantifies how much of the forecast error variance in each variable is attributable to each structural shock at different horizons.</p><hr/><h2 id="Common-Pitfalls"><a class="docs-heading-anchor" href="#Common-Pitfalls">Common Pitfalls</a><a id="Common-Pitfalls-1"></a><a class="docs-heading-anchor-permalink" href="#Common-Pitfalls" title="Permalink"></a></h2><ol><li><p><strong>Nickell bias in FE-OLS</strong>: The within estimator is biased of order <span>$O(1/T)$</span> in dynamic panels (Nickell 1981). For panels with <span>$T &lt; 20$</span>, FE-OLS overestimates the persistence of the lagged dependent variable. Use GMM estimation (<code>estimate_pvar</code>) instead of <code>estimate_pvar_feols</code> when the time dimension is short relative to the cross-section.</p></li><li><p><strong>Instrument count exceeding N</strong>: When the number of instruments exceeds <span>$N$</span> (the number of groups), the Hansen J-test loses power and standard errors become unreliable. Use <code>collapse=true</code>, restrict <code>max_lag_endo</code>, or apply <code>pca_instruments=true</code> to reduce instrument count. A rule of thumb: keep the instrument count below <span>$N$</span>.</p></li><li><p><strong>Hansen J-test interpretation</strong>: A high p-value (non-rejection) does not prove instrument validity –- it only means the data cannot reject the moment conditions. Conversely, with many instruments, the J-test almost never rejects even when some instruments are invalid. Always report the instrument count alongside the J-statistic.</p></li><li><p><strong>Unbalanced panels</strong>: First-differencing loses one observation per gap in the panel. Forward orthogonal deviations (<code>transformation=:fod</code>) handle unbalanced panels more efficiently by preserving orthogonality of the transformed errors. Use <code>:fod</code> when the panel has missing periods or unequal group sizes.</p></li><li><p><strong>System GMM stationarity assumption</strong>: Blundell-Bond system GMM requires that first differences are uncorrelated with fixed effects –- a mean stationarity condition. If the data exhibit trending behavior or structural breaks, the additional level-equation instruments are invalid and FD-GMM is preferred.</p></li></ol><hr/><h2 id="References"><a class="docs-heading-anchor" href="#References">References</a><a id="References-1"></a><a class="docs-heading-anchor-permalink" href="#References" title="Permalink"></a></h2><ul><li><p>Arellano, Manuel, and Stephen Bond. 1991. &quot;Some Tests of Specification for Panel Data.&quot; <em>Review of Economic Studies</em> 58 (2): 277–297. <a href="https://doi.org/10.2307/2297968">DOI</a></p></li><li><p>Arellano, Manuel, and Olympia Bover. 1995. &quot;Another Look at the Instrumental Variable Estimation of Error-Components Models.&quot; <em>Journal of Econometrics</em> 68 (1): 29–51. <a href="https://doi.org/10.1016/0304-4076(94)01642-D">DOI</a></p></li><li><p>Andrews, Donald W. K., and Biao Lu. 2001. &quot;Consistent Model and Moment Selection Procedures for GMM Estimation with Application to Dynamic Panel Data Models.&quot; <em>Journal of Econometrics</em> 101 (1): 123–164. <a href="https://doi.org/10.1016/S0304-4076(00)00077-4">DOI</a></p></li><li><p>Blundell, Richard, and Stephen Bond. 1998. &quot;Initial Conditions and Moment Restrictions in Dynamic Panel Data Models.&quot; <em>Journal of Econometrics</em> 87 (1): 115–143. <a href="https://doi.org/10.1016/S0304-4076(98)00009-8">DOI</a></p></li><li><p>Hansen, Lars Peter. 1982. &quot;Large Sample Properties of Generalized Method of Moments Estimators.&quot; <em>Econometrica</em> 50 (4): 1029–1054. <a href="https://doi.org/10.2307/1912775">DOI</a></p></li><li><p>Holtz-Eakin, Douglas, Whitney Newey, and Harvey S. Rosen. 1988. &quot;Estimating Vector Autoregressions with Panel Data.&quot; <em>Econometrica</em> 56 (6): 1371–1395. <a href="https://doi.org/10.2307/1913103">DOI</a></p></li><li><p>Nickell, Stephen. 1981. &quot;Biases in Dynamic Models with Fixed Effects.&quot; <em>Econometrica</em> 49 (6): 1417–1426. <a href="https://doi.org/10.2307/1911408">DOI</a></p></li><li><p>Pesaran, M. Hashem, and Yongcheol Shin. 1998. &quot;Generalized Impulse Response Analysis in Linear Multivariate Models.&quot; <em>Economics Letters</em> 58 (1): 17–29. <a href="https://doi.org/10.1016/S0165-1765(97)00214-0">DOI</a></p></li><li><p>Windmeijer, Frank. 2005. &quot;A Finite Sample Correction for the Variance of Linear Efficient Two-Step GMM Estimators.&quot; <em>Journal of Econometrics</em> 126 (1): 25–51. <a href="https://doi.org/10.1016/j.jeconom.2004.02.005">DOI</a></p></li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../panel_reg/">« Panel Regression</a><a class="docs-footer-nextpage" href="../did/">Difference-in-Differences »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Tuesday 14 July 2026 19:06">Tuesday 14 July 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
