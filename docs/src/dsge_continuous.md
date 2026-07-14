@@ -2,7 +2,7 @@
 
 Continuous-time heterogeneous-agent models solved with the finite-difference methods of **Achdou, Han, Lasry, Lions & Moll (2022)**. The household problem is a **Hamilton-Jacobi-Bellman (HJB)** partial differential equation solved by an implicit upwind scheme, and the stationary wealth distribution solves the **Kolmogorov-Forward (Fokker-Planck)** equation. The elegance of the approach is that a single sparse infinitesimal generator ``A`` drives both: the HJB implicitly, and the KFE through its transpose ``A^\top``.
 
-This page covers the one-asset Aiyagari model. The same machinery is the foundation for two-asset (Kaplan-Moll-Violante) models and MIT-shock transitions.
+This page is part of the [DSGE Models](@ref dsge_page) suite and covers the one-asset Aiyagari model. The same machinery is the foundation for two-asset (Kaplan-Moll-Violante) models and MIT-shock transitions.
 
 ## Quick Start
 
@@ -170,6 +170,32 @@ The vast majority of wealth is held in the illiquid asset: the higher return mor
 | `g` | `Array{T,3}` | Stationary joint density over ``(b, a, z)`` (``I_b \times I_a \times 2``) |
 | `c`, `d` | `Array{T,3}` | Consumption and deposit policies |
 | `gen` | `SparseMatrixCSC{T}` | Infinitesimal generator (``2 I_b I_a`` square) |
+
+---
+
+## Complete Example
+
+This example solves a one-asset continuous-time Aiyagari economy end to end: it builds the model, computes the stationary equilibrium, and reads off the equilibrium interest rate, aggregate capital, and the mass of households at the borrowing constraint.
+
+```@example ct
+# Calibrate and solve the stationary equilibrium
+aiyagari = CTAiyagari(; alpha=0.36, rho=0.05, sigma=2.0, delta=0.05,
+                        z=[0.1, 0.2], lambda=[0.5, 0.5], a_max=30.0, I=200)
+eq = ct_steady_state(aiyagari; tol=1e-5)
+report(eq)
+```
+
+```@example ct
+# Key equilibrium objects
+da = eq.a[2] - eq.a[1]
+(interest_rate = round(eq.r, digits=5),
+ below_discount_rate = eq.r < aiyagari.rho,
+ aggregate_capital = round(eq.K, digits=4),
+ effective_labor = round(eq.L, digits=4),
+ constrained_mass = round((eq.g[1, 1] + eq.g[1, 2]) * da, digits=4))
+```
+
+The equilibrium interest rate settles below the discount rate ``\rho``: incomplete markets and precautionary saving push the supply of capital up and its return down. A nontrivial fraction of households sits at the borrowing constraint ``a_{\min}``, where the stationary density piles up --- the continuous-time counterpart of the discrete-time Aiyagari (1994) economy.
 
 ---
 

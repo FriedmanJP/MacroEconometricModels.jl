@@ -326,6 +326,34 @@ result
 
 ---
 
+## Complete Example
+
+This example identifies a contractionary monetary policy shock in the FRED-MD system [output, prices, interest rate] two ways --- recursively via Cholesky and via sign restrictions --- and compares the impact response of industrial production. Both schemes share the same reduced-form VAR(2).
+
+```@example sid
+# Reduced-form VAR on the monetary system (FFR ordered last)
+svar = estimate_var(Y, 2; varnames=["INDPRO", "CPIAUCSL", "FEDFUNDS"])
+
+# Recursive (Cholesky) identification of the monetary shock
+chol = irf(svar, 20; method=:cholesky, ci_type=:bootstrap, reps=50)
+report(chol)
+```
+
+```@example sid
+# Sign-restricted identification: FFR up, INDPRO and CPI down on impact
+check = irf -> irf[1, 3, 3] > 0 && irf[1, 1, 3] < 0 && irf[1, 2, 3] < 0
+sign_set = identify_sign(svar, 20, check; max_draws=5000, store_all=true)
+sign_med = irf_median(sign_set)
+
+# Impact response of INDPRO to the monetary shock under each scheme
+(cholesky_indpro_impact = round(chol.values[1, 1, 3], digits=4),
+ sign_median_indpro_impact = round(sign_med[1, 1, 3], digits=4))
+```
+
+With the interest rate ordered last, the Cholesky scheme forces the contemporaneous response of industrial production to the monetary shock to be exactly zero --- output cannot react within the period. Sign restrictions instead require only that the impact response be negative, so the median across admissible rotations is a nonzero contraction (summarized further by `irf_median` and `irf_bounds`). The two schemes encode different identifying assumptions about the within-period transmission of monetary policy, and the gap between their impact responses is the cost of the recursive zero restriction.
+
+---
+
 ## Common Pitfalls
 
 1. **Variable ordering matters for Cholesky.** Different orderings produce different IRFs. There is no statistical test for the correct ordering --- economic theory must justify the assumed causal structure.

@@ -11,6 +11,9 @@
 - **Estimation**: Four GMM-based methods (one-step, two-step, iterative, CU) for IRF matching, plus Bayesian estimation via SMC, SMC`` ^2 `` with two-stage delayed acceptance, and Random-Walk Metropolis-Hastings; see [Estimation](@ref dsge_estimation)
 - **Simulation and IRFs**: Stochastic and pruned simulation, analytical and generalized impulse responses, FEVD, and unconditional moments via Lyapunov equation; see [Nonlinear Methods](@ref dsge_nonlinear)
 - **Historical Decomposition**: Kalman smoother-based shock attribution for linear models, FFBSi particle smoother for nonlinear models, and Bayesian posterior bands; see [Historical Decomposition](@ref dsge_hd_page)
+- **Heterogeneous Agents**: Krusell-Smith and one- and two-asset HANK models via sequence-space Jacobian, Reiter, and Krusell-Smith solvers; see [Heterogeneous Agents](@ref dsge_ha)
+- **Overlapping Generations**: Blanchard (1985) perpetual-youth OLG models; see [Overlapping Generations](@ref dsge_olg)
+- **Continuous Time**: Achdou et al. (2022) continuous-time heterogeneous-agent models via HJB and Kolmogorov-Forward finite differences; see [Continuous Time](@ref dsge_continuous)
 - **Dynare Replication**: 27-model replication suite validated against Dynare 6.5+ reference values for steady states, IRFs, variance decomposition, and theoretical moments; includes Smets & Wouters (2007) Bayesian estimation pipeline
 
 All results integrate with `plot_result()` for interactive D3.js visualization and `report()` for publication-quality output.

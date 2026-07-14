@@ -61,6 +61,75 @@ Every documentation page follows this skeleton:
 
 ---
 
+## Page Types
+
+Every page is one of four types. The type determines which skeleton applies. Classify a page before writing it.
+
+| Type | Purpose | Examples |
+|------|---------|----------|
+| **Landing** | Site front page: feature overview, package structure, navigation | `index.md` |
+| **Hub** | Section overview fronting a family of child pages | `dsge.md`, `tests.md`, `innovation_accounting.md`, `nongaussian.md`, `io.md`, `nowcast.md` |
+| **Method** | Full documentation of one module or method family | `manual.md`, `did.md`, `dsge_linear.md`, `structural_identification.md` |
+| **Reference** | Auto-generated API and type catalogs; minimal prose | `api.md`, `api_types.md`, `plotting.md` |
+
+**Method pages** follow the standard Page Anatomy skeleton in full: intro → Quick Start (3-6 recipes) → H2 method sections → Complete Example → Common Pitfalls → References.
+
+**Hub pages** use a distinct skeleton:
+
+```
+# Hub Title
+
+[Intro: what this family of methods does and how the children divide the work]
+
+## Quick Start
+
+[ONE representative recipe — the simplest end-to-end use of the family]
+
+---
+
+## Choosing a Method
+
+[A decision or method-comparison table routing the reader to the right child page]
+
+---
+
+## Child Pages
+
+- [Child A](@ref child_a) — one-line description
+- [Child B](@ref child_b) — one-line description
+- ...
+
+---
+
+## [Shared theory sections]   (only if not duplicated by any child)
+
+---
+
+## References
+```
+
+**Hub rules:**
+- A hub links **every** child page in its child list, each with a one-line description. A hub that omits any child is broken.
+- A hub carries a decision or method-comparison table so the reader can pick a child.
+- A hub has exactly **one** Quick Start recipe (not the 3-6 of a method page).
+- A hub has **no** Complete Example — worked examples live on the child pages.
+- Shared-theory H2 sections appear on a hub only when they are not duplicated by any child (see Anti-Pattern 10).
+
+**Landing** (`index.md`) is the site front page: a feature list, a package-structure table, and a `@contents` block spanning the full navigation. It has no Quick Start, Complete Example, or Common Pitfalls.
+
+**Reference** pages (`api*.md`) are built from `@docs`, `@autodocs`, and `@eval` blocks with only enough prose to orient the reader. Every export is documented on exactly one reference page.
+
+### Cross-Reference Requirements
+
+- **Every child back-links its hub** in the intro: e.g. `[DSGE Models](@ref dsge_page)`.
+- **Every hub links every child** in its child list (per the hub skeleton above).
+- **Siblings cross-link** where the reader would naturally move between them.
+- Sidebar sections with a hub keep children **≤ 6**; beyond that, split the hub.
+- Anchors are `(@id target)` on the H1 title; references are `[Text](@ref target)`.
+- Prefer a cross-reference over duplicated content (Anti-Pattern 10).
+
+---
+
 ## Writing Voice
 
 **Register:** Professional econometrics textbook. The reader is a PhD student or applied researcher who knows economics but may not know this specific Julia package.
