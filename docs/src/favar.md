@@ -20,8 +20,6 @@ md = fred[:, vcat(slow_names, fast_names)]
 X = to_matrix(apply_tcode(md))
 X = X[all.(isfinite, eachrow(X)), :]
 X = X[end-59:end, :]
-Y_slow = X[:, 1:3]
-Y_fast = X[:, 4:end]
 ```
 
 ## Quick Start
@@ -183,7 +181,7 @@ The Gibbs sampler iterates three blocks:
 
 1. **Draw** ``\Lambda \mid F, X``: Equation-by-equation OLS regression with Normal posterior, drawing each row of ``\Lambda`` conditional on the current factors and idiosyncratic variances
 2. **Draw** ``F \mid \Lambda, B, \Sigma, X, Y^{key}``: Posterior regression combining the observation equation likelihood with a standard Normal prior, producing time-``t`` factor draws
-3. **Draw** ``(B, \Sigma) \mid F, Y^{key}``: Normal-Inverse-Wishart conjugate posterior from the VAR on the augmented system ``[F, Y^{key}]``
+3. **Draw** ``(B, \Sigma) \mid F, Y^{key}``: Normal-Inverse-Wishart conjugate posterior from the VAR on the augmented system ``[F, Y^{key}]``, in the informative-prior tradition of Doan, Litterman & Sims (1984)
 
 ```@example favar
 # Bayesian FAVAR with 100 posterior draws and 50 burn-in
@@ -362,17 +360,17 @@ The two-step FAVAR extracts 2 factors from the 7-variable panel, removes the com
 
 ## References
 
+- Bai, J., & Ng, S. (2002). Determining the Number of Factors in Approximate Factor Models.
+  *Econometrica*, 70(1), 191-221. [DOI](https://doi.org/10.1111/1468-0262.00273)
+
 - Bernanke, B. S., Boivin, J., & Eliasz, P. (2005). Measuring the Effects of Monetary Policy: A Factor-Augmented Vector Autoregressive (FAVAR) Approach.
   *Quarterly Journal of Economics*, 120(1), 387-422. [DOI](https://doi.org/10.1162/0033553053970344)
 
-- Stock, J. H., & Watson, M. W. (2002). Forecasting Using Principal Components from a Large Number of Predictors.
-  *Journal of the American Statistical Association*, 97(460), 1167-1179. [DOI](https://doi.org/10.1198/016214502388618960)
-
-- Bai, J., & Ng, S. (2002). Determining the Number of Factors in Approximate Factor Models.
-  *Econometrica*, 70(1), 191-221. [DOI](https://doi.org/10.1111/1468-0262.00273)
+- Carter, C. K., & Kohn, R. (1994). On Gibbs Sampling for State Space Models.
+  *Biometrika*, 81(3), 541-553. [DOI](https://doi.org/10.1093/biomet/81.3.541)
 
 - Doan, T., Litterman, R., & Sims, C. (1984). Forecasting and Conditional Projection Using Realistic Prior Distributions.
   *Econometric Reviews*, 3(1), 1-100. [DOI](https://doi.org/10.1080/07474938408800053)
 
-- Carter, C. K., & Kohn, R. (1994). On Gibbs Sampling for State Space Models.
-  *Biometrika*, 81(3), 541-553. [DOI](https://doi.org/10.1093/biomet/81.3.541)
+- Stock, J. H., & Watson, M. W. (2002). Forecasting Using Principal Components from a Large Number of Predictors.
+  *Journal of the American Statistical Association*, 97(460), 1167-1179. [DOI](https://doi.org/10.1198/016214502388618960)

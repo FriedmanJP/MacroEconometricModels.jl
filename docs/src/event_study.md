@@ -61,10 +61,6 @@ report(r)
 plot_result(r; title="Democracy -> GDP (DDCG)")
 ```
 
-```@raw html
-<iframe src="../assets/plots/eslp_event_study.html" style="width:100%;height:420px;border:1px solid #eee;border-radius:8px;" loading="lazy"></iframe>
-```
-
 **Recipe 4: LP-DiD with PMD and IPW reweighting**
 
 ```@example event
@@ -140,10 +136,6 @@ report(eslp)
 
 ```julia
 plot_result(eslp)
-```
-
-```@raw html
-<iframe src="../assets/plots/eslp_event_study.html" style="width:100%;height:420px;border:1px solid #eee;border-radius:8px;" loading="lazy"></iframe>
 ```
 
 The `estimate_event_study_lp` function runs ``K + H + 1`` separate OLS regressions (one per event-time horizon), each with cluster-robust standard errors. The resulting coefficients ``\beta_h`` trace out the dynamic treatment effect path.
@@ -435,7 +427,7 @@ nothing # hide
 
 ```julia
 p = plot_result(eslp)
-save_plot(p, "event_study.html")
+save_plot(p, "eslp_event_study.html")
 ```
 
 ```@raw html
@@ -467,10 +459,6 @@ report(r_pmd)
 
 ```julia
 plot_result(r; title="Democracy -> GDP (LP-DiD, DDCG)")
-```
-
-```@raw html
-<iframe src="../assets/plots/eslp_event_study.html" style="width:100%;height:420px;border:1px solid #eee;border-radius:8px;" loading="lazy"></iframe>
 ```
 
 The baseline LP-DiD specification estimates the causal effect of democratic transitions on log GDP per capita using a switching indicator and clean control samples. The pooled post-treatment estimate averages the dynamic treatment effect over horizons 0 through 25, providing a single summary measure of democracy's long-run GDP impact. The pre-treatment pooled estimate serves as a placebo --- a value near zero supports the parallel trends assumption. The PMD + IPW robustness check uses pre-mean differencing to reduce noise from a single baseline period and inverse probability weighting to ensure equal representation across time periods, confirming that the baseline result is not driven by compositional changes in the sample.

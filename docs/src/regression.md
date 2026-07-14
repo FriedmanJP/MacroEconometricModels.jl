@@ -544,7 +544,7 @@ m = estimate_reg(y, X; varnames=["(Intercept)", "x1", "x2"])
 
 # OLS diagnostics: residual plot, QQ plot, fitted vs actual
 p = plot_result(m)
-save_plot(p, "reg_diagnostics.html")
+save_plot(p, "reg_ols_diagnostics.html")
 ```
 
 ```@raw html

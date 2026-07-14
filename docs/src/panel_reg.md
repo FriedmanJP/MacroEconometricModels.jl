@@ -1,6 +1,6 @@
 # [Panel Regression](@id panel_reg_page)
 
-**MacroEconometricModels.jl** provides a comprehensive panel regression module following Stata's `xtreg`/`xtiverg`/`xtlogit`/`xtprobit` conventions. The module covers linear panel models, panel instrumental variables, panel discrete choice, and six specification tests with four covariance estimators.
+**MacroEconometricModels.jl** provides a comprehensive panel regression module following Stata's `xtreg`/`xtivreg`/`xtlogit`/`xtprobit` conventions. The module covers linear panel models, panel instrumental variables, panel discrete choice, and six specification tests with four covariance estimators.
 
 - **Linear panel** (`estimate_xtreg`): Fixed Effects, Random Effects (Swamy-Arora), First-Difference, Between, Correlated Random Effects (Mundlak 1978), Arellano-Bond, Blundell-Bond
 - **Panel IV** (`estimate_xtiv`): FE-IV, RE-IV/EC2SLS (Baltagi 1981), FD-IV, Hausman-Taylor (1981)

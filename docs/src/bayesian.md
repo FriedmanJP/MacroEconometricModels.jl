@@ -59,6 +59,7 @@ plot_result(birf)
 bfevd = fevd(post, 20; method=:cholesky)
 bhd = historical_decomposition(post; method=:cholesky)
 report(bfevd)
+report(bhd)
 ```
 
 **Recipe 5: Multi-step forecasting with credible intervals**

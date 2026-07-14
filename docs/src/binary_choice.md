@@ -494,7 +494,7 @@ y = Float64.(rand(n) .< 1.0 ./ (1.0 .+ exp.(-eta)))
 
 m_logit = estimate_logit(y, X; varnames=["(Intercept)", "x1", "x2"])
 p = plot_result(m_logit)
-save_plot(p, "logit_diagnostics.html")
+save_plot(p, "reg_logit.html")
 ```
 
 ```@raw html
@@ -512,7 +512,7 @@ y = Float64.(rand(n) .< 1.0 ./ (1.0 .+ exp.(-eta)))
 
 m_probit = estimate_probit(y, X; varnames=["(Intercept)", "x1", "x2"])
 p = plot_result(m_probit)
-save_plot(p, "probit_diagnostics.html")
+save_plot(p, "reg_probit.html")
 ```
 
 ```@raw html
@@ -532,7 +532,7 @@ y = Float64.(rand(n) .< 1.0 ./ (1.0 .+ exp.(-eta)))
 m = estimate_logit(y, X; varnames=["(Intercept)", "x1", "x2"])
 me = marginal_effects(m)
 p = plot_result(me)
-save_plot(p, "marginal_effects.html")
+save_plot(p, "reg_marginal_effects.html")
 ```
 
 ```@raw html

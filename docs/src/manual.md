@@ -65,7 +65,7 @@ plot_result(result)
 model = estimate_var(Y, 4)
 
 # Contractionary monetary shock: FFR rises on impact
-check = irf -> irf[1, 3, 3] > 0
+check = ir -> ir[1, 3, 3] > 0
 result = irf(model, 20; method=:sign, check_func=check)
 ```
 
@@ -321,7 +321,7 @@ Sign restrictions identify structural shocks by constraining the signs of impuls
 model = estimate_var(Y, 4)
 
 # Contractionary monetary shock: FFR rises, INDPRO and CPI fall
-check = irf -> irf[1, 3, 3] > 0 && irf[1, 1, 3] < 0 && irf[1, 2, 3] < 0
+check = ir -> ir[1, 3, 3] > 0 && ir[1, 1, 3] < 0 && ir[1, 2, 3] < 0
 
 # Full identified set
 id_set = identify_sign(model, 20, check; max_draws=5000, store_all=true)
@@ -345,7 +345,7 @@ Narrative restrictions augment sign restrictions with historical information abo
 model = estimate_var(Y, 4)
 
 # Sign restrictions on impact
-sign_check = irf -> irf[1, 3, 3] > 0 && irf[1, 1, 3] < 0
+sign_check = ir -> ir[1, 3, 3] > 0 && ir[1, 1, 3] < 0
 
 # Narrative: monetary shock was positive at observation 20
 narrative_check = shocks -> shocks[20, 3] > 0

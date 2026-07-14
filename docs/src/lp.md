@@ -374,7 +374,7 @@ The `smooth_model.irf_values` matrix contains the smoothed impulse responses. Co
 
 ## State-Dependent Local Projections
 
-Economic responses may differ across states of the economy. Auerbach & Gorodnichenko (2012, 2013) develop **state-dependent LPs** using smooth transition functions to estimate regime-varying impulse responses --- for example, whether fiscal multipliers differ between recessions and expansions.
+Economic responses may differ across states of the economy. Auerbach & Gorodnichenko (2012, 2013) develop **state-dependent LPs** using smooth transition functions to estimate regime-varying impulse responses --- for example, whether fiscal multipliers differ between recessions and expansions (Ramey & Zubairy 2018).
 
 The state-dependent model is:
 
@@ -471,7 +471,7 @@ The `irf_expansion` and `irf_recession` objects contain regime-specific impulse 
 
 ## Propensity Score Local Projections
 
-When the shock is a discrete treatment (e.g., a policy intervention), selection bias may confound causal inference. Angrist, Jordà & Kuersteiner (2018) develop **LP with inverse propensity weighting (IPW)** to address treatment selection. The package provides two estimators: IPW and doubly robust (AIPW).
+When the shock is a discrete treatment (e.g., a policy intervention), selection bias may confound causal inference. Angrist, Jordà & Kuersteiner (2018) develop **LP with inverse propensity weighting (IPW)** to address treatment selection. Weighting by the estimated rather than the known propensity score is efficient (Hirano, Imbens & Ridder 2003). The package provides two estimators: IPW and doubly robust (AIPW).
 
 ### IPW Estimator
 
@@ -499,7 +499,7 @@ where:
 
 ### Doubly Robust Estimator
 
-The **doubly robust (DR)** estimator combines IPW with separate outcome regressions for treated and control groups. It computes the ATE from the influence function:
+The **doubly robust (DR)** estimator combines IPW with separate outcome regressions for treated and control groups (Robins, Rotnitzky & Zhao 1994). It computes the ATE from the influence function:
 
 ```math
 \hat{\text{ATE}}_h^{\text{DR}} = \frac{1}{n} \sum_{t=1}^{n} \hat{\psi}_t
@@ -961,6 +961,9 @@ The `estimate_lp` call fits 21 horizon-specific OLS regressions (``h = 0, \ldots
 
 - Hirano, K., Imbens, G. W., & Ridder, G. (2003). Efficient Estimation of Average Treatment Effects Using the Estimated Propensity Score.
   *Econometrica*, 71(4), 1161-1189. [DOI](https://doi.org/10.1111/1468-0262.00442)
+
+- Hyvärinen, A. (1999). Fast and Robust Fixed-Point Algorithms for Independent Component Analysis.
+  *IEEE Transactions on Neural Networks*, 10(3), 626-634. [DOI](https://doi.org/10.1109/72.761722)
 
 - Jordà, Ò. (2005). Estimation and Inference of Impulse Responses by Local Projections.
   *American Economic Review*, 95(1), 161-182. [DOI](https://doi.org/10.1257/0002828053828518)
