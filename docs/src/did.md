@@ -237,7 +237,7 @@ report(did)
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
 | `method` | `Symbol` | `:twfe` | Estimation method (see below) |
-| `leads` | `Int` | `3` | Pre-treatment event-time window ``K`` |
+| `leads` | `Int` | `0` | Pre-treatment event-time window ``K`` |
 | `horizon` | `Int` | `5` | Post-treatment horizon ``H`` |
 | `control_group` | `Symbol` | `:never_treated` | `:never_treated` or `:not_yet_treated` |
 | `cluster` | `Symbol` | `:unit` | SE clustering: `:unit`, `:time`, or `:twoway` |

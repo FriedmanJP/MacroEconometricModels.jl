@@ -153,7 +153,7 @@ The `estimate_event_study_lp` function runs ``K + H + 1`` separate OLS regressio
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
 | `leads` | `Int` | `3` | Pre-treatment horizons ``K`` |
-| `lags` | `Int` | `0` | Lagged outcome controls |
+| `lags` | `Int` | `4` | Lagged outcome controls |
 | `covariates` | `Vector{String}` | `String[]` | Additional control variables |
 | `cluster` | `Symbol` | `:unit` | SE clustering: `:unit`, `:time`, or `:twoway` |
 | `conf_level` | `Real` | `0.95` | Confidence level |
