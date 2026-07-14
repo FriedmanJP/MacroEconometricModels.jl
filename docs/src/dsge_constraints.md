@@ -435,4 +435,4 @@ The unconstrained IRF shows optimal consumption smoothing: the agent borrows fre
 
 - Rendahl, P. (2017). Linear Time Iteration. Unpublished manuscript.
 
-- Sims, C. A. (2002). Solving Linear Rational Expectations Models. *Computational Economics*, 20(1), 1--20. [DOI](https://doi.org/10.1023/A:1020517101123)
+- Sims, C. A. (2002). Solving Linear Rational Expectations Models. *Computational Economics*, 20(1--2), 1--20. [DOI](https://doi.org/10.1023/A:1020517101123)

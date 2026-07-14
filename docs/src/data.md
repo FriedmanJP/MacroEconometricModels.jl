@@ -295,6 +295,8 @@ diag.is_short      # false
 
 ### Fixing Issues
 
+For row-level control, [`dropna`](@ref) removes every row containing a `NaN`/`Inf`, and [`keeprows`](@ref) subsets a `TimeSeriesData` to an explicit boolean mask while keeping metadata aligned.
+
 `fix()` returns a clean copy using one of three methods:
 
 ```@example data

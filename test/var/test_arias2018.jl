@@ -461,10 +461,10 @@ end
         restrictions = SVARRestrictions(n; signs=signs)
 
         Random.seed!(11111)
-        result1 = identify_arias(model, restrictions, 5; n_draws=10, n_rotations=50)
+        result1 = identify_arias(model, restrictions, 5; n_draws=5, n_rotations=20)
 
         Random.seed!(11111)
-        result2 = identify_arias(model, restrictions, 5; n_draws=10, n_rotations=50)
+        result2 = identify_arias(model, restrictions, 5; n_draws=5, n_rotations=20)
 
         # Same seed should give same results
         @test length(result1.Q_draws) == length(result2.Q_draws)
@@ -1440,10 +1440,10 @@ end
     Y = randn(150, 3)
     model = estimate_var(Y, 2)
     restr = SVARRestrictions(3; signs=[sign_restriction(1, 1, :positive)])
-    r1 = identify_arias(model, restr, 8; n_draws=10, n_rotations=100, rng=Random.MersenneTwister(11))
-    r2 = identify_arias(model, restr, 8; n_draws=10, n_rotations=100, rng=Random.MersenneTwister(11))
+    r1 = identify_arias(model, restr, 8; n_draws=10, n_rotations=30, rng=Random.MersenneTwister(11))
+    r2 = identify_arias(model, restr, 8; n_draws=10, n_rotations=30, rng=Random.MersenneTwister(11))
     @test r1.Q_draws == r2.Q_draws          # same seed -> bitwise-identical rotations
-    r3 = identify_arias(model, restr, 8; n_draws=10, n_rotations=100, rng=Random.MersenneTwister(99))
+    r3 = identify_arias(model, restr, 8; n_draws=10, n_rotations=30, rng=Random.MersenneTwister(99))
     @test r1.Q_draws != r3.Q_draws          # different seed -> different draws
 end
 

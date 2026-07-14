@@ -199,6 +199,8 @@ The `irf_result.values` matrix has dimension ``(H+1) \times n_{\text{resp}}``, w
 | `cov_type` | `Symbol` | Covariance estimator type |
 | `conf_level` | `T` | Confidence level |
 
+Two convenience wrappers extend the single-shock estimator: [`estimate_lp_multi`](@ref) fits one `LPModel` per shock variable in a supplied index vector, and [`estimate_lp_cholesky`](@ref) orthogonalizes the reduced-form residuals via a Cholesky factorization before projecting, returning one recursively-identified `LPModel` per structural shock.
+
 ---
 
 ## LP with Instrumental Variables
@@ -374,7 +376,7 @@ The `smooth_model.irf_values` matrix contains the smoothed impulse responses. Co
 
 ## State-Dependent Local Projections
 
-Economic responses may differ across states of the economy. Auerbach & Gorodnichenko (2012, 2013) develop **state-dependent LPs** using smooth transition functions to estimate regime-varying impulse responses --- for example, whether fiscal multipliers differ between recessions and expansions.
+Economic responses may differ across states of the economy. Auerbach & Gorodnichenko (2012, 2013) develop **state-dependent LPs** using smooth transition functions to estimate regime-varying impulse responses --- for example, whether fiscal multipliers differ between recessions and expansions (Ramey & Zubairy 2018).
 
 The state-dependent model is:
 
@@ -471,7 +473,7 @@ The `irf_expansion` and `irf_recession` objects contain regime-specific impulse 
 
 ## Propensity Score Local Projections
 
-When the shock is a discrete treatment (e.g., a policy intervention), selection bias may confound causal inference. Angrist, Jordà & Kuersteiner (2018) develop **LP with inverse propensity weighting (IPW)** to address treatment selection. The package provides two estimators: IPW and doubly robust (AIPW).
+When the shock is a discrete treatment (e.g., a policy intervention), selection bias may confound causal inference. Angrist, Jordà & Kuersteiner (2018) develop **LP with inverse propensity weighting (IPW)** to address treatment selection. Weighting by the estimated rather than the known propensity score is efficient (Hirano, Imbens & Ridder 2003). The package provides two estimators: IPW and doubly robust (AIPW). The underlying propensity-score fit is also available standalone via [`estimate_propensity_score`](@ref), which returns the estimated ``\hat{p}(X_t)`` from a logit or probit model of treatment on covariates.
 
 ### IPW Estimator
 
@@ -499,7 +501,7 @@ where:
 
 ### Doubly Robust Estimator
 
-The **doubly robust (DR)** estimator combines IPW with separate outcome regressions for treated and control groups. It computes the ATE from the influence function:
+The **doubly robust (DR)** estimator combines IPW with separate outcome regressions for treated and control groups (Robins, Rotnitzky & Zhao 1994). It computes the ATE from the influence function:
 
 ```math
 \hat{\text{ATE}}_h^{\text{DR}} = \frac{1}{n} \sum_{t=1}^{n} \hat{\psi}_t
@@ -622,6 +624,10 @@ The 3D IRF array stores ``\Theta[h, i, j] = \hat{\beta}_{i,h}^{(j)}`` for ``h = 
 | Mixture-normal ML | `:mixture_normal` | Gaussian mixture ML |
 | PML | `:pml` | Pseudo maximum likelihood |
 
+The statistical (non-Gaussian) schemes — FastICA, JADE, SOBI, dCov, HSIC, and the maximum-likelihood variants — are documented in full on the [Statistical Identification](@ref nongaussian_page) hub and its [Non-Gaussian Methods](@ref id_nongaussian_page) child.
+
+For a moment-based alternative to the OLS projection, [`estimate_lp_gmm`](@ref) estimates the horizon-``h`` local projections by GMM (returning one `GMMModel` per horizon), which admits overidentifying instruments and efficient two-step weighting; see the [GMM & SMM](@ref gmm_page) page for the underlying estimator.
+
 ```@example lp
 # Structural LP with Cholesky identification
 slp = structural_lp(Y, 20; method=:cholesky, lags=4)
@@ -659,7 +665,7 @@ hd = historical_decomposition(slp)
 | `lags` | `Int` | `4` | Number of LP control lags |
 | `cov_type` | `Symbol` | `:newey_west` | HAC estimator type |
 | `ci_type` | `Symbol` | `:none` | CI method (`:none`, `:bootstrap`) |
-| `reps` | `Int` | `500` | Bootstrap replications |
+| `reps` | `Int` | `200` | Bootstrap replications |
 | `check_func` | `Function` | `nothing` | Sign restriction check function |
 
 ### Return Values (`StructuralLP`)
@@ -821,7 +827,7 @@ The raw FEVD proportions in `lfevd.proportions[i, j, h]` give the R² from regre
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
 | `method` | `Symbol` | `:r2` | Estimator (`:r2`, `:lp_a`, `:lp_b`) |
-| `bias_correct` | `Bool` | `false` | Apply bootstrap bias correction |
+| `bias_correct` | `Bool` | `true` | Apply bootstrap bias correction |
 | `n_boot` | `Int` | `500` | Number of bootstrap replications |
 | `conf_level` | `Real` | `0.95` | Confidence level for CIs |
 
@@ -865,6 +871,15 @@ The key trade-off is bias vs. variance:
 | **External instruments** | SVAR-IV | LP-IV |
 
 Use LP when concerned about VAR misspecification, when incorporating external instruments or nonlinearities, when working with discrete treatments, or at long horizons where VAR error compounds.
+
+The [`compare_var_lp`](@ref) helper quantifies this equivalence directly, estimating both a Cholesky-identified VAR and the matching Cholesky LP on the same data and returning their IRFs alongside the horizon-by-horizon difference:
+
+```@example lp
+cmp = compare_var_lp(Y, 20; lags=4)
+round.(cmp.difference[1:5, :, 3], digits=3)   # VAR − LP gap, first 5 horizons, FFR shock
+```
+
+Under correct specification the differences shrink toward zero as the sample grows; the residual gaps here reflect finite-sample bias-variance trade-offs rather than a population discrepancy.
 
 ---
 
@@ -959,6 +974,9 @@ The `estimate_lp` call fits 21 horizon-specific OLS regressions (``h = 0, \ldots
 
 - Hirano, K., Imbens, G. W., & Ridder, G. (2003). Efficient Estimation of Average Treatment Effects Using the Estimated Propensity Score.
   *Econometrica*, 71(4), 1161-1189. [DOI](https://doi.org/10.1111/1468-0262.00442)
+
+- Hyvärinen, A. (1999). Fast and Robust Fixed-Point Algorithms for Independent Component Analysis.
+  *IEEE Transactions on Neural Networks*, 10(3), 626-634. [DOI](https://doi.org/10.1109/72.761722)
 
 - Jordà, Ò. (2005). Estimation and Inference of Impulse Responses by Local Projections.
   *American Economic Review*, 95(1), 161-182. [DOI](https://doi.org/10.1257/0002828053828518)

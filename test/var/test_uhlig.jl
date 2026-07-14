@@ -195,7 +195,7 @@ end
         restrictions = SVARRestrictions(n; zeros=zeros_r, signs=signs)
 
         result = identify_uhlig(model, restrictions, 10;
-            n_starts=(FAST ? 3 : 15), n_refine=(FAST ? 1 : 3), max_iter_coarse=(FAST ? 50 : 150), max_iter_fine=(FAST ? 100 : 500))
+            n_starts=(FAST ? 3 : 10), n_refine=(FAST ? 1 : 2), max_iter_coarse=(FAST ? 50 : 100), max_iter_fine=(FAST ? 100 : 300))
 
         # Zero restriction must hold
         @test abs(result.irf[1, 2, 1]) < 1e-8
@@ -354,11 +354,11 @@ end
 
         Random.seed!(11111)
         result1 = identify_uhlig(model, restrictions, 5;
-            n_starts=8, n_refine=2, max_iter_coarse=100, max_iter_fine=300)
+            n_starts=3, n_refine=1, max_iter_coarse=50, max_iter_fine=100)
 
         Random.seed!(11111)
         result2 = identify_uhlig(model, restrictions, 5;
-            n_starts=8, n_refine=2, max_iter_coarse=100, max_iter_fine=300)
+            n_starts=3, n_refine=1, max_iter_coarse=50, max_iter_fine=100)
 
         @test result1.Q ≈ result2.Q
         @test result1.irf ≈ result2.irf

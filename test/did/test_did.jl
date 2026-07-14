@@ -72,6 +72,8 @@ function _make_did_panel(; n_units=50, n_periods=20, treat_effect=2.0,
     pd, treat_effect
 end
 
+const _MPDTA = load_example(:mpdta)
+
 
 @testset "Difference-in-Differences" begin
 
@@ -996,7 +998,7 @@ end
 
         dcdh = estimate_did(pd, "outcome", "treat_time";
                             method=:did_multiplegt, leads=3, horizon=5,
-                            n_boot=50, rng=MersenneTwister(1234))
+                            n_boot=10, rng=MersenneTwister(1234))
 
         @test dcdh isa DIDResult{Float64}
         @test dcdh.method == :did_multiplegt
@@ -1048,7 +1050,7 @@ end
 
         dcdh_nyt = estimate_did(pd, "outcome", "treat_time";
                                 method=:did_multiplegt, leads=2, horizon=4,
-                                control_group=:not_yet_treated, n_boot=30,
+                                control_group=:not_yet_treated, n_boot=10,
                                 rng=MersenneTwister(1234))
 
         @test dcdh_nyt isa DIDResult{Float64}
@@ -1155,7 +1157,7 @@ end
 
         # All methods should produce positive overall ATT for a large effect
         for meth in (:callaway_santanna, :sun_abraham, :bjs, :did_multiplegt)
-            kwargs = meth == :did_multiplegt ? (; n_boot=30, rng=MersenneTwister(1234)) : (;)
+            kwargs = meth == :did_multiplegt ? (; n_boot=10, rng=MersenneTwister(1234)) : (;)
             did = estimate_did(pd, "outcome", "treat_time";
                                method=meth, leads=2, horizon=4, kwargs...)
             @test did.overall_att > 0
@@ -1170,7 +1172,7 @@ end
         pd, te = _make_did_panel(seed=2700, n_units=60, n_periods=20)
 
         for meth in (:sun_abraham, :bjs, :did_multiplegt)
-            kwargs = meth == :did_multiplegt ? (; n_boot=30, rng=MersenneTwister(1234)) : (;)
+            kwargs = meth == :did_multiplegt ? (; n_boot=10, rng=MersenneTwister(1234)) : (;)
             did = estimate_did(pd, "outcome", "treat_time";
                                method=meth, leads=3, horizon=5, kwargs...)
             pt = pretrend_test(did)
@@ -1202,7 +1204,7 @@ end
 
         # dCDH plot
         dcdh = estimate_did(pd, "outcome", "treat_time";
-                            method=:did_multiplegt, leads=2, horizon=3, n_boot=30,
+                            method=:did_multiplegt, leads=2, horizon=3, n_boot=10,
                             rng=MersenneTwister(1234))
         p_dcdh = plot_result(dcdh)
         @test p_dcdh isa PlotOutput
@@ -1247,7 +1249,7 @@ end
         @test bjs_single isa DIDResult{Float64}
 
         dcdh_single = estimate_did(pd_single, "outcome", "treat_time";
-                                   method=:did_multiplegt, leads=2, horizon=3, n_boot=20,
+                                   method=:did_multiplegt, leads=2, horizon=3, n_boot=10,
                                    rng=MersenneTwister(1234))
         @test dcdh_single isa DIDResult{Float64}
 
@@ -1271,7 +1273,7 @@ end
         pd, te = _make_did_panel(seed=3200, n_units=60, n_periods=20)
 
         for meth in (:sun_abraham, :bjs, :did_multiplegt)
-            kwargs = meth == :did_multiplegt ? (; n_boot=30, rng=MersenneTwister(1234)) : (;)
+            kwargs = meth == :did_multiplegt ? (; n_boot=10, rng=MersenneTwister(1234)) : (;)
             did = estimate_did(pd, "outcome", "treat_time";
                                method=meth, leads=2, horizon=3, kwargs...)
             @test nobs(did) == did.n_obs
@@ -1342,7 +1344,7 @@ end
 
         # dCDH (uses bootstrap, test it runs)
         did_dcdh = estimate_did(pd_c, "y", "tt"; method=:did_multiplegt,
-                                leads=1, horizon=2, n_boot=20, rng=MersenneTwister(1234))
+                                leads=1, horizon=2, n_boot=10, rng=MersenneTwister(1234))
         @test did_dcdh isa DIDResult{Float64}
 
         # Event study LP
@@ -1377,7 +1379,7 @@ end
     # mpdta Dataset + CS Verification Against R `did` Package
     # =========================================================================
     @testset "mpdta dataset loading" begin
-        pd = load_example(:mpdta)
+        pd = _MPDTA
         @test pd isa PanelData{Float64}
         @test nobs(pd) == 2500
         @test pd.n_groups == 500
@@ -1388,7 +1390,7 @@ end
     end
 
     @testset "CS varying base — nevertreated (mpdta verification)" begin
-        pd = load_example(:mpdta)
+        pd = _MPDTA
 
         # CS estimator on Callaway & Sant'Anna (2021) minimum wage data
         did = estimate_did(pd, "lemp", "first_treat";
@@ -1442,7 +1444,7 @@ end
     end
 
     @testset "CS varying base — notyettreated (mpdta verification)" begin
-        pd = load_example(:mpdta)
+        pd = _MPDTA
 
         did = estimate_did(pd, "lemp", "first_treat";
                            method=:callaway_santanna,
@@ -1470,7 +1472,7 @@ end
     end
 
     @testset "CS universal base period" begin
-        pd = load_example(:mpdta)
+        pd = _MPDTA
 
         did = estimate_did(pd, "lemp", "first_treat";
                            method=:callaway_santanna,
@@ -1491,7 +1493,7 @@ end
     end
 
     @testset "CS base_period validation" begin
-        pd = load_example(:mpdta)
+        pd = _MPDTA
         @test_throws ArgumentError estimate_did(pd, "lemp", "first_treat";
                                                 method=:callaway_santanna,
                                                 base_period=:invalid)

@@ -338,6 +338,12 @@ end
 # IndividualProblem — Household optimization specification
 # =============================================================================
 
+# Parameterized on the concrete function-field types (#254 G-14): the EGM/VFI inner loops
+# call ip.utility/utility_prime/… on a concretely-typed `ip` argument, so specialization
+# removes the dynamic dispatch that abstract ::Function fields forced. Leading {T} is kept —
+# IndividualProblem{T}(...) infers FU…FA via the inner ctor, and ::IndividualProblem{T}
+# dispatch (used throughout egm/vfi/ssj/reiter/krusell_smith/steady_state) still matches by
+# partial parameterization, so no call site changes.
 """
     IndividualProblem{T}
 
@@ -353,12 +359,6 @@ Fields:
 - `adjustment_cost::Union{Nothing,Function}` — optional `χ(d)` portfolio adjustment cost (two-asset)
 - `n_asset_dims::Int` — number of asset dimensions (1 or 2)
 """
-# Parameterized on the concrete function-field types (#254 G-14): the EGM/VFI inner loops
-# call ip.utility/utility_prime/… on a concretely-typed `ip` argument, so specialization
-# removes the dynamic dispatch that abstract ::Function fields forced. Leading {T} is kept —
-# IndividualProblem{T}(...) infers FU…FA via the inner ctor, and ::IndividualProblem{T}
-# dispatch (used throughout egm/vfi/ssj/reiter/krusell_smith/steady_state) still matches by
-# partial parameterization, so no call site changes.
 struct IndividualProblem{T<:AbstractFloat, FU, FUP, FUPI, FB, FA}
     utility::FU
     utility_prime::FUP

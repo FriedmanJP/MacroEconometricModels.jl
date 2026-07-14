@@ -69,19 +69,15 @@ nothing # hide
 
 ## Unified Solver Interface
 
-The `solve(spec; method=:gensys)` function is the single entry point for all DSGE solution methods. The `method` keyword selects the algorithm:
+The `solve(spec; method=:gensys)` function is the single entry point for all DSGE solution methods. This page covers the three **linear** (first-order) methods, selected by the `method` keyword:
 
 | `method` | Algorithm |
 |----------|-----------|
 | `:gensys` | Sims (2002) QZ decomposition (default) |
 | `:blanchard_kahn` | Blanchard & Kahn (1980) eigenvalue counting |
 | `:klein` | Klein (2000) generalized Schur decomposition |
-| `:perturbation` | Higher-order perturbation (Schmitt-Grohe & Uribe 2004) |
-| `:projection` | Chebyshev collocation (Judd 1998) |
-| `:pfi` | Policy function iteration (Coleman 1990) |
-| `:perfect_foresight` | Deterministic Newton solver |
 
-This page covers the three **linear** (first-order) methods: `:gensys`, `:blanchard_kahn`, and `:klein`. All three solve the same linearized system and return a `DSGESolution{T}`. For higher-order perturbation, global projection, and policy function iteration, see [Nonlinear Methods](@ref dsge_nonlinear).
+All three solve the same linearized system and return a `DSGESolution{T}`. For the full set of `solve()` methods --- including higher-order perturbation, global projection, policy function iteration, and perfect foresight --- see [DSGE Models](@ref dsge_page).
 
 ### Solver Comparison
 
@@ -473,9 +469,6 @@ All three solvers produce identical state-space representations for a well-speci
 
 - Klein, P. (2000). Using the Generalized Schur Form to Solve a Multivariate Linear Rational Expectations Model.
   *Journal of Economic Dynamics and Control*, 24(10), 1405--1423. [DOI](https://doi.org/10.1016/S0165-1889(99)00045-7)
-
-- Koop, G., Pesaran, M. H., & Potter, S. M. (1996). Impulse Response Analysis in Nonlinear Multivariate Models.
-  *Journal of Econometrics*, 74(1), 119--147. [DOI](https://doi.org/10.1016/0304-4076(95)01753-4)
 
 - Sims, C. A. (2002). Solving Linear Rational Expectations Models.
   *Computational Economics*, 20(1--2), 1--20. [DOI](https://doi.org/10.1023/A:1020517101123)

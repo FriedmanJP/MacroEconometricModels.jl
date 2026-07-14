@@ -357,7 +357,7 @@ show(stdout, result)
 
 ```@example spectral
 sd = spectral_density(y; method=:welch)
-power = band_power(sd, 2π/32, 2π/6)  # business-cycle band (6–32 quarters)
+power = band_power(sd, 2π/32, 2π/6)  # 6–32 months
 ```
 
 ---
@@ -392,7 +392,7 @@ show(stdout, result)
 
 ### Durbin-Watson Test
 
-The Durbin-Watson test (Durbin & Watson 1950, 1951) detects first-order autocorrelation in regression residuals:
+The Durbin-Watson test (Durbin & Watson 1950) detects first-order autocorrelation in regression residuals:
 
 ```math
 DW = \frac{\sum_{t=2}^{n}(e_t - e_{t-1})^2}{\sum_{t=1}^{n} e_t^2} \approx 2(1 - \hat{\rho}_1)
@@ -579,9 +579,9 @@ The correlogram reveals significant autocorrelation in industrial production gro
 
 - Box, G. E. P., & Pierce, D. A. (1970). Distribution of Residual Autocorrelations in Autoregressive-Integrated Moving Average Time Series Models. *Journal of the American Statistical Association*, 65(332), 1509--1526. [DOI](https://doi.org/10.1080/01621459.1970.10481180)
 
-- Brockwell, P. J., & Davis, R. A. (1991). *Time Series: Theory and Methods* (2nd ed.). Springer.
+- Brockwell, P. J., & Davis, R. A. (1991). *Time Series: Theory and Methods* (2nd ed.). New York: Springer. ISBN 978-1-4419-0319-8.
 
-- Brillinger, D. R. (1981). *Time Series: Data Analysis and Theory*. Holden-Day.
+- Brillinger, D. R. (1981). *Time Series: Data Analysis and Theory*. Expanded ed. San Francisco: Holden-Day. ISBN 978-0-8162-1150-0.
 
 - Burg, J. P. (1968). A New Analysis Technique for Time Series Data. NATO Advanced Study Institute on Signal Processing, Enschede, Netherlands.
 
@@ -589,10 +589,10 @@ The correlogram reveals significant autocorrelation in industrial production gro
 
 - Fisher, R. A. (1929). Tests of Significance in Harmonic Analysis. *Proceedings of the Royal Society of London A*, 125(796), 54--59. [DOI](https://doi.org/10.1098/rspa.1929.0151)
 
-- Hamilton, J. D. (1994). *Time Series Analysis*. Princeton University Press.
+- Hamilton, J. D. (1994). *Time Series Analysis*. Princeton, NJ: Princeton University Press. ISBN 978-0-691-04289-3.
 
 - Ljung, G. M., & Box, G. E. P. (1978). On a Measure of Lack of Fit in Time Series Models. *Biometrika*, 65(2), 297--303. [DOI](https://doi.org/10.1093/biomet/65.2.297)
 
-- Priestley, M. B. (1981). *Spectral Analysis and Time Series*. Academic Press.
+- Priestley, M. B. (1981). *Spectral Analysis and Time Series*. London: Academic Press. ISBN 978-0-12-564922-3.
 
 - Welch, P. D. (1967). The Use of Fast Fourier Transform for the Estimation of Power Spectra. *IEEE Transactions on Audio and Electroacoustics*, 15(2), 70--73. [DOI](https://doi.org/10.1109/TAU.1967.1161901)

@@ -440,6 +440,8 @@ m_mlogit = estimate_mlogit(y, hcat(ones(n), X); varnames=["const", "income", "ed
 report(m_mlogit)
 ```
 
+The ordered logit recovers the data-generating signs: `income` carries a positive coefficient, pushing observations toward higher satisfaction categories, while `education` is negative. The ordered probit produces the same sign pattern on a rescaled latent index, so the two links agree qualitatively. The Brant test p-value indicates whether the proportional-odds (parallel-regression) assumption holds — a small p-value would flag category-specific slopes and favor the multinomial specification. The multinomial logit reports one coefficient block per non-base category, each interpreted as the log-odds of that category relative to the base; the `income` log-odds rise monotonically across the higher categories, mirroring the ordinal structure that the ordered models impose by construction.
+
 ---
 
 ## Common Pitfalls

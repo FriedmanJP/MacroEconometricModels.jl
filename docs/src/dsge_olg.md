@@ -47,7 +47,7 @@ sol = blanchard_solve(m, ss)
 
 ## Demographics and Annuities
 
-Each period an agent survives with probability ``\gamma \in (0,1]`` and dies with probability ``1-\gamma``. Population is constant: the mass ``1-\gamma`` of newborns exactly replaces the deceased. Survival enters the objective as an extra discount, so the agent maximizes
+Fujiwara & Teranishi (2008) embed this perpetual-youth demographic structure in a New Keynesian model to study how societal aging shapes monetary policy. Each period an agent survives with probability ``\gamma \in (0,1]`` and dies with probability ``1-\gamma``. Population is constant: the mass ``1-\gamma`` of newborns exactly replaces the deceased. Survival enters the objective as an extra discount, so the agent maximizes
 
 ```math
 \mathbb{E}_t \sum_{j \geq 0} (\beta \gamma)^j \, \ln c_{t+j}
@@ -59,6 +59,17 @@ where:
 - ``\beta\gamma`` is the effective discount factor
 
 Households trade **fair annuities**: an agent surrenders all wealth at death in exchange for the gross return ``(1+r)/\gamma`` while alive. The annuity premium ``1/\gamma`` exactly offsets mortality, so the *individual* Euler equation is the standard ``c_{t+1}/c_t = \beta(1+r_{t+1})``. Age matters only because newborns start with zero assets while older cohorts have accumulated wealth.
+
+`BlanchardOLG` collects the calibration:
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `alpha` | `Real` | `0.36` | Capital share in Cobb-Douglas production |
+| `beta` | `Real` | `0.96` | Pure discount factor (time preference) |
+| `delta` | `Real` | `0.08` | Capital depreciation rate |
+| `gamma` | `Real` | `0.98` | One-period survival probability (``\gamma = 1`` is the representative agent) |
+| `Z` | `Real` | `1.0` | Total factor productivity |
+| `b` | `Real` | `0.0` | Per-capita government debt (net wealth) |
 
 ---
 
@@ -84,7 +95,7 @@ The correction term is the discrete-time analog of Blanchard's continuous-time w
 
 ## Steady State
 
-`blanchard_steady_state` solves for capital by bracketed bisection, equating the budget-implied consumption ``C = r k + w`` (``= f(k) - \delta k``; debt is net wealth and taxes ``r b`` service it, so the debt-service terms cancel in aggregate) with the Euler-implied consumption ``C = (1+r)\lambda(k+b)/[\beta(1+r)-1]``. The solver selects the high-capital root continuously connected to the Ramsey economy.
+`blanchard_steady_state` solves for capital by bracketed bisection, equating the budget-implied consumption ``C = r k + w`` (``= f(k) - \delta k``; debt is net wealth and taxes ``r b`` service it, so the debt-service terms cancel in aggregate) with the Euler-implied consumption ``C = (1+r)\lambda(k+b)/[\beta(1+r)-1]``. The solver selects the high-capital root continuously connected to the Ramsey economy and returns a [`BlanchardOLGSteadyState`](@ref).
 
 ```@example olg
 ss = blanchard_steady_state(BlanchardOLG(; gamma=0.96))
@@ -112,10 +123,9 @@ The equilibrium interest rate (``\approx`` 5.8% here) lies **above** the pure ra
 Because newborns do not internalize the taxes that will service debt issued before their birth, government debt is **net wealth** in the aggregate. Higher debt raises aggregate demand for assets, bidding up the interest rate and crowding out capital.
 
 ```@example olg
-for b in (0.0, 0.05, 0.10, 0.15)
-    s = blanchard_steady_state(BlanchardOLG(; gamma=0.98, b=b))
-    println("b = ", b, "  →  r = ", round(s.r, digits=5), ",  k = ", round(s.k, digits=4))
-end
+[let s = blanchard_steady_state(BlanchardOLG(; gamma=0.98, b=b))
+    (debt = b, r = round(s.r, digits=5), k = round(s.k, digits=4))
+ end for b in (0.0, 0.05, 0.10, 0.15)]
 ```
 
 The interest rate rises and capital falls monotonically with debt — Ricardian equivalence fails. In the representative-agent limit (``\gamma=1``) the correction term is zero and debt has no real effect, restoring Ricardian equivalence.
@@ -124,7 +134,7 @@ The interest rate rises and capital falls monotonically with debt — Ricardian 
 
 ## Transitional Dynamics
 
-`blanchard_solve` linearizes the ``(k, C)`` system around the steady state and solves the saddle path. The 2×2 transition has one eigenvalue inside the unit circle (the stable convergence rate) and one outside, confirming determinacy. `blanchard_transition` then simulates convergence from an arbitrary initial capital stock.
+`blanchard_solve` linearizes the ``(k, C)`` system around the steady state and solves the saddle path, returning a [`BlanchardOLGSolution`](@ref) that carries the policy matrix and eigenvalues. The 2×2 transition has one eigenvalue inside the unit circle (the stable convergence rate) and one outside, confirming determinacy. `blanchard_transition` then simulates convergence from an arbitrary initial capital stock.
 
 ```@example olg
 m = BlanchardOLG(; gamma=0.98)
@@ -138,6 +148,29 @@ path = blanchard_transition(m, sol, 0.7 * ss.k; H=40)
 ```
 
 Starting 30% below the steady state, capital rises monotonically toward ``k^*`` at the stable rate, with the interest rate falling and consumption rising along the saddle path — the standard Ramsey-style transition, modified by the perpetual-youth wedge.
+
+!!! note "Determinacy of the saddle path"
+    The linearized ``(k, C)`` system is a predetermined-plus-jump pair: capital is predetermined and consumption jumps. A determinate saddle path requires exactly one eigenvalue inside the unit circle. `sol.determinate` reports this check; when it is `false`, the calibration admits no locally unique convergent path.
+
+`blanchard_solve` returns a `BlanchardOLGSolution`:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `ss` | `BlanchardOLGSteadyState{T}` | Steady state the linearization expands around |
+| `M` | `Matrix{T}` | ``2 \times 2`` linearized transition of ``(k - k^*, C - C^*)`` |
+| `eigenvalues` | `Vector{ComplexF64}` | Both eigenvalues of ``M`` |
+| `stable_eig` | `T` | Saddle-path (modulus ``< 1``) eigenvalue governing convergence |
+| `policy_slope` | `T` | Consumption policy slope ``dC/dk`` along the saddle path |
+| `determinate` | `Bool` | `true` when exactly one eigenvalue lies inside the unit circle |
+
+`blanchard_transition` returns a `NamedTuple` of length-``H+1`` paths:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `k` | `Vector{T}` | Capital path converging to ``k^*`` |
+| `C` | `Vector{T}` | Consumption path |
+| `r` | `Vector{T}` | Interest-rate path (evaluated at each period's capital) |
+| `w` | `Vector{T}` | Wage path |
 
 ---
 

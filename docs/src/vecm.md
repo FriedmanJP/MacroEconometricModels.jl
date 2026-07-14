@@ -251,7 +251,7 @@ var_model = to_var(vecm)
 report(var_model)
 ```
 
-This conversion is critical because it enables all 18 identification methods (Cholesky, sign restrictions, ICA, narrative, etc.) to work automatically with VECM models. The `irf`, `fevd`, and `historical_decomposition` functions dispatch through `to_var()` internally, so `VECMModel` objects can be passed directly.
+This conversion is critical because it enables all 18 identification methods (Cholesky, sign restrictions, ICA, narrative, etc.) to work automatically with VECM models. The `irf`, `fevd`, and `historical_decomposition` functions dispatch through `to_var()` internally, so `VECMModel` objects can be passed directly. The statistical (non-Gaussian) schemes are documented on the [Statistical Identification](@ref nongaussian_page) hub and its [Non-Gaussian Methods](@ref id_nongaussian_page) child.
 
 ---
 
@@ -447,7 +447,7 @@ The cointegrating vector ``\beta`` identifies the long-run equilibrium between G
 
 3. **Too many lags in levels**: The underlying VAR order ``p`` determines the number of lagged differences ``p - 1`` in the VECM. Over-parameterization wastes degrees of freedom and inflates estimation uncertainty, especially in small samples. Use `select_lag_order` on the levels data or compare `aic`/`bic` across candidate orders.
 
-4. **Misinterpreting the Johansen trace test**: The sequential testing procedure starts from ``r_0 = 0`` and increments until the trace statistic falls below the critical value. Rejecting ``r_0 = 0`` but not ``r_0 = 1`` implies exactly one cointegrating vector. The trace test has well-known size distortions in small samples; the Bartlett correction (not yet implemented) mitigates this, or use a more conservative significance level.
+4. **Misinterpreting the Johansen trace test**: The sequential testing procedure starts from ``r_0 = 0`` and increments until the trace statistic falls below the critical value. Rejecting ``r_0 = 0`` but not ``r_0 = 1`` implies exactly one cointegrating vector. The trace test has well-known size distortions in small samples; a small-sample Bartlett correction of the trace statistic mitigates this, or use a more conservative significance level.
 
 5. **Engle-Granger with multiple cointegrating vectors**: The Engle-Granger two-step method estimates only a single cointegrating vector via static OLS. Applying it to a system with ``r > 1`` recovers at most one linear combination and discards the remaining equilibrium relationships. Use the Johansen method for systems with multiple cointegrating vectors.
 
@@ -457,17 +457,17 @@ The cointegrating vector ``\beta`` identifies the long-run equilibrium between G
 
 ## References
 
-- Johansen, S. (1991). Estimation and Hypothesis Testing of Cointegration Vectors in Gaussian Vector Autoregressive Models.
-  *Econometrica*, 59(6), 1551-1580. [DOI](https://doi.org/10.2307/2938278)
-
 - Engle, R. F., & Granger, C. W. J. (1987). Co-Integration and Error Correction: Representation, Estimation, and Testing.
   *Econometrica*, 55(2), 251-276. [DOI](https://doi.org/10.2307/1913236)
 
-- Toda, H. Y., & Phillips, P. C. B. (1993). Vector Autoregressions and Causality.
-  *Econometrica*, 61(6), 1367-1393. [DOI](https://doi.org/10.2307/2951647)
+- Johansen, S. (1991). Estimation and Hypothesis Testing of Cointegration Vectors in Gaussian Vector Autoregressive Models.
+  *Econometrica*, 59(6), 1551-1580. [DOI](https://doi.org/10.2307/2938278)
+
+- Lutkepohl, H. (2005). *New Introduction to Multiple Time Series Analysis*.
+  Berlin: Springer. ISBN 978-3-540-40172-8.
 
 - Stock, J. H. (1987). Asymptotic Properties of Least Squares Estimators of Cointegrating Vectors.
   *Econometrica*, 55(5), 1035-1056. [DOI](https://doi.org/10.2307/1911260)
 
-- Lutkepohl, H. (2005). *New Introduction to Multiple Time Series Analysis*.
-  Berlin: Springer. ISBN 978-3-540-40172-8.
+- Toda, H. Y., & Phillips, P. C. B. (1993). Vector Autoregressions and Causality.
+  *Econometrica*, 61(6), 1367-1393. [DOI](https://doi.org/10.2307/2951647)

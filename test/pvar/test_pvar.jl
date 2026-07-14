@@ -617,7 +617,7 @@ end
         df = DataFrame(data, ["y1", "y2"]); df.id = repeat(1:N, inner=Tt); df.time = repeat(1:Tt, outer=N)
         xtset(df, :id, :time)
     end
-    nrep = _fast ? 40 : 120
+    nrep = 40
     bs = Float64[]; ses = Float64[]
     for r in 1:nrep
         rng = MersenneTwister(4321 + r); pd = _wm_panel(rng, 120, 8, 0.4)

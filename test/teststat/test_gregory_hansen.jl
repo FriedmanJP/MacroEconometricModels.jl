@@ -14,8 +14,11 @@ using Test, MacroEconometricModels, Random, LinearAlgebra
     y = vcat(1.0 .+ 0.5 .* x[1:100], 3.0 .+ 1.5 .* x[101:200]) + 0.3 .* randn(rng, T_gh)
     Y = hcat(y, x)
 
+    # model=:C fit computed once and shared (deterministic estimator)
+    gh_C = gregory_hansen_test(Y; model=:C)
+
     @testset "Model C (level shift)" begin
-        result = gregory_hansen_test(Y; model=:C)
+        result = gh_C
         @test result isa GregoryHansenResult
         @test result.model == :C
         @test result.adf_break > 0
@@ -65,7 +68,7 @@ using Test, MacroEconometricModels, Random, LinearAlgebra
     end
 
     @testset "StatsAPI interface" begin
-        result = gregory_hansen_test(Y; model=:C)
+        result = gh_C
         @test StatsAPI.nobs(result) == T_gh
         @test StatsAPI.pvalue(result) == result.adf_pvalue
         @test StatsAPI.dof(result) == result.n_regressors
@@ -78,7 +81,7 @@ using Test, MacroEconometricModels, Random, LinearAlgebra
     end
 
     @testset "show method" begin
-        result = gregory_hansen_test(Y; model=:C)
+        result = gh_C
         io = IOBuffer()
         show(io, result)
         output = String(take!(io))

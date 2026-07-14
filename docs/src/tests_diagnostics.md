@@ -45,9 +45,10 @@ report(suite)
 ```@example test_diag
 # Test for ARCH effects in a return series
 result = arch_lm_test(randn(500), 5)
-println("ARCH-LM statistic: ", round(result.statistic, digits=4),
-        ", p-value: ", round(result.pvalue, digits=4), ", q: ", result.q)
+(statistic = round(result.statistic, digits=4), pvalue = round(result.pvalue, digits=4), q = result.q)
 ```
+
+A p-value above 0.05 fails to reject the null of no ARCH effects, consistent with the i.i.d. Gaussian input.
 
 **Recipe 4: LR test for lag selection**
 
@@ -313,13 +314,15 @@ The function accepts either a raw data vector (centering and squaring internally
 # Test raw series for ARCH effects
 y = randn(500)
 result = arch_lm_test(y, 5)
-println("ARCH-LM: statistic=$(round(result.statistic, digits=4)), p=$(round(result.pvalue, digits=4))")
 
 # Test GARCH model residuals for remaining ARCH effects
 g = estimate_garch(y)
 result2 = arch_lm_test(g, 10)
-println("ARCH-LM (residuals): statistic=$(round(result2.statistic, digits=4)), p=$(round(result2.pvalue, digits=4))")
+(raw = (statistic = round(result.statistic, digits=4), pvalue = round(result.pvalue, digits=4)),
+ residuals = (statistic = round(result2.statistic, digits=4), pvalue = round(result2.pvalue, digits=4)))
 ```
+
+Both tests return large p-values, confirming no ARCH effects in the raw series and none remaining in the fitted GARCH standardized residuals.
 
 ### Ljung-Box on Squared Residuals
 
@@ -338,13 +341,15 @@ where:
 # Test for serial correlation in squared residuals
 z = randn(500)
 result = ljung_box_squared(z, 10)
-println("Ljung-Box Q²: statistic=$(round(result.statistic, digits=4)), p=$(round(result.pvalue, digits=4))")
 
 # Test GARCH standardized residuals
 g_lb = estimate_garch(z)
 result2 = ljung_box_squared(g_lb, 20)
-println("Ljung-Box Q² (residuals): statistic=$(round(result2.statistic, digits=4)), p=$(round(result2.pvalue, digits=4))")
+(raw = (statistic = round(result.statistic, digits=4), pvalue = round(result.pvalue, digits=4)),
+ residuals = (statistic = round(result2.statistic, digits=4), pvalue = round(result2.pvalue, digits=4)))
 ```
+
+Neither Q² statistic is significant, indicating no serial correlation in the squared series before fitting and none in the standardized residuals after.
 
 !!! note "Technical Note"
     Use `arch_lm_test` on raw residuals to detect ARCH effects before fitting a volatility model. After fitting, apply both `arch_lm_test` and `ljung_box_squared` to the model object (which uses standardized residuals) to verify the GARCH specification adequately captures the conditional variance dynamics.
@@ -493,10 +498,10 @@ where ``q - k`` is the number of overidentifying restrictions and ``n`` is the t
 
 ```@example test_diag
 mmsc = pvar_mmsc(m_pd)
-println("MMSC-BIC: ", round(mmsc.bic, digits=2),
-        ", MMSC-AIC: ", round(mmsc.aic, digits=2),
-        ", MMSC-HQIC: ", round(mmsc.hqic, digits=2))
+(bic = round(mmsc.bic, digits=2), aic = round(mmsc.aic, digits=2), hqic = round(mmsc.hqic, digits=2))
 ```
+
+The specification minimizing MMSC-BIC is preferred; the three criteria differ only in how heavily they penalize additional moment conditions.
 
 ### Lag Selection
 
@@ -504,10 +509,10 @@ The `pvar_lag_selection` function estimates Panel VARs for lag orders ``p = 1, \
 
 ```@example test_diag
 sel = pvar_lag_selection(pd, 4)
-println("Optimal lag (BIC): ", sel.best_bic,
-        ", (AIC): ", sel.best_aic,
-        ", (HQIC): ", sel.best_hqic)
+(best_bic = sel.best_bic, best_aic = sel.best_aic, best_hqic = sel.best_hqic)
 ```
+
+Each criterion reports its own optimal lag order; when they agree, the selected order is robust to the penalty choice.
 
 ---
 

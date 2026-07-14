@@ -289,15 +289,15 @@ end
 
     @testset "Single known break" begin
         Random.seed!(456)
-        T_obs = 200
+        T_obs = 100
         X = ones(T_obs, 1)
-        y = vcat(fill(1.0, 100), fill(5.0, 100)) + randn(T_obs) * 0.3
+        y = vcat(fill(1.0, 50), fill(5.0, 50)) + randn(T_obs) * 0.3
         result = bai_perron_test(y, X; max_breaks=3, trimming=0.15)
         @test result isa BaiPerronResult{Float64}
         @test result.n_breaks >= 1
-        # Break should be near observation 100
+        # Break should be near observation 50
         if result.n_breaks >= 1
-            @test abs(result.break_dates[1] - 100) <= 20
+            @test abs(result.break_dates[1] - 50) <= 10
         end
     end
 
@@ -364,9 +364,9 @@ end
     @testset "Bai (1997) CIs valid ranges" begin
         # CIs should be valid ranges
         rng_bp = Random.MersenneTwister(55443)
-        T_bp = 200
+        T_bp = 100
         X_bp = ones(T_bp, 1)
-        y_bp = vcat(2.0 * ones(100), 5.0 * ones(100)) + 0.5 * randn(rng_bp, T_bp)
+        y_bp = vcat(2.0 * ones(50), 5.0 * ones(50)) + 0.5 * randn(rng_bp, T_bp)
         result_bp = bai_perron_test(y_bp, X_bp; max_breaks=3)
         if result_bp.n_breaks > 0
             for (lo, hi) in result_bp.break_cis

@@ -820,9 +820,12 @@ const _suppress_warnings = M._suppress_warnings
     # =========================================================================
     # 7. src/arch/types.jl — volatility accessors, StatsAPI, show
     # =========================================================================
+    # Shared ARCH fit for accessors + StatsAPI (deterministic MLE; dedupe, n=400)
+    y_arch400 = simulate_arch1(; n=400, seed=7060)
+    m_arch400 = estimate_arch(y_arch400, 1)
+
     @testset "arch/types.jl — ARCH accessors" begin
-        y = simulate_arch1(; n=1000, seed=7060)
-        m = estimate_arch(y, 1)
+        m = m_arch400
 
         @test arch_order(m) == 1
         @test persistence(m) ≈ sum(m.alpha)
@@ -831,10 +834,9 @@ const _suppress_warnings = M._suppress_warnings
     end
 
     @testset "arch/types.jl — ARCH StatsAPI" begin
-        y = simulate_arch1(; n=1000, seed=7061)
-        m = estimate_arch(y, 1)
+        m = m_arch400
 
-        @test nobs(m) == 1000
+        @test nobs(m) == 400
         @test length(coef(m)) == 3  # mu + omega + alpha1
         @test residuals(m) isa Vector
         @test predict(m) isa Vector  # conditional variance
@@ -865,7 +867,7 @@ const _suppress_warnings = M._suppress_warnings
     @testset "arch/types.jl — VolatilityForecast show" begin
         y = simulate_arch1(; n=500, seed=7063)
         m = estimate_arch(y, 1)
-        fc = forecast(m, 10)
+        fc = forecast(m, 10; n_sim=500)
         io = IOBuffer()
         show(io, fc)
         s = String(take!(io))
@@ -873,7 +875,7 @@ const _suppress_warnings = M._suppress_warnings
         @test occursin("arch", s)
 
         # Long forecast triggers truncation
-        fc_long = forecast(m, 15)
+        fc_long = forecast(m, 15; n_sim=500)
         io2 = IOBuffer()
         show(io2, fc_long)
         s2 = String(take!(io2))
@@ -881,7 +883,7 @@ const _suppress_warnings = M._suppress_warnings
     end
 
     @testset "arch/types.jl — GARCH/EGARCH/GJR-GARCH accessors" begin
-        y = simulate_garch11(; n=1000, seed=7064)
+        y = simulate_garch11(; n=400, seed=7064)
 
         garch = estimate_garch(y)
         @test arch_order(garch) == 1
@@ -912,7 +914,7 @@ const _suppress_warnings = M._suppress_warnings
 
         # GARCH/EGARCH/GJR StatsAPI
         for mod in [garch, egarch, gjr]
-            @test nobs(mod) == 1000
+            @test nobs(mod) == 400
             @test length(coef(mod)) > 0
             @test residuals(mod) isa Vector
             @test predict(mod) isa Vector

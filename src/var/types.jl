@@ -51,7 +51,19 @@ end
 
 # Accessors
 nvars(model::VARModel) = size(model.Y, 2)
+
+"""
+    nlags(model::VARModel) -> Int
+
+Number of lags ``p`` in the fitted VAR.
+"""
 nlags(model::VARModel) = model.p
+
+"""
+    ncoefs(model::VARModel) -> Int
+
+Number of estimated coefficients per equation, ``1 + n p`` (intercept plus ``p`` lags of ``n`` variables).
+"""
 ncoefs(model::VARModel) = 1 + nvars(model) * model.p
 effective_nobs(model::VARModel) = size(model.Y, 1) - model.p
 varnames(model::VARModel) = model.varnames

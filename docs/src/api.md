@@ -1,13 +1,60 @@
 # API Reference
 
-This section provides the complete API documentation for **MacroEconometricModels.jl**.
+This section provides the complete API documentation for **MacroEconometricModels.jl**. Docstrings are split into per-domain reference pages; the quick-reference tables below link each function to its narrative page.
 
-The API documentation is organized into the following pages:
+The full API documentation is organized into the following per-domain pages:
 
-- **[Types](@ref api_types)**: Core type definitions for models, results, and estimators
-- **[Functions](@ref api_functions)**: Function documentation organized by module
+- **[Data Management](@ref api_data)** — containers, datasets, cleaning, panel construction
+- **[Univariate Models](@ref api_univariate)** — filters, ARIMA, volatility, spectral analysis
+- **[Multivariate Models](@ref api_multivariate)** — VAR, VECM, BVAR, LP, factor models, FAVAR, innovation accounting
+- **[Cross-Sectional Models](@ref api_cross_section)** — OLS/IV, logit/probit, ordered/multinomial
+- **[Panel Models](@ref api_panel)** — panel VAR, panel regression, DiD, panel unit-root tests
+- **[DSGE Models](@ref api_dsge)** — specification, solvers, estimation, constraints
+- **[Structural & Statistical Identification](@ref api_structural)** — SVAR schemes, non-Gaussian/heteroskedastic identification
+- **[GMM & SMM](@ref api_gmm)** — moment-based estimation
+- **[Hypothesis Tests](@ref api_tests)** — unit root, breaks, comparison, portmanteau
+- **[Nowcasting](@ref api_nowcasting)** — DFM/BVAR/bridge nowcasting and news
+- **[Visualization](@ref api_visualization)** — `plot_result` dispatches
+- **[Utilities & Display](@ref api_utilities)** — covariance estimators, output, references
 
-The quick reference tables below cover all modules: data management, time series, multivariate models, cross-sectional and panel models, DSGE, difference-in-differences, factor models, spectral analysis, volatility, nowcasting, hypothesis tests, and output utilities.
+```@docs
+MacroEconometricModels.MacroEconometricModels
+```
+
+## Type Hierarchy
+
+The abstract-type hierarchy is derived at build time by walking `subtypes()` from the package's top-level abstract roots, so it never drifts from the source:
+
+```@eval
+using MacroEconometricModels
+import InteractiveUtils
+import Markdown
+const _M = MacroEconometricModels
+_pkgabs = Set{Type}()
+for n in names(_M; all=true)
+    isdefined(_M, n) || continue
+    v = getfield(_M, n)
+    (v isa Type && isabstracttype(v) && parentmodule(v) === _M) && push!(_pkgabs, v)
+end
+_roots = sort!([t for t in _pkgabs if !(supertype(t) in _pkgabs)]; by=string)
+_io = IOBuffer()
+function _walk(io, t, indent)
+    kids = sort!(InteractiveUtils.subtypes(t); by=string)
+    for (i, k) in enumerate(kids)
+        last = i == length(kids)
+        println(io, indent, last ? "└── " : "├── ", nameof(k))
+        _walk(io, k, indent * (last ? "    " : "│   "))
+    end
+end
+for r in _roots
+    sup = supertype(r)
+    supstr = parentmodule(sup) === _M ? string(nameof(sup)) : string(sup)
+    println(_io, nameof(r), " <: ", supstr)
+    _walk(_io, r, "")
+    println(_io)
+end
+Markdown.parse("```\n" * String(take!(_io)) * "```")
+```
 
 ## Quick Reference Tables
 
@@ -32,7 +79,7 @@ Typed data containers, built-in datasets (FRED-MD, FRED-QD, Penn World Table), a
 | `desc(d)` / `vardesc(d, name)` | Dataset and per-variable descriptions |
 | `set_desc!(d, text)` / `set_vardesc!(d, name, text)` | Set descriptions |
 | `rename_vars!(d, old => new)` | Rename variables |
-| `load_example(:fred_md)` / `load_example(:fred_qd)` / `load_example(:pwt)` | Load built-in datasets (FRED-MD, FRED-QD, PWT) |
+| `load_example(:fred_md)` / `load_example(:fred_qd)` / `load_example(:pwt)` / `load_example(:ddcg)` / `load_example(:mpdta)` / `load_example(:wiot)` | Load built-in datasets: FRED-MD, FRED-QD, PWT, DDCG (Acemoglu et al. 2019 → `PanelData`), mpdta (Callaway & Sant'Anna 2021 → `PanelData`), WIOT (WIOD → `IOData`) |
 
 AR, MA, ARMA, and ARIMA model estimation with automatic order selection. See [ARIMA Models](arima.md) for estimation methods, forecasting, and model selection.
 
@@ -60,6 +107,7 @@ Trend-cycle decomposition via HP, Hamilton, Beveridge-Nelson, Baxter-King, and b
 | `beveridge_nelson(y; p=:auto, q=:auto)` | Beveridge-Nelson permanent/transitory decomposition |
 | `baxter_king(y; pl=6, pu=32, K=12)` | Baxter-King band-pass filter |
 | `boosted_hp(y; stopping=:BIC, lambda=1600.0)` | Boosted HP filter (Phillips & Shi 2021) |
+| `x13_filter(y; frequency=12, method=:seats)` | X-13ARIMA-SEATS seasonal adjustment (see [X-13ARIMA-SEATS](x13.md)) |
 | `trend(result)` | Extract trend component from filter result |
 | `cycle(result)` | Extract cyclical component from filter result |
 
@@ -370,6 +418,20 @@ Specify, solve, simulate, and estimate Dynamic Stochastic General Equilibrium mo
 |----------|-------------|
 | `estimate_dsge(spec, data, params; method)` | GMM estimation (IRF matching, Euler, SMM, analytical) |
 | `estimate_dsge_bayes(spec, data, θ0; ...)` | Bayesian estimation (SMC/SMC²/MH) |
+
+Heterogeneous-agent (Reiter/SSJ/Krusell-Smith), continuous-time (HJB/KFE), and OLG solvers. See [Heterogeneous Agents](dsge_ha.md), [Continuous Time](dsge_continuous.md), and [Overlapping Generations](dsge_olg.md).
+
+### Heterogeneous-Agent DSGE
+
+| Function | Description |
+|----------|-------------|
+| `load_ha_example(:krusell_smith)` | Built-in HA-DSGE model specs (see [Heterogeneous Agents](dsge_ha.md)) |
+| `compute_steady_state(spec::HADSGESpec)` | HA stationary equilibrium (EGM + distribution + market clearing) |
+| `solve(spec::HADSGESpec; method=:ssj)` | HA-DSGE solution (SSJ/Reiter/Krusell-Smith) |
+| `rouwenhorst(ρ, σ, n)` / `tauchen(ρ, σ, n)` | Income process discretization |
+| `distribution_irf(sol, H)` / `inequality_irf(sol, H)` | Distribution dynamics / Gini response |
+| `simulate_panel(ss; N_agents, T_periods)` | Simulate individual-level panel from HA steady state |
+| `den_haan_test(ks_sol)` | Den Haan (2010) forecast accuracy |
 
 ### Occasionally Binding Constraints (OccBin)
 

@@ -30,7 +30,7 @@ using StatsAPI
         @test model isa VARModel
 
         # IRF with bootstrap CI
-        irf_result = irf(model, 20; ci_type=:bootstrap)
+        irf_result = irf(model, 20; ci_type=:bootstrap, reps=50)
         @test irf_result isa ImpulseResponse
 
         # Local Projections
