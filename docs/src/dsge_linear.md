@@ -470,9 +470,6 @@ All three solvers produce identical state-space representations for a well-speci
 - Klein, P. (2000). Using the Generalized Schur Form to Solve a Multivariate Linear Rational Expectations Model.
   *Journal of Economic Dynamics and Control*, 24(10), 1405--1423. [DOI](https://doi.org/10.1016/S0165-1889(99)00045-7)
 
-- Koop, G., Pesaran, M. H., & Potter, S. M. (1996). Impulse Response Analysis in Nonlinear Multivariate Models.
-  *Journal of Econometrics*, 74(1), 119--147. [DOI](https://doi.org/10.1016/0304-4076(95)01753-4)
-
 - Sims, C. A. (2002). Solving Linear Rational Expectations Models.
   *Computational Economics*, 20(1--2), 1--20. [DOI](https://doi.org/10.1023/A:1020517101123)
 

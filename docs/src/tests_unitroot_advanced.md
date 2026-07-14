@@ -458,36 +458,36 @@ report(result_both)
 This workflow applies all five advanced unit root tests to a macroeconomic series, compares results with the standard ADF test, and demonstrates how the tests complement each other for robust inference.
 
 ```@example test_ur_adv
-# ── Step 2: Standard ADF as baseline ──────────────────────────
+# ── Step 1: Standard ADF as baseline ──────────────────────────
 adf = adf_test(cpi; lags=:aic, regression=:constant)
 report(adf)
 
-# ── Step 3: Fourier ADF for smooth structural change ──────────
+# ── Step 2: Fourier ADF for smooth structural change ──────────
 fadf = fourier_adf_test(cpi; regression=:constant, fmax=3)
 report(fadf)
 
 # Check whether Fourier terms contribute
 (F=round(fadf.f_statistic, digits=3), p=round(fadf.f_pvalue, digits=3))
 
-# ── Step 4: Fourier KPSS as complementary stationarity test ──
+# ── Step 3: Fourier KPSS as complementary stationarity test ──
 fkpss = fourier_kpss_test(cpi; regression=:constant, fmax=3)
 report(fkpss)
 
-# ── Step 5: DF-GLS for maximum power ─────────────────────────
+# ── Step 4: DF-GLS for maximum power ─────────────────────────
 dfgls = dfgls_test(cpi; regression=:constant, lags=:aic)
 report(dfgls)
 
-# ── Step 6: LM test with 1 break (breaks under H0) ──────────
+# ── Step 5: LM test with 1 break (breaks under H0) ──────────
 lm1 = lm_unitroot_test(cpi; breaks=1, regression=:level)
 report(lm1)
 lm1.break_dates[1]
 
-# ── Step 7: Two-break ADF ───────────────────────────────────
+# ── Step 6: Two-break ADF ───────────────────────────────────
 adf2 = adf_2break_test(cpi; model=:level, lags=:aic)
 report(adf2)
 (break1=adf2.break1, break2=adf2.break2)
 
-# ── Step 8: Synthesis ───────────────────────────────────────
+# ── Step 7: Synthesis ───────────────────────────────────────
 map([("ADF", adf.pvalue), ("Fourier ADF", fadf.pvalue),
      ("DF-GLS", dfgls.pvalue), ("LM (1 break)", lm1.pvalue),
      ("ADF 2-break", adf2.pvalue)]) do (name, pval)

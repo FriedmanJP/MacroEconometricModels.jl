@@ -431,7 +431,7 @@ The ICA approach provides a quick nonparametric identification. The ML approach 
   *Annual Review of Economics* 17: 665--693. [DOI](https://doi.org/10.1146/annurev-economics-070124-051419)
 
 - Keweloh, Sascha A. 2021. "A Generalized Method of Moments Estimator for Structural Vector Autoregressions Based on Higher Moments."
-  *Journal of Business & Economic Statistics* 39 (3): 772--882. [DOI](https://doi.org/10.1080/07350015.2020.1730858)
+  *Journal of Business & Economic Statistics* 39 (3): 772--782. [DOI](https://doi.org/10.1080/07350015.2020.1730858)
 
 - Lanne, Markku, and Jani Luoto. 2021. "GMM Estimation of Non-Gaussian Structural Vector Autoregression."
   *Journal of Business & Economic Statistics* 39 (1): 69--81. [DOI](https://doi.org/10.1080/07350015.2019.1629940)

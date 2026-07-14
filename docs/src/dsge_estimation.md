@@ -513,6 +513,8 @@ The result is a `BayesianDSGESimulation{T}` containing the pointwise median, qua
 | `solution` | Union type | Model solution at posterior mean |
 | `state_space` | Union type | State-space representation at posterior mean |
 
+When called with `method=:mh`, the stored `method` field reports `:rwmh` --- the random-walk Metropolis-Hastings sampler that `:mh` selects.
+
 **StatsAPI interface**: `coef(result)` returns the posterior mean parameter vector.
 
 ---

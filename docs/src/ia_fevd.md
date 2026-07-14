@@ -94,10 +94,6 @@ At short horizons, own shocks typically dominate (large diagonal entries in the 
 decomp = fevd(model, 20)
 report(decomp)
 
-# Inspect variance shares at horizon 1 and 20 for INDPRO
-h1_shares = decomp.proportions[1, :, 1]   # horizon 1: shock contributions to var 1
-h20_shares = decomp.proportions[1, :, 20]  # horizon 20
-
 # Tabular output at selected horizons
 print_table(stdout, decomp, 1; horizons=[1, 4, 8, 12, 20])
 ```
@@ -210,7 +206,7 @@ lp_decomp = fevd(slp, 20; method=:r2, bias_correct=true,
 report(lp_decomp)
 ```
 
-The LP-FEVD produces variance shares that are numerically close to VAR-based FEVD under correct specification, but the LP estimates have wider confidence intervals because each horizon is estimated independently. The bias-corrected shares are bounded to ``[0, 1]`` and clamped to ensure non-negativity.
+Consistent with Plagborg-Moller & Wolf (2021), the LP-FEVD produces variance shares that are numerically close to VAR-based FEVD under correct specification, but the LP estimates have wider confidence intervals because each horizon is estimated independently. The bias-corrected shares are bounded to ``[0, 1]`` and clamped to ensure non-negativity.
 
 ```@raw html
 <iframe src="../assets/plots/fevd_lp.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>

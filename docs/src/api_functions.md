@@ -667,9 +667,9 @@ gensys
 blanchard_kahn
 klein
 perturbation_solver
-MacroEconometricModels.collocation_solver
-MacroEconometricModels.pfi_solver
-MacroEconometricModels.perfect_foresight
+collocation_solver
+pfi_solver
+perfect_foresight
 evaluate_policy
 max_euler_error
 ```
@@ -693,7 +693,7 @@ analytical_moments
 ### Global Solution Methods
 
 ```@docs
-MacroEconometricModels.vfi_solver
+vfi_solver
 ```
 
 ### DSGE GMM Estimation

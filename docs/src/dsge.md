@@ -466,7 +466,7 @@ The estimation pipeline is validated separately in `test/dynare_replication/esti
 ## References
 
 - Sims, C. A. (2002). Solving Linear Rational Expectations Models.
-  *Computational Economics*, 20(1-2), 1-20. [DOI](https://doi.org/10.1023/A:1020517101123)
+  *Computational Economics*, 20(1--2), 1--20. [DOI](https://doi.org/10.1023/A:1020517101123)
 
 - Blanchard, O. J., & Kahn, C. M. (1980). The Solution of Linear Difference Models under Rational Expectations.
   *Econometrica*, 48(5), 1305-1311. [DOI](https://doi.org/10.2307/1912186)

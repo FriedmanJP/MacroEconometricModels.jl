@@ -47,7 +47,7 @@ sol = blanchard_solve(m, ss)
 
 ## Demographics and Annuities
 
-Each period an agent survives with probability ``\gamma \in (0,1]`` and dies with probability ``1-\gamma``. Population is constant: the mass ``1-\gamma`` of newborns exactly replaces the deceased. Survival enters the objective as an extra discount, so the agent maximizes
+Fujiwara & Teranishi (2008) embed this perpetual-youth demographic structure in a New Keynesian model to study how societal aging shapes monetary policy. Each period an agent survives with probability ``\gamma \in (0,1]`` and dies with probability ``1-\gamma``. Population is constant: the mass ``1-\gamma`` of newborns exactly replaces the deceased. Survival enters the objective as an extra discount, so the agent maximizes
 
 ```math
 \mathbb{E}_t \sum_{j \geq 0} (\beta \gamma)^j \, \ln c_{t+j}

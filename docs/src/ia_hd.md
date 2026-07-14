@@ -263,7 +263,7 @@ plot_result(hd)
 <iframe src="../assets/plots/hd_freq.html" width="100%" height="600" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-The IRFs reveal the dynamic transmission mechanism: a contractionary monetary shock (positive FFR innovation) reduces industrial production with a lag of several quarters. The FEVD shows that monetary shocks explain a modest but non-trivial share of output forecast error variance at business-cycle horizons. The HD identifies specific historical episodes where monetary shocks made large positive or negative contributions to output movements, providing a narrative interpretation of the estimated structural model.
+The IRFs reveal the dynamic transmission mechanism: a contractionary monetary shock (positive FFR innovation) reduces industrial production with a lag of several months. The FEVD shows that monetary shocks explain a modest but non-trivial share of output forecast error variance at business-cycle horizons. The HD identifies specific historical episodes where monetary shocks made large positive or negative contributions to output movements, providing a narrative interpretation of the estimated structural model.
 
 ---
 

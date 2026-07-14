@@ -33,7 +33,7 @@ report(result)
 **Recipe 2: Sign restrictions with identified set**
 
 ```@example sid
-check = irf -> irf[1, 3, 3] > 0 && irf[1, 1, 3] < 0 && irf[1, 2, 3] < 0
+check = resp -> resp[1, 3, 3] > 0 && resp[1, 1, 3] < 0 && resp[1, 2, 3] < 0
 id_set = identify_sign(model, 20, check; max_draws=5000, store_all=true)
 id_set
 ```
@@ -135,7 +135,7 @@ The algorithm:
 model = estimate_var(Y, 2; varnames=["INDPRO", "CPIAUCSL", "FEDFUNDS"])
 
 # Contractionary monetary shock: FFR rises, INDPRO and CPI fall
-check = irf -> irf[1, 3, 3] > 0 && irf[1, 1, 3] < 0 && irf[1, 2, 3] < 0
+check = resp -> resp[1, 3, 3] > 0 && resp[1, 1, 3] < 0 && resp[1, 2, 3] < 0
 
 # Full identified set
 id_set = identify_sign(model, 20, check; max_draws=5000, store_all=true)
@@ -172,7 +172,7 @@ The algorithm first filters for sign-satisfying rotations, then checks whether t
 ```@example sid
 model = estimate_var(Y, 2; varnames=["INDPRO", "CPIAUCSL", "FEDFUNDS"])
 
-sign_check = irf -> irf[1, 3, 3] > 0 && irf[1, 1, 3] < 0
+sign_check = resp -> resp[1, 3, 3] > 0 && resp[1, 1, 3] < 0
 narrative_check = shocks -> shocks[20, 3] > 0
 
 Q, irfs, shocks = identify_narrative(model, 20, sign_check, narrative_check; max_draws=5000)
@@ -341,7 +341,7 @@ report(chol)
 
 ```@example sid
 # Sign-restricted identification: FFR up, INDPRO and CPI down on impact
-check = irf -> irf[1, 3, 3] > 0 && irf[1, 1, 3] < 0 && irf[1, 2, 3] < 0
+check = resp -> resp[1, 3, 3] > 0 && resp[1, 1, 3] < 0 && resp[1, 2, 3] < 0
 sign_set = identify_sign(svar, 20, check; max_draws=5000, store_all=true)
 sign_med = irf_median(sign_set)
 
