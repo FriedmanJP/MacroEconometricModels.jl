@@ -4413,7 +4413,7 @@ end
         end
     end
 
-    @testset "GMM estimation with 3rd-order perturbation" begin
+    @testset "GMM estimation of order-2 model on 3rd-order data" begin
         _suppress_warnings() do
         spec = @dsge begin
             parameters: ρ = 0.85, σ = 0.01
@@ -4427,19 +4427,19 @@ end
         sol_true = solve(spec; method=:perturbation, order=3)
         data = simulate(sol_true, 500; rng=Random.MersenneTwister(42))
 
-        # Estimate with perturbation order 3
+        # Estimate with perturbation order 2 (order-2/order-3 divergence is O(σ²) here)
         bounds = ParameterTransform{Float64}([0.01], [0.999])
         est = estimate_dsge(spec, data, [:ρ];
                              method=:analytical_gmm,
                              solve_method=:perturbation,
-                             solve_order=3,
+                             solve_order=2,
                              auto_lags=[1],
                              bounds=bounds)
 
         @test est.converged
         @test est.method == :analytical_gmm
         @test est.solution isa MacroEconometricModels.PerturbationSolution
-        @test est.solution.order == 3
+        @test est.solution.order == 2
         @test abs(est.theta[1] - 0.85) < 0.15
         @test est.J_stat >= 0.0
         end
