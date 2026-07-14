@@ -1,13 +1,60 @@
 # API Reference
 
-This section provides the complete API documentation for **MacroEconometricModels.jl**.
+This section provides the complete API documentation for **MacroEconometricModels.jl**. Docstrings are split into per-domain reference pages; the quick-reference tables below link each function to its narrative page.
 
-The API documentation is organized into the following pages:
+The full API documentation is organized into the following per-domain pages:
 
-- **[Types](@ref api_types)**: Core type definitions for models, results, and estimators
-- **[Functions](@ref api_functions)**: Function documentation organized by module
+- **[Data Management](@ref api_data)** — containers, datasets, cleaning, panel construction
+- **[Univariate Models](@ref api_univariate)** — filters, ARIMA, volatility, spectral analysis
+- **[Multivariate Models](@ref api_multivariate)** — VAR, VECM, BVAR, LP, factor models, FAVAR, innovation accounting
+- **[Cross-Sectional Models](@ref api_cross_section)** — OLS/IV, logit/probit, ordered/multinomial
+- **[Panel Models](@ref api_panel)** — panel VAR, panel regression, DiD, panel unit-root tests
+- **[DSGE Models](@ref api_dsge)** — specification, solvers, estimation, constraints
+- **[Structural & Statistical Identification](@ref api_structural)** — SVAR schemes, non-Gaussian/heteroskedastic identification
+- **[GMM & SMM](@ref api_gmm)** — moment-based estimation
+- **[Hypothesis Tests](@ref api_tests)** — unit root, breaks, comparison, portmanteau
+- **[Nowcasting](@ref api_nowcasting)** — DFM/BVAR/bridge nowcasting and news
+- **[Visualization](@ref api_visualization)** — `plot_result` dispatches
+- **[Utilities & Display](@ref api_utilities)** — covariance estimators, output, references
 
-The quick reference tables below cover all modules: data management, time series, multivariate models, cross-sectional and panel models, DSGE, difference-in-differences, factor models, spectral analysis, volatility, nowcasting, hypothesis tests, and output utilities.
+```@docs
+MacroEconometricModels.MacroEconometricModels
+```
+
+## Type Hierarchy
+
+The abstract-type hierarchy is derived at build time by walking `subtypes()` from the package's top-level abstract roots, so it never drifts from the source:
+
+```@eval
+using MacroEconometricModels
+import InteractiveUtils
+import Markdown
+const _M = MacroEconometricModels
+_pkgabs = Set{Type}()
+for n in names(_M; all=true)
+    isdefined(_M, n) || continue
+    v = getfield(_M, n)
+    (v isa Type && isabstracttype(v) && parentmodule(v) === _M) && push!(_pkgabs, v)
+end
+_roots = sort!([t for t in _pkgabs if !(supertype(t) in _pkgabs)]; by=string)
+_io = IOBuffer()
+function _walk(io, t, indent)
+    kids = sort!(InteractiveUtils.subtypes(t); by=string)
+    for (i, k) in enumerate(kids)
+        last = i == length(kids)
+        println(io, indent, last ? "└── " : "├── ", nameof(k))
+        _walk(io, k, indent * (last ? "    " : "│   "))
+    end
+end
+for r in _roots
+    sup = supertype(r)
+    supstr = parentmodule(sup) === _M ? string(nameof(sup)) : string(sup)
+    println(_io, nameof(r), " <: ", supstr)
+    _walk(_io, r, "")
+    println(_io)
+end
+Markdown.parse("```\n" * String(take!(_io)) * "```")
+```
 
 ## Quick Reference Tables
 
