@@ -25,6 +25,7 @@ makedocs(;
         "Home" => "index.md",
         "Getting Started" => [
             "Installation & First Model" => "getting_started.md",
+            "Choosing a Method" => "method_guide.md",
         ],
         "Data Management" => "data.md",
         "Univariate Models" => [

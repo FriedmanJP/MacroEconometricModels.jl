@@ -2,7 +2,7 @@
 
 This tutorial takes you from a clean Julia install to an estimated vector autoregression with plotted impulse responses in about ten minutes. It uses the built-in FRED-MD dataset, so no external files or downloads are required. Every code block below runs exactly as shown.
 
-Once you finish, the per-topic pages listed under [Where to Next](@ref getting_started_next) cover each model family in depth.
+Once you finish, the [Choosing a Method](@ref method_guide_page) guide routes you to the right estimator for your data, and the per-topic pages listed under [Where to Next](@ref getting_started_next) cover each model family in depth.
 
 ---
 
