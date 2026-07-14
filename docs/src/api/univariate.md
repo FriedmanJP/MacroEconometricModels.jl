@@ -13,6 +13,7 @@ HamiltonFilterResult
 BeveridgeNelsonResult
 BaxterKingResult
 BoostedHPResult
+X13FilterResult
 ```
 
 ---
@@ -27,6 +28,13 @@ baxter_king
 boosted_hp
 trend
 cycle
+```
+
+### X-13ARIMA-SEATS
+
+```@docs
+x13_filter
+seasonal
 ```
 
 ---

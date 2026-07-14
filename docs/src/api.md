@@ -107,6 +107,7 @@ Trend-cycle decomposition via HP, Hamilton, Beveridge-Nelson, Baxter-King, and b
 | `beveridge_nelson(y; p=:auto, q=:auto)` | Beveridge-Nelson permanent/transitory decomposition |
 | `baxter_king(y; pl=6, pu=32, K=12)` | Baxter-King band-pass filter |
 | `boosted_hp(y; stopping=:BIC, lambda=1600.0)` | Boosted HP filter (Phillips & Shi 2021) |
+| `x13_filter(y; frequency=12, method=:seats)` | X-13ARIMA-SEATS seasonal adjustment (see [X-13ARIMA-SEATS](x13.md)) |
 | `trend(result)` | Extract trend component from filter result |
 | `cycle(result)` | Extract cyclical component from filter result |
 
@@ -417,6 +418,20 @@ Specify, solve, simulate, and estimate Dynamic Stochastic General Equilibrium mo
 |----------|-------------|
 | `estimate_dsge(spec, data, params; method)` | GMM estimation (IRF matching, Euler, SMM, analytical) |
 | `estimate_dsge_bayes(spec, data, θ0; ...)` | Bayesian estimation (SMC/SMC²/MH) |
+
+Heterogeneous-agent (Reiter/SSJ/Krusell-Smith), continuous-time (HJB/KFE), and OLG solvers. See [Heterogeneous Agents](dsge_ha.md), [Continuous Time](dsge_continuous.md), and [Overlapping Generations](dsge_olg.md).
+
+### Heterogeneous-Agent DSGE
+
+| Function | Description |
+|----------|-------------|
+| `load_ha_example(:krusell_smith)` | Built-in HA-DSGE model specs (see [Heterogeneous Agents](dsge_ha.md)) |
+| `compute_steady_state(spec::HADSGESpec)` | HA stationary equilibrium (EGM + distribution + market clearing) |
+| `solve(spec::HADSGESpec; method=:ssj)` | HA-DSGE solution (SSJ/Reiter/Krusell-Smith) |
+| `rouwenhorst(ρ, σ, n)` / `tauchen(ρ, σ, n)` | Income process discretization |
+| `distribution_irf(sol, H)` / `inequality_irf(sol, H)` | Distribution dynamics / Gini response |
+| `simulate_panel(ss; N_agents, T_periods)` | Simulate individual-level panel from HA steady state |
+| `den_haan_test(ks_sol)` | Den Haan (2010) forecast accuracy |
 
 ### Occasionally Binding Constraints (OccBin)
 

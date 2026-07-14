@@ -122,3 +122,70 @@ occbin_irf
 variable_bound
 nonlinear_constraint
 ```
+
+---
+
+## Heterogeneous-Agent DSGE
+
+```@docs
+HADSGESpec
+HAGrid
+IncomeProcess
+HASteadyState
+HADSGESolution
+KrusellSmithSolution
+DenHaanAccuracy
+```
+
+### Heterogeneous-Agent Solvers and Analysis
+
+```@docs
+rouwenhorst
+tauchen
+load_ha_example
+distribution_irf
+inequality_irf
+simulate_panel
+den_haan_test
+```
+
+---
+
+## Continuous-Time DSGE
+
+```@docs
+CTAiyagari
+CTPoissonIncome
+CTSteadyState
+CTTransition
+CTTwoAsset
+CTTwoAssetSolution
+```
+
+### Continuous-Time Solvers
+
+```@docs
+ct_hjb
+ct_kfe
+ct_steady_state
+ct_mit_shock
+ct_two_asset_solve
+```
+
+---
+
+## Overlapping Generations (OLG)
+
+```@docs
+BlanchardOLG
+BlanchardOLGSteadyState
+BlanchardOLGSolution
+```
+
+### OLG Solvers
+
+```@docs
+blanchard_steady_state
+blanchard_solve
+blanchard_transition
+```
