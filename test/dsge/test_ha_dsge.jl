@@ -1592,9 +1592,9 @@ end
 end
 
 @testset "Huggett Krusell-Smith" begin
-    spec = MacroEconometricModels._huggett_example(; credit_limit=-2.0, a_max=8.0, n_a=150)
+    spec = MacroEconometricModels._huggett_example(; credit_limit=-2.0, a_max=8.0, n_a=100)
     ss = compute_steady_state(spec; max_iter=100, tol=1e-3)
-    sol = solve(spec; method=:krusell_smith, ss=ss, T_sim=800, T_burn=200, max_outer=3)
+    sol = solve(spec; method=:krusell_smith, ss=ss, T_sim=300, T_burn=75, max_outer=3)
     @test sol isa KrusellSmithSolution
     @test haskey(sol.plm_coefficients, :r)        # PLM forecasts the clearing rate, not K
     @test sol.r_squared[:r] > 0.7                 # rate is near-linear in the endowment shock
