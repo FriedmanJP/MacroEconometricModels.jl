@@ -199,6 +199,8 @@ The `irf_result.values` matrix has dimension ``(H+1) \times n_{\text{resp}}``, w
 | `cov_type` | `Symbol` | Covariance estimator type |
 | `conf_level` | `T` | Confidence level |
 
+Two convenience wrappers extend the single-shock estimator: [`estimate_lp_multi`](@ref) fits one `LPModel` per shock variable in a supplied index vector, and [`estimate_lp_cholesky`](@ref) orthogonalizes the reduced-form residuals via a Cholesky factorization before projecting, returning one recursively-identified `LPModel` per structural shock.
+
 ---
 
 ## LP with Instrumental Variables
@@ -471,7 +473,7 @@ The `irf_expansion` and `irf_recession` objects contain regime-specific impulse 
 
 ## Propensity Score Local Projections
 
-When the shock is a discrete treatment (e.g., a policy intervention), selection bias may confound causal inference. Angrist, Jordà & Kuersteiner (2018) develop **LP with inverse propensity weighting (IPW)** to address treatment selection. Weighting by the estimated rather than the known propensity score is efficient (Hirano, Imbens & Ridder 2003). The package provides two estimators: IPW and doubly robust (AIPW).
+When the shock is a discrete treatment (e.g., a policy intervention), selection bias may confound causal inference. Angrist, Jordà & Kuersteiner (2018) develop **LP with inverse propensity weighting (IPW)** to address treatment selection. Weighting by the estimated rather than the known propensity score is efficient (Hirano, Imbens & Ridder 2003). The package provides two estimators: IPW and doubly robust (AIPW). The underlying propensity-score fit is also available standalone via [`estimate_propensity_score`](@ref), which returns the estimated ``\hat{p}(X_t)`` from a logit or probit model of treatment on covariates.
 
 ### IPW Estimator
 
@@ -623,6 +625,8 @@ The 3D IRF array stores ``\Theta[h, i, j] = \hat{\beta}_{i,h}^{(j)}`` for ``h = 
 | PML | `:pml` | Pseudo maximum likelihood |
 
 The statistical (non-Gaussian) schemes — FastICA, JADE, SOBI, dCov, HSIC, and the maximum-likelihood variants — are documented in full on the [Statistical Identification](@ref nongaussian_page) hub and its [Non-Gaussian Methods](@ref id_nongaussian_page) child.
+
+For a moment-based alternative to the OLS projection, [`estimate_lp_gmm`](@ref) estimates the horizon-``h`` local projections by GMM (returning one `GMMModel` per horizon), which admits overidentifying instruments and efficient two-step weighting; see the [GMM & SMM](@ref gmm_page) page for the underlying estimator.
 
 ```@example lp
 # Structural LP with Cholesky identification
@@ -867,6 +871,15 @@ The key trade-off is bias vs. variance:
 | **External instruments** | SVAR-IV | LP-IV |
 
 Use LP when concerned about VAR misspecification, when incorporating external instruments or nonlinearities, when working with discrete treatments, or at long horizons where VAR error compounds.
+
+The [`compare_var_lp`](@ref) helper quantifies this equivalence directly, estimating both a Cholesky-identified VAR and the matching Cholesky LP on the same data and returning their IRFs alongside the horizon-by-horizon difference:
+
+```@example lp
+cmp = compare_var_lp(Y, 20; lags=4)
+round.(cmp.difference[1:5, :, 3], digits=3)   # VAR − LP gap, first 5 horizons, FFR shock
+```
+
+Under correct specification the differences shrink toward zero as the sample grows; the residual gaps here reflect finite-sample bias-variance trade-offs rather than a population discrepancy.
 
 ---
 

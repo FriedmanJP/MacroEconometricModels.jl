@@ -114,7 +114,7 @@ The estimator is consistent for any fixed ``W``, but the **asymptotically effici
 !!! note "Time-series moments and HAC"
     When moment conditions are serially correlated (the typical macro case), ``\Omega`` is estimated with a Newey-West/Bartlett HAC kernel. Pass `hac=true` (the default) and optionally a fixed `bandwidth`; `bandwidth=0` selects the bandwidth automatically.
 
-The moment function has signature `moment_fn(theta, data)` and must return an ``n \times q`` matrix — one row per observation, one column per moment. `estimate_gmm` reads ``n`` and ``q`` from an initial evaluation at `theta0`.
+The moment function has signature `moment_fn(theta, data)` and must return an ``n \times q`` matrix — one row per observation, one column per moment. `estimate_gmm` reads ``n`` and ``q`` from an initial evaluation at `theta0`. The scalar criterion ``Q(\theta)`` itself is exposed as [`gmm_objective`](@ref)`(theta, moment_fn, data, W)` for users who want to evaluate or plot the objective surface directly.
 
 ---
 
@@ -178,7 +178,7 @@ The optimizer is LBFGS with a Nelder-Mead fallback. When `bounds` are supplied t
 | `converged` | `Bool` | Optimizer convergence flag |
 | `iterations` | `Int` | Total iterations |
 
-The `report` method prints the specification, a Stata-style coefficient table, and — when overidentified — the Hansen J-test. `coef`, `vcov`, `stderror`, `confint`, `nobs`, and `dof` follow the StatsAPI convention.
+The `report` method prints the specification, a Stata-style coefficient table, and — when overidentified — the Hansen J-test. `coef`, `vcov`, `stderror`, `confint`, `nobs`, and `dof` follow the StatsAPI convention. Both `GMMModel` and `SMMModel` subtype the abstract [`AbstractGMMModel`](@ref), on which the shared `report` and StatsAPI accessors dispatch.
 
 ---
 

@@ -128,6 +128,8 @@ plot_result(result)
 
 The recursive ordering INDPRO, CPIAUCSL, FEDFUNDS implies that monetary policy shocks (federal funds rate innovations) do not contemporaneously affect industrial production or prices. The bootstrap confidence bands quantify estimation uncertainty: at impact (``h = 0``), the federal funds rate shock has zero effect on INDPRO by construction. By ``h = 8`` months, the contractionary transmission is visible as the INDPRO response becomes negative, consistent with standard monetary transmission mechanisms.
 
+The point-estimate engine is also exposed for advanced users who supply their own rotation matrix ``Q``: [`compute_irf`](@ref)`(model, Q, horizon)` returns the ``(H+1) \times n \times n`` IRF array for any identification scheme.
+
 ### Keyword Arguments
 
 | Keyword | Type | Default | Description |

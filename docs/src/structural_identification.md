@@ -97,6 +97,8 @@ The ordering reflects economic assumptions about the speed of adjustment. Variab
 ```@example sid
 model = estimate_var(Y, 2; varnames=["INDPRO", "CPIAUCSL", "FEDFUNDS"])
 result = irf(model, 20; method=:cholesky, ci_type=:bootstrap, reps=50, conf_level=0.90)
+B0 = identify_cholesky(model)
+nothing # hide
 ```
 
 ```julia
@@ -107,7 +109,7 @@ plot_result(result)
 <iframe src="../assets/plots/irf_freq.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-The Cholesky identification is exact (point identification). Different variable orderings produce different ``B_0`` and hence different IRFs --- there is no statistical test for the "correct" ordering. Economic theory must justify the assumed causal ordering.
+The impact matrix is available directly via [`identify_cholesky`](@ref), which returns the lower-triangular ``B_0 = \text{chol}(\Sigma)`` without running the full IRF pipeline. The Cholesky identification is exact (point identification). Different variable orderings produce different ``B_0`` and hence different IRFs --- there is no statistical test for the "correct" ordering. Economic theory must justify the assumed causal ordering.
 
 ---
 
@@ -198,6 +200,8 @@ where:
 - ``A(1) = A_1 + A_2 + \cdots + A_p`` is the sum of VAR coefficient matrices
 
 Blanchard & Quah (1989) impose that ``C(1)`` is lower triangular, so that shocks ordered later have zero long-run effect on variables ordered earlier. The typical application restricts demand shocks to have no long-run effect on output, identifying supply-driven long-run fluctuations.
+
+The rotation is computed by [`identify_long_run`](@ref), which returns the orthogonal rotation ``Q`` implementing the Blanchard–Quah restriction (the structural impact matrix is then ``\text{chol}(\Sigma) \cdot Q``).
 
 ```@example sid
 model = estimate_var(Y, 2; varnames=["INDPRO", "CPIAUCSL", "FEDFUNDS"])
