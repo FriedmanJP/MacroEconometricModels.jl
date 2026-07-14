@@ -18,6 +18,9 @@ Documentation content and architecture, plus test-suite quality. No public API c
 - API reference split into per-domain pages with an auto-generated type hierarchy; every exported
   symbol is now documented on exactly one reference page (`:missing_docs` is a hard build error).
 - Corrected stale counts, mislabeled example series, and keyword-table defaults across the corpus.
+- Test-suite compute cuts: shared fixtures and shorter simulation/grid/draw settings across the
+  DSGE, heterogeneous-agent, volatility, factor, panel, and nowcast suites (with assertions kept
+  discriminating), and a dedicated Extensions test group for the optional JuMP/Ipopt/PATH solvers.
 
 ## v0.6.6
 
