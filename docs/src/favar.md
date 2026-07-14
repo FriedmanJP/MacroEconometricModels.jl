@@ -128,7 +128,7 @@ favar_ts = estimate_favar(X, [4, 5], 2, 2)
 report(irf(favar_ts, 20; method=:cholesky))
 ```
 
-The estimation extracts factors from the panel, orthogonalizes them against the 2 key variables, and fits a VAR(2) on the resulting 5-variable system. The `report()` call on the IRF displays the structural impulse responses with Cholesky identification, where the ordering places factors before key variables.
+The estimation extracts factors from the panel, orthogonalizes them against the 2 key variables, and fits a VAR(2) on the resulting 4-variable system. The `report()` call on the IRF displays the structural impulse responses with Cholesky identification, where the ordering places factors before key variables.
 
 ### Specifying Key Variables
 
@@ -312,7 +312,7 @@ The Cholesky identification places the slow-moving factors before the fast-movin
 
 ## Complete Example
 
-This example estimates a FAVAR on simulated data, performs structural analysis with both frequentist and Bayesian approaches, and maps results to the full panel:
+This example estimates a FAVAR on FRED-MD data, performs structural analysis with both frequentist and Bayesian approaches, and maps results to the full panel:
 
 ```@example favar
 # --- Two-step FAVAR ---
@@ -341,7 +341,7 @@ report(r_panel_full)
 report(bfevd_full)
 ```
 
-The two-step FAVAR extracts 3 factors from the 50-variable panel, removes the component spanned by the 2 key variables, and estimates a VAR(2) on the resulting 5-variable augmented system. The panel-wide IRFs map structural shocks to all 50 variables through the ``N \times r`` loading matrix ``\Lambda``. The Bayesian FAVAR additionally quantifies uncertainty in the factor extraction through 5000 Gibbs draws, producing wider credible intervals that account for estimation error in both the factors and the VAR parameters.
+The two-step FAVAR extracts 2 factors from the 7-variable panel, removes the component spanned by the 2 key variables, and estimates a VAR(2) on the resulting 4-variable augmented system. The panel-wide IRFs map structural shocks to all 7 variables through the ``N \times r`` loading matrix ``\Lambda``. The Bayesian FAVAR additionally quantifies uncertainty in the factor extraction through 100 Gibbs draws, producing wider credible intervals that account for estimation error in both the factors and the VAR parameters.
 
 ---
 
