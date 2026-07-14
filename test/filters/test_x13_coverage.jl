@@ -539,26 +539,28 @@ end
 @testset "Internal _x13_run paths" begin
     yf = Float64.(y_monthly)
     yp = Float64.(y_pos)
+    # Shared explicit ARIMA spec — skips automdl on internal calls that don't
+    # test model selection (the public API pipeline above remains the anchor).
+    spec = M._X13ARIMASpec(0, 1, 1, 0, 1, 1, 12)
 
     # Custom forecast horizon
-    res = M._x13_run(yf; frequency=12, forecast_horizon=24)
+    res = M._x13_run(yf; frequency=12, model=spec, forecast_horizon=24)
     @test res isa M._X13InternalResult
 
     # Explicit model spec (not :auto)
-    spec = M._X13ARIMASpec(0, 1, 1, 0, 1, 1, 12)
     res2 = M._x13_run(yf; frequency=12, model=spec, outliers=true)
     @test res2.model.spec.p == 0 && res2.model.spec.q == 1
 
     # X-11 with non-default henderson and mode
-    res3 = M._x13_run(yf; frequency=12, x11_henderson=5, x11_mode=:additive)
+    res3 = M._x13_run(yf; frequency=12, model=spec, x11_henderson=5, x11_mode=:additive)
     @test res3.x11 !== nothing
 
     # SEATS only (no X-11)
-    res4 = M._x13_run(yf; frequency=12, x11=false, seats=true)
+    res4 = M._x13_run(yf; frequency=12, model=spec, x11=false, seats=true)
     @test res4.x11 === nothing && res4.seats !== nothing
 
     # X-11 only (no SEATS)
-    res5 = M._x13_run(yf; frequency=12, x11=true, seats=false)
+    res5 = M._x13_run(yf; frequency=12, model=spec, x11=true, seats=false)
     @test res5.x11 !== nothing && res5.seats === nothing
 
     # Outlier type filtering
@@ -567,7 +569,7 @@ end
     @test res6 isa M._X13InternalResult
 
     # Log transform with positive data
-    res7 = M._x13_run(yp; frequency=12, transform=:log)
+    res7 = M._x13_run(yp; frequency=12, model=spec, transform=:log)
     @test res7.transform == M._X13_LOG
 end
 
