@@ -103,13 +103,20 @@ end
 # GARCH/ARCH Edge Cases: persistence >= 1
 # =============================================================================
 
+# Shared deterministic base fits (n=300) reused across edge-case, StatsAPI, and
+# display testsets below — each reads distinct fields / constructs its own
+# extreme model, so one shared fit per family suffices (dedupe).
+Random.seed!(5099)
+y300 = randn(300)
+garch300 = estimate_garch(y300, 1, 1)
+egarch300 = estimate_egarch(y300, 1, 1)
+gjr300 = estimate_gjr_garch(y300, 1, 1)
+arch300 = estimate_arch(y300, 1)
+
 @testset "Volatility edge cases: high persistence" begin
     @testset "GARCH halflife and unconditional_variance at boundary" begin
-        Random.seed!(5010)
-        y = randn(300)
-
         # Estimate a model, then manually create one with extreme parameters
-        m = estimate_garch(y, 1, 1)
+        m = garch300
 
         # Construct a model with persistence >= 1 using the GARCHModel constructor
         m_extreme = GARCHModel(
@@ -128,9 +135,7 @@ end
     end
 
     @testset "EGARCH persistence edge case" begin
-        Random.seed!(5011)
-        y = randn(300)
-        m = estimate_egarch(y, 1, 1)
+        m = egarch300
 
         # Construct with beta sum >= 1
         m_extreme = EGARCHModel(
@@ -149,9 +154,7 @@ end
     end
 
     @testset "GJR-GARCH persistence edge case" begin
-        Random.seed!(5012)
-        y = randn(300)
-        m = estimate_gjr_garch(y, 1, 1)
+        m = gjr300
 
         # Construct with persistence >= 1
         m_extreme = GJRGARCHModel(
@@ -170,9 +173,7 @@ end
     end
 
     @testset "ARCH halflife edge case: persistence <= 0" begin
-        Random.seed!(5013)
-        y = randn(300)
-        m = estimate_arch(y, 1)
+        m = arch300
 
         # Construct with zero alpha
         m_zero = ARCHModel(
@@ -201,9 +202,7 @@ end
     end
 
     @testset "GARCH halflife edge case: persistence <= 0" begin
-        Random.seed!(5014)
-        y = randn(300)
-        m = estimate_garch(y, 1, 1)
+        m = garch300
 
         m_zero = GARCHModel(
             m.y, m.p, m.q, m.mu, m.omega,
@@ -224,11 +223,8 @@ end
 # =============================================================================
 
 @testset "EGARCH/GJR StatsAPI completeness" begin
-    Random.seed!(5020)
-    y = randn(300)
-
     @testset "EGARCH StatsAPI" begin
-        m = estimate_egarch(y, 1, 1)
+        m = egarch300
         @test StatsAPI.nobs(m) == 300
         @test length(StatsAPI.coef(m)) == 5  # mu + omega + alpha + gamma + beta
         @test length(StatsAPI.residuals(m)) == 300
@@ -243,7 +239,7 @@ end
     end
 
     @testset "GJR-GARCH StatsAPI" begin
-        m = estimate_gjr_garch(y, 1, 1)
+        m = gjr300
         @test StatsAPI.nobs(m) == 300
         @test length(StatsAPI.coef(m)) == 5
         @test length(StatsAPI.residuals(m)) == 300
@@ -263,10 +259,8 @@ end
 # =============================================================================
 
 @testset "VolatilityForecast display h > 10" begin
-    Random.seed!(5030)
-    y = randn(300)
-    m = estimate_garch(y, 1, 1)
-    fc = forecast(m, 15)
+    m = garch300
+    fc = forecast(m, 15; n_sim=500)
 
     io = IOBuffer()
     show(io, fc)
