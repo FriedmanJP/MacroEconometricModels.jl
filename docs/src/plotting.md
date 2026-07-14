@@ -1,6 +1,6 @@
 # [Visualization](@id plotting_page)
 
-MacroEconometricModels.jl includes a zero-dependency visualization system that renders interactive HTML/SVG charts using inline [D3.js](https://d3js.org/) v7. The unified `plot_result()` function dispatches on 41 result types, producing self-contained HTML documents with interactive tooltips.
+MacroEconometricModels.jl includes a zero-dependency visualization system that renders interactive HTML/SVG charts using inline [D3.js](https://d3js.org/) v7. The unified `plot_result()` function dispatches on the library's result types, producing self-contained HTML documents with interactive tooltips.
 
 ```@setup plotting
 using MacroEconometricModels, Random
