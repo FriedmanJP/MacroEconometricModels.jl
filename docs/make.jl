@@ -23,6 +23,9 @@ makedocs(;
     ),
     pages=[
         "Home" => "index.md",
+        "Getting Started" => [
+            "Installation & First Model" => "getting_started.md",
+        ],
         "Data Management" => "data.md",
         "Univariate Models" => [
             "Time Series Filters" => "filters.md",
