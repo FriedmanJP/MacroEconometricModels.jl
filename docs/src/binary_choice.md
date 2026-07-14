@@ -369,9 +369,7 @@ m = estimate_logit(y, X; varnames=["(Intercept)", "x1", "x2"])
 
 or = odds_ratio(m)
 # Access odds ratios and CIs for each variable
-round.(or.or, digits=3)
-round.(or.ci_lower, digits=3)
-round.(or.ci_upper, digits=3)
+(or = round.(or.or, digits=3), ci_lower = round.(or.ci_lower, digits=3), ci_upper = round.(or.ci_upper, digits=3))
 ```
 
 An odds ratio of ``\exp(1.5) \approx 4.48`` for `x1` means that a one-unit increase in `x1` multiplies the odds of ``y = 1`` by approximately 4.5. The confidence interval excludes 1, confirming statistical significance. The odds ratio for `x2` is below 1, indicating that higher values of `x2` reduce the odds of the positive outcome.
@@ -418,15 +416,9 @@ m = estimate_logit(y, X; varnames=["(Intercept)", "x1", "x2"])
 
 # Default threshold = 0.5
 ct = classification_table(m)
-round(ct["accuracy"], digits=3)
-round(ct["sensitivity"], digits=3)
-round(ct["specificity"], digits=3)
-round(ct["f1_score"], digits=3)
-
 # Lower threshold increases sensitivity at the cost of specificity
 ct_30 = classification_table(m; threshold=0.3)
-round(ct_30["sensitivity"], digits=3)
-round(ct_30["specificity"], digits=3)
+(default = (accuracy = round(ct["accuracy"], digits=3), sensitivity = round(ct["sensitivity"], digits=3), specificity = round(ct["specificity"], digits=3), f1 = round(ct["f1_score"], digits=3)), thr30 = (sensitivity = round(ct_30["sensitivity"], digits=3), specificity = round(ct_30["specificity"], digits=3)))
 ```
 
 The default threshold of 0.5 balances sensitivity and specificity. Lowering the threshold increases sensitivity (catches more true positives) at the cost of specificity (more false positives). The optimal threshold depends on the relative costs of false positives and false negatives in the application.
@@ -597,19 +589,15 @@ report(me_mer)
 # Step 5: Odds ratios
 # ──────────────────────────────────────────────────────────────────────
 or = odds_ratio(m_logit)
-round.(or.or, digits=3)
-round.(or.ci_lower, digits=3)
-round.(or.ci_upper, digits=3)
+(or = round.(or.or, digits=3), ci_lower = round.(or.ci_lower, digits=3), ci_upper = round.(or.ci_upper, digits=3))
+```
 
+```@example binary
 # ──────────────────────────────────────────────────────────────────────
 # Step 6: Classification diagnostics
 # ──────────────────────────────────────────────────────────────────────
 ct = classification_table(m_logit)
-round(ct["accuracy"], digits=3)
-round(ct["sensitivity"], digits=3)
-round(ct["specificity"], digits=3)
-round(ct["f1_score"], digits=3)
-nothing # hide
+(accuracy = round(ct["accuracy"], digits=3), sensitivity = round(ct["sensitivity"], digits=3), specificity = round(ct["specificity"], digits=3), f1 = round(ct["f1_score"], digits=3))
 ```
 
 ```julia

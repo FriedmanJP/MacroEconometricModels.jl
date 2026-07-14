@@ -207,6 +207,8 @@ did = estimate_did(pd_cohort, :gdp, :reform; method=:callaway_santanna)
 
 When `cohort_id` is `nothing` (the default), cohorts are inferred from the treatment column.
 
+For the standalone local-projection event-study estimator see [Event Study LP](@ref event_study_page).
+
 ---
 
 ## TWFE Event Study
@@ -429,9 +431,7 @@ The de Chaisemartin & D'Haultfoeuille (2020) diagnostic checks whether the TWFE 
 ```@example did
 pd = load_example(:mpdta)
 nw = negative_weight_check(pd, "first_treat")
-nw.has_negative_weights   # true if any weights are negative
-nw.n_negative             # count of negative-weight cells
-nw.total_negative_weight  # sum of all negative weights
+(has_negative_weights = nw.has_negative_weights, n_negative = nw.n_negative, total_negative_weight = round(nw.total_negative_weight, digits=4))
 ```
 
 Negative weights mean the TWFE estimate can have the opposite sign of every underlying ``\text{ATT}(g, t)``. When negative weights are detected, switch to one of the heterogeneity-robust estimators.

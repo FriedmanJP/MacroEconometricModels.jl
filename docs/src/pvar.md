@@ -450,9 +450,7 @@ Lower values are preferred. These criteria penalize overidentification, balancin
 
 ```@example pvar
 mmsc = pvar_mmsc(model)
-mmsc.bic     # MMSC-BIC
-mmsc.aic     # MMSC-AIC
-mmsc.hqic    # MMSC-HQIC
+(bic = mmsc.bic, aic = mmsc.aic, hqic = mmsc.hqic)
 ```
 
 ---
@@ -464,9 +462,7 @@ The `pvar_lag_selection` function compares MMSC criteria across candidate lag or
 ```@example pvar
 
 sel = pvar_lag_selection(pd, 4; dependent_vars=["rgdpna", "emp", "hc"])
-sel.best_bic    # optimal lag by BIC
-sel.best_aic    # optimal lag by AIC
-sel.best_hqic   # optimal lag by HQIC
+(best_bic = sel.best_bic, best_aic = sel.best_aic, best_hqic = sel.best_hqic)
 ```
 
 The function estimates PVAR models for lags 1 through the maximum candidate, computes MMSC criteria for each, and returns the lag order that minimizes each criterion.

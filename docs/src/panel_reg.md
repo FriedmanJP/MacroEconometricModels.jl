@@ -8,6 +8,8 @@
 - **Panel probit** (`estimate_xtprobit`): Pooled, RE, CRE (no FE — incidental parameters problem)
 - **Panel marginal effects**: AME with delta-method SEs for panel logit/probit
 - **Specification tests**: Hausman, Breusch-Pagan LM, F-test for FE, Pesaran CD, Wooldridge AR, Modified Wald
+
+For dynamic panels with multivariate feedback, see [Panel VAR](@ref pvar_page).
 - **Covariance estimators**: Entity-cluster (Arellano 1987), time-cluster, two-way cluster (Cameron-Gelbach-Miller 2011), Driscoll-Kraay (1998) HAC
 
 ```@setup preg
@@ -72,8 +74,9 @@ n = N * T_p
 df_iv = DataFrame(id=repeat(1:N, inner=T_p), t=repeat(1:T_p, N),
                   x=randn(n), z=randn(n))
 alpha_i = repeat(randn(N), inner=T_p)
-df_iv.x_endog = 0.5 .* df_iv.z .+ randn(n)
-df_iv.wage = alpha_i .+ 1.5 .* df_iv.x .+ 2.0 .* df_iv.x_endog .+ randn(n)
+u = randn(n)                                        # shared error component (endogeneity source)
+df_iv.x_endog = 0.5 .* df_iv.z .+ u .+ randn(n)
+df_iv.wage = alpha_i .+ 1.5 .* df_iv.x .+ 2.0 .* df_iv.x_endog .+ u .+ randn(n)
 pd_iv = xtset(df_iv, :id, :t)
 m_iv = estimate_xtiv(pd_iv, :wage, [:x], [:x_endog]; instruments=[:z])
 report(m_iv)
@@ -340,6 +343,8 @@ report(m_ht)
 ---
 
 ## Panel Discrete Choice
+
+For cross-sectional (non-panel) discrete choice models, see [Binary Choice Models](@ref binary_choice_page).
 
 ### Panel Logit
 
