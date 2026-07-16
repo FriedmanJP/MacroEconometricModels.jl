@@ -1178,6 +1178,28 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
     :greene2018 => (key=:greene2018, authors="Greene, William H.", year=2018,
         title="Econometric Analysis", journal="", volume="", issue="", pages="",
         doi="", isbn="978-0134461366", publisher="Pearson (8th ed.)", entry_type=:book),
+    # --- Robust regression: M / MM estimation (EV-40, #448) ---
+    :huber1964 => (key=:huber1964, authors="Huber, Peter J.", year=1964,
+        title="Robust Estimation of a Location Parameter",
+        journal="The Annals of Mathematical Statistics", volume="35", issue="1", pages="73--101",
+        doi="10.1214/aoms/1177703732", isbn="", publisher="", entry_type=:article),
+    :yohai1987 => (key=:yohai1987, authors="Yohai, Víctor J.", year=1987,
+        title="High Breakdown-Point and High Efficiency Robust Estimates for Regression",
+        journal="The Annals of Statistics", volume="15", issue="2", pages="642--656",
+        doi="10.1214/aos/1176350366", isbn="", publisher="", entry_type=:article),
+    :salibian_yohai2006 => (key=:salibian_yohai2006,
+        authors="Salibian-Barrera, Matías and Yohai, Víctor J.", year=2006,
+        title="A Fast Algorithm for S-Regression Estimates",
+        journal="Journal of Computational and Graphical Statistics", volume="15", issue="2", pages="414--427",
+        doi="10.1198/106186006X113629", isbn="", publisher="", entry_type=:article),
+    :huber_ronchetti2009 => (key=:huber_ronchetti2009,
+        authors="Huber, Peter J. and Ronchetti, Elvezio M.", year=2009,
+        title="Robust Statistics", journal="", volume="", issue="", pages="",
+        doi="10.1002/9780470434697", isbn="978-0-470-12990-6", publisher="Wiley (2nd ed.)", entry_type=:book),
+    :brownlee1965 => (key=:brownlee1965, authors="Brownlee, Kenneth A.", year=1965,
+        title="Statistical Theory and Methodology in Science and Engineering",
+        journal="", volume="", issue="", pages="491--500",
+        doi="", isbn="", publisher="Wiley (2nd ed.)", entry_type=:book),
     # --- Single-Equation Cointegrating Regression (EV-10, #418) ---
     :phillips_hansen1990 => (key=:phillips_hansen1990,
         authors="Phillips, Peter C. B. and Hansen, Bruce E.", year=1990,
@@ -1746,6 +1768,8 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     # Heckman sample-selection model (EV-18, #426)
     :HeckmanModel => [:heckman1979, :greene2018, :mroz1987, :wooldridge2010],
     :estimate_heckman => [:heckman1979, :greene2018, :wooldridge2010],
+    :RobustRegModel => [:huber1964, :yohai1987, :salibian_yohai2006, :huber_ronchetti2009, :brownlee1965],  # EV-40 (#448)
+    :estimate_robust => [:huber1964, :yohai1987, :salibian_yohai2006, :huber_ronchetti2009],  # EV-40 (#448)
     # Single-equation cointegrating regression (EV-10, #418)
     :CointRegModel => [:phillips_hansen1990, :park1992, :saikkonen1991, :stock_watson1993],
     :PanelCointRegModel => [:pedroni2000, :pedroni2001, :kao_chiang2000, :mark_sul2003],  # EV-22 (#430)
@@ -2227,6 +2251,7 @@ refs(io::IO, ::SelectionResult; kw...) = refs(io, _TYPE_REFS[:SelectionResult]; 
 refs(io::IO, ::TobitModel; kw...) = refs(io, _TYPE_REFS[:TobitModel]; kw...)
 refs(io::IO, ::TruncRegModel; kw...) = refs(io, _TYPE_REFS[:TruncRegModel]; kw...)
 refs(io::IO, ::HeckmanModel; kw...) = refs(io, _TYPE_REFS[:HeckmanModel]; kw...)  # EV-18 (#426)
+refs(io::IO, ::RobustRegModel; kw...) = refs(io, _TYPE_REFS[:RobustRegModel]; kw...)  # EV-40 (#448)
 refs(io::IO, ::CointRegModel; kw...) = refs(io, _TYPE_REFS[:CointRegModel]; kw...)  # EV-10 (#418)
 refs(io::IO, ::PanelCointRegModel; kw...) = refs(io, _TYPE_REFS[:PanelCointRegModel]; kw...)  # EV-22 (#430)
 

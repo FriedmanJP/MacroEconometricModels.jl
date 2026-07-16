@@ -125,6 +125,7 @@ include("reg/logit.jl")
 include("reg/probit.jl")
 include("reg/tobit.jl")        # EV-17 (#425): Tobit (censored) + truncated regression
 include("reg/heckman.jl")      # EV-18 (#426): Heckman sample-selection (two-step + MLE)
+include("reg/robust.jl")       # EV-40 (#448): robust regression — Huber/bisquare M + Yohai MM
 include("reg/margins.jl")
 include("reg/diagnostics.jl")
 include("reg/stability.jl")     # EV-32 (#440): recursive residuals / CUSUM(SQ) / Chow / influence
@@ -1148,6 +1149,9 @@ export TobitModel, TruncRegModel, estimate_tobit, estimate_truncreg
 
 # Heckman sample-selection model — EV-18 (#426)
 export HeckmanModel, estimate_heckman
+
+# Robust regression (M / MM estimation) — EV-40 (#448)
+export RobustRegModel, estimate_robust
 
 # Marginal effects, diagnostics, prediction
 export marginal_effects, odds_ratio, vif, classification_table, OddsRatio, MultinomialMarginalEffects

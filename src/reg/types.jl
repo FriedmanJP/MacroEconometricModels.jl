@@ -119,6 +119,114 @@ function RegModel{T}(y, X, beta, vcov_mat, residuals, fitted, ssr, tss, r2, adj_
 end
 
 # =============================================================================
+# RobustRegModel — Huber/bisquare M-estimation + Yohai MM-estimation (EV-40, #448)
+# =============================================================================
+
+"""
+    RobustRegModel{T} <: StatsAPI.RegressionModel
+
+Outlier-resistant linear regression fitted by bounded-influence M-estimation (Huber or
+Tukey bisquare, via iteratively reweighted least squares) or Yohai high-breakdown
+MM-estimation (fast-S subsampling scale seed followed by a high-efficiency bisquare
+M-step). See [`estimate_robust`](@ref).
+
+M-estimation minimizes `Σ ρ((yᵢ − xᵢ'β)/ŝ)` for a bounded ρ, downweighting observations
+with large scaled residuals `uᵢ = rᵢ/ŝ`. The final ψ-weights `wᵢ = ψ(uᵢ)/uᵢ` flag outliers:
+points with `wᵢ ≈ 0` are effectively discarded.
+
+# Fields
+- `y::Vector{T}`, `X::Matrix{T}` — response and regressors (include an intercept column).
+- `beta::Vector{T}` — robust coefficient estimates.
+- `vcov_mat::Matrix{T}` — Huber–Ronchetti sandwich covariance of `beta`.
+- `scale::T` — robust residual scale `ŝ`: normalized MAD (M-estimation) or the
+  high-breakdown S-scale (MM-estimation).
+- `weights::Vector{T}` — final ψ-weights `wᵢ = ψ(uᵢ)/uᵢ` (outlier flags; `≈0` ⇒ downweighted).
+- `residuals::Vector{T}` — `yᵢ − xᵢ'β`.
+- `fitted::Vector{T}` — `X·β`.
+- `psi::Symbol` — influence function: `:huber` or `:bisquare`.
+- `method::Symbol` — `:m` (M-estimation) or `:mm` (MM-estimation).
+- `tuning::T` — the ψ tuning constant actually used (Huber `k`, bisquare `c`).
+- `robust_r2::T` — robust R² `1 − Σρ(rᵢ/ŝ)/Σρ((yᵢ − median y)/ŝ)`.
+- `varnames::Vector{String}` — coefficient names.
+- `converged::Bool` — whether the IRLS M-step converged.
+- `iterations::Int` — number of IRLS iterations in the (final) M-step.
+
+# References
+- Huber, P. J. (1964). *Annals of Mathematical Statistics* 35(1), 73-101.
+- Huber, P. J. & Ronchetti, E. M. (2009). *Robust Statistics*. 2nd ed. Wiley.
+- Yohai, V. J. (1987). *Annals of Statistics* 15(2), 642-656.
+- Salibian-Barrera, M. & Yohai, V. J. (2006). *J. Computational and Graphical Statistics* 15(2), 414-427.
+"""
+struct RobustRegModel{T<:AbstractFloat} <: StatsAPI.RegressionModel
+    y::Vector{T}
+    X::Matrix{T}
+    beta::Vector{T}
+    vcov_mat::Matrix{T}
+    scale::T
+    weights::Vector{T}
+    residuals::Vector{T}
+    fitted::Vector{T}
+    psi::Symbol
+    method::Symbol
+    tuning::T
+    robust_r2::T
+    varnames::Vector{String}
+    converged::Bool
+    iterations::Int
+end
+
+StatsAPI.coef(m::RobustRegModel) = m.beta
+StatsAPI.vcov(m::RobustRegModel) = m.vcov_mat
+StatsAPI.residuals(m::RobustRegModel) = m.residuals
+StatsAPI.predict(m::RobustRegModel) = m.fitted
+StatsAPI.nobs(m::RobustRegModel) = length(m.y)
+StatsAPI.dof(m::RobustRegModel) = length(m.beta)
+StatsAPI.dof_residual(m::RobustRegModel) = length(m.y) - length(m.beta)
+StatsAPI.islinear(::RobustRegModel) = true
+StatsAPI.stderror(m::RobustRegModel) = sqrt.(diag(m.vcov_mat))
+
+"""Confidence intervals for RobustRegModel coefficients (t-distribution)."""
+function StatsAPI.confint(m::RobustRegModel{T}; level::Real=0.95) where {T}
+    se = stderror(m)
+    df_r = dof_residual(m)
+    crit = T(quantile(TDist(df_r), 1 - (1 - level) / 2))
+    hcat(m.beta .- crit .* se, m.beta .+ crit .* se)
+end
+
+function Base.show(io::IO, m::RobustRegModel{T}) where {T}
+    n = nobs(m)
+    k = dof(m)
+    psi_str = m.psi == :huber ? "Huber" : "Tukey bisquare"
+    method_str = m.method == :mm ? "MM-estimation" : "M-estimation"
+    # Downweighted-observation count: ψ-weight materially below one (Stata/rlm convention).
+    n_down = count(w -> w < T(0.999), m.weights)
+    n_zero = count(w -> w < T(1e-3), m.weights)
+
+    spec = Any[
+        "Method"          method_str;
+        "Influence fn."   psi_str;
+        "Tuning const."   _fmt(m.tuning; digits=3);
+        "Observations"    n;
+        "Covariates"      k;
+        "Robust scale"    _fmt(m.scale; digits=4);
+        "Robust R-sq."    _fmt(m.robust_r2);
+        "Downweighted"    "$n_down of $n";
+        "Rejected (w≈0)"  n_zero;
+        "Converged"       m.converged ? "Yes" : "No";
+        "Iterations"      m.iterations
+    ]
+    _pretty_table(io, spec;
+        title = "Robust Regression ($method_str, $psi_str)",
+        column_labels = ["Specification", ""],
+        alignment = [:l, :r],
+    )
+
+    _coef_table(io, "Coefficients", m.varnames, m.beta, stderror(m);
+        dist = :t, dof_r = dof_residual(m))
+    _sig_legend(io)
+end
+
+# =============================================================================
 # PenalizedRegModel — ridge / LASSO / elastic net (EV-03, #411)
 # =============================================================================
 

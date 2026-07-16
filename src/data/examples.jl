@@ -26,6 +26,7 @@ const _EXAMPLE_DATASETS = Dict{Symbol, Tuple{String, Symbol}}(
     :nile    => ("nile.toml",    :timeseries),   # EV-13 (#421); shared with EV-37
     :mroz    => ("mroz.toml",    :crosssection), # EV-18 (#426): Mroz (1987) labor supply
     :gnp_hamilton => ("gnp_hamilton.toml", :timeseries), # EV-07 (#415): Hamilton (1989) GNP growth
+    :stackloss => ("stackloss.toml", :crosssection), # EV-40 (#448): Brownlee (1965) stack loss
 )
 
 # Parse frequency string to Frequency enum
@@ -53,6 +54,8 @@ Load a built-in example dataset.
   for the 325 non-participants) → `CrossSectionData`. Used for the Heckman selection model.
 - `:gnp_hamilton` — Hamilton (1989) US real GNP growth, 1951Q2–1984Q4 (135 obs, 100×quarterly
   log-diff) → `TimeSeriesData`. The canonical Markov-switching AR business-cycle dataset.
+- `:stackloss` — Brownlee (1965) stack-loss plant data (21 obs × 4 vars: Air.Flow, Water.Temp,
+  Acid.Conc., stack.loss) → `CrossSectionData`. The canonical robust-regression outlier example.
 
 For time series datasets, the returned `TimeSeriesData` includes variable names,
 transformation codes, frequency, per-variable descriptions (via `vardesc`),

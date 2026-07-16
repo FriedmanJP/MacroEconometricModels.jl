@@ -1088,6 +1088,58 @@ report(heck_ml)
 
 ---
 
+## Robust Regression: M- and MM-Estimation
+
+Ordinary least squares breaks down under outliers: a single gross error, given full weight by the squared-error loss, can dominate the fit. Robust regression bounds each observation's influence. [`estimate_robust`](@ref) implements two classical strategies.
+
+**M-estimation** minimizes ``\sum_i \rho\!\left(r_i/\hat s\right)`` for a bounded loss ``\rho``, where ``r_i = y_i - x_i'\beta`` and ``\hat s`` is a robust scale. Solved by iteratively reweighted least squares (IRLS): each step forms scaled residuals ``u_i = r_i/\hat s``, weights ``w_i = \psi(u_i)/u_i``, and updates ``\beta = (X'WX)^{-1}X'Wy``.
+
+- **Huber** (`psi=:huber`): ``\psi(u) = u`` for ``|u| \le k``, else ``k\,\mathrm{sign}(u)``. Default ``k = 1.345`` (95% Gaussian efficiency). Downweights but never rejects.
+- **Tukey bisquare** (`psi=:bisquare`): ``\psi(u) = u\left(1-(u/c)^2\right)^2`` for ``|u| \le c``, else ``0``. Default ``c = 4.685``. Redescending: extreme points get zero weight.
+
+The scale ``\hat s`` is the normalized MAD ``\mathrm{median}(|r|)/0.6745`` (Fisher-consistent at the normal), re-estimated each iteration; pass `scale_update=:proposal2` for Huber's joint scale updating.
+
+```@example reg
+d = load_example(:stackloss)          # Brownlee (1965), 21 obs, a classic outlier example
+y = d.data[:, 4]
+X = hcat(ones(21), d.data[:, 1:3])
+m = estimate_robust(y, X, psi=:huber, method=:m,
+                    varnames=["(Intercept)", "Air.Flow", "Water.Temp", "Acid.Conc."])
+report(m)
+```
+
+The `weights` field flags outliers: observations with ``w_i \approx 0`` are downweighted. Huber and bisquare M-estimates match R's `MASS::rlm(method="M")` to machine tolerance.
+
+**MM-estimation** (Yohai 1987) combines a high-breakdown start with high efficiency. First a 50%-breakdown S-estimate of scale is found by the fast-S subsampling algorithm (Salibian-Barrera & Yohai 2006); that scale is then held fixed while ``\beta`` is re-estimated by a high-efficiency bisquare M-step. It resists up to 50% contamination yet retains ≈95% Gaussian efficiency. The subsampling is seeded — pass an `rng` for reproducibility.
+
+```@example reg
+using Random
+mm = estimate_robust(y, X, method=:mm, rng=MersenneTwister(1),
+                     varnames=["(Intercept)", "Air.Flow", "Water.Temp", "Acid.Conc."])
+report(mm)
+```
+
+On the stackloss data the MM fit reproduces the canonical Rousseeuw & Leroy (1987) result, assigning ``\psi``-weight ≈ 0 to observations 1, 3, 4, and 21:
+
+```@example reg
+findall(<(0.05), mm.weights)
+```
+
+Covariance is the Huber–Ronchetti sandwich ``V = \hat s^2\,\frac{(1/n)\sum \psi(u_i)^2}{[(1/n)\sum \psi'(u_i)]^2}\,(X'X)^{-1}``, reported through the usual coefficient table.
+
+!!! note "MM scale vs `MASS::rlm`"
+    `estimate_robust(method=:mm)` uses the standard Tukey biweight M-scale for the S-step (as in `robustbase::lmrob`). `MASS::rlm(method="MM")` seeds its scale from `lqs`, whose non-standard scale estimator over-states the high-breakdown scale; its MM fit therefore stays closer to OLS and down-weights fewer points. The Yohai/Salibian-Barrera-Yohai estimator here recovers the canonical robust fit.
+
+| Keyword | Type | Default | Description |
+|---|---|---|---|
+| `psi` | `Symbol` | `:huber` | Influence function `:huber` or `:bisquare` (forced `:bisquare` for MM) |
+| `method` | `Symbol` | `:m` | `:m` (M-estimation) or `:mm` (Yohai MM) |
+| `k` | `Real` | `1.345`/`4.685` | ψ tuning constant (Huber `k` / bisquare `c`) |
+| `scale_update` | `Symbol` | `:mad` | `:mad` or Huber `:proposal2` (M-estimation only) |
+| `rng` | `AbstractRNG` | `default_rng()` | Seeds MM fast-S subsampling |
+
+---
+
 ## Complete Example
 
 This example demonstrates a full cross-sectional regression workflow: OLS estimation with robust standard error comparison, WLS correction for heteroskedasticity, IV estimation for an endogenous regressor, and VIF diagnostics.
@@ -1218,6 +1270,21 @@ The OLS estimate of the return to education is biased upward because ability is 
   *Journal of Statistical Software*, 86(3), 1-44. [DOI](https://doi.org/10.18637/jss.v086.i03)
 - Heckman, J. J. (1979). Sample Selection Bias as a Specification Error.
   *Econometrica*, 47(1), 153-161. [DOI](https://doi.org/10.2307/1912352)
+
+- Brownlee, K. A. (1965). *Statistical Theory and Methodology in Science and Engineering*. 2nd ed. New York: Wiley, pp. 491-500. (Source of the `:stackloss` dataset.)
+
+- Huber, P. J. (1964). Robust Estimation of a Location Parameter.
+  *The Annals of Mathematical Statistics*, 35(1), 73-101. [DOI](https://doi.org/10.1214/aoms/1177703732)
+
+- Huber, P. J., & Ronchetti, E. M. (2009). *Robust Statistics*. 2nd ed. Hoboken, NJ: Wiley. [DOI](https://doi.org/10.1002/9780470434697)
+
+- Rousseeuw, P. J., & Leroy, A. M. (1987). *Robust Regression and Outlier Detection*. New York: Wiley. [DOI](https://doi.org/10.1002/0471725382)
+
+- Salibian-Barrera, M., & Yohai, V. J. (2006). A Fast Algorithm for S-Regression Estimates.
+  *Journal of Computational and Graphical Statistics*, 15(2), 414-427. [DOI](https://doi.org/10.1198/106186006X113629)
+
+- Yohai, V. J. (1987). High Breakdown-Point and High Efficiency Robust Estimates for Regression.
+  *The Annals of Statistics*, 15(2), 642-656. [DOI](https://doi.org/10.1214/aos/1176350366)
 
 - MacKinnon, J. G., & White, H. (1985). Some Heteroskedasticity-Consistent Covariance Matrix Estimators with Improved Finite Sample Properties.
   *Journal of Econometrics*, 29(3), 305-325. [DOI](https://doi.org/10.1016/0304-4076(85)90158-7)
