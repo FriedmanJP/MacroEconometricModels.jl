@@ -82,3 +82,66 @@ function _plot_threshold_ssr(m::ThresholdModel{T}; title::String="") where {T}
     ttl = isempty(title) ? "Threshold SSR Profile S(γ)" : title
     _make_plot([panel]; title=ttl, ncols=1)
 end
+
+# =============================================================================
+# STARModel — smooth-transition function view (EV-06)
+# =============================================================================
+
+"""
+    plot_result(m::STARModel; view=:transition, title="", save_path=nothing)
+
+Visualise a fitted [`STARModel`](@ref).
+
+- `view=:transition` (default): the fitted smooth-transition weight
+  `G(sₜ; γ̂, ĉ)` plotted against the transition variable `sₜ` (sorted), showing
+  how sharply the process moves between the two regimes.
+- `view=:weights`: the transition weight `G` over the sample in time order.
+"""
+function plot_result(m::STARModel{T}; view::Symbol=:transition,
+                     title::String="", save_path::Union{String,Nothing}=nothing) where {T}
+    if view === :transition
+        p = _plot_star_transition(m; title=title)
+    elseif view === :weights
+        p = _plot_star_weights(m; title=title)
+    else
+        throw(ArgumentError("Unknown view :$view for STARModel; use :transition or :weights."))
+    end
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+function _plot_star_transition(m::STARModel{T}; title::String="") where {T}
+    perm = sortperm(m.s)
+    rows = Vector{Pair{String,String}}[]
+    for i in perm
+        push!(rows, ["x" => _json(m.s[i]), "G" => _json(m.G[i])])
+    end
+    data_json = _json_array_of_objects(rows)
+
+    id = _next_plot_id("star_g")
+    s = _series_json(["G(s; γ̂, ĉ)"], [_PLOT_COLORS[1]]; keys=["G"])
+    js = _render_line_js(id, data_json, s;
+                         xlabel="$(m.sname)  (transition variable)",
+                         ylabel="G  (regime-2 weight)")
+    panel = _PanelSpec(id, "Transition Function", js)
+
+    ttl = isempty(title) ?
+        "STAR($(m.p)) — $(_star_type_label(m.trans_type)) Transition (γ̂=$(_fmt(m.gamma)))" : title
+    _make_plot([panel]; title=ttl, ncols=1)
+end
+
+function _plot_star_weights(m::STARModel{T}; title::String="") where {T}
+    rows = Vector{Pair{String,String}}[]
+    for t in 1:m.n
+        push!(rows, ["x" => _json(t), "G" => _json(m.G[t])])
+    end
+    data_json = _json_array_of_objects(rows)
+
+    id = _next_plot_id("star_w")
+    s = _series_json(["G(sₜ)"], [_PLOT_COLORS[4]]; keys=["G"])
+    js = _render_line_js(id, data_json, s; xlabel="t", ylabel="G  (regime-2 weight)")
+    panel = _PanelSpec(id, "Transition Weights over Time", js)
+
+    ttl = isempty(title) ? "STAR($(m.p)) — Transition Weights" : title
+    _make_plot([panel]; title=ttl, ncols=1)
+end

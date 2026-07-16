@@ -7,8 +7,9 @@
 - **Hansen (1996) linearity test** — `hansen_linearity_test` reports a heteroskedasticity-robust sup-LM (and sup-Wald) statistic with a fixed-regressor bootstrap p-value, the correct inference under the Davies nuisance-parameter problem
 - **Hansen (2000) threshold confidence interval** — the reported interval inverts the likelihood-ratio statistic with the tabulated non-standard critical values ``c(.90)=5.94``, ``c(.95)=7.35``, ``c(.99)=10.59``
 - **Bootstrap forecasting** — `forecast` iterates the fitted piecewise model forward, resampling residuals within regime, and returns a mean path with percentile bands
+- **Smooth-transition autoregression (STAR)** — `estimate_star` replaces the abrupt indicator with a continuous logistic (LSTR1/LSTR2) or exponential (ESTR) transition, `star_linearity_test` runs the Luukkonen–Saikkonen–Teräsvirta LM3 test, and `type=:auto` selects the transition shape by Teräsvirta's (1994) sequential procedure
 
-This is the entry point of the nonlinear module; smooth-transition (STAR) and Markov-switching models extend the same scaffold. All models return a [`ThresholdModel`](@ref) and integrate with `report`, `refs`, `forecast`, and `plot_result`.
+Threshold and SETAR models return a [`ThresholdModel`](@ref); the smooth-transition estimator returns a [`STARModel`](@ref). Both integrate with `report`, `refs`, `forecast`, and `plot_result`. Markov-switching models extend the same scaffold.
 
 ```@setup nonlinear
 using MacroEconometricModels, Random, Statistics
@@ -180,6 +181,69 @@ plot_result(m; view=:ssr)       # SSR profile S(γ) with γ̂ annotated
 
 ---
 
+## Smooth-Transition Autoregression (STAR)
+
+The threshold model switches regime abruptly at ``\gamma``. A smooth-transition autoregression (STAR) replaces the indicator ``\mathbf{1}\{s_t > c\}`` with a continuous transition function ``G(s_t; \gamma, c) \in [0, 1]``, so the process moves *gradually* between two autoregressions as the transition variable ``s_t`` crosses the location ``c``:
+
+```math
+y_t = \phi_1'z_t\,(1 - G(s_t;\gamma,c)) + \phi_2'z_t\,G(s_t;\gamma,c) + u_t,
+\qquad z_t = [1, y_{t-1}, \dots, y_{t-p}]'.
+```
+
+This is the standard model for gradual business-cycle asymmetry — expansions and contractions blend into one another rather than snapping at a boundary. The transition ``G`` takes one of three shapes:
+
+| Type | ``G(s_t;\gamma,c)`` | Shape |
+|:-----|:--------------------|:------|
+| `:lstr1` | ``1/(1 + e^{-(\gamma/\hat\sigma_s)(s_t - c)})`` | Logistic, one location — monotone asymmetry |
+| `:lstr2` | ``1/(1 + e^{-(\gamma/\hat\sigma_s^2)(s_t - c_1)(s_t - c_2)})`` | Logistic, two locations — outer/inner regimes |
+| `:estr`  | ``1 - e^{-(\gamma/\hat\sigma_s^2)(s_t - c)^2}`` | Exponential — symmetric about ``c`` |
+
+!!! note "The ``1/\hat\sigma_s`` slope scaling"
+    The slope ``\gamma`` is divided by the sample standard deviation of ``s`` (squared for the quadratic transitions). This makes ``\gamma`` dimension-free and comparable across series — and it is not optional: without it the optimiser stalls on the flat region of ``G`` where the objective is nearly constant in ``\gamma`` (Teräsvirta 1994). The reported ``\hat\gamma`` is the scaled slope.
+
+`estimate_star` fits the model by nonlinear least squares. Because the STAR objective is multimodal, starting values come from a 2-D grid over ``(\gamma, c)`` — ``\gamma`` log-spaced, ``c`` on the sample quantiles of ``s`` — with the linear coefficients ``(\phi_1, \phi_2)`` concentrated out by OLS at each node; the best node is refined with L-BFGS and a ForwardDiff gradient. Standard errors are the Gauss–Newton delta-method SEs.
+
+```@example nonlinear
+# LSTR1 smooth-transition AR(1), transition on y_{t-1}
+ms = estimate_star(y, 1; d=1, type=:lstr1)
+report(ms)
+```
+
+As ``\gamma \to \infty`` the logistic transition collapses to the indicator, so LSTR1 nests the SETAR model: on the sharply switching series above, the fit drives ``\hat\gamma`` very large and the regime split ``G > 0.5`` reproduces the SETAR split.
+
+### Testing linearity and selecting the transition
+
+Under the null of linearity (``\phi_1 = \phi_2``) the transition parameters ``\gamma`` and ``c`` are unidentified. `star_linearity_test` sidesteps this with the Luukkonen–Saikkonen–Teräsvirta LM3 test: it regresses the linear-AR residuals on ``z_t`` augmented with ``\tilde z_t s_t``, ``\tilde z_t s_t^2``, ``\tilde z_t s_t^3`` — the third-order Taylor expansion of ``G`` around ``\gamma = 0`` — and forms the ``n R^2 \sim \chi^2(3p)`` statistic (plus an F-form with better small-sample size).
+
+```@example nonlinear
+lt = star_linearity_test(y, 1; d=1)
+println("LM3 χ²(", lt.df, ") = ", round(lt.stat, digits=2),
+        "  (p = ", round(lt.pvalue, digits=4), ")")
+println("F-form           = ", round(lt.fstat, digits=2),
+        "  (p = ", round(lt.fpvalue, digits=4), ")")
+```
+
+Passing `type=:auto` runs Teräsvirta's (1994) sequential F-test on the same auxiliary regression to choose the transition shape (LSTR1 vs. ESTR), storing the three hypothesis p-values in `m.sel_pvalues`:
+
+```@example nonlinear
+m_auto = estimate_star(y, 1; type=:auto)
+println("selected transition: ", m_auto.trans_type)
+println("Teräsvirta (H₀₄, H₀₃, H₀₂) p-values: ",
+        round.(m_auto.sel_pvalues, digits=4))
+```
+
+The `:transition` view plots the fitted ``G(s_t;\hat\gamma,\hat c)`` against the transition variable, showing how sharply the process moves between regimes.
+
+```julia
+plot_result(ms; view=:transition)   # G(s) against s
+plot_result(ms; view=:weights)      # G over time
+```
+
+!!! note "Distinct from smooth-transition heteroskedasticity"
+    STAR models a smooth transition in the conditional *mean*. This is different from the smooth-transition SVAR *variance* model used for statistical identification in [Statistical Identification](@ref nongaussian_page) (`src/nongaussian/heteroskedastic.jl`), where the transition drives the shock covariance rather than the autoregression. The two share the logistic functional form but nothing else.
+
+---
+
 ## Complete Example
 
 ```@example nonlinear
@@ -218,4 +282,7 @@ report(f)
 - Davies, R. B. (1987). Hypothesis testing when a nuisance parameter is present only under the alternative. *Biometrika* 74(1), 33–43.
 - Hansen, B. E. (1996). Inference when a nuisance parameter is not identified under the null hypothesis. *Econometrica* 64(2), 413–430. [doi:10.2307/2171789](https://doi.org/10.2307/2171789)
 - Hansen, B. E. (2000). Sample splitting and threshold estimation. *Econometrica* 68(3), 575–603. [doi:10.1111/1468-0262.00124](https://doi.org/10.1111/1468-0262.00124)
+- Luukkonen, R., Saikkonen, P. & Teräsvirta, T. (1988). Testing linearity against smooth transition autoregressive models. *Biometrika* 75(3), 491–499. [doi:10.1093/biomet/75.3.491](https://doi.org/10.1093/biomet/75.3.491)
+- Teräsvirta, T. (1994). Specification, estimation, and evaluation of smooth transition autoregressive models. *Journal of the American Statistical Association* 89(425), 208–218. [doi:10.1080/01621459.1994.10476462](https://doi.org/10.1080/01621459.1994.10476462)
 - Tong, H. (1990). *Non-linear Time Series: A Dynamical System Approach.* Oxford University Press. ISBN 978-0-19-852300-6.
+- van Dijk, D., Teräsvirta, T. & Franses, P. H. (2002). Smooth transition autoregressive models — a survey of recent developments. *Econometric Reviews* 21(1), 1–47. [doi:10.1081/ETC-120015876](https://doi.org/10.1081/ETC-120015876)

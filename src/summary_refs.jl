@@ -466,6 +466,17 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Sample Splitting and Threshold Estimation",
         journal="Econometrica", volume="68", issue="3", pages="575--603",
         doi="10.1111/1468-0262.00124", isbn="", publisher="", entry_type=:article),
+    # --- Smooth-transition autoregression (STAR) — EV-06 ---
+    :luukkonen1988 => (key=:luukkonen1988,
+        authors="Luukkonen, Ritva and Saikkonen, Pentti and Teräsvirta, Timo", year=1988,
+        title="Testing Linearity Against Smooth Transition Autoregressive Models",
+        journal="Biometrika", volume="75", issue="3", pages="491--499",
+        doi="10.1093/biomet/75.3.491", isbn="", publisher="", entry_type=:article),
+    :terasvirta1994 => (key=:terasvirta1994, authors="Teräsvirta, Timo", year=1994,
+        title="Specification, Estimation, and Evaluation of Smooth Transition Autoregressive Models",
+        journal="Journal of the American Statistical Association", volume="89", issue="425",
+        pages="208--218", doi="10.1080/01621459.1994.10476462", isbn="", publisher="",
+        entry_type=:article),
     :giannone_lenza_primiceri2015 => (key=:giannone_lenza_primiceri2015,
         authors="Giannone, Domenico and Lenza, Michele and Primiceri, Giorgio E.", year=2015,
         title="Prior Selection for Vector Autoregressions",
@@ -1233,6 +1244,9 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :HansenLinearityTest => [:hansen1996],
     :threshold => [:tong1990, :hansen2000],
     :setar => [:tong1990, :hansen2000],
+    # Smooth-transition autoregression (STAR) — EV-06
+    :STARModel => [:luukkonen1988, :terasvirta1994],
+    :star => [:luukkonen1988, :terasvirta1994],
     # Time Series Filters
     :HPFilterResult => [:hodrick_prescott1997],
     :HamiltonFilterResult => [:hamilton2018filter],
@@ -1680,6 +1694,7 @@ refs(io::IO, ::VolatilityForecast; kw...) = refs(io, _TYPE_REFS[:VolatilityForec
 # Nonlinear time series (threshold/SETAR)
 refs(io::IO, ::ThresholdModel; kw...) = refs(io, _TYPE_REFS[:ThresholdModel]; kw...)
 refs(io::IO, ::HansenLinearityTest; kw...) = refs(io, _TYPE_REFS[:HansenLinearityTest]; kw...)
+refs(io::IO, ::STARModel; kw...) = refs(io, _TYPE_REFS[:STARModel]; kw...)
 
 # Covariance estimators
 refs(io::IO, ::NeweyWestEstimator; kw...) = refs(io, _TYPE_REFS[:NeweyWestEstimator]; kw...)

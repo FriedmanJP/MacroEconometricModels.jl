@@ -251,6 +251,8 @@ AbstractNonlinearTSModel
 ThresholdModel
 ThresholdForecast
 HansenLinearityTest
+STARModel
+STARForecast
 ```
 
 ---
@@ -261,4 +263,6 @@ HansenLinearityTest
 estimate_threshold
 estimate_setar
 hansen_linearity_test
+estimate_star
+star_linearity_test
 ```

@@ -320,6 +320,7 @@ include("sv/forecast.jl")
 # --- Nonlinear time series (threshold/SETAR; STAR & Markov switching extend this) ---
 include("nonlinear/types.jl")
 include("nonlinear/threshold.jl")
+include("nonlinear/star.jl")   # EV-06: smooth-transition (STAR/LSTR1/LSTR2/ESTR)
 
 # Model comparison tests (LR, LM)
 include("teststat/model_comparison.jl")
@@ -948,6 +949,9 @@ export arch_order, garch_order, persistence, halflife, unconditional_variance
 export AbstractNonlinearTSModel
 export ThresholdModel, ThresholdForecast, HansenLinearityTest
 export estimate_threshold, estimate_setar, hansen_linearity_test
+# EV-06: smooth-transition autoregression (STAR/LSTR1/LSTR2/ESTR)
+export STARModel, STARForecast
+export estimate_star, star_linearity_test
 
 # =============================================================================
 # Exports - Spectral Analysis & ACF/PACF

@@ -258,3 +258,197 @@ StatsAPI.coef(m::ThresholdModel) = vcat(m.beta1, m.beta2)
 StatsAPI.dof(m::ThresholdModel) = 2 * m.k + 1
 StatsAPI.aic(m::ThresholdModel) = m.aic
 StatsAPI.bic(m::ThresholdModel) = m.bic
+
+# =============================================================================
+# Smooth-transition autoregression (STAR / LSTR1 / LSTR2 / ESTR) — EV-06 / #414
+# =============================================================================
+
+"""
+    STARModel{T} <: AbstractNonlinearTSModel
+
+Smooth-transition autoregression (STAR), estimated by nonlinear least squares
+(Teräsvirta 1994). The conditional mean is a convex combination of two linear
+autoregressions whose weight is a smooth function `G(sₜ; γ, c) ∈ [0,1]` of a
+transition variable `sₜ`:
+
+```math
+y_t = φ_1'z_t·(1 - G(s_t;γ,c)) + φ_2'z_t·G(s_t;γ,c) + u_t,
+\\qquad z_t = [1, y_{t-1}, …, y_{t-p}]'.
+```
+
+The transition `G` is one of three shapes (`trans_type`):
+
+- **LSTR1** (`:lstr1`, logistic, one location) `G = 1/(1 + exp(-(γ/σ̂_s)(s_t - c)))`;
+- **LSTR2** (`:lstr2`, logistic, two locations) `G = 1/(1 + exp(-(γ/σ̂_s²)(s_t - c₁)(s_t - c₂)))`;
+- **ESTR** (`:estr`, exponential) `G = 1 - exp(-(γ/σ̂_s²)(s_t - c)²)`.
+
+**Identification / scaling.** The slope `γ` is divided by the sample standard
+deviation of `s` (`σ̂_s`, squared for the quadratic transitions) so that it is
+dimension-free and comparable across series; without this the optimiser stalls on
+the flat region of `G` (Teräsvirta 1994). The reported `γ̂` is the scaled slope.
+
+# Fields
+- `y::Vector{T}`: dependent variable (effective sample used in the regression).
+- `z::Matrix{T}`: regressor matrix `[1, y_{t-1}, …, y_{t-p}]` (`n × k`, `k = p+1`).
+- `s::Vector{T}`: transition variable over the effective sample.
+- `phi1::Vector{T}`, `phi2::Vector{T}`: lower (`1-G`) and upper (`G`) regime coefficients.
+- `se_phi1::Vector{T}`, `se_phi2::Vector{T}`: Gauss–Newton standard errors.
+- `gamma::T`: estimated (scaled) transition slope γ̂.
+- `c::Vector{T}`: transition location(s) — length 1 (LSTR1/ESTR) or 2 (LSTR2).
+- `se_gamma::T`, `se_c::Vector{T}`: standard errors of γ̂ and ĉ.
+- `G::Vector{T}`: fitted transition weights `G(sₜ; γ̂, ĉ)`.
+- `trans_type::Symbol`: `:lstr1`, `:lstr2`, or `:estr`.
+- `residuals::Vector{T}`, `ssr::T`, `sigma2::T`: residuals, SSR, and `σ̂² = SSR/(n-npar)`.
+- `n::Int`, `p::Int`, `d::Int`, `k::Int`: sample size, AR order, delay, regressors per regime.
+- `sigma_s::T`: the scaling `σ̂_s` used for `γ`.
+- `aic::T`, `bic::T`: information criteria.
+- `znames::Vector{String}`, `sname::String`: regressor and transition-variable labels.
+- `lm3_stat::T`, `lm3_pvalue::T`: Luukkonen–Saikkonen–Teräsvirta LM3 statistic (χ²) and p-value.
+- `lm3_fstat::T`, `lm3_fpvalue::T`: the F-form of the LM3 test and its p-value.
+- `sel_pvalues::Union{Nothing,NTuple{3,T}}`: Teräsvirta (1994) sequential-test p-values
+  `(H₀₄, H₀₃, H₀₂)` when `type=:auto`, else `nothing`.
+- `converged::Bool`: NLS convergence flag.
+"""
+struct STARModel{T<:AbstractFloat} <: AbstractNonlinearTSModel
+    y::Vector{T}
+    z::Matrix{T}
+    s::Vector{T}
+    phi1::Vector{T}
+    phi2::Vector{T}
+    se_phi1::Vector{T}
+    se_phi2::Vector{T}
+    gamma::T
+    c::Vector{T}
+    se_gamma::T
+    se_c::Vector{T}
+    G::Vector{T}
+    trans_type::Symbol
+    residuals::Vector{T}
+    ssr::T
+    sigma2::T
+    n::Int
+    p::Int
+    d::Int
+    k::Int
+    sigma_s::T
+    aic::T
+    bic::T
+    znames::Vector{String}
+    sname::String
+    lm3_stat::T
+    lm3_pvalue::T
+    lm3_fstat::T
+    lm3_fpvalue::T
+    sel_pvalues::Union{Nothing,NTuple{3,T}}
+    converged::Bool
+end
+
+"""
+    STARForecast{T} <: AbstractForecastResult{T}
+
+Bootstrap-simulation forecast from a fitted [`STARModel`](@ref).
+
+# Fields
+- `forecast::Vector{T}`: mean forecast path (length `horizon`).
+- `ci_lower::Vector{T}`, `ci_upper::Vector{T}`: percentile bands.
+- `se::Vector{T}`: standard deviation of the simulated paths at each horizon.
+- `horizon::Int`: forecast horizon.
+- `conf_level::T`: nominal band coverage (e.g. 0.90).
+- `reps::Int`: number of simulated paths.
+"""
+struct STARForecast{T<:AbstractFloat} <: AbstractForecastResult{T}
+    forecast::Vector{T}
+    ci_lower::Vector{T}
+    ci_upper::Vector{T}
+    se::Vector{T}
+    horizon::Int
+    conf_level::T
+    reps::Int
+end
+
+# Human-readable transition-type label.
+function _star_type_label(t::Symbol)
+    t === :lstr1 ? "LSTR1 (logistic, one location)" :
+    t === :lstr2 ? "LSTR2 (logistic, two locations)" :
+    t === :estr  ? "ESTR (exponential)" : string(t)
+end
+
+function Base.show(io::IO, m::STARModel{T}) where {T}
+    dof_r = max(m.n - (2 * m.k + 1 + length(m.c)), 1)
+
+    _coef_table(io, "STAR($(m.p)) — Regime 1 weight (1 − G): $(m.sname) low  (n=$(m.n))",
+                m.znames, m.phi1, m.se_phi1; dist=:t, dof_r=dof_r)
+    _coef_table(io, "Regime 2 weight (G): $(m.sname) high",
+                m.znames, m.phi2, m.se_phi2; dist=:t, dof_r=dof_r)
+
+    # Transition block: γ̂, ĉ (delta-method SEs), selected type, LM3 p-value.
+    cnames = length(m.c) == 1 ? ["c"] : ["c₁", "c₂"]
+    _coef_table(io, "Transition parameters", vcat("γ", cnames),
+                vcat(m.gamma, m.c), vcat(m.se_gamma, m.se_c); dist=:t, dof_r=dof_r)
+
+    fit_data = Any[
+        "Transition"           _star_type_label(m.trans_type);
+        "Transition var s"     m.sname;
+        "Slope scaling σ̂_s"    _fmt(m.sigma_s);
+        "Observations"         m.n;
+        "Total SSR"            _fmt(m.ssr);
+        "σ̂²"                   _fmt(m.sigma2);
+        "AIC"                  _fmt(m.aic);
+        "BIC"                  _fmt(m.bic);
+        "LM3 linearity χ²"     _fmt(m.lm3_stat);
+        "  p-value"            _format_pvalue(m.lm3_pvalue);
+        "LM3 linearity F"      _fmt(m.lm3_fstat);
+        "  p-value"            _format_pvalue(m.lm3_fpvalue);
+        "Converged"            m.converged
+    ]
+    if m.sel_pvalues !== nothing
+        sp = m.sel_pvalues
+        fit_data = vcat(fit_data, Any[
+            "Teräsvirta H₀₄ p"  _format_pvalue(sp[1]);
+            "Teräsvirta H₀₃ p"  _format_pvalue(sp[2]);
+            "Teräsvirta H₀₂ p"  _format_pvalue(sp[3])
+        ])
+    end
+    _pretty_table(io, fit_data; column_labels=["Transition & Fit", "Value"],
+                  alignment=[:l, :r])
+
+    _show_note(io, "STAR: yₜ = φ₁'zₜ·(1−G) + φ₂'zₜ·G + uₜ, G=G(sₜ;γ,c). " *
+                   "γ scaled by 1/σ̂_s (Teräsvirta 1994); NLS with delta-method SEs.")
+    _sig_legend(io)
+end
+
+function Base.show(io::IO, f::STARForecast{T}) where {T}
+    ci_pct = round(Int, 100 * f.conf_level)
+    n_show = min(10, f.horizon)
+    data = Matrix{Any}(undef, n_show, 5)
+    for i in 1:n_show
+        data[i, 1] = i
+        data[i, 2] = _fmt(f.forecast[i])
+        data[i, 3] = _fmt(f.se[i])
+        data[i, 4] = _fmt(f.ci_lower[i])
+        data[i, 5] = _fmt(f.ci_upper[i])
+    end
+    _pretty_table(io, data;
+        title = "STAR Bootstrap Forecast ($(f.reps) paths)",
+        column_labels = ["h", "Mean", "Std.Dev.", "$(ci_pct)% Lo", "$(ci_pct)% Hi"],
+        alignment = [:r, :r, :r, :r, :r])
+end
+
+"""
+    report(m::STARModel)
+
+Print two regime-coefficient blocks (`1−G` and `G` weighted), the transition
+parameters (γ̂, ĉ) with delta-method standard errors, the selected transition
+type, and the LM3 linearity test.
+"""
+report(m::STARModel) = show(stdout, m)
+report(io::IO, m::STARModel) = show(io, m)
+report(f::STARForecast) = show(stdout, f)
+report(io::IO, f::STARForecast) = show(io, f)
+
+StatsAPI.nobs(m::STARModel) = m.n
+StatsAPI.residuals(m::STARModel) = m.residuals
+StatsAPI.coef(m::STARModel) = vcat(m.phi1, m.phi2, m.gamma, m.c)
+StatsAPI.dof(m::STARModel) = 2 * m.k + 1 + length(m.c)
+StatsAPI.aic(m::STARModel) = m.aic
+StatsAPI.bic(m::STARModel) = m.bic

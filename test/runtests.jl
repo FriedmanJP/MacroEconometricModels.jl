@@ -119,6 +119,7 @@ const TEST_GROUPS = [
     # switching join this group).
     ("Nonlinear" => [
         "nonlinear/test_threshold.jl",
+        "nonlinear/test_star.jl",       # EV-06 smooth-transition (STAR)
     ]),
     # Group 7 split into three so the DSGE critical path balances across processes (#123):
     # the heavy test_ha_dsge.jl (~65% of the old group) runs alone.
@@ -439,6 +440,8 @@ else
 
         # Nonlinear time series (EV-05 threshold/SETAR)
         @testset "Nonlinear (Threshold/SETAR)" begin include("nonlinear/test_threshold.jl") end
+        # Smooth-transition autoregression (EV-06 STAR)
+        @testset "Nonlinear (STAR)" begin include("nonlinear/test_star.jl") end
 
         # Group 7 split into three (#123)
         @testset "DSGE Core" begin
