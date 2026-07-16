@@ -40,6 +40,7 @@ makedocs(;
             "Bayesian VAR" => "bayesian.md",
             "VECM" => "vecm.md",
             "ARDL & Bounds Test" => "ardl.md",
+            "Cointegrating Regression" => "cointreg.md",
             "Local Projections" => "lp.md",
             "Factor Models" => "factormodels.md",
             "FAVAR" => "favar.md",

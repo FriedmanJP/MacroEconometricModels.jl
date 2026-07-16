@@ -1001,6 +1001,25 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="The Uses of Tobit Analysis",
         journal="The Review of Economics and Statistics", volume="62", issue="2", pages="318--321",
         doi="10.2307/1924766", isbn="", publisher="", entry_type=:article),
+    # --- Single-Equation Cointegrating Regression (EV-10, #418) ---
+    :phillips_hansen1990 => (key=:phillips_hansen1990,
+        authors="Phillips, Peter C. B. and Hansen, Bruce E.", year=1990,
+        title="Statistical Inference in Instrumental Variables Regression with I(1) Processes",
+        journal="The Review of Economic Studies", volume="57", issue="1", pages="99--125",
+        doi="10.2307/2297545", isbn="", publisher="", entry_type=:article),
+    :park1992 => (key=:park1992, authors="Park, Joon Y.", year=1992,
+        title="Canonical Cointegrating Regressions",
+        journal="Econometrica", volume="60", issue="1", pages="119--143",
+        doi="10.2307/2951679", isbn="", publisher="", entry_type=:article),
+    :saikkonen1991 => (key=:saikkonen1991, authors="Saikkonen, Pentti", year=1991,
+        title="Asymptotically Efficient Estimation of Cointegration Regressions",
+        journal="Econometric Theory", volume="7", issue="1", pages="1--21",
+        doi="10.1017/S0266466600004217", isbn="", publisher="", entry_type=:article),
+    :stock_watson1993 => (key=:stock_watson1993,
+        authors="Stock, James H. and Watson, Mark W.", year=1993,
+        title="A Simple Estimator of Cointegrating Vectors in Higher Order Integrated Systems",
+        journal="Econometrica", volume="61", issue="4", pages="783--820",
+        doi="10.2307/2951763", isbn="", publisher="", entry_type=:article),
     # --- Ordered & Multinomial Models ---
     :mccullagh1980 => (key=:mccullagh1980, authors="McCullagh, Peter", year=1980,
         title="Regression Models for Ordinal Data",
@@ -1393,6 +1412,9 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :TruncRegModel => [:hausman_wise1977, :wooldridge2010],
     :estimate_tobit => [:tobin1958, :olsen1978, :mcdonald_moffitt1980],
     :estimate_truncreg => [:hausman_wise1977, :wooldridge2010],
+    # Single-equation cointegrating regression (EV-10, #418)
+    :CointRegModel => [:phillips_hansen1990, :park1992, :saikkonen1991, :stock_watson1993],
+    :estimate_cointreg => [:phillips_hansen1990, :park1992, :saikkonen1991, :stock_watson1993],
     # Ordered & Multinomial models
     :OrderedLogitModel => [:mccullagh1980, :brant1990, :wooldridge2010],
     :OrderedProbitModel => [:mccullagh1980, :wooldridge2010],
@@ -1821,6 +1843,7 @@ end
 # Censored / truncated regression (EV-17, #425)
 refs(io::IO, ::TobitModel; kw...) = refs(io, _TYPE_REFS[:TobitModel]; kw...)
 refs(io::IO, ::TruncRegModel; kw...) = refs(io, _TYPE_REFS[:TruncRegModel]; kw...)
+refs(io::IO, ::CointRegModel; kw...) = refs(io, _TYPE_REFS[:CointRegModel]; kw...)  # EV-10 (#418)
 
 # Ordered & Multinomial models
 refs(io::IO, ::OrderedLogitModel; kw...) = refs(io, _TYPE_REFS[:OrderedLogitModel]; kw...)

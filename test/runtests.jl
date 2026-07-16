@@ -100,6 +100,7 @@ const TEST_GROUPS = [
         "reg/test_multinomial.jl",
         "midas/test_midas.jl",
         "ardl/test_ardl.jl",   # EV-08 (#416): ARDL + PSS bounds test
+        "cointreg/test_cointreg.jl",   # EV-10 (#418): FMOLS/CCR/DOLS cointegrating regression
         "preg/test_panel_reg.jl",
         "preg/test_panel_tests.jl",
     ]),

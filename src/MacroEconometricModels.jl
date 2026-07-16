@@ -358,6 +358,14 @@ include("core/covariance.jl")
 # Long-run variance toolkit (EV-12: lrvar/lrcov/lrcov_oneside/varhac)
 include("core/lrvar.jl")
 
+# Single-equation cointegrating regression (EV-10, #418) — FMOLS/CCR/DOLS.
+# Reuses the EV-12 LRV toolkit (lrcov/lrcov_oneside) and reg display (_coef_table).
+# Scaffold extended later by EV-11 (stability/spurious tests) and EV-22 (panel cointreg).
+include("cointreg/types.jl")
+include("cointreg/fmols.jl")
+include("cointreg/ccr.jl")
+include("cointreg/dols.jl")
+
 # Local Projections
 include("lp/types.jl")
 include("lp/core.jl")
@@ -778,6 +786,9 @@ export register_cov_estimator!
 
 # Long-run variance toolkit (EV-12)
 export lrvar, lrcov, lrcov_oneside, varhac, optimal_bandwidth_nw94
+
+# Single-equation cointegrating regression (EV-10, #418): FMOLS/CCR/DOLS
+export estimate_cointreg, CointRegModel
 
 # LP-IV (Stock & Watson 2018)
 export estimate_lp_iv, lp_iv_irf

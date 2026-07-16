@@ -457,6 +457,8 @@ report(me::MarginalEffects) = show(stdout, me)
 report(m::PenalizedRegModel) = show(stdout, m)  # EV-03 (#411)
 report(m::TobitModel) = show(stdout, m)         # EV-17 (#425)
 report(m::TruncRegModel) = show(stdout, m)      # EV-17 (#425)
+report(m::CointRegModel) = show(stdout, m)      # EV-10 (#418)
+report(io::IO, m::CointRegModel) = show(io, m)  # EV-10 (#418)
 
 # Panel VAR
 report(x::PVARModel) = show(stdout, x)
