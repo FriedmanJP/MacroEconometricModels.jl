@@ -708,3 +708,169 @@ function Base.show(io::IO, r::GregoryHansenResult)
     conc_data = Any["Conclusion" conclusion; "Note" "*** p<0.01, ** p<0.05, * p<0.10"]
     _pretty_table(io, conc_data; column_labels=["",""], alignment=[:l,:l])
 end
+
+# =============================================================================
+# First-Generation Panel Unit Root Tests (EV-20, #428)
+# LLC / IPS / Breitung / Fisher share the UNIT-ROOT null (left-tailed N(0,1));
+# Hadri flips it (STATIONARITY null, right-tailed). Do not copy conclusions.
+# =============================================================================
+
+# Standard-normal critical values for a left-tailed test.
+const _NORMAL_LEFT_CV = Dict(1 => -2.326, 5 => -1.645, 10 => -1.282)
+# ... and right-tailed (Hadri).
+const _NORMAL_RIGHT_CV = Dict(1 => 2.326, 5 => 1.645, 10 => 1.282)
+
+function _panel_ur_cv_table(io::IO, cv::Dict)
+    cv_data = Matrix{Any}(undef, 1, 3)
+    cv_data[1, :] = [round(cv[1], digits=3), round(cv[5], digits=3), round(cv[10], digits=3)]
+    _pretty_table(io, cv_data;
+        title = "Critical Values (N(0,1))",
+        column_labels = ["1%", "5%", "10%"],
+        alignment = :r,
+    )
+end
+
+function Base.show(io::IO, r::LLCResult{T}) where {T}
+    spec_data = Any[
+        "H0"          "All panels have a unit root (non-stationary)";
+        "H1"          "All panels are stationary";
+        "Deterministic" _regression_name(r.deterministic);
+        "Avg. lags (p̄)" round(mean(r.lags), digits=2);
+        "Adj. sample (T̃)" round(r.T_tilde, digits=2);
+        "Units (N)"    r.n_units;
+        "Time (T)"     r.nobs
+    ]
+    _pretty_table(io, spec_data;
+        title = "Levin-Lin-Chu (2002) Panel Unit Root Test",
+        column_labels = ["Specification", ""], alignment = [:l, :r])
+    stars = _significance_stars(r.pvalue)
+    results_data = Any[
+        "Unadjusted t"       round(r.t_unadjusted, digits=4);
+        "Adjusted t* (N(0,1))" string(round(r.statistic, digits=4), " ", stars);
+        "P-value"            _format_pvalue(r.pvalue)
+    ]
+    _pretty_table(io, results_data; title = "Results",
+        column_labels = ["", "Value"], alignment = [:l, :r])
+    _panel_ur_cv_table(io, _NORMAL_LEFT_CV)
+    reject = r.statistic < _NORMAL_LEFT_CV[5]
+    conclusion = reject ?
+        "Reject H0 at 5%: evidence panels are stationary" :
+        "Fail to reject H0: panels appear non-stationary"
+    conc_data = Any["Conclusion" conclusion; "Note" "*** p<0.01, ** p<0.05, * p<0.10"]
+    _pretty_table(io, conc_data; column_labels=["",""], alignment=[:l,:l])
+end
+
+function Base.show(io::IO, r::IPSResult{T}) where {T}
+    spec_data = Any[
+        "H0"          "All panels have a unit root (non-stationary)";
+        "H1"          "Some panels are stationary";
+        "Deterministic" _regression_name(r.deterministic);
+        "Avg. lags (p̄)" round(mean(r.lags), digits=2);
+        "Units (N)"    r.n_units;
+        "Time (T)"     r.nobs
+    ]
+    _pretty_table(io, spec_data;
+        title = "Im-Pesaran-Shin (2003) Panel Unit Root Test",
+        column_labels = ["Specification", ""], alignment = [:l, :r])
+    stars = _significance_stars(r.pvalue)
+    results_data = Any[
+        "t-bar"                round(r.tbar, digits=4);
+        "W_t-bar (N(0,1))"     string(round(r.statistic, digits=4), " ", stars);
+        "P-value"              _format_pvalue(r.pvalue)
+    ]
+    _pretty_table(io, results_data; title = "Results",
+        column_labels = ["", "Value"], alignment = [:l, :r])
+    _panel_ur_cv_table(io, _NORMAL_LEFT_CV)
+    reject = r.statistic < _NORMAL_LEFT_CV[5]
+    conclusion = reject ?
+        "Reject H0 at 5%: evidence some panels are stationary" :
+        "Fail to reject H0: panels appear non-stationary"
+    conc_data = Any["Conclusion" conclusion; "Note" "*** p<0.01, ** p<0.05, * p<0.10"]
+    _pretty_table(io, conc_data; column_labels=["",""], alignment=[:l,:l])
+end
+
+function Base.show(io::IO, r::BreitungPanelResult{T}) where {T}
+    spec_data = Any[
+        "H0"          "All panels have a unit root (non-stationary)";
+        "H1"          "All panels are stationary";
+        "Deterministic" _regression_name(r.deterministic);
+        "Prewhitening lags" r.lags;
+        "Units (N)"    r.n_units;
+        "Time (T)"     r.nobs
+    ]
+    _pretty_table(io, spec_data;
+        title = "Breitung (2000) Panel Unit Root Test",
+        column_labels = ["Specification", ""], alignment = [:l, :r])
+    stars = _significance_stars(r.pvalue)
+    results_data = Any[
+        "lambda (N(0,1))" string(round(r.statistic, digits=4), " ", stars);
+        "P-value"         _format_pvalue(r.pvalue)
+    ]
+    _pretty_table(io, results_data; title = "Results",
+        column_labels = ["", "Value"], alignment = [:l, :r])
+    _panel_ur_cv_table(io, _NORMAL_LEFT_CV)
+    reject = r.statistic < _NORMAL_LEFT_CV[5]
+    conclusion = reject ?
+        "Reject H0 at 5%: evidence panels are stationary" :
+        "Fail to reject H0: panels appear non-stationary"
+    conc_data = Any["Conclusion" conclusion; "Note" "*** p<0.01, ** p<0.05, * p<0.10"]
+    _pretty_table(io, conc_data; column_labels=["",""], alignment=[:l,:l])
+end
+
+function Base.show(io::IO, r::FisherPanelResult{T}) where {T}
+    base_name = r.base == :adf ? "ADF (Dickey-Fuller)" : "Phillips-Perron"
+    spec_data = Any[
+        "H0"          "All panels have a unit root (non-stationary)";
+        "H1"          "Some panels are stationary";
+        "Per-unit test" base_name;
+        "Units (N)"    r.n_units;
+        "Time (T)"     r.nobs
+    ]
+    _pretty_table(io, spec_data;
+        title = "Fisher-type (Maddala-Wu / Choi) Panel Unit Root Test",
+        column_labels = ["Specification", ""], alignment = [:l, :r])
+    results_data = Any[
+        "P (Maddala-Wu, χ²(2N))"  string(round(r.P, digits=4), " ", _significance_stars(r.P_pvalue))  _format_pvalue(r.P_pvalue);
+        "Z (Choi inv-normal)"     string(round(r.Z, digits=4), " ", _significance_stars(r.Z_pvalue))  _format_pvalue(r.Z_pvalue);
+        "L* (Choi logit, t)"      string(round(r.Lstar, digits=4), " ", _significance_stars(r.Lstar_pvalue))  _format_pvalue(r.Lstar_pvalue);
+        "Pm (Choi modified)"      string(round(r.Pm, digits=4), " ", _significance_stars(r.Pm_pvalue))  _format_pvalue(r.Pm_pvalue)
+    ]
+    _pretty_table(io, results_data;
+        title = "Combination Statistics (primary: :$(r.combine))",
+        column_labels = ["Statistic", "Value", "P-value"], alignment = [:l, :r, :r])
+    reject = r.pvalue < 0.05
+    conclusion = reject ?
+        "Reject H0 at 5% ($(r.combine)): evidence some panels are stationary" :
+        "Fail to reject H0 ($(r.combine)): panels appear non-stationary"
+    conc_data = Any["Conclusion" conclusion; "Note" "*** p<0.01, ** p<0.05, * p<0.10"]
+    _pretty_table(io, conc_data; column_labels=["",""], alignment=[:l,:l])
+end
+
+function Base.show(io::IO, r::HadriResult{T}) where {T}
+    spec_data = Any[
+        "H0"          "All panels are stationary";
+        "H1"          "Some panels have a unit root (non-stationary)";
+        "Deterministic" _regression_name(r.deterministic);
+        "Variance"     (r.hetero ? "Heteroskedastic (per-unit σ̂²)" : "Homoskedastic (pooled σ̂²)");
+        "Units (N)"    r.n_units;
+        "Time (T)"     r.nobs
+    ]
+    _pretty_table(io, spec_data;
+        title = "Hadri (2000) LM Panel Stationarity Test",
+        column_labels = ["Specification", ""], alignment = [:l, :r])
+    stars = _significance_stars(r.pvalue)
+    results_data = Any[
+        "LM-bar"          round(r.LM, digits=4);
+        "Z (N(0,1))"      string(round(r.statistic, digits=4), " ", stars);
+        "P-value"         _format_pvalue(r.pvalue)
+    ]
+    _pretty_table(io, results_data; title = "Results (right-tailed)",
+        column_labels = ["", "Value"], alignment = [:l, :r])
+    _panel_ur_cv_table(io, _NORMAL_RIGHT_CV)
+    reject = r.statistic > _NORMAL_RIGHT_CV[5]
+    conclusion = reject ?
+        "Reject H0 at 5%: evidence some panels have a unit root" :
+        "Fail to reject H0: panels appear stationary"
+    conc_data = Any["Conclusion" conclusion; "Note" "*** p<0.01, ** p<0.05, * p<0.10"]
+    _pretty_table(io, conc_data; column_labels=["",""], alignment=[:l,:l])
+end

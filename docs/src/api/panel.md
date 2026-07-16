@@ -163,6 +163,11 @@ honest_did
 ## Panel Unit Root Tests
 
 ```@docs
+llc_test
+ips_test
+breitung_panel_test
+fisher_panel_test
+hadri_test
 panic_test
 pesaran_cips_test
 moon_perron_test

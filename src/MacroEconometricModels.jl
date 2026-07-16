@@ -218,6 +218,14 @@ include("favar/estimation.jl")
 include("teststat/panic.jl")
 include("teststat/pesaran_cips.jl")
 include("teststat/moon_perron.jl")
+# First-generation panel unit root tests (EV-20, #428) — after panic.jl for
+# _panel_to_matrix and after adf/pp for the per-unit tests. llc.jl first (it
+# defines _interp_clamped / _cs_demean reused by the others).
+include("teststat/llc.jl")
+include("teststat/ips.jl")
+include("teststat/breitung_panel.jl")
+include("teststat/fisher_panel.jl")
+include("teststat/hadri.jl")
 include("teststat/factor_break.jl")
 
 # Nowcasting (after factor models for Kalman filter reuse)
@@ -600,6 +608,10 @@ export andrews_test, bai_perron_test
 
 # Panel unit root tests
 export panic_test, pesaran_cips_test, moon_perron_test, panel_unit_root_summary, PanelUnitRootSummary
+
+# First-generation panel unit root tests (EV-20, #428)
+export llc_test, ips_test, breitung_panel_test, fisher_panel_test, hadri_test
+export LLCResult, IPSResult, BreitungPanelResult, FisherPanelResult, HadriResult
 
 # Factor model structural break tests
 export factor_break_test

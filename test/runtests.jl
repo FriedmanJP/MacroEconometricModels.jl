@@ -81,6 +81,7 @@ const TEST_GROUPS = [
         "teststat/test_lm_unitroot.jl",
         "teststat/test_adf_2break.jl",
         "teststat/test_gregory_hansen.jl",
+        "teststat/test_panel_unitroot_firstgen.jl",   # EV-20 (#428): LLC/IPS/Breitung/Fisher/Hadri
         "arima/test_arima.jl",
         "arima/test_arima_coverage.jl",
         "teststat/test_granger.jl",
@@ -401,6 +402,7 @@ else
         @testset "LM Unit Root Test" begin include("teststat/test_lm_unitroot.jl") end
         @testset "Two-Break ADF Test" begin include("teststat/test_adf_2break.jl") end
         @testset "Gregory-Hansen Cointegration Test" begin include("teststat/test_gregory_hansen.jl") end
+        @testset "First-Gen Panel Unit Root Tests" begin include("teststat/test_panel_unitroot_firstgen.jl") end
         @testset "ARIMA Models" begin include("arima/test_arima.jl") end
         @testset "ARIMA Coverage" begin include("arima/test_arima_coverage.jl") end
         @testset "Granger Causality Tests" begin include("teststat/test_granger.jl") end

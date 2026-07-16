@@ -34,6 +34,11 @@ FactorBreakResult
 PANICResult
 PesaranCIPSResult
 MoonPerronResult
+LLCResult
+IPSResult
+BreitungPanelResult
+FisherPanelResult
+HadriResult
 ```
 
 ---

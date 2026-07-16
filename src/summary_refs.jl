@@ -824,6 +824,31 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Testing for a Unit Root in Panels with Dynamic Factors",
         journal="Journal of Econometrics", volume="122", issue="1", pages="81--126",
         doi="10.1016/j.jeconom.2003.10.020", isbn="", publisher="", entry_type=:article),
+    # --- First-Generation Panel Unit Root Tests (EV-20, #428) ---
+    :levin_lin_chu2002 => (key=:levin_lin_chu2002, authors="Levin, Andrew and Lin, Chien-Fu and Chu, Chia-Shang James", year=2002,
+        title="Unit Root Tests in Panel Data: Asymptotic and Finite-Sample Properties",
+        journal="Journal of Econometrics", volume="108", issue="1", pages="1--24",
+        doi="10.1016/S0304-4076(01)00098-7", isbn="", publisher="", entry_type=:article),
+    :im_pesaran_shin2003 => (key=:im_pesaran_shin2003, authors="Im, Kyung So and Pesaran, M. Hashem and Shin, Yongcheol", year=2003,
+        title="Testing for Unit Roots in Heterogeneous Panels",
+        journal="Journal of Econometrics", volume="115", issue="1", pages="53--74",
+        doi="10.1016/S0304-4076(03)00092-7", isbn="", publisher="", entry_type=:article),
+    :breitung2000 => (key=:breitung2000, authors="Breitung, Jorg", year=2000,
+        title="The Local Power of Some Unit Root Tests for Panel Data",
+        journal="Advances in Econometrics", volume="15", issue="", pages="161--178",
+        doi="10.1016/S0731-9053(00)15006-6", isbn="", publisher="JAI Press", entry_type=:incollection),
+    :maddala_wu1999 => (key=:maddala_wu1999, authors="Maddala, G. S. and Wu, Shaowen", year=1999,
+        title="A Comparative Study of Unit Root Tests with Panel Data and a New Simple Test",
+        journal="Oxford Bulletin of Economics and Statistics", volume="61", issue="S1", pages="631--652",
+        doi="10.1111/1468-0084.61.s1.13", isbn="", publisher="", entry_type=:article),
+    :choi2001 => (key=:choi2001, authors="Choi, In", year=2001,
+        title="Unit Root Tests for Panel Data",
+        journal="Journal of International Money and Finance", volume="20", issue="2", pages="249--272",
+        doi="10.1016/S0261-5606(00)00048-6", isbn="", publisher="", entry_type=:article),
+    :hadri2000 => (key=:hadri2000, authors="Hadri, Kaddour", year=2000,
+        title="Testing for Stationarity in Heterogeneous Panel Data",
+        journal="Econometrics Journal", volume="3", issue="2", pages="148--161",
+        doi="10.1111/1368-423X.00043", isbn="", publisher="", entry_type=:article),
     # --- Factor Model Break Tests ---
     :breitung_eickmeier2011 => (key=:breitung_eickmeier2011,
         authors="Breitung, Jorg and Eickmeier, Sandra", year=2011,
@@ -1243,6 +1268,17 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :panic_test => [:bai_ng2004, :bai_ng2010],
     :pesaran_cips_test => [:pesaran2007],
     :moon_perron_test => [:moon_perron2004],
+    # First-generation panel unit root tests (EV-20, #428)
+    :LLCResult => [:levin_lin_chu2002],
+    :IPSResult => [:im_pesaran_shin2003],
+    :BreitungPanelResult => [:breitung2000],
+    :FisherPanelResult => [:maddala_wu1999, :choi2001],
+    :HadriResult => [:hadri2000],
+    :llc_test => [:levin_lin_chu2002],
+    :ips_test => [:im_pesaran_shin2003],
+    :breitung_panel_test => [:breitung2000],
+    :fisher_panel_test => [:maddala_wu1999, :choi2001],
+    :hadri_test => [:hadri2000],
     # Factor model break tests
     :FactorBreakResult => [:breitung_eickmeier2011, :chen_dolado_gonzalo2014, :han_inoue2015],
     :factor_break_test => [:breitung_eickmeier2011, :chen_dolado_gonzalo2014, :han_inoue2015],
@@ -1667,6 +1703,12 @@ refs(io::IO, ::BaiPerronResult; kw...) = refs(io, _TYPE_REFS[:BaiPerronResult]; 
 refs(io::IO, ::PANICResult; kw...) = refs(io, _TYPE_REFS[:PANICResult]; kw...)
 refs(io::IO, ::PesaranCIPSResult; kw...) = refs(io, _TYPE_REFS[:PesaranCIPSResult]; kw...)
 refs(io::IO, ::MoonPerronResult; kw...) = refs(io, _TYPE_REFS[:MoonPerronResult]; kw...)
+# First-generation panel unit root tests (EV-20, #428)
+refs(io::IO, ::LLCResult; kw...) = refs(io, _TYPE_REFS[:LLCResult]; kw...)
+refs(io::IO, ::IPSResult; kw...) = refs(io, _TYPE_REFS[:IPSResult]; kw...)
+refs(io::IO, ::BreitungPanelResult; kw...) = refs(io, _TYPE_REFS[:BreitungPanelResult]; kw...)
+refs(io::IO, ::FisherPanelResult; kw...) = refs(io, _TYPE_REFS[:FisherPanelResult]; kw...)
+refs(io::IO, ::HadriResult; kw...) = refs(io, _TYPE_REFS[:HadriResult]; kw...)
 
 # Factor break types
 refs(io::IO, ::FactorBreakResult; kw...) = refs(io, _TYPE_REFS[:FactorBreakResult]; kw...)

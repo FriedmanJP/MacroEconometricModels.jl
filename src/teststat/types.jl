@@ -581,3 +581,194 @@ StatsAPI.pvalue(r::DFGLSResult) = r.pvalue
 StatsAPI.pvalue(r::LMUnitRootResult) = r.pvalue
 StatsAPI.pvalue(r::ADF2BreakResult) = r.pvalue
 StatsAPI.pvalue(r::GregoryHansenResult) = r.adf_pvalue
+
+# =============================================================================
+# First-Generation Panel Unit Root Tests (EV-20, #428)
+# LLC / IPS / Breitung / Fisher / Hadri. Cross-sectional-independence battery
+# forming EViews' "Panel Unit Root Test" dialog. Result structs below; the
+# estimator functions live in src/teststat/{llc,ips,breitung_panel,fisher_panel,
+# hadri}.jl and their show methods in src/teststat/show.jl (append-only blocks).
+# LLC/IPS/Breitung/Fisher share the UNIT-ROOT null; Hadri flips it (STATIONARITY
+# null) and is RIGHT-tailed.
+# =============================================================================
+
+"""
+    LLCResult{T} <: AbstractUnitRootTest
+
+Levin-Lin-Chu (2002) pooled panel unit root test result (unit-root null).
+
+The bias-adjusted statistic `t*_δ` is asymptotically N(0,1); very negative
+values reject H0 (panel unit root). See [`llc_test`](@ref).
+
+Fields:
+- `statistic`: bias-adjusted `t*_δ` (N(0,1) under H0)
+- `pvalue`: left-tailed normal p-value
+- `t_unadjusted`: unadjusted pooled t-statistic `t_δ`
+- `delta`: pooled OLS coefficient `δ̂` (≈ ρ̂ − 1)
+- `S_N`: mean long-run/short-run standard-deviation ratio S̄_N
+- `mu_star`, `sigma_star`: LLC (2002) Table 2 mean/std adjustments at T̃
+- `T_tilde`: adjusted per-unit sample T̃ = T − p̄ − 1
+- `lags`: per-unit ADF augmentation lags
+- `deterministic`: `:none`, `:constant`, or `:trend`
+- `nobs`: time dimension T
+- `n_units`: cross-section dimension N
+"""
+struct LLCResult{T<:AbstractFloat} <: AbstractUnitRootTest
+    statistic::T
+    pvalue::T
+    t_unadjusted::T
+    delta::T
+    S_N::T
+    mu_star::T
+    sigma_star::T
+    T_tilde::T
+    lags::Vector{Int}
+    deterministic::Symbol
+    nobs::Int
+    n_units::Int
+end
+
+"""
+    IPSResult{T} <: AbstractUnitRootTest
+
+Im-Pesaran-Shin (2003) `W_tbar` panel unit root test result (unit-root null).
+
+Averages the per-unit ADF t-statistics and standardizes with the finite-sample
+moments of IPS (2003, Table 3). `W_tbar` is asymptotically N(0,1); very negative
+values reject H0. See [`ips_test`](@ref).
+
+Fields:
+- `statistic`: standardized `W_tbar` (N(0,1) under H0)
+- `pvalue`: left-tailed normal p-value
+- `tbar`: mean of the per-unit ADF t-statistics
+- `individual_t`: per-unit ADF t-statistics
+- `E_mean`, `V_mean`: averaged Table-3 E[t_iT] / Var[t_iT]
+- `lags`: per-unit ADF augmentation lags
+- `deterministic`: `:constant` or `:trend`
+- `nobs`: time dimension T
+- `n_units`: cross-section dimension N
+"""
+struct IPSResult{T<:AbstractFloat} <: AbstractUnitRootTest
+    statistic::T
+    pvalue::T
+    tbar::T
+    individual_t::Vector{T}
+    E_mean::T
+    V_mean::T
+    lags::Vector{Int}
+    deterministic::Symbol
+    nobs::Int
+    n_units::Int
+end
+
+"""
+    BreitungPanelResult{T} <: AbstractUnitRootTest
+
+Breitung (2000) pooled panel unit root test result (unit-root null).
+
+The `λ` statistic uses a bias-free forward-orthogonal-deviations construction, so
+it needs no moment table — it is asymptotically N(0,1) under H0, with very
+negative values rejecting. Named `breitung_panel_test`/`BreitungPanelResult` to
+avoid collision with the unrelated Breitung-Eickmeier factor break test. See
+[`breitung_panel_test`](@ref).
+
+Fields:
+- `statistic`: Breitung `λ` (N(0,1) under H0)
+- `pvalue`: left-tailed normal p-value
+- `lags`: prewhitening lag order p
+- `deterministic`: `:none`, `:constant`, or `:trend`
+- `nobs`: time dimension T
+- `n_units`: cross-section dimension N
+"""
+struct BreitungPanelResult{T<:AbstractFloat} <: AbstractUnitRootTest
+    statistic::T
+    pvalue::T
+    lags::Int
+    deterministic::Symbol
+    nobs::Int
+    n_units::Int
+end
+
+"""
+    FisherPanelResult{T} <: AbstractUnitRootTest
+
+Fisher-type (Maddala-Wu 1999 / Choi 2001) combination panel unit root test
+result (unit-root null). Combines per-unit ADF/PP p-values four ways.
+
+Fields:
+- `statistic`, `pvalue`: the combination selected by `combine` (primary)
+- `P`, `P_pvalue`: Maddala-Wu `P = −2Σln p_i ~ χ²(2N)` (upper-tailed)
+- `Z`, `Z_pvalue`: Choi inverse-normal `Z = N^{-1/2}Σ Φ⁻¹(p_i) ~ N(0,1)`
+- `Lstar`, `Lstar_pvalue`: Choi logit `L* ~ t(5N+4)`
+- `Pm`, `Pm_pvalue`: Choi modified `Pm ~ N(0,1)` (upper-tailed)
+- `individual_pvalues`: per-unit p-values
+- `base`: `:adf` or `:pp`
+- `combine`: `:mw`, `:choi`, `:logit`, or `:pm`
+- `nobs`: time dimension T
+- `n_units`: cross-section dimension N
+"""
+struct FisherPanelResult{T<:AbstractFloat} <: AbstractUnitRootTest
+    statistic::T
+    pvalue::T
+    P::T
+    P_pvalue::T
+    Z::T
+    Z_pvalue::T
+    Lstar::T
+    Lstar_pvalue::T
+    Pm::T
+    Pm_pvalue::T
+    individual_pvalues::Vector{T}
+    base::Symbol
+    combine::Symbol
+    nobs::Int
+    n_units::Int
+end
+
+"""
+    HadriResult{T} <: AbstractUnitRootTest
+
+Hadri (2000) LM panel STATIONARITY test result. Unlike the other four
+first-generation tests, H0 is *stationarity* (trend/level stationary) and the
+statistic is RIGHT-tailed: very positive `Z` rejects. See [`hadri_test`](@ref).
+
+Fields:
+- `statistic`: standardized `Z = √N(LM̄ − ξ)/ζ` (N(0,1) under H0)
+- `pvalue`: right-tailed normal p-value
+- `LM`: mean per-unit LM statistic LM̄
+- `xi`, `zeta`: Hadri (2000) standardization constants (ξ, ζ = √ζ²)
+- `hetero`: whether per-unit (heteroskedastic) σ̂² was used
+- `deterministic`: `:constant` or `:trend`
+- `nobs`: time dimension T
+- `n_units`: cross-section dimension N
+"""
+struct HadriResult{T<:AbstractFloat} <: AbstractUnitRootTest
+    statistic::T
+    pvalue::T
+    LM::T
+    xi::T
+    zeta::T
+    hetero::Bool
+    deterministic::Symbol
+    nobs::Int
+    n_units::Int
+end
+
+# --- StatsAPI interface (EV-20) ---
+StatsAPI.nobs(r::LLCResult) = r.nobs
+StatsAPI.nobs(r::IPSResult) = r.nobs
+StatsAPI.nobs(r::BreitungPanelResult) = r.nobs
+StatsAPI.nobs(r::FisherPanelResult) = r.nobs
+StatsAPI.nobs(r::HadriResult) = r.nobs
+
+StatsAPI.dof(r::LLCResult) = r.n_units
+StatsAPI.dof(r::IPSResult) = r.n_units
+StatsAPI.dof(r::BreitungPanelResult) = r.n_units
+StatsAPI.dof(r::FisherPanelResult) = 2 * r.n_units
+StatsAPI.dof(r::HadriResult) = r.n_units
+
+StatsAPI.pvalue(r::LLCResult) = r.pvalue
+StatsAPI.pvalue(r::IPSResult) = r.pvalue
+StatsAPI.pvalue(r::BreitungPanelResult) = r.pvalue
+StatsAPI.pvalue(r::FisherPanelResult) = r.pvalue
+StatsAPI.pvalue(r::HadriResult) = r.pvalue
