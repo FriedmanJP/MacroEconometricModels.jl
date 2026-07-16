@@ -191,6 +191,34 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Automatic Time Series Forecasting: The forecast Package for R",
         journal="Journal of Statistical Software", volume="27", issue="3", pages="1--22",
         doi="10.18637/jss.v027.i03", isbn="", publisher="", entry_type=:article),
+    # --- ARFIMA / long memory (EV-13) ---
+    :sowell1992 => (key=:sowell1992, authors="Sowell, Fallaw", year=1992,
+        title="Maximum Likelihood Estimation of Stationary Univariate Fractionally Integrated Time Series Models",
+        journal="Journal of Econometrics", volume="53", issue="1--3", pages="165--188",
+        doi="10.1016/0304-4076(92)90084-5", isbn="", publisher="", entry_type=:article),
+    :geweke_porter_hudak1983 => (key=:geweke_porter_hudak1983,
+        authors="Geweke, John and Porter-Hudak, Susan", year=1983,
+        title="The Estimation and Application of Long Memory Time Series Models",
+        journal="Journal of Time Series Analysis", volume="4", issue="4", pages="221--238",
+        doi="10.1111/j.1467-9892.1983.tb00371.x", isbn="", publisher="", entry_type=:article),
+    :robinson1995 => (key=:robinson1995, authors="Robinson, Peter M.", year=1995,
+        title="Gaussian Semiparametric Estimation of Long Range Dependence",
+        journal="Annals of Statistics", volume="23", issue="5", pages="1630--1661",
+        doi="10.1214/aos/1176324317", isbn="", publisher="", entry_type=:article),
+    :hosking1981 => (key=:hosking1981, authors="Hosking, J. R. M.", year=1981,
+        title="Fractional Differencing",
+        journal="Biometrika", volume="68", issue="1", pages="165--176",
+        doi="10.1093/biomet/68.1.165", isbn="", publisher="", entry_type=:article),
+    :jensen_nielsen2014 => (key=:jensen_nielsen2014,
+        authors="Jensen, Andreas Noack and Nielsen, Morten \\O{}rregaard", year=2014,
+        title="A Fast Fractional Difference Algorithm",
+        journal="Journal of Time Series Analysis", volume="35", issue="5", pages="428--436",
+        doi="10.1111/jtsa.12074", isbn="", publisher="", entry_type=:article),
+    :durbin_koopman2012 => (key=:durbin_koopman2012,
+        authors="Durbin, James and Koopman, Siem Jan", year=2012,
+        title="Time Series Analysis by State Space Methods", journal="",
+        volume="", issue="", pages="", doi="10.1093/acprof:oso/9780199641178.001.0001",
+        isbn="978-0-19-964117-8", publisher="Oxford University Press", entry_type=:book),
     # --- GMM ---
     :hansen1982 => (key=:hansen1982, authors="Hansen, Lars Peter", year=1982,
         title="Large Sample Properties of Generalized Method of Moments Estimators",
@@ -1129,6 +1157,13 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :ARIMAForecast => [:box_jenkins1970],
     :ARIMAOrderSelection => [:hyndman_khandakar2008],
     :auto_arima => [:hyndman_khandakar2008],
+    # ARFIMA / long memory (EV-13)
+    :ARFIMAModel => [:sowell1992, :hosking1981, :jensen_nielsen2014],
+    :estimate_arfima => [:sowell1992, :hosking1981, :jensen_nielsen2014],
+    :GPHResult => [:geweke_porter_hudak1983],
+    :gph_test => [:geweke_porter_hudak1983],
+    :LocalWhittleResult => [:robinson1995],
+    :local_whittle => [:robinson1995],
     # MIDAS (EV-01)
     :MidasModel => [:ghysels2007, :andreou2010, :foroni2015],
     :MidasForecast => [:ghysels2007, :andreou2010],
@@ -1614,6 +1649,11 @@ refs(io::IO, ::ARMAModel; kw...) = refs(io, _TYPE_REFS[:ARMAModel]; kw...)
 refs(io::IO, ::ARIMAModel; kw...) = refs(io, _TYPE_REFS[:ARIMAModel]; kw...)
 refs(io::IO, ::ARIMAForecast; kw...) = refs(io, _TYPE_REFS[:ARIMAForecast]; kw...)
 refs(io::IO, ::ARIMAOrderSelection; kw...) = refs(io, _TYPE_REFS[:ARIMAOrderSelection]; kw...)
+
+# ARFIMA / long memory (EV-13)
+refs(io::IO, ::ARFIMAModel; kw...) = refs(io, _TYPE_REFS[:ARFIMAModel]; kw...)
+refs(io::IO, ::GPHResult; kw...) = refs(io, _TYPE_REFS[:GPHResult]; kw...)
+refs(io::IO, ::LocalWhittleResult; kw...) = refs(io, _TYPE_REFS[:LocalWhittleResult]; kw...)
 
 # MIDAS (EV-01)
 refs(io::IO, ::MidasModel; kw...) = refs(io, _TYPE_REFS[:MidasModel]; kw...)

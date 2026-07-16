@@ -23,6 +23,7 @@ const _EXAMPLE_DATASETS = Dict{Symbol, Tuple{String, Symbol}}(
     :ddcg    => ("ddcg.toml",    :panel),
     :mpdta   => ("mpdta.toml",   :panel),
     :wiot    => ("wiot.toml",    :io),
+    :nile    => ("nile.toml",    :timeseries),   # EV-13 (#421); shared with EV-37
 )
 
 # Parse frequency string to Frequency enum
@@ -45,6 +46,7 @@ Load a built-in example dataset.
 - `:pwt` — Penn World Table 10.01, 38 OECD countries (42 variables × 74 years, 1950–2023) → `PanelData`
 - `:ddcg` — Acemoglu et al. (2019) Democracy-GDP Panel (2 variables × 9,384 obs, 184 countries × 51 years) → `PanelData`
 - `:mpdta` — Callaway & Sant'Anna (2021) Minimum Wage Panel (3 variables × 2,500 obs, 500 counties × 5 years) → `PanelData`
+- `:nile` — Annual flow of the river Nile at Aswan, 1871–1970 (100 obs, 10^8 m^3) → `TimeSeriesData`
 
 For time series datasets, the returned `TimeSeriesData` includes variable names,
 transformation codes, frequency, per-variable descriptions (via `vardesc`),

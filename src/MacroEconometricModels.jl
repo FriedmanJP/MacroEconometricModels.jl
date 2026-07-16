@@ -269,6 +269,7 @@ include("arima/kalman.jl")
 include("arima/estimation.jl")
 include("arima/forecast.jl")
 include("arima/selection.jl")
+include("arima/arfima.jl")   # EV-13 (#421): ARFIMA + GPH + local Whittle
 
 # X-13ARIMA-SEATS internal (before filters for X13FilterResult)
 include("x13/types.jl")
@@ -876,6 +877,10 @@ export estimate_ar, estimate_ma, estimate_arma, estimate_arima
 
 # Order selection
 export select_arima_order, auto_arima, ic_table
+
+# ARFIMA — fractional integration (EV-13, #421)
+export estimate_arfima, ARFIMAModel
+export gph_test, local_whittle, GPHResult, LocalWhittleResult
 
 # =============================================================================
 # Exports - Non-Gaussian VAR Identification
