@@ -923,6 +923,48 @@ struct FisherJohansenResult{T<:AbstractFloat} <: AbstractUnitRootTest
     n_series::Int
 end
 
+# =============================================================================
+# Dumitrescu-Hurlin panel Granger non-causality test (EV-24, #432)
+# =============================================================================
+
+"""
+    DumitrescuHurlinResult{T} <: AbstractUnitRootTest
+
+Result from the Dumitrescu-Hurlin (2012) heterogeneous-panel Granger
+non-causality test. See [`dh_causality_test`](@ref).
+
+Fields:
+- `Wbar`: average individual Wald statistic `W̄ = N⁻¹ Σ W_i` (χ²(p) convention)
+- `Zbar`, `Zbar_pvalue`: asymptotic standardized statistic `Z̄` (right-tailed) and p-value
+- `Ztilde`, `Ztilde_pvalue`: small-`T` standardized statistic `Z̃` (right-tailed) and p-value
+- `W_i`: per-unit Wald statistics (retained units only)
+- `p`: lag order
+- `N`: number of units retained (satisfying `T_i > 2p+5`)
+- `nobs`: representative effective regression sample (mean `T_i`)
+- `n_skipped`: units dropped for insufficient observations
+- `bootstrap`: number of block-bootstrap replications (0 if none)
+- `seed`: bootstrap RNG seed
+- `bootstrap_pvalue`: CSD-robust bootstrap p-value on `Z̄` (`NaN` if `bootstrap == 0`)
+- `cause`, `effect`: variable names (`x` Granger-causes `y`?)
+"""
+struct DumitrescuHurlinResult{T<:AbstractFloat} <: AbstractUnitRootTest
+    Wbar::T
+    Zbar::T
+    Zbar_pvalue::T
+    Ztilde::T
+    Ztilde_pvalue::T
+    W_i::Vector{T}
+    p::Int
+    N::Int
+    nobs::Int
+    n_skipped::Int
+    bootstrap::Int
+    seed::Int
+    bootstrap_pvalue::T
+    cause::Symbol
+    effect::Symbol
+end
+
 # --- StatsAPI interface (EV-21) ---
 StatsAPI.nobs(r::PedroniResult) = r.nobs
 StatsAPI.nobs(r::KaoResult) = r.nobs
@@ -1055,3 +1097,8 @@ StatsAPI.pvalue(r::EngleGrangerResult) = r.pvalue
 StatsAPI.pvalue(r::PhillipsOuliarisResult) = r.pvalue
 StatsAPI.pvalue(r::HansenInstabilityResult) = r.pvalue
 StatsAPI.pvalue(r::ParkAddedResult) = r.pvalue
+# --- StatsAPI interface (EV-24) ---
+StatsAPI.nobs(r::DumitrescuHurlinResult) = r.nobs
+StatsAPI.dof(r::DumitrescuHurlinResult) = r.N
+# Primary p-value: the small-T Z̃ (recommended for finite panels).
+StatsAPI.pvalue(r::DumitrescuHurlinResult) = r.Ztilde_pvalue

@@ -1287,6 +1287,12 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         journal="International Journal of Forecasting", volume="22", issue="4",
         pages="679--688", doi="10.1016/j.ijforecast.2006.03.001",
         isbn="", publisher="", entry_type=:article),
+    # --- Dumitrescu-Hurlin panel Granger non-causality (EV-24, #432) ---
+    :dumitrescu_hurlin2012 => (key=:dumitrescu_hurlin2012,
+        authors="Dumitrescu, Elena-Ivona and Hurlin, Christophe", year=2012,
+        title="Testing for Granger Non-causality in Heterogeneous Panels",
+        journal="Economic Modelling", volume="29", issue="4", pages="1450--1460",
+        doi="10.1016/j.econmod.2012.02.014", isbn="", publisher="", entry_type=:article),
 )
 
 # --- Type/method → reference keys mapping ---
@@ -1596,6 +1602,9 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :kao_test => [:kao1999],
     :westerlund_test => [:westerlund2007, :persyn_westerlund2008],
     :fisher_johansen_test => [:maddala_wu1999, :choi2001, :johansen1991],
+    # Dumitrescu-Hurlin panel Granger non-causality (EV-24, #432)
+    :DumitrescuHurlinResult => [:dumitrescu_hurlin2012, :granger1969],
+    :dh_causality_test => [:dumitrescu_hurlin2012, :granger1969],
     # Factor model break tests
     :FactorBreakResult => [:breitung_eickmeier2011, :chen_dolado_gonzalo2014, :han_inoue2015],
     :factor_break_test => [:breitung_eickmeier2011, :chen_dolado_gonzalo2014, :han_inoue2015],
@@ -2076,6 +2085,7 @@ refs(io::IO, ::HadriResult; kw...) = refs(io, _TYPE_REFS[:HadriResult]; kw...)
 refs(io::IO, ::PedroniResult; kw...) = refs(io, _TYPE_REFS[:PedroniResult]; kw...)
 refs(io::IO, ::KaoResult; kw...) = refs(io, _TYPE_REFS[:KaoResult]; kw...)
 refs(io::IO, ::WesterlundResult; kw...) = refs(io, _TYPE_REFS[:WesterlundResult]; kw...)
+refs(io::IO, ::DumitrescuHurlinResult; kw...) = refs(io, _TYPE_REFS[:DumitrescuHurlinResult]; kw...)
 refs(io::IO, ::FisherJohansenResult; kw...) = refs(io, _TYPE_REFS[:FisherJohansenResult]; kw...)
 # Residual-based / parameter-stability cointegration tests (EV-11, #419)
 refs(io::IO, ::EngleGrangerResult; kw...) = refs(io, _TYPE_REFS[:EngleGrangerResult]; kw...)

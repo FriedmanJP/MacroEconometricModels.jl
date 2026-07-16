@@ -1137,3 +1137,50 @@ function Base.show(io::IO, r::ParkAddedResult)
     _pretty_table(io, Any["Conclusion" conc; "Note" "*** p<0.01, ** p<0.05, * p<0.10"];
         column_labels=["",""], alignment=[:l,:l])
 end
+
+# Dumitrescu-Hurlin panel Granger non-causality test (EV-24, #432)
+# =============================================================================
+
+function Base.show(io::IO, r::DumitrescuHurlinResult{T}) where {T}
+    has_boot = r.bootstrap > 0 && isfinite(r.bootstrap_pvalue)
+    spec_data = Any[
+        "H₀"           "$(r.cause) does not Granger-cause $(r.effect) for any unit";
+        "H₁"           "$(r.cause) Granger-causes $(r.effect) for some units";
+        "Lag order (p)" r.p;
+        "Units used (N)" r.N;
+        "Eff. sample (T̄)" r.nobs;
+        "Units skipped"  r.n_skipped;
+        "Bootstrap"      (has_boot ? "$(r.bootstrap) reps (seed $(r.seed))" : "none")
+    ]
+    _pretty_table(io, spec_data;
+        title = "Dumitrescu-Hurlin (2012) Panel Granger Non-Causality Test",
+        column_labels = ["Specification", ""], alignment = [:l, :r])
+
+    results_data = Any[
+        "W̄ (avg Wald, χ²(p))"  _fmt(r.Wbar);
+        "Z̄ (asymptotic)"       string(_fmt(r.Zbar), " ", _significance_stars(r.Zbar_pvalue));
+        "  P-value (Z̄)"        _format_pvalue(r.Zbar_pvalue);
+        "Z̃ (small-T)"          string(_fmt(r.Ztilde), " ", _significance_stars(r.Ztilde_pvalue));
+        "  P-value (Z̃)"        _format_pvalue(r.Ztilde_pvalue)
+    ]
+    if has_boot
+        results_data = vcat(results_data,
+            Any["Bootstrap P (Z̄)"  _format_pvalue(r.bootstrap_pvalue)])
+    end
+    _pretty_table(io, results_data;
+        title = "Results (right-tailed)",
+        column_labels = ["Statistic", "Value"], alignment = [:l, :r])
+
+    pv = r.Ztilde_pvalue
+    conclusion = if pv < 0.01
+        "Reject H₀ at 1% — $(r.cause) Granger-causes $(r.effect) for some units"
+    elseif pv < 0.05
+        "Reject H₀ at 5% — $(r.cause) Granger-causes $(r.effect) for some units"
+    elseif pv < 0.10
+        "Reject H₀ at 10% — $(r.cause) Granger-causes $(r.effect) for some units"
+    else
+        "Fail to reject H₀ — no evidence that $(r.cause) Granger-causes $(r.effect)"
+    end
+    conc_data = Any["Conclusion" conclusion; "Note" "*** p<0.01, ** p<0.05, * p<0.10 (on Z̃)"]
+    _pretty_table(io, conc_data; column_labels=["",""], alignment=[:l,:l])
+end

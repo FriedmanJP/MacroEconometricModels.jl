@@ -1,6 +1,6 @@
 # [Panel Tests](@id tests_panel_page)
 
-Panel-level hypothesis testing addresses several distinct phases of the empirical workflow. **Panel unit root tests** detect non-stationarity in panel datasets, a prerequisite for correct specification of panel VARs and factor models. **Panel cointegration tests** then ask whether non-stationary panel series share a long-run equilibrium. **Panel VAR specification tests** validate GMM instrument validity and select optimal lag orders after estimation. This page covers five **first-generation** panel unit root tests (LLC, IPS, Breitung, Fisher, Hadri — the EViews "Panel Unit Root Test" dialog, which assume cross-sectional independence), three **second-generation** tests robust to cross-sectional dependence (PANIC, Pesaran CIPS, Moon-Perron), four **panel cointegration** tests (Pedroni, Kao, Westerlund, Fisher-Johansen — the EViews "Panel Cointegration Test" dialog), and three Panel VAR diagnostics (Hansen J-test, Andrews-Lu MMSC, lag selection).
+Panel-level hypothesis testing addresses several distinct phases of the empirical workflow. **Panel unit root tests** detect non-stationarity in panel datasets, a prerequisite for correct specification of panel VARs and factor models. **Panel cointegration tests** then ask whether non-stationary panel series share a long-run equilibrium. **Panel VAR specification tests** validate GMM instrument validity and select optimal lag orders after estimation. This page covers five **first-generation** panel unit root tests (LLC, IPS, Breitung, Fisher, Hadri — the EViews "Panel Unit Root Test" dialog, which assume cross-sectional independence), three **second-generation** tests robust to cross-sectional dependence (PANIC, Pesaran CIPS, Moon-Perron), four **panel cointegration** tests (Pedroni, Kao, Westerlund, Fisher-Johansen — the EViews "Panel Cointegration Test" dialog), the **Dumitrescu-Hurlin** heterogeneous-panel Granger non-causality test (the EViews "Panel Granger Causality" dialog), and three Panel VAR diagnostics (Hansen J-test, Andrews-Lu MMSC, lag selection).
 
 - **Levin-Lin-Chu**: Pooled bias-adjusted t-statistic with a common autoregressive root (Levin, Lin & Chu 2002)
 - **Im-Pesaran-Shin**: Averaged per-unit ADF t-statistics standardized with finite-sample moments (Im, Pesaran & Shin 2003)
@@ -10,6 +10,7 @@ Panel-level hypothesis testing addresses several distinct phases of the empirica
 - **PANIC**: Factor-based decomposition into common and idiosyncratic components (Bai & Ng 2004, 2010)
 - **Pesaran CIPS**: Cross-sectionally augmented IPS test robust to common factors (Pesaran 2007)
 - **Moon-Perron**: Factor-adjusted pooled AR(1) with bias correction (Moon & Perron 2004)
+- **Dumitrescu-Hurlin**: Heterogeneous-panel Granger non-causality — averaged per-unit Wald statistics standardized to ``\bar{Z}``/``\tilde{Z}`` (Dumitrescu & Hurlin 2012)
 - **Hansen J-test, Andrews-Lu MMSC, and MMSC-based lag selection** for Panel VAR
 
 ```@setup test_panel
@@ -453,6 +454,58 @@ The estimated cointegration rank (`.rank`) is the first rank hypothesis whose co
 
 ---
 
+## Dumitrescu-Hurlin Panel Causality
+
+The **Dumitrescu-Hurlin (2012)** test asks whether one variable Granger-causes another across a **heterogeneous** panel — the regression coefficients are allowed to differ by unit. It is the EViews "Panel Granger Causality" dialog and the standard tool for cross-country lead-lag questions (credit → GDP, oil → inflation) where the dynamics vary by country.
+
+For each unit ``i``, ``y_{it}`` is regressed on an intercept, ``p`` lags of ``y_i`` and ``p`` lags of ``x_i``, and the individual Granger-Wald statistic ``W_i`` tests ``H_0``: all ``p`` coefficients on lagged ``x_i`` are zero. The ``W_i`` are averaged and standardized:
+
+```math
+\bar{W} = \frac{1}{N}\sum_{i=1}^{N} W_i, \qquad
+\bar{Z} = \sqrt{\frac{N}{2p}}\,(\bar{W} - p) \;\xrightarrow{d}\; N(0,1),
+```
+
+```math
+\tilde{Z} = \sqrt{N}\,\frac{\bar{W} - \mathbb{E}[W_i]}{\sqrt{\operatorname{Var}[W_i]}} \;\xrightarrow{d}\; N(0,1),
+```
+
+where ``\bar{Z}`` is the asymptotic statistic and ``\tilde{Z}`` uses the exact finite-``T`` moments (Dumitrescu-Hurlin 2012, eqs. 26-27):
+
+```math
+\mathbb{E}[W_i] = \frac{p\,(T - 2p - 1)}{T - 2p - 3}, \qquad
+\operatorname{Var}[W_i] = \frac{2p\,(T - 2p - 1)^2\,(T - p - 3)}{(T - 2p - 3)^2\,(T - 2p - 5)}.
+```
+
+- ``H_0``: ``x`` does not Granger-cause ``y`` for **any** unit (homogeneous non-causality).
+- ``H_1``: ``x`` Granger-causes ``y`` for **some** units.
+
+Both statistics are **right-tailed** (a large ``\bar{W}`` rejects non-causality). `dh_causality_test` reports the χ²(p) Wald form ``W_i = p\,F_i`` (`df = p`); R's `plm::pgrangertest` reports the F-based ``F_i = W_i/p`` instead.
+
+```@example test_panel
+# Panel where x[t-1], x[t-2] drive y in every unit ⇒ x Granger-causes y.
+Nu, Tt, p = 8, 30, 2
+idv = Int[]; tv = Int[]; yv = Float64[]; xv = Float64[]
+for i in 1:Nu
+    x = randn(Tt); y = zeros(Tt)
+    for t in 3:Tt
+        y[t] = 0.4y[t-1] - 0.1y[t-2] + 0.3x[t-1] + 0.2x[t-2] + randn()
+    end
+    append!(idv, fill(i, Tt)); append!(tv, 1:Tt); append!(yv, y); append!(xv, x)
+end
+pd_dh = xtset(DataFrame(id = idv, time = tv, y = yv, x = xv), :id, :time)
+report(dh_causality_test(pd_dh, :x, :y; p = 2))
+```
+
+The small-``T`` ``\tilde{Z}`` is the recommended statistic for finite panels and requires ``T > 2p + 5`` (below this the variance is undefined) — units with too few observations are skipped, and the call errors if none qualifies. For **unbalanced** panels the moments are averaged per unit with each unit's own ``T_i``. Pass `bootstrap=B` for a cross-sectional-dependence-robust bootstrap p-value on ``\bar{Z}`` that resamples time blocks jointly across units under the non-causality null.
+
+| Keyword | Default | Description |
+|---|---|---|
+| `p` | `1` | Lag order (number of ``y`` and ``x`` lags per unit) |
+| `bootstrap` | `0` | Block-bootstrap replications for a CSD-robust ``\bar{Z}`` p-value (`0` = none) |
+| `seed` | `1234` | RNG seed for the bootstrap (stored on the result) |
+
+---
+
 ## Panel VAR Specification Tests
 
 After estimating a Panel VAR by GMM, three diagnostics validate the specification: the Hansen J-test for instrument validity, Andrews-Lu MMSC criteria for model selection, and MMSC-based lag order selection. These tests apply to GMM-estimated models (`estimate_pvar` with `:onestep` or `:twostep`), not to FE-OLS models.
@@ -662,6 +715,10 @@ The PANIC test separates the common factor (I(1)) from the stationary idiosyncra
 - Breitung, J. (2000). The Local Power of Some Unit Root Tests for Panel Data. In B. Baltagi (Ed.), *Advances in Econometrics, Vol. 15* (pp. 161-178). JAI Press. [DOI](https://doi.org/10.1016/S0731-9053(00)15006-6)
 
 - Choi, I. (2001). Unit Root Tests for Panel Data. *Journal of International Money and Finance*, 20(2), 249-272. [DOI](https://doi.org/10.1016/S0261-5606(00)00048-6)
+
+- Dumitrescu, E.-I., & Hurlin, C. (2012). Testing for Granger Non-causality in Heterogeneous Panels. *Economic Modelling*, 29(4), 1450-1460. [DOI](https://doi.org/10.1016/j.econmod.2012.02.014)
+
+- Granger, C. W. J. (1969). Investigating Causal Relations by Econometric Models and Cross-spectral Methods. *Econometrica*, 37(3), 424-438. [DOI](https://doi.org/10.2307/1912791)
 
 - Hadri, K. (2000). Testing for Stationarity in Heterogeneous Panel Data. *Econometrics Journal*, 3(2), 148-161. [DOI](https://doi.org/10.1111/1368-423X.00043)
 

@@ -250,6 +250,9 @@ include("teststat/pedroni.jl")
 include("teststat/kao.jl")
 include("teststat/westerlund.jl")
 include("teststat/fisher_johansen.jl")
+# Dumitrescu-Hurlin panel Granger non-causality test (EV-24, #432). Self-contained
+# per-unit Wald (reuses robust_inv + PanelData); show in teststat/show.jl.
+include("teststat/dumitrescu_hurlin.jl")
 include("teststat/factor_break.jl")
 
 # Nowcasting (after factor models for Kalman filter reuse)
@@ -664,6 +667,8 @@ export LLCResult, IPSResult, BreitungPanelResult, FisherPanelResult, HadriResult
 # Panel cointegration tests (EV-21, #429)
 export pedroni_test, kao_test, westerlund_test, fisher_johansen_test
 export PedroniResult, KaoResult, WesterlundResult, FisherJohansenResult
+# Dumitrescu-Hurlin panel Granger non-causality test (EV-24, #432)
+export dh_causality_test, DumitrescuHurlinResult
 
 # Factor model structural break tests
 export factor_break_test

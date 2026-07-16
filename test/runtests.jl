@@ -87,6 +87,7 @@ const TEST_GROUPS = [
         "arima/test_arima_coverage.jl",
         "arima/test_arfima.jl",   # EV-13 (#421): ARFIMA + GPH + local Whittle
         "teststat/test_granger.jl",
+        "teststat/test_dumitrescu_hurlin.jl",   # EV-24 (#432): DH panel Granger non-causality
         "teststat/test_model_comparison.jl",
         "teststat/test_normality.jl",
         "gmm/test_gmm.jl",
