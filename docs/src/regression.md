@@ -648,6 +648,82 @@ save_plot(p, "reg_iv.html")
 
 ---
 
+## Penalized Regression: Ridge, LASSO, and Elastic Net
+
+Penalized regression shrinks coefficients toward zero to trade a small increase in bias for a large reduction in variance, which is essential when the number of predictors is large relative to the sample --- the routine setting for macro forecasters facing wide predictor sets such as FRED-MD's 126 series. The elastic-net objective on standardized regressors and a centered response is
+
+```math
+\min_{\beta}\;\frac{1}{2n}\lVert \tilde{y} - \tilde{X}\beta \rVert_2^2 \;+\; \lambda\!\left[\alpha\lVert\beta\rVert_1 + \tfrac{1-\alpha}{2}\lVert\beta\rVert_2^2\right],
+```
+
+where
+
+- ``\tilde{X}`` are the mean-centered, unit-variance regressors and ``\tilde{y}`` the centered response,
+- ``\lambda \ge 0`` is the penalty strength (larger ``\lambda`` shrinks more),
+- ``\alpha \in [0,1]`` is the mixing parameter: ``\alpha=1`` is LASSO (sparse), ``\alpha=0`` is ridge (dense), intermediate values interpolate.
+
+The intercept is never penalized; coefficients are unstandardized before return and the intercept is recovered as ``\beta_0 = \bar{y} - \bar{x}'\beta``. This `glmnet`-convention ``1/2n`` scaling makes ``\lambda`` values comparable to R `glmnet` and Python `sklearn`.
+
+!!! note "Solver"
+    Ridge (``\alpha=0``) is solved in closed form, ``\beta = (\tilde{X}'\tilde{X} + n\lambda I)^{-1}\tilde{X}'\tilde{y}``. LASSO and elastic net (``\alpha>0``) use cyclic coordinate descent with soft-thresholding, active-set cycling, and strong-rule screening over a warm-started, log-spaced ``\lambda`` path.
+
+**LASSO with cross-validated ``\lambda``.** `estimate_lasso` fits the full path and selects ``\lambda`` by cross-validation. Use `cv=:timeseries` for serially dependent data --- it uses contiguous, non-shuffled folds so no future information leaks into training.
+
+```@example reg
+n, p = 120, 8
+Xpen = randn(n, p)
+beta_sparse = [2.5, 0.0, -3.0, 0.0, 0.0, 1.8, 0.0, 0.0]  # only 3 nonzero
+ypen = Xpen * beta_sparse + 0.5 * randn(n)
+lasso = estimate_lasso(ypen, Xpen; cv=:timeseries, nfolds=5)
+report(lasso)
+```
+
+The report shows only the nonzero coefficients: LASSO recovers the three strong predictors (`x1`, `x3`, `x6`) near their true magnitudes and shrinks the true-zero predictors sharply toward zero (a stricter penalty, e.g. `select=:bic`, sets more of them exactly to zero). No standard errors or p-values are reported --- shrinkage estimators have no valid closed-form inference.
+
+**Ridge and elastic net.** `estimate_ridge` keeps all predictors (dense shrinkage), while `estimate_elastic_net` mixes the two penalties via `alpha`.
+
+```@example reg
+ridge = estimate_ridge(ypen, Xpen; select=:bic)      # dense; lambda by BIC
+enet  = estimate_elastic_net(ypen, Xpen; alpha=0.5)  # 50/50 mix; lambda by CV
+round.(ridge.beta; digits=3)
+```
+
+**Adaptive LASSO and post-selection OLS.** Adaptive weights (Zou 2006) improve support recovery; post-selection OLS de-shrinks the selected coefficients.
+
+```@example reg
+adaptive = estimate_lasso(ypen, Xpen; adaptive=true, post=true)
+adaptive.active_set   # indices of selected predictors
+```
+
+!!! warning "Honest inference"
+    Naive post-selection standard errors are invalid: conditioning on the selected model biases classical inference. Post-LASSO standard errors are trustworthy only under the sparsity and beta-min conditions of the honest-inference literature (Belloni & Chernozhukov 2013), which this package does not verify. No t-statistics or p-values are reported for any penalized fit.
+
+Predictions use the natural-scale coefficients and the unpenalized intercept, `predict(m, Xnew) = Xnew * m.beta .+ m.beta0`:
+
+```@example reg
+yhat = predict(lasso, Xpen[1:5, :])
+round.(yhat; digits=3)
+```
+
+The coefficient path and cross-validation curve are available via `plot_result`:
+
+```julia
+plot_result(lasso; view=:path)   # coefficient path vs log(λ)
+plot_result(lasso; view=:cv)     # CV MSE curve with λ_min / 1-SE markers
+```
+
+| Keyword | Type | Default | Description |
+|---|---|---|---|
+| `alpha` | `Real` | `1.0` | Mixing: `1`=LASSO, `0`=ridge, in-between=elastic net |
+| `lambda` | `Symbol`/`Real`/`Vector` | `:cv` | `:cv` builds a path; a scalar/vector fixes it |
+| `select` | `Symbol` | `:cv` | `:cv`, `:aic`, `:bic`, or `:ebic` |
+| `cv` | `Symbol` | `:kfold` | `:kfold` (shuffled) or `:timeseries` (contiguous) |
+| `nfolds` | `Int` | `10` | Number of CV folds |
+| `adaptive` | `Bool` | `false` | Adaptive-LASSO weights (Zou 2006) |
+| `post` | `Bool` | `false` | Post-selection OLS refit (Belloni-Chernozhukov) |
+
+---
+
 ## Complete Example
 
 This example demonstrates a full cross-sectional regression workflow: OLS estimation with robust standard error comparison, WLS correction for heteroskedasticity, IV estimation for an endogenous regressor, and VIF diagnostics.
@@ -734,6 +810,9 @@ The OLS estimate of the return to education is biased upward because ability is 
 - Andrews, D. W. K., & Monahan, J. C. (1992). An Improved Heteroskedasticity and Autocorrelation Consistent Covariance Matrix Estimator.
   *Econometrica*, 60(4), 953-966. [DOI](https://doi.org/10.2307/2951574)
 
+- Belloni, A., & Chernozhukov, V. (2013). Least Squares After Model Selection in High-Dimensional Sparse Models.
+  *Bernoulli*, 19(2), 521-547. [DOI](https://doi.org/10.3150/11-BEJ410)
+
 - Belsley, D. A., Kuh, E., & Welsch, R. E. (1980). *Regression Diagnostics: Identifying Influential Data and Sources of Collinearity*. New York: Wiley. ISBN 978-0-471-05856-4.
 
 - Den Haan, W. J., & Levin, A. T. (1997). A Practitioner's Guide to Robust Covariance Matrix Estimation.
@@ -742,7 +821,13 @@ The OLS estimate of the return to education is biased upward because ability is 
 - Cameron, A. C., & Miller, D. L. (2015). A Practitioner's Guide to Cluster-Robust Inference.
   *Journal of Human Resources*, 50(2), 317-372. [DOI](https://doi.org/10.3368/jhr.50.2.317)
 
+- Friedman, J., Hastie, T., & Tibshirani, R. (2010). Regularization Paths for Generalized Linear Models via Coordinate Descent.
+  *Journal of Statistical Software*, 33(1), 1-22. [DOI](https://doi.org/10.18637/jss.v033.i01)
+
 - Greene, W. H. (2018). *Econometric Analysis*. 8th ed. New York: Pearson. ISBN 978-0-13-446136-6.
+
+- Hoerl, A. E., & Kennard, R. W. (1970). Ridge Regression: Biased Estimation for Nonorthogonal Problems.
+  *Technometrics*, 12(1), 55-67. [DOI](https://doi.org/10.1080/00401706.1970.10488634)
 
 - Hansen, L. P. (1982). Large Sample Properties of Generalized Method of Moments Estimators.
   *Econometrica*, 50(4), 1029-1054. [DOI](https://doi.org/10.2307/1912775)
@@ -762,7 +847,16 @@ The OLS estimate of the return to education is biased upward because ability is 
 - Theil, H. (1953). Repeated Least Squares Applied to Complete Equation Systems.
   *The Hague: Central Planning Bureau*.
 
+- Tibshirani, R. (1996). Regression Shrinkage and Selection via the Lasso.
+  *Journal of the Royal Statistical Society, Series B*, 58(1), 267-288. [DOI](https://doi.org/10.1111/j.2517-6161.1996.tb02080.x)
+
 - White, H. (1980). A Heteroskedasticity-Consistent Covariance Matrix Estimator and a Direct Test for Heteroskedasticity.
   *Econometrica*, 48(4), 817-838. [DOI](https://doi.org/10.2307/1912934)
 
 - Wooldridge, J. M. (2010). *Econometric Analysis of Cross Section and Panel Data*. 2nd ed. Cambridge, MA: MIT Press. ISBN 978-0-262-23258-6.
+
+- Zou, H. (2006). The Adaptive Lasso and Its Oracle Properties.
+  *Journal of the American Statistical Association*, 101(476), 1418-1429. [DOI](https://doi.org/10.1198/016214506000000735)
+
+- Zou, H., & Hastie, T. (2005). Regularization and Variable Selection via the Elastic Net.
+  *Journal of the Royal Statistical Society, Series B*, 67(2), 301-320. [DOI](https://doi.org/10.1111/j.1467-9868.2005.00503.x)

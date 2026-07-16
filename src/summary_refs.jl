@@ -843,6 +843,37 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Instrumental Variables Regression with Weak Instruments",
         journal="Econometrica", volume="65", issue="3", pages="557--586",
         doi="10.2307/2171753", isbn="", publisher="", entry_type=:article),
+    # --- Penalized Regression (EV-03, #411) ---
+    :hoerl_kennard1970 => (key=:hoerl_kennard1970,
+        authors="Hoerl, Arthur E. and Kennard, Robert W.", year=1970,
+        title="Ridge Regression: Biased Estimation for Nonorthogonal Problems",
+        journal="Technometrics", volume="12", issue="1", pages="55--67",
+        doi="10.1080/00401706.1970.10488634", isbn="", publisher="", entry_type=:article),
+    :tibshirani1996 => (key=:tibshirani1996, authors="Tibshirani, Robert", year=1996,
+        title="Regression Shrinkage and Selection via the Lasso",
+        journal="Journal of the Royal Statistical Society, Series B",
+        volume="58", issue="1", pages="267--288",
+        doi="10.1111/j.2517-6161.1996.tb02080.x", isbn="", publisher="", entry_type=:article),
+    :zou_hastie2005 => (key=:zou_hastie2005, authors="Zou, Hui and Hastie, Trevor", year=2005,
+        title="Regularization and Variable Selection via the Elastic Net",
+        journal="Journal of the Royal Statistical Society, Series B",
+        volume="67", issue="2", pages="301--320",
+        doi="10.1111/j.1467-9868.2005.00503.x", isbn="", publisher="", entry_type=:article),
+    :zou2006 => (key=:zou2006, authors="Zou, Hui", year=2006,
+        title="The Adaptive Lasso and Its Oracle Properties",
+        journal="Journal of the American Statistical Association",
+        volume="101", issue="476", pages="1418--1429",
+        doi="10.1198/016214506000000735", isbn="", publisher="", entry_type=:article),
+    :friedman2010 => (key=:friedman2010,
+        authors="Friedman, Jerome and Hastie, Trevor and Tibshirani, Robert", year=2010,
+        title="Regularization Paths for Generalized Linear Models via Coordinate Descent",
+        journal="Journal of Statistical Software", volume="33", issue="1", pages="1--22",
+        doi="10.18637/jss.v033.i01", isbn="", publisher="", entry_type=:article),
+    :belloni_chernozhukov2013 => (key=:belloni_chernozhukov2013,
+        authors="Belloni, Alexandre and Chernozhukov, Victor", year=2013,
+        title="Least Squares After Model Selection in High-Dimensional Sparse Models",
+        journal="Bernoulli", volume="19", issue="2", pages="521--547",
+        doi="10.3150/11-BEJ410", isbn="", publisher="", entry_type=:article),
     # --- Ordered & Multinomial Models ---
     :mccullagh1980 => (key=:mccullagh1980, authors="McCullagh, Peter", year=1980,
         title="Regression Models for Ordinal Data",
@@ -1169,6 +1200,12 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :estimate_iv => [:wooldridge2010, :staiger_stock1997],
     :estimate_logit => [:wooldridge2010, :cameron_trivedi2005, :mcfadden1974],
     :estimate_probit => [:wooldridge2010, :cameron_trivedi2005],
+    # Penalized regression (EV-03, #411)
+    :PenalizedRegModel => [:tibshirani1996, :zou_hastie2005, :friedman2010,
+                           :hoerl_kennard1970, :zou2006, :belloni_chernozhukov2013],
+    :estimate_lasso => [:tibshirani1996, :friedman2010],
+    :estimate_ridge => [:hoerl_kennard1970, :friedman2010],
+    :estimate_elastic_net => [:zou_hastie2005, :friedman2010, :zou2006],
     # Ordered & Multinomial models
     :OrderedLogitModel => [:mccullagh1980, :brant1990, :wooldridge2010],
     :OrderedProbitModel => [:mccullagh1980, :wooldridge2010],
@@ -1564,6 +1601,15 @@ refs(io::IO, m::RegModel; kw...) = refs(io, m.method == :iv ? [:wooldridge2010, 
 refs(io::IO, ::LogitModel; kw...) = refs(io, _TYPE_REFS[:LogitModel]; kw...)
 refs(io::IO, ::ProbitModel; kw...) = refs(io, _TYPE_REFS[:ProbitModel]; kw...)
 refs(io::IO, ::MarginalEffects; kw...) = refs(io, _TYPE_REFS[:MarginalEffects]; kw...)
+# Penalized regression (EV-03, #411): reference set depends on the fitted variant.
+function refs(io::IO, m::PenalizedRegModel; kw...)
+    ks = m.alpha == 1 ? [:tibshirani1996, :friedman2010] :
+         m.alpha == 0 ? [:hoerl_kennard1970, :friedman2010] :
+                        [:zou_hastie2005, :friedman2010]
+    m.adaptive && push!(ks, :zou2006)
+    m.post && push!(ks, :belloni_chernozhukov2013)
+    refs(io, ks; kw...)
+end
 
 # Ordered & Multinomial models
 refs(io::IO, ::OrderedLogitModel; kw...) = refs(io, _TYPE_REFS[:OrderedLogitModel]; kw...)

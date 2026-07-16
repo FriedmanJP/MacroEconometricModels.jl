@@ -91,6 +91,7 @@ const TEST_GROUPS = [
         "data/test_data.jl",
         "pvar/test_pvar.jl",
         "reg/test_reg.jl",
+        "reg/test_penalized.jl",   # EV-03 (#411): ridge / LASSO / elastic net
         "reg/test_ordered.jl",
         "reg/test_multinomial.jl",
         "midas/test_midas.jl",

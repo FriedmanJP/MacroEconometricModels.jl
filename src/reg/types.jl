@@ -98,6 +98,134 @@ function RegModel{T}(y, X, beta, vcov_mat, residuals, fitted, ssr, tss, r2, adj_
 end
 
 # =============================================================================
+# PenalizedRegModel — ridge / LASSO / elastic net (EV-03, #411)
+# =============================================================================
+
+"""
+    PenalizedRegModel{T} <: StatsAPI.RegressionModel
+
+Penalized linear regression: ridge, LASSO, or elastic net (with optional adaptive-LASSO
+weights and post-selection OLS refit). Coefficients are stored on the **natural** scale;
+the intercept is fitted separately and never penalized. See [`estimate_elastic_net`](@ref),
+[`estimate_lasso`](@ref), [`estimate_ridge`](@ref).
+
+No standard errors, t-statistics, or p-values are reported: shrinkage estimators have no
+valid closed-form inference, and post-LASSO SEs are trustworthy only under honest-inference
+sparsity conditions this package does not verify.
+
+# Fields
+- `y`, `X` — response and regressors (no intercept column in `X`).
+- `beta::Vector{T}` — natural-scale slope coefficients at the selected lambda.
+- `beta0::T` — unpenalized intercept `ȳ − x̄'β`.
+- `beta_std::Vector{T}` — standardized-scale coefficients at the selected lambda.
+- `alpha::T` — elastic-net mixing (`1`=LASSO, `0`=ridge).
+- `lambda::T` — selected penalty.
+- `lambda_path::Vector{T}` — full (descending) lambda path.
+- `coef_path::Matrix{T}` — `p × L` natural-scale coefficient path.
+- `beta0_path::Vector{T}` — intercept along the path.
+- `active_set::Vector{Int}` — indices of nonzero coefficients at the selected lambda.
+- `df_path::Vector{T}`, `df_star::T` — degrees of freedom along the path / at selection.
+- `fitted`, `residuals`, `ssr`, `tss`, `r2` — fit on the original scale.
+- `loglik`, `aic`, `bic`, `ebic` — Gaussian information criteria at selection.
+- `cv_mse`, `cv_se` — CV MSE curve and its standard error (`nothing` for IC/fixed selection).
+- `lambda_min::T`, `lambda_1se::T` — CV-minimizing and 1-SE-rule lambdas.
+- `select::Symbol` — `:cv`, `:aic`, `:bic`, `:ebic`, or `:fixed`.
+- `cv::Symbol`, `nfolds::Int` — CV scheme and fold count.
+- `adaptive::Bool`, `post::Bool`, `standardize::Bool` — variant flags.
+- `xbar`, `xsd`, `ybar` — standardization stats (for prediction on new data).
+- `varnames::Vector{String}` — regressor names.
+
+# References
+- Hoerl, A. E. & Kennard, R. W. (1970). *Technometrics* 12(1), 55-67.
+- Tibshirani, R. (1996). *JRSS-B* 58(1), 267-288.
+- Zou, H. & Hastie, T. (2005). *JRSS-B* 67(2), 301-320.
+- Zou, H. (2006). *JASA* 101(476), 1418-1429.
+- Friedman, J., Hastie, T. & Tibshirani, R. (2010). *J. Statistical Software* 33(1), 1-22.
+- Belloni, A. & Chernozhukov, V. (2013). *Bernoulli* 19(2), 521-547.
+"""
+struct PenalizedRegModel{T<:AbstractFloat} <: StatsAPI.RegressionModel
+    y::Vector{T}
+    X::Matrix{T}
+    beta::Vector{T}
+    beta0::T
+    beta_std::Vector{T}
+    alpha::T
+    lambda::T
+    lambda_path::Vector{T}
+    coef_path::Matrix{T}
+    beta0_path::Vector{T}
+    active_set::Vector{Int}
+    df_path::Vector{T}
+    df_star::T
+    fitted::Vector{T}
+    residuals::Vector{T}
+    ssr::T
+    tss::T
+    r2::T
+    loglik::T
+    aic::T
+    bic::T
+    ebic::T
+    cv_mse::Union{Nothing,Vector{T}}
+    cv_se::Union{Nothing,Vector{T}}
+    lambda_min::T
+    lambda_1se::T
+    select::Symbol
+    cv::Symbol
+    nfolds::Int
+    adaptive::Bool
+    post::Bool
+    standardize::Bool
+    xbar::Vector{T}
+    xsd::Vector{T}
+    ybar::T
+    varnames::Vector{String}
+end
+
+function Base.show(io::IO, m::PenalizedRegModel{T}) where {T}
+    kind = m.alpha == one(T) ? "LASSO" :
+           m.alpha == zero(T) ? "Ridge" : "Elastic Net"
+    m.adaptive && (kind = "Adaptive " * kind)
+    m.post && (kind *= " + post-OLS")
+    sel_str = m.select == :cv ? "CV ($(m.cv), $(m.nfolds)-fold)" :
+              m.select == :fixed ? "fixed" : uppercase(string(m.select))
+
+    spec = Any[
+        "Method"        kind;
+        "alpha"         _fmt(m.alpha; digits=3);
+        "Observations"  length(m.y);
+        "Regressors"    length(m.beta);
+        "lambda"        _fmt(m.lambda; digits=5);
+        "Selection"     sel_str;
+        "Nonzero coef." length(m.active_set);
+        "Eff. df"       _fmt(m.df_star; digits=2);
+        "R-squared"     _fmt(m.r2);
+        "AIC"           _fmt(m.aic; digits=2);
+        "BIC"           _fmt(m.bic; digits=2)
+    ]
+    _pretty_table(io, spec;
+        title = "$kind Regression",
+        column_labels = ["Specification", ""],
+        alignment = [:l, :r],
+    )
+
+    # Coefficient table (no SEs / p-values for shrinkage estimators): intercept + nonzero coefs.
+    names = vcat("(Intercept)", m.varnames[m.active_set])
+    vals = vcat(m.beta0, m.beta[m.active_set])
+    data = Matrix{Any}(undef, length(names), 2)
+    for i in eachindex(names)
+        data[i, 1] = names[i]
+        data[i, 2] = _fmt(vals[i])
+    end
+    _pretty_table(io, data;
+        title = "Coefficients (nonzero)",
+        column_labels = ["", "Coef."],
+        alignment = [:l, :r],
+    )
+    println(io, "Note: penalized estimates carry no valid standard errors or p-values.")
+end
+
+# =============================================================================
 # LogitModel
 # =============================================================================
 

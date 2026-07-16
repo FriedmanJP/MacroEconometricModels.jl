@@ -454,6 +454,7 @@ report(m::RegModel) = show(stdout, m)
 report(m::LogitModel) = show(stdout, m)
 report(m::ProbitModel) = show(stdout, m)
 report(me::MarginalEffects) = show(stdout, me)
+report(m::PenalizedRegModel) = show(stdout, m)  # EV-03 (#411)
 
 # Panel VAR
 report(x::PVARModel) = show(stdout, x)
