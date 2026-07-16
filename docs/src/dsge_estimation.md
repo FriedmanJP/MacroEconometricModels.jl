@@ -255,6 +255,29 @@ nothing # hide
 | `Normal(mu, sigma)` | ``(-\infty, \infty)`` | Unbounded parameters |
 | `Uniform(a, b)` | ``[a, b]`` | Weakly informative, bounded |
 
+#### Porting Dynare Priors
+
+Published priors are almost always declared in Dynare's **(mean, std)** convention. `dynare_prior` converts them into correctly parameterized `Distributions` objects — solving the moment-matching equations and, crucially, handling the inverse-gamma convention mismatch:
+
+| Dynare pdf | `dynare_prior` call | Returns |
+|---|---|---|
+| `normal_pdf(m, s)` | `dynare_prior(:normal, m, s)` | `Normal(m, s)` |
+| `gamma_pdf(m, s)` | `dynare_prior(:gamma, m, s)` | `Gamma(m²/s², s²/m)` |
+| `beta_pdf(m, s)` | `dynare_prior(:beta, m, s)` | moment-matched `Beta(α, β)` |
+| `beta_pdf(m, s, p3, p4)` | `dynare_prior(:beta, m, s; lower=p3, upper=p4)` | shifted/scaled Beta on `(p3, p4)` |
+| `inv_gamma_pdf(m, s)` | `dynare_prior(:inv_gamma, m, s)` | `InverseGamma1` **on σ** |
+| `inv_gamma2_pdf(m, s)` | `dynare_prior(:inv_gamma2, m, s)` | `InverseGamma` **on σ²** |
+| `uniform_pdf(...)` | `dynare_prior(:uniform, m, s)` or `; lower=a, upper=b` | `Uniform(a, b)` |
+
+```@example dsge_estimation
+priors_dynare = Dict{Symbol,Distribution}(
+    :rho => dynare_prior(:beta, 0.7, 0.1))
+mean(priors_dynare[:rho]), std(priors_dynare[:rho])
+```
+
+!!! danger "Dynare's inverse gamma is on σ, not σ²"
+    Dynare's `inv_gamma_pdf` is the **type-1** inverse gamma on the *standard deviation*; `Distributions.InverseGamma` is on the *variance*. Feeding Dynare's numbers straight into `Distributions.InverseGamma` — the natural-looking port — silently produces a completely different prior. `dynare_prior(:inv_gamma, m, s)` returns an [`InverseGamma1`](@ref) whose draws are σ values with exactly the requested mean and standard deviation (`σ² ~ InverseGamma(ν/2, s/2)` internally, matching Dynare's `(s, ν)` parameterization).
+
 ### Sequential Monte Carlo (Herbst & Schorfheide 2014)
 
 **SMC** draws from a sequence of tempered distributions that bridge the prior to the posterior:
@@ -371,6 +394,68 @@ report(result_mh)
 
 RWMH is simple to implement and diagnose but converges slowly for high-dimensional parameter spaces. For models with more than 5--10 parameters, SMC is strongly preferred.
 
+### Posterior Mode and Laplace Marginal Likelihood
+
+`posterior_mode` implements the standard Dynare-style first step of Bayesian estimation: numerically maximize the log posterior, report the mode together with a Laplace approximation of the marginal likelihood, and expose the inverse Hessian at the mode as an RWMH proposal covariance.
+
+```math
+\theta^* = \arg\max_\theta \; \big[\log \mathcal{L}(Y|\theta) + \log \pi(\theta)\big]
+```
+
+The optimizer works in a **prior-transformed unconstrained space** (log for positive supports, logit for bounded intervals, via `ParameterTransform`), so bounded parameters never collide with their boundaries; the reported mode is mapped back to the natural parameter space. The Laplace approximation of the log marginal likelihood is
+
+```math
+\log \hat{p}(Y) = \log \mathcal{L}(\theta^*) + \log \pi(\theta^*) + \frac{d}{2}\log(2\pi) - \frac{1}{2}\log\det H
+```
+
+where ``H`` is the Hessian of the negative log posterior at the mode and ``d`` the number of estimated parameters (Tierney & Kadane 1986). If ``H`` is not positive definite, `laplace_log_ml` is `NaN` (with a warning) and the inverse Hessian falls back to a diagonal matrix, so downstream proposal seeding never receives a garbage covariance.
+
+```@example dsge_estimation
+pm = posterior_mode(spec, Y_data, [0.9];
+    priors=Dict(:rho => Beta(5, 2)), observables=[:y])
+pm
+```
+
+**Keywords** (`posterior_mode`):
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `priors` | `Dict{Symbol, Distribution}` | required | Prior distributions keyed by parameter name |
+| `observables` | `Vector{Symbol}` | `spec.endog` | Observed endogenous variables |
+| `measurement_error` | `Vector{<:Real}` | `nothing` | Measurement error standard deviations |
+| `solver` | `Symbol` | `:gensys` | DSGE solver method |
+| `solver_kwargs` | `NamedTuple` | `()` | Additional solver keyword arguments |
+| `transform` | `Bool` | `true` | Optimize in the unconstrained (prior-transformed) space |
+| `optimizer` | `Optim` method | `Optim.LBFGS()` | Any first-order `Optim.jl` optimizer |
+| `f_reltol` | `Real` | `1e-8` | Relative objective tolerance |
+| `max_iter` | `Int` | `500` | Maximum optimizer iterations |
+
+**Return value** (`PosteriorMode` fields):
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `mode` | `Vector{T}` | Posterior mode in the natural parameter space |
+| `inv_hessian` | `Matrix{T}` | Inverse Hessian at the mode (asymptotic posterior covariance) |
+| `hessian` | `Matrix{T}` | Hessian of the negative log posterior at the mode |
+| `log_posterior` | `T` | Log posterior at the mode |
+| `log_likelihood` | `T` | Log-likelihood at the mode |
+| `laplace_log_ml` | `T` | Laplace log marginal likelihood (`NaN` if Hessian not PD) |
+| `param_names` | `Vector{Symbol}` | Parameter names (sorted prior order) |
+| `converged` | `Bool` | Optimizer convergence flag |
+| `n_iterations` | `Int` | Optimizer iterations used |
+
+To seed RWMH from the mode, pass `proposal=:mode`: the chain starts at ``\theta^*`` with proposal covariance ``c^2 H^{-1}``, ``c = 2.38/\sqrt{d}`` (Roberts & Rosenthal 2001), which typically lands the acceptance rate in the 0.2--0.4 range without hand-tuning:
+
+```@example dsge_estimation
+result_mode_mh = estimate_dsge_bayes(spec, Y_data, [0.9];
+    priors=Dict(:rho => Beta(5, 2)),
+    method=:mh, proposal=:mode, observables=[:y],
+    n_draws=50, burnin=25)
+round(result_mode_mh.acceptance_rate; digits=2)
+```
+
+The Laplace log-ML is on the same additive-constant convention as the SMC tempering-path estimate, so the two are directly comparable via `bayes_factor` (on a small linear model they agree to within about one nat).
+
 ### Bayesian Keywords
 
 | Keyword | Type | Default | Description |
@@ -389,6 +474,12 @@ RWMH is simple to implement and diagnose but converges slowly for high-dimension
 | `solver_kwargs` | `NamedTuple` | `()` | Additional solver keyword arguments |
 | `delayed_acceptance` | `Bool` | `false` | Two-stage delayed acceptance (SMC``^2`` only) |
 | `n_screen` | `Int` | `200` | Screening PF particles (delayed acceptance only) |
+| `keep_burnin` | `Bool` | `false` | Retain the full RWMH chain including burnin (e.g. for trace plots) |
+| `proposal` | `Symbol` | `:adaptive` | RWMH proposal init: `:adaptive` or `:mode` (seed from `posterior_mode`) |
+| `transform` | `Bool` | `true` | RWMH walks in the prior-transformed unconstrained space with Jacobian correction |
+
+!!! note "Sampling in the unconstrained space"
+    With `transform=true` (the default for `method=:mh`), the random walk runs on ``y = T(\theta)`` — ``\log`` for positive supports, logit for bounded intervals, inferred from each prior's support — and the acceptance ratio uses ``\log p(\theta(y)|Y) + \log|J(y)|``, the correct pushforward density (Stan reference manual). A walk on a persistence near 1 or a shock standard deviation near 0 then never wastes proposals outside the support; draws are back-transformed to ``\theta`` before storage, so results are directly comparable to `transform=false`.
 
 !!! note "Pre-Linearized Models"
     For `DSGESpec` with `linear=true` (e.g., Smets & Wouters 2007), the Kalman filter automatically computes the observation equation offset as ``d = (I - G_1)^{-1} C_{\text{sol}}``, where ``C_{\text{sol}}`` contains the constant terms from gensys. This handles models where observation equations include trend growth, steady-state inflation, or other constant offsets that are absent from the zero steady state. No user intervention is required --- `estimate_dsge_bayes` detects and handles `linear=true` models transparently.
@@ -417,6 +508,30 @@ ml = marginal_likelihood(result_smc)
 log_bf = bayes_factor(result1, result2)
 ```
 
+For RWMH output, `bridge_sampling_ml` provides a marginal-likelihood estimate that is far more stable than harmonic-mean-style estimators (whose importance weights can have infinite variance). It fits a proposal density to the posterior draws in the prior-transformed unconstrained space and iterates the Meng & Wong (1996) optimal-bridge recursion to convergence (Gronau et al. 2017):
+
+```@example dsge_estimation
+bml = bridge_sampling_ml(result_mode_mh)
+```
+
+**Keywords** (`bridge_sampling_ml`):
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `proposal` | `Symbol` | `:normal` | Proposal family fitted to the draws: `:normal` or `:t` |
+| `df` | `Real` | `5` | Degrees of freedom for the `:t` proposal |
+| `n_proposal` | `Int` | `0` | Number of proposal draws (`0` → same as the bridge half) |
+| `max_iter` | `Int` | `1000` | Maximum bridge-recursion iterations |
+| `tol` | `Real` | `1e-10` | Relative convergence tolerance on the bridge ratio |
+| `rng` | `AbstractRNG` | `Random.default_rng()` | RNG for proposal draws |
+
+**Returns**: the scalar log marginal likelihood estimate, on the same additive-constant convention as the SMC tempering-path estimate and the Laplace approximation from `posterior_mode` — the three are directly comparable via `bayes_factor`. Failure cases (chain too short, proposal too diffuse, recursion non-convergence) return `NaN` with a warning, never a silently wrong number.
+
+!!! tip "Which marginal-likelihood estimator?"
+    - **SMC** (`method=:smc`): the tempering-path estimate is a by-product — use it.
+    - **RWMH chains**: prefer **bridge sampling** over harmonic-mean estimators; it is consistent with much lighter tail conditions.
+    - **Quick model comparison at the mode**: the Laplace approximation from `posterior_mode` is instantaneous and accurate when the posterior is approximately Gaussian.
+
 ```@example dsge_estimation
 # Prior vs posterior comparison table
 tbl = prior_posterior_table(result_smc)
@@ -430,6 +545,131 @@ size(Y_pred)
 ```
 
 `posterior_summary` returns a `Dict{Symbol, Dict{Symbol, T}}` with keys `:mean`, `:median`, `:std`, `:ci_lower` (2.5th percentile), and `:ci_upper` (97.5th percentile) for each parameter. `prior_posterior_table` returns a vector of named tuples suitable for tabular display, comparing prior and posterior moments side by side. `posterior_predictive` draws `n_sim` parameter vectors from the posterior, solves the model at each, and simulates forward, returning an `n_sim x T_periods x n_vars` array of simulated paths.
+
+For RWMH chains, `posterior_summary` additionally annotates each parameter with its bulk effective sample size (`:ess_bulk`) and a `:low_ess` flag, and **warns** when any parameter's ESS falls below `min_ess` (default 400, per Vehtari et al. 2021) rather than silently presenting unreliable credible intervals. `prior_posterior_table` carries the same flag in a `low_ess` column.
+
+### Convergence Diagnostics
+
+Credible intervals from an MCMC chain are only as good as the chain's mixing. `mcmc_diagnostics` computes the modern standard set of per-parameter convergence diagnostics on the retained (post-burn-in) draws:
+
+- **Rank-normalized split-``\hat{R}``** (Vehtari et al. 2021): the chain is split in half, pooled draws are rank-normalized (rank → z-score via the inverse normal CDF), and ``\hat{R} = \sqrt{\widehat{\mathrm{var}}^+ / W}`` is computed from the between/within half-chain variances. The reported value is the maximum of the bulk statistic and the *folded* statistic on ``|\theta - \mathrm{median}|``, which catches scale (not just location) non-convergence. Values ``\lesssim 1.01`` indicate convergence.
+- **Bulk / tail ESS**: effective sample size from the integrated autocorrelation time ``\mathrm{ESS} = S / (1 + 2\sum_k \hat\rho_k)`` with Geyer's initial-monotone-sequence truncation. Bulk-ESS is computed on rank-normalized draws; tail-ESS is the minimum ESS of the 5% and 95% quantile indicators. Vehtari et al. recommend ESS ``\geq 400`` before trusting reported intervals.
+- **Geweke (1992) z**: spectral test comparing the mean of the first 10% against the last 50% of the chain, with numerical-standard-error variance estimates; under convergence ``z \sim N(0,1)``.
+
+```@example dsge_estimation
+diag = mcmc_diagnostics(result_mode_mh)
+diag
+```
+
+`trace` and `acf` expose the raw per-parameter draw sequence and its autocorrelation function for plotting:
+
+```@example dsge_estimation
+tr = trace(result_mode_mh, :rho)      # retained draw sequence
+length(tr)
+```
+
+```@example dsge_estimation
+a = acf(result_mode_mh, :rho; lags=5) # ACFResult (spectral acf on the chain)
+round.(a.acf; digits=2)
+```
+
+**Keywords / accessors**:
+
+| Function | Arguments | Returns |
+|----------|-----------|---------|
+| `mcmc_diagnostics(result)` | `BayesianDSGE` | `MCMCDiagnostics` (see field table below) |
+| `trace(result, param)` | result + parameter `Symbol` | `Vector{T}` of retained draws |
+| `acf(result, param; lags, conf_level)` | result + parameter `Symbol` | `ACFResult` (see [Spectral Analysis](@ref spectral_page)) |
+| `posterior_summary(result; min_ess=400)` | ESS warning threshold | summary dict + `:ess_bulk`/`:low_ess` keys (RWMH) |
+
+**Return value** (`MCMCDiagnostics` fields):
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `param_names` | `Vector{Symbol}` | Parameter names |
+| `rhat` | `Vector{T}` | Rank-normalized split-``\hat{R}`` (max of bulk and folded) |
+| `ess_bulk` | `Vector{T}` | Bulk effective sample size |
+| `ess_tail` | `Vector{T}` | Tail effective sample size (min of 5%/95% indicators) |
+| `geweke_z` | `Vector{T}` | Geweke z-statistic |
+| `geweke_p` | `Vector{T}` | Two-sided Geweke p-value |
+| `mean`, `sd` | `Vector{T}` | Posterior mean and standard deviation |
+| `n_draws` | `Int` | Retained draws used |
+| `method` | `Symbol` | Sampler that produced the draws |
+
+!!! note "SMC draws are not a chain"
+    `mcmc_diagnostics` assumes Markov chain draws. Calling it on `:smc`/`:smc2` results (weighted particle systems) emits a warning — the SMC-native convergence measures are the ESS history (`result.ess_history`) and the tempering schedule (`result.phi_schedule`).
+
+### Identification Diagnostics
+
+Estimating a DSGE whose parameters are not identified by the chosen observables produces confident-looking but meaningless posteriors. Three diagnostics catch this failure mode — one before estimation, two after:
+
+**Iskrev (2010) rank test** (pre-estimation). The parameters are locally identified from the data iff the Jacobian ``J(\theta) = \partial m(\theta) / \partial \theta'`` of the model-implied data moments has full column rank. The moment vector ``m(\theta)`` stacks the observable steady-state means, the lower triangle of the contemporaneous covariance, and the autocovariance matrices at lags ``1..L`` computed from the first-order state-space solution via the Lyapunov equation. Rank deficiency names the unidentified directions through the null space of ``J``:
+
+```@example dsge_estimation
+# a and b enter the model only as the product a·b — not separately identified
+spec_bad = @dsge begin
+    parameters: a = 0.5, b = 0.9, sigma = 0.5
+    endogenous: y
+    exogenous: e
+    y[t] = a * b * y[t-1] + sigma * e[t]
+    steady_state = [0.0]
+end
+spec_bad = compute_steady_state(spec_bad)
+idd = identification_diagnostics(spec_bad, [:a, :b]; observables=[:y])
+idd
+```
+
+**Koop-Pesaran-Smith (2013) learning-rate check** (post-estimation). For an identified parameter the posterior variance shrinks at the ``1/T`` rate; `learning_rate_check` re-estimates on nested subsamples and reports the implied rate ``\alpha`` in ``\mathrm{var} \propto T^{-\alpha}`` — ``\alpha \approx 1`` is healthy, ``\alpha \approx 0`` flags a parameter whose posterior barely updates.
+
+**Prior/posterior overlap** (post-estimation). `prior_posterior_overlap` computes ``\int \min(\pi(\theta_i), p(\theta_i|Y))\,d\theta_i`` per parameter; overlap near 1 means the data never moved the prior.
+
+```julia
+lrc = learning_rate_check(fit; fractions=[0.5, 1.0], n_smc=300)  # re-estimates per subsample
+ppo = prior_posterior_overlap(fit)                                # instantaneous
+```
+
+**Keywords and return values**:
+
+| Function | Key keywords | Returns |
+|----------|--------------|---------|
+| `identification_diagnostics(spec, params; ...)` | `theta`, `observables`, `n_lags=2`, `tol_rel=√eps` | `IdentificationDiagnostics`: `rank`, `n_params`, `singular_values`, `null_space`, `identified` |
+| `learning_rate_check(result; ...)` | `fractions=[0.5,1.0]`, `n_smc=300`, `threshold=0.2` | `LearningRateCheck`: `sample_sizes`, `post_vars`, `learning_rate` (α), `flagged` |
+| `prior_posterior_overlap(result; ...)` | `n_grid=0` (auto ≈√N), `threshold=0.8` | `PriorPosteriorOverlap`: `overlap` ∈ [0,1], `flagged` |
+
+All three emit a warning naming the offending parameters when something looks unidentified; none of them throws.
+
+!!! warning "Identification is observables-dependent"
+    A parameter can be perfectly identified with one observable set and unidentified with another. Re-run `identification_diagnostics` with exactly the `observables` you pass to `estimate_dsge_bayes`, and check several `n_lags` horizons (Iskrev's recommendation).
+
+### Predictive Checks
+
+**Prior predictive analysis** (Geweke 2005) answers "what kind of data does my prior believe in?" *before* estimation: draw parameters from the prior, solve, simulate, and summarize. A prior that implies absurd volatilities or persistence should be revised before it distorts the posterior:
+
+```@example dsge_estimation
+ppr = prior_predictive(spec, Dict(:rho => Beta(5, 2));
+    n_draws=50, T_periods=100, observables=[:y])
+ppr
+```
+
+**Posterior predictive checks** (Gelman, Meng & Stern 1996) assess model adequacy *after* estimation: draw from the posterior, simulate replicated datasets of the observed length, and compare summary statistics. The posterior predictive p-value ``p_j = \Pr(T_j(y^{\mathrm{rep}}) \geq T_j(y^{\mathrm{obs}}))`` should be interior — extreme values (marked `*` in the table) flag the data feature the model cannot reproduce:
+
+```@example dsge_estimation
+ppc = posterior_predictive_check(result_smc; n_draws=25)
+ppc
+```
+
+**Keywords**:
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `n_draws` | `Int` | `500` / `200` | Prior / posterior draws to simulate |
+| `T_periods` | `Int` | `200` | Simulated periods per draw (prior predictive only) |
+| `observables` | `Vector{Symbol}` | all endogenous | Which variables to summarize (prior predictive) |
+| `data` | matrix | stored sample | Observed data override (posterior check) |
+| `stats` | function | mean/var/AR(1)/cross-corr | `Y::Matrix → (names, values)` or `NamedTuple` of scalars |
+| `rng` | `AbstractRNG` | `Random.default_rng()` | Random number generator |
+
+**Return values**: `PriorPredictiveResult` carries the `n_effective × n_stats` draw-level statistic matrix (`stats`), the labels (`stat_names`), and the effective draw count. `PosteriorPredictiveCheck` adds the `observed` statistic vector and `p_values`. In both, parameter draws for which the model fails to solve are **dropped and counted** — `n_effective` reports the draws actually used, and a warning fires when more than 10% are lost (a symptom of a prior straddling the determinacy boundary).
 
 ### Posterior IRFs and FEVD (Herbst & Schorfheide 2015)
 

@@ -745,6 +745,14 @@ acceptance rate (over the last `adapt_interval` draws), not the stale cumulative
 - `burnin::Int=1000` — burn-in length. `_mh_sample` returns the FULL chain; the caller
   (`estimate_dsge_bayes`) discards the first `burnin` draws unless `keep_burnin=true`.
 - `adapt_interval::Int=100` — adapt proposal covariance every N draws
+- `init_proposal_cov::Union{Nothing,AbstractMatrix}=nothing` — initial proposal
+  covariance in the SAMPLING space (already scaled, e.g. `c²·H⁻¹` from
+  `posterior_mode`, transformed by the caller when `transform=true`); default `c²·I`
+- `transform::Bool=false` — random-walk in the prior-transformed unconstrained
+  space (log/logit via `ParameterTransform`): the target becomes
+  `log posterior(θ(y)) + log|J(y)|` so the θ-space posterior is preserved, no
+  proposal is ever wasted outside the support, and stored draws are
+  back-transformed to θ before being returned
 - `observables::Vector{Symbol}` — observed variables
 - `measurement_error` — measurement error SDs or `nothing`
 - `solver::Symbol=:gensys` — DSGE solver method
@@ -752,8 +760,9 @@ acceptance rate (over the last `adapt_interval` draws), not the stale cumulative
 - `rng::AbstractRNG` — random number generator
 
 # Returns
-- `draws::Matrix{T}` — `n_draws × n_params` matrix of posterior draws
-- `log_posterior::Vector{T}` — log posterior at each draw
+- `draws::Matrix{T}` — `n_draws × n_params` matrix of posterior draws (θ-space)
+- `log_posterior::Vector{T}` — log posterior `log L + log π` at each draw
+  (θ-space kernel, no Jacobian, regardless of `transform`)
 - `acceptance_rate::T` — overall acceptance rate
 - `diagnostics::NamedTuple` — the frozen end-of-burn-in proposal (`proposal_L_at_burnin`,
   `scale_at_burnin`), the final proposal (`proposal_L`, `scale_factor`), and the
@@ -771,6 +780,8 @@ function _mh_sample(spec::DSGESpec{T}, data::AbstractMatrix,
                      theta0::AbstractVector{T};
                      n_draws::Int=5000, burnin::Int=1000,
                      adapt_interval::Int=100,
+                     init_proposal_cov::Union{Nothing,AbstractMatrix}=nothing,
+                     transform::Bool=false,
                      observables::Vector{Symbol}=spec.endog,
                      measurement_error=nothing,
                      solver::Symbol=:gensys,
@@ -786,8 +797,24 @@ function _mh_sample(spec::DSGESpec{T}, data::AbstractMatrix,
                                   measurement_error, solver, solver_kwargs;
                                   failures=lik_failures, evals=lik_evals)
 
-    # Initialize
+    # Transform layer: the walk runs on x (= θ untransformed, or y = T(θ)
+    # unconstrained); acceptance uses log posterior(θ(x)) + log|J(x)|
+    pt = transform ? ParameterTransform(prior.lower, prior.upper) : nothing
+    to_nat = transform ? (x -> to_constrained(pt, x)) : identity
+    ljac = transform ? (x -> log_jacobian(pt, x)) : (x -> zero(T))
+
+    # Initialize (θ-space first, then map into the sampling space)
     theta_current = copy(theta0)
+    if transform
+        # Nudge strictly inside the support so the transform is finite
+        for i in 1:n_params
+            lo, hi = prior.lower[i], prior.upper[i]
+            span = isfinite(lo) && isfinite(hi) ? hi - lo : one(T)
+            margin = T(1e-8) * span
+            isfinite(lo) && theta_current[i] <= lo && (theta_current[i] = lo + margin)
+            isfinite(hi) && theta_current[i] >= hi && (theta_current[i] = hi - margin)
+        end
+    end
     ll_current = ll_fn(theta_current)
     lp_current = _log_prior(theta_current, prior)
 
@@ -810,17 +837,27 @@ function _mh_sample(spec::DSGESpec{T}, data::AbstractMatrix,
         end
     end
 
-    # Storage
+    x_current = transform ? to_unconstrained(pt, theta_current) : theta_current
+    lj_current = ljac(x_current)
+
+    # Storage: θ-space draws for the caller, sampling-space path for adaptation
     draws = zeros(T, n_draws, n_params)
     log_posterior = zeros(T, n_draws)
+    xs = transform ? zeros(T, n_draws, n_params) : draws
 
-    # Proposal covariance: start with identity, scale by c²
+    # Proposal covariance: caller-supplied (already scaled and in the sampling
+    # space, e.g. c²·H⁻¹ from posterior_mode) or identity scaled by c²
     c2 = T(2.38)^2 / T(n_params)
-    proposal_cov = c2 * Matrix{T}(I, n_params, n_params)
+    proposal_cov = init_proposal_cov === nothing ?
+        c2 * Matrix{T}(I, n_params, n_params) : Matrix{T}(init_proposal_cov)
     scale_factor = one(T)
 
     # Cholesky of proposal
-    proposal_L = cholesky(Hermitian(proposal_cov)).L
+    proposal_L = try
+        cholesky(Hermitian(proposal_cov)).L
+    catch
+        cholesky(Hermitian(proposal_cov + T(1e-8) * I)).L
+    end
 
     total_accepted = 0
     window_accepted = 0
@@ -832,9 +869,10 @@ function _mh_sample(spec::DSGESpec{T}, data::AbstractMatrix,
     cum_acc_history = T[]
 
     for draw in 1:n_draws
-        # Propose
+        # Propose in the sampling space
         z = randn(rng, T, n_params)
-        theta_star = theta_current + scale_factor * proposal_L * z
+        x_star = x_current + scale_factor * proposal_L * z
+        theta_star = to_nat(x_star)
 
         # Evaluate
         lp_star = _log_prior(theta_star, prior)
@@ -843,22 +881,29 @@ function _mh_sample(spec::DSGESpec{T}, data::AbstractMatrix,
             ll_star = ll_fn(theta_star)
 
             if isfinite(ll_star)
-                # MH acceptance ratio (phi = 1 for full posterior)
-                log_alpha = (ll_star + lp_star) - (ll_current + lp_current)
+                lj_star = ljac(x_star)
+                # MH acceptance ratio; the Jacobian terms make the y-space walk
+                # target the pushforward of the θ-space posterior
+                log_alpha = (ll_star + lp_star + lj_star) -
+                            (ll_current + lp_current + lj_current)
 
                 if log(rand(rng, T)) < log_alpha
+                    x_current = x_star
                     theta_current = theta_star
                     ll_current = ll_star
                     lp_current = lp_star
+                    lj_current = lj_star
                     total_accepted += 1
                     window_accepted += 1
                 end
             end
         end
 
-        # Store
+        # Store (θ-space kernel, no Jacobian — the convention downstream
+        # consumers like bridge_sampling_ml rely on)
         draws[draw, :] = theta_current
         log_posterior[draw] = ll_current + lp_current
+        transform && (xs[draw, :] = x_current)
 
         # Adapt proposal covariance and scale — ONLY during burn-in (frozen after).
         if draw <= burnin && draw % adapt_interval == 0
@@ -870,9 +915,10 @@ function _mh_sample(spec::DSGESpec{T}, data::AbstractMatrix,
             window_accepted = 0
 
             if draw >= 2 * adapt_interval
-                # Use recent draws to update proposal covariance
+                # Update proposal covariance from recent draws in the SAMPLING
+                # space (xs === draws when transform is off, unconstrained y when on).
                 recent_start = max(1, draw - 5 * adapt_interval)
-                recent_draws = draws[recent_start:draw, :]
+                recent_draws = xs[recent_start:draw, :]
 
                 if size(recent_draws, 1) > n_params + 1
                     sample_cov = cov(recent_draws)

@@ -377,10 +377,13 @@ include("dsge/estimation.jl")
 
 # DSGE Bayesian estimation (after estimation.jl, needs DSGESpec, solve, ParameterTransform)
 include("dsge/bayes_types.jl")
+include("dsge/priors.jl")
 include("dsge/kalman_dsge.jl")
 include("dsge/particle_filter.jl")
 include("dsge/smc.jl")
 include("dsge/bayes_estimation.jl")
+include("dsge/mcmc_diagnostics.jl")
+include("dsge/identification.jl")
 include("dsge/smoother.jl")
 include("dsge/hd.jl")
 
@@ -497,6 +500,15 @@ export DSGESpec, LinearDSGE, DSGESolution, PerturbationSolution, ProjectionSolut
 export BayesianDSGE, BayesianDSGESimulation
 export estimate_dsge_bayes, posterior_summary, marginal_likelihood, bayes_factor
 export prior_posterior_table, posterior_predictive
+export posterior_mode, PosteriorMode
+export mcmc_diagnostics, MCMCDiagnostics, trace
+export bridge_sampling_ml
+export identification_diagnostics, IdentificationDiagnostics
+export learning_rate_check, LearningRateCheck
+export prior_posterior_overlap, PriorPosteriorOverlap
+export prior_predictive, PriorPredictiveResult
+export posterior_predictive_check, PosteriorPredictiveCheck
+export dynare_prior, InverseGamma1
 
 # Macro
 export @dsge
@@ -765,7 +777,7 @@ export optimal_weighting_matrix, identity_weighting
 export j_test, numerical_gradient
 export estimate_lp_gmm, lp_gmm_moments
 export linear_gmm_solve, gmm_sandwich_vcov, andrews_lu_mmsc
-export ParameterTransform, to_unconstrained, to_constrained, transform_jacobian
+export ParameterTransform, to_unconstrained, to_constrained, transform_jacobian, log_jacobian
 export SMMModel, estimate_smm, autocovariance_moments, autocovariance_moment_contributions
 
 # =============================================================================
