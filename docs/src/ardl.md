@@ -173,6 +173,66 @@ Plot the multipliers (``m^{+}_h``, ``m^{-}_h``, and the asymmetry curve ``m^{+}_
 
 ```julia
 plot_result(mm; view=:multipliers)          # or plot_result(nm; view=:multipliers, H=24)
+## Panel ARDL (PMG / MG / DFE)
+
+For a **dynamic heterogeneous panel** — many cross-sectional units, each an ARDL(``p``, ``q``) in error-correction form — `estimate_pmg` fits three estimators that trade off long-run homogeneity against short-run flexibility:
+
+```math
+\Delta y_{it} = \varphi_i\,\bigl(y_{i,t-1} - \theta' x_{i,t-1}\bigr)
+              + \sum_{j=1}^{p-1}\xi_{ij}\,\Delta y_{i,t-j}
+              + \sum_{j=0}^{q-1}\psi_{ij}'\,\Delta x_{i,t-j} + \mu_i + \varepsilon_{it}.
+```
+
+- **`:pmg`** — *Pooled Mean Group* (Pesaran, Shin & Smith 1999): the long-run vector ``\theta`` is **common** across units, while the speed of adjustment ``\varphi_i``, the short-run dynamics, and ``\sigma^2_i`` are heterogeneous. ``\theta`` maximises the concentrated (profile) likelihood.
+- **`:mg`** — *Mean Group* (Pesaran & Smith 1995): an unrestricted ARDL per unit, with ``\bar\theta = N^{-1}\sum_i\theta_i`` and the Swamy between-unit standard error ``\operatorname{std}(\theta_i)/\sqrt N``.
+- **`:dfe`** — *Dynamic Fixed Effects*: a pooled within-transformed EC regression (common ``\varphi,\theta``, short-run) with unit intercepts and cluster-robust standard errors.
+
+Pass a [`PanelData`](@ref) from `xtset`, the dependent-variable symbol, and one or more long-run regressor symbols. Units with ``\varphi_i \ge 0`` (non-error-correcting) are flagged.
+
+```@setup ardlpanel
+using MacroEconometricModels, Random, Statistics, DataFrames
+
+# Fixed-seed heterogeneous panel: common long-run θ = 1.5, heterogeneous φ_i and
+# short-run dynamics, an I(1) regressor x, and an error-correction DGP.
+Random.seed!(431)
+N, Tt = 20, 60
+rows = NamedTuple[]
+for i in 1:N
+    phi = -(0.2 + 0.4 * rand())            # φ_i ∈ (-0.6, -0.2)
+    g   = 0.3 * randn()
+    x = zeros(Tt); y = zeros(Tt)
+    x[1] = randn(); y[1] = 1.5 * x[1] + randn()
+    for t in 2:Tt
+        x[t] = x[t-1] + randn()
+        y[t] = y[t-1] + phi * (y[t-1] - 1.5 * x[t-1]) + g * (x[t] - x[t-1]) + 0.3 * randn()
+    end
+    for t in 1:Tt
+        push!(rows, (id = i, time = t, y = y[t], x = x[t]))
+    end
+end
+pd = xtset(DataFrame(rows), :id, :time)
+```
+
+```@example ardlpanel
+# Pooled Mean Group: common long-run θ (should be near the true 1.5)
+pmg = estimate_pmg(pd, :y, :x; p=1, q=1, method=:pmg)
+report(pmg)
+```
+
+```@example ardlpanel
+# Mean Group and Dynamic Fixed Effects on the same panel
+mg  = estimate_pmg(pd, :y, :x; p=1, q=1, method=:mg)
+dfe = estimate_pmg(pd, :y, :x; p=1, q=1, method=:dfe)
+println("long-run θ  — PMG: ", round(pmg.theta[1], digits=3),
+        "  MG: ", round(mg.theta[1], digits=3),
+        "  DFE: ", round(dfe.theta[1], digits=3))
+```
+
+The **Hausman test** compares the pooled estimator (efficient under long-run homogeneity) against the always-consistent Mean Group estimator. Failing to reject ``H_0`` supports pooling the long-run relationship:
+
+```@example ardlpanel
+h = hausman_test(pmg, mg)   # H0: long-run homogeneity ⇒ PMG efficient
+report(h)
 ```
 
 ---
@@ -232,3 +292,6 @@ refs(m)
 - Narayan, P. K. (2005). The Saving and Investment Nexus for China: Evidence from Cointegration Tests. *Applied Economics* 37(17), 1979–1990.
 - Kripfganz, S. & Schneider, D. C. (2023). ARDL: Estimating Autoregressive Distributed Lag and Equilibrium Correction Models. *Stata Journal* 23(4), 983–1019.
 - Shin, Y., Yu, B. & Greenwood-Nimmo, M. (2014). *Modelling Asymmetric Cointegration and Dynamic Multipliers in a Nonlinear ARDL Framework*. In Sickles & Horrace (eds.), Festschrift in Honor of Peter Schmidt, Springer, 281–314.
+- Pesaran, M. H., Shin, Y. & Smith, R. P. (1999). Pooled Mean Group Estimation of Dynamic Heterogeneous Panels. *Journal of the American Statistical Association* 94(446), 621–634.
+- Pesaran, M. H. & Smith, R. (1995). Estimating Long-Run Relationships from Dynamic Heterogeneous Panels. *Journal of Econometrics* 68(1), 79–113.
+- Blackburne, E. F. & Frank, M. W. (2007). Estimation of Nonstationary Heterogeneous Panels. *Stata Journal* 7(2), 197–208.

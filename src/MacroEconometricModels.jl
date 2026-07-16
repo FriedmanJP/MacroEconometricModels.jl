@@ -146,6 +146,8 @@ include("ardl/bounds.jl")
 # Nonlinear ARDL (NARDL, EV-09, #417) — extends the EV-08 scaffold: reuses
 # estimate_ardl / long_run / bounds_test on the partial-sum-split design.
 include("ardl/nardl.jl")
+# Panel ARDL — PMG/MG/DFE (EV-23, #431); included after preg/ so it can reuse
+# _panel_cluster_vcov and _hausman_quadratic_form (see the include block below).
 
 # VAR types and estimation
 include("var/types.jl")
@@ -365,6 +367,10 @@ include("preg/logit.jl")
 include("preg/probit.jl")
 include("preg/margins.jl")
 include("preg/display.jl")
+
+# Panel ARDL — PMG / MG / DFE (EV-23, #431). After preg/ (reuses _panel_cluster_vcov,
+# _hausman_quadratic_form) and after ardl/estimation.jl (reuses estimate_ardl for MG).
+include("ardl/pmg.jl")
 
 # Covariance estimators
 include("core/covariance.jl")
@@ -1119,6 +1125,12 @@ export estimate_ardl, bounds_test, long_run, ARDLModel, ARDLBoundsTest
 # NARDL — nonlinear (asymmetric) ARDL (EV-09, #417)
 export estimate_nardl, symmetry_test, dynamic_multipliers,
        NARDLModel, NARDLSymmetryTest, NARDLMultipliers
+
+# =============================================================================
+# Exports — Panel ARDL: PMG / MG / DFE (EV-23, #431)
+# =============================================================================
+
+export estimate_pmg, PMGModel
 
 # =============================================================================
 # Exports - Plotting

@@ -310,3 +310,89 @@ struct NARDLMultipliers{T<:AbstractFloat}
     nreps::Int
     level::T
 end
+
+# PMGModel — dynamic heterogeneous panel ARDL (PMG / MG / DFE), EV-23 (#431)
+# =============================================================================
+
+"""
+    PMGModel{T<:AbstractFloat}
+
+Dynamic heterogeneous-panel ARDL estimated in error-correction form,
+
+```math
+\\Delta y_{it} = \\varphi_i\\,\\bigl(y_{i,t-1} - \\theta' x_{i,t-1}\\bigr)
+              + \\sum_{j=1}^{p-1}\\xi_{ij}\\,\\Delta y_{i,t-j}
+              + \\sum_{j=0}^{q-1}\\psi_{ij}'\\,\\Delta x_{i,t-j}
+              + \\mu_i + \\varepsilon_{it},
+```
+
+for `i = 1…N` cross-sectional units. Three estimators (selected by `method`):
+
+- **`:pmg`** — Pooled Mean Group (Pesaran, Shin & Smith 1999): the long-run vector
+  `θ` is **common** across units while the speed of adjustment `φ_i`, the short-run
+  dynamics, and `σ²_i` are heterogeneous. `θ` maximises the concentrated (profile)
+  Gaussian likelihood by alternating a pooled-GLS update of `θ` with per-unit OLS
+  updates of `(φ_i, short-run, σ²_i)` to convergence; `θ`'s covariance is the inverse
+  information `[Σ_i (φ_i²/σ²_i) X_{i,-1}' N_i X_{i,-1}]⁻¹` (`N_i` projects out the
+  short-run block and the EC direction).
+- **`:mg`** — Mean Group (Pesaran & Smith 1995): an **unrestricted** ARDL is fit per
+  unit (via [`estimate_ardl`](@ref)); `θ̄ = N⁻¹Σθ_i` with the Swamy between-unit
+  covariance `(N(N-1))⁻¹Σ(θ_i-θ̄)(θ_i-θ̄)'` (diagonal SE `= std(θ_i)/√N`).
+- **`:dfe`** — Dynamic Fixed Effects: a **pooled** within-transformed EC regression with
+  common `φ, θ`, short-run, unit intercepts, and cluster-robust (by unit) standard
+  errors via `_panel_cluster_vcov`.
+
+Units with `φ_i ≥ 0` (non-error-correcting) are counted in `n_nonconv` and flagged by
+[`report`](@ref).
+
+# Fields
+- `method::Symbol`: `:pmg`, `:mg`, or `:dfe`.
+- `yname::String`, `xnames::Vector{String}`: dependent / long-run regressor labels (`k`).
+- `srnames::Vector{String}`: short-run coefficient labels (deterministics + Δ terms).
+- `theta::Vector{T}`, `theta_se::Vector{T}`, `theta_vcov::Matrix{T}`: long-run block
+  (common for `:pmg`/`:dfe`, averaged for `:mg`) with covariance.
+- `theta_i::Matrix{T}`: `N×k` per-unit long-run coefficients (populated for `:mg`; empty
+  `0×k` otherwise).
+- `phi_i::Vector{T}`: per-unit speed of adjustment (`= φ` repeated for `:dfe`).
+- `phi::T`, `phi_se::T`: averaged (or common, `:dfe`) speed of adjustment and its SE.
+- `sr::Vector{T}`, `sr_se::Vector{T}`: averaged (common for `:dfe`) short-run block.
+- `sr_i::Matrix{T}`: `N×m` per-unit short-run coefficients (empty `0×m` for `:dfe`).
+- `sigma2_i::Vector{T}`: per-unit residual variances.
+- `loglik::T`: Gaussian log-likelihood (concentrated, at the estimate).
+- `N::Int`: number of units; `T_i::Vector{Int}`: per-unit effective sample sizes.
+- `p::Int`, `q::Int`: ARDL AR / distributed-lag orders.
+- `n_nonconv::Int`: number of units with `φ_i ≥ 0`.
+- `converged::Bool`, `iters::Int`: PMG outer-loop convergence flag / iteration count
+  (`true`/`0` for `:mg`/`:dfe`).
+
+# References
+- Pesaran, M. H., Shin, Y. & Smith, R. P. (1999). *Journal of the American Statistical
+  Association* 94(446), 621–634.
+- Pesaran, M. H. & Smith, R. (1995). *Journal of Econometrics* 68(1), 79–113.
+- Blackburne, E. F. & Frank, M. W. (2007). *Stata Journal* 7(2), 197–208.
+"""
+struct PMGModel{T<:AbstractFloat}
+    method::Symbol
+    yname::String
+    xnames::Vector{String}
+    srnames::Vector{String}
+    theta::Vector{T}
+    theta_se::Vector{T}
+    theta_vcov::Matrix{T}
+    theta_i::Matrix{T}
+    phi_i::Vector{T}
+    phi::T
+    phi_se::T
+    sr::Vector{T}
+    sr_se::Vector{T}
+    sr_i::Matrix{T}
+    sigma2_i::Vector{T}
+    loglik::T
+    N::Int
+    T_i::Vector{Int}
+    p::Int
+    q::Int
+    n_nonconv::Int
+    converged::Bool
+    iters::Int
+end

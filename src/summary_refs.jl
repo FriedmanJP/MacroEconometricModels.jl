@@ -1187,6 +1187,23 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         isbn="978-1-4899-8007-6",
         publisher="Springer (Sickles and Horrace, eds., Festschrift in Honor of Peter Schmidt)",
         entry_type=:incollection),
+    # --- Panel ARDL: PMG / MG / DFE (EV-23, #431) ---
+    :pesaran_shin_smith1999 => (key=:pesaran_shin_smith1999,
+        authors="Pesaran, M. Hashem and Shin, Yongcheol and Smith, Ron P.", year=1999,
+        title="Pooled Mean Group Estimation of Dynamic Heterogeneous Panels",
+        journal="Journal of the American Statistical Association", volume="94", issue="446",
+        pages="621--634", doi="10.1080/01621459.1999.10474156", isbn="", publisher="",
+        entry_type=:article),
+    :pesaran_smith1995 => (key=:pesaran_smith1995,
+        authors="Pesaran, M. Hashem and Smith, Ron", year=1995,
+        title="Estimating Long-Run Relationships from Dynamic Heterogeneous Panels",
+        journal="Journal of Econometrics", volume="68", issue="1", pages="79--113",
+        doi="10.1016/0304-4076(94)01644-F", isbn="", publisher="", entry_type=:article),
+    :blackburne_frank2007 => (key=:blackburne_frank2007,
+        authors="Blackburne, Edward F. and Frank, Mark W.", year=2007,
+        title="Estimation of Nonstationary Heterogeneous Panels",
+        journal="Stata Journal", volume="7", issue="2", pages="197--208",
+        doi="10.1177/1536867X0700700204", isbn="", publisher="", entry_type=:article),
 )
 
 # --- Type/method → reference keys mapping ---
@@ -1296,6 +1313,9 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :NARDLSymmetryTest => [:shin_yu_greenwood_nimmo2014],
     :NARDLMultipliers => [:shin_yu_greenwood_nimmo2014],
     :nardl => [:shin_yu_greenwood_nimmo2014, :pesaran_shin_smith2001],
+    # Panel ARDL: PMG / MG / DFE (EV-23, #431)
+    :PMGModel => [:pesaran_shin_smith1999, :pesaran_smith1995, :blackburne_frank2007],
+    :estimate_pmg => [:pesaran_shin_smith1999, :pesaran_smith1995, :blackburne_frank2007],
     # GMM
     :GMMModel => [:hansen1982],
     :gmm => [:hansen1982],
@@ -1822,6 +1842,9 @@ refs(io::IO, ::ARDLBoundsTest; kw...) = refs(io, _TYPE_REFS[:ARDLBoundsTest]; kw
 refs(io::IO, ::NARDLModel; kw...) = refs(io, _TYPE_REFS[:NARDLModel]; kw...)
 refs(io::IO, ::NARDLSymmetryTest; kw...) = refs(io, _TYPE_REFS[:NARDLSymmetryTest]; kw...)
 refs(io::IO, ::NARDLMultipliers; kw...) = refs(io, _TYPE_REFS[:NARDLMultipliers]; kw...)
+
+# Panel ARDL: PMG / MG / DFE (EV-23, #431)
+refs(io::IO, ::PMGModel; kw...) = refs(io, _TYPE_REFS[:PMGModel]; kw...)
 
 # GMM
 refs(io::IO, ::GMMModel; kw...) = refs(io, _TYPE_REFS[:GMMModel]; kw...)
