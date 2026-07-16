@@ -127,6 +127,12 @@ include("reg/predict.jl")
 include("reg/ordered.jl")
 include("reg/multinomial.jl")
 
+# MIDAS regression (EV-01) — after reg/ (reuses robust_inv, _coef_table)
+include("midas/weights.jl")
+include("midas/types.jl")
+include("midas/estimation.jl")
+include("midas/forecast.jl")
+
 # VAR types and estimation
 include("var/types.jl")
 include("var/estimation.jl")
@@ -431,6 +437,7 @@ include("plotting/models.jl")
 include("plotting/nowcast.jl")
 include("plotting/did.jl")
 include("plotting/reg.jl")
+include("plotting/midas.jl")
 include("plotting/spectral.jl")
 include("plotting/io.jl")
 
@@ -1001,6 +1008,12 @@ export estimate_reg, estimate_iv, estimate_logit, estimate_probit
 # Marginal effects, diagnostics, prediction
 export marginal_effects, odds_ratio, vif, classification_table, OddsRatio, MultinomialMarginalEffects
 export brant_test, hausman_iia
+
+# =============================================================================
+# Exports — MIDAS Regression (EV-01)
+# =============================================================================
+
+export estimate_midas, MidasModel, MidasForecast, midas_weights
 
 # =============================================================================
 # Exports - Plotting

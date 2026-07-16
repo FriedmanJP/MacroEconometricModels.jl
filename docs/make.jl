@@ -92,6 +92,7 @@ makedocs(;
             "BVAR Nowcasting" => "nowcast_bvar.md",
             "Bridge Equations" => "nowcast_bridge.md",
             "News Decomposition" => "nowcast_news.md",
+            "MIDAS Regression" => "midas.md",
         ],
         "Hypothesis Tests" => [
             "Overview" => "tests.md",

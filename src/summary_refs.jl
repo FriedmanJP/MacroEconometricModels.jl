@@ -883,6 +883,22 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Consistent Covariance Matrix Estimation with Spatially Dependent Panel Data",
         journal="Review of Economics and Statistics", volume="80", issue="4", pages="549--560",
         doi="10.1162/003465398557825", isbn="", publisher="", entry_type=:article),
+    # --- MIDAS Regression (EV-01) ---
+    :ghysels2007 => (key=:ghysels2007,
+        authors="Ghysels, Eric and Sinko, Arthur and Valkanov, Rossen", year=2007,
+        title="MIDAS Regressions: Further Results and New Directions",
+        journal="Econometric Reviews", volume="26", issue="1", pages="53--90",
+        doi="10.1080/07474930600972467", isbn="", publisher="", entry_type=:article),
+    :andreou2010 => (key=:andreou2010,
+        authors="Andreou, Elena and Ghysels, Eric and Kourtellos, Andros", year=2010,
+        title="Regression Models with Mixed Sampling Frequencies",
+        journal="Journal of Econometrics", volume="158", issue="2", pages="246--261",
+        doi="10.1016/j.jeconom.2010.01.004", isbn="", publisher="", entry_type=:article),
+    :foroni2015 => (key=:foroni2015,
+        authors="Foroni, Claudia and Marcellino, Massimiliano and Schumacher, Christian", year=2015,
+        title="Unrestricted Mixed Data Sampling (MIDAS): MIDAS Regressions with Unrestricted Lag Polynomials",
+        journal="Journal of the Royal Statistical Society: Series A", volume="178", issue="1", pages="57--82",
+        doi="10.1111/rssa.12043", isbn="", publisher="", entry_type=:article),
 )
 
 # --- Type/method → reference keys mapping ---
@@ -972,6 +988,10 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :ARIMAForecast => [:box_jenkins1970],
     :ARIMAOrderSelection => [:hyndman_khandakar2008],
     :auto_arima => [:hyndman_khandakar2008],
+    # MIDAS (EV-01)
+    :MidasModel => [:ghysels2007, :andreou2010, :foroni2015],
+    :MidasForecast => [:ghysels2007, :andreou2010],
+    :midas => [:ghysels2007, :andreou2010, :foroni2015],
     # GMM
     :GMMModel => [:hansen1982],
     :gmm => [:hansen1982],
@@ -1419,6 +1439,10 @@ refs(io::IO, ::ARMAModel; kw...) = refs(io, _TYPE_REFS[:ARMAModel]; kw...)
 refs(io::IO, ::ARIMAModel; kw...) = refs(io, _TYPE_REFS[:ARIMAModel]; kw...)
 refs(io::IO, ::ARIMAForecast; kw...) = refs(io, _TYPE_REFS[:ARIMAForecast]; kw...)
 refs(io::IO, ::ARIMAOrderSelection; kw...) = refs(io, _TYPE_REFS[:ARIMAOrderSelection]; kw...)
+
+# MIDAS (EV-01)
+refs(io::IO, ::MidasModel; kw...) = refs(io, _TYPE_REFS[:MidasModel]; kw...)
+refs(io::IO, ::MidasForecast; kw...) = refs(io, _TYPE_REFS[:MidasForecast]; kw...)
 
 # GMM
 refs(io::IO, ::GMMModel; kw...) = refs(io, _TYPE_REFS[:GMMModel]; kw...)
