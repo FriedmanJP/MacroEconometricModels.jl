@@ -467,6 +467,12 @@ OLS, WLS, IV/2SLS, logit, probit, ordered, and multinomial estimation for cross-
 | `odds_ratio(m)` | Odds ratios for logit models |
 | `classification_table(m)` | Classification accuracy table |
 | `vif(m)` | Variance inflation factors |
+| `white_test(m)` | White heteroskedasticity test |
+| `breusch_pagan_test(m::RegModel)` | Breusch-Pagan/Koenker heteroskedasticity test |
+| `glejser_test(m)` | Glejser heteroskedasticity test |
+| `harvey_test(m)` | Harvey multiplicative heteroskedasticity test |
+| `breusch_godfrey_test(m; lags)` | Breusch-Godfrey serial-correlation LM test |
+| `reset_test(m; powers)` | Ramsey RESET functional-form test |
 | `brant_test(m)` | Brant test for parallel regression |
 | `hausman_iia(m)` | Hausman test for IIA assumption |
 

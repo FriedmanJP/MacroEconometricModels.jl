@@ -1049,6 +1049,12 @@ export TobitModel, TruncRegModel, estimate_tobit, estimate_truncreg
 export marginal_effects, odds_ratio, vif, classification_table, OddsRatio, MultinomialMarginalEffects
 export brant_test, hausman_iia
 
+# OLS residual diagnostics — EV-31 (#439)
+# Note: `breusch_pagan_test` is ALSO exported for PanelRegModel (src/preg, line ~821);
+# these are distinct methods on the same generic — do not deduplicate the symbol.
+export white_test, breusch_pagan_test, glejser_test, harvey_test,
+       breusch_godfrey_test, reset_test, RegDiagnosticResult
+
 # =============================================================================
 # Exports — MIDAS Regression (EV-01)
 # =============================================================================

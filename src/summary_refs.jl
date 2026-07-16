@@ -341,6 +341,38 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="A Heteroskedasticity-Consistent Covariance Matrix Estimator and a Direct Test for Heteroskedasticity",
         journal="Econometrica", volume="48", issue="4", pages="817--838",
         doi="10.2307/1912934", isbn="", publisher="", entry_type=:article),
+    # --- OLS Residual Diagnostics (EV-31, #439) ---
+    :breusch_pagan1979 => (key=:breusch_pagan1979,
+        authors="Breusch, Trevor S. and Pagan, Adrian R.", year=1979,
+        title="A Simple Test for Heteroscedasticity and Random Coefficient Variation",
+        journal="Econometrica", volume="47", issue="5", pages="1287--1294",
+        doi="10.2307/1911963", isbn="", publisher="", entry_type=:article),
+    :koenker1981 => (key=:koenker1981, authors="Koenker, Roger", year=1981,
+        title="A Note on Studentizing a Test for Heteroscedasticity",
+        journal="Journal of Econometrics", volume="17", issue="1", pages="107--112",
+        doi="10.1016/0304-4076(81)90062-2", isbn="", publisher="", entry_type=:article),
+    :glejser1969 => (key=:glejser1969, authors="Glejser, Herbert", year=1969,
+        title="A New Test for Heteroskedasticity",
+        journal="Journal of the American Statistical Association", volume="64", issue="325",
+        pages="316--323", doi="10.1080/01621459.1969.10500976", isbn="", publisher="",
+        entry_type=:article),
+    :harvey1976 => (key=:harvey1976, authors="Harvey, Andrew C.", year=1976,
+        title="Estimating Regression Models with Multiplicative Heteroscedasticity",
+        journal="Econometrica", volume="44", issue="3", pages="461--465",
+        doi="10.2307/1913974", isbn="", publisher="", entry_type=:article),
+    :godfrey1978 => (key=:godfrey1978, authors="Godfrey, Leslie G.", year=1978,
+        title="Testing Against General Autoregressive and Moving Average Error Models when the Regressors Include Lagged Dependent Variables",
+        journal="Econometrica", volume="46", issue="6", pages="1293--1301",
+        doi="10.2307/1913829", isbn="", publisher="", entry_type=:article),
+    :breusch1978 => (key=:breusch1978, authors="Breusch, Trevor S.", year=1978,
+        title="Testing for Autocorrelation in Dynamic Linear Models",
+        journal="Australian Economic Papers", volume="17", issue="31", pages="334--355",
+        doi="10.1111/j.1467-8454.1978.tb00635.x", isbn="", publisher="", entry_type=:article),
+    :ramsey1969 => (key=:ramsey1969, authors="Ramsey, James B.", year=1969,
+        title="Tests for Specification Errors in Classical Linear Least-Squares Regression Analysis",
+        journal="Journal of the Royal Statistical Society, Series B", volume="31", issue="2",
+        pages="350--371", doi="10.1111/j.2517-6161.1969.tb00796.x", isbn="", publisher="",
+        entry_type=:article),
     # --- Long-Run Variance Toolkit (EV-12) ---
     :andrews1991 => (key=:andrews1991, authors="Andrews, Donald W. K.", year=1991,
         title="Heteroskedasticity and Autocorrelation Consistent Covariance Matrix Estimation",
@@ -1294,6 +1326,9 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :LogitModel => [:wooldridge2010, :cameron_trivedi2005, :mcfadden1974],
     :ProbitModel => [:wooldridge2010, :cameron_trivedi2005],
     :MarginalEffects => [:cameron_trivedi2005],
+    # OLS residual diagnostics (EV-31, #439)
+    :RegDiagnosticResult => [:white1980, :breusch_pagan1979, :koenker1981,
+                             :glejser1969, :harvey1976, :godfrey1978, :ramsey1969],
     :estimate_reg => [:wooldridge2010, :white1980],
     :estimate_iv => [:wooldridge2010, :staiger_stock1997],
     :estimate_logit => [:wooldridge2010, :cameron_trivedi2005, :mcfadden1974],
@@ -1757,6 +1792,19 @@ end
 refs(io::IO, ::PanelLogitModel; kw...) = refs(io, _TYPE_REFS[:PanelLogitModel]; kw...)
 refs(io::IO, ::PanelProbitModel; kw...) = refs(io, _TYPE_REFS[:PanelProbitModel]; kw...)
 refs(io::IO, ::PanelTestResult; kw...) = refs(io, _TYPE_REFS[:PanelTestResult]; kw...)
+
+# OLS residual diagnostics (EV-31, #439): pick the reference(s) matching the test.
+function refs(io::IO, r::RegDiagnosticResult; kw...)
+    nm = r.test_name
+    ks = startswith(nm, "White")            ? [:white1980] :
+         startswith(nm, "Breusch-Pagan")    ? [:breusch_pagan1979, :koenker1981] :
+         startswith(nm, "Glejser")          ? [:glejser1969] :
+         startswith(nm, "Harvey")           ? [:harvey1976] :
+         startswith(nm, "Breusch-Godfrey")  ? [:breusch1978, :godfrey1978] :
+         startswith(nm, "Ramsey")           ? [:ramsey1969] :
+                                              _TYPE_REFS[:RegDiagnosticResult]
+    refs(io, ks; kw...)
+end
 
 # --- Convenience: stdout fallback ---
 function refs(x; kw...)

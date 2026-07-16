@@ -565,6 +565,63 @@ The VIF values for `x1` and `x2` are large because these two variables are corre
 
 ---
 
+## Residual Diagnostics
+
+After fitting an OLS model, a standard battery of residual diagnostics checks the classical assumptions: constant error variance (homoskedasticity), no serial correlation, and correct functional form. Each test runs an auxiliary regression on a fitted [`RegModel`](@ref) and returns a [`RegDiagnosticResult`](@ref) rendering an ``nR^2`` chi-squared statistic and/or an F-form.
+
+| Function | Null hypothesis | Auxiliary regression | Statistic |
+|----------|-----------------|----------------------|-----------|
+| [`white_test`](@ref) | Homoskedasticity | ``\hat{u}^2`` on regressors, squares, cross-products | ``nR^2 \sim \chi^2`` |
+| [`breusch_pagan_test`](@ref) | Homoskedasticity | ``\hat{u}^2`` on regressors | ``nR^2 \sim \chi^2`` (Koenker) |
+| [`glejser_test`](@ref) | Homoskedasticity | ``\lvert\hat{u}\rvert`` on regressors | ``F`` |
+| [`harvey_test`](@ref) | Homoskedasticity | ``\log \hat{u}^2`` on regressors | ``nR^2 \sim \chi^2`` |
+| [`breusch_godfrey_test`](@ref) | No serial correlation | ``\hat{u}`` on regressors + lagged residuals | ``nR^2 \sim \chi^2(p)`` + F |
+| [`reset_test`](@ref) | Correct functional form | ``y`` on regressors + ``\hat{y}^2\dots\hat{y}^k`` | ``F`` |
+
+!!! note "Name collision with the panel test"
+    `breusch_pagan_test` also has a method for `PanelRegModel` — the Breusch–Pagan random-effects Lagrange-multiplier test, a *different* test. Dispatch on the model type selects the correct one: pass a `RegModel` for the heteroskedasticity test documented here.
+
+### Heteroskedasticity Tests
+
+White's test is the most general: it regresses the squared residuals on the regressors, their squares, and (by default) their pairwise cross-products. The Breusch–Pagan test (Koenker studentized form, the default) uses only the levels and is robust to non-normal errors.
+
+```@example reg
+# Heteroskedastic DGP: error standard deviation grows with |x1|
+n = 200
+x1 = randn(n); x2 = randn(n)
+u = (0.5 .+ 0.8 .* abs.(x1)) .* randn(n)
+y = 1.0 .+ 2.0 .* x1 .- 1.0 .* x2 .+ u
+m = estimate_reg(y, hcat(ones(n), x1, x2); varnames=["const", "x1", "x2"])
+
+report(white_test(m))
+report(breusch_pagan_test(m))          # RegModel ⇒ heteroskedasticity test
+```
+
+Glejser and Harvey target specific variance forms — Glejser F-tests ``\lvert\hat{u}\rvert`` against the regressors, while Harvey regresses ``\log\hat{u}^2`` (multiplicative heteroskedasticity):
+
+```@example reg
+report(glejser_test(m))
+report(harvey_test(m))
+```
+
+### Serial Correlation
+
+The Breusch–Godfrey test regresses the residuals on the original regressors and `lags` lagged residuals (pre-sample lags zero-padded), reporting both the LM ``\chi^2(p)`` form and an F-form:
+
+```@example reg
+report(breusch_godfrey_test(m; lags=2))
+```
+
+### Functional Form
+
+Ramsey's RESET test augments the regression with powers of the **fitted values** ``\hat{y}^2,\dots,\hat{y}^k`` and F-tests that they are jointly zero. Rejection signals a misspecified functional form (e.g. an omitted nonlinearity):
+
+```@example reg
+report(reset_test(m; powers=2:4))
+```
+
+---
+
 ## CrossSectionData Dispatch
 
 The `CrossSectionData` wrapper provides a symbol-based API that automatically constructs the regressor matrix with an intercept column and maps variable names. This dispatch eliminates manual column extraction and intercept handling.
