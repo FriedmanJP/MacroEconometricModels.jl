@@ -936,3 +936,122 @@ StatsAPI.pvalue(r::PedroniResult) = minimum(r.pvalues)
 StatsAPI.pvalue(r::KaoResult) = minimum(r.pvalues)
 StatsAPI.pvalue(r::WesterlundResult) = minimum(r.pvalues)
 StatsAPI.pvalue(r::FisherJohansenResult) = r.trace_pvalues[1]
+
+# =============================================================================
+# Residual-based / parameter-stability cointegration tests (EV-11)
+# =============================================================================
+
+"""
+    EngleGrangerResult{T} <: AbstractUnitRootTest
+
+Engle–Granger (1987) two-step residual-based cointegration test. `H₀`: no cointegration.
+
+# Fields
+- `statistic::T` — residual ADF `t`-statistic (`t` on `ρ` in `Δû_t = ρû_{t-1} + …`)
+- `pvalue::T` — MacKinnon (1996/2010) cointegration-surface asymptotic p-value (`N = k+1`)
+- `lags::Int` — augmenting lags used (or selected by IC)
+- `regression::Symbol` — deterministic case (`:none`/`:constant`/`:trend`)
+- `k::Int` — number of `I(1)` regressors
+- `N::Int` — number of `I(1)` series (`= k+1`)
+- `nobs::Int` — number of level observations
+"""
+struct EngleGrangerResult{T<:AbstractFloat} <: AbstractUnitRootTest
+    statistic::T
+    pvalue::T
+    lags::Int
+    regression::Symbol
+    k::Int
+    N::Int
+    nobs::Int
+end
+
+"""
+    PhillipsOuliarisResult{T} <: AbstractUnitRootTest
+
+Phillips–Ouliaris (1990) residual-based cointegration test. `H₀`: no cointegration.
+Reports the `t`-ratio `Ẑ_t` (`statistic`/`pvalue`) and the normalized-bias `Ẑ_α`
+(`z_alpha`/`z_alpha_pvalue`).
+
+# Fields
+- `statistic::T` — `Ẑ_t` (primary; studentized PP-style statistic)
+- `pvalue::T` — `Ẑ_t` MacKinnon cointegration-surface p-value (`N = k+1`)
+- `z_alpha::T` — `Ẑ_α` normalized-bias statistic
+- `z_alpha_pvalue::T` — `Ẑ_α` p-value (Monte-Carlo `PO_ZA_CV` bracketing interpolation)
+- `regression::Symbol` — deterministic case
+- `kernel::Symbol` — HAC kernel used for the residual long-run variance
+- `bandwidth::T` — resolved truncation-lag bandwidth
+- `k::Int`, `N::Int`, `nobs::Int`
+"""
+struct PhillipsOuliarisResult{T<:AbstractFloat} <: AbstractUnitRootTest
+    statistic::T
+    pvalue::T
+    z_alpha::T
+    z_alpha_pvalue::T
+    regression::Symbol
+    kernel::Symbol
+    bandwidth::T
+    k::Int
+    N::Int
+    nobs::Int
+end
+
+"""
+    HansenInstabilityResult{T} <: AbstractUnitRootTest
+
+Hansen (1992) `L_c` parameter-instability test for a cointegrating regression.
+`H₀`: cointegration with stable coefficients (large `L_c` ⇒ reject).
+
+# Fields
+- `statistic::T` — `L_c` statistic
+- `pvalue::T` — bracketing p-value from Monte-Carlo `HANSEN_LC_CV`
+- `regression::Symbol` — deterministic case
+- `trend::Symbol` — the underlying `CointRegModel` trend (`:none`/`:const`/`:linear`)
+- `nparam::Int` — number of regression parameters `p = d+k`
+- `k::Int` — number of `I(1)` regressors
+- `nobs::Int`
+"""
+struct HansenInstabilityResult{T<:AbstractFloat} <: AbstractUnitRootTest
+    statistic::T
+    pvalue::T
+    regression::Symbol
+    trend::Symbol
+    nparam::Int
+    k::Int
+    nobs::Int
+end
+
+"""
+    ParkAddedResult{T} <: AbstractUnitRootTest
+
+Park (1990) `H(p, q)` added-superfluous-trends test. `H₀`: genuine cointegration
+(`I(0)` errors); large `H` ⇒ reject in favour of a spurious regression.
+
+# Fields
+- `statistic::T` — `H(p, q)` Wald statistic (`~ χ²(q_add)` under `H₀`)
+- `pvalue::T` — asymptotic `χ²(q_add)` upper-tail p-value
+- `q_add::Int` — number of superfluous trends added (degrees of freedom)
+- `base_order::Int` — highest deterministic-trend order already present (`p`)
+- `regression::Symbol` — deterministic case
+- `trend::Symbol` — underlying `CointRegModel` trend
+- `k::Int`, `nobs::Int`
+"""
+struct ParkAddedResult{T<:AbstractFloat} <: AbstractUnitRootTest
+    statistic::T
+    pvalue::T
+    q_add::Int
+    base_order::Int
+    regression::Symbol
+    trend::Symbol
+    k::Int
+    nobs::Int
+end
+
+# --- StatsAPI interface (EV-11) ---
+StatsAPI.nobs(r::EngleGrangerResult) = r.nobs
+StatsAPI.nobs(r::PhillipsOuliarisResult) = r.nobs
+StatsAPI.nobs(r::HansenInstabilityResult) = r.nobs
+StatsAPI.nobs(r::ParkAddedResult) = r.nobs
+StatsAPI.pvalue(r::EngleGrangerResult) = r.pvalue
+StatsAPI.pvalue(r::PhillipsOuliarisResult) = r.pvalue
+StatsAPI.pvalue(r::HansenInstabilityResult) = r.pvalue
+StatsAPI.pvalue(r::ParkAddedResult) = r.pvalue

@@ -396,6 +396,13 @@ include("cointreg/fmols.jl")
 include("cointreg/ccr.jl")
 include("cointreg/dols.jl")
 
+# Residual-based / parameter-stability cointegration tests (EV-11) — after cointreg
+# (Hansen/Park consume CointRegModel) and after core/lrvar.jl (EV-12 long-run variance).
+include("teststat/engle_granger.jl")
+include("teststat/phillips_ouliaris.jl")
+include("teststat/hansen_instability.jl")
+include("teststat/park_added.jl")
+
 # Local Projections
 include("lp/types.jl")
 include("lp/core.jl")
@@ -664,6 +671,10 @@ export factor_break_test
 # Extended unit root tests
 export fourier_adf_test, fourier_kpss_test, dfgls_test
 export lm_unitroot_test, adf_2break_test, gregory_hansen_test
+
+# Residual-based / parameter-stability cointegration tests (EV-11, #419)
+export engle_granger_test, phillips_ouliaris_test, hansen_instability_test, park_added_test
+export EngleGrangerResult, PhillipsOuliarisResult, HansenInstabilityResult, ParkAddedResult
 
 # Convenience functions
 export unit_root_summary, test_all_variables

@@ -108,6 +108,7 @@ const TEST_GROUPS = [
         "ardl/test_pmg.jl",    # EV-23 (#431): panel ARDL — PMG / MG / DFE + Hausman
         "fceval/test_fceval.jl",   # EV-39 (#447): forecast eval metrics + DM/CW/MZ/encompassing + combination
         "cointreg/test_cointreg.jl",   # EV-10 (#418): FMOLS/CCR/DOLS cointegrating regression
+        "teststat/test_cointegration_resid.jl",   # EV-11 (#419): Engle-Granger/Phillips-Ouliaris/Hansen-Lc/Park
         "preg/test_panel_reg.jl",
         "preg/test_panel_tests.jl",
     ]),
@@ -437,6 +438,7 @@ else
         @testset "NARDL" begin include("ardl/test_nardl.jl") end
         @testset "Panel ARDL (PMG/MG/DFE)" begin include("ardl/test_pmg.jl") end
         @testset "Forecast Evaluation" begin include("fceval/test_fceval.jl") end
+        @testset "Residual-Based Cointegration Tests" begin include("teststat/test_cointegration_resid.jl") end
         @testset "Panel Regression" begin include("preg/test_panel_reg.jl") end
         @testset "Panel Specification Tests" begin include("preg/test_panel_tests.jl") end
         @testset "Panel IV" begin include("preg/test_panel_iv.jl") end

@@ -1028,3 +1028,112 @@ function Base.show(io::IO, r::FisherJohansenResult{T}) where {T}
         "Note" "*** p<0.01, ** p<0.05, * p<0.10"]
     _pretty_table(io, conc_data; column_labels=["",""], alignment=[:l,:l])
 end
+
+# =============================================================================
+# Residual-based / parameter-stability cointegration tests (EV-11)
+# =============================================================================
+
+function Base.show(io::IO, r::EngleGrangerResult)
+    spec_data = Any[
+        "H₀" "No cointegration (unit root in residuals)";
+        "H₁" "Cointegration";
+        "Deterministic terms" _regression_name(r.regression);
+        "I(1) series (N=k+1)" r.N;
+        "Augmenting lags" r.lags;
+        "Observations" r.nobs
+    ]
+    _pretty_table(io, spec_data;
+        title = "Engle-Granger Two-Step Cointegration Test",
+        column_labels = ["Specification", ""], alignment = [:l, :r])
+    stars = _significance_stars(r.pvalue)
+    results_data = Any[
+        "ADF statistic (τ)" string(round(r.statistic, digits=4), " ", stars);
+        "P-value (MacKinnon)" _format_pvalue(r.pvalue)
+    ]
+    _pretty_table(io, results_data;
+        title = "Results", column_labels = ["", "Value"], alignment = [:l, :r])
+    conc = r.pvalue < 0.01 ? "Reject H₀ at 1% (cointegration)" :
+           r.pvalue < 0.05 ? "Reject H₀ at 5% (cointegration)" :
+           r.pvalue < 0.10 ? "Reject H₀ at 10% (cointegration)" :
+                             "Fail to reject H₀ (no cointegration)"
+    _pretty_table(io, Any["Conclusion" conc; "Note" "*** p<0.01, ** p<0.05, * p<0.10"];
+        column_labels=["",""], alignment=[:l,:l])
+end
+
+function Base.show(io::IO, r::PhillipsOuliarisResult)
+    spec_data = Any[
+        "H₀" "No cointegration";
+        "H₁" "Cointegration";
+        "Deterministic terms" _regression_name(r.regression);
+        "I(1) series (N=k+1)" r.N;
+        "Kernel / bandwidth" string(r.kernel, " / ", round(r.bandwidth, digits=2));
+        "Observations" r.nobs
+    ]
+    _pretty_table(io, spec_data;
+        title = "Phillips-Ouliaris Cointegration Test",
+        column_labels = ["Specification", ""], alignment = [:l, :r])
+    results_data = Any[
+        "Ẑ_t statistic" string(round(r.statistic, digits=4), " ", _significance_stars(r.pvalue));
+        "Ẑ_t p-value (MacKinnon)" _format_pvalue(r.pvalue);
+        "Ẑ_α statistic" string(round(r.z_alpha, digits=4), " ", _significance_stars(r.z_alpha_pvalue));
+        "Ẑ_α p-value (MC table)" _format_pvalue(r.z_alpha_pvalue)
+    ]
+    _pretty_table(io, results_data;
+        title = "Results", column_labels = ["", "Value"], alignment = [:l, :r])
+    conc = r.pvalue < 0.05 ? "Reject H₀ at 5% (cointegration)" :
+           r.pvalue < 0.10 ? "Reject H₀ at 10% (cointegration)" :
+                             "Fail to reject H₀ (no cointegration)"
+    _pretty_table(io, Any["Conclusion" conc; "Note" "*** p<0.01, ** p<0.05, * p<0.10"];
+        column_labels=["",""], alignment=[:l,:l])
+end
+
+function Base.show(io::IO, r::HansenInstabilityResult)
+    spec_data = Any[
+        "H₀" "Cointegration with stable coefficients";
+        "H₁" "Parameter instability / no cointegration";
+        "Deterministic terms" _regression_name(r.regression);
+        "Parameters (p=d+k)" r.nparam;
+        "Observations" r.nobs
+    ]
+    _pretty_table(io, spec_data;
+        title = "Hansen (1992) Lc Parameter-Instability Test",
+        column_labels = ["Specification", ""], alignment = [:l, :r])
+    results_data = Any[
+        "Lc statistic" string(round(r.statistic, digits=4), " ", _significance_stars(r.pvalue));
+        "P-value (MC table)" _format_pvalue(r.pvalue)
+    ]
+    _pretty_table(io, results_data;
+        title = "Results", column_labels = ["", "Value"], alignment = [:l, :r])
+    conc = r.pvalue < 0.01 ? "Reject H₀ at 1% (unstable / no cointegration)" :
+           r.pvalue < 0.05 ? "Reject H₀ at 5% (unstable / no cointegration)" :
+           r.pvalue < 0.10 ? "Reject H₀ at 10% (unstable / no cointegration)" :
+                             "Fail to reject H₀ (stable cointegration)"
+    _pretty_table(io, Any["Conclusion" conc; "Note" "*** p<0.01, ** p<0.05, * p<0.10"];
+        column_labels=["",""], alignment=[:l,:l])
+end
+
+function Base.show(io::IO, r::ParkAddedResult)
+    spec_data = Any[
+        "H₀" "Genuine cointegration (I(0) errors)";
+        "H₁" "Spurious regression (I(1) errors)";
+        "Deterministic terms" _regression_name(r.regression);
+        "Superfluous trends (q_add)" r.q_add;
+        "Base trend order (p)" r.base_order;
+        "Observations" r.nobs
+    ]
+    _pretty_table(io, spec_data;
+        title = "Park (1990) Added-Variables H(p,q) Test",
+        column_labels = ["Specification", ""], alignment = [:l, :r])
+    results_data = Any[
+        "H(p,q) statistic" string(round(r.statistic, digits=4), " ", _significance_stars(r.pvalue));
+        "P-value (χ²($(r.q_add)))" _format_pvalue(r.pvalue)
+    ]
+    _pretty_table(io, results_data;
+        title = "Results", column_labels = ["", "Value"], alignment = [:l, :r])
+    conc = r.pvalue < 0.01 ? "Reject H₀ at 1% (spurious)" :
+           r.pvalue < 0.05 ? "Reject H₀ at 5% (spurious)" :
+           r.pvalue < 0.10 ? "Reject H₀ at 10% (spurious)" :
+                             "Fail to reject H₀ (cointegration)"
+    _pretty_table(io, Any["Conclusion" conc; "Note" "*** p<0.01, ** p<0.05, * p<0.10"];
+        column_labels=["",""], alignment=[:l,:l])
+end

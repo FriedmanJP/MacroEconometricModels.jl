@@ -1103,6 +1103,26 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Canonical Cointegrating Regressions",
         journal="Econometrica", volume="60", issue="1", pages="119--143",
         doi="10.2307/2951679", isbn="", publisher="", entry_type=:article),
+    # --- Residual-based / parameter-stability cointegration tests (EV-11) ---
+    :phillips_ouliaris1990 => (key=:phillips_ouliaris1990,
+        authors="Phillips, Peter C. B. and Ouliaris, Sam", year=1990,
+        title="Asymptotic Properties of Residual Based Tests for Cointegration",
+        journal="Econometrica", volume="58", issue="1", pages="165--193",
+        doi="10.2307/2938339", isbn="", publisher="", entry_type=:article),
+    :hansen1992_instability => (key=:hansen1992_instability,
+        authors="Hansen, Bruce E.", year=1992,
+        title="Tests for Parameter Instability in Regressions with I(1) Processes",
+        journal="Journal of Business & Economic Statistics", volume="10", issue="3",
+        pages="321--335", doi="10.1080/07350015.1992.10509908", isbn="", publisher="",
+        entry_type=:article),
+    :park1990_added => (key=:park1990_added, authors="Park, Joon Y.", year=1990,
+        title="Testing for Unit Roots and Cointegration by Adding Superfluous Regressors",
+        journal="Center for Analytic Economics Working Paper, Cornell University",
+        volume="", issue="", pages="", doi="", isbn="", publisher="", entry_type=:techreport),
+    :mackinnon2010 => (key=:mackinnon2010, authors="MacKinnon, James G.", year=2010,
+        title="Critical Values for Cointegration Tests",
+        journal="Queen's University Department of Economics Working Paper", volume="1227",
+        issue="", pages="", doi="", isbn="", publisher="", entry_type=:techreport),
     :saikkonen1991 => (key=:saikkonen1991, authors="Saikkonen, Pentti", year=1991,
         title="Asymptotically Efficient Estimation of Cointegration Regressions",
         journal="Econometric Theory", volume="7", issue="1", pages="1--21",
@@ -1627,6 +1647,15 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     # Single-equation cointegrating regression (EV-10, #418)
     :CointRegModel => [:phillips_hansen1990, :park1992, :saikkonen1991, :stock_watson1993],
     :estimate_cointreg => [:phillips_hansen1990, :park1992, :saikkonen1991, :stock_watson1993],
+    # Residual-based / parameter-stability cointegration tests (EV-11)
+    :EngleGrangerResult => [:engle_granger1987, :mackinnon2010],
+    :engle_granger_test => [:engle_granger1987, :mackinnon2010],
+    :PhillipsOuliarisResult => [:phillips_ouliaris1990, :mackinnon2010],
+    :phillips_ouliaris_test => [:phillips_ouliaris1990, :mackinnon2010],
+    :HansenInstabilityResult => [:hansen1992_instability],
+    :hansen_instability_test => [:hansen1992_instability],
+    :ParkAddedResult => [:park1990_added, :park1992],
+    :park_added_test => [:park1990_added, :park1992],
     # Ordered & Multinomial models
     :OrderedLogitModel => [:mccullagh1980, :brant1990, :wooldridge2010],
     :OrderedProbitModel => [:mccullagh1980, :wooldridge2010],
@@ -2048,6 +2077,11 @@ refs(io::IO, ::PedroniResult; kw...) = refs(io, _TYPE_REFS[:PedroniResult]; kw..
 refs(io::IO, ::KaoResult; kw...) = refs(io, _TYPE_REFS[:KaoResult]; kw...)
 refs(io::IO, ::WesterlundResult; kw...) = refs(io, _TYPE_REFS[:WesterlundResult]; kw...)
 refs(io::IO, ::FisherJohansenResult; kw...) = refs(io, _TYPE_REFS[:FisherJohansenResult]; kw...)
+# Residual-based / parameter-stability cointegration tests (EV-11, #419)
+refs(io::IO, ::EngleGrangerResult; kw...) = refs(io, _TYPE_REFS[:EngleGrangerResult]; kw...)
+refs(io::IO, ::PhillipsOuliarisResult; kw...) = refs(io, _TYPE_REFS[:PhillipsOuliarisResult]; kw...)
+refs(io::IO, ::HansenInstabilityResult; kw...) = refs(io, _TYPE_REFS[:HansenInstabilityResult]; kw...)
+refs(io::IO, ::ParkAddedResult; kw...) = refs(io, _TYPE_REFS[:ParkAddedResult]; kw...)
 
 # Factor break types
 refs(io::IO, ::FactorBreakResult; kw...) = refs(io, _TYPE_REFS[:FactorBreakResult]; kw...)
