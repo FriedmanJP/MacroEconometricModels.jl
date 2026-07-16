@@ -134,6 +134,12 @@ include("midas/types.jl")
 include("midas/estimation.jl")
 include("midas/forecast.jl")
 
+# ARDL + Pesaran–Shin–Smith bounds test (EV-08, #416) — after reg/ (reuses
+# robust_inv, _coef_table). Scaffold extended later by NARDL (EV-09) and PMG (EV-23).
+include("ardl/types.jl")
+include("ardl/estimation.jl")
+include("ardl/bounds.jl")
+
 # VAR types and estimation
 include("var/types.jl")
 include("var/estimation.jl")
@@ -1032,6 +1038,12 @@ export brant_test, hausman_iia
 # =============================================================================
 
 export estimate_midas, MidasModel, MidasForecast, midas_weights
+
+# =============================================================================
+# Exports — ARDL & Bounds Test (EV-08, #416)
+# =============================================================================
+
+export estimate_ardl, bounds_test, long_run, ARDLModel, ARDLBoundsTest
 
 # =============================================================================
 # Exports - Plotting

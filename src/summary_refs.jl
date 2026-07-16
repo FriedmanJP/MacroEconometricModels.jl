@@ -943,6 +943,28 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Unrestricted Mixed Data Sampling (MIDAS): MIDAS Regressions with Unrestricted Lag Polynomials",
         journal="Journal of the Royal Statistical Society: Series A", volume="178", issue="1", pages="57--82",
         doi="10.1111/rssa.12043", isbn="", publisher="", entry_type=:article),
+    # --- ARDL & Bounds Test (EV-08, #416) ---
+    :pesaran_shin1999 => (key=:pesaran_shin1999,
+        authors="Pesaran, M. Hashem and Shin, Yongcheol", year=1999,
+        title="An Autoregressive Distributed Lag Modelling Approach to Cointegration Analysis",
+        journal="", volume="", issue="", pages="371--413", doi="",
+        isbn="978-0-521-63323-9",
+        publisher="Cambridge University Press (Strom, ed., Econometrics and Economic Theory in the 20th Century)",
+        entry_type=:incollection),
+    :pesaran_shin_smith2001 => (key=:pesaran_shin_smith2001,
+        authors="Pesaran, M. Hashem and Shin, Yongcheol and Smith, Richard J.", year=2001,
+        title="Bounds Testing Approaches to the Analysis of Level Relationships",
+        journal="Journal of Applied Econometrics", volume="16", issue="3", pages="289--326",
+        doi="10.1002/jae.616", isbn="", publisher="", entry_type=:article),
+    :narayan2005 => (key=:narayan2005, authors="Narayan, Paresh Kumar", year=2005,
+        title="The Saving and Investment Nexus for China: Evidence from Cointegration Tests",
+        journal="Applied Economics", volume="37", issue="17", pages="1979--1990",
+        doi="10.1080/00036840500278103", isbn="", publisher="", entry_type=:article),
+    :kripfganz_schneider2023 => (key=:kripfganz_schneider2023,
+        authors="Kripfganz, Sebastian and Schneider, Daniel C.", year=2023,
+        title="ARDL: Estimating Autoregressive Distributed Lag and Equilibrium Correction Models",
+        journal="Stata Journal", volume="23", issue="4", pages="983--1019",
+        doi="10.1177/1536867X231212434", isbn="", publisher="", entry_type=:article),
 )
 
 # --- Type/method → reference keys mapping ---
@@ -1036,6 +1058,10 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :MidasModel => [:ghysels2007, :andreou2010, :foroni2015],
     :MidasForecast => [:ghysels2007, :andreou2010],
     :midas => [:ghysels2007, :andreou2010, :foroni2015],
+    # ARDL & bounds test (EV-08, #416)
+    :ARDLModel => [:pesaran_shin1999, :pesaran_shin_smith2001, :kripfganz_schneider2023],
+    :ARDLBoundsTest => [:pesaran_shin_smith2001, :narayan2005],
+    :ardl => [:pesaran_shin1999, :pesaran_shin_smith2001, :narayan2005, :kripfganz_schneider2023],
     # GMM
     :GMMModel => [:hansen1982],
     :gmm => [:hansen1982],
@@ -1498,6 +1524,10 @@ refs(io::IO, ::ARIMAOrderSelection; kw...) = refs(io, _TYPE_REFS[:ARIMAOrderSele
 # MIDAS (EV-01)
 refs(io::IO, ::MidasModel; kw...) = refs(io, _TYPE_REFS[:MidasModel]; kw...)
 refs(io::IO, ::MidasForecast; kw...) = refs(io, _TYPE_REFS[:MidasForecast]; kw...)
+
+# ARDL & bounds test (EV-08, #416)
+refs(io::IO, ::ARDLModel; kw...) = refs(io, _TYPE_REFS[:ARDLModel]; kw...)
+refs(io::IO, ::ARDLBoundsTest; kw...) = refs(io, _TYPE_REFS[:ARDLBoundsTest]; kw...)
 
 # GMM
 refs(io::IO, ::GMMModel; kw...) = refs(io, _TYPE_REFS[:GMMModel]; kw...)

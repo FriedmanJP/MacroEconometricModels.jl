@@ -39,6 +39,7 @@ makedocs(;
             "VAR" => "manual.md",
             "Bayesian VAR" => "bayesian.md",
             "VECM" => "vecm.md",
+            "ARDL & Bounds Test" => "ardl.md",
             "Local Projections" => "lp.md",
             "Factor Models" => "factormodels.md",
             "FAVAR" => "favar.md",
