@@ -126,6 +126,7 @@ include("reg/probit.jl")
 include("reg/tobit.jl")        # EV-17 (#425): Tobit (censored) + truncated regression
 include("reg/margins.jl")
 include("reg/diagnostics.jl")
+include("reg/stability.jl")     # EV-32 (#440): recursive residuals / CUSUM(SQ) / Chow / influence
 include("reg/predict.jl")
 include("reg/ordered.jl")
 include("reg/multinomial.jl")
@@ -1089,6 +1090,10 @@ export brant_test, hausman_iia
 # these are distinct methods on the same generic — do not deduplicate the symbol.
 export white_test, breusch_pagan_test, glejser_test, harvey_test,
        breusch_godfrey_test, reset_test, RegDiagnosticResult
+
+# Stability & influence diagnostics — EV-32 (#440)
+export recursive_residuals, cusum_test, cusumsq_test, chow_test, influence_stats,
+       StabilityResult, InfluenceStats
 
 # =============================================================================
 # Exports — MIDAS Regression (EV-01)

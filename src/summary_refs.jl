@@ -401,6 +401,32 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         journal="Journal of the Royal Statistical Society, Series B", volume="31", issue="2",
         pages="350--371", doi="10.1111/j.2517-6161.1969.tb00796.x", isbn="", publisher="",
         entry_type=:article),
+    # --- Stability & Influence Diagnostics (EV-32, #440) ---
+    :brown_durbin_evans1975 => (key=:brown_durbin_evans1975,
+        authors="Brown, Robert L. and Durbin, James and Evans, J. M.", year=1975,
+        title="Techniques for Testing the Constancy of Regression Relationships over Time",
+        journal="Journal of the Royal Statistical Society, Series B", volume="37", issue="2",
+        pages="149--192", doi="10.1111/j.2517-6161.1975.tb01532.x", isbn="", publisher="",
+        entry_type=:article),
+    :chow1960 => (key=:chow1960, authors="Chow, Gregory C.", year=1960,
+        title="Tests of Equality Between Sets of Coefficients in Two Linear Regressions",
+        journal="Econometrica", volume="28", issue="3", pages="591--605",
+        doi="10.2307/1910133", isbn="", publisher="", entry_type=:article),
+    :edgerton_wells1994 => (key=:edgerton_wells1994,
+        authors="Edgerton, David and Wells, Curt", year=1994,
+        title="Critical Values for the CUSUMSQ Statistic in Medium and Large Sized Samples",
+        journal="Oxford Bulletin of Economics and Statistics", volume="56", issue="3",
+        pages="355--365", doi="10.1111/j.1468-0084.1994.mp56003008.x", isbn="", publisher="",
+        entry_type=:article),
+    :belsley_kuh_welsch1980 => (key=:belsley_kuh_welsch1980,
+        authors="Belsley, David A. and Kuh, Edwin and Welsch, Roy E.", year=1980,
+        title="Regression Diagnostics: Identifying Influential Data and Sources of Collinearity",
+        journal="", volume="", issue="", pages="", doi="10.1002/0471725153",
+        isbn="978-0471058564", publisher="Wiley", entry_type=:book),
+    :cook1977 => (key=:cook1977, authors="Cook, R. Dennis", year=1977,
+        title="Detection of Influential Observation in Linear Regression",
+        journal="Technometrics", volume="19", issue="1", pages="15--18",
+        doi="10.2307/1268249", isbn="", publisher="", entry_type=:article),
     # --- Long-Run Variance Toolkit (EV-12) ---
     :andrews1991 => (key=:andrews1991, authors="Andrews, Donald W. K.", year=1991,
         title="Heteroskedasticity and Autocorrelation Consistent Covariance Matrix Estimation",
@@ -1442,7 +1468,16 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :MarginalEffects => [:cameron_trivedi2005],
     # OLS residual diagnostics (EV-31, #439)
     :RegDiagnosticResult => [:white1980, :breusch_pagan1979, :koenker1981,
-                             :glejser1969, :harvey1976, :godfrey1978, :ramsey1969],
+                             :glejser1969, :harvey1976, :godfrey1978, :ramsey1969,
+                             :chow1960],
+    # Stability & influence diagnostics (EV-32, #440)
+    :StabilityResult => [:brown_durbin_evans1975, :edgerton_wells1994],
+    :InfluenceStats => [:belsley_kuh_welsch1980, :cook1977],
+    :recursive_residuals => [:brown_durbin_evans1975],
+    :cusum_test => [:brown_durbin_evans1975],
+    :cusumsq_test => [:brown_durbin_evans1975, :edgerton_wells1994],
+    :chow_test => [:chow1960],
+    :influence_stats => [:belsley_kuh_welsch1980, :cook1977],
     :estimate_reg => [:wooldridge2010, :white1980],
     :estimate_iv => [:wooldridge2010, :staiger_stock1997],
     :estimate_logit => [:wooldridge2010, :cameron_trivedi2005, :mcfadden1974],
@@ -1884,6 +1919,10 @@ refs(io::IO, m::RegModel; kw...) = refs(io, m.method == :iv ? [:wooldridge2010, 
 refs(io::IO, ::LogitModel; kw...) = refs(io, _TYPE_REFS[:LogitModel]; kw...)
 refs(io::IO, ::ProbitModel; kw...) = refs(io, _TYPE_REFS[:ProbitModel]; kw...)
 refs(io::IO, ::MarginalEffects; kw...) = refs(io, _TYPE_REFS[:MarginalEffects]; kw...)
+# Stability & influence diagnostics (EV-32, #440)
+refs(io::IO, r::StabilityResult; kw...) = refs(io, r.kind == :cusumsq ?
+    [:brown_durbin_evans1975, :edgerton_wells1994] : [:brown_durbin_evans1975]; kw...)
+refs(io::IO, ::InfluenceStats; kw...) = refs(io, _TYPE_REFS[:InfluenceStats]; kw...)
 # Penalized regression (EV-03, #411): reference set depends on the fitted variant.
 function refs(io::IO, m::PenalizedRegModel; kw...)
     ks = m.alpha == 1 ? [:tibshirani1996, :friedman2010] :
@@ -1937,6 +1976,7 @@ function refs(io::IO, r::RegDiagnosticResult; kw...)
          startswith(nm, "Harvey")           ? [:harvey1976] :
          startswith(nm, "Breusch-Godfrey")  ? [:breusch1978, :godfrey1978] :
          startswith(nm, "Ramsey")           ? [:ramsey1969] :
+         startswith(nm, "Chow")             ? [:chow1960] :
                                               _TYPE_REFS[:RegDiagnosticResult]
     refs(io, ks; kw...)
 end

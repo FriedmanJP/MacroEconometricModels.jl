@@ -622,6 +622,89 @@ report(reset_test(m; powers=2:4))
 
 ---
 
+## Stability and Influence Diagnostics
+
+Residual diagnostics assume the coefficient vector is constant. **Stability diagnostics** test that assumption directly — whether the regression relationship drifts or breaks over the sample — and **influence diagnostics** identify individual observations that disproportionately drive the fit. Together they complete EViews' "Stability Diagnostics" menu for a fitted [`RegModel`](@ref).
+
+### Recursive Residuals
+
+The Brown–Durbin–Evans (1975) recursive least-squares residuals fit the model on a growing window and record each one-step-ahead forecast error, standardized:
+
+```math
+w_t = \frac{y_t - x_t' \hat{\beta}_{t-1}}{\sqrt{1 + x_t' (X_{t-1}'X_{t-1})^{-1} x_t}}, \qquad t = k+1, \dots, n
+```
+
+where
+
+- ``\hat{\beta}_{t-1}`` is the OLS estimate on the first ``t-1`` observations,
+- ``X_{t-1}`` is the ``(t-1) \times k`` design of those observations,
+- ``k`` is the number of regressors.
+
+Under a stable model the ``w_t`` are i.i.d. ``N(0, \sigma^2)``, and their sum of squares equals the full-sample OLS SSR. [`recursive_residuals`](@ref) returns the length-``(n-k)`` vector, updating ``(X'X)^{-1}`` by rank-one Sherman–Morrison formulae rather than re-inverting each step.
+
+```@example reg
+w = recursive_residuals(m)
+length(w), round(sum(abs2, w) - m.ssr; digits=10)   # Σ wₜ² == SSR
+```
+
+### CUSUM and CUSUM of Squares
+
+The **CUSUM** test cumulates the standardized recursive residuals,
+
+```math
+W_t = \frac{1}{\hat{\sigma}_w} \sum_{j=k+1}^{t} w_j,
+```
+
+and rejects stability when ``W_t`` crosses the pair of straight significance lines ``\pm a\sqrt{n-k}\,(1 + 2(t-k)/(n-k))``, with ``a = 0.948`` at the 5% level (Brown, Durbin & Evans 1975). CUSUM is sensitive to a gradual drift in the coefficients. The **CUSUM of squares** test uses the normalized cumulative sum of squared recursive residuals ``S_t = \sum_{j=k+1}^{t} w_j^2 / \sum_{j=k+1}^{n} w_j^2`` against the band ``(t-k)/(n-k) \pm c_0``, where ``c_0`` follows the Edgerton–Wells (1994) approximation; it targets a one-off shift in the error variance.
+
+```@example reg
+report(cusum_test(m))
+report(cusumsq_test(m))
+```
+
+Both return a [`StabilityResult`](@ref) carrying the statistic path, the upper/lower bound sequences, and a crossing flag. `plot_result` draws the path against its bounds:
+
+```julia
+plot_result(cusum_test(m))
+```
+
+!!! note "Unknown break dates"
+    CUSUM and Chow tests presume you either monitor the whole path (CUSUM) or specify the break date (Chow). For an *unknown* break date, use [`andrews_test`](@ref) — the Quandt–Andrews sup-Wald test, which searches over candidate break points. This page does not duplicate it.
+
+### Chow Breakpoint and Forecast Tests
+
+When the break date is known, [`chow_test`](@ref) tests coefficient equality across sub-samples. The **breakpoint** test splits the sample at the break and compares the pooled fit against segment-wise fits:
+
+```math
+F = \frac{(\text{SSR}_r - \text{SSR}_u)/k}{\text{SSR}_u/(n - 2k)} \sim F(k,\, n - 2k),
+```
+
+with ``\text{SSR}_u = \text{SSR}_1 + \text{SSR}_2`` the sum of the two sub-sample SSRs. Multiple break indices partition the sample into more segments (and scale the degrees of freedom). The **forecast** test handles a short second sample by treating it as an out-of-sample forecast period.
+
+```@example reg
+# Engineer a mid-sample coefficient break, then test it at the known date.
+yb = copy(y); yb[101:end] .+= 3.0
+mb = estimate_reg(yb, hcat(ones(n), x1, x2); varnames=["const", "x1", "x2"])
+report(chow_test(mb, 100; type=:breakpoint))
+report(chow_test(mb, 150; type=:forecast))
+```
+
+### Influence Statistics
+
+[`influence_stats`](@ref) returns per-observation leverage and influence measures (Belsley, Kuh & Welsch 1980), reusing the fitted ``(X'X)^{-1}``: the hat-diagonal ``h_{ii}``, internally and externally studentized residuals, ``\text{DFFITS}_i``, Cook's distance ``D_i``, and the ``n \times k`` DFBETAS matrix. Observations are flagged high-leverage when ``h_{ii} > 2k/n`` and influential when ``|\text{DFFITS}_i| > 2\sqrt{k/n}``.
+
+```@example reg
+report(influence_stats(m))
+```
+
+The result also exposes the raw vectors (`hat`, `cooksd`, `dffits`, `dfbetas`, …) for downstream analysis, and `plot_result` draws a leverage scatter with the ``2k/n`` cutoff plus a Cook's distance panel:
+
+```julia
+plot_result(influence_stats(m))
+```
+
+---
+
 ## CrossSectionData Dispatch
 
 The `CrossSectionData` wrapper provides a symbol-based API that automatically constructs the regressor matrix with an intercept column and maps variable names. This dispatch eliminates manual column extraction and intercept handling.
@@ -993,6 +1076,15 @@ The OLS estimate of the return to education is biased upward because ability is 
   *Bernoulli*, 19(2), 521-547. [DOI](https://doi.org/10.3150/11-BEJ410)
 
 - Belsley, D. A., Kuh, E., & Welsch, R. E. (1980). *Regression Diagnostics: Identifying Influential Data and Sources of Collinearity*. New York: Wiley. ISBN 978-0-471-05856-4.
+
+- Brown, R. L., Durbin, J., & Evans, J. M. (1975). Techniques for Testing the Constancy of Regression Relationships over Time.
+  *Journal of the Royal Statistical Society, Series B*, 37(2), 149-192. [DOI](https://doi.org/10.1111/j.2517-6161.1975.tb01532.x)
+
+- Chow, G. C. (1960). Tests of Equality Between Sets of Coefficients in Two Linear Regressions.
+  *Econometrica*, 28(3), 591-605. [DOI](https://doi.org/10.2307/1910133)
+
+- Edgerton, D., & Wells, C. (1994). Critical Values for the CUSUMSQ Statistic in Medium and Large Sized Samples.
+  *Oxford Bulletin of Economics and Statistics*, 56(3), 355-365. [DOI](https://doi.org/10.1111/j.1468-0084.1994.mp56003008.x)
 
 - Den Haan, W. J., & Levin, A. T. (1997). A Practitioner's Guide to Robust Covariance Matrix Estimation.
   In *Handbook of Statistics*, Vol. 15, 299-342. Elsevier. [DOI](https://doi.org/10.1016/S0169-7161(97)15014-3)

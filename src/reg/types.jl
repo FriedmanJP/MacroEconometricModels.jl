@@ -321,6 +321,88 @@ function Base.show(io::IO, r::SelectionResult{T}) where {T}
     show(io, r.final)
 end
 
+# StabilityResult / InfluenceStats — parameter-stability diagnostics (EV-32, #440)
+# =============================================================================
+
+"""
+    StabilityResult{T} <: StatsAPI.HypothesisTest
+
+Result of a recursive-residual parameter-stability test (Brown–Durbin–Evans 1975):
+the CUSUM (`:cusum`) or CUSUM-of-squares (`:cusumsq`) path together with its
+significance-band lines and a crossing flag. Produced by [`cusum_test`](@ref) and
+[`cusumsq_test`](@ref).
+
+# Fields
+- `kind::Symbol` — `:cusum` or `:cusumsq`.
+- `tindex::Vector{Int}` — observation index `t = k+1 … n` for each path point.
+- `stat_path::Vector{T}` — the CUSUM statistic `W_t` (`:cusum`) or CUSUMSQ `S_t`
+  (`:cusumsq`) at each `t`.
+- `upper::Vector{T}` — upper significance-band line at each `t`.
+- `lower::Vector{T}` — lower significance-band line at each `t`.
+- `crossed::Bool` — whether the path breaches either band anywhere.
+- `first_crossing::Union{Nothing,Int}` — observation index of the first breach
+  (`nothing` if the path stays inside the bands).
+- `level::T` — significance level of the bands (e.g. `0.05`).
+- `recursive_resid::Vector{T}` — the standardized recursive residuals `w_t`.
+- `n::Int`, `k::Int` — sample size and number of regressors.
+
+# References
+- Brown, R. L., Durbin, J. & Evans, J. M. (1975). *JRSS-B* 37(2), 149–192.
+- Edgerton, D. & Wells, C. (1994). *Oxford Bull. Econ. Stat.* 56(3), 355–365.
+"""
+struct StabilityResult{T<:AbstractFloat} <: StatsAPI.HypothesisTest
+    kind::Symbol
+    tindex::Vector{Int}
+    stat_path::Vector{T}
+    upper::Vector{T}
+    lower::Vector{T}
+    crossed::Bool
+    first_crossing::Union{Nothing,Int}
+    level::T
+    recursive_resid::Vector{T}
+    n::Int
+    k::Int
+end
+
+"""
+    InfluenceStats{T}
+
+Observation-level regression influence and leverage statistics for a fitted
+[`RegModel`](@ref), following Belsley, Kuh & Welsch (1980). Produced by
+[`influence_stats`](@ref).
+
+# Fields
+- `hat::Vector{T}` — hat-matrix diagonals (leverage) `h_ii = x_i'(X'X)⁻¹x_i`.
+- `student_internal::Vector{T}` — internally studentized residuals (R `rstandard`).
+- `student_external::Vector{T}` — externally studentized residuals (R `rstudent`).
+- `dffits::Vector{T}` — `DFFITS_i = t*_i √(h_ii/(1−h_ii))`.
+- `cooksd::Vector{T}` — Cook's distance `D_i = (r_i²/k)·(h_ii/(1−h_ii))`.
+- `dfbetas::Matrix{T}` — `n × k` DFBETAS (per-observation, per-coefficient).
+- `sigma::T` — OLS residual standard error `√(SSR/(n−k))`.
+- `high_leverage::Vector{Int}` — indices flagged `h_ii > 2k/n` (BKW rule of thumb).
+- `influential::Vector{Int}` — indices flagged `|DFFITS_i| > 2√(k/n)`.
+- `varnames::Vector{String}` — coefficient names (columns of `dfbetas`).
+- `n::Int`, `k::Int` — sample size and number of regressors.
+
+# References
+- Belsley, D. A., Kuh, E. & Welsch, R. E. (1980). *Regression Diagnostics*. Wiley.
+- Cook, R. D. (1977). *Technometrics* 19(1), 15–18.
+"""
+struct InfluenceStats{T<:AbstractFloat}
+    hat::Vector{T}
+    student_internal::Vector{T}
+    student_external::Vector{T}
+    dffits::Vector{T}
+    cooksd::Vector{T}
+    dfbetas::Matrix{T}
+    sigma::T
+    high_leverage::Vector{Int}
+    influential::Vector{Int}
+    varnames::Vector{String}
+    n::Int
+    k::Int
+end
+
 # =============================================================================
 # LogitModel
 # =============================================================================

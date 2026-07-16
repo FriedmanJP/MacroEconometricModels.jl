@@ -98,6 +98,7 @@ const TEST_GROUPS = [
         "reg/test_selection.jl",   # EV-04 (#412): stepwise / best-subset / GETS
         "reg/test_tobit.jl",       # EV-17 (#425): Tobit + truncated regression
         "reg/test_reg_diagnostics.jl",   # EV-31 (#439): White/BP/Glejser/Harvey/BG/RESET
+        "reg/test_stability.jl",         # EV-32 (#440): recursive residuals / CUSUM(SQ) / Chow / influence
         "reg/test_ordered.jl",
         "reg/test_multinomial.jl",
         "midas/test_midas.jl",
@@ -422,6 +423,7 @@ else
         @testset "Panel VAR" begin include("pvar/test_pvar.jl") end
         @testset "Cross-Sectional Models" begin include("reg/test_reg.jl") end
         @testset "Reg Diagnostics" begin include("reg/test_reg_diagnostics.jl") end
+        @testset "Reg Stability" begin include("reg/test_stability.jl") end
         @testset "Ordered Models" begin include("reg/test_ordered.jl") end
         @testset "Multinomial Models" begin include("reg/test_multinomial.jl") end
         @testset "MIDAS Regression" begin include("midas/test_midas.jl") end
