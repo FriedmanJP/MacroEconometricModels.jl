@@ -226,6 +226,102 @@ function Base.show(io::IO, m::PenalizedRegModel{T}) where {T}
 end
 
 # =============================================================================
+# SelectionResult — variable selection (stepwise / best-subset / GETS) (EV-04, #412)
+# =============================================================================
+
+"""
+    SelectionResult{T}
+
+Result of automated regressor selection via [`select_variables`](@ref): stepwise
+(forward/backward/bidirectional), exhaustive best-subset, or the LSE
+general-to-specific (GETS) multi-path reduction.
+
+# Fields
+- `method::Symbol` — `:forward`, `:backward`, `:bidirectional`, `:best_subset`, or `:gets`.
+- `criterion::Symbol` — move criterion (`:pvalue`, `:aic`, `:bic`).
+- `selected::Vector{Int}` — selected column indices into the GUM (sorted; includes forced keeps).
+- `keep::Vector{Int}` — forced-in column indices (detected intercepts ∪ user `keep`).
+- `varnames::Vector{String}` — names of all GUM candidate columns.
+- `path::Vector{Tuple{Symbol,Int,T}}` — ordered search moves `(action, column, criterion value)`
+  where `action ∈ (:enter, :remove, :retain, :best_subset)`.
+- `terminal_models::Vector{Vector{Int}}` — GETS diagnostic-passing terminal column sets (empty otherwise).
+- `encompassing_f::Union{Nothing,T}` — parsimonious-encompassing F-statistic of the selection vs the GUM.
+- `encompassing_pval::Union{Nothing,T}` — its p-value.
+- `encompassing_df::Union{Nothing,Tuple{Int,Int}}` — `(q, n−k_gum)` F degrees of freedom.
+- `final::RegModel{T}` — the refit selected model (post-selection SEs are conditional-on-selection).
+- `n_gum::Int` — number of GUM candidate columns.
+
+# References
+- Hoover, K. D. & Perez, S. J. (1999). *Econometrics Journal* 2(2), 167-191.
+- Hendry, D. F. & Krolzig, H.-M. (2005). *Economic Journal* 115(502), C32-C61.
+- Pretis, F., Reade, J. J. & Sucarrat, G. (2018). *J. Statistical Software* 86(3).
+"""
+struct SelectionResult{T<:AbstractFloat}
+    method::Symbol
+    criterion::Symbol
+    selected::Vector{Int}
+    keep::Vector{Int}
+    varnames::Vector{String}
+    path::Vector{Tuple{Symbol,Int,T}}
+    terminal_models::Vector{Vector{Int}}
+    encompassing_f::Union{Nothing,T}
+    encompassing_pval::Union{Nothing,T}
+    encompassing_df::Union{Nothing,Tuple{Int,Int}}
+    final::RegModel{T}
+    n_gum::Int
+end
+
+function Base.show(io::IO, r::SelectionResult{T}) where {T}
+    method_str = r.method === :forward ? "Forward stepwise" :
+                 r.method === :backward ? "Backward stepwise" :
+                 r.method === :bidirectional ? "Bidirectional stepwise" :
+                 r.method === :best_subset ? "Best subset" : "General-to-Specific (GETS)"
+    crit_str = uppercase(string(r.criterion))
+
+    spec = Any[
+        "Method"            method_str;
+        "Criterion"         crit_str;
+        "GUM regressors"    r.n_gum;
+        "Selected"          length(r.selected);
+        "Observations"      length(r.final.y)
+    ]
+    if r.method === :gets
+        spec = vcat(spec, Any["Terminal models" length(r.terminal_models)])
+    end
+    if r.encompassing_f !== nothing
+        spec = vcat(spec, Any[
+            "Encompassing F"    _fmt(r.encompassing_f; digits=3);
+            "Encompassing p"    _format_pvalue(r.encompassing_pval)])
+    end
+    _pretty_table(io, spec;
+        title = "Variable Selection — $method_str",
+        column_labels = ["Specification", ""],
+        alignment = [:l, :r])
+
+    # Search path (omit the trivial best-subset marker row).
+    steps = filter(s -> s[1] !== :best_subset, r.path)
+    if !isempty(steps)
+        data = Matrix{Any}(undef, length(steps), 4)
+        for (i, s) in enumerate(steps)
+            act = s[1] === :enter ? "enter" : s[1] === :remove ? "remove" : "retain"
+            data[i, 1] = i
+            data[i, 2] = act
+            data[i, 3] = r.varnames[s[2]]
+            data[i, 4] = _fmt(s[3])
+        end
+        cval = r.criterion === :pvalue ? "p-value" : crit_str
+        _pretty_table(io, data;
+            title = "Search Path",
+            column_labels = ["Step", "Action", "Variable", cval],
+            alignment = [:r, :l, :l, :r])
+    end
+
+    println(io)
+    println(io, "Selected model (post-selection SEs are conditional-on-selection):")
+    show(io, r.final)
+end
+
+# =============================================================================
 # LogitModel
 # =============================================================================
 

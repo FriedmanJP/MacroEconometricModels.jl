@@ -782,6 +782,60 @@ plot_result(lasso; view=:cv)     # CV MSE curve with λ_min / 1-SE markers
 
 ---
 
+## Variable Selection: Stepwise and General-to-Specific
+
+When the general unrestricted model (GUM) carries more regressors than theory pins down, [`select_variables`](@ref) automates the specification search on top of the OLS stack. It returns a [`SelectionResult`](@ref) holding the search path, the selected column set, a parsimonious-encompassing test, and a refit [`RegModel`](@ref) (the `.final` field) so `report`, `predict`, and `refs` work unchanged. Three search families are available:
+
+- **Stepwise** (`:forward`, `:backward`, `:bidirectional`) adds or drops one regressor at a time, by coefficient p-value (`criterion=:pvalue`) or by information criterion (`:aic`/`:bic`).
+- **Best subset** (`:best_subset`) is an exhaustive search over all subsets, minimizing the chosen information criterion (feasible only for small candidate sets).
+- **GETS** (`:gets`) is the LSE general-to-specific reduction (Hoover & Perez 1999; Hendry & Krolzig 2005): multi-path backward elimination from the GUM, gated at each deletion by a misspecification battery — the Breusch–Godfrey serial-correlation LM test and the Jarque–Bera normality test.
+
+**Stepwise search.** Forward selection enters the most significant candidate below `p_enter`; backward elimination drops the least significant term above `p_remove`; bidirectional alternates. For information-criterion moves each accepted step must strictly improve the criterion, which guarantees termination at a local optimum.
+
+```@example reg
+Random.seed!(11)
+nsel = 150
+Xsel = hcat(ones(nsel), randn(nsel, 8))
+beta_sel = zeros(9); beta_sel[[1, 2, 4, 6]] .= [1.0, 3.0, -2.5, 2.0]  # 3 active slopes
+ysel = Xsel * beta_sel + 0.6 * randn(nsel)
+fw = select_variables(ysel, Xsel; method=:forward, criterion=:bic)
+report(fw)
+```
+
+The intercept (a numerically constant column) is detected and always kept, as are any columns passed via `keep`. On a strong-signal design forward and backward stepwise reach the same subset as an exhaustive best-subset search.
+
+**General-to-specific (GETS).** GETS starts from the full GUM and follows multiple deletion paths, each seeded by removing a different insignificant regressor, deleting the least-significant term at every node. A deletion is accepted only if the reduced model still passes the diagnostic gate; the diagnostic-passing terminal models are collected and the final model is the one with the best information criterion. A parsimonious-encompassing ``F``-test of the selection against the GUM is stored in `encompassing_f`/`encompassing_pval`.
+
+```@example reg
+Random.seed!(42)
+ngets = 200
+Xgum = hcat(ones(ngets), randn(ngets, 20))          # 20 candidates + intercept
+beta_gum = zeros(21); beta_gum[[2, 5, 8, 11, 14]] .= 1.5   # 5 true regressors
+ygets = Xgum * beta_gum + randn(ngets)
+gets = select_variables(ygets, Xgum; method=:gets)
+gets.selected                                        # retained column indices
+```
+
+GETS retains all five true regressors and drops the vast majority of the irrelevant ones; the encompassing test does not reject the reduction against the GUM.
+
+```@example reg
+gets.encompassing_pval   # parsimonious-encompassing F p-value (selection vs GUM)
+```
+
+| Keyword | Type | Default | Description |
+|---|---|---|---|
+| `method` | `Symbol` | `:bidirectional` | `:forward`, `:backward`, `:bidirectional`, `:best_subset`, `:gets` |
+| `criterion` | `Symbol` | `:pvalue` | Move criterion: `:pvalue`, `:aic`, `:bic` |
+| `p_enter` / `p_remove` | `Real` | `0.05` / `0.10` | Stepwise entry / removal levels (require `p_remove ≥ p_enter`) |
+| `p_gets` | `Real` | `0.05` | GETS deletion significance level |
+| `diag_level` | `Real` | `0.05` | GETS misspecification-gate level |
+| `keep` | `Vector{Int}` | `nothing` | Columns forced into every model |
+
+!!! warning "Post-selection inference is invalid"
+    The standard errors, ``t``-statistics, and p-values on `result.final` are **conditional on the selected specification** and ignore the search that produced them; they are not valid unconditional inference. Report them as descriptive, not as a basis for hypothesis tests. For a shrinkage alternative that regularizes rather than searches, see the Penalized Regression section above — `estimate_lasso` selects a sparse model along a single tuning path.
+
+---
+
 ## Censored and Truncated Regression: Tobit
 
 Many economic outcomes are *limited dependent variables*: hours worked, corner-solution expenditures, capped survey responses, and zero-bounded durations pile up at a boundary or are only observed over part of their range. OLS on such data is biased and inconsistent. Two distinct sampling schemes call for two estimators:
@@ -956,6 +1010,15 @@ The OLS estimate of the return to education is biased upward because ability is 
 
 - Hansen, L. P. (1982). Large Sample Properties of Generalized Method of Moments Estimators.
   *Econometrica*, 50(4), 1029-1054. [DOI](https://doi.org/10.2307/1912775)
+
+- Hendry, D. F., & Krolzig, H.-M. (2005). The Properties of Automatic Gets Modelling.
+  *Economic Journal*, 115(502), C32-C61. [DOI](https://doi.org/10.1111/j.0013-0133.2005.00979.x)
+
+- Hoover, K. D., & Perez, S. J. (1999). Data Mining Reconsidered: Encompassing and the General-to-Specific Approach to Specification Search.
+  *Econometrics Journal*, 2(2), 167-191. [DOI](https://doi.org/10.1111/1368-423X.00025)
+
+- Pretis, F., Reade, J. J., & Sucarrat, G. (2018). Automated General-to-Specific (GETS) Regression Modeling and Indicator Saturation for Outliers and Structural Breaks.
+  *Journal of Statistical Software*, 86(3), 1-44. [DOI](https://doi.org/10.18637/jss.v086.i03)
 
 - MacKinnon, J. G., & White, H. (1985). Some Heteroskedasticity-Consistent Covariance Matrix Estimators with Improved Finite Sample Properties.
   *Journal of Econometrics*, 29(3), 305-325. [DOI](https://doi.org/10.1016/0304-4076(85)90158-7)

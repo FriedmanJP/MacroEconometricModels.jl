@@ -119,6 +119,7 @@ include("reg/types.jl")
 include("reg/covariance.jl")
 include("reg/estimation.jl")
 include("reg/penalized.jl")   # EV-03 (#411): ridge / LASSO / elastic net — after estimation.jl
+include("reg/selection.jl")   # EV-04 (#412): stepwise / best-subset / GETS variable selection
 include("reg/iv.jl")
 include("reg/logit.jl")
 include("reg/probit.jl")
@@ -1072,6 +1073,9 @@ export estimate_reg, estimate_iv, estimate_logit, estimate_probit
 
 # Penalized regression — EV-03 (#411)
 export PenalizedRegModel, estimate_ridge, estimate_lasso, estimate_elastic_net
+
+# Variable selection — EV-04 (#412): stepwise / best-subset / GETS
+export select_variables, SelectionResult
 
 # Censored / truncated regression — EV-17 (#425)
 export TobitModel, TruncRegModel, estimate_tobit, estimate_truncreg

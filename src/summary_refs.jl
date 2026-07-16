@@ -994,6 +994,22 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         journal="Journal of the American Statistical Association",
         volume="101", issue="476", pages="1418--1429",
         doi="10.1198/016214506000000735", isbn="", publisher="", entry_type=:article),
+    # Variable selection — stepwise / GETS (EV-04, #412)
+    :hoover_perez1999 => (key=:hoover_perez1999,
+        authors="Hoover, Kevin D. and Perez, Stephen J.", year=1999,
+        title="Data Mining Reconsidered: Encompassing and the General-to-Specific Approach to Specification Search",
+        journal="Econometrics Journal", volume="2", issue="2", pages="167--191",
+        doi="10.1111/1368-423X.00025", isbn="", publisher="", entry_type=:article),
+    :hendry_krolzig2005 => (key=:hendry_krolzig2005,
+        authors="Hendry, David F. and Krolzig, Hans-Martin", year=2005,
+        title="The Properties of Automatic Gets Modelling",
+        journal="Economic Journal", volume="115", issue="502", pages="C32--C61",
+        doi="10.1111/j.0013-0133.2005.00979.x", isbn="", publisher="", entry_type=:article),
+    :pretis2018 => (key=:pretis2018,
+        authors="Pretis, Felix and Reade, J. James and Sucarrat, Genaro", year=2018,
+        title="Automated General-to-Specific (GETS) Regression Modeling and Indicator Saturation for Outliers and Structural Breaks",
+        journal="Journal of Statistical Software", volume="86", issue="3", pages="1--44",
+        doi="10.18637/jss.v086.i03", isbn="", publisher="", entry_type=:article),
     :friedman2010 => (key=:friedman2010,
         authors="Friedman, Jerome and Hastie, Trevor and Tibshirani, Robert", year=2010,
         title="Regularization Paths for Generalized Linear Models via Coordinate Descent",
@@ -1437,6 +1453,9 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :estimate_lasso => [:tibshirani1996, :friedman2010],
     :estimate_ridge => [:hoerl_kennard1970, :friedman2010],
     :estimate_elastic_net => [:zou_hastie2005, :friedman2010, :zou2006],
+    # Variable selection — stepwise / best-subset / GETS (EV-04, #412)
+    :SelectionResult => [:hoover_perez1999, :hendry_krolzig2005, :pretis2018],
+    :select_variables => [:hoover_perez1999, :hendry_krolzig2005, :pretis2018],
     # Censored / truncated regression (EV-17, #425)
     :TobitModel => [:tobin1958, :olsen1978, :mcdonald_moffitt1980, :wooldridge2010],
     :TruncRegModel => [:hausman_wise1977, :wooldridge2010],
@@ -1874,6 +1893,9 @@ function refs(io::IO, m::PenalizedRegModel; kw...)
     m.post && push!(ks, :belloni_chernozhukov2013)
     refs(io, ks; kw...)
 end
+
+# Variable selection — stepwise / best-subset / GETS (EV-04, #412)
+refs(io::IO, ::SelectionResult; kw...) = refs(io, _TYPE_REFS[:SelectionResult]; kw...)
 
 # Censored / truncated regression (EV-17, #425)
 refs(io::IO, ::TobitModel; kw...) = refs(io, _TYPE_REFS[:TobitModel]; kw...)
