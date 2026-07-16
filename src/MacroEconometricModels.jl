@@ -149,6 +149,15 @@ include("ardl/nardl.jl")
 # Panel ARDL — PMG/MG/DFE (EV-23, #431); included after preg/ so it can reuse
 # _panel_cluster_vcov and _hausman_quadratic_form (see the include block below).
 
+# Forecast evaluation & combination (EV-39, #447) — model-agnostic accuracy
+# metrics, DM/CW/MZ/encompassing tests, and combination. Reuses newey_west
+# (src/core/covariance.jl), robust_inv, _coef_table. plot_result dispatch lives
+# in src/plotting/forecast.jl (included later).
+include("fceval/types.jl")
+include("fceval/metrics.jl")
+include("fceval/tests.jl")
+include("fceval/combine.jl")
+
 # VAR types and estimation
 include("var/types.jl")
 include("var/estimation.jl")
@@ -1131,6 +1140,15 @@ export estimate_nardl, symmetry_test, dynamic_multipliers,
 # =============================================================================
 
 export estimate_pmg, PMGModel
+
+# =============================================================================
+# Exports — Forecast Evaluation & Combination (EV-39, #447)
+# =============================================================================
+
+export forecast_evaluate, diebold_mariano, clark_west, mincer_zarnowitz,
+       forecast_encompassing, combine_forecasts,
+       ForecastEvaluation, DMTestResult, ClarkWestResult, MincerZarnowitzResult,
+       ForecastEncompassingResult, ForecastCombination
 
 # =============================================================================
 # Exports - Plotting

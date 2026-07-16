@@ -1204,6 +1204,58 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Estimation of Nonstationary Heterogeneous Panels",
         journal="Stata Journal", volume="7", issue="2", pages="197--208",
         doi="10.1177/1536867X0700700204", isbn="", publisher="", entry_type=:article),
+    # --- Forecast evaluation & combination (EV-39, #447) ---
+    :diebold_mariano1995 => (key=:diebold_mariano1995,
+        authors="Diebold, Francis X. and Mariano, Roberto S.", year=1995,
+        title="Comparing Predictive Accuracy",
+        journal="Journal of Business \\& Economic Statistics", volume="13", issue="3",
+        pages="253--263", doi="10.1080/07350015.1995.10524599",
+        isbn="", publisher="", entry_type=:article),
+    :harvey_leybourne_newbold1997 => (key=:harvey_leybourne_newbold1997,
+        authors="Harvey, David and Leybourne, Stephen and Newbold, Paul", year=1997,
+        title="Testing the Equality of Prediction Mean Squared Errors",
+        journal="International Journal of Forecasting", volume="13", issue="2",
+        pages="281--291", doi="10.1016/S0169-2070(96)00719-4",
+        isbn="", publisher="", entry_type=:article),
+    :harvey_leybourne_newbold1998 => (key=:harvey_leybourne_newbold1998,
+        authors="Harvey, David I. and Leybourne, Stephen J. and Newbold, Paul", year=1998,
+        title="Tests for Forecast Encompassing",
+        journal="Journal of Business \\& Economic Statistics", volume="16", issue="2",
+        pages="254--259", doi="10.1080/07350015.1998.10524759",
+        isbn="", publisher="", entry_type=:article),
+    :clark_west2007 => (key=:clark_west2007,
+        authors="Clark, Todd E. and West, Kenneth D.", year=2007,
+        title="Approximately Normal Tests for Equal Predictive Accuracy in Nested Models",
+        journal="Journal of Econometrics", volume="138", issue="1", pages="291--311",
+        doi="10.1016/j.jeconom.2006.05.023", isbn="", publisher="", entry_type=:article),
+    :bates_granger1969 => (key=:bates_granger1969,
+        authors="Bates, J. M. and Granger, C. W. J.", year=1969,
+        title="The Combination of Forecasts",
+        journal="Operational Research Quarterly", volume="20", issue="4", pages="451--468",
+        doi="10.1057/jors.1969.103", isbn="", publisher="", entry_type=:article),
+    :granger_ramanathan1984 => (key=:granger_ramanathan1984,
+        authors="Granger, C. W. J. and Ramanathan, Ramu", year=1984,
+        title="Improved Methods of Combining Forecasts",
+        journal="Journal of Forecasting", volume="3", issue="2", pages="197--204",
+        doi="10.1002/for.3980030207", isbn="", publisher="", entry_type=:article),
+    :mincer_zarnowitz1969 => (key=:mincer_zarnowitz1969,
+        authors="Mincer, Jacob A. and Zarnowitz, Victor", year=1969,
+        title="The Evaluation of Economic Forecasts",
+        journal="", volume="", issue="", pages="3--46", doi="",
+        isbn="0-870-14202-X",
+        publisher="NBER (Mincer, ed., Economic Forecasts and Expectations)",
+        entry_type=:incollection),
+    :theil1966 => (key=:theil1966,
+        authors="Theil, Henri", year=1966,
+        title="Applied Economic Forecasting",
+        journal="", volume="", issue="", pages="", doi="", isbn="",
+        publisher="North-Holland, Amsterdam", entry_type=:book),
+    :hyndman_koehler2006 => (key=:hyndman_koehler2006,
+        authors="Hyndman, Rob J. and Koehler, Anne B.", year=2006,
+        title="Another Look at Measures of Forecast Accuracy",
+        journal="International Journal of Forecasting", volume="22", issue="4",
+        pages="679--688", doi="10.1016/j.ijforecast.2006.03.001",
+        isbn="", publisher="", entry_type=:article),
 )
 
 # --- Type/method → reference keys mapping ---
@@ -1316,6 +1368,13 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     # Panel ARDL: PMG / MG / DFE (EV-23, #431)
     :PMGModel => [:pesaran_shin_smith1999, :pesaran_smith1995, :blackburne_frank2007],
     :estimate_pmg => [:pesaran_shin_smith1999, :pesaran_smith1995, :blackburne_frank2007],
+    # Forecast evaluation & combination (EV-39, #447)
+    :ForecastEvaluation => [:theil1966, :hyndman_koehler2006],
+    :DMTestResult => [:diebold_mariano1995, :harvey_leybourne_newbold1997],
+    :ClarkWestResult => [:clark_west2007],
+    :MincerZarnowitzResult => [:mincer_zarnowitz1969],
+    :ForecastEncompassingResult => [:harvey_leybourne_newbold1998],
+    :ForecastCombination => [:bates_granger1969, :granger_ramanathan1984],
     # GMM
     :GMMModel => [:hansen1982],
     :gmm => [:hansen1982],
@@ -2045,6 +2104,14 @@ function refs(io::IO, r::RegDiagnosticResult; kw...)
                                               _TYPE_REFS[:RegDiagnosticResult]
     refs(io, ks; kw...)
 end
+
+# Forecast evaluation & combination (EV-39, #447)
+refs(io::IO, ::ForecastEvaluation; kw...) = refs(io, _TYPE_REFS[:ForecastEvaluation]; kw...)
+refs(io::IO, ::DMTestResult; kw...) = refs(io, _TYPE_REFS[:DMTestResult]; kw...)
+refs(io::IO, ::ClarkWestResult; kw...) = refs(io, _TYPE_REFS[:ClarkWestResult]; kw...)
+refs(io::IO, ::MincerZarnowitzResult; kw...) = refs(io, _TYPE_REFS[:MincerZarnowitzResult]; kw...)
+refs(io::IO, ::ForecastEncompassingResult; kw...) = refs(io, _TYPE_REFS[:ForecastEncompassingResult]; kw...)
+refs(io::IO, ::ForecastCombination; kw...) = refs(io, _TYPE_REFS[:ForecastCombination]; kw...)
 
 # --- Convenience: stdout fallback ---
 function refs(x; kw...)

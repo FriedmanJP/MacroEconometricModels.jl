@@ -99,6 +99,7 @@ makedocs(;
             "News Decomposition" => "nowcast_news.md",
             "MIDAS Regression" => "midas.md",
         ],
+        "Forecast Evaluation" => "forecast_evaluation.md",
         "Hypothesis Tests" => [
             "Overview" => "tests.md",
             "Unit Root & Cointegration" => "tests_unitroot.md",
