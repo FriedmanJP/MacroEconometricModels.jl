@@ -116,6 +116,67 @@ The ``t``-bounds are tabulated only for cases I, III, and V (cases II and IV res
 
 ---
 
+## Asymmetric ARDL (NARDL)
+
+The nonlinear ARDL of Shin, Yu & Greenwood-Nimmo (2014) lets a regressor push ``y`` differently when it rises than when it falls. Each *asymmetric* regressor ``x_j`` is decomposed into positive and negative **partial sums**,
+
+```math
+x^{+}_{j,t} = \sum_{s\le t}\max(\Delta x_{j,s},0), \qquad
+x^{-}_{j,t} = \sum_{s\le t}\min(\Delta x_{j,s},0),
+```
+
+with ``x^{+}_{j,0}=x^{-}_{j,0}=0``, so that ``x_{j,t}=x_{j,1}+x^{+}_{j,t}+x^{-}_{j,t}`` exactly. The two partial sums are cumulated **levels** (``I(1)`` like ``x``) and replace ``x_j`` in the ARDL. `estimate_nardl` builds this enlarged design and hands it to the same estimation, `long_run`, and `bounds_test` machinery — so an asymmetric regressor contributes **two** columns to the bounds-table ``k``.
+
+```@example ardl
+using Random
+# Asymmetric DGP: y reacts to x⁺ with θ⁺ = 1.5 and to x⁻ with θ⁻ = -0.5
+Random.seed!(909)
+n = 260
+xa = cumsum(randn(n))
+dxa = [0.0; diff(xa)]
+xap = cumsum(max.(dxa, 0.0)); xan = cumsum(min.(dxa, 0.0))
+ya = zeros(n)
+for t in 2:n
+    ya[t] = ya[t-1] - 0.4 * (ya[t-1] - (1.5*xap[t-1] - 0.5*xan[t-1])) +
+            0.25*dxa[t-1] + 0.4*randn()
+end
+
+nm = estimate_nardl(ya, xa; asymmetric=:all, p=1, q=1, case=3)
+report(nm)
+```
+
+The long-run block now carries a separate ``\theta^{+}`` (`…_POS`) and ``\theta^{-}`` (`…_NEG`), and the bounds test is read at the enlarged ``k``:
+
+```@example ardl
+lr = long_run(nm)
+println("θ⁺ = ", round(lr.theta[1], digits=3), "   θ⁻ = ", round(lr.theta[2], digits=3))
+println("bounds k (enlarged) = ", nm.bounds.k)
+```
+
+`symmetry_test` runs, per asymmetric regressor, a **long-run** symmetry Wald ``H_0:\theta^{+}=\theta^{-}`` (delta method) and a **short-run** symmetry Wald ``H_0:\sum_\ell\pi^{+}_\ell=\sum_\ell\pi^{-}_\ell`` on the ECM differenced-term coefficients. Each single-restriction statistic is a ``\chi^2(1)`` (equivalently ``F(1,n-K)``):
+
+```@example ardl
+st = symmetry_test(nm)
+report(st)
+```
+
+`dynamic_multipliers(nm, H)` recursively iterates the estimated ARDL to a unit permanent shock in ``x^{+}`` (then ``x^{-}``), giving the cumulative dynamic multipliers ``m^{+}_h`` and ``m^{-}_h``, which converge to ``\theta^{+}`` and ``\theta^{-}``. Pointwise bands come from a recursive-design (condition-on-``x``) residual bootstrap:
+
+```@example ardl
+mm = dynamic_multipliers(nm, 24; bootstrap=true, nreps=200, level=0.90,
+                         rng=MersenneTwister(1))
+println("m⁺(24) = ", round(mm.m_pos[1, end], digits=3),
+        "  →  θ⁺ = ", round(mm.theta_pos[1], digits=3))
+```
+
+Plot the multipliers (``m^{+}_h``, ``m^{-}_h``, and the asymmetry curve ``m^{+}_h-m^{-}_h`` with their bands):
+
+```julia
+plot_result(mm; view=:multipliers)          # or plot_result(nm; view=:multipliers, H=24)
+```
+
+---
+
 ## Complete Example
 
 ```@example ardl
@@ -170,3 +231,4 @@ refs(m)
 - Pesaran, M. H., Shin, Y. & Smith, R. J. (2001). Bounds Testing Approaches to the Analysis of Level Relationships. *Journal of Applied Econometrics* 16(3), 289–326.
 - Narayan, P. K. (2005). The Saving and Investment Nexus for China: Evidence from Cointegration Tests. *Applied Economics* 37(17), 1979–1990.
 - Kripfganz, S. & Schneider, D. C. (2023). ARDL: Estimating Autoregressive Distributed Lag and Equilibrium Correction Models. *Stata Journal* 23(4), 983–1019.
+- Shin, Y., Yu, B. & Greenwood-Nimmo, M. (2014). *Modelling Asymmetric Cointegration and Dynamic Multipliers in a Nonlinear ARDL Framework*. In Sickles & Horrace (eds.), Festschrift in Honor of Peter Schmidt, Springer, 281–314.

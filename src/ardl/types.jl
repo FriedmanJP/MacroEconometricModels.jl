@@ -174,3 +174,139 @@ struct ARDLBoundsTest{T<:AbstractFloat}
     t_decision::Symbol
     n::Int
 end
+
+# =============================================================================
+# Nonlinear ARDL (NARDL) — Shin–Yu–Greenwood-Nimmo (2014) — EV-09 (#417)
+# =============================================================================
+
+"""
+    NARDLModel{T<:AbstractFloat}
+
+Nonlinear autoregressive distributed-lag (NARDL) model of Shin, Yu &
+Greenwood-Nimmo (2014). Each regressor flagged `asymmetric` is decomposed into
+positive/negative partial sums
+
+```math
+x^{+}_{j,t} = \\sum_{s\\le t}\\max(\\Delta x_{j,s},0), \\qquad
+x^{-}_{j,t} = \\sum_{s\\le t}\\min(\\Delta x_{j,s},0), \\qquad x^{+}_{j,0}=x^{-}_{j,0}=0,
+```
+
+and the pair `(x⁺_j, x⁻_j)` replaces `x_j` in an ARDL conditional error-correction
+model. The enlarged design is estimated by the reused EV-08 [`estimate_ardl`](@ref)
+machinery, so the long-run coefficients, the ECM re-parameterisation, and the
+[`bounds_test`](@ref) all operate on the split regressors. Crucially, an
+asymmetric regressor contributes **two** columns to the number-of-regressors `k`
+that indexes the Pesaran–Shin–Smith bounds table — the enlarged `k` is what the
+stored [`ARDLBoundsTest`](@ref) uses.
+
+# Fields
+- `ardl::ARDLModel{T}`: the underlying ARDL fit on the enlarged (split) design.
+- `bounds::ARDLBoundsTest{T}`: PSS bounds test on the enlarged specification (`k` enlarged).
+- `y::Vector{T}`: dependent variable (full sample, `N`-vector).
+- `X::Matrix{T}`: original regressors (`N × k₀`).
+- `Xsplit::Matrix{T}`: enlarged design handed to `estimate_ardl` (`N × k`).
+- `asym::Vector{Int}`: original-column indices that were split into partial sums.
+- `meta::Vector{Tuple{Int,Symbol}}`: one entry per enlarged regressor — `(orig_index, kind)`
+  with `kind ∈ (:pos, :neg, :sym)`, aligned with `ardl.q` / `ardl.x_idx`.
+- `k_orig::Int`, `k::Int`: original and enlarged regressor counts.
+- `xnames::Vector{String}`: original regressor labels (`k₀`-vector).
+- `enames::Vector{String}`: enlarged regressor labels (`k`-vector, e.g. `"x1_POS"`).
+- `yname::String`: dependent-variable label.
+
+# References
+- Shin, Y., Yu, B. & Greenwood-Nimmo, M. (2014). *Modelling Asymmetric Cointegration
+  and Dynamic Multipliers in a Nonlinear ARDL Framework.* In Festschrift in Honor of
+  Peter Schmidt, Springer, 281–314.
+"""
+struct NARDLModel{T<:AbstractFloat}
+    ardl::ARDLModel{T}
+    bounds::ARDLBoundsTest{T}
+    y::Vector{T}
+    X::Matrix{T}
+    Xsplit::Matrix{T}
+    asym::Vector{Int}
+    meta::Vector{Tuple{Int,Symbol}}
+    k_orig::Int
+    k::Int
+    xnames::Vector{String}
+    enames::Vector{String}
+    yname::String
+end
+
+"""
+    NARDLSymmetryTest{T<:AbstractFloat}
+
+Long- and short-run symmetry Wald tests for a [`NARDLModel`](@ref), one row per
+asymmetric regressor. The long-run test is `H₀: θ⁺_j = θ⁻_j` (a delta-method Wald
+on the long-run coefficients, whose Jacobian carries the `1 − Σφ̂` denominator);
+the short-run test is `H₀: Σ_ℓ π⁺_{jℓ} = Σ_ℓ π⁻_{jℓ}` on the differenced-term
+coefficients of the conditional ECM (a linear restriction on the levels
+coefficients). Each single-restriction statistic is reported both as a `χ²(1)` and
+as an `F(1, n−K)` with the matching p-value.
+
+# Fields
+- `reg_index::Vector{Int}`, `reg_names::Vector{String}`: asymmetric regressors tested.
+- `lr_stat::Vector{T}`, `lr_p_chi2::Vector{T}`, `lr_p_f::Vector{T}`: long-run Wald `χ²`, χ²- and F-p-values.
+- `sr_stat::Vector{T}`, `sr_p_chi2::Vector{T}`, `sr_p_f::Vector{T}`: short-run Wald `χ²`, χ²- and F-p-values.
+- `theta_pos::Vector{T}`, `theta_neg::Vector{T}`: long-run θ⁺_j / θ⁻_j.
+- `df::Int`: numerator degrees of freedom (1 per single-restriction test).
+- `dof_resid::Int`: residual degrees of freedom `n − K` (F-denominator).
+
+# References
+- Shin, Y., Yu, B. & Greenwood-Nimmo, M. (2014).
+"""
+struct NARDLSymmetryTest{T<:AbstractFloat}
+    reg_index::Vector{Int}
+    reg_names::Vector{String}
+    lr_stat::Vector{T}
+    lr_p_chi2::Vector{T}
+    lr_p_f::Vector{T}
+    sr_stat::Vector{T}
+    sr_p_chi2::Vector{T}
+    sr_p_f::Vector{T}
+    theta_pos::Vector{T}
+    theta_neg::Vector{T}
+    df::Int
+    dof_resid::Int
+end
+
+"""
+    NARDLMultipliers{T<:AbstractFloat}
+
+Cumulative dynamic multipliers of a [`NARDLModel`](@ref): the response of `y` to a
+unit permanent (step) change in each asymmetric regressor's positive and negative
+partial sum, obtained by recursively iterating the estimated ARDL difference
+equation. `m⁺_{j,h}` and `m⁻_{j,h}` converge to the long-run θ⁺_j / θ⁻_j as
+`h → ∞`. Optional pointwise percentile bands come from a recursive-design
+(condition-on-`x`) residual bootstrap.
+
+# Fields
+- `horizons::Vector{Int}`: `0:H`.
+- `reg_index::Vector{Int}`, `reg_names::Vector{String}`: asymmetric regressors.
+- `m_pos::Matrix{T}`, `m_neg::Matrix{T}`: multipliers, `n_asym × (H+1)`.
+- `m_diff::Matrix{T}`: the asymmetry curve `m⁺ − m⁻`.
+- `m_pos_lo/hi`, `m_neg_lo/hi`, `m_diff_lo/hi::Matrix{T}`: bootstrap bands (empty if `nreps==0`).
+- `theta_pos::Vector{T}`, `theta_neg::Vector{T}`: long-run limits.
+- `nreps::Int`, `level::T`: bootstrap replications and band coverage.
+
+# References
+- Shin, Y., Yu, B. & Greenwood-Nimmo, M. (2014).
+"""
+struct NARDLMultipliers{T<:AbstractFloat}
+    horizons::Vector{Int}
+    reg_index::Vector{Int}
+    reg_names::Vector{String}
+    m_pos::Matrix{T}
+    m_neg::Matrix{T}
+    m_diff::Matrix{T}
+    m_pos_lo::Matrix{T}
+    m_pos_hi::Matrix{T}
+    m_neg_lo::Matrix{T}
+    m_neg_hi::Matrix{T}
+    m_diff_lo::Matrix{T}
+    m_diff_hi::Matrix{T}
+    theta_pos::Vector{T}
+    theta_neg::Vector{T}
+    nreps::Int
+    level::T
+end

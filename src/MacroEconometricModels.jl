@@ -143,6 +143,9 @@ include("midas/forecast.jl")
 include("ardl/types.jl")
 include("ardl/estimation.jl")
 include("ardl/bounds.jl")
+# Nonlinear ARDL (NARDL, EV-09, #417) — extends the EV-08 scaffold: reuses
+# estimate_ardl / long_run / bounds_test on the partial-sum-split design.
+include("ardl/nardl.jl")
 
 # VAR types and estimation
 include("var/types.jl")
@@ -483,6 +486,7 @@ include("plotting/penalized.jl")   # EV-03 (#411): coefficient-path / CV-curve p
 include("plotting/spectral.jl")
 include("plotting/io.jl")
 include("plotting/nonlinear.jl")
+include("plotting/ardl.jl")          # EV-09 (#417): NARDL dynamic-multiplier plots
 
 # =============================================================================
 # Exports - Types
@@ -1112,6 +1116,9 @@ export estimate_midas, MidasModel, MidasForecast, midas_weights
 # =============================================================================
 
 export estimate_ardl, bounds_test, long_run, ARDLModel, ARDLBoundsTest
+# NARDL — nonlinear (asymmetric) ARDL (EV-09, #417)
+export estimate_nardl, symmetry_test, dynamic_multipliers,
+       NARDLModel, NARDLSymmetryTest, NARDLMultipliers
 
 # =============================================================================
 # Exports - Plotting

@@ -1179,6 +1179,14 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="ARDL: Estimating Autoregressive Distributed Lag and Equilibrium Correction Models",
         journal="Stata Journal", volume="23", issue="4", pages="983--1019",
         doi="10.1177/1536867X231212434", isbn="", publisher="", entry_type=:article),
+    # --- Nonlinear ARDL (NARDL, EV-09, #417) ---
+    :shin_yu_greenwood_nimmo2014 => (key=:shin_yu_greenwood_nimmo2014,
+        authors="Shin, Yongcheol and Yu, Byungchul and Greenwood-Nimmo, Matthew", year=2014,
+        title="Modelling Asymmetric Cointegration and Dynamic Multipliers in a Nonlinear ARDL Framework",
+        journal="", volume="", issue="", pages="281--314", doi="10.1007/978-1-4899-8008-3_9",
+        isbn="978-1-4899-8007-6",
+        publisher="Springer (Sickles and Horrace, eds., Festschrift in Honor of Peter Schmidt)",
+        entry_type=:incollection),
 )
 
 # --- Type/method → reference keys mapping ---
@@ -1283,6 +1291,11 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :ARDLModel => [:pesaran_shin1999, :pesaran_shin_smith2001, :kripfganz_schneider2023],
     :ARDLBoundsTest => [:pesaran_shin_smith2001, :narayan2005],
     :ardl => [:pesaran_shin1999, :pesaran_shin_smith2001, :narayan2005, :kripfganz_schneider2023],
+    # NARDL — nonlinear ARDL (EV-09, #417)
+    :NARDLModel => [:shin_yu_greenwood_nimmo2014, :pesaran_shin_smith2001],
+    :NARDLSymmetryTest => [:shin_yu_greenwood_nimmo2014],
+    :NARDLMultipliers => [:shin_yu_greenwood_nimmo2014],
+    :nardl => [:shin_yu_greenwood_nimmo2014, :pesaran_shin_smith2001],
     # GMM
     :GMMModel => [:hansen1982],
     :gmm => [:hansen1982],
@@ -1805,6 +1818,10 @@ refs(io::IO, ::MidasForecast; kw...) = refs(io, _TYPE_REFS[:MidasForecast]; kw..
 # ARDL & bounds test (EV-08, #416)
 refs(io::IO, ::ARDLModel; kw...) = refs(io, _TYPE_REFS[:ARDLModel]; kw...)
 refs(io::IO, ::ARDLBoundsTest; kw...) = refs(io, _TYPE_REFS[:ARDLBoundsTest]; kw...)
+# NARDL — nonlinear ARDL (EV-09, #417)
+refs(io::IO, ::NARDLModel; kw...) = refs(io, _TYPE_REFS[:NARDLModel]; kw...)
+refs(io::IO, ::NARDLSymmetryTest; kw...) = refs(io, _TYPE_REFS[:NARDLSymmetryTest]; kw...)
+refs(io::IO, ::NARDLMultipliers; kw...) = refs(io, _TYPE_REFS[:NARDLMultipliers]; kw...)
 
 # GMM
 refs(io::IO, ::GMMModel; kw...) = refs(io, _TYPE_REFS[:GMMModel]; kw...)

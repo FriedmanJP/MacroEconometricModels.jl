@@ -104,6 +104,7 @@ const TEST_GROUPS = [
         "reg/test_multinomial.jl",
         "midas/test_midas.jl",
         "ardl/test_ardl.jl",   # EV-08 (#416): ARDL + PSS bounds test
+        "ardl/test_nardl.jl",  # EV-09 (#417): nonlinear ARDL (NARDL) + dynamic multipliers
         "cointreg/test_cointreg.jl",   # EV-10 (#418): FMOLS/CCR/DOLS cointegrating regression
         "preg/test_panel_reg.jl",
         "preg/test_panel_tests.jl",
@@ -430,6 +431,7 @@ else
         @testset "Multinomial Models" begin include("reg/test_multinomial.jl") end
         @testset "MIDAS Regression" begin include("midas/test_midas.jl") end
         @testset "ARDL & Bounds Test" begin include("ardl/test_ardl.jl") end
+        @testset "NARDL" begin include("ardl/test_nardl.jl") end
         @testset "Panel Regression" begin include("preg/test_panel_reg.jl") end
         @testset "Panel Specification Tests" begin include("preg/test_panel_tests.jl") end
         @testset "Panel IV" begin include("preg/test_panel_iv.jl") end
