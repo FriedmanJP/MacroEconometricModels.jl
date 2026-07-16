@@ -1087,6 +1087,20 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Instrumental Variables Regression with Weak Instruments",
         journal="Econometrica", volume="65", issue="3", pages="557--586",
         doi="10.2307/2171753", isbn="", publisher="", entry_type=:article),
+    # --- IV k-class / LIML / Fuller estimators (EV-36, #444) ---
+    :anderson_rubin1949 => (key=:anderson_rubin1949,
+        authors="Anderson, T. W. and Rubin, Herman", year=1949,
+        title="Estimation of the Parameters of a Single Equation in a Complete System of Stochastic Equations",
+        journal="Annals of Mathematical Statistics", volume="20", issue="1", pages="46--63",
+        doi="10.1214/aoms/1177730090", isbn="", publisher="", entry_type=:article),
+    :fuller1977 => (key=:fuller1977, authors="Fuller, Wayne A.", year=1977,
+        title="Some Properties of a Modification of the Limited Information Estimator",
+        journal="Econometrica", volume="45", issue="4", pages="939--953",
+        doi="10.2307/1912683", isbn="", publisher="", entry_type=:article),
+    :bekker1994 => (key=:bekker1994, authors="Bekker, Paul A.", year=1994,
+        title="Alternative Approximations to the Distributions of Instrumental Variable Estimators",
+        journal="Econometrica", volume="62", issue="3", pages="657--681",
+        doi="10.2307/2951662", isbn="", publisher="", entry_type=:article),
     # --- Penalized Regression (EV-03, #411) ---
     :hoerl_kennard1970 => (key=:hoerl_kennard1970,
         authors="Hoerl, Arthur E. and Kennard, Robert W.", year=1970,
@@ -2182,7 +2196,13 @@ refs(io::IO, ::ParkAddedResult; kw...) = refs(io, _TYPE_REFS[:ParkAddedResult]; 
 refs(io::IO, ::FactorBreakResult; kw...) = refs(io, _TYPE_REFS[:FactorBreakResult]; kw...)
 
 # Cross-sectional models
-refs(io::IO, m::RegModel; kw...) = refs(io, m.method == :iv ? [:wooldridge2010, :white1980, :staiger_stock1997] : [:wooldridge2010, :white1980]; kw...)
+# IV k-class (LIML/Fuller) models additionally cite Anderson-Rubin, Fuller, Bekker (EV-36, #444).
+refs(io::IO, m::RegModel; kw...) = refs(io,
+    m.method == :iv ?
+        (m.kappa_hat !== nothing ?
+            [:wooldridge2010, :white1980, :staiger_stock1997, :anderson_rubin1949, :fuller1977, :bekker1994] :
+            [:wooldridge2010, :white1980, :staiger_stock1997]) :
+        [:wooldridge2010, :white1980]; kw...)
 refs(io::IO, ::LogitModel; kw...) = refs(io, _TYPE_REFS[:LogitModel]; kw...)
 refs(io::IO, ::ProbitModel; kw...) = refs(io, _TYPE_REFS[:ProbitModel]; kw...)
 refs(io::IO, ::MarginalEffects; kw...) = refs(io, _TYPE_REFS[:MarginalEffects]; kw...)

@@ -95,6 +95,7 @@ const TEST_GROUPS = [
         "data/test_data.jl",
         "pvar/test_pvar.jl",
         "reg/test_reg.jl",
+        "reg/test_ivkclass.jl",    # EV-36 (#444): IV k-class — LIML / Fuller / generic k-class
         "reg/test_penalized.jl",   # EV-03 (#411): ridge / LASSO / elastic net
         "reg/test_selection.jl",   # EV-04 (#412): stepwise / best-subset / GETS
         "reg/test_tobit.jl",       # EV-17 (#425): Tobit + truncated regression

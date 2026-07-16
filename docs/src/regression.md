@@ -506,11 +506,55 @@ report(m_iv)
 
 The OLS coefficient on education is biased upward because ability enters both the education equation and the wage equation. The 2SLS estimator removes this bias by instrumenting education with distance to college and quarter of birth. The first-stage F well exceeds 10, confirming that the instruments are strong. The Sargan test p-value fails to reject the null that both instruments are valid.
 
+### LIML, Fuller, and k-class estimators
+
+Under **weak or many instruments**, 2SLS is severely biased toward OLS. The **k-class** family
+(Theil 1961) addresses this through a single scalar ``k``:
+
+```math
+\hat{\beta}(k) = \bigl(X'(I - k M_Z)X\bigr)^{-1} X'(I - k M_Z)\,y,
+\qquad M_Z = I - Z(Z'Z)^{-1}Z'
+```
+
+where:
+- ``k = 0`` recovers OLS, ``k = 1`` recovers 2SLS
+- ``k = \hat{\kappa}`` is **LIML** (Anderson & Rubin 1949), with ``\hat{\kappa}`` the smallest root of
+  ``\lvert \bar{Y}'M_{X_1}\bar{Y} - \kappa\,\bar{Y}'M_Z\bar{Y}\rvert = 0`` for
+  ``\bar{Y} = [\,y\ \ Y_{\text{endog}}\,]`` and included exogenous ``X_1``
+- ``k = \hat{\kappa} - a/(n-m)`` is **Fuller** (1977); with ``a = 1`` it is approximately unbiased
+  with finite moments
+
+**LIML is median-unbiased** and, unlike 2SLS, its finite-sample bias does not grow with the number
+of instruments. Fuller's ``k`` can dip *below* 1 — that is the intended finite-sample correction and
+is not clamped. Select the estimator through the `method` keyword:
+
+```@example reg
+# Same education / ability DGP as above, now with three instruments (over-identified).
+z3 = randn(n)
+Z3 = hcat(ones(n), z1, z2, z3)
+m_liml   = estimate_iv(wage, X, Z3; endogenous=[2], method=:liml,
+                       varnames=["(Intercept)", "education"])
+m_fuller = estimate_iv(wage, X, Z3; endogenous=[2], method=:fuller, fuller_a=1.0,
+                       varnames=["(Intercept)", "education"])
+report(m_liml)
+```
+
+The `report()` footer adds the LIML least-variance ratio ``\hat{\kappa}`` and the implied
+Anderson (1949) likelihood-ratio overidentification statistic ``n\ln\hat{\kappa} \sim \chi^2(m - k)``.
+For a user-specified value pass `method=:kclass` with the `k` keyword.
+
+Weak-instrument *inference* (Anderson–Rubin, Kleibergen–Paap, Stock–Yogo critical values) is a
+separate layer tracked in issue #343; this entry point delivers the *estimators* those tests
+condition on.
+
 ### Keyword Arguments
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
 | `endogenous` | `Vector{Int}` | required | Column indices of endogenous regressors in `X` |
+| `method` | `Symbol` | `:tsls` | Estimator: `:tsls`/`:2sls`, `:liml`, `:fuller`, `:kclass` |
+| `k` | `Union{Nothing,Real}` | `nothing` | Scalar for `method=:kclass` (`0`=OLS, `1`=2SLS) |
+| `fuller_a` | `Real` | `1.0` | Fuller constant ``a`` (used only for `method=:fuller`) |
 | `cov_type` | `Symbol` | `:hc1` | Covariance estimator: `:ols`, `:hc0`, `:hc1`, `:hc2`, `:hc3` |
 | `varnames` | `Union{Nothing,Vector{String}}` | `nothing` | Coefficient names |
 
@@ -525,6 +569,8 @@ The OLS coefficient on education is biased upward because ability enters both th
 | `first_stage_f` | `T` | Minimum first-stage F-statistic across endogenous variables |
 | `sargan_stat` | `Union{Nothing,T}` | Sargan-Hansen J-statistic (`nothing` if exactly identified) |
 | `sargan_pval` | `Union{Nothing,T}` | p-value of the Sargan test |
+| `kclass_k` | `Union{Nothing,T}` | k-class scalar actually used (`nothing` for plain 2SLS) |
+| `kappa_hat` | `Union{Nothing,T}` | LIML ``\hat{\kappa}`` (`:liml`/`:fuller` only) |
 
 ---
 
@@ -1128,6 +1174,9 @@ The OLS estimate of the return to education is biased upward because ability is 
 - Andrews, D. W. K., & Monahan, J. C. (1992). An Improved Heteroskedasticity and Autocorrelation Consistent Covariance Matrix Estimator.
   *Econometrica*, 60(4), 953-966. [DOI](https://doi.org/10.2307/2951574)
 
+- Anderson, T. W., & Rubin, H. (1949). Estimation of the Parameters of a Single Equation in a Complete System of Stochastic Equations.
+  *Annals of Mathematical Statistics*, 20(1), 46-63. [DOI](https://doi.org/10.1214/aoms/1177730090)
+
 - Belloni, A., & Chernozhukov, V. (2013). Least Squares After Model Selection in High-Dimensional Sparse Models.
   *Bernoulli*, 19(2), 521-547. [DOI](https://doi.org/10.3150/11-BEJ410)
 
@@ -1181,6 +1230,9 @@ The OLS estimate of the return to education is biased upward because ability is 
 
 - Sargan, J. D. (1958). The Estimation of Economic Relationships Using Instrumental Variables.
   *Econometrica*, 26(3), 393-415. [DOI](https://doi.org/10.2307/1907619)
+
+- Fuller, W. A. (1977). Some Properties of a Modification of the Limited Information Estimator.
+  *Econometrica*, 45(4), 939-953. [DOI](https://doi.org/10.2307/1912683)
 
 - Staiger, D., & Stock, J. H. (1997). Instrumental Variables Regression with Weak Instruments.
   *Econometrica*, 65(3), 557-586. [DOI](https://doi.org/10.2307/2171753)

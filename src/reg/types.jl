@@ -48,12 +48,19 @@ Linear regression model estimated via OLS, WLS, or IV/2SLS.
 - `cragg_donald_f::Union{Nothing,T}` — Cragg-Donald weak-instrument F (IV only)
 - `kleibergen_paap_f::Union{Nothing,T}` — Kleibergen-Paap rk Wald F, robust (IV only)
 - `stock_yogo_10pct::Union{Nothing,T}` — Stock-Yogo 10% maximal-size critical value (IV only)
+- `kclass_k::Union{Nothing,T}` — k-class scalar `k` actually used (IV k-class only; `nothing` for
+  the plain `:tsls`/`:2sls` path). `k=0` is OLS, `k=1` is 2SLS, `k=κ̂` is LIML,
+  `k=κ̂−a/(n−m)` is Fuller.
+- `kappa_hat::Union{Nothing,T}` — LIML minimum-eigenvalue `κ̂` (IV `:liml`/`:fuller` only;
+  `nothing` otherwise). The implied Anderson (1949) LR overidentification statistic is `n·ln(κ̂)`.
 
 # References
 - White, H. (1980). *Econometrica* 48(4), 817-838.
 - MacKinnon, J. G. & White, H. (1985). *JBES* 3(3), 305-314.
 - Stock, J. H. & Yogo, M. (2005). *Identification and Inference for Econometric Models*, ch. 5.
 - Kleibergen, F. & Paap, R. (2006). *Journal of Econometrics* 133(1), 97-126.
+- Anderson, T. W. & Rubin, H. (1949). *Ann. Math. Statist.* 20(1), 46-63.
+- Fuller, W. A. (1977). *Econometrica* 45(4), 939-953.
 """
 struct RegModel{T<:AbstractFloat} <: StatsAPI.RegressionModel
     y::Vector{T}
@@ -83,10 +90,12 @@ struct RegModel{T<:AbstractFloat} <: StatsAPI.RegressionModel
     cragg_donald_f::Union{Nothing,T}
     kleibergen_paap_f::Union{Nothing,T}
     stock_yogo_10pct::Union{Nothing,T}
+    kclass_k::Union{Nothing,T}          # k-class scalar (IV k-class only) — EV-36 (#444)
+    kappa_hat::Union{Nothing,T}         # LIML minimum eigenvalue κ̂ — EV-36 (#444)
 end
 
 # Back-compat outer constructor: legacy 24-arg positional calls (through `sargan_pval`)
-# default the three weak-instrument diagnostic fields to `nothing`.
+# default the weak-instrument diagnostic + k-class fields to `nothing`.
 function RegModel{T}(y, X, beta, vcov_mat, residuals, fitted, ssr, tss, r2, adj_r2,
                      f_stat, f_pval, loglik, aic, bic, varnames, method, cov_type,
                      weights, Z, endogenous, first_stage_f, sargan_stat,
@@ -94,7 +103,19 @@ function RegModel{T}(y, X, beta, vcov_mat, residuals, fitted, ssr, tss, r2, adj_
     RegModel{T}(y, X, beta, vcov_mat, residuals, fitted, ssr, tss, r2, adj_r2,
                 f_stat, f_pval, loglik, aic, bic, varnames, method, cov_type,
                 weights, Z, endogenous, first_stage_f, sargan_stat, sargan_pval,
-                nothing, nothing, nothing)
+                nothing, nothing, nothing, nothing, nothing)
+end
+
+# Back-compat outer constructor: 27-arg positional calls (through `stock_yogo_10pct`,
+# i.e. the pre-EV-36 IV constructor) default the two k-class fields to `nothing`.
+function RegModel{T}(y, X, beta, vcov_mat, residuals, fitted, ssr, tss, r2, adj_r2,
+                     f_stat, f_pval, loglik, aic, bic, varnames, method, cov_type,
+                     weights, Z, endogenous, first_stage_f, sargan_stat, sargan_pval,
+                     cragg_donald_f, kleibergen_paap_f, stock_yogo_10pct) where {T<:AbstractFloat}
+    RegModel{T}(y, X, beta, vcov_mat, residuals, fitted, ssr, tss, r2, adj_r2,
+                f_stat, f_pval, loglik, aic, bic, varnames, method, cov_type,
+                weights, Z, endogenous, first_stage_f, sargan_stat, sargan_pval,
+                cragg_donald_f, kleibergen_paap_f, stock_yogo_10pct, nothing, nothing)
 end
 
 # =============================================================================
@@ -625,6 +646,22 @@ function Base.show(io::IO, m::RegModel{T}) where {T}
             "Kleibergen-Paap F" _fmt(m.kleibergen_paap_f; digits=2)]))
         m.stock_yogo_10pct !== nothing && (spec = vcat(spec, Any[
             "Stock-Yogo 10%" _fmt(m.stock_yogo_10pct; digits=2)]))
+        # k-class family (EV-36): report the k-class scalar and, for LIML/Fuller, κ̂ plus
+        # the Anderson (1949) LR overidentification statistic n·ln(κ̂) ~ χ²(m − k_reg).
+        if m.kclass_k !== nothing
+            spec = vcat(spec, Any["k-class k" _fmt(m.kclass_k; digits=4)])
+        end
+        if m.kappa_hat !== nothing
+            spec = vcat(spec, Any["LIML κ̂" _fmt(m.kappa_hat; digits=4)])
+            n_iv = size(m.Z, 2)
+            dof_ar = n_iv - k
+            if dof_ar > 0 && m.kappa_hat > zero(T)
+                ar_stat = T(n) * log(m.kappa_hat)
+                ar_p = T(1 - cdf(Chisq(dof_ar), max(ar_stat, zero(T))))
+                spec = vcat(spec, Any["Anderson LR" _fmt(ar_stat; digits=2)])
+                spec = vcat(spec, Any["Anderson LR p" _format_pvalue(ar_p)])
+            end
+        end
     end
 
     _pretty_table(io, spec;
