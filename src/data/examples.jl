@@ -25,6 +25,7 @@ const _EXAMPLE_DATASETS = Dict{Symbol, Tuple{String, Symbol}}(
     :wiot    => ("wiot.toml",    :io),
     :nile    => ("nile.toml",    :timeseries),   # EV-13 (#421); shared with EV-37
     :mroz    => ("mroz.toml",    :crosssection), # EV-18 (#426): Mroz (1987) labor supply
+    :gnp_hamilton => ("gnp_hamilton.toml", :timeseries), # EV-07 (#415): Hamilton (1989) GNP growth
 )
 
 # Parse frequency string to Frequency enum
@@ -50,6 +51,8 @@ Load a built-in example dataset.
 - `:nile` — Annual flow of the river Nile at Aswan, 1871–1970 (100 obs, 10^8 m^3) → `TimeSeriesData`
 - `:mroz` — Mroz (1987) female labor-supply extract (753 obs × 22 vars; `lwage`/`wage` are `NaN`
   for the 325 non-participants) → `CrossSectionData`. Used for the Heckman selection model.
+- `:gnp_hamilton` — Hamilton (1989) US real GNP growth, 1951Q2–1984Q4 (135 obs, 100×quarterly
+  log-diff) → `TimeSeriesData`. The canonical Markov-switching AR business-cycle dataset.
 
 For time series datasets, the returned `TimeSeriesData` includes variable names,
 transformation codes, frequency, per-variable descriptions (via `vardesc`),

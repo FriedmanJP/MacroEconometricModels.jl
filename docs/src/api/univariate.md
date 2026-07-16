@@ -255,6 +255,7 @@ ThresholdForecast
 HansenLinearityTest
 STARModel
 STARForecast
+MSRegModel
 ```
 
 ---
@@ -267,4 +268,6 @@ estimate_setar
 hansen_linearity_test
 estimate_star
 star_linearity_test
+estimate_ms
+estimate_ms_ar
 ```

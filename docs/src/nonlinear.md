@@ -244,6 +244,64 @@ plot_result(ms; view=:weights)      # G over time
 
 ---
 
+## Markov-Switching Regression and MS-AR
+
+Where threshold and STAR models make the regime a deterministic function of an observed transition variable, a **Markov-switching** model treats the regime ``s_t`` as a *latent* ``K``-state Markov chain with transition matrix ``P`` (Hamilton 1989). The likelihood integrates over the unobserved regime path with the scaled Hamilton forward filter; the Kim (1994) backward smoother recovers ``\Pr(s_t=k\mid\mathcal{F}_T)``; and parameters are estimated by EM (Baum–Welch) with an `Optim` maximum-likelihood polish and delta-method standard errors.
+
+Two entry points cover the common cases:
+
+- [`estimate_ms`](@ref) — a switching *regression* ``y_t = x_t'\beta_{s_t} + \varepsilon_t``, ``\varepsilon_t\sim N(0,\sigma^2_{s_t})``, where every coefficient (and optionally the variance) switches with the regime.
+- [`estimate_ms_ar`](@ref) — the Hamilton (1989) mean-switching autoregression
+
+```math
+(y_t - \mu_{s_t}) = \sum_{j=1}^{p} \phi_j\,(y_{t-j} - \mu_{s_{t-j}}) + \varepsilon_t,
+```
+
+where only the level ``\mu`` switches; the AR coefficients ``\phi`` are common across regimes. Because the density depends on the regime *path* ``(s_t,\dots,s_{t-p})``, the filter runs on the ``K^{p+1}`` expanded state space and reports the ``s_t`` marginals.
+
+Regimes are labelled deterministically in order of increasing conditional mean, so regime 1 is always the lowest-mean state — reproducible across runs.
+
+The canonical illustration is Hamilton's (1989) MS(2)-AR(4) model of US real GNP growth, shipped as `load_example(:gnp_hamilton)`:
+
+```@example ms
+using MacroEconometricModels
+ts = load_example(:gnp_hamilton)          # 100 × quarterly log-diff, 1951Q2–1984Q4
+g  = vec(ts.data)
+m  = estimate_ms_ar(g, 4)                 # 2-regime mean-switching AR(4)
+report(m)
+```
+
+Regime 1 is the low-growth recession state (``\hat\mu\approx-0.36``) and regime 2 the high-growth expansion (``\hat\mu\approx1.16``), with staying probabilities ``\hat p_{11}\approx0.75`` and ``\hat p_{22}\approx0.90`` — the classic Hamilton (1989, Table I) estimates.
+
+The `smoothed_prob` field holds the inferred recession probabilities ``\Pr(s_t=1\mid\mathcal{F}_T)``:
+
+```@example ms
+peak = argmax(m.smoothed_prob[:, 1])      # most likely recession quarter
+println("max smoothed recession prob = ", round(maximum(m.smoothed_prob[:, 1]), digits=3))
+println("ergodic recession share = ", round(m.ergodic[1], digits=3),
+        ", expected expansion duration = ", round(m.expected_durations[2], digits=1), " quarters")
+```
+
+For a general switching regression, pass the design matrix directly. With `switching_variance=true` (the default) each regime carries its own error variance:
+
+```@example ms
+mr = estimate_ms(g; k_regimes=2, switching_variance=true)   # intercept-only: switching mean+var
+println("regime means: ", round.(mr.mu, digits=3))
+println("regime variances: ", round.(mr.sigma2, digits=3))
+```
+
+The `:probabilities` view plots the Kim-smoothed regime probabilities as a stacked area (each layer a regime, summing to 1 at every date):
+
+```julia
+plot_result(m; view=:probabilities)   # smoothed regime timeline
+plot_result(m; view=:filtered)        # filtered probabilities
+```
+
+!!! note "Distinct from variance-regime identification"
+    `estimate_ms`/`estimate_ms_ar` switch the conditional *mean*. This is a separate code path from the Markov-switching *variance* regimes used for SVAR identification in [Statistical Identification](@ref nongaussian_page) (`src/nongaussian/heteroskedastic.jl`), and from the Hamilton (2018) detrending [`hamilton_filter`](@ref). All three use a Hamilton–Kim filter but model different objects.
+
+---
+
 ## Complete Example
 
 ```@example nonlinear
@@ -280,7 +338,9 @@ report(f)
 ## References
 
 - Davies, R. B. (1987). Hypothesis testing when a nuisance parameter is present only under the alternative. *Biometrika* 74(1), 33–43.
+- Hamilton, J. D. (1989). A new approach to the economic analysis of nonstationary time series and the business cycle. *Econometrica* 57(2), 357–384. [doi:10.2307/1912559](https://doi.org/10.2307/1912559)
 - Hansen, B. E. (1996). Inference when a nuisance parameter is not identified under the null hypothesis. *Econometrica* 64(2), 413–430. [doi:10.2307/2171789](https://doi.org/10.2307/2171789)
+- Kim, C.-J. (1994). Dynamic linear models with Markov-switching. *Journal of Econometrics* 60(1–2), 1–22. [doi:10.1016/0304-4076(94)90036-1](https://doi.org/10.1016/0304-4076(94)90036-1)
 - Hansen, B. E. (2000). Sample splitting and threshold estimation. *Econometrica* 68(3), 575–603. [doi:10.1111/1468-0262.00124](https://doi.org/10.1111/1468-0262.00124)
 - Luukkonen, R., Saikkonen, P. & Teräsvirta, T. (1988). Testing linearity against smooth transition autoregressive models. *Biometrika* 75(3), 491–499. [doi:10.1093/biomet/75.3.491](https://doi.org/10.1093/biomet/75.3.491)
 - Teräsvirta, T. (1994). Specification, estimation, and evaluation of smooth transition autoregressive models. *Journal of the American Statistical Association* 89(425), 208–218. [doi:10.1080/01621459.1994.10476462](https://doi.org/10.1080/01621459.1994.10476462)

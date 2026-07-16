@@ -520,6 +520,15 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         journal="Journal of the American Statistical Association", volume="89", issue="425",
         pages="208--218", doi="10.1080/01621459.1994.10476462", isbn="", publisher="",
         entry_type=:article),
+    # --- Markov-switching regression / MS-AR — EV-07 ---
+    :hamilton1989 => (key=:hamilton1989, authors="Hamilton, James D.", year=1989,
+        title="A New Approach to the Economic Analysis of Nonstationary Time Series and the Business Cycle",
+        journal="Econometrica", volume="57", issue="2", pages="357--384",
+        doi="10.2307/1912559", isbn="", publisher="", entry_type=:article),
+    :kim1994 => (key=:kim1994, authors="Kim, Chang-Jin", year=1994,
+        title="Dynamic Linear Models with Markov-Switching",
+        journal="Journal of Econometrics", volume="60", issue="1--2", pages="1--22",
+        doi="10.1016/0304-4076(94)90036-1", isbn="", publisher="", entry_type=:article),
     :giannone_lenza_primiceri2015 => (key=:giannone_lenza_primiceri2015,
         authors="Giannone, Domenico and Lenza, Michele and Primiceri, Giorgio E.", year=2015,
         title="Prior Selection for Vector Autoregressions",
@@ -1497,6 +1506,10 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     # Smooth-transition autoregression (STAR) — EV-06
     :STARModel => [:luukkonen1988, :terasvirta1994],
     :star => [:luukkonen1988, :terasvirta1994],
+    # Markov-switching regression / MS-AR — EV-07
+    :MSRegModel => [:hamilton1989, :kim1994, :hamilton1994],
+    :ms => [:hamilton1989, :kim1994],
+    :ms_ar => [:hamilton1989, :kim1994],
     # Time Series Filters
     :HPFilterResult => [:hodrick_prescott1997],
     :HamiltonFilterResult => [:hamilton2018filter],
@@ -1995,6 +2008,7 @@ refs(io::IO, ::VolatilityForecast; kw...) = refs(io, _TYPE_REFS[:VolatilityForec
 refs(io::IO, ::ThresholdModel; kw...) = refs(io, _TYPE_REFS[:ThresholdModel]; kw...)
 refs(io::IO, ::HansenLinearityTest; kw...) = refs(io, _TYPE_REFS[:HansenLinearityTest]; kw...)
 refs(io::IO, ::STARModel; kw...) = refs(io, _TYPE_REFS[:STARModel]; kw...)
+refs(io::IO, ::MSRegModel; kw...) = refs(io, _TYPE_REFS[:MSRegModel]; kw...)
 
 # Covariance estimators
 refs(io::IO, ::NeweyWestEstimator; kw...) = refs(io, _TYPE_REFS[:NeweyWestEstimator]; kw...)

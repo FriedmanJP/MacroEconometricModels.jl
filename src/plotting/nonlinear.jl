@@ -145,3 +145,57 @@ function _plot_star_weights(m::STARModel{T}; title::String="") where {T}
     ttl = isempty(title) ? "STAR($(m.p)) — Transition Weights" : title
     _make_plot([panel]; title=ttl, ncols=1)
 end
+
+# =============================================================================
+# MSRegModel — regime probabilities view (EV-07)
+# =============================================================================
+
+"""
+    plot_result(m::MSRegModel; view=:probabilities, title="", save_path=nothing)
+
+Visualise a fitted [`MSRegModel`](@ref) (Markov-switching regression / MS-AR).
+
+- `view=:probabilities` (default): the Kim-smoothed regime probabilities
+  `Pr(sₜ=k | ℱ_T)` over the sample as a stacked area (each layer a regime; the
+  layers sum to 1 at every date), showing the inferred regime timeline.
+- `view=:filtered`: the same but for the filtered probabilities `Pr(sₜ=k | ℱₜ)`.
+"""
+function plot_result(m::MSRegModel{T}; view::Symbol=:probabilities,
+                     title::String="", save_path::Union{String,Nothing}=nothing) where {T}
+    if view === :probabilities
+        p = _plot_ms_probs(m, m.smoothed_prob, "Smoothed"; title=title)
+    elseif view === :filtered
+        p = _plot_ms_probs(m, m.filtered_prob, "Filtered"; title=title)
+    else
+        throw(ArgumentError("Unknown view :$view for MSRegModel; use :probabilities or :filtered."))
+    end
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+function _plot_ms_probs(m::MSRegModel{T}, probs::Matrix{T}, kind::String;
+                        title::String="") where {T}
+    K = m.k_regimes
+    keys = ["r$k" for k in 1:K]
+    rows = Vector{Pair{String,String}}[]
+    for t in 1:m.n
+        row = ["x" => _json(t)]
+        for k in 1:K
+            push!(row, keys[k] => _json(probs[t, k]))
+        end
+        push!(rows, row)
+    end
+    data_json = _json_array_of_objects(rows)
+
+    id = _next_plot_id("ms_prob")
+    labels = ["Regime $k (μ=$(_fmt(m.mu[k])))" for k in 1:K]
+    colors = [_PLOT_COLORS[mod1(k, length(_PLOT_COLORS))] for k in 1:K]
+    s = _series_json(labels, colors; keys=keys)
+    js = _render_area_js(id, data_json, s; xlabel="t",
+                         ylabel="$kind Pr(regime)")
+    panel = _PanelSpec(id, "$kind Regime Probabilities", js)
+
+    hdr = m.model_type === :ms_ar ? "MS-AR($(m.p))" : "MS Regression"
+    ttl = isempty(title) ? "$hdr — $kind Regime Probabilities ($K regimes)" : title
+    _make_plot([panel]; title=ttl, ncols=1)
+end

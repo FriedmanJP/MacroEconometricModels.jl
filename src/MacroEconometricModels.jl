@@ -350,6 +350,7 @@ include("sv/forecast.jl")
 include("nonlinear/types.jl")
 include("nonlinear/threshold.jl")
 include("nonlinear/star.jl")   # EV-06: smooth-transition (STAR/LSTR1/LSTR2/ESTR)
+include("nonlinear/markov_switching.jl")  # EV-07: Markov-switching regression / MS-AR
 
 # Model comparison tests (LR, LM)
 include("teststat/model_comparison.jl")
@@ -1020,6 +1021,9 @@ export estimate_threshold, estimate_setar, hansen_linearity_test
 # EV-06: smooth-transition autoregression (STAR/LSTR1/LSTR2/ESTR)
 export STARModel, STARForecast
 export estimate_star, star_linearity_test
+# EV-07: Markov-switching regression / mean-switching AR (Hamilton 1989; Kim 1994)
+export MSRegModel
+export estimate_ms, estimate_ms_ar
 
 # =============================================================================
 # Exports - Spectral Analysis & ACF/PACF

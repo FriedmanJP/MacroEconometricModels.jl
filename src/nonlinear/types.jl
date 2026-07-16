@@ -452,3 +452,173 @@ StatsAPI.coef(m::STARModel) = vcat(m.phi1, m.phi2, m.gamma, m.c)
 StatsAPI.dof(m::STARModel) = 2 * m.k + 1 + length(m.c)
 StatsAPI.aic(m::STARModel) = m.aic
 StatsAPI.bic(m::STARModel) = m.bic
+
+# =============================================================================
+# Markov-switching regression / MS-AR (Hamilton 1989; Kim 1994) — EV-07 / #415
+# =============================================================================
+
+"""
+    MSRegModel{T} <: AbstractNonlinearTSModel
+
+Markov-switching regression / autoregression estimated by the Hamilton (1989)
+forward filter, the Kim (1994) backward smoother, and EM (Baum–Welch) with an
+`Optim` maximum-likelihood polish (delta-method standard errors).
+
+Two model shapes share this type, distinguished by `model_type`:
+
+- **`:regression`** ([`estimate_ms`](@ref)) — a K-state switching regression
+  `yₜ = xₜ'β_{sₜ} + εₜ`, `εₜ ~ N(0, σ²_{sₜ})`, where every coefficient switches
+  with the latent regime `sₜ` and (optionally) the variance switches too. The
+  latent chain is filtered on `K` states.
+
+- **`:ms_ar`** ([`estimate_ms_ar`](@ref)) — the Hamilton (1989) *mean-switching*
+  autoregression `(yₜ − μ_{sₜ}) = Σⱼ φⱼ (y_{t−j} − μ_{s_{t−j}}) + εₜ`. Only the
+  level `μ` switches; the AR coefficients `φ` are common across regimes (the
+  variance may switch). Because the conditional density depends on the regime
+  *path* `(sₜ, …, s_{t−p})`, the filter runs on the `Kᵖ⁺¹` expanded state space and
+  the reported regime probabilities are the marginals over `sₜ`.
+
+Regimes are labelled deterministically in order of increasing conditional mean
+`μ` (defeating label-switching across RNG seeds), so regime 1 is always the
+lowest-mean state.
+
+# Fields
+- `model_type::Symbol`: `:regression` or `:ms_ar`.
+- `y::Vector{T}`: dependent variable over the effective sample.
+- `X::Matrix{T}`: regressor matrix (`n × kx`); for `:ms_ar` this is `[1, y_{t−1}, …, y_{t−p}]`.
+- `k_regimes::Int`: number of regimes `K`.
+- `p::Int`: AR order (`0` for a generic regression).
+- `mu::Vector{T}`: regime conditional means (length `K`), in increasing order.
+- `coefs::Matrix{T}`: per-regime coefficients (`kx × K`) for `:regression`; a
+  `1 × K` row of the switching means `μ` for `:ms_ar`.
+- `se_coefs::Matrix{T}`: standard errors of `coefs` (same shape).
+- `ar::Vector{T}`: common AR coefficients `φ` (length `p`; empty for `:regression`).
+- `se_ar::Vector{T}`: standard errors of `ar`.
+- `sigma2::Vector{T}`: regime variances (length `K`; equal entries if the variance
+  does not switch).
+- `se_sigma2::Vector{T}`: standard errors of `sigma2`.
+- `P::Matrix{T}`: `K × K` transition matrix (`P[i,j] = Pr(sₜ=j | s_{t−1}=i)`, rows sum to 1).
+- `ergodic::Vector{T}`: ergodic (stationary) distribution of `P`.
+- `expected_durations::Vector{T}`: expected regime durations `1/(1 − P[k,k])`.
+- `filtered_prob::Matrix{T}`: filtered regime probabilities `Pr(sₜ=k | ℱₜ)` (`n × K`).
+- `smoothed_prob::Matrix{T}`: Kim-smoothed probabilities `Pr(sₜ=k | ℱ_T)` (`n × K`).
+- `residuals::Vector{T}`: smoothed-mean residuals `yₜ − Σₖ Pr(sₜ=k|ℱ_T)·meanₜ(k)`.
+- `loglik::T`: maximised log-likelihood.
+- `aic::T`, `bic::T`: information criteria.
+- `n::Int`: effective sample size.
+- `n_params::Int`: number of free parameters.
+- `switching_var::Bool`: whether the variance switches across regimes.
+- `switching_ar::Bool`: whether AR coefficients switch (`:regression` with lagged `X`); always
+  `false` for the mean-switching `:ms_ar` form.
+- `converged::Bool`, `iterations::Int`: EM/optimiser convergence flag and iteration count.
+- `xnames::Vector{String}`: regressor labels.
+- `yname::String`: dependent-variable label.
+"""
+struct MSRegModel{T<:AbstractFloat} <: AbstractNonlinearTSModel
+    model_type::Symbol
+    y::Vector{T}
+    X::Matrix{T}
+    k_regimes::Int
+    p::Int
+    mu::Vector{T}
+    coefs::Matrix{T}
+    se_coefs::Matrix{T}
+    ar::Vector{T}
+    se_ar::Vector{T}
+    sigma2::Vector{T}
+    se_sigma2::Vector{T}
+    P::Matrix{T}
+    ergodic::Vector{T}
+    expected_durations::Vector{T}
+    filtered_prob::Matrix{T}
+    smoothed_prob::Matrix{T}
+    residuals::Vector{T}
+    loglik::T
+    aic::T
+    bic::T
+    n::Int
+    n_params::Int
+    switching_var::Bool
+    switching_ar::Bool
+    converged::Bool
+    iterations::Int
+    xnames::Vector{String}
+    yname::String
+end
+
+function Base.show(io::IO, m::MSRegModel{T}) where {T}
+    K = m.k_regimes
+    header = m.model_type === :ms_ar ?
+        "Markov-Switching AR($(m.p)) — $(K) regimes (mean-switching, Hamilton 1989)" :
+        "Markov-Switching Regression — $(K) regimes"
+    dof_r = max(m.n - m.n_params, 1)
+
+    if m.model_type === :ms_ar
+        # Per-regime switching means μ_k (+ regime variance) then the common AR block.
+        for k in 1:K
+            lbl = k == 1 ? "low" : (k == K ? "high" : "mid-$k")
+            _coef_table(io, "$header — Regime $k ($lbl):  μ (level)",
+                        ["μ"], [m.mu[k]], [m.se_coefs[1, k]]; dist=:z)
+        end
+        if m.p > 0
+            _coef_table(io, "Common AR coefficients (φ)",
+                        ["φ$i" for i in 1:m.p], m.ar, m.se_ar; dist=:z)
+        end
+    else
+        for k in 1:K
+            lbl = k == 1 ? "low" : (k == K ? "high" : "mid-$k")
+            _coef_table(io, "$header — Regime $k ($lbl)",
+                        m.xnames, m.coefs[:, k], m.se_coefs[:, k]; dist=:t, dof_r=dof_r)
+        end
+    end
+
+    # Regime variances.
+    _coef_table(io, "Regime variances (σ²)",
+                ["σ²[$k]" for k in 1:K], m.sigma2, m.se_sigma2; dist=:z)
+
+    # Transition matrix + ergodic + durations.
+    _matrix_table(io, m.P, "Transition matrix P (rows = from, cols = to)";
+                  row_labels=["Regime $i" for i in 1:K],
+                  col_labels=["→ $j" for j in 1:K])
+
+    fit_data = Any[
+        "Observations"      m.n;
+        "Log-likelihood"    _fmt(m.loglik);
+        "Parameters"        m.n_params;
+        "AIC"               _fmt(m.aic);
+        "BIC"               _fmt(m.bic);
+        "Switching variance" m.switching_var;
+        "Converged"         m.converged
+    ]
+    for k in 1:K
+        fit_data = vcat(fit_data, Any[
+            "Ergodic Pr(regime $k)"  _fmt(m.ergodic[k]);
+            "Exp. duration reg. $k"  _fmt(m.expected_durations[k])
+        ])
+    end
+    _pretty_table(io, fit_data; column_labels=["Fit & Regimes", "Value"],
+                  alignment=[:l, :r])
+
+    _show_note(io, "Hamilton (1989) filter + Kim (1994) smoother + EM/ML; regimes " *
+                   "ordered by increasing mean. Transition rows sum to 1.")
+    _sig_legend(io)
+end
+
+"""
+    report(m::MSRegModel)
+
+Print per-regime coefficient (or switching-mean) blocks, regime variances, the
+Markov transition matrix with its ergodic distribution and expected regime
+durations, and the log-likelihood / information criteria.
+"""
+report(m::MSRegModel) = show(stdout, m)
+report(io::IO, m::MSRegModel) = show(io, m)
+
+StatsAPI.nobs(m::MSRegModel) = m.n
+StatsAPI.residuals(m::MSRegModel) = m.residuals
+StatsAPI.loglikelihood(m::MSRegModel) = m.loglik
+StatsAPI.aic(m::MSRegModel) = m.aic
+StatsAPI.bic(m::MSRegModel) = m.bic
+StatsAPI.dof(m::MSRegModel) = m.n_params
+StatsAPI.coef(m::MSRegModel) =
+    m.model_type === :ms_ar ? vcat(m.mu, m.ar) : vec(m.coefs)
