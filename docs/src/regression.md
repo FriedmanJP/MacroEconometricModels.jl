@@ -8,6 +8,7 @@
 - **Instrumental variables / 2SLS** with first-stage F-statistic and Sargan-Hansen overidentification test
 - **Variance Inflation Factors** for multicollinearity diagnostics (Belsley, Kuh & Welsch 1980)
 - **Censored (Tobit) and truncated regression** by MLE with McDonald–Moffitt marginal effects (Tobin 1958; Hausman & Wise 1977)
+- **Heckman sample-selection model** (two-step Heckit + full-information ML) with the Greene corrected two-step covariance (Heckman 1979)
 - **CrossSectionData dispatch** for symbol-based formula-like syntax
 - **StatsAPI interface**: `coef`, `vcov`, `predict`, `confint`, `stderror`, `nobs`, `r2`
 
@@ -986,6 +987,61 @@ The `dist` keyword also supports `:logistic` and `:extreme_value` latent-error l
 
 ---
 
+## Sample Selection: The Heckman Model
+
+Censoring records a boundary value for every unit; *incidental truncation* is more severe --- the outcome is simply **unobserved** for a non-random subsample. Wages are observed only for those who work, export prices only for exporters, loan rates only for approved applicants. The selected sample is not representative, and OLS on it is inconsistent whenever the unobservables driving selection are correlated with those driving the outcome. The Heckman (1979) selection model corrects this. A latent selection index and the outcome are
+
+```math
+d_i^\ast = z_i'\gamma + u_i, \qquad d_i = \mathbf{1}\{d_i^\ast > 0\}, \qquad
+y_i = x_i'\beta + \varepsilon_i \ \text{ observed only when } d_i = 1,
+```
+
+with ``(u_i, \varepsilon_i)`` bivariate normal, ``\mathrm{Var}(u_i)=1``, ``\mathrm{Var}(\varepsilon_i)=\sigma^2``, and ``\mathrm{Corr}(u_i,\varepsilon_i)=\rho``. The conditional mean over the selected sample carries a selection-bias term proportional to the inverse-Mills ratio ``\lambda(\cdot)=\phi(\cdot)/\Phi(\cdot)``:
+
+```math
+E[y_i \mid x_i,\, d_i = 1] = x_i'\beta + \rho\sigma \, \lambda(z_i'\gamma).
+```
+
+[`estimate_heckman`](@ref) offers two estimators. The **two-step (Heckit)** estimator fits a probit of ``d`` on ``Z``, forms ``\hat\lambda_i`` from the probit index, and runs OLS of ``y`` on ``[X\ \hat\lambda]`` over the selected subsample --- the Mills coefficient is ``\rho\sigma``. Its covariance is the Greene corrected two-step covariance, which accounts for the generated regressor ``\hat\lambda`` and the selection-induced heteroskedasticity. The **full-information ML** estimator (`method=:mle`) maximizes the bivariate-normal likelihood directly, started at the two-step estimates.
+
+**Two-step on the Mroz (1987) data.** The built-in `:mroz` extract has 753 married women; `lwage` is observed only for the 428 labor-force participants (`inlf == 1`). The selection equation adds `nwifeinc`, `age`, and the child counts as exclusion restrictions absent from the wage equation.
+
+```@example reg
+mroz = load_example(:mroz)
+nm = mroz.N_obs
+inlf  = mroz[:, "inlf"]
+lwage = mroz[:, "lwage"]          # NaN for the 325 non-participants (ignored)
+Xh = hcat(ones(nm), mroz[:, "educ"], mroz[:, "exper"], mroz[:, "expersq"])
+Zh = hcat(ones(nm), mroz[:, "nwifeinc"], mroz[:, "educ"], mroz[:, "exper"],
+          mroz[:, "expersq"], mroz[:, "age"], mroz[:, "kidslt6"], mroz[:, "kidsge6"])
+on = ["const", "educ", "exper", "expersq"]
+sn = ["const", "nwifeinc", "educ", "exper", "expersq", "age", "kidslt6", "kidsge6"]
+heck = estimate_heckman(lwage, Xh, inlf, Zh; method=:twostep,
+                        outcome_names=on, select_names=sn)
+report(heck)
+```
+
+The footer reports ``\hat\rho \approx 0.05`` with a small, insignificant Mills ``t``-statistic: on these data the selection correction is mild (the ``H_0``: *no selection* is not rejected), matching Wooldridge's (2010, Example 17.5) reading of this dataset.
+
+**Full-information ML.** `method=:mle` maximizes the joint likelihood; it delivers direct standard errors for ``\rho`` and ``\sigma`` and a Wald test of ``\rho = 0``:
+
+```@example reg
+heck_ml = estimate_heckman(lwage, Xh, inlf, Zh; method=:mle,
+                           outcome_names=on, select_names=sn)
+report(heck_ml)
+```
+
+!!! warning "Provide a genuine exclusion restriction"
+    Identification is far more credible when ``Z`` contains at least one variable excluded from ``X`` (here `nwifeinc`, `age`, and the child counts). If ``Z`` spans the same column space as ``X``, `estimate_heckman` emits a warning: identification then rests solely on the nonlinearity of the Mills ratio, and the two-step second stage becomes near-collinear. When ``\rho`` is close to zero the likelihood is nearly flat --- the selection term is weakly identified and the two-step and ML estimates can differ noticeably even though both are valid.
+
+| Keyword | Type | Default | Description |
+|---|---|---|---|
+| `method` | `Symbol` | `:twostep` | `:twostep` (Heckit) or `:mle` (full-information ML) |
+| `outcome_names` | `Vector{String}` | auto | Outcome-equation coefficient names |
+| `select_names` | `Vector{String}` | auto | Selection-equation coefficient names |
+
+---
+
 ## Complete Example
 
 This example demonstrates a full cross-sectional regression workflow: OLS estimation with robust standard error comparison, WLS correction for heteroskedasticity, IV estimation for an endogenous regressor, and VIF diagnostics.
@@ -1111,9 +1167,14 @@ The OLS estimate of the return to education is biased upward because ability is 
 
 - Pretis, F., Reade, J. J., & Sucarrat, G. (2018). Automated General-to-Specific (GETS) Regression Modeling and Indicator Saturation for Outliers and Structural Breaks.
   *Journal of Statistical Software*, 86(3), 1-44. [DOI](https://doi.org/10.18637/jss.v086.i03)
+- Heckman, J. J. (1979). Sample Selection Bias as a Specification Error.
+  *Econometrica*, 47(1), 153-161. [DOI](https://doi.org/10.2307/1912352)
 
 - MacKinnon, J. G., & White, H. (1985). Some Heteroskedasticity-Consistent Covariance Matrix Estimators with Improved Finite Sample Properties.
   *Journal of Econometrics*, 29(3), 305-325. [DOI](https://doi.org/10.1016/0304-4076(85)90158-7)
+
+- Mroz, T. A. (1987). The Sensitivity of an Empirical Model of Married Women's Hours of Work to Economic and Statistical Assumptions.
+  *Econometrica*, 55(4), 765-799. [DOI](https://doi.org/10.2307/1911029)
 
 - Newey, W. K., & West, K. D. (1994). Automatic Lag Selection in Covariance Matrix Estimation.
   *Review of Economic Studies*, 61(4), 631-653. [DOI](https://doi.org/10.2307/2297912)

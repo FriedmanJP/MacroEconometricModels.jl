@@ -1064,6 +1064,18 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="The Uses of Tobit Analysis",
         journal="The Review of Economics and Statistics", volume="62", issue="2", pages="318--321",
         doi="10.2307/1924766", isbn="", publisher="", entry_type=:article),
+    # --- Sample-selection / Heckman model (EV-18, #426) ---
+    :heckman1979 => (key=:heckman1979, authors="Heckman, James J.", year=1979,
+        title="Sample Selection Bias as a Specification Error",
+        journal="Econometrica", volume="47", issue="1", pages="153--161",
+        doi="10.2307/1912352", isbn="", publisher="", entry_type=:article),
+    :mroz1987 => (key=:mroz1987, authors="Mroz, Thomas A.", year=1987,
+        title="The Sensitivity of an Empirical Model of Married Women's Hours of Work to Economic and Statistical Assumptions",
+        journal="Econometrica", volume="55", issue="4", pages="765--799",
+        doi="10.2307/1911029", isbn="", publisher="", entry_type=:article),
+    :greene2018 => (key=:greene2018, authors="Greene, William H.", year=2018,
+        title="Econometric Analysis", journal="", volume="", issue="", pages="",
+        doi="", isbn="978-0134461366", publisher="Pearson (8th ed.)", entry_type=:book),
     # --- Single-Equation Cointegrating Regression (EV-10, #418) ---
     :phillips_hansen1990 => (key=:phillips_hansen1990,
         authors="Phillips, Peter C. B. and Hansen, Bruce E.", year=1990,
@@ -1496,6 +1508,9 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :TruncRegModel => [:hausman_wise1977, :wooldridge2010],
     :estimate_tobit => [:tobin1958, :olsen1978, :mcdonald_moffitt1980],
     :estimate_truncreg => [:hausman_wise1977, :wooldridge2010],
+    # Heckman sample-selection model (EV-18, #426)
+    :HeckmanModel => [:heckman1979, :greene2018, :mroz1987, :wooldridge2010],
+    :estimate_heckman => [:heckman1979, :greene2018, :wooldridge2010],
     # Single-equation cointegrating regression (EV-10, #418)
     :CointRegModel => [:phillips_hansen1990, :park1992, :saikkonen1991, :stock_watson1993],
     :estimate_cointreg => [:phillips_hansen1990, :park1992, :saikkonen1991, :stock_watson1993],
@@ -1939,6 +1954,7 @@ refs(io::IO, ::SelectionResult; kw...) = refs(io, _TYPE_REFS[:SelectionResult]; 
 # Censored / truncated regression (EV-17, #425)
 refs(io::IO, ::TobitModel; kw...) = refs(io, _TYPE_REFS[:TobitModel]; kw...)
 refs(io::IO, ::TruncRegModel; kw...) = refs(io, _TYPE_REFS[:TruncRegModel]; kw...)
+refs(io::IO, ::HeckmanModel; kw...) = refs(io, _TYPE_REFS[:HeckmanModel]; kw...)  # EV-18 (#426)
 refs(io::IO, ::CointRegModel; kw...) = refs(io, _TYPE_REFS[:CointRegModel]; kw...)  # EV-10 (#418)
 
 # Ordered & Multinomial models

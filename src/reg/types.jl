@@ -757,3 +757,65 @@ function Base.show(io::IO, r::OddsRatio{T}) where {T}
         column_labels = ["", "Odds Ratio", "Std.Err.", "[$ci_pct%", "CI]"],
         alignment = [:l, :r, :r, :r, :r])
 end
+
+# =============================================================================
+# HeckmanModel — sample-selection (incidental truncation) — EV-18 (#426)
+# =============================================================================
+
+"""
+    HeckmanModel{T} <: StatsAPI.RegressionModel
+
+Heckman (1979) sample-selection model for incidentally truncated data: the continuous outcome
+`y` is observed only for the subsample where a binary selection indicator `d == 1`. Estimated by
+[`estimate_heckman`](@ref) via either the two-step (Heckit) or full-information ML method.
+
+# Fields
+- `beta::Vector{T}` — outcome-equation coefficients (on `X`).
+- `vcov_beta::Matrix{T}` — covariance of `beta`. For `:twostep`, the Greene-corrected two-step
+  covariance (generated-regressor + selection-induced heteroskedasticity); for `:mle`, the
+  delta-method block of the observed-information inverse.
+- `outcome_names::Vector{String}` — outcome regressor names.
+- `gamma::Vector{T}` — selection-equation (probit) coefficients (on `Z`).
+- `vcov_gamma::Matrix{T}` — covariance of `gamma` (probit information inverse from step 1).
+- `select_names::Vector{String}` — selection regressor names.
+- `rho::T` — correlation between the outcome and selection errors.
+- `sigma::T` — standard deviation of the outcome error.
+- `lambda::T` — `rho * sigma`, the coefficient on the inverse-Mills ratio (two-step) or its
+  MLE-implied value; the two-step `t`-test on `lambda` is the `H₀: no selection` test.
+- `rho_se::T`, `sigma_se::T`, `lambda_se::T` — standard errors of `(rho, sigma, lambda)`
+  (delta-method under `:mle`; the OLS/Greene SE of the Mills coefficient for `:twostep`, with
+  `rho_se`/`sigma_se` set to `NaN` because the two-step does not deliver them directly).
+- `mills::Vector{T}` — fitted inverse-Mills ratio `φ(z'γ̂)/Φ(z'γ̂)` for the selected observations.
+- `method::Symbol` — `:twostep` or `:mle`.
+- `loglik::T`, `aic::T`, `bic::T` — bivariate-normal log-likelihood and information criteria
+  (`:mle`); for `:twostep` the profile log-likelihood evaluated at the two-step point estimates.
+- `n_selected::Int`, `n_total::Int` — selected-subsample and full-sample counts.
+- `y::Vector{T}`, `X::Matrix{T}` — outcome and outcome-regressors over the SELECTED subsample.
+- `converged::Bool` — optimizer convergence (`true` for `:twostep`).
+
+See also [`estimate_heckman`](@ref).
+"""
+struct HeckmanModel{T<:AbstractFloat} <: StatsAPI.RegressionModel
+    beta::Vector{T}
+    vcov_beta::Matrix{T}
+    outcome_names::Vector{String}
+    gamma::Vector{T}
+    vcov_gamma::Matrix{T}
+    select_names::Vector{String}
+    rho::T
+    sigma::T
+    lambda::T
+    rho_se::T
+    sigma_se::T
+    lambda_se::T
+    mills::Vector{T}
+    method::Symbol
+    loglik::T
+    aic::T
+    bic::T
+    n_selected::Int
+    n_total::Int
+    y::Vector{T}
+    X::Matrix{T}
+    converged::Bool
+end

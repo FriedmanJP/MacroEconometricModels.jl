@@ -459,6 +459,7 @@ report(r::SelectionResult) = show(stdout, r)    # EV-04 (#412)
 report(io::IO, r::SelectionResult) = show(io, r)  # EV-04 (#412)
 report(m::TobitModel) = show(stdout, m)         # EV-17 (#425)
 report(m::TruncRegModel) = show(stdout, m)      # EV-17 (#425)
+report(m::HeckmanModel) = show(stdout, m)       # EV-18 (#426)
 report(m::CointRegModel) = show(stdout, m)      # EV-10 (#418)
 report(io::IO, m::CointRegModel) = show(io, m)  # EV-10 (#418)
 

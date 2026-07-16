@@ -97,6 +97,7 @@ const TEST_GROUPS = [
         "reg/test_penalized.jl",   # EV-03 (#411): ridge / LASSO / elastic net
         "reg/test_selection.jl",   # EV-04 (#412): stepwise / best-subset / GETS
         "reg/test_tobit.jl",       # EV-17 (#425): Tobit + truncated regression
+        "reg/test_heckman.jl",     # EV-18 (#426): Heckman sample-selection (two-step + MLE)
         "reg/test_reg_diagnostics.jl",   # EV-31 (#439): White/BP/Glejser/Harvey/BG/RESET
         "reg/test_stability.jl",         # EV-32 (#440): recursive residuals / CUSUM(SQ) / Chow / influence
         "reg/test_ordered.jl",

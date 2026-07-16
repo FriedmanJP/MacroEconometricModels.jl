@@ -24,6 +24,7 @@ const _EXAMPLE_DATASETS = Dict{Symbol, Tuple{String, Symbol}}(
     :mpdta   => ("mpdta.toml",   :panel),
     :wiot    => ("wiot.toml",    :io),
     :nile    => ("nile.toml",    :timeseries),   # EV-13 (#421); shared with EV-37
+    :mroz    => ("mroz.toml",    :crosssection), # EV-18 (#426): Mroz (1987) labor supply
 )
 
 # Parse frequency string to Frequency enum
@@ -47,6 +48,8 @@ Load a built-in example dataset.
 - `:ddcg` — Acemoglu et al. (2019) Democracy-GDP Panel (2 variables × 9,384 obs, 184 countries × 51 years) → `PanelData`
 - `:mpdta` — Callaway & Sant'Anna (2021) Minimum Wage Panel (3 variables × 2,500 obs, 500 counties × 5 years) → `PanelData`
 - `:nile` — Annual flow of the river Nile at Aswan, 1871–1970 (100 obs, 10^8 m^3) → `TimeSeriesData`
+- `:mroz` — Mroz (1987) female labor-supply extract (753 obs × 22 vars; `lwage`/`wage` are `NaN`
+  for the 325 non-participants) → `CrossSectionData`. Used for the Heckman selection model.
 
 For time series datasets, the returned `TimeSeriesData` includes variable names,
 transformation codes, frequency, per-variable descriptions (via `vardesc`),
@@ -97,6 +100,8 @@ function load_example(name::Symbol)
         _load_panel_example(d)
     elseif dtype == :io
         _load_io_example(d)
+    elseif dtype == :crosssection
+        _load_crosssection_example(d)
     else
         _load_timeseries_example(d)
     end
@@ -171,6 +176,34 @@ function _load_timeseries_example(d::Dict)
                    desc=ds,
                    vardesc=vardesc_dict,
                    source_refs=sr)
+end
+
+# Load a cross-sectional example (:mroz). Returns CrossSectionData; columns with
+# missing values (e.g. lwage/wage for non-participants) carry NaN.
+function _load_crosssection_example(d::Dict)
+    meta = d["metadata"]
+    vars = d["variables"]
+    descs = get(d, "descriptions", Dict{String,Any}())
+    data_dict = d["data"]
+
+    varnames = String.(vars["names"])
+    n_vars = length(varnames)
+    n_obs = meta["n_obs"]
+
+    mat = Matrix{Float64}(undef, n_obs, n_vars)
+    for (j, vn) in enumerate(varnames)
+        col = data_dict[vn]
+        for i in 1:n_obs
+            mat[i, j] = Float64(col[i])
+        end
+    end
+
+    sr = Symbol.(get(meta, "source_refs", String[]))
+    vardesc_dict = Dict{String,String}(String(k) => String(v) for (k, v) in descs)
+    ds = get(meta, "desc", "")
+
+    CrossSectionData(mat; varnames=varnames, desc=ds, vardesc=vardesc_dict,
+                     source_refs=sr)
 end
 
 # Load a panel example (Penn World Table)
