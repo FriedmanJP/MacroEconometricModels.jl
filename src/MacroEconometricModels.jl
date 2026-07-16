@@ -327,6 +327,9 @@ include("preg/display.jl")
 # Covariance estimators
 include("core/covariance.jl")
 
+# Long-run variance toolkit (EV-12: lrvar/lrcov/lrcov_oneside/varhac)
+include("core/lrvar.jl")
+
 # Local Projections
 include("lp/types.jl")
 include("lp/core.jl")
@@ -737,6 +740,9 @@ export structural_lp
 export newey_west, white_vcov, driscoll_kraay, optimal_bandwidth_nw
 export robust_vcov, long_run_variance, long_run_covariance
 export register_cov_estimator!
+
+# Long-run variance toolkit (EV-12)
+export lrvar, lrcov, lrcov_oneside, varhac, optimal_bandwidth_nw94
 
 # LP-IV (Stock & Watson 2018)
 export estimate_lp_iv, lp_iv_irf

@@ -341,6 +341,26 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="A Heteroskedasticity-Consistent Covariance Matrix Estimator and a Direct Test for Heteroskedasticity",
         journal="Econometrica", volume="48", issue="4", pages="817--838",
         doi="10.2307/1912934", isbn="", publisher="", entry_type=:article),
+    # --- Long-Run Variance Toolkit (EV-12) ---
+    :andrews1991 => (key=:andrews1991, authors="Andrews, Donald W. K.", year=1991,
+        title="Heteroskedasticity and Autocorrelation Consistent Covariance Matrix Estimation",
+        journal="Econometrica", volume="59", issue="3", pages="817--858",
+        doi="10.2307/2938229", isbn="", publisher="", entry_type=:article),
+    :newey_west1994 => (key=:newey_west1994,
+        authors="Newey, Whitney K. and West, Kenneth D.", year=1994,
+        title="Automatic Lag Selection in Covariance Matrix Estimation",
+        journal="Review of Economic Studies", volume="61", issue="4", pages="631--653",
+        doi="10.2307/2297912", isbn="", publisher="", entry_type=:article),
+    :andrews_monahan1992 => (key=:andrews_monahan1992,
+        authors="Andrews, Donald W. K. and Monahan, J. Christopher", year=1992,
+        title="An Improved Heteroskedasticity and Autocorrelation Consistent Covariance Matrix Estimator",
+        journal="Econometrica", volume="60", issue="4", pages="953--966",
+        doi="10.2307/2951574", isbn="", publisher="", entry_type=:article),
+    :den_haan_levin1997 => (key=:den_haan_levin1997,
+        authors="Den Haan, Wouter J. and Levin, Andrew T.", year=1997,
+        title="A Practitioner's Guide to Robust Covariance Matrix Estimation",
+        journal="Handbook of Statistics", volume="15", issue="", pages="299--342",
+        doi="10.1016/S0169-7161(97)15014-3", isbn="", publisher="Elsevier", entry_type=:incollection),
     # --- Volatility Models ---
     :engle1982 => (key=:engle1982, authors="Engle, Robert F.", year=1982,
         title="Autoregressive Conditional Heteroscedasticity with Estimates of the Variance of United Kingdom Inflation",
@@ -868,6 +888,8 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
 # --- Type/method → reference keys mapping ---
 
 const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
+    # Long-run variance toolkit (EV-12): lrvar/lrcov/lrcov_oneside/varhac
+    :lrvar => [:andrews1991, :newey_west1994, :andrews_monahan1992, :den_haan_levin1997],
     # Input-Output analysis
     :IOData => [:leontief1936, :ghosh1958, :miller_blair_2009],
     :LeontiefModel => [:leontief1936, :miller_blair_2009],

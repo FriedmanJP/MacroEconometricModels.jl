@@ -359,6 +359,78 @@ The cluster-robust standard errors for the intercept are substantially larger th
 
 ---
 
+## Long-Run Variance (HAC) Estimation
+
+When the data are serially correlated --- as in time-series regressions, GMM moment conditions, and cointegration analysis --- inference requires the **long-run variance** (LRV), the zero-frequency spectral density that sums all autocovariances rather than a single-lag White correction. For a mean-zero (after demeaning) series ``U_t`` (``T \times k``) with sample autocovariances ``\Gamma_j = T^{-1} \sum_t U_t U_{t-j}'`` and kernel ``k(\cdot)``:
+
+```math
+\Omega = \Gamma_0 + \sum_{j \geq 1} k(j/b)\,(\Gamma_j + \Gamma_j'), \qquad
+\Lambda = \Gamma_0 + \sum_{j \geq 1} k(j/b)\,\Gamma_j
+```
+
+where:
+- ``\Omega`` is the **two-sided** long-run covariance --- the object HAC standard errors and spectral density estimates use
+- ``\Lambda`` is the **one-sided** long-run covariance --- the object fully-modified OLS, canonical cointegrating regression, and panel cointegration consume
+- ``b`` is the bandwidth (truncation lag), fixed or data-dependent
+- ``k(\cdot)`` is the kernel: `:bartlett` (Newey-West), `:parzen`, `:qs` (quadratic-spectral), or `:tukey_hanning`
+
+The two objects satisfy the identity ``\Omega = \Lambda + \Lambda' - \Gamma_0`` by construction. Using ``\Gamma_j + \Gamma_j'`` where ``\Gamma_j`` alone is required silently breaks fully-modified estimators, so the one-sided ``\Lambda`` has its own function.
+
+`lrvar` returns the two-sided ``\Omega`` (a scalar for a vector input, a matrix for a matrix input); `lrcov` is its matrix form and `lrcov_oneside` returns the one-sided ``\Lambda``:
+
+```@example reg
+# Serially correlated series: an AR(1) with rho = 0.6
+T = 400
+u = zeros(T)
+for t in 2:T
+    u[t] = 0.6 * u[t-1] + randn()
+end
+
+Omega = lrvar(u; kernel=:bartlett, bandwidth=:andrews)   # two-sided, Andrews (1991) bandwidth
+naive = sum(abs2, u .- sum(u)/T) / T                     # naive variance ignores serial correlation
+round.((Omega, naive); digits=3)
+```
+
+The long-run variance (about ``1/(1-0.6)^2 \approx 6.25`` times the innovation variance) exceeds the naive sample variance because positive serial correlation inflates the variance of the sample mean --- exactly the correction HAC inference applies.
+
+### Bandwidth and Kernel Selection
+
+The `bandwidth` keyword accepts a data-dependent selector or a fixed truncation lag:
+
+| Selector | Method | Reference |
+|---|---|---|
+| `:andrews` | AR(1) parametric plug-in | Andrews (1991) |
+| `:nw94` | Nonparametric automatic bandwidth | Newey & West (1994) |
+| a real number | fixed truncation lag, used as-is | --- |
+
+Setting `prewhiten=true` applies Andrews-Monahan (1992) VAR(1) prewhitening with recoloring and an eigenvalue-modulus cap at 0.97 (falling back to no prewhitening near a unit root).
+
+```@example reg
+# Multivariate one-sided long-run covariance for a cointegration workflow
+X = hcat(u, cumsum(0.3 .* u .+ randn(T)))
+Lambda = lrcov_oneside(X; kernel=:qs, bandwidth=:nw94)
+round.(Lambda; digits=3)
+```
+
+### VARHAC
+
+VARHAC (Den Haan & Levin 1997) is a **parametric** alternative to kernel HAC: it fits a reduced-form VAR selected by information criterion (up to ``\lfloor T^{1/3} \rfloor`` lags) and reads the LRV off the fitted filter,
+
+```math
+\Omega = \hat{B}(1)^{-1}\, \hat{\Sigma}\, \hat{B}(1)^{-\top}, \qquad \hat{B}(1) = I - \sum_{l=1}^p \hat{A}_l
+```
+
+with no bandwidth or kernel to choose.
+
+```@example reg
+Omega_vh = varhac(u; ic=:aic)
+round(Omega_vh; digits=3)
+```
+
+VARHAC and kernel HAC estimate the same population object; VARHAC is often more accurate when the serial correlation is well approximated by a low-order VAR.
+
+---
+
 ## Instrumental Variables / 2SLS
 
 When a regressor ``x_j`` is correlated with the error term (``E[x_j u] \neq 0``), OLS is biased and inconsistent. Common sources of endogeneity include omitted variables, simultaneity, and measurement error. **Instrumental variables** (IV) estimation resolves this by using instruments ``Z`` that satisfy two conditions:
@@ -644,6 +716,8 @@ The OLS estimate of the return to education is biased upward because ability is 
 
 6. **Confusing WLS weights with frequency weights.** The `weights` argument represents inverse-variance weights (``w_i = 1/\text{Var}(u_i)``), not frequency weights. For frequency-weighted regression, multiply each weight by the observation count.
 
+7. **Using the two-sided ``\Omega`` where the one-sided ``\Lambda`` is required.** Fully-modified OLS, CCR, and panel cointegration need ``\Lambda = \sum_{j \geq 0} \Gamma_j`` (no transpose). Feeding them `lrvar`/`lrcov` (which return ``\Omega = \Lambda + \Lambda' - \Gamma_0``) silently biases the second-stage correction --- always call `lrcov_oneside` for those estimators.
+
 ---
 
 ## References
@@ -654,7 +728,16 @@ The OLS estimate of the return to education is biased upward because ability is 
 - Arellano, M. (1987). Computing Robust Standard Errors for Within-Groups Estimators.
   *Oxford Bulletin of Economics and Statistics*, 49(4), 431-434. [DOI](https://doi.org/10.1111/j.1468-0084.1987.mp49004006.x)
 
+- Andrews, D. W. K. (1991). Heteroskedasticity and Autocorrelation Consistent Covariance Matrix Estimation.
+  *Econometrica*, 59(3), 817-858. [DOI](https://doi.org/10.2307/2938229)
+
+- Andrews, D. W. K., & Monahan, J. C. (1992). An Improved Heteroskedasticity and Autocorrelation Consistent Covariance Matrix Estimator.
+  *Econometrica*, 60(4), 953-966. [DOI](https://doi.org/10.2307/2951574)
+
 - Belsley, D. A., Kuh, E., & Welsch, R. E. (1980). *Regression Diagnostics: Identifying Influential Data and Sources of Collinearity*. New York: Wiley. ISBN 978-0-471-05856-4.
+
+- Den Haan, W. J., & Levin, A. T. (1997). A Practitioner's Guide to Robust Covariance Matrix Estimation.
+  In *Handbook of Statistics*, Vol. 15, 299-342. Elsevier. [DOI](https://doi.org/10.1016/S0169-7161(97)15014-3)
 
 - Cameron, A. C., & Miller, D. L. (2015). A Practitioner's Guide to Cluster-Robust Inference.
   *Journal of Human Resources*, 50(2), 317-372. [DOI](https://doi.org/10.3368/jhr.50.2.317)
@@ -666,6 +749,9 @@ The OLS estimate of the return to education is biased upward because ability is 
 
 - MacKinnon, J. G., & White, H. (1985). Some Heteroskedasticity-Consistent Covariance Matrix Estimators with Improved Finite Sample Properties.
   *Journal of Econometrics*, 29(3), 305-325. [DOI](https://doi.org/10.1016/0304-4076(85)90158-7)
+
+- Newey, W. K., & West, K. D. (1994). Automatic Lag Selection in Covariance Matrix Estimation.
+  *Review of Economic Studies*, 61(4), 631-653. [DOI](https://doi.org/10.2307/2297912)
 
 - Sargan, J. D. (1958). The Estimation of Economic Relationships Using Instrumental Variables.
   *Econometrica*, 26(3), 393-415. [DOI](https://doi.org/10.2307/1907619)

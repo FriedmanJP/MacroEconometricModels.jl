@@ -29,6 +29,7 @@ const TEST_GROUPS = [
         "core/test_edge_cases.jl",
         "core/test_examples.jl",
         "core/test_covariance.jl",
+        "core/test_lrvar.jl",
         "core/test_internal_helpers.jl",
         "core/test_error_paths.jl",
         "core/test_display_backends.jl",
