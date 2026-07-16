@@ -117,6 +117,68 @@ function plot_result(m::GJRGARCHModel{T};
 end
 
 # =============================================================================
+# GarchMidasModel (EV-02, #410)
+# =============================================================================
+
+"""
+    plot_result(m::GarchMidasModel; view=:components, title="", save_path=nothing)
+
+Plot a GARCH-MIDAS fit.
+
+- `view=:components` — overlay total conditional volatility `√σ²` and the
+  long-run component `√τ` over the retained sample.
+- `view=:weights` — the fitted Beta MIDAS weight curve `φ_k` versus lag `k`.
+"""
+function plot_result(m::GarchMidasModel{T}; view::Symbol=:components,
+                     title::String="", save_path::Union{String,Nothing}=nothing) where {T}
+    if view === :components
+        p = _garch_midas_components_plot(m, title)
+    elseif view === :weights
+        p = _garch_midas_weight_plot(m, title)
+    else
+        throw(ArgumentError("unknown view $view — use :components or :weights"))
+    end
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+function _garch_midas_components_plot(m::GarchMidasModel{T}, title::String) where {T}
+    id = _next_plot_id("gm_comp")
+    n = length(m.conditional_variance)
+    rows = Vector{Pair{String,String}}[]
+    for i in 1:n
+        push!(rows, [
+            "x" => _json(i),
+            "total" => _json(sqrt(max(m.conditional_variance[i], zero(T)))),
+            "longrun" => _json(sqrt(max(m.tau[i], zero(T)))),
+        ])
+    end
+    data_json = _json_array_of_objects(rows)
+    s_json = _series_json(["Total √σ²", "Long-run √τ"],
+                          [_PLOT_COLORS[1], _PLOT_COLORS[2]];
+                          keys=["total", "longrun"], dash=["", "6,3"])
+    js = _render_line_js(id, data_json, s_json;
+                         xlabel="Retained HF observation", ylabel="Volatility")
+    isempty(title) && (title = "GARCH-MIDAS Volatility Components")
+    _make_plot([_PanelSpec(id, title, js)]; title=title)
+end
+
+function _garch_midas_weight_plot(m::GarchMidasModel{T}, title::String) where {T}
+    id = _next_plot_id("gm_w")
+    rows = Vector{Pair{String,String}}[]
+    for k in 1:m.K
+        push!(rows, ["x" => _json(k), "w" => _json(m.weights[k]), "zero" => "0"])
+    end
+    data_json = _json_array_of_objects(rows)
+    s_json = _series_json(["Weight φₖ"], [_PLOT_COLORS[1]]; keys=["w"])
+    refs = "[{\"value\":0,\"color\":\"#999\",\"dash\":\"4,3\"}]"
+    js = _render_line_js(id, data_json, s_json;
+                         ref_lines_json=refs, xlabel="MIDAS lag k", ylabel="Weight")
+    isempty(title) && (title = "GARCH-MIDAS Beta Weights (K=$(m.K))")
+    _make_plot([_PanelSpec(id, title, js)]; title=title)
+end
+
+# =============================================================================
 # SVModel
 # =============================================================================
 

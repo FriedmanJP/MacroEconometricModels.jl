@@ -310,6 +310,7 @@ ARCH, GARCH, EGARCH, GJR-GARCH, and Stochastic Volatility estimation, forecastin
 | `estimate_garch(y, p, q)` | GARCH(p,q) via MLE |
 | `estimate_egarch(y, p, q)` | EGARCH(p,q) via MLE |
 | `estimate_gjr_garch(y, p, q)` | GJR-GARCH(p,q) via MLE |
+| `estimate_garch_midas(r, x_lf; K, m_freq)` | GARCH-MIDAS long/short-run components |
 | `estimate_sv(y; variant, ...)` | Stochastic Volatility via KSC Gibbs |
 | `forecast(vol_model, h)` | Volatility forecast with simulation CIs |
 | `arch_lm_test(y_or_model, q)` | ARCH-LM test for conditional heteroskedasticity |

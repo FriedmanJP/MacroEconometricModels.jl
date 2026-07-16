@@ -6,6 +6,7 @@
 - **GARCH**: Generalized ARCH (Bollerslev 1986) --- adds lagged conditional variances for parsimonious volatility persistence
 - **EGARCH**: Exponential GARCH (Nelson 1991) --- log-variance specification with asymmetric leverage effects, no positivity constraints
 - **GJR-GARCH**: Threshold GARCH (Glosten, Jagannathan & Runkle 1993) --- indicator-based leverage via ``\gamma_i \mathbb{1}(\varepsilon_{t-i} < 0)``
+- **GARCH-MIDAS**: Mixed-frequency component GARCH (Engle, Ghysels & Sohn 2013) --- variance splits into a short-run unit-mean GARCH and a long-run MIDAS-filtered macro/realized-variance component
 - **Stochastic Volatility**: Latent log-variance AR(1) process (Taylor 1986), estimated via Kim-Shephard-Chib (1998) Gibbs sampler with optional leverage and Student-t errors
 - **Diagnostics**: ARCH-LM test, Ljung-Box on squared residuals, news impact curves
 - **Forecasting**: Multi-step ahead variance forecasts with simulation-based confidence intervals (GARCH family) or posterior predictive intervals (SV)
@@ -331,6 +332,95 @@ The top panel shows the raw return series to identify volatility clusters visual
 | `method` | `Symbol` | Estimation method |
 | `converged` | `Bool` | Convergence status |
 | `iterations` | `Int` | Optimizer iterations |
+
+---
+
+## GARCH-MIDAS
+
+The **GARCH-MIDAS** model of Engle, Ghysels & Sohn (2013) links high-frequency financial volatility to slowly moving macroeconomic fundamentals by factoring the conditional variance into two multiplicative components:
+
+```math
+\sigma^2_{i,t} = \tau_t \cdot g_{i,t}
+```
+
+where ``i`` indexes the high-frequency return within low-frequency block ``t``. The **short-run** component ``g`` is a unit-mean GARCH(1,1) on the ``\tau``-standardized return,
+
+```math
+g_{i,t} = (1 - \alpha - \beta) + \alpha \frac{(r_{i-1,t} - \mu)^2}{\tau_{i-1}} + \beta \, g_{i-1,t},
+```
+
+and the **long-run** component is a MIDAS filter of a low-frequency driver ``X`` (a macro series or realized variance):
+
+```math
+\tau_t = \exp\!\left( m + \theta \sum_{k=1}^{K} \varphi_k(w) \, X_{t-k} \right),
+```
+
+with Beta weights ``\varphi_k(w)`` (monotone decaying, summing to one). The ``\sqrt{\tau}`` scaling of the short-run innovation keeps ``g`` at unit unconditional mean --- ``\tau`` carries the variance level.
+
+- ``\mu`` --- conditional mean
+- ``\alpha, \beta`` --- short-run ARCH/GARCH coefficients (``\alpha + \beta < 1``)
+- ``m`` --- long-run intercept
+- ``\theta`` --- MIDAS slope on the aggregated low-frequency driver
+- ``w`` --- Beta weight shape (``w > 1`` gives decaying weights)
+
+Estimation is by Gaussian QMLE over ``(\mu, \alpha, \beta, m, \theta, w)`` with ``\alpha, \beta`` log-transformed under the stationarity constraint and ``w = 1 + e^{\tilde w}``. The `variance_ratio` field reports ``\mathrm{Var}(\log \tau_t) / \mathrm{Var}(\log \sigma^2_{i,t})``, the share of total variance variation attributable to the long-run macro component (Engle, Ghysels & Sohn 2013).
+
+```@example volatility
+# Simulate a daily-frequency return series with a monthly macro driver
+Random.seed!(202)
+K, m_freq, nblk = 6, 21, 90
+phi = midas_weights([1.0, 4.0], K; kind=:beta2)      # decaying Beta weights
+Xlf = zeros(nblk); for t in 2:nblk; Xlf[t] = 0.7Xlf[t-1] + randn(); end
+tau = [t > K ? exp(-0.5 + 0.3 * sum(phi[k] * Xlf[t-k] for k in 1:K)) : exp(-0.5) for t in 1:nblk]
+r = Float64[]; g = 1.0; ep = 0.0; tp = tau[1]
+for t in 1:nblk, i in 1:m_freq
+    global g, ep, tp
+    g = 0.04 + 0.06 * ep^2 / tp + 0.90 * g
+    push!(r, 0.02 + sqrt(tau[t] * g) * randn()); ep = r[end] - 0.02; tp = tau[t]
+end
+
+# Fit GARCH-MIDAS with the macro driver
+gm = estimate_garch_midas(r, Xlf; K=K, m_freq=m_freq, rv=:macro, span=:fixed)
+report(gm)
+```
+
+The realized-variance variant needs no exogenous series --- the long-run driver is the block realized variance of the returns themselves:
+
+```@example volatility
+gm_rv = estimate_garch_midas(r; K=K, m_freq=m_freq, rv=:realized)
+gm_rv.variance_ratio      # long-run share of total variance variation
+```
+
+Forecasts iterate the short-run ``g`` forward (mean-reverting to 1) while holding the long-run ``\tau`` at its last low-frequency block:
+
+```@example volatility
+fc = forecast(gm, 10)
+fc.total          # total variance path σ² = τ·g
+```
+
+The component overlay plots total ``\sqrt{\sigma^2}`` against the long-run ``\sqrt{\tau}``:
+
+```julia
+plot_result(gm; view=:components)
+```
+
+### GarchMidasModel Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `mu` | `T` | Conditional mean ``\mu`` |
+| `alpha`, `beta` | `T` | Short-run ARCH/GARCH coefficients |
+| `m_const` | `T` | Long-run intercept ``m`` |
+| `theta` | `T` | MIDAS slope ``\theta`` |
+| `w` | `T` | Beta weight shape ``w`` |
+| `weights` | `Vector{T}` | Realized weight curve ``\varphi(\hat w)`` (length ``K``) |
+| `tau` | `Vector{T}` | Long-run component per retained observation |
+| `g` | `Vector{T}` | Short-run unit-mean component |
+| `conditional_variance` | `Vector{T}` | Total ``\sigma^2 = \tau g`` |
+| `variance_ratio` | `T` | Long-run variance share ``\mathrm{Var}(\log\tau)/\mathrm{Var}(\log\sigma^2)`` |
+| `ret_idx` | `Vector{Int}` | Indices of retained (non-ragged) observations |
+| `loglik`, `aic`, `bic` | `T` | Fit statistics |
+| `converged` | `Bool` | Convergence status |
 
 ---
 
@@ -732,6 +822,9 @@ The industrial production growth series exhibits ARCH effects, confirming the ne
 
 - Engle, R. F. (1982). Autoregressive Conditional Heteroscedasticity with Estimates of the Variance of United Kingdom Inflation.
   *Econometrica*, 50(4), 987--1007. [DOI](https://doi.org/10.2307/1912773)
+
+- Engle, R. F., Ghysels, E., & Sohn, B. (2013). Stock Market Volatility and Macroeconomic Fundamentals.
+  *Review of Economics and Statistics*, 95(3), 776--797. [DOI](https://doi.org/10.1162/REST_a_00300)
 
 - Glosten, L. R., Jagannathan, R., & Runkle, D. E. (1993). On the Relation between the Expected Value and the Volatility of the Nominal Excess Return on Stocks.
   *Journal of Finance*, 48(5), 1779--1801. [DOI](https://doi.org/10.1111/j.1540-6261.1993.tb05128.x)

@@ -168,6 +168,89 @@ function GJRGARCHModel(y::Vector{T}, p::Int, q::Int, mu::T, omega::T,
 end
 
 # =============================================================================
+# GARCH-MIDAS Model Type (EV-02, #410)
+# =============================================================================
+
+"""
+    GarchMidasModel{T} <: AbstractVolatilityModel
+
+GARCH-MIDAS model (Engle, Ghysels & Sohn 2013) decomposing the conditional
+variance of a high-frequency return `r_{i,t}` into a **short-run** unit-mean
+GARCH(1,1) component `g_{i,t}` and a slowly-moving **long-run** component `τ_t`
+driven by a MIDAS-weighted low-frequency covariate:
+
+    σ²_{i,t} = τ_t · g_{i,t}
+    g_{i,t}  = (1−α−β) + α (r_{i−1,t}−μ)²/τ_{i−1} + β g_{i−1,t}
+    τ_t      = exp( m + θ · Σ_{k=1}^{K} φ_k(w) · X_{t−k} )
+
+where `i` indexes the high-frequency observation, `t` its low-frequency block,
+`X` is a macro level/volatility series (`rv=:macro`) or realized variance
+(`rv=:realized`), and `φ_k(w)` are Beta MIDAS weights (`_midas_weights([1,w], K,
+:beta2)`, monotone decaying, summing to 1). The short-run innovation is scaled by
+`√τ` so `g` has unconditional mean 1 (τ carries the variance level).
+
+# Fields
+- `y::Vector{T}` — full high-frequency return series (untrimmed)
+- `x_lf::Vector{T}` — low-frequency driver as supplied (empty for `rv=:realized`)
+- `mu::T` — conditional mean μ
+- `alpha::T` / `beta::T` — short-run ARCH/GARCH coefficients (α+β<1)
+- `m_const::T` — long-run intercept m
+- `theta::T` — MIDAS slope θ
+- `w::T` — Beta weight shape (w>1 ⇒ monotone decaying)
+- `weights::Vector{T}` — realized weight curve φ(ŵ), length `K` (sums to 1)
+- `tau::Vector{T}` — long-run component per retained HF obs
+- `g::Vector{T}` — short-run component per retained HF obs (unit-mean)
+- `conditional_variance::Vector{T}` — total σ² = τ·g per retained HF obs
+- `ret_idx::Vector{Int}` — indices into `y` of the retained (non-ragged) HF obs
+- `residuals::Vector{T}` — retained raw residuals r−μ
+- `standardized_residuals::Vector{T}` — z = (r−μ)/√σ²
+- `variance_ratio::T` — VR = Var(log τ)/Var(log σ²), long-run variation share
+- `K::Int` — number of MIDAS lags
+- `m_freq::Int` — high-to-low frequency ratio (HF obs per LF block)
+- `n_blocks::Int` — number of complete low-frequency blocks
+- `rv::Symbol` — `:macro` or `:realized`
+- `span::Symbol` — `:fixed` (calendar-block τ) or `:rolling` (rolling-RV τ)
+- `loglik::T` / `aic::T` / `bic::T`
+- `method::Symbol` — estimation method (`:qmle`)
+- `converged::Bool` / `iterations::Int`
+- `param_vcov::Matrix{T}` — 6×6 QMLE sandwich covariance in optimization space,
+  ordered `[μ, log α, log β, m, θ, w̃]`
+
+# References
+- Engle, Ghysels & Sohn (2013). *Review of Economics and Statistics* 95(3), 776-797.
+"""
+struct GarchMidasModel{T<:AbstractFloat} <: AbstractVolatilityModel
+    y::Vector{T}
+    x_lf::Vector{T}
+    mu::T
+    alpha::T
+    beta::T
+    m_const::T
+    theta::T
+    w::T
+    weights::Vector{T}
+    tau::Vector{T}
+    g::Vector{T}
+    conditional_variance::Vector{T}
+    ret_idx::Vector{Int}
+    residuals::Vector{T}
+    standardized_residuals::Vector{T}
+    variance_ratio::T
+    K::Int
+    m_freq::Int
+    n_blocks::Int
+    rv::Symbol
+    span::Symbol
+    loglik::T
+    aic::T
+    bic::T
+    method::Symbol
+    converged::Bool
+    iterations::Int
+    param_vcov::Matrix{T}
+end
+
+# =============================================================================
 # Type Accessors
 # =============================================================================
 
@@ -296,3 +379,39 @@ Base.show(io::IO, m::EGARCHModel) =
 
 Base.show(io::IO, m::GJRGARCHModel) =
     _show_volatility_model(io, "GJR-GARCH($(m.p),$(m.q)) Model", m; alpha=m.alpha, gamma=m.gamma, beta=m.beta)
+
+# =============================================================================
+# GARCH-MIDAS accessors / StatsAPI / display (EV-02, #410)
+# =============================================================================
+
+"""Short-run persistence α+β of a GARCH-MIDAS model."""
+persistence(m::GarchMidasModel) = m.alpha + m.beta
+
+function halflife(m::GarchMidasModel)
+    p = persistence(m)
+    (p <= zero(p) || p >= one(p)) && return Inf
+    log(typeof(p)(0.5)) / log(p)
+end
+
+"""Number of retained (non-ragged) high-frequency observations."""
+StatsAPI.nobs(m::GarchMidasModel) = length(m.ret_idx)
+"""Coefficient vector `[μ, α, β, m, θ, w]`."""
+StatsAPI.coef(m::GarchMidasModel) = [m.mu, m.alpha, m.beta, m.m_const, m.theta, m.w]
+"""Retained raw residuals ``r_{i,t}-\\mu``."""
+StatsAPI.residuals(m::GarchMidasModel) = m.residuals
+"""Total conditional variance series ``\\hat{\\sigma}^2 = \\tau g``."""
+StatsAPI.predict(m::GarchMidasModel) = m.conditional_variance
+"""Maximized (quasi) log-likelihood."""
+StatsAPI.loglikelihood(m::GarchMidasModel) = m.loglik
+"""Akaike Information Criterion."""
+StatsAPI.aic(m::GarchMidasModel) = m.aic
+"""Bayesian Information Criterion."""
+StatsAPI.bic(m::GarchMidasModel) = m.bic
+"""Number of estimated parameters: 6 `[μ, α, β, m, θ, w]`."""
+StatsAPI.dof(::GarchMidasModel) = 6
+"""Residual degrees of freedom."""
+StatsAPI.dof_residual(m::GarchMidasModel) = length(m.ret_idx) - 6
+"""`false` — GARCH-MIDAS is nonlinear."""
+StatsAPI.islinear(::GarchMidasModel) = false
+
+Base.show(io::IO, m::GarchMidasModel) = _show_garch_midas(io, m)

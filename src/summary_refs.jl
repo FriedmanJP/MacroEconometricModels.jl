@@ -460,6 +460,12 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Conditional Heteroskedasticity in Asset Returns: A New Approach",
         journal="Econometrica", volume="59", issue="2", pages="347--370",
         doi="10.2307/2938260", isbn="", publisher="", entry_type=:article),
+    # --- GARCH-MIDAS (EV-02, #410) ---
+    :engle_ghysels_sohn2013 => (key=:engle_ghysels_sohn2013,
+        authors="Engle, Robert F. and Ghysels, Eric and Sohn, Bumjean", year=2013,
+        title="Stock Market Volatility and Macroeconomic Fundamentals",
+        journal="Review of Economics and Statistics", volume="95", issue="3", pages="776--797",
+        doi="10.1162/REST_a_00300", isbn="", publisher="", entry_type=:article),
     :glosten_jagannathan_runkle1993 => (key=:glosten_jagannathan_runkle1993,
         authors="Glosten, Lawrence R. and Jagannathan, Ravi and Runkle, David E.", year=1993,
         title="On the Relation Between the Expected Value and the Volatility of the Nominal Excess Return on Stocks",
@@ -1326,6 +1332,8 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :GARCHModel => [:bollerslev1986],
     :EGARCHModel => [:nelson1991],
     :GJRGARCHModel => [:glosten_jagannathan_runkle1993],
+    :GarchMidasModel => [:engle_ghysels_sohn2013, :ghysels2007, :bollerslev1986],
+    :garch_midas => [:engle_ghysels_sohn2013, :ghysels2007, :bollerslev1986],
     :SVModel => [:taylor1986, :kim_shephard_chib1998, :omori2007],
     :VolatilityForecast => [:engle1982, :bollerslev1986],
     :arch => [:engle1982],
@@ -1809,6 +1817,7 @@ refs(io::IO, ::ARCHModel; kw...) = refs(io, _TYPE_REFS[:ARCHModel]; kw...)
 refs(io::IO, ::GARCHModel; kw...) = refs(io, _TYPE_REFS[:GARCHModel]; kw...)
 refs(io::IO, ::EGARCHModel; kw...) = refs(io, _TYPE_REFS[:EGARCHModel]; kw...)
 refs(io::IO, ::GJRGARCHModel; kw...) = refs(io, _TYPE_REFS[:GJRGARCHModel]; kw...)
+refs(io::IO, ::GarchMidasModel; kw...) = refs(io, _TYPE_REFS[:GarchMidasModel]; kw...)
 refs(io::IO, ::SVModel; kw...) = refs(io, _TYPE_REFS[:SVModel]; kw...)
 refs(io::IO, ::VolatilityForecast; kw...) = refs(io, _TYPE_REFS[:VolatilityForecast]; kw...)
 

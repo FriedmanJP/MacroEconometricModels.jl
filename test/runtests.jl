@@ -112,6 +112,7 @@ const TEST_GROUPS = [
     ("Volatility & Filters" => [
         "volatility/test_volatility.jl",
         "volatility/test_volatility_coverage.jl",
+        "volatility/test_garch_midas.jl",   # EV-02 (#410): GARCH-MIDAS long/short-run components
         "nongaussian/test_nongaussian_svar.jl",
         "nongaussian/test_nongaussian_internals.jl",
         "plotting/test_plot_result.jl",
@@ -437,6 +438,7 @@ else
         # Group 6: Volatility & Filters
         @testset "Volatility Models (ARCH/GARCH/SV)" begin include("volatility/test_volatility.jl") end
         @testset "Volatility Coverage" begin include("volatility/test_volatility_coverage.jl") end
+        @testset "GARCH-MIDAS" begin include("volatility/test_garch_midas.jl") end
         @testset "Non-Gaussian SVAR Identification" begin include("nongaussian/test_nongaussian_svar.jl") end
         @testset "Non-Gaussian Internals" begin include("nongaussian/test_nongaussian_internals.jl") end
         @testset "Plotting" begin include("plotting/test_plot_result.jl") end

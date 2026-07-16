@@ -106,6 +106,7 @@ ARCHModel
 GARCHModel
 EGARCHModel
 GJRGARCHModel
+GarchMidasModel
 SVModel
 VolatilityForecast
 ```
@@ -128,6 +129,7 @@ ljung_box_squared
 estimate_garch
 estimate_egarch
 estimate_gjr_garch
+estimate_garch_midas
 news_impact_curve
 ```
 
