@@ -1003,6 +1003,10 @@ export estimate_garch, estimate_egarch, estimate_gjr_garch
 export estimate_garch_midas, GarchMidasModel   # EV-02 (#410): GARCH-MIDAS
 export estimate_figarch, estimate_fiegarch, FIGARCHModel, FIEGARCHModel   # EV-14 (#422): FIGARCH/FIEGARCH
 export news_impact_curve
+# EV-15 (#423): IGARCH / Component-GARCH / APARCH + volatility misspecification tests
+export IGARCHModel, CGARCHModel, APARCHModel
+export estimate_igarch, estimate_cgarch, estimate_aparch
+export component_variances, sign_bias_test, nyblom_test
 
 # SV types and estimation
 export SVModel

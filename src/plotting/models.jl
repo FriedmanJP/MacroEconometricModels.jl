@@ -143,6 +143,73 @@ function plot_result(m::FIEGARCHModel{T};
 end
 
 # =============================================================================
+# IGARCHModel / APARCHModel / CGARCHModel (EV-15, #423)
+# =============================================================================
+
+"""
+    plot_result(m::IGARCHModel; title="", save_path=nothing)
+
+Plot IGARCH conditional-volatility diagnostics (returns + fitted σ²).
+"""
+function plot_result(m::IGARCHModel{T};
+                     title::String="", save_path::Union{String,Nothing}=nothing) where {T}
+    _plot_volatility_diagnostics(m.y, m.conditional_variance, "IGARCH($(m.p),$(m.q))";
+                                  title=title, save_path=save_path)
+end
+
+"""
+    plot_result(m::APARCHModel; title="", save_path=nothing)
+
+Plot APARCH conditional-volatility diagnostics (returns + fitted σ²).
+"""
+function plot_result(m::APARCHModel{T};
+                     title::String="", save_path::Union{String,Nothing}=nothing) where {T}
+    _plot_volatility_diagnostics(m.y, m.conditional_variance, "APARCH($(m.p),$(m.q))";
+                                  title=title, save_path=save_path)
+end
+
+"""
+    plot_result(m::CGARCHModel; view=:components, title="", save_path=nothing)
+
+Plot a Component-GARCH(1,1) fit.
+
+- `view=:components` — stacked-area decomposition of the permanent (`√q`) and
+  transitory (`√max(σ²−q,0)`) volatility contributions over the sample.
+- `view=:default` — the standard 3-panel volatility diagnostic figure.
+"""
+function plot_result(m::CGARCHModel{T}; view::Symbol=:components,
+                     title::String="", save_path::Union{String,Nothing}=nothing) where {T}
+    if view === :components
+        p = _cgarch_components_plot(m, title)
+    elseif view === :default
+        return _plot_volatility_diagnostics(m.y, m.conditional_variance, "Component-GARCH(1,1)";
+                                             title=title, save_path=save_path)
+    else
+        throw(ArgumentError("unknown view $view — use :components or :default"))
+    end
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+function _cgarch_components_plot(m::CGARCHModel{T}, title::String) where {T}
+    id = _next_plot_id("cg_comp")
+    n = length(m.conditional_variance)
+    rows = Vector{Pair{String,String}}[]
+    for i in 1:n
+        perm = sqrt(max(m.permanent[i], zero(T)))
+        trans = sqrt(max(m.transitory[i], zero(T)))
+        push!(rows, ["x" => _json(i), "permanent" => _json(perm), "transitory" => _json(trans)])
+    end
+    data_json = _json_array_of_objects(rows)
+    s_json = _series_json(["Permanent √q", "Transitory √(σ²−q)"],
+                          [_PLOT_COLORS[1], _PLOT_COLORS[2]]; keys=["permanent", "transitory"])
+    js = _render_area_js(id, data_json, s_json;
+                         xlabel="Observation", ylabel="Volatility contribution")
+    isempty(title) && (title = "Component-GARCH Volatility Decomposition")
+    _make_plot([_PanelSpec(id, title, js)]; title=title)
+end
+
+# =============================================================================
 # GarchMidasModel (EV-02, #410)
 # =============================================================================
 

@@ -601,3 +601,547 @@ function StatsAPI.stderror(m::GJRGARCHModel{T}; cov_type::Symbol=:robust) where 
     end
     se
 end
+
+# =============================================================================
+# IGARCH / Component-GARCH / APARCH estimation (EV-15, #423)
+# =============================================================================
+# Extends the GARCH scaffold: reuses `_garch_filter`, the two-stage NelderMead→LBFGS
+# optimizer, the shared `_volatility_negloglik`/`_volatility_loglik_contribs`
+# likelihood pieces, `_numerical_hessian`, and the cached Bollerslev–Wooldridge
+# `_qmle_sandwich_cov`. Standard errors are obtained by a ForwardDiff delta-method
+# Jacobian of the reconstructed coefficient vector w.r.t. the free transform params.
+
+# --- small transform helpers ---
+_igarch_logistic(x) = inv(one(x) + exp(-x))
+
+"""Multinomial-logit simplex: `theta` (length m-1) → weights `w` (length m, wᵢ>0, Σw=1)."""
+function _simplex_from_logits(theta, m::Int)
+    E = eltype(theta)
+    denom = one(E)
+    @inbounds for j in eachindex(theta)
+        denom += exp(theta[j])
+    end
+    w = Vector{E}(undef, m)
+    @inbounds for i in 1:(m - 1)
+        w[i] = exp(theta[i]) / denom
+    end
+    w[m] = one(E) / denom
+    w
+end
+
+# =============================================================================
+# IGARCH
+# =============================================================================
+
+# free params: [mu, log(omega), θ₁..θ_{q+p-1}]  (simplex over the q+p ARCH/GARCH weights)
+function _igarch_unpack(params, p::Int, q::Int)
+    mu = params[1]
+    omega = exp(params[2])
+    w = _simplex_from_logits(params[3:end], q + p)
+    alpha = w[1:q]
+    beta = w[q+1:q+p]
+    mu, omega, alpha, beta
+end
+
+function _igarch_negloglik(params, y, p::Int, q::Int)
+    n = length(y)
+    mu, omega, alpha, beta = _igarch_unpack(params, p, q)
+    resid = y .- mu
+    rsq = resid .^ 2
+    h = _garch_filter(omega, alpha, beta, rsq)
+    _volatility_negloglik(h, rsq, n)
+end
+
+function _igarch_loglik_contribs(params, y, p::Int, q::Int)
+    mu, omega, alpha, beta = _igarch_unpack(params, p, q)
+    resid = y .- mu
+    rsq = resid .^ 2
+    h = _garch_filter(omega, alpha, beta, rsq)
+    _volatility_loglik_contribs(h, rsq)
+end
+
+_igarch_coef_from_free(params, p::Int, q::Int) =
+    (mp = _igarch_unpack(params, p, q); vcat(mp[1], mp[2], mp[3], mp[4]))
+
+"""
+    estimate_igarch(y, p=1, q=1; method=:mle) -> IGARCHModel
+
+Estimate an Integrated GARCH(p,q) model (Engle & Bollerslev 1986) imposing
+`Σα + Σβ = 1` exactly (persistence = 1, divergent unconditional variance). The
+`q+p` ARCH/GARCH weights are parameterized through a multinomial-logit simplex, so
+`q+p-1` weights are free.
+
+# Example
+```julia
+m = estimate_igarch(y, 1, 1)
+persistence(m)  # == 1.0 exactly
+```
+"""
+function estimate_igarch(y::AbstractVector{T}, p::Int=1, q::Int=1; method::Symbol=:mle) where {T<:AbstractFloat}
+    _validate_data(y, "y")
+    _validate_volatility_inputs(y, p, q)
+    p < 1 && throw(ArgumentError("IGARCH requires GARCH order p ≥ 1, got $p"))
+    y_vec = Vector{T}(y)
+    n = length(y_vec)
+
+    mu_init = mean(y_vec)
+    var_init = var(y_vec .- mu_init; corrected=false)
+    omega_init = var_init * T(0.02)
+    # start near α≈0.1, remaining mass on β (unit-sum simplex)
+    m_w = q + p
+    w0 = fill(T(0.1) / q, q)
+    append!(w0, fill((one(T) - sum(w0)) / p, p))
+    # invert simplex: θ_i = log(w_i / w_last)
+    theta0 = [log(w0[i] / w0[end]) for i in 1:(m_w - 1)]
+    params_init = _sanitize_init_params(vcat(mu_init, log(omega_init), theta0))
+
+    obj = params -> _igarch_negloglik(params, y_vec, p, q)
+    result1 = Optim.optimize(obj, params_init, Optim.NelderMead(),
+        Optim.Options(iterations=2000, show_trace=false))
+    result = Optim.optimize(obj, Optim.minimizer(result1), Optim.LBFGS(),
+        Optim.Options(iterations=1000, g_tol=T(1e-8), show_trace=false))
+
+    params_opt = Optim.minimizer(result)
+    mu, omega, alpha, beta = _igarch_unpack(params_opt, p, q)
+    alpha = Vector{T}(alpha); beta = Vector{T}(beta)
+
+    resid = y_vec .- mu
+    rsq = resid .^ 2
+    h = _garch_filter(omega, alpha, beta, rsq)
+    z = resid ./ sqrt.(h)
+
+    loglik = -Optim.minimum(result)
+    k = 1 + q + p
+    aic_val, bic_val = _compute_aic_bic(loglik, k, n)
+
+    param_vcov = try
+        H = _numerical_hessian(obj, params_opt)
+        S = ForwardDiff.jacobian(θ -> _igarch_loglik_contribs(θ, y_vec, p, q), params_opt)
+        Matrix{T}(_qmle_sandwich_cov(H, S))
+    catch
+        fill(T(NaN), k, k)
+    end
+
+    IGARCHModel{T}(y_vec, p, q, mu, omega, alpha, beta, h, z, resid, fill(mu, n),
+                   loglik, aic_val, bic_val, method, Optim.converged(result),
+                   Optim.iterations(result), param_vcov)
+end
+
+estimate_igarch(y::AbstractVector, p::Int=1, q::Int=1; kwargs...) = estimate_igarch(Float64.(y), p, q; kwargs...)
+
+"""
+    StatsAPI.stderror(m::IGARCHModel{T}; cov_type=:robust) -> Vector{T}
+
+Delta-method standard errors matching `coef(m) = [μ, ω, α₁…αq, β₁…βp]`. The
+constrained (`Σα+Σβ=1`) coefficients are nonlinear functions of the free simplex
+logits, so the full Jacobian of the reconstructed coefficient vector is applied to
+the free-space QMLE covariance. `cov_type`: `:robust` (Bollerslev–Wooldridge
+sandwich) or `:hessian` (inverse observed information).
+"""
+function StatsAPI.stderror(m::IGARCHModel{T}; cov_type::Symbol=:robust) where {T}
+    p, q = m.p, m.q
+    ncoef = 2 + q + p
+    _volatility_delta_se(m, ncoef, cov_type,
+        free -> _igarch_coef_from_free(free, p, q),
+        () -> _igarch_reconstruct_free(m),
+        obj_free -> _igarch_negloglik(obj_free, m.y, p, q),
+        free -> _igarch_loglik_contribs(free, m.y, p, q))
+end
+
+# reconstruct the free-param vector from stored fields (inverse simplex)
+function _igarch_reconstruct_free(m::IGARCHModel{T}) where {T}
+    w = vcat(m.alpha, m.beta)
+    theta = [log(w[i] / w[end]) for i in 1:(m.q + m.p - 1)]
+    vcat(m.mu, log(m.omega), theta)
+end
+
+# =============================================================================
+# Shared delta-method SE for the EV-15 constrained/transformed models
+# =============================================================================
+"""
+    _volatility_delta_se(m, ncoef, cov_type, coef_map, free_reconstruct, negll, contribs)
+
+Standard errors for a volatility model whose stored coefficients are a nonlinear
+map `coef_map(free)` of the free optimization parameters. Uses the cached
+`param_vcov` (free space) for `:robust`, recomputes the inverse Hessian for
+`:hessian`, and propagates via the ForwardDiff Jacobian `J` of `coef_map`:
+`Cov(coef) = J V J'`.
+"""
+function _volatility_delta_se(m, ncoef::Int, cov_type::Symbol,
+                              coef_map, free_reconstruct, negll, contribs)
+    T = eltype(m.y)
+    cov_type in (:robust, :qmle, :sandwich, :bw, :hessian, :opg_hessian) ||
+        throw(ArgumentError("cov_type must be :robust or :hessian, got :$cov_type"))
+    free = free_reconstruct()
+    V = if cov_type in (:robust, :qmle, :sandwich, :bw) && all(isfinite, m.param_vcov)
+        m.param_vcov
+    else
+        try
+            H = _numerical_hessian(negll, free)
+            if cov_type in (:robust, :qmle, :sandwich, :bw)
+                S = ForwardDiff.jacobian(contribs, free)
+                _qmle_sandwich_cov(H, S)
+            else
+                robust_inv(H)
+            end
+        catch
+            return fill(T(NaN), ncoef)
+        end
+    end
+    J = try
+        ForwardDiff.jacobian(coef_map, free)
+    catch
+        return fill(T(NaN), ncoef)
+    end
+    C = J * V * J'
+    T[sqrt(max(C[i, i], zero(T))) for i in 1:ncoef]
+end
+
+# =============================================================================
+# Component-GARCH (Engle–Lee 1999)
+# =============================================================================
+
+"""
+    _cgarch_filter(mu_omega, rho, phi, alpha, beta, rsq, backcast) -> (h, q)
+
+Component-GARCH(1,1) recursion returning total variance `h=σ²` and permanent `q`.
+"""
+function _cgarch_filter(omega, rho, phi, alpha, beta, rsq, backcast)
+    n = length(rsq)
+    E = promote_type(eltype(rsq), typeof(omega))
+    h = Vector{E}(undef, n)
+    qc = Vector{E}(undef, n)
+    floorv = eps(float(real(E)))
+    @inbounds for t in 1:n
+        e2_lag = t > 1 ? rsq[t-1] : backcast
+        h_lag  = t > 1 ? h[t-1] : backcast
+        q_lag  = t > 1 ? qc[t-1] : omega
+        qt = omega + rho * (q_lag - omega) + phi * (e2_lag - h_lag)
+        ht = qt + alpha * (e2_lag - q_lag) + beta * (h_lag - q_lag)
+        qc[t] = max(qt, floorv)
+        h[t]  = max(ht, floorv)
+    end
+    h, qc
+end
+
+# free params: [mu, log(omega), logit(rho), log(phi), log(alpha), log(beta)]
+function _cgarch_unpack(params)
+    mu    = params[1]
+    omega = exp(params[2])
+    rho   = _igarch_logistic(params[3])
+    phi   = exp(params[4])
+    alpha = exp(params[5])
+    beta  = exp(params[6])
+    mu, omega, rho, phi, alpha, beta
+end
+
+function _cgarch_negloglik(params, y)
+    n = length(y)
+    mu, omega, rho, phi, alpha, beta = _cgarch_unpack(params)
+    E = eltype(params)
+    # Engle–Lee identification / non-negativity guards
+    (alpha + beta >= rho) && return E(1e10)        # trend must be more persistent
+    (alpha + beta >= one(E)) && return E(1e10)     # transitory stationarity
+    (phi >= beta) && return E(1e10)                # non-negativity (0 ≤ φ < β)
+    resid = y .- mu
+    rsq = resid .^ 2
+    backcast = sum(rsq) / n
+    h, _ = _cgarch_filter(omega, rho, phi, alpha, beta, rsq, backcast)
+    _volatility_negloglik(h, rsq, n)
+end
+
+function _cgarch_loglik_contribs(params, y)
+    n = length(y)
+    mu, omega, rho, phi, alpha, beta = _cgarch_unpack(params)
+    resid = y .- mu
+    rsq = resid .^ 2
+    backcast = sum(rsq) / n
+    h, _ = _cgarch_filter(omega, rho, phi, alpha, beta, rsq, backcast)
+    _volatility_loglik_contribs(h, rsq)
+end
+
+_cgarch_coef_from_free(params) = collect(_cgarch_unpack(params))
+
+"""
+    estimate_cgarch(y; method=:mle) -> CGARCHModel
+
+Estimate a Component GARCH(1,1) model (Engle & Lee 1999) splitting conditional
+variance into a persistent long-run component `q` (reverting to `ω` with
+persistence `ρ`) and a transitory component with persistence `α+β`. Identification
+requires `ρ > α+β`, enforced during optimization.
+
+# Example
+```julia
+m = estimate_cgarch(y)
+comp = component_variances(m)   # (permanent, transitory, total)
+```
+"""
+function estimate_cgarch(y::AbstractVector{T}; method::Symbol=:mle) where {T<:AbstractFloat}
+    _validate_data(y, "y")
+    _validate_volatility_inputs(y, 1, 1)
+    y_vec = Vector{T}(y)
+    n = length(y_vec)
+
+    mu_init = mean(y_vec)
+    var_init = var(y_vec .- mu_init; corrected=false)
+    # ρ≈0.99, φ≈0.05, α≈0.05, β≈0.85  (ρ ≫ α+β, φ<β)
+    params_init = _sanitize_init_params(T[mu_init, log(var_init),
+        log(T(0.99) / (one(T) - T(0.99))), log(T(0.05)), log(T(0.05)), log(T(0.85))])
+
+    obj = params -> _cgarch_negloglik(params, y_vec)
+    result1 = Optim.optimize(obj, params_init, Optim.NelderMead(),
+        Optim.Options(iterations=3000, show_trace=false))
+    result = Optim.optimize(obj, Optim.minimizer(result1), Optim.LBFGS(),
+        Optim.Options(iterations=1000, g_tol=T(1e-8), show_trace=false))
+
+    params_opt = Optim.minimizer(result)
+    mu, omega, rho, phi, alpha, beta = _cgarch_unpack(params_opt)
+
+    resid = y_vec .- mu
+    rsq = resid .^ 2
+    backcast = sum(rsq) / n
+    h, qperm = _cgarch_filter(omega, rho, phi, alpha, beta, rsq, backcast)
+    h = Vector{T}(h); qperm = Vector{T}(qperm)
+    transitory = h .- qperm
+    z = resid ./ sqrt.(h)
+
+    loglik = -Optim.minimum(result)
+    k = 6
+    aic_val, bic_val = _compute_aic_bic(loglik, k, n)
+
+    param_vcov = try
+        H = _numerical_hessian(obj, params_opt)
+        S = ForwardDiff.jacobian(θ -> _cgarch_loglik_contribs(θ, y_vec), params_opt)
+        Matrix{T}(_qmle_sandwich_cov(H, S))
+    catch
+        fill(T(NaN), k, k)
+    end
+
+    CGARCHModel{T}(y_vec, T(mu), T(omega), T(rho), T(phi), T(alpha), T(beta),
+                   qperm, transitory, h, z, resid, fill(T(mu), n),
+                   loglik, aic_val, bic_val, method, Optim.converged(result),
+                   Optim.iterations(result), param_vcov)
+end
+
+estimate_cgarch(y::AbstractVector; kwargs...) = estimate_cgarch(Float64.(y); kwargs...)
+
+function StatsAPI.stderror(m::CGARCHModel{T}; cov_type::Symbol=:robust) where {T}
+    _volatility_delta_se(m, 6, cov_type,
+        _cgarch_coef_from_free,
+        () -> _cgarch_reconstruct_free(m),
+        free -> _cgarch_negloglik(free, m.y),
+        free -> _cgarch_loglik_contribs(free, m.y))
+end
+
+_cgarch_reconstruct_free(m::CGARCHModel{T}) where {T} =
+    T[m.mu, log(m.omega), log(m.rho / (one(T) - m.rho)), log(m.phi), log(m.alpha), log(m.beta)]
+
+# =============================================================================
+# APARCH (Ding–Granger–Engle 1993)
+# =============================================================================
+
+"""
+    _aparch_filter(omega, alpha, gamma, beta, delta, resid) -> (h, s)
+
+APARCH recursion in `s = σ^δ`: `sₜ = ω + Σαᵢ(|εₜ₋ᵢ|−γᵢεₜ₋ᵢ)^δ + Σβⱼ sₜ₋ⱼ`, then
+`h = σ² = s^{2/δ}`. With `δ=2, γ=0` this reduces bit-for-bit to `_garch_filter`.
+"""
+function _aparch_filter(omega, alpha, gamma, beta, delta, resid)
+    n = length(resid)
+    q = length(alpha)
+    p = length(beta)
+    E = promote_type(eltype(resid), typeof(omega), typeof(delta))
+    s = Vector{E}(undef, n)
+    bc = zero(E)
+    @inbounds for t in 1:n
+        bc += abs(resid[t])^delta
+    end
+    bc /= n
+    floorv = eps(float(real(E)))
+    @inbounds for t in 1:n
+        st = omega
+        for i in 1:q
+            if t - i >= 1
+                e = resid[t-i]
+                st += alpha[i] * (abs(e) - gamma[i] * e)^delta
+            else
+                st += alpha[i] * bc
+            end
+        end
+        for j in 1:p
+            slag = t - j >= 1 ? s[t-j] : bc
+            st += beta[j] * slag
+        end
+        s[t] = max(st, floorv)
+    end
+    h = s .^ (2 / delta)
+    h, s
+end
+
+# Ding–Granger–Engle persistence moment E(|z|−γz)^δ for z~N(0,1), by Gauss–Hermite.
+function _aparch_kappa(gamma::Real, delta::Real; n::Int=48)
+    x, w = _gauss_hermite_nodes_weights(n)   # ∫ f(x) e^{-x²} dx
+    acc = 0.0
+    inv_sqrt_pi = 1 / sqrt(π)
+    for k in 1:n
+        z = sqrt(2.0) * x[k]
+        base = abs(z) - gamma * z
+        acc += w[k] * base^delta
+    end
+    inv_sqrt_pi * acc
+end
+
+# free params layout: [mu, log(omega), log(alpha)_q, (atanh(gamma)_q?), log(beta)_p, (log(delta)?)]
+struct _APARCHLayout
+    q::Int
+    p::Int
+    fix_delta::Union{Nothing,Float64}
+    fix_gamma::Union{Nothing,Float64}
+end
+
+function _aparch_unpack(params, lay::_APARCHLayout)
+    E = eltype(params)
+    q, p = lay.q, lay.p
+    idx = 2
+    mu = params[1]
+    omega = exp(params[idx]); idx += 1
+    alpha = [exp(params[idx + i - 1]) for i in 1:q]; idx += q
+    if lay.fix_gamma === nothing
+        gamma = [tanh(params[idx + i - 1]) for i in 1:q]; idx += q
+    else
+        gamma = fill(E(lay.fix_gamma), q)
+    end
+    beta = [exp(params[idx + j - 1]) for j in 1:p]; idx += p
+    if lay.fix_delta === nothing
+        delta = exp(params[idx])
+    else
+        delta = E(lay.fix_delta)
+    end
+    mu, omega, alpha, gamma, beta, delta
+end
+
+function _aparch_negloglik(params, y, lay::_APARCHLayout)
+    n = length(y)
+    mu, omega, alpha, gamma, beta, delta = _aparch_unpack(params, lay)
+    E = eltype(params)
+    (sum(alpha) + sum(beta) >= one(E)) && return E(1e10)
+    resid = y .- mu
+    h, _ = _aparch_filter(omega, alpha, gamma, beta, delta, resid)
+    rsq = resid .^ 2
+    _volatility_negloglik(h, rsq, n)
+end
+
+function _aparch_loglik_contribs(params, y, lay::_APARCHLayout)
+    mu, omega, alpha, gamma, beta, delta = _aparch_unpack(params, lay)
+    resid = y .- mu
+    h, _ = _aparch_filter(omega, alpha, gamma, beta, delta, resid)
+    rsq = resid .^ 2
+    _volatility_loglik_contribs(h, rsq)
+end
+
+function _aparch_coef_from_free(params, lay::_APARCHLayout)
+    mu, omega, alpha, gamma, beta, delta = _aparch_unpack(params, lay)
+    vcat(mu, omega, alpha, gamma, beta, delta)
+end
+
+"""
+    estimate_aparch(y, p=1, q=1; fix_delta=nothing, fix_gamma=nothing, method=:mle) -> APARCHModel
+
+Estimate an Asymmetric Power ARCH(p,q) model (Ding, Granger & Engle 1993):
+
+    σₜ^δ = ω + Σᵢ αᵢ(|εₜ₋ᵢ| − γᵢεₜ₋ᵢ)^δ + Σⱼ βⱼ σₜ₋ⱼ^δ
+
+with `δ > 0` and leverage `γᵢ ∈ (−1,1)`. Pin parameters to recover nested models:
+`fix_delta=2.0, fix_gamma=0.0` ≡ GARCH; `fix_delta=2.0` (γ free) ≡ GJR-GARCH;
+`fix_delta=1.0` (γ free) ≡ Zakoïan TARCH.
+
+# Keyword arguments
+- `fix_delta`: pin the power `δ` (default free)
+- `fix_gamma`: pin the leverage `γ` for all lags (default free)
+
+# Example
+```julia
+m = estimate_aparch(y, 1, 1)                 # full APARCH
+g = estimate_aparch(y, 1, 1; fix_delta=2.0, fix_gamma=0.0)  # ≡ GARCH(1,1)
+```
+"""
+function estimate_aparch(y::AbstractVector{T}, p::Int=1, q::Int=1;
+                         fix_delta::Union{Nothing,Real}=nothing,
+                         fix_gamma::Union{Nothing,Real}=nothing,
+                         method::Symbol=:mle) where {T<:AbstractFloat}
+    _validate_data(y, "y")
+    _validate_volatility_inputs(y, p, q)
+    fix_delta !== nothing && fix_delta <= 0 && throw(ArgumentError("fix_delta must be > 0"))
+    fix_gamma !== nothing && abs(fix_gamma) >= 1 && throw(ArgumentError("fix_gamma must be in (-1, 1)"))
+    y_vec = Vector{T}(y)
+    n = length(y_vec)
+
+    lay = _APARCHLayout(q, p,
+        fix_delta === nothing ? nothing : Float64(fix_delta),
+        fix_gamma === nothing ? nothing : Float64(fix_gamma))
+
+    mu_init = mean(y_vec)
+    var_init = var(y_vec .- mu_init; corrected=false)
+    d0 = fix_delta === nothing ? T(1.5) : T(fix_delta)
+    omega_init = (var_init^(d0 / 2)) * T(0.05)
+    init = vcat(mu_init, log(omega_init), log.(fill(T(0.05), q)))
+    fix_gamma === nothing && (init = vcat(init, fill(T(0.0), q)))   # atanh(0)=0
+    init = vcat(init, log.(fill(T(0.85) / p, p)))
+    fix_delta === nothing && (init = vcat(init, log(d0)))
+    params_init = _sanitize_init_params(Vector{T}(init))
+
+    obj = params -> _aparch_negloglik(params, y_vec, lay)
+    result1 = Optim.optimize(obj, params_init, Optim.NelderMead(),
+        Optim.Options(iterations=4000, show_trace=false))
+    result = Optim.optimize(obj, Optim.minimizer(result1), Optim.LBFGS(),
+        Optim.Options(iterations=1500, g_tol=T(1e-8), show_trace=false))
+
+    params_opt = Optim.minimizer(result)
+    mu, omega, alpha, gamma, beta, delta = _aparch_unpack(params_opt, lay)
+    alpha = Vector{T}(alpha); gamma = Vector{T}(gamma); beta = Vector{T}(beta)
+
+    resid = y_vec .- mu
+    h, s = _aparch_filter(omega, alpha, gamma, beta, delta, resid)
+    h = Vector{T}(h); s = Vector{T}(s)
+    z = resid ./ sqrt.(h)
+
+    loglik = -Optim.minimum(result)
+    n_params = length(params_opt)
+    aic_val, bic_val = _compute_aic_bic(loglik, n_params, n)
+
+    param_vcov = try
+        H = _numerical_hessian(obj, params_opt)
+        S = ForwardDiff.jacobian(θ -> _aparch_loglik_contribs(θ, y_vec, lay), params_opt)
+        Matrix{T}(_qmle_sandwich_cov(H, S))
+    catch
+        fill(T(NaN), n_params, n_params)
+    end
+
+    APARCHModel{T}(y_vec, p, q, T(mu), T(omega), alpha, gamma, beta, T(delta),
+                   s, h, z, resid, fill(T(mu), n), loglik, aic_val, bic_val,
+                   fix_delta !== nothing, fix_gamma !== nothing, n_params,
+                   method, Optim.converged(result), Optim.iterations(result), param_vcov)
+end
+
+estimate_aparch(y::AbstractVector, p::Int=1, q::Int=1; kwargs...) = estimate_aparch(Float64.(y), p, q; kwargs...)
+
+function StatsAPI.stderror(m::APARCHModel{T}; cov_type::Symbol=:robust) where {T}
+    lay = _APARCHLayout(m.q, m.p,
+        m.fixed_delta ? Float64(m.delta) : nothing,
+        m.fixed_gamma ? Float64(m.gamma[1]) : nothing)
+    ncoef = 3 + 2m.q + m.p
+    _volatility_delta_se(m, ncoef, cov_type,
+        free -> _aparch_coef_from_free(free, lay),
+        () -> _aparch_reconstruct_free(m, lay),
+        free -> _aparch_negloglik(free, m.y, lay),
+        free -> _aparch_loglik_contribs(free, m.y, lay))
+end
+
+function _aparch_reconstruct_free(m::APARCHModel{T}, lay::_APARCHLayout) where {T}
+    v = T[m.mu, log(m.omega)]
+    append!(v, log.(m.alpha))
+    lay.fix_gamma === nothing && append!(v, atanh.(m.gamma))
+    append!(v, log.(m.beta))
+    lay.fix_delta === nothing && push!(v, log(m.delta))
+    v
+end

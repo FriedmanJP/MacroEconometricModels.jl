@@ -589,3 +589,351 @@ StatsAPI.dof_residual(m::FIEGARCHModel) = length(m.residuals) - dof(m)
 
 Base.show(io::IO, m::FIGARCHModel) = _show_figarch(io, m)
 Base.show(io::IO, m::FIEGARCHModel) = _show_fiegarch(io, m)
+
+# =============================================================================
+# IGARCH / Component-GARCH / APARCH Model Types (EV-15, #423)
+# =============================================================================
+
+"""
+    IGARCHModel{T} <: AbstractVolatilityModel
+
+Integrated GARCH(p,q) (Engle & Bollerslev 1986) — a GARCH model with the
+persistence constraint `Σαᵢ + Σβⱼ = 1` imposed **exactly**:
+
+    σ²ₜ = ω + Σᵢ αᵢ ε²ₜ₋ᵢ + Σⱼ βⱼ σ²ₜ₋ⱼ ,   Σα + Σβ = 1
+
+A shock to variance never dies out: `persistence(m) == 1`,
+`unconditional_variance(m) == Inf`, and multi-step variance forecasts grow
+linearly (the RiskMetrics EWMA is the special case `ω = 0`, IGARCH(1,1)). The
+unit-sum constraint is enforced in optimization space via a multinomial-logit
+simplex over the `q+p` ARCH/GARCH weights, so only `q+p-1` weight parameters are
+free (`dof = 1 + q + p`: μ, ω, and `q+p-1` simplex logits).
+
+# Fields
+- `y,p,q,mu,omega,alpha,beta` — data, orders, mean, intercept and constrained
+  ARCH/GARCH coefficients (`sum(alpha)+sum(beta) == 1`)
+- `conditional_variance,standardized_residuals,residuals,fitted` — fitted series
+- `loglik,aic,bic,method,converged,iterations`
+- `param_vcov` — cached QMLE sandwich covariance in the free (`1+q+p`) transform space
+
+# References
+- Engle & Bollerslev (1986). *Econometric Reviews* 5(1), 1–50.
+"""
+struct IGARCHModel{T<:AbstractFloat} <: AbstractVolatilityModel
+    y::Vector{T}
+    p::Int
+    q::Int
+    mu::T
+    omega::T
+    alpha::Vector{T}
+    beta::Vector{T}
+    conditional_variance::Vector{T}
+    standardized_residuals::Vector{T}
+    residuals::Vector{T}
+    fitted::Vector{T}
+    loglik::T
+    aic::T
+    bic::T
+    method::Symbol
+    converged::Bool
+    iterations::Int
+    param_vcov::Matrix{T}
+end
+
+function IGARCHModel(y::Vector{T}, p::Int, q::Int, mu::T, omega::T,
+                     alpha::Vector{T}, beta::Vector{T},
+                     conditional_variance::Vector{T}, standardized_residuals::Vector{T},
+                     residuals::Vector{T}, fitted::Vector{T},
+                     loglik::T, aic::T, bic::T,
+                     method::Symbol, converged::Bool, iterations::Int) where {T<:AbstractFloat}
+    k = 1 + q + p
+    IGARCHModel{T}(y, p, q, mu, omega, alpha, beta, conditional_variance,
+                   standardized_residuals, residuals, fitted, loglik, aic, bic,
+                   method, converged, iterations, fill(T(NaN), k, k))
+end
+
+"""
+    CGARCHModel{T} <: AbstractVolatilityModel
+
+Component GARCH(1,1) (Engle & Lee 1999) decomposing the conditional variance into
+a slowly mean-reverting **permanent** (trend) component `qₜ` and a fast
+**transitory** component `σ²ₜ − qₜ`:
+
+    σ²ₜ = qₜ + α(ε²ₜ₋₁ − q_{t−1}) + β(σ²ₜ₋₁ − q_{t−1})
+    qₜ  = ω + ρ(q_{t−1} − ω) + φ(ε²ₜ₋₁ − σ²ₜ₋₁)
+
+The permanent component reverts to the long-run variance `ω` with persistence `ρ`
+(typically `ρ → 1`); the transitory component has the faster persistence `α+β`.
+Identification requires `ρ > α+β` (the trend must be more persistent than the
+transitory cycle). `unconditional_variance(m) == ω` and `persistence(m) == ρ`.
+
+# Fields
+- `y,mu,omega,rho,phi,alpha,beta` — data, mean, long-run level, permanent
+  persistence `ρ`, permanent shock loading `φ`, transitory ARCH/GARCH `α,β`
+- `permanent` — permanent component `qₜ`; `transitory` — `σ²ₜ − qₜ`
+- `conditional_variance,standardized_residuals,residuals,fitted`
+- `loglik,aic,bic,method,converged,iterations`
+- `param_vcov` — cached 6×6 QMLE sandwich covariance in transform space
+
+# References
+- Engle & Lee (1999), in *Cointegration, Causality, and Forecasting* (Engle &
+  White, eds.), Oxford University Press, 475–497.
+"""
+struct CGARCHModel{T<:AbstractFloat} <: AbstractVolatilityModel
+    y::Vector{T}
+    mu::T
+    omega::T
+    rho::T
+    phi::T
+    alpha::T
+    beta::T
+    permanent::Vector{T}
+    transitory::Vector{T}
+    conditional_variance::Vector{T}
+    standardized_residuals::Vector{T}
+    residuals::Vector{T}
+    fitted::Vector{T}
+    loglik::T
+    aic::T
+    bic::T
+    method::Symbol
+    converged::Bool
+    iterations::Int
+    param_vcov::Matrix{T}
+end
+
+function CGARCHModel(y::Vector{T}, mu::T, omega::T, rho::T, phi::T, alpha::T, beta::T,
+                     permanent::Vector{T}, transitory::Vector{T},
+                     conditional_variance::Vector{T}, standardized_residuals::Vector{T},
+                     residuals::Vector{T}, fitted::Vector{T},
+                     loglik::T, aic::T, bic::T,
+                     method::Symbol, converged::Bool, iterations::Int) where {T<:AbstractFloat}
+    CGARCHModel{T}(y, mu, omega, rho, phi, alpha, beta, permanent, transitory,
+                   conditional_variance, standardized_residuals, residuals, fitted,
+                   loglik, aic, bic, method, converged, iterations, fill(T(NaN), 6, 6))
+end
+
+"""
+    APARCHModel{T} <: AbstractVolatilityModel
+
+Asymmetric Power ARCH(p,q) (Ding, Granger & Engle 1993) modelling a free power `δ`
+of the conditional standard deviation with a Box-Cox-style leverage term:
+
+    σₜ^δ = ω + Σᵢ αᵢ(|εₜ₋ᵢ| − γᵢ εₜ₋ᵢ)^δ + Σⱼ βⱼ σₜ₋ⱼ^δ
+
+with `δ > 0`, `γᵢ ∈ (−1, 1)` (leverage, `γ > 0` ⇒ negative shocks raise variance
+more). APARCH nests the standard family exactly:
+`(δ=2, γ=0)` ≡ GARCH; `(δ=2, γ free)` ≡ GJR-GARCH (reparameterized); `(δ=1, γ free)`
+≡ Zakoïan's TARCH. Pin `δ` and/or `γ` via the `fix_delta` / `fix_gamma` keywords of
+[`estimate_aparch`](@ref).
+
+# Fields
+- `y,p,q,mu,omega,alpha,gamma,beta,delta` — data, orders, mean, intercept, ARCH,
+  leverage, GARCH, and power parameters
+- `sigma_delta` — fitted `σₜ^δ` series; `conditional_variance` — `σ²ₜ = (σ^δ)^{2/δ}`
+- `standardized_residuals,residuals,fitted`
+- `loglik,aic,bic`
+- `fixed_delta,fixed_gamma` — whether `δ`/`γ` were pinned (fewer free params)
+- `n_params` — number of estimated (free) parameters
+- `method,converged,iterations`
+- `param_vcov` — cached QMLE sandwich covariance in the free transform space
+
+# References
+- Ding, Granger & Engle (1993). *Journal of Empirical Finance* 1(1), 83–106.
+"""
+struct APARCHModel{T<:AbstractFloat} <: AbstractVolatilityModel
+    y::Vector{T}
+    p::Int
+    q::Int
+    mu::T
+    omega::T
+    alpha::Vector{T}
+    gamma::Vector{T}
+    beta::Vector{T}
+    delta::T
+    sigma_delta::Vector{T}
+    conditional_variance::Vector{T}
+    standardized_residuals::Vector{T}
+    residuals::Vector{T}
+    fitted::Vector{T}
+    loglik::T
+    aic::T
+    bic::T
+    fixed_delta::Bool
+    fixed_gamma::Bool
+    n_params::Int
+    method::Symbol
+    converged::Bool
+    iterations::Int
+    param_vcov::Matrix{T}
+end
+
+# -----------------------------------------------------------------------------
+# Accessors
+# -----------------------------------------------------------------------------
+
+arch_order(m::IGARCHModel) = m.q
+arch_order(m::APARCHModel) = m.q
+arch_order(m::CGARCHModel) = 1
+garch_order(m::IGARCHModel) = m.p
+garch_order(m::APARCHModel) = m.p
+garch_order(m::CGARCHModel) = 1
+
+"""IGARCH persistence is unity by construction."""
+persistence(m::IGARCHModel{T}) where {T} = one(T)
+"""Permanent-component persistence `ρ` of a Component-GARCH model."""
+persistence(m::CGARCHModel) = m.rho
+"""
+    persistence(m::APARCHModel)
+
+Ding–Granger–Engle persistence `Σⱼ βⱼ + Σᵢ αᵢ E(|z|−γᵢz)^δ`, with the Gaussian
+moment `E(|z|−γz)^δ` evaluated by Gauss–Hermite quadrature.
+"""
+function persistence(m::APARCHModel{T}) where {T}
+    s = sum(m.beta)
+    for i in 1:m.q
+        s += m.alpha[i] * _aparch_kappa(m.gamma[i], m.delta)
+    end
+    T(s)
+end
+
+function halflife(m::Union{IGARCHModel, CGARCHModel, APARCHModel})
+    p = persistence(m)
+    (p <= zero(p) || p >= one(p)) && return Inf
+    log(typeof(p)(0.5)) / log(p)
+end
+
+"""IGARCH is variance-nonstationary: the unconditional variance diverges."""
+unconditional_variance(m::IGARCHModel{T}) where {T} = T(Inf)
+"""Component-GARCH long-run variance equals the intercept `ω`."""
+unconditional_variance(m::CGARCHModel) = m.omega
+function unconditional_variance(m::APARCHModel{T}) where {T}
+    p = persistence(m)
+    p >= one(p) && return T(Inf)
+    # unconditional σ^δ = ω / (1 - persistence); σ² = (σ^δ)^{2/δ}
+    (m.omega / (one(p) - p))^(2 / m.delta)
+end
+
+"""
+    component_variances(m::CGARCHModel) -> (permanent, transitory, total)
+
+Return the Engle–Lee permanent (`qₜ`, long-run trend), transitory (`σ²ₜ − qₜ`),
+and total (`σ²ₜ`) conditional-variance series as a named tuple of vectors.
+"""
+component_variances(m::CGARCHModel) =
+    (permanent=m.permanent, transitory=m.transitory, total=m.conditional_variance)
+
+# -----------------------------------------------------------------------------
+# StatsAPI
+# -----------------------------------------------------------------------------
+
+StatsAPI.nobs(m::IGARCHModel) = length(m.y)
+StatsAPI.nobs(m::CGARCHModel) = length(m.y)
+StatsAPI.nobs(m::APARCHModel) = length(m.y)
+
+"""Coefficient vector `[μ, ω, α₁…αq, β₁…βp]` (with `Σα+Σβ = 1`)."""
+StatsAPI.coef(m::IGARCHModel) = vcat(m.mu, m.omega, m.alpha, m.beta)
+"""Coefficient vector `[μ, ω, ρ, φ, α, β]`."""
+StatsAPI.coef(m::CGARCHModel) = [m.mu, m.omega, m.rho, m.phi, m.alpha, m.beta]
+"""Coefficient vector `[μ, ω, α₁…αq, γ₁…γq, β₁…βp, δ]`."""
+StatsAPI.coef(m::APARCHModel) = vcat(m.mu, m.omega, m.alpha, m.gamma, m.beta, m.delta)
+
+StatsAPI.residuals(m::IGARCHModel) = m.residuals
+StatsAPI.residuals(m::CGARCHModel) = m.residuals
+StatsAPI.residuals(m::APARCHModel) = m.residuals
+StatsAPI.predict(m::IGARCHModel) = m.conditional_variance
+StatsAPI.predict(m::CGARCHModel) = m.conditional_variance
+StatsAPI.predict(m::APARCHModel) = m.conditional_variance
+StatsAPI.loglikelihood(m::IGARCHModel) = m.loglik
+StatsAPI.loglikelihood(m::CGARCHModel) = m.loglik
+StatsAPI.loglikelihood(m::APARCHModel) = m.loglik
+StatsAPI.aic(m::IGARCHModel) = m.aic
+StatsAPI.aic(m::CGARCHModel) = m.aic
+StatsAPI.aic(m::APARCHModel) = m.aic
+StatsAPI.bic(m::IGARCHModel) = m.bic
+StatsAPI.bic(m::CGARCHModel) = m.bic
+StatsAPI.bic(m::APARCHModel) = m.bic
+
+"""Number of estimated parameters: `1 + q + p` (μ, ω, `q+p-1` simplex weights)."""
+StatsAPI.dof(m::IGARCHModel) = 1 + m.q + m.p
+"""Number of estimated parameters: 6 `[μ, ω, ρ, φ, α, β]`."""
+StatsAPI.dof(::CGARCHModel) = 6
+"""Number of estimated (free) parameters — depends on `fix_delta`/`fix_gamma`."""
+StatsAPI.dof(m::APARCHModel) = m.n_params
+
+StatsAPI.islinear(::IGARCHModel) = false
+StatsAPI.islinear(::CGARCHModel) = false
+StatsAPI.islinear(::APARCHModel) = false
+StatsAPI.dof_residual(m::IGARCHModel) = length(m.residuals) - dof(m)
+StatsAPI.dof_residual(m::CGARCHModel) = length(m.residuals) - dof(m)
+StatsAPI.dof_residual(m::APARCHModel) = length(m.residuals) - dof(m)
+
+# -----------------------------------------------------------------------------
+# Display
+# -----------------------------------------------------------------------------
+
+Base.show(io::IO, m::IGARCHModel) =
+    _show_volatility_model(io, "IGARCH($(m.p),$(m.q)) Model", m; alpha=m.alpha, beta=m.beta)
+
+Base.show(io::IO, m::CGARCHModel) = _show_cgarch(io, m)
+Base.show(io::IO, m::APARCHModel) = _show_aparch(io, m)
+
+function _show_cgarch(io::IO, m::CGARCHModel{T}) where {T}
+    se = try
+        stderror(m)
+    catch
+        fill(T(NaN), 6)
+    end
+    names = String["μ (mean)", "ω (long-run σ²)", "ρ (perm. persist.)",
+                   "φ (perm. loading)", "α (transitory)", "β (transitory)"]
+    vals = T[m.mu, m.omega, m.rho, m.phi, m.alpha, m.beta]
+    _coef_table(io, "Component-GARCH(1,1) Model", names, vals, se; dist=:z)
+
+    fit_data = Any[
+        "Observations"          length(m.y);
+        "Log-likelihood"        _fmt(m.loglik; digits=4);
+        "AIC"                   _fmt(m.aic; digits=4);
+        "BIC"                   _fmt(m.bic; digits=4);
+        "Perm. persistence ρ"   _fmt(m.rho);
+        "Transitory α+β"        _fmt(m.alpha + m.beta);
+        "Unconditional σ²"      _fmt(m.omega);
+        "Converged"             _yesno(m.converged)
+    ]
+    _pretty_table(io, fit_data; column_labels=["Fit", "Value"], alignment=[:l, :r])
+    _sig_legend(io)
+end
+
+function _show_aparch(io::IO, m::APARCHModel{T}) where {T}
+    se = try
+        stderror(m)
+    catch
+        fill(T(NaN), 3 + 2m.q + m.p)
+    end
+    names = String["μ (mean)", "ω (intercept)"]
+    vals = T[m.mu, m.omega]
+    for i in 1:m.q; push!(names, "α[$i]"); push!(vals, m.alpha[i]); end
+    for i in 1:m.q; push!(names, "γ[$i]"); push!(vals, m.gamma[i]); end
+    for j in 1:m.p; push!(names, "β[$j]"); push!(vals, m.beta[j]); end
+    push!(names, "δ (power)"); push!(vals, m.delta)
+
+    tag = m.fixed_delta || m.fixed_gamma ?
+        "  [" * (m.fixed_delta ? "δ=$(round(m.delta;digits=3)) fixed" : "") *
+        (m.fixed_delta && m.fixed_gamma ? ", " : "") *
+        (m.fixed_gamma ? "γ fixed" : "") * "]" : ""
+    _coef_table(io, "APARCH($(m.p),$(m.q)) Model" * tag, names, vals, se; dist=:z)
+
+    pers = persistence(m)
+    uv = unconditional_variance(m)
+    fit_data = Any[
+        "Observations"     length(m.y);
+        "Log-likelihood"   _fmt(m.loglik; digits=4);
+        "AIC"              _fmt(m.aic; digits=4);
+        "BIC"              _fmt(m.bic; digits=4);
+        "Power δ"          _fmt(m.delta);
+        "Persistence"      _fmt(pers);
+        "Unconditional σ²" (isfinite(uv) ? _fmt(uv) : "∞");
+        "Converged"        _yesno(m.converged)
+    ]
+    _pretty_table(io, fit_data; column_labels=["Fit", "Value"], alignment=[:l, :r])
+    _sig_legend(io)
+end

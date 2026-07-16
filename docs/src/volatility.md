@@ -8,8 +8,11 @@
 - **GJR-GARCH**: Threshold GARCH (Glosten, Jagannathan & Runkle 1993) --- indicator-based leverage via ``\gamma_i \mathbb{1}(\varepsilon_{t-i} < 0)``
 - **GARCH-MIDAS**: Mixed-frequency component GARCH (Engle, Ghysels & Sohn 2013) --- variance splits into a short-run unit-mean GARCH and a long-run MIDAS-filtered macro/realized-variance component
 - **FIGARCH / FIEGARCH**: Fractionally integrated (E)GARCH (Baillie, Bollerslev & Mikkelsen 1996; Bollerslev & Mikkelsen 1996) --- hyperbolic (long-memory) volatility persistence via the fractional-difference operator ``(1-L)^d``
+- **IGARCH**: Integrated GARCH (Engle & Bollerslev 1986) --- unit-persistence (``\sum\alpha + \sum\beta = 1``) volatility with a divergent unconditional variance (RiskMetrics EWMA is the ``\omega = 0`` case)
+- **Component GARCH**: Permanent/transitory decomposition (Engle & Lee 1999) --- a slowly mean-reverting long-run variance trend plus a fast transitory cycle
+- **APARCH**: Asymmetric Power ARCH (Ding, Granger & Engle 1993) --- a free power ``\delta`` and Box-Cox leverage term that nests GARCH, GJR-GARCH, and TARCH
 - **Stochastic Volatility**: Latent log-variance AR(1) process (Taylor 1986), estimated via Kim-Shephard-Chib (1998) Gibbs sampler with optional leverage and Student-t errors
-- **Diagnostics**: ARCH-LM test, Ljung-Box on squared residuals, news impact curves
+- **Diagnostics**: ARCH-LM test, Ljung-Box on squared residuals, news impact curves, Engle-Ng sign-bias and Nyblom-Hansen parameter-stability tests
 - **Forecasting**: Multi-step ahead variance forecasts with simulation-based confidence intervals (GARCH family) or posterior predictive intervals (SV)
 
 ```@setup volatility
@@ -504,6 +507,111 @@ news_impact_curve(m)              # symmetric FIGARCH parabola; FIEGARCH is asym
 | `conditional_variance` | `Vector{T}` | Fitted ``\sigma^2_t`` |
 | `truncation` | `Int` | ARCH(∞) / MA(∞) truncation lag ``K`` |
 | `n_neg_lambda` | `Int` | Negative ``\lambda``-weight count (FIGARCH BBM violation) |
+| `loglik`, `aic`, `bic` | `T` | Fit statistics |
+| `converged` | `Bool` | Convergence status |
+
+---
+
+## IGARCH, Component GARCH, and APARCH
+
+Three further members of the GARCH family target distinct empirical regularities: **unit persistence** (IGARCH), a **long-run/short-run variance decomposition** (Component GARCH), and a **free volatility power with leverage** (APARCH). All three reuse the shared Bollerslev-Wooldridge (1992) QMLE sandwich standard errors and integrate with `report()`, `forecast()`, `news_impact_curve()`, and `plot_result()`.
+
+### IGARCH(p,q)
+
+The **Integrated GARCH** of Engle & Bollerslev (1986) imposes the persistence constraint ``\sum_i \alpha_i + \sum_j \beta_j = 1`` exactly, so a variance shock never dies out:
+
+```math
+\sigma^2_t = \omega + \sum_{i=1}^q \alpha_i \varepsilon^2_{t-i} + \sum_{j=1}^p \beta_j \sigma^2_{t-j}, \qquad \sum_i \alpha_i + \sum_j \beta_j = 1
+```
+
+Persistence is unity by construction, the unconditional variance diverges, and multi-step variance forecasts grow linearly. The RiskMetrics EWMA is the special case ``\omega = 0``.
+
+```@example volatility
+ig = estimate_igarch(ip, 1, 1)
+report(ig)
+```
+
+```@example volatility
+persistence(ig)                    # exactly 1.0
+```
+
+### Component GARCH(1,1)
+
+The **Component GARCH** of Engle & Lee (1999) splits the conditional variance into a slowly mean-reverting **permanent** trend ``q_t`` and a fast **transitory** cycle:
+
+```math
+\sigma^2_t = q_t + \alpha(\varepsilon^2_{t-1} - q_{t-1}) + \beta(\sigma^2_{t-1} - q_{t-1})
+```
+
+```math
+q_t = \omega + \rho(q_{t-1} - \omega) + \varphi(\varepsilon^2_{t-1} - \sigma^2_{t-1})
+```
+
+where:
+- ``q_t`` is the permanent component, reverting to the long-run variance ``\omega`` with persistence ``\rho``
+- ``\alpha + \beta`` is the transitory persistence; identification requires ``\rho > \alpha + \beta``
+
+```@example volatility
+cg = estimate_cgarch(ip)
+report(cg)
+```
+
+`component_variances` returns the permanent, transitory, and total conditional-variance series:
+
+```@example volatility
+comp = component_variances(cg)
+(permanent_mean = sum(comp.permanent)/length(comp.permanent),
+ reconstructs_total = maximum(abs.(comp.permanent .+ comp.transitory .- comp.total)))
+```
+
+### APARCH(p,q)
+
+The **Asymmetric Power ARCH** of Ding, Granger & Engle (1993) estimates a free power ``\delta > 0`` of the conditional standard deviation together with a Box-Cox leverage term ``\gamma_i \in (-1, 1)``:
+
+```math
+\sigma^\delta_t = \omega + \sum_{i=1}^q \alpha_i(|\varepsilon_{t-i}| - \gamma_i \varepsilon_{t-i})^\delta + \sum_{j=1}^p \beta_j \sigma^\delta_{t-j}
+```
+
+APARCH nests the standard family exactly: ``(\delta=2, \gamma=0)`` is GARCH, ``(\delta=2, \gamma \ne 0)`` is GJR-GARCH, and ``(\delta=1, \gamma \ne 0)`` is Zakoïan's TARCH. Pin parameters with the `fix_delta` / `fix_gamma` keywords.
+
+```@example volatility
+ap = estimate_aparch(ip, 1, 1)
+report(ap)
+```
+
+```@example volatility
+# recover a plain GARCH(1,1) by pinning δ=2, γ=0
+apg = estimate_aparch(ip, 1, 1; fix_delta=2.0, fix_gamma=0.0)
+(aparch_loglik = apg.loglik, garch_loglik = estimate_garch(ip, 1, 1).loglik)
+```
+
+### Volatility misspecification tests
+
+The **Engle-Ng (1993) sign-bias test** regresses squared standardized residuals on the lagged shock's sign and size to detect asymmetry a symmetric model has missed; the joint statistic is ``(n-1)R^2 \sim \chi^2(3)``.
+
+```@example volatility
+garch = estimate_garch(ip, 1, 1)
+sb = sign_bias_test(garch)
+(joint = sb.joint_statistic, pvalue = sb.joint_pvalue)
+```
+
+The **Nyblom (1989) / Hansen (1992) test** checks parameter stability against a martingale-parameter alternative, returning per-parameter statistics ``L_k`` and the joint ``L_C`` with the Hansen (1992) critical values:
+
+```@example volatility
+ny = nyblom_test(garch)
+(joint = ny.joint, cv_5pct = ny.cv_joint, individual = ny.individual)
+```
+
+### Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `omega` | `T` | Variance intercept (IGARCH/APARCH) or long-run variance ``\omega`` (CGARCH) |
+| `alpha`, `beta` | `Vector{T}`/`T` | ARCH / GARCH coefficients (IGARCH: ``\sum\alpha+\sum\beta=1``) |
+| `rho`, `phi` | `T` | CGARCH permanent persistence ``\rho`` and shock loading ``\varphi`` |
+| `gamma`, `delta` | `Vector{T}`, `T` | APARCH leverage ``\gamma`` and power ``\delta`` |
+| `permanent`, `transitory` | `Vector{T}` | CGARCH long-run / short-run variance components |
+| `conditional_variance` | `Vector{T}` | Fitted ``\sigma^2_t`` |
 | `loglik`, `aic`, `bic` | `T` | Fit statistics |
 | `converged` | `Bool` | Convergence status |
 

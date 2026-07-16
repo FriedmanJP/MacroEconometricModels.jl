@@ -482,6 +482,34 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="On the Relation Between the Expected Value and the Volatility of the Nominal Excess Return on Stocks",
         journal="Journal of Finance", volume="48", issue="5", pages="1779--1801",
         doi="10.1111/j.1540-6261.1993.tb05128.x", isbn="", publisher="", entry_type=:article),
+    # --- IGARCH / Component-GARCH / APARCH + diagnostics (EV-15, #423) ---
+    :engle_bollerslev1986 => (key=:engle_bollerslev1986,
+        authors="Engle, Robert F. and Bollerslev, Tim", year=1986,
+        title="Modelling the Persistence of Conditional Variances",
+        journal="Econometric Reviews", volume="5", issue="1", pages="1--50",
+        doi="10.1080/07474938608800095", isbn="", publisher="", entry_type=:article),
+    :engle_lee1999 => (key=:engle_lee1999,
+        authors="Engle, Robert F. and Lee, Gary G. J.", year=1999,
+        title="A Permanent and Transitory Component Model of Stock Return Volatility",
+        journal="", volume="", issue="", pages="475--497", doi="",
+        isbn="978-0-19-510944-7",
+        publisher="Oxford University Press (in Cointegration, Causality, and Forecasting, Engle & White, eds.)",
+        entry_type=:incollection),
+    :ding_granger_engle1993 => (key=:ding_granger_engle1993,
+        authors="Ding, Zhuanxin and Granger, Clive W. J. and Engle, Robert F.", year=1993,
+        title="A Long Memory Property of Stock Market Returns and a New Model",
+        journal="Journal of Empirical Finance", volume="1", issue="1", pages="83--106",
+        doi="10.1016/0927-5398(93)90006-D", isbn="", publisher="", entry_type=:article),
+    :engle_ng1993 => (key=:engle_ng1993,
+        authors="Engle, Robert F. and Ng, Victor K.", year=1993,
+        title="Measuring and Testing the Impact of News on Volatility",
+        journal="Journal of Finance", volume="48", issue="5", pages="1749--1778",
+        doi="10.1111/j.1540-6261.1993.tb05127.x", isbn="", publisher="", entry_type=:article),
+    :nyblom1989 => (key=:nyblom1989, authors="Nyblom, Jukka", year=1989,
+        title="Testing for the Constancy of Parameters Over Time",
+        journal="Journal of the American Statistical Association", volume="84", issue="405",
+        pages="223--230", doi="10.1080/01621459.1989.10478759", isbn="", publisher="",
+        entry_type=:article),
     :taylor1986 => (key=:taylor1986, authors="Taylor, Stephen J.", year=1986,
         title="Modelling Financial Time Series", journal="",
         volume="", issue="", pages="", doi="",
@@ -1491,6 +1519,9 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :garch_midas => [:engle_ghysels_sohn2013, :ghysels2007, :bollerslev1986],
     :FIGARCHModel => [:baillie_bollerslev_mikkelsen1996, :bollerslev1986],
     :FIEGARCHModel => [:bollerslev_mikkelsen1996, :nelson1991],
+    :IGARCHModel => [:engle_bollerslev1986, :bollerslev1986],
+    :CGARCHModel => [:engle_lee1999, :bollerslev1986],
+    :APARCHModel => [:ding_granger_engle1993, :glosten_jagannathan_runkle1993],
     :SVModel => [:taylor1986, :kim_shephard_chib1998, :omori2007],
     :VolatilityForecast => [:engle1982, :bollerslev1986],
     :arch => [:engle1982],
@@ -2001,6 +2032,9 @@ refs(io::IO, ::GJRGARCHModel; kw...) = refs(io, _TYPE_REFS[:GJRGARCHModel]; kw..
 refs(io::IO, ::GarchMidasModel; kw...) = refs(io, _TYPE_REFS[:GarchMidasModel]; kw...)
 refs(io::IO, ::FIGARCHModel; kw...) = refs(io, _TYPE_REFS[:FIGARCHModel]; kw...)
 refs(io::IO, ::FIEGARCHModel; kw...) = refs(io, _TYPE_REFS[:FIEGARCHModel]; kw...)
+refs(io::IO, ::IGARCHModel; kw...) = refs(io, _TYPE_REFS[:IGARCHModel]; kw...)
+refs(io::IO, ::CGARCHModel; kw...) = refs(io, _TYPE_REFS[:CGARCHModel]; kw...)
+refs(io::IO, ::APARCHModel; kw...) = refs(io, _TYPE_REFS[:APARCHModel]; kw...)
 refs(io::IO, ::SVModel; kw...) = refs(io, _TYPE_REFS[:SVModel]; kw...)
 refs(io::IO, ::VolatilityForecast; kw...) = refs(io, _TYPE_REFS[:VolatilityForecast]; kw...)
 
