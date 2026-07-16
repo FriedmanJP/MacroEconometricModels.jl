@@ -614,6 +614,125 @@ ny = nyblom_test(garch)
 | `conditional_variance` | `Vector{T}` | Fitted ``\sigma^2_t`` |
 | `loglik`, `aic`, `bic` | `T` | Fit statistics |
 | `converged` | `Bool` | Convergence status |
+## Multivariate GARCH (CCC / DCC / BEKK)
+
+The univariate models above describe one series at a time. Cross-asset spillovers, exchange-rate co-volatility, and CoVaR inputs instead need the full **conditional covariance matrix** ``H_t``. The multivariate GARCH estimators fit an ``n``-dimensional return matrix ``Y`` (``T \times n``) and return the ``n \times n \times T`` covariance path ``H_t``, the conditional correlations ``R_t``, and the per-series variances --- all extractable with [`covariances`](@ref), [`correlations`](@ref), and [`variances`](@ref). Every estimator **reuses the univariate [`estimate_garch`](@ref)** for its margins, so the marginal volatilities are exactly the standalone GARCH fits.
+
+Three specifications are provided:
+
+- **CCC** ([`estimate_ccc`](@ref), Bollerslev 1990) --- constant conditional correlation ``R``, ``H_t = D_t R D_t`` with ``D_t = \mathrm{diag}(\sigma_{1t}, …, \sigma_{nt})``. Simplest and fastest; the correlation is the sample correlation of the standardized residuals.
+- **DCC / cDCC** ([`estimate_dcc`](@ref), Engle 2002 / Aielli 2013) --- dynamic correlation via a scalar recursion in ``(a, b)``.
+- **BEKK** ([`estimate_bekk`](@ref), Engle & Kroner 1995) --- scalar or diagonal, modelling the covariance directly with covariance targeting (no separate margins).
+
+```@setup volatility
+using LinearAlgebra
+# Bivariate DCC(1,1) process with GARCH(1,1) margins (fixed seed for the docs build)
+let
+    T, a, b, ρ = 400, 0.05, 0.90, 0.3
+    rng = MersenneTwister(2024)
+    Qbar = [1.0 ρ; ρ 1.0]; Q = copy(Qbar)
+    Y = zeros(T, 2); h = [1.0, 1.0]
+    for t in 1:T
+        d = sqrt.([Q[1,1], Q[2,2]]); R = Q ./ (d * d'); R = (R + R') / 2
+        L = cholesky(Symmetric(R)).L
+        zt = L * randn(rng, 2)
+        e = sqrt.(h) .* zt
+        Y[t, :] = e
+        Q = (1 - a - b) * Qbar + a * (zt * zt') + b * Q; Q = (Q + Q') / 2
+        for i in 1:2; h[i] = 0.02 + 0.08 * e[i]^2 + 0.90 * h[i]; end
+    end
+    global Yret = Y
+end
+```
+
+### Constant Conditional Correlation (CCC)
+
+CCC decouples the problem: fit a univariate GARCH to each column, then hold the standardized-residual correlation fixed.
+
+```math
+H_t = D_t \, R \, D_t, \qquad R = \operatorname{corr}(z), \qquad z_t = D_t^{-1}\varepsilon_t.
+```
+
+```@example volatility
+ccc = estimate_ccc(Yret)      # Yret is a 400×2 return matrix
+report(ccc)
+```
+
+The constant correlation is stored in `ccc.R`; `covariances(ccc)` returns the ``2\times2\times400`` covariance path.
+
+### Dynamic Conditional Correlation (DCC)
+
+DCC lets the correlation evolve while keeping the two-step tractability. Step 1 estimates the same univariate margins; step 2 estimates ``(a, b)`` by maximizing the correlation quasi-likelihood, with the intercept fixed by **correlation targeting** ``\bar{Q} = \tfrac1T\sum_t z_t z_t'``:
+
+```math
+Q_t = (1-a-b)\bar{Q} + a\, z_{t-1}z_{t-1}' + b\, Q_{t-1}, \qquad
+R_t = \operatorname{diag}(Q_t)^{-1/2} Q_t \operatorname{diag}(Q_t)^{-1/2}.
+```
+
+The parameters satisfy ``a, b \ge 0`` and ``a + b < 1`` (enforced by a logit-simplex reparametrization). Setting ``a = b = 0`` reduces DCC exactly to CCC.
+
+```@example volatility
+dcc = estimate_dcc(Yret)
+report(dcc)
+```
+
+```@example volatility
+a, b = coef(dcc)              # correlation dynamics
+Rt = correlations(dcc)        # 2×2×400 time-varying correlations
+extrema(Rt[1, 2, :])          # range of the conditional ρ₁₂ over the sample
+```
+
+Pass `correction=:aielli` for the **cDCC** variant (Aielli 2013), which removes the standard-DCC intercept-targeting bias by replacing ``z_t z_t'`` with ``q^*_t q^{*\prime}_t``, ``q^*_t = \operatorname{diag}(Q_t)^{1/2} z_t``.
+
+### BEKK
+
+BEKK models the covariance directly (no separate margins). With **covariance targeting** the intercept is fixed so the unconditional covariance equals the sample covariance ``\bar\Sigma``; only the news/persistence parameters are estimated, which keeps the recursion positive semidefinite and stable.
+
+```math
+\text{scalar:}\quad H_t = (1-a-b)\bar\Sigma + a\,\varepsilon_{t-1}\varepsilon_{t-1}' + b\,H_{t-1}.
+```
+
+```@example volatility
+bekk = estimate_bekk(Yret)               # scalar (default)
+report(bekk)
+```
+
+The diagonal variant (`kind=:diagonal`) uses ``A, B = \operatorname{diag}(a), \operatorname{diag}(b)`` and ``H_t = \tilde C + A\varepsilon_{t-1}\varepsilon_{t-1}'A + B H_{t-1} B``.
+
+### Accessors, forecasting & plotting
+
+All three models share the same interface:
+
+```@example volatility
+H  = covariances(dcc)     # n×n×T conditional covariances
+R  = correlations(dcc)    # n×n×T conditional correlations (constant broadcast for CCC/BEKK)
+V  = variances(dcc)       # T×n conditional variances (the diagonals)
+fc = forecast(dcc, 10)    # 10-step-ahead covariance forecast, n×n×10
+size(fc)
+```
+
+```julia
+plot_result(dcc; view=:correlations)                  # pairwise conditional correlations over time
+plot_result(dcc; view=:covariance_heatmap, at=400)    # heatmap of Hₜ at a chosen t
+```
+
+### MGARCHModel Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `Y` | `Matrix{T}` | Data (T×n) |
+| `mu` | `Vector{T}` | Per-series conditional mean |
+| `margins` | `Vector{GARCHModel{T}}` | Univariate GARCH margin fits (empty for BEKK) |
+| `H` | `Array{T,3}` | Conditional covariance path ``H_t`` (n×n×T) |
+| `R` | `Matrix{T}` / `Array{T,3}` | Correlation --- constant (CCC/BEKK) or time-varying (DCC) |
+| `Rbar` | `Matrix{T}` | Unconditional / targeting correlation |
+| `params` | `Vector{T}` | Second-stage parameters (`[a,b]` for DCC/scalar BEKK; empty for CCC) |
+| `param_vcov` | `Matrix{T}` | QML sandwich covariance of `params` |
+| `loglik`, `aic`, `bic` | `T` | Joint Gaussian (quasi) log-likelihood and information criteria |
+| `kind` | `Symbol` | `:ccc`, `:dcc`, or `:bekk` |
+| `correction` | `Symbol` | `:none` or `:aielli` (DCC) |
+| `bekk_kind` | `Symbol` | `:scalar` or `:diagonal` (BEKK) |
+| `converged` | `Bool` | Second-stage convergence status |
 
 ---
 
@@ -1007,11 +1126,23 @@ The industrial production growth series exhibits ARCH effects, confirming the ne
 
 ## References
 
+- Aielli, G. P. (2013). Dynamic Conditional Correlation: On Properties and Estimation.
+  *Journal of Business & Economic Statistics*, 31(3), 282--299. [DOI](https://doi.org/10.1080/07350015.2013.771027)
+
 - Black, F. (1976). Studies of Stock Price Volatility Changes.
   *Proceedings of the 1976 Meetings of the American Statistical Association*, 171--177.
 
 - Bollerslev, T. (1986). Generalized Autoregressive Conditional Heteroskedasticity.
   *Journal of Econometrics*, 31(3), 307--327. [DOI](https://doi.org/10.1016/0304-4076(86)90063-1)
+
+- Bollerslev, T. (1990). Modelling the Coherence in Short-Run Nominal Exchange Rates: A Multivariate Generalized ARCH Model.
+  *Review of Economics and Statistics*, 72(3), 498--505. [DOI](https://doi.org/10.2307/2109358)
+
+- Engle, R. F. (2002). Dynamic Conditional Correlation: A Simple Class of Multivariate GARCH Models.
+  *Journal of Business & Economic Statistics*, 20(3), 339--350. [DOI](https://doi.org/10.1198/073500102288618487)
+
+- Engle, R. F., & Kroner, K. F. (1995). Multivariate Simultaneous Generalized ARCH.
+  *Econometric Theory*, 11(1), 122--150. [DOI](https://doi.org/10.1017/S0266466600009063)
 
 - Engle, R. F. (1982). Autoregressive Conditional Heteroscedasticity with Estimates of the Variance of United Kingdom Inflation.
   *Econometrica*, 50(4), 987--1007. [DOI](https://doi.org/10.2307/1912773)

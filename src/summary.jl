@@ -403,6 +403,7 @@ report(hd::BayesianHistoricalDecomposition) = show(stdout, hd)
 report(x::AbstractARIMAModel) = show(stdout, x)
 report(x::AbstractFactorModel) = show(stdout, x)
 report(x::AbstractVolatilityModel) = show(stdout, x)
+report(x::AbstractMGARCHModel) = show(stdout, x)   # EV-16 (#424): CCC/DCC/BEKK
 report(x::AbstractLPModel) = show(stdout, x)
 report(x::AbstractGMMModel) = show(stdout, x)
 

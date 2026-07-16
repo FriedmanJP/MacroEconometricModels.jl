@@ -477,6 +477,23 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Modeling and Pricing Long Memory in Stock Market Volatility",
         journal="Journal of Econometrics", volume="73", issue="1", pages="151--184",
         doi="10.1016/0304-4076(95)01736-4", isbn="", publisher="", entry_type=:article),
+    # --- Multivariate GARCH (EV-16, #424) ---
+    :bollerslev1990 => (key=:bollerslev1990, authors="Bollerslev, Tim", year=1990,
+        title="Modelling the Coherence in Short-Run Nominal Exchange Rates: A Multivariate Generalized ARCH Model",
+        journal="Review of Economics and Statistics", volume="72", issue="3", pages="498--505",
+        doi="10.2307/2109358", isbn="", publisher="", entry_type=:article),
+    :engle2002dcc => (key=:engle2002dcc, authors="Engle, Robert F.", year=2002,
+        title="Dynamic Conditional Correlation: A Simple Class of Multivariate Generalized Autoregressive Conditional Heteroskedasticity Models",
+        journal="Journal of Business \\& Economic Statistics", volume="20", issue="3", pages="339--350",
+        doi="10.1198/073500102288618487", isbn="", publisher="", entry_type=:article),
+    :aielli2013 => (key=:aielli2013, authors="Aielli, Gian Piero", year=2013,
+        title="Dynamic Conditional Correlation: On Properties and Estimation",
+        journal="Journal of Business \\& Economic Statistics", volume="31", issue="3", pages="282--299",
+        doi="10.1080/07350015.2013.771027", isbn="", publisher="", entry_type=:article),
+    :engle_kroner1995 => (key=:engle_kroner1995, authors="Engle, Robert F. and Kroner, Kenneth F.", year=1995,
+        title="Multivariate Simultaneous Generalized ARCH",
+        journal="Econometric Theory", volume="11", issue="1", pages="122--150",
+        doi="10.1017/S0266466600009063", isbn="", publisher="", entry_type=:article),
     :glosten_jagannathan_runkle1993 => (key=:glosten_jagannathan_runkle1993,
         authors="Glosten, Lawrence R. and Jagannathan, Ravi and Runkle, David E.", year=1993,
         title="On the Relation Between the Expected Value and the Volatility of the Nominal Excess Return on Stocks",
@@ -1522,6 +1539,7 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :IGARCHModel => [:engle_bollerslev1986, :bollerslev1986],
     :CGARCHModel => [:engle_lee1999, :bollerslev1986],
     :APARCHModel => [:ding_granger_engle1993, :glosten_jagannathan_runkle1993],
+    :MGARCHModel => [:bollerslev1990, :engle2002dcc, :aielli2013, :engle_kroner1995],
     :SVModel => [:taylor1986, :kim_shephard_chib1998, :omori2007],
     :VolatilityForecast => [:engle1982, :bollerslev1986],
     :arch => [:engle1982],
@@ -2035,6 +2053,7 @@ refs(io::IO, ::FIEGARCHModel; kw...) = refs(io, _TYPE_REFS[:FIEGARCHModel]; kw..
 refs(io::IO, ::IGARCHModel; kw...) = refs(io, _TYPE_REFS[:IGARCHModel]; kw...)
 refs(io::IO, ::CGARCHModel; kw...) = refs(io, _TYPE_REFS[:CGARCHModel]; kw...)
 refs(io::IO, ::APARCHModel; kw...) = refs(io, _TYPE_REFS[:APARCHModel]; kw...)
+refs(io::IO, ::MGARCHModel; kw...) = refs(io, _TYPE_REFS[:MGARCHModel]; kw...)   # EV-16 (#424)
 refs(io::IO, ::SVModel; kw...) = refs(io, _TYPE_REFS[:SVModel]; kw...)
 refs(io::IO, ::VolatilityForecast; kw...) = refs(io, _TYPE_REFS[:VolatilityForecast]; kw...)
 

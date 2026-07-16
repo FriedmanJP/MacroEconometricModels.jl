@@ -341,6 +341,13 @@ include("garch/diagnostics.jl")
 include("garch/midas.jl")   # EV-02 (#410): GARCH-MIDAS long/short-run volatility components
 include("garch/figarch.jl") # EV-14 (#422): FIGARCH/FIEGARCH fractionally-integrated volatility
 
+# Multivariate GARCH (EV-16, #424): CCC / DCC / BEKK — reuse univariate estimate_garch margins
+include("mgarch/types.jl")
+include("mgarch/ccc.jl")
+include("mgarch/dcc.jl")
+include("mgarch/bekk.jl")
+include("mgarch/forecast.jl")
+
 # Stochastic Volatility models
 include("sv/types.jl")
 include("sv/estimation.jl")
@@ -517,6 +524,7 @@ include("plotting/spectral.jl")
 include("plotting/io.jl")
 include("plotting/nonlinear.jl")
 include("plotting/ardl.jl")          # EV-09 (#417): NARDL dynamic-multiplier plots
+include("plotting/mgarch.jl")        # EV-16 (#424): MGARCH conditional-correlation & covariance-heatmap plots
 
 # =============================================================================
 # Exports - Types
@@ -1007,6 +1015,11 @@ export news_impact_curve
 export IGARCHModel, CGARCHModel, APARCHModel
 export estimate_igarch, estimate_cgarch, estimate_aparch
 export component_variances, sign_bias_test, nyblom_test
+
+# Multivariate GARCH (EV-16, #424): CCC / DCC / BEKK
+export AbstractMGARCHModel, MGARCHModel
+export estimate_ccc, estimate_dcc, estimate_bekk
+export covariances, correlations, variances
 
 # SV types and estimation
 export SVModel

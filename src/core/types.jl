@@ -75,6 +75,9 @@ abstract type AbstractNonGaussianSVAR end
 """Abstract supertype for univariate volatility models (ARCH/GARCH/SV)."""
 abstract type AbstractVolatilityModel <: StatsAPI.RegressionModel end
 
+"""Abstract supertype for multivariate GARCH models (CCC/DCC/BEKK) — EV-16 (#424)."""
+abstract type AbstractMGARCHModel <: StatsAPI.RegressionModel end
+
 """Abstract supertype for trend-cycle decomposition filter results."""
 abstract type AbstractFilterResult end
 
