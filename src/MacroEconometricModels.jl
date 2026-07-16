@@ -122,6 +122,7 @@ include("reg/penalized.jl")   # EV-03 (#411): ridge / LASSO / elastic net — af
 include("reg/iv.jl")
 include("reg/logit.jl")
 include("reg/probit.jl")
+include("reg/tobit.jl")        # EV-17 (#425): Tobit (censored) + truncated regression
 include("reg/margins.jl")
 include("reg/diagnostics.jl")
 include("reg/predict.jl")
@@ -1028,6 +1029,9 @@ export estimate_reg, estimate_iv, estimate_logit, estimate_probit
 
 # Penalized regression — EV-03 (#411)
 export PenalizedRegModel, estimate_ridge, estimate_lasso, estimate_elastic_net
+
+# Censored / truncated regression — EV-17 (#425)
+export TobitModel, TruncRegModel, estimate_tobit, estimate_truncreg
 
 # Marginal effects, diagnostics, prediction
 export marginal_effects, odds_ratio, vif, classification_table, OddsRatio, MultinomialMarginalEffects

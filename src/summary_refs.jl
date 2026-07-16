@@ -887,6 +887,24 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Least Squares After Model Selection in High-Dimensional Sparse Models",
         journal="Bernoulli", volume="19", issue="2", pages="521--547",
         doi="10.3150/11-BEJ410", isbn="", publisher="", entry_type=:article),
+    # --- Censored / Truncated Regression (EV-17, #425) ---
+    :tobin1958 => (key=:tobin1958, authors="Tobin, James", year=1958,
+        title="Estimation of Relationships for Limited Dependent Variables",
+        journal="Econometrica", volume="26", issue="1", pages="24--36",
+        doi="10.2307/1907382", isbn="", publisher="", entry_type=:article),
+    :olsen1978 => (key=:olsen1978, authors="Olsen, Randall J.", year=1978,
+        title="Note on the Uniqueness of the Maximum Likelihood Estimator for the Tobit Model",
+        journal="Econometrica", volume="46", issue="5", pages="1211--1215",
+        doi="10.2307/1911445", isbn="", publisher="", entry_type=:article),
+    :hausman_wise1977 => (key=:hausman_wise1977, authors="Hausman, Jerry A. and Wise, David A.", year=1977,
+        title="Social Experimentation, Truncated Distributions, and Efficient Estimation",
+        journal="Econometrica", volume="45", issue="4", pages="919--938",
+        doi="10.2307/1912682", isbn="", publisher="", entry_type=:article),
+    :mcdonald_moffitt1980 => (key=:mcdonald_moffitt1980,
+        authors="McDonald, John F. and Moffitt, Robert A.", year=1980,
+        title="The Uses of Tobit Analysis",
+        journal="The Review of Economics and Statistics", volume="62", issue="2", pages="318--321",
+        doi="10.2307/1924766", isbn="", publisher="", entry_type=:article),
     # --- Ordered & Multinomial Models ---
     :mccullagh1980 => (key=:mccullagh1980, authors="McCullagh, Peter", year=1980,
         title="Regression Models for Ordinal Data",
@@ -1250,6 +1268,11 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :estimate_lasso => [:tibshirani1996, :friedman2010],
     :estimate_ridge => [:hoerl_kennard1970, :friedman2010],
     :estimate_elastic_net => [:zou_hastie2005, :friedman2010, :zou2006],
+    # Censored / truncated regression (EV-17, #425)
+    :TobitModel => [:tobin1958, :olsen1978, :mcdonald_moffitt1980, :wooldridge2010],
+    :TruncRegModel => [:hausman_wise1977, :wooldridge2010],
+    :estimate_tobit => [:tobin1958, :olsen1978, :mcdonald_moffitt1980],
+    :estimate_truncreg => [:hausman_wise1977, :wooldridge2010],
     # Ordered & Multinomial models
     :OrderedLogitModel => [:mccullagh1980, :brant1990, :wooldridge2010],
     :OrderedProbitModel => [:mccullagh1980, :wooldridge2010],
@@ -1662,6 +1685,10 @@ function refs(io::IO, m::PenalizedRegModel; kw...)
     m.post && push!(ks, :belloni_chernozhukov2013)
     refs(io, ks; kw...)
 end
+
+# Censored / truncated regression (EV-17, #425)
+refs(io::IO, ::TobitModel; kw...) = refs(io, _TYPE_REFS[:TobitModel]; kw...)
+refs(io::IO, ::TruncRegModel; kw...) = refs(io, _TYPE_REFS[:TruncRegModel]; kw...)
 
 # Ordered & Multinomial models
 refs(io::IO, ::OrderedLogitModel; kw...) = refs(io, _TYPE_REFS[:OrderedLogitModel]; kw...)

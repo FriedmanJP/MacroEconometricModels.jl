@@ -7,6 +7,7 @@
 - **Cluster-robust standard errors** with finite-sample correction (Arellano 1987)
 - **Instrumental variables / 2SLS** with first-stage F-statistic and Sargan-Hansen overidentification test
 - **Variance Inflation Factors** for multicollinearity diagnostics (Belsley, Kuh & Welsch 1980)
+- **Censored (Tobit) and truncated regression** by MLE with McDonald–Moffitt marginal effects (Tobin 1958; Hausman & Wise 1977)
 - **CrossSectionData dispatch** for symbol-based formula-like syntax
 - **StatsAPI interface**: `coef`, `vcov`, `predict`, `confint`, `stderror`, `nobs`, `r2`
 
@@ -721,6 +722,73 @@ plot_result(lasso; view=:cv)     # CV MSE curve with λ_min / 1-SE markers
 | `nfolds` | `Int` | `10` | Number of CV folds |
 | `adaptive` | `Bool` | `false` | Adaptive-LASSO weights (Zou 2006) |
 | `post` | `Bool` | `false` | Post-selection OLS refit (Belloni-Chernozhukov) |
+
+---
+
+## Censored and Truncated Regression: Tobit
+
+Many economic outcomes are *limited dependent variables*: hours worked, corner-solution expenditures, capped survey responses, and zero-bounded durations pile up at a boundary or are only observed over part of their range. OLS on such data is biased and inconsistent. Two distinct sampling schemes call for two estimators:
+
+- **Censoring (Tobit).** The latent variable ``y_i^\ast = x_i'\beta + u_i`` is generated for every unit, but is only *recorded* within ``[L, U]``: values below ``L`` are reported as ``L`` and values above ``U`` as ``U``. The regressors are observed for all units. Use [`estimate_tobit`](@ref) (Tobin 1958).
+- **Truncation.** Units outside ``(L, U)`` are entirely absent from the sample — both ``y`` and ``x`` are missing. Use [`estimate_truncreg`](@ref) (Hausman & Wise 1977).
+
+Both are estimated by maximum likelihood with ``u_i \sim N(0, \sigma^2)``. The Tobit log-likelihood combines a density term for uncensored observations with tail-probability terms for the censored ones:
+
+```math
+\ell(\beta, \sigma) = \sum_{L < y_i < U} \log\!\left[\tfrac{1}{\sigma}\phi\!\left(\tfrac{y_i - x_i'\beta}{\sigma}\right)\right]
++ \sum_{y_i \le L} \log \Phi\!\left(\tfrac{L - x_i'\beta}{\sigma}\right)
++ \sum_{y_i \ge U} \log\!\left[1 - \Phi\!\left(\tfrac{U - x_i'\beta}{\sigma}\right)\right],
+```
+
+where ``\phi`` and ``\Phi`` are the standard normal pdf and cdf. For the normal case the fit is carried out in the globally concave Olsen (1978) reparameterization ``\delta = \beta/\sigma``, ``\gamma = 1/\sigma``, then back-transformed to ``(\beta, \sigma)`` with delta-method standard errors — this guarantees a unique maximum regardless of starting values.
+
+**Tobit on left-censored data.** The classic case censors at zero (`lower=0.0, upper=Inf`). `report()` shows the estimated ``\sigma``, the censored-observation counts, and the coefficient table:
+
+```@example reg
+n = 400
+Xt = hcat(ones(n), randn(n), randn(n))
+beta_true = [0.5, 1.0, -0.8]
+ystar = Xt * beta_true + randn(n)          # latent outcome
+y_cens = max.(ystar, 0.0)                    # left-censored at 0
+tob = estimate_tobit(y_cens, Xt; lower=0.0, varnames=["const", "x1", "x2"])
+report(tob)
+```
+
+Roughly a third of the sample piles up at zero; OLS on `y_cens` would attenuate the slopes toward zero, while Tobit recovers the latent-index coefficients. Two-sided censoring is requested by passing both bounds, e.g. `estimate_tobit(y, X; lower=0.0, upper=100.0)`.
+
+**Marginal effects (McDonald–Moffitt).** A Tobit slope ``\beta_j`` is *not* the marginal effect on the observed outcome. [`marginal_effects`](@ref) returns the McDonald & Moffitt (1980) decomposition, each with delta-method standard errors, selected by the `which` keyword:
+
+- `:unconditional` (default) — ``\partial E[y]/\partial x_j = \beta_j\,\Phi(x_i'\beta/\sigma)``, the total effect on the observed outcome;
+- `:conditional` — ``\partial E[y \mid L<y<U]/\partial x_j``, the effect within the uncensored subpopulation;
+- `:probability` — ``\partial P(L<y<U)/\partial x_j = \beta_j\,\phi(x_i'\beta/\sigma)/\sigma``, the effect on the probability of being uncensored.
+
+```@example reg
+me = marginal_effects(tob; which=:unconditional)   # average marginal effects
+report(me)
+```
+
+The intercept has no marginal effect and is reported as a blank row.
+
+**Truncated regression.** When the boundary observations are missing entirely, `estimate_truncreg` maximizes the Hausman–Wise truncated-normal likelihood. Every `y` must lie strictly inside `(lower, upper)`; an out-of-range value is an error.
+
+```@example reg
+keep = ystar .> 0                            # only positive latent values survive
+trunc = estimate_truncreg(ystar[keep], Xt[keep, :]; lower=0.0,
+                          varnames=["const", "x1", "x2"])
+report(trunc)
+```
+
+!!! note "Which estimator?"
+    Use **Tobit** when the sample includes the boundary observations (you observe both the pile-up at ``L``/``U`` and the regressors for those units). Use **truncated regression** when those units are absent from the data altogether. Applying Tobit to a truncated sample — or OLS to either — yields inconsistent estimates.
+
+The `dist` keyword also supports `:logistic` and `:extreme_value` latent-error laws (optimized directly in ``(\beta, \log\sigma)``); `:normal` is the default.
+
+| Keyword | Type | Default | Description |
+|---|---|---|---|
+| `lower` | `Real` | `0.0` | Lower censoring/truncation bound (`-Inf` for none) |
+| `upper` | `Real` | `Inf` | Upper censoring/truncation bound (`Inf` for none) |
+| `dist` | `Symbol` | `:normal` | Latent error law: `:normal`, `:logistic`, `:extreme_value` (Tobit only) |
+| `varnames` | `Vector{String}` | auto | Coefficient names |
 
 ---
 
