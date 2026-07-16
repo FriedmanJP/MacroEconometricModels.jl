@@ -874,3 +874,157 @@ function Base.show(io::IO, r::HadriResult{T}) where {T}
     conc_data = Any["Conclusion" conclusion; "Note" "*** p<0.01, ** p<0.05, * p<0.10"]
     _pretty_table(io, conc_data; column_labels=["",""], alignment=[:l,:l])
 end
+
+# =============================================================================
+# Panel Cointegration Tests (EV-21, #429)
+# H0: no cointegration (except: no direct H0 flip — all four share the null).
+# Pedroni panel-v is RIGHT-tailed (large positive rejects); the other six
+# Pedroni stats + Kao + Westerlund are LEFT-tailed.
+# =============================================================================
+
+function Base.show(io::IO, r::PedroniResult{T}) where {T}
+    spec_data = Any[
+        "H0"          "No cointegration in any panel";
+        "H1"          "Cointegration (homogeneous / heterogeneous)";
+        "Deterministic" _regression_name(r.trend);
+        "Regressors (k)" r.n_regressors;
+        "NW bandwidth" r.bandwidth;
+        "ADF lags"     r.adf_lags;
+        "Units (N)"    r.n_units;
+        "Time (T)"     r.nobs
+    ]
+    _pretty_table(io, spec_data;
+        title = "Pedroni (1999, 2004) Residual-Based Panel Cointegration Test",
+        column_labels = ["Specification", ""], alignment = [:l, :r])
+    nstat = length(r.names)
+    results_data = Matrix{Any}(undef, nstat, 4)
+    for s in 1:nstat
+        tail = s == 1 ? "right" : "left"
+        results_data[s, 1] = r.names[s]
+        results_data[s, 2] = round(r.raw[s], digits=4)
+        results_data[s, 3] = string(round(r.statistics[s], digits=4), " ",
+                                    _significance_stars(r.pvalues[s]))
+        results_data[s, 4] = string(_format_pvalue(r.pvalues[s]), " (", tail, ")")
+    end
+    _pretty_table(io, results_data;
+        title = "Statistics (standardized N(0,1); panel-v right-tailed)",
+        column_labels = ["Statistic", "Raw", "Std (z)", "P-value"],
+        alignment = [:l, :r, :r, :r])
+    reject = r.pvalues[4] < 0.05      # panel-ADF is the workhorse
+    conclusion = reject ?
+        "Reject H0 at 5% (panel-ADF): evidence of cointegration" :
+        "Fail to reject H0 (panel-ADF): no evidence of cointegration"
+    conc_data = Any["Conclusion" conclusion; "Note" "*** p<0.01, ** p<0.05, * p<0.10"]
+    _pretty_table(io, conc_data; column_labels=["",""], alignment=[:l,:l])
+end
+
+function Base.show(io::IO, r::KaoResult{T}) where {T}
+    spec_data = Any[
+        "H0"          "No cointegration (unit root in pooled residual)";
+        "H1"          "Cointegration (homogeneous vector)";
+        "Regressors (k)" r.n_regressors;
+        "ADF lags (p)" r.lags;
+        "Kernel lags"  r.kernel_lags;
+        "ρ̂ (pooled)"   round(r.rho, digits=4);
+        "Units (N)"    r.n_units;
+        "Time (T)"     r.nobs
+    ]
+    _pretty_table(io, spec_data;
+        title = "Kao (1999) Residual-Based Panel Cointegration Test",
+        column_labels = ["Specification", ""], alignment = [:l, :r])
+    nstat = length(r.names)
+    results_data = Matrix{Any}(undef, nstat, 3)
+    for s in 1:nstat
+        results_data[s, 1] = r.names[s]
+        results_data[s, 2] = string(round(r.statistics[s], digits=4), " ",
+                                    _significance_stars(r.pvalues[s]))
+        results_data[s, 3] = _format_pvalue(r.pvalues[s])
+    end
+    _pretty_table(io, results_data;
+        title = "Statistics (all N(0,1), left-tailed)",
+        column_labels = ["Statistic", "Value", "P-value"],
+        alignment = [:l, :r, :r])
+    reject = r.pvalues[end] < 0.05    # ADF
+    conclusion = reject ?
+        "Reject H0 at 5% (ADF): evidence of cointegration" :
+        "Fail to reject H0 (ADF): no evidence of cointegration"
+    conc_data = Any["Conclusion" conclusion; "Note" "*** p<0.01, ** p<0.05, * p<0.10"]
+    _pretty_table(io, conc_data; column_labels=["",""], alignment=[:l,:l])
+end
+
+function Base.show(io::IO, r::WesterlundResult{T}) where {T}
+    has_boot = r.bootstrap > 0
+    spec_data = Any[
+        "H0"          "No error correction (no cointegration)";
+        "H1"          "Error correction (cointegration)";
+        "Deterministic" _regression_name(r.trend);
+        "Regressors (k)" r.n_regressors;
+        "Lags / Leads" string(r.lags, " / ", r.leads);
+        "LR window"    r.lrwindow;
+        "Bootstrap"    (has_boot ? "$(r.bootstrap) reps (seed $(r.seed))" : "none");
+        "Units (N)"    r.n_units;
+        "Time (T)"     r.nobs
+    ]
+    _pretty_table(io, spec_data;
+        title = "Westerlund (2007) ECM Panel Cointegration Test",
+        column_labels = ["Specification", ""], alignment = [:l, :r])
+    nstat = length(r.names)
+    ncol = has_boot ? 4 : 3
+    results_data = Matrix{Any}(undef, nstat, ncol)
+    for s in 1:nstat
+        results_data[s, 1] = r.names[s]
+        results_data[s, 2] = string(round(r.statistics[s], digits=4), " ",
+                                    _significance_stars(r.pvalues[s]))
+        results_data[s, 3] = _format_pvalue(r.pvalues[s])
+        if has_boot
+            results_data[s, 4] = _format_pvalue(r.bootstrap_pvalues[s])
+        end
+    end
+    labels = has_boot ? ["Statistic", "Z", "P-value", "Boot P"] :
+                        ["Statistic", "Z", "P-value"]
+    align = has_boot ? [:l, :r, :r, :r] : [:l, :r, :r]
+    _pretty_table(io, results_data;
+        title = "Statistics (Gt/Ga group-mean, Pt/Pa pooled; left-tailed)",
+        column_labels = labels, alignment = align)
+    reject = r.pvalues[1] < 0.05      # Gt
+    conclusion = reject ?
+        "Reject H0 at 5% (Gt): evidence of cointegration" :
+        "Fail to reject H0 (Gt): no evidence of cointegration"
+    conc_data = Any["Conclusion" conclusion; "Note" "*** p<0.01, ** p<0.05, * p<0.10"]
+    _pretty_table(io, conc_data; column_labels=["",""], alignment=[:l,:l])
+end
+
+function Base.show(io::IO, r::FisherJohansenResult{T}) where {T}
+    combine_name = r.combine == :mw ? "Maddala-Wu (χ²(2N))" : "Choi (inv-normal Z)"
+    spec_data = Any[
+        "H0(r)"       "rank ≤ r (against rank > r)";
+        "Combination" combine_name;
+        "Deterministic" _regression_name(r.deterministic);
+        "VAR lags (p)" r.lags;
+        "Series (n)"   r.n_series;
+        "Units (N)"    r.n_units;
+        "Est. rank"    r.rank
+    ]
+    _pretty_table(io, spec_data;
+        title = "Fisher-Type (Maddala-Wu / Choi) Panel Johansen Cointegration Test",
+        column_labels = ["Specification", ""], alignment = [:l, :r])
+    nr = length(r.ranks)
+    results_data = Matrix{Any}(undef, nr, 5)
+    for j in 1:nr
+        results_data[j, 1] = "r ≤ $(r.ranks[j])"
+        results_data[j, 2] = round(r.trace_statistics[j], digits=4)
+        results_data[j, 3] = string(_format_pvalue(r.trace_pvalues[j]), " ",
+                                    _significance_stars(r.trace_pvalues[j]))
+        results_data[j, 4] = round(r.max_statistics[j], digits=4)
+        results_data[j, 5] = string(_format_pvalue(r.max_pvalues[j]), " ",
+                                    _significance_stars(r.max_pvalues[j]))
+    end
+    _pretty_table(io, results_data;
+        title = "Combined Statistics per Rank Hypothesis (primary: :$(r.combine))",
+        column_labels = ["H0", "Trace stat", "Trace p", "Max stat", "Max p"],
+        alignment = [:l, :r, :r, :r, :r])
+    conc_data = Any[
+        "Conclusion" "Estimated cointegration rank = $(r.rank) (first non-rejected trace test at 5%)";
+        "Note" "*** p<0.01, ** p<0.05, * p<0.10"]
+    _pretty_table(io, conc_data; column_labels=["",""], alignment=[:l,:l])
+end

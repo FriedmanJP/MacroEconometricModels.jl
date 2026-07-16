@@ -590,6 +590,15 @@ PANIC, Pesaran CIPS, and Moon-Perron panel unit root tests. See [Panel Unit Root
 | `moon_perron_test(pd; ...)` | Moon-Perron (2004) test |
 | `panel_unit_root_summary(pd; ...)` | Run all panel unit root tests |
 
+### Panel Cointegration Tests
+
+| Function | Description |
+|----------|-------------|
+| `pedroni_test(pd, y, xs...; ...)` | Pedroni (1999, 2004) residual-based test (7 statistics) |
+| `kao_test(pd, y, xs...; ...)` | Kao (1999) residual-based test (5 DF-type statistics) |
+| `westerlund_test(pd, y, xs...; ...)` | Westerlund (2007) ECM test (Gt/Ga/Pt/Pa) |
+| `fisher_johansen_test(pd, ys...; ...)` | Fisher-type (Maddala-Wu/Choi) combined Johansen test |
+
 Within-group lag, lead, and differencing utilities for panel data construction. See [Data Management](data.md) for details.
 
 ### Panel Data Utilities

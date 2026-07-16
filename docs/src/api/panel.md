@@ -176,6 +176,21 @@ panel_unit_root_summary
 
 ---
 
+## Panel Cointegration Tests
+
+```@docs
+pedroni_test
+kao_test
+westerlund_test
+fisher_johansen_test
+PedroniResult
+KaoResult
+WesterlundResult
+FisherJohansenResult
+```
+
+---
+
 ## Panel Data Utilities
 
 ```@docs

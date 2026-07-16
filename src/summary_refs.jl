@@ -920,6 +920,27 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Testing for Stationarity in Heterogeneous Panel Data",
         journal="Econometrics Journal", volume="3", issue="2", pages="148--161",
         doi="10.1111/1368-423X.00043", isbn="", publisher="", entry_type=:article),
+    # --- Panel Cointegration Tests (EV-21, #429) ---
+    :pedroni1999 => (key=:pedroni1999, authors="Pedroni, Peter", year=1999,
+        title="Critical Values for Cointegration Tests in Heterogeneous Panels with Multiple Regressors",
+        journal="Oxford Bulletin of Economics and Statistics", volume="61", issue="S1", pages="653--670",
+        doi="10.1111/1468-0084.61.s1.14", isbn="", publisher="", entry_type=:article),
+    :pedroni2004 => (key=:pedroni2004, authors="Pedroni, Peter", year=2004,
+        title="Panel Cointegration: Asymptotic and Finite Sample Properties of Pooled Time Series Tests with an Application to the PPP Hypothesis",
+        journal="Econometric Theory", volume="20", issue="3", pages="597--625",
+        doi="10.1017/S0266466604203073", isbn="", publisher="", entry_type=:article),
+    :kao1999 => (key=:kao1999, authors="Kao, Chihwa", year=1999,
+        title="Spurious Regression and Residual-Based Tests for Cointegration in Panel Data",
+        journal="Journal of Econometrics", volume="90", issue="1", pages="1--44",
+        doi="10.1016/S0304-4076(98)00023-2", isbn="", publisher="", entry_type=:article),
+    :westerlund2007 => (key=:westerlund2007, authors="Westerlund, Joakim", year=2007,
+        title="Testing for Error Correction in Panel Data",
+        journal="Oxford Bulletin of Economics and Statistics", volume="69", issue="6", pages="709--748",
+        doi="10.1111/j.1468-0084.2007.00477.x", isbn="", publisher="", entry_type=:article),
+    :persyn_westerlund2008 => (key=:persyn_westerlund2008, authors="Persyn, Damiaan and Westerlund, Joakim", year=2008,
+        title="Error-Correction-Based Cointegration Tests for Panel Data",
+        journal="Stata Journal", volume="8", issue="2", pages="232--241",
+        doi="10.1177/1536867X0800800205", isbn="", publisher="", entry_type=:article),
     # --- Factor Model Break Tests ---
     :breitung_eickmeier2011 => (key=:breitung_eickmeier2011,
         authors="Breitung, Jorg and Eickmeier, Sandra", year=2011,
@@ -1379,6 +1400,15 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :breitung_panel_test => [:breitung2000],
     :fisher_panel_test => [:maddala_wu1999, :choi2001],
     :hadri_test => [:hadri2000],
+    # Panel cointegration tests (EV-21, #429)
+    :PedroniResult => [:pedroni1999, :pedroni2004],
+    :KaoResult => [:kao1999],
+    :WesterlundResult => [:westerlund2007, :persyn_westerlund2008],
+    :FisherJohansenResult => [:maddala_wu1999, :choi2001, :johansen1991],
+    :pedroni_test => [:pedroni1999, :pedroni2004],
+    :kao_test => [:kao1999],
+    :westerlund_test => [:westerlund2007, :persyn_westerlund2008],
+    :fisher_johansen_test => [:maddala_wu1999, :choi2001, :johansen1991],
     # Factor model break tests
     :FactorBreakResult => [:breitung_eickmeier2011, :chen_dolado_gonzalo2014, :han_inoue2015],
     :factor_break_test => [:breitung_eickmeier2011, :chen_dolado_gonzalo2014, :han_inoue2015],
@@ -1821,6 +1851,11 @@ refs(io::IO, ::IPSResult; kw...) = refs(io, _TYPE_REFS[:IPSResult]; kw...)
 refs(io::IO, ::BreitungPanelResult; kw...) = refs(io, _TYPE_REFS[:BreitungPanelResult]; kw...)
 refs(io::IO, ::FisherPanelResult; kw...) = refs(io, _TYPE_REFS[:FisherPanelResult]; kw...)
 refs(io::IO, ::HadriResult; kw...) = refs(io, _TYPE_REFS[:HadriResult]; kw...)
+# Panel cointegration tests (EV-21, #429)
+refs(io::IO, ::PedroniResult; kw...) = refs(io, _TYPE_REFS[:PedroniResult]; kw...)
+refs(io::IO, ::KaoResult; kw...) = refs(io, _TYPE_REFS[:KaoResult]; kw...)
+refs(io::IO, ::WesterlundResult; kw...) = refs(io, _TYPE_REFS[:WesterlundResult]; kw...)
+refs(io::IO, ::FisherJohansenResult; kw...) = refs(io, _TYPE_REFS[:FisherJohansenResult]; kw...)
 
 # Factor break types
 refs(io::IO, ::FactorBreakResult; kw...) = refs(io, _TYPE_REFS[:FactorBreakResult]; kw...)

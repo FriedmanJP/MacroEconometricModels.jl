@@ -1,6 +1,6 @@
 # [Panel Tests](@id tests_panel_page)
 
-Panel-level hypothesis testing addresses two distinct phases of the empirical workflow. **Panel unit root tests** detect non-stationarity in panel datasets, a prerequisite for correct specification of panel VARs and factor models. **Panel VAR specification tests** validate GMM instrument validity and select optimal lag orders after estimation. This page covers five **first-generation** panel unit root tests (LLC, IPS, Breitung, Fisher, Hadri — the EViews "Panel Unit Root Test" dialog, which assume cross-sectional independence), three **second-generation** tests robust to cross-sectional dependence (PANIC, Pesaran CIPS, Moon-Perron), and three Panel VAR diagnostics (Hansen J-test, Andrews-Lu MMSC, lag selection).
+Panel-level hypothesis testing addresses several distinct phases of the empirical workflow. **Panel unit root tests** detect non-stationarity in panel datasets, a prerequisite for correct specification of panel VARs and factor models. **Panel cointegration tests** then ask whether non-stationary panel series share a long-run equilibrium. **Panel VAR specification tests** validate GMM instrument validity and select optimal lag orders after estimation. This page covers five **first-generation** panel unit root tests (LLC, IPS, Breitung, Fisher, Hadri — the EViews "Panel Unit Root Test" dialog, which assume cross-sectional independence), three **second-generation** tests robust to cross-sectional dependence (PANIC, Pesaran CIPS, Moon-Perron), four **panel cointegration** tests (Pedroni, Kao, Westerlund, Fisher-Johansen — the EViews "Panel Cointegration Test" dialog), and three Panel VAR diagnostics (Hansen J-test, Andrews-Lu MMSC, lag selection).
 
 - **Levin-Lin-Chu**: Pooled bias-adjusted t-statistic with a common autoregressive root (Levin, Lin & Chu 2002)
 - **Im-Pesaran-Shin**: Averaged per-unit ADF t-statistics standardized with finite-sample moments (Im, Pesaran & Shin 2003)
@@ -369,6 +369,90 @@ The output displays each test's specification, statistics, p-values, and conclus
 
 ---
 
+## Panel Cointegration Tests
+
+Once a panel is established as I(1), the next question is whether the non-stationary series share a long-run equilibrium. Four tests — the EViews "Panel Cointegration Test" dialog — cover the residual-based, error-correction, and combination approaches. All share the null **H0: no cointegration** (Fisher-Johansen instead tests a sequence of rank hypotheses).
+
+- **Pedroni**: residual-based, seven statistics allowing a *heterogeneous* cointegrating vector (Pedroni 1999, 2004)
+- **Kao**: residual-based, five DF-type statistics under a *homogeneous* cointegrating vector (Kao 1999)
+- **Westerlund**: four error-correction statistics testing the speed-of-adjustment coefficient, with an optional CSD-robust bootstrap (Westerlund 2007)
+- **Fisher-Johansen**: Maddala-Wu / Choi combination of per-unit Johansen trace and max-eigenvalue p-values (Maddala & Wu 1999; Choi 2001; Johansen 1991)
+
+Each test (except Fisher-Johansen) takes a `PanelData`, a response symbol, and one or more regressor symbols. The panel must be balanced. The following cointegrated panel (`y = x + stationary error`, with `x` a random walk) is used throughout this section:
+
+```@example test_panel
+Random.seed!(2024)
+Tobs, Nunits = 60, 20
+idv = Int[]; tv = Int[]; yy = Float64[]; xx = Float64[]
+for i in 1:Nunits
+    e = zeros(Tobs)
+    x = cumsum(randn(Tobs))
+    for t in 2:Tobs
+        e[t] = 0.3 * e[t-1] + randn()      # stationary equilibrium error
+    end
+    for t in 1:Tobs
+        push!(idv, i); push!(tv, t); push!(yy, x[t] + e[t]); push!(xx, x[t])
+    end
+end
+pdc = xtset(DataFrame(id = idv, t = tv, y = yy, x1 = xx), :id, :t)
+nothing # hide
+```
+
+### Pedroni
+
+`pedroni_test` reports seven statistics: four within-dimension (panel) statistics that pool the numerators and denominators across units, and three between-dimension (group) statistics that average per-unit ratios. All are standardized to N(0,1) using the Pedroni (1999, Table 2) adjustment moments.
+
+!!! warning "Sign trap"
+    The **panel-v** statistic is **right-tailed** — a large *positive* value rejects the no-cointegration null. The other six Pedroni statistics (and every Kao and Westerlund statistic) are **left-tailed**. The `report` output labels each statistic's tail; the reconstruction `p = ccdf(Normal(), z)` for panel-v versus `p = cdf(Normal(), z)` for the rest.
+
+```@example test_panel
+report(pedroni_test(pdc, :y, :x1; trend = :constant))
+```
+
+The `trend` keyword selects the deterministic case of the cointegrating regression (`:none`, `:constant`, or `:trend`); `lags` sets the Newey-West bandwidth for the residual long-run variances (`:auto` by default) and `adf_lags` the augmentation order of the parametric statistics.
+
+### Kao
+
+`kao_test` assumes a *homogeneous* cointegrating vector: it within-demeans each unit, fits a single pooled slope, and applies five Dickey-Fuller-type statistics to the pooled residuals. All five are N(0,1) and left-tailed.
+
+```@example test_panel
+report(kao_test(pdc, :y, :x1))
+```
+
+The `lags` keyword sets the pooled ADF lag order and `kernel_lags` the Bartlett bandwidth for the endogeneity-correcting long-run variances (both `:auto` by default).
+
+### Westerlund
+
+`westerlund_test` estimates a per-unit error-correction model and tests the error-correction coefficient. The two group-mean statistics (`Gt`, `Ga`) average per-unit quantities; the two panel statistics (`Pt`, `Pa`) pool a common coefficient. A seeded bootstrap (`bootstrap = B`) yields p-values robust to cross-sectional dependence.
+
+```@example test_panel
+report(westerlund_test(pdc, :y, :x1; trend = :constant, lags = 1, leads = 0))
+```
+
+Set `bootstrap` to a positive integer for the CSD-robust p-values (stored in `bootstrap_pvalues`); the `seed` keyword makes them reproducible.
+
+### Fisher-Johansen
+
+`fisher_johansen_test` runs a per-unit [`johansen_test`](@ref) and combines the trace and max-eigenvalue p-values across units. Unlike the other three, it takes the panel and a list of series symbols (no response/regressor split) and reports a combined statistic for each rank hypothesis `r = 0, 1, …, n-1`. With `combine = :mw` (default) the combination is Maddala-Wu `P = -2 Σ ln p_i ~ χ²(2N)` (upper-tailed); `combine = :choi` uses the inverse-normal `Z ~ N(0,1)`. With a single unit (`N = 1`) the combination reduces exactly to that unit's Johansen p-values.
+
+```@example test_panel
+Random.seed!(303)
+idv = Int[]; tv = Int[]; av = Float64[]; bv = Float64[]
+for i in 1:12
+    a = cumsum(randn(Tobs))
+    b = a .+ 0.5 .* randn(Tobs)         # b cointegrated with a
+    for t in 1:Tobs
+        push!(idv, i); push!(tv, t); push!(av, a[t]); push!(bv, b[t])
+    end
+end
+pdfj = xtset(DataFrame(id = idv, t = tv, a = av, b = bv), :id, :t)
+report(fisher_johansen_test(pdfj, :a, :b; lags = 2))
+```
+
+The estimated cointegration rank (`.rank`) is the first rank hypothesis whose combined trace test fails to reject at 5%.
+
+---
+
 ## Panel VAR Specification Tests
 
 After estimating a Panel VAR by GMM, three diagnostics validate the specification: the Hansen J-test for instrument validity, Andrews-Lu MMSC criteria for model selection, and MMSC-based lag order selection. These tests apply to GMM-estimated models (`estimate_pvar` with `:onestep` or `:twostep`), not to FE-OLS models.
@@ -585,10 +669,22 @@ The PANIC test separates the common factor (I(1)) from the stationary idiosyncra
 
 - Im, K. S., Pesaran, M. H., & Shin, Y. (2003). Testing for Unit Roots in Heterogeneous Panels. *Journal of Econometrics*, 115(1), 53-74. [DOI](https://doi.org/10.1016/S0304-4076(03)00092-7)
 
+- Johansen, S. (1991). Estimation and Hypothesis Testing of Cointegration Vectors in Gaussian Vector Autoregressive Models. *Econometrica*, 59(6), 1551-1580. [DOI](https://doi.org/10.2307/2938278)
+
+- Kao, C. (1999). Spurious Regression and Residual-Based Tests for Cointegration in Panel Data. *Journal of Econometrics*, 90(1), 1-44. [DOI](https://doi.org/10.1016/S0304-4076(98)00023-2)
+
 - Levin, A., Lin, C.-F., & Chu, C.-S. J. (2002). Unit Root Tests in Panel Data: Asymptotic and Finite-Sample Properties. *Journal of Econometrics*, 108(1), 1-24. [DOI](https://doi.org/10.1016/S0304-4076(01)00098-7)
 
 - Maddala, G. S., & Wu, S. (1999). A Comparative Study of Unit Root Tests with Panel Data and a New Simple Test. *Oxford Bulletin of Economics and Statistics*, 61(S1), 631-652. [DOI](https://doi.org/10.1111/1468-0084.61.s1.13)
 
 - Moon, H. R., & Perron, B. (2004). Testing for a Unit Root in Panels with Dynamic Factors. *Journal of Econometrics*, 122(1), 81-126. [DOI](https://doi.org/10.1016/j.jeconom.2003.10.020)
 
+- Pedroni, P. (1999). Critical Values for Cointegration Tests in Heterogeneous Panels with Multiple Regressors. *Oxford Bulletin of Economics and Statistics*, 61(S1), 653-670. [DOI](https://doi.org/10.1111/1468-0084.61.s1.14)
+
+- Pedroni, P. (2004). Panel Cointegration: Asymptotic and Finite Sample Properties of Pooled Time Series Tests with an Application to the PPP Hypothesis. *Econometric Theory*, 20(3), 597-625. [DOI](https://doi.org/10.1017/S0266466604203073)
+
+- Persyn, D., & Westerlund, J. (2008). Error-Correction-Based Cointegration Tests for Panel Data. *Stata Journal*, 8(2), 232-241. [DOI](https://doi.org/10.1177/1536867X0800800205)
+
 - Pesaran, M. H. (2007). A Simple Panel Unit Root Test in the Presence of Cross-Section Dependence. *Journal of Applied Econometrics*, 22(2), 265-312. [DOI](https://doi.org/10.1002/jae.951)
+
+- Westerlund, J. (2007). Testing for Error Correction in Panel Data. *Oxford Bulletin of Economics and Statistics*, 69(6), 709-748. [DOI](https://doi.org/10.1111/j.1468-0084.2007.00477.x)

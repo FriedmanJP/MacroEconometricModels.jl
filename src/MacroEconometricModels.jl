@@ -226,6 +226,13 @@ include("teststat/ips.jl")
 include("teststat/breitung_panel.jl")
 include("teststat/fisher_panel.jl")
 include("teststat/hadri.jl")
+# Panel cointegration tests (EV-21, #429). pedroni.jl first: it defines the
+# shared helpers (_panel_coint_data / _stata_lrv / _resid_ols / _coint_det)
+# reused by kao/westerlund. fisher_johansen reuses johansen_test (above).
+include("teststat/pedroni.jl")
+include("teststat/kao.jl")
+include("teststat/westerlund.jl")
+include("teststat/fisher_johansen.jl")
 include("teststat/factor_break.jl")
 
 # Nowcasting (after factor models for Kalman filter reuse)
@@ -622,6 +629,10 @@ export panic_test, pesaran_cips_test, moon_perron_test, panel_unit_root_summary,
 # First-generation panel unit root tests (EV-20, #428)
 export llc_test, ips_test, breitung_panel_test, fisher_panel_test, hadri_test
 export LLCResult, IPSResult, BreitungPanelResult, FisherPanelResult, HadriResult
+
+# Panel cointegration tests (EV-21, #429)
+export pedroni_test, kao_test, westerlund_test, fisher_johansen_test
+export PedroniResult, KaoResult, WesterlundResult, FisherJohansenResult
 
 # Factor model structural break tests
 export factor_break_test

@@ -82,6 +82,7 @@ const TEST_GROUPS = [
         "teststat/test_adf_2break.jl",
         "teststat/test_gregory_hansen.jl",
         "teststat/test_panel_unitroot_firstgen.jl",   # EV-20 (#428): LLC/IPS/Breitung/Fisher/Hadri
+        "teststat/test_panel_cointegration.jl",       # EV-21 (#429): Pedroni/Kao/Westerlund/Fisher-Johansen
         "arima/test_arima.jl",
         "arima/test_arima_coverage.jl",
         "arima/test_arfima.jl",   # EV-13 (#421): ARFIMA + GPH + local Whittle
@@ -407,6 +408,7 @@ else
         @testset "Two-Break ADF Test" begin include("teststat/test_adf_2break.jl") end
         @testset "Gregory-Hansen Cointegration Test" begin include("teststat/test_gregory_hansen.jl") end
         @testset "First-Gen Panel Unit Root Tests" begin include("teststat/test_panel_unitroot_firstgen.jl") end
+        @testset "Panel Cointegration Tests" begin include("teststat/test_panel_cointegration.jl") end
         @testset "ARIMA Models" begin include("arima/test_arima.jl") end
         @testset "ARIMA Coverage" begin include("arima/test_arima_coverage.jl") end
         @testset "ARFIMA (long memory)" begin include("arima/test_arfima.jl") end

@@ -772,3 +772,167 @@ StatsAPI.pvalue(r::IPSResult) = r.pvalue
 StatsAPI.pvalue(r::BreitungPanelResult) = r.pvalue
 StatsAPI.pvalue(r::FisherPanelResult) = r.pvalue
 StatsAPI.pvalue(r::HadriResult) = r.pvalue
+
+# =============================================================================
+# Panel Cointegration Tests (EV-21, #429)
+# Pedroni / Kao / Westerlund / Fisher-Johansen. All H0: no cointegration.
+# =============================================================================
+
+"""
+    PedroniResult{T} <: AbstractUnitRootTest
+
+Pedroni (1999, 2004) residual-based panel cointegration test result. Seven
+statistics; **`panel-v` (index 1) is right-tailed**, the other six are
+left-tailed. See [`pedroni_test`](@ref).
+
+Fields:
+- `names`: the seven statistic names, in order
+- `raw`: raw (empirical) statistics
+- `statistics`: standardized `(raw − μ√N)/√v` (N(0,1) under H0)
+- `pvalues`: per-statistic p-values (right-tailed for `panel-v`, else left)
+- `mu`, `v`: Pedroni (1999) Table 2 (μ, v) moments for this (trend, k)
+- `trend`: `:none`, `:constant`, or `:trend`
+- `n_regressors`: number of regressors k
+- `bandwidth`: Newey-West bandwidth used for the residual LRVs
+- `adf_lags`: augmentation order of the parametric statistics
+- `nobs`: time dimension T
+- `n_units`: cross-section dimension N
+"""
+struct PedroniResult{T<:AbstractFloat} <: AbstractUnitRootTest
+    names::Vector{String}
+    raw::Vector{T}
+    statistics::Vector{T}
+    pvalues::Vector{T}
+    mu::Vector{T}
+    v::Vector{T}
+    trend::Symbol
+    n_regressors::Int
+    bandwidth::Int
+    adf_lags::Int
+    nobs::Int
+    n_units::Int
+end
+
+"""
+    KaoResult{T} <: AbstractUnitRootTest
+
+Kao (1999) residual-based panel cointegration test result (homogeneous
+cointegrating vector). Five DF-type statistics, all N(0,1) and left-tailed. See
+[`kao_test`](@ref).
+
+Fields:
+- `names`: statistic names (`DFrho`, `DFt`, `DFrho_star`, `DFt_star`, `ADF`)
+- `statistics`: standardized statistics (N(0,1) under H0)
+- `pvalues`: left-tailed normal p-values
+- `rho`: pooled AR(1) coefficient ρ̂ of the residuals
+- `t_rho`: DF t-statistic for H0: ρ = 1
+- `t_adf`: ADF t-statistic for H0: ρ = 1
+- `sigma_v2`, `omega_v2`: short-run σ̂²_ν and long-run ω̂²_ν conditional variances
+- `lags`: ADF lag order p
+- `kernel_lags`: Bartlett bandwidth for ω̂²_ν
+- `n_regressors`: number of regressors k
+- `nobs`: time dimension T
+- `n_units`: cross-section dimension N
+"""
+struct KaoResult{T<:AbstractFloat} <: AbstractUnitRootTest
+    names::Vector{String}
+    statistics::Vector{T}
+    pvalues::Vector{T}
+    rho::T
+    t_rho::T
+    t_adf::T
+    sigma_v2::T
+    omega_v2::T
+    lags::Int
+    kernel_lags::Int
+    n_regressors::Int
+    nobs::Int
+    n_units::Int
+end
+
+"""
+    WesterlundResult{T} <: AbstractUnitRootTest
+
+Westerlund (2007) ECM panel cointegration test result. Four statistics (`Gt`,
+`Ga`, `Pt`, `Pa`), all N(0,1) and left-tailed. See [`westerlund_test`](@ref).
+
+Fields:
+- `names`: `["Gt", "Ga", "Pt", "Pa"]`
+- `raw`: raw statistics
+- `statistics`: standardized Z-scores (N(0,1) under H0)
+- `pvalues`: asymptotic left-tailed p-values
+- `bootstrap_pvalues`: seeded-bootstrap p-values (`NaN` if `bootstrap == 0`)
+- `trend`: `:none`, `:constant`, or `:trend`
+- `n_regressors`: number of regressors k
+- `lags`, `leads`: short-run lag/lead orders p, q
+- `lrwindow`: Bartlett window for the long-run variances
+- `bootstrap`: number of bootstrap replications (0 ⇒ none)
+- `seed`: bootstrap RNG seed
+- `nobs`: time dimension T
+- `n_units`: cross-section dimension N
+"""
+struct WesterlundResult{T<:AbstractFloat} <: AbstractUnitRootTest
+    names::Vector{String}
+    raw::Vector{T}
+    statistics::Vector{T}
+    pvalues::Vector{T}
+    bootstrap_pvalues::Vector{T}
+    trend::Symbol
+    n_regressors::Int
+    lags::Int
+    leads::Int
+    lrwindow::Int
+    bootstrap::Int
+    seed::Int
+    nobs::Int
+    n_units::Int
+end
+
+"""
+    FisherJohansenResult{T} <: AbstractUnitRootTest
+
+Fisher-type (Maddala-Wu / Choi) combination of per-unit Johansen cointegration
+tests. Combined trace and max-eigenvalue statistics per rank hypothesis. See
+[`fisher_johansen_test`](@ref).
+
+Fields:
+- `ranks`: rank hypotheses tested (`0, 1, …, n-1`)
+- `trace_statistics`, `trace_pvalues`: combined trace statistic and p-value per rank
+- `max_statistics`, `max_pvalues`: combined max-eigenvalue statistic and p-value per rank
+- `individual_trace_pvalues`, `individual_max_pvalues`: N×n per-unit p-values
+- `combine`: `:mw` (χ²) or `:choi` (Z)
+- `deterministic`: passed to the per-unit Johansen tests
+- `lags`: per-unit VAR lag order
+- `rank`: estimated cointegration rank (first non-rejected combined trace test)
+- `n_units`: cross-section dimension N
+- `n_series`: number of series n
+"""
+struct FisherJohansenResult{T<:AbstractFloat} <: AbstractUnitRootTest
+    ranks::Vector{Int}
+    trace_statistics::Vector{T}
+    trace_pvalues::Vector{T}
+    max_statistics::Vector{T}
+    max_pvalues::Vector{T}
+    individual_trace_pvalues::Matrix{T}
+    individual_max_pvalues::Matrix{T}
+    combine::Symbol
+    deterministic::Symbol
+    lags::Int
+    rank::Int
+    n_units::Int
+    n_series::Int
+end
+
+# --- StatsAPI interface (EV-21) ---
+StatsAPI.nobs(r::PedroniResult) = r.nobs
+StatsAPI.nobs(r::KaoResult) = r.nobs
+StatsAPI.nobs(r::WesterlundResult) = r.nobs
+StatsAPI.dof(r::PedroniResult) = r.n_units
+StatsAPI.dof(r::KaoResult) = r.n_units
+StatsAPI.dof(r::WesterlundResult) = r.n_units
+StatsAPI.dof(r::FisherJohansenResult) = 2 * r.n_units
+# Primary p-value: the most significant (smallest) across the reported statistics.
+StatsAPI.pvalue(r::PedroniResult) = minimum(r.pvalues)
+StatsAPI.pvalue(r::KaoResult) = minimum(r.pvalues)
+StatsAPI.pvalue(r::WesterlundResult) = minimum(r.pvalues)
+StatsAPI.pvalue(r::FisherJohansenResult) = r.trace_pvalues[1]
