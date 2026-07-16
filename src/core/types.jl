@@ -145,3 +145,18 @@ abstract type AbstractImpulseResponse <: AbstractAnalysisResult end
 
 """Abstract supertype for forecast error variance decomposition results."""
 abstract type AbstractFEVD <: AbstractAnalysisResult end
+
+# =============================================================================
+# Abstract Types - Nonlinear Time Series Models
+# =============================================================================
+
+"""
+    AbstractNonlinearTSModel <: StatsAPI.StatisticalModel
+
+Abstract supertype for regime-switching / nonlinear univariate time series models.
+
+Subtypes: `ThresholdModel` (threshold autoregression / SETAR). The scaffold is
+shared by later smooth-transition (STAR) and Markov-switching models, which extend
+this hierarchy without re-scaffolding.
+"""
+abstract type AbstractNonlinearTSModel <: StatsAPI.StatisticalModel end

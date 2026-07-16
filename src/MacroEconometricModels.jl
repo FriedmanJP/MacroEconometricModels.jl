@@ -301,6 +301,10 @@ include("sv/types.jl")
 include("sv/estimation.jl")
 include("sv/forecast.jl")
 
+# --- Nonlinear time series (threshold/SETAR; STAR & Markov switching extend this) ---
+include("nonlinear/types.jl")
+include("nonlinear/threshold.jl")
+
 # Model comparison tests (LR, LM)
 include("teststat/model_comparison.jl")
 
@@ -442,6 +446,7 @@ include("plotting/midas.jl")
 include("plotting/penalized.jl")   # EV-03 (#411): coefficient-path / CV-curve plots
 include("plotting/spectral.jl")
 include("plotting/io.jl")
+include("plotting/nonlinear.jl")
 
 # =============================================================================
 # Exports - Types
@@ -911,6 +916,14 @@ export estimate_sv
 
 # Type accessors
 export arch_order, garch_order, persistence, halflife, unconditional_variance
+
+# =============================================================================
+# Exports — Nonlinear Time Series (threshold/SETAR)
+# =============================================================================
+
+export AbstractNonlinearTSModel
+export ThresholdModel, ThresholdForecast, HansenLinearityTest
+export estimate_threshold, estimate_setar, hansen_linearity_test
 
 # =============================================================================
 # Exports - Spectral Analysis & ACF/PACF

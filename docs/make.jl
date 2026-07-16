@@ -43,6 +43,9 @@ makedocs(;
             "Factor Models" => "factormodels.md",
             "FAVAR" => "favar.md",
         ],
+        "Nonlinear Time Series" => [
+            "Threshold & SETAR" => "nonlinear.md",
+        ],
         "Cross-Section & Panel" => [
             "Linear Regression" => "regression.md",
             "Binary Choice Models" => "binary_choice.md",

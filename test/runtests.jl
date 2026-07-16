@@ -110,6 +110,11 @@ const TEST_GROUPS = [
         "filters/test_x13_coverage.jl",
         "spectral/test_spectral.jl",
     ]),
+    # Nonlinear time series (EV-05 threshold/SETAR; EV-06 STAR & EV-07 Markov
+    # switching join this group).
+    ("Nonlinear" => [
+        "nonlinear/test_threshold.jl",
+    ]),
     # Group 7 split into three so the DSGE critical path balances across processes (#123):
     # the heavy test_ha_dsge.jl (~65% of the old group) runs alone.
     ("DSGE Core" => [
@@ -422,6 +427,9 @@ else
         @testset "X-13ARIMA-SEATS" begin include("filters/test_x13.jl") end
         @testset "X-13 Coverage" begin include("filters/test_x13_coverage.jl") end
         @testset "Spectral Analysis" begin include("spectral/test_spectral.jl") end
+
+        # Nonlinear time series (EV-05 threshold/SETAR)
+        @testset "Nonlinear (Threshold/SETAR)" begin include("nonlinear/test_threshold.jl") end
 
         # Group 7 split into three (#123)
         @testset "DSGE Core" begin

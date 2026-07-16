@@ -393,6 +393,19 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Stochastic Volatility with Leverage: Fast and Efficient Likelihood Inference",
         journal="Journal of Econometrics", volume="140", issue="2", pages="425--449",
         doi="10.1016/j.jeconom.2006.07.008", isbn="", publisher="", entry_type=:article),
+    # --- Nonlinear Time Series (threshold/SETAR) ---
+    :tong1990 => (key=:tong1990, authors="Tong, Howell", year=1990,
+        title="Non-linear Time Series: A Dynamical System Approach", journal="",
+        volume="", issue="", pages="", doi="",
+        isbn="978-0-19-852300-6", publisher="Oxford University Press", entry_type=:book),
+    :hansen1996 => (key=:hansen1996, authors="Hansen, Bruce E.", year=1996,
+        title="Inference When a Nuisance Parameter Is Not Identified Under the Null Hypothesis",
+        journal="Econometrica", volume="64", issue="2", pages="413--430",
+        doi="10.2307/2171789", isbn="", publisher="", entry_type=:article),
+    :hansen2000 => (key=:hansen2000, authors="Hansen, Bruce E.", year=2000,
+        title="Sample Splitting and Threshold Estimation",
+        journal="Econometrica", volume="68", issue="3", pages="575--603",
+        doi="10.1111/1468-0262.00124", isbn="", publisher="", entry_type=:article),
     :giannone_lenza_primiceri2015 => (key=:giannone_lenza_primiceri2015,
         authors="Giannone, Domenico and Lenza, Michele and Primiceri, Giorgio E.", year=2015,
         title="Prior Selection for Vector Autoregressions",
@@ -1079,6 +1092,11 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :egarch => [:nelson1991],
     :gjr_garch => [:glosten_jagannathan_runkle1993],
     :sv => [:taylor1986, :kim_shephard_chib1998, :omori2007],
+    # Nonlinear time series (threshold/SETAR)
+    :ThresholdModel => [:tong1990, :hansen1996, :hansen2000],
+    :HansenLinearityTest => [:hansen1996],
+    :threshold => [:tong1990, :hansen2000],
+    :setar => [:tong1990, :hansen2000],
     # Time Series Filters
     :HPFilterResult => [:hodrick_prescott1997],
     :HamiltonFilterResult => [:hamilton2018filter],
@@ -1494,6 +1512,10 @@ refs(io::IO, ::EGARCHModel; kw...) = refs(io, _TYPE_REFS[:EGARCHModel]; kw...)
 refs(io::IO, ::GJRGARCHModel; kw...) = refs(io, _TYPE_REFS[:GJRGARCHModel]; kw...)
 refs(io::IO, ::SVModel; kw...) = refs(io, _TYPE_REFS[:SVModel]; kw...)
 refs(io::IO, ::VolatilityForecast; kw...) = refs(io, _TYPE_REFS[:VolatilityForecast]; kw...)
+
+# Nonlinear time series (threshold/SETAR)
+refs(io::IO, ::ThresholdModel; kw...) = refs(io, _TYPE_REFS[:ThresholdModel]; kw...)
+refs(io::IO, ::HansenLinearityTest; kw...) = refs(io, _TYPE_REFS[:HansenLinearityTest]; kw...)
 
 # Covariance estimators
 refs(io::IO, ::NeweyWestEstimator; kw...) = refs(io, _TYPE_REFS[:NeweyWestEstimator]; kw...)

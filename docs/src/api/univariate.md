@@ -241,3 +241,24 @@ band_power
 ideal_bandpass
 transfer_function
 ```
+
+---
+
+## Nonlinear Time Series Types
+
+```@docs
+AbstractNonlinearTSModel
+ThresholdModel
+ThresholdForecast
+HansenLinearityTest
+```
+
+---
+
+## Nonlinear Time Series Estimation
+
+```@docs
+estimate_threshold
+estimate_setar
+hansen_linearity_test
+```
