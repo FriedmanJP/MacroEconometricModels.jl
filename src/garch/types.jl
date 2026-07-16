@@ -251,6 +251,132 @@ struct GarchMidasModel{T<:AbstractFloat} <: AbstractVolatilityModel
 end
 
 # =============================================================================
+# FIGARCH / FIEGARCH Model Types (EV-14, #422)
+# =============================================================================
+
+"""
+    FIGARCHModel{T} <: AbstractVolatilityModel
+
+Fractionally-integrated GARCH(p,d,q) (Baillie, Bollerslev & Mikkelsen 1996). The
+conditional variance follows an **ARCH(∞)** representation obtained by inverting
+the fractional-difference operator:
+
+    σ²ₜ = ω/(1−β(1)) + [1 − (1−β(L))⁻¹ φ(L)(1−L)ᵈ] ε²ₜ
+        = ω* + Σ_{i≥1} λᵢ ε²_{t−i}
+
+The λ-weights are built by convolving the `(1−L)ᵈ` fractional-difference weights
+(EV-13's `_frac_diff_weights`) with `φ(L)` and the inverse of `(1−β(L))`, then
+truncating at `truncation` lags. The memory parameter `d ∈ (0,1)` gives the
+hyperbolic decay `λᵢ ∝ i^{−1−d}` characteristic of long-memory volatility. As
+`d → 0`, FIGARCH(1,0,1) collapses to GARCH(1,1) with `α = φ − β`.
+
+Non-negativity of the λ-weights (Baillie–Bollerslev–Mikkelsen inequality
+conditions) guarantees a well-defined variance process; a violation is **warned**
+(not thrown) and the count of negative truncated weights is stored in
+`n_neg_lambda`.
+
+# Fields
+- `y::Vector{T}`: Return series `r`
+- `p::Int` / `q::Int`: GARCH `β(L)` order and ARCH `φ(L)` order
+- `mu::T`: Conditional mean μ
+- `omega::T`: Variance intercept ω (> 0); the ARCH(∞) intercept is `ω/(1−β(1))`
+- `phi::Vector{T}`: `φ(L)` coefficients `[φ₁,…,φq]`
+- `beta::Vector{T}`: `β(L)` coefficients `[β₁,…,βp]`
+- `d::T`: Fractional integration order `d ∈ (0,1)`
+- `lambda::Vector{T}`: Truncated ARCH(∞) weights `[λ₁,…,λ_trunc]`
+- `conditional_variance::Vector{T}`: Fitted σ²ₜ
+- `standardized_residuals::Vector{T}`: zₜ = εₜ/σₜ
+- `residuals::Vector{T}`: εₜ = yₜ − μ
+- `fitted::Vector{T}`: Fitted mean (constant μ)
+- `loglik::T` / `aic::T` / `bic::T`: Fit statistics
+- `truncation::Int`: ARCH(∞) truncation lag
+- `n_neg_lambda::Int`: Number of negative truncated λ-weights (BBM violation count)
+- `method::Symbol`: Estimation method (`:qmle`)
+- `converged::Bool` / `iterations::Int`
+- `param_vcov::Matrix{T}`: Cached Bollerslev–Wooldridge QMLE sandwich covariance in
+  optimization (transform) space, ordered `[μ, log ω, logit φ, logit β, logit d]`
+
+# References
+- Baillie, Bollerslev & Mikkelsen (1996). *Journal of Econometrics* 74(1), 3–30.
+"""
+struct FIGARCHModel{T<:AbstractFloat} <: AbstractVolatilityModel
+    y::Vector{T}
+    p::Int
+    q::Int
+    mu::T
+    omega::T
+    phi::Vector{T}
+    beta::Vector{T}
+    d::T
+    lambda::Vector{T}
+    conditional_variance::Vector{T}
+    standardized_residuals::Vector{T}
+    residuals::Vector{T}
+    fitted::Vector{T}
+    loglik::T
+    aic::T
+    bic::T
+    truncation::Int
+    n_neg_lambda::Int
+    method::Symbol
+    converged::Bool
+    iterations::Int
+    param_vcov::Matrix{T}
+end
+
+"""
+    FIEGARCHModel{T} <: AbstractVolatilityModel
+
+Fractionally-integrated EGARCH (Bollerslev & Mikkelsen 1996) — the log-variance
+long-memory analogue of FIGARCH:
+
+    ln σ²ₜ = ω + (1−β(L))⁻¹ φ(L)(1−L)^{−d} g(z_{t−1})
+           = ω + Σ_{j≥0} ψⱼ g(z_{t−1−j})
+
+where `g(z) = θz + γ(|z| − E|z|)` is the EGARCH news function (θ the sign/leverage
+term, γ the magnitude term) and `E|z| = √(2/π)` under Gaussianity. Because the log
+variance is unconstrained, there is **no positivity constraint** — long memory
+enters through `(1−L)^{−d}` (note the negative exponent), whose MA(∞) weights are
+built from `_frac_diff_weights(−d, truncation)` convolved with `φ(L)/(1−β(L))`.
+
+# Fields
+Same layout as [`FIGARCHModel`](@ref) plus the news-function parameters, with
+`psi` the truncated MA(∞) weights and no `n_neg_lambda`:
+- `theta::T`: EGARCH sign/leverage coefficient θ
+- `gamma::T`: EGARCH magnitude coefficient γ
+- `psi::Vector{T}`: Truncated MA(∞) weights `[ψ₀,…,ψ_{trunc}]`
+- `param_vcov`: ordered `[μ, ω, θ, γ, logit φ, logit β, logit d]`
+
+# References
+- Bollerslev & Mikkelsen (1996). *Journal of Econometrics* 73(1), 151–184.
+"""
+struct FIEGARCHModel{T<:AbstractFloat} <: AbstractVolatilityModel
+    y::Vector{T}
+    p::Int
+    q::Int
+    mu::T
+    omega::T
+    theta::T
+    gamma::T
+    phi::Vector{T}
+    beta::Vector{T}
+    d::T
+    psi::Vector{T}
+    conditional_variance::Vector{T}
+    standardized_residuals::Vector{T}
+    residuals::Vector{T}
+    fitted::Vector{T}
+    loglik::T
+    aic::T
+    bic::T
+    truncation::Int
+    method::Symbol
+    converged::Bool
+    iterations::Int
+    param_vcov::Matrix{T}
+end
+
+# =============================================================================
 # Type Accessors
 # =============================================================================
 
@@ -415,3 +541,51 @@ StatsAPI.dof_residual(m::GarchMidasModel) = length(m.ret_idx) - 6
 StatsAPI.islinear(::GarchMidasModel) = false
 
 Base.show(io::IO, m::GarchMidasModel) = _show_garch_midas(io, m)
+
+# =============================================================================
+# FIGARCH / FIEGARCH accessors / StatsAPI / display (EV-14, #422)
+# =============================================================================
+
+arch_order(m::FIGARCHModel) = m.q
+arch_order(m::FIEGARCHModel) = m.q
+garch_order(m::FIGARCHModel) = m.p
+garch_order(m::FIEGARCHModel) = m.p
+
+"""Long-memory (fractional integration) parameter `d`, governing hyperbolic decay."""
+persistence(m::FIGARCHModel) = m.d
+persistence(m::FIEGARCHModel) = m.d
+
+"""Fractional-integration order `d` (long-memory parameter)."""
+frac_order(m::FIGARCHModel) = m.d
+frac_order(m::FIEGARCHModel) = m.d
+
+StatsAPI.nobs(m::FIGARCHModel) = length(m.y)
+StatsAPI.nobs(m::FIEGARCHModel) = length(m.y)
+
+"""Coefficient vector `[μ, ω, φ₁…φq, β₁…βp, d]`."""
+StatsAPI.coef(m::FIGARCHModel) = vcat(m.mu, m.omega, m.phi, m.beta, m.d)
+"""Coefficient vector `[μ, ω, θ, γ, φ₁…φq, β₁…βp, d]`."""
+StatsAPI.coef(m::FIEGARCHModel) = vcat(m.mu, m.omega, m.theta, m.gamma, m.phi, m.beta, m.d)
+
+StatsAPI.residuals(m::FIGARCHModel) = m.residuals
+StatsAPI.residuals(m::FIEGARCHModel) = m.residuals
+StatsAPI.predict(m::FIGARCHModel) = m.conditional_variance
+StatsAPI.predict(m::FIEGARCHModel) = m.conditional_variance
+StatsAPI.loglikelihood(m::FIGARCHModel) = m.loglik
+StatsAPI.loglikelihood(m::FIEGARCHModel) = m.loglik
+StatsAPI.aic(m::FIGARCHModel) = m.aic
+StatsAPI.aic(m::FIEGARCHModel) = m.aic
+StatsAPI.bic(m::FIGARCHModel) = m.bic
+StatsAPI.bic(m::FIEGARCHModel) = m.bic
+
+"""Number of estimated parameters: `3 + q + p` (μ, ω, φ, β, d)."""
+StatsAPI.dof(m::FIGARCHModel) = 3 + m.q + m.p
+"""Number of estimated parameters: `5 + q + p` (μ, ω, θ, γ, φ, β, d)."""
+StatsAPI.dof(m::FIEGARCHModel) = 5 + m.q + m.p
+StatsAPI.islinear(::FIGARCHModel) = false
+StatsAPI.islinear(::FIEGARCHModel) = false
+StatsAPI.dof_residual(m::FIGARCHModel) = length(m.residuals) - dof(m)
+StatsAPI.dof_residual(m::FIEGARCHModel) = length(m.residuals) - dof(m)
+
+Base.show(io::IO, m::FIGARCHModel) = _show_figarch(io, m)
+Base.show(io::IO, m::FIEGARCHModel) = _show_fiegarch(io, m)

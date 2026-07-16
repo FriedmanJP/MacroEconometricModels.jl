@@ -117,6 +117,32 @@ function plot_result(m::GJRGARCHModel{T};
 end
 
 # =============================================================================
+# FIGARCHModel / FIEGARCHModel (EV-14, #422)
+# =============================================================================
+
+"""
+    plot_result(m::FIGARCHModel; title="", save_path=nothing)
+
+Plot FIGARCH conditional-volatility diagnostics (returns + fitted σ²).
+"""
+function plot_result(m::FIGARCHModel{T};
+                     title::String="", save_path::Union{String,Nothing}=nothing) where {T}
+    _plot_volatility_diagnostics(m.y, m.conditional_variance, "FIGARCH($(m.p),d,$(m.q))";
+                                  title=title, save_path=save_path)
+end
+
+"""
+    plot_result(m::FIEGARCHModel; title="", save_path=nothing)
+
+Plot FIEGARCH conditional-volatility diagnostics (returns + fitted σ²).
+"""
+function plot_result(m::FIEGARCHModel{T};
+                     title::String="", save_path::Union{String,Nothing}=nothing) where {T}
+    _plot_volatility_diagnostics(m.y, m.conditional_variance, "FIEGARCH($(m.p),d,$(m.q))";
+                                  title=title, save_path=save_path)
+end
+
+# =============================================================================
 # GarchMidasModel (EV-02, #410)
 # =============================================================================
 

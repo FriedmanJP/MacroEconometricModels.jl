@@ -336,6 +336,7 @@ include("garch/estimation.jl")
 include("garch/forecast.jl")
 include("garch/diagnostics.jl")
 include("garch/midas.jl")   # EV-02 (#410): GARCH-MIDAS long/short-run volatility components
+include("garch/figarch.jl") # EV-14 (#422): FIGARCH/FIEGARCH fractionally-integrated volatility
 
 # Stochastic Volatility models
 include("sv/types.jl")
@@ -979,6 +980,7 @@ export arch_lm_test, ljung_box_squared
 export GARCHModel, EGARCHModel, GJRGARCHModel
 export estimate_garch, estimate_egarch, estimate_gjr_garch
 export estimate_garch_midas, GarchMidasModel   # EV-02 (#410): GARCH-MIDAS
+export estimate_figarch, estimate_fiegarch, FIGARCHModel, FIEGARCHModel   # EV-14 (#422): FIGARCH/FIEGARCH
 export news_impact_curve
 
 # SV types and estimation

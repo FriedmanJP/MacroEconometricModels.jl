@@ -7,6 +7,7 @@
 - **EGARCH**: Exponential GARCH (Nelson 1991) --- log-variance specification with asymmetric leverage effects, no positivity constraints
 - **GJR-GARCH**: Threshold GARCH (Glosten, Jagannathan & Runkle 1993) --- indicator-based leverage via ``\gamma_i \mathbb{1}(\varepsilon_{t-i} < 0)``
 - **GARCH-MIDAS**: Mixed-frequency component GARCH (Engle, Ghysels & Sohn 2013) --- variance splits into a short-run unit-mean GARCH and a long-run MIDAS-filtered macro/realized-variance component
+- **FIGARCH / FIEGARCH**: Fractionally integrated (E)GARCH (Baillie, Bollerslev & Mikkelsen 1996; Bollerslev & Mikkelsen 1996) --- hyperbolic (long-memory) volatility persistence via the fractional-difference operator ``(1-L)^d``
 - **Stochastic Volatility**: Latent log-variance AR(1) process (Taylor 1986), estimated via Kim-Shephard-Chib (1998) Gibbs sampler with optional leverage and Student-t errors
 - **Diagnostics**: ARCH-LM test, Ljung-Box on squared residuals, news impact curves
 - **Forecasting**: Multi-step ahead variance forecasts with simulation-based confidence intervals (GARCH family) or posterior predictive intervals (SV)
@@ -419,6 +420,90 @@ plot_result(gm; view=:components)
 | `conditional_variance` | `Vector{T}` | Total ``\sigma^2 = \tau g`` |
 | `variance_ratio` | `T` | Long-run variance share ``\mathrm{Var}(\log\tau)/\mathrm{Var}(\log\sigma^2)`` |
 | `ret_idx` | `Vector{Int}` | Indices of retained (non-ragged) observations |
+| `loglik`, `aic`, `bic` | `T` | Fit statistics |
+| `converged` | `Bool` | Convergence status |
+
+---
+
+## Fractionally Integrated GARCH (FIGARCH / FIEGARCH)
+
+Standard GARCH persistence decays *geometrically*: a shock to volatility dies out at rate ``(\alpha+\beta)^h``. Many financial and high-frequency macro series instead show *hyperbolic* decay --- the autocorrelation of squared returns falls off far more slowly than any GARCH can reproduce, yet the process is not fully integrated (IGARCH). **FIGARCH** (Baillie, Bollerslev & Mikkelsen 1996) bridges the two by applying the fractional-difference operator ``(1-L)^d`` with ``d \in (0,1)`` to the ARCH polynomial, giving an **ARCH(∞)** conditional variance:
+
+```math
+\sigma^2_t = \frac{\omega}{1-\beta(1)} + \Big[1 - \big(1-\beta(L)\big)^{-1}\phi(L)(1-L)^d\Big]\varepsilon^2_t
+           = \omega^* + \sum_{i=1}^{K} \lambda_i \, \varepsilon^2_{t-i}.
+```
+
+The ``\lambda``-weights are obtained by convolving the ``(1-L)^d`` fractional-difference weights with ``\phi(L)`` and the inverse of ``1-\beta(L)``, then **truncating at ``K`` lags** (`truncation`, default 1000). Because the weights decay only ``\propto i^{-1-d}``, small ``d`` needs the full truncation. As ``d \to 0`` the model collapses to GARCH(1,1) with ``\alpha = \phi - \beta``; as ``d \to 1`` it approaches IGARCH.
+
+- ``\omega`` --- variance intercept (the ARCH(∞) level is ``\omega/(1-\beta(1))``)
+- ``\phi`` --- ARCH polynomial coefficient(s)
+- ``\beta`` --- GARCH polynomial coefficient(s)
+- ``d`` --- fractional integration order (long-memory parameter), ``d \in (0,1)``
+
+Estimation is by Gaussian QMLE with ``\omega`` log-transformed and ``\phi, \beta, d`` logit-transformed to their unit intervals; standard errors are Bollerslev–Wooldridge QML sandwich SEs with a delta-method back-transform. The pre-sample ``\varepsilon^2`` are set to the sample variance (matching `rugarch`). After fitting, the truncated ``\lambda``-weights are checked against the Baillie–Bollerslev–Mikkelsen non-negativity conditions --- a violation is **warned** (never thrown) and counted in `n_neg_lambda`.
+
+```@example volatility
+# Simulate a long-memory FIGARCH(1,d,1) return series (true d = 0.4)
+Random.seed!(77)
+let
+    ω, d, ϕ, β, K = 0.05, 0.4, 0.2, 0.5, 400
+    δ = [1.0]; for k in 1:K; push!(δ, δ[end] * (k - 1 - d) / k); end          # (1−L)^d
+    g = [δ[k+1] - (k ≥ 1 ? ϕ * δ[k] : 0.0) for k in 0:K]                      # φ(L)(1−L)^d
+    c = zeros(K + 1); c[1] = g[1]; for k in 1:K; c[k+1] = g[k+1] + β * c[k]; end
+    λ = [-c[i+1] for i in 1:K]                                                # ARCH(∞) weights
+    ostar, n, burn = ω / (1 - β), 1500, 800
+    e2 = fill(ostar, n + burn); r = zeros(n + burn)
+    for t in 1:(n + burn)
+        h = ostar
+        for i in 1:min(K, t - 1); h += λ[i] * e2[t-i]; end
+        r[t] = sqrt(max(h, 1e-12)) * randn(); e2[t] = r[t]^2
+    end
+    global rets = r[burn+1:end]
+end
+
+m = estimate_figarch(rets; truncation=400)
+report(m)
+```
+
+The fitted ``d`` is significantly positive, flagging genuine long memory (precise recovery of ``(\omega, d, \phi, \beta)`` needs a long sample --- the fractional parameters are only weakly identified at moderate ``T``).
+
+**FIEGARCH** (Bollerslev & Mikkelsen 1996) is the log-variance analogue: long memory enters the *log* conditional variance through ``(1-L)^{-d}`` (note the negative exponent), and the EGARCH news function ``g(z) = \theta z + \gamma(|z| - E|z|)`` captures asymmetry (leverage). Because the log variance is unconstrained there is no positivity restriction:
+
+```math
+\ln \sigma^2_t = \omega + \big(1-\beta(L)\big)^{-1}\phi(L)(1-L)^{-d}\, g(z_{t-1}).
+```
+
+```@example volatility
+fim = estimate_fiegarch(rets; truncation=300)
+fim.d                # estimated long-memory parameter d
+```
+
+Both models support multi-step variance forecasts (simulation-based, feeding the ARCH(∞) / log-variance recursion forward) and a news impact curve:
+
+```@example volatility
+fc = forecast(m, 10)
+fc.forecast          # 10-step variance path
+```
+
+```julia
+plot_result(m)                    # returns + fitted conditional volatility
+news_impact_curve(m)              # symmetric FIGARCH parabola; FIEGARCH is asymmetric
+```
+
+### FIGARCHModel / FIEGARCHModel Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `mu` | `T` | Conditional mean ``\mu`` |
+| `omega` | `T` | Variance intercept ``\omega`` |
+| `phi`, `beta` | `Vector{T}` | ARCH ``\phi(L)`` / GARCH ``\beta(L)`` coefficients |
+| `d` | `T` | Fractional integration order ``d \in (0,1)`` |
+| `lambda` / `psi` | `Vector{T}` | Truncated ARCH(∞) / MA(∞) weights |
+| `theta`, `gamma` | `T` | FIEGARCH sign / magnitude news coefficients |
+| `conditional_variance` | `Vector{T}` | Fitted ``\sigma^2_t`` |
+| `truncation` | `Int` | ARCH(∞) / MA(∞) truncation lag ``K`` |
+| `n_neg_lambda` | `Int` | Negative ``\lambda``-weight count (FIGARCH BBM violation) |
 | `loglik`, `aic`, `bic` | `T` | Fit statistics |
 | `converged` | `Bool` | Convergence status |
 

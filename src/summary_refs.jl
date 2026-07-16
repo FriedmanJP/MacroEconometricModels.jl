@@ -466,6 +466,17 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Stock Market Volatility and Macroeconomic Fundamentals",
         journal="Review of Economics and Statistics", volume="95", issue="3", pages="776--797",
         doi="10.1162/REST_a_00300", isbn="", publisher="", entry_type=:article),
+    # --- Fractionally-integrated volatility (EV-14, #422) ---
+    :baillie_bollerslev_mikkelsen1996 => (key=:baillie_bollerslev_mikkelsen1996,
+        authors="Baillie, Richard T. and Bollerslev, Tim and Mikkelsen, Hans Ole", year=1996,
+        title="Fractionally Integrated Generalized Autoregressive Conditional Heteroskedasticity",
+        journal="Journal of Econometrics", volume="74", issue="1", pages="3--30",
+        doi="10.1016/S0304-4076(95)01749-6", isbn="", publisher="", entry_type=:article),
+    :bollerslev_mikkelsen1996 => (key=:bollerslev_mikkelsen1996,
+        authors="Bollerslev, Tim and Mikkelsen, Hans Ole", year=1996,
+        title="Modeling and Pricing Long Memory in Stock Market Volatility",
+        journal="Journal of Econometrics", volume="73", issue="1", pages="151--184",
+        doi="10.1016/0304-4076(95)01736-4", isbn="", publisher="", entry_type=:article),
     :glosten_jagannathan_runkle1993 => (key=:glosten_jagannathan_runkle1993,
         authors="Glosten, Lawrence R. and Jagannathan, Ravi and Runkle, David E.", year=1993,
         title="On the Relation Between the Expected Value and the Volatility of the Nominal Excess Return on Stocks",
@@ -1426,6 +1437,8 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :GJRGARCHModel => [:glosten_jagannathan_runkle1993],
     :GarchMidasModel => [:engle_ghysels_sohn2013, :ghysels2007, :bollerslev1986],
     :garch_midas => [:engle_ghysels_sohn2013, :ghysels2007, :bollerslev1986],
+    :FIGARCHModel => [:baillie_bollerslev_mikkelsen1996, :bollerslev1986],
+    :FIEGARCHModel => [:bollerslev_mikkelsen1996, :nelson1991],
     :SVModel => [:taylor1986, :kim_shephard_chib1998, :omori2007],
     :VolatilityForecast => [:engle1982, :bollerslev1986],
     :arch => [:engle1982],
@@ -1917,6 +1930,8 @@ refs(io::IO, ::GARCHModel; kw...) = refs(io, _TYPE_REFS[:GARCHModel]; kw...)
 refs(io::IO, ::EGARCHModel; kw...) = refs(io, _TYPE_REFS[:EGARCHModel]; kw...)
 refs(io::IO, ::GJRGARCHModel; kw...) = refs(io, _TYPE_REFS[:GJRGARCHModel]; kw...)
 refs(io::IO, ::GarchMidasModel; kw...) = refs(io, _TYPE_REFS[:GarchMidasModel]; kw...)
+refs(io::IO, ::FIGARCHModel; kw...) = refs(io, _TYPE_REFS[:FIGARCHModel]; kw...)
+refs(io::IO, ::FIEGARCHModel; kw...) = refs(io, _TYPE_REFS[:FIEGARCHModel]; kw...)
 refs(io::IO, ::SVModel; kw...) = refs(io, _TYPE_REFS[:SVModel]; kw...)
 refs(io::IO, ::VolatilityForecast; kw...) = refs(io, _TYPE_REFS[:VolatilityForecast]; kw...)
 
