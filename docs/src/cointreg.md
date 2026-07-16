@@ -8,6 +8,8 @@
 - **Reused long-run-variance toolkit** — all three build ``\hat\Omega`` (two-sided), ``\hat\Lambda`` (one-sided) and ``\hat\Sigma = \hat\Gamma_0`` of the stacked ``(u, \Delta x)`` process on the EV-12 `lrcov`/`lrcov_oneside` HAC estimators
 - **Stored covariance pieces** — the fitted [`CointRegModel`](@ref) exposes ``\hat\Omega``, ``\hat\Lambda``, ``\hat\Sigma`` and the conditional long-run variance ``\hat\omega_{u\cdot\Delta x}`` for downstream cointegration stability and panel-cointegration tests
 
+- **Panel extension** — `estimate_xtcointreg(pd, y, xs...)` aggregates the single-unit estimator across the ``N`` units of a [`PanelData`](@ref) into group-mean (Pedroni 2001) or pooled (Pedroni 2000 FMOLS / Kao–Chiang 2000 DOLS) panel FMOLS/DOLS; see [Panel cointegrating regression](@ref cointreg_panel).
+
 All estimators return a [`CointRegModel`](@ref) and integrate with `report` and `refs`.
 
 ```@setup cointreg
@@ -178,6 +180,81 @@ println("95% CI:\n", round.(ci, digits=4))
 
 ---
 
+## [Panel cointegrating regression](@id cointreg_panel)
+
+When the same cointegrating relationship holds across a panel of ``N`` units,
+`estimate_xtcointreg` estimates each unit with `estimate_cointreg` and aggregates the
+per-unit long-run coefficients. Two poolings are available:
+
+- **Group-mean** (`pooling=:group`, the between-dimension estimator of Pedroni 2001 /
+  Mark–Sul 2003): the point estimate is the arithmetic mean of the per-unit coefficient
+  vectors, ``\bar\beta = N^{-1}\sum_i \hat\beta_i``, and the reported ``t``-statistic is
+  Pedroni's ``N^{-1/2}\sum_i t_i`` (the average of the per-unit ``t``-ratios, **not** the
+  ``t``-ratio of ``\bar\beta``). It is robust to cross-unit heterogeneity in the short-run
+  dynamics and endogeneity.
+- **Pooled** (`pooling=:pooled`, the within-dimension estimator): fixed effects (and, for
+  DOLS, unit-specific lead/lag dynamics) are partialled out per unit and the corrected
+  moments are pooled into one common slope. Pooled FMOLS (Pedroni 2000) weights each unit by
+  its inverse conditional long-run variance ``\hat L_{11i}^{-2}``; pooled DOLS is the
+  Kao–Chiang (2000) stacked within-demeaned regression.
+
+```@setup cointreg
+using DataFrames
+# A fixed-seed heterogeneous cointegrated panel: y_it = a_i + 1.5 x_it + u_it,
+# common slope, unit-specific intercepts / dynamics / endogeneity.
+let
+    global paneldf
+    rng = MersenneTwister(20260716)
+    Np, Tp = 5, 80
+    yv = Float64[]; xv = Float64[]; idv = Int[]; tv = Int[]
+    for i in 1:Np
+        vv = randn(rng, Tp); ee = randn(rng, Tp); xi = cumsum(vv)
+        ui = zeros(Tp)
+        for t in 2:Tp
+            ui[t] = (0.2 + 0.05i) * ui[t-1] + ee[t] + (0.3 + 0.05i) * vv[t]
+        end
+        yi = (1.0 + 0.5i) .+ 1.5 .* xi .+ ui
+        append!(yv, yi); append!(xv, xi); append!(idv, fill(i, Tp)); append!(tv, 1:Tp)
+    end
+    paneldf = DataFrame(country=idv, year=tv, ly=yv, lx=xv)
+end
+```
+
+**Group-mean FMOLS** across the panel:
+
+```@example cointreg
+pd = xtset(paneldf, :country, :year)
+mg = estimate_xtcointreg(pd, :ly, :lx; method=:fmols, pooling=:group, trend=:const)
+report(mg)
+```
+
+**Pooled FMOLS** reports the common slope only, with unit fixed effects removed:
+
+```@example cointreg
+mp = estimate_xtcointreg(pd, :ly, :lx; method=:fmols, pooling=:pooled, trend=:const)
+println("pooled slope = ", round(coef(mp)[1], digits=4), " (true = 1.5)")
+```
+
+**Pooled DOLS** (Kao–Chiang), with automatic per-unit lead/lag selection:
+
+```@example cointreg
+md = estimate_xtcointreg(pd, :ly, :lx; method=:dols, pooling=:pooled, trend=:const)
+println("pooled DOLS slope = ", round(coef(md)[1], digits=4))
+```
+
+The group-mean estimate is the exact mean of the per-unit fits — a useful identity for
+verification:
+
+```@example cointreg
+per = [estimate_cointreg(gd.data[:, 1], gd.data[:, 2]; method=:fmols, trend=:const)
+       for gd in (MacroEconometricModels.group_data(pd, g) for g in 1:pd.n_groups)]
+mean_of_units = sum(coef.(per)) ./ pd.n_groups
+println("β̄ matches mean of per-unit coefs: ",
+        isapprox(coef(mg), mean_of_units; atol=1e-10))
+```
+
+---
+
 ## Common Pitfalls
 
 - **The regressors must be ``I(1)`` and cointegrated with ``y``.** FMOLS/CCR/DOLS assume a genuine cointegrating relationship; applied to unrelated ``I(1)`` series they estimate a spurious "long-run" vector. Pre-test for cointegration (e.g. the Gregory–Hansen or Johansen tests on the [Unit Root & Cointegration](@ref tests_unitroot_page) page) first.
@@ -198,3 +275,7 @@ refs(m)
 - Park, J. Y. (1992). Canonical Cointegrating Regressions. *Econometrica* 60(1), 119–143.
 - Saikkonen, P. (1991). Asymptotically Efficient Estimation of Cointegration Regressions. *Econometric Theory* 7(1), 1–21.
 - Stock, J. H. & Watson, M. W. (1993). A Simple Estimator of Cointegrating Vectors in Higher Order Integrated Systems. *Econometrica* 61(4), 783–820.
+- Pedroni, P. (2000). Fully Modified OLS for Heterogeneous Cointegrated Panels. *Advances in Econometrics* 15, 93–130.
+- Pedroni, P. (2001). Purchasing Power Parity Tests in Cointegrated Panels. *Review of Economics and Statistics* 83(4), 727–731.
+- Kao, C. & Chiang, M.-H. (2000). On the Estimation and Inference of a Cointegrated Regression in Panel Data. *Advances in Econometrics* 15, 179–222.
+- Mark, N. C. & Sul, D. (2003). Cointegration Vector Estimation by Panel DOLS and Long-Run Money Demand. *Oxford Bulletin of Economics and Statistics* 65(5), 655–680.

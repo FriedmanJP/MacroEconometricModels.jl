@@ -1,0 +1,10 @@
+
+=========================== RUN: test/display/test_display_invariants.jl ===========================
+Test Summary:                  | Pass  Total   Time
+Display invariants (T176/#275) |  124    124  33.1s
+
+=========================== RUN: test/display/test_display_goldens.jl ===========================
+Test Summary:               | Pass  Total  Time
+Display goldens (T176/#275) |   20     20  0.1s
+
+=== run_one.jl done ===

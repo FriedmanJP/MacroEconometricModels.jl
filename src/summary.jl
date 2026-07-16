@@ -462,6 +462,8 @@ report(m::TruncRegModel) = show(stdout, m)      # EV-17 (#425)
 report(m::HeckmanModel) = show(stdout, m)       # EV-18 (#426)
 report(m::CointRegModel) = show(stdout, m)      # EV-10 (#418)
 report(io::IO, m::CointRegModel) = show(io, m)  # EV-10 (#418)
+report(m::PanelCointRegModel) = show(stdout, m)      # EV-22 (#430)
+report(io::IO, m::PanelCointRegModel) = show(io, m)  # EV-22 (#430)
 
 # Panel VAR
 report(x::PVARModel) = show(stdout, x)

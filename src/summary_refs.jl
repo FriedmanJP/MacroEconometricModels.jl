@@ -984,6 +984,23 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Error-Correction-Based Cointegration Tests for Panel Data",
         journal="Stata Journal", volume="8", issue="2", pages="232--241",
         doi="10.1177/1536867X0800800205", isbn="", publisher="", entry_type=:article),
+    # --- Panel Cointegrating Regression (EV-22, #430) ---
+    :pedroni2000 => (key=:pedroni2000, authors="Pedroni, Peter", year=2000,
+        title="Fully Modified OLS for Heterogeneous Cointegrated Panels",
+        journal="Advances in Econometrics", volume="15", issue="", pages="93--130",
+        doi="10.1016/S0731-9053(00)15004-2", isbn="", publisher="", entry_type=:article),
+    :pedroni2001 => (key=:pedroni2001, authors="Pedroni, Peter", year=2001,
+        title="Purchasing Power Parity Tests in Cointegrated Panels",
+        journal="The Review of Economics and Statistics", volume="83", issue="4", pages="727--731",
+        doi="10.1162/003465301753237803", isbn="", publisher="", entry_type=:article),
+    :kao_chiang2000 => (key=:kao_chiang2000, authors="Kao, Chihwa and Chiang, Min-Hsien", year=2000,
+        title="On the Estimation and Inference of a Cointegrated Regression in Panel Data",
+        journal="Advances in Econometrics", volume="15", issue="", pages="179--222",
+        doi="10.1016/S0731-9053(00)15007-8", isbn="", publisher="", entry_type=:article),
+    :mark_sul2003 => (key=:mark_sul2003, authors="Mark, Nelson C. and Sul, Donggyu", year=2003,
+        title="Cointegration Vector Estimation by Panel DOLS and Long-Run Money Demand",
+        journal="Oxford Bulletin of Economics and Statistics", volume="65", issue="5", pages="655--680",
+        doi="10.1111/j.1468-0084.2003.00066.x", isbn="", publisher="", entry_type=:article),
     # --- Factor Model Break Tests ---
     :breitung_eickmeier2011 => (key=:breitung_eickmeier2011,
         authors="Breitung, Jorg and Eickmeier, Sandra", year=2011,
@@ -1655,6 +1672,7 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :estimate_heckman => [:heckman1979, :greene2018, :wooldridge2010],
     # Single-equation cointegrating regression (EV-10, #418)
     :CointRegModel => [:phillips_hansen1990, :park1992, :saikkonen1991, :stock_watson1993],
+    :PanelCointRegModel => [:pedroni2000, :pedroni2001, :kao_chiang2000, :mark_sul2003],  # EV-22 (#430)
     :estimate_cointreg => [:phillips_hansen1990, :park1992, :saikkonen1991, :stock_watson1993],
     # Residual-based / parameter-stability cointegration tests (EV-11)
     :EngleGrangerResult => [:engle_granger1987, :mackinnon2010],
@@ -2123,6 +2141,7 @@ refs(io::IO, ::TobitModel; kw...) = refs(io, _TYPE_REFS[:TobitModel]; kw...)
 refs(io::IO, ::TruncRegModel; kw...) = refs(io, _TYPE_REFS[:TruncRegModel]; kw...)
 refs(io::IO, ::HeckmanModel; kw...) = refs(io, _TYPE_REFS[:HeckmanModel]; kw...)  # EV-18 (#426)
 refs(io::IO, ::CointRegModel; kw...) = refs(io, _TYPE_REFS[:CointRegModel]; kw...)  # EV-10 (#418)
+refs(io::IO, ::PanelCointRegModel; kw...) = refs(io, _TYPE_REFS[:PanelCointRegModel]; kw...)  # EV-22 (#430)
 
 # Ordered & Multinomial models
 refs(io::IO, ::OrderedLogitModel; kw...) = refs(io, _TYPE_REFS[:OrderedLogitModel]; kw...)

@@ -1,0 +1,45 @@
+fix(reg,gmm,preg,did,teststat): [T089] low-severity batch M-27..M-36 (#188)
+
+- M-27: separation detection (Albert & Anderson 1984) + @warn in
+  estimate_logit/estimate_probit: complete-ordering gap in the fitted linear
+  predictor, boundary-pinned fitted probabilities, or diverged coefficients.
+  Stored `converged` untouched (warning satisfies "not silent").
+- M-28: marginal_effects computes the discrete change F(eta|x_j=1)-F(eta|x_j=0)
+  for binary {0,1} regressors (Stata `margins, dydx(*)` factor-variable
+  convention) with the exact delta-method Jacobian rows (G[j,l!=j]=mean((f1-f0)x_l),
+  G[j,j]=mean(f1)); intercept ME/SE/z/p/CI = NaN (zeroed G row, no cross-pollution);
+  AME/MEM/MER all covered; plot_result(::MarginalEffects) skips NaN rows;
+  binary_choice.md documents the convention.
+- M-29: GMM Hansen J p-value = NaN under :identity weighting — the chi-squared
+  limit requires efficient W = Omega^-1 (Hansen 1982). show() prints "n/a" +
+  caveat, j_test() returns an explanatory message with reject_05=false, GMMModel
+  inner ctor assert allows NaN. test_dsge analytical-GMM pin updated (that path
+  uses identity weighting; NaN is by design).
+- M-31: numerical_gradient kwarg eps -> step (exported API; smm.jl and
+  dsge/estimation.jl call it positionally, unaffected); renamed local `eps` ->
+  `resid` throughout garch/estimation.jl AND arch/estimation.jl (same defect
+  class, folded in) — genuine Base.eps(T) variance floors kept.
+- M-32: HC2/HC3 use the GLM leverage h_ii = w_i x_i'(X'WX)^-1 x_i (McCullagh &
+  Nelder 1989) via a default-inert `weights` kwarg on _hat_diag/_reg_vcov;
+  logit passes IRLS weights, probit passes Fisher-scoring weights. OLS/WLS
+  paths unchanged (weights=nothing).
+- M-33: default-inert `n_absorbed` kwarg on did/_cluster_vcov and
+  preg/_panel_cluster_vcov/_panel_time_cluster_vcov/_panel_vcov: small-sample
+  correction (N-1)/(N-K-n_absorbed), reghdfe nesting convention documented
+  (absorbed FE nested in the clustering dimension are excluded — hence 0 for
+  the default entity-FE-clustered-on-entity setup; no call-site wiring, per
+  spec fallback). Exercised by direct unit tests.
+- M-34: adf_test uses robust_inv(XtX) instead of raw inv (identical on
+  well-conditioned designs; existing ADF pins green).
+- M-35: between estimator @warns that a requested cov_type != :ols is ignored
+  (classical SEs on the group-means regression).
+- M-36: verify-only — estimate_xtprobit(model=:fe) already throws an
+  ArgumentError naming the incidental parameters problem; pinning test added.
+
+Test hygiene: test_gmm.jl gains `import StatsAPI` (its StatsAPI testset relied
+on include-order coupling from group siblings).
+
+Tests: test_reg 233/233 incl. new T089 32/32, test_gmm 128/128, test_smm,
+test_panel_reg (+M-33/M-35), test_panel_nonlinear (+M-36), test_did,
+test_unitroot, test_volatility — 1309/1309; test_dsge + test_ordered green;
+binary_choice.md verify_examples OK.

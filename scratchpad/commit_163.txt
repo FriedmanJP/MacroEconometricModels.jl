@@ -1,0 +1,49 @@
+fix(did): [T064] Rambachan-Roth honest DiD — real Δ^RM/Δ^SD robust CIs (#163)
+
+Replaces the naive `ATT_e ± Mbar·(e+1) ± z·SE` bound (which never read the
+pre-treatment coefficients, treated Mbar as an outcome-scale absolute bias,
+and had no smoothness restriction) with a faithful port of the R HonestDiD
+package (Rambachan & Roth 2023, RES 90(5)):
+
+- New core `honest_did(betahat, sigma; num_pre, num_post, restriction=:rm,
+  Mbar, M, l_vec, conf_level)` mirroring the R API: event-study coefficients
+  (reference period omitted, pre first) + joint covariance.
+- Δ^SD(M) via the Armstrong-Kolesár (2018) fixed-length CI (`_flci_delta_sd`):
+  affine estimator with slope-cancellation constraint; worst-case bias at each
+  sd level h solved by NLopt SLSQP over the (U, w) epigraph formulation (port
+  of HonestDiD .findWorstCaseBiasGivenH); closed-form KKT min-variance start;
+  half-length cv_α(M·bias/h)·h minimized by golden section over [h_min, h0];
+  folded-normal critical value exact via NoncentralChisq (R simulates it).
+  ORACLE: matches R findOptimalFLCI on a fixed (betahat, sigma) to ≤3e-4
+  (inside R's own 1e6-draw MC noise) for e1 x M∈{0,.02,.05} and e2 x M∈{0,.02}.
+- Δ^RM(Mbar) identified set in closed form (`_deltarm_identified_set`):
+  c = max pre-period |first difference| (incl. the step to the reference), post
+  bounds Mbar·c·G with G = Σ_i|Σ_{j≥i} l_j| — proven equal to the R package's
+  union-of-LPs .compute_IDset_DeltaRM (feasible-branch argument) and pinned
+  EXACTLY against R on 5 cases. Robust CI = identified set widened by
+  delta-method SEs of the endpoint functions (`_deltarm_robust_ci`) — a
+  DOCUMENTED INTERIM for the ARP conditional (C-LF) confidence set: correctly
+  pre-period-dependent, scale-covariant, Mbar dimensionless, contains the
+  identified set; coverage pointwise rather than uniform. Follow-up: ARP test.
+- Breakdown value via bisection on the bound (covers-zero monotonicity);
+  Mbar=0 collapses exactly to the conventional CI (pinned).
+- Dispatches honest_did(::DIDResult)/(::EventStudyLP) run every post period
+  (l_vec = e_k); DIDResult uses the joint event-study covariance att_vcov
+  (T068/#167) when present, else warned diagonal-Σ fallback (EventStudyLP
+  always diagonal — no cross-horizon covariance stored).
+- HonestDiDResult gains `restriction::Symbol`, `M::T`, `method::Symbol`
+  (:flci / :delta_id); show() prints the active restriction and bound; plot
+  titles restriction-aware. refs() adds Armstrong-Kolesár (2018).
+- SPEC CORRECTION (empirical): the audit's "M=0 FLCI == conventional CI"
+  oracle is wrong under pre/post covariance — at M=0 the FLCI is the
+  MIN-VARIANCE affine estimator honoring the slope constraint (R behaves
+  identically: [-0.0746, 0.3160] vs conventional [-0.0460, 0.3460] on the
+  fixture); the M̄=0 collapse holds for Δ^RM instead and is tested there.
+
+docs/src/did.md Honest DiD section rewritten (both restrictions, FLCI math,
+breakdown, core API note; Armstrong-Kolesár added to References); old naive
+formula deleted from all docstrings. Tests: naive-pinning testsets rewritten;
+new "HonestDiD RR (betahat/sigma core)" testset pins the R oracle values
+(committed as constants from this session's R 4.5 HonestDiD 0.2.8 run),
+pre-period dependence, Δ^RM scale covariance, nesting/monotonicity, breakdown
+bracketing, folded-normal cv, input validation. test_did.jl 496/496.

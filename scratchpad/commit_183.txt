@@ -1,0 +1,22 @@
+fix(pvar): [T084] warn on too many instruments (Roodman 2009) when n_inst > N (#183)
+
+PVAR GMM silently proceeded when the moment-condition count n_inst exceeded the number of
+groups N — the instrument-proliferation regime (Roodman 2009) where the two-step optimal
+weighting matrix becomes singular/ill-conditioned and the Hansen J-test is biased toward
+non-rejection. Zero-padding unbalanced instrument blocks (#179) makes this more likely, so
+a diagnostic is warranted.
+
+Fix: after `n_inst = size(group_Z[1], 2)` in the GMM path, `@warn (maxlog=1)` when
+`n_inst > N`, naming Roodman (2009), reporting both counts + the ratio, and suggesting
+`collapse=true` / a smaller `max_lag_endo`. GMM path only (estimate_pvar_feols has no
+instruments). Numerics unchanged. Base.show now shows "Instruments: n (groups: N) ⚠ too
+many" when n_inst > N. No struct field added (n_instruments/n_groups already stored/shown).
+
+Test: "Too-many-instruments warning (Roodman 2009, T084)" — short-N/long-T (N=8,T=14,m=2)
+fires the warning (n_inst > n_groups); wide-N/short-T (N=60,T=5,m=1) is silent
+(n_inst ≤ n_groups); show contains "groups:". Captured via TestLogger(respect_maxlog=false)
+so the assertion is independent of the session-wide maxlog=1 counter. test_pvar.jl green.
+
+NOTE: landed before #182 (which is heavier — full GMM covariance + AR(1)/AR(2)/Hansen +
+a PVARModel struct field touching all constructors) — function-disjoint, no conflict.
+Ref: Roodman (2009), OBES 71(1):135-158.

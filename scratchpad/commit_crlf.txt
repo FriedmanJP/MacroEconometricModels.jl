@@ -1,0 +1,18 @@
+fix(test): [T176] make display goldens CRLF-tolerant on Windows (#275)
+
+With the content fixes in, the v0.6.6 CI went green on every Linux and macOS Julia
+job (lts/1.10/1); only Julia LTS on windows-latest failed — and purely on line
+endings. Git's autocrlf checks the golden `.txt` files out with CRLF on Windows, so
+`read(path)` returns `\r\n`-terminated lines while the canonicalized render is LF,
+making all 19 goldens mismatch on a trailing `\r`.
+
+Two-part fix (no golden content change, no regeneration):
+- `.gitattributes`: pin `test/display/goldens/*.txt` to `eol=lf` so Git never
+  rewrites them to CRLF on checkout (root cause).
+- `_check_golden`: normalize `\r\n`/`\r` → `\n` when reading the golden, as
+  defense-in-depth for any stray CRLF checkout regardless of Git config.
+
+Verified locally: for all 19 fixtures, a simulated CRLF golden and an LF golden both
+compare equal to the LF canonical render.
+
+Claude-Session: https://claude.ai/code/session_01QZizX88NDsBZrBgdqPcLQp

@@ -1,0 +1,1704 @@
+﻿2026-07-13T13:13:04.7490725Z Current runner version: '2.335.1'
+2026-07-13T13:13:04.7516138Z ##[group]Runner Image Provisioner
+2026-07-13T13:13:04.7517114Z Hosted Compute Agent
+2026-07-13T13:13:04.7518075Z Version: 20260624.560
+2026-07-13T13:13:04.7518820Z Commit: 925d229a51159bc391ae97e54a2dd1fe20af789d
+2026-07-13T13:13:04.7519565Z Build Date: 2026-06-24T18:26:47Z
+2026-07-13T13:13:04.7520273Z Worker ID: {ee5aca4d-d499-4646-9042-da9eed5b7de5}
+2026-07-13T13:13:04.7521081Z Azure Region: eastus
+2026-07-13T13:13:04.7521675Z ##[endgroup]
+2026-07-13T13:13:04.7524114Z ##[group]Operating System
+2026-07-13T13:13:04.7524873Z Ubuntu
+2026-07-13T13:13:04.7525392Z 24.04.4
+2026-07-13T13:13:04.7525975Z LTS
+2026-07-13T13:13:04.7526563Z ##[endgroup]
+2026-07-13T13:13:04.7527167Z ##[group]Runner Image
+2026-07-13T13:13:04.7528162Z Image: ubuntu-24.04
+2026-07-13T13:13:04.7528794Z Version: 20260705.232.1
+2026-07-13T13:13:04.7530209Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260705.232/images/ubuntu/Ubuntu2404-Readme.md
+2026-07-13T13:13:04.7531763Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260705.232
+2026-07-13T13:13:04.7532799Z ##[endgroup]
+2026-07-13T13:13:04.7533984Z ##[group]GITHUB_TOKEN Permissions
+2026-07-13T13:13:04.7536337Z Actions: write
+2026-07-13T13:13:04.7536989Z Contents: read
+2026-07-13T13:13:04.7538082Z Metadata: read
+2026-07-13T13:13:04.7538758Z ##[endgroup]
+2026-07-13T13:13:04.7540936Z Secret source: Actions
+2026-07-13T13:13:04.7542044Z Prepare workflow directory
+2026-07-13T13:13:04.7927878Z Prepare all required actions
+2026-07-13T13:13:04.7966006Z Getting action download info
+2026-07-13T13:13:05.0688936Z Download action repository 'actions/checkout@v7' (SHA:9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0)
+2026-07-13T13:13:05.1658905Z Download action repository 'julia-actions/setup-julia@v3' (SHA:fa02766e078afaaf09b14210362cee14137e6a32)
+2026-07-13T13:13:05.3129811Z Download action repository 'julia-actions/cache@v3' (SHA:a45e8fa8be21c18a06b7177052533149e61e9b38)
+2026-07-13T13:13:05.7291380Z Download action repository 'julia-actions/julia-buildpkg@v1' (SHA:e3eb439fad4f9aba7da2667e7510e4a46ebc46e1)
+2026-07-13T13:13:05.8151092Z Download action repository 'julia-actions/julia-runtest@v1' (SHA:6e050c8013b833b1195105ff2fce9cd802f53271)
+2026-07-13T13:13:05.8972679Z Download action repository 'julia-actions/julia-processcoverage@v1' (SHA:03114f09f119417c3242a9fb6e0b722676aedf38)
+2026-07-13T13:13:05.9863580Z Download action repository 'codecov/codecov-action@v7' (SHA:fb8b3582c8e4def4969c97caa2f19720cb33a72f)
+2026-07-13T13:13:06.2171439Z Getting action download info
+2026-07-13T13:13:06.3097814Z Download action repository 'actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd' (SHA:ed597411d8f924073f98dfc5c65a23a2325f34cd)
+2026-07-13T13:13:06.4634816Z Complete job name: Julia lts - ubuntu-latest - x64
+2026-07-13T13:13:06.5363100Z ##[group]Run actions/checkout@v7
+2026-07-13T13:13:06.5363766Z with:
+2026-07-13T13:13:06.5364092Z   repository: FriedmanJP/MacroEconometricModels.jl
+2026-07-13T13:13:06.5366864Z   token: ***
+2026-07-13T13:13:06.5367133Z   ssh-strict: true
+2026-07-13T13:13:06.5367658Z   ssh-user: git
+2026-07-13T13:13:06.5367952Z   persist-credentials: true
+2026-07-13T13:13:06.5368257Z   clean: true
+2026-07-13T13:13:06.5368539Z   sparse-checkout-cone-mode: true
+2026-07-13T13:13:06.5368862Z   fetch-depth: 1
+2026-07-13T13:13:06.5369123Z   fetch-tags: false
+2026-07-13T13:13:06.5369389Z   show-progress: true
+2026-07-13T13:13:06.5369647Z   lfs: false
+2026-07-13T13:13:06.5369887Z   submodules: false
+2026-07-13T13:13:06.5370152Z   set-safe-directory: true
+2026-07-13T13:13:06.5370463Z   allow-unsafe-pr-checkout: false
+2026-07-13T13:13:06.5371032Z env:
+2026-07-13T13:13:06.5371344Z   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+2026-07-13T13:13:06.5371682Z ##[endgroup]
+2026-07-13T13:13:06.6350816Z Syncing repository: FriedmanJP/MacroEconometricModels.jl
+2026-07-13T13:13:06.6352933Z ##[group]Getting Git version info
+2026-07-13T13:13:06.6353920Z Working directory is '/home/runner/work/MacroEconometricModels.jl/MacroEconometricModels.jl'
+2026-07-13T13:13:06.6355808Z [command]/usr/bin/git version
+2026-07-13T13:13:06.6431087Z git version 2.54.0
+2026-07-13T13:13:06.6486277Z ##[endgroup]
+2026-07-13T13:13:06.6498574Z Temporarily overriding HOME='/home/runner/work/_temp/87ceb40c-4247-47d1-a04c-e2560f1ffb3f' before making global git config changes
+2026-07-13T13:13:06.6500117Z Adding repository directory to the temporary git global config as a safe directory
+2026-07-13T13:13:06.6503960Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/MacroEconometricModels.jl/MacroEconometricModels.jl
+2026-07-13T13:13:06.6556905Z Deleting the contents of '/home/runner/work/MacroEconometricModels.jl/MacroEconometricModels.jl'
+2026-07-13T13:13:06.6560835Z ##[group]Determining repository object format
+2026-07-13T13:13:06.6562165Z ##[endgroup]
+2026-07-13T13:13:06.6563145Z ##[group]Initializing the repository
+2026-07-13T13:13:06.6566493Z [command]/usr/bin/git init /home/runner/work/MacroEconometricModels.jl/MacroEconometricModels.jl
+2026-07-13T13:13:06.6703838Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-07-13T13:13:06.6705232Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-07-13T13:13:06.6706597Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-07-13T13:13:06.6707923Z hint: call:
+2026-07-13T13:13:06.6708702Z hint:
+2026-07-13T13:13:06.6709722Z hint: 	git config --global init.defaultBranch <name>
+2026-07-13T13:13:06.6710603Z hint:
+2026-07-13T13:13:06.6711165Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-07-13T13:13:06.6711973Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-07-13T13:13:06.6712566Z hint:
+2026-07-13T13:13:06.6713018Z hint: 	git branch -m <name>
+2026-07-13T13:13:06.6713462Z hint:
+2026-07-13T13:13:06.6714000Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-07-13T13:13:06.6715031Z Initialized empty Git repository in /home/runner/work/MacroEconometricModels.jl/MacroEconometricModels.jl/.git/
+2026-07-13T13:13:06.6723780Z [command]/usr/bin/git remote add origin https://github.com/FriedmanJP/MacroEconometricModels.jl
+2026-07-13T13:13:06.6775590Z ##[endgroup]
+2026-07-13T13:13:06.6776596Z ##[group]Disabling automatic garbage collection
+2026-07-13T13:13:06.6779990Z [command]/usr/bin/git config --local gc.auto 0
+2026-07-13T13:13:06.6813609Z ##[endgroup]
+2026-07-13T13:13:06.6814711Z ##[group]Setting up auth
+2026-07-13T13:13:06.6815579Z Removing SSH command configuration
+2026-07-13T13:13:06.6820717Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-07-13T13:13:06.6862900Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-07-13T13:13:06.7289265Z Removing HTTP extra header
+2026-07-13T13:13:06.7289987Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-07-13T13:13:06.7326529Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-07-13T13:13:06.7582939Z Removing includeIf entries pointing to credentials config files
+2026-07-13T13:13:06.7584137Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-07-13T13:13:06.7608477Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-07-13T13:13:06.7868469Z [command]/usr/bin/git config --file /home/runner/work/_temp/git-credentials-9c38f367-27d7-4806-a78a-0711ee8f8a8d.config http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-07-13T13:13:06.7915978Z [command]/usr/bin/git config --local includeIf.gitdir:/home/runner/work/MacroEconometricModels.jl/MacroEconometricModels.jl/.git.path /home/runner/work/_temp/git-credentials-9c38f367-27d7-4806-a78a-0711ee8f8a8d.config
+2026-07-13T13:13:06.7955196Z [command]/usr/bin/git config --local includeIf.gitdir:/home/runner/work/MacroEconometricModels.jl/MacroEconometricModels.jl/.git/worktrees/*.path /home/runner/work/_temp/git-credentials-9c38f367-27d7-4806-a78a-0711ee8f8a8d.config
+2026-07-13T13:13:06.7999133Z [command]/usr/bin/git config --local includeIf.gitdir:/github/workspace/.git.path /github/runner_temp/git-credentials-9c38f367-27d7-4806-a78a-0711ee8f8a8d.config
+2026-07-13T13:13:06.8046114Z [command]/usr/bin/git config --local includeIf.gitdir:/github/workspace/.git/worktrees/*.path /github/runner_temp/git-credentials-9c38f367-27d7-4806-a78a-0711ee8f8a8d.config
+2026-07-13T13:13:06.8082965Z ##[endgroup]
+2026-07-13T13:13:06.8083779Z ##[group]Fetching the repository
+2026-07-13T13:13:06.8092898Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +ba8d741a30f97595ef7d584d186106c94933fe43:refs/remotes/pull/406/merge
+2026-07-13T13:13:07.7937871Z From https://github.com/FriedmanJP/MacroEconometricModels.jl
+2026-07-13T13:13:07.7940359Z  * [new ref]         ba8d741a30f97595ef7d584d186106c94933fe43 -> pull/406/merge
+2026-07-13T13:13:07.7975203Z ##[endgroup]
+2026-07-13T13:13:07.7976089Z ##[group]Determining the checkout info
+2026-07-13T13:13:07.7977042Z ##[endgroup]
+2026-07-13T13:13:07.7982591Z [command]/usr/bin/git sparse-checkout disable
+2026-07-13T13:13:07.8032285Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-07-13T13:13:07.8063384Z ##[group]Checking out the ref
+2026-07-13T13:13:07.8066639Z [command]/usr/bin/git checkout --progress --force refs/remotes/pull/406/merge
+2026-07-13T13:13:07.8856103Z Note: switching to 'refs/remotes/pull/406/merge'.
+2026-07-13T13:13:07.8856868Z 
+2026-07-13T13:13:07.8857200Z You are in 'detached HEAD' state. You can look around, make experimental
+2026-07-13T13:13:07.8858260Z changes and commit them, and you can discard any commits you make in this
+2026-07-13T13:13:07.8858978Z state without impacting any branches by switching back to a branch.
+2026-07-13T13:13:07.8859395Z 
+2026-07-13T13:13:07.8859741Z If you want to create a new branch to retain commits you create, you may
+2026-07-13T13:13:07.8860416Z do so (now or later) by using -c with the switch command. Example:
+2026-07-13T13:13:07.8860802Z 
+2026-07-13T13:13:07.8860968Z   git switch -c <new-branch-name>
+2026-07-13T13:13:07.8861227Z 
+2026-07-13T13:13:07.8861383Z Or undo this operation with:
+2026-07-13T13:13:07.8861627Z 
+2026-07-13T13:13:07.8861765Z   git switch -
+2026-07-13T13:13:07.8861990Z 
+2026-07-13T13:13:07.8862305Z Turn off this advice by setting config variable advice.detachedHead to false
+2026-07-13T13:13:07.8862854Z 
+2026-07-13T13:13:07.8863991Z HEAD is now at ba8d741 Merge 00328bdd1f26d39f17765e266b846373bbef87dd into 6580ca5dcc50052e35dbde983faca033ab2e9009
+2026-07-13T13:13:07.8869156Z ##[endgroup]
+2026-07-13T13:13:07.8918506Z [command]/usr/bin/git log -1 --format=%H
+2026-07-13T13:13:07.8947200Z ba8d741a30f97595ef7d584d186106c94933fe43
+2026-07-13T13:13:07.9175237Z ##[group]Run julia-actions/setup-julia@v3
+2026-07-13T13:13:07.9175604Z with:
+2026-07-13T13:13:07.9175841Z   version: lts
+2026-07-13T13:13:07.9176083Z   arch: x64
+2026-07-13T13:13:07.9176333Z   include-all-prereleases: false
+2026-07-13T13:13:07.9176625Z   force-arch: false
+2026-07-13T13:13:07.9176888Z   show-versioninfo: false
+2026-07-13T13:13:07.9177155Z env:
+2026-07-13T13:13:07.9177719Z   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+2026-07-13T13:13:07.9178053Z ##[endgroup]
+2026-07-13T13:13:09.1015877Z [command]/usr/bin/tar xf /home/runner/work/_temp/c1732209-5708-4422-b2b3-fe9fc4a28466 --strip-components=1 -C /opt/hostedtoolcache/julia/1.10.11/x64
+2026-07-13T13:13:12.9999469Z [command]/opt/hostedtoolcache/julia/1.10.11/x64/bin/julia --version
+2026-07-13T13:13:13.0142855Z julia version 1.10.11
+2026-07-13T13:13:13.0422010Z ##[group]Run julia-actions/cache@v3
+2026-07-13T13:13:13.0422299Z with:
+2026-07-13T13:13:13.0422696Z   cache-name: julia-cache;workflow=CI;job=test
+2026-07-13T13:13:13.0422997Z   include-matrix: true
+2026-07-13T13:13:13.0423226Z   cache-artifacts: true
+2026-07-13T13:13:13.0423449Z   cache-packages: true
+2026-07-13T13:13:13.0423669Z   cache-registries: true
+2026-07-13T13:13:13.0423898Z   cache-compiled: true
+2026-07-13T13:13:13.0424119Z   cache-scratchspaces: true
+2026-07-13T13:13:13.0424348Z   cache-logs: true
+2026-07-13T13:13:13.0424562Z   delete-old-caches: true
+2026-07-13T13:13:13.0427087Z   token: ***
+2026-07-13T13:13:13.0427295Z   save-always: true
+2026-07-13T13:13:13.0427967Z   _matrix-json: {
+  "version": "lts",
+  "os": "ubuntu-latest",
+  "arch": "x64"
+}
+2026-07-13T13:13:13.0428359Z   _runner-os: Linux
+2026-07-13T13:13:13.0428573Z   _github-run-id: 29252900314
+2026-07-13T13:13:13.0428820Z   _github-run-attempt: 1
+2026-07-13T13:13:13.0429187Z   _github-repository: FriedmanJP/MacroEconometricModels.jl
+2026-07-13T13:13:13.0429539Z   _github-ref: refs/pull/406/merge
+2026-07-13T13:13:13.0429846Z   _github-event-repository-default-branch: main
+2026-07-13T13:13:13.0430150Z   _job-status: success
+2026-07-13T13:13:13.0430360Z env:
+2026-07-13T13:13:13.0430567Z   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+2026-07-13T13:13:13.0430834Z ##[endgroup]
+2026-07-13T13:13:13.1824450Z Using depot path: /home/runner/.julia
+2026-07-13T13:13:13.1833915Z Cache key: julia-cache;workflow=CI;job=test;os=Linux;version=lts;os=ubuntu-latest;arch=x64;run_id=29252900314;run_attempt=1
+2026-07-13T13:13:13.1835806Z Restore key: julia-cache;workflow=CI;job=test;os=Linux;version=lts;os=ubuntu-latest;arch=x64;
+2026-07-13T13:13:13.1865523Z (node:2320) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-07-13T13:13:13.1866796Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-07-13T13:13:13.2743256Z Cache hit for restore-key: julia-cache;workflow=CI;job=test;os=Linux;version=lts;os=ubuntu-latest;arch=x64;run_id=29066005563;run_attempt=1
+2026-07-13T13:13:14.3374536Z Received 197132288 of 435705806 (45.2%), 187.8 MBs/sec
+2026-07-13T13:13:15.3381494Z Received 406847488 of 435705806 (93.4%), 193.9 MBs/sec
+2026-07-13T13:13:15.4619143Z Received 435705806 of 435705806 (100.0%), 195.5 MBs/sec
+2026-07-13T13:13:15.4622293Z Cache Size: ~416 MB (435705806 B)
+2026-07-13T13:13:15.4693778Z [command]/usr/bin/tar -xf /home/runner/work/_temp/1d91d00b-5b32-4d4c-94d7-7a8ca7a4dccc/cache.tzst -P -C /home/runner/work/MacroEconometricModels.jl/MacroEconometricModels.jl --use-compress-program unzstd
+2026-07-13T13:13:19.5492599Z Cache restored successfully
+2026-07-13T13:13:19.5675320Z Cache restored from key: julia-cache;workflow=CI;job=test;os=Linux;version=lts;os=ubuntu-latest;arch=x64;run_id=29066005563;run_attempt=1
+2026-07-13T13:13:19.5695606Z [command]/usr/bin/bash -c du -shc /home/runner/.julia/* 2>/dev/null || true
+2026-07-13T13:13:19.6334155Z 537M	/home/runner/.julia/artifacts
+2026-07-13T13:13:19.6395255Z 1.3G	/home/runner/.julia/compiled
+2026-07-13T13:13:19.6395780Z 12K	/home/runner/.julia/logs
+2026-07-13T13:13:19.7167178Z 224M	/home/runner/.julia/packages
+2026-07-13T13:13:19.7168246Z 11M	/home/runner/.julia/registries
+2026-07-13T13:13:19.7168907Z 12K	/home/runner/.julia/scratchspaces
+2026-07-13T13:13:19.7174674Z 2.0G	total
+2026-07-13T13:13:19.7178876Z Registries directory exists and is non-empty. Updating any registries
+2026-07-13T13:13:19.7218611Z [command]/opt/hostedtoolcache/julia/1.10.11/x64/bin/julia -e import Pkg; isdefined(Pkg, :Registry) && Pkg.Registry.update();
+2026-07-13T13:13:21.0810054Z     Updating registry at `~/.julia/registries/General.toml`
+2026-07-13T13:13:22.4257015Z ##[group]Run julia-actions/julia-buildpkg@v1
+2026-07-13T13:13:22.4257647Z with:
+2026-07-13T13:13:22.4257909Z   project: @.
+2026-07-13T13:13:22.4258127Z   precompile: no
+2026-07-13T13:13:22.4258342Z   git_cli: false
+2026-07-13T13:13:22.4258550Z   ignore-no-cache: false
+2026-07-13T13:13:22.4258776Z env:
+2026-07-13T13:13:22.4258984Z   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+2026-07-13T13:13:22.4259496Z ##[endgroup]
+2026-07-13T13:13:22.4344499Z ##[group]Run echo "JULIA_PKG_SERVER_REGISTRY_PREFERENCE=${JULIA_PKG_SERVER_REGISTRY_PREFERENCE:-eager}" >> ${GITHUB_ENV}
+2026-07-13T13:13:22.4345388Z [36;1mecho "JULIA_PKG_SERVER_REGISTRY_PREFERENCE=${JULIA_PKG_SERVER_REGISTRY_PREFERENCE:-eager}" >> ${GITHUB_ENV}[0m
+2026-07-13T13:13:22.4542273Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-07-13T13:13:22.4542672Z env:
+2026-07-13T13:13:22.4542913Z   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+2026-07-13T13:13:22.4543243Z ##[endgroup]
+2026-07-13T13:13:22.4647148Z ##[group]Run if "false" == "false" && !isdir(DEPOT_PATH[1])
+2026-07-13T13:13:22.4647906Z [36;1mif "false" == "false" && !isdir(DEPOT_PATH[1])[0m
+2026-07-13T13:13:22.4648924Z [36;1m    println("::notice title=[julia-buildpkg] Caching of the julia depot was not detected ::Consider using `julia-actions/cache` to speed up runs https://github.com/julia-actions/cache To ignore, set input `ignore-no-cache: true` ")[0m
+2026-07-13T13:13:22.4649898Z [36;1mend[0m
+2026-07-13T13:13:22.4650121Z [36;1mimport Pkg[0m
+2026-07-13T13:13:22.4650332Z [36;1m[0m
+2026-07-13T13:13:22.4650653Z [36;1m# Determine if Pkg uses git-cli executable instead of LibGit2[0m
+2026-07-13T13:13:22.4651117Z [36;1mVERSION >= v"1.7-" && (ENV["JULIA_PKG_USE_CLI_GIT"] = false)[0m
+2026-07-13T13:13:22.4651461Z [36;1m[0m
+2026-07-13T13:13:22.4651680Z [36;1mif VERSION < v"1.7-" && false == true[0m
+2026-07-13T13:13:22.4652314Z [36;1m  printstyled("::notice::JULIA_PKG_USE_CLI_GIT requires Julia >= 1.7. Using default LibGit2 git-interface instead! \n"; color = :yellow)[0m
+2026-07-13T13:13:22.4652909Z [36;1mend[0m
+2026-07-13T13:13:22.4653092Z [36;1m[0m
+2026-07-13T13:13:22.4653273Z [36;1m[0m
+2026-07-13T13:13:22.4653462Z [36;1mif VERSION >= v"1.5-"[0m
+2026-07-13T13:13:22.4653712Z [36;1m    if VERSION >= v"1.8-"[0m
+2026-07-13T13:13:22.4653999Z [36;1m        # Install the default registries[0m
+2026-07-13T13:13:22.4654307Z [36;1m        Pkg.Registry.add()[0m
+2026-07-13T13:13:22.4654571Z [36;1m    else[0m
+2026-07-13T13:13:22.4654792Z [36;1m        Pkg.Registry.add("General")[0m
+2026-07-13T13:13:22.4655064Z [36;1m    end[0m
+2026-07-13T13:13:22.4655256Z [36;1m[0m
+2026-07-13T13:13:22.4655471Z [36;1m    # If provided add local registries[0m
+2026-07-13T13:13:22.4655769Z [36;1m    if !isempty("")[0m
+2026-07-13T13:13:22.4656050Z [36;1m      local_repos = split("", "\n") .|> string[0m
+2026-07-13T13:13:22.4656370Z [36;1m      for repo_url in local_repos[0m
+2026-07-13T13:13:22.4656672Z [36;1m        isempty(repo_url) && continue[0m
+2026-07-13T13:13:22.4657043Z [36;1m        Pkg.Registry.add(Pkg.RegistrySpec(; url = repo_url))[0m
+2026-07-13T13:13:22.4657620Z [36;1m      end[0m
+2026-07-13T13:13:22.4657843Z [36;1m    end[0m
+2026-07-13T13:13:22.4658045Z [36;1mend[0m
+2026-07-13T13:13:22.4658229Z [36;1m[0m
+2026-07-13T13:13:22.4658567Z [36;1mVERSION >= v"1.1.0-rc1" ? retry(Pkg.build)(verbose=true) : retry(Pkg.build)()[0m
+2026-07-13T13:13:22.4659953Z shell: /opt/hostedtoolcache/julia/1.10.11/x64/bin/julia --color=yes --project=@. {0}
+2026-07-13T13:13:22.4660381Z env:
+2026-07-13T13:13:22.4660597Z   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+2026-07-13T13:13:22.4660911Z   JULIA_PKG_SERVER_REGISTRY_PREFERENCE: eager
+2026-07-13T13:13:22.4661219Z   JULIA_PKG_PRECOMPILE_AUTO: no
+2026-07-13T13:13:22.4663773Z   GITHUB_TOKEN: ***
+2026-07-13T13:13:22.4663995Z ##[endgroup]
+2026-07-13T13:13:23.2768836Z [32m[1m  Installing[22m[39m known registries into `~/.julia`
+2026-07-13T13:13:24.6446732Z [32m[1m       Added[22m[39m `General` registry to ~/.julia/registries
+2026-07-13T13:13:25.4774480Z [32m[1m    Updating[22m[39m registry at `~/.julia/registries/General.toml`
+2026-07-13T13:13:27.6586864Z [32m[1m   Installed[22m[39m NonlinearSolveQuasiNewton ───── v1.14.0
+2026-07-13T13:13:27.7348223Z [32m[1m   Installed[22m[39m SciMLPublic ─────────────────── v1.2.3
+2026-07-13T13:13:27.7380864Z [32m[1m   Installed[22m[39m SciMLStructures ─────────────── v1.10.3
+2026-07-13T13:13:27.7404880Z [32m[1m   Installed[22m[39m RuntimeGeneratedFunctions ───── v0.5.22
+2026-07-13T13:13:27.7432475Z [32m[1m   Installed[22m[39m FunctionWrappersWrappers ────── v1.10.1
+2026-07-13T13:13:27.7877041Z [32m[1m   Installed[22m[39m SciMLBase ───────────────────── v3.35.2
+2026-07-13T13:13:27.8138902Z [32m[1m   Installed[22m[39m ADTypes ─────────────────────── v1.22.2
+2026-07-13T13:13:27.8162631Z [32m[1m   Installed[22m[39m SciMLLogging ────────────────── v2.0.3
+2026-07-13T13:13:27.8178085Z [32m[1m   Installed[22m[39m HashArrayMappedTries ────────── v0.2.0
+2026-07-13T13:13:27.8202664Z [32m[1m   Installed[22m[39m FindFirstFunctions ──────────── v3.1.0
+2026-07-13T13:13:27.8212531Z [32m[1m   Installed[22m[39m SciMLOperators ──────────────── v1.24.3
+2026-07-13T13:13:27.8241721Z [32m[1m   Installed[22m[39m LinearSolve ─────────────────── v5.0.0
+2026-07-13T13:13:27.8290397Z [32m[1m   Installed[22m[39m NonlinearSolve ──────────────── v4.21.0
+2026-07-13T13:13:27.8365385Z [32m[1m   Installed[22m[39m BracketingNonlinearSolve ────── v1.12.3
+2026-07-13T13:13:28.0448399Z [32m[1m   Installed[22m[39m SimpleNonlinearSolve ────────── v2.13.0
+2026-07-13T13:13:28.0469180Z [32m[1m   Installed[22m[39m SciMLJacobianOperators ──────── v0.1.15
+2026-07-13T13:13:28.0547985Z [32m[1m   Installed[22m[39m NonlinearSolveBase ──────────── v2.34.1
+2026-07-13T13:13:28.0551536Z [32m[1m   Installed[22m[39m LineSearch ──────────────────── v0.1.12
+2026-07-13T13:13:28.0556728Z [32m[1m   Installed[22m[39m ConcreteStructs ─────────────── v0.2.6
+2026-07-13T13:13:28.0562105Z [32m[1m   Installed[22m[39m PureKLU ─────────────────────── v1.1.1
+2026-07-13T13:13:28.0571640Z [32m[1m   Installed[22m[39m NonlinearSolveSpectralMethods ─ v1.7.3
+2026-07-13T13:13:28.0601780Z [32m[1m   Installed[22m[39m Roots ───────────────────────── v3.0.4
+2026-07-13T13:13:28.1246856Z [32m[1m   Installed[22m[39m NonlinearSolveFirstOrder ────── v2.2.0
+2026-07-13T13:13:28.1347260Z [32m[1m   Installed[22m[39m PreallocationTools ──────────── v1.3.0
+2026-07-13T13:13:28.1350691Z [32m[1m   Installed[22m[39m SymbolicIndexingInterface ───── v0.3.51
+2026-07-13T13:13:28.1357793Z [32m[1m   Installed[22m[39m MaybeInplace ────────────────── v0.1.6
+2026-07-13T13:13:28.1359059Z [32m[1m   Installed[22m[39m CommonSolve ─────────────────── v0.2.11
+2026-07-13T13:13:28.1360118Z [32m[1m   Installed[22m[39m SparseColumnPivotedQR ───────── v2.1.4
+2026-07-13T13:13:28.1371795Z [32m[1m   Installed[22m[39m RecursiveArrayTools ─────────── v4.3.4
+2026-07-13T13:13:28.1865143Z [32m[1m   Installed[22m[39m FiniteDiff ──────────────────── v2.32.0
+2026-07-13T13:13:28.1896701Z [32m[1m   Installed[22m[39m DifferentiationInterface ────── v0.7.20
+2026-07-13T13:13:28.2407962Z [32m[1m   Installed[22m[39m ScopedValues ────────────────── v1.6.2
+2026-07-13T13:13:29.6005147Z [32m[1m    Updating[22m[39m `~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/Project.toml`
+2026-07-13T13:13:29.6255589Z   [90m[a93c6f00] [39m[92m+ DataFrames v1.8.2[39m
+2026-07-13T13:13:29.6256536Z   [90m[8bb1440f] [39m[92m+ DelimitedFiles v1.9.1[39m
+2026-07-13T13:13:29.6257963Z   [90m[31c24e10] [39m[92m+ Distributions v0.25.129[39m
+2026-07-13T13:13:29.6258907Z   [90m[7a1cc6ca] [39m[92m+ FFTW v1.10.0[39m
+2026-07-13T13:13:29.6259580Z   [90m[f6369f11] [39m[92m+ ForwardDiff v1.4.1[39m
+2026-07-13T13:13:29.6260057Z   [90m[76087f3c] [39m[92m+ NLopt v1.2.1[39m
+2026-07-13T13:13:29.6260554Z   [90m[8913a72c] [39m[92m+ NonlinearSolve v4.21.0[39m
+2026-07-13T13:13:29.6261723Z   [90m[429524aa] [39m[92m+ Optim v2.2.1[39m
+2026-07-13T13:13:29.6262421Z [33m⌅[39m [90m[aea7be01] [39m[92m+ PrecompileTools v1.2.1[39m
+2026-07-13T13:13:29.6263008Z   [90m[08abe8d2] [39m[92m+ PrettyTables v3.4.0[39m
+2026-07-13T13:13:29.6263521Z   [90m[7e506255] [39m[92m+ ScopedValues v1.6.2[39m
+2026-07-13T13:13:29.6264017Z   [90m[82ae8749] [39m[92m+ StatsAPI v1.8.0[39m
+2026-07-13T13:13:29.6264708Z   [90m[f43a241f] [39m[93m~ Downloads ⇒ v1.6.0[39m
+2026-07-13T13:13:29.6265161Z   [90m[ea8e919c] [39m[93m~ SHA ⇒ v0.7.0[39m
+2026-07-13T13:13:29.6265643Z   [90m[2f01184e] [39m[93m~ SparseArrays ⇒ v1.10.0[39m
+2026-07-13T13:13:29.6266139Z   [90m[10745b16] [39m[93m~ Statistics ⇒ v1.10.0[39m
+2026-07-13T13:13:29.6266595Z   [90m[fa267f1f] [39m[93m~ TOML ⇒ v1.0.3[39m
+2026-07-13T13:13:29.6323280Z [32m[1m    Updating[22m[39m `~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/Manifest.toml`
+2026-07-13T13:13:29.6629840Z   [90m[47edcb42] [39m[92m+ ADTypes v1.22.2[39m
+2026-07-13T13:13:29.6630748Z   [90m[14f7f29c] [39m[92m+ AMD v0.5.3[39m
+2026-07-13T13:13:29.6631620Z   [90m[621f4979] [39m[92m+ AbstractFFTs v1.5.0[39m
+2026-07-13T13:13:29.6632506Z   [90m[7d9f7c33] [39m[92m+ Accessors v0.1.45[39m
+2026-07-13T13:13:29.6633389Z   [90m[79e6a3ab] [39m[92m+ Adapt v4.7.0[39m
+2026-07-13T13:13:29.6634256Z   [90m[66dad0bd] [39m[92m+ AliasTables v1.1.3[39m
+2026-07-13T13:13:29.6635267Z   [90m[4fba245c] [39m[92m+ ArrayInterface v7.27.0[39m
+2026-07-13T13:13:29.6636189Z   [90m[70df07ce] [39m[92m+ BracketingNonlinearSolve v1.12.3[39m
+2026-07-13T13:13:29.6637057Z   [90m[fa961155] [39m[92m+ CEnum v0.5.0[39m
+2026-07-13T13:13:29.6638070Z   [90m[38540f10] [39m[92m+ CommonSolve v0.2.11[39m
+2026-07-13T13:13:29.6638922Z   [90m[bbf7d656] [39m[92m+ CommonSubexpressions v0.3.1[39m
+2026-07-13T13:13:29.6639745Z   [90m[34da2185] [39m[92m+ Compat v4.18.1[39m
+2026-07-13T13:13:29.6640547Z   [90m[a33af91c] [39m[92m+ CompositionsBase v0.1.2[39m
+2026-07-13T13:13:29.6641404Z   [90m[2569d6c7] [39m[92m+ ConcreteStructs v0.2.6[39m
+2026-07-13T13:13:29.6642234Z   [90m[187b0558] [39m[92m+ ConstructionBase v1.6.0[39m
+2026-07-13T13:13:29.6643010Z   [90m[a8cc5b0e] [39m[92m+ Crayons v4.1.1[39m
+2026-07-13T13:13:29.6643735Z   [90m[9a962f9c] [39m[92m+ DataAPI v1.16.0[39m
+2026-07-13T13:13:29.6644488Z   [90m[a93c6f00] [39m[92m+ DataFrames v1.8.2[39m
+2026-07-13T13:13:29.6645326Z   [90m[864edb3b] [39m[92m+ DataStructures v0.19.5[39m
+2026-07-13T13:13:29.6646178Z   [90m[e2d170a0] [39m[92m+ DataValueInterfaces v1.0.0[39m
+2026-07-13T13:13:29.6647040Z   [90m[8bb1440f] [39m[92m+ DelimitedFiles v1.9.1[39m
+2026-07-13T13:13:29.6648012Z   [90m[163ba53b] [39m[92m+ DiffResults v1.1.0[39m
+2026-07-13T13:13:29.6648795Z   [90m[b552c78f] [39m[92m+ DiffRules v1.16.0[39m
+2026-07-13T13:13:29.6649680Z   [90m[a0c0ee7d] [39m[92m+ DifferentiationInterface v0.7.20[39m
+2026-07-13T13:13:29.6650589Z   [90m[31c24e10] [39m[92m+ Distributions v0.25.129[39m
+2026-07-13T13:13:29.6651448Z   [90m[ffbed154] [39m[92m+ DocStringExtensions v0.9.5[39m
+2026-07-13T13:13:29.6652253Z   [90m[4e289a0a] [39m[92m+ EnumX v1.0.7[39m
+2026-07-13T13:13:29.6652959Z   [90m[f151be2c] [39m[92m+ EnzymeCore v0.8.21[39m
+2026-07-13T13:13:29.6653660Z   [90m[e2ba6199] [39m[92m+ ExprTools v0.1.10[39m
+2026-07-13T13:13:29.6654323Z   [90m[7a1cc6ca] [39m[92m+ FFTW v1.10.0[39m
+2026-07-13T13:13:29.6655013Z   [90m[9aa1b823] [39m[92m+ FastClosures v0.3.2[39m
+2026-07-13T13:13:29.6655720Z   [90m[1a297f60] [39m[92m+ FillArrays v1.16.0[39m
+2026-07-13T13:13:29.6656455Z   [90m[64ca27bc] [39m[92m+ FindFirstFunctions v3.1.0[39m
+2026-07-13T13:13:29.6657211Z   [90m[6a86dc24] [39m[92m+ FiniteDiff v2.32.0[39m
+2026-07-13T13:13:29.6658070Z   [90m[f6369f11] [39m[92m+ ForwardDiff v1.4.1[39m
+2026-07-13T13:13:29.6658823Z   [90m[069b7b12] [39m[92m+ FunctionWrappers v1.1.3[39m
+2026-07-13T13:13:29.6659679Z   [90m[77dc65aa] [39m[92m+ FunctionWrappersWrappers v1.10.1[39m
+2026-07-13T13:13:29.6660807Z   [90m[46192b85] [39m[92m+ GPUArraysCore v0.2.0[39m
+2026-07-13T13:13:29.6661530Z   [90m[a0844989] [39m[92m+ Gamma v1.1.0[39m
+2026-07-13T13:13:29.6662284Z   [90m[076d061b] [39m[92m+ HashArrayMappedTries v0.2.0[39m
+2026-07-13T13:13:29.6663171Z   [90m[34004b35] [39m[92m+ HypergeometricFunctions v0.3.29[39m
+2026-07-13T13:13:29.6663978Z   [90m[842dd82b] [39m[92m+ InlineStrings v1.4.5[39m
+2026-07-13T13:13:29.6665006Z   [90m[3587e190] [39m[92m+ InverseFunctions v0.1.17[39m
+2026-07-13T13:13:29.6665769Z   [90m[41ab1584] [39m[92m+ InvertedIndices v1.3.1[39m
+2026-07-13T13:13:29.6666548Z   [90m[92d709cd] [39m[92m+ IrrationalConstants v0.2.6[39m
+2026-07-13T13:13:29.6667589Z   [90m[82899510] [39m[92m+ IteratorInterfaceExtensions v1.0.0[39m
+2026-07-13T13:13:29.6668585Z   [90m[692b3bcd] [39m[92m+ JLLWrappers v1.8.0[39m
+2026-07-13T13:13:29.6669312Z   [90m[ba0b0d4f] [39m[92m+ Krylov v0.10.8[39m
+2026-07-13T13:13:29.6670016Z   [90m[b964fa9f] [39m[92m+ LaTeXStrings v1.4.0[39m
+2026-07-13T13:13:29.6670491Z   [90m[87fe0de2] [39m[92m+ LineSearch v0.1.12[39m
+2026-07-13T13:13:29.6670885Z   [90m[d3d80556] [39m[92m+ LineSearches v7.7.1[39m
+2026-07-13T13:13:29.6671261Z   [90m[7ed4a6bd] [39m[92m+ LinearSolve v5.0.0[39m
+2026-07-13T13:13:29.6671645Z   [90m[2ab3a3ac] [39m[92m+ LogExpFunctions v1.0.1[39m
+2026-07-13T13:13:29.6672031Z   [90m[e6f89c97] [39m[92m+ LoggingExtras v1.2.0[39m
+2026-07-13T13:13:29.6672405Z   [90m[1914dd2f] [39m[92m+ MacroTools v0.5.16[39m
+2026-07-13T13:13:29.6672765Z   [90m[bb5d69b7] [39m[92m+ MaybeInplace v0.1.6[39m
+2026-07-13T13:13:29.6673113Z   [90m[e1d29d7a] [39m[92m+ Missings v1.2.0[39m
+2026-07-13T13:13:29.6673473Z   [90m[46d2c3a1] [39m[92m+ MuladdMacro v0.2.6[39m
+2026-07-13T13:13:29.6673832Z   [90m[d41bc354] [39m[92m+ NLSolversBase v8.0.0[39m
+2026-07-13T13:13:29.6674178Z   [90m[76087f3c] [39m[92m+ NLopt v1.2.1[39m
+2026-07-13T13:13:29.6674516Z   [90m[77ba4419] [39m[92m+ NaNMath v1.1.4[39m
+2026-07-13T13:13:29.6674899Z   [90m[8913a72c] [39m[92m+ NonlinearSolve v4.21.0[39m
+2026-07-13T13:13:29.6675310Z   [90m[be0214bd] [39m[92m+ NonlinearSolveBase v2.34.1[39m
+2026-07-13T13:13:29.6675767Z   [90m[5959db7a] [39m[92m+ NonlinearSolveFirstOrder v2.2.0[39m
+2026-07-13T13:13:29.6676232Z   [90m[9a2c21bd] [39m[92m+ NonlinearSolveQuasiNewton v1.14.0[39m
+2026-07-13T13:13:29.6676729Z   [90m[26075421] [39m[92m+ NonlinearSolveSpectralMethods v1.7.3[39m
+2026-07-13T13:13:29.6677156Z   [90m[429524aa] [39m[92m+ Optim v2.2.1[39m
+2026-07-13T13:13:29.6677964Z [33m⌅[39m [90m[bac558e1] [39m[92m+ OrderedCollections v1.8.2[39m
+2026-07-13T13:13:29.6678405Z   [90m[90014a1f] [39m[92m+ PDMats v0.11.40[39m
+2026-07-13T13:13:29.6678783Z   [90m[2dfb63ee] [39m[92m+ PooledArrays v1.4.3[39m
+2026-07-13T13:13:29.6679195Z   [90m[85a6dd25] [39m[92m+ PositiveFactorizations v0.2.4[39m
+2026-07-13T13:13:29.6679634Z   [90m[d236fae5] [39m[92m+ PreallocationTools v1.3.0[39m
+2026-07-13T13:13:29.6680084Z [33m⌅[39m [90m[aea7be01] [39m[92m+ PrecompileTools v1.2.1[39m
+2026-07-13T13:13:29.6680494Z   [90m[21216c6a] [39m[92m+ Preferences v1.5.2[39m
+2026-07-13T13:13:29.6680863Z   [90m[08abe8d2] [39m[92m+ PrettyTables v3.4.0[39m
+2026-07-13T13:13:29.6681224Z   [90m[43287f4e] [39m[92m+ PtrArrays v1.4.0[39m
+2026-07-13T13:13:29.6681585Z   [90m[0c0d3e7f] [39m[92m+ PureKLU v1.1.1[39m
+2026-07-13T13:13:29.6681938Z   [90m[1fd47b50] [39m[92m+ QuadGK v2.11.3[39m
+2026-07-13T13:13:29.6682319Z   [90m[3cdcf5f2] [39m[92m+ RecipesBase v1.3.4[39m
+2026-07-13T13:13:29.6682716Z   [90m[731186ca] [39m[92m+ RecursiveArrayTools v4.3.4[39m
+2026-07-13T13:13:29.6683099Z   [90m[189a3867] [39m[92m+ Reexport v1.2.2[39m
+2026-07-13T13:13:29.6683434Z   [90m[79098fc4] [39m[92m+ Rmath v0.9.0[39m
+2026-07-13T13:13:29.6683761Z   [90m[f2b01f46] [39m[92m+ Roots v3.0.4[39m
+2026-07-13T13:13:29.6684170Z   [90m[7e49a35a] [39m[92m+ RuntimeGeneratedFunctions v0.5.22[39m
+2026-07-13T13:13:29.6684589Z   [90m[0bca4576] [39m[92m+ SciMLBase v3.35.2[39m
+2026-07-13T13:13:29.6685156Z   [90m[19f34311] [39m[92m+ SciMLJacobianOperators v0.1.15[39m
+2026-07-13T13:13:29.6685577Z   [90m[a6db7da4] [39m[92m+ SciMLLogging v2.0.3[39m
+2026-07-13T13:13:29.6685961Z   [90m[c0aeaf25] [39m[92m+ SciMLOperators v1.24.3[39m
+2026-07-13T13:13:29.6686337Z   [90m[431bcebd] [39m[92m+ SciMLPublic v1.2.3[39m
+2026-07-13T13:13:29.6686716Z   [90m[53ae85a6] [39m[92m+ SciMLStructures v1.10.3[39m
+2026-07-13T13:13:29.6687224Z   [90m[7e506255] [39m[92m+ ScopedValues v1.6.2[39m
+2026-07-13T13:13:29.6687778Z   [90m[91c51154] [39m[92m+ SentinelArrays v1.4.10[39m
+2026-07-13T13:13:29.6688161Z   [90m[efcf1570] [39m[92m+ Setfield v1.1.2[39m
+2026-07-13T13:13:29.6688556Z   [90m[727e6d20] [39m[92m+ SimpleNonlinearSolve v2.13.0[39m
+2026-07-13T13:13:29.6700473Z   [90m[a2af1166] [39m[92m+ SortingAlgorithms v1.2.3[39m
+2026-07-13T13:13:29.6701199Z   [90m[a57abbd0] [39m[92m+ SparseColumnPivotedQR v2.1.4[39m
+2026-07-13T13:13:29.6701676Z   [90m[276daf66] [39m[92m+ SpecialFunctions v2.8.0[39m
+2026-07-13T13:13:29.6702117Z   [90m[1e83bf80] [39m[92m+ StaticArraysCore v1.4.4[39m
+2026-07-13T13:13:29.6702505Z   [90m[82ae8749] [39m[92m+ StatsAPI v1.8.0[39m
+2026-07-13T13:13:29.6702876Z   [90m[2913bbd2] [39m[92m+ StatsBase v0.34.12[39m
+2026-07-13T13:13:29.6703461Z   [90m[4c63d2b9] [39m[92m+ StatsFuns v2.2.0[39m
+2026-07-13T13:13:29.6703886Z   [90m[892a3eda] [39m[92m+ StringManipulation v0.4.4[39m
+2026-07-13T13:13:29.6704351Z   [90m[2efcf032] [39m[92m+ SymbolicIndexingInterface v0.3.51[39m
+2026-07-13T13:13:29.6704776Z   [90m[3783bdb8] [39m[92m+ TableTraits v1.0.1[39m
+2026-07-13T13:13:29.6705132Z   [90m[bd369af6] [39m[92m+ Tables v1.13.0[39m
+2026-07-13T13:13:29.6705499Z   [90m[a759f4b9] [39m[92m+ TimerOutputs v0.5.29[39m
+2026-07-13T13:13:29.6705908Z   [90m[781d530d] [39m[92m+ TruncatedStacktraces v1.4.0[39m
+2026-07-13T13:13:29.6706295Z   [90m[f5851436] [39m[92m+ FFTW_jll v3.3.12+0[39m
+2026-07-13T13:13:29.6706686Z   [90m[1d5cc7b8] [39m[92m+ IntelOpenMP_jll v2025.2.0+0[39m
+2026-07-13T13:13:29.6707073Z   [90m[856f044c] [39m[92m+ MKL_jll v2025.2.0+0[39m
+2026-07-13T13:13:29.6707687Z   [90m[079eb43e] [39m[92m+ NLopt_jll v2.11.0+0[39m
+2026-07-13T13:13:29.6708097Z   [90m[efe28fd5] [39m[92m+ OpenSpecFun_jll v0.5.6+0[39m
+2026-07-13T13:13:29.6708481Z   [90m[f50d1b31] [39m[92m+ Rmath_jll v0.5.1+0[39m
+2026-07-13T13:13:29.6708870Z   [90m[1317d2d5] [39m[92m+ oneTBB_jll v2022.3.0+0[39m
+2026-07-13T13:13:29.6709239Z   [90m[0dad84c5] [39m[92m+ ArgTools v1.1.1[39m
+2026-07-13T13:13:29.6709587Z   [90m[56f22d72] [39m[92m+ Artifacts[39m
+2026-07-13T13:13:29.6709904Z   [90m[2a0f44e3] [39m[92m+ Base64[39m
+2026-07-13T13:13:29.6710208Z   [90m[ade2ca70] [39m[92m+ Dates[39m
+2026-07-13T13:13:29.6710525Z   [90m[8ba89e20] [39m[92m+ Distributed[39m
+2026-07-13T13:13:29.6710871Z   [90m[f43a241f] [39m[92m+ Downloads v1.6.0[39m
+2026-07-13T13:13:29.6711228Z   [90m[7b1f6079] [39m[92m+ FileWatching[39m
+2026-07-13T13:13:29.6711551Z   [90m[9fa8497b] [39m[92m+ Future[39m
+2026-07-13T13:13:29.6711881Z   [90m[b77e0a4c] [39m[92m+ InteractiveUtils[39m
+2026-07-13T13:13:29.6712234Z   [90m[4af54fe1] [39m[92m+ LazyArtifacts[39m
+2026-07-13T13:13:29.6712578Z   [90m[b27032c2] [39m[92m+ LibCURL v0.6.4[39m
+2026-07-13T13:13:29.6712910Z   [90m[76f85450] [39m[92m+ LibGit2[39m
+2026-07-13T13:13:29.6713215Z   [90m[8f399da3] [39m[92m+ Libdl[39m
+2026-07-13T13:13:29.6713850Z   [90m[37e2e46d] [39m[92m+ LinearAlgebra[39m
+2026-07-13T13:13:29.6714186Z   [90m[56ddb016] [39m[92m+ Logging[39m
+2026-07-13T13:13:29.6714505Z   [90m[d6f4376e] [39m[92m+ Markdown[39m
+2026-07-13T13:13:29.6714815Z   [90m[a63ad114] [39m[92m+ Mmap[39m
+2026-07-13T13:13:29.6715160Z   [90m[ca575930] [39m[92m+ NetworkOptions v1.2.0[39m
+2026-07-13T13:13:29.6715521Z   [90m[44cfe95a] [39m[92m+ Pkg v1.10.0[39m
+2026-07-13T13:13:29.6716128Z   [90m[de0858da] [39m[92m+ Printf[39m
+2026-07-13T13:13:29.6716480Z   [90m[3fa0cd96] [39m[92m+ REPL[39m
+2026-07-13T13:13:29.6717291Z   [90m[9a3f8284] [39m[92m+ Random[39m
+2026-07-13T13:13:29.6717971Z   [90m[ea8e919c] [39m[92m+ SHA v0.7.0[39m
+2026-07-13T13:13:29.6718325Z   [90m[9e88b42a] [39m[92m+ Serialization[39m
+2026-07-13T13:13:29.6718664Z   [90m[6462fe0b] [39m[92m+ Sockets[39m
+2026-07-13T13:13:29.6719030Z   [90m[2f01184e] [39m[92m+ SparseArrays v1.10.0[39m
+2026-07-13T13:13:29.6719407Z   [90m[10745b16] [39m[92m+ Statistics v1.10.0[39m
+2026-07-13T13:13:29.6719918Z   [90m[4607b0f0] [39m[92m+ SuiteSparse[39m
+2026-07-13T13:13:29.6720251Z   [90m[fa267f1f] [39m[92m+ TOML v1.0.3[39m
+2026-07-13T13:13:29.6720582Z   [90m[a4e569a6] [39m[92m+ Tar v1.10.0[39m
+2026-07-13T13:13:29.6720895Z   [90m[cf7118a7] [39m[92m+ UUIDs[39m
+2026-07-13T13:13:29.6721203Z   [90m[4ec0a83e] [39m[92m+ Unicode[39m
+2026-07-13T13:13:29.6721614Z   [90m[e66e0078] [39m[92m+ CompilerSupportLibraries_jll v1.1.1+0[39m
+2026-07-13T13:13:29.6722057Z   [90m[deac9b47] [39m[92m+ LibCURL_jll v8.4.0+0[39m
+2026-07-13T13:13:29.6722443Z   [90m[e37daf67] [39m[92m+ LibGit2_jll v1.6.4+0[39m
+2026-07-13T13:13:29.6723027Z   [90m[29816b5a] [39m[92m+ LibSSH2_jll v1.11.0+1[39m
+2026-07-13T13:13:29.6723698Z   [90m[c8ffd9c3] [39m[92m+ MbedTLS_jll v2.28.1010+0[39m
+2026-07-13T13:13:29.6724202Z   [90m[14a3606d] [39m[92m+ MozillaCACerts_jll v2025.12.2[39m
+2026-07-13T13:13:29.6724614Z   [90m[4536629a] [39m[92m+ OpenBLAS_jll v0.3.23+5[39m
+2026-07-13T13:13:29.6725015Z   [90m[05823500] [39m[92m+ OpenLibm_jll v0.8.5+0[39m
+2026-07-13T13:13:29.6725398Z   [90m[bea87d4a] [39m[92m+ SuiteSparse_jll v7.2.1+1[39m
+2026-07-13T13:13:29.6725781Z   [90m[83775a58] [39m[92m+ Zlib_jll v1.2.13+1[39m
+2026-07-13T13:13:29.6726183Z   [90m[8e850b90] [39m[92m+ libblastrampoline_jll v5.11.0+0[39m
+2026-07-13T13:13:29.6726603Z   [90m[8e850ede] [39m[92m+ nghttp2_jll v1.52.0+1[39m
+2026-07-13T13:13:29.6726980Z   [90m[3f19e933] [39m[92m+ p7zip_jll v17.6.1+0[39m
+2026-07-13T13:13:29.6728175Z [36m[1m        Info[22m[39m Packages marked with [33m⌅[39m have new versions available but compatibility constraints restrict them from upgrading. To see why use `status --outdated -m`
+2026-07-13T13:13:29.7055032Z ##[group]Run julia-actions/julia-runtest@v1
+2026-07-13T13:13:29.7055349Z with:
+2026-07-13T13:13:29.7055548Z   coverage: false
+2026-07-13T13:13:29.7055755Z   check_bounds: yes
+2026-07-13T13:13:29.7055964Z   depwarn: yes
+2026-07-13T13:13:29.7056195Z   force_latest_compatible_version: auto
+2026-07-13T13:13:29.7056460Z   inline: yes
+2026-07-13T13:13:29.7056651Z   project: @.
+2026-07-13T13:13:29.7056840Z   annotate: false
+2026-07-13T13:13:29.7057053Z   compiled_modules: yes
+2026-07-13T13:13:29.7057274Z   allow_reresolve: true
+2026-07-13T13:13:29.7057763Z env:
+2026-07-13T13:13:29.7057972Z   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+2026-07-13T13:13:29.7058276Z   JULIA_PKG_SERVER_REGISTRY_PREFERENCE: eager
+2026-07-13T13:13:29.7058591Z   JULIA_NUM_THREADS: 1
+2026-07-13T13:13:29.7058814Z   OPENBLAS_NUM_THREADS: 1
+2026-07-13T13:13:29.7059053Z   MACRO_MULTIPROCESS_TESTS: 1
+2026-07-13T13:13:29.7059289Z   MACRO_FAST_TESTS: 0
+2026-07-13T13:13:29.7059499Z   MACRO_CHECK_BOUNDS: 1
+2026-07-13T13:13:29.7059740Z ##[endgroup]
+2026-07-13T13:13:29.7076425Z ##[group]Run # Set and export registry flavor preference
+2026-07-13T13:13:29.7076835Z [36;1m# Set and export registry flavor preference[0m
+2026-07-13T13:13:29.7077725Z [36;1mecho "JULIA_PKG_SERVER_REGISTRY_PREFERENCE=${JULIA_PKG_SERVER_REGISTRY_PREFERENCE:-eager}" >> ${GITHUB_ENV}[0m
+2026-07-13T13:13:29.7109989Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-07-13T13:13:29.7110342Z env:
+2026-07-13T13:13:29.7110565Z   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+2026-07-13T13:13:29.7110884Z   JULIA_PKG_SERVER_REGISTRY_PREFERENCE: eager
+2026-07-13T13:13:29.7111171Z   JULIA_NUM_THREADS: 1
+2026-07-13T13:13:29.7111395Z   OPENBLAS_NUM_THREADS: 1
+2026-07-13T13:13:29.7111644Z   MACRO_MULTIPROCESS_TESTS: 1
+2026-07-13T13:13:29.7111885Z   MACRO_FAST_TESTS: 0
+2026-07-13T13:13:29.7112097Z   MACRO_CHECK_BOUNDS: 1
+2026-07-13T13:13:29.7112313Z ##[endgroup]
+2026-07-13T13:13:29.7190700Z ##[group]Run # Run the package tests
+2026-07-13T13:13:29.7191025Z [36;1m# Run the package tests[0m
+2026-07-13T13:13:29.7191272Z [36;1m[0m
+2026-07-13T13:13:29.7191579Z [36;1m# On Windows the executable is julia.exe, elsewhere it is julia[0m
+2026-07-13T13:13:29.7191961Z [36;1mjulia_bin=julia[0m
+2026-07-13T13:13:29.7192414Z [36;1m[[ "Linux" == "Windows" ]] && julia_bin=julia.exe[0m
+2026-07-13T13:13:29.7192724Z [36;1m[0m
+2026-07-13T13:13:29.7193062Z [36;1m# Optionally set the optimization level (empty means use the Julia default)[0m
+2026-07-13T13:13:29.7193482Z [36;1mopt_flag=()[0m
+2026-07-13T13:13:29.7193811Z [36;1m[[ -n "${OPTIMIZE}" ]] && opt_flag=( "--optimize=${OPTIMIZE}" )[0m
+2026-07-13T13:13:29.7194158Z [36;1m[0m
+2026-07-13T13:13:29.7194390Z [36;1m# The Julia command that will be executed[0m
+2026-07-13T13:13:29.7195108Z [36;1mjulia_cmd=( "${julia_bin:?}" --color=yes --inline=yes "${opt_flag[@]}" --project=@. -e 'include(joinpath(ENV["GITHUB_ACTION_PATH"], "test_harness.jl"))' --  )[0m
+2026-07-13T13:13:29.7195751Z [36;1m[0m
+2026-07-13T13:13:29.7196024Z [36;1m# Add the prefix in front of the command if there is one[0m
+2026-07-13T13:13:29.7196369Z [36;1mprefix=(  )[0m
+2026-07-13T13:13:29.7196691Z [36;1m[[ -n ${prefix[*]} ]] && julia_cmd=( "${prefix[@]}" "${julia_cmd[@]}" )[0m
+2026-07-13T13:13:29.7197064Z [36;1m[0m
+2026-07-13T13:13:29.7197262Z [36;1m# Run the Julia command[0m
+2026-07-13T13:13:29.7197866Z [36;1mecho "::debug::Executing Julia: ${julia_cmd[*]}"[0m
+2026-07-13T13:13:29.7198211Z [36;1m"${julia_cmd[@]}"[0m
+2026-07-13T13:13:29.7226593Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-07-13T13:13:29.7226940Z env:
+2026-07-13T13:13:29.7227157Z   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+2026-07-13T13:13:29.7227783Z   JULIA_PKG_SERVER_REGISTRY_PREFERENCE: eager
+2026-07-13T13:13:29.7228092Z   JULIA_NUM_THREADS: 1
+2026-07-13T13:13:29.7228317Z   OPENBLAS_NUM_THREADS: 1
+2026-07-13T13:13:29.7228561Z   MACRO_MULTIPROCESS_TESTS: 1
+2026-07-13T13:13:29.7228801Z   MACRO_FAST_TESTS: 0
+2026-07-13T13:13:29.7229274Z   MACRO_CHECK_BOUNDS: 1
+2026-07-13T13:13:29.7229517Z   ANNOTATE: false
+2026-07-13T13:13:29.7229722Z   COVERAGE: false
+2026-07-13T13:13:29.7229943Z   FORCE_LATEST_COMPATIBLE_VERSION: auto
+2026-07-13T13:13:29.7230208Z   CHECK_BOUNDS: yes
+2026-07-13T13:13:29.7230415Z   COMPILED_MODULES: yes
+2026-07-13T13:13:29.7230649Z   ALLOW_RERESOLVE: true
+2026-07-13T13:13:29.7230856Z   DEPWARN: yes
+2026-07-13T13:13:29.7231044Z   OPTIMIZE: 
+2026-07-13T13:13:29.7231235Z ##[endgroup]
+2026-07-13T13:13:30.1903821Z │
+2026-07-13T13:13:30.1904946Z │ To reproduce this CI run locally run the following from the same repository state on julia version 1.10.11:
+2026-07-13T13:13:30.1905947Z │
+2026-07-13T13:13:30.1907795Z │ `import Pkg; Pkg.test(;coverage=false, julia_args=["--check-bounds=yes", "--compiled-modules=yes", "--depwarn=yes"], force_latest_compatible_version=false, allow_reresolve=true)`
+2026-07-13T13:13:30.1909193Z │
+2026-07-13T13:13:31.5542898Z [32m[1m     Testing[22m[39m MacroEconometricModels
+2026-07-13T13:13:35.1276677Z [32m[1m      Status[22m[39m `/tmp/jl_bgCUwv/Project.toml`
+2026-07-13T13:13:35.1376306Z   [90m[4c88cf16] [39mAqua v0.8.16
+2026-07-13T13:13:35.1376950Z   [90m[a93c6f00] [39mDataFrames v1.8.2
+2026-07-13T13:13:35.1377849Z   [90m[8bb1440f] [39mDelimitedFiles v1.9.1
+2026-07-13T13:13:35.1378544Z   [90m[31c24e10] [39mDistributions v0.25.129
+2026-07-13T13:13:35.1379173Z   [90m[e30172f5] [39mDocumenter v1.17.0
+2026-07-13T13:13:35.1379758Z   [90m[7a1cc6ca] [39mFFTW v1.10.0
+2026-07-13T13:13:35.1380313Z   [90m[f6369f11] [39mForwardDiff v1.4.1
+2026-07-13T13:13:35.1380878Z   [90m[b6b21f68] [39mIpopt v1.15.0
+2026-07-13T13:13:35.1398288Z   [90m[4076af6c] [39mJuMP v1.30.1
+2026-07-13T13:13:35.1399074Z   [90m[14a6ec33] [39mMacroEconometricModels v0.6.6 `~/work/MacroEconometricModels.jl/MacroEconometricModels.jl`
+2026-07-13T13:13:35.1399670Z   [90m[76087f3c] [39mNLopt v1.2.1
+2026-07-13T13:13:35.1400020Z   [90m[8913a72c] [39mNonlinearSolve v4.21.0
+2026-07-13T13:13:35.1400351Z   [90m[429524aa] [39mOptim v2.2.1
+2026-07-13T13:13:35.1400661Z   [90m[f5f7c340] [39mPATHSolver v1.7.9
+2026-07-13T13:13:35.1401106Z [33m⌅[39m [90m[aea7be01] [39mPrecompileTools v1.2.1
+2026-07-13T13:13:35.1401492Z   [90m[08abe8d2] [39mPrettyTables v3.4.0
+2026-07-13T13:13:35.1401820Z   [90m[7e506255] [39mScopedValues v1.6.2
+2026-07-13T13:13:35.1402502Z   [90m[82ae8749] [39mStatsAPI v1.8.0
+2026-07-13T13:13:35.1402842Z [33m⌅[39m [90m[fdbf4ff8] [39mXLSX v0.11.11
+2026-07-13T13:13:35.1403186Z   [90m[a5390f91] [39mZipFile v0.10.1
+2026-07-13T13:13:35.1403477Z   [90m[ade2ca70] [39mDates
+2026-07-13T13:13:35.1403757Z   [90m[f43a241f] [39mDownloads v1.6.0
+2026-07-13T13:13:35.1404060Z   [90m[37e2e46d] [39mLinearAlgebra
+2026-07-13T13:13:35.1404356Z   [90m[56ddb016] [39mLogging
+2026-07-13T13:13:35.1404629Z   [90m[de0858da] [39mPrintf
+2026-07-13T13:13:35.1404896Z   [90m[9a3f8284] [39mRandom
+2026-07-13T13:13:35.1405174Z   [90m[ea8e919c] [39mSHA v0.7.0
+2026-07-13T13:13:35.1405479Z   [90m[2f01184e] [39mSparseArrays v1.10.0
+2026-07-13T13:13:35.1405827Z   [90m[10745b16] [39mStatistics v1.10.0
+2026-07-13T13:13:35.1406128Z   [90m[fa267f1f] [39mTOML v1.0.3
+2026-07-13T13:13:35.1406404Z   [90m[8dfed614] [39mTest
+2026-07-13T13:13:35.1406739Z [32m[1m      Status[22m[39m `/tmp/jl_bgCUwv/Manifest.toml`
+2026-07-13T13:13:35.1796116Z   [90m[47edcb42] [39mADTypes v1.22.2
+2026-07-13T13:13:35.1796824Z   [90m[14f7f29c] [39mAMD v0.5.3
+2026-07-13T13:13:35.1797788Z   [90m[a4c015fc] [39mANSIColoredPrinters v0.0.1
+2026-07-13T13:13:35.1798550Z   [90m[621f4979] [39mAbstractFFTs v1.5.0
+2026-07-13T13:13:35.1799202Z   [90m[1520ce14] [39mAbstractTrees v0.4.5
+2026-07-13T13:13:35.1799892Z   [90m[7d9f7c33] [39mAccessors v0.1.45
+2026-07-13T13:13:35.1800594Z   [90m[79e6a3ab] [39mAdapt v4.7.0
+2026-07-13T13:13:35.1801270Z   [90m[66dad0bd] [39mAliasTables v1.1.3
+2026-07-13T13:13:35.1801956Z   [90m[4c88cf16] [39mAqua v0.8.16
+2026-07-13T13:13:35.1802603Z   [90m[dce04be8] [39mArgCheck v2.5.0
+2026-07-13T13:13:35.1803942Z   [90m[4fba245c] [39mArrayInterface v7.27.0
+2026-07-13T13:13:35.1804935Z   [90m[70df07ce] [39mBracketingNonlinearSolve v1.12.3
+2026-07-13T13:13:35.1805756Z   [90m[fa961155] [39mCEnum v0.5.0
+2026-07-13T13:13:35.1806483Z   [90m[523fee87] [39mCodecBzip2 v0.8.5
+2026-07-13T13:13:35.1807277Z   [90m[6309b1aa] [39mCodecInflate64 v0.1.3
+2026-07-13T13:13:35.1808546Z   [90m[944b1d66] [39mCodecZlib v0.7.8
+2026-07-13T13:13:35.1809256Z   [90m[3da002f7] [39mColorTypes v0.12.1
+2026-07-13T13:13:35.1809963Z   [90m[5ae59095] [39mColors v0.13.1
+2026-07-13T13:13:35.1810671Z   [90m[38540f10] [39mCommonSolve v0.2.11
+2026-07-13T13:13:35.1811470Z   [90m[bbf7d656] [39mCommonSubexpressions v0.3.1
+2026-07-13T13:13:35.1812250Z   [90m[34da2185] [39mCompat v4.18.1
+2026-07-13T13:13:35.1812976Z   [90m[a33af91c] [39mCompositionsBase v0.1.2
+2026-07-13T13:13:35.1813765Z   [90m[2569d6c7] [39mConcreteStructs v0.2.6
+2026-07-13T13:13:35.1814545Z   [90m[187b0558] [39mConstructionBase v1.6.0
+2026-07-13T13:13:35.1815290Z   [90m[a8cc5b0e] [39mCrayons v4.1.1
+2026-07-13T13:13:35.1815998Z   [90m[9a962f9c] [39mDataAPI v1.16.0
+2026-07-13T13:13:35.1816729Z   [90m[a93c6f00] [39mDataFrames v1.8.2
+2026-07-13T13:13:35.1817639Z   [90m[864edb3b] [39mDataStructures v0.19.5
+2026-07-13T13:13:35.1818462Z   [90m[e2d170a0] [39mDataValueInterfaces v1.0.0
+2026-07-13T13:13:35.1819222Z   [90m[8bb1440f] [39mDelimitedFiles v1.9.1
+2026-07-13T13:13:35.1819834Z   [90m[163ba53b] [39mDiffResults v1.1.0
+2026-07-13T13:13:35.1820426Z   [90m[b552c78f] [39mDiffRules v1.16.0
+2026-07-13T13:13:35.1821105Z   [90m[a0c0ee7d] [39mDifferentiationInterface v0.7.20
+2026-07-13T13:13:35.1821807Z   [90m[31c24e10] [39mDistributions v0.25.129
+2026-07-13T13:13:35.1822478Z   [90m[ffbed154] [39mDocStringExtensions v0.9.5
+2026-07-13T13:13:35.1823115Z   [90m[e30172f5] [39mDocumenter v1.17.0
+2026-07-13T13:13:35.1823706Z   [90m[4e289a0a] [39mEnumX v1.0.7
+2026-07-13T13:13:35.1824276Z   [90m[f151be2c] [39mEnzymeCore v0.8.21
+2026-07-13T13:13:35.1824864Z   [90m[e2ba6199] [39mExprTools v0.1.10
+2026-07-13T13:13:35.1825440Z   [90m[7a1cc6ca] [39mFFTW v1.10.0
+2026-07-13T13:13:35.1826012Z   [90m[9aa1b823] [39mFastClosures v0.3.2
+2026-07-13T13:13:35.1826617Z   [90m[1a297f60] [39mFillArrays v1.16.0
+2026-07-13T13:13:35.1827257Z   [90m[64ca27bc] [39mFindFirstFunctions v3.1.0
+2026-07-13T13:13:35.1828396Z   [90m[6a86dc24] [39mFiniteDiff v2.32.0
+2026-07-13T13:13:35.1829148Z [33m⌅[39m [90m[53c48c17] [39mFixedPointNumbers v0.8.6
+2026-07-13T13:13:35.1829861Z   [90m[f6369f11] [39mForwardDiff v1.4.1
+2026-07-13T13:13:35.1830494Z   [90m[069b7b12] [39mFunctionWrappers v1.1.3
+2026-07-13T13:13:35.1831266Z   [90m[77dc65aa] [39mFunctionWrappersWrappers v1.10.1
+2026-07-13T13:13:35.1831956Z   [90m[46192b85] [39mGPUArraysCore v0.2.0
+2026-07-13T13:13:35.1832546Z   [90m[a0844989] [39mGamma v1.1.0
+2026-07-13T13:13:35.1833153Z   [90m[d7ba0133] [39mGit v1.5.0
+2026-07-13T13:13:35.1833773Z   [90m[076d061b] [39mHashArrayMappedTries v0.2.0
+2026-07-13T13:13:35.1834538Z   [90m[34004b35] [39mHypergeometricFunctions v0.3.29
+2026-07-13T13:13:35.1835223Z   [90m[b5f81e59] [39mIOCapture v1.0.0
+2026-07-13T13:13:35.1835823Z   [90m[842dd82b] [39mInlineStrings v1.4.5
+2026-07-13T13:13:35.1836448Z   [90m[0c81fc1b] [39mInputBuffers v1.1.1
+2026-07-13T13:13:35.1837106Z   [90m[3587e190] [39mInverseFunctions v0.1.17
+2026-07-13T13:13:35.1837952Z   [90m[41ab1584] [39mInvertedIndices v1.3.1
+2026-07-13T13:13:35.1838584Z   [90m[b6b21f68] [39mIpopt v1.15.0
+2026-07-13T13:13:35.1839199Z   [90m[92d709cd] [39mIrrationalConstants v0.2.6
+2026-07-13T13:13:35.1839951Z   [90m[82899510] [39mIteratorInterfaceExtensions v1.0.0
+2026-07-13T13:13:35.1840647Z   [90m[692b3bcd] [39mJLLWrappers v1.8.0
+2026-07-13T13:13:35.1841223Z   [90m[682c06a0] [39mJSON v1.6.1
+2026-07-13T13:13:35.1841770Z   [90m[4076af6c] [39mJuMP v1.30.1
+2026-07-13T13:13:35.1842318Z   [90m[ba0b0d4f] [39mKrylov v0.10.8
+2026-07-13T13:13:35.1842898Z   [90m[b964fa9f] [39mLaTeXStrings v1.4.0
+2026-07-13T13:13:35.1843953Z   [90m[0e77f7df] [39mLazilyInitializedFields v1.3.0
+2026-07-13T13:13:35.1844657Z   [90m[87fe0de2] [39mLineSearch v0.1.12
+2026-07-13T13:13:35.1845212Z   [90m[d3d80556] [39mLineSearches v7.7.1
+2026-07-13T13:13:35.1845769Z   [90m[7ed4a6bd] [39mLinearSolve v5.0.0
+2026-07-13T13:13:35.1846357Z   [90m[2ab3a3ac] [39mLogExpFunctions v1.0.1
+2026-07-13T13:13:35.1846961Z   [90m[e6f89c97] [39mLoggingExtras v1.2.0
+2026-07-13T13:13:35.1848336Z   [90m[14a6ec33] [39mMacroEconometricModels v0.6.6 `~/work/MacroEconometricModels.jl/MacroEconometricModels.jl`
+2026-07-13T13:13:35.1849477Z   [90m[1914dd2f] [39mMacroTools v0.5.16
+2026-07-13T13:13:35.1850077Z   [90m[d0879d2d] [39mMarkdownAST v0.1.3
+2026-07-13T13:13:35.1850709Z   [90m[b8f27783] [39mMathOptInterface v1.51.1
+2026-07-13T13:13:35.1851357Z   [90m[bb5d69b7] [39mMaybeInplace v0.1.6
+2026-07-13T13:13:35.1851949Z   [90m[e1d29d7a] [39mMissings v1.2.0
+2026-07-13T13:13:35.1852523Z   [90m[46d2c3a1] [39mMuladdMacro v0.2.6
+2026-07-13T13:13:35.1853178Z   [90m[d8a4904e] [39mMutableArithmetics v1.8.0
+2026-07-13T13:13:35.1853764Z   [90m[d41bc354] [39mNLSolversBase v8.0.0
+2026-07-13T13:13:35.1854080Z   [90m[76087f3c] [39mNLopt v1.2.1
+2026-07-13T13:13:35.1854379Z   [90m[77ba4419] [39mNaNMath v1.1.4
+2026-07-13T13:13:35.1854691Z   [90m[8913a72c] [39mNonlinearSolve v4.21.0
+2026-07-13T13:13:35.1855040Z   [90m[be0214bd] [39mNonlinearSolveBase v2.34.1
+2026-07-13T13:13:35.1855452Z   [90m[5959db7a] [39mNonlinearSolveFirstOrder v2.2.0
+2026-07-13T13:13:35.1855871Z   [90m[9a2c21bd] [39mNonlinearSolveQuasiNewton v1.14.0
+2026-07-13T13:13:35.1856299Z   [90m[26075421] [39mNonlinearSolveSpectralMethods v1.7.3
+2026-07-13T13:13:35.1856658Z   [90m[429524aa] [39mOptim v2.2.1
+2026-07-13T13:13:35.1857029Z [33m⌅[39m [90m[bac558e1] [39mOrderedCollections v1.8.2
+2026-07-13T13:13:35.1858053Z   [90m[f5f7c340] [39mPATHSolver v1.7.9
+2026-07-13T13:13:35.1858664Z   [90m[90014a1f] [39mPDMats v0.11.40
+2026-07-13T13:13:35.1859228Z   [90m[69de0a69] [39mParsers v2.8.6
+2026-07-13T13:13:35.1859824Z   [90m[2dfb63ee] [39mPooledArrays v1.4.3
+2026-07-13T13:13:35.1860568Z   [90m[85a6dd25] [39mPositiveFactorizations v0.2.4
+2026-07-13T13:13:35.1861372Z   [90m[d236fae5] [39mPreallocationTools v1.3.0
+2026-07-13T13:13:35.1862127Z [33m⌅[39m [90m[aea7be01] [39mPrecompileTools v1.2.1
+2026-07-13T13:13:35.1863105Z   [90m[21216c6a] [39mPreferences v1.5.2
+2026-07-13T13:13:35.1863683Z   [90m[08abe8d2] [39mPrettyTables v3.4.0
+2026-07-13T13:13:35.1864251Z   [90m[43287f4e] [39mPtrArrays v1.4.0
+2026-07-13T13:13:35.1864795Z   [90m[0c0d3e7f] [39mPureKLU v1.1.1
+2026-07-13T13:13:35.1865325Z   [90m[1fd47b50] [39mQuadGK v2.11.3
+2026-07-13T13:13:35.1865868Z   [90m[3cdcf5f2] [39mRecipesBase v1.3.4
+2026-07-13T13:13:35.1866479Z   [90m[731186ca] [39mRecursiveArrayTools v4.3.4
+2026-07-13T13:13:35.1867082Z   [90m[189a3867] [39mReexport v1.2.2
+2026-07-13T13:13:35.1867962Z   [90m[2792f1a3] [39mRegistryInstances v0.1.0
+2026-07-13T13:13:35.1868561Z   [90m[79098fc4] [39mRmath v0.9.0
+2026-07-13T13:13:35.1869142Z   [90m[f2b01f46] [39mRoots v3.0.4
+2026-07-13T13:13:35.1869821Z   [90m[7e49a35a] [39mRuntimeGeneratedFunctions v0.5.22
+2026-07-13T13:13:35.1870529Z   [90m[0bca4576] [39mSciMLBase v3.35.2
+2026-07-13T13:13:35.1871222Z   [90m[19f34311] [39mSciMLJacobianOperators v0.1.15
+2026-07-13T13:13:35.1871660Z   [90m[a6db7da4] [39mSciMLLogging v2.0.3
+2026-07-13T13:13:35.1871995Z   [90m[c0aeaf25] [39mSciMLOperators v1.24.3
+2026-07-13T13:13:35.1872320Z   [90m[431bcebd] [39mSciMLPublic v1.2.3
+2026-07-13T13:13:35.1872643Z   [90m[53ae85a6] [39mSciMLStructures v1.10.3
+2026-07-13T13:13:35.1872982Z   [90m[7e506255] [39mScopedValues v1.6.2
+2026-07-13T13:13:35.1873305Z   [90m[91c51154] [39mSentinelArrays v1.4.10
+2026-07-13T13:13:35.1873619Z   [90m[efcf1570] [39mSetfield v1.1.2
+2026-07-13T13:13:35.1873955Z   [90m[727e6d20] [39mSimpleNonlinearSolve v2.13.0
+2026-07-13T13:13:35.1874322Z   [90m[a2af1166] [39mSortingAlgorithms v1.2.3
+2026-07-13T13:13:35.1874685Z   [90m[a57abbd0] [39mSparseColumnPivotedQR v2.1.4
+2026-07-13T13:13:35.1875225Z   [90m[276daf66] [39mSpecialFunctions v2.8.0
+2026-07-13T13:13:35.1875580Z   [90m[1e83bf80] [39mStaticArraysCore v1.4.4
+2026-07-13T13:13:35.1875904Z   [90m[82ae8749] [39mStatsAPI v1.8.0
+2026-07-13T13:13:35.1876214Z   [90m[2913bbd2] [39mStatsBase v0.34.12
+2026-07-13T13:13:35.1876530Z   [90m[4c63d2b9] [39mStatsFuns v2.2.0
+2026-07-13T13:13:35.1876858Z   [90m[892a3eda] [39mStringManipulation v0.4.4
+2026-07-13T13:13:35.1877191Z   [90m[ec057cc2] [39mStructUtils v2.8.2
+2026-07-13T13:13:35.1877806Z   [90m[2efcf032] [39mSymbolicIndexingInterface v0.3.51
+2026-07-13T13:13:35.1878170Z   [90m[3783bdb8] [39mTableTraits v1.0.1
+2026-07-13T13:13:35.1878469Z   [90m[bd369af6] [39mTables v1.13.0
+2026-07-13T13:13:35.1878773Z   [90m[a759f4b9] [39mTimerOutputs v0.5.29
+2026-07-13T13:13:35.1879120Z   [90m[3bb67fe8] [39mTranscodingStreams v0.11.3
+2026-07-13T13:13:35.1879488Z   [90m[781d530d] [39mTruncatedStacktraces v1.4.0
+2026-07-13T13:13:35.1879854Z [33m⌅[39m [90m[fdbf4ff8] [39mXLSX v0.11.11
+2026-07-13T13:13:35.1880229Z [33m⌅[39m [90m[72c71f33] [39mXML v0.3.9
+2026-07-13T13:13:35.1880540Z   [90m[49080126] [39mZipArchives v2.6.0
+2026-07-13T13:13:35.1880844Z   [90m[a5390f91] [39mZipFile v0.10.1
+2026-07-13T13:13:35.1881136Z   [90m[ae81ac8f] [39mASL_jll v0.1.3+0
+2026-07-13T13:13:35.1881444Z   [90m[6e34b625] [39mBzip2_jll v1.0.9+0
+2026-07-13T13:13:35.1881739Z   [90m[2e619515] [39mExpat_jll v2.8.2+0
+2026-07-13T13:13:35.1882032Z   [90m[f5851436] [39mFFTW_jll v3.3.12+0
+2026-07-13T13:13:35.1882335Z   [90m[020c3dae] [39mGit_LFS_jll v3.7.1+0
+2026-07-13T13:13:35.1882639Z   [90m[f8c6e375] [39mGit_jll v2.54.0+0
+2026-07-13T13:13:35.1882941Z   [90m[e33a78d0] [39mHwloc_jll v2.14.0+0
+2026-07-13T13:13:35.1883271Z   [90m[1d5cc7b8] [39mIntelOpenMP_jll v2025.2.0+0
+2026-07-13T13:13:35.1883626Z   [90m[9cc047cb] [39mIpopt_jll v300.1400.1902+0
+2026-07-13T13:13:35.1883967Z   [90m[94ce4f54] [39mLibiconv_jll v1.18.0+0
+2026-07-13T13:13:35.1884285Z   [90m[d00139f3] [39mMETIS_jll v5.1.3+0
+2026-07-13T13:13:35.1884593Z   [90m[856f044c] [39mMKL_jll v2025.2.0+0
+2026-07-13T13:13:35.1884916Z   [90m[d7ed1dd3] [39mMUMPS_seq_jll v500.900.0+0
+2026-07-13T13:13:35.1885247Z   [90m[079eb43e] [39mNLopt_jll v2.11.0+0
+2026-07-13T13:13:35.1885605Z [33m⌅[39m [90m[656ef2d0] [39mOpenBLAS32_jll v0.3.24+0
+2026-07-13T13:13:35.1886123Z   [90m[9bd350c2] [39mOpenSSH_jll v10.4.1+0
+2026-07-13T13:13:35.1886448Z   [90m[458c3c95] [39mOpenSSL_jll v3.5.7+0
+2026-07-13T13:13:35.1886773Z   [90m[efe28fd5] [39mOpenSpecFun_jll v0.5.6+0
+2026-07-13T13:13:35.1887101Z   [90m[f50d1b31] [39mRmath_jll v0.5.1+0
+2026-07-13T13:13:35.1887571Z   [90m[319450e9] [39mSPRAL_jll v2025.9.18+0
+2026-07-13T13:13:35.1887922Z [33m⌅[39m [90m[02c8fc9c] [39mXML2_jll v2.13.9+0
+2026-07-13T13:13:35.1888307Z   [90m[a65dc6b1] [39mXorg_libpciaccess_jll v0.19.0+0
+2026-07-13T13:13:35.1888655Z   [90m[1317d2d5] [39moneTBB_jll v2022.3.0+0
+2026-07-13T13:13:35.1888969Z   [90m[0dad84c5] [39mArgTools v1.1.1
+2026-07-13T13:13:35.1889265Z   [90m[56f22d72] [39mArtifacts
+2026-07-13T13:13:35.1889536Z   [90m[2a0f44e3] [39mBase64
+2026-07-13T13:13:35.1889795Z   [90m[ade2ca70] [39mDates
+2026-07-13T13:13:35.1890059Z   [90m[8ba89e20] [39mDistributed
+2026-07-13T13:13:35.1890360Z   [90m[f43a241f] [39mDownloads v1.6.0
+2026-07-13T13:13:35.1890664Z   [90m[7b1f6079] [39mFileWatching
+2026-07-13T13:13:35.1890940Z   [90m[9fa8497b] [39mFuture
+2026-07-13T13:13:35.1891212Z   [90m[b77e0a4c] [39mInteractiveUtils
+2026-07-13T13:13:35.1891508Z   [90m[4af54fe1] [39mLazyArtifacts
+2026-07-13T13:13:35.1891805Z   [90m[b27032c2] [39mLibCURL v0.6.4
+2026-07-13T13:13:35.1892083Z   [90m[76f85450] [39mLibGit2
+2026-07-13T13:13:35.1892343Z   [90m[8f399da3] [39mLibdl
+2026-07-13T13:13:35.1892606Z   [90m[37e2e46d] [39mLinearAlgebra
+2026-07-13T13:13:35.1892884Z   [90m[56ddb016] [39mLogging
+2026-07-13T13:13:35.1893143Z   [90m[d6f4376e] [39mMarkdown
+2026-07-13T13:13:35.1893405Z   [90m[a63ad114] [39mMmap
+2026-07-13T13:13:35.1893821Z   [90m[ca575930] [39mNetworkOptions v1.2.0
+2026-07-13T13:13:35.1894145Z   [90m[44cfe95a] [39mPkg v1.10.0
+2026-07-13T13:13:35.1894425Z   [90m[de0858da] [39mPrintf
+2026-07-13T13:13:35.1894681Z   [90m[3fa0cd96] [39mREPL
+2026-07-13T13:13:35.1894931Z   [90m[9a3f8284] [39mRandom
+2026-07-13T13:13:35.1895524Z   [90m[ea8e919c] [39mSHA v0.7.0
+2026-07-13T13:13:35.1895901Z   [90m[9e88b42a] [39mSerialization
+2026-07-13T13:13:35.1896347Z   [90m[6462fe0b] [39mSockets
+2026-07-13T13:13:35.1896744Z   [90m[2f01184e] [39mSparseArrays v1.10.0
+2026-07-13T13:13:35.1897195Z   [90m[10745b16] [39mStatistics v1.10.0
+2026-07-13T13:13:35.1898092Z   [90m[4607b0f0] [39mSuiteSparse
+2026-07-13T13:13:35.1898497Z   [90m[fa267f1f] [39mTOML v1.0.3
+2026-07-13T13:13:35.1961024Z   [90m[a4e569a6] [39mTar v1.10.0
+2026-07-13T13:13:35.1961708Z   [90m[8dfed614] [39mTest
+2026-07-13T13:13:35.1962149Z   [90m[cf7118a7] [39mUUIDs
+2026-07-13T13:13:35.1962585Z   [90m[4ec0a83e] [39mUnicode
+2026-07-13T13:13:35.1963244Z   [90m[e66e0078] [39mCompilerSupportLibraries_jll v1.1.1+0
+2026-07-13T13:13:35.1964031Z   [90m[deac9b47] [39mLibCURL_jll v8.4.0+0
+2026-07-13T13:13:35.1964570Z   [90m[e37daf67] [39mLibGit2_jll v1.6.4+0
+2026-07-13T13:13:35.1965072Z   [90m[29816b5a] [39mLibSSH2_jll v1.11.0+1
+2026-07-13T13:13:35.1965447Z   [90m[c8ffd9c3] [39mMbedTLS_jll v2.28.1010+0
+2026-07-13T13:13:35.1965828Z   [90m[14a3606d] [39mMozillaCACerts_jll v2025.12.2
+2026-07-13T13:13:35.1966188Z   [90m[4536629a] [39mOpenBLAS_jll v0.3.23+5
+2026-07-13T13:13:35.1966511Z   [90m[05823500] [39mOpenLibm_jll v0.8.5+0
+2026-07-13T13:13:35.1966832Z   [90m[efcefdf7] [39mPCRE2_jll v10.42.0+1
+2026-07-13T13:13:35.1967157Z   [90m[bea87d4a] [39mSuiteSparse_jll v7.2.1+1
+2026-07-13T13:13:35.1967794Z   [90m[83775a58] [39mZlib_jll v1.2.13+1
+2026-07-13T13:13:35.1968176Z   [90m[8e850b90] [39mlibblastrampoline_jll v5.11.0+0
+2026-07-13T13:13:35.1968534Z   [90m[8e850ede] [39mnghttp2_jll v1.52.0+1
+2026-07-13T13:13:35.1968862Z   [90m[3f19e933] [39mp7zip_jll v17.6.1+0
+2026-07-13T13:13:35.1969642Z [36m[1m        Info[22m[39m Packages marked with [33m⌅[39m have new versions available but compatibility constraints restrict them from upgrading.
+2026-07-13T13:13:37.9176457Z [32m[1mPrecompiling[22m[39m packages...
+2026-07-13T13:13:38.7258827Z     775.4 ms[32m  ✓ [39m[90mConcreteStructs[39m
+2026-07-13T13:13:38.8398851Z     690.6 ms[32m  ✓ [39m[90mCommonSolve[39m
+2026-07-13T13:13:38.8846706Z     731.5 ms[32m  ✓ [39m[90mHashArrayMappedTries[39m
+2026-07-13T13:13:38.9260820Z     774.6 ms[32m  ✓ [39m[90mRuntimeGeneratedFunctions[39m
+2026-07-13T13:13:38.9988844Z     849.6 ms[32m  ✓ [39m[90mADTypes[39m
+2026-07-13T13:13:39.3908915Z     664.0 ms[32m  ✓ [39m[90mSciMLPublic[39m
+2026-07-13T13:13:39.9266349Z    1000.4 ms[32m  ✓ [39m[90mFunctionWrappersWrappers[39m
+2026-07-13T13:13:39.9648758Z     965.5 ms[32m  ✓ [39m[90mSciMLLogging[39m
+2026-07-13T13:13:40.6891596Z    1300.7 ms[32m  ✓ [39m[90mMaybeInplace[39m
+2026-07-13T13:13:40.9529035Z    1023.3 ms[32m  ✓ [39m[90mSciMLStructures[39m
+2026-07-13T13:13:41.9808858Z    2017.0 ms[32m  ✓ [39m[90mPreallocationTools[39m
+2026-07-13T13:13:43.4790760Z    2528.8 ms[32m  ✓ [39m[90mSciMLOperators[39m
+2026-07-13T13:13:43.5326156Z    4689.7 ms[32m  ✓ [39m[90mFindFirstFunctions[39m
+2026-07-13T13:13:43.5428558Z    1560.4 ms[32m  ✓ [39m[90mFiniteDiff[39m
+2026-07-13T13:13:44.2688726Z     735.5 ms[32m  ✓ [39mScopedValues
+2026-07-13T13:13:45.9620477Z    2419.9 ms[32m  ✓ [39m[90mSymbolicIndexingInterface[39m
+2026-07-13T13:13:46.5558886Z    2285.8 ms[32m  ✓ [39m[90mDifferentiationInterface[39m
+2026-07-13T13:13:46.8209099Z     855.0 ms[32m  ✓ [39m[90mADTypes → ADTypesEnzymeCoreExt[39m
+2026-07-13T13:13:47.2726066Z     716.8 ms[32m  ✓ [39m[90mADTypes → ADTypesConstructionBaseExt[39m
+2026-07-13T13:13:47.7358713Z    4250.7 ms[32m  ✓ [39m[90mRoots[39m
+2026-07-13T13:13:48.0739542Z    1251.4 ms[32m  ✓ [39m[90mMaybeInplace → MaybeInplaceSparseArraysExt[39m
+2026-07-13T13:13:48.7019535Z     967.3 ms[32m  ✓ [39m[90mPreallocationTools → PreallocationToolsEnzymeCoreExt[39m
+2026-07-13T13:13:48.7466600Z     674.3 ms[32m  ✓ [39m[90mSciMLOperators → SciMLOperatorsStaticArraysCoreExt[39m
+2026-07-13T13:13:49.1819042Z    1909.4 ms[32m  ✓ [39m[90mPreallocationTools → PreallocationToolsForwardDiffExt[39m
+2026-07-13T13:13:49.6352330Z     889.0 ms[32m  ✓ [39m[90mFiniteDiff → FiniteDiffSparseArraysExt[39m
+2026-07-13T13:13:49.6519059Z     947.4 ms[32m  ✓ [39m[90mSciMLOperators → SciMLOperatorsSparseArraysExt[39m
+2026-07-13T13:13:50.1290768Z     480.2 ms[32m  ✓ [39m[90mDifferentiationInterface → DifferentiationInterfaceGPUArraysCoreExt[39m
+2026-07-13T13:13:50.6790211Z    1497.8 ms[32m  ✓ [39m[90mSymbolicIndexingInterface → SymbolicIndexingInterfacePrettyTablesExt[39m
+2026-07-13T13:13:50.7216012Z     592.4 ms[32m  ✓ [39m[90mDifferentiationInterface → DifferentiationInterfaceFiniteDiffExt[39m
+2026-07-13T13:13:51.6849334Z     962.4 ms[32m  ✓ [39m[90mDifferentiationInterface → DifferentiationInterfaceSparseArraysExt[39m
+2026-07-13T13:13:51.8615635Z    1181.6 ms[32m  ✓ [39m[90mDifferentiationInterface → DifferentiationInterfaceForwardDiffExt[39m
+2026-07-13T13:13:52.8338819Z    1148.8 ms[32m  ✓ [39m[90mRoots → RootsForwardDiffExt[39m
+2026-07-13T13:13:54.8298702Z    1992.1 ms[32m  ✓ [39m[90mNLSolversBase[39m
+2026-07-13T13:13:56.1774212Z    6541.8 ms[32m  ✓ [39m[90mRecursiveArrayTools[39m
+2026-07-13T13:13:56.4599356Z    1633.9 ms[32m  ✓ [39m[90mLineSearches[39m
+2026-07-13T13:13:58.3569108Z    1895.4 ms[32m  ✓ [39m[90mRecursiveArrayTools → RecursiveArrayToolsSparseArraysExt[39m
+2026-07-13T13:13:58.9669210Z    2788.1 ms[32m  ✓ [39m[90mRecursiveArrayTools → RecursiveArrayToolsStatisticsExt[39m
+2026-07-13T13:14:00.0008957Z    1641.0 ms[32m  ✓ [39m[90mRecursiveArrayTools → RecursiveArrayToolsTablesExt[39m
+2026-07-13T13:14:00.5809014Z    1612.3 ms[32m  ✓ [39m[90mRecursiveArrayTools → RecursiveArrayToolsForwardDiffExt[39m
+2026-07-13T13:14:02.5049046Z   10641.1 ms[32m  ✓ [39mDistributions
+2026-07-13T13:14:04.6538630Z    4655.5 ms[32m  ✓ [39mOptim
+2026-07-13T13:14:05.0598875Z    2554.3 ms[32m  ✓ [39mDistributions → DistributionsTestExt
+2026-07-13T13:14:07.5978800Z    2939.5 ms[32m  ✓ [39mOptim → OptimMOIExt
+2026-07-13T13:14:07.8325755Z   28950.2 ms[32m  ✓ [39m[90mSparseColumnPivotedQR[39m
+2026-07-13T13:14:08.3349210Z     502.6 ms[32m  ✓ [39m[90mSparseColumnPivotedQR → SparseColumnPivotedQRAMDExt[39m
+2026-07-13T13:14:15.9925733Z   15413.8 ms[32m  ✓ [39m[90mSciMLBase[39m
+2026-07-13T13:14:17.8409010Z    1844.5 ms[32m  ✓ [39m[90mSciMLBase → SciMLBaseDifferentiationInterfaceExt[39m
+2026-07-13T13:14:18.5084449Z    2515.3 ms[32m  ✓ [39m[90mSciMLBase → SciMLBaseDistributionsExt[39m
+2026-07-13T13:14:18.6559285Z    2659.4 ms[32m  ✓ [39m[90mSciMLBase → SciMLBaseForwardDiffExt[39m
+2026-07-13T13:14:21.3258676Z    3485.6 ms[32m  ✓ [39m[90mSciMLJacobianOperators[39m
+2026-07-13T13:14:27.8718934Z    6543.8 ms[32m  ✓ [39m[90mLineSearch[39m
+2026-07-13T13:14:29.4689230Z    1597.6 ms[32m  ✓ [39m[90mLineSearch → LineSearchLineSearchesExt[39m
+2026-07-13T13:14:30.4180214Z    9089.6 ms[32m  ✓ [39m[90mNonlinearSolveBase[39m
+2026-07-13T13:14:32.7909712Z    2367.5 ms[32m  ✓ [39m[90mNonlinearSolveBase → NonlinearSolveBaseSparseArraysExt[39m
+2026-07-13T13:14:33.1559116Z    2728.3 ms[32m  ✓ [39m[90mNonlinearSolveBase → NonlinearSolveBaseLineSearchExt[39m
+2026-07-13T13:14:38.4109129Z    5618.4 ms[32m  ✓ [39m[90mBracketingNonlinearSolve[39m
+2026-07-13T13:14:39.4049283Z    8982.8 ms[32m  ✓ [39m[90mNonlinearSolveBase → NonlinearSolveBaseForwardDiffExt[39m
+2026-07-13T13:14:40.6309581Z    2221.5 ms[32m  ✓ [39m[90mBracketingNonlinearSolve → BracketingNonlinearSolveForwardDiffExt[39m
+2026-07-13T13:14:45.9609058Z   12806.0 ms[32m  ✓ [39m[90mNonlinearSolveSpectralMethods[39m
+2026-07-13T13:14:47.7510628Z    1789.7 ms[32m  ✓ [39m[90mNonlinearSolveSpectralMethods → NonlinearSolveSpectralMethodsForwardDiffExt[39m
+2026-07-13T13:14:50.4818971Z   69792.5 ms[32m  ✓ [39m[90mPureKLU[39m
+2026-07-13T13:14:51.4146111Z     932.4 ms[32m  ✓ [39m[90mPureKLU → PureKLUForwardDiffExt[39m
+2026-07-13T13:14:53.4061617Z   12775.3 ms[32m  ✓ [39m[90mSimpleNonlinearSolve[39m
+2026-07-13T13:15:02.4998456Z   12015.5 ms[32m  ✓ [39m[90mLinearSolve[39m
+2026-07-13T13:15:06.2775371Z    3775.6 ms[32m  ✓ [39m[90mLinearSolve → LinearSolveSparseArraysExt[39m
+2026-07-13T13:15:07.6235072Z    1345.2 ms[32m  ✓ [39m[90mLinearSolve → LinearSolveEnzymeExt[39m
+2026-07-13T13:15:07.6267740Z    5126.4 ms[32m  ✓ [39m[90mLinearSolve → LinearSolveForwardDiffExt[39m
+2026-07-13T13:15:07.8579025Z    5354.5 ms[32m  ✓ [39m[90mNonlinearSolveBase → NonlinearSolveBaseLinearSolveExt[39m
+2026-07-13T13:15:27.8090942Z   19950.8 ms[32m  ✓ [39m[90mNonlinearSolveQuasiNewton[39m
+2026-07-13T13:15:29.3098053Z    1500.0 ms[32m  ✓ [39m[90mNonlinearSolveQuasiNewton → NonlinearSolveQuasiNewtonForwardDiffExt[39m
+2026-07-13T13:15:40.0489102Z   32189.2 ms[32m  ✓ [39m[90mNonlinearSolveFirstOrder[39m
+2026-07-13T13:16:17.7250328Z   37675.6 ms[32m  ✓ [39mNonlinearSolve
+2026-07-13T13:17:01.7347189Z   44007.8 ms[32m  ✓ [39mMacroEconometricModels
+2026-07-13T13:17:07.4250862Z    5688.2 ms[32m  ✓ [39mMacroEconometricModels → MacroEconometricModelsZipFileExt
+2026-07-13T13:17:07.7127208Z    5977.3 ms[32m  ✓ [39mMacroEconometricModels → MacroEconometricModelsXLSXExt
+2026-07-13T13:17:09.2711289Z    7532.5 ms[32m  ✓ [39mMacroEconometricModels → MacroEconometricModelsPATHExt
+2026-07-13T13:17:09.4631614Z    7722.8 ms[32m  ✓ [39mMacroEconometricModels → MacroEconometricModelsJuMPExt
+2026-07-13T13:17:09.4632516Z   77 dependencies successfully precompiled in 213 seconds. 161 already precompiled.
+2026-07-13T13:17:09.4828940Z [32m[1m     Testing[22m[39m Running tests...
+2026-07-13T13:17:16.9686470Z Running 13 test groups in parallel processes (4 CPUs)
+2026-07-13T13:17:16.9723706Z Code coverage level: 0 (0=none, 1=user, 2=all)
+2026-07-13T13:17:16.9724314Z Set MACRO_SERIAL_TESTS=1 to run sequentially
+2026-07-13T13:17:16.9724623Z 
+2026-07-13T13:18:23.9138429Z Heterogeneous Agent Steady State
+2026-07-13T13:18:23.9138804Z 
+2026-07-13T13:18:23.9138811Z 
+2026-07-13T13:18:23.9138816Z 
+2026-07-13T13:18:24.2318390Z            Convergence
+2026-07-13T13:18:24.2347935Z 
+2026-07-13T13:18:24.2378279Z                            Value
+2026-07-13T13:18:24.2378631Z 
+2026-07-13T13:18:24.2378798Z   Converged                  Yes
+2026-07-13T13:18:24.2379232Z   Iterations                  17
+2026-07-13T13:18:24.2379668Z   Excess demand         0.000689
+2026-07-13T13:18:24.2380124Z   Euler error (log10)    -1.7899
+2026-07-13T13:18:24.2380400Z 
+2026-07-13T13:18:24.2380581Z          Prices
+2026-07-13T13:18:24.2407839Z 
+2026-07-13T13:18:24.2408088Z   Variable       Value
+2026-07-13T13:18:24.2408376Z 
+2026-07-13T13:18:24.2408525Z   r          -0.004553
+2026-07-13T13:18:24.2408905Z   w           3.212685
+2026-07-13T13:18:24.2409128Z 
+2026-07-13T13:18:24.2409266Z         Aggregates
+2026-07-13T13:18:24.2409489Z 
+2026-07-13T13:18:24.2409662Z   Variable          Value
+2026-07-13T13:18:24.2409926Z 
+2026-07-13T13:18:24.2410059Z   K               88.3811
+2026-07-13T13:18:24.2410438Z   K_demand        88.3804
+2026-07-13T13:18:24.2410903Z   Y                5.0198
+2026-07-13T13:18:24.2438062Z   excess_demand    0.0007
+2026-07-13T13:18:24.2438393Z 
+2026-07-13T13:18:24.4128284Z       Wealth Distribution
+2026-07-13T13:18:24.4147934Z 
+2026-07-13T13:18:24.4168429Z   Statistic             Value
+2026-07-13T13:18:24.4197923Z 
+2026-07-13T13:18:24.4218090Z   Mean wealth         88.3811
+2026-07-13T13:18:24.4238057Z   Gini coefficient     0.5286
+2026-07-13T13:18:24.4258009Z   P10                  0.0000
+2026-07-13T13:18:24.4258440Z   P25                  0.0000
+2026-07-13T13:18:24.4258848Z   P50                 71.7089
+2026-07-13T13:18:24.4259238Z   P75                182.0858
+2026-07-13T13:18:24.4259631Z   P90                196.6346
+2026-07-13T13:18:24.4260021Z   P99                199.6635
+2026-07-13T13:18:24.4260263Z 
+2026-07-13T13:18:32.5383921Z ┌ Warning: Reiter (Aiyagari): reduced HA transition spectral radius ρ = 1.00272293 ≥ 1 — the reduced system is indeterminate or explosive (likely an incomplete GE block or a mis-scaled Jacobian). No silent eigenvalue rescaling is applied (#234).
+2026-07-13T13:18:32.5438849Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/dsge/heterogeneous/reiter.jl:92
+2026-07-13T13:18:56.9668508Z FILETIME	Coverage-A	coverage/test_dsge_coverage.jl	93.5
+2026-07-13T13:19:02.5649460Z ┌ Warning: measurement_error=:auto: added per-observable measurement error at 10% of each series' variance
+2026-07-13T13:19:02.5708608Z │   observables =
+2026-07-13T13:19:02.5718401Z │    2-element Vector{Symbol}:
+2026-07-13T13:19:02.5738373Z │     :a
+2026-07-13T13:19:02.5760917Z │     :b
+2026-07-13T13:19:02.5788211Z │   sds =
+2026-07-13T13:19:02.5818298Z │    2-element Vector{Float64}:
+2026-07-13T13:19:02.5828040Z │     0.0
+2026-07-13T13:19:02.5848131Z │     5.0
+2026-07-13T13:19:02.5878997Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/dsge/bayes_estimation.jl:158
+2026-07-13T13:19:02.7088781Z ┌ Warning: Matrix singular. Using pseudo-inverse.
+2026-07-13T13:19:02.7109033Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/utils.jl:158
+2026-07-13T13:19:09.3838737Z ┌ Warning: Matrix singular. Using pseudo-inverse.
+2026-07-13T13:19:09.3878914Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/utils.jl:158
+2026-07-13T13:19:43.0078814Z ┌ Warning: Steady state solver did not converge (retcode = Stalled)
+2026-07-13T13:19:43.0108556Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/dsge/steady_state.jl:216
+2026-07-13T13:19:46.3898626Z FILETIME	Coverage-A	coverage/test_dsge_bayes_coverage.jl	49.4
+2026-07-13T13:19:46.4308414Z Test Summary: | Pass  Total     Time
+2026-07-13T13:19:46.4311708Z Coverage-A    |  604    604  2m23.0s
+2026-07-13T13:19:47.3218939Z [36m[1m[ [22m[39m[36m[1mInfo: [22m[39mTest group 'Coverage-A' PASSED
+2026-07-13T13:20:14.6978524Z FILETIME	ARIMA & Tests & Data & Reg	teststat/test_unitroot.jl	21.4
+2026-07-13T13:20:26.7098888Z ┌ Warning: Steady state solver did not converge (retcode = Stalled)
+2026-07-13T13:20:26.7128750Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/dsge/steady_state.jl:216
+2026-07-13T13:20:33.2711912Z ┌ Warning: Perfect-foresight path has not returned to the steady state by the terminal period (‖deviation‖∞ = 0.005726416908215937 ≫ 1.0e-6); increase the horizon T for an accurate transition.
+2026-07-13T13:20:33.2768910Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/dsge/perfect_foresight.jl:124
+2026-07-13T13:20:34.2200588Z ┌ Warning: Perfect-foresight path has not returned to the steady state by the terminal period (‖deviation‖∞ = 0.0015474252271270763 ≫ 1.0e-6); increase the horizon T for an accurate transition.
+2026-07-13T13:20:34.2228944Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/dsge/perfect_foresight.jl:124
+2026-07-13T13:20:34.2379741Z ┌ Warning: Perfect-foresight path has not returned to the steady state by the terminal period (‖deviation‖∞ = 1.907339483251899e-6 ≫ 1.0e-6); increase the horizon T for an accurate transition.
+2026-07-13T13:20:34.2409175Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/dsge/perfect_foresight.jl:124
+2026-07-13T13:20:34.2769842Z ┌ Warning: Perfect-foresight path has not returned to the steady state by the terminal period (‖deviation‖∞ = 0.10250672099140697 ≫ 1.0e-6); increase the horizon T for an accurate transition.
+2026-07-13T13:20:34.2789008Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/dsge/perfect_foresight.jl:124
+2026-07-13T13:20:35.6877284Z ┌ Warning: Perfect-foresight path has not returned to the steady state by the terminal period (‖deviation‖∞ = 0.04710128698204117 ≫ 1.0e-6); increase the horizon T for an accurate transition.
+2026-07-13T13:20:35.6908660Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/dsge/perfect_foresight.jl:124
+2026-07-13T13:20:36.3979952Z ┌ Warning: Perfect-foresight path has not returned to the steady state by the terminal period (‖deviation‖∞ = 0.13508517176341475 ≫ 1.0e-6); increase the horizon T for an accurate transition.
+2026-07-13T13:20:36.4008960Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/dsge/perfect_foresight.jl:124
+2026-07-13T13:20:36.5940066Z ┌ Warning: Perfect-foresight path has not returned to the steady state by the terminal period (‖deviation‖∞ = 0.13508517176341475 ≫ 1.0e-6); increase the horizon T for an accurate transition.
+2026-07-13T13:20:36.5969035Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/dsge/perfect_foresight.jl:124
+2026-07-13T13:20:39.1988675Z FILETIME	ARIMA & Tests & Data & Reg	teststat/test_structural_break.jl	24.5
+2026-07-13T13:20:43.2298473Z FILETIME	ARIMA & Tests & Data & Reg	teststat/test_fourier.jl	4.0
+2026-07-13T13:20:45.7708471Z FILETIME	ARIMA & Tests & Data & Reg	teststat/test_dfgls.jl	2.5
+2026-07-13T13:20:53.8009905Z ┌ Warning: Perfect-foresight path has not returned to the steady state by the terminal period (‖deviation‖∞ = 0.005726416908215937 ≫ 1.0e-6); increase the horizon T for an accurate transition.
+2026-07-13T13:20:53.8038473Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/dsge/perfect_foresight.jl:124
+2026-07-13T13:20:56.7548391Z FILETIME	ARIMA & Tests & Data & Reg	teststat/test_lm_unitroot.jl	11.0
+2026-07-13T13:21:19.5689499Z ┌ Warning: OccBin: the defining equation for :R is ambiguous (runner-up/top = 1.0 > 0.9); pass an explicit Dict(variable => equation_index) to disambiguate.
+2026-07-13T13:21:19.5718377Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/dsge/occbin.jl:199
+2026-07-13T13:21:19.5838767Z ┌ Warning: OccBin: the defining equation for :R is ambiguous (runner-up/top = 1.0 > 0.9); pass an explicit Dict(variable => equation_index) to disambiguate.
+2026-07-13T13:21:19.5878632Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/dsge/occbin.jl:199
+2026-07-13T13:21:19.6679336Z ┌ Warning: OccBin: the defining equation for :R is ambiguous (runner-up/top = 1.0 > 0.9); pass an explicit Dict(variable => equation_index) to disambiguate.
+2026-07-13T13:21:19.6708567Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/dsge/occbin.jl:199
+2026-07-13T13:21:19.7349402Z ┌ Warning: OccBin: the defining equation for :R is ambiguous (runner-up/top = 1.0 > 0.9); pass an explicit Dict(variable => equation_index) to disambiguate.
+2026-07-13T13:21:19.7378982Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/dsge/occbin.jl:199
+2026-07-13T13:21:19.7619328Z ┌ Warning: OccBin: the defining equation for :R is ambiguous (runner-up/top = 1.0 > 0.9); pass an explicit Dict(variable => equation_index) to disambiguate.
+2026-07-13T13:21:19.7621270Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/dsge/occbin.jl:199
+2026-07-13T13:21:20.1149545Z ┌ Warning: OccBin: the defining equation for :R is ambiguous (runner-up/top = 1.0 > 0.9); pass an explicit Dict(variable => equation_index) to disambiguate.
+2026-07-13T13:21:20.1178572Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/dsge/occbin.jl:199
+2026-07-13T13:21:26.9738817Z ┌ Warning: Matrix singular. Using pseudo-inverse.
+2026-07-13T13:21:26.9798832Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/utils.jl:158
+2026-07-13T13:21:26.9800975Z ┌ Warning: Geweke MHM: effective post-burn-in chain too short (finite draws = 0 < 10·d = 10); returning NaN. Increase n_draws or reduce burnin for a usable marginal likelihood.
+2026-07-13T13:21:26.9859339Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/dsge/bayes_estimation.jl:441
+2026-07-13T13:22:06.8349754Z ┌ Warning: DSGE determinacy: 2 generalized eigenvalues cluster within cluster_tol=1.0e-6 of |λ|=1; the stable/unstable split is numerically delicate — pass an explicit `div` to force a deterministic classification.
+2026-07-13T13:22:06.8378878Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/dsge/qz_solve.jl:31
+2026-07-13T13:22:12.6018416Z FILETIME	ARIMA & Tests & Data & Reg	teststat/test_adf_2break.jl	75.8
+2026-07-13T13:22:15.3998797Z FILETIME	ARIMA & Tests & Data & Reg	teststat/test_gregory_hansen.jl	2.8
+2026-07-13T13:22:59.0919192Z ┌ Warning: Discrete Lyapunov iteration did not converge to tol=1.0e-10 in 1000 iterations (last change 0.0003329625519069955).
+2026-07-13T13:22:59.0938598Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/kalman.jl:56
+2026-07-13T13:23:14.9699158Z ┌ Warning: Optim converged to non-zero residual (||F||² = 0.002500000000099997). Steady state may not be accurate.
+2026-07-13T13:23:14.9700842Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/dsge/steady_state.jl:272
+2026-07-13T13:23:15.2791657Z ┌ Warning: NLopt converged to non-zero residual (||F||² = 0.0024999999999999988). This is expected when constraints are binding. Verify solution accuracy.
+2026-07-13T13:23:15.2808674Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/dsge/steady_state.jl:350
+2026-07-13T13:23:16.2199604Z ┌ Warning: NLopt converged to non-zero residual (||F||² = 0.0008999999999999982). This is expected when constraints are binding. Verify solution accuracy.
+2026-07-13T13:23:16.2228878Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/dsge/steady_state.jl:350
+2026-07-13T13:23:16.3028856Z ┌ Warning: Steady state solver did not converge (retcode = Stalled)
+2026-07-13T13:23:16.3030430Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/dsge/steady_state.jl:216
+2026-07-13T13:23:16.3839773Z ┌ Warning: Perfect-foresight path has not returned to the steady state by the terminal period (‖deviation‖∞ = 0.1413038611486424 ≫ 1.0e-6); increase the horizon T for an accurate transition.
+2026-07-13T13:23:16.3869013Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/dsge/perfect_foresight.jl:124
+2026-07-13T13:23:19.3448432Z FILETIME	ARIMA & Tests & Data & Reg	arima/test_arima.jl	63.9
+2026-07-13T13:23:20.0199807Z ┌ Warning: Perfect-foresight path has not returned to the steady state by the terminal period (‖deviation‖∞ = 0.32805000000000006 ≫ 9.999999999999999e-5); increase the horizon T for an accurate transition.
+2026-07-13T13:23:20.0228920Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/dsge/perfect_foresight.jl:124
+2026-07-13T13:23:23.6328541Z FILETIME	ARIMA & Tests & Data & Reg	arima/test_arima_coverage.jl	4.3
+2026-07-13T13:23:25.2588177Z FILETIME	ARIMA & Tests & Data & Reg	teststat/test_granger.jl	1.6
+2026-07-13T13:23:31.6418459Z 
+2026-07-13T13:23:31.6428485Z ******************************************************************************
+2026-07-13T13:23:31.6458157Z This program contains Ipopt, a library for large-scale nonlinear optimization.
+2026-07-13T13:23:31.6478329Z  Ipopt is released as open source code under the Eclipse Public License (EPL).
+2026-07-13T13:23:31.6508282Z          For more information visit https://github.com/coin-or/Ipopt
+2026-07-13T13:23:31.6548044Z ******************************************************************************
+2026-07-13T13:23:31.6567877Z 
+2026-07-13T13:23:44.6998786Z ┌ Warning: Matrix singular. Using pseudo-inverse.
+2026-07-13T13:23:44.7028744Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/utils.jl:158
+2026-07-13T13:23:44.7059777Z ┌ Warning: Geweke MHM: effective post-burn-in chain too short (finite draws = 0 < 10·d = 10); returning NaN. Increase n_draws or reduce burnin for a usable marginal likelihood.
+2026-07-13T13:23:44.7088755Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/dsge/bayes_estimation.jl:441
+2026-07-13T13:24:02.3443341Z ┌ Warning: Matrix singular. Using pseudo-inverse.
+2026-07-13T13:24:02.3468605Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/utils.jl:158
+2026-07-13T13:24:02.8188865Z ┌ Warning: Matrix singular. Using pseudo-inverse.
+2026-07-13T13:24:02.8208421Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/utils.jl:158
+2026-07-13T13:24:03.0588661Z ┌ Warning: Matrix singular. Using pseudo-inverse.
+2026-07-13T13:24:03.0608531Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/utils.jl:158
+2026-07-13T13:24:05.3438454Z FILETIME	DSGE Core	dsge/test_dsge.jl	401.9
+2026-07-13T13:24:06.7858842Z Blanchard (1985) Perpetual-Youth OLG — Steady State
+2026-07-13T13:24:06.7887843Z 
+2026-07-13T13:24:06.7917861Z   Capital k          5.123960
+2026-07-13T13:24:06.7937991Z   Consumption C      1.390852
+2026-07-13T13:24:06.7967888Z   Interest rate r    0.046519
+2026-07-13T13:24:06.7997843Z   Wage w             1.152492
+2026-07-13T13:24:06.8037772Z   Human wealth H    18.131809
+2026-07-13T13:24:06.8058183Z   MPC (1 − βγ)       0.059200
+2026-07-13T13:24:06.8087828Z   Govt debt b        0.000000
+2026-07-13T13:24:06.8117945Z   Converged               Yes
+2026-07-13T13:24:06.8147730Z 
+2026-07-13T13:24:06.8178049Z FILETIME	DSGE Core	dsge/test_blanchard_olg.jl	1.4
+2026-07-13T13:24:16.9948898Z Continuous-Time Two-Asset HANK (KMV-style) — Stationary Solution
+2026-07-13T13:24:16.9957939Z 
+2026-07-13T13:24:16.9997802Z   Aggregate liquid B       0.465548
+2026-07-13T13:24:17.0027752Z   Aggregate illiquid A    10.564613
+2026-07-13T13:24:17.0058213Z   Illiquid wealth share      0.9578
+2026-07-13T13:24:17.0087799Z   HJB converged                 Yes
+2026-07-13T13:24:17.0107768Z 
+2026-07-13T13:24:17.0148098Z FILETIME	DSGE Core	dsge/test_continuous_aiyagari.jl	10.2
+2026-07-13T13:24:17.0378524Z Test Summary: | Pass  Total     Time
+2026-07-13T13:24:17.0379157Z DSGE Core     | 1503   1503  6m53.6s
+2026-07-13T13:24:17.2202177Z [36m[1m[ [22m[39m[36m[1mInfo: [22m[39mTest group 'DSGE Core' PASSED
+2026-07-13T13:24:21.7428789Z BayesianDSGESimulation{Float64}
+2026-07-13T13:24:21.7447945Z   Periods:    20
+2026-07-13T13:24:21.7458109Z   Variables:  1
+2026-07-13T13:24:21.7477712Z   Draws:      10
+2026-07-13T13:24:21.7507732Z   Quantiles:  [0.05, 0.16, 0.84, 0.95]
+2026-07-13T13:24:22.8568674Z ┌ Warning: Matrix singular. Using pseudo-inverse.
+2026-07-13T13:24:22.8588728Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/utils.jl:158
+2026-07-13T13:24:22.8748701Z ┌ Warning: Geweke MHM: no draws fell inside the p=0.5 truncation region; returning NaN (degenerate or extremely diffuse posterior sample).
+2026-07-13T13:24:22.8768746Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/dsge/bayes_estimation.jl:472
+2026-07-13T13:24:23.4608591Z Generating Data for IRF Verification...
+2026-07-13T13:24:23.5398446Z Frequentist Estimation Done.
+2026-07-13T13:24:23.5428270Z Testing Frequentist IRF (Cholesky)...
+2026-07-13T13:24:23.7848558Z FILETIME	DSGE Bayesian & HD	dsge/test_bayesian_dsge.jl	420.4
+2026-07-13T13:24:23.8625956Z Testing Frequentist IRF (Sign)...
+2026-07-13T13:24:24.5058260Z Testing Bayesian Estimation...
+2026-07-13T13:24:24.7828325Z Bayesian Estimation Done.
+2026-07-13T13:24:24.7828908Z Testing Bayesian IRF...
+2026-07-13T13:24:25.8908192Z Bayesian IRF Done.
+2026-07-13T13:24:26.8788795Z FILETIME	ARIMA & Tests & Data & Reg	teststat/test_model_comparison.jl	61.6
+2026-07-13T13:24:28.4888805Z FILETIME	ARIMA & Tests & Data & Reg	teststat/test_normality.jl	1.6
+2026-07-13T13:24:43.7338641Z FILETIME	IRF & VECM	var/test_irf.jl	20.6
+2026-07-13T13:24:48.9728999Z FILETIME	ARIMA & Tests & Data & Reg	gmm/test_gmm.jl	20.5
+2026-07-13T13:24:50.5788366Z FILETIME	DSGE Bayesian & HD	dsge/test_dsge_hd.jl	26.8
+2026-07-13T13:24:50.6198255Z Test Summary:      | Pass  Total     Time
+2026-07-13T13:24:50.6198894Z DSGE Bayesian & HD | 1078   1078  7m27.2s
+2026-07-13T13:24:50.8279490Z [36m[1m[ [22m[39m[36m[1mInfo: [22m[39mTest group 'DSGE Bayesian & HD' PASSED
+2026-07-13T13:24:57.0838643Z Generating Data for Bayesian Verification...
+2026-07-13T13:24:57.2578444Z Estimating BVAR (direct)...
+2026-07-13T13:24:58.2358763Z Recovered Means: FILETIME	ARIMA & Tests & Data & Reg	gmm/test_smm.jl	9.3
+2026-07-13T13:24:58.2888773Z [-0.006137225584181182, 0.39756056413559127, 0.14555349971124576, -0.16526269572055444, 0.06873064717625799, 0.30234939521075926]
+2026-07-13T13:24:58.3268465Z Direct Sampler Parameter Recovery Verified.
+2026-07-13T13:24:58.3388242Z Estimating BVAR (Gibbs)...
+2026-07-13T13:24:58.3578118Z Gibbs Sampler Smoke Test Passed.
+2026-07-13T13:24:58.3608108Z Testing BVAR reproducibility...
+2026-07-13T13:24:59.2518603Z Reproducibility test passed.
+2026-07-13T13:24:59.2538586Z Testing numerical stability with near-collinear data...
+2026-07-13T13:25:00.1318394Z Numerical stability test passed.
+2026-07-13T13:25:00.1347984Z Testing edge cases...
+2026-07-13T13:25:00.1468051Z Edge case tests passed.
+2026-07-13T13:25:00.1497978Z Testing posterior draws structure...
+2026-07-13T13:25:01.0028387Z Posterior draws structure test passed.
+2026-07-13T13:25:01.0058059Z Testing posterior model extraction...
+2026-07-13T13:25:02.3988651Z Posterior model extraction test passed.
+2026-07-13T13:25:02.6288383Z Minnesota prior BVAR test passed.
+2026-07-13T13:25:02.6408270Z Direct sampler test passed.
+2026-07-13T13:25:02.6548735Z Gibbs sampler test passed.
+2026-07-13T13:25:06.6218348Z BVARPosterior show test passed.
+2026-07-13T13:25:09.3716044Z forecast(BVARPosterior, h) tests passed.
+2026-07-13T13:25:09.6068609Z BVARForecast show method tests passed.
+2026-07-13T13:25:09.7348340Z BVARPosterior show with varnames test passed.
+2026-07-13T13:25:09.7488179Z posterior_mean_model / posterior_median_model (default data) tests passed.
+2026-07-13T13:25:10.0008421Z Deprecated process_posterior_samples wrapper test passed.
+2026-07-13T13:25:10.0118193Z Base.size / Base.length tests passed.
+2026-07-13T13:25:10.0148088Z varnames() accessor tests passed.
+2026-07-13T13:25:10.6828769Z compute_posterior_quantiles central=:median tests passed.
+2026-07-13T13:25:10.6998594Z Minnesota prior edge cases tests passed.
+2026-07-13T13:25:11.1068452Z log_marginal_likelihood tests passed.
+2026-07-13T13:25:16.2568460Z FILETIME	IRF & VECM	var/test_irf_ci.jl	32.5
+2026-07-13T13:25:16.9818640Z Generating Data for FEVD Verification...
+2026-07-13T13:25:16.9828554Z Frequentist Estimation Done.
+2026-07-13T13:25:16.9837982Z Testing Frequentist FEVD...
+2026-07-13T13:25:16.9857965Z Testing Bayesian FEVD...
+2026-07-13T13:25:16.9887987Z FEVD Verification Passed.
+2026-07-13T13:25:18.2958269Z FILETIME	Bayesian & SVAR	bvar/test_bayesian.jl	21.8
+2026-07-13T13:25:19.2458521Z FILETIME	IRF & VECM	var/test_fevd.jl	3.0
+2026-07-13T13:25:22.9808326Z Testing BVAR samplers...
+2026-07-13T13:25:22.9808887Z Testing sampler: direct
+2026-07-13T13:25:22.9867937Z   -> Passed
+2026-07-13T13:25:22.9868552Z Testing sampler: gibbs
+2026-07-13T13:25:22.9893754Z   -> Passed
+2026-07-13T13:25:22.9894406Z Testing sampler: gibbs with thin=2
+2026-07-13T13:25:22.9918016Z   -> Passed
+2026-07-13T13:25:22.9948167Z Testing gibbs default burnin (200 when not specified)
+2026-07-13T13:25:22.9978242Z   -> Passed
+2026-07-13T13:25:22.9998000Z Testing direct sampler with Minnesota prior
+2026-07-13T13:25:23.0017941Z   -> Passed
+2026-07-13T13:25:23.0018363Z Testing gibbs sampler with Minnesota prior
+2026-07-13T13:25:23.0018895Z   -> Passed
+2026-07-13T13:25:23.0019454Z FILETIME	Bayesian & SVAR	bvar/test_samplers.jl	4.7
+2026-07-13T13:25:23.1178531Z FILETIME	ARIMA & Tests & Data & Reg	data/test_data.jl	24.9
+2026-07-13T13:25:28.5888248Z FILETIME	IRF & VECM	var/test_hd.jl	9.3
+2026-07-13T13:25:30.6439095Z FILETIME	Bayesian & SVAR	bvar/test_bayesian_utils.jl	7.7
+2026-07-13T13:25:31.8801083Z Generating Data for Minnesota Test...
+2026-07-13T13:25:31.8858056Z Dummy Observations Generated.
+2026-07-13T13:25:31.8887982Z Estimating BVAR with Minnesota...
+2026-07-13T13:25:31.8917943Z Estimation Complete.
+2026-07-13T13:25:31.8948013Z Testing optimize_hyperparameters_full...
+2026-07-13T13:25:31.9168054Z Full Hyperparameter Optimization Test Complete.
+2026-07-13T13:25:31.9168834Z FILETIME	Bayesian & SVAR	bvar/test_minnesota.jl	1.3
+2026-07-13T13:25:32.4388661Z Testing BGR 2010 Hyperparameter Optimization...
+2026-07-13T13:25:32.4417998Z Testing Marginal Likelihood...
+2026-07-13T13:25:32.4440536Z ML (tau=0.2): -148.20900576109656
+2026-07-13T13:25:32.4467967Z Testing Optimization...
+2026-07-13T13:25:32.4468393Z Optimal Tau: 1.12
+2026-07-13T13:25:32.4468787Z ML Optimal: -150.71455943319356
+2026-07-13T13:25:32.4469234Z ML Loose:   -190.50906307487585
+2026-07-13T13:25:32.6763699Z 
+2026-07-13T13:25:32.6778289Z Testing Large Sparse VAR (N=20)...
+2026-07-13T13:25:32.6808213Z Optimizing Hyperparameters for Large VAR...
+2026-07-13T13:25:32.6972256Z   0.003055 seconds (7.24 k allocations: 11.494 MiB)
+2026-07-13T13:25:32.6987991Z Optimal Tau (Large): 0.01
+2026-07-13T13:25:32.7017814Z ML Optimal (Large): -4001.5667998742683
+2026-07-13T13:25:32.7047855Z ML Loose (Large):   -5181.628512457328
+2026-07-13T13:25:32.7077866Z FILETIME	Bayesian & SVAR	bvar/test_bgr.jl	0.8
+2026-07-13T13:25:33.3491111Z ┌ Warning: Too many instruments: PVAR GMM has n_inst=828 moment conditions > N=30 groups (ratio 27.6). Instrument proliferation overfits the endogenous regressors, biases the two-step weighting matrix toward singularity, and pushes the Hansen J-test toward non-rejection (Roodman 2009, OBES 71(1):135-158). Consider collapse=true or a smaller max_lag_endo.
+2026-07-13T13:25:33.3518854Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/pvar/estimation.jl:245
+2026-07-13T13:25:33.5369382Z ┌ Warning: Matrix near-singular (1-norm cond ≈ 1.7327432281616751e22). Using pseudo-inverse.
+2026-07-13T13:25:33.5398756Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/utils.jl:152
+2026-07-13T13:25:34.7489061Z ┌ Warning: Matrix near-singular (1-norm cond ≈ 1.7327432281616751e22). Using pseudo-inverse.
+2026-07-13T13:25:34.7498897Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/utils.jl:152
+2026-07-13T13:25:35.0259075Z ┌ Warning: Matrix near-singular (1-norm cond ≈ 1.903894365442625e21). Using pseudo-inverse.
+2026-07-13T13:25:35.0288737Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/utils.jl:152
+2026-07-13T13:25:51.5788420Z Arias et al. (2018) tests completed.
+2026-07-13T13:25:51.5818246Z FILETIME	Bayesian & SVAR	var/test_arias2018.jl	18.9
+2026-07-13T13:25:54.6698400Z Mountford-Uhlig (2009) tests completed.
+2026-07-13T13:25:54.6727867Z FILETIME	Bayesian & SVAR	var/test_uhlig.jl	3.1
+2026-07-13T13:25:56.4638531Z ┌ Warning: Matrix singular. Using pseudo-inverse.
+2026-07-13T13:25:56.4669054Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/utils.jl:158
+2026-07-13T13:25:56.4719834Z ┌ Warning: Geweke MHM: effective post-burn-in chain too short (finite draws = 0 < 10·d = 10); returning NaN. Increase n_draws or reduce burnin for a usable marginal likelihood.
+2026-07-13T13:25:56.4749005Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/dsge/bayes_estimation.jl:441
+2026-07-13T13:25:57.3437727Z FILETIME	IRF & VECM	vecm/test_vecm.jl	28.8
+2026-07-13T13:26:11.4628327Z FILETIME	IRF & VECM	preg/test_panel_iv.jl	14.1
+2026-07-13T13:26:11.4998298Z Test Summary: | Pass  Broken  Total     Time
+2026-07-13T13:26:11.5008283Z IRF & VECM    |  674       1    675  1m48.4s
+2026-07-13T13:26:11.5778937Z [36m[1m[ [22m[39m[36m[1mInfo: [22m[39mTest group 'IRF & VECM' PASSED
+2026-07-13T13:26:13.1489074Z FILETIME	ARIMA & Tests & Data & Reg	pvar/test_pvar.jl	50.0
+2026-07-13T13:26:17.1199573Z [ Info: Krusell–Smith: solving the PLM fixed point by simulation (T_sim=800, max_outer=3) — this can take several minutes…
+2026-07-13T13:26:27.4728829Z FILETIME	Bayesian & SVAR	preg/test_panel_nonlinear.jl	32.8
+2026-07-13T13:26:27.5168506Z Test Summary:   | Pass  Broken  Total     Time
+2026-07-13T13:26:27.5198459Z Bayesian & SVAR | 1417       1   1418  1m31.0s
+2026-07-13T13:26:27.6269803Z [36m[1m[ [22m[39m[36m[1mInfo: [22m[39mTest group 'Bayesian & SVAR' PASSED
+2026-07-13T13:26:40.5349391Z [ Info: Krusell–Smith: solving the PLM fixed point by simulation (T_sim=500, max_outer=3) — this can take several minutes…
+2026-07-13T13:26:52.6109568Z ┌ Warning: perfect (quasi-)separation detected in probit estimation; the MLE does not exist or lies on the boundary — coefficients and standard errors are unreliable
+2026-07-13T13:26:52.6158924Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/reg/probit.jl:180
+2026-07-13T13:26:52.7333342Z ┌ Warning: perfect (quasi-)separation detected in logit estimation; the MLE does not exist or lies on the boundary — coefficients and standard errors are unreliable
+2026-07-13T13:26:52.7348947Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/reg/logit.jl:242
+2026-07-13T13:26:53.2679752Z ┌ Warning: perfect (quasi-)separation detected in probit estimation; the MLE does not exist or lies on the boundary — coefficients and standard errors are unreliable
+2026-07-13T13:26:53.2708934Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/reg/probit.jl:180
+2026-07-13T13:26:53.3209610Z ┌ Warning: perfect (quasi-)separation detected in probit estimation; the MLE does not exist or lies on the boundary — coefficients and standard errors are unreliable
+2026-07-13T13:26:53.3238987Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/reg/probit.jl:180
+2026-07-13T13:26:55.9418589Z FILETIME	ARIMA & Tests & Data & Reg	reg/test_reg.jl	42.8
+2026-07-13T13:27:02.4752701Z FILETIME	ARIMA & Tests & Data & Reg	reg/test_ordered.jl	6.5
+2026-07-13T13:27:06.3348615Z FILETIME	ARIMA & Tests & Data & Reg	reg/test_multinomial.jl	3.9
+2026-07-13T13:27:06.9278750Z   Den Haan (2010) Accuracy Test
+2026-07-13T13:27:06.9298145Z 
+2026-07-13T13:27:06.9318212Z                            Value
+2026-07-13T13:27:06.9347870Z 
+2026-07-13T13:27:06.9358002Z   Aggregate                    K
+2026-07-13T13:27:06.9387935Z   Max error (%)           0.0674
+2026-07-13T13:27:06.9408169Z   Mean error (%)          0.0257
+2026-07-13T13:27:06.9438423Z   σ reference (log K)   0.003094
+2026-07-13T13:27:06.9439071Z   σ PLM-only (log K)    0.002872
+2026-07-13T13:27:06.9468228Z   σ ratio (PLM/ref)       0.9281
+2026-07-13T13:27:06.9498019Z   Simulation length          400
+2026-07-13T13:27:06.9507969Z   Burn-in                    100
+2026-07-13T13:27:06.9537748Z 
+2026-07-13T13:27:07.1818510Z FILETIME	HA-DSGE	dsge/test_ha_dsge.jl	584.0
+2026-07-13T13:27:07.2173889Z Test Summary: | Pass  Broken  Total     Time
+2026-07-13T13:27:07.2174890Z HA-DSGE       | 3466       3   3469  9m44.0s
+2026-07-13T13:27:07.7593010Z [36m[1m[ [22m[39m[36m[1mInfo: [22m[39mTest group 'HA-DSGE' PASSED
+2026-07-13T13:27:11.3048701Z FILETIME	Core & VAR	core/test_aqua.jl	37.9
+2026-07-13T13:27:17.2679372Z ┌ Warning: between estimator uses classical (OLS) standard errors on the group-means regression; requested cov_type=:cluster is ignored
+2026-07-13T13:27:17.2708933Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/preg/estimation.jl:789
+2026-07-13T13:27:17.3309318Z ┌ Warning: between estimator uses classical (OLS) standard errors on the group-means regression; requested cov_type=:cluster is ignored
+2026-07-13T13:27:17.3329002Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/preg/estimation.jl:789
+2026-07-13T13:27:17.4024529Z ┌ Warning: between estimator uses classical (OLS) standard errors on the group-means regression; requested cov_type=:cluster is ignored
+2026-07-13T13:27:17.4048855Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/preg/estimation.jl:789
+2026-07-13T13:27:21.4178820Z FILETIME	ARIMA & Tests & Data & Reg	preg/test_panel_reg.jl	15.1
+2026-07-13T13:27:24.6358596Z FILETIME	ARIMA & Tests & Data & Reg	preg/test_panel_tests.jl	3.2
+2026-07-13T13:27:24.6808443Z Test Summary:              | Pass  Total     Time
+2026-07-13T13:27:24.6838475Z ARIMA & Tests & Data & Reg | 3398   3398  7m31.5s
+2026-07-13T13:27:24.8173895Z [36m[1m[ [22m[39m[36m[1mInfo: [22m[39mTest group 'ARIMA & Tests & Data & Reg' PASSED
+2026-07-13T13:27:27.0788444Z FILETIME	Core & VAR	core/test_kalman.jl	15.8
+2026-07-13T13:27:27.6628791Z FILETIME	Core & VAR	core/test_quadrature.jl	0.6
+2026-07-13T13:27:32.1709126Z ┌ Warning: Matrix near-singular (1-norm cond ≈ 1.892815950815077e18). Using pseudo-inverse.
+2026-07-13T13:27:32.1738882Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/utils.jl:152
+2026-07-13T13:27:32.1979423Z ┌ Warning: Estimated VAR is non-stationary (max eigenvalue modulus = 1.0264). Consider differencing the data or using a VECM specification.
+2026-07-13T13:27:32.2009124Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/var/estimation.jl:63
+2026-07-13T13:27:41.5258662Z FILETIME	Core & VAR	var/test_core_var.jl	13.9
+2026-07-13T13:27:44.4872908Z Testing dof/nobs...
+2026-07-13T13:27:44.4939138Z Testing vcov()...
+2026-07-13T13:27:44.4958090Z Testing predict() in-sample...
+2026-07-13T13:27:44.4978267Z Testing predict() forecast...
+2026-07-13T13:27:44.5007983Z Testing loglikelihood...
+2026-07-13T13:27:44.5008469Z Testing stderror...
+2026-07-13T13:27:44.5038097Z Testing confint...
+2026-07-13T13:27:44.5067966Z Testing islinear...
+2026-07-13T13:27:44.5068398Z StatsAPI Tests Passed.
+2026-07-13T13:27:45.1148683Z r2 for VAR: [0.0038063723192072185, 0.004832873983925845]
+2026-07-13T13:27:45.1178383Z FILETIME	Core & VAR	var/test_statsapi.jl	3.6
+2026-07-13T13:28:00.1559168Z ┌ Warning: Matrix near-singular (1-norm cond ≈ 1.977580663852576e8). Using pseudo-inverse.
+2026-07-13T13:28:00.1588828Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/utils.jl:152
+2026-07-13T13:28:01.2209088Z ┌ Warning: Matrix near-singular (1-norm cond ≈ 1.228759887393823e8). Using pseudo-inverse.
+2026-07-13T13:28:01.2238843Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/utils.jl:152
+2026-07-13T13:28:06.3428466Z FILETIME	LP & Factor & Nowcast	lp/test_lp.jl	52.8
+2026-07-13T13:28:10.1809144Z ┌ Warning: Matrix near-singular (1-norm cond ≈ 1.0480104496210244e12). Using pseudo-inverse.
+2026-07-13T13:28:10.1869005Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/utils.jl:152
+2026-07-13T13:28:18.9928780Z FILETIME	Display	display/test_display_invariants.jl	122.0
+2026-07-13T13:28:20.3478983Z ┌ Warning: golden mismatch: var line 21
+2026-07-13T13:28:20.3488461Z │   expected = " (Intercept) N N N N N N *"
+2026-07-13T13:28:20.3538272Z │   got = " (Intercept) N N N N N N"
+2026-07-13T13:28:20.3539412Z └ @ Main ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/display_helpers.jl:128
+2026-07-13T13:28:20.4409225Z var: Test Failed at /home/runner/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/test_display_goldens.jl:32
+2026-07-13T13:28:20.4430581Z   Expression: _check_golden(f.name, s)
+2026-07-13T13:28:22.2160800Z 
+2026-07-13T13:28:22.2188329Z Stacktrace:
+2026-07-13T13:28:22.2208552Z  [1] macro expansion
+2026-07-13T13:28:22.2236459Z    @ /opt/hostedtoolcache/julia/1.10.11/x64/share/julia/stdlib/v1.10/Test/src/Test.jl:673 [inlined]
+2026-07-13T13:28:22.2288159Z  [2] macro expansion
+2026-07-13T13:28:22.2289172Z    @ ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/test_display_goldens.jl:32 [inlined]
+2026-07-13T13:28:22.2328452Z  [3] macro expansion
+2026-07-13T13:28:22.2337995Z    @ /opt/hostedtoolcache/julia/1.10.11/x64/share/julia/stdlib/v1.10/Test/src/Test.jl:1674 [inlined]
+2026-07-13T13:28:22.2358096Z  [4] macro expansion
+2026-07-13T13:28:22.2388574Z    @ ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/test_display_goldens.jl:30 [inlined]
+2026-07-13T13:28:22.2397976Z  [5] macro expansion
+2026-07-13T13:28:22.2428317Z    @ /opt/hostedtoolcache/julia/1.10.11/x64/share/julia/stdlib/v1.10/Test/src/Test.jl:1582 [inlined]
+2026-07-13T13:28:22.2448231Z  [6] top-level scope
+2026-07-13T13:28:22.2478505Z    @ ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/test_display_goldens.jl:25
+2026-07-13T13:28:22.2518332Z ┌ Warning: golden mismatch: mlogit line 32
+2026-07-13T13:28:22.2538327Z │   expected = " x1 N N N <N N N ***"
+2026-07-13T13:28:22.2548033Z │   got = " x1 N N N N N N ***"
+2026-07-13T13:28:22.2578602Z └ @ Main ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/display_helpers.jl:128
+2026-07-13T13:28:22.2598763Z mlogit: Test Failed at /home/runner/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/test_display_goldens.jl:32
+2026-07-13T13:28:22.2628094Z   Expression: _check_golden(f.name, s)
+2026-07-13T13:28:22.2637697Z 
+2026-07-13T13:28:22.2668005Z Stacktrace:
+2026-07-13T13:28:22.2688063Z  [1] macro expansion
+2026-07-13T13:28:22.2698302Z    @ /opt/hostedtoolcache/julia/1.10.11/x64/share/julia/stdlib/v1.10/Test/src/Test.jl:673 [inlined]
+2026-07-13T13:28:22.2727939Z  [2] macro expansion
+2026-07-13T13:28:22.2748591Z    @ ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/test_display_goldens.jl:32 [inlined]
+2026-07-13T13:28:22.2778026Z  [3] macro expansion
+2026-07-13T13:28:22.2788306Z    @ /opt/hostedtoolcache/julia/1.10.11/x64/share/julia/stdlib/v1.10/Test/src/Test.jl:1674 [inlined]
+2026-07-13T13:28:22.2817879Z  [4] macro expansion
+2026-07-13T13:28:22.2838584Z    @ ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/test_display_goldens.jl:30 [inlined]
+2026-07-13T13:28:22.2847851Z  [5] macro expansion
+2026-07-13T13:28:22.2878305Z    @ /opt/hostedtoolcache/julia/1.10.11/x64/share/julia/stdlib/v1.10/Test/src/Test.jl:1582 [inlined]
+2026-07-13T13:28:22.2907931Z  [6] top-level scope
+2026-07-13T13:28:22.2928517Z    @ ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/test_display_goldens.jl:25
+2026-07-13T13:28:22.2938246Z ┌ Warning: golden mismatch: garch line 7
+2026-07-13T13:28:22.2968117Z │   expected = " α[1] N N N N N N"
+2026-07-13T13:28:22.2998041Z │   got = " α[1] N N N N N N *"
+2026-07-13T13:28:22.3018789Z └ @ Main ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/display_helpers.jl:128
+2026-07-13T13:28:22.3028572Z garch: Test Failed at /home/runner/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/test_display_goldens.jl:32
+2026-07-13T13:28:22.3057986Z   Expression: _check_golden(f.name, s)
+2026-07-13T13:28:22.3077984Z 
+2026-07-13T13:28:22.3107957Z Stacktrace:
+2026-07-13T13:28:22.3108351Z  [1] macro expansion
+2026-07-13T13:28:22.3109119Z    @ /opt/hostedtoolcache/julia/1.10.11/x64/share/julia/stdlib/v1.10/Test/src/Test.jl:673 [inlined]
+2026-07-13T13:28:22.3109955Z  [2] macro expansion
+2026-07-13T13:28:22.3110840Z    @ ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/test_display_goldens.jl:32 [inlined]
+2026-07-13T13:28:22.3111865Z  [3] macro expansion
+2026-07-13T13:28:22.3112604Z    @ /opt/hostedtoolcache/julia/1.10.11/x64/share/julia/stdlib/v1.10/Test/src/Test.jl:1674 [inlined]
+2026-07-13T13:28:22.3113438Z  [4] macro expansion
+2026-07-13T13:28:22.3114296Z    @ ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/test_display_goldens.jl:30 [inlined]
+2026-07-13T13:28:22.3115273Z  [5] macro expansion
+2026-07-13T13:28:22.3115987Z    @ /opt/hostedtoolcache/julia/1.10.11/x64/share/julia/stdlib/v1.10/Test/src/Test.jl:1582 [inlined]
+2026-07-13T13:28:22.3116778Z  [6] top-level scope
+2026-07-13T13:28:22.3148477Z    @ ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/test_display_goldens.jl:25
+2026-07-13T13:28:22.3149691Z ┌ Warning: golden mismatch: gmm line 8
+2026-07-13T13:28:22.3150260Z │   expected = " Iterations 2"
+2026-07-13T13:28:22.3150789Z │   got = " Iterations 3"
+2026-07-13T13:28:22.3151842Z └ @ Main ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/display_helpers.jl:128
+2026-07-13T13:28:22.3153389Z gmm: Test Failed at /home/runner/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/test_display_goldens.jl:32
+2026-07-13T13:28:22.3154503Z   Expression: _check_golden(f.name, s)
+2026-07-13T13:28:22.3154837Z 
+2026-07-13T13:28:22.3154975Z Stacktrace:
+2026-07-13T13:28:22.3155332Z  [1] macro expansion
+2026-07-13T13:28:22.3156081Z    @ /opt/hostedtoolcache/julia/1.10.11/x64/share/julia/stdlib/v1.10/Test/src/Test.jl:673 [inlined]
+2026-07-13T13:28:22.3156920Z  [2] macro expansion
+2026-07-13T13:28:22.3158272Z    @ ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/test_display_goldens.jl:32 [inlined]
+2026-07-13T13:28:22.3159291Z  [3] macro expansion
+2026-07-13T13:28:22.3160031Z    @ /opt/hostedtoolcache/julia/1.10.11/x64/share/julia/stdlib/v1.10/Test/src/Test.jl:1674 [inlined]
+2026-07-13T13:28:22.3160848Z  [4] macro expansion
+2026-07-13T13:28:22.3162014Z    @ ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/test_display_goldens.jl:30 [inlined]
+2026-07-13T13:28:22.3162965Z  [5] macro expansion
+2026-07-13T13:28:22.3163668Z    @ /opt/hostedtoolcache/julia/1.10.11/x64/share/julia/stdlib/v1.10/Test/src/Test.jl:1582 [inlined]
+2026-07-13T13:28:22.3164462Z  [6] top-level scope
+2026-07-13T13:28:22.3165261Z    @ ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/test_display_goldens.jl:25
+2026-07-13T13:28:22.3166336Z ┌ Warning: golden mismatch: did_es line 20
+2026-07-13T13:28:22.3166952Z │   expected = " e=0 N N N N N N *"
+2026-07-13T13:28:22.3167753Z │   got = " e=0 N N N N N N"
+2026-07-13T13:28:22.3168787Z └ @ Main ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/display_helpers.jl:128
+2026-07-13T13:28:22.3170369Z did_es: Test Failed at /home/runner/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/test_display_goldens.jl:32
+2026-07-13T13:28:22.3171497Z   Expression: _check_golden(f.name, s)
+2026-07-13T13:28:22.3171845Z 
+2026-07-13T13:28:22.3171988Z Stacktrace:
+2026-07-13T13:28:22.3172319Z  [1] macro expansion
+2026-07-13T13:28:22.3173036Z    @ /opt/hostedtoolcache/julia/1.10.11/x64/share/julia/stdlib/v1.10/Test/src/Test.jl:673 [inlined]
+2026-07-13T13:28:22.3173845Z  [2] macro expansion
+2026-07-13T13:28:22.3174677Z    @ ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/test_display_goldens.jl:32 [inlined]
+2026-07-13T13:28:22.3175627Z  [3] macro expansion
+2026-07-13T13:28:22.3176344Z    @ /opt/hostedtoolcache/julia/1.10.11/x64/share/julia/stdlib/v1.10/Test/src/Test.jl:1674 [inlined]
+2026-07-13T13:28:22.3177170Z  [4] macro expansion
+2026-07-13T13:28:22.3208528Z    @ ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/test_display_goldens.jl:30 [inlined]
+2026-07-13T13:28:22.3209542Z  [5] macro expansion
+2026-07-13T13:28:22.3210270Z    @ /opt/hostedtoolcache/julia/1.10.11/x64/share/julia/stdlib/v1.10/Test/src/Test.jl:1582 [inlined]
+2026-07-13T13:28:22.3211092Z  [6] top-level scope
+2026-07-13T13:28:22.3211896Z    @ ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/test_display_goldens.jl:25
+2026-07-13T13:28:22.3212984Z ┌ Warning: golden mismatch: adf line 8
+2026-07-13T13:28:22.3213541Z │   expected = " Lag length 0"
+2026-07-13T13:28:22.3214024Z │   got = " Lag length 1"
+2026-07-13T13:28:22.3215054Z └ @ Main ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/display_helpers.jl:128
+2026-07-13T13:28:22.3216666Z adf: Test Failed at /home/runner/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/test_display_goldens.jl:32
+2026-07-13T13:28:22.3218129Z   Expression: _check_golden(f.name, s)
+2026-07-13T13:28:22.3218478Z 
+2026-07-13T13:28:22.3218873Z Stacktrace:
+2026-07-13T13:28:22.3219223Z  [1] macro expansion
+2026-07-13T13:28:22.3219961Z    @ /opt/hostedtoolcache/julia/1.10.11/x64/share/julia/stdlib/v1.10/Test/src/Test.jl:673 [inlined]
+2026-07-13T13:28:22.3220797Z  [2] macro expansion
+2026-07-13T13:28:22.3221644Z    @ ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/test_display_goldens.jl:32 [inlined]
+2026-07-13T13:28:22.3222621Z  [3] macro expansion
+2026-07-13T13:28:22.3223334Z    @ /opt/hostedtoolcache/julia/1.10.11/x64/share/julia/stdlib/v1.10/Test/src/Test.jl:1674 [inlined]
+2026-07-13T13:28:22.3224137Z  [4] macro expansion
+2026-07-13T13:28:22.3224948Z    @ ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/test_display_goldens.jl:30 [inlined]
+2026-07-13T13:28:22.3225906Z  [5] macro expansion
+2026-07-13T13:28:22.3226585Z    @ /opt/hostedtoolcache/julia/1.10.11/x64/share/julia/stdlib/v1.10/Test/src/Test.jl:1582 [inlined]
+2026-07-13T13:28:22.3227320Z  [6] top-level scope
+2026-07-13T13:28:22.3228396Z    @ ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/test_display_goldens.jl:25
+2026-07-13T13:28:22.3229451Z ┌ Warning: golden mismatch: factor line 23
+2026-07-13T13:28:22.3229965Z │   expected = " Var 5 N"
+2026-07-13T13:28:22.3230778Z │   got = " Var 2 N"
+2026-07-13T13:28:22.3231709Z └ @ Main ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/display_helpers.jl:128
+2026-07-13T13:28:22.3233270Z factor: Test Failed at /home/runner/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/test_display_goldens.jl:32
+2026-07-13T13:28:22.3234430Z   Expression: _check_golden(f.name, s)
+2026-07-13T13:28:22.3234778Z 
+2026-07-13T13:28:22.3234933Z Stacktrace:
+2026-07-13T13:28:22.3235282Z  [1] macro expansion
+2026-07-13T13:28:22.3235998Z    @ /opt/hostedtoolcache/julia/1.10.11/x64/share/julia/stdlib/v1.10/Test/src/Test.jl:673 [inlined]
+2026-07-13T13:28:22.3236833Z  [2] macro expansion
+2026-07-13T13:28:22.3258236Z    @ ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/test_display_goldens.jl:32 [inlined]
+2026-07-13T13:28:22.3259287Z  [3] macro expansion
+2026-07-13T13:28:22.3260034Z    @ /opt/hostedtoolcache/julia/1.10.11/x64/share/julia/stdlib/v1.10/Test/src/Test.jl:1674 [inlined]
+2026-07-13T13:28:22.3260908Z  [4] macro expansion
+2026-07-13T13:28:22.3261794Z    @ ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/test_display_goldens.jl:30 [inlined]
+2026-07-13T13:28:22.3262795Z  [5] macro expansion
+2026-07-13T13:28:22.3263526Z    @ /opt/hostedtoolcache/julia/1.10.11/x64/share/julia/stdlib/v1.10/Test/src/Test.jl:1582 [inlined]
+2026-07-13T13:28:22.3264346Z  [6] top-level scope
+2026-07-13T13:28:22.3265104Z    @ ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/test_display_goldens.jl:25
+2026-07-13T13:28:22.3266167Z ┌ Warning: golden mismatch: lp line 15
+2026-07-13T13:28:22.3266721Z │   expected = " y1 N* N* N* N"
+2026-07-13T13:28:22.3267185Z │   got = " y1 N* N* N N"
+2026-07-13T13:28:22.3268446Z └ @ Main ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/display_helpers.jl:128
+2026-07-13T13:28:22.3269918Z lp: Test Failed at /home/runner/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/test_display_goldens.jl:32
+2026-07-13T13:28:22.3271036Z   Expression: _check_golden(f.name, s)
+2026-07-13T13:28:22.3271371Z 
+2026-07-13T13:28:22.3271511Z Stacktrace:
+2026-07-13T13:28:22.3271832Z  [1] macro expansion
+2026-07-13T13:28:22.3272507Z    @ /opt/hostedtoolcache/julia/1.10.11/x64/share/julia/stdlib/v1.10/Test/src/Test.jl:673 [inlined]
+2026-07-13T13:28:22.3273288Z  [2] macro expansion
+2026-07-13T13:28:22.3274079Z    @ ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/test_display_goldens.jl:32 [inlined]
+2026-07-13T13:28:22.3275034Z  [3] macro expansion
+2026-07-13T13:28:22.3275721Z    @ /opt/hostedtoolcache/julia/1.10.11/x64/share/julia/stdlib/v1.10/Test/src/Test.jl:1674 [inlined]
+2026-07-13T13:28:22.3276517Z  [4] macro expansion
+2026-07-13T13:28:22.3287954Z    @ ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/test_display_goldens.jl:30 [inlined]
+2026-07-13T13:28:22.3289022Z  [5] macro expansion
+2026-07-13T13:28:22.3289744Z    @ /opt/hostedtoolcache/julia/1.10.11/x64/share/julia/stdlib/v1.10/Test/src/Test.jl:1582 [inlined]
+2026-07-13T13:28:22.3290563Z  [6] top-level scope
+2026-07-13T13:28:22.3291344Z    @ ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/test_display_goldens.jl:25
+2026-07-13T13:28:22.3292432Z ┌ Warning: golden mismatch: normality line 5
+2026-07-13T13:28:22.3293145Z │   expected = " Jarque–Bera (multivariate) N N Reject"
+2026-07-13T13:28:22.3293839Z │   got = " Jarque–Bera (multivariate) N <N Reject"
+2026-07-13T13:28:22.3294929Z └ @ Main ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/display_helpers.jl:128
+2026-07-13T13:28:22.3296484Z normality: Test Failed at /home/runner/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/test_display_goldens.jl:32
+2026-07-13T13:28:22.3297897Z   Expression: _check_golden(f.name, s)
+2026-07-13T13:28:22.3298213Z 
+2026-07-13T13:28:22.3298358Z Stacktrace:
+2026-07-13T13:28:22.3298695Z  [1] macro expansion
+2026-07-13T13:28:22.3299395Z    @ /opt/hostedtoolcache/julia/1.10.11/x64/share/julia/stdlib/v1.10/Test/src/Test.jl:673 [inlined]
+2026-07-13T13:28:22.3300524Z  [2] macro expansion
+2026-07-13T13:28:22.3301419Z    @ ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/test_display_goldens.jl:32 [inlined]
+2026-07-13T13:28:22.3302415Z  [3] macro expansion
+2026-07-13T13:28:22.3303150Z    @ /opt/hostedtoolcache/julia/1.10.11/x64/share/julia/stdlib/v1.10/Test/src/Test.jl:1674 [inlined]
+2026-07-13T13:28:22.3303982Z  [4] macro expansion
+2026-07-13T13:28:22.3304842Z    @ ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/test_display_goldens.jl:30 [inlined]
+2026-07-13T13:28:22.3305824Z  [5] macro expansion
+2026-07-13T13:28:22.3306551Z    @ /opt/hostedtoolcache/julia/1.10.11/x64/share/julia/stdlib/v1.10/Test/src/Test.jl:1582 [inlined]
+2026-07-13T13:28:22.3307722Z  [6] top-level scope
+2026-07-13T13:28:22.3308565Z    @ ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/display/test_display_goldens.jl:25
+2026-07-13T13:28:22.3309537Z FILETIME	Display	display/test_display_goldens.jl	3.3
+2026-07-13T13:28:22.3588750Z Test Summary:                    | Pass  Fail  Total     Time
+2026-07-13T13:28:22.3598072Z Display                          |  135     9    144  2m05.3s
+2026-07-13T13:28:22.3638064Z   Display invariants (T176/#275) |  124          124  1m59.5s
+2026-07-13T13:28:22.3648740Z   Display goldens (T176/#275)    |   11     9     20     3.0s
+2026-07-13T13:28:22.3678279Z     var                          |          1      1     2.8s
+2026-07-13T13:28:22.3687951Z     vecm                         |    1            1     0.0s
+2026-07-13T13:28:22.3715565Z     reg_ols                      |    1            1     0.0s
+2026-07-13T13:28:22.3738216Z     logit                        |    1            1     0.0s
+2026-07-13T13:28:22.3747840Z     probit                       |    1            1     0.0s
+2026-07-13T13:28:22.3778561Z     ologit                       |    1            1     0.0s
+2026-07-13T13:28:22.3807953Z     mlogit                       |          1      1     0.0s
+2026-07-13T13:28:22.3817918Z     arma                         |    1            1     0.0s
+2026-07-13T13:28:22.3848146Z     garch                        |          1      1     0.0s
+2026-07-13T13:28:22.3878119Z     gmm                          |          1      1     0.0s
+2026-07-13T13:28:22.3881581Z     panel_fe                     |    1            1     0.0s
+2026-07-13T13:28:22.3908216Z     did_es                       |          1      1     0.0s
+2026-07-13T13:28:22.3938176Z     adf                          |          1      1     0.0s
+2026-07-13T13:28:22.3968192Z     johansen                     |    1            1     0.0s
+2026-07-13T13:28:22.3968974Z     factor                       |          1      1     0.0s
+2026-07-13T13:28:22.3998618Z     lp                           |          1      1     0.0s
+2026-07-13T13:28:22.4028179Z     bvar_fcst                    |    1            1     0.0s
+2026-07-13T13:28:22.4038105Z     normality                    |          1      1     0.0s
+2026-07-13T13:28:22.4058198Z     dsge_est                     |    1            1     0.0s
+2026-07-13T13:28:23.0618679Z ERROR: Some tests did not pass: 135 passed, 9 failed, 0 errored, 0 broken.
+2026-07-13T13:28:23.5119040Z [91m[1m┌ [22m[39m[91m[1mError: [22m[39mTest group 'Display' FAILED (exit code 1)
+2026-07-13T13:28:23.5148931Z [91m[1m└ [22m[39m[90m@ Main ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/runtests.jl:269[39m
+2026-07-13T13:28:32.7708783Z FILETIME	LP & Factor & Nowcast	lp/test_lp_structural.jl	26.4
+2026-07-13T13:28:34.7518748Z FILETIME	LP & Factor & Nowcast	lp/test_lp_forecast.jl	2.0
+2026-07-13T13:28:40.0637104Z FILETIME	LP & Factor & Nowcast	lp/test_lp_fevd.jl	5.3
+2026-07-13T13:28:45.4228622Z FILETIME	LP & Factor & Nowcast	factor/test_factormodel.jl	5.4
+2026-07-13T13:28:54.8499061Z ┌ Warning: Matrix singular. Using pseudo-inverse.
+2026-07-13T13:28:54.8559273Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/utils.jl:158
+2026-07-13T13:29:12.6328695Z FILETIME	Volatility & Filters	volatility/test_volatility.jl	102.0
+2026-07-13T13:29:12.9809097Z ┌ Warning: Matrix singular. Using pseudo-inverse.
+2026-07-13T13:29:12.9849210Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/utils.jl:158
+2026-07-13T13:29:13.2011773Z ┌ Warning: Matrix singular. Using pseudo-inverse.
+2026-07-13T13:29:13.2019102Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/utils.jl:158
+2026-07-13T13:29:13.6748765Z ┌ Warning: Matrix singular. Using pseudo-inverse.
+2026-07-13T13:29:13.6778910Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/utils.jl:158
+2026-07-13T13:29:13.6878589Z FILETIME	Volatility & Filters	volatility/test_volatility_coverage.jl	1.1
+2026-07-13T13:29:15.9498839Z FILETIME	LP & Factor & Nowcast	factor/test_dynamicfactormodel.jl	30.5
+2026-07-13T13:29:16.8681033Z ┌ Warning: Too many instruments: PVAR GMM has n_inst=342 moment conditions > N=10 groups (ratio 34.2). Instrument proliferation overfits the endogenous regressors, biases the two-step weighting matrix toward singularity, and pushes the Hansen J-test toward non-rejection (Roodman 2009, OBES 71(1):135-158). Consider collapse=true or a smaller max_lag_endo.
+2026-07-13T13:29:16.8699133Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/pvar/estimation.jl:245
+2026-07-13T13:29:16.8819162Z ┌ Warning: Matrix near-singular (1-norm cond ≈ 2.742316992517426e21). Using pseudo-inverse.
+2026-07-13T13:29:16.8848939Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/utils.jl:152
+2026-07-13T13:29:17.1869495Z ┌ Warning: Matrix near-singular (1-norm cond ≈ 8.212909610605437e20). Using pseudo-inverse.
+2026-07-13T13:29:17.1898851Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/utils.jl:152
+2026-07-13T13:29:31.5498691Z FILETIME	Core & VAR	core/test_summary.jl	106.4
+2026-07-13T13:29:33.3599726Z ┌ Warning: logdet_safe: matrix not positive-definite; returning pseudo-logdet (sum of logs of positive eigenvalues only); downstream likelihood values are approximate.
+2026-07-13T13:29:33.3629032Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/utils.jl:215
+2026-07-13T13:29:36.0698760Z FILETIME	Core & VAR	core/test_utils.jl	4.5
+2026-07-13T13:29:37.1152282Z Running GDFM tests...
+2026-07-13T13:29:37.1198358Z FILETIME	LP & Factor & Nowcast	factor/test_gdfm.jl	21.2
+2026-07-13T13:29:44.7379434Z ┌ Warning: Matrix near-singular (1-norm cond ≈ 4.913981228572787e16). Using pseudo-inverse.
+2026-07-13T13:29:44.7409537Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/utils.jl:152
+2026-07-13T13:29:45.8229419Z ┌ Warning: Discrete Lyapunov iteration did not converge to tol=1.0e-10 in 1000 iterations (last change 1.844950762052863e-5).
+2026-07-13T13:29:45.8238877Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/kalman.jl:56
+2026-07-13T13:29:53.4168662Z FILETIME	LP & Factor & Nowcast	factor/test_factor_forecast.jl	16.3
+2026-07-13T13:29:56.7339319Z ┌ Warning: Matrix near-singular (1-norm cond ≈ 2.2063068620734346e8). Using pseudo-inverse.
+2026-07-13T13:29:56.7399277Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/utils.jl:152
+2026-07-13T13:29:56.8108589Z FILETIME	LP & Factor & Nowcast	factor/test_restricted.jl	3.4
+2026-07-13T13:30:10.2209033Z FILETIME	Volatility & Filters	nongaussian/test_nongaussian_svar.jl	56.5
+2026-07-13T13:30:11.2328733Z FILETIME	Core & VAR	core/test_edge_cases.jl	35.2
+2026-07-13T13:30:15.5708515Z FILETIME	LP & Factor & Nowcast	factor/test_favar.jl	18.8
+2026-07-13T13:30:17.0908999Z FILETIME	Volatility & Filters	nongaussian/test_nongaussian_internals.jl	6.9
+2026-07-13T13:30:18.4238793Z FILETIME	LP & Factor & Nowcast	factor/test_structural_dfm.jl	2.9
+2026-07-13T13:30:21.1091085Z FILETIME	Coverage-B	coverage/test_data_types_coverage.jl	112.1
+2026-07-13T13:30:22.4161646Z FILETIME	Core & VAR	core/test_examples.jl	11.2
+2026-07-13T13:30:30.1278749Z FILETIME	Core & VAR	core/test_covariance.jl	7.7
+2026-07-13T13:30:31.6669624Z FILETIME	Core & VAR	core/test_internal_helpers.jl	1.5
+2026-07-13T13:30:31.8888833Z ┌ Warning: Matrix singular. Using pseudo-inverse.
+2026-07-13T13:30:31.8899078Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/utils.jl:158
+2026-07-13T13:30:31.8929596Z ┌ Warning: Covariance matrix required jitter (absolute=6.666666666666667e-11, relative=1.0e-10, mean diagonal=0.6666666666666666) for Cholesky decomposition. Results may be affected by near-collinearity.
+2026-07-13T13:30:31.8948768Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/utils.jl:191
+2026-07-13T13:30:32.2749681Z ┌ Warning: logdet_safe: matrix not positive-definite; returning pseudo-logdet (sum of logs of positive eigenvalues only); downstream likelihood values are approximate.
+2026-07-13T13:30:32.2778887Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/utils.jl:215
+2026-07-13T13:30:32.2958490Z FILETIME	Core & VAR	core/test_error_paths.jl	0.6
+2026-07-13T13:30:33.1258860Z ┌ Warning: Matrix singular. Using pseudo-inverse.
+2026-07-13T13:30:33.1299120Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/utils.jl:158
+2026-07-13T13:30:33.4248845Z ┌ Warning: Matrix singular. Using pseudo-inverse.
+2026-07-13T13:30:33.4278892Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/utils.jl:158
+2026-07-13T13:30:33.4338382Z ┌ Warning: Matrix singular. Using pseudo-inverse.
+2026-07-13T13:30:33.4398979Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/utils.jl:158
+2026-07-13T13:30:36.6579067Z ┌ Warning: Matrix singular. Using pseudo-inverse.
+2026-07-13T13:30:36.6618986Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/utils.jl:158
+2026-07-13T13:30:36.7909265Z ┌ Warning: Matrix near-singular (1-norm cond ≈ 6.938315135782681e9). Using pseudo-inverse.
+2026-07-13T13:30:36.7918805Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/utils.jl:152
+2026-07-13T13:30:36.7968523Z ┌ Warning: Matrix near-singular (1-norm cond ≈ 2.266714402930582e10). Using pseudo-inverse.
+2026-07-13T13:30:36.7998648Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/utils.jl:152
+2026-07-13T13:30:36.8028453Z ┌ Warning: Matrix near-singular (1-norm cond ≈ 7.87978158655408e10). Using pseudo-inverse.
+2026-07-13T13:30:36.8059122Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/utils.jl:152
+2026-07-13T13:30:42.9669358Z FILETIME	Core & VAR	core/test_display_backends.jl	10.7
+2026-07-13T13:30:51.9778497Z FILETIME	Core & VAR	core/test_coverage_gaps.jl	9.0
+2026-07-13T13:30:52.0238433Z Test Summary: | Pass  Total     Time
+2026-07-13T13:30:52.0268176Z Core & VAR    | 1738   1738  4m18.6s
+2026-07-13T13:30:52.3301452Z FILETIME	Coverage-B	coverage/test_teststat_break_panel_coverage.jl	31.2
+2026-07-13T13:30:52.4837226Z [36m[1m[ [22m[39m[36m[1mInfo: [22m[39mTest group 'Core & VAR' PASSED
+2026-07-13T13:30:56.4558791Z ┌ Warning: Matrix singular. Using pseudo-inverse.
+2026-07-13T13:30:56.4589006Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/utils.jl:158
+2026-07-13T13:30:56.8748800Z ┌ Warning: Matrix singular. Using pseudo-inverse.
+2026-07-13T13:30:56.8778999Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/utils.jl:158
+2026-07-13T13:31:12.6575718Z ┌ Warning: Too many instruments: PVAR GMM has n_inst=342 moment conditions > N=25 groups (ratio 13.68). Instrument proliferation overfits the endogenous regressors, biases the two-step weighting matrix toward singularity, and pushes the Hansen J-test toward non-rejection (Roodman 2009, OBES 71(1):135-158). Consider collapse=true or a smaller max_lag_endo.
+2026-07-13T13:31:12.6609060Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/pvar/estimation.jl:245
+2026-07-13T13:31:12.7172038Z ┌ Warning: Matrix near-singular (1-norm cond ≈ 1.5371083965712276e20). Using pseudo-inverse.
+2026-07-13T13:31:12.7173776Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/utils.jl:152
+2026-07-13T13:31:13.0538930Z ┌ Warning: Matrix near-singular (1-norm cond ≈ 2.0962160786678704e20). Using pseudo-inverse.
+2026-07-13T13:31:13.0540674Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/utils.jl:152
+2026-07-13T13:31:13.0989364Z ┌ Warning: Matrix near-singular (1-norm cond ≈ 1.4199202263115122e20). Using pseudo-inverse.
+2026-07-13T13:31:13.1018621Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/utils.jl:152
+2026-07-13T13:31:16.3618533Z FILETIME	LP & Factor & Nowcast	nowcast/test_nowcast.jl	57.9
+2026-07-13T13:31:17.2729219Z ┌ Warning: Matrix near-singular (1-norm cond ≈ 2.6383389475234818e8). Using pseudo-inverse.
+2026-07-13T13:31:17.2768705Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/utils.jl:152
+2026-07-13T13:31:20.8728795Z ┌ Warning: Matrix singular. Using pseudo-inverse.
+2026-07-13T13:31:20.8738678Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/utils.jl:158
+2026-07-13T13:31:29.1706790Z FILETIME	Volatility & Filters	plotting/test_plot_result.jl	72.1
+2026-07-13T13:31:44.9218739Z FILETIME	Coverage-C + IO	coverage/test_pvar_nongaussian_coverage.jl	46.3
+2026-07-13T13:31:50.8190267Z ┌ Warning: Discrete Lyapunov iteration did not converge to tol=1.0e-10 in 1000 iterations (last change 0.0006845886436152362).
+2026-07-13T13:31:50.8199105Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/core/kalman.jl:56
+2026-07-13T13:31:55.9878529Z FILETIME	Coverage-C + IO	coverage/test_nowcast_coverage.jl	11.1
+2026-07-13T13:32:00.2088765Z FILETIME	Volatility & Filters	filters/test_filters.jl	31.0
+2026-07-13T13:32:06.1479738Z ┌ Warning: no joint event-study covariance available; using a diagonal Σ from the per-period standard errors — cross-period covariance is ignored
+2026-07-13T13:32:06.1498848Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/did/honest_did.jl:477
+2026-07-13T13:32:07.2326501Z  X-13ARIMA-SEATS Seasonal Adjustment
+2026-07-13T13:32:07.2347839Z 
+2026-07-13T13:32:07.2378197Z                               Value
+2026-07-13T13:32:07.2407808Z 
+2026-07-13T13:32:07.2438748Z   Observations                  120
+2026-07-13T13:32:07.2488048Z   Frequency                      12
+2026-07-13T13:32:07.2498037Z   Method                        x11
+2026-07-13T13:32:07.2498547Z   Transform                    none
+2026-07-13T13:32:07.2499012Z   ARIMA           (0,0,1)(0,1,2)_12
+2026-07-13T13:32:07.2499690Z   σ²                         1.1401
+2026-07-13T13:32:07.2500107Z   AIC                        252.43
+2026-07-13T13:32:07.2500536Z   Outliers                        0
+2026-07-13T13:32:07.2500969Z   Seasonal std               0.0789
+2026-07-13T13:32:07.2501403Z   Irregular std              0.0067
+2026-07-13T13:32:07.2501690Z 
+2026-07-13T13:32:07.4458608Z FILETIME	Volatility & Filters	filters/test_x13.jl	7.2
+2026-07-13T13:32:09.1128968Z FILETIME	Coverage-C + IO	coverage/test_vecm_teststat_coverage.jl	13.1
+2026-07-13T13:32:10.8678646Z FILETIME	Volatility & Filters	filters/test_x13_coverage.jl	3.4
+2026-07-13T13:32:12.6588451Z FILETIME	LP & Factor & Nowcast	did/test_did.jl	56.3
+2026-07-13T13:32:18.2213680Z FILETIME	LP & Factor & Nowcast	did/test_lpdid.jl	5.6
+2026-07-13T13:32:18.2668482Z Test Summary:         | Pass  Total     Time
+2026-07-13T13:32:18.2669136Z LP & Factor & Nowcast | 4795   4795  5m04.7s
+2026-07-13T13:32:18.7669624Z [36m[1m[ [22m[39m[36m[1mInfo: [22m[39mTest group 'LP & Factor & Nowcast' PASSED
+2026-07-13T13:32:20.3272749Z FILETIME	Coverage-C + IO	coverage/test_misc_coverage.jl	11.2
+2026-07-13T13:32:20.3321266Z FILETIME	Coverage-C + IO	io/test_io_smoke.jl	0.0
+2026-07-13T13:32:21.7362850Z FILETIME	Coverage-C + IO	io/test_io_types.jl	1.4
+2026-07-13T13:32:22.6158060Z FILETIME	Coverage-C + IO	io/test_io_coefficients.jl	0.9
+2026-07-13T13:32:24.2146301Z FILETIME	Coverage-C + IO	io/test_io_example.jl	1.6
+2026-07-13T13:32:25.3653115Z FILETIME	Coverage-C + IO	io/test_io_multipliers.jl	1.2
+2026-07-13T13:32:25.5602305Z FILETIME	Coverage-C + IO	io/test_io_linkages.jl	0.2
+2026-07-13T13:32:26.3387048Z FILETIME	Coverage-C + IO	io/test_io_sda.jl	0.8
+2026-07-13T13:32:27.1113989Z FILETIME	Coverage-C + IO	io/test_io_extraction.jl	0.8
+2026-07-13T13:32:27.7148445Z FILETIME	Coverage-C + IO	io/test_io_environmental.jl	0.6
+2026-07-13T13:32:28.7624383Z FILETIME	Coverage-C + IO	io/test_io_bf_first.jl	1.0
+2026-07-13T13:32:28.9751904Z FILETIME	Coverage-B	coverage/test_display_coverage.jl	96.6
+2026-07-13T13:32:30.3531656Z FILETIME	Coverage-C + IO	io/test_io_bf_second.jl	1.6
+2026-07-13T13:32:30.9302648Z ┌ Warning: No registered SHA-256 checksum for https://example.org/archive.zip; the downloaded file is NOT integrity-verified. Populate MacroEconometricModels.IO_CHECKSUMS to enable verification.
+2026-07-13T13:32:30.9305248Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/io/download/registry.jl:86
+2026-07-13T13:32:31.3272926Z FILETIME	Coverage-C + IO	io/test_io_fetch.jl	1.0
+2026-07-13T13:32:31.8054637Z FILETIME	Coverage-C + IO	io/test_io_registry.jl	0.5
+2026-07-13T13:32:32.8812411Z FILETIME	Coverage-C + IO	io/test_io_sources.jl	1.1
+2026-07-13T13:32:33.6755981Z ┌ Warning: Squared coherence is identically 1 with a single segment (no averaging over segments); reduce segment_length or increase overlap for a meaningful estimate.
+2026-07-13T13:32:33.6758557Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/spectral/cross.jl:85
+2026-07-13T13:32:33.6816803Z FILETIME	Volatility & Filters	spectral/test_spectral.jl	22.8
+2026-07-13T13:32:33.7105270Z Test Summary:        | Pass  Total     Time
+2026-07-13T13:32:33.7110064Z Volatility & Filters | 1721   1721  5m03.1s
+2026-07-13T13:32:33.8148497Z [36m[1m[ [22m[39m[36m[1mInfo: [22m[39mTest group 'Volatility & Filters' PASSED
+2026-07-13T13:32:34.0462845Z FILETIME	Coverage-C + IO	io/test_io_parse.jl	1.2
+2026-07-13T13:32:37.5854294Z FILETIME	Coverage-C + IO	io/test_io_ext_parse.jl	3.5
+2026-07-13T13:32:40.0239853Z FILETIME	Coverage-C + IO	io/test_io_show.jl	2.4
+2026-07-13T13:32:40.5697072Z FILETIME	Coverage-C + IO	io/test_io_plotting.jl	0.5
+2026-07-13T13:32:40.9752732Z FILETIME	Coverage-C + IO	io/test_io_refs.jl	0.4
+2026-07-13T13:32:42.3272233Z ┌ Warning: No registered SHA-256 checksum for https://www.wiod.org/protected3/data13/AUS/wiot09_row_apr12.xlsx; the downloaded file is NOT integrity-verified. Populate MacroEconometricModels.IO_CHECKSUMS to enable verification.
+2026-07-13T13:32:42.3274694Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/io/download/registry.jl:86
+2026-07-13T13:32:42.3734770Z ┌ Warning: No registered SHA-256 checksum for https://zenodo.org/record/5589597/files/IOT_2010_pxp.zip; the downloaded file is NOT integrity-verified. Populate MacroEconometricModels.IO_CHECKSUMS to enable verification.
+2026-07-13T13:32:42.3737854Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/io/download/registry.jl:86
+2026-07-13T13:32:42.4109610Z ┌ Warning: No registered SHA-256 checksum for https://dl.dropboxusercontent.com/sh/o4fxq94n7grvdbk/AACPnp0qOD1N7CSjv0reFKSba/previous_releases/053/MRIO/GLORIA_MRIOs_53_2006.zip?dl=0; the downloaded file is NOT integrity-verified. Populate MacroEconometricModels.IO_CHECKSUMS to enable verification.
+2026-07-13T13:32:42.4112851Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/io/download/registry.jl:86
+2026-07-13T13:32:42.4116427Z ┌ Warning: No registered SHA-256 checksum for https://dl.dropboxusercontent.com/sh/o4fxq94n7grvdbk/AACD6UmIBqbmkAQiAOfX7U_fa/previous_releases/053/MRIO/GLORIA_MRIOs_53_1997.zip?dl=0; the downloaded file is NOT integrity-verified. Populate MacroEconometricModels.IO_CHECKSUMS to enable verification.
+2026-07-13T13:32:42.4119752Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/io/download/registry.jl:86
+2026-07-13T13:32:42.4122934Z ┌ Warning: No registered SHA-256 checksum for https://dl.dropboxusercontent.com/sh/o4fxq94n7grvdbk/AAD6y_13ul9SZnJkPV1GhZCza/previous_releases/053/MRIO/GLORIA_MRIOs_53_2013.zip?dl=0; the downloaded file is NOT integrity-verified. Populate MacroEconometricModels.IO_CHECKSUMS to enable verification.
+2026-07-13T13:32:42.4125767Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/io/download/registry.jl:86
+2026-07-13T13:32:42.4129131Z ┌ Warning: No registered SHA-256 checksum for https://dl.dropboxusercontent.com/sh/o4fxq94n7grvdbk/AAB3PLbnxPHIP2MGN8S36ZUBa/previous_releases/053/MRIO/GLORIA_MRIOs_53_2007.zip?dl=0; the downloaded file is NOT integrity-verified. Populate MacroEconometricModels.IO_CHECKSUMS to enable verification.
+2026-07-13T13:32:42.4132308Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/io/download/registry.jl:86
+2026-07-13T13:32:42.4135414Z ┌ Warning: No registered SHA-256 checksum for https://dl.dropboxusercontent.com/sh/o4fxq94n7grvdbk/AABIfGIVZkelhq58Ij1DKO1Va/previous_releases/053/MRIO/GLORIA_MRIOs_53_2012.zip?dl=0; the downloaded file is NOT integrity-verified. Populate MacroEconometricModels.IO_CHECKSUMS to enable verification.
+2026-07-13T13:32:42.4138755Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/io/download/registry.jl:86
+2026-07-13T13:32:42.4804678Z ┌ Warning: No registered SHA-256 checksum for https://stats.oecd.org/wbos/fileview2.aspx?IDFile=8adf89dd-18b4-40fe-bc7f-c822052eb961; the downloaded file is NOT integrity-verified. Populate MacroEconometricModels.IO_CHECKSUMS to enable verification.
+2026-07-13T13:32:42.4808022Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/io/download/registry.jl:86
+2026-07-13T13:32:42.5457349Z ┌ Warning: No registered SHA-256 checksum for https://www.wiod.org/protected3/data13/AUS/wiot09_row_apr12.xlsx; the downloaded file is NOT integrity-verified. Populate MacroEconometricModels.IO_CHECKSUMS to enable verification.
+2026-07-13T13:32:42.5460098Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/io/download/registry.jl:86
+2026-07-13T13:32:42.6404348Z ┌ Warning: No registered SHA-256 checksum for https://zenodo.org/record/5589597/files/IOT_2010_pxp.zip; the downloaded file is NOT integrity-verified. Populate MacroEconometricModels.IO_CHECKSUMS to enable verification.
+2026-07-13T13:32:42.6406951Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/io/download/registry.jl:86
+2026-07-13T13:32:42.6409865Z ┌ Warning: No registered SHA-256 checksum for https://zenodo.org/record/5589597/files/IOT_2011_pxp.zip; the downloaded file is NOT integrity-verified. Populate MacroEconometricModels.IO_CHECKSUMS to enable verification.
+2026-07-13T13:32:42.6412392Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/io/download/registry.jl:86
+2026-07-13T13:32:42.7526805Z ┌ Warning: No registered SHA-256 checksum for https://dl.dropboxusercontent.com/sh/o4fxq94n7grvdbk/AACPnp0qOD1N7CSjv0reFKSba/previous_releases/053/MRIO/GLORIA_MRIOs_53_2006.zip?dl=0; the downloaded file is NOT integrity-verified. Populate MacroEconometricModels.IO_CHECKSUMS to enable verification.
+2026-07-13T13:32:42.7530276Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/io/download/registry.jl:86
+2026-07-13T13:32:42.7533575Z ┌ Warning: No registered SHA-256 checksum for https://dl.dropboxusercontent.com/sh/o4fxq94n7grvdbk/AACD6UmIBqbmkAQiAOfX7U_fa/previous_releases/053/MRIO/GLORIA_MRIOs_53_1997.zip?dl=0; the downloaded file is NOT integrity-verified. Populate MacroEconometricModels.IO_CHECKSUMS to enable verification.
+2026-07-13T13:32:42.7537125Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/io/download/registry.jl:86
+2026-07-13T13:32:42.7540499Z ┌ Warning: No registered SHA-256 checksum for https://dl.dropboxusercontent.com/sh/o4fxq94n7grvdbk/AAD6y_13ul9SZnJkPV1GhZCza/previous_releases/053/MRIO/GLORIA_MRIOs_53_2013.zip?dl=0; the downloaded file is NOT integrity-verified. Populate MacroEconometricModels.IO_CHECKSUMS to enable verification.
+2026-07-13T13:32:42.7543494Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/io/download/registry.jl:86
+2026-07-13T13:32:42.7546580Z ┌ Warning: No registered SHA-256 checksum for https://dl.dropboxusercontent.com/sh/o4fxq94n7grvdbk/AAB3PLbnxPHIP2MGN8S36ZUBa/previous_releases/053/MRIO/GLORIA_MRIOs_53_2007.zip?dl=0; the downloaded file is NOT integrity-verified. Populate MacroEconometricModels.IO_CHECKSUMS to enable verification.
+2026-07-13T13:32:42.7549878Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/io/download/registry.jl:86
+2026-07-13T13:32:42.7553051Z ┌ Warning: No registered SHA-256 checksum for https://dl.dropboxusercontent.com/sh/o4fxq94n7grvdbk/AABIfGIVZkelhq58Ij1DKO1Va/previous_releases/053/MRIO/GLORIA_MRIOs_53_2012.zip?dl=0; the downloaded file is NOT integrity-verified. Populate MacroEconometricModels.IO_CHECKSUMS to enable verification.
+2026-07-13T13:32:42.7556081Z └ @ MacroEconometricModels ~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/src/io/download/registry.jl:86
+2026-07-13T13:32:42.7667048Z FILETIME	Coverage-C + IO	io/test_io_coverage.jl	1.8
+2026-07-13T13:32:42.7930758Z Test Summary:   | Pass  Total     Time
+2026-07-13T13:32:42.7932237Z Coverage-C + IO |  554    554  1m44.2s
+2026-07-13T13:32:43.3447178Z [36m[1m[ [22m[39m[36m[1mInfo: [22m[39mTest group 'Coverage-C + IO' PASSED
+2026-07-13T13:32:44.1689458Z 
+2026-07-13T13:32:44.1690310Z ******************************************************************************
+2026-07-13T13:32:44.1691118Z This program contains Ipopt, a library for large-scale nonlinear optimization.
+2026-07-13T13:32:44.1692026Z  Ipopt is released as open source code under the Eclipse Public License (EPL).
+2026-07-13T13:32:44.1692795Z          For more information visit https://github.com/coin-or/Ipopt
+2026-07-13T13:32:44.1693413Z ******************************************************************************
+2026-07-13T13:32:44.1693762Z 
+2026-07-13T13:32:59.4338772Z FILETIME	Coverage-B	coverage/test_gmm_ext_coverage.jl	30.5
+2026-07-13T13:32:59.4642541Z Test Summary: | Pass  Total     Time
+2026-07-13T13:32:59.4644899Z Coverage-B    | 1036   1036  4m30.5s
+2026-07-13T13:32:59.8971466Z [36m[1m[ [22m[39m[36m[1mInfo: [22m[39mTest group 'Coverage-B' PASSED
+2026-07-13T13:33:01.0667936Z [91m[1mERROR: [22m[39mLoadError: Test groups failed: Display
+2026-07-13T13:33:01.0668597Z Stacktrace:
+2026-07-13T13:33:01.0677743Z  [1] [0m[1merror[22m[0m[1m([22m[90ms[39m::[0mString[0m[1m)[22m
+2026-07-13T13:33:01.0678331Z [90m   @[39m [90mBase[39m [90m./[39m[90m[4merror.jl:35[24m[39m
+2026-07-13T13:33:01.0678687Z  [2] top-level scope
+2026-07-13T13:33:01.0679291Z [90m   @[39m [90m~/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/[39m[90m[4mruntests.jl:277[24m[39m
+2026-07-13T13:33:01.0680117Z  [3] [0m[1minclude[22m[0m[1m([22m[90mfname[39m::[0mString[0m[1m)[22m
+2026-07-13T13:33:01.0680702Z [90m   @[39m [90mBase.MainInclude[39m [90m./[39m[90m[4mclient.jl:487[24m[39m
+2026-07-13T13:33:01.0681092Z  [4] top-level scope
+2026-07-13T13:33:01.0681359Z [90m   @[39m [90m[4mnone:6[24m[39m
+2026-07-13T13:33:01.0681906Z in expression starting at /home/runner/work/MacroEconometricModels.jl/MacroEconometricModels.jl/test/runtests.jl:239
+2026-07-13T13:33:01.1228739Z Package MacroEconometricModels errored during testing
+2026-07-13T13:33:01.1241524Z ##[error]Process completed with exit code 1.
+2026-07-13T13:33:01.1374635Z Post job cleanup.
+2026-07-13T13:33:01.2828892Z Job status: failure, save-always: true
+2026-07-13T13:33:01.2830178Z Saving cache with key: julia-cache;workflow=CI;job=test;os=Linux;version=lts;os=ubuntu-latest;arch=x64;run_id=29252900314;run_attempt=1
+2026-07-13T13:33:01.2853162Z (node:3418) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-07-13T13:33:01.2854603Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-07-13T13:33:01.3272460Z [command]/usr/bin/tar --posix -cf cache.tzst --exclude cache.tzst -P -C /home/runner/work/MacroEconometricModels.jl/MacroEconometricModels.jl --files-from manifest.txt --use-compress-program zstdmt
+2026-07-13T13:33:07.5482184Z Sent 6104183 of 475866231 (1.3%), 5.8 MBs/sec
+2026-07-13T13:33:07.8130110Z Sent 475866231 of 475866231 (100.0%), 357.1 MBs/sec
+2026-07-13T13:33:07.9415235Z Cache saved successfully
+2026-07-13T13:33:07.9415824Z Running Pkg.gc() and cleaning up old caches...
+2026-07-13T13:33:07.9446712Z [command]/opt/hostedtoolcache/julia/1.10.11/x64/bin/julia /home/runner/work/_actions/julia-actions/cache/v3/handle_caches.jl rm FriedmanJP/MacroEconometricModels.jl julia-cache;workflow=CI;job=test;os=Linux;version=lts;os=ubuntu-latest;arch=x64; refs/pull/406/merge true
+2026-07-13T13:33:08.6627882Z       Active manifest files: 1 found
+2026-07-13T13:33:08.6824989Z       Active artifact files: 32 found
+2026-07-13T13:33:08.6837258Z       Active scratchspaces: 0 found
+2026-07-13T13:33:08.6891760Z      Deleted no artifacts, repos, packages or scratchspaces
+2026-07-13T13:33:09.4282019Z Post job cleanup.
+2026-07-13T13:33:09.5157003Z [command]/usr/bin/git version
+2026-07-13T13:33:09.5213859Z git version 2.54.0
+2026-07-13T13:33:09.5256628Z Temporarily overriding HOME='/home/runner/work/_temp/99aa52b6-89db-4923-a8f3-55b2f643d48c' before making global git config changes
+2026-07-13T13:33:09.5257956Z Adding repository directory to the temporary git global config as a safe directory
+2026-07-13T13:33:09.5263205Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/MacroEconometricModels.jl/MacroEconometricModels.jl
+2026-07-13T13:33:09.5296458Z Removing SSH command configuration
+2026-07-13T13:33:09.5303701Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-07-13T13:33:09.5344397Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-07-13T13:33:09.5594788Z Removing HTTP extra header
+2026-07-13T13:33:09.5601854Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-07-13T13:33:09.5640727Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-07-13T13:33:09.5907778Z Removing includeIf entries pointing to credentials config files
+2026-07-13T13:33:09.5914054Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-07-13T13:33:09.5950012Z includeif.gitdir:/home/runner/work/MacroEconometricModels.jl/MacroEconometricModels.jl/.git.path
+2026-07-13T13:33:09.5951589Z includeif.gitdir:/home/runner/work/MacroEconometricModels.jl/MacroEconometricModels.jl/.git/worktrees/*.path
+2026-07-13T13:33:09.5953016Z includeif.gitdir:/github/workspace/.git.path
+2026-07-13T13:33:09.5954134Z includeif.gitdir:/github/workspace/.git/worktrees/*.path
+2026-07-13T13:33:09.5959107Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/MacroEconometricModels.jl/MacroEconometricModels.jl/.git.path
+2026-07-13T13:33:09.5986597Z /home/runner/work/_temp/git-credentials-9c38f367-27d7-4806-a78a-0711ee8f8a8d.config
+2026-07-13T13:33:09.5998586Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/MacroEconometricModels.jl/MacroEconometricModels.jl/.git.path /home/runner/work/_temp/git-credentials-9c38f367-27d7-4806-a78a-0711ee8f8a8d.config
+2026-07-13T13:33:09.6043553Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/MacroEconometricModels.jl/MacroEconometricModels.jl/.git/worktrees/*.path
+2026-07-13T13:33:09.6071473Z /home/runner/work/_temp/git-credentials-9c38f367-27d7-4806-a78a-0711ee8f8a8d.config
+2026-07-13T13:33:09.6092122Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/MacroEconometricModels.jl/MacroEconometricModels.jl/.git/worktrees/*.path /home/runner/work/_temp/git-credentials-9c38f367-27d7-4806-a78a-0711ee8f8a8d.config
+2026-07-13T13:33:09.6132797Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git.path
+2026-07-13T13:33:09.6162922Z /github/runner_temp/git-credentials-9c38f367-27d7-4806-a78a-0711ee8f8a8d.config
+2026-07-13T13:33:09.6172266Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git.path /github/runner_temp/git-credentials-9c38f367-27d7-4806-a78a-0711ee8f8a8d.config
+2026-07-13T13:33:09.6211430Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git/worktrees/*.path
+2026-07-13T13:33:09.6238624Z /github/runner_temp/git-credentials-9c38f367-27d7-4806-a78a-0711ee8f8a8d.config
+2026-07-13T13:33:09.6248024Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git/worktrees/*.path /github/runner_temp/git-credentials-9c38f367-27d7-4806-a78a-0711ee8f8a8d.config
+2026-07-13T13:33:09.6286250Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-07-13T13:33:09.6510189Z Removing credentials config '/home/runner/work/_temp/git-credentials-9c38f367-27d7-4806-a78a-0711ee8f8a8d.config'
+2026-07-13T13:33:09.6647823Z Cleaning up orphan processes

@@ -110,6 +110,7 @@ const TEST_GROUPS = [
         "fceval/test_fceval.jl",   # EV-39 (#447): forecast eval metrics + DM/CW/MZ/encompassing + combination
         "cointreg/test_cointreg.jl",   # EV-10 (#418): FMOLS/CCR/DOLS cointegrating regression
         "teststat/test_cointegration_resid.jl",   # EV-11 (#419): Engle-Granger/Phillips-Ouliaris/Hansen-Lc/Park
+        "cointreg/test_panel_cointreg.jl",   # EV-22 (#430): panel FMOLS/DOLS (group-mean + pooled)
         "preg/test_panel_reg.jl",
         "preg/test_panel_tests.jl",
     ]),

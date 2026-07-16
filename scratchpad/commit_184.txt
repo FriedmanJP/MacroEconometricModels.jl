@@ -1,0 +1,24 @@
+fix(preg): [T085] Hausman test — generalized inverse, df=rank(dV), no abs() masking (#184)
+
+`hausman_test` computed `chi2 = abs(dot(db, robust_inv(dV) * db))` with `df = k` fixed.
+Two defects: (1) `abs()` forced a genuinely negative quadratic form — which arises when
+`dV = V_FE − V_RE` is indefinite (a common finite-sample outcome) — to appear as a large
+POSITIVE statistic, so a variance-estimation failure was reported as a significant
+rejection of RE; (2) `df` was hard-wired to `k` even when `dV` is rank-deficient, and
+`robust_inv` on a near-singular/indefinite `dV` is unreliable.
+
+Fix: new `_hausman_quadratic_form(db, dV)` symmetrizes `dV`, uses its eigenvalues to get the
+numerical rank `r` (positive part) and a non-PSD flag, and computes the statistic via the
+Moore-Penrose generalized inverse `pinv` WITHOUT abs(). `hausman_test` sets `df = rank(dV)`,
+`@warn`s (maxlog=1) when `dV` is non-PSD, sets `pval = 1` when `chi2 ≤ 0` (never a spurious
+rejection), and prefixes the description with "[non-PSD dV]". When `dV` is full-rank PSD,
+`pinv == inv` and `r == k`, so the classical statistic and `df = k` are recovered exactly.
+
+Test (test_panel_tests.jl): the existing correlated-X fixture (seed 1234) yields an
+indefinite `dV` — now correctly reports a negative statistic, `df = rank(dV) = 1`,
+`pvalue = 1`, a "non-PSD" description and one warning (was: masked into a spurious
+rejection). New numerics testset pins `_hausman_quadratic_form` on hand-built matrices:
+full-rank PSD == classical inverse quadratic form (df=k), indefinite ⇒ negative + flagged +
+df drops, rank-deficient ⇒ generalized-inverse df. Panel Specification Tests 40/40; the
+no-correlation non-rejection case unaffected (only checks pvalue>0.01). Docs: panel_reg.md
+Hausman note (verify 1/1). Ref: Hausman (1978); Stata `hausman`.

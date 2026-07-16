@@ -1,0 +1,27 @@
+fix(test): [T176] make display goldens robust to cross-version numeric drift (#275)
+
+The v0.6.6 CI run surfaced 9 golden mismatches on the Julia LTS (1.10) matrix cells
+(ubuntu/windows) that pass on 1.12 — exactly the regression class #275 exists to
+catch, here a false positive from the goldens being too strict. The table STRUCTURE
+renders identically across versions (the other 10 goldens match), but tokens DERIVED
+from last-ulp floating-point differ between 1.10 and 1.12's BLAS/LAPACK/openlibm:
+
+  - significance stars flip on p-values straddling 0.01/0.05/0.10 (var, garch, did_es, lp)
+  - the `<0.001` / `>0.999` threshold rendering flips (mlogit, normality)
+  - algorithm-path integers differ: GMM iteration count, ADF auto lag length,
+    factor top-loading rank (gmm, adf, factor)
+
+`_canonicalize` masked value magnitudes but wrongly kept stars, `<`/`>` prefixes,
+and integers. Strengthen it to also mask those: strip stars, normalize `<N`/`>N`
+thresholds, and mask ALL integers (sample sizes are stable, but iteration/lag/rank
+integers are algorithm-path-dependent and indistinguishable generically). The golden
+now locks only the environment-invariant text skeleton — titles, headers, row labels,
+notes, legends, `%`/`—`/`(ref)`/`Yes`/`No` markers, section order, row counts. The
+numeric VALUES and significance stay locked by `test_display_invariants.jl` (raw
+string) and the per-issue unit tests, which are the correct home for them.
+
+Verified: the strengthened canonicalization collapses all 9 captured 1.10-vs-1.12
+divergences to identical form; goldens 20/20 + invariants 124/124 green on 1.12.
+Goldens regenerated.
+
+Claude-Session: https://claude.ai/code/session_01QZizX88NDsBZrBgdqPcLQp

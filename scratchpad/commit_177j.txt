@@ -1,0 +1,29 @@
+fix(teststat): [T078] Johansen p-values via Doornik (1998) gamma approximation (#177)
+
+Completes the Johansen half of T078 (the ADF/PP MacKinnon response surfaces
+landed in de243e7). Replaces the 3-point critical-value interpolation with the
+Doornik (1998, JES 12(5)) gamma approximation to the asymptotic trace and
+max-eigenvalue distributions: mean/variance response surfaces in m = n - r
+(regressors [m², m, 1, m==1, m==2, √m] for trace; [m, 1, m==1, m==2, √m] for
+max-eig), p = 1 - cdf(Gamma(mean²/var, var/mean), stat). The surfaces reproduce
+the MacKinnon-Haug-Michelis (1999) numerical distributions to simulation
+accuracy — validated in-session against statsmodels' MHM-generated c_sjt/c_sja
+tables (|p(cv) - nominal| ≤ 0.005 across m=1..12, all three cases, both tests).
+
+Coefficients transcribed PROGRAMMATICALLY from gretl (GPL-3) plugin/johansen.c
+(no hand-typing) into 4 consts in critical_values.jl. Case mapping pinned
+empirically: :none -> Doornik case 1 (no constant), :constant -> case 2
+(restricted constant), :trend -> case 4 (restricted trend) — matching our
+Osterwald-Lenum CV tables (verified: gamma-implied CVs match the restricted-
+case tables; the unrestricted cases 3/5 match statsmodels instead).
+
+New `_johansen_pvalue(stat, m, deterministic, test)`; the rank DECISION still
+uses the OL critical values (unchanged), and a comment documents that OL
+tables drift low for large m relative to the asymptotic surfaces, so p-values
+near a CV need not equal the nominal level exactly.
+
+Tests: transcription pinned against an independent scipy implementation of
+the same surfaces (7 tuples, atol 1e-8); nominal-level property at the OL 95%
+CVs; monotonicity/degenerate-input properties; johansen_test end-to-end
+consistency. test_unitroot 197/197 + 38/38 new; VECM suites and display
+coverage green. MHM (1999) + Doornik (1998) added to the docstring references.

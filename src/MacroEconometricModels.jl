@@ -398,6 +398,9 @@ include("cointreg/types.jl")
 include("cointreg/fmols.jl")
 include("cointreg/ccr.jl")
 include("cointreg/dols.jl")
+# Panel cointegrating regression (EV-22, #430) — panel FMOLS/DOLS (group-mean + pooled).
+# Aggregation-only layer: reuses estimate_cointreg per unit + the EV-12 LRV toolkit.
+include("cointreg/panel.jl")
 
 # Residual-based / parameter-stability cointegration tests (EV-11) — after cointreg
 # (Hansen/Park consume CointRegModel) and after core/lrvar.jl (EV-12 long-run variance).
@@ -840,6 +843,7 @@ export lrvar, lrcov, lrcov_oneside, varhac, optimal_bandwidth_nw94
 
 # Single-equation cointegrating regression (EV-10, #418): FMOLS/CCR/DOLS
 export estimate_cointreg, CointRegModel
+export estimate_xtcointreg, PanelCointRegModel   # EV-22 (#430): panel FMOLS/DOLS
 
 # LP-IV (Stock & Watson 2018)
 export estimate_lp_iv, lp_iv_irf
