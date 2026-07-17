@@ -6,6 +6,30 @@ output, not just documentation.
 
 ---
 
+## v0.7.0
+
+Major feature release. Breaking (0.6 → 0.7): a large new exported API surface, and `JuMP` + `Ipopt`
+are now full dependencies.
+
+- **EViews-parity series** (EV-01–EV-40): nine new modules — MIDAS (`src/midas`), ARDL/NARDL + panel
+  ARDL (`src/ardl`), single-equation & panel cointegrating regression (`src/cointreg`), SUR/3SLS
+  (`src/system`), multivariate GARCH CCC/DCC/BEKK (`src/mgarch`), nonlinear time series
+  (threshold/SETAR, STAR/LSTR, Markov-switching; `src/nonlinear`), nonparametric density/regression
+  (`src/nonparametric`), Kalman-MLE state-space + TVP regression (`src/statespace`), and forecast
+  evaluation & combination (`src/fceval`) — plus GARCH extensions (IGARCH/CGARCH/APARCH/FIGARCH/
+  FIEGARCH, GARCH-MIDAS), ARFIMA, penalized/robust/Tobit/Heckman regression, IV k-class, panel
+  PCSE/Prais-Winsten, and a large hypothesis-test battery (HEGY, ERS, SADF/GSADF bubbles, BDS,
+  variance-ratio, EDF goodness-of-fit, residual/panel cointegration, first-generation panel unit
+  root, Dumitrescu-Hurlin, long-run variance).
+- **DSGE Bayesian diagnostics**: posterior mode + Laplace/bridge-sampling marginal likelihood, MCMC
+  convergence diagnostics (rank-normalized R-hat, bulk/tail ESS, Geweke), Iskrev identification
+  tests, prior/posterior predictive checks, sampler parameter transforms, and Dynare prior shims.
+- **Reproducibility & serialization**: `ReproManifest`/`reproduce` and versioned
+  `save_model`/`load_model` (JLD2 weak-dependency backend).
+- **Tables.jl integration** for result types and **structured logging** replacing bare `println`.
+- **`JuMP` + `Ipopt` promoted to full dependencies** (GPL-compatible): `solver=:ipopt` works with no
+  manual `]add`; `PATHSolver` remains an optional weak dependency.
+
 ## v0.6.7
 
 Documentation content and architecture, plus test-suite quality. No public API changes.
