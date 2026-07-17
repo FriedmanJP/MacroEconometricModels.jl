@@ -1136,6 +1136,63 @@ end
     end
 end
 
+@testset "IRF matching: SEs respond to target IRF covariance Ω (T039)" begin
+    _suppress_warnings() do
+        rng = Random.MersenneTwister(2039)
+        T_obs = 300; y = zeros(T_obs)
+        for t in 2:T_obs; y[t] = 0.8*y[t-1] + randn(rng); end
+        Y = reshape(y, :, 1)
+        spec = @dsge begin
+            parameters: ρ = 0.5
+            endogenous: y
+            exogenous: ε
+            y[t] = ρ * y[t-1] + ε[t]
+        end
+        H = 10
+        vm = estimate_var(Y, 4); Random.seed!(7)
+        base = irf(vm, H; method=:cholesky, ci_type=:bootstrap, reps=200)
+        vals = base.values; d = base._draws
+        dev  = d .- reshape(vals, 1, size(vals)...)
+        # Two targets with IDENTICAL point IRFs but bootstrap draws scaled by 0.5 vs 2.0.
+        mk(scale) = MacroEconometricModels.ImpulseResponse{Float64}(
+            vals, base.ci_lower, base.ci_upper, H,
+            base.variables, base.shocks, base.ci_type,
+            reshape(vals, 1, size(vals)...) .+ scale .* dev, base._conf_level)
+        est_t = estimate_dsge(spec, Y, [:ρ]; method=:irf_matching,
+                              target_irfs=mk(0.5), irf_horizon=H, weighting=:efficient)
+        est_w = estimate_dsge(spec, Y, [:ρ]; method=:irf_matching,
+                              target_irfs=mk(2.0), irf_horizon=H, weighting=:efficient)
+        # Identical point IRFs ⇒ identical θ̂ and G; only Ω differs.
+        @test est_t.theta[1] ≈ est_w.theta[1] atol=1e-6
+        se_t = stderror(est_t)[1]; se_w = stderror(est_w)[1]
+        @test se_w > se_t
+        @test se_w/se_t ≈ 4.0 rtol=0.05   # Ω scales by (2/0.5)²=16 ⇒ SE by 4
+    end
+end
+
+@testset "IRF matching: J is Ω-weighted χ² with correct dof (T039)" begin
+    _suppress_warnings() do
+        rng = Random.MersenneTwister(4039)
+        T_obs = 400; y = zeros(T_obs)
+        for t in 2:T_obs; y[t] = 0.8*y[t-1] + randn(rng); end
+        Y = reshape(y, :, 1)
+        spec = @dsge begin
+            parameters: ρ = 0.5
+            endogenous: y
+            exogenous: ε
+            y[t] = ρ * y[t-1] + ε[t]
+        end
+        H = 10; Random.seed!(11)
+        est = estimate_dsge(spec, Y, [:ρ]; method=:irf_matching,
+                            irf_horizon=H, weighting=:efficient, n_boot=300)
+        dof = H - 1
+        @test isfinite(est.J_stat)
+        @test est.J_stat >= 0
+        @test 0.0 <= est.J_pvalue <= 1.0
+        @test est.J_stat < 5*dof   # χ²(9)-scaled J is O(dof); P(χ²(9)>45)≈9e-7
+    end
+end
+
 @testset "DSGEEstimation show and report" begin
     rng = Random.MersenneTwister(42)
     y_true = zeros(200)

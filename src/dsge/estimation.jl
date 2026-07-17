@@ -42,6 +42,7 @@ function estimate_dsge(spec::DSGESpec{T}, data::AbstractMatrix,
                         target_irfs::Union{Nothing,ImpulseResponse}=nothing,
                         var_lags::Int=4, irf_horizon::Int=20,
                         weighting::Symbol=:two_step,
+                        n_boot::Int=200,
                         n_lags_instruments::Int=4,
                         sim_ratio::Int=5, burn::Int=100,
                         moments_fn::Function=d -> autocovariance_moments(d; lags=1),
@@ -60,7 +61,8 @@ function estimate_dsge(spec::DSGESpec{T}, data::AbstractMatrix,
                                        target_irfs=target_irfs,
                                        var_lags=var_lags,
                                        irf_horizon=irf_horizon,
-                                       weighting=weighting)
+                                       weighting=weighting,
+                                       n_boot=n_boot)
     elseif method == :euler_gmm
         return _estimate_euler_gmm(spec, data_T, param_names;
                                     n_lags=n_lags_instruments,
@@ -100,21 +102,40 @@ end
 """
     _estimate_irf_matching(spec, data, param_names; ...) -> DSGEEstimation
 
-Internal: IRF matching GMM estimation.
+Internal: IRF matching minimum-distance (GMM) estimation, Christiano, Eichenbaum &
+Evans (2005). Matches model-implied IRFs `Ψ_model(θ)` to empirical VAR-Cholesky IRFs
+`Ψ_VAR` by minimizing `g(θ)'W g(θ)` where `g(θ) = Ψ_model(θ) − Ψ_VAR`.
 
-Matches model-implied IRFs to empirical VAR IRFs by minimizing the distance
-under a GMM weighting matrix.
+Inference uses the CEE sandwich with `Ω = Var(Ψ_VAR)`, the bootstrap covariance of
+the empirical VAR IRF targets:
+
+    Var(θ̂) = (G'WG)⁻¹ G'W Ω W G (G'WG)⁻¹,   G = ∂Ψ_model/∂θ'
+
+Under efficient weighting `W = Ω⁻¹` this collapses to `(G'Ω⁻¹G)⁻¹` and the
+overidentification statistic `J = g'Ω⁻¹g ~ χ²(dim g − dim θ)`. Under diagonal
+(CEE `W = diag(Ω)⁻¹`) or identity weighting no χ² J is reported.
+
+`weighting`: `:two_step`/`:efficient`/`:optimal` → `W = Ω⁻¹` (χ² J reported);
+`:diagonal`/`:cee` → `W = diag(Ω)⁻¹`; `:identity` → `W = I`. If no valid bootstrap
+draws are available, falls back to identity weighting with a warning (SEs not CEE-valid).
+
+Shock units: both the model IRF (whose impact matrix embeds the structural-shock
+standard deviations via the σ parameters) and the VAR Cholesky target use 1-s.d.
+shock scaling, so for well-scaled models they align.
 """
 function _estimate_irf_matching(spec::DSGESpec{T}, data::Matrix{T},
                                  param_names::Vector{Symbol};
                                  target_irfs=nothing, var_lags=4,
-                                 irf_horizon=20, weighting=:two_step) where {T}
+                                 irf_horizon=20, weighting=:two_step,
+                                 n_boot::Int=200) where {T}
     n_est = length(param_names)
 
-    # Step 1: Compute target IRFs from VAR if not provided
+    # Step 1: Compute target IRFs from VAR if not provided (with bootstrap draws so
+    # the sampling covariance Ω of the empirical IRF targets can be estimated).
     if target_irfs === nothing
         var_model = estimate_var(data, var_lags)
-        target_irfs = irf(var_model, irf_horizon; method=:cholesky)
+        target_irfs = irf(var_model, irf_horizon; method=:cholesky,
+                          ci_type=:bootstrap, reps=n_boot)
     end
     target_vec = vec(target_irfs.values)
     n_moments = length(target_vec)
@@ -146,9 +167,54 @@ function _estimate_irf_matching(spec::DSGESpec{T}, data::Matrix{T},
         end
     end
 
-    # IRF matching is a minimum-distance estimator: min_θ g(θ)' W g(θ)
-    # Use identity weighting matrix (standard for IRF matching)
-    W = Matrix{T}(I, n_moments, n_moments)
+    # IRF matching is a minimum-distance estimator: min_θ g(θ)' W g(θ).
+    # Estimate Ω = Var(Ψ_VAR), the bootstrap covariance of the empirical IRF targets.
+    draws = target_irfs._draws
+    if draws === nothing
+        vm = estimate_var(data, var_lags)
+        draws = irf(vm, irf_horizon; method=:cholesky,
+                    ci_type=:bootstrap, reps=n_boot)._draws
+    end
+
+    identity_fallback = false
+    Omega = if draws !== nothing && size(draws, 1) >= 2 &&
+               prod(size(draws)[2:end]) == n_moments
+        R = size(draws, 1)
+        D = Matrix{T}(undef, n_moments, R)
+        for r in 1:R
+            D[:, r] = vec(@view draws[r, :, :, :])
+        end
+        cov(D; dims=2)                       # columns = R bootstrap observations
+    else
+        identity_fallback = true
+        @warn "IRF-matching: no valid bootstrap draws for target IRFs — falling back " *
+              "to identity weighting; SEs are not CEE-valid."
+        Matrix{T}(I, n_moments, n_moments)
+    end
+
+    # Near-singular Ω is common at long horizons: warn (efficient weighting unstable).
+    if !identity_fallback
+        sv = svdvals(Omega)
+        if sv[end] < sqrt(eps(T)) * sv[1]
+            @warn "IRF-matching: target IRF covariance Ω is near-singular (common at " *
+                  "long horizons); efficient weighting is unstable — consider weighting=:diagonal."
+        end
+    end
+
+    # Resolve the weighting matrix W and whether a χ² J is meaningful.
+    W, report_J = if identity_fallback
+        (Matrix{T}(I, n_moments, n_moments), false)
+    elseif weighting in (:efficient, :optimal, :two_step)
+        (robust_inv(Omega), true)
+    elseif weighting in (:diagonal, :cee)
+        (Matrix{T}(Diagonal(one(T) ./ diag(Omega))), false)
+    elseif weighting === :identity
+        (Matrix{T}(I, n_moments, n_moments), false)
+    else
+        throw(ArgumentError("IRF-matching weighting must be :efficient/:optimal/:two_step, " *
+                            ":diagonal/:cee, or :identity; got :$weighting"))
+    end
+
     result = minimize_gmm(
         (theta, _data) -> reshape(irf_distance(theta), 1, :),
         theta0, data, W; max_iter=100, tol=T(1e-8)
@@ -156,25 +222,26 @@ function _estimate_irf_matching(spec::DSGESpec{T}, data::Matrix{T},
     theta_hat = result.theta
     converged = result.converged
 
-    # Compute vcov via numerical Hessian of the objective
-    # Q(θ) = g(θ)'g(θ), so ∂²Q/∂θ² gives the curvature
+    # CEE minimum-distance sandwich covariance:
+    #   Var(θ̂) = (G'WG)⁻¹ G'W Ω W G (G'WG)⁻¹,  G = ∂g/∂θ = ∂Ψ_model/∂θ'
+    # (No 1/T_obs — Ω already carries the sampling scale of the targets.)
     g_hat = irf_distance(theta_hat)
-    dg = numerical_gradient(irf_distance, theta_hat)  # n_moments x n_est
+    dg = numerical_gradient(irf_distance, theta_hat)  # n_moments x n_est (this is G)
 
-    # For minimum-distance with identity W:
-    # V_θ = (G'G)^{-1} where G = ∂g/∂θ evaluated at θ_hat
     bread = dg' * W * dg
     bread_inv = robust_inv(bread)
-    T_obs = size(data, 1)
-    vcov_hat = bread_inv / T(T_obs)
+    meat = dg' * W * Omega * W * dg
+    vcov_hat = bread_inv * meat * bread_inv
+    vcov_hat = (vcov_hat + vcov_hat') / 2
 
-    # J-statistic (overidentification test)
-    J_stat, J_pvalue = if n_moments > n_est
-        J = T(T_obs) * (g_hat' * W * g_hat)
+    # Overidentification test: valid χ² only under efficient weighting W = Ω⁻¹.
+    J_stat, J_pvalue = if report_J && n_moments > n_est
+        Omega_inv = robust_inv(Omega)
+        J = g_hat' * Omega_inv * g_hat
         df = n_moments - n_est
-        (J, one(T) - cdf(Chisq(df), J))
+        (T(J), T(one(T) - cdf(Chisq(df), J)))
     else
-        (zero(T), one(T))
+        (T(NaN), T(NaN))
     end
 
     # Build solution at estimated parameters

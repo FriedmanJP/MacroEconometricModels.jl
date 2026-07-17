@@ -486,7 +486,7 @@ using Distributions
 result = estimate_dsge_bayes(spec, data, [0.36];
     priors=Dict(:alpha => Beta(5, 2)),
     observables=[:K], n_draws=5000, burnin=1000,
-    ha_method=:ssj, ha_kwargs=(T_horizon=50, n_reduced=15))
+    ha_method=:ssj, ha_kwargs=(T_horizon=300, n_reduced=15))
 ```
 
 !!! note "Technical Note"
@@ -504,7 +504,7 @@ The estimation output is a `BayesianDSGE` object with posterior draws, acceptanc
 | `n_draws` | `Int` | `5000` | Total RWMH draws |
 | `burnin` | `Int` | `1000` | Burn-in draws to discard |
 | `ha_method` | `Symbol` | `:ssj` | Aggregate solution method (`:ssj` or `:reiter`) |
-| `ha_kwargs` | `NamedTuple` | `()` | Keyword arguments passed to `solve` |
+| `ha_kwargs` | `NamedTuple` | `(T_horizon=300, n_reduced=15)` | `solve` options. `T_horizon` sets the SSJ truncation length; too-small values truncate persistent HA Jacobians and bias the likelihood (default follows Auclert et al. 2021) |
 
 ---
 

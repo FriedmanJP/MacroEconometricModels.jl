@@ -162,7 +162,9 @@ function verify_file(mdfile::String)
             # @example blocks (@setup output is never rendered).
             if b.kind === :example
                 try
-                    show(devnull, MIME"text/plain"(), payload)
+                    # invokelatest: the block's `using` runs inside this function's call,
+                    # so package show methods are newer than our frozen world age.
+                    Base.invokelatest(show, devnull, MIME"text/plain"(), payload)
                 catch se
                     nfail += 1
                     println("  ✗ $(loc): SHOW/display ERROR ($(elapsed)s)")

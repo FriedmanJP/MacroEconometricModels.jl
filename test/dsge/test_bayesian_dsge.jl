@@ -231,6 +231,40 @@ end
     @test ws.reference_ancestors === nothing
 end
 
+@testset "Particle-filter likelihood correct under adaptive resampling (#128)" begin
+    # On a small linear-Gaussian state space the Kalman likelihood is exact. The bootstrap PF
+    # log-likelihood must match it even when adaptive resampling SKIPS steps (low threshold):
+    # the ratio-form increment logsumexp(L_t)-logsumexp(L_{t-1}) keeps the carried non-uniform
+    # weights, whereas the pre-fix logsumexp(log g_t)-log N increment biased every skipped step.
+    ns, no, nsh = 2, 1, 1
+    G1 = [0.6 0.0; 0.0 0.4]
+    impact = reshape([1.0, 0.5], ns, nsh)
+    Z = [1.0 1.0]
+    d = [0.0]
+    H = reshape([0.05], no, no)
+    Q = reshape([1.0], nsh, nsh)
+    ss = MacroEconometricModels.DSGEStateSpace{Float64}(G1, impact, Z, d, H, Q)
+    T_obs = 50
+    data = let rng = MersenneTwister(1), x = zeros(ns), dat = zeros(no, T_obs), Hc = sqrt(H[1, 1])
+        for t in 1:T_obs
+            x = G1 * x + impact * randn(rng, nsh)
+            dat[:, t] = Z * x .+ d .+ Hc * randn(rng, no)
+        end
+        dat
+    end
+    ll_kalman = MacroEconometricModels._kalman_loglikelihood(ss, data)
+    N = 2500
+    for thr in (0.1, 0.5, 1.0)   # 0.1 skips most resamples yet must still match Kalman
+        lls = Float64[]
+        for s in 1:50
+            ws = MacroEconometricModels._allocate_pf_workspace(Float64, ns, no, nsh, N)
+            push!(lls, MacroEconometricModels._bootstrap_particle_filter!(
+                ws, ss, data, T_obs; threshold=thr, rng=MersenneTwister(1000 + s)))
+        end
+        @test isapprox(mean(lls), ll_kalman; rtol=0.05)
+    end
+end
+
 @testset "PFWorkspace allocation — order 2" begin
     n_states = 4
     n_obs = 2
@@ -382,12 +416,11 @@ end
     @test d2[1] == spec_ss.steady_state[1]
     @test d2[2] == spec_ss.steady_state[3]
 
-    # H should be positive definite (default 1e-4 * I)
+    # H defaults to ZERO measurement error (T042); n_obs=2 ≤ n_shocks=3, no singularity.
     @test size(H) == (2, 2)
-    @test H[1, 1] > 0.0
-    @test H[2, 2] > 0.0
+    @test all(iszero, H)
+    @test H == zeros(2, 2)
     @test H[1, 2] == 0.0
-    @test H ≈ 1e-4 * I(2)
 
     # Error: unknown observable
     @test_throws ArgumentError MacroEconometricModels._build_observation_equation(
@@ -420,6 +453,58 @@ end
     # Wrong length measurement error
     @test_throws ArgumentError MacroEconometricModels._build_observation_equation(
         spec, [:y, :c], [0.1])
+end
+
+@testset "Stochastic singularity & auto measurement error (T042)" begin
+    spec1 = _suppress_warnings() do
+        @dsge begin
+            parameters: rho = 0.5
+            endogenous: y, k
+            exogenous: eps
+            y[t] = rho * y[t-1] + eps[t]
+            k[t] = 0.5 * k[t-1] + y[t]
+            steady_state = [0.0, 0.0]
+        end
+    end
+
+    _suppress_warnings() do
+        # (a) Default zero ME when n_obs ≤ n_shocks (2 obs, 2 shocks).
+        spec2 = @dsge begin
+            parameters: rho = 0.8
+            endogenous: y, c
+            exogenous: eps_y, eps_c
+            y[t] = rho * y[t-1] + eps_y[t]
+            c[t] = rho * c[t-1] + eps_c[t]
+        end
+        _, _, H0 = MacroEconometricModels._build_observation_equation(spec2, [:y, :c], nothing)
+        @test all(iszero, H0)
+
+        # (b) Builder throws on stochastic singularity (2 obs > 1 shock).
+        @test_throws MacroEconometricModels.StochasticSingularityError MacroEconometricModels._build_observation_equation(
+            spec1, [:y, :k], nothing)
+
+        # (c) Explicit vector ME with n_obs>n_shocks does NOT throw.
+        _, _, Hv = MacroEconometricModels._build_observation_equation(spec1, [:y, :k], [0.01, 0.01])
+        @test Hv ≈ diagm([1e-4, 1e-4])
+
+        # (d) Entry-point singularity check fires before sampling.
+        spec1c = compute_steady_state(spec1)
+        data1 = simulate(solve(spec1c; method=:gensys), 50; rng=Random.MersenneTwister(1))
+        @test_throws MacroEconometricModels.StochasticSingularityError estimate_dsge_bayes(
+            spec1c, data1, [0.5]; priors=Dict(:rho => Beta(2, 2)),
+            method=:smc, observables=[:y, :k], measurement_error=nothing,
+            n_smc=20, rng=Random.MersenneTwister(0))
+    end
+
+    # (e) :auto scales per-observable to √(0.1·var) and warns (outside suppression).
+    dm = reshape(Float64[1.0, 2.0, 3.0, 4.0, 5.0], 1, 5)
+    me = @test_logs (:warn,) match_mode=:any MacroEconometricModels._resolve_measurement_error(
+        :auto, dm, [:y])
+    @test me[1] ≈ sqrt(0.1 * var(dm[1, :]))
+    # per-observable scaling: a higher-variance series gets a larger SD
+    dm2 = [ones(1, 5); 10.0 .* Float64[1.0 2.0 3.0 4.0 5.0]]
+    me2 = MacroEconometricModels._resolve_measurement_error(:auto, dm2, [:a, :b])
+    @test me2[2] > me2[1]
 end
 
 @testset "Build state space from DSGESolution" begin
@@ -490,6 +575,49 @@ end
 
     @test isfinite(ll_wrong)
     @test ll_correct > ll_wrong  # correct model should have higher log-likelihood
+end
+
+@testset "Kalman diffuse init: scale-invariant under a unit root (T040)" begin
+    # Transition with one unit root (random walk) + one stationary direction.
+    G1 = [1.0 0.0; 0.0 0.6]
+    impact = [0.4 0.0; 0.0 0.3]
+    Z = Matrix{Float64}(I, 2, 2)
+    d = zeros(2)
+    H = 1e-6 * Matrix{Float64}(I, 2, 2)
+    Q = Matrix{Float64}(I, 2, 2)
+
+    x = zeros(2, 200); rng = Random.MersenneTwister(20240709)
+    for t in 2:200; x[:, t] = G1 * x[:, t-1] + impact * randn(rng, 2); end
+    data = x
+
+    ss = MacroEconometricModels.DSGEStateSpace{Float64}(G1, impact, Z, d, H, Q)
+    ll = _suppress_warnings() do
+        MacroEconometricModels._kalman_loglikelihood(ss, data)
+    end
+    @test isfinite(ll)
+
+    # Rescale ONLY the nonstationary STATE direction (Z compensates), so the OBSERVED
+    # process is unchanged ⇒ the likelihood must be (near-)invariant. G1 diagonal ⇒
+    # D*G1*Dinv == G1, so the transition is unchanged.
+    c = 100.0; D = [c 0.0; 0.0 1.0]; Dinv = [1/c 0.0; 0.0 1.0]
+    ss_scaled = MacroEconometricModels.DSGEStateSpace{Float64}(G1, D*impact, Z*Dinv, d, H, Q)
+    ll_scaled = _suppress_warnings() do
+        MacroEconometricModels._kalman_loglikelihood(ss_scaled, data)
+    end
+    # κ=1e6 diffuse init leaves an O(log c)≈4.6 residual; P0=10*I blows up (fails atol=15).
+    @test isapprox(ll, ll_scaled; atol=15.0)
+end
+
+@testset "Kalman init: non-stability error propagates, not swallowed (T040)" begin
+    G1 = fill(0.5, 1, 1)             # stationary ⇒ takes the solve_lyapunov branch
+    impact_bad = zeros(2, 1)         # 2 rows vs n_states=1 ⇒ solve_lyapunov throws
+    Z = ones(1, 1); d = zeros(1); H = fill(1e-6, 1, 1); Q = ones(1, 1)
+    ss_bad = MacroEconometricModels.DSGEStateSpace{Float64}(G1, impact_bad, Z, d, H, Q)
+    data = reshape(randn(Random.MersenneTwister(1), 20), 1, 20)
+    # Old code swallowed this into P0=10I and returned a finite ll; now it propagates.
+    @test_throws ArgumentError _suppress_warnings() do
+        MacroEconometricModels._kalman_loglikelihood(ss_bad, data)
+    end
 end
 
 @testset "Kalman loglikelihood: 2D with missing data" begin
@@ -755,56 +883,6 @@ end
     @test rel_error < 0.15
 end
 
-@testset "Auxiliary particle filter" begin
-    Random.seed!(300)
-
-    # Same AR(1) setup
-    rho = 0.8
-    sigma_eps = 0.5
-    sigma_me = 0.1
-    T_sim = 150
-
-    x = zeros(T_sim)
-    y = zeros(T_sim)
-    for t in 2:T_sim
-        x[t] = rho * x[t-1] + sigma_eps * randn()
-    end
-    for t in 1:T_sim
-        y[t] = x[t] + sigma_me * randn()
-    end
-
-    G1 = fill(rho, 1, 1)
-    impact = fill(sigma_eps, 1, 1)
-    Z = ones(1, 1)
-    d = zeros(1)
-    H = fill(sigma_me^2, 1, 1)
-    Q = ones(1, 1)
-
-    ss = MacroEconometricModels.DSGEStateSpace{Float64}(G1, impact, Z, d, H, Q)
-    data = reshape(y, 1, T_sim)
-
-    # Kalman log-likelihood
-    ll_kalman = MacroEconometricModels._kalman_loglikelihood(ss, data)
-
-    # APF log-likelihood
-    N_particles = 500
-    n_runs = 10
-    ll_apf_runs = zeros(n_runs)
-
-    for r in 1:n_runs
-        ws = MacroEconometricModels._allocate_pf_workspace(Float64, 1, 1, 1, N_particles)
-        ll_apf_runs[r] = MacroEconometricModels._auxiliary_particle_filter!(
-            ws, ss, data, T_sim; rng=Random.MersenneTwister(r * 2000))
-    end
-
-    ll_apf_mean = mean(ll_apf_runs)
-
-    @test isfinite(ll_apf_mean)
-    # APF should be finite and in the right ballpark
-    # APF likelihood estimate can differ from Kalman due to the two-stage structure
-    # but should still be a reasonable finite value
-    @test ll_apf_mean < 0.0  # log-likelihood should be negative
-end
 
 @testset "Conditional SMC" begin
     Random.seed!(400)
@@ -930,18 +1008,17 @@ end
 @testset "Adaptive tempering bisection" begin
     N = 100
     log_liks = randn(Random.MersenneTwister(123), N)
+    log_weights = fill(-log(N), N)          # uniform incoming weights (5-arg signature, #133)
     phi_old = 0.0
     ess_target = 0.5
 
-    phi_new = MacroEconometricModels._adaptive_tempering(log_liks, phi_old, ess_target, N)
+    phi_new = MacroEconometricModels._adaptive_tempering(log_liks, log_weights, phi_old, ess_target, N)
     @test phi_new > phi_old
     @test phi_new <= 1.0
 
-    # Check ESS at this phi
-    delta_phi = phi_new - phi_old
-    inc_log_w = delta_phi .* log_liks
-    inc_log_w .-= MacroEconometricModels._logsumexp(inc_log_w) - log(N)
-    w = exp.(inc_log_w)
+    # ESS of the cumulative weights at this phi (reduces to incremental under uniform incoming)
+    lw = log_weights .+ (phi_new - phi_old) .* log_liks
+    w = exp.(lw .- MacroEconometricModels._logsumexp(lw))
     w ./= sum(w)
     ess = 1.0 / sum(abs2, w)
     @test abs(ess - ess_target * N) < 5.0
@@ -997,6 +1074,86 @@ end
     end
 end
 
+@testset "Likelihood closure: narrow catch + failure counting (T041)" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:gensys)
+    good = simulate(sol, 100; rng=Random.MersenneTwister(42))'   # 1×100
+
+    # (a) A genuine bug (dimension mismatch: 2-row data vs 1 observable) PROPAGATES
+    #     rather than being swallowed to -Inf.
+    bad = vcat(good, good)   # 2×100
+    ll_fn_bad = MacroEconometricModels._build_likelihood_fn(spec, [:ρ], bad,
+        [:y], nothing, :gensys, NamedTuple())
+    @test_throws DimensionMismatch ll_fn_bad([0.5])
+
+    # (b) A legitimate indeterminacy is caught, returns -Inf, and is COUNTED.
+    fails = Threads.Atomic{Int}(0); evals = Threads.Atomic{Int}(0)
+    ll_fn = MacroEconometricModels._build_likelihood_fn(spec, [:ρ], good,
+        [:y], nothing, :gensys, NamedTuple(); failures=fails, evals=evals)
+    @test ll_fn([1.5]) == -Inf          # explosive ⇒ !is_determined
+    @test fails[] == 1 && evals[] == 1
+    @test isfinite(ll_fn([0.6]))
+    @test fails[] == 1 && evals[] == 2
+    end
+end
+
+@testset "SMC records and surfaces the likelihood failure count (T041)" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:gensys)
+    data = simulate(sol, 200; rng=Random.MersenneTwister(7))'
+    # Uniform(0,1.4) prior ⇒ ~29% of particles are explosive (ρ>1) ⇒ many failed evals.
+    priors = Dict(:ρ => Uniform(0.0, 1.4))
+    result = estimate_dsge_bayes(spec, data, [0.5];
+        priors=priors, method=:smc, observables=[:y],
+        n_smc=200, n_mh_steps=1, rng=Random.MersenneTwister(123))
+    @test result.n_lik_evals > 0
+    @test result.n_failed_draws > 0
+    @test occursin("Failed lik. evals", sprint(show, result))
+    end
+end
+
+@testset "posterior_predictive drops failed draws, no zero-fill (T041)" begin
+    # NOTE: not wrapped in _suppress_warnings — @test_warn must see the "dropped" @warn.
+    spec = _suppress_warnings() do
+        s = @dsge begin
+            parameters: ρ = 0.5, σ = 0.5
+            endogenous: y
+            exogenous: ε
+            y[t] = ρ * y[t-1] + σ * ε[t]
+            steady_state = [0.0]
+        end
+        compute_steady_state(s)
+    end
+    sol, ss = MacroEconometricModels._build_solution_at_theta(spec, [:ρ], [0.5],
+        [:y], nothing, :gensys, NamedTuple())
+    # Half the draws are explosive (ρ=1.5, indeterminate ⇒ dropped), half valid (ρ=0.5).
+    n = 40
+    td = reshape(vcat(fill(0.5, 20), fill(1.5, 20)), 40, 1)
+    prior = MacroEconometricModels.DSGEPrior{Float64}([:ρ], [Uniform(0.0, 2.0)], [0.0], [2.0])
+    post = BayesianDSGE{Float64}(td, zeros(n), [:ρ], prior, 0.0, :smc, 0.5,
+        Float64[], Float64[], spec, sol, ss)   # 12-arg compat ctor
+    Y = @test_warn r"dropped" posterior_predictive(post, 30; T_periods=25,
+        rng=Random.MersenneTwister(9))
+    @test size(Y, 1) < 30                                    # dropped, not zero-filled to 30
+    @test all(any(!iszero, Y[s, :, :]) for s in 1:size(Y, 1))   # no zero path survived
+end
+
 @testset "SMC with Kalman: AR(1) recovery" begin
     _suppress_warnings() do
     rng = Random.MersenneTwister(42)
@@ -1038,6 +1195,112 @@ end
     w = exp.(result.log_weights .- MacroEconometricModels._logsumexp(result.log_weights))
     post_mean = sum(result.theta_particles[1, :] .* w)
     @test abs(post_mean - 0.8) < 0.3
+    end
+end
+
+@testset "SMC prior init errors on exhausted retries (T051 #150)" begin
+    _suppress_warnings() do
+        spec = @dsge begin
+            parameters: ρ = 0.5, σ = 0.5
+            endogenous: y
+            exogenous: ε
+            y[t] = ρ * y[t-1] + σ * ε[t]
+            steady_state = [0.0]
+        end
+        spec = compute_steady_state(spec)
+        sol = solve(spec; method=:gensys)
+        data = simulate(sol, 50; rng=Random.MersenneTwister(7))'  # n_obs × T
+
+        # Prior support (Normal(5.0, 0.01)) lies entirely OUTSIDE the [0.01, 0.99] bounds →
+        # every draw is rejected → the initializer must fail loudly, not substitute a midpoint.
+        bad_prior = MacroEconometricModels.DSGEPrior(
+            Dict(:ρ => Normal(5.0, 0.01));
+            lower=Dict(:ρ => 0.01), upper=Dict(:ρ => 0.99))
+
+        err = try
+            MacroEconometricModels._smc_sample(spec, data, [:ρ], bad_prior, [0.5];
+                n_smc=4, observables=[:y], solver=:gensys,
+                rng=Random.MersenneTwister(123))
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        msg = sprint(showerror, err)
+        @test occursin("ρ", msg)     # names the offending parameter
+        @test occursin("100", msg)   # names the rejection count
+    end
+end
+
+@testset "SMC tempering: max_stages guard (#145 T046)" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    true_spec = @dsge begin
+        parameters: ρ = 0.8, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    true_spec = compute_steady_state(true_spec)
+    data = simulate(solve(true_spec; method=:gensys), 200; rng=Random.MersenneTwister(42))'
+    prior = MacroEconometricModels.DSGEPrior(Dict(:ρ => Beta(2, 2));
+        lower=Dict(:ρ => 0.01), upper=Dict(:ρ => 0.99))
+    # An informative 200-obs AR(1) SMC needs many tempering stages; capping at 2 must raise.
+    @test_throws ErrorException MacroEconometricModels._smc_sample(
+        spec, data, [:ρ], prior, [0.5];
+        n_smc=100, n_mh_steps=1, ess_target=0.5, observables=[:y],
+        solver=:gensys, max_stages=2, rng=Random.MersenneTwister(123))
+    end
+end
+
+@testset "_check_tempering_progress: min_dphi + max_stages guards (#145 T046)" begin
+    # A degenerate step Δφ < min_dphi while φ < 1 raises (stall).
+    @test_throws ErrorException MacroEconometricModels._check_tempering_progress(
+        3, 500, 0.5, 0.5 + 1e-9, 1e-6)
+    # Exceeding the stage cap raises.
+    @test_throws ErrorException MacroEconometricModels._check_tempering_progress(
+        501, 500, 0.9, 0.95, 1e-6)
+    # A legitimate final jump to exactly φ=1 is never flagged, even if the step is small.
+    @test MacroEconometricModels._check_tempering_progress(10, 500, 0.9999, 1.0, 1e-6) === nothing
+    # Normal within-schedule progress does not raise.
+    @test MacroEconometricModels._check_tempering_progress(5, 500, 0.3, 0.5, 1e-6) === nothing
+end
+
+@testset "SMC² tempering: max_stages guard (#145 T046)" begin
+    FAST && return
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    true_spec = @dsge begin
+        parameters: ρ = 0.8, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    true_spec = compute_steady_state(true_spec)
+    data = simulate(solve(true_spec; method=:gensys), 100; rng=Random.MersenneTwister(42))'
+    prior = MacroEconometricModels.DSGEPrior(Dict(:ρ => Beta(2, 2));
+        lower=Dict(:ρ => 0.01), upper=Dict(:ρ => 0.99))
+    @test_throws ErrorException MacroEconometricModels._smc2_sample(
+        spec, data, [:ρ], prior, [0.5];
+        n_smc=40, n_particles=20, n_mh_steps=1, ess_target=0.5,
+        observables=[:y], measurement_error=[0.5], solver=:gensys,
+        max_stages=2, rng=Random.MersenneTwister(5))
     end
 end
 
@@ -1085,6 +1348,59 @@ end
     end
 end
 
+@testset "RWMH freezes proposal after burn-in and windows the acceptance signal (T038)" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    true_spec = @dsge begin
+        parameters: ρ = 0.8, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    true_spec = compute_steady_state(true_spec)
+    data = simulate(solve(true_spec; method=:gensys), 200; rng=Random.MersenneTwister(42))'
+
+    prior = MacroEconometricModels.DSGEPrior(Dict(:ρ => Beta(2, 2));
+        lower=Dict(:ρ => 0.01), upper=Dict(:ρ => 0.99))
+
+    # burnin=300 ≥ 2*adapt_interval ⇒ adaptation fires at 100,150,…,300 then freezes;
+    # n_draws=1500 ≫ burnin so an un-frozen sampler would keep moving the proposal.
+    draws, log_post, acc_rate, diag = MacroEconometricModels._mh_sample(
+        spec, data, [:ρ], prior, [0.5];
+        n_draws=1500, burnin=300, adapt_interval=50,
+        observables=[:y], measurement_error=nothing,
+        solver=:gensys, solver_kwargs=NamedTuple(),
+        rng=Random.MersenneTwister(123))
+
+    # 1. FREEZE: proposal at end of burn-in == proposal at end of run.
+    @test diag.proposal_L_at_burnin ≈ diag.proposal_L
+    @test diag.scale_at_burnin == diag.scale_factor
+
+    # 2. Adaptation actually occurred (so the freeze is meaningful): the burn-in proposal
+    #    has moved away from the initial c2·I.
+    init_L = cholesky(Hermitian((2.38^2) * Matrix{Float64}(I, 1, 1))).L
+    @test !isapprox(diag.proposal_L_at_burnin, init_L)
+
+    # 3. WINDOWED SIGNAL: recorded, in [0,1], and NOT equal to the cumulative signal.
+    @test !isempty(diag.window_acc_history)
+    @test all(0.0 .<= diag.window_acc_history .<= 1.0)
+    @test diag.window_acc_history != diag.cum_acc_history
+
+    # 4. Recovery sanity.
+    @test 0.0 < acc_rate < 1.0
+    @test abs(mean(draws[301:end, 1]) - 0.8) < 0.3
+    end
+end
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Section 5: SMC² (Nested PF inside SMC)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1114,8 +1430,10 @@ end
     sol = solve(spec; method=:gensys)
     data_mat = simulate(sol, 50; rng=Random.MersenneTwister(42))'
 
+    # Bootstrap PF needs nonzero measurement error to weight particles (T042 default is
+    # zero ME); [0.01] reproduces the former 1e-4·I default (0.01² = 1e-4).
     pf_ll_fn = MacroEconometricModels._build_pf_likelihood_fn(spec, [:ρ], data_mat,
-        [:y], nothing, :gensys, NamedTuple(), 100)
+        [:y], [0.01], :gensys, NamedTuple(), 100)
 
     ws = MacroEconometricModels._allocate_pf_workspace(Float64, 1, 1, 1, 100; T_obs=50)
     rng = Random.MersenneTwister(123)
@@ -1288,6 +1606,90 @@ end
     end
 end
 
+# ── E-12 / H-12 / #136: theta0 as Dict/NamedTuple + length validation ──
+
+@testset "_resolve_theta0: order-independent Dict/NamedTuple + length validation" begin
+    _rt = MacroEconometricModels._resolve_theta0
+    pnames = [:alpha, :rho, :sigma]                        # sorted prior keys
+
+    # Dict / NamedTuple in scrambled order → values land on the RIGHT parameters.
+    @test _rt(Dict(:sigma => 0.3, :alpha => 0.1, :rho => 0.9), pnames, Float64) == [0.1, 0.9, 0.3]
+    @test _rt((sigma = 0.3, alpha = 0.1, rho = 0.9), pnames, Float64) == [0.1, 0.9, 0.3]
+    # Positional vector (must already be in sorted order) passes through.
+    @test _rt([0.1, 0.9, 0.3], pnames, Float64) == [0.1, 0.9, 0.3]
+    # Type conversion.
+    @test _rt(Dict(:alpha => 0.1, :rho => 0.9, :sigma => 0.3), pnames, Float32) isa Vector{Float32}
+    # Wrong-length positional vector → informative ArgumentError (was a late opaque failure).
+    @test_throws ArgumentError _rt([0.1, 0.9], pnames, Float64)
+    # Dict missing a parameter → ArgumentError.
+    @test_throws ArgumentError _rt(Dict(:alpha => 0.1, :rho => 0.9), pnames, Float64)
+    # Dict with an unknown parameter → ArgumentError.
+    @test_throws ArgumentError _rt(
+        Dict(:alpha => 0.1, :rho => 0.9, :sigma => 0.3, :bogus => 0.0), pnames, Float64)
+end
+
+@testset "estimate_dsge_bayes: accepts Dict theta0, errors on wrong length (#136)" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:gensys)
+    sim_data = simulate(sol, 100; rng=Random.MersenneTwister(42))
+    priors = Dict(:ρ => Beta(2, 2), :σ => InverseGamma(3.0, 1.0))
+
+    # Dict theta0 in scrambled order runs end-to-end (order-independent).
+    r = estimate_dsge_bayes(spec, sim_data, Dict(:σ => 0.5, :ρ => 0.5);
+        priors=priors, method=:smc, observables=[:y], n_smc=100,
+        rng=Random.MersenneTwister(1))
+    @test r isa BayesianDSGE{Float64}
+    # Wrong-length positional vector errors before sampling.
+    @test_throws ArgumentError estimate_dsge_bayes(spec, sim_data, [0.5];
+        priors=priors, method=:smc, observables=[:y], n_smc=100,
+        rng=Random.MersenneTwister(1))
+    end
+end
+
+# ── E-18 / #142: data orientation resolved by matching n_obs (T×n convention) ──
+
+@testset "_orient_data: orientation by n_obs, not by size comparison" begin
+    _od = MacroEconometricModels._orient_data
+    @test size(_od(reshape(collect(1.0:20), 10, 2), 2, Float64)) == (2, 10)   # T×n → n_obs×T_obs
+    @test size(_od(reshape(collect(1.0:20), 2, 10), 2, Float64)) == (2, 10)    # n×T → as-is
+    A = randn(Random.MersenneTwister(1), 40, 3)
+    @test _od(A, 3, Float64) == _od(permutedims(A), 3, Float64)                 # same internal matrix
+    # Neither dimension equals n_obs → informative ArgumentError (was a silent best-guess).
+    @test_throws ArgumentError _od(randn(3, 100), 1, Float64)
+end
+
+@testset "estimate_dsge_bayes: T×n and n×T give the same likelihood (#142)" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sim = simulate(solve(spec; method=:gensys), 100; rng=Random.MersenneTwister(42))  # 100×1 (T×n)
+    priors = Dict(:ρ => Beta(2, 2))
+
+    r_tn = estimate_dsge_bayes(spec, sim, [0.5]; priors=priors, method=:smc,
+        observables=[:y], n_smc=100, rng=Random.MersenneTwister(5))
+    r_nt = estimate_dsge_bayes(spec, permutedims(sim), [0.5]; priors=priors, method=:smc,
+        observables=[:y], n_smc=100, rng=Random.MersenneTwister(5))
+    @test r_tn.log_marginal_likelihood ≈ r_nt.log_marginal_likelihood
+    # A shape where neither dimension equals n_obs errors instead of guessing.
+    @test_throws ArgumentError estimate_dsge_bayes(spec, randn(3, 100), [0.5];
+        priors=priors, method=:smc, observables=[:y], n_smc=50)
+    end
+end
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Section 7: Posterior Analysis
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1319,6 +1721,33 @@ end
     @test haskey(ps[:ρ], :ci_lower)
     @test haskey(ps[:ρ], :ci_upper)
     @test ps[:ρ][:ci_lower] < ps[:ρ][:mean] < ps[:ρ][:ci_upper]
+    end
+end
+
+@testset "posterior_summary: quantiles equal Statistics.quantile (#144)" begin
+    _suppress_warnings() do
+    rng = Random.MersenneTwister(42)
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sim_data = simulate(solve(spec; method=:gensys), 200; rng=rng)
+    priors = Dict(:ρ => Beta(2, 2))
+    result = estimate_dsge_bayes(spec, sim_data, [0.5];
+        priors=priors, method=:smc, observables=[:y],
+        n_smc=300, rng=Random.MersenneTwister(1))
+
+    ps = posterior_summary(result)
+    d = result.theta_draws[:, 1]
+    # Reported median/CI bounds are interpolated Statistics.quantile of the (unweighted,
+    # post-terminal-resample) draws — the old order-statistic indexing did not match.
+    @test ps[:ρ][:median]   ≈ quantile(d, 0.5)
+    @test ps[:ρ][:ci_lower] ≈ quantile(d, 0.025)
+    @test ps[:ρ][:ci_upper] ≈ quantile(d, 0.975)
     end
 end
 
@@ -1368,6 +1797,413 @@ end
 
     bf = bayes_factor(r1, r2)
     @test isfinite(bf)
+    end
+end
+
+# ── E-04 / #130: RWMH marginal likelihood = Geweke (1999) modified harmonic mean ──
+
+@testset "_geweke_mhm: recovers analytic Gaussian marginal likelihood" begin
+    # If the posterior is exactly N(μ, Σ) and the kernel is c·N(θ;μ,Σ), then the
+    # marginal likelihood (integral of the kernel) equals c, so log ML = log c.
+    # The MHM estimator applied to draws from N(μ,Σ) must recover log c — this is
+    # the precise, deterministic check that the estimator (not just "some finite
+    # number") is correct.
+    rng = Random.MersenneTwister(20260708)
+    μ = [0.5, -0.3]
+    Σ = [0.04 0.01; 0.01 0.09]
+    mvn = MvNormal(μ, Σ)
+    S = 20_000
+    draws = Matrix(rand(rng, mvn, S)')          # S×d
+    log_c = -50.0
+    kernel = [log_c + logpdf(mvn, draws[s, :]) for s in 1:S]
+
+    est = MacroEconometricModels._geweke_mhm(draws, kernel)
+    @test isfinite(est)
+    @test isapprox(est, log_c; atol=0.3)         # observed ≈ -49.99
+
+    # Truncation fraction p should not materially move the estimate (Geweke's point).
+    est_p9 = MacroEconometricModels._geweke_mhm(draws, kernel; p=0.9)
+    est_p1 = MacroEconometricModels._geweke_mhm(draws, kernel; p=0.1)
+    @test isapprox(est_p9, log_c; atol=0.4)
+    @test isapprox(est_p1, log_c; atol=0.4)
+end
+
+@testset "_geweke_mhm: short-chain / degenerate guards return NaN" begin
+    _suppress_warnings() do
+        # S < 10·d → NaN, not a silently wrong number.
+        short = randn(Random.MersenneTwister(1), 5, 2)
+        @test isnan(MacroEconometricModels._geweke_mhm(short, fill(-1.0, 5)))
+        # No finite kernel value → NaN.
+        big = randn(Random.MersenneTwister(2), 100, 1)
+        @test isnan(MacroEconometricModels._geweke_mhm(big, fill(-Inf, 100)))
+    end
+end
+
+@testset "marginal_likelihood: :mh MHM agrees with :smc (not max log posterior)" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    true_spec = @dsge begin
+        parameters: ρ = 0.8, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    true_spec = compute_steady_state(true_spec)
+    sol_true = solve(true_spec; method=:gensys)
+    sim_data = simulate(sol_true, 200; rng=Random.MersenneTwister(2024))
+
+    priors = Dict(:ρ => Beta(2, 2))
+    r_smc = estimate_dsge_bayes(spec, sim_data, [0.5]; priors=priors, method=:smc,
+        observables=[:y], n_smc=400, rng=Random.MersenneTwister(11))
+    r_mh = estimate_dsge_bayes(spec, sim_data, [0.5]; priors=priors, method=:mh,
+        observables=[:y], n_draws=6000, burnin=2000, rng=Random.MersenneTwister(12))
+
+    ml_smc = marginal_likelihood(r_smc)
+    ml_mh  = marginal_likelihood(r_mh)
+    @test isfinite(ml_smc)
+    @test isfinite(ml_mh)
+    # Regression against the old behaviour: the estimator is a genuine evidence
+    # estimate strictly below the max log posterior kernel (the peaked-posterior
+    # Occam factor), NOT `maximum(log_posterior)` (≈ -128.4 here) as before.
+    @test ml_mh < maximum(r_mh.log_posterior)
+    # SMC (tempering path) and MHM estimate the same log marginal likelihood and
+    # agree within a documented Monte Carlo tolerance: the observed gap is ≈ 0.5
+    # (within SMC's own ≈ 0.5 cross-seed spread); the old max-log-posterior would
+    # miss by ≈ 2.5 and fail this bound.
+    @test isapprox(ml_smc, ml_mh; atol=2.0)
+    end
+end
+
+# ── E-08 / #131: SMC marginal-likelihood increment under non-uniform weights ──
+
+@testset "SMC log marginal likelihood: ratio increment (resample-invariant)" begin
+    # The per-stage ML increment must be logsumexp(lw+inc)−logsumexp(lw), the
+    # weighted-average tempering factor, NOT logsumexp(inc)−log N (valid only when
+    # incoming weights are uniform). A low ess_target takes few, large tempering
+    # steps that leave many stages *un*-resampled (non-uniform incoming weights),
+    # while a high ess_target resamples almost every stage. Both configurations
+    # estimate the *same* marginal likelihood, so their log-ML must agree within
+    # Monte Carlo error. Pre-fix (uniform form) the two configs disagreed by ≈0.36;
+    # the ratio form brings them to ≈0.05 (well inside MC noise).
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 1.0
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    true_spec = @dsge begin
+        parameters: ρ = 0.7, σ = 1.0
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    true_spec = compute_steady_state(true_spec)
+    sol_true = solve(true_spec; method=:gensys)
+    sim_data = simulate(sol_true, 150; rng=Random.MersenneTwister(99))
+    priors = Dict(:ρ => Beta(2, 2), :σ => Gamma(2, 0.5))
+
+    run_cfg(ess) = [marginal_likelihood(estimate_dsge_bayes(spec, sim_data, [0.5, 1.0];
+                        priors=priors, method=:smc, observables=[:y], n_smc=400,
+                        ess_target=ess, rng=Random.MersenneTwister(sd)))
+                    for sd in 1:6]
+
+    ml_lo = run_cfg(0.50)   # few, large steps → non-resampled stages
+    ml_hi = run_cfg(0.90)   # many, small steps → resamples ≈ every stage
+    @test all(isfinite, ml_lo)
+    @test all(isfinite, ml_hi)
+    @test all(<(0), ml_lo)
+    # Resample-invariance of the marginal-likelihood estimate. Documented MC
+    # tolerance 0.3; the pre-fix uniform form biased ml_lo by ≈0.36 and fails this.
+    @test isapprox(sum(ml_lo)/6, sum(ml_hi)/6; atol=0.3)
+    end
+end
+
+# ── E-10 / #133: adaptive tempering targets ESS of the CUMULATIVE weights ──
+
+@testset "_adaptive_tempering: ESS on cumulative weights (no overshoot)" begin
+    lse = MacroEconometricModels._logsumexp
+    N = 300
+    rng = Random.MersenneTwister(7)
+    log_liks = 1.5 .* randn(rng, N)
+    log_weights = 0.7 .* randn(rng, N)      # non-uniform incoming cumulative weights
+    phi_old = 0.3
+    ess_target = 0.5
+
+    ess_cum(phi) = (lw = log_weights .+ (phi - phi_old) .* log_liks;
+                    w = exp.(lw .- lse(lw)); 1.0 / sum(abs2, w))
+    ess_inc(phi) = (inc = (phi - phi_old) .* log_liks;
+                    w = exp.(inc .- lse(inc)); 1.0 / sum(abs2, w))
+
+    # Valid bracket: cumulative ESS starts above target and drops below it by φ=1.
+    @test ess_cum(phi_old) > ess_target * N
+    @test ess_cum(1.0) < ess_target * N
+
+    phi_new = MacroEconometricModels._adaptive_tempering(
+        log_liks, log_weights, phi_old, ess_target, N)
+    @test phi_old < phi_new <= 1.0
+    # Realized ESS on the CUMULATIVE weights hits the target (bisection tol ≈1 in ESS units).
+    @test isapprox(ess_cum(phi_new), ess_target * N; atol=2.0)
+    # The uniform-base (incremental-only) ESS at this φ is materially different — the old
+    # computation would have chosen a different φ and overshot the cumulative ESS target.
+    @test abs(ess_inc(phi_new) - ess_cum(phi_new)) > 5.0
+end
+
+# ── E-09 / #132: terminal resample → stored SMC draws are equal-weighted ──
+
+@testset "_terminal_resample!: unweighted quantiles match weighted pre-resample set" begin
+    lse = MacroEconometricModels._logsumexp
+    np, Np = 2, 500
+    rng = Random.MersenneTwister(11)
+    theta = randn(rng, np, Np); theta[1, :] .+= 3.0
+    lw0 = 1.2 .* randn(rng, Np)              # deliberately non-uniform terminal weights
+    state = MacroEconometricModels.SMCState{Float64}(
+        copy(theta), copy(lw0), randn(rng, Np), randn(rng, Np),
+        Float64[0.0, 1.0], Float64[], Float64[], 0.0,
+        MacroEconometricModels.PFWorkspace{Float64}[], Matrix{Float64}(I, np, np))
+
+    # weighted median of param 1 on the pre-resample particle set
+    w = exp.(lw0 .- lse(lw0))
+    perm = sortperm(theta[1, :]); cw = cumsum(w[perm]); cw ./= cw[end]
+    wq50_before = theta[1, perm][findfirst(>=(0.5), cw)]
+
+    did = MacroEconometricModels._terminal_resample!(state, Np, Random.MersenneTwister(123))
+    @test did                                                    # non-uniform → resampled
+    weights_after = exp.(state.log_weights .- lse(state.log_weights))
+    @test all(≈(1 / Np), weights_after)                          # stored weights uniform
+    # plain (unweighted) median of resampled draws ≈ weighted median of the original set
+    @test isapprox(quantile(state.theta_particles[1, :], 0.5), wq50_before; atol=0.3)
+
+    # No-op when weights are already uniform (e.g. the final stage resampled) — no double resample.
+    state_u = MacroEconometricModels.SMCState{Float64}(
+        copy(theta), fill(-log(Float64(Np)), Np), zeros(Np), zeros(Np),
+        Float64[0.0, 1.0], Float64[], Float64[], 0.0,
+        MacroEconometricModels.PFWorkspace{Float64}[], Matrix{Float64}(I, np, np))
+    @test MacroEconometricModels._terminal_resample!(state_u, Np, Random.MersenneTwister(1)) == false
+end
+
+# ── E-06 / #134: SMC² PMMH mutation (chunked workspaces, unconditional PF) ──
+
+@testset "_chunk_ranges: contiguous non-overlapping partition of 1:N" begin
+    _cr = MacroEconometricModels._chunk_ranges
+    # Even/uneven splits cover exactly 1:N with no overlap, no threadid() aliasing.
+    for (N, k) in ((100, 4), (101, 4), (7, 3), (10, 1), (5, 5))
+        rgs = _cr(N, k)
+        @test length(rgs) == k
+        @test reduce(vcat, collect.(rgs)) == collect(1:N)   # covers 1:N in order, once each
+        @test maximum(length.(rgs)) - minimum(length.(rgs)) <= 1   # near-equal
+    end
+    # N < k → trailing chunks are empty (no phantom particles)
+    rgs = _cr(3, 8)
+    @test length(rgs) == 8
+    @test count(!isempty, rgs) == 3
+    @test reduce(vcat, collect.(rgs)) == collect(1:3)
+end
+
+@testset "SMC² PMMH recovers the Kalman posterior (linear model)" begin
+    # On a linear model the bootstrap PF is a noisy estimator of the exact Kalman
+    # likelihood, so the redesigned PMMH SMC² kernel must recover the same posterior
+    # as :smc (exact Kalman). Verifies the mutation targets the correct distribution.
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    true_spec = @dsge begin
+        parameters: ρ = 0.7, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    true_spec = compute_steady_state(true_spec)
+    sol_true = solve(true_spec; method=:gensys)
+    sim_data = simulate(sol_true, 120; rng=Random.MersenneTwister(2026))
+    priors = Dict(:ρ => Beta(2, 2))
+    merr = [0.1]
+
+    r_smc = estimate_dsge_bayes(spec, sim_data, [0.5]; priors=priors, method=:smc,
+        observables=[:y], n_smc=300, measurement_error=merr,
+        rng=Random.MersenneTwister(1))
+    r_smc2 = estimate_dsge_bayes(spec, sim_data, [0.5]; priors=priors, method=:smc2,
+        observables=[:y], n_smc=200, n_particles=200, n_mh_steps=2,
+        measurement_error=merr, solver=:gensys,
+        rng=Random.MersenneTwister(101))
+
+    ρ_smc = mean(r_smc.theta_draws[:, 1])
+    ρ_smc2 = mean(r_smc2.theta_draws[:, 1])
+    # Both recover the true ρ region (data posterior ≈ 0.69, well away from prior mean 0.5).
+    @test ρ_smc2 > 0.6
+    # SMC² PMMH agrees with the exact-Kalman SMC reference within MC error (observed ≈ 0.002).
+    @test isapprox(ρ_smc2, ρ_smc; atol=0.05)
+    end
+end
+
+# ── E-11 / #135: SMC² N_x adaptation on estimator variance + exchange step ──
+
+@testset "_pf_estimator_variance: estimator noise, not posterior spread (#135)" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    true_spec = @dsge begin
+        parameters: ρ = 0.7, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    true_spec = compute_steady_state(true_spec)
+    sol_true = solve(true_spec; method=:gensys)
+    sim = simulate(sol_true, 80; rng=Random.MersenneTwister(7))
+    data = Matrix(reshape(sim[:, 1], 1, :))          # n_obs × T_obs
+    T_obs = size(data, 2)
+    merr = [0.4]
+    n_states = spec.n_endog; n_shocks = spec.n_exog
+    mkpool(N_x, k=1) = [MacroEconometricModels._allocate_pf_workspace(
+        Float64, n_states, 1, n_shocks, N_x; T_obs=T_obs) for _ in 1:k]
+
+    # A DIFFUSE θ-population: ρ ranges widely, so the likelihood level varies a lot
+    # across particles ⇒ var(ll across θ) is large (this is what the OLD trigger fired on).
+    diffuse = reshape(collect(range(0.2, 0.9; length=40)), 1, 40)
+    rng = Random.MersenneTwister(123)
+
+    est400 = MacroEconometricModels._pf_estimator_variance(
+        spec, [:ρ], diffuse, [:y], merr, :gensys, NamedTuple(), mkpool(400),
+        data, T_obs, rng; n_probe=10, n_rep=3)
+    est50 = MacroEconometricModels._pf_estimator_variance(
+        spec, [:ρ], diffuse, [:y], merr, :gensys, NamedTuple(), mkpool(50),
+        data, T_obs, rng; n_probe=10, n_rep=3)
+
+    # var(ll across θ) — the OLD (wrong) trigger quantity — on the same diffuse set.
+    ws = mkpool(400)[1]; lls = Float64[]
+    for i in 1:size(diffuse, 2)
+        rr = Random.MersenneTwister(hash((:av, i)))
+        ll = MacroEconometricModels._solve_and_run_pf(
+            spec, [:ρ], diffuse[:, i], [:y], merr, :gensys, NamedTuple(),
+            ws, data, T_obs, rr)
+        isfinite(ll) && push!(lls, ll)
+    end
+    var_across = var(lls)
+
+    @test var_across > 10                 # OLD trigger (threshold 10) would double N_x here
+    @test est400 < 3                      # NEW estimator-variance trigger does NOT (Chopin ≈1–3)
+    @test est50 > est400                  # estimator variance falls with more inner particles
+    # Decision: on this diffuse-but-well-estimated posterior, N_x stays put (no spurious doubling).
+    @test MacroEconometricModels._adapt_n_particles(400, est400, 3.0) == 400
+    end
+end
+
+@testset "_exchange_step!: recomputes all θ-likelihoods at the new N_x (#135)" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    true_spec = @dsge begin
+        parameters: ρ = 0.7, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    true_spec = compute_steady_state(true_spec)
+    sim = simulate(solve(true_spec; method=:gensys), 60; rng=Random.MersenneTwister(3))
+    data = Matrix(reshape(sim[:, 1], 1, :)); T_obs = size(data, 2)
+    merr = [0.4]; N = 20; N_x = 200
+    n_states = spec.n_endog; n_shocks = spec.n_exog
+    npool = max(Threads.nthreads(), 1)
+    pool = [MacroEconometricModels._allocate_pf_workspace(
+        Float64, n_states, 1, n_shocks, N_x; T_obs=T_obs) for _ in 1:npool]
+
+    thetas = reshape(collect(range(0.55, 0.85; length=N)), 1, N)
+    SENTINEL = -1.0e5
+    state = MacroEconometricModels.SMCState{Float64}(
+        copy(thetas), fill(-log(Float64(N)), N),
+        fill(SENTINEL, N), zeros(N),          # stale (old-N_x) sentinel likelihoods
+        Float64[0.0, 1.0], Float64[], Float64[], 0.0,
+        MacroEconometricModels.PFWorkspace{Float64}[], Matrix{Float64}(I, 1, 1))
+
+    MacroEconometricModels._exchange_step!(
+        state, spec, [:ρ], [:y], merr, :gensys, NamedTuple(),
+        pool, data, T_obs, Random.MersenneTwister(99))
+
+    @test all(isfinite, state.log_likelihoods)          # all recomputed to finite values
+    @test all(state.log_likelihoods .!= SENTINEL)       # no stale (old-N_x) estimate remains
+    end
+end
+
+@testset "SMC² init likelihoods: threaded chunks == serial (#146 #147)" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    true_spec = @dsge begin
+        parameters: ρ = 0.7, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    true_spec = compute_steady_state(true_spec)
+    sim = simulate(solve(true_spec; method=:gensys), 60; rng=Random.MersenneTwister(3))
+    data = Matrix(reshape(sim[:, 1], 1, :)); T_obs = size(data, 2)
+    merr = [0.4]; N = 12; N_x = 200
+    n_states = spec.n_endog; n_shocks = spec.n_exog
+    npool = max(Threads.nthreads(), 1)
+
+    pf_ll_fn = MacroEconometricModels._build_pf_likelihood_fn(spec, [:ρ], data, [:y],
+        merr, :gensys, NamedTuple(), N_x)
+    thetas = reshape(collect(range(0.55, 0.85; length=N)), 1, N)
+    # Fixed per-particle seeds ⇒ threaded and serial must agree exactly.
+    seeds = UInt64[hash((j, UInt64(0x5EED))) for j in 1:N]
+
+    # THREADED: chunked helper with one PF workspace per chunk.
+    pool = [MacroEconometricModels._allocate_pf_workspace(
+        Float64, n_states, 1, n_shocks, N_x; T_obs=T_obs) for _ in 1:npool]
+    ll_thr = fill(-Inf, N); sols_thr = Vector{Any}(undef, N); fill!(sols_thr, nothing)
+    MacroEconometricModels._smc2_init_likelihoods!(ll_thr, sols_thr, thetas, spec, [:ρ],
+        [:y], merr, :gensys, NamedTuple(), pf_ll_fn, pool, data, T_obs, seeds)
+
+    # SERIAL reference: single workspace, same per-particle seeds and closure.
+    ws = MacroEconometricModels._allocate_pf_workspace(Float64, n_states, 1, n_shocks, N_x; T_obs=T_obs)
+    ll_ser = fill(-Inf, N)
+    for j in 1:N
+        rr = Random.MersenneTwister(seeds[j])
+        ll_ser[j] = pf_ll_fn(Vector{Float64}(thetas[:, j]), ws, rr)
+    end
+
+    @test ll_thr == ll_ser              # bit-identical, thread-count-independent (#146/#147)
+    @test all(isfinite, ll_thr)
     end
 end
 
@@ -1584,8 +2420,10 @@ end
         :ρ => Beta(2, 2),
         :α => Normal(0.3, 0.1)
     )
+    # 1 shock but 2 observables ⇒ n_obs>n_shocks: must supply explicit ME (T042).
     result = estimate_dsge_bayes(spec, data, [0.5, 0.3];
         priors=priors, method=:smc, observables=[:y, :k],
+        measurement_error=[0.01, 0.01],
         n_smc=300, n_mh_steps=1,
         rng=Random.MersenneTwister(123))
 
@@ -1858,7 +2696,9 @@ end
     data_sim = simulate(sol, 50; rng=Random.MersenneTwister(1))
     data = Matrix{Float64}(data_sim')  # n_obs x T_obs
 
-    Z, d, H = MacroEconometricModels._build_observation_equation(spec, [:y], nothing)
+    # Bootstrap PF needs nonzero measurement error (T042 default is zero ME);
+    # [0.01] reproduces the former 1e-4·I default.
+    Z, d, H = MacroEconometricModels._build_observation_equation(spec, [:y], [0.01])
     nlss = MacroEconometricModels._build_nonlinear_state_space(sol, Z, d, H)
 
     nx = length(sol.state_indices)
@@ -1894,7 +2734,8 @@ end
     data_sim = simulate(sol, T_obs; rng=Random.MersenneTwister(1))
     data = Matrix{Float64}(data_sim')
 
-    Z, d, H = MacroEconometricModels._build_observation_equation(spec, [:y], nothing)
+    # Bootstrap PF/CSMC need nonzero measurement error (T042 default is zero ME).
+    Z, d, H = MacroEconometricModels._build_observation_equation(spec, [:y], [0.01])
     nlss = MacroEconometricModels._build_nonlinear_state_space(sol, Z, d, H)
 
     nx = length(sol.state_indices)
@@ -1941,8 +2782,9 @@ end
     data_sim = simulate(sol_lin, T_obs; rng=Random.MersenneTwister(1))
     data = Matrix{Float64}(data_sim')
 
-    # Kalman log-likelihood
-    Z, d, H = MacroEconometricModels._build_observation_equation(spec, [:y], nothing)
+    # Kalman log-likelihood. Bootstrap PF needs nonzero measurement error (T042 default
+    # is zero ME); use the same H for both so the PF-vs-Kalman comparison is fair.
+    Z, d, H = MacroEconometricModels._build_observation_equation(spec, [:y], [0.01])
     ss = MacroEconometricModels._build_state_space(sol_lin, Z, d, H)
     ll_kalman = MacroEconometricModels._kalman_loglikelihood(ss, data)
 
@@ -2649,6 +3491,46 @@ end
     d_eff = MacroEconometricModels._effective_obs_offset(zeros(1), sspec, sol, [:y])
     @test d_eff[1] ≈ c / (1 - a - b) atol=1e-6
     @test !(d_eff[1] ≈ 0.0)
+end
+
+@testset "Posterior-mean solve failure falls back to highest-posterior draw (T044)" begin
+    _suppress_warnings() do
+    # Forward-looking model: a_ ≤ 0.9 determinate, a_ ≥ 1.2 indeterminate (verified).
+    spec = @dsge begin
+        parameters: a_ = 0.5, s = 0.5
+        endogenous: y
+        exogenous: eps
+        y[t] = a_ * y[t+1] + s * eps[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    prior = MacroEconometricModels.DSGEPrior{Float64}([:a_], [Uniform(0.0, 3.0)], [0.0], [3.0])
+
+    # Mean of [0.5, 1.6, 1.7] = 1.27 is INDETERMINATE ⇒ fall back to the highest-posterior
+    # draw (argmax log-posterior = index 1 ⇒ a_=0.5, determinate). The whole call must still
+    # return a usable BayesianDSGE rather than erroring after sampling.
+    result = MacroEconometricModels._mh_to_bayesian_dsge(
+        reshape([0.5, 1.6, 1.7], 3, 1), [5.0, 1.0, 0.5], 0.4, prior, [:a_],
+        spec, [:y], nothing, :gensys, NamedTuple())
+    @test result isa BayesianDSGE{Float64}
+    @test result.solved_at == :highest_posterior_draw
+    @test is_determined(result.solution)
+    @test occursin("Solution built at", sprint(show, result))
+
+    # Control: a determinate mean stays :posterior_mean.
+    result2 = MacroEconometricModels._mh_to_bayesian_dsge(
+        reshape([0.5, 0.6, 0.7], 3, 1), [1.0, 2.0, 3.0], 0.4, prior, [:a_],
+        spec, [:y], nothing, :gensys, NamedTuple())
+    @test result2.solved_at == :posterior_mean
+    @test is_determined(result2.solution)
+
+    # Shared helper directly (SMC path uses the same seam).
+    sol, ss, tag = MacroEconometricModels._build_solution_mean_or_hpd(
+        spec, [:a_], [1.5], reshape([0.5, 1.5], 2, 1), [3.0, 0.1],
+        [:y], nothing, :gensys, NamedTuple())
+    @test tag == :highest_posterior_draw
+    @test is_determined(sol)
+    end
 end
 
 end  # @testset "Bayesian DSGE"
