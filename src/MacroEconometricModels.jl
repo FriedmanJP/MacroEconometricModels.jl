@@ -87,6 +87,9 @@ import Tables
 include("core/exceptions.jl")
 include("core/utils.jl")
 include("core/logging.jl")
+# Reproducibility manifest (#345): defines ReproManifest, a field type of
+# ImpulseResponse/BVARPosterior, so it must load before those result types.
+include("core/repro.jl")
 include("core/tolerances.jl")
 include("core/types.jl")
 include("core/display.jl")
@@ -418,6 +421,10 @@ include("summary.jl")
 # Tables.jl source interface + tidy exports (after all result types are defined)
 include("core/tables.jl")
 
+# Versioned result serialization (#347): dispatches on every result type, so it
+# loads after they are all defined (JLD2 disk backend is a weak-dep extension).
+include("core/serialization.jl")
+
 # Data conversion and estimation dispatch wrappers (after all estimation functions)
 include("data/convert.jl")
 
@@ -695,10 +702,12 @@ export contribution, total_shock_contribution, verify_decomposition
 export report, refs
 export table, print_table
 export long_table, write_csv                 # Tables.jl-compatible tidy exports (#346)
+export ReproManifest, capture_manifest, reproduce, ReproReport   # reproducibility manifest (#345)
+export save_model, load_model, SERIALIZATION_FORMAT_VERSION      # versioned serialization (#347)
 export point_estimate, has_uncertainty, uncertainty_bounds
 export set_display_backend, get_display_backend, with_display_backend
 export default_abstol, default_reltol
-export MacroModelError, ConvergenceError, IdentificationError, SingularSystemError
+export MacroModelError, ConvergenceError, IdentificationError, SingularSystemError, SerializationError
 
 # =============================================================================
 # Exports - Factor Models

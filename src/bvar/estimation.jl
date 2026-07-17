@@ -61,12 +61,17 @@ function estimate_bvar(Y::AbstractMatrix{T}, p::Int;
     prior::Symbol=:normal,
     hyper::Union{Nothing,MinnesotaHyperparameters}=nothing,
     varnames::Union{Vector{String},Nothing}=nothing,
+    seed::Union{Integer,Nothing}=nothing,
     rng::AbstractRNG=Random.default_rng()
 ) where {T<:AbstractFloat}
 
     _validate_data(Y, "Y")
     T_obs, n = size(Y)
     validate_var_inputs(T_obs, n, p)
+
+    # Reproducibility (T246/#345): when a `seed` is given, own the RNG so the
+    # posterior can be reproduced bit-for-bit from the recorded seed.
+    rng = _resolve_repro_rng(rng, seed)
 
     Y_eff, X = construct_var_matrices(Y, p)
     T_eff = size(Y_eff, 1)
@@ -109,15 +114,23 @@ function estimate_bvar(Y::AbstractMatrix{T}, p::Int;
 
     vn = something(varnames, ["y$i" for i in 1:n])
 
-    if sampler == :direct
-        return _sample_direct(Y, p, n, k, n_draws, B_post, V_post, ν_post, S_post, prior, vn, rng)
+    # Effective burn-in (Gibbs defaults 0 → 200); recorded in the manifest so
+    # reproduce() re-runs the exact same draw stream.
+    eff_burnin = sampler == :gibbs ? (burnin == 0 ? 200 : burnin) : burnin
+    manifest = capture_manifest(; seed=seed,
+        settings=Dict{String,Any}("burnin" => eff_burnin, "thin" => thin))
+
+    post = if sampler == :direct
+        _sample_direct(Y, p, n, k, n_draws, B_post, V_post, ν_post, S_post, prior, vn, rng)
     elseif sampler == :gibbs
-        eff_burnin = burnin == 0 ? 200 : burnin
-        return _sample_gibbs(Y, p, n, k, n_draws, eff_burnin, thin,
-                             Y_data, X_data, V0_inv, B0, ν0, S0, prior, vn, rng)
+        _sample_gibbs(Y, p, n, k, n_draws, eff_burnin, thin,
+                      Y_data, X_data, V0_inv, B0, ν0, S0, prior, vn, rng)
     else
         throw(ArgumentError("Unknown sampler: $sampler. Use :direct or :gibbs"))
     end
+
+    return BVARPosterior{T}(post.B_draws, post.Sigma_draws, post.n_draws, post.p, post.n,
+                            post.data, post.prior, post.sampler, post.varnames; manifest=manifest)
 end
 
 @float_fallback estimate_bvar Y
@@ -442,4 +455,36 @@ function forecast(post::BVARPosterior{T}, h::Int;
     end
 
     BVARForecast{T}(point, ci_lower, ci_upper, h, T(conf_level), point_estimate, post.varnames)
+end
+
+# =============================================================================
+# Reproducibility (T246 / #345)
+# =============================================================================
+
+"""
+    reproduce(post::BVARPosterior) -> ReproReport
+
+Re-draw the posterior from the manifest's recorded seed and settings and check it
+matches the stored `B_draws`/`Sigma_draws` bit-for-bit. Self-contained: the
+posterior stores its data, lag order, prior, and sampler. Requires the posterior
+to have been estimated with `estimate_bvar(Y, p; seed=N)`; without a recorded seed
+the report's `matched` is `missing`.
+
+```julia
+post = estimate_bvar(Y, 2; n_draws=500, seed=20260717)
+reproduce(post)   # ReproReport: PASS
+```
+"""
+function reproduce(post::BVARPosterior)
+    m = post.manifest
+    m === nothing && return _no_manifest_report("BVARPosterior")
+    m.seed === nothing && return _no_seed_report(m, "estimate_bvar(Y, p; seed=N)")
+    fresh = estimate_bvar(post.data, post.p;
+                          n_draws=post.n_draws, sampler=post.sampler, prior=post.prior,
+                          burnin=Int(get(m.settings, "burnin", 0)),
+                          thin=Int(get(m.settings, "thin", 1)),
+                          varnames=post.varnames, seed=m.seed)
+    diffs = [_repro_field_diff("B_draws", post.B_draws, fresh.B_draws),
+             _repro_field_diff("Sigma_draws", post.Sigma_draws, fresh.Sigma_draws)]
+    return _finalize_repro(diffs, m)
 end

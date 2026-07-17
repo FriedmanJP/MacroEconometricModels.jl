@@ -58,6 +58,23 @@ set_log_level
 with_min_level
 ```
 
+### Reproducibility
+
+```@docs
+ReproManifest
+capture_manifest
+reproduce
+ReproReport
+```
+
+### Serialization
+
+```@docs
+save_model
+load_model
+SERIALIZATION_FORMAT_VERSION
+```
+
 ---
 
 ## Utility Functions
@@ -84,6 +101,7 @@ MacroModelError
 ConvergenceError
 IdentificationError
 SingularSystemError
+SerializationError
 ```
 
 ---

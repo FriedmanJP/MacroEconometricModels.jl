@@ -45,9 +45,13 @@ function irf(model::VARModel{T}, horizon::Int;
     shock_names::Union{Nothing,Vector{String}}=nothing,
     transition_var::Union{Nothing,AbstractVector}=nothing,
     regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing,
+    seed::Union{Integer,Nothing}=nothing,
     rng::AbstractRNG=Random.default_rng()
 ) where {T<:AbstractFloat}
 
+    # Reproducibility (T246/#345): a `seed` owns the RNG so bootstrap bands can be
+    # reproduced bit-for-bit (the per-replication sub-seeding is thread-invariant).
+    rng = _resolve_repro_rng(rng, seed)
     _validate_data(model.Sigma, "Sigma")
     _validate_data(model.B, "B")
     n = nvars(model)
@@ -71,8 +75,13 @@ function irf(model::VARModel{T}, horizon::Int;
 
     snames = isnothing(shock_names) ? model.varnames : shock_names
     cl = ci_type == :none ? zero(T) : T(conf_level)
+    # Attach a reproducibility manifest whenever the bands consume randomness.
+    manifest = ci_type == :none ? nothing :
+        capture_manifest(; seed=seed, settings=Dict{String,Any}(
+            "method" => String(method), "ci_type" => String(ci_type),
+            "reps" => reps, "stationary_only" => stationary_only))
     ImpulseResponse{T}(point_irf, ci_lower, ci_upper, horizon,
-                       model.varnames, snames, ci_type, sim_irfs, cl)
+                       model.varnames, snames, ci_type, sim_irfs, cl; manifest=manifest)
 end
 
 """Simulate IRFs for confidence intervals (bootstrap or asymptotic)."""
@@ -402,3 +411,44 @@ function cumulative_irf(irf_result::BayesianImpulseResponse{T}) where {T<:Abstra
                                irf_result.variables, irf_result.shocks, irf_result.quantile_levels,
                                nothing, irf_result.n_requested, irf_result.n_effective, irf_result.n_failed)
 end
+
+# =============================================================================
+# Reproducibility (T246 / #345)
+# =============================================================================
+
+"""
+    reproduce(ir::ImpulseResponse, model::VARModel) -> ReproReport
+
+Re-run the bootstrap that produced `ir`'s confidence bands from the manifest's
+recorded seed and settings and check the point IRF and bands match bit-for-bit.
+The source `model` is passed explicitly — a large object deliberately not retained
+on the IRF result. Requires `ir` to have been produced by
+`irf(model, H; ci_type=:bootstrap, seed=N)`.
+
+```julia
+model = estimate_var(Y, 2)
+ir = irf(model, 20; ci_type=:bootstrap, reps=200, seed=20260717)
+reproduce(ir, model)   # ReproReport: PASS
+```
+"""
+function reproduce(ir::ImpulseResponse, model::VARModel)
+    m = ir.manifest
+    m === nothing && return _no_manifest_report("ImpulseResponse")
+    m.seed === nothing && return _no_seed_report(m, "irf(model, H; ci_type=:bootstrap, seed=N)")
+    s = m.settings
+    fresh = irf(model, ir.horizon;
+                method = Symbol(get(s, "method", "cholesky")),
+                ci_type = Symbol(get(s, "ci_type", "bootstrap")),
+                reps = Int(get(s, "reps", ir._draws === nothing ? 0 : size(ir._draws, 1))),
+                conf_level = ir._conf_level,
+                stationary_only = Bool(get(s, "stationary_only", false)),
+                seed = m.seed)
+    diffs = [_repro_field_diff("values", ir.values, fresh.values),
+             _repro_field_diff("ci_lower", ir.ci_lower, fresh.ci_lower),
+             _repro_field_diff("ci_upper", ir.ci_upper, fresh.ci_upper)]
+    return _finalize_repro(diffs, m)
+end
+
+# Single-argument form: the source model is required (not retained on the result).
+reproduce(::ImpulseResponse) =
+    _needs_source_report("bootstrap ImpulseResponse", "reproduce(ir, model)")
