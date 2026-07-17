@@ -959,6 +959,86 @@ const ERS_PT_CV = Dict(
 )
 
 # =============================================================================
+# HEGY seasonal unit-root critical values (EV-29, #437)
+# -----------------------------------------------------------------------------
+# PUBLISHED, TRANSCRIBED OFFLINE, NOT LIVE-VERIFIED in this environment (R
+# `uroot`/`urca` are NOT installed here). Quarterly values are the finite-sample
+# (T≈100) Monte-Carlo critical values of Hylleberg, Engle, Granger & Yoo (1990,
+# J. Econometrics 44, Table 1); monthly values are Beaulieu & Miron (1993,
+# J. Econometrics 55, Tables) for T≈240. Each deterministic case gives the
+# left-tailed CVs for t(π₁) (zero frequency) and t(π₂) (Nyquist, freq π), and
+# the right-tailed CV for the paired joint F at each complex-conjugate harmonic.
+# NOTE: Díaz-Emparanza (2014) response-surface p-values are a SHOULD-have
+# refinement (per issue #437) — not implemented here; interpolation across T is
+# left to the nearest published block. Keys: 1/5/10 = significance %.
+# =============================================================================
+
+const HEGY_CV_QUARTERLY = Dict(
+    # No deterministic terms
+    :none => Dict(
+        :t_zero    => Dict(1=>-2.55, 5=>-1.94, 10=>-1.62),
+        :t_nyquist => Dict(1=>-2.53, 5=>-1.90, 10=>-1.61),
+        :pair_F    => Dict(1=>4.75,  5=>3.00,  10=>2.32),
+    ),
+    # Intercept only
+    :const => Dict(
+        :t_zero    => Dict(1=>-3.44, 5=>-2.88, 10=>-2.57),
+        :t_nyquist => Dict(1=>-2.53, 5=>-1.93, 10=>-1.61),
+        :pair_F    => Dict(1=>4.78,  5=>3.12,  10=>2.38),
+    ),
+    # Intercept + seasonal dummies
+    :const_seas => Dict(
+        :t_zero    => Dict(1=>-3.48, 5=>-2.89, 10=>-2.58),
+        :t_nyquist => Dict(1=>-3.51, 5=>-2.91, 10=>-2.59),
+        :pair_F    => Dict(1=>8.67,  5=>6.55,  10=>5.54),
+    ),
+    # Intercept + trend
+    :const_trend => Dict(
+        :t_zero    => Dict(1=>-3.99, 5=>-3.44, 10=>-3.15),
+        :t_nyquist => Dict(1=>-2.56, 5=>-1.94, 10=>-1.61),
+        :pair_F    => Dict(1=>4.75,  5=>3.08,  10=>2.36),
+    ),
+    # Intercept + seasonal dummies + trend (HEGY 1990 anchor: F 5%=6.57, 10%=5.56)
+    :const_trend_seas => Dict(
+        :t_zero    => Dict(1=>-4.05, 5=>-3.47, 10=>-3.17),
+        :t_nyquist => Dict(1=>-3.53, 5=>-2.92, 10=>-2.60),
+        :pair_F    => Dict(1=>8.74,  5=>6.57,  10=>5.56),
+    ),
+)
+
+# Beaulieu & Miron (1993) monthly CVs (T≈240). The paired-F critical values are
+# near-identical across the five complex harmonics; a single common block is
+# used (BM report ≈6.3 at 5% for each pair). t(π₁)/t(π₂) mirror the quarterly
+# zero/Nyquist blocks. Published-not-live-verified (see header).
+const HEGY_CV_MONTHLY = Dict(
+    :none => Dict(
+        :t_zero    => Dict(1=>-2.55, 5=>-1.94, 10=>-1.62),
+        :t_nyquist => Dict(1=>-2.55, 5=>-1.94, 10=>-1.62),
+        :pair_F    => Dict(1=>4.70,  5=>3.02,  10=>2.35),
+    ),
+    :const => Dict(
+        :t_zero    => Dict(1=>-3.42, 5=>-2.86, 10=>-2.57),
+        :t_nyquist => Dict(1=>-2.54, 5=>-1.92, 10=>-1.61),
+        :pair_F    => Dict(1=>4.73,  5=>3.10,  10=>2.37),
+    ),
+    :const_seas => Dict(
+        :t_zero    => Dict(1=>-3.42, 5=>-2.86, 10=>-2.56),
+        :t_nyquist => Dict(1=>-3.42, 5=>-2.86, 10=>-2.56),
+        :pair_F    => Dict(1=>8.18,  5=>6.30,  10=>5.36),
+    ),
+    :const_trend => Dict(
+        :t_zero    => Dict(1=>-3.95, 5=>-3.41, 10=>-3.13),
+        :t_nyquist => Dict(1=>-2.54, 5=>-1.92, 10=>-1.61),
+        :pair_F    => Dict(1=>4.73,  5=>3.10,  10=>2.37),
+    ),
+    :const_trend_seas => Dict(
+        :t_zero    => Dict(1=>-3.92, 5=>-3.36, 10=>-3.07),
+        :t_nyquist => Dict(1=>-3.41, 5=>-2.84, 10=>-2.55),
+        :pair_F    => Dict(1=>8.23,  5=>6.32,  10=>5.38),
+    ),
+)
+
+# =============================================================================
 # LM Unit Root & Break Test Critical Values
 # =============================================================================
 

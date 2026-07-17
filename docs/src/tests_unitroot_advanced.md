@@ -1,10 +1,12 @@
 # [Advanced Unit Root Tests](@id tests_unitroot_advanced_page)
 
-Standard unit root tests (ADF, PP, KPSS) perform well when the data-generating process is a simple autoregressive model with fixed deterministic components. Real macroeconomic series, however, exhibit smooth structural changes, multiple regime shifts, and near-unit-root behavior that erode the power of classical tests. This page covers five advanced unit root tests that address these limitations through Fourier approximation of smooth breaks, GLS detrending for optimal power, LM-based testing with endogenous breaks under the null, and two-break ADF extensions.
+Standard unit root tests (ADF, PP, KPSS) perform well when the data-generating process is a simple autoregressive model with fixed deterministic components. Real macroeconomic series, however, exhibit smooth structural changes, multiple regime shifts, and near-unit-root behavior that erode the power of classical tests. This page covers several advanced unit root tests that address these limitations through Fourier approximation of smooth breaks, GLS detrending for optimal power, point-optimal and seasonal-frequency testing, LM-based testing with endogenous breaks under the null, and two-break ADF extensions.
 
 - **Fourier ADF** (Enders & Lee 2012): Captures smooth, unknown structural breaks with trigonometric terms
 - **Fourier KPSS** (Becker, Enders & Lee 2006): Stationarity test robust to smooth breaks
 - **DF-GLS / ERS** (Elliott, Rothenberg & Stock 1996): GLS-detrended ADF with near-optimal power
+- **ERS point-optimal** (Elliott, Rothenberg & Stock 1996): standalone feasible ``P_T`` test reusing the GLS detrending
+- **HEGY seasonal** (Hylleberg et al. 1990; Beaulieu & Miron 1993): frequency-by-frequency seasonal unit roots (quarterly/monthly)
 - **LM Unit Root** (Schmidt & Phillips 1992; Lee & Strazicich 2003, 2013): Breaks under the null hypothesis
 - **Two-Break ADF** (Narayan & Popp 2010): ADF with two endogenous structural breaks
 - **SADF / GSADF** (Phillips, Wu & Yu 2011; Phillips, Shi & Yu 2015): Right-tailed sup-ADF tests for explosive (bubble) behavior with date-stamping
@@ -304,6 +306,104 @@ result.MPT               # Modified point-optimal
 
 ---
 
+## ERS Point-Optimal Test
+
+The Elliott, Rothenberg & Stock (1996) feasible **point-optimal** test ``P_T`` is the second pillar of their efficient-testing framework. Where DF-GLS builds a ``\tau``-style statistic from GLS-detrended data, ``P_T`` compares the sum of squared residuals from GLS quasi-differencing at the local alternative ``\bar{\alpha} = 1 + \bar{c}/T`` against the residuals under the unit-root null:
+
+```math
+P_T = \frac{S(\bar{\alpha}) - \bar{\alpha}\, S(1)}{\hat{\omega}^2},
+```
+
+where
+
+- ``S(\bar{\alpha})`` is the SSR of the quasi-differenced regression at ``\bar{c} = -7`` (constant) or ``\bar{c} = -13.5`` (trend),
+- ``S(1)`` is the SSR under the unit-root null,
+- ``\hat{\omega}^2`` is the long-run variance from the same AR-spectral estimator DF-GLS uses.
+
+`ers_test` reuses the exact GLS-detrending machinery of `dfgls_test` — the returned `P_T` is identical to the `pt_statistic` field of the corresponding `dfgls_test` call, so the two never drift.
+
+```@example test_ur_adv
+# ERS point-optimal test — constant (demeaning) case
+result = ers_test(cpi; trend=false)
+report(result)
+```
+
+The identity with DF-GLS is exact:
+
+```@example test_ur_adv
+ers = ers_test(cpi; trend=false)
+dfg = dfgls_test(cpi; regression=:constant)
+ers.P_T == dfg.pt_statistic   # same statistic, shared helper
+```
+
+### Options
+
+- `trend` (default `false`): `false` uses GLS demeaning (``\bar{c} = -7``); `true` uses GLS detrending (``\bar{c} = -13.5``) for trending series.
+
+### Return Values
+
+`ERSResult` exposes:
+
+- `P_T` — the feasible point-optimal statistic,
+- `pvalue` — interpolated p-value against the ERS (1996, Table 1) critical values,
+- `critical_values` — the (1%, 5%, 10%) point-optimal critical values,
+- `regression`, `nobs`.
+
+### Interpretation
+
+**Small** ``P_T`` rejects the unit-root null in favour of stationarity: the local-alternative model fits far better than the unit-root model. Because ``P_T`` and DF-GLS share the same GLS detrending, they are best read together — ``P_T`` is the point-optimal complement to the ``\tau``-style DF-GLS statistic.
+
+---
+
+## HEGY Seasonal Unit Roots
+
+Seasonal macro series can carry unit roots not only at the zero (long-run) frequency but at seasonal frequencies too. The Hylleberg, Engle, Granger & Yoo (1990) test — extended to monthly data by Beaulieu & Miron (1993) — tests for unit roots **frequency by frequency**. For a series of periodicity ``s``, it regresses the seasonal difference ``\Delta_s y_t = (1 - L^s) y_t`` on transform regressors that isolate each spectral frequency, plus deterministics and augmenting lags of ``\Delta_s y``:
+
+```math
+\Delta_s y_t = \pi_1 y_{1,t-1} + \pi_2 y_{2,t-1} + \sum_{\text{pairs}} \big(\pi_k y_{k,t-1} + \pi_{k+1} y_{k,t-2}\big) + \text{deterministics} + \sum_{i=1}^{p} \phi_i \Delta_s y_{t-i} + \varepsilon_t.
+```
+
+For quarterly data (``s = 4``) the transforms are ``y_{1,t} = (1+L)(1+L^2)y_t`` (zero frequency), ``y_{2,t} = -(1-L)(1+L^2)y_t`` (Nyquist, ``\omega = \pi``), and ``y_{3,t} = (1-L^2)y_t`` (the annual harmonic pair at ``\omega = \pi/2``). Monthly data (``s = 12``) follows Beaulieu & Miron with twelve transforms and five complex-conjugate harmonic pairs.
+
+The test reports the left-tailed ``t(\pi_1)`` (zero frequency) and ``t(\pi_2)`` (Nyquist), and a right-tailed joint ``F`` for each harmonic pair, plus joint ``F`` statistics over all seasonal frequencies and over all frequencies.
+
+```@example test_ur_adv
+# HEGY monthly test on the CPI series (frequency = 12)
+result = hegy_test(cpi; frequency=12, deterministic=:const_trend_seas)
+report(result)
+```
+
+Quarterly data uses `frequency=4`:
+
+```@example test_ur_adv
+# Simulated quarterly series with a stochastic seasonal (Δ₄) unit root
+using Random
+rng = Random.MersenneTwister(7)
+yq = zeros(160)
+for t in 5:160
+    yq[t] = yq[t-4] + randn(rng)   # seasonal random walk: roots at every frequency
+end
+hq = hegy_test(yq; frequency=4)
+(t_zero=round(hq.t_zero, digits=3), t_nyquist=round(hq.t_nyquist, digits=3),
+ F_pair=round(hq.pair_F[1], digits=3))
+```
+
+### Options
+
+- `frequency`: `4` (quarterly) or `12` (monthly). Other values throw an `ArgumentError`.
+- `deterministic`: `:none`, `:const`, `:const_seas`, `:const_trend`, or `:const_trend_seas` (default). Seasonal dummies span the intercept, so they replace it when present.
+- `lags`: number of augmenting lags of ``\Delta_s y``, or `:auto` for AIC selection up to ``\lfloor 12(T/100)^{1/4} \rfloor``.
+
+### Return Values
+
+`HEGYResult` exposes `frequency`, `deterministic`, `lags`, the `pi_coefs`, the zero/Nyquist statistics `t_zero`/`t_nyquist` with their critical values, the harmonic-pair frequencies `pair_freqs` with joint `pair_F` and shared `pair_F_cv`, the joint `F_seasonal` and `F_all`, and `nobs`.
+
+### Interpretation
+
+At each frequency, ``H_0`` is that a unit root is present. **Reject** ``t(\pi_1)`` (``t < `` CV) ⇒ no zero-frequency root; **reject** ``t(\pi_2)`` ⇒ no Nyquist root; **reject** a pair ``F`` (``F > `` CV) ⇒ no unit root at that seasonal frequency. If every null fails to reject, ``\Delta_s`` (full seasonal differencing) is appropriate; if some seasonal nulls reject, seasonal differencing over-differences and seasonal dummies or a partial filter should be used instead. Critical values are the published HEGY (1990) quarterly and Beaulieu-Miron (1993) monthly tables; the Díaz-Emparanza (2014) response-surface p-values are a refinement not yet implemented.
+
+---
+
 ## LM Unit Root Test
 
 The LM unit root test (Schmidt & Phillips 1992; Lee & Strazicich 2003, 2013) takes a fundamentally different approach to structural breaks compared to the Zivot-Andrews and Narayan-Popp tests. The key innovation is that breaks are incorporated under the null hypothesis. In the Zivot-Andrews framework, breaks appear only under the alternative, so rejection could reflect either stationarity or a break in a unit root process. The LM test resolves this ambiguity: rejection unambiguously implies stationarity, regardless of whether structural breaks are present.
@@ -588,8 +688,10 @@ The fixed-start [`sadf_test`](@ref) shares the interface and stores the recursiv
 
 ## References
 
+- Beaulieu, J. Joseph, and Jeffrey A. Miron. 1993. "Seasonal Unit Roots in Aggregate U.S. Data." *Journal of Econometrics* 55 (1--2): 305--328. [https://doi.org/10.1016/0304-4076(93)90018-Z](https://doi.org/10.1016/0304-4076(93)90018-Z)
 - Becker, Ralf, Walter Enders, and Junsoo Lee. 2006. "A Stationarity Test in the Presence of an Unknown Number of Smooth Breaks." *Journal of Time Series Analysis* 27 (3): 381--409. [https://doi.org/10.1111/j.1467-9892.2006.00478.x](https://doi.org/10.1111/j.1467-9892.2006.00478.x)
 - Elliott, Graham, Thomas J. Rothenberg, and James H. Stock. 1996. "Efficient Tests for an Autoregressive Unit Root." *Econometrica* 64 (4): 813--836. [https://doi.org/10.2307/2171846](https://doi.org/10.2307/2171846)
+- Hylleberg, Svend, Robert F. Engle, Clive W. J. Granger, and Byung Sam Yoo. 1990. "Seasonal Integration and Cointegration." *Journal of Econometrics* 44 (1--2): 215--238. [https://doi.org/10.1016/0304-4076(90)90080-D](https://doi.org/10.1016/0304-4076(90)90080-D)
 - Enders, Walter, and Junsoo Lee. 2012. "A Unit Root Test Using a Fourier Series to Approximate Smooth Breaks." *Oxford Bulletin of Economics and Statistics* 74 (4): 574--599. [https://doi.org/10.1111/j.1468-0084.2011.00662.x](https://doi.org/10.1111/j.1468-0084.2011.00662.x)
 - Lee, Junsoo, and Mark C. Strazicich. 2003. "Minimum Lagrange Multiplier Unit Root Test with Two Structural Breaks." *Review of Economics and Statistics* 85 (4): 1082--1089. [https://doi.org/10.1162/003465303772815961](https://doi.org/10.1162/003465303772815961)
 - Lee, Junsoo, and Mark C. Strazicich. 2013. "Minimum LM Unit Root Test with One Structural Break." *Economics Bulletin* 33 (4): 2483--2492.

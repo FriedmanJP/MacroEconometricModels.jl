@@ -188,6 +188,7 @@ include("teststat/bai_perron.jl")
 include("teststat/johansen.jl")
 include("teststat/fourier.jl")
 include("teststat/dfgls.jl")
+include("teststat/hegy.jl")   # EV-29 (#437): HEGY seasonal unit roots + ERS point-optimal test
 include("teststat/lm_unitroot.jl")
 include("teststat/adf_2break.jl")
 include("teststat/gregory_hansen.jl")
@@ -715,6 +716,8 @@ export factor_break_test
 export fourier_adf_test, fourier_kpss_test, dfgls_test
 export lm_unitroot_test, adf_2break_test, gregory_hansen_test
 export sadf_test, gsadf_test, BubbleResult   # EV-30 (#438): explosive/bubble detection
+# Seasonal unit roots (HEGY) + ERS point-optimal test (EV-29, #437)
+export hegy_test, ers_test, HEGYResult, ERSResult
 
 # Residual-based / parameter-stability cointegration tests (EV-11, #419)
 export engle_granger_test, phillips_ouliaris_test, hansen_instability_test, park_added_test

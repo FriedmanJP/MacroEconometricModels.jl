@@ -1384,3 +1384,77 @@ end
 StatsAPI.nobs(r::BubbleResult) = r.nobs
 StatsAPI.pvalue(r::BubbleResult) = r.pvalue
 StatsAPI.dof(r::BubbleResult) = r.adflag + 2
+# Seasonal unit roots (HEGY) + ERS point-optimal test (EV-29, #437)
+# HEGYResult renders a frequency-by-frequency table (zero / Nyquist / harmonic
+# pairs). ERSResult is the standalone point-optimal P_T (the same statistic that
+# also lives inside DFGLSResult.pt_statistic). Estimators in teststat/hegy.jl and
+# teststat/dfgls.jl; show methods in teststat/show.jl.
+# =============================================================================
+
+"""
+    HEGYResult{T} <: AbstractUnitRootTest
+
+Hylleberg-Engle-Granger-Yoo (1990, quarterly) / Beaulieu-Miron (1993, monthly)
+seasonal unit-root test result. H₀ at each frequency: a unit root is present.
+
+Fields:
+- `frequency::Int` — data periodicity (`4` quarterly, `12` monthly)
+- `deterministic::Symbol` — deterministic case (e.g. `:const_trend_seas`)
+- `lags::Int` — number of augmenting lags of Δ_s y
+- `pi_coefs::Vector{T}` — the π coefficients (`π₁, π₂, …`)
+- `t_zero::T` — t(π₁): zero-frequency statistic (left-tailed)
+- `t_nyquist::T` — t(π₂): Nyquist (π) statistic (left-tailed)
+- `t_zero_cv::Dict{Int,T}`, `t_nyquist_cv::Dict{Int,T}` — (1%,5%,10%) CVs
+- `pair_freqs::Vector{T}` — angular frequencies of the harmonic pairs (radians)
+- `pair_F::Vector{T}` — joint F statistic for each conjugate pair (right-tailed)
+- `pair_F_cv::Dict{Int,T}` — common (1%,5%,10%) paired-F CVs
+- `F_seasonal::T` — joint F over all seasonal frequencies (Nyquist + pairs)
+- `F_all::T` — joint F over all frequencies (zero + seasonal)
+- `nobs::Int` — effective observations in the auxiliary regression
+"""
+struct HEGYResult{T<:AbstractFloat} <: AbstractUnitRootTest
+    frequency::Int
+    deterministic::Symbol
+    lags::Int
+    pi_coefs::Vector{T}
+    t_zero::T
+    t_nyquist::T
+    t_zero_cv::Dict{Int,T}
+    t_nyquist_cv::Dict{Int,T}
+    pair_freqs::Vector{T}
+    pair_F::Vector{T}
+    pair_F_cv::Dict{Int,T}
+    F_seasonal::T
+    F_all::T
+    nobs::Int
+end
+
+"""
+    ERSResult{T} <: AbstractUnitRootTest
+
+Elliott-Rothenberg-Stock (1996) feasible point-optimal `P_T` test result.
+Small `P_T` rejects the unit-root null.
+
+Fields:
+- `P_T::T` — feasible point-optimal statistic
+- `pvalue::T` — interpolated p-value
+- `regression::Symbol` — `:constant` (demean) or `:trend` (detrend)
+- `critical_values::Dict{Int,T}` — (1%,5%,10%) CVs (ERS 1996, Table 1)
+- `nobs::Int` — number of observations
+"""
+struct ERSResult{T<:AbstractFloat} <: AbstractUnitRootTest
+    P_T::T
+    pvalue::T
+    regression::Symbol
+    critical_values::Dict{Int,T}
+    nobs::Int
+end
+
+# --- StatsAPI interface (EV-29) ---
+StatsAPI.nobs(r::HEGYResult) = r.nobs
+# Primary p-value: interpolate the zero-frequency t on its own CVs (left tail).
+StatsAPI.pvalue(r::HEGYResult) = _ers_pt_pvalue(r.t_zero, r.t_zero_cv)
+StatsAPI.dof(r::HEGYResult) = r.lags + length(r.pi_coefs)
+StatsAPI.nobs(r::ERSResult) = r.nobs
+StatsAPI.pvalue(r::ERSResult) = r.pvalue
+StatsAPI.dof(r::ERSResult) = r.regression == :constant ? 1 : 2

@@ -315,3 +315,21 @@ function _ers_pt_critical_values(regression::Symbol, nobs::Int, ::Type{TF}=Float
     key = nobs <= 50 ? 50 : nobs <= 100 ? 100 : nobs <= 200 ? 200 : 500
     Dict{Int,TF}(k => TF(v) for (k, v) in table[key])
 end
+
+"""
+Get HEGY seasonal unit-root critical values (EV-29). Returns a tuple
+`(t_zero_cv, t_nyquist_cv, pair_F_cv)` of (1%,5%,10%) dicts for the given
+`frequency` (4 or 12) and `deterministic` case. Published (HEGY 1990 quarterly /
+Beaulieu-Miron 1993 monthly), not live-verified — see `critical_values.jl`.
+"""
+function _hegy_critical_values(frequency::Int, deterministic::Symbol,
+                               ::Type{TF}=Float64) where {TF<:AbstractFloat}
+    table = frequency == 4 ? HEGY_CV_QUARTERLY : HEGY_CV_MONTHLY
+    # Fall back to the fullest deterministic case if an exotic one is requested.
+    case = haskey(table, deterministic) ? deterministic : :const_trend_seas
+    block = table[case]
+    tz = Dict{Int,TF}(k => TF(v) for (k, v) in block[:t_zero])
+    tn = Dict{Int,TF}(k => TF(v) for (k, v) in block[:t_nyquist])
+    pf = Dict{Int,TF}(k => TF(v) for (k, v) in block[:pair_F])
+    return (tz, tn, pf)
+end

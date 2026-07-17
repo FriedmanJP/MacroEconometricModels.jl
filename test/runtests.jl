@@ -78,6 +78,7 @@ const TEST_GROUPS = [
         "teststat/test_structural_break.jl",
         "teststat/test_fourier.jl",
         "teststat/test_dfgls.jl",
+        "teststat/test_hegy.jl",   # EV-29 (#437): HEGY seasonal unit roots + ERS point-optimal
         "teststat/test_lm_unitroot.jl",
         "teststat/test_adf_2break.jl",
         "teststat/test_gregory_hansen.jl",
@@ -428,6 +429,7 @@ else
         @testset "Structural Break & Panel Unit Root" begin include("teststat/test_structural_break.jl") end
         @testset "Fourier Unit Root Tests" begin include("teststat/test_fourier.jl") end
         @testset "DF-GLS Unit Root Test" begin include("teststat/test_dfgls.jl") end
+        @testset "HEGY Seasonal Unit Root + ERS Test" begin include("teststat/test_hegy.jl") end   # EV-29 (#437)
         @testset "LM Unit Root Test" begin include("teststat/test_lm_unitroot.jl") end
         @testset "Two-Break ADF Test" begin include("teststat/test_adf_2break.jl") end
         @testset "Gregory-Hansen Cointegration Test" begin include("teststat/test_gregory_hansen.jl") end

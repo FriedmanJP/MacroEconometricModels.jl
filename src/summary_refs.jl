@@ -1564,6 +1564,22 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Real-Time Monitoring of Asset Markets: Bubbles and Crises",
         journal="Handbook of Statistics", volume="42", issue="", pages="61--80",
         doi="10.1016/bs.host.2018.12.002", isbn="", publisher="Elsevier", entry_type=:article),
+    # --- Seasonal unit roots (HEGY) + ERS point-optimal (EV-29, #437) ---
+    :hegy1990 => (key=:hegy1990,
+        authors="Hylleberg, Svend and Engle, Robert F. and Granger, Clive W. J. and Yoo, Byung Sam",
+        year=1990, title="Seasonal Integration and Cointegration",
+        journal="Journal of Econometrics", volume="44", issue="1-2", pages="215--238",
+        doi="10.1016/0304-4076(90)90080-D", isbn="", publisher="", entry_type=:article),
+    :beaulieu_miron1993 => (key=:beaulieu_miron1993,
+        authors="Beaulieu, J. Joseph and Miron, Jeffrey A.", year=1993,
+        title="Seasonal Unit Roots in Aggregate U.S. Data",
+        journal="Journal of Econometrics", volume="55", issue="1-2", pages="305--328",
+        doi="10.1016/0304-4076(93)90018-Z", isbn="", publisher="", entry_type=:article),
+    :ers1996 => (key=:ers1996,
+        authors="Elliott, Graham and Rothenberg, Thomas J. and Stock, James H.", year=1996,
+        title="Efficient Tests for an Autoregressive Unit Root",
+        journal="Econometrica", volume="64", issue="4", pages="813--836",
+        doi="10.2307/2171846", isbn="", publisher="", entry_type=:article),
 )
 
 # --- Type/method → reference keys mapping ---
@@ -1906,6 +1922,11 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :BubbleResult => [:psy2011, :psy2015, :phillips_shi2020],
     :sadf_test => [:psy2011, :psy2015],
     :gsadf_test => [:psy2015, :psy2011, :phillips_shi2020],
+    # Seasonal unit roots (HEGY) + ERS point-optimal (EV-29, #437)
+    :HEGYResult => [:hegy1990, :beaulieu_miron1993],
+    :hegy_test => [:hegy1990, :beaulieu_miron1993],
+    :ERSResult => [:ers1996],
+    :ers_test => [:ers1996],
     # Factor model break tests
     :FactorBreakResult => [:breitung_eickmeier2011, :chen_dolado_gonzalo2014, :han_inoue2015],
     :factor_break_test => [:breitung_eickmeier2011, :chen_dolado_gonzalo2014, :han_inoue2015],
@@ -2417,6 +2438,9 @@ refs(io::IO, ::HansenInstabilityResult; kw...) = refs(io, _TYPE_REFS[:HansenInst
 refs(io::IO, ::ParkAddedResult; kw...) = refs(io, _TYPE_REFS[:ParkAddedResult]; kw...)
 # Variance-ratio / random-walk tests (EV-27, #435)
 refs(io::IO, ::VarianceRatioResult; kw...) = refs(io, _TYPE_REFS[:VarianceRatioResult]; kw...)
+# Seasonal unit roots (HEGY) + ERS point-optimal test (EV-29, #437)
+refs(io::IO, ::HEGYResult; kw...) = refs(io, _TYPE_REFS[:HEGYResult]; kw...)
+refs(io::IO, ::ERSResult; kw...) = refs(io, _TYPE_REFS[:ERSResult]; kw...)
 
 # Factor break types
 refs(io::IO, ::FactorBreakResult; kw...) = refs(io, _TYPE_REFS[:FactorBreakResult]; kw...)

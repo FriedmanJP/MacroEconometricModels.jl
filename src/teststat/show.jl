@@ -1594,3 +1594,96 @@ function Base.show(io::IO, r::BubbleResult)
     end
     return nothing
 end
+
+# =============================================================================
+# Seasonal unit roots (HEGY) + ERS point-optimal test — EV-29 (#437)
+# Self-contained show methods with a UNIQUE trailing "HEGY/ERS note" section
+# (see the src/teststat/show.jl collapsed-end hazard for this series).
+# =============================================================================
+
+function _hegy_deterministic_name(d::Symbol)
+    d == :none ? "None" :
+    d == :const ? "Constant" :
+    d == :const_seas ? "Constant + Seasonal dummies" :
+    d == :const_trend ? "Constant + Trend" :
+    d == :const_trend_seas ? "Constant + Trend + Seasonal dummies" : string(d)
+end
+
+function Base.show(io::IO, r::HEGYResult)
+    label = r.frequency == 4 ? "Quarterly (HEGY 1990)" : "Monthly (Beaulieu-Miron 1993)"
+    spec_data = Any[
+        "H₀ (each freq.)" "Unit root present at that frequency";
+        "Periodicity" label;
+        "Deterministic terms" _hegy_deterministic_name(r.deterministic);
+        "Augmenting lags" r.lags;
+        "Observations" r.nobs
+    ]
+    _pretty_table(io, spec_data;
+        title = "HEGY Seasonal Unit Root Test",
+        column_labels = ["Specification", ""],
+        alignment = [:l, :r])
+
+    # Frequency-by-frequency table: zero, Nyquist (t-tests), harmonic pairs (F).
+    nrows = 2 + length(r.pair_F) + 2
+    tbl = Matrix{Any}(undef, nrows, 5)
+    tz_reject = r.t_zero < r.t_zero_cv[5]
+    tn_reject = r.t_nyquist < r.t_nyquist_cv[5]
+    tbl[1, :] = ["ω = 0 (zero)", "t(π₁)", round(r.t_zero, digits=4),
+                 round(r.t_zero_cv[5], digits=3), tz_reject ? "reject" : "fail"]
+    tbl[2, :] = ["ω = π (Nyquist)", "t(π₂)", round(r.t_nyquist, digits=4),
+                 round(r.t_nyquist_cv[5], digits=3), tn_reject ? "reject" : "fail"]
+    for (i, F) in enumerate(r.pair_F)
+        rej = F > r.pair_F_cv[5]
+        tbl[2 + i, :] = [string("ω = ", round(r.pair_freqs[i], digits=3)),
+                         "F(pair)", round(F, digits=4),
+                         round(r.pair_F_cv[5], digits=3), rej ? "reject" : "fail"]
+    end
+    tbl[end-1, :] = ["all seasonal", "F₍seas₎", round(r.F_seasonal, digits=4), "—", "—"]
+    tbl[end, :]   = ["all frequencies", "F₍all₎", round(r.F_all, digits=4), "—", "—"]
+    _pretty_table(io, tbl;
+        title = "Frequency-by-frequency statistics (5% CV)",
+        column_labels = ["Frequency", "Stat", "Value", "CV(5%)", "Decision"],
+        alignment = [:l, :l, :r, :r, :r])
+
+    note = Any[
+        "Reject rule" "t < CV (left tail); F > CV (right tail)";
+        "Note" "Seasonal difference Δ_$(r.frequency) is over-differencing if all nulls reject"
+    ]
+    _pretty_table(io, note; column_labels=["HEGY note", ""], alignment=[:l, :l])
+end
+
+function Base.show(io::IO, r::ERSResult)
+    spec_data = Any[
+        "H₀" "Series has a unit root";
+        "H₁" "Series is stationary";
+        "Detrending" _regression_name(r.regression);
+        "Observations" r.nobs
+    ]
+    _pretty_table(io, spec_data;
+        title = "ERS Point-Optimal Unit Root Test (Elliott-Rothenberg-Stock 1996)",
+        column_labels = ["Specification", ""],
+        alignment = [:l, :r])
+
+    stars = _significance_stars(r.pvalue)
+    results_data = Any[
+        "Point-optimal Pₜ" string(round(r.P_T, digits=4), " ", stars);
+        "p-value" _format_pvalue(r.pvalue)
+    ]
+    _pretty_table(io, results_data;
+        title = "Results", column_labels = ["", "Value"], alignment = [:l, :r])
+
+    cv_data = Matrix{Any}(undef, 1, 3)
+    cv_data[1, :] = [round(r.critical_values[1], digits=3),
+                     round(r.critical_values[5], digits=3),
+                     round(r.critical_values[10], digits=3)]
+    _pretty_table(io, cv_data;
+        title = "Critical Values", column_labels = ["1%", "5%", "10%"],
+        alignment = :r, row_labels = ["Pₜ"])
+
+    reject_5 = r.P_T < r.critical_values[5]
+    note = Any[
+        "Conclusion" (reject_5 ? "Reject H₀ at 5% (stationary)" : "Fail to reject H₀ (unit root)");
+        "ERS note" "Small Pₜ ⇒ reject; *** p<0.01, ** p<0.05, * p<0.10"
+    ]
+    _pretty_table(io, note; column_labels=["", ""], alignment=[:l, :l])
+end
