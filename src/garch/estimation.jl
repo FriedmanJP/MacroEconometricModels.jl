@@ -301,8 +301,27 @@ function estimate_garch(y::AbstractVector{T}, p::Int=1, q::Int=1; method::Symbol
         fill(T(NaN), k, k)
     end
 
+    # Convergence flag. Optim's finite-difference gradient (g_tol=1e-8) is noisy
+    # near the flat likelihood of a high-persistence (α+β→1) fit, so its flag can
+    # report non-convergence even AT a valid optimum, and the outcome differs
+    # across platforms (converged on arm64 but not on x64 CI for a persistence
+    # ≈ 0.95 DGP). Confirm with the EXACT score (ForwardDiff on the per-observation
+    # contributions — `_garch_loglik_contribs` is Dual-safe, `_garch_negloglik` is
+    # not): at a genuine QMLE optimum the summed score is ≈ 0 (~1e-6 here), whereas
+    # true non-convergence leaves an O(1) score. This only ever upgrades a
+    # spuriously-false flag; it never downgrades a real convergence.
+    converged = Optim.converged(result)
+    if !converged
+        converged = try
+            score = ForwardDiff.jacobian(θ -> _garch_loglik_contribs(θ, y_vec, p, q), params_cache)
+            norm(vec(sum(score; dims=1))) < T(1e-3)
+        catch
+            false
+        end
+    end
+
     GARCHModel(y_vec, p, q, mu, omega, alpha, beta, h, z, resid, fill(mu, n),
-               loglik, aic_val, bic_val, method, Optim.converged(result), Optim.iterations(result),
+               loglik, aic_val, bic_val, method, converged, Optim.iterations(result),
                param_vcov)
 end
 
