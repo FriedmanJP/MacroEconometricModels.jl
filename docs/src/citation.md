@@ -17,19 +17,18 @@ Plain-text (AEA style):
 BibTeX:
 
 ```bibtex
-@software{chung_macroeconometricmodels,
-  author  = {Chung, Wookyung},
-  title   = {{MacroEconometricModels.jl}: A Comprehensive Julia Package for Macroeconometric
-             Research and Analysis},
-  year    = {2026},
-  version = {0.6.7},
-  url     = {https://github.com/FriedmanJP/MacroEconometricModels.jl},
-  note    = {GPL-3.0-or-later}
+@misc{chung2026macroeconometricmodels,
+  author    = {Chung, Wookyung},
+  title     = {{MacroEconometricModels.jl}},
+  year      = {2026},
+  doi       = {10.5281/zenodo.18439170},
+  url       = {https://doi.org/10.5281/zenodo.18439170},
+  publisher = {Zenodo}
 }
 ```
 
-Replace the `version` field with the release you actually used (see [Changelog / What's New](@ref
-changelog) for the version history).
+The DOI resolves to the Zenodo record for the software; cite the version-specific DOI listed there
+for the exact release you used (see [Changelog / What's New](@ref changelog) for the version history).
 
 ---
 
