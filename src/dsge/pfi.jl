@@ -349,7 +349,9 @@ function pfi_solver(spec::DSGESpec{T};
         sup_norm = maximum(abs.(y_updated_nodes .- y_current_nodes))
 
         if verbose
-            println("  PFI iteration $k: sup-norm = $(sup_norm)")
+            @info "PFI iteration $k: sup-norm = $(sup_norm)"
+        else
+            @debug "PFI iteration $k: sup-norm = $(sup_norm)"
         end
 
         coeffs .= coeffs_new

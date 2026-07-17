@@ -549,7 +549,9 @@ function collocation_solver(spec::DSGESpec{T};
         residual_norm = norm(R)
 
         if verbose
-            println("  Iteration $k: ||R|| = $(residual_norm)")
+            @info "Iteration $k: ||R|| = $(residual_norm)"
+        else
+            @debug "Iteration $k: ||R|| = $(residual_norm)"
         end
 
         if residual_norm < tol

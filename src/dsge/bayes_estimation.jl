@@ -81,27 +81,6 @@ function _build_bayes_prior(priors::Dict{Symbol,<:Distribution})
     return DSGEPrior(priors; lower=lower_dict, upper=upper_dict)
 end
 
-"""
-    _orient_bayes_data(data, n_obs, ::Type{T}) → Matrix{T}
-
-Convert `data` to an `n_obs × T_obs` matrix (each column one time period), the
-orientation the Kalman/particle filters expect. Transposes when the column
-count matches `n_obs`, or best-guesses (more rows than columns → transpose)
-when neither dimension matches.
-"""
-function _orient_bayes_data(data::AbstractMatrix, n_obs::Int, ::Type{T}) where {T<:AbstractFloat}
-    data_mat = Matrix{T}(data)
-    nrows, ncols = size(data_mat)
-    if nrows != n_obs && ncols == n_obs
-        data_mat = Matrix{T}(data_mat')
-    elseif nrows != n_obs && ncols != n_obs
-        if nrows > ncols
-            data_mat = Matrix{T}(data_mat')
-        end
-    end
-    return data_mat
-end
-
 # =============================================================================
 # Helper: resolve theta0 (positional / Dict / NamedTuple) onto sorted params
 # =============================================================================
@@ -443,8 +422,12 @@ and `inv_hessian` falls back to a diagonal matrix.
 
 # Arguments
 - `spec::DSGESpec{T}` — model specification from `@dsge`
-- `data::AbstractMatrix` — observed data (`T_obs × n_obs` or `n_obs × T_obs`, auto-detected)
-- `θ0::AbstractVector{<:Real}` — initial guess, ordered like the sorted prior keys
+- `data::AbstractMatrix` — observed data in the package `T×n` convention (time in rows).
+  Orientation is resolved by matching a dimension to `n_obs`; ambiguous or mismatched
+  shapes throw an `ArgumentError` rather than being silently transposed (#142).
+- `θ0` — initial guess. Preferred: a `Dict{Symbol}`/`NamedTuple` keyed by parameter name
+  (order-independent). A positional `AbstractVector` must be in **sorted prior-key order**
+  and length-matched, else an informative `ArgumentError` is thrown (#136).
 
 # Keywords
 - `priors::Dict{Symbol,<:Distribution}` — prior distributions keyed by parameter name
@@ -468,7 +451,7 @@ the mode, and the Laplace log marginal likelihood.
   Metropolis-Hastings Algorithms. *Statistical Science*, 16(4), 351-367.
 """
 function posterior_mode(spec::DSGESpec{T}, data::AbstractMatrix,
-                        theta0::AbstractVector{<:Real};
+                        theta0::Union{AbstractVector{<:Real},AbstractDict{Symbol,<:Real},NamedTuple};
                         priors::Dict{Symbol,<:Distribution},
                         observables::Vector{Symbol}=Symbol[],
                         measurement_error=nothing,
@@ -481,13 +464,15 @@ function posterior_mode(spec::DSGESpec{T}, data::AbstractMatrix,
     prior = _build_bayes_prior(priors)
     param_names = prior.param_names
     d = length(param_names)
-    length(theta0) == d ||
-        throw(ArgumentError("theta0 has length $(length(theta0)), expected $d (one per prior)"))
+    # theta0 accepted as a Dict/NamedTuple (order-independent) or a length-validated
+    # positional vector in sorted prior-key order (#136); data resolved by matching a
+    # dimension to n_obs, never by a rows-vs-cols guess (#142).
+    theta0_resolved = _resolve_theta0(theta0, param_names, T)
 
     if isempty(observables)
         observables = copy(spec.endog)
     end
-    data_mat = _orient_bayes_data(data, length(observables), T)
+    data_mat = _orient_data(data, length(observables), T)
 
     # Same likelihood closure the samplers use, so mode and chain see identical evaluations
     ll_fn = _build_likelihood_fn(spec, param_names, data_mat, observables,
@@ -503,7 +488,7 @@ function posterior_mode(spec::DSGESpec{T}, data::AbstractMatrix,
     end
 
     # Nudge θ0 strictly inside the prior support so the transform is finite
-    theta_start = Vector{T}(theta0)
+    theta_start = copy(theta0_resolved)
     for i in 1:d
         lo, hi = prior.lower[i], prior.upper[i]
         span = isfinite(lo) && isfinite(hi) ? hi - lo : one(T)
@@ -1532,7 +1517,7 @@ function posterior_predictive_check(result::BayesianDSGE{T};
         data = result.data
     end
     # Observed data → T_obs × n_obs orientation for the stats function
-    data_no = _orient_bayes_data(data, length(observables), T)
+    data_no = _orient_data(data, length(observables), T)
     Y_obs = Matrix{T}(data_no')
     T_obs = size(Y_obs, 1)
 

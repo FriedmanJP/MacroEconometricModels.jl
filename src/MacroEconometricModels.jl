@@ -76,6 +76,8 @@ import ForwardDiff
 import NLopt
 import NonlinearSolve
 import Optim
+using Logging
+import Tables
 
 # =============================================================================
 # Include Source Files (Order Matters)
@@ -84,6 +86,7 @@ import Optim
 # Core infrastructure
 include("core/exceptions.jl")
 include("core/utils.jl")
+include("core/logging.jl")
 include("core/tolerances.jl")
 include("core/types.jl")
 include("core/display.jl")
@@ -412,6 +415,9 @@ include("ct/two_asset.jl")
 # Display (after all types)
 include("summary.jl")
 
+# Tables.jl source interface + tidy exports (after all result types are defined)
+include("core/tables.jl")
+
 # Data conversion and estimation dispatch wrappers (after all estimation functions)
 include("data/convert.jl")
 
@@ -688,6 +694,7 @@ export contribution, total_shock_contribution, verify_decomposition
 
 export report, refs
 export table, print_table
+export long_table, write_csv                 # Tables.jl-compatible tidy exports (#346)
 export point_estimate, has_uncertainty, uncertainty_bounds
 export set_display_backend, get_display_backend, with_display_backend
 export default_abstol, default_reltol
@@ -726,6 +733,7 @@ export favar_panel_irf, favar_panel_forecast, sdfm_panel_irf
 # Exports - Utility Functions
 # =============================================================================
 
+export set_log_level, with_min_level          # structured-logging facade (#348)
 export robust_inv
 export safe_cholesky
 export safe_cholesky_jitter

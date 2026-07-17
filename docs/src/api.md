@@ -353,6 +353,10 @@ Publication-quality tables, display backend switching, and bibliographic referen
 | `report(result)` | Print comprehensive summary |
 | `table(result, ...)` | Extract results as matrix |
 | `print_table([io], result, ...)` | Print formatted table |
+| `long_table(result)` | Tidy/long `DataFrame` of an array-valued result |
+| `write_csv(result, path)` | Export a result (coefficient table or `long_table`) to CSV |
+| `set_log_level(level)` | Set the global minimum log level |
+| `with_min_level(f, level)` | Run `f()` with a scoped minimum log level |
 | `refs(model; format=...)` | Bibliographic references |
 | `refs(io, :method; format=...)` | References by method name |
 

@@ -47,6 +47,15 @@ refs
 ```@docs
 table
 print_table
+long_table
+write_csv
+```
+
+### Logging
+
+```@docs
+set_log_level
+with_min_level
 ```
 
 ---

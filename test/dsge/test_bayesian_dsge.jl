@@ -1690,6 +1690,63 @@ end
     end
 end
 
+# ── #136 / #142 parity: posterior_mode & posterior_predictive_check route through
+#    the shared _resolve_theta0 / _orient_data helpers (previously positional-only
+#    theta0 + the best-guess _orient_bayes_data heuristic) ──
+
+@testset "posterior_mode: Dict/NamedTuple theta0 + n_obs orientation (#136/#142)" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    data = simulate(solve(spec; method=:gensys), 120; rng=Random.MersenneTwister(7))  # 120×1 (T×n)
+    priors = Dict(:ρ => Beta(2, 2), :σ => InverseGamma(3.0, 1.0))
+
+    pm_vec  = posterior_mode(spec, data, [0.5, 0.5]; priors=priors, observables=[:y])
+    # Scrambled Dict / NamedTuple land on the right parameters → identical mode.
+    pm_dict = posterior_mode(spec, data, Dict(:σ => 0.5, :ρ => 0.5); priors=priors, observables=[:y])
+    pm_nt   = posterior_mode(spec, data, (σ = 0.5, ρ = 0.5); priors=priors, observables=[:y])
+    @test pm_dict.mode ≈ pm_vec.mode
+    @test pm_nt.mode ≈ pm_vec.mode
+    # n×T data (row count == n_obs) accepted and gives the same mode as T×n.
+    pm_nxt = posterior_mode(spec, permutedims(data), [0.5, 0.5]; priors=priors, observables=[:y])
+    @test pm_nxt.mode ≈ pm_vec.mode
+
+    # Wrong-length vector, missing/unknown Dict key, and neither-dim-matches shape all error.
+    @test_throws ArgumentError posterior_mode(spec, data, [0.5]; priors=priors, observables=[:y])
+    @test_throws ArgumentError posterior_mode(spec, data, Dict(:ρ => 0.5); priors=priors, observables=[:y])
+    @test_throws ArgumentError posterior_mode(spec, randn(3, 120), [0.5, 0.5];
+                                              priors=priors, observables=[:y])
+    end
+end
+
+@testset "posterior_predictive_check: T×n and n×T data agree, bad shape errors (#142)" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    data = simulate(solve(spec; method=:gensys), 120; rng=Random.MersenneTwister(7))
+    priors = Dict(:ρ => Beta(2, 2), :σ => InverseGamma(3.0, 1.0))
+    fit = estimate_dsge_bayes(spec, data, [0.5, 0.5]; priors=priors, method=:smc,
+                              observables=[:y], n_smc=80, rng=Random.MersenneTwister(3))
+    ppc_tn = posterior_predictive_check(fit; data=data, n_draws=40, rng=Random.MersenneTwister(1))
+    ppc_nt = posterior_predictive_check(fit; data=permutedims(data), n_draws=40,
+                                        rng=Random.MersenneTwister(1))
+    @test ppc_tn.p_values ≈ ppc_nt.p_values
+    @test_throws ArgumentError posterior_predictive_check(fit; data=randn(3, 120), n_draws=10)
+    end
+end
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Section 7: Posterior Analysis
 # ─────────────────────────────────────────────────────────────────────────────
