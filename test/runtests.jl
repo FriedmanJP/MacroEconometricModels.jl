@@ -120,6 +120,7 @@ const TEST_GROUPS = [
         "teststat/test_variance_ratio.jl",   # EV-27 (#435): Lo-MacKinlay/Chow-Denning/Wright/Kim variance-ratio tests
         "cointreg/test_panel_cointreg.jl",   # EV-22 (#430): panel FMOLS/DOLS (group-mean + pooled)
         "preg/test_panel_reg.jl",
+        "preg/test_pcse_prais.jl",   # EV-25 (#433): Beck-Katz PCSE + Prais-Winsten AR(1)
         "preg/test_panel_tests.jl",
     ]),
     # Group 6: Volatility & Non-Gaussian & Plotting & Filters & Spectral
@@ -458,6 +459,7 @@ else
         @testset "Residual-Based Cointegration Tests" begin include("teststat/test_cointegration_resid.jl") end
         @testset "Variance-Ratio Tests" begin include("teststat/test_variance_ratio.jl") end   # EV-27 (#435): Lo-MacKinlay/Chow-Denning/Wright/Kim
         @testset "Panel Regression" begin include("preg/test_panel_reg.jl") end
+        @testset "PCSE + Prais-Winsten" begin include("preg/test_pcse_prais.jl") end   # EV-25 (#433)
         @testset "Panel Specification Tests" begin include("preg/test_panel_tests.jl") end
         @testset "Panel IV" begin include("preg/test_panel_iv.jl") end
         @testset "Panel Nonlinear" begin include("preg/test_panel_nonlinear.jl") end

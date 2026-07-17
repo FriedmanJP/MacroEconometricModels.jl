@@ -235,8 +235,14 @@ Estimate a linear panel regression model.
 # Keyword Arguments
 - `model::Symbol` — `:fe`, `:re`, `:fd`, `:between`, or `:cre` (default: `:fe`)
 - `twoway::Bool` — include time fixed effects (FE only, default: `false`)
-- `cov_type::Symbol` — covariance type: `:ols`, `:cluster` (default), `:twoway`, `:driscoll_kraay`
+- `cov_type::Symbol` — covariance type: `:ols`, `:cluster` (default), `:twoway`,
+  `:driscoll_kraay`, or `:pcse` (Beck-Katz 1995 panel-corrected SE)
 - `bandwidth::Union{Nothing,Int}` — Driscoll-Kraay bandwidth (default: auto)
+- `pcse_unbalanced::Symbol` — `:pcse` unbalanced handling: `:casewise` (default) or `:pairwise`
+- `ar1::Symbol` — Prais-Winsten AR(1) FGLS: `:none` (default), `:common` (one ρ̂),
+  or `:panel_specific` (per-unit ρ̂ᵢ). Supported for `model ∈ (:fe, :re, :cre)`.
+  Pipeline order: Prais-Winsten transform of `(y, X)` → estimate → covariance
+  (`cov_type`, e.g. `:pcse`) on the transformed residuals.
 
 # Returns
 `PanelRegModel{T}` with estimated coefficients, variance components, and R-squared variants.
@@ -264,11 +270,17 @@ m_cre = estimate_xtreg(pd, :y, [:x1, :x2]; model=:cre)
 function estimate_xtreg(pd::PanelData{T}, depvar::Symbol, indepvars::Vector{Symbol};
                         model::Symbol=:fe, twoway::Bool=false,
                         cov_type::Symbol=:cluster,
-                        bandwidth::Union{Nothing,Int}=nothing) where {T<:AbstractFloat}
+                        bandwidth::Union{Nothing,Int}=nothing,
+                        pcse_unbalanced::Symbol=:casewise,
+                        ar1::Symbol=:none) where {T<:AbstractFloat}
     model in (:fe, :re, :fd, :between, :cre, :ab, :bb) ||
         throw(ArgumentError("model must be :fe, :re, :fd, :between, :cre, :ab, or :bb; got :$model"))
-    cov_type in (:ols, :cluster, :twoway, :driscoll_kraay) ||
-        throw(ArgumentError("cov_type must be :ols, :cluster, :twoway, or :driscoll_kraay; got :$cov_type"))
+    cov_type in (:ols, :cluster, :twoway, :driscoll_kraay, :pcse) ||
+        throw(ArgumentError("cov_type must be :ols, :cluster, :twoway, :driscoll_kraay, or :pcse; got :$cov_type"))
+    pcse_unbalanced in (:casewise, :pairwise) ||
+        throw(ArgumentError("pcse_unbalanced must be :casewise or :pairwise; got :$pcse_unbalanced"))
+    ar1 in (:none, :common, :panel_specific) ||
+        throw(ArgumentError("ar1 must be :none, :common, or :panel_specific; got :$ar1"))
 
     # ---- Extract data columns ----
     y_idx = findfirst(==(String(depvar)), pd.varnames)
@@ -293,22 +305,38 @@ function estimate_xtreg(pd::PanelData{T}, depvar::Symbol, indepvars::Vector{Symb
     N = length(unique_groups)
     n_times = length(unique_times)
 
+    # ---- Prais-Winsten AR(1) FGLS pre-transform (EV-25) ----
+    # Order: estimate ρ̂ from first-pass within residuals → quasi-difference (y, X)
+    # per unit (first obs weighted by √(1-ρ̂²)) → estimate on transformed data →
+    # apply the requested cov_type (e.g. :pcse) to the transformed residuals.
+    ar1_rho = nothing
+    if ar1 != :none
+        model in (:fe, :re, :cre) || throw(ArgumentError(
+            "ar1=:$ar1 (Prais-Winsten) is supported only for model=:fe, :re, or :cre; got :$model"))
+        resid0 = _panel_first_pass_resid(y, X, groups, unique_groups)
+        y, X, ar1_rho = _prais_winsten_transform(y, X, groups, time_ids, resid0; ar1=ar1)
+    end
+
     # Dispatch to specific estimator
     if model == :fe
         return _estimate_fe(pd, y, X, groups, time_ids, unique_groups, unique_times,
-                            N, n_times, n, k, indepvars, twoway, cov_type, bandwidth)
+                            N, n_times, n, k, indepvars, twoway, cov_type, bandwidth;
+                            pcse_unbalanced=pcse_unbalanced, ar1_rho=ar1_rho)
     elseif model == :re
         return _estimate_re(pd, y, X, groups, time_ids, unique_groups, unique_times,
-                            N, n_times, n, k, indepvars, cov_type, bandwidth)
+                            N, n_times, n, k, indepvars, cov_type, bandwidth;
+                            pcse_unbalanced=pcse_unbalanced, ar1_rho=ar1_rho)
     elseif model == :fd
         return _estimate_fd(pd, y, X, groups, time_ids, unique_groups,
-                            N, n, k, indepvars, cov_type, bandwidth)
+                            N, n, k, indepvars, cov_type, bandwidth;
+                            pcse_unbalanced=pcse_unbalanced)
     elseif model == :between
         return _estimate_between(pd, y, X, groups, time_ids, unique_groups,
                                   N, n, k, indepvars, cov_type, bandwidth)
     elseif model == :cre
         return _estimate_cre(pd, y, X, groups, time_ids, unique_groups, unique_times,
-                             N, n_times, n, k, indepvars, cov_type, bandwidth)
+                             N, n_times, n, k, indepvars, cov_type, bandwidth;
+                             pcse_unbalanced=pcse_unbalanced, ar1_rho=ar1_rho)
     elseif model == :ab
         return _estimate_ab(pd, depvar, indepvars, n, N, k)
     elseif model == :bb
@@ -325,7 +353,8 @@ function _estimate_fe(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
                       unique_groups::Vector{Int}, unique_times::Vector{Int},
                       N::Int, n_times::Int, n::Int, k::Int,
                       indepvars::Vector{Symbol}, twoway::Bool,
-                      cov_type::Symbol, bandwidth) where {T}
+                      cov_type::Symbol, bandwidth;
+                      pcse_unbalanced::Symbol=:casewise, ar1_rho=nothing) where {T}
 
     n > k + N || throw(ArgumentError("Need more observations than parameters (n=$n, k=$k, N=$N)"))
 
@@ -426,7 +455,7 @@ function _estimate_fe(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
 
     # ---- F-test for joint significance ----
     vcov_mat = _panel_vcov(X_dm, resid_dm, XtXinv, groups, time_ids, cov_type;
-                           bandwidth=bandwidth)
+                           bandwidth=bandwidth, pcse_unbalanced=pcse_unbalanced)
 
     f_stat = try
         T(dot(beta, robust_inv(vcov_mat) * beta) / k)
@@ -461,7 +490,7 @@ function _estimate_fe(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
         loglik, aic_val, bic_val,
         vn, :fe, twoway, cov_type,
         n, N, n_periods_avg,
-        group_effects, pd, nothing
+        group_effects, pd, nothing, ar1_rho
     )
 end
 
@@ -474,7 +503,8 @@ function _estimate_re(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
                       unique_groups::Vector{Int}, unique_times::Vector{Int},
                       N::Int, n_times::Int, n::Int, k::Int,
                       indepvars::Vector{Symbol},
-                      cov_type::Symbol, bandwidth) where {T}
+                      cov_type::Symbol, bandwidth;
+                      pcse_unbalanced::Symbol=:casewise, ar1_rho=nothing) where {T}
 
     # Step 1: Run FE internally to get sigma_e^2
     y_dm, y_group_means = _within_demean(y, groups, unique_groups)
@@ -565,7 +595,7 @@ function _estimate_re(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
     # ---- Covariance matrix ----
     # Use the quasi-demeaned X (with intercept) for vcov
     vcov_full = _panel_vcov(X_qd_c, resid_qd, XtXinv, groups, time_ids, cov_type;
-                            bandwidth=bandwidth)
+                            bandwidth=bandwidth, pcse_unbalanced=pcse_unbalanced)
     # Extract slope portion (drop intercept row/col)
     vcov_mat = vcov_full[2:end, 2:end]
 
@@ -601,7 +631,7 @@ function _estimate_re(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
         loglik, aic_val, bic_val,
         vn, :re, false, cov_type,
         n, N, n_periods_avg,
-        nothing, pd, nothing  # no group_effects for RE
+        nothing, pd, nothing, ar1_rho  # no group_effects for RE
     )
 end
 
@@ -614,7 +644,8 @@ function _estimate_fd(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
                       unique_groups::Vector{Int},
                       N::Int, n::Int, k::Int,
                       indepvars::Vector{Symbol},
-                      cov_type::Symbol, bandwidth) where {T}
+                      cov_type::Symbol, bandwidth;
+                      pcse_unbalanced::Symbol=:casewise) where {T}
 
     # Compute first differences within each group
     # Only difference consecutive time periods (handle gaps)
@@ -708,7 +739,7 @@ function _estimate_fd(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
 
     # ---- Covariance ----
     vcov_full = _panel_vcov(dX_c, resid_fd, XtXinv, dgroups, dtimes, cov_type;
-                            bandwidth=bandwidth)
+                            bandwidth=bandwidth, pcse_unbalanced=pcse_unbalanced)
     vcov_mat = vcov_full[2:end, 2:end]
 
     # ---- F-test ----
@@ -742,7 +773,7 @@ function _estimate_fd(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
         loglik, aic_val, bic_val,
         vn, :fd, false, cov_type,
         n_fd, N_fd, n_periods_avg,
-        nothing, pd, nothing
+        nothing, pd, nothing, nothing
     )
 end
 
@@ -823,7 +854,7 @@ function _estimate_between(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
         loglik, aic_val, bic_val,
         vn, :between, false, cov_type,
         N, N, n_periods_avg,  # n_obs = N for between
-        nothing, pd, nothing
+        nothing, pd, nothing, nothing
     )
 end
 
@@ -836,7 +867,8 @@ function _estimate_cre(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
                        unique_groups::Vector{Int}, unique_times::Vector{Int},
                        N::Int, n_times::Int, n::Int, k::Int,
                        indepvars::Vector{Symbol},
-                       cov_type::Symbol, bandwidth) where {T}
+                       cov_type::Symbol, bandwidth;
+                       pcse_unbalanced::Symbol=:casewise, ar1_rho=nothing) where {T}
 
     # Step 1: Compute group means X̄ᵢ for all regressors
     X_group_means = Dict{Int,Vector{T}}()
@@ -946,7 +978,7 @@ function _estimate_cre(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
 
     # ---- Covariance ----
     vcov_full = _panel_vcov(X_aug_qd_c, resid_qd, XtXinv, groups, time_ids, cov_type;
-                            bandwidth=bandwidth)
+                            bandwidth=bandwidth, pcse_unbalanced=pcse_unbalanced)
     vcov_mat = vcov_full[2:end, 2:end]  # drop intercept
 
     # ---- F-test (on all slopes) ----
@@ -985,7 +1017,7 @@ function _estimate_cre(pd::PanelData{T}, y::Vector{T}, X::Matrix{T},
         loglik, aic_val, bic_val,
         vn_all, :cre, false, cov_type,
         n, N, n_periods_avg,
-        nothing, pd, nothing
+        nothing, pd, nothing, ar1_rho
     )
 end
 
@@ -1084,6 +1116,6 @@ function _estimate_dynamic_panel(pd::PanelData{T}, depvar::Symbol, indepvars::Ve
         zero(T), zero(T), zero(T),  # loglik, aic, bic
         vn, method, false, :cluster,
         m_pvar.n_obs, N, n_periods_avg,
-        nothing, pd, dynamic_diagnostics
+        nothing, pd, dynamic_diagnostics, nothing
     )
 end

@@ -1279,6 +1279,17 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Consistent Covariance Matrix Estimation with Spatially Dependent Panel Data",
         journal="Review of Economics and Statistics", volume="80", issue="4", pages="549--560",
         doi="10.1162/003465398557825", isbn="", publisher="", entry_type=:article),
+    # --- Panel-corrected SE + Prais-Winsten AR(1) (EV-25, #433) ---
+    :beck_katz1995 => (key=:beck_katz1995,
+        authors="Beck, Nathaniel and Katz, Jonathan N.", year=1995,
+        title="What to Do (and Not to Do) with Time-Series Cross-Section Data",
+        journal="American Political Science Review", volume="89", issue="3", pages="634--647",
+        doi="10.2307/2082979", isbn="", publisher="", entry_type=:article),
+    :prais_winsten1954 => (key=:prais_winsten1954,
+        authors="Prais, S. J. and Winsten, C. B.", year=1954,
+        title="Trend Estimators and Serial Correlation",
+        journal="Cowles Commission Discussion Paper", volume="383", issue="", pages="1--26",
+        doi="", isbn="", publisher="Cowles Commission for Research in Economics", entry_type=:article),
     # --- MIDAS Regression (EV-01) ---
     :ghysels2007 => (key=:ghysels2007,
         authors="Ghysels, Eric and Sinko, Arthur and Valkanov, Rossen", year=2007,
@@ -1951,7 +1962,7 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :estimate_oprobit => [:mccullagh1980, :wooldridge2010],
     :estimate_mlogit => [:mcfadden1974, :hausman_mcfadden1984, :wooldridge2010],
     # Panel regression
-    :PanelRegModel => [:baltagi2021, :wooldridge2010],
+    :PanelRegModel => [:baltagi2021, :wooldridge2010, :beck_katz1995, :prais_winsten1954],
     :PanelIVModel => [:baltagi2021, :wooldridge2010, :hausman_taylor1981],
     :PanelLogitModel => [:chamberlain1980, :wooldridge2010],
     :PanelProbitModel => [:wooldridge2010],
