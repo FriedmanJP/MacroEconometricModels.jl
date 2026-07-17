@@ -59,6 +59,7 @@ plot_result(birf)
 bfevd = fevd(post, 20; method=:cholesky)
 bhd = historical_decomposition(post; method=:cholesky)
 report(bfevd)
+report(bhd)
 ```
 
 **Recipe 5: Multi-step forecasting with credible intervals**
@@ -601,7 +602,7 @@ mean_model_ce = posterior_mean_model(post_ce)
 stab_ce = is_stationary(mean_model_ce)
 ```
 
-This workflow demonstrates the complete Bayesian pipeline: hyperparameter optimization selects the optimal shrinkage ``\tau`` via marginal likelihood, the conjugate NIW sampler produces 1000 posterior draws, and the structural analysis functions compute IRFs, FEVD, and historical decomposition with credible intervals. The Cholesky ordering [INDPRO, CPI, FFR] identifies a monetary policy shock as the third innovation. The forecast integrates over the full posterior distribution of ``(B, \Sigma)``, providing credible intervals that account for both parameter and shock uncertainty. The posterior mean model confirms stationarity of the system.
+This workflow demonstrates the complete Bayesian pipeline: hyperparameter optimization selects the optimal shrinkage ``\tau`` via marginal likelihood, the conjugate NIW sampler produces 100 posterior draws, and the structural analysis functions compute IRFs, FEVD, and historical decomposition with credible intervals. The Cholesky ordering [INDPRO, CPI, FFR] identifies a monetary policy shock as the third innovation. The forecast integrates over the full posterior distribution of ``(B, \Sigma)``, providing credible intervals that account for both parameter and shock uncertainty. The posterior mean model confirms stationarity of the system.
 
 ---
 

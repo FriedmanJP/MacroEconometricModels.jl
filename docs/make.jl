@@ -23,7 +23,11 @@ makedocs(;
     ),
     pages=[
         "Home" => "index.md",
-        "Data Management" => "data.md",
+        "Getting Started" => [
+            "Installation & First Model" => "getting_started.md",
+            "Choosing a Method" => "method_guide.md",
+            "Data Management" => "data.md",
+        ],
         "Univariate Models" => [
             "Time Series Filters" => "filters.md",
             "X-13ARIMA-SEATS" => "x13.md",
@@ -39,17 +43,16 @@ makedocs(;
             "Factor Models" => "factormodels.md",
             "FAVAR" => "favar.md",
         ],
-        "Cross-Sectional Models" => [
+        "Cross-Section & Panel" => [
             "Linear Regression" => "regression.md",
             "Binary Choice Models" => "binary_choice.md",
             "Ordered & Multinomial" => "ordered_multinomial.md",
-        ],
-        "Panel Models" => [
-            "Panel VAR" => "pvar.md",
             "Panel Regression" => "panel_reg.md",
+            "Panel VAR" => "pvar.md",
             "Difference-in-Differences" => "did.md",
             "Event Study LP" => "event_study.md",
         ],
+        "GMM & SMM" => "gmm.md",
         "DSGE Models" => [
             "Overview" => "dsge.md",
             "Linear Solvers" => "dsge_linear.md",
@@ -68,18 +71,20 @@ makedocs(;
             "Baqaee & Farhi (2019)" => "io_baqaee_farhi.md",
             "Downloading Data" => "io_download.md",
         ],
-        "Innovation Accounting" => [
-            "Overview" => "innovation_accounting.md",
-            "Impulse Responses" => "ia_irf.md",
-            "Variance Decomposition" => "ia_fevd.md",
-            "Historical Decomposition" => "ia_hd.md",
-        ],
-        "Structural Identification" => "structural_identification.md",
-        "Statistical Identification" => [
-            "Overview" => "nongaussian.md",
-            "Non-Gaussian Methods" => "id_nongaussian.md",
-            "Heteroskedasticity" => "id_heteroskedastic.md",
-            "Testing" => "id_testing.md",
+        "Structural Analysis" => [
+            "Structural Identification" => "structural_identification.md",
+            "Statistical Identification" => [
+                "Overview" => "nongaussian.md",
+                "Non-Gaussian Methods" => "id_nongaussian.md",
+                "Heteroskedasticity" => "id_heteroskedastic.md",
+                "Testing" => "id_testing.md",
+            ],
+            "Innovation Accounting" => [
+                "Overview" => "innovation_accounting.md",
+                "Impulse Responses" => "ia_irf.md",
+                "Variance Decomposition" => "ia_fevd.md",
+                "Historical Decomposition" => "ia_hd.md",
+            ],
         ],
         "Nowcasting" => [
             "Overview" => "nowcast.md",
@@ -97,17 +102,34 @@ makedocs(;
             "Model Diagnostics" => "tests_diagnostics.md",
         ],
         "Visualization" => "plotting.md",
+        "Project" => [
+            "Notation" => "notation.md",
+            "Bibliography" => "bibliography.md",
+            "Changelog" => "changelog.md",
+            "How to Cite" => "citation.md",
+        ],
         "API Reference" => [
             "Overview" => "api.md",
-            "Types" => "api_types.md",
-            "Functions" => "api_functions.md",
+            "Data Management" => "api/data.md",
+            "Univariate Models" => "api/univariate.md",
+            "Multivariate Models" => "api/multivariate.md",
+            "Cross-Sectional Models" => "api/cross_section.md",
+            "Panel Models" => "api/panel.md",
+            "DSGE Models" => "api/dsge.md",
+            "Structural & Statistical Identification" => "api/structural.md",
+            "GMM & SMM" => "api/gmm.md",
+            "Hypothesis Tests" => "api/tests.md",
+            "Nowcasting" => "api/nowcasting.md",
+            "Visualization" => "api/visualization.md",
+            "Utilities & Display" => "api/utilities.md",
         ],
     ],
     checkdocs=:exports,
     # example/setup/docs/autodocs block failures must FAIL the build (docrule: "@example
-    # blocks MUST run"). :missing_docs stays until the docstring backlog clears ([T202]);
-    # :cross_references deferred to the docs-consistency stage (xref burn-down not yet done).
-    warnonly=[:missing_docs, :cross_references],
+    # blocks MUST run"). Every exported docstring is now registered on a reference page
+    # ([T202]/[T177]/[T178]), so :missing_docs is a hard error. :cross_references is
+    # deferred to the docs-consistency stage (xref burn-down not yet done).
+    warnonly=[:cross_references],
 )
 
 # Since v0.6.x docs are NOT built or deployed by CI (Documentation.yml removed

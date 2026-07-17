@@ -20,7 +20,7 @@ y = y[end-99:end]
 
 ## Quick Start
 
-**Recipe 1: Estimate an AR(2) on industrial production growth**
+**Recipe 1: Estimate an AR(2) on CPI inflation**
 
 ```@example arima
 ar = estimate_ar(y, 2)
@@ -127,7 +127,7 @@ ar_mle = estimate_ar(y, 2; method=:mle)
 report(ar_mle)
 ```
 
-The AR(2) model on IP growth captures the short-run momentum (positive ``\phi_1``) and mean-reversion (negative ``\phi_2``) that characterize industrial production dynamics. OLS and MLE produce nearly identical estimates for this large sample, but MLE provides exact inference through proper likelihood treatment.
+The AR(2) model on CPI inflation captures the short-run momentum (positive ``\phi_1``) and mean-reversion (negative ``\phi_2``) that characterize CPI inflation dynamics. OLS and MLE produce nearly identical estimates for this large sample, but MLE provides exact inference through proper likelihood treatment.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -188,7 +188,7 @@ ma = estimate_ma(y, 1; method=:css_mle)
 report(ma)
 ```
 
-The MA(1) coefficient ``\theta_1`` captures one-period serial correlation in shocks to industrial production growth. A positive ``\theta_1`` indicates that a positive surprise this month raises the forecast for next month beyond the unconditional mean.
+The estimated MA(1) coefficient ``\hat\theta_1 \approx 0.60`` captures one-period serial correlation in shocks to CPI inflation. Its positive sign indicates that a positive inflation surprise this month raises the forecast for next month beyond the unconditional mean.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -240,7 +240,7 @@ arma = estimate_arma(y, 1, 1; method=:css_mle)
 report(arma)
 ```
 
-The ARMA(1,1) model captures both the autoregressive persistence in IP growth (through ``\phi_1``) and the one-period shock amplification (through ``\theta_1``). An ARMA(1,1) often achieves a lower BIC than a pure AR model of comparable fit because the MA component absorbs short-run dynamics that would otherwise require additional AR lags.
+The ARMA(1,1) model captures both the autoregressive persistence in CPI inflation (``\hat\phi_1 \approx 0.23``) and the one-period shock amplification (``\hat\theta_1 \approx 0.41``). Its BIC of about ``-908`` improves on the AR(2) model estimated above (BIC ``\approx -888``), because the MA component absorbs short-run dynamics that would otherwise require additional AR lags.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -294,7 +294,7 @@ model = estimate_arima(y_level, 1, 1, 0)
 report(model)
 ```
 
-The ARIMA(1,1,0) on log IP first-differences the level series (removing the stochastic trend), then fits an AR(1) to the growth rate. The AR coefficient on the differenced series captures month-to-month momentum in industrial production growth.
+The ARIMA(1,1,0) on the synthetic log-level series (`y_level = cumsum(y)`, an I(1) series accumulated from CPI inflation, approximately a log price level) first-differences the level, then fits an AR(1) to the resulting inflation series. The AR coefficient on the differenced series captures month-to-month momentum in CPI inflation.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -471,7 +471,7 @@ sel = select_arima_order(y, 4, 4)
 report(sel)
 ```
 
-The BIC-optimal order typically selects a more parsimonious model than AIC because BIC penalizes free parameters more heavily (penalty ``k \log n`` vs. ``2k``). For forecasting applications, BIC-selected models often outperform AIC-selected models at longer horizons due to reduced parameter estimation uncertainty.
+Here the AIC selects an ARMA(1,2) while the BIC selects the more parsimonious ARMA(0,1), because BIC penalizes free parameters more heavily (penalty ``k \log n`` vs. ``2k``). For forecasting applications, BIC-selected models often outperform AIC-selected models at longer horizons due to reduced parameter estimation uncertainty.
 
 !!! note "CSS order comparability"
     Under `:css` estimation the conditional likelihood is evaluated over ``n - \max(p,q)`` observations, a window that varies with the candidate order. `select_arima_order` therefore rescores every `:css` candidate's AIC/BIC on a **common conditioning window** ``n - \max(\text{max\_p}, \text{max\_q})`` so the criteria are comparable across orders; MLE / CSS-MLE candidates already use the full sample.
@@ -550,10 +550,10 @@ The `fit` interface provides a standard constructor pattern consistent with othe
 
 ## Complete Example
 
-This example demonstrates the full Box-Jenkins workflow: unit root testing, order selection, estimation, diagnostics, and forecasting on FRED-MD industrial production data.
+This example demonstrates the full Box-Jenkins workflow: unit root testing, order selection, estimation, diagnostics, and forecasting on FRED-MD CPI (CPIAUCSL) inflation data.
 
 ```@example arima
-# Step 1: Check for unit root — IP growth should be stationary
+# Step 1: Check for unit root — CPI inflation should be stationary
 adf_result = adf_test(y; lags=:aic, regression=:constant)
 report(adf_result)
 ```
@@ -571,7 +571,7 @@ report(model)
 ```
 
 ```@example arima
-# Step 4: Forecast IP growth 12 months ahead
+# Step 4: Forecast CPI inflation 12 months ahead
 fc = forecast(model, 12; conf_level=0.95)
 report(fc)
 ```
@@ -585,7 +585,7 @@ p = plot_result(fc; history=y, n_history=50)
 <iframe src="../assets/plots/forecast_arima.html" width="100%" height="400" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-The ADF test rejects the unit root null at the 1% level, confirming that IP growth is stationary and no differencing is required. The BIC grid search identifies the optimal ARMA order, balancing fit against parsimony. The 12-month forecast shows IP growth reverting toward its unconditional mean, with widening confidence bands that reflect increasing uncertainty at longer horizons. The one-step standard error provides the minimal forecast uncertainty, while the 12-step band is substantially wider due to the accumulation of ``\psi``-weight variance.
+The ADF test rejects the unit root null at the 1% level, confirming that CPI inflation is stationary and no differencing is required. The BIC grid search identifies the optimal ARMA order, balancing fit against parsimony. The 12-month forecast shows CPI inflation reverting toward its unconditional mean, with widening confidence bands that reflect increasing uncertainty at longer horizons. The one-step standard error provides the minimal forecast uncertainty, while the 12-step band is substantially wider due to the accumulation of ``\psi``-weight variance.
 
 ---
 

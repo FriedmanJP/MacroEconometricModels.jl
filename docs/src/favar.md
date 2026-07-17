@@ -20,8 +20,6 @@ md = fred[:, vcat(slow_names, fast_names)]
 X = to_matrix(apply_tcode(md))
 X = X[all.(isfinite, eachrow(X)), :]
 X = X[end-59:end, :]
-Y_slow = X[:, 1:3]
-Y_fast = X[:, 4:end]
 ```
 
 ## Quick Start
@@ -128,7 +126,7 @@ favar_ts = estimate_favar(X, [4, 5], 2, 2)
 report(irf(favar_ts, 20; method=:cholesky))
 ```
 
-The estimation extracts factors from the panel, orthogonalizes them against the 2 key variables, and fits a VAR(2) on the resulting 5-variable system. The `report()` call on the IRF displays the structural impulse responses with Cholesky identification, where the ordering places factors before key variables.
+The estimation extracts factors from the panel, orthogonalizes them against the 2 key variables, and fits a VAR(2) on the resulting 4-variable system. The `report()` call on the IRF displays the structural impulse responses with Cholesky identification, where the ordering places factors before key variables.
 
 ### Specifying Key Variables
 
@@ -183,7 +181,7 @@ The Gibbs sampler iterates three blocks:
 
 1. **Draw** ``\Lambda \mid F, X``: Equation-by-equation OLS regression with Normal posterior, drawing each row of ``\Lambda`` conditional on the current factors and idiosyncratic variances
 2. **Draw** ``F \mid \Lambda, B, \Sigma, X, Y^{key}``: Posterior regression combining the observation equation likelihood with a standard Normal prior, producing time-``t`` factor draws
-3. **Draw** ``(B, \Sigma) \mid F, Y^{key}``: Normal-Inverse-Wishart conjugate posterior from the VAR on the augmented system ``[F, Y^{key}]``
+3. **Draw** ``(B, \Sigma) \mid F, Y^{key}``: Normal-Inverse-Wishart conjugate posterior from the VAR on the augmented system ``[F, Y^{key}]``, in the informative-prior tradition of Doan, Litterman & Sims (1984)
 
 ```@example favar
 # Bayesian FAVAR with 100 posterior draws and 50 burn-in
@@ -300,10 +298,11 @@ r_chol = irf(favar_panel, 20; method=:cholesky)
 report(r_chol)
 ```
 
-```julia
+```@example favar
 # Sign restrictions via check function (irf_matrix is H × n × n)
 check_fn(irf_matrix) = irf_matrix[1, 1, 1] > 0 && irf_matrix[1, 3, 1] < 0
 r_sign_favar = irf(favar_panel, 20; method=:sign, check_func=check_fn)
+report(r_sign_favar)
 ```
 
 The Cholesky identification places the slow-moving factors before the fast-moving key variables, consistent with the Bernanke, Boivin & Eliasz (2005) identification scheme where monetary policy (the key variable) responds contemporaneously to factor movements but not vice versa. For a detailed treatment of identification methods, see [Innovation Accounting](@ref innovation_accounting_page).
@@ -312,7 +311,7 @@ The Cholesky identification places the slow-moving factors before the fast-movin
 
 ## Complete Example
 
-This example estimates a FAVAR on simulated data, performs structural analysis with both frequentist and Bayesian approaches, and maps results to the full panel:
+This example estimates a FAVAR on FRED-MD data, performs structural analysis with both frequentist and Bayesian approaches, and maps results to the full panel:
 
 ```@example favar
 # --- Two-step FAVAR ---
@@ -341,7 +340,7 @@ report(r_panel_full)
 report(bfevd_full)
 ```
 
-The two-step FAVAR extracts 3 factors from the 50-variable panel, removes the component spanned by the 2 key variables, and estimates a VAR(2) on the resulting 5-variable augmented system. The panel-wide IRFs map structural shocks to all 50 variables through the ``N \times r`` loading matrix ``\Lambda``. The Bayesian FAVAR additionally quantifies uncertainty in the factor extraction through 5000 Gibbs draws, producing wider credible intervals that account for estimation error in both the factors and the VAR parameters.
+The two-step FAVAR extracts 2 factors from the 7-variable panel, removes the component spanned by the 2 key variables, and estimates a VAR(2) on the resulting 4-variable augmented system. The panel-wide IRFs map structural shocks to all 7 variables through the ``N \times r`` loading matrix ``\Lambda``. The Bayesian FAVAR additionally quantifies uncertainty in the factor extraction through 100 Gibbs draws, producing wider credible intervals that account for estimation error in both the factors and the VAR parameters.
 
 ---
 
@@ -361,17 +360,17 @@ The two-step FAVAR extracts 3 factors from the 50-variable panel, removes the co
 
 ## References
 
+- Bai, J., & Ng, S. (2002). Determining the Number of Factors in Approximate Factor Models.
+  *Econometrica*, 70(1), 191-221. [DOI](https://doi.org/10.1111/1468-0262.00273)
+
 - Bernanke, B. S., Boivin, J., & Eliasz, P. (2005). Measuring the Effects of Monetary Policy: A Factor-Augmented Vector Autoregressive (FAVAR) Approach.
   *Quarterly Journal of Economics*, 120(1), 387-422. [DOI](https://doi.org/10.1162/0033553053970344)
 
-- Stock, J. H., & Watson, M. W. (2002). Forecasting Using Principal Components from a Large Number of Predictors.
-  *Journal of the American Statistical Association*, 97(460), 1167-1179. [DOI](https://doi.org/10.1198/016214502388618960)
-
-- Bai, J., & Ng, S. (2002). Determining the Number of Factors in Approximate Factor Models.
-  *Econometrica*, 70(1), 191-221. [DOI](https://doi.org/10.1111/1468-0262.00273)
+- Carter, C. K., & Kohn, R. (1994). On Gibbs Sampling for State Space Models.
+  *Biometrika*, 81(3), 541-553. [DOI](https://doi.org/10.1093/biomet/81.3.541)
 
 - Doan, T., Litterman, R., & Sims, C. (1984). Forecasting and Conditional Projection Using Realistic Prior Distributions.
   *Econometric Reviews*, 3(1), 1-100. [DOI](https://doi.org/10.1080/07474938408800053)
 
-- Carter, C. K., & Kohn, R. (1994). On Gibbs Sampling for State Space Models.
-  *Biometrika*, 81(3), 541-553. [DOI](https://doi.org/10.1093/biomet/81.3.541)
+- Stock, J. H., & Watson, M. W. (2002). Forecasting Using Principal Components from a Large Number of Predictors.
+  *Journal of the American Statistical Association*, 97(460), 1167-1179. [DOI](https://doi.org/10.1198/016214502388618960)

@@ -109,7 +109,7 @@ p = plot_result(hp)
 <iframe src="../assets/plots/filter_hp.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-The HP trend tracks the low-frequency movements in log industrial production, while the cycle component captures business cycle fluctuations. The cycle standard deviation indicates the amplitude of the extracted fluctuations relative to trend.
+The HP trend tracks the low-frequency movements in log industrial production, while the cycle component captures business cycle fluctuations. Here the reported cycle standard deviation is ``0.0314`` (about 3.1 log points), measuring the amplitude of the extracted fluctuations relative to trend.
 
 ### Keyword Arguments
 
@@ -394,7 +394,7 @@ p = plot_result(bhp)
 <iframe src="../assets/plots/filter_boosted_hp.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-The boosted HP trend is sharper than the standard HP trend, tracking structural shifts more closely. The number of iterations indicates how many re-filterings were needed to remove unit root behavior from the cycle --- more iterations imply stronger trend persistence in the original data. Mei, Phillips & Shi (2024) show that the boosted HP filter encompasses the standard HP filter as the special case ``m^* = 1``.
+The boosted HP trend is sharper than the standard HP trend, tracking structural shifts more closely. Here BIC stopping requires 51 iterations to remove unit root behavior from the cycle --- more iterations imply stronger trend persistence in the original data. Mei, Phillips & Shi (2024) show that the boosted HP filter encompasses the standard HP filter as the special case ``m^* = 1``.
 
 ### Keyword Arguments
 
@@ -469,7 +469,7 @@ round(std(cycle(bk)), digits=4)
 round(std(cycle(bhp)), digits=4)
 ```
 
-The HP, Hamilton, and boosted HP cycles have full sample length, while the Hamilton and Baxter-King cycles are shorter due to observation loss. Cycle standard deviations differ across filters because each isolates a different frequency range: the BK filter targets a specific band (18--96 months), the HP filter penalizes curvature globally, and the Hamilton filter captures predictable variation over a 2-year horizon. The boosted HP cycle is typically smaller in amplitude than the standard HP cycle because additional iterations remove residual trend contamination.
+The Hamilton and Baxter-King cycles are shorter than the full sample due to observation loss, while the HP, boosted HP, and Beveridge-Nelson cycles retain full sample length. Cycle standard deviations differ sharply across filters because each isolates a different frequency range: the Hamilton cycle is largest at ``0.0609``, followed by the HP (``0.0314``) and Baxter-King (``0.0294``) cycles, while the boosted HP (``0.0151``) and Beveridge-Nelson (``0.0029``) cycles are far smaller. The BK filter targets a specific band (18--96 months), the HP filter penalizes curvature globally, and the Hamilton filter captures predictable variation over a 2-year horizon. The boosted HP cycle is smaller in amplitude than the standard HP cycle because additional iterations remove residual trend contamination.
 
 ---
 

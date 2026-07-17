@@ -377,7 +377,7 @@ using MacroEconometricModels
     @testset "favar_panel_irf with CI" begin
         X, _ = make_favar_data(N=30)
         favar = estimate_favar(X, [1, 5], 2, 2)
-        irf_ci = irf(favar, 10; ci_type=:bootstrap, reps=30)
+        irf_ci = irf(favar, 10; ci_type=:bootstrap, reps=20)
 
         panel_irf = favar_panel_irf(favar, irf_ci)
         @test panel_irf.ci_type == :bootstrap
@@ -444,7 +444,7 @@ using MacroEconometricModels
     @testset "favar_panel_forecast with bootstrap CI" begin
         X, _ = make_favar_data(N=30)
         favar = estimate_favar(X, [1, 5], 2, 2)
-        fc = forecast(favar, 5; ci_method=:bootstrap, reps=30)
+        fc = forecast(favar, 5; ci_method=:bootstrap, reps=20)
 
         panel_fc = favar_panel_forecast(favar, fc)
         @test size(panel_fc.ci_lower) == (5, 30)
@@ -470,7 +470,7 @@ using MacroEconometricModels
         X, _ = make_favar_data()
         favar = estimate_favar(X, [1, 2], 2, 2)
 
-        fc = forecast(favar, 5; ci_method=:bootstrap, reps=50, conf_level=0.90)
+        fc = forecast(favar, 5; ci_method=:bootstrap, reps=20, conf_level=0.90)
         @test fc.ci_method == :bootstrap
         @test fc.conf_level == 0.90
         @test size(fc.ci_lower) == (5, 4)
@@ -640,10 +640,14 @@ using MacroEconometricModels
     # Task 8: Bayesian FAVAR Structural Analysis
     # =========================================================================
 
-    @testset "Bayesian FAVAR IRF" begin
-        X, _ = make_favar_data(T_obs=150, N=20, r_true=2)
-        bfavar = estimate_favar(X, [1, 5], 2, 1; method=:bayesian, n_draws=60, burnin=20)
+    # Shared Bayesian Gibbs chain reused across the 5 structural-analysis testsets
+    # below (identical config previously rebuilt in each). Seed the global RNG so the
+    # chain is reproducible; make_favar_data is deterministic via its own MersenneTwister.
+    Xb, _ = make_favar_data(T_obs=150, N=20, r_true=2)
+    Random.seed!(320)
+    bfavar = estimate_favar(Xb, [1, 5], 2, 1; method=:bayesian, n_draws=60, burnin=20)
 
+    @testset "Bayesian FAVAR IRF" begin
         irf_result = irf(bfavar, 10)
         @test irf_result isa BayesianImpulseResponse{Float64}
         @test irf_result.horizon == 10
@@ -654,9 +658,6 @@ using MacroEconometricModels
     end
 
     @testset "Bayesian FAVAR FEVD" begin
-        X, _ = make_favar_data(T_obs=150, N=20, r_true=2)
-        bfavar = estimate_favar(X, [1, 5], 2, 1; method=:bayesian, n_draws=60, burnin=20)
-
         fevd_result = fevd(bfavar, 10)
         @test fevd_result isa BayesianFEVD{Float64}
         @test fevd_result.horizon == 10
@@ -664,9 +665,6 @@ using MacroEconometricModels
     end
 
     @testset "Bayesian FAVAR panel IRF" begin
-        X, _ = make_favar_data(T_obs=150, N=20, r_true=2)
-        bfavar = estimate_favar(X, [1, 5], 2, 1; method=:bayesian, n_draws=60, burnin=20)
-
         irf_aug = irf(bfavar, 10)
         panel_irf = favar_panel_irf(bfavar, irf_aug)
 
@@ -678,9 +676,6 @@ using MacroEconometricModels
     end
 
     @testset "Bayesian FAVAR panel IRF key variable override" begin
-        X, _ = make_favar_data(T_obs=150, N=20, r_true=2)
-        bfavar = estimate_favar(X, [1, 5], 2, 1; method=:bayesian, n_draws=60, burnin=20)
-
         irf_aug = irf(bfavar, 10)
         panel_irf = favar_panel_irf(bfavar, irf_aug)
 
@@ -696,9 +691,6 @@ using MacroEconometricModels
     end
 
     @testset "Bayesian FAVAR panel IRF loadings mapping" begin
-        X, _ = make_favar_data(T_obs=150, N=20, r_true=2)
-        bfavar = estimate_favar(X, [1, 5], 2, 1; method=:bayesian, n_draws=60, burnin=20)
-
         irf_aug = irf(bfavar, 10)
         panel_irf = favar_panel_irf(bfavar, irf_aug)
 

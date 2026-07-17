@@ -184,7 +184,7 @@ unconditional_variance(garch)   # Long-run variance level
     inverse-observed-information errors (valid only under correct Gaussian specification):
     `stderror(garch; cov_type=:hessian)`.
 
-The persistence ``\alpha_1 + \beta_1`` for equity returns typically falls between 0.9 and 0.99, implying that volatility shocks are highly persistent. A half-life of 13 periods means that half the impact of a volatility shock dissipates after 13 time units. The unconditional variance provides the long-run level to which the conditional variance mean-reverts.
+The persistence ``\alpha_1 + \beta_1`` typically falls between 0.9 and 0.99, implying that volatility shocks are highly persistent. The unconditional variance provides the long-run level to which the conditional variance mean-reverts.
 
 ### EGARCH(p,q)
 
@@ -627,7 +627,7 @@ coef(garch)          # [μ, ω, α₁, ..., αq, β₁, ..., βp]
 
 ## Complete Example
 
-This example estimates all four GARCH-family models on S&P 500 returns, runs diagnostics, compares specifications, and estimates an SV model for comparison.
+This example estimates all four GARCH-family models on monthly industrial production growth (FRED-MD INDPRO, tcode-transformed to log-growth), runs diagnostics, compares specifications, and estimates an SV model for comparison.
 
 ```@example volatility
 # === Step 1: Test for ARCH effects ===
@@ -702,7 +702,7 @@ fc_sv = forecast(sv, 20)
 report(fc_sv)
 ```
 
-The S&P 500 returns exhibit strong ARCH effects, confirming the need for volatility modeling. The GARCH(1,1) persistence is typically close to 0.95 for monthly equity returns, meaning volatility shocks take roughly 13 periods to dissipate to half their initial impact. The EGARCH and GJR-GARCH models capture asymmetric leverage effects --- negative shocks increase volatility more than positive shocks of equal magnitude --- which the symmetric GARCH specification misses. After fitting, all models' standardized residuals pass the ARCH-LM test, confirming adequate capture of variance dynamics. The SV model provides an independent Bayesian assessment via the Kim-Shephard-Chib (1998) Gibbs sampler, with posterior credible bands quantifying parameter uncertainty.
+The industrial production growth series exhibits ARCH effects, confirming the need for volatility modeling. The EGARCH and GJR-GARCH models capture asymmetric leverage effects --- negative shocks increase volatility more than positive shocks of equal magnitude --- which the symmetric GARCH specification misses. After fitting, all models' standardized residuals pass the ARCH-LM test, confirming adequate capture of variance dynamics. The SV model provides an independent Bayesian assessment via the Kim-Shephard-Chib (1998) Gibbs sampler, with posterior credible bands quantifying parameter uncertainty.
 
 ---
 

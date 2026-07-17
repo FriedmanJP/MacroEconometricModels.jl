@@ -612,11 +612,15 @@ end
 # 5. News Decomposition
 # =============================================================================
 
+# Shared T=60/nM=4/nQ=1/r=1 DFM fit (seed=700, heavier max_iter=20/thresh=1e-3 config
+# valid for all reused News/Dispatch/Display testsets). Deduplicates 13 redundant EM refits.
+_NC_Y, _, _, _ = _make_nowcast_data(T_obs=60, nM=4, nQ=1, r=1, seed=700)
+_NC_M = nowcast_dfm(_NC_Y, 4, 1; r=1, p=1, max_iter=20, thresh=1e-3)
+
 @testset "News Decomposition" begin
     @testset "Basic news computation" begin
-        Y, _, _, _ = _make_nowcast_data(T_obs=60, nM=4, nQ=1, r=1, seed=700)
-
-        m = nowcast_dfm(Y, 4, 1; r=1, p=1, max_iter=20, thresh=1e-3)
+        Y = _NC_Y
+        m = _NC_M
 
         # Create old vintage with more NaN
         X_old = copy(Y)
@@ -631,8 +635,8 @@ end
     end
 
     @testset "No-news case" begin
-        Y, _, _, _ = _make_nowcast_data(T_obs=60, nM=4, nQ=1, r=1, seed=800)
-        m = nowcast_dfm(Y, 4, 1; r=1, p=1, max_iter=20, thresh=1e-3)
+        Y = _NC_Y
+        m = _NC_M
 
         # Same data → no news
         news = nowcast_news(Y, Y, m, 30; target_var=5)
@@ -642,8 +646,8 @@ end
     end
 
     @testset "Decomposition identity" begin
-        Y, _, _, _ = _make_nowcast_data(T_obs=60, nM=4, nQ=1, r=1, seed=900)
-        m = nowcast_dfm(Y, 4, 1; r=1, p=1, max_iter=20, thresh=1e-3)
+        Y = _NC_Y
+        m = _NC_M
 
         X_old = copy(Y)
         X_old[55:60, 1:2] .= NaN
@@ -701,8 +705,8 @@ end
     end
 
     @testset "Input validation" begin
-        Y, _, _, _ = _make_nowcast_data(T_obs=60, nM=4, nQ=1, r=1, seed=1000)
-        m = nowcast_dfm(Y, 4, 1; r=1, p=1, max_iter=10, thresh=1e-2)
+        Y = _NC_Y
+        m = _NC_M
 
         @test_throws ArgumentError nowcast_news(Y, Y[1:50, :], m, 30)  # size mismatch
         @test_throws ArgumentError nowcast_news(Y, Y, m, 0)  # out of range
@@ -711,8 +715,8 @@ end
     end
 
     @testset "Group impacts" begin
-        Y, _, _, _ = _make_nowcast_data(T_obs=60, nM=4, nQ=1, r=1, seed=1100)
-        m = nowcast_dfm(Y, 4, 1; r=1, p=1, max_iter=20, thresh=1e-3)
+        Y = _NC_Y
+        m = _NC_M
 
         X_old = copy(Y)
         X_old[58:60, 1:2] .= NaN
@@ -734,8 +738,8 @@ end
     end
 
     @testset "Default group_names without groups" begin
-        Y, _, _, _ = _make_nowcast_data(T_obs=60, nM=4, nQ=1, r=1, seed=1150)
-        m = nowcast_dfm(Y, 4, 1; r=1, p=1, max_iter=20, thresh=1e-3)
+        Y = _NC_Y
+        m = _NC_M
 
         X_old = copy(Y)
         X_old[58:60, 1:2] .= NaN
@@ -753,8 +757,8 @@ end
 
 @testset "Nowcast and Forecast" begin
     @testset "nowcast() DFM" begin
-        Y, _, _, _ = _make_nowcast_data(T_obs=60, nM=4, nQ=1, r=1, seed=1200)
-        m = nowcast_dfm(Y, 4, 1; r=1, p=1, max_iter=20, thresh=1e-3)
+        Y = _NC_Y
+        m = _NC_M
 
         result = nowcast(m)
         @test result isa NowcastResult{Float64}
@@ -792,8 +796,8 @@ end
     end
 
     @testset "forecast() DFM" begin
-        Y, _, _, _ = _make_nowcast_data(T_obs=60, nM=4, nQ=1, r=1, seed=1500)
-        m = nowcast_dfm(Y, 4, 1; r=1, p=1, max_iter=20, thresh=1e-3)
+        Y = _NC_Y
+        m = _NC_M
 
         fc = forecast(m, 6)
         @test size(fc) == (6, 5)
@@ -815,8 +819,8 @@ end
     end
 
     @testset "nowcast() with target_var" begin
-        Y, _, _, _ = _make_nowcast_data(T_obs=60, nM=4, nQ=1, r=1, seed=1700)
-        m = nowcast_dfm(Y, 4, 1; r=1, p=1, max_iter=10, thresh=1e-2)
+        Y = _NC_Y
+        m = _NC_M
 
         result = nowcast(m; target_var=3)
         @test result.target_index == 3
@@ -899,8 +903,8 @@ end
 
 @testset "Display and Report" begin
     @testset "NowcastDFM show" begin
-        Y, _, _, _ = _make_nowcast_data(T_obs=60, nM=4, nQ=1, r=1, seed=2200)
-        m = nowcast_dfm(Y, 4, 1; r=1, p=1, max_iter=10, thresh=1e-2)
+        Y = _NC_Y
+        m = _NC_M
 
         io = IOBuffer()
         show(io, m)
@@ -937,8 +941,8 @@ end
     end
 
     @testset "NowcastResult show" begin
-        Y, _, _, _ = _make_nowcast_data(T_obs=60, nM=4, nQ=1, r=1, seed=2500)
-        m = nowcast_dfm(Y, 4, 1; r=1, p=1, max_iter=10, thresh=1e-2)
+        Y = _NC_Y
+        m = _NC_M
         result = nowcast(m)
 
         io = IOBuffer()
@@ -949,8 +953,8 @@ end
     end
 
     @testset "NowcastNews show" begin
-        Y, _, _, _ = _make_nowcast_data(T_obs=60, nM=4, nQ=1, r=1, seed=2600)
-        m = nowcast_dfm(Y, 4, 1; r=1, p=1, max_iter=20, thresh=1e-3)
+        Y = _NC_Y
+        m = _NC_M
 
         X_old = copy(Y)
         X_old[58:60, 1] .= NaN
@@ -964,8 +968,8 @@ end
     end
 
     @testset "report() dispatch" begin
-        Y, _, _, _ = _make_nowcast_data(T_obs=60, nM=4, nQ=1, r=1, seed=2700)
-        m = nowcast_dfm(Y, 4, 1; r=1, p=1, max_iter=10, thresh=1e-2)
+        Y = _NC_Y
+        m = _NC_M
 
         # Test show(io, m) directly (redirect_stdout(IOBuffer) not supported in Julia 1.12)
         io = IOBuffer()

@@ -414,7 +414,7 @@ end
 
     _suppress() do
         @testset "jade method" begin
-            result = test_identification_strength(model; method=:jade, n_bootstrap=15)
+            result = test_identification_strength(model; method=:jade, n_bootstrap=(FAST ? 5 : 15))
             @test result isa MEM.IdentifiabilityTestResult{Float64}
             @test result.test_name == :identification_strength
             @test result.statistic >= 0
@@ -424,7 +424,7 @@ end
         end
 
         @testset "sobi method" begin
-            result = test_identification_strength(model; method=:sobi, n_bootstrap=15)
+            result = test_identification_strength(model; method=:sobi, n_bootstrap=(FAST ? 5 : 15))
             @test result isa MEM.IdentifiabilityTestResult{Float64}
             @test result.test_name == :identification_strength
             @test result.details[:method] == :sobi
@@ -514,7 +514,8 @@ end
     _suppress() do
         @testset "with ICA result" begin
             ica = identify_fastica(model)
-            result = test_overidentification(model, ica; n_bootstrap=49)
+            nb = FAST ? 9 : 49
+            result = test_overidentification(model, ica; n_bootstrap=nb)
             @test result isa MEM.IdentifiabilityTestResult{Float64}
             @test result.test_name == :overidentification
             @test result.statistic >= 0
@@ -522,12 +523,12 @@ end
             @test haskey(result.details, :discrepancy)
             @test haskey(result.details, :orthogonality_error)
             @test haskey(result.details, :n_bootstrap)
-            @test result.details[:n_bootstrap] == 49
+            @test result.details[:n_bootstrap] == nb
         end
 
         @testset "with ML result" begin
             ml = identify_student_t(model)
-            result = test_overidentification(model, ml; n_bootstrap=29)
+            result = test_overidentification(model, ml; n_bootstrap=(FAST ? 9 : 29))
             @test result isa MEM.IdentifiabilityTestResult{Float64}
             @test result.test_name == :overidentification
             @test result.statistic >= 0
@@ -535,7 +536,7 @@ end
 
         @testset "with JADE result" begin
             jade_res = identify_jade(model)
-            result = test_overidentification(model, jade_res; n_bootstrap=19)
+            result = test_overidentification(model, jade_res; n_bootstrap=(FAST ? 9 : 19))
             @test result isa MEM.IdentifiabilityTestResult{Float64}
         end
     end

@@ -73,6 +73,8 @@ report(ks_result)
 
 ## Individual Problem
 
+The full model is assembled into an [`HADSGESpec`](@ref) (built by [`load_ha_example`](@ref)), which bundles the discretized [`IncomeProcess`](@ref) and the household [`IndividualProblem`](@ref) — the utility, marginal utility, budget, and borrowing-constraint fields the EGM/VFI inner loops consume.
+
 Households solve a consumption-savings problem with idiosyncratic income risk and a borrowing constraint:
 
 ```math
@@ -167,6 +169,8 @@ With lower persistence (``\rho = 0.9``), Tauchen produces a wider grid and a fla
 ---
 
 ## Distribution Tracking
+
+Beyond the stationary distribution, [`distribution_irf`](@ref) traces the impulse response of the entire wealth distribution to an aggregate shock, and [`inequality_irf`](@ref) reports the induced Gini/percentile dynamics.
 
 The cross-sectional wealth distribution ``\Gamma(a, e)`` evolves according to the **Young (2010) non-stochastic simulation** method. Given the savings policy ``a' = g(a, e)``, the distribution updates via a sparse transition matrix ``\Lambda``:
 
@@ -299,6 +303,8 @@ The **Krusell-Smith (1998)** method approximates agents' forecasting rule with a
 \log K_{t+1} = b_0 + b_1 \log K_t + b_2 z_t
 ```
 
+The fitted PLM coefficients and simulated paths are returned in a [`KrusellSmithSolution`](@ref).
+
 The algorithm iterates between simulation (using the PLM to forecast prices) and regression (updating PLM coefficients via OLS). Convergence requires ``R^2 > 0.9999``, reflecting the near-sufficiency of the first moment plus the aggregate shock for forecasting. Including ``z`` is essential for the Den Haan (2010) accuracy test below: a ``z``-free PLM produces a degenerate, fluctuation-free simulated path.
 
 !!! note "Technical Note"
@@ -338,6 +344,8 @@ Den Haan (2010) shows that the regression ``R^2`` and standard error are **inade
 ```math
 \varepsilon_t = 100 \cdot \left| \log K_t^{\text{ref}} - \log K_t^{\text{PLM}} \right|
 ```
+
+Call [`den_haan_test`](@ref) on a [`KrusellSmithSolution`](@ref) to obtain the maximum and mean errors packaged in a [`DenHaanAccuracy`](@ref) result.
 
 where:
 - ``K_t^{\text{ref}}`` is the reference aggregate capital from the explicit distribution simulation
@@ -458,13 +466,10 @@ Four canonical models are available via `load_ha_example`:
 | `:huggett` | 1 (``a \in [-2, 8]``) | 300 pts | 2 states | Pure exchange, bond in zero net supply |
 
 ```@example dsge_ha
-for name in [:krusell_smith, :one_asset_hank, :two_asset_hank, :huggett]
-    s = load_ha_example(name)
-    n = s.grid.n_dims
-    g = join(s.grid.n_points, "×")
-    println(rpad(name, 20), n, "-asset   β=", s.individual.beta, "   grid=", g)
-end
-nothing # hide
+[let s = load_ha_example(name)
+    (model = name, assets = s.grid.n_dims, beta = s.individual.beta,
+     grid = join(s.grid.n_points, "×"))
+ end for name in [:krusell_smith, :one_asset_hank, :two_asset_hank, :huggett]]
 ```
 
 The Krusell-Smith economy is the simplest benchmark with a single asset and Cobb-Douglas production. The one-asset HANK adds New Keynesian features (sticky prices, monetary policy, dividends) and allows borrowing. The two-asset HANK introduces portfolio choice between liquid and illiquid assets, capturing the empirical finding that most household wealth is illiquid.

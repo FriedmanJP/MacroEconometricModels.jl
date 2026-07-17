@@ -6,15 +6,17 @@ Historical Decomposition (HD) decomposes observed variable movements into contri
 - **Bayesian HD**: Posterior distributions over shock contributions with credible intervals
 - **Accessor functions**: `contribution()`, `total_shock_contribution()`, and `verify_decomposition()` for programmatic analysis
 
+For an overview and method comparison, see [Innovation Accounting](@ref innovation_accounting_page). For variance decomposition, see [Variance Decomposition](@ref ia_fevd_page).
+
 ```@setup ia_hd
 using MacroEconometricModels, Random
 Random.seed!(42)
 fred = load_example(:fred_md)
 Y = to_matrix(apply_tcode(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]))
 Y = Y[all.(isfinite, eachrow(Y)), :]
-Y = Y[end-99:end, :]
+Y = Y[end-59:end, :]
 model = estimate_var(Y, 2; varnames=["INDPRO", "CPIAUCSL", "FEDFUNDS"])
-post = estimate_bvar(Y, 2; n_draws=500, varnames=["INDPRO", "CPIAUCSL", "FEDFUNDS"])
+post = estimate_bvar(Y, 2; n_draws=100, varnames=["INDPRO", "CPIAUCSL", "FEDFUNDS"])
 ```
 
 ## Quick Start
@@ -261,7 +263,7 @@ plot_result(hd)
 <iframe src="../assets/plots/hd_freq.html" width="100%" height="600" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-The IRFs reveal the dynamic transmission mechanism: a contractionary monetary shock (positive FFR innovation) reduces industrial production with a lag of several quarters. The FEVD shows that monetary shocks explain a modest but non-trivial share of output forecast error variance at business-cycle horizons. The HD identifies specific historical episodes where monetary shocks made large positive or negative contributions to output movements, providing a narrative interpretation of the estimated structural model.
+The IRFs reveal the dynamic transmission mechanism: a contractionary monetary shock (positive FFR innovation) reduces industrial production with a lag of several months. The FEVD shows that monetary shocks explain a modest but non-trivial share of output forecast error variance at business-cycle horizons. The HD identifies specific historical episodes where monetary shocks made large positive or negative contributions to output movements, providing a narrative interpretation of the estimated structural model.
 
 ---
 

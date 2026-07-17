@@ -185,6 +185,7 @@ end
             result = estimate_smm(sim_ar1, d -> autocovariance_moments(d; lags=2),
                                   [0.5, 0.3], data;
                                   sim_ratio=3, burn=50, weighting=:identity,
+                                  max_iter=200,
                                   rng=Random.MersenneTwister(42))
 
             @test result isa SMMModel{Float64}
@@ -226,6 +227,7 @@ end
             result = estimate_smm(sim_fn, d -> autocovariance_moments(d; lags=1),
                                   [0.3], data;
                                   sim_ratio=3, burn=25, weighting=:identity,
+                                  max_iter=200,
                                   rng=Random.MersenneTwister(55))
             @test result isa SMMModel{Float64}
             @test result.weighting.method == :identity
@@ -405,7 +407,7 @@ end
             result = estimate_smm(sim_bounded, d -> autocovariance_moments(d; lags=1),
                                   [0.3], data;
                                   sim_ratio=3, burn=25, weighting=:identity,
-                                  bounds=bounds,
+                                  bounds=bounds, max_iter=200,
                                   rng=Random.MersenneTwister(42))
             @test result isa SMMModel{Float64}
             @test -1.0 < result.theta[1] < 1.0
@@ -414,214 +416,10 @@ end
 end
 
 # ============================================================================
-# 3. JuMP + Ipopt extension coverage
+# NOTE: JuMP/Ipopt and PATH extension coverage testsets were moved to
+# test/ext/test_constrained_ext.jl (issue #309/T210) so the weakdep
+# cold-load is paid once in a dedicated Extensions group rather than twice.
 # ============================================================================
-
-_jump_available = try
-    @eval import JuMP
-    @eval import Ipopt
-    true
-catch
-    false
-end
-
-if _jump_available
-
-@testset "JuMP Extension coverage" begin
-
-    @testset "Constrained SS with initial_guess kwarg" begin
-        _suppress_warnings() do
-            spec = @dsge begin
-                parameters: rho = 0.9, sigma = 0.01
-                endogenous: y
-                exogenous: eps
-                y[t] = rho * y[t-1] + sigma * eps[t]
-                steady_state: [0.0]
-            end
-            spec = compute_steady_state(spec)
-
-            # Provide explicit initial_guess (exercises that branch in the extension)
-            spec_c = compute_steady_state(spec;
-                constraints=[variable_bound(:y, lower=-1.0)],
-                initial_guess=[0.5])
-            @test abs(spec_c.steady_state[1]) < 0.1
-        end
-    end
-
-    @testset "Constrained SS with only upper bound" begin
-        _suppress_warnings() do
-            spec = @dsge begin
-                parameters: rho = 0.9, sigma = 0.01
-                endogenous: y
-                exogenous: eps
-                y[t] = rho * y[t-1] + sigma * eps[t]
-                steady_state: [0.0]
-            end
-            spec = compute_steady_state(spec)
-
-            # Upper bound only — exercises the c.upper !== nothing branch
-            spec_c = compute_steady_state(spec;
-                constraints=[variable_bound(:y, upper=1.0)])
-            @test spec_c.steady_state[1] <= 1.0 + 1e-4
-        end
-    end
-
-    @testset "Constrained PF with both bounds and NL constraint" begin
-        _suppress_warnings() do
-            spec = @dsge begin
-                parameters: rho = 0.9, sigma = 1.0
-                endogenous: y
-                exogenous: eps
-                y[t] = rho * y[t-1] + sigma * eps[t]
-                steady_state: [0.0]
-            end
-            spec = compute_steady_state(spec)
-
-            shocks = zeros(10, 1)
-            shocks[1, 1] = 2.0
-
-            # Variable bound + nonlinear constraint together
-            nlc = nonlinear_constraint(
-                (y, y_lag, y_lead, e, theta) -> y[1] - 5.0;
-                label="cap_y")
-            pf = solve(spec; method=:perfect_foresight, T_periods=10,
-                       shock_path=shocks,
-                       constraints=[variable_bound(:y, lower=-1.0), nlc])
-            @test pf isa PerfectForesightPath
-            @test size(pf.path) == (10, 1)
-        end
-    end
-
-    @testset "Constrained PF with upper-only variable bound" begin
-        _suppress_warnings() do
-            spec = @dsge begin
-                parameters: rho = 0.9, sigma = 1.0
-                endogenous: y
-                exogenous: eps
-                y[t] = rho * y[t-1] + sigma * eps[t]
-                steady_state: [0.0]
-            end
-            spec = compute_steady_state(spec)
-
-            shocks = zeros(15, 1)
-            shocks[1, 1] = 3.0
-
-            # Upper-only bound
-            pf = solve(spec; method=:perfect_foresight, T_periods=15,
-                       shock_path=shocks,
-                       constraints=[variable_bound(:y, upper=5.0)])
-            @test pf isa PerfectForesightPath
-            @test pf.converged
-            @test all(pf.path[:, 1] .<= 5.0 + 1e-4)
-        end
-    end
-end
-
-end  # _jump_available
-
-# ============================================================================
-# 4. PATH extension coverage
-# ============================================================================
-
-_path_available = try
-    @eval import PATHSolver
-    true
-catch
-    false
-end
-
-if _path_available
-
-@testset "PATH Extension coverage" begin
-
-    @testset "MCP SS with initial_guess kwarg" begin
-        _suppress_warnings() do
-            spec = @dsge begin
-                parameters: rho = 0.9, sigma = 0.01
-                endogenous: y
-                exogenous: eps
-                y[t] = rho * y[t-1] + sigma * eps[t]
-                steady_state: [0.0]
-            end
-            spec = compute_steady_state(spec)
-
-            # Provide explicit initial_guess (exercises that branch in PATH ext)
-            spec_c = compute_steady_state(spec;
-                constraints=[variable_bound(:y, lower=-1.0)],
-                solver=:path,
-                initial_guess=[0.2])
-            @test abs(spec_c.steady_state[1]) < 0.1
-        end
-    end
-
-    @testset "MCP SS with upper-only bound" begin
-        _suppress_warnings() do
-            spec = @dsge begin
-                parameters: rho = 0.9, sigma = 0.01
-                endogenous: y
-                exogenous: eps
-                y[t] = rho * y[t-1] + sigma * eps[t]
-                steady_state: [0.0]
-            end
-            spec = compute_steady_state(spec)
-
-            # Upper bound only on PATH
-            spec_c = compute_steady_state(spec;
-                constraints=[variable_bound(:y, upper=1.0)],
-                solver=:path)
-            @test spec_c.steady_state[1] <= 1.0 + 1e-4
-        end
-    end
-
-    @testset "MCP PF single-period (t==1 && t==T_periods)" begin
-        _suppress_warnings() do
-            spec = @dsge begin
-                parameters: rho = 0.9, sigma = 1.0
-                endogenous: y
-                exogenous: eps
-                y[t] = rho * y[t-1] + sigma * eps[t]
-                steady_state: [0.0]
-            end
-            spec = compute_steady_state(spec)
-
-            # T_periods=1 triggers the t==1 && t==T_periods branch (line 107)
-            shocks = zeros(1, 1)
-            shocks[1, 1] = 0.5
-            pf = solve(spec; method=:perfect_foresight, T_periods=1,
-                       shock_path=shocks,
-                       constraints=[variable_bound(:y, lower=-5.0)],
-                       solver=:path)
-            @test pf isa PerfectForesightPath
-            @test size(pf.path) == (1, 1)
-        end
-    end
-
-    @testset "MCP PF with upper bound" begin
-        _suppress_warnings() do
-            spec = @dsge begin
-                parameters: rho = 0.9, sigma = 1.0
-                endogenous: y
-                exogenous: eps
-                y[t] = rho * y[t-1] + sigma * eps[t]
-                steady_state: [0.0]
-            end
-            spec = compute_steady_state(spec)
-
-            shocks = zeros(10, 1)
-            shocks[1, 1] = 3.0
-
-            pf = solve(spec; method=:perfect_foresight, T_periods=10,
-                       shock_path=shocks,
-                       constraints=[variable_bound(:y, upper=0.5)],
-                       solver=:path)
-            @test pf isa PerfectForesightPath
-            @test pf.converged
-            @test all(pf.path[:, 1] .<= 0.5 + 1e-4)
-        end
-    end
-end
-
-end  # _path_available
 
 # ============================================================================
 # 5. GMM with ParameterTransform bounds (additional branch coverage)

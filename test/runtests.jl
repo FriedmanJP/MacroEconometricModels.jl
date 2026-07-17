@@ -126,6 +126,11 @@ const TEST_GROUPS = [
         "coverage/test_dsge_coverage.jl",
         "coverage/test_dsge_bayes_coverage.jl",
     ]),
+    # Extensions: JuMP/Ipopt/PATH weakdep cold-load isolated here (#309) so the
+    # ~1-3 min ext compile is paid once, in its own process, instead of twice.
+    ("Extensions (JuMP/Ipopt/PATH)" => [
+        "ext/test_constrained_ext.jl",
+    ]),
     # Group 9: Coverage-B (medium-weight coverage tests)
     ("Coverage-B" => [
         "coverage/test_data_types_coverage.jl",
@@ -178,6 +183,7 @@ function _expected_rank(name::AbstractString)
     name == "HA-DSGE"             && return 100
     name == "DSGE Core"           && return 90
     name == "DSGE Bayesian & HD"  && return 70
+    name == "Extensions (JuMP/Ipopt/PATH)"    && return 60   # cold-load: schedule early
     startswith(name, "Coverage-A")            && return 60
     name == "ARIMA & Tests & Data & Reg"      && return 55
     name == "IRF & VECM"          && return 50
@@ -430,6 +436,9 @@ else
         # Group 8: Coverage-A (DSGE)
         @testset "DSGE Coverage" begin include("coverage/test_dsge_coverage.jl") end
         @testset "DSGE Bayesian Coverage" begin include("coverage/test_dsge_bayes_coverage.jl") end
+
+        # Extensions: JuMP/Ipopt/PATH weakdep testsets (#309)
+        @testset "Constrained Extensions (JuMP/Ipopt/PATH)" begin include("ext/test_constrained_ext.jl") end
 
         # Group 9: Coverage-B (medium-weight)
         @testset "Data Types Coverage" begin include("coverage/test_data_types_coverage.jl") end

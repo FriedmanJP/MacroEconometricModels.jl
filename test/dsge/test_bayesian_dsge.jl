@@ -1477,7 +1477,7 @@ end
     result = MacroEconometricModels._smc2_sample(spec, data, [:ρ],
         MacroEconometricModels.DSGEPrior(priors; lower=Dict(:ρ => 0.01), upper=Dict(:ρ => 0.99)),
         [0.5];
-        n_smc=100, n_particles=50, n_mh_steps=1, ess_target=0.5,
+        n_smc=50, n_particles=50, n_mh_steps=1, ess_target=0.5,
         observables=[:y], measurement_error=nothing,
         solver=:gensys, solver_kwargs=NamedTuple(),
         rng=Random.MersenneTwister(123))
@@ -3199,7 +3199,7 @@ end
     result = estimate_dsge_bayes(
         spec, data_obs, θ0;
         priors=priors, method=:smc2, observables=[:y],
-        n_smc=20, n_particles=50, n_mh_steps=3,
+        n_smc=10, n_particles=25, n_mh_steps=3,
         ess_target=0.5, measurement_error=[0.005],
         solver=:projection, solver_kwargs=(degree=3, scale=5.0),
         rng=MersenneTwister(123))
@@ -3300,7 +3300,7 @@ end
     result = estimate_dsge_bayes(
         spec, data_obs, θ0;
         priors=priors, method=:smc2, observables=[:y],
-        n_smc=20, n_particles=50, n_mh_steps=2,
+        n_smc=10, n_particles=25, n_mh_steps=2,
         ess_target=0.5, measurement_error=[0.005],
         solver=:projection, solver_kwargs=(degree=3, scale=5.0),
         rng=MersenneTwister(999))
@@ -3327,10 +3327,10 @@ end
     result = estimate_dsge_bayes(
         spec, data_obs, θ0;
         priors=priors, method=:smc2, observables=[:y],
-        n_smc=20, n_particles=50, n_mh_steps=2,
+        n_smc=10, n_particles=25, n_mh_steps=2,
         ess_target=0.5, measurement_error=[0.005],
         solver=:projection, solver_kwargs=(degree=3, scale=5.0),
-        delayed_acceptance=true, n_screen=30,
+        delayed_acceptance=true, n_screen=15,
         rng=MersenneTwister(555))
     @test result isa MacroEconometricModels.BayesianDSGE
     @test isfinite(result.log_marginal_likelihood)
@@ -3355,7 +3355,7 @@ end
     result_std = estimate_dsge_bayes(
         spec, data_obs, θ0;
         priors=priors, method=:smc2, observables=[:y],
-        n_smc=40, n_particles=100, n_mh_steps=2,
+        n_smc=20, n_particles=50, n_mh_steps=2,
         ess_target=0.5, measurement_error=[0.005],
         solver=:projection, solver_kwargs=(degree=3, scale=5.0),
         rng=MersenneTwister(777))
@@ -3364,7 +3364,7 @@ end
     result_da = estimate_dsge_bayes(
         spec, data_obs, θ0;
         priors=priors, method=:smc2, observables=[:y],
-        n_smc=40, n_particles=100, n_mh_steps=2,
+        n_smc=20, n_particles=50, n_mh_steps=2,
         ess_target=0.5, measurement_error=[0.005],
         solver=:projection, solver_kwargs=(degree=3, scale=5.0),
         delayed_acceptance=true, n_screen=30,

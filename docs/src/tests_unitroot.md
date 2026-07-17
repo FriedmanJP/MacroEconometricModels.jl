@@ -319,7 +319,7 @@ The GLS detrending procedure quasi-differences the data using a local-to-unity p
 \tilde{y}_1 = y_1, \qquad \tilde{y}_t = y_t - \bar{c}/T \cdot y_{t-1}, \quad t = 2, \ldots, T
 ```
 
-where ``\bar{c} = -7`` for level stationarity (`:constant`) and ``\bar{c} = -13.5`` for trend stationarity (`:trend``). The four test statistics are:
+where ``\bar{c} = -7`` for level stationarity (`:constant`) and ``\bar{c} = -13.5`` for trend stationarity (`:trend`). The four test statistics are:
 
 - **MZa** (``MZ_\alpha``): Modified Phillips ``Z_\alpha`` statistic
 - **MZt** (``MZ_t``): Modified Phillips ``Z_t`` statistic (most commonly reported)
@@ -464,9 +464,10 @@ result.adjustment                        # Loading matrix α
 
 ### Options
 
-| Argument | Type | Default | Description |
-|----------|------|---------|-------------|
-| `p` | `Int` | Required | Number of lags in VECM representation |
+The lag order `p` is passed as a positional argument (`johansen_test(Y, p)`) specifying the number of lags in the VECM representation. The remaining behavior is controlled by one keyword:
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
 | `deterministic` | `Symbol` | `:constant` | Deterministic terms: `:none`, `:constant`, or `:trend` |
 
 ### Return Values

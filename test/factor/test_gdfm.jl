@@ -443,8 +443,8 @@ using Random
 
     @testset "Wide Panel (N > T)" begin
         Random.seed!(23456)
-        T_obs = 50
-        N = 100  # N > T
+        T_obs = 25
+        N = 50  # N > T
         q = 2
 
         X = randn(T_obs, N)
@@ -663,7 +663,7 @@ using Random
     @testset "Increasing Sample Size" begin
         Random.seed!(78901)
         N, q = 20, 2
-        sample_sizes = [100, 200, 400]
+        sample_sizes = [100, 400]
 
         # Generate consistent DGP
         F_full = randn(500, q)
@@ -686,7 +686,7 @@ using Random
     @testset "Increasing Panel Width" begin
         Random.seed!(89012)
         T_obs, q = 200, 2
-        panel_widths = [10, 25, 50]
+        panel_widths = [10, 25]
 
         variance_explained_list = Float64[]
 

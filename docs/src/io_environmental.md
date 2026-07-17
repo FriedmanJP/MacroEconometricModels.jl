@@ -46,6 +46,7 @@ intensities(io, "water")
 ## API
 
 ```@docs
+IOExtension
 add_extension!
 intensities
 emission_multipliers

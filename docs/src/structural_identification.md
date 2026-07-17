@@ -9,7 +9,7 @@ Structural identification recovers the mapping from reduced-form VAR residuals t
 - **Zero + sign restrictions** --- exact zero restrictions with sign constraints and importance-weighted inference (Arias, Rubio-Ramírez & Waggoner 2018)
 - **Penalty function (Mountford-Uhlig)** --- point-identified rotation via constrained optimization (Mountford & Uhlig 2009)
 
-For statistical identification via non-Gaussianity or heteroskedasticity (18 additional methods), see [Statistical Identification](@ref nongaussian_page).
+For statistical identification via non-Gaussianity or heteroskedasticity (13 additional methods: 5 ICA + 4 ML + 4 heteroskedasticity), see [Statistical Identification](@ref nongaussian_page). Once ``B_0`` is identified, the impact matrix feeds the impulse responses, variance decompositions, and historical decompositions of [Innovation Accounting](@ref innovation_accounting_page).
 
 ```@setup sid
 using MacroEconometricModels, Random
@@ -33,7 +33,7 @@ report(result)
 **Recipe 2: Sign restrictions with identified set**
 
 ```@example sid
-check = irf -> irf[1, 3, 3] > 0 && irf[1, 1, 3] < 0 && irf[1, 2, 3] < 0
+check = resp -> resp[1, 3, 3] > 0 && resp[1, 1, 3] < 0 && resp[1, 2, 3] < 0
 id_set = identify_sign(model, 20, check; max_draws=5000, store_all=true)
 id_set
 ```
@@ -97,6 +97,8 @@ The ordering reflects economic assumptions about the speed of adjustment. Variab
 ```@example sid
 model = estimate_var(Y, 2; varnames=["INDPRO", "CPIAUCSL", "FEDFUNDS"])
 result = irf(model, 20; method=:cholesky, ci_type=:bootstrap, reps=50, conf_level=0.90)
+B0 = identify_cholesky(model)
+nothing # hide
 ```
 
 ```julia
@@ -107,7 +109,7 @@ plot_result(result)
 <iframe src="../assets/plots/irf_freq.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-The Cholesky identification is exact (point identification). Different variable orderings produce different ``B_0`` and hence different IRFs --- there is no statistical test for the "correct" ordering. Economic theory must justify the assumed causal ordering.
+The impact matrix is available directly via [`identify_cholesky`](@ref), which returns the lower-triangular ``B_0 = \text{chol}(\Sigma)`` without running the full IRF pipeline. The Cholesky identification is exact (point identification). Different variable orderings produce different ``B_0`` and hence different IRFs --- there is no statistical test for the "correct" ordering. Economic theory must justify the assumed causal ordering.
 
 ---
 
@@ -135,7 +137,7 @@ The algorithm:
 model = estimate_var(Y, 2; varnames=["INDPRO", "CPIAUCSL", "FEDFUNDS"])
 
 # Contractionary monetary shock: FFR rises, INDPRO and CPI fall
-check = irf -> irf[1, 3, 3] > 0 && irf[1, 1, 3] < 0 && irf[1, 2, 3] < 0
+check = resp -> resp[1, 3, 3] > 0 && resp[1, 1, 3] < 0 && resp[1, 2, 3] < 0
 
 # Full identified set
 id_set = identify_sign(model, 20, check; max_draws=5000, store_all=true)
@@ -172,7 +174,7 @@ The algorithm first filters for sign-satisfying rotations, then checks whether t
 ```@example sid
 model = estimate_var(Y, 2; varnames=["INDPRO", "CPIAUCSL", "FEDFUNDS"])
 
-sign_check = irf -> irf[1, 3, 3] > 0 && irf[1, 1, 3] < 0
+sign_check = resp -> resp[1, 3, 3] > 0 && resp[1, 1, 3] < 0
 narrative_check = shocks -> shocks[20, 3] > 0
 
 Q, irfs, shocks = identify_narrative(model, 20, sign_check, narrative_check; max_draws=5000)
@@ -198,6 +200,8 @@ where:
 - ``A(1) = A_1 + A_2 + \cdots + A_p`` is the sum of VAR coefficient matrices
 
 Blanchard & Quah (1989) impose that ``C(1)`` is lower triangular, so that shocks ordered later have zero long-run effect on variables ordered earlier. The typical application restricts demand shocks to have no long-run effect on output, identifying supply-driven long-run fluctuations.
+
+The rotation is computed by [`identify_long_run`](@ref), which returns the orthogonal rotation ``Q`` implementing the Blanchard–Quah restriction (the structural impact matrix is then ``\text{chol}(\Sigma) \cdot Q``).
 
 ```@example sid
 model = estimate_var(Y, 2; varnames=["INDPRO", "CPIAUCSL", "FEDFUNDS"])
@@ -322,7 +326,35 @@ result
 | Long-run neutrality | Blanchard-Quah | Natural for supply vs demand |
 | Exact zero + sign constraints | Arias et al. | Importance-weighted inference |
 | Single optimal rotation | Uhlig penalty | Fast, deterministic |
-| Non-Gaussian shocks | [Statistical ID](@ref nongaussian_page) | 18 methods via `compute_Q` |
+| Non-Gaussian shocks | [Statistical ID](@ref nongaussian_page) | 13 methods via `compute_Q` (5 ICA + 4 ML + 4 heteroskedasticity) |
+
+---
+
+## Complete Example
+
+This example identifies a contractionary monetary policy shock in the FRED-MD system [output, prices, interest rate] two ways --- recursively via Cholesky and via sign restrictions --- and compares the impact response of industrial production. Both schemes share the same reduced-form VAR(2).
+
+```@example sid
+# Reduced-form VAR on the monetary system (FFR ordered last)
+svar = estimate_var(Y, 2; varnames=["INDPRO", "CPIAUCSL", "FEDFUNDS"])
+
+# Recursive (Cholesky) identification of the monetary shock
+chol = irf(svar, 20; method=:cholesky, ci_type=:bootstrap, reps=50)
+report(chol)
+```
+
+```@example sid
+# Sign-restricted identification: FFR up, INDPRO and CPI down on impact
+check = resp -> resp[1, 3, 3] > 0 && resp[1, 1, 3] < 0 && resp[1, 2, 3] < 0
+sign_set = identify_sign(svar, 20, check; max_draws=5000, store_all=true)
+sign_med = irf_median(sign_set)
+
+# Impact response of INDPRO to the monetary shock under each scheme
+(cholesky_indpro_impact = round(chol.values[1, 1, 3], digits=4),
+ sign_median_indpro_impact = round(sign_med[1, 1, 3], digits=4))
+```
+
+With the interest rate ordered last, the Cholesky scheme forces the contemporaneous response of industrial production to the monetary shock to be exactly zero --- output cannot react within the period. Sign restrictions instead require only that the impact response be negative, so the median across admissible rotations is a nonzero contraction (summarized further by `irf_median` and `irf_bounds`). The two schemes encode different identifying assumptions about the within-period transmission of monetary policy, and the gap between their impact responses is the cost of the recursive zero restriction.
 
 ---
 

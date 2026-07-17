@@ -243,50 +243,58 @@ end
     @test isapprox(Omega[1, 1], 2.0; rtol=0.15)
 end
 
-@testset "estimate_smm — AR(1) recovery" begin
-    _suppress_warnings() do
-        rng = Random.MersenneTwister(42)
-        true_rho = 0.8
-        true_sigma = 0.5
-        T_obs = 500
-        y = zeros(T_obs)
-        for t in 2:T_obs
-            y[t] = true_rho * y[t-1] + true_sigma * randn(rng)
-        end
-        data = reshape(y, :, 1)
-
-        function sim_ar1(theta, T_periods, burn; rng=Random.default_rng())
-            rho, sigma = theta
-            sim = zeros(T_periods + burn)
-            for t in 2:(T_periods + burn)
-                sim[t] = rho * sim[t-1] + abs(sigma) * randn(rng)
-            end
-            reshape(sim[(burn+1):end], :, 1)
-        end
-
-        function my_moments(d)
-            autocovariance_moments(d; lags=1)
-        end
-
-        # Use bounds to properly constrain the parameter space:
-        # rho in (-1, 1), sigma in (0, Inf)
-        bounds = ParameterTransform([-1.0, 0.0], [1.0, Inf])
-        result = estimate_smm(sim_ar1, my_moments, [0.5, 0.3], data;
-                              sim_ratio=5, burn=100, weighting=:two_step,
-                              contributions_fn=d -> autocovariance_moment_contributions(d; lags=1),
-                              bounds=bounds,
-                              rng=Random.MersenneTwister(123))
-
-        @test result isa SMMModel{Float64}
-        @test result.converged
-        @test abs(result.theta[1] - true_rho) < 0.15
-        @test abs(result.theta[2] - true_sigma) < 0.15
-        @test result.sim_ratio == 5
-        @test length(stderror(result)) == 2
-        @test all(stderror(result) .> 0)
-        # Two-step W is a genuine Ω⁻¹, not the old 1e8·I fallback
-        @test maximum(abs, result.W - Diagonal(diag(result.W))) > 1e-6
+# Shared bounded two-step fit (#318): computed ONCE here and referenced by both
+# the "AR(1) recovery" anchor and the "with bounds" testset — one n=500
+# estimation instead of two near-identical ones.
+_shared_bounded_fit = _suppress_warnings() do
+    rng = Random.MersenneTwister(42)
+    true_rho = 0.8
+    true_sigma = 0.5
+    T_obs = 500
+    y = zeros(T_obs)
+    for t in 2:T_obs
+        y[t] = true_rho * y[t-1] + true_sigma * randn(rng)
     end
+    data = reshape(y, :, 1)
+
+    function sim_ar1(theta, T_periods, burn; rng=Random.default_rng())
+        rho, sigma = theta
+        sim = zeros(T_periods + burn)
+        for t in 2:(T_periods + burn)
+            sim[t] = rho * sim[t-1] + abs(sigma) * randn(rng)
+        end
+        reshape(sim[(burn+1):end], :, 1)
+    end
+
+    my_moments(d) = autocovariance_moments(d; lags=1)
+
+    # Use bounds to properly constrain the parameter space:
+    # rho in (-1, 1), sigma in (0, Inf)
+    bounds = ParameterTransform([-1.0, 0.0], [1.0, Inf])
+    estimate_smm(sim_ar1, my_moments, [0.5, 0.3], data;
+                 sim_ratio=5, burn=100, weighting=:two_step,
+                 contributions_fn=d -> autocovariance_moment_contributions(d; lags=1),
+                 bounds=bounds,
+                 rng=Random.MersenneTwister(123))
+end
+
+@testset "estimate_smm — AR(1) recovery" begin
+    true_rho = 0.8
+    true_sigma = 0.5
+    result = _shared_bounded_fit
+
+    @test result isa SMMModel{Float64}
+    @test result.converged
+    @test abs(result.theta[1] - true_rho) < 0.15
+    @test abs(result.theta[2] - true_sigma) < 0.15
+    @test result.sim_ratio == 5
+    @test length(stderror(result)) == 2
+    @test all(stderror(result) .> 0)
+    # Two-step W is a genuine Ω⁻¹, not the old 1e8·I fallback
+    @test maximum(abs, result.W - Diagonal(diag(result.W))) > 1e-6
+    # Folded from the "with bounds" testset (structural bound assertions)
+    @test -1.0 < result.theta[1] < 1.0
+    @test result.theta[2] > 0.0
 end
 
 @testset "estimate_smm — SE vs Monte-Carlo dispersion" begin
@@ -332,35 +340,13 @@ end
 end
 
 @testset "estimate_smm with bounds" begin
-    _suppress_warnings() do
-        rng = Random.MersenneTwister(42)
-        true_rho = 0.8
-        true_sigma = 0.5
-        T_obs = 500
-        y = zeros(T_obs)
-        for t in 2:T_obs
-            y[t] = true_rho * y[t-1] + true_sigma * randn(rng)
-        end
-        data = reshape(y, :, 1)
-
-        function sim_ar1_bounded(theta, T_periods, burn; rng=Random.default_rng())
-            rho, sigma = theta
-            sim = zeros(T_periods + burn)
-            for t in 2:(T_periods + burn)
-                sim[t] = rho * sim[t-1] + sigma * randn(rng)
-            end
-            reshape(sim[(burn+1):end], :, 1)
-        end
-
-        bounds = ParameterTransform([-1.0, 0.0], [1.0, Inf])
-        result = estimate_smm(sim_ar1_bounded, autocovariance_moments, [0.5, 0.3], data;
-                              sim_ratio=5, burn=100, bounds=bounds,
-                              rng=Random.MersenneTwister(123))
-
-        @test result.converged
-        @test -1.0 < result.theta[1] < 1.0
-        @test result.theta[2] > 0.0
-    end
+    # References the shared bounded two-step fit (#318): the two_step-without-
+    # contributions_fn fallback branch it used to exercise stays covered by the
+    # j_test and show/refs default-:two_step fits below.
+    result = _shared_bounded_fit
+    @test result.converged
+    @test -1.0 < result.theta[1] < 1.0
+    @test result.theta[2] > 0.0
 end
 
 @testset "estimate_smm — identity weighting" begin
@@ -419,55 +405,42 @@ end
     end
 end
 
-@testset "SMMModel report and show" begin
-    _suppress_warnings() do
-        rng = Random.MersenneTwister(42)
-        y = zeros(200)
-        for t in 2:200; y[t] = 0.7 * y[t-1] + randn(rng); end
-        data = reshape(y, :, 1)
+# Shared display fit (#318): one default-:two_step estimate reused by both the
+# show and refs testsets (they asserted only on display output).
+_display_fit = _suppress_warnings() do
+    rng = Random.MersenneTwister(42)
+    y = zeros(200)
+    for t in 2:200; y[t] = 0.7 * y[t-1] + randn(rng); end
+    data = reshape(y, :, 1)
 
-        function sim_fn_report(theta, T_periods, burn; rng=Random.default_rng())
-            rho = theta[1]
-            sim = zeros(T_periods + burn)
-            for t in 2:(T_periods + burn); sim[t] = rho * sim[t-1] + randn(rng); end
-            reshape(sim[(burn+1):end], :, 1)
-        end
-
-        result = estimate_smm(sim_fn_report, d -> autocovariance_moments(d; lags=1),
-                              [0.5], data; sim_ratio=3, burn=50,
-                              rng=Random.MersenneTwister(42))
-        io = IOBuffer()
-        show(io, result)
-        str = String(take!(io))
-        @test occursin("SMM", str)
-        @test occursin("Sim ratio", str)
-        @test redirect_stdout(devnull) do; report(result) end === nothing  # should not error
+    function sim_fn_display(theta, T_periods, burn; rng=Random.default_rng())
+        rho = theta[1]
+        sim = zeros(T_periods + burn)
+        for t in 2:(T_periods + burn); sim[t] = rho * sim[t-1] + randn(rng); end
+        reshape(sim[(burn+1):end], :, 1)
     end
+
+    estimate_smm(sim_fn_display, d -> autocovariance_moments(d; lags=1),
+                 [0.5], data; sim_ratio=3, burn=50, max_iter=200,
+                 rng=Random.MersenneTwister(42))
+end
+
+@testset "SMMModel report and show" begin
+    result = _display_fit
+    io = IOBuffer()
+    show(io, result)
+    str = String(take!(io))
+    @test occursin("SMM", str)
+    @test occursin("Sim ratio", str)
+    @test redirect_stdout(devnull) do; report(result) end === nothing  # should not error
 end
 
 @testset "SMM refs()" begin
-    _suppress_warnings() do
-        rng = Random.MersenneTwister(42)
-        y = zeros(200)
-        for t in 2:200; y[t] = 0.7 * y[t-1] + randn(rng); end
-        data = reshape(y, :, 1)
-
-        function sim_fn_refs(theta, T_periods, burn; rng=Random.default_rng())
-            rho = theta[1]
-            sim = zeros(T_periods + burn)
-            for t in 2:(T_periods + burn); sim[t] = rho * sim[t-1] + randn(rng); end
-            reshape(sim[(burn+1):end], :, 1)
-        end
-
-        result = estimate_smm(sim_fn_refs, d -> autocovariance_moments(d; lags=1),
-                              [0.5], data; sim_ratio=3, burn=50,
-                              rng=Random.MersenneTwister(42))
-
-        io = IOBuffer()
-        refs(io, result)
-        str = String(take!(io))
-        @test occursin("Ruge-Murcia", str) || occursin("Lee", str) || occursin("Hansen", str)
-    end
+    result = _display_fit
+    io = IOBuffer()
+    refs(io, result)
+    str = String(take!(io))
+    @test occursin("Ruge-Murcia", str) || occursin("Lee", str) || occursin("Hansen", str)
 end
 
 end  # outer testset

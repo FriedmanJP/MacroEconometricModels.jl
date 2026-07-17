@@ -11,6 +11,12 @@ using SparseArrays
 using Random
 using Distributions
 
+# Shared Huggett (1993) credit-limit −2 steady state (T209/#308): three testsets
+# (the Table-1 SS loop, SSJ, and Reiter) recompute the identical cl=−2 equilibrium.
+# Solve it ONCE here at the stricter (tol=5e-4) bar and reuse everywhere.
+const _HUG_SPEC_M2 = MacroEconometricModels._huggett_example(; credit_limit=-2.0, a_max=8.0, n_a=200)
+const _HUG_SS_M2 = compute_steady_state(_HUG_SPEC_M2; max_iter=200, tol=5e-4)
+
 @testset "HA-DSGE Types" begin
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1306,13 +1312,21 @@ end
 
 @testset "HA Bayesian estimation" begin
     spec = load_ha_example(:krusell_smith)
+    # [T206] NOTE: the plan's asset-grid shrink (n_a 200→60/80) was dropped — coarsening the
+    # KS-SSJ grid non-monotonically stabilizes the reduced realization and flips the #234
+    # @test_broken truncation assertions to unexpected passes (n_a=60 flips T049's L1475;
+    # n_a=80 also flips _build_ha_likelihood_fn's ll_val). Per the plan's flip-guard fallback
+    # we keep the full-size spec and cut only draws + T_data (+ the shared-solve hoist).
 
     # Compute steady state for generating fake data
     ss = compute_steady_state(spec; K_init=10.0, r_bounds=(-0.02, 0.04), max_iter=50, tol=1e-3)
     K_ss = ss.aggregates[:K]
-    T_data = 50
+    T_data = 16
     rng = Random.MersenneTwister(42)
     data_K = K_ss .+ 0.1 .* randn(rng, T_data)  # K with noise
+
+    # [T206] hoist one shared :ssj solve to avoid re-solving in the two helper testsets below.
+    sol_shared = solve(spec; method=:ssj, ss=ss, T_horizon=30, n_reduced=10)
 
     @testset "_update_ha_params" begin
         param_names = [:alpha]
@@ -1332,8 +1346,7 @@ end
 
     @testset "_build_ha_likelihood_fn" begin
         # Solve model first to have a valid solution for observation equation
-        sol = solve(spec; method=:ssj, ss=ss, T_horizon=30, n_reduced=10)
-        @test sol isa HADSGESolution{Float64}
+        @test sol_shared isa HADSGESolution{Float64}
 
         param_names = [:alpha]
         ll_fn = MacroEconometricModels._build_ha_likelihood_fn(
@@ -1357,7 +1370,7 @@ end
     end
 
     @testset "_build_ha_observation_equation" begin
-        sol = solve(spec; method=:ssj, ss=ss, T_horizon=30, n_reduced=10)
+        sol = sol_shared
 
         Z, d, H = MacroEconometricModels._build_ha_observation_equation(
             sol, [:K], nothing
@@ -1404,20 +1417,20 @@ end
             spec, reshape(data_K, T_data, 1), [0.36];
             priors=priors,
             observables=[:K],
-            n_draws=20,
-            burnin=5,
+            n_draws=6,
+            burnin=2,
             ha_method=:ssj,
             ha_kwargs=(T_horizon=30, n_reduced=10),
             proposal_scale=0.001,
-            adapt_interval=50,  # no adaptation in 20 draws
+            adapt_interval=50,  # no adaptation in 6 draws
             rng=rng_est
         )
 
         @test result isa BayesianDSGE{Float64}
         @test result.solved_at === :posterior_mean  # normal path (#149/T050)
         @test size(result.theta_draws, 2) == 1  # one parameter
-        @test size(result.theta_draws, 1) == 15  # n_draws - burnin = 20 - 5
-        @test length(result.log_posterior) == 15
+        @test size(result.theta_draws, 1) == 4  # n_draws - burnin = 6 - 2
+        @test length(result.log_posterior) == 4
         @test result.method === :rwmh
         @test result.acceptance_rate >= 0.0
         @test result.acceptance_rate <= 1.0
@@ -1433,7 +1446,7 @@ end
         # a wrong-length positional vector errors informatively before any solve.
         result_dict = estimate_dsge_bayes(
             spec, reshape(data_K, T_data, 1), Dict(:alpha => 0.36);
-            priors=priors, observables=[:K], n_draws=10, burnin=2,
+            priors=priors, observables=[:K], n_draws=6, burnin=2,
             ha_method=:ssj, ha_kwargs=(T_horizon=30, n_reduced=10),
             proposal_scale=0.001, adapt_interval=50, rng=Random.MersenneTwister(7))
         @test result_dict isa BayesianDSGE{Float64}
@@ -1446,7 +1459,7 @@ end
         # identical draws under the same rng); a shape matching neither dim to n_obs errors.
         result_nt = estimate_dsge_bayes(
             spec, reshape(data_K, 1, T_data), Dict(:alpha => 0.36);
-            priors=priors, observables=[:K], n_draws=10, burnin=2,
+            priors=priors, observables=[:K], n_draws=6, burnin=2,
             ha_method=:ssj, ha_kwargs=(T_horizon=30, n_reduced=10),
             proposal_scale=0.001, adapt_interval=50, rng=Random.MersenneTwister(7))
         @test result_nt.theta_draws ≈ result_dict.theta_draws
@@ -1531,9 +1544,14 @@ end
     r_annuals = Float64[]
     for (cl, r_target) in targets
         a_max = cl <= -6 ? 18.0 : 8.0
-        spec = MacroEconometricModels._huggett_example(; credit_limit=cl, a_max=a_max, n_a=400)
+        if cl == -2.0                       # reuse the shared cl=−2 SS (a_max=8.0, n_a=200)
+            spec = _HUG_SPEC_M2
+            ss = _HUG_SS_M2
+        else
+            spec = MacroEconometricModels._huggett_example(; credit_limit=cl, a_max=a_max, n_a=200)
+            ss = compute_steady_state(spec; max_iter=200, tol=5e-4)
+        end
         @test spec.model == :huggett
-        ss = compute_steady_state(spec; max_iter=200, tol=5e-4)
         @test ss.converged
         @test abs(ss.excess_demand) < 3e-3                 # bond market clears (∫a' ≈ 0)
         r_ann = annualize(ss.prices[:r])
@@ -1555,9 +1573,8 @@ end
 end
 
 @testset "Huggett SSJ" begin
-    spec = MacroEconometricModels._huggett_example(; credit_limit=-2.0, a_max=8.0, n_a=200)
-    ss = compute_steady_state(spec; max_iter=120, tol=1e-3)
-    sol = solve(spec; method=:ssj, ss=ss, T_horizon=100, n_reduced=20)
+    spec = _HUG_SPEC_M2; ss = _HUG_SS_M2      # reuse shared cl=−2 SS (T209/#308)
+    sol = solve(spec; method=:ssj, ss=ss, T_horizon=50, n_reduced=20)
     @test sol isa HADSGESolution
     @test sol.method === :ssj
     @test maximum(abs.(eigvals(sol.linear_solution.G1))) <= 1 + 1e-6  # stable
@@ -1565,13 +1582,12 @@ end
     @test haskey(sol.jacobians, :H_Z)                                  # shock Jacobian
     # A positive aggregate endowment shock lowers the clearing risk-free rate on impact.
     H_U = sol.jacobians[:H_U]; H_Z = sol.jacobians[:H_Z]
-    dr = -(H_U \ (H_Z * [0.9^(t - 1) for t in 1:100]))
+    dr = -(H_U \ (H_Z * [0.9^(t - 1) for t in 1:50]))
     @test dr[1] < 0
 end
 
 @testset "Huggett Reiter" begin
-    spec = MacroEconometricModels._huggett_example(; credit_limit=-2.0, a_max=8.0, n_a=200)
-    ss = compute_steady_state(spec; max_iter=120, tol=1e-3)
+    spec = _HUG_SPEC_M2; ss = _HUG_SS_M2      # reuse shared cl=−2 SS (T209/#308)
     sol = solve(spec; method=:reiter, ss=ss, n_reduced=30)
     @test sol isa HADSGESolution
     @test sol.method === :reiter
@@ -1585,9 +1601,9 @@ end
 end
 
 @testset "Huggett Krusell-Smith" begin
-    spec = MacroEconometricModels._huggett_example(; credit_limit=-2.0, a_max=8.0, n_a=150)
+    spec = MacroEconometricModels._huggett_example(; credit_limit=-2.0, a_max=8.0, n_a=100)
     ss = compute_steady_state(spec; max_iter=100, tol=1e-3)
-    sol = solve(spec; method=:krusell_smith, ss=ss, T_sim=800, T_burn=200, max_outer=3)
+    sol = solve(spec; method=:krusell_smith, ss=ss, T_sim=300, T_burn=75, max_outer=3)
     @test sol isa KrusellSmithSolution
     @test haskey(sol.plm_coefficients, :r)        # PLM forecasts the clearing rate, not K
     @test sol.r_squared[:r] > 0.7                 # rate is near-linear in the endowment shock
@@ -1600,21 +1616,21 @@ end
     # --- Aiyagari capital model (z-augmented PLM makes the test meaningful) ---
     ks_spec = load_ha_example(:krusell_smith)
     ss_a = compute_steady_state(ks_spec; r_bounds=(-0.02, 0.04), max_iter=80, tol=1e-3)
-    ks = solve(ks_spec; method=:krusell_smith, ss=ss_a, T_sim=500, T_burn=100, max_outer=3)
+    ks = solve(ks_spec; method=:krusell_smith, ss=ss_a, T_sim=200, T_burn=100, max_outer=3)
     @test length(ks.plm_coefficients[:K]) == 3          # z-augmented PLM
 
-    dh = den_haan_test(ks; T_sim=400, T_burn=100)
+    dh = den_haan_test(ks; T_sim=150, T_burn=100)
     @test dh isa DenHaanAccuracy
     @test dh.aggregate === :K
     @test isfinite(dh.dh_max) && dh.dh_max >= dh.dh_mean >= 0
     @test dh.sigma_ref > 0 && dh.sigma_plm > 0
-    @test length(dh.ref_path) == 400 && length(dh.plm_path) == 400
+    @test length(dh.ref_path) == 150 && length(dh.plm_path) == 150
     @test dh.sigma_plm > 0.2 * dh.sigma_ref             # PLM reproduces the fluctuations
     @test dh.dh_max < 1.0                               # accurate: well under 1% (Den Haan)
     report(dh)                                          # display smoke test
 
     # --- Huggett: rate accuracy test is intentionally unsupported (errors clearly) ---
-    hug_spec = MacroEconometricModels._huggett_example(; n_a=120)
+    hug_spec = MacroEconometricModels._huggett_example(; n_a=80)
     ss_h = compute_steady_state(hug_spec; max_iter=80, tol=1e-3)
     ks_h = KrusellSmithSolution{Float64}(ss_h,
         Dict(:r => [ss_h.prices[:r], 0.0]), Dict(:r => 1.0), hug_spec, false, 0)

@@ -2,7 +2,7 @@
 
 Continuous-time heterogeneous-agent models solved with the finite-difference methods of **Achdou, Han, Lasry, Lions & Moll (2022)**. The household problem is a **Hamilton-Jacobi-Bellman (HJB)** partial differential equation solved by an implicit upwind scheme, and the stationary wealth distribution solves the **Kolmogorov-Forward (Fokker-Planck)** equation. The elegance of the approach is that a single sparse infinitesimal generator ``A`` drives both: the HJB implicitly, and the KFE through its transpose ``A^\top``.
 
-This page covers the one-asset Aiyagari model. The same machinery is the foundation for two-asset (Kaplan-Moll-Violante) models and MIT-shock transitions.
+This page is part of the [DSGE Models](@ref dsge_page) suite and covers the one-asset Aiyagari model. The same machinery is the foundation for two-asset (Kaplan-Moll-Violante) models and MIT-shock transitions.
 
 ## Quick Start
 
@@ -57,7 +57,7 @@ where:
 r = 0.03
 kl = (0.36 / (r + 0.05))^(1 / 0.64)
 w = 0.64 * kl^0.36
-v, c, s, A, a, converged = MacroEconometricModels.ct_hjb(m, r, w)
+v, c, s, A, a, converged = ct_hjb(m, r, w)
 (hjb_converged = converged,
  generator_row_sums = round(maximum(abs.(vec(sum(A; dims=2)))), sigdigits=2))
 ```
@@ -72,7 +72,7 @@ The stationary density ``g(a,z)`` solves ``A^\top g = 0`` subject to ``\int g\, 
 
 ```@example ct
 da = a[2] - a[1]
-g = MacroEconometricModels.ct_kfe(A, m.I, da)
+g = ct_kfe(A, m.I, da)
 (density_nonnegative = minimum(g) >= -1e-10,
  integrates_to_one = round(sum(g) * da, digits=8))
 ```
@@ -83,7 +83,7 @@ The density is nonnegative and integrates to one. Mass piles up at the borrowing
 
 ## Stationary Equilibrium
 
-`ct_steady_state` bisects on the interest rate ``r`` until household-supplied capital ``\int a\, g`` equals firm capital demand from the Cobb-Douglas first-order condition ``r = \alpha Z (K/L)^{\alpha-1} - \delta``, with the wage ``w = (1-\alpha) Z (K/L)^{\alpha}`` and effective labor ``L = \int z\, g``.
+`ct_steady_state` bisects on the interest rate ``r`` until household-supplied capital ``\int a\, g`` equals firm capital demand from the Cobb-Douglas first-order condition ``r = \alpha Z (K/L)^{\alpha-1} - \delta``, with the wage ``w = (1-\alpha) Z (K/L)^{\alpha}`` and effective labor ``L = \int z\, g``. It returns a [`CTSteadyState`](@ref) holding the value function, stationary density, prices, and aggregates. The idiosyncratic income state follows a [`CTPoissonIncome`](@ref) two-state Poisson process.
 
 ```@example ct
 (interest_rate = round(ss.r, digits=5),
@@ -93,6 +93,15 @@ The density is nonnegative and integrates to one. Mass piles up at the borrowing
 ```
 
 The equilibrium interest rate lies strictly below the discount rate ``\rho``: incomplete markets and precautionary saving push the supply of capital up and the return down, exactly as in the discrete-time Aiyagari (1994) economy.
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `r_bounds` | `Tuple` | `(0.0001, ρ-1e-4)` | Bisection bracket for the equilibrium interest rate |
+| `max_iter` | `Int` | `100` | Maximum interest-rate bisection iterations |
+| `tol` | `Real` | ``10^{-6}`` | Convergence tolerance on capital market clearing |
+| `hjb_max_iter` | `Int` | `100` | Maximum HJB value-function iterations per rate |
+| `hjb_tol` | `Real` | ``10^{-6}`` | HJB convergence tolerance |
+| `Delta` | `Real` | `1000.0` | Implicit HJB time step (speed only, not the solution) |
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -113,6 +122,8 @@ An **MIT shock** is an unanticipated, deterministic aggregate disturbance: the e
 2. Solve the HJB **backward** from the terminal steady-state value ``v(\cdot,T)``.
 3. Solve the KFE **forward** from the initial distribution ``g(\cdot,0)``.
 4. Update ``K_t = \int a\, g_t`` by relaxation until the path converges.
+
+The converged prices, aggregates, and time-varying densities are returned in a [`CTTransition`](@ref).
 
 ```@example ct
 m2 = CTAiyagari(; sigma=2.0, rho=0.05, delta=0.05, a_max=30.0, I=120)
@@ -147,7 +158,7 @@ The two-asset model adds a second, **illiquid** asset ``a`` (return ``r_a``) alo
 \rho V(b,a,z) = \max_{c,d}\; u(c) + V_b\,(w z + r_b b - d - \tfrac{\chi}{2}d^2 - c) + V_a\,(r_a a + d) + \sum_{z'}\lambda_{z\to z'}[V(b,a,z')-V(b,a,z)]
 ```
 
-where the first-order conditions are ``c = (V_b)^{-1/\sigma}`` and ``d = (V_a/V_b - 1)/\chi``. The HJB is a two-dimensional PDE solved by upwind finite differences in both ``b`` and ``a``; the stationary joint density of ``(b,a,z)`` solves the Kolmogorov-Forward equation.
+where the first-order conditions are ``c = (V_b)^{-1/\sigma}`` and ``d = (V_a/V_b - 1)/\chi``. The HJB is a two-dimensional PDE solved by upwind finite differences in both ``b`` and ``a``; the stationary joint density of ``(b,a,z)`` solves the Kolmogorov-Forward equation. `ct_two_asset_solve` returns a [`CTTwoAssetSolution`](@ref) with the value function, deposit and consumption policies, joint density, and aggregates.
 
 ```@example ct
 tw = CTTwoAsset(; r_a=0.05, r_b=0.02, chi=2.0, rho=0.08, Ib=30, Ia=30)
@@ -164,12 +175,48 @@ The vast majority of wealth is held in the illiquid asset: the higher return mor
     returns. It is numerically stable for moderate adjustment costs ``\chi``; very small
     ``\chi`` makes the optimal deposit large and the HJB iteration unstable.
 
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `max_iter` | `Int` | `200` | Maximum HJB value-function iterations |
+| `tol` | `Real` | ``10^{-6}`` | Convergence tolerance on the value function |
+| `Delta` | `Real` | `1000.0` | Implicit HJB time step (speed only, not the solution) |
+
 | Field | Type | Description |
 |-------|------|-------------|
-| `B`, `A` | `T` | Aggregate liquid and illiquid holdings (``\int b\,g``, ``\int a\,g``) |
-| `g` | `Array{T,3}` | Stationary joint density over ``(b, a, z)`` (``I_b \times I_a \times 2``) |
+| `b`, `a` | `Vector{T}` | Liquid and illiquid asset grids |
+| `V` | `Array{T,3}` | Value function over ``(b, a, z)`` (``I_b \times I_a \times 2``) |
 | `c`, `d` | `Array{T,3}` | Consumption and deposit policies |
+| `sb`, `sa` | `Array{T,3}` | Liquid and illiquid saving drifts |
+| `g` | `Array{T,3}` | Stationary joint density over ``(b, a, z)`` (``I_b \times I_a \times 2``) |
+| `B`, `A` | `T` | Aggregate liquid and illiquid holdings (``\int b\,g``, ``\int a\,g``) |
 | `gen` | `SparseMatrixCSC{T}` | Infinitesimal generator (``2 I_b I_a`` square) |
+| `hjb_converged` | `Bool` | Whether the HJB iteration converged |
+
+---
+
+## Complete Example
+
+This example solves a one-asset continuous-time Aiyagari economy end to end: it builds the model, computes the stationary equilibrium, and reads off the equilibrium interest rate, aggregate capital, and the mass of households at the borrowing constraint.
+
+```@example ct
+# Calibrate and solve the stationary equilibrium
+aiyagari = CTAiyagari(; alpha=0.36, rho=0.05, sigma=2.0, delta=0.05,
+                        z=[0.1, 0.2], lambda=[0.5, 0.5], a_max=30.0, I=200)
+eq = ct_steady_state(aiyagari; tol=1e-5)
+report(eq)
+```
+
+```@example ct
+# Key equilibrium objects
+da = eq.a[2] - eq.a[1]
+(interest_rate = round(eq.r, digits=5),
+ below_discount_rate = eq.r < aiyagari.rho,
+ aggregate_capital = round(eq.K, digits=4),
+ effective_labor = round(eq.L, digits=4),
+ constrained_mass = round((eq.g[1, 1] + eq.g[1, 2]) * da, digits=4))
+```
+
+The equilibrium interest rate settles below the discount rate ``\rho``: incomplete markets and precautionary saving push the supply of capital up and its return down. A nontrivial fraction of households sits at the borrowing constraint ``a_{\min}``, where the stationary density piles up --- the continuous-time counterpart of the discrete-time Aiyagari (1994) economy.
 
 ---
 

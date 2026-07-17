@@ -78,7 +78,6 @@ x3 = randn(n)
 X = hcat(ones(n), x1, x2, x3)
 y = X * [1.0, 2.0, -1.0, 0.5] + randn(n)
 m = estimate_reg(y, X; varnames=["(Intercept)", "x1", "x2", "x3"])
-v = vif(m)
 report(m)
 ```
 
@@ -486,6 +485,7 @@ y = X * [1.0, 2.0, -1.0, 0.5] + randn(n)
 m = estimate_reg(y, X; varnames=["(Intercept)", "x1", "x2", "x3"])
 v = vif(m)
 report(m)
+(x1 = round(v[1], digits=2), x2 = round(v[2], digits=2), x3 = round(v[3], digits=2))
 ```
 
 The VIF values for `x1` and `x2` are large because these two variables are correlated at ``r = 0.95``. The inflated standard errors make it difficult to distinguish the individual effects of `x1` and `x2`. The VIF for `x3` is close to 1, confirming that it is not collinear with the other regressors.
@@ -544,7 +544,7 @@ m = estimate_reg(y, X; varnames=["(Intercept)", "x1", "x2"])
 
 # OLS diagnostics: residual plot, QQ plot, fitted vs actual
 p = plot_result(m)
-save_plot(p, "reg_diagnostics.html")
+save_plot(p, "reg_ols_diagnostics.html")
 ```
 
 ```@raw html
@@ -618,8 +618,7 @@ report(m_iv)
 # ──────────────────────────────────────────────────────────────────────
 # Step 5: VIF diagnostics
 # ──────────────────────────────────────────────────────────────────────
-v = vif(m_ols)
-nothing # hide
+round.(vif(m_ols), digits=2)
 ```
 
 ```julia

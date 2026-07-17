@@ -1,6 +1,6 @@
 # [Panel Regression](@id panel_reg_page)
 
-**MacroEconometricModels.jl** provides a comprehensive panel regression module following Stata's `xtreg`/`xtiverg`/`xtlogit`/`xtprobit` conventions. The module covers linear panel models, panel instrumental variables, panel discrete choice, and six specification tests with four covariance estimators.
+**MacroEconometricModels.jl** provides a comprehensive panel regression module following Stata's `xtreg`/`xtivreg`/`xtlogit`/`xtprobit` conventions. The module covers linear panel models, panel instrumental variables, panel discrete choice, and six specification tests with four covariance estimators.
 
 - **Linear panel** (`estimate_xtreg`): Fixed Effects, Random Effects (Swamy-Arora), First-Difference, Between, Correlated Random Effects (Mundlak 1978), Arellano-Bond, Blundell-Bond
 - **Panel IV** (`estimate_xtiv`): FE-IV, RE-IV/EC2SLS (Baltagi 1981), FD-IV, Hausman-Taylor (1981)
@@ -8,6 +8,8 @@
 - **Panel probit** (`estimate_xtprobit`): Pooled, RE, CRE (no FE — incidental parameters problem)
 - **Panel marginal effects**: AME with delta-method SEs for panel logit/probit
 - **Specification tests**: Hausman, Breusch-Pagan LM, F-test for FE, Pesaran CD, Wooldridge AR, Modified Wald
+
+For dynamic panels with multivariate feedback, see [Panel VAR](@ref pvar_page).
 - **Covariance estimators**: Entity-cluster (Arellano 1987), time-cluster, two-way cluster (Cameron-Gelbach-Miller 2011), Driscoll-Kraay (1998) HAC
 
 ```@setup preg
@@ -72,8 +74,9 @@ n = N * T_p
 df_iv = DataFrame(id=repeat(1:N, inner=T_p), t=repeat(1:T_p, N),
                   x=randn(n), z=randn(n))
 alpha_i = repeat(randn(N), inner=T_p)
-df_iv.x_endog = 0.5 .* df_iv.z .+ randn(n)
-df_iv.wage = alpha_i .+ 1.5 .* df_iv.x .+ 2.0 .* df_iv.x_endog .+ randn(n)
+u = randn(n)                                        # shared error component (endogeneity source)
+df_iv.x_endog = 0.5 .* df_iv.z .+ u .+ randn(n)
+df_iv.wage = alpha_i .+ 1.5 .* df_iv.x .+ 2.0 .* df_iv.x_endog .+ u .+ randn(n)
 pd_iv = xtset(df_iv, :id, :t)
 m_iv = estimate_xtiv(pd_iv, :wage, [:x], [:x_endog]; instruments=[:z])
 report(m_iv)
@@ -341,6 +344,8 @@ report(m_ht)
 
 ## Panel Discrete Choice
 
+For cross-sectional (non-panel) discrete choice models, see [Binary Choice Models](@ref binary_choice_page).
+
 ### Panel Logit
 
 The `estimate_xtlogit` function estimates panel logistic regression with four methods:
@@ -405,7 +410,7 @@ report(me)
 
 ## Specification Tests
 
-Six specification tests help choose between estimators and diagnose violations of model assumptions.
+Six specification tests help choose between estimators and diagnose violations of model assumptions. Each returns a [`PanelTestResult`](@ref) carrying the test statistic, p-value, and degrees of freedom.
 
 ### Hausman Test (FE vs RE)
 

@@ -3,7 +3,7 @@
 Statistical identification recovers the structural impact matrix ``B_0`` from higher-moment information --- time-varying variances (heteroskedasticity) or non-Gaussian shock distributions --- without imposing recursive orderings, sign restrictions, or zero restrictions. The classification follows Lewis (2025), the definitive survey of higher-moment identification in macroeconometrics.
 
 - **13 identification methods**: 5 ICA + 4 ML (non-Gaussianity) and 4 heteroskedasticity estimators
-- **5 diagnostic tests**: normality suite, shock Gaussianity, LR test, independence, identification strength
+- **6 diagnostic tests**: normality suite, shock Gaussianity, LR test, independence, identification strength, overidentification
 - **Full pipeline integration**: all methods produce a rotation ``Q`` consumed by `irf()`, `fevd()`, `historical_decomposition()`
 - **Sub-pages**: [Non-Gaussian Methods](@ref id_nongaussian_page) | [Heteroskedasticity](@ref id_heteroskedastic_page) | [Testing](@ref id_testing_page)
 
@@ -125,7 +125,7 @@ decomp   = fevd(model, 20; method=:jade)
 nothing # hide
 ```
 
-Supported symbols: `:fastica`, `:jade`, `:sobi`, `:dcov`, `:hsic`, `:student_t`, `:mixture_normal`, `:pml`, `:skew_normal`, `:markov_switching`, `:garch`.
+Supported symbols: `:fastica`, `:jade`, `:sobi`, `:dcov`, `:hsic`, `:student_t`, `:mixture_normal`, `:pml`, `:skew_normal`, `:markov_switching`, `:garch`, and `:nongaussian_ml`. The heteroskedasticity schemes `:smooth_transition` and `:external_volatility` are also accepted but require an additional keyword argument (`transition_var` and `regime_indicator`, respectively).
 
 ---
 
@@ -189,7 +189,7 @@ Statistical identification recovers ``B_0`` only up to **column permutation and 
 - Lanne, M. & Lutkepohl, H. (2010). SVARs with Nonnormal Residuals. *Journal of Business & Economic Statistics*, 28(1), 159--168. [DOI: 10.1198/jbes.2009.06003](https://doi.org/10.1198/jbes.2009.06003)
 - Herwartz, H. (2018). Hodges-Lehmann Detection of Structural Shocks. *Oxford Bulletin of Economics and Statistics*, 80(4), 736--754. [DOI: 10.1111/obes.12234](https://doi.org/10.1111/obes.12234)
 - Azzalini, A. (1985). A Class of Distributions Which Includes the Normal Ones. *Scandinavian Journal of Statistics*, 12(2), 171--178. [https://www.jstor.org/stable/4615982](https://www.jstor.org/stable/4615982)
-- Keweloh, S. A. (2021). A GMM Estimator for SVARs Based on Higher Moments. *Journal of Business & Economic Statistics*, 39(3), 772--882. [DOI: 10.1080/07350015.2020.1730858](https://doi.org/10.1080/07350015.2020.1730858)
+- Keweloh, S. A. (2021). A GMM Estimator for SVARs Based on Higher Moments. *Journal of Business & Economic Statistics*, 39(3), 772--782. [DOI: 10.1080/07350015.2020.1730858](https://doi.org/10.1080/07350015.2020.1730858)
 - Lanne, M. & Luoto, J. (2021). GMM Estimation of Non-Gaussian SVAR. *Journal of Business & Economic Statistics*, 39(1), 69--81. [DOI: 10.1080/07350015.2019.1629940](https://doi.org/10.1080/07350015.2019.1629940)
 
 ### Diagnostics
