@@ -1,8 +1,0 @@
-docs(method-guide): [T199] add method_guide.md decision-table router (#298)
-
-New "Choosing a Method" page: per-domain decision tables mapping each data
-situation/goal to the recommended estimator and its @ref page. Mutual
-cross-links with getting_started.md. Registers the page in make.jl and the
-index @contents. Draft make.jl build clean; no broken cross-references.
-
-Claude-Session: https://claude.ai/code/session_01U961hhdMRdrcbNjmACaVVQ
