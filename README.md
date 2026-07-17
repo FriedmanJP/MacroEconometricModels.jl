@@ -10,23 +10,29 @@
 
 A comprehensive Julia package for macroeconometric research and analysis.
 
-**Univariate:** ARIMA, ARCH/GARCH, Stochastic Volatility, HP/Hamilton/BN/BK/Boosted HP filters, X-13ARIMA-SEATS seasonal adjustment, Spectral Analysis, ACF/PACF/CCF
+**Univariate:** ARIMA/ARFIMA, ARCH/GARCH family (EGARCH, GJR, IGARCH, Component-GARCH, APARCH, FIGARCH/FIEGARCH, GARCH-MIDAS), Stochastic Volatility, HP/Hamilton/BN/BK/Boosted HP filters, X-13ARIMA-SEATS seasonal adjustment, Spectral Analysis, ACF/PACF/CCF
 
-**Multivariate:** VAR, VECM, Bayesian VAR, Local Projections, Factor Models, FAVAR, Structural DFM
+**Nonlinear & State-Space:** Threshold/SETAR (Hansen), STAR/LSTR/ESTR (Teräsvirta), Markov-switching regression & MS-AR (Hamilton), general linear-Gaussian state-space (Kalman MLE), time-varying-parameter regression
 
-**Panel:** Panel VAR (FD-GMM, System GMM, FE-OLS), Panel Regression (FE/RE/FD/Between/CRE/AB/BB), Panel IV (FE-IV/RE-IV/FD-IV/Hausman-Taylor), Panel Logit/Probit, Difference-in-Differences (TWFE, Callaway-Sant'Anna, Sun-Abraham, BJS, dCDH, HonestDiD), Event Study LP, LP-DiD (Dube et al. 2025)
+**Multivariate:** VAR, VECM (+ Johansen β/α restriction testing), Bayesian VAR, Local Projections, Factor Models, FAVAR, Structural DFM, Multivariate GARCH (CCC/DCC/BEKK), cointegrating regression (FMOLS/CCR/DOLS), SUR/3SLS systems, MIDAS regression
 
-**DSGE:** 7 solvers (Gensys, Blanchard-Kahn, Klein, 2nd/3rd-order perturbation with pruning, Chebyshev projection, PFI, VFI), model(linear) for pre-linearized models, built-in constrained solvers (Optim.jl, NLopt.jl, projected Newton) with optional JuMP+Ipopt/PATH, OccBin, GMM/SMM estimation, Bayesian estimation (SMC/SMC²/MH) with posterior IRF/FEVD credible bands, order≥2 unconditional FEVD (Andreasen et al. 2018), 24-model Dynare replication suite
+**Panel:** Panel VAR (FD-GMM, System GMM, FE-OLS), Panel Regression (FE/RE/FD/Between/CRE/AB/BB + PCSE/Prais-Winsten), Panel IV (FE-IV/RE-IV/FD-IV/Hausman-Taylor), Panel Logit/Probit, Panel ARDL (PMG/MG/DFE), panel cointegrating regression (FMOLS/DOLS), Difference-in-Differences (TWFE, Callaway-Sant'Anna, Sun-Abraham, BJS, dCDH, HonestDiD), Event Study LP, LP-DiD (Dube et al. 2025)
 
-**Heterogeneous Agent DSGE:** Reiter, Sequence-Space Jacobian, Krusell-Smith; one-asset and two-asset HANK; EGM/VFI individual solvers; Bayesian estimation
+**DSGE:** 7 solvers (Gensys, Blanchard-Kahn, Klein, 2nd/3rd-order perturbation with pruning, Chebyshev projection, PFI, VFI), model(linear) for pre-linearized models, built-in constrained solvers (Optim.jl, NLopt.jl, projected Newton) with optional JuMP+Ipopt/PATH, OccBin, GMM/SMM estimation, Bayesian estimation (SMC/SMC²/MH) with posterior mode + Laplace/bridge-sampling marginal likelihood, MCMC & identification diagnostics, prior/posterior predictive checks, order≥2 unconditional FEVD (Andreasen et al. 2018), 24-model Dynare replication suite
+
+**Heterogeneous Agent DSGE:** Reiter, Sequence-Space Jacobian, Krusell-Smith; one-asset and two-asset HANK; continuous-time Aiyagari & two-asset HANK (HJB / Kolmogorov-Forward, Achdou et al. 2022); Blanchard (1985) perpetual-youth OLG; EGM/VFI individual solvers; Bayesian estimation
 
 **Input-Output:** IOData container, Leontief/Ghosh models, output/income/employment multipliers, backward/forward linkages (Rasmussen) & key sectors, structural decomposition analysis, hypothetical extraction, environmental satellite accounts, Baqaee-Farhi (2019), pymrio-style MRIO downloaders (OECD/WIOD/Exiobase3/Eora26/GLORIA)
 
-**Cross-Sectional:** OLS, WLS, IV/2SLS, Logit, Probit, Ordered Logit/Probit, Multinomial Logit (MLE), marginal effects (AME/MEM/MER)
+**Cross-Sectional:** OLS, WLS, IV/2SLS (+ LIML/Fuller/k-class), penalized (ridge/LASSO/elastic net), robust (Huber/bisquare/MM), Tobit/truncated, Heckman selection, Logit, Probit, Ordered Logit/Probit, Multinomial Logit (MLE), marginal effects (AME/MEM/MER)
 
-**Estimation:** OLS, MLE, GMM, SMM, Bayesian (Gibbs/conjugate), Kalman filter/smoother
+**Nonparametric:** kernel density estimation (Sheather-Jones), Nadaraya-Watson & local-polynomial regression, LOWESS
 
-**Features:** IRF, FEVD, historical decomposition, structural identification, nowcasting, spectral analysis, structural break detection, panel unit root tests, hypothesis testing, interactive D3.js visualization
+**Forecasting:** multi-model forecasting, forecast evaluation (Diebold-Mariano, Clark-West, Mincer-Zarnowitz, encompassing), forecast combination, nowcasting (DFM/BVAR/bridge)
+
+**Estimation:** OLS, MLE, GMM, SMM, Bayesian (Gibbs/conjugate/SMC/MH), Kalman filter/smoother
+
+**Features:** IRF, FEVD, historical decomposition, structural identification, spectral analysis, structural-break & explosive-bubble detection, unit-root & panel unit-root tests, cointegration tests, hypothesis testing, reproducibility manifests, versioned model serialization, Tables.jl integration, interactive D3.js visualization
 
 ## Installation
 
@@ -54,12 +60,16 @@ Pkg.add("MacroEconometricModels")
 - **ARIMA** - AR, MA, ARMA, ARIMA estimation via CSS, exact MLE (Kalman filter), or CSS-MLE
   - Automatic order selection via `auto_arima` with grid search over (p,d,q), AIC/BIC information criteria
   - Multi-step ahead forecasting with confidence intervals via psi-weight accumulation
+- **ARFIMA** - Fractionally-integrated ARFIMA(p,d,q) via CSS or exact MLE (`estimate_arfima`); semiparametric long-memory estimators of the differencing parameter d: GPH log-periodogram regression (`gph_test`; Geweke & Porter-Hudak 1983) and local-Whittle (`local_whittle`; Robinson 1995)
 - **Volatility Models**:
   - ARCH - Engle (1982) ARCH(q) with MLE, ARCH-LM test, Ljung-Box squared residuals
   - GARCH - GARCH(p,q), EGARCH (Nelson 1991), GJR-GARCH (Glosten, Jagannathan & Runkle 1993)
+  - Extended GARCH - IGARCH (`estimate_igarch`; Engle & Bollerslev 1986), Component-GARCH (`estimate_cgarch`; Engle & Lee 1999), APARCH (`estimate_aparch`; Ding, Granger & Engle 1993)
+  - Long-memory volatility - FIGARCH (`estimate_figarch`; Baillie, Bollerslev & Mikkelsen 1996) and FIEGARCH (`estimate_fiegarch`; Bollerslev & Mikkelsen 1996)
+  - GARCH-MIDAS - long/short-run volatility components with a mixed-frequency secular component (`estimate_garch_midas`; Engle, Ghysels & Sohn 2013)
   - Stochastic Volatility - Bayesian SV via Kim-Shephard-Chib Gibbs sampler (basic, leverage, Student-t variants)
   - Multi-step volatility forecasts with simulation CIs
-  - Diagnostics: news impact curves, persistence, half-life, unconditional variance
+  - Diagnostics: news impact curves, persistence, half-life, unconditional variance; sign-bias test (`sign_bias_test`; Engle & Ng 1993) and Nyblom-Hansen parameter-stability test (`nyblom_test`)
 - **Spectral Analysis**:
   - Periodogram, Welch method, smoothed periodogram (Daniell kernel), AR spectral estimation
   - Cross-spectrum: coherence, phase, gain functions
@@ -70,6 +80,18 @@ Pkg.add("MacroEconometricModels")
   - Correlogram display with cumulative Ljung-Box Q-statistics
   - Ljung-Box, Box-Pierce, and Durbin-Watson tests
 
+### Nonlinear Time Series
+- **Threshold & SETAR** - Two-regime threshold least squares and SETAR(2;p,p) with automatic delay/threshold selection (`estimate_threshold`, `estimate_setar`)
+  - Hansen (1996) fixed-regressor bootstrap linearity test (`hansen_linearity_test`) and Hansen (2000) likelihood-ratio-inversion threshold confidence interval
+- **Smooth-Transition (STAR)** - LSTR1, LSTR2, and ESTR transition families via NLS (`estimate_star`)
+  - Luukkonen-Saikkonen-Teräsvirta (1988) LM linearity test and Teräsvirta (1994) sequential transition-family selection (`star_linearity_test`)
+- **Markov-Switching** - K-state Markov-switching regression (`estimate_ms`) and mean-switching MS-AR (`estimate_ms_ar`; Hamilton 1989) via the Hamilton forward filter, Kim (1994) smoother, and EM/Optim MLE
+
+### State-Space Models
+- **General linear-Gaussian state-space** - `estimate_statespace` fits an arbitrary parameterized state-space model by prediction-error-decomposition MLE, routed through the consolidated Kalman filter + RTS smoother
+- **Structural components** - `local_level` (random walk + noise) and `local_linear_trend` convenience constructors
+- **Time-varying-parameter regression** - `estimate_tvp_reg` for regression coefficients following a random walk
+
 ### Multivariate Models
 - **Vector Autoregression (VAR)** - OLS estimation with lag order selection (AIC, BIC, HQ)
 - **Bayesian VAR (BVAR)** - Minnesota priors with hyperparameter optimization (Giannone, Lenza & Primiceri 2015)
@@ -78,6 +100,7 @@ Pkg.add("MacroEconometricModels")
   - VAR conversion (`to_var`) enabling all 13 statistical identification methods
   - VECM-specific forecasting preserving cointegrating relationships
   - Granger causality: short-run, long-run, and strong tests
+  - Johansen LR restriction testing on the cointegrating structure: `test_beta_restriction`, `test_alpha_restriction`, `test_weak_exogeneity`, `test_known_beta`, `test_joint_restriction`
 - **Local Projections (LP)** - Jorda (2005) with extensions:
   - HAC standard errors (Newey-West, White, Driscoll-Kraay)
   - Instrumental Variables (Stock & Watson 2018)
@@ -96,12 +119,36 @@ Pkg.add("MacroEconometricModels")
   - `favar_panel_irf` maps factor IRFs to N observables via loadings
 - **Structural DFM** - Structural dynamic factor model wrapping GDFM + VAR for identified factor shocks
   - `sdfm_panel_irf` maps structural factor IRFs to all N observable panel variables via loadings
+- **Multivariate GARCH** - Conditional-covariance models for vector return series (`estimate_ccc`, `estimate_dcc`, `estimate_bekk`)
+  - CCC-GARCH (Bollerslev 1990), DCC-GARCH with optional cDCC correction (Engle 2002; Aielli 2013), scalar/diagonal BEKK(1,1) (Engle & Kroner 1995)
+  - Two-step QMLE reusing univariate GARCH margins; multi-step covariance forecasting; `covariances`/`correlations`/`variances` accessors
+- **Cointegrating Regression** - Single-equation estimators of a cointegrating vector (`estimate_cointreg`)
+  - Fully-modified OLS (Phillips & Hansen 1990), canonical cointegrating regression (Park 1992), dynamic OLS (Saikkonen 1991; Stock & Watson 1993)
+- **MIDAS Regression** - Mixed-data-sampling regression of a low-frequency target on high-frequency predictors (`estimate_midas`)
+  - Exponential-Almon, Beta (2/3-param), polynomial-Almon, and unrestricted U-MIDAS weighting; ADL-MIDAS with autoregressive lags; direct multi-horizon forecasting (Ghysels, Sinko & Valkanov 2007; Foroni, Marcellino & Schumacher 2015)
+
+### Systems of Equations
+- **Seemingly Unrelated Regressions (SUR)** - Feasible/iterated GLS (converging to Gaussian MLE) with McElroy (1977) system R² (`estimate_sur`; Zellner 1962)
+- **Three-Stage Least Squares (3SLS)** - Zellner-Theil system IV with common or per-equation instruments (`estimate_3sls`; Zellner & Theil 1962)
+- Built-in `load_example(:grunfeld)` panel for classic SUR demonstrations
+
+### Nonparametric Methods
+- **Kernel density estimation** - `kernel_density` with Gaussian/Epanechnikov/triangular/uniform kernels and Sheather-Jones (1991) plug-in bandwidth
+- **Kernel & local-polynomial regression** - `kernel_reg` (degree 0 → Nadaraya-Watson, degree ≥ 1 → Fan-Gijbels local polynomial)
+- **LOWESS** - Cleveland (1979) tricube-weighted robust local-linear scatterplot smoother (`lowess`)
 
 ### Cross-Sectional Models
 - **Linear Regression** - OLS with HC0–HC3 robust and cluster-robust standard errors
   - Weighted Least Squares (WLS) with analytic or user-supplied weights
   - Variance Inflation Factor (VIF) for multicollinearity diagnostics
 - **Instrumental Variables** - IV/2SLS estimation with first-stage F-statistic and Sargan overidentification test
+  - k-class estimators: LIML, Fuller-modified LIML, and generic k-class via `estimate_iv(...; method=:liml/:fuller/:kclass)` (Fuller 1977)
+- **Penalized Regression** - Ridge, LASSO, and elastic net with coordinate descent and a cross-validated regularization path (`estimate_ridge`, `estimate_lasso`, `estimate_elastic_net`; Hoerl & Kennard 1970; Tibshirani 1996; Zou & Hastie 2005)
+- **Robust Regression** - Huber and Tukey-bisquare M-estimators and Yohai (1987) MM-estimation (`estimate_robust`; Huber 1964)
+- **Censored & Truncated** - Tobit (`estimate_tobit`; Tobin 1958, Olsen 1978 reparameterization) and truncated regression (`estimate_truncreg`) with McDonald-Moffitt marginal effects
+- **Sample Selection** - Heckman two-step and full-information MLE selection model (`estimate_heckman`; Heckman 1979)
+- **Variable Selection** - Forward/backward/bidirectional stepwise, best-subset, and LSE general-to-specific (GETS) (`select_variables`)
+- **Regression Diagnostics** - OLS residual tests: White, Breusch-Pagan, Glejser, Harvey, Breusch-Godfrey, and Ramsey RESET (`white_test`, `breusch_pagan_test`, `glejser_test`, `harvey_test`, `breusch_godfrey_test`, `reset_test`); stability & influence: recursive residuals, CUSUM/CUSUMSQ, Chow, and influence measures (`recursive_residuals`, `cusum_test`, `cusumsq_test`, `chow_test`, `influence_stats`; Brown, Durbin & Evans 1975)
 - **Binary Choice** - Logit and Probit MLE via IRLS (Fisher scoring)
   - Marginal effects: average (AME), at-means (MEM), at-representative (MER) with delta-method SEs
   - `odds_ratio()`, `classification_table()`, McFadden/AIC/BIC fit statistics
@@ -127,7 +174,8 @@ Pkg.add("MacroEconometricModels")
   - Fixed Effects (within estimator), Random Effects (GLS), First Differences
   - Between estimator, Correlated Random Effects (Mundlak/Chamberlain)
   - Dynamic panels: Arellano-Bond (1991) and Blundell-Bond (1998) GMM
-  - 4 covariance estimators: conventional, robust (HC1), cluster-robust, Driscoll-Kraay
+  - Covariance estimators: conventional, robust (HC1), cluster-robust, Driscoll-Kraay, and Beck-Katz panel-corrected SEs (PCSE; `cov_type=:pcse`)
+  - Prais-Winsten AR(1) FGLS quasi-differencing (`ar1=:common`)
   - Specification tests: Hausman FE vs RE, Breusch-Pagan LM, Pesaran CD, Wooldridge AR(1), Modified Wald
 - **Panel IV** - `estimate_xtiv` for instrumental variables in panel data:
   - FE-IV, RE-IV, FD-IV, Hausman-Taylor estimator
@@ -153,6 +201,8 @@ Pkg.add("MacroEconometricModels")
   - Pre-mean differencing (PMD), IPW reweighting, nocomp restriction
   - Pooled post-treatment and pre-treatment estimates
   - `panel_lag`, `panel_lead`, `panel_diff` for within-group transformations
+- **Panel ARDL** - Heterogeneous dynamic panels via `estimate_pmg`: Pooled Mean Group, Mean Group, and Dynamic Fixed Effects (`method=:pmg/:mg/:dfe`) with a generalized Hausman selection test (Pesaran, Shin & Smith 1999; Pesaran & Smith 1995)
+- **Panel Cointegrating Regression** - Panel FMOLS/DOLS with group-mean (between) or pooled (within) dimensions (`estimate_xtcointreg`; Pedroni 2000, 2001; Kao & Chiang 2000)
 
 ### DSGE
 - **Model specification** - `@dsge` macro with declarative syntax for parameters, variables, shocks, and equilibrium equations
@@ -170,6 +220,11 @@ Pkg.add("MacroEconometricModels")
 - **Analytical moments** - Order 1: Lyapunov equation for unconditional covariance; Order ≥2: Andreasen et al. (2018) augmented state-space Lyapunov for means, variances, and autocovariances; `analytical_moments` for both
 - **GMM Estimation** - IRF matching, Euler equation GMM, SMM, analytical GMM via `estimate_dsge`
 - **Bayesian Estimation** - Sequential Monte Carlo (SMC with adaptive tempering), SMC² with particle filter likelihood, random-walk Metropolis-Hastings; delayed acceptance for accelerated sampling; nonlinear particle filter for higher-order solutions via `estimate_dsge_bayes`
+- **Posterior mode & marginal likelihood** - `posterior_mode` maximizes the log posterior (optionally in unconstrained space) and returns the inverse Hessian (reusable as an RWMH proposal) and the Laplace marginal likelihood; `bridge_sampling_ml` computes a bridge-sampling marginal likelihood from stored draws (Meng & Wong 1996)
+- **MCMC convergence diagnostics** - `mcmc_diagnostics` reports rank-normalized split-R-hat, bulk/tail ESS, and Geweke z-statistics; `trace` and `acf` accessors expose per-parameter draw sequences (Vehtari et al. 2021; Geweke 1992)
+- **Identification diagnostics** - Iskrev (2010) rank test (`identification_diagnostics`), Koop-Pesaran-Smith learning-rate test (`learning_rate_check`), and prior/posterior overlap (`prior_posterior_overlap`)
+- **Predictive checks** - Prior predictive simulation (`prior_predictive`) and posterior predictive checks with per-statistic predictive p-values (`posterior_predictive_check`; Gelman, Meng & Stern 1996)
+- **Sampler infrastructure** - Bijective parameter transforms with Jacobian correction for unconstrained sampling (`to_unconstrained`/`to_constrained`) and Dynare prior-convention shims (`dynare_prior`, `InverseGamma1`)
 - **Dynare replication** - 24-model replication suite (`test/dynare_replication/`) with automated steady-state, IRF, variance decomposition, and theoretical moment comparison against Dynare 6.5+ reference values; includes Smets-Wouters (2007) full estimation pipeline
 
 ### Heterogeneous Agent DSGE
@@ -187,6 +242,8 @@ Pkg.add("MacroEconometricModels")
   - Reiter (2009) linearization with observability-based SVD dimensionality reduction
   - Krusell-Smith (1998) bounded rationality via perceived law of motion simulation
 - **Bayesian estimation** - `estimate_dsge_bayes(spec::HADSGESpec, ...)` with adaptive RWMH; re-solves HA steady state + linearizes at each draw; Kalman filter on reduced system
+- **Continuous-time methods** - Continuous-time Aiyagari solved by implicit upwind finite-difference HJB (`ct_hjb`) with a Kolmogorov-Forward stationary distribution (`ct_kfe`), steady state (`ct_steady_state`), and MIT-shock transition dynamics (`ct_mit_shock`); a two-asset HANK household block with convex deposit-adjustment costs (`ct_two_asset_solve`) (Achdou et al. 2022; Kaplan, Moll & Violante 2018)
+- **Overlapping generations** - Blanchard (1985) perpetual-youth OLG: steady state (`blanchard_steady_state`), full solution (`blanchard_solve`), and transition-path dynamics (`blanchard_transition`)
 - **Analysis** - `irf`, `fevd`, `simulate` dispatch via embedded `DSGESolution`; `distribution_irf` for wealth distribution dynamics; `inequality_irf` for Gini/percentile responses; `simulate_panel` for individual-level data
 - **Visualization** - `plot_result(ss; view=:distribution)` (wealth histogram), `:lorenz` (Lorenz curve with Gini), `:policy` (consumption and savings functions by income state)
 
@@ -236,6 +293,11 @@ Pkg.add("MacroEconometricModels")
 - **News Decomposition** - Attribute nowcast revisions to individual data releases with group aggregation and named groups
 - **Panel Balancing** - `balance_panel()` fills NaN in TimeSeriesData/PanelData using DFM imputation
 
+### Forecast Evaluation & Combination
+- **Accuracy metrics** - `forecast_evaluate` reports ME, MAE, RMSE, MAPE, sMAPE, MASE, and Theil U1/U2
+- **Predictive-accuracy tests** - Diebold-Mariano with Harvey-Leybourne-Newbold small-sample correction (`diebold_mariano`; 1995), Clark-West nested-model adjusted-MSPE test (`clark_west`; 2007), Mincer-Zarnowitz efficiency regression (`mincer_zarnowitz`; 1969), and forecast encompassing (`forecast_encompassing`)
+- **Combination** - Equal-weight, Bates-Granger inverse-MSE, and Granger-Ramanathan constrained-least-squares combination (`combine_forecasts`; Bates & Granger 1969; Granger & Ramanathan 1984)
+
 ### Statistical Identification via Higher Moments
 - **Heteroskedasticity-based** - Markov-switching (Lanne & Lütkepohl 2008), GARCH (Normandin & Phaneuf 2004), smooth-transition (Lütkepohl & Netšunajev 2017), external volatility (Rigobon 2003)
 - **Non-Gaussian ICA** - FastICA, JADE, SOBI, distance covariance, HSIC (Hyvärinen et al. 2010, Matteson & Tsay 2017)
@@ -247,30 +309,45 @@ Pkg.add("MacroEconometricModels")
 
 ### Hypothesis Tests
 - **Unit Root Tests** - ADF, KPSS, Phillips-Perron, Zivot-Andrews, Ng-Perron (MZa, MZt, MSB, MPT)
-- **Advanced Unit Root** - Fourier ADF/KPSS (Enders & Lee 2012), DF-GLS/ERS (Elliott, Rothenberg & Stock 1996), LM unit root with 0/1/2 breaks (Lee & Strazicich 2003, 2013), two-break ADF (Narayan & Popp 2010)
-- **Cointegration** - Johansen test (trace and max-eigenvalue), Gregory-Hansen (1996) test with structural break (level shift, trend, regime)
+- **Advanced Unit Root** - Fourier ADF/KPSS (Enders & Lee 2012), DF-GLS and ERS point-optimal (`dfgls_test`, `ers_test`; Elliott, Rothenberg & Stock 1996), LM unit root with 0/1/2 breaks (Lee & Strazicich 2003, 2013), two-break ADF (Narayan & Popp 2010)
+- **Seasonal Unit Root** - HEGY test for unit roots at seasonal frequencies (`hegy_test`; Hylleberg, Engle, Granger & Yoo 1990)
+- **Cointegration** - Johansen test (trace and max-eigenvalue), Gregory-Hansen (1996) test with structural break (level shift, trend, regime), and residual-based tests: Engle-Granger, Phillips-Ouliaris, Hansen L_c instability, and Park added-variable (`engle_granger_test`, `phillips_ouliaris_test`, `hansen_instability_test`, `park_added_test`)
+- **Explosive Bubbles** - SADF and generalized supADF (GSADF) right-tailed tests with BSADF date-stamping (`sadf_test`, `gsadf_test`; Phillips, Wu & Yu 2011; Phillips, Shi & Yu 2015)
 - **Structural Breaks** - Andrews (1993) SupWald/SupLM/SupLR with 9 test variants; Bai-Perron (1998) multiple break detection via dynamic programming with BIC/LWZ/sequential selection; factor break tests — Breitung-Eickmeier (2011), Chen-Dolado-Gonzalo (2014), Han-Inoue (2015)
-- **Panel Unit Root** - Bai-Ng (2004) PANIC with factor-adjusted pooled/individual tests; Pesaran (2007) CIPS with cross-sectional augmentation; Moon-Perron (2004) factor-adjusted t-statistics; `panel_unit_root_summary()` battery
+- **Panel Unit Root** - First-generation tests: Levin-Lin-Chu (`llc_test`), Im-Pesaran-Shin (`ips_test`), Breitung (`breitung_panel_test`), Fisher/Maddala-Wu (`fisher_panel_test`), and Hadri (`hadri_test`); second-generation Bai-Ng (2004) PANIC, Pesaran (2007) CIPS, and Moon-Perron (2004) factor-adjusted tests; `panel_unit_root_summary()` battery
+- **Panel Cointegration** - Pedroni (1999, 2004), Kao (1999), Westerlund (2007), and Fisher-Johansen combined tests (`pedroni_test`, `kao_test`, `westerlund_test`, `fisher_johansen_test`)
+- **Panel Granger** - Dumitrescu-Hurlin (2012) heterogeneous panel non-causality test (`dh_causality_test`)
 - **Granger Causality** - Pairwise and block Wald tests, all-pairs matrix
 - **Normality** - Jarque-Bera, Mardia multivariate, Doornik-Hansen, Henze-Zirkler, Royston; unified `normality_test_suite()`
 - **Portmanteau Tests** - Ljung-Box, Box-Pierce autocorrelation tests; Durbin-Watson test for first-order serial correlation
 - **ARCH Diagnostics** - ARCH-LM test, Ljung-Box on squared residuals
 - **Panel VAR** - Hansen J-test for overidentifying restrictions, Andrews-Lu MMSC for lag/moment selection
 - **Model Comparison** - Likelihood ratio (LR) and Lagrange multiplier (LM/score) tests for nested models
+- **Independence** - BDS nonlinear-dependence test (`bds_test`; Brock, Dechert, Scheinkman & LeBaron 1996)
+- **Variance-Ratio / Random Walk** - Lo-MacKinlay, Chow-Denning joint, Wright rank/sign, and Kim wild-bootstrap variants (`variance_ratio_test`; Lo & MacKinlay 1988)
+- **Goodness-of-Fit** - EDF battery: Kolmogorov-Smirnov, Lilliefors, Cramér-von Mises, Anderson-Darling, and Watson (`edf_test`)
+- **Two-Sample & Rank** - Equality-of-distribution battery (Wilcoxon/Mann-Whitney, Kruskal-Wallis, van der Waerden, Levene/Bartlett; `equality_test`, plus `ttest`/`anova_test`) and Pearson/Spearman/Kendall rank-correlation tests (`cor_test`)
+- **Long-Run Variance** - Kernel HAC and VARHAC long-run (co)variance toolkit with Andrews (1991) and Newey-West (1994) automatic bandwidth (`lrvar`, `lrcov`, `lrcov_oneside`, `varhac`)
 - **Stationarity diagnostics** - `unit_root_summary()`, `test_all_variables()`
 
 ### Visualization
 - **Interactive D3.js plots** - `plot_result()` renders self-contained HTML with inline D3.js v7 (no additional dependencies)
-  - 52 dispatch methods covering IRF, FEVD, historical decomposition, filters, forecasts, volatility models, factor models, data containers, nowcasting, regression, and difference-in-differences
+  - 78 dispatch methods covering IRF, FEVD, historical decomposition, filters, forecasts, volatility models (incl. multivariate GARCH), factor models, data containers, nowcasting, regression, nonlinear time series, nonparametric fits, MIDAS/ARDL, input-output, and difference-in-differences
   - Four chart types: line (with confidence bands), stacked area, bar, and heatmap
   - Interactive tooltips, responsive layout, multi-panel grid figures
   - Nowcast views: `view=:default` (+ DFM factor panels), `:heatmap` (z-score ragged edge), `:contributions` (group stacked bar); news views: `:releases`, `:groups`, `:individual`
   - `save_plot(p, "file.html")` saves to disk; `display_plot(p)` opens in browser; auto-renders in Jupyter
   - Common kwargs: `var`, `shock`, `title`, `save_path`, `ncols`, `view`
 
+### Reproducibility & Interoperability
+- **Reproducibility manifests** - `capture_manifest` records the RNG seed, thread count, Julia/package/dependency versions, OS, UTC timestamp, and package git SHA + dirty flag; bootstrap IRFs and BVAR posteriors carry a `ReproManifest`, and `reproduce()` re-runs from the stored seed and reports a bit-for-bit `ReproReport` (with a thread-count caveat)
+- **Versioned serialization** - `save_model` / `load_model` write a self-describing, version-tagged container (via an optional JLD2 backend) that survives package upgrades; `load_model` raises a typed `SerializationError` on a format/type mismatch
+- **Tables.jl integration** - Coefficient-bearing result types are Tables.jl column sources, so `DataFrame(result)` works with no hard DataFrames dependency; `long_table` gives tidy views of array-valued results (IRF/FEVD/forecasts) and `write_csv` exports via stdlib
+- **Structured logging** - Library diagnostics route through the `Logging` stdlib (quiet by default); `set_log_level` and `with_min_level` control verbosity
+
 ### Data Management
 - **Typed containers** - `TimeSeriesData`, `PanelData`, `CrossSectionData` with variable names, frequency, transformation codes, and descriptions
-- **Built-in datasets** - FRED-MD (126 monthly variables), FRED-QD (245 quarterly variables), Penn World Table (38 OECD countries, 1950–2023), DDCG democracy-GDP (184 countries, 1960–2010; Acemoglu et al. 2019), and mpdta minimum wage panel (500 US counties, 2003–2007; Callaway & Sant'Anna 2021)
+- **Built-in datasets** - FRED-MD (126 monthly variables), FRED-QD (245 quarterly variables), Penn World Table (38 OECD countries, 1950–2023), DDCG democracy-GDP (184 countries, 1960–2010; Acemoglu et al. 2019), mpdta minimum wage panel (500 US counties, 2003–2007; Callaway & Sant'Anna 2021), Grunfeld (1958) investment panel, Mroz (1987) labor-supply cross-section, the Nile flow series, and the WIOT input-output table (`load_example(:wiot)`)
 - **Data diagnostics** - `diagnose()` scans for NaN/Inf/constant columns; `fix()` cleans via listwise deletion, interpolation, or mean imputation
 - **FRED transformations** - `apply_tcode()` / `inverse_tcode()` for all 7 FRED transformation codes
 - **Filtering** - `apply_filter()` applies HP, Hamilton, BN, BK, or boosted HP per-variable to `TimeSeriesData` and `PanelData`
@@ -490,6 +567,95 @@ All documentation code examples execute during the build — `report()` output, 
 - Rao, C. Radhakrishna. 1948. "Large Sample Tests of Statistical Hypotheses Concerning Several Parameters with Applications to Problems of Estimation." *Mathematical Proceedings of the Cambridge Philosophical Society* 44 (1): 50–57. [https://doi.org/10.1017/S0305004100023987](https://doi.org/10.1017/S0305004100023987)
 - Silvey, S. D. 1959. "The Lagrangian Multiplier Test." *Annals of Mathematical Statistics* 30 (2): 389–407. [https://doi.org/10.1214/aoms/1177706259](https://doi.org/10.1214/aoms/1177706259)
 - Wilks, Samuel S. 1938. "The Large-Sample Distribution of the Likelihood Ratio for Testing Composite Hypotheses." *Annals of Mathematical Statistics* 9 (1): 60–62. [https://doi.org/10.1214/aoms/1177732360](https://doi.org/10.1214/aoms/1177732360)
+
+### MIDAS and Mixed-Frequency Regression
+
+- Ghysels, Eric, Arthur Sinko, and Rossen Valkanov. 2007. "MIDAS Regressions: Further Results and New Directions." *Econometric Reviews* 26 (1): 53–90. [https://doi.org/10.1080/07474930600972467](https://doi.org/10.1080/07474930600972467)
+- Foroni, Claudia, Massimiliano Marcellino, and Christian Schumacher. 2015. "Unrestricted Mixed Data Sampling (MIDAS): MIDAS Regressions with Unrestricted Lag Polynomials." *Journal of the Royal Statistical Society: Series A* 178 (1): 57–82. [https://doi.org/10.1111/rssa.12043](https://doi.org/10.1111/rssa.12043)
+- Engle, Robert F., Eric Ghysels, and Bumjean Sohn. 2013. "Stock Market Volatility and Macroeconomic Fundamentals." *Review of Economics and Statistics* 95 (3): 776–797. [https://doi.org/10.1162/REST_a_00300](https://doi.org/10.1162/REST_a_00300)
+
+### ARDL and Cointegrating Regression
+
+- Pesaran, M. Hashem, Yongcheol Shin, and Richard J. Smith. 2001. "Bounds Testing Approaches to the Analysis of Level Relationships." *Journal of Applied Econometrics* 16 (3): 289–326. [https://doi.org/10.1002/jae.616](https://doi.org/10.1002/jae.616)
+- Pesaran, M. Hashem, Yongcheol Shin, and Ron P. Smith. 1999. "Pooled Mean Group Estimation of Dynamic Heterogeneous Panels." *Journal of the American Statistical Association* 94 (446): 621–634. [https://doi.org/10.1080/01621459.1999.10474156](https://doi.org/10.1080/01621459.1999.10474156)
+- Shin, Yongcheol, Byungchul Yu, and Matthew Greenwood-Nimmo. 2014. "Modelling Asymmetric Cointegration and Dynamic Multipliers in a Nonlinear ARDL Framework." In *Festschrift in Honor of Peter Schmidt*, edited by Robin C. Sickles and William C. Horrace, 281–314. New York: Springer. [https://doi.org/10.1007/978-1-4899-8008-3_9](https://doi.org/10.1007/978-1-4899-8008-3_9)
+- Phillips, Peter C. B., and Bruce E. Hansen. 1990. "Statistical Inference in Instrumental Variables Regression with I(1) Processes." *Review of Economic Studies* 57 (1): 99–125. [https://doi.org/10.2307/2297545](https://doi.org/10.2307/2297545)
+- Stock, James H., and Mark W. Watson. 1993. "A Simple Estimator of Cointegrating Vectors in Higher Order Integrated Systems." *Econometrica* 61 (4): 783–820. [https://doi.org/10.2307/2951763](https://doi.org/10.2307/2951763)
+
+### Nonlinear Time Series
+
+- Hamilton, James D. 1989. "A New Approach to the Economic Analysis of Nonstationary Time Series and the Business Cycle." *Econometrica* 57 (2): 357–384. [https://doi.org/10.2307/1912559](https://doi.org/10.2307/1912559)
+- Hansen, Bruce E. 2000. "Sample Splitting and Threshold Estimation." *Econometrica* 68 (3): 575–603. [https://doi.org/10.1111/1468-0262.00124](https://doi.org/10.1111/1468-0262.00124)
+- Teräsvirta, Timo. 1994. "Specification, Estimation, and Evaluation of Smooth Transition Autoregressive Models." *Journal of the American Statistical Association* 89 (425): 208–218. [https://doi.org/10.1080/01621459.1994.10476462](https://doi.org/10.1080/01621459.1994.10476462)
+
+### Multivariate and Long-Memory Volatility
+
+- Bollerslev, Tim. 1990. "Modelling the Coherence in Short-Run Nominal Exchange Rates: A Multivariate Generalized ARCH Model." *Review of Economics and Statistics* 72 (3): 498–505. [https://doi.org/10.2307/2109358](https://doi.org/10.2307/2109358)
+- Engle, Robert F. 2002. "Dynamic Conditional Correlation: A Simple Class of Multivariate Generalized Autoregressive Conditional Heteroskedasticity Models." *Journal of Business & Economic Statistics* 20 (3): 339–350. [https://doi.org/10.1198/073500102288618487](https://doi.org/10.1198/073500102288618487)
+- Engle, Robert F., and Kenneth F. Kroner. 1995. "Multivariate Simultaneous Generalized ARCH." *Econometric Theory* 11 (1): 122–150. [https://doi.org/10.1017/S0266466600009063](https://doi.org/10.1017/S0266466600009063)
+- Baillie, Richard T., Tim Bollerslev, and Hans Ole Mikkelsen. 1996. "Fractionally Integrated Generalized Autoregressive Conditional Heteroskedasticity." *Journal of Econometrics* 74 (1): 3–30. [https://doi.org/10.1016/S0304-4076(95)01749-6](https://doi.org/10.1016/S0304-4076(95)01749-6)
+- Ding, Zhuanxin, Clive W. J. Granger, and Robert F. Engle. 1993. "A Long Memory Property of Stock Market Returns and a New Model." *Journal of Empirical Finance* 1 (1): 83–106. [https://doi.org/10.1016/0927-5398(93)90006-D](https://doi.org/10.1016/0927-5398(93)90006-D)
+- Geweke, John, and Susan Porter-Hudak. 1983. "The Estimation and Application of Long Memory Time Series Models." *Journal of Time Series Analysis* 4 (4): 221–238. [https://doi.org/10.1111/j.1467-9892.1983.tb00371.x](https://doi.org/10.1111/j.1467-9892.1983.tb00371.x)
+- Robinson, Peter M. 1995. "Gaussian Semiparametric Estimation of Long Range Dependence." *Annals of Statistics* 23 (5): 1630–1661. [https://doi.org/10.1214/aos/1176324317](https://doi.org/10.1214/aos/1176324317)
+
+### State-Space Models
+
+- Durbin, James, and Siem Jan Koopman. 2012. *Time Series Analysis by State Space Methods.* 2nd ed. Oxford: Oxford University Press. [https://doi.org/10.1093/acprof:oso/9780199641178.001.0001](https://doi.org/10.1093/acprof:oso/9780199641178.001.0001)
+- Harvey, Andrew C. 1989. *Forecasting, Structural Time Series Models and the Kalman Filter.* Cambridge: Cambridge University Press. [https://doi.org/10.1017/CBO9781107049994](https://doi.org/10.1017/CBO9781107049994)
+
+### Systems of Equations
+
+- Zellner, Arnold. 1962. "An Efficient Method of Estimating Seemingly Unrelated Regressions and Tests for Aggregation Bias." *Journal of the American Statistical Association* 57 (298): 348–368. [https://doi.org/10.1080/01621459.1962.10480664](https://doi.org/10.1080/01621459.1962.10480664)
+- Zellner, Arnold, and Henri Theil. 1962. "Three-Stage Least Squares: Simultaneous Estimation of Simultaneous Equations." *Econometrica* 30 (1): 54–78. [https://doi.org/10.2307/1911287](https://doi.org/10.2307/1911287)
+
+### Nonparametric Methods
+
+- Cleveland, William S. 1979. "Robust Locally Weighted Regression and Smoothing Scatterplots." *Journal of the American Statistical Association* 74 (368): 829–836. [https://doi.org/10.1080/01621459.1979.10481038](https://doi.org/10.1080/01621459.1979.10481038)
+- Sheather, Simon J., and Michael C. Jones. 1991. "A Reliable Data-Based Bandwidth Selection Method for Kernel Density Estimation." *Journal of the Royal Statistical Society: Series B* 53 (3): 683–690. [https://doi.org/10.1111/j.2517-6161.1991.tb01857.x](https://doi.org/10.1111/j.2517-6161.1991.tb01857.x)
+- Fan, Jianqing, and Irène Gijbels. 1996. *Local Polynomial Modelling and Its Applications.* London: Chapman & Hall. ISBN 978-0-412-98321-4.
+
+### Forecast Evaluation and Combination
+
+- Diebold, Francis X., and Roberto S. Mariano. 1995. "Comparing Predictive Accuracy." *Journal of Business & Economic Statistics* 13 (3): 253–263. [https://doi.org/10.1080/07350015.1995.10524599](https://doi.org/10.1080/07350015.1995.10524599)
+- Clark, Todd E., and Kenneth D. West. 2007. "Approximately Normal Tests for Equal Predictive Accuracy in Nested Models." *Journal of Econometrics* 138 (1): 291–311. [https://doi.org/10.1016/j.jeconom.2006.05.023](https://doi.org/10.1016/j.jeconom.2006.05.023)
+- Bates, John M., and Clive W. J. Granger. 1969. "The Combination of Forecasts." *Operational Research Quarterly* 20 (4): 451–468. [https://doi.org/10.1057/jors.1969.103](https://doi.org/10.1057/jors.1969.103)
+
+### Continuous-Time and Life-Cycle Heterogeneous Agents
+
+- Achdou, Yves, Jiequn Han, Jean-Michel Lasry, Pierre-Louis Lions, and Benjamin Moll. 2022. "Income and Wealth Distribution in Macroeconomics: A Continuous-Time Approach." *Review of Economic Studies* 89 (1): 45–86. [https://doi.org/10.1093/restud/rdab002](https://doi.org/10.1093/restud/rdab002)
+- Aiyagari, S. Rao. 1994. "Uninsured Idiosyncratic Risk and Aggregate Saving." *Quarterly Journal of Economics* 109 (3): 659–684. [https://doi.org/10.2307/2118417](https://doi.org/10.2307/2118417)
+- Blanchard, Olivier J. 1985. "Debt, Deficits, and Finite Horizons." *Journal of Political Economy* 93 (2): 223–247. [https://doi.org/10.1086/261297](https://doi.org/10.1086/261297)
+
+### DSGE Bayesian Estimation Diagnostics
+
+- Iskrev, Nikolay. 2010. "Local Identification in DSGE Models." *Journal of Monetary Economics* 57 (2): 189–202. [https://doi.org/10.1016/j.jmoneco.2009.12.007](https://doi.org/10.1016/j.jmoneco.2009.12.007)
+- Vehtari, Aki, Andrew Gelman, Daniel Simpson, Bob Carpenter, and Paul-Christian Bürkner. 2021. "Rank-Normalization, Folding, and Localization: An Improved R̂ for Assessing Convergence of MCMC." *Bayesian Analysis* 16 (2): 667–718. [https://doi.org/10.1214/20-BA1221](https://doi.org/10.1214/20-BA1221)
+- Meng, Xiao-Li, and Wing Hung Wong. 1996. "Simulating Ratios of Normalizing Constants via a Simple Identity: A Theoretical Exploration." *Statistica Sinica* 6 (4): 831–860.
+- Geweke, John. 1992. "Evaluating the Accuracy of Sampling-Based Approaches to the Calculation of Posterior Moments." In *Bayesian Statistics 4*, edited by J. M. Bernardo, J. O. Berger, A. P. Dawid, and A. F. M. Smith, 169–193. Oxford: Oxford University Press.
+
+### Panel Cointegration and First-Generation Panel Unit Root Tests
+
+- Levin, Andrew, Chien-Fu Lin, and Chia-Shang James Chu. 2002. "Unit Root Tests in Panel Data: Asymptotic and Finite-Sample Properties." *Journal of Econometrics* 108 (1): 1–24. [https://doi.org/10.1016/S0304-4076(01)00098-7](https://doi.org/10.1016/S0304-4076(01)00098-7)
+- Im, Kyung So, M. Hashem Pesaran, and Yongcheol Shin. 2003. "Testing for Unit Roots in Heterogeneous Panels." *Journal of Econometrics* 115 (1): 53–74. [https://doi.org/10.1016/S0304-4076(03)00092-7](https://doi.org/10.1016/S0304-4076(03)00092-7)
+- Pedroni, Peter. 2004. "Panel Cointegration: Asymptotic and Finite Sample Properties of Pooled Time Series Tests with an Application to the PPP Hypothesis." *Econometric Theory* 20 (3): 597–625. [https://doi.org/10.1017/S0266466604203073](https://doi.org/10.1017/S0266466604203073)
+- Westerlund, Joakim. 2007. "Testing for Error Correction in Panel Data." *Oxford Bulletin of Economics and Statistics* 69 (6): 709–748. [https://doi.org/10.1111/j.1468-0084.2007.00477.x](https://doi.org/10.1111/j.1468-0084.2007.00477.x)
+- Dumitrescu, Elena-Ivona, and Christophe Hurlin. 2012. "Testing for Granger Non-Causality in Heterogeneous Panels." *Economic Modelling* 29 (4): 1450–1460. [https://doi.org/10.1016/j.econmod.2012.02.014](https://doi.org/10.1016/j.econmod.2012.02.014)
+
+### Seasonal Unit Roots, Bubbles, and Distribution Tests
+
+- Hylleberg, Svend, Robert F. Engle, Clive W. J. Granger, and Byung Sam Yoo. 1990. "Seasonal Integration and Cointegration." *Journal of Econometrics* 44 (1–2): 215–238. [https://doi.org/10.1016/0304-4076(90)90080-D](https://doi.org/10.1016/0304-4076(90)90080-D)
+- Phillips, Peter C. B., Shuping Shi, and Jun Yu. 2015. "Testing for Multiple Bubbles: Historical Episodes of Exuberance and Collapse in the S&P 500." *International Economic Review* 56 (4): 1043–1078. [https://doi.org/10.1111/iere.12132](https://doi.org/10.1111/iere.12132)
+- Lo, Andrew W., and A. Craig MacKinlay. 1988. "Stock Market Prices Do Not Follow Random Walks: Evidence from a Simple Specification Test." *Review of Financial Studies* 1 (1): 41–66. [https://doi.org/10.1093/rfs/1.1.41](https://doi.org/10.1093/rfs/1.1.41)
+- Brock, William A., W. Davis Dechert, José A. Scheinkman, and Blake LeBaron. 1996. "A Test for Independence Based on the Correlation Dimension." *Econometric Reviews* 15 (3): 197–235. [https://doi.org/10.1080/07474939608800353](https://doi.org/10.1080/07474939608800353)
+
+### Regularized, Robust, and Limited-Dependent-Variable Regression
+
+- Tibshirani, Robert. 1996. "Regression Shrinkage and Selection via the Lasso." *Journal of the Royal Statistical Society: Series B* 58 (1): 267–288. [https://doi.org/10.1111/j.2517-6161.1996.tb02080.x](https://doi.org/10.1111/j.2517-6161.1996.tb02080.x)
+- Zou, Hui, and Trevor Hastie. 2005. "Regularization and Variable Selection via the Elastic Net." *Journal of the Royal Statistical Society: Series B* 67 (2): 301–320. [https://doi.org/10.1111/j.1467-9868.2005.00503.x](https://doi.org/10.1111/j.1467-9868.2005.00503.x)
+- Huber, Peter J. 1964. "Robust Estimation of a Location Parameter." *Annals of Mathematical Statistics* 35 (1): 73–101. [https://doi.org/10.1214/aoms/1177703732](https://doi.org/10.1214/aoms/1177703732)
+- Tobin, James. 1958. "Estimation of Relationships for Limited Dependent Variables." *Econometrica* 26 (1): 24–36. [https://doi.org/10.2307/1907382](https://doi.org/10.2307/1907382)
+- Heckman, James J. 1979. "Sample Selection Bias as a Specification Error." *Econometrica* 47 (1): 153–161. [https://doi.org/10.2307/1912352](https://doi.org/10.2307/1912352)
+- Fuller, Wayne A. 1977. "Some Properties of a Modification of the Limited Information Estimator." *Econometrica* 45 (4): 939–953. [https://doi.org/10.2307/1912683](https://doi.org/10.2307/1912683)
 
 ## License
 
