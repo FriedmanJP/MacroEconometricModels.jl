@@ -161,6 +161,15 @@ const TEST_GROUPS = [
         "io/test_io_refs.jl",
         "io/test_io_coverage.jl",
     ]),
+    # Group 11: Display regression harness (T176/#275). A dedicated group — the
+    # fixtures compile a broad swath of estimators (VAR/VECM/BVAR/DSGE/GARCH/GMM/
+    # panel/DiD/factor/LP/ARIMA/teststat), so it carries real compilation weight and
+    # is kept out of the light coverage groups. Renders are sub-second; goldens/
+    # invariants lock the display layer against silent regressions.
+    ("Display" => [
+        "display/test_display_invariants.jl",
+        "display/test_display_goldens.jl",
+    ]),
 ]
 
 # Monotone expected-duration ranking (heaviest first) for the longest-first work queue (#124).
@@ -173,6 +182,7 @@ function _expected_rank(name::AbstractString)
     name == "ARIMA & Tests & Data & Reg"      && return 55
     name == "IRF & VECM"          && return 50
     name == "Bayesian & SVAR"     && return 45
+    name == "Display"             && return 42   # est-heavy compile; schedule with the medium wave
     startswith(name, "Coverage")  && return 20   # light coverage groups last
     return 40                                     # default medium
 end
@@ -456,6 +466,12 @@ else
             include("io/test_io_plotting.jl")
             include("io/test_io_refs.jl")
             include("io/test_io_coverage.jl")
+        end
+
+        # Group 11: Display regression harness (T176/#275)
+        @testset "Display" begin
+            include("display/test_display_invariants.jl")
+            include("display/test_display_goldens.jl")
         end
     end
 end

@@ -1,0 +1,23 @@
+ Probit Regression
+
+ Specification
+
+ Model Probit
+ Observations N
+ Covariates N
+ Log-lik. N
+ Log-lik. null N
+ Pseudo R-sq. N
+ AIC N
+ BIC N
+ Converged Yes
+ Iterations N
+
+ Coefficients
+
+ Coef. Std.Err. z P>|z| CI lower CI upper
+
+ xN N N N N N N
+ xN N N N N N N
+
+Significance: pN, pN, pN

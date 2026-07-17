@@ -29,10 +29,12 @@ end
 """
     _show_note(io, text)
 
-Display a note row (e.g., significance legend) as a 2-column table.
+Print a note as a plain text line — not a 2-column table, so it cannot inherit the
+stray empty-header band or the horizontal-crop truncation that tables suffer. Callers
+pass a complete sentence (e.g. "* CI excludes zero"). (S7/T162)
 """
 function _show_note(io::IO, text::String)
-    _pretty_table(io, Any["Note" text]; column_labels=["", ""], alignment=[:l, :l])
+    println(io, text)
 end
 
 # =============================================================================
@@ -60,6 +62,7 @@ function print_table(io::IO, irf::ImpulseResponse{T}, var::Int, shock::Int;
         column_labels = col_labels,
         alignment = fill(:r, size(raw, 2)),
     )
+    _show_note(io, "Note: h=1 denotes the impact period (h=0 in Dynare/textbook convention).")
 end
 
 print_table(irf::ImpulseResponse, var, shock; kwargs...) =
@@ -85,6 +88,7 @@ function print_table(io::IO, irf::BayesianImpulseResponse{T}, var::Int, shock::I
         column_labels = col_labels,
         alignment = fill(:r, size(raw, 2)),
     )
+    _show_note(io, "Note: h=1 denotes the impact period (h=0 in Dynare/textbook convention).")
 end
 
 print_table(irf::BayesianImpulseResponse, var, shock; kwargs...) =
@@ -502,7 +506,7 @@ function Base.show(io::IO, f::LPFEVD{T}) where {T}
                 v = vals[i, j, h]
                 if f.n_boot > 0
                     se = f.se[i, j, h]
-                    data[i, j + 1] = string(_fmt_pct(v), " (", _fmt(se), ")")
+                    data[i, j + 1] = string(_fmt_pct(v), " (", _fmt_pct(se), ")")  # SE in % to match the point estimate (S9/T170)
                 else
                     data[i, j + 1] = _fmt_pct(v)
                 end
@@ -596,6 +600,8 @@ function print_table(io::IO, fc::VolatilityForecast{T}) where {T}
         column_labels = ["h", "σ² Forecast", "Std. Err.", "Lower", "Upper"],
         alignment = fill(:r, 5),
     )
+    println(io, "Note: CI bounds are empirical quantiles of the simulated σ² paths " *
+                "(asymmetric); Std. Err. is the path std. dev., not a symmetric ±z·SE band.")  # (S9/T170)
 end
 
 print_table(fc::VolatilityForecast) = print_table(stdout, fc)
@@ -696,6 +702,12 @@ print_table(irf::LPImpulseResponse, var_name::String) =
 # Base.show Methods for LP Types
 # =============================================================================
 
+# Response/shock labels for LP models, tolerant of variants without a varnames field. (S4/T168)
+_lp_resp_labels(m) = hasproperty(m, :varnames) ? String.(m.varnames[m.response_vars]) :
+                     ["y$i" for i in m.response_vars]
+_lp_shock_label(m) = hasproperty(m, :varnames) ? string(m.varnames[m.shock_var]) : "var $(m.shock_var)"
+const _LP_IRF_NOTE = "* significant at 5% (|IRF/SE| > 1.96)"
+
 function Base.show(io::IO, m::LPModel)
     cov_name = m.cov_estimator isa NeweyWestEstimator ? "Newey-West" :
                m.cov_estimator isa WhiteEstimator ? "White (HC0)" : "Driscoll-Kraay"
@@ -703,6 +715,10 @@ function Base.show(io::IO, m::LPModel)
         ["Variables" => nvars(m), "Shock variable" => m.shock_var,
          "Response variables" => length(m.response_vars), "Horizon" => m.horizon,
          "Lags" => m.lags, "Observations" => size(m.Y, 1), "Covariance" => cov_name])
+    ir = extract_shock_irf(m.B, m.vcov, m.response_vars, 2)
+    _irf_horizon_table(io, ir.values, ir.se, _lp_resp_labels(m),
+        "Impulse Responses (shock: $(_lp_shock_label(m)))")
+    _show_note(io, _LP_IRF_NOTE)
 end
 
 function Base.show(io::IO, m::LPIVModel)
@@ -716,6 +732,10 @@ function Base.show(io::IO, m::LPIVModel)
          "Lags" => m.lags, "Observations" => size(m.Y, 1),
          "First-stage F (min)" => min_F, "First-stage F (max)" => max_F,
          "Covariance" => cov_name])
+    ir = extract_shock_irf(m.B, m.vcov, m.response_vars, 2)
+    _irf_horizon_table(io, ir.values, ir.se, _lp_resp_labels(m),
+        "Impulse Responses (shock: $(_lp_shock_label(m)))")
+    _show_note(io, _LP_IRF_NOTE)
 end
 
 nvars(m::LPIVModel) = size(m.Y, 2)
@@ -731,6 +751,9 @@ function Base.show(io::IO, m::SmoothLPModel)
          "Lambda (penalty)" => _fmt(m.lambda),
          "Basis functions" => n_basis(m.spline_basis),
          "Observations" => size(m.Y, 1), "Covariance" => cov_name])
+    _irf_horizon_table(io, m.irf_values, m.irf_se, _lp_resp_labels(m),
+        "Impulse Responses (shock: $(_lp_shock_label(m)))")
+    _show_note(io, _LP_IRF_NOTE)
 end
 
 function Base.show(io::IO, m::StateLPModel)
@@ -745,6 +768,14 @@ function Base.show(io::IO, m::StateLPModel)
          "Threshold" => _fmt(m.state.threshold),
          "% in expansion" => string(pct_exp, "%"),
          "Observations" => size(m.Y, 1), "Covariance" => cov_name])
+    shock = _lp_shock_label(m); rows = _lp_resp_labels(m)
+    ir_e = extract_shock_irf(m.B_expansion, m.vcov_expansion, m.response_vars, 2)
+    _irf_horizon_table(io, ir_e.values, ir_e.se, rows,
+        "Impulse Responses — Expansion (shock: $shock)")
+    ir_r = extract_shock_irf(m.B_recession, m.vcov_recession, m.response_vars, 2)
+    _irf_horizon_table(io, ir_r.values, ir_r.se, rows,
+        "Impulse Responses — Recession (shock: $shock)")
+    _show_note(io, _LP_IRF_NOTE)
 end
 
 function Base.show(io::IO, m::PropensityLPModel)
@@ -759,6 +790,10 @@ function Base.show(io::IO, m::PropensityLPModel)
          "PS method" => string(m.config.method),
          "Trimming" => string(m.config.trimming),
          "Observations" => size(m.Y, 1), "Covariance" => cov_name])
+    # PropensityLPModel is treatment-based (no shock_var) — report the IPW ATE path.
+    _irf_horizon_table(io, m.ate, m.ate_se, _lp_resp_labels(m),
+        "Average Treatment Effects (IPW)")
+    _show_note(io, _LP_IRF_NOTE)
 end
 
 function Base.show(io::IO, irf::LPImpulseResponse)
@@ -767,6 +802,9 @@ function Base.show(io::IO, irf::LPImpulseResponse)
         ["Shock" => irf.shock_var, "Response variables" => length(irf.response_vars),
          "Horizon" => irf.horizon, "CI type" => string(irf.cov_type),
          "Confidence level" => string(ci_pct, "%")])
+    _irf_horizon_table(io, irf.values, irf.se, irf.response_vars,
+        "Impulse Responses (shock: $(irf.shock_var))")
+    _show_note(io, _LP_IRF_NOTE)
 end
 
 function Base.show(io::IO, b::BSplineBasis)
@@ -812,6 +850,14 @@ function Base.show(io::IO, r::AriasSVARResult)
         ["Accepted draws" => n_draws, "Acceptance rate" => string(acc_pct, "%"),
          "Zero restrictions" => n_zeros, "Sign restrictions" => n_signs,
          "Variables" => r.restrictions.n_vars, "Shocks" => r.restrictions.n_shocks])
+    # Posterior-mean IRF summary — was restrictions/penalties only. (S4/T168)
+    if n_draws > 0
+        im = irf_mean(r)
+        var_labels = ["var$i" for i in 1:r.restrictions.n_vars]
+        for s in 1:size(im, 3)
+            _irf_points_table(io, im[:, :, s], var_labels, "Posterior-mean IRF to Shock $s")
+        end
+    end
 end
 
 function Base.show(io::IO, r::UhligSVARResult)
@@ -839,6 +885,11 @@ function Base.show(io::IO, r::UhligSVARResult)
         column_labels = ["Shock", "Restrictions", "Penalty"],
         alignment = [:l, :l, :r],
     )
+    # IRF summary for the identified shocks — was restrictions/penalties only. (S4/T168)
+    var_labels = ["var$i" for i in 1:n]
+    for s in 1:size(r.irf, 3)
+        _irf_points_table(io, r.irf[:, :, s], var_labels, "IRF to Shock $s")
+    end
 end
 
 function Base.show(io::IO, r::ZeroRestriction)

@@ -615,7 +615,6 @@ and steady state (if computed).
 function _show_dsge_text(io::IO, spec::DSGESpec{T}) where {T}
     # --- Header ---
     println(io, "DSGE Model Specification")
-    println(io, repeat("=", 50))
     disp_endog = spec.augmented ? spec.original_endog : spec.endog
     n_disp = length(disp_endog)
     disp_eq = spec.augmented ? spec.original_equations : spec.equations
@@ -627,7 +626,7 @@ function _show_dsge_text(io::IO, spec::DSGESpec{T}) where {T}
     println(io, "  Equations:             ", length(disp_eq))
     println(io, "  Forward-looking:       ", spec.n_expect)
     if spec.linear
-        println(io, "  Linear:                true (pre-linearized)")
+        println(io, "  Linear:                Yes (pre-linearized)")
     end
     if spec.augmented
         println(io, "  Augmented state dim:   ", spec.n_endog,
@@ -637,7 +636,6 @@ function _show_dsge_text(io::IO, spec::DSGESpec{T}) where {T}
 
     # --- Calibration ---
     println(io, "Calibration")
-    println(io, repeat("-", 50))
     for p in spec.params
         val = get(spec.param_values, p, missing)
         println(io, "  ", string(p), " = ", val isa Missing ? "?" : _format_num_display(val))
@@ -646,7 +644,6 @@ function _show_dsge_text(io::IO, spec::DSGESpec{T}) where {T}
 
     # --- Equations (original only for augmented models) ---
     println(io, "Model Equations")
-    println(io, repeat("-", 50))
     for (i, eq) in enumerate(disp_eq)
         eq_str = _equation_to_display(eq, spec.original_endog, spec.exog, spec.params; mode=:text)
         println(io, "  ($i)  ", eq_str)
@@ -656,7 +653,6 @@ function _show_dsge_text(io::IO, spec::DSGESpec{T}) where {T}
     if !isempty(spec.steady_state)
         println(io)
         println(io, "Steady State")
-        println(io, repeat("-", 50))
         if spec.augmented
             orig_idx = _original_var_indices(spec)
             println(io, _steady_state_text(spec.original_endog, spec.steady_state[orig_idx]))

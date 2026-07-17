@@ -1,0 +1,32 @@
+ Ordered Logit Regression
+
+ Specification
+
+ Model Ordered Logit
+ Observations N
+ Covariates N
+ Categories N
+ Parameters N
+ Log-lik. N
+ Log-lik. null N
+ Pseudo R-sq. N
+ AIC N
+ BIC N
+ Converged Yes
+ Iterations N
+
+ Coefficients
+
+ Coef. Std.Err. z P>|z| CI lower CI upper
+
+ xN N N N N N N
+ xN N N N N N N
+
+ Cutpoints
+
+ Coef. Std.Err. z P>|z| CI lower CI upper
+
+ cutN N N N N N N
+ cutN N N N N N N
+
+Significance: pN, pN, pN

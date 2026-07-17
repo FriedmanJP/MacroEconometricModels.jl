@@ -124,7 +124,7 @@ end
         # Verify publication-quality columns in text mode
         buf = IOBuffer(); show(buf, ar); out = String(take!(buf))
         @test occursin("Std.Err.", out)
-        @test occursin("CI]", out)
+        @test occursin("CI upper", out)   # CI header merged from split "[95%|CI]" (S10/T175)
     end
 
     @testset "Unit root tests render in all backends" begin
@@ -381,4 +381,258 @@ end
         @test a == b
         @test !occursin("tabular", a) && !occursin("<table>", a)
     end
+end
+
+@testset "Non-TTY cropping disabled (S1/T161)" begin
+    set_display_backend(:text)
+
+    # (A) Wide 8-column coefficient table at a NARROW width. With PrettyTables' fit-to-
+    #     display crop ON (the pre-fix default) the trailing significance/CI columns are
+    #     dropped with a "N columns omitted" footer. Crop OFF renders the full table.
+    Random.seed!(1)
+    X = randn(200, 4)
+    y = X * [1.0, -0.8, 0.6, 0.4] .+ 0.1 .* randn(200)
+    mr = estimate_reg(y, X)
+    buf = IOBuffer(); show(IOContext(buf, :displaysize => (24, 50), :color => false), mr)
+    out = String(take!(buf))
+    @test !occursin("omitted", out)          # horizontal crop off → no dropped columns
+    @test occursin("Std.Err.", out)          # full-width table present
+    @test occursin("P>|", out)               # p-value column (last-but-two) survives
+
+    # (B) GARCH show spans >24 lines → the pre-fix vertical crop drops interior rows.
+    Random.seed!(2)
+    mg = estimate_garch(randn(400))
+    buf = IOBuffer(); show(IOContext(buf, :displaysize => (24, 80), :color => false), mg)
+    out = String(take!(buf))
+    @test !occursin("omitted", out)          # vertical crop off
+
+    # (C) ACF with 25 lags → long table (audit V04 vertical-crop victim).
+    ra = acf(randn(300); lags = 25)
+    buf = IOBuffer(); show(IOContext(buf, :displaysize => (24, 80), :color => false), ra)
+    out = String(take!(buf))
+    @test !occursin("omitted", out)
+    @test count(==('\n'), out) > 20          # all 25 lag rows rendered, not clipped to a 24-line box
+
+    # (D) Regression guard: the :latex/:html branches must still render (they must NOT
+    #     receive the text-only fit_table_in_display_* kwargs, which would error there).
+    for be in (:latex, :html)
+        s = with_display_backend(be) do
+            sprint(show, mr)
+        end
+        @test length(s) > 0
+    end
+
+    set_display_backend(:text)
+end
+
+@testset "Empty-header suppression + legend-as-text (S7/T162)" begin
+    set_display_backend(:text)
+
+    # (A) _sig_legend is a single plain line, not a multi-line table.
+    s = sprint(MacroEconometricModels._sig_legend)
+    @test occursin("Significance: *** p<0.01, ** p<0.05, * p<0.10", s)
+    @test count(==('\n'), s) <= 1
+
+    # (B) _show_note is plain text, not a 2-column "Note | text" table.
+    s = sprint(MacroEconometricModels._show_note, "* CI excludes zero")
+    @test occursin("* CI excludes zero", s)
+    @test !occursin("Note", s)          # the old wrapper cell is gone
+    @test count(==('\n'), s) <= 1
+
+    # (C) All-empty column labels suppress the header row (no stray blank band); a
+    #     key/value spec table still prints its data rows.
+    s = sprint(Any["Stationary" "Yes"; "Max |λ|" "0.9"]) do io, d
+        MacroEconometricModels._pretty_table(io, d;
+            title = "Stationarity", column_labels = ["", ""], alignment = [:l, :r])
+    end
+    @test occursin("Stationary", s) && occursin("0.9", s)   # data rows survive
+    @test !occursin("\n\n\n", s)                            # no extra empty-header blank band
+                                                            # (one blank after the title is the format's own spacing)
+
+    # (D) Non-empty labels are untouched — a real header still renders.
+    s = sprint(Any[1 2 3]) do io, d
+        MacroEconometricModels._pretty_table(io, d;
+            column_labels = ["", "Coef.", "SE"], alignment = [:l, :r, :r])
+    end
+    @test occursin("Coef.", s)
+
+    set_display_backend(:text)
+end
+
+@testset "Fixed-decimal number formatting (S2/T163)" begin
+    set_display_backend(:text)
+    # _matrix_table routes every cell through _fmt → constant 4-decimal columns; the A01
+    # ragged case (round() printed "1.0 / -0.033 / 0.1829") is fixed.
+    M = [1.0 -0.033; 0.1829 1.0]
+    s = sprint(io -> MacroEconometricModels._matrix_table(io, M, "Residual Correlation";
+                        row_labels = ["y1", "y2"], col_labels = ["y1", "y2"]))
+    @test occursin("1.0000", s)      # was "1.0"
+    @test occursin("-0.0330", s)     # was "-0.033"
+    @test occursin("0.1829", s)
+    set_display_backend(:text)
+end
+
+@testset "Shared display conventions (S8/T166)" begin
+    set_display_backend(:text)
+    MEM = MacroEconometricModels
+    # label dictionary + prettify fallback for unknown symbols
+    @test MEM._label(:hc1) == "HC1 (robust)"
+    @test MEM._label(:css_mle) == "CSS-MLE"
+    @test MEM._label(:ar1) == "AR(1)"
+    @test MEM._label(:jarque_bera) == "Jarque–Bera"
+    @test MEM._label(:some_unknown_thing) == "Some Unknown Thing"   # prettified, not raw
+    @test MEM._label("normal") == "Normal"                          # String dispatch
+    # Yes/No booleans (no raw true/false)
+    @test MEM._yesno(true) == "Yes" && MEM._yesno(false) == "No"
+    # one canonical p-value formatter
+    @test MEM._fmt_pvalue(0.0001) == "<0.001"
+    @test MEM._fmt_pvalue === MEM._format_pvalue
+    # intercept convention: internal tokens map to (Intercept), others pass through
+    @test MEM._INTERCEPT_LABEL == "(Intercept)"
+    @test MEM._display_intercept("const") == "(Intercept)"
+    @test MEM._display_intercept("_cons") == "(Intercept)"
+    @test MEM._display_intercept("Intercept (c)") == "(Intercept)"
+    @test MEM._display_intercept("gdp") == "gdp"
+    set_display_backend(:text)
+end
+
+@testset "_select_horizons deduplication (B2/T165)" begin
+    MEM = MacroEconometricModels
+    # endpoint no longer doubled when H coincides with a fixed anchor
+    @test MEM._select_horizons(8) == [1, 4, 8]        # was [1, 4, 8, 8]
+    @test MEM._select_horizons(12) == [1, 4, 8, 12]
+    @test MEM._select_horizons(4) == [1, 2, 3, 4]
+    @test MEM._select_horizons(24) == [1, 4, 8, 12, 24]
+    @test MEM._select_horizons(40) == [1, 4, 8, 12, 24, 40]
+    # no duplicated horizons for any H (the doubled-row defect)
+    @test all(allunique(MEM._select_horizons(H)) for H in 1:60)
+end
+
+@testset "Dust/reference-row guard + degenerate-fit banner (S6/T164)" begin
+    set_display_backend(:text)
+    MEM = MacroEconometricModels
+
+    # (A) A genuinely-estimated dust row (huge z from se≈1e-15) must NOT print a computed
+    #     stat/p/stars ("significant zero"); the real row above it keeps its stars.
+    s = sprint(io -> MEM._coef_table(io, "T", ["a", "dust"],
+                    [1.0, 8.145e-15], [0.2, 1.0e-15]))
+    @test occursin("*", s)                                   # the real row keeps stars
+    dust_line = only(filter(l -> occursin("dust", l), split(s, '\n')))
+    @test occursin("—", dust_line) && !occursin("*", dust_line)
+
+    # (B) Reference row labeled "(ref)" with dashed estimate/stat.
+    s = sprint(io -> MEM._coef_table(io, "T", ["e=-1", "e=0"],
+                    [0.0, 0.5], [0.0, 0.1]; ref_rows=[1]))
+    @test occursin("(ref)", s)
+    ref_line = only(filter(l -> occursin("(ref)", l), split(s, '\n')))
+    @test occursin("—", ref_line) && !occursin("*", ref_line)
+
+    # (C) Degenerate-fit banner fires on exploded/non-finite coefficients, silent on a
+    #     healthy fit; a finite coefficient (any SE) never triggers it.
+    @test occursin("degenerate fit", sprint(io -> MEM._degenerate_fit_banner(io, [4.72533e114, 1.0])))
+    @test occursin("degenerate fit", sprint(io -> MEM._degenerate_fit_banner(io, [NaN, 1.0])))
+    @test isempty(strip(sprint(io -> MEM._degenerate_fit_banner(io, [0.5, -0.3, 1.2]))))
+    @test isempty(strip(sprint(io -> MEM._degenerate_fit_banner(io, [0.5, 0.0]))))
+    set_display_backend(:text)
+end
+
+@testset "Missing report() dispatches (S3/T167)" begin
+    MEM = MacroEconometricModels
+    # every show-existing type now has a report() dispatch (no MethodError)
+    for T in (MEM.GrangerCausalityResult, MEM.FAVARModel, MEM.BayesianFAVAR,
+              MEM.ACFResult, MEM.SpectralDensityResult, MEM.CrossSpectrumResult,
+              MEM.TransferFunctionResult, MEM.LjungBoxResult, MEM.BoxPierceResult,
+              MEM.DurbinWatsonResult, MEM.LRTestResult, MEM.LMTestResult,
+              MEM.PretrendTestResult)
+        @test hasmethod(report, Tuple{T})
+    end
+end
+
+@testset "Bare-return display wrappers (S3/T167 pt2)" begin
+    set_display_backend(:text)
+    MEM = MacroEconometricModels
+    # OddsRatio: NamedTuple-compatible fields; show omits the intercept row
+    orr = OddsRatio([1.5, 2.0, 0.8], [0.1, 0.2, 0.05], [1.2, 1.5, 0.7],
+                    [1.9, 2.7, 0.95], ["const", "x1", "x2"], 0.95)
+    @test length(orr.or) == 3 && orr.varnames == ["const", "x1", "x2"]
+    s = sprint(show, orr)
+    @test occursin("Odds Ratio", s) && occursin("x1", s) && !occursin("const", s)
+
+    # NowcastForecast forwards the array interface (keeps numeric consumers green)
+    nf = MEM.NowcastForecast([1.0, 2.0, 3.0], 3, 1, nothing)
+    @test length(nf) == 3 && nf[2] == 2.0 && !any(isnan, nf)
+    @test occursin("Nowcast Forecast", sprint(show, nf))
+    @test size(MEM.NowcastForecast([1.0 2.0; 3.0 4.0], 2, nothing, nothing)) == (2, 2)
+
+    # MultinomialMarginalEffects: per-category dy/dx blocks
+    mme = MEM.MultinomialMarginalEffects([0.0 0.1 -0.1; 0.0 0.2 -0.2], nothing,
+                                         ["const", "x1"], ["A", "B", "C"])
+    @test occursin("dy/dx", sprint(show, mme))
+
+    # report() dispatches exist for all four wrappers
+    for Tp in (OddsRatio, MEM.MultinomialMarginalEffects, NowcastForecast, PanelUnitRootSummary)
+        @test hasmethod(report, Tuple{Tp})
+    end
+    set_display_backend(:text)
+end
+
+@testset "report() ends with an estimates table (S4/T168 pt1)" begin
+    set_display_backend(:text)
+    Random.seed!(11)
+    Y = randn(120, 3)
+    # LP report now appends an IRF horizon table (was spec-table only) including impact h=0.
+    m = estimate_lp(Y, 1, 8)
+    s = sprint(show, m)
+    @test occursin("Impulse Responses", s)
+    @test occursin("h=0", s)
+    set_display_backend(:text)
+end
+
+@testset "content-standard renderers (S4/T168 pt2)" begin
+    set_display_backend(:text)
+    MEM = MacroEconometricModels
+    # _ss_table: variable → steady-state value
+    s = sprint(io -> MEM._ss_table(io, ["k", "c"], [1.5, 0.9]))
+    @test occursin("Steady State", s) && occursin("k", s) && occursin("1.5", s)
+    # _irf_points_table: values-only horizon summary with impact h=0
+    vals = reshape(collect(1.0:9.0), 3, 3)   # (H+1=3) × n_row=3
+    s = sprint(io -> MEM._irf_points_table(io, vals, ["a", "b", "c"], "IRF"))
+    @test occursin("h=0", s) && occursin("IRF", s)
+    set_display_backend(:text)
+end
+
+@testset "CI/quantile/SE labels (S9/T170)" begin
+    set_display_backend(:text)
+    MEM = MacroEconometricModels
+    # band-label formula: a 95% CI reads 2.5%/97.5%, not round(Int, 2.5000…)=3%
+    @test MEM._fmt_pct((1 - 0.95) / 2) == "2.5%"
+    @test MEM._fmt_pct((1 + 0.95) / 2) == "97.5%"
+    # end-to-end: the BVAR forecast table now labels the band 2.5%/97.5%
+    Random.seed!(9)
+    bp = estimate_bvar(randn(80, 2), 2; n_draws = 100)
+    s = sprint(show, forecast(bp, 4))
+    @test occursin("2.5%", s) && occursin("97.5%", s)
+    set_display_backend(:text)
+end
+
+@testset "LaTeX backend compilable (S10/T175)" begin
+    MEM = MacroEconometricModels
+    s = with_display_backend(:latex) do
+        sprint(io -> MEM._coef_table(io, "T", ["x1"], [0.5], [0.001]))
+    end
+    @test occursin("\\midrule", s) && occursin("\\bottomrule", s)   # booktabs rules
+    @test !occursin("\\hline", s) && !occursin("|r|", s)            # no grid rules / vertical bars
+    @test occursin("\$P>|", s)                                      # P>|z| header math-moded
+    @test occursin("\$<0.001\$", s)                                 # p-value cell math-moded
+    set_display_backend(:text)
+end
+
+@testset "Display one-offs (T174)" begin
+    set_display_backend(:text)
+    # V09: the normality suite disambiguates its two Jarque–Bera rows
+    s = sprint(show, normality_test_suite(randn(Random.MersenneTwister(3), 200, 3)))
+    @test occursin("Jarque–Bera (multivariate)", s)
+    @test occursin("Jarque–Bera (component-wise)", s)
+    @test !occursin("jarque_bera", s)
+    set_display_backend(:text)
 end

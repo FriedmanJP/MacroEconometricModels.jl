@@ -639,6 +639,8 @@ function solve(spec::HADSGESpec{T}; method::Symbol=:ssj,
         rho_e = get(kwargs, :rho_e, get(spec.het_params, :rho_e, 0.9))
         sigma_e = get(kwargs, :sigma_e, get(spec.het_params, :sigma_e, 0.01))
 
+        @info "Krusell–Smith: solving the PLM fixed point by simulation " *
+              "(T_sim=$T_sim, max_outer=$max_outer) — this can take several minutes…"  # (KS/T174)
         raw = _krusell_smith_solve(ss, spec.individual, spec.grid, spec.income,
                                     _default_cobb_douglas_price_fn,
                                     spec.het_params;

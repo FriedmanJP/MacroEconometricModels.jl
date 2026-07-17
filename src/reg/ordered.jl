@@ -786,6 +786,7 @@ function _show_ordered(io::IO, m, model_name::String)
     cut_names = ["cut$(j)" for j in 1:length(m.cutpoints)]
     _coef_table(io, "Cutpoints", cut_names, m.cutpoints, se_cut; dist=:z)
 
+    _degenerate_fit_banner(io, m.beta)
     _sig_legend(io)
 end
 

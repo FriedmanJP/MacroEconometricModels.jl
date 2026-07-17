@@ -280,6 +280,10 @@ function Base.show(io::IO, r::BeveridgeNelsonResult)
         column_labels = ["", "Value"],
         alignment = [:l, :r],
     )
+    if p == 0 && q == 0
+        println(io, "Note: auto-selected ARMA(0,0) — the series is a random walk with drift; " *
+                    "the transitory (cyclical) component is identically zero.")   # (K03/T174)
+    end
 end
 
 function Base.show(io::IO, r::BaxterKingResult)

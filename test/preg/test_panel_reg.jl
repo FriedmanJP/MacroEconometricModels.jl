@@ -94,6 +94,27 @@ end
         @test length(m.group_effects) == 50
     end
 
+    @testset "between-R² not degenerate to 1.0 (B3/T172)" begin
+        rng = Random.MersenneTwister(271)
+        N_g = 20; T_p = 8; n = N_g * T_p
+        ids = repeat(1:N_g, inner=T_p)
+        ts = repeat(1:T_p, N_g)
+        x = repeat(randn(rng, N_g), inner=T_p) .+ 0.5 .* randn(rng, n)  # between + within
+        alpha = repeat(randn(rng, N_g), inner=T_p)                     # entity fixed effect
+        y = 1.0 .* x .+ alpha .+ 0.3 .* randn(rng, n)
+        df = DataFrame(id=ids, t=ts, x=x, y=y)
+        pd = xtset(df, :id, :t)
+        m = estimate_xtreg(pd, :y, [:x])
+        # between/overall R² must NOT be trivially 1.0 (the α_i-absorption bug set it =1)
+        @test 0 < m.r2_between < 1 - 1e-6
+        @test 0 < m.r2_overall < 1 - 1e-6
+        @test m.r2_within > 0
+        # independent Stata-form pin: between = cor(ȳ_i, x̄_i)² (scale-invariant in β̂)
+        y_g = [mean(y[ids .== i]) for i in 1:N_g]
+        x_g = [mean(x[ids .== i]) for i in 1:N_g]
+        @test isapprox(m.r2_between, cor(y_g, x_g)^2; atol=1e-6)
+    end
+
     @testset "Two-way FE" begin
         rng = Random.MersenneTwister(456)
         N_g = 30; T_p = 15; n = N_g * T_p

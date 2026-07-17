@@ -1,0 +1,26 @@
+Panel Regression — Fixed Effects
+
+ Specification
+
+ Method Fixed Effects
+ Observations N
+ Groups N
+ Avg. periods N
+ R-sq. within N
+ R-sq. between N
+ R-sq. overall N
+ sigma_u N
+ sigma_e N
+ rho N
+ F-statistic N
+ F p-value N
+ Cov. type cluster
+
+ Coefficients
+
+ Coef. Std.Err. t P>|t| CI lower CI upper
+
+ xN N N N N N N
+ xN N N N N N N
+
+Significance: pN, pN, pN

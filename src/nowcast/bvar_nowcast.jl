@@ -119,6 +119,12 @@ function nowcast_bvar(Y::AbstractMatrix, nM::Int, nQ::Int;
     miu_opt = exp(par_opt[3])
     alpha_opt = exp(par_opt[4])
 
+    # The log-hyperparameter box is |par| ≤ 5; a hit at the corner (λ = exp(5) ≈ 148.4)
+    # means the marginal-likelihood optimizer diverged to the boundary rather than an
+    # interior optimum — flag it (the box is the documented cause and is NOT altered, which
+    # would perturb the whole nowcast pipeline). (B4/T173)
+    converged = !any(x -> abs(x) >= Tf(5) - Tf(1e-3), par_opt)
+
     # Estimate BVAR with optimal hyperparameters
     beta, sigma, ml = _bvar_estimate(Ybal, lags, sigma_ar,
                                       lambda_opt, theta_opt, miu_opt, alpha_opt)
@@ -127,7 +133,7 @@ function nowcast_bvar(Y::AbstractMatrix, nM::Int, nQ::Int;
     X_sm = _bvar_smooth_missing(Ymat, beta, sigma, lags, t_complete)
 
     NowcastBVAR{Tf}(X_sm, beta, sigma, lambda_opt, theta_opt, miu_opt,
-                     alpha_opt, lags, ml, nM, nQ, Ymat)
+                     alpha_opt, lags, ml, nM, nQ, Ymat, converged)
 end
 
 # =============================================================================

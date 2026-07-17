@@ -134,9 +134,27 @@ const MEM_IH = MacroEconometricModels
     # =========================================================================
 
     @testset "Display formatting helpers" begin
-        # _fmt returns a number (rounded)
-        @test MEM_IH._fmt(3.14159) isa Real
-        @test MEM_IH._fmt(3.14159; digits=2) ≈ 3.14
+        # _fmt returns a fixed-decimal String (S2/T163)
+        @test MEM_IH._fmt(3.14159) isa String
+        @test MEM_IH._fmt(3.14159) == "3.1416"
+        @test MEM_IH._fmt(3.14159; digits=2) == "3.14"
+        # fixed decimals + -0.0 normalization (aligned columns, no signed zero)
+        @test MEM_IH._fmt(-0.0) == "0.0000"
+        @test MEM_IH._fmt(1.0) == "1.0000"
+        @test MEM_IH._fmt(0.973) == "0.9730"
+        @test MEM_IH._fmt(0.07) == "0.0700"
+        @test MEM_IH._fmt(-0.001; digits=2) == "0.00"      # signed sub-threshold zero stripped
+        # scientific fallback for tiny/huge magnitudes (never collapse to 0.0000 or a raw run)
+        @test occursin("e", MEM_IH._fmt(1e-9))
+        @test MEM_IH._fmt(1e-9) != "0.0000"
+        let bignum = MEM_IH._fmt(4.72533e114)
+            @test length(bignum) < 12 && occursin("e+11", bignum)
+            @test bignum != "4.72533e114"
+        end
+        # non-finite
+        @test MEM_IH._fmt(NaN) == "NaN"
+        @test MEM_IH._fmt(Inf) == "Inf"
+        @test MEM_IH._fmt(-Inf) == "-Inf"
 
         # _fmt_pct returns a string with %
         @test occursin("%", MEM_IH._fmt_pct(0.5))

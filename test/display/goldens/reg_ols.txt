@@ -1,0 +1,24 @@
+ OLS Regression
+
+ Specification
+
+ Method OLS
+ Observations N
+ Covariates N
+ R-squared N
+ Adj. R-sq. N
+ F-statistic N
+ F p-value N
+ AIC N
+ BIC N
+ Cov. type HCN (robust)
+
+ Coefficients
+
+ Coef. Std.Err. t P>|t| CI lower CI upper
+
+ xN N N N N N N
+ xN N N N N N N
+ xN N N N N N N
+
+Significance: pN, pN, pN

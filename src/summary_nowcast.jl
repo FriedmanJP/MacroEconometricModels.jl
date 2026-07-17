@@ -19,7 +19,7 @@ function Base.show(io::IO, m::NowcastDFM{T}) where {T}
         "Observations"  T_obs;
         "Factors"       m.r;
         "Factor lags"   m.p;
-        "Idiosyncratic" string(m.idio);
+        "Idiosyncratic" _label(m.idio);
         "Blocks"        size(m.blocks, 2);
         "EM iterations" m.n_iter;
         "Log-likelihood" _fmt(m.loglik);
@@ -30,6 +30,9 @@ function Base.show(io::IO, m::NowcastDFM{T}) where {T}
         column_labels = ["", ""],
         alignment = [:l, :r],
     )
+    # The headline the model exists to produce (default target = last variable). (S4/T168)
+    _pretty_table(io, Any["Current nowcast" _fmt(m.X_sm[end, end])];
+        title = "Nowcast", column_labels = ["", ""], alignment = [:l, :r])
 end
 
 function Base.show(io::IO, m::NowcastBVAR{T}) where {T}
@@ -53,6 +56,15 @@ function Base.show(io::IO, m::NowcastBVAR{T}) where {T}
         column_labels = ["", ""],
         alignment = [:l, :r],
     )
+    # The headline the model exists to produce (default target = last variable). (S4/T168)
+    _pretty_table(io, Any["Current nowcast" _fmt(m.X_sm[end, end])];
+        title = "Nowcast", column_labels = ["", ""], alignment = [:l, :r])
+    # Sanity flag: a boundary-hit optimizer parks λ at exp(5)≈148.4 — never present it bare. (B4/T173)
+    if !m.converged
+        println(io, "WARNING: GLP hyperparameters hit the |log-param| ≤ 5 box edge " *
+                    "(λ = exp(5) ≈ 148.4) — the marginal-likelihood optimizer did not reach " *
+                    "an interior optimum; treat the shrinkage values with caution.")
+    end
 end
 
 function Base.show(io::IO, m::NowcastBridge{T}) where {T}

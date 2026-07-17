@@ -113,7 +113,7 @@ using StatsAPI: pvalue
         show(buf, suite)
         s = String(take!(buf))
         @test occursin("Normality Test Suite", s)
-        @test occursin("jarque_bera", s)
+        @test occursin("Jarque", s)
     end
 
     @testset "Non-Gaussian data should reject" begin

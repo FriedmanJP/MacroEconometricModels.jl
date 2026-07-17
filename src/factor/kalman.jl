@@ -60,6 +60,20 @@ function Base.show(io::IO, fc::FactorForecast{T}) where {T}
         column_labels = ["", ""],
         alignment = [:l, :r],
     )
+    # Append the observable forecast values (was spec-table only). (S4/T168)
+    hs = _select_horizons(h)
+    nshow = min(N, 8)
+    fdata = Matrix{Any}(undef, nshow, length(hs) + 1)
+    for i in 1:nshow
+        fdata[i, 1] = "obs$i"
+        for (c, hh) in enumerate(hs)
+            fdata[i, c+1] = _fmt(fc.observables[hh, i])
+        end
+    end
+    _pretty_table(io, fdata;
+        title = "Observable Forecasts" * (N > nshow ? " (first $nshow of $N)" : ""),
+        column_labels = vcat([""], ["h=$hh" for hh in hs]),
+        alignment = vcat([:l], fill(:r, length(hs))))
 end
 
 # =============================================================================
