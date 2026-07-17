@@ -1,0 +1,1205 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Linear Regression · MacroEconometricModels.jl</title><meta name="title" content="Linear Regression · MacroEconometricModels.jl"/><meta property="og:title" content="Linear Regression · MacroEconometricModels.jl"/><meta property="twitter:title" content="Linear Regression · MacroEconometricModels.jl"/><meta name="description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:description" content="Documentation for MacroEconometricModels.jl."/><meta property="twitter:description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:url" content="https://FriedmanJP.github.io/MacroEconometricModels.jl/regression/"/><meta property="twitter:url" content="https://FriedmanJP.github.io/MacroEconometricModels.jl/regression/"/><link rel="canonical" href="https://FriedmanJP.github.io/MacroEconometricModels.jl/regression/"/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script><link href="../assets/custom.css" rel="stylesheet" type="text/css"/><script src="../assets/theme-toggle.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">MacroEconometricModels.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><span class="tocitem">Getting Started</span><ul><li><a class="tocitem" href="../getting_started/">Installation &amp; First Model</a></li><li><a class="tocitem" href="../method_guide/">Choosing a Method</a></li><li><a class="tocitem" href="../data/">Data Management</a></li></ul></li><li><span class="tocitem">Univariate Models</span><ul><li><a class="tocitem" href="../filters/">Time Series Filters</a></li><li><a class="tocitem" href="../x13/">X-13ARIMA-SEATS</a></li><li><a class="tocitem" href="../spectral/">Spectral Analysis</a></li><li><a class="tocitem" href="../arima/">ARIMA</a></li><li><a class="tocitem" href="../statespace/">State-Space Models</a></li><li><a class="tocitem" href="../volatility/">Volatility Models</a></li><li><a class="tocitem" href="../nonparametric/">Nonparametric Regression &amp; Density</a></li></ul></li><li><span class="tocitem">Multivariate Models</span><ul><li><a class="tocitem" href="../manual/">VAR</a></li><li><a class="tocitem" href="../bayesian/">Bayesian VAR</a></li><li><a class="tocitem" href="../vecm/">VECM</a></li><li><a class="tocitem" href="../ardl/">ARDL &amp; Bounds Test</a></li><li><a class="tocitem" href="../cointreg/">Cointegrating Regression</a></li><li><a class="tocitem" href="../lp/">Local Projections</a></li><li><a class="tocitem" href="../factormodels/">Factor Models</a></li><li><a class="tocitem" href="../favar/">FAVAR</a></li></ul></li><li><span class="tocitem">Nonlinear Time Series</span><ul><li><a class="tocitem" href="../nonlinear/">Threshold &amp; SETAR</a></li></ul></li><li><span class="tocitem">Cross-Section &amp; Panel</span><ul><li class="is-active"><a class="tocitem" href>Linear Regression</a><ul class="internal"><li><a class="tocitem" href="#Quick-Start"><span>Quick Start</span></a></li><li><a class="tocitem" href="#Ordinary-Least-Squares"><span>Ordinary Least Squares</span></a></li><li><a class="tocitem" href="#Weighted-Least-Squares"><span>Weighted Least Squares</span></a></li><li><a class="tocitem" href="#Robust-Standard-Errors"><span>Robust Standard Errors</span></a></li><li><a class="tocitem" href="#Long-Run-Variance-(HAC)-Estimation"><span>Long-Run Variance (HAC) Estimation</span></a></li><li><a class="tocitem" href="#Instrumental-Variables-/-2SLS"><span>Instrumental Variables / 2SLS</span></a></li><li><a class="tocitem" href="#VIF-Diagnostics"><span>VIF Diagnostics</span></a></li><li><a class="tocitem" href="#Residual-Diagnostics"><span>Residual Diagnostics</span></a></li><li><a class="tocitem" href="#Stability-and-Influence-Diagnostics"><span>Stability and Influence Diagnostics</span></a></li><li><a class="tocitem" href="#CrossSectionData-Dispatch"><span>CrossSectionData Dispatch</span></a></li><li><a class="tocitem" href="#Visualization"><span>Visualization</span></a></li><li><a class="tocitem" href="#Penalized-Regression:-Ridge,-LASSO,-and-Elastic-Net"><span>Penalized Regression: Ridge, LASSO, and Elastic Net</span></a></li><li><a class="tocitem" href="#Variable-Selection:-Stepwise-and-General-to-Specific"><span>Variable Selection: Stepwise and General-to-Specific</span></a></li><li><a class="tocitem" href="#Censored-and-Truncated-Regression:-Tobit"><span>Censored and Truncated Regression: Tobit</span></a></li><li><a class="tocitem" href="#Sample-Selection:-The-Heckman-Model"><span>Sample Selection: The Heckman Model</span></a></li><li><a class="tocitem" href="#Robust-Regression:-M-and-MM-Estimation"><span>Robust Regression: M- and MM-Estimation</span></a></li><li><a class="tocitem" href="#Systems-of-Equations:-SUR-and-3SLS"><span>Systems of Equations: SUR and 3SLS</span></a></li><li><a class="tocitem" href="#Complete-Example"><span>Complete Example</span></a></li><li><a class="tocitem" href="#Common-Pitfalls"><span>Common Pitfalls</span></a></li><li><a class="tocitem" href="#References"><span>References</span></a></li></ul></li><li><a class="tocitem" href="../binary_choice/">Binary Choice Models</a></li><li><a class="tocitem" href="../ordered_multinomial/">Ordered &amp; Multinomial</a></li><li><a class="tocitem" href="../panel_reg/">Panel Regression</a></li><li><a class="tocitem" href="../pvar/">Panel VAR</a></li><li><a class="tocitem" href="../did/">Difference-in-Differences</a></li><li><a class="tocitem" href="../event_study/">Event Study LP</a></li></ul></li><li><a class="tocitem" href="../gmm/">GMM &amp; SMM</a></li><li><span class="tocitem">DSGE Models</span><ul><li><a class="tocitem" href="../dsge/">Overview</a></li><li><a class="tocitem" href="../dsge_linear/">Linear Solvers</a></li><li><a class="tocitem" href="../dsge_nonlinear/">Nonlinear Methods</a></li><li><a class="tocitem" href="../dsge_constraints/">Constraints</a></li><li><a class="tocitem" href="../dsge_estimation/">Estimation</a></li><li><a class="tocitem" href="../dsge_hd/">Historical Decomposition</a></li><li><a class="tocitem" href="../dsge_ha/">Heterogeneous Agents</a></li><li><a class="tocitem" href="../dsge_olg/">Overlapping Generations</a></li><li><a class="tocitem" href="../dsge_continuous/">Continuous Time</a></li></ul></li><li><span class="tocitem">Input-Output Analysis</span><ul><li><a class="tocitem" href="../io/">Overview</a></li><li><a class="tocitem" href="../io_classical/">Classical Analysis</a></li><li><a class="tocitem" href="../io_environmental/">Environmental Extensions</a></li><li><a class="tocitem" href="../io_baqaee_farhi/">Baqaee &amp; Farhi (2019)</a></li><li><a class="tocitem" href="../io_download/">Downloading Data</a></li></ul></li><li><span class="tocitem">Structural Analysis</span><ul><li><a class="tocitem" href="../structural_identification/">Structural Identification</a></li><li><input class="collapse-toggle" id="menuitem-10-2" type="checkbox"/><label class="tocitem" for="menuitem-10-2"><span class="docs-label">Statistical Identification</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../nongaussian/">Overview</a></li><li><a class="tocitem" href="../id_nongaussian/">Non-Gaussian Methods</a></li><li><a class="tocitem" href="../id_heteroskedastic/">Heteroskedasticity</a></li><li><a class="tocitem" href="../id_testing/">Testing</a></li></ul></li><li><input class="collapse-toggle" id="menuitem-10-3" type="checkbox"/><label class="tocitem" for="menuitem-10-3"><span class="docs-label">Innovation Accounting</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../innovation_accounting/">Overview</a></li><li><a class="tocitem" href="../ia_irf/">Impulse Responses</a></li><li><a class="tocitem" href="../ia_fevd/">Variance Decomposition</a></li><li><a class="tocitem" href="../ia_hd/">Historical Decomposition</a></li></ul></li></ul></li><li><span class="tocitem">Nowcasting</span><ul><li><a class="tocitem" href="../nowcast/">Overview</a></li><li><a class="tocitem" href="../nowcast_dfm/">DFM Nowcasting</a></li><li><a class="tocitem" href="../nowcast_bvar/">BVAR Nowcasting</a></li><li><a class="tocitem" href="../nowcast_bridge/">Bridge Equations</a></li><li><a class="tocitem" href="../nowcast_news/">News Decomposition</a></li><li><a class="tocitem" href="../midas/">MIDAS Regression</a></li></ul></li><li><a class="tocitem" href="../forecast_evaluation/">Forecast Evaluation</a></li><li><span class="tocitem">Hypothesis Tests</span><ul><li><a class="tocitem" href="../tests/">Overview</a></li><li><a class="tocitem" href="../tests_unitroot/">Unit Root &amp; Cointegration</a></li><li><a class="tocitem" href="../tests_unitroot_advanced/">Advanced Unit Root</a></li><li><a class="tocitem" href="../tests_cointegration/">Residual-Based Cointegration</a></li><li><a class="tocitem" href="../tests_breaks/">Structural Breaks</a></li><li><a class="tocitem" href="../tests_panel/">Panel Tests</a></li><li><a class="tocitem" href="../tests_diagnostics/">Model Diagnostics</a></li></ul></li><li><a class="tocitem" href="../plotting/">Visualization</a></li><li><span class="tocitem">Project</span><ul><li><a class="tocitem" href="../notation/">Notation</a></li><li><a class="tocitem" href="../bibliography/">Bibliography</a></li><li><a class="tocitem" href="../changelog/">Changelog</a></li><li><a class="tocitem" href="../citation/">How to Cite</a></li></ul></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../api/">Overview</a></li><li><a class="tocitem" href="../api/data/">Data Management</a></li><li><a class="tocitem" href="../api/univariate/">Univariate Models</a></li><li><a class="tocitem" href="../api/multivariate/">Multivariate Models</a></li><li><a class="tocitem" href="../api/cross_section/">Cross-Sectional Models</a></li><li><a class="tocitem" href="../api/panel/">Panel Models</a></li><li><a class="tocitem" href="../api/dsge/">DSGE Models</a></li><li><a class="tocitem" href="../api/structural/">Structural &amp; Statistical Identification</a></li><li><a class="tocitem" href="../api/gmm/">GMM &amp; SMM</a></li><li><a class="tocitem" href="../api/tests/">Hypothesis Tests</a></li><li><a class="tocitem" href="../api/nowcasting/">Nowcasting</a></li><li><a class="tocitem" href="../api/visualization/">Visualization</a></li><li><a class="tocitem" href="../api/utilities/">Utilities &amp; Display</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Cross-Section &amp; Panel</a></li><li class="is-active"><a href>Linear Regression</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Linear Regression</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/FriedmanJP/MacroEconometricModels.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/FriedmanJP/MacroEconometricModels.jl/blob/main/docs/src/regression.md#" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="regression_page"><a class="docs-heading-anchor" href="#regression_page">Linear Regression</a><a id="regression_page-1"></a><a class="docs-heading-anchor-permalink" href="#regression_page" title="Permalink"></a></h1><p><strong>MacroEconometricModels.jl</strong> provides a complete cross-sectional linear regression toolkit covering OLS, WLS, and IV/2SLS estimation with modern robust inference. All estimators produce Stata/EViews-style coefficient tables via <code>report()</code> and integrate with the package&#39;s D3.js visualization system.</p><ul><li><strong>OLS / WLS</strong> estimation with automatic intercept handling and goodness-of-fit statistics</li><li><strong>Heteroskedasticity-robust standard errors</strong>: HC0 (White 1980), HC1, HC2, HC3 (MacKinnon &amp; White 1985)</li><li><strong>Cluster-robust standard errors</strong> with finite-sample correction (Arellano 1987)</li><li><strong>Instrumental variables / 2SLS</strong> with first-stage F-statistic and Sargan-Hansen overidentification test</li><li><strong>Variance Inflation Factors</strong> for multicollinearity diagnostics (Belsley, Kuh &amp; Welsch 1980)</li><li><strong>Censored (Tobit) and truncated regression</strong> by MLE with McDonald–Moffitt marginal effects (Tobin 1958; Hausman &amp; Wise 1977)</li><li><strong>Heckman sample-selection model</strong> (two-step Heckit + full-information ML) with the Greene corrected two-step covariance (Heckman 1979)</li><li><strong>CrossSectionData dispatch</strong> for symbol-based formula-like syntax</li><li><strong>StatsAPI interface</strong>: <code>coef</code>, <code>vcov</code>, <code>predict</code>, <code>confint</code>, <code>stderror</code>, <code>nobs</code>, <code>r2</code></li></ul><h2 id="Quick-Start"><a class="docs-heading-anchor" href="#Quick-Start">Quick Start</a><a id="Quick-Start-1"></a><a class="docs-heading-anchor-permalink" href="#Quick-Start" title="Permalink"></a></h2><p><strong>Recipe 1: OLS with robust standard errors</strong></p><pre><code class="language-julia hljs"># Simulate a cross-sectional dataset
+n = 200
+X = hcat(ones(n), randn(n, 2))
+y = X * [1.0, 2.0, -0.5] + 0.5 * randn(n)
+m = estimate_reg(y, X; varnames=[&quot;(Intercept)&quot;, &quot;x1&quot;, &quot;x2&quot;])
+report(m)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">         OLS Regression
+
+  Specification
+
+  Method                   OLS
+  Observations             200
+  Covariates                 3
+  R-squared             0.9473
+  Adj. R-sq.            0.9468
+  F-statistic          1772.15
+  F p-value             &lt;0.001
+  AIC                   268.31
+  BIC                   281.51
+  Cov. type       HC1 (robust)
+
+                                    Coefficients
+
+                  Coef.   Std.Err.          t    P&gt;|t|   CI lower   CI upper
+
+  (Intercept)    1.0244     0.0333    30.7492   &lt;0.001     0.9587     1.0901   ***
+  x1             2.0123     0.0338    59.5353   &lt;0.001     1.9456     2.0789   ***
+  x2            -0.4816     0.0342   -14.0676   &lt;0.001    -0.5492    -0.4141   ***
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p><strong>Recipe 2: Weighted Least Squares</strong></p><pre><code class="language-julia hljs"># Heteroskedastic DGP: variance proportional to x1^2
+n = 300
+x1 = 1.0 .+ abs.(randn(n))
+X = hcat(ones(n), x1)
+y = 2.0 .+ 3.0 * x1 + x1 .* randn(n)
+w = 1.0 ./ (x1 .^ 2)   # Inverse variance weights
+m = estimate_reg(y, X; weights=w, varnames=[&quot;(Intercept)&quot;, &quot;x1&quot;])
+report(m)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">         WLS Regression
+
+  Specification
+
+  Method                   WLS
+  Observations             300
+  Covariates                 2
+  R-squared             0.3693
+  Adj. R-sq.            0.3671
+  F-statistic            49.68
+  F p-value             &lt;0.001
+  AIC                  1286.51
+  BIC                  1297.62
+  Cov. type       HC1 (robust)
+
+                                   Coefficients
+
+                 Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
+
+  (Intercept)   2.0379     0.3398    5.9971   &lt;0.001     1.3692     2.7067   ***
+  x1            2.9050     0.2260   12.8565   &lt;0.001     2.4603     3.3497   ***
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p><strong>Recipe 3: HC3 robust standard errors</strong></p><pre><code class="language-julia hljs"># HC3 is preferred for small samples with heteroskedasticity
+n = 200
+X = hcat(ones(n), randn(n, 3))
+y = X * [1.0, 0.5, -1.0, 0.3] + randn(n) .* (1.0 .+ abs.(X[:, 2]))
+m = estimate_reg(y, X; cov_type=:hc3, varnames=[&quot;(Intercept)&quot;, &quot;x1&quot;, &quot;x2&quot;, &quot;x3&quot;])
+report(m)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">         OLS Regression
+
+  Specification
+
+  Method                   OLS
+  Observations             200
+  Covariates                 4
+  R-squared             0.2982
+  Adj. R-sq.            0.2875
+  F-statistic            27.76
+  F p-value             &lt;0.001
+  AIC                   811.15
+  BIC                   827.64
+  Cov. type       HC3 (robust)
+
+                                   Coefficients
+
+                  Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
+
+  (Intercept)    0.9528     0.1268    7.5123   &lt;0.001     0.7027     1.2030   ***
+  x1             0.7010     0.1833    3.8246   &lt;0.001     0.3395     1.0624   ***
+  x2            -0.9153     0.1203   -7.6068   &lt;0.001    -1.1526    -0.6780   ***
+  x3             0.2601     0.1118    2.3259    0.021     0.0396     0.4806   **
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p><strong>Recipe 4: IV/2SLS estimation</strong></p><pre><code class="language-julia hljs"># Endogenous regressor correlated with the error
+n = 500
+z1, z2 = randn(n), randn(n)
+u = randn(n)
+x_endog = 0.5 * z1 + 0.3 * z2 + 0.5 * u + randn(n)
+y = 1.0 .+ 2.0 * x_endog + u
+X = hcat(ones(n), x_endog)
+Z = hcat(ones(n), z1, z2)
+m = estimate_iv(y, X, Z; endogenous=[2], varnames=[&quot;(Intercept)&quot;, &quot;x_endog&quot;])
+report(m)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">         IV/2SLS Regression
+
+  Specification
+
+  Method                   IV/2SLS
+  Observations                 500
+  Covariates                     2
+  R-squared                 0.9172
+  Adj. R-sq.                0.9170
+  F-statistic              1080.99
+  F p-value                 &lt;0.001
+  AIC                      1360.57
+  BIC                      1373.22
+  Cov. type           HC1 (robust)
+  1st-stage F                75.58
+  Cragg-Donald F             75.58
+  Kleibergen-Paap F          80.68
+  Stock-Yogo 10%             19.93
+
+                                   Coefficients
+
+                 Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
+
+  (Intercept)   1.0203     0.0420   24.2893   &lt;0.001     0.9378     1.1028   ***
+  x_endog       2.1346     0.0626   34.1108   &lt;0.001     2.0117     2.2576   ***
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p><strong>Recipe 5: Multicollinearity diagnostics</strong></p><pre><code class="language-julia hljs"># Two highly correlated regressors
+n = 200
+x1 = randn(n)
+x2 = 0.9 * x1 + 0.1 * randn(n)   # Correlated with x1
+x3 = randn(n)
+X = hcat(ones(n), x1, x2, x3)
+y = X * [1.0, 2.0, -1.0, 0.5] + randn(n)
+m = estimate_reg(y, X; varnames=[&quot;(Intercept)&quot;, &quot;x1&quot;, &quot;x2&quot;, &quot;x3&quot;])
+report(m)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">         OLS Regression
+
+  Specification
+
+  Method                   OLS
+  Observations             200
+  Covariates                 4
+  R-squared             0.5396
+  Adj. R-sq.            0.5325
+  F-statistic            76.57
+  F p-value             &lt;0.001
+  AIC                   585.54
+  BIC                   602.04
+  Cov. type       HC1 (robust)
+
+                                   Coefficients
+
+                  Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
+
+  (Intercept)    0.9551     0.0751   12.7218   &lt;0.001     0.8070     1.1031   ***
+  x1             1.8511     0.7474    2.4768   0.0141     0.3772     3.3250   **
+  x2            -0.9353     0.8323   -1.1237   0.2625    -2.5767     0.7061
+  x3             0.4814     0.0670    7.1866   &lt;0.001     0.3493     0.6136   ***
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p><strong>Recipe 6: CrossSectionData dispatch</strong></p><pre><code class="language-julia hljs"># Symbol-based formula-like API
+n = 300
+data = hcat(randn(n), randn(n), randn(n))
+d = CrossSectionData(data; varnames=[&quot;wage&quot;, &quot;educ&quot;, &quot;exper&quot;])
+m = estimate_reg(d, :wage, [:educ, :exper])
+report(m)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">         OLS Regression
+
+  Specification
+
+  Method                   OLS
+  Observations             300
+  Covariates                 3
+  R-squared             0.0175
+  Adj. R-sq.            0.0109
+  F-statistic             2.64
+  F p-value             0.0728
+  AIC                   869.89
+  BIC                   884.71
+  Cov. type       HC1 (robust)
+
+                                   Coefficients
+
+                  Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
+
+  (Intercept)   -0.0244     0.0594   -0.4109   0.6815    -0.1413     0.0925
+  educ          -0.1104     0.0542   -2.0388   0.0424    -0.2170    -0.0038   **
+  exper         -0.0723     0.0602   -1.1993   0.2314    -0.1908     0.0463
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><hr/><h2 id="Ordinary-Least-Squares"><a class="docs-heading-anchor" href="#Ordinary-Least-Squares">Ordinary Least Squares</a><a id="Ordinary-Least-Squares-1"></a><a class="docs-heading-anchor-permalink" href="#Ordinary-Least-Squares" title="Permalink"></a></h2><p>The <strong>Ordinary Least Squares</strong> (OLS) estimator is the workhorse of applied econometrics. Under the Gauss-Markov conditions, it is the best linear unbiased estimator (BLUE) of the population regression coefficients.</p><h3 id="The-Linear-Model"><a class="docs-heading-anchor" href="#The-Linear-Model">The Linear Model</a><a id="The-Linear-Model-1"></a><a class="docs-heading-anchor-permalink" href="#The-Linear-Model" title="Permalink"></a></h3><p>The linear regression model relates a scalar dependent variable <span>$y_i$</span> to a <span>$k \times 1$</span> vector of regressors <span>$x_i$</span>:</p><p class="math-container">\[y_i = x_i&#39; \beta + u_i, \quad i = 1, \ldots, n\]</p><p>where:</p><ul><li><span>$y_i$</span> is the dependent variable for observation <span>$i$</span></li><li><span>$x_i$</span> is the <span>$k \times 1$</span> vector of regressors (including a constant if desired)</li><li><span>$\beta$</span> is the <span>$k \times 1$</span> vector of population coefficients</li><li><span>$u_i$</span> is the error term with <span>$E[u_i | x_i] = 0$</span></li></ul><p>In matrix form, stacking all <span>$n$</span> observations:</p><p class="math-container">\[y = X \beta + u\]</p><p>where:</p><ul><li><span>$y$</span> is the <span>$n \times 1$</span> vector of dependent variable observations</li><li><span>$X$</span> is the <span>$n \times k$</span> regressor matrix</li><li><span>$u$</span> is the <span>$n \times 1$</span> vector of error terms</li></ul><p>The OLS estimator minimizes the sum of squared residuals:</p><p class="math-container">\[\hat{\beta}_{OLS} = (X&#39;X)^{-1} X&#39;y\]</p><p>where:</p><ul><li><span>$(X&#39;X)^{-1}$</span> is the inverse of the <span>$k \times k$</span> Gram matrix</li><li><span>$X&#39;y$</span> is the <span>$k \times 1$</span> cross-product vector</li></ul><p>Under the Gauss-Markov conditions (<span>$E[u|X] = 0$</span>, <span>$\text{Var}(u|X) = \sigma^2 I_n$</span>), the classical covariance matrix is:</p><p class="math-container">\[\text{Var}(\hat{\beta}) = \sigma^2 (X&#39;X)^{-1}\]</p><p>where:</p><ul><li><span>$\sigma^2$</span> is the error variance</li><li><span>$\hat{\sigma}^2 = \hat{u}&#39;\hat{u} / (n - k)$</span> is the unbiased estimator of <span>$\sigma^2$</span></li></ul><h3 id="Goodness-of-Fit"><a class="docs-heading-anchor" href="#Goodness-of-Fit">Goodness of Fit</a><a id="Goodness-of-Fit-1"></a><a class="docs-heading-anchor-permalink" href="#Goodness-of-Fit" title="Permalink"></a></h3><p>The <strong>R-squared</strong> measures the fraction of variance explained by the model:</p><p class="math-container">\[R^2 = 1 - \frac{SSR}{TSS} = 1 - \frac{\sum_{i=1}^n \hat{u}_i^2}{\sum_{i=1}^n (y_i - \bar{y})^2}\]</p><p>where:</p><ul><li><span>$SSR = \sum \hat{u}_i^2$</span> is the sum of squared residuals</li><li><span>$TSS = \sum (y_i - \bar{y})^2$</span> is the total sum of squares</li><li><span>$\bar{y}$</span> is the sample mean of the dependent variable</li></ul><p>The <strong>adjusted R-squared</strong> penalizes for additional regressors:</p><p class="math-container">\[\bar{R}^2 = 1 - (1 - R^2) \cdot \frac{n - 1}{n - k}\]</p><p>where:</p><ul><li><span>$n$</span> is the sample size</li><li><span>$k$</span> is the number of regressors (including the intercept)</li></ul><p>The <strong>F-statistic</strong> tests joint significance of all slope coefficients (<span>$H_0: \beta_2 = \cdots = \beta_k = 0$</span>):</p><p class="math-container">\[F = \frac{(R \hat{\beta})&#39; [R \hat{V} R&#39;]^{-1} (R \hat{\beta})}{q} \sim F_{q, n-k}\]</p><p>where:</p><ul><li><span>$R$</span> is the <span>$q \times k$</span> restriction matrix selecting the <span>$q = k - 1$</span> slope coefficients</li><li><span>$\hat{V}$</span> is the estimated covariance matrix of <span>$\hat{\beta}$</span></li></ul><p>Information criteria for model comparison:</p><p class="math-container">\[AIC = -2 \log L + 2(k + 1), \quad BIC = -2 \log L + \log(n) \cdot (k + 1)\]</p><p>where:</p><ul><li><span>$\log L = -\frac{n}{2} \log(2\pi) - \frac{n}{2} \log(\hat{\sigma}^2_{ML}) - \frac{n}{2}$</span> is the Gaussian log-likelihood</li><li><span>$\hat{\sigma}^2_{ML} = SSR / n$</span> is the ML error variance estimator</li></ul><pre><code class="language-julia hljs"># Generate data with known coefficients
+n = 500
+X = hcat(ones(n), randn(n, 3))
+beta_true = [2.0, 1.5, -0.8, 0.3]
+y = X * beta_true + 0.5 * randn(n)
+
+# OLS with HC1 robust standard errors (default)
+m = estimate_reg(y, X; varnames=[&quot;(Intercept)&quot;, &quot;education&quot;, &quot;experience&quot;, &quot;tenure&quot;])
+report(m)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">         OLS Regression
+
+  Specification
+
+  Method                   OLS
+  Observations             500
+  Covariates                 4
+  R-squared             0.9190
+  Adj. R-sq.            0.9185
+  F-statistic          1876.01
+  F p-value             &lt;0.001
+  AIC                   741.13
+  BIC                   762.21
+  Cov. type       HC1 (robust)
+
+                                    Coefficients
+
+                  Coef.   Std.Err.          t    P&gt;|t|   CI lower   CI upper
+
+  (Intercept)    2.0199     0.0227    89.1580   &lt;0.001     1.9754     2.0645   ***
+  education      1.5109     0.0242    62.4066   &lt;0.001     1.4633     1.5585   ***
+  experience    -0.7764     0.0230   -33.7559   &lt;0.001    -0.8216    -0.7312   ***
+  tenure         0.2989     0.0217    13.7641   &lt;0.001     0.2562     0.3416   ***
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>The estimated coefficients recover the true data-generating process. With <span>$n = 500$</span> and <span>$\sigma = 0.5$</span>, the standard errors are small enough to reject <span>$H_0: \beta_j = 0$</span> for all slope coefficients. The <span>$R^2$</span> is high because the signal-to-noise ratio is large. The F-statistic rejects the null of joint insignificance at all conventional levels.</p><h3 id="Keyword-Arguments"><a class="docs-heading-anchor" href="#Keyword-Arguments">Keyword Arguments</a><a id="Keyword-Arguments-1"></a><a class="docs-heading-anchor-permalink" href="#Keyword-Arguments" title="Permalink"></a></h3><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>cov_type</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:hc1</code></td><td style="text-align: right">Covariance estimator: <code>:ols</code>, <code>:hc0</code>, <code>:hc1</code>, <code>:hc2</code>, <code>:hc3</code>, <code>:cluster</code></td></tr><tr><td style="text-align: right"><code>weights</code></td><td style="text-align: right"><code>Union{Nothing,Vector}</code></td><td style="text-align: right"><code>nothing</code></td><td style="text-align: right">WLS weights (positive values); <code>nothing</code> for OLS</td></tr><tr><td style="text-align: right"><code>varnames</code></td><td style="text-align: right"><code>Union{Nothing,Vector{String}}</code></td><td style="text-align: right"><code>nothing</code></td><td style="text-align: right">Coefficient names (auto-generated if <code>nothing</code>)</td></tr><tr><td style="text-align: right"><code>clusters</code></td><td style="text-align: right"><code>Union{Nothing,Vector}</code></td><td style="text-align: right"><code>nothing</code></td><td style="text-align: right">Cluster assignments (required for <code>:cluster</code>)</td></tr></table><h3 id="Return-Values"><a class="docs-heading-anchor" href="#Return-Values">Return Values</a><a id="Return-Values-1"></a><a class="docs-heading-anchor-permalink" href="#Return-Values" title="Permalink"></a></h3><p><code>estimate_reg</code> returns a <code>RegModel{T}</code> with the following fields:</p><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>y</code></td><td style="text-align: right"><code>Vector{T}</code></td><td style="text-align: right">Dependent variable</td></tr><tr><td style="text-align: right"><code>X</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right"><span>$n \times k$</span> regressor matrix</td></tr><tr><td style="text-align: right"><code>beta</code></td><td style="text-align: right"><code>Vector{T}</code></td><td style="text-align: right"><span>$k \times 1$</span> estimated coefficients</td></tr><tr><td style="text-align: right"><code>vcov_mat</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right"><span>$k \times k$</span> variance-covariance matrix</td></tr><tr><td style="text-align: right"><code>residuals</code></td><td style="text-align: right"><code>Vector{T}</code></td><td style="text-align: right">OLS/WLS residuals <span>$\hat{u} = y - X\hat{\beta}$</span></td></tr><tr><td style="text-align: right"><code>fitted</code></td><td style="text-align: right"><code>Vector{T}</code></td><td style="text-align: right">Fitted values <span>$\hat{y} = X\hat{\beta}$</span></td></tr><tr><td style="text-align: right"><code>ssr</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Sum of squared residuals</td></tr><tr><td style="text-align: right"><code>tss</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Total sum of squares (demeaned)</td></tr><tr><td style="text-align: right"><code>r2</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">R-squared</td></tr><tr><td style="text-align: right"><code>adj_r2</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Adjusted R-squared</td></tr><tr><td style="text-align: right"><code>f_stat</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">F-statistic for joint significance</td></tr><tr><td style="text-align: right"><code>f_pval</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">p-value of the F-test</td></tr><tr><td style="text-align: right"><code>loglik</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Gaussian log-likelihood</td></tr><tr><td style="text-align: right"><code>aic</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Akaike Information Criterion</td></tr><tr><td style="text-align: right"><code>bic</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Bayesian Information Criterion</td></tr><tr><td style="text-align: right"><code>varnames</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right">Coefficient names</td></tr><tr><td style="text-align: right"><code>method</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right">Estimation method (<code>:ols</code>, <code>:wls</code>, or <code>:iv</code>)</td></tr><tr><td style="text-align: right"><code>cov_type</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right">Covariance estimator used</td></tr></table><hr/><h2 id="Weighted-Least-Squares"><a class="docs-heading-anchor" href="#Weighted-Least-Squares">Weighted Least Squares</a><a id="Weighted-Least-Squares-1"></a><a class="docs-heading-anchor-permalink" href="#Weighted-Least-Squares" title="Permalink"></a></h2><p>When the error variance is heteroskedastic with a known form <span>$\text{Var}(u_i | x_i) = \sigma^2 / w_i$</span>, <strong>Weighted Least Squares</strong> (WLS) restores efficiency by transforming the model. The WLS estimator (Aitken 1936) is:</p><p class="math-container">\[\hat{\beta}_{WLS} = (X&#39;WX)^{-1} X&#39;Wy\]</p><p>where:</p><ul><li><span>$W = \text{diag}(w_1, w_2, \ldots, w_n)$</span> is the <span>$n \times n$</span> diagonal weight matrix</li><li><span>$w_i &gt; 0$</span> are user-specified weights, typically inverse variance weights</li><li><span>$X$</span> is the <span>$n \times k$</span> regressor matrix</li><li><span>$y$</span> is the <span>$n \times 1$</span> dependent variable vector</li></ul><p>WLS is equivalent to applying OLS to the transformed model <span>$\sqrt{w_i} \, y_i = \sqrt{w_i} \, x_i&#39; \beta + \sqrt{w_i} \, u_i$</span>, which has homoskedastic errors when the weight specification is correct.</p><div class="admonition is-info" id="Technical-Note-e7b401fe0938e3f5"><header class="admonition-header">Technical Note<a class="admonition-anchor" href="#Technical-Note-e7b401fe0938e3f5" title="Permalink"></a></header><div class="admonition-body"><p>The package computes residuals from the <strong>original</strong> (untransformed) data: <span>$\hat{u}_i = y_i - x_i&#39; \hat{\beta}_{WLS}$</span>. Robust standard errors (HC0–HC3) applied under WLS use the original <span>$X$</span> and residuals with the WLS bread matrix <span>$(X&#39;WX)^{-1}$</span>, providing double robustness against weight misspecification.</p></div></div><pre><code class="language-julia hljs"># DGP with heteroskedastic errors: Var(u_i) = sigma^2 * x1_i^2
+n = 500
+x1 = 1.0 .+ abs.(randn(n))
+X = hcat(ones(n), x1)
+sigma_i = 0.5 * x1
+y = 2.0 .+ 3.0 * x1 + sigma_i .* randn(n)
+
+# OLS (inefficient under heteroskedasticity)
+m_ols = estimate_reg(y, X; varnames=[&quot;(Intercept)&quot;, &quot;x1&quot;])
+
+# WLS with correct weights (inverse variance)
+w = 1.0 ./ (x1 .^ 2)
+m_wls = estimate_reg(y, X; weights=w, varnames=[&quot;(Intercept)&quot;, &quot;x1&quot;])
+report(m_wls)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">         WLS Regression
+
+  Specification
+
+  Method                   WLS
+  Observations             500
+  Covariates                 2
+  R-squared             0.7714
+  Adj. R-sq.            0.7710
+  F-statistic           427.56
+  F p-value             &lt;0.001
+  AIC                  1356.90
+  BIC                  1369.54
+  Cov. type       HC1 (robust)
+
+                                   Coefficients
+
+                 Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
+
+  (Intercept)   2.0746     0.1202   17.2559   &lt;0.001     1.8384     2.3109   ***
+  x1            2.9854     0.0772   38.6707   &lt;0.001     2.8337     3.1371   ***
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>The WLS standard errors are smaller than the OLS standard errors when the weight specification correctly captures the heteroskedasticity pattern. Both estimators are consistent, but WLS is more efficient. In practice, the weights often come from a preliminary regression of the squared OLS residuals on the regressors (feasible GLS).</p><hr/><h2 id="Robust-Standard-Errors"><a class="docs-heading-anchor" href="#Robust-Standard-Errors">Robust Standard Errors</a><a id="Robust-Standard-Errors-1"></a><a class="docs-heading-anchor-permalink" href="#Robust-Standard-Errors" title="Permalink"></a></h2><p>Under heteroskedasticity (<span>$\text{Var}(u_i | x_i) \neq \sigma^2$</span>), the classical OLS covariance matrix is inconsistent. White (1980) proposes a <strong>heteroskedasticity-consistent</strong> (HC) covariance estimator using the sandwich form:</p><p class="math-container">\[\hat{V}_{HC} = (X&#39;X)^{-1} \left( \sum_{i=1}^{n} \hat{\omega}_i \, x_i x_i&#39; \right) (X&#39;X)^{-1}\]</p><p>where:</p><ul><li><span>$(X&#39;X)^{-1}$</span> is the <span>$k \times k$</span> OLS bread matrix</li><li><span>$\hat{\omega}_i$</span> is the observation-specific weight (depends on the HC variant)</li><li><span>$x_i$</span> is the <span>$k \times 1$</span> regressor vector for observation <span>$i$</span></li></ul><h3 id="HC-Variants"><a class="docs-heading-anchor" href="#HC-Variants">HC Variants</a><a id="HC-Variants-1"></a><a class="docs-heading-anchor-permalink" href="#HC-Variants" title="Permalink"></a></h3><p>The weight <span>$\hat{\omega}_i$</span> differs across variants:</p><table><tr><th style="text-align: right">Variant</th><th style="text-align: right">Weight <span>$\hat{\omega}_i$</span></th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><strong>HC0</strong></td><td style="text-align: right"><span>$\hat{u}_i^2$</span></td><td style="text-align: right">White (1980) –- asymptotically valid, downward biased in small samples</td></tr><tr><td style="text-align: right"><strong>HC1</strong></td><td style="text-align: right"><span>$\frac{n}{n-k} \hat{u}_i^2$</span></td><td style="text-align: right">Degree-of-freedom correction (Stata default)</td></tr><tr><td style="text-align: right"><strong>HC2</strong></td><td style="text-align: right"><span>$\frac{\hat{u}_i^2}{1 - h_{ii}}$</span></td><td style="text-align: right">Leverage-adjusted (unbiased under homoskedasticity)</td></tr><tr><td style="text-align: right"><strong>HC3</strong></td><td style="text-align: right"><span>$\frac{\hat{u}_i^2}{(1 - h_{ii})^2}$</span></td><td style="text-align: right">Jackknife-like (conservative, best small-sample properties)</td></tr></table><p>where <span>$h_{ii} = x_i&#39; (X&#39;X)^{-1} x_i$</span> is the <span>$i$</span>-th diagonal element of the hat matrix <span>$H = X(X&#39;X)^{-1}X&#39;$</span>.</p><div class="admonition is-info" id="Technical-Note-7e1b36b9504fd4c7"><header class="admonition-header">Technical Note<a class="admonition-anchor" href="#Technical-Note-7e1b36b9504fd4c7" title="Permalink"></a></header><div class="admonition-body"><p>The leverage <span>$h_{ii}$</span> measures how influential observation <span>$i$</span> is on the regression fit. High-leverage observations (<span>$h_{ii}$</span> close to 1) have small residuals mechanically, making HC0 and HC1 underestimate the true variance. HC2 corrects for this exactly under homoskedasticity; HC3 provides conservative inference even under heteroskedasticity. MacKinnon &amp; White (1985) recommend HC3 for small samples (<span>$n &lt; 250$</span>).</p></div></div><pre><code class="language-julia hljs"># Heteroskedastic DGP
+n = 200
+X = hcat(ones(n), randn(n, 2))
+u = randn(n) .* (1.0 .+ abs.(X[:, 2]))   # Variance depends on x1
+y = X * [1.0, 2.0, -0.5] + u
+
+# Compare HC variants
+for cov in [:ols, :hc0, :hc1, :hc2, :hc3]
+    m = estimate_reg(y, X; cov_type=cov, varnames=[&quot;(Intercept)&quot;, &quot;x1&quot;, &quot;x2&quot;])
+    se = stderror(m)
+    report(m)
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">┌ Warning: Assignment to `m` in soft scope is ambiguous because a global variable by the same name exists: `m` will be treated as a new local. Disambiguate by using `local m` to suppress this warning or `global m` to assign to the existing global variable.
+└ @ regression.md:319
+      OLS Regression
+
+  Specification
+
+  Method             OLS
+  Observations       200
+  Covariates           3
+  R-squared       0.5932
+  Adj. R-sq.      0.5890
+  F-statistic     143.62
+  F p-value       &lt;0.001
+  AIC             819.14
+  BIC             832.33
+  Cov. type          OLS
+
+                                   Coefficients
+
+                  Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
+
+  (Intercept)    0.9503     0.1320    7.2005   &lt;0.001     0.6901     1.2106   ***
+  x1             1.9442     0.1246   15.5998   &lt;0.001     1.6985     2.1900   ***
+  x2            -0.5637     0.1393   -4.0456   &lt;0.001    -0.8386    -0.2889   ***
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10
+         OLS Regression
+
+  Specification
+
+  Method                   OLS
+  Observations             200
+  Covariates                 3
+  R-squared             0.5932
+  Adj. R-sq.            0.5890
+  F-statistic           143.62
+  F p-value             &lt;0.001
+  AIC                   819.14
+  BIC                   832.33
+  Cov. type       HC0 (robust)
+
+                                   Coefficients
+
+                  Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
+
+  (Intercept)    0.9503     0.1278    7.4358   &lt;0.001     0.6983     1.2024   ***
+  x1             1.9442     0.1687   11.5277   &lt;0.001     1.6116     2.2768   ***
+  x2            -0.5637     0.1458   -3.8664   &lt;0.001    -0.8513    -0.2762   ***
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10
+         OLS Regression
+
+  Specification
+
+  Method                   OLS
+  Observations             200
+  Covariates                 3
+  R-squared             0.5932
+  Adj. R-sq.            0.5890
+  F-statistic           143.62
+  F p-value             &lt;0.001
+  AIC                   819.14
+  BIC                   832.33
+  Cov. type       HC1 (robust)
+
+                                   Coefficients
+
+                  Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
+
+  (Intercept)    0.9503     0.1288    7.3798   &lt;0.001     0.6964     1.2043   ***
+  x1             1.9442     0.1699   11.4410   &lt;0.001     1.6091     2.2794   ***
+  x2            -0.5637     0.1469   -3.8373   &lt;0.001    -0.8535    -0.2740   ***
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10
+         OLS Regression
+
+  Specification
+
+  Method                   OLS
+  Observations             200
+  Covariates                 3
+  R-squared             0.5932
+  Adj. R-sq.            0.5890
+  F-statistic           143.62
+  F p-value             &lt;0.001
+  AIC                   819.14
+  BIC                   832.33
+  Cov. type       HC2 (robust)
+
+                                   Coefficients
+
+                  Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
+
+  (Intercept)    0.9503     0.1290    7.3659   &lt;0.001     0.6959     1.2048   ***
+  x1             1.9442     0.1714   11.3442   &lt;0.001     1.6062     2.2822   ***
+  x2            -0.5637     0.1482   -3.8042   &lt;0.001    -0.8560    -0.2715   ***
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10
+         OLS Regression
+
+  Specification
+
+  Method                   OLS
+  Observations             200
+  Covariates                 3
+  R-squared             0.5932
+  Adj. R-sq.            0.5890
+  F-statistic           143.62
+  F p-value             &lt;0.001
+  AIC                   819.14
+  BIC                   832.33
+  Cov. type       HC3 (robust)
+
+                                   Coefficients
+
+                  Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
+
+  (Intercept)    0.9503     0.1303    7.2962   &lt;0.001     0.6935     1.2072   ***
+  x1             1.9442     0.1742   11.1617   &lt;0.001     1.6007     2.2877   ***
+  x2            -0.5637     0.1506   -3.7425   &lt;0.001    -0.8608    -0.2667   ***
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>The classical OLS standard errors understate the true sampling variability when heteroskedasticity is present. HC1 (the default) provides a simple finite-sample correction that performs well in most applied settings. HC3 produces the most conservative inference and is preferred when the sample contains high-leverage observations.</p><h3 id="Cluster-Robust-Standard-Errors"><a class="docs-heading-anchor" href="#Cluster-Robust-Standard-Errors">Cluster-Robust Standard Errors</a><a id="Cluster-Robust-Standard-Errors-1"></a><a class="docs-heading-anchor-permalink" href="#Cluster-Robust-Standard-Errors" title="Permalink"></a></h3><p>When observations within groups (e.g., firms, regions, industries) share common unobserved shocks, standard errors must account for within-cluster correlation. The cluster-robust covariance estimator (Arellano 1987) is:</p><p class="math-container">\[\hat{V}_{CL} = (X&#39;X)^{-1} \left( \sum_{g=1}^{G} X_g&#39; \hat{u}_g \hat{u}_g&#39; X_g \right) (X&#39;X)^{-1} \cdot \frac{G}{G-1} \cdot \frac{n-1}{n-k}\]</p><p>where:</p><ul><li><span>$G$</span> is the number of clusters</li><li><span>$X_g$</span> is the <span>$n_g \times k$</span> regressor matrix for cluster <span>$g$</span></li><li><span>$\hat{u}_g$</span> is the <span>$n_g \times 1$</span> residual vector for cluster <span>$g$</span></li><li>The factor <span>$\frac{G}{G-1} \cdot \frac{n-1}{n-k}$</span> is the standard finite-sample correction</li></ul><p>Cluster-robust standard errors are consistent as <span>$G \to \infty$</span>, regardless of the within-cluster correlation structure. A rule of thumb requires at least <span>$G \geq 50$</span> clusters for reliable inference (Cameron &amp; Miller 2015).</p><pre><code class="language-julia hljs"># 50 clusters with 20 observations each
+G, n_per_g = 50, 20
+n = G * n_per_g
+clusters = repeat(1:G, inner=n_per_g)
+
+# Cluster-level shock
+cluster_effect = randn(G)
+X = hcat(ones(n), randn(n))
+u = repeat(cluster_effect, inner=n_per_g) + 0.5 * randn(n)
+y = X * [1.0, 2.0] + u
+
+m = estimate_reg(y, X; cov_type=:cluster, clusters=clusters,
+                 varnames=[&quot;(Intercept)&quot;, &quot;x1&quot;])
+report(m)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">          OLS Regression
+
+  Specification
+
+  Method                     OLS
+  Observations              1000
+  Covariates                   2
+  R-squared               0.7558
+  Adj. R-sq.              0.7555
+  F-statistic            3088.14
+  F p-value               &lt;0.001
+  AIC                    2999.84
+  BIC                    3014.56
+  Cov. type       Cluster-robust
+
+                                   Coefficients
+
+                 Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
+
+  (Intercept)   0.7771     0.1387    5.6022   &lt;0.001     0.5049     1.0493   ***
+  x1            1.9209     0.0298   64.3963   &lt;0.001     1.8624     1.9795   ***
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>The cluster-robust standard errors for the intercept are substantially larger than the HC1 standard errors because the cluster-level shock induces within-group correlation that inflates the effective variance. The slope coefficient is less affected because the regressor <code>x1</code> varies independently across observations within each cluster.</p><hr/><h2 id="Long-Run-Variance-(HAC)-Estimation"><a class="docs-heading-anchor" href="#Long-Run-Variance-(HAC)-Estimation">Long-Run Variance (HAC) Estimation</a><a id="Long-Run-Variance-(HAC)-Estimation-1"></a><a class="docs-heading-anchor-permalink" href="#Long-Run-Variance-(HAC)-Estimation" title="Permalink"></a></h2><p>When the data are serially correlated –- as in time-series regressions, GMM moment conditions, and cointegration analysis –- inference requires the <strong>long-run variance</strong> (LRV), the zero-frequency spectral density that sums all autocovariances rather than a single-lag White correction. For a mean-zero (after demeaning) series <span>$U_t$</span> (<span>$T \times k$</span>) with sample autocovariances <span>$\Gamma_j = T^{-1} \sum_t U_t U_{t-j}&#39;$</span> and kernel <span>$k(\cdot)$</span>:</p><p class="math-container">\[\Omega = \Gamma_0 + \sum_{j \geq 1} k(j/b)\,(\Gamma_j + \Gamma_j&#39;), \qquad
+\Lambda = \Gamma_0 + \sum_{j \geq 1} k(j/b)\,\Gamma_j\]</p><p>where:</p><ul><li><span>$\Omega$</span> is the <strong>two-sided</strong> long-run covariance –- the object HAC standard errors and spectral density estimates use</li><li><span>$\Lambda$</span> is the <strong>one-sided</strong> long-run covariance –- the object fully-modified OLS, canonical cointegrating regression, and panel cointegration consume</li><li><span>$b$</span> is the bandwidth (truncation lag), fixed or data-dependent</li><li><span>$k(\cdot)$</span> is the kernel: <code>:bartlett</code> (Newey-West), <code>:parzen</code>, <code>:qs</code> (quadratic-spectral), or <code>:tukey_hanning</code></li></ul><p>The two objects satisfy the identity <span>$\Omega = \Lambda + \Lambda&#39; - \Gamma_0$</span> by construction. Using <span>$\Gamma_j + \Gamma_j&#39;$</span> where <span>$\Gamma_j$</span> alone is required silently breaks fully-modified estimators, so the one-sided <span>$\Lambda$</span> has its own function.</p><p><code>lrvar</code> returns the two-sided <span>$\Omega$</span> (a scalar for a vector input, a matrix for a matrix input); <code>lrcov</code> is its matrix form and <code>lrcov_oneside</code> returns the one-sided <span>$\Lambda$</span>:</p><pre><code class="language-julia hljs"># Serially correlated series: an AR(1) with rho = 0.6
+T = 400
+u = zeros(T)
+for t in 2:T
+    u[t] = 0.6 * u[t-1] + randn()
+end
+
+Omega = lrvar(u; kernel=:bartlett, bandwidth=:andrews)   # two-sided, Andrews (1991) bandwidth
+naive = sum(abs2, u .- sum(u)/T) / T                     # naive variance ignores serial correlation
+round.((Omega, naive); digits=3)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(4.55, 1.719)</code></pre><p>The long-run variance (about <span>$1/(1-0.6)^2 \approx 6.25$</span> times the innovation variance) exceeds the naive sample variance because positive serial correlation inflates the variance of the sample mean –- exactly the correction HAC inference applies.</p><h3 id="Bandwidth-and-Kernel-Selection"><a class="docs-heading-anchor" href="#Bandwidth-and-Kernel-Selection">Bandwidth and Kernel Selection</a><a id="Bandwidth-and-Kernel-Selection-1"></a><a class="docs-heading-anchor-permalink" href="#Bandwidth-and-Kernel-Selection" title="Permalink"></a></h3><p>The <code>bandwidth</code> keyword accepts a data-dependent selector or a fixed truncation lag:</p><table><tr><th style="text-align: right">Selector</th><th style="text-align: right">Method</th><th style="text-align: right">Reference</th></tr><tr><td style="text-align: right"><code>:andrews</code></td><td style="text-align: right">AR(1) parametric plug-in</td><td style="text-align: right">Andrews (1991)</td></tr><tr><td style="text-align: right"><code>:nw94</code></td><td style="text-align: right">Nonparametric automatic bandwidth</td><td style="text-align: right">Newey &amp; West (1994)</td></tr><tr><td style="text-align: right">a real number</td><td style="text-align: right">fixed truncation lag, used as-is</td><td style="text-align: right">–-</td></tr></table><p>Setting <code>prewhiten=true</code> applies Andrews-Monahan (1992) VAR(1) prewhitening with recoloring and an eigenvalue-modulus cap at 0.97 (falling back to no prewhitening near a unit root).</p><pre><code class="language-julia hljs"># Multivariate one-sided long-run covariance for a cointegration workflow
+X = hcat(u, cumsum(0.3 .* u .+ randn(T)))
+Lambda = lrcov_oneside(X; kernel=:qs, bandwidth=:nw94)
+round.(Lambda; digits=3)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">2×2 Matrix{Float64}:
+   3.404   -22.402
+ -14.094  1596.0</code></pre><h3 id="VARHAC"><a class="docs-heading-anchor" href="#VARHAC">VARHAC</a><a id="VARHAC-1"></a><a class="docs-heading-anchor-permalink" href="#VARHAC" title="Permalink"></a></h3><p>VARHAC (Den Haan &amp; Levin 1997) is a <strong>parametric</strong> alternative to kernel HAC: it fits a reduced-form VAR selected by information criterion (up to <span>$\lfloor T^{1/3} \rfloor$</span> lags) and reads the LRV off the fitted filter,</p><p class="math-container">\[\Omega = \hat{B}(1)^{-1}\, \hat{\Sigma}\, \hat{B}(1)^{-\top}, \qquad \hat{B}(1) = I - \sum_{l=1}^p \hat{A}_l\]</p><p>with no bandwidth or kernel to choose.</p><pre><code class="language-julia hljs">Omega_vh = varhac(u; ic=:aic)
+round(Omega_vh; digits=3)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">6.497</code></pre><p>VARHAC and kernel HAC estimate the same population object; VARHAC is often more accurate when the serial correlation is well approximated by a low-order VAR.</p><hr/><h2 id="Instrumental-Variables-/-2SLS"><a class="docs-heading-anchor" href="#Instrumental-Variables-/-2SLS">Instrumental Variables / 2SLS</a><a id="Instrumental-Variables-/-2SLS-1"></a><a class="docs-heading-anchor-permalink" href="#Instrumental-Variables-/-2SLS" title="Permalink"></a></h2><p>When a regressor <span>$x_j$</span> is correlated with the error term (<span>$E[x_j u] \neq 0$</span>), OLS is biased and inconsistent. Common sources of endogeneity include omitted variables, simultaneity, and measurement error. <strong>Instrumental variables</strong> (IV) estimation resolves this by using instruments <span>$Z$</span> that satisfy two conditions:</p><ol><li><strong>Relevance</strong>: correlated with the endogenous regressor (<span>$E[Z&#39;x_j] \neq 0$</span>)</li><li><strong>Exogeneity</strong>: uncorrelated with the structural error (<span>$E[Z&#39;u] = 0$</span>)</li></ol><h3 id="Two-Stage-Least-Squares"><a class="docs-heading-anchor" href="#Two-Stage-Least-Squares">Two-Stage Least Squares</a><a id="Two-Stage-Least-Squares-1"></a><a class="docs-heading-anchor-permalink" href="#Two-Stage-Least-Squares" title="Permalink"></a></h3><p>The <strong>Two-Stage Least Squares</strong> (2SLS) estimator (Theil 1953) proceeds in two stages.</p><p><strong>Stage 1</strong> –- Project the regressors onto the instrument space:</p><p class="math-container">\[\hat{X} = P_Z X, \quad P_Z = Z(Z&#39;Z)^{-1}Z&#39;\]</p><p>where:</p><ul><li><span>$P_Z$</span> is the <span>$n \times n$</span> projection matrix onto the column space of <span>$Z$</span></li><li><span>$Z$</span> is the <span>$n \times m$</span> instrument matrix (<span>$m \geq k$</span>)</li></ul><p><strong>Stage 2</strong> –- Regress <span>$y$</span> on the projected regressors:</p><p class="math-container">\[\hat{\beta}_{2SLS} = (\hat{X}&#39;X)^{-1} \hat{X}&#39;y\]</p><p>where:</p><ul><li><span>$\hat{X}$</span> is the <span>$n \times k$</span> matrix of fitted values from Stage 1</li><li><span>$X$</span> is the original regressor matrix (not <span>$\hat{X}$</span>) in the cross-product <span>$\hat{X}&#39;X$</span></li><li>Residuals use the original regressors: <span>$\hat{u} = y - X\hat{\beta}_{2SLS}$</span></li></ul><div class="admonition is-info" id="Technical-Note-1bce9aa5fc26ba26"><header class="admonition-header">Technical Note<a class="admonition-anchor" href="#Technical-Note-1bce9aa5fc26ba26" title="Permalink"></a></header><div class="admonition-body"><p>The 2SLS estimator uses <span>$\hat{X}&#39;X$</span> (not <span>$\hat{X}&#39;\hat{X}$</span>) in the bread matrix. This ensures that the covariance matrix <span>$(\hat{X}&#39;X)^{-1} S (\hat{X}&#39;X)^{-1}$</span> is correctly centered. The residuals <span>$\hat{u} = y - X\hat{\beta}$</span> use the original <span>$X$</span> because <span>$X\hat{\beta} \neq \hat{X}\hat{\beta}$</span> in general.</p></div></div><h3 id="Diagnostics"><a class="docs-heading-anchor" href="#Diagnostics">Diagnostics</a><a id="Diagnostics-1"></a><a class="docs-heading-anchor-permalink" href="#Diagnostics" title="Permalink"></a></h3><p><strong>First-stage F-statistic</strong> tests instrument relevance by regressing each endogenous variable on all instruments and computing the F-statistic for joint significance of the excluded instruments. The Staiger &amp; Stock (1997) rule of thumb requires <span>$F &gt; 10$</span> for strong instruments; <span>$F &lt; 10$</span> indicates weak instruments and unreliable 2SLS inference.</p><p><strong>Sargan-Hansen J-test</strong> tests overidentifying restrictions when the number of instruments exceeds the number of endogenous regressors. Under <span>$H_0$</span> (all instruments are valid):</p><p class="math-container">\[J = n \cdot R^2_{aux} \sim \chi^2(m - k)\]</p><p>where:</p><ul><li><span>$R^2_{aux}$</span> is from regressing the 2SLS residuals on the instruments</li><li><span>$m$</span> is the number of instruments</li><li><span>$k$</span> is the number of regressors</li></ul><p>Rejection suggests at least one instrument is invalid. The test has no power when the model is exactly identified (<span>$m = k$</span>).</p><pre><code class="language-julia hljs"># Classical IV setup: returns to education with ability bias
+n = 1000
+ability = randn(n)                                    # Unobserved ability
+z1 = randn(n)                                         # Instrument 1: distance to college
+z2 = randn(n)                                         # Instrument 2: quarter of birth
+education = 12.0 .+ 0.5 * z1 .+ 0.3 * z2 .+ 0.4 * ability .+ randn(n)
+wage = 5.0 .+ 0.8 * education .+ 0.6 * ability .+ randn(n)
+
+# OLS is biased upward due to ability bias
+X = hcat(ones(n), education)
+m_ols = estimate_reg(wage, X; varnames=[&quot;(Intercept)&quot;, &quot;education&quot;])
+
+# 2SLS removes the bias
+Z = hcat(ones(n), z1, z2)
+m_iv = estimate_iv(wage, X, Z; endogenous=[2], varnames=[&quot;(Intercept)&quot;, &quot;education&quot;])
+report(m_iv)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">         IV/2SLS Regression
+
+  Specification
+
+  Method                   IV/2SLS
+  Observations                1000
+  Covariates                     2
+  R-squared                 0.4934
+  Adj. R-sq.                0.4929
+  F-statistic               149.64
+  F p-value                 &lt;0.001
+  AIC                      3253.70
+  BIC                      3268.42
+  Cov. type           HC1 (robust)
+  1st-stage F               162.23
+  Cragg-Donald F            162.23
+  Kleibergen-Paap F         167.47
+  Stock-Yogo 10%             19.93
+
+                                   Coefficients
+
+                 Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
+
+  (Intercept)   5.2960     0.7226    7.3295   &lt;0.001     3.8781     6.7139   ***
+  education     0.7738     0.0600   12.8924   &lt;0.001     0.6560     0.8915   ***
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>The OLS coefficient on education is biased upward because ability enters both the education equation and the wage equation. The 2SLS estimator removes this bias by instrumenting education with distance to college and quarter of birth. The first-stage F well exceeds 10, confirming that the instruments are strong. The Sargan test p-value fails to reject the null that both instruments are valid.</p><h3 id="LIML,-Fuller,-and-k-class-estimators"><a class="docs-heading-anchor" href="#LIML,-Fuller,-and-k-class-estimators">LIML, Fuller, and k-class estimators</a><a id="LIML,-Fuller,-and-k-class-estimators-1"></a><a class="docs-heading-anchor-permalink" href="#LIML,-Fuller,-and-k-class-estimators" title="Permalink"></a></h3><p>Under <strong>weak or many instruments</strong>, 2SLS is severely biased toward OLS. The <strong>k-class</strong> family (Theil 1961) addresses this through a single scalar <span>$k$</span>:</p><p class="math-container">\[\hat{\beta}(k) = \bigl(X&#39;(I - k M_Z)X\bigr)^{-1} X&#39;(I - k M_Z)\,y,
+\qquad M_Z = I - Z(Z&#39;Z)^{-1}Z&#39;\]</p><p>where:</p><ul><li><span>$k = 0$</span> recovers OLS, <span>$k = 1$</span> recovers 2SLS</li><li><span>$k = \hat{\kappa}$</span> is <strong>LIML</strong> (Anderson &amp; Rubin 1949), with <span>$\hat{\kappa}$</span> the smallest root of <span>$\lvert \bar{Y}&#39;M_{X_1}\bar{Y} - \kappa\,\bar{Y}&#39;M_Z\bar{Y}\rvert = 0$</span> for <span>$\bar{Y} = [\,y\ \ Y_{\text{endog}}\,]$</span> and included exogenous <span>$X_1$</span></li><li><span>$k = \hat{\kappa} - a/(n-m)$</span> is <strong>Fuller</strong> (1977); with <span>$a = 1$</span> it is approximately unbiased with finite moments</li></ul><p><strong>LIML is median-unbiased</strong> and, unlike 2SLS, its finite-sample bias does not grow with the number of instruments. Fuller&#39;s <span>$k$</span> can dip <em>below</em> 1 — that is the intended finite-sample correction and is not clamped. Select the estimator through the <code>method</code> keyword:</p><pre><code class="language-julia hljs"># Same education / ability DGP as above, now with three instruments (over-identified).
+z3 = randn(n)
+Z3 = hcat(ones(n), z1, z2, z3)
+m_liml   = estimate_iv(wage, X, Z3; endogenous=[2], method=:liml,
+                       varnames=[&quot;(Intercept)&quot;, &quot;education&quot;])
+m_fuller = estimate_iv(wage, X, Z3; endogenous=[2], method=:fuller, fuller_a=1.0,
+                       varnames=[&quot;(Intercept)&quot;, &quot;education&quot;])
+report(m_liml)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">         IV/2SLS Regression
+
+  Specification
+
+  Method                   IV/2SLS
+  Observations                1000
+  Covariates                     2
+  R-squared                 0.4933
+  Adj. R-sq.                0.4928
+  F-statistic               150.12
+  F p-value                 &lt;0.001
+  AIC                      3253.80
+  BIC                      3268.52
+  Cov. type           HC1 (robust)
+  1st-stage F               108.71
+  Cragg-Donald F            108.71
+  Kleibergen-Paap F         112.10
+  Stock-Yogo 10%             22.30
+  k-class k                 1.0003
+  LIML κ̂                    1.0003
+  Anderson LR                 0.28
+  Anderson LR p             0.8712
+
+                                   Coefficients
+
+                 Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
+
+  (Intercept)   5.2985     0.7193    7.3664   &lt;0.001     3.8871     6.7100   ***
+  education     0.7736     0.0597   12.9469   &lt;0.001     0.6563     0.8908   ***
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>The <code>report()</code> footer adds the LIML least-variance ratio <span>$\hat{\kappa}$</span> and the implied Anderson (1949) likelihood-ratio overidentification statistic <span>$n\ln\hat{\kappa} \sim \chi^2(m - k)$</span>. For a user-specified value pass <code>method=:kclass</code> with the <code>k</code> keyword.</p><p>Weak-instrument <em>inference</em> (Anderson–Rubin, Kleibergen–Paap, Stock–Yogo critical values) is a separate layer tracked in issue #343; this entry point delivers the <em>estimators</em> those tests condition on.</p><h3 id="Keyword-Arguments-2"><a class="docs-heading-anchor" href="#Keyword-Arguments-2">Keyword Arguments</a><a class="docs-heading-anchor-permalink" href="#Keyword-Arguments-2" title="Permalink"></a></h3><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>endogenous</code></td><td style="text-align: right"><code>Vector{Int}</code></td><td style="text-align: right">required</td><td style="text-align: right">Column indices of endogenous regressors in <code>X</code></td></tr><tr><td style="text-align: right"><code>method</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:tsls</code></td><td style="text-align: right">Estimator: <code>:tsls</code>/<code>:2sls</code>, <code>:liml</code>, <code>:fuller</code>, <code>:kclass</code></td></tr><tr><td style="text-align: right"><code>k</code></td><td style="text-align: right"><code>Union{Nothing,Real}</code></td><td style="text-align: right"><code>nothing</code></td><td style="text-align: right">Scalar for <code>method=:kclass</code> (<code>0</code>=OLS, <code>1</code>=2SLS)</td></tr><tr><td style="text-align: right"><code>fuller_a</code></td><td style="text-align: right"><code>Real</code></td><td style="text-align: right"><code>1.0</code></td><td style="text-align: right">Fuller constant <span>$a$</span> (used only for <code>method=:fuller</code>)</td></tr><tr><td style="text-align: right"><code>cov_type</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:hc1</code></td><td style="text-align: right">Covariance estimator: <code>:ols</code>, <code>:hc0</code>, <code>:hc1</code>, <code>:hc2</code>, <code>:hc3</code></td></tr><tr><td style="text-align: right"><code>varnames</code></td><td style="text-align: right"><code>Union{Nothing,Vector{String}}</code></td><td style="text-align: right"><code>nothing</code></td><td style="text-align: right">Coefficient names</td></tr></table><h3 id="Return-Values-2"><a class="docs-heading-anchor" href="#Return-Values-2">Return Values</a><a class="docs-heading-anchor-permalink" href="#Return-Values-2" title="Permalink"></a></h3><p><code>estimate_iv</code> returns a <code>RegModel{T}</code> with <code>method = :iv</code> and the following additional fields:</p><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>Z</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right"><span>$n \times m$</span> instrument matrix</td></tr><tr><td style="text-align: right"><code>endogenous</code></td><td style="text-align: right"><code>Vector{Int}</code></td><td style="text-align: right">Indices of endogenous regressors in <code>X</code></td></tr><tr><td style="text-align: right"><code>first_stage_f</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Minimum first-stage F-statistic across endogenous variables</td></tr><tr><td style="text-align: right"><code>sargan_stat</code></td><td style="text-align: right"><code>Union{Nothing,T}</code></td><td style="text-align: right">Sargan-Hansen J-statistic (<code>nothing</code> if exactly identified)</td></tr><tr><td style="text-align: right"><code>sargan_pval</code></td><td style="text-align: right"><code>Union{Nothing,T}</code></td><td style="text-align: right">p-value of the Sargan test</td></tr><tr><td style="text-align: right"><code>kclass_k</code></td><td style="text-align: right"><code>Union{Nothing,T}</code></td><td style="text-align: right">k-class scalar actually used (<code>nothing</code> for plain 2SLS)</td></tr><tr><td style="text-align: right"><code>kappa_hat</code></td><td style="text-align: right"><code>Union{Nothing,T}</code></td><td style="text-align: right">LIML <span>$\hat{\kappa}$</span> (<code>:liml</code>/<code>:fuller</code> only)</td></tr></table><hr/><h2 id="VIF-Diagnostics"><a class="docs-heading-anchor" href="#VIF-Diagnostics">VIF Diagnostics</a><a id="VIF-Diagnostics-1"></a><a class="docs-heading-anchor-permalink" href="#VIF-Diagnostics" title="Permalink"></a></h2><p>The <strong>Variance Inflation Factor</strong> (VIF) quantifies the degree of multicollinearity for each regressor (Belsley, Kuh &amp; Welsch 1980). For regressor <span>$x_j$</span>, the VIF is:</p><p class="math-container">\[\text{VIF}_j = \frac{1}{1 - R_j^2}\]</p><p>where:</p><ul><li><span>$R_j^2$</span> is the R-squared from regressing <span>$x_j$</span> on all other regressors (excluding the intercept)</li></ul><table><tr><th style="text-align: right">VIF Range</th><th style="text-align: right">Interpretation</th></tr><tr><td style="text-align: right">1</td><td style="text-align: right">No collinearity</td></tr><tr><td style="text-align: right">1 – 5</td><td style="text-align: right">Moderate collinearity (usually acceptable)</td></tr><tr><td style="text-align: right">5 – 10</td><td style="text-align: right">High collinearity (investigate)</td></tr><tr><td style="text-align: right">&gt; 10</td><td style="text-align: right">Severe multicollinearity (remedial action needed)</td></tr></table><p>A VIF of 10 means that the variance of <span>$\hat{\beta}_j$</span> is 10 times larger than it would be if <span>$x_j$</span> were uncorrelated with the other regressors. Remedial actions include dropping or combining correlated variables, using ridge regression, or collecting more data.</p><pre><code class="language-julia hljs">n = 300
+x1 = randn(n)
+x2 = 0.95 * x1 + 0.05 * randn(n)   # Nearly collinear with x1
+x3 = randn(n)                        # Independent
+X = hcat(ones(n), x1, x2, x3)
+y = X * [1.0, 2.0, -1.0, 0.5] + randn(n)
+
+m = estimate_reg(y, X; varnames=[&quot;(Intercept)&quot;, &quot;x1&quot;, &quot;x2&quot;, &quot;x3&quot;])
+v = vif(m)
+report(m)
+(x1 = round(v[1], digits=2), x2 = round(v[2], digits=2), x3 = round(v[3], digits=2))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(x1 = 374.87, x2 = 374.85, x3 = 1.01)</code></pre><p>The VIF values for <code>x1</code> and <code>x2</code> are large because these two variables are correlated at <span>$r = 0.95$</span>. The inflated standard errors make it difficult to distinguish the individual effects of <code>x1</code> and <code>x2</code>. The VIF for <code>x3</code> is close to 1, confirming that it is not collinear with the other regressors.</p><hr/><h2 id="Residual-Diagnostics"><a class="docs-heading-anchor" href="#Residual-Diagnostics">Residual Diagnostics</a><a id="Residual-Diagnostics-1"></a><a class="docs-heading-anchor-permalink" href="#Residual-Diagnostics" title="Permalink"></a></h2><p>After fitting an OLS model, a standard battery of residual diagnostics checks the classical assumptions: constant error variance (homoskedasticity), no serial correlation, and correct functional form. Each test runs an auxiliary regression on a fitted <a href="../api/cross_section/#MacroEconometricModels.RegModel"><code>RegModel</code></a> and returns a <a href="../api/cross_section/#MacroEconometricModels.RegDiagnosticResult"><code>RegDiagnosticResult</code></a> rendering an <span>$nR^2$</span> chi-squared statistic and/or an F-form.</p><table><tr><th style="text-align: right">Function</th><th style="text-align: right">Null hypothesis</th><th style="text-align: right">Auxiliary regression</th><th style="text-align: right">Statistic</th></tr><tr><td style="text-align: right"><a href="../api/cross_section/#MacroEconometricModels.white_test-Union{Tuple{T}, Tuple{AbstractVector{T}, AbstractMatrix{T}}} where T&lt;:AbstractFloat"><code>white_test</code></a></td><td style="text-align: right">Homoskedasticity</td><td style="text-align: right"><span>$\hat{u}^2$</span> on regressors, squares, cross-products</td><td style="text-align: right"><span>$nR^2 \sim \chi^2$</span></td></tr><tr><td style="text-align: right"><a href="../api/panel/#MacroEconometricModels.breusch_pagan_test"><code>breusch_pagan_test</code></a></td><td style="text-align: right">Homoskedasticity</td><td style="text-align: right"><span>$\hat{u}^2$</span> on regressors</td><td style="text-align: right"><span>$nR^2 \sim \chi^2$</span> (Koenker)</td></tr><tr><td style="text-align: right"><a href="../api/cross_section/#MacroEconometricModels.glejser_test-Union{Tuple{T}, Tuple{AbstractVector{T}, AbstractMatrix{T}}} where T&lt;:AbstractFloat"><code>glejser_test</code></a></td><td style="text-align: right">Homoskedasticity</td><td style="text-align: right"><span>$\lvert\hat{u}\rvert$</span> on regressors</td><td style="text-align: right"><span>$F$</span></td></tr><tr><td style="text-align: right"><a href="../api/cross_section/#MacroEconometricModels.harvey_test-Union{Tuple{T}, Tuple{AbstractVector{T}, AbstractMatrix{T}}} where T&lt;:AbstractFloat"><code>harvey_test</code></a></td><td style="text-align: right">Homoskedasticity</td><td style="text-align: right"><span>$\log \hat{u}^2$</span> on regressors</td><td style="text-align: right"><span>$nR^2 \sim \chi^2$</span></td></tr><tr><td style="text-align: right"><a href="../api/cross_section/#MacroEconometricModels.breusch_godfrey_test-Union{Tuple{T}, Tuple{AbstractVector{T}, AbstractMatrix{T}}} where T&lt;:AbstractFloat"><code>breusch_godfrey_test</code></a></td><td style="text-align: right">No serial correlation</td><td style="text-align: right"><span>$\hat{u}$</span> on regressors + lagged residuals</td><td style="text-align: right"><span>$nR^2 \sim \chi^2(p)$</span> + F</td></tr><tr><td style="text-align: right"><a href="../api/cross_section/#MacroEconometricModels.reset_test-Union{Tuple{RegModel{T}}, Tuple{T}} where T&lt;:AbstractFloat"><code>reset_test</code></a></td><td style="text-align: right">Correct functional form</td><td style="text-align: right"><span>$y$</span> on regressors + <span>$\hat{y}^2\dots\hat{y}^k$</span></td><td style="text-align: right"><span>$F$</span></td></tr></table><div class="admonition is-info" id="Name-collision-with-the-panel-test-fb8fb4314bc090c1"><header class="admonition-header">Name collision with the panel test<a class="admonition-anchor" href="#Name-collision-with-the-panel-test-fb8fb4314bc090c1" title="Permalink"></a></header><div class="admonition-body"><p><code>breusch_pagan_test</code> also has a method for <code>PanelRegModel</code> — the Breusch–Pagan random-effects Lagrange-multiplier test, a <em>different</em> test. Dispatch on the model type selects the correct one: pass a <code>RegModel</code> for the heteroskedasticity test documented here.</p></div></div><h3 id="Heteroskedasticity-Tests"><a class="docs-heading-anchor" href="#Heteroskedasticity-Tests">Heteroskedasticity Tests</a><a id="Heteroskedasticity-Tests-1"></a><a class="docs-heading-anchor-permalink" href="#Heteroskedasticity-Tests" title="Permalink"></a></h3><p>White&#39;s test is the most general: it regresses the squared residuals on the regressors, their squares, and (by default) their pairwise cross-products. The Breusch–Pagan test (Koenker studentized form, the default) uses only the levels and is robust to non-normal errors.</p><pre><code class="language-julia hljs"># Heteroskedastic DGP: error standard deviation grows with |x1|
+n = 200
+x1 = randn(n); x2 = randn(n)
+u = (0.5 .+ 0.8 .* abs.(x1)) .* randn(n)
+y = 1.0 .+ 2.0 .* x1 .- 1.0 .* x2 .+ u
+m = estimate_reg(y, hcat(ones(n), x1, x2); varnames=[&quot;const&quot;, &quot;x1&quot;, &quot;x2&quot;])
+
+report(white_test(m))
+report(breusch_pagan_test(m))          # RegModel ⇒ heteroskedasticity test</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">                                    White test
+
+  Test                                                                White test
+  H0                   Homoskedasticity (error variance unrelated to regressors)
+  χ² statistic (nR²)                                                     49.0971
+  df                                                                           5
+  p-value                                                                 &lt;0.001
+  Conclusion                                                Reject H0 (p=&lt;0.001)
+
+            Breusch-Pagan test (Koenker studentized)
+
+  Test                 Breusch-Pagan test (Koenker studentized)
+  H0                                           Homoskedasticity
+  χ² statistic (nR²)                                     1.5077
+  df                                                          2
+  p-value                                                0.4705
+  Conclusion                       Fail to reject H0 (p=0.4705)</code></pre><p>Glejser and Harvey target specific variance forms — Glejser F-tests <span>$\lvert\hat{u}\rvert$</span> against the regressors, while Harvey regresses <span>$\log\hat{u}^2$</span> (multiplicative heteroskedasticity):</p><pre><code class="language-julia hljs">report(glejser_test(m))
+report(harvey_test(m))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">                            Glejser test
+
+  Test                                                Glejser test
+  H0            Homoskedasticity (|resid| unrelated to regressors)
+  F statistic                                               0.5435
+  df                                                      (2, 197)
+  p-value                                                   0.5816
+  Conclusion                          Fail to reject H0 (p=0.5816)
+
+                                 Harvey test
+
+  Test                                                           Harvey test
+  H0                   Homoskedasticity (log resid² unrelated to regressors)
+  χ² statistic (nR²)                                                  0.7585
+  df                                                                       2
+  p-value                                                             0.6844
+  Conclusion                                    Fail to reject H0 (p=0.6844)</code></pre><h3 id="Serial-Correlation"><a class="docs-heading-anchor" href="#Serial-Correlation">Serial Correlation</a><a id="Serial-Correlation-1"></a><a class="docs-heading-anchor-permalink" href="#Serial-Correlation" title="Permalink"></a></h3><p>The Breusch–Godfrey test regresses the residuals on the original regressors and <code>lags</code> lagged residuals (pre-sample lags zero-padded), reporting both the LM <span>$\chi^2(p)$</span> form and an F-form:</p><pre><code class="language-julia hljs">report(breusch_godfrey_test(m; lags=2))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">               Breusch-Godfrey test (lags=2)
+
+  Test                       Breusch-Godfrey test (lags=2)
+  H0                   No serial correlation up to order 2
+  χ² statistic (nR²)                                2.3290
+  df                                                     2
+  p-value                                           0.3121
+  F statistic                                       1.1488
+  F df                                            (2, 195)
+  F p-value                                         0.3192
+  Conclusion                  Fail to reject H0 (p=0.3121)</code></pre><h3 id="Functional-Form"><a class="docs-heading-anchor" href="#Functional-Form">Functional Form</a><a id="Functional-Form-1"></a><a class="docs-heading-anchor-permalink" href="#Functional-Form" title="Permalink"></a></h3><p>Ramsey&#39;s RESET test augments the regression with powers of the <strong>fitted values</strong> <span>$\hat{y}^2,\dots,\hat{y}^k$</span> and F-tests that they are jointly zero. Rejection signals a misspecified functional form (e.g. an omitted nonlinearity):</p><pre><code class="language-julia hljs">report(reset_test(m; powers=2:4))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">                   Ramsey RESET test (powers=[2, 3, 4])
+
+  Test                              Ramsey RESET test (powers=[2, 3, 4])
+  H0            Correct functional form (added power terms jointly zero)
+  F statistic                                                     0.2020
+  df                                                            (3, 194)
+  p-value                                                         0.8949
+  Conclusion                                Fail to reject H0 (p=0.8949)</code></pre><hr/><h2 id="Stability-and-Influence-Diagnostics"><a class="docs-heading-anchor" href="#Stability-and-Influence-Diagnostics">Stability and Influence Diagnostics</a><a id="Stability-and-Influence-Diagnostics-1"></a><a class="docs-heading-anchor-permalink" href="#Stability-and-Influence-Diagnostics" title="Permalink"></a></h2><p>Residual diagnostics assume the coefficient vector is constant. <strong>Stability diagnostics</strong> test that assumption directly — whether the regression relationship drifts or breaks over the sample — and <strong>influence diagnostics</strong> identify individual observations that disproportionately drive the fit. Together they complete EViews&#39; &quot;Stability Diagnostics&quot; menu for a fitted <a href="../api/cross_section/#MacroEconometricModels.RegModel"><code>RegModel</code></a>.</p><h3 id="Recursive-Residuals"><a class="docs-heading-anchor" href="#Recursive-Residuals">Recursive Residuals</a><a id="Recursive-Residuals-1"></a><a class="docs-heading-anchor-permalink" href="#Recursive-Residuals" title="Permalink"></a></h3><p>The Brown–Durbin–Evans (1975) recursive least-squares residuals fit the model on a growing window and record each one-step-ahead forecast error, standardized:</p><p class="math-container">\[w_t = \frac{y_t - x_t&#39; \hat{\beta}_{t-1}}{\sqrt{1 + x_t&#39; (X_{t-1}&#39;X_{t-1})^{-1} x_t}}, \qquad t = k+1, \dots, n\]</p><p>where</p><ul><li><span>$\hat{\beta}_{t-1}$</span> is the OLS estimate on the first <span>$t-1$</span> observations,</li><li><span>$X_{t-1}$</span> is the <span>$(t-1) \times k$</span> design of those observations,</li><li><span>$k$</span> is the number of regressors.</li></ul><p>Under a stable model the <span>$w_t$</span> are i.i.d. <span>$N(0, \sigma^2)$</span>, and their sum of squares equals the full-sample OLS SSR. <a href="../api/cross_section/#MacroEconometricModels.recursive_residuals"><code>recursive_residuals</code></a> returns the length-<span>$(n-k)$</span> vector, updating <span>$(X&#39;X)^{-1}$</span> by rank-one Sherman–Morrison formulae rather than re-inverting each step.</p><pre><code class="language-julia hljs">w = recursive_residuals(m)
+length(w), round(sum(abs2, w) - m.ssr; digits=10)   # Σ wₜ² == SSR</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(197, -0.0)</code></pre><h3 id="CUSUM-and-CUSUM-of-Squares"><a class="docs-heading-anchor" href="#CUSUM-and-CUSUM-of-Squares">CUSUM and CUSUM of Squares</a><a id="CUSUM-and-CUSUM-of-Squares-1"></a><a class="docs-heading-anchor-permalink" href="#CUSUM-and-CUSUM-of-Squares" title="Permalink"></a></h3><p>The <strong>CUSUM</strong> test cumulates the standardized recursive residuals,</p><p class="math-container">\[W_t = \frac{1}{\hat{\sigma}_w} \sum_{j=k+1}^{t} w_j,\]</p><p>and rejects stability when <span>$W_t$</span> crosses the pair of straight significance lines <span>$\pm a\sqrt{n-k}\,(1 + 2(t-k)/(n-k))$</span>, with <span>$a = 0.948$</span> at the 5% level (Brown, Durbin &amp; Evans 1975). CUSUM is sensitive to a gradual drift in the coefficients. The <strong>CUSUM of squares</strong> test uses the normalized cumulative sum of squared recursive residuals <span>$S_t = \sum_{j=k+1}^{t} w_j^2 / \sum_{j=k+1}^{n} w_j^2$</span> against the band <span>$(t-k)/(n-k) \pm c_0$</span>, where <span>$c_0$</span> follows the Edgerton–Wells (1994) approximation; it targets a one-off shift in the error variance.</p><pre><code class="language-julia hljs">report(cusum_test(m))
+report(cusumsq_test(m))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">                     CUSUM test (recursive residuals)
+
+  Test                                   CUSUM test (recursive residuals)
+  Recursive resid.                                                    197
+  Observations                                                        200
+  Regressors                                                            3
+  Level                                                                5%
+  max |W_t|                                                        7.1755
+  Crosses bound                                                        No
+  Conclusion         Fail to reject stability — path within the 5% bounds
+
+                           CUSUM of squares test
+
+  Test                                              CUSUM of squares test
+  Recursive resid.                                                    197
+  Observations                                                        200
+  Regressors                                                            3
+  Level                                                                5%
+  max |S_t|                                                        1.0000
+  Crosses bound                                                        No
+  Conclusion         Fail to reject stability — path within the 5% bounds</code></pre><p>Both return a <a href="../api/cross_section/#MacroEconometricModels.StabilityResult"><code>StabilityResult</code></a> carrying the statistic path, the upper/lower bound sequences, and a crossing flag. <code>plot_result</code> draws the path against its bounds:</p><pre><code class="language-julia hljs">plot_result(cusum_test(m))</code></pre><div class="admonition is-info" id="Unknown-break-dates-c54e526e713e766"><header class="admonition-header">Unknown break dates<a class="admonition-anchor" href="#Unknown-break-dates-c54e526e713e766" title="Permalink"></a></header><div class="admonition-body"><p>CUSUM and Chow tests presume you either monitor the whole path (CUSUM) or specify the break date (Chow). For an <em>unknown</em> break date, use <a href="../api/tests/#MacroEconometricModels.andrews_test"><code>andrews_test</code></a> — the Quandt–Andrews sup-Wald test, which searches over candidate break points. This page does not duplicate it.</p></div></div><h3 id="Chow-Breakpoint-and-Forecast-Tests"><a class="docs-heading-anchor" href="#Chow-Breakpoint-and-Forecast-Tests">Chow Breakpoint and Forecast Tests</a><a id="Chow-Breakpoint-and-Forecast-Tests-1"></a><a class="docs-heading-anchor-permalink" href="#Chow-Breakpoint-and-Forecast-Tests" title="Permalink"></a></h3><p>When the break date is known, <a href="../api/cross_section/#MacroEconometricModels.chow_test"><code>chow_test</code></a> tests coefficient equality across sub-samples. The <strong>breakpoint</strong> test splits the sample at the break and compares the pooled fit against segment-wise fits:</p><p class="math-container">\[F = \frac{(\text{SSR}_r - \text{SSR}_u)/k}{\text{SSR}_u/(n - 2k)} \sim F(k,\, n - 2k),\]</p><p>with <span>$\text{SSR}_u = \text{SSR}_1 + \text{SSR}_2$</span> the sum of the two sub-sample SSRs. Multiple break indices partition the sample into more segments (and scale the degrees of freedom). The <strong>forecast</strong> test handles a short second sample by treating it as an out-of-sample forecast period.</p><pre><code class="language-julia hljs"># Engineer a mid-sample coefficient break, then test it at the known date.
+yb = copy(y); yb[101:end] .+= 3.0
+mb = estimate_reg(yb, hcat(ones(n), x1, x2); varnames=[&quot;const&quot;, &quot;x1&quot;, &quot;x2&quot;])
+report(chow_test(mb, 100; type=:breakpoint))
+report(chow_test(mb, 150; type=:forecast))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">                Chow breakpoint test (break=100)
+
+  Test                        Chow breakpoint test (break=100)
+  H0            Coefficients constant across the 2 sub-samples
+  F statistic                                          94.6754
+  df                                                  (3, 194)
+  p-value                                               &lt;0.001
+  Conclusion                              Reject H0 (p=&lt;0.001)
+
+                       Chow forecast test (split=150)
+
+  Test                                       Chow forecast test (split=150)
+  H0            No predictive failure in the 50-observation forecast period
+  F statistic                                                        1.2548
+  df                                                              (50, 147)
+  p-value                                                            0.1507
+  Conclusion                                   Fail to reject H0 (p=0.1507)</code></pre><h3 id="Influence-Statistics"><a class="docs-heading-anchor" href="#Influence-Statistics">Influence Statistics</a><a id="Influence-Statistics-1"></a><a class="docs-heading-anchor-permalink" href="#Influence-Statistics" title="Permalink"></a></h3><p><a href="../api/cross_section/#MacroEconometricModels.influence_stats"><code>influence_stats</code></a> returns per-observation leverage and influence measures (Belsley, Kuh &amp; Welsch 1980), reusing the fitted <span>$(X&#39;X)^{-1}$</span>: the hat-diagonal <span>$h_{ii}$</span>, internally and externally studentized residuals, <span>$\text{DFFITS}_i$</span>, Cook&#39;s distance <span>$D_i$</span>, and the <span>$n \times k$</span> DFBETAS matrix. Observations are flagged high-leverage when <span>$h_{ii} &gt; 2k/n$</span> and influential when <span>$|\text{DFFITS}_i| &gt; 2\sqrt{k/n}$</span>.</p><pre><code class="language-julia hljs">report(influence_stats(m))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">        Influence Diagnostics
+
+  Summary
+
+  Observations                   200
+  Regressors                       3
+  σ̂ (resid. s.e.)             1.3716
+  Leverage cutoff      0.0300 (2k/n)
+  DFFITS cutoff     0.2449 (2√(k/n))
+  High-leverage                   18
+  Influential                     17
+
+ Most influential observations (top 10 by |DFFITS|)
+
+  Obs   Leverage   Stud.resid    DFFITS   Cook&#39;s D
+
+   92     0.0401      -3.5951   -0.7349     0.1698
+  135     0.0537       2.9180    0.6948     0.1550
+  134     0.0218      -4.4931   -0.6706     0.1366
+   42     0.0272      -3.2332   -0.5406     0.0930
+  127     0.0403       2.4792    0.5077     0.0837
+  188     0.0222      -3.3052   -0.4978     0.0787
+   48     0.0147       3.8621    0.4718     0.0693
+   61     0.0413       1.9986    0.4148     0.0565
+  163     0.0228      -2.6122   -0.3989     0.0515
+  116     0.0322       2.1544    0.3930     0.0505</code></pre><p>The result also exposes the raw vectors (<code>hat</code>, <code>cooksd</code>, <code>dffits</code>, <code>dfbetas</code>, …) for downstream analysis, and <code>plot_result</code> draws a leverage scatter with the <span>$2k/n$</span> cutoff plus a Cook&#39;s distance panel:</p><pre><code class="language-julia hljs">plot_result(influence_stats(m))</code></pre><hr/><h2 id="CrossSectionData-Dispatch"><a class="docs-heading-anchor" href="#CrossSectionData-Dispatch">CrossSectionData Dispatch</a><a id="CrossSectionData-Dispatch-1"></a><a class="docs-heading-anchor-permalink" href="#CrossSectionData-Dispatch" title="Permalink"></a></h2><p>The <code>CrossSectionData</code> wrapper provides a symbol-based API that automatically constructs the regressor matrix with an intercept column and maps variable names. This dispatch eliminates manual column extraction and intercept handling.</p><pre><code class="language-julia hljs"># Create a CrossSectionData container
+n = 500
+data = hcat(randn(n), randn(n), randn(n), randn(n))
+d = CrossSectionData(data; varnames=[&quot;wage&quot;, &quot;educ&quot;, &quot;exper&quot;, &quot;tenure&quot;])
+
+# OLS — symbols select columns, intercept added automatically
+m = estimate_reg(d, :wage, [:educ, :exper, :tenure])
+report(m)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">         OLS Regression
+
+  Specification
+
+  Method                   OLS
+  Observations             500
+  Covariates                 4
+  R-squared             0.0054
+  Adj. R-sq.           -0.0006
+  F-statistic             0.90
+  F p-value             0.4422
+  AIC                  1432.24
+  BIC                  1453.32
+  Cov. type       HC1 (robust)
+
+                                  Coefficients
+
+                  Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
+
+  (Intercept)   -0.0862     0.0453   -1.9035   0.0576    -0.1752     0.0028   *
+  educ          -0.0324     0.0436   -0.7419   0.4585    -0.1181     0.0534
+  exper         -0.0608     0.0459   -1.3244    0.186    -0.1509     0.0294
+  tenure         0.0260     0.0439    0.5913   0.5546    -0.0603     0.1122
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>For IV estimation, the <code>CrossSectionData</code> dispatch accepts symbol-based arguments for endogenous variables and instruments:</p><pre><code class="language-julia hljs">n = 500
+z1, z2 = randn(n), randn(n)
+u = randn(n)
+educ = 0.5 * z1 + 0.3 * z2 + 0.5 * u + randn(n)
+exper = randn(n)
+wage = 5.0 .+ 0.8 * educ + 0.3 * exper + u
+
+data = hcat(wage, educ, exper, z1, z2)
+d = CrossSectionData(data; varnames=[&quot;wage&quot;, &quot;educ&quot;, &quot;exper&quot;, &quot;z1&quot;, &quot;z2&quot;])
+
+# Symbol-based IV: specify endogenous and instruments by name
+m = estimate_iv(d, :wage, [:educ, :exper], [:z1, :z2]; endogenous=[:educ])
+report(m)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">         IV/2SLS Regression
+
+  Specification
+
+  Method                   IV/2SLS
+  Observations                 500
+  Covariates                     3
+  R-squared                 0.6994
+  Adj. R-sq.                0.6982
+  F-statistic                93.72
+  F p-value                 &lt;0.001
+  AIC                      1356.31
+  BIC                      1373.17
+  Cov. type           HC1 (robust)
+  1st-stage F                64.93
+  Cragg-Donald F             64.93
+  Kleibergen-Paap F          78.38
+  Stock-Yogo 10%             19.93
+
+                                   Coefficients
+
+                 Coef.   Std.Err.          t    P&gt;|t|   CI lower   CI upper
+
+  (Intercept)   5.0080     0.0418   119.8750   &lt;0.001     4.9259     5.0901   ***
+  educ          0.8564     0.0675    12.6969   &lt;0.001     0.7239     0.9890   ***
+  exper         0.2792     0.0409     6.8289   &lt;0.001     0.1989     0.3595   ***
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>The <code>CrossSectionData</code> dispatch automatically extracts the dependent variable column by name, builds the regressor matrix with an <code>(Intercept)</code> column prepended, maps <code>endogenous</code> symbols to column indices in the regressor matrix, and constructs the instrument matrix from exogenous regressors plus excluded instruments.</p><hr/><h2 id="Visualization"><a class="docs-heading-anchor" href="#Visualization">Visualization</a><a id="Visualization-1"></a><a class="docs-heading-anchor-permalink" href="#Visualization" title="Permalink"></a></h2><p>The <code>plot_result</code> function generates interactive D3.js diagnostic plots for regression models, including residual plots, QQ plots, and fitted-vs-actual scatterplots.</p><pre><code class="language-julia hljs">using MacroEconometricModels, Random
+Random.seed!(42)
+
+n = 200
+X = hcat(ones(n), randn(n, 2))
+y = X * [1.0, 2.0, -0.5] + 0.5 * randn(n)
+m = estimate_reg(y, X; varnames=[&quot;(Intercept)&quot;, &quot;x1&quot;, &quot;x2&quot;])
+
+# OLS diagnostics: residual plot, QQ plot, fitted vs actual
+p = plot_result(m)
+save_plot(p, &quot;reg_ols_diagnostics.html&quot;)</code></pre><iframe src="../assets/plots/reg_ols_diagnostics.html" width="100%" height="520" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe><p>For IV models, the diagnostic plot includes the first-stage fit:</p><pre><code class="language-julia hljs">using MacroEconometricModels, Random
+Random.seed!(42)
+
+n = 500
+z1, z2 = randn(n), randn(n)
+u = randn(n)
+x_endog = 0.5 * z1 + 0.3 * z2 + 0.5 * u + randn(n)
+y = 1.0 .+ 2.0 * x_endog + u
+X = hcat(ones(n), x_endog)
+Z = hcat(ones(n), z1, z2)
+m = estimate_iv(y, X, Z; endogenous=[2], varnames=[&quot;(Intercept)&quot;, &quot;x_endog&quot;])
+
+p = plot_result(m)
+save_plot(p, &quot;reg_iv.html&quot;)</code></pre><iframe src="../assets/plots/reg_iv.html" width="100%" height="520" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe><hr/><h2 id="Penalized-Regression:-Ridge,-LASSO,-and-Elastic-Net"><a class="docs-heading-anchor" href="#Penalized-Regression:-Ridge,-LASSO,-and-Elastic-Net">Penalized Regression: Ridge, LASSO, and Elastic Net</a><a id="Penalized-Regression:-Ridge,-LASSO,-and-Elastic-Net-1"></a><a class="docs-heading-anchor-permalink" href="#Penalized-Regression:-Ridge,-LASSO,-and-Elastic-Net" title="Permalink"></a></h2><p>Penalized regression shrinks coefficients toward zero to trade a small increase in bias for a large reduction in variance, which is essential when the number of predictors is large relative to the sample –- the routine setting for macro forecasters facing wide predictor sets such as FRED-MD&#39;s 126 series. The elastic-net objective on standardized regressors and a centered response is</p><p class="math-container">\[\min_{\beta}\;\frac{1}{2n}\lVert \tilde{y} - \tilde{X}\beta \rVert_2^2 \;+\; \lambda\!\left[\alpha\lVert\beta\rVert_1 + \tfrac{1-\alpha}{2}\lVert\beta\rVert_2^2\right],\]</p><p>where</p><ul><li><span>$\tilde{X}$</span> are the mean-centered, unit-variance regressors and <span>$\tilde{y}$</span> the centered response,</li><li><span>$\lambda \ge 0$</span> is the penalty strength (larger <span>$\lambda$</span> shrinks more),</li><li><span>$\alpha \in [0,1]$</span> is the mixing parameter: <span>$\alpha=1$</span> is LASSO (sparse), <span>$\alpha=0$</span> is ridge (dense), intermediate values interpolate.</li></ul><p>The intercept is never penalized; coefficients are unstandardized before return and the intercept is recovered as <span>$\beta_0 = \bar{y} - \bar{x}&#39;\beta$</span>. This <code>glmnet</code>-convention <span>$1/2n$</span> scaling makes <span>$\lambda$</span> values comparable to R <code>glmnet</code> and Python <code>sklearn</code>.</p><div class="admonition is-info" id="Solver-4ffb6add7d1bcf71"><header class="admonition-header">Solver<a class="admonition-anchor" href="#Solver-4ffb6add7d1bcf71" title="Permalink"></a></header><div class="admonition-body"><p>Ridge (<span>$\alpha=0$</span>) is solved in closed form, <span>$\beta = (\tilde{X}&#39;\tilde{X} + n\lambda I)^{-1}\tilde{X}&#39;\tilde{y}$</span>. LASSO and elastic net (<span>$\alpha&gt;0$</span>) use cyclic coordinate descent with soft-thresholding, active-set cycling, and strong-rule screening over a warm-started, log-spaced <span>$\lambda$</span> path.</p></div></div><p><strong>LASSO with cross-validated <span>$\lambda$</span>.</strong> <code>estimate_lasso</code> fits the full path and selects <span>$\lambda$</span> by cross-validation. Use <code>cv=:timeseries</code> for serially dependent data –- it uses contiguous, non-shuffled folds so no future information leaks into training.</p><pre><code class="language-julia hljs">n, p = 120, 8
+Xpen = randn(n, p)
+beta_sparse = [2.5, 0.0, -3.0, 0.0, 0.0, 1.8, 0.0, 0.0]  # only 3 nonzero
+ypen = Xpen * beta_sparse + 0.5 * randn(n)
+lasso = estimate_lasso(ypen, Xpen; cv=:timeseries, nfolds=5)
+report(lasso)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">             LASSO Regression
+
+  Specification
+
+  Method                            LASSO
+  alpha                             1.000
+  Observations                        120
+  Regressors                            8
+  lambda                          0.02702
+  Selection       CV (timeseries, 5-fold)
+  Nonzero coef.                         4
+  Eff. df                            4.00
+  R-squared                        0.9884
+  AIC                              170.22
+  BIC                              184.16
+
+ Coefficients (nonzero)
+
+                  Coef.
+
+  (Intercept)   -0.0077
+  x1             2.4774
+  x2             0.0305
+  x3            -3.0005
+  x6             1.7605
+
+Note: penalized estimates carry no valid standard errors or p-values.</code></pre><p>The report shows only the nonzero coefficients: LASSO recovers the three strong predictors (<code>x1</code>, <code>x3</code>, <code>x6</code>) near their true magnitudes and shrinks the true-zero predictors sharply toward zero (a stricter penalty, e.g. <code>select=:bic</code>, sets more of them exactly to zero). No standard errors or p-values are reported –- shrinkage estimators have no valid closed-form inference.</p><p><strong>Ridge and elastic net.</strong> <code>estimate_ridge</code> keeps all predictors (dense shrinkage), while <code>estimate_elastic_net</code> mixes the two penalties via <code>alpha</code>.</p><pre><code class="language-julia hljs">ridge = estimate_ridge(ypen, Xpen; select=:bic)      # dense; lambda by BIC
+enet  = estimate_elastic_net(ypen, Xpen; alpha=0.5)  # 50/50 mix; lambda by CV
+round.(ridge.beta; digits=3)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">8-element Vector{Float64}:
+  1.898
+  0.017
+ -2.284
+ -0.009
+ -0.124
+  1.435
+  0.032
+ -0.0</code></pre><p><strong>Adaptive LASSO and post-selection OLS.</strong> Adaptive weights (Zou 2006) improve support recovery; post-selection OLS de-shrinks the selected coefficients.</p><pre><code class="language-julia hljs">adaptive = estimate_lasso(ypen, Xpen; adaptive=true, post=true)
+adaptive.active_set   # indices of selected predictors</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">3-element Vector{Int64}:
+ 1
+ 3
+ 6</code></pre><div class="admonition is-warning" id="Honest-inference-8963e5dd89ad0e01"><header class="admonition-header">Honest inference<a class="admonition-anchor" href="#Honest-inference-8963e5dd89ad0e01" title="Permalink"></a></header><div class="admonition-body"><p>Naive post-selection standard errors are invalid: conditioning on the selected model biases classical inference. Post-LASSO standard errors are trustworthy only under the sparsity and beta-min conditions of the honest-inference literature (Belloni &amp; Chernozhukov 2013), which this package does not verify. No t-statistics or p-values are reported for any penalized fit.</p></div></div><p>Predictions use the natural-scale coefficients and the unpenalized intercept, <code>predict(m, Xnew) = Xnew * m.beta .+ m.beta0</code>:</p><pre><code class="language-julia hljs">yhat = predict(lasso, Xpen[1:5, :])
+round.(yhat; digits=3)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">5-element Vector{Float64}:
+  2.445
+  3.526
+ 11.825
+  0.373
+ 10.991</code></pre><p>The coefficient path and cross-validation curve are available via <code>plot_result</code>:</p><pre><code class="language-julia hljs">plot_result(lasso; view=:path)   # coefficient path vs log(λ)
+plot_result(lasso; view=:cv)     # CV MSE curve with λ_min / 1-SE markers</code></pre><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>alpha</code></td><td style="text-align: right"><code>Real</code></td><td style="text-align: right"><code>1.0</code></td><td style="text-align: right">Mixing: <code>1</code>=LASSO, <code>0</code>=ridge, in-between=elastic net</td></tr><tr><td style="text-align: right"><code>lambda</code></td><td style="text-align: right"><code>Symbol</code>/<code>Real</code>/<code>Vector</code></td><td style="text-align: right"><code>:cv</code></td><td style="text-align: right"><code>:cv</code> builds a path; a scalar/vector fixes it</td></tr><tr><td style="text-align: right"><code>select</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:cv</code></td><td style="text-align: right"><code>:cv</code>, <code>:aic</code>, <code>:bic</code>, or <code>:ebic</code></td></tr><tr><td style="text-align: right"><code>cv</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:kfold</code></td><td style="text-align: right"><code>:kfold</code> (shuffled) or <code>:timeseries</code> (contiguous)</td></tr><tr><td style="text-align: right"><code>nfolds</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>10</code></td><td style="text-align: right">Number of CV folds</td></tr><tr><td style="text-align: right"><code>adaptive</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>false</code></td><td style="text-align: right">Adaptive-LASSO weights (Zou 2006)</td></tr><tr><td style="text-align: right"><code>post</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>false</code></td><td style="text-align: right">Post-selection OLS refit (Belloni-Chernozhukov)</td></tr></table><hr/><h2 id="Variable-Selection:-Stepwise-and-General-to-Specific"><a class="docs-heading-anchor" href="#Variable-Selection:-Stepwise-and-General-to-Specific">Variable Selection: Stepwise and General-to-Specific</a><a id="Variable-Selection:-Stepwise-and-General-to-Specific-1"></a><a class="docs-heading-anchor-permalink" href="#Variable-Selection:-Stepwise-and-General-to-Specific" title="Permalink"></a></h2><p>When the general unrestricted model (GUM) carries more regressors than theory pins down, <a href="../api/cross_section/#MacroEconometricModels.select_variables-Union{Tuple{T}, Tuple{AbstractVector{T}, AbstractMatrix{T}}} where T&lt;:AbstractFloat"><code>select_variables</code></a> automates the specification search on top of the OLS stack. It returns a <a href="../api/cross_section/#MacroEconometricModels.SelectionResult"><code>SelectionResult</code></a> holding the search path, the selected column set, a parsimonious-encompassing test, and a refit <a href="../api/cross_section/#MacroEconometricModels.RegModel"><code>RegModel</code></a> (the <code>.final</code> field) so <code>report</code>, <code>predict</code>, and <code>refs</code> work unchanged. Three search families are available:</p><ul><li><strong>Stepwise</strong> (<code>:forward</code>, <code>:backward</code>, <code>:bidirectional</code>) adds or drops one regressor at a time, by coefficient p-value (<code>criterion=:pvalue</code>) or by information criterion (<code>:aic</code>/<code>:bic</code>).</li><li><strong>Best subset</strong> (<code>:best_subset</code>) is an exhaustive search over all subsets, minimizing the chosen information criterion (feasible only for small candidate sets).</li><li><strong>GETS</strong> (<code>:gets</code>) is the LSE general-to-specific reduction (Hoover &amp; Perez 1999; Hendry &amp; Krolzig 2005): multi-path backward elimination from the GUM, gated at each deletion by a misspecification battery — the Breusch–Godfrey serial-correlation LM test and the Jarque–Bera normality test.</li></ul><p><strong>Stepwise search.</strong> Forward selection enters the most significant candidate below <code>p_enter</code>; backward elimination drops the least significant term above <code>p_remove</code>; bidirectional alternates. For information-criterion moves each accepted step must strictly improve the criterion, which guarantees termination at a local optimum.</p><pre><code class="language-julia hljs">Random.seed!(11)
+nsel = 150
+Xsel = hcat(ones(nsel), randn(nsel, 8))
+beta_sel = zeros(9); beta_sel[[1, 2, 4, 6]] .= [1.0, 3.0, -2.5, 2.0]  # 3 active slopes
+ysel = Xsel * beta_sel + 0.6 * randn(nsel)
+fw = select_variables(ysel, Xsel; method=:forward, criterion=:bic)
+report(fw)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Variable Selection — Forward stepwise
+
+  Specification
+
+  Method           Forward stepwise
+  Criterion                     BIC
+  GUM regressors                  9
+  Selected                        4
+  Observations                  150
+  Encompassing F              0.599
+  Encompassing p             0.7006
+
+              Search Path
+
+  Step   Action   Variable        BIC
+
+     1   enter    x2         799.4106
+     2   enter    x4         667.0284
+     3   enter    x6         281.6688
+
+
+Selected model (post-selection SEs are conditional-on-selection):
+      OLS Regression
+
+  Specification
+
+  Method              OLS
+  Observations        150
+  Covariates            4
+  R-squared        0.9852
+  Adj. R-sq.       0.9849
+  F-statistic     3229.82
+  F p-value        &lt;0.001
+  AIC              266.62
+  BIC              281.67
+  Cov. type           OLS
+
+                               Coefficients
+
+         Coef.   Std.Err.          t    P&gt;|t|   CI lower   CI upper
+
+  x1    1.0410     0.0478    21.7896   &lt;0.001     0.9466     1.1355   ***
+  x2    2.9308     0.0479    61.2449   &lt;0.001     2.8362     3.0253   ***
+  x4   -2.5485     0.0483   -52.7400   &lt;0.001    -2.6440    -2.4530   ***
+  x6    1.9574     0.0458    42.7149   &lt;0.001     1.8669     2.0480   ***
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>The intercept (a numerically constant column) is detected and always kept, as are any columns passed via <code>keep</code>. On a strong-signal design forward and backward stepwise reach the same subset as an exhaustive best-subset search.</p><p><strong>General-to-specific (GETS).</strong> GETS starts from the full GUM and follows multiple deletion paths, each seeded by removing a different insignificant regressor, deleting the least-significant term at every node. A deletion is accepted only if the reduced model still passes the diagnostic gate; the diagnostic-passing terminal models are collected and the final model is the one with the best information criterion. A parsimonious-encompassing <span>$F$</span>-test of the selection against the GUM is stored in <code>encompassing_f</code>/<code>encompassing_pval</code>.</p><pre><code class="language-julia hljs">Random.seed!(42)
+ngets = 200
+Xgum = hcat(ones(ngets), randn(ngets, 20))          # 20 candidates + intercept
+beta_gum = zeros(21); beta_gum[[2, 5, 8, 11, 14]] .= 1.5   # 5 true regressors
+ygets = Xgum * beta_gum + randn(ngets)
+gets = select_variables(ygets, Xgum; method=:gets)
+gets.selected                                        # retained column indices</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">8-element Vector{Int64}:
+  1
+  2
+  5
+  6
+  8
+ 11
+ 14
+ 20</code></pre><p>GETS retains all five true regressors and drops the vast majority of the irrelevant ones; the encompassing test does not reject the reduction against the GUM.</p><pre><code class="language-julia hljs">gets.encompassing_pval   # parsimonious-encompassing F p-value (selection vs GUM)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">0.12106190012603613</code></pre><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>method</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:bidirectional</code></td><td style="text-align: right"><code>:forward</code>, <code>:backward</code>, <code>:bidirectional</code>, <code>:best_subset</code>, <code>:gets</code></td></tr><tr><td style="text-align: right"><code>criterion</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:pvalue</code></td><td style="text-align: right">Move criterion: <code>:pvalue</code>, <code>:aic</code>, <code>:bic</code></td></tr><tr><td style="text-align: right"><code>p_enter</code> / <code>p_remove</code></td><td style="text-align: right"><code>Real</code></td><td style="text-align: right"><code>0.05</code> / <code>0.10</code></td><td style="text-align: right">Stepwise entry / removal levels (require <code>p_remove ≥ p_enter</code>)</td></tr><tr><td style="text-align: right"><code>p_gets</code></td><td style="text-align: right"><code>Real</code></td><td style="text-align: right"><code>0.05</code></td><td style="text-align: right">GETS deletion significance level</td></tr><tr><td style="text-align: right"><code>diag_level</code></td><td style="text-align: right"><code>Real</code></td><td style="text-align: right"><code>0.05</code></td><td style="text-align: right">GETS misspecification-gate level</td></tr><tr><td style="text-align: right"><code>keep</code></td><td style="text-align: right"><code>Vector{Int}</code></td><td style="text-align: right"><code>nothing</code></td><td style="text-align: right">Columns forced into every model</td></tr></table><div class="admonition is-warning" id="Post-selection-inference-is-invalid-2ff07931522015c5"><header class="admonition-header">Post-selection inference is invalid<a class="admonition-anchor" href="#Post-selection-inference-is-invalid-2ff07931522015c5" title="Permalink"></a></header><div class="admonition-body"><p>The standard errors, <span>$t$</span>-statistics, and p-values on <code>result.final</code> are <strong>conditional on the selected specification</strong> and ignore the search that produced them; they are not valid unconditional inference. Report them as descriptive, not as a basis for hypothesis tests. For a shrinkage alternative that regularizes rather than searches, see the Penalized Regression section above — <code>estimate_lasso</code> selects a sparse model along a single tuning path.</p></div></div><hr/><h2 id="Censored-and-Truncated-Regression:-Tobit"><a class="docs-heading-anchor" href="#Censored-and-Truncated-Regression:-Tobit">Censored and Truncated Regression: Tobit</a><a id="Censored-and-Truncated-Regression:-Tobit-1"></a><a class="docs-heading-anchor-permalink" href="#Censored-and-Truncated-Regression:-Tobit" title="Permalink"></a></h2><p>Many economic outcomes are <em>limited dependent variables</em>: hours worked, corner-solution expenditures, capped survey responses, and zero-bounded durations pile up at a boundary or are only observed over part of their range. OLS on such data is biased and inconsistent. Two distinct sampling schemes call for two estimators:</p><ul><li><strong>Censoring (Tobit).</strong> The latent variable <span>$y_i^\ast = x_i&#39;\beta + u_i$</span> is generated for every unit, but is only <em>recorded</em> within <span>$[L, U]$</span>: values below <span>$L$</span> are reported as <span>$L$</span> and values above <span>$U$</span> as <span>$U$</span>. The regressors are observed for all units. Use <a href="../api/cross_section/#MacroEconometricModels.estimate_tobit-Union{Tuple{T}, Tuple{AbstractVector{T}, AbstractMatrix{T}}} where T&lt;:AbstractFloat"><code>estimate_tobit</code></a> (Tobin 1958).</li><li><strong>Truncation.</strong> Units outside <span>$(L, U)$</span> are entirely absent from the sample — both <span>$y$</span> and <span>$x$</span> are missing. Use <a href="../api/cross_section/#MacroEconometricModels.estimate_truncreg-Union{Tuple{T}, Tuple{AbstractVector{T}, AbstractMatrix{T}}} where T&lt;:AbstractFloat"><code>estimate_truncreg</code></a> (Hausman &amp; Wise 1977).</li></ul><p>Both are estimated by maximum likelihood with <span>$u_i \sim N(0, \sigma^2)$</span>. The Tobit log-likelihood combines a density term for uncensored observations with tail-probability terms for the censored ones:</p><p class="math-container">\[\ell(\beta, \sigma) = \sum_{L &lt; y_i &lt; U} \log\!\left[\tfrac{1}{\sigma}\phi\!\left(\tfrac{y_i - x_i&#39;\beta}{\sigma}\right)\right]
++ \sum_{y_i \le L} \log \Phi\!\left(\tfrac{L - x_i&#39;\beta}{\sigma}\right)
++ \sum_{y_i \ge U} \log\!\left[1 - \Phi\!\left(\tfrac{U - x_i&#39;\beta}{\sigma}\right)\right],\]</p><p>where <span>$\phi$</span> and <span>$\Phi$</span> are the standard normal pdf and cdf. For the normal case the fit is carried out in the globally concave Olsen (1978) reparameterization <span>$\delta = \beta/\sigma$</span>, <span>$\gamma = 1/\sigma$</span>, then back-transformed to <span>$(\beta, \sigma)$</span> with delta-method standard errors — this guarantees a unique maximum regardless of starting values.</p><p><strong>Tobit on left-censored data.</strong> The classic case censors at zero (<code>lower=0.0, upper=Inf</code>). <code>report()</code> shows the estimated <span>$\sigma$</span>, the censored-observation counts, and the coefficient table:</p><pre><code class="language-julia hljs">n = 400
+Xt = hcat(ones(n), randn(n), randn(n))
+beta_true = [0.5, 1.0, -0.8]
+ystar = Xt * beta_true + randn(n)          # latent outcome
+y_cens = max.(ystar, 0.0)                    # left-censored at 0
+tob = estimate_tobit(y_cens, Xt; lower=0.0, varnames=[&quot;const&quot;, &quot;x1&quot;, &quot;x2&quot;])
+report(tob)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">         Tobit Regression
+
+  Specification
+
+  Model            Tobit (Normal)
+  Observations                400
+  Covariates                    3
+  Censoring         [0.0000, Inf]
+  Left-censored               142
+  Right-censored                0
+  Uncensored                  258
+  sigma                    0.9670
+  Log-lik.                -432.61
+  AIC                      873.22
+  BIC                      889.19
+  Converged                   Yes
+
+                                 Coefficients
+
+            Coef.   Std.Err.          z    P&gt;|z|   CI lower   CI upper
+
+  const    0.6035     0.0583    10.3432   &lt;0.001     0.4892     0.7179   ***
+  x1       0.9685     0.0558    17.3432   &lt;0.001     0.8590     1.0779   ***
+  x2      -0.7831     0.0524   -14.9459   &lt;0.001    -0.8858    -0.6804   ***
+
+                                   Scale
+
+           Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
+
+  sigma   0.9670     0.0439   22.0432   &lt;0.001     0.8810     1.0530   ***
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>Roughly a third of the sample piles up at zero; OLS on <code>y_cens</code> would attenuate the slopes toward zero, while Tobit recovers the latent-index coefficients. Two-sided censoring is requested by passing both bounds, e.g. <code>estimate_tobit(y, X; lower=0.0, upper=100.0)</code>.</p><p><strong>Marginal effects (McDonald–Moffitt).</strong> A Tobit slope <span>$\beta_j$</span> is <em>not</em> the marginal effect on the observed outcome. <a href="../api/cross_section/#MacroEconometricModels.marginal_effects"><code>marginal_effects</code></a> returns the McDonald &amp; Moffitt (1980) decomposition, each with delta-method standard errors, selected by the <code>which</code> keyword:</p><ul><li><code>:unconditional</code> (default) — <span>$\partial E[y]/\partial x_j = \beta_j\,\Phi(x_i&#39;\beta/\sigma)$</span>, the total effect on the observed outcome;</li><li><code>:conditional</code> — <span>$\partial E[y \mid L&lt;y&lt;U]/\partial x_j$</span>, the effect within the uncensored subpopulation;</li><li><code>:probability</code> — <span>$\partial P(L&lt;y&lt;U)/\partial x_j = \beta_j\,\phi(x_i&#39;\beta/\sigma)/\sigma$</span>, the effect on the probability of being uncensored.</li></ul><pre><code class="language-julia hljs">me = marginal_effects(tob; which=:unconditional)   # average marginal effects
+report(me)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">                         Average Marginal Effects
+
+         dy/dx   Std.Err.          z    P&gt;|z|   CI lower   CI upper
+
+  x1    0.6255     0.0317    19.7368   &lt;0.001     0.5633     0.6876   ***
+  x2   -0.5057     0.0309   -16.3622   &lt;0.001    -0.5663    -0.4452   ***
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>The intercept has no marginal effect and is reported as a blank row.</p><p><strong>Truncated regression.</strong> When the boundary observations are missing entirely, <code>estimate_truncreg</code> maximizes the Hausman–Wise truncated-normal likelihood. Every <code>y</code> must lie strictly inside <code>(lower, upper)</code>; an out-of-range value is an error.</p><pre><code class="language-julia hljs">keep = ystar .&gt; 0                            # only positive latent values survive
+trunc = estimate_truncreg(ystar[keep], Xt[keep, :]; lower=0.0,
+                          varnames=[&quot;const&quot;, &quot;x1&quot;, &quot;x2&quot;])
+report(trunc)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">              Truncated Regression
+
+  Specification
+
+  Model           Truncated regression (Normal)
+  Observations                              258
+  Covariates                                  3
+  Truncation                      (0.0000, Inf)
+  sigma                                  0.9791
+  Log-lik.                              -278.06
+  AIC                                    564.12
+  BIC                                    578.33
+  Converged                                 Yes
+
+                                Coefficients
+
+            Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
+
+  const    0.6103     0.1369    4.4577   &lt;0.001     0.3420     0.8787   ***
+  x1       0.9647     0.0930   10.3682   &lt;0.001     0.7823     1.1470   ***
+  x2      -0.7513     0.0790   -9.5112   &lt;0.001    -0.9062    -0.5965   ***
+
+                                   Scale
+
+           Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
+
+  sigma   0.9791     0.0630   15.5528   &lt;0.001     0.8557     1.1025   ***
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><div class="admonition is-info" id="Which-estimator?-730b90ae6dbe9688"><header class="admonition-header">Which estimator?<a class="admonition-anchor" href="#Which-estimator?-730b90ae6dbe9688" title="Permalink"></a></header><div class="admonition-body"><p>Use <strong>Tobit</strong> when the sample includes the boundary observations (you observe both the pile-up at <span>$L$</span>/<span>$U$</span> and the regressors for those units). Use <strong>truncated regression</strong> when those units are absent from the data altogether. Applying Tobit to a truncated sample — or OLS to either — yields inconsistent estimates.</p></div></div><p>The <code>dist</code> keyword also supports <code>:logistic</code> and <code>:extreme_value</code> latent-error laws (optimized directly in <span>$(\beta, \log\sigma)$</span>); <code>:normal</code> is the default.</p><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>lower</code></td><td style="text-align: right"><code>Real</code></td><td style="text-align: right"><code>0.0</code></td><td style="text-align: right">Lower censoring/truncation bound (<code>-Inf</code> for none)</td></tr><tr><td style="text-align: right"><code>upper</code></td><td style="text-align: right"><code>Real</code></td><td style="text-align: right"><code>Inf</code></td><td style="text-align: right">Upper censoring/truncation bound (<code>Inf</code> for none)</td></tr><tr><td style="text-align: right"><code>dist</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:normal</code></td><td style="text-align: right">Latent error law: <code>:normal</code>, <code>:logistic</code>, <code>:extreme_value</code> (Tobit only)</td></tr><tr><td style="text-align: right"><code>varnames</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right">auto</td><td style="text-align: right">Coefficient names</td></tr></table><hr/><h2 id="Sample-Selection:-The-Heckman-Model"><a class="docs-heading-anchor" href="#Sample-Selection:-The-Heckman-Model">Sample Selection: The Heckman Model</a><a id="Sample-Selection:-The-Heckman-Model-1"></a><a class="docs-heading-anchor-permalink" href="#Sample-Selection:-The-Heckman-Model" title="Permalink"></a></h2><p>Censoring records a boundary value for every unit; <em>incidental truncation</em> is more severe –- the outcome is simply <strong>unobserved</strong> for a non-random subsample. Wages are observed only for those who work, export prices only for exporters, loan rates only for approved applicants. The selected sample is not representative, and OLS on it is inconsistent whenever the unobservables driving selection are correlated with those driving the outcome. The Heckman (1979) selection model corrects this. A latent selection index and the outcome are</p><p class="math-container">\[d_i^\ast = z_i&#39;\gamma + u_i, \qquad d_i = \mathbf{1}\{d_i^\ast &gt; 0\}, \qquad
+y_i = x_i&#39;\beta + \varepsilon_i \ \text{ observed only when } d_i = 1,\]</p><p>with <span>$(u_i, \varepsilon_i)$</span> bivariate normal, <span>$\mathrm{Var}(u_i)=1$</span>, <span>$\mathrm{Var}(\varepsilon_i)=\sigma^2$</span>, and <span>$\mathrm{Corr}(u_i,\varepsilon_i)=\rho$</span>. The conditional mean over the selected sample carries a selection-bias term proportional to the inverse-Mills ratio <span>$\lambda(\cdot)=\phi(\cdot)/\Phi(\cdot)$</span>:</p><p class="math-container">\[E[y_i \mid x_i,\, d_i = 1] = x_i&#39;\beta + \rho\sigma \, \lambda(z_i&#39;\gamma).\]</p><p><a href="../api/cross_section/#MacroEconometricModels.estimate_heckman-Union{Tuple{T}, Tuple{AbstractVector{T}, AbstractMatrix{T}, AbstractVector, AbstractMatrix{T}}} where T&lt;:AbstractFloat"><code>estimate_heckman</code></a> offers two estimators. The <strong>two-step (Heckit)</strong> estimator fits a probit of <span>$d$</span> on <span>$Z$</span>, forms <span>$\hat\lambda_i$</span> from the probit index, and runs OLS of <span>$y$</span> on <span>$[X\ \hat\lambda]$</span> over the selected subsample –- the Mills coefficient is <span>$\rho\sigma$</span>. Its covariance is the Greene corrected two-step covariance, which accounts for the generated regressor <span>$\hat\lambda$</span> and the selection-induced heteroskedasticity. The <strong>full-information ML</strong> estimator (<code>method=:mle</code>) maximizes the bivariate-normal likelihood directly, started at the two-step estimates.</p><p><strong>Two-step on the Mroz (1987) data.</strong> The built-in <code>:mroz</code> extract has 753 married women; <code>lwage</code> is observed only for the 428 labor-force participants (<code>inlf == 1</code>). The selection equation adds <code>nwifeinc</code>, <code>age</code>, and the child counts as exclusion restrictions absent from the wage equation.</p><pre><code class="language-julia hljs">mroz = load_example(:mroz)
+nm = mroz.N_obs
+inlf  = mroz[:, &quot;inlf&quot;]
+lwage = mroz[:, &quot;lwage&quot;]          # NaN for the 325 non-participants (ignored)
+Xh = hcat(ones(nm), mroz[:, &quot;educ&quot;], mroz[:, &quot;exper&quot;], mroz[:, &quot;expersq&quot;])
+Zh = hcat(ones(nm), mroz[:, &quot;nwifeinc&quot;], mroz[:, &quot;educ&quot;], mroz[:, &quot;exper&quot;],
+          mroz[:, &quot;expersq&quot;], mroz[:, &quot;age&quot;], mroz[:, &quot;kidslt6&quot;], mroz[:, &quot;kidsge6&quot;])
+on = [&quot;const&quot;, &quot;educ&quot;, &quot;exper&quot;, &quot;expersq&quot;]
+sn = [&quot;const&quot;, &quot;nwifeinc&quot;, &quot;educ&quot;, &quot;exper&quot;, &quot;expersq&quot;, &quot;age&quot;, &quot;kidslt6&quot;, &quot;kidsge6&quot;]
+heck = estimate_heckman(lwage, Xh, inlf, Zh; method=:twostep,
+                        outcome_names=on, select_names=sn)
+report(heck)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">         Heckman Selection Model
+
+  Specification
+
+  Model                Heckman selection
+  Method               Two-step (Heckit)
+  Total obs.                         753
+  Selected obs.                      428
+  Censored obs.                      325
+  rho                             0.0486
+  sigma                           0.6636
+  lambda (rho*sigma)              0.0323
+  Log-lik.                       -832.90
+  AIC                            1693.80
+  BIC                            1758.53
+  Converged                          Yes
+
+                          Selection equation (probit)
+
+               Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
+
+  const       0.2701     0.5081    0.5316    0.595    -0.7258     1.2659
+  nwifeinc   -0.0120     0.0049   -2.4344   0.0149    -0.0217    -0.0023   **
+  educ        0.1309     0.0254    5.1539   &lt;0.001     0.0811     0.1807   ***
+  exper       0.1233     0.0188    6.5754   &lt;0.001     0.0866     0.1601   ***
+  expersq    -0.0019     0.0006   -3.1455   0.0017    -0.0031    -0.0007   ***
+  age        -0.0529     0.0085   -6.2454   &lt;0.001    -0.0694    -0.0363   ***
+  kidslt6    -0.8683     0.1184   -7.3350   &lt;0.001    -1.1004    -0.6363   ***
+  kidsge6     0.0360     0.0440    0.8177   0.4135    -0.0503     0.1223
+
+                               Outcome equation
+
+              Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
+
+  const     -0.5781     0.3050   -1.8954    0.058    -1.1759     0.0197   *
+  educ       0.1091     0.0155    7.0261   &lt;0.001     0.0786     0.1395   ***
+  exper      0.0439     0.0163    2.6989    0.007     0.0120     0.0758   ***
+  expersq   -0.0009     0.0004   -1.9574   0.0503    -0.0017   1.15e-06   *
+
+Selection: lambda = 0.0323 (se 0.1336), H0: no selection  z = 0.2414, p = 0.8092
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>The footer reports <span>$\hat\rho \approx 0.05$</span> with a small, insignificant Mills <span>$t$</span>-statistic: on these data the selection correction is mild (the <span>$H_0$</span>: <em>no selection</em> is not rejected), matching Wooldridge&#39;s (2010, Example 17.5) reading of this dataset.</p><p><strong>Full-information ML.</strong> <code>method=:mle</code> maximizes the joint likelihood; it delivers direct standard errors for <span>$\rho$</span> and <span>$\sigma$</span> and a Wald test of <span>$\rho = 0$</span>:</p><pre><code class="language-julia hljs">heck_ml = estimate_heckman(lwage, Xh, inlf, Zh; method=:mle,
+                           outcome_names=on, select_names=sn)
+report(heck_ml)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">          Heckman Selection Model
+
+  Specification
+
+  Model                 Heckman selection
+  Method               Maximum likelihood
+  Total obs.                          753
+  Selected obs.                       428
+  Censored obs.                       325
+  rho                              0.0266
+  sigma                            0.6634
+  lambda (rho*sigma)               0.0177
+  Log-lik.                        -832.89
+  AIC                             1693.77
+  BIC                             1758.51
+  Converged                           Yes
+
+                          Selection equation (probit)
+
+               Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
+
+  const       0.2664     0.5090    0.5235   0.6006    -0.7311     1.2640
+  nwifeinc   -0.0121     0.0049   -2.4878   0.0129    -0.0217    -0.0026   **
+  educ        0.1313     0.0254    5.1745   &lt;0.001     0.0816     0.1811   ***
+  exper       0.1233     0.0187    6.5841   &lt;0.001     0.0866     0.1600   ***
+  expersq    -0.0019     0.0006   -3.1417   0.0017    -0.0031    -0.0007   ***
+  age        -0.0528     0.0085   -6.2304   &lt;0.001    -0.0694    -0.0362   ***
+  kidslt6    -0.8674     0.1187   -7.3105   &lt;0.001    -1.1000    -0.6348   ***
+  kidsge6     0.0359     0.0435    0.8251   0.4093    -0.0493     0.1211
+
+                                Outcome equation
+
+              Coef.   Std.Err.         z    P&gt;|z|   CI lower    CI upper
+
+  const     -0.5527     0.2604   -2.1227   0.0338    -1.0630     -0.0424   **
+  educ       0.1084     0.0149    7.2911   &lt;0.001     0.0792      0.1375   ***
+  exper      0.0428     0.0149    2.8791    0.004     0.0137      0.0720   ***
+  expersq   -0.0008     0.0004   -2.0060   0.0449    -0.0017   -1.92e-05   **
+
+Selection: rho = 0.0266 (se 0.1471), Wald H0: rho=0  z = 0.1809, p = 0.8564
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><div class="admonition is-warning" id="Provide-a-genuine-exclusion-restriction-75050c490a274bac"><header class="admonition-header">Provide a genuine exclusion restriction<a class="admonition-anchor" href="#Provide-a-genuine-exclusion-restriction-75050c490a274bac" title="Permalink"></a></header><div class="admonition-body"><p>Identification is far more credible when <span>$Z$</span> contains at least one variable excluded from <span>$X$</span> (here <code>nwifeinc</code>, <code>age</code>, and the child counts). If <span>$Z$</span> spans the same column space as <span>$X$</span>, <code>estimate_heckman</code> emits a warning: identification then rests solely on the nonlinearity of the Mills ratio, and the two-step second stage becomes near-collinear. When <span>$\rho$</span> is close to zero the likelihood is nearly flat –- the selection term is weakly identified and the two-step and ML estimates can differ noticeably even though both are valid.</p></div></div><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>method</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:twostep</code></td><td style="text-align: right"><code>:twostep</code> (Heckit) or <code>:mle</code> (full-information ML)</td></tr><tr><td style="text-align: right"><code>outcome_names</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right">auto</td><td style="text-align: right">Outcome-equation coefficient names</td></tr><tr><td style="text-align: right"><code>select_names</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right">auto</td><td style="text-align: right">Selection-equation coefficient names</td></tr></table><hr/><h2 id="Robust-Regression:-M-and-MM-Estimation"><a class="docs-heading-anchor" href="#Robust-Regression:-M-and-MM-Estimation">Robust Regression: M- and MM-Estimation</a><a id="Robust-Regression:-M-and-MM-Estimation-1"></a><a class="docs-heading-anchor-permalink" href="#Robust-Regression:-M-and-MM-Estimation" title="Permalink"></a></h2><p>Ordinary least squares breaks down under outliers: a single gross error, given full weight by the squared-error loss, can dominate the fit. Robust regression bounds each observation&#39;s influence. <a href="../api/cross_section/#MacroEconometricModels.estimate_robust-Union{Tuple{T}, Tuple{AbstractVector{T}, AbstractMatrix{T}}} where T&lt;:AbstractFloat"><code>estimate_robust</code></a> implements two classical strategies.</p><p><strong>M-estimation</strong> minimizes <span>$\sum_i \rho\!\left(r_i/\hat s\right)$</span> for a bounded loss <span>$\rho$</span>, where <span>$r_i = y_i - x_i&#39;\beta$</span> and <span>$\hat s$</span> is a robust scale. Solved by iteratively reweighted least squares (IRLS): each step forms scaled residuals <span>$u_i = r_i/\hat s$</span>, weights <span>$w_i = \psi(u_i)/u_i$</span>, and updates <span>$\beta = (X&#39;WX)^{-1}X&#39;Wy$</span>.</p><ul><li><strong>Huber</strong> (<code>psi=:huber</code>): <span>$\psi(u) = u$</span> for <span>$|u| \le k$</span>, else <span>$k\,\mathrm{sign}(u)$</span>. Default <span>$k = 1.345$</span> (95% Gaussian efficiency). Downweights but never rejects.</li><li><strong>Tukey bisquare</strong> (<code>psi=:bisquare</code>): <span>$\psi(u) = u\left(1-(u/c)^2\right)^2$</span> for <span>$|u| \le c$</span>, else <span>$0$</span>. Default <span>$c = 4.685$</span>. Redescending: extreme points get zero weight.</li></ul><p>The scale <span>$\hat s$</span> is the normalized MAD <span>$\mathrm{median}(|r|)/0.6745$</span> (Fisher-consistent at the normal), re-estimated each iteration; pass <code>scale_update=:proposal2</code> for Huber&#39;s joint scale updating.</p><pre><code class="language-julia hljs">d = load_example(:stackloss)          # Brownlee (1965), 21 obs, a classic outlier example
+y = d.data[:, 4]
+X = hcat(ones(21), d.data[:, 1:3])
+m = estimate_robust(y, X, psi=:huber, method=:m,
+                    varnames=[&quot;(Intercept)&quot;, &quot;Air.Flow&quot;, &quot;Water.Temp&quot;, &quot;Acid.Conc.&quot;])
+report(m)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Robust Regression (M-estimation, Huber)
+
+  Specification
+
+  Method           M-estimation
+  Influence fn.           Huber
+  Tuning const.           1.345
+  Observations               21
+  Covariates                  4
+  Robust scale           2.4405
+  Robust R-sq.           0.8083
+  Downweighted          3 of 21
+  Rejected (w≈0)              0
+  Converged                 Yes
+  Iterations                 13
+
+                                    Coefficients
+
+                   Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
+
+  (Intercept)   -41.0265     8.5390   -4.8046   &lt;0.001   -59.0421   -23.0109   ***
+  Air.Flow        0.8294     0.0968    8.5679   &lt;0.001     0.6252     1.0336   ***
+  Water.Temp      0.9261     0.2642    3.5056   0.0027     0.3687     1.4834   ***
+  Acid.Conc.     -0.1278     0.1122   -1.1396   0.2703    -0.3645     0.1088
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>The <code>weights</code> field flags outliers: observations with <span>$w_i \approx 0$</span> are downweighted. Huber and bisquare M-estimates match R&#39;s <code>MASS::rlm(method=&quot;M&quot;)</code> to machine tolerance.</p><p><strong>MM-estimation</strong> (Yohai 1987) combines a high-breakdown start with high efficiency. First a 50%-breakdown S-estimate of scale is found by the fast-S subsampling algorithm (Salibian-Barrera &amp; Yohai 2006); that scale is then held fixed while <span>$\beta$</span> is re-estimated by a high-efficiency bisquare M-step. It resists up to 50% contamination yet retains ≈95% Gaussian efficiency. The subsampling is seeded — pass an <code>rng</code> for reproducibility.</p><pre><code class="language-julia hljs">using Random
+mm = estimate_robust(y, X, method=:mm, rng=MersenneTwister(1),
+                     varnames=[&quot;(Intercept)&quot;, &quot;Air.Flow&quot;, &quot;Water.Temp&quot;, &quot;Acid.Conc.&quot;])
+report(mm)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Robust Regression (MM-estimation, Tukey bisquare)
+
+  Specification
+
+  Method            MM-estimation
+  Influence fn.    Tukey bisquare
+  Tuning const.             4.685
+  Observations                 21
+  Covariates                    4
+  Robust scale             1.0855
+  Robust R-sq.             0.5868
+  Downweighted           19 of 21
+  Rejected (w≈0)                4
+  Converged                   Yes
+  Iterations                   11
+
+                                    Coefficients
+
+                   Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
+
+  (Intercept)   -37.1305     4.5054   -8.2413   &lt;0.001   -46.6361   -27.6249   ***
+  Air.Flow        0.8182     0.0511   16.0191   &lt;0.001     0.7104     0.9259   ***
+  Water.Temp      0.5198     0.1394    3.7296   0.0017     0.2258     0.8139   ***
+  Acid.Conc.     -0.0726     0.0592   -1.2262   0.2368    -0.1975     0.0523
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>On the stackloss data the MM fit reproduces the canonical Rousseeuw &amp; Leroy (1987) result, assigning <span>$\psi$</span>-weight ≈ 0 to observations 1, 3, 4, and 21:</p><pre><code class="language-julia hljs">findall(&lt;(0.05), mm.weights)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">4-element Vector{Int64}:
+  1
+  3
+  4
+ 21</code></pre><p>Covariance is the Huber–Ronchetti sandwich <span>$V = \hat s^2\,\frac{(1/n)\sum \psi(u_i)^2}{[(1/n)\sum \psi&#39;(u_i)]^2}\,(X&#39;X)^{-1}$</span>, reported through the usual coefficient table.</p><div class="admonition is-info" id="MM-scale-vs-MASS::rlm-75be3aa5507f7fe5"><header class="admonition-header">MM scale vs `MASS::rlm`<a class="admonition-anchor" href="#MM-scale-vs-MASS::rlm-75be3aa5507f7fe5" title="Permalink"></a></header><div class="admonition-body"><p><code>estimate_robust(method=:mm)</code> uses the standard Tukey biweight M-scale for the S-step (as in <code>robustbase::lmrob</code>). <code>MASS::rlm(method=&quot;MM&quot;)</code> seeds its scale from <code>lqs</code>, whose non-standard scale estimator over-states the high-breakdown scale; its MM fit therefore stays closer to OLS and down-weights fewer points. The Yohai/Salibian-Barrera-Yohai estimator here recovers the canonical robust fit.</p></div></div><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>psi</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:huber</code></td><td style="text-align: right">Influence function <code>:huber</code> or <code>:bisquare</code> (forced <code>:bisquare</code> for MM)</td></tr><tr><td style="text-align: right"><code>method</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:m</code></td><td style="text-align: right"><code>:m</code> (M-estimation) or <code>:mm</code> (Yohai MM)</td></tr><tr><td style="text-align: right"><code>k</code></td><td style="text-align: right"><code>Real</code></td><td style="text-align: right"><code>1.345</code>/<code>4.685</code></td><td style="text-align: right">ψ tuning constant (Huber <code>k</code> / bisquare <code>c</code>)</td></tr><tr><td style="text-align: right"><code>scale_update</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:mad</code></td><td style="text-align: right"><code>:mad</code> or Huber <code>:proposal2</code> (M-estimation only)</td></tr><tr><td style="text-align: right"><code>rng</code></td><td style="text-align: right"><code>AbstractRNG</code></td><td style="text-align: right"><code>default_rng()</code></td><td style="text-align: right">Seeds MM fast-S subsampling</td></tr></table><hr/><h2 id="Systems-of-Equations:-SUR-and-3SLS"><a class="docs-heading-anchor" href="#Systems-of-Equations:-SUR-and-3SLS">Systems of Equations: SUR and 3SLS</a><a id="Systems-of-Equations:-SUR-and-3SLS-1"></a><a class="docs-heading-anchor-permalink" href="#Systems-of-Equations:-SUR-and-3SLS" title="Permalink"></a></h2><p>The estimators above fit one equation at a time. When several equations are estimated jointly and their errors are correlated across equations, exploiting that correlation improves efficiency. <a href="../api/multivariate/#MacroEconometricModels.estimate_sur-Tuple{AbstractVector}"><code>estimate_sur</code></a> fits Zellner&#39;s (1962) seemingly-unrelated regressions; <a href="../api/multivariate/#MacroEconometricModels.estimate_3sls-Tuple{AbstractVector, Any}"><code>estimate_3sls</code></a> fits the Zellner–Theil (1962) three-stage least squares estimator for simultaneous systems.</p><p>Stack the <span>$M$</span> equations as <span>$y = X\beta + u$</span> with block-diagonal <span>$X = \mathrm{blkdiag}(X_1,\dots,X_M)$</span> and <span>$\mathrm{Cov}(u) = \Sigma \otimes I_T$</span>. <strong>SUR</strong> estimates the residual cross-covariance from equation-by-equation OLS residuals, <span>$\hat\Sigma_{ij} = \hat u_i&#39;\hat u_j / T$</span> (the classical Zellner divisor <span>$T$</span>), then applies feasible GLS:</p><p class="math-container">\[\hat\beta = \left(X&#39;(\hat\Sigma^{-1}\otimes I)X\right)^{-1} X&#39;(\hat\Sigma^{-1}\otimes I)y,
+\qquad
+\widehat{\mathrm{Var}}(\hat\beta) = \left(X&#39;(\hat\Sigma^{-1}\otimes I)X\right)^{-1}.\]</p><p>The efficiency gain comes entirely from cross-equation error correlation: when every equation carries identical regressors the two estimators coincide exactly (Kruskal 1968). The Kronecker product is never materialized — the normal equations are assembled block-wise.</p><p>Pass equations as a vector of <code>(y, X)</code> (or <code>(y, X, names)</code>) tuples. The canonical example is the Grunfeld (1958) investment data for General Electric and Westinghouse:</p><pre><code class="language-julia hljs">using MacroEconometricModels
+pd = load_example(:grunfeld)              # 10-firm investment panel, 1935–1954
+ge = group_data(pd, &quot;General Electric&quot;)
+wh = group_data(pd, &quot;Westinghouse&quot;)
+# invest = col 1; regressors [1, value (col 2), capital (col 3)]
+Xge = hcat(ones(20), ge.data[:, 2], ge.data[:, 3])
+Xwh = hcat(ones(20), wh.data[:, 2], wh.data[:, 3])
+cols = [&quot;const&quot;, &quot;value&quot;, &quot;capital&quot;]
+m = estimate_sur([(ge.data[:, 1], Xge, cols), (wh.data[:, 1], Xwh, cols)];
+                 eqnames = [&quot;GE&quot;, &quot;Westinghouse&quot;])
+report(m)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">SUR — 2 equations, Zellner (1962) FGLS
+
+  System statistic
+
+  Equations                   2
+  Obs./eq.                   20
+  det(Sigma)         27455.9834
+  McElroy R-sq           0.6284
+  Log-lik.              -158.96
+  Iterations                  1
+
+                                  Equation: GE
+
+               Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
+
+  const     -27.7193    27.0328   -1.0254   0.3195   -84.7536    29.3150
+  value       0.0383     0.0133    2.8826   0.0103     0.0103     0.0663   **
+  capital     0.1390     0.0230    6.0357   &lt;0.001     0.0904     0.1876   ***
+
+                            Equation: Westinghouse
+
+              Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
+
+  const     -1.2520     6.9563   -0.1800   0.8593   -15.9286    13.4246
+  value      0.0576     0.0134    4.2972   &lt;0.001     0.0293     0.0859   ***
+  capital    0.0640     0.0489    1.3083   0.2082    -0.0392     0.1672
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>The footer reports <span>$\det\hat\Sigma$</span>, the McElroy (1977) system R², the Gaussian system log-likelihood, and the FGLS iteration count. These match R&#39;s <code>systemfit(..., method = &quot;SUR&quot;)</code> (Henningsen &amp; Hamann 2007).</p><p><strong>Iterated FGLS</strong> (<code>iterate = true</code>) alternates between updating <span>$\hat\Sigma$</span> from the current residuals and re-estimating <span>$\hat\beta$</span> until convergence; it reaches the Gaussian maximum-likelihood estimator (iterated FGLS ≡ SUR/FIML for the linear system):</p><pre><code class="language-julia hljs">mi = estimate_sur([(ge.data[:, 1], Xge, cols), (wh.data[:, 1], Xwh, cols)];
+                  eqnames = [&quot;GE&quot;, &quot;Westinghouse&quot;], iterate = true)
+mi.iterations</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">15</code></pre><p><strong>Linear cross-equation restrictions</strong> <span>$R\cdot\mathrm{vec}(B) = r$</span> are imposed via restricted GLS. Here <code>vec(B)</code> stacks the equations&#39; coefficients in order (<code>[const₁, value₁, capital₁, const₂, value₂, capital₂]</code>); this restriction forces the <code>value</code> coefficient to be equal across the two firms:</p><pre><code class="language-julia hljs">R = reshape([0.0, 1, 0, 0, -1, 0], 1, 6)   # value₁ − value₂ = 0
+mr = estimate_sur([(ge.data[:, 1], Xge, cols), (wh.data[:, 1], Xwh, cols)];
+                  eqnames = [&quot;GE&quot;, &quot;Westinghouse&quot;], restrict = (R, [0.0]))
+mr.betas[1][2], mr.betas[2][2]              # equal by construction</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(0.04770233056280869, 0.04770233056280869)</code></pre><p><strong>3SLS</strong> extends SUR to simultaneous systems by first projecting each equation&#39;s regressors onto an instrument space, <span>$\hat X_i = P_{Z_i} X_i$</span>, forming <span>$\hat\Sigma$</span> from equation-by-equation 2SLS residuals, and then applying the SUR GLS step to the projected regressors. Supply instruments as one shared matrix (<code>instruments = :common</code>, the default) or a vector of per-equation matrices (<code>instruments = :perequation</code>):</p><pre><code class="language-julia hljs">Z = hcat(ones(20), ge.data[:, 3], wh.data[:, 3])   # common instruments [1, C_ge, C_wh]
+m3 = estimate_3sls([(ge.data[:, 1], Xge, cols), (wh.data[:, 1], Xwh, cols)], Z;
+                   eqnames = [&quot;GE&quot;, &quot;Westinghouse&quot;])
+report(m3)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">3SLS — 2 equations, Zellner-Theil (1962)
+
+  System statistic
+
+  Equations                    2
+  Obs./eq.                    20
+  det(Sigma)         466418.1750
+  McElroy R-sq            0.5747
+  Instruments/eq            3, 3
+
+                                  Equation: GE
+
+               Coef.   Std.Err.         t    P&gt;|t|    CI lower    CI upper
+
+  const     191.8803   496.7456    0.3863   0.7041   -856.1614   1239.9220
+  value      -0.0818     0.2664   -0.3070   0.7626     -0.6437      0.4802
+  capital     0.1728     0.0695    2.4855   0.0236      0.0261      0.3196   **
+
+                            Equation: Westinghouse
+
+               Coef.   Std.Err.         t    P&gt;|t|    CI lower   CI upper
+
+  const     -40.7640    93.7108   -0.4350    0.669   -238.4766   156.9486
+  value       0.1435     0.2106    0.6817   0.5046     -0.3007     0.5878
+  capital    -0.1477     0.5610   -0.2634   0.7954     -1.3312     1.0358
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>When the instrument set spans every regressor, <span>$P_{Z_i} X_i = X_i$</span> and 3SLS collapses to SUR; when every equation is exactly identified it collapses to equation-by-equation 2SLS.</p><div class="admonition is-info" id="Ill-conditioned-raw-scale-designs-e524ecc066fbb95f"><header class="admonition-header">Ill-conditioned raw-scale designs<a class="admonition-anchor" href="#Ill-conditioned-raw-scale-designs-e524ecc066fbb95f" title="Permalink"></a></header><div class="admonition-body"><p>The Grunfeld regressors span several orders of magnitude, so the normal-equation cross-product <span>$X&#39;X$</span> has condition number <span>$\approx 10^8$</span>. The system estimators solve for the coefficients with QR-based least squares on the design directly (never squaring the condition number), so no rescaling is required. Full-information maximum likelihood is not implemented as a separate optimizer — iterated SUR already reaches the Gaussian MLE for the linear system.</p></div></div><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>iterate</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>false</code></td><td style="text-align: right">Iterate FGLS to the Gaussian MLE (SUR only)</td></tr><tr><td style="text-align: right"><code>tol</code> / <code>maxiter</code></td><td style="text-align: right"><code>Real</code> / <code>Int</code></td><td style="text-align: right"><code>1e-8</code> / <code>100</code></td><td style="text-align: right">Iteration controls (SUR only)</td></tr><tr><td style="text-align: right"><code>restrict</code></td><td style="text-align: right"><code>(R, r)</code> or <code>nothing</code></td><td style="text-align: right"><code>nothing</code></td><td style="text-align: right">Linear cross-equation restriction <span>$R\cdot\mathrm{vec}(B)=r$</span> (SUR only)</td></tr><tr><td style="text-align: right"><code>instruments</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:common</code></td><td style="text-align: right"><code>:common</code> (shared <code>Z</code>) or <code>:perequation</code> (3SLS only)</td></tr><tr><td style="text-align: right"><code>eqnames</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right">auto</td><td style="text-align: right">Equation labels</td></tr></table><hr/><h2 id="Complete-Example"><a class="docs-heading-anchor" href="#Complete-Example">Complete Example</a><a id="Complete-Example-1"></a><a class="docs-heading-anchor-permalink" href="#Complete-Example" title="Permalink"></a></h2><p>This example demonstrates a full cross-sectional regression workflow: OLS estimation with robust standard error comparison, WLS correction for heteroskedasticity, IV estimation for an endogenous regressor, and VIF diagnostics.</p><pre><code class="language-julia hljs"># ──────────────────────────────────────────────────────────────────────
+# Step 1: Generate synthetic cross-sectional data
+# ──────────────────────────────────────────────────────────────────────
+n = 500
+ability = randn(n)                                           # Unobserved
+z1 = randn(n)                                                # Instrument 1
+z2 = randn(n)                                                # Instrument 2
+education = 12.0 .+ 0.5 * z1 .+ 0.3 * z2 .+ 0.4 * ability .+ randn(n)
+experience = abs.(5.0 .+ 3.0 * randn(n))
+wage = 5.0 .+ 0.8 * education .+ 0.3 * experience .+ 0.6 * ability .+ experience .* 0.2 .* randn(n)
+
+# ──────────────────────────────────────────────────────────────────────
+# Step 2: OLS with default HC1 robust SEs
+# ──────────────────────────────────────────────────────────────────────
+X = hcat(ones(n), education, experience)
+m_ols = estimate_reg(wage, X; varnames=[&quot;(Intercept)&quot;, &quot;education&quot;, &quot;experience&quot;])
+report(m_ols)
+
+# ──────────────────────────────────────────────────────────────────────
+# Step 3: WLS (inverse variance weights based on experience)
+# ──────────────────────────────────────────────────────────────────────
+w = 1.0 ./ (experience .^ 2)
+m_wls = estimate_reg(wage, X; weights=w,
+                      varnames=[&quot;(Intercept)&quot;, &quot;education&quot;, &quot;experience&quot;])
+report(m_wls)
+
+# ──────────────────────────────────────────────────────────────────────
+# Step 4: IV/2SLS to correct for endogeneity
+# ──────────────────────────────────────────────────────────────────────
+Z = hcat(ones(n), z1, z2, experience)   # Instruments + exogenous regressors
+m_iv = estimate_iv(wage, X, Z; endogenous=[2],
+                    varnames=[&quot;(Intercept)&quot;, &quot;education&quot;, &quot;experience&quot;])
+report(m_iv)
+
+# ──────────────────────────────────────────────────────────────────────
+# Step 5: VIF diagnostics
+# ──────────────────────────────────────────────────────────────────────
+round.(vif(m_ols), digits=2)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">2-element Vector{Float64}:
+ 1.0
+ 1.0</code></pre><pre><code class="language-julia hljs">p_ols = plot_result(m_ols)
+p_iv = plot_result(m_iv)</code></pre><p>The OLS estimate of the return to education is biased upward because ability is positively correlated with both education and wages. The 2SLS estimator instruments education with distance to college and quarter of birth, recovering a coefficient closer to the true value of 0.8. The first-stage F confirms strong instruments, and the Sargan test does not reject instrument validity. The VIF values are low, indicating no multicollinearity concerns between education and experience. The WLS estimates account for heteroskedasticity driven by experience, producing more efficient coefficient estimates for the wage equation.</p><hr/><h2 id="Common-Pitfalls"><a class="docs-heading-anchor" href="#Common-Pitfalls">Common Pitfalls</a><a id="Common-Pitfalls-1"></a><a class="docs-heading-anchor-permalink" href="#Common-Pitfalls" title="Permalink"></a></h2><ol><li><p><strong>Forgetting the intercept column.</strong> <code>estimate_reg</code> requires the user to include a column of ones in <code>X</code> for the intercept. If omitted, the model is estimated without a constant, which biases <span>$R^2$</span> and the F-test. The <code>CrossSectionData</code> dispatch adds the intercept automatically.</p></li><li><p><strong>Multicollinearity inflating standard errors.</strong> When regressors are highly correlated, individual coefficient estimates become imprecise even though the overall model fit is good. Run <code>vif(m)</code> after estimation –- a VIF above 10 signals severe multicollinearity. Remedial actions include dropping redundant regressors, combining correlated variables into an index, or using principal components.</p></li><li><p><strong>Ignoring heteroskedasticity without robust SEs.</strong> Classical standard errors assume <span>$\text{Var}(u|X) = \sigma^2 I$</span>. When this assumption fails, t-statistics and confidence intervals are unreliable. The default <code>cov_type=:hc1</code> provides a safe baseline; use <code>cov_type=:hc3</code> for small samples (<span>$n &lt; 250$</span>) with high-leverage observations.</p></li><li><p><strong>Endogeneity bias from omitted variables.</strong> When a regressor is correlated with the error term, OLS is biased and inconsistent regardless of sample size. Instrumental variables estimation via <code>estimate_iv</code> corrects this, but requires instruments that are both relevant (first-stage <span>$F &gt; 10$</span>) and exogenous (untestable when exactly identified).</p></li><li><p><strong>Too few clusters.</strong> Cluster-robust standard errors require <span>$G \to \infty$</span> for consistency. With fewer than 50 clusters, the finite-sample correction is insufficient and inference becomes unreliable. Consider wild cluster bootstrap methods in such cases.</p></li><li><p><strong>Confusing WLS weights with frequency weights.</strong> The <code>weights</code> argument represents inverse-variance weights (<span>$w_i = 1/\text{Var}(u_i)$</span>), not frequency weights. For frequency-weighted regression, multiply each weight by the observation count.</p></li><li><p><strong>Using the two-sided <span>$\Omega$</span> where the one-sided <span>$\Lambda$</span> is required.</strong> Fully-modified OLS, CCR, and panel cointegration need <span>$\Lambda = \sum_{j \geq 0} \Gamma_j$</span> (no transpose). Feeding them <code>lrvar</code>/<code>lrcov</code> (which return <span>$\Omega = \Lambda + \Lambda&#39; - \Gamma_0$</span>) silently biases the second-stage correction –- always call <code>lrcov_oneside</code> for those estimators.</p></li></ol><hr/><h2 id="References"><a class="docs-heading-anchor" href="#References">References</a><a id="References-1"></a><a class="docs-heading-anchor-permalink" href="#References" title="Permalink"></a></h2><ul><li><p>Aitken, A. C. (1936). On Least Squares and Linear Combination of Observations. <em>Proceedings of the Royal Society of Edinburgh</em>, 55, 42-48. <a href="https://doi.org/10.1017/S0370164600014346">DOI</a></p></li><li><p>Arellano, M. (1987). Computing Robust Standard Errors for Within-Groups Estimators. <em>Oxford Bulletin of Economics and Statistics</em>, 49(4), 431-434. <a href="https://doi.org/10.1111/j.1468-0084.1987.mp49004006.x">DOI</a></p></li><li><p>Andrews, D. W. K. (1991). Heteroskedasticity and Autocorrelation Consistent Covariance Matrix Estimation. <em>Econometrica</em>, 59(3), 817-858. <a href="https://doi.org/10.2307/2938229">DOI</a></p></li><li><p>Andrews, D. W. K., &amp; Monahan, J. C. (1992). An Improved Heteroskedasticity and Autocorrelation Consistent Covariance Matrix Estimator. <em>Econometrica</em>, 60(4), 953-966. <a href="https://doi.org/10.2307/2951574">DOI</a></p></li><li><p>Anderson, T. W., &amp; Rubin, H. (1949). Estimation of the Parameters of a Single Equation in a Complete System of Stochastic Equations. <em>Annals of Mathematical Statistics</em>, 20(1), 46-63. <a href="https://doi.org/10.1214/aoms/1177730090">DOI</a></p></li><li><p>Belloni, A., &amp; Chernozhukov, V. (2013). Least Squares After Model Selection in High-Dimensional Sparse Models. <em>Bernoulli</em>, 19(2), 521-547. <a href="https://doi.org/10.3150/11-BEJ410">DOI</a></p></li><li><p>Belsley, D. A., Kuh, E., &amp; Welsch, R. E. (1980). <em>Regression Diagnostics: Identifying Influential Data and Sources of Collinearity</em>. New York: Wiley. ISBN 978-0-471-05856-4.</p></li><li><p>Brown, R. L., Durbin, J., &amp; Evans, J. M. (1975). Techniques for Testing the Constancy of Regression Relationships over Time. <em>Journal of the Royal Statistical Society, Series B</em>, 37(2), 149-192. <a href="https://doi.org/10.1111/j.2517-6161.1975.tb01532.x">DOI</a></p></li><li><p>Chow, G. C. (1960). Tests of Equality Between Sets of Coefficients in Two Linear Regressions. <em>Econometrica</em>, 28(3), 591-605. <a href="https://doi.org/10.2307/1910133">DOI</a></p></li><li><p>Edgerton, D., &amp; Wells, C. (1994). Critical Values for the CUSUMSQ Statistic in Medium and Large Sized Samples. <em>Oxford Bulletin of Economics and Statistics</em>, 56(3), 355-365. <a href="https://doi.org/10.1111/j.1468-0084.1994.mp56003008.x">DOI</a></p></li><li><p>Den Haan, W. J., &amp; Levin, A. T. (1997). A Practitioner&#39;s Guide to Robust Covariance Matrix Estimation. In <em>Handbook of Statistics</em>, Vol. 15, 299-342. Elsevier. <a href="https://doi.org/10.1016/S0169-7161(97)15014-3">DOI</a></p></li><li><p>Cameron, A. C., &amp; Miller, D. L. (2015). A Practitioner&#39;s Guide to Cluster-Robust Inference. <em>Journal of Human Resources</em>, 50(2), 317-372. <a href="https://doi.org/10.3368/jhr.50.2.317">DOI</a></p></li><li><p>Friedman, J., Hastie, T., &amp; Tibshirani, R. (2010). Regularization Paths for Generalized Linear Models via Coordinate Descent. <em>Journal of Statistical Software</em>, 33(1), 1-22. <a href="https://doi.org/10.18637/jss.v033.i01">DOI</a></p></li><li><p>Greene, W. H. (2018). <em>Econometric Analysis</em>. 8th ed. New York: Pearson. ISBN 978-0-13-446136-6.</p></li><li><p>Hoerl, A. E., &amp; Kennard, R. W. (1970). Ridge Regression: Biased Estimation for Nonorthogonal Problems. <em>Technometrics</em>, 12(1), 55-67. <a href="https://doi.org/10.1080/00401706.1970.10488634">DOI</a></p></li><li><p>Hansen, L. P. (1982). Large Sample Properties of Generalized Method of Moments Estimators. <em>Econometrica</em>, 50(4), 1029-1054. <a href="https://doi.org/10.2307/1912775">DOI</a></p></li><li><p>Hendry, D. F., &amp; Krolzig, H.-M. (2005). The Properties of Automatic Gets Modelling. <em>Economic Journal</em>, 115(502), C32-C61. <a href="https://doi.org/10.1111/j.0013-0133.2005.00979.x">DOI</a></p></li><li><p>Hoover, K. D., &amp; Perez, S. J. (1999). Data Mining Reconsidered: Encompassing and the General-to-Specific Approach to Specification Search. <em>Econometrics Journal</em>, 2(2), 167-191. <a href="https://doi.org/10.1111/1368-423X.00025">DOI</a></p></li><li><p>Pretis, F., Reade, J. J., &amp; Sucarrat, G. (2018). Automated General-to-Specific (GETS) Regression Modeling and Indicator Saturation for Outliers and Structural Breaks. <em>Journal of Statistical Software</em>, 86(3), 1-44. <a href="https://doi.org/10.18637/jss.v086.i03">DOI</a></p></li><li><p>Heckman, J. J. (1979). Sample Selection Bias as a Specification Error. <em>Econometrica</em>, 47(1), 153-161. <a href="https://doi.org/10.2307/1912352">DOI</a></p></li><li><p>Brownlee, K. A. (1965). <em>Statistical Theory and Methodology in Science and Engineering</em>. 2nd ed. New York: Wiley, pp. 491-500. (Source of the <code>:stackloss</code> dataset.)</p></li><li><p>Huber, P. J. (1964). Robust Estimation of a Location Parameter. <em>The Annals of Mathematical Statistics</em>, 35(1), 73-101. <a href="https://doi.org/10.1214/aoms/1177703732">DOI</a></p></li><li><p>Huber, P. J., &amp; Ronchetti, E. M. (2009). <em>Robust Statistics</em>. 2nd ed. Hoboken, NJ: Wiley. <a href="https://doi.org/10.1002/9780470434697">DOI</a></p></li><li><p>Rousseeuw, P. J., &amp; Leroy, A. M. (1987). <em>Robust Regression and Outlier Detection</em>. New York: Wiley. <a href="https://doi.org/10.1002/0471725382">DOI</a></p></li><li><p>Salibian-Barrera, M., &amp; Yohai, V. J. (2006). A Fast Algorithm for S-Regression Estimates. <em>Journal of Computational and Graphical Statistics</em>, 15(2), 414-427. <a href="https://doi.org/10.1198/106186006X113629">DOI</a></p></li><li><p>Yohai, V. J. (1987). High Breakdown-Point and High Efficiency Robust Estimates for Regression. <em>The Annals of Statistics</em>, 15(2), 642-656. <a href="https://doi.org/10.1214/aos/1176350366">DOI</a></p></li><li><p>MacKinnon, J. G., &amp; White, H. (1985). Some Heteroskedasticity-Consistent Covariance Matrix Estimators with Improved Finite Sample Properties. <em>Journal of Econometrics</em>, 29(3), 305-325. <a href="https://doi.org/10.1016/0304-4076(85)90158-7">DOI</a></p></li><li><p>Mroz, T. A. (1987). The Sensitivity of an Empirical Model of Married Women&#39;s Hours of Work to Economic and Statistical Assumptions. <em>Econometrica</em>, 55(4), 765-799. <a href="https://doi.org/10.2307/1911029">DOI</a></p></li><li><p>Newey, W. K., &amp; West, K. D. (1994). Automatic Lag Selection in Covariance Matrix Estimation. <em>Review of Economic Studies</em>, 61(4), 631-653. <a href="https://doi.org/10.2307/2297912">DOI</a></p></li><li><p>Sargan, J. D. (1958). The Estimation of Economic Relationships Using Instrumental Variables. <em>Econometrica</em>, 26(3), 393-415. <a href="https://doi.org/10.2307/1907619">DOI</a></p></li><li><p>Fuller, W. A. (1977). Some Properties of a Modification of the Limited Information Estimator. <em>Econometrica</em>, 45(4), 939-953. <a href="https://doi.org/10.2307/1912683">DOI</a></p></li><li><p>Staiger, D., &amp; Stock, J. H. (1997). Instrumental Variables Regression with Weak Instruments. <em>Econometrica</em>, 65(3), 557-586. <a href="https://doi.org/10.2307/2171753">DOI</a></p></li><li><p>Theil, H. (1953). Repeated Least Squares Applied to Complete Equation Systems. <em>The Hague: Central Planning Bureau</em>.</p></li><li><p>Tibshirani, R. (1996). Regression Shrinkage and Selection via the Lasso. <em>Journal of the Royal Statistical Society, Series B</em>, 58(1), 267-288. <a href="https://doi.org/10.1111/j.2517-6161.1996.tb02080.x">DOI</a></p></li><li><p>White, H. (1980). A Heteroskedasticity-Consistent Covariance Matrix Estimator and a Direct Test for Heteroskedasticity. <em>Econometrica</em>, 48(4), 817-838. <a href="https://doi.org/10.2307/1912934">DOI</a></p></li><li><p>Zellner, A. (1962). An Efficient Method of Estimating Seemingly Unrelated Regressions and Tests for Aggregation Bias. <em>Journal of the American Statistical Association</em>, 57(298), 348-368. <a href="https://doi.org/10.1080/01621459.1962.10480664">DOI</a></p></li><li><p>Zellner, A., &amp; Theil, H. (1962). Three-Stage Least Squares: Simultaneous Estimation of Simultaneous Equations. <em>Econometrica</em>, 30(1), 54-78. <a href="https://doi.org/10.2307/1911287">DOI</a></p></li><li><p>Kruskal, W. (1968). When Are Gauss-Markov and Least Squares Estimators Identical? A Coordinate-Free Approach. <em>The Annals of Mathematical Statistics</em>, 39(1), 70-75. <a href="https://doi.org/10.1214/aoms/1177698505">DOI</a></p></li><li><p>McElroy, M. B. (1977). Goodness of Fit for Seemingly Unrelated Regressions. <em>Journal of Econometrics</em>, 6(3), 381-387. <a href="https://doi.org/10.1016/0304-4076(77)90008-1">DOI</a></p></li><li><p>Henningsen, A., &amp; Hamann, J. D. (2007). systemfit: A Package for Estimating Systems of Simultaneous Equations in R. <em>Journal of Statistical Software</em>, 23(4), 1-40. <a href="https://doi.org/10.18637/jss.v023.i04">DOI</a></p></li><li><p>Grunfeld, Y. (1958). <em>The Determinants of Corporate Investment</em>. Ph.D. thesis, University of Chicago. (Source of the <code>:grunfeld</code> dataset.)</p></li><li><p>Wooldridge, J. M. (2010). <em>Econometric Analysis of Cross Section and Panel Data</em>. 2nd ed. Cambridge, MA: MIT Press. ISBN 978-0-262-23258-6.</p></li><li><p>Zou, H. (2006). The Adaptive Lasso and Its Oracle Properties. <em>Journal of the American Statistical Association</em>, 101(476), 1418-1429. <a href="https://doi.org/10.1198/016214506000000735">DOI</a></p></li><li><p>Zou, H., &amp; Hastie, T. (2005). Regularization and Variable Selection via the Elastic Net. <em>Journal of the Royal Statistical Society, Series B</em>, 67(2), 301-320. <a href="https://doi.org/10.1111/j.1467-9868.2005.00503.x">DOI</a></p></li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../nonlinear/">« Threshold &amp; SETAR</a><a class="docs-footer-nextpage" href="../binary_choice/">Binary Choice Models »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Saturday 18 July 2026 03:53">Saturday 18 July 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
