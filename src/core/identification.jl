@@ -23,8 +23,8 @@ identify_cholesky(model::VARModel{T}) where {T<:AbstractFloat} = safe_cholesky(m
 # =============================================================================
 
 """Generate random orthogonal matrix via QR decomposition (Haar measure)."""
-function generate_Q(n::Int, ::Type{T}=Float64) where {T<:AbstractFloat}
-    X = randn(T, n, n)
+function generate_Q(n::Int, ::Type{T}=Float64; rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    X = randn(rng, T, n, n)
     Q, R = qr(X)
     # Sign-normalize columns by the QR pivots. Use an explicit ±1 map (not `sign`, whose
     # sign(0.0)=0.0 would zero an entire rotation column when a pivot is exactly 0).
@@ -88,17 +88,18 @@ rotations and their IRFs (Baumeister & Hamilton, 2015).
 """
 function identify_sign(model::VARModel{T}, horizon::Int, check_func::Function;
                        max_draws::Int=1000, store_all::Bool=false,
-                       shock_names::Union{Nothing,Vector{String}}=nothing) where {T<:AbstractFloat}
+                       shock_names::Union{Nothing,Vector{String}}=nothing,
+                       rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     n = nvars(model)
 
     if !store_all
         # Original behavior: return first valid Q
         for _ in 1:max_draws
-            Q = generate_Q(n, T)
+            Q = generate_Q(n, T; rng=rng)
             irf_result = compute_irf(model, Q, horizon)
             check_func(irf_result) && return Q, irf_result
         end
-        error("No valid Q found after $max_draws draws")
+        throw(IdentificationError("No valid Q found after $max_draws draws"))
     end
 
     # Full identified set: collect ALL valid rotations
@@ -106,7 +107,7 @@ function identify_sign(model::VARModel{T}, horizon::Int, check_func::Function;
     accepted_irf_list = Array{T,3}[]
 
     for _ in 1:max_draws
-        Q = generate_Q(n, T)
+        Q = generate_Q(n, T; rng=rng)
         irf_result = compute_irf(model, Q, horizon)
         if check_func(irf_result)
             push!(accepted_Q, Q)
@@ -115,7 +116,7 @@ function identify_sign(model::VARModel{T}, horizon::Int, check_func::Function;
     end
 
     n_accepted = length(accepted_Q)
-    n_accepted == 0 && error("No valid Q found after $max_draws draws")
+    n_accepted == 0 && throw(IdentificationError("No valid Q found after $max_draws draws"))
 
     # Stack IRFs into 4D array (n_accepted × horizon × n × n)
     irf_draws = zeros(T, n_accepted, horizon, n, n)
@@ -173,17 +174,18 @@ end
 Combine sign and narrative restrictions. Returns (Q, irf, shocks).
 """
 function identify_narrative(model::VARModel{T}, horizon::Int, sign_check::Function,
-                            narrative_check::Function; max_draws::Int=1000) where {T<:AbstractFloat}
+                            narrative_check::Function; max_draws::Int=1000,
+                            rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     n = nvars(model)
     for _ in 1:max_draws
-        Q = generate_Q(n, T)
+        Q = generate_Q(n, T; rng=rng)
         irf = compute_irf(model, Q, horizon)
         if sign_check(irf)
             shocks = compute_structural_shocks(model, Q)
             narrative_check(shocks) && return Q, irf, shocks
         end
     end
-    error("No valid Q found after $max_draws draws")
+    throw(IdentificationError("No valid Q found after $max_draws draws"))
 end
 
 # =============================================================================
@@ -252,18 +254,21 @@ Compute identification matrix Q for structural VAR analysis.
 function compute_Q(model::VARModel{T}, method::Symbol, horizon::Int, check_func, narrative_check;
                    max_draws::Int=100,
                    transition_var::Union{Nothing,AbstractVector}=nothing,
-                   regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing) where {T<:AbstractFloat}
+                   regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing,
+                   rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     n = nvars(model)
     method == :cholesky && return Matrix{T}(I, n, n)
     method == :sign && (isnothing(check_func) && throw(ArgumentError("Need check_func for sign"));
-                        return identify_sign(model, horizon, check_func; max_draws)[1])
+                        return identify_sign(model, horizon, check_func; max_draws, rng)[1])
     method == :narrative && (isnothing(check_func) || isnothing(narrative_check)) &&
         throw(ArgumentError("Need check_func and narrative_check for narrative"))
-    method == :narrative && return identify_narrative(model, horizon, check_func, narrative_check; max_draws)[1]
+    method == :narrative && return identify_narrative(model, horizon, check_func, narrative_check; max_draws, rng)[1]
     method == :long_run && return identify_long_run(model)
 
     # Non-Gaussian ICA methods (defined in nongaussian_ica.jl, loaded after this file)
-    method == :fastica       && return identify_fastica(model).Q
+    # :fastica is the only statistical-identification method that draws (random init);
+    # jade/sobi/dcov/hsic + all ML/heteroskedastic methods are deterministic (#243).
+    method == :fastica       && return identify_fastica(model; rng=rng).Q
     method == :jade          && return identify_jade(model).Q
     method == :sobi          && return identify_sobi(model).Q
     method == :dcov          && return identify_dcov(model).Q

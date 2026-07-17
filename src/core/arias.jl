@@ -68,8 +68,8 @@ function _compute_ma_coefficients(model::VARModel{T}, horizon::Int) where {T<:Ab
 end
 
 """Draw uniformly from O(n) via QR decomposition."""
-function _draw_uniform_orthogonal(n::Int, ::Type{T}=Float64) where {T<:AbstractFloat}
-    X = randn(T, n, n)
+function _draw_uniform_orthogonal(n::Int, ::Type{T}=Float64; rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    X = randn(rng, T, n, n)
     F = qr(X)
     Q = Matrix(F.Q)
     R_diag = diag(F.R)
@@ -110,8 +110,8 @@ _build_zero_constraint_matrix(r::SVARRestrictions, shock::Int, Phi::Vector{Matri
     [Vector{T}((Phi[zr.horizon + 1] * L)[zr.variable, :]) for zr in r.zeros if zr.shock == shock]
 
 """Draw unit vector from null space of constraints."""
-function _draw_null_space_vector(constraints::Vector{Vector{T}}, n::Int) where {T<:AbstractFloat}
-    isempty(constraints) && return (x = randn(T, n); x / norm(x))
+function _draw_null_space_vector(constraints::Vector{Vector{T}}, n::Int; rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    isempty(constraints) && return (x = randn(rng, T, n); x / norm(x))
 
     F = reduce(vcat, [c' for c in constraints])
     svd_result = svd(F, full=true)
@@ -122,20 +122,21 @@ function _draw_null_space_vector(constraints::Vector{Vector{T}}, n::Int) where {
     null_dim <= 0 && error("Zero restrictions over-constrain shock")
 
     N = V[:, (rank_F + 1):n]
-    z = randn(T, null_dim)
+    z = randn(rng, T, null_dim)
     q = N * z
     q / norm(q)
 end
 
 """Draw orthogonal Q satisfying zero restrictions (Algorithm 2, Arias et al. 2018)."""
 function _draw_Q_with_zero_restrictions(r::SVARRestrictions, Phi::Vector{Matrix{T}},
-                                         L::LowerTriangular{T,Matrix{T}}) where {T<:AbstractFloat}
+                                         L::LowerTriangular{T,Matrix{T}};
+                                         rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     n = r.n_vars
     Q = zeros(T, n, n)
     for j in 1:n
         zero_constraints = _build_zero_constraint_matrix(r, j, Phi, L)
         ortho_constraints = [Vector{T}(Q[:, k]) for k in 1:j-1]
-        Q[:, j] = _draw_null_space_vector(vcat(zero_constraints, ortho_constraints), n)
+        Q[:, j] = _draw_null_space_vector(vcat(zero_constraints, ortho_constraints), n; rng=rng)
     end
     @assert norm(Q' * Q - I) < 1e-10 "Q not orthogonal"
     Q
@@ -151,13 +152,14 @@ struct _AriasSVARSetup{T<:AbstractFloat}
     dim::Int                      # total sphere dimension = Σ s_j
 end
 
-function _AriasSVARSetup(restrictions::SVARRestrictions, n::Int, ::Type{T}) where {T<:AbstractFloat}
+function _AriasSVARSetup(restrictions::SVARRestrictions, n::Int, ::Type{T};
+                        rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     zeros_per_shock = zeros(Int, n)
     for zr in restrictions.zeros
         zeros_per_shock[zr.shock] += 1
     end
     sphere_dims = [n - (j - 1) - zeros_per_shock[j] for j in 1:n]
-    W = [randn(T, s, n) for s in sphere_dims]
+    W = [randn(rng, T, s, n) for s in sphere_dims]
     _AriasSVARSetup{T}(W, zeros_per_shock, sphere_dims, sum(sphere_dims))
 end
 
@@ -361,10 +363,10 @@ function _spheres_to_Q(w::AbstractVector{T}, setup::_AriasSVARSetup, restriction
 end
 
 """Draw w from product of unit spheres S^{s_1-1} × ... × S^{s_n-1}."""
-function _draw_w(setup::_AriasSVARSetup{T}) where {T}
+function _draw_w(setup::_AriasSVARSetup{T}; rng::AbstractRNG=Random.default_rng()) where {T}
     w_parts = Vector{T}()
     for s_j in setup.sphere_dims
-        x = randn(T, s_j)
+        x = randn(rng, T, s_j)
         append!(w_parts, x / norm(x))
     end
     Vector{T}(w_parts)
@@ -522,7 +524,8 @@ combinations. For pure sign restrictions, draws uniformly from O(n) with unit we
 """
 function identify_arias(model::VARModel{T}, restrictions::SVARRestrictions, horizon::Int;
                         n_draws::Int=1000, n_rotations::Int=1000,
-                        compute_weights::Bool=true) where {T<:AbstractFloat}
+                        compute_weights::Bool=true,
+                        rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     n = nvars(model)
     @assert restrictions.n_vars == n "Restriction dimension must match model"
 
@@ -537,15 +540,15 @@ function identify_arias(model::VARModel{T}, restrictions::SVARRestrictions, hori
     last_err = nothing
 
     # Create setup once for zero restrictions (W matrices fixed for all draws)
-    setup = has_zeros ? _AriasSVARSetup(restrictions, n, T) : nothing
+    setup = has_zeros ? _AriasSVARSetup(restrictions, n, T; rng=rng) : nothing
 
     while length(Q_draws) < n_draws && n_attempts < n_draws * n_rotations
         n_attempts += 1
         try
             if has_zeros
-                Q = _draw_Q_with_zero_restrictions(restrictions, Phi, L)
+                Q = _draw_Q_with_zero_restrictions(restrictions, Phi, L; rng=rng)
             else
-                Q = _draw_uniform_orthogonal(n, T)
+                Q = _draw_uniform_orthogonal(n, T; rng=rng)
             end
             irf = _compute_irf_for_Q(model, Q, Phi, L, horizon)
 
@@ -566,9 +569,9 @@ function identify_arias(model::VARModel{T}, restrictions::SVARRestrictions, hori
         end
     end
 
-    isempty(Q_draws) && error("No valid identification after $n_attempts attempts" *
+    isempty(Q_draws) && throw(IdentificationError("No valid identification after $n_attempts attempts" *
         (last_err === nothing ? "" :
-         "; last rejectable failure: $(typeof(last_err)): $(sprint(showerror, last_err))"))
+         "; last rejectable failure: $(typeof(last_err)): $(sprint(showerror, last_err))")))
 
     n_acc = length(Q_draws)
     irf_array = zeros(T, n_acc, horizon, n, n)
@@ -590,7 +593,8 @@ Creates the `_AriasSVARSetup` once (W matrices fixed across all posterior draws)
 """
 function identify_arias_bayesian(post::BVARPosterior, restrictions::SVARRestrictions, horizon::Int;
     data::Union{Nothing,AbstractMatrix}=nothing, n_rotations::Int=100,
-    quantiles::Vector{Float64}=[0.16, 0.5, 0.84], compute_weights::Bool=true)
+    quantiles::Vector{Float64}=[0.16, 0.5, 0.84], compute_weights::Bool=true,
+    rng::AbstractRNG=Random.default_rng())
 
     use_data = isnothing(data) ? (isempty(post.data) ? nothing : post.data) : data
     p, n = post.p, post.n
@@ -603,7 +607,7 @@ function identify_arias_bayesian(post::BVARPosterior, restrictions::SVARRestrict
         m = parameters_to_model(b_vecs[s,:], sigmas[s,:], p, n, use_data)
         try
             result = identify_arias(m, restrictions, horizon;
-                n_draws=1, n_rotations=n_rotations, compute_weights=compute_weights)
+                n_draws=1, n_rotations=n_rotations, compute_weights=compute_weights, rng=rng)
             for (i, w) in enumerate(result.weights)
                 push!(all_irfs, result.irf_draws[i, :, :, :])
                 push!(all_weights, w)
@@ -615,7 +619,7 @@ function identify_arias_bayesian(post::BVARPosterior, restrictions::SVARRestrict
         end
     end
 
-    isempty(all_irfs) && error("No valid identifications across posterior")
+    isempty(all_irfs) && throw(IdentificationError("No valid identifications across posterior"))
 
     n_acc = length(all_irfs)
     irf_array = zeros(n_acc, horizon, n, n)

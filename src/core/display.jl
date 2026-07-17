@@ -12,18 +12,30 @@ and common formatting helpers used across all show methods in the package.
 """
 
 using PrettyTables
+using ScopedValues: ScopedValue
+import ScopedValues
 
 # =============================================================================
 # Display Backend Configuration
 # =============================================================================
 
-# Global display backend (:text, :latex, :html)
-const _DISPLAY_BACKEND = Ref{Symbol}(:text)
+# Display backend (:text, :latex, :html). Hybrid design (#249, finding G-08):
+#   _DISPLAY_BACKEND_DEFAULT — process-wide default, set by `set_display_backend`
+#                              (mutating; preserves the historical top-level API).
+#   _DISPLAY_BACKEND         — per-task scoped override set by `with_display_backend`;
+#                              `nothing` ⇒ fall back to the process default.
+# `get_display_backend` reads the scoped value FIRST, so two concurrent tasks each
+# under their own `with_display_backend` scope never collide (a `ScopedValue` is
+# task-inherited; the old single `Ref` was shared and order-dependent).
+const _DISPLAY_BACKEND_DEFAULT = Ref{Symbol}(:text)
+const _DISPLAY_BACKEND = ScopedValue{Union{Nothing,Symbol}}(nothing)
 
 """
     set_display_backend(backend::Symbol)
 
-Set the PrettyTables output backend. Options: `:text` (default), `:latex`, `:html`.
+Set the process-wide default PrettyTables output backend. Options: `:text` (default),
+`:latex`, `:html`. For a task-local, concurrency-safe override use
+[`with_display_backend`](@ref) instead.
 
 # Examples
 ```julia
@@ -34,15 +46,37 @@ set_display_backend(:text)    # back to terminal-friendly text
 """
 function set_display_backend(backend::Symbol)
     backend ∈ (:text, :latex, :html) || throw(ArgumentError("backend must be :text, :latex, or :html, got :$backend"))
-    _DISPLAY_BACKEND[] = backend
+    _DISPLAY_BACKEND_DEFAULT[] = backend
 end
 
 """
     get_display_backend() -> Symbol
 
-Return the current PrettyTables display backend (`:text`, `:latex`, or `:html`).
+Return the PrettyTables display backend in effect (`:text`, `:latex`, or `:html`):
+the task-scoped override from an enclosing [`with_display_backend`](@ref) if one is
+active, otherwise the process default set by [`set_display_backend`](@ref).
 """
-get_display_backend() = _DISPLAY_BACKEND[]
+get_display_backend() = something(_DISPLAY_BACKEND[], _DISPLAY_BACKEND_DEFAULT[])
+
+"""
+    with_display_backend(f, backend::Symbol)
+
+Run `f()` with the PrettyTables display backend set to `backend` for the current task
+(and any tasks it spawns) only, restoring the previous setting on exit. Unlike
+[`set_display_backend`](@ref), this is concurrency-safe: two tasks may render under
+different backends simultaneously without interfering with one another.
+
+# Examples
+```julia
+latex_str = with_display_backend(:latex) do
+    sprint(show, model)   # emits LaTeX regardless of the process default
+end
+```
+"""
+function with_display_backend(f, backend::Symbol)
+    backend ∈ (:text, :latex, :html) || throw(ArgumentError("backend must be :text, :latex, or :html, got :$backend"))
+    ScopedValues.with(f, _DISPLAY_BACKEND => backend)
+end
 
 # Shared borderless text table format (Stata-style)
 const _TEXT_TABLE_FORMAT = TextTableFormat(
@@ -59,7 +93,7 @@ For `:text` backend, applies `_TEXT_TABLE_FORMAT` automatically.
 For `:latex` and `:html` backends, omits text-only formatting options.
 """
 function _pretty_table(io::IO, data; kwargs...)
-    be = _DISPLAY_BACKEND[]
+    be = get_display_backend()
     if be == :text
         pretty_table(io, data; backend = :text, table_format = _TEXT_TABLE_FORMAT, kwargs...)
     elseif be == :latex

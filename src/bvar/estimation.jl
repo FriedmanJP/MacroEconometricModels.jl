@@ -60,7 +60,8 @@ function estimate_bvar(Y::AbstractMatrix{T}, p::Int;
     burnin::Int=0, thin::Int=1,
     prior::Symbol=:normal,
     hyper::Union{Nothing,MinnesotaHyperparameters}=nothing,
-    varnames::Union{Vector{String},Nothing}=nothing
+    varnames::Union{Vector{String},Nothing}=nothing,
+    rng::AbstractRNG=Random.default_rng()
 ) where {T<:AbstractFloat}
 
     _validate_data(Y, "Y")
@@ -109,11 +110,11 @@ function estimate_bvar(Y::AbstractMatrix{T}, p::Int;
     vn = something(varnames, ["y$i" for i in 1:n])
 
     if sampler == :direct
-        return _sample_direct(Y, p, n, k, n_draws, B_post, V_post, ν_post, S_post, prior, vn)
+        return _sample_direct(Y, p, n, k, n_draws, B_post, V_post, ν_post, S_post, prior, vn, rng)
     elseif sampler == :gibbs
         eff_burnin = burnin == 0 ? 200 : burnin
         return _sample_gibbs(Y, p, n, k, n_draws, eff_burnin, thin,
-                             Y_data, X_data, V0_inv, B0, ν0, S0, prior, vn)
+                             Y_data, X_data, V0_inv, B0, ν0, S0, prior, vn, rng)
     else
         throw(ArgumentError("Unknown sampler: $sampler. Use :direct or :gibbs"))
     end
@@ -129,7 +130,8 @@ end
 function _sample_direct(Y::Matrix{T}, p::Int, n::Int, k::Int, n_draws::Int,
                         B_post::Matrix{T}, V_post::Matrix{T},
                         ν_post::Int, S_post::Matrix{T}, prior::Symbol,
-                        varnames::Vector{String}) where {T<:AbstractFloat}
+                        varnames::Vector{String},
+                        rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
 
     B_draws = Array{T,3}(undef, n_draws, k, n)
     Sigma_draws = Array{T,3}(undef, n_draws, n, n)
@@ -140,13 +142,13 @@ function _sample_direct(Y::Matrix{T}, p::Int, n::Int, k::Int, n_draws::Int,
 
     for s in 1:n_draws
         # Step 1: Draw Σ ~ IW(ν_post, S_post)
-        Sigma = _draw_inverse_wishart(ν_post, S_post)
+        Sigma = _draw_inverse_wishart(ν_post, S_post, rng)
 
         # Step 2: Draw B | Σ ~ MN(B_post, V_post, Σ)
         #   vec(B) ~ N(vec(B_post), Σ ⊗ V_post)
         #   Efficient: B = B_post + L_V * Z * L_Σ' where Z ~ N(0, I_{k×n})
         L_Sigma = safe_cholesky(Sigma)
-        randn!(Z_buf)
+        randn!(rng, Z_buf)
         B = B_post + L_V * Z_buf * L_Sigma'
 
         B_draws[s, :, :] = B
@@ -166,7 +168,8 @@ function _sample_gibbs(Y::Matrix{T}, p::Int, n::Int, k::Int,
                        Y_data::Matrix{T}, X_data::Matrix{T},
                        V0_inv::Matrix{T}, B0::Matrix{T},
                        ν0::Int, S0::Matrix{T}, prior::Symbol,
-                       varnames::Vector{String}) where {T<:AbstractFloat}
+                       varnames::Vector{String},
+                       rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
 
     B_draws = Array{T,3}(undef, n_draws, k, n)
     Sigma_draws = Array{T,3}(undef, n_draws, n, n)
@@ -194,7 +197,7 @@ function _sample_gibbs(Y::Matrix{T}, p::Int, n::Int, k::Int,
     for s in 1:total_iters
         # Block 1: Draw B | Σ, Y
         L_Sigma = safe_cholesky(Sigma_curr)
-        randn!(Z_buf)
+        randn!(rng, Z_buf)
         B_curr = B_post + L_V * Z_buf * L_Sigma'
 
         # Block 2: Draw Σ | B, Y
@@ -202,7 +205,7 @@ function _sample_gibbs(Y::Matrix{T}, p::Int, n::Int, k::Int,
         S_post = S0 + resid' * resid
         S_post = T(0.5) * (S_post + S_post')
         ν_post = ν0 + size(Y_data, 1)
-        Sigma_curr = _draw_inverse_wishart(ν_post, S_post)
+        Sigma_curr = _draw_inverse_wishart(ν_post, S_post, rng)
 
         # Store after burnin, with thinning
         if s > burnin && (s - burnin - 1) % thin == 0
@@ -224,16 +227,17 @@ end
 Draw from Inverse-Wishart(ν, S) distribution.
 Uses the Bartlett decomposition: if X ~ W(ν, S⁻¹), then X⁻¹ ~ IW(ν, S).
 """
-function _draw_inverse_wishart(ν::Int, S::AbstractMatrix{T}) where {T<:AbstractFloat}
+function _draw_inverse_wishart(ν::Int, S::AbstractMatrix{T},
+                               rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     n = size(S, 1)
     L_S_inv = safe_cholesky(robust_inv(S))
 
     # Bartlett decomposition of Wishart
     A = zeros(T, n, n)
     for i in 1:n
-        A[i, i] = sqrt(rand(Chisq(T(ν - i + 1))))
+        A[i, i] = sqrt(rand(rng, Chisq(T(ν - i + 1))))
         for j in 1:(i-1)
-            A[i, j] = randn(T)
+            A[i, j] = randn(rng, T)
         end
     end
 
@@ -363,7 +367,8 @@ fc = forecast(post, 12)
 function forecast(post::BVARPosterior{T}, h::Int;
                   reps::Union{Nothing,Int}=nothing,
                   conf_level::Real=0.95,
-                  point_estimate::Symbol=:mean) where {T}
+                  point_estimate::Symbol=:mean,
+                  rng::AbstractRNG=Random.default_rng()) where {T}
     h < 1 && throw(ArgumentError("Forecast horizon must be positive"))
 
     n, p = post.n, post.p
@@ -407,7 +412,7 @@ function forecast(post::BVARPosterior{T}, h::Int;
             for lag in 1:p
                 y_hat .+= A_list[lag] * @view(history[end - lag + 1, :])
             end
-            y_hat .+= L * randn(T, n)
+            y_hat .+= L * randn(rng, T, n)
             sim[valid, step, :] = y_hat
             # In-place ring shift: drop the oldest row, append `y_hat` as the newest.
             for r in 1:(p - 1)

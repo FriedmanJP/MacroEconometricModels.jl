@@ -69,6 +69,7 @@ using SparseArrays
 using FFTW
 using Dates
 using Downloads
+import SHA
 using DelimitedFiles
 import ForwardDiff
 import NLopt
@@ -80,10 +81,13 @@ import Optim
 # =============================================================================
 
 # Core infrastructure
+include("core/exceptions.jl")
 include("core/utils.jl")
+include("core/tolerances.jl")
 include("core/types.jl")
 include("core/display.jl")
 include("core/kalman.jl")
+include("core/kalman_kernel.jl")
 include("core/quadrature.jl")
 
 # Data containers, validation, transforms, panel, summary stats, examples
@@ -439,6 +443,7 @@ export add_extension!, intensities, emission_multipliers, footprint
 export domar_weights, baqaee_farhi
 export list_io_sources, download_io, download_oecd, download_wiod
 export download_exiobase3, download_eora26, download_gloria, parse_io
+export io_file_digest
 
 # Abstract types
 export AbstractAnalysisResult, AbstractFrequentistResult, AbstractBayesianResult
@@ -671,7 +676,9 @@ export contribution, total_shock_contribution, verify_decomposition
 export report, refs
 export table, print_table
 export point_estimate, has_uncertainty, uncertainty_bounds
-export set_display_backend, get_display_backend
+export set_display_backend, get_display_backend, with_display_backend
+export default_abstol, default_reltol
+export MacroModelError, ConvergenceError, IdentificationError, SingularSystemError
 
 # =============================================================================
 # Exports - Factor Models
@@ -1098,5 +1105,8 @@ function __init__()
         println("under certain conditions; type `conditions()` for details.")
     end
 end
+
+# PrecompileTools workload — LAST, after every entry point is defined (#253).
+include("precompile.jl")
 
 end # module

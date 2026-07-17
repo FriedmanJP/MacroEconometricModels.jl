@@ -130,8 +130,13 @@ function _yule_walker(y::Vector{T}, p::Int) where {T<:AbstractFloat}
         phi = R \ r
         # Truncate to ensure stationarity if needed
         return _truncate_to_stationary(phi)
-    catch
-        # Fallback: return small coefficients
+    catch e
+        # A singular Toeplitz system (e.g. a (near-)constant series) has no Yule-Walker
+        # solution — return a small stationary INIT for the optimizer. This is a starting
+        # point, never a returned fit (`converged` reflects Optim.converged), so it is honest.
+        # Genuine programming errors (MethodError/BoundsError/…) propagate.
+        (e isa LinearAlgebra.SingularException || e isa LinearAlgebra.LAPACKException ||
+         e isa LinearAlgebra.PosDefException || e isa DomainError) || rethrow(e)
         return fill(T(0.1), p)
     end
 end

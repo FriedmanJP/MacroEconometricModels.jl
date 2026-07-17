@@ -241,7 +241,9 @@ function ct_kfe(A::SparseMatrixCSC{T,Int}, I::Int, da::T) where {T<:AbstractFloa
     AT[1, :] .= zero(T)
     AT[1, 1] = one(T)
     b[1] = one(T)
-    g_vec = Matrix(AT) \ b
+    # Sparse LU on the SparseMatrixCSC directly — never materialise the dense
+    # 2I×2I matrix (#242).
+    g_vec = lu(AT) \ b
     g_vec = max.(g_vec, zero(T))
     mass = sum(g_vec) * da
     g_vec ./= mass
@@ -458,17 +460,18 @@ end
 Print the continuous-time Aiyagari steady state: equilibrium prices, aggregates, the
 fraction of households at the borrowing constraint, and convergence.
 """
-function report(ss::CTSteadyState{T}) where {T}
+function report(io::IO, ss::CTSteadyState{T}) where {T}
     da = ss.a[2] - ss.a[1]
     constrained = (ss.g[1, 1] + ss.g[1, 2]) * da
     mean_a = ss.K
-    println("Continuous-Time Aiyagari (Achdou et al. 2022) — Steady State")
-    println("  Interest rate   r = ", round(ss.r; digits=6))
-    println("  Wage            w = ", round(ss.w; digits=6))
-    println("  Capital         K = ", round(ss.K; digits=6))
-    println("  Effective labor L = ", round(ss.L; digits=6))
-    println("  Mean wealth       = ", round(mean_a; digits=6))
-    println("  At constraint     = ", round(constrained; digits=6))
-    println("  Converged         = ", ss.converged)
+    println(io, "Continuous-Time Aiyagari (Achdou et al. 2022) — Steady State")
+    println(io, "  Interest rate   r = ", round(ss.r; digits=6))
+    println(io, "  Wage            w = ", round(ss.w; digits=6))
+    println(io, "  Capital         K = ", round(ss.K; digits=6))
+    println(io, "  Effective labor L = ", round(ss.L; digits=6))
+    println(io, "  Mean wealth       = ", round(mean_a; digits=6))
+    println(io, "  At constraint     = ", round(constrained; digits=6))
+    println(io, "  Converged         = ", ss.converged)
     return nothing
 end
+report(ss::CTSteadyState) = report(stdout, ss)   # G-17 (#254): io-routed report

@@ -40,7 +40,8 @@ const _KSC_VARIANCES = [
 
 """Draw mixture indicators s_t | h_t, y* from discrete posterior (in-place)."""
 function _ksc_draw_indicators!(s::Vector{Int}, log_probs::Vector{T},
-                                y_star::Vector{T}, h::Vector{T}) where {T}
+                                y_star::Vector{T}, h::Vector{T},
+                                rng::AbstractRNG=Random.default_rng()) where {T}
     n = length(y_star)
 
     for t in 1:n
@@ -62,7 +63,7 @@ function _ksc_draw_indicators!(s::Vector{Int}, log_probs::Vector{T},
         end
 
         # Sample from categorical
-        u = rand(T)
+        u = rand(rng, T)
         cumprob = zero(T)
         s[t] = 10
         for k in 1:10
@@ -77,11 +78,12 @@ function _ksc_draw_indicators!(s::Vector{Int}, log_probs::Vector{T},
 end
 
 """Draw mixture indicators s_t | h_t, y* from discrete posterior."""
-function _ksc_draw_indicators(y_star::Vector{T}, h::Vector{T}) where {T}
+function _ksc_draw_indicators(y_star::Vector{T}, h::Vector{T},
+                              rng::AbstractRNG=Random.default_rng()) where {T}
     n = length(y_star)
     s = Vector{Int}(undef, n)
     log_probs = Vector{T}(undef, 10)
-    _ksc_draw_indicators!(s, log_probs, y_star, h)
+    _ksc_draw_indicators!(s, log_probs, y_star, h, rng)
 end
 
 """
@@ -95,7 +97,8 @@ Writes drawn h_{1:T} into `h_out`, using `h_filt` and `P_filt` as workspace.
 """
 function _ksc_ffbs!(h_out::Vector{T}, h_filt::Vector{T}, P_filt::Vector{T},
                     y_star::Vector{T}, s::Vector{Int},
-                    mu::T, phi::T, sigma_eta::T) where {T}
+                    mu::T, phi::T, sigma_eta::T,
+                    rng::AbstractRNG=Random.default_rng()) where {T}
     n = length(y_star)
     sigma2_eta = sigma_eta^2
 
@@ -123,7 +126,7 @@ function _ksc_ffbs!(h_out::Vector{T}, h_filt::Vector{T}, P_filt::Vector{T},
     end
 
     # Backward sampling
-    h_out[n] = h_filt[n] + sqrt(max(P_filt[n], T(1e-12))) * randn(T)
+    h_out[n] = h_filt[n] + sqrt(max(P_filt[n], T(1e-12))) * randn(rng, T)
 
     for t in (n-1):-1:1
         # Smoother gain
@@ -135,7 +138,7 @@ function _ksc_ffbs!(h_out::Vector{T}, h_filt::Vector{T}, P_filt::Vector{T},
         P_smooth = P_filt[t] - J_t^2 * P_pred_tp1
         P_smooth = max(P_smooth, T(1e-12))
 
-        h_out[t] = h_smooth + sqrt(P_smooth) * randn(T)
+        h_out[t] = h_smooth + sqrt(P_smooth) * randn(rng, T)
     end
 
     h_out
@@ -143,12 +146,13 @@ end
 
 """FFBS allocating variant (for external callers)."""
 function _ksc_ffbs(y_star::Vector{T}, s::Vector{Int},
-                   mu::T, phi::T, sigma_eta::T) where {T}
+                   mu::T, phi::T, sigma_eta::T,
+                   rng::AbstractRNG=Random.default_rng()) where {T}
     n = length(y_star)
     h_out = Vector{T}(undef, n)
     h_filt = Vector{T}(undef, n)
     P_filt = Vector{T}(undef, n)
-    _ksc_ffbs!(h_out, h_filt, P_filt, y_star, s, mu, phi, sigma_eta)
+    _ksc_ffbs!(h_out, h_filt, P_filt, y_star, s, mu, phi, sigma_eta, rng)
 end
 
 """
@@ -157,7 +161,8 @@ Draw parameters (μ, φ, σ_η) | h_{1:T} via conjugate updates and MH.
 - σ_η²: Inverse-Gamma conjugate update
 - (μ, φ): Joint Metropolis-Hastings with stationarity constraint |φ| < 1
 """
-function _ksc_draw_params(h::Vector{T}, mu_curr::T, phi_curr::T, sigma_eta_curr::T) where {T}
+function _ksc_draw_params(h::Vector{T}, mu_curr::T, phi_curr::T, sigma_eta_curr::T,
+                          rng::AbstractRNG=Random.default_rng()) where {T}
     n = length(h)
 
     # --- Draw σ_η² from IG posterior ---
@@ -171,14 +176,14 @@ function _ksc_draw_params(h::Vector{T}, mu_curr::T, phi_curr::T, sigma_eta_curr:
     end
     a_post = a0 + T(n - 1) / T(2)
     b_post = b0 + ss / T(2)
-    sigma2_eta_new = b_post / rand(Gamma(a_post))  # IG draw via reciprocal of Gamma
+    sigma2_eta_new = b_post / rand(rng, Gamma(a_post))  # IG draw via reciprocal of Gamma
     sigma_eta_new = sqrt(sigma2_eta_new)
 
     # --- Draw (μ, φ) via MH ---
     # Proposal: random walk on (μ, logit_phi)
     logit_phi_curr = log((one(T) + phi_curr) / (one(T) - phi_curr + T(1e-10)))
-    mu_prop = mu_curr + T(0.1) * randn(T)
-    logit_phi_prop = logit_phi_curr + T(0.1) * randn(T)
+    mu_prop = mu_curr + T(0.1) * randn(rng, T)
+    logit_phi_prop = logit_phi_curr + T(0.1) * randn(rng, T)
     phi_prop = (T(2) / (one(T) + exp(-logit_phi_prop))) - one(T)
 
     # Check stationarity
@@ -215,7 +220,7 @@ function _ksc_draw_params(h::Vector{T}, mu_curr::T, phi_curr::T, sigma_eta_curr:
         log_alpha = (ll_prop + log_prior_prop + log_jac_prop) -
                     (ll_curr + log_prior_curr + log_jac_curr)
 
-        if log(rand(T)) < log_alpha
+        if log(rand(rng, T)) < log_alpha
             return (mu_prop, phi_prop, sigma_eta_new)
         end
     end
@@ -228,28 +233,31 @@ end
 # =============================================================================
 
 """Draw scale mixture variables λ_t | y_t, h_t, ν for Student-t SV (in-place)."""
-function _ksc_draw_lambda!(lambda::Vector{T}, y::Vector{T}, h::Vector{T}, nu::T) where {T}
+function _ksc_draw_lambda!(lambda::Vector{T}, y::Vector{T}, h::Vector{T}, nu::T,
+                           rng::AbstractRNG=Random.default_rng()) where {T}
     n = length(y)
     for t in 1:n
         a = (nu + one(T)) / T(2)
         b = (nu + y[t]^2 * exp(-h[t])) / T(2)
-        lambda[t] = rand(Gamma(a)) / b  # Gamma → 1/IG
+        lambda[t] = rand(rng, Gamma(a)) / b  # Gamma → 1/IG
     end
     lambda
 end
 
 """Draw scale mixture variables λ_t | y_t, h_t, ν for Student-t SV."""
-function _ksc_draw_lambda(y::Vector{T}, h::Vector{T}, nu::T) where {T}
+function _ksc_draw_lambda(y::Vector{T}, h::Vector{T}, nu::T,
+                          rng::AbstractRNG=Random.default_rng()) where {T}
     lambda = Vector{T}(undef, length(y))
-    _ksc_draw_lambda!(lambda, y, h, nu)
+    _ksc_draw_lambda!(lambda, y, h, nu, rng)
 end
 
 """Draw degrees of freedom ν | λ_{1:T} via MH with log-normal proposal."""
-function _ksc_draw_nu(lambda::Vector{T}, nu_curr::T) where {T}
+function _ksc_draw_nu(lambda::Vector{T}, nu_curr::T,
+                     rng::AbstractRNG=Random.default_rng()) where {T}
     n = length(lambda)
 
     # Proposal
-    nu_prop = exp(log(nu_curr) + T(0.1) * randn(T))
+    nu_prop = exp(log(nu_curr) + T(0.1) * randn(rng, T))
     nu_prop < T(2.01) && return nu_curr
 
     # Log-likelihood of λ | ν
@@ -270,7 +278,7 @@ function _ksc_draw_nu(lambda::Vector{T}, nu_curr::T) where {T}
     log_jac = log(nu_prop) - log(nu_curr)
 
     log_alpha = (ll_prop + log_prior_prop + log_jac) - (ll_curr + log_prior_curr)
-    if log(rand(T)) < log_alpha
+    if log(rand(rng, T)) < log_alpha
         return nu_prop
     end
     nu_curr
@@ -287,7 +295,8 @@ FFBS for leverage SV: h_t depends on z_{t-1} = y_{t-1}/σ_{t-1}.
     h_t = μ + φ(h_{t-1} - μ) + ρ σ_η z_{t-1} + σ_η √(1-ρ²) η_t
 """
 function _ksc_ffbs_leverage(y_star::Vector{T}, y::Vector{T}, s::Vector{Int},
-                            mu::T, phi::T, sigma_eta::T, rho::T) where {T}
+                            mu::T, phi::T, sigma_eta::T, rho::T,
+                            rng::AbstractRNG=Random.default_rng()) where {T}
     n = length(y_star)
     sigma2_eta = sigma_eta^2
     sigma_eta_cond = sigma_eta * sqrt(max(one(T) - rho^2, T(1e-8)))
@@ -320,7 +329,7 @@ function _ksc_ffbs_leverage(y_star::Vector{T}, y::Vector{T}, s::Vector{Int},
 
     # Backward sampling
     h = Vector{T}(undef, n)
-    h[n] = h_filt[n] + sqrt(max(P_filt[n], T(1e-12))) * randn(T)
+    h[n] = h_filt[n] + sqrt(max(P_filt[n], T(1e-12))) * randn(rng, T)
 
     for t in (n-1):-1:1
         z_t = y[t] * exp(-h_filt[t] / T(2))
@@ -332,7 +341,7 @@ function _ksc_ffbs_leverage(y_star::Vector{T}, y::Vector{T}, s::Vector{Int},
         P_smooth = P_filt[t] - J_t^2 * P_pred_tp1
         P_smooth = max(P_smooth, T(1e-12))
 
-        h[t] = h_smooth + sqrt(P_smooth) * randn(T)
+        h[t] = h_smooth + sqrt(P_smooth) * randn(rng, T)
     end
 
     h
@@ -340,12 +349,13 @@ end
 
 """Draw ρ | h, y, μ, φ, σ_η via MH."""
 function _ksc_draw_rho(h::Vector{T}, y::Vector{T},
-                       mu::T, phi::T, sigma_eta::T, rho_curr::T) where {T}
+                       mu::T, phi::T, sigma_eta::T, rho_curr::T,
+                       rng::AbstractRNG=Random.default_rng()) where {T}
     n = length(h)
 
     # Proposal: truncated random walk on atanh(ρ)
     atanh_curr = atanh(clamp(rho_curr, T(-0.999), T(0.999)))
-    atanh_prop = atanh_curr + T(0.1) * randn(T)
+    atanh_prop = atanh_curr + T(0.1) * randn(rng, T)
     rho_prop = tanh(atanh_prop)
 
     function _loglik_rho(rho_val::T)
@@ -369,7 +379,7 @@ function _ksc_draw_rho(h::Vector{T}, y::Vector{T},
     log_jac_prop = -log(max(one(T) - rho_prop^2, T(1e-10)))
 
     log_alpha = (ll_prop + log_jac_prop) - (ll_curr + log_jac_curr)
-    if log(rand(T)) < log_alpha
+    if log(rand(rng, T)) < log_alpha
         return rho_prop
     end
     rho_curr
@@ -409,7 +419,8 @@ println("φ = ", mean(model.phi_post))
 function estimate_sv(y::AbstractVector{T};
                      n_samples::Int=2000, burnin::Int=1000,
                      dist::Symbol=:normal, leverage::Bool=false,
-                     quantile_levels::Vector{<:Real}=[0.025, 0.5, 0.975]) where {T<:AbstractFloat}
+                     quantile_levels::Vector{<:Real}=[0.025, 0.5, 0.975],
+                     rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     _validate_data(y, "y")
     n = length(y)
     n < 20 && throw(ArgumentError("Need at least 20 observations for SV model, got $n"))
@@ -460,27 +471,27 @@ function estimate_sv(y::AbstractVector{T};
         end
 
         # Step 1: Draw mixture indicators s_t | h_t, y*
-        _ksc_draw_indicators!(s_buf, log_probs_buf, y_star_eff, h)
+        _ksc_draw_indicators!(s_buf, log_probs_buf, y_star_eff, h, rng)
 
         # Step 2: Draw h_{1:T} via FFBS
         if leverage
-            h = _ksc_ffbs_leverage(y_star_eff, y_vec, s_buf, mu, phi, sigma_eta, rho)
+            h = _ksc_ffbs_leverage(y_star_eff, y_vec, s_buf, mu, phi, sigma_eta, rho, rng)
         else
-            _ksc_ffbs!(h, h_filt_buf, P_filt_buf, y_star_eff, s_buf, mu, phi, sigma_eta)
+            _ksc_ffbs!(h, h_filt_buf, P_filt_buf, y_star_eff, s_buf, mu, phi, sigma_eta, rng)
         end
 
         # Step 3: Draw (μ, φ, σ_η)
-        mu, phi, sigma_eta = _ksc_draw_params(h, mu, phi, sigma_eta)
+        mu, phi, sigma_eta = _ksc_draw_params(h, mu, phi, sigma_eta, rng)
 
         # Step 4 (leverage): Draw ρ
         if leverage
-            rho = _ksc_draw_rho(h, y_vec, mu, phi, sigma_eta, rho)
+            rho = _ksc_draw_rho(h, y_vec, mu, phi, sigma_eta, rho, rng)
         end
 
         # Step 5 (Student-t): Draw λ_t and ν
         if dist == :studentt
-            _ksc_draw_lambda!(lambda, y_vec, h, nu)
-            nu = _ksc_draw_nu(lambda, nu)
+            _ksc_draw_lambda!(lambda, y_vec, h, nu, rng)
+            nu = _ksc_draw_nu(lambda, nu, rng)
         end
 
         # Store post-burnin

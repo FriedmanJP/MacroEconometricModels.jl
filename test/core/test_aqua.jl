@@ -8,10 +8,9 @@ using Aqua
 using MacroEconometricModels
 
 @testset "Aqua.jl" begin
-    Aqua.test_all(
-        MacroEconometricModels;
-        ambiguities=false,       # Skip ambiguity tests (can have false positives with StatsAPI)
-        deps_compat=false,       # Skip deps compat (stdlib packages don't need compat)
-        persistent_tasks=false,  # Flaky on macOS ARM (dependency init timers)
-    )
+    # All gates enabled (#251). Verified on macOS-ARM (the platform previously cited as
+    # persistent_tasks-flaky): ambiguities = 0 (no excludes needed), persistent_tasks
+    # stable across repeated runs, deps_compat passes now that every dep/weakdep AND the
+    # test-only extras (Aqua/Documenter/Logging/Test) carry [compat] entries.
+    Aqua.test_all(MacroEconometricModels)
 end

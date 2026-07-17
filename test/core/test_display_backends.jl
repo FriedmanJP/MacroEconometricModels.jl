@@ -304,3 +304,81 @@ end
         @test (redirect_stdout(devnull) do; refs(:johansen); end; true)
     end
 end
+
+@testset "with_display_backend (scoped, concurrency-safe) — #249" begin
+    Random.seed!(2049)
+    m = estimate_var(randn(80, 2), 1)
+    set_display_backend(:text)   # process default
+
+    @testset "scoped override restores on exit" begin
+        @test get_display_backend() == :text
+        out = with_display_backend(:latex) do
+            @test get_display_backend() == :latex
+            sprint(show, m)
+        end
+        @test occursin("tabular", out)
+        @test get_display_backend() == :text
+    end
+
+    @testset "nesting pops back to the enclosing scope" begin
+        with_display_backend(:latex) do
+            @test get_display_backend() == :latex
+            with_display_backend(:html) do
+                @test get_display_backend() == :html
+            end
+            @test get_display_backend() == :latex
+        end
+        @test get_display_backend() == :text
+    end
+
+    @testset "invalid backend throws" begin
+        @test_throws ArgumentError with_display_backend(identity, :pdf)
+    end
+
+    @testset "scope wins over the process default" begin
+        set_display_backend(:html)
+        try
+            @test get_display_backend() == :html
+            with_display_backend(:latex) do
+                @test get_display_backend() == :latex
+            end
+            @test get_display_backend() == :html
+        finally
+            set_display_backend(:text)
+        end
+    end
+
+    @testset "child tasks inherit the scope" begin
+        out = with_display_backend(:latex) do
+            fetch(Threads.@spawn sprint(show, m))
+        end
+        @test occursin("tabular", out) && !occursin("<table>", out)
+    end
+
+    @testset "concurrent tasks under different backends do not collide" begin
+        # The old single shared Ref let one task's backend clobber another's read under
+        # interleaving (finding G-08). A ScopedValue keeps each task's scope isolated;
+        # the explicit yield() forces the interleaving that would expose a shared Ref.
+        n = 32
+        latex_out = Vector{String}(undef, n)
+        html_out  = Vector{String}(undef, n)
+        @sync for i in 1:n
+            Threads.@spawn (latex_out[i] = with_display_backend(:latex) do
+                yield(); sprint(show, m)
+            end)
+            Threads.@spawn (html_out[i] = with_display_backend(:html) do
+                yield(); sprint(show, m)
+            end)
+        end
+        @test all(s -> occursin("tabular", s) && !occursin("<table>", s), latex_out)
+        @test all(s -> occursin("<table>", s) && !occursin("tabular", s), html_out)
+        @test get_display_backend() == :text   # default untouched throughout
+    end
+
+    @testset "default :text render is deterministic and unpolluted" begin
+        a = sprint(show, m)
+        b = sprint(show, m)
+        @test a == b
+        @test !occursin("tabular", a) && !occursin("<table>", a)
+    end
+end

@@ -106,14 +106,15 @@ _get_contrast(sym::Symbol) = sym == :logcosh ? _contrast_logcosh :
 
 """FastICA deflation: extract components one at a time."""
 function _fastica_deflation(Z::Matrix{T}, n::Int; contrast::Symbol=:logcosh,
-                            max_iter::Int=200, tol::T=T(1e-6)) where {T<:AbstractFloat}
+                            max_iter::Int=200, tol::T=T(1e-6),
+                            rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     T_obs = size(Z, 1)
     g_func = _get_contrast(contrast)
     W = zeros(T, n, n)
     total_iter = 0
 
     for p in 1:n
-        w = randn(T, n)
+        w = randn(rng, T, n)
         w /= norm(w)
 
         for iter in 1:max_iter
@@ -147,12 +148,13 @@ end
 
 """FastICA symmetric: extract all components simultaneously."""
 function _fastica_symmetric(Z::Matrix{T}, n::Int; contrast::Symbol=:logcosh,
-                            max_iter::Int=200, tol::T=T(1e-6)) where {T<:AbstractFloat}
+                            max_iter::Int=200, tol::T=T(1e-6),
+                            rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     T_obs = size(Z, 1)
     g_func = _get_contrast(contrast)
 
     # Initialize W with random orthogonal matrix
-    W = Matrix{T}(qr(randn(T, n, n)).Q)
+    W = Matrix{T}(qr(randn(rng, T, n, n)).Q)
     total_iter = 0
 
     for iter in 1:max_iter
@@ -207,14 +209,15 @@ Arguments:
 """
 function identify_fastica(model::VARModel{T}; contrast::Symbol=:logcosh,
                           approach::Symbol=:deflation, max_iter::Int=200,
-                          tol::T=T(1e-6)) where {T<:AbstractFloat}
+                          tol::T=T(1e-6),
+                          rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     n = nvars(model)
     Z, W_white, dewhiten = _whiten(model.U)
 
     if approach == :deflation
-        W_ica, iters = _fastica_deflation(Z, n; contrast=contrast, max_iter=max_iter, tol=tol)
+        W_ica, iters = _fastica_deflation(Z, n; contrast=contrast, max_iter=max_iter, tol=tol, rng=rng)
     else
-        W_ica, iters = _fastica_symmetric(Z, n; contrast=contrast, max_iter=max_iter, tol=tol)
+        W_ica, iters = _fastica_symmetric(Z, n; contrast=contrast, max_iter=max_iter, tol=tol, rng=rng)
     end
 
     # Full unmixing in original space
@@ -226,7 +229,7 @@ function identify_fastica(model::VARModel{T}; contrast::Symbol=:logcosh,
     obj = zero(T)
     for j in 1:n
         s = @view shocks[:, j]
-        obj += abs(mean(x -> g_func(x)[1], s) - mean(x -> g_func(x)[1], randn(T, length(s))))
+        obj += abs(mean(x -> g_func(x)[1], s) - mean(x -> g_func(x)[1], randn(rng, T, length(s))))
     end
 
     ICASVARResult{T}(B0, W_full, Q, shocks, :fastica, iters < max_iter * n, iters, obj)

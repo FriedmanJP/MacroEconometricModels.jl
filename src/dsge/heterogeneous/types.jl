@@ -353,14 +353,20 @@ Fields:
 - `adjustment_cost::Union{Nothing,Function}` — optional `χ(d)` portfolio adjustment cost (two-asset)
 - `n_asset_dims::Int` — number of asset dimensions (1 or 2)
 """
-struct IndividualProblem{T<:AbstractFloat}
-    utility::Function
-    utility_prime::Function
-    utility_prime_inv::Function
+# Parameterized on the concrete function-field types (#254 G-14): the EGM/VFI inner loops
+# call ip.utility/utility_prime/… on a concretely-typed `ip` argument, so specialization
+# removes the dynamic dispatch that abstract ::Function fields forced. Leading {T} is kept —
+# IndividualProblem{T}(...) infers FU…FA via the inner ctor, and ::IndividualProblem{T}
+# dispatch (used throughout egm/vfi/ssj/reiter/krusell_smith/steady_state) still matches by
+# partial parameterization, so no call site changes.
+struct IndividualProblem{T<:AbstractFloat, FU, FUP, FUPI, FB, FA}
+    utility::FU
+    utility_prime::FUP
+    utility_prime_inv::FUPI
     beta::T
-    budget_fn::Function
+    budget_fn::FB
     borrowing_constraint::Vector{T}
-    adjustment_cost::Union{Nothing,Function}
+    adjustment_cost::FA   # Nothing (one-asset) or a concrete χ(d) function type (two-asset)
     n_asset_dims::Int
 
     function IndividualProblem{T}(utility, utility_prime, utility_prime_inv, beta,
@@ -369,8 +375,10 @@ struct IndividualProblem{T<:AbstractFloat}
         @assert zero(T) < beta < one(T) "Discount factor must be in (0, 1)"
         @assert n_asset_dims in (1, 2) "Only 1 or 2 asset dimensions supported"
         @assert length(borrowing_constraint) == n_asset_dims "Borrowing constraint length must match n_asset_dims"
-        new{T}(utility, utility_prime, utility_prime_inv, beta,
-               budget_fn, borrowing_constraint, adjustment_cost, n_asset_dims)
+        new{T, typeof(utility), typeof(utility_prime), typeof(utility_prime_inv),
+            typeof(budget_fn), typeof(adjustment_cost)}(
+            utility, utility_prime, utility_prime_inv, beta,
+            budget_fn, borrowing_constraint, adjustment_cost, n_asset_dims)
     end
 end
 
@@ -475,6 +483,8 @@ Fields:
 - `n_reduced::Int` — reduced state dimension
 - `explained_variance::T` — fraction of variance captured by reduction
 - `jacobians::Union{Nothing,Dict{Symbol,Matrix{T}}}` — optional Jacobian matrices
+- `C_obs::Matrix{T}` — reduced-state → aggregate-output map (Ho-Kalman `C`; identity for Reiter)
+- `D_obs::Matrix{T}` — direct shock feed-through to aggregate outputs (`D = h[0]`)
 """
 struct HADSGESolution{T<:AbstractFloat}
     steady_state::HASteadyState{T}
@@ -486,6 +496,8 @@ struct HADSGESolution{T<:AbstractFloat}
     n_reduced::Int
     explained_variance::T
     jacobians::Union{Nothing,Dict{Symbol,Matrix{T}}}
+    C_obs::Matrix{T}
+    D_obs::Matrix{T}
 end
 
 # Accessors — delegate to linear_solution

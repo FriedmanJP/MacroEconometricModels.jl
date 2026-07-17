@@ -2594,7 +2594,7 @@ end
     violvec[5:8] .= true  # binding in periods 5-8
     shock_path = zeros(10, 1)
 
-    @test_throws ErrorException MacroEconometricModels._backward_iteration(
+    @test_throws ConvergenceError MacroEconometricModels._backward_iteration(
         ref, alt, d_ref, d_alt, P, Q, violvec, shock_path)
 end
 

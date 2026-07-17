@@ -8,7 +8,8 @@ import MacroEconometricModels: _parse_zip_io, IOData
 # next `n_fd` are final demand.
 function _parse_zip_io(path::AbstractString; source=nothing, year=nothing,
                        member::AbstractString="", n_sectors::Int=0, n_fd::Int=1,
-                       sectors=String[], delim::AbstractChar=',', kwargs...)
+                       sectors=String[], delim::AbstractChar=',',
+                       max_uncompressed::Integer=1_000_000_000, kwargs...)
     r = ZipFile.Reader(path)
     try
         target = if isempty(member)
@@ -18,6 +19,12 @@ function _parse_zip_io(path::AbstractString; source=nothing, year=nothing,
             idx === nothing && throw(ArgumentError("member '$member' not found in $path"))
             r.files[idx]
         end
+        # Zip-bomb guard (#254 G-15): refuse to read a member whose declared uncompressed
+        # size exceeds max_uncompressed (default 1 GB) into memory. Raise max_uncompressed
+        # for a genuinely large table.
+        target.uncompressedsize > max_uncompressed && throw(ErrorException(
+            "zip member '$(target.name)' declares $(target.uncompressedsize) uncompressed " *
+            "bytes, exceeding the $(max_uncompressed)-byte cap; pass max_uncompressed= to raise it."))
         content = read(target, String)
         rows = Vector{Vector{Float64}}()
         for line in split(strip(content), '\n')

@@ -910,9 +910,20 @@ end
 
     # Expression
     @test M._eval_bound(:(1/400), Float64) ≈ 1.0/400.0
+    @test M._eval_bound(:(-(1/400)), Float64) ≈ -1.0/400.0
+    # Int ^ negative-Int would DomainError at runtime; leaf-to-T makes it 2.0^-3.0.
+    @test M._eval_bound(:(2^-3), Float64) == 0.125
+    @test M._eval_bound(:(2 * 3), Float64) ≈ 6.0
+    @test M._eval_bound(:(1 - 0.25), Float64) ≈ 0.75
 
     # Symbol (should error)
     @test_throws ArgumentError M._eval_bound(:x, Float64)
+    # Symbol operand inside an expression
+    @test_throws ArgumentError M._eval_bound(:(a + 1), Float64)
+    # Arbitrary function calls are rejected (runtime eval would have returned sin(1))
+    @test_throws ArgumentError M._eval_bound(:(sin(1)), Float64)
+    # Indexing (:ref) is rejected
+    @test_throws ArgumentError M._eval_bound(:(x[1]), Float64)
 end
 
 @testset "occbin: _derive_alternative_regime" begin

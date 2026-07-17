@@ -304,7 +304,8 @@ result = identify_uhlig(model, restrictions, 20)
 function identify_uhlig(model::VARModel{T}, restrictions::SVARRestrictions, horizon::Int;
                          n_starts::Int=50, n_refine::Int=10,
                          max_iter_coarse::Int=500, max_iter_fine::Int=2000,
-                         tol_coarse::T=T(1e-4), tol_fine::T=T(1e-8)) where {T<:AbstractFloat}
+                         tol_coarse::T=T(1e-4), tol_fine::T=T(1e-8),
+                         rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     n = nvars(model)
     @assert restrictions.n_vars == n "Restriction dimension ($( restrictions.n_vars)) must match model ($n)"
 
@@ -333,8 +334,10 @@ function identify_uhlig(model::VARModel{T}, restrictions::SVARRestrictions, hori
     results_phase1 = Vector{Tuple{T, Vector{T}}}(undef, n_starts)
     fill!(results_phase1, (T(Inf), zeros(T, n_params)))
 
+    seeds1 = rand(rng, UInt64, n_starts)
     Threads.@threads for i in 1:n_starts
-        theta0 = rand(T, n_params) .* T(2π)
+        local_rng = Random.MersenneTwister(seeds1[i])
+        theta0 = rand(local_rng, T, n_params) .* T(2π)
 
         res = try
             Optim.optimize(obj, theta0, Optim.NelderMead(),
@@ -363,11 +366,13 @@ function identify_uhlig(model::VARModel{T}, restrictions::SVARRestrictions, hori
     fill!(results_phase2, (T(Inf), zeros(T, n_params)))
     best_theta_snap = copy(best_theta)
 
+    seeds2 = rand(rng, UInt64, n_refine)
     Threads.@threads for i in 1:n_refine
+        local_rng = Random.MersenneTwister(seeds2[i])
         theta0 = if i == 1
             copy(best_theta_snap)
         else
-            best_theta_snap .+ T(0.01) .* randn(T, n_params)
+            best_theta_snap .+ T(0.01) .* randn(local_rng, T, n_params)
         end
 
         res = try

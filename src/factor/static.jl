@@ -405,7 +405,8 @@ to produce multi-step forecasts and confidence intervals.
 `FactorForecast` with factor and observable forecasts (and CIs if requested).
 """
 function forecast(m::FactorModel{T}, h::Int; p::Int=1, ci_method::Symbol=:theoretical,
-    conf_level::Real=0.95, n_boot::Int=1000) where {T}
+    conf_level::Real=0.95, n_boot::Int=1000,
+    rng::AbstractRNG=Random.default_rng()) where {T}
 
     h < 1 && throw(ArgumentError("h must be ≥ 1"))
     p < 1 && throw(ArgumentError("p must be ≥ 1"))
@@ -471,7 +472,7 @@ function forecast(m::FactorModel{T}, h::Int; p::Int=1, ci_method::Symbol=:theore
     # Bootstrap
     factor_resids = var_model.U
     f_lo, f_hi, o_lo, o_hi, f_se, o_se = _factor_forecast_bootstrap(
-        F_last, A, factor_resids, Sigma_e, Lambda, h, r, p, n_boot, conf_T)
+        F_last, A, factor_resids, Sigma_e, Lambda, h, r, p, n_boot, conf_T, rng)
 
     if m.standardized
         _unstandardize_factor_forecast!(X_fc, o_lo, o_hi, o_se, m.X)

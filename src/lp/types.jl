@@ -186,7 +186,16 @@ struct StructuralLP{T<:AbstractFloat} <: AbstractFrequentistResult
     cov_type::Symbol
     se::Array{T,3}
     lp_models::Vector{LPModel{T}}
+    # MC honesty counts (#244): block-bootstrap draws requested, usable, and dropped.
+    # All zero unless the result was built with ci_type=:bootstrap.
+    n_requested::Int
+    n_effective::Int
+    n_failed::Int
 end
+
+# Backward-compatible constructor (pre-#244, no bootstrap counts ⇒ all zero).
+StructuralLP{T}(irf, structural_shocks, var_model, Q, method, lags, cov_type, se, lp_models) where {T} =
+    StructuralLP{T}(irf, structural_shocks, var_model, Q, method, lags, cov_type, se, lp_models, 0, 0, 0)
 
 # Accessors
 nvars(slp::StructuralLP) = nvars(slp.var_model)
@@ -286,7 +295,20 @@ struct LPFEVD{T<:AbstractFloat} <: AbstractFEVD
     bias_correction::Bool
     variables::Vector{String}
     shocks::Vector{String}
+    # Monte-Carlo honesty counts (#244): total bootstrap draws attempted across all
+    # (shock, response) cells, how many were usable, and how many were dropped by the
+    # recoverable-error catch in the bootstrap loop. n_requested==0 when n_boot==0.
+    n_requested::Int
+    n_effective::Int
+    n_failed::Int
 end
+
+# Backward-compatible constructor (pre-#244 call sites without MC counts): assumes no
+# dropped draws (n_effective == n_requested, n_failed == 0), n_requested == n_boot.
+LPFEVD{T}(proportions, bias_corrected, se, ci_lower, ci_upper, method, horizon, n_boot,
+          conf_level, bias_correction, variables, shocks) where {T} =
+    LPFEVD{T}(proportions, bias_corrected, se, ci_lower, ci_upper, method, horizon, n_boot,
+              conf_level, bias_correction, variables, shocks, n_boot, n_boot, 0)
 
 # =============================================================================
 # StatsAPI Interface for LP Models

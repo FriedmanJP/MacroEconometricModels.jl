@@ -174,9 +174,19 @@ struct BayesianImpulseResponse{T<:AbstractFloat} <: AbstractImpulseResponse
     shocks::Vector{String}
     quantile_levels::Vector{T}
     _draws::Union{Nothing, Array{T,4}}
+    # MC honesty counts (#244): posterior draws requested, usable, and dropped (failed to
+    # solve / non-stationary / identification-rejected).
+    n_requested::Int
+    n_effective::Int
+    n_failed::Int
 end
 
-# Backward-compatible constructor (no draws)
+# Backward-compatible constructors (pre-#244, no MC counts). Default to "no dropped draws":
+# n_requested = n_effective = number of stacked draws (0 when draws absent), n_failed = 0.
+_bir_ndraws(draws) = draws === nothing ? 0 : size(draws, 1)
+BayesianImpulseResponse{T}(quantiles, point_estimate, horizon, variables, shocks, quantile_levels, draws) where {T} =
+    BayesianImpulseResponse{T}(quantiles, point_estimate, horizon, variables, shocks, quantile_levels, draws,
+                               _bir_ndraws(draws), _bir_ndraws(draws), 0)
 BayesianImpulseResponse{T}(quantiles, point_estimate, horizon, variables, shocks, quantile_levels) where {T} =
     BayesianImpulseResponse{T}(quantiles, point_estimate, horizon, variables, shocks, quantile_levels, nothing)
 
@@ -200,7 +210,15 @@ struct BayesianFEVD{T<:AbstractFloat} <: AbstractFEVD
     variables::Vector{String}
     shocks::Vector{String}
     quantile_levels::Vector{T}
+    # MC honesty counts (#244): posterior draws requested, usable, and dropped.
+    n_requested::Int
+    n_effective::Int
+    n_failed::Int
 end
+
+# Backward-compatible constructor (pre-#244, no MC counts ⇒ untracked, no dropped draws).
+BayesianFEVD{T}(quantiles, point_estimate, horizon, variables, shocks, quantile_levels) where {T} =
+    BayesianFEVD{T}(quantiles, point_estimate, horizon, variables, shocks, quantile_levels, 0, 0, 0)
 
 # =============================================================================
 # Priors

@@ -423,7 +423,8 @@ function structural_lp(Y::AbstractMatrix{T}, horizon::Int;
                        transition_var::Union{Nothing,AbstractVector}=nothing,
                        regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing,
                        varnames::Vector{String}=["y$i" for i in 1:size(Y, 2)],
-                       shock_names::Union{Nothing,Vector{String}}=nothing) where {T<:AbstractFloat}
+                       shock_names::Union{Nothing,Vector{String}}=nothing,
+                       rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     T_obs, n = size(Y)
     p = isnothing(var_lags) ? lags : var_lags
 
@@ -435,7 +436,7 @@ function structural_lp(Y::AbstractMatrix{T}, horizon::Int;
 
     # Step 2: Compute identification matrix Q
     Q = compute_Q(var_model, method, horizon, check_func, narrative_check;
-                  max_draws=max_draws, transition_var=transition_var, regime_indicator=regime_indicator)
+                  max_draws=max_draws, transition_var=transition_var, regime_indicator=regime_indicator, rng=rng)
 
     # Step 3: Compute structural shocks
     eps = compute_structural_shocks(var_model, Q)
@@ -461,13 +462,17 @@ function structural_lp(Y::AbstractMatrix{T}, horizon::Int;
         lp_models, n, horizon, ET; conf_level=conf_level)
     ci_sym = :analytical
 
-    # Step 6: Bootstrap CIs if requested (overrides analytical)
+    # Step 6: Bootstrap CIs if requested (overrides analytical). MC honesty counts (#244):
+    # only the bootstrap path draws; :none/:analytical leave the counts at zero.
+    n_req = 0
+    n_fail = 0
     if ci_type == :bootstrap
-        ci_lower, ci_upper = _structural_lp_bootstrap(Matrix{ET}(Y), horizon, n, p, method,
+        ci_lower, ci_upper, n_fail = _structural_lp_bootstrap(Matrix{ET}(Y), horizon, n, p, method,
                                                        lags, cov_type, reps, ET(conf_level),
                                                        check_func, narrative_check, max_draws;
                                                        transition_var=transition_var,
-                                                       regime_indicator=regime_indicator)
+                                                       regime_indicator=regime_indicator, rng=rng)
+        n_req = reps
         ci_sym = :bootstrap
     end
 
@@ -476,7 +481,7 @@ function structural_lp(Y::AbstractMatrix{T}, horizon::Int;
                                       var_model.varnames, snames, ci_sym)
 
     StructuralLP{ET}(irf_result, Matrix{ET}(eps), var_model, Matrix{ET}(Q), method,
-                     lags, cov_type, se_arr, lp_models)
+                     lags, cov_type, se_arr, lp_models, n_req, n_req - n_fail, n_fail)
 end
 
 # Float fallback
@@ -516,19 +521,27 @@ function _structural_lp_bootstrap(Y::AbstractMatrix{T}, horizon::Int, n::Int, p:
                                    check_func, narrative_check,
                                    max_draws::Int;
                                    transition_var::Union{Nothing,AbstractVector}=nothing,
-                                   regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing) where {T<:AbstractFloat}
+                                   regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing,
+                                   rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     T_obs = size(Y, 1)
     sim_irfs = zeros(T, reps, horizon, n, n)
     block_size = max(1, round(Int, T_obs^(1/3)))
 
+    # Pre-seed one MersenneTwister per replication so bootstrap CIs are reproducible and
+    # thread-count invariant: each fixed r-slot draws only on its own local_rng, threaded
+    # into BOTH the block resample and the sign/narrative rejection sampler (#243).
+    seeds = rand(rng, UInt64, reps)
+    n_failed = Threads.Atomic{Int}(0)     # dropped draws (#244 MC honesty count; atomic total
+                                          # is thread-count invariant like the seeded slots)
     Threads.@threads for r in 1:reps
+        local_rng = Random.MersenneTwister(seeds[r])
         # Block bootstrap on Y
-        Y_boot = _block_bootstrap(Y, block_size)
+        Y_boot = _block_bootstrap(Y, block_size, local_rng)
         try
             _suppress_warnings() do
                 var_m = estimate_var(Y_boot, p; check_stability=false)
                 Q_r = compute_Q(var_m, method, horizon, check_func, narrative_check;
-                                max_draws=max_draws, transition_var=transition_var, regime_indicator=regime_indicator)
+                                max_draws=max_draws, transition_var=transition_var, regime_indicator=regime_indicator, rng=local_rng)
                 eps_r = compute_structural_shocks(var_m, Q_r)
 
                 Y_eff_r = Y_boot[(p+1):end, :]
@@ -542,8 +555,11 @@ function _structural_lp_bootstrap(Y::AbstractMatrix{T}, horizon::Int, n::Int, p:
                     end
                 end
             end
-        catch
-            # If bootstrap draw fails (e.g., singular matrix), skip
+        catch e
+            # A recoverable failed bootstrap draw (e.g. singular matrix) is skipped; a
+            # programming error (MethodError/BoundsError/…) propagates (T145/#244).
+            _is_recoverable_draw_error(e) || rethrow(e)
+            Threads.atomic_add!(n_failed, 1)
             continue
         end
     end
@@ -556,18 +572,19 @@ function _structural_lp_bootstrap(Y::AbstractMatrix{T}, horizon::Int, n::Int, p:
         ci_lower[h, v, s] = quantile(d, alpha)
         ci_upper[h, v, s] = quantile(d, 1 - alpha)
     end
-    ci_lower, ci_upper
+    ci_lower, ci_upper, n_failed[]
 end
 
 """Generate a block bootstrap sample from matrix Y."""
-function _block_bootstrap(Y::AbstractMatrix{T}, block_size::Int) where {T<:AbstractFloat}
+function _block_bootstrap(Y::AbstractMatrix{T}, block_size::Int,
+                          rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     T_obs, n = size(Y)
     n_blocks = ceil(Int, T_obs / block_size)
     Y_boot = Matrix{T}(undef, n_blocks * block_size, n)
 
     idx = 1
     for _ in 1:n_blocks
-        start = rand(1:max(1, T_obs - block_size + 1))
+        start = rand(rng, 1:max(1, T_obs - block_size + 1))
         len = min(block_size, T_obs - start + 1)
         Y_boot[idx:idx+len-1, :] = Y[start:start+len-1, :]
         idx += len

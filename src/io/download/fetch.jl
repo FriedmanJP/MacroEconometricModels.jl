@@ -1,9 +1,12 @@
 # fetch.jl — HTTP fetching via the Downloads stdlib (no heavy deps)
 
-"Browser-like headers; plain requests are blocked by several MRIO hosts."
+# Honest User-Agent identifying the tool + repository (#254 G-16). The previous value
+# spoofed a Firefox browser; several MRIO hosts still accept a non-browser UA, and an
+# honest one is the correct default. Override `headers=` on a per-call basis if a host
+# genuinely requires a browser string.
 const IO_HEADERS = Dict(
     "User-Agent" =>
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/131.0",
+        "MacroEconometricModels.jl (+https://github.com/FriedmanJP/MacroEconometricModels.jl)",
 )
 
 "Append a `url => filename` record and a timestamped history line to `meta`."

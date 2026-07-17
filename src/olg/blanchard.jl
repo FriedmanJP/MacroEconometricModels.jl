@@ -14,7 +14,7 @@ out of total wealth is `1 − βγ`, and aggregating the individual consumption 
 cohorts (eliminating human wealth) yields the aggregate system
 
     Euler:  C_{t+1} = (1+r_{t+1}) · [ β C_t − λ (k_{t+1} + b) ],   λ = (1−βγ)(1−γ)/γ
-    Budget: k_{t+1} = (1+r_t) k_t + w_t − r_t b − C_t
+    Budget: k_{t+1} = (1+r_t) k_t + w_t − C_t
     Prices: r_t = α Z k_t^{α−1} − δ,   w_t = (1−α) Z k_t^α
 
 The `(1−γ)` term is the Blanchard correction from generational turnover. When `γ = 1` it
@@ -126,7 +126,8 @@ end
     blanchard_steady_state(m::BlanchardOLG; tol=1e-10, max_iter=200) → BlanchardOLGSteadyState
 
 Compute the stationary equilibrium by bisecting on capital `k` until the budget-implied
-consumption `C = r k + w − r b` equals the Euler-implied consumption
+consumption `C = r k + w` (`= f(k) − δk`; debt service `r·b` cancels in aggregate)
+equals the Euler-implied consumption
 `C = (1+r) λ (k + b) / (β(1+r) − 1)`, with `λ = (1−βγ)(1−γ)/γ`. For `γ = 1` (Ramsey) the
 interest rate is pinned directly at `1/β − 1`.
 """
@@ -138,7 +139,12 @@ function blanchard_steady_state(m::BlanchardOLG{T}; tol::Real=1e-10,
     if m.gamma >= one(T) - eps(T)
         k = k_ram
         r, w = _blanchard_prices(m, k)
-        C = r * k + w - r * m.b
+        # Aggregate consumption C = r·k + w = f(k) − δk (#237). Debt is net wealth
+        # and taxes T = r·b service it, so in aggregate the debt-service terms
+        # cancel (deriving the capital law from a = k+b minus the government budget
+        # gives k_{t+1} = (1+r)k + w − C); a spurious −r·b here double-counted it
+        # for b ≠ 0. Human wealth H below keeps −r·b (after-tax labour income).
+        C = r * k + w
         H = m.b == zero(T) ? w * (one(T) + r) / (one(T) + r - m.gamma) :
             (w - r * m.b) * (one(T) + r) / (one(T) + r - m.gamma)
         return BlanchardOLGSteadyState{T}(k, C, r, w, H, one(T) - m.beta * m.gamma, m.b, true)
@@ -152,7 +158,7 @@ function blanchard_steady_state(m::BlanchardOLG{T}; tol::Real=1e-10,
         r, w = _blanchard_prices(m, k)
         denom = m.beta * (one(T) + r) - one(T)
         denom <= zero(T) && return T(Inf)            # r ≤ 1/β−1: not an OLG equilibrium
-        C_budget = r * k + w - r * m.b
+        C_budget = r * k + w                          # = f(k) − δk; debt service cancels (#237)
         C_euler = (one(T) + r) * lambda * (k + m.b) / denom
         return C_budget - C_euler
     end
@@ -198,7 +204,7 @@ function blanchard_steady_state(m::BlanchardOLG{T}; tol::Real=1e-10,
     end
 
     r, w = _blanchard_prices(m, k)
-    C = r * k + w - r * m.b
+    C = r * k + w                        # = f(k) − δk; debt service cancels (#237)
     H = (w - r * m.b) * (one(T) + r) / (one(T) + r - m.gamma)
     return BlanchardOLGSteadyState{T}(k, C, r, w, H, one(T) - m.beta * m.gamma, m.b, converged)
 end
@@ -300,16 +306,17 @@ end
 Print the Blanchard OLG steady state: capital, consumption, prices, human wealth, the
 log-utility MPC, debt, and convergence.
 """
-function report(ss::BlanchardOLGSteadyState{T}) where {T}
-    println("Blanchard (1985) Perpetual-Youth OLG — Steady State")
-    println("  Capital        k = ", round(ss.k; digits=6))
-    println("  Consumption    C = ", round(ss.C; digits=6))
-    println("  Interest rate  r = ", round(ss.r; digits=6))
-    println("  Wage           w = ", round(ss.w; digits=6))
-    println("  Human wealth   H = ", round(ss.H; digits=6))
-    println("  MPC (1 − βγ)     = ", round(ss.mpc; digits=6))
-    println("  Govt debt      b = ", round(ss.b; digits=6))
-    println("  Converged        = ", ss.converged)
+function report(io::IO, ss::BlanchardOLGSteadyState{T}) where {T}
+    println(io, "Blanchard (1985) Perpetual-Youth OLG — Steady State")
+    println(io, "  Capital        k = ", round(ss.k; digits=6))
+    println(io, "  Consumption    C = ", round(ss.C; digits=6))
+    println(io, "  Interest rate  r = ", round(ss.r; digits=6))
+    println(io, "  Wage           w = ", round(ss.w; digits=6))
+    println(io, "  Human wealth   H = ", round(ss.H; digits=6))
+    println(io, "  MPC (1 − βγ)     = ", round(ss.mpc; digits=6))
+    println(io, "  Govt debt      b = ", round(ss.b; digits=6))
+    println(io, "  Converged        = ", ss.converged)
     return nothing
 end
+report(ss::BlanchardOLGSteadyState) = report(stdout, ss)   # G-17 (#254): io-routed report
 
