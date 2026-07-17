@@ -466,6 +466,17 @@ report(x::LPDiDResult) = show(stdout, x)
 report(x::BaconDecomposition) = show(stdout, x)
 report(x::HonestDiDResult) = show(stdout, x)
 
+# Input-Output analysis
+report(x::IOData) = show(stdout, x)
+report(x::LeontiefModel) = show(stdout, x)
+report(x::GhoshModel) = show(stdout, x)
+report(x::IOMultipliers) = show(stdout, x)
+report(x::LinkageResult) = show(stdout, x)
+report(x::SDAResult) = show(stdout, x)
+report(x::ExtractionResult) = show(stdout, x)
+report(x::BaqaeeFarhiResult) = show(stdout, x)
+report(x::FootprintResult) = show(stdout, x)
+
 # =============================================================================
 # Split Files (table extraction, display, references, nowcasting)
 # =============================================================================

@@ -68,6 +68,8 @@ using Distributions
 using SparseArrays
 using FFTW
 using Dates
+using Downloads
+using DelimitedFiles
 import ForwardDiff
 import NLopt
 import NonlinearSolve
@@ -91,6 +93,21 @@ include("data/transform.jl")
 include("data/panel.jl")
 include("data/summary_stats.jl")
 include("data/examples.jl")
+
+# Input-Output analysis
+include("io/types.jl")
+include("io/coefficients.jl")
+include("io/multipliers.jl")
+include("io/linkages.jl")
+include("io/sda.jl")
+include("io/extraction.jl")
+include("io/environmental.jl")
+include("io/baqaee_farhi.jl")
+include("io/download/fetch.jl")
+include("io/download/registry.jl")
+include("io/download/sources.jl")
+include("io/parse.jl")
+include("io/show.jl")
 
 # Cross-sectional regression
 include("reg/types.jl")
@@ -406,10 +423,21 @@ include("plotting/nowcast.jl")
 include("plotting/did.jl")
 include("plotting/reg.jl")
 include("plotting/spectral.jl")
+include("plotting/io.jl")
 
 # =============================================================================
 # Exports - Types
 # =============================================================================
+
+# Input-Output analysis
+export IOData, IOExtension, IOMetaData
+export technical_coefficients, leontief_inverse, allocation_coefficients, ghosh_inverse
+export leontief, ghosh, multipliers, linkages, rasmussen, key_sectors
+export sda, hypothetical_extraction
+export add_extension!, intensities, emission_multipliers, footprint
+export domar_weights, baqaee_farhi
+export list_io_sources, download_io, download_oecd, download_wiod
+export download_exiobase3, download_eora26, download_gloria, parse_io
 
 # Abstract types
 export AbstractAnalysisResult, AbstractFrequentistResult, AbstractBayesianResult

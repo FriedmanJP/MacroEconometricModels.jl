@@ -135,6 +135,29 @@ const TEST_GROUPS = [
         "coverage/test_vecm_teststat_coverage.jl",
         "coverage/test_misc_coverage.jl",
     ]),
+    # Group 11: Input-Output analysis
+    ("IO Analysis" => [
+        "io/test_io_smoke.jl",
+        "io/test_io_types.jl",
+        "io/test_io_coefficients.jl",
+        "io/test_io_example.jl",
+        "io/test_io_multipliers.jl",
+        "io/test_io_linkages.jl",
+        "io/test_io_sda.jl",
+        "io/test_io_extraction.jl",
+        "io/test_io_environmental.jl",
+        "io/test_io_bf_first.jl",
+        "io/test_io_bf_second.jl",
+        "io/test_io_fetch.jl",
+        "io/test_io_registry.jl",
+        "io/test_io_sources.jl",
+        "io/test_io_parse.jl",
+        "io/test_io_ext_parse.jl",
+        "io/test_io_show.jl",
+        "io/test_io_plotting.jl",
+        "io/test_io_refs.jl",
+        "io/test_io_coverage.jl",
+    ]),
 ]
 
 # Multi-process runner (fallback when threads unavailable)
@@ -154,7 +177,11 @@ function run_test_group(group_name::String, files::Vector{String})
     # Values: 0=none, 1=user, 2=all, 3=tracefile (Julia 1.12+)
     cov_opt = Base.JLOptions().code_coverage
     cov_flag = cov_opt != 0 ? `--code-coverage=user` : ``
-    cmd = `julia $cov_flag --project=$(dirname(test_dir)) -e $code`
+    # Single-thread each child (Julia + OpenBLAS): the test matrices are small, so
+    # multi-threaded BLAS is pure contention and N threads × ~10 children oversubscribes
+    # CI cores. Mirrors the CI.yml env so local multiprocess runs behave identically.
+    cmd = addenv(`julia $cov_flag --project=$(dirname(test_dir)) -e $code`,
+                 "JULIA_NUM_THREADS" => "1", "OPENBLAS_NUM_THREADS" => "1")
     proc = run(pipeline(cmd; stdout=stdout, stderr=stderr); wait=false)
     return proc
 end

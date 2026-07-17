@@ -186,6 +186,17 @@ Pkg.add("MacroEconometricModels")
 - **Analysis** - `irf`, `fevd`, `simulate` dispatch via embedded `DSGESolution`; `distribution_irf` for wealth distribution dynamics; `inequality_irf` for Gini/percentile responses; `simulate_panel` for individual-level data
 - **Visualization** - `plot_result(ss; view=:distribution)` (wealth histogram), `:lorenz` (Lorenz curve with Gini), `:policy` (consumption and savings functions by income state)
 
+### Input-Output Analysis
+- **`IOData` container** - Symmetric input-output tables (intermediate flows, final demand, value added); `load_example(:wiot)` loads the Miller & Blair 2-sector table
+- **Leontief & Ghosh models** - Technical coefficients `A` and Leontief inverse `L` (demand-driven); allocation coefficients `B` and Ghosh inverse `G` (supply-driven)
+- **Multipliers** - Output, income, and employment multipliers (Type I and Type II with household endogenization)
+- **Linkages** - Backward and forward linkages, Rasmussen (1956) power/sensitivity-of-dispersion indices, key-sector classification
+- **Structural decomposition analysis (SDA)** - Additive two-polar and multiplicative decomposition of output change between two periods
+- **Hypothetical extraction** - Backward/forward/total linkage extraction quantifying a sector's importance
+- **Environmental extensions** - Satellite accounts via `add_extension!`; direct/total intensities, emission multipliers, and consumption-based footprints
+- **Baqaee & Farhi (2019)** - Nonlinear production-network model: Domar weights (Hulten first-order), second-order Hessian term, Cobb-Douglas (θ=σ=1) special case
+- **MRIO downloaders** - pymrio-style `download_io(:oecd/:wiod/:exiobase3/:eora26/:gloria)` on the `Downloads` stdlib + URL registry; `parse_io` reads CSV/TSV in-core and `.zip`/`.xlsx` via `ZipFile`/`XLSX` package extensions
+
 ### GMM
 - **Generalized Method of Moments** - One-step, two-step, and iterated; Hansen J-test
 - **Simulated Method of Moments (SMM)** - Simulation-based estimation with HAC-optimal weighting, two-step and iterated
@@ -381,6 +392,14 @@ All documentation code examples execute during the build — `report()` output, 
 - Krusell, Per, and Anthony A. Smith Jr. 1998. "Income and Wealth Heterogeneity in the Macroeconomy." *Journal of Political Economy* 106 (5): 867–896. [https://doi.org/10.1086/250034](https://doi.org/10.1086/250034)
 - Reiter, Michael. 2009. "Solving Heterogeneous-Agent Models by Projection and Perturbation." *Journal of Economic Dynamics and Control* 33 (3): 649–665. [https://doi.org/10.1016/j.jedc.2008.08.010](https://doi.org/10.1016/j.jedc.2008.08.010)
 - Young, Eric R. 2010. "Solving the Incomplete Markets Model with Aggregate Uncertainty Using the Krusell–Smith Algorithm and Non-Stochastic Simulations." *Journal of Economic Dynamics and Control* 34 (1): 36–41. [https://doi.org/10.1016/j.jedc.2008.11.010](https://doi.org/10.1016/j.jedc.2008.11.010)
+
+### Input-Output Analysis
+
+- Baqaee, David Rezza, and Emmanuel Farhi. 2019. "The Macroeconomic Impact of Microeconomic Shocks: Beyond Hulten's Theorem." *Econometrica* 87 (4): 1155–1203. [https://doi.org/10.3982/ECTA15202](https://doi.org/10.3982/ECTA15202)
+- Ghosh, Ambica. 1958. "Input-Output Approach in an Allocation System." *Economica* 25 (97): 58–64. [https://doi.org/10.2307/2550694](https://doi.org/10.2307/2550694)
+- Leontief, Wassily W. 1936. "Quantitative Input and Output Relations in the Economic System of the United States." *Review of Economics and Statistics* 18 (3): 105–125. [https://doi.org/10.2307/1927837](https://doi.org/10.2307/1927837)
+- Miller, Ronald E., and Peter D. Blair. 2009. *Input-Output Analysis: Foundations and Extensions.* 2nd ed. Cambridge: Cambridge University Press. [https://doi.org/10.1017/CBO9780511626982](https://doi.org/10.1017/CBO9780511626982)
+- Rasmussen, P. Nørregaard. 1956. *Studies in Inter-Sectoral Relations.* Amsterdam: North-Holland.
 
 ### GMM and Covariance Estimation
 

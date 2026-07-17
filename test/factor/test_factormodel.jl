@@ -285,4 +285,28 @@ const fm_dof = MacroEconometricModels.dof
         @test all(isfinite, model.factors)
     end
 
+    @testset "F-06 regression: PCA reconstruction == projection & correct Bai-Ng" begin
+        # Reconstruction F·Λ' must equal the true PCA projection X·Vᵣ·Vᵣ', and
+        # factors must be unit-variance (F'F/T = I). Mis-scaled factors (the F-06 bug)
+        # break predict/residuals/r2 and make ic_criteria pick the wrong factor count.
+        Random.seed!(20260623)
+        T, N, rtrue = 200, 30, 3
+        F0 = randn(T, rtrue); Λ0 = randn(N, rtrue)
+        X = F0 * Λ0' + randn(T, N)
+
+        m = estimate_factors(X, rtrue; standardize=false)
+        # projection onto the top-rtrue principal directions
+        ev = eigen(Symmetric(X'X / T)); idx = sortperm(ev.values; rev=true)
+        Vr = ev.vectors[:, idx[1:rtrue]]
+        proj = X * Vr * Vr'
+        @test isapprox(fm_predict(m), proj; rtol=1e-8, atol=1e-8)
+        # factors are unit-variance: F'F/T ≈ I
+        @test isapprox(m.factors' * m.factors / T, Matrix(I, rtrue, rtrue); atol=1e-8)
+        # Bai-Ng recovers the true number of factors on a clear factor structure
+        ic = ic_criteria(X, 8; standardize=false)
+        @test ic.r_IC1 == rtrue
+        @test ic.r_IC2 == rtrue
+        @test ic.r_IC3 == rtrue
+    end
+
 end

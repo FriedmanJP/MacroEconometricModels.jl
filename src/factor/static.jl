@@ -96,9 +96,14 @@ function estimate_factors(X::AbstractMatrix{T}, r::Int;
     idx = sortperm(eig.values, rev=true)
     λ, V = eig.values[idx], eig.vectors[:, idx]
 
-    # Extract loadings and factors
-    loadings = V[:, 1:r] * Diagonal(sqrt.(λ[1:r]))
-    factors = X_proc * V[:, 1:r]
+    # Extract loadings and factors.
+    # Normalize factors to unit variance (F'F/T = Iᵣ) and put the scale in the loadings,
+    # so the reconstruction F·Λ' = X·Vᵣ·Vᵣ' is the true PCA projection. Without the
+    # 1/√λ normalization of `factors`, predict/residuals/r2 and the Bai–Ng `ic_criteria`
+    # are mis-scaled (see audit F-06).
+    sqrtλ = sqrt.(max.(λ[1:r], eps(T)))
+    loadings = V[:, 1:r] * Diagonal(sqrtλ)
+    factors = X_proc * V[:, 1:r] * Diagonal(one(T) ./ sqrtλ)
 
     # Variance explained
     total = sum(λ)
