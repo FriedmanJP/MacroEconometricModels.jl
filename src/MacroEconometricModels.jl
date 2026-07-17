@@ -752,6 +752,7 @@ export granger_test, granger_test_all
 
 # VECM types
 export VECMModel, VECMForecast, VECMGrangerResult
+export VECMRestrictionTest   # EV-38 (#446)
 
 # =============================================================================
 # Exports - VAR Estimation
@@ -766,6 +767,9 @@ export select_lag_order
 
 export estimate_vecm, to_var, select_vecm_rank
 export cointegrating_rank, granger_causality_vecm
+# EV-38 (#446): Johansen LR restriction tests on the cointegrating structure
+export test_beta_restriction, test_alpha_restriction, test_weak_exogeneity
+export test_known_beta, test_joint_restriction
 
 # =============================================================================
 # Exports - Bayesian Estimation

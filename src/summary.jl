@@ -322,6 +322,42 @@ Print VECM Granger causality test results.
 """
 report(g::VECMGrangerResult) = show(stdout, g)
 
+"""
+    report(res::VECMRestrictionTest)
+
+Print a Johansen LR restriction-test summary: the statistic, degrees of freedom,
+p-value, restriction description, and the restricted vs. unrestricted eigenvalues
+(EV-38 / #446).
+"""
+report(res::VECMRestrictionTest) = report(stdout, res)
+function report(io::IO, res::VECMRestrictionTest{T}) where {T}
+    hdr = ["LR χ² statistic" _fmt(res.lr_stat; digits=4);
+           "Degrees of freedom" res.df;
+           "P-value" _format_pvalue(res.pvalue);
+           "Cointegrating rank" res.rank;
+           "Converged" string(res.converged)]
+    _pretty_table(io, hdr;
+        title = "VECM Restriction Test — $(res.description)",
+        column_labels = ["", ""],
+        alignment = [:l, :r],
+    )
+    if !isempty(res.eigenvalues_restricted)
+        r = res.rank
+        eig = Matrix{Any}(undef, r, 3)
+        for i in 1:r
+            eig[i, 1] = "λ$i"
+            eig[i, 2] = _fmt(res.eigenvalues_unrestricted[i]; digits=6)
+            eig[i, 3] = _fmt(res.eigenvalues_restricted[i]; digits=6)
+        end
+        _pretty_table(io, eig;
+            title = "Eigenvalues",
+            column_labels = ["", "Unrestricted", "Restricted"],
+            alignment = [:l, :r, :r],
+        )
+    end
+    println(io, "Note: LR = T Σᵢ ln[(1−λ*ᵢ)/(1−λᵢ)] ~ χ²($(res.df)) under H₀.")
+end
+
 # =============================================================================
 # report() - Time Series Filters
 # =============================================================================

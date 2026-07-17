@@ -28,6 +28,7 @@ const _EXAMPLE_DATASETS = Dict{Symbol, Tuple{String, Symbol}}(
     :gnp_hamilton => ("gnp_hamilton.toml", :timeseries), # EV-07 (#415): Hamilton (1989) GNP growth
     :stackloss => ("stackloss.toml", :crosssection), # EV-40 (#448): Brownlee (1965) stack loss
     :grunfeld => ("grunfeld.toml", :panel), # EV-35 (#443): Grunfeld (1958) 10-firm investment panel
+    :denmark => ("denmark.toml", :timeseries), # EV-38 (#446): Johansen & Juselius (1990) Danish money demand
 )
 
 # Parse frequency string to Frequency enum
@@ -60,6 +61,9 @@ Load a built-in example dataset.
 - `:grunfeld` — Grunfeld (1958) investment panel: 10 firms × 20 years (1935–1954), variables
   `invest`, `value`, `capital` → `PanelData`. The canonical SUR/3SLS dataset; General Electric
   and Westinghouse form the classic Zellner (1962) two-equation system.
+- `:denmark` — Johansen & Juselius (1990) Danish money demand, 1974Q1–1987Q3 (55 obs × 5 vars:
+  `LRM`, `LRY`, `LPY`, `IBO`, `IDE`) → `TimeSeriesData`. The canonical cointegration
+  money-demand dataset for VECM restriction testing (public domain; ships with R `urca`).
 
 For time series datasets, the returned `TimeSeriesData` includes variable names,
 transformation codes, frequency, per-variable descriptions (via `vardesc`),

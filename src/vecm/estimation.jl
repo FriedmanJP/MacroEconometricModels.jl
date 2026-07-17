@@ -79,36 +79,18 @@ function estimate_vecm(Y::AbstractMatrix{T}, p::Int;
         return _vecm_rank_zero(Y, p, n, deterministic, joh, varnames)
     end
 
-    # Construct VECM matrices (parallels johansen.jl)
-    dY = diff(Y, dims=1)
-    Y_lag = Y[p:end-1, :]  # Y_{t-1}
-
-    T_eff = T_obs - p
-    dY_lags = if p > 1
-        hcat([dY[(p-j):(end-j), :] for j in 1:(p-1)]...)
-    else
-        Matrix{T}(undef, T_eff, 0)
-    end
-    dY_eff = dY[p:end, :]
-
-    # Deterministic terms for concentrating out
-    Z = _build_deterministic_Z(T, T_eff, dY_lags, deterministic)
-
-    # Concentrate out short-run dynamics
-    if size(Z, 2) > 0
-        ZtZ_inv = robust_inv(Z'Z)
-        M = I - Z * (ZtZ_inv * Z')
-        R0 = M * dY_eff
-        R1 = M * Y_lag
-    else
-        R0 = copy(dY_eff)
-        R1 = copy(Y_lag)
-    end
-
-    # Moment matrices
-    S00 = (R0'R0) / T_eff
-    S11 = (R1'R1) / T_eff
-    S01 = (R0'R1) / T_eff
+    # Construct VECM matrices (parallels johansen.jl). The concentrated-out
+    # product-moment matrices are factored into `_johansen_moments` so the VECM
+    # restriction tests (EV-38/#446) reuse the identical S00/S11/S01. This
+    # refactor leaves the estimated β, α, Γ, Σ bit-for-bit unchanged.
+    mom = _johansen_moments(Y, p, deterministic)
+    Y_lag  = mom.Y_lag
+    dY_lags = mom.dY_lags
+    dY_eff = mom.dY_eff
+    T_eff  = mom.T_eff
+    S00 = mom.S00
+    S11 = mom.S11
+    S01 = mom.S01
 
     # Eigendecomposition for beta
     S00_inv = robust_inv(S00)
@@ -307,6 +289,49 @@ end
 # =============================================================================
 # Internal Helpers
 # =============================================================================
+
+# Johansen concentrated product-moment matrices for a VECM specification.
+# Factored out of estimate_vecm (EV-38/#446) so the restriction tests reuse the
+# IDENTICAL moments. The deterministic term is concentrated OUT (unrestricted
+# constant/trend), matching how estimate_vecm forms β and α. Returns a NamedTuple
+# with S00/S11/S01 (n×n), plus the pieces estimate_vecm needs downstream
+# (Y_lag, dY_lags, dY_eff, T_eff) and the concentrated residuals R0/R1.
+function _johansen_moments(Y::AbstractMatrix{T}, p::Int, deterministic::Symbol) where {T<:AbstractFloat}
+    T_obs = size(Y, 1)
+    dY = diff(Y, dims=1)
+    Y_lag = Y[p:end-1, :]                 # Y_{t-1}
+
+    T_eff = T_obs - p
+    dY_lags = if p > 1
+        hcat([dY[(p-j):(end-j), :] for j in 1:(p-1)]...)
+    else
+        Matrix{T}(undef, T_eff, 0)
+    end
+    dY_eff = dY[p:end, :]
+
+    # Deterministic terms for concentrating out
+    Z = _build_deterministic_Z(T, T_eff, dY_lags, deterministic)
+
+    # Concentrate out short-run dynamics
+    if size(Z, 2) > 0
+        ZtZ_inv = robust_inv(Z'Z)
+        M = I - Z * (ZtZ_inv * Z')
+        R0 = M * dY_eff
+        R1 = M * Y_lag
+    else
+        R0 = copy(dY_eff)
+        R1 = copy(Y_lag)
+    end
+
+    S00 = (R0'R0) / T_eff
+    S11 = (R1'R1) / T_eff
+    S01 = (R0'R1) / T_eff
+
+    (; S00, S11, S01, Y_lag, dY_lags, dY_eff, T_eff, R0, R1)
+end
+
+# Convenience overload: recompute the moments from an estimated VECMModel.
+_johansen_moments(m::VECMModel) = _johansen_moments(m.Y, m.p, m.deterministic)
 
 # _select_rank_trace relocated to src/teststat/johansen.jl as the single source of the
 # trace-rank rule (shared with johansen_test via _rank_from_trace). (B1/T171)

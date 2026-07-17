@@ -53,6 +53,7 @@ const TEST_GROUPS = [
         "var/test_fevd.jl",
         "var/test_hd.jl",
         "vecm/test_vecm.jl",
+        "vecm/test_vecm_restrictions.jl", # EV-38 (#446)
         "preg/test_panel_iv.jl",          # moved from the ceiling ARIMA group to rebalance (#127)
     ]),
     # Group 4: LP & Factor Models & Nowcasting & DiD
@@ -409,6 +410,7 @@ else
         @testset "FEVD" begin include("var/test_fevd.jl") end
         @testset "Historical Decomposition" begin include("var/test_hd.jl") end
         @testset "VECM" begin include("vecm/test_vecm.jl") end
+        @testset "VECM Restriction Tests" begin include("vecm/test_vecm_restrictions.jl") end
 
         # Group 4: LP & Factor & Nowcast
         @testset "Local Projections" begin include("lp/test_lp.jl") end

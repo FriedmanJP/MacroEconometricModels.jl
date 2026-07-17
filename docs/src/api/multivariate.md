@@ -19,6 +19,7 @@ AbstractVARModel
 VECMModel
 VECMForecast
 VECMGrangerResult
+VECMRestrictionTest
 ```
 
 ---

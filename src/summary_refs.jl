@@ -175,6 +175,17 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Estimation and Hypothesis Testing of Cointegration Vectors in Gaussian Vector Autoregressive Models",
         journal="Econometrica", volume="59", issue="6", pages="1551--1580",
         doi="10.2307/2938278", isbn="", publisher="", entry_type=:article),
+    # EV-38 (#446): VECM restriction testing
+    :johansen_juselius1990 => (key=:johansen_juselius1990,
+        authors="Johansen, S{\\o}ren and Juselius, Katarina", year=1990,
+        title="Maximum Likelihood Estimation and Inference on Cointegration --- with Applications to the Demand for Money",
+        journal="Oxford Bulletin of Economics and Statistics", volume="52", issue="2", pages="169--210",
+        doi="10.1111/j.1468-0084.1990.mp52002003.x", isbn="", publisher="", entry_type=:article),
+    :johansen1995 => (key=:johansen1995, authors="Johansen, S{\\o}ren", year=1995,
+        title="Likelihood-Based Inference in Cointegrated Vector Autoregressive Models",
+        journal="", volume="", issue="", pages="",
+        doi="10.1093/0198774508.001.0001", isbn="978-0-19-877450-1",
+        publisher="Oxford University Press", entry_type=:book),
     :engle_granger1987 => (key=:engle_granger1987,
         authors="Engle, Robert F. and Granger, Clive W. J.", year=1987,
         title="Co-Integration and Error Correction: Representation, Estimation, and Testing",
@@ -1695,6 +1706,8 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :VECMForecast => [:johansen1991, :lutkepohl2005],
     :VECMGrangerResult => [:johansen1991, :lutkepohl2005],
     :vecm => [:johansen1991, :engle_granger1987, :lutkepohl2005],
+    # EV-38 (#446): VECM restriction testing
+    :VECMRestrictionTest => [:johansen1991, :johansen1995, :johansen_juselius1990],
     :engle_granger => [:engle_granger1987],
     # ARIMA
     :ARModel => [:box_jenkins1970],
@@ -2308,6 +2321,7 @@ refs(io::IO, ::JohansenResult; kw...) = refs(io, _TYPE_REFS[:JohansenResult]; kw
 refs(io::IO, ::VECMModel; kw...) = refs(io, _TYPE_REFS[:VECMModel]; kw...)
 refs(io::IO, ::VECMForecast; kw...) = refs(io, _TYPE_REFS[:VECMForecast]; kw...)
 refs(io::IO, ::VECMGrangerResult; kw...) = refs(io, _TYPE_REFS[:VECMGrangerResult]; kw...)
+refs(io::IO, ::VECMRestrictionTest; kw...) = refs(io, _TYPE_REFS[:VECMRestrictionTest]; kw...)  # EV-38 (#446)
 
 # ARIMA
 refs(io::IO, ::ARModel; kw...) = refs(io, _TYPE_REFS[:ARModel]; kw...)
