@@ -10,9 +10,8 @@ version.
 
 Plain-text (AEA style):
 
-> Chung, Wookyung. 2026. *MacroEconometricModels.jl: A Comprehensive Julia Package for
-> Macroeconometric Research and Analysis*. Version 0.6.7.
-> [https://github.com/FriedmanJP/MacroEconometricModels.jl](https://github.com/FriedmanJP/MacroEconometricModels.jl).
+> Chung, Wookyung. 2026. *MacroEconometricModels.jl*. Zenodo.
+> [https://doi.org/10.5281/zenodo.18439170](https://doi.org/10.5281/zenodo.18439170).
 
 BibTeX:
 
@@ -57,6 +56,6 @@ See the API Reference pages for the full `refs` signature.
 | Field | Value |
 |-------|-------|
 | Author | Wookyung Chung <chung@friedman.jp> |
-| Version | 0.6.7 |
+| Version | 0.7.0 |
 | Repository | [github.com/FriedmanJP/MacroEconometricModels.jl](https://github.com/FriedmanJP/MacroEconometricModels.jl) |
 | License | GPL-3.0-or-later |
