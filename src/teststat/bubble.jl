@@ -123,8 +123,8 @@ function _simulate_bubble_null(kind::Symbol, Tn::Int, swindow0::Int, p::Int,
         wb_resid = dy .- mean(dy)          # driftless null residuals
     end
 
-    base_rng = MersenneTwister(seed)
-    draw_seeds = rand(base_rng, UInt64, mc_reps)
+    boot_rng = MersenneTwister(seed)
+    draw_seeds = rand(boot_rng, UInt64, mc_reps)
 
     Threads.@threads for b in 1:mc_reps
         rng = MersenneTwister(draw_seeds[b])
