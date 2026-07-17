@@ -1580,6 +1580,36 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Efficient Tests for an Autoregressive Unit Root",
         journal="Econometrica", volume="64", issue="4", pages="813--836",
         doi="10.2307/2171846", isbn="", publisher="", entry_type=:article),
+    # --- Nonparametric regression & density (EV-33, #441) ---
+    :silverman1986 => (key=:silverman1986, authors="Silverman, Bernard W.", year=1986,
+        title="Density Estimation for Statistics and Data Analysis", journal="",
+        volume="", issue="", pages="", doi="10.1201/9781315140919",
+        isbn="978-0-412-24620-3", publisher="Chapman \\& Hall", entry_type=:book),
+    :sheather_jones1991 => (key=:sheather_jones1991,
+        authors="Sheather, Simon J. and Jones, Michael C.", year=1991,
+        title="A Reliable Data-Based Bandwidth Selection Method for Kernel Density Estimation",
+        journal="Journal of the Royal Statistical Society, Series B",
+        volume="53", issue="3", pages="683--690",
+        doi="10.1111/j.2517-6161.1991.tb01857.x", isbn="", publisher="", entry_type=:article),
+    :nadaraya1964 => (key=:nadaraya1964, authors="Nadaraya, Elizbar A.", year=1964,
+        title="On Estimating Regression",
+        journal="Theory of Probability and Its Applications", volume="9", issue="1",
+        pages="141--142", doi="10.1137/1109020", isbn="", publisher="", entry_type=:article),
+    :watson1964 => (key=:watson1964, authors="Watson, Geoffrey S.", year=1964,
+        title="Smooth Regression Analysis",
+        journal="Sankhyā: The Indian Journal of Statistics, Series A",
+        volume="26", issue="4", pages="359--372", doi="", isbn="", publisher="",
+        entry_type=:article),
+    :fan_gijbels1996 => (key=:fan_gijbels1996,
+        authors="Fan, Jianqing and Gijbels, Irène", year=1996,
+        title="Local Polynomial Modelling and Its Applications", journal="",
+        volume="", issue="", pages="", doi="10.1201/9780203748725",
+        isbn="978-0-412-98321-4", publisher="Chapman \\& Hall", entry_type=:book),
+    :cleveland1979 => (key=:cleveland1979, authors="Cleveland, William S.", year=1979,
+        title="Robust Locally Weighted Regression and Smoothing Scatterplots",
+        journal="Journal of the American Statistical Association", volume="74", issue="368",
+        pages="829--836", doi="10.1080/01621459.1979.10481038", isbn="", publisher="",
+        entry_type=:article),
 )
 
 # --- Type/method → reference keys mapping ---
@@ -2016,6 +2046,13 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :panel_iv => [:baltagi2021, :wooldridge2010, :hausman_taylor1981],
     :panel_logit => [:chamberlain1980, :wooldridge2010],
     :panel_probit => [:wooldridge2010],
+    # Nonparametric regression & density (EV-33, #441)
+    :KernelDensity => [:silverman1986, :sheather_jones1991],
+    :kernel_density => [:silverman1986, :sheather_jones1991],
+    :KernelRegression => [:nadaraya1964, :watson1964, :fan_gijbels1996],
+    :kernel_reg => [:nadaraya1964, :watson1964, :fan_gijbels1996],
+    :LowessFit => [:cleveland1979],
+    :lowess => [:cleveland1979],
 )
 
 # ICA method → additional ref keys (appended to ICASVARResult base refs)
@@ -2312,6 +2349,11 @@ refs(io::IO, ::ThresholdModel; kw...) = refs(io, _TYPE_REFS[:ThresholdModel]; kw
 refs(io::IO, ::HansenLinearityTest; kw...) = refs(io, _TYPE_REFS[:HansenLinearityTest]; kw...)
 refs(io::IO, ::STARModel; kw...) = refs(io, _TYPE_REFS[:STARModel]; kw...)
 refs(io::IO, ::MSRegModel; kw...) = refs(io, _TYPE_REFS[:MSRegModel]; kw...)
+
+# Nonparametric regression & density (EV-33, #441)
+refs(io::IO, ::KernelDensity; kw...) = refs(io, _TYPE_REFS[:KernelDensity]; kw...)
+refs(io::IO, ::KernelRegression; kw...) = refs(io, _TYPE_REFS[:KernelRegression]; kw...)
+refs(io::IO, ::LowessFit; kw...) = refs(io, _TYPE_REFS[:LowessFit]; kw...)
 
 # Covariance estimators
 refs(io::IO, ::NeweyWestEstimator; kw...) = refs(io, _TYPE_REFS[:NeweyWestEstimator]; kw...)

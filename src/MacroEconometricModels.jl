@@ -379,6 +379,13 @@ include("nonlinear/threshold.jl")
 include("nonlinear/star.jl")   # EV-06: smooth-transition (STAR/LSTR1/LSTR2/ESTR)
 include("nonlinear/markov_switching.jl")  # EV-07: Markov-switching regression / MS-AR
 
+# --- Nonparametric regression & density (EV-33, #441) ---
+include("nonparametric/types.jl")
+include("nonparametric/density.jl")
+include("nonparametric/kernel_reg.jl")
+include("nonparametric/lowess.jl")
+include("nonparametric/show.jl")
+
 # Model comparison tests (LR, LM)
 include("teststat/model_comparison.jl")
 
@@ -545,6 +552,7 @@ include("plotting/penalized.jl")   # EV-03 (#411): coefficient-path / CV-curve p
 include("plotting/spectral.jl")
 include("plotting/io.jl")
 include("plotting/nonlinear.jl")
+include("plotting/nonparametric.jl")   # EV-33 (#441): kernel density / kernel-reg / LOWESS scatter+fit
 include("plotting/ardl.jl")          # EV-09 (#417): NARDL dynamic-multiplier plots
 include("plotting/mgarch.jl")        # EV-16 (#424): MGARCH conditional-correlation & covariance-heatmap plots
 include("plotting/teststat.jl")      # EV-30 (#438): SADF/GSADF bubble monitor (BSADF vs 95% CV, shaded episodes)
@@ -1074,6 +1082,12 @@ export estimate_star, star_linearity_test
 # EV-07: Markov-switching regression / mean-switching AR (Hamilton 1989; Kim 1994)
 export MSRegModel
 export estimate_ms, estimate_ms_ar
+
+# =============================================================================
+# Exports — Nonparametric regression & density (EV-33, #441)
+# =============================================================================
+export KernelDensity, KernelRegression, LowessFit
+export kernel_density, kernel_reg, lowess
 
 # =============================================================================
 # Exports - Spectral Analysis & ACF/PACF

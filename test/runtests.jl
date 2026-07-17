@@ -147,6 +147,7 @@ const TEST_GROUPS = [
         "nonlinear/test_threshold.jl",
         "nonlinear/test_star.jl",       # EV-06 smooth-transition (STAR)
         "nonlinear/test_markov_switching.jl",  # EV-07 Markov-switching regression / MS-AR
+        "nonparametric/test_nonparametric.jl",  # EV-33 (#441): kernel density / kernel-reg / LOWESS
     ]),
     # Group 7 split into three so the DSGE critical path balances across processes (#123):
     # the heavy test_ha_dsge.jl (~65% of the old group) runs alone.
@@ -489,6 +490,8 @@ else
         @testset "Nonlinear (STAR)" begin include("nonlinear/test_star.jl") end
         # Markov-switching regression / MS-AR (EV-07)
         @testset "Nonlinear (Markov-Switching)" begin include("nonlinear/test_markov_switching.jl") end
+        # Nonparametric regression & density (EV-33, #441)
+        @testset "Nonparametric" begin include("nonparametric/test_nonparametric.jl") end
 
         # Group 7 split into three (#123)
         @testset "DSGE Core" begin

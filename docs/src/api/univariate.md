@@ -271,3 +271,23 @@ star_linearity_test
 estimate_ms
 estimate_ms_ar
 ```
+
+---
+
+## Nonparametric Regression & Density Types
+
+```@docs
+KernelDensity
+KernelRegression
+LowessFit
+```
+
+---
+
+## Nonparametric Regression & Density Estimation
+
+```@docs
+kernel_density
+kernel_reg
+lowess
+```

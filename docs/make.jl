@@ -34,6 +34,7 @@ makedocs(;
             "Spectral Analysis" => "spectral.md",
             "ARIMA" => "arima.md",
             "Volatility Models" => "volatility.md",
+            "Nonparametric Regression & Density" => "nonparametric.md",
         ],
         "Multivariate Models" => [
             "VAR" => "manual.md",

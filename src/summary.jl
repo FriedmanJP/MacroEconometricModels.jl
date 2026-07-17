@@ -406,6 +406,10 @@ report(x::AbstractVolatilityModel) = show(stdout, x)
 report(x::AbstractMGARCHModel) = show(stdout, x)   # EV-16 (#424): CCC/DCC/BEKK
 report(x::AbstractLPModel) = show(stdout, x)
 report(x::AbstractGMMModel) = show(stdout, x)
+# Nonparametric regression & density (EV-33, #441)
+report(x::KernelDensity) = show(stdout, x)
+report(x::KernelRegression) = show(stdout, x)
+report(x::LowessFit) = show(stdout, x)
 
 # --- Hypothesis test results ---
 report(x::AbstractUnitRootTest) = show(stdout, x)
