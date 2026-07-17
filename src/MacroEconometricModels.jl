@@ -133,6 +133,12 @@ include("reg/predict.jl")
 include("reg/ordered.jl")
 include("reg/multinomial.jl")
 
+# Systems estimation — SUR / 3SLS (EV-35, #443) — after reg/ (reuses robust_inv,
+# _coef_table, _pretty_table, _sig_legend). Greenfield src/system/ module.
+include("system/types.jl")
+include("system/sur.jl")
+include("system/threesls.jl")
+
 # MIDAS regression (EV-01) — after reg/ (reuses robust_inv, _coef_table)
 include("midas/weights.jl")
 include("midas/types.jl")
@@ -1171,6 +1177,9 @@ export HeckmanModel, estimate_heckman
 
 # Robust regression (M / MM estimation) — EV-40 (#448)
 export RobustRegModel, estimate_robust
+
+# Systems estimation — SUR / 3SLS (EV-35, #443)
+export estimate_sur, estimate_3sls, SURModel, ThreeSLSModel
 
 # Marginal effects, diagnostics, prediction
 export marginal_effects, odds_ratio, vif, classification_table, OddsRatio, MultinomialMarginalEffects

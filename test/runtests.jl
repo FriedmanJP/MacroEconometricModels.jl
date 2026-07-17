@@ -105,6 +105,7 @@ const TEST_GROUPS = [
         "reg/test_tobit.jl",       # EV-17 (#425): Tobit + truncated regression
         "reg/test_heckman.jl",     # EV-18 (#426): Heckman sample-selection (two-step + MLE)
         "reg/test_robust.jl",      # EV-40 (#448): robust regression — Huber/bisquare M + Yohai MM
+        "system/test_system.jl",   # EV-35 (#443): SUR / 3SLS systems estimation
         "reg/test_reg_diagnostics.jl",   # EV-31 (#439): White/BP/Glejser/Harvey/BG/RESET
         "reg/test_stability.jl",         # EV-32 (#440): recursive residuals / CUSUM(SQ) / Chow / influence
         "reg/test_ordered.jl",
@@ -444,6 +445,7 @@ else
         @testset "Data Module" begin include("data/test_data.jl") end
         @testset "Panel VAR" begin include("pvar/test_pvar.jl") end
         @testset "Cross-Sectional Models" begin include("reg/test_reg.jl") end
+        @testset "SUR & 3SLS" begin include("system/test_system.jl") end
         @testset "Reg Diagnostics" begin include("reg/test_reg_diagnostics.jl") end
         @testset "Reg Stability" begin include("reg/test_stability.jl") end
         @testset "Ordered Models" begin include("reg/test_ordered.jl") end

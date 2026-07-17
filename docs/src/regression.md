@@ -1140,6 +1140,79 @@ Covariance is the Huber–Ronchetti sandwich ``V = \hat s^2\,\frac{(1/n)\sum \ps
 
 ---
 
+## Systems of Equations: SUR and 3SLS
+
+The estimators above fit one equation at a time. When several equations are estimated jointly and their errors are correlated across equations, exploiting that correlation improves efficiency. [`estimate_sur`](@ref) fits Zellner's (1962) seemingly-unrelated regressions; [`estimate_3sls`](@ref) fits the Zellner–Theil (1962) three-stage least squares estimator for simultaneous systems.
+
+Stack the ``M`` equations as ``y = X\beta + u`` with block-diagonal ``X = \mathrm{blkdiag}(X_1,\dots,X_M)`` and ``\mathrm{Cov}(u) = \Sigma \otimes I_T``. **SUR** estimates the residual cross-covariance from equation-by-equation OLS residuals, ``\hat\Sigma_{ij} = \hat u_i'\hat u_j / T`` (the classical Zellner divisor ``T``), then applies feasible GLS:
+
+```math
+\hat\beta = \left(X'(\hat\Sigma^{-1}\otimes I)X\right)^{-1} X'(\hat\Sigma^{-1}\otimes I)y,
+\qquad
+\widehat{\mathrm{Var}}(\hat\beta) = \left(X'(\hat\Sigma^{-1}\otimes I)X\right)^{-1}.
+```
+
+The efficiency gain comes entirely from cross-equation error correlation: when every equation carries identical regressors the two estimators coincide exactly (Kruskal 1968). The Kronecker product is never materialized — the normal equations are assembled block-wise.
+
+Pass equations as a vector of `(y, X)` (or `(y, X, names)`) tuples. The canonical example is the Grunfeld (1958) investment data for General Electric and Westinghouse:
+
+```@example sur
+using MacroEconometricModels
+pd = load_example(:grunfeld)              # 10-firm investment panel, 1935–1954
+ge = group_data(pd, "General Electric")
+wh = group_data(pd, "Westinghouse")
+# invest = col 1; regressors [1, value (col 2), capital (col 3)]
+Xge = hcat(ones(20), ge.data[:, 2], ge.data[:, 3])
+Xwh = hcat(ones(20), wh.data[:, 2], wh.data[:, 3])
+cols = ["const", "value", "capital"]
+m = estimate_sur([(ge.data[:, 1], Xge, cols), (wh.data[:, 1], Xwh, cols)];
+                 eqnames = ["GE", "Westinghouse"])
+report(m)
+```
+
+The footer reports ``\det\hat\Sigma``, the McElroy (1977) system R², the Gaussian system log-likelihood, and the FGLS iteration count. These match R's `systemfit(..., method = "SUR")` (Henningsen & Hamann 2007).
+
+**Iterated FGLS** (`iterate = true`) alternates between updating ``\hat\Sigma`` from the current residuals and re-estimating ``\hat\beta`` until convergence; it reaches the Gaussian maximum-likelihood estimator (iterated FGLS ≡ SUR/FIML for the linear system):
+
+```@example sur
+mi = estimate_sur([(ge.data[:, 1], Xge, cols), (wh.data[:, 1], Xwh, cols)];
+                  eqnames = ["GE", "Westinghouse"], iterate = true)
+mi.iterations
+```
+
+**Linear cross-equation restrictions** ``R\cdot\mathrm{vec}(B) = r`` are imposed via restricted GLS. Here `vec(B)` stacks the equations' coefficients in order (`[const₁, value₁, capital₁, const₂, value₂, capital₂]`); this restriction forces the `value` coefficient to be equal across the two firms:
+
+```@example sur
+R = reshape([0.0, 1, 0, 0, -1, 0], 1, 6)   # value₁ − value₂ = 0
+mr = estimate_sur([(ge.data[:, 1], Xge, cols), (wh.data[:, 1], Xwh, cols)];
+                  eqnames = ["GE", "Westinghouse"], restrict = (R, [0.0]))
+mr.betas[1][2], mr.betas[2][2]              # equal by construction
+```
+
+**3SLS** extends SUR to simultaneous systems by first projecting each equation's regressors onto an instrument space, ``\hat X_i = P_{Z_i} X_i``, forming ``\hat\Sigma`` from equation-by-equation 2SLS residuals, and then applying the SUR GLS step to the projected regressors. Supply instruments as one shared matrix (`instruments = :common`, the default) or a vector of per-equation matrices (`instruments = :perequation`):
+
+```@example sur
+Z = hcat(ones(20), ge.data[:, 3], wh.data[:, 3])   # common instruments [1, C_ge, C_wh]
+m3 = estimate_3sls([(ge.data[:, 1], Xge, cols), (wh.data[:, 1], Xwh, cols)], Z;
+                   eqnames = ["GE", "Westinghouse"])
+report(m3)
+```
+
+When the instrument set spans every regressor, ``P_{Z_i} X_i = X_i`` and 3SLS collapses to SUR; when every equation is exactly identified it collapses to equation-by-equation 2SLS.
+
+!!! note "Ill-conditioned raw-scale designs"
+    The Grunfeld regressors span several orders of magnitude, so the normal-equation cross-product ``X'X`` has condition number ``\approx 10^8``. The system estimators solve for the coefficients with QR-based least squares on the design directly (never squaring the condition number), so no rescaling is required. Full-information maximum likelihood is not implemented as a separate optimizer — iterated SUR already reaches the Gaussian MLE for the linear system.
+
+| Keyword | Type | Default | Description |
+|---|---|---|---|
+| `iterate` | `Bool` | `false` | Iterate FGLS to the Gaussian MLE (SUR only) |
+| `tol` / `maxiter` | `Real` / `Int` | `1e-8` / `100` | Iteration controls (SUR only) |
+| `restrict` | `(R, r)` or `nothing` | `nothing` | Linear cross-equation restriction ``R\cdot\mathrm{vec}(B)=r`` (SUR only) |
+| `instruments` | `Symbol` | `:common` | `:common` (shared `Z`) or `:perequation` (3SLS only) |
+| `eqnames` | `Vector{String}` | auto | Equation labels |
+
+---
+
 ## Complete Example
 
 This example demonstrates a full cross-sectional regression workflow: OLS estimation with robust standard error comparison, WLS correction for heteroskedasticity, IV estimation for an endogenous regressor, and VIF diagnostics.
@@ -1312,6 +1385,23 @@ The OLS estimate of the return to education is biased upward because ability is 
 
 - White, H. (1980). A Heteroskedasticity-Consistent Covariance Matrix Estimator and a Direct Test for Heteroskedasticity.
   *Econometrica*, 48(4), 817-838. [DOI](https://doi.org/10.2307/1912934)
+
+- Zellner, A. (1962). An Efficient Method of Estimating Seemingly Unrelated Regressions and Tests for Aggregation Bias.
+  *Journal of the American Statistical Association*, 57(298), 348-368. [DOI](https://doi.org/10.1080/01621459.1962.10480664)
+
+- Zellner, A., & Theil, H. (1962). Three-Stage Least Squares: Simultaneous Estimation of Simultaneous Equations.
+  *Econometrica*, 30(1), 54-78. [DOI](https://doi.org/10.2307/1911287)
+
+- Kruskal, W. (1968). When Are Gauss-Markov and Least Squares Estimators Identical? A Coordinate-Free Approach.
+  *The Annals of Mathematical Statistics*, 39(1), 70-75. [DOI](https://doi.org/10.1214/aoms/1177698505)
+
+- McElroy, M. B. (1977). Goodness of Fit for Seemingly Unrelated Regressions.
+  *Journal of Econometrics*, 6(3), 381-387. [DOI](https://doi.org/10.1016/0304-4076(77)90008-1)
+
+- Henningsen, A., & Hamann, J. D. (2007). systemfit: A Package for Estimating Systems of Simultaneous Equations in R.
+  *Journal of Statistical Software*, 23(4), 1-40. [DOI](https://doi.org/10.18637/jss.v023.i04)
+
+- Grunfeld, Y. (1958). *The Determinants of Corporate Investment*. Ph.D. thesis, University of Chicago. (Source of the `:grunfeld` dataset.)
 
 - Wooldridge, J. M. (2010). *Econometric Analysis of Cross Section and Panel Data*. 2nd ed. Cambridge, MA: MIT Press. ISBN 978-0-262-23258-6.
 

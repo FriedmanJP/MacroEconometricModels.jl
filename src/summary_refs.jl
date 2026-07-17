@@ -1505,6 +1505,38 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="A Computer Method for Calculating Kendall's Tau with Ungrouped Data",
         journal="Journal of the American Statistical Association", volume="61", issue="314", pages="436--439",
         doi="10.1080/01621459.1966.10480879", isbn="", publisher="", entry_type=:article),
+    # --- Systems estimation: SUR / 3SLS + Grunfeld data (EV-35, #443) ---
+    :zellner1962 => (key=:zellner1962, authors="Zellner, Arnold", year=1962,
+        title="An Efficient Method of Estimating Seemingly Unrelated Regressions and Tests for Aggregation Bias",
+        journal="Journal of the American Statistical Association", volume="57", issue="298", pages="348--368",
+        doi="10.1080/01621459.1962.10480664", isbn="", publisher="", entry_type=:article),
+    :zellner_theil1962 => (key=:zellner_theil1962,
+        authors="Zellner, Arnold and Theil, Henri", year=1962,
+        title="Three-Stage Least Squares: Simultaneous Estimation of Simultaneous Equations",
+        journal="Econometrica", volume="30", issue="1", pages="54--78",
+        doi="10.2307/1911287", isbn="", publisher="", entry_type=:article),
+    :kruskal1968 => (key=:kruskal1968, authors="Kruskal, William", year=1968,
+        title="When Are Gauss-Markov and Least Squares Estimators Identical? A Coordinate-Free Approach",
+        journal="The Annals of Mathematical Statistics", volume="39", issue="1", pages="70--75",
+        doi="10.1214/aoms/1177698505", isbn="", publisher="", entry_type=:article),
+    :mcelroy1977 => (key=:mcelroy1977, authors="McElroy, Marjorie B.", year=1977,
+        title="Goodness of Fit for Seemingly Unrelated Regressions: Glahn's R²yx and Hooper's r̄²",
+        journal="Journal of Econometrics", volume="6", issue="3", pages="381--387",
+        doi="10.1016/0304-4076(77)90008-1", isbn="", publisher="", entry_type=:article),
+    :grunfeld1958 => (key=:grunfeld1958, authors="Grunfeld, Yehuda", year=1958,
+        title="The Determinants of Corporate Investment",
+        journal="", volume="", issue="", pages="",
+        doi="", isbn="", publisher="Ph.D. thesis, University of Chicago", entry_type=:book),
+    :henningsen_hamann2007 => (key=:henningsen_hamann2007,
+        authors="Henningsen, Arne and Hamann, Jeff D.", year=2007,
+        title="systemfit: A Package for Estimating Systems of Simultaneous Equations in R",
+        journal="Journal of Statistical Software", volume="23", issue="4", pages="1--40",
+        doi="10.18637/jss.v023.i04", isbn="", publisher="", entry_type=:article),
+    :oberhofer_kmenta1974 => (key=:oberhofer_kmenta1974,
+        authors="Oberhofer, Walter and Kmenta, Jan", year=1974,
+        title="A General Procedure for Obtaining Maximum Likelihood Estimates in Generalized Regression Models",
+        journal="Econometrica", volume="42", issue="3", pages="579--590",
+        doi="10.2307/1911789", isbn="", publisher="", entry_type=:article),
 )
 
 # --- Type/method → reference keys mapping ---
@@ -1893,6 +1925,11 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :estimate_heckman => [:heckman1979, :greene2018, :wooldridge2010],
     :RobustRegModel => [:huber1964, :yohai1987, :salibian_yohai2006, :huber_ronchetti2009, :brownlee1965],  # EV-40 (#448)
     :estimate_robust => [:huber1964, :yohai1987, :salibian_yohai2006, :huber_ronchetti2009],  # EV-40 (#448)
+    # Systems estimation — SUR / 3SLS (EV-35, #443)
+    :SURModel => [:zellner1962, :kruskal1968, :mcelroy1977, :oberhofer_kmenta1974, :henningsen_hamann2007, :grunfeld1958],
+    :ThreeSLSModel => [:zellner_theil1962, :mcelroy1977, :henningsen_hamann2007, :grunfeld1958],
+    :estimate_sur => [:zellner1962, :kruskal1968, :mcelroy1977, :oberhofer_kmenta1974],
+    :estimate_3sls => [:zellner_theil1962, :mcelroy1977],
     # Single-equation cointegrating regression (EV-10, #418)
     :CointRegModel => [:phillips_hansen1990, :park1992, :saikkonen1991, :stock_watson1993],
     :PanelCointRegModel => [:pedroni2000, :pedroni2001, :kao_chiang2000, :mark_sul2003],  # EV-22 (#430)
@@ -2384,6 +2421,8 @@ refs(io::IO, ::TobitModel; kw...) = refs(io, _TYPE_REFS[:TobitModel]; kw...)
 refs(io::IO, ::TruncRegModel; kw...) = refs(io, _TYPE_REFS[:TruncRegModel]; kw...)
 refs(io::IO, ::HeckmanModel; kw...) = refs(io, _TYPE_REFS[:HeckmanModel]; kw...)  # EV-18 (#426)
 refs(io::IO, ::RobustRegModel; kw...) = refs(io, _TYPE_REFS[:RobustRegModel]; kw...)  # EV-40 (#448)
+refs(io::IO, ::SURModel; kw...) = refs(io, _TYPE_REFS[:SURModel]; kw...)  # EV-35 (#443)
+refs(io::IO, ::ThreeSLSModel; kw...) = refs(io, _TYPE_REFS[:ThreeSLSModel]; kw...)  # EV-35 (#443)
 refs(io::IO, ::CointRegModel; kw...) = refs(io, _TYPE_REFS[:CointRegModel]; kw...)  # EV-10 (#418)
 refs(io::IO, ::PanelCointRegModel; kw...) = refs(io, _TYPE_REFS[:PanelCointRegModel]; kw...)  # EV-22 (#430)
 
