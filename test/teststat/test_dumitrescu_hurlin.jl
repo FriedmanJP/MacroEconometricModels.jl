@@ -28,25 +28,18 @@
 #       bootstrap reproducibility under a fixed seed.
 
 using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics, DataFrames
-using Distributions
+using Distributions, DelimitedFiles
 
-# Fixed-seed heterogeneous panel identical to the one fed to the R oracle.
-# Uses an explicit MersenneTwister so the data is invariant to @testset RNG
-# reseeding. x[t-1], x[t-2] enter y ⇒ x Granger-causes y in every unit.
+# Fixed heterogeneous panel identical to the one fed to the R oracle.
+# MersenneTwister is not stable across Julia versions, so the exact (y,x) panel
+# the R oracle saw is committed as data/dh_panel.csv (test/gen_ev_fixtures.jl).
+# x[t-1], x[t-2] enter y ⇒ x Granger-causes y in every unit.
 function make_dh_panel()
-    rng = MersenneTwister(20240717)
     N = 8; T = 30
-    ids = Int[]; tt = Int[]; ys = Float64[]; xs = Float64[]
-    for i in 1:N
-        x = randn(rng, T)
-        y = zeros(T)
-        b = 0.3 + 0.1 * (i - 1) / N
-        for t in 3:T
-            y[t] = 0.4 * y[t-1] - 0.1 * y[t-2] + b * x[t-1] + 0.2 * x[t-2] + randn(rng)
-        end
-        append!(ids, fill(i, T)); append!(tt, 1:T); append!(ys, y); append!(xs, x)
-    end
-    DataFrame(id = ids, time = tt, y = ys, x = xs)
+    d = readdlm(joinpath(@__DIR__, "data", "dh_panel.csv"), ',', Float64)
+    ids = repeat(1:N, inner = T)
+    tt = repeat(1:T, N)
+    DataFrame(id = ids, time = tt, y = d[:, 1], x = d[:, 2])
 end
 
 # Independent classical F-test for joint significance of the p lagged-x

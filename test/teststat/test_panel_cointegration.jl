@@ -37,6 +37,7 @@ using StatsAPI
 using DataFrames
 using Random
 using Statistics
+using DelimitedFiles
 using Distributions
 
 const _M = MacroEconometricModels
@@ -250,8 +251,11 @@ end
     end
 
     @testset "Independent random walks fail to reject H0" begin
-        rng = MersenneTwister(42)
-        Yn, Xn = _nocoint_dgp(rng, 60, 20)
+        # Pinned to committed fixtures (test/gen_ev_fixtures.jl): the "fail to
+        # reject" p > 0.10 assertions are seed-specific and MersenneTwister is not
+        # version-stable. Equivalent to MersenneTwister(42); _nocoint_dgp(rng,60,20).
+        Yn = readdlm(joinpath(@__DIR__, "data", "pcoint_nocoint_Y.csv"), ',', Float64)
+        Xn = reshape(readdlm(joinpath(@__DIR__, "data", "pcoint_nocoint_X.csv"), ',', Float64), 60, 20, 1)
         pdn = _mk_coint_panel(Yn, Xn)
 
         # Group statistics (most reliable finite-sample) do not reject.

@@ -34,6 +34,7 @@ using MacroEconometricModels
 using Random
 using Statistics
 using LinearAlgebra
+using DelimitedFiles
 
 # -----------------------------------------------------------------------------
 # Fixed-seed DGPs
@@ -43,6 +44,15 @@ using LinearAlgebra
 function _sim_lstar(; n::Int, gamma::Float64=8.0, c::Float64=0.0,
                     phi1=(0.5, 0.6), phi2=(-0.4, -0.3), sigma::Float64=0.3,
                     seed::Int=20240716)
+    # The n=1200, gamma=15 parameter-recovery DGP is pinned to a committed fixture
+    # (test/gen_ev_fixtures.jl) because MersenneTwister is not stable across Julia
+    # versions and the recovery tolerances are realization-specific. Other
+    # (n, gamma, seed) configurations stay RNG-driven.
+    f = joinpath(@__DIR__, "data", "star_lstar_$(n).csv")
+    if isfile(f) && gamma == 15.0 && c == 0.0 && phi1 == (0.5, 0.6) &&
+       phi2 == (-0.4, -0.3) && sigma == 0.3 && seed == 20240716
+        return vec(readdlm(f, ',', Float64))
+    end
     rng = MersenneTwister(seed)
     y = zeros(n)
     for t in 2:n

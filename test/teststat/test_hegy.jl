@@ -26,7 +26,7 @@
 #       and marked "published, transcribed offline, not live-verified".
 
 using Test, MacroEconometricModels, Random, Statistics, LinearAlgebra
-using StatsAPI
+using StatsAPI, DelimitedFiles
 using MacroEconometricModels: _ers_pt_statistic, _ers_gls_detrend, _ers_lrv
 
 # ---------------------------------------------------------------------------
@@ -48,7 +48,12 @@ end
 
 # Seasonal random walk y_t = y_{t-s} + e_t: unit roots at ALL s roots of L^s = 1
 # (zero, Nyquist and every harmonic) ⇒ every HEGY null should fail to reject.
+# The (n,s,seed)=(360,12,44) "fails to reject" oracle is pinned to a committed
+# fixture (test/gen_ev_fixtures.jl) because MersenneTwister is not version-stable;
+# other (n,s,seed) stay RNG-driven (their assertions are direction-only).
 function _seasonal_rw(n, s; seed=202)
+    f = joinpath(@__DIR__, "data", "hegy_srw_$(n)_$(s)_$(seed).csv")
+    isfile(f) && return vec(readdlm(f, ',', Float64))
     rng = Random.MersenneTwister(seed)
     y = zeros(n)
     e = randn(rng, n)

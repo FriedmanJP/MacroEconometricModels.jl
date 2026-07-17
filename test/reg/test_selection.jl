@@ -9,7 +9,7 @@
 using Test
 using MacroEconometricModels
 using MacroEconometricModels: _sel_ols, _sel_ic
-using LinearAlgebra, Statistics, Random
+using LinearAlgebra, Statistics, Random, DelimitedFiles
 import StatsAPI
 
 # =============================================================================
@@ -33,6 +33,15 @@ end
 # errors (so the GETS misspecification gate — Breusch–Godfrey + Jarque–Bera —
 # passes throughout and the reduction is driven purely by significance).
 function _sel_dgp_sparse(; n=200, k=20, seed=42, active=[2, 5, 8, 11, 14], b=1.5)
+    # The default (seed 42) configuration is the GETS oracle; its exact data is
+    # pinned to a committed fixture because MersenneTwister is not stable across
+    # Julia versions (see test/gen_ev_fixtures.jl). Other seeds (the Monte-Carlo
+    # retention-rate loop) stay RNG-driven — those assertions are distributional.
+    if seed == 42 && n == 200 && k == 20 && active == [2, 5, 8, 11, 14] && b == 1.5
+        d = readdlm(joinpath(@__DIR__, "data", "reg_sel_sparse42.csv"), ',', Float64)
+        X = hcat(ones(size(d, 1)), d[:, 2:end])
+        return (d[:, 1], X, active)
+    end
     rng = MersenneTwister(seed)
     X = hcat(ones(n), randn(rng, n, k))
     beta = zeros(k + 1); beta[1] = 0.5

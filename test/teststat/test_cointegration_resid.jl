@@ -17,11 +17,20 @@
 #   (4) Exact identities: Park p-value == χ²(q_add) upper tail of the statistic.
 
 using Test, MacroEconometricModels, Random, Statistics, LinearAlgebra, Distributions
+using DelimitedFiles
 const MEM = MacroEconometricModels
 
-# ---- DGP helpers (fixed-seed, reproducible in Julia AND python; see provenance below) ----
-# `coint_pair(12345, 200)` is the exact series fed to statsmodels `coint` for the oracle.
+# ---- DGP helpers (see provenance below) ----
+# `coint_pair(12345, 200)` is the exact series fed to statsmodels `coint` for the
+# oracle. MersenneTwister is not stable across Julia versions, so the exact series
+# for the pinned (seed, T) oracle calls are committed as data/coint_pair_*.csv /
+# data/indep_pair_*.csv (test/gen_ev_fixtures.jl); other (seed, T) stay RNG-driven.
 function coint_pair(seed::Int, T::Int; beta::Float64=2.0, rho::Float64=0.5)
+    f = joinpath(@__DIR__, "data", "coint_pair_$(seed)_$(T).csv")
+    if beta == 2.0 && rho == 0.5 && isfile(f)
+        d = readdlm(f, ',', Float64)
+        return d[:, 1], d[:, 2]
+    end
     rng = MersenneTwister(seed)
     x = cumsum(randn(rng, T))
     e = zeros(T)
@@ -32,6 +41,11 @@ function coint_pair(seed::Int, T::Int; beta::Float64=2.0, rho::Float64=0.5)
     return y, x
 end
 function indep_pair(seed::Int, T::Int)
+    f = joinpath(@__DIR__, "data", "indep_pair_$(seed)_$(T).csv")
+    if isfile(f)
+        d = readdlm(f, ',', Float64)
+        return d[:, 1], d[:, 2]
+    end
     rng = MersenneTwister(seed)
     x = cumsum(randn(rng, T))
     y = cumsum(randn(rng, T))

@@ -34,6 +34,7 @@ using MacroEconometricModels
 using StatsAPI
 using Random
 using Statistics
+using DelimitedFiles
 
 const _M = MacroEconometricModels
 
@@ -101,9 +102,12 @@ _stat_panel(rng, T=60, N=20) = randn(rng, T, N)
     end
 
     @testset "Degenerate: stationary rejects, random walk does not (correct tails)" begin
-        rng = MersenneTwister(7)
-        Xrw = _rw_panel(rng)
-        Xst = _stat_panel(rng)
+        # Pinned to committed fixtures (test/gen_ev_fixtures.jl): the tail-behaviour
+        # assertions below (p > 0.10 for a random walk) are seed-specific, and
+        # MersenneTwister is not stable across Julia versions. Equivalent to
+        # rng = MersenneTwister(7); Xrw = _rw_panel(rng); Xst = _stat_panel(rng).
+        Xrw = readdlm(joinpath(@__DIR__, "data", "firstgen_deg_rw.csv"), ',', Float64)
+        Xst = readdlm(joinpath(@__DIR__, "data", "firstgen_deg_st.csv"), ',', Float64)
 
         # Unit-root-null tests: left-tailed. Stationary ⇒ very negative ⇒ reject.
         for f in (llc_test, ips_test, breitung_panel_test)
@@ -130,6 +134,8 @@ _stat_panel(rng, T=60, N=20) = randn(rng, T, N)
         hrw = hadri_test(Xrw)
         @test hrw.pvalue < 0.05                            # reject stationarity for a random walk
         @test hrw.statistic > 5.0                          # RW pushes Z strongly positive
+        # Distributional rejection-rate check (not an oracle): its own rng.
+        rng = MersenneTwister(7)
         n_rej_stat = count(1:12) do _
             hadri_test(_stat_panel(rng)).pvalue < 0.05
         end

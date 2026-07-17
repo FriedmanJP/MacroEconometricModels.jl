@@ -10,7 +10,7 @@ using Test
 using MacroEconometricModels
 using MacroEconometricModels: _cointreg_deter, _cointreg_lrv, _make_leadlag,
                               _dols_select_leadlag
-using LinearAlgebra, Statistics, Random
+using LinearAlgebra, Statistics, Random, DelimitedFiles
 import StatsAPI as S
 
 # =============================================================================
@@ -21,6 +21,13 @@ import StatsAPI as S
 #   endog=false: u_t = e_t (strictly exogenous, u ⟂ v, i.i.d.)
 # =============================================================================
 function coint_dgp(; seed::Int=20260716, T::Int=200, endog::Bool=true)
+    # The endogenous default is the R cointReg oracle; its exact (y,x) is pinned to
+    # a committed fixture (test/gen_ev_fixtures.jl) because MersenneTwister is not
+    # stable across Julia versions. The exogenous variant stays RNG-driven.
+    if endog && seed == 20260716 && T == 200
+        d = readdlm(joinpath(@__DIR__, "data", "coint_dgp_endog.csv"), ',', Float64)
+        return d[:, 1], d[:, 2]
+    end
     rng = MersenneTwister(seed)
     v = randn(rng, T)
     e = randn(rng, T)
@@ -159,11 +166,13 @@ end
     end
 
     @testset "Multi-regressor system" begin
-        rng = MersenneTwister(11)
-        Tn = 220
-        x1 = cumsum(randn(rng, Tn)); x2 = cumsum(randn(rng, Tn))
-        uu = zeros(Tn)
-        for t in 2:Tn; uu[t] = 0.3uu[t-1] + randn(rng); end
+        # Pinned to a committed fixture (test/gen_ev_fixtures.jl): the slope-recovery
+        # assertion (atol 0.05) is seed-specific and MersenneTwister is not stable
+        # across Julia versions. Equivalent to MersenneTwister(11), Tn=220 with
+        # x1,x2 random walks and an AR(1) error uu.
+        dmr = readdlm(joinpath(@__DIR__, "data", "cointreg_multireg.csv"), ',', Float64)
+        Tn = size(dmr, 1)
+        x1 = dmr[:, 1]; x2 = dmr[:, 2]; uu = dmr[:, 3]
         yy = 1.0 .+ 0.8 .* x1 .- 0.5 .* x2 .+ uu
         X = hcat(x1, x2)
         for meth in (:fmols, :ccr, :dols)

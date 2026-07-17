@@ -28,7 +28,7 @@
 #       (The SADF/GSADF *statistics* depend only on the data, so they are
 #       reproducibility anchors of THIS implementation — no live R run exists.)
 
-using Test, MacroEconometricModels, Random, Statistics, LinearAlgebra
+using Test, MacroEconometricModels, Random, Statistics, LinearAlgebra, DelimitedFiles
 
 # Independent, from-scratch ADF-window t-statistic (constant + p lags), used as
 # a hand-recomputation oracle for the internal sup-ADF kernel.
@@ -56,9 +56,11 @@ end
 
 @testset "SADF/GSADF bubble detection (EV-30)" begin
 
-    # Fixed-seed pure random walk, T=100. Statistics are deterministic in y.
-    rng = MersenneTwister(12345)
-    y_rw = cumsum(randn(rng, 100))
+    # Fixed pure random walk, T=100. Statistics are deterministic in y; the
+    # hard-coded reproducibility anchors below are keyed to this exact series, so
+    # it is pinned to a committed fixture (test/gen_ev_fixtures.jl) — MersenneTwister
+    # is not stable across Julia versions. Equivalent to cumsum(randn(MT(12345),100)).
+    y_rw = vec(readdlm(joinpath(@__DIR__, "data", "bubble_yrw.csv"), ',', Float64))
 
     @testset "in-env identity + hand-recomputation oracle" begin
         s = sadf_test(y_rw; mc_reps=99, seed=777)
@@ -163,10 +165,10 @@ end
     end
 
     @testset "wild-bootstrap CVs (Phillips-Shi 2020)" begin
-        yb = let r = MersenneTwister(2024), T = 120, yy = zeros(T)
-            for t in 2:T; yy[t] = (50 <= t <= 75 ? 1.05 : 1.0) * yy[t-1] + randn(r); end
-            yy
-        end
+        # Explosive-segment series pinned to a committed fixture (MersenneTwister is
+        # not version-stable). Equivalent to the MT(2024) recursion with an
+        # explosive AR root (1.05) over 50 ≤ t ≤ 75.
+        yb = vec(readdlm(joinpath(@__DIR__, "data", "bubble_yb.csv"), ',', Float64))
         gw = gsadf_test(yb; mc_reps=199, seed=99, cv=:wildboot)
         @test gw.cv_method == :wildboot
         @test isfinite(gw.critical_values[5])

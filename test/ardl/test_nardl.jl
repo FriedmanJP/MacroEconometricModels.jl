@@ -34,7 +34,7 @@
 #   # bounds F: joint Wald {b[2]=1, b[3]+b[4]=0, b[5]+b[6]=0}/3 = 27.4905998610
 #   # bounds t: (b[2]-1)/se(b[2]) = -8.9676996239
 
-using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics
+using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics, DelimitedFiles
 
 @testset "NARDL — Nonlinear ARDL (EV-09 #417)" begin
 
@@ -43,6 +43,14 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics
     # -------------------------------------------------------------------------
     # Asymmetric error-correction DGP with KNOWN long-run θ⁺, θ⁻ and speed φ.
     function _nardl_dgp(seed::Int, N::Int; θp, θn, φ=0.35, ψ=0.25, σ=0.5)
+        # The (seed,N)=(987654321,250; θp=1.2, θn=-0.7) series is the R oracle; it is
+        # pinned to a committed fixture (test/gen_ev_fixtures.jl) because
+        # MersenneTwister is not stable across Julia versions. Other seeds stay RNG.
+        f = joinpath(@__DIR__, "data", "nardl_$(seed)_$(N).csv")
+        if isfile(f) && φ == 0.35 && ψ == 0.25 && σ == 0.5
+            d = readdlm(f, ',', Float64)
+            return d[:, 1], d[:, 2]
+        end
         rng = MersenneTwister(seed)
         x = zeros(N)
         for t in 2:N
