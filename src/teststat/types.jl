@@ -1331,3 +1331,56 @@ StatsAPI.pvalue(r::EqualityTestResult) = r.pvalue
 StatsAPI.dof(r::EqualityTestResult) = r.df1
 StatsAPI.nobs(r::CorTestResult) = r.n
 StatsAPI.pvalue(r::CorTestResult) = r.pvalue
+
+# =============================================================================
+# Explosive / rational-bubble detection (EV-30, #438)
+# SADF (Phillips-Wu-Yu 2011) / GSADF (Phillips-Shi-Yu 2015). RIGHT-TAILED:
+# rejection of the unit-root null (in favour of a mildly explosive root) is
+# `statistic > critical_value`, using UPPER null quantiles. Estimator functions
+# live in src/teststat/bubble.jl; show in src/teststat/show.jl; plot in
+# src/plotting/teststat.jl.
+# =============================================================================
+
+"""
+    BubbleResult{T} <: AbstractUnitRootTest
+
+Result of a sup-ADF explosive-behaviour test ([`sadf_test`](@ref) /
+[`gsadf_test`](@ref)). **Right-tailed**: reject the unit-root null for a large
+statistic using upper simulated critical values.
+
+Fields:
+- `kind::Symbol` — `:sadf` (fixed-start) or `:gsadf` (double-sup)
+- `statistic::T` — the sup statistic (SADF or GSADF)
+- `pvalue::T` — right-tailed MC p-value (fraction of null draws ≥ statistic)
+- `critical_values::Dict{Int,T}` — simulated upper CVs at percent keys `10/5/1`
+- `bsadf::Vector{T}` — the r₂-indexed date-stamping sequence (backward sup-ADF
+  for `:gsadf`; fixed-start recursive ADF for `:sadf`)
+- `cv_seq::Vector{T}` — per-r₂ 95% critical-value sequence (same length as `bsadf`)
+- `r2_index::Vector{Int}` — the level index of `y` for each sequence position
+- `episodes::Vector{Tuple{Int,Int}}` — stamped bubble `(start, end)` index pairs
+- `r0::T` — minimum window fraction actually used
+- `adflag::Int` — augmenting-lag order of the window ADF regressions
+- `cv_method::Symbol` — `:asymptotic` or `:wildboot`
+- `mc_reps::Int` — null Monte-Carlo replications
+- `nobs::Int` — sample length T
+"""
+struct BubbleResult{T<:AbstractFloat} <: AbstractUnitRootTest
+    kind::Symbol
+    statistic::T
+    pvalue::T
+    critical_values::Dict{Int,T}
+    bsadf::Vector{T}
+    cv_seq::Vector{T}
+    r2_index::Vector{Int}
+    episodes::Vector{Tuple{Int,Int}}
+    r0::T
+    adflag::Int
+    cv_method::Symbol
+    mc_reps::Int
+    nobs::Int
+end
+
+# --- StatsAPI interface (EV-30) ---
+StatsAPI.nobs(r::BubbleResult) = r.nobs
+StatsAPI.pvalue(r::BubbleResult) = r.pvalue
+StatsAPI.dof(r::BubbleResult) = r.adflag + 2

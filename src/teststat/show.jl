@@ -1524,3 +1524,73 @@ end
 # Plain 2-arg forwarders so report()/print render the same table (EV-34).
 Base.show(io::IO, r::EqualityTestResult) = show(io, MIME"text/plain"(), r)
 Base.show(io::IO, r::CorTestResult) = show(io, MIME"text/plain"(), r)
+
+# =============================================================================
+# Explosive / rational-bubble detection (EV-30, #438). RIGHT-TAILED sup-ADF:
+# reject the unit-root null for a LARGE statistic (stat > CV), upper quantiles.
+# Unique trailing section (episode roster) — do not rely on shared trailing
+# lines when cherry-picking this branch.
+# =============================================================================
+function Base.show(io::IO, r::BubbleResult)
+    kind_name = r.kind == :sadf ? "Supremum ADF (SADF)" : "Generalized Supremum ADF (GSADF)"
+    provenance = r.kind == :sadf ? "Phillips-Wu-Yu (2011)" : "Phillips-Shi-Yu (2015)"
+    cv_label = r.cv_method == :wildboot ? "wild bootstrap (Phillips-Shi 2020)" : "asymptotic MC"
+    spec_data = Any[
+        "H₀" "Unit root (no explosive behaviour)";
+        "H₁" "Mildly explosive root (bubble) — right-tailed";
+        "Statistic" kind_name;
+        "Min. window r₀" string(round(r.r0, digits=4));
+        "Augmenting lags" r.adflag;
+        "Critical values" string(cv_label, ", ", r.mc_reps, " reps");
+        "Observations" r.nobs
+    ]
+    _pretty_table(io, spec_data;
+        title = string(kind_name, " Bubble Test — ", provenance),
+        column_labels = ["Specification", ""],
+        alignment = [:l, :r],
+    )
+    stars = _significance_stars(r.pvalue)
+    results_data = Any[
+        "Sup statistic" string(round(r.statistic, digits=4), " ", stars);
+        "P-value" _format_pvalue(r.pvalue)
+    ]
+    _pretty_table(io, results_data;
+        title = "Results", column_labels = ["", "Value"], alignment = [:l, :r])
+    cv_data = Matrix{Any}(undef, 1, 3)
+    cv_data[1, :] = [round(r.critical_values[10], digits=3),
+                     round(r.critical_values[5], digits=3),
+                     round(r.critical_values[1], digits=3)]
+    _pretty_table(io, cv_data;
+        title = "Right-Tailed Critical Values (upper quantiles)",
+        column_labels = ["10%", "5%", "1%"], alignment = :r)
+    decision = if r.statistic > r.critical_values[1]
+        "Reject H₀ at 1% — explosive behaviour detected"
+    elseif r.statistic > r.critical_values[5]
+        "Reject H₀ at 5% — explosive behaviour detected"
+    elseif r.statistic > r.critical_values[10]
+        "Reject H₀ at 10% — explosive behaviour detected"
+    else
+        "Fail to reject H₀ — no evidence of a bubble"
+    end
+    dec_data = Any["Decision" decision; "Note" "reject when statistic > CV (right-tailed)"]
+    _pretty_table(io, dec_data; column_labels=["",""], alignment=[:l,:l])
+
+    # Unique trailing section: stamped bubble episode roster.
+    if isempty(r.episodes)
+        ep_data = Any["No bubble episodes stamped" string("(min duration ", max(1, ceil(Int, log(r.nobs))), " obs)")]
+        _pretty_table(io, ep_data; title="Date-Stamped Bubble Episodes",
+            column_labels=["",""], alignment=[:l,:r])
+    else
+        ep_rows = Matrix{Any}(undef, length(r.episodes), 3)
+        for (i, (s, e)) in enumerate(r.episodes)
+            ep_rows[i, 1] = i
+            ep_rows[i, 2] = string(s, " – ", e)
+            ep_rows[i, 3] = e - s + 1
+        end
+        _pretty_table(io, ep_rows;
+            title = string("Date-Stamped Bubble Episodes (", length(r.episodes), ")"),
+            column_labels = ["#", "Index range", "Duration"],
+            alignment = [:r, :c, :r])
+    end
+    return nothing
+end

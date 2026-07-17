@@ -267,6 +267,9 @@ include("teststat/factor_break.jl")
 # CrossSectionData/PanelData column lookup.
 include("teststat/rank_correlation.jl")
 include("teststat/equality.jl")
+# Explosive / rational-bubble detection (EV-30, #438). Right-tailed sup-ADF:
+# SADF (Phillips-Wu-Yu 2011) / GSADF (Phillips-Shi-Yu 2015) with BSADF date-stamping.
+include("teststat/bubble.jl")
 
 # Nowcasting (after factor models for Kalman filter reuse)
 include("nowcast/types.jl")
@@ -543,6 +546,7 @@ include("plotting/io.jl")
 include("plotting/nonlinear.jl")
 include("plotting/ardl.jl")          # EV-09 (#417): NARDL dynamic-multiplier plots
 include("plotting/mgarch.jl")        # EV-16 (#424): MGARCH conditional-correlation & covariance-heatmap plots
+include("plotting/teststat.jl")      # EV-30 (#438): SADF/GSADF bubble monitor (BSADF vs 95% CV, shaded episodes)
 
 # =============================================================================
 # Exports - Types
@@ -710,6 +714,7 @@ export factor_break_test
 # Extended unit root tests
 export fourier_adf_test, fourier_kpss_test, dfgls_test
 export lm_unitroot_test, adf_2break_test, gregory_hansen_test
+export sadf_test, gsadf_test, BubbleResult   # EV-30 (#438): explosive/bubble detection
 
 # Residual-based / parameter-stability cointegration tests (EV-11, #419)
 export engle_granger_test, phillips_ouliaris_test, hansen_instability_test, park_added_test

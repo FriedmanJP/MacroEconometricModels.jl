@@ -1548,6 +1548,22 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="A General Procedure for Obtaining Maximum Likelihood Estimates in Generalized Regression Models",
         journal="Econometrica", volume="42", issue="3", pages="579--590",
         doi="10.2307/1911789", isbn="", publisher="", entry_type=:article),
+    # --- Explosive / rational-bubble detection (EV-30, #438) ---
+    :psy2011 => (key=:psy2011,
+        authors="Phillips, Peter C. B. and Wu, Yangru and Yu, Jun", year=2011,
+        title="Explosive Behavior in the 1990s Nasdaq: When Did Exuberance Escalate Asset Values?",
+        journal="International Economic Review", volume="52", issue="1", pages="201--226",
+        doi="10.1111/j.1468-2354.2010.00625.x", isbn="", publisher="", entry_type=:article),
+    :psy2015 => (key=:psy2015,
+        authors="Phillips, Peter C. B. and Shi, Shuping and Yu, Jun", year=2015,
+        title="Testing for Multiple Bubbles: Historical Episodes of Exuberance and Collapse in the S\\&P 500",
+        journal="International Economic Review", volume="56", issue="4", pages="1043--1078",
+        doi="10.1111/iere.12132", isbn="", publisher="", entry_type=:article),
+    :phillips_shi2020 => (key=:phillips_shi2020,
+        authors="Phillips, Peter C. B. and Shi, Shuping", year=2020,
+        title="Real-Time Monitoring of Asset Markets: Bubbles and Crises",
+        journal="Handbook of Statistics", volume="42", issue="", pages="61--80",
+        doi="10.1016/bs.host.2018.12.002", isbn="", publisher="Elsevier", entry_type=:article),
 )
 
 # --- Type/method → reference keys mapping ---
@@ -1886,6 +1902,10 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
                        :bartlett1937, :brown_forsythe1974, :vanderwaerden1952],
     :CorTestResult => [:kendall1938, :spearman1904, :knight1966],
     :cor_test => [:kendall1938, :spearman1904, :knight1966],
+    # Explosive / rational-bubble detection (EV-30, #438)
+    :BubbleResult => [:psy2011, :psy2015, :phillips_shi2020],
+    :sadf_test => [:psy2011, :psy2015],
+    :gsadf_test => [:psy2015, :psy2011, :phillips_shi2020],
     # Factor model break tests
     :FactorBreakResult => [:breitung_eickmeier2011, :chen_dolado_gonzalo2014, :han_inoue2015],
     :factor_break_test => [:breitung_eickmeier2011, :chen_dolado_gonzalo2014, :han_inoue2015],
@@ -2388,6 +2408,8 @@ refs(io::IO, ::FisherJohansenResult; kw...) = refs(io, _TYPE_REFS[:FisherJohanse
 # Equality-of-distribution + rank-correlation battery (EV-34, #442)
 refs(io::IO, ::EqualityTestResult; kw...) = refs(io, _TYPE_REFS[:EqualityTestResult]; kw...)
 refs(io::IO, ::CorTestResult; kw...) = refs(io, _TYPE_REFS[:CorTestResult]; kw...)
+# Explosive / rational-bubble detection (EV-30, #438)
+refs(io::IO, ::BubbleResult; kw...) = refs(io, _TYPE_REFS[:BubbleResult]; kw...)
 # Residual-based / parameter-stability cointegration tests (EV-11, #419)
 refs(io::IO, ::EngleGrangerResult; kw...) = refs(io, _TYPE_REFS[:EngleGrangerResult]; kw...)
 refs(io::IO, ::PhillipsOuliarisResult; kw...) = refs(io, _TYPE_REFS[:PhillipsOuliarisResult]; kw...)

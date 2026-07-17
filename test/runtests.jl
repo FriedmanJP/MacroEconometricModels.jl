@@ -93,6 +93,7 @@ const TEST_GROUPS = [
         "teststat/test_normality.jl",
         "teststat/test_edf.jl",   # EV-26 (#434): EDF goodness-of-fit battery (KS/Lilliefors/CvM/AD/Watson)
         "teststat/test_bds.jl",   # EV-28 (#436): BDS iid/independence test
+        "teststat/test_bubble.jl",   # EV-30 (#438): SADF/GSADF explosive-bubble detection
 
         "gmm/test_gmm.jl",
         "gmm/test_smm.jl",
@@ -441,6 +442,7 @@ else
         @testset "Multivariate Normality Tests" begin include("teststat/test_normality.jl") end
         @testset "EDF Goodness-of-Fit Battery" begin include("teststat/test_edf.jl") end  # EV-26 (#434)
         @testset "BDS Independence Test" begin include("teststat/test_bds.jl") end  # EV-28 (#436)
+        @testset "SADF/GSADF Bubble Detection" begin include("teststat/test_bubble.jl") end  # EV-30 (#438)
         @testset "GMM Estimation" begin include("gmm/test_gmm.jl") end
         @testset "SMM Estimation" begin include("gmm/test_smm.jl") end
         @testset "Data Module" begin include("data/test_data.jl") end

@@ -7,6 +7,7 @@ Standard unit root tests (ADF, PP, KPSS) perform well when the data-generating p
 - **DF-GLS / ERS** (Elliott, Rothenberg & Stock 1996): GLS-detrended ADF with near-optimal power
 - **LM Unit Root** (Schmidt & Phillips 1992; Lee & Strazicich 2003, 2013): Breaks under the null hypothesis
 - **Two-Break ADF** (Narayan & Popp 2010): ADF with two endogenous structural breaks
+- **SADF / GSADF** (Phillips, Wu & Yu 2011; Phillips, Shi & Yu 2015): Right-tailed sup-ADF tests for explosive (bubble) behavior with date-stamping
 
 ```@setup test_ur_adv
 using MacroEconometricModels, Random
@@ -42,6 +43,21 @@ y = vcat(cumsum(randn(100)), 5.0 .+ cumsum(randn(100)), cumsum(randn(100)))
 # LM test — breaks are included under the null, so rejection is unambiguous
 result = lm_unitroot_test(y; breaks=2, regression=:level)
 report(result)
+```
+
+**Recipe 4: GSADF for explosive-bubble detection**
+
+```@example test_ur_adv
+# Random walk with an embedded explosive (φ=1.05) window — a stylized bubble
+Random.seed!(11)
+bubble = zeros(150)
+for t in 2:150
+    bubble[t] = (60 <= t <= 100 ? 1.05 : 1.0) * bubble[t-1] + randn()
+end
+
+# GSADF — right-tailed sup-ADF; reject the unit root for LARGE statistics
+gsadf = gsadf_test(bubble; mc_reps=199)
+report(gsadf)
 ```
 
 ---
@@ -499,6 +515,63 @@ end |> v -> push!(v, (test="Fourier KPSS",
 
 ---
 
+## SADF / GSADF Bubble Detection
+
+The tests above ask whether a series has a unit root against a *stationary* alternative. Asset-price exuberance poses the opposite question: is the root *explosive* (``\rho > 1``)? The sup-ADF family of Phillips, Wu & Yu (2011) and Phillips, Shi & Yu (2015) answers it with **right-tailed** ADF regressions — the unit-root null is rejected in favor of a mildly explosive root for **large** statistics, using **upper** simulated critical values (the reverse of every other test on this page).
+
+For a sample of size ``T`` and window ``[r_1, r_2]`` (fractions of ``T``), let ``\mathrm{ADF}_{r_1}^{r_2}`` be the right-tailed ADF ``t``-statistic on the lagged level, fit with a constant and `adflag` augmenting lags. The three statistics are
+
+```math
+\mathrm{SADF} = \sup_{r_2 \in [r_0, 1]} \mathrm{ADF}_0^{r_2}, \qquad
+\mathrm{GSADF} = \sup_{\substack{r_2 \in [r_0, 1] \\ r_1 \in [0, r_2 - r_0]}} \mathrm{ADF}_{r_1}^{r_2},
+```
+
+```math
+\mathrm{BSADF}(r_2) = \sup_{r_1 \in [0, r_2 - r_0]} \mathrm{ADF}_{r_1}^{r_2},
+```
+
+where:
+
+- ``r_0`` is the minimum window fraction; `r0=:auto` uses the PSY rule ``r_0 = 0.01 + 1.8/\sqrt{T}``
+- **SADF** fixes the start (``r_1 = 0``) and expands the end — the original PWY (2011) test
+- **GSADF** floats both endpoints (a double sup), giving power against *periodically collapsing* bubbles that SADF misses
+- **BSADF**``(r_2)`` is the backward sup-ADF sequence used to **date-stamp** episodes
+
+`gsadf_test` compares the ``\mathrm{BSADF}(r_2)`` sequence against its 95% critical-value *sequence* (one critical value per ``r_2``): origination is the first crossing above, termination the first subsequent crossing below, subject to the PSY minimum-duration rule of ``\log(T)`` observations. Critical values are simulated from the driftless random-walk null (`cv=:asymptotic`) or the Phillips-Shi (2020) wild bootstrap on the sample's ADF residuals (`cv=:wildboot`), and cached by ``(T, r_0, `adflag`)``.
+
+```@example test_ur_adv
+# A stylized price series: random walk, an explosive run, then a collapse to RW
+Random.seed!(7)
+price = zeros(160)
+for t in 2:160
+    ρ = (70 <= t <= 110) ? 1.05 : 1.0          # explosive window [70, 110]
+    price[t] = ρ * price[t-1] + randn()
+end
+
+# GSADF test with backward sup-ADF date-stamping
+res = gsadf_test(price; adflag=0, mc_reps=299)
+report(res)
+```
+
+The stamped episodes are index pairs into the input series, so they line up with your calendar directly:
+
+```@example test_ur_adv
+# Bubble origination/termination indices and the sup statistic vs its 95% CV
+(statistic=round(res.statistic, digits=3),
+ cv95=round(res.critical_values[5], digits=3),
+ episodes=res.episodes)
+```
+
+The signature PSY chart plots the ``\mathrm{BSADF}(r_2)`` sequence against its 95% critical-value sequence, shading the date-stamped episodes:
+
+```julia
+plot_result(res)   # BSADF vs 95% CV with shaded bubble episodes
+```
+
+The fixed-start [`sadf_test`](@ref) shares the interface and stores the recursive-ADF sequence for its own date-stamping; use `gsadf_test` for real-time monitoring, where the double sup is the standard central-bank exuberance monitor.
+
+---
+
 ## Common Pitfalls
 
 1. **Fourier frequency selection -- keep fmax low.** Setting `fmax` higher than 3 rarely improves the Fourier ADF or KPSS tests and wastes degrees of freedom. Enders & Lee (2012) demonstrate that a single low-frequency Fourier component (``k = 1`` or ``k = 2``) approximates most empirically relevant smooth break patterns. With `fmax=5`, the search space expands but the additional frequencies capture noise rather than structural change, reducing power against the unit root null.
@@ -508,6 +581,8 @@ end |> v -> push!(v, (test="Fourier KPSS",
 3. **LM test break model specification.** The `:level` model allows only intercept shifts, while `:both` allows both level and trend shifts. Using `:both` when only level shifts are present reduces power because the test estimates unnecessary trend-break parameters. More importantly, the LM test includes breaks under ``H_0``, so rejection unambiguously implies stationarity. This contrasts with the Zivot-Andrews and Narayan-Popp tests, where breaks appear under ``H_1`` and rejection could reflect either stationarity or a break in a unit root process. When the goal is clean inference, the LM test is the safer choice.
 
 4. **Two-break ADF trimming and endpoint instability.** The default `trim=0.10` excludes the first and last 10% of the sample from the break search. Reducing the trimming parameter below 0.10 allows breaks near the endpoints, but the parameter estimates become unreliable with few observations on either side of the break. With short samples (``T < 100``), increase the trimming to 0.15 to maintain estimation accuracy. Also verify that the estimated break dates are not clustered at the trimming boundary, which suggests the true break may lie outside the search region.
+
+5. **SADF/GSADF are right-tailed -- reject for large statistics.** Every other test on this page rejects the unit root for large *negative* statistics. The sup-ADF tests invert this: they reject in favor of an explosive root when the statistic exceeds an *upper* critical value, so `res.statistic > res.critical_values[5]` (not `<`) signals a bubble. Reading them left-tailed is the classic error. Two further points: keep `mc_reps` modest during exploration (the GSADF double sup over the null replications is the costly step -- critical values are cached by ``(T, r_0, `adflag`)``), and date-stamp with GSADF's ``\mathrm{BSADF}(r_2)`` *sequence* rather than a single scalar critical value, which would mis-stamp short episodes. Bubble detection also needs a reasonable span: with fewer than ``\sim 50`` observations the minimum window leaves too few sub-samples for the sup to be informative.
 
 ---
 
@@ -521,4 +596,7 @@ end |> v -> push!(v, (test="Fourier KPSS",
 - Narayan, Paresh Kumar, and Stephan Popp. 2010. "A New Unit Root Test with Two Structural Breaks in Level and Slope at Unknown Time." *Journal of Applied Statistics* 37 (9): 1425--1438. [https://doi.org/10.1080/02664760903039883](https://doi.org/10.1080/02664760903039883)
 - Ng, Serena, and Pierre Perron. 2001. "Lag Length Selection and the Construction of Unit Root Tests with Good Size and Power." *Econometrica* 69 (6): 1519--1554. [https://doi.org/10.1111/1468-0262.00256](https://doi.org/10.1111/1468-0262.00256)
 - Perron, Pierre, and Serena Ng. 1996. "Useful Modifications to Some Unit Root Tests with Dependent Errors and Their Local Asymptotic Properties." *Review of Economic Studies* 63 (3): 435--463. [https://doi.org/10.2307/2297890](https://doi.org/10.2307/2297890)
+- Phillips, Peter C. B., Yangru Wu, and Jun Yu. 2011. "Explosive Behavior in the 1990s Nasdaq: When Did Exuberance Escalate Asset Values?" *International Economic Review* 52 (1): 201--226. [https://doi.org/10.1111/j.1468-2354.2010.00625.x](https://doi.org/10.1111/j.1468-2354.2010.00625.x)
+- Phillips, Peter C. B., Shuping Shi, and Jun Yu. 2015. "Testing for Multiple Bubbles: Historical Episodes of Exuberance and Collapse in the S&P 500." *International Economic Review* 56 (4): 1043--1078. [https://doi.org/10.1111/iere.12132](https://doi.org/10.1111/iere.12132)
+- Phillips, Peter C. B., and Shuping Shi. 2020. "Real-Time Monitoring of Asset Markets: Bubbles and Crises." In *Handbook of Statistics* 42, 61--80. Elsevier. [https://doi.org/10.1016/bs.host.2018.12.002](https://doi.org/10.1016/bs.host.2018.12.002)
 - Schmidt, Peter, and Peter C. B. Phillips. 1992. "LM Tests for a Unit Root in the Presence of Deterministic Trends." *Oxford Bulletin of Economics and Statistics* 54 (3): 257--287. [https://doi.org/10.1111/j.1468-0084.1992.tb00002.x](https://doi.org/10.1111/j.1468-0084.1992.tb00002.x)
