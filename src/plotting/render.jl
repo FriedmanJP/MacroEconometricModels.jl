@@ -89,13 +89,12 @@ function _render_html(; title::String, css::String, body::String, scripts::Strin
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>$(title)</title>
+<title>$(_esc_html(title))</title>
 <style>$(css)</style>
 </head>
 <body>
 $(body)
-<div class="tooltip" id="tooltip"></div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script>$(_d3_source())</script>
 <script>
 $(_render_js_core())
 $(scripts)
@@ -104,24 +103,68 @@ $(scripts)
 </html>"""
 end
 
+# Embeddable HTML fragment — no <!DOCTYPE>/<html>/<head>/<body>, so two plots can be
+# dropped into one notebook/Documenter page without nesting whole documents (A11).
+# D3 is inlined per fragment (the UMD build reassigns window.d3 idempotently); the
+# shared JS core is guarded so re-inclusion on the same page is a runtime no-op.
+function _render_fragment(; css::String, body::String, scripts::String)
+    """<style>$(css)</style>
+$(body)
+<script>$(_d3_source())</script>
+<script>
+$(_render_js_core())
+$(scripts)
+</script>"""
+end
+
 # =============================================================================
 # Shared D3.js Core
 # =============================================================================
 
 function _render_js_core()
     """
-// Shared utilities
-const tooltip = d3.select('#tooltip');
-function fmt(v) {
-    if (v === null || v === undefined) return '';
-    return Math.abs(v) >= 1000 ? v.toFixed(1) : (Math.abs(v) >= 1 ? v.toFixed(3) : v.toFixed(4));
+// Shared, embed-safe core. Guarded so two PlotOutputs on one page don't collide
+// (A11); the tooltip is a single lazily-created node on document.body, NOT a fixed
+// global id, so concatenated fragments share it instead of fighting over it.
+if (typeof window.__mem_core === 'undefined') {
+    window.__mem_core = {
+        tip: d3.select('body').append('div').attr('class','tooltip'),
+        fmt: function fmt(v) {
+            if (v === null || v === undefined) return '';
+            return Math.abs(v) >= 1000 ? v.toFixed(1) : (Math.abs(v) >= 1 ? v.toFixed(3) : v.toFixed(4));
+        },
+        showTip: function showTip(evt, html) {
+            window.__mem_core.tip.html(html).style('opacity',1)
+                .style('left',(evt.pageX+12)+'px').style('top',(evt.pageY-28)+'px');
+        },
+        hideTip: function hideTip() { window.__mem_core.tip.style('opacity',0); }
+    };
 }
-function showTip(evt, html) {
-    tooltip.html(html).style('opacity',1)
-        .style('left',(evt.pageX+12)+'px').style('top',(evt.pageY-28)+'px');
-}
-function hideTip() { tooltip.style('opacity',0); }
+// var aliases are redeclaration-safe across concatenated fragments (unlike const),
+// so renderer call sites keep using fmt()/showTip()/hideTip() unchanged.
+var fmt = window.__mem_core.fmt;
+var showTip = window.__mem_core.showTip;
+var hideTip = window.__mem_core.hideTip;
 """
+end
+
+# Build the axis-label <text> appends. Labels are emitted as JSON string literals
+# (A8 JS-string sink) and omitted entirely, Julia-side, when empty — so no raw user
+# text is ever interpolated into quoted JS. `g`/`w`/`h` are the D3 group/width/height
+# var names in the caller's scope; `yl_y` is the y-axis-label y offset.
+function _axis_labels_js(xlabel::AbstractString, ylabel::AbstractString;
+                         g::String="g", w::String="w", h::String="h",
+                         yl_y::String="-42")
+    s = ""
+    if !isempty(xlabel)
+        s *= "    $(g).append('text').attr('x',$(w)/2).attr('y',$(h)+30).attr('text-anchor','middle')" *
+             ".attr('font-size','11px').attr('fill','#666').text($(_json(xlabel)));\n"
+    end
+    if !isempty(ylabel)
+        s *= "    $(g).append('text').attr('transform','rotate(-90)').attr('x',-$(h)/2).attr('y',$(yl_y))" *
+             ".attr('text-anchor','middle').attr('font-size','11px').attr('fill','#666').text($(_json(ylabel)));\n"
+    end
+    s
 end
 
 # =============================================================================
@@ -208,11 +251,7 @@ function _render_line_js(id::String, data_json::String, series_json::String;
         .call(d3.axisBottom(x).ticks(Math.min(xVals.length,8)));
     g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
 
-    if('$(xlabel)') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
-        .attr('font-size','11px').attr('fill','#666').text('$(xlabel)');
-    if('$(ylabel)') g.append('text').attr('transform','rotate(-90)')
-        .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
-        .attr('font-size','11px').attr('fill','#666').text('$(ylabel)');
+$(_axis_labels_js(xlabel, ylabel))
 
     // Legend
     if(series.length > 1) {
@@ -290,11 +329,7 @@ function _render_area_js(id::String, data_json::String, series_json::String;
         .call(d3.axisBottom(x).ticks(Math.min(data.length,8)));
     g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(5).tickFormat(d3.format('.0%')));
 
-    if('$(xlabel)') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
-        .attr('font-size','11px').attr('fill','#666').text('$(xlabel)');
-    if('$(ylabel)') g.append('text').attr('transform','rotate(-90)')
-        .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
-        .attr('font-size','11px').attr('fill','#666').text('$(ylabel)');
+$(_axis_labels_js(xlabel, ylabel))
 
     // Legend
     const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
@@ -409,11 +444,7 @@ function _render_bar_js(id::String, data_json::String, series_json::String;
         g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
     }
 
-    if('$(xlabel)') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
-        .attr('font-size','11px').attr('fill','#666').text('$(xlabel)');
-    if('$(ylabel)') g.append('text').attr('transform','rotate(-90)')
-        .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
-        .attr('font-size','11px').attr('fill','#666').text('$(ylabel)');
+$(_axis_labels_js(xlabel, ylabel))
 
     // Legend
     if(series.length > 1) {
@@ -503,11 +534,7 @@ function _render_heatmap_js(id::String, data_json::String,
     g.append('g').attr('class','axis')
         .call(d3.axisLeft(y).tickFormat(d => d.length > 20 ? d.slice(0,18)+'..' : d));
 
-    if('$(xlabel)') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
-        .attr('font-size','11px').attr('fill','#666').text('$(xlabel)');
-    if('$(ylabel)') g.append('text').attr('transform','rotate(-90)')
-        .attr('x',-h/2).attr('y',-maxLabelW+10).attr('text-anchor','middle')
-        .attr('font-size','11px').attr('fill','#666').text('$(ylabel)');
+$(_axis_labels_js(xlabel, ylabel; yl_y="-maxLabelW+10"))
 })();
 """
 end
@@ -519,10 +546,10 @@ end
 function _render_body_single(panel::_PanelSpec; title::String="")
     html = ""
     if !isempty(title)
-        html *= "<div class=\"figure-title\">$(title)</div>\n"
+        html *= "<div class=\"figure-title\">$(_esc_html(title))</div>\n"
     end
     html *= """<div class="panel">
-<div class="panel-title">$(panel.title)</div>
+<div class="panel-title">$(_esc_html(panel.title))</div>
 <div id="$(panel.id)"></div>
 </div>"""
     html
@@ -532,21 +559,21 @@ function _render_body_figure(panels::Vector{_PanelSpec}; title::String="",
                              source::String="", note::String="")
     html = ""
     if !isempty(title)
-        html *= "<div class=\"figure-title\">$(title)</div>\n"
+        html *= "<div class=\"figure-title\">$(_esc_html(title))</div>\n"
     end
     html *= "<div class=\"panel-grid\">\n"
     for p in panels
         html *= """<div class="panel">
-<div class="panel-title">$(p.title)</div>
+<div class="panel-title">$(_esc_html(p.title))</div>
 <div id="$(p.id)"></div>
 </div>\n"""
     end
     html *= "</div>\n"
     if !isempty(source)
-        html *= "<div class=\"figure-source\">$(source)</div>\n"
+        html *= "<div class=\"figure-source\">$(_esc_html(source))</div>\n"
     end
     if !isempty(note)
-        html *= "<div class=\"figure-source\">$(note)</div>\n"
+        html *= "<div class=\"figure-source\">$(_esc_html(note))</div>\n"
     end
     html
 end
@@ -573,9 +600,10 @@ function _make_plot(panels::Vector{_PanelSpec}; title::String="",
     end
     scripts = join([p.js for p in panels], "\n")
 
-    html = _render_html(; title=isempty(title) ? "MacroEconometricModels Plot" : title,
-                         css=css, body=body, scripts=scripts)
-    PlotOutput(html)
+    doc_title = isempty(title) ? "MacroEconometricModels Plot" : title
+    html = _render_html(; title=doc_title, css=css, body=body, scripts=scripts)
+    fragment = _render_fragment(; css=css, body=body, scripts=scripts)
+    PlotOutput(html, fragment)
 end
 
 # =============================================================================
@@ -618,13 +646,16 @@ function display_plot(p::PlotOutput)
     tmpfile
 end
 
+# Embeddable fragment for notebook/Documenter pages (A11); full standalone document
+# is kept for save_plot/display_plot. Directly-constructed outputs (empty fragment)
+# fall back to the full html.
 function Base.show(io::IO, ::MIME"text/html", p::PlotOutput)
-    print(io, p.html)
+    print(io, isempty(p.fragment) ? p.html : p.fragment)
 end
 
 function Base.show(io::IO, ::MIME"text/plain", p::PlotOutput)
     n = length(p.html)
-    print(io, "PlotOutput($(n) bytes HTML with inline D3.js)")
+    print(io, "PlotOutput($(n) bytes, self-contained inline D3.js)")
 end
 
 function Base.show(io::IO, p::PlotOutput)

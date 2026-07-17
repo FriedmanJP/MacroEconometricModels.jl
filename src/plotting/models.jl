@@ -702,15 +702,7 @@ function _render_occbin_panel_js(id::String, data_json::String,
     g_$(id).append('g').attr('class','axis')
         .call(d3.axisLeft(y_$(id)).ticks(6));
 
-    if('$(xlabel)') g_$(id).append('text')
-        .attr('x', w_$(id)/2).attr('y', h_$(id)+30)
-        .attr('text-anchor','middle').attr('font-size','11px')
-        .attr('fill','#666').text('$(xlabel)');
-    if('$(ylabel)') g_$(id).append('text')
-        .attr('transform','rotate(-90)')
-        .attr('x', -h_$(id)/2).attr('y', -42)
-        .attr('text-anchor','middle').attr('font-size','11px')
-        .attr('fill','#666').text('$(ylabel)');
+$(_axis_labels_js(xlabel, ylabel; g="g_$(id)", w="w_$(id)", h="h_$(id)"))
 
     // Legend
     const leg_$(id) = g_$(id).append('g').attr('class','legend')

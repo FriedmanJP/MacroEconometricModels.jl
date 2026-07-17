@@ -336,11 +336,7 @@ function _render_coef_plot_js(id::String, data_json::String;
     g.append('g').attr('class','axis')
         .call(d3.axisLeft(y));
 
-    if('$(xlabel)') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
-        .attr('font-size','11px').attr('fill','#666').text('$(xlabel)');
-    if('$(ylabel)') g.append('text').attr('transform','rotate(-90)')
-        .attr('x',-h/2).attr('y',-85).attr('text-anchor','middle')
-        .attr('font-size','11px').attr('fill','#666').text('$(ylabel)');
+$(_axis_labels_js(xlabel, ylabel; yl_y="-85"))
 
     // Tooltip
     svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)

@@ -89,11 +89,7 @@ function _render_vbar_js(id::String, data_json::String;
         .call(d3.axisBottom(x).ticks(Math.min(xVals.length, 10)));
     g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
 
-    if('$(xlabel)') g.append('text').attr('x',w/2).attr('y',h+30).attr('text-anchor','middle')
-        .attr('font-size','11px').attr('fill','#666').text('$(xlabel)');
-    if('$(ylabel)') g.append('text').attr('transform','rotate(-90)')
-        .attr('x',-h/2).attr('y',-42).attr('text-anchor','middle')
-        .attr('font-size','11px').attr('fill','#666').text('$(ylabel)');
+$(_axis_labels_js(xlabel, ylabel))
 
     // Tooltip
     svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)

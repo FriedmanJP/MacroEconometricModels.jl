@@ -5,7 +5,8 @@
 # Licensed under GPL-3.0-or-later. See LICENSE for details.
 
 """
-Core types and JSON utilities for inline D3.js plotting.
+Core types and JSON/HTML-escaping utilities for self-contained plotting with
+vendored (inline) D3.js.
 """
 
 # =============================================================================
@@ -15,10 +16,16 @@ Core types and JSON utilities for inline D3.js plotting.
 """
     PlotOutput
 
-Self-contained HTML document with inline D3.js visualization.
+Self-contained HTML visualization with **vendored (inline) D3.js** — it renders
+offline, with no CDN dependency.
 
 # Fields
-- `html::String`: Complete HTML document string
+- `html::String`: complete standalone HTML document (used by `save_plot` /
+  `display_plot`), starting with `<!DOCTYPE html>`.
+- `fragment::String`: embeddable HTML fragment (no `<!DOCTYPE>`/`<html>`/`<head>`/
+  `<body>`), emitted by `show(::MIME"text/html")` so multiple plots can be embedded
+  in one notebook/Documenter page without nesting whole documents. Empty for
+  directly-constructed outputs (falls back to `html` on show).
 
 # Usage
 ```julia
@@ -29,7 +36,12 @@ display_plot(p)                 # open in browser
 """
 struct PlotOutput
     html::String
+    fragment::String
 end
+
+# Back-compatible single-argument constructor: no embeddable fragment (show falls
+# back to the full document). Keeps `PlotOutput(html)` call sites working.
+PlotOutput(html::AbstractString) = PlotOutput(String(html), "")
 
 """Internal panel specification for multi-panel figures."""
 struct _PanelSpec
@@ -61,11 +73,68 @@ function _next_plot_id(prefix::String)
 end
 
 # =============================================================================
+# Vendored D3.js (self-contained output — plotrule A12)
+# =============================================================================
+
+# Cache the vendored D3 blob in a Ref, populated LAZILY on first use — never at
+# precompile/module-init time, since const-Ref caches filled during precompilation
+# do not survive into the running session.
+const _D3_SOURCE = Ref{String}("")
+
+"""
+    _d3_source() -> String
+
+Return the vendored D3.js v7.8.5 UMD source (read once from
+`src/plotting/assets/d3.v7.min.js`, then cached). Inlined into every `PlotOutput`
+so plots render offline (plotrule A12).
+"""
+function _d3_source()
+    if isempty(_D3_SOURCE[])
+        _D3_SOURCE[] = read(joinpath(@__DIR__, "assets", "d3.v7.min.js"), String)
+    end
+    _D3_SOURCE[]
+end
+
+# =============================================================================
+# HTML / JSON escaping (plotrule A7/A8)
+# =============================================================================
+
+"""
+    _esc_html(s) -> String
+
+Escape a user string for the **HTML-text sink** (panel/figure titles, `<title>`,
+figure source/note). `&` first. See plotrule A8.
+"""
+_esc_html(s::AbstractString) = replace(string(s),
+    "&" => "&amp;", "<" => "&lt;", ">" => "&gt;", "\"" => "&quot;", "'" => "&#39;")
+
+# =============================================================================
 # Minimal JSON Serializer
 # =============================================================================
 
-_json(x::AbstractString) = "\"" * replace(replace(replace(string(x),
-    "\\" => "\\\\"), "\"" => "\\\""), "\n" => "\\n") * "\""
+# String serialization for the JSON / JS-string-literal sink (plotrule A7). Covers
+# \\ " \n \r \t, all control chars < U+0020, and — because output is embedded in a
+# <script> block — `<` (as <, which neutralizes </script> and <!-- while
+# decoding back to `<` as displayed text) plus the JS line separators U+2028/U+2029.
+function _json(x::AbstractString)
+    io = IOBuffer()
+    print(io, '"')
+    for c in x
+        if     c == '\\'      print(io, "\\\\")
+        elseif c == '"'       print(io, "\\\"")
+        elseif c == '\n'      print(io, "\\n")
+        elseif c == '\r'      print(io, "\\r")
+        elseif c == '\t'      print(io, "\\t")
+        elseif c == '<'       print(io, "\\u003c")
+        elseif c == '\u2028'  print(io, "\\u2028")
+        elseif c == '\u2029'  print(io, "\\u2029")
+        elseif c < ' '   print(io, "\\u", lpad(string(UInt16(c), base=16), 4, '0'))
+        else                  print(io, c)
+        end
+    end
+    print(io, '"')
+    String(take!(io))
+end
 
 function _json(x::Number)
     (isnan(x) || isinf(x)) && return "null"

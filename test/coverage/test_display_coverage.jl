@@ -39,7 +39,8 @@ end
         html = M._render_html(; title="Test", css="body{}", body="<p>hi</p>", scripts="")
         @test occursin("<!DOCTYPE html>", html)
         @test occursin("<title>Test</title>", html)
-        @test occursin("d3.min.js", html)
+        @test occursin("d3js.org", html)          # vendored D3 inlined (A12), not a CDN URL
+        @test !occursin("cdnjs", html)
         @test occursin("<p>hi</p>", html)
     end
 

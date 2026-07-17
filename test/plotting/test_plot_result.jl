@@ -19,7 +19,13 @@ using Test, Random, DataFrames
         # D3 creates <svg> elements at runtime; check for the JS creation pattern
         @test occursin("append('svg')", p.html)
         if check_d3
-            @test occursin("d3.min.js", p.html)
+            # A12 self-containment: D3 is vendored/inlined, NOT loaded from a CDN.
+            # (Supersedes the old occursin("d3.min.js") check, which passed on the
+            # CDN URL and so could never catch a regression.)
+            @test occursin("d3js.org", p.html)                 # inline D3 source banner
+            @test !occursin("cdnjs", p.html)
+            @test !occursin(r"src=\"https?://", p.html)
+            @test !occursin(r"href=\"https?://", p.html)
         end
     end
 
@@ -460,7 +466,8 @@ using Test, Random, DataFrames
         @test result_path == tmpfile
         @test isfile(tmpfile)
         content = read(tmpfile, String)
-        @test occursin("d3.min.js", content)
+        @test occursin("d3js.org", content)      # vendored D3 inlined (A12), not a CDN URL
+        @test !occursin("cdnjs", content)
         @test occursin("append('svg')", content)
         rm(tmpfile)
     end
@@ -477,11 +484,17 @@ using Test, Random, DataFrames
         @test occursin("PlotOutput", s)
         @test occursin("bytes", s)
 
-        # text/html
+        # text/html — PLT-03: show emits an EMBEDDABLE fragment (no <!DOCTYPE>/
+        # <html>/<head>/<body>) so two plots can share one notebook/Documenter page;
+        # the full standalone document is kept in p.html / save_plot.
         io2 = IOBuffer()
         show(io2, MIME"text/html"(), p)
         s2 = String(take!(io2))
-        @test occursin("<!DOCTYPE html>", s2)
+        @test !occursin("<!DOCTYPE html>", s2)
+        @test !occursin("<html", s2)
+        @test occursin("append('svg')", s2)          # embeddable panel content present
+        @test occursin("window.__mem_core", s2)       # guarded shared core included
+        @test occursin("<!DOCTYPE html>", p.html)     # full document retained on the type
 
         # Default show
         io3 = IOBuffer()
