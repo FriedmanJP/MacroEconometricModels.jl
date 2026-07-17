@@ -196,7 +196,9 @@ function _stepwise_arima(y::Vector{T}, max_p::Int, max_q::Int, d::Int;
 
     function _fit_and_cache(p::Int, q::Int)
         haskey(cache, (p, q)) && return cache[(p, q)]
-        p < 0 || q < 0 || p > max_p || q > max_q && return nothing
+        # Parenthesize: && binds tighter than ||, so without the parens `return nothing`
+        # only fired when q > max_q, not for the earlier disjuncts (audit R-23 / #117).
+        (p < 0 || q < 0 || p > max_p || q > max_q) && return nothing
         try
             model = if d == 0
                 estimate_arma(y_work, p, q; method=method, include_intercept=include_intercept)

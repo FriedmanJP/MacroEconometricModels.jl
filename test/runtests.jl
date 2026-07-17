@@ -43,6 +43,7 @@ const TEST_GROUPS = [
         "bvar/test_bgr.jl",
         "var/test_arias2018.jl",
         "var/test_uhlig.jl",
+        "preg/test_panel_nonlinear.jl",   # moved from the ceiling ARIMA group to rebalance (#127)
     ]),
     # Group 3: IRF/FEVD/HD & VECM
     ("IRF & VECM" => [
@@ -51,6 +52,7 @@ const TEST_GROUPS = [
         "var/test_fevd.jl",
         "var/test_hd.jl",
         "vecm/test_vecm.jl",
+        "preg/test_panel_iv.jl",          # moved from the ceiling ARIMA group to rebalance (#127)
     ]),
     # Group 4: LP & Factor Models & Nowcasting & DiD
     ("LP & Factor & Nowcast" => [
@@ -92,8 +94,6 @@ const TEST_GROUPS = [
         "reg/test_multinomial.jl",
         "preg/test_panel_reg.jl",
         "preg/test_panel_tests.jl",
-        "preg/test_panel_iv.jl",
-        "preg/test_panel_nonlinear.jl",
     ]),
     # Group 6: Volatility & Non-Gaussian & Plotting & Filters & Spectral
     ("Volatility & Filters" => [
@@ -107,14 +107,19 @@ const TEST_GROUPS = [
         "filters/test_x13_coverage.jl",
         "spectral/test_spectral.jl",
     ]),
-    # Group 7: DSGE Models
-    ("DSGE Models" => [
+    # Group 7 split into three so the DSGE critical path balances across processes (#123):
+    # the heavy test_ha_dsge.jl (~65% of the old group) runs alone.
+    ("DSGE Core" => [
         "dsge/test_dsge.jl",
-        "dsge/test_bayesian_dsge.jl",
-        "dsge/test_dsge_hd.jl",
-        "dsge/test_ha_dsge.jl",
         "dsge/test_blanchard_olg.jl",
         "dsge/test_continuous_aiyagari.jl",
+    ]),
+    ("DSGE Bayesian & HD" => [
+        "dsge/test_bayesian_dsge.jl",
+        "dsge/test_dsge_hd.jl",
+    ]),
+    ("HA-DSGE" => [
+        "dsge/test_ha_dsge.jl",
     ]),
     # Group 8: Coverage-A (DSGE — heaviest coverage tests)
     ("Coverage-A" => [
@@ -128,15 +133,13 @@ const TEST_GROUPS = [
         "coverage/test_display_coverage.jl",
         "coverage/test_gmm_ext_coverage.jl",
     ]),
-    # Group 10: Coverage-C (lightweight coverage tests)
-    ("Coverage-C" => [
+    # Group 10: Coverage-C + IO. The io tests are sub-second, so they fold into this light
+    # group rather than paying a standalone process (#127).
+    ("Coverage-C + IO" => [
         "coverage/test_pvar_nongaussian_coverage.jl",
         "coverage/test_nowcast_coverage.jl",
         "coverage/test_vecm_teststat_coverage.jl",
         "coverage/test_misc_coverage.jl",
-    ]),
-    # Group 11: Input-Output analysis
-    ("IO Analysis" => [
         "io/test_io_smoke.jl",
         "io/test_io_types.jl",
         "io/test_io_coefficients.jl",
@@ -160,10 +163,29 @@ const TEST_GROUPS = [
     ]),
 ]
 
+# Monotone expected-duration ranking (heaviest first) for the longest-first work queue (#124).
+# Only the ordering matters, not accurate minutes.
+function _expected_rank(name::AbstractString)
+    name == "HA-DSGE"             && return 100
+    name == "DSGE Core"           && return 90
+    name == "DSGE Bayesian & HD"  && return 70
+    startswith(name, "Coverage-A")            && return 60
+    name == "ARIMA & Tests & Data & Reg"      && return 55
+    name == "IRF & VECM"          && return 50
+    name == "Bayesian & SVAR"     && return 45
+    startswith(name, "Coverage")  && return 20   # light coverage groups last
+    return 40                                     # default medium
+end
+
 # Multi-process runner (fallback when threads unavailable)
 function run_test_group(group_name::String, files::Vector{String})
     test_dir = replace(string(@__DIR__), '\\' => '/')  # forward slashes for Windows compat
-    includes = join(["include(\"$(test_dir)/$(f)\");" for f in files], "\n    ")
+    # Time each file and print a machine-greppable FILETIME<TAB>group<TAB>file<TAB>seconds line (#125).
+    includes = join(
+        ["let t = @elapsed include(\"$(test_dir)/$(f)\"); " *
+         "println(\"FILETIME\\t$(group_name)\\t$(f)\\t\", round(t; digits=1)); end"
+         for f in files],
+        "\n    ")
     fixtures_path = replace(joinpath(test_dir, "fixtures.jl"), '\\' => '/')
     code = """
     using Test, MacroEconometricModels
@@ -177,10 +199,16 @@ function run_test_group(group_name::String, files::Vector{String})
     # Values: 0=none, 1=user, 2=all, 3=tracefile (Julia 1.12+)
     cov_opt = Base.JLOptions().code_coverage
     cov_flag = cov_opt != 0 ? `--code-coverage=user` : ``
+    # Child-process hygiene (#127): spawn via the current interpreter (not PATH `julia`),
+    # skip startup.jl, and — decision P1.4 — restore standard Pkg.test check-bounds semantics
+    # on the full-fidelity Ubuntu job only (MACRO_CHECK_BOUNDS=1 there; ~10-20% slower but net
+    # time still falls due to the other savings; off on windows/macOS).
+    julia_exe = joinpath(Sys.BINDIR, Base.julia_exename())
+    checkbounds_flag = get(ENV, "MACRO_CHECK_BOUNDS", "") == "1" ? `--check-bounds=yes` : ``
     # Single-thread each child (Julia + OpenBLAS): the test matrices are small, so
     # multi-threaded BLAS is pure contention and N threads × ~10 children oversubscribes
     # CI cores. Mirrors the CI.yml env so local multiprocess runs behave identically.
-    cmd = addenv(`julia $cov_flag --project=$(dirname(test_dir)) -e $code`,
+    cmd = addenv(`$julia_exe $cov_flag $checkbounds_flag --startup-file=no --project=$(dirname(test_dir)) -e $code`,
                  "JULIA_NUM_THREADS" => "1", "OPENBLAS_NUM_THREADS" => "1")
     proc = run(pipeline(cmd; stdout=stdout, stderr=stderr); wait=false)
     return proc
@@ -210,21 +238,29 @@ if !serial && (multiprocess || (!serial && Threads.nthreads() == 1 && Sys.CPU_TH
     FAST && println("FAST mode enabled (reduced sampling)")
     println("Set MACRO_SERIAL_TESTS=1 to run sequentially\n")
 
-    procs = Pair{String, Base.Process}[]
-    for (group_name, files) in TEST_GROUPS
-        proc = run_test_group(group_name, files)
-        push!(procs, group_name => proc)
-    end
-
-    # Wait for all and collect results
+    # Concurrency-capped, longest-first work queue (#124): order groups heaviest-first and
+    # launch at most min(CPU_THREADS, 4) at a time, starting the next as each finishes. This
+    # cuts context-switch waste and macOS memory pressure vs spawning all groups at once.
+    queue = sort(collect(TEST_GROUPS); by = p -> _expected_rank(first(p)), rev = true)
+    max_conc = min(Sys.CPU_THREADS, 4)
+    active = Dict{Base.Process, String}()
     failed_groups = String[]
-    for (name, proc) in procs
-        wait(proc)
-        if proc.exitcode != 0
-            @error "Test group '$name' FAILED (exit code $(proc.exitcode))"
-            push!(failed_groups, name)
-        else
-            @info "Test group '$name' PASSED"
+    while !isempty(queue) || !isempty(active)
+        while !isempty(queue) && length(active) < max_conc
+            (name, files) = popfirst!(queue)
+            active[run_test_group(name, files)] = name
+        end
+        sleep(0.5)   # Julia has no wait_any; poll process_exited (parent cost negligible)
+        for (proc, name) in collect(active)
+            if process_exited(proc)
+                if proc.exitcode == 0
+                    @info "Test group '$name' PASSED"
+                else
+                    @error "Test group '$name' FAILED (exit code $(proc.exitcode))"
+                    push!(failed_groups, name)
+                end
+                delete!(active, proc)
+            end
         end
     end
 
@@ -367,14 +403,18 @@ else
         @testset "X-13 Coverage" begin include("filters/test_x13_coverage.jl") end
         @testset "Spectral Analysis" begin include("spectral/test_spectral.jl") end
 
-        # Group 7: DSGE Models
-        @testset "DSGE Models" begin
+        # Group 7 split into three (#123)
+        @testset "DSGE Core" begin
             include("dsge/test_dsge.jl")
-            include("dsge/test_bayesian_dsge.jl")
-            include("dsge/test_dsge_hd.jl")
-            include("dsge/test_ha_dsge.jl")
             include("dsge/test_blanchard_olg.jl")
             include("dsge/test_continuous_aiyagari.jl")
+        end
+        @testset "DSGE Bayesian & HD" begin
+            include("dsge/test_bayesian_dsge.jl")
+            include("dsge/test_dsge_hd.jl")
+        end
+        @testset "HA-DSGE" begin
+            include("dsge/test_ha_dsge.jl")
         end
 
         # Group 8: Coverage-A (DSGE)
@@ -392,5 +432,30 @@ else
         @testset "Nowcast Coverage" begin include("coverage/test_nowcast_coverage.jl") end
         @testset "VECM & Teststat Coverage" begin include("coverage/test_vecm_teststat_coverage.jl") end
         @testset "Misc Coverage" begin include("coverage/test_misc_coverage.jl") end
+
+        # IO Analysis (folds into "Coverage-C + IO" for the parallel runner; also restores the
+        # serial-fallback includes the io branch omitted — #127).
+        @testset "IO Analysis" begin
+            include("io/test_io_smoke.jl")
+            include("io/test_io_types.jl")
+            include("io/test_io_coefficients.jl")
+            include("io/test_io_example.jl")
+            include("io/test_io_multipliers.jl")
+            include("io/test_io_linkages.jl")
+            include("io/test_io_sda.jl")
+            include("io/test_io_extraction.jl")
+            include("io/test_io_environmental.jl")
+            include("io/test_io_bf_first.jl")
+            include("io/test_io_bf_second.jl")
+            include("io/test_io_fetch.jl")
+            include("io/test_io_registry.jl")
+            include("io/test_io_sources.jl")
+            include("io/test_io_parse.jl")
+            include("io/test_io_ext_parse.jl")
+            include("io/test_io_show.jl")
+            include("io/test_io_plotting.jl")
+            include("io/test_io_refs.jl")
+            include("io/test_io_coverage.jl")
+        end
     end
 end

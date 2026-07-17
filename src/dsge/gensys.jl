@@ -26,7 +26,8 @@ Returns `(G1, impact, C_sol, eu, eigenvalues)` where:
 """
 function gensys(Gamma0::AbstractMatrix{T}, Gamma1::AbstractMatrix{T},
                 C::AbstractVector{T}, Psi::AbstractMatrix{T}, Pi::AbstractMatrix{T};
-                div::Real=1.0 + 1e-8) where {T<:AbstractFloat}
+                div::Real=1.0 + 1e-8,
+                f_lead::Union{Nothing,AbstractMatrix{T}}=nothing) where {T<:AbstractFloat}
     n = size(Gamma0, 1)
     eu = [0, 0]
 
@@ -110,9 +111,13 @@ function gensys(Gamma0::AbstractMatrix{T}, Gamma1::AbstractMatrix{T},
     end
 
     # Compute solution constant: y_t = G1*y_{t-1} + impact*eps + C_sol
-    # At SS: y_ss = (Gamma0-Gamma1)^{-1}*C, and C_sol = (I-G1)*y_ss
+    # Static SS relation is (f₀+f₁+f_lead)·y = C. In the pencil Γ₀-Γ₁ = f₀+f₁; f_lead was
+    # folded into Π, so add it back when supplied (audit S-06 / #114) — without it the SS
+    # constant is wrong for forward-looking models with a constant.
     if norm(C) > eps(T)
-        y_bar = real(Vector{T}((complex(Gamma0) - complex(Gamma1)) \ complex(C)))
+        A_ss = f_lead === nothing ? (complex(Gamma0) - complex(Gamma1)) :
+                                    (complex(Gamma0) - complex(Gamma1) + complex(f_lead))
+        y_bar = real(Vector{T}(A_ss \ complex(C)))
         C_sol = (I - G1) * y_bar
     else
         C_sol = zeros(T, n)
@@ -218,9 +223,10 @@ function solve(spec::DSGESpec{T}; method::Symbol=:gensys, kwargs...) where {T<:A
         G1 = uc_ok ? uc_result.G1 : qz_core.G
         impact = uc_ok ? uc_result.impact : qz_core.impact
 
-        # Constants: C_sol = (I - G1)·y_ss, y_ss = (Γ0 - Γ1)⁻¹·C
+        # Constants: C_sol = (I - G1)·y_ss, y_ss = (f₀+f₁+f_lead)⁻¹·C. Include the lead
+        # block (Γ0-Γ1 = f₀+f₁ omits it) or the SS is wrong for forward models (S-06 / #114).
         if norm(ld.C) > eps(T)
-            y_bar = real(Vector{T}((complex(ld.Gamma0) - complex(ld.Gamma1)) \ complex(ld.C)))
+            y_bar = real(Vector{T}(complex(f_0 + f_1 + f_lead) \ complex(ld.C)))
             C_sol = (I - G1) * y_bar
         else
             C_sol = zeros(T, spec.n_endog)

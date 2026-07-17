@@ -203,7 +203,9 @@ function sargan_test(model::LPIVModel{T}, h::Int) where {T<:AbstractFloat}
         sigma2 = sum(u.^2) / T_h
         Zu = Z' * u
         ZtZ_inv = robust_inv(Z' * Z)
-        T_h * (Zu' * ZtZ_inv * Zu) / sigma2
+        # Sargan J = (Z'u)'(Z'Z)⁻¹(Z'u)/σ̂², σ̂² = u'u/T_h. σ̂² already carries the sample
+        # size in its denominator; do NOT multiply by T_h again (audit R-02 / #112).
+        (Zu' * ZtZ_inv * Zu) / sigma2
     end for eq in 1:n_resp]
 
     J_avg = mean(J_stats)

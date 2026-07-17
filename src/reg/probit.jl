@@ -195,8 +195,18 @@ function estimate_probit(y::AbstractVector{T}, X::AbstractMatrix{T};
     if cov_type == :ols
         vcov_mat = info_inv
     else
-        # Sandwich: V = info_inv * S * info_inv
-        score_resid = yv .- mu
+        # Sandwich: V = info_inv * S * info_inv. The meat must use the probit SCORE residual
+        # s_i = φ(η_i)(y_i−μ_i)/(μ_i(1−μ_i)), NOT the raw residual (y−μ). Logit's score residual
+        # reduces to y−μ, but probit's does not — the raw residual made every robust/cluster
+        # probit SE wrong (audit M-02 / #113). Match the IRLS clamps so extreme indices are safe.
+        dist = Normal(zero(T), one(T))
+        eta_hat = Xm * beta
+        score_resid = similar(mu)
+        @inbounds for i in 1:n
+            phi_i = max(T(pdf(dist, eta_hat[i])), T(1e-10))
+            denom_i = max(mu[i] * (one(T) - mu[i]), T(1e-10))
+            score_resid[i] = phi_i * (yv[i] - mu[i]) / denom_i
+        end
         vcov_mat = _reg_vcov(Xm, score_resid, cov_type, info_inv; clusters=clusters)
     end
 

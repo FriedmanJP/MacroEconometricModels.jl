@@ -806,6 +806,35 @@ end
         end
     end
 
+    @testset "Probit robust SE uses the score residual (M-02 / #113)" begin
+        rng = MersenneTwister(7013)
+        n = 600
+        X = hcat(ones(n), randn(rng, n), randn(rng, n))
+        beta_true = [0.3, 0.8, -0.5]
+        d = Distributions.Normal()
+        y = Float64.(rand(rng, n) .< Distributions.cdf.(d, X * beta_true))
+
+        # For :ols the probit vcov IS the model's own info_inv = robust_inv(X'WX); reusing it
+        # (rather than reconstructing W) sidesteps the IRLS returning w one iteration stale.
+        m_ols = estimate_probit(y, X; cov_type=:ols)
+        m_hc0 = estimate_probit(y, X; cov_type=:hc0)
+        info_inv = vcov(m_ols)
+
+        # Score residual exactly as the estimator builds it (same index, same clamps).
+        eta = X * coef(m_ols)
+        mu = clamp.(Distributions.cdf.(d, eta), 1e-10, 1 - 1e-10)
+        phi = max.(Distributions.pdf.(d, eta), 1e-10)
+        denom = max.(mu .* (1 .- mu), 1e-10)
+        s_score = phi .* (y .- mu) ./ denom
+        V_score = info_inv * (X' * Diagonal(s_score .^ 2) * X) * info_inv
+        @test diag(vcov(m_hc0)) ≈ diag(V_score) rtol = 1e-6
+
+        # Must NOT equal the pre-fix raw-residual (y−μ) sandwich.
+        s_raw = y .- mu
+        V_raw = info_inv * (X' * Diagonal(s_raw .^ 2) * X) * info_inv
+        @test !isapprox(diag(vcov(m_hc0)), diag(V_raw); rtol = 1e-3)
+    end
+
     @testset "Probit convergence and predictions" begin
         rng = MersenneTwister(7002)
         n = 500

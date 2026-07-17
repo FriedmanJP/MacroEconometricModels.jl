@@ -317,7 +317,8 @@ function _collocation_residual(coeffs_vec::AbstractVector{T},
                                 quad_weights::Vector{T},
                                 state_bounds::Matrix{T},
                                 multi_indices::Matrix{Int},
-                                steady_state::Vector{T}) where {T}
+                                steady_state::Vector{T},
+                                impact::Matrix{T}) where {T}
 
     coeffs = reshape(coeffs_vec, n_vars, n_basis)
     n_nodes = size(basis_matrix, 1)
@@ -352,6 +353,15 @@ function _collocation_residual(coeffs_vec::AbstractVector{T},
                 x_next_dev[ii] = y_dev[si]
             end
             x_next_level = x_next_dev .+ steady_state[state_idx]
+
+            # Integrate over the next-period shock at this quadrature node: add the linear
+            # shock impact so E_t[y_{t+1}] is a genuine quadrature, not n_quad identical
+            # deterministic evaluations (the certainty-equivalent bug — audit S-02 / #120).
+            for (ii, si) in enumerate(state_idx)
+                for k in 1:n_eps
+                    x_next_level[ii] += impact[si, k] * quad_nodes[q, k]
+                end
+            end
 
             # Clamp to state bounds
             for d in 1:nx
@@ -509,6 +519,9 @@ function collocation_solver(spec::DSGESpec{T};
         end
     end
 
+    # First-order shock-impact matrix for genuine quadrature over next-period shocks (S-02 / #120)
+    impact_mat = gensys(ld.Gamma0, ld.Gamma1, ld.C, ld.Psi, ld.Pi).impact
+
     # Step 6: Newton iteration
     coeffs_vec = vec(coeffs)
     converged = false
@@ -525,7 +538,7 @@ function collocation_solver(spec::DSGESpec{T};
                                    basis_matrix, nodes_phys_T,
                                    state_idx, control_idx, spec,
                                    quad_nodes, quad_weights,
-                                   state_bounds_T, multi_indices, ss)
+                                   state_bounds_T, multi_indices, ss, impact_mat)
 
         residual_norm = norm(R)
 
@@ -552,7 +565,7 @@ function collocation_solver(spec::DSGESpec{T};
                                                 basis_matrix, nodes_phys_T,
                                                 state_idx, control_idx, spec,
                                                 quad_nodes, quad_weights,
-                                                state_bounds_T, multi_indices, ss)
+                                                state_bounds_T, multi_indices, ss, impact_mat)
                 J[:, i] = (R_plus .- R) ./ h_fd
             end
         else
@@ -563,7 +576,7 @@ function collocation_solver(spec::DSGESpec{T};
                                                 basis_matrix, nodes_phys_T,
                                                 state_idx, control_idx, spec,
                                                 quad_nodes, quad_weights,
-                                                state_bounds_T, multi_indices, ss)
+                                                state_bounds_T, multi_indices, ss, impact_mat)
                 J[:, i] = (R_plus .- R) ./ h_fd
             end
         end
@@ -583,7 +596,7 @@ function collocation_solver(spec::DSGESpec{T};
                                              basis_matrix, nodes_phys_T,
                                              state_idx, control_idx, spec,
                                              quad_nodes, quad_weights,
-                                             state_bounds_T, multi_indices, ss)
+                                             state_bounds_T, multi_indices, ss, impact_mat)
             trial_norm = norm(R_trial)
             if trial_norm < best_norm
                 best_norm = trial_norm
@@ -698,6 +711,11 @@ function max_euler_error(sol::ProjectionSolution{T}; n_test::Int=1000,
     quad_nodes = Matrix{T}(quad_nodes)
     quad_weights = Vector{T}(quad_weights)
 
+    # First-order shock impact so the Euler-error diagnostic integrates over next-period
+    # shocks too (else it cannot detect the certainty-equivalent failure — S-02 / #120).
+    ld_lin = linearize(spec)
+    impact_mat = gensys(ld_lin.Gamma0, ld_lin.Gamma1, ld_lin.C, ld_lin.Psi, ld_lin.Pi).impact
+
     max_err = zero(T)
 
     for _ in 1:n_test
@@ -719,6 +737,12 @@ function max_euler_error(sol::ProjectionSolution{T}; n_test::Int=1000,
         for q in 1:size(quad_nodes, 1)
             x_next_dev = y_t[sol.state_indices] .- ss[sol.state_indices]
             x_next_level = x_next_dev .+ ss[sol.state_indices]
+            # Integrate over the next-period shock at this quadrature node (S-02 / #120)
+            for (ii, si) in enumerate(sol.state_indices)
+                for k in 1:n_eps
+                    x_next_level[ii] += impact_mat[si, k] * quad_nodes[q, k]
+                end
+            end
             for d in 1:nx
                 x_next_level[d] = clamp(x_next_level[d], sol.state_bounds[d, 1], sol.state_bounds[d, 2])
             end
