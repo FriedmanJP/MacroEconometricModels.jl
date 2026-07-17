@@ -7,6 +7,8 @@
 - **Cluster-robust standard errors** with finite-sample correction (Arellano 1987)
 - **Instrumental variables / 2SLS** with first-stage F-statistic and Sargan-Hansen overidentification test
 - **Variance Inflation Factors** for multicollinearity diagnostics (Belsley, Kuh & Welsch 1980)
+- **Censored (Tobit) and truncated regression** by MLE with McDonald–Moffitt marginal effects (Tobin 1958; Hausman & Wise 1977)
+- **Heckman sample-selection model** (two-step Heckit + full-information ML) with the Greene corrected two-step covariance (Heckman 1979)
 - **CrossSectionData dispatch** for symbol-based formula-like syntax
 - **StatsAPI interface**: `coef`, `vcov`, `predict`, `confint`, `stderror`, `nobs`, `r2`
 
@@ -359,6 +361,78 @@ The cluster-robust standard errors for the intercept are substantially larger th
 
 ---
 
+## Long-Run Variance (HAC) Estimation
+
+When the data are serially correlated --- as in time-series regressions, GMM moment conditions, and cointegration analysis --- inference requires the **long-run variance** (LRV), the zero-frequency spectral density that sums all autocovariances rather than a single-lag White correction. For a mean-zero (after demeaning) series ``U_t`` (``T \times k``) with sample autocovariances ``\Gamma_j = T^{-1} \sum_t U_t U_{t-j}'`` and kernel ``k(\cdot)``:
+
+```math
+\Omega = \Gamma_0 + \sum_{j \geq 1} k(j/b)\,(\Gamma_j + \Gamma_j'), \qquad
+\Lambda = \Gamma_0 + \sum_{j \geq 1} k(j/b)\,\Gamma_j
+```
+
+where:
+- ``\Omega`` is the **two-sided** long-run covariance --- the object HAC standard errors and spectral density estimates use
+- ``\Lambda`` is the **one-sided** long-run covariance --- the object fully-modified OLS, canonical cointegrating regression, and panel cointegration consume
+- ``b`` is the bandwidth (truncation lag), fixed or data-dependent
+- ``k(\cdot)`` is the kernel: `:bartlett` (Newey-West), `:parzen`, `:qs` (quadratic-spectral), or `:tukey_hanning`
+
+The two objects satisfy the identity ``\Omega = \Lambda + \Lambda' - \Gamma_0`` by construction. Using ``\Gamma_j + \Gamma_j'`` where ``\Gamma_j`` alone is required silently breaks fully-modified estimators, so the one-sided ``\Lambda`` has its own function.
+
+`lrvar` returns the two-sided ``\Omega`` (a scalar for a vector input, a matrix for a matrix input); `lrcov` is its matrix form and `lrcov_oneside` returns the one-sided ``\Lambda``:
+
+```@example reg
+# Serially correlated series: an AR(1) with rho = 0.6
+T = 400
+u = zeros(T)
+for t in 2:T
+    u[t] = 0.6 * u[t-1] + randn()
+end
+
+Omega = lrvar(u; kernel=:bartlett, bandwidth=:andrews)   # two-sided, Andrews (1991) bandwidth
+naive = sum(abs2, u .- sum(u)/T) / T                     # naive variance ignores serial correlation
+round.((Omega, naive); digits=3)
+```
+
+The long-run variance (about ``1/(1-0.6)^2 \approx 6.25`` times the innovation variance) exceeds the naive sample variance because positive serial correlation inflates the variance of the sample mean --- exactly the correction HAC inference applies.
+
+### Bandwidth and Kernel Selection
+
+The `bandwidth` keyword accepts a data-dependent selector or a fixed truncation lag:
+
+| Selector | Method | Reference |
+|---|---|---|
+| `:andrews` | AR(1) parametric plug-in | Andrews (1991) |
+| `:nw94` | Nonparametric automatic bandwidth | Newey & West (1994) |
+| a real number | fixed truncation lag, used as-is | --- |
+
+Setting `prewhiten=true` applies Andrews-Monahan (1992) VAR(1) prewhitening with recoloring and an eigenvalue-modulus cap at 0.97 (falling back to no prewhitening near a unit root).
+
+```@example reg
+# Multivariate one-sided long-run covariance for a cointegration workflow
+X = hcat(u, cumsum(0.3 .* u .+ randn(T)))
+Lambda = lrcov_oneside(X; kernel=:qs, bandwidth=:nw94)
+round.(Lambda; digits=3)
+```
+
+### VARHAC
+
+VARHAC (Den Haan & Levin 1997) is a **parametric** alternative to kernel HAC: it fits a reduced-form VAR selected by information criterion (up to ``\lfloor T^{1/3} \rfloor`` lags) and reads the LRV off the fitted filter,
+
+```math
+\Omega = \hat{B}(1)^{-1}\, \hat{\Sigma}\, \hat{B}(1)^{-\top}, \qquad \hat{B}(1) = I - \sum_{l=1}^p \hat{A}_l
+```
+
+with no bandwidth or kernel to choose.
+
+```@example reg
+Omega_vh = varhac(u; ic=:aic)
+round(Omega_vh; digits=3)
+```
+
+VARHAC and kernel HAC estimate the same population object; VARHAC is often more accurate when the serial correlation is well approximated by a low-order VAR.
+
+---
+
 ## Instrumental Variables / 2SLS
 
 When a regressor ``x_j`` is correlated with the error term (``E[x_j u] \neq 0``), OLS is biased and inconsistent. Common sources of endogeneity include omitted variables, simultaneity, and measurement error. **Instrumental variables** (IV) estimation resolves this by using instruments ``Z`` that satisfy two conditions:
@@ -432,11 +506,55 @@ report(m_iv)
 
 The OLS coefficient on education is biased upward because ability enters both the education equation and the wage equation. The 2SLS estimator removes this bias by instrumenting education with distance to college and quarter of birth. The first-stage F well exceeds 10, confirming that the instruments are strong. The Sargan test p-value fails to reject the null that both instruments are valid.
 
+### LIML, Fuller, and k-class estimators
+
+Under **weak or many instruments**, 2SLS is severely biased toward OLS. The **k-class** family
+(Theil 1961) addresses this through a single scalar ``k``:
+
+```math
+\hat{\beta}(k) = \bigl(X'(I - k M_Z)X\bigr)^{-1} X'(I - k M_Z)\,y,
+\qquad M_Z = I - Z(Z'Z)^{-1}Z'
+```
+
+where:
+- ``k = 0`` recovers OLS, ``k = 1`` recovers 2SLS
+- ``k = \hat{\kappa}`` is **LIML** (Anderson & Rubin 1949), with ``\hat{\kappa}`` the smallest root of
+  ``\lvert \bar{Y}'M_{X_1}\bar{Y} - \kappa\,\bar{Y}'M_Z\bar{Y}\rvert = 0`` for
+  ``\bar{Y} = [\,y\ \ Y_{\text{endog}}\,]`` and included exogenous ``X_1``
+- ``k = \hat{\kappa} - a/(n-m)`` is **Fuller** (1977); with ``a = 1`` it is approximately unbiased
+  with finite moments
+
+**LIML is median-unbiased** and, unlike 2SLS, its finite-sample bias does not grow with the number
+of instruments. Fuller's ``k`` can dip *below* 1 — that is the intended finite-sample correction and
+is not clamped. Select the estimator through the `method` keyword:
+
+```@example reg
+# Same education / ability DGP as above, now with three instruments (over-identified).
+z3 = randn(n)
+Z3 = hcat(ones(n), z1, z2, z3)
+m_liml   = estimate_iv(wage, X, Z3; endogenous=[2], method=:liml,
+                       varnames=["(Intercept)", "education"])
+m_fuller = estimate_iv(wage, X, Z3; endogenous=[2], method=:fuller, fuller_a=1.0,
+                       varnames=["(Intercept)", "education"])
+report(m_liml)
+```
+
+The `report()` footer adds the LIML least-variance ratio ``\hat{\kappa}`` and the implied
+Anderson (1949) likelihood-ratio overidentification statistic ``n\ln\hat{\kappa} \sim \chi^2(m - k)``.
+For a user-specified value pass `method=:kclass` with the `k` keyword.
+
+Weak-instrument *inference* (Anderson–Rubin, Kleibergen–Paap, Stock–Yogo critical values) is a
+separate layer tracked in issue #343; this entry point delivers the *estimators* those tests
+condition on.
+
 ### Keyword Arguments
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
 | `endogenous` | `Vector{Int}` | required | Column indices of endogenous regressors in `X` |
+| `method` | `Symbol` | `:tsls` | Estimator: `:tsls`/`:2sls`, `:liml`, `:fuller`, `:kclass` |
+| `k` | `Union{Nothing,Real}` | `nothing` | Scalar for `method=:kclass` (`0`=OLS, `1`=2SLS) |
+| `fuller_a` | `Real` | `1.0` | Fuller constant ``a`` (used only for `method=:fuller`) |
 | `cov_type` | `Symbol` | `:hc1` | Covariance estimator: `:ols`, `:hc0`, `:hc1`, `:hc2`, `:hc3` |
 | `varnames` | `Union{Nothing,Vector{String}}` | `nothing` | Coefficient names |
 
@@ -451,6 +569,8 @@ The OLS coefficient on education is biased upward because ability enters both th
 | `first_stage_f` | `T` | Minimum first-stage F-statistic across endogenous variables |
 | `sargan_stat` | `Union{Nothing,T}` | Sargan-Hansen J-statistic (`nothing` if exactly identified) |
 | `sargan_pval` | `Union{Nothing,T}` | p-value of the Sargan test |
+| `kclass_k` | `Union{Nothing,T}` | k-class scalar actually used (`nothing` for plain 2SLS) |
+| `kappa_hat` | `Union{Nothing,T}` | LIML ``\hat{\kappa}`` (`:liml`/`:fuller` only) |
 
 ---
 
@@ -489,6 +609,146 @@ report(m)
 ```
 
 The VIF values for `x1` and `x2` are large because these two variables are correlated at ``r = 0.95``. The inflated standard errors make it difficult to distinguish the individual effects of `x1` and `x2`. The VIF for `x3` is close to 1, confirming that it is not collinear with the other regressors.
+
+---
+
+## Residual Diagnostics
+
+After fitting an OLS model, a standard battery of residual diagnostics checks the classical assumptions: constant error variance (homoskedasticity), no serial correlation, and correct functional form. Each test runs an auxiliary regression on a fitted [`RegModel`](@ref) and returns a [`RegDiagnosticResult`](@ref) rendering an ``nR^2`` chi-squared statistic and/or an F-form.
+
+| Function | Null hypothesis | Auxiliary regression | Statistic |
+|----------|-----------------|----------------------|-----------|
+| [`white_test`](@ref) | Homoskedasticity | ``\hat{u}^2`` on regressors, squares, cross-products | ``nR^2 \sim \chi^2`` |
+| [`breusch_pagan_test`](@ref) | Homoskedasticity | ``\hat{u}^2`` on regressors | ``nR^2 \sim \chi^2`` (Koenker) |
+| [`glejser_test`](@ref) | Homoskedasticity | ``\lvert\hat{u}\rvert`` on regressors | ``F`` |
+| [`harvey_test`](@ref) | Homoskedasticity | ``\log \hat{u}^2`` on regressors | ``nR^2 \sim \chi^2`` |
+| [`breusch_godfrey_test`](@ref) | No serial correlation | ``\hat{u}`` on regressors + lagged residuals | ``nR^2 \sim \chi^2(p)`` + F |
+| [`reset_test`](@ref) | Correct functional form | ``y`` on regressors + ``\hat{y}^2\dots\hat{y}^k`` | ``F`` |
+
+!!! note "Name collision with the panel test"
+    `breusch_pagan_test` also has a method for `PanelRegModel` — the Breusch–Pagan random-effects Lagrange-multiplier test, a *different* test. Dispatch on the model type selects the correct one: pass a `RegModel` for the heteroskedasticity test documented here.
+
+### Heteroskedasticity Tests
+
+White's test is the most general: it regresses the squared residuals on the regressors, their squares, and (by default) their pairwise cross-products. The Breusch–Pagan test (Koenker studentized form, the default) uses only the levels and is robust to non-normal errors.
+
+```@example reg
+# Heteroskedastic DGP: error standard deviation grows with |x1|
+n = 200
+x1 = randn(n); x2 = randn(n)
+u = (0.5 .+ 0.8 .* abs.(x1)) .* randn(n)
+y = 1.0 .+ 2.0 .* x1 .- 1.0 .* x2 .+ u
+m = estimate_reg(y, hcat(ones(n), x1, x2); varnames=["const", "x1", "x2"])
+
+report(white_test(m))
+report(breusch_pagan_test(m))          # RegModel ⇒ heteroskedasticity test
+```
+
+Glejser and Harvey target specific variance forms — Glejser F-tests ``\lvert\hat{u}\rvert`` against the regressors, while Harvey regresses ``\log\hat{u}^2`` (multiplicative heteroskedasticity):
+
+```@example reg
+report(glejser_test(m))
+report(harvey_test(m))
+```
+
+### Serial Correlation
+
+The Breusch–Godfrey test regresses the residuals on the original regressors and `lags` lagged residuals (pre-sample lags zero-padded), reporting both the LM ``\chi^2(p)`` form and an F-form:
+
+```@example reg
+report(breusch_godfrey_test(m; lags=2))
+```
+
+### Functional Form
+
+Ramsey's RESET test augments the regression with powers of the **fitted values** ``\hat{y}^2,\dots,\hat{y}^k`` and F-tests that they are jointly zero. Rejection signals a misspecified functional form (e.g. an omitted nonlinearity):
+
+```@example reg
+report(reset_test(m; powers=2:4))
+```
+
+---
+
+## Stability and Influence Diagnostics
+
+Residual diagnostics assume the coefficient vector is constant. **Stability diagnostics** test that assumption directly — whether the regression relationship drifts or breaks over the sample — and **influence diagnostics** identify individual observations that disproportionately drive the fit. Together they complete EViews' "Stability Diagnostics" menu for a fitted [`RegModel`](@ref).
+
+### Recursive Residuals
+
+The Brown–Durbin–Evans (1975) recursive least-squares residuals fit the model on a growing window and record each one-step-ahead forecast error, standardized:
+
+```math
+w_t = \frac{y_t - x_t' \hat{\beta}_{t-1}}{\sqrt{1 + x_t' (X_{t-1}'X_{t-1})^{-1} x_t}}, \qquad t = k+1, \dots, n
+```
+
+where
+
+- ``\hat{\beta}_{t-1}`` is the OLS estimate on the first ``t-1`` observations,
+- ``X_{t-1}`` is the ``(t-1) \times k`` design of those observations,
+- ``k`` is the number of regressors.
+
+Under a stable model the ``w_t`` are i.i.d. ``N(0, \sigma^2)``, and their sum of squares equals the full-sample OLS SSR. [`recursive_residuals`](@ref) returns the length-``(n-k)`` vector, updating ``(X'X)^{-1}`` by rank-one Sherman–Morrison formulae rather than re-inverting each step.
+
+```@example reg
+w = recursive_residuals(m)
+length(w), round(sum(abs2, w) - m.ssr; digits=10)   # Σ wₜ² == SSR
+```
+
+### CUSUM and CUSUM of Squares
+
+The **CUSUM** test cumulates the standardized recursive residuals,
+
+```math
+W_t = \frac{1}{\hat{\sigma}_w} \sum_{j=k+1}^{t} w_j,
+```
+
+and rejects stability when ``W_t`` crosses the pair of straight significance lines ``\pm a\sqrt{n-k}\,(1 + 2(t-k)/(n-k))``, with ``a = 0.948`` at the 5% level (Brown, Durbin & Evans 1975). CUSUM is sensitive to a gradual drift in the coefficients. The **CUSUM of squares** test uses the normalized cumulative sum of squared recursive residuals ``S_t = \sum_{j=k+1}^{t} w_j^2 / \sum_{j=k+1}^{n} w_j^2`` against the band ``(t-k)/(n-k) \pm c_0``, where ``c_0`` follows the Edgerton–Wells (1994) approximation; it targets a one-off shift in the error variance.
+
+```@example reg
+report(cusum_test(m))
+report(cusumsq_test(m))
+```
+
+Both return a [`StabilityResult`](@ref) carrying the statistic path, the upper/lower bound sequences, and a crossing flag. `plot_result` draws the path against its bounds:
+
+```julia
+plot_result(cusum_test(m))
+```
+
+!!! note "Unknown break dates"
+    CUSUM and Chow tests presume you either monitor the whole path (CUSUM) or specify the break date (Chow). For an *unknown* break date, use [`andrews_test`](@ref) — the Quandt–Andrews sup-Wald test, which searches over candidate break points. This page does not duplicate it.
+
+### Chow Breakpoint and Forecast Tests
+
+When the break date is known, [`chow_test`](@ref) tests coefficient equality across sub-samples. The **breakpoint** test splits the sample at the break and compares the pooled fit against segment-wise fits:
+
+```math
+F = \frac{(\text{SSR}_r - \text{SSR}_u)/k}{\text{SSR}_u/(n - 2k)} \sim F(k,\, n - 2k),
+```
+
+with ``\text{SSR}_u = \text{SSR}_1 + \text{SSR}_2`` the sum of the two sub-sample SSRs. Multiple break indices partition the sample into more segments (and scale the degrees of freedom). The **forecast** test handles a short second sample by treating it as an out-of-sample forecast period.
+
+```@example reg
+# Engineer a mid-sample coefficient break, then test it at the known date.
+yb = copy(y); yb[101:end] .+= 3.0
+mb = estimate_reg(yb, hcat(ones(n), x1, x2); varnames=["const", "x1", "x2"])
+report(chow_test(mb, 100; type=:breakpoint))
+report(chow_test(mb, 150; type=:forecast))
+```
+
+### Influence Statistics
+
+[`influence_stats`](@ref) returns per-observation leverage and influence measures (Belsley, Kuh & Welsch 1980), reusing the fitted ``(X'X)^{-1}``: the hat-diagonal ``h_{ii}``, internally and externally studentized residuals, ``\text{DFFITS}_i``, Cook's distance ``D_i``, and the ``n \times k`` DFBETAS matrix. Observations are flagged high-leverage when ``h_{ii} > 2k/n`` and influential when ``|\text{DFFITS}_i| > 2\sqrt{k/n}``.
+
+```@example reg
+report(influence_stats(m))
+```
+
+The result also exposes the raw vectors (`hat`, `cooksd`, `dffits`, `dfbetas`, …) for downstream analysis, and `plot_result` draws a leverage scatter with the ``2k/n`` cutoff plus a Cook's distance panel:
+
+```julia
+plot_result(influence_stats(m))
+```
 
 ---
 
@@ -576,6 +836,383 @@ save_plot(p, "reg_iv.html")
 
 ---
 
+## Penalized Regression: Ridge, LASSO, and Elastic Net
+
+Penalized regression shrinks coefficients toward zero to trade a small increase in bias for a large reduction in variance, which is essential when the number of predictors is large relative to the sample --- the routine setting for macro forecasters facing wide predictor sets such as FRED-MD's 126 series. The elastic-net objective on standardized regressors and a centered response is
+
+```math
+\min_{\beta}\;\frac{1}{2n}\lVert \tilde{y} - \tilde{X}\beta \rVert_2^2 \;+\; \lambda\!\left[\alpha\lVert\beta\rVert_1 + \tfrac{1-\alpha}{2}\lVert\beta\rVert_2^2\right],
+```
+
+where
+
+- ``\tilde{X}`` are the mean-centered, unit-variance regressors and ``\tilde{y}`` the centered response,
+- ``\lambda \ge 0`` is the penalty strength (larger ``\lambda`` shrinks more),
+- ``\alpha \in [0,1]`` is the mixing parameter: ``\alpha=1`` is LASSO (sparse), ``\alpha=0`` is ridge (dense), intermediate values interpolate.
+
+The intercept is never penalized; coefficients are unstandardized before return and the intercept is recovered as ``\beta_0 = \bar{y} - \bar{x}'\beta``. This `glmnet`-convention ``1/2n`` scaling makes ``\lambda`` values comparable to R `glmnet` and Python `sklearn`.
+
+!!! note "Solver"
+    Ridge (``\alpha=0``) is solved in closed form, ``\beta = (\tilde{X}'\tilde{X} + n\lambda I)^{-1}\tilde{X}'\tilde{y}``. LASSO and elastic net (``\alpha>0``) use cyclic coordinate descent with soft-thresholding, active-set cycling, and strong-rule screening over a warm-started, log-spaced ``\lambda`` path.
+
+**LASSO with cross-validated ``\lambda``.** `estimate_lasso` fits the full path and selects ``\lambda`` by cross-validation. Use `cv=:timeseries` for serially dependent data --- it uses contiguous, non-shuffled folds so no future information leaks into training.
+
+```@example reg
+n, p = 120, 8
+Xpen = randn(n, p)
+beta_sparse = [2.5, 0.0, -3.0, 0.0, 0.0, 1.8, 0.0, 0.0]  # only 3 nonzero
+ypen = Xpen * beta_sparse + 0.5 * randn(n)
+lasso = estimate_lasso(ypen, Xpen; cv=:timeseries, nfolds=5)
+report(lasso)
+```
+
+The report shows only the nonzero coefficients: LASSO recovers the three strong predictors (`x1`, `x3`, `x6`) near their true magnitudes and shrinks the true-zero predictors sharply toward zero (a stricter penalty, e.g. `select=:bic`, sets more of them exactly to zero). No standard errors or p-values are reported --- shrinkage estimators have no valid closed-form inference.
+
+**Ridge and elastic net.** `estimate_ridge` keeps all predictors (dense shrinkage), while `estimate_elastic_net` mixes the two penalties via `alpha`.
+
+```@example reg
+ridge = estimate_ridge(ypen, Xpen; select=:bic)      # dense; lambda by BIC
+enet  = estimate_elastic_net(ypen, Xpen; alpha=0.5)  # 50/50 mix; lambda by CV
+round.(ridge.beta; digits=3)
+```
+
+**Adaptive LASSO and post-selection OLS.** Adaptive weights (Zou 2006) improve support recovery; post-selection OLS de-shrinks the selected coefficients.
+
+```@example reg
+adaptive = estimate_lasso(ypen, Xpen; adaptive=true, post=true)
+adaptive.active_set   # indices of selected predictors
+```
+
+!!! warning "Honest inference"
+    Naive post-selection standard errors are invalid: conditioning on the selected model biases classical inference. Post-LASSO standard errors are trustworthy only under the sparsity and beta-min conditions of the honest-inference literature (Belloni & Chernozhukov 2013), which this package does not verify. No t-statistics or p-values are reported for any penalized fit.
+
+Predictions use the natural-scale coefficients and the unpenalized intercept, `predict(m, Xnew) = Xnew * m.beta .+ m.beta0`:
+
+```@example reg
+yhat = predict(lasso, Xpen[1:5, :])
+round.(yhat; digits=3)
+```
+
+The coefficient path and cross-validation curve are available via `plot_result`:
+
+```julia
+plot_result(lasso; view=:path)   # coefficient path vs log(λ)
+plot_result(lasso; view=:cv)     # CV MSE curve with λ_min / 1-SE markers
+```
+
+| Keyword | Type | Default | Description |
+|---|---|---|---|
+| `alpha` | `Real` | `1.0` | Mixing: `1`=LASSO, `0`=ridge, in-between=elastic net |
+| `lambda` | `Symbol`/`Real`/`Vector` | `:cv` | `:cv` builds a path; a scalar/vector fixes it |
+| `select` | `Symbol` | `:cv` | `:cv`, `:aic`, `:bic`, or `:ebic` |
+| `cv` | `Symbol` | `:kfold` | `:kfold` (shuffled) or `:timeseries` (contiguous) |
+| `nfolds` | `Int` | `10` | Number of CV folds |
+| `adaptive` | `Bool` | `false` | Adaptive-LASSO weights (Zou 2006) |
+| `post` | `Bool` | `false` | Post-selection OLS refit (Belloni-Chernozhukov) |
+
+---
+
+## Variable Selection: Stepwise and General-to-Specific
+
+When the general unrestricted model (GUM) carries more regressors than theory pins down, [`select_variables`](@ref) automates the specification search on top of the OLS stack. It returns a [`SelectionResult`](@ref) holding the search path, the selected column set, a parsimonious-encompassing test, and a refit [`RegModel`](@ref) (the `.final` field) so `report`, `predict`, and `refs` work unchanged. Three search families are available:
+
+- **Stepwise** (`:forward`, `:backward`, `:bidirectional`) adds or drops one regressor at a time, by coefficient p-value (`criterion=:pvalue`) or by information criterion (`:aic`/`:bic`).
+- **Best subset** (`:best_subset`) is an exhaustive search over all subsets, minimizing the chosen information criterion (feasible only for small candidate sets).
+- **GETS** (`:gets`) is the LSE general-to-specific reduction (Hoover & Perez 1999; Hendry & Krolzig 2005): multi-path backward elimination from the GUM, gated at each deletion by a misspecification battery — the Breusch–Godfrey serial-correlation LM test and the Jarque–Bera normality test.
+
+**Stepwise search.** Forward selection enters the most significant candidate below `p_enter`; backward elimination drops the least significant term above `p_remove`; bidirectional alternates. For information-criterion moves each accepted step must strictly improve the criterion, which guarantees termination at a local optimum.
+
+```@example reg
+Random.seed!(11)
+nsel = 150
+Xsel = hcat(ones(nsel), randn(nsel, 8))
+beta_sel = zeros(9); beta_sel[[1, 2, 4, 6]] .= [1.0, 3.0, -2.5, 2.0]  # 3 active slopes
+ysel = Xsel * beta_sel + 0.6 * randn(nsel)
+fw = select_variables(ysel, Xsel; method=:forward, criterion=:bic)
+report(fw)
+```
+
+The intercept (a numerically constant column) is detected and always kept, as are any columns passed via `keep`. On a strong-signal design forward and backward stepwise reach the same subset as an exhaustive best-subset search.
+
+**General-to-specific (GETS).** GETS starts from the full GUM and follows multiple deletion paths, each seeded by removing a different insignificant regressor, deleting the least-significant term at every node. A deletion is accepted only if the reduced model still passes the diagnostic gate; the diagnostic-passing terminal models are collected and the final model is the one with the best information criterion. A parsimonious-encompassing ``F``-test of the selection against the GUM is stored in `encompassing_f`/`encompassing_pval`.
+
+```@example reg
+Random.seed!(42)
+ngets = 200
+Xgum = hcat(ones(ngets), randn(ngets, 20))          # 20 candidates + intercept
+beta_gum = zeros(21); beta_gum[[2, 5, 8, 11, 14]] .= 1.5   # 5 true regressors
+ygets = Xgum * beta_gum + randn(ngets)
+gets = select_variables(ygets, Xgum; method=:gets)
+gets.selected                                        # retained column indices
+```
+
+GETS retains all five true regressors and drops the vast majority of the irrelevant ones; the encompassing test does not reject the reduction against the GUM.
+
+```@example reg
+gets.encompassing_pval   # parsimonious-encompassing F p-value (selection vs GUM)
+```
+
+| Keyword | Type | Default | Description |
+|---|---|---|---|
+| `method` | `Symbol` | `:bidirectional` | `:forward`, `:backward`, `:bidirectional`, `:best_subset`, `:gets` |
+| `criterion` | `Symbol` | `:pvalue` | Move criterion: `:pvalue`, `:aic`, `:bic` |
+| `p_enter` / `p_remove` | `Real` | `0.05` / `0.10` | Stepwise entry / removal levels (require `p_remove ≥ p_enter`) |
+| `p_gets` | `Real` | `0.05` | GETS deletion significance level |
+| `diag_level` | `Real` | `0.05` | GETS misspecification-gate level |
+| `keep` | `Vector{Int}` | `nothing` | Columns forced into every model |
+
+!!! warning "Post-selection inference is invalid"
+    The standard errors, ``t``-statistics, and p-values on `result.final` are **conditional on the selected specification** and ignore the search that produced them; they are not valid unconditional inference. Report them as descriptive, not as a basis for hypothesis tests. For a shrinkage alternative that regularizes rather than searches, see the Penalized Regression section above — `estimate_lasso` selects a sparse model along a single tuning path.
+
+---
+
+## Censored and Truncated Regression: Tobit
+
+Many economic outcomes are *limited dependent variables*: hours worked, corner-solution expenditures, capped survey responses, and zero-bounded durations pile up at a boundary or are only observed over part of their range. OLS on such data is biased and inconsistent. Two distinct sampling schemes call for two estimators:
+
+- **Censoring (Tobit).** The latent variable ``y_i^\ast = x_i'\beta + u_i`` is generated for every unit, but is only *recorded* within ``[L, U]``: values below ``L`` are reported as ``L`` and values above ``U`` as ``U``. The regressors are observed for all units. Use [`estimate_tobit`](@ref) (Tobin 1958).
+- **Truncation.** Units outside ``(L, U)`` are entirely absent from the sample — both ``y`` and ``x`` are missing. Use [`estimate_truncreg`](@ref) (Hausman & Wise 1977).
+
+Both are estimated by maximum likelihood with ``u_i \sim N(0, \sigma^2)``. The Tobit log-likelihood combines a density term for uncensored observations with tail-probability terms for the censored ones:
+
+```math
+\ell(\beta, \sigma) = \sum_{L < y_i < U} \log\!\left[\tfrac{1}{\sigma}\phi\!\left(\tfrac{y_i - x_i'\beta}{\sigma}\right)\right]
++ \sum_{y_i \le L} \log \Phi\!\left(\tfrac{L - x_i'\beta}{\sigma}\right)
++ \sum_{y_i \ge U} \log\!\left[1 - \Phi\!\left(\tfrac{U - x_i'\beta}{\sigma}\right)\right],
+```
+
+where ``\phi`` and ``\Phi`` are the standard normal pdf and cdf. For the normal case the fit is carried out in the globally concave Olsen (1978) reparameterization ``\delta = \beta/\sigma``, ``\gamma = 1/\sigma``, then back-transformed to ``(\beta, \sigma)`` with delta-method standard errors — this guarantees a unique maximum regardless of starting values.
+
+**Tobit on left-censored data.** The classic case censors at zero (`lower=0.0, upper=Inf`). `report()` shows the estimated ``\sigma``, the censored-observation counts, and the coefficient table:
+
+```@example reg
+n = 400
+Xt = hcat(ones(n), randn(n), randn(n))
+beta_true = [0.5, 1.0, -0.8]
+ystar = Xt * beta_true + randn(n)          # latent outcome
+y_cens = max.(ystar, 0.0)                    # left-censored at 0
+tob = estimate_tobit(y_cens, Xt; lower=0.0, varnames=["const", "x1", "x2"])
+report(tob)
+```
+
+Roughly a third of the sample piles up at zero; OLS on `y_cens` would attenuate the slopes toward zero, while Tobit recovers the latent-index coefficients. Two-sided censoring is requested by passing both bounds, e.g. `estimate_tobit(y, X; lower=0.0, upper=100.0)`.
+
+**Marginal effects (McDonald–Moffitt).** A Tobit slope ``\beta_j`` is *not* the marginal effect on the observed outcome. [`marginal_effects`](@ref) returns the McDonald & Moffitt (1980) decomposition, each with delta-method standard errors, selected by the `which` keyword:
+
+- `:unconditional` (default) — ``\partial E[y]/\partial x_j = \beta_j\,\Phi(x_i'\beta/\sigma)``, the total effect on the observed outcome;
+- `:conditional` — ``\partial E[y \mid L<y<U]/\partial x_j``, the effect within the uncensored subpopulation;
+- `:probability` — ``\partial P(L<y<U)/\partial x_j = \beta_j\,\phi(x_i'\beta/\sigma)/\sigma``, the effect on the probability of being uncensored.
+
+```@example reg
+me = marginal_effects(tob; which=:unconditional)   # average marginal effects
+report(me)
+```
+
+The intercept has no marginal effect and is reported as a blank row.
+
+**Truncated regression.** When the boundary observations are missing entirely, `estimate_truncreg` maximizes the Hausman–Wise truncated-normal likelihood. Every `y` must lie strictly inside `(lower, upper)`; an out-of-range value is an error.
+
+```@example reg
+keep = ystar .> 0                            # only positive latent values survive
+trunc = estimate_truncreg(ystar[keep], Xt[keep, :]; lower=0.0,
+                          varnames=["const", "x1", "x2"])
+report(trunc)
+```
+
+!!! note "Which estimator?"
+    Use **Tobit** when the sample includes the boundary observations (you observe both the pile-up at ``L``/``U`` and the regressors for those units). Use **truncated regression** when those units are absent from the data altogether. Applying Tobit to a truncated sample — or OLS to either — yields inconsistent estimates.
+
+The `dist` keyword also supports `:logistic` and `:extreme_value` latent-error laws (optimized directly in ``(\beta, \log\sigma)``); `:normal` is the default.
+
+| Keyword | Type | Default | Description |
+|---|---|---|---|
+| `lower` | `Real` | `0.0` | Lower censoring/truncation bound (`-Inf` for none) |
+| `upper` | `Real` | `Inf` | Upper censoring/truncation bound (`Inf` for none) |
+| `dist` | `Symbol` | `:normal` | Latent error law: `:normal`, `:logistic`, `:extreme_value` (Tobit only) |
+| `varnames` | `Vector{String}` | auto | Coefficient names |
+
+---
+
+## Sample Selection: The Heckman Model
+
+Censoring records a boundary value for every unit; *incidental truncation* is more severe --- the outcome is simply **unobserved** for a non-random subsample. Wages are observed only for those who work, export prices only for exporters, loan rates only for approved applicants. The selected sample is not representative, and OLS on it is inconsistent whenever the unobservables driving selection are correlated with those driving the outcome. The Heckman (1979) selection model corrects this. A latent selection index and the outcome are
+
+```math
+d_i^\ast = z_i'\gamma + u_i, \qquad d_i = \mathbf{1}\{d_i^\ast > 0\}, \qquad
+y_i = x_i'\beta + \varepsilon_i \ \text{ observed only when } d_i = 1,
+```
+
+with ``(u_i, \varepsilon_i)`` bivariate normal, ``\mathrm{Var}(u_i)=1``, ``\mathrm{Var}(\varepsilon_i)=\sigma^2``, and ``\mathrm{Corr}(u_i,\varepsilon_i)=\rho``. The conditional mean over the selected sample carries a selection-bias term proportional to the inverse-Mills ratio ``\lambda(\cdot)=\phi(\cdot)/\Phi(\cdot)``:
+
+```math
+E[y_i \mid x_i,\, d_i = 1] = x_i'\beta + \rho\sigma \, \lambda(z_i'\gamma).
+```
+
+[`estimate_heckman`](@ref) offers two estimators. The **two-step (Heckit)** estimator fits a probit of ``d`` on ``Z``, forms ``\hat\lambda_i`` from the probit index, and runs OLS of ``y`` on ``[X\ \hat\lambda]`` over the selected subsample --- the Mills coefficient is ``\rho\sigma``. Its covariance is the Greene corrected two-step covariance, which accounts for the generated regressor ``\hat\lambda`` and the selection-induced heteroskedasticity. The **full-information ML** estimator (`method=:mle`) maximizes the bivariate-normal likelihood directly, started at the two-step estimates.
+
+**Two-step on the Mroz (1987) data.** The built-in `:mroz` extract has 753 married women; `lwage` is observed only for the 428 labor-force participants (`inlf == 1`). The selection equation adds `nwifeinc`, `age`, and the child counts as exclusion restrictions absent from the wage equation.
+
+```@example reg
+mroz = load_example(:mroz)
+nm = mroz.N_obs
+inlf  = mroz[:, "inlf"]
+lwage = mroz[:, "lwage"]          # NaN for the 325 non-participants (ignored)
+Xh = hcat(ones(nm), mroz[:, "educ"], mroz[:, "exper"], mroz[:, "expersq"])
+Zh = hcat(ones(nm), mroz[:, "nwifeinc"], mroz[:, "educ"], mroz[:, "exper"],
+          mroz[:, "expersq"], mroz[:, "age"], mroz[:, "kidslt6"], mroz[:, "kidsge6"])
+on = ["const", "educ", "exper", "expersq"]
+sn = ["const", "nwifeinc", "educ", "exper", "expersq", "age", "kidslt6", "kidsge6"]
+heck = estimate_heckman(lwage, Xh, inlf, Zh; method=:twostep,
+                        outcome_names=on, select_names=sn)
+report(heck)
+```
+
+The footer reports ``\hat\rho \approx 0.05`` with a small, insignificant Mills ``t``-statistic: on these data the selection correction is mild (the ``H_0``: *no selection* is not rejected), matching Wooldridge's (2010, Example 17.5) reading of this dataset.
+
+**Full-information ML.** `method=:mle` maximizes the joint likelihood; it delivers direct standard errors for ``\rho`` and ``\sigma`` and a Wald test of ``\rho = 0``:
+
+```@example reg
+heck_ml = estimate_heckman(lwage, Xh, inlf, Zh; method=:mle,
+                           outcome_names=on, select_names=sn)
+report(heck_ml)
+```
+
+!!! warning "Provide a genuine exclusion restriction"
+    Identification is far more credible when ``Z`` contains at least one variable excluded from ``X`` (here `nwifeinc`, `age`, and the child counts). If ``Z`` spans the same column space as ``X``, `estimate_heckman` emits a warning: identification then rests solely on the nonlinearity of the Mills ratio, and the two-step second stage becomes near-collinear. When ``\rho`` is close to zero the likelihood is nearly flat --- the selection term is weakly identified and the two-step and ML estimates can differ noticeably even though both are valid.
+
+| Keyword | Type | Default | Description |
+|---|---|---|---|
+| `method` | `Symbol` | `:twostep` | `:twostep` (Heckit) or `:mle` (full-information ML) |
+| `outcome_names` | `Vector{String}` | auto | Outcome-equation coefficient names |
+| `select_names` | `Vector{String}` | auto | Selection-equation coefficient names |
+
+---
+
+## Robust Regression: M- and MM-Estimation
+
+Ordinary least squares breaks down under outliers: a single gross error, given full weight by the squared-error loss, can dominate the fit. Robust regression bounds each observation's influence. [`estimate_robust`](@ref) implements two classical strategies.
+
+**M-estimation** minimizes ``\sum_i \rho\!\left(r_i/\hat s\right)`` for a bounded loss ``\rho``, where ``r_i = y_i - x_i'\beta`` and ``\hat s`` is a robust scale. Solved by iteratively reweighted least squares (IRLS): each step forms scaled residuals ``u_i = r_i/\hat s``, weights ``w_i = \psi(u_i)/u_i``, and updates ``\beta = (X'WX)^{-1}X'Wy``.
+
+- **Huber** (`psi=:huber`): ``\psi(u) = u`` for ``|u| \le k``, else ``k\,\mathrm{sign}(u)``. Default ``k = 1.345`` (95% Gaussian efficiency). Downweights but never rejects.
+- **Tukey bisquare** (`psi=:bisquare`): ``\psi(u) = u\left(1-(u/c)^2\right)^2`` for ``|u| \le c``, else ``0``. Default ``c = 4.685``. Redescending: extreme points get zero weight.
+
+The scale ``\hat s`` is the normalized MAD ``\mathrm{median}(|r|)/0.6745`` (Fisher-consistent at the normal), re-estimated each iteration; pass `scale_update=:proposal2` for Huber's joint scale updating.
+
+```@example reg
+d = load_example(:stackloss)          # Brownlee (1965), 21 obs, a classic outlier example
+y = d.data[:, 4]
+X = hcat(ones(21), d.data[:, 1:3])
+m = estimate_robust(y, X, psi=:huber, method=:m,
+                    varnames=["(Intercept)", "Air.Flow", "Water.Temp", "Acid.Conc."])
+report(m)
+```
+
+The `weights` field flags outliers: observations with ``w_i \approx 0`` are downweighted. Huber and bisquare M-estimates match R's `MASS::rlm(method="M")` to machine tolerance.
+
+**MM-estimation** (Yohai 1987) combines a high-breakdown start with high efficiency. First a 50%-breakdown S-estimate of scale is found by the fast-S subsampling algorithm (Salibian-Barrera & Yohai 2006); that scale is then held fixed while ``\beta`` is re-estimated by a high-efficiency bisquare M-step. It resists up to 50% contamination yet retains ≈95% Gaussian efficiency. The subsampling is seeded — pass an `rng` for reproducibility.
+
+```@example reg
+using Random
+mm = estimate_robust(y, X, method=:mm, rng=MersenneTwister(1),
+                     varnames=["(Intercept)", "Air.Flow", "Water.Temp", "Acid.Conc."])
+report(mm)
+```
+
+On the stackloss data the MM fit reproduces the canonical Rousseeuw & Leroy (1987) result, assigning ``\psi``-weight ≈ 0 to observations 1, 3, 4, and 21:
+
+```@example reg
+findall(<(0.05), mm.weights)
+```
+
+Covariance is the Huber–Ronchetti sandwich ``V = \hat s^2\,\frac{(1/n)\sum \psi(u_i)^2}{[(1/n)\sum \psi'(u_i)]^2}\,(X'X)^{-1}``, reported through the usual coefficient table.
+
+!!! note "MM scale vs `MASS::rlm`"
+    `estimate_robust(method=:mm)` uses the standard Tukey biweight M-scale for the S-step (as in `robustbase::lmrob`). `MASS::rlm(method="MM")` seeds its scale from `lqs`, whose non-standard scale estimator over-states the high-breakdown scale; its MM fit therefore stays closer to OLS and down-weights fewer points. The Yohai/Salibian-Barrera-Yohai estimator here recovers the canonical robust fit.
+
+| Keyword | Type | Default | Description |
+|---|---|---|---|
+| `psi` | `Symbol` | `:huber` | Influence function `:huber` or `:bisquare` (forced `:bisquare` for MM) |
+| `method` | `Symbol` | `:m` | `:m` (M-estimation) or `:mm` (Yohai MM) |
+| `k` | `Real` | `1.345`/`4.685` | ψ tuning constant (Huber `k` / bisquare `c`) |
+| `scale_update` | `Symbol` | `:mad` | `:mad` or Huber `:proposal2` (M-estimation only) |
+| `rng` | `AbstractRNG` | `default_rng()` | Seeds MM fast-S subsampling |
+
+---
+
+## Systems of Equations: SUR and 3SLS
+
+The estimators above fit one equation at a time. When several equations are estimated jointly and their errors are correlated across equations, exploiting that correlation improves efficiency. [`estimate_sur`](@ref) fits Zellner's (1962) seemingly-unrelated regressions; [`estimate_3sls`](@ref) fits the Zellner–Theil (1962) three-stage least squares estimator for simultaneous systems.
+
+Stack the ``M`` equations as ``y = X\beta + u`` with block-diagonal ``X = \mathrm{blkdiag}(X_1,\dots,X_M)`` and ``\mathrm{Cov}(u) = \Sigma \otimes I_T``. **SUR** estimates the residual cross-covariance from equation-by-equation OLS residuals, ``\hat\Sigma_{ij} = \hat u_i'\hat u_j / T`` (the classical Zellner divisor ``T``), then applies feasible GLS:
+
+```math
+\hat\beta = \left(X'(\hat\Sigma^{-1}\otimes I)X\right)^{-1} X'(\hat\Sigma^{-1}\otimes I)y,
+\qquad
+\widehat{\mathrm{Var}}(\hat\beta) = \left(X'(\hat\Sigma^{-1}\otimes I)X\right)^{-1}.
+```
+
+The efficiency gain comes entirely from cross-equation error correlation: when every equation carries identical regressors the two estimators coincide exactly (Kruskal 1968). The Kronecker product is never materialized — the normal equations are assembled block-wise.
+
+Pass equations as a vector of `(y, X)` (or `(y, X, names)`) tuples. The canonical example is the Grunfeld (1958) investment data for General Electric and Westinghouse:
+
+```@example sur
+using MacroEconometricModels
+pd = load_example(:grunfeld)              # 10-firm investment panel, 1935–1954
+ge = group_data(pd, "General Electric")
+wh = group_data(pd, "Westinghouse")
+# invest = col 1; regressors [1, value (col 2), capital (col 3)]
+Xge = hcat(ones(20), ge.data[:, 2], ge.data[:, 3])
+Xwh = hcat(ones(20), wh.data[:, 2], wh.data[:, 3])
+cols = ["const", "value", "capital"]
+m = estimate_sur([(ge.data[:, 1], Xge, cols), (wh.data[:, 1], Xwh, cols)];
+                 eqnames = ["GE", "Westinghouse"])
+report(m)
+```
+
+The footer reports ``\det\hat\Sigma``, the McElroy (1977) system R², the Gaussian system log-likelihood, and the FGLS iteration count. These match R's `systemfit(..., method = "SUR")` (Henningsen & Hamann 2007).
+
+**Iterated FGLS** (`iterate = true`) alternates between updating ``\hat\Sigma`` from the current residuals and re-estimating ``\hat\beta`` until convergence; it reaches the Gaussian maximum-likelihood estimator (iterated FGLS ≡ SUR/FIML for the linear system):
+
+```@example sur
+mi = estimate_sur([(ge.data[:, 1], Xge, cols), (wh.data[:, 1], Xwh, cols)];
+                  eqnames = ["GE", "Westinghouse"], iterate = true)
+mi.iterations
+```
+
+**Linear cross-equation restrictions** ``R\cdot\mathrm{vec}(B) = r`` are imposed via restricted GLS. Here `vec(B)` stacks the equations' coefficients in order (`[const₁, value₁, capital₁, const₂, value₂, capital₂]`); this restriction forces the `value` coefficient to be equal across the two firms:
+
+```@example sur
+R = reshape([0.0, 1, 0, 0, -1, 0], 1, 6)   # value₁ − value₂ = 0
+mr = estimate_sur([(ge.data[:, 1], Xge, cols), (wh.data[:, 1], Xwh, cols)];
+                  eqnames = ["GE", "Westinghouse"], restrict = (R, [0.0]))
+mr.betas[1][2], mr.betas[2][2]              # equal by construction
+```
+
+**3SLS** extends SUR to simultaneous systems by first projecting each equation's regressors onto an instrument space, ``\hat X_i = P_{Z_i} X_i``, forming ``\hat\Sigma`` from equation-by-equation 2SLS residuals, and then applying the SUR GLS step to the projected regressors. Supply instruments as one shared matrix (`instruments = :common`, the default) or a vector of per-equation matrices (`instruments = :perequation`):
+
+```@example sur
+Z = hcat(ones(20), ge.data[:, 3], wh.data[:, 3])   # common instruments [1, C_ge, C_wh]
+m3 = estimate_3sls([(ge.data[:, 1], Xge, cols), (wh.data[:, 1], Xwh, cols)], Z;
+                   eqnames = ["GE", "Westinghouse"])
+report(m3)
+```
+
+When the instrument set spans every regressor, ``P_{Z_i} X_i = X_i`` and 3SLS collapses to SUR; when every equation is exactly identified it collapses to equation-by-equation 2SLS.
+
+!!! note "Ill-conditioned raw-scale designs"
+    The Grunfeld regressors span several orders of magnitude, so the normal-equation cross-product ``X'X`` has condition number ``\approx 10^8``. The system estimators solve for the coefficients with QR-based least squares on the design directly (never squaring the condition number), so no rescaling is required. Full-information maximum likelihood is not implemented as a separate optimizer — iterated SUR already reaches the Gaussian MLE for the linear system.
+
+| Keyword | Type | Default | Description |
+|---|---|---|---|
+| `iterate` | `Bool` | `false` | Iterate FGLS to the Gaussian MLE (SUR only) |
+| `tol` / `maxiter` | `Real` / `Int` | `1e-8` / `100` | Iteration controls (SUR only) |
+| `restrict` | `(R, r)` or `nothing` | `nothing` | Linear cross-equation restriction ``R\cdot\mathrm{vec}(B)=r`` (SUR only) |
+| `instruments` | `Symbol` | `:common` | `:common` (shared `Z`) or `:perequation` (3SLS only) |
+| `eqnames` | `Vector{String}` | auto | Equation labels |
+
+---
+
 ## Complete Example
 
 This example demonstrates a full cross-sectional regression workflow: OLS estimation with robust standard error comparison, WLS correction for heteroskedasticity, IV estimation for an endogenous regressor, and VIF diagnostics.
@@ -644,6 +1281,8 @@ The OLS estimate of the return to education is biased upward because ability is 
 
 6. **Confusing WLS weights with frequency weights.** The `weights` argument represents inverse-variance weights (``w_i = 1/\text{Var}(u_i)``), not frequency weights. For frequency-weighted regression, multiply each weight by the observation count.
 
+7. **Using the two-sided ``\Omega`` where the one-sided ``\Lambda`` is required.** Fully-modified OLS, CCR, and panel cointegration need ``\Lambda = \sum_{j \geq 0} \Gamma_j`` (no transpose). Feeding them `lrvar`/`lrcov` (which return ``\Omega = \Lambda + \Lambda' - \Gamma_0``) silently biases the second-stage correction --- always call `lrcov_oneside` for those estimators.
+
 ---
 
 ## References
@@ -654,21 +1293,86 @@ The OLS estimate of the return to education is biased upward because ability is 
 - Arellano, M. (1987). Computing Robust Standard Errors for Within-Groups Estimators.
   *Oxford Bulletin of Economics and Statistics*, 49(4), 431-434. [DOI](https://doi.org/10.1111/j.1468-0084.1987.mp49004006.x)
 
+- Andrews, D. W. K. (1991). Heteroskedasticity and Autocorrelation Consistent Covariance Matrix Estimation.
+  *Econometrica*, 59(3), 817-858. [DOI](https://doi.org/10.2307/2938229)
+
+- Andrews, D. W. K., & Monahan, J. C. (1992). An Improved Heteroskedasticity and Autocorrelation Consistent Covariance Matrix Estimator.
+  *Econometrica*, 60(4), 953-966. [DOI](https://doi.org/10.2307/2951574)
+
+- Anderson, T. W., & Rubin, H. (1949). Estimation of the Parameters of a Single Equation in a Complete System of Stochastic Equations.
+  *Annals of Mathematical Statistics*, 20(1), 46-63. [DOI](https://doi.org/10.1214/aoms/1177730090)
+
+- Belloni, A., & Chernozhukov, V. (2013). Least Squares After Model Selection in High-Dimensional Sparse Models.
+  *Bernoulli*, 19(2), 521-547. [DOI](https://doi.org/10.3150/11-BEJ410)
+
 - Belsley, D. A., Kuh, E., & Welsch, R. E. (1980). *Regression Diagnostics: Identifying Influential Data and Sources of Collinearity*. New York: Wiley. ISBN 978-0-471-05856-4.
+
+- Brown, R. L., Durbin, J., & Evans, J. M. (1975). Techniques for Testing the Constancy of Regression Relationships over Time.
+  *Journal of the Royal Statistical Society, Series B*, 37(2), 149-192. [DOI](https://doi.org/10.1111/j.2517-6161.1975.tb01532.x)
+
+- Chow, G. C. (1960). Tests of Equality Between Sets of Coefficients in Two Linear Regressions.
+  *Econometrica*, 28(3), 591-605. [DOI](https://doi.org/10.2307/1910133)
+
+- Edgerton, D., & Wells, C. (1994). Critical Values for the CUSUMSQ Statistic in Medium and Large Sized Samples.
+  *Oxford Bulletin of Economics and Statistics*, 56(3), 355-365. [DOI](https://doi.org/10.1111/j.1468-0084.1994.mp56003008.x)
+
+- Den Haan, W. J., & Levin, A. T. (1997). A Practitioner's Guide to Robust Covariance Matrix Estimation.
+  In *Handbook of Statistics*, Vol. 15, 299-342. Elsevier. [DOI](https://doi.org/10.1016/S0169-7161(97)15014-3)
 
 - Cameron, A. C., & Miller, D. L. (2015). A Practitioner's Guide to Cluster-Robust Inference.
   *Journal of Human Resources*, 50(2), 317-372. [DOI](https://doi.org/10.3368/jhr.50.2.317)
 
+- Friedman, J., Hastie, T., & Tibshirani, R. (2010). Regularization Paths for Generalized Linear Models via Coordinate Descent.
+  *Journal of Statistical Software*, 33(1), 1-22. [DOI](https://doi.org/10.18637/jss.v033.i01)
+
 - Greene, W. H. (2018). *Econometric Analysis*. 8th ed. New York: Pearson. ISBN 978-0-13-446136-6.
+
+- Hoerl, A. E., & Kennard, R. W. (1970). Ridge Regression: Biased Estimation for Nonorthogonal Problems.
+  *Technometrics*, 12(1), 55-67. [DOI](https://doi.org/10.1080/00401706.1970.10488634)
 
 - Hansen, L. P. (1982). Large Sample Properties of Generalized Method of Moments Estimators.
   *Econometrica*, 50(4), 1029-1054. [DOI](https://doi.org/10.2307/1912775)
 
+- Hendry, D. F., & Krolzig, H.-M. (2005). The Properties of Automatic Gets Modelling.
+  *Economic Journal*, 115(502), C32-C61. [DOI](https://doi.org/10.1111/j.0013-0133.2005.00979.x)
+
+- Hoover, K. D., & Perez, S. J. (1999). Data Mining Reconsidered: Encompassing and the General-to-Specific Approach to Specification Search.
+  *Econometrics Journal*, 2(2), 167-191. [DOI](https://doi.org/10.1111/1368-423X.00025)
+
+- Pretis, F., Reade, J. J., & Sucarrat, G. (2018). Automated General-to-Specific (GETS) Regression Modeling and Indicator Saturation for Outliers and Structural Breaks.
+  *Journal of Statistical Software*, 86(3), 1-44. [DOI](https://doi.org/10.18637/jss.v086.i03)
+- Heckman, J. J. (1979). Sample Selection Bias as a Specification Error.
+  *Econometrica*, 47(1), 153-161. [DOI](https://doi.org/10.2307/1912352)
+
+- Brownlee, K. A. (1965). *Statistical Theory and Methodology in Science and Engineering*. 2nd ed. New York: Wiley, pp. 491-500. (Source of the `:stackloss` dataset.)
+
+- Huber, P. J. (1964). Robust Estimation of a Location Parameter.
+  *The Annals of Mathematical Statistics*, 35(1), 73-101. [DOI](https://doi.org/10.1214/aoms/1177703732)
+
+- Huber, P. J., & Ronchetti, E. M. (2009). *Robust Statistics*. 2nd ed. Hoboken, NJ: Wiley. [DOI](https://doi.org/10.1002/9780470434697)
+
+- Rousseeuw, P. J., & Leroy, A. M. (1987). *Robust Regression and Outlier Detection*. New York: Wiley. [DOI](https://doi.org/10.1002/0471725382)
+
+- Salibian-Barrera, M., & Yohai, V. J. (2006). A Fast Algorithm for S-Regression Estimates.
+  *Journal of Computational and Graphical Statistics*, 15(2), 414-427. [DOI](https://doi.org/10.1198/106186006X113629)
+
+- Yohai, V. J. (1987). High Breakdown-Point and High Efficiency Robust Estimates for Regression.
+  *The Annals of Statistics*, 15(2), 642-656. [DOI](https://doi.org/10.1214/aos/1176350366)
+
 - MacKinnon, J. G., & White, H. (1985). Some Heteroskedasticity-Consistent Covariance Matrix Estimators with Improved Finite Sample Properties.
   *Journal of Econometrics*, 29(3), 305-325. [DOI](https://doi.org/10.1016/0304-4076(85)90158-7)
 
+- Mroz, T. A. (1987). The Sensitivity of an Empirical Model of Married Women's Hours of Work to Economic and Statistical Assumptions.
+  *Econometrica*, 55(4), 765-799. [DOI](https://doi.org/10.2307/1911029)
+
+- Newey, W. K., & West, K. D. (1994). Automatic Lag Selection in Covariance Matrix Estimation.
+  *Review of Economic Studies*, 61(4), 631-653. [DOI](https://doi.org/10.2307/2297912)
+
 - Sargan, J. D. (1958). The Estimation of Economic Relationships Using Instrumental Variables.
   *Econometrica*, 26(3), 393-415. [DOI](https://doi.org/10.2307/1907619)
+
+- Fuller, W. A. (1977). Some Properties of a Modification of the Limited Information Estimator.
+  *Econometrica*, 45(4), 939-953. [DOI](https://doi.org/10.2307/1912683)
 
 - Staiger, D., & Stock, J. H. (1997). Instrumental Variables Regression with Weak Instruments.
   *Econometrica*, 65(3), 557-586. [DOI](https://doi.org/10.2307/2171753)
@@ -676,7 +1380,33 @@ The OLS estimate of the return to education is biased upward because ability is 
 - Theil, H. (1953). Repeated Least Squares Applied to Complete Equation Systems.
   *The Hague: Central Planning Bureau*.
 
+- Tibshirani, R. (1996). Regression Shrinkage and Selection via the Lasso.
+  *Journal of the Royal Statistical Society, Series B*, 58(1), 267-288. [DOI](https://doi.org/10.1111/j.2517-6161.1996.tb02080.x)
+
 - White, H. (1980). A Heteroskedasticity-Consistent Covariance Matrix Estimator and a Direct Test for Heteroskedasticity.
   *Econometrica*, 48(4), 817-838. [DOI](https://doi.org/10.2307/1912934)
 
+- Zellner, A. (1962). An Efficient Method of Estimating Seemingly Unrelated Regressions and Tests for Aggregation Bias.
+  *Journal of the American Statistical Association*, 57(298), 348-368. [DOI](https://doi.org/10.1080/01621459.1962.10480664)
+
+- Zellner, A., & Theil, H. (1962). Three-Stage Least Squares: Simultaneous Estimation of Simultaneous Equations.
+  *Econometrica*, 30(1), 54-78. [DOI](https://doi.org/10.2307/1911287)
+
+- Kruskal, W. (1968). When Are Gauss-Markov and Least Squares Estimators Identical? A Coordinate-Free Approach.
+  *The Annals of Mathematical Statistics*, 39(1), 70-75. [DOI](https://doi.org/10.1214/aoms/1177698505)
+
+- McElroy, M. B. (1977). Goodness of Fit for Seemingly Unrelated Regressions.
+  *Journal of Econometrics*, 6(3), 381-387. [DOI](https://doi.org/10.1016/0304-4076(77)90008-1)
+
+- Henningsen, A., & Hamann, J. D. (2007). systemfit: A Package for Estimating Systems of Simultaneous Equations in R.
+  *Journal of Statistical Software*, 23(4), 1-40. [DOI](https://doi.org/10.18637/jss.v023.i04)
+
+- Grunfeld, Y. (1958). *The Determinants of Corporate Investment*. Ph.D. thesis, University of Chicago. (Source of the `:grunfeld` dataset.)
+
 - Wooldridge, J. M. (2010). *Econometric Analysis of Cross Section and Panel Data*. 2nd ed. Cambridge, MA: MIT Press. ISBN 978-0-262-23258-6.
+
+- Zou, H. (2006). The Adaptive Lasso and Its Oracle Properties.
+  *Journal of the American Statistical Association*, 101(476), 1418-1429. [DOI](https://doi.org/10.1198/016214506000000735)
+
+- Zou, H., & Hastie, T. (2005). Regularization and Variable Selection via the Elastic Net.
+  *Journal of the Royal Statistical Society, Series B*, 67(2), 301-320. [DOI](https://doi.org/10.1111/j.1467-9868.2005.00503.x)

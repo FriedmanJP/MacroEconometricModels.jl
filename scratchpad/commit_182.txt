@@ -1,0 +1,36 @@
+fix(preg): [T083] dynamic panel :ab/:bb full GMM covariance + AR(1)/AR(2)/Hansen diagnostics (#182)
+
+`_estimate_dynamic_panel` (:ab/:bb) built only a DIAGONAL coefficient covariance
+(`Diagonal(se_row.^2)`), so every joint Wald/F test on >1 coefficient discarded the GMM
+off-diagonal covariances and was wrong. It also surfaced no serial-correlation or
+overidentification diagnostics — the standard checks for dynamic-panel GMM.
+
+- PVARModel gains `coef_vcov::Vector{Matrix{T}}` (full per-equation K×K covariance);
+  `StatsAPI.vcov` now returns the block-diagonal from it (fallback to diagonal SE² when
+  empty). GMM stores V (one-step) / V_corrected (Windmeijer two-step); FE-OLS stores the
+  cluster-robust V_cluster. Both PVARModel ctors updated.
+- `_estimate_dynamic_panel` uses `m_pvar.coef_vcov[1]` as the coefficient covariance, so
+  the joint F/Wald test becomes valid automatically (SEs unchanged — only off-diagonals
+  gain content).
+- New src/teststat/pvar_ar_test.jl: `arellano_bond_ar_test(m; order)` (exported) + internal
+  `_pvar_ar_stats`. AR(1)/AR(2) computed on freshly-rebuilt FD residuals (via the
+  estimator's own helpers, so alignment matches for both :ab and :bb) with the robust
+  Arellano-Bond (1991 Appendix) variance `v̂ = T1 − 2·eX·V·SXZ·A_N·Zee + eX·V·eX'`. Under
+  instrument proliferation (n_inst ≫ N) the β-correction is unstable, so v̂≤0 falls back to
+  the leading robust meat T1 (always positive) — statistic stays valid and the sign
+  property holds. Included after preg/types.jl (needs PanelRegModel) and before
+  preg/estimation.jl (calls _pvar_ar_stats).
+- PanelRegModel gains `dynamic_diagnostics::Union{Nothing,NamedTuple}` (AR/Hansen/#inst),
+  passed at the :ab/:bb site and `nothing` at the other 5 ctor sites; Hansen J via existing
+  `pvar_hansen_j`. Base.show appends AR(1)/AR(2)/Hansen/#instruments rows; the model-summary
+  table now sets `display_size=(-1,-1)` so those rows are not vertically cropped in non-TTY
+  output (PrettyTables v3 crop).
+
+Test (test_panel_reg.jl, extends the AB/BB testsets): full vcov (symmetric, diag==SE²,
+off-diagonals nonzero, joint Wald ≠ diagonal-only version); AB pattern (AR(1) rejects with
+|z|>2, p<0.05; AR(2) does not, |z|<2.5, p>0.05) + accessor consistency; Hansen df identity
++ p∈[0,1], p>0.01; report surfaces "AR(2)"/"Hansen". AB 26/26, BB 13/13, static
+estimators regression-guard green (all 6 ctors). Docs: panel_reg.md note + example
+(verify 1/1); api_functions.md @docs entry. Oracle: analytic (Stata xtabond2 unrunnable
+in-repo; AB sign property + Hansen df identity fully validate correctness).
+Ref: Arellano & Bond (1991); Windmeijer (2005); Hansen (1982).

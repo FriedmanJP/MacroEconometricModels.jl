@@ -175,6 +175,17 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Estimation and Hypothesis Testing of Cointegration Vectors in Gaussian Vector Autoregressive Models",
         journal="Econometrica", volume="59", issue="6", pages="1551--1580",
         doi="10.2307/2938278", isbn="", publisher="", entry_type=:article),
+    # EV-38 (#446): VECM restriction testing
+    :johansen_juselius1990 => (key=:johansen_juselius1990,
+        authors="Johansen, S{\\o}ren and Juselius, Katarina", year=1990,
+        title="Maximum Likelihood Estimation and Inference on Cointegration --- with Applications to the Demand for Money",
+        journal="Oxford Bulletin of Economics and Statistics", volume="52", issue="2", pages="169--210",
+        doi="10.1111/j.1468-0084.1990.mp52002003.x", isbn="", publisher="", entry_type=:article),
+    :johansen1995 => (key=:johansen1995, authors="Johansen, S{\\o}ren", year=1995,
+        title="Likelihood-Based Inference in Cointegrated Vector Autoregressive Models",
+        journal="", volume="", issue="", pages="",
+        doi="10.1093/0198774508.001.0001", isbn="978-0-19-877450-1",
+        publisher="Oxford University Press", entry_type=:book),
     :engle_granger1987 => (key=:engle_granger1987,
         authors="Engle, Robert F. and Granger, Clive W. J.", year=1987,
         title="Co-Integration and Error Correction: Representation, Estimation, and Testing",
@@ -191,6 +202,39 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Automatic Time Series Forecasting: The forecast Package for R",
         journal="Journal of Statistical Software", volume="27", issue="3", pages="1--22",
         doi="10.18637/jss.v027.i03", isbn="", publisher="", entry_type=:article),
+    # --- ARFIMA / long memory (EV-13) ---
+    :sowell1992 => (key=:sowell1992, authors="Sowell, Fallaw", year=1992,
+        title="Maximum Likelihood Estimation of Stationary Univariate Fractionally Integrated Time Series Models",
+        journal="Journal of Econometrics", volume="53", issue="1--3", pages="165--188",
+        doi="10.1016/0304-4076(92)90084-5", isbn="", publisher="", entry_type=:article),
+    :geweke_porter_hudak1983 => (key=:geweke_porter_hudak1983,
+        authors="Geweke, John and Porter-Hudak, Susan", year=1983,
+        title="The Estimation and Application of Long Memory Time Series Models",
+        journal="Journal of Time Series Analysis", volume="4", issue="4", pages="221--238",
+        doi="10.1111/j.1467-9892.1983.tb00371.x", isbn="", publisher="", entry_type=:article),
+    :robinson1995 => (key=:robinson1995, authors="Robinson, Peter M.", year=1995,
+        title="Gaussian Semiparametric Estimation of Long Range Dependence",
+        journal="Annals of Statistics", volume="23", issue="5", pages="1630--1661",
+        doi="10.1214/aos/1176324317", isbn="", publisher="", entry_type=:article),
+    :hosking1981 => (key=:hosking1981, authors="Hosking, J. R. M.", year=1981,
+        title="Fractional Differencing",
+        journal="Biometrika", volume="68", issue="1", pages="165--176",
+        doi="10.1093/biomet/68.1.165", isbn="", publisher="", entry_type=:article),
+    :jensen_nielsen2014 => (key=:jensen_nielsen2014,
+        authors="Jensen, Andreas Noack and Nielsen, Morten \\O{}rregaard", year=2014,
+        title="A Fast Fractional Difference Algorithm",
+        journal="Journal of Time Series Analysis", volume="35", issue="5", pages="428--436",
+        doi="10.1111/jtsa.12074", isbn="", publisher="", entry_type=:article),
+    :durbin_koopman2012 => (key=:durbin_koopman2012,
+        authors="Durbin, James and Koopman, Siem Jan", year=2012,
+        title="Time Series Analysis by State Space Methods", journal="",
+        volume="", issue="", pages="", doi="10.1093/acprof:oso/9780199641178.001.0001",
+        isbn="978-0-19-964117-8", publisher="Oxford University Press", entry_type=:book),
+    :harvey1989 => (key=:harvey1989, authors="Harvey, Andrew C.", year=1989,
+        title="Forecasting, Structural Time Series Models and the Kalman Filter",
+        journal="", volume="", issue="", pages="",
+        doi="10.1017/CBO9781107049994", isbn="978-0-521-40573-7",
+        publisher="Cambridge University Press", entry_type=:book),
     # --- GMM ---
     :hansen1982 => (key=:hansen1982, authors="Hansen, Lars Peter", year=1982,
         title="Large Sample Properties of Generalized Method of Moments Estimators",
@@ -341,6 +385,84 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="A Heteroskedasticity-Consistent Covariance Matrix Estimator and a Direct Test for Heteroskedasticity",
         journal="Econometrica", volume="48", issue="4", pages="817--838",
         doi="10.2307/1912934", isbn="", publisher="", entry_type=:article),
+    # --- OLS Residual Diagnostics (EV-31, #439) ---
+    :breusch_pagan1979 => (key=:breusch_pagan1979,
+        authors="Breusch, Trevor S. and Pagan, Adrian R.", year=1979,
+        title="A Simple Test for Heteroscedasticity and Random Coefficient Variation",
+        journal="Econometrica", volume="47", issue="5", pages="1287--1294",
+        doi="10.2307/1911963", isbn="", publisher="", entry_type=:article),
+    :koenker1981 => (key=:koenker1981, authors="Koenker, Roger", year=1981,
+        title="A Note on Studentizing a Test for Heteroscedasticity",
+        journal="Journal of Econometrics", volume="17", issue="1", pages="107--112",
+        doi="10.1016/0304-4076(81)90062-2", isbn="", publisher="", entry_type=:article),
+    :glejser1969 => (key=:glejser1969, authors="Glejser, Herbert", year=1969,
+        title="A New Test for Heteroskedasticity",
+        journal="Journal of the American Statistical Association", volume="64", issue="325",
+        pages="316--323", doi="10.1080/01621459.1969.10500976", isbn="", publisher="",
+        entry_type=:article),
+    :harvey1976 => (key=:harvey1976, authors="Harvey, Andrew C.", year=1976,
+        title="Estimating Regression Models with Multiplicative Heteroscedasticity",
+        journal="Econometrica", volume="44", issue="3", pages="461--465",
+        doi="10.2307/1913974", isbn="", publisher="", entry_type=:article),
+    :godfrey1978 => (key=:godfrey1978, authors="Godfrey, Leslie G.", year=1978,
+        title="Testing Against General Autoregressive and Moving Average Error Models when the Regressors Include Lagged Dependent Variables",
+        journal="Econometrica", volume="46", issue="6", pages="1293--1301",
+        doi="10.2307/1913829", isbn="", publisher="", entry_type=:article),
+    :breusch1978 => (key=:breusch1978, authors="Breusch, Trevor S.", year=1978,
+        title="Testing for Autocorrelation in Dynamic Linear Models",
+        journal="Australian Economic Papers", volume="17", issue="31", pages="334--355",
+        doi="10.1111/j.1467-8454.1978.tb00635.x", isbn="", publisher="", entry_type=:article),
+    :ramsey1969 => (key=:ramsey1969, authors="Ramsey, James B.", year=1969,
+        title="Tests for Specification Errors in Classical Linear Least-Squares Regression Analysis",
+        journal="Journal of the Royal Statistical Society, Series B", volume="31", issue="2",
+        pages="350--371", doi="10.1111/j.2517-6161.1969.tb00796.x", isbn="", publisher="",
+        entry_type=:article),
+    # --- Stability & Influence Diagnostics (EV-32, #440) ---
+    :brown_durbin_evans1975 => (key=:brown_durbin_evans1975,
+        authors="Brown, Robert L. and Durbin, James and Evans, J. M.", year=1975,
+        title="Techniques for Testing the Constancy of Regression Relationships over Time",
+        journal="Journal of the Royal Statistical Society, Series B", volume="37", issue="2",
+        pages="149--192", doi="10.1111/j.2517-6161.1975.tb01532.x", isbn="", publisher="",
+        entry_type=:article),
+    :chow1960 => (key=:chow1960, authors="Chow, Gregory C.", year=1960,
+        title="Tests of Equality Between Sets of Coefficients in Two Linear Regressions",
+        journal="Econometrica", volume="28", issue="3", pages="591--605",
+        doi="10.2307/1910133", isbn="", publisher="", entry_type=:article),
+    :edgerton_wells1994 => (key=:edgerton_wells1994,
+        authors="Edgerton, David and Wells, Curt", year=1994,
+        title="Critical Values for the CUSUMSQ Statistic in Medium and Large Sized Samples",
+        journal="Oxford Bulletin of Economics and Statistics", volume="56", issue="3",
+        pages="355--365", doi="10.1111/j.1468-0084.1994.mp56003008.x", isbn="", publisher="",
+        entry_type=:article),
+    :belsley_kuh_welsch1980 => (key=:belsley_kuh_welsch1980,
+        authors="Belsley, David A. and Kuh, Edwin and Welsch, Roy E.", year=1980,
+        title="Regression Diagnostics: Identifying Influential Data and Sources of Collinearity",
+        journal="", volume="", issue="", pages="", doi="10.1002/0471725153",
+        isbn="978-0471058564", publisher="Wiley", entry_type=:book),
+    :cook1977 => (key=:cook1977, authors="Cook, R. Dennis", year=1977,
+        title="Detection of Influential Observation in Linear Regression",
+        journal="Technometrics", volume="19", issue="1", pages="15--18",
+        doi="10.2307/1268249", isbn="", publisher="", entry_type=:article),
+    # --- Long-Run Variance Toolkit (EV-12) ---
+    :andrews1991 => (key=:andrews1991, authors="Andrews, Donald W. K.", year=1991,
+        title="Heteroskedasticity and Autocorrelation Consistent Covariance Matrix Estimation",
+        journal="Econometrica", volume="59", issue="3", pages="817--858",
+        doi="10.2307/2938229", isbn="", publisher="", entry_type=:article),
+    :newey_west1994 => (key=:newey_west1994,
+        authors="Newey, Whitney K. and West, Kenneth D.", year=1994,
+        title="Automatic Lag Selection in Covariance Matrix Estimation",
+        journal="Review of Economic Studies", volume="61", issue="4", pages="631--653",
+        doi="10.2307/2297912", isbn="", publisher="", entry_type=:article),
+    :andrews_monahan1992 => (key=:andrews_monahan1992,
+        authors="Andrews, Donald W. K. and Monahan, J. Christopher", year=1992,
+        title="An Improved Heteroskedasticity and Autocorrelation Consistent Covariance Matrix Estimator",
+        journal="Econometrica", volume="60", issue="4", pages="953--966",
+        doi="10.2307/2951574", isbn="", publisher="", entry_type=:article),
+    :den_haan_levin1997 => (key=:den_haan_levin1997,
+        authors="Den Haan, Wouter J. and Levin, Andrew T.", year=1997,
+        title="A Practitioner's Guide to Robust Covariance Matrix Estimation",
+        journal="Handbook of Statistics", volume="15", issue="", pages="299--342",
+        doi="10.1016/S0169-7161(97)15014-3", isbn="", publisher="Elsevier", entry_type=:incollection),
     # --- Volatility Models ---
     :engle1982 => (key=:engle1982, authors="Engle, Robert F.", year=1982,
         title="Autoregressive Conditional Heteroscedasticity with Estimates of the Variance of United Kingdom Inflation",
@@ -354,11 +476,73 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Conditional Heteroskedasticity in Asset Returns: A New Approach",
         journal="Econometrica", volume="59", issue="2", pages="347--370",
         doi="10.2307/2938260", isbn="", publisher="", entry_type=:article),
+    # --- GARCH-MIDAS (EV-02, #410) ---
+    :engle_ghysels_sohn2013 => (key=:engle_ghysels_sohn2013,
+        authors="Engle, Robert F. and Ghysels, Eric and Sohn, Bumjean", year=2013,
+        title="Stock Market Volatility and Macroeconomic Fundamentals",
+        journal="Review of Economics and Statistics", volume="95", issue="3", pages="776--797",
+        doi="10.1162/REST_a_00300", isbn="", publisher="", entry_type=:article),
+    # --- Fractionally-integrated volatility (EV-14, #422) ---
+    :baillie_bollerslev_mikkelsen1996 => (key=:baillie_bollerslev_mikkelsen1996,
+        authors="Baillie, Richard T. and Bollerslev, Tim and Mikkelsen, Hans Ole", year=1996,
+        title="Fractionally Integrated Generalized Autoregressive Conditional Heteroskedasticity",
+        journal="Journal of Econometrics", volume="74", issue="1", pages="3--30",
+        doi="10.1016/S0304-4076(95)01749-6", isbn="", publisher="", entry_type=:article),
+    :bollerslev_mikkelsen1996 => (key=:bollerslev_mikkelsen1996,
+        authors="Bollerslev, Tim and Mikkelsen, Hans Ole", year=1996,
+        title="Modeling and Pricing Long Memory in Stock Market Volatility",
+        journal="Journal of Econometrics", volume="73", issue="1", pages="151--184",
+        doi="10.1016/0304-4076(95)01736-4", isbn="", publisher="", entry_type=:article),
+    # --- Multivariate GARCH (EV-16, #424) ---
+    :bollerslev1990 => (key=:bollerslev1990, authors="Bollerslev, Tim", year=1990,
+        title="Modelling the Coherence in Short-Run Nominal Exchange Rates: A Multivariate Generalized ARCH Model",
+        journal="Review of Economics and Statistics", volume="72", issue="3", pages="498--505",
+        doi="10.2307/2109358", isbn="", publisher="", entry_type=:article),
+    :engle2002dcc => (key=:engle2002dcc, authors="Engle, Robert F.", year=2002,
+        title="Dynamic Conditional Correlation: A Simple Class of Multivariate Generalized Autoregressive Conditional Heteroskedasticity Models",
+        journal="Journal of Business \\& Economic Statistics", volume="20", issue="3", pages="339--350",
+        doi="10.1198/073500102288618487", isbn="", publisher="", entry_type=:article),
+    :aielli2013 => (key=:aielli2013, authors="Aielli, Gian Piero", year=2013,
+        title="Dynamic Conditional Correlation: On Properties and Estimation",
+        journal="Journal of Business \\& Economic Statistics", volume="31", issue="3", pages="282--299",
+        doi="10.1080/07350015.2013.771027", isbn="", publisher="", entry_type=:article),
+    :engle_kroner1995 => (key=:engle_kroner1995, authors="Engle, Robert F. and Kroner, Kenneth F.", year=1995,
+        title="Multivariate Simultaneous Generalized ARCH",
+        journal="Econometric Theory", volume="11", issue="1", pages="122--150",
+        doi="10.1017/S0266466600009063", isbn="", publisher="", entry_type=:article),
     :glosten_jagannathan_runkle1993 => (key=:glosten_jagannathan_runkle1993,
         authors="Glosten, Lawrence R. and Jagannathan, Ravi and Runkle, David E.", year=1993,
         title="On the Relation Between the Expected Value and the Volatility of the Nominal Excess Return on Stocks",
         journal="Journal of Finance", volume="48", issue="5", pages="1779--1801",
         doi="10.1111/j.1540-6261.1993.tb05128.x", isbn="", publisher="", entry_type=:article),
+    # --- IGARCH / Component-GARCH / APARCH + diagnostics (EV-15, #423) ---
+    :engle_bollerslev1986 => (key=:engle_bollerslev1986,
+        authors="Engle, Robert F. and Bollerslev, Tim", year=1986,
+        title="Modelling the Persistence of Conditional Variances",
+        journal="Econometric Reviews", volume="5", issue="1", pages="1--50",
+        doi="10.1080/07474938608800095", isbn="", publisher="", entry_type=:article),
+    :engle_lee1999 => (key=:engle_lee1999,
+        authors="Engle, Robert F. and Lee, Gary G. J.", year=1999,
+        title="A Permanent and Transitory Component Model of Stock Return Volatility",
+        journal="", volume="", issue="", pages="475--497", doi="",
+        isbn="978-0-19-510944-7",
+        publisher="Oxford University Press (in Cointegration, Causality, and Forecasting, Engle & White, eds.)",
+        entry_type=:incollection),
+    :ding_granger_engle1993 => (key=:ding_granger_engle1993,
+        authors="Ding, Zhuanxin and Granger, Clive W. J. and Engle, Robert F.", year=1993,
+        title="A Long Memory Property of Stock Market Returns and a New Model",
+        journal="Journal of Empirical Finance", volume="1", issue="1", pages="83--106",
+        doi="10.1016/0927-5398(93)90006-D", isbn="", publisher="", entry_type=:article),
+    :engle_ng1993 => (key=:engle_ng1993,
+        authors="Engle, Robert F. and Ng, Victor K.", year=1993,
+        title="Measuring and Testing the Impact of News on Volatility",
+        journal="Journal of Finance", volume="48", issue="5", pages="1749--1778",
+        doi="10.1111/j.1540-6261.1993.tb05127.x", isbn="", publisher="", entry_type=:article),
+    :nyblom1989 => (key=:nyblom1989, authors="Nyblom, Jukka", year=1989,
+        title="Testing for the Constancy of Parameters Over Time",
+        journal="Journal of the American Statistical Association", volume="84", issue="405",
+        pages="223--230", doi="10.1080/01621459.1989.10478759", isbn="", publisher="",
+        entry_type=:article),
     :taylor1986 => (key=:taylor1986, authors="Taylor, Stephen J.", year=1986,
         title="Modelling Financial Time Series", journal="",
         volume="", issue="", pages="", doi="",
@@ -373,6 +557,39 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Stochastic Volatility with Leverage: Fast and Efficient Likelihood Inference",
         journal="Journal of Econometrics", volume="140", issue="2", pages="425--449",
         doi="10.1016/j.jeconom.2006.07.008", isbn="", publisher="", entry_type=:article),
+    # --- Nonlinear Time Series (threshold/SETAR) ---
+    :tong1990 => (key=:tong1990, authors="Tong, Howell", year=1990,
+        title="Non-linear Time Series: A Dynamical System Approach", journal="",
+        volume="", issue="", pages="", doi="",
+        isbn="978-0-19-852300-6", publisher="Oxford University Press", entry_type=:book),
+    :hansen1996 => (key=:hansen1996, authors="Hansen, Bruce E.", year=1996,
+        title="Inference When a Nuisance Parameter Is Not Identified Under the Null Hypothesis",
+        journal="Econometrica", volume="64", issue="2", pages="413--430",
+        doi="10.2307/2171789", isbn="", publisher="", entry_type=:article),
+    :hansen2000 => (key=:hansen2000, authors="Hansen, Bruce E.", year=2000,
+        title="Sample Splitting and Threshold Estimation",
+        journal="Econometrica", volume="68", issue="3", pages="575--603",
+        doi="10.1111/1468-0262.00124", isbn="", publisher="", entry_type=:article),
+    # --- Smooth-transition autoregression (STAR) — EV-06 ---
+    :luukkonen1988 => (key=:luukkonen1988,
+        authors="Luukkonen, Ritva and Saikkonen, Pentti and Teräsvirta, Timo", year=1988,
+        title="Testing Linearity Against Smooth Transition Autoregressive Models",
+        journal="Biometrika", volume="75", issue="3", pages="491--499",
+        doi="10.1093/biomet/75.3.491", isbn="", publisher="", entry_type=:article),
+    :terasvirta1994 => (key=:terasvirta1994, authors="Teräsvirta, Timo", year=1994,
+        title="Specification, Estimation, and Evaluation of Smooth Transition Autoregressive Models",
+        journal="Journal of the American Statistical Association", volume="89", issue="425",
+        pages="208--218", doi="10.1080/01621459.1994.10476462", isbn="", publisher="",
+        entry_type=:article),
+    # --- Markov-switching regression / MS-AR — EV-07 ---
+    :hamilton1989 => (key=:hamilton1989, authors="Hamilton, James D.", year=1989,
+        title="A New Approach to the Economic Analysis of Nonstationary Time Series and the Business Cycle",
+        journal="Econometrica", volume="57", issue="2", pages="357--384",
+        doi="10.2307/1912559", isbn="", publisher="", entry_type=:article),
+    :kim1994 => (key=:kim1994, authors="Kim, Chang-Jin", year=1994,
+        title="Dynamic Linear Models with Markov-Switching",
+        journal="Journal of Econometrics", volume="60", issue="1--2", pages="1--22",
+        doi="10.1016/0304-4076(94)90036-1", isbn="", publisher="", entry_type=:article),
     :giannone_lenza_primiceri2015 => (key=:giannone_lenza_primiceri2015,
         authors="Giannone, Domenico and Lenza, Michele and Primiceri, Giorgio E.", year=2015,
         title="Prior Selection for Vector Autoregressions",
@@ -791,6 +1008,69 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Testing for a Unit Root in Panels with Dynamic Factors",
         journal="Journal of Econometrics", volume="122", issue="1", pages="81--126",
         doi="10.1016/j.jeconom.2003.10.020", isbn="", publisher="", entry_type=:article),
+    # --- First-Generation Panel Unit Root Tests (EV-20, #428) ---
+    :levin_lin_chu2002 => (key=:levin_lin_chu2002, authors="Levin, Andrew and Lin, Chien-Fu and Chu, Chia-Shang James", year=2002,
+        title="Unit Root Tests in Panel Data: Asymptotic and Finite-Sample Properties",
+        journal="Journal of Econometrics", volume="108", issue="1", pages="1--24",
+        doi="10.1016/S0304-4076(01)00098-7", isbn="", publisher="", entry_type=:article),
+    :im_pesaran_shin2003 => (key=:im_pesaran_shin2003, authors="Im, Kyung So and Pesaran, M. Hashem and Shin, Yongcheol", year=2003,
+        title="Testing for Unit Roots in Heterogeneous Panels",
+        journal="Journal of Econometrics", volume="115", issue="1", pages="53--74",
+        doi="10.1016/S0304-4076(03)00092-7", isbn="", publisher="", entry_type=:article),
+    :breitung2000 => (key=:breitung2000, authors="Breitung, Jorg", year=2000,
+        title="The Local Power of Some Unit Root Tests for Panel Data",
+        journal="Advances in Econometrics", volume="15", issue="", pages="161--178",
+        doi="10.1016/S0731-9053(00)15006-6", isbn="", publisher="JAI Press", entry_type=:incollection),
+    :maddala_wu1999 => (key=:maddala_wu1999, authors="Maddala, G. S. and Wu, Shaowen", year=1999,
+        title="A Comparative Study of Unit Root Tests with Panel Data and a New Simple Test",
+        journal="Oxford Bulletin of Economics and Statistics", volume="61", issue="S1", pages="631--652",
+        doi="10.1111/1468-0084.61.s1.13", isbn="", publisher="", entry_type=:article),
+    :choi2001 => (key=:choi2001, authors="Choi, In", year=2001,
+        title="Unit Root Tests for Panel Data",
+        journal="Journal of International Money and Finance", volume="20", issue="2", pages="249--272",
+        doi="10.1016/S0261-5606(00)00048-6", isbn="", publisher="", entry_type=:article),
+    :hadri2000 => (key=:hadri2000, authors="Hadri, Kaddour", year=2000,
+        title="Testing for Stationarity in Heterogeneous Panel Data",
+        journal="Econometrics Journal", volume="3", issue="2", pages="148--161",
+        doi="10.1111/1368-423X.00043", isbn="", publisher="", entry_type=:article),
+    # --- Panel Cointegration Tests (EV-21, #429) ---
+    :pedroni1999 => (key=:pedroni1999, authors="Pedroni, Peter", year=1999,
+        title="Critical Values for Cointegration Tests in Heterogeneous Panels with Multiple Regressors",
+        journal="Oxford Bulletin of Economics and Statistics", volume="61", issue="S1", pages="653--670",
+        doi="10.1111/1468-0084.61.s1.14", isbn="", publisher="", entry_type=:article),
+    :pedroni2004 => (key=:pedroni2004, authors="Pedroni, Peter", year=2004,
+        title="Panel Cointegration: Asymptotic and Finite Sample Properties of Pooled Time Series Tests with an Application to the PPP Hypothesis",
+        journal="Econometric Theory", volume="20", issue="3", pages="597--625",
+        doi="10.1017/S0266466604203073", isbn="", publisher="", entry_type=:article),
+    :kao1999 => (key=:kao1999, authors="Kao, Chihwa", year=1999,
+        title="Spurious Regression and Residual-Based Tests for Cointegration in Panel Data",
+        journal="Journal of Econometrics", volume="90", issue="1", pages="1--44",
+        doi="10.1016/S0304-4076(98)00023-2", isbn="", publisher="", entry_type=:article),
+    :westerlund2007 => (key=:westerlund2007, authors="Westerlund, Joakim", year=2007,
+        title="Testing for Error Correction in Panel Data",
+        journal="Oxford Bulletin of Economics and Statistics", volume="69", issue="6", pages="709--748",
+        doi="10.1111/j.1468-0084.2007.00477.x", isbn="", publisher="", entry_type=:article),
+    :persyn_westerlund2008 => (key=:persyn_westerlund2008, authors="Persyn, Damiaan and Westerlund, Joakim", year=2008,
+        title="Error-Correction-Based Cointegration Tests for Panel Data",
+        journal="Stata Journal", volume="8", issue="2", pages="232--241",
+        doi="10.1177/1536867X0800800205", isbn="", publisher="", entry_type=:article),
+    # --- Panel Cointegrating Regression (EV-22, #430) ---
+    :pedroni2000 => (key=:pedroni2000, authors="Pedroni, Peter", year=2000,
+        title="Fully Modified OLS for Heterogeneous Cointegrated Panels",
+        journal="Advances in Econometrics", volume="15", issue="", pages="93--130",
+        doi="10.1016/S0731-9053(00)15004-2", isbn="", publisher="", entry_type=:article),
+    :pedroni2001 => (key=:pedroni2001, authors="Pedroni, Peter", year=2001,
+        title="Purchasing Power Parity Tests in Cointegrated Panels",
+        journal="The Review of Economics and Statistics", volume="83", issue="4", pages="727--731",
+        doi="10.1162/003465301753237803", isbn="", publisher="", entry_type=:article),
+    :kao_chiang2000 => (key=:kao_chiang2000, authors="Kao, Chihwa and Chiang, Min-Hsien", year=2000,
+        title="On the Estimation and Inference of a Cointegrated Regression in Panel Data",
+        journal="Advances in Econometrics", volume="15", issue="", pages="179--222",
+        doi="10.1016/S0731-9053(00)15007-8", isbn="", publisher="", entry_type=:article),
+    :mark_sul2003 => (key=:mark_sul2003, authors="Mark, Nelson C. and Sul, Donggyu", year=2003,
+        title="Cointegration Vector Estimation by Panel DOLS and Long-Run Money Demand",
+        journal="Oxford Bulletin of Economics and Statistics", volume="65", issue="5", pages="655--680",
+        doi="10.1111/j.1468-0084.2003.00066.x", isbn="", publisher="", entry_type=:article),
     # --- Factor Model Break Tests ---
     :breitung_eickmeier2011 => (key=:breitung_eickmeier2011,
         authors="Breitung, Jorg and Eickmeier, Sandra", year=2011,
@@ -823,6 +1103,158 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Instrumental Variables Regression with Weak Instruments",
         journal="Econometrica", volume="65", issue="3", pages="557--586",
         doi="10.2307/2171753", isbn="", publisher="", entry_type=:article),
+    # --- IV k-class / LIML / Fuller estimators (EV-36, #444) ---
+    :anderson_rubin1949 => (key=:anderson_rubin1949,
+        authors="Anderson, T. W. and Rubin, Herman", year=1949,
+        title="Estimation of the Parameters of a Single Equation in a Complete System of Stochastic Equations",
+        journal="Annals of Mathematical Statistics", volume="20", issue="1", pages="46--63",
+        doi="10.1214/aoms/1177730090", isbn="", publisher="", entry_type=:article),
+    :fuller1977 => (key=:fuller1977, authors="Fuller, Wayne A.", year=1977,
+        title="Some Properties of a Modification of the Limited Information Estimator",
+        journal="Econometrica", volume="45", issue="4", pages="939--953",
+        doi="10.2307/1912683", isbn="", publisher="", entry_type=:article),
+    :bekker1994 => (key=:bekker1994, authors="Bekker, Paul A.", year=1994,
+        title="Alternative Approximations to the Distributions of Instrumental Variable Estimators",
+        journal="Econometrica", volume="62", issue="3", pages="657--681",
+        doi="10.2307/2951662", isbn="", publisher="", entry_type=:article),
+    # --- Penalized Regression (EV-03, #411) ---
+    :hoerl_kennard1970 => (key=:hoerl_kennard1970,
+        authors="Hoerl, Arthur E. and Kennard, Robert W.", year=1970,
+        title="Ridge Regression: Biased Estimation for Nonorthogonal Problems",
+        journal="Technometrics", volume="12", issue="1", pages="55--67",
+        doi="10.1080/00401706.1970.10488634", isbn="", publisher="", entry_type=:article),
+    :tibshirani1996 => (key=:tibshirani1996, authors="Tibshirani, Robert", year=1996,
+        title="Regression Shrinkage and Selection via the Lasso",
+        journal="Journal of the Royal Statistical Society, Series B",
+        volume="58", issue="1", pages="267--288",
+        doi="10.1111/j.2517-6161.1996.tb02080.x", isbn="", publisher="", entry_type=:article),
+    :zou_hastie2005 => (key=:zou_hastie2005, authors="Zou, Hui and Hastie, Trevor", year=2005,
+        title="Regularization and Variable Selection via the Elastic Net",
+        journal="Journal of the Royal Statistical Society, Series B",
+        volume="67", issue="2", pages="301--320",
+        doi="10.1111/j.1467-9868.2005.00503.x", isbn="", publisher="", entry_type=:article),
+    :zou2006 => (key=:zou2006, authors="Zou, Hui", year=2006,
+        title="The Adaptive Lasso and Its Oracle Properties",
+        journal="Journal of the American Statistical Association",
+        volume="101", issue="476", pages="1418--1429",
+        doi="10.1198/016214506000000735", isbn="", publisher="", entry_type=:article),
+    # Variable selection — stepwise / GETS (EV-04, #412)
+    :hoover_perez1999 => (key=:hoover_perez1999,
+        authors="Hoover, Kevin D. and Perez, Stephen J.", year=1999,
+        title="Data Mining Reconsidered: Encompassing and the General-to-Specific Approach to Specification Search",
+        journal="Econometrics Journal", volume="2", issue="2", pages="167--191",
+        doi="10.1111/1368-423X.00025", isbn="", publisher="", entry_type=:article),
+    :hendry_krolzig2005 => (key=:hendry_krolzig2005,
+        authors="Hendry, David F. and Krolzig, Hans-Martin", year=2005,
+        title="The Properties of Automatic Gets Modelling",
+        journal="Economic Journal", volume="115", issue="502", pages="C32--C61",
+        doi="10.1111/j.0013-0133.2005.00979.x", isbn="", publisher="", entry_type=:article),
+    :pretis2018 => (key=:pretis2018,
+        authors="Pretis, Felix and Reade, J. James and Sucarrat, Genaro", year=2018,
+        title="Automated General-to-Specific (GETS) Regression Modeling and Indicator Saturation for Outliers and Structural Breaks",
+        journal="Journal of Statistical Software", volume="86", issue="3", pages="1--44",
+        doi="10.18637/jss.v086.i03", isbn="", publisher="", entry_type=:article),
+    :friedman2010 => (key=:friedman2010,
+        authors="Friedman, Jerome and Hastie, Trevor and Tibshirani, Robert", year=2010,
+        title="Regularization Paths for Generalized Linear Models via Coordinate Descent",
+        journal="Journal of Statistical Software", volume="33", issue="1", pages="1--22",
+        doi="10.18637/jss.v033.i01", isbn="", publisher="", entry_type=:article),
+    :belloni_chernozhukov2013 => (key=:belloni_chernozhukov2013,
+        authors="Belloni, Alexandre and Chernozhukov, Victor", year=2013,
+        title="Least Squares After Model Selection in High-Dimensional Sparse Models",
+        journal="Bernoulli", volume="19", issue="2", pages="521--547",
+        doi="10.3150/11-BEJ410", isbn="", publisher="", entry_type=:article),
+    # --- Censored / Truncated Regression (EV-17, #425) ---
+    :tobin1958 => (key=:tobin1958, authors="Tobin, James", year=1958,
+        title="Estimation of Relationships for Limited Dependent Variables",
+        journal="Econometrica", volume="26", issue="1", pages="24--36",
+        doi="10.2307/1907382", isbn="", publisher="", entry_type=:article),
+    :olsen1978 => (key=:olsen1978, authors="Olsen, Randall J.", year=1978,
+        title="Note on the Uniqueness of the Maximum Likelihood Estimator for the Tobit Model",
+        journal="Econometrica", volume="46", issue="5", pages="1211--1215",
+        doi="10.2307/1911445", isbn="", publisher="", entry_type=:article),
+    :hausman_wise1977 => (key=:hausman_wise1977, authors="Hausman, Jerry A. and Wise, David A.", year=1977,
+        title="Social Experimentation, Truncated Distributions, and Efficient Estimation",
+        journal="Econometrica", volume="45", issue="4", pages="919--938",
+        doi="10.2307/1912682", isbn="", publisher="", entry_type=:article),
+    :mcdonald_moffitt1980 => (key=:mcdonald_moffitt1980,
+        authors="McDonald, John F. and Moffitt, Robert A.", year=1980,
+        title="The Uses of Tobit Analysis",
+        journal="The Review of Economics and Statistics", volume="62", issue="2", pages="318--321",
+        doi="10.2307/1924766", isbn="", publisher="", entry_type=:article),
+    # --- Sample-selection / Heckman model (EV-18, #426) ---
+    :heckman1979 => (key=:heckman1979, authors="Heckman, James J.", year=1979,
+        title="Sample Selection Bias as a Specification Error",
+        journal="Econometrica", volume="47", issue="1", pages="153--161",
+        doi="10.2307/1912352", isbn="", publisher="", entry_type=:article),
+    :mroz1987 => (key=:mroz1987, authors="Mroz, Thomas A.", year=1987,
+        title="The Sensitivity of an Empirical Model of Married Women's Hours of Work to Economic and Statistical Assumptions",
+        journal="Econometrica", volume="55", issue="4", pages="765--799",
+        doi="10.2307/1911029", isbn="", publisher="", entry_type=:article),
+    :greene2018 => (key=:greene2018, authors="Greene, William H.", year=2018,
+        title="Econometric Analysis", journal="", volume="", issue="", pages="",
+        doi="", isbn="978-0134461366", publisher="Pearson (8th ed.)", entry_type=:book),
+    # --- Robust regression: M / MM estimation (EV-40, #448) ---
+    :huber1964 => (key=:huber1964, authors="Huber, Peter J.", year=1964,
+        title="Robust Estimation of a Location Parameter",
+        journal="The Annals of Mathematical Statistics", volume="35", issue="1", pages="73--101",
+        doi="10.1214/aoms/1177703732", isbn="", publisher="", entry_type=:article),
+    :yohai1987 => (key=:yohai1987, authors="Yohai, Víctor J.", year=1987,
+        title="High Breakdown-Point and High Efficiency Robust Estimates for Regression",
+        journal="The Annals of Statistics", volume="15", issue="2", pages="642--656",
+        doi="10.1214/aos/1176350366", isbn="", publisher="", entry_type=:article),
+    :salibian_yohai2006 => (key=:salibian_yohai2006,
+        authors="Salibian-Barrera, Matías and Yohai, Víctor J.", year=2006,
+        title="A Fast Algorithm for S-Regression Estimates",
+        journal="Journal of Computational and Graphical Statistics", volume="15", issue="2", pages="414--427",
+        doi="10.1198/106186006X113629", isbn="", publisher="", entry_type=:article),
+    :huber_ronchetti2009 => (key=:huber_ronchetti2009,
+        authors="Huber, Peter J. and Ronchetti, Elvezio M.", year=2009,
+        title="Robust Statistics", journal="", volume="", issue="", pages="",
+        doi="10.1002/9780470434697", isbn="978-0-470-12990-6", publisher="Wiley (2nd ed.)", entry_type=:book),
+    :brownlee1965 => (key=:brownlee1965, authors="Brownlee, Kenneth A.", year=1965,
+        title="Statistical Theory and Methodology in Science and Engineering",
+        journal="", volume="", issue="", pages="491--500",
+        doi="", isbn="", publisher="Wiley (2nd ed.)", entry_type=:book),
+    # --- Single-Equation Cointegrating Regression (EV-10, #418) ---
+    :phillips_hansen1990 => (key=:phillips_hansen1990,
+        authors="Phillips, Peter C. B. and Hansen, Bruce E.", year=1990,
+        title="Statistical Inference in Instrumental Variables Regression with I(1) Processes",
+        journal="The Review of Economic Studies", volume="57", issue="1", pages="99--125",
+        doi="10.2307/2297545", isbn="", publisher="", entry_type=:article),
+    :park1992 => (key=:park1992, authors="Park, Joon Y.", year=1992,
+        title="Canonical Cointegrating Regressions",
+        journal="Econometrica", volume="60", issue="1", pages="119--143",
+        doi="10.2307/2951679", isbn="", publisher="", entry_type=:article),
+    # --- Residual-based / parameter-stability cointegration tests (EV-11) ---
+    :phillips_ouliaris1990 => (key=:phillips_ouliaris1990,
+        authors="Phillips, Peter C. B. and Ouliaris, Sam", year=1990,
+        title="Asymptotic Properties of Residual Based Tests for Cointegration",
+        journal="Econometrica", volume="58", issue="1", pages="165--193",
+        doi="10.2307/2938339", isbn="", publisher="", entry_type=:article),
+    :hansen1992_instability => (key=:hansen1992_instability,
+        authors="Hansen, Bruce E.", year=1992,
+        title="Tests for Parameter Instability in Regressions with I(1) Processes",
+        journal="Journal of Business & Economic Statistics", volume="10", issue="3",
+        pages="321--335", doi="10.1080/07350015.1992.10509908", isbn="", publisher="",
+        entry_type=:article),
+    :park1990_added => (key=:park1990_added, authors="Park, Joon Y.", year=1990,
+        title="Testing for Unit Roots and Cointegration by Adding Superfluous Regressors",
+        journal="Center for Analytic Economics Working Paper, Cornell University",
+        volume="", issue="", pages="", doi="", isbn="", publisher="", entry_type=:techreport),
+    :mackinnon2010 => (key=:mackinnon2010, authors="MacKinnon, James G.", year=2010,
+        title="Critical Values for Cointegration Tests",
+        journal="Queen's University Department of Economics Working Paper", volume="1227",
+        issue="", pages="", doi="", isbn="", publisher="", entry_type=:techreport),
+    :saikkonen1991 => (key=:saikkonen1991, authors="Saikkonen, Pentti", year=1991,
+        title="Asymptotically Efficient Estimation of Cointegration Regressions",
+        journal="Econometric Theory", volume="7", issue="1", pages="1--21",
+        doi="10.1017/S0266466600004217", isbn="", publisher="", entry_type=:article),
+    :stock_watson1993 => (key=:stock_watson1993,
+        authors="Stock, James H. and Watson, Mark W.", year=1993,
+        title="A Simple Estimator of Cointegrating Vectors in Higher Order Integrated Systems",
+        journal="Econometrica", volume="61", issue="4", pages="783--820",
+        doi="10.2307/2951763", isbn="", publisher="", entry_type=:article),
     # --- Ordered & Multinomial Models ---
     :mccullagh1980 => (key=:mccullagh1980, authors="McCullagh, Peter", year=1980,
         title="Regression Models for Ordinal Data",
@@ -863,11 +1295,344 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Consistent Covariance Matrix Estimation with Spatially Dependent Panel Data",
         journal="Review of Economics and Statistics", volume="80", issue="4", pages="549--560",
         doi="10.1162/003465398557825", isbn="", publisher="", entry_type=:article),
+    # --- Panel-corrected SE + Prais-Winsten AR(1) (EV-25, #433) ---
+    :beck_katz1995 => (key=:beck_katz1995,
+        authors="Beck, Nathaniel and Katz, Jonathan N.", year=1995,
+        title="What to Do (and Not to Do) with Time-Series Cross-Section Data",
+        journal="American Political Science Review", volume="89", issue="3", pages="634--647",
+        doi="10.2307/2082979", isbn="", publisher="", entry_type=:article),
+    :prais_winsten1954 => (key=:prais_winsten1954,
+        authors="Prais, S. J. and Winsten, C. B.", year=1954,
+        title="Trend Estimators and Serial Correlation",
+        journal="Cowles Commission Discussion Paper", volume="383", issue="", pages="1--26",
+        doi="", isbn="", publisher="Cowles Commission for Research in Economics", entry_type=:article),
+    # --- MIDAS Regression (EV-01) ---
+    :ghysels2007 => (key=:ghysels2007,
+        authors="Ghysels, Eric and Sinko, Arthur and Valkanov, Rossen", year=2007,
+        title="MIDAS Regressions: Further Results and New Directions",
+        journal="Econometric Reviews", volume="26", issue="1", pages="53--90",
+        doi="10.1080/07474930600972467", isbn="", publisher="", entry_type=:article),
+    :andreou2010 => (key=:andreou2010,
+        authors="Andreou, Elena and Ghysels, Eric and Kourtellos, Andros", year=2010,
+        title="Regression Models with Mixed Sampling Frequencies",
+        journal="Journal of Econometrics", volume="158", issue="2", pages="246--261",
+        doi="10.1016/j.jeconom.2010.01.004", isbn="", publisher="", entry_type=:article),
+    :foroni2015 => (key=:foroni2015,
+        authors="Foroni, Claudia and Marcellino, Massimiliano and Schumacher, Christian", year=2015,
+        title="Unrestricted Mixed Data Sampling (MIDAS): MIDAS Regressions with Unrestricted Lag Polynomials",
+        journal="Journal of the Royal Statistical Society: Series A", volume="178", issue="1", pages="57--82",
+        doi="10.1111/rssa.12043", isbn="", publisher="", entry_type=:article),
+    # --- ARDL & Bounds Test (EV-08, #416) ---
+    :pesaran_shin1999 => (key=:pesaran_shin1999,
+        authors="Pesaran, M. Hashem and Shin, Yongcheol", year=1999,
+        title="An Autoregressive Distributed Lag Modelling Approach to Cointegration Analysis",
+        journal="", volume="", issue="", pages="371--413", doi="",
+        isbn="978-0-521-63323-9",
+        publisher="Cambridge University Press (Strom, ed., Econometrics and Economic Theory in the 20th Century)",
+        entry_type=:incollection),
+    :pesaran_shin_smith2001 => (key=:pesaran_shin_smith2001,
+        authors="Pesaran, M. Hashem and Shin, Yongcheol and Smith, Richard J.", year=2001,
+        title="Bounds Testing Approaches to the Analysis of Level Relationships",
+        journal="Journal of Applied Econometrics", volume="16", issue="3", pages="289--326",
+        doi="10.1002/jae.616", isbn="", publisher="", entry_type=:article),
+    :narayan2005 => (key=:narayan2005, authors="Narayan, Paresh Kumar", year=2005,
+        title="The Saving and Investment Nexus for China: Evidence from Cointegration Tests",
+        journal="Applied Economics", volume="37", issue="17", pages="1979--1990",
+        doi="10.1080/00036840500278103", isbn="", publisher="", entry_type=:article),
+    :kripfganz_schneider2023 => (key=:kripfganz_schneider2023,
+        authors="Kripfganz, Sebastian and Schneider, Daniel C.", year=2023,
+        title="ARDL: Estimating Autoregressive Distributed Lag and Equilibrium Correction Models",
+        journal="Stata Journal", volume="23", issue="4", pages="983--1019",
+        doi="10.1177/1536867X231212434", isbn="", publisher="", entry_type=:article),
+    # --- Nonlinear ARDL (NARDL, EV-09, #417) ---
+    :shin_yu_greenwood_nimmo2014 => (key=:shin_yu_greenwood_nimmo2014,
+        authors="Shin, Yongcheol and Yu, Byungchul and Greenwood-Nimmo, Matthew", year=2014,
+        title="Modelling Asymmetric Cointegration and Dynamic Multipliers in a Nonlinear ARDL Framework",
+        journal="", volume="", issue="", pages="281--314", doi="10.1007/978-1-4899-8008-3_9",
+        isbn="978-1-4899-8007-6",
+        publisher="Springer (Sickles and Horrace, eds., Festschrift in Honor of Peter Schmidt)",
+        entry_type=:incollection),
+    # --- Panel ARDL: PMG / MG / DFE (EV-23, #431) ---
+    :pesaran_shin_smith1999 => (key=:pesaran_shin_smith1999,
+        authors="Pesaran, M. Hashem and Shin, Yongcheol and Smith, Ron P.", year=1999,
+        title="Pooled Mean Group Estimation of Dynamic Heterogeneous Panels",
+        journal="Journal of the American Statistical Association", volume="94", issue="446",
+        pages="621--634", doi="10.1080/01621459.1999.10474156", isbn="", publisher="",
+        entry_type=:article),
+    :pesaran_smith1995 => (key=:pesaran_smith1995,
+        authors="Pesaran, M. Hashem and Smith, Ron", year=1995,
+        title="Estimating Long-Run Relationships from Dynamic Heterogeneous Panels",
+        journal="Journal of Econometrics", volume="68", issue="1", pages="79--113",
+        doi="10.1016/0304-4076(94)01644-F", isbn="", publisher="", entry_type=:article),
+    :blackburne_frank2007 => (key=:blackburne_frank2007,
+        authors="Blackburne, Edward F. and Frank, Mark W.", year=2007,
+        title="Estimation of Nonstationary Heterogeneous Panels",
+        journal="Stata Journal", volume="7", issue="2", pages="197--208",
+        doi="10.1177/1536867X0700700204", isbn="", publisher="", entry_type=:article),
+    # --- Forecast evaluation & combination (EV-39, #447) ---
+    :diebold_mariano1995 => (key=:diebold_mariano1995,
+        authors="Diebold, Francis X. and Mariano, Roberto S.", year=1995,
+        title="Comparing Predictive Accuracy",
+        journal="Journal of Business \\& Economic Statistics", volume="13", issue="3",
+        pages="253--263", doi="10.1080/07350015.1995.10524599",
+        isbn="", publisher="", entry_type=:article),
+    :harvey_leybourne_newbold1997 => (key=:harvey_leybourne_newbold1997,
+        authors="Harvey, David and Leybourne, Stephen and Newbold, Paul", year=1997,
+        title="Testing the Equality of Prediction Mean Squared Errors",
+        journal="International Journal of Forecasting", volume="13", issue="2",
+        pages="281--291", doi="10.1016/S0169-2070(96)00719-4",
+        isbn="", publisher="", entry_type=:article),
+    :harvey_leybourne_newbold1998 => (key=:harvey_leybourne_newbold1998,
+        authors="Harvey, David I. and Leybourne, Stephen J. and Newbold, Paul", year=1998,
+        title="Tests for Forecast Encompassing",
+        journal="Journal of Business \\& Economic Statistics", volume="16", issue="2",
+        pages="254--259", doi="10.1080/07350015.1998.10524759",
+        isbn="", publisher="", entry_type=:article),
+    :clark_west2007 => (key=:clark_west2007,
+        authors="Clark, Todd E. and West, Kenneth D.", year=2007,
+        title="Approximately Normal Tests for Equal Predictive Accuracy in Nested Models",
+        journal="Journal of Econometrics", volume="138", issue="1", pages="291--311",
+        doi="10.1016/j.jeconom.2006.05.023", isbn="", publisher="", entry_type=:article),
+    :bates_granger1969 => (key=:bates_granger1969,
+        authors="Bates, J. M. and Granger, C. W. J.", year=1969,
+        title="The Combination of Forecasts",
+        journal="Operational Research Quarterly", volume="20", issue="4", pages="451--468",
+        doi="10.1057/jors.1969.103", isbn="", publisher="", entry_type=:article),
+    :granger_ramanathan1984 => (key=:granger_ramanathan1984,
+        authors="Granger, C. W. J. and Ramanathan, Ramu", year=1984,
+        title="Improved Methods of Combining Forecasts",
+        journal="Journal of Forecasting", volume="3", issue="2", pages="197--204",
+        doi="10.1002/for.3980030207", isbn="", publisher="", entry_type=:article),
+    :mincer_zarnowitz1969 => (key=:mincer_zarnowitz1969,
+        authors="Mincer, Jacob A. and Zarnowitz, Victor", year=1969,
+        title="The Evaluation of Economic Forecasts",
+        journal="", volume="", issue="", pages="3--46", doi="",
+        isbn="0-870-14202-X",
+        publisher="NBER (Mincer, ed., Economic Forecasts and Expectations)",
+        entry_type=:incollection),
+    :theil1966 => (key=:theil1966,
+        authors="Theil, Henri", year=1966,
+        title="Applied Economic Forecasting",
+        journal="", volume="", issue="", pages="", doi="", isbn="",
+        publisher="North-Holland, Amsterdam", entry_type=:book),
+    :hyndman_koehler2006 => (key=:hyndman_koehler2006,
+        authors="Hyndman, Rob J. and Koehler, Anne B.", year=2006,
+        title="Another Look at Measures of Forecast Accuracy",
+        journal="International Journal of Forecasting", volume="22", issue="4",
+        pages="679--688", doi="10.1016/j.ijforecast.2006.03.001",
+        isbn="", publisher="", entry_type=:article),
+    # --- Dumitrescu-Hurlin panel Granger non-causality (EV-24, #432) ---
+    :dumitrescu_hurlin2012 => (key=:dumitrescu_hurlin2012,
+        authors="Dumitrescu, Elena-Ivona and Hurlin, Christophe", year=2012,
+        title="Testing for Granger Non-causality in Heterogeneous Panels",
+        journal="Economic Modelling", volume="29", issue="4", pages="1450--1460",
+        doi="10.1016/j.econmod.2012.02.014", isbn="", publisher="", entry_type=:article),
+    # --- EDF goodness-of-fit battery (EV-26, #434) ---
+    :anderson_darling1954 => (key=:anderson_darling1954,
+        authors="Anderson, Theodore W. and Darling, Donald A.", year=1954,
+        title="A Test of Goodness of Fit",
+        journal="Journal of the American Statistical Association", volume="49", issue="268",
+        pages="765--769", doi="10.1080/01621459.1954.10501232", isbn="", publisher="",
+        entry_type=:article),
+    :stephens1974 => (key=:stephens1974, authors="Stephens, Michael A.", year=1974,
+        title="EDF Statistics for Goodness of Fit and Some Comparisons",
+        journal="Journal of the American Statistical Association", volume="69", issue="347",
+        pages="730--737", doi="10.1080/01621459.1974.10480196", isbn="", publisher="",
+        entry_type=:article),
+    :lilliefors1967 => (key=:lilliefors1967, authors="Lilliefors, Hubert W.", year=1967,
+        title="On the Kolmogorov-Smirnov Test for Normality with Mean and Variance Unknown",
+        journal="Journal of the American Statistical Association", volume="62", issue="318",
+        pages="399--402", doi="10.1080/01621459.1967.10482916", isbn="", publisher="",
+        entry_type=:article),
+    :dallal_wilkinson1986 => (key=:dallal_wilkinson1986,
+        authors="Dallal, Gerard E. and Wilkinson, Leland", year=1986,
+        title="An Analytic Approximation to the Distribution of Lilliefors's Test Statistic for Normality",
+        journal="The American Statistician", volume="40", issue="4", pages="294--296",
+        doi="10.1080/00031305.1986.10475419", isbn="", publisher="", entry_type=:article),
+    :marsaglia_tsang_wang2003 => (key=:marsaglia_tsang_wang2003,
+        authors="Marsaglia, George and Tsang, Wai Wan and Wang, Jingbo", year=2003,
+        title="Evaluating Kolmogorov's Distribution",
+        journal="Journal of Statistical Software", volume="8", issue="18", pages="1--4",
+        doi="10.18637/jss.v008.i18", isbn="", publisher="", entry_type=:article),
+    # --- Variance-ratio / random-walk tests (EV-27, #435) ---
+    :lo_mackinlay1988 => (key=:lo_mackinlay1988,
+        authors="Lo, Andrew W. and MacKinlay, A. Craig", year=1988,
+        title="Stock Market Prices Do Not Follow Random Walks: Evidence from a Simple Specification Test",
+        journal="Review of Financial Studies", volume="1", issue="1", pages="41--66",
+        doi="10.1093/rfs/1.1.41", isbn="", publisher="", entry_type=:article),
+    :chow_denning1993 => (key=:chow_denning1993,
+        authors="Chow, K. Victor and Denning, Karen C.", year=1993,
+        title="A Simple Multiple Variance Ratio Test",
+        journal="Journal of Econometrics", volume="58", issue="3", pages="385--401",
+        doi="10.1016/0304-4076(93)90051-6", isbn="", publisher="", entry_type=:article),
+    :wright2000 => (key=:wright2000,
+        authors="Wright, Jonathan H.", year=2000,
+        title="Alternative Variance-Ratio Tests Using Ranks and Signs",
+        journal="Journal of Business & Economic Statistics", volume="18", issue="1", pages="1--9",
+        doi="10.1080/07350015.2000.10524842", isbn="", publisher="", entry_type=:article),
+    :kim2006 => (key=:kim2006,
+        authors="Kim, Jae H.", year=2006,
+        title="Wild Bootstrapping Variance Ratio Tests",
+        journal="Economics Letters", volume="92", issue="1", pages="38--43",
+        doi="10.1016/j.econlet.2006.01.007", isbn="", publisher="", entry_type=:article),
+    # --- BDS independence test (EV-28, #436) ---
+    :bds1996 => (key=:bds1996,
+        authors="Brock, William A. and Dechert, W. Davis and Scheinkman, Jos\\'e A. and LeBaron, Blake",
+        year=1996, title="A Test for Independence Based on the Correlation Dimension",
+        journal="Econometric Reviews", volume="15", issue="3", pages="197--235",
+        doi="10.1080/07474939608800353", isbn="", publisher="", entry_type=:article),
+    :brock_hsieh_lebaron1991 => (key=:brock_hsieh_lebaron1991,
+        authors="Brock, William A. and Hsieh, David A. and LeBaron, Blake", year=1991,
+        title="Nonlinear Dynamics, Chaos, and Instability: Statistical Theory and Economic Evidence",
+        journal="", volume="", issue="", pages="", doi="", isbn="9780262023290",
+        publisher="MIT Press, Cambridge, MA", entry_type=:book),
+    # --- Equality-of-distribution + rank-correlation battery (EV-34, #442) ---
+    :mann_whitney1947 => (key=:mann_whitney1947,
+        authors="Mann, Henry B. and Whitney, Donald R.", year=1947,
+        title="On a Test of Whether one of Two Random Variables is Stochastically Larger than the Other",
+        journal="The Annals of Mathematical Statistics", volume="18", issue="1", pages="50--60",
+        doi="10.1214/aoms/1177730491", isbn="", publisher="", entry_type=:article),
+    :kruskal_wallis1952 => (key=:kruskal_wallis1952,
+        authors="Kruskal, William H. and Wallis, W. Allen", year=1952,
+        title="Use of Ranks in One-Criterion Variance Analysis",
+        journal="Journal of the American Statistical Association", volume="47", issue="260", pages="583--621",
+        doi="10.1080/01621459.1952.10483441", isbn="", publisher="", entry_type=:article),
+    :brown_forsythe1974 => (key=:brown_forsythe1974,
+        authors="Brown, Morton B. and Forsythe, Alan B.", year=1974,
+        title="Robust Tests for the Equality of Variances",
+        journal="Journal of the American Statistical Association", volume="69", issue="346", pages="364--367",
+        doi="10.1080/01621459.1974.10482955", isbn="", publisher="", entry_type=:article),
+    :kendall1938 => (key=:kendall1938,
+        authors="Kendall, Maurice G.", year=1938,
+        title="A New Measure of Rank Correlation",
+        journal="Biometrika", volume="30", issue="1/2", pages="81--93",
+        doi="10.1093/biomet/30.1-2.81", isbn="", publisher="", entry_type=:article),
+    :wilcoxon1945 => (key=:wilcoxon1945,
+        authors="Wilcoxon, Frank", year=1945,
+        title="Individual Comparisons by Ranking Methods",
+        journal="Biometrics Bulletin", volume="1", issue="6", pages="80--83",
+        doi="10.2307/3001968", isbn="", publisher="", entry_type=:article),
+    :spearman1904 => (key=:spearman1904,
+        authors="Spearman, Charles", year=1904,
+        title="The Proof and Measurement of Association between Two Things",
+        journal="The American Journal of Psychology", volume="15", issue="1", pages="72--101",
+        doi="10.2307/1412159", isbn="", publisher="", entry_type=:article),
+    :bartlett1937 => (key=:bartlett1937,
+        authors="Bartlett, Maurice S.", year=1937,
+        title="Properties of Sufficiency and Statistical Tests",
+        journal="Proceedings of the Royal Society A", volume="160", issue="901", pages="268--282",
+        doi="10.1098/rspa.1937.0109", isbn="", publisher="", entry_type=:article),
+    :vanderwaerden1952 => (key=:vanderwaerden1952,
+        authors="van der Waerden, Bartel L.", year=1952,
+        title="Order Tests for the Two-Sample Problem and Their Power",
+        journal="Indagationes Mathematicae", volume="14", issue="", pages="453--458",
+        doi="", isbn="", publisher="", entry_type=:article),
+    :knight1966 => (key=:knight1966,
+        authors="Knight, William R.", year=1966,
+        title="A Computer Method for Calculating Kendall's Tau with Ungrouped Data",
+        journal="Journal of the American Statistical Association", volume="61", issue="314", pages="436--439",
+        doi="10.1080/01621459.1966.10480879", isbn="", publisher="", entry_type=:article),
+    # --- Systems estimation: SUR / 3SLS + Grunfeld data (EV-35, #443) ---
+    :zellner1962 => (key=:zellner1962, authors="Zellner, Arnold", year=1962,
+        title="An Efficient Method of Estimating Seemingly Unrelated Regressions and Tests for Aggregation Bias",
+        journal="Journal of the American Statistical Association", volume="57", issue="298", pages="348--368",
+        doi="10.1080/01621459.1962.10480664", isbn="", publisher="", entry_type=:article),
+    :zellner_theil1962 => (key=:zellner_theil1962,
+        authors="Zellner, Arnold and Theil, Henri", year=1962,
+        title="Three-Stage Least Squares: Simultaneous Estimation of Simultaneous Equations",
+        journal="Econometrica", volume="30", issue="1", pages="54--78",
+        doi="10.2307/1911287", isbn="", publisher="", entry_type=:article),
+    :kruskal1968 => (key=:kruskal1968, authors="Kruskal, William", year=1968,
+        title="When Are Gauss-Markov and Least Squares Estimators Identical? A Coordinate-Free Approach",
+        journal="The Annals of Mathematical Statistics", volume="39", issue="1", pages="70--75",
+        doi="10.1214/aoms/1177698505", isbn="", publisher="", entry_type=:article),
+    :mcelroy1977 => (key=:mcelroy1977, authors="McElroy, Marjorie B.", year=1977,
+        title="Goodness of Fit for Seemingly Unrelated Regressions: Glahn's R²yx and Hooper's r̄²",
+        journal="Journal of Econometrics", volume="6", issue="3", pages="381--387",
+        doi="10.1016/0304-4076(77)90008-1", isbn="", publisher="", entry_type=:article),
+    :grunfeld1958 => (key=:grunfeld1958, authors="Grunfeld, Yehuda", year=1958,
+        title="The Determinants of Corporate Investment",
+        journal="", volume="", issue="", pages="",
+        doi="", isbn="", publisher="Ph.D. thesis, University of Chicago", entry_type=:book),
+    :henningsen_hamann2007 => (key=:henningsen_hamann2007,
+        authors="Henningsen, Arne and Hamann, Jeff D.", year=2007,
+        title="systemfit: A Package for Estimating Systems of Simultaneous Equations in R",
+        journal="Journal of Statistical Software", volume="23", issue="4", pages="1--40",
+        doi="10.18637/jss.v023.i04", isbn="", publisher="", entry_type=:article),
+    :oberhofer_kmenta1974 => (key=:oberhofer_kmenta1974,
+        authors="Oberhofer, Walter and Kmenta, Jan", year=1974,
+        title="A General Procedure for Obtaining Maximum Likelihood Estimates in Generalized Regression Models",
+        journal="Econometrica", volume="42", issue="3", pages="579--590",
+        doi="10.2307/1911789", isbn="", publisher="", entry_type=:article),
+    # --- Explosive / rational-bubble detection (EV-30, #438) ---
+    :psy2011 => (key=:psy2011,
+        authors="Phillips, Peter C. B. and Wu, Yangru and Yu, Jun", year=2011,
+        title="Explosive Behavior in the 1990s Nasdaq: When Did Exuberance Escalate Asset Values?",
+        journal="International Economic Review", volume="52", issue="1", pages="201--226",
+        doi="10.1111/j.1468-2354.2010.00625.x", isbn="", publisher="", entry_type=:article),
+    :psy2015 => (key=:psy2015,
+        authors="Phillips, Peter C. B. and Shi, Shuping and Yu, Jun", year=2015,
+        title="Testing for Multiple Bubbles: Historical Episodes of Exuberance and Collapse in the S\\&P 500",
+        journal="International Economic Review", volume="56", issue="4", pages="1043--1078",
+        doi="10.1111/iere.12132", isbn="", publisher="", entry_type=:article),
+    :phillips_shi2020 => (key=:phillips_shi2020,
+        authors="Phillips, Peter C. B. and Shi, Shuping", year=2020,
+        title="Real-Time Monitoring of Asset Markets: Bubbles and Crises",
+        journal="Handbook of Statistics", volume="42", issue="", pages="61--80",
+        doi="10.1016/bs.host.2018.12.002", isbn="", publisher="Elsevier", entry_type=:article),
+    # --- Seasonal unit roots (HEGY) + ERS point-optimal (EV-29, #437) ---
+    :hegy1990 => (key=:hegy1990,
+        authors="Hylleberg, Svend and Engle, Robert F. and Granger, Clive W. J. and Yoo, Byung Sam",
+        year=1990, title="Seasonal Integration and Cointegration",
+        journal="Journal of Econometrics", volume="44", issue="1-2", pages="215--238",
+        doi="10.1016/0304-4076(90)90080-D", isbn="", publisher="", entry_type=:article),
+    :beaulieu_miron1993 => (key=:beaulieu_miron1993,
+        authors="Beaulieu, J. Joseph and Miron, Jeffrey A.", year=1993,
+        title="Seasonal Unit Roots in Aggregate U.S. Data",
+        journal="Journal of Econometrics", volume="55", issue="1-2", pages="305--328",
+        doi="10.1016/0304-4076(93)90018-Z", isbn="", publisher="", entry_type=:article),
+    :ers1996 => (key=:ers1996,
+        authors="Elliott, Graham and Rothenberg, Thomas J. and Stock, James H.", year=1996,
+        title="Efficient Tests for an Autoregressive Unit Root",
+        journal="Econometrica", volume="64", issue="4", pages="813--836",
+        doi="10.2307/2171846", isbn="", publisher="", entry_type=:article),
+    # --- Nonparametric regression & density (EV-33, #441) ---
+    :silverman1986 => (key=:silverman1986, authors="Silverman, Bernard W.", year=1986,
+        title="Density Estimation for Statistics and Data Analysis", journal="",
+        volume="", issue="", pages="", doi="10.1201/9781315140919",
+        isbn="978-0-412-24620-3", publisher="Chapman \\& Hall", entry_type=:book),
+    :sheather_jones1991 => (key=:sheather_jones1991,
+        authors="Sheather, Simon J. and Jones, Michael C.", year=1991,
+        title="A Reliable Data-Based Bandwidth Selection Method for Kernel Density Estimation",
+        journal="Journal of the Royal Statistical Society, Series B",
+        volume="53", issue="3", pages="683--690",
+        doi="10.1111/j.2517-6161.1991.tb01857.x", isbn="", publisher="", entry_type=:article),
+    :nadaraya1964 => (key=:nadaraya1964, authors="Nadaraya, Elizbar A.", year=1964,
+        title="On Estimating Regression",
+        journal="Theory of Probability and Its Applications", volume="9", issue="1",
+        pages="141--142", doi="10.1137/1109020", isbn="", publisher="", entry_type=:article),
+    :watson1964 => (key=:watson1964, authors="Watson, Geoffrey S.", year=1964,
+        title="Smooth Regression Analysis",
+        journal="Sankhyā: The Indian Journal of Statistics, Series A",
+        volume="26", issue="4", pages="359--372", doi="", isbn="", publisher="",
+        entry_type=:article),
+    :fan_gijbels1996 => (key=:fan_gijbels1996,
+        authors="Fan, Jianqing and Gijbels, Irène", year=1996,
+        title="Local Polynomial Modelling and Its Applications", journal="",
+        volume="", issue="", pages="", doi="10.1201/9780203748725",
+        isbn="978-0-412-98321-4", publisher="Chapman \\& Hall", entry_type=:book),
+    :cleveland1979 => (key=:cleveland1979, authors="Cleveland, William S.", year=1979,
+        title="Robust Locally Weighted Regression and Smoothing Scatterplots",
+        journal="Journal of the American Statistical Association", volume="74", issue="368",
+        pages="829--836", doi="10.1080/01621459.1979.10481038", isbn="", publisher="",
+        entry_type=:article),
 )
 
 # --- Type/method → reference keys mapping ---
 
 const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
+    # Long-run variance toolkit (EV-12): lrvar/lrcov/lrcov_oneside/varhac
+    :lrvar => [:andrews1991, :newey_west1994, :andrews_monahan1992, :den_haan_levin1997],
     # Input-Output analysis
     :IOData => [:leontief1936, :ghosh1958, :miller_blair_2009],
     :LeontiefModel => [:leontief1936, :miller_blair_2009],
@@ -941,6 +1706,8 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :VECMForecast => [:johansen1991, :lutkepohl2005],
     :VECMGrangerResult => [:johansen1991, :lutkepohl2005],
     :vecm => [:johansen1991, :engle_granger1987, :lutkepohl2005],
+    # EV-38 (#446): VECM restriction testing
+    :VECMRestrictionTest => [:johansen1991, :johansen1995, :johansen_juselius1990],
     :engle_granger => [:engle_granger1987],
     # ARIMA
     :ARModel => [:box_jenkins1970],
@@ -950,6 +1717,42 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :ARIMAForecast => [:box_jenkins1970],
     :ARIMAOrderSelection => [:hyndman_khandakar2008],
     :auto_arima => [:hyndman_khandakar2008],
+    # ARFIMA / long memory (EV-13)
+    :ARFIMAModel => [:sowell1992, :hosking1981, :jensen_nielsen2014],
+    :estimate_arfima => [:sowell1992, :hosking1981, :jensen_nielsen2014],
+    :GPHResult => [:geweke_porter_hudak1983],
+    :gph_test => [:geweke_porter_hudak1983],
+    # State-space module (EV-37)
+    :StateSpaceModel => [:durbin_koopman2012, :harvey1989],
+    :estimate_statespace => [:durbin_koopman2012, :harvey1989],
+    :local_level => [:durbin_koopman2012],
+    :local_linear_trend => [:harvey1989],
+    :estimate_tvp_reg => [:harvey1989, :durbin_koopman2012],
+    :LocalWhittleResult => [:robinson1995],
+    :local_whittle => [:robinson1995],
+    # MIDAS (EV-01)
+    :MidasModel => [:ghysels2007, :andreou2010, :foroni2015],
+    :MidasForecast => [:ghysels2007, :andreou2010],
+    :midas => [:ghysels2007, :andreou2010, :foroni2015],
+    # ARDL & bounds test (EV-08, #416)
+    :ARDLModel => [:pesaran_shin1999, :pesaran_shin_smith2001, :kripfganz_schneider2023],
+    :ARDLBoundsTest => [:pesaran_shin_smith2001, :narayan2005],
+    :ardl => [:pesaran_shin1999, :pesaran_shin_smith2001, :narayan2005, :kripfganz_schneider2023],
+    # NARDL — nonlinear ARDL (EV-09, #417)
+    :NARDLModel => [:shin_yu_greenwood_nimmo2014, :pesaran_shin_smith2001],
+    :NARDLSymmetryTest => [:shin_yu_greenwood_nimmo2014],
+    :NARDLMultipliers => [:shin_yu_greenwood_nimmo2014],
+    :nardl => [:shin_yu_greenwood_nimmo2014, :pesaran_shin_smith2001],
+    # Panel ARDL: PMG / MG / DFE (EV-23, #431)
+    :PMGModel => [:pesaran_shin_smith1999, :pesaran_smith1995, :blackburne_frank2007],
+    :estimate_pmg => [:pesaran_shin_smith1999, :pesaran_smith1995, :blackburne_frank2007],
+    # Forecast evaluation & combination (EV-39, #447)
+    :ForecastEvaluation => [:theil1966, :hyndman_koehler2006],
+    :DMTestResult => [:diebold_mariano1995, :harvey_leybourne_newbold1997],
+    :ClarkWestResult => [:clark_west2007],
+    :MincerZarnowitzResult => [:mincer_zarnowitz1969],
+    :ForecastEncompassingResult => [:harvey_leybourne_newbold1998],
+    :ForecastCombination => [:bates_granger1969, :granger_ramanathan1984],
     # GMM
     :GMMModel => [:hansen1982],
     :gmm => [:hansen1982],
@@ -999,6 +1802,14 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :GARCHModel => [:bollerslev1986],
     :EGARCHModel => [:nelson1991],
     :GJRGARCHModel => [:glosten_jagannathan_runkle1993],
+    :GarchMidasModel => [:engle_ghysels_sohn2013, :ghysels2007, :bollerslev1986],
+    :garch_midas => [:engle_ghysels_sohn2013, :ghysels2007, :bollerslev1986],
+    :FIGARCHModel => [:baillie_bollerslev_mikkelsen1996, :bollerslev1986],
+    :FIEGARCHModel => [:bollerslev_mikkelsen1996, :nelson1991],
+    :IGARCHModel => [:engle_bollerslev1986, :bollerslev1986],
+    :CGARCHModel => [:engle_lee1999, :bollerslev1986],
+    :APARCHModel => [:ding_granger_engle1993, :glosten_jagannathan_runkle1993],
+    :MGARCHModel => [:bollerslev1990, :engle2002dcc, :aielli2013, :engle_kroner1995],
     :SVModel => [:taylor1986, :kim_shephard_chib1998, :omori2007],
     :VolatilityForecast => [:engle1982, :bollerslev1986],
     :arch => [:engle1982],
@@ -1006,6 +1817,18 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :egarch => [:nelson1991],
     :gjr_garch => [:glosten_jagannathan_runkle1993],
     :sv => [:taylor1986, :kim_shephard_chib1998, :omori2007],
+    # Nonlinear time series (threshold/SETAR)
+    :ThresholdModel => [:tong1990, :hansen1996, :hansen2000],
+    :HansenLinearityTest => [:hansen1996],
+    :threshold => [:tong1990, :hansen2000],
+    :setar => [:tong1990, :hansen2000],
+    # Smooth-transition autoregression (STAR) — EV-06
+    :STARModel => [:luukkonen1988, :terasvirta1994],
+    :star => [:luukkonen1988, :terasvirta1994],
+    # Markov-switching regression / MS-AR — EV-07
+    :MSRegModel => [:hamilton1989, :kim1994, :hamilton1994],
+    :ms => [:hamilton1989, :kim1994],
+    :ms_ar => [:hamilton1989, :kim1994],
     # Time Series Filters
     :HPFilterResult => [:hodrick_prescott1997],
     :HamiltonFilterResult => [:hamilton2018filter],
@@ -1108,6 +1931,56 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :panic_test => [:bai_ng2004, :bai_ng2010],
     :pesaran_cips_test => [:pesaran2007],
     :moon_perron_test => [:moon_perron2004],
+    # First-generation panel unit root tests (EV-20, #428)
+    :LLCResult => [:levin_lin_chu2002],
+    :IPSResult => [:im_pesaran_shin2003],
+    :BreitungPanelResult => [:breitung2000],
+    :FisherPanelResult => [:maddala_wu1999, :choi2001],
+    :HadriResult => [:hadri2000],
+    :llc_test => [:levin_lin_chu2002],
+    :ips_test => [:im_pesaran_shin2003],
+    :breitung_panel_test => [:breitung2000],
+    :fisher_panel_test => [:maddala_wu1999, :choi2001],
+    :hadri_test => [:hadri2000],
+    # Panel cointegration tests (EV-21, #429)
+    :PedroniResult => [:pedroni1999, :pedroni2004],
+    :KaoResult => [:kao1999],
+    :WesterlundResult => [:westerlund2007, :persyn_westerlund2008],
+    :FisherJohansenResult => [:maddala_wu1999, :choi2001, :johansen1991],
+    :pedroni_test => [:pedroni1999, :pedroni2004],
+    :kao_test => [:kao1999],
+    :westerlund_test => [:westerlund2007, :persyn_westerlund2008],
+    :fisher_johansen_test => [:maddala_wu1999, :choi2001, :johansen1991],
+    # Dumitrescu-Hurlin panel Granger non-causality (EV-24, #432)
+    :DumitrescuHurlinResult => [:dumitrescu_hurlin2012, :granger1969],
+    :dh_causality_test => [:dumitrescu_hurlin2012, :granger1969],
+    # EDF goodness-of-fit battery (EV-26, #434)
+    :EDFTestResult => [:anderson_darling1954, :stephens1974, :lilliefors1967,
+                       :dallal_wilkinson1986, :marsaglia_tsang_wang2003],
+    :edf_test => [:anderson_darling1954, :stephens1974, :lilliefors1967,
+                  :dallal_wilkinson1986, :marsaglia_tsang_wang2003],
+    # Variance-ratio / random-walk tests (EV-27, #435)
+    :VarianceRatioResult => [:lo_mackinlay1988, :chow_denning1993, :wright2000, :kim2006],
+    :variance_ratio_test => [:lo_mackinlay1988, :chow_denning1993, :wright2000, :kim2006],
+    # BDS independence test (EV-28, #436)
+    :BDSResult => [:bds1996, :brock_hsieh_lebaron1991],
+    :bds_test => [:bds1996, :brock_hsieh_lebaron1991],
+    # Equality-of-distribution + rank-correlation battery (EV-34, #442)
+    :EqualityTestResult => [:mann_whitney1947, :kruskal_wallis1952, :wilcoxon1945,
+                            :bartlett1937, :brown_forsythe1974, :vanderwaerden1952],
+    :equality_test => [:mann_whitney1947, :kruskal_wallis1952, :wilcoxon1945,
+                       :bartlett1937, :brown_forsythe1974, :vanderwaerden1952],
+    :CorTestResult => [:kendall1938, :spearman1904, :knight1966],
+    :cor_test => [:kendall1938, :spearman1904, :knight1966],
+    # Explosive / rational-bubble detection (EV-30, #438)
+    :BubbleResult => [:psy2011, :psy2015, :phillips_shi2020],
+    :sadf_test => [:psy2011, :psy2015],
+    :gsadf_test => [:psy2015, :psy2011, :phillips_shi2020],
+    # Seasonal unit roots (HEGY) + ERS point-optimal (EV-29, #437)
+    :HEGYResult => [:hegy1990, :beaulieu_miron1993],
+    :hegy_test => [:hegy1990, :beaulieu_miron1993],
+    :ERSResult => [:ers1996],
+    :ers_test => [:ers1996],
     # Factor model break tests
     :FactorBreakResult => [:breitung_eickmeier2011, :chen_dolado_gonzalo2014, :han_inoue2015],
     :factor_break_test => [:breitung_eickmeier2011, :chen_dolado_gonzalo2014, :han_inoue2015],
@@ -1123,10 +1996,59 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :LogitModel => [:wooldridge2010, :cameron_trivedi2005, :mcfadden1974],
     :ProbitModel => [:wooldridge2010, :cameron_trivedi2005],
     :MarginalEffects => [:cameron_trivedi2005],
+    # OLS residual diagnostics (EV-31, #439)
+    :RegDiagnosticResult => [:white1980, :breusch_pagan1979, :koenker1981,
+                             :glejser1969, :harvey1976, :godfrey1978, :ramsey1969,
+                             :chow1960],
+    # Stability & influence diagnostics (EV-32, #440)
+    :StabilityResult => [:brown_durbin_evans1975, :edgerton_wells1994],
+    :InfluenceStats => [:belsley_kuh_welsch1980, :cook1977],
+    :recursive_residuals => [:brown_durbin_evans1975],
+    :cusum_test => [:brown_durbin_evans1975],
+    :cusumsq_test => [:brown_durbin_evans1975, :edgerton_wells1994],
+    :chow_test => [:chow1960],
+    :influence_stats => [:belsley_kuh_welsch1980, :cook1977],
     :estimate_reg => [:wooldridge2010, :white1980],
     :estimate_iv => [:wooldridge2010, :staiger_stock1997],
     :estimate_logit => [:wooldridge2010, :cameron_trivedi2005, :mcfadden1974],
     :estimate_probit => [:wooldridge2010, :cameron_trivedi2005],
+    # Penalized regression (EV-03, #411)
+    :PenalizedRegModel => [:tibshirani1996, :zou_hastie2005, :friedman2010,
+                           :hoerl_kennard1970, :zou2006, :belloni_chernozhukov2013],
+    :estimate_lasso => [:tibshirani1996, :friedman2010],
+    :estimate_ridge => [:hoerl_kennard1970, :friedman2010],
+    :estimate_elastic_net => [:zou_hastie2005, :friedman2010, :zou2006],
+    # Variable selection — stepwise / best-subset / GETS (EV-04, #412)
+    :SelectionResult => [:hoover_perez1999, :hendry_krolzig2005, :pretis2018],
+    :select_variables => [:hoover_perez1999, :hendry_krolzig2005, :pretis2018],
+    # Censored / truncated regression (EV-17, #425)
+    :TobitModel => [:tobin1958, :olsen1978, :mcdonald_moffitt1980, :wooldridge2010],
+    :TruncRegModel => [:hausman_wise1977, :wooldridge2010],
+    :estimate_tobit => [:tobin1958, :olsen1978, :mcdonald_moffitt1980],
+    :estimate_truncreg => [:hausman_wise1977, :wooldridge2010],
+    # Heckman sample-selection model (EV-18, #426)
+    :HeckmanModel => [:heckman1979, :greene2018, :mroz1987, :wooldridge2010],
+    :estimate_heckman => [:heckman1979, :greene2018, :wooldridge2010],
+    :RobustRegModel => [:huber1964, :yohai1987, :salibian_yohai2006, :huber_ronchetti2009, :brownlee1965],  # EV-40 (#448)
+    :estimate_robust => [:huber1964, :yohai1987, :salibian_yohai2006, :huber_ronchetti2009],  # EV-40 (#448)
+    # Systems estimation — SUR / 3SLS (EV-35, #443)
+    :SURModel => [:zellner1962, :kruskal1968, :mcelroy1977, :oberhofer_kmenta1974, :henningsen_hamann2007, :grunfeld1958],
+    :ThreeSLSModel => [:zellner_theil1962, :mcelroy1977, :henningsen_hamann2007, :grunfeld1958],
+    :estimate_sur => [:zellner1962, :kruskal1968, :mcelroy1977, :oberhofer_kmenta1974],
+    :estimate_3sls => [:zellner_theil1962, :mcelroy1977],
+    # Single-equation cointegrating regression (EV-10, #418)
+    :CointRegModel => [:phillips_hansen1990, :park1992, :saikkonen1991, :stock_watson1993],
+    :PanelCointRegModel => [:pedroni2000, :pedroni2001, :kao_chiang2000, :mark_sul2003],  # EV-22 (#430)
+    :estimate_cointreg => [:phillips_hansen1990, :park1992, :saikkonen1991, :stock_watson1993],
+    # Residual-based / parameter-stability cointegration tests (EV-11)
+    :EngleGrangerResult => [:engle_granger1987, :mackinnon2010],
+    :engle_granger_test => [:engle_granger1987, :mackinnon2010],
+    :PhillipsOuliarisResult => [:phillips_ouliaris1990, :mackinnon2010],
+    :phillips_ouliaris_test => [:phillips_ouliaris1990, :mackinnon2010],
+    :HansenInstabilityResult => [:hansen1992_instability],
+    :hansen_instability_test => [:hansen1992_instability],
+    :ParkAddedResult => [:park1990_added, :park1992],
+    :park_added_test => [:park1990_added, :park1992],
     # Ordered & Multinomial models
     :OrderedLogitModel => [:mccullagh1980, :brant1990, :wooldridge2010],
     :OrderedProbitModel => [:mccullagh1980, :wooldridge2010],
@@ -1135,7 +2057,7 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :estimate_oprobit => [:mccullagh1980, :wooldridge2010],
     :estimate_mlogit => [:mcfadden1974, :hausman_mcfadden1984, :wooldridge2010],
     # Panel regression
-    :PanelRegModel => [:baltagi2021, :wooldridge2010],
+    :PanelRegModel => [:baltagi2021, :wooldridge2010, :beck_katz1995, :prais_winsten1954],
     :PanelIVModel => [:baltagi2021, :wooldridge2010, :hausman_taylor1981],
     :PanelLogitModel => [:chamberlain1980, :wooldridge2010],
     :PanelProbitModel => [:wooldridge2010],
@@ -1148,6 +2070,13 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :panel_iv => [:baltagi2021, :wooldridge2010, :hausman_taylor1981],
     :panel_logit => [:chamberlain1980, :wooldridge2010],
     :panel_probit => [:wooldridge2010],
+    # Nonparametric regression & density (EV-33, #441)
+    :KernelDensity => [:silverman1986, :sheather_jones1991],
+    :kernel_density => [:silverman1986, :sheather_jones1991],
+    :KernelRegression => [:nadaraya1964, :watson1964, :fan_gijbels1996],
+    :kernel_reg => [:nadaraya1964, :watson1964, :fan_gijbels1996],
+    :LowessFit => [:cleveland1979],
+    :lowess => [:cleveland1979],
 )
 
 # ICA method → additional ref keys (appended to ICASVARResult base refs)
@@ -1344,6 +2273,9 @@ refs(io::IO, ::SignIdentifiedSet; kw...) = refs(io, _TYPE_REFS[:SignIdentifiedSe
 refs(io::IO, ::MinnesotaHyperparameters; kw...) = refs(io, _TYPE_REFS[:MinnesotaHyperparameters]; kw...)
 refs(io::IO, ::BVARPosterior; kw...) = refs(io, _TYPE_REFS[:BVARPosterior]; kw...)
 
+# State-space module (EV-37, #445)
+refs(io::IO, ::StateSpaceModel; kw...) = refs(io, _TYPE_REFS[:StateSpaceModel]; kw...)
+
 # Input-Output analysis
 refs(io::IO, ::IOData; kw...) = refs(io, _TYPE_REFS[:IOData]; kw...)
 refs(io::IO, ::LeontiefModel; kw...) = refs(io, _TYPE_REFS[:LeontiefModel]; kw...)
@@ -1389,6 +2321,7 @@ refs(io::IO, ::JohansenResult; kw...) = refs(io, _TYPE_REFS[:JohansenResult]; kw
 refs(io::IO, ::VECMModel; kw...) = refs(io, _TYPE_REFS[:VECMModel]; kw...)
 refs(io::IO, ::VECMForecast; kw...) = refs(io, _TYPE_REFS[:VECMForecast]; kw...)
 refs(io::IO, ::VECMGrangerResult; kw...) = refs(io, _TYPE_REFS[:VECMGrangerResult]; kw...)
+refs(io::IO, ::VECMRestrictionTest; kw...) = refs(io, _TYPE_REFS[:VECMRestrictionTest]; kw...)  # EV-38 (#446)
 
 # ARIMA
 refs(io::IO, ::ARModel; kw...) = refs(io, _TYPE_REFS[:ARModel]; kw...)
@@ -1397,6 +2330,26 @@ refs(io::IO, ::ARMAModel; kw...) = refs(io, _TYPE_REFS[:ARMAModel]; kw...)
 refs(io::IO, ::ARIMAModel; kw...) = refs(io, _TYPE_REFS[:ARIMAModel]; kw...)
 refs(io::IO, ::ARIMAForecast; kw...) = refs(io, _TYPE_REFS[:ARIMAForecast]; kw...)
 refs(io::IO, ::ARIMAOrderSelection; kw...) = refs(io, _TYPE_REFS[:ARIMAOrderSelection]; kw...)
+
+# ARFIMA / long memory (EV-13)
+refs(io::IO, ::ARFIMAModel; kw...) = refs(io, _TYPE_REFS[:ARFIMAModel]; kw...)
+refs(io::IO, ::GPHResult; kw...) = refs(io, _TYPE_REFS[:GPHResult]; kw...)
+refs(io::IO, ::LocalWhittleResult; kw...) = refs(io, _TYPE_REFS[:LocalWhittleResult]; kw...)
+
+# MIDAS (EV-01)
+refs(io::IO, ::MidasModel; kw...) = refs(io, _TYPE_REFS[:MidasModel]; kw...)
+refs(io::IO, ::MidasForecast; kw...) = refs(io, _TYPE_REFS[:MidasForecast]; kw...)
+
+# ARDL & bounds test (EV-08, #416)
+refs(io::IO, ::ARDLModel; kw...) = refs(io, _TYPE_REFS[:ARDLModel]; kw...)
+refs(io::IO, ::ARDLBoundsTest; kw...) = refs(io, _TYPE_REFS[:ARDLBoundsTest]; kw...)
+# NARDL — nonlinear ARDL (EV-09, #417)
+refs(io::IO, ::NARDLModel; kw...) = refs(io, _TYPE_REFS[:NARDLModel]; kw...)
+refs(io::IO, ::NARDLSymmetryTest; kw...) = refs(io, _TYPE_REFS[:NARDLSymmetryTest]; kw...)
+refs(io::IO, ::NARDLMultipliers; kw...) = refs(io, _TYPE_REFS[:NARDLMultipliers]; kw...)
+
+# Panel ARDL: PMG / MG / DFE (EV-23, #431)
+refs(io::IO, ::PMGModel; kw...) = refs(io, _TYPE_REFS[:PMGModel]; kw...)
 
 # GMM
 refs(io::IO, ::GMMModel; kw...) = refs(io, _TYPE_REFS[:GMMModel]; kw...)
@@ -1409,8 +2362,26 @@ refs(io::IO, ::ARCHModel; kw...) = refs(io, _TYPE_REFS[:ARCHModel]; kw...)
 refs(io::IO, ::GARCHModel; kw...) = refs(io, _TYPE_REFS[:GARCHModel]; kw...)
 refs(io::IO, ::EGARCHModel; kw...) = refs(io, _TYPE_REFS[:EGARCHModel]; kw...)
 refs(io::IO, ::GJRGARCHModel; kw...) = refs(io, _TYPE_REFS[:GJRGARCHModel]; kw...)
+refs(io::IO, ::GarchMidasModel; kw...) = refs(io, _TYPE_REFS[:GarchMidasModel]; kw...)
+refs(io::IO, ::FIGARCHModel; kw...) = refs(io, _TYPE_REFS[:FIGARCHModel]; kw...)
+refs(io::IO, ::FIEGARCHModel; kw...) = refs(io, _TYPE_REFS[:FIEGARCHModel]; kw...)
+refs(io::IO, ::IGARCHModel; kw...) = refs(io, _TYPE_REFS[:IGARCHModel]; kw...)
+refs(io::IO, ::CGARCHModel; kw...) = refs(io, _TYPE_REFS[:CGARCHModel]; kw...)
+refs(io::IO, ::APARCHModel; kw...) = refs(io, _TYPE_REFS[:APARCHModel]; kw...)
+refs(io::IO, ::MGARCHModel; kw...) = refs(io, _TYPE_REFS[:MGARCHModel]; kw...)   # EV-16 (#424)
 refs(io::IO, ::SVModel; kw...) = refs(io, _TYPE_REFS[:SVModel]; kw...)
 refs(io::IO, ::VolatilityForecast; kw...) = refs(io, _TYPE_REFS[:VolatilityForecast]; kw...)
+
+# Nonlinear time series (threshold/SETAR)
+refs(io::IO, ::ThresholdModel; kw...) = refs(io, _TYPE_REFS[:ThresholdModel]; kw...)
+refs(io::IO, ::HansenLinearityTest; kw...) = refs(io, _TYPE_REFS[:HansenLinearityTest]; kw...)
+refs(io::IO, ::STARModel; kw...) = refs(io, _TYPE_REFS[:STARModel]; kw...)
+refs(io::IO, ::MSRegModel; kw...) = refs(io, _TYPE_REFS[:MSRegModel]; kw...)
+
+# Nonparametric regression & density (EV-33, #441)
+refs(io::IO, ::KernelDensity; kw...) = refs(io, _TYPE_REFS[:KernelDensity]; kw...)
+refs(io::IO, ::KernelRegression; kw...) = refs(io, _TYPE_REFS[:KernelRegression]; kw...)
+refs(io::IO, ::LowessFit; kw...) = refs(io, _TYPE_REFS[:LowessFit]; kw...)
 
 # Covariance estimators
 refs(io::IO, ::NeweyWestEstimator; kw...) = refs(io, _TYPE_REFS[:NeweyWestEstimator]; kw...)
@@ -1509,15 +2480,78 @@ refs(io::IO, ::BaiPerronResult; kw...) = refs(io, _TYPE_REFS[:BaiPerronResult]; 
 refs(io::IO, ::PANICResult; kw...) = refs(io, _TYPE_REFS[:PANICResult]; kw...)
 refs(io::IO, ::PesaranCIPSResult; kw...) = refs(io, _TYPE_REFS[:PesaranCIPSResult]; kw...)
 refs(io::IO, ::MoonPerronResult; kw...) = refs(io, _TYPE_REFS[:MoonPerronResult]; kw...)
+# First-generation panel unit root tests (EV-20, #428)
+refs(io::IO, ::LLCResult; kw...) = refs(io, _TYPE_REFS[:LLCResult]; kw...)
+refs(io::IO, ::IPSResult; kw...) = refs(io, _TYPE_REFS[:IPSResult]; kw...)
+refs(io::IO, ::BreitungPanelResult; kw...) = refs(io, _TYPE_REFS[:BreitungPanelResult]; kw...)
+refs(io::IO, ::FisherPanelResult; kw...) = refs(io, _TYPE_REFS[:FisherPanelResult]; kw...)
+refs(io::IO, ::HadriResult; kw...) = refs(io, _TYPE_REFS[:HadriResult]; kw...)
+# Panel cointegration tests (EV-21, #429)
+refs(io::IO, ::PedroniResult; kw...) = refs(io, _TYPE_REFS[:PedroniResult]; kw...)
+refs(io::IO, ::KaoResult; kw...) = refs(io, _TYPE_REFS[:KaoResult]; kw...)
+refs(io::IO, ::WesterlundResult; kw...) = refs(io, _TYPE_REFS[:WesterlundResult]; kw...)
+refs(io::IO, ::DumitrescuHurlinResult; kw...) = refs(io, _TYPE_REFS[:DumitrescuHurlinResult]; kw...)
+# EDF goodness-of-fit battery (EV-26, #434)
+refs(io::IO, ::EDFTestResult; kw...) = refs(io, _TYPE_REFS[:EDFTestResult]; kw...)
+# BDS independence test (EV-28, #436)
+refs(io::IO, ::BDSResult; kw...) = refs(io, _TYPE_REFS[:BDSResult]; kw...)
+refs(io::IO, ::FisherJohansenResult; kw...) = refs(io, _TYPE_REFS[:FisherJohansenResult]; kw...)
+# Equality-of-distribution + rank-correlation battery (EV-34, #442)
+refs(io::IO, ::EqualityTestResult; kw...) = refs(io, _TYPE_REFS[:EqualityTestResult]; kw...)
+refs(io::IO, ::CorTestResult; kw...) = refs(io, _TYPE_REFS[:CorTestResult]; kw...)
+# Explosive / rational-bubble detection (EV-30, #438)
+refs(io::IO, ::BubbleResult; kw...) = refs(io, _TYPE_REFS[:BubbleResult]; kw...)
+# Residual-based / parameter-stability cointegration tests (EV-11, #419)
+refs(io::IO, ::EngleGrangerResult; kw...) = refs(io, _TYPE_REFS[:EngleGrangerResult]; kw...)
+refs(io::IO, ::PhillipsOuliarisResult; kw...) = refs(io, _TYPE_REFS[:PhillipsOuliarisResult]; kw...)
+refs(io::IO, ::HansenInstabilityResult; kw...) = refs(io, _TYPE_REFS[:HansenInstabilityResult]; kw...)
+refs(io::IO, ::ParkAddedResult; kw...) = refs(io, _TYPE_REFS[:ParkAddedResult]; kw...)
+# Variance-ratio / random-walk tests (EV-27, #435)
+refs(io::IO, ::VarianceRatioResult; kw...) = refs(io, _TYPE_REFS[:VarianceRatioResult]; kw...)
+# Seasonal unit roots (HEGY) + ERS point-optimal test (EV-29, #437)
+refs(io::IO, ::HEGYResult; kw...) = refs(io, _TYPE_REFS[:HEGYResult]; kw...)
+refs(io::IO, ::ERSResult; kw...) = refs(io, _TYPE_REFS[:ERSResult]; kw...)
 
 # Factor break types
 refs(io::IO, ::FactorBreakResult; kw...) = refs(io, _TYPE_REFS[:FactorBreakResult]; kw...)
 
 # Cross-sectional models
-refs(io::IO, m::RegModel; kw...) = refs(io, m.method == :iv ? [:wooldridge2010, :white1980, :staiger_stock1997] : [:wooldridge2010, :white1980]; kw...)
+# IV k-class (LIML/Fuller) models additionally cite Anderson-Rubin, Fuller, Bekker (EV-36, #444).
+refs(io::IO, m::RegModel; kw...) = refs(io,
+    m.method == :iv ?
+        (m.kappa_hat !== nothing ?
+            [:wooldridge2010, :white1980, :staiger_stock1997, :anderson_rubin1949, :fuller1977, :bekker1994] :
+            [:wooldridge2010, :white1980, :staiger_stock1997]) :
+        [:wooldridge2010, :white1980]; kw...)
 refs(io::IO, ::LogitModel; kw...) = refs(io, _TYPE_REFS[:LogitModel]; kw...)
 refs(io::IO, ::ProbitModel; kw...) = refs(io, _TYPE_REFS[:ProbitModel]; kw...)
 refs(io::IO, ::MarginalEffects; kw...) = refs(io, _TYPE_REFS[:MarginalEffects]; kw...)
+# Stability & influence diagnostics (EV-32, #440)
+refs(io::IO, r::StabilityResult; kw...) = refs(io, r.kind == :cusumsq ?
+    [:brown_durbin_evans1975, :edgerton_wells1994] : [:brown_durbin_evans1975]; kw...)
+refs(io::IO, ::InfluenceStats; kw...) = refs(io, _TYPE_REFS[:InfluenceStats]; kw...)
+# Penalized regression (EV-03, #411): reference set depends on the fitted variant.
+function refs(io::IO, m::PenalizedRegModel; kw...)
+    ks = m.alpha == 1 ? [:tibshirani1996, :friedman2010] :
+         m.alpha == 0 ? [:hoerl_kennard1970, :friedman2010] :
+                        [:zou_hastie2005, :friedman2010]
+    m.adaptive && push!(ks, :zou2006)
+    m.post && push!(ks, :belloni_chernozhukov2013)
+    refs(io, ks; kw...)
+end
+
+# Variable selection — stepwise / best-subset / GETS (EV-04, #412)
+refs(io::IO, ::SelectionResult; kw...) = refs(io, _TYPE_REFS[:SelectionResult]; kw...)
+
+# Censored / truncated regression (EV-17, #425)
+refs(io::IO, ::TobitModel; kw...) = refs(io, _TYPE_REFS[:TobitModel]; kw...)
+refs(io::IO, ::TruncRegModel; kw...) = refs(io, _TYPE_REFS[:TruncRegModel]; kw...)
+refs(io::IO, ::HeckmanModel; kw...) = refs(io, _TYPE_REFS[:HeckmanModel]; kw...)  # EV-18 (#426)
+refs(io::IO, ::RobustRegModel; kw...) = refs(io, _TYPE_REFS[:RobustRegModel]; kw...)  # EV-40 (#448)
+refs(io::IO, ::SURModel; kw...) = refs(io, _TYPE_REFS[:SURModel]; kw...)  # EV-35 (#443)
+refs(io::IO, ::ThreeSLSModel; kw...) = refs(io, _TYPE_REFS[:ThreeSLSModel]; kw...)  # EV-35 (#443)
+refs(io::IO, ::CointRegModel; kw...) = refs(io, _TYPE_REFS[:CointRegModel]; kw...)  # EV-10 (#418)
+refs(io::IO, ::PanelCointRegModel; kw...) = refs(io, _TYPE_REFS[:PanelCointRegModel]; kw...)  # EV-22 (#430)
 
 # Ordered & Multinomial models
 refs(io::IO, ::OrderedLogitModel; kw...) = refs(io, _TYPE_REFS[:OrderedLogitModel]; kw...)
@@ -1544,6 +2578,28 @@ end
 refs(io::IO, ::PanelLogitModel; kw...) = refs(io, _TYPE_REFS[:PanelLogitModel]; kw...)
 refs(io::IO, ::PanelProbitModel; kw...) = refs(io, _TYPE_REFS[:PanelProbitModel]; kw...)
 refs(io::IO, ::PanelTestResult; kw...) = refs(io, _TYPE_REFS[:PanelTestResult]; kw...)
+
+# OLS residual diagnostics (EV-31, #439): pick the reference(s) matching the test.
+function refs(io::IO, r::RegDiagnosticResult; kw...)
+    nm = r.test_name
+    ks = startswith(nm, "White")            ? [:white1980] :
+         startswith(nm, "Breusch-Pagan")    ? [:breusch_pagan1979, :koenker1981] :
+         startswith(nm, "Glejser")          ? [:glejser1969] :
+         startswith(nm, "Harvey")           ? [:harvey1976] :
+         startswith(nm, "Breusch-Godfrey")  ? [:breusch1978, :godfrey1978] :
+         startswith(nm, "Ramsey")           ? [:ramsey1969] :
+         startswith(nm, "Chow")             ? [:chow1960] :
+                                              _TYPE_REFS[:RegDiagnosticResult]
+    refs(io, ks; kw...)
+end
+
+# Forecast evaluation & combination (EV-39, #447)
+refs(io::IO, ::ForecastEvaluation; kw...) = refs(io, _TYPE_REFS[:ForecastEvaluation]; kw...)
+refs(io::IO, ::DMTestResult; kw...) = refs(io, _TYPE_REFS[:DMTestResult]; kw...)
+refs(io::IO, ::ClarkWestResult; kw...) = refs(io, _TYPE_REFS[:ClarkWestResult]; kw...)
+refs(io::IO, ::MincerZarnowitzResult; kw...) = refs(io, _TYPE_REFS[:MincerZarnowitzResult]; kw...)
+refs(io::IO, ::ForecastEncompassingResult; kw...) = refs(io, _TYPE_REFS[:ForecastEncompassingResult]; kw...)
+refs(io::IO, ::ForecastCombination; kw...) = refs(io, _TYPE_REFS[:ForecastCombination]; kw...)
 
 # --- Convenience: stdout fallback ---
 function refs(x; kw...)

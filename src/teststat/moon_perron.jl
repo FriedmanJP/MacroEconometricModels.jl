@@ -239,21 +239,31 @@ end
 """
     PanelUnitRootSummary
 
-Container for the panel unit-root test battery (PANIC / Pesaran CIPS / Moon-Perron),
-returned by `panel_unit_root_summary` so the battery can be composed, re-displayed, and
-inspected — not just printed once. Any sub-test that errors is recorded in `errors` and
-skipped. (S3/T167)
+Container for the panel unit-root test battery, returned by `panel_unit_root_summary`
+so the battery can be composed, re-displayed, and inspected — not just printed once.
+
+Holds both the **second-generation** (cross-sectional-dependence-robust) tests —
+PANIC, Pesaran CIPS, Moon-Perron — and the **first-generation**
+(cross-sectional-independence) tests added in EV-20 (#428): Levin-Lin-Chu, IPS,
+Breitung, Fisher, and Hadri. Any sub-test that errors is recorded in `errors` and
+skipped. (S3/T167) Note Hadri flips the null to *stationarity* (right-tailed).
 """
 struct PanelUnitRootSummary
     panic::Union{PANICResult,Nothing}
     cips::Union{PesaranCIPSResult,Nothing}
     moon_perron::Union{MoonPerronResult,Nothing}
+    llc::Union{LLCResult,Nothing}
+    ips::Union{IPSResult,Nothing}
+    breitung::Union{BreitungPanelResult,Nothing}
+    fisher::Union{FisherPanelResult,Nothing}
+    hadri::Union{HadriResult,Nothing}
     errors::Vector{String}
 end
 
 function _build_panel_unit_root_summary(X::AbstractMatrix; r::Union{Int,Symbol}=:auto,
                                         lags::Union{Int,Symbol}=:auto)
     panic = nothing; cips = nothing; mp = nothing
+    llc = nothing; ips = nothing; breit = nothing; fish = nothing; had = nothing
     errors = String[]
     try
         panic = panic_test(X; r=r, method=:pooled)
@@ -270,7 +280,32 @@ function _build_panel_unit_root_summary(X::AbstractMatrix; r::Union{Int,Symbol}=
     catch e
         push!(errors, "Moon-Perron test failed: " * sprint(showerror, e))
     end
-    return PanelUnitRootSummary(panic, cips, mp, errors)
+    try
+        llc = llc_test(X; lags=lags, deterministic=:constant)
+    catch e
+        push!(errors, "Levin-Lin-Chu test failed: " * sprint(showerror, e))
+    end
+    try
+        ips = ips_test(X; lags=lags, deterministic=:constant)
+    catch e
+        push!(errors, "Im-Pesaran-Shin test failed: " * sprint(showerror, e))
+    end
+    try
+        breit = breitung_panel_test(X; deterministic=:constant)
+    catch e
+        push!(errors, "Breitung test failed: " * sprint(showerror, e))
+    end
+    try
+        fish = fisher_panel_test(X; base=:adf, combine=:mw, lags=lags, deterministic=:constant)
+    catch e
+        push!(errors, "Fisher test failed: " * sprint(showerror, e))
+    end
+    try
+        had = hadri_test(X; deterministic=:constant)
+    catch e
+        push!(errors, "Hadri test failed: " * sprint(showerror, e))
+    end
+    return PanelUnitRootSummary(panic, cips, mp, llc, ips, breit, fish, had, errors)
 end
 
 """
@@ -306,6 +341,13 @@ end
 function Base.show(io::IO, s::PanelUnitRootSummary)
     # Borderless title (dropped the ='^60 ASCII banner for dialect consistency). (S5/T169)
     println(io, "\n  Panel Unit Root Test Battery\n")
+    # First-generation (cross-sectional independence).
+    s.llc !== nothing && (show(io, s.llc); println(io))
+    s.ips !== nothing && (show(io, s.ips); println(io))
+    s.breitung !== nothing && (show(io, s.breitung); println(io))
+    s.fisher !== nothing && (show(io, s.fisher); println(io))
+    s.hadri !== nothing && (show(io, s.hadri); println(io))
+    # Second-generation (cross-sectional dependence robust).
     s.panic !== nothing && (show(io, s.panic); println(io))
     s.cips !== nothing && (show(io, s.cips); println(io))
     s.moon_perron !== nothing && (show(io, s.moon_perron); println(io))

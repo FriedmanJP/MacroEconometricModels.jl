@@ -201,35 +201,98 @@ function _sargan_test(resid::Vector{T}, Z::Matrix{T},
 end
 
 # =============================================================================
+# LIML minimum-eigenvalue κ̂  (EV-36, #444)
+# =============================================================================
+
+"""
+    _liml_kappa(y, X, Z, endogenous) -> T
+
+Least-variance-ratio `κ̂` for limited-information maximum likelihood (LIML): the smallest
+root of the determinantal equation `|Ȳ'M_{X₁}Ȳ − κ Ȳ'M_Z Ȳ| = 0`, where
+`Ȳ = [y  X[:,endogenous]]` stacks the dependent variable with the endogenous regressors,
+`X₁ = X[:,included]` are the included exogenous regressors, `M_{X₁} = I − X₁(X₁'X₁)⁻¹X₁'`
+and `M_Z = I − Z(Z'Z)⁻¹Z'` are the corresponding residual-makers.
+
+Solved as a generalized *symmetric* eigenproblem `B v = κ W v` with SPD `W = Ȳ'M_Z Ȳ`:
+`safe_cholesky`-whiten `W = L L'` and take `κ̂ = minimum(eigvals(Hermitian(L⁻¹ B L⁻ᵀ)))`.
+The raw `robust_inv(W)·B` product is nonsymmetric and can return complex eigenvalues, so the
+whitened route is used. Because `M_{X₁} − M_Z` is positive semidefinite, `κ̂ ≥ 1` always, and
+`κ̂ → 1` in the just-identified case (LIML ≡ 2SLS).
+
+# References
+- Anderson, T. W. & Rubin, H. (1949). *Ann. Math. Statist.* 20(1), 46-63.
+"""
+function _liml_kappa(y::Vector{T}, X::Matrix{T}, Z::Matrix{T},
+                     endogenous::Vector{Int}) where {T<:AbstractFloat}
+    k = size(X, 2)
+    incl = setdiff(1:k, endogenous)
+    X1 = X[:, incl]                              # included exogenous (may be 0 columns)
+    Ybar = hcat(y, X[:, endogenous])             # [y  Y_endog]
+    MZ_Y  = _partial_out(Ybar, Z)                # M_Z · Ȳ
+    MX1_Y = size(X1, 2) == 0 ? Ybar : _partial_out(Ybar, X1)  # M_{X₁} · Ȳ
+    W = Symmetric(MZ_Y' * MZ_Y)                  # Ȳ'M_Z Ȳ  (SPD)
+    B = Symmetric(MX1_Y' * MX1_Y)                # Ȳ'M_{X₁} Ȳ
+    L = safe_cholesky(Matrix{T}(W); silent=true) # W = L L'
+    # C = L⁻¹ B L⁻ᵀ  (symmetric):  L \ (L \ B)' = L⁻¹ (L⁻¹B)' = L⁻¹ B L⁻ᵀ  (B symmetric)
+    C = L \ Matrix{T}((L \ Matrix{T}(B))')
+    kappa = minimum(eigvals(Hermitian(C)))
+    max(kappa, one(T))                           # κ̂ ≥ 1 by construction; guard tiny numeric dips
+end
+
+# =============================================================================
 # IV/2SLS Estimation
 # =============================================================================
 
 """
-    estimate_iv(y, X, Z; endogenous, cov_type=:hc1, varnames=nothing) -> RegModel{T}
+    estimate_iv(y, X, Z; endogenous, method=:tsls, k=nothing, fuller_a=1.0,
+                cov_type=:hc1, varnames=nothing) -> RegModel{T}
 
-Estimate a linear regression model via instrumental variables / two-stage least
-squares (IV/2SLS).
+Estimate a linear regression with endogenous regressors via the **k-class** estimator family:
+two-stage least squares (2SLS), limited-information maximum likelihood (LIML), Fuller's
+modified LIML, or a user-specified generic k-class estimator.
 
-# Algorithm
-1. Project regressors onto instrument space: X_hat = P_Z * X where P_Z = Z(Z'Z)^{-1}Z'
-2. Second stage: beta = (X_hat'X)^{-1} X_hat'y
-3. Residuals from ORIGINAL X: e = y - X*beta (not X_hat*beta)
-4. Covariance uses X_hat for the bread and original residuals for the meat
+# k-class estimator
+Every member solves the closed form
+```
+β̂(k) = (X'(I − k·M_Z)X)⁻¹ X'(I − k·M_Z) y,   M_Z = I − Z(Z'Z)⁻¹Z'
+```
+with the scalar `k` selecting the estimator:
+
+| `method`   | `k`                     | Notes |
+|:-----------|:------------------------|:------|
+| `:tsls` / `:2sls` (default) | `1`        | Two-stage least squares (bit-for-bit the classic path) |
+| `:liml`    | `κ̂`                    | LIML — the LIML least-variance ratio (see [`_liml_kappa`](@ref)) |
+| `:fuller`  | `κ̂ − fuller_a/(n−m)`   | Fuller (1977); with `fuller_a=1` it is approximately unbiased |
+| `:kclass`  | user `k`                | generic k-class (`k=0` ⇒ OLS, `k=1` ⇒ 2SLS) |
+
+Under weak or many instruments 2SLS is badly biased; **LIML is median-unbiased** and **Fuller
+is its finite-sample-improved variant** (bias-corrected, with finite moments). Fuller's `k` can
+fall *below 1* — that is the intended finite-sample correction and is **not** clamped.
 
 # Arguments
-- `y::AbstractVector{T}` — dependent variable (n x 1)
-- `X::AbstractMatrix{T}` — regressor matrix (n x k), includes exogenous regressors and intercept
-- `Z::AbstractMatrix{T}` — instrument matrix (n x m), includes exogenous regressors and excluded instruments
-- `endogenous::Vector{Int}` — column indices of endogenous regressors in X
+- `y::AbstractVector{T}` — dependent variable (n × 1)
+- `X::AbstractMatrix{T}` — regressor matrix (n × k), includes exogenous regressors and intercept
+- `Z::AbstractMatrix{T}` — instrument matrix (n × m), includes the included exogenous regressors and excluded instruments
+- `endogenous::Vector{Int}` — column indices of endogenous regressors in `X`
+- `method::Symbol` — `:tsls` (default), `:liml`, `:fuller`, or `:kclass`
+- `k::Union{Nothing,Real}` — scalar for `method=:kclass` (required only then)
+- `fuller_a::Real` — Fuller constant `a` (default `1.0`); ignored unless `method=:fuller`
 - `cov_type::Symbol` — covariance estimator: `:ols`, `:hc0`, `:hc1` (default), `:hc2`, `:hc3`
 - `varnames::Union{Nothing,Vector{String}}` — coefficient names (auto-generated if nothing)
 
 # Returns
-`RegModel{T}` with method=:iv, including first-stage F-statistic and Sargan test.
+`RegModel{T}` with `method=:iv`, the first-stage F, Cragg-Donald / Kleibergen-Paap F, Sargan
+test, and — for k-class methods — the k-class scalar `kclass_k` and (LIML/Fuller) `kappa_hat`.
+`report()` prints `κ̂` and the Anderson (1949) LR overidentification statistic `n·ln(κ̂)`.
 
-# Diagnostics
-- `first_stage_f`: minimum first-stage F across endogenous variables (>10 suggests strong instruments)
-- `sargan_stat`/`sargan_pval`: overidentification test (nothing if exactly identified)
+# Covariance
+k-class VCV `σ̂²·(X'(I−k·M_Z)X)⁻¹` with `σ̂² = û'û/n` (`cov_type=:ols`); the HC variants use the
+sandwich `(X'(I−k·M_Z)X)⁻¹ · [Σ û_i² wᵢwᵢ'] · (X'(I−k·M_Z)X)⁻¹` with `w = (I−k·M_Z)X`, which
+reduces exactly to the 2SLS sandwich at `k=1`.
+
+Weak-instrument **inference** (Anderson-Rubin, Kleibergen-Paap, Stock-Yogo critical values) is a
+separate layer — see issue #343; this entry point delivers the *estimators* those tests
+condition on.
 
 # Examples
 ```julia
@@ -242,17 +305,23 @@ x_endog .+= 0.5 * u  # endogeneity
 y = 1.0 .+ 2.0 * x_endog + u
 X = hcat(ones(n), x_endog)
 Z = hcat(ones(n), z1, z2)
-m = estimate_iv(y, X, Z; endogenous=[2])
-report(m)
+m_liml = estimate_iv(y, X, Z; endogenous=[2], method=:liml)
+report(m_liml)
 ```
 
 # References
+- Anderson, T. W. & Rubin, H. (1949). *Ann. Math. Statist.* 20(1), 46-63.
+- Fuller, W. A. (1977). *Econometrica* 45(4), 939-953.
+- Bekker, P. A. (1994). *Econometrica* 62(3), 657-681.
 - Wooldridge, J. M. (2010). *Econometric Analysis of Cross Section and Panel Data*. 2nd ed. MIT Press, ch. 5.
 - Stock, J. H. & Yogo, M. (2005). *Identification and Inference for Econometric Models*. Cambridge University Press, ch. 5.
 """
 function estimate_iv(y::AbstractVector{T}, X::AbstractMatrix{T},
                      Z::AbstractMatrix{T};
                      endogenous::Vector{Int}=Int[],
+                     method::Symbol=:tsls,
+                     k::Union{Nothing,Real}=nothing,
+                     fuller_a::Real=1.0,
                      cov_type::Symbol=:hc1,
                      varnames::Union{Nothing,Vector{String}}=nothing) where {T<:AbstractFloat}
     # ---- Input validation ----
@@ -261,24 +330,33 @@ function estimate_iv(y::AbstractVector{T}, X::AbstractMatrix{T},
     _validate_data(Z, "Z")
 
     n = length(y)
-    k = size(X, 2)
+    k_reg = size(X, 2)
     m = size(Z, 2)
 
     size(X, 1) == n || throw(ArgumentError("X must have $n rows (got $(size(X, 1)))"))
     size(Z, 1) == n || throw(ArgumentError("Z must have $n rows (got $(size(Z, 1)))"))
-    n > k || throw(ArgumentError("Need n > k (n=$n, k=$k)"))
+    n > k_reg || throw(ArgumentError("Need n > k (n=$n, k=$k_reg)"))
 
     # Order condition: at least as many instruments as regressors
-    m >= k || throw(ArgumentError(
-        "Order condition violated: need m >= k (m=$m instruments, k=$k regressors)"))
+    m >= k_reg || throw(ArgumentError(
+        "Order condition violated: need m >= k (m=$m instruments, k=$k_reg regressors)"))
 
     # Validate endogenous indices
     isempty(endogenous) && throw(ArgumentError("endogenous must be non-empty for IV estimation"))
-    all(1 .<= endogenous .<= k) || throw(ArgumentError(
-        "endogenous indices must be in [1, $k]; got $endogenous"))
+    all(1 .<= endogenous .<= k_reg) || throw(ArgumentError(
+        "endogenous indices must be in [1, $k_reg]; got $endogenous"))
 
     cov_type in (:ols, :hc0, :hc1, :hc2, :hc3) ||
         throw(ArgumentError("cov_type must be :ols, :hc0, :hc1, :hc2, or :hc3 for IV; got :$cov_type"))
+
+    method in (:tsls, Symbol("2sls"), :liml, :fuller, :kclass) || throw(ArgumentError(
+        "method must be :tsls, Symbol(\"2sls\"), :liml, :fuller, or :kclass; got :$method"))
+    method == :kclass && k === nothing && throw(ArgumentError(
+        "method=:kclass requires the k keyword (a scalar k-class value, e.g. k=0.9)"))
+
+    # Capture the user k-class scalar before reusing `k` as the regressor count downstream.
+    user_k = k
+    k = k_reg
 
     # ---- Variable names ----
     vn = something(varnames, ["x$i" for i in 1:k])
@@ -294,10 +372,40 @@ function estimate_iv(y::AbstractVector{T}, X::AbstractMatrix{T},
     P_Z = Zm * ZtZinv * Zm'   # n x n projection matrix
     X_hat = P_Z * Xm          # projected regressors
 
-    # ---- Stage 2: 2SLS estimation ----
-    XhX = X_hat' * Xm
-    XhXinv = robust_inv(XhX)
-    beta = XhXinv * (X_hat' * yv)
+    # k-class dispatch. The classic :tsls path (k=1) is preserved BIT-FOR-BIT: β̂, the bread
+    # (X'P_Z X)⁻¹, and the covariance design X_hat are computed exactly as before. The k-class
+    # members instead use β̂(k)=(X'(I−k·M_Z)X)⁻¹X'(I−k·M_Z)y and the sandwich design (I−k·M_Z)X.
+    is_kclass = method in (:liml, :fuller, :kclass)
+    kappa_hat_val = nothing
+    kclass_k_val = nothing
+    if is_kclass
+        kappa_hat_val = (method == :liml || method == :fuller) ?
+            _liml_kappa(yv, Xm, Zm, endogenous) : nothing
+        k_val = if method == :liml
+            kappa_hat_val
+        elseif method == :fuller
+            # Fuller's k = κ̂ − a/(n − m); intentionally NOT clamped to ≥ 1.
+            kappa_hat_val - T(fuller_a) / T(n - m)
+        else  # :kclass
+            T(user_k)
+        end
+        kclass_k_val = k_val
+        # X'(I − k·M_Z)X = (1−k)X'X + k·X'P_Z X ; X'(I − k·M_Z)y = (1−k)X'y + k·X'P_Z y.
+        # (X'P_Z X = X_hat'X, X'P_Z y = X_hat'y since P_Z is symmetric idempotent.)
+        A = (one(T) - k_val) .* (Xm' * Xm) .+ k_val .* (X_hat' * Xm)
+        Ainv = robust_inv(A)
+        rhs = (one(T) - k_val) .* (Xm' * yv) .+ k_val .* (X_hat' * yv)
+        beta = Ainv * rhs
+        bread_inv = Ainv
+        vcov_design = (one(T) - k_val) .* Xm .+ k_val .* X_hat   # (I − k·M_Z)X
+    else
+        # ---- Stage 2: classic 2SLS (k=1) — DO NOT ALTER (golden-path guard) ----
+        XhX = X_hat' * Xm
+        XhXinv = robust_inv(XhX)
+        beta = XhXinv * (X_hat' * yv)
+        bread_inv = XhXinv
+        vcov_design = X_hat
+    end
 
     # ---- Residuals from ORIGINAL X (not X_hat) ----
     fitted_vals = Xm * beta
@@ -312,8 +420,8 @@ function estimate_iv(y::AbstractVector{T}, X::AbstractMatrix{T},
     r2_val = one(T) - ssr / tss
     adj_r2_val = one(T) - (one(T) - r2_val) * T(n - 1) / T(n - k)
 
-    # ---- F-test (using 2SLS estimates) ----
-    f_stat, f_pval = _ols_f_test(beta, XhXinv, ssr, n, k)
+    # ---- F-test (using the k-class point estimates) ----
+    f_stat, f_pval = _ols_f_test(beta, bread_inv, ssr, n, k)
 
     # ---- Log-likelihood, AIC, BIC ----
     sigma2_ml = ssr / T(n)
@@ -323,10 +431,13 @@ function estimate_iv(y::AbstractVector{T}, X::AbstractMatrix{T},
 
     # ---- Covariance matrix ----
     if cov_type == :ols
-        sigma2 = ssr / T(n - k)
-        vcov_mat = sigma2 .* XhXinv
+        # Homoskedastic k-class VCV. 2SLS keeps the classic (n−k) divisor bit-for-bit; the
+        # k-class members use σ̂² = û'û/n (matches the LIML/Fuller asymptotic VCV, linearmodels
+        # "unadjusted", and spec point 5).
+        sigma2 = is_kclass ? ssr / T(n) : ssr / T(n - k)
+        vcov_mat = sigma2 .* bread_inv
     else
-        vcov_mat = _reg_vcov(X_hat, resid, cov_type, XhXinv)
+        vcov_mat = _reg_vcov(vcov_design, resid, cov_type, bread_inv)
     end
 
     # ---- Weak-instrument diagnostics ----
@@ -352,7 +463,8 @@ function estimate_iv(y::AbstractVector{T}, X::AbstractMatrix{T},
         nothing,                        # weights
         Zm, endogenous,                 # Z, endogenous
         fs_f, sargan_s, sargan_p,       # first_stage_f, sargan_stat, sargan_pval
-        cd_val, kp_val, sy_val          # cragg_donald_f, kleibergen_paap_f, stock_yogo_10pct
+        cd_val, kp_val, sy_val,         # cragg_donald_f, kleibergen_paap_f, stock_yogo_10pct
+        kclass_k_val, kappa_hat_val     # kclass_k, kappa_hat (EV-36)
     )
 end
 

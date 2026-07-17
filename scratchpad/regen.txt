@@ -1,0 +1,18 @@
+[ Info: goldens (re)written to /Users/chung/Desktop/CODES/MacroEconometricModels/test/display/goldens — eyeball the diff and commit
+
+=========================== RUN: test/display/test_display_goldens.jl ===========================
+Test Summary:               | Pass  Total   Time
+Display goldens (T176/#275) |   20     20  18.5s
+
+=== run_one.jl done ===
+---REGEN DONE, now COMPARE---
+
+=========================== RUN: test/display/test_display_invariants.jl ===========================
+Test Summary:                  | Pass  Total   Time
+Display invariants (T176/#275) |  124    124  38.2s
+
+=========================== RUN: test/display/test_display_goldens.jl ===========================
+Test Summary:               | Pass  Total  Time
+Display goldens (T176/#275) |   20     20  0.1s
+
+=== run_one.jl done ===

@@ -6,8 +6,13 @@
 - **GARCH**: Generalized ARCH (Bollerslev 1986) --- adds lagged conditional variances for parsimonious volatility persistence
 - **EGARCH**: Exponential GARCH (Nelson 1991) --- log-variance specification with asymmetric leverage effects, no positivity constraints
 - **GJR-GARCH**: Threshold GARCH (Glosten, Jagannathan & Runkle 1993) --- indicator-based leverage via ``\gamma_i \mathbb{1}(\varepsilon_{t-i} < 0)``
+- **GARCH-MIDAS**: Mixed-frequency component GARCH (Engle, Ghysels & Sohn 2013) --- variance splits into a short-run unit-mean GARCH and a long-run MIDAS-filtered macro/realized-variance component
+- **FIGARCH / FIEGARCH**: Fractionally integrated (E)GARCH (Baillie, Bollerslev & Mikkelsen 1996; Bollerslev & Mikkelsen 1996) --- hyperbolic (long-memory) volatility persistence via the fractional-difference operator ``(1-L)^d``
+- **IGARCH**: Integrated GARCH (Engle & Bollerslev 1986) --- unit-persistence (``\sum\alpha + \sum\beta = 1``) volatility with a divergent unconditional variance (RiskMetrics EWMA is the ``\omega = 0`` case)
+- **Component GARCH**: Permanent/transitory decomposition (Engle & Lee 1999) --- a slowly mean-reverting long-run variance trend plus a fast transitory cycle
+- **APARCH**: Asymmetric Power ARCH (Ding, Granger & Engle 1993) --- a free power ``\delta`` and Box-Cox leverage term that nests GARCH, GJR-GARCH, and TARCH
 - **Stochastic Volatility**: Latent log-variance AR(1) process (Taylor 1986), estimated via Kim-Shephard-Chib (1998) Gibbs sampler with optional leverage and Student-t errors
-- **Diagnostics**: ARCH-LM test, Ljung-Box on squared residuals, news impact curves
+- **Diagnostics**: ARCH-LM test, Ljung-Box on squared residuals, news impact curves, Engle-Ng sign-bias and Nyblom-Hansen parameter-stability tests
 - **Forecasting**: Multi-step ahead variance forecasts with simulation-based confidence intervals (GARCH family) or posterior predictive intervals (SV)
 
 ```@setup volatility
@@ -331,6 +336,403 @@ The top panel shows the raw return series to identify volatility clusters visual
 | `method` | `Symbol` | Estimation method |
 | `converged` | `Bool` | Convergence status |
 | `iterations` | `Int` | Optimizer iterations |
+
+---
+
+## GARCH-MIDAS
+
+The **GARCH-MIDAS** model of Engle, Ghysels & Sohn (2013) links high-frequency financial volatility to slowly moving macroeconomic fundamentals by factoring the conditional variance into two multiplicative components:
+
+```math
+\sigma^2_{i,t} = \tau_t \cdot g_{i,t}
+```
+
+where ``i`` indexes the high-frequency return within low-frequency block ``t``. The **short-run** component ``g`` is a unit-mean GARCH(1,1) on the ``\tau``-standardized return,
+
+```math
+g_{i,t} = (1 - \alpha - \beta) + \alpha \frac{(r_{i-1,t} - \mu)^2}{\tau_{i-1}} + \beta \, g_{i-1,t},
+```
+
+and the **long-run** component is a MIDAS filter of a low-frequency driver ``X`` (a macro series or realized variance):
+
+```math
+\tau_t = \exp\!\left( m + \theta \sum_{k=1}^{K} \varphi_k(w) \, X_{t-k} \right),
+```
+
+with Beta weights ``\varphi_k(w)`` (monotone decaying, summing to one). The ``\sqrt{\tau}`` scaling of the short-run innovation keeps ``g`` at unit unconditional mean --- ``\tau`` carries the variance level.
+
+- ``\mu`` --- conditional mean
+- ``\alpha, \beta`` --- short-run ARCH/GARCH coefficients (``\alpha + \beta < 1``)
+- ``m`` --- long-run intercept
+- ``\theta`` --- MIDAS slope on the aggregated low-frequency driver
+- ``w`` --- Beta weight shape (``w > 1`` gives decaying weights)
+
+Estimation is by Gaussian QMLE over ``(\mu, \alpha, \beta, m, \theta, w)`` with ``\alpha, \beta`` log-transformed under the stationarity constraint and ``w = 1 + e^{\tilde w}``. The `variance_ratio` field reports ``\mathrm{Var}(\log \tau_t) / \mathrm{Var}(\log \sigma^2_{i,t})``, the share of total variance variation attributable to the long-run macro component (Engle, Ghysels & Sohn 2013).
+
+```@example volatility
+# Simulate a daily-frequency return series with a monthly macro driver
+Random.seed!(202)
+K, m_freq, nblk = 6, 21, 90
+phi = midas_weights([1.0, 4.0], K; kind=:beta2)      # decaying Beta weights
+Xlf = zeros(nblk); for t in 2:nblk; Xlf[t] = 0.7Xlf[t-1] + randn(); end
+tau = [t > K ? exp(-0.5 + 0.3 * sum(phi[k] * Xlf[t-k] for k in 1:K)) : exp(-0.5) for t in 1:nblk]
+r = Float64[]; g = 1.0; ep = 0.0; tp = tau[1]
+for t in 1:nblk, i in 1:m_freq
+    global g, ep, tp
+    g = 0.04 + 0.06 * ep^2 / tp + 0.90 * g
+    push!(r, 0.02 + sqrt(tau[t] * g) * randn()); ep = r[end] - 0.02; tp = tau[t]
+end
+
+# Fit GARCH-MIDAS with the macro driver
+gm = estimate_garch_midas(r, Xlf; K=K, m_freq=m_freq, rv=:macro, span=:fixed)
+report(gm)
+```
+
+The realized-variance variant needs no exogenous series --- the long-run driver is the block realized variance of the returns themselves:
+
+```@example volatility
+gm_rv = estimate_garch_midas(r; K=K, m_freq=m_freq, rv=:realized)
+gm_rv.variance_ratio      # long-run share of total variance variation
+```
+
+Forecasts iterate the short-run ``g`` forward (mean-reverting to 1) while holding the long-run ``\tau`` at its last low-frequency block:
+
+```@example volatility
+fc = forecast(gm, 10)
+fc.total          # total variance path σ² = τ·g
+```
+
+The component overlay plots total ``\sqrt{\sigma^2}`` against the long-run ``\sqrt{\tau}``:
+
+```julia
+plot_result(gm; view=:components)
+```
+
+### GarchMidasModel Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `mu` | `T` | Conditional mean ``\mu`` |
+| `alpha`, `beta` | `T` | Short-run ARCH/GARCH coefficients |
+| `m_const` | `T` | Long-run intercept ``m`` |
+| `theta` | `T` | MIDAS slope ``\theta`` |
+| `w` | `T` | Beta weight shape ``w`` |
+| `weights` | `Vector{T}` | Realized weight curve ``\varphi(\hat w)`` (length ``K``) |
+| `tau` | `Vector{T}` | Long-run component per retained observation |
+| `g` | `Vector{T}` | Short-run unit-mean component |
+| `conditional_variance` | `Vector{T}` | Total ``\sigma^2 = \tau g`` |
+| `variance_ratio` | `T` | Long-run variance share ``\mathrm{Var}(\log\tau)/\mathrm{Var}(\log\sigma^2)`` |
+| `ret_idx` | `Vector{Int}` | Indices of retained (non-ragged) observations |
+| `loglik`, `aic`, `bic` | `T` | Fit statistics |
+| `converged` | `Bool` | Convergence status |
+
+---
+
+## Fractionally Integrated GARCH (FIGARCH / FIEGARCH)
+
+Standard GARCH persistence decays *geometrically*: a shock to volatility dies out at rate ``(\alpha+\beta)^h``. Many financial and high-frequency macro series instead show *hyperbolic* decay --- the autocorrelation of squared returns falls off far more slowly than any GARCH can reproduce, yet the process is not fully integrated (IGARCH). **FIGARCH** (Baillie, Bollerslev & Mikkelsen 1996) bridges the two by applying the fractional-difference operator ``(1-L)^d`` with ``d \in (0,1)`` to the ARCH polynomial, giving an **ARCH(∞)** conditional variance:
+
+```math
+\sigma^2_t = \frac{\omega}{1-\beta(1)} + \Big[1 - \big(1-\beta(L)\big)^{-1}\phi(L)(1-L)^d\Big]\varepsilon^2_t
+           = \omega^* + \sum_{i=1}^{K} \lambda_i \, \varepsilon^2_{t-i}.
+```
+
+The ``\lambda``-weights are obtained by convolving the ``(1-L)^d`` fractional-difference weights with ``\phi(L)`` and the inverse of ``1-\beta(L)``, then **truncating at ``K`` lags** (`truncation`, default 1000). Because the weights decay only ``\propto i^{-1-d}``, small ``d`` needs the full truncation. As ``d \to 0`` the model collapses to GARCH(1,1) with ``\alpha = \phi - \beta``; as ``d \to 1`` it approaches IGARCH.
+
+- ``\omega`` --- variance intercept (the ARCH(∞) level is ``\omega/(1-\beta(1))``)
+- ``\phi`` --- ARCH polynomial coefficient(s)
+- ``\beta`` --- GARCH polynomial coefficient(s)
+- ``d`` --- fractional integration order (long-memory parameter), ``d \in (0,1)``
+
+Estimation is by Gaussian QMLE with ``\omega`` log-transformed and ``\phi, \beta, d`` logit-transformed to their unit intervals; standard errors are Bollerslev–Wooldridge QML sandwich SEs with a delta-method back-transform. The pre-sample ``\varepsilon^2`` are set to the sample variance (matching `rugarch`). After fitting, the truncated ``\lambda``-weights are checked against the Baillie–Bollerslev–Mikkelsen non-negativity conditions --- a violation is **warned** (never thrown) and counted in `n_neg_lambda`.
+
+```@example volatility
+# Simulate a long-memory FIGARCH(1,d,1) return series (true d = 0.4)
+Random.seed!(77)
+let
+    ω, d, ϕ, β, K = 0.05, 0.4, 0.2, 0.5, 400
+    δ = [1.0]; for k in 1:K; push!(δ, δ[end] * (k - 1 - d) / k); end          # (1−L)^d
+    g = [δ[k+1] - (k ≥ 1 ? ϕ * δ[k] : 0.0) for k in 0:K]                      # φ(L)(1−L)^d
+    c = zeros(K + 1); c[1] = g[1]; for k in 1:K; c[k+1] = g[k+1] + β * c[k]; end
+    λ = [-c[i+1] for i in 1:K]                                                # ARCH(∞) weights
+    ostar, n, burn = ω / (1 - β), 1500, 800
+    e2 = fill(ostar, n + burn); r = zeros(n + burn)
+    for t in 1:(n + burn)
+        h = ostar
+        for i in 1:min(K, t - 1); h += λ[i] * e2[t-i]; end
+        r[t] = sqrt(max(h, 1e-12)) * randn(); e2[t] = r[t]^2
+    end
+    global rets = r[burn+1:end]
+end
+
+m = estimate_figarch(rets; truncation=400)
+report(m)
+```
+
+The fitted ``d`` is significantly positive, flagging genuine long memory (precise recovery of ``(\omega, d, \phi, \beta)`` needs a long sample --- the fractional parameters are only weakly identified at moderate ``T``).
+
+**FIEGARCH** (Bollerslev & Mikkelsen 1996) is the log-variance analogue: long memory enters the *log* conditional variance through ``(1-L)^{-d}`` (note the negative exponent), and the EGARCH news function ``g(z) = \theta z + \gamma(|z| - E|z|)`` captures asymmetry (leverage). Because the log variance is unconstrained there is no positivity restriction:
+
+```math
+\ln \sigma^2_t = \omega + \big(1-\beta(L)\big)^{-1}\phi(L)(1-L)^{-d}\, g(z_{t-1}).
+```
+
+```@example volatility
+fim = estimate_fiegarch(rets; truncation=300)
+fim.d                # estimated long-memory parameter d
+```
+
+Both models support multi-step variance forecasts (simulation-based, feeding the ARCH(∞) / log-variance recursion forward) and a news impact curve:
+
+```@example volatility
+fc = forecast(m, 10)
+fc.forecast          # 10-step variance path
+```
+
+```julia
+plot_result(m)                    # returns + fitted conditional volatility
+news_impact_curve(m)              # symmetric FIGARCH parabola; FIEGARCH is asymmetric
+```
+
+### FIGARCHModel / FIEGARCHModel Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `mu` | `T` | Conditional mean ``\mu`` |
+| `omega` | `T` | Variance intercept ``\omega`` |
+| `phi`, `beta` | `Vector{T}` | ARCH ``\phi(L)`` / GARCH ``\beta(L)`` coefficients |
+| `d` | `T` | Fractional integration order ``d \in (0,1)`` |
+| `lambda` / `psi` | `Vector{T}` | Truncated ARCH(∞) / MA(∞) weights |
+| `theta`, `gamma` | `T` | FIEGARCH sign / magnitude news coefficients |
+| `conditional_variance` | `Vector{T}` | Fitted ``\sigma^2_t`` |
+| `truncation` | `Int` | ARCH(∞) / MA(∞) truncation lag ``K`` |
+| `n_neg_lambda` | `Int` | Negative ``\lambda``-weight count (FIGARCH BBM violation) |
+| `loglik`, `aic`, `bic` | `T` | Fit statistics |
+| `converged` | `Bool` | Convergence status |
+
+---
+
+## IGARCH, Component GARCH, and APARCH
+
+Three further members of the GARCH family target distinct empirical regularities: **unit persistence** (IGARCH), a **long-run/short-run variance decomposition** (Component GARCH), and a **free volatility power with leverage** (APARCH). All three reuse the shared Bollerslev-Wooldridge (1992) QMLE sandwich standard errors and integrate with `report()`, `forecast()`, `news_impact_curve()`, and `plot_result()`.
+
+### IGARCH(p,q)
+
+The **Integrated GARCH** of Engle & Bollerslev (1986) imposes the persistence constraint ``\sum_i \alpha_i + \sum_j \beta_j = 1`` exactly, so a variance shock never dies out:
+
+```math
+\sigma^2_t = \omega + \sum_{i=1}^q \alpha_i \varepsilon^2_{t-i} + \sum_{j=1}^p \beta_j \sigma^2_{t-j}, \qquad \sum_i \alpha_i + \sum_j \beta_j = 1
+```
+
+Persistence is unity by construction, the unconditional variance diverges, and multi-step variance forecasts grow linearly. The RiskMetrics EWMA is the special case ``\omega = 0``.
+
+```@example volatility
+ig = estimate_igarch(ip, 1, 1)
+report(ig)
+```
+
+```@example volatility
+persistence(ig)                    # exactly 1.0
+```
+
+### Component GARCH(1,1)
+
+The **Component GARCH** of Engle & Lee (1999) splits the conditional variance into a slowly mean-reverting **permanent** trend ``q_t`` and a fast **transitory** cycle:
+
+```math
+\sigma^2_t = q_t + \alpha(\varepsilon^2_{t-1} - q_{t-1}) + \beta(\sigma^2_{t-1} - q_{t-1})
+```
+
+```math
+q_t = \omega + \rho(q_{t-1} - \omega) + \varphi(\varepsilon^2_{t-1} - \sigma^2_{t-1})
+```
+
+where:
+- ``q_t`` is the permanent component, reverting to the long-run variance ``\omega`` with persistence ``\rho``
+- ``\alpha + \beta`` is the transitory persistence; identification requires ``\rho > \alpha + \beta``
+
+```@example volatility
+cg = estimate_cgarch(ip)
+report(cg)
+```
+
+`component_variances` returns the permanent, transitory, and total conditional-variance series:
+
+```@example volatility
+comp = component_variances(cg)
+(permanent_mean = sum(comp.permanent)/length(comp.permanent),
+ reconstructs_total = maximum(abs.(comp.permanent .+ comp.transitory .- comp.total)))
+```
+
+### APARCH(p,q)
+
+The **Asymmetric Power ARCH** of Ding, Granger & Engle (1993) estimates a free power ``\delta > 0`` of the conditional standard deviation together with a Box-Cox leverage term ``\gamma_i \in (-1, 1)``:
+
+```math
+\sigma^\delta_t = \omega + \sum_{i=1}^q \alpha_i(|\varepsilon_{t-i}| - \gamma_i \varepsilon_{t-i})^\delta + \sum_{j=1}^p \beta_j \sigma^\delta_{t-j}
+```
+
+APARCH nests the standard family exactly: ``(\delta=2, \gamma=0)`` is GARCH, ``(\delta=2, \gamma \ne 0)`` is GJR-GARCH, and ``(\delta=1, \gamma \ne 0)`` is Zakoïan's TARCH. Pin parameters with the `fix_delta` / `fix_gamma` keywords.
+
+```@example volatility
+ap = estimate_aparch(ip, 1, 1)
+report(ap)
+```
+
+```@example volatility
+# recover a plain GARCH(1,1) by pinning δ=2, γ=0
+apg = estimate_aparch(ip, 1, 1; fix_delta=2.0, fix_gamma=0.0)
+(aparch_loglik = apg.loglik, garch_loglik = estimate_garch(ip, 1, 1).loglik)
+```
+
+### Volatility misspecification tests
+
+The **Engle-Ng (1993) sign-bias test** regresses squared standardized residuals on the lagged shock's sign and size to detect asymmetry a symmetric model has missed; the joint statistic is ``(n-1)R^2 \sim \chi^2(3)``.
+
+```@example volatility
+garch = estimate_garch(ip, 1, 1)
+sb = sign_bias_test(garch)
+(joint = sb.joint_statistic, pvalue = sb.joint_pvalue)
+```
+
+The **Nyblom (1989) / Hansen (1992) test** checks parameter stability against a martingale-parameter alternative, returning per-parameter statistics ``L_k`` and the joint ``L_C`` with the Hansen (1992) critical values:
+
+```@example volatility
+ny = nyblom_test(garch)
+(joint = ny.joint, cv_5pct = ny.cv_joint, individual = ny.individual)
+```
+
+### Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `omega` | `T` | Variance intercept (IGARCH/APARCH) or long-run variance ``\omega`` (CGARCH) |
+| `alpha`, `beta` | `Vector{T}`/`T` | ARCH / GARCH coefficients (IGARCH: ``\sum\alpha+\sum\beta=1``) |
+| `rho`, `phi` | `T` | CGARCH permanent persistence ``\rho`` and shock loading ``\varphi`` |
+| `gamma`, `delta` | `Vector{T}`, `T` | APARCH leverage ``\gamma`` and power ``\delta`` |
+| `permanent`, `transitory` | `Vector{T}` | CGARCH long-run / short-run variance components |
+| `conditional_variance` | `Vector{T}` | Fitted ``\sigma^2_t`` |
+| `loglik`, `aic`, `bic` | `T` | Fit statistics |
+| `converged` | `Bool` | Convergence status |
+## Multivariate GARCH (CCC / DCC / BEKK)
+
+The univariate models above describe one series at a time. Cross-asset spillovers, exchange-rate co-volatility, and CoVaR inputs instead need the full **conditional covariance matrix** ``H_t``. The multivariate GARCH estimators fit an ``n``-dimensional return matrix ``Y`` (``T \times n``) and return the ``n \times n \times T`` covariance path ``H_t``, the conditional correlations ``R_t``, and the per-series variances --- all extractable with [`covariances`](@ref), [`correlations`](@ref), and [`variances`](@ref). Every estimator **reuses the univariate [`estimate_garch`](@ref)** for its margins, so the marginal volatilities are exactly the standalone GARCH fits.
+
+Three specifications are provided:
+
+- **CCC** ([`estimate_ccc`](@ref), Bollerslev 1990) --- constant conditional correlation ``R``, ``H_t = D_t R D_t`` with ``D_t = \mathrm{diag}(\sigma_{1t}, …, \sigma_{nt})``. Simplest and fastest; the correlation is the sample correlation of the standardized residuals.
+- **DCC / cDCC** ([`estimate_dcc`](@ref), Engle 2002 / Aielli 2013) --- dynamic correlation via a scalar recursion in ``(a, b)``.
+- **BEKK** ([`estimate_bekk`](@ref), Engle & Kroner 1995) --- scalar or diagonal, modelling the covariance directly with covariance targeting (no separate margins).
+
+```@setup volatility
+using LinearAlgebra
+# Bivariate DCC(1,1) process with GARCH(1,1) margins (fixed seed for the docs build)
+let
+    T, a, b, ρ = 400, 0.05, 0.90, 0.3
+    rng = MersenneTwister(2024)
+    Qbar = [1.0 ρ; ρ 1.0]; Q = copy(Qbar)
+    Y = zeros(T, 2); h = [1.0, 1.0]
+    for t in 1:T
+        d = sqrt.([Q[1,1], Q[2,2]]); R = Q ./ (d * d'); R = (R + R') / 2
+        L = cholesky(Symmetric(R)).L
+        zt = L * randn(rng, 2)
+        e = sqrt.(h) .* zt
+        Y[t, :] = e
+        Q = (1 - a - b) * Qbar + a * (zt * zt') + b * Q; Q = (Q + Q') / 2
+        for i in 1:2; h[i] = 0.02 + 0.08 * e[i]^2 + 0.90 * h[i]; end
+    end
+    global Yret = Y
+end
+```
+
+### Constant Conditional Correlation (CCC)
+
+CCC decouples the problem: fit a univariate GARCH to each column, then hold the standardized-residual correlation fixed.
+
+```math
+H_t = D_t \, R \, D_t, \qquad R = \operatorname{corr}(z), \qquad z_t = D_t^{-1}\varepsilon_t.
+```
+
+```@example volatility
+ccc = estimate_ccc(Yret)      # Yret is a 400×2 return matrix
+report(ccc)
+```
+
+The constant correlation is stored in `ccc.R`; `covariances(ccc)` returns the ``2\times2\times400`` covariance path.
+
+### Dynamic Conditional Correlation (DCC)
+
+DCC lets the correlation evolve while keeping the two-step tractability. Step 1 estimates the same univariate margins; step 2 estimates ``(a, b)`` by maximizing the correlation quasi-likelihood, with the intercept fixed by **correlation targeting** ``\bar{Q} = \tfrac1T\sum_t z_t z_t'``:
+
+```math
+Q_t = (1-a-b)\bar{Q} + a\, z_{t-1}z_{t-1}' + b\, Q_{t-1}, \qquad
+R_t = \operatorname{diag}(Q_t)^{-1/2} Q_t \operatorname{diag}(Q_t)^{-1/2}.
+```
+
+The parameters satisfy ``a, b \ge 0`` and ``a + b < 1`` (enforced by a logit-simplex reparametrization). Setting ``a = b = 0`` reduces DCC exactly to CCC.
+
+```@example volatility
+dcc = estimate_dcc(Yret)
+report(dcc)
+```
+
+```@example volatility
+a, b = coef(dcc)              # correlation dynamics
+Rt = correlations(dcc)        # 2×2×400 time-varying correlations
+extrema(Rt[1, 2, :])          # range of the conditional ρ₁₂ over the sample
+```
+
+Pass `correction=:aielli` for the **cDCC** variant (Aielli 2013), which removes the standard-DCC intercept-targeting bias by replacing ``z_t z_t'`` with ``q^*_t q^{*\prime}_t``, ``q^*_t = \operatorname{diag}(Q_t)^{1/2} z_t``.
+
+### BEKK
+
+BEKK models the covariance directly (no separate margins). With **covariance targeting** the intercept is fixed so the unconditional covariance equals the sample covariance ``\bar\Sigma``; only the news/persistence parameters are estimated, which keeps the recursion positive semidefinite and stable.
+
+```math
+\text{scalar:}\quad H_t = (1-a-b)\bar\Sigma + a\,\varepsilon_{t-1}\varepsilon_{t-1}' + b\,H_{t-1}.
+```
+
+```@example volatility
+bekk = estimate_bekk(Yret)               # scalar (default)
+report(bekk)
+```
+
+The diagonal variant (`kind=:diagonal`) uses ``A, B = \operatorname{diag}(a), \operatorname{diag}(b)`` and ``H_t = \tilde C + A\varepsilon_{t-1}\varepsilon_{t-1}'A + B H_{t-1} B``.
+
+### Accessors, forecasting & plotting
+
+All three models share the same interface:
+
+```@example volatility
+H  = covariances(dcc)     # n×n×T conditional covariances
+R  = correlations(dcc)    # n×n×T conditional correlations (constant broadcast for CCC/BEKK)
+V  = variances(dcc)       # T×n conditional variances (the diagonals)
+fc = forecast(dcc, 10)    # 10-step-ahead covariance forecast, n×n×10
+size(fc)
+```
+
+```julia
+plot_result(dcc; view=:correlations)                  # pairwise conditional correlations over time
+plot_result(dcc; view=:covariance_heatmap, at=400)    # heatmap of Hₜ at a chosen t
+```
+
+### MGARCHModel Return Values
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `Y` | `Matrix{T}` | Data (T×n) |
+| `mu` | `Vector{T}` | Per-series conditional mean |
+| `margins` | `Vector{GARCHModel{T}}` | Univariate GARCH margin fits (empty for BEKK) |
+| `H` | `Array{T,3}` | Conditional covariance path ``H_t`` (n×n×T) |
+| `R` | `Matrix{T}` / `Array{T,3}` | Correlation --- constant (CCC/BEKK) or time-varying (DCC) |
+| `Rbar` | `Matrix{T}` | Unconditional / targeting correlation |
+| `params` | `Vector{T}` | Second-stage parameters (`[a,b]` for DCC/scalar BEKK; empty for CCC) |
+| `param_vcov` | `Matrix{T}` | QML sandwich covariance of `params` |
+| `loglik`, `aic`, `bic` | `T` | Joint Gaussian (quasi) log-likelihood and information criteria |
+| `kind` | `Symbol` | `:ccc`, `:dcc`, or `:bekk` |
+| `correction` | `Symbol` | `:none` or `:aielli` (DCC) |
+| `bekk_kind` | `Symbol` | `:scalar` or `:diagonal` (BEKK) |
+| `converged` | `Bool` | Second-stage convergence status |
 
 ---
 
@@ -724,14 +1126,29 @@ The industrial production growth series exhibits ARCH effects, confirming the ne
 
 ## References
 
+- Aielli, G. P. (2013). Dynamic Conditional Correlation: On Properties and Estimation.
+  *Journal of Business & Economic Statistics*, 31(3), 282--299. [DOI](https://doi.org/10.1080/07350015.2013.771027)
+
 - Black, F. (1976). Studies of Stock Price Volatility Changes.
   *Proceedings of the 1976 Meetings of the American Statistical Association*, 171--177.
 
 - Bollerslev, T. (1986). Generalized Autoregressive Conditional Heteroskedasticity.
   *Journal of Econometrics*, 31(3), 307--327. [DOI](https://doi.org/10.1016/0304-4076(86)90063-1)
 
+- Bollerslev, T. (1990). Modelling the Coherence in Short-Run Nominal Exchange Rates: A Multivariate Generalized ARCH Model.
+  *Review of Economics and Statistics*, 72(3), 498--505. [DOI](https://doi.org/10.2307/2109358)
+
+- Engle, R. F. (2002). Dynamic Conditional Correlation: A Simple Class of Multivariate GARCH Models.
+  *Journal of Business & Economic Statistics*, 20(3), 339--350. [DOI](https://doi.org/10.1198/073500102288618487)
+
+- Engle, R. F., & Kroner, K. F. (1995). Multivariate Simultaneous Generalized ARCH.
+  *Econometric Theory*, 11(1), 122--150. [DOI](https://doi.org/10.1017/S0266466600009063)
+
 - Engle, R. F. (1982). Autoregressive Conditional Heteroscedasticity with Estimates of the Variance of United Kingdom Inflation.
   *Econometrica*, 50(4), 987--1007. [DOI](https://doi.org/10.2307/1912773)
+
+- Engle, R. F., Ghysels, E., & Sohn, B. (2013). Stock Market Volatility and Macroeconomic Fundamentals.
+  *Review of Economics and Statistics*, 95(3), 776--797. [DOI](https://doi.org/10.1162/REST_a_00300)
 
 - Glosten, L. R., Jagannathan, R., & Runkle, D. E. (1993). On the Relation between the Expected Value and the Volatility of the Nominal Excess Return on Stocks.
   *Journal of Finance*, 48(5), 1779--1801. [DOI](https://doi.org/10.1111/j.1540-6261.1993.tb05128.x)

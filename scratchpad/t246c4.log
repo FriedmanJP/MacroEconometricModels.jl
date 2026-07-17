@@ -1,0 +1,16 @@
+Precompiling packages...
+   9908.1 ms  ✓ MacroEconometricModels
+  1 dependency successfully precompiled in 10 seconds. 207 already precompiled.
+┌ Warning: The call to compilecache failed to create a usable precompiled cache file for MacroEconometricModels [14a6ec33-bcac-448e-845f-2fb6769698f1]
+│   exception = Required dependency Base.PkgId(Base.UUID("8bb1440f-4735-579b-a4ab-409b98df4dab"), "DelimitedFiles") failed to load from a cache file.
+└ @ Base loading.jl:2701
+
+=========================== RUN: test/core/test_kalman.jl ===========================
+Test Summary:          | Pass  Total  Time
+Core Kalman operations |   45     45  4.3s
+
+=========================== RUN: test/factor/test_dynamicfactormodel.jl ===========================
+Test Summary:              | Pass  Total  Time
+Dynamic Factor Model Tests |  124    124  6.5s
+
+=== run_one.jl done ===

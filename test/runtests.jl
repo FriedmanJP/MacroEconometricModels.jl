@@ -31,6 +31,7 @@ const TEST_GROUPS = [
         "core/test_edge_cases.jl",
         "core/test_examples.jl",
         "core/test_covariance.jl",
+        "core/test_lrvar.jl",
         "core/test_internal_helpers.jl",
         "core/test_error_paths.jl",
         "core/test_display_backends.jl",
@@ -54,6 +55,7 @@ const TEST_GROUPS = [
         "var/test_fevd.jl",
         "var/test_hd.jl",
         "vecm/test_vecm.jl",
+        "vecm/test_vecm_restrictions.jl", # EV-38 (#446)
         "preg/test_panel_iv.jl",          # moved from the ceiling ARIMA group to rebalance (#127)
     ]),
     # Group 4: LP & Factor Models & Nowcasting & DiD
@@ -79,28 +81,62 @@ const TEST_GROUPS = [
         "teststat/test_structural_break.jl",
         "teststat/test_fourier.jl",
         "teststat/test_dfgls.jl",
+        "teststat/test_hegy.jl",   # EV-29 (#437): HEGY seasonal unit roots + ERS point-optimal
         "teststat/test_lm_unitroot.jl",
         "teststat/test_adf_2break.jl",
         "teststat/test_gregory_hansen.jl",
+        "teststat/test_panel_unitroot_firstgen.jl",   # EV-20 (#428): LLC/IPS/Breitung/Fisher/Hadri
+        "teststat/test_panel_cointegration.jl",       # EV-21 (#429): Pedroni/Kao/Westerlund/Fisher-Johansen
         "arima/test_arima.jl",
         "arima/test_arima_coverage.jl",
+        "arima/test_arfima.jl",   # EV-13 (#421): ARFIMA + GPH + local Whittle
+        "statespace/test_statespace.jl",   # EV-37 (#445): public state-space Kalman MLE + TVP regression
         "teststat/test_granger.jl",
+        "teststat/test_dumitrescu_hurlin.jl",   # EV-24 (#432): DH panel Granger non-causality
+        "teststat/test_equality.jl",   # EV-34 (#442): equality-of-distribution + rank correlations
         "teststat/test_model_comparison.jl",
         "teststat/test_normality.jl",
+        "teststat/test_edf.jl",   # EV-26 (#434): EDF goodness-of-fit battery (KS/Lilliefors/CvM/AD/Watson)
+        "teststat/test_bds.jl",   # EV-28 (#436): BDS iid/independence test
+        "teststat/test_bubble.jl",   # EV-30 (#438): SADF/GSADF explosive-bubble detection
+
         "gmm/test_gmm.jl",
         "gmm/test_smm.jl",
         "data/test_data.jl",
         "pvar/test_pvar.jl",
         "reg/test_reg.jl",
+        "reg/test_ivkclass.jl",    # EV-36 (#444): IV k-class — LIML / Fuller / generic k-class
+        "reg/test_penalized.jl",   # EV-03 (#411): ridge / LASSO / elastic net
+        "reg/test_selection.jl",   # EV-04 (#412): stepwise / best-subset / GETS
+        "reg/test_tobit.jl",       # EV-17 (#425): Tobit + truncated regression
+        "reg/test_heckman.jl",     # EV-18 (#426): Heckman sample-selection (two-step + MLE)
+        "reg/test_robust.jl",      # EV-40 (#448): robust regression — Huber/bisquare M + Yohai MM
+        "system/test_system.jl",   # EV-35 (#443): SUR / 3SLS systems estimation
+        "reg/test_reg_diagnostics.jl",   # EV-31 (#439): White/BP/Glejser/Harvey/BG/RESET
+        "reg/test_stability.jl",         # EV-32 (#440): recursive residuals / CUSUM(SQ) / Chow / influence
         "reg/test_ordered.jl",
         "reg/test_multinomial.jl",
+        "midas/test_midas.jl",
+        "ardl/test_ardl.jl",   # EV-08 (#416): ARDL + PSS bounds test
+        "ardl/test_nardl.jl",  # EV-09 (#417): nonlinear ARDL (NARDL) + dynamic multipliers
+        "ardl/test_pmg.jl",    # EV-23 (#431): panel ARDL — PMG / MG / DFE + Hausman
+        "fceval/test_fceval.jl",   # EV-39 (#447): forecast eval metrics + DM/CW/MZ/encompassing + combination
+        "cointreg/test_cointreg.jl",   # EV-10 (#418): FMOLS/CCR/DOLS cointegrating regression
+        "teststat/test_cointegration_resid.jl",   # EV-11 (#419): Engle-Granger/Phillips-Ouliaris/Hansen-Lc/Park
+        "teststat/test_variance_ratio.jl",   # EV-27 (#435): Lo-MacKinlay/Chow-Denning/Wright/Kim variance-ratio tests
+        "cointreg/test_panel_cointreg.jl",   # EV-22 (#430): panel FMOLS/DOLS (group-mean + pooled)
         "preg/test_panel_reg.jl",
+        "preg/test_pcse_prais.jl",   # EV-25 (#433): Beck-Katz PCSE + Prais-Winsten AR(1)
         "preg/test_panel_tests.jl",
     ]),
     # Group 6: Volatility & Non-Gaussian & Plotting & Filters & Spectral
     ("Volatility & Filters" => [
         "volatility/test_volatility.jl",
         "volatility/test_volatility_coverage.jl",
+        "volatility/test_garch_midas.jl",   # EV-02 (#410): GARCH-MIDAS long/short-run components
+        "volatility/test_figarch.jl",       # EV-14 (#422): FIGARCH/FIEGARCH fractionally-integrated volatility
+        "volatility/test_garch_family.jl",  # EV-15 (#423): IGARCH/Component-GARCH/APARCH + sign-bias/Nyblom tests
+        "mgarch/test_mgarch.jl",            # EV-16 (#424): multivariate GARCH — CCC/DCC/BEKK
         "nongaussian/test_nongaussian_svar.jl",
         "nongaussian/test_nongaussian_internals.jl",
         "plotting/test_plot_result.jl",
@@ -108,6 +144,14 @@ const TEST_GROUPS = [
         "filters/test_x13.jl",
         "filters/test_x13_coverage.jl",
         "spectral/test_spectral.jl",
+    ]),
+    # Nonlinear time series (EV-05 threshold/SETAR; EV-06 STAR & EV-07 Markov
+    # switching join this group).
+    ("Nonlinear" => [
+        "nonlinear/test_threshold.jl",
+        "nonlinear/test_star.jl",       # EV-06 smooth-transition (STAR)
+        "nonlinear/test_markov_switching.jl",  # EV-07 Markov-switching regression / MS-AR
+        "nonparametric/test_nonparametric.jl",  # EV-33 (#441): kernel density / kernel-reg / LOWESS
     ]),
     # Group 7 split into three so the DSGE critical path balances across processes (#123):
     # the heavy test_ha_dsge.jl (~65% of the old group) runs alone.
@@ -370,6 +414,7 @@ else
         @testset "FEVD" begin include("var/test_fevd.jl") end
         @testset "Historical Decomposition" begin include("var/test_hd.jl") end
         @testset "VECM" begin include("vecm/test_vecm.jl") end
+        @testset "VECM Restriction Tests" begin include("vecm/test_vecm_restrictions.jl") end
 
         # Group 4: LP & Factor & Nowcast
         @testset "Local Projections" begin include("lp/test_lp.jl") end
@@ -392,22 +437,42 @@ else
         @testset "Structural Break & Panel Unit Root" begin include("teststat/test_structural_break.jl") end
         @testset "Fourier Unit Root Tests" begin include("teststat/test_fourier.jl") end
         @testset "DF-GLS Unit Root Test" begin include("teststat/test_dfgls.jl") end
+        @testset "HEGY Seasonal Unit Root + ERS Test" begin include("teststat/test_hegy.jl") end   # EV-29 (#437)
         @testset "LM Unit Root Test" begin include("teststat/test_lm_unitroot.jl") end
         @testset "Two-Break ADF Test" begin include("teststat/test_adf_2break.jl") end
         @testset "Gregory-Hansen Cointegration Test" begin include("teststat/test_gregory_hansen.jl") end
+        @testset "First-Gen Panel Unit Root Tests" begin include("teststat/test_panel_unitroot_firstgen.jl") end
+        @testset "Panel Cointegration Tests" begin include("teststat/test_panel_cointegration.jl") end
         @testset "ARIMA Models" begin include("arima/test_arima.jl") end
         @testset "ARIMA Coverage" begin include("arima/test_arima_coverage.jl") end
+        @testset "ARFIMA (long memory)" begin include("arima/test_arfima.jl") end
+        @testset "State-Space Module" begin include("statespace/test_statespace.jl") end   # EV-37 (#445)
         @testset "Granger Causality Tests" begin include("teststat/test_granger.jl") end
+        @testset "Equality & Rank Correlation Tests" begin include("teststat/test_equality.jl") end   # EV-34 (#442)
         @testset "Model Comparison Tests" begin include("teststat/test_model_comparison.jl") end
         @testset "Multivariate Normality Tests" begin include("teststat/test_normality.jl") end
+        @testset "EDF Goodness-of-Fit Battery" begin include("teststat/test_edf.jl") end  # EV-26 (#434)
+        @testset "BDS Independence Test" begin include("teststat/test_bds.jl") end  # EV-28 (#436)
+        @testset "SADF/GSADF Bubble Detection" begin include("teststat/test_bubble.jl") end  # EV-30 (#438)
         @testset "GMM Estimation" begin include("gmm/test_gmm.jl") end
         @testset "SMM Estimation" begin include("gmm/test_smm.jl") end
         @testset "Data Module" begin include("data/test_data.jl") end
         @testset "Panel VAR" begin include("pvar/test_pvar.jl") end
         @testset "Cross-Sectional Models" begin include("reg/test_reg.jl") end
+        @testset "SUR & 3SLS" begin include("system/test_system.jl") end
+        @testset "Reg Diagnostics" begin include("reg/test_reg_diagnostics.jl") end
+        @testset "Reg Stability" begin include("reg/test_stability.jl") end
         @testset "Ordered Models" begin include("reg/test_ordered.jl") end
         @testset "Multinomial Models" begin include("reg/test_multinomial.jl") end
+        @testset "MIDAS Regression" begin include("midas/test_midas.jl") end
+        @testset "ARDL & Bounds Test" begin include("ardl/test_ardl.jl") end
+        @testset "NARDL" begin include("ardl/test_nardl.jl") end
+        @testset "Panel ARDL (PMG/MG/DFE)" begin include("ardl/test_pmg.jl") end
+        @testset "Forecast Evaluation" begin include("fceval/test_fceval.jl") end
+        @testset "Residual-Based Cointegration Tests" begin include("teststat/test_cointegration_resid.jl") end
+        @testset "Variance-Ratio Tests" begin include("teststat/test_variance_ratio.jl") end   # EV-27 (#435): Lo-MacKinlay/Chow-Denning/Wright/Kim
         @testset "Panel Regression" begin include("preg/test_panel_reg.jl") end
+        @testset "PCSE + Prais-Winsten" begin include("preg/test_pcse_prais.jl") end   # EV-25 (#433)
         @testset "Panel Specification Tests" begin include("preg/test_panel_tests.jl") end
         @testset "Panel IV" begin include("preg/test_panel_iv.jl") end
         @testset "Panel Nonlinear" begin include("preg/test_panel_nonlinear.jl") end
@@ -415,6 +480,10 @@ else
         # Group 6: Volatility & Filters
         @testset "Volatility Models (ARCH/GARCH/SV)" begin include("volatility/test_volatility.jl") end
         @testset "Volatility Coverage" begin include("volatility/test_volatility_coverage.jl") end
+        @testset "GARCH-MIDAS" begin include("volatility/test_garch_midas.jl") end
+        @testset "FIGARCH/FIEGARCH" begin include("volatility/test_figarch.jl") end
+        @testset "GARCH Family (IGARCH/CGARCH/APARCH)" begin include("volatility/test_garch_family.jl") end
+        @testset "Multivariate GARCH (CCC/DCC/BEKK)" begin include("mgarch/test_mgarch.jl") end
         @testset "Non-Gaussian SVAR Identification" begin include("nongaussian/test_nongaussian_svar.jl") end
         @testset "Non-Gaussian Internals" begin include("nongaussian/test_nongaussian_internals.jl") end
         @testset "Plotting" begin include("plotting/test_plot_result.jl") end
@@ -422,6 +491,15 @@ else
         @testset "X-13ARIMA-SEATS" begin include("filters/test_x13.jl") end
         @testset "X-13 Coverage" begin include("filters/test_x13_coverage.jl") end
         @testset "Spectral Analysis" begin include("spectral/test_spectral.jl") end
+
+        # Nonlinear time series (EV-05 threshold/SETAR)
+        @testset "Nonlinear (Threshold/SETAR)" begin include("nonlinear/test_threshold.jl") end
+        # Smooth-transition autoregression (EV-06 STAR)
+        @testset "Nonlinear (STAR)" begin include("nonlinear/test_star.jl") end
+        # Markov-switching regression / MS-AR (EV-07)
+        @testset "Nonlinear (Markov-Switching)" begin include("nonlinear/test_markov_switching.jl") end
+        # Nonparametric regression & density (EV-33, #441)
+        @testset "Nonparametric" begin include("nonparametric/test_nonparametric.jl") end
 
         # Group 7 split into three (#123)
         @testset "DSGE Core" begin

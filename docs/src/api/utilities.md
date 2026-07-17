@@ -30,6 +30,18 @@ register_cov_estimator!
 
 ---
 
+## Long-Run Variance Toolkit
+
+```@docs
+lrvar
+lrcov
+lrcov_oneside
+varhac
+optimal_bandwidth_nw94
+```
+
+---
+
 ## Display and References
 
 ```@autodocs

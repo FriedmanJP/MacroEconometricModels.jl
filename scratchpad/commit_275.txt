@@ -1,0 +1,26 @@
+test(display): [T176] goldens + invariants regression harness (#275)
+
+Add a dedicated `test/display/` group that renders every result type through one
+path and locks the display layer against silent regressions — the terminal piece
+of the Stage-11 (report display quality) batch.
+
+- `display_helpers.jl`: `_render` (report(io,x) with a show/MIME fallback, pinned
+  to the :text backend at 24×80, no color — no redirect_stdout, which is broken for
+  IOBuffer on 1.12 and thread-unsafe under the runner; this is why the bespoke
+  VAR/VECM/DSGEEstimation report bodies needed io-plumbing in #268), `_check_golden`
+  / `_canonicalize` (mask volatile numeric cells + column padding → the golden locks
+  STRUCTURE, immune to last-ulp BLAS/OS drift), and 19 deterministic fixtures.
+- `test_display_invariants.jl` (124 checks): raw-string invariants locking the batch
+  — S1 no "omitted" crop footer, S2 no negative-zero / no raw-exponential leak, S7 no
+  degenerate blank band, S8 no raw true/false, stars on significant fixtures, `(ref)`
+  row dashed with no star.
+- `test_display_goldens.jl` (20 checks) + `goldens/*.txt`: canonicalized snapshots of
+  all 19 fixtures (VAR/VECM/DSGE bespoke report(io) bodies, every _coef_table consumer,
+  DiD event-study reference row, ADF/Johansen/factor/LP/BVAR-forecast/normality).
+  Regenerate wholesale with MACRO_UPDATE_GOLDENS=1.
+- runtests.jl: register the "Display" group (TEST_GROUPS + _expected_rank + sequential
+  fallback).
+
+Local: invariants 124/124, goldens 20/20 green (compare mode).
+
+Claude-Session: https://claude.ai/code/session_01QZizX88NDsBZrBgdqPcLQp

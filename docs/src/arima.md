@@ -589,6 +589,74 @@ The ADF test rejects the unit root null at the 1% level, confirming that CPI inf
 
 ---
 
+## ARFIMA and Long Memory
+
+Standard ARIMA differencing is restricted to integer orders: a series is either I(0) or I(1). Many economic series --- inflation, realized volatility, interest-rate spreads --- exhibit *long memory*: an autocorrelation function that decays hyperbolically (``\rho(k) \sim k^{2d-1}``) rather than geometrically, too slowly for a stationary ARMA yet without a unit root. The **ARFIMA(p, d, q)** model of Granger, Joyeux, and Hosking captures this with a *fractional* integration order ``d \in (-0.5, 0.5)``:
+
+```math
+\phi(L)\,(1-L)^d\,(y_t - \mu) = \theta(L)\,\varepsilon_t,
+```
+
+where the fractional-difference operator is defined by the binomial expansion
+
+```math
+(1-L)^d = \sum_{k=0}^{\infty} \pi_k L^k, \qquad
+\pi_0 = 1,\quad \pi_k = \pi_{k-1}\,\frac{k-1-d}{k}.
+```
+
+For ``0 < d < 0.5`` the process is stationary but long-range dependent; for ``-0.5 < d < 0`` it is *anti-persistent* (intermediate memory). The weights ``\pi_k`` decay only as ``k^{-1-d}``, so the filter has effectively infinite memory.
+
+### Estimating the fractional order
+
+`estimate_arfima(y, p, q; method)` jointly estimates ``d`` and the ARMA parameters. Two methods are available:
+
+- `:css` (default) --- conditional sum of squares. The series is fractionally differenced and the ARMA conditional likelihood is maximized. Fast, and robust for moderate samples.
+- `:mle` --- exact Gaussian ML via the Durbin--Levinson recursion over the Sowell (1992) / Hosking (1981) ARFIMA autocovariances. More accurate but ``O(T^2)``.
+
+The order ``d`` is kept strictly inside ``(-0.5, 0.5)`` through an internal logit reparameterization, and its standard error is reported via the delta method.
+
+```@example arima
+using MacroEconometricModels
+
+nile = load_example(:nile)         # annual Nile flow at Aswan, 1871–1970
+flow = nile.data[:, 1]
+
+m = estimate_arfima(flow, 0, 0; method=:css)
+report(m)
+```
+
+### Semiparametric estimators
+
+Two log-periodogram estimators estimate ``d`` *without* specifying the short-memory ARMA structure, and test ``H_0: d = 0`` (no long memory):
+
+- `gph_test(y; m, trim)` --- the Geweke--Porter-Hudak (1983) regression of ``\log I(\lambda_j)`` on ``-\log\!\big(4\sin^2(\lambda_j/2)\big)`` over the first ``m`` Fourier frequencies (default ``m = \lfloor\sqrt{T}\rfloor``). The estimate ``\hat d`` is the negated slope.
+- `local_whittle(y; m)` --- the Robinson (1995) Gaussian semiparametric estimator, minimizing the local Whittle objective over the same frequency band.
+
+```@example arima
+g = gph_test(flow)
+report(g)
+```
+
+```@example arima
+lw = local_whittle(flow)
+report(lw)
+```
+
+Both flag positive long memory in the Nile series, with ``\hat d \approx 0.4`` --- the classic result for this benchmark long-memory series.
+
+### Forecasting
+
+`forecast(::ARFIMAModel, h)` propagates the point forecast through the truncated ``\mathrm{AR}(\infty)`` representation ``\pi(L) = \phi(L)(1-L)^d/\theta(L)``, and accumulates forecast-error variance from the ``\mathrm{MA}(\infty)`` ``\psi``-weights.
+
+```@example arima
+fc = forecast(m, 10)
+report(fc)
+```
+
+The shared filter helpers `MacroEconometricModels._frac_diff_weights(d, K)` and `_frac_diff(y, d)` (with an ``O(T\log T)`` FFT path, Jensen--Nielsen 2014) are also used by the FIGARCH long-memory volatility model.
+
+---
+
 ## Common Pitfalls
 
 1. **Fitting ARMA to a non-stationary series**: Estimating ARMA(p,q) on an I(1) level series produces spurious coefficient estimates and unreliable forecasts. Always test for unit roots with `adf_test` or `kpss_test` before estimation, and use `estimate_arima` with ``d \geq 1`` for integrated processes.
@@ -602,6 +670,8 @@ The ADF test rejects the unit root null at the 1% level, confirming that CPI inf
 5. **ARMA order identifiability**: An ARMA(p,q) model with common roots in ``\phi(z)`` and ``\theta(z)`` is not identified --- the common factor cancels. If `select_arima_order` returns similar IC values for ARMA(1,1) and AR(1), the MA component may not be contributing meaningfully. Inspect coefficient significance via `report()` before choosing the larger model.
 
 6. **Forecast integration for ARIMA**: Forecasts from `forecast(::ARIMAModel, h)` are automatically integrated back to the original level scale. The returned `forecast` field contains level forecasts, not differenced forecasts. Standard errors account for the cumulative variance from integration.
+
+7. **ARFIMA ``d``/AR identification**: In an ARFIMA(p, d, q) model, the fractional order ``d`` and the AR persistence both govern long-run behavior and are only weakly separable in moderate samples. Jointly estimated ``\hat d`` and ``\hat\phi`` can trade off substantially at ``T`` of a few hundred; use longer samples, or the semiparametric `gph_test` / `local_whittle` estimators (which do not require specifying the ARMA part) to corroborate ``\hat d``.
 
 ---
 
@@ -618,6 +688,21 @@ The ADF test rejects the unit root null at the 1% level, confirming that CPI inf
 
 - Durbin, J., & Koopman, S. J. (2012). *Time Series Analysis by State Space Methods*. 2nd ed.
   Oxford: Oxford University Press. [DOI](https://doi.org/10.1093/acprof:oso/9780199641178.001.0001)
+
+- Geweke, J., & Porter-Hudak, S. (1983). The Estimation and Application of Long Memory Time Series Models.
+  *Journal of Time Series Analysis*, 4(4), 221-238. [DOI](https://doi.org/10.1111/j.1467-9892.1983.tb00371.x)
+
+- Hosking, J. R. M. (1981). Fractional Differencing.
+  *Biometrika*, 68(1), 165-176. [DOI](https://doi.org/10.1093/biomet/68.1.165)
+
+- Jensen, A. N., & Nielsen, M. Ø. (2014). A Fast Fractional Difference Algorithm.
+  *Journal of Time Series Analysis*, 35(5), 428-436. [DOI](https://doi.org/10.1111/jtsa.12074)
+
+- Robinson, P. M. (1995). Gaussian Semiparametric Estimation of Long Range Dependence.
+  *The Annals of Statistics*, 23(5), 1630-1661. [DOI](https://doi.org/10.1214/aos/1176324317)
+
+- Sowell, F. (1992). Maximum Likelihood Estimation of Stationary Univariate Fractionally Integrated Time Series Models.
+  *Journal of Econometrics*, 53(1-3), 165-188. [DOI](https://doi.org/10.1016/0304-4076(92)90084-5)
 
 - Hamilton, J. D. (1994). *Time Series Analysis*.
   Princeton, NJ: Princeton University Press. ISBN 978-0-691-04289-3.

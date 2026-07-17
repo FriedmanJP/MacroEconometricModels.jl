@@ -10,7 +10,8 @@
 - **Specification tests**: Hausman, Breusch-Pagan LM, F-test for FE, Pesaran CD, Wooldridge AR, Modified Wald
 
 For dynamic panels with multivariate feedback, see [Panel VAR](@ref pvar_page).
-- **Covariance estimators**: Entity-cluster (Arellano 1987), time-cluster, two-way cluster (Cameron-Gelbach-Miller 2011), Driscoll-Kraay (1998) HAC
+- **Covariance estimators**: Entity-cluster (Arellano 1987), time-cluster, two-way cluster (Cameron-Gelbach-Miller 2011), Driscoll-Kraay (1998) HAC, Beck-Katz (1995) panel-corrected SE
+- **Serial correlation**: Prais-Winsten AR(1) FGLS (`ar1=:common`/`:panel_specific`)
 
 ```@setup preg
 using MacroEconometricModels, Random, DataFrames
@@ -240,14 +241,69 @@ arellano_bond_ar_test(m_ab; order=2)   # expect a non-significant p-value
 The coefficient covariance (`vcov(m)`) is the full Windmeijer-corrected GMM covariance, so
 joint Wald tests across coefficients use the cross-coefficient (off-diagonal) terms.
 
+### Panel-Corrected SEs and Prais-Winsten AR(1)
+
+For **time-series-cross-section (TSCS)** panels — a modest number of units observed
+over many periods (``T \gtrsim N``) with **contemporaneous cross-section
+correlation** — Beck & Katz (1995) recommend **panel-corrected standard errors
+(PCSE)**. PCSE forms the ``N \times N`` contemporaneous residual covariance
+``\hat{\Sigma}`` and sandwiches it as ``(X'X)^{-1} [\sum_t X_t' \hat{\Sigma} X_t] (X'X)^{-1}``.
+Point estimates are unchanged; only the covariance differs:
+
+```@example preg
+m_pcse = estimate_xtreg(pd_pwt, :lngdppc, [:hc, :lnk]; cov_type=:pcse)
+report(m_pcse)
+```
+
+Unbalanced panels choose how ``\hat{\Sigma}`` is accumulated with `pcse_unbalanced`:
+`:casewise` (default — only fully-observed periods enter ``\hat{\Sigma}``) or
+`:pairwise` (``\hat{\Sigma}_{ij}`` over the overlapping periods of ``i`` and ``j``):
+
+```@example preg
+m_pcse_pw = estimate_xtreg(pd_pwt, :lngdppc, [:hc, :lnk];
+                           cov_type=:pcse, pcse_unbalanced=:pairwise)
+nothing # hide
+```
+
+When the idiosyncratic error is serially correlated, add a **Prais-Winsten AR(1)**
+FGLS transform via `ar1`. The pipeline is **PW transform ``\to`` estimate ``\to``
+PCSE**: each unit's series is quasi-differenced (``x_{it} - \hat{\rho}\, x_{i,t-1}``),
+with the first observation weighted by ``\sqrt{1-\hat{\rho}^2}`` (dropping that
+weight silently reverts to Cochrane-Orcutt). Use `ar1=:common` for one pooled
+``\hat{\rho}`` or `ar1=:panel_specific` for per-unit ``\hat{\rho}_i``. Unlike `:pcse`
+alone, the AR(1) FGLS **does** change the point estimates:
+
+```@example preg
+m_ar1 = estimate_xtreg(pd_pwt, :lngdppc, [:hc, :lnk]; cov_type=:pcse, ar1=:common)
+report(m_ar1)
+```
+
+**Which covariance for which panel?**
+
+| Situation | Recommended | Why |
+|-----------|-------------|-----|
+| ``T \gtrsim N``, contemporaneous cross-section correlation | `:pcse` | Beck-Katz (1995) TSCS standard |
+| ``T \gtrsim N``, serial **and** contemporaneous correlation | `:pcse` + `ar1=:common` | PW purges AR(1); PCSE handles cross-section |
+| Large ``T``, spatial + serial dependence | `:driscoll_kraay` | HAC across time, robust to cross-section |
+| Many entities, within-entity serial correlation | `:cluster` | Entity clusters absorb arbitrary within-``i`` dependence |
+| Two-dimensional clustering | `:twoway` | Cameron-Gelbach-Miller (2011) |
+
+!!! note "T ≥ N for casewise PCSE"
+    The casewise ``\hat{\Sigma}`` is full rank only when the number of
+    fully-observed periods is at least ``N``. With ``T < N`` it is singular;
+    `estimate_xtreg` warns and you should prefer `pcse_unbalanced=:pairwise` or a
+    longer panel (``\hat{\Sigma}`` is never inverted, so no garbage is returned).
+
 ### Keywords
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
 | `model` | `Symbol` | `:fe` | Estimator: `:fe`, `:re`, `:fd`, `:between`, `:cre`, `:ab`, `:bb` |
 | `twoway` | `Bool` | `false` | Include time fixed effects (FE only) |
-| `cov_type` | `Symbol` | `:cluster` | Covariance: `:ols`, `:cluster`, `:twoway`, `:driscoll_kraay` |
+| `cov_type` | `Symbol` | `:cluster` | Covariance: `:ols`, `:cluster`, `:twoway`, `:driscoll_kraay`, `:pcse` |
 | `bandwidth` | `Int` | auto | Driscoll-Kraay bandwidth (auto = Newey-West optimal) |
+| `pcse_unbalanced` | `Symbol` | `:casewise` | `:pcse` unbalanced handling: `:casewise` or `:pairwise` |
+| `ar1` | `Symbol` | `:none` | Prais-Winsten AR(1): `:none`, `:common`, `:panel_specific` (`:fe`/`:re`/`:cre`) |
 
 ### Return Values
 

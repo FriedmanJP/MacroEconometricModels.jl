@@ -10,6 +10,119 @@ DF-GLS unit root test with ERS point optimal statistic and MGLS statistics.
 
 using LinearAlgebra, Statistics
 
+# =============================================================================
+# Shared ERS (Elliott-Rothenberg-Stock 1996) GLS-detrending + point-optimal Pt
+# -----------------------------------------------------------------------------
+# The feasible point-optimal statistic Pt used to live *inline* inside
+# `dfgls_test`. EV-29 (#437) surfaces a standalone `ers_test`; to guarantee the
+# two computations can never drift, the GLS quasi-differencing, the SSR-based Pt
+# statistic, and the long-run-variance estimate are factored into the `_`
+# helpers below. BOTH `dfgls_test` and `ers_test` call `_ers_pt_statistic`, so
+# `ers_test(y; trend=false).P_T == dfgls_test(y; regression=:constant).pt_statistic`
+# bit-for-bit on the same data. Do NOT re-inline these.
+# =============================================================================
+
+"""
+    _ers_gls_detrend(y, regression) -> NamedTuple
+
+GLS (local-to-unity) detrending of `y` at c̄ = -7 (constant) / -13.5 (trend),
+following Elliott, Rothenberg & Stock (1996). Returns the detrended series
+`y_d`, the fitted deterministic coefficients `delta`, the original/quasi-
+differenced regressor matrices, the quasi-differenced series `y_qd`, and the
+localizing constant `c_bar`/`alpha`. Internal helper (not exported).
+"""
+function _ers_gls_detrend(y::AbstractVector{T}, regression::Symbol) where {T<:AbstractFloat}
+    n = length(y)
+    c_bar = regression == :constant ? T(-7) : T(-13.5)
+    alpha = one(T) + c_bar / n
+
+    # Quasi-difference y
+    y_qd = copy(y)
+    y_qd[2:end] = y[2:end] - alpha * y[1:end-1]
+
+    # Deterministic regressors: original and quasi-differenced
+    if regression == :constant
+        Z_orig = reshape(ones(T, n), :, 1)
+        z_qd = ones(T, n)
+        z_qd[2:end] .= 1 - alpha
+        Z_qd = reshape(z_qd, :, 1)
+    else
+        Z_orig = hcat(ones(T, n), T.(1:n))
+        z1 = ones(T, n)
+        z1[2:end] .= 1 - alpha
+        z2 = T.(1:n)
+        z2[2:end] = z2[2:end] - alpha * z2[1:end-1]
+        Z_qd = hcat(z1, z2)
+    end
+
+    # GLS coefficients from QD regression, applied to original Z
+    delta = Z_qd \ y_qd
+    y_d = y - Z_orig * delta
+    return (; y_d, delta, Z_orig, Z_qd, y_qd, c_bar, alpha, n)
+end
+
+"""
+    _ers_lrv(y_d, n) -> f00
+
+Long-run variance at the zero frequency of `Δ(y_d)` via an autoregressive
+(AR) spectral estimate with `k = ⌊4(n/100)^{2/9}⌋` lags. This is the SAME
+estimate DF-GLS/Ng-Perron use, reused verbatim so the ERS Pt matches the
+value embedded in `DFGLSResult`. Internal helper (not exported).
+"""
+function _ers_lrv(y_d::AbstractVector{T}, n::Int) where {T<:AbstractFloat}
+    k_ar = floor(Int, 4 * (n / 100)^(2 / 9))
+    dy_d_full = diff(y_d)
+
+    if k_ar > 0 && length(dy_d_full) > k_ar + 5
+        Y_ar = dy_d_full[(k_ar+1):end]
+        X_ar = hcat([dy_d_full[(k_ar+1-j):(end-j)] for j in 1:k_ar]...)
+        rho_ar = X_ar \ Y_ar
+        resid_ar = Y_ar - X_ar * rho_ar
+        s2 = var(resid_ar; corrected=true)
+        ar_sum = 1 - sum(rho_ar)
+        return s2 / ar_sum^2
+    else
+        return var(dy_d_full; corrected=true)
+    end
+end
+
+"""
+    _ers_pt_statistic(y, regression) -> NamedTuple
+
+ERS (1996) feasible point-optimal statistic
+`Pt = (S(c̄) − ᾱ·S(1)) / ω̂²`, where `S(c̄)` is the SSR of the GLS quasi-
+differenced regression at `ᾱ = 1 + c̄/T` and `S(1)` the SSR of the a=1
+(unit-root) quasi-differenced regression, and
+`ω̂²` the long-run variance from [`_ers_lrv`](@ref). Returns `pt_stat`, `f00`,
+the detrended series `y_d`, `delta`, `c_bar`, `alpha`, and `n`. Shared by
+`dfgls_test` and `ers_test` (EV-29). Internal helper (not exported).
+"""
+function _ers_pt_statistic(y::AbstractVector{T}, regression::Symbol) where {T<:AbstractFloat}
+    d = _ers_gls_detrend(y, regression)
+    ssr_qd = sum((d.y_qd - d.Z_qd * d.delta) .^ 2)
+    # S(1): SSR of the a=1 (unit-root) quasi-differenced regression, per ERS (1996).
+    # The a=1 quasi-difference of a series x is (x₁, x₂−x₁, …, x_T−x_{T-1}); apply it
+    # to y and to each column of Z_orig. (Using the OLS-detrended LEVELS SSR here is
+    # O(T²), inverts the sign of Pt, and spuriously rejects the unit-root null.)
+    y_q1 = copy(y)
+    y_q1[2:end] = y[2:end] - y[1:end-1]
+    Z_q1 = copy(d.Z_orig)
+    Z_q1[2:end, :] = d.Z_orig[2:end, :] - d.Z_orig[1:end-1, :]
+    ssr_1 = sum((y_q1 - Z_q1 * (Z_q1 \ y_q1)) .^ 2)
+    f00 = _ers_lrv(d.y_d, d.n)
+    pt_stat = (ssr_qd - d.alpha * ssr_1) / f00
+    return (; pt_stat, f00, y_d = d.y_d, delta = d.delta, c_bar = d.c_bar, alpha = d.alpha, n = d.n)
+end
+
+# Piecewise-linear p-value for a left-tailed statistic against (1%,5%,10%) CVs.
+function _ers_pt_pvalue(stat::T, cv::Dict{Int,T}) where {T<:AbstractFloat}
+    if stat <= cv[1]; T(0.001)
+    elseif stat <= cv[5]; T(0.01) + (stat - cv[1]) / (cv[5] - cv[1]) * T(0.04)
+    elseif stat <= cv[10]; T(0.05) + (stat - cv[5]) / (cv[10] - cv[5]) * T(0.05)
+    else; T(0.20)
+    end
+end
+
 """
     dfgls_test(y; regression=:constant, lags=:aic, max_lags=nothing) -> DFGLSResult
 
@@ -41,32 +154,12 @@ function dfgls_test(y::AbstractVector{T};
 
     max_p = isnothing(max_lags) ? floor(Int, 12 * (n / 100)^0.25) : max_lags
 
-    # GLS detrending (ERS 1996)
-    c_bar = regression == :constant ? T(-7) : T(-13.5)
-    alpha = one(T) + c_bar / n
-
-    # Quasi-difference y
-    y_qd = copy(y)
-    y_qd[2:end] = y[2:end] - alpha * y[1:end-1]
-
-    # Deterministic regressors: original and quasi-differenced
-    if regression == :constant
-        Z_orig = reshape(ones(T, n), :, 1)
-        z_qd = ones(T, n)
-        z_qd[2:end] .= 1 - alpha
-        Z_qd = reshape(z_qd, :, 1)
-    else
-        Z_orig = hcat(ones(T, n), T.(1:n))
-        z1 = ones(T, n)
-        z1[2:end] .= 1 - alpha
-        z2 = T.(1:n)
-        z2[2:end] = z2[2:end] - alpha * z2[1:end-1]
-        Z_qd = hcat(z1, z2)
-    end
-
-    # GLS coefficients from QD regression, applied to original Z
-    delta = Z_qd \ y_qd
-    y_d = y - Z_orig * delta
+    # GLS detrending + ERS point-optimal Pt (shared helper — EV-29).
+    ers = _ers_pt_statistic(y, regression)
+    y_d = ers.y_d
+    f00 = ers.f00
+    pt_stat = ers.pt_stat
+    c_bar = ers.c_bar
 
     # ADF on detrended series (no deterministic terms)
     dy_d = diff(y_d)
@@ -119,29 +212,6 @@ function dfgls_test(y::AbstractVector{T};
         end
     end
 
-    # ERS Pt statistic
-    ssr_qd = sum((y_qd - Z_qd * delta).^2)
-    delta_ols = Z_orig \ y
-    ssr_ols = sum((y - Z_orig * delta_ols).^2)
-
-    # Spectral density at zero via AR approximation on first differences of detrended series
-    k_ar = floor(Int, 4 * (n / 100)^(2 / 9))
-    dy_d_full = diff(y_d)
-
-    if k_ar > 0 && length(dy_d_full) > k_ar + 5
-        Y_ar = dy_d_full[(k_ar+1):end]
-        X_ar = hcat([dy_d_full[(k_ar+1-j):(end-j)] for j in 1:k_ar]...)
-        rho_ar = X_ar \ Y_ar
-        resid_ar = Y_ar - X_ar * rho_ar
-        s2 = var(resid_ar; corrected=true)
-        ar_sum = 1 - sum(rho_ar)
-        f00 = s2 / ar_sum^2
-    else
-        f00 = var(dy_d_full; corrected=true)
-    end
-
-    pt_stat = (ssr_qd - alpha * ssr_ols) / f00
-
     # MGLS statistics (Ng-Perron on GLS-detrended data)
     sum_yd2 = sum(y_d[1:end-1].^2) / n^2
     T_term = y_d[n]^2 / n
@@ -177,15 +247,51 @@ function dfgls_test(y::AbstractVector{T};
     else; T(0.20)
     end
 
-    # Pt p-value (reject when Pt is small)
-    pt_pval = if pt_stat <= pt_cv[1]; T(0.001)
-    elseif pt_stat <= pt_cv[5]; T(0.01) + (pt_stat - pt_cv[1]) / (pt_cv[5] - pt_cv[1]) * T(0.04)
-    elseif pt_stat <= pt_cv[10]; T(0.05) + (pt_stat - pt_cv[5]) / (pt_cv[10] - pt_cv[5]) * T(0.05)
-    else; T(0.20)
-    end
+    # Pt p-value (reject when Pt is small) — shared helper (EV-29)
+    pt_pval = _ers_pt_pvalue(pt_stat, pt_cv)
 
     DFGLSResult(best_stat, pval, pt_stat, pt_pval, MZa, MZt, MSB_val, MPT_val,
                 best_p, regression, cv, pt_cv, mgls_cv, nobs)
 end
 
 dfgls_test(y::AbstractVector; kwargs...) = dfgls_test(Float64.(y); kwargs...)
+
+# =============================================================================
+# ERS point-optimal test (standalone) — EV-29 (#437)
+# =============================================================================
+
+"""
+    ers_test(y; trend=false) -> ERSResult
+
+Elliott-Rothenberg-Stock (1996) feasible **point-optimal** unit root test `P_T`.
+
+Tests H₀: unit root against H₁: stationary. Reuses the SAME GLS quasi-
+differencing and point-optimal statistic as [`dfgls_test`](@ref) via the shared
+internal helper [`_ers_pt_statistic`](@ref) — so
+`ers_test(y; trend=false).P_T == dfgls_test(y; regression=:constant).pt_statistic`.
+The long-run variance `ω̂²` is the AR-spectral estimate of DF-GLS/Ng-Perron.
+
+Small values of `P_T` reject the unit-root null. Critical values are from
+Elliott et al. (1996, Table 1), hard-coded by `trend`.
+
+# Arguments
+- `y`: Time series vector
+- `trend`: `false` → GLS demeaning (c̄ = -7); `true` → GLS detrending (c̄ = -13.5)
+
+# References
+- Elliott, G., Rothenberg, T. J., & Stock, J. H. (1996). Efficient tests for an
+  autoregressive unit root. Econometrica, 64(4), 813-836.
+"""
+function ers_test(y::AbstractVector{T}; trend::Bool=false) where {T<:AbstractFloat}
+    n = length(y)
+    n < 30 && throw(ArgumentError("Need at least 30 observations, got $n"))
+    regression = trend ? :trend : :constant
+
+    ers = _ers_pt_statistic(y, regression)
+    pt_cv = _ers_pt_critical_values(regression, n, T)
+    pval = _ers_pt_pvalue(ers.pt_stat, pt_cv)
+
+    return ERSResult(ers.pt_stat, pval, regression, pt_cv, n)
+end
+
+ers_test(y::AbstractVector; kwargs...) = ers_test(Float64.(y); kwargs...)

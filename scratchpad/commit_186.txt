@@ -1,0 +1,29 @@
+fix(preg): [T087] RE/CRE logit — Optim/LBFGS on adaptive Gauss-Hermite marginal loglik (#186)
+
+`_xtlogit_re`/`_xtlogit_cre` used a hand-rolled gradient ascent with a FUNCTION-VALUE
+stopping rule: convergence was declared on `|Δloglik| < tol` rather than the gradient. If
+the 20-step halving line search failed to improve, `theta` was left unchanged and the next
+iteration saw `Δloglik == 0 < tol` and reported `converged = true` with a possibly-large
+gradient — false convergence. The integrator was a FIXED 12-node Gauss-Hermite rule, which
+under-resolves the random-effect integral for large σ_u. `_xtlogit_cre` additionally
+reported `loglik_final = loglik_old` (a stale value).
+
+Fix:
+- New `_re_logit_agh_loglik` (generic element type for ForwardDiff): adaptive Gauss-Hermite
+  marginal loglik with per-group posterior-mode recentering (scalar Newton) + curvature
+  rescaling (Liu & Pierce 1994; Rabe-Hesketh et al. 2005), nodes `μ̂ + √2·σ̂·x_q` and
+  log-weights `log(√2·σ̂)+log(w_q)+x_q²`, stable per-group logsumexp. Reduces to Laplace at
+  1 node.
+- Both estimators now maximize the AGH loglik with `Optim.LBFGS` on ForwardDiff gradients
+  (`g_tol=1e-8`); convergence is set from a genuine gradient-norm criterion
+  (`Optim.converged && ‖∇nll‖ < 1e-5`); SEs come from the ForwardDiff Hessian of the
+  negative loglik (observed information); `loglik_final` is recomputed at the optimum for
+  both (fixes the CRE stale value). `_re_logit_loglik` (fixed-GH + analytic grad) is kept
+  for its other caller.
+
+Test (test_panel_nonlinear.jl "RE/CRE logit adaptive-GH + honest convergence (T087)"):
+genuine FOC — ‖∇nll‖ at the reported optimum < 1e-4 (measured ~3e-7); adaptive-vs-fixed
+accuracy on a σ_u=3 fixture — AGH-12 error vs the AGH-60 reference is ~75× smaller than the
+old fixed-12-node error; CRE converges honestly with finite SEs and a recomputed loglik.
+8/8; existing RE (11/11) / CRE (6/6) / probit-RE (9/9) estimator tests unaffected. No public
+API change. Ref: reliability report finding M-25; Liu & Pierce (1994).

@@ -1,10 +1,16 @@
 # [Panel Tests](@id tests_panel_page)
 
-Panel-level hypothesis testing addresses two distinct phases of the empirical workflow. **Panel unit root tests** detect non-stationarity in datasets with cross-sectional dependence, a prerequisite for correct specification of panel VARs and factor models. **Panel VAR specification tests** validate GMM instrument validity and select optimal lag orders after estimation. This page covers three second-generation panel unit root tests (PANIC, Pesaran CIPS, Moon-Perron) and three Panel VAR diagnostics (Hansen J-test, Andrews-Lu MMSC, lag selection).
+Panel-level hypothesis testing addresses several distinct phases of the empirical workflow. **Panel unit root tests** detect non-stationarity in panel datasets, a prerequisite for correct specification of panel VARs and factor models. **Panel cointegration tests** then ask whether non-stationary panel series share a long-run equilibrium. **Panel VAR specification tests** validate GMM instrument validity and select optimal lag orders after estimation. This page covers five **first-generation** panel unit root tests (LLC, IPS, Breitung, Fisher, Hadri — the EViews "Panel Unit Root Test" dialog, which assume cross-sectional independence), three **second-generation** tests robust to cross-sectional dependence (PANIC, Pesaran CIPS, Moon-Perron), four **panel cointegration** tests (Pedroni, Kao, Westerlund, Fisher-Johansen — the EViews "Panel Cointegration Test" dialog), the **Dumitrescu-Hurlin** heterogeneous-panel Granger non-causality test (the EViews "Panel Granger Causality" dialog), and three Panel VAR diagnostics (Hansen J-test, Andrews-Lu MMSC, lag selection).
 
+- **Levin-Lin-Chu**: Pooled bias-adjusted t-statistic with a common autoregressive root (Levin, Lin & Chu 2002)
+- **Im-Pesaran-Shin**: Averaged per-unit ADF t-statistics standardized with finite-sample moments (Im, Pesaran & Shin 2003)
+- **Breitung**: Bias-free pooled statistic via forward orthogonal deviations (Breitung 2000)
+- **Fisher**: Maddala-Wu / Choi combination of per-unit ADF/PP p-values (Maddala & Wu 1999; Choi 2001)
+- **Hadri**: LM stationarity test — the panel KPSS, with a *stationarity* null (Hadri 2000)
 - **PANIC**: Factor-based decomposition into common and idiosyncratic components (Bai & Ng 2004, 2010)
 - **Pesaran CIPS**: Cross-sectionally augmented IPS test robust to common factors (Pesaran 2007)
 - **Moon-Perron**: Factor-adjusted pooled AR(1) with bias correction (Moon & Perron 2004)
+- **Dumitrescu-Hurlin**: Heterogeneous-panel Granger non-causality — averaged per-unit Wald statistics standardized to ``\bar{Z}``/``\tilde{Z}`` (Dumitrescu & Hurlin 2012)
 - **Hansen J-test, Andrews-Lu MMSC, and MMSC-based lag selection** for Panel VAR
 
 ```@setup test_panel
@@ -13,6 +19,14 @@ Random.seed!(42)
 ```
 
 ## Quick Start
+
+**Recipe 0: First-generation battery (LLC / IPS / Breitung / Fisher / Hadri)**
+
+```@example test_panel
+X = randn(60, 20)                       # T x N panel (stationary)
+report(llc_test(X; deterministic=:constant))
+report(ips_test(X; deterministic=:constant))
+```
 
 **Recipe 1: PANIC test on a panel**
 
@@ -59,6 +73,102 @@ model = estimate_pvar(pd, 2; steps=:twostep)
 j = pvar_hansen_j(model)
 report(j)
 ```
+
+---
+
+## First-Generation Panel Unit Root Tests
+
+The **first-generation** tests — Levin-Lin-Chu, Im-Pesaran-Shin, Breitung, Fisher, and Hadri — form the EViews "Panel Unit Root Test" dialog and are the baseline diagnostics run before the cross-sectional-dependence-robust [second-generation tests](@ref tests_panel_page) below. All five assume **cross-sectional independence** across units; each accepts a `T×N` matrix (time in rows, units in columns) or a [`PanelData`](@ref) object.
+
+!!! warning "Cross-sectional dependence"
+    These tests are only valid when the innovations are independent across units. Macroeconomic panels almost always share common (global) shocks. The `cs_demean=true` keyword subtracts the cross-sectional mean at each period as a crude mitigation, but it alters the null distribution — for genuine dependence use [`pesaran_cips_test`](@ref) or [`panic_test`](@ref) instead.
+
+The first four tests share the **unit-root null** ``H_0``: all panels are non-stationary, and reject for **very negative** standardized statistics. Hadri **flips the null** to *stationarity* and rejects for **very positive** values — do not carry a conclusion across the two families.
+
+### Levin-Lin-Chu
+
+The LLC test of Levin, Lin & Chu (2002) pools per-unit ADF regressions under a **common** autoregressive root. Starting from
+
+```math
+\Delta y_{it} = \phi\, y_{i,t-1} + \mathbf{z}_{it}'\boldsymbol{\gamma}_i + \sum_{j=1}^{p_i} \theta_{ij}\,\Delta y_{i,t-j} + u_{it}
+```
+
+it forms orthogonalized residuals ``\tilde e_{it}`` and ``\tilde v_{i,t-1}`` (normalized by the per-unit short-run standard deviation), estimates the average ratio of long-run to short-run standard deviations ``\bar S_N`` via a Bartlett kernel, and runs the pooled regression ``\tilde e_{it} = \delta\,\tilde v_{i,t-1} + \varepsilon``. The bias-adjusted statistic
+
+```math
+t^*_\delta = \frac{t_\delta - N\,\tilde T\,\bar S_N\,\operatorname{se}(\hat\delta)\,\mu^*_{\tilde T}}{\sigma^*_{\tilde T}} \sim N(0,1)
+```
+
+uses the mean/std adjustments ``(\mu^*_{\tilde T},\,\sigma^*_{\tilde T})`` interpolated in ``\tilde T = T - \bar p - 1`` from LLC (2002, Table 2).
+
+```@example test_panel
+X = randn(60, 20)                       # stationary panel
+report(llc_test(X; deterministic=:constant, lags=:auto))
+```
+
+### Im-Pesaran-Shin
+
+The IPS ``W_{\bar t}`` test of Im, Pesaran & Shin (2003) allows a **heterogeneous** root ``\phi_i`` by averaging the per-unit ADF t-statistics ``\bar t = N^{-1}\sum_i t_{iT}`` and standardizing with the finite-sample moments from IPS (2003, Table 3):
+
+```math
+W_{\bar t} = \frac{\sqrt{N}\left(\bar t - N^{-1}\sum_i \mathrm{E}[t_{iT}]\right)}{\sqrt{N^{-1}\sum_i \mathrm{Var}[t_{iT}]}} \sim N(0,1)
+```
+
+The moments are interpolated linearly in ``T`` per unit's ``(\text{deterministic}, \text{lag})`` — the correct lag column matters, so `:auto` selects each unit's lag by information criterion.
+
+```@example test_panel
+report(ips_test(X; deterministic=:constant, lags=:auto))
+```
+
+### Breitung
+
+Breitung's (2000) pooled ``\lambda`` statistic uses a variance-ratio construction (forward orthogonal deviations of the differences, detrending of the levels) that is **bias-free by design** — no finite-sample moment table is needed, and ``\lambda \sim N(0,1)`` under the null. (The public name `breitung_panel_test` avoids collision with the unrelated Breitung-Eickmeier factor break test, [`factor_break_test`](@ref).) The `lags` keyword prewhitens serial correlation.
+
+```@example test_panel
+report(breitung_panel_test(X; deterministic=:constant))
+```
+
+### Fisher-type
+
+The Fisher-type test of Maddala & Wu (1999) and Choi (2001) combines the per-unit ADF (or Phillips-Perron) p-values ``p_i`` — reusing the same MacKinnon response-surface path as [`adf_test`](@ref):
+
+```math
+P = -2\sum_{i=1}^{N}\ln p_i \sim \chi^2(2N), \qquad Z = \frac{1}{\sqrt{N}}\sum_{i=1}^{N}\Phi^{-1}(p_i) \sim N(0,1)
+```
+
+The result stores all four combinations (Maddala-Wu ``P``, Choi inverse-normal ``Z``, logit ``L^*``, and modified ``P_m``); `combine` selects the primary. With ``N=1`` the test reduces exactly to the single-series `adf_test` p-value.
+
+```@example test_panel
+report(fisher_panel_test(X; base=:adf, combine=:mw))
+```
+
+### Hadri
+
+The Hadri (2000) LM test is the panel analogue of KPSS, with a **stationarity null**. For each unit it forms partial sums ``S_{it} = \sum_{j\le t}\hat\varepsilon_{ij}`` of the OLS residuals and ``LM_i = T^{-2}\sum_t S_{it}^2 / \hat\sigma_i^2``, then standardizes
+
+```math
+Z = \frac{\sqrt{N}\,(\overline{LM} - \xi)}{\zeta} \sim N(0,1), \qquad (\xi, \zeta^2) = \begin{cases}(1/6,\ 1/45) & \text{constant}\\(1/15,\ 11/6300) & \text{trend}\end{cases}
+```
+
+Because the null is stationarity, the test is **right-tailed**: very positive ``Z`` rejects. `hetero=true` (default) uses a per-unit ``\hat\sigma_i^2``.
+
+```@example test_panel
+Xrw = cumsum(randn(60, 20); dims=1)     # random walk (non-stationary)
+report(hadri_test(Xrw; deterministic=:constant))
+```
+
+### Options and return values
+
+| Argument | Applies to | Default | Description |
+|----------|-----------|---------|-------------|
+| `deterministic` | all | `:constant` | `:none`/`:constant`/`:trend` (IPS & Hadri: `:constant`/`:trend` only) |
+| `lags` | LLC, IPS, Fisher | `:auto` | Common integer lag, or per-unit IC selection |
+| `base` | Fisher | `:adf` | Per-unit test: `:adf` or `:pp` |
+| `combine` | Fisher | `:mw` | Primary combination: `:mw`, `:choi`, `:logit`, `:pm` |
+| `hetero` | Hadri | `true` | Per-unit vs. pooled ``\hat\sigma^2`` |
+| `cs_demean` | all | `false` | Subtract the cross-sectional mean each period (heuristic CSD mitigation) |
+
+Each result (`LLCResult`, `IPSResult`, `BreitungPanelResult`, `FisherPanelResult`, `HadriResult`) exposes `statistic`, `pvalue`, `nobs`, `n_units`, and the [`StatsAPI`](https://github.com/JuliaStats/StatsAPI.jl) `pvalue`/`nobs`/`dof` interface, plus [`refs`](@ref) for citations.
 
 ---
 
@@ -249,14 +359,150 @@ Both p-values test the same null hypothesis using different pooling approaches. 
 
 ## Panel Unit Root Summary
 
-The convenience function `panel_unit_root_summary` runs all three panel unit root tests (PANIC, Pesaran CIPS, Moon-Perron) and prints a consolidated report. This is the recommended entry point for pre-estimation diagnostics on panel data.
+The convenience function `panel_unit_root_summary` runs the full battery — the five first-generation tests (LLC, IPS, Breitung, Fisher, Hadri) and the three second-generation tests (PANIC, Pesaran CIPS, Moon-Perron) — and prints a consolidated report. This is the recommended entry point for pre-estimation diagnostics on panel data.
 
 ```@example test_panel
 X = randn(100, 20)
 panel_unit_root_summary(X; r=1)
 ```
 
-The output displays each test's specification, statistics, p-values, and conclusion in sequence. If any individual test fails (e.g., due to insufficient observations), the function prints the error and continues with the remaining tests.
+The output displays each test's specification, statistics, p-values, and conclusion in sequence. If any individual test fails (e.g., due to insufficient observations), the function prints the error and continues with the remaining tests. Remember that Hadri's stationarity null is the mirror image of the other seven — it rejects where they fail to reject.
+
+---
+
+## Panel Cointegration Tests
+
+Once a panel is established as I(1), the next question is whether the non-stationary series share a long-run equilibrium. Four tests — the EViews "Panel Cointegration Test" dialog — cover the residual-based, error-correction, and combination approaches. All share the null **H0: no cointegration** (Fisher-Johansen instead tests a sequence of rank hypotheses).
+
+- **Pedroni**: residual-based, seven statistics allowing a *heterogeneous* cointegrating vector (Pedroni 1999, 2004)
+- **Kao**: residual-based, five DF-type statistics under a *homogeneous* cointegrating vector (Kao 1999)
+- **Westerlund**: four error-correction statistics testing the speed-of-adjustment coefficient, with an optional CSD-robust bootstrap (Westerlund 2007)
+- **Fisher-Johansen**: Maddala-Wu / Choi combination of per-unit Johansen trace and max-eigenvalue p-values (Maddala & Wu 1999; Choi 2001; Johansen 1991)
+
+Each test (except Fisher-Johansen) takes a `PanelData`, a response symbol, and one or more regressor symbols. The panel must be balanced. The following cointegrated panel (`y = x + stationary error`, with `x` a random walk) is used throughout this section:
+
+```@example test_panel
+Random.seed!(2024)
+Tobs, Nunits = 60, 20
+idv = Int[]; tv = Int[]; yy = Float64[]; xx = Float64[]
+for i in 1:Nunits
+    e = zeros(Tobs)
+    x = cumsum(randn(Tobs))
+    for t in 2:Tobs
+        e[t] = 0.3 * e[t-1] + randn()      # stationary equilibrium error
+    end
+    for t in 1:Tobs
+        push!(idv, i); push!(tv, t); push!(yy, x[t] + e[t]); push!(xx, x[t])
+    end
+end
+pdc = xtset(DataFrame(id = idv, t = tv, y = yy, x1 = xx), :id, :t)
+nothing # hide
+```
+
+### Pedroni
+
+`pedroni_test` reports seven statistics: four within-dimension (panel) statistics that pool the numerators and denominators across units, and three between-dimension (group) statistics that average per-unit ratios. All are standardized to N(0,1) using the Pedroni (1999, Table 2) adjustment moments.
+
+!!! warning "Sign trap"
+    The **panel-v** statistic is **right-tailed** — a large *positive* value rejects the no-cointegration null. The other six Pedroni statistics (and every Kao and Westerlund statistic) are **left-tailed**. The `report` output labels each statistic's tail; the reconstruction `p = ccdf(Normal(), z)` for panel-v versus `p = cdf(Normal(), z)` for the rest.
+
+```@example test_panel
+report(pedroni_test(pdc, :y, :x1; trend = :constant))
+```
+
+The `trend` keyword selects the deterministic case of the cointegrating regression (`:none`, `:constant`, or `:trend`); `lags` sets the Newey-West bandwidth for the residual long-run variances (`:auto` by default) and `adf_lags` the augmentation order of the parametric statistics.
+
+### Kao
+
+`kao_test` assumes a *homogeneous* cointegrating vector: it within-demeans each unit, fits a single pooled slope, and applies five Dickey-Fuller-type statistics to the pooled residuals. All five are N(0,1) and left-tailed.
+
+```@example test_panel
+report(kao_test(pdc, :y, :x1))
+```
+
+The `lags` keyword sets the pooled ADF lag order and `kernel_lags` the Bartlett bandwidth for the endogeneity-correcting long-run variances (both `:auto` by default).
+
+### Westerlund
+
+`westerlund_test` estimates a per-unit error-correction model and tests the error-correction coefficient. The two group-mean statistics (`Gt`, `Ga`) average per-unit quantities; the two panel statistics (`Pt`, `Pa`) pool a common coefficient. A seeded bootstrap (`bootstrap = B`) yields p-values robust to cross-sectional dependence.
+
+```@example test_panel
+report(westerlund_test(pdc, :y, :x1; trend = :constant, lags = 1, leads = 0))
+```
+
+Set `bootstrap` to a positive integer for the CSD-robust p-values (stored in `bootstrap_pvalues`); the `seed` keyword makes them reproducible.
+
+### Fisher-Johansen
+
+`fisher_johansen_test` runs a per-unit [`johansen_test`](@ref) and combines the trace and max-eigenvalue p-values across units. Unlike the other three, it takes the panel and a list of series symbols (no response/regressor split) and reports a combined statistic for each rank hypothesis `r = 0, 1, …, n-1`. With `combine = :mw` (default) the combination is Maddala-Wu `P = -2 Σ ln p_i ~ χ²(2N)` (upper-tailed); `combine = :choi` uses the inverse-normal `Z ~ N(0,1)`. With a single unit (`N = 1`) the combination reduces exactly to that unit's Johansen p-values.
+
+```@example test_panel
+Random.seed!(303)
+idv = Int[]; tv = Int[]; av = Float64[]; bv = Float64[]
+for i in 1:12
+    a = cumsum(randn(Tobs))
+    b = a .+ 0.5 .* randn(Tobs)         # b cointegrated with a
+    for t in 1:Tobs
+        push!(idv, i); push!(tv, t); push!(av, a[t]); push!(bv, b[t])
+    end
+end
+pdfj = xtset(DataFrame(id = idv, t = tv, a = av, b = bv), :id, :t)
+report(fisher_johansen_test(pdfj, :a, :b; lags = 2))
+```
+
+The estimated cointegration rank (`.rank`) is the first rank hypothesis whose combined trace test fails to reject at 5%.
+
+---
+
+## Dumitrescu-Hurlin Panel Causality
+
+The **Dumitrescu-Hurlin (2012)** test asks whether one variable Granger-causes another across a **heterogeneous** panel — the regression coefficients are allowed to differ by unit. It is the EViews "Panel Granger Causality" dialog and the standard tool for cross-country lead-lag questions (credit → GDP, oil → inflation) where the dynamics vary by country.
+
+For each unit ``i``, ``y_{it}`` is regressed on an intercept, ``p`` lags of ``y_i`` and ``p`` lags of ``x_i``, and the individual Granger-Wald statistic ``W_i`` tests ``H_0``: all ``p`` coefficients on lagged ``x_i`` are zero. The ``W_i`` are averaged and standardized:
+
+```math
+\bar{W} = \frac{1}{N}\sum_{i=1}^{N} W_i, \qquad
+\bar{Z} = \sqrt{\frac{N}{2p}}\,(\bar{W} - p) \;\xrightarrow{d}\; N(0,1),
+```
+
+```math
+\tilde{Z} = \sqrt{N}\,\frac{\bar{W} - \mathbb{E}[W_i]}{\sqrt{\operatorname{Var}[W_i]}} \;\xrightarrow{d}\; N(0,1),
+```
+
+where ``\bar{Z}`` is the asymptotic statistic and ``\tilde{Z}`` uses the exact finite-``T`` moments (Dumitrescu-Hurlin 2012, eqs. 26-27):
+
+```math
+\mathbb{E}[W_i] = \frac{p\,(T - 2p - 1)}{T - 2p - 3}, \qquad
+\operatorname{Var}[W_i] = \frac{2p\,(T - 2p - 1)^2\,(T - p - 3)}{(T - 2p - 3)^2\,(T - 2p - 5)}.
+```
+
+- ``H_0``: ``x`` does not Granger-cause ``y`` for **any** unit (homogeneous non-causality).
+- ``H_1``: ``x`` Granger-causes ``y`` for **some** units.
+
+Both statistics are **right-tailed** (a large ``\bar{W}`` rejects non-causality). `dh_causality_test` reports the χ²(p) Wald form ``W_i = p\,F_i`` (`df = p`); R's `plm::pgrangertest` reports the F-based ``F_i = W_i/p`` instead.
+
+```@example test_panel
+# Panel where x[t-1], x[t-2] drive y in every unit ⇒ x Granger-causes y.
+Nu, Tt, p = 8, 30, 2
+idv = Int[]; tv = Int[]; yv = Float64[]; xv = Float64[]
+for i in 1:Nu
+    x = randn(Tt); y = zeros(Tt)
+    for t in 3:Tt
+        y[t] = 0.4y[t-1] - 0.1y[t-2] + 0.3x[t-1] + 0.2x[t-2] + randn()
+    end
+    append!(idv, fill(i, Tt)); append!(tv, 1:Tt); append!(yv, y); append!(xv, x)
+end
+pd_dh = xtset(DataFrame(id = idv, time = tv, y = yv, x = xv), :id, :time)
+report(dh_causality_test(pd_dh, :x, :y; p = 2))
+```
+
+The small-``T`` ``\tilde{Z}`` is the recommended statistic for finite panels and requires ``T > 2p + 5`` (below this the variance is undefined) — units with too few observations are skipped, and the call errors if none qualifies. For **unbalanced** panels the moments are averaged per unit with each unit's own ``T_i``. Pass `bootstrap=B` for a cross-sectional-dependence-robust bootstrap p-value on ``\bar{Z}`` that resamples time blocks jointly across units under the non-causality null.
+
+| Keyword | Default | Description |
+|---|---|---|
+| `p` | `1` | Lag order (number of ``y`` and ``x`` lags per unit) |
+| `bootstrap` | `0` | Block-bootstrap replications for a CSD-robust ``\bar{Z}`` p-value (`0` = none) |
+| `seed` | `1234` | RNG seed for the bootstrap (stored on the result) |
 
 ---
 
@@ -466,8 +712,36 @@ The PANIC test separates the common factor (I(1)) from the stationary idiosyncra
 
 - Bai, J., & Ng, S. (2010). Panel Unit Root Tests with Cross-Section Dependence: A Further Investigation. *Econometric Theory*, 26(4), 1088-1114. [DOI](https://doi.org/10.1017/S0266466609990478)
 
+- Breitung, J. (2000). The Local Power of Some Unit Root Tests for Panel Data. In B. Baltagi (Ed.), *Advances in Econometrics, Vol. 15* (pp. 161-178). JAI Press. [DOI](https://doi.org/10.1016/S0731-9053(00)15006-6)
+
+- Choi, I. (2001). Unit Root Tests for Panel Data. *Journal of International Money and Finance*, 20(2), 249-272. [DOI](https://doi.org/10.1016/S0261-5606(00)00048-6)
+
+- Dumitrescu, E.-I., & Hurlin, C. (2012). Testing for Granger Non-causality in Heterogeneous Panels. *Economic Modelling*, 29(4), 1450-1460. [DOI](https://doi.org/10.1016/j.econmod.2012.02.014)
+
+- Granger, C. W. J. (1969). Investigating Causal Relations by Econometric Models and Cross-spectral Methods. *Econometrica*, 37(3), 424-438. [DOI](https://doi.org/10.2307/1912791)
+
+- Hadri, K. (2000). Testing for Stationarity in Heterogeneous Panel Data. *Econometrics Journal*, 3(2), 148-161. [DOI](https://doi.org/10.1111/1368-423X.00043)
+
 - Hansen, L. P. (1982). Large Sample Properties of Generalized Method of Moments Estimators. *Econometrica*, 50(4), 1029-1054. [DOI](https://doi.org/10.2307/1912775)
+
+- Im, K. S., Pesaran, M. H., & Shin, Y. (2003). Testing for Unit Roots in Heterogeneous Panels. *Journal of Econometrics*, 115(1), 53-74. [DOI](https://doi.org/10.1016/S0304-4076(03)00092-7)
+
+- Johansen, S. (1991). Estimation and Hypothesis Testing of Cointegration Vectors in Gaussian Vector Autoregressive Models. *Econometrica*, 59(6), 1551-1580. [DOI](https://doi.org/10.2307/2938278)
+
+- Kao, C. (1999). Spurious Regression and Residual-Based Tests for Cointegration in Panel Data. *Journal of Econometrics*, 90(1), 1-44. [DOI](https://doi.org/10.1016/S0304-4076(98)00023-2)
+
+- Levin, A., Lin, C.-F., & Chu, C.-S. J. (2002). Unit Root Tests in Panel Data: Asymptotic and Finite-Sample Properties. *Journal of Econometrics*, 108(1), 1-24. [DOI](https://doi.org/10.1016/S0304-4076(01)00098-7)
+
+- Maddala, G. S., & Wu, S. (1999). A Comparative Study of Unit Root Tests with Panel Data and a New Simple Test. *Oxford Bulletin of Economics and Statistics*, 61(S1), 631-652. [DOI](https://doi.org/10.1111/1468-0084.61.s1.13)
 
 - Moon, H. R., & Perron, B. (2004). Testing for a Unit Root in Panels with Dynamic Factors. *Journal of Econometrics*, 122(1), 81-126. [DOI](https://doi.org/10.1016/j.jeconom.2003.10.020)
 
+- Pedroni, P. (1999). Critical Values for Cointegration Tests in Heterogeneous Panels with Multiple Regressors. *Oxford Bulletin of Economics and Statistics*, 61(S1), 653-670. [DOI](https://doi.org/10.1111/1468-0084.61.s1.14)
+
+- Pedroni, P. (2004). Panel Cointegration: Asymptotic and Finite Sample Properties of Pooled Time Series Tests with an Application to the PPP Hypothesis. *Econometric Theory*, 20(3), 597-625. [DOI](https://doi.org/10.1017/S0266466604203073)
+
+- Persyn, D., & Westerlund, J. (2008). Error-Correction-Based Cointegration Tests for Panel Data. *Stata Journal*, 8(2), 232-241. [DOI](https://doi.org/10.1177/1536867X0800800205)
+
 - Pesaran, M. H. (2007). A Simple Panel Unit Root Test in the Presence of Cross-Section Dependence. *Journal of Applied Econometrics*, 22(2), 265-312. [DOI](https://doi.org/10.1002/jae.951)
+
+- Westerlund, J. (2007). Testing for Error Correction in Panel Data. *Oxford Bulletin of Economics and Statistics*, 69(6), 709-748. [DOI](https://doi.org/10.1111/j.1468-0084.2007.00477.x)

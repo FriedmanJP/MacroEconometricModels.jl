@@ -193,3 +193,62 @@ function Base.show(io::IO, g::VECMGrangerResult{T}) where {T}
         alignment = [:l, :r, :r, :r, :l],
     )
 end
+
+# =============================================================================
+# VECMRestrictionTest  (EV-38 / #446)
+# =============================================================================
+
+"""
+    VECMRestrictionTest{T}
+
+Johansen likelihood-ratio test of a linear restriction on the cointegrating
+structure (β and/or α) of an estimated [`VECMModel`](@ref).
+
+The statistic compares the restricted and unrestricted reduced-rank likelihoods,
+
+    LR = T Σ_{i=1}^{r} ln[(1 − λ*_i)/(1 − λ_i)]        (β / α restrictions)
+
+where `λ_i` are the unrestricted eigenvalues and `λ*_i` the eigenvalues of the
+transformed eigenproblem, distributed asymptotically `χ²(df)` under H₀.
+
+# Fields
+- `kind`: `:beta`, `:alpha`, `:weak_exogeneity`, `:known_beta`, or `:joint`
+- `lr_stat`: LR test statistic
+- `df`: χ² degrees of freedom
+- `pvalue`: asymptotic p-value
+- `rank`: cointegrating rank r
+- `description`: human-readable restriction description
+- `beta_restricted`: re-normalized β under H₀ (n × r)
+- `beta_unrestricted`: β of the input model (n × r)
+- `eigenvalues_restricted`: restricted eigenvalues λ*₁,…,λ*_r (empty for `:joint`)
+- `eigenvalues_unrestricted`: unrestricted eigenvalues λ₁,…,λ_r
+- `converged`: whether estimation converged (always `true` for closed-form tests;
+  reflects the switching-algorithm status for `:joint`)
+- `restricted_model`: re-estimated [`VECMModel`](@ref) imposing H₀, so downstream
+  `irf`/`fevd`/`historical_decomposition` run on the restricted system
+"""
+struct VECMRestrictionTest{T<:AbstractFloat}
+    kind::Symbol
+    lr_stat::T
+    df::Int
+    pvalue::T
+    rank::Int
+    description::String
+    beta_restricted::Matrix{T}
+    beta_unrestricted::Matrix{T}
+    eigenvalues_restricted::Vector{T}
+    eigenvalues_unrestricted::Vector{T}
+    converged::Bool
+    restricted_model::VECMModel{T}
+end
+
+function Base.show(io::IO, res::VECMRestrictionTest{T}) where {T}
+    data = Any[
+        _fmt(res.lr_stat)  res.df  _format_pvalue(res.pvalue)  _significance_stars(res.pvalue)
+    ]
+    _pretty_table(io, data;
+        title = "VECM Restriction Test — $(res.description)",
+        column_labels = ["LR χ²", "df", "P-value", ""],
+        alignment = [:r, :r, :r, :l],
+    )
+end

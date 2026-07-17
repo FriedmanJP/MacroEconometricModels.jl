@@ -1,0 +1,29 @@
+fix(reg): [T076] IV overidentification Hansen J under robust/cluster weighting (#175)
+
+The overidentification statistic was the classical homoskedastic Sargan in BOTH IV
+paths and ignored `cov_type` entirely — a :hc1 cross-sectional fit or a :cluster panel
+fit reported a homoskedastic overid test (`J = e'P_Z e / σ̂²`), inconsistent under
+heteroskedasticity / within-entity dependence.
+
+Cross-sectional (src/reg/iv.jl): `_sargan_test` gains a `cov_type` arg. :ols keeps the
+Sargan branch; :hc0/:hc1/:hc2/:hc3 compute the robust Hansen J with the HC0
+moment-covariance meat `J = g'Ω̂⁻¹g`, g=Z'e, Ω̂=Z'diag(e²)Z (matching Stata ivreg2's
+default robust J — no n/(n−m) or hc1 scaling; those cancel). Call site threads cov_type.
+
+Panel (src/preg/iv.jl): `_panel_sargan_test` gains `cov_type` + `groups`. :ols keeps
+Sargan; :cluster/:twoway/:driscoll_kraay use the entity-clustered meat Ω̂=Σ_g s_g s_g',
+s_g=Z_g'e_g (raw GMM weighting, no G/(G-1) factor). Threaded into all four call sites
+(FE/RE/HT use `groups`; FD uses `dgroups`) with the SAME transformed Z/resid that
+produced the 2SLS β. A fully two-way / DK-HAC overid statistic is out of scope; robust
+types reuse the entity-cluster meat.
+
+Display (src/preg/types.jl): the PanelIVModel overid row is now labelled "Sargan"
+(:ols) or "Hansen J" (robust) to match the statistic actually reported.
+`robust_inv` used throughout (meat may be near-singular). LP-IV `sargan_test` untouched.
+
+Tests: cross-sectional "IV overid: Hansen J under robust weighting (T076)" — exact
+HC0-meat reproduction J=g'S⁻¹g (atol 1e-8), homoskedastic-collapse identity (e²≡const ⇒
+Hansen J == Sargan), robust≠Sargan under heteroskedasticity, df/exact-identified paths.
+Panel "…under cluster weighting (T076)" — cluster J≠Sargan; singleton-cluster
+equivalence (panel cluster J == cross-sectional HC0 Hansen J, atol 1e-6). test_reg.jl +
+test_panel_iv.jl 75/75 green. Ref: Hansen (1982); Stata ivreg2; reliability report (T076).

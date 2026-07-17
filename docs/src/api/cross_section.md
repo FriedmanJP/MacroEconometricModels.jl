@@ -50,6 +50,18 @@ vif
 classification_table
 ```
 
+### Stability and Influence Diagnostics
+
+```@docs
+StabilityResult
+InfluenceStats
+recursive_residuals
+cusum_test
+cusumsq_test
+chow_test
+influence_stats
+```
+
 ---
 
 ## Ordered and Multinomial Models

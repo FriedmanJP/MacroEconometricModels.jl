@@ -98,6 +98,21 @@ MacroEconometricModels.StatsAPI.stderror(::ARIMAModel)
 
 ---
 
+## State-Space Models
+
+See [State-Space Models](../statespace.md) for theory and examples.
+
+```@docs
+AbstractStateSpaceModel
+StateSpaceModel
+estimate_statespace
+local_level
+local_linear_trend
+estimate_tvp_reg
+```
+
+---
+
 ## Volatility Types
 
 ```@docs
@@ -106,6 +121,7 @@ ARCHModel
 GARCHModel
 EGARCHModel
 GJRGARCHModel
+GarchMidasModel
 SVModel
 VolatilityForecast
 ```
@@ -128,6 +144,7 @@ ljung_box_squared
 estimate_garch
 estimate_egarch
 estimate_gjr_garch
+estimate_garch_midas
 news_impact_curve
 ```
 
@@ -240,4 +257,52 @@ gain
 band_power
 ideal_bandpass
 transfer_function
+```
+
+---
+
+## Nonlinear Time Series Types
+
+```@docs
+AbstractNonlinearTSModel
+ThresholdModel
+ThresholdForecast
+HansenLinearityTest
+STARModel
+STARForecast
+MSRegModel
+```
+
+---
+
+## Nonlinear Time Series Estimation
+
+```@docs
+estimate_threshold
+estimate_setar
+hansen_linearity_test
+estimate_star
+star_linearity_test
+estimate_ms
+estimate_ms_ar
+```
+
+---
+
+## Nonparametric Regression & Density Types
+
+```@docs
+KernelDensity
+KernelRegression
+LowessFit
+```
+
+---
+
+## Nonparametric Regression & Density Estimation
+
+```@docs
+kernel_density
+kernel_reg
+lowess
 ```

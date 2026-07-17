@@ -121,14 +121,52 @@ include("io/show.jl")
 include("reg/types.jl")
 include("reg/covariance.jl")
 include("reg/estimation.jl")
+include("reg/penalized.jl")   # EV-03 (#411): ridge / LASSO / elastic net — after estimation.jl
+include("reg/selection.jl")   # EV-04 (#412): stepwise / best-subset / GETS variable selection
 include("reg/iv.jl")
 include("reg/logit.jl")
 include("reg/probit.jl")
+include("reg/tobit.jl")        # EV-17 (#425): Tobit (censored) + truncated regression
+include("reg/heckman.jl")      # EV-18 (#426): Heckman sample-selection (two-step + MLE)
+include("reg/robust.jl")       # EV-40 (#448): robust regression — Huber/bisquare M + Yohai MM
 include("reg/margins.jl")
 include("reg/diagnostics.jl")
+include("reg/stability.jl")     # EV-32 (#440): recursive residuals / CUSUM(SQ) / Chow / influence
 include("reg/predict.jl")
 include("reg/ordered.jl")
 include("reg/multinomial.jl")
+
+# Systems estimation — SUR / 3SLS (EV-35, #443) — after reg/ (reuses robust_inv,
+# _coef_table, _pretty_table, _sig_legend). Greenfield src/system/ module.
+include("system/types.jl")
+include("system/sur.jl")
+include("system/threesls.jl")
+
+# MIDAS regression (EV-01) — after reg/ (reuses robust_inv, _coef_table)
+include("midas/weights.jl")
+include("midas/types.jl")
+include("midas/estimation.jl")
+include("midas/forecast.jl")
+
+# ARDL + Pesaran–Shin–Smith bounds test (EV-08, #416) — after reg/ (reuses
+# robust_inv, _coef_table). Scaffold extended later by NARDL (EV-09) and PMG (EV-23).
+include("ardl/types.jl")
+include("ardl/estimation.jl")
+include("ardl/bounds.jl")
+# Nonlinear ARDL (NARDL, EV-09, #417) — extends the EV-08 scaffold: reuses
+# estimate_ardl / long_run / bounds_test on the partial-sum-split design.
+include("ardl/nardl.jl")
+# Panel ARDL — PMG/MG/DFE (EV-23, #431); included after preg/ so it can reuse
+# _panel_cluster_vcov and _hausman_quadratic_form (see the include block below).
+
+# Forecast evaluation & combination (EV-39, #447) — model-agnostic accuracy
+# metrics, DM/CW/MZ/encompassing tests, and combination. Reuses newey_west
+# (src/core/covariance.jl), robust_inv, _coef_table. plot_result dispatch lives
+# in src/plotting/forecast.jl (included later).
+include("fceval/types.jl")
+include("fceval/metrics.jl")
+include("fceval/tests.jl")
+include("fceval/combine.jl")
 
 # VAR types and estimation
 include("var/types.jl")
@@ -153,6 +191,7 @@ include("teststat/bai_perron.jl")
 include("teststat/johansen.jl")
 include("teststat/fourier.jl")
 include("teststat/dfgls.jl")
+include("teststat/hegy.jl")   # EV-29 (#437): HEGY seasonal unit roots + ERS point-optimal test
 include("teststat/lm_unitroot.jl")
 include("teststat/adf_2break.jl")
 include("teststat/gregory_hansen.jl")
@@ -165,6 +204,7 @@ include("teststat/stationarity.jl")
 include("teststat/convenience.jl")
 include("teststat/show.jl")
 include("teststat/normality.jl")
+include("teststat/edf.jl")   # EV-26 (#434): EDF goodness-of-fit battery (KS/Lilliefors/CvM/AD/Watson)
 include("teststat/portmanteau.jl")
 
 # Structural identification
@@ -207,7 +247,33 @@ include("favar/estimation.jl")
 include("teststat/panic.jl")
 include("teststat/pesaran_cips.jl")
 include("teststat/moon_perron.jl")
+# First-generation panel unit root tests (EV-20, #428) — after panic.jl for
+# _panel_to_matrix and after adf/pp for the per-unit tests. llc.jl first (it
+# defines _interp_clamped / _cs_demean reused by the others).
+include("teststat/llc.jl")
+include("teststat/ips.jl")
+include("teststat/breitung_panel.jl")
+include("teststat/fisher_panel.jl")
+include("teststat/hadri.jl")
+# Panel cointegration tests (EV-21, #429). pedroni.jl first: it defines the
+# shared helpers (_panel_coint_data / _stata_lrv / _resid_ols / _coint_det)
+# reused by kao/westerlund. fisher_johansen reuses johansen_test (above).
+include("teststat/pedroni.jl")
+include("teststat/kao.jl")
+include("teststat/westerlund.jl")
+include("teststat/fisher_johansen.jl")
+# Dumitrescu-Hurlin panel Granger non-causality test (EV-24, #432). Self-contained
+# per-unit Wald (reuses robust_inv + PanelData); show in teststat/show.jl.
+include("teststat/dumitrescu_hurlin.jl")
 include("teststat/factor_break.jl")
+# Equality-of-distribution + rank-correlation "Basic statistics" battery (EV-34, #442).
+# rank_correlation.jl first (defines _tiedrank used by equality.jl); both reuse
+# CrossSectionData/PanelData column lookup.
+include("teststat/rank_correlation.jl")
+include("teststat/equality.jl")
+# Explosive / rational-bubble detection (EV-30, #438). Right-tailed sup-ADF:
+# SADF (Phillips-Wu-Yu 2011) / GSADF (Phillips-Shi-Yu 2015) with BSADF date-stamping.
+include("teststat/bubble.jl")
 
 # Nowcasting (after factor models for Kalman filter reuse)
 include("nowcast/types.jl")
@@ -250,6 +316,12 @@ include("arima/kalman.jl")
 include("arima/estimation.jl")
 include("arima/forecast.jl")
 include("arima/selection.jl")
+include("arima/arfima.jl")   # EV-13 (#421): ARFIMA + GPH + local Whittle
+
+# Public linear-Gaussian state-space module — thin wrapper over the core Kalman kernel
+include("statespace/types.jl")      # EV-37 (#445): StateSpaceModel + AbstractStateSpaceModel
+include("statespace/estimation.jl") # EV-37 (#445): PED-MLE, filter/smoother driver, TVP reg
+include("statespace/api.jl")        # EV-37 (#445): forecast (state recursion + variance accumulation)
 
 # X-13ARIMA-SEATS internal (before filters for X13FilterResult)
 include("x13/types.jl")
@@ -291,11 +363,36 @@ include("garch/types.jl")
 include("garch/estimation.jl")
 include("garch/forecast.jl")
 include("garch/diagnostics.jl")
+include("garch/midas.jl")   # EV-02 (#410): GARCH-MIDAS long/short-run volatility components
+include("garch/figarch.jl") # EV-14 (#422): FIGARCH/FIEGARCH fractionally-integrated volatility
+# EV-28 (#436): BDS independence test — placed here so the AbstractARIMAModel /
+# AbstractVolatilityModel residual dispatches see their (already-defined) types.
+include("teststat/bds.jl")
+
+# Multivariate GARCH (EV-16, #424): CCC / DCC / BEKK — reuse univariate estimate_garch margins
+include("mgarch/types.jl")
+include("mgarch/ccc.jl")
+include("mgarch/dcc.jl")
+include("mgarch/bekk.jl")
+include("mgarch/forecast.jl")
 
 # Stochastic Volatility models
 include("sv/types.jl")
 include("sv/estimation.jl")
 include("sv/forecast.jl")
+
+# --- Nonlinear time series (threshold/SETAR; STAR & Markov switching extend this) ---
+include("nonlinear/types.jl")
+include("nonlinear/threshold.jl")
+include("nonlinear/star.jl")   # EV-06: smooth-transition (STAR/LSTR1/LSTR2/ESTR)
+include("nonlinear/markov_switching.jl")  # EV-07: Markov-switching regression / MS-AR
+
+# --- Nonparametric regression & density (EV-33, #441) ---
+include("nonparametric/types.jl")
+include("nonparametric/density.jl")
+include("nonparametric/kernel_reg.jl")
+include("nonparametric/lowess.jl")
+include("nonparametric/show.jl")
 
 # Model comparison tests (LR, LM)
 include("teststat/model_comparison.jl")
@@ -318,6 +415,7 @@ include("teststat/pvar_lag_selection.jl")
 include("preg/types.jl")
 include("teststat/pvar_ar_test.jl")   # after preg/types (needs PanelRegModel), before preg/estimation (calls _pvar_ar_stats)
 include("preg/covariance.jl")
+include("preg/prais.jl")           # EV-25 (#433): Prais-Winsten AR(1) FGLS transform (used by estimation.jl)
 include("preg/estimation.jl")
 include("preg/tests.jl")
 include("preg/iv.jl")
@@ -327,8 +425,34 @@ include("preg/probit.jl")
 include("preg/margins.jl")
 include("preg/display.jl")
 
+# Panel ARDL — PMG / MG / DFE (EV-23, #431). After preg/ (reuses _panel_cluster_vcov,
+# _hausman_quadratic_form) and after ardl/estimation.jl (reuses estimate_ardl for MG).
+include("ardl/pmg.jl")
+
 # Covariance estimators
 include("core/covariance.jl")
+
+# Long-run variance toolkit (EV-12: lrvar/lrcov/lrcov_oneside/varhac)
+include("core/lrvar.jl")
+
+# Single-equation cointegrating regression (EV-10, #418) — FMOLS/CCR/DOLS.
+# Reuses the EV-12 LRV toolkit (lrcov/lrcov_oneside) and reg display (_coef_table).
+# Scaffold extended later by EV-11 (stability/spurious tests) and EV-22 (panel cointreg).
+include("cointreg/types.jl")
+include("cointreg/fmols.jl")
+include("cointreg/ccr.jl")
+include("cointreg/dols.jl")
+# Panel cointegrating regression (EV-22, #430) — panel FMOLS/DOLS (group-mean + pooled).
+# Aggregation-only layer: reuses estimate_cointreg per unit + the EV-12 LRV toolkit.
+include("cointreg/panel.jl")
+
+# Residual-based / parameter-stability cointegration tests (EV-11) — after cointreg
+# (Hansen/Park consume CointRegModel) and after core/lrvar.jl (EV-12 long-run variance).
+include("teststat/engle_granger.jl")
+include("teststat/phillips_ouliaris.jl")
+include("teststat/hansen_instability.jl")
+include("teststat/park_added.jl")
+include("teststat/variance_ratio.jl")   # EV-27 (#435): variance-ratio / random-walk tests
 
 # Local Projections
 include("lp/types.jl")
@@ -437,8 +561,15 @@ include("plotting/models.jl")
 include("plotting/nowcast.jl")
 include("plotting/did.jl")
 include("plotting/reg.jl")
+include("plotting/midas.jl")
+include("plotting/penalized.jl")   # EV-03 (#411): coefficient-path / CV-curve plots
 include("plotting/spectral.jl")
 include("plotting/io.jl")
+include("plotting/nonlinear.jl")
+include("plotting/nonparametric.jl")   # EV-33 (#441): kernel density / kernel-reg / LOWESS scatter+fit
+include("plotting/ardl.jl")          # EV-09 (#417): NARDL dynamic-multiplier plots
+include("plotting/mgarch.jl")        # EV-16 (#424): MGARCH conditional-correlation & covariance-heatmap plots
+include("plotting/teststat.jl")      # EV-30 (#438): SADF/GSADF bubble monitor (BSADF vs 95% CV, shaded episodes)
 
 # =============================================================================
 # Exports - Types
@@ -595,12 +726,36 @@ export andrews_test, bai_perron_test
 # Panel unit root tests
 export panic_test, pesaran_cips_test, moon_perron_test, panel_unit_root_summary, PanelUnitRootSummary
 
+# First-generation panel unit root tests (EV-20, #428)
+export llc_test, ips_test, breitung_panel_test, fisher_panel_test, hadri_test
+export LLCResult, IPSResult, BreitungPanelResult, FisherPanelResult, HadriResult
+
+# Panel cointegration tests (EV-21, #429)
+export pedroni_test, kao_test, westerlund_test, fisher_johansen_test
+export PedroniResult, KaoResult, WesterlundResult, FisherJohansenResult
+# Dumitrescu-Hurlin panel Granger non-causality test (EV-24, #432)
+export dh_causality_test, DumitrescuHurlinResult
+# EDF goodness-of-fit battery (EV-26, #434): KS/Lilliefors/CvM/AD/Watson
+export edf_test, EDFTestResult
+# Equality-of-distribution + rank-correlation "Basic statistics" battery (EV-34, #442)
+export equality_test, cor_test, ttest, anova_test, EqualityTestResult, CorTestResult
+
 # Factor model structural break tests
 export factor_break_test
 
 # Extended unit root tests
 export fourier_adf_test, fourier_kpss_test, dfgls_test
 export lm_unitroot_test, adf_2break_test, gregory_hansen_test
+export sadf_test, gsadf_test, BubbleResult   # EV-30 (#438): explosive/bubble detection
+# Seasonal unit roots (HEGY) + ERS point-optimal test (EV-29, #437)
+export hegy_test, ers_test, HEGYResult, ERSResult
+
+# Residual-based / parameter-stability cointegration tests (EV-11, #419)
+export engle_granger_test, phillips_ouliaris_test, hansen_instability_test, park_added_test
+export EngleGrangerResult, PhillipsOuliarisResult, HansenInstabilityResult, ParkAddedResult
+
+# Variance-ratio / random-walk tests (EV-27, #435)
+export variance_ratio_test, VarianceRatioResult
 
 # Convenience functions
 export unit_root_summary, test_all_variables
@@ -615,6 +770,7 @@ export granger_test, granger_test_all
 
 # VECM types
 export VECMModel, VECMForecast, VECMGrangerResult
+export VECMRestrictionTest   # EV-38 (#446)
 
 # =============================================================================
 # Exports - VAR Estimation
@@ -629,6 +785,9 @@ export select_lag_order
 
 export estimate_vecm, to_var, select_vecm_rank
 export cointegrating_rank, granger_causality_vecm
+# EV-38 (#446): Johansen LR restriction tests on the cointegrating structure
+export test_beta_restriction, test_alpha_restriction, test_weak_exogeneity
+export test_known_beta, test_joint_restriction
 
 # =============================================================================
 # Exports - Bayesian Estimation
@@ -758,6 +917,13 @@ export newey_west, white_vcov, driscoll_kraay, optimal_bandwidth_nw
 export robust_vcov, long_run_variance, long_run_covariance
 export register_cov_estimator!
 
+# Long-run variance toolkit (EV-12)
+export lrvar, lrcov, lrcov_oneside, varhac, optimal_bandwidth_nw94
+
+# Single-equation cointegrating regression (EV-10, #418): FMOLS/CCR/DOLS
+export estimate_cointreg, CointRegModel
+export estimate_xtcointreg, PanelCointRegModel   # EV-22 (#430): panel FMOLS/DOLS
+
 # LP-IV (Stock & Watson 2018)
 export estimate_lp_iv, lp_iv_irf
 export weak_instrument_test, sargan_test
@@ -858,6 +1024,13 @@ export estimate_ar, estimate_ma, estimate_arma, estimate_arima
 # Order selection
 export select_arima_order, auto_arima, ic_table
 
+# ARFIMA — fractional integration (EV-13, #421)
+export estimate_arfima, ARFIMAModel
+export gph_test, local_whittle, GPHResult, LocalWhittleResult
+
+# State-space module (EV-37, #445): public Kalman MLE + TVP regression
+export StateSpaceModel, estimate_statespace, estimate_tvp_reg, local_level, local_linear_trend
+
 # =============================================================================
 # Exports - Non-Gaussian VAR Identification
 # =============================================================================
@@ -908,7 +1081,18 @@ export arch_lm_test, ljung_box_squared
 # GARCH types and estimation
 export GARCHModel, EGARCHModel, GJRGARCHModel
 export estimate_garch, estimate_egarch, estimate_gjr_garch
+export estimate_garch_midas, GarchMidasModel   # EV-02 (#410): GARCH-MIDAS
+export estimate_figarch, estimate_fiegarch, FIGARCHModel, FIEGARCHModel   # EV-14 (#422): FIGARCH/FIEGARCH
 export news_impact_curve
+# EV-15 (#423): IGARCH / Component-GARCH / APARCH + volatility misspecification tests
+export IGARCHModel, CGARCHModel, APARCHModel
+export estimate_igarch, estimate_cgarch, estimate_aparch
+export component_variances, sign_bias_test, nyblom_test
+
+# Multivariate GARCH (EV-16, #424): CCC / DCC / BEKK
+export AbstractMGARCHModel, MGARCHModel
+export estimate_ccc, estimate_dcc, estimate_bekk
+export covariances, correlations, variances
 
 # SV types and estimation
 export SVModel
@@ -916,6 +1100,26 @@ export estimate_sv
 
 # Type accessors
 export arch_order, garch_order, persistence, halflife, unconditional_variance
+
+# =============================================================================
+# Exports — Nonlinear Time Series (threshold/SETAR)
+# =============================================================================
+
+export AbstractNonlinearTSModel
+export ThresholdModel, ThresholdForecast, HansenLinearityTest
+export estimate_threshold, estimate_setar, hansen_linearity_test
+# EV-06: smooth-transition autoregression (STAR/LSTR1/LSTR2/ESTR)
+export STARModel, STARForecast
+export estimate_star, star_linearity_test
+# EV-07: Markov-switching regression / mean-switching AR (Hamilton 1989; Kim 1994)
+export MSRegModel
+export estimate_ms, estimate_ms_ar
+
+# =============================================================================
+# Exports — Nonparametric regression & density (EV-33, #441)
+# =============================================================================
+export KernelDensity, KernelRegression, LowessFit
+export kernel_density, kernel_reg, lowess
 
 # =============================================================================
 # Exports - Spectral Analysis & ACF/PACF
@@ -944,6 +1148,8 @@ export LjungBoxResult, BoxPierceResult, DurbinWatsonResult
 export FisherTestResult, BartlettWhiteNoiseResult
 export ljung_box_test, box_pierce_test, durbin_watson_test
 export fisher_test, bartlett_white_noise_test
+# BDS independence test (EV-28, #436)
+export bds_test, BDSResult
 
 # =============================================================================
 # Exports - Time Series Filters
@@ -1012,9 +1218,67 @@ export MultinomialLogitModel, estimate_mlogit
 # Estimation
 export estimate_reg, estimate_iv, estimate_logit, estimate_probit
 
+# Penalized regression — EV-03 (#411)
+export PenalizedRegModel, estimate_ridge, estimate_lasso, estimate_elastic_net
+
+# Variable selection — EV-04 (#412): stepwise / best-subset / GETS
+export select_variables, SelectionResult
+
+# Censored / truncated regression — EV-17 (#425)
+export TobitModel, TruncRegModel, estimate_tobit, estimate_truncreg
+
+# Heckman sample-selection model — EV-18 (#426)
+export HeckmanModel, estimate_heckman
+
+# Robust regression (M / MM estimation) — EV-40 (#448)
+export RobustRegModel, estimate_robust
+
+# Systems estimation — SUR / 3SLS (EV-35, #443)
+export estimate_sur, estimate_3sls, SURModel, ThreeSLSModel
+
 # Marginal effects, diagnostics, prediction
 export marginal_effects, odds_ratio, vif, classification_table, OddsRatio, MultinomialMarginalEffects
 export brant_test, hausman_iia
+
+# OLS residual diagnostics — EV-31 (#439)
+# Note: `breusch_pagan_test` is ALSO exported for PanelRegModel (src/preg, line ~821);
+# these are distinct methods on the same generic — do not deduplicate the symbol.
+export white_test, breusch_pagan_test, glejser_test, harvey_test,
+       breusch_godfrey_test, reset_test, RegDiagnosticResult
+
+# Stability & influence diagnostics — EV-32 (#440)
+export recursive_residuals, cusum_test, cusumsq_test, chow_test, influence_stats,
+       StabilityResult, InfluenceStats
+
+# =============================================================================
+# Exports — MIDAS Regression (EV-01)
+# =============================================================================
+
+export estimate_midas, MidasModel, MidasForecast, midas_weights
+
+# =============================================================================
+# Exports — ARDL & Bounds Test (EV-08, #416)
+# =============================================================================
+
+export estimate_ardl, bounds_test, long_run, ARDLModel, ARDLBoundsTest
+# NARDL — nonlinear (asymmetric) ARDL (EV-09, #417)
+export estimate_nardl, symmetry_test, dynamic_multipliers,
+       NARDLModel, NARDLSymmetryTest, NARDLMultipliers
+
+# =============================================================================
+# Exports — Panel ARDL: PMG / MG / DFE (EV-23, #431)
+# =============================================================================
+
+export estimate_pmg, PMGModel
+
+# =============================================================================
+# Exports — Forecast Evaluation & Combination (EV-39, #447)
+# =============================================================================
+
+export forecast_evaluate, diebold_mariano, clark_west, mincer_zarnowitz,
+       forecast_encompassing, combine_forecasts,
+       ForecastEvaluation, DMTestResult, ClarkWestResult, MincerZarnowitzResult,
+       ForecastEncompassingResult, ForecastCombination
 
 # =============================================================================
 # Exports - Plotting

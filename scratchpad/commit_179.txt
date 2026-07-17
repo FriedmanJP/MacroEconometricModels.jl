@@ -1,0 +1,22 @@
+fix(pvar): [T080] zero-pad unbalanced GMM instrument blocks instead of truncating to min width (#179)
+
+For non-system difference-GMM, `estimate_pvar` aligned the per-group Arellano-Bond
+instrument blocks by TRUNCATING every group to the minimum column count across groups.
+Because the block-diagonal instruments are nested (block s occupies the same leading
+column range for every unit, its width depending only on p/min_lag/max_lag/s — not on
+T_i), truncating to the min discards every longer unit's later-period moment conditions
+on an unbalanced panel, biasing the estimator and diverging from xtabond2.
+
+Fix: zero-pad each shorter group's block to the common MAXIMUM width. Padded zeros
+contribute exactly zero to every moment sum (Σ_g Z_g'X_g, Σ_g Z_g'y_g, Σ_g Z_g'Z_g),
+so a moment condition present in only k<N units is automatically averaged over its k
+contributing units — longer units keep their extra moments. `n_inst` then picks up the
+max width. `robust_inv(Hermitian(...))` already tolerates the reduced-rank padded blocks.
+The system-GMM branch is left as min-truncation (its level block sits at the right end, so
+right-padding would misalign it — deliberately out of scope, noted in a comment).
+
+Test: "PVAR GMM unbalanced instrument zero-padding (T080)" — group lengths [6,6,8], p=1,
+min_lag=2, max_lag=99: n_instruments == max per-group AB-FD width (21), not the old min
+(10), with widths computed independently via _build_instruments_fd; coefficients finite.
+Balanced panels are a no-op (min==max) — the rest of test_pvar.jl (balanced fixtures)
+stays green. Ref: Roodman (2009); Arellano-Bond (1991). Feeds #183 (too-many-instruments).

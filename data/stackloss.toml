@@ -1,0 +1,26 @@
+# Brownlee (1965) "stack loss" plant data, 21 observations, 4 variables. Public domain.
+# Ships with base R as `datasets::stackloss`. Operation of a plant oxidizing ammonia to
+# nitric acid; `stack.loss` is 10× the percentage of ingoing ammonia escaping unabsorbed.
+# Source: Brownlee, K. A. (1965) *Statistical Theory and Methodology in Science and
+# Engineering*, 2nd ed., Wiley, pp. 491-500.
+[metadata]
+name = "stackloss"
+desc = "Brownlee (1965) stack-loss plant data (21 obs)"
+n_obs = 21
+frequency = "Other"
+source_refs = ["brownlee1965"]
+
+[variables]
+names = ["Air.Flow", "Water.Temp", "Acid.Conc.", "stack.loss"]
+
+[descriptions]
+"Air.Flow" = "Air flow to the plant (rate of operation)"
+"Water.Temp" = "Cooling water inlet temperature (°C)"
+"Acid.Conc." = "Acid concentration (%, coded: ×10 − 500)"
+"stack.loss" = "10× % of ingoing ammonia lost (response)"
+
+[data]
+"Air.Flow"   = [80, 80, 75, 62, 62, 62, 62, 62, 58, 58, 58, 58, 58, 58, 50, 50, 50, 50, 50, 56, 70]
+"Water.Temp" = [27, 27, 25, 24, 22, 23, 24, 24, 23, 18, 18, 17, 18, 19, 18, 18, 19, 19, 20, 20, 20]
+"Acid.Conc." = [89, 88, 90, 87, 87, 87, 93, 93, 87, 80, 89, 88, 82, 93, 89, 86, 72, 79, 80, 82, 91]
+"stack.loss" = [42, 37, 37, 28, 18, 18, 19, 20, 15, 14, 14, 13, 11, 12, 8, 7, 8, 8, 9, 15, 15]

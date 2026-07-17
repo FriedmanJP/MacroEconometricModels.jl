@@ -177,3 +177,144 @@ end
 StatsAPI.predict(m::GARCHModel, h::Int; kwargs...) = forecast(m, h; kwargs...).forecast
 StatsAPI.predict(m::EGARCHModel, h::Int; kwargs...) = forecast(m, h; kwargs...).forecast
 StatsAPI.predict(m::GJRGARCHModel, h::Int; kwargs...) = forecast(m, h; kwargs...).forecast
+
+# =============================================================================
+# IGARCH / Component-GARCH / APARCH forecasting (EV-15, #423)
+# =============================================================================
+
+"""
+    forecast(m::IGARCHModel, h; conf_level=0.95, n_sim=10000) -> VolatilityForecast
+
+Forecast conditional variance from an IGARCH(p,q) model. The point forecast is
+computed **analytically** from the unit-persistence recursion
+`E[σ²_{t+k}] = ω + Σαᵢ E[σ²_{t+k-i}] + Σβⱼ E[σ²_{t+k-j}]` (using `E[ε²]=E[σ²]` for
+future shocks), which grows without bound (strictly increasing when `ω > 0`);
+confidence bands come from simulated paths.
+"""
+function forecast(m::IGARCHModel{T}, h::Int; conf_level::Real=0.95, n_sim::Int=10000,
+                  rng::AbstractRNG=Random.default_rng()) where {T}
+    conf_level = T(conf_level)
+    h < 1 && throw(ArgumentError("Forecast horizon must be ≥ 1"))
+    q, p = m.q, m.p
+
+    # Analytic mean via E[ε²]=E[σ²] recursion, seeded with the fitted tail.
+    m_lag = max(q, p)
+    eps_sq_hist = m.residuals[end-m_lag+1:end] .^ 2
+    h_hist = m.conditional_variance[end-m_lag+1:end]
+    fc = Vector{T}(undef, h)
+    ef = copy(eps_sq_hist)   # expected ε² buffer (history then forecasts)
+    hf = copy(h_hist)        # expected σ² buffer
+    for t in 1:h
+        ht = m.omega
+        for i in 1:q
+            ht += m.alpha[i] * ef[end-i+1]
+        end
+        for j in 1:p
+            ht += m.beta[j] * hf[end-j+1]
+        end
+        ht = max(ht, eps(T))
+        fc[t] = ht
+        push!(ef, ht)   # E[ε²_{t+k}] = E[σ²_{t+k}]
+        push!(hf, ht)
+    end
+
+    # Simulated bands
+    paths = Matrix{T}(undef, n_sim, h)
+    for s in 1:n_sim
+        eps_sq_buf = copy(eps_sq_hist)
+        h_buf = copy(h_hist)
+        for t in 1:h
+            ht = m.omega
+            for i in 1:q
+                ht += m.alpha[i] * eps_sq_buf[end-i+1]
+            end
+            for j in 1:p
+                ht += m.beta[j] * h_buf[end-j+1]
+            end
+            ht = max(ht, eps(T))
+            z = randn(rng, T)
+            push!(eps_sq_buf, ht * z^2)
+            push!(h_buf, ht)
+            paths[s, t] = ht
+        end
+    end
+    alpha_half = (one(T) - conf_level) / 2
+    ci_lo = vec(mapslices(x -> quantile(x, alpha_half), paths, dims=1))
+    ci_hi = vec(mapslices(x -> quantile(x, one(T) - alpha_half), paths, dims=1))
+    se = vec(std(paths, dims=1))
+    VolatilityForecast(fc, ci_lo, ci_hi, se, h, conf_level, :igarch)
+end
+
+"""
+    forecast(m::CGARCHModel, h; conf_level=0.95, n_sim=10000) -> VolatilityForecast
+
+Forecast conditional variance from a Component-GARCH(1,1) model via simulation of
+the permanent/transitory recursion; point forecasts revert to the long-run level `ω`.
+"""
+function forecast(m::CGARCHModel{T}, h::Int; conf_level::Real=0.95, n_sim::Int=10000,
+                  rng::AbstractRNG=Random.default_rng()) where {T}
+    conf_level = T(conf_level)
+    h < 1 && throw(ArgumentError("Forecast horizon must be ≥ 1"))
+    last_eps_sq = m.residuals[end]^2
+    last_h = m.conditional_variance[end]
+    last_q = m.permanent[end]
+
+    paths = Matrix{T}(undef, n_sim, h)
+    for s in 1:n_sim
+        e2 = last_eps_sq; hh = last_h; qq = last_q
+        for t in 1:h
+            qt = m.omega + m.rho * (qq - m.omega) + m.phi * (e2 - hh)
+            ht = qt + m.alpha * (e2 - qq) + m.beta * (hh - qq)
+            qt = max(qt, eps(T)); ht = max(ht, eps(T))
+            z = randn(rng, T)
+            e2 = ht * z^2
+            hh = ht; qq = qt
+            paths[s, t] = ht
+        end
+    end
+    _build_volatility_forecast(paths, h, conf_level, :cgarch)
+end
+
+"""
+    forecast(m::APARCHModel, h; conf_level=0.95, n_sim=10000) -> VolatilityForecast
+
+Forecast conditional variance from an APARCH(p,q) model via simulation of the
+power-`δ` recursion.
+"""
+function forecast(m::APARCHModel{T}, h::Int; conf_level::Real=0.95, n_sim::Int=10000,
+                  rng::AbstractRNG=Random.default_rng()) where {T}
+    conf_level = T(conf_level)
+    h < 1 && throw(ArgumentError("Forecast horizon must be ≥ 1"))
+    q, p = m.q, m.p
+    d = m.delta
+    m_lag = max(q, p)
+    last_eps = m.residuals[end-m_lag+1:end]
+    last_s = m.sigma_delta[end-m_lag+1:end]
+
+    paths = Matrix{T}(undef, n_sim, h)
+    for si in 1:n_sim
+        eps_buf = copy(last_eps)
+        s_buf = copy(last_s)
+        for t in 1:h
+            st = m.omega
+            for i in 1:q
+                e = eps_buf[end-i+1]
+                st += m.alpha[i] * (abs(e) - m.gamma[i] * e)^d
+            end
+            for j in 1:p
+                st += m.beta[j] * s_buf[end-j+1]
+            end
+            st = max(st, eps(T))
+            ht = st^(2 / d)
+            z = randn(rng, T)
+            push!(eps_buf, sqrt(ht) * z)
+            push!(s_buf, st)
+            paths[si, t] = ht
+        end
+    end
+    _build_volatility_forecast(paths, h, conf_level, :aparch)
+end
+
+StatsAPI.predict(m::IGARCHModel, h::Int; kwargs...) = forecast(m, h; kwargs...).forecast
+StatsAPI.predict(m::CGARCHModel, h::Int; kwargs...) = forecast(m, h; kwargs...).forecast
+StatsAPI.predict(m::APARCHModel, h::Int; kwargs...) = forecast(m, h; kwargs...).forecast

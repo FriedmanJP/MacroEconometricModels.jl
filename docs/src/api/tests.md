@@ -34,6 +34,11 @@ FactorBreakResult
 PANICResult
 PesaranCIPSResult
 MoonPerronResult
+LLCResult
+IPSResult
+BreitungPanelResult
+FisherPanelResult
+HadriResult
 ```
 
 ---
@@ -113,4 +118,26 @@ fisher_test
 andrews_test
 bai_perron_test
 factor_break_test
+```
+
+---
+
+## Residual-Based Cointegration Test Types
+
+```@docs
+EngleGrangerResult
+PhillipsOuliarisResult
+HansenInstabilityResult
+ParkAddedResult
+```
+
+---
+
+## Residual-Based Cointegration Tests
+
+```@docs
+engle_granger_test
+phillips_ouliaris_test
+hansen_instability_test
+park_added_test
 ```

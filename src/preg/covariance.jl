@@ -228,6 +228,120 @@ function _panel_driscoll_kraay_vcov(X::Matrix{T}, resid::Vector{T},
 end
 
 # =============================================================================
+# Beck-Katz (1995) Panel-Corrected Standard Errors (PCSE)  [EV-25, #433]
+# =============================================================================
+
+"""
+    _panel_pcse_vcov(X, resid, XtXinv, groups, time_ids; unbalanced=:casewise) -> Matrix{T}
+
+Beck & Katz (1995) panel-corrected standard errors for time-series-cross-section
+(TSCS) data with contemporaneous cross-section correlation.
+
+Forms the `N×N` contemporaneous residual covariance
+`Σ̂_ij = (Σ_t ê_it ê_jt) / T` and returns the sandwich
+
+    V = (X'X)⁻¹ [ Σ_t X_t' Σ̂ X_t ] (X'X)⁻¹,
+
+where `X_t` is the block of regressor rows observed at time `t`. The meat
+`Σ_t X_t' Σ̂ X_t` is **accumulated time-by-time** — the `NT×NT` Kronecker
+`Σ̂ ⊗ I` is **never materialized** (it is the memory trap on wide panels).
+
+# Arguments
+- `X::Matrix{T}` — regressor matrix used to form `XtXinv` (n × k); for FE this is
+  the within-demeaned design, matching the residuals `resid`.
+- `resid::Vector{T}` — residuals aligned with the rows of `X` (n)
+- `XtXinv::Matrix{T}` — `(X'X)⁻¹`
+- `groups::AbstractVector{Int}` — entity (cross-section) id per observation
+- `time_ids::AbstractVector{Int}` — time period per observation
+
+# Keyword Arguments
+- `unbalanced::Symbol` — `:casewise` (only fully-observed periods enter `Σ̂`;
+  Beck-Katz default) or `:pairwise` (`Σ̂_ij` over the overlapping periods of `i`
+  and `j`).
+
+`Σ̂` is never inverted, so the sandwich is well-defined even when `Σ̂` is
+rank-deficient; a rank-deficient casewise `Σ̂` (fewer fully-observed periods than
+units, `T < N`) triggers a warning rather than a garbage inverse.
+
+# References
+- Beck, N. & Katz, J. N. (1995). *American Political Science Review* 89(3), 634-647.
+"""
+function _panel_pcse_vcov(X::Matrix{T}, resid::Vector{T}, XtXinv::Matrix{T},
+                          groups::AbstractVector{Int}, time_ids::AbstractVector{Int};
+                          unbalanced::Symbol=:casewise) where {T<:AbstractFloat}
+    unbalanced in (:casewise, :pairwise) ||
+        throw(ArgumentError("unbalanced must be :casewise or :pairwise; got :$unbalanced"))
+    n, k = size(X)
+
+    unit_ids = sort(unique(groups))
+    Ncs = length(unit_ids)
+    time_vals = sort(unique(time_ids))
+    Tn = length(time_vals)
+    unit_pos = Dict(g => i for (i, g) in enumerate(unit_ids))
+    time_pos = Dict(t => j for (j, t) in enumerate(time_vals))
+
+    # Residual panel E (Ncs × Tn) + presence mask.
+    E = zeros(T, Ncs, Tn)
+    present = falses(Ncs, Tn)
+    unit_of = Vector{Int}(undef, n)       # cached unit position per obs row
+    for r in 1:n
+        i = unit_pos[groups[r]]
+        j = time_pos[time_ids[r]]
+        E[i, j] = resid[r]
+        present[i, j] = true
+        unit_of[r] = i
+    end
+
+    # ---- Contemporaneous residual covariance Σ̂ (Ncs × Ncs) ----
+    Sigma = zeros(T, Ncs, Ncs)
+    if unbalanced == :casewise
+        full_cols = [j for j in 1:Tn if all(@view present[:, j])]
+        Tf = length(full_cols)
+        Tf == 0 && throw(ArgumentError(
+            "PCSE casewise: no fully-observed time period exists; use unbalanced=:pairwise"))
+        Tf < Ncs && @warn "PCSE casewise Σ̂ is rank-deficient (fully-observed periods " *
+            "T_full=$Tf < N=$Ncs units): the contemporaneous covariance is singular. " *
+            "Beck & Katz (1995) require T ≥ N; consider unbalanced=:pairwise or a longer panel."
+        Ef = @view E[:, full_cols]
+        Sigma = (Ef * Ef') ./ T(Tf)
+    else  # :pairwise
+        @inbounds for i in 1:Ncs, jj in i:Ncs
+            s = zero(T)
+            cnt = 0
+            for c in 1:Tn
+                if present[i, c] && present[jj, c]
+                    s += E[i, c] * E[jj, c]
+                    cnt += 1
+                end
+            end
+            val = cnt > 0 ? s / T(cnt) : zero(T)
+            Sigma[i, jj] = val
+            Sigma[jj, i] = val
+        end
+    end
+
+    # ---- Sandwich meat: accumulate Σ_t X_t' Σ̂_t X_t time-by-time ----
+    # (Σ̂_t is the submatrix of Σ̂ for units present at t; NEVER form Σ̂ ⊗ I.)
+    tmap = Dict{Int,Vector{Int}}()
+    for r in 1:n
+        push!(get!(() -> Int[], tmap, time_ids[r]), r)
+    end
+    meat = zeros(T, k, k)
+    for t in time_vals
+        rows = tmap[t]
+        m_t = length(rows)
+        Xt = @view X[rows, :]                       # m_t × k
+        Sig_t = Matrix{T}(undef, m_t, m_t)
+        @inbounds for a in 1:m_t, b in 1:m_t
+            Sig_t[a, b] = Sigma[unit_of[rows[a]], unit_of[rows[b]]]
+        end
+        meat .+= Xt' * (Sig_t * Xt)
+    end
+
+    XtXinv * meat * XtXinv
+end
+
+# =============================================================================
 # Panel Covariance Dispatch
 # =============================================================================
 
@@ -242,6 +356,7 @@ Dispatch to the appropriate panel covariance estimator.
 - `:cluster` — entity cluster-robust (default)
 - `:twoway` — two-way cluster (Cameron-Gelbach-Miller 2011)
 - `:driscoll_kraay` — Driscoll-Kraay (1998) HAC
+- `:pcse` — Beck-Katz (1995) panel-corrected SE (`pcse_unbalanced` ∈ `:casewise`/`:pairwise`)
 
 `n_absorbed` is forwarded to the `:cluster` small-sample dof correction — count
 only absorbed FE parameters NOT nested within the entity clustering dimension
@@ -251,7 +366,8 @@ function _panel_vcov(X::Matrix{T}, resid::Vector{T}, XtXinv::Matrix{T},
                      groups::AbstractVector{Int}, time_ids::AbstractVector{Int},
                      cov_type::Symbol;
                      bandwidth::Union{Nothing,Int}=nothing,
-                     n_absorbed::Int=0) where {T<:AbstractFloat}
+                     n_absorbed::Int=0,
+                     pcse_unbalanced::Symbol=:casewise) where {T<:AbstractFloat}
     n, k = size(X)
 
     if cov_type == :ols
@@ -264,7 +380,10 @@ function _panel_vcov(X::Matrix{T}, resid::Vector{T}, XtXinv::Matrix{T},
     elseif cov_type == :driscoll_kraay
         return _panel_driscoll_kraay_vcov(X, resid, XtXinv, groups, time_ids;
                                           bandwidth=bandwidth)
+    elseif cov_type == :pcse
+        return _panel_pcse_vcov(X, resid, XtXinv, groups, time_ids;
+                                unbalanced=pcse_unbalanced)
     else
-        throw(ArgumentError("cov_type must be :ols, :cluster, :twoway, or :driscoll_kraay; got :$cov_type"))
+        throw(ArgumentError("cov_type must be :ols, :cluster, :twoway, :driscoll_kraay, or :pcse; got :$cov_type"))
     end
 end

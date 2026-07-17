@@ -1,0 +1,18 @@
+fix(did): [T066] BJS imputation Prop-6 influence-function variance (#165)
+
+The event-time SE was the naive sample variance of the imputed cell effects,
+var(tau_ge)/n_g, treating the estimated unit/time fixed effects as KNOWN — it omits
+the imputation-model estimation-error term. The declared `cluster` kwarg was never used.
+
+The BJS (2024) imputation tau-hat(e) = (1/N_e) sum_{o in treated(e)} (y_o - x_o'beta-hat)
+is linear in Y, so its exact variance is closed-form:
+- Build the untreated two-way-FE design X0 (rank-deficient by 1), Gram pseudo-inverse
+  M+ = robust_inv(Hermitian(X0'X0)), beta-hat, untreated residuals, sigma-hat^2.
+- Homoskedastic Prop-6 plug-in: Var(tau-hat(e)) = sigma-hat^2 (1/N_e + W_e' M+ W_e),
+  which restores the omitted FE estimation-error term W_e'M+W_e.
+- cluster=:unit (default): cluster-robust IF variance — aggregate the per-obs IF scores
+  c_e(i)*e-hat_i within each unit and sum of squares over units (honors the cluster kwarg).
+Point estimates are unchanged (att(e) = mean of imputed effects over treated(e)).
+
+Test: test/did/test_did.jl 401/401 — analytic 4x4 fixture pins the homoskedastic SE to
+sigma-hat^2(1/N_e + W_e'M+W_e) at 1e-10; cluster-robust path finite/positive.

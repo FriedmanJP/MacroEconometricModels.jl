@@ -1,0 +1,44 @@
+Precompiling packages...
+   9934.9 ms  ✓ MacroEconometricModels
+  1 dependency successfully precompiled in 10 seconds. 207 already precompiled.
+┌ Warning: The call to compilecache failed to create a usable precompiled cache file for MacroEconometricModels [14a6ec33-bcac-448e-845f-2fb6769698f1]
+│   exception = Required dependency Base.PkgId(Base.UUID("8bb1440f-4735-579b-a4ab-409b98df4dab"), "DelimitedFiles") failed to load from a cache file.
+└ @ Base loading.jl:2701
+┌ Warning: Matrix singular. Using pseudo-inverse.
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:136
+┌ Warning: Matrix singular. Using pseudo-inverse.
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:136
+┌ Warning: Matrix singular. Using pseudo-inverse.
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:136
+┌ Warning: Matrix near-singular (1-norm cond ≈ 1.5126093631165045e8). Using pseudo-inverse.
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:130
+┌ Warning: Matrix near-singular (1-norm cond ≈ 1.5125908991787162e8). Using pseudo-inverse.
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:130
+┌ Warning: Matrix near-singular (1-norm cond ≈ 1.510445934628384e8). Using pseudo-inverse.
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/utils.jl:130
+
+=========================== RUN: test/nowcast/test_nowcast.jl ===========================
+Test Summary:                   | Pass  Total  Time
+Kalman Filter with Missing Data |   21     21  2.1s
+Test Summary:  | Pass  Total  Time
+DFM Nowcasting |   78     78  3.9s
+Test Summary:   | Pass  Total  Time
+BVAR Nowcasting |   31     31  1.6s
+Test Summary:              | Pass  Total  Time
+Bridge Equation Nowcasting |   17     17  0.5s
+Test Summary:      | Pass  Total  Time
+News Decomposition |   33     33  1.7s
+Test Summary:        | Pass  Total  Time
+Nowcast and Forecast |   16     16  0.4s
+Test Summary: | Pass  Total  Time
+balance_panel |    9      9  0.9s
+Test Summary:      | Pass  Total  Time
+Display and Report |    9      9  1.2s
+Test Summary: | Pass  Total  Time
+References    |    7      7  0.0s
+Test Summary:           | Pass  Total  Time
+TimeSeriesData Dispatch |    4      4  0.0s
+Test Summary: | Pass  Total  Time
+Edge Cases    |    6      6  4.2s
+
+=== run_one.jl done ===

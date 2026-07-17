@@ -75,6 +75,9 @@ abstract type AbstractNonGaussianSVAR end
 """Abstract supertype for univariate volatility models (ARCH/GARCH/SV)."""
 abstract type AbstractVolatilityModel <: StatsAPI.RegressionModel end
 
+"""Abstract supertype for multivariate GARCH models (CCC/DCC/BEKK) — EV-16 (#424)."""
+abstract type AbstractMGARCHModel <: StatsAPI.RegressionModel end
+
 """Abstract supertype for trend-cycle decomposition filter results."""
 abstract type AbstractFilterResult end
 
@@ -145,3 +148,33 @@ abstract type AbstractImpulseResponse <: AbstractAnalysisResult end
 
 """Abstract supertype for forecast error variance decomposition results."""
 abstract type AbstractFEVD <: AbstractAnalysisResult end
+
+# =============================================================================
+# Abstract Types - Nonlinear Time Series Models
+# =============================================================================
+
+"""
+    AbstractNonlinearTSModel <: StatsAPI.StatisticalModel
+
+Abstract supertype for regime-switching / nonlinear univariate time series models.
+
+Subtypes: `ThresholdModel` (threshold autoregression / SETAR). The scaffold is
+shared by later smooth-transition (STAR) and Markov-switching models, which extend
+this hierarchy without re-scaffolding.
+"""
+abstract type AbstractNonlinearTSModel <: StatsAPI.StatisticalModel end
+
+# =============================================================================
+# Abstract Types - State-Space Models (EV-37, #445)
+# =============================================================================
+
+"""
+    AbstractStateSpaceModel{T<:AbstractFloat} <: StatsAPI.StatisticalModel
+
+Abstract supertype for public linear-Gaussian state-space models — a documented
+front end over the consolidated Kalman kernel (`src/core/kalman_kernel.jl`).
+
+Subtypes: `StateSpaceModel` (general single-block observation/state system with
+prediction-error-decomposition MLE, filtering, RTS smoothing, and forecasting).
+"""
+abstract type AbstractStateSpaceModel{T<:AbstractFloat} <: StatsAPI.StatisticalModel end

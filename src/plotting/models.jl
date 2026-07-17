@@ -117,6 +117,161 @@ function plot_result(m::GJRGARCHModel{T};
 end
 
 # =============================================================================
+# FIGARCHModel / FIEGARCHModel (EV-14, #422)
+# =============================================================================
+
+"""
+    plot_result(m::FIGARCHModel; title="", save_path=nothing)
+
+Plot FIGARCH conditional-volatility diagnostics (returns + fitted σ²).
+"""
+function plot_result(m::FIGARCHModel{T};
+                     title::String="", save_path::Union{String,Nothing}=nothing) where {T}
+    _plot_volatility_diagnostics(m.y, m.conditional_variance, "FIGARCH($(m.p),d,$(m.q))";
+                                  title=title, save_path=save_path)
+end
+
+"""
+    plot_result(m::FIEGARCHModel; title="", save_path=nothing)
+
+Plot FIEGARCH conditional-volatility diagnostics (returns + fitted σ²).
+"""
+function plot_result(m::FIEGARCHModel{T};
+                     title::String="", save_path::Union{String,Nothing}=nothing) where {T}
+    _plot_volatility_diagnostics(m.y, m.conditional_variance, "FIEGARCH($(m.p),d,$(m.q))";
+                                  title=title, save_path=save_path)
+end
+
+# =============================================================================
+# IGARCHModel / APARCHModel / CGARCHModel (EV-15, #423)
+# =============================================================================
+
+"""
+    plot_result(m::IGARCHModel; title="", save_path=nothing)
+
+Plot IGARCH conditional-volatility diagnostics (returns + fitted σ²).
+"""
+function plot_result(m::IGARCHModel{T};
+                     title::String="", save_path::Union{String,Nothing}=nothing) where {T}
+    _plot_volatility_diagnostics(m.y, m.conditional_variance, "IGARCH($(m.p),$(m.q))";
+                                  title=title, save_path=save_path)
+end
+
+"""
+    plot_result(m::APARCHModel; title="", save_path=nothing)
+
+Plot APARCH conditional-volatility diagnostics (returns + fitted σ²).
+"""
+function plot_result(m::APARCHModel{T};
+                     title::String="", save_path::Union{String,Nothing}=nothing) where {T}
+    _plot_volatility_diagnostics(m.y, m.conditional_variance, "APARCH($(m.p),$(m.q))";
+                                  title=title, save_path=save_path)
+end
+
+"""
+    plot_result(m::CGARCHModel; view=:components, title="", save_path=nothing)
+
+Plot a Component-GARCH(1,1) fit.
+
+- `view=:components` — stacked-area decomposition of the permanent (`√q`) and
+  transitory (`√max(σ²−q,0)`) volatility contributions over the sample.
+- `view=:default` — the standard 3-panel volatility diagnostic figure.
+"""
+function plot_result(m::CGARCHModel{T}; view::Symbol=:components,
+                     title::String="", save_path::Union{String,Nothing}=nothing) where {T}
+    if view === :components
+        p = _cgarch_components_plot(m, title)
+    elseif view === :default
+        return _plot_volatility_diagnostics(m.y, m.conditional_variance, "Component-GARCH(1,1)";
+                                             title=title, save_path=save_path)
+    else
+        throw(ArgumentError("unknown view $view — use :components or :default"))
+    end
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+function _cgarch_components_plot(m::CGARCHModel{T}, title::String) where {T}
+    id = _next_plot_id("cg_comp")
+    n = length(m.conditional_variance)
+    rows = Vector{Pair{String,String}}[]
+    for i in 1:n
+        perm = sqrt(max(m.permanent[i], zero(T)))
+        trans = sqrt(max(m.transitory[i], zero(T)))
+        push!(rows, ["x" => _json(i), "permanent" => _json(perm), "transitory" => _json(trans)])
+    end
+    data_json = _json_array_of_objects(rows)
+    s_json = _series_json(["Permanent √q", "Transitory √(σ²−q)"],
+                          [_PLOT_COLORS[1], _PLOT_COLORS[2]]; keys=["permanent", "transitory"])
+    js = _render_area_js(id, data_json, s_json;
+                         xlabel="Observation", ylabel="Volatility contribution")
+    isempty(title) && (title = "Component-GARCH Volatility Decomposition")
+    _make_plot([_PanelSpec(id, title, js)]; title=title)
+end
+
+# =============================================================================
+# GarchMidasModel (EV-02, #410)
+# =============================================================================
+
+"""
+    plot_result(m::GarchMidasModel; view=:components, title="", save_path=nothing)
+
+Plot a GARCH-MIDAS fit.
+
+- `view=:components` — overlay total conditional volatility `√σ²` and the
+  long-run component `√τ` over the retained sample.
+- `view=:weights` — the fitted Beta MIDAS weight curve `φ_k` versus lag `k`.
+"""
+function plot_result(m::GarchMidasModel{T}; view::Symbol=:components,
+                     title::String="", save_path::Union{String,Nothing}=nothing) where {T}
+    if view === :components
+        p = _garch_midas_components_plot(m, title)
+    elseif view === :weights
+        p = _garch_midas_weight_plot(m, title)
+    else
+        throw(ArgumentError("unknown view $view — use :components or :weights"))
+    end
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+function _garch_midas_components_plot(m::GarchMidasModel{T}, title::String) where {T}
+    id = _next_plot_id("gm_comp")
+    n = length(m.conditional_variance)
+    rows = Vector{Pair{String,String}}[]
+    for i in 1:n
+        push!(rows, [
+            "x" => _json(i),
+            "total" => _json(sqrt(max(m.conditional_variance[i], zero(T)))),
+            "longrun" => _json(sqrt(max(m.tau[i], zero(T)))),
+        ])
+    end
+    data_json = _json_array_of_objects(rows)
+    s_json = _series_json(["Total √σ²", "Long-run √τ"],
+                          [_PLOT_COLORS[1], _PLOT_COLORS[2]];
+                          keys=["total", "longrun"], dash=["", "6,3"])
+    js = _render_line_js(id, data_json, s_json;
+                         xlabel="Retained HF observation", ylabel="Volatility")
+    isempty(title) && (title = "GARCH-MIDAS Volatility Components")
+    _make_plot([_PanelSpec(id, title, js)]; title=title)
+end
+
+function _garch_midas_weight_plot(m::GarchMidasModel{T}, title::String) where {T}
+    id = _next_plot_id("gm_w")
+    rows = Vector{Pair{String,String}}[]
+    for k in 1:m.K
+        push!(rows, ["x" => _json(k), "w" => _json(m.weights[k]), "zero" => "0"])
+    end
+    data_json = _json_array_of_objects(rows)
+    s_json = _series_json(["Weight φₖ"], [_PLOT_COLORS[1]]; keys=["w"])
+    refs = "[{\"value\":0,\"color\":\"#999\",\"dash\":\"4,3\"}]"
+    js = _render_line_js(id, data_json, s_json;
+                         ref_lines_json=refs, xlabel="MIDAS lag k", ylabel="Weight")
+    isempty(title) && (title = "GARCH-MIDAS Beta Weights (K=$(m.K))")
+    _make_plot([_PanelSpec(id, title, js)]; title=title)
+end
+
+# =============================================================================
 # SVModel
 # =============================================================================
 
@@ -1029,4 +1184,56 @@ function _plot_ha_policy(ss::HASteadyState{T}; title::String="") where {T}
     end
 
     _make_plot(panels; title=title, ncols=min(length(panels), 2))
+end
+
+# =============================================================================
+# StateSpaceModel (EV-37, #445)
+# =============================================================================
+
+"""
+    plot_result(ss::StateSpaceModel; obs=1, state=nothing, title="", save_path=nothing)
+
+Overlay the observed series (`obs`-th observable) with the filtered and smoothed level
+of a fitted state-space model, plus a ±1.96·√`smoothed_cov` band around the smoothed
+path. `state` selects which state component to overlay (defaults to the state that the
+`obs`-th observation loads on, or state 1).
+"""
+function plot_result(ss::StateSpaceModel{T}; obs::Int=1, state::Union{Int,Nothing}=nothing,
+                     title::String="", save_path::Union{String,Nothing}=nothing) where {T}
+    isfitted(ss) || throw(ArgumentError("plot_result requires a fitted StateSpaceModel"))
+    (1 <= obs <= ss.n_obs) || throw(ArgumentError("obs must be in 1:$(ss.n_obs)"))
+    # Default state: the first state the obs-th observation loads on.
+    st = state === nothing ? something(findfirst(!iszero, ss.Z[obs, :]), 1) : state
+    (1 <= st <= ss.n_state) || throw(ArgumentError("state must be in 1:$(ss.n_state)"))
+
+    z = ss.Z[obs, st]                                    # loading of obs on state st
+    z = z == 0 ? one(T) : z
+    rows = Vector{Pair{String,String}}[]
+    for t in 1:ss.T_obs
+        yv = ss.y[t, obs]
+        filt = z * ss.filtered_state[t, st]
+        smth = z * ss.smoothed_state[t, st]
+        sd = z * sqrt(max(ss.smoothed_cov[st, st, t], zero(T)))
+        push!(rows, Pair{String,String}[
+            "x"    => _json(t),
+            "obs"  => isnan(yv) ? "null" : _json(yv),
+            "filt" => _json(filt),
+            "smth" => _json(smth),
+            "lo"   => _json(smth - T(1.96) * sd),
+            "hi"   => _json(smth + T(1.96) * sd),
+        ])
+    end
+    data_json = _json_array_of_objects(rows)
+    id = _next_plot_id("ss_level")
+    series = _series_json(["Observed", "Filtered", "Smoothed"],
+                          [_PLOT_COLORS[1], _PLOT_COLORS[3], _PLOT_COLORS[2]];
+                          keys=["obs", "filt", "smth"], dash=["", "4,3", ""])
+    bands = "[{\"lo_key\":\"lo\",\"hi_key\":\"hi\",\"color\":\"$(_PLOT_COLORS[2])\"}]"
+    js = _render_line_js(id, data_json, series; bands_json=bands,
+                         xlabel="Period", ylabel=ss.n_obs == 1 ? "Value" : "Series $obs")
+    panel = _PanelSpec(id, "Filtered vs smoothed level (95% band)", js)
+    isempty(title) && (title = "State-Space Model — level estimates")
+    p = _make_plot([panel]; title=title, ncols=1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
 end
