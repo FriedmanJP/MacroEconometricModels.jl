@@ -357,6 +357,57 @@ Neither Q² statistic is significant, indicating no serial correlation in the sq
 
 ---
 
+## BDS Independence Test
+
+The Ljung-Box and ARCH-LM tests detect only *linear* dependence or conditional heteroskedasticity of a known form. The Brock-Dechert-Scheinkman-LeBaron (BDS) test (Brock, Dechert, Scheinkman & LeBaron 1996) detects *any* departure from independence and identical distribution --- nonlinear serial dependence, neglected conditional heteroskedasticity, or deterministic chaos --- and is the canonical post-ARIMA/post-GARCH adequacy check.
+
+The test compares the correlation integral of the ``m``-dimensional embedding of the series with what independence would imply. For a distance threshold ``\varepsilon`` and the indicator ``\Theta_{ij} = \mathbf{1}(|y_i - y_j| < \varepsilon)``, the correlation integral is
+
+```math
+C_m(\varepsilon) = \frac{2}{T_m(T_m-1)} \sum_{s < t} \prod_{k=0}^{m-1} \Theta_{s+k,\, t+k}, \qquad T_m = T - m + 1 ,
+```
+
+and the standardized statistic is
+
+```math
+w_m = \sqrt{T}\, \frac{C_m(\varepsilon) - C_1(\varepsilon)^m}{\sigma_m(\varepsilon)} \xrightarrow{d} N(0, 1) ,
+```
+
+where:
+- ``C_1(\varepsilon)`` is the first-order correlation integral (full sample)
+- ``\sigma_m(\varepsilon)`` is the asymptotic standard deviation (Brock et al. 1996), a function of ``C_1`` and the triple-overlap probability ``K``
+- ``m`` is the embedding dimension and ``\varepsilon = \texttt{eps\_frac} \cdot \operatorname{sd}(y)``
+
+Under ``H_0`` the observations are iid; large ``|w_m|`` (two-sided) rejects independence. The result reports one row per ``(m, \varepsilon)`` pair.
+
+```@example test_diag
+# A: iid data — should NOT reject independence
+x = randn(400)
+report(bds_test(x; m=2:3, eps_frac=1.0))
+```
+
+```@example test_diag
+# B: deterministic chaos (logistic map) — strongly rejected
+z = Vector{Float64}(undef, 400); z[1] = 0.3
+for t in 2:400
+    z[t] = 4 * z[t-1] * (1 - z[t-1])
+end
+report(bds_test(z; m=2:3, eps_frac=0.7))
+```
+
+For fitted models, pass the model object directly: `bds_test(model)` tests ARIMA residuals, and for volatility models it tests the **standardized** residuals ``\hat{\varepsilon}_t / \hat{\sigma}_t`` (testing raw returns would merely re-detect the volatility clustering the model already removed).
+
+```@example test_diag
+# Post-GARCH adequacy check on standardized residuals
+g = estimate_garch(randn(600))
+report(bds_test(g; m=2, eps_frac=[1.0, 1.5]))
+```
+
+!!! note "Small samples and the bootstrap"
+    The asymptotic ``N(0,1)`` approximation is unreliable for ``T < 200`` (a warning is emitted). For short series pass `bootstrap=500` (or more): each replication permutes the series to impose the iid null and recomputes ``w_m``, yielding a permutation p-value that does not rely on the asymptotic distribution.
+
+---
+
 ## Model Comparison Tests
 
 The classical trinity of specification tests --- Wald, likelihood ratio (LR), and Lagrange multiplier (LM) --- provides asymptotically equivalent tests for nested model hypotheses. MacroEconometricModels.jl implements the LR and LM tests with automatic detection of the restricted and unrestricted models.
@@ -673,6 +724,9 @@ show(stdout, lr23)
 
 - Dallal, G. E., & Wilkinson, L. (1986). An Analytic Approximation to the Distribution of Lilliefors's Test Statistic for Normality. *The American Statistician*, 40(4), 294-296. [DOI](https://doi.org/10.1080/00031305.1986.10475419)
 - Chow, K. V., & Denning, K. C. (1993). A Simple Multiple Variance Ratio Test. *Journal of Econometrics*, 58(3), 385-401. [DOI](https://doi.org/10.1016/0304-4076(93)90051-6)
+- Brock, W. A., Dechert, W. D., Scheinkman, J. A., & LeBaron, B. (1996). A Test for Independence Based on the Correlation Dimension. *Econometric Reviews*, 15(3), 197-235. [DOI](https://doi.org/10.1080/07474939608800353)
+
+- Brock, W. A., Hsieh, D. A., & LeBaron, B. (1991). *Nonlinear Dynamics, Chaos, and Instability: Statistical Theory and Economic Evidence*. Cambridge, MA: MIT Press. ISBN 978-0-262-02329-0.
 
 - Doornik, J. A., & Hansen, H. (2008). An Omnibus Test for Univariate and Multivariate Normality. *Oxford Bulletin of Economics and Statistics*, 70(s1), 927-939. [DOI](https://doi.org/10.1111/j.1468-0084.2008.00537.x)
 

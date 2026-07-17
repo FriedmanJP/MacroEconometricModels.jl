@@ -342,6 +342,9 @@ include("garch/forecast.jl")
 include("garch/diagnostics.jl")
 include("garch/midas.jl")   # EV-02 (#410): GARCH-MIDAS long/short-run volatility components
 include("garch/figarch.jl") # EV-14 (#422): FIGARCH/FIEGARCH fractionally-integrated volatility
+# EV-28 (#436): BDS independence test — placed here so the AbstractARIMAModel /
+# AbstractVolatilityModel residual dispatches see their (already-defined) types.
+include("teststat/bds.jl")
 
 # Multivariate GARCH (EV-16, #424): CCC / DCC / BEKK — reuse univariate estimate_garch margins
 include("mgarch/types.jl")
@@ -1077,6 +1080,8 @@ export LjungBoxResult, BoxPierceResult, DurbinWatsonResult
 export FisherTestResult, BartlettWhiteNoiseResult
 export ljung_box_test, box_pierce_test, durbin_watson_test
 export fisher_test, bartlett_white_noise_test
+# BDS independence test (EV-28, #436)
+export bds_test, BDSResult
 
 # =============================================================================
 # Exports - Time Series Filters

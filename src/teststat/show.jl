@@ -1330,3 +1330,60 @@ function Base.show(io::IO, r::VarianceRatioResult{T}) where {T}
     conc_data = Any["Conclusion" conclusion; "Note" "*** p<0.01, ** p<0.05, * p<0.10 (two-sided)"]
     _pretty_table(io, conc_data; column_labels=["",""], alignment=[:l,:l])
 end
+
+# =============================================================================
+# BDS independence test (Brock-Dechert-Scheinkman-LeBaron 1996) — EV-28 (#436)
+# =============================================================================
+
+function Base.show(io::IO, r::BDSResult{T}) where {T}
+    has_boot = r.bootstrap > 0
+    spec_data = Any[
+        "H₀"                 "Observations are iid (independent)";
+        "H₁"                 "Observations are not iid (nonlinear dependence / chaos)";
+        "Embedding dims (m)" string(collect(r.m));
+        "ε multipliers"      string("[", join(_fmt.(r.eps_frac), ", "), "] × sd");
+        "Sample sd"          _fmt(r.sd);
+        "Observations (T)"   r.nobs;
+        "Bootstrap"          (has_boot ? "$(r.bootstrap) reps (seed $(r.seed))" : "none")
+    ]
+    _pretty_table(io, spec_data;
+        title = "BDS Independence Test (Brock-Dechert-Scheinkman-LeBaron 1996)",
+        column_labels = ["Specification", ""], alignment = [:l, :r])
+
+    ncol = has_boot ? 6 : 5
+    rows = length(r.m) * length(r.eps)
+    data = Matrix{Any}(undef, rows, ncol)
+    ri = 0
+    for (im, m) in enumerate(r.m)
+        for (je, eps) in enumerate(r.eps)
+            ri += 1
+            w = r.statistic[im, je]
+            p = r.pvalue[im, je]
+            data[ri, 1] = m
+            data[ri, 2] = _fmt(eps)
+            data[ri, 3] = _fmt(r.C[im, je])
+            data[ri, 4] = isfinite(w) ? string(_fmt(w), " ", _significance_stars(p)) : "NaN"
+            data[ri, 5] = isfinite(p) ? _format_pvalue(p) : "NaN"
+            if has_boot
+                pb = r.boot_pvalue[im, je]
+                data[ri, 6] = isfinite(pb) ? _format_pvalue(pb) : "NaN"
+            end
+        end
+    end
+    labels = has_boot ? ["m", "ε", "C_m", "w (z)", "P-value", "Boot P"] :
+                        ["m", "ε", "C_m", "w (z)", "P-value"]
+    align = has_boot ? [:r, :r, :r, :r, :r, :r] : [:r, :r, :r, :r, :r]
+    _pretty_table(io, data;
+        title = "Results (two-sided N(0,1); one row per (m, ε))",
+        column_labels = labels, alignment = align)
+
+    pmin = minimum(r.pvalue)
+    conclusion = pmin < 0.01 ? "Reject H₀ at 1% — series is not iid" :
+                 pmin < 0.05 ? "Reject H₀ at 5% — series is not iid" :
+                 pmin < 0.10 ? "Reject H₀ at 10% — series is not iid" :
+                               "Fail to reject H₀ — no evidence against iid"
+    note = r.small_sample ? "T<200: asymptotic p-values unreliable — prefer bootstrap" :
+                            "*** p<0.01, ** p<0.05, * p<0.10"
+    conc_data = Any["Conclusion" conclusion; "Note" note]
+    _pretty_table(io, conc_data; column_labels=["",""], alignment=[:l,:l])
+end

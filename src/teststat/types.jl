@@ -1214,3 +1214,49 @@ StatsAPI.nobs(r::VarianceRatioResult) = r.nobs
 StatsAPI.dof(r::VarianceRatioResult) = length(r.q)
 # Primary p-value: the reported Chow–Denning joint test (robust unless robust=false).
 StatsAPI.pvalue(r::VarianceRatioResult) = r.robust ? r.cd_star_pvalue : r.cd_pvalue
+
+# =============================================================================
+# BDS independence test (Brock-Dechert-Scheinkman-LeBaron 1996) — EV-28 (#436)
+# =============================================================================
+
+"""
+    BDSResult{T} <: AbstractUnitRootTest
+
+Result of the Brock-Dechert-Scheinkman-LeBaron (BDS) test for iid/independence.
+The statistic `w_m = √T (C_m(ε) − C_1(ε)^m) / σ_m(ε) → N(0,1)` is reported for
+each embedding dimension `m` and distance threshold `ε` (a table with one row per
+`(m, ε)` pair). Two-sided p-values (departures from iid in either direction reject).
+
+Fields:
+- `m::Vector{Int}` — embedding dimensions tested (rows of the statistic table).
+- `eps::Vector{T}` — distance thresholds `ε` (columns; `ε = eps_frac · sd`).
+- `eps_frac::Vector{T}` — the `ε`-multipliers of the sample sd.
+- `sd::T` — sample standard deviation of the input series.
+- `statistic::Matrix{T}` — `w_m` statistics, `length(m) × length(eps)`.
+- `pvalue::Matrix{T}` — asymptotic two-sided N(0,1) p-values, same shape.
+- `boot_pvalue::Matrix{T}` — permutation-bootstrap p-values (`NaN` if `bootstrap==0`).
+- `C::Matrix{T}` — correlation integrals `C_m(ε)`, same shape (diagnostic).
+- `nobs::Int` — series length `T`.
+- `small_sample::Bool` — `true` when `T < 200` (asymptotic distribution unreliable).
+- `bootstrap::Int` — number of permutation replications (0 = none).
+- `seed::Int` — RNG seed used for the bootstrap.
+"""
+struct BDSResult{T<:AbstractFloat} <: AbstractUnitRootTest
+    m::Vector{Int}
+    eps::Vector{T}
+    eps_frac::Vector{T}
+    sd::T
+    statistic::Matrix{T}
+    pvalue::Matrix{T}
+    boot_pvalue::Matrix{T}
+    C::Matrix{T}
+    nobs::Int
+    small_sample::Bool
+    bootstrap::Int
+    seed::Int
+end
+
+# --- StatsAPI interface (EV-28) ---
+StatsAPI.nobs(r::BDSResult) = r.nobs
+# Primary p-value: the most significant cell of the (m, ε) table.
+StatsAPI.pvalue(r::BDSResult) = minimum(r.pvalue)

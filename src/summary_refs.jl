@@ -1448,6 +1448,17 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Wild Bootstrapping Variance Ratio Tests",
         journal="Economics Letters", volume="92", issue="1", pages="38--43",
         doi="10.1016/j.econlet.2006.01.007", isbn="", publisher="", entry_type=:article),
+    # --- BDS independence test (EV-28, #436) ---
+    :bds1996 => (key=:bds1996,
+        authors="Brock, William A. and Dechert, W. Davis and Scheinkman, Jos\\'e A. and LeBaron, Blake",
+        year=1996, title="A Test for Independence Based on the Correlation Dimension",
+        journal="Econometric Reviews", volume="15", issue="3", pages="197--235",
+        doi="10.1080/07474939608800353", isbn="", publisher="", entry_type=:article),
+    :brock_hsieh_lebaron1991 => (key=:brock_hsieh_lebaron1991,
+        authors="Brock, William A. and Hsieh, David A. and LeBaron, Blake", year=1991,
+        title="Nonlinear Dynamics, Chaos, and Instability: Statistical Theory and Economic Evidence",
+        journal="", volume="", issue="", pages="", doi="", isbn="9780262023290",
+        publisher="MIT Press, Cambridge, MA", entry_type=:book),
 )
 
 # --- Type/method → reference keys mapping ---
@@ -1776,6 +1787,9 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     # Variance-ratio / random-walk tests (EV-27, #435)
     :VarianceRatioResult => [:lo_mackinlay1988, :chow_denning1993, :wright2000, :kim2006],
     :variance_ratio_test => [:lo_mackinlay1988, :chow_denning1993, :wright2000, :kim2006],
+    # BDS independence test (EV-28, #436)
+    :BDSResult => [:bds1996, :brock_hsieh_lebaron1991],
+    :bds_test => [:bds1996, :brock_hsieh_lebaron1991],
     # Factor model break tests
     :FactorBreakResult => [:breitung_eickmeier2011, :chen_dolado_gonzalo2014, :han_inoue2015],
     :factor_break_test => [:breitung_eickmeier2011, :chen_dolado_gonzalo2014, :han_inoue2015],
@@ -2267,6 +2281,8 @@ refs(io::IO, ::WesterlundResult; kw...) = refs(io, _TYPE_REFS[:WesterlundResult]
 refs(io::IO, ::DumitrescuHurlinResult; kw...) = refs(io, _TYPE_REFS[:DumitrescuHurlinResult]; kw...)
 # EDF goodness-of-fit battery (EV-26, #434)
 refs(io::IO, ::EDFTestResult; kw...) = refs(io, _TYPE_REFS[:EDFTestResult]; kw...)
+# BDS independence test (EV-28, #436)
+refs(io::IO, ::BDSResult; kw...) = refs(io, _TYPE_REFS[:BDSResult]; kw...)
 refs(io::IO, ::FisherJohansenResult; kw...) = refs(io, _TYPE_REFS[:FisherJohansenResult]; kw...)
 # Residual-based / parameter-stability cointegration tests (EV-11, #419)
 refs(io::IO, ::EngleGrangerResult; kw...) = refs(io, _TYPE_REFS[:EngleGrangerResult]; kw...)
