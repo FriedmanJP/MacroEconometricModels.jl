@@ -1,7 +1,0 @@
-docs(getting-started): [T198] add getting_started.md quick-start tutorial (#297)
-
-New linear FRED-MD -> VAR(4) -> Cholesky IRF -> plot tutorial with runnable
-@example blocks (verify_examples OK). Registers a Getting Started nav section
-in make.jl and prepends the page to the index @contents block.
-
-Claude-Session: https://claude.ai/code/session_01U961hhdMRdrcbNjmACaVVQ
