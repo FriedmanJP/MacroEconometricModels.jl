@@ -657,6 +657,70 @@ vr2 = variance_ratio_test(ar1; q=[2, 4, 8], method=:wright, bootstrap=299)
 ```
 
 The mean-reverting AR(1) level drives ``VR(q)`` below one and the robust Chow–Denning test rejects the random-walk null.
+## Basic Statistics: Equality-of-Distribution and Rank Correlation Tests
+
+The "Basic statistics" battery compares the location, scale, or distribution of a response across the groups of a classifier, and measures the association between two series. This delivers EViews "Equality Tests by Classification" parity. The single entry point `equality_test(y, g; test=...)` groups `y` by the distinct values of `g`; `cor_test(x, y; method=...)` returns a rank/product-moment correlation. Both dispatch on `CrossSectionData`/`PanelData` via column symbols.
+
+Location tests: one/two-sample and paired t (pooled or Welch/Satterthwaite), one-way ANOVA (classic F or Welch), Mann–Whitney U, Wilcoxon signed-rank, Kruskal–Wallis H, van der Waerden normal-scores, and the Mood median χ². Scale tests: two-group variance F, Bartlett, Levene (center = group mean), Brown–Forsythe (center = group median), and Siegel–Tukey. The rank tests use the exact null for small tie-free samples and otherwise a continuity- and tie-corrected normal approximation, mirroring R's `wilcox.test`/`kruskal.test` behavior.
+
+!!! note "Grouped data vs. regression residuals"
+    The Levene and Brown–Forsythe tests here operate on **raw data split by a classifier**. For the regression-residual heteroskedasticity variants (deviations of fitted residuals), use the diagnostics in the cross-sectional regression module.
+
+```@setup test_basicstat
+using MacroEconometricModels, Random
+```
+
+Compare a response across three groups and test dispersion and association:
+
+```@example test_basicstat
+# three groups of a response
+g1 = [5.1, 4.9, 6.2, 5.7, 6.0, 5.5]
+g2 = [6.1, 5.9, 7.2, 6.8, 6.5]
+g3 = [7.0, 7.5, 6.9, 8.1, 7.3, 7.8]
+y = vcat(g1, g2, g3)
+grp = vcat(fill(1, 6), fill(2, 5), fill(3, 6))
+
+# one-way ANOVA (equal-variance F)
+report(anova_test(y, grp))
+```
+
+```@example test_basicstat
+# Welch ANOVA (unequal variances) and the tie-corrected Kruskal–Wallis H
+report(equality_test(y, grp; test=:anova, equal_var=false))
+report(equality_test(y, grp; test=:kruskal_wallis))
+```
+
+```@example test_basicstat
+# scale: Bartlett and the robust Brown–Forsythe test
+report(equality_test(y, grp; test=:bartlett))
+report(equality_test(y, grp; test=:brown_forsythe))
+```
+
+Two-sample location and the Mann–Whitney U (exact null when tie-free):
+
+```@example test_basicstat
+y12 = vcat(g1, g2); grp12 = vcat(fill(1, 6), fill(2, 5))
+report(equality_test(y12, grp12; test=:t, equal_var=false))  # Welch t, groups 1 & 2
+```
+
+```@example test_basicstat
+report(equality_test(y12, grp12; test=:mann_whitney))
+```
+
+Association between two series — Pearson, Spearman, and Kendall τ_b (the
+concordant−discordant count is computed in `O(n log n)` via a merge-sort inversion
+counter):
+
+```@example test_basicstat
+x = [10.0, 8, 13, 9, 11, 14, 6, 4, 12, 7, 5]
+z = [8.04, 6.95, 7.58, 8.81, 8.33, 9.96, 7.24, 4.26, 10.84, 4.82, 5.68]
+report(cor_test(x, z; method=:pearson))
+```
+
+```@example test_basicstat
+report(cor_test(x, z; method=:spearman))
+report(cor_test(x, z; method=:kendall))
+```
 
 ---
 
@@ -715,6 +779,24 @@ show(stdout, lr23)
 ## References
 
 - Andrews, D. W. K., & Lu, B. (2001). Consistent Model and Moment Selection Procedures for GMM Estimation with Application to Dynamic Panel Data Models. *Journal of Econometrics*, 101(1), 123-164. [DOI](https://doi.org/10.1016/S0304-4076(00)00077-4)
+
+- Bartlett, M. S. (1937). Properties of Sufficiency and Statistical Tests. *Proceedings of the Royal Society A*, 160(901), 268-282. [DOI](https://doi.org/10.1098/rspa.1937.0109)
+
+- Brown, M. B., & Forsythe, A. B. (1974). Robust Tests for the Equality of Variances. *Journal of the American Statistical Association*, 69(346), 364-367. [DOI](https://doi.org/10.1080/01621459.1974.10482955)
+
+- Kendall, M. G. (1938). A New Measure of Rank Correlation. *Biometrika*, 30(1/2), 81-93. [DOI](https://doi.org/10.1093/biomet/30.1-2.81)
+
+- Knight, W. R. (1966). A Computer Method for Calculating Kendall's Tau with Ungrouped Data. *Journal of the American Statistical Association*, 61(314), 436-439. [DOI](https://doi.org/10.1080/01621459.1966.10480879)
+
+- Kruskal, W. H., & Wallis, W. A. (1952). Use of Ranks in One-Criterion Variance Analysis. *Journal of the American Statistical Association*, 47(260), 583-621. [DOI](https://doi.org/10.1080/01621459.1952.10483441)
+
+- Mann, H. B., & Whitney, D. R. (1947). On a Test of Whether one of Two Random Variables is Stochastically Larger than the Other. *The Annals of Mathematical Statistics*, 18(1), 50-60. [DOI](https://doi.org/10.1214/aoms/1177730491)
+
+- Spearman, C. (1904). The Proof and Measurement of Association between Two Things. *The American Journal of Psychology*, 15(1), 72-101. [DOI](https://doi.org/10.2307/1412159)
+
+- van der Waerden, B. L. (1952). Order Tests for the Two-Sample Problem and Their Power. *Indagationes Mathematicae*, 14, 453-458.
+
+- Wilcoxon, F. (1945). Individual Comparisons by Ranking Methods. *Biometrics Bulletin*, 1(6), 80-83. [DOI](https://doi.org/10.2307/3001968)
 
 - Berndt, E. R., & Savin, N. E. (1977). Conflict Among Criteria for Testing Hypotheses in the Multivariate Linear Regression Model. *Econometrica*, 45(5), 1263-1277. [DOI](https://doi.org/10.2307/1914072)
 

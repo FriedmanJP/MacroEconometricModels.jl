@@ -256,6 +256,11 @@ include("teststat/fisher_johansen.jl")
 # per-unit Wald (reuses robust_inv + PanelData); show in teststat/show.jl.
 include("teststat/dumitrescu_hurlin.jl")
 include("teststat/factor_break.jl")
+# Equality-of-distribution + rank-correlation "Basic statistics" battery (EV-34, #442).
+# rank_correlation.jl first (defines _tiedrank used by equality.jl); both reuse
+# CrossSectionData/PanelData column lookup.
+include("teststat/rank_correlation.jl")
+include("teststat/equality.jl")
 
 # Nowcasting (after factor models for Kalman filter reuse)
 include("nowcast/types.jl")
@@ -689,6 +694,8 @@ export PedroniResult, KaoResult, WesterlundResult, FisherJohansenResult
 export dh_causality_test, DumitrescuHurlinResult
 # EDF goodness-of-fit battery (EV-26, #434): KS/Lilliefors/CvM/AD/Watson
 export edf_test, EDFTestResult
+# Equality-of-distribution + rank-correlation "Basic statistics" battery (EV-34, #442)
+export equality_test, cor_test, ttest, anova_test, EqualityTestResult, CorTestResult
 
 # Factor model structural break tests
 export factor_break_test

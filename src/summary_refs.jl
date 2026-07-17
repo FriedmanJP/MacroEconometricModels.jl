@@ -1459,6 +1459,52 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Nonlinear Dynamics, Chaos, and Instability: Statistical Theory and Economic Evidence",
         journal="", volume="", issue="", pages="", doi="", isbn="9780262023290",
         publisher="MIT Press, Cambridge, MA", entry_type=:book),
+    # --- Equality-of-distribution + rank-correlation battery (EV-34, #442) ---
+    :mann_whitney1947 => (key=:mann_whitney1947,
+        authors="Mann, Henry B. and Whitney, Donald R.", year=1947,
+        title="On a Test of Whether one of Two Random Variables is Stochastically Larger than the Other",
+        journal="The Annals of Mathematical Statistics", volume="18", issue="1", pages="50--60",
+        doi="10.1214/aoms/1177730491", isbn="", publisher="", entry_type=:article),
+    :kruskal_wallis1952 => (key=:kruskal_wallis1952,
+        authors="Kruskal, William H. and Wallis, W. Allen", year=1952,
+        title="Use of Ranks in One-Criterion Variance Analysis",
+        journal="Journal of the American Statistical Association", volume="47", issue="260", pages="583--621",
+        doi="10.1080/01621459.1952.10483441", isbn="", publisher="", entry_type=:article),
+    :brown_forsythe1974 => (key=:brown_forsythe1974,
+        authors="Brown, Morton B. and Forsythe, Alan B.", year=1974,
+        title="Robust Tests for the Equality of Variances",
+        journal="Journal of the American Statistical Association", volume="69", issue="346", pages="364--367",
+        doi="10.1080/01621459.1974.10482955", isbn="", publisher="", entry_type=:article),
+    :kendall1938 => (key=:kendall1938,
+        authors="Kendall, Maurice G.", year=1938,
+        title="A New Measure of Rank Correlation",
+        journal="Biometrika", volume="30", issue="1/2", pages="81--93",
+        doi="10.1093/biomet/30.1-2.81", isbn="", publisher="", entry_type=:article),
+    :wilcoxon1945 => (key=:wilcoxon1945,
+        authors="Wilcoxon, Frank", year=1945,
+        title="Individual Comparisons by Ranking Methods",
+        journal="Biometrics Bulletin", volume="1", issue="6", pages="80--83",
+        doi="10.2307/3001968", isbn="", publisher="", entry_type=:article),
+    :spearman1904 => (key=:spearman1904,
+        authors="Spearman, Charles", year=1904,
+        title="The Proof and Measurement of Association between Two Things",
+        journal="The American Journal of Psychology", volume="15", issue="1", pages="72--101",
+        doi="10.2307/1412159", isbn="", publisher="", entry_type=:article),
+    :bartlett1937 => (key=:bartlett1937,
+        authors="Bartlett, Maurice S.", year=1937,
+        title="Properties of Sufficiency and Statistical Tests",
+        journal="Proceedings of the Royal Society A", volume="160", issue="901", pages="268--282",
+        doi="10.1098/rspa.1937.0109", isbn="", publisher="", entry_type=:article),
+    :vanderwaerden1952 => (key=:vanderwaerden1952,
+        authors="van der Waerden, Bartel L.", year=1952,
+        title="Order Tests for the Two-Sample Problem and Their Power",
+        journal="Indagationes Mathematicae", volume="14", issue="", pages="453--458",
+        doi="", isbn="", publisher="", entry_type=:article),
+    :knight1966 => (key=:knight1966,
+        authors="Knight, William R.", year=1966,
+        title="A Computer Method for Calculating Kendall's Tau with Ungrouped Data",
+        journal="Journal of the American Statistical Association", volume="61", issue="314", pages="436--439",
+        doi="10.1080/01621459.1966.10480879", isbn="", publisher="", entry_type=:article),
 )
 
 # --- Type/method → reference keys mapping ---
@@ -1790,6 +1836,13 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     # BDS independence test (EV-28, #436)
     :BDSResult => [:bds1996, :brock_hsieh_lebaron1991],
     :bds_test => [:bds1996, :brock_hsieh_lebaron1991],
+    # Equality-of-distribution + rank-correlation battery (EV-34, #442)
+    :EqualityTestResult => [:mann_whitney1947, :kruskal_wallis1952, :wilcoxon1945,
+                            :bartlett1937, :brown_forsythe1974, :vanderwaerden1952],
+    :equality_test => [:mann_whitney1947, :kruskal_wallis1952, :wilcoxon1945,
+                       :bartlett1937, :brown_forsythe1974, :vanderwaerden1952],
+    :CorTestResult => [:kendall1938, :spearman1904, :knight1966],
+    :cor_test => [:kendall1938, :spearman1904, :knight1966],
     # Factor model break tests
     :FactorBreakResult => [:breitung_eickmeier2011, :chen_dolado_gonzalo2014, :han_inoue2015],
     :factor_break_test => [:breitung_eickmeier2011, :chen_dolado_gonzalo2014, :han_inoue2015],
@@ -2284,6 +2337,9 @@ refs(io::IO, ::EDFTestResult; kw...) = refs(io, _TYPE_REFS[:EDFTestResult]; kw..
 # BDS independence test (EV-28, #436)
 refs(io::IO, ::BDSResult; kw...) = refs(io, _TYPE_REFS[:BDSResult]; kw...)
 refs(io::IO, ::FisherJohansenResult; kw...) = refs(io, _TYPE_REFS[:FisherJohansenResult]; kw...)
+# Equality-of-distribution + rank-correlation battery (EV-34, #442)
+refs(io::IO, ::EqualityTestResult; kw...) = refs(io, _TYPE_REFS[:EqualityTestResult]; kw...)
+refs(io::IO, ::CorTestResult; kw...) = refs(io, _TYPE_REFS[:CorTestResult]; kw...)
 # Residual-based / parameter-stability cointegration tests (EV-11, #419)
 refs(io::IO, ::EngleGrangerResult; kw...) = refs(io, _TYPE_REFS[:EngleGrangerResult]; kw...)
 refs(io::IO, ::PhillipsOuliarisResult; kw...) = refs(io, _TYPE_REFS[:PhillipsOuliarisResult]; kw...)

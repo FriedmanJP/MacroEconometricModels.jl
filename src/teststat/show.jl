@@ -1245,6 +1245,89 @@ function Base.show(io::IO, r::EDFTestResult{T}) where {T}
 end
 
 # =============================================================================
+# Equality-of-distribution + rank-correlation "Basic statistics" battery
+# (EV-34, #442)
+# =============================================================================
+
+const _EQ_TEST_LABELS = Dict{Symbol,String}(
+    :one_sample_t         => "One-Sample t-Test",
+    :two_sample_t         => "Two-Sample t-Test (pooled)",
+    :welch_t              => "Welch Two-Sample t-Test",
+    :paired_t             => "Paired t-Test",
+    :anova                => "One-Way ANOVA (F)",
+    :welch_anova          => "Welch ANOVA (F)",
+    :mann_whitney         => "Mann-Whitney U Test",
+    :wilcoxon_signed_rank => "Wilcoxon Signed-Rank Test",
+    :kruskal_wallis       => "Kruskal-Wallis H Test",
+    :van_der_waerden      => "van der Waerden Normal-Scores Test",
+    :median_chisq         => "Mood Median (χ²) Test",
+    :variance_f           => "Two-Group Variance F-Test",
+    :bartlett             => "Bartlett's Test",
+    :levene               => "Levene's Test (center = mean)",
+    :brown_forsythe       => "Brown-Forsythe Test (center = median)",
+    :siegel_tukey         => "Siegel-Tukey Test",
+)
+
+const _EQ_STAT_LABELS = Dict{Symbol,String}(
+    :one_sample_t         => "t statistic",
+    :two_sample_t         => "t statistic",
+    :welch_t              => "t statistic",
+    :paired_t             => "t statistic",
+    :anova                => "F statistic",
+    :welch_anova          => "F statistic",
+    :mann_whitney         => "U statistic",
+    :wilcoxon_signed_rank => "V statistic",
+    :kruskal_wallis       => "H statistic",
+    :van_der_waerden      => "T statistic (χ²)",
+    :median_chisq         => "χ² statistic",
+    :variance_f           => "F statistic",
+    :bartlett             => "χ² statistic",
+    :levene               => "F statistic",
+    :brown_forsythe       => "F statistic",
+    :siegel_tukey         => "Rank-sum (group 1)",
+)
+
+# Tests whose primary statistic is on an F distribution (two df values).
+_eq_is_ftest(name::Symbol) = name in (:anova, :welch_anova, :variance_f, :levene, :brown_forsythe)
+
+function Base.show(io::IO, ::MIME"text/plain", r::EqualityTestResult{T}) where {T}
+    stars = _significance_stars(r.pvalue)
+    isf = _eq_is_ftest(r.test_name)
+    df_str = isf ? string("(", _fmt(r.df1), ", ", _fmt(r.df2), ")") : _fmt(r.df1)
+    spec_data = Any[
+        "H₀"            "Groups share a common distribution / parameter";
+        "H₁"            "Groups differ";
+        "Method"        r.detail;
+        "Groups"        r.n_groups;
+        "Group sizes"   string(r.group_sizes);
+        "Null"          (r.exact ? "exact" : "asymptotic approximation")
+    ]
+    _pretty_table(io, spec_data;
+        title = "Equality Test: $(get(_EQ_TEST_LABELS, r.test_name, string(r.test_name)))",
+        column_labels = ["Specification", ""], alignment = [:l, :r])
+
+    results_data = Any[
+        get(_EQ_STAT_LABELS, r.test_name, "Statistic")  string(_fmt(r.statistic), " ", stars);
+        "Degrees of freedom"                             df_str;
+        "P-value"                                        _format_pvalue(r.pvalue)
+    ]
+    _pretty_table(io, results_data;
+        title = "Results", column_labels = ["", "Value"], alignment = [:l, :r])
+
+    conclusion = if r.pvalue < 0.01
+        "Reject H₀ at 1% significance level"
+    elseif r.pvalue < 0.05
+        "Reject H₀ at 5% significance level"
+    elseif r.pvalue < 0.10
+        "Reject H₀ at 10% significance level"
+    else
+        "Fail to reject H₀"
+    end
+    conc_data = Any["Conclusion" conclusion; "Note" "*** p<0.01, ** p<0.05, * p<0.10"]
+    _pretty_table(io, conc_data; column_labels=["",""], alignment=[:l,:l])
+end
+
+# =============================================================================
 # Variance-ratio / random-walk tests (EV-27, #435)
 # =============================================================================
 
@@ -1387,3 +1470,57 @@ function Base.show(io::IO, r::BDSResult{T}) where {T}
     conc_data = Any["Conclusion" conclusion; "Note" note]
     _pretty_table(io, conc_data; column_labels=["",""], alignment=[:l,:l])
 end
+
+# =============================================================================
+# Rank/association correlation tests (EV-34, #442)
+# =============================================================================
+
+function Base.show(io::IO, ::MIME"text/plain", r::CorTestResult{T}) where {T}
+    stars = _significance_stars(r.pvalue)
+    method_name = r.method === :pearson ? "Pearson product-moment" :
+                  r.method === :spearman ? "Spearman rank" : "Kendall rank"
+    coef_label = r.method === :pearson ? "Correlation r" :
+                 r.method === :spearman ? "Correlation ρ" :
+                 (r.exact ? "τ_a" : "τ_b")
+    stat_label = r.method === :pearson ? "t statistic" :
+                 r.method === :spearman ? "S statistic" :
+                 (r.exact ? "T (concordant)" : "z statistic")
+    spec_data = Any[
+        "H₀"           "No association (coefficient = 0)";
+        "H₁"           "Nonzero association";
+        "Method"       r.detail;
+        "Observations" r.n;
+        "Null"         (r.exact ? "exact" : "asymptotic approximation")
+    ]
+    _pretty_table(io, spec_data;
+        title = "Correlation Test: $(method_name)",
+        column_labels = ["Specification", ""], alignment = [:l, :r])
+
+    results_data = Any[
+        coef_label   string(_fmt(r.estimate), " ", stars);
+        stat_label   _fmt(r.statistic);
+        "P-value"    _format_pvalue(r.pvalue)
+    ]
+    if r.method === :pearson && isfinite(r.ci_lower)
+        results_data = vcat(results_data,
+            Any["95% CI" string("[", _fmt(r.ci_lower), ", ", _fmt(r.ci_upper), "]")])
+    end
+    _pretty_table(io, results_data;
+        title = "Results", column_labels = ["", "Value"], alignment = [:l, :r])
+
+    conclusion = if r.pvalue < 0.01
+        "Reject H₀ at 1% — significant association"
+    elseif r.pvalue < 0.05
+        "Reject H₀ at 5% — significant association"
+    elseif r.pvalue < 0.10
+        "Reject H₀ at 10% — marginal association"
+    else
+        "Fail to reject H₀ — no significant association"
+    end
+    conc_data = Any["Conclusion" conclusion; "Note" "*** p<0.01, ** p<0.05, * p<0.10"]
+    _pretty_table(io, conc_data; column_labels=["",""], alignment=[:l,:l])
+end
+
+# Plain 2-arg forwarders so report()/print render the same table (EV-34).
+Base.show(io::IO, r::EqualityTestResult) = show(io, MIME"text/plain"(), r)
+Base.show(io::IO, r::CorTestResult) = show(io, MIME"text/plain"(), r)

@@ -411,6 +411,9 @@ report(x::AbstractGMMModel) = show(stdout, x)
 report(x::AbstractUnitRootTest) = show(stdout, x)
 report(x::AbstractNormalityTest) = show(stdout, x)
 report(x::AbstractNonGaussianSVAR) = show(stdout, x)
+# Equality-of-distribution + rank-correlation battery (EV-34, #442)
+report(x::EqualityTestResult) = show(stdout, x)
+report(x::CorTestResult) = show(stdout, x)
 
 # --- Types without abstract parents ---
 report(x::ARIMAForecast) = show(stdout, x)

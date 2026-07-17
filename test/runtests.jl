@@ -88,6 +88,7 @@ const TEST_GROUPS = [
         "arima/test_arfima.jl",   # EV-13 (#421): ARFIMA + GPH + local Whittle
         "teststat/test_granger.jl",
         "teststat/test_dumitrescu_hurlin.jl",   # EV-24 (#432): DH panel Granger non-causality
+        "teststat/test_equality.jl",   # EV-34 (#442): equality-of-distribution + rank correlations
         "teststat/test_model_comparison.jl",
         "teststat/test_normality.jl",
         "teststat/test_edf.jl",   # EV-26 (#434): EDF goodness-of-fit battery (KS/Lilliefors/CvM/AD/Watson)
@@ -433,6 +434,7 @@ else
         @testset "ARIMA Coverage" begin include("arima/test_arima_coverage.jl") end
         @testset "ARFIMA (long memory)" begin include("arima/test_arfima.jl") end
         @testset "Granger Causality Tests" begin include("teststat/test_granger.jl") end
+        @testset "Equality & Rank Correlation Tests" begin include("teststat/test_equality.jl") end   # EV-34 (#442)
         @testset "Model Comparison Tests" begin include("teststat/test_model_comparison.jl") end
         @testset "Multivariate Normality Tests" begin include("teststat/test_normality.jl") end
         @testset "EDF Goodness-of-Fit Battery" begin include("teststat/test_edf.jl") end  # EV-26 (#434)

@@ -1260,3 +1260,74 @@ end
 StatsAPI.nobs(r::BDSResult) = r.nobs
 # Primary p-value: the most significant cell of the (m, ε) table.
 StatsAPI.pvalue(r::BDSResult) = minimum(r.pvalue)
+# Equality-of-distribution + rank-correlation "Basic statistics" battery
+# (EV-34, #442). Both result types subtype StatsAPI.HypothesisTest directly.
+# =============================================================================
+
+"""
+    EqualityTestResult{T} <: StatsAPI.HypothesisTest
+
+Result of a grouped equality-of-distribution test (`equality_test`, `ttest`,
+`anova_test`).
+
+Fields:
+- `test_name::Symbol` — e.g. `:two_sample_t`, `:welch_t`, `:anova`, `:welch_anova`,
+  `:mann_whitney`, `:wilcoxon_signed_rank`, `:kruskal_wallis`, `:van_der_waerden`,
+  `:median_chisq`, `:variance_f`, `:bartlett`, `:levene`, `:brown_forsythe`,
+  `:siegel_tukey`
+- `statistic::T` — the reported statistic (t / F / U / V / H / χ² / rank sum)
+- `pvalue::T` — two-sided p-value
+- `df1::T` — degrees of freedom (numerator df for F; χ²/t df; fractional for Welch)
+- `df2::T` — denominator df for F tests, `NaN` otherwise
+- `n_groups::Int` — number of groups
+- `group_sizes::Vector{Int}` — per-group sample sizes
+- `exact::Bool` — whether the exact null (vs an asymptotic approximation) was used
+- `detail::String` — method annotation (pooled/Welch, tie-corrected, …)
+"""
+struct EqualityTestResult{T<:AbstractFloat} <: StatsAPI.HypothesisTest
+    test_name::Symbol
+    statistic::T
+    pvalue::T
+    df1::T
+    df2::T
+    n_groups::Int
+    group_sizes::Vector{Int}
+    exact::Bool
+    detail::String
+end
+
+"""
+    CorTestResult{T} <: StatsAPI.HypothesisTest
+
+Result of a rank/association test (`cor_test`).
+
+Fields:
+- `method::Symbol` — `:pearson`, `:spearman`, or `:kendall`
+- `estimate::T` — the coefficient (`r`, `ρ`, or `τ_a`/`τ_b`)
+- `statistic::T` — test statistic (`t`, `S`, `z`, or concordant count `T`)
+- `pvalue::T` — two-sided p-value
+- `n::Int` — number of paired observations
+- `df::T` — `n − 2` for Pearson/Spearman, `NaN` for Kendall
+- `ci_lower::T`, `ci_upper::T` — Fisher-z CI (Pearson only; `NaN` otherwise)
+- `exact::Bool` — whether the exact null was used
+- `detail::String` — method annotation
+"""
+struct CorTestResult{T<:AbstractFloat} <: StatsAPI.HypothesisTest
+    method::Symbol
+    estimate::T
+    statistic::T
+    pvalue::T
+    n::Int
+    df::T
+    ci_lower::T
+    ci_upper::T
+    exact::Bool
+    detail::String
+end
+
+# --- StatsAPI interface (EV-34) ---
+StatsAPI.nobs(r::EqualityTestResult) = sum(r.group_sizes)
+StatsAPI.pvalue(r::EqualityTestResult) = r.pvalue
+StatsAPI.dof(r::EqualityTestResult) = r.df1
+StatsAPI.nobs(r::CorTestResult) = r.n
+StatsAPI.pvalue(r::CorTestResult) = r.pvalue
