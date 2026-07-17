@@ -1102,3 +1102,49 @@ StatsAPI.nobs(r::DumitrescuHurlinResult) = r.nobs
 StatsAPI.dof(r::DumitrescuHurlinResult) = r.N
 # Primary p-value: the small-T Z̃ (recommended for finite panels).
 StatsAPI.pvalue(r::DumitrescuHurlinResult) = r.Ztilde_pvalue
+
+# =============================================================================
+# EDF goodness-of-fit battery (EV-26, #434)
+# KS / Lilliefors / Cramér–von Mises / Anderson–Darling / Watson against a
+# specified or ML-estimated continuous distribution. Right-tailed: large
+# statistic ⇒ reject the null of good fit. See [`edf_test`](@ref).
+# =============================================================================
+
+"""
+    EDFTestResult{T} <: AbstractUnitRootTest
+
+Result from the empirical-distribution-function goodness-of-fit battery
+[`edf_test`](@ref). `H₀`: the data follow `dist`; `H₁`: they do not.
+
+Fields:
+- `test`: EDF statistic — `:ks`, `:lilliefors`, `:cvm`, `:ad`, `:watson`
+- `dist`: null family (`:normal`, `:exponential`, `:logistic`, `:gumbel`,
+  `:gamma`, `:weibull`, `:chisq`)
+- `params`: `:estimate` (ML-fit θ) or `:specified`
+- `statistic`: the value compared to the critical values (modified statistic for
+  the estimated-normal AD/CvM/Watson routes; raw EDF statistic otherwise)
+- `raw_statistic`: the unmodified EDF statistic
+- `pvalue`: p-value (`NaN` when no published null table exists for the requested
+  estimated-parameter family)
+- `nobs`: number of observations
+- `theta`: fitted or specified distribution parameters
+- `critical_values`: `Dict` of `1/5/10 (%) => critical value` (empty when
+  unavailable)
+- `case`: human-readable label of the null-distribution case used
+"""
+struct EDFTestResult{T<:AbstractFloat} <: AbstractUnitRootTest
+    test::Symbol
+    dist::Symbol
+    params::Symbol
+    statistic::T
+    raw_statistic::T
+    pvalue::T
+    nobs::Int
+    theta::Vector{T}
+    critical_values::Dict{Int,T}
+    case::String
+end
+
+# --- StatsAPI interface (EV-26) ---
+StatsAPI.nobs(r::EDFTestResult) = r.nobs
+StatsAPI.pvalue(r::EDFTestResult) = r.pvalue

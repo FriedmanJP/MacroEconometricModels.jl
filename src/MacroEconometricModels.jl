@@ -194,6 +194,7 @@ include("teststat/stationarity.jl")
 include("teststat/convenience.jl")
 include("teststat/show.jl")
 include("teststat/normality.jl")
+include("teststat/edf.jl")   # EV-26 (#434): EDF goodness-of-fit battery (KS/Lilliefors/CvM/AD/Watson)
 include("teststat/portmanteau.jl")
 
 # Structural identification
@@ -682,6 +683,8 @@ export pedroni_test, kao_test, westerlund_test, fisher_johansen_test
 export PedroniResult, KaoResult, WesterlundResult, FisherJohansenResult
 # Dumitrescu-Hurlin panel Granger non-causality test (EV-24, #432)
 export dh_causality_test, DumitrescuHurlinResult
+# EDF goodness-of-fit battery (EV-26, #434): KS/Lilliefors/CvM/AD/Watson
+export edf_test, EDFTestResult
 
 # Factor model structural break tests
 export factor_break_test

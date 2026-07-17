@@ -1400,6 +1400,33 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Testing for Granger Non-causality in Heterogeneous Panels",
         journal="Economic Modelling", volume="29", issue="4", pages="1450--1460",
         doi="10.1016/j.econmod.2012.02.014", isbn="", publisher="", entry_type=:article),
+    # --- EDF goodness-of-fit battery (EV-26, #434) ---
+    :anderson_darling1954 => (key=:anderson_darling1954,
+        authors="Anderson, Theodore W. and Darling, Donald A.", year=1954,
+        title="A Test of Goodness of Fit",
+        journal="Journal of the American Statistical Association", volume="49", issue="268",
+        pages="765--769", doi="10.1080/01621459.1954.10501232", isbn="", publisher="",
+        entry_type=:article),
+    :stephens1974 => (key=:stephens1974, authors="Stephens, Michael A.", year=1974,
+        title="EDF Statistics for Goodness of Fit and Some Comparisons",
+        journal="Journal of the American Statistical Association", volume="69", issue="347",
+        pages="730--737", doi="10.1080/01621459.1974.10480196", isbn="", publisher="",
+        entry_type=:article),
+    :lilliefors1967 => (key=:lilliefors1967, authors="Lilliefors, Hubert W.", year=1967,
+        title="On the Kolmogorov-Smirnov Test for Normality with Mean and Variance Unknown",
+        journal="Journal of the American Statistical Association", volume="62", issue="318",
+        pages="399--402", doi="10.1080/01621459.1967.10482916", isbn="", publisher="",
+        entry_type=:article),
+    :dallal_wilkinson1986 => (key=:dallal_wilkinson1986,
+        authors="Dallal, Gerard E. and Wilkinson, Leland", year=1986,
+        title="An Analytic Approximation to the Distribution of Lilliefors's Test Statistic for Normality",
+        journal="The American Statistician", volume="40", issue="4", pages="294--296",
+        doi="10.1080/00031305.1986.10475419", isbn="", publisher="", entry_type=:article),
+    :marsaglia_tsang_wang2003 => (key=:marsaglia_tsang_wang2003,
+        authors="Marsaglia, George and Tsang, Wai Wan and Wang, Jingbo", year=2003,
+        title="Evaluating Kolmogorov's Distribution",
+        journal="Journal of Statistical Software", volume="8", issue="18", pages="1--4",
+        doi="10.18637/jss.v008.i18", isbn="", publisher="", entry_type=:article),
 )
 
 # --- Type/method → reference keys mapping ---
@@ -1720,6 +1747,11 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     # Dumitrescu-Hurlin panel Granger non-causality (EV-24, #432)
     :DumitrescuHurlinResult => [:dumitrescu_hurlin2012, :granger1969],
     :dh_causality_test => [:dumitrescu_hurlin2012, :granger1969],
+    # EDF goodness-of-fit battery (EV-26, #434)
+    :EDFTestResult => [:anderson_darling1954, :stephens1974, :lilliefors1967,
+                       :dallal_wilkinson1986, :marsaglia_tsang_wang2003],
+    :edf_test => [:anderson_darling1954, :stephens1974, :lilliefors1967,
+                  :dallal_wilkinson1986, :marsaglia_tsang_wang2003],
     # Factor model break tests
     :FactorBreakResult => [:breitung_eickmeier2011, :chen_dolado_gonzalo2014, :han_inoue2015],
     :factor_break_test => [:breitung_eickmeier2011, :chen_dolado_gonzalo2014, :han_inoue2015],
@@ -2209,6 +2241,8 @@ refs(io::IO, ::PedroniResult; kw...) = refs(io, _TYPE_REFS[:PedroniResult]; kw..
 refs(io::IO, ::KaoResult; kw...) = refs(io, _TYPE_REFS[:KaoResult]; kw...)
 refs(io::IO, ::WesterlundResult; kw...) = refs(io, _TYPE_REFS[:WesterlundResult]; kw...)
 refs(io::IO, ::DumitrescuHurlinResult; kw...) = refs(io, _TYPE_REFS[:DumitrescuHurlinResult]; kw...)
+# EDF goodness-of-fit battery (EV-26, #434)
+refs(io::IO, ::EDFTestResult; kw...) = refs(io, _TYPE_REFS[:EDFTestResult]; kw...)
 refs(io::IO, ::FisherJohansenResult; kw...) = refs(io, _TYPE_REFS[:FisherJohansenResult]; kw...)
 # Residual-based / parameter-stability cointegration tests (EV-11, #419)
 refs(io::IO, ::EngleGrangerResult; kw...) = refs(io, _TYPE_REFS[:EngleGrangerResult]; kw...)

@@ -516,6 +516,61 @@ Each criterion reports its own optimal lag order; when they agree, the selected 
 
 ---
 
+## EDF Goodness-of-Fit Tests
+
+Empirical-distribution-function (EDF) tests compare the sample distribution to a hypothesized continuous distribution through the probability-integral transform ``z_{(i)} = F(y_{(i)}; \theta)``. Unlike the moment-based normality suite above, `edf_test` tests fit against any of seven parametric families and reports the Kolmogorov–Smirnov, Lilliefors, Cramér–von Mises, Anderson–Darling, or Watson statistic. This matches EViews' *Empirical distribution tests* and is the standard tool for checking residuals, PIT transforms, or loss series in risk and forecast-evaluation work.
+
+The five statistics summarise the gap between the empirical and hypothesized CDFs differently:
+
+```math
+\begin{aligned}
+D   &= \max_i\left[\max\left(\tfrac{i}{n} - z_{(i)},\; z_{(i)} - \tfrac{i-1}{n}\right)\right] & &\text{(Kolmogorov–Smirnov)}\\
+W^2 &= \frac{1}{12n} + \sum_{i=1}^n\left(z_{(i)} - \frac{2i-1}{2n}\right)^2 & &\text{(Cramér–von Mises)}\\
+A^2 &= -n - \frac{1}{n}\sum_{i=1}^n (2i-1)\left[\ln z_{(i)} + \ln\!\left(1 - z_{(n+1-i)}\right)\right] & &\text{(Anderson–Darling)}\\
+U^2 &= W^2 - n\left(\bar{z} - \tfrac{1}{2}\right)^2 & &\text{(Watson)}
+\end{aligned}
+```
+
+where
+
+- ``z_{(i)}`` are the sorted PIT values,
+- ``n`` is the sample size,
+- ``\bar{z}`` is the mean of the PIT values.
+
+The Anderson–Darling statistic places the most weight on the tails and is the recommended default.
+
+**Specified versus estimated parameters.** When the distribution parameters are known, `params=:specified` uses distribution-free asymptotics (the Marsaglia–Tsang–Wang exact Kolmogorov CDF for ``n \le 100``, the Marsaglia–Marsaglia ADinf distribution for ``A^2``, and asymptotic tables for ``W^2``/``U^2``). When parameters are estimated from the data, the statistics are no longer distribution-free; for the normal family `edf_test` applies the Stephens (1974) modified statistics with the D'Agostino & Stephens (1986) closed-form p-values, and the Dallal–Wilkinson (1986) approximation for the Lilliefors (estimated-normal KS) statistic.
+
+```@example test_diag
+using Distributions
+z = rand(MersenneTwister(7), Normal(0.5, 2.0), 300)
+
+# Anderson–Darling with estimated normal parameters (Stephens Case 3)
+report(edf_test(z; dist=:normal, test=:ad, params=:estimate))
+```
+
+The high p-value fails to reject normality, as expected for Gaussian data. Testing the same series against a fully specified null uses the distribution-free route:
+
+```@example test_diag
+# Kolmogorov–Smirnov against a fully specified N(0, 1) — a poor fit here
+report(edf_test(z; dist=:normal, test=:ks, params=:specified, theta=(0.0, 1.0)))
+```
+
+Non-normal families are supported for the specified route and (where a published null table exists) the estimated route:
+
+```@example test_diag
+# Exponential duration data, Anderson–Darling, parameters estimated by ML
+d = rand(MersenneTwister(11), Exponential(1.5), 200)
+r = edf_test(d; dist=:exponential, test=:ad, params=:specified, theta=(1.5,))
+(statistic = round(r.statistic, digits=4), pvalue = round(r.pvalue, digits=4))
+```
+
+`edf_test` accepts `dist ∈ (:normal, :exponential, :logistic, :gumbel, :gamma, :weibull, :chisq)` and `test ∈ (:ks, :lilliefors, :cvm, :ad, :watson)`. For estimated-parameter families without a published null distribution, the statistic is returned with `pvalue = NaN` and an explanatory case label rather than an incorrect number.
+
+**Return value.** `EDFTestResult{T}` stores `test`, `dist`, `params`, `statistic` (the value compared to the critical values), `raw_statistic` (the unmodified EDF statistic), `pvalue`, `nobs`, the fitted or specified `theta`, the `critical_values` dictionary, and a human-readable `case` label.
+
+---
+
 ## Complete Example
 
 A full post-estimation diagnostic workflow for a VAR model estimated on FRED-MD data:
@@ -574,6 +629,12 @@ show(stdout, lr23)
 
 - Berndt, E. R., & Savin, N. E. (1977). Conflict Among Criteria for Testing Hypotheses in the Multivariate Linear Regression Model. *Econometrica*, 45(5), 1263-1277. [DOI](https://doi.org/10.2307/1914072)
 
+- Anderson, T. W., & Darling, D. A. (1954). A Test of Goodness of Fit. *Journal of the American Statistical Association*, 49(268), 765-769. [DOI](https://doi.org/10.1080/01621459.1954.10501232)
+
+- D'Agostino, R. B., & Stephens, M. A. (1986). *Goodness-of-Fit Techniques*. New York: Marcel Dekker. ISBN 978-0-8247-7487-5.
+
+- Dallal, G. E., & Wilkinson, L. (1986). An Analytic Approximation to the Distribution of Lilliefors's Test Statistic for Normality. *The American Statistician*, 40(4), 294-296. [DOI](https://doi.org/10.1080/00031305.1986.10475419)
+
 - Doornik, J. A., & Hansen, H. (2008). An Omnibus Test for Univariate and Multivariate Normality. *Oxford Bulletin of Economics and Statistics*, 70(s1), 927-939. [DOI](https://doi.org/10.1111/j.1468-0084.2008.00537.x)
 
 - Engle, R. F. (1982). Autoregressive Conditional Heteroscedasticity with Estimates of the Variance of United Kingdom Inflation. *Econometrica*, 50(4), 987-1007. [DOI](https://doi.org/10.2307/1912773)
@@ -586,10 +647,16 @@ show(stdout, lr23)
 
 - Jarque, C. M., & Bera, A. K. (1980). Efficient Tests for Normality, Homoscedasticity and Serial Independence of Regression Residuals. *Economics Letters*, 6(3), 255-259. [DOI](https://doi.org/10.1016/0165-1765(80)90024-5)
 
+- Lilliefors, H. W. (1967). On the Kolmogorov-Smirnov Test for Normality with Mean and Variance Unknown. *Journal of the American Statistical Association*, 62(318), 399-402. [DOI](https://doi.org/10.1080/01621459.1967.10482916)
+
 - Lutkepohl, H. (2005). *New Introduction to Multiple Time Series Analysis*. Berlin: Springer. ISBN 978-3-540-40172-8.
+
+- Marsaglia, G., Tsang, W. W., & Wang, J. (2003). Evaluating Kolmogorov's Distribution. *Journal of Statistical Software*, 8(18), 1-4. [DOI](https://doi.org/10.18637/jss.v008.i18)
 
 - Mardia, K. V. (1970). Measures of Multivariate Skewness and Kurtosis with Applications. *Biometrika*, 57(3), 519-530. [DOI](https://doi.org/10.2307/2334770)
 
 - Rao, C. R. (1948). Large Sample Tests of Statistical Hypotheses Concerning Several Parameters with Applications to Problems of Estimation. *Mathematical Proceedings of the Cambridge Philosophical Society*, 44(1), 50-57. [DOI](https://doi.org/10.1017/S0305004100023987)
+
+- Stephens, M. A. (1974). EDF Statistics for Goodness of Fit and Some Comparisons. *Journal of the American Statistical Association*, 69(347), 730-737. [DOI](https://doi.org/10.1080/01621459.1974.10480196)
 
 - Wilks, S. S. (1938). The Large-Sample Distribution of the Likelihood Ratio for Testing Composite Hypotheses. *Annals of Mathematical Statistics*, 9(1), 60-62. [DOI](https://doi.org/10.1214/aoms/1177732360)

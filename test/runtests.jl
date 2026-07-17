@@ -90,6 +90,7 @@ const TEST_GROUPS = [
         "teststat/test_dumitrescu_hurlin.jl",   # EV-24 (#432): DH panel Granger non-causality
         "teststat/test_model_comparison.jl",
         "teststat/test_normality.jl",
+        "teststat/test_edf.jl",   # EV-26 (#434): EDF goodness-of-fit battery (KS/Lilliefors/CvM/AD/Watson)
         "gmm/test_gmm.jl",
         "gmm/test_smm.jl",
         "data/test_data.jl",
@@ -431,6 +432,7 @@ else
         @testset "Granger Causality Tests" begin include("teststat/test_granger.jl") end
         @testset "Model Comparison Tests" begin include("teststat/test_model_comparison.jl") end
         @testset "Multivariate Normality Tests" begin include("teststat/test_normality.jl") end
+        @testset "EDF Goodness-of-Fit Battery" begin include("teststat/test_edf.jl") end  # EV-26 (#434)
         @testset "GMM Estimation" begin include("gmm/test_gmm.jl") end
         @testset "SMM Estimation" begin include("gmm/test_smm.jl") end
         @testset "Data Module" begin include("data/test_data.jl") end

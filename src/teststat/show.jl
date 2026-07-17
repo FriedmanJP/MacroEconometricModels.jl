@@ -1184,3 +1184,62 @@ function Base.show(io::IO, r::DumitrescuHurlinResult{T}) where {T}
     conc_data = Any["Conclusion" conclusion; "Note" "*** p<0.01, ** p<0.05, * p<0.10 (on Z̃)"]
     _pretty_table(io, conc_data; column_labels=["",""], alignment=[:l,:l])
 end
+
+# =============================================================================
+# EDF goodness-of-fit battery (EV-26, #434)
+# H₀: data follow the (specified/estimated) distribution; large statistic rejects.
+# =============================================================================
+
+function Base.show(io::IO, r::EDFTestResult{T}) where {T}
+    param_mode = r.params == :estimate ? "estimated (ML)" : "specified"
+    theta_str = isempty(r.theta) ? "—" :
+        join([_fmt(t; digits=4) for t in r.theta], ", ")
+    spec_data = Any[
+        "H₀" "Data follow the $(_EDF_DIST_LABEL[r.dist]) distribution";
+        "H₁" "Data do not follow the $(_EDF_DIST_LABEL[r.dist]) distribution";
+        "Statistic" _EDF_TEST_LABEL[r.test];
+        "Distribution" _EDF_DIST_LABEL[r.dist];
+        "Parameters" "$param_mode: $theta_str";
+        "Null case" r.case;
+        "Observations" r.nobs
+    ]
+    _pretty_table(io, spec_data;
+        title = "EDF Goodness-of-Fit Test",
+        column_labels = ["Specification", ""], alignment = [:l, :r])
+
+    has_p = isfinite(r.pvalue)
+    stars = has_p ? _significance_stars(r.pvalue) : ""
+    stat_label = r.statistic == r.raw_statistic ? "Statistic" : "Modified statistic"
+    results_data = Any[
+        stat_label            string(_fmt(r.statistic), " ", stars);
+        "Raw EDF statistic"   _fmt(r.raw_statistic);
+        "P-value"             (has_p ? _format_pvalue(r.pvalue) : "n/a (no null table)")
+    ]
+    _pretty_table(io, results_data;
+        title = "Results (right-tailed)",
+        column_labels = ["", "Value"], alignment = [:l, :r])
+
+    if !isempty(r.critical_values)
+        cv_data = Matrix{Any}(undef, 1, 3)
+        cv_data[1, :] = [_fmt(r.critical_values[1]; digits=4),
+                         _fmt(r.critical_values[5]; digits=4),
+                         _fmt(r.critical_values[10]; digits=4)]
+        _pretty_table(io, cv_data;
+            title = "Critical Values",
+            column_labels = ["1%", "5%", "10%"], alignment = :r)
+    end
+
+    conclusion = if !has_p
+        "No published null table for this estimated family — inspect the statistic"
+    elseif r.pvalue < 0.01
+        "Reject H₀ at 1% — data do not follow the $(_EDF_DIST_LABEL[r.dist]) distribution"
+    elseif r.pvalue < 0.05
+        "Reject H₀ at 5% — data do not follow the $(_EDF_DIST_LABEL[r.dist]) distribution"
+    elseif r.pvalue < 0.10
+        "Reject H₀ at 10% — data do not follow the $(_EDF_DIST_LABEL[r.dist]) distribution"
+    else
+        "Fail to reject H₀ — no evidence against the $(_EDF_DIST_LABEL[r.dist]) fit"
+    end
+    conc_data = Any["Conclusion" conclusion; "Note" "*** p<0.01, ** p<0.05, * p<0.10"]
+    _pretty_table(io, conc_data; column_labels=["",""], alignment=[:l,:l])
+end
