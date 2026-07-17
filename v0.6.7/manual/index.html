@@ -1,0 +1,1368 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>VAR · MacroEconometricModels.jl</title><meta name="title" content="VAR · MacroEconometricModels.jl"/><meta property="og:title" content="VAR · MacroEconometricModels.jl"/><meta property="twitter:title" content="VAR · MacroEconometricModels.jl"/><meta name="description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:description" content="Documentation for MacroEconometricModels.jl."/><meta property="twitter:description" content="Documentation for MacroEconometricModels.jl."/><meta property="og:url" content="https://FriedmanJP.github.io/MacroEconometricModels.jl/manual/"/><meta property="twitter:url" content="https://FriedmanJP.github.io/MacroEconometricModels.jl/manual/"/><link rel="canonical" href="https://FriedmanJP.github.io/MacroEconometricModels.jl/manual/"/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script><link href="../assets/custom.css" rel="stylesheet" type="text/css"/><script src="../assets/theme-toggle.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">MacroEconometricModels.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><span class="tocitem">Getting Started</span><ul><li><a class="tocitem" href="../getting_started/">Installation &amp; First Model</a></li><li><a class="tocitem" href="../method_guide/">Choosing a Method</a></li><li><a class="tocitem" href="../data/">Data Management</a></li></ul></li><li><span class="tocitem">Univariate Models</span><ul><li><a class="tocitem" href="../filters/">Time Series Filters</a></li><li><a class="tocitem" href="../x13/">X-13ARIMA-SEATS</a></li><li><a class="tocitem" href="../spectral/">Spectral Analysis</a></li><li><a class="tocitem" href="../arima/">ARIMA</a></li><li><a class="tocitem" href="../volatility/">Volatility Models</a></li></ul></li><li><span class="tocitem">Multivariate Models</span><ul><li class="is-active"><a class="tocitem" href>VAR</a><ul class="internal"><li><a class="tocitem" href="#Quick-Start"><span>Quick Start</span></a></li><li><a class="tocitem" href="#Reduced-Form-VAR"><span>Reduced-Form VAR</span></a></li><li><a class="tocitem" href="#Stability-and-Lag-Selection"><span>Stability and Lag Selection</span></a></li><li><a class="tocitem" href="#Structural-VAR-and-Identification"><span>Structural VAR and Identification</span></a></li><li><a class="tocitem" href="#Covariance-Estimation"><span>Covariance Estimation</span></a></li><li><a class="tocitem" href="#Forecasting"><span>Forecasting</span></a></li><li><a class="tocitem" href="#Innovation-Accounting-and-Bayesian-VAR"><span>Innovation Accounting and Bayesian VAR</span></a></li><li><a class="tocitem" href="#Complete-Example"><span>Complete Example</span></a></li><li><a class="tocitem" href="#Common-Pitfalls"><span>Common Pitfalls</span></a></li><li><a class="tocitem" href="#References"><span>References</span></a></li></ul></li><li><a class="tocitem" href="../bayesian/">Bayesian VAR</a></li><li><a class="tocitem" href="../vecm/">VECM</a></li><li><a class="tocitem" href="../lp/">Local Projections</a></li><li><a class="tocitem" href="../factormodels/">Factor Models</a></li><li><a class="tocitem" href="../favar/">FAVAR</a></li></ul></li><li><span class="tocitem">Cross-Section &amp; Panel</span><ul><li><a class="tocitem" href="../regression/">Linear Regression</a></li><li><a class="tocitem" href="../binary_choice/">Binary Choice Models</a></li><li><a class="tocitem" href="../ordered_multinomial/">Ordered &amp; Multinomial</a></li><li><a class="tocitem" href="../panel_reg/">Panel Regression</a></li><li><a class="tocitem" href="../pvar/">Panel VAR</a></li><li><a class="tocitem" href="../did/">Difference-in-Differences</a></li><li><a class="tocitem" href="../event_study/">Event Study LP</a></li></ul></li><li><a class="tocitem" href="../gmm/">GMM &amp; SMM</a></li><li><span class="tocitem">DSGE Models</span><ul><li><a class="tocitem" href="../dsge/">Overview</a></li><li><a class="tocitem" href="../dsge_linear/">Linear Solvers</a></li><li><a class="tocitem" href="../dsge_nonlinear/">Nonlinear Methods</a></li><li><a class="tocitem" href="../dsge_constraints/">Constraints</a></li><li><a class="tocitem" href="../dsge_estimation/">Estimation</a></li><li><a class="tocitem" href="../dsge_hd/">Historical Decomposition</a></li><li><a class="tocitem" href="../dsge_ha/">Heterogeneous Agents</a></li><li><a class="tocitem" href="../dsge_olg/">Overlapping Generations</a></li><li><a class="tocitem" href="../dsge_continuous/">Continuous Time</a></li></ul></li><li><span class="tocitem">Input-Output Analysis</span><ul><li><a class="tocitem" href="../io/">Overview</a></li><li><a class="tocitem" href="../io_classical/">Classical Analysis</a></li><li><a class="tocitem" href="../io_environmental/">Environmental Extensions</a></li><li><a class="tocitem" href="../io_baqaee_farhi/">Baqaee &amp; Farhi (2019)</a></li><li><a class="tocitem" href="../io_download/">Downloading Data</a></li></ul></li><li><span class="tocitem">Structural Analysis</span><ul><li><a class="tocitem" href="../structural_identification/">Structural Identification</a></li><li><input class="collapse-toggle" id="menuitem-9-2" type="checkbox"/><label class="tocitem" for="menuitem-9-2"><span class="docs-label">Statistical Identification</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../nongaussian/">Overview</a></li><li><a class="tocitem" href="../id_nongaussian/">Non-Gaussian Methods</a></li><li><a class="tocitem" href="../id_heteroskedastic/">Heteroskedasticity</a></li><li><a class="tocitem" href="../id_testing/">Testing</a></li></ul></li><li><input class="collapse-toggle" id="menuitem-9-3" type="checkbox"/><label class="tocitem" for="menuitem-9-3"><span class="docs-label">Innovation Accounting</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../innovation_accounting/">Overview</a></li><li><a class="tocitem" href="../ia_irf/">Impulse Responses</a></li><li><a class="tocitem" href="../ia_fevd/">Variance Decomposition</a></li><li><a class="tocitem" href="../ia_hd/">Historical Decomposition</a></li></ul></li></ul></li><li><span class="tocitem">Nowcasting</span><ul><li><a class="tocitem" href="../nowcast/">Overview</a></li><li><a class="tocitem" href="../nowcast_dfm/">DFM Nowcasting</a></li><li><a class="tocitem" href="../nowcast_bvar/">BVAR Nowcasting</a></li><li><a class="tocitem" href="../nowcast_bridge/">Bridge Equations</a></li><li><a class="tocitem" href="../nowcast_news/">News Decomposition</a></li></ul></li><li><span class="tocitem">Hypothesis Tests</span><ul><li><a class="tocitem" href="../tests/">Overview</a></li><li><a class="tocitem" href="../tests_unitroot/">Unit Root &amp; Cointegration</a></li><li><a class="tocitem" href="../tests_unitroot_advanced/">Advanced Unit Root</a></li><li><a class="tocitem" href="../tests_breaks/">Structural Breaks</a></li><li><a class="tocitem" href="../tests_panel/">Panel Tests</a></li><li><a class="tocitem" href="../tests_diagnostics/">Model Diagnostics</a></li></ul></li><li><a class="tocitem" href="../plotting/">Visualization</a></li><li><span class="tocitem">Project</span><ul><li><a class="tocitem" href="../notation/">Notation</a></li><li><a class="tocitem" href="../bibliography/">Bibliography</a></li><li><a class="tocitem" href="../changelog/">Changelog</a></li><li><a class="tocitem" href="../citation/">How to Cite</a></li></ul></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../api/">Overview</a></li><li><a class="tocitem" href="../api/data/">Data Management</a></li><li><a class="tocitem" href="../api/univariate/">Univariate Models</a></li><li><a class="tocitem" href="../api/multivariate/">Multivariate Models</a></li><li><a class="tocitem" href="../api/cross_section/">Cross-Sectional Models</a></li><li><a class="tocitem" href="../api/panel/">Panel Models</a></li><li><a class="tocitem" href="../api/dsge/">DSGE Models</a></li><li><a class="tocitem" href="../api/structural/">Structural &amp; Statistical Identification</a></li><li><a class="tocitem" href="../api/gmm/">GMM &amp; SMM</a></li><li><a class="tocitem" href="../api/tests/">Hypothesis Tests</a></li><li><a class="tocitem" href="../api/nowcasting/">Nowcasting</a></li><li><a class="tocitem" href="../api/visualization/">Visualization</a></li><li><a class="tocitem" href="../api/utilities/">Utilities &amp; Display</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Multivariate Models</a></li><li class="is-active"><a href>VAR</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>VAR</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/FriedmanJP/MacroEconometricModels.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/FriedmanJP/MacroEconometricModels.jl/blob/main/docs/src/manual.md#" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="var_page"><a class="docs-heading-anchor" href="#var_page">VAR</a><a id="var_page-1"></a><a class="docs-heading-anchor-permalink" href="#var_page" title="Permalink"></a></h1><p><strong>MacroEconometricModels.jl</strong> provides a complete implementation of Vector Autoregression (VAR) models, from reduced-form estimation through structural identification and robust inference. The VAR framework, introduced by Sims (1980), remains the workhorse of empirical macroeconomics for analyzing the dynamic interactions among multiple time series.</p><ul><li><strong>Estimation</strong>: OLS estimation of reduced-form VAR(p) with automatic information criteria (AIC, BIC, HQIC) and stability checking</li><li><strong>Lag Selection</strong>: Data-driven lag order selection via AIC, BIC, or HQIC minimization</li><li><strong>Structural Identification</strong>: Six methods –- Cholesky (recursive), sign restrictions, narrative restrictions, long-run (Blanchard-Quah), Arias et al. (2018) zero + sign, and Mountford-Uhlig (2009) penalty function</li><li><strong>Robust Inference</strong>: Newey-West HAC, White heteroscedasticity-robust (HC0), and Driscoll-Kraay panel-robust covariance estimators</li><li><strong>Innovation Accounting</strong>: IRF, FEVD, and historical decomposition with bootstrap or asymptotic confidence intervals; see <a href="../innovation_accounting/">Innovation Accounting</a></li><li><strong>Forecasting</strong>: Multi-step ahead point forecasts with bootstrap confidence intervals</li></ul><p>All results integrate with <code>report()</code> for publication-quality output and <code>plot_result()</code> for interactive D3.js visualization.</p><h2 id="Quick-Start"><a class="docs-heading-anchor" href="#Quick-Start">Quick Start</a><a id="Quick-Start-1"></a><a class="docs-heading-anchor-permalink" href="#Quick-Start" title="Permalink"></a></h2><p><strong>Recipe 1: Estimate VAR(p)</strong></p><pre><code class="language-julia hljs">model = estimate_var(Y, 4)
+report(model)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"> Vector Autoregression — VAR(4)
+
+  Specification
+
+  Variables                   3
+  Lags                        4
+  Observations (effective)   56
+  Parameters per equation    13
+
+                    Equation Summary
+
+  Equation   Parms     RMSE       R²   Adj. R²   F-stat
+
+  y1            13   0.0067   0.3356    0.1502    1.810
+  y2            13   0.0022   0.4482    0.2942    2.910
+  y3            13   0.0858   0.8083    0.7549   15.113
+
+                                    Equation: y1
+
+                  Coef.   Std.Err.         t    P&gt;|t|    CI lower   CI upper
+
+  (Intercept)    0.0021     0.0011    1.9797   0.0542   -3.94e-05     0.0042   *
+  y1.L1         -0.5888     0.1320   -4.4588   &lt;0.001     -0.8551    -0.3225   ***
+  y2.L1          0.6302     0.3954    1.5939   0.1183     -0.1672     1.4276
+  y3.L1         -0.0005     0.0094   -0.0534   0.9576     -0.0194     0.0184
+  y1.L2         -0.4117     0.1423   -2.8931    0.006     -0.6987    -0.1247   ***
+  y2.L2          0.3720     0.4608    0.8074   0.4239     -0.5572     1.3013
+  y3.L2         -0.0044     0.0111   -0.3977   0.6928     -0.0267     0.0179
+  y1.L3         -0.2435     0.1440   -1.6910   0.0981     -0.5338     0.0469   *
+  y2.L3          0.4111     0.4508    0.9120   0.3668     -0.4979     1.3202
+  y3.L3          0.0066     0.0104    0.6371   0.5274     -0.0143     0.0276
+  y1.L4         -0.1213     0.1263   -0.9604   0.3422     -0.3761     0.1335
+  y2.L4          0.3335     0.4276    0.7800   0.4397     -0.5288     1.1958
+  y3.L4         -0.0092     0.0088   -1.0499   0.2996     -0.0270     0.0085
+
+                                   Equation: y2
+
+                  Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
+
+  (Intercept)    0.0004     0.0003    1.2447     0.22    -0.0003     0.0011
+  y1.L1         -0.0072     0.0434   -0.1657   0.8692    -0.0948     0.0804
+  y2.L1         -0.6085     0.1300   -4.6801   &lt;0.001    -0.8707    -0.3463   ***
+  y3.L1         -0.0055     0.0031   -1.8032   0.0784    -0.0118     0.0007   *
+  y1.L2         -0.0499     0.0468   -1.0667   0.2921    -0.1443     0.0445
+  y2.L2         -0.7800     0.1515   -5.1478   &lt;0.001    -1.0856    -0.4744   ***
+  y3.L2          0.0008     0.0036    0.2097   0.8349    -0.0066     0.0081
+  y1.L3         -0.0324     0.0473   -0.6853   0.4968    -0.1279     0.0630
+  y2.L3         -0.2866     0.1482   -1.9334   0.0598    -0.5855     0.0123   *
+  y3.L3         -0.0010     0.0034   -0.2795   0.7812    -0.0078     0.0059
+  y1.L4         -0.0352     0.0415   -0.8465   0.4019    -0.1190     0.0486
+  y2.L4         -0.2386     0.1406   -1.6973   0.0969    -0.5222     0.0449   *
+  y3.L4          0.0015     0.0029    0.5105   0.6123    -0.0044     0.0073
+
+                                    Equation: y3
+
+                   Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
+
+  (Intercept)     0.0065     0.0137    0.4717   0.6395    -0.0212     0.0341
+  y1.L1           1.5989     1.7013    0.9398   0.3526    -1.8321     5.0300
+  y2.L1          -6.6502     5.0942   -1.3054   0.1987   -16.9237     3.6233
+  y3.L1           0.8283     0.1206    6.8688   &lt;0.001     0.5851     1.0715   ***
+  y1.L2           1.8998     1.8334    1.0362   0.3059    -1.7977     5.5972
+  y2.L2           6.3792     5.9368    1.0745   0.2886    -5.5935    18.3519
+  y3.L2          -0.1258     0.1425   -0.8826   0.3824    -0.4131     0.1616
+  y1.L3           2.1757     1.8551    1.1728   0.2473    -1.5654     5.9169
+  y2.L3         -14.6841     5.8077   -2.5284   0.0152   -26.3964    -2.9718   **
+  y3.L3           0.5920     0.1338    4.4257   &lt;0.001     0.3222     0.8617   ***
+  y1.L4          -0.6259     1.6279   -0.3845   0.7025    -3.9089     2.6570
+  y2.L4          -4.4972     5.5089   -0.8164   0.4188   -15.6070     6.6125
+  y3.L4          -0.4534     0.1135   -3.9954   &lt;0.001    -0.6822    -0.2245   ***
+
+     Information Criteria
+
+  Criterion            Value
+
+  Log-likelihood    525.3617
+  AIC (per obs.)    -26.8123
+  BIC (per obs.)    -26.3421
+  HQIC (per obs.)   -26.6300
+
+        Residual Covariance (Σ)
+
+             y1         y2         y3
+
+  y1   4.43e-05   1.98e-07     0.0001
+  y2   1.98e-07   4.79e-06   2.68e-05
+  y3     0.0001   2.68e-05     0.0074
+
+      Residual Correlation
+
+           y1       y2       y3
+
+  y1   1.0000   0.0136   0.2595
+  y2   0.0136   1.0000   0.1428
+  y3   0.2595   0.1428   1.0000
+
+     Stationarity
+
+  Stationary      Yes
+  Max |λ|      0.8328
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p><strong>Recipe 2: Lag selection</strong></p><pre><code class="language-julia hljs"># Select lag order minimizing BIC (default)
+p_bic = select_lag_order(Y, 13)
+
+# Select via AIC
+p_aic = select_lag_order(Y, 13; criterion=:aic)
+
+model = estimate_var(Y, p_bic)
+report(model)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">┌ Warning: Matrix near-singular (1-norm cond ≈ 7.826201527222449e7). Using pseudo-inverse.
+└ @ MacroEconometricModels /private/tmp/claude-501/-Users-chung-Desktop-CODES-MacroEconometricModels/1225c743-cd3c-417e-86ed-feb1487cf988/scratchpad/docs-deploy/src/core/utils.jl:152
+┌ Warning: Matrix near-singular (1-norm cond ≈ 1.3976828671341679e8). Using pseudo-inverse.
+└ @ MacroEconometricModels /private/tmp/claude-501/-Users-chung-Desktop-CODES-MacroEconometricModels/1225c743-cd3c-417e-86ed-feb1487cf988/scratchpad/docs-deploy/src/core/utils.jl:152
+┌ Warning: Estimated VAR is non-stationary (max eigenvalue modulus = 1.0378). Consider differencing the data or using a VECM specification.
+└ @ MacroEconometricModels /private/tmp/claude-501/-Users-chung-Desktop-CODES-MacroEconometricModels/1225c743-cd3c-417e-86ed-feb1487cf988/scratchpad/docs-deploy/src/var/estimation.jl:63
+┌ Warning: Matrix near-singular (1-norm cond ≈ 2.8597039257582015e8). Using pseudo-inverse.
+└ @ MacroEconometricModels /private/tmp/claude-501/-Users-chung-Desktop-CODES-MacroEconometricModels/1225c743-cd3c-417e-86ed-feb1487cf988/scratchpad/docs-deploy/src/core/utils.jl:152
+┌ Warning: Estimated VAR is non-stationary (max eigenvalue modulus = 1.0642). Consider differencing the data or using a VECM specification.
+└ @ MacroEconometricModels /private/tmp/claude-501/-Users-chung-Desktop-CODES-MacroEconometricModels/1225c743-cd3c-417e-86ed-feb1487cf988/scratchpad/docs-deploy/src/var/estimation.jl:63
+┌ Warning: Matrix near-singular (1-norm cond ≈ 7.826201527222449e7). Using pseudo-inverse.
+└ @ MacroEconometricModels /private/tmp/claude-501/-Users-chung-Desktop-CODES-MacroEconometricModels/1225c743-cd3c-417e-86ed-feb1487cf988/scratchpad/docs-deploy/src/core/utils.jl:152
+┌ Warning: Matrix near-singular (1-norm cond ≈ 1.3976828671341679e8). Using pseudo-inverse.
+└ @ MacroEconometricModels /private/tmp/claude-501/-Users-chung-Desktop-CODES-MacroEconometricModels/1225c743-cd3c-417e-86ed-feb1487cf988/scratchpad/docs-deploy/src/core/utils.jl:152
+┌ Warning: Estimated VAR is non-stationary (max eigenvalue modulus = 1.0378). Consider differencing the data or using a VECM specification.
+└ @ MacroEconometricModels /private/tmp/claude-501/-Users-chung-Desktop-CODES-MacroEconometricModels/1225c743-cd3c-417e-86ed-feb1487cf988/scratchpad/docs-deploy/src/var/estimation.jl:63
+┌ Warning: Matrix near-singular (1-norm cond ≈ 2.8597039257582015e8). Using pseudo-inverse.
+└ @ MacroEconometricModels /private/tmp/claude-501/-Users-chung-Desktop-CODES-MacroEconometricModels/1225c743-cd3c-417e-86ed-feb1487cf988/scratchpad/docs-deploy/src/core/utils.jl:152
+┌ Warning: Estimated VAR is non-stationary (max eigenvalue modulus = 1.0642). Consider differencing the data or using a VECM specification.
+└ @ MacroEconometricModels /private/tmp/claude-501/-Users-chung-Desktop-CODES-MacroEconometricModels/1225c743-cd3c-417e-86ed-feb1487cf988/scratchpad/docs-deploy/src/var/estimation.jl:63
+┌ Warning: Matrix near-singular (1-norm cond ≈ 2.8597039257582015e8). Using pseudo-inverse.
+└ @ MacroEconometricModels /private/tmp/claude-501/-Users-chung-Desktop-CODES-MacroEconometricModels/1225c743-cd3c-417e-86ed-feb1487cf988/scratchpad/docs-deploy/src/core/utils.jl:152
+┌ Warning: Estimated VAR is non-stationary (max eigenvalue modulus = 1.0642). Consider differencing the data or using a VECM specification.
+└ @ MacroEconometricModels /private/tmp/claude-501/-Users-chung-Desktop-CODES-MacroEconometricModels/1225c743-cd3c-417e-86ed-feb1487cf988/scratchpad/docs-deploy/src/var/estimation.jl:63
+ Vector Autoregression — VAR(13)
+
+  Specification
+
+  Variables                   3
+  Lags                       13
+  Observations (effective)   47
+  Parameters per equation    40
+
+┌ Warning: Matrix near-singular (1-norm cond ≈ 2.8597039257582015e8). Using pseudo-inverse.
+└ @ MacroEconometricModels /private/tmp/claude-501/-Users-chung-Desktop-CODES-MacroEconometricModels/1225c743-cd3c-417e-86ed-feb1487cf988/scratchpad/docs-deploy/src/core/utils.jl:152
+                    Equation Summary
+
+  Equation   Parms     RMSE       R²   Adj. R²   F-stat
+
+  y1            40   0.0014   0.9273    0.5223    2.290
+  y2            40   0.0010   0.9009    0.3486    1.631
+  y3            40   0.0434   0.9577    0.7218    4.060
+
+                                    Equation: y1
+
+                  Coef.   Std.Err.          t    P&gt;|t|   CI lower   CI upper
+
+  (Intercept)    0.0014     0.0003     3.9161   0.0058     0.0005     0.0022   ***
+  y1.L1          0.0950     0.0791     1.2014   0.2687    -0.0920     0.2821
+  y2.L1          1.5638     0.2054     7.6149   &lt;0.001     1.0782     2.0494   ***
+  y3.L1         -0.0110     0.0042    -2.6133   0.0347    -0.0209    -0.0010   **
+  y1.L2         -0.1438     0.0747    -1.9232   0.0959    -0.3205     0.0330   *
+  y2.L2          0.3556     0.2646     1.3439   0.2209    -0.2701     0.9812
+  y3.L2          0.0445     0.0058     7.6617   &lt;0.001     0.0307     0.0582   ***
+  y1.L3         -0.1363     0.0728    -1.8734   0.1032    -0.3084     0.0357
+  y2.L3          1.5104     0.3168     4.7674    0.002     0.7613     2.2596   ***
+  y3.L3         -0.0455     0.0067    -6.8261   &lt;0.001    -0.0612    -0.0297   ***
+  y1.L4         -0.0014     0.0773    -0.0184   0.9858    -0.1842     0.1814
+  y2.L4         -0.9749     0.2685    -3.6307   0.0084    -1.6099    -0.3400   ***
+  y3.L4          0.0333     0.0069     4.8400   0.0019     0.0170     0.0496   ***
+  y1.L5         -0.5222     0.0703    -7.4261   &lt;0.001    -0.6885    -0.3559   ***
+  y2.L5          0.7349     0.2261     3.2498   0.0141     0.2002     1.2696   **
+  y3.L5         -0.0166     0.0055    -3.0031   0.0199    -0.0297    -0.0035   **
+  y1.L6          0.2950     0.0662     4.4561   0.0029     0.1385     0.4515   ***
+  y2.L6         -0.4410     0.2103    -2.0971   0.0742    -0.9382     0.0563   *
+  y3.L6         -0.0226     0.0055    -4.0938   0.0046    -0.0356    -0.0095   ***
+  y1.L7         -0.1158     0.0674    -1.7180   0.1295    -0.2751     0.0436
+  y2.L7         -1.0962     0.1845    -5.9424   &lt;0.001    -1.5324    -0.6600   ***
+  y3.L7          0.0182     0.0051     3.5375   0.0095     0.0060     0.0303   ***
+  y1.L8         -0.2144     0.0657    -3.2632   0.0138    -0.3697    -0.0590   **
+  y2.L8          0.4422     0.2052     2.1550   0.0681    -0.0430     0.9274   *
+  y3.L8         -0.0131     0.0055    -2.3959   0.0478    -0.0261    -0.0002   **
+  y1.L9          0.0994     0.0695     1.4307   0.1956    -0.0649     0.2636
+  y2.L9         -0.9261     0.2779    -3.3327   0.0125    -1.5832    -0.2690   **
+  y3.L9         -0.0009     0.0050    -0.1882    0.856    -0.0127     0.0108
+  y1.L10         0.0732     0.0778     0.9410    0.378    -0.1108     0.2572
+  y2.L10         0.4233     0.3309     1.2792   0.2416    -0.3591     1.2056
+  y3.L10         0.0193     0.0044     4.3448   0.0034     0.0088     0.0298   ***
+  y1.L11         0.1811     0.0767     2.3598   0.0504    -0.0004     0.3625   *
+  y2.L11         0.9145     0.3725     2.4553   0.0438     0.0338     1.7953   **
+  y3.L11        -0.0257     0.0043    -5.9901   &lt;0.001    -0.0359    -0.0156   ***
+  y1.L12         0.0712     0.0701     1.0163   0.3433    -0.0945     0.2369
+  y2.L12        -0.5330     0.3265    -1.6322   0.1467    -1.3051     0.2392
+  y3.L12         0.0595     0.0051    11.6633   &lt;0.001     0.0474     0.0715   ***
+  y1.L13        -0.2785     0.0612    -4.5527   0.0026    -0.4231    -0.1338   ***
+  y2.L13         0.1472     0.2300     0.6401   0.5425    -0.3967     0.6912
+  y3.L13        -0.0457     0.0039   -11.6437   &lt;0.001    -0.0550    -0.0364   ***
+
+                                   Equation: y2
+
+                  Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
+
+  (Intercept)   -0.0001     0.0002   -0.5733   0.5844    -0.0007     0.0004
+  y1.L1         -0.0030     0.0519   -0.0570   0.9561    -0.1257     0.1197
+  y2.L1         -0.8979     0.1347   -6.6657   &lt;0.001    -1.2164    -0.5794   ***
+  y3.L1          0.0004     0.0028    0.1278   0.9019    -0.0062     0.0069
+  y1.L2          0.0516     0.0490    1.0516   0.3279    -0.0644     0.1675
+  y2.L2         -0.9178     0.1736   -5.2882   0.0011    -1.3282    -0.5074   ***
+  y3.L2         -0.0092     0.0038   -2.4277   0.0456    -0.0182    -0.0002   **
+  y1.L3          0.0199     0.0477    0.4162   0.6898    -0.0930     0.1327
+  y2.L3         -0.4911     0.2078   -2.3629   0.0501    -0.9825     0.0004   *
+  y3.L3         -0.0075     0.0044   -1.7065   0.1317    -0.0178     0.0029
+  y1.L4          0.0032     0.0507    0.0627   0.9518    -0.1167     0.1231
+  y2.L4         -0.1507     0.1761   -0.8554   0.4207    -0.5671     0.2658
+  y3.L4         -0.0024     0.0045   -0.5269   0.6145    -0.0130     0.0083
+  y1.L5          0.0079     0.0461    0.1714   0.8688    -0.1012     0.1170
+  y2.L5         -0.1327     0.1483   -0.8949   0.4005    -0.4835     0.2180
+  y3.L5          0.0159     0.0036    4.3676   0.0033     0.0073     0.0244   ***
+  y1.L6          0.1214     0.0434    2.7953   0.0267     0.0187     0.2241   **
+  y2.L6          0.1276     0.1379    0.9249   0.3858    -0.1986     0.4537
+  y3.L6         -0.0006     0.0036   -0.1543   0.8817    -0.0091     0.0080
+  y1.L7          0.1609     0.0442    3.6398   0.0083     0.0564     0.2654   ***
+  y2.L7         -0.1216     0.1210   -1.0048   0.3485    -0.4077     0.1645
+  y3.L7          0.0058     0.0034    1.7113   0.1308    -0.0022     0.0137
+  y1.L8         -0.0567     0.0431   -1.3158   0.2297    -0.1586     0.0452
+  y2.L8          0.6969     0.1346    5.1782   0.0013     0.3787     1.0152   ***
+  y3.L8          0.0002     0.0036    0.0608   0.9532    -0.0083     0.0087
+  y1.L9         -0.1132     0.0456   -2.4854   0.0419    -0.2210    -0.0055   **
+  y2.L9          0.3750     0.1823    2.0570   0.0787    -0.0561     0.8060   *
+  y3.L9         -0.0070     0.0033   -2.1326   0.0704    -0.0147     0.0008   *
+  y1.L10         0.0408     0.0510    0.7992   0.4504    -0.0799     0.1615
+  y2.L10         0.4757     0.2170    2.1919   0.0645    -0.0375     0.9889   *
+  y3.L10         0.0024     0.0029    0.8198   0.4393    -0.0045     0.0093
+  y1.L11         0.1012     0.0503    2.0118   0.0841    -0.0178     0.2202   *
+  y2.L11         0.0936     0.2443    0.3833   0.7129    -0.4841     0.6713
+  y3.L11        -0.0062     0.0028   -2.1994   0.0638    -0.0129     0.0005   *
+  y1.L12         0.1767     0.0460    3.8456   0.0063     0.0681     0.2854   ***
+  y2.L12        -0.1150     0.2142   -0.5368   0.6081    -0.6215     0.3915
+  y3.L12         0.0097     0.0033    2.8912   0.0233     0.0018     0.0176   **
+  y1.L13        -0.0735     0.0401   -1.8309   0.1098    -0.1683     0.0214
+  y2.L13        -0.2740     0.1509   -1.8158   0.1123    -0.6308     0.0828
+  y3.L13        -0.0047     0.0026   -1.8404   0.1083    -0.0108     0.0013
+
+                                    Equation: y3
+
+                   Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
+
+  (Intercept)     0.0073     0.0104    0.6999   0.5066    -0.0173     0.0318
+  y1.L1          -3.4123     2.3659   -1.4423   0.1924    -9.0068     2.1821
+  y2.L1           2.8860     6.1417    0.4699   0.6527   -11.6368    17.4088
+  y3.L1           0.9928     0.1257    7.8971   &lt;0.001     0.6955     1.2901   ***
+  y1.L2           1.5341     2.2355    0.6862   0.5147    -3.7521     6.8202
+  y2.L2          31.2758     7.9131    3.9524   0.0055    12.5642    49.9873   ***
+  y3.L2          -0.1812     0.1735   -1.0443   0.3311    -0.5915     0.2291
+  y1.L3           2.0727     2.1764    0.9524   0.3726    -3.0736     7.2190
+  y2.L3           2.8644     9.4752    0.3023   0.7712   -19.5410    25.2698
+  y3.L3           0.3496     0.1993    1.7542   0.1228    -0.1217     0.8209
+  y1.L4          -6.5381     2.3123   -2.8275   0.0255   -12.0059    -1.0703   **
+  y2.L4          17.5813     8.0306    2.1893   0.0647    -1.4081    36.5707   *
+  y3.L4          -0.1553     0.2057   -0.7548    0.475    -0.6417     0.3312
+  y1.L5          -4.8207     2.1031   -2.2922   0.0556    -9.7937     0.1523   *
+  y2.L5          23.3154     6.7631    3.4474   0.0107     7.3232    39.3076   **
+  y3.L5           0.4006     0.1655    2.4203   0.0461     0.0092     0.7919   **
+  y1.L6           0.7731     1.9798    0.3905   0.7078    -3.9085     5.4547
+  y2.L6          20.5544     6.2887    3.2684   0.0137     5.6839    35.4249   **
+  y3.L6          -0.3509     0.1649   -2.1277   0.0709    -0.7408     0.0391   *
+  y1.L7           7.3762     2.0153    3.6602   0.0081     2.6109    12.1416   ***
+  y2.L7          -8.8566     5.5168   -1.6054   0.1524   -21.9018     4.1886
+  y3.L7          -0.0255     0.1536   -0.1661   0.8727    -0.3887     0.3377
+  y1.L8           5.1344     1.9646    2.6135   0.0347     0.4889     9.7800   **
+  y2.L8           0.0115     6.1366    0.0019   0.9986   -14.4993    14.5223
+  y3.L8          -0.1053     0.1641   -0.6414   0.5417    -0.4933     0.2828
+  y1.L9           4.0169     2.0775    1.9336   0.0944    -0.8955     8.9293   *
+  y2.L9         -34.1234     8.3110   -4.1058   0.0045   -53.7757   -14.4711   ***
+  y3.L9          -0.1897     0.1488   -1.2750    0.243    -0.5417     0.1622
+  y1.L10          6.8125     2.3271    2.9275   0.0221     1.3098    12.3152   **
+  y2.L10        -30.7329     9.8953   -3.1058   0.0172   -54.1316    -7.3341   **
+  y3.L10         -0.1510     0.1330   -1.1356   0.2935    -0.4655     0.1635
+  y1.L11          5.9108     2.2946    2.5759   0.0367     0.4849    11.3368   **
+  y2.L11        -24.9362    11.1394   -2.2386   0.0602   -51.2767     1.4042   *
+  y3.L11          0.0456     0.1284    0.3552   0.7329    -0.2580     0.3492
+  y1.L12          7.7169     2.0953    3.6830   0.0078     2.7623    12.6714   ***
+  y2.L12        -34.1073     9.7660   -3.4925   0.0101   -57.2002   -11.0144   **
+  y3.L12          0.3430     0.1525    2.2497   0.0592    -0.0175     0.7036   *
+  y1.L13         -1.7362     1.8294   -0.9491   0.3742    -6.0620     2.5896
+  y2.L13        -35.8847     6.8794   -5.2162   0.0012   -52.1520   -19.6175   ***
+  y3.L13         -0.1594     0.1174   -1.3583   0.2165    -0.4370     0.1181
+
+     Information Criteria
+
+  Criterion            Value
+
+  Log-likelihood    597.5476
+  AIC (per obs.)    -32.2391
+  BIC (per obs.)    -30.6645
+  HQIC (per obs.)   -31.6465
+
+        Residual Covariance (Σ)
+
+             y1         y2         y3
+
+  y1    2.1e-06   -5.7e-07   2.76e-05
+  y2   -5.7e-07   9.05e-07   9.05e-06
+  y3   2.76e-05   9.05e-06     0.0019
+
+       Residual Correlation
+
+            y1        y2       y3
+
+  y1    1.0000   -0.4131   0.4396
+  y2   -0.4131    1.0000   0.2194
+  y3    0.4396    0.2194   1.0000
+
+     Stationarity
+
+  Stationary       No
+  Max |λ|      1.0642
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p><strong>Recipe 3: Cholesky IRF</strong></p><pre><code class="language-julia hljs">model = estimate_var(Y, 4)
+
+# Cholesky IRF with bootstrap confidence intervals
+result = irf(model, 20; method=:cholesky, ci_type=:bootstrap, reps=50)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">Impulse Response Functions</span>
+
+  Variables           3
+  Shocks              3
+  Horizon            20
+  CI          bootstrap
+
+<span class="sgr1">                          Shock: y1</span>
+
+ <span class="sgr1">    </span> <span class="sgr1">      h=1 </span> <span class="sgr1">     h=4 </span> <span class="sgr1">     h=8 </span> <span class="sgr1">      h=12 </span> <span class="sgr1">      h=20 </span>
+
+  y1    0.0067*    0.0001   -0.0003   -1.44e-05   -2.64e-07
+  y2   2.97e-05    0.0002   -0.0002   -3.81e-06    4.06e-07
+  y3    0.0223*   0.0402*    0.0167      0.0058     -0.0016
+
+<span class="sgr1">                          Shock: y2</span>
+
+ <span class="sgr1">    </span> <span class="sgr1">     h=1 </span> <span class="sgr1">     h=4 </span> <span class="sgr1">       h=8 </span> <span class="sgr1">     h=12 </span> <span class="sgr1">      h=20 </span>
+
+  y1    0.0000   -0.0001      0.0001     0.0003   -1.81e-05
+  y2   0.0022*   0.0008*   -3.97e-05   3.04e-05    3.84e-06
+  y3    0.0119   -0.0101     -0.0150     0.0033     -0.0008
+
+<span class="sgr1">                        Shock: y3</span>
+
+ <span class="sgr1">    </span> <span class="sgr1">     h=1 </span> <span class="sgr1">     h=4 </span> <span class="sgr1">     h=8 </span> <span class="sgr1">     h=12 </span> <span class="sgr1">     h=20 </span>
+
+  y1    0.0000    0.0004   -0.0004    -0.0002   1.62e-05
+  y2    0.0000    0.0001   -0.0001   2.09e-05   1.03e-06
+  y3   0.0820*   0.0767*    0.0393     0.0080    -0.0033
+
+* CI excludes zero
+</code></pre><pre><code class="language-julia hljs">plot_result(result)</code></pre><iframe src="../assets/plots/quickstart_irf.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe><p><strong>Recipe 4: Sign restrictions</strong></p><pre><code class="language-julia hljs">model = estimate_var(Y, 4)
+
+# Contractionary monetary shock: FFR rises on impact
+check = ir -&gt; ir[1, 3, 3] &gt; 0
+result = irf(model, 20; method=:sign, check_func=check)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">Impulse Response Functions</span>
+
+  Variables      3
+  Shocks         3
+  Horizon       20
+  CI          None
+
+<span class="sgr1">                          Shock: y1</span>
+
+ <span class="sgr1">    </span> <span class="sgr1">     h=1 </span> <span class="sgr1">     h=4 </span> <span class="sgr1">      h=8 </span> <span class="sgr1">      h=12 </span> <span class="sgr1">      h=20 </span>
+
+  y1    0.0015   -0.0001   2.36e-05     -0.0002    6.54e-06
+  y2   -0.0018   -0.0007   3.88e-05   -3.68e-05   -3.61e-06
+  y3   -0.0475   -0.0226    -0.0043     -0.0056      0.0020
+
+<span class="sgr1">                         Shock: y2</span>
+
+ <span class="sgr1">    </span> <span class="sgr1">       h=1 </span> <span class="sgr1">    h=4 </span> <span class="sgr1">     h=8 </span> <span class="sgr1">     h=12 </span> <span class="sgr1">     h=20 </span>
+
+  y1      0.0060   0.0003   -0.0005    -0.0001   7.31e-06
+  y2   -4.29e-05   0.0002   -0.0002   4.64e-06   6.87e-07
+  y3      0.0550   0.0697    0.0325     0.0085    -0.0028
+
+<span class="sgr1">                          Shock: y3</span>
+
+ <span class="sgr1">    </span> <span class="sgr1">     h=1 </span> <span class="sgr1">     h=4 </span> <span class="sgr1">      h=8 </span> <span class="sgr1">      h=12 </span> <span class="sgr1">      h=20 </span>
+
+  y1   -0.0025    0.0003    -0.0002     -0.0003    2.22e-05
+  y2   -0.0012   -0.0004   2.38e-05   -2.02e-07   -1.55e-06
+  y3    0.0455    0.0473     0.0312      0.0019     -0.0014
+
+</code></pre><pre><code class="language-julia hljs">plot_result(result)</code></pre><iframe src="../assets/plots/irf_sign.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe><p><strong>Recipe 5: Arias identification</strong></p><pre><code class="language-julia hljs">model_short = estimate_var(Y, 2)
+
+# Sign restrictions on the monetary policy shock (shock 3)
+restrictions = SVARRestrictions(3;
+    signs = [sign_restriction(3, 3, :positive),          # FFR rises
+             sign_restriction(1, 1, :positive)]          # Output rises to demand shock
+)
+result = identify_arias(model_short, restrictions, 20; n_draws=500)
+result</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">Arias et al. (2018) SVAR Result</span>
+
+  Accepted draws        500
+  Acceptance rate     24.8%
+  Zero restrictions       0
+  Sign restrictions       2
+  Variables               3
+  Shocks                  3
+
+<span class="sgr1">                       Posterior-mean IRF to Shock 1</span>
+
+ <span class="sgr1">      </span> <span class="sgr1">    h=0 </span> <span class="sgr1">     h=1 </span> <span class="sgr1">       h=4 </span> <span class="sgr1">       h=8 </span> <span class="sgr1">      h=12 </span> <span class="sgr1">      h=19 </span>
+
+  var1   0.0037   -0.0017   -3.83e-05    1.55e-06   -1.47e-05   -3.41e-06
+  var2   0.0001   -0.0001   -4.37e-06   -3.62e-05   -1.14e-05   -1.68e-06
+  var3   0.0080    0.0083      0.0025      0.0022      0.0014      0.0005
+
+<span class="sgr1">                       Posterior-mean IRF to Shock 2</span>
+
+ <span class="sgr1">      </span> <span class="sgr1">     h=0 </span> <span class="sgr1">      h=1 </span> <span class="sgr1">       h=4 </span> <span class="sgr1">       h=8 </span> <span class="sgr1">     h=12 </span> <span class="sgr1">     h=19 </span>
+
+  var1   -0.0003     0.0001   -1.82e-05   -2.12e-06   2.77e-06   7.04e-07
+  var2   -0.0001   4.45e-05   -2.82e-06     6.9e-06   2.68e-06   3.85e-07
+  var3   -0.0014    -0.0011     -0.0005     -0.0005    -0.0003    -0.0001
+
+<span class="sgr1">                     Posterior-mean IRF to Shock 3</span>
+
+ <span class="sgr1">      </span> <span class="sgr1">    h=0 </span> <span class="sgr1">     h=1 </span> <span class="sgr1">       h=4 </span> <span class="sgr1">     h=8 </span> <span class="sgr1">     h=12 </span> <span class="sgr1">      h=19 </span>
+
+  var1   0.0005   -0.0004   -3.87e-05   -0.0001    -0.0001   -1.95e-05
+  var2   0.0002   -0.0004     -0.0001   -0.0001   -2.1e-05   -5.72e-06
+  var3   0.0549    0.0381      0.0258    0.0155     0.0090      0.0034
+
+</code></pre><p><strong>Recipe 6: Uhlig identification</strong></p><pre><code class="language-julia hljs">model_short = estimate_var(Y, 2)
+
+# Mountford-Uhlig penalty function: one optimal rotation
+restrictions = SVARRestrictions(3;
+    signs = [sign_restriction(1, 1, :positive),     # Fiscal shock raises INDPRO
+             sign_restriction(3, 3, :positive)]     # Monetary shock raises FFR
+)
+result = identify_uhlig(model_short, restrictions, 20)
+result</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">Mountford-Uhlig (2009) SVAR Result</span>
+
+  Variables                   3
+  Horizon                    20
+  Zero restrictions           0
+  Sign restrictions           2
+  Penalty             -199.2443
+  Converged                 Yes
+
+<span class="sgr1">           Per-Shock Summary</span>
+
+ <span class="sgr1"> Shock   </span> <span class="sgr1"> Restrictions   </span> <span class="sgr1">  Penalty </span>
+
+  Shock 1   0 zero, 1 sign   -99.6222
+  Shock 2   0 zero, 0 sign     0.0000
+  Shock 3   0 zero, 1 sign   -99.6222
+
+<span class="sgr1">                               IRF to Shock 1</span>
+
+ <span class="sgr1">      </span> <span class="sgr1">      h=0 </span> <span class="sgr1">     h=1 </span> <span class="sgr1">       h=4 </span> <span class="sgr1">      h=8 </span> <span class="sgr1">      h=12 </span> <span class="sgr1">      h=19 </span>
+
+  var1     0.0071   -0.0032     -0.0001   9.99e-06   -2.13e-05   -4.27e-06
+  var2   1.38e-05   -0.0001   -2.34e-06    -0.0001   -1.85e-05   -2.46e-06
+  var3     0.0094    0.0119      0.0019     0.0024      0.0016      0.0006
+
+<span class="sgr1">                             IRF to Shock 2</span>
+
+ <span class="sgr1">      </span> <span class="sgr1">       h=0 </span> <span class="sgr1">     h=1 </span> <span class="sgr1">     h=4 </span> <span class="sgr1">     h=8 </span> <span class="sgr1">     h=12 </span> <span class="sgr1">     h=19 </span>
+
+  var1   -2.68e-08   -0.0013   -0.0007   -0.0001   2.21e-05   4.66e-06
+  var2     -0.0023    0.0010   -0.0001    0.0001   4.41e-05   5.13e-06
+  var3   -7.26e-08    0.0051    0.0017   -0.0023    -0.0020    -0.0007
+
+<span class="sgr1">                            IRF to Shock 3</span>
+
+ <span class="sgr1">      </span> <span class="sgr1">    h=0 </span> <span class="sgr1">     h=1 </span> <span class="sgr1">     h=4 </span> <span class="sgr1">     h=8 </span> <span class="sgr1">      h=12 </span> <span class="sgr1">      h=19 </span>
+
+  var1   0.0006   -0.0007   -0.0001   -0.0002     -0.0001   -3.78e-05
+  var2   0.0003   -0.0007   -0.0002   -0.0001   -3.72e-05   -1.08e-05
+  var3   0.1075    0.0746    0.0508    0.0302      0.0175      0.0066
+
+</code></pre><hr/><h2 id="Reduced-Form-VAR"><a class="docs-heading-anchor" href="#Reduced-Form-VAR">Reduced-Form VAR</a><a id="Reduced-Form-VAR-1"></a><a class="docs-heading-anchor-permalink" href="#Reduced-Form-VAR" title="Permalink"></a></h2><h3 id="The-Model"><a class="docs-heading-anchor" href="#The-Model">The Model</a><a id="The-Model-1"></a><a class="docs-heading-anchor-permalink" href="#The-Model" title="Permalink"></a></h3><p>A <strong>VAR(p)</strong> model for an <span>$n$</span>-dimensional vector of endogenous variables <span>$y_t$</span> is:</p><p class="math-container">\[y_t = c + A_1 y_{t-1} + A_2 y_{t-2} + \cdots + A_p y_{t-p} + u_t\]</p><p>where:</p><ul><li><span>$y_t$</span> is the <span>$n \times 1$</span> vector of endogenous variables at time <span>$t$</span></li><li><span>$c$</span> is the <span>$n \times 1$</span> vector of intercepts</li><li><span>$A_i$</span> is the <span>$n \times n$</span> coefficient matrix for lag <span>$i = 1, \ldots, p$</span></li><li><span>$u_t$</span> is the <span>$n \times 1$</span> vector of reduced-form innovations with <span>$E[u_t] = 0$</span> and <span>$E[u_t u_t&#39;] = \Sigma$</span></li></ul><h3 id="OLS-Estimation"><a class="docs-heading-anchor" href="#OLS-Estimation">OLS Estimation</a><a id="OLS-Estimation-1"></a><a class="docs-heading-anchor-permalink" href="#OLS-Estimation" title="Permalink"></a></h3><p>Stack the observations into matrices. Let <span>$T$</span> denote the total sample size and define the effective sample as <span>$T_{\text{eff}} = T - p$</span> observations after accounting for lags:</p><p class="math-container">\[Y = \begin{bmatrix} y_{p+1}&#39; \\ y_{p+2}&#39; \\ \vdots \\ y_T&#39; \end{bmatrix}_{T_{\text{eff}} \times n}, \quad
+X = \begin{bmatrix} 1 &amp; y_p&#39; &amp; y_{p-1}&#39; &amp; \cdots &amp; y_1&#39; \\
+1 &amp; y_{p+1}&#39; &amp; y_p&#39; &amp; \cdots &amp; y_2&#39; \\
+\vdots &amp; \vdots &amp; \vdots &amp; \ddots &amp; \vdots \\
+1 &amp; y_{T-1}&#39; &amp; y_{T-2}&#39; &amp; \cdots &amp; y_{T-p}&#39; \end{bmatrix}_{T_{\text{eff}} \times (1+np)}\]</p><p>where:</p><ul><li><span>$Y$</span> is the <span>$T_{\text{eff}} \times n$</span> matrix of dependent variables</li><li><span>$X$</span> is the <span>$T_{\text{eff}} \times k$</span> matrix of regressors with <span>$k = 1 + np$</span></li></ul><p>The compact form <span>$Y = XB + U$</span> yields the OLS estimator:</p><p class="math-container">\[\hat{B} = (X&#39;X)^{-1} X&#39;Y\]</p><p>where:</p><ul><li><span>$\hat{B}$</span> is the <span>$k \times n$</span> coefficient matrix <span>$[c, A_1, \ldots, A_p]&#39;$</span></li></ul><p>The residual covariance matrix is:</p><p class="math-container">\[\hat{\Sigma} = \frac{1}{T_{\text{eff}} - k} \hat{U}&#39;\hat{U}\]</p><p>where:</p><ul><li><span>$\hat{U} = Y - X\hat{B}$</span> is the <span>$T_{\text{eff}} \times n$</span> residual matrix</li><li><span>$k = 1 + np$</span> is the number of regressors per equation</li></ul><pre><code class="language-julia hljs">model = estimate_var(Y, 4; varnames=[&quot;INDPRO&quot;, &quot;CPI&quot;, &quot;FFR&quot;])
+report(model)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"> Vector Autoregression — VAR(4)
+
+  Specification
+
+  Variables                   3
+  Lags                        4
+  Observations (effective)   56
+  Parameters per equation    13
+
+                    Equation Summary
+
+  Equation   Parms     RMSE       R²   Adj. R²   F-stat
+
+  INDPRO        13   0.0067   0.3356    0.1502    1.810
+  CPI           13   0.0022   0.4482    0.2942    2.910
+  FFR           13   0.0858   0.8083    0.7549   15.113
+
+                                  Equation: INDPRO
+
+                  Coef.   Std.Err.         t    P&gt;|t|    CI lower   CI upper
+
+  (Intercept)    0.0021     0.0011    1.9797   0.0542   -3.94e-05     0.0042   *
+  INDPRO.L1     -0.5888     0.1320   -4.4588   &lt;0.001     -0.8551    -0.3225   ***
+  CPI.L1         0.6302     0.3954    1.5939   0.1183     -0.1672     1.4276
+  FFR.L1        -0.0005     0.0094   -0.0534   0.9576     -0.0194     0.0184
+  INDPRO.L2     -0.4117     0.1423   -2.8931    0.006     -0.6987    -0.1247   ***
+  CPI.L2         0.3720     0.4608    0.8074   0.4239     -0.5572     1.3013
+  FFR.L2        -0.0044     0.0111   -0.3977   0.6928     -0.0267     0.0179
+  INDPRO.L3     -0.2435     0.1440   -1.6910   0.0981     -0.5338     0.0469   *
+  CPI.L3         0.4111     0.4508    0.9120   0.3668     -0.4979     1.3202
+  FFR.L3         0.0066     0.0104    0.6371   0.5274     -0.0143     0.0276
+  INDPRO.L4     -0.1213     0.1263   -0.9604   0.3422     -0.3761     0.1335
+  CPI.L4         0.3335     0.4276    0.7800   0.4397     -0.5288     1.1958
+  FFR.L4        -0.0092     0.0088   -1.0499   0.2996     -0.0270     0.0085
+
+                                   Equation: CPI
+
+                  Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
+
+  (Intercept)    0.0004     0.0003    1.2447     0.22    -0.0003     0.0011
+  INDPRO.L1     -0.0072     0.0434   -0.1657   0.8692    -0.0948     0.0804
+  CPI.L1        -0.6085     0.1300   -4.6801   &lt;0.001    -0.8707    -0.3463   ***
+  FFR.L1        -0.0055     0.0031   -1.8032   0.0784    -0.0118     0.0007   *
+  INDPRO.L2     -0.0499     0.0468   -1.0667   0.2921    -0.1443     0.0445
+  CPI.L2        -0.7800     0.1515   -5.1478   &lt;0.001    -1.0856    -0.4744   ***
+  FFR.L2         0.0008     0.0036    0.2097   0.8349    -0.0066     0.0081
+  INDPRO.L3     -0.0324     0.0473   -0.6853   0.4968    -0.1279     0.0630
+  CPI.L3        -0.2866     0.1482   -1.9334   0.0598    -0.5855     0.0123   *
+  FFR.L3        -0.0010     0.0034   -0.2795   0.7812    -0.0078     0.0059
+  INDPRO.L4     -0.0352     0.0415   -0.8465   0.4019    -0.1190     0.0486
+  CPI.L4        -0.2386     0.1406   -1.6973   0.0969    -0.5222     0.0449   *
+  FFR.L4         0.0015     0.0029    0.5105   0.6123    -0.0044     0.0073
+
+                                   Equation: FFR
+
+                   Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
+
+  (Intercept)     0.0065     0.0137    0.4717   0.6395    -0.0212     0.0341
+  INDPRO.L1       1.5989     1.7013    0.9398   0.3526    -1.8321     5.0300
+  CPI.L1         -6.6502     5.0942   -1.3054   0.1987   -16.9237     3.6233
+  FFR.L1          0.8283     0.1206    6.8688   &lt;0.001     0.5851     1.0715   ***
+  INDPRO.L2       1.8998     1.8334    1.0362   0.3059    -1.7977     5.5972
+  CPI.L2          6.3792     5.9368    1.0745   0.2886    -5.5935    18.3519
+  FFR.L2         -0.1258     0.1425   -0.8826   0.3824    -0.4131     0.1616
+  INDPRO.L3       2.1757     1.8551    1.1728   0.2473    -1.5654     5.9169
+  CPI.L3        -14.6841     5.8077   -2.5284   0.0152   -26.3964    -2.9718   **
+  FFR.L3          0.5920     0.1338    4.4257   &lt;0.001     0.3222     0.8617   ***
+  INDPRO.L4      -0.6259     1.6279   -0.3845   0.7025    -3.9089     2.6570
+  CPI.L4         -4.4972     5.5089   -0.8164   0.4188   -15.6070     6.6125
+  FFR.L4         -0.4534     0.1135   -3.9954   &lt;0.001    -0.6822    -0.2245   ***
+
+     Information Criteria
+
+  Criterion            Value
+
+  Log-likelihood    525.3617
+  AIC (per obs.)    -26.8123
+  BIC (per obs.)    -26.3421
+  HQIC (per obs.)   -26.6300
+
+          Residual Covariance (Σ)
+
+             INDPRO        CPI        FFR
+
+  INDPRO   4.43e-05   1.98e-07     0.0001
+  CPI      1.98e-07   4.79e-06   2.68e-05
+  FFR        0.0001   2.68e-05     0.0074
+
+        Residual Correlation
+
+           INDPRO      CPI      FFR
+
+  INDPRO   1.0000   0.0136   0.2595
+  CPI      0.0136   1.0000   0.1428
+  FFR      0.2595   0.1428   1.0000
+
+     Stationarity
+
+  Stationary      Yes
+  Max |λ|      0.8328
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>The <code>report</code> output displays the VAR specification (number of variables, lags, observations) alongside the AIC, BIC, and HQIC values. The coefficient matrix <code>model.B</code> stores the intercept in row 1, followed by <span>$A_1, A_2, \ldots, A_p$</span> stacked vertically. To extract lag-<span>$i$</span> coefficients for an <span>$n$</span>-variable system: <code>A_i = model.B[(i-1)*n+2 : i*n+1, :]</code>.</p><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>check_stability</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>true</code></td><td style="text-align: right">Warn if estimated VAR is non-stationary</td></tr><tr><td style="text-align: right"><code>varnames</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right"><code>nothing</code></td><td style="text-align: right">Variable display names (default: <code>y1</code>, <code>y2</code>, ...)</td></tr></table><h3 id="Return-Value"><a class="docs-heading-anchor" href="#Return-Value">Return Value</a><a id="Return-Value-1"></a><a class="docs-heading-anchor-permalink" href="#Return-Value" title="Permalink"></a></h3><p><code>estimate_var</code> returns a <code>VARModel{T}</code> with these fields:</p><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>Y</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right">Original <span>$T \times n$</span> data matrix</td></tr><tr><td style="text-align: right"><code>p</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Number of lags</td></tr><tr><td style="text-align: right"><code>B</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right"><span>$(1+np) \times n$</span> coefficient matrix <span>$[c, A_1, \ldots, A_p]&#39;$</span></td></tr><tr><td style="text-align: right"><code>U</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right"><span>$T_{\text{eff}} \times n$</span> residual matrix</td></tr><tr><td style="text-align: right"><code>Sigma</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right"><span>$n \times n$</span> residual covariance matrix</td></tr><tr><td style="text-align: right"><code>aic</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Akaike Information Criterion</td></tr><tr><td style="text-align: right"><code>bic</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Bayesian Information Criterion</td></tr><tr><td style="text-align: right"><code>hqic</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Hannan-Quinn Information Criterion</td></tr><tr><td style="text-align: right"><code>varnames</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right">Variable display names</td></tr></table><hr/><h2 id="Stability-and-Lag-Selection"><a class="docs-heading-anchor" href="#Stability-and-Lag-Selection">Stability and Lag Selection</a><a id="Stability-and-Lag-Selection-1"></a><a class="docs-heading-anchor-permalink" href="#Stability-and-Lag-Selection" title="Permalink"></a></h2><h3 id="Companion-Form-and-Stability"><a class="docs-heading-anchor" href="#Companion-Form-and-Stability">Companion Form and Stability</a><a id="Companion-Form-and-Stability-1"></a><a class="docs-heading-anchor-permalink" href="#Companion-Form-and-Stability" title="Permalink"></a></h3><p>A VAR(p) is <strong>stable</strong> (stationary) if all eigenvalues of the companion matrix <span>$F$</span> lie inside the unit circle. The companion form rewrites the VAR(p) as a VAR(1) in the <span>$np$</span>-dimensional state vector:</p><p class="math-container">\[F = \begin{bmatrix}
+A_1 &amp; A_2 &amp; \cdots &amp; A_{p-1} &amp; A_p \\
+I_n &amp; 0 &amp; \cdots &amp; 0 &amp; 0 \\
+0 &amp; I_n &amp; \cdots &amp; 0 &amp; 0 \\
+\vdots &amp; \vdots &amp; \ddots &amp; \vdots &amp; \vdots \\
+0 &amp; 0 &amp; \cdots &amp; I_n &amp; 0
+\end{bmatrix}_{np \times np}\]</p><p>where:</p><ul><li><span>$A_i$</span> is the <span>$n \times n$</span> VAR coefficient matrix for lag <span>$i$</span></li><li><span>$I_n$</span> is the <span>$n \times n$</span> identity matrix</li><li><span>$F$</span> is the <span>$np \times np$</span> companion matrix</li></ul><p>The stability condition requires <span>$|\lambda_i| &lt; 1$</span> for all eigenvalues <span>$\lambda_i$</span> of <span>$F$</span>. The function <code>is_stationary</code> checks this condition and returns the companion matrix eigenvalues:</p><pre><code class="language-julia hljs">model = estimate_var(Y, 4)
+stab = is_stationary(model)
+stab</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">VAR Model Stationarity Test — Companion Matrix Eigenvalues</span>
+
+ <span class="sgr1"> Index </span> <span class="sgr1">      Eigenvalue </span> <span class="sgr1"> Modulus </span>
+
+      1    0.8169-0.1624i    0.8328
+      2    0.8169+0.1624i    0.8328
+      3   -0.3485-0.7192i    0.7992
+      4   -0.3485+0.7192i    0.7992
+      5   -0.4586-0.5921i    0.7489
+      6   -0.4586+0.5921i    0.7489
+      7    0.0737-0.7423i    0.7459
+      8    0.0737+0.7423i    0.7459
+      9    0.2356-0.6167i    0.6602
+     10    0.2356+0.6167i    0.6602
+    ...          (2 more)
+
+<span class="sgr1">                                 Summary</span>
+
+  Maximum modulus                                              0.832845
+  Number of eigenvalues                                              12
+  Stationary                                                        Yes
+  Result                  VAR is STATIONARY (all eigenvalue moduli &lt; 1)
+
+</code></pre><p>The <code>max_modulus</code> field reports the largest eigenvalue modulus. A value below 1.0 confirms stationarity; values near 1.0 indicate near-unit-root behavior suggesting the system may require differencing or a VECM specification.</p><h3 id="Information-Criteria"><a class="docs-heading-anchor" href="#Information-Criteria">Information Criteria</a><a id="Information-Criteria-1"></a><a class="docs-heading-anchor-permalink" href="#Information-Criteria" title="Permalink"></a></h3><p>The optimal lag length minimizes an information criterion that balances fit against model complexity. For a Gaussian VAR:</p><p class="math-container">\[\text{AIC}(p) = \log|\hat{\Sigma}| + \frac{2}{T}(n^2 p + n)\]</p><p class="math-container">\[\text{BIC}(p) = \log|\hat{\Sigma}| + \frac{\log T}{T}(n^2 p + n)\]</p><p class="math-container">\[\text{HQ}(p) = \log|\hat{\Sigma}| + \frac{2 \log(\log T)}{T}(n^2 p + n)\]</p><p>where:</p><ul><li><span>$\hat{\Sigma}$</span> is the ML residual covariance at lag order <span>$p$</span></li><li><span>$T$</span> is the effective sample size</li><li><span>$n$</span> is the number of endogenous variables</li><li><span>$n^2 p + n$</span> is the total number of free parameters (<span>$n^2$</span> per lag plus <span>$n$</span> intercepts)</li></ul><p>AIC tends to overfit in finite samples; BIC is consistent (selects the true order with probability approaching 1 as <span>$T \to \infty$</span>); HQIC offers an intermediate trade-off.</p><pre><code class="language-julia hljs"># BIC-optimal lag order (default)
+p_bic = select_lag_order(Y, 13)
+
+# AIC-optimal lag order
+p_aic = select_lag_order(Y, 13; criterion=:aic)
+
+model = estimate_var(Y, p_bic)
+report(model)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">┌ Warning: Matrix near-singular (1-norm cond ≈ 7.826201527222449e7). Using pseudo-inverse.
+└ @ MacroEconometricModels /private/tmp/claude-501/-Users-chung-Desktop-CODES-MacroEconometricModels/1225c743-cd3c-417e-86ed-feb1487cf988/scratchpad/docs-deploy/src/core/utils.jl:152
+┌ Warning: Matrix near-singular (1-norm cond ≈ 1.3976828671341679e8). Using pseudo-inverse.
+└ @ MacroEconometricModels /private/tmp/claude-501/-Users-chung-Desktop-CODES-MacroEconometricModels/1225c743-cd3c-417e-86ed-feb1487cf988/scratchpad/docs-deploy/src/core/utils.jl:152
+┌ Warning: Estimated VAR is non-stationary (max eigenvalue modulus = 1.0378). Consider differencing the data or using a VECM specification.
+└ @ MacroEconometricModels /private/tmp/claude-501/-Users-chung-Desktop-CODES-MacroEconometricModels/1225c743-cd3c-417e-86ed-feb1487cf988/scratchpad/docs-deploy/src/var/estimation.jl:63
+┌ Warning: Matrix near-singular (1-norm cond ≈ 2.8597039257582015e8). Using pseudo-inverse.
+└ @ MacroEconometricModels /private/tmp/claude-501/-Users-chung-Desktop-CODES-MacroEconometricModels/1225c743-cd3c-417e-86ed-feb1487cf988/scratchpad/docs-deploy/src/core/utils.jl:152
+┌ Warning: Estimated VAR is non-stationary (max eigenvalue modulus = 1.0642). Consider differencing the data or using a VECM specification.
+└ @ MacroEconometricModels /private/tmp/claude-501/-Users-chung-Desktop-CODES-MacroEconometricModels/1225c743-cd3c-417e-86ed-feb1487cf988/scratchpad/docs-deploy/src/var/estimation.jl:63
+┌ Warning: Matrix near-singular (1-norm cond ≈ 7.826201527222449e7). Using pseudo-inverse.
+└ @ MacroEconometricModels /private/tmp/claude-501/-Users-chung-Desktop-CODES-MacroEconometricModels/1225c743-cd3c-417e-86ed-feb1487cf988/scratchpad/docs-deploy/src/core/utils.jl:152
+┌ Warning: Matrix near-singular (1-norm cond ≈ 1.3976828671341679e8). Using pseudo-inverse.
+└ @ MacroEconometricModels /private/tmp/claude-501/-Users-chung-Desktop-CODES-MacroEconometricModels/1225c743-cd3c-417e-86ed-feb1487cf988/scratchpad/docs-deploy/src/core/utils.jl:152
+┌ Warning: Estimated VAR is non-stationary (max eigenvalue modulus = 1.0378). Consider differencing the data or using a VECM specification.
+└ @ MacroEconometricModels /private/tmp/claude-501/-Users-chung-Desktop-CODES-MacroEconometricModels/1225c743-cd3c-417e-86ed-feb1487cf988/scratchpad/docs-deploy/src/var/estimation.jl:63
+┌ Warning: Matrix near-singular (1-norm cond ≈ 2.8597039257582015e8). Using pseudo-inverse.
+└ @ MacroEconometricModels /private/tmp/claude-501/-Users-chung-Desktop-CODES-MacroEconometricModels/1225c743-cd3c-417e-86ed-feb1487cf988/scratchpad/docs-deploy/src/core/utils.jl:152
+┌ Warning: Estimated VAR is non-stationary (max eigenvalue modulus = 1.0642). Consider differencing the data or using a VECM specification.
+└ @ MacroEconometricModels /private/tmp/claude-501/-Users-chung-Desktop-CODES-MacroEconometricModels/1225c743-cd3c-417e-86ed-feb1487cf988/scratchpad/docs-deploy/src/var/estimation.jl:63
+┌ Warning: Matrix near-singular (1-norm cond ≈ 2.8597039257582015e8). Using pseudo-inverse.
+└ @ MacroEconometricModels /private/tmp/claude-501/-Users-chung-Desktop-CODES-MacroEconometricModels/1225c743-cd3c-417e-86ed-feb1487cf988/scratchpad/docs-deploy/src/core/utils.jl:152
+┌ Warning: Estimated VAR is non-stationary (max eigenvalue modulus = 1.0642). Consider differencing the data or using a VECM specification.
+└ @ MacroEconometricModels /private/tmp/claude-501/-Users-chung-Desktop-CODES-MacroEconometricModels/1225c743-cd3c-417e-86ed-feb1487cf988/scratchpad/docs-deploy/src/var/estimation.jl:63
+ Vector Autoregression — VAR(13)
+
+  Specification
+
+  Variables                   3
+  Lags                       13
+  Observations (effective)   47
+  Parameters per equation    40
+
+┌ Warning: Matrix near-singular (1-norm cond ≈ 2.8597039257582015e8). Using pseudo-inverse.
+└ @ MacroEconometricModels /private/tmp/claude-501/-Users-chung-Desktop-CODES-MacroEconometricModels/1225c743-cd3c-417e-86ed-feb1487cf988/scratchpad/docs-deploy/src/core/utils.jl:152
+                    Equation Summary
+
+  Equation   Parms     RMSE       R²   Adj. R²   F-stat
+
+  y1            40   0.0014   0.9273    0.5223    2.290
+  y2            40   0.0010   0.9009    0.3486    1.631
+  y3            40   0.0434   0.9577    0.7218    4.060
+
+                                    Equation: y1
+
+                  Coef.   Std.Err.          t    P&gt;|t|   CI lower   CI upper
+
+  (Intercept)    0.0014     0.0003     3.9161   0.0058     0.0005     0.0022   ***
+  y1.L1          0.0950     0.0791     1.2014   0.2687    -0.0920     0.2821
+  y2.L1          1.5638     0.2054     7.6149   &lt;0.001     1.0782     2.0494   ***
+  y3.L1         -0.0110     0.0042    -2.6133   0.0347    -0.0209    -0.0010   **
+  y1.L2         -0.1438     0.0747    -1.9232   0.0959    -0.3205     0.0330   *
+  y2.L2          0.3556     0.2646     1.3439   0.2209    -0.2701     0.9812
+  y3.L2          0.0445     0.0058     7.6617   &lt;0.001     0.0307     0.0582   ***
+  y1.L3         -0.1363     0.0728    -1.8734   0.1032    -0.3084     0.0357
+  y2.L3          1.5104     0.3168     4.7674    0.002     0.7613     2.2596   ***
+  y3.L3         -0.0455     0.0067    -6.8261   &lt;0.001    -0.0612    -0.0297   ***
+  y1.L4         -0.0014     0.0773    -0.0184   0.9858    -0.1842     0.1814
+  y2.L4         -0.9749     0.2685    -3.6307   0.0084    -1.6099    -0.3400   ***
+  y3.L4          0.0333     0.0069     4.8400   0.0019     0.0170     0.0496   ***
+  y1.L5         -0.5222     0.0703    -7.4261   &lt;0.001    -0.6885    -0.3559   ***
+  y2.L5          0.7349     0.2261     3.2498   0.0141     0.2002     1.2696   **
+  y3.L5         -0.0166     0.0055    -3.0031   0.0199    -0.0297    -0.0035   **
+  y1.L6          0.2950     0.0662     4.4561   0.0029     0.1385     0.4515   ***
+  y2.L6         -0.4410     0.2103    -2.0971   0.0742    -0.9382     0.0563   *
+  y3.L6         -0.0226     0.0055    -4.0938   0.0046    -0.0356    -0.0095   ***
+  y1.L7         -0.1158     0.0674    -1.7180   0.1295    -0.2751     0.0436
+  y2.L7         -1.0962     0.1845    -5.9424   &lt;0.001    -1.5324    -0.6600   ***
+  y3.L7          0.0182     0.0051     3.5375   0.0095     0.0060     0.0303   ***
+  y1.L8         -0.2144     0.0657    -3.2632   0.0138    -0.3697    -0.0590   **
+  y2.L8          0.4422     0.2052     2.1550   0.0681    -0.0430     0.9274   *
+  y3.L8         -0.0131     0.0055    -2.3959   0.0478    -0.0261    -0.0002   **
+  y1.L9          0.0994     0.0695     1.4307   0.1956    -0.0649     0.2636
+  y2.L9         -0.9261     0.2779    -3.3327   0.0125    -1.5832    -0.2690   **
+  y3.L9         -0.0009     0.0050    -0.1882    0.856    -0.0127     0.0108
+  y1.L10         0.0732     0.0778     0.9410    0.378    -0.1108     0.2572
+  y2.L10         0.4233     0.3309     1.2792   0.2416    -0.3591     1.2056
+  y3.L10         0.0193     0.0044     4.3448   0.0034     0.0088     0.0298   ***
+  y1.L11         0.1811     0.0767     2.3598   0.0504    -0.0004     0.3625   *
+  y2.L11         0.9145     0.3725     2.4553   0.0438     0.0338     1.7953   **
+  y3.L11        -0.0257     0.0043    -5.9901   &lt;0.001    -0.0359    -0.0156   ***
+  y1.L12         0.0712     0.0701     1.0163   0.3433    -0.0945     0.2369
+  y2.L12        -0.5330     0.3265    -1.6322   0.1467    -1.3051     0.2392
+  y3.L12         0.0595     0.0051    11.6633   &lt;0.001     0.0474     0.0715   ***
+  y1.L13        -0.2785     0.0612    -4.5527   0.0026    -0.4231    -0.1338   ***
+  y2.L13         0.1472     0.2300     0.6401   0.5425    -0.3967     0.6912
+  y3.L13        -0.0457     0.0039   -11.6437   &lt;0.001    -0.0550    -0.0364   ***
+
+                                   Equation: y2
+
+                  Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
+
+  (Intercept)   -0.0001     0.0002   -0.5733   0.5844    -0.0007     0.0004
+  y1.L1         -0.0030     0.0519   -0.0570   0.9561    -0.1257     0.1197
+  y2.L1         -0.8979     0.1347   -6.6657   &lt;0.001    -1.2164    -0.5794   ***
+  y3.L1          0.0004     0.0028    0.1278   0.9019    -0.0062     0.0069
+  y1.L2          0.0516     0.0490    1.0516   0.3279    -0.0644     0.1675
+  y2.L2         -0.9178     0.1736   -5.2882   0.0011    -1.3282    -0.5074   ***
+  y3.L2         -0.0092     0.0038   -2.4277   0.0456    -0.0182    -0.0002   **
+  y1.L3          0.0199     0.0477    0.4162   0.6898    -0.0930     0.1327
+  y2.L3         -0.4911     0.2078   -2.3629   0.0501    -0.9825     0.0004   *
+  y3.L3         -0.0075     0.0044   -1.7065   0.1317    -0.0178     0.0029
+  y1.L4          0.0032     0.0507    0.0627   0.9518    -0.1167     0.1231
+  y2.L4         -0.1507     0.1761   -0.8554   0.4207    -0.5671     0.2658
+  y3.L4         -0.0024     0.0045   -0.5269   0.6145    -0.0130     0.0083
+  y1.L5          0.0079     0.0461    0.1714   0.8688    -0.1012     0.1170
+  y2.L5         -0.1327     0.1483   -0.8949   0.4005    -0.4835     0.2180
+  y3.L5          0.0159     0.0036    4.3676   0.0033     0.0073     0.0244   ***
+  y1.L6          0.1214     0.0434    2.7953   0.0267     0.0187     0.2241   **
+  y2.L6          0.1276     0.1379    0.9249   0.3858    -0.1986     0.4537
+  y3.L6         -0.0006     0.0036   -0.1543   0.8817    -0.0091     0.0080
+  y1.L7          0.1609     0.0442    3.6398   0.0083     0.0564     0.2654   ***
+  y2.L7         -0.1216     0.1210   -1.0048   0.3485    -0.4077     0.1645
+  y3.L7          0.0058     0.0034    1.7113   0.1308    -0.0022     0.0137
+  y1.L8         -0.0567     0.0431   -1.3158   0.2297    -0.1586     0.0452
+  y2.L8          0.6969     0.1346    5.1782   0.0013     0.3787     1.0152   ***
+  y3.L8          0.0002     0.0036    0.0608   0.9532    -0.0083     0.0087
+  y1.L9         -0.1132     0.0456   -2.4854   0.0419    -0.2210    -0.0055   **
+  y2.L9          0.3750     0.1823    2.0570   0.0787    -0.0561     0.8060   *
+  y3.L9         -0.0070     0.0033   -2.1326   0.0704    -0.0147     0.0008   *
+  y1.L10         0.0408     0.0510    0.7992   0.4504    -0.0799     0.1615
+  y2.L10         0.4757     0.2170    2.1919   0.0645    -0.0375     0.9889   *
+  y3.L10         0.0024     0.0029    0.8198   0.4393    -0.0045     0.0093
+  y1.L11         0.1012     0.0503    2.0118   0.0841    -0.0178     0.2202   *
+  y2.L11         0.0936     0.2443    0.3833   0.7129    -0.4841     0.6713
+  y3.L11        -0.0062     0.0028   -2.1994   0.0638    -0.0129     0.0005   *
+  y1.L12         0.1767     0.0460    3.8456   0.0063     0.0681     0.2854   ***
+  y2.L12        -0.1150     0.2142   -0.5368   0.6081    -0.6215     0.3915
+  y3.L12         0.0097     0.0033    2.8912   0.0233     0.0018     0.0176   **
+  y1.L13        -0.0735     0.0401   -1.8309   0.1098    -0.1683     0.0214
+  y2.L13        -0.2740     0.1509   -1.8158   0.1123    -0.6308     0.0828
+  y3.L13        -0.0047     0.0026   -1.8404   0.1083    -0.0108     0.0013
+
+                                    Equation: y3
+
+                   Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
+
+  (Intercept)     0.0073     0.0104    0.6999   0.5066    -0.0173     0.0318
+  y1.L1          -3.4123     2.3659   -1.4423   0.1924    -9.0068     2.1821
+  y2.L1           2.8860     6.1417    0.4699   0.6527   -11.6368    17.4088
+  y3.L1           0.9928     0.1257    7.8971   &lt;0.001     0.6955     1.2901   ***
+  y1.L2           1.5341     2.2355    0.6862   0.5147    -3.7521     6.8202
+  y2.L2          31.2758     7.9131    3.9524   0.0055    12.5642    49.9873   ***
+  y3.L2          -0.1812     0.1735   -1.0443   0.3311    -0.5915     0.2291
+  y1.L3           2.0727     2.1764    0.9524   0.3726    -3.0736     7.2190
+  y2.L3           2.8644     9.4752    0.3023   0.7712   -19.5410    25.2698
+  y3.L3           0.3496     0.1993    1.7542   0.1228    -0.1217     0.8209
+  y1.L4          -6.5381     2.3123   -2.8275   0.0255   -12.0059    -1.0703   **
+  y2.L4          17.5813     8.0306    2.1893   0.0647    -1.4081    36.5707   *
+  y3.L4          -0.1553     0.2057   -0.7548    0.475    -0.6417     0.3312
+  y1.L5          -4.8207     2.1031   -2.2922   0.0556    -9.7937     0.1523   *
+  y2.L5          23.3154     6.7631    3.4474   0.0107     7.3232    39.3076   **
+  y3.L5           0.4006     0.1655    2.4203   0.0461     0.0092     0.7919   **
+  y1.L6           0.7731     1.9798    0.3905   0.7078    -3.9085     5.4547
+  y2.L6          20.5544     6.2887    3.2684   0.0137     5.6839    35.4249   **
+  y3.L6          -0.3509     0.1649   -2.1277   0.0709    -0.7408     0.0391   *
+  y1.L7           7.3762     2.0153    3.6602   0.0081     2.6109    12.1416   ***
+  y2.L7          -8.8566     5.5168   -1.6054   0.1524   -21.9018     4.1886
+  y3.L7          -0.0255     0.1536   -0.1661   0.8727    -0.3887     0.3377
+  y1.L8           5.1344     1.9646    2.6135   0.0347     0.4889     9.7800   **
+  y2.L8           0.0115     6.1366    0.0019   0.9986   -14.4993    14.5223
+  y3.L8          -0.1053     0.1641   -0.6414   0.5417    -0.4933     0.2828
+  y1.L9           4.0169     2.0775    1.9336   0.0944    -0.8955     8.9293   *
+  y2.L9         -34.1234     8.3110   -4.1058   0.0045   -53.7757   -14.4711   ***
+  y3.L9          -0.1897     0.1488   -1.2750    0.243    -0.5417     0.1622
+  y1.L10          6.8125     2.3271    2.9275   0.0221     1.3098    12.3152   **
+  y2.L10        -30.7329     9.8953   -3.1058   0.0172   -54.1316    -7.3341   **
+  y3.L10         -0.1510     0.1330   -1.1356   0.2935    -0.4655     0.1635
+  y1.L11          5.9108     2.2946    2.5759   0.0367     0.4849    11.3368   **
+  y2.L11        -24.9362    11.1394   -2.2386   0.0602   -51.2767     1.4042   *
+  y3.L11          0.0456     0.1284    0.3552   0.7329    -0.2580     0.3492
+  y1.L12          7.7169     2.0953    3.6830   0.0078     2.7623    12.6714   ***
+  y2.L12        -34.1073     9.7660   -3.4925   0.0101   -57.2002   -11.0144   **
+  y3.L12          0.3430     0.1525    2.2497   0.0592    -0.0175     0.7036   *
+  y1.L13         -1.7362     1.8294   -0.9491   0.3742    -6.0620     2.5896
+  y2.L13        -35.8847     6.8794   -5.2162   0.0012   -52.1520   -19.6175   ***
+  y3.L13         -0.1594     0.1174   -1.3583   0.2165    -0.4370     0.1181
+
+     Information Criteria
+
+  Criterion            Value
+
+  Log-likelihood    597.5476
+  AIC (per obs.)    -32.2391
+  BIC (per obs.)    -30.6645
+  HQIC (per obs.)   -31.6465
+
+        Residual Covariance (Σ)
+
+             y1         y2         y3
+
+  y1    2.1e-06   -5.7e-07   2.76e-05
+  y2   -5.7e-07   9.05e-07   9.05e-06
+  y3   2.76e-05   9.05e-06     0.0019
+
+       Residual Correlation
+
+            y1        y2       y3
+
+  y1    1.0000   -0.4131   0.4396
+  y2   -0.4131    1.0000   0.2194
+  y3    0.4396    0.2194   1.0000
+
+     Stationarity
+
+  Stationary       No
+  Max |λ|      1.0642
+
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>The function <code>select_lag_order</code> evaluates all lag orders from 1 to <code>max_p</code> and returns the integer lag order minimizing the selected criterion. The BIC default provides the most parsimonious specification and is the standard choice for structural analysis (Lütkepohl 2005).</p><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>criterion</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:bic</code></td><td style="text-align: right">Information criterion: <code>:aic</code>, <code>:bic</code>, or <code>:hqic</code></td></tr></table><hr/><h2 id="Structural-VAR-and-Identification"><a class="docs-heading-anchor" href="#Structural-VAR-and-Identification">Structural VAR and Identification</a><a id="Structural-VAR-and-Identification-1"></a><a class="docs-heading-anchor-permalink" href="#Structural-VAR-and-Identification" title="Permalink"></a></h2><p>The reduced-form residuals <span>$u_t$</span> are linear combinations of orthogonal structural shocks <span>$\varepsilon_t$</span>:</p><p class="math-container">\[u_t = B_0 \varepsilon_t\]</p><p>where:</p><ul><li><span>$B_0$</span> is the <span>$n \times n$</span> contemporaneous impact matrix</li><li><span>$\varepsilon_t$</span> are structural shocks with <span>$E[\varepsilon_t \varepsilon_t&#39;] = I_n$</span></li></ul><p>The identifying restriction <span>$\Sigma = B_0 B_0&#39;$</span> provides <span>$n(n+1)/2$</span> equations for <span>$n^2$</span> unknowns, leaving <span>$n(n-1)/2$</span> free parameters. Additional restrictions are required to achieve <strong>exact identification</strong>. The package provides six identification strategies.</p><h3 id="Cholesky-(Recursive)"><a class="docs-heading-anchor" href="#Cholesky-(Recursive)">Cholesky (Recursive)</a><a id="Cholesky-(Recursive)-1"></a><a class="docs-heading-anchor-permalink" href="#Cholesky-(Recursive)" title="Permalink"></a></h3><p>The Cholesky decomposition imposes a lower triangular structure on <span>$B_0$</span>:</p><p class="math-container">\[B_0 = \text{chol}(\Sigma)\]</p><p>where:</p><ul><li><span>$B_0$</span> is lower triangular, implying variable <span>$i$</span> responds contemporaneously only to shocks <span>$1, \ldots, i$</span></li></ul><p>The ordering reflects economic assumptions about the speed of adjustment. Variables ordered first respond only to their own shocks on impact. In the standard monetary VAR ordering [INDPRO, CPI, FFR], the federal funds rate shock (shock 3) has no contemporaneous effect on output or prices, consistent with the information and implementation lags in monetary policy transmission (Christiano, Eichenbaum &amp; Evans 1999).</p><pre><code class="language-julia hljs">model = estimate_var(Y, 4)
+
+# Cholesky IRF with bootstrap 90% CI
+result = irf(model, 20; method=:cholesky, ci_type=:bootstrap, reps=50, conf_level=0.90)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">Impulse Response Functions</span>
+
+  Variables           3
+  Shocks              3
+  Horizon            20
+  CI          bootstrap
+
+<span class="sgr1">                          Shock: y1</span>
+
+ <span class="sgr1">    </span> <span class="sgr1">      h=1 </span> <span class="sgr1">     h=4 </span> <span class="sgr1">     h=8 </span> <span class="sgr1">      h=12 </span> <span class="sgr1">      h=20 </span>
+
+  y1    0.0067*    0.0001   -0.0003   -1.44e-05   -2.64e-07
+  y2   2.97e-05    0.0002   -0.0002   -3.81e-06    4.06e-07
+  y3    0.0223*   0.0402*    0.0167      0.0058     -0.0016
+
+<span class="sgr1">                          Shock: y2</span>
+
+ <span class="sgr1">    </span> <span class="sgr1">     h=1 </span> <span class="sgr1">     h=4 </span> <span class="sgr1">       h=8 </span> <span class="sgr1">     h=12 </span> <span class="sgr1">      h=20 </span>
+
+  y1    0.0000   -0.0001      0.0001     0.0003   -1.81e-05
+  y2   0.0022*   0.0008*   -3.97e-05   3.04e-05    3.84e-06
+  y3    0.0119   -0.0101     -0.0150     0.0033     -0.0008
+
+<span class="sgr1">                        Shock: y3</span>
+
+ <span class="sgr1">    </span> <span class="sgr1">     h=1 </span> <span class="sgr1">     h=4 </span> <span class="sgr1">     h=8 </span> <span class="sgr1">     h=12 </span> <span class="sgr1">     h=20 </span>
+
+  y1    0.0000    0.0004   -0.0004    -0.0002   1.62e-05
+  y2    0.0000    0.0001   -0.0001   2.09e-05   1.03e-06
+  y3   0.0820*   0.0767*    0.0393     0.0080    -0.0033
+
+* CI excludes zero
+</code></pre><pre><code class="language-julia hljs">plot_result(result)</code></pre><iframe src="../assets/plots/irf_freq.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe><h3 id="Sign-Restrictions"><a class="docs-heading-anchor" href="#Sign-Restrictions">Sign Restrictions</a><a id="Sign-Restrictions-1"></a><a class="docs-heading-anchor-permalink" href="#Sign-Restrictions" title="Permalink"></a></h3><p>Sign restrictions identify structural shocks by constraining the signs of impulse responses at selected horizons, following Rubio-Ramírez, Waggoner &amp; Zha (2010). The algorithm draws random orthogonal matrices <span>$Q$</span> from the Haar measure and retains only those producing IRFs consistent with the sign constraints:</p><ol><li>Compute the Cholesky factor: <span>$P = \text{chol}(\Sigma)$</span></li><li>Draw <span>$Q$</span> uniformly from <span>$O(n)$</span> via QR decomposition of a random matrix</li><li>Compute the candidate impact matrix: <span>$B_0 = PQ$</span></li><li>Compute IRFs <span>$\Theta_0 = B_0, \Theta_1, \ldots$</span> from the candidate <span>$B_0$</span></li><li>Accept if all sign conditions hold; otherwise discard and repeat</li></ol><div class="admonition is-info" id="Technical-Note-ef4792d6d52cda32"><header class="admonition-header">Technical Note<a class="admonition-anchor" href="#Technical-Note-ef4792d6d52cda32" title="Permalink"></a></header><div class="admonition-body"><p>With <code>store_all=true</code>, <code>identify_sign</code> returns a <code>SignIdentifiedSet</code> containing all accepted rotation matrices and their IRFs, enabling characterization of the full identified set (Baumeister &amp; Hamilton 2015). Use <code>irf_bounds</code> and <code>irf_median</code> to summarize the identified set.</p></div></div><pre><code class="language-julia hljs">model = estimate_var(Y, 4)
+
+# Contractionary monetary shock: FFR rises, INDPRO and CPI fall
+check = ir -&gt; ir[1, 3, 3] &gt; 0 &amp;&amp; ir[1, 1, 3] &lt; 0 &amp;&amp; ir[1, 2, 3] &lt; 0
+
+# Full identified set
+id_set = identify_sign(model, 20, check; max_draws=5000, store_all=true)
+id_set
+
+# Pointwise median and 68% credible bands
+med = irf_median(id_set)
+lower, upper = irf_bounds(id_set; quantiles=[0.16, 0.84])</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">([-0.004426328437487384 -0.0014501749963005191 -0.06530792009885607; -0.003343592772422344 -0.0011883709155988088 -0.05672642692337527; … ; -3.143988132267043e-5 -1.4207039194882633e-5 -0.002822306269721216; -1.2337057935510402e-5 -3.000442361432331e-6 -0.002707491551748639;;; -0.00493651140266707 -0.0015731797268884148 -0.059929185762511404; -0.003341319328231453 -0.00114445853277331 -0.052323252356299255; … ; -2.8216967496885987e-5 -1.3346849645247266e-5 -0.002919728838357749; -1.1012789845406731e-5 -2.951285382255354e-6 -0.0028503296158760016;;; -0.005000515688034507 -0.0017454767472398726 0.01121900387750025; -0.00036083193676187395 -3.280238564528165e-5 0.01005343449107256; … ; 2.8287114781931215e-5 7.887745225522487e-6 -0.002981755822207648; 1.4469171064347151e-5 -2.7114238414358264e-6 -0.0022384036393970166], [0.004868899279315387 0.0015833920037344365 0.059421847904016556; 0.0031209187958997874 0.0011497528979652893 0.05050787788538355; … ; 3.023897410809705e-5 1.4081163616898646e-5 0.003147272040273494; 1.1440443068158086e-5 3.1489448341216003e-6 0.0030246330304494013;;; 0.005014411340046623 0.0015076466607610597 0.061691146712863444; 0.0033261138486411035 0.0011130926770071812 0.05268192706299123; … ; 3.2083734521793274e-5 1.4313669171011099e-5 0.002888975242289507; 1.2118391550675726e-5 2.989883613964832e-6 0.0028438087373194422;;; -0.0008404949501264857 -0.00034711328617615436 0.06311403577779309; 0.0024528485617694253 0.00096316073295111 0.054723737879922664; … ; 5.274809565046e-5 2.0332785750204754e-5 -0.0004997523799624977; 2.2894967410036086e-5 -3.793515134129465e-8 0.0001467522283403838])</code></pre><p>The acceptance rate indicates what fraction of random draws satisfy all sign conditions simultaneously. Rates below 1% suggest the restrictions may be overly stringent or nearly contradictory.</p><h3 id="Narrative-Restrictions"><a class="docs-heading-anchor" href="#Narrative-Restrictions">Narrative Restrictions</a><a id="Narrative-Restrictions-1"></a><a class="docs-heading-anchor-permalink" href="#Narrative-Restrictions" title="Permalink"></a></h3><p>Narrative restrictions augment sign restrictions with historical information about specific shocks at particular dates, following Antolín-Díaz &amp; Rubio-Ramírez (2018). Two types of narrative constraints are supported:</p><ol><li><strong>Shock sign narrative</strong>: at date <span>$t^*$</span>, structural shock <span>$j$</span> was positive (or negative)</li><li><strong>Shock contribution narrative</strong>: at date <span>$t^*$</span>, shock <span>$j$</span> was the dominant driver of variable <span>$i$</span></li></ol><pre><code class="language-julia hljs">model = estimate_var(Y, 4)
+
+# Sign restrictions on impact
+sign_check = ir -&gt; ir[1, 3, 3] &gt; 0 &amp;&amp; ir[1, 1, 3] &lt; 0
+
+# Narrative: monetary shock was positive at observation 20
+narrative_check = shocks -&gt; shocks[20, 3] &gt; 0
+
+Q, irfs, shocks = identify_narrative(model, 20, sign_check, narrative_check; max_draws=5000)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">([-0.637604756856772 -0.7591324719955092 -0.13106511357185813; 0.28488973593434797 -0.07428354284024352 -0.9556776619877431; 0.7157499649967677 -0.6466837289008353 0.2636325897571026], [-0.004244009260833195 0.0006045673130283439 0.04787522675794068; 0.002855802626162497 -0.0006030359128784837 0.028849134217120813; … ; 8.378933886270541e-6 -1.230428873791089e-6 -0.0015283258959003735; 6.567188530685038e-6 1.5699419166902234e-6 -0.0015555588627151513;;; -0.005052919079886753 -0.00018512369017713466 -0.07077941434721068; 0.002893741852183834 0.0005417955970510014 -0.06547526447798319; … ; -2.0965630929020637e-5 -5.966168299495881e-6 0.003643166767225522; -8.902665266434869e-6 -1.2576972224728893e-6 0.0033979777869763365;;; -0.0008723924183270663 -0.0020954750394055793 0.0072758572819804895; -0.0008106030798060146 0.001240979218470725 0.018567026252255044; … ; 5.199696327069332e-5 2.1825005209559138e-5 -0.0010243477943229877; 2.1629523364692725e-5 -3.4499652550847675e-6 7.780133786380145e-5], [2.6795268770143803 2.7518126994053143 -0.546122744143872; -0.7194404054676692 -1.4930341092723618 -0.7229117280061269; … ; 0.024665771251840996 0.5173576494608358 -1.460769264879211; -0.7340894876352029 0.7472874150370814 -0.1909741604916225])</code></pre><p>The algorithm first filters for sign-satisfying rotations, then checks whether the recovered structural shocks <span>$\varepsilon = B_0^{-1} u$</span> satisfy the narrative conditions. This sequential filtering sharply reduces the identified set.</p><h3 id="Long-Run-(Blanchard-Quah)"><a class="docs-heading-anchor" href="#Long-Run-(Blanchard-Quah)">Long-Run (Blanchard-Quah)</a><a id="Long-Run-(Blanchard-Quah)-1"></a><a class="docs-heading-anchor-permalink" href="#Long-Run-(Blanchard-Quah)" title="Permalink"></a></h3><p>Long-run restrictions constrain the cumulative effect of structural shocks on selected variables. The long-run impact matrix is:</p><p class="math-container">\[C(1) = (I_n - A_1 - A_2 - \cdots - A_p)^{-1} B_0\]</p><p>where:</p><ul><li><span>$C(1)$</span> is the <span>$n \times n$</span> long-run cumulative response matrix</li><li><span>$A(1) = A_1 + A_2 + \cdots + A_p$</span> is the sum of VAR coefficient matrices</li></ul><p>Blanchard &amp; Quah (1989) impose that <span>$C(1)$</span> is lower triangular, so that shocks ordered later have zero long-run effect on variables ordered earlier. The typical application restricts demand shocks to have no long-run effect on output, identifying supply-driven long-run fluctuations.</p><pre><code class="language-julia hljs">model = estimate_var(Y, 4)
+result = irf(model, 40; method=:long_run)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">Impulse Response Functions</span>
+
+  Variables      3
+  Shocks         3
+  Horizon       40
+  CI          None
+
+<span class="sgr1">                                Shock: y1</span>
+
+ <span class="sgr1">    </span> <span class="sgr1">     h=1 </span> <span class="sgr1">     h=4 </span> <span class="sgr1">       h=8 </span> <span class="sgr1">      h=12 </span> <span class="sgr1">      h=24 </span> <span class="sgr1">      h=40 </span>
+
+  y1    0.0040   -0.0003      0.0001      0.0002    1.74e-06     4.4e-07
+  y2    0.0004    0.0002   -4.43e-05   -1.29e-05   -4.56e-07    3.27e-08
+  y3   -0.0477   -0.0368     -0.0230     -0.0021      0.0010   -4.69e-05
+
+<span class="sgr1">                              Shock: y2</span>
+
+ <span class="sgr1">    </span> <span class="sgr1">     h=1 </span> <span class="sgr1">     h=4 </span> <span class="sgr1">     h=8 </span> <span class="sgr1">     h=12 </span> <span class="sgr1">     h=24 </span> <span class="sgr1">     h=40 </span>
+
+  y1   -0.0044   -0.0003    0.0004     0.0003   7.39e-06   6.62e-07
+  y2    0.0014    0.0004    0.0001   1.45e-05   -3.6e-07   2.64e-08
+  y3   -0.0373   -0.0616   -0.0353    -0.0046     0.0016    -0.0001
+
+<span class="sgr1">                             Shock: y3</span>
+
+ <span class="sgr1">    </span> <span class="sgr1">    h=1 </span> <span class="sgr1">    h=4 </span> <span class="sgr1">     h=8 </span> <span class="sgr1">     h=12 </span> <span class="sgr1">     h=24 </span> <span class="sgr1">      h=40 </span>
+
+  y1   0.0029   0.0002   -0.0002     0.0001   1.88e-05   -2.95e-07
+  y2   0.0016   0.0007   -0.0001   3.16e-05   1.61e-06   -5.52e-08
+  y3   0.0608   0.0495    0.0164     0.0091    -0.0014      0.0001
+
+</code></pre><pre><code class="language-julia hljs">plot_result(result)</code></pre><iframe src="../assets/plots/irf_longrun.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe><h3 id="Arias-et-al.-(2018)-Zero-Sign-Restrictions"><a class="docs-heading-anchor" href="#Arias-et-al.-(2018)-Zero-Sign-Restrictions">Arias et al. (2018) Zero + Sign Restrictions</a><a id="Arias-et-al.-(2018)-Zero-Sign-Restrictions-1"></a><a class="docs-heading-anchor-permalink" href="#Arias-et-al.-(2018)-Zero-Sign-Restrictions" title="Permalink"></a></h3><p>When sign restrictions alone are insufficient, zero restrictions on specific impulse responses can be imposed alongside sign constraints. Arias, Rubio-Ramírez &amp; Waggoner (2018) develop an algorithm that draws rotation matrices <span>$Q$</span> uniformly over the set satisfying zero restrictions, then filters for sign satisfaction. Importance weights correct for non-uniform sampling induced by the zero-restriction constraint manifold.</p><p>The algorithm constructs <span>$Q$</span> column-by-column via QR decomposition in the null space of the zero restriction matrix, then checks sign restrictions on the candidate IRF <span>$\Theta_h = \Phi_h L Q$</span>.</p><table><tr><th style="text-align: right">Type</th><th style="text-align: right">Function</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right">Zero</td><td style="text-align: right"><code>zero_restriction(var, shock; horizon=0)</code></td><td style="text-align: right">Variable <code>var</code> does not respond to <code>shock</code> at <code>horizon</code></td></tr><tr><td style="text-align: right">Sign</td><td style="text-align: right"><code>sign_restriction(var, shock, :positive; horizon=0)</code></td><td style="text-align: right">Response has required sign at <code>horizon</code></td></tr></table><pre><code class="language-julia hljs">model_short = estimate_var(Y, 2)
+
+# Monetary policy shock (shock 3):
+# Sign: FFR rises on impact, output rises to demand shock
+restrictions = SVARRestrictions(3;
+    signs = [sign_restriction(3, 3, :positive),
+             sign_restriction(1, 1, :positive)]
+)
+
+result = identify_arias(model_short, restrictions, 20; n_draws=1000)
+result
+
+# Weighted IRF percentiles (importance-weight-corrected)
+pct = irf_percentiles(result; quantiles=[0.16, 0.5, 0.84])</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">20×3×3×3 Array{Float64, 4}:
+[:, :, 1, 1] =
+  0.00119927   -0.00150572   -0.0635801
+ -0.00294866   -0.000900155  -0.0411255
+ -0.00106251   -0.000623861  -0.048866
+  6.40825e-8   -0.000341854  -0.0335953
+ -0.000553068  -0.0001713    -0.0314632
+ -0.000374703  -0.000397636  -0.0288898
+ -0.000335473  -1.10834e-5   -0.0242985
+ -0.000107888  -0.000106783  -0.0206179
+ -0.000144206  -0.000126634  -0.0183113
+ -0.000200506  -6.71441e-5   -0.0163086
+ -8.16515e-5   -3.22771e-5   -0.013874
+ -7.20267e-5   -3.37109e-5   -0.0120632
+ -9.42355e-5   -4.88059e-5   -0.0106485
+ -7.80448e-5   -7.21593e-6   -0.00921363
+ -4.45399e-5   -1.56724e-5   -0.00796675
+ -4.85446e-5   -2.1194e-5    -0.00701395
+ -5.06637e-5   -1.36292e-5   -0.00613278
+ -3.50948e-5   -7.18084e-6   -0.0053187
+ -2.94034e-5   -9.32735e-6   -0.00463507
+ -2.99563e-5   -9.88121e-6   -0.0040425
+
+[:, :, 2, 1] =
+ -0.00473347   -0.00153606   -0.0723703
+ -0.00238845   -0.000882466  -0.0519476
+ -0.000962185  -0.000548908  -0.0500565
+ -0.000475327  -0.000551424  -0.0380269
+ -0.000490892  -0.000154891  -0.0347586
+ -0.000306404  -0.00034886   -0.0320708
+ -0.000307656  -6.10412e-5   -0.0270026
+ -0.000137289  -0.000144969  -0.0222198
+ -0.00013509   -0.000104536  -0.0203128
+ -0.000173     -6.21301e-5   -0.0181016
+ -7.03941e-5   -5.18075e-5   -0.0151251
+ -7.41186e-5   -2.84679e-5   -0.0132003
+ -7.77068e-5   -4.2124e-5    -0.0117859
+ -6.54486e-5   -8.9162e-6    -0.0101608
+ -4.11177e-5   -1.73332e-5   -0.00873723
+ -4.27969e-5   -1.72987e-5   -0.00770094
+ -4.18969e-5   -1.15696e-5   -0.0067393
+ -3.0221e-5    -7.56355e-6   -0.00583027
+ -2.6223e-5    -8.03715e-6   -0.00506616
+ -2.51549e-5   -8.19375e-6   -0.00446233
+
+[:, :, 3, 1] =
+ -0.00424912   -0.00141031   0.0181921
+ -0.00271489   -0.00108081   0.011756
+ -0.00119335   -0.000584472  0.00876568
+ -0.000494037  -0.000441618  0.00978593
+ -0.000560165  -0.000191719  0.00881072
+ -0.000383102  -0.000410538  0.00811228
+ -0.000382777  -3.5618e-5    0.00670049
+ -0.000159257  -0.000148039  0.00582003
+ -0.000167796  -0.000125798  0.0051982
+ -0.000208271  -7.36237e-5   0.00465524
+ -8.87431e-5   -5.07243e-5   0.00395875
+ -9.09154e-5   -3.5097e-5    0.0033642
+ -9.72129e-5   -5.13395e-5   0.00302783
+ -8.06623e-5   -1.10368e-5   0.00260932
+ -5.06838e-5   -2.06736e-5   0.00229671
+ -5.30518e-5   -2.13585e-5   0.00206602
+ -5.25209e-5   -1.44498e-5   0.0017318
+ -3.81888e-5   -9.22454e-6   0.00153543
+ -3.26415e-5   -9.96645e-6   0.00135094
+ -3.19268e-5   -1.01067e-5   0.00117096
+
+[:, :, 1, 2] =
+  0.00359806   -9.2823e-5    0.0113908
+ -0.00185089   -4.5427e-5    0.0119935
+ -0.000134714  -0.000145967  0.00604332
+  0.000350787   0.000168389  0.00636705
+ -8.10779e-5   -1.90547e-5   0.00354685
+ -8.79306e-5   -0.000107137  0.00524687
+ -3.57787e-5    4.06474e-5   0.00439106
+  2.83585e-5    3.07895e-5   0.00276336
+ -9.16198e-6   -4.09453e-5   0.00307565
+ -4.83911e-5   -9.20952e-6   0.00292495
+ -7.31168e-6    1.68495e-5   0.00202532
+  2.94366e-6   -6.7963e-6    0.00185252
+ -1.87921e-5   -1.14197e-5   0.00178083
+ -1.54583e-5    2.65293e-6   0.00145666
+ -2.7115e-7     1.56703e-6   0.00123679
+ -5.6489e-6    -5.73607e-6   0.00111883
+ -1.00695e-5   -2.35607e-6   0.00098355
+ -4.04882e-6    5.91295e-7   0.000793427
+ -2.58645e-6   -1.38045e-6   0.000737104
+ -4.50901e-6   -2.18493e-6   0.000623818
+
+[:, :, 2, 2] =
+ -8.40584e-5    0.000111605   0.000772512
+  0.000133046  -1.50507e-5   -0.000309303
+ -2.06351e-5   -5.00757e-5    0.00138164
+  5.99633e-6    3.39894e-5    0.00110185
+  4.27264e-5    6.9675e-6     0.000317688
+ -6.04871e-6   -1.9932e-5     0.000325428
+ -8.00149e-6    9.56253e-7    0.000370586
+  1.18082e-5    1.30813e-5    8.44982e-5
+  2.54816e-6   -9.14445e-7    0.00030476
+ -3.67609e-6   -3.9298e-6     0.000134266
+ -5.97228e-7    3.88813e-6    0.000171021
+  3.87084e-6    2.00691e-7    0.000276472
+  2.96517e-7   -3.16263e-7    9.35488e-6
+  5.40565e-7   -1.99236e-7    1.71946e-5
+  2.1993e-7     5.46547e-7    0.000141795
+ -5.66696e-7   -4.43892e-7    0.000102493
+ -8.34956e-7    2.25144e-8    2.15879e-5
+ -6.45437e-7    3.20638e-7    5.80496e-5
+ -2.04764e-7   -1.05969e-7    6.58154e-5
+ -7.0297e-8    -3.45347e-8    2.07596e-5
+
+[:, :, 3, 2] =
+  0.000540858   0.000177419  0.0520945
+ -0.000507401  -0.000470206  0.0369595
+ -0.000533928  -4.01374e-5   0.038718
+ -2.59814e-5    0.000143913  0.0275681
+ -7.81327e-5   -0.000109665  0.0246141
+ -0.000227645  -0.000122629  0.0230964
+ -0.000156845   2.75641e-5   0.0193391
+ -4.93295e-5   -1.08289e-5   0.016313
+ -0.000101296  -6.53787e-5   0.0149345
+ -0.000118171  -2.1511e-5    0.0130831
+ -5.30714e-5    2.65637e-7   0.0110257
+ -5.15738e-5   -2.12857e-5   0.00966508
+ -5.60034e-5   -2.3718e-5    0.0085178
+ -4.91971e-5   -6.79343e-6   0.00737843
+ -3.09398e-5   -9.04707e-6   0.00645515
+ -3.02456e-5   -1.27255e-5   0.0056673
+ -3.12348e-5   -8.465e-6     0.00488243
+ -2.22034e-5   -5.39942e-6   0.00426016
+ -1.90219e-5   -5.88992e-6   0.0037286
+ -1.8663e-5    -6.10145e-6   0.00323127
+
+[:, :, 1, 3] =
+  0.00595846   0.00152252   0.0826387
+ -0.000365671  0.000807247  0.0598113
+  0.000821836  0.000373587  0.0597793
+  0.000582568  0.000641062  0.0440054
+  0.000429578  0.000140581  0.0380077
+  0.000239062  0.000208476  0.0372698
+  0.000264284  7.31692e-5   0.0314133
+  0.000140299  0.000154768  0.0252439
+  0.000130709  6.13046e-5   0.023323
+  0.000128387  4.70084e-5   0.020988
+  6.82359e-5   5.85491e-5   0.0172743
+  7.63507e-5   2.38261e-5   0.0150592
+  6.42911e-5   2.9761e-5    0.0136338
+  5.49612e-5   1.06089e-5   0.0117606
+  4.07862e-5   1.70956e-5   0.0100375
+  3.76697e-5   1.27407e-5   0.00887165
+  3.58091e-5   1.00834e-5   0.00781843
+  2.855e-5     8.15309e-6   0.00670654
+  2.42935e-5   6.93096e-6   0.00583563
+  2.23417e-5   6.63277e-6   0.00513717
+
+[:, :, 2, 3] =
+ 0.00509294   0.00154111   0.071911
+ 0.00237679   0.000817269  0.0506316
+ 0.000910064  0.000548876  0.050626
+ 0.00044339   0.00055779   0.0373468
+ 0.000503023  0.000160279  0.0339215
+ 0.000305348  0.00033336   0.0313732
+ 0.000293361  6.2912e-5    0.0263058
+ 0.000135582  0.000138193  0.0222375
+ 0.00014061   9.92018e-5   0.0202364
+ 0.000163227  5.80089e-5   0.0176665
+ 6.82766e-5   5.08906e-5   0.0149861
+ 7.62058e-5   2.91726e-5   0.013168
+ 7.79664e-5   3.92654e-5   0.0116402
+ 6.2601e-5    9.05416e-6   0.0100058
+ 4.24632e-5   1.7192e-5    0.00869731
+ 4.39703e-5   1.6641e-5    0.00765341
+ 4.16639e-5   1.12803e-5   0.0066651
+ 3.06824e-5   7.74048e-6   0.00578702
+ 2.73561e-5   8.30825e-6   0.00506371
+ 2.56705e-5   7.87131e-6   0.00441284
+
+[:, :, 3, 3] =
+  0.00526131    0.0017406    0.0900916
+  0.00198566    0.000390149  0.0632992
+  0.00040524    0.000511213  0.064534
+  0.000441965   0.000645141  0.0473711
+  0.000451512   2.93092e-5   0.0421987
+ -3.49172e-5    0.000238374  0.0400089
+  0.00014454    7.22875e-5   0.0335954
+  8.56625e-5    0.000137282  0.0277314
+  6.48665e-6    3.25225e-5   0.0253962
+  2.97073e-5    4.07169e-5   0.0225132
+ -1.24924e-5    5.0857e-5    0.0189007
+  1.346e-5     -2.89229e-6   0.0164728
+ -1.62023e-5    1.73457e-5   0.0146998
+ -2.29488e-6   -3.8567e-7    0.0126662
+ -8.97882e-6    7.69732e-6   0.0109315
+ -1.01998e-5   -4.37179e-7   0.0096637
+ -7.00723e-6    1.20533e-6   0.00843551
+ -7.58548e-6    1.0304e-6    0.00729274
+ -6.44505e-6   -1.8802e-6    0.00636589
+ -6.62437e-6   -1.47085e-7   0.00556977</code></pre><p>The acceptance rate reports the fraction of draws satisfying all restrictions. Low rates (below 1%) suggest overly stringent restrictions. The importance weights correct for non-uniform sampling –- the weighted percentiles provide correctly calibrated credible intervals.</p><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>n_draws</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>1000</code></td><td style="text-align: right">Target number of accepted draws</td></tr><tr><td style="text-align: right"><code>n_rotations</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>1000</code></td><td style="text-align: right">Maximum attempts per target draw</td></tr><tr><td style="text-align: right"><code>compute_weights</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right"><code>true</code></td><td style="text-align: right">Compute importance weights (set <code>false</code> for faster exploratory analysis)</td></tr></table><p><strong>AriasSVARResult fields:</strong></p><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>Q_draws</code></td><td style="text-align: right"><code>Vector{Matrix{T}}</code></td><td style="text-align: right">Accepted rotation matrices</td></tr><tr><td style="text-align: right"><code>irf_draws</code></td><td style="text-align: right"><code>Array{T,4}</code></td><td style="text-align: right"><span>$n_{\text{draws}} \times H \times n \times n$</span> IRF draws</td></tr><tr><td style="text-align: right"><code>weights</code></td><td style="text-align: right"><code>Vector{T}</code></td><td style="text-align: right">Importance weights (normalized to sum to 1)</td></tr><tr><td style="text-align: right"><code>acceptance_rate</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Fraction of draws satisfying all restrictions</td></tr><tr><td style="text-align: right"><code>restrictions</code></td><td style="text-align: right"><code>SVARRestrictions</code></td><td style="text-align: right">The imposed restrictions</td></tr></table><h3 id="Mountford-Uhlig-(2009)-Penalty-Function"><a class="docs-heading-anchor" href="#Mountford-Uhlig-(2009)-Penalty-Function">Mountford-Uhlig (2009) Penalty Function</a><a id="Mountford-Uhlig-(2009)-Penalty-Function-1"></a><a class="docs-heading-anchor-permalink" href="#Mountford-Uhlig-(2009)-Penalty-Function" title="Permalink"></a></h3><p>When a single best rotation is preferred over a distribution of draws, Mountford &amp; Uhlig (2009) provide a penalty function approach. Zero restrictions are enforced exactly via null-space projection; sign restrictions are encouraged through a penalty function minimized with two-phase Nelder-Mead optimization.</p><p>The penalty for each sign restriction <span>$s$</span> is:</p><p class="math-container">\[\text{penalty} = -\sum_{s} w_s \cdot \text{sign}_s \cdot \frac{\text{IRF}_s}{\sigma_s}\]</p><p>where:</p><ul><li><span>$w_s = 100$</span> if the sign restriction is satisfied, <span>$w_s = 1$</span> if violated</li><li><span>$\text{sign}_s \in \{+1, -1\}$</span> is the required sign direction</li><li><span>$\text{IRF}_s$</span> is the impulse response value at the restricted horizon</li><li><span>$\sigma_s$</span> is the standard deviation of the response variable (normalization)</li></ul><div class="admonition is-info" id="When-to-use-Uhlig-vs-Arias-af943acc1c9f275f"><header class="admonition-header">When to use Uhlig vs Arias<a class="admonition-anchor" href="#When-to-use-Uhlig-vs-Arias-af943acc1c9f275f" title="Permalink"></a></header><div class="admonition-body"><p>Use <code>identify_uhlig</code> when a single point-identified rotation is needed –- for example, as a starting point for policy analysis. Use <code>identify_arias</code> when the full identified set is required for inference with credible intervals.</p></div></div><pre><code class="language-julia hljs">model_short = estimate_var(Y, 2)
+
+# Fiscal vs monetary separation
+restrictions = SVARRestrictions(3;
+    signs = [sign_restriction(1, 1, :positive),     # Fiscal shock raises INDPRO
+             sign_restriction(3, 3, :positive)]     # Monetary shock raises FFR
+)
+
+result = identify_uhlig(model_short, restrictions, 20)
+result</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">Mountford-Uhlig (2009) SVAR Result</span>
+
+  Variables                   3
+  Horizon                    20
+  Zero restrictions           0
+  Sign restrictions           2
+  Penalty             -199.2443
+  Converged                 Yes
+
+<span class="sgr1">           Per-Shock Summary</span>
+
+ <span class="sgr1"> Shock   </span> <span class="sgr1"> Restrictions   </span> <span class="sgr1">  Penalty </span>
+
+  Shock 1   0 zero, 1 sign   -99.6222
+  Shock 2   0 zero, 0 sign     0.0000
+  Shock 3   0 zero, 1 sign   -99.6222
+
+<span class="sgr1">                               IRF to Shock 1</span>
+
+ <span class="sgr1">      </span> <span class="sgr1">      h=0 </span> <span class="sgr1">     h=1 </span> <span class="sgr1">       h=4 </span> <span class="sgr1">      h=8 </span> <span class="sgr1">      h=12 </span> <span class="sgr1">      h=19 </span>
+
+  var1     0.0071   -0.0032     -0.0001   9.99e-06   -2.13e-05   -4.27e-06
+  var2   1.38e-05   -0.0001   -2.34e-06    -0.0001   -1.85e-05   -2.46e-06
+  var3     0.0094    0.0119      0.0019     0.0024      0.0016      0.0006
+
+<span class="sgr1">                            IRF to Shock 2</span>
+
+ <span class="sgr1">      </span> <span class="sgr1">      h=0 </span> <span class="sgr1">     h=1 </span> <span class="sgr1">     h=4 </span> <span class="sgr1">     h=8 </span> <span class="sgr1">     h=12 </span> <span class="sgr1">     h=19 </span>
+
+  var1   1.41e-08   -0.0013   -0.0007   -0.0001   2.21e-05   4.66e-06
+  var2    -0.0023    0.0010   -0.0001    0.0001   4.41e-05   5.13e-06
+  var3   3.59e-07    0.0051    0.0017   -0.0023    -0.0020    -0.0007
+
+<span class="sgr1">                            IRF to Shock 3</span>
+
+ <span class="sgr1">      </span> <span class="sgr1">    h=0 </span> <span class="sgr1">     h=1 </span> <span class="sgr1">     h=4 </span> <span class="sgr1">     h=8 </span> <span class="sgr1">      h=12 </span> <span class="sgr1">      h=19 </span>
+
+  var1   0.0006   -0.0007   -0.0001   -0.0002     -0.0001   -3.78e-05
+  var2   0.0003   -0.0007   -0.0002   -0.0001   -3.72e-05   -1.08e-05
+  var3   0.1075    0.0746    0.0508    0.0302      0.0175      0.0066
+
+</code></pre><p>The <code>converged</code> field indicates whether all sign restrictions are satisfied at the optimum. A <code>false</code> value means the optimizer found a local minimum where some sign conditions are violated –- increasing <code>n_starts</code> or relaxing restrictions may help.</p><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>n_starts</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>50</code></td><td style="text-align: right">Random starting points for coarse search</td></tr><tr><td style="text-align: right"><code>n_refine</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>10</code></td><td style="text-align: right">Top candidates refined in second phase</td></tr><tr><td style="text-align: right"><code>max_iter_coarse</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>500</code></td><td style="text-align: right">Maximum Nelder-Mead iterations (coarse phase)</td></tr><tr><td style="text-align: right"><code>max_iter_fine</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>2000</code></td><td style="text-align: right">Maximum iterations (refinement phase)</td></tr></table><p><strong>UhligSVARResult fields:</strong></p><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>Q</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right">Optimal rotation matrix</td></tr><tr><td style="text-align: right"><code>irf</code></td><td style="text-align: right"><code>Array{T,3}</code></td><td style="text-align: right"><span>$H \times n \times n$</span> impulse responses</td></tr><tr><td style="text-align: right"><code>penalty</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Total penalty at optimum (more negative = better)</td></tr><tr><td style="text-align: right"><code>shock_penalties</code></td><td style="text-align: right"><code>Vector{T}</code></td><td style="text-align: right">Per-shock penalty values</td></tr><tr><td style="text-align: right"><code>restrictions</code></td><td style="text-align: right"><code>SVARRestrictions</code></td><td style="text-align: right">The imposed restrictions</td></tr><tr><td style="text-align: right"><code>converged</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right">Whether all sign restrictions are satisfied</td></tr></table><hr/><h2 id="Covariance-Estimation"><a class="docs-heading-anchor" href="#Covariance-Estimation">Covariance Estimation</a><a id="Covariance-Estimation-1"></a><a class="docs-heading-anchor-permalink" href="#Covariance-Estimation" title="Permalink"></a></h2><h3 id="Newey-West-HAC-Estimator"><a class="docs-heading-anchor" href="#Newey-West-HAC-Estimator">Newey-West HAC Estimator</a><a id="Newey-West-HAC-Estimator-1"></a><a class="docs-heading-anchor-permalink" href="#Newey-West-HAC-Estimator" title="Permalink"></a></h3><p>For robust inference in the presence of heteroscedasticity and autocorrelation, the Newey-West (1987, 1994) estimator computes a heteroscedasticity and autocorrelation consistent (HAC) covariance matrix:</p><p class="math-container">\[\hat{V}_{\text{NW}} = (X&#39;X)^{-1} \hat{S} (X&#39;X)^{-1}\]</p><p>where:</p><ul><li><span>$\hat{V}_{\text{NW}}$</span> is the HAC covariance matrix of the coefficient estimator</li><li><span>$\hat{S}$</span> is the long-run covariance estimator</li></ul><p>The long-run covariance <span>$\hat{S}$</span> is:</p><p class="math-container">\[\hat{S} = \hat{\Gamma}_0 + \sum_{j=1}^{m} w_j (\hat{\Gamma}_j + \hat{\Gamma}_j&#39;)\]</p><p>where:</p><ul><li><span>$\hat{\Gamma}_j = \sum_{t=j+1}^{T} \hat{u}_t \hat{u}_{t-j}&#39; x_t x_{t-j}&#39;$</span> is the <span>$j$</span>-th order autocovariance</li><li><span>$w_j$</span> is the kernel weight at lag <span>$j$</span></li><li><span>$m$</span> is the bandwidth (truncation parameter)</li></ul><h3 id="Kernel-Functions"><a class="docs-heading-anchor" href="#Kernel-Functions">Kernel Functions</a><a id="Kernel-Functions-1"></a><a class="docs-heading-anchor-permalink" href="#Kernel-Functions" title="Permalink"></a></h3><p>The weight function <span>$w_j$</span> depends on the kernel choice:</p><p><strong>Bartlett</strong> (default):</p><p class="math-container">\[w_j = 1 - \frac{j}{m+1}\]</p><p><strong>Parzen</strong>:</p><p class="math-container">\[w_j = \begin{cases}
+1 - 6x^2 + 6|x|^3 &amp; |x| \leq 0.5 \\
+2(1-|x|)^3 &amp; 0.5 &lt; |x| \leq 1
+\end{cases}\]</p><p>where:</p><ul><li><span>$x = j/(m+1)$</span></li></ul><p><strong>Quadratic spectral</strong> (Andrews 1991):</p><p class="math-container">\[w_j = \frac{25}{12\pi^2 x^2} \left( \frac{\sin(6\pi x/5)}{6\pi x/5} - \cos(6\pi x/5) \right)\]</p><p>where:</p><ul><li><span>$x = j/(m+1)$</span></li></ul><h3 id="Automatic-Bandwidth-Selection"><a class="docs-heading-anchor" href="#Automatic-Bandwidth-Selection">Automatic Bandwidth Selection</a><a id="Automatic-Bandwidth-Selection-1"></a><a class="docs-heading-anchor-permalink" href="#Automatic-Bandwidth-Selection" title="Permalink"></a></h3><p>Newey &amp; West (1994) provide a data-driven bandwidth:</p><p class="math-container">\[m^* = 1.1447 \left( \hat{\alpha} \cdot T \right)^{1/3}\]</p><p>where:</p><ul><li><span>$\hat{\alpha} = 4\hat{\rho}^2 / (1-\hat{\rho})^4$</span> is estimated from AR(1) fits to the residuals</li><li><span>$T$</span> is the sample size</li></ul><h3 id="White-Heteroscedasticity-Robust-Estimator"><a class="docs-heading-anchor" href="#White-Heteroscedasticity-Robust-Estimator">White Heteroscedasticity-Robust Estimator</a><a id="White-Heteroscedasticity-Robust-Estimator-1"></a><a class="docs-heading-anchor-permalink" href="#White-Heteroscedasticity-Robust-Estimator" title="Permalink"></a></h3><p>When errors are heteroscedastic but serially uncorrelated, the White (1980) HC0 estimator provides consistent standard errors without bandwidth selection:</p><p class="math-container">\[\hat{V}_{W} = (X&#39;X)^{-1} \left( \sum_{t=1}^{T} \hat{u}_t^2 x_t x_t&#39; \right) (X&#39;X)^{-1}\]</p><p>where:</p><ul><li><span>$\hat{u}_t$</span> is the OLS residual at time <span>$t$</span></li><li><span>$x_t$</span> is the <span>$k \times 1$</span> regressor vector at time <span>$t$</span></li></ul><h3 id="Driscoll-Kraay-Panel-Robust-Estimator"><a class="docs-heading-anchor" href="#Driscoll-Kraay-Panel-Robust-Estimator">Driscoll-Kraay Panel-Robust Estimator</a><a id="Driscoll-Kraay-Panel-Robust-Estimator-1"></a><a class="docs-heading-anchor-permalink" href="#Driscoll-Kraay-Panel-Robust-Estimator" title="Permalink"></a></h3><p>For panel data with both cross-sectional and temporal dependence, the Driscoll &amp; Kraay (1998) estimator applies HAC estimation to the cross-sectional averages of moment conditions. This produces standard errors robust to heteroscedasticity, serial correlation, and cross-sectional dependence.</p><pre><code class="language-julia hljs"># Construct VAR design matrices
+Y_eff, X = construct_var_matrices(Y, 2)
+residuals = Y_eff - X * ((X&#39;X) \ (X&#39;Y_eff))
+
+# Newey-West HAC (Bartlett kernel, automatic bandwidth)
+V_nw = newey_west(X, residuals; bandwidth=0, kernel=:bartlett)
+
+# White heteroscedasticity-robust (HC0)
+V_w = white_vcov(X, residuals)
+
+# Automatic bandwidth selection
+bw = optimal_bandwidth_nw(residuals)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">1</code></pre><p>The Newey-West estimator is the standard choice for time series with heteroscedastic and serially correlated errors –- the default for VAR and LP applications. The White estimator is simpler but inconsistent when errors are autocorrelated. The Driscoll-Kraay estimator extends HAC to panel settings where cross-sectional units may be correlated.</p><hr/><h2 id="Forecasting"><a class="docs-heading-anchor" href="#Forecasting">Forecasting</a><a id="Forecasting-1"></a><a class="docs-heading-anchor-permalink" href="#Forecasting" title="Permalink"></a></h2><p>The VAR generates multi-step ahead forecasts by iterating the estimated recursion forward from the last <span>$p$</span> observations:</p><p class="math-container">\[\hat{y}_{T+h} = \hat{c} + \hat{A}_1 \hat{y}_{T+h-1} + \cdots + \hat{A}_p \hat{y}_{T+h-p}\]</p><p>where:</p><ul><li><span>$\hat{y}_{T+h}$</span> is the <span>$h$</span>-step ahead point forecast</li><li><span>$\hat{y}_{T+j}$</span> for <span>$j \leq 0$</span> uses the observed data</li></ul><p>Bootstrap confidence intervals resample the residuals and simulate forecast paths to construct empirical prediction intervals.</p><pre><code class="language-julia hljs">model = estimate_var(Y, 4; varnames=[&quot;INDPRO&quot;, &quot;CPI&quot;, &quot;FFR&quot;])
+fc = forecast(model, 12; ci_method=:bootstrap, reps=50, conf_level=0.95)
+fc</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">        VAR Forecast</span>
+
+ <span class="sgr1"> Specification </span> <span class="sgr1">           </span>
+
+  Horizon                12
+  Variables               3
+  CI method       bootstrap
+  Conf. level           95%
+
+<span class="sgr1">                 INDPRO</span>
+
+ <span class="sgr1">  h </span> <span class="sgr1"> Forecast </span> <span class="sgr1"> Lower 95% </span> <span class="sgr1"> Upper 95% </span>
+
+   1     0.0012     -0.0061      0.0111
+   2     0.0013     -0.0193      0.0156
+   3     0.0011     -0.0168      0.0145
+   4     0.0014     -0.0125      0.0139
+   5     0.0013     -0.0152      0.0158
+   6     0.0008     -0.0205      0.0157
+   7     0.0015     -0.0121      0.0156
+   8     0.0009     -0.0187      0.0179
+   9     0.0006     -0.0196      0.0193
+  10     0.0013     -0.0181      0.0153
+  11     0.0008     -0.0285      0.0161
+  12     0.0005     -0.0191      0.0227
+
+<span class="sgr1">                   CPI</span>
+
+ <span class="sgr1">  h </span> <span class="sgr1">  Forecast </span> <span class="sgr1"> Lower 95% </span> <span class="sgr1"> Upper 95% </span>
+
+   1     -0.0004     -0.0028      0.0038
+   2      0.0010     -0.0034      0.0050
+   3      0.0002     -0.0046      0.0051
+   4   -1.18e-05     -0.0052      0.0047
+   5   -1.78e-05     -0.0057      0.0061
+   6      0.0001     -0.0062      0.0079
+   7      0.0003     -0.0064      0.0054
+   8   -2.34e-05     -0.0068      0.0054
+   9     -0.0001     -0.0070      0.0081
+  10      0.0001     -0.0086      0.0059
+  11    1.43e-06     -0.0051      0.0067
+  12    5.56e-06     -0.0037      0.0077
+
+<span class="sgr1">                   FFR</span>
+
+ <span class="sgr1">  h </span> <span class="sgr1"> Forecast </span> <span class="sgr1"> Lower 95% </span> <span class="sgr1"> Upper 95% </span>
+
+   1    -0.0611     -0.2165      0.0929
+   2    -0.0592     -0.2767      0.1909
+   3    -0.0964     -0.3151      0.1269
+   4    -0.0329     -0.3198      0.2517
+   5    -0.0211     -0.3536      0.3263
+   6    -0.0386     -0.3819      0.2828
+   7     0.0060     -0.3351      0.4151
+   8     0.0236     -0.2659      0.4332
+   9     0.0180     -0.3604      0.5481
+  10     0.0408     -0.2746      0.5500
+  11     0.0514     -0.3219      0.4917
+  12     0.0502     -0.3118      0.3962
+
+</code></pre><p>The forecast object displays per-variable tables with point forecasts and confidence interval bounds at each horizon. The bootstrap intervals account for both parameter uncertainty and future shock uncertainty.</p><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>ci_method</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:bootstrap</code></td><td style="text-align: right">Confidence interval method: <code>:bootstrap</code> or <code>:none</code></td></tr><tr><td style="text-align: right"><code>reps</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>500</code></td><td style="text-align: right">Number of bootstrap replications</td></tr><tr><td style="text-align: right"><code>conf_level</code></td><td style="text-align: right"><code>Real</code></td><td style="text-align: right"><code>0.95</code></td><td style="text-align: right">Confidence level for intervals</td></tr></table><hr/><h2 id="Innovation-Accounting-and-Bayesian-VAR"><a class="docs-heading-anchor" href="#Innovation-Accounting-and-Bayesian-VAR">Innovation Accounting and Bayesian VAR</a><a id="Innovation-Accounting-and-Bayesian-VAR-1"></a><a class="docs-heading-anchor-permalink" href="#Innovation-Accounting-and-Bayesian-VAR" title="Permalink"></a></h2><p>For detailed coverage of impulse response functions, forecast error variance decomposition, and historical decomposition, see the dedicated <a href="../innovation_accounting/">Innovation Accounting</a> page. For Bayesian VAR estimation with Minnesota priors, conjugate NIW sampling, and hyperparameter optimization, see <a href="../bayesian/">Bayesian VAR</a>.</p><hr/><h2 id="Complete-Example"><a class="docs-heading-anchor" href="#Complete-Example">Complete Example</a><a id="Complete-Example-1"></a><a class="docs-heading-anchor-permalink" href="#Complete-Example" title="Permalink"></a></h2><p>This example demonstrates an end-to-end VAR workflow from data loading through structural analysis using FRED-MD monetary policy variables.</p><pre><code class="language-julia hljs"># Step 1: Select lag order
+p_opt = select_lag_order(Y, 13)
+
+# Step 2: Estimate VAR
+model = estimate_var(Y, p_opt; varnames=[&quot;INDPRO&quot;, &quot;CPI&quot;, &quot;FFR&quot;])
+report(model)
+
+# Step 3: Check stability
+stab = is_stationary(model)
+stab
+
+# Step 4: Cholesky IRF with bootstrap CI
+# Ordering: [INDPRO, CPI, FFR] — monetary policy shock is shock 3
+result = irf(model, 20; method=:cholesky, ci_type=:bootstrap, reps=50)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">Impulse Response Functions</span>
+
+  Variables           3
+  Shocks              3
+  Horizon            20
+  CI          bootstrap
+
+<span class="sgr1">                       Shock: INDPRO</span>
+
+ <span class="sgr1">        </span> <span class="sgr1">     h=1 </span> <span class="sgr1">     h=4 </span> <span class="sgr1">      h=8 </span> <span class="sgr1">    h=12 </span> <span class="sgr1">   h=20 </span>
+
+  INDPRO   0.0014*   -0.0009   2.34e-05   -0.0003   0.0004
+  CPI      -0.0004   -0.0004     0.0002   -0.0002   0.0001
+  FFR       0.0191    0.0158     0.0152    0.0283   0.0034
+
+<span class="sgr1">                        Shock: CPI</span>
+
+ <span class="sgr1">        </span> <span class="sgr1">     h=1 </span> <span class="sgr1">    h=4 </span> <span class="sgr1">     h=8 </span> <span class="sgr1">    h=12 </span> <span class="sgr1">    h=20 </span>
+
+  INDPRO    0.0000   0.0001   -0.0001    0.0001   -0.0009
+  CPI      0.0009*   0.0003   -0.0001   -0.0001   -0.0002
+  FFR       0.0191   0.0212    0.0070    0.0083   -0.0265
+
+<span class="sgr1">                         Shock: FFR</span>
+
+ <span class="sgr1">        </span> <span class="sgr1">     h=1 </span> <span class="sgr1">     h=4 </span> <span class="sgr1">     h=8 </span> <span class="sgr1">    h=12 </span> <span class="sgr1">    h=20 </span>
+
+  INDPRO    0.0000   -0.0007   -0.0003   -0.0006   -0.0003
+  CPI       0.0000   -0.0003   -0.0001   -0.0002    0.0002
+  FFR      0.0339*   0.0292*    0.0172    0.0012   -0.0069
+
+* CI excludes zero
+</code></pre><pre><code class="language-julia hljs">plot_result(result)</code></pre><iframe src="../assets/plots/irf_freq.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe><pre><code class="language-julia hljs"># Step 5: FEVD
+decomp = fevd(model, 20)
+decomp
+
+# Step 6: Historical decomposition
+hd = historical_decomposition(model, size(model.U, 1))
+verify_decomposition(hd)
+
+# Step 7: Forecast
+fc = forecast(model, 12)
+fc</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">        VAR Forecast</span>
+
+ <span class="sgr1"> Specification </span> <span class="sgr1">           </span>
+
+  Horizon                12
+  Variables               3
+  CI method       bootstrap
+  Conf. level           95%
+
+<span class="sgr1">                 INDPRO</span>
+
+ <span class="sgr1">  h </span> <span class="sgr1"> Forecast </span> <span class="sgr1"> Lower 95% </span> <span class="sgr1"> Upper 95% </span>
+
+   1    -0.0078     -0.0138     -0.0019
+   2     0.0023     -0.0056      0.0101
+   3     0.0082     -0.0019      0.0173
+   4    -0.0013     -0.0113      0.0117
+   5     0.0069     -0.0060      0.0175
+   6     0.0076     -0.0042      0.0227
+   7    -0.0034     -0.0182      0.0092
+   8     0.0013     -0.0135      0.0169
+   9    -0.0048     -0.0214      0.0094
+  10    -0.0035     -0.0178      0.0155
+  11    -0.0080     -0.0259      0.0066
+  12    -0.0046     -0.0190      0.0117
+
+<span class="sgr1">                   CPI</span>
+
+ <span class="sgr1">  h </span> <span class="sgr1"> Forecast </span> <span class="sgr1"> Lower 95% </span> <span class="sgr1"> Upper 95% </span>
+
+   1    -0.0017     -0.0061      0.0021
+   2    -0.0008     -0.0052      0.0049
+   3     0.0058      0.0011      0.0108
+   4    -0.0054     -0.0104      0.0006
+   5     0.0023     -0.0026      0.0083
+   6    -0.0042     -0.0100      0.0014
+   7    -0.0016     -0.0079      0.0041
+   8    -0.0023     -0.0087      0.0039
+   9     0.0029     -0.0047      0.0098
+  10     0.0005     -0.0077      0.0078
+  11     0.0023     -0.0045      0.0090
+  12    -0.0041     -0.0120      0.0036
+
+<span class="sgr1">                   FFR</span>
+
+ <span class="sgr1">  h </span> <span class="sgr1"> Forecast </span> <span class="sgr1"> Lower 95% </span> <span class="sgr1"> Upper 95% </span>
+
+   1    -0.0282     -0.2358      0.1177
+   2     0.0215     -0.2429      0.2300
+   3     0.1844     -0.1985      0.4629
+   4     0.1513     -0.2391      0.4608
+   5     0.5563      0.0829      0.9126
+   6     0.4822      0.0243      0.9056
+   7     0.4956      0.0296      0.9702
+   8     0.4252      0.0097      0.8912
+   9     0.3852     -0.0690      0.8954
+  10     0.3202     -0.0920      0.8207
+  11     0.3851     -0.0577      0.8691
+  12     0.0848     -0.3998      0.5979
+
+</code></pre><p>The BIC selects a parsimonious lag order for the 3-variable system. The Cholesky ordering [INDPRO, CPI, FFR] implements the standard recursive identification of Christiano, Eichenbaum &amp; Evans (1999): a monetary policy shock (shock 3) raises the federal funds rate on impact while output and prices respond with a lag. The FEVD reveals the fraction of industrial production forecast error variance attributable to monetary shocks at each horizon. The historical decomposition identity <span>$y_t = \sum_j \text{HD}_j(t) + \text{initial}(t)$</span> holds exactly up to numerical precision, verified by <code>verify_decomposition</code>.</p><hr/><h2 id="Common-Pitfalls"><a class="docs-heading-anchor" href="#Common-Pitfalls">Common Pitfalls</a><a id="Common-Pitfalls-1"></a><a class="docs-heading-anchor-permalink" href="#Common-Pitfalls" title="Permalink"></a></h2><ol><li><p><strong>Variable ordering matters for Cholesky identification.</strong> The Cholesky decomposition imposes a recursive causal structure where variable <span>$i$</span> responds contemporaneously only to shocks <span>$1, \ldots, i$</span>. Reordering the columns of <span>$Y$</span> changes the economic interpretation of the structural shocks. The standard monetary VAR ordering places slow-moving variables first (output, prices) and the policy instrument last.</p></li><li><p><strong>Non-stationary VAR produces unreliable inference.</strong> If <code>is_stationary</code> returns <code>false</code>, the companion matrix has unit-root eigenvalues and the asymptotic distribution theory underlying OLS standard errors and bootstrap confidence intervals is invalid. Consider differencing the data, applying the appropriate transformation codes via <code>apply_tcode</code>, or estimating a <a href="../vecm/">VECM</a> for cointegrated systems.</p></li><li><p><strong>Too many lags exhaust degrees of freedom.</strong> Each additional lag adds <span>$n^2$</span> parameters. For an <span>$n = 7$</span> variable system, each lag costs 49 parameters. With moderate sample sizes (<span>$T &lt; 200$</span>), overfitting degrades forecast accuracy and inflates IRF confidence intervals. Use <code>select_lag_order</code> with BIC for parsimony.</p></li><li><p><strong>Low acceptance rate for sign restrictions.</strong> When <code>identify_sign</code> or <code>identify_arias</code> reports an acceptance rate below 1%, the imposed sign conditions are difficult to satisfy jointly. This may indicate contradictory economic restrictions or an overidentified specification. Relaxing some conditions (e.g., restricting only impact responses rather than multiple horizons) typically improves acceptance.</p></li><li><p><strong>Uhlig penalty function finds local minima.</strong> The <code>identify_uhlig</code> optimizer uses multi-start Nelder-Mead, but non-convexity of the penalty landscape means the solution depends on initial conditions. If <code>converged</code> is <code>false</code>, increase <code>n_starts</code> or verify that the sign restrictions are economically coherent.</p></li></ol><hr/><h2 id="References"><a class="docs-heading-anchor" href="#References">References</a><a id="References-1"></a><a class="docs-heading-anchor-permalink" href="#References" title="Permalink"></a></h2><ul><li><p>Andrews, D. W. K. (1991). Heteroskedasticity and Autocorrelation Consistent Covariance Matrix Estimation. <em>Econometrica</em>, 59(3), 817-858. <a href="https://doi.org/10.2307/2938229">DOI</a></p></li><li><p>Antolín-Díaz, J., &amp; Rubio-Ramírez, J. F. (2018). Narrative Sign Restrictions for SVARs. <em>American Economic Review</em>, 108(10), 2802-2829. <a href="https://doi.org/10.1257/aer.20161852">DOI</a></p></li><li><p>Arias, J. E., Rubio-Ramírez, J. F., &amp; Waggoner, D. F. (2018). Inference Based on Structural Vector Autoregressions Identified with Sign and Zero Restrictions: Theory and Applications. <em>Econometrica</em>, 86(2), 685-720. <a href="https://doi.org/10.3982/ECTA14468">DOI</a></p></li><li><p>Baumeister, C., &amp; Hamilton, J. D. (2015). Sign Restrictions, Structural Vector Autoregressions, and Useful Prior Information. <em>Econometrica</em>, 83(5), 1963-1999. <a href="https://doi.org/10.3982/ECTA12356">DOI</a></p></li><li><p>Blanchard, O. J., &amp; Quah, D. (1989). The Dynamic Effects of Aggregate Demand and Supply Disturbances. <em>American Economic Review</em>, 79(4), 655-673. <a href="https://doi.org/10.2307/1827924">DOI</a></p></li><li><p>Christiano, L. J., Eichenbaum, M., &amp; Evans, C. L. (1999). Monetary Policy Shocks: What Have We Learned and to What End? In <em>Handbook of Macroeconomics</em>, Vol. 1, edited by J. B. Taylor &amp; M. Woodford, 65-148. Amsterdam: Elsevier. <a href="https://doi.org/10.1016/S1574-0048(99)01005-8">DOI</a></p></li><li><p>Driscoll, J. C., &amp; Kraay, A. C. (1998). Consistent Covariance Matrix Estimation with Spatially Dependent Panel Data. <em>Review of Economics and Statistics</em>, 80(4), 549-560. <a href="https://doi.org/10.1162/003465398557825">DOI</a></p></li><li><p>Hamilton, J. D. (1994). <em>Time Series Analysis</em>. Princeton, NJ: Princeton University Press. ISBN 978-0-691-04289-3.</p></li><li><p>Kilian, L., &amp; Lütkepohl, H. (2017). <em>Structural Vector Autoregressive Analysis</em>. Cambridge: Cambridge University Press. <a href="https://doi.org/10.1017/9781108164818">DOI</a></p></li><li><p>Lütkepohl, H. (2005). <em>New Introduction to Multiple Time Series Analysis</em>. Berlin: Springer. <a href="https://doi.org/10.1007/978-3-540-27752-1">DOI</a></p></li><li><p>Mountford, A., &amp; Uhlig, H. (2009). What Are the Effects of Fiscal Policy Shocks? <em>Journal of Applied Econometrics</em>, 24(6), 960-992. <a href="https://doi.org/10.1002/jae.1079">DOI</a></p></li><li><p>Newey, W. K., &amp; West, K. D. (1987). A Simple, Positive Semi-Definite, Heteroskedasticity and Autocorrelation Consistent Covariance Matrix. <em>Econometrica</em>, 55(3), 703-708. <a href="https://doi.org/10.2307/1913610">DOI</a></p></li><li><p>Newey, W. K., &amp; West, K. D. (1994). Automatic Lag Selection in Covariance Matrix Estimation. <em>Review of Economic Studies</em>, 61(4), 631-653. <a href="https://doi.org/10.2307/2297912">DOI</a></p></li><li><p>Rubio-Ramírez, J. F., Waggoner, D. F., &amp; Zha, T. (2010). Structural Vector Autoregressions: Theory of Identification and Algorithms for Inference. <em>Review of Economic Studies</em>, 77(2), 665-696. <a href="https://doi.org/10.1111/j.1467-937X.2009.00578.x">DOI</a></p></li><li><p>Sims, C. A. (1980). Macroeconomics and Reality. <em>Econometrica</em>, 48(1), 1-48. <a href="https://doi.org/10.2307/1912017">DOI</a></p></li><li><p>Uhlig, H. (2005). What Are the Effects of Monetary Policy on Output? Results from an Agnostic Identification Procedure. <em>Journal of Monetary Economics</em>, 52(2), 381-419. <a href="https://doi.org/10.1016/j.jmoneco.2004.05.007">DOI</a></p></li><li><p>White, H. (1980). A Heteroskedasticity-Consistent Covariance Matrix Estimator and a Direct Test for Heteroskedasticity. <em>Econometrica</em>, 48(4), 817-838. <a href="https://doi.org/10.2307/1912934">DOI</a></p></li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../volatility/">« Volatility Models</a><a class="docs-footer-nextpage" href="../bayesian/">Bayesian VAR »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Friday 17 July 2026 14:22">Friday 17 July 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
