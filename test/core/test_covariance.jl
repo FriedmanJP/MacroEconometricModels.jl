@@ -98,6 +98,251 @@ using Random
         @test bw_empty == 0
     end
 
+    @testset "optimal_bandwidth_nw — Andrews (1991) plug-in (T052)" begin
+        # Persistent AR(1) with ρ≈0.5 so the plug-in bandwidth comfortably exceeds
+        # the old degenerate floor(n^(1/3))=5 clamp but stays under the Schwert cap.
+        Random.seed!(4242)
+        n = 200
+        x = zeros(n); x[1] = randn()
+        for t in 2:n
+            x[t] = 0.5 * x[t-1] + randn()
+        end
+        # Recompute ρ̂ with the SAME estimator the function uses → the pins are exact
+        # regardless of the realized draw.
+        rho = dot(@view(x[1:end-1]), @view(x[2:end])) / dot(@view(x[1:end-1]), @view(x[1:end-1]))
+        ra = min(abs(rho), 0.99)
+        schwert = floor(Int, 12 * (n / 100)^(1 / 4))          # = 14 for n=200
+
+        # (1) Bartlett exact pin: α(1)=4ρ²/(1−ρ²)², constant 1.1447, exponent 1/3
+        a1 = 4ra^2 / (1 - ra^2)^2
+        exp_bart = min(ceil(Int, 1.1447 * (a1 * n)^(1 / 3)), schwert)
+        @test MacroEconometricModels.optimal_bandwidth_nw(x) == exp_bart
+        @test MacroEconometricModels.optimal_bandwidth_nw(x; kernel=:bartlett) == exp_bart
+
+        # (2) q=2 kernels: α(2)=4ρ²/(1−ρ)⁴ with kernel-specific Andrews constants
+        a2 = 4ra^2 / (1 - ra)^4
+        @test MacroEconometricModels.optimal_bandwidth_nw(x; kernel=:parzen) ==
+              min(ceil(Int, 2.6614 * (a2 * n)^(1 / 5)), schwert)
+        @test MacroEconometricModels.optimal_bandwidth_nw(x; kernel=:quadratic_spectral) ==
+              min(ceil(Int, 1.3221 * (a2 * n)^(1 / 5)), schwert)
+        @test MacroEconometricModels.optimal_bandwidth_nw(x; kernel=:tukey_hanning) ==
+              min(ceil(Int, 1.7462 * (a2 * n)^(1 / 5)), schwert)
+
+        # (3) Truncation-cap fix: bandwidth now exceeds the old floor(n^(1/3)) clamp
+        @test MacroEconometricModels.optimal_bandwidth_nw(x) > floor(Int, n^(1 / 3))
+
+        # (4) Unknown kernel throws
+        @test_throws ArgumentError MacroEconometricModels.optimal_bandwidth_nw(x; kernel=:bogus)
+
+        # (5) Mislabel/α-gap: the old code paired the Bartlett constant/exponent with
+        #     the α(2) plug-in → a strictly larger (uncapped) bandwidth than the
+        #     kernel-consistent Bartlett value.
+        old_uncapped = ceil(Int, 1.1447 * (a2 * n)^(1 / 3))
+        new_uncapped = ceil(Int, 1.1447 * (a1 * n)^(1 / 3))
+        @test new_uncapped < old_uncapped
+
+        # (6) Smoke: every kernel flows finitely through the public estimators
+        X = hcat(ones(n), randn(n, 2)); u = randn(n)
+        for k in (:bartlett, :parzen, :quadratic_spectral, :tukey_hanning)
+            @test all(isfinite, MacroEconometricModels.newey_west(X, u; kernel=k))
+            @test isfinite(MacroEconometricModels.long_run_variance(x; kernel=k))
+            @test all(isfinite, MacroEconometricModels.long_run_covariance(X; kernel=k))
+        end
+    end
+
+    @testset "QS kernel infinite support (T053)" begin
+        # (A) analytic pin: QS weight is nonzero for lags beyond the bandwidth.
+        #     x = 10/(3+1) = 2.5, z = 6π·2.5/5 = 3π ⇒ sin(3π)=0, cos(3π)=−1
+        #     ⇒ w = 25/(12π²·6.25)·1 = 1/(3π²).
+        w_qs = MacroEconometricModels.kernel_weight(10, 3, :quadratic_spectral)
+        @test w_qs ≈ 1 / (3π^2) atol = 1e-12
+        @test w_qs > 0
+        # Compact-support kernels still truncate to exactly 0 at |x|>1.
+        for k in (:bartlett, :parzen, :tukey_hanning)
+            @test MacroEconometricModels.kernel_weight(10, 3, k) == 0.0
+        end
+
+        # AR(1), ρ=0.7 (project convention: explicit MersenneTwister seed).
+        rng = Random.MersenneTwister(53)
+        n = 200
+        x = zeros(n); x[1] = randn(rng)
+        for t in 2:n
+            x[t] = 0.7 * x[t-1] + randn(rng)
+        end
+        xd = x .- Statistics.mean(x)
+        bw = 4
+        γ(j) = sum(@view(xd[j+1:n]) .* @view(xd[1:n-j])) / n
+        wqs(j) = MacroEconometricModels.kernel_weight(j, bw, :quadratic_spectral)
+
+        # (B) QS full-range summation (to n−1) differs from the old bw-truncated sum.
+        lrv_qs = MacroEconometricModels.long_run_variance(x; bandwidth=bw, kernel=:quadratic_spectral)
+        S0 = sum(abs2, xd) / n
+        trunc_qs = S0 + sum(2 * wqs(j) * γ(j) for j in 1:bw)
+        tail = sum(2 * wqs(j) * γ(j) for j in (bw+1):(n-1))
+        @test !isapprox(lrv_qs, trunc_qs; rtol=1e-6)   # summation range genuinely changed
+        @test lrv_qs > trunc_qs                         # positive serial corr ⇒ positive tail mass
+        @test abs(tail) > 0
+        @test lrv_qs ≈ trunc_qs + tail atol = 1e-10     # exact reconstruction
+
+        # (C) compact kernels are a strict no-op off the QS path (jmax==bw).
+        for k in (:bartlett, :parzen, :tukey_hanning)
+            manual = S0 + sum(2 * MacroEconometricModels.kernel_weight(j, bw, k) * γ(j) for j in 1:bw)
+            @test MacroEconometricModels.long_run_variance(x; bandwidth=bw, kernel=k) ≈ manual rtol = 1e-12
+        end
+    end
+
+    @testset "Andrews–Monahan prewhitening (T054)" begin
+        # (A) Scalar reduction (k=1, X=ones): the VAR(1) collapses to a scalar AR(1)
+        #     with ρ = Σu_{t-1}u_t / Σu_{t-1}², whitened û_t = u_t − ρ u_{t-1} (t=2..n,
+        #     length n−1, NOT spliced with u[1]), recolored by 1/(1−ρ)².
+        Random.seed!(71)
+        n = 300
+        u = zeros(n); u[1] = randn()
+        for t in 2:n
+            u[t] = 0.6 * u[t-1] + randn()
+        end
+        bw = 5
+        ulag = @view u[1:n-1]; ulead = @view u[2:n]
+        rho = dot(ulag, ulead) / dot(ulag, ulag)
+        uhat = ulead .- rho .* ulag                 # length n-1
+        mh = length(uhat)
+        Sstar = sum(abs2, uhat)
+        for j in 1:bw
+            w = MacroEconometricModels.kernel_weight(j, bw, :bartlett)
+            Sstar += 2 * w * sum(@view(uhat[j+1:mh]) .* @view(uhat[1:mh-j]))
+        end
+        V_ref = (1 / n) * (Sstar / (1 - rho)^2) * (1 / n)
+        V_scalar = MacroEconometricModels.newey_west(reshape(ones(n), n, 1), u;
+                                                     prewhiten=true, bandwidth=bw)
+        @test V_scalar[1, 1] ≈ V_ref rtol = 1e-9
+
+        # (B) Multivariate: the new VAR(1) prewhitening genuinely differs from both the
+        #     non-prewhitened estimate and the OLD scalar-AR(1) prewhitening.
+        Random.seed!(72)
+        xreg = zeros(n); xreg[1] = randn()
+        for t in 2:n
+            xreg[t] = 0.7 * xreg[t-1] + randn()
+        end
+        X = hcat(ones(n), xreg)
+        uu = zeros(n); uu[1] = randn()
+        for t in 2:n
+            uu[t] = 0.5 * uu[t-1] + randn()
+        end
+        V_new = MacroEconometricModels.newey_west(X, uu; prewhiten=true, bandwidth=bw)
+        V_noprew = MacroEconometricModels.newey_west(X, uu; prewhiten=false, bandwidth=bw)
+        # inline reconstruction of the OLD scalar-AR(1) prewhitening (spliced first obs)
+        rl = @view uu[1:n-1]; ld = @view uu[2:n]
+        rho_s = dot(rl, ld) / dot(rl, rl)
+        u_pw = vcat([uu[1]], uu[2:n] .- rho_s .* uu[1:n-1])
+        Xu_old = X .* u_pw
+        S_old = Xu_old' * Xu_old
+        for j in 1:bw
+            w = MacroEconometricModels.kernel_weight(j, bw, :bartlett)
+            Gj = @view(Xu_old[j+1:n, :])' * @view(Xu_old[1:n-j, :])
+            S_old .+= w * (Gj + Gj')
+        end
+        S_old ./= (1 - rho_s)^2
+        XtXi = inv(X'X)
+        V_old = XtXi * S_old * XtXi
+        @test !isapprox(V_new, V_noprew; rtol=1e-3)
+        @test !isapprox(V_new, V_old; rtol=1e-3)
+        @test isapprox(V_new, V_new'; atol=1e-10)
+
+        # (C) Stability guard: a near-unit-root moment VAR(1) → warned fallback to no
+        #     prewhitening (bit-for-bit equal to prewhiten=false).
+        Random.seed!(99)
+        m = 500
+        u_rw = zeros(m); u_rw[1] = randn()
+        for t in 2:m
+            u_rw[t] = 0.995 * u_rw[t-1] + randn()
+        end
+        Xc = reshape(ones(m), m, 1)
+        V_fallback = @test_logs (:warn,) match_mode = :any MacroEconometricModels.newey_west(
+            Xc, u_rw; prewhiten=true, bandwidth=4)
+        @test V_fallback ≈ MacroEconometricModels.newey_west(Xc, u_rw; prewhiten=false, bandwidth=4)
+
+        # (D) Helper contract: stable moments → (n-1)×k whitened + k×k A; near-unit-root → nothing.
+        Random.seed!(7)
+        Gm = randn(300, 2)
+        Ghat, A = MacroEconometricModels._prewhiten_moments(Gm)
+        @test size(Ghat) == (299, 2)
+        @test size(A) == (2, 2)
+        g1 = zeros(m); g1[1] = randn(); g2 = zeros(m); g2[1] = randn()
+        for t in 2:m
+            g1[t] = 0.995 * g1[t-1] + randn()
+            g2[t] = 0.99 * g2[t-1] + randn()
+        end
+        Gh2, _ = MacroEconometricModels._prewhiten_moments(hcat(g1, g2); radius_cap=0.97)
+        @test Gh2 === nothing
+    end
+
+    @testset "long_run_covariance PSD gate (T063 SUB-2)" begin
+        # The isposdef gate is behavior-preserving: the result is symmetric + PSD on both
+        # the Bartlett (PD) and QS (may be non-PD → projected) paths.
+        Random.seed!(63)
+        X = hcat(ones(200), randn(200, 2))
+        for k in (:bartlett, :quadratic_spectral)
+            S = MacroEconometricModels.long_run_covariance(X; bandwidth=4, kernel=k)
+            @test isapprox(S, S'; atol=1e-12)
+            @test minimum(eigvals(Symmetric(S))) ≥ -1e-10
+        end
+    end
+
+    @testset "System HAC cross-equation blocks (T055)" begin
+        Random.seed!(313)
+        n = 300; k = 2; n_eq = 2
+        X = hcat(ones(n), randn(n))
+        fac = randn(n)                       # common factor → correlated equations
+        u1 = randn(n) .+ fac
+        u2 = randn(n) .+ fac
+        U = hcat(u1, u2)
+        bw = 4
+        XtXinv = inv(X'X)
+        blk1 = 1:k; blk2 = (k+1):(2k)
+
+        # (a) newey_west — nonzero cross-block, symmetric, PSD, diagonal-block backward compat
+        Vnw = MacroEconometricModels.newey_west(X, U; bandwidth=bw)
+        @test size(Vnw) == (k * n_eq, k * n_eq)
+        @test isapprox(Vnw, Vnw'; atol=1e-10)
+        @test minimum(eigvals(Symmetric(Vnw))) ≥ -1e-8
+        @test opnorm(Vnw[blk1, blk2]) > 1e-6
+        @test Vnw[blk1, blk1] ≈ MacroEconometricModels.newey_west(X, u1; bandwidth=bw) atol = 1e-9
+        @test Vnw[blk2, blk2] ≈ MacroEconometricModels.newey_west(X, u2; bandwidth=bw) atol = 1e-9
+
+        # (b) white_vcov — all HC variants
+        for variant in (:hc0, :hc1, :hc2, :hc3)
+            Vw = MacroEconometricModels.white_vcov(X, U; variant=variant)
+            @test isapprox(Vw, Vw'; atol=1e-10)
+            @test minimum(eigvals(Symmetric(Vw))) ≥ -1e-8
+            @test opnorm(Vw[blk1, blk2]) > 1e-6
+            @test Vw[blk1, blk1] ≈ MacroEconometricModels.white_vcov(X, u1; variant=variant) atol = 1e-9
+            @test Vw[blk2, blk2] ≈ MacroEconometricModels.white_vcov(X, u2; variant=variant) atol = 1e-9
+        end
+        # exact cross-block identity (HC0): V[1:k, k+1:2k] = (X'X)^{-1}(Xu1'Xu2)(X'X)^{-1}
+        Xu1 = X .* u1; Xu2 = X .* u2
+        V0 = MacroEconometricModels.white_vcov(X, U; variant=:hc0)
+        @test V0[blk1, blk2] ≈ XtXinv * (Xu1' * Xu2) * XtXinv atol = 1e-10
+
+        # (c) driscoll_kraay
+        Vdk = MacroEconometricModels.driscoll_kraay(X, U; bandwidth=bw)
+        @test isapprox(Vdk, Vdk'; atol=1e-10)
+        @test opnorm(Vdk[blk1, blk2]) > 1e-6
+        @test Vdk[blk1, blk1] ≈ MacroEconometricModels.driscoll_kraay(X, u1; bandwidth=bw) atol = 1e-9
+        @test Vdk[blk2, blk2] ≈ MacroEconometricModels.driscoll_kraay(X, u2; bandwidth=bw) atol = 1e-9
+
+        # Perfectly-correlated equations ⇒ all four k×k blocks equal (HC0)
+        Vd = MacroEconometricModels.white_vcov(X, hcat(u1, u1); variant=:hc0)
+        @test Vd[blk1, blk1] ≈ Vd[blk1, blk2] atol = 1e-10
+        @test Vd[blk1, blk2] ≈ Vd[blk2, blk2] atol = 1e-10
+
+        # Independent equations ⇒ cross-block small relative to diagonal
+        Random.seed!(314)
+        ni = 2000
+        Xi = hcat(ones(ni), randn(ni))
+        Vi = MacroEconometricModels.white_vcov(Xi, hcat(randn(ni), randn(ni)); variant=:hc0)
+        @test opnorm(Vi[blk1, blk2]) < 0.15 * opnorm(Vi[blk1, blk1])
+    end
+
     # =========================================================================
     # Newey-West HAC Estimator
     # =========================================================================

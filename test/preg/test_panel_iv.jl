@@ -263,4 +263,32 @@ using Test, MacroEconometricModels, DataFrames, Distributions, Random, LinearAlg
         @test stderror(m_ols)[1] > 0.0
     end
 
+    # =================================================================
+    @testset "Panel IV overid: Hansen J under cluster weighting (T076)" begin
+        pd, _, _ = make_iv_panel(N=60, Ti=20, seed=909)
+        m_cl  = estimate_xtiv(pd, :y, [:x], [:x_endog]; instruments=[:z1, :z2],
+                              model=:fe, cov_type=:cluster)
+        m_ols = estimate_xtiv(pd, :y, [:x], [:x_endog]; instruments=[:z1, :z2],
+                              model=:fe, cov_type=:ols)
+        @test m_cl.sargan_stat !== nothing
+        # clustered Hansen J differs from the homoskedastic Sargan
+        @test m_cl.sargan_stat != m_ols.sargan_stat
+        @test 0.0 <= m_cl.sargan_pval <= 1.0
+
+        # Singleton-cluster equivalence: with one obs per entity the clustered meat equals
+        # the HC0 meat, so the panel cluster Hansen J == the cross-sectional HC0 Hansen J.
+        rng = MersenneTwister(4242)
+        nq = 300
+        Zq = hcat(ones(nq), randn(rng, nq), randn(rng, nq))   # m = 3
+        eq = randn(rng, nq)
+        j_panel = MacroEconometricModels._panel_sargan_test(eq, Zq, 2, :cluster, collect(1:nq))[1]
+        j_hc0   = MacroEconometricModels._sargan_test(eq, Zq, 1, 2, :hc0)[1]
+        @test isapprox(j_panel, j_hc0; atol=1e-6)
+
+        # exactly-identified ⇒ (nothing, nothing) under cluster too
+        m_x = estimate_xtiv(pd, :y, [:x], [:x_endog]; instruments=[:z1],
+                            model=:fe, cov_type=:cluster)
+        @test m_x.sargan_stat === nothing
+    end
+
 end

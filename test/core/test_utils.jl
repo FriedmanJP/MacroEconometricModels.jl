@@ -104,6 +104,24 @@ using Random
         @test Float64.(C) * C_inv ≈ I(2) atol=1e-10
     end
 
+    @testset "robust_inv near-singular guard + narrowed catch (T056)" begin
+        # (1) benign matrix ⇒ returns the raw inverse, emits no warning
+        A = [2.0 1.0; 1.0 2.0]
+        @test_nowarn MacroEconometricModels.robust_inv(A)
+        @test MacroEconometricModels.robust_inv(A) == inv(A)
+
+        # (2) invertible-but-near-singular (κ≈4e14 ≫ 1/sqrt(eps)) ⇒ pinv at rtol=sqrt(eps)
+        B = [1.0 1.0; 1.0 1.0 + 1e-14]
+        @test MacroEconometricModels.robust_inv(B; silent=true) == pinv(B; rtol=sqrt(eps(Float64)))
+
+        # (3) rcond_tol=0 disables the guard ⇒ raw inverse even when near-singular
+        @test MacroEconometricModels.robust_inv(B; rcond_tol=0.0) == inv(B)
+
+        # (4) exactly singular ⇒ narrowed catch path ⇒ finite pinv
+        C = [1.0 2.0; 2.0 4.0]
+        @test all(isfinite, MacroEconometricModels.robust_inv(C; silent=true))
+    end
+
     @testset "Safe Cholesky Decomposition" begin
         # Positive definite matrix
         A_pd = [4.0 2.0; 2.0 3.0]
@@ -125,6 +143,31 @@ using Random
         @test all(isfinite.(L_custom))
     end
 
+    @testset "safe_cholesky scale-relative jitter (T057)" begin
+        # (1) small-magnitude rank-1 matrix ⇒ jitter ∝ scale (~1e-16), NOT the old fixed 1e-8
+        A = 1e-6 .* [1.0 1.0; 1.0 1.0]
+        L, j = MacroEconometricModels.safe_cholesky_jitter(A; silent=true)
+        @test 0 < j < 1e-12
+        @test j < 1e-8
+        @test norm(L * L' - A) < 1e-12
+        @test istril(L)
+
+        # (2) PD matrix ⇒ zero jitter, exact factor, wrapper agrees
+        B = [4.0 2.0; 2.0 3.0]
+        L2, j2 = MacroEconometricModels.safe_cholesky_jitter(B)
+        @test j2 == 0.0
+        @test L2 == cholesky(Hermitian(B)).L
+        @test MacroEconometricModels.safe_cholesky(B) == L2
+
+        # (3) equivariance: applied jitter scales with the matrix, j(c·M) == c·j(M)
+        M = [1.0 1.0; 1.0 1.0]
+        _, jM = MacroEconometricModels.safe_cholesky_jitter(M; silent=true)
+        c = 1e6
+        _, jcM = MacroEconometricModels.safe_cholesky_jitter(c .* M; silent=true)
+        @test jM > 0
+        @test jcM ≈ c * jM rtol = 1e-8
+    end
+
     @testset "Safe Log Determinant" begin
         # Regular positive definite matrix
         A_pd = [4.0 2.0; 2.0 3.0]
@@ -135,6 +178,16 @@ using Random
         A_sing = [1.0 1.0; 1.0 1.0 + 1e-15]
         ld_sing = MacroEconometricModels.logdet_safe(A_sing)
         @test isfinite(ld_sing) || ld_sing == -Inf
+    end
+
+    @testset "logdet_safe pseudo-fallback warns (T062 C-13)" begin
+        # Indefinite matrix: logdet throws (log of negative), fallback keeps only the
+        # positive eigenvalue (+1) ⇒ log(1) = 0, and warns that the result is a pseudo-logdet.
+        A = [1.0 0.0; 0.0 -1.0]
+        @test MacroEconometricModels.logdet_safe(A) == 0.0
+        @test_logs (:warn,) match_mode = :any MacroEconometricModels.logdet_safe(A)
+        # PD matrix: exact logdet, no warning.
+        @test @test_nowarn(MacroEconometricModels.logdet_safe(Matrix{Float64}(I, 3, 3))) == 0.0
     end
 
     # ==========================================================================

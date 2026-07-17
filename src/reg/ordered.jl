@@ -117,6 +117,15 @@ end
 _normal_cdf(::Type{T}, x::T) where {T<:AbstractFloat} = T(cdf(Normal(zero(T), one(T)), x))
 _normal_pdf(::Type{T}, x::T) where {T<:AbstractFloat} = T(pdf(Normal(zero(T), one(T)), x))
 
+# Density derivatives f'(z) (needed for the analytic observed-information Hessian)
+# Logistic: f(z)=F(z)(1-F(z)) ⇒ f'(z)=f(z)(1-2F(z)). Normal: f'(z)=-z·φ(z).
+_logistic_pdf_deriv(::Type{T}, x::T) where {T<:AbstractFloat} = begin
+    F = _logistic_cdf(T, x)
+    f = F * (one(T) - F)
+    f * (one(T) - 2 * F)
+end
+_normal_pdf_deriv(::Type{T}, x::T) where {T<:AbstractFloat} = -x * _normal_pdf(T, x)
+
 # =============================================================================
 # Category Probabilities
 # =============================================================================
@@ -151,14 +160,15 @@ end
 # =============================================================================
 
 """
-    _ordered_loglik_score_hessian(y, X, beta, alpha, J, F_cdf, F_pdf)
+    _ordered_loglik_score_hessian(y, X, beta, alpha, J, F_cdf, F_pdf, F_dpdf)
 
-Compute log-likelihood, score (gradient), and Hessian for ordered model.
-Parameter vector is theta = [beta; alpha].
+Compute log-likelihood, score (gradient), and the analytic observed-information
+Hessian for the ordered model. Parameter vector is theta = [beta; alpha].
+`F_dpdf` is the density derivative f'(z) used for the Hessian curvature terms.
 """
 function _ordered_loglik_score_hessian(
         y::Vector{Int}, X::Matrix{T}, beta::Vector{T}, alpha::Vector{T},
-        J::Int, F_cdf::Function, F_pdf::Function) where {T<:AbstractFloat}
+        J::Int, F_cdf::Function, F_pdf::Function, F_dpdf::Function) where {T<:AbstractFloat}
     n, K = size(X)
     Jm1 = J - 1
     P = K + Jm1  # total parameters
@@ -219,8 +229,12 @@ function _ordered_loglik_score_hessian(
         end
     end
 
-    # Use BHHH (outer product of gradients) approximation for Hessian
-    # Recompute per-observation scores for BHHH
+    # Analytic observed-information Hessian (NOT BHHH). For ℓ=log p,
+    #   ∂²ℓ/∂θ_a∂θ_b = (∂²p/∂θ_a∂θ_b)/p − s_a s_b,
+    # where the −s_a s_b term is BHHH and the curvature term (∂²p/∂θ²)/p is what BHHH drops.
+    # With z_u=α_j−x'β, z_l=α_{j-1}−x'β and f'(z)=F_dpdf(z), the nonzero curvature blocks are
+    #   ββ: (f'_u−f'_l)/p·xxᵀ, β·α_j: −f'_u/p·x, β·α_{j-1}: +f'_l/p·x,
+    #   α_jα_j: f'_u/p, α_{j-1}α_{j-1}: −f'_l/p, α_jα_{j-1}: 0 (that cross is pure −s_a s_b).
     H .= zero(T)
     scores_i = zeros(T, P)
     @inbounds for i in 1:n
@@ -229,43 +243,56 @@ function _ordered_loglik_score_hessian(
         j = y[i]
 
         if j == 1
-            F_lower = zero(T)
-            f_lower = zero(T)
-            F_upper = F_cdf(T, alpha[1] - xb)
-            f_upper = F_pdf(T, alpha[1] - xb)
+            F_lower = zero(T); f_lower = zero(T); fp_lower = zero(T)
+            zu = alpha[1] - xb
+            F_upper = F_cdf(T, zu); f_upper = F_pdf(T, zu); fp_upper = F_dpdf(T, zu)
         elseif j == J
-            F_lower = F_cdf(T, alpha[Jm1] - xb)
-            f_lower = F_pdf(T, alpha[Jm1] - xb)
-            F_upper = one(T)
-            f_upper = zero(T)
+            zl = alpha[Jm1] - xb
+            F_lower = F_cdf(T, zl); f_lower = F_pdf(T, zl); fp_lower = F_dpdf(T, zl)
+            F_upper = one(T); f_upper = zero(T); fp_upper = zero(T)
         else
-            F_lower = F_cdf(T, alpha[j-1] - xb)
-            f_lower = F_pdf(T, alpha[j-1] - xb)
-            F_upper = F_cdf(T, alpha[j] - xb)
-            f_upper = F_pdf(T, alpha[j] - xb)
+            zl = alpha[j-1] - xb; zu = alpha[j] - xb
+            F_lower = F_cdf(T, zl); f_lower = F_pdf(T, zl); fp_lower = F_dpdf(T, zl)
+            F_upper = F_cdf(T, zu); f_upper = F_pdf(T, zu); fp_upper = F_dpdf(T, zu)
         end
 
         p_ij = max(F_upper - F_lower, eps_floor)
 
         scores_i .= zero(T)
-
-        dp_dbeta = -(f_upper - f_lower)
-        sbf = dp_dbeta / p_ij
+        sbf = -(f_upper - f_lower) / p_ij
         for k in 1:K
             scores_i[k] = sbf * xi[k]
         end
-        if j < J
-            scores_i[K + j] = f_upper / p_ij
-        end
-        if j > 1
-            scores_i[K + j - 1] += -f_lower / p_ij
+        (j < J) && (scores_i[K + j] = f_upper / p_ij)
+        (j > 1) && (scores_i[K + j - 1] += -f_lower / p_ij)
+
+        # −s_i s_iᵀ (BHHH part) over all parameter pairs
+        for a in 1:P, b in 1:P
+            H[a, b] -= scores_i[a] * scores_i[b]
         end
 
-        # Outer product: H -= s_i * s_i' (negative because we maximize)
-        for a in 1:P
-            for b in 1:P
-                H[a, b] -= scores_i[a] * scores_i[b]
+        # + curvature (∂²p/∂θ²)/p over the nonzero blocks
+        cbb = (fp_upper - fp_lower) / p_ij            # ββ scalar
+        for a in 1:K, b in 1:K
+            H[a, b] += cbb * xi[a] * xi[b]
+        end
+        if j < J
+            au = K + j
+            cbu = -fp_upper / p_ij                    # β·α_j
+            for k in 1:K
+                H[k, au] += cbu * xi[k]
+                H[au, k] += cbu * xi[k]
             end
+            H[au, au] += fp_upper / p_ij              # α_jα_j
+        end
+        if j > 1
+            al = K + j - 1
+            cbl = fp_lower / p_ij                      # β·α_{j-1}
+            for k in 1:K
+                H[k, al] += cbl * xi[k]
+                H[al, k] += cbl * xi[k]
+            end
+            H[al, al] += -fp_lower / p_ij             # α_{j-1}α_{j-1}
         end
     end
 
@@ -277,13 +304,13 @@ end
 # =============================================================================
 
 """
-    _nr_ordered(y, X, J, F_cdf, F_pdf; maxiter=200, tol=1e-8)
+    _nr_ordered(y, X, J, F_cdf, F_pdf, F_dpdf; maxiter=200, tol=1e-8)
 
-Newton-Raphson optimization for ordered logit/probit.
+Newton-Raphson optimization for ordered logit/probit (true Newton via analytic Hessian).
 Returns (beta, alpha, loglik, converged, iterations).
 """
 function _nr_ordered(y::Vector{Int}, X::Matrix{T}, J::Int,
-                     F_cdf::Function, F_pdf::Function;
+                     F_cdf::Function, F_pdf::Function, F_dpdf::Function;
                      maxiter::Int=200, tol::T=T(1e-8)) where {T<:AbstractFloat}
     n, K = size(X)
     Jm1 = J - 1
@@ -300,7 +327,7 @@ function _nr_ordered(y::Vector{Int}, X::Matrix{T}, J::Int,
     for it in 1:maxiter
         iter = it
         loglik_val, score, H = _ordered_loglik_score_hessian(
-            y, X, beta, alpha, J, F_cdf, F_pdf)
+            y, X, beta, alpha, J, F_cdf, F_pdf, F_dpdf)
 
         # Check convergence
         if abs(loglik_val - loglik_old) < tol * (abs(loglik_old) + one(T))
@@ -546,15 +573,15 @@ function _estimate_ordered(y::AbstractVector, X::AbstractMatrix{T}, link::Symbol
     Xm = Matrix{T}(X)
 
     # ---- Select link functions ----
-    F_cdf, F_pdf = if link == :logit
-        (_logistic_cdf, _logistic_pdf)
+    F_cdf, F_pdf, F_dpdf = if link == :logit
+        (_logistic_cdf, _logistic_pdf, _logistic_pdf_deriv)
     else
-        (_normal_cdf, _normal_pdf)
+        (_normal_cdf, _normal_pdf, _normal_pdf_deriv)
     end
 
     # ---- Newton-Raphson estimation ----
     beta, alpha, loglik_val, converged, iterations = _nr_ordered(
-        yint, Xm, J, F_cdf, F_pdf; maxiter=maxiter, tol=tol)
+        yint, Xm, J, F_cdf, F_pdf, F_dpdf; maxiter=maxiter, tol=tol)
 
     # ---- Null model log-likelihood ----
     loglik_null = _ordered_null_loglik(yint, J, T)
@@ -569,15 +596,14 @@ function _estimate_ordered(y::AbstractVector, X::AbstractMatrix{T}, link::Symbol
 
     # ---- Covariance matrix ----
     if cov_type == :ols
-        # Classical MLE: V = -H^{-1} (BHHH approximation)
+        # Classical MLE: V = (-H)^{-1} = observed-information inverse (Stata vce(oim))
         _, _, H = _ordered_loglik_score_hessian(
-            yint, Xm, beta, alpha, J, F_cdf, F_pdf)
+            yint, Xm, beta, alpha, J, F_cdf, F_pdf, F_dpdf)
         vcov_mat = Matrix{T}(robust_inv(Hermitian(-H)))
     else
-        # Sandwich estimator: V = H^{-1} S H^{-1}
-        # where S = sum s_i s_i' (with HC adjustments)
+        # Sandwich estimator: V = (-H)^{-1} S (-H)^{-1}, bread = observed information
         _, _, H = _ordered_loglik_score_hessian(
-            yint, Xm, beta, alpha, J, F_cdf, F_pdf)
+            yint, Xm, beta, alpha, J, F_cdf, F_pdf, F_dpdf)
         H_inv = Matrix{T}(robust_inv(Hermitian(-H)))
 
         S_mat = _ordered_score_matrix(yint, Xm, beta, alpha, J, F_cdf, F_pdf)

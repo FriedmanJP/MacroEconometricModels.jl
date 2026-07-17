@@ -124,6 +124,39 @@ function _irls_logit(y::Vector{T}, X::Matrix{T};
 end
 
 # =============================================================================
+# Separation Detection
+# =============================================================================
+
+"""
+    _detect_separation(y, eta, mu, beta) -> Bool
+
+Heuristic detection of complete or quasi-complete separation in a fitted binary
+response model (Albert & Anderson 1984). Flags when (a) the fitted linear
+predictor perfectly orders the outcomes with a gap, (b) any fitted probability
+is pinned to the 0/1 boundary, or (c) the coefficients have diverged. Under
+separation the MLE does not exist (or lies on the boundary), so the reported
+coefficients and standard errors are unreliable even though the log-likelihood
+plateaus and the IRLS loop reports convergence.
+
+Shared by logit and probit. Returns `false` for degenerate all-0/all-1 outcomes
+(those are caught by their own failure modes).
+"""
+function _detect_separation(y::Vector{T}, eta::Vector{T}, mu::Vector{T},
+                            beta::Vector{T}) where {T<:AbstractFloat}
+    is1 = y .== one(T)
+    (all(is1) || !any(is1)) && return false
+    eta1 = view(eta, is1)
+    eta0 = view(eta, .!is1)
+    # (a) complete separation: linear predictor perfectly orders outcomes with a gap
+    (maximum(eta0) < minimum(eta1) || maximum(eta1) < minimum(eta0)) && return true
+    # (b) quasi-complete separation: fitted probabilities pinned to the boundary
+    any(m -> m <= T(1e-8) || m >= one(T) - T(1e-8), mu) && return true
+    # (c) diverging coefficients
+    maximum(abs, beta) > T(1e3) && return true
+    false
+end
+
+# =============================================================================
 # Logit Estimation
 # =============================================================================
 
@@ -204,6 +237,11 @@ function estimate_logit(y::AbstractVector{T}, X::AbstractMatrix{T};
     beta, mu, w, loglik_val, converged, iterations = _irls_logit(yv, Xm;
                                                                   maxiter=maxiter, tol=tol)
 
+    # ---- Separation check (Albert & Anderson 1984) ----
+    if _detect_separation(yv, Xm * beta, mu, beta)
+        @warn "perfect (quasi-)separation detected in logit estimation; the MLE does not exist or lies on the boundary — coefficients and standard errors are unreliable"
+    end
+
     # ---- Null model log-likelihood ----
     p_bar = mean(yv)
     p_bar = clamp(p_bar, T(1e-10), one(T) - T(1e-10))
@@ -225,9 +263,10 @@ function estimate_logit(y::AbstractVector{T}, X::AbstractMatrix{T};
         vcov_mat = info_inv
     else
         # Sandwich: V = info_inv * S * info_inv
-        # where S uses score residuals (y - mu) as the "residuals"
+        # where S uses score residuals (y - mu) as the "residuals".
+        # HC2/HC3 leverage needs the IRLS working weights: h_ii = w_i x_i'(X'WX)^{-1}x_i.
         score_resid = yv .- mu
-        vcov_mat = _reg_vcov(Xm, score_resid, cov_type, info_inv; clusters=clusters)
+        vcov_mat = _reg_vcov(Xm, score_resid, cov_type, info_inv; clusters=clusters, weights=w)
     end
 
     # ---- Deviance residuals ----

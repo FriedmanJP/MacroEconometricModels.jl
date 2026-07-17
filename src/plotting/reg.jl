@@ -372,9 +372,10 @@ function plot_result(me::MarginalEffects{T};
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
     id = _next_plot_id("me_coef")
 
-    # Build data JSON
+    # Build data JSON (skip the intercept, whose marginal effect is NaN)
     rows = String[]
     for i in 1:length(me.effects)
+        isfinite(me.effects[i]) || continue
         push!(rows, "{\"name\":$(_json(me.varnames[i])),\"effect\":$(_json(me.effects[i])),\"ci_lo\":$(_json(me.ci_lower[i])),\"ci_hi\":$(_json(me.ci_upper[i]))}")
     end
     data_json = "[" * join(rows, ",\n") * "]"

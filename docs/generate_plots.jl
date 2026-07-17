@@ -639,7 +639,7 @@ function main()
         bayes_result = estimate_dsge_bayes(dsge_spec, Y_data, [0.9];
             priors=Dict(:ρ => Beta(5, 2)),
             method=:mh, n_draws=5000, burnin=2000,
-            observables=[:Y, :A])
+            observables=[:Y, :A], measurement_error=:auto)
         birf_dsge = irf(bayes_result, 40; n_draws=50)
         save("dsge_bayes_irf.html", plot_result(birf_dsge))
     end
@@ -649,7 +649,10 @@ function main()
     # -------------------------------------------------------------------
     begin
         Y_dsge_hd = simulate(dsge_sol, 200)
-        dsge_hd = historical_decomposition(dsge_sol, Y_dsge_hd, [:Y, :C, :K, :A])
+        # 4 observables vs 1 structural shock: measurement error keeps the
+        # observation covariance nonsingular (post-#139 stochastic-singularity guard)
+        dsge_hd = historical_decomposition(dsge_sol, Y_dsge_hd, [:Y, :C, :K, :A];
+                                           measurement_error=fill(0.01, 4))
         save("dsge_hd.html", plot_result(dsge_hd))
     end
 

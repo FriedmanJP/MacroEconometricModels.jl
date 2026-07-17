@@ -159,15 +159,16 @@ function estimate_reg(y::AbstractVector{T}, X::AbstractMatrix{T};
     bic_val = -2 * loglik + log(T(n)) * T(k + 1)
 
     # ---- Covariance matrix ----
-    # For WLS, use the original X and residuals for sandwich estimators
-    X_for_vcov = Matrix{T}(X)
+    # WLS is OLS on the √W-transformed data (Xw = √W·X, yw = √W·y). Routing the
+    # transformed design Xw, transformed residuals √W·e, and XtXinv = (X'WX)⁻¹ through
+    # _reg_vcov automatically carries the weights into every branch: classical
+    # σ̂² = (e'We)/(n−k); HC meat Σ wᵢ² eᵢ² xᵢxᵢ'; leverage hᵢ = wᵢ xᵢ'(X'WX)⁻¹xᵢ;
+    # cluster scores Σ √wᵢ xᵢ · √wᵢ eᵢ. The stored `resid` stays raw (√W·e is vcov-only).
     if method == :wls
-        # For HC estimators under WLS, use the transformed residuals and design
-        # but report the original X residuals for interpretation
-        XtXinv_vcov = robust_inv(X_for_vcov' * Diagonal(Vector{T}(weights)) * X_for_vcov)
-        vcov_mat = _reg_vcov(X_for_vcov, resid, cov_type, XtXinv_vcov; clusters=clusters)
+        resid_t = sqrtW * resid
+        vcov_mat = _reg_vcov(Xw, resid_t, cov_type, XtXinv; clusters=clusters)
     else
-        vcov_mat = _reg_vcov(X_for_vcov, resid, cov_type, XtXinv; clusters=clusters)
+        vcov_mat = _reg_vcov(Matrix{T}(X), resid, cov_type, XtXinv; clusters=clusters)
     end
 
     # ---- Weights ----
@@ -180,7 +181,8 @@ function estimate_reg(y::AbstractVector{T}, X::AbstractMatrix{T};
         loglik, aic_val, bic_val,
         vn, method, cov_type, w,
         nothing, nothing,     # Z, endogenous (not IV)
-        nothing, nothing, nothing  # first_stage_f, sargan_stat, sargan_pval
+        nothing, nothing, nothing,  # first_stage_f, sargan_stat, sargan_pval
+        nothing, nothing, nothing   # cragg_donald_f, kleibergen_paap_f, stock_yogo_10pct
     )
 end
 

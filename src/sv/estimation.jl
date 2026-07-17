@@ -436,7 +436,9 @@ function estimate_sv(y::AbstractVector{T};
     mu_draws = Vector{T}(undef, n_samples)
     phi_draws = Vector{T}(undef, n_samples)
     sigma_eta_draws = Vector{T}(undef, n_samples)
-    h_draws = Matrix{T}(undef, n_samples, n)
+    # Internal transposed buffer: column writes are contiguous (Julia is
+    # column-major); transposed to the public (n_samples x n) shape after the loop
+    h_buf = Matrix{T}(undef, n, n_samples)
 
     # Pre-allocate MCMC workspace buffers
     s_buf = Vector{Int}(undef, n)
@@ -487,9 +489,13 @@ function estimate_sv(y::AbstractVector{T};
             mu_draws[draw_idx] = mu
             phi_draws[draw_idx] = phi
             sigma_eta_draws[draw_idx] = sigma_eta
-            h_draws[draw_idx, :] = h
+            @inbounds h_buf[:, draw_idx] = h
         end
     end
+
+    # Materialize the public (n_samples x n) layout once — pure data movement,
+    # draws bit-identical to the previous strided row writes
+    h_draws = permutedims(h_buf)
 
     # Compute volatility posterior summaries
     vol_mean = Vector{T}(undef, n)

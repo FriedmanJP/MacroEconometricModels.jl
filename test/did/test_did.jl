@@ -8,7 +8,7 @@
 # Tests for: estimate_did (TWFE, CS), estimate_event_study_lp, estimate_lp_did,
 #            bacon_decomposition, pretrend_test, negative_weight_check, plotting, refs
 
-using Test, Random, Statistics
+using Test, Random, Statistics, LinearAlgebra
 using MacroEconometricModels
 
 # =============================================================================
@@ -206,6 +206,82 @@ end
         @test did_nyt.overall_att > 0
     end
 
+    @testset "Callaway-Sant'Anna influence-function covariance (T065)" begin
+        # 6 units × 4 periods. Units 1-3 never-treated; unit 4 treated at g=3;
+        # units 5-6 treated at g=4. Universal base ⇒ base_t = g-1 for every (g,t), so the
+        # cells are analytically simple and the event-time IF covariance V_evt = Φ'Φ can be
+        # reconstructed independently from the difference-in-means influence function.
+        rng = MersenneTwister(6501)
+        treat_time = [0, 0, 0, 3, 4, 4]
+        gid = Int[]; tid = Int[]; yv = Float64[]; gt = Float64[]
+        alpha = [0.0, 0.4, 0.9, 1.3, 1.8, 2.2]
+        for u in 1:6, t in 1:4
+            te = (treat_time[u] > 0 && t >= treat_time[u]) ? 1.5 : 0.0
+            push!(gid, u); push!(tid, t); push!(gt, Float64(treat_time[u]))
+            push!(yv, alpha[u] + 0.1t + te + 0.3 * randn(rng))
+        end
+        data = hcat(yv, gt)
+        pd = PanelData{Float64}(data, ["outcome", "treat_time"], Quarterly, [1, 1],
+                                gid, tid, nothing, ["u$i" for i in 1:6],
+                                6, 2, 24, true, ["fx"], Dict{String,String}(), Symbol[])
+        cs = MacroEconometricModels._estimate_callaway_santanna(pd, 1, 2;
+                 leads=0, horizon=1, control_group=:never_treated, base_period=:universal)
+
+        # Independent reconstruction: per-cell diff-in-means influence, aggregated by cohort
+        # size, then V_evt = Φ'Φ over the 6 units.
+        Yd = Dict((gid[k], tid[k]) => yv[k] for k in eachindex(yv))
+        controls = [1, 2, 3]
+        function cell_c(coh_units, t, base_t)         # -> Dict(unit => c_gt(i))
+            dyt = [(u, Yd[(u, t)] - Yd[(u, base_t)]) for u in coh_units]
+            dyc = [(u, Yd[(u, t)] - Yd[(u, base_t)]) for u in controls]
+            mt = mean(last.(dyt)); mc = mean(last.(dyc))
+            d = Dict{Int,Float64}()
+            for (u, v) in dyt; d[u] = get(d, u, 0.0) + (v - mt) / length(dyt); end
+            for (u, v) in dyc; d[u] = get(d, u, 0.0) - (v - mc) / length(dyc); end
+            d
+        end
+        evt = cs.event_times                          # [0, 1]
+        Phi = zeros(6, length(evt))
+        function accum!(ei, cells)                    # cells :: (coh_units, t, base, size)
+            w = [c[4] for c in cells]; w ./= sum(w)
+            for (m, c) in enumerate(cells)
+                for (u, v) in cell_c(c[1], c[2], c[3]); Phi[u, ei] += w[m] * v; end
+            end
+        end
+        i0 = findfirst(==(0), evt); i1 = findfirst(==(1), evt)
+        # e=0: cohort g=3 (t=3, base=2, size 1) + cohort g=4 (t=4, base=3, size 2) — shared controls
+        accum!(i0, [([4], 3, 2, 1.0), ([5, 6], 4, 3, 2.0)])
+        # e=1: only cohort g=3 (t=4, base=g-1=2); cohort g=4 would need t=5 (absent)
+        accum!(i1, [([4], 4, 2, 1.0)])
+        Vref = Phi' * Phi
+
+        V = vcov(cs)
+        @test V isa Matrix{Float64}
+        @test isapprox(V, Vref; atol=1e-10)                          # full covariance pinned
+        @test isapprox(cs.se, sqrt.(max.(diag(Vref), 0.0)); atol=1e-10)
+        @test isapprox(V, V'; atol=1e-12)
+        @test minimum(eigvals(Symmetric(V))) > -1e-10                # PSD (Φ'Φ)
+
+        # e=0 pools two cohorts sharing controls {1,2,3} → cross-cell control covariance is
+        # real; the aggregate variance is NOT the independence sum of the two cells' variances.
+        c3 = cell_c([4], 3, 2); c4 = cell_c([5, 6], 4, 3)
+        indep = (1/3)^2 * sum(abs2, collect(values(c3))) + (2/3)^2 * sum(abs2, collect(values(c4)))
+        @test !isapprox(Vref[i0, i0], indep; rtol=1e-6)              # shared-control covariance
+
+        # ---- real-panel invariants + overall/vcov wiring ----
+        pd_big, _ = _make_did_panel(seed=3200, n_units=90)
+        did = estimate_did(pd_big, "outcome", "treat_time";
+                           method=:callaway_santanna, leads=3, horizon=4)
+        Vr = vcov(did)
+        @test Vr === did.att_vcov
+        @test isapprox(Vr, Vr'; atol=1e-10)
+        @test isapprox(sqrt.(max.(diag(Vr), 0.0)), did.se; atol=1e-10)
+        post_idx = findall(>=(0), did.event_times)
+        vp = post_idx[did.se[post_idx] .> 0]
+        wv = fill(1.0 / length(vp), length(vp))
+        @test isapprox(did.overall_se, sqrt(max(dot(wv, Vr[vp, vp] * wv), 0.0)); atol=1e-10)
+    end
+
     # =========================================================================
     # Event Study LP
     # =========================================================================
@@ -313,6 +389,19 @@ end
 
         # Overall ATT is the weighted average
         @test isapprox(bd.overall_att, sum(bd.estimates .* bd.weights); atol=1e-10)
+
+        # Goodman-Bacon (2021) identity (T070): Σ weight·component == the static single-
+        # coefficient TWFE β on D_it = 1{t >= treat_time} (exact for this balanced panel).
+        # The old weights omitted the D̄(1-D̄) timing-window factors and violated this.
+        gid = pd.group_id; tid = pd.time_id
+        Dit = Float64[(pd.data[i, 2] > 0 && tid[i] >= pd.data[i, 2]) ? 1.0 : 0.0
+                      for i in 1:pd.T_obs]
+        y_dm = MacroEconometricModels._double_demean(pd.data[:, 1], gid, tid)
+        D_dm = MacroEconometricModels._double_demean(Dit, gid, tid)
+        beta_twfe = dot(D_dm, y_dm) / dot(D_dm, D_dm)
+        @test isapprox(sum(bd.estimates .* bd.weights), beta_twfe; atol=1e-8)
+        @test isapprox(bd.overall_att, beta_twfe; atol=1e-8)
+        @test all(bd.weights .>= 0)                  # interior cohorts ⇒ no negative weights
 
         # Display
         io = IOBuffer()
@@ -699,9 +788,141 @@ end
         @test all(sa_nyt.se .>= 0)
     end
 
+    @testset "Sun-Abraham joint regression + period weights (T067)" begin
+        # --- Oracle: with a SINGLE treated cohort and a reporting window covering the full
+        # relative-period support, the SA saturated regression IS the TWFE event-study
+        # regression, so att and the joint clustered SEs must match TWFE exactly. ---
+        rng = MersenneTwister(6701)
+        treat1 = [0, 0, 0, 4, 4, 4]                 # units 1-3 never, 4-6 cohort g=4
+        gid = Int[]; tid = Int[]; yv = Float64[]; gt = Float64[]
+        a1 = [0.0, 0.5, 1.0, 1.5, 2.0, 2.5]
+        for u in 1:6, t in 1:8
+            te = (treat1[u] > 0 && t >= treat1[u]) ? 1.5 * (1 + 0.1 * (t - treat1[u])) : 0.0
+            push!(gid, u); push!(tid, t); push!(gt, Float64(treat1[u]))
+            push!(yv, a1[u] + 0.1t + te + 0.3 * randn(rng))
+        end
+        pd1 = PanelData{Float64}(hcat(yv, gt), ["outcome", "treat_time"], Quarterly, [1, 1],
+                                 gid, tid, nothing, ["u$i" for i in 1:6],
+                                 6, 2, 48, true, ["fx"], Dict{String,String}(), Symbol[])
+        # g=4, periods 1:8 ⇒ support l ∈ -3:4 ⇒ leads=3, horizon=4 spans it exactly.
+        sa1 = estimate_did(pd1, "outcome", "treat_time"; method=:sun_abraham, leads=3, horizon=4)
+        tw1 = estimate_did(pd1, "outcome", "treat_time"; method=:twfe, leads=3, horizon=4)
+        @test isapprox(sa1.att, tw1.att; atol=1e-8)           # saturated single-cohort == TWFE
+        @test isapprox(sa1.se, tw1.se; atol=1e-8)             # joint clustered SE == TWFE
+        @test vcov(sa1) isa Matrix{Float64}
+        @test isapprox(sqrt.(max.(diag(vcov(sa1)), 0.0)), sa1.se; atol=1e-10)
+
+        # --- Period-specific weights: at a relative period where only ONE cohort is present,
+        # that cohort must get weight 1 (the old code used a CONSTANT global cohort share and
+        # blended in the absent cohort's zero coefficient). ---
+        treat2 = [0, 0, 3, 3, 5, 5, 5]              # cohort g=3 (size 2), g=5 (size 3)
+        gid = Int[]; tid = Int[]; yv = Float64[]; gt = Float64[]
+        a2 = [0.0, 0.3, 0.7, 1.1, 1.5, 1.9, 2.3]
+        for u in 1:7, t in 1:7
+            te = (treat2[u] > 0 && t >= treat2[u]) ? 1.5 : 0.0
+            push!(gid, u); push!(tid, t); push!(gt, Float64(treat2[u]))
+            push!(yv, a2[u] + 0.1t + te + 0.3 * randn(rng))
+        end
+        pd2 = PanelData{Float64}(hcat(yv, gt), ["outcome", "treat_time"], Quarterly, [1, 1],
+                                 gid, tid, nothing, ["u$i" for i in 1:7],
+                                 7, 2, 49, true, ["fx"], Dict{String,String}(), Symbol[])
+        sa2 = estimate_did(pd2, "outcome", "treat_time"; method=:sun_abraham, leads=1, horizon=3)
+        # cohorts sorted [3, 5]; at l=3, g=3⇒t=6 (present), g=5⇒t=8 (absent, max period 7).
+        r3 = findfirst(==(3), sa2.event_times)
+        @test isapprox(sa2.att[r3], sa2.group_time_att[1, r3]; atol=1e-10)  # weight 1 on g=3
+        @test sa2.group_time_att[2, r3] == 0.0                             # g=5 absent ⇒ no col
+
+        # --- Real-panel covariance invariants + overall/vcov wiring ---
+        pd, _ = _make_did_panel(seed=3300, n_units=150, n_periods=25)
+        sa = estimate_did(pd, "outcome", "treat_time"; method=:sun_abraham, leads=3, horizon=5)
+        V = vcov(sa)
+        @test V === sa.att_vcov
+        @test isapprox(V, V'; atol=1e-10)
+        @test minimum(eigvals(Symmetric(V))) > -1e-8
+        @test isapprox(sqrt.(max.(diag(V), 0.0)), sa.se; atol=1e-10)
+        post_idx = findall(>=(0), sa.event_times)
+        vp = post_idx[sa.se[post_idx] .> 0]
+        wv = fill(1.0 / length(vp), length(vp))
+        @test isapprox(sa.overall_se, sqrt(max(dot(wv, V[vp, vp] * wv), 0.0)); atol=1e-10)
+    end
+
     # =========================================================================
     # Phase 2: BJS (2024) Imputation
     # =========================================================================
+    @testset "BJS Prop-6 influence-function variance (T066)" begin
+        # Analytic fixture: 4 units × 4 periods; units 1-2 never-treated, units 3-4 treated
+        # at t=3. The homoskedastic Prop-6 IF variance is Var(τ̂(e)) = σ̂²(1/N_e + W_e'M⁺W_e),
+        # where M⁺ is the untreated two-way-FE Gram pseudo-inverse, W_e the mean treated
+        # design row, and σ̂² the untreated residual variance.
+        rng = Random.MersenneTwister(2266)
+        gid = Int[]; tid = Int[]; yv = Float64[]; gtime = Float64[]
+        alpha = [0.0, 1.0, 2.0, 3.0]
+        treat_time = [0, 0, 3, 3]
+        for u in 1:4, t in 1:4
+            te = (treat_time[u] > 0 && t >= treat_time[u]) ? 2.0 : 0.0
+            push!(gid, u); push!(tid, t)
+            push!(yv, alpha[u] + 0.1 * t + te + 0.3 * randn(rng))
+            push!(gtime, Float64(treat_time[u]))
+        end
+        data = hcat(yv, gtime)
+        pd = PanelData{Float64}(data, ["outcome", "treat_time"], Quarterly, [1, 1],
+                                gid, tid, nothing, ["u1", "u2", "u3", "u4"],
+                                4, 2, 16, true, ["fixture"], Dict{String,String}(), Symbol[])
+
+        # Homoskedastic path (cluster=:none) matches the closed-form plug-in exactly.
+        bjs0 = MacroEconometricModels._estimate_bjs(pd, 1, 2; leads=2, horizon=1, cluster=:none)
+
+        # Independent reconstruction of the Prop-6 plug-in variance.
+        untreated = [(gid[o], tid[o], yv[o]) for o in 1:16 if !(treat_time[gid[o]] > 0 && tid[o] >= treat_time[gid[o]])]
+        ug = sort(unique(first.(untreated))); ut = sort(unique(getindex.(untreated, 2)))
+        U = length(ug); P = length(ut); K = U + P
+        ucol = Dict(g => i for (i, g) in enumerate(ug)); tcol = Dict(t => U + j for (j, t) in enumerate(ut))
+        N0 = length(untreated)
+        X0 = zeros(N0, K); y0 = zeros(N0)
+        for (o, (g, t, y)) in enumerate(untreated)
+            X0[o, ucol[g]] = 1.0; X0[o, tcol[t]] = 1.0; y0[o] = y
+        end
+        Mp = Matrix(MacroEconometricModels.robust_inv(Hermitian(X0'X0); silent=true))
+        resid = y0 .- X0 * (Mp * (X0'y0))
+        sig2 = sum(abs2, resid) / (N0 - (K - 1))
+        function var_e(tt)   # treated units 3,4 at period tt
+            We = zeros(K); We[ucol[3]] += 0.5; We[ucol[4]] += 0.5; We[tcol[tt]] += 1.0
+            sig2 * (1 / 2 + dot(We, Mp * We))
+        end
+        et = bjs0.event_times
+        @test bjs0.se[findfirst(==(0), et)] ≈ sqrt(var_e(3)) atol = 1e-10   # e=0 ⇒ t=3
+        @test bjs0.se[findfirst(==(1), et)] ≈ sqrt(var_e(4)) atol = 1e-10   # e=1 ⇒ t=4
+
+        # The Prop-6 variance strictly exceeds the naive Var(τ)/n (which omits the FE
+        # estimation-error term W_e'M⁺W_e > 0).
+        @test var_e(3) > sig2 / 2
+
+        # T068: the stored att_vcov carries the FULL cross-horizon IF covariance, not just
+        # the diagonal. Cov(τ̂(0),τ̂(1)) = σ̂² W_0'M⁺W_1 (shared untreated FE estimate), pinned.
+        function cov_ee(t1, t2)
+            W1 = zeros(K); W1[ucol[3]] += 0.5; W1[ucol[4]] += 0.5; W1[tcol[t1]] += 1.0
+            W2 = zeros(K); W2[ucol[3]] += 0.5; W2[ucol[4]] += 0.5; W2[tcol[t2]] += 1.0
+            sig2 * dot(W1, Mp * W2)
+        end
+        V0 = vcov(bjs0)
+        i0 = findfirst(==(0), et); i1 = findfirst(==(1), et)
+        @test V0 isa Matrix{Float64}
+        @test isapprox(V0, V0'; atol=1e-12)                          # symmetric
+        @test isapprox(V0[i0, i0], var_e(3); atol=1e-10)             # diagonal == Prop-6 var
+        @test isapprox(V0[i1, i1], var_e(4); atol=1e-10)
+        @test isapprox(V0[i0, i1], cov_ee(3, 4); atol=1e-10)         # off-diagonal IF cov
+        @test abs(cov_ee(3, 4)) > 1e-8                               # genuinely nonzero
+
+        # Cluster-robust default path stays finite and positive.
+        bjs1 = MacroEconometricModels._estimate_bjs(pd, 1, 2; leads=2, horizon=1, cluster=:unit)
+        @test all(isfinite, bjs1.se)
+        @test bjs1.se[findfirst(==(0), bjs1.event_times)] > 0
+        # Clustered att_vcov = Ψ'Ψ; its diagonal reproduces the reported clustered SEs.
+        V1 = vcov(bjs1)
+        @test isapprox(V1, V1'; atol=1e-12)
+        @test isapprox(sqrt.(max.(diag(V1), 0.0)), bjs1.se; atol=1e-10)
+    end
+
     @testset "BJS Imputation" begin
         pd, te = _make_did_panel(seed=2200, n_units=60, n_periods=20)
 
@@ -841,7 +1062,7 @@ end
     @testset "HonestDiD" begin
         pd, te = _make_did_panel(seed=2400, n_units=60, n_periods=20)
 
-        # Test with DIDResult
+        # Test with DIDResult (default restriction = :rm)
         did = estimate_did(pd, "outcome", "treat_time";
                            method=:callaway_santanna, leads=3, horizon=5)
         hd = honest_did(did; Mbar=1.0, conf_level=0.95)
@@ -849,6 +1070,8 @@ end
         @test hd isa HonestDiDResult{Float64}
         @test hd.Mbar == 1.0
         @test hd.conf_level == 0.95
+        @test hd.restriction == :rm
+        @test hd.method == :delta_id
         @test hd.breakdown_value >= 0
 
         # Post-event times should be non-negative
@@ -863,29 +1086,41 @@ end
         @test length(hd.original_ci_upper) == n_post
         @test length(hd.post_att) == n_post
 
-        # Robust CIs should be at least as wide as original CIs
-        for i in 1:n_post
-            @test hd.robust_ci_lower[i] <= hd.original_ci_lower[i] + 1e-10
-            @test hd.robust_ci_upper[i] >= hd.original_ci_upper[i] - 1e-10
-        end
-
-        # CIs bracket point estimates
+        # Robust CIs contain the identified set around the point estimates
         @test all(hd.robust_ci_lower .<= hd.post_att)
         @test all(hd.robust_ci_upper .>= hd.post_att)
+        @test all(hd.robust_ci_upper .- hd.robust_ci_lower .>=
+                  hd.original_ci_upper .- hd.original_ci_lower .- 1e-10)
 
-        # With Mbar=0, robust CIs should equal original CIs
-        hd0 = honest_did(did; Mbar=0.0)
+        # With Mbar=0 the Delta^RM robust CI collapses to the conventional CI
+        hd0 = honest_did(did; restriction=:rm, Mbar=0.0)
         for i in 1:length(hd0.post_event_times)
             @test isapprox(hd0.robust_ci_lower[i], hd0.original_ci_lower[i]; atol=1e-10)
             @test isapprox(hd0.robust_ci_upper[i], hd0.original_ci_upper[i]; atol=1e-10)
         end
 
+        # Nesting: robust CIs widen with Mbar
+        hd2 = honest_did(did; restriction=:rm, Mbar=2.0)
+        @test all(hd2.robust_ci_lower .<= hd.robust_ci_lower .+ 1e-10)
+        @test all(hd2.robust_ci_upper .>= hd.robust_ci_upper .- 1e-10)
+
+        # Delta^SD FLCI path on the same result
+        hd_sd = honest_did(did; restriction=:sd, M=0.01)
+        @test hd_sd.restriction == :sd
+        @test hd_sd.method == :flci
+        @test hd_sd.M == 0.01
+        @test all(isfinite.(hd_sd.robust_ci_lower))
+        @test all(hd_sd.robust_ci_upper .> hd_sd.robust_ci_lower)
+
         # Display
         io = IOBuffer()
         show(io, hd)
         s = String(take!(io))
-        @test occursin("HonestDiD", s)
+        @test occursin("Honest DiD", s)
         @test occursin("Breakdown", s)
+        io2 = IOBuffer()
+        show(io2, hd_sd)
+        @test occursin("FLCI", String(take!(io2)))
     end
 
     # =========================================================================
@@ -975,7 +1210,7 @@ end
         hd = honest_did(sa; Mbar=1.0)
         p_hd = plot_result(hd)
         @test p_hd isa PlotOutput
-        @test occursin("HonestDiD", p_hd.html)
+        @test occursin("Honest DiD", p_hd.html)
     end
 
     # =========================================================================
@@ -1257,6 +1492,227 @@ end
         @test_throws ArgumentError estimate_did(pd, "lemp", "first_treat";
                                                 method=:callaway_santanna,
                                                 base_period=:invalid)
+    end
+
+    @testset "DiD covariance aggregation & pre-trend Wald (T068/T069)" begin
+        pd, te = _make_did_panel(seed=3100, n_units=90, n_periods=20)
+
+        # ----- TWFE: att_vcov populated from the pooled clustered vcov -----
+        did = estimate_did(pd, "outcome", "treat_time"; method=:twfe, leads=3, horizon=4)
+        V = vcov(did)                                  # StatsAPI.vcov -> att_vcov
+        @test V isa Matrix{Float64}
+        @test V === did.att_vcov
+        E = length(did.event_times)
+        @test size(V) == (E, E)
+        @test isapprox(V, V'; atol=1e-10)                                   # symmetric
+        @test minimum(eigvals(Symmetric(V))) > -1e-8                        # PSD up to FP
+        @test isapprox(sqrt.(max.(diag(V), 0.0)), did.se; atol=1e-10)       # diag == se²
+
+        # overall_se == covariance contrast sqrt(w'V_post w) (NOT the old sqrt(Σse²)/n_post)
+        post_idx = findall(>=(0), did.event_times)
+        np = length(post_idx)
+        w = fill(1.0 / np, np)
+        Vpost = V[post_idx, post_idx]
+        @test isapprox(did.overall_se, sqrt(max(dot(w, Vpost * w), 0.0)); atol=1e-10)
+        # off-diagonal covariance is genuinely present (shared controls) → fix is load-bearing
+        @test any(abs.(Vpost .- Diagonal(diag(Vpost))) .> 1e-8)
+
+        # ----- Pre-trend joint Wald uses the full covariance b' V_pre⁻¹ b -----
+        pt = pretrend_test(did)
+        @test pt.test_type == :wald
+        @test pt.statistic >= 0 && isfinite(pt.statistic)
+        pre_mask = (did.event_times .< 0) .& (did.event_times .!= did.reference_period)
+        b = did.att[pre_mask]
+        Vpre = Symmetric((V[pre_mask, pre_mask] .+ V[pre_mask, pre_mask]') ./ 2)
+        wald_ref = dot(b, MacroEconometricModels.robust_inv(Vpre; silent=true) * b)
+        @test isapprox(pt.statistic, wald_ref; atol=1e-8)
+        # differs from the diagonal-only Σ(b/se)² form under cross-horizon covariance
+        diag_wald = sum((b ./ did.se[pre_mask]) .^ 2)
+        @test !isapprox(pt.statistic, diag_wald; rtol=1e-3)
+
+        # ----- dCDH: empirical bootstrap covariance stored; diag == bootstrap se² -----
+        dcdh = estimate_did(pd, "outcome", "treat_time"; method=:did_multiplegt,
+                            leads=3, horizon=4, n_boot=200)
+        Vd = vcov(dcdh)
+        @test Vd isa Matrix{Float64}
+        @test isapprox(Vd, Vd'; atol=1e-10)
+        @test isapprox(sqrt.(max.(diag(Vd), 0.0)), dcdh.se; atol=1e-10)
+        @test dcdh.overall_se >= 0 && isfinite(dcdh.overall_se)
+
+        # ----- Pre-trend fallback: att_vcov === nothing → diagonal Wald (graceful) -----
+        r0 = DIDResult{Float64}([0.3, -0.2, 0.0, 1.0, 1.2],
+                                [0.1, 0.15, 0.0, 0.3, 0.3],
+                                zeros(5), zeros(5), [-3, -2, -1, 0, 1], -1,
+                                nothing, nothing, 1.0, 0.2, 100, 20, 10, 10,
+                                :twfe, "y", "d", :never_treated, :unit, 0.95)
+        @test r0.att_vcov === nothing                                       # outer ctor default
+        @test vcov(r0) === nothing
+        pt0 = pretrend_test(r0)
+        @test pt0.test_type == :wald
+        @test pt0.df == 2
+        @test isapprox(pt0.statistic, (0.3 / 0.1)^2 + (0.2 / 0.15)^2; atol=1e-10)
+    end
+
+
+    # =========================================================================
+    # T089 (#188) M-33: absorbed-FE dof in the DiD cluster correction
+    # =========================================================================
+
+    @testset "T089 M-33: _cluster_vcov n_absorbed kwarg" begin
+        rng = Random.MersenneTwister(18937)
+        N = 90; K = 2
+        X = randn(rng, N, K)
+        resid = randn(rng, N)
+        cluster_ids = repeat(1:9, inner=10)
+
+        V0 = MacroEconometricModels._cluster_vcov(X, resid, cluster_ids)
+        n_abs = 6
+        V1 = MacroEconometricModels._cluster_vcov(X, resid, cluster_ids; n_absorbed=n_abs)
+
+        ratio = (N - K) / (N - K - n_abs)
+        @test V1 ≈ V0 .* ratio atol = 1e-12
+        @test all(diag(V1) .> diag(V0))
+    end
+
+
+    # =========================================================================
+    # T090 (#189) SUB-3: CS dense panel lookup == Dict-based ATT (exact)
+    # =========================================================================
+
+    @testset "T090 SUB-3: CS dense-lookup ATT equals manual Dict computation" begin
+        pd3, _ = _make_did_panel(n_units=30, n_periods=8, n_cohorts=1, seed=19003)
+        # cohort period = 5; units 1..15 treated at t=5, 16..30 never treated
+        r = estimate_did(pd3, :outcome, :treat_time; method=:callaway_santanna)
+
+        # manual Dict-based ATT(g=5, t=5), base = 4 (pre-change algorithm)
+        panel = Dict{Int,Dict{Int,Float64}}()
+        for i in 1:pd3.T_obs
+            get!(panel, pd3.group_id[i], Dict{Int,Float64}())[pd3.time_id[i]] = pd3.data[i, 1]
+        end
+        treated_units = [u for u in 1:30 if pd3.data[findfirst(==(u), pd3.group_id), 2] == 5.0]
+        control_units = [u for u in 1:30 if pd3.data[findfirst(==(u), pd3.group_id), 2] == 0.0]
+        dy_t = [panel[u][5] - panel[u][4] for u in treated_units]
+        dy_c = [panel[u][5] - panel[u][4] for u in control_units]
+        att_manual = mean(dy_t) - mean(dy_c)
+
+        ci = findfirst(==(5), r.cohorts)
+        ti = 5  # times are 1..8, so column 5 is t=5
+        @test r.group_time_att[ci, ti] ≈ att_manual atol = 1e-12
+    end
+
+    # =========================================================================
+    # T064 (#163): Rambachan-Roth honest DiD — core (betahat, sigma) method
+    # =========================================================================
+
+    @testset "HonestDiD RR (betahat/sigma core)" begin
+        betahat = [0.05, -0.10, 0.08, 0.15, 0.25, 0.30]  # 3 pre, 3 post
+        sigma = [0.01 * 0.5^abs(i - j) for i in 1:6, j in 1:6]
+
+        @testset "Delta^SD FLCI matches R HonestDiD" begin
+            # R HonestDiD::.findOptimalFLCI_helper on (betahat, sigma), alpha=0.05.
+            # R's folded-normal cv is simulated with 1e6 draws (MC noise ~2e-3);
+            # ours is exact via NoncentralChisq — compare at atol 5e-3.
+            r_flci_e1 = Dict(0.0  => (-0.0746475725, 0.3160442338),
+                             0.02 => (-0.1018395313, 0.3270227396),
+                             0.05 => (-0.1778374773, 0.3638093457))
+            for (M, (lb, ub)) in r_flci_e1
+                r = honest_did(betahat, sigma; num_pre=3, num_post=3,
+                               restriction=:sd, M=M)
+                @test r.ci_lower ≈ lb atol = 5e-3
+                @test r.ci_upper ≈ ub atol = 5e-3
+                @test r.method == :flci
+            end
+            r_flci_e2 = Dict(0.0  => (0.0073599200, 0.4847787921),
+                             0.02 => (-0.0655127233, 0.5344024372))
+            for (M, (lb, ub)) in r_flci_e2
+                r = honest_did(betahat, sigma; num_pre=3, num_post=3,
+                               restriction=:sd, M=M, l_vec=[0.0, 1.0, 0.0])
+                @test r.ci_lower ≈ lb atol = 5e-3
+                @test r.ci_upper ≈ ub atol = 5e-3
+            end
+            # FLCI half-length is nondecreasing in M
+            hls = [honest_did(betahat, sigma; num_pre=3, num_post=3,
+                              restriction=:sd, M=M).ci_upper -
+                   honest_did(betahat, sigma; num_pre=3, num_post=3,
+                              restriction=:sd, M=M).ci_lower for M in (0.0, 0.02, 0.05)]
+            @test hls[1] <= hls[2] + 1e-8 && hls[2] <= hls[3] + 1e-8
+        end
+
+        @testset "Delta^RM identified set matches R HonestDiD exactly" begin
+            # R HonestDiD::.compute_IDset_DeltaRM (union of LPs) — closed form here
+            MEM = MacroEconometricModels
+            for (Mb, lb, ub) in ((0.5, 0.06, 0.24), (1.0, -0.03, 0.33), (2.0, -0.21, 0.51))
+                idlb, idub = MEM._deltarm_identified_set(betahat, 3, 3; Mbar=Mb)
+                @test idlb ≈ lb atol = 1e-10
+                @test idub ≈ ub atol = 1e-10
+            end
+            for (Mb, lb, ub) in ((0.5, 0.03, 0.57), (1.0, -0.24, 0.84))
+                idlb, idub = MEM._deltarm_identified_set(betahat, 3, 3; Mbar=Mb,
+                                                         l_vec=[0.0, 0.0, 1.0])
+                @test idlb ≈ lb atol = 1e-10
+                @test idub ≈ ub atol = 1e-10
+            end
+        end
+
+        @testset "Conventional CI matches R constructOriginalCS" begin
+            r = honest_did(betahat, sigma; num_pre=3, num_post=3, restriction=:rm, Mbar=1.0)
+            @test r.original_ci_lower ≈ -0.0459963985 atol = 1e-8
+            @test r.original_ci_upper ≈ 0.3459963985 atol = 1e-8
+            # The delta-CI interim must CONTAIN the identified set
+            MEM = MacroEconometricModels
+            idlb, idub = MEM._deltarm_identified_set(betahat, 3, 3; Mbar=1.0)
+            @test r.ci_lower <= idlb && r.ci_upper >= idub
+        end
+
+        @testset "Pre-period dependence (M-01 regression catcher)" begin
+            b2 = copy(betahat); b2[2] += 0.5
+            for restriction in (:rm, :sd)
+                kw = restriction == :rm ? (Mbar=1.0,) : (M=0.02,)
+                r1 = honest_did(betahat, sigma; num_pre=3, num_post=3,
+                                restriction=restriction, kw...)
+                r2 = honest_did(b2, sigma; num_pre=3, num_post=3,
+                                restriction=restriction, kw...)
+                @test !isapprox(r1.ci_lower, r2.ci_lower; atol=1e-6) ||
+                      !isapprox(r1.ci_upper, r2.ci_upper; atol=1e-6)
+            end
+        end
+
+        @testset "Delta^RM scale covariance (Mbar dimensionless)" begin
+            c = 3.0
+            r1 = honest_did(betahat, sigma; num_pre=3, num_post=3, restriction=:rm, Mbar=1.0)
+            r2 = honest_did(c .* betahat, c^2 .* sigma; num_pre=3, num_post=3,
+                            restriction=:rm, Mbar=1.0)
+            @test r2.ci_lower ≈ c * r1.ci_lower atol = 1e-8
+            @test r2.ci_upper ≈ c * r1.ci_upper atol = 1e-8
+            @test r2.breakdown ≈ r1.breakdown atol = 1e-6
+        end
+
+        @testset "Breakdown value brackets zero-crossing" begin
+            # Fixture whose conventional CI excludes zero
+            b_sig = [0.05, -0.10, 0.08, 0.5, 0.6, 0.7]
+            r = honest_did(b_sig, sigma; num_pre=3, num_post=3, restriction=:rm, Mbar=1.0)
+            bd = r.breakdown
+            @test bd > 0 && isfinite(bd)
+            r_over = honest_did(b_sig, sigma; num_pre=3, num_post=3,
+                                restriction=:rm, Mbar=bd + 1e-3)
+            r_under = honest_did(b_sig, sigma; num_pre=3, num_post=3,
+                                 restriction=:rm, Mbar=max(bd - 1e-3, 0.0))
+            @test r_over.ci_lower <= 0.0 <= r_over.ci_upper
+            @test !(r_under.ci_lower <= 0.0 <= r_under.ci_upper)
+        end
+
+        @testset "Folded-normal critical value" begin
+            MEM = MacroEconometricModels
+            @test MEM._fold_normal_cv(0.0, 0.05) ≈ 1.959963984540054 atol = 1e-10  # z_{0.975}
+            @test MEM._fold_normal_cv(1.0, 0.05) > MEM._fold_normal_cv(0.0, 0.05)
+        end
+
+        @testset "Input validation" begin
+            @test_throws ArgumentError honest_did(betahat, sigma; num_pre=3, num_post=3,
+                                                  restriction=:bogus)
+            @test_throws ArgumentError honest_did(betahat[1:5], sigma; num_pre=3, num_post=3)
+            @test_throws ArgumentError honest_did(betahat, sigma; num_pre=0, num_post=6)
+        end
     end
 
 end  # @testset "Difference-in-Differences"

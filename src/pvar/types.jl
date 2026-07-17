@@ -89,11 +89,17 @@ struct PVARModel{T<:AbstractFloat} <: StatsAPI.RegressionModel
 
     # Original data
     data::PanelData{T}
+
+    # Full per-equation GMM/FE coefficient covariance (K×K each); empty ⇒ diagonal fallback
+    coef_vcov::Vector{Matrix{T}}
 end
 
 # StatsAPI interface
 StatsAPI.coef(m::PVARModel) = vec(m.Phi)
-StatsAPI.vcov(m::PVARModel) = Diagonal(vec(m.se).^2)  # diagonal approx
+# Full block-diagonal coefficient covariance (per-equation K×K blocks stacked); falls back
+# to the diagonal SE² when coef_vcov is empty (legacy/edge constructions).
+StatsAPI.vcov(m::PVARModel) =
+    isempty(m.coef_vcov) ? Diagonal(vec(m.se) .^ 2) : cat(m.coef_vcov...; dims=(1, 2))
 StatsAPI.nobs(m::PVARModel) = m.n_obs
 StatsAPI.dof(m::PVARModel) = m.m * size(m.Phi, 2)
 StatsAPI.stderror(m::PVARModel) = vec(m.se)
@@ -168,7 +174,10 @@ function Base.show(io::IO, model::PVARModel{T}) where {T}
         "Observations"    model.n_obs;
     ]
     if model.method != :fe_ols
-        spec = vcat(spec, Any["Instruments" model.n_instruments])
+        inst_str = model.n_instruments > model.n_groups ?
+            "$(model.n_instruments) (groups: $(model.n_groups)) ⚠ too many" :
+            "$(model.n_instruments) (groups: $(model.n_groups))"
+        spec = vcat(spec, Any["Instruments" inst_str])
     end
 
     _pretty_table(io, spec;

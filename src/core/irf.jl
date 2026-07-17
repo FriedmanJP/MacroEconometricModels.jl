@@ -29,7 +29,14 @@ Note: `:smooth_transition` requires `transition_var` kwarg.
       `:external_volatility` requires `regime_indicator` kwarg.
 
 # CI types
-`:none`, `:bootstrap`, `:theoretical`
+- `:none`
+- `:bootstrap` --- nonparametric residual (recursive-design) bootstrap: resamples the
+  estimated residuals, regenerates data from the estimated `B`, and re-estimates the VAR
+  per replication. With `stationary_only=true`, draws whose companion matrix has
+  `|λmax| ≥ 1` are rejected and redrawn. This is **not** the Kilian (1998) bias-corrected
+  bootstrap — `B̂` is not bias-adjusted; the bias-corrected and wild bootstraps are tracked
+  as roadmap task T271.
+- `:theoretical` --- asymptotic (delta-method) confidence intervals.
 """
 function irf(model::VARModel{T}, horizon::Int;
     method::Symbol=:cholesky, check_func=nothing, narrative_check=nothing,
@@ -40,6 +47,8 @@ function irf(model::VARModel{T}, horizon::Int;
     regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing
 ) where {T<:AbstractFloat}
 
+    _validate_data(model.Sigma, "Sigma")
+    _validate_data(model.B, "B")
     n = nvars(model)
     Q = compute_Q(model, method, horizon, check_func, narrative_check;
                   transition_var=transition_var, regime_indicator=regime_indicator)

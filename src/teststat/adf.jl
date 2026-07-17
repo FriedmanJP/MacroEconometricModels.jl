@@ -70,7 +70,7 @@ function adf_test(y::AbstractVector{T};
 
     # OLS estimation
     XtX = X'X
-    XtX_inv = inv(XtX)
+    XtX_inv = robust_inv(XtX)
     B = XtX_inv * (X'Y)
     resid = Y - X * B
 

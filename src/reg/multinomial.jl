@@ -33,7 +33,7 @@ Multinomial logistic regression model estimated via maximum likelihood.
 - `vcov_mat::Matrix{T}` -- vcov of vec(beta), K(J-1) x K(J-1)
 - `fitted::Matrix{T}` -- predicted probabilities (n x J)
 - `loglik::T` -- maximized log-likelihood
-- `loglik_null::T` -- null model log-likelihood: n * log(1/J)
+- `loglik_null::T` -- null model log-likelihood (constants-only): Σⱼ nⱼ·log(nⱼ/n)
 - `pseudo_r2::T` -- McFadden's pseudo R-squared
 - `aic::T` -- Akaike information criterion
 - `bic::T` -- Bayesian information criterion
@@ -298,6 +298,20 @@ report(m)
 - McFadden, D. (1974). Conditional logit analysis of qualitative choice behavior.
 - Train, K. E. (2009). *Discrete Choice Methods with Simulation*. 2nd ed. Cambridge Univ. Press.
 """
+# Constants-only (intercept-only) null log-likelihood. The intercept-only MLE
+# probabilities equal the empirical category shares p̄ⱼ = nⱼ/n, so
+# LL₀ = Σⱼ nⱼ·log(nⱼ/n) exactly (no optimization needed) — the standard McFadden /
+# Stata `mlogit` baseline. `yint` is the remapped 1:J integer label vector.
+function _mlogit_null_loglik(yint::Vector{Int}, J::Int, ::Type{T}) where {T<:AbstractFloat}
+    n = length(yint)
+    ll = zero(T)
+    for j in 1:J
+        n_j = count(==(j), yint)
+        n_j > 0 && (ll += T(n_j) * log(T(n_j) / T(n)))
+    end
+    ll
+end
+
 function estimate_mlogit(y::AbstractVector, X::AbstractMatrix{T};
                          cov_type::Symbol=:ols,
                          varnames::Union{Nothing,Vector{String}}=nothing,
@@ -340,8 +354,8 @@ function estimate_mlogit(y::AbstractVector, X::AbstractMatrix{T};
     beta, loglik_val, converged, iterations = _nr_mlogit(
         yint, Xm, J; maxiter=maxiter, tol=tol)
 
-    # ---- Null model log-likelihood ----
-    loglik_null = T(n) * log(one(T) / T(J))
+    # ---- Null model log-likelihood (constants-only, Stata-comparable) ----
+    loglik_null = _mlogit_null_loglik(yint, J, T)
 
     # ---- McFadden pseudo R-squared ----
     pseudo_r2 = one(T) - loglik_val / loglik_null

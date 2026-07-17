@@ -190,19 +190,57 @@ end
     @test ci[2, 1] < 0.3 < ci[2, 2]
 end
 
+@testset "autocovariance_moment_contributions — mean identity" begin
+    # HARD deterministic oracle: the per-observation contributions decompose the mean
+    # moments exactly (vec(mean(H)) == autocovariance_moments) to machine precision.
+    for lags in (1, 2)
+        data = randn(Random.MersenneTwister(11), 300, 2)
+        H = autocovariance_moment_contributions(data; lags=lags)
+        k = 2
+        @test size(H) == (300, k*(k+1)÷2 + k*lags)
+        @test vec(mean(H, dims=1)) ≈ autocovariance_moments(data; lags=lags) atol=1e-12
+    end
+    # Real-input conversion method
+    Hi = autocovariance_moment_contributions(randn(Random.MersenneTwister(3), 50, 1) .|> Float32 .|> Float64; lags=1)
+    @test eltype(Hi) == Float64
+end
+
 @testset "smm_weighting_matrix" begin
     rng = Random.MersenneTwister(42)
     data = randn(rng, 200, 2)
-    # Use hac=false to avoid bandwidth estimation issues with per-observation
-    # moment contributions from autocovariance_moments (which are degenerate for
-    # single observations)
-    W = MacroEconometricModels.smm_weighting_matrix(data, d -> autocovariance_moments(d; lags=1); hac=false)
+    cfn = d -> autocovariance_moment_contributions(d; lags=1)
+    W = MacroEconometricModels.smm_weighting_matrix(data, cfn; hac=false)
     @test size(W) == (5, 5)
     @test issymmetric(round.(W, digits=10))  # approximately symmetric
 
-    # With explicit bandwidth (avoids automatic bandwidth NaN issue)
-    W2 = MacroEconometricModels.smm_weighting_matrix(data, d -> autocovariance_moments(d; lags=1); hac=true, bandwidth=5)
+    # Automatic bandwidth is now well-defined with genuine contributions (no NaN)
+    W2 = MacroEconometricModels.smm_weighting_matrix(data, cfn; hac=true)
     @test size(W2) == (5, 5)
+    @test all(isfinite, W2)
+end
+
+@testset "smm Ω full-rank, W ≠ identity" begin
+    rng = Random.MersenneTwister(42)
+    data = randn(rng, 200, 2)
+    cfn = d -> autocovariance_moment_contributions(d; lags=1)
+    n_moments = 5
+    Omega = MacroEconometricModels.smm_data_covariance(data, cfn; hac=false)
+    # Ω is a genuine full-rank moment covariance, NOT the old ~1e-8·I fallback
+    @test rank(Omega) == n_moments
+    @test opnorm(Omega) > 1e-4
+    W = MacroEconometricModels.smm_weighting_matrix(data, cfn; hac=false)
+    # W is a genuine inverse (W·Ω ≈ I), not a scalar multiple of the identity
+    @test maximum(abs, W - Diagonal(diag(W))) > 1e-6
+    @test W * Omega ≈ Matrix(I, n_moments, n_moments) atol=1e-6
+end
+
+@testset "Ω magnitude analytic oracle (iid Gaussian)" begin
+    # For iid N(0,σ²), the variance-moment contribution (x-μ)² has long-run variance
+    # Var[(X-μ)²] = E[(X-μ)⁴] - σ⁴ = 3σ⁴ - σ⁴ = 2σ⁴ = 2.0 (σ=1). iid ⇒ bandwidth irrelevant.
+    x = randn(Random.MersenneTwister(2024), 4000, 1)
+    cfn = d -> autocovariance_moment_contributions(d; lags=1)
+    Omega = MacroEconometricModels.smm_data_covariance(x, cfn; hac=false)
+    @test isapprox(Omega[1, 1], 2.0; rtol=0.15)
 end
 
 @testset "estimate_smm — AR(1) recovery" begin
@@ -235,6 +273,7 @@ end
         bounds = ParameterTransform([-1.0, 0.0], [1.0, Inf])
         result = estimate_smm(sim_ar1, my_moments, [0.5, 0.3], data;
                               sim_ratio=5, burn=100, weighting=:two_step,
+                              contributions_fn=d -> autocovariance_moment_contributions(d; lags=1),
                               bounds=bounds,
                               rng=Random.MersenneTwister(123))
 
@@ -245,6 +284,50 @@ end
         @test result.sim_ratio == 5
         @test length(stderror(result)) == 2
         @test all(stderror(result) .> 0)
+        # Two-step W is a genuine Ω⁻¹, not the old 1e8·I fallback
+        @test maximum(abs, result.W - Diagonal(diag(result.W))) > 1e-6
+    end
+end
+
+@testset "estimate_smm — SE vs Monte-Carlo dispersion" begin
+    # Statistical oracle: the reported two-step SMM SE must track the Monte-Carlo
+    # dispersion of the point estimate across independent samples (loose rtol).
+    _suppress_warnings() do
+        true_rho = 0.7
+        true_sigma = 0.5
+        T_obs = 400
+        cfn = d -> autocovariance_moment_contributions(d; lags=1)
+
+        function sim_ar1(theta, T_periods, burn; rng=Random.default_rng())
+            rho, sigma = theta
+            sim = zeros(T_periods + burn)
+            for t in 2:(T_periods + burn)
+                sim[t] = rho * sim[t-1] + abs(sigma) * randn(rng)
+            end
+            reshape(sim[(burn+1):end], :, 1)
+        end
+
+        bounds = ParameterTransform([-1.0, 0.0], [1.0, Inf])
+        R = 160
+        rho_hat = Float64[]
+        se_rho = Float64[]
+        for r in 1:R
+            drng = Random.MersenneTwister(5000 + r)
+            y = zeros(T_obs)
+            for t in 2:T_obs
+                y[t] = true_rho * y[t-1] + true_sigma * randn(drng)
+            end
+            res = estimate_smm(sim_ar1, d -> autocovariance_moments(d; lags=1),
+                               [0.5, 0.4], reshape(y, :, 1);
+                               sim_ratio=5, burn=100, weighting=:two_step,
+                               contributions_fn=cfn, bounds=bounds,
+                               rng=Random.MersenneTwister(9000 + r))
+            push!(rho_hat, res.theta[1])
+            push!(se_rho, stderror(res)[1])
+        end
+        mc_std = std(rho_hat)
+        mean_se = mean(se_rho)
+        @test isapprox(mc_std, mean_se; rtol=0.35)
     end
 end
 

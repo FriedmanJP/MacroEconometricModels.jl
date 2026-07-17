@@ -49,30 +49,27 @@ Random.seed!(9010)
         @test cv32[1] isa Float32
     end
 
-    @testset "adf_pvalue: all 4 branches" begin
-        # Branch 1: stat <= cv[1] (below 1% CV)
-        pval1 = MacroEconometricModels.adf_pvalue(-10.0, :constant, 100)
-        @test pval1 == 0.001
+    @testset "adf_pvalue: MacKinnon (1996) surface regions" begin
+        # Small-p quadratic region (τ ≤ τ*): tiny p far into the left tail
+        @test MacroEconometricModels.adf_pvalue(-10.0, :constant, 100) < 1e-6
 
-        # Branch 2: stat between cv[1] and cv[5]
         cv = MacroEconometricModels.adf_critical_values(:constant, 100)
-        stat_mid15 = (cv[1] + cv[5]) / 2
-        pval2 = MacroEconometricModels.adf_pvalue(stat_mid15, :constant, 100)
+        pval2 = MacroEconometricModels.adf_pvalue((cv[1] + cv[5]) / 2, :constant, 100)
         @test 0.01 < pval2 < 0.05
-
-        # Branch 3: stat between cv[5] and cv[10]
-        stat_mid510 = (cv[5] + cv[10]) / 2
-        pval3 = MacroEconometricModels.adf_pvalue(stat_mid510, :constant, 100)
+        pval3 = MacroEconometricModels.adf_pvalue((cv[5] + cv[10]) / 2, :constant, 100)
         @test 0.05 < pval3 < 0.10
 
-        # Branch 4: stat above cv[10] — normal approximation
+        # Large-p cubic region (τ > τ*)
         pval4 = MacroEconometricModels.adf_pvalue(0.0, :constant, 100)
-        @test pval4 > 0.10
+        @test pval4 > 0.90
         @test pval4 <= 1.0
 
-        # Very large positive stat
-        pval5 = MacroEconometricModels.adf_pvalue(5.0, :constant, 100)
-        @test pval5 > 0.50
+        # τ_max saturation → p = 1
+        @test MacroEconometricModels.adf_pvalue(5.0, :constant, 100) == 1.0
+        # τ_min saturation → p = 0 (:trend has finite bounds)
+        @test MacroEconometricModels.adf_pvalue(-30.0, :trend, 100) == 0.0
+        # invalid regression
+        @test_throws ArgumentError MacroEconometricModels._mackinnon_pvalue(-2.0, :bogus)
     end
 
     @testset "kpss_pvalue: all 4 branches" begin

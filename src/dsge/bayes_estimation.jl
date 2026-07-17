@@ -538,7 +538,8 @@ function _build_solution_at_theta(spec::DSGESpec{T}, param_names::Vector{Symbol}
                                     observables::Vector{Symbol},
                                     measurement_error,
                                     solver::Symbol,
-                                    solver_kwargs::NamedTuple) where {T<:AbstractFloat}
+                                    solver_kwargs::NamedTuple;
+                                    build_observation::Bool=true) where {T<:AbstractFloat}
     # Update spec parameters
     new_pv = copy(spec.param_values)
     for (i, pn) in enumerate(param_names)
@@ -549,6 +550,11 @@ function _build_solution_at_theta(spec::DSGESpec{T}, param_names::Vector{Symbol}
 
     new_spec = compute_steady_state(new_spec)
     sol = solve(new_spec; method=solver, solver_kwargs...)
+
+    # Posterior-draw rebuilds for irf/fevd/simulate only need the solution —
+    # skip the observation equation (it throws on stochastic singularity when
+    # all endogenous variables are treated as observables with no measurement error)
+    build_observation || return (sol, nothing)
 
     # Build observation equation and state space
     Z, d, H = _build_observation_equation(new_spec, observables, measurement_error)
@@ -869,7 +875,8 @@ function irf(result::BayesianDSGE{T}, horizon::Int;
         try
             _suppress_warnings() do
                 sol, _ = _build_solution_at_theta(spec, result.param_names, theta,
-                                                   spec.endog, nothing, solver, solver_kwargs)
+                                                   spec.endog, nothing, solver, solver_kwargs;
+                                                   build_observation=false)
                 if sol isa DSGESolution && (!is_determined(sol))
                     return  # skip indeterminate
                 end
@@ -947,7 +954,8 @@ function fevd(result::BayesianDSGE{T}, horizon::Int;
         try
             _suppress_warnings() do
                 sol, _ = _build_solution_at_theta(spec, result.param_names, theta,
-                                                   spec.endog, nothing, solver, solver_kwargs)
+                                                   spec.endog, nothing, solver, solver_kwargs;
+                                                   build_observation=false)
                 if sol isa DSGESolution && (!is_determined(sol))
                     return
                 end
@@ -1025,7 +1033,8 @@ function simulate(result::BayesianDSGE{T}, T_periods::Int;
         try
             _suppress_warnings() do
                 sol, _ = _build_solution_at_theta(spec, result.param_names, theta,
-                                                   spec.endog, nothing, solver, solver_kwargs)
+                                                   spec.endog, nothing, solver, solver_kwargs;
+                                                   build_observation=false)
                 if sol isa DSGESolution && (!is_determined(sol))
                     return
                 end

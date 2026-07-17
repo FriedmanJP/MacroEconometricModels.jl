@@ -46,6 +46,7 @@ function estimate_dsge(spec::DSGESpec{T}, data::AbstractMatrix,
                         n_lags_instruments::Int=4,
                         sim_ratio::Int=5, burn::Int=100,
                         moments_fn::Function=d -> autocovariance_moments(d; lags=1),
+                        contributions_fn::Function=d -> autocovariance_moment_contributions(d; lags=1),
                         bounds::Union{Nothing,ParameterTransform}=nothing,
                         lags::Int=1,
                         rng=Random.default_rng(),
@@ -71,6 +72,7 @@ function estimate_dsge(spec::DSGESpec{T}, data::AbstractMatrix,
         return _estimate_dsge_smm(spec, data_T, param_names;
                                     sim_ratio=sim_ratio, burn=burn,
                                     weighting=weighting, moments_fn=moments_fn,
+                                    contributions_fn=contributions_fn,
                                     bounds=bounds, rng=rng)
     elseif method == :analytical_gmm
         # Note: analytical GMM uses identity weighting (deterministic moment
@@ -354,6 +356,7 @@ function _estimate_dsge_smm(spec::DSGESpec{T}, data::Matrix{T},
                               param_names::Vector{Symbol};
                               sim_ratio=5, burn=100, weighting=:two_step,
                               moments_fn=d -> autocovariance_moments(d; lags=1),
+                              contributions_fn=d -> autocovariance_moment_contributions(d; lags=1),
                               bounds=nothing, rng=Random.default_rng()) where {T}
     theta0 = T[spec.param_values[p] for p in param_names]
 
@@ -389,7 +392,8 @@ function _estimate_dsge_smm(spec::DSGESpec{T}, data::Matrix{T},
 
     smm_result = estimate_smm(dsge_simulator, moments_fn, theta0, data;
                                sim_ratio=sim_ratio, burn=0,  # burn handled inside simulator
-                               weighting=weighting, bounds=bounds, rng=rng)
+                               weighting=weighting, contributions_fn=contributions_fn,
+                               bounds=bounds, rng=rng)
 
     # Build solution at estimated parameters
     final_pv = copy(spec.param_values)

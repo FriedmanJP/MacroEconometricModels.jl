@@ -204,6 +204,8 @@ function historical_decomposition(model::VARModel{T}, horizon::Int=effective_nob
     regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing
 ) where {T<:AbstractFloat}
 
+    _validate_data(model.Sigma, "Sigma")
+    _validate_data(model.B, "B")
     n = nvars(model)
     T_eff = effective_nobs(model)
 

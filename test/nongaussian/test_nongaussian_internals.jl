@@ -494,3 +494,47 @@ const MEM = MacroEconometricModels
         @test 0 <= pval <= 1
     end
 end
+
+# =============================================================================
+# T090 (#189) SUB-2: ICA buffer reuse is arithmetic-identical (exact)
+# =============================================================================
+
+@testset "T090 SUB-2: buffered dcov/HSIC == allocating formulas" begin
+    rng = MersenneTwister(19002)
+    n = 40
+    x = randn(rng, n)
+    y = x .^ 2 .+ 0.3 .* randn(rng, n)
+
+    # Pre-change distance covariance formula, inlined
+    A = [abs(x[i] - x[j]) for i in 1:n, j in 1:n]
+    B = [abs(y[i] - y[j]) for i in 1:n, j in 1:n]
+    A_row = mean(A, dims=2); A_col = mean(A, dims=1); A_grand = mean(A)
+    B_row = mean(B, dims=2); B_col = mean(B, dims=1); B_grand = mean(B)
+    for i in 1:n, j in 1:n
+        A[i, j] = A[i, j] - A_row[i] - A_col[j] + A_grand
+        B[i, j] = B[i, j] - B_row[i] - B_col[j] + B_grand
+    end
+    dcov_ref = max(sum(A .* B) / n^2, 0.0)
+    @test MEM._distance_covariance(x, y) == dcov_ref  # bit-identical
+
+    # Pre-change HSIC formula, inlined
+    s2 = 2 * 1.0^2
+    K = [exp(-(x[i] - x[j])^2 / s2) for i in 1:n, j in 1:n]
+    L = [exp(-(y[i] - y[j])^2 / s2) for i in 1:n, j in 1:n]
+    H = I - ones(n, n) / n
+    Kc = H * K * H
+    Lc = H * L * H
+    hsic_ref = tr(Kc * Lc) / (n - 1)^2
+    @test MEM._hsic_statistic(x, y; sigma=1.0) == hsic_ref  # bit-identical
+
+    # Buffered objective == unbuffered objective (same buffers semantics)
+    Z = randn(rng, 60, 2)
+    angles = [0.3]
+    @test MEM._dcov_objective(angles, Z, 2) ==
+          MEM._dcov_objective(angles, Z, 2,
+                              [Matrix{Float64}(undef, 60, 60) for _ in 1:3]...)
+    Hbuf = I - ones(60, 60) / 60
+    bufs = ntuple(_ -> Matrix{Float64}(undef, 60, 60), 6)
+    @test MEM._hsic_objective(angles, Z, 2; sigma=1.0) ==
+          MEM._hsic_objective(angles, Z, 2, bufs..., Hbuf; sigma=1.0)
+end

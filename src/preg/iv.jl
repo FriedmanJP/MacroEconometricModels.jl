@@ -16,36 +16,46 @@ using LinearAlgebra, Statistics, Distributions
 # =============================================================================
 
 """
-    _panel_first_stage_f(X_endog, Z) -> T
+    _panel_first_stage_f(X_endog, Z; n_incl=0) -> T
 
-Minimum first-stage F across endogenous variables. For each endogenous column
-x_j, regress x_j on Z and compute the partial F for joint significance.
+Minimum EXCLUDED-instrument partial first-stage F across the endogenous columns, on the
+transformed (demeaned/differenced/quasi-demeaned) panel data. For each x_j, partial out the
+`n_incl` leading included-structural instrument columns W = Z[:, 1:n_incl] and test the joint
+significance of the remaining excluded instruments:
+    F_j = ((SSR_restricted − SSR_unrestricted) / q) / (SSR_unrestricted / (n − m)),
+q = m − n_incl. The previous formula used TSS-about-the-mean with q = m (the overall F of all
+instruments), which mechanically inflated as the included controls predicted x_j.
+On EC2SLS / Hausman-Taylor instrument sets this is a heuristic (`n_incl` counts leading
+included columns; the transformed sets are not cleanly partitioned).
 """
-function _panel_first_stage_f(X_endog::Matrix{T}, Z::Matrix{T}) where {T<:AbstractFloat}
+function _panel_first_stage_f(X_endog::Matrix{T}, Z::Matrix{T};
+                              n_incl::Int=0) where {T<:AbstractFloat}
     n, m = size(Z)
     k_endog = size(X_endog, 2)
     k_endog == 0 && return T(Inf)
+    n_incl = clamp(n_incl, 0, m - 1)
+    q = m - n_incl
+    df2 = n - m
+    (q <= 0 || df2 <= 0) && return T(NaN)
 
     ZtZinv = robust_inv(Z' * Z)
+    W = n_incl > 0 ? Z[:, 1:n_incl] : Z[:, 1:0]
+    WtWinv = n_incl > 0 ? robust_inv(W' * W) : zeros(T, 0, 0)
     f_min = T(Inf)
-
     for j in 1:k_endog
         x_j = X_endog[:, j]
-        gamma = ZtZinv * (Z' * x_j)
-        resid_j = x_j .- Z * gamma
-        ssr_j = dot(resid_j, resid_j)
-
-        x_bar = mean(x_j)
-        tss_j = sum((xi - x_bar)^2 for xi in x_j)
-        tss_j = max(tss_j, T(1e-300))
-
-        df2 = n - m
-        df2 > 0 || continue
-
-        f_j = ((tss_j - ssr_j) / T(m)) / (ssr_j / T(df2))
+        # Unrestricted: x_j on ALL instruments Z
+        resid_u = x_j .- Z * (ZtZinv * (Z' * x_j))
+        ssr_u = dot(resid_u, resid_u)
+        # Restricted: x_j on the leading included-exogenous columns W
+        ssr_r = if n_incl > 0
+            r = x_j .- W * (WtWinv * (W' * x_j)); dot(r, r)
+        else
+            dot(x_j, x_j)
+        end
+        f_j = ((ssr_r - ssr_u) / T(q)) / (ssr_u / T(df2))
         f_min = min(f_min, f_j)
     end
-
     f_min
 end
 
@@ -54,24 +64,42 @@ end
 # =============================================================================
 
 """
-    _panel_sargan_test(resid, Z, k_regressors) -> (stat, pval) or (nothing, nothing)
+    _panel_sargan_test(resid, Z, k_regressors, cov_type, groups) -> (stat, pval) or (nothing, nothing)
 
-Sargan-Hansen J-test for overidentifying restrictions in panel IV.
+Overidentification test for panel IV. Under `cov_type=:ols` this is the classical
+homoskedastic Sargan statistic `J = e'P_Z e / σ̂²`; under `:cluster`/`:twoway`/
+`:driscoll_kraay` it is the entity-clustered Hansen J `J = g' Ω̂⁻¹ g` with `g = Z'e` and
+`Ω̂ = Σ_g s_g s_g'`, `s_g = Z_g'e_g` — consistent under within-entity dependence/
+heteroskedasticity. `resid`/`Z` must be the SAME transformed objects (demeaned for FE,
+differenced for FD, quasi-demeaned for RE/HT) that produced the 2SLS β, and `groups` the
+matching entity index (differenced-panel groups for FD). A fully two-way / DK-HAC overid
+statistic is out of scope: `:twoway`/`:driscoll_kraay` reuse the entity-cluster meat.
 """
 function _panel_sargan_test(resid::Vector{T}, Z::Matrix{T},
-                            k_regressors::Int) where {T<:AbstractFloat}
+                            k_regressors::Int, cov_type::Symbol,
+                            groups::AbstractVector{Int}) where {T<:AbstractFloat}
     n, m = size(Z)
     dof_sargan = m - k_regressors
     dof_sargan <= 0 && return (nothing, nothing)
 
-    ZtZinv = robust_inv(Z' * Z)
-    P_Z_e = Z * (ZtZinv * (Z' * resid))
-    sigma2 = dot(resid, resid) / T(n)
-    sigma2 = max(sigma2, T(1e-300))
+    j_stat = if cov_type == :ols
+        ZtZinv = robust_inv(Z' * Z)
+        P_Z_e = Z * (ZtZinv * (Z' * resid))
+        sigma2 = max(dot(resid, resid) / T(n), T(1e-300))
+        dot(resid, P_Z_e) / sigma2
+    else
+        # Clustered-by-entity Hansen J (raw GMM weighting; no G/(G-1)·(n-1)/(n-k) factor).
+        g = Z' * resid
+        S = zeros(T, m, m)
+        for g_id in unique(groups)
+            idx = findall(==(g_id), groups)
+            s_g = Z[idx, :]' * resid[idx]
+            S .+= s_g * s_g'
+        end
+        dot(g, robust_inv(S) * g)
+    end
 
-    j_stat = dot(resid, P_Z_e) / sigma2
     j_pval = T(1 - cdf(Chisq(dof_sargan), max(j_stat, zero(T))))
-
     (j_stat, j_pval)
 end
 
@@ -128,10 +156,11 @@ function _estimate_fe_iv(pd::PanelData{T}, y::Vector{T}, X_exog::Matrix{T},
     beta, XhXinv, resid_dm, _, X_hat = _tsls(y_dm, X_dm, Z_dm)
 
     # First-stage F on demeaned endogenous
-    first_stage_f = _panel_first_stage_f(X_endog_dm, Z_dm)
+    # Included exogenous lead the within-demeaned instrument set: W = X_exog columns.
+    first_stage_f = _panel_first_stage_f(X_endog_dm, Z_dm; n_incl=size(X_exog, 2))
 
     # Sargan test
-    sargan_s, sargan_p = _panel_sargan_test(resid_dm, Z_dm, k)
+    sargan_s, sargan_p = _panel_sargan_test(resid_dm, Z_dm, k, cov_type, groups)
 
     # Fitted and residuals on original scale
     # Recover group effects: alpha_i = y_bar_i - x_bar_i' * beta
@@ -180,6 +209,7 @@ function _estimate_fe_iv(pd::PanelData{T}, y::Vector{T}, X_exog::Matrix{T},
         r2_within, r2_between, r2_overall,
         sigma_u, sigma_e, rho,
         first_stage_f, sargan_s, sargan_p,
+        nothing, nothing, nothing,   # cragg_donald_f, kleibergen_paap_f, stock_yogo_10pct
         vn, en, in_,
         :fe_iv, cov_type, n, N, pd
     )
@@ -269,10 +299,11 @@ function _estimate_fd_iv(pd::PanelData{T}, y::Vector{T}, X_exog::Matrix{T},
     beta = beta_full[2:end]
 
     # First-stage F on differenced endogenous
-    first_stage_f = _panel_first_stage_f(dX_endog, dZ_c)
+    # dZ_c leads with an intercept then differenced included exogenous.
+    first_stage_f = _panel_first_stage_f(dX_endog, dZ_c; n_incl=1 + size(X_exog, 2))
 
     # Sargan test
-    sargan_s, sargan_p = _panel_sargan_test(resid_fd, dZ_c, k_full)
+    sargan_s, sargan_p = _panel_sargan_test(resid_fd, dZ_c, k_full, cov_type, dgroups)
 
     # Vcov — extract slope portion
     vcov_full = _panel_vcov(X_hat, resid_fd, XhXinv, dgroups, dtimes, cov_type)
@@ -300,6 +331,7 @@ function _estimate_fd_iv(pd::PanelData{T}, y::Vector{T}, X_exog::Matrix{T},
         r2_within, r2_between, r2_overall,
         zero(T), sigma_e, zero(T),
         first_stage_f, sargan_s, sargan_p,
+        nothing, nothing, nothing,   # cragg_donald_f, kleibergen_paap_f, stock_yogo_10pct
         vn, en, in_,
         :fd_iv, cov_type, n_fd, N_fd, pd
     )
@@ -411,10 +443,12 @@ function _estimate_re_iv(pd::PanelData{T}, y::Vector{T}, X_exog::Matrix{T},
             end
         end
     end
-    first_stage_f = _panel_first_stage_f(X_endog_qd, Z_ec2sls_c)
+    # EC2SLS Z_ec2sls_c = [intercept, quasi-demeaned(X_exog,Z_excl), between(...)]; the leading
+    # 1 + #X_exog columns are the (quasi-demeaned) included exogenous — heuristic partial-F.
+    first_stage_f = _panel_first_stage_f(X_endog_qd, Z_ec2sls_c; n_incl=1 + size(X_exog, 2))
 
     # Sargan test
-    sargan_s, sargan_p = _panel_sargan_test(resid_qd, Z_ec2sls_c, k_full)
+    sargan_s, sargan_p = _panel_sargan_test(resid_qd, Z_ec2sls_c, k_full, cov_type, groups)
 
     # R-squared
     r2_within, r2_between, r2_overall = _panel_r2(y, fitted_full, groups, unique_groups)
@@ -438,6 +472,7 @@ function _estimate_re_iv(pd::PanelData{T}, y::Vector{T}, X_exog::Matrix{T},
         r2_within, r2_between, r2_overall,
         sigma_u, sigma_e, rho,
         first_stage_f, sargan_s, sargan_p,
+        nothing, nothing, nothing,   # cragg_donald_f, kleibergen_paap_f, stock_yogo_10pct
         vn, en, in_,
         :re_iv, cov_type, n, N, pd
     )
@@ -617,10 +652,12 @@ function _estimate_hausman_taylor(pd::PanelData{T}, y::Vector{T},
             end
         end
     end
-    first_stage_f = _panel_first_stage_f(X_endog_qd, Z_qd_c)
+    # Hausman-Taylor instrument set is non-standard; partial out only the leading intercept
+    # (a demeaning) as a conservative heuristic first-stage F.
+    first_stage_f = _panel_first_stage_f(X_endog_qd, Z_qd_c; n_incl=1)
 
     # Sargan test
-    sargan_s, sargan_p = _panel_sargan_test(resid_qd, Z_qd_c, k_full)
+    sargan_s, sargan_p = _panel_sargan_test(resid_qd, Z_qd_c, k_full, cov_type, groups)
 
     # R-squared
     r2_within, r2_between, r2_overall = _panel_r2(y, fitted_full, groups, unique_groups)
@@ -649,6 +686,7 @@ function _estimate_hausman_taylor(pd::PanelData{T}, y::Vector{T},
         r2_within, r2_between, r2_overall,
         sigma_u, sigma_e, rho,
         first_stage_f, sargan_s, sargan_p,
+        nothing, nothing, nothing,   # cragg_donald_f, kleibergen_paap_f, stock_yogo_10pct
         vn, en, in_,
         :hausman_taylor, cov_type, n, N, pd
     )

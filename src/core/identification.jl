@@ -26,7 +26,10 @@ identify_cholesky(model::VARModel{T}) where {T<:AbstractFloat} = safe_cholesky(m
 function generate_Q(n::Int, ::Type{T}=Float64) where {T<:AbstractFloat}
     X = randn(T, n, n)
     Q, R = qr(X)
-    Matrix(Q) * Diagonal(sign.(diag(R)))
+    # Sign-normalize columns by the QR pivots. Use an explicit ±1 map (not `sign`, whose
+    # sign(0.0)=0.0 would zero an entire rotation column when a pivot is exactly 0).
+    d = [r < zero(T) ? -one(T) : one(T) for r in diag(R)]
+    Matrix(Q) * Diagonal(d)
 end
 
 # =============================================================================
@@ -42,25 +45,32 @@ IRF[h, i, j] = response of variable i to shock j at horizon h-1.
 function compute_irf(model::VARModel{T}, Q::AbstractMatrix{T}, horizon::Int) where {T<:AbstractFloat}
     n, p = nvars(model), model.p
     P = safe_cholesky(model.Sigma) * Q
+    A = extract_ar_coefficients(model.B, n, p)      # Vector{Matrix{T}} (contiguous n×n)
 
-    IRF, Phi = zeros(T, horizon, n, n), zeros(T, horizon, n, n)
-    Phi[1, :, :], IRF[1, :, :] = I(n), P
+    IRF = zeros(T, horizon, n, n)
+    Phi = [zeros(T, n, n) for _ in 1:horizon]       # per-horizon contiguous buffers
+    temp = zeros(T, n, n)
+    scratch = zeros(T, n, n)
+    copyto!(Phi[1], I(n))
+    IRF[1, :, :] = P
 
-    A = extract_ar_coefficients(model.B, n, p)
     @inbounds for h in 2:horizon
-        temp = zeros(T, n, n)
+        fill!(temp, zero(T))
         for j in 1:min(p, h-1)
-            temp .+= A[j] * @view(Phi[h-j, :, :])
+            mul!(scratch, A[j], Phi[h-j])           # in-place gemm, no A[j]*view alloc
+            temp .+= scratch
         end
-        Phi[h, :, :], IRF[h, :, :] = temp, temp * P
+        Phi[h] .= temp
+        mul!(scratch, temp, P)
+        IRF[h, :, :] = scratch
     end
     IRF
 end
 
 """Compute structural shocks: εₜ = Q'L⁻¹uₜ."""
 function compute_structural_shocks(model::VARModel{T}, Q::AbstractMatrix{T}) where {T<:AbstractFloat}
-    L = safe_cholesky(model.Sigma)
-    (Q' * robust_inv(Matrix(L)) * model.U')'
+    L = safe_cholesky(model.Sigma)          # lower-triangular Cholesky factor
+    (Q' * (L \ model.U'))'                    # L \ U' = L⁻¹U' via triangular backsolve
 end
 
 # =============================================================================
@@ -190,15 +200,18 @@ reference `iresponse_longrun.m` normalizes only the impact sign of the first sho
 function identify_long_run(model::VARModel{T}) where {T<:AbstractFloat}
     n, p = nvars(model), model.p
     A_sum = sum(extract_ar_coefficients(model.B, n, p))
-    inv_lag = robust_inv(I(n) - A_sum)
+    M = Matrix{T}(I(n) - A_sum)
+    cM = cond(M)
+    cM > one(T) / sqrt(eps(T)) && @warn "identify_long_run: (I − ΣAᵢ) is near-singular (cond ≈ $(cM)); the VAR is near a unit root, so the long-run impact matrix is numerically unstable." maxlog = 1
+    inv_lag = robust_inv(M; silent=true)
     V_LR = inv_lag * model.Sigma * inv_lag'
     D = Matrix(safe_cholesky(V_LR))   # lower-triangular; D == long-run cumulative impact matrix
     # Sign-normalize: long-run own-effect (diag of D) non-negative for every shock.
     @inbounds for j in 1:n
         D[j, j] < zero(T) && (@views D[:, j] .*= -one(T))
     end
-    P = (I(n) - A_sum) * D
-    robust_inv(Matrix(safe_cholesky(model.Sigma))) * P
+    P = M * D
+    safe_cholesky(model.Sigma) \ P     # L⁻¹P via triangular backsolve
 end
 
 # =============================================================================

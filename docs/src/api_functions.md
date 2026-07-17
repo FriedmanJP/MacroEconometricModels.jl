@@ -423,6 +423,7 @@ pvar_bootstrap_irf
 pvar_hansen_j
 pvar_mmsc
 pvar_lag_selection
+arellano_bond_ar_test
 ```
 
 ### GMM Utilities

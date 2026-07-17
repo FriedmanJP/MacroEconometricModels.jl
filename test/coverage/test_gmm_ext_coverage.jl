@@ -372,13 +372,13 @@ end
         rng = Random.MersenneTwister(42)
         data = randn(rng, 200, 2)
         Omega = MacroEconometricModels.smm_data_covariance(
-            data, d -> autocovariance_moments(d; lags=1); hac=false)
+            data, d -> autocovariance_moment_contributions(d; lags=1); hac=false)
         @test size(Omega) == (5, 5)
         @test all(isfinite, Omega)
 
         # With HAC + explicit bandwidth
         Omega_hac = MacroEconometricModels.smm_data_covariance(
-            data, d -> autocovariance_moments(d; lags=1); hac=true, bandwidth=3)
+            data, d -> autocovariance_moment_contributions(d; lags=1); hac=true, bandwidth=3)
         @test size(Omega_hac) == (5, 5)
     end
 

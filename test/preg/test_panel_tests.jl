@@ -1,4 +1,5 @@
 using Test, MacroEconometricModels, DataFrames, Random, Statistics, LinearAlgebra
+using Logging: with_logger
 
 @testset "Panel Specification Tests" begin
 
@@ -23,11 +24,17 @@ using Test, MacroEconometricModels, DataFrames, Random, Statistics, LinearAlgebr
         fe = estimate_xtreg(pd, :y, [:x1, :x2]; model=:fe)
         re = estimate_xtreg(pd, :y, [:x1, :x2]; model=:re)
 
-        ht = hausman_test(fe, re)
+        # On this finite sample V_FE − V_RE is INDEFINITE. The corrected test reports the
+        # (genuinely negative) generalized-inverse statistic with df = rank(dV) < k and does
+        # NOT spuriously reject — the old abs()+df=k reported this as a significant rejection.
+        tl = Test.TestLogger(respect_maxlog=false)
+        ht = with_logger(() -> hausman_test(fe, re), tl)
         @test ht isa PanelTestResult{Float64}
-        @test ht.statistic >= 0
-        @test ht.df == 2
-        @test ht.pvalue < 0.05  # should reject: RE inconsistent
+        @test ht.statistic < 0                    # negative form no longer masked by abs()
+        @test ht.df == 1                          # rank(dV) < k = 2
+        @test ht.pvalue == 1.0                    # never a spurious rejection when chi2 ≤ 0
+        @test occursin("non-PSD", ht.description)
+        @test any(r -> occursin("not positive semidefinite", r.message), tl.logs)  # warns once
 
         # Test show method
         io = IOBuffer()
@@ -36,6 +43,22 @@ using Test, MacroEconometricModels, DataFrames, Random, Statistics, LinearAlgebr
 
         # Error: wrong model types
         @test_throws ArgumentError hausman_test(re, fe)
+    end
+
+    @testset "Hausman generalized-inverse numerics (T085)" begin
+        hq = MacroEconometricModels._hausman_quadratic_form
+        # (a) full-rank PSD: equals the classical inverse quadratic form, df = k
+        chi2, df, nonpsd = hq([1.0, 2.0], [2.0 0.0; 0.0 3.0])
+        @test chi2 ≈ (1.0^2 / 2 + 2.0^2 / 3)
+        @test df == 2 && nonpsd == false
+        A = [1.5 0.4; 0.4 2.2]; b = [0.7, -1.1]
+        @test hq(b, A)[1] ≈ dot(b, inv(A) * b)           # generalized inverse == inverse when PD
+        # (b) indefinite dV: negative form NOT masked; flagged; df drops to the positive rank
+        chi2n, dfn, np = hq([1.0, 1.0], [1.0 0.0; 0.0 -0.5])
+        @test chi2n < 0 && np == true && dfn == 1
+        # (c) rank-deficient PSD: Moore-Penrose inverse, reduced df, not flagged non-PSD
+        chi2r, dfr, npr = hq([1.0, 1.0], [1.0 0.0; 0.0 0.0])
+        @test chi2r ≈ 1.0 && dfr == 1 && npr == false
     end
 
     # =========================================================================

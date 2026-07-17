@@ -1,4 +1,4 @@
-using Test, MacroEconometricModels, DataFrames, Distributions, Random, Statistics
+using Test, MacroEconometricModels, DataFrames, Distributions, Random, Statistics, LinearAlgebra
 using StatsAPI: coef, vcov, predict, nobs, stderror, confint, loglikelihood, aic, bic, dof, islinear
 
 @testset "estimate_xtlogit -- pooled" begin
@@ -86,6 +86,84 @@ end
 
     # Groups with no variation should be dropped
     @test m.n_groups <= N_g
+end
+
+@testset "FE clogit log-space DP stability (T088)" begin
+    dp = MacroEconometricModels._clogit_dp_logsum
+    # (a) OVERFLOW + closed form (T_g=2, s=1): raw exp overflows to Inf; log-space stays finite
+    ld, p = dp(reshape([1000.0, 1001.0], 2, 1), [1.0], 1)
+    @test isfinite(ld)
+    @test isapprox(ld, 1001.3132616875182; atol=1e-9)     # logaddexp(1000, 1001)
+    @test isapprox(p, [0.2689414213699951, 0.7310585786300049]; atol=1e-8)   # softmax
+    @test all(isfinite, p) && isapprox(sum(p), 1.0)
+
+    # (b) BRUTE-FORCE cross-check (T_g=5, s=2) against explicit subset enumeration
+    rng = Random.MersenneTwister(88); eta = randn(rng, 5) .* 0.5
+    ld5, p5 = dp(reshape(eta, 5, 1), [1.0], 2)
+    subs = [(i, j) for i in 1:5 for j in (i+1):5]
+    denom_bf = sum(exp(eta[i] + eta[j]) for (i, j) in subs)
+    @test isapprox(ld5, log(denom_bf); atol=1e-10)
+    for t in 1:5
+        gt = sum(exp(eta[i] + eta[j]) for (i, j) in subs if t == i || t == j)
+        @test isapprox(p5[t], gt / denom_bf; atol=1e-10)
+    end
+
+    # (c) SCALE-EQUIVARIANCE through _xtlogit_fe: β(50·x) = β(x)/50, equal maximized loglik.
+    #     With large |Xβ| the old raw-exp DP overflowed (NaN); the log-space DP stays valid.
+    rng2 = Random.MersenneTwister(880); N_g = 60; T_p = 8; nn = N_g * T_p
+    ids = repeat(1:N_g, inner=T_p); ts = repeat(1:T_p, N_g)
+    x1 = randn(rng2, nn)
+    alpha = repeat(randn(rng2, N_g), inner=T_p)
+    y = Float64.(rand(rng2, nn) .< 1.0 ./ (1.0 .+ exp.(-(alpha .+ 0.7 .* x1))))
+    m1 = estimate_xtlogit(xtset(DataFrame(id=ids, t=ts, x1=x1, y=y), :id, :t), :y, [:x1]; model=:fe)
+    m2 = estimate_xtlogit(xtset(DataFrame(id=ids, t=ts, x1=50.0 .* x1, y=y), :id, :t), :y, [:x1]; model=:fe)
+    @test all(isfinite, coef(m2))
+    @test isapprox(coef(m2)[1], coef(m1)[1] / 50.0; rtol=1e-4)
+    @test isapprox(loglikelihood(m1), loglikelihood(m2); rtol=1e-5)
+end
+
+@testset "RE/CRE logit adaptive-GH + honest convergence (T087)" begin
+    FD = MacroEconometricModels.ForwardDiff
+    ghnw = MacroEconometricModels._gauss_hermite_nodes_weights
+    agh = MacroEconometricModels._re_logit_agh_loglik
+    fixed = MacroEconometricModels._re_logit_loglik
+
+    rng = Random.MersenneTwister(3071); N = 100; Tp = 8; nn = N * Tp
+    ids = repeat(1:N, inner=Tp); ts = repeat(1:Tp, N)
+    x1 = randn(rng, nn); alpha = repeat(randn(rng, N) .* 1.0, inner=Tp)
+    y = Float64.(rand(rng, nn) .< 1.0 ./ (1.0 .+ exp.(-(alpha .+ 0.7 .* x1))))
+    pd = xtset(DataFrame(id=ids, t=ts, x1=x1, y=y), :id, :t)
+    m = estimate_xtlogit(pd, :y, [:x1]; model=:re)
+    @test m.converged
+    @test all(stderror(m) .> 0)
+
+    # (1) genuine FOC: the reported optimum has a near-zero gradient of the AGH nll
+    X_c = hcat(ones(nn), x1); ug = sort(unique(ids))
+    gobs = Dict(g => findall(==(g), ids) for g in ug)
+    nodes, weights = ghnw(12)
+    nll(th) = -agh(th, y, X_c, ug, gobs, nodes, weights)
+    @test norm(FD.gradient(nll, vcat(coef(m), log(m.sigma_u)))) < 1e-4
+
+    # (3) adaptive-vs-fixed accuracy on a large-σ_u (=3) fixture where fixed GH under-resolves
+    rng2 = Random.MersenneTwister(3072); N2 = 150; Tp2 = 8; n2 = N2 * Tp2
+    ids2 = repeat(1:N2, inner=Tp2)
+    x2 = randn(rng2, n2); a2 = repeat(randn(rng2, N2) .* 3.0, inner=Tp2)
+    y2 = Float64.(rand(rng2, n2) .< 1.0 ./ (1.0 .+ exp.(-(a2 .+ 0.5 .* x2))))
+    Xc2 = hcat(ones(n2), x2); ug2 = sort(unique(ids2))
+    gobs2 = Dict(g => findall(==(g), ids2) for g in ug2)
+    theta_true = [0.0, 0.5, log(3.0)]
+    n12, w12 = ghnw(12); n60, w60 = ghnw(60)
+    ll_ref = agh(theta_true, y2, Xc2, ug2, gobs2, n60, w60)         # high-accuracy AGH-60
+    ll_agh12 = agh(theta_true, y2, Xc2, ug2, gobs2, n12, w12)
+    ll_fix12 = fixed(theta_true, y2, Xc2, ids2, ug2, gobs2, n12, w12)[1]  # old non-adaptive GH-12
+    @test abs(ll_agh12 - ll_ref) < 0.05
+    @test abs(ll_fix12 - ll_ref) > 10 * abs(ll_agh12 - ll_ref)     # AGH substantially beats fixed GH
+
+    # CRE analog: honest convergence, finite SEs, loglik recomputed at the optimum (not stale)
+    mc = estimate_xtlogit(pd, :y, [:x1]; model=:cre)
+    @test mc.converged
+    @test all(stderror(mc) .> 0)
+    @test isfinite(loglikelihood(mc))
 end
 
 @testset "estimate_xtlogit -- RE" begin
@@ -431,4 +509,28 @@ end
     s_probit = String(take!(io))
     @test contains(s_probit, "Probit")
     @test contains(s_probit, "Pooled")
+end
+
+# =============================================================================
+# T089 (#188): M-36 — xtprobit :fe rejected (incidental parameters)
+# =============================================================================
+
+@testset "T089 M-36: xtprobit :fe throws (incidental parameters)" begin
+    rng = Random.MersenneTwister(18936)
+    N_g = 10; T_p = 8; n = N_g * T_p
+    ids = repeat(1:N_g, inner=T_p)
+    ts = repeat(1:T_p, N_g)
+    x1 = randn(rng, n)
+    y = Float64.(x1 .+ 0.5 .* randn(rng, n) .> 0)
+    df = DataFrame(id=ids, t=ts, x1=x1, y=y)
+    pd = xtset(df, :id, :t)
+
+    err = try
+        estimate_xtprobit(pd, :y, [:x1]; model=:fe)
+        nothing
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    @test occursin("incidental parameters", err.msg)
 end

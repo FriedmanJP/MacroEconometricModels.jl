@@ -3534,3 +3534,34 @@ end
 end
 
 end  # @testset "Bayesian DSGE"
+
+# =============================================================================
+# Regression (#139/#141 interaction): posterior-draw irf/fevd/simulate on a
+# model with more endogenous variables than shocks must not trip the
+# stochastic-singularity guard (the rebuild skips the observation equation)
+# =============================================================================
+
+@testset "posterior irf/fevd/simulate with n_endog > n_shocks" begin
+    Random.seed!(13901)
+    spec = @dsge begin
+        parameters: ρ = 0.9, α = 0.33
+        endogenous: Y, K, A
+        exogenous: ε
+        A[t] = ρ * A[t-1] + ε[t]
+        Y[t] = A[t] + α * K[t-1]
+        K[t] = 0.9 * K[t-1] + 0.1 * Y[t]
+    end
+    spec2 = compute_steady_state(spec)
+    sol = solve(spec2; method=:gensys)
+    Y = simulate(sol, 150)
+    b = estimate_dsge_bayes(spec, Y[:, [1]], [0.8];
+                            priors=Dict(:ρ => Beta(5, 2)),
+                            method=:mh, n_draws=200, burnin=80,
+                            observables=[:Y])
+    r = irf(b, 8; n_draws=4)
+    @test size(r.point_estimate) == (8, 3, 1)
+    f = fevd(b, 8; n_draws=4)
+    @test f !== nothing
+    s = simulate(b, 20; n_draws=4)
+    @test s !== nothing
+end
