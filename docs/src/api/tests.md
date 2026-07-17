@@ -141,3 +141,32 @@ phillips_ouliaris_test
 hansen_instability_test
 park_added_test
 ```
+
+---
+
+## Higher-Moment, Bubble & Distribution Test Types
+
+```@docs
+HEGYResult
+ERSResult
+BubbleResult
+BDSResult
+VarianceRatioResult
+EDFTestResult
+EqualityTestResult
+CorTestResult
+DumitrescuHurlinResult
+```
+
+---
+
+## Higher-Moment, Bubble & Distribution Tests
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["teststat/hegy.jl", "teststat/bubble.jl", "teststat/bds.jl", "teststat/variance_ratio.jl", "teststat/edf.jl", "teststat/equality.jl", "teststat/dumitrescu_hurlin.jl"]
+```
+
+```@docs
+cor_test
+```

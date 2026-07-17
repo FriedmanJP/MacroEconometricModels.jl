@@ -103,7 +103,6 @@ MacroEconometricModels.StatsAPI.stderror(::ARIMAModel)
 See [State-Space Models](../statespace.md) for theory and examples.
 
 ```@docs
-AbstractStateSpaceModel
 StateSpaceModel
 estimate_statespace
 local_level
@@ -122,6 +121,11 @@ GARCHModel
 EGARCHModel
 GJRGARCHModel
 GarchMidasModel
+IGARCHModel
+CGARCHModel
+APARCHModel
+FIGARCHModel
+FIEGARCHModel
 SVModel
 VolatilityForecast
 ```
@@ -145,7 +149,18 @@ estimate_garch
 estimate_egarch
 estimate_gjr_garch
 estimate_garch_midas
+estimate_igarch
+estimate_cgarch
+estimate_aparch
+component_variances
 news_impact_curve
+```
+
+### Extended GARCH Diagnostics
+
+```@docs
+sign_bias_test
+nyblom_test
 ```
 
 ### Stochastic Volatility
@@ -158,7 +173,7 @@ estimate_sv
 
 ```@autodocs
 Modules = [MacroEconometricModels]
-Pages   = ["arch/forecast.jl", "garch/forecast.jl", "sv/forecast.jl"]
+Pages   = ["arch/forecast.jl", "garch/forecast.jl", "garch/figarch.jl", "sv/forecast.jl"]
 Order   = [:function]
 ```
 
@@ -207,6 +222,24 @@ MacroEconometricModels.StatsAPI.nobs(::SVModel)
 MacroEconometricModels.StatsAPI.coef(::SVModel)
 MacroEconometricModels.StatsAPI.residuals(::SVModel)
 MacroEconometricModels.StatsAPI.islinear(::SVModel)
+MacroEconometricModels.StatsAPI.coef(::IGARCHModel)
+MacroEconometricModels.StatsAPI.dof(::IGARCHModel)
+MacroEconometricModels.StatsAPI.coef(::CGARCHModel)
+MacroEconometricModels.StatsAPI.dof(::CGARCHModel)
+MacroEconometricModels.StatsAPI.coef(::APARCHModel)
+MacroEconometricModels.StatsAPI.dof(::APARCHModel)
+MacroEconometricModels.StatsAPI.coef(::FIGARCHModel)
+MacroEconometricModels.StatsAPI.dof(::FIGARCHModel)
+MacroEconometricModels.StatsAPI.coef(::FIEGARCHModel)
+MacroEconometricModels.StatsAPI.dof(::FIEGARCHModel)
+MacroEconometricModels.StatsAPI.nobs(::GarchMidasModel)
+MacroEconometricModels.StatsAPI.coef(::GarchMidasModel)
+MacroEconometricModels.StatsAPI.residuals(::GarchMidasModel)
+MacroEconometricModels.StatsAPI.aic(::GarchMidasModel)
+MacroEconometricModels.StatsAPI.bic(::GarchMidasModel)
+MacroEconometricModels.StatsAPI.dof(::GarchMidasModel)
+MacroEconometricModels.StatsAPI.dof_residual(::GarchMidasModel)
+MacroEconometricModels.StatsAPI.islinear(::GarchMidasModel)
 MacroEconometricModels.StatsAPI.stderror(::GJRGARCHModel{T}) where {T}
 MacroEconometricModels.StatsAPI.confint(m::AbstractVolatilityModel)
 MacroEconometricModels.StatsAPI.vcov(::AbstractVolatilityModel)
@@ -277,14 +310,9 @@ MSRegModel
 
 ## Nonlinear Time Series Estimation
 
-```@docs
-estimate_threshold
-estimate_setar
-hansen_linearity_test
-estimate_star
-star_linearity_test
-estimate_ms
-estimate_ms_ar
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["nonlinear/threshold.jl", "nonlinear/star.jl", "nonlinear/markov_switching.jl"]
 ```
 
 ---
@@ -305,4 +333,40 @@ LowessFit
 kernel_density
 kernel_reg
 lowess
+```
+
+---
+
+## MIDAS Regression
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["midas/types.jl", "midas/weights.jl", "midas/estimation.jl", "midas/forecast.jl"]
+```
+
+---
+
+## ARFIMA and Long-Memory
+
+```@docs
+ARFIMAModel
+GPHResult
+LocalWhittleResult
+```
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["arima/arfima.jl"]
+```
+
+---
+
+## Nonlinear & State-Space Forecast Methods
+
+```@docs
+forecast(::StateSpaceModel{T}, ::Integer) where {T<:AbstractFloat}
+forecast(::GarchMidasModel{T}, ::Int) where {T}
+report(::MSRegModel)
+report(::ThresholdModel)
+report(::STARModel)
 ```

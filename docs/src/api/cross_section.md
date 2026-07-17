@@ -73,3 +73,19 @@ estimate_mlogit
 brant_test
 hausman_iia
 ```
+
+---
+
+## Regularized, Robust & Limited-Dependent Regression
+
+```@docs
+PenalizedRegModel
+RobustRegModel
+HeckmanModel
+SelectionResult
+```
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["reg/penalized.jl", "reg/robust.jl", "reg/tobit.jl", "reg/heckman.jl", "reg/selection.jl", "reg/stability.jl", "reg/diagnostics.jl"]
+```
