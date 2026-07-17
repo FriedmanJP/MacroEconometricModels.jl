@@ -1,0 +1,17 @@
+chore: bump version to 0.6.3, update README, regenerate plots
+
+Stage 5-6 (#151-#189, 39 issues) complete on this branch.
+
+- Project.toml -> 0.6.3
+- README: Honest DiD feature line reflects the real Rambachan-Roth
+  implementation (relative-magnitudes + second-difference restrictions,
+  Armstrong-Kolesár FLCIs)
+- docs/generate_plots.jl: two plot recipes predated the v0.6.2
+  stochastic-singularity guard (n_obs > n_shocks with no measurement error
+  now throws by design) — Bayesian DSGE IRF passes measurement_error=:auto,
+  DSGE HD passes explicit measurement SDs
+- Regenerated all 66 D3 plot HTML files: material changes in did_honest
+  (real RR robust CIs + breakdown), reg_marginal_effects (intercept row
+  dropped per T089 M-28), did_event_study/did_bacon (CS influence-function
+  SEs, corrected Bacon weights); remaining diffs are RNG-sequence shifts
+  from upstream estimator fixes in the shared generation script

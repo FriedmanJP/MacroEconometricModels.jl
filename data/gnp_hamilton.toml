@@ -1,0 +1,32 @@
+# Hamilton (1989) US real GNP growth — the canonical Markov-switching AR dataset.
+#
+# 100 × the quarterly log-difference of seasonally-adjusted US real GNP,
+# 1951Q2–1984Q4 (135 observations). This is the series used in Hamilton (1989,
+# Econometrica 57(2)) to fit the MS(2)-AR(4) business-cycle model; regime 1 is the
+# high-growth expansion (μ̂ ≈ 1.16), regime 2 the low-growth recession
+# (μ̂ ≈ −0.36), with staying probabilities p₁₁ ≈ 0.90, p₂₂ ≈ 0.75.
+#
+# Values are the `rgnp` series distributed with Hamilton's replication files and
+# bundled verbatim in statsmodels' regime-switching test data
+# (statsmodels.tsa.regime_switching.tests.test_markov_autoregression.rgnp,
+# statsmodels 0.14.4). Used by load_example(:gnp_hamilton); EV-07 (#415).
+# Source: Hamilton, J. D. (1989). "A New Approach to the Economic Analysis of
+# Nonstationary Time Series and the Business Cycle." Econometrica 57(2), 357–384.
+
+[metadata]
+desc = "Hamilton (1989) US real GNP growth, 1951Q2-1984Q4 (100 x quarterly log-diff)"
+frequency = "Quarterly"
+n_obs = 135
+start_year = 1951
+source = "Hamilton (1989), Econometrica 57(2), 357-384; rgnp replication series"
+source_refs = ["hamilton1989"]
+
+[variables]
+names = ["gnp_growth"]
+tcodes = [1]
+
+[descriptions]
+gnp_growth = "100 x quarterly log-difference of seasonally-adjusted US real GNP, 1951Q2-1984Q4"
+
+[data]
+gnp_growth = [2.5932,2.2022,0.4583,0.9687,-0.2413,0.8965,2.0539,1.7335,0.9387,-0.4648,-0.8098,-1.3976,-0.3989,1.1918,1.4562,2.1181,1.0896,1.3239,0.8730,-0.1977,0.4542,0.0722,1.1030,0.8210,-0.0580,0.5845,-1.5619,-2.0504,0.5364,2.3368,2.3401,1.2339,1.8870,-0.4592,0.8494,1.7014,-0.2876,0.0959,-0.8608,1.0345,1.2369,1.4200,2.2241,1.3021,1.0352,0.9253,-0.1656,1.3444,1.3750,1.7322,0.7161,2.2103,0.8533,1.0024,0.4273,2.1437,1.4379,1.5796,2.2747,1.9596,0.2599,1.0195,0.4902,0.5636,0.5960,1.4308,0.5623,1.1539,1.6872,0.7744,-0.0965,1.3960,0.1365,0.5522,-0.3994,-0.6167,-0.0872,1.2102,-0.9073,2.6492,-0.0081,0.5111,-0.0040,2.1682,1.9259,1.0350,1.8590,2.3200,0.2557,-0.0986,0.8907,-0.5590,0.2835,-1.3116,-0.8828,-1.9745,1.0128,1.6826,1.3827,1.8607,0.4447,0.4145,0.9920,1.3628,1.5997,1.9885,-0.2568,0.8779,3.1096,0.8532,1.2334,0.0031,-0.0943,0.8988,-0.1904,0.9977,-2.3912,0.0665,1.2614,1.9164,-0.3348,0.4421,-1.4066,-1.5213,0.2992,-0.8020,0.1520,0.9859,2.1303,1.3440,1.6155,2.7093,1.2446,0.5084,0.1480]

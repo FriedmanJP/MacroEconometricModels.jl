@@ -310,6 +310,7 @@ ARCH, GARCH, EGARCH, GJR-GARCH, and Stochastic Volatility estimation, forecastin
 | `estimate_garch(y, p, q)` | GARCH(p,q) via MLE |
 | `estimate_egarch(y, p, q)` | EGARCH(p,q) via MLE |
 | `estimate_gjr_garch(y, p, q)` | GJR-GARCH(p,q) via MLE |
+| `estimate_garch_midas(r, x_lf; K, m_freq)` | GARCH-MIDAS long/short-run components |
 | `estimate_sv(y; variant, ...)` | Stochastic Volatility via KSC Gibbs |
 | `forecast(vol_model, h)` | Volatility forecast with simulation CIs |
 | `arch_lm_test(y_or_model, q)` | ARCH-LM test for conditional heteroskedasticity |
@@ -353,6 +354,14 @@ Publication-quality tables, display backend switching, and bibliographic referen
 | `report(result)` | Print comprehensive summary |
 | `table(result, ...)` | Extract results as matrix |
 | `print_table([io], result, ...)` | Print formatted table |
+| `long_table(result)` | Tidy/long `DataFrame` of an array-valued result |
+| `write_csv(result, path)` | Export a result (coefficient table or `long_table`) to CSV |
+| `set_log_level(level)` | Set the global minimum log level |
+| `with_min_level(f, level)` | Run `f()` with a scoped minimum log level |
+| `capture_manifest(; seed)` | Capture a reproducibility manifest (seed, threads, versions, git) |
+| `reproduce(result)` | Re-run a randomized result from its seed; returns a `ReproReport` |
+| `save_model(model, path)` | Persist a fitted model to a versioned container (needs JLD2) |
+| `load_model(path)` | Reconstruct a saved model, validating the format version |
 | `refs(model; format=...)` | Bibliographic references |
 | `refs(io, :method; format=...)` | References by method name |
 
@@ -467,6 +476,12 @@ OLS, WLS, IV/2SLS, logit, probit, ordered, and multinomial estimation for cross-
 | `odds_ratio(m)` | Odds ratios for logit models |
 | `classification_table(m)` | Classification accuracy table |
 | `vif(m)` | Variance inflation factors |
+| `white_test(m)` | White heteroskedasticity test |
+| `breusch_pagan_test(m::RegModel)` | Breusch-Pagan/Koenker heteroskedasticity test |
+| `glejser_test(m)` | Glejser heteroskedasticity test |
+| `harvey_test(m)` | Harvey multiplicative heteroskedasticity test |
+| `breusch_godfrey_test(m; lags)` | Breusch-Godfrey serial-correlation LM test |
+| `reset_test(m; powers)` | Ramsey RESET functional-form test |
 | `brant_test(m)` | Brant test for parallel regression |
 | `hausman_iia(m)` | Hausman test for IIA assumption |
 
@@ -583,6 +598,15 @@ PANIC, Pesaran CIPS, and Moon-Perron panel unit root tests. See [Panel Unit Root
 | `pesaran_cips_test(pd; ...)` | Pesaran (2007) CIPS test |
 | `moon_perron_test(pd; ...)` | Moon-Perron (2004) test |
 | `panel_unit_root_summary(pd; ...)` | Run all panel unit root tests |
+
+### Panel Cointegration Tests
+
+| Function | Description |
+|----------|-------------|
+| `pedroni_test(pd, y, xs...; ...)` | Pedroni (1999, 2004) residual-based test (7 statistics) |
+| `kao_test(pd, y, xs...; ...)` | Kao (1999) residual-based test (5 DF-type statistics) |
+| `westerlund_test(pd, y, xs...; ...)` | Westerlund (2007) ECM test (Gt/Ga/Pt/Pa) |
+| `fisher_johansen_test(pd, ys...; ...)` | Fisher-type (Maddala-Wu/Choi) combined Johansen test |
 
 Within-group lag, lead, and differencing utilities for panel data construction. See [Data Management](data.md) for details.
 

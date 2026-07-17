@@ -283,6 +283,79 @@ function _integrate_se(se_diff::Vector{T}, d::Int) where {T<:AbstractFloat}
 end
 
 # =============================================================================
+# ARFIMA Forecasting (EV-13)
+# =============================================================================
+
+"""Full polynomial convolution a(L)·b(L), returned as a coefficient vector."""
+function _arfima_polymul(a::Vector{T}, b::Vector{T}) where {T<:AbstractFloat}
+    la, lb = length(a), length(b)
+    c = zeros(T, la + lb - 1)
+    @inbounds for i in 1:la, j in 1:lb
+        c[i+j-1] += a[i] * b[j]
+    end
+    c
+end
+
+"""Power-series coefficients of num(L)/den(L) up to lag K (den[1] must be nonzero)."""
+function _arfima_poly_ratio(num::Vector{T}, den::Vector{T}, K::Int) where {T<:AbstractFloat}
+    c = zeros(T, K + 1)
+    @inbounds for k in 0:K
+        s = (k + 1) <= length(num) ? num[k+1] : zero(T)
+        for j in 1:min(k, length(den) - 1)
+            s -= den[j+1] * c[k-j+1]
+        end
+        c[k+1] = s / den[1]
+    end
+    c
+end
+
+"""
+    forecast(model::ARFIMAModel, h; conf_level=0.95, trunc_lag=200) -> ARIMAForecast
+
+`h`-step forecasts for an ARFIMA(p,d,q) model via the truncated AR(∞)/ψ(∞)
+representation. The AR(∞) operator π(L) = φ(L)(1−L)^d/θ(L) drives the point
+recursion on the mean-adjusted series; forecast-error variances use the MA(∞)
+ψ-weights ψ(L) = θ(L)(1−L)^{−d}/φ(L), so Var(e_{n+k}) = σ² Σ_{j=0}^{k−1} ψ_j².
+`trunc_lag` sets the AR(∞) truncation (the fractional weights decay ∝ k^{−1−d}).
+"""
+function forecast(model::ARFIMAModel{T}, h::Int; conf_level::Real=0.95,
+                  trunc_lag::Int=200) where {T<:AbstractFloat}
+    conf_level = T(conf_level)
+    h < 1 && throw(ArgumentError("Forecast horizon h must be positive"))
+    n = length(model.y)
+    d = model.d
+    phi, theta = model.phi, model.theta
+    K = min(trunc_lag, n + h)
+
+    # AR(∞): π(L) = φ(L)(1−L)^d / θ(L). a(L)=1−ΣφLⁱ, b(L)=1+ΣθLʲ.
+    a = vcat(one(T), -phi)
+    b = vcat(one(T), theta)
+    fd = _frac_diff_weights(d, K)
+    pi_w = _arfima_poly_ratio(_arfima_polymul(fd, a), b, K)     # π₀=1, π₁, …
+
+    mu = mean(model.y)
+    x = model.y .- mu
+    x_ext = vcat(x, zeros(T, h))
+    @inbounds for k in 1:h
+        t = n + k
+        s = zero(T)
+        for j in 1:min(K, t - 1)
+            s -= pi_w[j+1] * x_ext[t-j]
+        end
+        x_ext[t] = s
+    end
+    forecasts = mu .+ x_ext[n+1:n+h]
+
+    # MA(∞): ψ(L) = θ(L)(1−L)^{−d} / φ(L)
+    fdinv = _frac_diff_weights(-d, h - 1)
+    psi = _arfima_poly_ratio(_arfima_polymul(fdinv, b), a, h - 1)  # ψ₀=1, …, ψ_{h-1}
+    var_fc = model.sigma2 .* cumsum(psi .^ 2)
+    se = sqrt.(var_fc)
+    ci_lower, ci_upper = _confidence_band(forecasts, se, conf_level)
+    ARIMAForecast(forecasts, ci_lower, ci_upper, se, h, conf_level)
+end
+
+# =============================================================================
 # Convenience Function for StatsAPI
 # =============================================================================
 

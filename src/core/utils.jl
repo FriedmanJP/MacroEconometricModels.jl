@@ -103,33 +103,10 @@ macro float_fallback(func_name, arg_name)
 end
 
 # =============================================================================
-# Warning Suppression
+# Warning Suppression / structured logging
 # =============================================================================
-
-"""
-Logger that forwards only records at or above `min_level` to `inner`, discarding
-lower-severity records. Lets `_suppress_warnings` hide `@warn`/`@info` in noisy
-Monte-Carlo/bootstrap loops while ALWAYS surfacing `@error` — unlike the old
-`NullLogger`, which silently swallowed errors too.
-"""
-struct _MinLevelLogger{L<:Base.CoreLogging.AbstractLogger} <: Base.CoreLogging.AbstractLogger
-    inner::L
-    min_level::Base.CoreLogging.LogLevel
-end
-Base.CoreLogging.min_enabled_level(l::_MinLevelLogger) = l.min_level
-Base.CoreLogging.shouldlog(l::_MinLevelLogger, level, _module, group, id) =
-    level >= l.min_level && Base.CoreLogging.shouldlog(l.inner, level, _module, group, id)
-Base.CoreLogging.handle_message(l::_MinLevelLogger, level, message, _module, group, id,
-                                filepath, line; kwargs...) =
-    Base.CoreLogging.handle_message(l.inner, level, message, _module, group, id,
-                                    filepath, line; kwargs...)
-Base.CoreLogging.catch_exceptions(l::_MinLevelLogger) = Base.CoreLogging.catch_exceptions(l.inner)
-
-"""Suppress `@warn`/`@info` within `f()` while ALWAYS surfacing `@error`. Used in
-bootstrap / Monte-Carlo loops where per-draw warnings are noise but a genuine error must
-never be hidden (T145/#244 — the old `NullLogger` swallowed errors too)."""
-_suppress_warnings(f) = Base.CoreLogging.with_logger(f,
-    _MinLevelLogger(Base.CoreLogging.current_logger(), Base.CoreLogging.Error))
+# `_MinLevelLogger`, `_suppress_warnings`, `with_min_level`, and `set_log_level`
+# live in `core/logging.jl` (included immediately after this file). See T249/#348.
 
 # =============================================================================
 # Matrix Utilities

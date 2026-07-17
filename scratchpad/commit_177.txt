@@ -1,0 +1,32 @@
+fix(teststat): [T078] ADF/PP p-values via MacKinnon (1996) response surface (partial; Johansen deferred) (#177)
+
+ADF/Phillips-Perron p-values used a 3-point piecewise-linear interpolation across the
+tabulated 1/5/10% critical values and, beyond the 10% CV, a raw standard-Normal tail
+(`0.10 + 0.90·(1−Φ(−τ))`) justified by the false claim that the DF statistic converges
+to N(0,1). The Dickey-Fuller limiting distribution is NOT normal, so every reported
+p-value away from the three tabulated points — and the entire >10% region — was wrong,
+with a discontinuous jump at the 10% CV.
+
+Fix (ADF/PP): implement the MacKinnon (1996) response-surface asymptotic p-value
+`p = Φ(P(τ))` (statsmodels `mackinnonp` form) — a quadratic polynomial link for τ ≤ τ*
+and a cubic above it, saturating to 0/1 outside [τ_min, τ_max]. Coefficients (N=1, per
+deterministic case :none/:constant/:trend) added as consts in critical_values.jl
+(transcribed from statsmodels tsa/adfvalues.py, BSD; MacKinnon 1996). New
+`_mackinnon_pvalue(stat, regression)`; `adf_pvalue` keeps its signature (nobs/lags now
+unused — asymptotic surface) and is shared by `adf_test` and `pp_test` (same DF limiting
+distribution), so Phillips-Perron p-values are fixed too. The Normal CDF here is the
+response-surface LINK, not a tail on the raw statistic. Removed the invalid Normal tail.
+
+PARTIAL: the Johansen trace/max-eigenvalue p-values (johansen.jl) have the analogous
+linear-interpolation/extrapolation defect. The correct fix needs the MacKinnon-Haug-
+Michelis (1999) response-surface tables (jc-t.tab / jc-m.tab) or Doornik (1998)
+coefficients, which are not available/verifiable in this environment; the spec forbids
+hand-typing them. Deferred to a follow-up — #177 stays OPEN. Johansen decisions already
+use the tabulated Osterwald-Lenum CVs, which are unchanged.
+
+Tests: "MacKinnon ADF p-values (T078)" — analytic pins (0.01/0.05/0.10 at the asymptotic
+CVs for all three cases; p(-2,:c)=0.2866 etc.), continuity + strict monotonicity in τ,
+beyond-10% sanity (p(-1.94)≈0.31 not the old ≈0.124), [0,1] bound, ArgumentError. Updated
+the stale coverage twin (test_teststat_break_panel_coverage.jl "4 branches" → new surface
+regions). test_unitroot 192/192, break/panel coverage 398/398, vecm/teststat 62/62.
+Ref: MacKinnon (1994, 1996); statsmodels adfvalues.py.

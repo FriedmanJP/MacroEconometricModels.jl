@@ -237,6 +237,97 @@ function _prewhiten_moments(G::AbstractMatrix{T}; radius_cap::T=T(0.97)) where {
 end
 
 """
+    _hac_meat(M::AbstractMatrix{T}, bw::Int, kernel::Symbol) -> Matrix{T}
+
+Shared HAC "meat" kernel: the UN-normalized weighted sum of sample autocovariances
+
+    S = Γ₀ + Σ_{j=1}^{jmax} w(j) (Γⱼ + Γⱼ'),   Γⱼ = M[(j+1):m, :]' M[1:(m-j), :]
+
+for a moment matrix `M` (rows `m`, columns `k`), kernel weights `w(j) = kernel_weight(j, bw, kernel)`.
+Compact kernels truncate at `j = bw`; the quadratic-spectral kernel has infinite support and
+sums to `m-1`. No division by `m` (the sandwich meat convention used by `newey_west`).
+
+This is the single autocovariance-accumulation code path shared by `newey_west` and the
+long-run-variance API (`lrcov`/`lrvar` divide the same accumulator by `T`). Kept byte-identical
+to the historical inline loop so rerouting `newey_west` through it is numerically exact.
+"""
+function _hac_meat(M::AbstractMatrix{T}, bw::Int, kernel::Symbol) where {T<:AbstractFloat}
+    m = size(M, 1)
+    S = M' * M
+    jmax = kernel == :quadratic_spectral ? (m - 1) : bw
+    @inbounds for j in 1:jmax
+        w = kernel_weight(j, bw, kernel, T)
+        w == 0 && continue
+        Mt  = @view M[(j+1):m, :]
+        Mtj = @view M[1:(m-j), :]
+        Gamma_j = Mt' * Mtj  # k × k
+        S .+= w * (Gamma_j + Gamma_j')
+    end
+    return S
+end
+
+"""
+    optimal_bandwidth_nw94(U::AbstractVecOrMat{T}; kernel::Symbol=:bartlett,
+                           prewhiten::Bool=false) -> Int
+
+Newey & West (1994) automatic bandwidth selection (the data-dependent nonparametric
+plug-in, distinct from the Andrews (1991) parametric AR(1) plug-in in
+`optimal_bandwidth_nw`). Multivariate input is aggregated to a scalar series by equal
+weights `h_t = Σᵢ Uₜᵢ` (the `sandwich::bwNeweyWest` convention with unit weights).
+
+Procedure: a pilot lag `n = ⌊c·(T/100)^{mrate}⌋` (c = 4, or 3 when `prewhiten=true`), the
+weighted autocovariance sums `s0 = g_0 + 2*sum(sigma_j)`, `sq = 2*sum(j^q * sigma_j)`, then
+
+    b = γ · ((s^{(q)}/s^{(0)})² · T)^{1/(2q+1)}
+
+with kernel-specific `(γ, q, mrate)`: Bartlett `(1.1447, 1, 2/9)`, Parzen `(2.6614, 2, 4/25)`,
+quadratic-spectral `(1.3221, 2, 2/25)`, Tukey–Hanning `(1.7462, 2, 1/5)`. Returned rounded to
+an integer truncation lag for use with `kernel_weight`.
+
+Reference: Newey, W.K. and West, K.D. (1994), *Review of Economic Studies* 61(4):631–653.
+"""
+function optimal_bandwidth_nw94(U::AbstractMatrix{T}; kernel::Symbol=:bartlett,
+                                prewhiten::Bool=false) where {T<:AbstractFloat}
+    _nw94_bandwidth(vec(sum(U, dims=2)), kernel, prewhiten)
+end
+function optimal_bandwidth_nw94(u::AbstractVector{T}; kernel::Symbol=:bartlett,
+                                prewhiten::Bool=false) where {T<:AbstractFloat}
+    _nw94_bandwidth(collect(u), kernel, prewhiten)
+end
+
+function _nw94_bandwidth(h::AbstractVector{T}, kernel::Symbol, prewhiten::Bool) where {T<:AbstractFloat}
+    n = length(h)
+    n < 4 && return 0
+    mrate, q, gamma = if kernel == :bartlett
+        (T(2) / 9, 1, T(1.1447))
+    elseif kernel == :parzen
+        (T(4) / 25, 2, T(2.6614))
+    elseif kernel == :quadratic_spectral
+        (T(2) / 25, 2, T(1.3221))
+    elseif kernel == :tukey_hanning
+        (T(1) / 5, 2, T(1.7462))
+    else
+        throw(ArgumentError("Unknown kernel: $kernel"))
+    end
+    cconst = prewhiten ? T(3) : T(4)
+    m = floor(Int, cconst * (T(n) / 100)^mrate)
+    m = clamp(m, 1, n - 1)
+
+    sig0 = dot(h, h) / n
+    sig0 ≤ eps(T) && return 0
+    s0 = sig0
+    sq = zero(T)
+    @inbounds for j in 1:m
+        sj = dot(@view(h[(j+1):n]), @view(h[1:(n-j)])) / n
+        s0 += 2sj
+        sq += 2 * T(j)^q * sj
+    end
+    (s0 ≤ zero(T) || !isfinite(sq)) && return m
+    b = gamma * ((sq / s0)^2 * n)^(one(T) / (2q + 1))
+    max(round(Int, b), 0)
+end
+
+"""
     newey_west(X::AbstractMatrix{T}, residuals::AbstractVector{T};
                bandwidth::Int=0, kernel::Symbol=:bartlett, prewhiten::Bool=false,
                XtX_inv::Union{Nothing,AbstractMatrix{T}}=nothing) -> Matrix{T}
@@ -291,19 +382,9 @@ function newey_west(X::AbstractMatrix{T}, residuals::AbstractVector{T};
         end
     end
 
-    # Long-run variance S* of the (possibly whitened) moments.
-    m = size(M, 1)
-    S = M' * M
-    # QS kernel has infinite support → sum all lags to m-1; compact kernels truncate at bw.
-    jmax = kernel == :quadratic_spectral ? (m - 1) : bw
-    @inbounds for j in 1:jmax
-        w = kernel_weight(j, bw, kernel, T)
-        w == 0 && continue
-        Mt  = @view M[(j+1):m, :]
-        Mtj = @view M[1:(m-j), :]
-        Gamma_j = Mt' * Mtj  # k × k
-        S .+= w * (Gamma_j + Gamma_j')
-    end
+    # Long-run variance S* of the (possibly whitened) moments — the shared HAC-meat kernel
+    # (`_hac_meat`) that `lrcov`/`lrvar` also route through (they divide it by T).
+    S = _hac_meat(M, bw, kernel)
 
     # Recolor: S = D S* D', D = (I − Â)^{-1}.
     if recolor_A !== nothing

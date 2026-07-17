@@ -399,3 +399,93 @@ function plot_result(me::MarginalEffects{T};
     save_path !== nothing && save_plot(p, save_path)
     p
 end
+
+# =============================================================================
+# StabilityResult — CUSUM / CUSUM-of-squares path with significance bounds (EV-32)
+# =============================================================================
+
+"""
+    plot_result(r::StabilityResult{T}; title="", save_path=nothing)
+
+Plot a recursive-residual stability test: the CUSUM (`:cusum`) or CUSUM-of-squares
+(`:cusumsq`) statistic path against its upper/lower significance-band lines. The path
+straying outside the dashed bounds signals coefficient instability.
+"""
+function plot_result(r::StabilityResult{T};
+                     title::String="", save_path::Union{String,Nothing}=nothing) where {T}
+    id = _next_plot_id(r.kind == :cusum ? "cusum" : "cusumsq")
+    rows = Vector{Pair{String,String}}[]
+    for i in eachindex(r.tindex)
+        push!(rows, [
+            "x" => _json(r.tindex[i]),
+            "stat" => _json(r.stat_path[i]),
+            "upper" => _json(r.upper[i]),
+            "lower" => _json(r.lower[i]),
+        ])
+    end
+    data = _json_array_of_objects(rows)
+    stat_name = r.kind == :cusum ? "CUSUM" : "CUSUM²"
+    lvl_pct = round(Int, 100 * r.level)
+    series = _series_json(
+        [stat_name, "$(lvl_pct)% bound", "$(lvl_pct)% bound"],
+        [_PLOT_COLORS[1], "#d62728", "#d62728"];
+        keys = ["stat", "upper", "lower"],
+        dash = ["", "6,3", "6,3"])
+    ylabel = r.kind == :cusum ? "CUSUM statistic" : "CUSUM of squares"
+    js = _render_line_js(id, data, series; xlabel = "Observation", ylabel = ylabel)
+    ptitle = (r.kind == :cusum ? "CUSUM Test" : "CUSUM of Squares Test") *
+             (r.crossed ? " — bound crossed" : " — stable")
+    panel = _PanelSpec(id, ptitle, js)
+    isempty(title) && (title = r.kind == :cusum ? "CUSUM Stability Test" :
+                                                  "CUSUM of Squares Stability Test")
+    p = _make_plot([panel]; title = title, ncols = 1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+# =============================================================================
+# InfluenceStats — leverage & Cook's distance (EV-32)
+# =============================================================================
+
+"""
+    plot_result(s::InfluenceStats{T}; title="", save_path=nothing)
+
+Plot observation-level influence diagnostics: a leverage scatter (`h_ii` vs
+observation, with the `2k/n` reference line) and a Cook's distance bar panel.
+"""
+function plot_result(s::InfluenceStats{T};
+                     title::String="", save_path::Union{String,Nothing}=nothing) where {T}
+    n = s.n
+    # Panel 1: leverage scatter with 2k/n reference line.
+    id1 = _next_plot_id("infl_lev")
+    scatter_rows = String[]
+    hi_cut = T(2 * s.k) / T(n)
+    for i in 1:n
+        grp = s.hat[i] > hi_cut ? "High leverage" : "Leverage"
+        push!(scatter_rows, "{\"x\":$(_json(i)),\"y\":$(_json(s.hat[i])),\"group\":$(_json(grp))}")
+    end
+    data1 = "[" * join(scatter_rows, ",\n") * "]"
+    groups1 = "[{\"name\":\"Leverage\",\"color\":\"$(_PLOT_COLORS[1])\"}," *
+              "{\"name\":\"High leverage\",\"color\":\"$(_PLOT_COLORS[4])\"}]"
+    refs1 = "[{\"value\":$(_json(hi_cut)),\"color\":\"#d62728\",\"dash\":\"6,3\"}]"
+    js1 = _render_scatter_js(id1, data1, groups1; ref_lines_json = refs1,
+                             xlabel = "Observation", ylabel = "Leverage (h_ii)")
+    p1 = _PanelSpec(id1, "Leverage (2k/n cutoff)", js1)
+
+    # Panel 2: Cook's distance bar panel.
+    id2 = _next_plot_id("infl_cook")
+    bar_rows = Vector{Pair{String,String}}[]
+    for i in 1:n
+        push!(bar_rows, ["x" => _json(i), "s1" => _json(s.cooksd[i])])
+    end
+    data2 = _json_array_of_objects(bar_rows)
+    s2 = _series_json(["Cook's D"], [_PLOT_COLORS[2]]; keys = ["s1"])
+    js2 = _render_bar_js(id2, data2, s2; mode = "stacked",
+                         xlabel = "Observation", ylabel = "Cook's distance")
+    p2 = _PanelSpec(id2, "Cook's Distance", js2)
+
+    isempty(title) && (title = "Influence Diagnostics")
+    p = _make_plot([p1, p2]; title = title, ncols = 1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end

@@ -1,0 +1,32 @@
+fix(reg): [T072] IV excluded-instrument partial first-stage F + Cragg-Donald/Kleibergen-Paap/Stock-Yogo (#171)
+
+The weak-instrument first-stage F reported the OVERALL regression F (all instruments incl. the
+included exogenous W, using TSS about the grand mean and q = m), which mechanically inflates as
+the included controls W predict the endogenous regressor — contradicting the docstring's own
+"joint significance of excluded instruments" claim (self-admitted "simplified: use all Z" at
+reg/iv.jl:54). Byte-identical bug in preg/iv.jl `_panel_first_stage_f`.
+
+Fix: for each endogenous x_j, partial out W = X[:, non-endogenous] and test the EXCLUDED
+instruments only —
+    F = ((SSR(x_j~W) − SSR(x_j~Z)) / q) / (SSR(x_j~Z) / (n − m)), q = m − #W.
+df2 = n − m was already correct and is unchanged. Added `_partial_out` helper.
+
+Bundled weak-instrument diagnostics (reg/iv.jl), 3 new RegModel fields + a 24-arg back-compat
+outer constructor (test hand-builds and external callers keep compiling):
+  - `_cragg_donald_f`: min generalized eigenvalue of the concentration matrix / q. Equals the
+    partial F for a single endogenous regressor (validated to 1e-6).
+  - `_kleibergen_paap_f`: HC1-robust rk Wald F (exact robust first-stage F for one endogenous
+    regressor; per-regressor minimum otherwise). Reduces to Cragg-Donald under homoskedasticity.
+  - `_stock_yogo_cv`: Stock-Yogo (2005) Table 5.2 10%-maximal-size critical values, one
+    endogenous regressor (q=1..5); `nothing` outside the tabulated range.
+
+Panel side (preg/iv.jl): `_panel_first_stage_f` gains `n_incl` and computes the partial F on the
+transformed data; the 4 estimators pass n_incl (FE = #X_exog, FD/RE = 1+#X_exog, HT = 1 as a
+conservative heuristic since EC2SLS/HT instrument sets are not cleanly partitioned). 3 new
+PanelIVModel fields added (nothing on transformed panel sets — CD/KP/Stock-Yogo are cross-
+sectional weak-IV statistics). Display rows added for both models when the fields are present.
+
+Tests (test/reg/test_reg.jl IV 33→39): manual excluded-instrument partial F pinned to 1e-6 on a
+fixture where the included control strongly predicts x_endog (old overall-F provably larger);
+Cragg-Donald == partial F; Kleibergen-Paap == manually-reconstructed HC1 robust F; Stock-Yogo ==
+19.93 for q=2. Panel IV 70/70 unchanged (partial F still exceeds the fixtures' thresholds).

@@ -396,6 +396,64 @@ Each test reports a Wald ``\chi^2`` statistic, degrees of freedom, and p-value. 
 
 ---
 
+## Restriction Testing on the Cointegrating Structure
+
+The central empirical use of a VECM is testing economic hypotheses on the long-run parameters ``\alpha`` and ``\beta`` via Johansen likelihood-ratio tests. Each test re-solves the reduced-rank eigenproblem on transformed product-moment matrices and forms
+
+```math
+\mathrm{LR} = T \sum_{i=1}^{r} \ln\!\frac{1-\lambda^{*}_i}{1-\lambda_i} \;\sim\; \chi^2(\mathrm{df}),
+```
+
+where ``\lambda_i`` are the unrestricted eigenvalues and ``\lambda^{*}_i`` the restricted ones. The classic testbed is the [`load_example(:denmark)`](@ref) Danish money-demand data (Johansen & Juselius 1990), estimated as a rank-1 VECM.
+
+```@example vecm
+dk = load_example(:denmark)
+Ydk = to_matrix(dk[:, ["LRM", "LRY", "IBO", "IDE"]])
+mdk = estimate_vecm(Ydk, 2; rank=1, varnames=["LRM", "LRY", "IBO", "IDE"])
+cointegrating_rank(mdk)
+```
+
+### ``\beta`` restricted to a known space
+
+[`test_beta_restriction(m, H)`](@ref) tests ``\beta = H\varphi`` (the same restriction on every cointegrating vector), where `H` is ``p \times s`` with ``s \ge r``. The degrees of freedom are ``\mathrm{df} = r(p-s)``. Here we test that the bond and deposit rates enter the long-run relation only through their spread (``\beta_{\mathrm{IBO}} = -\beta_{\mathrm{IDE}}``):
+
+```@example vecm
+H = Float64[1 0 0; 0 1 0; 0 0 1; 0 0 -1]   # imposes IBO = -IDE
+rb = test_beta_restriction(mdk, H)
+report(rb)
+```
+
+### ``\alpha`` restricted and weak exogeneity
+
+[`test_alpha_restriction(m, A)`](@ref) tests ``\alpha = A\psi`` (``\mathrm{df} = r(p-a)``). Its headline special case is [`test_weak_exogeneity(m, vars)`](@ref): the named variables have zero rows in ``\alpha``, so they do not error-correct toward the long-run equilibrium — the central-bank question *"is the policy variable weakly exogenous for the long run?"* With ``m`` = number of tested variables, ``\mathrm{df} = r\cdot m``.
+
+```@example vecm
+we = test_weak_exogeneity(mdk, "LRY")   # is real income weakly exogenous?
+report(we)
+```
+
+### Fully known ``\beta`` and joint restrictions
+
+[`test_known_beta(m, b)`](@ref) tests a completely specified cointegrating space ``\beta = b`` (``\mathrm{df} = r(p-r)``), and [`test_joint_restriction(m, H, A)`](@ref) tests ``\beta = H\varphi`` **and** ``\alpha = A\psi`` jointly via the Johansen–Juselius switching algorithm (``\mathrm{df}`` is the sum of the individual restriction counts).
+
+```@example vecm
+b = reshape(Float64[1, -1, 0, 0], 4, 1)   # unit income elasticity, no rate terms
+rk = test_known_beta(mdk, b)
+(lr = rk.lr_stat, df = rk.df, pvalue = rk.pvalue)
+```
+
+Every test returns a `VECMRestrictionTest{T}` carrying the LR statistic, degrees of freedom, p-value, and a re-estimated `restricted_model::VECMModel` that imposes ``H_0``, so `irf`, `fevd`, and `historical_decomposition` all run on the restricted system:
+
+```@example vecm
+irf(rb.restricted_model, 8)   # IRFs from the spread-restricted VECM
+nothing # hide
+```
+
+!!! note "Non-binding restrictions"
+    The non-binding case ``H = I_p`` (``s = p``) returns ``\mathrm{LR} \approx 0`` with ``\mathrm{df} = 0``; likewise `test_known_beta(m, m.beta)` returns ``\mathrm{LR} \approx 0``. These are useful sanity checks.
+
+---
+
 ## Complete Example
 
 This example demonstrates the full VECM workflow: cointegration testing, estimation, structural analysis, forecasting, and Granger causality.

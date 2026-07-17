@@ -1,0 +1,25 @@
+fix(reg): [T075] WLS covariance uses √W-transformed residuals/design (#174)
+
+WLS standard errors mixed unweighted quantities with the weighted design inverse.
+`estimate_reg` passed the RAW design X and RAW residuals e (not √W·X, √W·e) into
+`_reg_vcov` while using XtXinv=(X'WX)⁻¹, so:
+- :ols  gave σ̂²(X'WX)⁻¹ with σ̂²=(e'e)/(n−k) — unweighted SSR, should be (e'We)/(n−k);
+- HC0–HC3 meat Σ eᵢ²xᵢxᵢ' omitted the wᵢ² factor (should be Σ wᵢ²eᵢ²xᵢxᵢ');
+- HC2/HC3 leverage and :cluster scores dropped the weights too.
+
+Fix: route ALL WLS covariance through the √W-transformed quantities already bound in
+the WLS branch (sqrtW, Xw=√W·X, XtXinv=(X'WX)⁻¹): `resid_t = sqrtW*resid`,
+`vcov_mat = _reg_vcov(Xw, resid_t, cov_type, XtXinv; clusters)`. WLS is OLS on the
+transformed data, so this carries wᵢ²/wᵢ into meat/leverage and makes classical
+σ̂²=(e'We)/(n−k) automatically. `_reg_vcov` (covariance.jl) is unchanged — correct once
+fed transformed inputs; OLS/IV/logit/probit paths untouched. Stored `resid` stays raw
+(interpretation/plotting); only the vcov path uses √W·e. No new inversions.
+
+Out of scope (flagged for a follow-up): the classical F-test/R²/AIC/BIC still use the
+unweighted SSR for WLS (forces a weighted-R² convention decision).
+
+Test: "WLS covariance equivalence (T075)" — exact analytic identity WLS(w) ≡ OLS on
+√w·y,√w·X for coef AND full vcov (atol 1e-10) for cov_type ∈ {:ols,:hc0,:hc1,:hc2,:hc3};
+weight-scale invariance; closed-form classical WLS vcov. All test_reg.jl green.
+Docs: regression.md already documents the transformed-model equivalence (§WLS) — no
+change needed. Ref: Aitken (1936); reliability report (T075).

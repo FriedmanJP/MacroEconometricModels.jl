@@ -322,6 +322,42 @@ Print VECM Granger causality test results.
 """
 report(g::VECMGrangerResult) = show(stdout, g)
 
+"""
+    report(res::VECMRestrictionTest)
+
+Print a Johansen LR restriction-test summary: the statistic, degrees of freedom,
+p-value, restriction description, and the restricted vs. unrestricted eigenvalues
+(EV-38 / #446).
+"""
+report(res::VECMRestrictionTest) = report(stdout, res)
+function report(io::IO, res::VECMRestrictionTest{T}) where {T}
+    hdr = ["LR χ² statistic" _fmt(res.lr_stat; digits=4);
+           "Degrees of freedom" res.df;
+           "P-value" _format_pvalue(res.pvalue);
+           "Cointegrating rank" res.rank;
+           "Converged" string(res.converged)]
+    _pretty_table(io, hdr;
+        title = "VECM Restriction Test — $(res.description)",
+        column_labels = ["", ""],
+        alignment = [:l, :r],
+    )
+    if !isempty(res.eigenvalues_restricted)
+        r = res.rank
+        eig = Matrix{Any}(undef, r, 3)
+        for i in 1:r
+            eig[i, 1] = "λ$i"
+            eig[i, 2] = _fmt(res.eigenvalues_unrestricted[i]; digits=6)
+            eig[i, 3] = _fmt(res.eigenvalues_restricted[i]; digits=6)
+        end
+        _pretty_table(io, eig;
+            title = "Eigenvalues",
+            column_labels = ["", "Unrestricted", "Restricted"],
+            alignment = [:l, :r, :r],
+        )
+    end
+    println(io, "Note: LR = T Σᵢ ln[(1−λ*ᵢ)/(1−λᵢ)] ~ χ²($(res.df)) under H₀.")
+end
+
 # =============================================================================
 # report() - Time Series Filters
 # =============================================================================
@@ -403,13 +439,52 @@ report(hd::BayesianHistoricalDecomposition) = show(stdout, hd)
 report(x::AbstractARIMAModel) = show(stdout, x)
 report(x::AbstractFactorModel) = show(stdout, x)
 report(x::AbstractVolatilityModel) = show(stdout, x)
+report(x::AbstractMGARCHModel) = show(stdout, x)   # EV-16 (#424): CCC/DCC/BEKK
 report(x::AbstractLPModel) = show(stdout, x)
 report(x::AbstractGMMModel) = show(stdout, x)
+# Nonparametric regression & density (EV-33, #441)
+report(x::KernelDensity) = show(stdout, x)
+report(x::KernelRegression) = show(stdout, x)
+report(x::LowessFit) = show(stdout, x)
+
+# --- State-space models (EV-37, #445) ---
+report(ss::StateSpaceModel) = report(stdout, ss)
+function report(io::IO, ss::StateSpaceModel{T}) where {T}
+    if !isfitted(ss)
+        println(io, "State-Space Model (unfitted spec)")
+        println(io, "  n_obs = $(ss.n_obs), n_state = $(ss.n_state), init = :$(ss.init_mode)")
+        return nothing
+    end
+    println(io, "State-Space Model — Maximum Likelihood (prediction-error decomposition)")
+    println(io, "  Observations: $(ss.T_obs)   State dim: $(ss.n_state)   Obs dim: $(ss.n_obs)")
+    println(io, "  Log-likelihood: $(round(ss.loglik, digits=4))   Converged: $(ss.converged)   Init: :$(ss.init_mode)")
+    println(io)
+    if !isempty(ss.theta)
+        # Hyper-parameters (variances / builder θ̂) printed as a plain estimate table.
+        # Standard errors are not delta-propagated here; the "—" columns are intentional.
+        se = fill(T(NaN), length(ss.theta))
+        _coef_table(io, "Hyper-parameters", ss.param_names, Vector{T}(ss.theta), se;
+                    coef_label="Estimate")
+    end
+    # One-step-ahead residual diagnostics (drop missing).
+    r = vec(ss.std_residuals)
+    r = r[.!isnan.(r)]
+    if length(r) > 8
+        lb = ljung_box_test(r; lags=min(10, length(r) ÷ 2))
+        println(io)
+        println(io, "  Std. residual Ljung–Box(", lb.lags, "): Q = ", round(lb.statistic, digits=3),
+                "  p = ", round(lb.pvalue, digits=4))
+    end
+    return nothing
+end
 
 # --- Hypothesis test results ---
 report(x::AbstractUnitRootTest) = show(stdout, x)
 report(x::AbstractNormalityTest) = show(stdout, x)
 report(x::AbstractNonGaussianSVAR) = show(stdout, x)
+# Equality-of-distribution + rank-correlation battery (EV-34, #442)
+report(x::EqualityTestResult) = show(stdout, x)
+report(x::CorTestResult) = show(stdout, x)
 
 # --- Types without abstract parents ---
 report(x::ARIMAForecast) = show(stdout, x)
@@ -454,6 +529,22 @@ report(m::RegModel) = show(stdout, m)
 report(m::LogitModel) = show(stdout, m)
 report(m::ProbitModel) = show(stdout, m)
 report(me::MarginalEffects) = show(stdout, me)
+report(m::PenalizedRegModel) = show(stdout, m)  # EV-03 (#411)
+report(r::SelectionResult) = show(stdout, r)    # EV-04 (#412)
+report(io::IO, r::SelectionResult) = show(io, r)  # EV-04 (#412)
+report(m::TobitModel) = show(stdout, m)         # EV-17 (#425)
+report(m::TruncRegModel) = show(stdout, m)      # EV-17 (#425)
+report(m::HeckmanModel) = show(stdout, m)       # EV-18 (#426)
+report(m::RobustRegModel) = show(stdout, m)          # EV-40 (#448)
+report(io::IO, m::RobustRegModel) = show(io, m)      # EV-40 (#448)
+report(m::CointRegModel) = show(stdout, m)      # EV-10 (#418)
+report(io::IO, m::CointRegModel) = show(io, m)  # EV-10 (#418)
+report(m::SURModel) = show(stdout, m)           # EV-35 (#443)
+report(io::IO, m::SURModel) = show(io, m)       # EV-35 (#443)
+report(m::ThreeSLSModel) = show(stdout, m)      # EV-35 (#443)
+report(io::IO, m::ThreeSLSModel) = show(io, m)  # EV-35 (#443)
+report(m::PanelCointRegModel) = show(stdout, m)      # EV-22 (#430)
+report(io::IO, m::PanelCointRegModel) = show(io, m)  # EV-22 (#430)
 
 # Panel VAR
 report(x::PVARModel) = show(stdout, x)

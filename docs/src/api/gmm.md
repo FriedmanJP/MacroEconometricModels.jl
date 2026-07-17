@@ -37,6 +37,7 @@ Order   = [:function]
 to_unconstrained
 to_constrained
 transform_jacobian
+log_jacobian
 ```
 
 ### GMM Utilities

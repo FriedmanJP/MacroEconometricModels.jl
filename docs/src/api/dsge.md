@@ -105,11 +105,29 @@ estimate_dsge
 
 ```@docs
 estimate_dsge_bayes
+posterior_mode
+PosteriorMode
 posterior_summary
 marginal_likelihood
+bridge_sampling_ml
 bayes_factor
 prior_posterior_table
 posterior_predictive
+mcmc_diagnostics
+MCMCDiagnostics
+trace
+identification_diagnostics
+IdentificationDiagnostics
+learning_rate_check
+LearningRateCheck
+prior_posterior_overlap
+PriorPosteriorOverlap
+prior_predictive
+PriorPredictiveResult
+posterior_predictive_check
+PosteriorPredictiveCheck
+dynare_prior
+InverseGamma1
 ```
 
 ---

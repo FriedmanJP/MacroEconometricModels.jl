@@ -1,0 +1,62 @@
+[ Info: SetupBuildDirectory: setting up build directory.
+[ Info: Doctest: running doctests.
+[ Info: ExpandTemplates: expanding markdown templates.
+[ Info: CrossReferences: building cross-references.
+┌ Warning: Cannot resolve @ref for md"[`IO_CHECKSUMS`](@ref)" in docs/src/io_download.md.
+│ - No docstring found in doc for binding `MacroEconometricModels.IO_CHECKSUMS`.
+│ - No docstring found in doc for binding `Main.IO_CHECKSUMS`.
+└ @ Documenter ~/.julia/packages/Documenter/AXNMp/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`fetch_file`](@ref)" in docs/src/io_download.md.
+│ - No docstring found in doc for binding `MacroEconometricModels.fetch_file`.
+│ - No docstring found in doc for binding `Main.fetch_file`.
+└ @ Documenter ~/.julia/packages/Documenter/AXNMp/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`IO_CHECKSUMS`](@ref)" in docs/src/io_download.md.
+│ - No docstring found in doc for binding `MacroEconometricModels.IO_CHECKSUMS`.
+│ - No docstring found in doc for binding `Main.IO_CHECKSUMS`.
+└ @ Documenter ~/.julia/packages/Documenter/AXNMp/src/utilities/utilities.jl:49
+[ Info: CheckDocument: running document checks.
+[ Info: Populate: populating indices.
+[ Info: RenderDocument: rendering document.
+[ Info: HTMLWriter: rendering HTML pages.
+┌ Warning: Generated HTML over size_threshold_warn limit: api/panel.md
+│     Generated file size: 113.96 (KiB)
+│     size_threshold_warn: 100.0 (KiB)
+│     size_threshold:      900.0 (KiB)
+│     HTML file:           api/panel.html
+└ @ Documenter.HTMLWriter ~/.julia/packages/Documenter/AXNMp/src/html/HTMLWriter.jl:2003
+┌ Warning: Generated HTML over size_threshold_warn limit: lp.md
+│     Generated file size: 103.11 (KiB)
+│     size_threshold_warn: 100.0 (KiB)
+│     size_threshold:      900.0 (KiB)
+│     HTML file:           lp.html
+└ @ Documenter.HTMLWriter ~/.julia/packages/Documenter/AXNMp/src/html/HTMLWriter.jl:2003
+┌ Warning: Generated HTML over size_threshold_warn limit: api/dsge.md
+│     Generated file size: 184.96 (KiB)
+│     size_threshold_warn: 100.0 (KiB)
+│     size_threshold:      900.0 (KiB)
+│     HTML file:           api/dsge.html
+└ @ Documenter.HTMLWriter ~/.julia/packages/Documenter/AXNMp/src/html/HTMLWriter.jl:2003
+┌ Warning: Generated HTML over size_threshold_warn limit: api/univariate.md
+│     Generated file size: 149.48 (KiB)
+│     size_threshold_warn: 100.0 (KiB)
+│     size_threshold:      900.0 (KiB)
+│     HTML file:           api/univariate.html
+└ @ Documenter.HTMLWriter ~/.julia/packages/Documenter/AXNMp/src/html/HTMLWriter.jl:2003
+┌ Warning: Generated HTML over size_threshold_warn limit: index.md
+│     Generated file size: 111.49 (KiB)
+│     size_threshold_warn: 100.0 (KiB)
+│     size_threshold:      900.0 (KiB)
+│     HTML file:           index.html
+└ @ Documenter.HTMLWriter ~/.julia/packages/Documenter/AXNMp/src/html/HTMLWriter.jl:2003
+┌ Warning: Generated HTML over size_threshold_warn limit: api/multivariate.md
+│     Generated file size: 316.91 (KiB)
+│     size_threshold_warn: 100.0 (KiB)
+│     size_threshold:      900.0 (KiB)
+│     HTML file:           api/multivariate.html
+└ @ Documenter.HTMLWriter ~/.julia/packages/Documenter/AXNMp/src/html/HTMLWriter.jl:2003
+┌ Warning: Generated search index over size_threshold_warn limit:
+│     Generated file size: 1.78 (MiB)
+│     search_size_threshold_warn: 500.0 (KiB)
+│     Search index file:   build/search_index.js
+└ @ Documenter.HTMLWriter ~/.julia/packages/Documenter/AXNMp/src/html/HTMLWriter.jl:931
+[ Info: Automatic `version="0.6.6"` for inventory from ../Project.toml

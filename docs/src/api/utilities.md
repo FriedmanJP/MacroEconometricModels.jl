@@ -30,6 +30,18 @@ register_cov_estimator!
 
 ---
 
+## Long-Run Variance Toolkit
+
+```@docs
+lrvar
+lrcov
+lrcov_oneside
+varhac
+optimal_bandwidth_nw94
+```
+
+---
+
 ## Display and References
 
 ```@autodocs
@@ -47,6 +59,32 @@ refs
 ```@docs
 table
 print_table
+long_table
+write_csv
+```
+
+### Logging
+
+```@docs
+set_log_level
+with_min_level
+```
+
+### Reproducibility
+
+```@docs
+ReproManifest
+capture_manifest
+reproduce
+ReproReport
+```
+
+### Serialization
+
+```@docs
+save_model
+load_model
+SERIALIZATION_FORMAT_VERSION
 ```
 
 ---
@@ -75,6 +113,7 @@ MacroModelError
 ConvergenceError
 IdentificationError
 SingularSystemError
+SerializationError
 ```
 
 ---

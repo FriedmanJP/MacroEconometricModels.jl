@@ -1690,6 +1690,63 @@ end
     end
 end
 
+# ── #136 / #142 parity: posterior_mode & posterior_predictive_check route through
+#    the shared _resolve_theta0 / _orient_data helpers (previously positional-only
+#    theta0 + the best-guess _orient_bayes_data heuristic) ──
+
+@testset "posterior_mode: Dict/NamedTuple theta0 + n_obs orientation (#136/#142)" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    data = simulate(solve(spec; method=:gensys), 120; rng=Random.MersenneTwister(7))  # 120×1 (T×n)
+    priors = Dict(:ρ => Beta(2, 2), :σ => InverseGamma(3.0, 1.0))
+
+    pm_vec  = posterior_mode(spec, data, [0.5, 0.5]; priors=priors, observables=[:y])
+    # Scrambled Dict / NamedTuple land on the right parameters → identical mode.
+    pm_dict = posterior_mode(spec, data, Dict(:σ => 0.5, :ρ => 0.5); priors=priors, observables=[:y])
+    pm_nt   = posterior_mode(spec, data, (σ = 0.5, ρ = 0.5); priors=priors, observables=[:y])
+    @test pm_dict.mode ≈ pm_vec.mode
+    @test pm_nt.mode ≈ pm_vec.mode
+    # n×T data (row count == n_obs) accepted and gives the same mode as T×n.
+    pm_nxt = posterior_mode(spec, permutedims(data), [0.5, 0.5]; priors=priors, observables=[:y])
+    @test pm_nxt.mode ≈ pm_vec.mode
+
+    # Wrong-length vector, missing/unknown Dict key, and neither-dim-matches shape all error.
+    @test_throws ArgumentError posterior_mode(spec, data, [0.5]; priors=priors, observables=[:y])
+    @test_throws ArgumentError posterior_mode(spec, data, Dict(:ρ => 0.5); priors=priors, observables=[:y])
+    @test_throws ArgumentError posterior_mode(spec, randn(3, 120), [0.5, 0.5];
+                                              priors=priors, observables=[:y])
+    end
+end
+
+@testset "posterior_predictive_check: T×n and n×T data agree, bad shape errors (#142)" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    data = simulate(solve(spec; method=:gensys), 120; rng=Random.MersenneTwister(7))
+    priors = Dict(:ρ => Beta(2, 2), :σ => InverseGamma(3.0, 1.0))
+    fit = estimate_dsge_bayes(spec, data, [0.5, 0.5]; priors=priors, method=:smc,
+                              observables=[:y], n_smc=80, rng=Random.MersenneTwister(3))
+    ppc_tn = posterior_predictive_check(fit; data=data, n_draws=40, rng=Random.MersenneTwister(1))
+    ppc_nt = posterior_predictive_check(fit; data=permutedims(data), n_draws=40,
+                                        rng=Random.MersenneTwister(1))
+    @test ppc_tn.p_values ≈ ppc_nt.p_values
+    @test_throws ArgumentError posterior_predictive_check(fit; data=randn(3, 120), n_draws=10)
+    end
+end
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Section 7: Posterior Analysis
 # ─────────────────────────────────────────────────────────────────────────────
@@ -3530,6 +3587,814 @@ end
         [:y], nothing, :gensys, NamedTuple())
     @test tag == :highest_posterior_draw
     @test is_determined(sol)
+    end
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Posterior mode + Laplace ML + mode-seeded RWMH proposal (T233 / #332)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "posterior_mode: mode finding + Laplace ML (#332)" begin
+    _suppress_warnings() do
+    rng = Random.MersenneTwister(42)
+
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    true_spec = @dsge begin
+        parameters: ρ = 0.8, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    true_spec = compute_steady_state(true_spec)
+    sol_true = solve(true_spec; method=:gensys)
+    data = simulate(sol_true, 300; rng=rng)'
+
+    priors = Dict(:ρ => Beta(2, 2))
+
+    pm = posterior_mode(spec, data, [0.5]; priors=priors, observables=[:y])
+
+    @test pm isa PosteriorMode{Float64}
+    @test length(pm.mode) == 1
+    @test pm.param_names == [:ρ]
+    @test pm.converged
+    # Mode recovers the true ρ = 0.8 from T=300 simulated observations
+    @test abs(pm.mode[1] - 0.8) < 0.15
+    # Hessian/inverse-Hessian are PD scalars here
+    @test pm.hessian[1, 1] > 0
+    @test pm.inv_hessian[1, 1] > 0
+    @test pm.inv_hessian[1, 1] ≈ 1 / pm.hessian[1, 1] rtol=1e-6
+    @test isfinite(pm.log_posterior)
+    @test isfinite(pm.log_likelihood)
+    @test isfinite(pm.laplace_log_ml)
+    # Laplace ML must be below the log posterior maximum plus the Gaussian volume
+    # term only when det H > 1; sanity: it is finite and differs from log posterior
+    @test pm.laplace_log_ml != pm.log_posterior
+
+    # Mode is a maximizer: log posterior at the mode ≥ at nearby points
+    ll_fn = MacroEconometricModels._build_likelihood_fn(
+        spec, [:ρ], Matrix{Float64}(data), [:y], nothing, :gensys, NamedTuple())
+    prior = MacroEconometricModels._build_bayes_prior(priors)
+    lp(θ) = ll_fn([θ]) + MacroEconometricModels._log_prior([θ], prior)
+    @test pm.log_posterior ≥ lp(pm.mode[1] + 0.05) - 1e-8
+    @test pm.log_posterior ≥ lp(pm.mode[1] - 0.05) - 1e-8
+
+    # transform=false path reaches the same interior mode
+    pm2 = posterior_mode(spec, data, [0.5]; priors=priors, observables=[:y],
+                         transform=false)
+    @test abs(pm2.mode[1] - pm.mode[1]) < 0.02
+
+    # Laplace log-ML agrees with the SMC tempering-path log-ML (documented
+    # tolerance: 1.0 nat on this 1-parameter linear-Gaussian model)
+    smc_fit = estimate_dsge_bayes(spec, data, [0.5];
+        priors=priors, method=:smc, observables=[:y],
+        n_smc=300, rng=Random.MersenneTwister(11))
+    @test abs(pm.laplace_log_ml - marginal_likelihood(smc_fit)) < 1.0
+
+    # show does not error
+    io = IOBuffer()
+    show(io, pm)
+    out = String(take!(io))
+    @test occursin("Posterior Mode", out)
+    end
+end
+
+@testset "posterior_mode: RWMH proposal seeding (proposal=:mode)" begin
+    _suppress_warnings() do
+    rng = Random.MersenneTwister(42)
+
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    true_spec = @dsge begin
+        parameters: ρ = 0.8, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    true_spec = compute_steady_state(true_spec)
+    sol_true = solve(true_spec; method=:gensys)
+    data = simulate(sol_true, 300; rng=rng)'
+
+    priors = Dict(:ρ => Beta(2, 2))
+
+    fit = estimate_dsge_bayes(spec, data, [0.5];
+        priors=priors, method=:mh, proposal=:mode,
+        n_draws=1500, burnin=500, observables=[:y],
+        rng=Random.MersenneTwister(7))
+
+    @test fit isa BayesianDSGE{Float64}
+    # Mode-seeded inverse-Hessian proposal achieves a reasonable acceptance rate
+    # (documented target 0.2–0.4; assert a safe envelope)
+    @test 0.10 < fit.acceptance_rate < 0.60
+    # Posterior mean near truth
+    @test abs(mean(fit.theta_draws[:, 1]) - 0.8) < 0.2
+
+    # Invalid proposal symbol throws
+    @test_throws ArgumentError estimate_dsge_bayes(spec, data, [0.5];
+        priors=priors, method=:mh, proposal=:bogus,
+        n_draws=10, burnin=2, observables=[:y])
+    end
+end
+
+@testset "posterior_mode: non-PD Hessian fallback (flat posterior)" begin
+    _suppress_warnings() do
+    rng = Random.MersenneTwister(42)
+
+    # κ multiplies a zero regressor: the likelihood is flat in κ, and the
+    # Uniform(0,1) prior contributes zero curvature → H ≈ 0 → not PD
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5, κ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + κ * 0.0 * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:gensys)
+    data = simulate(sol, 100; rng=rng)'
+
+    priors = Dict(:κ => Uniform(0.0, 1.0))
+    pm = @test_logs (:warn, r"not finite positive definite") match_mode=:any begin
+        posterior_mode(spec, data, [0.5]; priors=priors, observables=[:y])
+    end
+    @test isnan(pm.laplace_log_ml)
+    # Diagonal fallback proposal is still usable
+    @test isfinite(pm.inv_hessian[1, 1])
+    @test pm.inv_hessian[1, 1] > 0
+    end
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MCMC convergence diagnostics (T234 / #333)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "MCMC diagnostics internals: rank-normalized R̂/ESS/Geweke (#333)" begin
+    M = MacroEconometricModels
+    rng = Random.MersenneTwister(2026)
+
+    # Tied ranks average
+    @test M._tied_ranks([1.0, 2.0, 2.0, 3.0]) == [1.0, 2.5, 2.5, 4.0]
+
+    # Rank normalization: monotone, mean ≈ 0
+    z = M._rank_normalize(reshape(collect(1.0:100.0), 50, 2))
+    @test size(z) == (50, 2)
+    @test abs(mean(z)) < 1e-10
+    @test issorted(vec(z))
+
+    # iid chain: R̂ ≈ 1, ESS ≈ S, Geweke accepts
+    x = randn(rng, 4000)
+    @test M._rhat_rank(x) < 1.02
+    @test 0.5 * 4000 < M._ess_bulk(x) < 2.0 * 4000
+    @test M._ess_tail(x) > 400
+    @test abs(M._geweke_z(x)) < 3.5
+
+    # Sticky AR(1) chain (φ = 0.99): ESS collapses
+    y = zeros(4000)
+    for t in 2:4000
+        y[t] = 0.99 * y[t-1] + 0.1 * randn(rng)
+    end
+    @test M._ess_bulk(y) < 0.2 * 4000
+
+    # Drifting chain: Geweke rejects
+    drift = collect(range(0.0, 3.0; length=2000)) .+ 0.1 .* randn(rng, 2000)
+    @test abs(M._geweke_z(drift)) > 3.0
+
+    # Degenerate constant chain → NaN diagnostics (no crash)
+    @test isnan(M._ess_bulk(fill(1.0, 100)))
+    @test isnan(M._rhat_rank(fill(1.0, 100)))
+    @test isnan(M._ess_tail(fill(1.0, 100)))
+end
+
+@testset "mcmc_diagnostics + trace/acf accessors + low-ESS warning (#333)" begin
+    _suppress_warnings() do
+    rng = Random.MersenneTwister(42)
+
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    true_spec = @dsge begin
+        parameters: ρ = 0.8, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    true_spec = compute_steady_state(true_spec)
+    sol_true = solve(true_spec; method=:gensys)
+    data = simulate(sol_true, 200; rng=rng)'
+
+    priors = Dict(:ρ => Beta(2, 2))
+    fit = estimate_dsge_bayes(spec, data, [0.5];
+        priors=priors, method=:mh, n_draws=2000, burnin=500,
+        observables=[:y], rng=Random.MersenneTwister(123))
+
+    # mcmc_diagnostics returns per-parameter stats on the retained chain
+    d = mcmc_diagnostics(fit)
+    @test d isa MCMCDiagnostics{Float64}
+    @test d.param_names == [:ρ]
+    @test d.n_draws == 1500                    # burnin discarded
+    @test isfinite(d.rhat[1])
+    @test d.rhat[1] < 1.2                      # short but reasonably mixed chain
+    @test 0 < d.ess_bulk[1] <= 1500 * log10(1500.0)
+    @test 0 < d.ess_tail[1]
+    @test isfinite(d.geweke_z[1])
+    @test 0 <= d.geweke_p[1] <= 1
+    @test abs(d.mean[1] - 0.8) < 0.3
+
+    # show does not error and prints the table
+    io = IOBuffer()
+    show(io, d)
+    out = String(take!(io))
+    @test occursin("R-hat", out)
+    @test occursin("ESS", out)
+
+    # trace accessor
+    tr = trace(fit, :ρ)
+    @test tr == fit.theta_draws[:, 1]
+    @test length(tr) == 1500
+    @test_throws ArgumentError trace(fit, :bogus)
+
+    # acf accessor dispatches to the spectral acf
+    a = acf(fit, :ρ; lags=10)
+    @test length(a.acf) == 10
+    @test all(abs.(a.acf) .<= 1.0 .+ 1e-12)
+
+    # low-ESS warning path: an impossible threshold forces the flag
+    ps = @test_logs (:warn, r"bulk ESS below") match_mode=:any begin
+        posterior_summary(fit; min_ess=10^9)
+    end
+    @test ps[:ρ][:low_ess] == 1.0
+    @test haskey(ps[:ρ], :ess_bulk)
+    pt = prior_posterior_table(fit; min_ess=10^9)
+    @test pt[1].low_ess === true
+
+    # relaxed threshold: no flag
+    ps0 = posterior_summary(fit; min_ess=0)
+    @test ps0[:ρ][:low_ess] == 0.0
+
+    # SMC results carry no ESS annotation (weighted particles, not a chain)
+    smc_fit = estimate_dsge_bayes(spec, data, [0.5];
+        priors=priors, method=:smc, n_smc=100,
+        observables=[:y], rng=Random.MersenneTwister(5))
+    pss = posterior_summary(smc_fit)
+    @test !haskey(pss[:ρ], :ess_bulk)
+    # mcmc_diagnostics on SMC draws warns but still computes
+    d2 = @test_logs (:warn, r"not a Markov chain") match_mode=:any begin
+        mcmc_diagnostics(smc_fit)
+    end
+    @test d2 isa MCMCDiagnostics{Float64}
+    end
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Bridge sampling marginal likelihood (T235 / #334)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "bridge_sampling_ml: agrees with SMC and Laplace (#334)" begin
+    _suppress_warnings() do
+    rng = Random.MersenneTwister(42)
+
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    true_spec = @dsge begin
+        parameters: ρ = 0.8, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    true_spec = compute_steady_state(true_spec)
+    sol_true = solve(true_spec; method=:gensys)
+    data = simulate(sol_true, 300; rng=rng)'
+
+    priors = Dict(:ρ => Beta(2, 2))
+
+    fit = estimate_dsge_bayes(spec, data, [0.5];
+        priors=priors, method=:mh, proposal=:mode,
+        n_draws=3000, burnin=1000, observables=[:y],
+        rng=Random.MersenneTwister(7))
+
+    # Estimation context is now stored on the result
+    @test !isempty(fit.data)
+    @test size(fit.data, 1) == 1                  # n_obs × T_obs orientation
+    @test fit.observables == [:y]
+    @test fit.solver == :gensys
+
+    bml = bridge_sampling_ml(fit; rng=Random.MersenneTwister(3))
+    @test isfinite(bml)
+
+    # Documented tolerance: 1 nat against the SMC tempering path and Laplace
+    smc_fit = estimate_dsge_bayes(spec, data, [0.5];
+        priors=priors, method=:smc, observables=[:y],
+        n_smc=300, rng=Random.MersenneTwister(11))
+    @test abs(bml - marginal_likelihood(smc_fit)) < 1.0
+
+    pm = posterior_mode(spec, data, [0.5]; priors=priors, observables=[:y])
+    @test abs(bml - pm.laplace_log_ml) < 1.0
+
+    # Student-t proposal agrees closely with the normal proposal
+    bml_t = bridge_sampling_ml(fit; proposal=:t, df=5, rng=Random.MersenneTwister(3))
+    @test isfinite(bml_t)
+    @test abs(bml_t - bml) < 0.5
+
+    # Works on SMC draws too (context stored for all methods)
+    bml_smc = bridge_sampling_ml(smc_fit; rng=Random.MersenneTwister(3))
+    @test isfinite(bml_smc)
+    @test abs(bml_smc - bml) < 0.5
+
+    # Invalid proposal family throws
+    @test_throws ArgumentError bridge_sampling_ml(fit; proposal=:bogus)
+    end
+end
+
+@testset "bridge_sampling_ml: failure paths return NaN + warn (#334)" begin
+    _suppress_warnings() do
+    rng = Random.MersenneTwister(42)
+
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:gensys)
+    data = simulate(sol, 100; rng=rng)'
+    priors = Dict(:ρ => Beta(2, 2))
+
+    # Chain too short → NaN + warning
+    fit_short = estimate_dsge_bayes(spec, data, [0.5];
+        priors=priors, method=:mh, n_draws=15, burnin=5, observables=[:y],
+        rng=Random.MersenneTwister(9))
+    bml = @test_logs (:warn, r"chain too short") match_mode=:any begin
+        bridge_sampling_ml(fit_short)
+    end
+    @test isnan(bml)
+    end
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Identification diagnostics (T236 / #335)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "identification_diagnostics: Iskrev rank test (#335)" begin
+    # Well-identified AR(1): ρ and σ identified from mean/variance/autocovariance
+    spec_ok = @dsge begin
+        parameters: ρ = 0.6, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec_ok = compute_steady_state(spec_ok)
+    idd = identification_diagnostics(spec_ok, [:ρ, :σ]; observables=[:y])
+    @test idd isa IdentificationDiagnostics{Float64}
+    @test idd.identified
+    @test idd.rank == 2
+    @test idd.n_params == 2
+    @test isempty(idd.null_space) || size(idd.null_space, 2) == 0
+    @test minimum(idd.singular_values) > idd.tol
+
+    # Deliberately unidentified: a and b enter only as the product a·b
+    spec_bad = @dsge begin
+        parameters: a = 0.5, b = 0.9, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = a * b * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec_bad = compute_steady_state(spec_bad)
+    idd2 = @test_logs (:warn, r"unidentified") match_mode=:any begin
+        identification_diagnostics(spec_bad, [:a, :b]; observables=[:y])
+    end
+    @test !idd2.identified
+    @test idd2.rank == 1
+    @test size(idd2.null_space, 2) == 1
+    # Null direction ∝ (a, -b) = (0.5, -0.9) up to sign and normalization
+    v = idd2.null_space[:, 1]
+    v = v / v[1]
+    @test v[2] ≈ -0.9 / 0.5 atol=1e-3
+
+    # show names the unidentified combination
+    io = IOBuffer()
+    show(io, idd2)
+    out = String(take!(io))
+    @test occursin("Unidentified direction", out)
+    @test occursin("NO", out)
+
+    # Input validation
+    @test_throws ArgumentError identification_diagnostics(spec_ok, Symbol[])
+    @test_throws ArgumentError identification_diagnostics(spec_ok, [:ρ]; observables=[:zzz])
+    @test_throws ArgumentError identification_diagnostics(spec_ok, [:ρ]; theta=[0.5, 0.5])
+end
+
+@testset "learning_rate_check + prior_posterior_overlap (#335)" begin
+    _suppress_warnings() do
+    rng = Random.MersenneTwister(42)
+
+    # κ multiplies a zero regressor → data are uninformative about κ
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5, κ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + κ * 0.0 * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    true_spec = @dsge begin
+        parameters: ρ = 0.8, σ = 0.5, κ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + κ * 0.0 * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    true_spec = compute_steady_state(true_spec)
+    data = simulate(solve(true_spec; method=:gensys), 300; rng=rng)'
+
+    priors = Dict(:ρ => Beta(2, 2), :κ => Beta(2, 2))
+    fit = estimate_dsge_bayes(spec, data, [0.5, 0.5];
+        priors=priors, method=:smc, n_smc=300, observables=[:y],
+        rng=Random.MersenneTwister(11))
+
+    # Overlap: κ's posterior is essentially the prior; ρ's is not
+    ppo = prior_posterior_overlap(fit)
+    @test ppo isa PriorPosteriorOverlap{Float64}
+    ik = findfirst(==(:κ), ppo.param_names)
+    ir = findfirst(==(:ρ), ppo.param_names)
+    @test ppo.flagged[ik]
+    @test !ppo.flagged[ir]
+    @test ppo.overlap[ik] > 0.8
+    @test ppo.overlap[ir] < 0.5
+    io = IOBuffer()
+    show(io, ppo)
+    @test occursin("Overlap", String(take!(io)))
+
+    # KPS learning rate: ρ's posterior variance shrinks with T, κ's does not
+    lrc = learning_rate_check(fit; fractions=[0.4, 1.0], n_smc=200,
+                              rng=Random.MersenneTwister(3))
+    @test lrc isa LearningRateCheck{Float64}
+    @test lrc.flagged[findfirst(==(:κ), lrc.param_names)]
+    @test lrc.learning_rate[findfirst(==(:ρ), lrc.param_names)] > 0.2
+    @test size(lrc.post_vars) == (2, 2)
+    io2 = IOBuffer()
+    show(io2, lrc)
+    @test occursin("Learning-Rate", String(take!(io2)))
+
+    # Validation
+    @test_throws ArgumentError learning_rate_check(fit; fractions=[0.5])
+    @test_throws ArgumentError learning_rate_check(fit; fractions=[0.0, 1.0])
+    end
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Prior/posterior predictive checks (T237 / #336)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "prior_predictive + posterior_predictive_check (#336)" begin
+    _suppress_warnings() do
+    rng = Random.MersenneTwister(42)
+
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    priors = Dict(:ρ => Beta(2, 2))
+
+    # Prior predictive: draw-level statistic distribution, sensible variance
+    ppr = prior_predictive(spec, priors; n_draws=100, T_periods=150,
+                           observables=[:y], rng=Random.MersenneTwister(1))
+    @test ppr isa PriorPredictiveResult{Float64}
+    @test ppr.n_draws == 100
+    @test 0 < ppr.n_effective <= 100
+    @test size(ppr.stats) == (ppr.n_effective, length(ppr.stat_names))
+    @test "mean_y" in ppr.stat_names
+    @test "var_y" in ppr.stat_names
+    @test "ar1_y" in ppr.stat_names
+    j = findfirst(==("var_y"), ppr.stat_names)
+    @test isfinite(mean(ppr.stats[:, j]))
+    @test mean(ppr.stats[:, j]) > 0
+    io = IOBuffer()
+    show(io, ppr)
+    @test occursin("Prior Predictive", String(take!(io)))
+
+    # Posterior predictive check on a correctly specified model: interior p-values
+    true_spec = @dsge begin
+        parameters: ρ = 0.8, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    true_spec = compute_steady_state(true_spec)
+    data = simulate(solve(true_spec; method=:gensys), 300; rng=rng)'
+    fit = estimate_dsge_bayes(spec, data, [0.5];
+        priors=priors, method=:smc, n_smc=200, observables=[:y],
+        rng=Random.MersenneTwister(11))
+
+    ppc = posterior_predictive_check(fit; n_draws=150, rng=Random.MersenneTwister(2))
+    @test ppc isa PosteriorPredictiveCheck{Float64}
+    @test ppc.n_effective > 0
+    @test length(ppc.p_values) == length(ppc.stat_names) == length(ppc.observed)
+    @test size(ppc.replicated) == (ppc.n_effective, length(ppc.stat_names))
+    jv = findfirst(==("var_y"), ppc.stat_names)
+    ja = findfirst(==("ar1_y"), ppc.stat_names)
+    @test 0.01 < ppc.p_values[jv] < 0.99      # model reproduces the variance
+    @test 0.01 < ppc.p_values[ja] < 0.99      # ... and the persistence
+    io2 = IOBuffer()
+    show(io2, ppc)
+    @test occursin("p-value", String(take!(io2)))
+
+    # Deliberately misspecified: prior pins ρ ≈ 0.2 while the data have ρ = 0.8
+    # → replicated persistence is far below observed → extreme p-value
+    tight = Dict(:ρ => Beta(60, 240))
+    fit_bad = estimate_dsge_bayes(spec, data, [0.2];
+        priors=tight, method=:smc, n_smc=200, observables=[:y],
+        rng=Random.MersenneTwister(12))
+    ppc_bad = posterior_predictive_check(fit_bad; n_draws=150,
+                                         rng=Random.MersenneTwister(3))
+    @test ppc_bad.p_values[findfirst(==("ar1_y"), ppc_bad.stat_names)] < 0.05
+
+    # Custom stats via NamedTuple contract
+    ppc_c = posterior_predictive_check(fit; n_draws=50, rng=Random.MersenneTwister(4),
+        stats=Y -> (skew_y = mean(((Y[:, 1] .- mean(Y[:, 1])) ./ std(Y[:, 1])).^3),))
+    @test ppc_c.stat_names == ["skew_y"]
+    @test length(ppc_c.p_values) == 1
+
+    # Explicit data argument (T_obs × n_obs orientation) matches stored data
+    ppc_d = posterior_predictive_check(fit; data=Matrix(data'), n_draws=50,
+                                       rng=Random.MersenneTwister(5))
+    @test ppc_d.observed ≈ ppc.observed
+
+    # Regression: model with MORE endogenous series than observables — the
+    # default stats must index by the observables, not by the data columns
+    spec2 = @dsge begin
+        parameters: ρ2 = 0.5, φ2 = 1.5
+        endogenous: y, i
+        exogenous: e
+        y[t] = ρ2 * y[t-1] + e[t]
+        i[t] = φ2 * y[t]
+    end
+    spec2 = compute_steady_state(spec2)
+    data2 = simulate(solve(spec2; method=:gensys), 150; rng=Random.MersenneTwister(6))
+    # Pass only the observed column (dev convention: data columns == observables, #142)
+    fit2 = estimate_dsge_bayes(spec2, data2[:, [1]], [0.5];
+        priors=Dict(:ρ2 => Beta(2, 2)), method=:smc, n_smc=100,
+        observables=[:y], rng=Random.MersenneTwister(13))
+    ppc2 = posterior_predictive_check(fit2; n_draws=25,
+                                      rng=Random.MersenneTwister(14))
+    @test ppc2.stat_names == ["mean_y", "var_y", "ar1_y"]   # no phantom cross-corrs
+    @test all(isfinite, ppc2.observed)
+    end
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Parameter transformations for samplers (T238 / #337)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "sampler transforms: round trip + log-Jacobian (#337)" begin
+    # Positive (0,∞), interval (0,1), unbounded, shifted interval (2,5)
+    pt = ParameterTransform([0.0, 0.0, -Inf, 2.0], [1.0, Inf, Inf, 5.0])
+    theta = [0.3, 1.7, -0.4, 4.2]
+    y = to_unconstrained(pt, theta)
+    @test to_constrained(pt, y) ≈ theta rtol=1e-12
+
+    # log_jacobian equals the log-abs product of the diagonal Jacobian
+    J = transform_jacobian(pt, y)
+    @test log_jacobian(pt, y) ≈ sum(log(abs(J[i, i])) for i in 1:4) rtol=1e-10
+
+    # Finite-difference check of log|dθᵢ/dyᵢ| coordinate by coordinate
+    h = 1e-6
+    for i in 1:4
+        yp = copy(y); yp[i] += h
+        ym = copy(y); ym[i] -= h
+        d_num = (to_constrained(pt, yp)[i] - to_constrained(pt, ym)[i]) / (2h)
+        @test log(abs(J[i, i])) ≈ log(abs(d_num)) atol=1e-6
+    end
+
+    # Numerically stable at extreme y where naive σ(y)(1-σ(y)) under/overflows
+    yext = [-800.0, -800.0, -800.0, 900.0]
+    @test isfinite(log_jacobian(pt, yext))
+end
+
+@testset "RWMH transform=true: boundary-safe walk (#337)" begin
+    _suppress_warnings() do
+    rng = Random.MersenneTwister(42)
+
+    # σ = 0.05 sits near the zero boundary of its positive support
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.05
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    true_spec = @dsge begin
+        parameters: ρ = 0.8, σ = 0.05
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    true_spec = compute_steady_state(true_spec)
+    data = simulate(solve(true_spec; method=:gensys), 300; rng=rng)'
+    priors = Dict(:ρ => Beta(2, 2), :σ => InverseGamma(3.0, 0.2))
+
+    # burnin=2000: dev's burn-in-frozen proposal adaptation (#139) needs enough
+    # tuning events before the freeze for the natural-space (transform=false) walk
+    # to mix on this near-boundary problem; with burnin=1000 the frozen baseline
+    # proposal stays under-scaled and the two parameterizations disagree.
+    fit_t = estimate_dsge_bayes(spec, data, [0.5, 0.1];
+        priors=priors, method=:mh, transform=true,
+        n_draws=5000, burnin=2000, observables=[:y],
+        rng=Random.MersenneTwister(7))
+    fit_u = estimate_dsge_bayes(spec, data, [0.5, 0.1];
+        priors=priors, method=:mh, transform=false,
+        n_draws=5000, burnin=2000, observables=[:y],
+        rng=Random.MersenneTwister(7))
+
+    # Posterior means agree across parameterizations within Monte Carlo error
+    mt = vec(mean(fit_t.theta_draws; dims=1))
+    mu = vec(mean(fit_u.theta_draws; dims=1))
+    @test abs(mt[1] - mu[1]) < 0.1
+    @test abs(mt[2] - mu[2]) < 0.05
+    # ... and recover the truth (ρ = 0.8, σ = 0.05)
+    @test abs(mt[1] - 0.8) < 0.15
+    @test abs(mt[2] - 0.05) < 0.05
+    @test fit_t.acceptance_rate > 0.1
+
+    # The transformed walk never leaves the support by construction —
+    # no proposal is wasted on out-of-bounds values
+    @test all(fit_t.theta_draws[:, 2] .> 0)
+    @test all(0 .< fit_t.theta_draws[:, 1] .< 1)
+
+    # transform composes with the mode-seeded proposal (Σ mapped through D⁻¹)
+    fit_mt = estimate_dsge_bayes(spec, data, [0.5, 0.1];
+        priors=priors, method=:mh, transform=true, proposal=:mode,
+        n_draws=1500, burnin=500, observables=[:y],
+        rng=Random.MersenneTwister(9))
+    @test 0.1 < fit_mt.acceptance_rate < 0.6
+    @test abs(mean(fit_mt.theta_draws[:, 1]) - 0.8) < 0.15
+    end
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Dynare prior-convention shims (T239 / #338)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@testset "dynare_prior: moment-matched constructors (#338)" begin
+    # normal — passthrough
+    d = dynare_prior(:normal, 0.3, 0.05)
+    @test d isa Normal
+    @test mean(d) ≈ 0.3 && std(d) ≈ 0.05
+
+    # gamma — k = m²/s², θ = s²/m
+    g = dynare_prior(:gamma, 1.5, 0.25)
+    @test g isa Gamma
+    @test mean(g) ≈ 1.5 atol=1e-12
+    @test std(g) ≈ 0.25 atol=1e-12
+    @test g.α ≈ 1.5^2 / 0.25^2 atol=1e-10
+
+    # beta — analytic shape parameters
+    b = dynare_prior(:beta, 0.7, 0.1)
+    @test b isa Beta
+    @test mean(b) ≈ 0.7 atol=1e-12
+    @test std(b) ≈ 0.1 atol=1e-12
+    k0 = 0.7 * 0.3 / 0.01 - 1
+    @test b.α ≈ 0.7 * k0 atol=1e-10
+    @test b.β ≈ 0.3 * k0 atol=1e-10
+
+    # generalized beta on (p3, p4) = (0, 0.9)
+    bs = dynare_prior(:beta, 0.5, 0.1; lower=0.0, upper=0.9)
+    @test mean(bs) ≈ 0.5 atol=1e-10
+    @test std(bs) ≈ 0.1 atol=1e-10
+    @test minimum(bs) ≈ 0.0 atol=1e-12
+    @test maximum(bs) ≈ 0.9 atol=1e-12
+
+    # uniform — from (mean, std) or explicit (lower, upper)
+    u = dynare_prior(:uniform, 0.5, 0.1)
+    @test u isa Uniform
+    @test mean(u) ≈ 0.5 && std(u) ≈ 0.1
+    @test dynare_prior(:uniform, 0.0, 0.0; lower=1.0, upper=3.0) == Uniform(1.0, 3.0)
+
+    # validation
+    @test_throws ArgumentError dynare_prior(:beta, 0.5, 0.6)     # std² ≥ m(1−m)
+    @test_throws ArgumentError dynare_prior(:beta, 1.2, 0.1)     # mean outside (0,1)
+    @test_throws ArgumentError dynare_prior(:gamma, -1.0, 1.0)
+    @test_throws ArgumentError dynare_prior(:uniform, 0.0, 0.0; lower=2.0, upper=1.0)
+    @test_throws ArgumentError dynare_prior(:bogus, 1.0, 1.0)
+end
+
+@testset "dynare_prior: inverse gamma on σ (InverseGamma1) (#338)" begin
+    # (mean, std) → (s, ν) inversion reproduces the requested σ-moments
+    ig = dynare_prior(:inv_gamma, 0.02, 0.05)
+    @test ig isa InverseGamma1
+    @test mean(ig) ≈ 0.02 rtol=1e-6
+    @test std(ig) ≈ 0.05 rtol=1e-6
+
+    # The density is Dynare's TYPE-1 kernel on σ (NOT σ²):
+    # log p(x₁) − log p(x₂) = −(ν+1)Δlog x − (s/2)Δ(1/x²)
+    x1, x2 = 0.03, 0.08
+    lhs = logpdf(ig, x1) - logpdf(ig, x2)
+    rhs = -(ig.nu + 1) * (log(x1) - log(x2)) - ig.s / 2 * (1 / x1^2 - 1 / x2^2)
+    @test lhs ≈ rhs rtol=1e-10
+
+    # σ² ~ InverseGamma(ν/2, s/2) — the exact Dynare correspondence
+    @test cdf(ig, 0.05) ≈ cdf(InverseGamma(ig.nu / 2, ig.s / 2), 0.05^2) rtol=1e-10
+
+    # ... and this differs from naively putting the numbers into InverseGamma
+    naive = InverseGamma(0.02, 0.05)
+    @test !(logpdf(ig, 0.05) ≈ logpdf(naive, 0.05))
+
+    # proper density: integrates to 1, quantile/cdf round trip, support
+    xs = range(1e-6, 2.0; length=200_000)
+    @test sum(pdf.(Ref(ig), xs)) * step(xs) ≈ 1.0 atol=5e-3
+    @test cdf(ig, quantile(ig, 0.3)) ≈ 0.3 rtol=1e-8
+    @test logpdf(ig, -0.1) == -Inf
+    @test minimum(ig) == 0.0 && maximum(ig) == Inf
+
+    # draw-based moments on a milder prior (ν ≈ 14.7 — 4th moment exists)
+    ig_mild = dynare_prior(:inv_gamma, 0.5, 0.1)
+    rng = Random.MersenneTwister(1)
+    draws = [rand(rng, ig_mild) for _ in 1:100_000]
+    @test mean(draws) ≈ 0.5 rtol=0.02
+    @test std(draws) ≈ 0.1 rtol=0.05
+
+    # :inv_gamma2 is on the variance with matched moments
+    igv = dynare_prior(:inv_gamma2, 0.004, 0.002)
+    @test igv isa InverseGamma
+    @test mean(igv) ≈ 0.004 rtol=1e-12
+    @test std(igv) ≈ 0.002 rtol=1e-12
+
+    # direct (s, ν) constructor validation
+    @test_throws ArgumentError InverseGamma1(-1.0, 3.0)
+    @test_throws ArgumentError InverseGamma1(1.0, -3.0)
+end
+
+@testset "dynare_prior: end-to-end in estimate_dsge_bayes (#338)" begin
+    _suppress_warnings() do
+    rng = Random.MersenneTwister(42)
+    spec = @dsge begin
+        parameters: ρ = 0.5, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    ts = @dsge begin
+        parameters: ρ = 0.8, σ = 0.5
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state = [0.0]
+    end
+    ts = compute_steady_state(ts)
+    data = simulate(solve(ts; method=:gensys), 200; rng=rng)'
+
+    priors = Dict{Symbol,Distribution}(
+        :ρ => dynare_prior(:beta, 0.5, 0.2),
+        :σ => dynare_prior(:inv_gamma, 0.5, 0.3))
+    fit = estimate_dsge_bayes(spec, data, [0.5, 0.5];
+        priors=priors, method=:smc, n_smc=200, observables=[:y],
+        rng=Random.MersenneTwister(3))
+    ps = posterior_summary(fit)
+    @test abs(ps[:ρ][:mean] - 0.8) < 0.25
+    @test abs(ps[:σ][:mean] - 0.5) < 0.2
     end
 end
 

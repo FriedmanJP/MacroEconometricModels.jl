@@ -100,21 +100,27 @@ function nonlinear_constraint(fn::Function; label::String="constraint")
 end
 
 # =============================================================================
-# Dispatch stubs — JuMP extension overrides these methods
+# Constrained-solver dispatch
 # =============================================================================
+# JuMP + Ipopt are full dependencies (#461): methods for `_jump_*` are always
+# provided by src/dsge/jump_solvers.jl, so `_check_jump_loaded` is now a no-op
+# guard kept for API stability. PATHSolver remains a weak dependency, so the
+# `_path_*` methods are added by the PATHSolver extension only when it is loaded.
 
-const _JUMP_INSTALL_MSG = "JuMP + Ipopt not loaded. NLopt handles most constrained problems by default.\n" *
-    "For explicit JuMP/Ipopt use, install with:\n" *
-    "  using Pkg; Pkg.add(\"JuMP\"); Pkg.add(\"Ipopt\")\n" *
-    "Then load: import JuMP, Ipopt"
+const _JUMP_INSTALL_MSG = "JuMP + Ipopt not loaded."   # retained for API stability; JuMP/Ipopt are hard deps
+const _PATH_INSTALL_MSG = "PATHSolver not loaded. The PATH MCP solver is optional (proprietary binary).\n" *
+    "Install with:\n" *
+    "  using Pkg; Pkg.add(\"PATHSolver\")\n" *
+    "Then load: import PATHSolver"
 
-# Function declarations — JuMP extension adds methods to these.
-# Without the extension loaded, calling these gives MethodError; callers check first.
+# Generic-function declarations. `_jump_*` methods live in jump_solvers.jl (always
+# loaded); `_path_*` methods are added by the PATHSolver extension when present.
 function _jump_compute_steady_state end
 function _jump_perfect_foresight end
 function _path_compute_steady_state end
 function _path_perfect_foresight end
 
+# JuMP + Ipopt are hard deps, so this always passes; kept for backward compatibility.
 function _check_jump_loaded()
     if !hasmethod(_jump_compute_steady_state, Tuple{DSGESpec, Vector})
         throw(ArgumentError(_JUMP_INSTALL_MSG))
@@ -125,6 +131,14 @@ end
 """Check if PATHSolver is loaded (extension adds method to `_path_compute_steady_state`)."""
 function _path_available()
     return hasmethod(_path_compute_steady_state, Tuple{DSGESpec, Vector})
+end
+
+"""Throw an informative error if the optional PATHSolver extension is not loaded."""
+function _check_path_loaded()
+    if !_path_available()
+        throw(ArgumentError(_PATH_INSTALL_MSG))
+    end
+    return nothing
 end
 
 """

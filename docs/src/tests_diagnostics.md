@@ -8,6 +8,7 @@ Post-estimation specification testing validates the assumptions underlying stati
 - **ARCH Diagnostics**: Engle (1982) ARCH-LM test and Ljung-Box on squared residuals
 - **Model Comparison**: Likelihood ratio (Wilks 1938) and Lagrange multiplier (Rao 1948) tests for nested models
 - **Panel VAR Diagnostics**: Hansen J-test, Andrews-Lu MMSC, and lag selection for GMM-estimated Panel VARs
+- **Variance-Ratio Tests**: Lo-MacKinlay (1988), Chow-Denning (1993), Wright (2000) rank/sign, and Kim (2006) wild bootstrap for the random-walk hypothesis
 
 ```@setup test_diag
 using MacroEconometricModels, Random, DataFrames
@@ -356,6 +357,57 @@ Neither Q² statistic is significant, indicating no serial correlation in the sq
 
 ---
 
+## BDS Independence Test
+
+The Ljung-Box and ARCH-LM tests detect only *linear* dependence or conditional heteroskedasticity of a known form. The Brock-Dechert-Scheinkman-LeBaron (BDS) test (Brock, Dechert, Scheinkman & LeBaron 1996) detects *any* departure from independence and identical distribution --- nonlinear serial dependence, neglected conditional heteroskedasticity, or deterministic chaos --- and is the canonical post-ARIMA/post-GARCH adequacy check.
+
+The test compares the correlation integral of the ``m``-dimensional embedding of the series with what independence would imply. For a distance threshold ``\varepsilon`` and the indicator ``\Theta_{ij} = \mathbf{1}(|y_i - y_j| < \varepsilon)``, the correlation integral is
+
+```math
+C_m(\varepsilon) = \frac{2}{T_m(T_m-1)} \sum_{s < t} \prod_{k=0}^{m-1} \Theta_{s+k,\, t+k}, \qquad T_m = T - m + 1 ,
+```
+
+and the standardized statistic is
+
+```math
+w_m = \sqrt{T}\, \frac{C_m(\varepsilon) - C_1(\varepsilon)^m}{\sigma_m(\varepsilon)} \xrightarrow{d} N(0, 1) ,
+```
+
+where:
+- ``C_1(\varepsilon)`` is the first-order correlation integral (full sample)
+- ``\sigma_m(\varepsilon)`` is the asymptotic standard deviation (Brock et al. 1996), a function of ``C_1`` and the triple-overlap probability ``K``
+- ``m`` is the embedding dimension and ``\varepsilon = \texttt{eps\_frac} \cdot \operatorname{sd}(y)``
+
+Under ``H_0`` the observations are iid; large ``|w_m|`` (two-sided) rejects independence. The result reports one row per ``(m, \varepsilon)`` pair.
+
+```@example test_diag
+# A: iid data — should NOT reject independence
+x = randn(400)
+report(bds_test(x; m=2:3, eps_frac=1.0))
+```
+
+```@example test_diag
+# B: deterministic chaos (logistic map) — strongly rejected
+z = Vector{Float64}(undef, 400); z[1] = 0.3
+for t in 2:400
+    z[t] = 4 * z[t-1] * (1 - z[t-1])
+end
+report(bds_test(z; m=2:3, eps_frac=0.7))
+```
+
+For fitted models, pass the model object directly: `bds_test(model)` tests ARIMA residuals, and for volatility models it tests the **standardized** residuals ``\hat{\varepsilon}_t / \hat{\sigma}_t`` (testing raw returns would merely re-detect the volatility clustering the model already removed).
+
+```@example test_diag
+# Post-GARCH adequacy check on standardized residuals
+g = estimate_garch(randn(600))
+report(bds_test(g; m=2, eps_frac=[1.0, 1.5]))
+```
+
+!!! note "Small samples and the bootstrap"
+    The asymptotic ``N(0,1)`` approximation is unreliable for ``T < 200`` (a warning is emitted). For short series pass `bootstrap=500` (or more): each replication permutes the series to impose the iid null and recomputes ``w_m``, yielding a permutation p-value that does not rely on the asymptotic distribution.
+
+---
+
 ## Model Comparison Tests
 
 The classical trinity of specification tests --- Wald, likelihood ratio (LR), and Lagrange multiplier (LM) --- provides asymptotically equivalent tests for nested model hypotheses. MacroEconometricModels.jl implements the LR and LM tests with automatic detection of the restricted and unrestricted models.
@@ -516,6 +568,162 @@ Each criterion reports its own optimal lag order; when they agree, the selected 
 
 ---
 
+## EDF Goodness-of-Fit Tests
+
+Empirical-distribution-function (EDF) tests compare the sample distribution to a hypothesized continuous distribution through the probability-integral transform ``z_{(i)} = F(y_{(i)}; \theta)``. Unlike the moment-based normality suite above, `edf_test` tests fit against any of seven parametric families and reports the Kolmogorov–Smirnov, Lilliefors, Cramér–von Mises, Anderson–Darling, or Watson statistic. This matches EViews' *Empirical distribution tests* and is the standard tool for checking residuals, PIT transforms, or loss series in risk and forecast-evaluation work.
+
+The five statistics summarise the gap between the empirical and hypothesized CDFs differently:
+
+```math
+\begin{aligned}
+D   &= \max_i\left[\max\left(\tfrac{i}{n} - z_{(i)},\; z_{(i)} - \tfrac{i-1}{n}\right)\right] & &\text{(Kolmogorov–Smirnov)}\\
+W^2 &= \frac{1}{12n} + \sum_{i=1}^n\left(z_{(i)} - \frac{2i-1}{2n}\right)^2 & &\text{(Cramér–von Mises)}\\
+A^2 &= -n - \frac{1}{n}\sum_{i=1}^n (2i-1)\left[\ln z_{(i)} + \ln\!\left(1 - z_{(n+1-i)}\right)\right] & &\text{(Anderson–Darling)}\\
+U^2 &= W^2 - n\left(\bar{z} - \tfrac{1}{2}\right)^2 & &\text{(Watson)}
+\end{aligned}
+```
+
+where
+
+- ``z_{(i)}`` are the sorted PIT values,
+- ``n`` is the sample size,
+- ``\bar{z}`` is the mean of the PIT values.
+
+The Anderson–Darling statistic places the most weight on the tails and is the recommended default.
+
+**Specified versus estimated parameters.** When the distribution parameters are known, `params=:specified` uses distribution-free asymptotics (the Marsaglia–Tsang–Wang exact Kolmogorov CDF for ``n \le 100``, the Marsaglia–Marsaglia ADinf distribution for ``A^2``, and asymptotic tables for ``W^2``/``U^2``). When parameters are estimated from the data, the statistics are no longer distribution-free; for the normal family `edf_test` applies the Stephens (1974) modified statistics with the D'Agostino & Stephens (1986) closed-form p-values, and the Dallal–Wilkinson (1986) approximation for the Lilliefors (estimated-normal KS) statistic.
+
+```@example test_diag
+using Distributions
+z = rand(MersenneTwister(7), Normal(0.5, 2.0), 300)
+
+# Anderson–Darling with estimated normal parameters (Stephens Case 3)
+report(edf_test(z; dist=:normal, test=:ad, params=:estimate))
+```
+
+The high p-value fails to reject normality, as expected for Gaussian data. Testing the same series against a fully specified null uses the distribution-free route:
+
+```@example test_diag
+# Kolmogorov–Smirnov against a fully specified N(0, 1) — a poor fit here
+report(edf_test(z; dist=:normal, test=:ks, params=:specified, theta=(0.0, 1.0)))
+```
+
+Non-normal families are supported for the specified route and (where a published null table exists) the estimated route:
+
+```@example test_diag
+# Exponential duration data, Anderson–Darling, parameters estimated by ML
+d = rand(MersenneTwister(11), Exponential(1.5), 200)
+r = edf_test(d; dist=:exponential, test=:ad, params=:specified, theta=(1.5,))
+(statistic = round(r.statistic, digits=4), pvalue = round(r.pvalue, digits=4))
+```
+
+`edf_test` accepts `dist ∈ (:normal, :exponential, :logistic, :gumbel, :gamma, :weibull, :chisq)` and `test ∈ (:ks, :lilliefors, :cvm, :ad, :watson)`. For estimated-parameter families without a published null distribution, the statistic is returned with `pvalue = NaN` and an explanatory case label rather than an incorrect number.
+
+**Return value.** `EDFTestResult{T}` stores `test`, `dist`, `params`, `statistic` (the value compared to the critical values), `raw_statistic` (the unmodified EDF statistic), `pvalue`, `nobs`, the fitted or specified `theta`, the `critical_values` dictionary, and a human-readable `case` label.
+## Variance-Ratio Tests
+
+The variance-ratio test evaluates the **random-walk (martingale) hypothesis** for a level series such as a log price or log exchange rate. Under a random walk the variance of the ``q``-period increment grows linearly in ``q``, so the variance ratio equals one for every aggregation ``q``:
+
+```math
+VR(q) = \frac{\operatorname{Var}(y_t - y_{t-q})}{q \, \operatorname{Var}(y_t - y_{t-1})}.
+```
+
+`variance_ratio_test` treats its argument as the **level** series and works internally with first differences (returns) ``x_t = y_t - y_{t-1}``. It reports the overlapping Lo–MacKinlay (1988) estimator with the unbiased normalizer ``m = q(N-q+1)(1-q/N)``, the homoskedastic statistic ``Z(q)`` and the heteroskedasticity-robust ``Z^*(q)`` (both asymptotically ``N(0,1)``), and the Chow–Denning (1993) joint statistic ``\max_q |Z(q)|`` whose p-value comes from the studentized-maximum-modulus complement ``1 - (2\Phi(\cdot) - 1)^m``.
+
+- ``VR(q) > 1`` — positive autocorrelation in returns (trending / momentum)
+- ``VR(q) < 1`` — negative autocorrelation (mean reversion)
+
+```@example test_diag
+rw = cumsum(randn(600))            # a simulated random walk (level series)
+vr = variance_ratio_test(rw; q=[2, 4, 8, 16])
+show(stdout, vr)
+```
+
+The Chow–Denning joint test controls the overall size across all ``q`` simultaneously — unlike inspecting each ``Z(q)`` separately, it does not inflate the familywise error rate.
+
+### Wright rank/sign and wild-bootstrap variants
+
+`method=:wright` adds Wright's (2000) rank (``R1``, ``R2``) and sign (``S1``) statistics, whose exact iid-null distributions are simulated on demand (and cached). These are robust to non-normality and often more powerful in small samples. `bootstrap=B` adds Kim's (2006) wild-bootstrap p-values for ``Z^*(q)`` and the Chow–Denning statistic.
+
+```@example test_diag
+ar1 = zeros(800)
+for t in 2:800
+    ar1[t] = 0.5 * ar1[t-1] + randn()   # mean-reverting: not a random walk
+end
+vr2 = variance_ratio_test(ar1; q=[2, 4, 8], method=:wright, bootstrap=299)
+(vr = round.(vr2.vr, digits=3),
+ cd_star = round(vr2.cd_star_stat, digits=3),
+ cd_boot_p = round(vr2.cd_boot_pvalue, digits=4))
+```
+
+The mean-reverting AR(1) level drives ``VR(q)`` below one and the robust Chow–Denning test rejects the random-walk null.
+## Basic Statistics: Equality-of-Distribution and Rank Correlation Tests
+
+The "Basic statistics" battery compares the location, scale, or distribution of a response across the groups of a classifier, and measures the association between two series. This delivers EViews "Equality Tests by Classification" parity. The single entry point `equality_test(y, g; test=...)` groups `y` by the distinct values of `g`; `cor_test(x, y; method=...)` returns a rank/product-moment correlation. Both dispatch on `CrossSectionData`/`PanelData` via column symbols.
+
+Location tests: one/two-sample and paired t (pooled or Welch/Satterthwaite), one-way ANOVA (classic F or Welch), Mann–Whitney U, Wilcoxon signed-rank, Kruskal–Wallis H, van der Waerden normal-scores, and the Mood median χ². Scale tests: two-group variance F, Bartlett, Levene (center = group mean), Brown–Forsythe (center = group median), and Siegel–Tukey. The rank tests use the exact null for small tie-free samples and otherwise a continuity- and tie-corrected normal approximation, mirroring R's `wilcox.test`/`kruskal.test` behavior.
+
+!!! note "Grouped data vs. regression residuals"
+    The Levene and Brown–Forsythe tests here operate on **raw data split by a classifier**. For the regression-residual heteroskedasticity variants (deviations of fitted residuals), use the diagnostics in the cross-sectional regression module.
+
+```@setup test_basicstat
+using MacroEconometricModels, Random
+```
+
+Compare a response across three groups and test dispersion and association:
+
+```@example test_basicstat
+# three groups of a response
+g1 = [5.1, 4.9, 6.2, 5.7, 6.0, 5.5]
+g2 = [6.1, 5.9, 7.2, 6.8, 6.5]
+g3 = [7.0, 7.5, 6.9, 8.1, 7.3, 7.8]
+y = vcat(g1, g2, g3)
+grp = vcat(fill(1, 6), fill(2, 5), fill(3, 6))
+
+# one-way ANOVA (equal-variance F)
+report(anova_test(y, grp))
+```
+
+```@example test_basicstat
+# Welch ANOVA (unequal variances) and the tie-corrected Kruskal–Wallis H
+report(equality_test(y, grp; test=:anova, equal_var=false))
+report(equality_test(y, grp; test=:kruskal_wallis))
+```
+
+```@example test_basicstat
+# scale: Bartlett and the robust Brown–Forsythe test
+report(equality_test(y, grp; test=:bartlett))
+report(equality_test(y, grp; test=:brown_forsythe))
+```
+
+Two-sample location and the Mann–Whitney U (exact null when tie-free):
+
+```@example test_basicstat
+y12 = vcat(g1, g2); grp12 = vcat(fill(1, 6), fill(2, 5))
+report(equality_test(y12, grp12; test=:t, equal_var=false))  # Welch t, groups 1 & 2
+```
+
+```@example test_basicstat
+report(equality_test(y12, grp12; test=:mann_whitney))
+```
+
+Association between two series — Pearson, Spearman, and Kendall τ_b (the
+concordant−discordant count is computed in `O(n log n)` via a merge-sort inversion
+counter):
+
+```@example test_basicstat
+x = [10.0, 8, 13, 9, 11, 14, 6, 4, 12, 7, 5]
+z = [8.04, 6.95, 7.58, 8.81, 8.33, 9.96, 7.24, 4.26, 10.84, 4.82, 5.68]
+report(cor_test(x, z; method=:pearson))
+```
+
+```@example test_basicstat
+report(cor_test(x, z; method=:spearman))
+report(cor_test(x, z; method=:kendall))
+```
+
+---
+
 ## Complete Example
 
 A full post-estimation diagnostic workflow for a VAR model estimated on FRED-MD data:
@@ -572,7 +780,35 @@ show(stdout, lr23)
 
 - Andrews, D. W. K., & Lu, B. (2001). Consistent Model and Moment Selection Procedures for GMM Estimation with Application to Dynamic Panel Data Models. *Journal of Econometrics*, 101(1), 123-164. [DOI](https://doi.org/10.1016/S0304-4076(00)00077-4)
 
+- Bartlett, M. S. (1937). Properties of Sufficiency and Statistical Tests. *Proceedings of the Royal Society A*, 160(901), 268-282. [DOI](https://doi.org/10.1098/rspa.1937.0109)
+
+- Brown, M. B., & Forsythe, A. B. (1974). Robust Tests for the Equality of Variances. *Journal of the American Statistical Association*, 69(346), 364-367. [DOI](https://doi.org/10.1080/01621459.1974.10482955)
+
+- Kendall, M. G. (1938). A New Measure of Rank Correlation. *Biometrika*, 30(1/2), 81-93. [DOI](https://doi.org/10.1093/biomet/30.1-2.81)
+
+- Knight, W. R. (1966). A Computer Method for Calculating Kendall's Tau with Ungrouped Data. *Journal of the American Statistical Association*, 61(314), 436-439. [DOI](https://doi.org/10.1080/01621459.1966.10480879)
+
+- Kruskal, W. H., & Wallis, W. A. (1952). Use of Ranks in One-Criterion Variance Analysis. *Journal of the American Statistical Association*, 47(260), 583-621. [DOI](https://doi.org/10.1080/01621459.1952.10483441)
+
+- Mann, H. B., & Whitney, D. R. (1947). On a Test of Whether one of Two Random Variables is Stochastically Larger than the Other. *The Annals of Mathematical Statistics*, 18(1), 50-60. [DOI](https://doi.org/10.1214/aoms/1177730491)
+
+- Spearman, C. (1904). The Proof and Measurement of Association between Two Things. *The American Journal of Psychology*, 15(1), 72-101. [DOI](https://doi.org/10.2307/1412159)
+
+- van der Waerden, B. L. (1952). Order Tests for the Two-Sample Problem and Their Power. *Indagationes Mathematicae*, 14, 453-458.
+
+- Wilcoxon, F. (1945). Individual Comparisons by Ranking Methods. *Biometrics Bulletin*, 1(6), 80-83. [DOI](https://doi.org/10.2307/3001968)
+
 - Berndt, E. R., & Savin, N. E. (1977). Conflict Among Criteria for Testing Hypotheses in the Multivariate Linear Regression Model. *Econometrica*, 45(5), 1263-1277. [DOI](https://doi.org/10.2307/1914072)
+
+- Anderson, T. W., & Darling, D. A. (1954). A Test of Goodness of Fit. *Journal of the American Statistical Association*, 49(268), 765-769. [DOI](https://doi.org/10.1080/01621459.1954.10501232)
+
+- D'Agostino, R. B., & Stephens, M. A. (1986). *Goodness-of-Fit Techniques*. New York: Marcel Dekker. ISBN 978-0-8247-7487-5.
+
+- Dallal, G. E., & Wilkinson, L. (1986). An Analytic Approximation to the Distribution of Lilliefors's Test Statistic for Normality. *The American Statistician*, 40(4), 294-296. [DOI](https://doi.org/10.1080/00031305.1986.10475419)
+- Chow, K. V., & Denning, K. C. (1993). A Simple Multiple Variance Ratio Test. *Journal of Econometrics*, 58(3), 385-401. [DOI](https://doi.org/10.1016/0304-4076(93)90051-6)
+- Brock, W. A., Dechert, W. D., Scheinkman, J. A., & LeBaron, B. (1996). A Test for Independence Based on the Correlation Dimension. *Econometric Reviews*, 15(3), 197-235. [DOI](https://doi.org/10.1080/07474939608800353)
+
+- Brock, W. A., Hsieh, D. A., & LeBaron, B. (1991). *Nonlinear Dynamics, Chaos, and Instability: Statistical Theory and Economic Evidence*. Cambridge, MA: MIT Press. ISBN 978-0-262-02329-0.
 
 - Doornik, J. A., & Hansen, H. (2008). An Omnibus Test for Univariate and Multivariate Normality. *Oxford Bulletin of Economics and Statistics*, 70(s1), 927-939. [DOI](https://doi.org/10.1111/j.1468-0084.2008.00537.x)
 
@@ -586,10 +822,20 @@ show(stdout, lr23)
 
 - Jarque, C. M., & Bera, A. K. (1980). Efficient Tests for Normality, Homoscedasticity and Serial Independence of Regression Residuals. *Economics Letters*, 6(3), 255-259. [DOI](https://doi.org/10.1016/0165-1765(80)90024-5)
 
+- Lilliefors, H. W. (1967). On the Kolmogorov-Smirnov Test for Normality with Mean and Variance Unknown. *Journal of the American Statistical Association*, 62(318), 399-402. [DOI](https://doi.org/10.1080/01621459.1967.10482916)
+- Kim, J. H. (2006). Wild Bootstrapping Variance Ratio Tests. *Economics Letters*, 92(1), 38-43. [DOI](https://doi.org/10.1016/j.econlet.2006.01.007)
+
+- Lo, A. W., & MacKinlay, A. C. (1988). Stock Market Prices Do Not Follow Random Walks: Evidence from a Simple Specification Test. *Review of Financial Studies*, 1(1), 41-66. [DOI](https://doi.org/10.1093/rfs/1.1.41)
+
 - Lutkepohl, H. (2005). *New Introduction to Multiple Time Series Analysis*. Berlin: Springer. ISBN 978-3-540-40172-8.
+
+- Marsaglia, G., Tsang, W. W., & Wang, J. (2003). Evaluating Kolmogorov's Distribution. *Journal of Statistical Software*, 8(18), 1-4. [DOI](https://doi.org/10.18637/jss.v008.i18)
 
 - Mardia, K. V. (1970). Measures of Multivariate Skewness and Kurtosis with Applications. *Biometrika*, 57(3), 519-530. [DOI](https://doi.org/10.2307/2334770)
 
 - Rao, C. R. (1948). Large Sample Tests of Statistical Hypotheses Concerning Several Parameters with Applications to Problems of Estimation. *Mathematical Proceedings of the Cambridge Philosophical Society*, 44(1), 50-57. [DOI](https://doi.org/10.1017/S0305004100023987)
+
+- Stephens, M. A. (1974). EDF Statistics for Goodness of Fit and Some Comparisons. *Journal of the American Statistical Association*, 69(347), 730-737. [DOI](https://doi.org/10.1080/01621459.1974.10480196)
+- Wright, J. H. (2000). Alternative Variance-Ratio Tests Using Ranks and Signs. *Journal of Business & Economic Statistics*, 18(1), 1-9. [DOI](https://doi.org/10.1080/07350015.2000.10524842)
 
 - Wilks, S. S. (1938). The Large-Sample Distribution of the Likelihood Ratio for Testing Composite Hypotheses. *Annals of Mathematical Statistics*, 9(1), 60-62. [DOI](https://doi.org/10.1214/aoms/1177732360)

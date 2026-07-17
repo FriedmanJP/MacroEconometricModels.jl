@@ -451,3 +451,161 @@ function Base.show(io::IO, r::ARIMAOrderSelection)
         column_labels = vcat([""], ["q=$(q-1)" for q in 1:Q]),
         alignment = vcat([:l], fill(:r, Q)))
 end
+
+# =============================================================================
+# ARFIMA Model (EV-13) — fractional integration
+# =============================================================================
+
+"""
+    ARFIMAModel{T} <: AbstractARIMAModel
+
+Autoregressive fractionally integrated moving average ARFIMA(p,d,q) model with a
+fractional integration order `d ∈ (−0.5, 0.5)`:
+
+    φ(L) (1−L)^d (yₜ − μ) = θ(L) εₜ
+
+# Fields
+- `y::Vector{T}`: Original data
+- `p::Int`: AR order
+- `d::T`: Fractional integration order
+- `q::Int`: MA order
+- `c::T`: Intercept (ARMA intercept on the filtered series for `:css`; process mean μ for `:mle`)
+- `phi::Vector{T}`: AR coefficients [φ₁, …, φₚ]
+- `theta::Vector{T}`: MA coefficients [θ₁, …, θq]
+- `sigma2::T`: Innovation variance
+- `d_se::T`: Standard error of `d` (logit delta method)
+- `residuals::Vector{T}`: One-step innovations
+- `fitted::Vector{T}`: One-step predictions
+- `loglik::T`: Log-likelihood (exact for `:mle`, conditional for `:css`)
+- `aic::T`, `bic::T`: Information criteria
+- `method::Symbol`: Estimation method (`:css` or `:mle`)
+- `converged::Bool`: Whether optimization converged
+- `iterations::Int`: Number of iterations
+"""
+struct ARFIMAModel{T<:AbstractFloat} <: AbstractARIMAModel{T}
+    y::Vector{T}
+    p::Int
+    d::T
+    q::Int
+    c::T
+    phi::Vector{T}
+    theta::Vector{T}
+    sigma2::T
+    d_se::T
+    residuals::Vector{T}
+    fitted::Vector{T}
+    loglik::T
+    aic::T
+    bic::T
+    method::Symbol
+    converged::Bool
+    iterations::Int
+end
+
+ar_order(m::ARFIMAModel) = m.p
+ma_order(m::ARFIMAModel) = m.q
+diff_order(m::ARFIMAModel) = m.d
+
+# coef ordering: [c, d, φ…, θ…]
+StatsAPI.coef(m::ARFIMAModel) = vcat(m.c, m.d, m.phi, m.theta)
+StatsAPI.dof(m::ARFIMAModel) = m.p + m.q + 3   # c/μ, d, σ² + φ + θ
+
+function Base.show(io::IO, m::ARFIMAModel)
+    T = eltype(m.y)
+    param_names = String[_INTERCEPT_LABEL, "d"]
+    param_vals = T[m.c, m.d]
+    for (i, ph) in enumerate(m.phi)
+        push!(param_names, "φ[$i]"); push!(param_vals, ph)
+    end
+    for (j, th) in enumerate(m.theta)
+        push!(param_names, "θ[$j]"); push!(param_vals, th)
+    end
+    se = try
+        stderror(m)
+    catch
+        fill(T(NaN), length(param_vals))
+    end
+    while length(se) < length(param_vals)
+        push!(se, T(NaN))
+    end
+    header = "ARFIMA($(m.p),$(round(m.d; digits=4)),$(m.q)) Model"
+    _coef_table(io, header, param_names, param_vals, se; dist=:z)
+
+    sigma_data = Any["σ²" _fmt(m.sigma2)]
+    _pretty_table(io, sigma_data; column_labels=["", "Estimate"], alignment=[:l, :r])
+
+    fit_data = Any[
+        "Observations"       length(m.y);
+        "d (frac. integ.)"   _fmt(m.d; digits=4);
+        "Log-likelihood"     _fmt(m.loglik; digits=4);
+        "AIC"                _fmt(m.aic; digits=4);
+        "BIC"                _fmt(m.bic; digits=4);
+        "S.E. of regression" _fmt(sqrt(m.sigma2));
+        "Method"             _label(m.method);
+        "Converged"          m.converged ? "Yes" : "No"
+    ]
+    _pretty_table(io, fit_data; column_labels=["Fit", "Value"], alignment=[:l, :r])
+    _sig_legend(io)
+end
+
+# =============================================================================
+# Semiparametric d-estimator results (GPH, local Whittle)
+# =============================================================================
+
+"""
+    GPHResult{T}
+
+Geweke & Porter-Hudak (1983) log-periodogram estimate of the fractional integration
+order. Fields: `d`, `se`, `tstat`, `pval` (H₀: d=0), `m` (frequencies used), `n`,
+`trim`.
+"""
+struct GPHResult{T<:AbstractFloat}
+    d::T
+    se::T
+    tstat::T
+    pval::T
+    m::Int
+    n::Int
+    trim::Int
+end
+
+"""
+    LocalWhittleResult{T}
+
+Robinson (1995) local-Whittle estimate of the fractional integration order. Fields:
+`d`, `se`, `tstat`, `pval` (H₀: d=0), `m` (frequencies used), `n`, `objective`
+(minimized R(d)).
+"""
+struct LocalWhittleResult{T<:AbstractFloat}
+    d::T
+    se::T
+    tstat::T
+    pval::T
+    m::Int
+    n::Int
+    objective::T
+end
+
+function Base.show(io::IO, r::GPHResult)
+    _coef_table(io, "GPH Log-Periodogram Regression (Geweke–Porter-Hudak 1983)",
+                ["d"], [r.d], [r.se]; dist=:z)
+    _pretty_table(io, Any[
+        "Frequencies (m)" r.m;
+        "Trimmed"         r.trim;
+        "Observations"    r.n;
+        "H₀"              "d = 0"
+    ]; column_labels=["", "Value"], alignment=[:l, :r])
+    _sig_legend(io)
+end
+
+function Base.show(io::IO, r::LocalWhittleResult)
+    _coef_table(io, "Local Whittle Estimator (Robinson 1995)",
+                ["d"], [r.d], [r.se]; dist=:z)
+    _pretty_table(io, Any[
+        "Frequencies (m)" r.m;
+        "Observations"    r.n;
+        "R(d̂)"            _fmt(r.objective);
+        "H₀"              "d = 0"
+    ]; column_labels=["", "Value"], alignment=[:l, :r])
+    _sig_legend(io)
+end

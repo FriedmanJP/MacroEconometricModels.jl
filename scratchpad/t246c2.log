@@ -1,0 +1,69 @@
+Precompiling packages...
+   9966.9 ms  ✓ MacroEconometricModels
+  1 dependency successfully precompiled in 10 seconds. 207 already precompiled.
+┌ Warning: The call to compilecache failed to create a usable precompiled cache file for MacroEconometricModels [14a6ec33-bcac-448e-845f-2fb6769698f1]
+│   exception = Required dependency Base.PkgId(Base.UUID("8bb1440f-4735-579b-a4ab-409b98df4dab"), "DelimitedFiles") failed to load from a cache file.
+└ @ Base loading.jl:2701
+┌ Warning: Discrete Lyapunov iteration did not converge to tol=1.0e-10 in 1000 iterations (last change 0.00033296250281542804).
+└ @ MacroEconometricModels ~/Desktop/CODES/MacroEconometricModels/src/core/kalman.jl:48
+
+=========================== RUN: test/arima/test_arima.jl ===========================
+Test Summary:       | Pass  Total  Time
+AR Model Estimation |   26     26  4.0s
+Test Summary:       | Pass  Total  Time
+MA Model Estimation |   10     10  4.0s
+Test Summary:         | Pass  Total  Time
+ARMA Model Estimation |   15     15  2.3s
+Test Summary:          | Pass  Total  Time
+ARIMA Model Estimation |   16     16  0.4s
+Test Summary: | Pass  Total  Time
+Forecasting   |   30     30  0.8s
+Test Summary:   | Pass  Total  Time
+Order Selection |   19     19  1.2s
+Test Summary: | Pass  Total  Time
+Edge Cases    |   15     15  0.8s
+Test Summary:  | Pass  Total  Time
+Type Accessors |   12     12  0.2s
+Test Summary:   | Pass  Total  Time
+Display Methods |    6      6  2.2s
+Test Summary:       | Pass  Total  Time
+Numerical Stability |    4      4  0.1s
+Test Summary: | Pass  Total  Time
+fit Interface |    4      4  0.1s
+Test Summary:                 | Pass  Total  Time
+StatsAPI Interface - MA Model |   24     24  0.2s
+Test Summary:                    | Pass  Total  Time
+StatsAPI Interface - MA(2) Model |    4      4  0.2s
+Test Summary:                   | Pass  Total  Time
+StatsAPI Interface - ARMA Model |   16     16  0.8s
+Test Summary:                        | Pass  Total  Time
+StatsAPI Interface - ARMA(2,1) Model |    3      3  0.5s
+Test Summary:                    | Pass  Total  Time
+StatsAPI Interface - ARIMA Model |   18     18  0.6s
+Test Summary:                           | Pass  Total  Time
+StatsAPI Interface - ARIMA(2,1,0) Model |    4      4  0.4s
+Test Summary:                           | Pass  Total  Time
+StatsAPI Interface - ARIMA(0,1,2) Model |    3      3  0.1s
+Test Summary:               | Pass  Total  Time
+StatsAPI consistency checks |    3      3  0.5s
+Test Summary:                   | Pass  Total  Time
+Display methods - MA/ARMA/ARIMA |    6      6  0.1s
+Test Summary:                   | Pass  Total  Time
+ARIMA d=2 (double differencing) |    3      3  0.2s
+Test Summary:                      | Pass  Total  Time
+auto_arima include_intercept=false |    2      2  0.0s
+Test Summary:                  | Pass  Total  Time
+select_arima_order larger grid |    5      5  0.1s
+Test Summary:                 | Pass  Total  Time
+Forecast with conf_level=0.99 |    3      3  0.1s
+Test Summary:           | Pass  Total  Time
+conf_level accepts Real |    2      2  0.0s
+Test Summary:              | Pass  Total  Time
+auto_arima stepwise search |   19     19  2.7s
+Test Summary:                                              | Pass  Total  Time
+ARMA Kalman scalar-observation specialization (#210 box F) |   18     18  0.5s
+
+=== run_one.jl done ===
+real 56.43
+user 55.41
+sys 1.70

@@ -163,10 +163,30 @@ honest_did
 ## Panel Unit Root Tests
 
 ```@docs
+llc_test
+ips_test
+breitung_panel_test
+fisher_panel_test
+hadri_test
 panic_test
 pesaran_cips_test
 moon_perron_test
 panel_unit_root_summary
+```
+
+---
+
+## Panel Cointegration Tests
+
+```@docs
+pedroni_test
+kao_test
+westerlund_test
+fisher_johansen_test
+PedroniResult
+KaoResult
+WesterlundResult
+FisherJohansenResult
 ```
 
 ---

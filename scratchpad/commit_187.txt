@@ -1,0 +1,25 @@
+fix(preg): [T088] FE conditional-logit DP recursion in log space (overflow fix) (#187)
+
+`_clogit_dp_logsum` claimed log-scale stability but formed RAW exponentials
+(`exp_eta = exp.(eta)`) and accumulated raw products in the forward/backward DP. For
+|x_t·β| ≳ 710 (Float64) `exp` overflows to `Inf`, so the partition function `denom` became
+`Inf`, `log_denom = Inf`, and `prob = Inf/Inf = NaN` — e.g.
+`_clogit_dp_logsum([1000,1001], [1], 1)` returned `(Inf, [NaN,NaN])`.
+
+Fix: rewrite the forward/backward/g_t dynamic program entirely in LOG SPACE with a stable
+scalar `logaddexp` (handles ±Inf, `logaddexp(-Inf,-Inf)=-Inf`). The recursion
+`f(t,j)=f(t-1,j)+f(t-1,j-1)e^{η_t}` becomes `lf(t,j)=logaddexp(lf(t-1,j), lf(t-1,j-1)+η_t)`;
+`prob[t]=exp(η_t + logf_{-t}(s-1) − log_denom)`. Removed the redundant second forward table
+and the dead backward scaffolding; fixed the docstring (returns `(log_denom, prob)`). The
+estimator math is otherwise unchanged (analytic gradient `X_g'(y_g−prob)` / Hessian), so
+non-overflowing fits are numerically identical.
+
+Test (test_panel_nonlinear.jl "FE clogit log-space DP stability (T088)"): (a) overflow +
+closed form — `([1000,1001],[1],1)` → log_denom = logaddexp(1000,1001) = 1001.3132616875182,
+prob = softmax = [0.26894142, 0.73105858] (was Inf/NaN); (b) brute-force subset-enumeration
+cross-check (T_g=5, s=2) to 1e-10; (c) exact scale-equivariance through _xtlogit_fe:
+β(50·x)=β(x)/50 with equal maximized loglik (the 50·x fit overflowed under the old code).
+13/13. No doc/API change. Ref: reliability report finding M-26.
+
+NOTE: landed before #186 (T087, a heavier RE/CRE optimizer rewrite in the same file but a
+disjoint function) — no conflict.

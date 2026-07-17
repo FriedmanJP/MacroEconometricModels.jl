@@ -41,12 +41,14 @@ First-Difference (FD), Between, or Correlated Random Effects (CRE).
 - `varnames::Vector{String}` — coefficient names
 - `method::Symbol` — :fe, :re, :fd, :between, :cre
 - `twoway::Bool` — whether time fixed effects are included
-- `cov_type::Symbol` — covariance estimator (:ols, :robust, :cluster, :driscoll_kraay)
+- `cov_type::Symbol` — covariance estimator (:ols, :cluster, :twoway, :driscoll_kraay, :pcse)
 - `n_obs::Int` — number of observations
 - `n_groups::Int` — number of groups
 - `n_periods_avg::T` — average number of periods per group
 - `group_effects::Union{Nothing,Vector{T}}` — estimated group effects (FE only)
 - `data::PanelData{T}` — original panel data
+- `ar1_rho::Union{Nothing,T,Vector{T}}` — Prais-Winsten AR(1) ρ̂ (`nothing` when
+  `ar1=:none`; scalar for `ar1=:common`; per-unit `Vector{T}` for `ar1=:panel_specific`)
 
 # References
 - Baltagi, B. H. (2021). *Econometric Analysis of Panel Data*. 6th ed. Springer.
@@ -83,6 +85,9 @@ struct PanelRegModel{T<:AbstractFloat} <: StatsAPI.RegressionModel
     # Arellano-Bond/Blundell-Bond dynamic-panel diagnostics (AR(1)/AR(2), Hansen J);
     # `nothing` for static estimators (FE/RE/FD/Between/CRE).
     dynamic_diagnostics::Union{Nothing,NamedTuple}
+    # Prais-Winsten AR(1) ρ̂ (EV-25, #433): `nothing` when ar1=:none, scalar for
+    # ar1=:common, per-unit Vector{T} for ar1=:panel_specific.
+    ar1_rho::Union{Nothing,T,Vector{T}}
 end
 
 # =============================================================================
@@ -400,6 +405,7 @@ function Base.show(io::IO, m::PanelRegModel{T}) where {T}
                  m.method == :ab ? "Arellano-Bond" :
                  m.method == :bb ? "Blundell-Bond" : "Correlated RE"
     twoway_str = m.twoway ? " (Two-way)" : ""
+    cov_str = m.cov_type == :pcse ? "Panel-corrected (Beck-Katz)" : string(m.cov_type)
 
     spec = Any[
         "Method"         method_str * twoway_str;
@@ -414,10 +420,15 @@ function Base.show(io::IO, m::PanelRegModel{T}) where {T}
         "rho"            _fmt(m.rho);
         "F-statistic"    _fmt(m.f_stat; digits=2);
         "F p-value"      _format_pvalue(m.f_pval);
-        "Cov. type"      string(m.cov_type)
+        "Cov. type"      cov_str
     ]
     if m.theta !== nothing
         spec = vcat(spec, Any["theta" _fmt(m.theta)])
+    end
+    if m.ar1_rho !== nothing
+        rho_str = m.ar1_rho isa AbstractVector ?
+            "panel-specific (mean " * _fmt(mean(m.ar1_rho)) * ")" : _fmt(m.ar1_rho)
+        spec = vcat(spec, Any["AR(1) rho (PW)" rho_str])
     end
     if m.dynamic_diagnostics !== nothing
         d = m.dynamic_diagnostics

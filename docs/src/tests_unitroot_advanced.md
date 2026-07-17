@@ -1,12 +1,15 @@
 # [Advanced Unit Root Tests](@id tests_unitroot_advanced_page)
 
-Standard unit root tests (ADF, PP, KPSS) perform well when the data-generating process is a simple autoregressive model with fixed deterministic components. Real macroeconomic series, however, exhibit smooth structural changes, multiple regime shifts, and near-unit-root behavior that erode the power of classical tests. This page covers five advanced unit root tests that address these limitations through Fourier approximation of smooth breaks, GLS detrending for optimal power, LM-based testing with endogenous breaks under the null, and two-break ADF extensions.
+Standard unit root tests (ADF, PP, KPSS) perform well when the data-generating process is a simple autoregressive model with fixed deterministic components. Real macroeconomic series, however, exhibit smooth structural changes, multiple regime shifts, and near-unit-root behavior that erode the power of classical tests. This page covers several advanced unit root tests that address these limitations through Fourier approximation of smooth breaks, GLS detrending for optimal power, point-optimal and seasonal-frequency testing, LM-based testing with endogenous breaks under the null, and two-break ADF extensions.
 
 - **Fourier ADF** (Enders & Lee 2012): Captures smooth, unknown structural breaks with trigonometric terms
 - **Fourier KPSS** (Becker, Enders & Lee 2006): Stationarity test robust to smooth breaks
 - **DF-GLS / ERS** (Elliott, Rothenberg & Stock 1996): GLS-detrended ADF with near-optimal power
+- **ERS point-optimal** (Elliott, Rothenberg & Stock 1996): standalone feasible ``P_T`` test reusing the GLS detrending
+- **HEGY seasonal** (Hylleberg et al. 1990; Beaulieu & Miron 1993): frequency-by-frequency seasonal unit roots (quarterly/monthly)
 - **LM Unit Root** (Schmidt & Phillips 1992; Lee & Strazicich 2003, 2013): Breaks under the null hypothesis
 - **Two-Break ADF** (Narayan & Popp 2010): ADF with two endogenous structural breaks
+- **SADF / GSADF** (Phillips, Wu & Yu 2011; Phillips, Shi & Yu 2015): Right-tailed sup-ADF tests for explosive (bubble) behavior with date-stamping
 
 ```@setup test_ur_adv
 using MacroEconometricModels, Random
@@ -42,6 +45,21 @@ y = vcat(cumsum(randn(100)), 5.0 .+ cumsum(randn(100)), cumsum(randn(100)))
 # LM test — breaks are included under the null, so rejection is unambiguous
 result = lm_unitroot_test(y; breaks=2, regression=:level)
 report(result)
+```
+
+**Recipe 4: GSADF for explosive-bubble detection**
+
+```@example test_ur_adv
+# Random walk with an embedded explosive (φ=1.05) window — a stylized bubble
+Random.seed!(11)
+bubble = zeros(150)
+for t in 2:150
+    bubble[t] = (60 <= t <= 100 ? 1.05 : 1.0) * bubble[t-1] + randn()
+end
+
+# GSADF — right-tailed sup-ADF; reject the unit root for LARGE statistics
+gsadf = gsadf_test(bubble; mc_reps=199)
+report(gsadf)
 ```
 
 ---
@@ -288,6 +306,104 @@ result.MPT               # Modified point-optimal
 
 ---
 
+## ERS Point-Optimal Test
+
+The Elliott, Rothenberg & Stock (1996) feasible **point-optimal** test ``P_T`` is the second pillar of their efficient-testing framework. Where DF-GLS builds a ``\tau``-style statistic from GLS-detrended data, ``P_T`` compares the sum of squared residuals from GLS quasi-differencing at the local alternative ``\bar{\alpha} = 1 + \bar{c}/T`` against the residuals under the unit-root null:
+
+```math
+P_T = \frac{S(\bar{\alpha}) - \bar{\alpha}\, S(1)}{\hat{\omega}^2},
+```
+
+where
+
+- ``S(\bar{\alpha})`` is the SSR of the quasi-differenced regression at ``\bar{c} = -7`` (constant) or ``\bar{c} = -13.5`` (trend),
+- ``S(1)`` is the SSR under the unit-root null,
+- ``\hat{\omega}^2`` is the long-run variance from the same AR-spectral estimator DF-GLS uses.
+
+`ers_test` reuses the exact GLS-detrending machinery of `dfgls_test` — the returned `P_T` is identical to the `pt_statistic` field of the corresponding `dfgls_test` call, so the two never drift.
+
+```@example test_ur_adv
+# ERS point-optimal test — constant (demeaning) case
+result = ers_test(cpi; trend=false)
+report(result)
+```
+
+The identity with DF-GLS is exact:
+
+```@example test_ur_adv
+ers = ers_test(cpi; trend=false)
+dfg = dfgls_test(cpi; regression=:constant)
+ers.P_T == dfg.pt_statistic   # same statistic, shared helper
+```
+
+### Options
+
+- `trend` (default `false`): `false` uses GLS demeaning (``\bar{c} = -7``); `true` uses GLS detrending (``\bar{c} = -13.5``) for trending series.
+
+### Return Values
+
+`ERSResult` exposes:
+
+- `P_T` — the feasible point-optimal statistic,
+- `pvalue` — interpolated p-value against the ERS (1996, Table 1) critical values,
+- `critical_values` — the (1%, 5%, 10%) point-optimal critical values,
+- `regression`, `nobs`.
+
+### Interpretation
+
+**Small** ``P_T`` rejects the unit-root null in favour of stationarity: the local-alternative model fits far better than the unit-root model. Because ``P_T`` and DF-GLS share the same GLS detrending, they are best read together — ``P_T`` is the point-optimal complement to the ``\tau``-style DF-GLS statistic.
+
+---
+
+## HEGY Seasonal Unit Roots
+
+Seasonal macro series can carry unit roots not only at the zero (long-run) frequency but at seasonal frequencies too. The Hylleberg, Engle, Granger & Yoo (1990) test — extended to monthly data by Beaulieu & Miron (1993) — tests for unit roots **frequency by frequency**. For a series of periodicity ``s``, it regresses the seasonal difference ``\Delta_s y_t = (1 - L^s) y_t`` on transform regressors that isolate each spectral frequency, plus deterministics and augmenting lags of ``\Delta_s y``:
+
+```math
+\Delta_s y_t = \pi_1 y_{1,t-1} + \pi_2 y_{2,t-1} + \sum_{\text{pairs}} \big(\pi_k y_{k,t-1} + \pi_{k+1} y_{k,t-2}\big) + \text{deterministics} + \sum_{i=1}^{p} \phi_i \Delta_s y_{t-i} + \varepsilon_t.
+```
+
+For quarterly data (``s = 4``) the transforms are ``y_{1,t} = (1+L)(1+L^2)y_t`` (zero frequency), ``y_{2,t} = -(1-L)(1+L^2)y_t`` (Nyquist, ``\omega = \pi``), and ``y_{3,t} = (1-L^2)y_t`` (the annual harmonic pair at ``\omega = \pi/2``). Monthly data (``s = 12``) follows Beaulieu & Miron with twelve transforms and five complex-conjugate harmonic pairs.
+
+The test reports the left-tailed ``t(\pi_1)`` (zero frequency) and ``t(\pi_2)`` (Nyquist), and a right-tailed joint ``F`` for each harmonic pair, plus joint ``F`` statistics over all seasonal frequencies and over all frequencies.
+
+```@example test_ur_adv
+# HEGY monthly test on the CPI series (frequency = 12)
+result = hegy_test(cpi; frequency=12, deterministic=:const_trend_seas)
+report(result)
+```
+
+Quarterly data uses `frequency=4`:
+
+```@example test_ur_adv
+# Simulated quarterly series with a stochastic seasonal (Δ₄) unit root
+using Random
+rng = Random.MersenneTwister(7)
+yq = zeros(160)
+for t in 5:160
+    yq[t] = yq[t-4] + randn(rng)   # seasonal random walk: roots at every frequency
+end
+hq = hegy_test(yq; frequency=4)
+(t_zero=round(hq.t_zero, digits=3), t_nyquist=round(hq.t_nyquist, digits=3),
+ F_pair=round(hq.pair_F[1], digits=3))
+```
+
+### Options
+
+- `frequency`: `4` (quarterly) or `12` (monthly). Other values throw an `ArgumentError`.
+- `deterministic`: `:none`, `:const`, `:const_seas`, `:const_trend`, or `:const_trend_seas` (default). Seasonal dummies span the intercept, so they replace it when present.
+- `lags`: number of augmenting lags of ``\Delta_s y``, or `:auto` for AIC selection up to ``\lfloor 12(T/100)^{1/4} \rfloor``.
+
+### Return Values
+
+`HEGYResult` exposes `frequency`, `deterministic`, `lags`, the `pi_coefs`, the zero/Nyquist statistics `t_zero`/`t_nyquist` with their critical values, the harmonic-pair frequencies `pair_freqs` with joint `pair_F` and shared `pair_F_cv`, the joint `F_seasonal` and `F_all`, and `nobs`.
+
+### Interpretation
+
+At each frequency, ``H_0`` is that a unit root is present. **Reject** ``t(\pi_1)`` (``t < `` CV) ⇒ no zero-frequency root; **reject** ``t(\pi_2)`` ⇒ no Nyquist root; **reject** a pair ``F`` (``F > `` CV) ⇒ no unit root at that seasonal frequency. If every null fails to reject, ``\Delta_s`` (full seasonal differencing) is appropriate; if some seasonal nulls reject, seasonal differencing over-differences and seasonal dummies or a partial filter should be used instead. Critical values are the published HEGY (1990) quarterly and Beaulieu-Miron (1993) monthly tables; the Díaz-Emparanza (2014) response-surface p-values are a refinement not yet implemented.
+
+---
+
 ## LM Unit Root Test
 
 The LM unit root test (Schmidt & Phillips 1992; Lee & Strazicich 2003, 2013) takes a fundamentally different approach to structural breaks compared to the Zivot-Andrews and Narayan-Popp tests. The key innovation is that breaks are incorporated under the null hypothesis. In the Zivot-Andrews framework, breaks appear only under the alternative, so rejection could reflect either stationarity or a break in a unit root process. The LM test resolves this ambiguity: rejection unambiguously implies stationarity, regardless of whether structural breaks are present.
@@ -499,6 +615,63 @@ end |> v -> push!(v, (test="Fourier KPSS",
 
 ---
 
+## SADF / GSADF Bubble Detection
+
+The tests above ask whether a series has a unit root against a *stationary* alternative. Asset-price exuberance poses the opposite question: is the root *explosive* (``\rho > 1``)? The sup-ADF family of Phillips, Wu & Yu (2011) and Phillips, Shi & Yu (2015) answers it with **right-tailed** ADF regressions — the unit-root null is rejected in favor of a mildly explosive root for **large** statistics, using **upper** simulated critical values (the reverse of every other test on this page).
+
+For a sample of size ``T`` and window ``[r_1, r_2]`` (fractions of ``T``), let ``\mathrm{ADF}_{r_1}^{r_2}`` be the right-tailed ADF ``t``-statistic on the lagged level, fit with a constant and `adflag` augmenting lags. The three statistics are
+
+```math
+\mathrm{SADF} = \sup_{r_2 \in [r_0, 1]} \mathrm{ADF}_0^{r_2}, \qquad
+\mathrm{GSADF} = \sup_{\substack{r_2 \in [r_0, 1] \\ r_1 \in [0, r_2 - r_0]}} \mathrm{ADF}_{r_1}^{r_2},
+```
+
+```math
+\mathrm{BSADF}(r_2) = \sup_{r_1 \in [0, r_2 - r_0]} \mathrm{ADF}_{r_1}^{r_2},
+```
+
+where:
+
+- ``r_0`` is the minimum window fraction; `r0=:auto` uses the PSY rule ``r_0 = 0.01 + 1.8/\sqrt{T}``
+- **SADF** fixes the start (``r_1 = 0``) and expands the end — the original PWY (2011) test
+- **GSADF** floats both endpoints (a double sup), giving power against *periodically collapsing* bubbles that SADF misses
+- **BSADF**``(r_2)`` is the backward sup-ADF sequence used to **date-stamp** episodes
+
+`gsadf_test` compares the ``\mathrm{BSADF}(r_2)`` sequence against its 95% critical-value *sequence* (one critical value per ``r_2``): origination is the first crossing above, termination the first subsequent crossing below, subject to the PSY minimum-duration rule of ``\log(T)`` observations. Critical values are simulated from the driftless random-walk null (`cv=:asymptotic`) or the Phillips-Shi (2020) wild bootstrap on the sample's ADF residuals (`cv=:wildboot`), and cached by ``(T, r_0, `adflag`)``.
+
+```@example test_ur_adv
+# A stylized price series: random walk, an explosive run, then a collapse to RW
+Random.seed!(7)
+price = zeros(160)
+for t in 2:160
+    ρ = (70 <= t <= 110) ? 1.05 : 1.0          # explosive window [70, 110]
+    price[t] = ρ * price[t-1] + randn()
+end
+
+# GSADF test with backward sup-ADF date-stamping
+res = gsadf_test(price; adflag=0, mc_reps=299)
+report(res)
+```
+
+The stamped episodes are index pairs into the input series, so they line up with your calendar directly:
+
+```@example test_ur_adv
+# Bubble origination/termination indices and the sup statistic vs its 95% CV
+(statistic=round(res.statistic, digits=3),
+ cv95=round(res.critical_values[5], digits=3),
+ episodes=res.episodes)
+```
+
+The signature PSY chart plots the ``\mathrm{BSADF}(r_2)`` sequence against its 95% critical-value sequence, shading the date-stamped episodes:
+
+```julia
+plot_result(res)   # BSADF vs 95% CV with shaded bubble episodes
+```
+
+The fixed-start [`sadf_test`](@ref) shares the interface and stores the recursive-ADF sequence for its own date-stamping; use `gsadf_test` for real-time monitoring, where the double sup is the standard central-bank exuberance monitor.
+
+---
+
 ## Common Pitfalls
 
 1. **Fourier frequency selection -- keep fmax low.** Setting `fmax` higher than 3 rarely improves the Fourier ADF or KPSS tests and wastes degrees of freedom. Enders & Lee (2012) demonstrate that a single low-frequency Fourier component (``k = 1`` or ``k = 2``) approximates most empirically relevant smooth break patterns. With `fmax=5`, the search space expands but the additional frequencies capture noise rather than structural change, reducing power against the unit root null.
@@ -509,16 +682,23 @@ end |> v -> push!(v, (test="Fourier KPSS",
 
 4. **Two-break ADF trimming and endpoint instability.** The default `trim=0.10` excludes the first and last 10% of the sample from the break search. Reducing the trimming parameter below 0.10 allows breaks near the endpoints, but the parameter estimates become unreliable with few observations on either side of the break. With short samples (``T < 100``), increase the trimming to 0.15 to maintain estimation accuracy. Also verify that the estimated break dates are not clustered at the trimming boundary, which suggests the true break may lie outside the search region.
 
+5. **SADF/GSADF are right-tailed -- reject for large statistics.** Every other test on this page rejects the unit root for large *negative* statistics. The sup-ADF tests invert this: they reject in favor of an explosive root when the statistic exceeds an *upper* critical value, so `res.statistic > res.critical_values[5]` (not `<`) signals a bubble. Reading them left-tailed is the classic error. Two further points: keep `mc_reps` modest during exploration (the GSADF double sup over the null replications is the costly step -- critical values are cached by ``(T, r_0, `adflag`)``), and date-stamp with GSADF's ``\mathrm{BSADF}(r_2)`` *sequence* rather than a single scalar critical value, which would mis-stamp short episodes. Bubble detection also needs a reasonable span: with fewer than ``\sim 50`` observations the minimum window leaves too few sub-samples for the sup to be informative.
+
 ---
 
 ## References
 
+- Beaulieu, J. Joseph, and Jeffrey A. Miron. 1993. "Seasonal Unit Roots in Aggregate U.S. Data." *Journal of Econometrics* 55 (1--2): 305--328. [https://doi.org/10.1016/0304-4076(93)90018-Z](https://doi.org/10.1016/0304-4076(93)90018-Z)
 - Becker, Ralf, Walter Enders, and Junsoo Lee. 2006. "A Stationarity Test in the Presence of an Unknown Number of Smooth Breaks." *Journal of Time Series Analysis* 27 (3): 381--409. [https://doi.org/10.1111/j.1467-9892.2006.00478.x](https://doi.org/10.1111/j.1467-9892.2006.00478.x)
 - Elliott, Graham, Thomas J. Rothenberg, and James H. Stock. 1996. "Efficient Tests for an Autoregressive Unit Root." *Econometrica* 64 (4): 813--836. [https://doi.org/10.2307/2171846](https://doi.org/10.2307/2171846)
+- Hylleberg, Svend, Robert F. Engle, Clive W. J. Granger, and Byung Sam Yoo. 1990. "Seasonal Integration and Cointegration." *Journal of Econometrics* 44 (1--2): 215--238. [https://doi.org/10.1016/0304-4076(90)90080-D](https://doi.org/10.1016/0304-4076(90)90080-D)
 - Enders, Walter, and Junsoo Lee. 2012. "A Unit Root Test Using a Fourier Series to Approximate Smooth Breaks." *Oxford Bulletin of Economics and Statistics* 74 (4): 574--599. [https://doi.org/10.1111/j.1468-0084.2011.00662.x](https://doi.org/10.1111/j.1468-0084.2011.00662.x)
 - Lee, Junsoo, and Mark C. Strazicich. 2003. "Minimum Lagrange Multiplier Unit Root Test with Two Structural Breaks." *Review of Economics and Statistics* 85 (4): 1082--1089. [https://doi.org/10.1162/003465303772815961](https://doi.org/10.1162/003465303772815961)
 - Lee, Junsoo, and Mark C. Strazicich. 2013. "Minimum LM Unit Root Test with One Structural Break." *Economics Bulletin* 33 (4): 2483--2492.
 - Narayan, Paresh Kumar, and Stephan Popp. 2010. "A New Unit Root Test with Two Structural Breaks in Level and Slope at Unknown Time." *Journal of Applied Statistics* 37 (9): 1425--1438. [https://doi.org/10.1080/02664760903039883](https://doi.org/10.1080/02664760903039883)
 - Ng, Serena, and Pierre Perron. 2001. "Lag Length Selection and the Construction of Unit Root Tests with Good Size and Power." *Econometrica* 69 (6): 1519--1554. [https://doi.org/10.1111/1468-0262.00256](https://doi.org/10.1111/1468-0262.00256)
 - Perron, Pierre, and Serena Ng. 1996. "Useful Modifications to Some Unit Root Tests with Dependent Errors and Their Local Asymptotic Properties." *Review of Economic Studies* 63 (3): 435--463. [https://doi.org/10.2307/2297890](https://doi.org/10.2307/2297890)
+- Phillips, Peter C. B., Yangru Wu, and Jun Yu. 2011. "Explosive Behavior in the 1990s Nasdaq: When Did Exuberance Escalate Asset Values?" *International Economic Review* 52 (1): 201--226. [https://doi.org/10.1111/j.1468-2354.2010.00625.x](https://doi.org/10.1111/j.1468-2354.2010.00625.x)
+- Phillips, Peter C. B., Shuping Shi, and Jun Yu. 2015. "Testing for Multiple Bubbles: Historical Episodes of Exuberance and Collapse in the S&P 500." *International Economic Review* 56 (4): 1043--1078. [https://doi.org/10.1111/iere.12132](https://doi.org/10.1111/iere.12132)
+- Phillips, Peter C. B., and Shuping Shi. 2020. "Real-Time Monitoring of Asset Markets: Bubbles and Crises." In *Handbook of Statistics* 42, 61--80. Elsevier. [https://doi.org/10.1016/bs.host.2018.12.002](https://doi.org/10.1016/bs.host.2018.12.002)
 - Schmidt, Peter, and Peter C. B. Phillips. 1992. "LM Tests for a Unit Root in the Presence of Deterministic Trends." *Oxford Bulletin of Economics and Statistics* 54 (3): 257--287. [https://doi.org/10.1111/j.1468-0084.1992.tb00002.x](https://doi.org/10.1111/j.1468-0084.1992.tb00002.x)

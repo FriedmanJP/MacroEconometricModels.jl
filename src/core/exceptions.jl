@@ -63,6 +63,19 @@ end
 SingularSystemError(msg::AbstractString; cond=nothing) =
     SingularSystemError(String(msg), cond)
 
+"""
+    SerializationError(msg) <: MacroModelError
+
+A model file cannot be read back — an unrecognized on-disk `format_version`, an
+unknown or unsupported result type, or a corrupted/missing container. Raised by
+[`load_model`](@ref); the message names the expected versus found version so an
+upgrade path is discoverable.
+"""
+struct SerializationError <: MacroModelError
+    msg::String
+end
+SerializationError(msg::AbstractString) = SerializationError(String(msg))
+
 function Base.showerror(io::IO, e::ConvergenceError)
     print(io, "ConvergenceError: ", e.msg)
     e.iters === nothing || print(io, " (iters=", e.iters, ")")
@@ -74,6 +87,8 @@ function Base.showerror(io::IO, e::SingularSystemError)
     print(io, "SingularSystemError: ", e.msg)
     e.cond === nothing || print(io, " (cond≈", e.cond, ")")
 end
+Base.showerror(io::IO, e::SerializationError) =
+    print(io, "SerializationError: ", e.msg)
 
 """
     _is_recoverable_draw_error(e) -> Bool

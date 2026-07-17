@@ -1,0 +1,1323 @@
+Building fixtures...
+built 19 fixtures in 28.56s
+
+var           1534.0ms  >>> NEGZ!
+vecm          231.0ms  ok
+reg_ols       183.0ms  ok
+logit         104.0ms  ok
+probit        81.0ms  ok
+ologit        133.0ms  ok
+mlogit        234.0ms  >>> NEGZ!
+arma          231.0ms  >>> NEGZ!TRIP!
+garch         233.0ms  >>> NEGZ!TRIP!
+gmm           165.0ms  ok
+panel_fe      300.0ms  ok
+did_es        211.0ms  >>> NEGZ!TRIP!
+adf           206.0ms  >>> TRIP!
+johansen      188.0ms  >>> TRIP!
+factor        121.0ms  ok
+lp            183.0ms  >>> NEGZ!
+bvar_fcst     92.0ms  ok
+normality     30.0ms  ok
+dsge_est      574.0ms  >>> EXP!
+
+
+============ RAW + CANONICAL DUMPS ============
+
+
+########## var  (stars=false ref=false) ##########
+---- RAW ----
+ Vector Autoregression — VAR(2)
+
+  Specification
+
+  Variables                   2
+  Lags                        2
+  Observations (effective)   78
+  Parameters per equation     5
+
+                    Equation Summary
+
+  Equation   Parms     RMSE       R²   Adj. R²   F-stat
+
+  y1             5   1.0650   0.2579    0.2173    6.344
+  y2             5   0.8680   0.3614    0.3264   10.328
+
+                                   Equation: y1
+
+                  Coef.   Std.Err.         t    P>|t|   CI lower   CI upper
+
+  (Intercept)    0.2415     0.1354    1.7839   0.0786    -0.0283     0.5113   *
+  y1.L1          0.5374     0.1122    4.7901   <0.001     0.3138     0.7609   ***
+  y2.L1          0.0975     0.1342    0.7262     0.47    -0.1700     0.3649
+  y1.L2         -0.0679     0.1166   -0.5820   0.5624    -0.3003     0.1646
+  y2.L2         -0.1349     0.1304   -1.0346   0.3043    -0.3948     0.1250
+
+                                   Equation: y2
+
+                  Coef.   Std.Err.         t    P>|t|   CI lower   CI upper
+
+  (Intercept)    0.1687     0.1104    1.5290   0.1306    -0.0512     0.3887
+  y1.L1         -0.2034     0.0914   -2.2245   0.0292    -0.3856    -0.0212   **
+  y2.L1          0.5973     0.1094    5.4600   <0.001     0.3793     0.8153   ***
+  y1.L2         -0.0068     0.0951   -0.0718    0.943    -0.1963     0.1826
+  y2.L2         -0.2532     0.1063   -2.3827   0.0198    -0.4651    -0.0414   **
+
+     Information Criteria
+
+  Criterion             Value
+
+  Log-likelihood    -215.1295
+  AIC (per obs.)      -0.0314
+  BIC (per obs.)       0.1197
+  HQIC (per obs.)      0.0291
+
+ Residual Covariance (Σ)
+
+            y1        y2
+
+  y1    1.1341   -0.0456
+  y2   -0.0456    0.7535
+
+   Residual Correlation
+
+            y1        y2
+
+  y1    1.0000   -0.0494
+  y2   -0.0494    1.0000
+
+     Stationarity
+
+  Stationary      Yes
+  Max |λ|      0.5335
+
+Significance: *** p<0.01, ** p<0.05, * p<0.10
+
+---- CANONICAL ----
+ Vector Autoregression — VAR(2)
+
+ Specification
+
+ Variables 2
+ Lags 2
+ Observations (effective) 78
+ Parameters per equation 5
+
+ Equation Summary
+
+ Equation Parms RMSE R² Adj. R² F-stat
+
+ y1 5 N N N N
+ y2 5 N N N N
+
+ Equation: y1
+
+ Coef. Std.Err. t P>|t| CI lower CI upper
+
+ (Intercept) N N N N N N *
+ y1.L1 N N N <N N N ***
+ y2.L1 N N N N N N
+ y1.L2 N N N N N N
+ y2.L2 N N N N N N
+
+ Equation: y2
+
+ Coef. Std.Err. t P>|t| CI lower CI upper
+
+ (Intercept) N N N N N N
+ y1.L1 N N N N N N **
+ y2.L1 N N N <N N N ***
+ y1.L2 N N N N N N
+ y2.L2 N N N N N N **
+
+ Information Criteria
+
+ Criterion Value
+
+ Log-likelihood N
+ AIC (per obs.) N
+ BIC (per obs.) N
+ HQIC (per obs.) N
+
+ Residual Covariance (Σ)
+
+ y1 y2
+
+ y1 N N
+ y2 N N
+
+ Residual Correlation
+
+ y1 y2
+
+ y1 N N
+ y2 N N
+
+ Stationarity
+
+ Stationary Yes
+ Max |λ| N
+
+Significance: *** p<N, ** p<N, * p<N
+
+
+########## vecm  (stars=false ref=false) ##########
+---- RAW ----
+Vector Error Correction Model — VECM(1), Rank 1
+
+  Specification
+
+  Variables                         2
+  VAR order (p)                     2
+  Lagged differences                1
+  Cointegrating rank (r)            1
+  Observations (effective)         88
+  Deterministic              constant
+  Method                     johansen
+
+Cointegrating Vectors (β)
+
+            β1
+
+  y1    1.0000
+  y2   -0.9959
+
+Adjustment Coefficients (α)
+
+           α1
+
+  y1   0.2778
+  y2   1.4718
+
+Long-Run Matrix (Π = αβ')
+
+           y1        y2
+
+  y1   0.2778   -0.2767
+  y2   1.4718   -1.4658
+
+  Short-Run Dynamics Γ1
+
+            y1       y2
+
+  y1   -0.2293   0.3439
+  y2   -0.2271   0.3516
+
+    Intercept (μ)
+
+  Variable    Value
+
+  y1         0.1413
+  y2         0.0888
+
+     Information Criteria
+
+  Criterion            Value
+
+  Log-likelihood    -60.7156
+  AIC (per obs.)     -4.1140
+  BIC (per obs.)     -3.8888
+  HQIC (per obs.)    -4.0233
+
+Residual Covariance (Σ)
+
+           y1       y2
+
+  y1   1.1594   1.1729
+  y2   1.1729   1.1984
+
+  Residual Correlation
+
+           y1       y2
+
+  y1   1.0000   0.9951
+  y2   0.9951   1.0000
+
+Note: Standard errors for α/β not available (asymptotic SEs: future release)
+
+---- CANONICAL ----
+Vector Error Correction Model — VECM(1), Rank 1
+
+ Specification
+
+ Variables 2
+ VAR order (p) 2
+ Lagged differences 1
+ Cointegrating rank (r) 1
+ Observations (effective) 88
+ Deterministic constant
+ Method johansen
+
+Cointegrating Vectors (β)
+
+ β1
+
+ y1 N
+ y2 N
+
+Adjustment Coefficients (α)
+
+ α1
+
+ y1 N
+ y2 N
+
+Long-Run Matrix (Π = αβ')
+
+ y1 y2
+
+ y1 N N
+ y2 N N
+
+ Short-Run Dynamics Γ1
+
+ y1 y2
+
+ y1 N N
+ y2 N N
+
+ Intercept (μ)
+
+ Variable Value
+
+ y1 N
+ y2 N
+
+ Information Criteria
+
+ Criterion Value
+
+ Log-likelihood N
+ AIC (per obs.) N
+ BIC (per obs.) N
+ HQIC (per obs.) N
+
+Residual Covariance (Σ)
+
+ y1 y2
+
+ y1 N N
+ y2 N N
+
+ Residual Correlation
+
+ y1 y2
+
+ y1 N N
+ y2 N N
+
+Note: Standard errors for α/β not available (asymptotic SEs: future release)
+
+
+########## reg_ols  (stars=true ref=false) ##########
+---- RAW ----
+         OLS Regression
+
+  Specification
+
+  Method                   OLS
+  Observations             120
+  Covariates                 3
+  R-squared             0.9945
+  Adj. R-sq.            0.9944
+  F-statistic          5536.50
+  F p-value             <0.001
+  AIC                  -105.40
+  BIC                   -94.25
+  Cov. type       HC1 (robust)
+
+                               Coefficients
+
+         Coef.   Std.Err.          t    P>|t|   CI lower   CI upper
+
+  x1    1.5056     0.0140   107.2674   <0.001     1.4778     1.5333   ***
+  x2   -1.1960     0.0126   -95.2445   <0.001    -1.2209    -1.1712   ***
+  x3    0.8268     0.0130    63.5988   <0.001     0.8010     0.8525   ***
+
+Significance: *** p<0.01, ** p<0.05, * p<0.10
+
+---- CANONICAL ----
+ OLS Regression
+
+ Specification
+
+ Method OLS
+ Observations 120
+ Covariates 3
+ R-squared N
+ Adj. R-sq. N
+ F-statistic N
+ F p-value <N
+ AIC N
+ BIC N
+ Cov. type HC1 (robust)
+
+ Coefficients
+
+ Coef. Std.Err. t P>|t| CI lower CI upper
+
+ x1 N N N <N N N ***
+ x2 N N N <N N N ***
+ x3 N N N <N N N ***
+
+Significance: *** p<N, ** p<N, * p<N
+
+
+########## logit  (stars=true ref=false) ##########
+---- RAW ----
+     Logit Regression
+
+  Specification
+
+  Model             Logit
+  Observations        300
+  Covariates            2
+  Log-lik.        -157.52
+  Log-lik. null   -207.40
+  Pseudo R-sq.     0.2405
+  AIC              319.05
+  BIC              326.46
+  Converged           Yes
+  Iterations            6
+
+                               Coefficients
+
+         Coef.   Std.Err.         z    P>|z|   CI lower   CI upper
+
+  x1    1.1099     0.1625    6.8302   <0.001     0.7914     1.4284   ***
+  x2   -0.8394     0.1460   -5.7474   <0.001    -1.1256    -0.5531   ***
+
+Significance: *** p<0.01, ** p<0.05, * p<0.10
+
+---- CANONICAL ----
+ Logit Regression
+
+ Specification
+
+ Model Logit
+ Observations 300
+ Covariates 2
+ Log-lik. N
+ Log-lik. null N
+ Pseudo R-sq. N
+ AIC N
+ BIC N
+ Converged Yes
+ Iterations 6
+
+ Coefficients
+
+ Coef. Std.Err. z P>|z| CI lower CI upper
+
+ x1 N N N <N N N ***
+ x2 N N N <N N N ***
+
+Significance: *** p<N, ** p<N, * p<N
+
+
+########## probit  (stars=true ref=false) ##########
+---- RAW ----
+     Probit Regression
+
+  Specification
+
+  Model            Probit
+  Observations        300
+  Covariates            2
+  Log-lik.        -157.28
+  Log-lik. null   -207.40
+  Pseudo R-sq.     0.2417
+  AIC              318.56
+  BIC              325.97
+  Converged           Yes
+  Iterations            6
+
+                               Coefficients
+
+         Coef.   Std.Err.         z    P>|z|   CI lower   CI upper
+
+  x1    0.6655     0.0910    7.3148   <0.001     0.4872     0.8438   ***
+  x2   -0.5002     0.0833   -6.0058   <0.001    -0.6634    -0.3369   ***
+
+Significance: *** p<0.01, ** p<0.05, * p<0.10
+
+---- CANONICAL ----
+ Probit Regression
+
+ Specification
+
+ Model Probit
+ Observations 300
+ Covariates 2
+ Log-lik. N
+ Log-lik. null N
+ Pseudo R-sq. N
+ AIC N
+ BIC N
+ Converged Yes
+ Iterations 6
+
+ Coefficients
+
+ Coef. Std.Err. z P>|z| CI lower CI upper
+
+ x1 N N N <N N N ***
+ x2 N N N <N N N ***
+
+Significance: *** p<N, ** p<N, * p<N
+
+
+########## ologit  (stars=true ref=false) ##########
+---- RAW ----
+    Ordered Logit Regression
+
+  Specification
+
+  Model           Ordered Logit
+  Observations              800
+  Covariates                  2
+  Categories                  3
+  Parameters                  4
+  Log-lik.              -716.60
+  Log-lik. null         -872.76
+  Pseudo R-sq.           0.1789
+  AIC                   1441.20
+  BIC                   1459.94
+  Converged                 Yes
+  Iterations                  6
+
+                               Coefficients
+
+         Coef.   Std.Err.         z    P>|z|   CI lower   CI upper
+
+  x1    1.1861     0.0869   13.6541   <0.001     1.0159     1.3564   ***
+  x2   -0.7358     0.0798   -9.2171   <0.001    -0.8923    -0.5794   ***
+
+                                 Cutpoints
+
+           Coef.   Std.Err.         z    P>|z|   CI lower   CI upper
+
+  cut1   -0.5261     0.0839   -6.2690   <0.001    -0.6906    -0.3616   ***
+  cut2    1.1250     0.0914   12.3111   <0.001     0.9459     1.3041   ***
+
+Significance: *** p<0.01, ** p<0.05, * p<0.10
+
+---- CANONICAL ----
+ Ordered Logit Regression
+
+ Specification
+
+ Model Ordered Logit
+ Observations 800
+ Covariates 2
+ Categories 3
+ Parameters 4
+ Log-lik. N
+ Log-lik. null N
+ Pseudo R-sq. N
+ AIC N
+ BIC N
+ Converged Yes
+ Iterations 6
+
+ Coefficients
+
+ Coef. Std.Err. z P>|z| CI lower CI upper
+
+ x1 N N N <N N N ***
+ x2 N N N <N N N ***
+
+ Cutpoints
+
+ Coef. Std.Err. z P>|z| CI lower CI upper
+
+ cut1 N N N <N N N ***
+ cut2 N N N <N N N ***
+
+Significance: *** p<N, ** p<N, * p<N
+
+
+########## mlogit  (stars=false ref=false) ##########
+---- RAW ----
+    Multinomial Logit Regression
+
+  Specification
+
+  Model           Multinomial Logit
+  Observations                  800
+  Covariates                      3
+  Categories                      3
+  Base category                   1
+  Parameters                      6
+  Log-lik.                  -663.58
+  Log-lik. null             -843.52
+  Pseudo R-sq.               0.2133
+  AIC                       1339.15
+  BIC                       1367.26
+  Converged                     Yes
+  Iterations                      6
+
+                               Alternative 2 (vs 1)
+
+                  Coef.   Std.Err.         z    P>|z|   CI lower   CI upper
+
+  (Intercept)    0.4973     0.0998    4.9843   <0.001     0.3017     0.6928   ***
+  x1             0.9757     0.1184    8.2421   <0.001     0.7437     1.2077   ***
+  x2            -0.7026     0.1131   -6.2148   <0.001    -0.9242    -0.4810   ***
+
+                               Alternative 3 (vs 1)
+
+                  Coef.   Std.Err.         z    P>|z|   CI lower   CI upper
+
+  (Intercept)   -0.2458     0.1252   -1.9628   0.0497    -0.4912    -0.0004   **
+  x1            -0.6726     0.1228   -5.4771   <0.001    -0.9133    -0.4319   ***
+  x2             0.7075     0.1205    5.8726   <0.001     0.4714     0.9436   ***
+
+Significance: *** p<0.01, ** p<0.05, * p<0.10
+
+---- CANONICAL ----
+ Multinomial Logit Regression
+
+ Specification
+
+ Model Multinomial Logit
+ Observations 800
+ Covariates 3
+ Categories 3
+ Base category 1
+ Parameters 6
+ Log-lik. N
+ Log-lik. null N
+ Pseudo R-sq. N
+ AIC N
+ BIC N
+ Converged Yes
+ Iterations 6
+
+ Alternative 2 (vs 1)
+
+ Coef. Std.Err. z P>|z| CI lower CI upper
+
+ (Intercept) N N N <N N N ***
+ x1 N N N <N N N ***
+ x2 N N N <N N N ***
+
+ Alternative 3 (vs 1)
+
+ Coef. Std.Err. z P>|z| CI lower CI upper
+
+ (Intercept) N N N N N N **
+ x1 N N N <N N N ***
+ x2 N N N <N N N ***
+
+Significance: *** p<N, ** p<N, * p<N
+
+
+########## arma  (stars=false ref=false) ##########
+---- RAW ----
+                               ARMA(1,1) Model
+
+                 Coef.   Std.Err.        z    P>|z|   CI lower   CI upper
+
+  (Intercept)   0.6863     0.0000        —        —          —          —
+  φ[1]          0.5744     0.0000        —        —          —          —
+  θ[1]          0.0635     0.0602   1.0541   0.2918    -0.0546     0.1816
+
+
+       Estimate
+
+  σ²     1.1211
+
+
+  Fit                      Value
+
+  Observations               200
+  Log-likelihood       -295.4570
+  AIC                   598.9140
+  BIC                   612.1073
+  R²                      0.3786
+  S.E. of regression      1.0588
+  Method                 CSS-MLE
+  Converged                  Yes
+
+Significance: *** p<0.01, ** p<0.05, * p<0.10
+
+---- CANONICAL ----
+ ARMA(1,1) Model
+
+ Coef. Std.Err. z P>|z| CI lower CI upper
+
+ (Intercept) N N — — — —
+ φ[1] N N — — — —
+ θ[1] N N N N N N
+
+
+ Estimate
+
+ σ² N
+
+
+ Fit Value
+
+ Observations 200
+ Log-likelihood N
+ AIC N
+ BIC N
+ R² N
+ S.E. of regression N
+ Method CSS-MLE
+ Converged Yes
+
+Significance: *** p<N, ** p<N, * p<N
+
+
+########## garch  (stars=false ref=false) ##########
+---- RAW ----
+                                  GARCH(1,1) Model
+
+                    Coef.   Std.Err.         z    P>|z|   CI lower   CI upper
+
+  μ (mean)        -0.0317     0.0200   -1.5859   0.1128    -0.0709     0.0075
+  ω (intercept)    0.0018     0.0019    0.9704   0.3318    -0.0019     0.0055
+  α[1]             0.0132     0.0094    1.4101   0.1585    -0.0052     0.0316
+  β[1]             0.9775     0.0131   74.8503   <0.001     0.9519     1.0031   ***
+
+
+  Fit                    Value
+
+  Observations             500
+  Log-likelihood     -307.9021
+  AIC                 623.8041
+  BIC                 640.6626
+  Persistence           0.9907
+  Unconditional σ²      0.1968
+  Converged                Yes
+
+Significance: *** p<0.01, ** p<0.05, * p<0.10
+
+---- CANONICAL ----
+ GARCH(1,1) Model
+
+ Coef. Std.Err. z P>|z| CI lower CI upper
+
+ μ (mean) N N N N N N
+ ω (intercept) N N N N N N
+ α[1] N N N N N N
+ β[1] N N N <N N N ***
+
+
+ Fit Value
+
+ Observations 500
+ Log-likelihood N
+ AIC N
+ BIC N
+ Persistence N
+ Unconditional σ² N
+ Converged Yes
+
+Significance: *** p<N, ** p<N, * p<N
+
+
+########## gmm  (stars=true ref=false) ##########
+---- RAW ----
+   GMM Estimation Result
+
+  Parameters            2
+  Moments               2
+  Observations        300
+  Weighting      two_step
+  Converged           Yes
+  Iterations            2
+
+                                Coefficients
+
+           Coef.   Std.Err.         z    P>|z|   CI lower   CI upper
+
+  θ[1]    0.9853     0.0514   19.1599   <0.001     0.8845     1.0861   ***
+  θ[2]   -0.4312     0.0511   -8.4441   <0.001    -0.5312    -0.3311   ***
+
+
+---- CANONICAL ----
+ GMM Estimation Result
+
+ Parameters 2
+ Moments 2
+ Observations 300
+ Weighting two_step
+ Converged Yes
+ Iterations 2
+
+ Coefficients
+
+ Coef. Std.Err. z P>|z| CI lower CI upper
+
+ θ[1] N N N <N N N ***
+ θ[2] N N N <N N N ***
+
+
+########## panel_fe  (stars=true ref=false) ##########
+---- RAW ----
+Panel Regression — Fixed Effects
+
+  Specification
+
+  Method          Fixed Effects
+  Observations               96
+  Groups                      8
+  Avg. periods             12.0
+  R-sq. within           0.9699
+  R-sq. between          0.7228
+  R-sq. overall          0.6922
+  sigma_u                1.7720
+  sigma_e                0.3231
+  rho                    0.9678
+  F-statistic           1259.92
+  F p-value              <0.001
+  Cov. type             cluster
+
+                               Coefficients
+
+         Coef.   Std.Err.          t    P>|t|   CI lower   CI upper
+
+  x1    1.4690     0.0490    29.9933   <0.001     1.3716     1.5664   ***
+  x2   -0.8722     0.0305   -28.6033   <0.001    -0.9328    -0.8115   ***
+
+Significance: *** p<0.01, ** p<0.05, * p<0.10
+
+---- CANONICAL ----
+Panel Regression — Fixed Effects
+
+ Specification
+
+ Method Fixed Effects
+ Observations 96
+ Groups 8
+ Avg. periods N
+ R-sq. within N
+ R-sq. between N
+ R-sq. overall N
+ sigma_u N
+ sigma_e N
+ rho N
+ F-statistic N
+ F p-value <N
+ Cov. type cluster
+
+ Coefficients
+
+ Coef. Std.Err. t P>|t| CI lower CI upper
+
+ x1 N N N <N N N ***
+ x2 N N N <N N N ***
+
+Significance: *** p<N, ** p<N, * p<N
+
+
+########## did_es  (stars=false ref=true) ##########
+---- RAW ----
+Difference-in-Differences — Two-Way Fixed Effects
+
+  Method          Two-Way Fixed Effects
+  Outcome                       outcome
+  Treatment                  treat_time
+  Clustering             Unit-clustered
+  Control group           never_treated
+  Groups                             30
+  Treated units                      20
+  Control units                      10
+  Observations                      480
+
+                             Event-Study Coefficients
+
+                 Coef.   Std.Err.         z    P>|z|   CI lower   CI upper
+
+  e=-3         -1.5238     0.2483   -6.1368   <0.001    -2.0105    -1.0371   ***
+  e=-2         -1.4856     0.2354   -6.3115   <0.001    -1.9470    -1.0243   ***
+  e=-1 (ref)         —          —         —        —          —          —
+  e=0           0.3263     0.1942    1.6801   0.0929    -0.0544     0.7069   *
+  e=1           0.2887     0.2126    1.3582   0.1744    -0.1279     0.7054
+  e=2           1.0244     0.1797    5.7005   <0.001     0.6722     1.3766   ***
+  e=3           0.3596     0.2106    1.7079   0.0877    -0.0531     0.7723   *
+  e=4           0.2788     0.1735    1.6070   0.1081    -0.0612     0.6188
+  e=5           0.9478     0.1704    5.5615   <0.001     0.6138     1.2818   ***
+
+
+Aggregate Treatment Effect
+
+  Overall ATT   0.5376
+  SE            0.1238
+  z             4.3409
+  P>|z|         <0.001
+
+
+---- CANONICAL ----
+Difference-in-Differences — Two-Way Fixed Effects
+
+ Method Two-Way Fixed Effects
+ Outcome outcome
+ Treatment treat_time
+ Clustering Unit-clustered
+ Control group never_treated
+ Groups 30
+ Treated units 20
+ Control units 10
+ Observations 480
+
+ Event-Study Coefficients
+
+ Coef. Std.Err. z P>|z| CI lower CI upper
+
+ e=-3 N N N <N N N ***
+ e=-2 N N N <N N N ***
+ e=-1 (ref) — — — — — —
+ e=0 N N N N N N *
+ e=1 N N N N N N
+ e=2 N N N <N N N ***
+ e=3 N N N N N N *
+ e=4 N N N N N N
+ e=5 N N N <N N N ***
+
+
+Aggregate Treatment Effect
+
+ Overall ATT N
+ SE N
+ z N
+ P>|z| <N
+
+
+########## adf  (stars=false ref=false) ##########
+---- RAW ----
+             Augmented Dickey-Fuller Unit Root Test
+
+  Specification
+
+  H₀                    Series has a unit root (non-stationary)
+  H₁                                       Series is stationary
+  Deterministic terms                                  Constant
+  Lag length                                                  0
+  Observations                                              149
+
+             Results
+
+                          Value
+
+  Test statistic (τ)   -1.8273
+  P-value                 0.367
+
+      Critical Values
+
+      1%       5%      10%
+
+  -3.467   -2.876   -2.576
+
+
+  Conclusion   Fail to reject H₀ (series appears non-stationary)
+  Note         *** p<0.01, ** p<0.05, * p<0.10
+
+
+---- CANONICAL ----
+ Augmented Dickey-Fuller Unit Root Test
+
+ Specification
+
+ H₀ Series has a unit root (non-stationary)
+ H₁ Series is stationary
+ Deterministic terms Constant
+ Lag length 0
+ Observations 149
+
+ Results
+
+ Value
+
+ Test statistic (τ) N
+ P-value N
+
+ Critical Values
+
+ 1% 5% 10%
+
+ N N N
+
+
+ Conclusion Fail to reject H₀ (series appears non-stationary)
+ Note *** p<N, ** p<N, * p<N
+
+
+########## johansen  (stars=false ref=false) ##########
+---- RAW ----
+                Johansen Cointegration Test
+
+  Specification
+
+  Deterministic terms   Constant in cointegrating equation
+  Lags in VECM                                           2
+  Observations                                         118
+  Number of variables                                    3
+
+                       Trace Test
+
+  H₀: rank ≤ r   Statistic   5% CV   P-value   Decision
+
+             0    67.3 ***   34.91    <0.001   Reject
+             1       9.41    19.96    0.7005
+             2       1.91     9.24    0.7912
+
+                 Maximum Eigenvalue Test
+
+  H₀: rank = r   Statistic   5% CV   P-value   Decision
+
+             0   57.89 ***    22.0    <0.001   Reject
+             1        7.5    15.67    0.6158
+             2       1.91     9.24    0.7901
+
+         Eigenvalues
+
+         λ1       λ2      λ3
+
+     0.3878   0.0616   0.016
+
+
+  Conclusion   Estimated cointegration rank = 1
+  Note         *** p<0.01, ** p<0.05, * p<0.10
+
+
+---- CANONICAL ----
+ Johansen Cointegration Test
+
+ Specification
+
+ Deterministic terms Constant in cointegrating equation
+ Lags in VECM 2
+ Observations 118
+ Number of variables 3
+
+ Trace Test
+
+ H₀: rank ≤ r Statistic 5% CV P-value Decision
+
+ 0 N *** N <N Reject
+ 1 N N N
+ 2 N N N
+
+ Maximum Eigenvalue Test
+
+ H₀: rank = r Statistic 5% CV P-value Decision
+
+ 0 N *** N <N Reject
+ 1 N N N
+ 2 N N N
+
+ Eigenvalues
+
+ λ1 λ2 λ3
+
+ N N N
+
+
+ Conclusion Estimated cointegration rank = 1
+ Note *** p<N, ** p<N, * p<N
+
+
+########## factor  (stars=false ref=false) ##########
+---- RAW ----
+Static Factor Model (r=3)
+
+  Specification
+
+  Factors           3
+  Variables        12
+  Observations    100
+  Standardized    Yes
+  Estimation      PCA
+
+         Variance Explained
+
+             Variance   Cumulative
+
+  Factor 1      42.0%        42.0%
+  Factor 2      28.8%        70.8%
+  Factor 3      22.5%        93.3%
+
+Top Loadings — Factor 1
+
+  Variable   Loading
+
+  Var 5      -0.9419
+  Var 4      -0.9337
+  Var 3      -0.9018
+  Var 9       0.8224
+  Var 6      -0.6399
+
+Top Loadings — Factor 2
+
+  Variable   Loading
+
+  Var 2       0.8255
+  Var 11     -0.8057
+  Var 8      -0.7559
+  Var 6       0.6991
+  Var 10     -0.6050
+
+Top Loadings — Factor 3
+
+  Variable   Loading
+
+  Var 1       0.8956
+  Var 7      -0.6689
+  Var 8       0.5932
+  Var 12      0.5675
+  Var 9       0.5048
+
+
+---- CANONICAL ----
+Static Factor Model (r=3)
+
+ Specification
+
+ Factors 3
+ Variables 12
+ Observations 100
+ Standardized Yes
+ Estimation PCA
+
+ Variance Explained
+
+ Variance Cumulative
+
+ Factor 1 N% N%
+ Factor 2 N% N%
+ Factor 3 N% N%
+
+Top Loadings — Factor 1
+
+ Variable Loading
+
+ Var 5 N
+ Var 4 N
+ Var 3 N
+ Var 9 N
+ Var 6 N
+
+Top Loadings — Factor 2
+
+ Variable Loading
+
+ Var 2 N
+ Var 11 N
+ Var 8 N
+ Var 6 N
+ Var 10 N
+
+Top Loadings — Factor 3
+
+ Variable Loading
+
+ Var 1 N
+ Var 7 N
+ Var 8 N
+ Var 12 N
+ Var 9 N
+
+
+########## lp  (stars=false ref=false) ##########
+---- RAW ----
+Local Projection Model (Jordà 2005)
+
+  Variables                     3
+  Shock variable                1
+  Response variables            3
+  Horizon                       8
+  Lags                          4
+  Observations                120
+  Covariance           Newey-West
+
+        Impulse Responses (shock: y1)
+
+           h=0       h=1       h=4       h=8
+
+  y1   1.0000*   0.5338*   0.2546*    0.0374
+  y2   -0.0794   -0.1845    0.0750    0.1426
+  y3    0.1234    0.0518    0.0640   -0.0020
+
+* significant at 5% (|IRF/SE| > 1.96)
+
+---- CANONICAL ----
+Local Projection Model (Jordà 2005)
+
+ Variables 3
+ Shock variable 1
+ Response variables 3
+ Horizon 8
+ Lags 4
+ Observations 120
+ Covariance Newey-West
+
+ Impulse Responses (shock: y1)
+
+ h=0 h=1 h=4 h=8
+
+ y1 N* N* N* N
+ y2 N N N N
+ y3 N N N N
+
+* significant at 5% (|IRF/SE| > N)
+
+
+########## bvar_fcst  (stars=false ref=false) ##########
+---- RAW ----
+ Bayesian VAR Forecast
+
+  Specification
+
+  Horizon           4
+  Variables         2
+  Credibility     95%
+
+                 y1
+
+  h   Post. Mean      2.5%    97.5%
+
+  1       0.1001   -2.0370   2.2796
+  2       0.3197   -2.1558   2.5475
+  3       0.4076   -2.2071   2.8269
+  4       0.5104   -1.8850   2.6535
+
+                 y2
+
+  h   Post. Mean      2.5%    97.5%
+
+  1      -0.5438   -2.2882   1.2607
+  2       0.0018   -1.9654   2.1550
+  3       0.3171   -1.8631   2.7112
+  4       0.3221   -1.9642   2.5143
+
+
+---- CANONICAL ----
+ Bayesian VAR Forecast
+
+ Specification
+
+ Horizon 4
+ Variables 2
+ Credibility 95%
+
+ y1
+
+ h Post. Mean N% N%
+
+ 1 N N N
+ 2 N N N
+ 3 N N N
+ 4 N N N
+
+ y2
+
+ h Post. Mean N% N%
+
+ 1 N N N
+ 2 N N N
+ 3 N N N
+ 4 N N N
+
+
+########## normality  (stars=false ref=false) ##########
+---- RAW ----
+            Multivariate Normality Test Suite (n=200, k=3)
+
+  Test                           Statistic   P-value   H₀ (5%)
+
+  Jarque–Bera (multivariate)       12.8312    0.0458   Reject
+  Jarque–Bera (component-wise)      8.6635    0.1934   Fail to reject
+  Mardia skewness                  12.7918    0.2355   Fail to reject
+  Mardia kurtosis                  -0.1538    0.8778   Fail to reject
+  Mardia Both                      12.8154    0.3056   Fail to reject
+  Doornik–Hansen                   69.4079    <0.001   Reject
+  Henze–Zirkler                     0.2719    <0.001   Reject
+
+
+---- CANONICAL ----
+ Multivariate Normality Test Suite (n=200, k=3)
+
+ Test Statistic P-value H₀ (5%)
+
+ Jarque–Bera (multivariate) N N Reject
+ Jarque–Bera (component-wise) N N Fail to reject
+ Mardia skewness N N Fail to reject
+ Mardia kurtosis N N Fail to reject
+ Mardia Both N N Fail to reject
+ Doornik–Hansen N <N Reject
+ Henze–Zirkler N <N Reject
+
+
+########## dsge_est  (stars=false ref=false) ##########
+---- RAW ----
+    DSGE Estimation — GMM
+
+  Parameters               1
+  Method        irf_matching
+  J-statistic         3.2363
+  J p-value           0.9542
+  Converged              Yes
+  Determined             Yes
+
+                          Estimated Parameters
+
+       Coef.   Std.Err.         z    P>|z|   CI lower   CI upper
+
+  ρ   0.7805     0.0373   20.9106   <0.001     0.7073     0.8536   ***
+
+Significance: *** p<0.01, ** p<0.05, * p<0.10
+
+          DSGE Solution
+
+  Variables                   1
+  Shocks                      1
+  Method                 gensys
+  Existence                 Yes
+  Uniqueness                Yes
+  Stable eigenvalues          1
+  Unstable eigenvalues        0
+  Max |eigenvalue(G1)|   0.7805
+
+  Steady State
+
+  y   4.46e-12
+
+
+---- CANONICAL ----
+ DSGE Estimation — GMM
+
+ Parameters 1
+ Method irf_matching
+ J-statistic N
+ J p-value N
+ Converged Yes
+ Determined Yes
+
+ Estimated Parameters
+
+ Coef. Std.Err. z P>|z| CI lower CI upper
+
+ ρ N N N <N N N ***
+
+Significance: *** p<N, ** p<N, * p<N
+
+ DSGE Solution
+
+ Variables 1
+ Shocks 1
+ Method gensys
+ Existence Yes
+ Uniqueness Yes
+ Stable eigenvalues 1
+ Unstable eigenvalues 0
+ Max |eigenvalue(G1)| N
+
+ Steady State
+
+ y N
+
+=== dump done ===
