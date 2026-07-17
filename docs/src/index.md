@@ -44,7 +44,7 @@
 - **Simulation and IRFs**: Stochastic simulation, pruned higher-order simulation, analytical and generalized IRFs, FEVD, Lyapunov-based unconditional moments
 - **GMM Estimation**: IRF matching, Euler equation GMM, Simulated Method of Moments, analytical GMM via Lyapunov equation
 - **Bayesian Estimation**: Sequential Monte Carlo (SMC with adaptive tempering), SMC-squared (SMC² with particle filter likelihood), random-walk Metropolis-Hastings; delayed acceptance for accelerated sampling; nonlinear particle filter for higher-order solutions
-- **Constraints**: Perfect foresight (Newton solver), OccBin occasionally binding constraints (Guerrieri & Iacoviello 2015), built-in constrained solvers (Optim.jl box constraints, NLopt.jl nonlinear inequalities, projected Newton) with optional JuMP/Ipopt (NLP) and PATH (MCP) backends
+- **Constraints**: Perfect foresight (Newton solver), OccBin occasionally binding constraints (Guerrieri & Iacoviello 2015), built-in constrained solvers (Optim.jl box constraints, NLopt.jl nonlinear inequalities, projected Newton, JuMP+Ipopt NLP) with an optional PATH (MCP) backend
 
 **Structural Identification**
 

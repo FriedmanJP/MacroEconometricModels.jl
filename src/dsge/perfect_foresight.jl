@@ -96,7 +96,7 @@ function perfect_foresight(spec::DSGESpec{FT};
             return _nlopt_perfect_foresight(spec, T_periods, shocks, constraints;
                         algorithm=algorithm)
         elseif chosen == :path
-            _check_jump_loaded()
+            _check_path_loaded()
             any(c -> c isa NonlinearConstraint, constraints) &&
                 throw(ArgumentError(
                     "PATH solver cannot handle NonlinearConstraint. " *

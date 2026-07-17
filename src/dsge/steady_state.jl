@@ -88,7 +88,7 @@ function compute_steady_state(spec::DSGESpec{T};
             y_ss = _nlopt_steady_state(spec, constraints;
                         initial_guess=initial_guess, algorithm=algorithm)
         elseif chosen == :path
-            _check_jump_loaded()
+            _check_path_loaded()
             any(c -> c isa NonlinearConstraint, constraints) &&
                 throw(ArgumentError(
                     "PATH solver cannot handle NonlinearConstraint. " *

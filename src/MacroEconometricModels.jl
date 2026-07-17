@@ -76,6 +76,8 @@ import ForwardDiff
 import NLopt
 import NonlinearSolve
 import Optim
+import JuMP
+import Ipopt
 using Logging
 import Tables
 
@@ -306,6 +308,7 @@ include("dsge/pfi.jl")
 include("dsge/anderson.jl")
 include("dsge/vfi.jl")
 include("dsge/perfect_foresight.jl")
+include("dsge/jump_solvers.jl")   # JuMP+Ipopt constrained solvers (full deps, #461)
 include("dsge/occbin.jl")
 
 # GMM

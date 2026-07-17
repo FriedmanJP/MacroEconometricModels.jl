@@ -3,11 +3,11 @@
 **MacroEconometricModels.jl** provides a complete toolkit for specifying, solving, simulating, and estimating Dynamic Stochastic General Equilibrium (DSGE) models. The package covers the full workflow from model definition through structural estimation, with seven solution methods spanning linear, higher-order, and global approaches.
 
 - **Specification**: The `@dsge` macro provides a domain-specific language for writing equilibrium conditions with time-indexed variables
-- **Steady State**: Analytical or numerical steady-state computation via NonlinearSolve.jl (`TrustRegion()` default) with built-in constrained solvers (Optim.jl, NLopt.jl) and optional JuMP backends
+- **Steady State**: Analytical or numerical steady-state computation via NonlinearSolve.jl (`TrustRegion()` default) with built-in constrained solvers (Optim.jl, NLopt.jl, JuMP+Ipopt) and an optional PATH backend
 - **Linearization**: Automatic first-order approximation via numerical Jacobians in the Sims (2002) canonical form
 - **Linear Solvers**: Three first-order solvers --- Gensys (Sims 2002), Blanchard-Kahn (1980), and Klein (2000) --- producing the state-space solution; see [Linear Solvers](@ref dsge_linear)
 - **Nonlinear Methods**: Up to 3rd-order perturbation with Andreasen, Fernandez-Villaverde & Rubio-Ramirez (2018) pruning, Chebyshev collocation, policy function iteration, and value function iteration (with Howard steps and Anderson acceleration) for globally accurate policy functions; see [Nonlinear Methods](@ref dsge_nonlinear)
-- **Constraints**: Perfect foresight paths, OccBin occasionally-binding constraints (Guerrieri & Iacoviello 2015), and constrained optimization via Optim.jl/NLopt.jl (built-in) with optional JuMP/Ipopt (NLP) and PATH (MCP) backends; see [Constraints](@ref dsge_constraints)
+- **Constraints**: Perfect foresight paths, OccBin occasionally-binding constraints (Guerrieri & Iacoviello 2015), and constrained optimization via Optim.jl/NLopt.jl and JuMP/Ipopt (NLP) — all built in — with an optional PATH (MCP) backend; see [Constraints](@ref dsge_constraints)
 - **Estimation**: Four GMM-based methods (one-step, two-step, iterative, CU) for IRF matching, plus Bayesian estimation via SMC, SMC`` ^2 `` with two-stage delayed acceptance, and Random-Walk Metropolis-Hastings; see [Estimation](@ref dsge_estimation)
 - **Simulation and IRFs**: Stochastic and pruned simulation, analytical and generalized impulse responses, FEVD, and unconditional moments via Lyapunov equation; see [Nonlinear Methods](@ref dsge_nonlinear)
 - **Historical Decomposition**: Kalman smoother-based shock attribution for linear models, FFBSi particle smoother for nonlinear models, and Bayesian posterior bands; see [Historical Decomposition](@ref dsge_hd_page)
@@ -315,17 +315,16 @@ spec = compute_steady_state(spec; constraints=[bound, debt_limit])
 For large-scale problems or complementarity formulations, JuMP-based backends provide additional power:
 
 ```julia
-# Ipopt (NLP): handles general nonlinear constraints
-import JuMP, Ipopt
+# Ipopt (NLP): handles general nonlinear constraints (JuMP + Ipopt are built in)
 spec = compute_steady_state(spec; constraints=[bound], solver=:ipopt)
 
-# PATH (MCP): natural for complementarity problems (e.g., ZLB)
-import JuMP, PATHSolver
+# PATH (MCP): natural for complementarity problems (e.g., ZLB); optional dependency
+import PATHSolver
 spec = compute_steady_state(spec; constraints=[bound], solver=:path)
 ```
 
 !!! note "Solver Selection Guide"
-    **Built-in solvers** (no extra packages): `:nonlinearsolve` for unconstrained, `:optim` for box constraints, `:nlopt` for nonlinear inequality constraints. **JuMP solvers** (require `import`): `:ipopt` for large-scale NLP, `:path` for complementarity problems. The solver is auto-detected from constraint types --- override with the `solver` keyword. For full details, see [Constraints](@ref dsge_constraints).
+    **Built-in solvers** (no extra packages): `:nonlinearsolve` for unconstrained, `:optim` for box constraints, `:nlopt` for nonlinear inequality constraints, and `:ipopt` (JuMP + Ipopt) for large-scale NLP. **Optional:** `:path` for complementarity problems requires the PATHSolver package. The solver is auto-detected from constraint types --- override with the `solver` keyword. For full details, see [Constraints](@ref dsge_constraints).
 
 ---
 
@@ -459,7 +458,7 @@ The estimation pipeline is validated separately in `test/dynare_replication/esti
 
 4. **Numerical steady state converges to wrong equilibrium**: For models with multiple equilibria, the default initial guess (vector of ones) may converge to an economically irrelevant solution. Provide `initial_guess` close to the desired equilibrium, or use the analytical `steady_state` block.
 
-5. **Constrained steady state**: Box constraints (variable bounds) are handled by NonlinearSolve.jl without additional dependencies. Nonlinear inequality constraints require `import JuMP, Ipopt`. PATH MCP requires `import JuMP, PATHSolver`.
+5. **Constrained steady state**: Box constraints (variable bounds) are handled by NonlinearSolve.jl. Nonlinear inequality constraints use the built-in JuMP + Ipopt backend (`solver=:ipopt`). PATH MCP requires the optional PATHSolver package (`import PATHSolver`).
 
 ---
 

@@ -1,21 +1,18 @@
-module MacroEconometricModelsJuMPExt
-
-using MacroEconometricModels
-using JuMP
-using Ipopt
-
-# Extension loaded — methods override the stubs in constraints.jl
-# Shared helpers (_build_ss_objective, _build_pf_equation, etc.) defined in
-# MacroEconometricModels.src/dsge/constraints.jl — imported via `using`.
-import MacroEconometricModels: _build_ss_objective, _build_ss_nlcon,
-    _build_pf_equation, _build_pf_nlcon
+# JuMP + Ipopt constrained-DSGE solvers.
+#
+# JuMP (MPL-2.0) and Ipopt (EPL-2.0 / MIT wrapper) are full dependencies (see
+# issue #461), so these methods are always available — no package extension.
+# They implement the `_jump_*` generic functions declared in constraints.jl and
+# provide the `solver=:ipopt` tier of the constrained steady-state / perfect-
+# foresight hierarchy. JuMP is imported (not `using`d) to avoid name clashes;
+# JuMP macros are therefore called qualified (`JuMP.@variable`, …).
 
 # =============================================================================
 # Constrained Steady State via JuMP + Ipopt
 # =============================================================================
 
-function MacroEconometricModels._jump_compute_steady_state(
-        spec::MacroEconometricModels.DSGESpec{T},
+function _jump_compute_steady_state(
+        spec::DSGESpec{T},
         constraints::Vector;
         initial_guess::Union{Nothing,AbstractVector}=nothing) where {T}
 
@@ -27,7 +24,7 @@ function MacroEconometricModels._jump_compute_steady_state(
     JuMP.set_silent(model)
 
     # Variables
-    @variable(model, x[1:n])
+    JuMP.@variable(model, x[1:n])
 
     # Initial guess
     ss_guess = if initial_guess !== nothing
@@ -43,7 +40,7 @@ function MacroEconometricModels._jump_compute_steady_state(
 
     # Apply variable bounds
     for c in constraints
-        if c isa MacroEconometricModels.VariableBound
+        if c isa VariableBound
             idx = findfirst(==(c.var_name), spec.endog)
             c.lower !== nothing && JuMP.set_lower_bound(x[idx], T(c.lower))
             c.upper !== nothing && JuMP.set_upper_bound(x[idx], T(c.upper))
@@ -53,17 +50,17 @@ function MacroEconometricModels._jump_compute_steady_state(
     # Objective: minimize sum of squared residuals at steady state
     ss_obj = _build_ss_objective(spec.residual_fns, n_ε, θ)
     op_obj = JuMP.add_nonlinear_operator(model, n, ss_obj; name=:ss_objective)
-    @objective(model, Min, op_obj(x...))
+    JuMP.@objective(model, Min, op_obj(x...))
 
     # Nonlinear inequality constraints
     nl_idx = 0
     for c in constraints
-        if c isa MacroEconometricModels.NonlinearConstraint
+        if c isa NonlinearConstraint
             nl_idx += 1
             wrapper = _build_ss_nlcon(c.fn, n_ε, θ)
             op_c = JuMP.add_nonlinear_operator(model, n, wrapper;
                         name=Symbol(:nlcon_, nl_idx))
-            @constraint(model, op_c(x...) <= 0)
+            JuMP.@constraint(model, op_c(x...) <= 0)
         end
     end
 
@@ -81,8 +78,8 @@ end
 # Constrained Perfect Foresight via JuMP + Ipopt
 # =============================================================================
 
-function MacroEconometricModels._jump_perfect_foresight(
-        spec::MacroEconometricModels.DSGESpec{FT},
+function _jump_perfect_foresight(
+        spec::DSGESpec{FT},
         T_periods::Int,
         shocks::Matrix{FT},
         constraints::Vector) where {FT}
@@ -98,7 +95,7 @@ function MacroEconometricModels._jump_perfect_foresight(
 
     # Variables: x[var, period] for t = 0, 1, ..., T+1
     # t=0 and t=T+1 are boundary conditions (fixed to SS)
-    @variable(model, x[1:n, 0:T_periods+1])
+    JuMP.@variable(model, x[1:n, 0:T_periods+1])
 
     # Fix boundary conditions
     for i in 1:n
@@ -113,7 +110,7 @@ function MacroEconometricModels._jump_perfect_foresight(
 
     # Apply variable bounds at each interior period
     for c in constraints
-        if c isa MacroEconometricModels.VariableBound
+        if c isa VariableBound
             idx = findfirst(==(c.var_name), spec.endog)
             for t in 1:T_periods
                 c.lower !== nothing && JuMP.set_lower_bound(x[idx, t], FT(c.lower))
@@ -136,7 +133,7 @@ function MacroEconometricModels._jump_perfect_foresight(
     # Equilibrium constraints for each period
     for t in 1:T_periods
         for eq in 1:n
-            @constraint(model,
+            JuMP.@constraint(model,
                 eq_ops[eq](x[:, t]..., x[:, t-1]..., x[:, t+1]..., shocks[t, :]...) == 0)
         end
     end
@@ -144,20 +141,20 @@ function MacroEconometricModels._jump_perfect_foresight(
     # Nonlinear inequality constraints at each period
     nl_idx = 0
     for c in constraints
-        if c isa MacroEconometricModels.NonlinearConstraint
+        if c isa NonlinearConstraint
             nl_idx += 1
             wrapper = _build_pf_nlcon(c.fn, n, n_ε, θ)
             op_c = JuMP.add_nonlinear_operator(model, n_args, wrapper;
                         name=Symbol(:pf_nlcon_, nl_idx))
             for t in 1:T_periods
-                @constraint(model,
+                JuMP.@constraint(model,
                     op_c(x[:, t]..., x[:, t-1]..., x[:, t+1]..., shocks[t, :]...) <= 0)
             end
         end
     end
 
     # Feasibility problem
-    @objective(model, Min, 0)
+    JuMP.@objective(model, Min, 0)
 
     JuMP.optimize!(model)
 
@@ -176,7 +173,7 @@ function MacroEconometricModels._jump_perfect_foresight(
 
     # Filter to original variables if augmented
     if spec.augmented
-        orig_idx = MacroEconometricModels._original_var_indices(spec)
+        orig_idx = _original_var_indices(spec)
         path = Matrix{FT}(path_full[:, orig_idx])
         deviations = Matrix{FT}(deviations_full[:, orig_idx])
     else
@@ -190,7 +187,5 @@ function MacroEconometricModels._jump_perfect_foresight(
         0
     end
 
-    MacroEconometricModels.PerfectForesightPath{FT}(path, deviations, converged, iter, spec)
+    PerfectForesightPath{FT}(path, deviations, converged, iter, spec)
 end
-
-end # module
