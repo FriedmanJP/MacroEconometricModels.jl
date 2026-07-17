@@ -98,6 +98,21 @@ MacroEconometricModels.StatsAPI.stderror(::ARIMAModel)
 
 ---
 
+## State-Space Models
+
+See [State-Space Models](../statespace.md) for theory and examples.
+
+```@docs
+AbstractStateSpaceModel
+StateSpaceModel
+estimate_statespace
+local_level
+local_linear_trend
+estimate_tvp_reg
+```
+
+---
+
 ## Volatility Types
 
 ```@docs

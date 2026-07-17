@@ -315,6 +315,11 @@ include("arima/forecast.jl")
 include("arima/selection.jl")
 include("arima/arfima.jl")   # EV-13 (#421): ARFIMA + GPH + local Whittle
 
+# Public linear-Gaussian state-space module — thin wrapper over the core Kalman kernel
+include("statespace/types.jl")      # EV-37 (#445): StateSpaceModel + AbstractStateSpaceModel
+include("statespace/estimation.jl") # EV-37 (#445): PED-MLE, filter/smoother driver, TVP reg
+include("statespace/api.jl")        # EV-37 (#445): forecast (state recursion + variance accumulation)
+
 # X-13ARIMA-SEATS internal (before filters for X13FilterResult)
 include("x13/types.jl")
 include("x13/linalg.jl")
@@ -998,6 +1003,9 @@ export select_arima_order, auto_arima, ic_table
 # ARFIMA — fractional integration (EV-13, #421)
 export estimate_arfima, ARFIMAModel
 export gph_test, local_whittle, GPHResult, LocalWhittleResult
+
+# State-space module (EV-37, #445): public Kalman MLE + TVP regression
+export StateSpaceModel, estimate_statespace, estimate_tvp_reg, local_level, local_linear_trend
 
 # =============================================================================
 # Exports - Non-Gaussian VAR Identification

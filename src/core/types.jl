@@ -163,3 +163,18 @@ shared by later smooth-transition (STAR) and Markov-switching models, which exte
 this hierarchy without re-scaffolding.
 """
 abstract type AbstractNonlinearTSModel <: StatsAPI.StatisticalModel end
+
+# =============================================================================
+# Abstract Types - State-Space Models (EV-37, #445)
+# =============================================================================
+
+"""
+    AbstractStateSpaceModel{T<:AbstractFloat} <: StatsAPI.StatisticalModel
+
+Abstract supertype for public linear-Gaussian state-space models — a documented
+front end over the consolidated Kalman kernel (`src/core/kalman_kernel.jl`).
+
+Subtypes: `StateSpaceModel` (general single-block observation/state system with
+prediction-error-decomposition MLE, filtering, RTS smoothing, and forecasting).
+"""
+abstract type AbstractStateSpaceModel{T<:AbstractFloat} <: StatsAPI.StatisticalModel end

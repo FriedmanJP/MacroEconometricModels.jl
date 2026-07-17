@@ -219,6 +219,11 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Time Series Analysis by State Space Methods", journal="",
         volume="", issue="", pages="", doi="10.1093/acprof:oso/9780199641178.001.0001",
         isbn="978-0-19-964117-8", publisher="Oxford University Press", entry_type=:book),
+    :harvey1989 => (key=:harvey1989, authors="Harvey, Andrew C.", year=1989,
+        title="Forecasting, Structural Time Series Models and the Kalman Filter",
+        journal="", volume="", issue="", pages="",
+        doi="10.1017/CBO9781107049994", isbn="978-0-521-40573-7",
+        publisher="Cambridge University Press", entry_type=:book),
     # --- GMM ---
     :hansen1982 => (key=:hansen1982, authors="Hansen, Lars Peter", year=1982,
         title="Large Sample Properties of Generalized Method of Moments Estimators",
@@ -1704,6 +1709,12 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :estimate_arfima => [:sowell1992, :hosking1981, :jensen_nielsen2014],
     :GPHResult => [:geweke_porter_hudak1983],
     :gph_test => [:geweke_porter_hudak1983],
+    # State-space module (EV-37)
+    :StateSpaceModel => [:durbin_koopman2012, :harvey1989],
+    :estimate_statespace => [:durbin_koopman2012, :harvey1989],
+    :local_level => [:durbin_koopman2012],
+    :local_linear_trend => [:harvey1989],
+    :estimate_tvp_reg => [:harvey1989, :durbin_koopman2012],
     :LocalWhittleResult => [:robinson1995],
     :local_whittle => [:robinson1995],
     # MIDAS (EV-01)
@@ -2248,6 +2259,9 @@ refs(io::IO, ::SVARRestrictions; kw...) = refs(io, _TYPE_REFS[:SVARRestrictions]
 refs(io::IO, ::SignIdentifiedSet; kw...) = refs(io, _TYPE_REFS[:SignIdentifiedSet]; kw...)
 refs(io::IO, ::MinnesotaHyperparameters; kw...) = refs(io, _TYPE_REFS[:MinnesotaHyperparameters]; kw...)
 refs(io::IO, ::BVARPosterior; kw...) = refs(io, _TYPE_REFS[:BVARPosterior]; kw...)
+
+# State-space module (EV-37, #445)
+refs(io::IO, ::StateSpaceModel; kw...) = refs(io, _TYPE_REFS[:StateSpaceModel]; kw...)
 
 # Input-Output analysis
 refs(io::IO, ::IOData; kw...) = refs(io, _TYPE_REFS[:IOData]; kw...)

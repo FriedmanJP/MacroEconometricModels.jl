@@ -33,6 +33,7 @@ makedocs(;
             "X-13ARIMA-SEATS" => "x13.md",
             "Spectral Analysis" => "spectral.md",
             "ARIMA" => "arima.md",
+            "State-Space Models" => "statespace.md",
             "Volatility Models" => "volatility.md",
             "Nonparametric Regression & Density" => "nonparametric.md",
         ],

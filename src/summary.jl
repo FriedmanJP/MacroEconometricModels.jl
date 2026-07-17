@@ -411,6 +411,37 @@ report(x::KernelDensity) = show(stdout, x)
 report(x::KernelRegression) = show(stdout, x)
 report(x::LowessFit) = show(stdout, x)
 
+# --- State-space models (EV-37, #445) ---
+report(ss::StateSpaceModel) = report(stdout, ss)
+function report(io::IO, ss::StateSpaceModel{T}) where {T}
+    if !isfitted(ss)
+        println(io, "State-Space Model (unfitted spec)")
+        println(io, "  n_obs = $(ss.n_obs), n_state = $(ss.n_state), init = :$(ss.init_mode)")
+        return nothing
+    end
+    println(io, "State-Space Model — Maximum Likelihood (prediction-error decomposition)")
+    println(io, "  Observations: $(ss.T_obs)   State dim: $(ss.n_state)   Obs dim: $(ss.n_obs)")
+    println(io, "  Log-likelihood: $(round(ss.loglik, digits=4))   Converged: $(ss.converged)   Init: :$(ss.init_mode)")
+    println(io)
+    if !isempty(ss.theta)
+        # Hyper-parameters (variances / builder θ̂) printed as a plain estimate table.
+        # Standard errors are not delta-propagated here; the "—" columns are intentional.
+        se = fill(T(NaN), length(ss.theta))
+        _coef_table(io, "Hyper-parameters", ss.param_names, Vector{T}(ss.theta), se;
+                    coef_label="Estimate")
+    end
+    # One-step-ahead residual diagnostics (drop missing).
+    r = vec(ss.std_residuals)
+    r = r[.!isnan.(r)]
+    if length(r) > 8
+        lb = ljung_box_test(r; lags=min(10, length(r) ÷ 2))
+        println(io)
+        println(io, "  Std. residual Ljung–Box(", lb.lags, "): Q = ", round(lb.statistic, digits=3),
+                "  p = ", round(lb.pvalue, digits=4))
+    end
+    return nothing
+end
+
 # --- Hypothesis test results ---
 report(x::AbstractUnitRootTest) = show(stdout, x)
 report(x::AbstractNormalityTest) = show(stdout, x)

@@ -87,6 +87,7 @@ const TEST_GROUPS = [
         "arima/test_arima.jl",
         "arima/test_arima_coverage.jl",
         "arima/test_arfima.jl",   # EV-13 (#421): ARFIMA + GPH + local Whittle
+        "statespace/test_statespace.jl",   # EV-37 (#445): public state-space Kalman MLE + TVP regression
         "teststat/test_granger.jl",
         "teststat/test_dumitrescu_hurlin.jl",   # EV-24 (#432): DH panel Granger non-causality
         "teststat/test_equality.jl",   # EV-34 (#442): equality-of-distribution + rank correlations
@@ -439,6 +440,7 @@ else
         @testset "ARIMA Models" begin include("arima/test_arima.jl") end
         @testset "ARIMA Coverage" begin include("arima/test_arima_coverage.jl") end
         @testset "ARFIMA (long memory)" begin include("arima/test_arfima.jl") end
+        @testset "State-Space Module" begin include("statespace/test_statespace.jl") end   # EV-37 (#445)
         @testset "Granger Causality Tests" begin include("teststat/test_granger.jl") end
         @testset "Equality & Rank Correlation Tests" begin include("teststat/test_equality.jl") end   # EV-34 (#442)
         @testset "Model Comparison Tests" begin include("teststat/test_model_comparison.jl") end

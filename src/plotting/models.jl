@@ -1185,3 +1185,55 @@ function _plot_ha_policy(ss::HASteadyState{T}; title::String="") where {T}
 
     _make_plot(panels; title=title, ncols=min(length(panels), 2))
 end
+
+# =============================================================================
+# StateSpaceModel (EV-37, #445)
+# =============================================================================
+
+"""
+    plot_result(ss::StateSpaceModel; obs=1, state=nothing, title="", save_path=nothing)
+
+Overlay the observed series (`obs`-th observable) with the filtered and smoothed level
+of a fitted state-space model, plus a ±1.96·√`smoothed_cov` band around the smoothed
+path. `state` selects which state component to overlay (defaults to the state that the
+`obs`-th observation loads on, or state 1).
+"""
+function plot_result(ss::StateSpaceModel{T}; obs::Int=1, state::Union{Int,Nothing}=nothing,
+                     title::String="", save_path::Union{String,Nothing}=nothing) where {T}
+    isfitted(ss) || throw(ArgumentError("plot_result requires a fitted StateSpaceModel"))
+    (1 <= obs <= ss.n_obs) || throw(ArgumentError("obs must be in 1:$(ss.n_obs)"))
+    # Default state: the first state the obs-th observation loads on.
+    st = state === nothing ? something(findfirst(!iszero, ss.Z[obs, :]), 1) : state
+    (1 <= st <= ss.n_state) || throw(ArgumentError("state must be in 1:$(ss.n_state)"))
+
+    z = ss.Z[obs, st]                                    # loading of obs on state st
+    z = z == 0 ? one(T) : z
+    rows = Vector{Pair{String,String}}[]
+    for t in 1:ss.T_obs
+        yv = ss.y[t, obs]
+        filt = z * ss.filtered_state[t, st]
+        smth = z * ss.smoothed_state[t, st]
+        sd = z * sqrt(max(ss.smoothed_cov[st, st, t], zero(T)))
+        push!(rows, Pair{String,String}[
+            "x"    => _json(t),
+            "obs"  => isnan(yv) ? "null" : _json(yv),
+            "filt" => _json(filt),
+            "smth" => _json(smth),
+            "lo"   => _json(smth - T(1.96) * sd),
+            "hi"   => _json(smth + T(1.96) * sd),
+        ])
+    end
+    data_json = _json_array_of_objects(rows)
+    id = _next_plot_id("ss_level")
+    series = _series_json(["Observed", "Filtered", "Smoothed"],
+                          [_PLOT_COLORS[1], _PLOT_COLORS[3], _PLOT_COLORS[2]];
+                          keys=["obs", "filt", "smth"], dash=["", "4,3", ""])
+    bands = "[{\"lo_key\":\"lo\",\"hi_key\":\"hi\",\"color\":\"$(_PLOT_COLORS[2])\"}]"
+    js = _render_line_js(id, data_json, series; bands_json=bands,
+                         xlabel="Period", ylabel=ss.n_obs == 1 ? "Value" : "Series $obs")
+    panel = _PanelSpec(id, "Filtered vs smoothed level (95% band)", js)
+    isempty(title) && (title = "State-Space Model — level estimates")
+    p = _make_plot([panel]; title=title, ncols=1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
