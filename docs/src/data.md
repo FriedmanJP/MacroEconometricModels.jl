@@ -9,6 +9,7 @@
 - **Filtering**: `apply_filter` applies HP, Hamilton, BN, BK, or Boosted HP filters per-variable to extract trend or cycle components
 - **Panel Operations**: Stata-style `xtset` for panel construction, within-group lag/lead/diff, group extraction, and balance detection
 - **Estimation Dispatch**: All estimators accept `TimeSeriesData` and `PanelData` directly --- no manual conversion required
+- **Interoperability**: `DataFrame(result)`, `long_table`, and `write_csv` turn any estimate into a tidy table or CSV for R/Python hand-off; `set_log_level` and `with_min_level` control library logging
 
 ```@setup data
 using MacroEconometricModels, DataFrames
@@ -565,6 +566,45 @@ to_vector(d_ed, 2)           # single column by index
 
 ---
 
+## Interoperability: DataFrames and CSV
+
+Every coefficient-bearing result and every array-valued result exposes a programmatic tabular view, so estimates flow into a `DataFrame`, a CSV file, or a co-author's R/Python session without hand-scraping fields. Coefficient models implement the Tables.jl source interface, so `DataFrame(model)` returns the same numbers `report(model)` prints.
+
+```@example data
+coef_table = DataFrame(model)      # VARModel: equation, term, estimate, std_error, stat, p_value, CI
+first(coef_table, 5)
+```
+
+Array-valued results (impulse responses, FEVDs, forecasts) have no single canonical rectangular shape, so `long_table` returns a tidy/long table with explicit index columns --- one row per cell.
+
+```@example data
+irf_var = irf(model, 12; method=:cholesky)
+tidy_irf = long_table(irf_var)     # one row per (horizon, variable, shock)
+first(tidy_irf, 5)
+```
+
+`write_csv` exports either form --- coefficient models write their coefficient table, array-valued results write their `long_table` --- using the stdlib `DelimitedFiles` (no CSV.jl dependency):
+
+```@example data
+write_csv(model, joinpath(tempdir(), "var_coefficients.csv"))
+write_csv(irf_var, joinpath(tempdir(), "var_irf.csv"))
+nothing # hide
+```
+
+The exposed columns are uniform across result families so downstream scripts stay generic:
+
+| Result | Columns |
+|--------|---------|
+| Coefficient models (`RegModel`, `LogitModel`, panel/ordered/multinomial, `VARModel`, `MarginalEffects`, `DIDResult`) | `term, estimate, std_error, stat, p_value, ci_lower, ci_upper` (plus a block/`equation`/`alternative` discriminator where applicable) |
+| `ImpulseResponse` / `BayesianImpulseResponse` | `horizon, variable, shock, value, lower, upper` |
+| `FEVD` | `horizon, variable, shock, value` |
+| `LPImpulseResponse` | `horizon, variable, shock, value, se, lower, upper` |
+| Forecasts (`VARForecast`, BVAR/VECM/LP) | `horizon, variable, value, lower, upper` |
+
+Bands (`lower`/`upper`) are `missing` when a result carries no uncertainty (`ci_type == :none` / `ci_method == :none`).
+
+---
+
 ## Filtering
 
 `apply_filter()` applies time series filters to variables in a `TimeSeriesData` or `PanelData`, extracting trend or cycle components. When filters produce different-length outputs (e.g., Hamilton drops initial observations), the result is trimmed to the common valid range. For mathematical details on each filter, see [Time Series Filters](@ref filters_page).
@@ -713,6 +753,32 @@ refs(md; format=:bibtex)   # BibTeX entry for McCracken & Ng (2016)
 refs(:fred_md)             # same via symbol dispatch
 refs(:pwt)                 # Feenstra, Inklaar & Timmer (2015)
 ```
+
+---
+
+## Controlling Logging
+
+Library diagnostics flow through Julia's `Logging` stdlib, and the package is quiet by default: solver iteration traces are emitted at `@debug`, which the default logger hides. `with_min_level` scopes a minimum severity to a single computation --- useful for muting per-draw `@warn` noise in bootstrap or Monte-Carlo loops while still surfacing a genuine `@error`.
+
+```@example data
+using Logging
+with_min_level(Logging.Error) do
+    estimate_var(to_matrix(d_ed), 2)   # per-draw @warn noise is hidden here
+end
+nothing # hide
+```
+
+`set_log_level` raises or lowers the global threshold for the whole session. Raise it to `:debug` to turn solver iteration traces on:
+
+```julia
+set_log_level(:debug)     # show @debug solver iteration traces
+set_log_level(:info)      # back to the default verbosity
+```
+
+| Function | Effect |
+|----------|--------|
+| `set_log_level(level)` | Set the global minimum log level (`:debug`, `:info`, `:warn`, `:error`, or a `Logging.LogLevel`) |
+| `with_min_level(f, level)` | Run `f()` with a scoped minimum level; the previous logger is restored afterwards |
 
 ---
 

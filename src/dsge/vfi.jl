@@ -254,7 +254,9 @@ function vfi_solver(spec::DSGESpec{T};
         sup_norm = maximum(abs.(y_updated_nodes .- y_current_nodes))
 
         if verbose
-            println("  VFI iteration $k: sup-norm = $(sup_norm)")
+            @info "VFI iteration $k: sup-norm = $(sup_norm)"
+        else
+            @debug "VFI iteration $k: sup-norm = $(sup_norm)"
         end
 
         coeffs .= coeffs_new

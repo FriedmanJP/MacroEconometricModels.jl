@@ -25,6 +25,8 @@ const TEST_GROUPS = [
         "var/test_core_var.jl",
         "var/test_statsapi.jl",
         "core/test_summary.jl",
+        "core/test_tables.jl",
+        "core/test_logging.jl",
         "core/test_utils.jl",
         "core/test_edge_cases.jl",
         "core/test_examples.jl",
@@ -342,6 +344,8 @@ else
         @testset "Core VAR" begin include("var/test_core_var.jl") end
         @testset "StatsAPI Compatibility" begin include("var/test_statsapi.jl") end
         @testset "Summary Tables" begin include("core/test_summary.jl") end
+        @testset "Tables Interface" begin include("core/test_tables.jl") end
+        @testset "Structured Logging" begin include("core/test_logging.jl") end
         @testset "Utility Functions" begin include("core/test_utils.jl") end
         @testset "Edge Cases" begin include("core/test_edge_cases.jl") end
         @testset "Documentation Examples" begin include("core/test_examples.jl") end

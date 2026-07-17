@@ -236,10 +236,13 @@ function _ha_steady_state(ip::IndividualProblem{T}, grid::HAGrid{T},
         warm_c = res.c_pol
         excess = res.excess
 
+        _bisect_msg = "Bisection iter $iter: r = $(round(r_mid; digits=6)), " *
+                      "K_s = $(round(res.K_s; digits=4)), K_d = $(round(res.K_d; digits=4)), " *
+                      "excess = $(round(excess; digits=6))"
         if verbose
-            @info "Bisection iter $iter: r = $(round(r_mid; digits=6)), " *
-                  "K_s = $(round(res.K_s; digits=4)), K_d = $(round(res.K_d; digits=4)), " *
-                  "excess = $(round(excess; digits=6))"
+            @info _bisect_msg
+        else
+            @debug _bisect_msg
         end
 
         # Store best solution
