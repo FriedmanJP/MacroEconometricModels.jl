@@ -358,6 +358,10 @@ Publication-quality tables, display backend switching, and bibliographic referen
 | `write_csv(result, path)` | Export a result (coefficient table or `long_table`) to CSV |
 | `set_log_level(level)` | Set the global minimum log level |
 | `with_min_level(f, level)` | Run `f()` with a scoped minimum log level |
+| `capture_manifest(; seed)` | Capture a reproducibility manifest (seed, threads, versions, git) |
+| `reproduce(result)` | Re-run a randomized result from its seed; returns a `ReproReport` |
+| `save_model(model, path)` | Persist a fitted model to a versioned container (needs JLD2) |
+| `load_model(path)` | Reconstruct a saved model, validating the format version |
 | `refs(model; format=...)` | Bibliographic references |
 | `refs(io, :method; format=...)` | References by method name |
 

@@ -264,6 +264,8 @@ function Base.show(io::IO, irf::ImpulseResponse{T}) where {T}
     if irf.ci_type != :none
         _show_note(io, "* CI excludes zero")
     end
+
+    _manifest_footer(io, irf.manifest)   # reproducibility footer (T246/#345), no-op if unset
 end
 
 function Base.show(io::IO, irf::BayesianImpulseResponse{T}) where {T}

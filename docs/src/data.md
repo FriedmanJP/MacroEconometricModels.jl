@@ -10,6 +10,7 @@
 - **Panel Operations**: Stata-style `xtset` for panel construction, within-group lag/lead/diff, group extraction, and balance detection
 - **Estimation Dispatch**: All estimators accept `TimeSeriesData` and `PanelData` directly --- no manual conversion required
 - **Interoperability**: `DataFrame(result)`, `long_table`, and `write_csv` turn any estimate into a tidy table or CSV for R/Python hand-off; `set_log_level` and `with_min_level` control library logging
+- **Reproducibility**: randomized results carry a `ReproManifest` (seed, threads, versions, git revision); `reproduce` re-runs and verifies bit-for-bit, and `save_model`/`load_model` persist a fitted model to a versioned container
 
 ```@setup data
 using MacroEconometricModels, DataFrames
@@ -602,6 +603,41 @@ The exposed columns are uniform across result families so downstream scripts sta
 | Forecasts (`VARForecast`, BVAR/VECM/LP) | `horizon, variable, value, lower, upper` |
 
 Bands (`lower`/`upper`) are `missing` when a result carries no uncertainty (`ci_type == :none` / `ci_method == :none`).
+
+---
+
+## Reproducibility and Model Persistence
+
+Randomized results — bootstrap IRF bands, BVAR posteriors — carry a [`ReproManifest`](@ref) that records how they were produced: the RNG seed, the thread count, the Julia and package versions, the OS, a UTC timestamp, and the package git revision. Passing a `seed` to a randomized estimator makes the draw reproducible and lets [`reproduce`](@ref) re-run the computation and confirm the numbers match bit-for-bit — the "did my published number actually come from this code" check that institutional publication workflows require.
+
+```@example data
+post = estimate_bvar(model.Y, 2; n_draws=200, seed=20260717)
+post.manifest            # seed, threads, versions, git revision
+```
+
+`reproduce` re-draws the posterior from the recorded seed and settings and reports whether it matches:
+
+```@example data
+reproduce(post)          # ReproReport: PASS (matched bit-for-bit)
+```
+
+Because a seed is not recoverable from an `AbstractRNG` after the fact, the estimator must own it: pass `seed=N` and it seeds a fresh generator, records `N`, and reproduces exactly (thread-count-invariantly). Without a `seed` the manifest still captures the environment but reports the result as not seed-reproducible. A bootstrap IRF carries a manifest too; reproduce it with `reproduce(ir, model)` (the source model is not retained on the IRF result).
+
+[`save_model`](@ref) / [`load_model`](@ref) persist a fitted model to a versioned, self-describing container backed by the optional `JLD2` package. The file records the format version, the package and Julia versions, and — for a randomized result — its reproducibility manifest, so it survives a package upgrade; a file whose `format_version` a build does not recognize is rejected with a `SerializationError` naming the expected version rather than silently mis-read.
+
+```julia
+using JLD2                                       # loads the disk backend
+save_model(post, "bvar_posterior.jld2")          # VAR/BVAR/Reg/Logit/Probit/LP supported
+post_reloaded = load_model("bvar_posterior.jld2")
+reproduce(post_reloaded)                          # still reproduces from the persisted seed
+```
+
+| Function | Description |
+|----------|-------------|
+| `capture_manifest(; seed)` | Capture the current environment as a `ReproManifest` |
+| `reproduce(result)` | Re-run from the recorded seed; returns a `ReproReport` (`matched` true/false/`missing`) |
+| `save_model(model, path)` | Persist to a versioned container (requires `using JLD2`) |
+| `load_model(path)` | Reconstruct a saved model, validating the `format_version` |
 
 ---
 

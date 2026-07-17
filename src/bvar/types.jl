@@ -41,7 +41,16 @@ struct BVARPosterior{T<:AbstractFloat}
     prior::Symbol
     sampler::Symbol
     varnames::Vector{String}
+    # Reproducibility manifest (T246/#345): seed + environment used to draw this
+    # posterior; `nothing` unless `estimate_bvar` was called with `seed=`.
+    manifest::Union{ReproManifest,Nothing}
 end
+
+# Backward-compatible constructor: the 9-arg positional form defaults the manifest
+# to `nothing`, so every existing `BVARPosterior{T}(...)` call site is unchanged.
+BVARPosterior{T}(B_draws, Sigma_draws, n_draws, p, n, data, prior, sampler, varnames;
+                 manifest=nothing) where {T<:AbstractFloat} =
+    BVARPosterior{T}(B_draws, Sigma_draws, n_draws, p, n, data, prior, sampler, varnames, manifest)
 
 """
     BVARForecast{T} <: AbstractForecastResult{T}
@@ -159,4 +168,6 @@ function Base.show(io::IO, post::BVARPosterior{T}) where {T}
     _matrix_table(io, Sigma_mean, "Posterior Mean Σ";
         row_labels=vn,
         col_labels=vn)
+
+    _manifest_footer(io, post.manifest)   # reproducibility footer (T246/#345), no-op if unset
 end

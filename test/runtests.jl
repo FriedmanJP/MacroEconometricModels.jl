@@ -27,6 +27,8 @@ const TEST_GROUPS = [
         "core/test_summary.jl",
         "core/test_tables.jl",
         "core/test_logging.jl",
+        "core/test_repro.jl",
+        "core/test_serialization.jl",
         "core/test_utils.jl",
         "core/test_edge_cases.jl",
         "core/test_examples.jl",
@@ -390,6 +392,8 @@ else
         @testset "Summary Tables" begin include("core/test_summary.jl") end
         @testset "Tables Interface" begin include("core/test_tables.jl") end
         @testset "Structured Logging" begin include("core/test_logging.jl") end
+        @testset "Reproducibility" begin include("core/test_repro.jl") end
+        @testset "Serialization" begin include("core/test_serialization.jl") end
         @testset "Utility Functions" begin include("core/test_utils.jl") end
         @testset "Edge Cases" begin include("core/test_edge_cases.jl") end
         @testset "Documentation Examples" begin include("core/test_examples.jl") end

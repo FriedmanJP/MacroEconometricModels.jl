@@ -164,9 +164,20 @@ struct ImpulseResponse{T<:AbstractFloat} <: AbstractImpulseResponse
     ci_type::Symbol
     _draws::Union{Nothing, Array{T,4}}
     _conf_level::T
+    # Reproducibility manifest (T246/#345): populated by the bootstrap-IRF path,
+    # `nothing` for deterministic/analytic IRFs. Optional trailing field so every
+    # existing positional call site is unchanged.
+    manifest::Union{ReproManifest,Nothing}
 end
 
-# Backward-compatible constructors (no draws)
+# Backward-compatible constructors. The 9-arg form defaults the manifest to
+# `nothing` (covers every existing positional call site); the 7-arg form
+# additionally defaults draws/conf-level. Only the bootstrap path (core/irf.jl)
+# passes `manifest=`.
+ImpulseResponse{T}(values, ci_lower, ci_upper, horizon, variables, shocks, ci_type,
+                   _draws, _conf_level; manifest=nothing) where {T} =
+    ImpulseResponse{T}(values, ci_lower, ci_upper, horizon, variables, shocks, ci_type,
+                       _draws, _conf_level, manifest)
 ImpulseResponse{T}(values, ci_lower, ci_upper, horizon, variables, shocks, ci_type) where {T} =
     ImpulseResponse{T}(values, ci_lower, ci_upper, horizon, variables, shocks, ci_type, nothing, zero(T))
 
