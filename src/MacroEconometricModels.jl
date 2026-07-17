@@ -418,6 +418,7 @@ include("teststat/engle_granger.jl")
 include("teststat/phillips_ouliaris.jl")
 include("teststat/hansen_instability.jl")
 include("teststat/park_added.jl")
+include("teststat/variance_ratio.jl")   # EV-27 (#435): variance-ratio / random-walk tests
 
 # Local Projections
 include("lp/types.jl")
@@ -696,6 +697,9 @@ export lm_unitroot_test, adf_2break_test, gregory_hansen_test
 # Residual-based / parameter-stability cointegration tests (EV-11, #419)
 export engle_granger_test, phillips_ouliaris_test, hansen_instability_test, park_added_test
 export EngleGrangerResult, PhillipsOuliarisResult, HansenInstabilityResult, ParkAddedResult
+
+# Variance-ratio / random-walk tests (EV-27, #435)
+export variance_ratio_test, VarianceRatioResult
 
 # Convenience functions
 export unit_root_summary, test_all_variables

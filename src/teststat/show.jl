@@ -1243,3 +1243,90 @@ function Base.show(io::IO, r::EDFTestResult{T}) where {T}
     conc_data = Any["Conclusion" conclusion; "Note" "*** p<0.01, ** p<0.05, * p<0.10"]
     _pretty_table(io, conc_data; column_labels=["",""], alignment=[:l,:l])
 end
+
+# =============================================================================
+# Variance-ratio / random-walk tests (EV-27, #435)
+# =============================================================================
+
+function Base.show(io::IO, r::VarianceRatioResult{T}) where {T}
+    has_boot = r.bootstrap > 0 && isfinite(r.cd_boot_pvalue)
+    spec_data = Any[
+        "H₀"              "Series is a random walk (VR(q)=1 ∀ q)";
+        "H₁"              "Increments serially dependent (VR(q)≠1)";
+        "Method"          (r.method === :wright ? "Lo-MacKinlay + Wright ranks/signs" : "Lo-MacKinlay");
+        "Aggregations (q)" string(r.q);
+        "Observations"    r.nobs;
+        "Bootstrap"       (has_boot ? "$(r.bootstrap) reps, $(r.boot_weights) (seed $(r.seed))" : "none")
+    ]
+    _pretty_table(io, spec_data;
+        title = "Variance-Ratio (Random-Walk) Test",
+        column_labels = ["Specification", ""], alignment = [:l, :r])
+
+    # Per-q Lo-MacKinlay table.
+    nq = length(r.q)
+    ncol = has_boot ? 6 : 5
+    vr_data = Matrix{Any}(undef, nq, ncol)
+    for i in 1:nq
+        vr_data[i, 1] = r.q[i]
+        vr_data[i, 2] = _fmt(r.vr[i])
+        vr_data[i, 3] = string(_fmt(r.z[i]), " ", _significance_stars(r.z_pvalue[i]))
+        vr_data[i, 4] = string(_fmt(r.z_star[i]), " ", _significance_stars(r.z_star_pvalue[i]))
+        vr_data[i, 5] = _format_pvalue(r.z_star_pvalue[i])
+        has_boot && (vr_data[i, 6] = _format_pvalue(r.z_star_boot_pvalue[i]))
+    end
+    vr_labels = has_boot ?
+        ["q", "VR(q)", "Z(q)", "Z*(q)", "P(Z*)", "P(boot)"] :
+        ["q", "VR(q)", "Z(q)", "Z*(q)", "P(Z*)"]
+    _pretty_table(io, vr_data;
+        title = "Lo-MacKinlay Variance Ratios",
+        column_labels = vr_labels,
+        alignment = [:r, :r, :r, :r, :r, :r][1:ncol])
+
+    # Wright rank / sign statistics.
+    if r.wright
+        w_data = Matrix{Any}(undef, nq, 7)
+        for i in 1:nq
+            w_data[i, 1] = r.q[i]
+            w_data[i, 2] = string(_fmt(r.R1[i]), " ", _significance_stars(r.R1_pvalue[i]))
+            w_data[i, 3] = _format_pvalue(r.R1_pvalue[i])
+            w_data[i, 4] = string(_fmt(r.R2[i]), " ", _significance_stars(r.R2_pvalue[i]))
+            w_data[i, 5] = _format_pvalue(r.R2_pvalue[i])
+            w_data[i, 6] = string(_fmt(r.S1[i]), " ", _significance_stars(r.S1_pvalue[i]))
+            w_data[i, 7] = _format_pvalue(r.S1_pvalue[i])
+        end
+        _pretty_table(io, w_data;
+            title = "Wright (2000) Rank / Sign Statistics (simulated null)",
+            column_labels = ["q", "R1", "P(R1)", "R2", "P(R2)", "S1", "P(S1)"],
+            alignment = [:r, :r, :r, :r, :r, :r, :r])
+    end
+
+    # Chow-Denning joint test.
+    primary_asy = r.robust ? r.cd_star_pvalue : r.cd_pvalue
+    joint_data = Any[
+        "CD (homoskedastic)"  string(_fmt(r.cd_stat), " ", _significance_stars(r.cd_pvalue));
+        "  P-value (SMM)"     _format_pvalue(r.cd_pvalue);
+        "CD* (robust)"        string(_fmt(r.cd_star_stat), " ", _significance_stars(r.cd_star_pvalue));
+        "  P-value (SMM)"     _format_pvalue(r.cd_star_pvalue)
+    ]
+    if has_boot
+        joint_data = vcat(joint_data,
+            Any["  P-value (wild boot)"  _format_pvalue(r.cd_boot_pvalue)])
+    end
+    _pretty_table(io, joint_data;
+        title = "Chow-Denning Joint Test (max|Z|)",
+        column_labels = ["Statistic", "Value"], alignment = [:l, :r])
+
+    pv = has_boot ? r.cd_boot_pvalue : primary_asy
+    branch = r.robust ? "robust" : "homoskedastic"
+    conclusion = if pv < 0.01
+        "Reject H₀ at 1% — series is not a random walk ($branch Chow-Denning)"
+    elseif pv < 0.05
+        "Reject H₀ at 5% — series is not a random walk ($branch Chow-Denning)"
+    elseif pv < 0.10
+        "Reject H₀ at 10% — series is not a random walk ($branch Chow-Denning)"
+    else
+        "Fail to reject H₀ — series consistent with a random walk"
+    end
+    conc_data = Any["Conclusion" conclusion; "Note" "*** p<0.01, ** p<0.05, * p<0.10 (two-sided)"]
+    _pretty_table(io, conc_data; column_labels=["",""], alignment=[:l,:l])
+end

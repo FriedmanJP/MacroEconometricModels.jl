@@ -8,6 +8,7 @@ Post-estimation specification testing validates the assumptions underlying stati
 - **ARCH Diagnostics**: Engle (1982) ARCH-LM test and Ljung-Box on squared residuals
 - **Model Comparison**: Likelihood ratio (Wilks 1938) and Lagrange multiplier (Rao 1948) tests for nested models
 - **Panel VAR Diagnostics**: Hansen J-test, Andrews-Lu MMSC, and lag selection for GMM-estimated Panel VARs
+- **Variance-Ratio Tests**: Lo-MacKinlay (1988), Chow-Denning (1993), Wright (2000) rank/sign, and Kim (2006) wild bootstrap for the random-walk hypothesis
 
 ```@setup test_diag
 using MacroEconometricModels, Random, DataFrames
@@ -568,6 +569,43 @@ r = edf_test(d; dist=:exponential, test=:ad, params=:specified, theta=(1.5,))
 `edf_test` accepts `dist ∈ (:normal, :exponential, :logistic, :gumbel, :gamma, :weibull, :chisq)` and `test ∈ (:ks, :lilliefors, :cvm, :ad, :watson)`. For estimated-parameter families without a published null distribution, the statistic is returned with `pvalue = NaN` and an explanatory case label rather than an incorrect number.
 
 **Return value.** `EDFTestResult{T}` stores `test`, `dist`, `params`, `statistic` (the value compared to the critical values), `raw_statistic` (the unmodified EDF statistic), `pvalue`, `nobs`, the fitted or specified `theta`, the `critical_values` dictionary, and a human-readable `case` label.
+## Variance-Ratio Tests
+
+The variance-ratio test evaluates the **random-walk (martingale) hypothesis** for a level series such as a log price or log exchange rate. Under a random walk the variance of the ``q``-period increment grows linearly in ``q``, so the variance ratio equals one for every aggregation ``q``:
+
+```math
+VR(q) = \frac{\operatorname{Var}(y_t - y_{t-q})}{q \, \operatorname{Var}(y_t - y_{t-1})}.
+```
+
+`variance_ratio_test` treats its argument as the **level** series and works internally with first differences (returns) ``x_t = y_t - y_{t-1}``. It reports the overlapping Lo–MacKinlay (1988) estimator with the unbiased normalizer ``m = q(N-q+1)(1-q/N)``, the homoskedastic statistic ``Z(q)`` and the heteroskedasticity-robust ``Z^*(q)`` (both asymptotically ``N(0,1)``), and the Chow–Denning (1993) joint statistic ``\max_q |Z(q)|`` whose p-value comes from the studentized-maximum-modulus complement ``1 - (2\Phi(\cdot) - 1)^m``.
+
+- ``VR(q) > 1`` — positive autocorrelation in returns (trending / momentum)
+- ``VR(q) < 1`` — negative autocorrelation (mean reversion)
+
+```@example test_diag
+rw = cumsum(randn(600))            # a simulated random walk (level series)
+vr = variance_ratio_test(rw; q=[2, 4, 8, 16])
+show(stdout, vr)
+```
+
+The Chow–Denning joint test controls the overall size across all ``q`` simultaneously — unlike inspecting each ``Z(q)`` separately, it does not inflate the familywise error rate.
+
+### Wright rank/sign and wild-bootstrap variants
+
+`method=:wright` adds Wright's (2000) rank (``R1``, ``R2``) and sign (``S1``) statistics, whose exact iid-null distributions are simulated on demand (and cached). These are robust to non-normality and often more powerful in small samples. `bootstrap=B` adds Kim's (2006) wild-bootstrap p-values for ``Z^*(q)`` and the Chow–Denning statistic.
+
+```@example test_diag
+ar1 = zeros(800)
+for t in 2:800
+    ar1[t] = 0.5 * ar1[t-1] + randn()   # mean-reverting: not a random walk
+end
+vr2 = variance_ratio_test(ar1; q=[2, 4, 8], method=:wright, bootstrap=299)
+(vr = round.(vr2.vr, digits=3),
+ cd_star = round(vr2.cd_star_stat, digits=3),
+ cd_boot_p = round(vr2.cd_boot_pvalue, digits=4))
+```
+
+The mean-reverting AR(1) level drives ``VR(q)`` below one and the robust Chow–Denning test rejects the random-walk null.
 
 ---
 
@@ -634,6 +672,7 @@ show(stdout, lr23)
 - D'Agostino, R. B., & Stephens, M. A. (1986). *Goodness-of-Fit Techniques*. New York: Marcel Dekker. ISBN 978-0-8247-7487-5.
 
 - Dallal, G. E., & Wilkinson, L. (1986). An Analytic Approximation to the Distribution of Lilliefors's Test Statistic for Normality. *The American Statistician*, 40(4), 294-296. [DOI](https://doi.org/10.1080/00031305.1986.10475419)
+- Chow, K. V., & Denning, K. C. (1993). A Simple Multiple Variance Ratio Test. *Journal of Econometrics*, 58(3), 385-401. [DOI](https://doi.org/10.1016/0304-4076(93)90051-6)
 
 - Doornik, J. A., & Hansen, H. (2008). An Omnibus Test for Univariate and Multivariate Normality. *Oxford Bulletin of Economics and Statistics*, 70(s1), 927-939. [DOI](https://doi.org/10.1111/j.1468-0084.2008.00537.x)
 
@@ -648,6 +687,9 @@ show(stdout, lr23)
 - Jarque, C. M., & Bera, A. K. (1980). Efficient Tests for Normality, Homoscedasticity and Serial Independence of Regression Residuals. *Economics Letters*, 6(3), 255-259. [DOI](https://doi.org/10.1016/0165-1765(80)90024-5)
 
 - Lilliefors, H. W. (1967). On the Kolmogorov-Smirnov Test for Normality with Mean and Variance Unknown. *Journal of the American Statistical Association*, 62(318), 399-402. [DOI](https://doi.org/10.1080/01621459.1967.10482916)
+- Kim, J. H. (2006). Wild Bootstrapping Variance Ratio Tests. *Economics Letters*, 92(1), 38-43. [DOI](https://doi.org/10.1016/j.econlet.2006.01.007)
+
+- Lo, A. W., & MacKinlay, A. C. (1988). Stock Market Prices Do Not Follow Random Walks: Evidence from a Simple Specification Test. *Review of Financial Studies*, 1(1), 41-66. [DOI](https://doi.org/10.1093/rfs/1.1.41)
 
 - Lutkepohl, H. (2005). *New Introduction to Multiple Time Series Analysis*. Berlin: Springer. ISBN 978-3-540-40172-8.
 
@@ -658,5 +700,6 @@ show(stdout, lr23)
 - Rao, C. R. (1948). Large Sample Tests of Statistical Hypotheses Concerning Several Parameters with Applications to Problems of Estimation. *Mathematical Proceedings of the Cambridge Philosophical Society*, 44(1), 50-57. [DOI](https://doi.org/10.1017/S0305004100023987)
 
 - Stephens, M. A. (1974). EDF Statistics for Goodness of Fit and Some Comparisons. *Journal of the American Statistical Association*, 69(347), 730-737. [DOI](https://doi.org/10.1080/01621459.1974.10480196)
+- Wright, J. H. (2000). Alternative Variance-Ratio Tests Using Ranks and Signs. *Journal of Business & Economic Statistics*, 18(1), 1-9. [DOI](https://doi.org/10.1080/07350015.2000.10524842)
 
 - Wilks, S. S. (1938). The Large-Sample Distribution of the Likelihood Ratio for Testing Composite Hypotheses. *Annals of Mathematical Statistics*, 9(1), 60-62. [DOI](https://doi.org/10.1214/aoms/1177732360)

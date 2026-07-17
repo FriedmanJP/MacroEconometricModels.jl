@@ -113,6 +113,7 @@ const TEST_GROUPS = [
         "fceval/test_fceval.jl",   # EV-39 (#447): forecast eval metrics + DM/CW/MZ/encompassing + combination
         "cointreg/test_cointreg.jl",   # EV-10 (#418): FMOLS/CCR/DOLS cointegrating regression
         "teststat/test_cointegration_resid.jl",   # EV-11 (#419): Engle-Granger/Phillips-Ouliaris/Hansen-Lc/Park
+        "teststat/test_variance_ratio.jl",   # EV-27 (#435): Lo-MacKinlay/Chow-Denning/Wright/Kim variance-ratio tests
         "cointreg/test_panel_cointreg.jl",   # EV-22 (#430): panel FMOLS/DOLS (group-mean + pooled)
         "preg/test_panel_reg.jl",
         "preg/test_panel_tests.jl",
@@ -448,6 +449,7 @@ else
         @testset "Panel ARDL (PMG/MG/DFE)" begin include("ardl/test_pmg.jl") end
         @testset "Forecast Evaluation" begin include("fceval/test_fceval.jl") end
         @testset "Residual-Based Cointegration Tests" begin include("teststat/test_cointegration_resid.jl") end
+        @testset "Variance-Ratio Tests" begin include("teststat/test_variance_ratio.jl") end   # EV-27 (#435): Lo-MacKinlay/Chow-Denning/Wright/Kim
         @testset "Panel Regression" begin include("preg/test_panel_reg.jl") end
         @testset "Panel Specification Tests" begin include("preg/test_panel_tests.jl") end
         @testset "Panel IV" begin include("preg/test_panel_iv.jl") end

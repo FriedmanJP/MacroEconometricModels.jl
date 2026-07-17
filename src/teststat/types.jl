@@ -1148,3 +1148,69 @@ end
 # --- StatsAPI interface (EV-26) ---
 StatsAPI.nobs(r::EDFTestResult) = r.nobs
 StatsAPI.pvalue(r::EDFTestResult) = r.pvalue
+
+# =============================================================================
+# Variance-ratio / random-walk tests (EV-27, #435)
+# =============================================================================
+
+"""
+    VarianceRatioResult{T} <: AbstractUnitRootTest
+
+Result from [`variance_ratio_test`](@ref): Lo–MacKinlay (1988) overlapping variance
+ratios with Chow–Denning (1993) joint testing, optional Wright (2000) rank/sign
+statistics and Kim (2006) wild-bootstrap p-values. `H₀`: the level series is a
+random walk (`VR(q) = 1` ∀ `q`).
+
+# Fields
+- `q::Vector{Int}` — aggregation values tested
+- `vr::Vector{T}` — `VR(q)` (one per `q`)
+- `z::Vector{T}` — homoskedastic `Z(q)` statistics (asymptotically `N(0,1)`)
+- `z_star::Vector{T}` — heteroskedasticity-robust `Z*(q)` statistics
+- `z_pvalue`, `z_star_pvalue::Vector{T}` — per-`q` two-sided asymptotic p-values
+- `cd_stat`, `cd_pvalue::T` — Chow–Denning `max_q |Z(q)|` and its SMM-complement p-value
+- `cd_star_stat`, `cd_star_pvalue::T` — robust Chow–Denning `max_q |Z*(q)|` + p-value
+- `method::Symbol` — `:lomackinlay` or `:wright`
+- `robust::Bool` — whether the robust branch is the reported primary
+- `wright::Bool` — whether Wright statistics were computed
+- `R1`, `R2`, `S1::Vector{T}` — Wright rank (`R1`/`R2`) and sign (`S1`) statistics (empty unless `wright`)
+- `R1_pvalue`, `R2_pvalue`, `S1_pvalue::Vector{T}` — Wright simulated-null two-sided p-values
+- `bootstrap::Int` — number of Kim (2006) wild-bootstrap replications (`0` = none)
+- `boot_weights::Symbol` — `:rademacher` or `:normal`
+- `seed::Int` — wild-bootstrap RNG seed
+- `z_star_boot_pvalue::Vector{T}` — per-`q` wild-bootstrap p-values (empty if none)
+- `cd_boot_pvalue::T` — Chow–Denning wild-bootstrap p-value (`NaN` if none)
+- `nobs::Int` — number of level observations
+"""
+struct VarianceRatioResult{T<:AbstractFloat} <: AbstractUnitRootTest
+    q::Vector{Int}
+    vr::Vector{T}
+    z::Vector{T}
+    z_star::Vector{T}
+    z_pvalue::Vector{T}
+    z_star_pvalue::Vector{T}
+    cd_stat::T
+    cd_pvalue::T
+    cd_star_stat::T
+    cd_star_pvalue::T
+    method::Symbol
+    robust::Bool
+    wright::Bool
+    R1::Vector{T}
+    R2::Vector{T}
+    S1::Vector{T}
+    R1_pvalue::Vector{T}
+    R2_pvalue::Vector{T}
+    S1_pvalue::Vector{T}
+    bootstrap::Int
+    boot_weights::Symbol
+    seed::Int
+    z_star_boot_pvalue::Vector{T}
+    cd_boot_pvalue::T
+    nobs::Int
+end
+
+# --- StatsAPI interface (EV-27) ---
+StatsAPI.nobs(r::VarianceRatioResult) = r.nobs
+StatsAPI.dof(r::VarianceRatioResult) = length(r.q)
+# Primary p-value: the reported Chow–Denning joint test (robust unless robust=false).
+StatsAPI.pvalue(r::VarianceRatioResult) = r.robust ? r.cd_star_pvalue : r.cd_pvalue

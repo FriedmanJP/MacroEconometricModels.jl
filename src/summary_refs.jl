@@ -1427,6 +1427,27 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Evaluating Kolmogorov's Distribution",
         journal="Journal of Statistical Software", volume="8", issue="18", pages="1--4",
         doi="10.18637/jss.v008.i18", isbn="", publisher="", entry_type=:article),
+    # --- Variance-ratio / random-walk tests (EV-27, #435) ---
+    :lo_mackinlay1988 => (key=:lo_mackinlay1988,
+        authors="Lo, Andrew W. and MacKinlay, A. Craig", year=1988,
+        title="Stock Market Prices Do Not Follow Random Walks: Evidence from a Simple Specification Test",
+        journal="Review of Financial Studies", volume="1", issue="1", pages="41--66",
+        doi="10.1093/rfs/1.1.41", isbn="", publisher="", entry_type=:article),
+    :chow_denning1993 => (key=:chow_denning1993,
+        authors="Chow, K. Victor and Denning, Karen C.", year=1993,
+        title="A Simple Multiple Variance Ratio Test",
+        journal="Journal of Econometrics", volume="58", issue="3", pages="385--401",
+        doi="10.1016/0304-4076(93)90051-6", isbn="", publisher="", entry_type=:article),
+    :wright2000 => (key=:wright2000,
+        authors="Wright, Jonathan H.", year=2000,
+        title="Alternative Variance-Ratio Tests Using Ranks and Signs",
+        journal="Journal of Business & Economic Statistics", volume="18", issue="1", pages="1--9",
+        doi="10.1080/07350015.2000.10524842", isbn="", publisher="", entry_type=:article),
+    :kim2006 => (key=:kim2006,
+        authors="Kim, Jae H.", year=2006,
+        title="Wild Bootstrapping Variance Ratio Tests",
+        journal="Economics Letters", volume="92", issue="1", pages="38--43",
+        doi="10.1016/j.econlet.2006.01.007", isbn="", publisher="", entry_type=:article),
 )
 
 # --- Type/method → reference keys mapping ---
@@ -1752,6 +1773,9 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
                        :dallal_wilkinson1986, :marsaglia_tsang_wang2003],
     :edf_test => [:anderson_darling1954, :stephens1974, :lilliefors1967,
                   :dallal_wilkinson1986, :marsaglia_tsang_wang2003],
+    # Variance-ratio / random-walk tests (EV-27, #435)
+    :VarianceRatioResult => [:lo_mackinlay1988, :chow_denning1993, :wright2000, :kim2006],
+    :variance_ratio_test => [:lo_mackinlay1988, :chow_denning1993, :wright2000, :kim2006],
     # Factor model break tests
     :FactorBreakResult => [:breitung_eickmeier2011, :chen_dolado_gonzalo2014, :han_inoue2015],
     :factor_break_test => [:breitung_eickmeier2011, :chen_dolado_gonzalo2014, :han_inoue2015],
@@ -2249,6 +2273,8 @@ refs(io::IO, ::EngleGrangerResult; kw...) = refs(io, _TYPE_REFS[:EngleGrangerRes
 refs(io::IO, ::PhillipsOuliarisResult; kw...) = refs(io, _TYPE_REFS[:PhillipsOuliarisResult]; kw...)
 refs(io::IO, ::HansenInstabilityResult; kw...) = refs(io, _TYPE_REFS[:HansenInstabilityResult]; kw...)
 refs(io::IO, ::ParkAddedResult; kw...) = refs(io, _TYPE_REFS[:ParkAddedResult]; kw...)
+# Variance-ratio / random-walk tests (EV-27, #435)
+refs(io::IO, ::VarianceRatioResult; kw...) = refs(io, _TYPE_REFS[:VarianceRatioResult]; kw...)
 
 # Factor break types
 refs(io::IO, ::FactorBreakResult; kw...) = refs(io, _TYPE_REFS[:FactorBreakResult]; kw...)
