@@ -80,11 +80,31 @@ end
     @test all(fc.factors_se .>= 0)
     @test fc.factors_lower != fc.factors_upper  # CIs not degenerate
 
-    # Explicit :none should give zeros
+    # Explicit :none should give zeros. T098 #197: the OBSERVABLES bounds must be EXACTLY zero
+    # too — the old aliased in-place unstandardizer (one zero buffer passed as lower/upper/se)
+    # corrupted them into nonzero garbage, which the old test missed by only checking factors.
     fc_none = forecast(fm, 5; ci_method=:none)
     @test all(fc_none.factors_lower .== 0)
     @test all(fc_none.factors_upper .== 0)
     @test all(fc_none.factors_se .== 0)
+    @test all(fc_none.observables_lower .== 0)
+    @test all(fc_none.observables_upper .== 0)
+    @test all(fc_none.observables_se .== 0)
+    @test all(isfinite, fc_none.observables)     # point path still correctly unstandardized
+end
+
+@testset "ci_method=:none yields exactly-zero bounds across model types (T098 #197)" begin
+    Random.seed!(19797)
+    X = randn(120, 8)
+    for fc in (forecast(estimate_factors(X, 2), 5; ci_method=:none),
+               forecast(estimate_dynamic_factors(X, 2, 1), 5; ci_method=:none),
+               forecast(estimate_gdfm(X, 2), 5; ci_method=:none))
+        @test all(fc.observables_lower .== 0)
+        @test all(fc.observables_upper .== 0)
+        @test all(fc.observables_se .== 0)
+        @test all(fc.factors_lower .== 0) && all(fc.factors_se .== 0)
+        @test all(isfinite, fc.observables) && all(isfinite, fc.factors)
+    end
 end
 
 @testset "FactorModel Forecast - VAR Lag" begin

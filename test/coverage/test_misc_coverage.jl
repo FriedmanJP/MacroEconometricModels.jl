@@ -89,15 +89,17 @@ Random.seed!(9004)
     # 5. src/filters/boosted_hp.jl — ADF stopping where ADF never rejects
     # =========================================================================
     @testset "boosted_hp ADF never rejects" begin
-        # A strong random walk: ADF should not reject within very few iterations
+        # sig_p = 0 makes rejection (pval < sig) impossible for any p-value
+        # implementation, so the filter must run to max_iter and keep the
+        # last iteration — this pins the "ADF never rejected" branch.
         rng = Random.MersenneTwister(42)
         y = cumsum(randn(rng, 200))  # strong unit root
-        result = boosted_hp(y; stopping=:ADF, max_iter=3, sig_p=0.001)
+        result = boosted_hp(y; stopping=:ADF, max_iter=3, sig_p=0.0)
         @test result isa MacroEconometricModels.BoostedHPResult
         # When ADF never rejects, all p-values >= sig_p, so it uses last iteration
         @test result.iterations == 3
-        @test length(result.adf_pvalues) >= 1
-        @test all(p -> p >= 0.001, result.adf_pvalues)
+        @test length(result.adf_pvalues) == 3
+        @test all(p -> p >= 0.0, result.adf_pvalues)
     end
 
     # =========================================================================

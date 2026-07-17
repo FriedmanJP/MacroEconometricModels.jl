@@ -62,6 +62,7 @@ struct FAVARModel{T<:AbstractFloat} <: AbstractVARModel
     n_key::Int
     factors::Matrix{T}
     loadings::Matrix{T}
+    Lambda_y::Matrix{T}        # N x n_key implied direct panel loadings (Lambda * B_y')
     factor_model::FactorModel{T}
     aic::T
     bic::T

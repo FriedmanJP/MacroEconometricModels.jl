@@ -65,7 +65,9 @@ function linearize(spec::DSGESpec{T}) where {T<:AbstractFloat}
     # Π: select columns of -f_lead corresponding to forward-looking variables
     if n_η > 0
         fwd_var_indices = _forward_variable_indices(spec)
-        Pi = -f_lead[:, fwd_var_indices]    # n × n_η
+        # width = #DISTINCT lead variables (not n_expect, which counts forward EQUATIONS); the
+        # dedup here is exactly the n_expect↔Π reconciliation flagged in #223 (verified fine).
+        Pi = -f_lead[:, fwd_var_indices]    # n × (#distinct lead vars)
     else
         Pi = zeros(T, n, 0)
     end

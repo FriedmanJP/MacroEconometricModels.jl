@@ -452,11 +452,14 @@ tf_ham = transfer_function(:hamilton; h=8)
 nothing  # hide
 ```
 
-The HP transfer function has the closed-form gain:
+The HP penalty is on the **second** difference of the trend, whose squared transfer modulus is ``16\sin^4(\omega/2)``, so the cyclical (high-pass) gain is a ``\sin^4`` --- not ``\sin^2`` --- response:
 
 ```math
-G(\omega) = \frac{4\lambda \sin^2(\omega/2)}{1 + 4\lambda \sin^2(\omega/2)}
+G(\omega) = \frac{16\lambda \sin^4(\omega/2)}{1 + 16\lambda \sin^4(\omega/2)}
+         = \frac{4\lambda (1 - \cos\omega)^2}{1 + 4\lambda (1 - \cos\omega)^2}
 ```
+
+At ``\lambda = 1600`` the half-power point (``G = 0.5``) occurs at ``\omega^* = 2\arcsin\big((16\lambda)^{-1/4}\big)``, a period of ``\approx 39.7`` quarters (``\approx 9.8`` quarters at ``\lambda = 6.25``).
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|

@@ -111,13 +111,19 @@ function forecast(lp::LPModel{T}, shock_path::AbstractVector{<:Real};
                lp.response_vars, lp.shock_var, shock_path_T, T(conf_level), ci_method, lp.varnames)
 end
 
-"""Build the control vector from LP model's last observations."""
+"""Build the control vector from LP model's last observations.
+
+The LP equation `y_{t+h} = α + β·shock_t + Γ·[y_{t-1}, …, y_{t-lags}] + ε` conditions on
+the lags *predetermined at the forecast origin* `t = T_obs`. The lag-1 block is therefore
+`y_{T_obs-1}` (not `y_{T_obs}`); with this alignment the h=0 forecast reproduces the last
+in-sample fitted value.
+"""
 function _build_forecast_controls(lp::LPModel{T}) where {T<:AbstractFloat}
     Y = lp.Y
     T_obs, n = size(Y)
     controls = T[]
     for lag in 1:lp.lags
-        t = T_obs - lag + 1
+        t = T_obs - lag                        # origin is T_obs; lag-1 ⇒ y_{T_obs-1}
         if t >= 1
             append!(controls, @view(Y[t, :]))
         else

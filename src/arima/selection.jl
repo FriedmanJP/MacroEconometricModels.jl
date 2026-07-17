@@ -59,6 +59,7 @@ function select_arima_order(y::AbstractVector{T}, max_p::Int, max_q::Int;
     # Initialize IC matrices with Inf
     aic_matrix = fill(T(Inf), max_p + 1, max_q + 1)
     bic_matrix = fill(T(Inf), max_p + 1, max_q + 1)
+    m_max = max(max_p, max_q)   # common CSS conditioning bound across all candidate orders
 
     # Store fitted models
     models = Dict{Tuple{Int,Int}, AbstractARIMAModel}()
@@ -75,8 +76,15 @@ function select_arima_order(y::AbstractVector{T}, max_p::Int, max_q::Int;
                 end
 
                 # Store IC values (matrix is 1-indexed, p and q are 0-indexed)
-                aic_matrix[p + 1, q + 1] = model.aic
-                bic_matrix[p + 1, q + 1] = model.bic
+                if method == :css
+                    # Score every order on the common window so IC differences reflect fit +
+                    # penalty only, not the order-dependent effective sample.
+                    aic_matrix[p + 1, q + 1] = _css_ic(model, m_max, :aic, include_intercept)
+                    bic_matrix[p + 1, q + 1] = _css_ic(model, m_max, :bic, include_intercept)
+                else
+                    aic_matrix[p + 1, q + 1] = model.aic
+                    bic_matrix[p + 1, q + 1] = model.bic
+                end
                 models[(p, q)] = model
 
             catch e
@@ -114,6 +122,29 @@ end
 
 select_arima_order(y::AbstractVector, max_p::Int, max_q::Int; kwargs...) =
     select_arima_order(Float64.(y), max_p, max_q; kwargs...)
+
+"""
+    _css_ic(model, m_max, criterion, include_intercept) -> ic
+
+Recompute a CSS information criterion on a COMMON conditioning window `t = m_max+1 … n` so it
+is comparable across candidate orders. The `:css` conditional log-likelihood is evaluated over
+`n - max(p,q)` observations, a window that varies by order; scoring every candidate on the
+same `n - m_max` window (with `m_max = max(max_p, max_q)`) removes the changing-sample
+contamination from the AIC/BIC differences. Falls back to the model's own IC if the common
+window would be empty.
+"""
+function _css_ic(model::AbstractARIMAModel, m_max::Int, criterion::Symbol, include_intercept::Bool)
+    res = model.residuals
+    T = eltype(res)
+    n = length(res)
+    k = _count_params(model.p, model.q; include_intercept=include_intercept)
+    (m_max + 1 > n) && return criterion == :aic ? T(model.aic) : T(model.bic)
+    r = @view res[(m_max + 1):end]
+    N = length(r)
+    sigma2 = sum(abs2, r) / N
+    loglik = -T(N) / 2 * (log(T(2π) * sigma2) + one(T))
+    criterion == :aic ? (-2loglik + 2k) : (-2loglik + k * log(T(N)))
+end
 
 # =============================================================================
 # Convenience Functions
@@ -190,6 +221,7 @@ function _stepwise_arima(y::Vector{T}, max_p::Int, max_q::Int, d::Int;
                          criterion::Symbol=:bic, method::Symbol=:css_mle,
                          include_intercept::Bool=true) where {T<:AbstractFloat}
     y_work = d > 0 ? _difference(y, d) : y
+    m_max = max(max_p, max_q)   # common CSS conditioning bound across all candidate orders
 
     # Cache: (p,q) => (ic_value, model)
     cache = Dict{Tuple{Int,Int}, Tuple{T, AbstractARIMAModel}}()
@@ -205,7 +237,8 @@ function _stepwise_arima(y::Vector{T}, max_p::Int, max_q::Int, d::Int;
             else
                 estimate_arima(y, p, d, q; method=method, include_intercept=include_intercept)
             end
-            ic = criterion == :aic ? model.aic : model.bic
+            ic = method == :css ? _css_ic(model, m_max, criterion, include_intercept) :
+                                  (criterion == :aic ? model.aic : model.bic)
             cache[(p, q)] = (ic, model)
             return (ic, model)
         catch
@@ -268,27 +301,26 @@ end
 """
     _select_d_heuristic(y, max_d) -> Int
 
-Select integration order d using simple variance heuristic.
-
-Differences until variance stops decreasing significantly.
+Select the integration order `d` by iterating an Augmented Dickey-Fuller unit-root
+test: difference while ADF fails to reject a unit root (p > 0.05), up to `max_d`.
+Falls back to a variance-decrease rule when the (differenced) series is too short
+for a reliable ADF test (< 20 observations) or the test errors.
 """
 function _select_d_heuristic(y::Vector{T}, max_d::Int) where {T<:AbstractFloat}
     max_d == 0 && return 0
 
     y_curr = copy(y)
-    var_prev = var(y_curr)
-
-    for d in 1:max_d
-        y_curr = diff(y_curr)
-        var_curr = var(y_curr)
-
-        # If variance increased or decreased by less than 10%, stop
-        if var_curr >= var_prev || var_curr > T(0.9) * var_prev
-            return d - 1
+    for d in 0:(max_d - 1)
+        length(y_curr) < 20 && return d          # too short for a reliable ADF test
+        has_unit_root = try
+            adf_test(y_curr; regression=:constant).pvalue > T(0.05)
+        catch
+            # Degenerate series → variance rule: a unit root shrinks the variance.
+            var(diff(y_curr)) < T(0.9) * var(y_curr)
         end
-        var_prev = var_curr
+        has_unit_root || return d                 # stationary at this order
+        y_curr = diff(y_curr)
     end
-
     max_d
 end
 

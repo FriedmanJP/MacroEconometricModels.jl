@@ -331,6 +331,29 @@ end
     @test length(tf_ham.gain) == 256
 end
 
+@testset "transfer_function HP sin^4 half-power (#206)" begin
+    # The HP penalty is on the SECOND difference, so the cyclical gain must be a
+    # sin^4 response: G(ω) = 16λ sin^4(ω/2) / (1 + 16λ sin^4(ω/2)). Its half-power
+    # (gain = 0.5) period is ≈39.7 quarters at λ=1600 — the erroneous sin^2 form
+    # gives ≈251q. Analytic crossing: ω* = 2·asin((16λ)^{-1/4}).
+    for (lambda, target_period) in ((1600.0, 39.70), (6.25, 9.77))
+        tf = transfer_function(:hp; lambda=lambda, n_freq=2048)
+        g = tf.gain
+        f = tf.freq
+        k = findfirst(i -> g[i] >= 0.5, eachindex(g))
+        @test k !== nothing && k > 1
+        ω = f[k-1] + (0.5 - g[k-1]) / (g[k] - g[k-1]) * (f[k] - f[k-1])
+        @test isapprox(2π / ω, target_period; atol=0.3)   # rules out the ~251q sin^2 bug
+        ω_star = 2 * asin((16 * lambda)^(-1 / 4))
+        @test isapprox(ω, ω_star; atol=1e-2)
+    end
+    # endpoints preserved + monotone increasing in ω
+    tf = transfer_function(:hp; lambda=1600)
+    @test tf.gain[1] == 0.0
+    @test tf.gain[end] > 0.99
+    @test all(diff(tf.gain) .>= -1e-12)
+end
+
 @testset "Display (show methods)" begin
     rng = Random.MersenneTwister(12001)
     y = randn(rng, 200)
@@ -1085,4 +1108,23 @@ end
     # Integer + Float64
     r6 = ccf(y_int, x64)
     @test r6 isa MacroEconometricModels.ACFResult{Float64}
+end
+
+@testset "cross_spectrum single-segment warn (#209 R-32)" begin
+    rng = Random.MersenneTwister(3209)
+    x = randn(rng, 40)
+    y = randn(rng, 40)
+    # segment_length == n ⇒ exactly one segment ⇒ squared coherence ≡ 1 ⇒ must warn
+    @test_logs (:warn,) match_mode = :any cross_spectrum(x, y; segment_length=40)
+    cs = cross_spectrum(x, y; segment_length=40)
+    @test all(cs.coherence .>= 1 - 1e-8)
+end
+
+@testset "fisher_test large-n BigFloat p-value (#209 R-33)" begin
+    rng = Random.MersenneTwister(3309)
+    # Large m: the old Float64 term C(m,k)·(1-kg)^{m-1} overflows to Inf·0 = NaN.
+    y = randn(rng, 5000)
+    ft = fisher_test(y)
+    @test isfinite(ft.pvalue)
+    @test 0.0 <= ft.pvalue <= 1.0
 end

@@ -1,6 +1,6 @@
 # [Nonlinear Solution Methods](@id dsge_nonlinear)
 
-First-order linear solutions impose **certainty equivalence** --- agents behave as if shocks have zero variance. This rules out risk premia, precautionary savings, welfare costs of uncertainty, and asymmetric dynamics. Nonlinear methods capture all of these by retaining higher-order terms in the Taylor expansion of the policy function or by solving the functional equation globally. MacroEconometricModels.jl provides four families: **higher-order perturbation** (local, Schmitt-Grohe & Uribe 2004; Andreasen, Fernandez-Villaverde & Rubio-Ramirez 2018), **Chebyshev projection** (global polynomial, Judd 1992, 1998), **policy function iteration** (global iterative, Coleman 1990), and **value function iteration** (global Bellman, Stokey, Lucas & Prescott 1989). All three global solvers support Anderson acceleration (Walker & Ni 2011) and multi-threading. For model specification and linearization, see [DSGE Models](@ref dsge_page). For first-order solvers, see [Linear Solvers](@ref dsge_linear).
+First-order linear solutions impose **certainty equivalence** --- agents behave as if shocks have zero variance. This rules out risk premia, precautionary savings, welfare costs of uncertainty, and asymmetric dynamics. Nonlinear methods capture all of these by retaining higher-order terms in the Taylor expansion of the policy function or by solving the functional equation globally. MacroEconometricModels.jl provides four families: **higher-order perturbation** (local, Schmitt-Grohe & Uribe 2004; Andreasen, Fernandez-Villaverde & Rubio-Ramirez 2018), **Chebyshev projection** (global polynomial, Judd 1992, 1998), **policy function iteration** (global iterative, Coleman 1990), and `vfi_solver` (a historically-named **Euler time-iteration** solver, algorithmically equivalent to policy function iteration --- not genuine value-function iteration; see the warning under [Value Function Iteration](@ref)). All three global solvers support Anderson acceleration (Walker & Ni 2011) and multi-threading. For model specification and linearization, see [DSGE Models](@ref dsge_page). For first-order solvers, see [Linear Solvers](@ref dsge_linear).
 
 
 ```@setup dsge_nonlinear
@@ -68,7 +68,7 @@ pfi = pfi_solver(spec; degree=5, damping=0.5, max_iter=200)
 report(pfi)
 ```
 
-**Recipe 5: VFI with Howard steps and Anderson acceleration**
+**Recipe 5: `vfi_solver` (Euler time iteration) with Howard-style re-solves and Anderson acceleration**
 
 ```@example dsge_nonlinear
 vfi = vfi_solver(spec; degree=5, howard_steps=5, anderson_m=3, max_iter=500)
@@ -393,7 +393,7 @@ report(pfi)
 | `initial_coeffs` | `Union{Nothing, Matrix}` | `nothing` | Warm-start from previous solve |
 
 !!! note "Technical Note"
-    PFI, Chebyshev collocation, and VFI all return the same `ProjectionSolution{T}` type. All three support `evaluate_policy`, `simulate`, `irf`, and `max_euler_error`. The `method` field distinguishes them: `:projection` for collocation, `:pfi` for policy function iteration, `:vfi` for value function iteration.
+    PFI, Chebyshev collocation, and `vfi_solver` all return the same `ProjectionSolution{T}` type. All three support `evaluate_policy`, `simulate`, `irf` (a generalized IRF), and `max_euler_error`. The `method` field distinguishes them: `:projection` for collocation, `:pfi` for policy function iteration, `:vfi` for the Euler time-iteration solver (historical name; see the warning under [Value Function Iteration](@ref)).
 
 ### Return Value (`ProjectionSolution{T}`)
 
@@ -418,7 +418,10 @@ report(pfi)
 
 ## Value Function Iteration
 
-**Value function iteration** (VFI, Stokey, Lucas & Prescott 1989) solves the Bellman equation by iterating on the value function. At each iteration, the solver evaluates the Euler equation residuals at all grid points, updates the policy coefficients, and checks sup-norm convergence. VFI is the most general global method --- it converges under weaker regularity conditions than PFI or collocation --- but is typically slower per iteration. Two acceleration techniques reduce the iteration count: **Howard improvement steps** (Howard 1960) and **Anderson acceleration** (Walker & Ni 2011).
+!!! warning "Historical name --- this is Euler time iteration, not value-function iteration"
+    Despite its name, `vfi_solver` does **not** perform value-function iteration: it holds no value function and evaluates no Bellman maximum. It performs **Euler-equation time iteration** (Coleman 1990) and is algorithmically identical to [`pfi_solver`](@ref) --- the four steps below are the PFI steps, and `howard_steps` are extra Euler re-solves, not Howard value-improvement steps. A genuine value-function iteration would need a separate reward/Bellman formulation that `DSGESpec` does not expose. The exported name and `:vfi` method tag are kept for backward compatibility.
+
+At each iteration the solver evaluates the Euler equation residuals at all grid points, updates the policy coefficients, and checks the policy sup-norm for convergence. Two acceleration techniques reduce the iteration count: extra Euler re-solves (`howard_steps`, after Howard 1960) and **Anderson acceleration** (Walker & Ni 2011).
 
 The algorithm proceeds in four steps:
 
@@ -441,11 +444,11 @@ report(vfi)
 | `n_quad` | `Int` | `5` | Quadrature nodes per dimension |
 | `scale` | `Real` | `3.0` | State bounds as multiples of unconditional std |
 | `damping` | `Real` | `1.0` | Coefficient mixing factor (1.0 = no damping) |
-| `howard_steps` | `Int` | `0` | Howard improvement steps per iteration (0 = pure VFI) |
+| `howard_steps` | `Int` | `0` | Extra Euler re-solves per iteration (0 = plain time iteration) |
 | `anderson_m` | `Int` | `0` | Anderson acceleration depth (0 = disabled; see [Anderson Acceleration](@ref anderson_accel)) |
 | `threaded` | `Bool` | `false` | Multi-threaded grid-point evaluation |
-| `tol` | `Real` | ``10^{-8}`` | Sup-norm convergence tolerance |
-| `max_iter` | `Int` | `1000` | Maximum VFI iterations |
+| `tol` | `Real` | ``10^{-8}`` | Policy sup-norm convergence tolerance |
+| `max_iter` | `Int` | `1000` | Maximum time-iteration steps |
 | `initial_coeffs` | `Union{Nothing, Matrix}` | `nothing` | Warm-start coefficients from previous solve |
 
 ### Howard Improvement Steps

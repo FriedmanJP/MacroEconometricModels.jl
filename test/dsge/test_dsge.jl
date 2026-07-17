@@ -699,6 +699,222 @@ end
     @test sol.eu[2] == 1  # unique
 end
 
+@testset "Exposed div/cluster_tol + UC stability gate (#222/#213)" begin
+    M = MacroEconometricModels
+    d = 1.0 + 1e-8
+    # --- _place_divhat: nominal div preserved (Sims convention); warn only on clustering (#222) ---
+    @test M._place_divhat([0.5, 1.5], d, 1e-6) == d          # well-separated → nominal
+    @test M._place_divhat([0.3, 0.9], d, 1e-6) == d          # all stable → nominal
+    @test M._place_divhat(Float64[], d, 1e-6) == d           # empty → nominal
+    @test M._place_divhat([0.5, 1.0, 2.0], d, 1e-6) == d     # a lone unit root is left to div
+    for m in (1.0, 1.0 - 1e-12, 1.0 + 1e-12)                 # isolated near-unit root: no warn, nominal
+        @test M._place_divhat([0.5, m], d, 1e-6) == d
+    end
+    @test_logs (:warn,) match_mode = :any M._place_divhat([1.0, 1.0 - 5e-7, 0.5], d, 1e-6)  # cluster → warn
+
+    # --- div forwarding flips the stable-root count (#222) ---
+    # scalar quadratic G² - 1.5G + 0.5 = (G-0.5)(G-1.0): companion roots {0.5, 1.0}
+    args = (reshape([-1.5], 1, 1), reshape([0.5], 1, 1), reshape([1.0], 1, 1), reshape([1.0], 1, 1))
+    @test M._solve_qz_quadratic(args...; div=1.5).n_stable == 2   # both roots below 1.5
+    @test M._solve_qz_quadratic(args...; div=0.9).n_stable == 1   # only 0.5 below 0.9
+
+    # --- solve() forwards div; klein and gensys agree ---
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 1.0
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+    end
+    spec = compute_steady_state(spec)
+    @test solve(spec; method=:gensys).eu == solve(spec; method=:klein).eu == [1, 1]
+    @test solve(spec; method=:gensys, div=0.5).eu == [0, 0]  # custom div excludes the 0.9 root
+
+    # --- #213: any accepted first-order G1 is stable (max|eigvals| < div) ---
+    sol = solve(spec; method=:gensys)
+    @test maximum(abs.(eigvals(sol.G1))) < d
+    @test is_determined(sol)
+end
+
+@testset "Exact AD derivative tensors (#212)" begin
+    M = MacroEconometricModels
+    # residual f = y_t - y_lag² - a·e  ⇒ ∂²f/∂y_lag² = -2 exactly; all other 2nd/3rd derivs 0
+    spec = @dsge begin
+        parameters: a = 1.0
+        endogenous: y
+        exogenous: e
+        y[t] = y[t-1]^2 + a * e[t]
+    end
+    spec = compute_steady_state(spec)
+    y_ss = spec.steady_state
+    @test M._compute_hessian(spec, y_ss, :lag, :lag)[1, 1, 1] ≈ -2.0 atol = 1e-10
+    @test abs(M._compute_hessian(spec, y_ss, :current, :current)[1, 1, 1]) < 1e-12
+    @test abs(M._compute_hessian(spec, y_ss, :current, :lag)[1, 1, 1]) < 1e-12
+    @test abs(M._third_derivative(spec, y_ss, :lag, :lag, :lag)[1, 1, 1, 1]) < 1e-10
+    # symmetry of the full Hessian tensor in its last two axes
+    Hfull = M._full_hessian(spec, y_ss)
+    @test Hfull ≈ permutedims(Hfull, (1, 3, 2)) atol = 1e-12
+    # build-once path returns all 10 blocks, consistent with the single-block slice
+    allH = M._compute_all_hessians(spec, y_ss)
+    @test length(allH) == 10
+    @test allH[(:lag, :lag)] ≈ M._compute_hessian(spec, y_ss, :lag, :lag)
+end
+
+@testset "GMRES Sylvester residual guard (#215)" begin
+    M = MacroEconometricModels
+    rng = Random.MersenneTwister(215)
+    n = 80
+    nvd = 80                                   # total = 6400 > 5000 → matrix-free GMRES branch
+    f_c = Matrix{Float64}(3.0I, n, n) .+ 0.02 .* randn(rng, n, n)   # diagonally dominant
+    f_f = 0.02 .* randn(rng, n, n)
+    Mkd = 0.02 .* randn(rng, n, n)
+    RHS = randn(rng, n, nvd)
+    # Default solve satisfies the Sylvester equation f_c·X + f_f·X·Mkd = -RHS
+    X = M._solve_kronecker_sylvester(f_c, f_f, Mkd, RHS, n, nvd)
+    @test norm(f_c * X + f_f * (X * Mkd) + RHS) / norm(RHS) < 1e-6
+    # An unreachable tolerance warns instead of silently returning the last iterate
+    @test_logs (:warn,) match_mode = :any M._solve_kronecker_sylvester(
+        f_c, f_f, Mkd, RHS, n, nvd; gmres_max_outer=1, gmres_tol=1e-18)
+    # rhs = 0 → zeros, not 0/0 = NaN
+    Z = M._solve_kronecker_sylvester(f_c, f_f, Mkd, zeros(n, nvd), n, nvd)
+    @test all(iszero, Z)
+end
+
+@testset "Matrix-free Kronecker power (#225 part 1)" begin
+    M = MacroEconometricModels
+    rng = Random.MersenneTwister(1225)
+
+    # _kron_power reproduces Julia's left-associative kron exactly.
+    A = randn(rng, 4, 4)
+    @test M._kron_power(A, 1) == A
+    @test M._kron_power(A, 2) == kron(A, A)
+    @test M._kron_power(A, 3) == kron(kron(A, A), A)
+
+    # _apply_kron_power(X, M, d) == X * kron(M,…,M) to fp tol, for orders 1–3, without ever
+    # forming the nv^d × nv^d Kronecker operator.
+    for (nv, nrow) in ((3, 5), (6, 7), (8, 4))
+        Mm = 0.2 .* randn(rng, nv, nv)
+        for d in 1:3
+            X = randn(rng, nrow, nv^d)
+            ref = X * M._kron_power(Mm, d)
+            got = M._apply_kron_power(X, Mm, d)
+            @test size(got) == (nrow, nv^d)
+            @test got ≈ ref rtol = 1e-10
+        end
+    end
+
+    # The order-aware Sylvester solve equals the general method with an explicit Kronecker
+    # power on the dense (small) branch — bit-identical, since both build the same operator.
+    n, nv = 4, 3
+    nv2 = nv^2                                    # total = 36 ≤ 5000 → dense
+    f_c = Matrix{Float64}(3.0I, n, n) .+ 0.05 .* randn(rng, n, n)
+    f_f = 0.05 .* randn(rng, n, n)
+    Mm = 0.2 .* randn(rng, nv, nv)
+    RHS = randn(rng, n, nv2)
+    X_gen = M._solve_kronecker_sylvester(f_c, f_f, kron(Mm, Mm), RHS, n, nv2)
+    X_ord = M._solve_kronecker_sylvester(f_c, f_f, Mm, RHS, n, nv2, 2)
+    @test X_ord ≈ X_gen rtol = 1e-12
+
+    # Large system (total > 5000) exercises the matrix-free GMRES matvec on a Kronecker power.
+    n2, nvL = 80, 9
+    nvL2 = nvL^2                                  # total = 6480 > 5000 → GMRES
+    f_cL = Matrix{Float64}(3.0I, n2, n2) .+ 0.02 .* randn(rng, n2, n2)
+    f_fL = 0.02 .* randn(rng, n2, n2)
+    MmL = 0.1 .* randn(rng, nvL, nvL)
+    RHSL = randn(rng, n2, nvL2)
+    X_ordL = M._solve_kronecker_sylvester(f_cL, f_fL, MmL, RHSL, n2, nvL2, 2)
+    resid = f_cL * X_ordL + f_fL * (X_ordL * kron(MmL, MmL)) + RHSL
+    @test norm(resid) / norm(RHSL) < 1e-6
+end
+
+@testset "Smolyak grid unisolvency (#218)" begin
+    M = MacroEconometricModels
+    # nodes and polynomial multi-index set come from the SAME combination loop ⇒ square
+    for (nx, mu) in ((2, 1), (2, 2), (2, 3), (3, 2))
+        nodes, mi = M._smolyak_grid(nx, mu)
+        @test size(mi, 1) == size(nodes, 1)
+    end
+    # d=2, μ=1 index pin: the collinear (1,1) is absent; (2,0)/(0,2) are present
+    _, mi = M._smolyak_grid(2, 1)
+    rows = [mi[i, :] for i in 1:size(mi, 1)]
+    @test [1, 1] ∉ rows
+    @test [2, 0] ∈ rows
+    @test [0, 2] ∈ rows
+end
+
+@testset "Lyapunov doubling (#220)" begin
+    M = MacroEconometricModels
+    # scalar AR(1): Σ = s²/(1-a²)
+    @test M.solve_lyapunov(reshape([0.9], 1, 1), reshape([1.0], 1, 1))[1, 1] ≈ 1 / (1 - 0.81) rtol = 1e-10
+    # near-unit-root does NOT throw (a=0.999 → ≈500.25)
+    @test M.solve_lyapunov(reshape([0.999], 1, 1), reshape([1.0], 1, 1))[1, 1] ≈ 1 / (1 - 0.999^2) rtol = 1e-8
+    # matrix case: doubling matches the dense kron solution
+    rng = Random.MersenneTwister(220)
+    n = 6
+    G = randn(rng, n, n)
+    G ./= (2 * opnorm(G))                       # spectral radius ≤ 0.5 < 1
+    Bm = randn(rng, n, 2)
+    Sig = M.solve_lyapunov(G, Bm)
+    Q = Bm * Bm'
+    Sig_ref = reshape((Matrix{Float64}(I, n * n, n * n) - kron(G, G)) \ vec(Q), n, n)
+    @test Sig ≈ (Sig_ref + Sig_ref') / 2 rtol = 1e-8
+    @test issymmetric(Sig)
+    # genuine unit root → throw (no unconditional covariance)
+    @test_throws ArgumentError M.solve_lyapunov(reshape([1.0], 1, 1), reshape([1.0], 1, 1))
+end
+
+@testset "Steady-state residual guard + cached eigenvalues (#214/#224)" begin
+    M = MacroEconometricModels
+    # #214: a nonlinear model with NO real steady state (y = y² + 1) must be rejected, not
+    # returned as a silently-wrong SS.
+    spec_bad = @dsge begin
+        parameters: c = 1.0
+        endogenous: y
+        exogenous: ε
+        y[t] = y[t-1]^2 + c + ε[t]
+    end
+    @test_throws M.DSGESolveError compute_steady_state(spec_bad)
+
+    # S-17 (#224): is_stable / show read the cached eigenvalues, equal to recomputing eigvals(G1)
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 1.0
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:gensys)
+    @test maximum(abs.(sol.eigenvalues)) ≈ maximum(abs.(eigvals(sol.G1)))
+    @test M.is_stable(sol) == (maximum(abs.(eigvals(sol.G1))) < 1.0)
+    @test M.is_stable(sol)
+end
+
+@testset "Solvers route through companion-QZ core (T112 #211)" begin
+    # For a forward-looking model the raw gensys pencil drops the lead Jacobian and mis-counts
+    # determinacy; the perturbation/projection solvers now route through _solve_qz_quadratic, so
+    # their determinacy flag matches solve(:gensys).
+    spec = @dsge begin
+        parameters: β = 0.5
+        endogenous: x
+        exogenous: ε
+        x[t] = β * E[t](x[t+1]) + ε[t]
+    end
+    spec = compute_steady_state(spec)
+    sg = solve(spec; method=:gensys)
+    sp = solve(spec; method=:perturbation)
+    @test sp.eu == sg.eu
+    @test sp.eu == [1, 1]
+
+    # a persistent forward+backward model exercises a nonzero routed solution
+    spec2 = @dsge begin
+        parameters: ρ = 0.7, β = 0.3
+        endogenous: y
+        exogenous: e
+        y[t] = ρ * y[t-1] + β * E[t](y[t+1]) + e[t]
+    end
+    spec2 = compute_steady_state(spec2)
+    @test solve(spec2; method=:perturbation).eu == solve(spec2; method=:gensys).eu == [1, 1]
+end
+
 @testset "Gensys: default method" begin
     spec = @dsge begin
         parameters: ρ = 0.9
@@ -1906,6 +2122,25 @@ end
     @test minimum(sol.piecewise_path[:, i_idx]) >= -1e-8
     @test minimum(sol.piecewise_path[:, c_idx]) >= -1e-8
     end
+end
+
+@testset "OccBin defining-equation collision (#219)" begin
+    spec = @dsge begin
+        parameters: rho = 0.5, phi = 1.5
+        endogenous: y, i
+        exogenous: e
+        y[t] = rho * y[t-1] + e[t]
+        i[t] = phi * y[t]
+    end
+    spec = compute_steady_state(spec)
+    M = MacroEconometricModels
+    # under the sensitivity heuristic BOTH y and i map to equation 2 (i = phi·y)
+    @test M._defining_equation_index(spec, 1)[1] == 2
+    @test M._defining_equation_index(spec, 2)[1] == 2
+    # the two-constraint default must refuse (collision detected on the ORIGINAL spec)
+    c_y = parse_constraint(:(y[t] >= -10.0), spec)
+    c_i = parse_constraint(:(i[t] >= 0.0), spec)
+    @test_throws ArgumentError occbin_solve(spec, c_y, c_i; shock_path=zeros(10, 1), nperiods=10)
 end
 
 @testset "OccBin: two-constraint no-binding" begin
@@ -3589,21 +3824,26 @@ end
         @test size(ir.values) == (40, 2, 1)
         @test all(isfinite.(ir.values))
 
-        # FEVD — single shock should explain 100% of variance for both variables
+        # FEVD — single shock. c (variable 2) responds to the shock, so it explains 100% of c's
+        # variance. k (variable 1) is a unit-root state whose ε-response cancels in equilibrium
+        # (c_t = 0.5·k_{t-1} + σε exactly offsets the σε in the k equation), so k has ~zero shock
+        # variance and its single-shock FEVD is the degenerate 0/0 case. This is the correct RE
+        # solution via the companion-QZ core (T112 #211): the old raw-gensys solver dropped the
+        # lead term, wrongly giving k no persistence (hx=0) so its FEVD spuriously read 1.0.
         fv = fevd(sol2, 40)
         @test all(isfinite.(fv.proportions))
-        for h in 1:40, i in 1:2
-            @test fv.proportions[i, 1, h] ≈ 1.0 atol=1e-8
+        @test maximum(abs, ir.values[:, 1, 1]) < 1e-8        # k has ~zero shock impact (correct)
+        for h in 1:40
+            @test fv.proportions[2, 1, h] ≈ 1.0 atol=1e-8    # c: single shock explains 100%
         end
 
-        # Unconditional FEVD (order=2 augmented Lyapunov)
+        # Unconditional FEVD (order=2 augmented Lyapunov). Only c has nonzero shock variance;
+        # k is the degenerate zero-variance case (see above).
         fv_uc = fevd(sol2, 1; unconditional=true)
         @test all(isfinite.(fv_uc.proportions))
         @test size(fv_uc.proportions, 3) == 1
-        for i in 1:2
-            @test fv_uc.proportions[i, 1, 1] ≈ 1.0 atol=1e-6
-            @test sum(fv_uc.proportions[i, :, 1]) ≈ 1.0 atol=1e-6
-        end
+        @test fv_uc.proportions[2, 1, 1] ≈ 1.0 atol=1e-6
+        @test sum(fv_uc.proportions[2, :, 1]) ≈ 1.0 atol=1e-6
 
         # Moments
         mom = analytical_moments(sol2; lags=2)
@@ -4490,6 +4730,70 @@ end
     @test abs(irfs.values[1, 1, 1] - 0.01) < 0.005
     # IRF should decay
     @test abs(irfs.values[20, 1, 1]) < abs(irfs.values[1, 1, 1])
+end
+
+@testset "Projection GIRF reproducibility (#217)" begin
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:projection, degree=5, verbose=false)
+    # GIRF is reproducible for a fixed rng (per-rep MersenneTwister seeds derive from it)
+    ir1 = irf(sol, 15; n_sim=100, rng=Random.MersenneTwister(217))
+    ir2 = irf(sol, 15; n_sim=100, rng=Random.MersenneTwister(217))
+    @test ir1.values == ir2.values
+    # h=0 (t=1) response is deterministic — independent of n_sim / rng (no future shock yet)
+    ir3 = irf(sol, 15; n_sim=300, rng=Random.MersenneTwister(999))
+    @test ir1.values[1, 1, 1] ≈ ir3.values[1, 1, 1] atol = 1e-12
+end
+
+@testset "ProjectionSolution.impact cached (#225)" begin
+    M = MacroEconometricModels
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:projection, degree=5, verbose=false)
+    # the cached field equals a fresh companion-QZ solve (what irf/simulate used to recompute)
+    @test sol.impact ≈ M._gensys_qz(sol.spec, sol.linear).impact
+    @test size(sol.impact) == (nvars(sol), nshocks(sol))
+    # simulate/irf now read sol.impact; zero shocks ⇒ stay at steady state
+    @test all(abs.(simulate(sol, 30; shock_draws=zeros(30, 1))) .< 1e-8)
+end
+
+@testset "Collocation QR step == normal equations (#225 part 2)" begin
+    M = MacroEconometricModels
+    rng = Random.MersenneTwister(2252)
+    # For the same well-conditioned Jacobian and residual, the column-pivoted QR least-squares
+    # step equals the former J'J normal-equations step to tight tolerance (the collocation
+    # Newton solver now uses the QR form to avoid squaring cond(J)).
+    m = 20
+    J = Matrix{Float64}(2.0I, m, m) .+ 0.3 .* randn(rng, m, m)   # well-conditioned, square
+    R = randn(rng, m)
+    delta_qr = -(qr(J, ColumnNorm()) \ R)
+    delta_ne = -(M.robust_inv(J' * J) * (J' * R))
+    @test delta_qr ≈ delta_ne rtol = 1e-8
+
+    # End-to-end: the reused-Jacobian + QR solver still converges to a small residual.
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 0.01
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:projection, degree=5, verbose=false)
+    @test sol.converged
+    @test sol.residual_norm < 1e-8
 end
 
 @testset "API integration" begin

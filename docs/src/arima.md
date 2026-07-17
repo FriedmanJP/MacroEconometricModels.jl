@@ -473,6 +473,9 @@ report(sel)
 
 The BIC-optimal order typically selects a more parsimonious model than AIC because BIC penalizes free parameters more heavily (penalty ``k \log n`` vs. ``2k``). For forecasting applications, BIC-selected models often outperform AIC-selected models at longer horizons due to reduced parameter estimation uncertainty.
 
+!!! note "CSS order comparability"
+    Under `:css` estimation the conditional likelihood is evaluated over ``n - \max(p,q)`` observations, a window that varies with the candidate order. `select_arima_order` therefore rescores every `:css` candidate's AIC/BIC on a **common conditioning window** ``n - \max(\text{max\_p}, \text{max\_q})`` so the criteria are comparable across orders; MLE / CSS-MLE candidates already use the full sample.
+
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
 | `criterion` | `Symbol` | `:bic` | Selection criterion (`:aic` or `:bic`) |
@@ -495,7 +498,7 @@ The BIC-optimal order typically selects a more parsimonious model than AIC becau
 
 ### Automatic Selection
 
-`auto_arima` implements a fully automatic model selection procedure. It first determines the integration order ``d`` via a variance-reduction heuristic (differencing until variance stops decreasing), then performs a grid search over ``p`` and ``q``:
+`auto_arima` implements a fully automatic model selection procedure. It first determines the integration order ``d`` by iterating an **Augmented Dickey-Fuller unit-root test** --- differencing while ADF fails to reject a unit root (``p > 0.05``), up to ``max_d`` (falling back to a variance-reduction rule only when a differenced series is too short for a reliable ADF test) --- then performs a grid search over ``p`` and ``q``:
 
 ```@example arima
 best = auto_arima(y_level; max_p=5, max_q=5, max_d=2, criterion=:bic)

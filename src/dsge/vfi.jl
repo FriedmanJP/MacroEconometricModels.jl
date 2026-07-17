@@ -15,12 +15,14 @@
 """
     vfi_solver(spec::DSGESpec{T}; kwargs...) -> ProjectionSolution{T}
 
-Solve DSGE model via Value Function Iteration.
-
-Iterates on the Bellman operator using Euler equation residuals:
-at each grid point, solve for the policy via Newton on `residual_fns`,
-then update the value (Chebyshev coefficients) and check sup-norm
-convergence on the policy function.
+Solve a DSGE model via **Euler-equation time iteration** (Coleman 1990) — despite the
+historical name, this routine does NOT perform value-function iteration: it holds no value
+function and evaluates no Bellman maximum. At each grid point it solves the Euler
+`residual_fns` for the policy via Newton, updates the Chebyshev policy coefficients, and
+iterates to a policy sup-norm fixed point. It is algorithmically equivalent to
+[`pfi_solver`](@ref) (policy-function / time iteration); `howard_steps` are Euler re-solves,
+not Howard value-improvement steps. A genuine value-function iteration would require a
+separate reward/Bellman formulation the `DSGESpec` does not expose.
 
 # Keyword Arguments
 - `degree::Int=5`: Chebyshev polynomial degree
@@ -29,10 +31,10 @@ convergence on the policy function.
 - `quadrature::Symbol=:auto`: `:gauss_hermite`, `:monomial`, or `:auto`
 - `n_quad::Int=5`: quadrature nodes per shock dimension
 - `scale::Real=3.0`: state bounds = SS ± scale × σ
-- `tol::Real=1e-8`: sup-norm convergence tolerance on value function
-- `max_iter::Int=1000`: maximum VFI iterations
+- `tol::Real=1e-8`: sup-norm convergence tolerance on the policy function
+- `max_iter::Int=1000`: maximum time-iteration steps
 - `damping::Real=1.0`: coefficient mixing factor (1.0 = no damping)
-- `howard_steps::Int=0`: Howard improvement steps per iteration (0 = pure VFI)
+- `howard_steps::Int=0`: extra Euler re-solves per iteration (0 = plain time iteration)
 - `anderson_m::Int=0`: Anderson acceleration depth (0 = disabled)
 - `threaded::Bool=false`: enable multi-threaded grid evaluation
 - `verbose::Bool=false`: print iteration info
@@ -104,8 +106,8 @@ function vfi_solver(spec::DSGESpec{T};
     quad_weights = Vector{T}(quad_weights)
 
     # Step 2: Initial guess from first-order perturbation
-    result_1st = gensys(ld.Gamma0, ld.Gamma1, ld.C, ld.Psi, ld.Pi)
-    G1 = result_1st.G1
+    result_1st = _gensys_qz(spec, ld)
+    G1 = result_1st.G
     impact = result_1st.impact
 
     if initial_coeffs !== nothing && size(initial_coeffs) == (n_vars, n_basis)
@@ -280,6 +282,7 @@ function vfi_solver(spec::DSGESpec{T};
         quadrature,
         spec,
         ld,
+        impact,
         ss,
         state_idx,
         control_idx,

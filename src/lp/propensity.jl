@@ -258,7 +258,20 @@ function doubly_robust_lp(Y::AbstractMatrix{T}, treatment::AbstractVector{Bool},
                             mu1[i] - (y_j[i] - mu0[i]) / (1 - p_h[i]) - mu0[i] for i in 1:T_h]
 
             ate_dr[j] = mean(psi)
-            ate_se_h[j] = std(psi) / sqrt(T_h)
+            # The doubly-robust influence functions are MA(h)-correlated across the overlapping
+            # horizon-h windows, so an iid std(psi)/sqrt(T_h) understates the SE. Use the
+            # Newey-West long-run variance of the demeaned series (bandwidth floor >= h+1),
+            # mirroring estimate_propensity_lp; V = LRV/T_h since the design is a single constant.
+            psi_c = psi .- mean(psi)
+            X1 = ones(T, T_h, 1)
+            Vpsi = if cov_estimator isa NeweyWestEstimator && cov_estimator.bandwidth == 0 && h > 0
+                effective_bw = max(optimal_bandwidth_nw(psi_c), h + 1)
+                newey_west(X1, psi_c; bandwidth=effective_bw, kernel=cov_estimator.kernel,
+                           prewhiten=cov_estimator.prewhiten)
+            else
+                robust_vcov(X1, psi_c, cov_estimator)
+            end
+            ate_se_h[j] = sqrt(max(Vpsi[1, 1], zero(T)))
         end
 
         ate[h + 1, :] = ate_dr

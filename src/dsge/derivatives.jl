@@ -5,16 +5,22 @@
 # Licensed under GPL-3.0-or-later. See LICENSE for details.
 
 """
-Numerical higher-order derivatives for DSGE residual functions.
+Exact higher-order derivatives for DSGE residual functions.
 
 Computes Hessians (second derivatives) and third-derivative tensors of the residual
-functions `f_i(y_t, y_{t-1}, y_{t+1}, ε, θ)` via central finite differences.
+functions `f_i(y_t, y_{t-1}, y_{t+1}, ε, θ)` via **nested ForwardDiff** on the stacked map
+`R(v)`, `v = [y_t; y_lag; y_lead; ε]`. This is machine-accurate (no finite-difference step
+error) and builds one full `n × N × N` (resp. `n × N × N × N`) tensor per order that the
+per-slot blocks are sliced from.
 
 The derivative dimensions correspond to the four argument slots:
 - `:current`  — y_t      (n variables)
 - `:lag`      — y_{t-1}  (n variables)
 - `:lead`     — y_{t+1}  (n variables)
 - `:shock`    — ε_t      (n_ε shocks)
+
+`_step_size_*` and `_make_args*` are retained for the finite-difference helpers exercised by
+the coverage tests; they are no longer used by the derivative computation itself.
 """
 
 # =============================================================================
@@ -32,6 +38,67 @@ function _slot_dim(spec::DSGESpec{T}, which::Symbol) where {T}
     else
         return spec.n_endog
     end
+end
+
+"""
+    _slot_offset(spec, which) → Int
+
+Offset of the given argument slot within the stacked vector `v = [y_t; y_lag; y_lead; ε]`.
+"""
+function _slot_offset(spec::DSGESpec, which::Symbol)
+    n = spec.n_endog
+    which === :current ? 0 :
+    which === :lag     ? n :
+    which === :lead    ? 2n : 3n   # :shock
+end
+
+"""
+    _stacked_residual(spec) → (v -> R(v))
+
+Stacked residual map `R(v) = [f_i(y_t, y_lag, y_lead, ε, θ)]` with `v = [y_t; y_lag; y_lead; ε]`,
+generic in `eltype(v)` so it can be differentiated by (nested) ForwardDiff.
+"""
+function _stacked_residual(spec::DSGESpec{T}) where {T}
+    n = spec.n_endog
+    n_ε = spec.n_exog
+    θ = spec.param_values
+    fns = spec.residual_fns
+    return function (v)
+        y_t    = v[1:n]
+        y_lag  = v[(n + 1):(2n)]
+        y_lead = v[(2n + 1):(3n)]
+        ε      = v[(3n + 1):(3n + n_ε)]
+        [fns[i](y_t, y_lag, y_lead, ε, θ) for i in 1:n]
+    end
+end
+
+"""
+    _full_hessian(spec, y_ss) → Array{T,3}    # n × N × N,  N = 3·n_endog + n_exog
+
+Exact second-derivative tensor `∂²R_i/∂v_a ∂v_b` of the stacked residual via nested ForwardDiff.
+"""
+function _full_hessian(spec::DSGESpec{T}, y_ss::AbstractVector{T}) where {T}
+    n = spec.n_endog
+    N = 3n + spec.n_exog
+    R = _stacked_residual(spec)
+    v0 = vcat(y_ss, y_ss, y_ss, zeros(T, spec.n_exog))
+    Hflat = ForwardDiff.jacobian(v -> vec(ForwardDiff.jacobian(R, v)), v0)   # (n·N) × N
+    reshape(Hflat, n, N, N)
+end
+
+"""
+    _full_third(spec, y_ss) → Array{T,4}      # n × N × N × N
+
+Exact third-derivative tensor `∂³R_i/∂v_a ∂v_b ∂v_c` via triply-nested ForwardDiff.
+"""
+function _full_third(spec::DSGESpec{T}, y_ss::AbstractVector{T}) where {T}
+    n = spec.n_endog
+    N = 3n + spec.n_exog
+    R = _stacked_residual(spec)
+    v0 = vcat(y_ss, y_ss, y_ss, zeros(T, spec.n_exog))
+    D3flat = ForwardDiff.jacobian(
+        v -> vec(ForwardDiff.jacobian(w -> vec(ForwardDiff.jacobian(R, w)), v)), v0)  # (n·N²) × N
+    reshape(D3flat, n, N, N, N)
 end
 
 """
@@ -172,41 +239,12 @@ Arguments:
 """
 function _compute_hessian(spec::DSGESpec{T}, y_ss::Vector{T},
                           which1::Symbol, which2::Symbol) where {T}
-    n = spec.n_endog
-    θ = spec.param_values
-    n_ε = spec.n_exog
-    ε_zero = zeros(T, n_ε)
-
-    dim1 = _slot_dim(spec, which1)
-    dim2 = _slot_dim(spec, which2)
-
-    H = zeros(T, n, dim1, dim2)
-
-    for j in 1:dim1
-        hj = _step_size_hessian(T, y_ss, which1, j)
-        for k in 1:dim2
-            hk = _step_size_hessian(T, y_ss, which2, k)
-
-            # Four perturbed argument tuples
-            args_pp = _make_args_two(y_ss, ε_zero, which1, j, +hj, which2, k, +hk)
-            args_pm = _make_args_two(y_ss, ε_zero, which1, j, +hj, which2, k, -hk)
-            args_mp = _make_args_two(y_ss, ε_zero, which1, j, -hj, which2, k, +hk)
-            args_mm = _make_args_two(y_ss, ε_zero, which1, j, -hj, which2, k, -hk)
-
-            inv_4hh = one(T) / (T(4) * hj * hk)
-
-            for i in 1:n
-                fn = spec.residual_fns[i]
-                f_pp = fn(args_pp..., θ)
-                f_pm = fn(args_pm..., θ)
-                f_mp = fn(args_mp..., θ)
-                f_mm = fn(args_mm..., θ)
-                H[i, j, k] = (f_pp - f_pm - f_mp + f_mm) * inv_4hh
-            end
-        end
-    end
-
-    H
+    Hfull = _full_hessian(spec, y_ss)
+    o1 = _slot_offset(spec, which1)
+    o2 = _slot_offset(spec, which2)
+    d1 = _slot_dim(spec, which1)
+    d2 = _slot_dim(spec, which2)
+    Hfull[:, (o1 + 1):(o1 + d1), (o2 + 1):(o2 + d2)]
 end
 
 """
@@ -220,13 +258,18 @@ canonical ordering) are computed; transpose can be obtained by permuting axes 2�
 Returns a dictionary mapping `(which1, which2) => H` where `H` is `n × dim1 × dim2`.
 """
 function _compute_all_hessians(spec::DSGESpec{T}, y_ss::Vector{T}) where {T}
+    Hfull = _full_hessian(spec, y_ss)          # build the full tensor ONCE, slice all blocks
     slots = [:current, :lag, :lead, :shock]
     result = Dict{Tuple{Symbol,Symbol}, Array{T,3}}()
 
     for (a, s1) in enumerate(slots)
+        o1 = _slot_offset(spec, s1)
+        d1 = _slot_dim(spec, s1)
         for b in a:length(slots)
             s2 = slots[b]
-            result[(s1, s2)] = _compute_hessian(spec, y_ss, s1, s2)
+            o2 = _slot_offset(spec, s2)
+            d2 = _slot_dim(spec, s2)
+            result[(s1, s2)] = Hfull[:, (o1 + 1):(o1 + d1), (o2 + 1):(o2 + d2)]
         end
     end
 
@@ -251,47 +294,12 @@ Arguments:
 """
 function _third_derivative(spec::DSGESpec{T}, y_ss::Vector{T},
                            w1::Symbol, w2::Symbol, w3::Symbol) where {T}
-    n = spec.n_endog
-    θ = spec.param_values
-    n_ε = spec.n_exog
-    ε_zero = zeros(T, n_ε)
-
-    dim1 = _slot_dim(spec, w1)
-    dim2 = _slot_dim(spec, w2)
-    dim3 = _slot_dim(spec, w3)
-
-    D3 = zeros(T, n, dim1, dim2, dim3)
-
-    signs = (T(-1), T(1))
-
-    for j in 1:dim1
-        hj = _step_size_third(T, y_ss, w1, j)
-        for k in 1:dim2
-            hk = _step_size_third(T, y_ss, w2, k)
-            for l in 1:dim3
-                hl = _step_size_third(T, y_ss, w3, l)
-
-                inv_8hhh = one(T) / (T(8) * hj * hk * hl)
-
-                # Evaluate all 8 sign combinations
-                for s1 in signs
-                    for s2 in signs
-                        for s3 in signs
-                            args = _make_args_three(y_ss, ε_zero,
-                                                    w1, j, s1 * hj,
-                                                    w2, k, s2 * hk,
-                                                    w3, l, s3 * hl)
-                            coeff = s1 * s2 * s3 * inv_8hhh
-                            for i in 1:n
-                                fn = spec.residual_fns[i]
-                                D3[i, j, k, l] += coeff * fn(args..., θ)
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    D3
+    D3full = _full_third(spec, y_ss)
+    o1 = _slot_offset(spec, w1)
+    o2 = _slot_offset(spec, w2)
+    o3 = _slot_offset(spec, w3)
+    d1 = _slot_dim(spec, w1)
+    d2 = _slot_dim(spec, w2)
+    d3 = _slot_dim(spec, w3)
+    D3full[:, (o1 + 1):(o1 + d1), (o2 + 1):(o2 + d2), (o3 + 1):(o3 + d3)]
 end

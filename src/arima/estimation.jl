@@ -483,7 +483,9 @@ function estimate_ma(y::AbstractVector{T}, q::Int; method::Symbol=:css_mle, incl
     c, _, theta, sigma2, loglik, residuals, fitted, converged, iterations =
         _estimate_arma_internal(y_vec, 0, q; method=method, include_intercept=include_intercept, max_iter=max_iter)
     k = _count_params(0, q; include_intercept=include_intercept)
-    aic, bic = _compute_aic_bic(loglik, k, length(residuals))
+    # For :css the loglik is conditional on the first max(p,q)=q obs, so BIC's N must match.
+    N_ic = method == :css ? length(residuals) - q : length(residuals)
+    aic, bic = _compute_aic_bic(loglik, k, N_ic)
     MAModel(y_vec, q, c, theta, sigma2, residuals, fitted, loglik, aic, bic, method, converged, iterations)
 end
 
@@ -524,7 +526,8 @@ function estimate_arma(y::AbstractVector{T}, p::Int, q::Int; method::Symbol=:css
     c, phi, theta, sigma2, loglik, residuals, fitted, converged, iterations =
         _estimate_arma_internal(y_vec, p, q; method=method, include_intercept=include_intercept, max_iter=max_iter)
     k = _count_params(p, q; include_intercept=include_intercept)
-    aic, bic = _compute_aic_bic(loglik, k, length(residuals))
+    N_ic = method == :css ? length(residuals) - max(p, q) : length(residuals)
+    aic, bic = _compute_aic_bic(loglik, k, N_ic)
     ARMAModel(y_vec, p, q, c, phi, theta, sigma2, residuals, fitted, loglik, aic, bic, method, converged, iterations)
 end
 
@@ -569,7 +572,8 @@ function estimate_arima(y::AbstractVector{T}, p::Int, d::Int, q::Int;
     c, phi, theta, sigma2, loglik, residuals, fitted, converged, iterations =
         _estimate_arma_internal(y_diff, p, q; method=method, include_intercept=include_intercept, max_iter=max_iter)
     k = _count_params(p, q; include_intercept=include_intercept)
-    aic, bic = _compute_aic_bic(loglik, k, length(residuals))
+    N_ic = method == :css ? length(residuals) - max(p, q) : length(residuals)
+    aic, bic = _compute_aic_bic(loglik, k, N_ic)
 
     ARIMAModel(y_vec, y_diff, p, d, q, c, phi, theta, sigma2, residuals, fitted,
                loglik, aic, bic, method, converged, iterations)

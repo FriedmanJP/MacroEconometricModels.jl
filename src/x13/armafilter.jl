@@ -62,6 +62,9 @@ function _x13_armafl!(y::AbstractVector{Float64},
                       model::_X13ARIMAModel,
                       X::AbstractMatrix{Float64})
     spec = model.spec
+    # `lndtcv` (log transformation-covariance determinant) is a reserved slot: this routine is a
+    # pure CSS filter and leaves it at 0, so the exact-ML determinant term is never accumulated
+    # here (#205, false positive).
     n = length(y); ncols = size(X, 2); lndtcv = 0.0
     if ncols > 0 && size(X, 1) != n
         error("X must have same number of rows as y")

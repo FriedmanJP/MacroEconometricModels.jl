@@ -292,61 +292,55 @@ end
 # Kalman Smoother for Ragged Edge
 # =============================================================================
 
-"""Fill missing data using BVAR estimates + Kalman smoother."""
+"""
+    _bvar_smooth_missing(Y, beta, sigma, lags, t_complete) -> Matrix
+
+Fill the missing entries of the panel `Y` (interior NaNs and the ragged edge) with a genuine
+Kalman smoother. The estimated BVAR(`lags`) is cast in companion state-space form
+(state `[y_t; …; y_{t-lags+1}]`, transition from the lag blocks of `beta`, state-noise `sigma`,
+observation `C = [I 0]`, tiny measurement ridge) and the missing-data filter/RTS smoother from
+`kalman_missing.jl` is run on the mean-centred panel. Because that smoother drops only the
+missing rows each period, contemporaneously OBSERVED variables update the unobserved states
+through the state covariance — so a released series informs the fill of an unreleased one,
+which the previous interpolation + deterministic-projection routine ignored. `t_complete` is
+retained for signature compatibility; the smoother fills every missing entry uniformly.
+"""
 function _bvar_smooth_missing(Y::Matrix{T}, beta::Matrix{T}, sigma::Matrix{T},
                                lags::Int, t_complete::Int) where {T<:AbstractFloat}
     T_obs, N = size(Y)
+    sd = N * lags
+
+    # Companion state-space form of the BVAR. beta is (1 + N*lags) × N (row 1 = intercept,
+    # then lag blocks); B[i][j,m] = coefficient of y_{t-i}[m] in equation j.
+    c = Vector{T}(beta[1, :])
+    B = [permutedims(Matrix{T}(beta[(2 + (i - 1) * N):(1 + i * N), :])) for i in 1:lags]
+    A = zeros(T, sd, sd)
+    for i in 1:lags
+        A[1:N, ((i - 1) * N + 1):(i * N)] = B[i]
+    end
+    lags > 1 && (A[(N + 1):sd, 1:(sd - N)] = Matrix{T}(I, sd - N, sd - N))
+    Q = zeros(T, sd, sd); Q[1:N, 1:N] = T(0.5) * (sigma + sigma')
+    C = zeros(T, N, sd); C[1:N, 1:N] = Matrix{T}(I, N, N)
+    R = Matrix{T}(I, N, N) * T(1e-8)              # observed series measured (nearly) exactly
+
+    # Centre by the steady-state mean so the centred VAR is intercept-free (mean-zero);
+    # fall back to per-column observed means if I - ΣBᵢ is near-singular (near unit root).
+    mu_emp = [begin v = filter(!isnan, @view Y[:, j]); isempty(v) ? zero(T) : T(mean(v)) end for j in 1:N]
+    Imb = Matrix{T}(I, N, N) - sum(B)
+    mu = let ss = try Imb \ c catch; fill(T(Inf), N) end
+        (all(isfinite, ss) && maximum(abs, ss) < T(1e6)) ? ss : mu_emp
+    end
+
+    Yc = Y .- mu'                                  # NaN stays NaN → dropped per period by _miss_data
+    x0 = zeros(T, sd)
+    P0 = _compute_unconditional_covariance(A, Q, sd)
+    all(isfinite, P0) || (P0 = Matrix{T}(I, sd, sd) * T(1e6))
+    x_smooth, _, _, _ = _kalman_smoother_missing(Matrix{T}(Yc'), A, C, Q, R, x0, P0)
+
+    # Fill only the missing entries with the (un-centred) smoothed current-period state.
     X_sm = copy(Y)
-
-    # Fill interior NaN values first (quarterly columns at non-quarter months)
-    for t in 1:t_complete
-        for j in 1:N
-            if isnan(X_sm[t, j])
-                # Linear interpolation between nearest non-NaN values
-                lo = t - 1
-                while lo >= 1 && isnan(X_sm[lo, j])
-                    lo -= 1
-                end
-                hi = t + 1
-                while hi <= T_obs && isnan(X_sm[hi, j])
-                    hi += 1
-                end
-                if lo >= 1 && hi <= T_obs
-                    # Linear interpolation
-                    X_sm[t, j] = X_sm[lo, j] + (X_sm[hi, j] - X_sm[lo, j]) * T(t - lo) / T(hi - lo)
-                elseif lo >= 1
-                    X_sm[t, j] = X_sm[lo, j]
-                elseif hi <= T_obs
-                    X_sm[t, j] = X_sm[hi, j]
-                else
-                    # Column mean
-                    valid = filter(!isnan, Y[:, j])
-                    X_sm[t, j] = isempty(valid) ? zero(T) : mean(valid)
-                end
-            end
-        end
+    @inbounds for t in 1:T_obs, j in 1:N
+        isnan(Y[t, j]) && (X_sm[t, j] = mu[j] + x_smooth[j, t])
     end
-
-    # Fill ragged edge (t > t_complete) using BVAR forecast
-    if t_complete < T_obs
-        for t in (t_complete + 1):T_obs
-            x_lag = ones(T, 1)
-            for lag in 1:lags
-                t_lag = t - lag
-                if t_lag >= 1
-                    x_lag = vcat(x_lag, X_sm[t_lag, :])
-                else
-                    x_lag = vcat(x_lag, zeros(T, N))
-                end
-            end
-            y_pred = beta' * x_lag
-            for j in 1:N
-                if isnan(X_sm[t, j])
-                    X_sm[t, j] = y_pred[j]
-                end
-            end
-        end
-    end
-
-    return X_sm
+    X_sm
 end

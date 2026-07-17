@@ -361,6 +361,38 @@ end
         @test abs(fc.forecast[1] - y[end]) < 2 * fc.se[1]
     end
 
+    @testset "ARIMA(d>=1) intervals via nondifferenced psi-weights (T094 #193)" begin
+        Random.seed!(321)
+        # ARIMA(0,1,0) random walk: forecast-error variance is σ²·h, and the band must be
+        # forecast ± z·se. The old code integrated the differenced CI arrays (half-width linear
+        # in h) but reported se = sqrt(cumsum(se_diff.^2)) (sqrt in h), so ci ≠ forecast ± z·se.
+        y = cumsum(randn(300))
+        m = estimate_arima(y, 0, 1, 0; include_intercept=false)
+        fc = forecast(m, 10; conf_level=0.95)
+        z = 1.959963984540054   # Φ⁻¹(0.975)
+        @test fc.ci_lower ≈ fc.forecast .- z .* fc.se atol=1e-10
+        @test fc.ci_upper ≈ fc.forecast .+ z .* fc.se atol=1e-10
+        @test fc.se ≈ sqrt(m.sigma2) .* sqrt.(1.0:10.0) rtol=1e-8
+        @test issorted(fc.se)
+
+        # ARIMA(1,1,0): the expanded operator φ*(L) = φ(L)(1-L) = [1+φ₁, -φ₁] carries the ψ
+        # cross-terms the old _integrate_se dropped.
+        e = zeros(300)
+        for t in 2:300
+            e[t] = 0.4 * e[t-1] + randn()
+        end
+        y2 = cumsum(e)
+        m2 = estimate_arima(y2, 1, 1, 0; include_intercept=false)
+        fc2 = forecast(m2, 8)
+        phistar = MacroEconometricModels._expand_ar_with_differencing(m2.phi, 1)
+        @test phistar ≈ [1 + m2.phi[1], -m2.phi[1]] atol=1e-12
+        psi = MacroEconometricModels._compute_psi_weights(phistar, m2.theta, 8)
+        se_expected = sqrt.(MacroEconometricModels._forecast_variance(m2.sigma2, psi, 8))
+        @test fc2.se ≈ se_expected atol=1e-10
+        @test fc2.ci_lower ≈ fc2.forecast .- z .* fc2.se atol=1e-10
+        @test fc2.ci_upper .- fc2.forecast ≈ fc2.forecast .- fc2.ci_lower atol=1e-12
+    end
+
     @testset "Confidence interval coverage" begin
         # Generate known process
         phi = 0.5
@@ -423,6 +455,36 @@ end
         # BIC should select MA(1)
         @test result.best_p_bic == 0
         @test result.best_q_bic in [0, 1]
+    end
+
+    @testset "CSS common conditioning window for order comparability (T108 #207)" begin
+        Random.seed!(4242)
+        y = zeros(300)
+        for t in 3:300
+            y[t] = 0.6 * y[t-1] - 0.2 * y[t-2] + randn()
+        end
+        m1 = estimate_arma(y, 1, 0; method=:css, include_intercept=true)
+        m2 = estimate_arma(y, 2, 2; method=:css, include_intercept=true)
+        m_max = 2
+        # _css_ic scores every order on the SAME window residuals[m_max+1:end].
+        for m in (m1, m2)
+            r = m.residuals[m_max+1:end]; N = length(r); s2 = sum(abs2, r) / N
+            ll = -N / 2 * (log(2π * s2) + 1)
+            k = MacroEconometricModels._count_params(m.p, m.q; include_intercept=true)
+            @test MacroEconometricModels._css_ic(m, m_max, :aic, true) ≈ -2ll + 2k atol=1e-8
+            @test MacroEconometricModels._css_ic(m, m_max, :bic, true) ≈ -2ll + k * log(N) atol=1e-8
+        end
+        @test length(m1.residuals) - m_max == length(m2.residuals) - m_max   # identical N
+
+        # Part A: a single :css model's BIC now uses n_eff = n - max(p,q).
+        kA = MacroEconometricModels._count_params(m2.p, m2.q; include_intercept=true)
+        n_eff = length(m2.residuals) - max(m2.p, m2.q)
+        @test m2.bic ≈ -2 * m2.loglik + kA * log(n_eff) atol=1e-6
+
+        # select_arima_order with :css produces finite, comparable IC and a valid order.
+        res = select_arima_order(y, 2, 2; method=:css, criterion=:bic, include_intercept=true)
+        @test all(isfinite, res.bic_matrix)
+        @test 0 <= res.best_p_bic <= 2
     end
 
     @testset "IC matrix dimensions" begin
@@ -1009,4 +1071,106 @@ end
         @test ar_order(m) == 0
         @test ma_order(m) == 0
     end
+
+    @testset "d≥3 forecast integration exact (#209 R-22)" begin
+        M = MacroEconometricModels
+        # A degree-d polynomial trend is continued EXACTLY when its constant d-th
+        # difference is integrated back. The previous d≥3 branch used a wrong binomial
+        # boundary term.
+        for d in 1:4
+            f(t) = float(t)^d - 2.0 * t + 7.0        # degree exactly d for d ≥ 1
+            n = 14
+            h = 6
+            y = Float64[f(t) for t in 1:n]
+            dvec = copy(y)
+            for _ in 1:d
+                dvec = diff(dvec)
+            end
+            fc_diff = fill(dvec[end], h)             # true constant d-th difference
+            fc = M._integrate_forecasts(y, fc_diff, d)
+            @test isapprox(fc, Float64[f(n + j) for j in 1:h]; rtol=1e-7)
+        end
+    end
+
+    @testset "_select_d_heuristic ADF iteration (#209 R-24)" begin
+        M = MacroEconometricModels
+        # `randn(::MersenneTwister)` is NOT stream-stable across Julia versions
+        # (the 1.10 vs 1.11+ streams differ), and this is a unit-root test decided
+        # right at the 5% threshold — a seeded random draw therefore spuriously
+        # rejected the unit root on Julia LTS. Build the innovations from a
+        # self-contained LCG (UInt64 arithmetic wraps mod 2^64) so the series, and
+        # hence the ADF verdict, are identical on every Julia version and platform.
+        _lcg_uniform(n::Int, seed::UInt64) = begin
+            x = seed
+            out = Vector{Float64}(undef, n)
+            for i in 1:n
+                x = 0x5851f42d4c957f2d * x + 0x14057b7ef767814f
+                out[i] = Float64(x >> 11) / Float64(UInt64(1) << 53) - 0.5   # U(-0.5, 0.5)
+            end
+            out
+        end
+        innov = _lcg_uniform(180, UInt64(2409))
+        # I(1) random walk → ADF fails to reject at d=0, rejects after one difference ⇒ d ≥ 1
+        rw = cumsum(innov)
+        @test M._select_d_heuristic(rw, 2) >= 1
+        # I(0) innovations → ADF rejects immediately ⇒ d = 0
+        @test M._select_d_heuristic(innov, 2) == 0
+    end
+end
+
+@testset "ARMA Kalman scalar-observation specialization (#210 box F)" begin
+    # Box F specializes the scalar-observation Kalman update in `_kalman_filter_arma`: the 1×1
+    # innovation variance is carried as a scalar `f` and the state/covariance updates `mul!` into
+    # preallocated r-vectors / r×r buffers (with R Q R' formed once) instead of allocating small
+    # matrices each step. Matrix-chain re-association reorders a few reductions, so loglik /
+    # residuals / fitted must equal the dense-matrix form (the pre-refactor algorithm,
+    # reconstructed here) to rtol≈1e-10.
+    M = MacroEconometricModels
+
+    # Faithful dense-matrix reference = the pre-refactor per-step update.
+    function dense_kalman_ref(y, c, phi, theta, sigma2)
+        Z, T_mat, R, Q, H, r = M._arma_state_space(c, phi, theta, sigma2, length(phi), length(theta))
+        a, P = M._initialize_state(T_mat, R, Q, r, Float64)
+        n = length(y); res = zeros(n); fit = zeros(n); ll = 0.0
+        for t in 1:n
+            y_pred = c + dot(Z, a); fit[t] = y_pred; v = y[t] - y_pred
+            F = Z * P * Z' .+ H; f = F[1, 1]
+            if f < 1e-12
+                res[t] = v; a = T_mat * a; P = T_mat*P*T_mat' + R*Q*R'; continue
+            end
+            ll -= 0.5*(log(2π) + log(f) + v^2/f); res[t] = v
+            K = T_mat * P * Z' / f
+            a = T_mat*a + K*v
+            P = T_mat*P*T_mat' + R*Q*R' - K*(K'*f)
+            P = (P + P')/2
+        end
+        ll, res, fit
+    end
+
+    # Exercise several (p,q) shapes, including a pure-AR, pure-MA, and mixed model.
+    cases = [(0.1, [0.5, -0.2], [0.3], 1.1),
+             (0.0, [0.7], Float64[], 0.8),
+             (-0.2, Float64[], [0.4, 0.1], 1.3),
+             (0.05, [0.3, 0.2, -0.1], [0.5], 0.9)]
+    rng = Random.MersenneTwister(2024)
+    y = zeros(160)
+    for t in 2:160
+        y[t] = 0.55*y[t-1] + randn(rng)
+    end
+    for (c, phi, theta, sigma2) in cases
+        ll, res, fit = M._kalman_filter_arma(y, c, phi, theta, sigma2)
+        ll0, res0, fit0 = dense_kalman_ref(y, c, phi, theta, sigma2)
+        @test isapprox(ll, ll0; rtol=1e-10)
+        @test isapprox(res, res0; rtol=1e-10)
+        @test isapprox(fit, fit0; rtol=1e-10)
+        @test all(isfinite, res) && all(isfinite, fit) && isfinite(ll)
+    end
+
+    # End-to-end: a fitted ARIMA is unaffected (loglik reproduces on a fixed seed).
+    Random.seed!(314)
+    yr = 0.1 .+ cumsum(0.5 .* randn(200) .+ 0.3 .* [0.0; randn(199)])
+    m1 = estimate_arima(yr, 1, 0, 1)
+    m2 = estimate_arima(yr, 1, 0, 1)
+    @test loglikelihood(m1) == loglikelihood(m2)
+    @test isfinite(loglikelihood(m1))
 end

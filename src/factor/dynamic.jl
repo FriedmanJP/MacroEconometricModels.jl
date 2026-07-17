@@ -241,7 +241,8 @@ function _em_mstep(Y::AbstractMatrix{T}, F_smooth::AbstractMatrix{T}, P_smooth::
     sum_Fminus_Fminus = zeros(T, state_dim, state_dim)
     for t in (p+1):T_obs
         sum_F_Fminus .+= @view(F_smooth[t, 1:r]) * @view(F_smooth[t-1, :])'
-        t > p + 1 && (sum_F_Fminus[1:r, 1:state_dim] .+= @view(Pt_smooth[t-1, 1:r, :]))
+        # Pt_smooth[t-1][1:r, :] = Cov(F_t, α_{t-1}); include t = p+1 (was wrongly gated out).
+        sum_F_Fminus[1:r, 1:state_dim] .+= @view(Pt_smooth[t-1, 1:r, :])
         sum_Fminus_Fminus .+= @view(F_smooth[t-1, :]) * @view(F_smooth[t-1, :])' + @view(P_smooth[t-1, :, :])
     end
     A_stacked = sum_F_Fminus * robust_inv(sum_Fminus_Fminus)
@@ -254,7 +255,8 @@ function _em_mstep(Y::AbstractMatrix{T}, F_smooth::AbstractMatrix{T}, P_smooth::
         eta = F_smooth[t, 1:r] - sum(A[lag] * @view(F_smooth[t-lag, 1:r]) for lag in 1:p)
         sum_eta .+= eta * eta' + @view(P_smooth[t, 1:r, 1:r])
         for lag in 1:p
-            cross = A[lag] * @view(Pt_smooth[min(t-1, T_obs-1), 1:r, 1:r])'
+            # per-lag block: Cov(F_t, F_{t-lag}) = Pt_smooth[t-1][1:r, ((lag-1)r+1):(lag r)]
+            cross = A[lag] * @view(Pt_smooth[t-1, 1:r, ((lag-1)*r+1):(lag*r)])'
             sum_eta .-= cross .+ cross'
         end
     end
@@ -389,12 +391,10 @@ function forecast(m::DynamicFactorModel{T}, h::Int; ci_method::Symbol=:theoretic
     conf_T = T(conf_level)
 
     if ci_method == :none
-        z = zeros(T, h, r)
-        zx = zeros(T, h, N)
-        if m.standardized
-            _unstandardize_factor_forecast!(X_fc, zx, zx, zx, m.X)
-        end
-        return _build_factor_forecast(F_fc, X_fc, z, z, zx, copy(zx), z, copy(zx), h, conf_T, :none)
+        m.standardized && _unstandardize_point!(X_fc, m.X)
+        return _build_factor_forecast(F_fc, X_fc,
+            zeros(T, h, r), zeros(T, h, r), zeros(T, h, N), zeros(T, h, N),
+            zeros(T, h, r), zeros(T, h, N), h, conf_T, :none)
     end
 
     if ci_method == :theoretical

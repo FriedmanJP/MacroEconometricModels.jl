@@ -15,6 +15,23 @@ using LinearAlgebra, Statistics, Distributions
 # 1. Hausman Test: FE vs RE
 # =============================================================================
 
+# Hausman quadratic form via the Moore-Penrose generalized inverse.
+# Returns (chi2, df, nonpsd): chi2 = db'·pinv(dV)·db (NO abs), df = numerical rank of the
+# positive part of dV, nonpsd flags a materially negative eigenvalue (indefinite dV). When
+# dV is full-rank PSD, pinv == inv and df == k, so this reduces to the classical statistic.
+function _hausman_quadratic_form(db::AbstractVector{T}, dV::AbstractMatrix{T}) where {T<:AbstractFloat}
+    k = length(db)
+    dV_sym = Symmetric((dV .+ dV') ./ 2)
+    lambda = eigvals(dV_sym)
+    lmax = isempty(lambda) ? zero(T) : maximum(abs, lambda)
+    tol = T(k) * eps(T) * max(lmax, one(T))
+    r = count(x -> x > tol, lambda)              # numerical rank (positive eigenvalues)
+    nonpsd = any(x -> x < -tol, lambda)          # any materially negative eigenvalue
+    dV_inv = pinv(Matrix{T}(dV_sym))             # Moore-Penrose generalized inverse
+    chi2 = dot(db, dV_inv * db)                  # NO abs() — a genuinely negative form stays negative
+    return (chi2, max(r, 1), nonpsd)
+end
+
 """
     hausman_test(fe::PanelRegModel, re::PanelRegModel) -> PanelTestResult{T}
 
@@ -36,23 +53,6 @@ on the common slope coefficients (intercept excluded from RE).
 # References
 - Hausman, J. A. (1978). *Econometrica* 46(6), 1251-1271.
 """
-# Hausman quadratic form via the Moore-Penrose generalized inverse.
-# Returns (chi2, df, nonpsd): chi2 = db'·pinv(dV)·db (NO abs), df = numerical rank of the
-# positive part of dV, nonpsd flags a materially negative eigenvalue (indefinite dV). When
-# dV is full-rank PSD, pinv == inv and df == k, so this reduces to the classical statistic.
-function _hausman_quadratic_form(db::AbstractVector{T}, dV::AbstractMatrix{T}) where {T<:AbstractFloat}
-    k = length(db)
-    dV_sym = Symmetric((dV .+ dV') ./ 2)
-    lambda = eigvals(dV_sym)
-    lmax = isempty(lambda) ? zero(T) : maximum(abs, lambda)
-    tol = T(k) * eps(T) * max(lmax, one(T))
-    r = count(x -> x > tol, lambda)              # numerical rank (positive eigenvalues)
-    nonpsd = any(x -> x < -tol, lambda)          # any materially negative eigenvalue
-    dV_inv = pinv(Matrix{T}(dV_sym))             # Moore-Penrose generalized inverse
-    chi2 = dot(db, dV_inv * db)                  # NO abs() — a genuinely negative form stays negative
-    return (chi2, max(r, 1), nonpsd)
-end
-
 function hausman_test(fe::PanelRegModel{T}, re::PanelRegModel{T}) where {T}
     fe.method == :fe || throw(ArgumentError("First argument must be a FE model (got :$(fe.method))"))
     re.method == :re || throw(ArgumentError("Second argument must be a RE model (got :$(re.method))"))
