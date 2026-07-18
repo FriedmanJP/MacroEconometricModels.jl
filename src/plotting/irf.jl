@@ -53,7 +53,7 @@ function plot_result(r::ImpulseResponse{T};
             refs = "[{\"value\":0,\"color\":\"#999\",\"dash\":\"4,3\"}]"
 
             js = _render_line_js(id, data_json, s_json;
-                                 bands_json=bands, ref_lines_json=refs,
+                                 bands_json=bands, ref_lines_json=refs, integer_x=true,
                                  xlabel="Horizon", ylabel="Response")
             push!(panels, _PanelSpec(id, ptitle, js))
         end
@@ -113,7 +113,7 @@ function plot_result(r::BayesianImpulseResponse{T};
             refs = "[{\"value\":0,\"color\":\"#999\",\"dash\":\"4,3\"}]"
 
             js = _render_line_js(id, data_json, s_json;
-                                 bands_json=bands, ref_lines_json=refs,
+                                 bands_json=bands, ref_lines_json=refs, integer_x=true,
                                  xlabel="Horizon", ylabel="Response")
             push!(panels, _PanelSpec(id, ptitle, js))
         end
@@ -166,7 +166,7 @@ function plot_result(r::LPImpulseResponse{T};
         refs = "[{\"value\":0,\"color\":\"#999\",\"dash\":\"4,3\"}]"
 
         js = _render_line_js(id, data_json, s_json;
-                             bands_json=bands, ref_lines_json=refs,
+                             bands_json=bands, ref_lines_json=refs, integer_x=true,
                              xlabel="Horizon", ylabel="Response")
         push!(panels, _PanelSpec(id, ptitle, js))
     end

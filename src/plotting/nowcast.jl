@@ -233,10 +233,13 @@ function _plot_nowcast_heatmap(nr::NowcastResult{T};
         title = "Nowcast Data Availability & Z-Scores ($(nr.method))"
     end
 
+    # Signed z-scores → diverging scale, explicit symmetric ±3 domain (standard
+    # z-score cut; plotrule Heatmaps rule 3, PLT-15). tip_label kills the "Period" noun.
     js = _render_heatmap_js(id, data_json, row_labels_json, col_labels_json;
-                            xlabel=use_dates ? "Date" : "Period", ylabel="")
+                            xlabel=use_dates ? "Date" : "Period", ylabel="",
+                            scale=:diverging, color_domain=[-3.0, 3.0])
 
-    _make_plot([_PanelSpec(id, "Z-Score Heatmap", js)]; title=title)
+    _make_plot([_PanelSpec(id, "Z-Score Heatmap (values are z-scores, clipped ±3)", js)]; title=title)
 end
 
 # =============================================================================

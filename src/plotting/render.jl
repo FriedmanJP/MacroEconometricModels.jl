@@ -13,14 +13,64 @@ composition, save/display/show.
 # CSS
 # =============================================================================
 
+# Dark-surface custom-property values, reused by the `prefers-color-scheme: dark`
+# media query AND the explicit `:root[data-theme="dark"]` block (the latter wins so
+# the docs Solarized toggle overrides the OS setting; plotrule Theming; PLT-14).
+const _MEM_DARK_VARS = """
+        --mem-bg: #0f1419;
+        --mem-panel-bg: #171d24;
+        --mem-panel-border: #2c333d;
+        --mem-ink: #d6d9de;
+        --mem-ink-strong: #e8eaed;
+        --mem-ink-title: #c3c7cc;
+        --mem-ink-muted: #9aa0a8;
+        --mem-ink-faint: #7f858d;
+        --mem-axis: #454d57;
+        --mem-grid: #262c34;
+        --mem-zero: #8a919b;
+        --mem-tooltip-bg: rgba(232,234,237,0.94);
+        --mem-tooltip-ink: #0f1419;"""
+
+const _MEM_LIGHT_VARS = """
+        --mem-bg: #fff;
+        --mem-panel-bg: #fff;
+        --mem-panel-border: #e0e0e0;
+        --mem-ink: #333;
+        --mem-ink-strong: #222;
+        --mem-ink-title: #444;
+        --mem-ink-muted: #666;
+        --mem-ink-faint: #888;
+        --mem-axis: #ccc;
+        --mem-grid: #f0f0f0;
+        --mem-zero: #333;
+        --mem-tooltip-bg: rgba(0,0,0,0.82);
+        --mem-tooltip-ink: #fff;"""
+
 function _render_css(ncols::Int)
     col_width = ncols <= 1 ? "100%" : "$(round(Int, 100 / ncols))%"
     """
+    /* Theme surface + ink are CSS custom properties (plotrule Theming; PLT-14): one
+       light default, a prefers-color-scheme dark override, and an explicit
+       data-theme override the docs toggle stamps on the root element. */
+    :root {
+$(_MEM_LIGHT_VARS)
+    }
+    @media (prefers-color-scheme: dark) {
+        :root {
+$(_MEM_DARK_VARS)
+        }
+    }
+    :root[data-theme="dark"] {
+$(_MEM_DARK_VARS)
+    }
+    :root[data-theme="light"] {
+$(_MEM_LIGHT_VARS)
+    }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
         font-family: $(_PLOT_FONT);
-        background: #fff;
-        color: #333;
+        background: var(--mem-bg);
+        color: var(--mem-ink);
         padding: 20px;
     }
     .figure-title {
@@ -28,11 +78,11 @@ function _render_css(ncols::Int)
         font-weight: 600;
         text-align: center;
         margin-bottom: 16px;
-        color: #222;
+        color: var(--mem-ink-strong);
     }
     .figure-source {
         font-size: 11px;
-        color: #888;
+        color: var(--mem-ink-faint);
         text-align: center;
         margin-top: 8px;
     }
@@ -45,8 +95,8 @@ function _render_css(ncols::Int)
     .panel {
         width: calc($col_width - 16px);
         min-width: 300px;
-        background: #fff;
-        border: 1px solid #e0e0e0;
+        background: var(--mem-panel-bg);
+        border: 1px solid var(--mem-panel-border);
         border-radius: 4px;
         padding: 12px;
     }
@@ -55,16 +105,21 @@ function _render_css(ncols::Int)
         font-weight: 600;
         text-align: center;
         margin-bottom: 8px;
-        color: #444;
+        color: var(--mem-ink-title);
     }
-    .axis text { font-size: 11px; fill: #666; }
-    .axis line, .axis path { stroke: #ccc; }
-    .grid line { stroke: #f0f0f0; stroke-dasharray: 2,2; }
+    .axis text { font-size: 11px; fill: var(--mem-ink-muted); }
+    .axis line, .axis path { stroke: var(--mem-axis); }
+    .grid line { stroke: var(--mem-grid); stroke-dasharray: 2,2; }
     .grid .domain { stroke: none; }
+    /* Inline SVG inks migrated to themed classes (plotrule Theming rule 2): CSS
+       properties override the low-specificity presentation attributes. */
+    .axis-label, .legend-label { fill: var(--mem-ink-muted); }
+    .plot-note { fill: var(--mem-ink-faint); }
+    .zero-line { stroke: var(--mem-zero); }
     .tooltip {
         position: absolute;
-        background: rgba(0,0,0,0.8);
-        color: #fff;
+        background: var(--mem-tooltip-bg);
+        color: var(--mem-tooltip-ink);
         padding: 6px 10px;
         border-radius: 4px;
         font-size: 11px;
@@ -99,8 +154,32 @@ $(body)
 $(_render_js_core())
 $(scripts)
 </script>
+$(_render_theme_sync_js())
 </body>
 </html>"""
+end
+
+# When this document is iframed into the Documenter site, mirror the site's Solarized
+# light/dark toggle: read the parent <html>'s `theme--documenter-dark` class (set by
+# docs/src/assets/theme-toggle.js) and stamp `data-theme` on our own root, re-syncing
+# via a MutationObserver. Standalone plots (no accessible parent) fall back to the
+# `prefers-color-scheme` media query. Cross-origin access throws → silently ignored.
+function _render_theme_sync_js()
+    """<script>
+(function() {
+    try {
+        if (window.parent && window.parent !== window && window.parent.document) {
+            var pd = window.parent.document.documentElement;
+            var sync = function() {
+                var dark = (pd.className || '').indexOf('theme--documenter-dark') !== -1;
+                document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+            };
+            sync();
+            new MutationObserver(sync).observe(pd, {attributes: true, attributeFilter: ['class']});
+        }
+    } catch (e) { /* cross-origin frame: keep prefers-color-scheme */ }
+})();
+</script>"""
 end
 
 # Embeddable HTML fragment — no <!DOCTYPE>/<html>/<head>/<body>, so two plots can be
@@ -137,7 +216,49 @@ if (typeof window.__mem_core === 'undefined') {
             window.__mem_core.tip.html(html).style('opacity',1)
                 .style('left',(evt.pageX+12)+'px').style('top',(evt.pageY-28)+'px');
         },
-        hideTip: function hideTip() { window.__mem_core.tip.style('opacity',0); }
+        hideTip: function hideTip() { window.__mem_core.tip.style('opacity',0); },
+        // Width-aware wrapping legend (plotrule Legend policy; PLT-16). `entries` are
+        // {label, color, type:'line'|'circle'|'rect', dash?, alpha?}. Each label is
+        // truncated with an ellipsis (full name kept in a <title> tooltip); rows wrap
+        // when the next entry would overflow `w`. `cap>0` folds the tail into a grey
+        // "Other (k more)" entry (line/scatter forms); `cap=0` wraps every entry
+        // (stacked FEVD/HD layers). Returns the pixel height the legend consumed.
+        legend: function legend(g, entries, w, cap) {
+            cap = cap || 0;
+            var items = entries;
+            if(cap > 0 && entries.length > cap) {
+                items = entries.slice(0, cap);
+                items.push({label:'Other ('+(entries.length - cap)+' more)', color:'#bbb', type:'rect'});
+            }
+            var leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
+            var rowH = 14, gap = 4, interGap = 14, cx = 0, cy = 0;
+            items.forEach(function(e) {
+                var full = (e.label == null) ? '' : String(e.label);
+                var shown = full.length > 22 ? full.slice(0,20)+'…' : full;
+                var gi = leg.append('g'), sw = 12;
+                if(e.type === 'line') {
+                    gi.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+                        .attr('stroke', e.color).attr('stroke-width',2).attr('stroke-dasharray', e.dash||'');
+                    sw = 16;
+                } else if(e.type === 'circle') {
+                    gi.append('circle').attr('cx',6).attr('cy',0).attr('r',5)
+                        .attr('fill', e.color).attr('opacity',0.8);
+                } else {
+                    gi.append('rect').attr('width',12).attr('height',12).attr('y',-6)
+                        .attr('fill', e.color).attr('opacity', e.alpha==null?1:e.alpha);
+                }
+                var txt = gi.append('text').attr('class','legend-label').attr('x', sw+gap).attr('y',4)
+                    .attr('font-size','10px').text(shown);
+                if(shown !== full) txt.append('title').text(full);
+                var tw = full.length * 6;
+                try { var mm = txt.node().getComputedTextLength(); if(mm > 0) tw = mm; } catch(err) {}
+                var ew = sw + gap + tw + interGap;
+                if(cx > 0 && cx + ew > w) { cx = 0; cy += rowH; }
+                gi.attr('transform','translate('+cx+','+cy+')');
+                cx += ew;
+            });
+            return cy + rowH;
+        }
     };
 }
 // var aliases are redeclaration-safe across concatenated fragments (unlike const),
@@ -157,12 +278,12 @@ function _axis_labels_js(xlabel::AbstractString, ylabel::AbstractString;
                          yl_y::String="-42")
     s = ""
     if !isempty(xlabel)
-        s *= "    $(g).append('text').attr('x',$(w)/2).attr('y',$(h)+30).attr('text-anchor','middle')" *
-             ".attr('font-size','11px').attr('fill','#666').text($(_json(xlabel)));\n"
+        s *= "    $(g).append('text').attr('class','axis-label').attr('x',$(w)/2).attr('y',$(h)+30).attr('text-anchor','middle')" *
+             ".attr('font-size','11px').text($(_json(xlabel)));\n"
     end
     if !isempty(ylabel)
-        s *= "    $(g).append('text').attr('transform','rotate(-90)').attr('x',-$(h)/2).attr('y',$(yl_y))" *
-             ".attr('text-anchor','middle').attr('font-size','11px').attr('fill','#666').text($(_json(ylabel)));\n"
+        s *= "    $(g).append('text').attr('class','axis-label').attr('transform','rotate(-90)').attr('x',-$(h)/2).attr('y',$(yl_y))" *
+             ".attr('text-anchor','middle').attr('font-size','11px').text($(_json(ylabel)));\n"
     end
     s
 end
@@ -297,18 +418,11 @@ function _render_line_js(id::String, data_json::String, series_json::String;
 
 $(_axis_labels_js(xlabel, ylabel))
 
-    // Legend
-    if(series.length > 1) {
-        const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
-        series.forEach((s,i) => {
-            const gi = leg.append('g').attr('transform','translate('+(i*100)+',0)');
-            gi.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
-                .attr('stroke',s.color).attr('stroke-width',2)
-                .attr('stroke-dasharray',s.dash||'');
-            gi.append('text').attr('x',20).attr('y',4).attr('font-size','10px')
-                .attr('fill','#555').text(s.name);
-        });
-    }
+    // Legend — series lines + any NAMED bands (overlapping CI bands must each be
+    // legended; plotrule Color/Legend policy, PLT-16). Width-aware shared engine.
+    const legEntries = series.map(s => ({label:s.name, color:s.color, type:'line', dash:s.dash||''}));
+    bands.forEach(b => { if(b.name) legEntries.push({label:b.name, color:b.color, type:'rect', alpha:b.alpha==null?0.15:b.alpha}); });
+    if(legEntries.length > 1) window.__mem_core.legend(g, legEntries, w, 8);
 
     // Tooltip overlay
     svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
@@ -393,13 +507,8 @@ function _render_area_js(id::String, data_json::String, series_json::String;
 
 $(_axis_labels_js(xlabel, ylabel))
 
-    // Legend
-    const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
-    series.forEach((s,i) => {
-        const gi = leg.append('g').attr('transform','translate('+(i*90)+',0)');
-        gi.append('rect').attr('width',12).attr('height',12).attr('y',-6).attr('fill',s.color).attr('opacity',0.85);
-        gi.append('text').attr('x',16).attr('y',4).attr('font-size','10px').attr('fill','#555').text(s.name);
-    });
+    // Legend — stacked layers wrap across rows (no fold; shared engine, PLT-16)
+    window.__mem_core.legend(g, series.map(s => ({label:s.name, color:s.color, type:'rect', alpha:0.85})), w, 0);
 
     // Tooltip
     svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
@@ -507,7 +616,7 @@ function _render_bar_js(id::String, data_json::String, series_json::String;
         // Zero line (vertical) — omitted on a log scale (no zero)
         if(!logscale) {
             g.append('line').attr('x1',x(0)).attr('x2',x(0)).attr('y1',0).attr('y2',h)
-                .attr('stroke','#333').attr('stroke-width',0.8);
+                .attr('class','zero-line').attr('stroke-width',0.8);
         }
 
         g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
@@ -517,14 +626,9 @@ function _render_bar_js(id::String, data_json::String, series_json::String;
 
 $(_axis_labels_js(xlabel, ylabel; yl_y="-(margin.left-12)"))
 
-        // Legend
+        // Legend (shared width-aware engine, PLT-16)
         if(series.length > 1) {
-            const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
-            series.forEach((s,i) => {
-                const gi = leg.append('g').attr('transform','translate('+(i*90)+',0)');
-                gi.append('rect').attr('width',12).attr('height',12).attr('y',-6).attr('fill',s.color);
-                gi.append('text').attr('x',16).attr('y',4).attr('font-size','10px').attr('fill','#555').text(s.name);
-            });
+            window.__mem_core.legend(g, series.map(s => ({label:s.name, color:s.color, type:'rect'})), w, 0);
         }
 
         // Tooltip (per y-band)
@@ -580,7 +684,7 @@ $(_axis_labels_js(xlabel, ylabel; yl_y="-(margin.left-12)"))
         if(!logscale) {
             g.append('line').attr('x1',0).attr('x2',w)
                 .attr('y1',y(0)).attr('y2',y(0))
-                .attr('stroke','#333').attr('stroke-width',0.8);
+                .attr('class','zero-line').attr('stroke-width',0.8);
         }
 
         g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
@@ -614,7 +718,7 @@ $(_axis_labels_js(xlabel, ylabel; yl_y="-(margin.left-12)"))
         if(!logscale) {
             g.append('line').attr('x1',0).attr('x2',w)
                 .attr('y1',y(0)).attr('y2',y(0))
-                .attr('stroke','#333').attr('stroke-width',0.8);
+                .attr('class','zero-line').attr('stroke-width',0.8);
         }
 
         g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
@@ -625,14 +729,9 @@ $(_axis_labels_js(xlabel, ylabel; yl_y="-(margin.left-12)"))
 
 $(_axis_labels_js(xlabel, ylabel))
 
-    // Legend
+    // Legend (shared width-aware engine, PLT-16)
     if(series.length > 1) {
-        const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
-        series.forEach((s,i) => {
-            const gi = leg.append('g').attr('transform','translate('+(i*90)+',0)');
-            gi.append('rect').attr('width',12).attr('height',12).attr('y',-6).attr('fill',s.color);
-            gi.append('text').attr('x',16).attr('y',4).attr('font-size','10px').attr('fill','#555').text(s.name);
-        });
+        window.__mem_core.legend(g, series.map(s => ({label:s.name, color:s.color, type:'rect'})), w, 0);
     }
 
     // Tooltip
@@ -658,31 +757,51 @@ end
 # =============================================================================
 
 """
-Generate D3.js code for a color-coded heatmap matrix.
+Generate D3.js code for a color-coded heatmap matrix with a **mandatory color-scale
+legend** (plotrule Heatmaps).
+
 - `data_json`: JSON array of {x, y, v} objects (v can be null for missing)
 - `row_labels_json`: JSON array of row label strings
 - `col_labels_json`: JSON array of column label strings
-- `color_domain`: [min, max] for the diverging color scale
+- `color_domain`: `nothing` (data-driven — see `scale`) or an explicit `[min, max]`.
+- `scale`: `:sequential` (single-hue `_PLOT_SEQUENTIAL` ramp, for **nonnegative**
+  matrices — Leontief, multipliers) or `:diverging` (`_PLOT_DIVERGING`, symmetric
+  around `midpoint` for **signed** data — z-scores, signed covariances). When
+  `color_domain === nothing` and `scale=:diverging`, the domain is forced symmetric
+  `[midpoint-m, midpoint+m]` with `m = max|v|`; sequential uses the data `[min,max]`.
+- `midpoint`: the neutral center for a diverging scale (default 0).
+- `best_cell_json`: `"null"` or `{"x":<col label>,"y":<row label>}` — outlines that
+  cell and stars it (the ARIMA IC-grid optimum; plotrule PLT-25 consumer).
 - `tip_label`: tooltip x-prefix (domain-agnostic, plotrule A2); defaults to `xlabel`
   when empty, empty ⇒ no prefix (kills the leaked "Period" noun).
 """
 function _render_heatmap_js(id::String, data_json::String,
                             row_labels_json::String, col_labels_json::String;
                             xlabel::String="", ylabel::String="", tip_label::String="",
-                            color_domain::Vector{<:Real}=[-3, 3])
-    cmin, cmax = color_domain[1], color_domain[2]
+                            color_domain::Union{Nothing,Vector{<:Real}}=nothing,
+                            scale::Symbol=:diverging, midpoint::Real=0,
+                            best_cell_json::String="null")
+    scale in (:sequential, :diverging) ||
+        throw(ArgumentError("scale must be :sequential or :diverging, got :$scale"))
     tip = isempty(tip_label) ? xlabel : tip_label
+    provided = color_domain === nothing ? "null" :
+        "[$(_json(float(color_domain[1]))), $(_json(float(color_domain[2])))]"
     """
 (function() {
     const data = $(data_json);
     const rowLabels = $(row_labels_json);
     const colLabels = $(col_labels_json);
     const tipLabel = $(_json(tip));
+    const scaleType = $(_json(String(scale)));
+    const midpoint = $(_json(float(midpoint)));
+    const providedDomain = $(provided);
+    const bestCell = $(best_cell_json);
 
     const container = d3.select('#$(id)');
     const W = Math.max(container.node().clientWidth - 24, 280);
     const maxLabelW = 120;
-    const margin = {top:10, right:15, bottom:35, left: maxLabelW};
+    const legendPad = 74;                       // reserve room for the gradient legend
+    const margin = {top:10, right:legendPad, bottom:35, left: maxLabelW};
     const w = W - margin.left - margin.right;
     const cellH = Math.max(Math.min(18, 250 / rowLabels.length), 8);
     const h = cellH * rowLabels.length;
@@ -693,8 +812,23 @@ function _render_heatmap_js(id::String, data_json::String,
     const x = d3.scaleBand().domain(colLabels).range([0, w]).padding(0.02);
     const y = d3.scaleBand().domain(rowLabels).range([0, h]).padding(0.02);
 
-    const color = d3.scaleSequential(t => d3.interpolateRdBu(1 - t))
-        .domain([$(cmin), $(cmax)]);
+    // Data-driven domain (unless the caller supplied one). Diverging ⇒ symmetric
+    // around `midpoint`; sequential ⇒ the data [min,max] (plotrule Heatmaps rule 3).
+    const finite = data.map(d => d.v).filter(v => v !== null && v !== undefined);
+    let cmin, cmax;
+    if(providedDomain !== null) {
+        cmin = providedDomain[0]; cmax = providedDomain[1];
+    } else if(scaleType === 'diverging') {
+        const m = (d3.max(finite.map(Math.abs)) || 1);
+        cmin = midpoint - m; cmax = midpoint + m;
+    } else {
+        cmin = (finite.length ? d3.min(finite) : 0);
+        cmax = (finite.length ? d3.max(finite) : 1);
+        if(cmin === cmax) { cmin -= 0.5; cmax += 0.5; }
+    }
+    const interp = scaleType === 'sequential' ?
+        d3.interpolate$(_PLOT_SEQUENTIAL) : (t => d3.interpolate$(_PLOT_DIVERGING)(1 - t));
+    const color = d3.scaleSequential(interp).domain([cmin, cmax]);
     const grey = '#d9d9d9';
 
     g.selectAll('rect.cell').data(data).join('rect').attr('class','cell')
@@ -702,13 +836,23 @@ function _render_heatmap_js(id::String, data_json::String,
         .attr('y', d => y(d.y))
         .attr('width', x.bandwidth())
         .attr('height', y.bandwidth())
-        .attr('fill', d => d.v === null ? grey : color(Math.max($(cmin), Math.min($(cmax), d.v))))
+        .attr('fill', d => d.v === null ? grey : color(Math.max(cmin, Math.min(cmax, d.v))))
         .attr('rx', 1)
         .on('mouseover', function(evt, d) {
             const val = d.v === null ? 'Missing' : fmt(d.v);
             showTip(evt, '<b>'+d.y+'</b><br>'+(tipLabel ? tipLabel+' ' : '')+d.x+': '+val);
         })
         .on('mouseout', hideTip);
+
+    // Best-cell marker (border + star) — highlights the optimum (e.g. min-BIC).
+    if(bestCell !== null) {
+        g.append('rect').attr('x', x(bestCell.x)).attr('y', y(bestCell.y))
+            .attr('width', x.bandwidth()).attr('height', y.bandwidth())
+            .attr('fill','none').attr('stroke','$(_PLOT_ALERT)').attr('stroke-width',2.5).attr('rx',1);
+        g.append('text').attr('x', x(bestCell.x)+x.bandwidth()/2)
+            .attr('y', y(bestCell.y)+y.bandwidth()/2+4).attr('text-anchor','middle')
+            .attr('font-size','12px').attr('fill','$(_PLOT_ALERT)').attr('pointer-events','none').text('★');
+    }
 
     // Axes
     g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
@@ -718,6 +862,33 @@ function _render_heatmap_js(id::String, data_json::String,
         .call(d3.axisLeft(y).tickFormat(d => d.length > 20 ? d.slice(0,18)+'..' : d));
 
 $(_axis_labels_js(xlabel, ylabel; yl_y="-maxLabelW+10"))
+
+    // Color-scale legend: vertical gradient bar (min/mid/max ticks) + missing swatch
+    const legW = 12, legH = Math.max(Math.min(h, 150), 40);
+    const legX = w + 20;
+    const defs = svg.append('defs');
+    const gradId = 'grad_$(id)';
+    const grad = defs.append('linearGradient').attr('id', gradId)
+        .attr('x1','0%').attr('y1','100%').attr('x2','0%').attr('y2','0%');   // bottom=cmin, top=cmax
+    const nstop = 12;
+    for(let s = 0; s <= nstop; s++) {
+        const tt = s / nstop;
+        grad.append('stop').attr('offset', (tt*100)+'%')
+            .attr('stop-color', color(cmin + tt*(cmax - cmin)));
+    }
+    g.append('rect').attr('class','legend-gradient')
+        .attr('x', legX).attr('y', 0).attr('width', legW).attr('height', legH)
+        .attr('fill', 'url(#'+gradId+')').attr('stroke','#ccc').attr('stroke-width',0.5);
+    const legScale = d3.scaleLinear().domain([cmin, cmax]).range([legH, 0]);
+    [cmin, (cmin+cmax)/2, cmax].forEach(tv => {
+        g.append('text').attr('x', legX + legW + 4).attr('y', legScale(tv)+3)
+            .attr('class','plot-note').attr('font-size','9px').text(fmt(tv));
+    });
+    // Missing swatch + legend entry (plotrule Heatmaps rule 2)
+    g.append('rect').attr('x', legX).attr('y', legH + 14).attr('width', 10).attr('height', 10)
+        .attr('fill', grey).attr('stroke','#ccc').attr('stroke-width',0.5);
+    g.append('text').attr('x', legX + 14).attr('y', legH + 23)
+        .attr('class','plot-note').attr('font-size','9px').text('missing');
 })();
 """
 end
@@ -902,22 +1073,15 @@ function _render_scatter_js(id::String, data_json::String, groups_json::String;
 
 $(_axis_labels_js(xlabel, ylabel))
 
-    // Legend
+    // Legend — group swatches, width-aware shared engine (PLT-16)
     if(groups.length > 1) {
-        const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
-        groups.forEach((gr, i) => {
-            const gi = leg.append('g').attr('transform','translate('+(i*130)+',0)');
-            gi.append('circle').attr('cx',6).attr('cy',0).attr('r',5)
-                .attr('fill',gr.color).attr('opacity',0.8);
-            gi.append('text').attr('x',16).attr('y',4).attr('font-size','10px')
-                .attr('fill','#555').text(gr.name);
-        });
+        window.__mem_core.legend(g, groups.map(gr => ({label:gr.name, color:gr.color, type:'circle'})), w, 8);
     }
 
     // Big-N subsample note (C7)
     if(subN > 0) {
         g.append('text').attr('x', w).attr('y', -2).attr('text-anchor','end')
-            .attr('font-size','9px').attr('fill','#888')
+            .attr('class','plot-note').attr('font-size','9px')
             .text('showing '+drawn.length+' of '+subN+' points');
     }
 })();
@@ -938,13 +1102,24 @@ optional horizontal reference lines (e.g. ACF ±CI bounds).
 - `ref_lines_json`: JSON array of {value, color, dash} horizontal reference lines
 - `tip_label`: tooltip x-prefix (domain-agnostic, plotrule A2); defaults to `xlabel`
   when empty, empty ⇒ no prefix (kills the leaked "Lag" noun).
+- `integer_x`: force integer x-axis ticks (lag/horizon axes — no tick at lag 2.5; PLT-17)
 - `xlabel`, `ylabel`: axis labels
 """
 function _render_vbar_js(id::String, data_json::String;
                          bar_color::String=_PLOT_COLORS[1],
                          ref_lines_json::String="[]", tip_label::String="",
+                         integer_x::Bool=false,
                          xlabel::String="", ylabel::String="")
     tip = isempty(tip_label) ? xlabel : tip_label
+    xaxis_js = integer_x ?
+        ("const _xd = x.domain();\n" *
+         "    const _ixv = [];\n" *
+         "    for (let _v = Math.ceil(_xd[0]); _v <= Math.floor(_xd[1]); _v++) _ixv.push(_v);\n" *
+         "    const _ixs = Math.max(1, Math.ceil(_ixv.length / 10));\n" *
+         "    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')\n" *
+         "        .call(d3.axisBottom(x).tickValues(_ixv.filter((_,i) => i % _ixs === 0)).tickFormat(d3.format('d')));") :
+        ("g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')\n" *
+         "        .call(d3.axisBottom(x).ticks(Math.min(xVals.length, 10)));")
     """
 (function() {
     const data = $(data_json);
@@ -979,7 +1154,7 @@ function _render_vbar_js(id::String, data_json::String;
     // Zero line
     g.append('line').attr('x1',0).attr('x2',w)
         .attr('y1',y(0)).attr('y2',y(0))
-        .attr('stroke','#333').attr('stroke-width',0.8);
+        .attr('class','zero-line').attr('stroke-width',0.8);
 
     // Reference lines (CI bounds)
     refLines.forEach(r => {
@@ -1004,8 +1179,7 @@ function _render_vbar_js(id::String, data_json::String;
     });
 
     // Axes
-    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
-        .call(d3.axisBottom(x).ticks(Math.min(xVals.length, 10)));
+    $(xaxis_js)
     g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
 
 $(_axis_labels_js(xlabel, ylabel))
@@ -1113,18 +1287,11 @@ function _render_histogram_js(id::String, bins_json::String, series_json::String
 
 $(_axis_labels_js(xlabel, ylabel))
 
-    // Legend (bars vs curve) when a density overlay + second series are present
+    // Legend (bars vs curve) — shared width-aware engine (PLT-16)
     if(series.length > 1) {
-        const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
-        series.forEach((s,i) => {
-            const gi = leg.append('g').attr('transform','translate('+(i*90)+',0)');
-            if(i === 0) {
-                gi.append('rect').attr('width',12).attr('height',12).attr('y',-6).attr('fill',s.color).attr('opacity',0.75);
-            } else {
-                gi.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0).attr('stroke',s.color).attr('stroke-width',2);
-            }
-            gi.append('text').attr('x',18).attr('y',4).attr('font-size','10px').attr('fill','#555').text(s.name);
-        });
+        const he = series.map((s,i) => ({label:s.name, color:s.color,
+            type: i === 0 ? 'rect' : 'line', alpha: i === 0 ? 0.75 : 1}));
+        window.__mem_core.legend(g, he, w, 0);
     }
 })();
 """
@@ -1324,19 +1491,11 @@ function _render_fan_js(id::String, data_json::String, fan_json::String;
 
 $(_axis_labels_js(xlabel, ylabel))
 
-    // Legend — one entry per band (labelled by quantile pair) + the central line
-    const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
-    let li = 0;
-    fan.forEach(b => {
-        const gi = leg.append('g').attr('transform','translate('+(li*90)+',0)');
-        gi.append('rect').attr('width',12).attr('height',12).attr('y',-6)
-            .attr('fill', b.color || '#1f77b4').attr('opacity', b.alpha || 0.15);
-        gi.append('text').attr('x',16).attr('y',4).attr('font-size','10px').attr('fill','#555').text(b.label);
-        li++;
-    });
-    const gm = leg.append('g').attr('transform','translate('+(li*90)+',0)');
-    gm.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0).attr('stroke',medColor).attr('stroke-width',2);
-    gm.append('text').attr('x',20).attr('y',4).attr('font-size','10px').attr('fill','#555').text(centralLabel);
+    // Legend — one entry per band (quantile pair) + the central line, width-aware (PLT-16)
+    const fanEntries = fan.map(b => ({label:b.label, color:b.color || '#1f77b4',
+        type:'rect', alpha: b.alpha || 0.15}));
+    fanEntries.push({label:centralLabel, color:medColor, type:'line'});
+    window.__mem_core.legend(g, fanEntries, w, 0);
 
     // Tooltip (crosshair nearest)
     svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
@@ -1352,6 +1511,127 @@ $(_axis_labels_js(xlabel, ylabel))
                 if(d[b.lo_key]!==null && d[b.hi_key]!==null && d[b.lo_key]!==undefined && d[b.hi_key]!==undefined)
                     html += '<br>'+b.label+': ['+fmt(d[b.lo_key])+', '+fmt(d[b.hi_key])+']';
             });
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+"""
+end
+
+# =============================================================================
+# Event-Study Dot-and-Whisker Renderer (per-event coefplot; PLT-17)
+# =============================================================================
+
+"""
+Generate D3.js for a per-event **dot-and-whisker** coefficient plot: a filled point
+at each `(x, y)` with a vertical CI whisker `[lo, hi]`, a HOLLOW marker at the
+reference / omitted period (`ref:1`, drawn without a whisker), plus a horizontal zero
+line and a vertical treatment line supplied via `ref_lines_json` (plotrule Form:
+event study — a continuous ribbon over-smooths discrete coefficients; PLT-17).
+
+- `data_json`: `[{x, y, lo, hi, ref}]` — `lo`/`hi` may be null; `ref ∈ {0,1}`.
+- `color`: point / whisker color.
+- `point_label`: series label for the tooltip.
+- `ref_lines_json`: `[{value, color, dash, axis}]` — `axis:"x"` vertical, `"y"` horizontal.
+- `integer_x`: force integer event-time ticks (default `true`; no tick at h = 2.5).
+- `xlabel`, `ylabel`: axis labels.
+"""
+function _render_whisker_js(id::String, data_json::String;
+                            color::String=_PLOT_SERIES[1], point_label::String="Estimate",
+                            ref_lines_json::String="[]", integer_x::Bool=true,
+                            xlabel::String="", ylabel::String="")
+    xaxis_js = integer_x ?
+        ("const _xd = x.domain();\n" *
+         "    const _ixv = [];\n" *
+         "    for (let _v = Math.ceil(_xd[0]); _v <= Math.floor(_xd[1]); _v++) _ixv.push(_v);\n" *
+         "    const _ixs = Math.max(1, Math.ceil(_ixv.length / 12));\n" *
+         "    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')\n" *
+         "        .call(d3.axisBottom(x).tickValues(_ixv.filter((_,i) => i % _ixs === 0)).tickFormat(d3.format('d')));") :
+        ("g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')\n" *
+         "        .call(d3.axisBottom(x).ticks(Math.min(data.length,10)));")
+    """
+(function() {
+    const data = $(data_json);
+    const refLines = $(ref_lines_json);
+    const pointLabel = $(_json(point_label));
+
+    const container = d3.select('#$(id)');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    const xVals = data.map(d => d.x);
+    const allY = [];
+    data.forEach(d => { if(d.y!==null) allY.push(d.y); if(d.lo!==null) allY.push(d.lo); if(d.hi!==null) allY.push(d.hi); });
+    refLines.forEach(r => { if((r.axis||'y') !== 'x') allY.push(r.value); });
+
+    const xExt = d3.extent(xVals);
+    const xPad = (xExt[1]-xExt[0])*0.06 || 0.5;
+    const x = d3.scaleLinear().domain([xExt[0]-xPad, xExt[1]+xPad]).range([0,w]);
+    const yExt = d3.extent(allY);
+    const yPad = (yExt[1]-yExt[0])*0.08 || 1;
+    const y = d3.scaleLinear().domain([yExt[0]-yPad, yExt[1]+yPad]).range([h,0]);
+
+    // Grid
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+
+    // Reference lines (axis:"x" vertical treatment line; axis:"y" horizontal zero)
+    refLines.forEach(r => {
+        if((r.axis||'y') === 'x') {
+            g.append('line').attr('x1',x(r.value)).attr('x2',x(r.value)).attr('y1',0).attr('y2',h)
+                .attr('stroke',r.color||'#999').attr('stroke-width',1).attr('stroke-dasharray',r.dash||'4,3');
+        } else {
+            g.append('line').attr('x1',0).attr('x2',w).attr('y1',y(r.value)).attr('y2',y(r.value))
+                .attr('stroke',r.color||'#999').attr('stroke-width',1).attr('stroke-dasharray',r.dash||'4,3');
+        }
+    });
+
+    // Whiskers (+ caps) — skipped at the reference period (no CI there)
+    const capW = Math.max(3, Math.min(9, w / Math.max(data.length,1) * 0.3));
+    data.forEach(d => {
+        if(d.ref === 1 || d.lo===null || d.hi===null) return;
+        g.append('line').attr('x1',x(d.x)).attr('x2',x(d.x)).attr('y1',y(d.lo)).attr('y2',y(d.hi))
+            .attr('stroke','$(color)').attr('stroke-width',1.5);
+        g.append('line').attr('x1',x(d.x)-capW/2).attr('x2',x(d.x)+capW/2).attr('y1',y(d.lo)).attr('y2',y(d.lo))
+            .attr('stroke','$(color)').attr('stroke-width',1.5);
+        g.append('line').attr('x1',x(d.x)-capW/2).attr('x2',x(d.x)+capW/2).attr('y1',y(d.hi)).attr('y2',y(d.hi))
+            .attr('stroke','$(color)').attr('stroke-width',1.5);
+    });
+
+    // Points: filled dot per event time; HOLLOW marker at the reference period
+    data.forEach(d => {
+        if(d.y===null) return;
+        if(d.ref === 1) {
+            g.append('circle').attr('cx',x(d.x)).attr('cy',y(d.y)).attr('r',5)
+                .attr('fill','none').attr('stroke','$(color)').attr('stroke-width',1.6);
+        } else {
+            g.append('circle').attr('cx',x(d.x)).attr('cy',y(d.y)).attr('r',4)
+                .attr('fill','$(color)').attr('stroke','#fff').attr('stroke-width',0.8);
+        }
+    });
+
+    // Axes
+    $(xaxis_js)
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+
+$(_axis_labels_js(xlabel, ylabel))
+
+    // Tooltip (nearest event time)
+    svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g.node());
+            const x0 = x.invert(mx);
+            const idx = d3.minIndex(data, d => Math.abs(d.x - x0));
+            const d = data[idx];
+            let html = '<b>'+(pointLabel ? pointLabel : 'x')+' @ '+d.x+'</b>';
+            if(d.y!==null) html += '<br>'+fmt(d.y);
+            if(d.ref === 1) html += '<br>(reference period)';
+            else if(d.lo!==null && d.hi!==null) html += '<br>CI: ['+fmt(d.lo)+', '+fmt(d.hi)+']';
             showTip(evt, html);
         })
         .on('mouseout', hideTip);
@@ -1584,20 +1864,12 @@ function _render_occbin_panel_js(id::String, data_json::String;
 
 $(_axis_labels_js(xlabel, ylabel))
 
-    // Legend
-    const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
-    const g1 = leg.append('g').attr('transform','translate(0,0)');
-    g1.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
-        .attr('stroke','$(lin_color)').attr('stroke-width',2).attr('stroke-dasharray','6,3');
-    g1.append('text').attr('x',20).attr('y',4).attr('font-size','10px').attr('fill','#555').text(linLabel);
-    const g2 = leg.append('g').attr('transform','translate(80,0)');
-    g2.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
-        .attr('stroke','$(pw_color)').attr('stroke-width',2);
-    g2.append('text').attr('x',20).attr('y',4).attr('font-size','10px').attr('fill','#555').text(pwLabel);
-    const g3 = leg.append('g').attr('transform','translate(175,0)');
-    g3.append('rect').attr('width',12).attr('height',10).attr('y',-5)
-        .attr('fill','$(bind_color)').attr('opacity',0.15);
-    g3.append('text').attr('x',16).attr('y',4).attr('font-size','10px').attr('fill','#555').text(bindLabel);
+    // Legend — shared width-aware engine (PLT-16)
+    window.__mem_core.legend(g, [
+        {label:linLabel, color:'$(lin_color)', type:'line', dash:'6,3'},
+        {label:pwLabel, color:'$(pw_color)', type:'line'},
+        {label:bindLabel, color:'$(bind_color)', type:'rect', alpha:0.15}
+    ], w, 0);
 
     // Tooltip
     svg.append('rect').attr('width', W).attr('height', h + margin.top + margin.bottom)

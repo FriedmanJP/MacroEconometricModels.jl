@@ -47,8 +47,8 @@ function plot_result(r::ACFResult{T};
         data_json = _acf_bar_data_json(r.lags, r.ccf)
         js = _render_vbar_js(id, data_json;
                              bar_color=_PLOT_COLORS[1],
-                             ref_lines_json=ci_refs,
-                             xlabel="Lag", ylabel="CCF")
+                             ref_lines_json=ci_refs, integer_x=true,
+                                     xlabel="Lag", ylabel="CCF")
         panels = [_PanelSpec(id, "Cross-Correlation Function", js)]
         if isempty(title)
             title = "Cross-Correlation Function (n=$(r.nobs))"
@@ -65,7 +65,7 @@ function plot_result(r::ACFResult{T};
             data_acf = _acf_bar_data_json(r.lags, r.acf)
             js_acf = _render_vbar_js(id_acf, data_acf;
                                      bar_color=_PLOT_COLORS[1],
-                                     ref_lines_json=ci_refs,
+                                     ref_lines_json=ci_refs, integer_x=true,
                                      xlabel="Lag", ylabel="ACF")
             push!(panels, _PanelSpec(id_acf, "Autocorrelation", js_acf))
         end
@@ -77,8 +77,8 @@ function plot_result(r::ACFResult{T};
             data_pacf = _acf_bar_data_json(r.lags, r.pacf)
             js_pacf = _render_vbar_js(id_pacf, data_pacf;
                                       bar_color=_PLOT_COLORS[2],
-                                      ref_lines_json=ci_refs,
-                                      xlabel="Lag", ylabel="PACF")
+                                      ref_lines_json=ci_refs, integer_x=true,
+                                     xlabel="Lag", ylabel="PACF")
             push!(panels, _PanelSpec(id_pacf, "Partial Autocorrelation", js_pacf))
         end
 
@@ -88,7 +88,7 @@ function plot_result(r::ACFResult{T};
             data_acf = _acf_bar_data_json(r.lags, r.acf)
             js_acf = _render_vbar_js(id_acf, data_acf;
                                      bar_color=_PLOT_COLORS[1],
-                                     ref_lines_json=ci_refs,
+                                     ref_lines_json=ci_refs, integer_x=true,
                                      xlabel="Lag", ylabel="ACF")
             push!(panels, _PanelSpec(id_acf, "Autocorrelation", js_acf))
         end

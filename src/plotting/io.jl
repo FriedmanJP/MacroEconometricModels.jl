@@ -70,9 +70,11 @@ function plot_result(m::LeontiefModel; title::String="Leontief inverse",
     end
     data_json = _json_array_of_objects(rows)
     mx = maximum(m.L)
+    # Leontief inverse is nonnegative → single-hue sequential ramp over [0, max]
+    # (plotrule Color / Heatmaps; a diverging scale here has a meaningless midpoint).
     js = _render_heatmap_js(id, data_json, _json(secs), _json(secs);
                             xlabel="using sector", ylabel="supplying sector",
-                            color_domain=[0.0, float(mx)])
+                            scale=:sequential, color_domain=[0.0, float(mx)])
     panel = _PanelSpec(id, title, js)
     p = _make_plot([panel]; title=title, ncols=1)
     save_path !== nothing && save_plot(p, save_path)

@@ -211,6 +211,47 @@ function _forecast_data_json(fc::AbstractVector, ci_lo::AbstractVector,
 end
 
 # =============================================================================
+# Event-study (dot-and-whisker) Data
+# =============================================================================
+
+"""
+    _whisker_data_json(event_times, coefs, ci_lo, ci_hi, reference_period) -> String
+
+Build the `[{x, y, lo, hi, ref}]` payload for `_render_whisker_js` (event-study
+coefplot; PLT-17). Each estimated event time carries its point + CI; the reference /
+omitted period is emitted with `ref:1`, `null` CI (so the renderer draws a hollow
+marker and no whisker). When `reference_period` is not among `event_times`, a
+synthetic `(reference_period, 0)` row is added so the omitted category is always
+visible. Rows are sorted by event time.
+"""
+function _whisker_data_json(event_times::AbstractVector{<:Integer},
+                            coefs::AbstractVector, ci_lo::AbstractVector,
+                            ci_hi::AbstractVector, reference_period::Integer)
+    xs = Int[]; ys = Float64[]
+    los = Union{Float64,Nothing}[]; his = Union{Float64,Nothing}[]; refs = Int[]
+    ref_present = false
+    for i in eachindex(event_times)
+        et = Int(event_times[i]); isref = et == Int(reference_period)
+        isref && (ref_present = true)
+        push!(xs, et); push!(ys, Float64(coefs[i]))
+        push!(los, isref ? nothing : Float64(ci_lo[i]))
+        push!(his, isref ? nothing : Float64(ci_hi[i]))
+        push!(refs, isref ? 1 : 0)
+    end
+    if !ref_present
+        push!(xs, Int(reference_period)); push!(ys, 0.0)
+        push!(los, nothing); push!(his, nothing); push!(refs, 1)
+    end
+    perm = sortperm(xs)
+    rows = Vector{Pair{String,String}}[]
+    for k in perm
+        push!(rows, ["x" => _json(xs[k]), "y" => _json(ys[k]),
+                     "lo" => _json(los[k]), "hi" => _json(his[k]), "ref" => _json(refs[k])])
+    end
+    _json_array_of_objects(rows)
+end
+
+# =============================================================================
 # Volatility Data
 # =============================================================================
 

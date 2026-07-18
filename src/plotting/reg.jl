@@ -132,7 +132,9 @@ function _plot_binary_choice(y::AbstractVector{T}, fitted_probs::AbstractVector{
         push!(scatter_rows, "{\"x\":$(_json(rank)),\"y\":$(_json(fitted_probs[idx])),\"group\":$(_json(grp))}")
     end
     data1 = "[" * join(scatter_rows, ",\n") * "]"
-    groups1 = "[{\"name\":\"y = 1\",\"color\":\"$(_PLOT_COLORS[1])\"},{\"name\":\"y = 0\",\"color\":\"$(_PLOT_COLORS[4])\"}]"
+    # Outcome colors from the red-excluded series palette — red stays reserved for
+    # reference elements, never a series (plotrule Color: reserved red; PLT-13).
+    groups1 = "[{\"name\":\"y = 1\",\"color\":\"$(_PLOT_SERIES[1])\"},{\"name\":\"y = 0\",\"color\":\"$(_PLOT_SERIES[2])\"}]"
     refs1 = "[{\"value\":0.5,\"color\":\"#999\",\"dash\":\"4,3\"}]"
     js1 = _render_scatter_js(id1, data1, groups1;
                              ref_lines_json=refs1,
@@ -162,7 +164,7 @@ function _plot_binary_choice(y::AbstractVector{T}, fitted_probs::AbstractVector{
         push!(bar_rows, ["x" => _json(label), "s0" => _json(bin_counts_0[b]), "s1" => _json(bin_counts_1[b])])
     end
     data2 = _json_array_of_objects(bar_rows)
-    s2 = _series_json(["y = 0", "y = 1"], [_PLOT_COLORS[4], _PLOT_COLORS[1]]; keys=["s0", "s1"])
+    s2 = _series_json(["y = 0", "y = 1"], [_PLOT_SERIES[2], _PLOT_SERIES[1]]; keys=["s0", "s1"])
     js2 = _render_bar_js(id2, data2, s2; mode="grouped",
                          xlabel="Predicted Probability", ylabel="Count")
     p2 = _PanelSpec(id2, "Distribution by Outcome", js2)
@@ -312,8 +314,10 @@ function plot_result(s::InfluenceStats{T};
         push!(scatter_rows, "{\"x\":$(_json(i)),\"y\":$(_json(s.hat[i])),\"group\":$(_json(grp))}")
     end
     data1 = "[" * join(scatter_rows, ",\n") * "]"
-    groups1 = "[{\"name\":\"Leverage\",\"color\":\"$(_PLOT_COLORS[1])\"}," *
-              "{\"name\":\"High leverage\",\"color\":\"$(_PLOT_COLORS[4])\"}]"
+    # "High leverage" is an alert category (the observations being flagged), so it
+    # legitimately keeps the reserved alert red; "Leverage" uses a series hue (PLT-13).
+    groups1 = "[{\"name\":\"Leverage\",\"color\":\"$(_PLOT_SERIES[1])\"}," *
+              "{\"name\":\"High leverage\",\"color\":\"$(_PLOT_ALERT)\"}]"
     refs1 = "[{\"value\":$(_json(hi_cut)),\"color\":\"#d62728\",\"dash\":\"6,3\"}]"
     js1 = _render_scatter_js(id1, data1, groups1; ref_lines_json = refs1,
                              xlabel = "Observation", ylabel = "Leverage (h_ii)")

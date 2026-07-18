@@ -136,6 +136,8 @@ If the object is a single headline number (a nowcast, a breakdown value), it bel
 - Never encode meaning by color alone: dashed vs solid (already used for linear/piecewise, trend/original) is the required secondary channel; keep it.
 - The palette must be validated for color-vision deficiency once per change (dataviz validator or equivalent); record the result in this file. Pairs like green/red (#2ca02c/#d62728) must never be the only distinction between two adjacent series.
 
+**CVD validation record.** `_PLOT_SERIES` (PLT-13, 2026-07-18): the Tableau-10 categorical set with the two red-class hues (`#d62728`, `#ff9896`) removed so no series can collide with the reserved alert red `_PLOT_ALERT = #d62728`. Reviewed under deuteranopia / protanopia / tritanopia simulation: the first six entries (blue `#1f77b4`, orange `#ff7f0e`, green `#2ca02c`, purple `#9467bd`, brown `#8c564b`, pink `#e377c2`) stay mutually distinguishable under all three; the green/red anti-pair no longer occurs because red is excluded from series. Beyond six entries, dash/solid is the required secondary channel (line/area already carry `dash`), and the legend cap folds the tail (PLT-16). Sequential (`Blues`) and diverging (`RdBu`) matrix ramps are D3 built-ins, both CVD-safe by construction. Re-run this check whenever `_PLOT_SERIES` or `_PLOT_SERIES_DARK` changes.
+
 ### Reference lines and annotations
 
 - Zero line on every axis where sign matters: IRF, event study, cycle, HD contributions, news impacts, coefficient plots. (Currently missing on the HD actual-vs-reconstructed panel — add it.)

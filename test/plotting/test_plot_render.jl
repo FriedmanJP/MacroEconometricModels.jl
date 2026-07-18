@@ -767,3 +767,320 @@ end
         @test count("const margin", jsc) == 1                      # single scale block (A4)
     end
 end
+
+# =============================================================================
+# PLT-13 (color system) / 15 (heatmap upgrades) / 16 (legend + bands) / 14 (dark
+# mode) / 17 (form corrections) / 18 (forecast history). Batch C design system.
+# =============================================================================
+@testset "Plotting PLT-13..18 design system (Batch C)" begin
+
+    _bc_line_dj(n) = M._json_array_of_objects(
+        [vcat(["x" => M._json(t)],
+              ["s$i" => M._json(float(t + i)) for i in 1:n]) for t in 0:3])
+
+    # -------------------------------------------------------------------------
+    # PLT-13 — role-split palette, entity-stable color map, reserved red
+    # -------------------------------------------------------------------------
+    @testset "PLT-13 color roles + entity stability" begin
+        @test M._PLOT_ALERT == "#d62728"
+        @test !("#d62728" in M._PLOT_SERIES)                       # red excluded from series
+        @test !("#ff9896" in M._PLOT_SERIES)                       # desaturated red excluded too
+        @test length(M._PLOT_SERIES) == length(M._PLOT_SERIES_DARK)
+        @test M._PLOT_SEQUENTIAL == "Blues" && M._PLOT_DIVERGING == "RdBu"
+
+        cm = M._color_map(["a", "b", "c"])                         # first-seen order
+        @test cm["a"] == M._PLOT_SERIES[1]
+        @test cm["b"] == M._PLOT_SERIES[2]
+        @test cm["c"] == M._PLOT_SERIES[3]
+        cmdup = M._color_map(["a", "a", "b"])                      # duplicate collapses one slot
+        @test cmdup["b"] == M._PLOT_SERIES[2]
+        np = length(M._PLOT_SERIES)
+        cmbig = M._color_map(string.(1:(np + 2)))                  # cycles past palette
+        @test cmbig[string(np + 1)] == M._PLOT_SERIES[1]
+        @test M._colors_for(["a", "b"]) == [M._PLOT_SERIES[1], M._PLOT_SERIES[2]]
+        @test M._color_for("mon") == M._color_for("mon")          # deterministic
+        @test M._color_for("mon") in M._PLOT_SERIES
+
+        # entity stability: panel 2 drops the FIRST entity, survivors keep colors
+        full = ["mon", "dem", "sup"]
+        cmap = M._color_map(full)
+        function _mk(names)
+            id = M._next_plot_id("cs")
+            dj = M._json_array_of_objects(
+                [vcat(["x" => M._json(t)],
+                      ["k$i" => M._json(float(t)) for i in eachindex(names)]) for t in 0:3])
+            sj = M._series_json(names, [cmap[n] for n in names];
+                                keys=["k$i" for i in eachindex(names)])
+            M._PanelSpec(id, "p", M._render_line_js(id, dj, sj))
+        end
+        p = M._make_plot([_mk(full), _mk(["dem", "sup"])])
+        sblocks = [lit for (nm, lit) in extract_json_blocks(p.html) if nm == "series"]
+        @test length(sblocks) == 2
+        s1, _ = _tj_parse_value(sblocks[1], firstindex(sblocks[1]))
+        s2, _ = _tj_parse_value(sblocks[2], firstindex(sblocks[2]))
+        _col(blk, nm) = first(o["color"] for o in blk if o["name"] == nm)
+        @test _col(s1, "dem") == _col(s2, "dem")                   # survivor color unchanged
+        @test _col(s1, "sup") == _col(s2, "sup")
+        @test _col(s1, "mon") != _col(s1, "dem")                   # distinct within a panel
+
+        # binary choice: red is no longer an ordinary series color
+        Random.seed!(1313)
+        Xb = randn(140, 2); yb = Float64.((Xb[:, 1] .+ 0.3 .* randn(140)) .> 0)
+        pl = plot_result(estimate_logit(yb, Xb))
+        @test occursin("\"y = 0\"", pl.html)
+        @test !occursin("\"name\":\"y = 0\",\"color\":\"#d62728\"", pl.html)
+        for (nm, lit) in extract_json_blocks(pl.html)
+            nm == "series" || continue
+            sv, _ = _tj_parse_value(lit, firstindex(lit))
+            for o in sv
+                @test o["color"] != M._PLOT_ALERT                  # no series drawn in alert red
+            end
+        end
+
+        # FEVD with 4+ shocks: the 4th shock is NOT painted alert red anymore
+        Random.seed!(1314)
+        f4 = fevd(estimate_var(randn(160, 4), 1), 6)
+        pf = plot_result(f4; var=1)
+        fs = first(lit for (nm, lit) in extract_json_blocks(pf.html) if nm == "series")
+        fsv, _ = _tj_parse_value(fs, firstindex(fs))
+        @test all(o -> o["color"] != M._PLOT_ALERT, fsv)
+    end
+
+    # -------------------------------------------------------------------------
+    # PLT-15 — heatmap color-scale legend, data-driven domain, seq vs diverging,
+    # missing swatch, best-cell marker
+    # -------------------------------------------------------------------------
+    @testset "PLT-15 heatmap legend + seq/div domain" begin
+        hdj = "[{\"x\":\"c1\",\"y\":\"r1\",\"v\":0.0},{\"x\":\"c2\",\"y\":\"r1\",\"v\":2.0}," *
+              "{\"x\":\"c1\",\"y\":\"r2\",\"v\":1.0},{\"x\":\"c2\",\"y\":\"r2\",\"v\":null}]"
+        rl = "[\"r1\",\"r2\"]"; cl = "[\"c1\",\"c2\"]"
+
+        # sequential: single-hue Blues + gradient legend + missing swatch
+        jseq = M._render_heatmap_js("hm_s", hdj, rl, cl; scale=:sequential, color_domain=[0.0, 2.0])
+        @test occursin("d3.interpolateBlues", jseq)
+        @test occursin("const scaleType = \"sequential\"", jseq)   # sequential branch active
+        @test occursin("linearGradient", jseq)                     # gradient legend (Heatmaps rule 1)
+        @test occursin(".text('missing')", jseq)                   # missing swatch entry (rule 2)
+        @test occursin("grad_hm_s", jseq)
+
+        # diverging: RdBu (reversed), data-driven symmetric domain
+        jdiv = M._render_heatmap_js("hm_d", hdj, rl, cl; scale=:diverging)
+        @test occursin("d3.interpolateRdBu", jdiv)
+        @test occursin("midpoint - m", jdiv)                       # symmetric-around-midpoint
+        @test occursin("providedDomain = null", jdiv)              # data-driven, no baked [-3,3]
+
+        # best-cell marker option (PLT-25 consumer)
+        jb = M._render_heatmap_js("hm_b", hdj, rl, cl; best_cell_json="{\"x\":\"c2\",\"y\":\"r1\"}")
+        @test occursin("bestCell !== null", jb)
+        @test occursin("x(bestCell.x)", jb)
+        @test occursin("★", jb)
+
+        @test_throws ArgumentError M._render_heatmap_js("hm_x", hdj, rl, cl; scale=:bogus)
+
+        # tooltip prefix still parameterized (A2, carried from PLT-09)
+        jt = M._render_heatmap_js("hm_t", hdj, rl, cl; xlabel="Sector")
+        @test occursin(M._json("Sector"), jt)
+        @test !occursin("Period '+d.x", jt)
+
+        # Leontief dispatch → sequential over [0, max], with a gradient legend
+        io = load_example(:wiot)
+        pL = plot_result(leontief(io))
+        @test occursin("d3.interpolateBlues", pL.html)
+        @test occursin("providedDomain = [0.0,", pL.html)
+        @test occursin("linearGradient", pL.html)
+
+        # signed matrix → diverging, symmetric provided domain
+        signed = "[{\"x\":\"a\",\"y\":\"a\",\"v\":1.0},{\"x\":\"b\",\"y\":\"a\",\"v\":-0.5}," *
+                 "{\"x\":\"a\",\"y\":\"b\",\"v\":-0.5},{\"x\":\"b\",\"y\":\"b\",\"v\":0.8}]"
+        js2 = M._render_heatmap_js("hm_sg", signed, "[\"a\",\"b\"]", "[\"a\",\"b\"]";
+                 scale=:diverging, color_domain=[-1.0, 1.0])
+        @test occursin("providedDomain = [-1.0, 1.0]", js2)
+        @test occursin("d3.interpolateRdBu", js2)
+        for (_, lit) in extract_json_blocks(js2); assert_strict_json(lit); end
+        check_plot(M._make_plot([M._PanelSpec("hm_s", "HM", jseq)]))
+    end
+
+    # -------------------------------------------------------------------------
+    # PLT-16 — width-aware wrapping legend + distinct overlapping bands
+    # -------------------------------------------------------------------------
+    @testset "PLT-16 width-aware legend + distinct bands" begin
+        core = M._render_js_core()
+        @test occursin("legend: function legend", core)            # shared engine present
+        @test occursin("cy += rowH", core)                         # rows wrap
+        @test occursin("append('title')", core)                    # full name in tooltip
+        @test occursin("Other ('+(entries.length - cap)", core)    # fold-tail entry (C7)
+        @test occursin("getComputedTextLength", core)              # measures text width
+
+        # no fixed-pixel legend step survives in render.jl (anti-pattern 9)
+        rtxt = read(joinpath(dirname(pathof(MacroEconometricModels)), "plotting", "render.jl"), String)
+        @test !occursin("(i*100)", rtxt)
+        @test !occursin("(i*130)", rtxt)
+        @test !occursin("(i*90)", rtxt)
+
+        # line renderer routes through the shared engine + legends named bands
+        sj3 = M._series_json(["a", "b", "c"], ["#1f77b4", "#ff7f0e", "#2ca02c"]; keys=["s1", "s2", "s3"])
+        jl = M._render_line_js("p_leg", _bc_line_dj(3), sj3)
+        @test occursin("window.__mem_core.legend(g, legEntries", jl)
+
+        bands = "[{\"lo_key\":\"lo\",\"hi_key\":\"hi\",\"name\":\"90% CI\",\"color\":\"#1f77b4\",\"alpha\":0.15}]"
+        sj1 = M._series_json(["x"], ["#1f77b4"]; keys=["s1"])
+        jb = M._render_line_js("p_bl", _bc_line_dj(1), sj1; bands_json=bands)
+        @test occursin("if(b.name) legEntries.push", jb)          # named band → legend entry
+
+        # long (30-char) names still route through the wrapping engine
+        long = "gross_domestic_product_growthX"                    # 30 chars
+        sjl = M._series_json([long, long * "2"], ["#1f77b4", "#ff7f0e"]; keys=["s1", "s2"])
+        jlong = M._render_line_js("p_ln", _bc_line_dj(2), sjl)
+        @test occursin("window.__mem_core.legend", jlong)
+
+        # HonestDiD: two distinct band legend entries (color AND alpha differ)
+        et = collect(-3:3); att = 0.1 .* Float64.(et)
+        hres = M.HonestDiDResult{Float64}(
+            0.0, att .- 0.5, att .+ 0.5, att .- 0.2, att .+ 0.2,
+            0.25, et, att, 0.95, :sd, 0.1, :original)
+        ph = plot_result(hres)
+        check_plot(ph)
+        @test occursin("Robust CI", ph.html)
+        @test occursin("Original CI", ph.html)
+        bl = first(lit for (nm, lit) in extract_json_blocks(ph.html) if nm == "bands")
+        bv, _ = _tj_parse_value(bl, firstindex(bl))
+        rob = first(o for o in bv if get(o, "name", "") == "Robust CI")
+        org = first(o for o in bv if get(o, "name", "") == "Original CI")
+        @test rob["color"] != org["color"]                        # distinct color
+        @test rob["alpha"] != org["alpha"]                        # distinct alpha
+    end
+
+    # -------------------------------------------------------------------------
+    # PLT-14 — dark mode via CSS custom properties + data-theme toggle mirror
+    # -------------------------------------------------------------------------
+    @testset "PLT-14 dark mode + CSS custom properties" begin
+        css = M._render_css(1)
+        @test occursin("--mem-bg", css)                            # custom properties defined
+        @test occursin("prefers-color-scheme: dark", css)          # OS dark override
+        @test occursin(":root[data-theme=\"dark\"]", css)          # docs-toggle override
+        @test occursin(":root[data-theme=\"light\"]", css)
+        @test occursin("background: var(--mem-bg)", css)           # body references the var
+        @test !occursin("background: #fff", css)                   # body no longer hardcodes surface
+        @test occursin(".zero-line", css) && occursin(".axis-label", css)
+
+        # a real plot carries the vars, the dark block, and the docs theme-sync script
+        Random.seed!(1414)
+        p = plot_result(irf(estimate_var(randn(60, 2), 2), 6; ci_type=:none); var=1, shock=1)
+        @test occursin("--mem-bg", p.html)
+        @test occursin("prefers-color-scheme: dark", p.html)
+        @test occursin("theme--documenter-dark", p.html)          # mirrors docs toggle
+        @test occursin("setAttribute('data-theme'", p.html)
+        @test occursin("MutationObserver", p.html)
+        @test occursin("axis-label", p.html)                       # inline inks moved to classes
+        @test occursin("zero-line", p.html)
+    end
+
+    # -------------------------------------------------------------------------
+    # PLT-17 — point-and-whisker event study, HD zero line, integer horizon ticks
+    # -------------------------------------------------------------------------
+    @testset "PLT-17 whisker event study + HD zero line + integer ticks" begin
+        # whisker renderer: hollow ref marker + treatment vline + integer_x default
+        wdj = "[{\"x\":-2,\"y\":0.1,\"lo\":-0.1,\"hi\":0.3,\"ref\":0}," *
+              "{\"x\":-1,\"y\":0.0,\"lo\":null,\"hi\":null,\"ref\":1}," *
+              "{\"x\":0,\"y\":0.5,\"lo\":0.3,\"hi\":0.7,\"ref\":0}]"
+        refs = "[{\"value\":0,\"color\":\"#999\",\"dash\":\"4,3\"}," *
+               "{\"value\":0,\"axis\":\"x\",\"color\":\"$(M._PLOT_ALERT)\",\"dash\":\"6,3\"}]"
+        jw = M._render_whisker_js("p_w", wdj; ref_lines_json=refs, point_label="ATT")
+        @test occursin("d.ref === 1", jw)                          # hollow reference marker
+        @test occursin("tickFormat(d3.format('d'))", jw)           # integer_x default true
+        @test occursin(".attr('x1',x(r.value)).attr('x2',x(r.value))", jw)  # axis:x treatment line
+        jwl = M._render_whisker_js("p_wl", wdj; integer_x=false)
+        @test !occursin("tickFormat(d3.format('d'))", jwl)
+        for (_, lit) in extract_json_blocks(jw); assert_strict_json(lit); end
+
+        # _whisker_data_json: synthetic reference row (null CI), sorted
+        wj = M._whisker_data_json([-2, 0, 1, 2], [0.1, 0.5, 0.4, 0.3],
+                                  [-0.1, 0.3, 0.2, 0.1], [0.3, 0.7, 0.6, 0.5], -1)
+        assert_strict_json(wj)
+        wv, _ = _tj_parse_value(wj, firstindex(wj))
+        refrow = first(o for o in wv if o["ref"] == 1.0)
+        @test refrow["x"] == -1.0
+        @test refrow["lo"] === nothing                             # no CI at the reference
+        @test issorted([o["x"] for o in wv])                       # rows sorted by event time
+
+        # DIDResult default = whisker (no ribbon band path); :ribbon restores it
+        did = M.DIDResult{Float64}(
+            [0.1, 0.5, 0.4, 0.3], [0.1, 0.1, 0.1, 0.1],
+            [-0.1, 0.3, 0.2, 0.1], [0.3, 0.7, 0.6, 0.5], [-2, 0, 1, 2], -1,
+            nothing, nothing, 0.35, 0.05, 500, 50, 25, 25, :twfe,
+            "y", "d", :notyettreated, :unit, 0.95, nothing)
+        pw = plot_result(did)
+        check_plot(pw)
+        @test occursin("d.ref === 1", pw.html)                     # whisker path
+        @test !occursin("bands.forEach", pw.html)                  # no line-renderer ribbon
+        pr = plot_result(did; style=:ribbon)
+        check_plot(pr)
+        @test occursin("bands.forEach", pr.html)                   # ribbon band restored
+        @test occursin("tickFormat(d3.format('d'))", pr.html)      # integer event-time ticks
+        @test_throws ArgumentError plot_result(did; style=:bogus)
+
+        # HD actual-vs-reconstructed panel now carries a zero reference line
+        Random.seed!(1717)
+        m = estimate_var(randn(160, 2), 2)
+        ph = plot_result(historical_decomposition(m, size(m.Y, 1) - m.p); var=1)
+        hasref = any((nm == "refLines" && occursin("\"value\":0", lit))
+                     for (nm, lit) in extract_json_blocks(ph.html))
+        @test hasref
+
+        # IRF forces integer horizon ticks (no h = 2.5)
+        Random.seed!(1718)
+        pirf = plot_result(irf(estimate_var(randn(80, 2), 2), 6; ci_type=:none); var=1, shock=1)
+        @test occursin("tickFormat(d3.format('d'))", pirf.html)
+
+        # vbar integer_x option
+        jvi = M._render_vbar_js("p_vi", "[{\"x\":1,\"y\":0.5}]"; integer_x=true)
+        @test occursin("tickFormat(d3.format('d'))", jvi)
+        jvd = M._render_vbar_js("p_vd", "[{\"x\":1,\"y\":0.5}]")
+        @test !occursin("tickFormat(d3.format('d'))", jvd)
+    end
+
+    # -------------------------------------------------------------------------
+    # PLT-18 — history= context for every forecast fan
+    # -------------------------------------------------------------------------
+    @testset "PLT-18 forecast history context" begin
+        Random.seed!(1818)
+        m = estimate_var(randn(120, 3), 2)
+        fc = forecast(m, 8)
+
+        # matrix history → History series + forecast-origin vline + valid bridge
+        p = plot_result(fc; history=randn(40, 3))
+        check_plot(p)
+        @test occursin("History", p.html)
+        hasx = any((nm == "refLines" && occursin("\"axis\":\"x\"", lit))
+                   for (nm, lit) in extract_json_blocks(p.html))
+        @test hasx                                                  # forecast-origin vline
+        for (nm, lit) in extract_json_blocks(p.html)
+            nm == "data" && assert_strict_json(lit)                # bridge: no duplicate "fc"
+        end
+
+        # vector history with a single var selected
+        p1 = plot_result(fc; var=1, history=randn(40))
+        check_plot(p1)
+        @test occursin("History", p1.html)
+
+        # wrong-width matrix → ArgumentError; vector with multiple panels → ArgumentError
+        @test_throws ArgumentError plot_result(fc; history=randn(40, 2))
+        @test_throws ArgumentError plot_result(fc; history=randn(40))
+
+        # BVAR / VECM / LP / Factor all accept history via the shared helper
+        post = estimate_bvar(randn(120, 2), 2; n_draws=60)
+        @test occursin("History", plot_result(forecast(post, 6); history=randn(30, 2)).html)
+
+        vecm = estimate_vecm(cumsum(randn(150, 3), dims=1), 2; rank=1)
+        @test occursin("History", plot_result(forecast(vecm, 8); history=randn(40, 3)).html)
+
+        lp = estimate_lp(randn(100, 3), 1, 8; lags=2)
+        lfc = forecast(lp, [i == 1 ? 1.0 : 0.0 for i in 1:8])
+        @test occursin("History", plot_result(lfc; history=randn(30, size(lfc.forecast, 2))).html)
+
+        fm = estimate_dynamic_factors(randn(200, 6), 2, 1)
+        pf = plot_result(forecast(fm, 6); type=:observable, history=randn(50, 6))
+        @test occursin("History", pf.html)
+        @test_throws ArgumentError plot_result(forecast(fm, 6); type=:observable, history=randn(50, 3))
+    end
+end

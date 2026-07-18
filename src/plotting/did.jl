@@ -17,43 +17,53 @@ plot_result methods for DiD types: DIDResult, EventStudyLP, BaconDecomposition.
 # =============================================================================
 
 """
-    plot_result(did::DIDResult; title="", save_path=nothing)
+    plot_result(did::DIDResult; style=:whisker, title="", save_path=nothing)
 
-Plot DiD event study coefficients with confidence bands.
+Plot DiD event-study coefficients.
 
-Displays ATT coefficients by event time with CI bands, a vertical dashed
-line at treatment time (event time = 0), a horizontal zero reference line,
-and the reference period marker.
+`style=:whisker` (default) draws a per-event-time **dot-and-whisker** coefficient
+plot — a point at each event time with its CI whisker and a HOLLOW marker at the
+omitted reference period — because a continuous ribbon over-smooths discrete
+coefficients (plotrule Form: event study). `style=:ribbon` restores the line + CI
+band. Both carry a vertical dashed treatment line at event time 0, a horizontal
+zero reference line, and integer event-time ticks.
 """
 function plot_result(did::DIDResult{T};
+                     style::Symbol=:whisker,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
-    n_evt = length(did.event_times)
+    style in (:whisker, :ribbon) ||
+        throw(ArgumentError("style must be :whisker or :ribbon, got :$style"))
     id = _next_plot_id("did_es")
 
-    # Build data JSON
-    rows = Vector{Pair{String,String}}[]
-    for i in 1:n_evt
-        push!(rows, [
-            "x" => _json(did.event_times[i]),
-            "att" => _json(did.att[i]),
-            "ci_lo" => _json(did.ci_lower[i]),
-            "ci_hi" => _json(did.ci_upper[i]),
-            "zero" => "0"
-        ])
-    end
-    data_json = _json_array_of_objects(rows)
-
-    s_json = _series_json(["ATT"], [_PLOT_COLORS[1]]; keys=["att"])
-    bands = "[{\"lo_key\":\"ci_lo\",\"hi_key\":\"ci_hi\",\"color\":\"$(_PLOT_COLORS[1])\",\"alpha\":$(_PLOT_CI_ALPHA)}]"
-
     # Reference lines: horizontal zero + vertical treatment line at event time 0
-    # (the line renderer's axis:"x" ref-line option — plotrule A4, no scale-clone).
+    # (the renderer's axis:"x" ref-line option — plotrule A4, no scale-clone).
     refs = "[{\"value\":0,\"color\":\"#999\",\"dash\":\"4,3\"}," *
-           "{\"value\":0,\"color\":\"#d62728\",\"dash\":\"6,3\",\"axis\":\"x\"}]"
+           "{\"value\":0,\"color\":\"$(_PLOT_ALERT)\",\"dash\":\"6,3\",\"axis\":\"x\"}]"
 
-    js = _render_line_js(id, data_json, s_json;
-                         bands_json=bands, ref_lines_json=refs,
-                         xlabel="Event Time", ylabel="ATT")
+    if style == :whisker
+        data_json = _whisker_data_json(did.event_times, did.att, did.ci_lower,
+                                       did.ci_upper, did.reference_period)
+        js = _render_whisker_js(id, data_json; color=_PLOT_SERIES[1], point_label="ATT",
+                                ref_lines_json=refs, integer_x=true,
+                                xlabel="Event Time", ylabel="ATT")
+    else
+        rows = Vector{Pair{String,String}}[]
+        for i in 1:length(did.event_times)
+            push!(rows, [
+                "x" => _json(did.event_times[i]),
+                "att" => _json(did.att[i]),
+                "ci_lo" => _json(did.ci_lower[i]),
+                "ci_hi" => _json(did.ci_upper[i]),
+                "zero" => "0"
+            ])
+        end
+        data_json = _json_array_of_objects(rows)
+        s_json = _series_json(["ATT"], [_PLOT_SERIES[1]]; keys=["att"])
+        bands = "[{\"lo_key\":\"ci_lo\",\"hi_key\":\"ci_hi\",\"color\":\"$(_PLOT_SERIES[1])\",\"alpha\":$(_PLOT_CI_ALPHA)}]"
+        js = _render_line_js(id, data_json, s_json;
+                             bands_json=bands, ref_lines_json=refs, integer_x=true,
+                             xlabel="Event Time", ylabel="ATT")
+    end
 
     ptitle = "Event Study"
     panel = _PanelSpec(id, ptitle, js)
@@ -78,42 +88,53 @@ end
 # =============================================================================
 
 """
-    plot_result(eslp::EventStudyLP; title="", save_path=nothing)
+    plot_result(eslp::EventStudyLP; style=:whisker, title="", save_path=nothing)
 
-Plot LP-based event study dynamic treatment effects with confidence bands.
+Plot LP-based event-study dynamic treatment effects.
 
-Same style as DIDResult but uses coefficients from LP regressions.
-Title includes "(LP-DiD)" if clean_controls is true, else "(Event Study LP)".
+`style=:whisker` (default) draws a per-event-time dot-and-whisker coefficient plot
+with a hollow marker at the omitted reference period; `style=:ribbon` restores the
+line + CI band. Both carry a vertical treatment line at event time 0, a horizontal
+zero line, and integer event-time ticks. Title includes "(LP-DiD)" if
+`clean_controls`, else "(Event Study LP)".
 """
 function plot_result(eslp::EventStudyLP{T};
+                     style::Symbol=:whisker,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
-    n_evt = length(eslp.event_times)
+    style in (:whisker, :ribbon) ||
+        throw(ArgumentError("style must be :whisker or :ribbon, got :$style"))
     id = _next_plot_id("eslp")
-
-    # Build data JSON
-    rows = Vector{Pair{String,String}}[]
-    for i in 1:n_evt
-        push!(rows, [
-            "x" => _json(eslp.event_times[i]),
-            "coef" => _json(eslp.coefficients[i]),
-            "ci_lo" => _json(eslp.ci_lower[i]),
-            "ci_hi" => _json(eslp.ci_upper[i]),
-            "zero" => "0"
-        ])
-    end
-    data_json = _json_array_of_objects(rows)
-
     label = eslp.clean_controls ? "LP-DiD" : "LP"
-    s_json = _series_json([label], [_PLOT_COLORS[1]]; keys=["coef"])
-    bands = "[{\"lo_key\":\"ci_lo\",\"hi_key\":\"ci_hi\",\"color\":\"$(_PLOT_COLORS[1])\",\"alpha\":$(_PLOT_CI_ALPHA)}]"
+
     # horizontal zero + vertical treatment line at event time 0 (axis:"x" ref-line
     # option — plotrule A4, no scale-clone).
     refs = "[{\"value\":0,\"color\":\"#999\",\"dash\":\"4,3\"}," *
-           "{\"value\":0,\"color\":\"#d62728\",\"dash\":\"6,3\",\"axis\":\"x\"}]"
+           "{\"value\":0,\"color\":\"$(_PLOT_ALERT)\",\"dash\":\"6,3\",\"axis\":\"x\"}]"
 
-    js = _render_line_js(id, data_json, s_json;
-                         bands_json=bands, ref_lines_json=refs,
-                         xlabel="Event Time", ylabel="Coefficient")
+    if style == :whisker
+        data_json = _whisker_data_json(eslp.event_times, eslp.coefficients,
+                                       eslp.ci_lower, eslp.ci_upper, eslp.reference_period)
+        js = _render_whisker_js(id, data_json; color=_PLOT_SERIES[1], point_label=label,
+                                ref_lines_json=refs, integer_x=true,
+                                xlabel="Event Time", ylabel="Coefficient")
+    else
+        rows = Vector{Pair{String,String}}[]
+        for i in 1:length(eslp.event_times)
+            push!(rows, [
+                "x" => _json(eslp.event_times[i]),
+                "coef" => _json(eslp.coefficients[i]),
+                "ci_lo" => _json(eslp.ci_lower[i]),
+                "ci_hi" => _json(eslp.ci_upper[i]),
+                "zero" => "0"
+            ])
+        end
+        data_json = _json_array_of_objects(rows)
+        s_json = _series_json([label], [_PLOT_SERIES[1]]; keys=["coef"])
+        bands = "[{\"lo_key\":\"ci_lo\",\"hi_key\":\"ci_hi\",\"color\":\"$(_PLOT_SERIES[1])\",\"alpha\":$(_PLOT_CI_ALPHA)}]"
+        js = _render_line_js(id, data_json, s_json;
+                             bands_json=bands, ref_lines_json=refs, integer_x=true,
+                             xlabel="Event Time", ylabel="Coefficient")
+    end
 
     method_label = eslp.clean_controls ? "LP-DiD" : "Event Study LP"
     ptitle = "Dynamic Treatment Effects ($method_label)"
@@ -129,6 +150,7 @@ function plot_result(eslp::EventStudyLP{T};
 end
 
 function plot_result(r::LPDiDResult{T};
+                     style::Symbol=:whisker,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
     eslp = EventStudyLP{T}(r.coefficients, r.se, r.ci_lower, r.ci_upper,
                            r.event_times, r.reference_period,
@@ -138,7 +160,8 @@ function plot_result(r::LPDiDResult{T};
                            r.outcome_var, r.treatment_var,
                            r.T_obs, r.n_groups, r.ylags, r.pre_window, r.post_window,
                            true, r.cluster, r.conf_level, r.data)
-    plot_result(eslp; title=isempty(title) ? "LP-DiD (Dube et al. 2025)" : title,
+    plot_result(eslp; style=style,
+                title=isempty(title) ? "LP-DiD (Dube et al. 2025)" : title,
                 save_path=save_path)
 end
 
@@ -241,9 +264,12 @@ function plot_result(hd::HonestDiDResult{T};
     end
     data_json = _json_array_of_objects(rows)
 
-    s_json = _series_json(["ATT"], [_PLOT_COLORS[1]]; keys=["att"])
-    bands = "[{\"lo_key\":\"robust_lo\",\"hi_key\":\"robust_hi\",\"color\":\"$(_PLOT_COLORS[2])\",\"alpha\":0.15}," *
-            "{\"lo_key\":\"orig_lo\",\"hi_key\":\"orig_hi\",\"color\":\"$(_PLOT_COLORS[1])\",\"alpha\":$(_PLOT_CI_ALPHA)}]"
+    s_json = _series_json(["ATT"], [_PLOT_SERIES[1]]; keys=["att"])
+    # Overlapping CI bands must differ in BOTH color and alpha and each be legended
+    # (plotrule Color: CI bands; PLT-16). Robust = wider/lighter orange; original =
+    # narrower/darker blue (the parent ATT line's hue).
+    bands = "[{\"lo_key\":\"robust_lo\",\"hi_key\":\"robust_hi\",\"name\":\"Robust CI\",\"color\":\"$(_PLOT_SERIES[2])\",\"alpha\":0.12}," *
+            "{\"lo_key\":\"orig_lo\",\"hi_key\":\"orig_hi\",\"name\":\"Original CI\",\"color\":\"$(_PLOT_SERIES[1])\",\"alpha\":0.3}]"
     refs = "[{\"value\":0,\"color\":\"#999\",\"dash\":\"4,3\"}]"
 
     js = _render_line_js(id, data_json, s_json;

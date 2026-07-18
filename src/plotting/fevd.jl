@@ -35,7 +35,7 @@ function plot_result(f::FEVD{T};
         # proportions[vi, :, :] → transpose to H × n_shocks
         props = permutedims(f.proportions[vi, :, :])  # H × n_shocks
         data_json = _fevd_data_json(props, f.shocks, H)
-        s_json = _series_json(f.shocks, _palette_take(n_shocks);
+        s_json = _series_json(f.shocks, _colors_for(f.shocks);
                               keys=["s$j" for j in 1:n_shocks])
 
         js = _render_area_js(id, data_json, s_json;
@@ -97,7 +97,7 @@ function plot_result(f::BayesianFEVD{T};
         props = props ./ max.(row_sums, eps(T))
 
         data_json = _fevd_data_json(props, f.shocks, H)
-        s_json = _series_json(f.shocks, _palette_take(n_shocks);
+        s_json = _series_json(f.shocks, _colors_for(f.shocks);
                               keys=["s$j" for j in 1:n_shocks])
 
         js = _render_area_js(id, data_json, s_json;
@@ -147,7 +147,7 @@ function plot_result(f::LPFEVD{T};
         props = props ./ max.(row_sums, eps(T))
 
         data_json = _fevd_data_json(props, f.shocks, H)
-        s_json = _series_json(f.shocks, _palette_take(n_shocks);
+        s_json = _series_json(f.shocks, _colors_for(f.shocks);
                               keys=["s$j" for j in 1:n_shocks])
 
         js = _render_area_js(id, data_json, s_json;
