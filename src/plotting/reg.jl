@@ -81,54 +81,22 @@ function plot_result(m::RegModel{T};
     q_max = quantile(Normal(), (n - T(0.5)) / n)
     refs3 = "[{\"value\":0,\"color\":\"#999\",\"dash\":\"4,3\"}]"
 
-    # Build scatter with a 45-degree line overlay
-    js3_scatter = _render_scatter_js(id3, data3, groups3;
-                                     ref_lines_json=refs3,
-                                     xlabel="Theoretical Quantiles",
-                                     ylabel="Sample Quantiles")
-
-    # Append 45-degree line via custom D3 snippet
+    # 45-degree reference line as a data-coordinate `line_overlays_json` segment on
+    # the scatter renderer (plotrule A4 — no scale re-derivation / scale-clone). The
+    # sample quantile is mean + std·theoretical, so the line runs from
+    # (q_min, mean+std·q_min) to (q_max, mean+std·q_max).
     resid_std = std(resid)
     resid_mean = mean(resid)
-    js3_line = """
-(function() {
-    const container = d3.select('#$(id3)');
-    const svgEl = container.select('svg');
-    const gEl = svgEl.select('g');
-    const W = +svgEl.attr('width');
-    const margin = {top:10, right:15, bottom:35, left:55};
-    const w = W - margin.left - margin.right;
-    const h = Math.min(w * 0.6, 250);
-
-    const qMin = $(_json(q_min));
-    const qMax = $(_json(q_max));
-    const rMean = $(_json(resid_mean));
-    const rStd = $(_json(resid_std));
-
-    // x domain matches scatter
-    const data = $(data3);
-    const xVals = data.map(d => d.x);
-    const yVals = data.map(d => d.y);
-    yVals.push(0);
-    const xExt = d3.extent(xVals);
-    const xPad = (xExt[1] - xExt[0]) * 0.08 || 1;
-    const x = d3.scaleLinear().domain([xExt[0] - xPad, xExt[1] + xPad]).range([0, w]);
-    const yExt = d3.extent(yVals);
-    const yPad = (yExt[1] - yExt[0]) * 0.08 || 0.01;
-    const y = d3.scaleLinear().domain([yExt[0] - yPad, yExt[1] + yPad]).range([h, 0]);
-
-    // 45-degree line: sample quantile = mean + std * theoretical quantile
-    const x1 = qMin, x2 = qMax;
-    const y1 = rMean + rStd * x1;
-    const y2 = rMean + rStd * x2;
-    gEl.append('line')
-        .attr('x1', x(x1)).attr('x2', x(x2))
-        .attr('y1', y(y1)).attr('y2', y(y2))
-        .attr('stroke', '#d62728').attr('stroke-width', 1.5)
-        .attr('stroke-dasharray', '6,3');
-})();
-"""
-    js3 = js3_scatter * "\n" * js3_line
+    qq_y1 = resid_mean + resid_std * q_min
+    qq_y2 = resid_mean + resid_std * q_max
+    overlay3 = "[{\"x1\":$(_json(q_min)),\"y1\":$(_json(qq_y1))," *
+               "\"x2\":$(_json(q_max)),\"y2\":$(_json(qq_y2))," *
+               "\"color\":\"#d62728\",\"dash\":\"6,3\"}]"
+    js3 = _render_scatter_js(id3, data3, groups3;
+                             ref_lines_json=refs3,
+                             line_overlays_json=overlay3,
+                             xlabel="Theoretical Quantiles",
+                             ylabel="Sample Quantiles")
     p3 = _PanelSpec(id3, "Normal Q-Q Plot", js3)
 
     if isempty(title)
@@ -236,123 +204,6 @@ distribution of predictions by outcome group.
 function plot_result(m::ProbitModel{T};
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
     _plot_binary_choice(m.y, m.fitted, "Probit"; title=title, save_path=save_path)
-end
-
-# =============================================================================
-# Coefficient Plot Renderer (for MarginalEffects)
-# =============================================================================
-
-"""
-Generate D3.js code for a horizontal coefficient plot with CI error bars.
-
-- `id`: SVG container element ID
-- `data_json`: JSON array of {name, effect, ci_lo, ci_hi} objects
-- `xlabel`, `ylabel`: axis labels
-"""
-function _render_coef_plot_js(id::String, data_json::String;
-                               xlabel::String="", ylabel::String="")
-    """
-(function() {
-    const data = $(data_json);
-
-    const container = d3.select('#$(id)');
-    const W = Math.max(container.node().clientWidth - 24, 280);
-    const margin = {top:10, right:15, bottom:35, left:100};
-    const w = W - margin.left - margin.right;
-    const h = Math.max(data.length * 28, 120);
-
-    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
-    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
-
-    // Scales
-    const allX = [];
-    data.forEach(d => { allX.push(d.effect, d.ci_lo, d.ci_hi); });
-    allX.push(0);
-    const xExt = d3.extent(allX);
-    const xPad = (xExt[1] - xExt[0]) * 0.12 || 0.1;
-    const x = d3.scaleLinear().domain([xExt[0] - xPad, xExt[1] + xPad]).range([0, w]);
-    const y = d3.scaleBand().domain(data.map(d => d.name)).range([0, h]).padding(0.3);
-
-    // Grid
-    g.append('g').attr('class','grid')
-        .call(d3.axisBottom(x).tickSize(h).tickFormat(''))
-        .attr('transform','translate(0,0)');
-
-    // Zero reference line
-    g.append('line')
-        .attr('x1', x(0)).attr('x2', x(0))
-        .attr('y1', 0).attr('y2', h)
-        .attr('stroke', '#d62728').attr('stroke-width', 1)
-        .attr('stroke-dasharray', '6,3');
-
-    // CI whiskers (horizontal lines)
-    g.selectAll('.ci-line').data(data).join('line')
-        .attr('class', 'ci-line')
-        .attr('x1', d => x(d.ci_lo))
-        .attr('x2', d => x(d.ci_hi))
-        .attr('y1', d => y(d.name) + y.bandwidth()/2)
-        .attr('y2', d => y(d.name) + y.bandwidth()/2)
-        .attr('stroke', '$(_PLOT_COLORS[1])')
-        .attr('stroke-width', 1.5);
-
-    // CI caps (vertical lines at ends)
-    const capH = y.bandwidth() * 0.4;
-    g.selectAll('.ci-cap-lo').data(data).join('line')
-        .attr('class', 'ci-cap-lo')
-        .attr('x1', d => x(d.ci_lo)).attr('x2', d => x(d.ci_lo))
-        .attr('y1', d => y(d.name) + y.bandwidth()/2 - capH/2)
-        .attr('y2', d => y(d.name) + y.bandwidth()/2 + capH/2)
-        .attr('stroke', '$(_PLOT_COLORS[1])').attr('stroke-width', 1.5);
-    g.selectAll('.ci-cap-hi').data(data).join('line')
-        .attr('class', 'ci-cap-hi')
-        .attr('x1', d => x(d.ci_hi)).attr('x2', d => x(d.ci_hi))
-        .attr('y1', d => y(d.name) + y.bandwidth()/2 - capH/2)
-        .attr('y2', d => y(d.name) + y.bandwidth()/2 + capH/2)
-        .attr('stroke', '$(_PLOT_COLORS[1])').attr('stroke-width', 1.5);
-
-    // Effect bars (horizontal from 0 to effect)
-    g.selectAll('.effect-bar').data(data).join('rect')
-        .attr('class', 'effect-bar')
-        .attr('x', d => x(Math.min(0, d.effect)))
-        .attr('y', d => y(d.name) + y.bandwidth() * 0.15)
-        .attr('width', d => Math.abs(x(d.effect) - x(0)))
-        .attr('height', y.bandwidth() * 0.7)
-        .attr('fill', '$(_PLOT_COLORS[1])')
-        .attr('opacity', 0.7);
-
-    // Effect dots (circles at effect value)
-    g.selectAll('.effect-dot').data(data).join('circle')
-        .attr('class', 'effect-dot')
-        .attr('cx', d => x(d.effect))
-        .attr('cy', d => y(d.name) + y.bandwidth()/2)
-        .attr('r', 4)
-        .attr('fill', '$(_PLOT_COLORS[1])')
-        .attr('stroke', '#fff')
-        .attr('stroke-width', 1);
-
-    // Axes
-    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
-        .call(d3.axisBottom(x).ticks(8));
-    g.append('g').attr('class','axis')
-        .call(d3.axisLeft(y));
-
-$(_axis_labels_js(xlabel, ylabel; yl_y="-85"))
-
-    // Tooltip
-    svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
-        .attr('fill','none').attr('pointer-events','all')
-        .on('mousemove', function(evt) {
-            const [mx, my] = d3.pointer(evt, g.node());
-            const names = data.map(d => d.name);
-            const bandY = y.step();
-            const idx = Math.min(Math.floor(my / bandY), data.length-1);
-            const d = data[Math.max(0,idx)];
-            if(!d) return;
-            showTip(evt, '<b>'+d.name+'</b><br>Effect: '+fmt(d.effect)+'<br>CI: ['+fmt(d.ci_lo)+', '+fmt(d.ci_hi)+']');
-        })
-        .on('mouseout', hideTip);
-})();
-"""
 end
 
 # =============================================================================

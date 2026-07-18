@@ -65,6 +65,25 @@ const _PLOT_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial
 
 const _PLOT_CI_ALPHA = 0.15
 
+"""
+    _palette(i) -> String
+
+Categorical color for the 1-based index `i`, cycling through `_PLOT_COLORS` via
+`mod1`. An index beyond the palette length wraps rather than throwing — the safe
+accessor to use instead of `_PLOT_COLORS[i]` when `i` can exceed the palette length
+(plotrule Color: "slicing `_PLOT_COLORS[1:n]` with `n > 20` is an error").
+"""
+_palette(i::Int)::String = _PLOT_COLORS[mod1(i, length(_PLOT_COLORS))]
+
+"""
+    _palette_take(n) -> Vector{String}
+
+`n` categorical colors, cycling through `_PLOT_COLORS`; correct for any `n ≥ 0`.
+Drop-in replacement for the unguarded `_PLOT_COLORS[1:n]` slice (which throws a
+`BoundsError` the moment `n > length(_PLOT_COLORS)`).
+"""
+_palette_take(n::Int)::Vector{String} = String[_palette(i) for i in 1:n]
+
 # Global counter for unique SVG IDs (thread-safe via Ref)
 const _plot_counter = Ref(0)
 function _next_plot_id(prefix::String)

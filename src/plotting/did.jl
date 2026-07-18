@@ -46,35 +46,17 @@ function plot_result(did::DIDResult{T};
     s_json = _series_json(["ATT"], [_PLOT_COLORS[1]]; keys=["att"])
     bands = "[{\"lo_key\":\"ci_lo\",\"hi_key\":\"ci_hi\",\"color\":\"$(_PLOT_COLORS[1])\",\"alpha\":$(_PLOT_CI_ALPHA)}]"
 
-    # Reference lines: horizontal zero + vertical treatment time (x=0)
-    refs = "[{\"value\":0,\"color\":\"#999\",\"dash\":\"4,3\"}]"
+    # Reference lines: horizontal zero + vertical treatment line at event time 0
+    # (the line renderer's axis:"x" ref-line option — plotrule A4, no scale-clone).
+    refs = "[{\"value\":0,\"color\":\"#999\",\"dash\":\"4,3\"}," *
+           "{\"value\":0,\"color\":\"#d62728\",\"dash\":\"6,3\",\"axis\":\"x\"}]"
 
     js = _render_line_js(id, data_json, s_json;
                          bands_json=bands, ref_lines_json=refs,
                          xlabel="Event Time", ylabel="ATT")
 
-    # Add vertical dashed line at x=0 (treatment time) via custom JS appended
-    # after the line chart renders
-    vline_js = """
-(function() {
-    const container = d3.select('#$(id)');
-    const svgEl = container.select('svg');
-    const gEl = svgEl.select('g');
-    const W = +svgEl.attr('width');
-    const margin = {top:10, right:15, bottom:35, left:55};
-    const w = W - margin.left - margin.right;
-    const xVals = $(_json(collect(did.event_times)));
-    const x = d3.scaleLinear().domain(d3.extent(xVals)).range([0,w]);
-    gEl.append('line')
-        .attr('x1', x(0)).attr('x2', x(0))
-        .attr('y1', 0).attr('y2', gEl.select('.grid').node().getBBox().height)
-        .attr('stroke', '#d62728').attr('stroke-width', 1)
-        .attr('stroke-dasharray', '6,3');
-})();
-"""
-
     ptitle = "Event Study"
-    panel = _PanelSpec(id, ptitle, js * "\n" * vline_js)
+    panel = _PanelSpec(id, ptitle, js)
 
     if isempty(title)
         method_str = did.method == :twfe ? "TWFE" :
@@ -124,34 +106,18 @@ function plot_result(eslp::EventStudyLP{T};
     label = eslp.clean_controls ? "LP-DiD" : "LP"
     s_json = _series_json([label], [_PLOT_COLORS[1]]; keys=["coef"])
     bands = "[{\"lo_key\":\"ci_lo\",\"hi_key\":\"ci_hi\",\"color\":\"$(_PLOT_COLORS[1])\",\"alpha\":$(_PLOT_CI_ALPHA)}]"
-    refs = "[{\"value\":0,\"color\":\"#999\",\"dash\":\"4,3\"}]"
+    # horizontal zero + vertical treatment line at event time 0 (axis:"x" ref-line
+    # option — plotrule A4, no scale-clone).
+    refs = "[{\"value\":0,\"color\":\"#999\",\"dash\":\"4,3\"}," *
+           "{\"value\":0,\"color\":\"#d62728\",\"dash\":\"6,3\",\"axis\":\"x\"}]"
 
     js = _render_line_js(id, data_json, s_json;
                          bands_json=bands, ref_lines_json=refs,
                          xlabel="Event Time", ylabel="Coefficient")
 
-    # Vertical dashed line at x=0
-    vline_js = """
-(function() {
-    const container = d3.select('#$(id)');
-    const svgEl = container.select('svg');
-    const gEl = svgEl.select('g');
-    const W = +svgEl.attr('width');
-    const margin = {top:10, right:15, bottom:35, left:55};
-    const w = W - margin.left - margin.right;
-    const xVals = $(_json(collect(eslp.event_times)));
-    const x = d3.scaleLinear().domain(d3.extent(xVals)).range([0,w]);
-    gEl.append('line')
-        .attr('x1', x(0)).attr('x2', x(0))
-        .attr('y1', 0).attr('y2', gEl.select('.grid').node().getBBox().height)
-        .attr('stroke', '#d62728').attr('stroke-width', 1)
-        .attr('stroke-dasharray', '6,3');
-})();
-"""
-
     method_label = eslp.clean_controls ? "LP-DiD" : "Event Study LP"
     ptitle = "Dynamic Treatment Effects ($method_label)"
-    panel = _PanelSpec(id, ptitle, js * "\n" * vline_js)
+    panel = _PanelSpec(id, ptitle, js)
 
     if isempty(title)
         title = "$(eslp.outcome_var) ($(method_label))"
@@ -234,7 +200,7 @@ function plot_result(bd::BaconDecomposition{T};
     panel = _PanelSpec(id, ptitle, js)
 
     if isempty(title)
-        title = "Bacon Decomposition (TWFE = $(_json(bd.overall_att)))"
+        title = "Bacon Decomposition (TWFE = $(_fmt(bd.overall_att; digits=3)))"
     end
 
     p = _make_plot([panel]; title=title, ncols=1)
@@ -285,12 +251,12 @@ function plot_result(hd::HonestDiDResult{T};
                          xlabel="Event Time", ylabel="ATT")
 
     ptitle = hd.restriction == :sd ?
-        "Honest DiD Sensitivity (\u0394^SD, M = $(_json(hd.M)))" :
-        "Honest DiD Sensitivity (\u0394^RM, M\u0305 = $(_json(hd.Mbar)))"
+        "Honest DiD Sensitivity (\u0394^SD, M = $(_fmt(hd.M; digits=3)))" :
+        "Honest DiD Sensitivity (\u0394^RM, M\u0305 = $(_fmt(hd.Mbar; digits=3)))"
     panel = _PanelSpec(id, ptitle, js)
 
     if isempty(title)
-        title = "Honest DiD: Robust CI (breakdown = $(_json(hd.breakdown_value)))"
+        title = "Honest DiD: Robust CI (breakdown = $(_fmt(hd.breakdown_value; digits=3)))"
     end
 
     p = _make_plot([panel]; title=title, ncols=1)

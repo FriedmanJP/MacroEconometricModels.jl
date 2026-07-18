@@ -35,7 +35,7 @@ function plot_result(hd::HistoricalDecomposition{T};
         id_bar = _next_plot_id("hd_bar")
         contributions = hd.contributions[:, vi, :]  # T_eff × n_shocks
         data_bar = _hd_data_json(contributions, hd.shock_names, T_eff)
-        s_bar = _series_json(hd.shock_names, _PLOT_COLORS[1:n_shocks];
+        s_bar = _series_json(hd.shock_names, _palette_take(n_shocks);
                              keys=["s$j" for j in 1:n_shocks])
         js_bar = _render_bar_js(id_bar, data_bar, s_bar;
                                 mode="stacked", xlabel="Period",
@@ -117,7 +117,7 @@ function plot_result(hd::BayesianHistoricalDecomposition{T};
         id_bar = _next_plot_id("bhd_bar")
         contributions = stat == :median ? hd.quantiles[:, vi, :, qidx] : hd.point_estimate[:, vi, :]  # T_eff × n_shocks
         data_bar = _hd_data_json(contributions, hd.shock_names, T_eff)
-        s_bar = _series_json(hd.shock_names, _PLOT_COLORS[1:n_shocks];
+        s_bar = _series_json(hd.shock_names, _palette_take(n_shocks);
                              keys=["s$j" for j in 1:n_shocks])
         js_bar = _render_bar_js(id_bar, data_bar, s_bar;
                                 mode="stacked", xlabel="Period",

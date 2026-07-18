@@ -109,11 +109,11 @@ end
 Plot VAR forecast with bootstrap CI bands.
 """
 function plot_result(fc::VARForecast{T};
-                     var::Union{Int,Nothing}=nothing,
+                     var::Union{Int,String,Nothing}=nothing,
                      ncols::Int=0, title::String="",
                      save_path::Union{String,Nothing}=nothing) where {T}
     h, n_vars = size(fc.forecast)
-    vars_to_plot = var === nothing ? (1:n_vars) : [var]
+    vars_to_plot = var === nothing ? (1:n_vars) : [_resolve_var(var, fc.varnames)]
 
     panels = _PanelSpec[]
     for vi in vars_to_plot
@@ -153,11 +153,11 @@ end
 Plot Bayesian VAR forecast with posterior credible bands.
 """
 function plot_result(fc::BVARForecast{T};
-                     var::Union{Int,Nothing}=nothing,
+                     var::Union{Int,String,Nothing}=nothing,
                      ncols::Int=0, title::String="",
                      save_path::Union{String,Nothing}=nothing) where {T}
     h, n_vars = size(fc.forecast)
-    vars_to_plot = var === nothing ? (1:n_vars) : [var]
+    vars_to_plot = var === nothing ? (1:n_vars) : [_resolve_var(var, fc.varnames)]
 
     panels = _PanelSpec[]
     for vi in vars_to_plot
@@ -196,11 +196,11 @@ end
 Plot VECM forecast in levels with CI bands.
 """
 function plot_result(fc::VECMForecast{T};
-                     var::Union{Int,Nothing}=nothing,
+                     var::Union{Int,String,Nothing}=nothing,
                      ncols::Int=0, title::String="",
                      save_path::Union{String,Nothing}=nothing) where {T}
     h, n_vars = size(fc.levels)
-    vars_to_plot = var === nothing ? (1:n_vars) : [var]
+    vars_to_plot = var === nothing ? (1:n_vars) : [_resolve_var(var, fc.varnames)]
 
     panels = _PanelSpec[]
     for vi in vars_to_plot
@@ -244,14 +244,19 @@ Plot factor model forecast.
 - `type=:factor`: plot factor forecasts only
 - `type=:observable`: plot observable forecasts only
 - `n_obs`: max number of observables to show when `type=:both` (default 6)
-- `var`: when given, selects a single panel index. Under `type=:both` it selects
-  the same index in **both** the factor and observable loops (bounds-checked).
+- `var`: select a single panel by 1-based index (`Int`) or synthetic name
+  (`"Factor k"` / `"Observable k"`, `String`); resolved through `_resolve_var`
+  (out-of-range/unknown → `ArgumentError`). An `Int` selects the same index in
+  **both** the factor and observable loops under `type=:both`; select a single
+  `type` when addressing a panel by name.
 """
 function plot_result(fc::FactorForecast{T};
-                     type::Symbol=:both, var::Union{Int,Nothing}=nothing,
+                     type::Symbol=:both, var::Union{Int,String,Nothing}=nothing,
                      ncols::Int=0, title::String="",
                      n_obs::Int=6,
                      save_path::Union{String,Nothing}=nothing) where {T}
+    type in (:factor, :observable, :both) ||
+        throw(ArgumentError("Unknown type: $type. Expected :factor, :observable, or :both"))
     has_ci = fc.ci_method != :none
     bands_str(color) = has_ci ?
         "[{\"lo_key\":\"ci_lo\",\"hi_key\":\"ci_hi\",\"color\":\"$(color)\",\"alpha\":$(_PLOT_CI_ALPHA)}]" : "[]"
@@ -262,9 +267,7 @@ function plot_result(fc::FactorForecast{T};
     if type == :factor || type == :both
         h_f, n_factors = size(fc.factors)
         if var !== nothing
-            (1 <= var <= n_factors) ||
-                throw(ArgumentError("var=$var out of range for $n_factors factors"))
-            fvars = [var]
+            fvars = [_resolve_var(var, String["Factor $i" for i in 1:n_factors])]
         else
             fvars = 1:n_factors
         end
@@ -285,9 +288,7 @@ function plot_result(fc::FactorForecast{T};
     if type == :observable || type == :both
         h_o, n_obs_total = size(fc.observables)
         if var !== nothing
-            (1 <= var <= n_obs_total) ||
-                throw(ArgumentError("var=$var out of range for $n_obs_total observables"))
-            ovars = [var]
+            ovars = [_resolve_var(var, String["Observable $i" for i in 1:n_obs_total])]
         elseif type == :both
             ovars = 1:min(n_obs_total, n_obs)
         else
@@ -326,11 +327,13 @@ end
 Plot LP direct multi-step forecast.
 """
 function plot_result(fc::LPForecast{T};
-                     var::Union{Int,Nothing}=nothing,
+                     var::Union{Int,String,Nothing}=nothing,
                      ncols::Int=0, title::String="",
                      save_path::Union{String,Nothing}=nothing) where {T}
     h, n_resp = size(fc.forecast)
-    vars_to_plot = var === nothing ? (1:n_resp) : [var]
+    # Names for selection are the response-variable names (one per forecast column).
+    resp_names = String[fc.varnames[fc.response_vars[vi]] for vi in 1:n_resp]
+    vars_to_plot = var === nothing ? (1:n_resp) : [_resolve_var(var, resp_names)]
 
     panels = _PanelSpec[]
     for vi in vars_to_plot

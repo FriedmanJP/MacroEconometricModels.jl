@@ -590,3 +590,180 @@ end
         @test length(pc) == 4
     end
 end
+
+# =============================================================================
+# PLT-09 (consolidation) / 10 (String+Int selection) / 11 (palette + no silent
+# truncation) / 12 (kwarg vocab, view validation, title formatting). Batch B/C.
+# =============================================================================
+@testset "Plotting PLT-09..12 consolidation + design/API (Batch B/C)" begin
+
+    # -------------------------------------------------------------------------
+    # PLT-11 — cycling palette accessor + no silent truncation (C7)
+    # -------------------------------------------------------------------------
+    @testset "PLT-11 palette accessors + caps" begin
+        np = length(M._PLOT_COLORS)
+        @test M._palette(1) == M._PLOT_COLORS[1]
+        @test M._palette(np) == M._PLOT_COLORS[np]
+        @test M._palette(np + 1) == M._PLOT_COLORS[1]              # wraps (mod1)
+        @test M._palette(2np) == M._PLOT_COLORS[np]
+        @test length(M._palette_take(25)) == 25                   # no BoundsError past 20
+        @test M._palette_take(0) == String[]
+        @test all(c -> startswith(c, "#"), M._palette_take(50))
+
+        # 25-shock FEVD + HD render without a BoundsError (the slice fix)
+        Random.seed!(2611)
+        m25 = estimate_var(randn(200, 25), 1)
+        pf = plot_result(fevd(m25, 6); var=1)
+        check_plot(pf)
+        ph = plot_result(historical_decomposition(m25, size(m25.Y, 1) - m25.p); var=1)
+        check_plot(ph)
+
+        # FactorModel factor cap visible + raisable (C7)
+        Random.seed!(2612)
+        fm = estimate_factors(randn(200, 20), 12)
+        pcap = plot_result(fm)                                    # default max_factors=5
+        @test any(t -> occursin("Extracted Factors (5 of 12)", t), panel_titles(pcap.html))
+        @test any(t -> occursin("Scree Plot (10 of 20)", t), panel_titles(pcap.html))
+        pall = plot_result(fm; max_factors=12, max_eig=20)        # raise → no cap suffix
+        @test "Extracted Factors" in panel_titles(pall.html)
+        @test "Scree Plot" in panel_titles(pall.html)
+        check_plot(pall)
+    end
+
+    # -------------------------------------------------------------------------
+    # PLT-10 — String+Int selection everywhere names exist, bounds-checked (C3)
+    # -------------------------------------------------------------------------
+    @testset "PLT-10 String+Int forecast selection" begin
+        nm = ["GDP", "CPI", "RATE"]
+        @test M._resolve_var(2, nm) == 2
+        @test M._resolve_var("CPI", nm) == 2
+        @test_throws ArgumentError M._resolve_var(0, nm)          # out of range low
+        @test_throws ArgumentError M._resolve_var(4, nm)          # out of range high
+        @test_throws ArgumentError M._resolve_var("NOPE", nm)     # unknown name
+
+        Random.seed!(2610)
+        m = estimate_var(randn(120, 3), 2)                        # varnames y1,y2,y3
+        fc = forecast(m, 8)
+        @test panel_titles(plot_result(fc; var=2).html) ==
+              panel_titles(plot_result(fc; var="y2").html) == ["y2"]
+        @test_throws ArgumentError plot_result(fc; var="nope")
+        @test_throws ArgumentError plot_result(fc; var=9)
+
+        # FactorForecast: synthetic names accepted + bounds-checked
+        fcf = forecast(estimate_dynamic_factors(randn(200, 8), 2, 1), 6)
+        @test panel_titles(plot_result(fcf; type=:factor, var=1).html) ==
+              panel_titles(plot_result(fcf; type=:factor, var="Factor 1").html)
+        @test_throws ArgumentError plot_result(fcf; type=:factor, var=99)
+        @test_throws ArgumentError plot_result(fcf; type=:factor, var="Factor 99")
+    end
+
+    # -------------------------------------------------------------------------
+    # PLT-12 — view/type validation (C5), title formatting (C9), dup-key (A7)
+    # -------------------------------------------------------------------------
+    @testset "PLT-12 view validation + title _fmt + forecast bridge" begin
+        # FactorForecast type= validation
+        fcf = forecast(estimate_dynamic_factors(randn(200, 6), 2, 1), 6)
+        @test_throws ArgumentError plot_result(fcf; type=:bogus)
+
+        # numbers in titles via _fmt (rounded), never _json full precision (C9)
+        bd = M.BaconDecomposition{Float64}(
+            [0.12345678901234567, -0.4], [0.6, 0.4],
+            [:earlier_vs_later, :treated_vs_untreated], [1, 2], [2, 3],
+            0.12345678901234567)
+        pb = plot_result(bd)
+        check_plot(pb)
+        figttl = match(r"<div class=\"figure-title\">(.*?)</div>"s, pb.html)
+        @test figttl !== nothing
+        @test occursin("0.123", figttl.captures[1])                # rounded value present
+        @test !occursin("0.12345678", figttl.captures[1])          # not full float precision
+
+        # forecast bridge: overwrite the "fc" key, never a duplicate (A7)
+        dj = M._forecast_data_json(randn(10), randn(10) .- 1, randn(10) .+ 1;
+                                   history=randn(30), n_history=20)
+        assert_strict_json(dj)                                     # throws on duplicate keys
+        # the bridge row now carries a non-null fc value joining history→forecast
+        parsed = assert_strict_json(dj)
+        @test parsed isa AbstractVector
+    end
+
+    # -------------------------------------------------------------------------
+    # PLT-09 — renderers only in render.jl (A1), domain-agnostic (A2), one-IIFE
+    # (A3), overlays via renderer options (A4)
+    # -------------------------------------------------------------------------
+    @testset "PLT-09 consolidation + domain-agnostic renderers" begin
+        srcdir = joinpath(dirname(pathof(MacroEconometricModels)), "plotting")
+        homes = String[]
+        for f in readdir(srcdir; join=true)
+            endswith(f, ".jl") || continue
+            for ln in eachline(f)
+                m = match(r"^function (_render_\w+_js)", ln)
+                m === nothing || push!(homes, basename(f))
+            end
+        end
+        @test unique(homes) == ["render.jl"]                       # A1: only render.jl
+        # the three relocated defs are gone from their old homes
+        for (file, name) in [("reg.jl", "_render_coef_plot_js"),
+                             ("models.jl", "_render_occbin_panel_js"),
+                             ("nonparametric.jl", "_render_np_overlay_js")]
+            @test !any(startswith(strip(ln), "function $name")
+                       for ln in eachline(joinpath(srcdir, file)))
+        end
+        # no scale-clone / vline helpers survive
+        for f in readdir(srcdir; join=true)
+            endswith(f, ".jl") || continue
+            txt = read(f, String)
+            @test !occursin("_penalized_vlines_js", txt)
+            @test !occursin("vline_js", txt)
+        end
+
+        # A2: heatmap tooltip prefix from xlabel/tip_label, not the leaked "Period"
+        hdj = "[{\"x\":\"Ag\",\"y\":\"Ag\",\"v\":0.5}]"
+        jh = M._render_heatmap_js("hm1", hdj, "[\"Ag\"]", "[\"Ag\"]"; xlabel="Sector")
+        @test !occursin("Period '+d.x", jh)
+        @test occursin("tipLabel", jh)
+        @test occursin(M._json("Sector"), jh)                      # label via JSON literal
+        jh2 = M._render_heatmap_js("hm2", hdj, "[\"Ag\"]", "[\"Ag\"]"; tip_label="Region")
+        @test occursin(M._json("Region"), jh2)
+
+        # A2: vbar + area tooltips parameterized (no leaked "Lag" / "h=")
+        jv = M._render_vbar_js("vb1", "[{\"x\":1,\"y\":0.5}]"; xlabel="Lag")
+        @test !occursin("Lag '+d.x", jv)
+        @test occursin("tipLabel", jv)
+        as = M._series_json(["a"], ["#1f77b4"]; keys=["s1"])
+        ja = M._render_area_js("ar1", "[{\"x\":1,\"s1\":0.5}]", as; xlabel="Horizon")
+        @test !occursin("h='+d.x", ja)
+        @test occursin("tipLabel", ja)
+
+        # PLT-09 coef renderer: color + logx + ref_value options (forest plots)
+        cdj = "[{\"name\":\"x1\",\"effect\":0.5,\"ci_lo\":0.1,\"ci_hi\":0.9}]"
+        jc = M._render_coef_plot_js("cf1", cdj; color="#2ca02c")
+        @test occursin("'#2ca02c'", jc)                            # color threaded
+        @test occursin("const logx = false", jc)
+        jcl = M._render_coef_plot_js("cf2", cdj; logx=true, ref_value=1)
+        @test occursin("const logx = true", jcl)
+        @test occursin("const refValue = 1.0", jcl)
+        @test occursin("d3.scaleLog", jcl)
+        @test occursin("x(refValue)", jcl)                         # reference at ref_value
+        check_plot(M._make_plot([M._PanelSpec("cf1", "Coef", jc)]))
+
+        # PLT-09 occbin renderer: one IIFE (A3), unsuffixed identifiers, labels
+        odj = "[{\"h\":1,\"lin\":0.2,\"pw\":0.1,\"bind\":1}]"
+        jo = M._render_occbin_panel_js("ob1", odj; xlabel="Horizon", ylabel="y",
+                                       lin_label="Lin", pw_label="PW", bind_label="Bind")
+        @test count("(function()", jo) == 1                        # single IIFE (A3)
+        @test !occursin("data_ob1", jo)                            # no id-suffixed identifiers
+        @test occursin("linLabel", jo)
+        @test occursin("tipLabel", jo)                             # tooltip prefix from xlabel
+        check_plot(M._make_plot([M._PanelSpec("ob1", "OccBin", jo)]))
+
+        # PLT-09 scatter curve overlay replaces the np-overlay scale-clone (A4)
+        curve = "[{\"points\":[{\"x\":1,\"y\":2,\"lo\":1.5,\"hi\":2.5}," *
+                "{\"x\":2,\"y\":3,\"lo\":2.5,\"hi\":3.5}],\"color\":\"#ff7f0e\"," *
+                "\"band\":true,\"alpha\":0.15}]"
+        jsc = M._render_scatter_js("sc1", "[{\"x\":1,\"y\":2,\"group\":\"g\"}]",
+                                   "[{\"name\":\"g\",\"color\":\"#1f77b4\"}]";
+                                   curve_overlays_json=curve)
+        @test occursin("curveOverlays.forEach", jsc)
+        @test count("const margin", jsc) == 1                      # single scale block (A4)
+    end
+end

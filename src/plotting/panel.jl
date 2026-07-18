@@ -20,24 +20,29 @@ panel inside the time×group loop (plotrule Robustness "pre-index once").
 
 Plot panel data: one panel per variable, with lines for each group.
 
-- `vars`: Variable indices or names to plot. `nothing` = all (up to 6).
+- `vars`: Variable indices or names to plot. `nothing` = all (up to `max_vars`).
 - `dates`: optional calendar labels parallel to the sorted unique `time_id` values;
   when supplied the x-axis shows these labels, otherwise the integer time ids.
+- `max_vars`/`max_groups`: caps (default 6/10) surfaced in a figure note when they
+  truncate; raise to draw more (plotrule C7).
 """
 function plot_result(d::PanelData{T};
                      vars::Union{Vector,Nothing}=nothing,
                      dates::Union{Vector{String},Nothing}=nothing,
+                     max_vars::Int=6, max_groups::Int=10,
                      ncols::Int=0, title::String="",
                      save_path::Union{String,Nothing}=nothing) where {T}
+    n_vars_shown = min(d.n_vars, max_vars)
     if vars === nothing
-        var_idxs = collect(1:min(d.n_vars, 6))
+        var_idxs = collect(1:n_vars_shown)
     else
         var_idxs = [v isa String ? _resolve_var(v, d.varnames) : v for v in vars]
     end
 
     # Group data by group_id
     unique_groups = sort(unique(d.group_id))
-    n_groups_plot = min(length(unique_groups), 10)
+    n_groups_total = length(unique_groups)
+    n_groups_plot = min(n_groups_total, max_groups)
     groups_to_plot = unique_groups[1:n_groups_plot]
 
     # Pre-index (group, time) → row ONCE (avoids the O(N·T·G) findfirst scan).
@@ -79,7 +84,7 @@ function plot_result(d::PanelData{T};
 
         group_names = [gi <= length(d.group_names) ? d.group_names[gi] : "Group $gid"
                        for (gi, gid) in enumerate(groups_to_plot)]
-        s_json = _series_json(group_names, _PLOT_COLORS[1:n_groups_plot];
+        s_json = _series_json(group_names, _palette_take(n_groups_plot);
                               keys=["g$i" for i in 1:n_groups_plot])
 
         js = _render_line_js(id, data_json, s_json; xlabel=xlabel, ylabel="",
@@ -91,7 +96,17 @@ function plot_result(d::PanelData{T};
         title = isempty(desc(d)) ? "Panel Data" : desc(d)
     end
 
-    p = _make_plot(panels; title=title, ncols=ncols)
+    # Figure notes for any silent truncation (C7): groups shown across every panel,
+    # and (when `vars === nothing`) the variable cap.
+    notes = String[]
+    gn = _cap_note("groups", n_groups_plot, n_groups_total, "max_groups")
+    isempty(gn) || push!(notes, gn)
+    if vars === nothing
+        vn = _cap_note("variables", n_vars_shown, d.n_vars, "max_vars")
+        isempty(vn) || push!(notes, vn)
+    end
+
+    p = _make_plot(panels; title=title, ncols=ncols, note=join(notes, " "))
     save_path !== nothing && save_plot(p, save_path)
     p
 end

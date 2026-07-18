@@ -328,12 +328,17 @@ end
     plot_result(fm::FactorModel; title="", save_path=nothing)
 
 Plot factor model: scree plot (eigenvalues) + extracted factor series.
+
+Caps (raise to show more; the drawn count appears in the panel title, plotrule C7):
+`max_factors=5` factor series, `max_eig=10` scree eigenvalues.
 """
 function plot_result(fm::FactorModel{T};
+                     max_factors::Int=5, max_eig::Int=10,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
     # Panel 1: Scree plot (eigenvalues as bar chart)
     id1 = _next_plot_id("fm_scree")
-    n_eig = min(length(fm.eigenvalues), 10)
+    n_e_total = length(fm.eigenvalues)
+    n_eig = min(n_e_total, max_eig)
     rows1 = Vector{Pair{String,String}}[]
     for i in 1:n_eig
         push!(rows1, ["x" => _json("PC $i"), "eig" => _json(fm.eigenvalues[i])])
@@ -341,18 +346,18 @@ function plot_result(fm::FactorModel{T};
     data1 = _json_array_of_objects(rows1)
     s1 = _series_json(["Eigenvalue"], [_PLOT_COLORS[1]]; keys=["eig"])
     js1 = _render_bar_js(id1, data1, s1; mode="grouped", ylabel="Eigenvalue")
-    p1 = _PanelSpec(id1, "Scree Plot", js1)
+    p1 = _PanelSpec(id1, _cap_title("Scree Plot", n_eig, n_e_total), js1)
 
     # Panel 2: Factor series
     id2 = _next_plot_id("fm_fac")
     T_obs, r = size(fm.factors)
-    n_plot = min(r, 5)
+    n_plot = min(r, max_factors)
     fac_names = ["Factor $i" for i in 1:n_plot]
-    fac_colors = _PLOT_COLORS[1:n_plot]
+    fac_colors = _palette_take(n_plot)
     data2 = _timeseries_data_json(fm.factors[:, 1:n_plot], fac_names)
     s2 = _series_json(fac_names, fac_colors; keys=["v$i" for i in 1:n_plot])
     js2 = _render_line_js(id2, data2, s2; xlabel="Period", ylabel="Factor Value")
-    p2 = _PanelSpec(id2, "Extracted Factors", js2)
+    p2 = _PanelSpec(id2, _cap_title("Extracted Factors", n_plot, r), js2)
 
     if isempty(title)
         title = "Static Factor Model (r=$(fm.r))"
@@ -371,12 +376,17 @@ end
     plot_result(fm::DynamicFactorModel; title="", save_path=nothing)
 
 Plot dynamic factor model: scree + factor series.
+
+Caps (raise to show more; the drawn count appears in the panel title, plotrule C7):
+`max_factors=5` factor series, `max_eig=10` scree eigenvalues.
 """
 function plot_result(fm::DynamicFactorModel{T};
+                     max_factors::Int=5, max_eig::Int=10,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
     # Panel 1: Scree
     id1 = _next_plot_id("dfm_scree")
-    n_eig = min(length(fm.eigenvalues), 10)
+    n_e_total = length(fm.eigenvalues)
+    n_eig = min(n_e_total, max_eig)
     rows1 = Vector{Pair{String,String}}[]
     for i in 1:n_eig
         push!(rows1, ["x" => _json("PC $i"), "eig" => _json(fm.eigenvalues[i])])
@@ -384,17 +394,17 @@ function plot_result(fm::DynamicFactorModel{T};
     data1 = _json_array_of_objects(rows1)
     s1 = _series_json(["Eigenvalue"], [_PLOT_COLORS[1]]; keys=["eig"])
     js1 = _render_bar_js(id1, data1, s1; mode="grouped", ylabel="Eigenvalue")
-    p1 = _PanelSpec(id1, "Scree Plot", js1)
+    p1 = _PanelSpec(id1, _cap_title("Scree Plot", n_eig, n_e_total), js1)
 
     # Panel 2: Factor series
     id2 = _next_plot_id("dfm_fac")
     T_obs, r = size(fm.factors)
-    n_plot = min(r, 5)
+    n_plot = min(r, max_factors)
     fac_names = ["Factor $i" for i in 1:n_plot]
     data2 = _timeseries_data_json(fm.factors[:, 1:n_plot], fac_names)
-    s2 = _series_json(fac_names, _PLOT_COLORS[1:n_plot]; keys=["v$i" for i in 1:n_plot])
+    s2 = _series_json(fac_names, _palette_take(n_plot); keys=["v$i" for i in 1:n_plot])
     js2 = _render_line_js(id2, data2, s2; xlabel="Period", ylabel="Factor Value")
-    p2 = _PanelSpec(id2, "Extracted Factors (VAR($( fm.p)))", js2)
+    p2 = _PanelSpec(id2, _cap_title("Extracted Factors (VAR($(fm.p)))", n_plot, r), js2)
 
     if isempty(title)
         title = "Dynamic Factor Model (r=$(fm.r), p=$(fm.p))"
@@ -441,7 +451,7 @@ function plot_result(oirf::OccBinIRF{T};
         end
         data_json = _json_array_of_objects(rows)
 
-        js = _render_occbin_panel_js(id, data_json, "Horizon", oirf.varnames[j])
+        js = _render_occbin_panel_js(id, data_json; xlabel="Horizon", ylabel=oirf.varnames[j])
         push!(panels, _PanelSpec(id, ptitle, js))
     end
 
@@ -486,7 +496,7 @@ function plot_result(sol::OccBinSolution{T};
         end
         data_json = _json_array_of_objects(rows)
 
-        js = _render_occbin_panel_js(id, data_json, "Period", sol.varnames[j])
+        js = _render_occbin_panel_js(id, data_json; xlabel="Period", ylabel=sol.varnames[j])
         push!(panels, _PanelSpec(id, ptitle, js))
     end
 
@@ -497,146 +507,6 @@ function plot_result(sol::OccBinSolution{T};
     p = _make_plot(panels; title=title, ncols=min(n_vars, 3))
     save_path !== nothing && save_plot(p, save_path)
     p
-end
-
-# =============================================================================
-# Shared OccBin Panel Renderer
-# =============================================================================
-
-"""
-Render a single OccBin panel with linear (dashed) vs piecewise (solid) lines,
-shaded binding-period rectangles, and zero reference line.
-
-Data format: [{h, lin, pw, bind}, ...] where bind is 0 or 1.
-"""
-function _render_occbin_panel_js(id::String, data_json::String,
-                                  xlabel::String, ylabel::String)
-    lin_color = _PLOT_COLORS[3]   # green for linear
-    pw_color = _PLOT_COLORS[1]    # blue for piecewise
-    bind_color = "#d62728"        # red for binding region
-    """
-(function() {
-    const data_$(id) = $(data_json);
-    const container_$(id) = d3.select('#$(id)');
-    const W_$(id) = Math.max(container_$(id).node().clientWidth - 24, 280);
-    const margin_$(id) = {top:10, right:15, bottom:35, left:55};
-    const w_$(id) = W_$(id) - margin_$(id).left - margin_$(id).right;
-    const h_$(id) = Math.min(w_$(id) * 0.6, 250);
-
-    const svg_$(id) = container_$(id).append('svg')
-        .attr('width', W_$(id))
-        .attr('height', h_$(id) + margin_$(id).top + margin_$(id).bottom);
-    const g_$(id) = svg_$(id).append('g')
-        .attr('transform', 'translate('+margin_$(id).left+','+margin_$(id).top+')');
-
-    // Compute domains
-    const xVals_$(id) = data_$(id).map(d => d.h);
-    const allY_$(id) = [];
-    data_$(id).forEach(d => {
-        if(d.lin!==null) allY_$(id).push(d.lin);
-        if(d.pw!==null) allY_$(id).push(d.pw);
-    });
-    allY_$(id).push(0);
-
-    const x_$(id) = d3.scaleLinear().domain(d3.extent(xVals_$(id))).range([0, w_$(id)]);
-    const yExt_$(id) = d3.extent(allY_$(id));
-    const yPad_$(id) = (yExt_$(id)[1] - yExt_$(id)[0]) * 0.08 || 0.1;
-    const y_$(id) = d3.scaleLinear()
-        .domain([yExt_$(id)[0] - yPad_$(id), yExt_$(id)[1] + yPad_$(id)])
-        .range([h_$(id), 0]);
-
-    // Grid
-    g_$(id).append('g').attr('class','grid')
-        .call(d3.axisLeft(y_$(id)).tickSize(-w_$(id)).tickFormat(''));
-
-    // Binding-period shaded rectangles
-    const xStep_$(id) = w_$(id) / Math.max(xVals_$(id).length - 1, 1);
-    data_$(id).forEach((d, i) => {
-        if(d.bind === 1) {
-            const x0_$(id) = x_$(id)(d.h) - xStep_$(id) * 0.5;
-            const x1_$(id) = x_$(id)(d.h) + xStep_$(id) * 0.5;
-            g_$(id).append('rect')
-                .attr('x', Math.max(0, x0_$(id)))
-                .attr('y', 0)
-                .attr('width', Math.min(x1_$(id), w_$(id)) - Math.max(0, x0_$(id)))
-                .attr('height', h_$(id))
-                .attr('fill', '$(bind_color)')
-                .attr('opacity', 0.08);
-        }
-    });
-
-    // Zero reference line
-    g_$(id).append('line')
-        .attr('x1', 0).attr('x2', w_$(id))
-        .attr('y1', y_$(id)(0)).attr('y2', y_$(id)(0))
-        .attr('stroke', '#999').attr('stroke-width', 1)
-        .attr('stroke-dasharray', '4,3');
-
-    // Linear line (dashed)
-    const linLine_$(id) = d3.line().x(d => x_$(id)(d.h)).y(d => y_$(id)(d.lin))
-        .defined(d => d.lin !== null);
-    g_$(id).append('path').datum(data_$(id)).attr('d', linLine_$(id))
-        .attr('fill', 'none').attr('stroke', '$(lin_color)')
-        .attr('stroke-width', 1.8).attr('stroke-dasharray', '6,3');
-
-    // Piecewise line (solid)
-    const pwLine_$(id) = d3.line().x(d => x_$(id)(d.h)).y(d => y_$(id)(d.pw))
-        .defined(d => d.pw !== null);
-    g_$(id).append('path').datum(data_$(id)).attr('d', pwLine_$(id))
-        .attr('fill', 'none').attr('stroke', '$(pw_color)')
-        .attr('stroke-width', 1.8);
-
-    // Axes
-    g_$(id).append('g').attr('class','axis')
-        .attr('transform', 'translate(0,'+h_$(id)+')')
-        .call(d3.axisBottom(x_$(id)).ticks(Math.min(xVals_$(id).length, 8)));
-    g_$(id).append('g').attr('class','axis')
-        .call(d3.axisLeft(y_$(id)).ticks(6));
-
-$(_axis_labels_js(xlabel, ylabel; g="g_$(id)", w="w_$(id)", h="h_$(id)"))
-
-    // Legend
-    const leg_$(id) = g_$(id).append('g').attr('class','legend')
-        .attr('transform','translate(5,-5)');
-    // Linear (dashed)
-    const g1_$(id) = leg_$(id).append('g').attr('transform','translate(0,0)');
-    g1_$(id).append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
-        .attr('stroke','$(lin_color)').attr('stroke-width',2)
-        .attr('stroke-dasharray','6,3');
-    g1_$(id).append('text').attr('x',20).attr('y',4)
-        .attr('font-size','10px').attr('fill','#555').text('Linear');
-    // Piecewise (solid)
-    const g2_$(id) = leg_$(id).append('g').attr('transform','translate(80,0)');
-    g2_$(id).append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
-        .attr('stroke','$(pw_color)').attr('stroke-width',2);
-    g2_$(id).append('text').attr('x',20).attr('y',4)
-        .attr('font-size','10px').attr('fill','#555').text('Piecewise');
-    // Binding
-    const g3_$(id) = leg_$(id).append('g').attr('transform','translate(175,0)');
-    g3_$(id).append('rect').attr('width',12).attr('height',10).attr('y',-5)
-        .attr('fill','$(bind_color)').attr('opacity',0.15);
-    g3_$(id).append('text').attr('x',16).attr('y',4)
-        .attr('font-size','10px').attr('fill','#555').text('Binding');
-
-    // Tooltip
-    svg_$(id).append('rect')
-        .attr('width', W_$(id))
-        .attr('height', h_$(id) + margin_$(id).top + margin_$(id).bottom)
-        .attr('fill','none').attr('pointer-events','all')
-        .on('mousemove', function(evt) {
-            const [mx] = d3.pointer(evt, g_$(id).node());
-            const x0 = x_$(id).invert(mx);
-            const idx = d3.minIndex(data_$(id), d => Math.abs(d.h - x0));
-            const d = data_$(id)[idx];
-            let html = '<b>h='+d.h+'</b>';
-            if(d.lin!==null) html += '<br>Linear: '+fmt(d.lin);
-            if(d.pw!==null) html += '<br>Piecewise: '+fmt(d.pw);
-            if(d.bind===1) html += '<br><span style="color:$(bind_color)">Binding</span>';
-            showTip(evt, html);
-        })
-        .on('mouseout', hideTip);
-})();
-"""
 end
 
 # NOTE: plot_result(::BayesianDSGE) relocated to plotting/mcmc.jl (PLT plotting
@@ -650,19 +520,23 @@ end
     plot_result(m::FAVARModel; title="", save_path=nothing)
 
 Plot FAVAR model: extracted factor series.
+
+Caps `max_factors=5` factor series; the drawn count appears in the panel title when
+truncated (plotrule C7).
 """
 function plot_result(m::FAVARModel{T};
+                     max_factors::Int=5,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
     r = m.n_factors
-    n_plot = min(r, 5)
+    n_plot = min(r, max_factors)
     fac_names = ["Factor $i" for i in 1:n_plot]
-    fac_colors = _PLOT_COLORS[1:n_plot]
+    fac_colors = _palette_take(n_plot)
     data2 = _timeseries_data_json(m.factors[:, 1:n_plot], fac_names)
     s2 = _series_json(fac_names, fac_colors; keys=["v$i" for i in 1:n_plot])
 
     id = _next_plot_id("favar_fac")
     js = _render_line_js(id, data2, s2; xlabel="Period", ylabel="Factor Value")
-    p1 = _PanelSpec(id, "Extracted Factors", js)
+    p1 = _PanelSpec(id, _cap_title("Extracted Factors", n_plot, r), js)
 
     if isempty(title)
         title = "FAVAR Model (r=$(m.n_factors), p=$(m.p))"
@@ -681,11 +555,14 @@ end
     plot_result(m::BayesianFAVAR; title="", save_path=nothing)
 
 Plot Bayesian FAVAR: posterior mean factor series with 68% credible intervals.
+
+Caps `max_factors=5` factor panels; a figure note reports any truncation (C7).
 """
 function plot_result(m::BayesianFAVAR{T};
+                     max_factors::Int=5,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
     r = m.n_factors
-    n_plot = min(r, 5)
+    n_plot = min(r, max_factors)
     F_mean = dropdims(mean(m.factor_draws, dims=1), dims=1)  # T_obs x r
     F_lo = dropdims(mapslices(x -> quantile(x, 0.16), m.factor_draws; dims=1), dims=1)
     F_hi = dropdims(mapslices(x -> quantile(x, 0.84), m.factor_draws; dims=1), dims=1)
@@ -719,7 +596,8 @@ function plot_result(m::BayesianFAVAR{T};
         title = "Bayesian FAVAR (r=$(m.n_factors), p=$(m.p))"
     end
 
-    p = _make_plot(panels; title=title, ncols=min(n_plot, 2))
+    p = _make_plot(panels; title=title, ncols=min(n_plot, 2),
+                   note=_cap_note("factors", n_plot, r, "max_factors"))
     save_path !== nothing && save_plot(p, save_path)
     p
 end
@@ -764,14 +642,15 @@ p = plot_result(ss; view=:policy)          # policy functions
 """
 function plot_result(ss::HASteadyState{T};
                      view::Symbol=:default,
+                     max_bars::Int=60, max_states::Int=length(_PLOT_COLORS),
                      title::String="",
                      save_path::Union{String,Nothing}=nothing) where {T}
     if view == :default || view == :distribution
-        p = _plot_ha_distribution(ss; title=title)
+        p = _plot_ha_distribution(ss; title=title, max_bars=max_bars)
     elseif view == :lorenz
         p = _plot_ha_lorenz(ss; title=title)
     elseif view == :policy
-        p = _plot_ha_policy(ss; title=title)
+        p = _plot_ha_policy(ss; title=title, max_states=max_states)
     else
         throw(ArgumentError("Unknown view: $view. Use :distribution, :lorenz, or :policy"))
     end
@@ -783,7 +662,8 @@ end
 Wealth distribution histogram: marginal asset distribution (summed over income states)
 plotted as a bar chart with asset grid on x-axis and density on y-axis.
 """
-function _plot_ha_distribution(ss::HASteadyState{T}; title::String="") where {T}
+function _plot_ha_distribution(ss::HASteadyState{T}; title::String="",
+                               max_bars::Int=60) where {T}
     a_grid = ss.grid.grids[1]
     n_a = ss.grid.n_points[1]
     n_e = ss.grid.n_income
@@ -804,8 +684,7 @@ function _plot_ha_distribution(ss::HASteadyState{T}; title::String="") where {T}
     # discard the mass on skipped nodes (plotrule Anti-Pattern #7 / mass must be
     # conserved). When n_a ≤ 60 each bin holds one node, so heights equal the
     # per-node masses (values unchanged from the old path, now provably conserving).
-    max_bars = min(n_a, 60)
-    nbins = max_bars
+    nbins = min(n_a, max_bars)
     bin_edges = round.(Int, range(0, n_a; length=nbins + 1))
 
     rows = Vector{Pair{String,String}}[]
@@ -934,7 +813,8 @@ end
 Policy function plot: consumption and savings as functions of assets,
 one line per income state. Two panels side by side.
 """
-function _plot_ha_policy(ss::HASteadyState{T}; title::String="") where {T}
+function _plot_ha_policy(ss::HASteadyState{T}; title::String="",
+                         max_states::Int=length(_PLOT_COLORS)) where {T}
     a_grid = ss.grid.grids[1]
     n_a = ss.grid.n_points[1]
     n_e = ss.grid.n_income
@@ -949,7 +829,7 @@ function _plot_ha_policy(ss::HASteadyState{T}; title::String="") where {T}
     end
 
     income_names = ["e$j" for j in 1:n_e]
-    n_plot_e = min(n_e, length(_PLOT_COLORS))
+    n_plot_e = min(n_e, max_states)
 
     for (pol_key, pol_label, pol_ylabel) in [
         (:consumption, "Consumption Policy", "c(a, e)"),
@@ -970,11 +850,11 @@ function _plot_ha_policy(ss::HASteadyState{T}; title::String="") where {T}
         data_json = _json_array_of_objects(rows)
 
         s_json = _series_json(income_names[1:n_plot_e],
-                              _PLOT_COLORS[1:n_plot_e];
+                              _palette_take(n_plot_e);
                               keys=["e$j" for j in 1:n_plot_e])
         js = _render_line_js(id, data_json, s_json;
                              xlabel="Assets", ylabel=pol_ylabel)
-        push!(panels, _PanelSpec(id, pol_label, js))
+        push!(panels, _PanelSpec(id, _cap_title(pol_label, n_plot_e, n_e), js))
     end
 
     if isempty(panels)
@@ -986,7 +866,8 @@ function _plot_ha_policy(ss::HASteadyState{T}; title::String="") where {T}
         title = "Policy Functions (r = $(_fmt(r_val; digits=4)))"
     end
 
-    _make_plot(panels; title=title, ncols=min(length(panels), 2))
+    _make_plot(panels; title=title, ncols=min(length(panels), 2),
+               note=_cap_note("income states", n_plot_e, n_e, "max_states"))
 end
 
 # =============================================================================

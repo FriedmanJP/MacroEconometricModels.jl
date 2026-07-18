@@ -12,10 +12,34 @@ Internal helper functions for converting result struct fields to JSON data array
 # Variable Resolution
 # =============================================================================
 
+"""
+    _cap_title(base, shown, total) -> String
+
+Append a `" (shown of total)"` suffix to a panel title when `shown < total`, so a
+silent truncation becomes visible in the output (plotrule C7 "No silent truncation").
+Returns `base` unchanged when everything is shown.
+"""
+_cap_title(base::AbstractString, shown::Integer, total::Integer) =
+    shown < total ? "$(base) ($(shown) of $(total))" : String(base)
+
+"""
+    _cap_note(kind, shown, total, kw) -> String
+
+Figure-level note for a truncation (plotrule C7): `"Showing <shown> of <total>
+<kind> (raise with <kw>=)."` — used when the cap applies across every panel of a
+multi-panel figure rather than to one panel's title. Empty when nothing is capped.
+"""
+_cap_note(kind::AbstractString, shown::Integer, total::Integer, kw::AbstractString) =
+    shown < total ? "Showing $(shown) of $(total) $(kind) (raise with $(kw)=)." : ""
+
 """Resolve a variable name or index to an integer index."""
 function _resolve_var(var::Union{Int,String,Nothing}, names::Vector{String}, default::Int=1)
     var === nothing && return default
-    var isa Int && return var
+    if var isa Int
+        (1 <= var <= length(names)) ||
+            throw(ArgumentError("Index $var out of range 1:$(length(names))"))
+        return var
+    end
     idx = findfirst(==(var), names)
     idx === nothing && throw(ArgumentError("Variable '$var' not found. Available: $names"))
     idx
@@ -170,9 +194,17 @@ function _forecast_data_json(fc::AbstractVector, ci_lo::AbstractVector,
         ])
     end
 
-    # Bridge point: connect history to forecast
+    # Bridge point: connect history to forecast. The last history row already carries
+    # a `"fc" => "null"` pair — OVERWRITE it (never push a second `"fc"`, which would
+    # emit a duplicate JSON key that only parses by browser accident; plotrule A7).
     if history !== nothing && !isempty(rows)
-        push!(rows[end - length(fc)], "fc" => _json(history[end]))
+        bridge_row = rows[end - length(fc)]
+        bi = findfirst(p -> first(p) == "fc", bridge_row)
+        if bi === nothing
+            push!(bridge_row, "fc" => _json(history[end]))
+        else
+            bridge_row[bi] = "fc" => _json(history[end])
+        end
     end
 
     _json_array_of_objects(rows)

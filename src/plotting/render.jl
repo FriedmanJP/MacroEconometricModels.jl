@@ -336,10 +336,13 @@ Generate D3.js code for a stacked area chart (proportions 0–1).
 
 - `x_ticks_json`: `"null"` (integer/auto ticks) or a JSON array of {v, label}
   drawn only at real data x-values (PLT-08 date axes).
+- `tip_label`: tooltip x-prefix (domain-agnostic, plotrule A2); defaults to `xlabel`
+  when empty, empty ⇒ no prefix.
 """
 function _render_area_js(id::String, data_json::String, series_json::String;
-                         x_ticks_json::String="null",
+                         x_ticks_json::String="null", tip_label::String="",
                          xlabel::String="", ylabel::String="Proportion")
+    tip = isempty(tip_label) ? xlabel : tip_label
     xaxis_js = if x_ticks_json == "null"
         "g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')\n" *
         "        .call(d3.axisBottom(x).ticks(Math.min(data.length,8)));"
@@ -355,6 +358,7 @@ function _render_area_js(id::String, data_json::String, series_json::String;
 (function() {
     const data = $(data_json);
     const series = $(series_json);
+    const tipLabel = $(_json(tip));
 
     const container = d3.select('#$(id)');
     const W = Math.max(container.node().clientWidth - 24, 280);
@@ -405,7 +409,7 @@ $(_axis_labels_js(xlabel, ylabel))
             const x0 = x.invert(mx);
             const idx = d3.minIndex(data, d => Math.abs(d.x - x0));
             const d = data[idx];
-            let html = '<b>h='+d.x+'</b>';
+            let html = '<b>'+(tipLabel ? tipLabel+' ' : '')+d.x+'</b>';
             series.forEach(s => { html += '<br>'+s.name+': '+(d[s.key]*100).toFixed(1)+'%'; });
             showTip(evt, html);
         })
@@ -659,17 +663,21 @@ Generate D3.js code for a color-coded heatmap matrix.
 - `row_labels_json`: JSON array of row label strings
 - `col_labels_json`: JSON array of column label strings
 - `color_domain`: [min, max] for the diverging color scale
+- `tip_label`: tooltip x-prefix (domain-agnostic, plotrule A2); defaults to `xlabel`
+  when empty, empty ⇒ no prefix (kills the leaked "Period" noun).
 """
 function _render_heatmap_js(id::String, data_json::String,
                             row_labels_json::String, col_labels_json::String;
-                            xlabel::String="", ylabel::String="",
+                            xlabel::String="", ylabel::String="", tip_label::String="",
                             color_domain::Vector{<:Real}=[-3, 3])
     cmin, cmax = color_domain[1], color_domain[2]
+    tip = isempty(tip_label) ? xlabel : tip_label
     """
 (function() {
     const data = $(data_json);
     const rowLabels = $(row_labels_json);
     const colLabels = $(col_labels_json);
+    const tipLabel = $(_json(tip));
 
     const container = d3.select('#$(id)');
     const W = Math.max(container.node().clientWidth - 24, 280);
@@ -698,7 +706,7 @@ function _render_heatmap_js(id::String, data_json::String,
         .attr('rx', 1)
         .on('mouseover', function(evt, d) {
             const val = d.v === null ? 'Missing' : fmt(d.v);
-            showTip(evt, '<b>'+d.y+'</b><br>Period '+d.x+': '+val);
+            showTip(evt, '<b>'+d.y+'</b><br>'+(tipLabel ? tipLabel+' ' : '')+d.x+': '+val);
         })
         .on('mouseout', hideTip);
 
@@ -730,6 +738,11 @@ sloped data-coordinate line overlays, and reference shapes.
 - `line_overlays_json`: JSON array of sloped segments {x1, y1, x2, y2, color, dash}
   in **data coordinates**, mapped through this renderer's own x/y scales — used for
   OLS / Q-Q 45° fit lines with no second IIFE / scale re-derivation (plotrule A4).
+- `curve_overlays_json`: JSON array of fitted-curve overlays
+  `{points:[{x,y,lo,hi}], color, dash, band, alpha}` in **data coordinates** — a
+  polyline through `(x,y)` plus (when `band` is true) a shaded `[lo,hi]` ribbon,
+  both mapped through this renderer's own scales. Replaces the old np-overlay
+  scale-clone (plotrule A1/A4); used by the nonparametric-fit / kernel-regression views.
 - `ref_shapes_json`: JSON array of {type:"circle", cx, cy, r, color, dash} in data
   coordinates, drawn as an ellipse through the independent x/y scales (e.g. the unit
   circle for inverse-root / stability plots).
@@ -742,6 +755,7 @@ on-figure note (plotrule C7 / Robustness "Huge N").
 function _render_scatter_js(id::String, data_json::String, groups_json::String;
                             ref_lines_json::String="[]",
                             line_overlays_json::String="[]",
+                            curve_overlays_json::String="[]",
                             ref_shapes_json::String="[]",
                             integer_x::Bool=false,
                             xlabel::String="", ylabel::String="")
@@ -760,6 +774,7 @@ function _render_scatter_js(id::String, data_json::String, groups_json::String;
     const groups = $(groups_json);
     const refLines = $(ref_lines_json);
     const lineOverlays = $(line_overlays_json);
+    const curveOverlays = $(curve_overlays_json);
     const refShapes = $(ref_shapes_json);
 
     // Big-N cap: subsample the drawn MARKS to <= 2000 (plotrule C7 / Robustness
@@ -786,6 +801,12 @@ function _render_scatter_js(id::String, data_json::String, groups_json::String;
     const yVals = data.map(d => d.y).filter(v => v !== null);
     refLines.forEach(r => { if(r.axis === 'x') xVals.push(r.value); else yVals.push(r.value); });
     lineOverlays.forEach(o => { xVals.push(o.x1, o.x2); yVals.push(o.y1, o.y2); });
+    curveOverlays.forEach(c => (c.points||[]).forEach(pt => {
+        if(pt.x !== null) xVals.push(pt.x);
+        if(pt.y !== null) yVals.push(pt.y);
+        if(c.band) { if(pt.lo !== null && pt.lo !== undefined) yVals.push(pt.lo);
+                     if(pt.hi !== null && pt.hi !== undefined) yVals.push(pt.hi); }
+    }));
     refShapes.forEach(s => { if(s.type === 'circle') { xVals.push(s.cx - s.r, s.cx + s.r); yVals.push(s.cy - s.r, s.cy + s.r); } });
 
     const xExt = d3.extent(xVals);
@@ -857,6 +878,24 @@ function _render_scatter_js(id::String, data_json::String, groups_json::String;
             hideTip();
         });
 
+    // Fitted-curve overlays (data coords → own scales; A4). Optional [lo,hi] band
+    // drawn first, the fit polyline on top.
+    curveOverlays.forEach(c => {
+        const pts = c.points || [];
+        if(c.band) {
+            const area = d3.area().x(d => x(d.x))
+                .y0(d => y(d.lo !== null && d.lo !== undefined ? d.lo : d.y))
+                .y1(d => y(d.hi !== null && d.hi !== undefined ? d.hi : d.y))
+                .defined(d => d.lo !== null && d.lo !== undefined && d.hi !== null && d.hi !== undefined);
+            g.append('path').datum(pts).attr('d', area)
+                .attr('fill', c.color || '#ff7f0e').attr('opacity', c.alpha || 0.15);
+        }
+        const line = d3.line().x(d => x(d.x)).y(d => y(d.y)).defined(d => d.y !== null);
+        g.append('path').datum(pts).attr('d', line)
+            .attr('fill', 'none').attr('stroke', c.color || '#ff7f0e')
+            .attr('stroke-width', 2.2).attr('stroke-dasharray', c.dash || '');
+    });
+
     // Axes
     $(xaxis_js)
     g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
@@ -897,16 +936,20 @@ optional horizontal reference lines (e.g. ACF ±CI bounds).
 - `data_json`: JSON array of {x, y} data points
 - `bar_color`: bar fill color
 - `ref_lines_json`: JSON array of {value, color, dash} horizontal reference lines
+- `tip_label`: tooltip x-prefix (domain-agnostic, plotrule A2); defaults to `xlabel`
+  when empty, empty ⇒ no prefix (kills the leaked "Lag" noun).
 - `xlabel`, `ylabel`: axis labels
 """
 function _render_vbar_js(id::String, data_json::String;
                          bar_color::String=_PLOT_COLORS[1],
-                         ref_lines_json::String="[]",
+                         ref_lines_json::String="[]", tip_label::String="",
                          xlabel::String="", ylabel::String="")
+    tip = isempty(tip_label) ? xlabel : tip_label
     """
 (function() {
     const data = $(data_json);
     const refLines = $(ref_lines_json);
+    const tipLabel = $(_json(tip));
 
     const container = d3.select('#$(id)');
     const W = Math.max(container.node().clientWidth - 24, 280);
@@ -975,7 +1018,7 @@ $(_axis_labels_js(xlabel, ylabel))
             const x0 = x.invert(mx);
             const idx = d3.minIndex(data, d => Math.abs(d.x - x0));
             const d = data[idx];
-            showTip(evt, '<b>Lag '+d.x+'</b><br>Value: '+fmt(d.y));
+            showTip(evt, '<b>'+(tipLabel ? tipLabel+' ' : '')+d.x+'</b><br>Value: '+fmt(d.y));
         })
         .on('mouseout', hideTip);
 })();
@@ -1309,6 +1352,265 @@ $(_axis_labels_js(xlabel, ylabel))
                 if(d[b.lo_key]!==null && d[b.hi_key]!==null && d[b.lo_key]!==undefined && d[b.hi_key]!==undefined)
                     html += '<br>'+b.label+': ['+fmt(d[b.lo_key])+', '+fmt(d[b.hi_key])+']';
             });
+            showTip(evt, html);
+        })
+        .on('mouseout', hideTip);
+})();
+"""
+end
+
+# =============================================================================
+# Horizontal Coefficient / Forest Plot Renderer (relocated from reg.jl — A1; PLT-09)
+# =============================================================================
+
+"""
+Generate D3.js code for a horizontal coefficient (dot-and-whisker) plot with CI
+error bars.
+
+- `id`: SVG container element ID
+- `data_json`: JSON array of {name, effect, ci_lo, ci_hi} objects
+- `color`: dot / whisker / bar color (default `_PLOT_COLORS[1]`)
+- `logx`: log-scale the x (effect) axis and suppress the from-reference bars — a
+  forest plot of ratios (odds/hazard/risk); requires positive effects and CI ends.
+- `ref_value`: x-position of the dashed reference line (0 for effects, 1 for ratios).
+- `xlabel`, `ylabel`: axis labels
+"""
+function _render_coef_plot_js(id::String, data_json::String;
+                              color::String=_PLOT_COLORS[1],
+                              logx::Bool=false, ref_value::Real=0,
+                              xlabel::String="", ylabel::String="")
+    """
+(function() {
+    const data = $(data_json);
+    const logx = $(logx ? "true" : "false");
+    const refValue = $(_json(float(ref_value)));
+
+    const container = d3.select('#$(id)');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:100};
+    const w = W - margin.left - margin.right;
+    const h = Math.max(data.length * 28, 120);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    // Scales
+    const allX = [];
+    data.forEach(d => { allX.push(d.effect, d.ci_lo, d.ci_hi); });
+    let x;
+    if(logx) {
+        const pos = allX.filter(v => v > 0);
+        const lo = pos.length ? Math.min.apply(null, pos) : 1e-6;
+        const hi = pos.length ? Math.max.apply(null, pos) : 1;
+        x = d3.scaleLog().domain([lo / 1.3, hi * 1.3]).range([0, w]).clamp(true);
+    } else {
+        allX.push(refValue);
+        const xExt = d3.extent(allX);
+        const xPad = (xExt[1] - xExt[0]) * 0.12 || 0.1;
+        x = d3.scaleLinear().domain([xExt[0] - xPad, xExt[1] + xPad]).range([0, w]);
+    }
+    const y = d3.scaleBand().domain(data.map(d => d.name)).range([0, h]).padding(0.3);
+
+    // Grid
+    g.append('g').attr('class','grid')
+        .call(d3.axisBottom(x).tickSize(h).tickFormat(''))
+        .attr('transform','translate(0,0)');
+
+    // Reference line (0 for effects, 1 for ratios) — the reserved alert color
+    g.append('line')
+        .attr('x1', x(refValue)).attr('x2', x(refValue))
+        .attr('y1', 0).attr('y2', h)
+        .attr('stroke', '#d62728').attr('stroke-width', 1)
+        .attr('stroke-dasharray', '6,3');
+
+    // CI whiskers (horizontal lines)
+    g.selectAll('.ci-line').data(data).join('line')
+        .attr('class', 'ci-line')
+        .attr('x1', d => x(d.ci_lo))
+        .attr('x2', d => x(d.ci_hi))
+        .attr('y1', d => y(d.name) + y.bandwidth()/2)
+        .attr('y2', d => y(d.name) + y.bandwidth()/2)
+        .attr('stroke', '$(color)')
+        .attr('stroke-width', 1.5);
+
+    // CI caps (vertical lines at ends)
+    const capH = y.bandwidth() * 0.4;
+    g.selectAll('.ci-cap-lo').data(data).join('line')
+        .attr('class', 'ci-cap-lo')
+        .attr('x1', d => x(d.ci_lo)).attr('x2', d => x(d.ci_lo))
+        .attr('y1', d => y(d.name) + y.bandwidth()/2 - capH/2)
+        .attr('y2', d => y(d.name) + y.bandwidth()/2 + capH/2)
+        .attr('stroke', '$(color)').attr('stroke-width', 1.5);
+    g.selectAll('.ci-cap-hi').data(data).join('line')
+        .attr('class', 'ci-cap-hi')
+        .attr('x1', d => x(d.ci_hi)).attr('x2', d => x(d.ci_hi))
+        .attr('y1', d => y(d.name) + y.bandwidth()/2 - capH/2)
+        .attr('y2', d => y(d.name) + y.bandwidth()/2 + capH/2)
+        .attr('stroke', '$(color)').attr('stroke-width', 1.5);
+
+    // Effect bars (from the reference to the effect) — linear scale only
+    if(!logx) {
+        g.selectAll('.effect-bar').data(data).join('rect')
+            .attr('class', 'effect-bar')
+            .attr('x', d => x(Math.min(refValue, d.effect)))
+            .attr('y', d => y(d.name) + y.bandwidth() * 0.15)
+            .attr('width', d => Math.abs(x(d.effect) - x(refValue)))
+            .attr('height', y.bandwidth() * 0.7)
+            .attr('fill', '$(color)')
+            .attr('opacity', 0.7);
+    }
+
+    // Effect dots (circles at effect value)
+    g.selectAll('.effect-dot').data(data).join('circle')
+        .attr('class', 'effect-dot')
+        .attr('cx', d => x(d.effect))
+        .attr('cy', d => y(d.name) + y.bandwidth()/2)
+        .attr('r', 4)
+        .attr('fill', '$(color)')
+        .attr('stroke', '#fff')
+        .attr('stroke-width', 1);
+
+    // Axes
+    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+        .call(d3.axisBottom(x).ticks(8));
+    g.append('g').attr('class','axis')
+        .call(d3.axisLeft(y));
+
+$(_axis_labels_js(xlabel, ylabel; yl_y="-85"))
+
+    // Tooltip
+    svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx, my] = d3.pointer(evt, g.node());
+            const names = data.map(d => d.name);
+            const bandY = y.step();
+            const idx = Math.min(Math.floor(my / bandY), data.length-1);
+            const d = data[Math.max(0,idx)];
+            if(!d) return;
+            showTip(evt, '<b>'+d.name+'</b><br>Effect: '+fmt(d.effect)+'<br>CI: ['+fmt(d.ci_lo)+', '+fmt(d.ci_hi)+']');
+        })
+        .on('mouseout', hideTip);
+})();
+"""
+end
+
+# =============================================================================
+# OccBin Panel Renderer (linear vs piecewise + binding shading; relocated from
+# models.jl — A1; one IIFE, plain identifiers — A3; PLT-09)
+# =============================================================================
+
+"""
+Render a single OccBin panel: linear (dashed) vs piecewise (solid) lines, shaded
+binding-period rectangles, and a zero reference line. Data format:
+`[{h, lin, pw, bind}, …]` with `bind ∈ {0,1}`.
+
+- `lin_label`/`pw_label`/`bind_label`: legend/tooltip labels (domain-agnostic, A2).
+- `lin_color`/`pw_color`/`bind_color`: series + binding-shade colors.
+- `xlabel`, `ylabel`: axis labels (`xlabel` also prefixes the tooltip, A2).
+"""
+function _render_occbin_panel_js(id::String, data_json::String;
+                                 xlabel::String="", ylabel::String="",
+                                 lin_label::String="Linear",
+                                 pw_label::String="Piecewise",
+                                 bind_label::String="Binding",
+                                 lin_color::String=_PLOT_COLORS[3],
+                                 pw_color::String=_PLOT_COLORS[1],
+                                 bind_color::String="#d62728")
+    """
+(function() {
+    const data = $(data_json);
+    const linLabel = $(_json(lin_label));
+    const pwLabel = $(_json(pw_label));
+    const bindLabel = $(_json(bind_label));
+    const tipLabel = $(_json(xlabel));
+
+    const container = d3.select('#$(id)');
+    const W = Math.max(container.node().clientWidth - 24, 280);
+    const margin = {top:10, right:15, bottom:35, left:55};
+    const w = W - margin.left - margin.right;
+    const h = Math.min(w * 0.6, 250);
+
+    const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+    const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+    // Compute domains
+    const xVals = data.map(d => d.h);
+    const allY = [];
+    data.forEach(d => { if(d.lin!==null) allY.push(d.lin); if(d.pw!==null) allY.push(d.pw); });
+    allY.push(0);
+
+    const x = d3.scaleLinear().domain(d3.extent(xVals)).range([0, w]);
+    const yExt = d3.extent(allY);
+    const yPad = (yExt[1] - yExt[0]) * 0.08 || 0.1;
+    const y = d3.scaleLinear().domain([yExt[0] - yPad, yExt[1] + yPad]).range([h, 0]);
+
+    // Grid
+    g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+
+    // Binding-period shaded rectangles
+    const xStep = w / Math.max(xVals.length - 1, 1);
+    data.forEach(d => {
+        if(d.bind === 1) {
+            const x0 = x(d.h) - xStep * 0.5;
+            const x1 = x(d.h) + xStep * 0.5;
+            g.append('rect')
+                .attr('x', Math.max(0, x0)).attr('y', 0)
+                .attr('width', Math.min(x1, w) - Math.max(0, x0)).attr('height', h)
+                .attr('fill', '$(bind_color)').attr('opacity', 0.08);
+        }
+    });
+
+    // Zero reference line
+    g.append('line').attr('x1', 0).attr('x2', w)
+        .attr('y1', y(0)).attr('y2', y(0))
+        .attr('stroke', '#999').attr('stroke-width', 1).attr('stroke-dasharray', '4,3');
+
+    // Linear line (dashed)
+    const linLine = d3.line().x(d => x(d.h)).y(d => y(d.lin)).defined(d => d.lin !== null);
+    g.append('path').datum(data).attr('d', linLine)
+        .attr('fill', 'none').attr('stroke', '$(lin_color)')
+        .attr('stroke-width', 1.8).attr('stroke-dasharray', '6,3');
+
+    // Piecewise line (solid)
+    const pwLine = d3.line().x(d => x(d.h)).y(d => y(d.pw)).defined(d => d.pw !== null);
+    g.append('path').datum(data).attr('d', pwLine)
+        .attr('fill', 'none').attr('stroke', '$(pw_color)').attr('stroke-width', 1.8);
+
+    // Axes
+    g.append('g').attr('class','axis').attr('transform', 'translate(0,'+h+')')
+        .call(d3.axisBottom(x).ticks(Math.min(xVals.length, 8)));
+    g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
+
+$(_axis_labels_js(xlabel, ylabel))
+
+    // Legend
+    const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
+    const g1 = leg.append('g').attr('transform','translate(0,0)');
+    g1.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+        .attr('stroke','$(lin_color)').attr('stroke-width',2).attr('stroke-dasharray','6,3');
+    g1.append('text').attr('x',20).attr('y',4).attr('font-size','10px').attr('fill','#555').text(linLabel);
+    const g2 = leg.append('g').attr('transform','translate(80,0)');
+    g2.append('line').attr('x1',0).attr('x2',16).attr('y1',0).attr('y2',0)
+        .attr('stroke','$(pw_color)').attr('stroke-width',2);
+    g2.append('text').attr('x',20).attr('y',4).attr('font-size','10px').attr('fill','#555').text(pwLabel);
+    const g3 = leg.append('g').attr('transform','translate(175,0)');
+    g3.append('rect').attr('width',12).attr('height',10).attr('y',-5)
+        .attr('fill','$(bind_color)').attr('opacity',0.15);
+    g3.append('text').attr('x',16).attr('y',4).attr('font-size','10px').attr('fill','#555').text(bindLabel);
+
+    // Tooltip
+    svg.append('rect').attr('width', W).attr('height', h + margin.top + margin.bottom)
+        .attr('fill','none').attr('pointer-events','all')
+        .on('mousemove', function(evt) {
+            const [mx] = d3.pointer(evt, g.node());
+            const x0 = x.invert(mx);
+            const idx = d3.minIndex(data, d => Math.abs(d.h - x0));
+            const d = data[idx];
+            let html = '<b>'+(tipLabel ? tipLabel+' ' : '')+d.h+'</b>';
+            if(d.lin!==null) html += '<br>'+linLabel+': '+fmt(d.lin);
+            if(d.pw!==null) html += '<br>'+pwLabel+': '+fmt(d.pw);
+            if(d.bind===1) html += '<br><span style="color:$(bind_color)">'+bindLabel+'</span>';
             showTip(evt, html);
         })
         .on('mouseout', hideTip);
