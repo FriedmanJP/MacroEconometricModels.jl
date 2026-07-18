@@ -581,6 +581,29 @@ include("plotting/ardl.jl")          # EV-09 (#417): NARDL dynamic-multiplier pl
 include("plotting/mgarch.jl")        # EV-16 (#424): MGARCH conditional-correlation & covariance-heatmap plots
 include("plotting/teststat.jl")      # EV-30 (#438): SADF/GSADF bubble monitor (BSADF vs 95% CV, shaded episodes)
 
+# --- PLT plotting overhaul — Wave-2/3 dispatch files (PLT-NN = #(462+NN)) ------
+# Data-analysis + diagnostics views (Batch D/E, PLT-20..28)
+include("plotting/timeseries.jl")      # PLT-20 (#482): TimeSeriesData analysis views
+include("plotting/panel.jl")           # PLT-21 (#483): PanelData analysis views
+include("plotting/crosssection.jl")    # PLT-22 (#484): CrossSectionData plotting (first dispatch)
+include("plotting/binscatter.jl")      # PLT-23 (#485): quantile-binned scatter (+FWL controls)
+include("plotting/diagnostics.jl")     # PLT-24 (#486): generic residual-diagnostics view
+include("plotting/arima.jl")           # PLT-25 (#487): ARIMA fit/resid/roots + IC grid
+include("plotting/mcmc.jl")            # PLT-26 (#488): MCMC trace/density/running/acf
+include("plotting/bayes.jl")           # PLT-27 (#489): prior/posterior & predictive checks
+include("plotting/bayesfan.jl")        # PLT-28 (#490): Bayesian nested-fan band upgrades
+# New-dispatch families (Batch F, PLT-29..38)
+include("plotting/pvar.jl")            # PLT-29 (#491): PVAR IRF/GIRF/FEVD/stability
+include("plotting/teststat_breaks.jl") # PLT-30 (#492): unit-root & break-test visuals
+include("plotting/svar_setid.jl")      # PLT-31 (#493): sign/zero set-identified SVAR IRFs
+include("plotting/svar_statid.jl")     # PLT-32 (#494): non-Gaussian/heteroskedastic SVAR
+include("plotting/dsge_extra.jl")      # PLT-33 (#495): PF path / smoother / DSGE-GMM / Bayes sim
+include("plotting/ha_dynamics.jl")     # PLT-34 (#496): distribution/inequality IRF, KS PLM, Den Haan
+include("plotting/ct_olg.jl")          # PLT-35 (#497): CT Aiyagari / two-asset / Blanchard OLG
+include("plotting/micro_coef.jl")      # PLT-36 (#498): panel/LDV coef & marginal-effect plots
+include("plotting/gmm.jl")             # PLT-37 (#499): GMM/SMM moment fit + news-impact
+include("plotting/fceval.jl")          # PLT-38 (#500): forecast-eval + LP extras
+
 # =============================================================================
 # Exports - Types
 # =============================================================================

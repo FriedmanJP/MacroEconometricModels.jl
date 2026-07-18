@@ -178,18 +178,39 @@ Generate D3.js code for a line chart with optional CI bands and reference lines.
 - `data_json`: JSON array of data points
 - `series_json`: JSON array of {name, color, dash, key} series configs
 - `bands_json`: JSON array of {lo_key, hi_key, color, alpha} band configs
-- `ref_lines_json`: JSON array of {value, color, dash} horizontal reference lines
+- `ref_lines_json`: JSON array of {value, color, dash, axis} reference lines
+  (`axis`: "y" (default) = horizontal at y(value); "x" = vertical at x(value))
+- `x_ticks_json`: `"null"` (integer/auto ticks) or a JSON array of {v, label}
+  drawn only at real data x-values (PLT-08 date axes)
+- `regions_json`: JSON array of {x0, x1, color, alpha} shaded x-ranges
+  (e.g. recession bands), drawn behind the series
 - `xlabel`, `ylabel`: axis labels
 """
 function _render_line_js(id::String, data_json::String, series_json::String;
                          bands_json::String="[]", ref_lines_json::String="[]",
+                         x_ticks_json::String="null", regions_json::String="[]",
                          xlabel::String="", ylabel::String="")
+    # Emit the x-axis call. When x_ticks_json == "null" this is byte-identical to
+    # the historical integer-tick axis; otherwise ticks/labels come only from the
+    # supplied data x-values (no fractional/date-less ticks). (PLT-08)
+    xaxis_js = if x_ticks_json == "null"
+        "g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')\n" *
+        "        .call(d3.axisBottom(x).ticks(Math.min(xVals.length,8)));"
+    else
+        "const _xt = $(x_ticks_json);\n" *
+        "    const _xtm = new Map(_xt.map(t => [t.v, t.label]));\n" *
+        "    const _xtv = _xt.map(t => t.v);\n" *
+        "    const _xtk = Math.max(1, Math.ceil(_xtv.length / 8));\n" *
+        "    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')\n" *
+        "        .call(d3.axisBottom(x).tickValues(_xtv.filter((_,i) => i % _xtk === 0)).tickFormat(v => { const l = _xtm.get(v); return l === undefined ? '' : l; }));"
+    end
     """
 (function() {
     const data = $(data_json);
     const series = $(series_json);
     const bands = $(bands_json);
     const refLines = $(ref_lines_json);
+    const regions = $(regions_json);
 
     const container = d3.select('#$(id)');
     const W = Math.max(container.node().clientWidth - 24, 280);
@@ -208,7 +229,7 @@ function _render_line_js(id::String, data_json::String, series_json::String;
         if(d[b.lo_key]!==null) allYVals.push(d[b.lo_key]);
         if(d[b.hi_key]!==null) allYVals.push(d[b.hi_key]);
     }));
-    refLines.forEach(r => allYVals.push(r.value));
+    refLines.forEach(r => { if((r.axis||'y') !== 'x') allYVals.push(r.value); });
 
     const x = d3.scaleLinear().domain(d3.extent(xVals)).range([0,w]);
     const yExt = d3.extent(allYVals);
@@ -217,6 +238,13 @@ function _render_line_js(id::String, data_json::String, series_json::String;
 
     // Grid
     g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+
+    // Shaded x-regions (e.g. recession bands) — drawn behind series
+    regions.forEach(rg => {
+        g.append('rect').attr('x', x(rg.x0)).attr('y', 0)
+            .attr('width', Math.max(0, x(rg.x1) - x(rg.x0))).attr('height', h)
+            .attr('fill', rg.color || '#888').attr('opacity', rg.alpha || 0.12);
+    });
 
     // Bands
     bands.forEach(b => {
@@ -229,12 +257,19 @@ function _render_line_js(id::String, data_json::String, series_json::String;
             .attr('fill',b.color).attr('opacity',b.alpha||0.15);
     });
 
-    // Reference lines
+    // Reference lines (axis:"y" → horizontal at y(value); axis:"x" → vertical at x(value))
     refLines.forEach(r => {
-        g.append('line').attr('x1',0).attr('x2',w)
-            .attr('y1',y(r.value)).attr('y2',y(r.value))
-            .attr('stroke',r.color||'#999').attr('stroke-width',1)
-            .attr('stroke-dasharray',r.dash||'4,3');
+        if((r.axis||'y') === 'x') {
+            g.append('line').attr('x1',x(r.value)).attr('x2',x(r.value))
+                .attr('y1',0).attr('y2',h)
+                .attr('stroke',r.color||'#999').attr('stroke-width',1)
+                .attr('stroke-dasharray',r.dash||'4,3');
+        } else {
+            g.append('line').attr('x1',0).attr('x2',w)
+                .attr('y1',y(r.value)).attr('y2',y(r.value))
+                .attr('stroke',r.color||'#999').attr('stroke-width',1)
+                .attr('stroke-dasharray',r.dash||'4,3');
+        }
     });
 
     // Lines
@@ -247,8 +282,7 @@ function _render_line_js(id::String, data_json::String, series_json::String;
     });
 
     // Axes
-    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
-        .call(d3.axisBottom(x).ticks(Math.min(xVals.length,8)));
+    $(xaxis_js)
     g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(6));
 
 $(_axis_labels_js(xlabel, ylabel))
@@ -289,9 +323,24 @@ end
 
 """
 Generate D3.js code for a stacked area chart (proportions 0–1).
+
+- `x_ticks_json`: `"null"` (integer/auto ticks) or a JSON array of {v, label}
+  drawn only at real data x-values (PLT-08 date axes).
 """
 function _render_area_js(id::String, data_json::String, series_json::String;
+                         x_ticks_json::String="null",
                          xlabel::String="", ylabel::String="Proportion")
+    xaxis_js = if x_ticks_json == "null"
+        "g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')\n" *
+        "        .call(d3.axisBottom(x).ticks(Math.min(data.length,8)));"
+    else
+        "const _xt = $(x_ticks_json);\n" *
+        "    const _xtm = new Map(_xt.map(t => [t.v, t.label]));\n" *
+        "    const _xtv = _xt.map(t => t.v);\n" *
+        "    const _xtk = Math.max(1, Math.ceil(_xtv.length / 8));\n" *
+        "    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')\n" *
+        "        .call(d3.axisBottom(x).tickValues(_xtv.filter((_,i) => i % _xtk === 0)).tickFormat(v => { const l = _xtm.get(v); return l === undefined ? '' : l; }));"
+    end
     """
 (function() {
     const data = $(data_json);
@@ -325,8 +374,7 @@ function _render_area_js(id::String, data_json::String, series_json::String;
         .attr('opacity', 0.85);
 
     g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
-    g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
-        .call(d3.axisBottom(x).ticks(Math.min(data.length,8)));
+    $(xaxis_js)
     g.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(5).tickFormat(d3.format('.0%')));
 
 $(_axis_labels_js(xlabel, ylabel))
@@ -363,17 +411,126 @@ end
 """
 Generate D3.js code for a stacked or grouped bar chart.
 - `mode`: "stacked" or "grouped"
+- `orientation`: "v" (vertical, categories on x-band) or "h" (horizontal, named
+  categories on the y-band with values on a horizontal linear/log x-axis). Use "h"
+  for named entities (news impacts, coefficients) so labels read horizontally.
+- `logscale`: log-scale the value axis (log-y when vertical, log-x when horizontal);
+  intended for all-positive magnitudes (e.g. singular values). No zero line when set.
 """
 function _render_bar_js(id::String, data_json::String, series_json::String;
-                        mode::String="stacked", xlabel::String="", ylabel::String="")
+                        mode::String="stacked", orientation::String="v",
+                        logscale::Bool=false, xlabel::String="", ylabel::String="")
     """
 (function() {
     const data = $(data_json);
     const series = $(series_json);
     const mode = '$(mode)';
+    const orientation = '$(orientation)';
+    const logscale = $(logscale ? "true" : "false");
 
     const container = d3.select('#$(id)');
     const W = Math.max(container.node().clientWidth - 24, 280);
+    const keys = series.map(s => s.key);
+
+    if(orientation === 'h') {
+        // ---- Horizontal: named categories on the y-band, values on x -------
+        const margin = {top:10, right:20, bottom:35, left:120};
+        const w = W - margin.left - margin.right;
+        const rowStep = 26;
+        const h = Math.max(data.length * rowStep, 60);
+
+        const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
+        const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+
+        const y = d3.scaleBand().domain(data.map(d=>d.x)).range([0,h]).padding(0.15);
+
+        let vMin = 0, vMax = 0;
+        let stacked = null;
+        if(mode === 'stacked') {
+            const stack = d3.stack().keys(keys).order(d3.stackOrderNone).offset(d3.stackOffsetDiverging);
+            stacked = stack(data);
+            stacked.forEach(layer => layer.forEach(d => { vMin = Math.min(vMin,d[0],d[1]); vMax = Math.max(vMax,d[0],d[1]); }));
+        } else {
+            data.forEach(d => keys.forEach(k => { vMin = Math.min(vMin,d[k]||0); vMax = Math.max(vMax,d[k]||0); }));
+        }
+
+        let x;
+        if(logscale) {
+            const lo = vMax > 0 ? (vMin > 0 ? vMin : vMax/1e6) : 1e-6;
+            x = d3.scaleLog().domain([lo, vMax > 0 ? vMax : 1]).range([0,w]).clamp(true);
+        } else {
+            const vPad = (vMax - vMin) * 0.08 || 1;
+            x = d3.scaleLinear().domain([vMin - (vMin<0?vPad:0), vMax + vPad]).range([0,w]);
+        }
+        const barBase = logscale ? x.range()[0] : x(0);
+        const barX = v => logscale ? Math.min(barBase, x(v)) : Math.min(x(0), x(v));
+        const barW = v => logscale ? Math.abs(x(v) - barBase) : Math.abs(x(v) - x(0));
+
+        g.append('g').attr('class','grid').attr('transform','translate(0,'+h+')')
+            .call(d3.axisBottom(x).tickSize(-h).tickFormat(''));
+
+        if(mode === 'stacked') {
+            g.selectAll('.layer').data(stacked).join('g').attr('class','layer')
+                .attr('fill', (d,i) => series[i].color)
+                .selectAll('rect').data(d => d).join('rect')
+                .attr('y', d => y(d.data.x))
+                .attr('x', d => x(Math.min(d[0], d[1])))
+                .attr('width', d => Math.abs(x(d[0]) - x(d[1])))
+                .attr('height', y.bandwidth());
+        } else {
+            const y1 = d3.scaleBand().domain(keys).range([0, y.bandwidth()]).padding(0.05);
+            g.selectAll('.group').data(data).join('g').attr('class','group')
+                .attr('transform', d => 'translate(0,'+y(d.x)+')')
+                .selectAll('rect').data(d => keys.map(k => ({key:k, val:d[k]||0})))
+                .join('rect')
+                .attr('y', d => y1(d.key))
+                .attr('x', d => barX(d.val))
+                .attr('width', d => barW(d.val))
+                .attr('height', y1.bandwidth())
+                .attr('fill', d => series.find(s=>s.key===d.key).color);
+        }
+
+        // Zero line (vertical) — omitted on a log scale (no zero)
+        if(!logscale) {
+            g.append('line').attr('x1',x(0)).attr('x2',x(0)).attr('y1',0).attr('y2',h)
+                .attr('stroke','#333').attr('stroke-width',0.8);
+        }
+
+        g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
+            .call(d3.axisBottom(x).ticks(6));
+        g.append('g').attr('class','axis')
+            .call(d3.axisLeft(y).tickFormat(d => d.length > 16 ? d.slice(0,14)+'..' : d));
+
+$(_axis_labels_js(xlabel, ylabel; yl_y="-(margin.left-12)"))
+
+        // Legend
+        if(series.length > 1) {
+            const leg = g.append('g').attr('class','legend').attr('transform','translate(5,-5)');
+            series.forEach((s,i) => {
+                const gi = leg.append('g').attr('transform','translate('+(i*90)+',0)');
+                gi.append('rect').attr('width',12).attr('height',12).attr('y',-6).attr('fill',s.color);
+                gi.append('text').attr('x',16).attr('y',4).attr('font-size','10px').attr('fill','#555').text(s.name);
+            });
+        }
+
+        // Tooltip (per y-band)
+        svg.append('rect').attr('width',W).attr('height',h+margin.top+margin.bottom)
+            .attr('fill','none').attr('pointer-events','all')
+            .on('mousemove', function(evt) {
+                const [,my] = d3.pointer(evt, g.node());
+                const cats = y.domain();
+                const idx = Math.min(Math.max(0,Math.floor(my / (h / cats.length))), cats.length-1);
+                const d = data[idx];
+                if(!d) return;
+                let html = '<b>'+d.x+'</b>';
+                series.forEach(s => { if(d[s.key]!==undefined) html += '<br>'+s.name+': '+fmt(d[s.key]); });
+                showTip(evt, html);
+            })
+            .on('mouseout', hideTip);
+        return;
+    }
+
+    // ---- Vertical (default): categories on the x-band, values on y ---------
     const margin = {top:10, right:15, bottom:35, left:55};
     const w = W - margin.left - margin.right;
     const h = Math.min(w * 0.6, 250);
@@ -381,7 +538,6 @@ function _render_bar_js(id::String, data_json::String, series_json::String;
     const svg = container.append('svg').attr('width', W).attr('height', h + margin.top + margin.bottom);
     const g = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
 
-    const keys = series.map(s => s.key);
     const x = d3.scaleBand().domain(data.map(d=>d.x)).range([0,w]).padding(0.15);
 
     let yMin = 0, yMax = 0;
@@ -393,7 +549,9 @@ function _render_bar_js(id::String, data_json::String, series_json::String;
             yMax = Math.max(yMax, d[0], d[1]);
         }));
         const yPad = (yMax - yMin) * 0.08 || 1;
-        const y = d3.scaleLinear().domain([yMin - yPad, yMax + yPad]).range([h, 0]);
+        const y = logscale ?
+            d3.scaleLog().domain([yMax>0?(yMin>0?yMin:yMax/1e6):1e-6, yMax>0?yMax:1]).range([h,0]).clamp(true) :
+            d3.scaleLinear().domain([yMin - yPad, yMax + yPad]).range([h, 0]);
 
         g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
         g.selectAll('.layer').data(stacked).join('g').attr('class','layer')
@@ -405,9 +563,11 @@ function _render_bar_js(id::String, data_json::String, series_json::String;
             .attr('width', x.bandwidth());
 
         // Zero line
-        g.append('line').attr('x1',0).attr('x2',w)
-            .attr('y1',y(0)).attr('y2',y(0))
-            .attr('stroke','#333').attr('stroke-width',0.8);
+        if(!logscale) {
+            g.append('line').attr('x1',0).attr('x2',w)
+                .attr('y1',y(0)).attr('y2',y(0))
+                .attr('stroke','#333').attr('stroke-width',0.8);
+        }
 
         g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
             .call(d3.axisBottom(x).tickValues(x.domain().filter((d,i) =>
@@ -420,7 +580,10 @@ function _render_bar_js(id::String, data_json::String, series_json::String;
             yMax = Math.max(yMax, d[k]||0);
         }));
         const yPad = (yMax - yMin) * 0.08 || 1;
-        const y = d3.scaleLinear().domain([yMin - yPad, yMax + yPad]).range([h, 0]);
+        const y = logscale ?
+            d3.scaleLog().domain([yMax>0?(yMin>0?yMin:yMax/1e6):1e-6, yMax>0?yMax:1]).range([h,0]).clamp(true) :
+            d3.scaleLinear().domain([yMin - yPad, yMax + yPad]).range([h, 0]);
+        const yBase = logscale ? y.range()[0] : y(0);
         const x1 = d3.scaleBand().domain(keys).range([0, x.bandwidth()]).padding(0.05);
 
         g.append('g').attr('class','grid').call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
@@ -429,14 +592,16 @@ function _render_bar_js(id::String, data_json::String, series_json::String;
             .selectAll('rect').data(d => keys.map(k => ({key:k, val:d[k]||0})))
             .join('rect')
             .attr('x', d => x1(d.key))
-            .attr('y', d => y(Math.max(0, d.val)))
-            .attr('height', d => Math.abs(y(0) - y(d.val)))
+            .attr('y', d => logscale ? (d.val>0?y(d.val):h) : y(Math.max(0, d.val)))
+            .attr('height', d => logscale ? Math.max(0,yBase-y(Math.max(d.val,y.domain()[0]))) : Math.abs(y(0) - y(d.val)))
             .attr('width', x1.bandwidth())
             .attr('fill', d => series.find(s=>s.key===d.key).color);
 
-        g.append('line').attr('x1',0).attr('x2',w)
-            .attr('y1',y(0)).attr('y2',y(0))
-            .attr('stroke','#333').attr('stroke-width',0.8);
+        if(!logscale) {
+            g.append('line').attr('x1',0).attr('x2',w)
+                .attr('y1',y(0)).attr('y2',y(0))
+                .attr('stroke','#333').attr('stroke-width',0.8);
+        }
 
         g.append('g').attr('class','axis').attr('transform','translate(0,'+h+')')
             .call(d3.axisBottom(x).tickValues(x.domain().filter((d,i) =>

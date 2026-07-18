@@ -145,6 +145,9 @@ _json(::Nothing) = "null"
 _json(::Missing) = "null"
 _json(x::Bool) = x ? "true" : "false"
 _json(x::Symbol) = _json(string(x))
+# Calendar values → ISO-8601 quoted string (plotrule A7; PLT-08 date axes).
+_json(x::Dates.Date) = _json(string(x))
+_json(x::Dates.DateTime) = _json(string(x))
 _json(x::AbstractVector) = "[" * join([_json(v) for v in x], ",") * "]"
 
 function _json_obj(pairs::Vector{Pair{String,String}})

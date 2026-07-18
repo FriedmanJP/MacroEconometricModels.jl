@@ -244,6 +244,8 @@ Plot factor model forecast.
 - `type=:factor`: plot factor forecasts only
 - `type=:observable`: plot observable forecasts only
 - `n_obs`: max number of observables to show when `type=:both` (default 6)
+- `var`: when given, selects a single panel index. Under `type=:both` it selects
+  the same index in **both** the factor and observable loops (bounds-checked).
 """
 function plot_result(fc::FactorForecast{T};
                      type::Symbol=:both, var::Union{Int,Nothing}=nothing,
@@ -259,7 +261,13 @@ function plot_result(fc::FactorForecast{T};
     # Factor panels
     if type == :factor || type == :both
         h_f, n_factors = size(fc.factors)
-        fvars = var !== nothing && type == :factor ? [var] : (1:n_factors)
+        if var !== nothing
+            (1 <= var <= n_factors) ||
+                throw(ArgumentError("var=$var out of range for $n_factors factors"))
+            fvars = [var]
+        else
+            fvars = 1:n_factors
+        end
         for vi in fvars
             id = _next_plot_id("fac_fc")
             ptitle = "Factor $vi"
@@ -276,7 +284,9 @@ function plot_result(fc::FactorForecast{T};
     # Observable panels
     if type == :observable || type == :both
         h_o, n_obs_total = size(fc.observables)
-        if var !== nothing && type == :observable
+        if var !== nothing
+            (1 <= var <= n_obs_total) ||
+                throw(ArgumentError("var=$var out of range for $n_obs_total observables"))
             ovars = [var]
         elseif type == :both
             ovars = 1:min(n_obs_total, n_obs)

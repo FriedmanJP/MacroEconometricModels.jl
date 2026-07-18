@@ -59,17 +59,29 @@ end
 """
     plot_result(f::BayesianFEVD; var=nothing, stat=:mean, ncols=0, title="", save_path=nothing)
 
-Plot Bayesian FEVD (uses posterior mean by default).
+Plot Bayesian FEVD. `stat` selects the posterior summary drawn:
+- `:mean` (default) — `f.point_estimate` (H × n_vars × n_shocks);
+- `:median` — the 0.5 quantile from `f.quantiles` (requires that level in
+  `f.quantile_levels`, else an `ArgumentError`).
 
-`f.point_estimate` is H × n_vars × n_shocks.
+The figure title states which summary was used.
 """
 function plot_result(f::BayesianFEVD{T};
                      var::Union{Int,String,Nothing}=nothing,
                      stat::Symbol=:mean, ncols::Int=0, title::String="",
                      save_path::Union{String,Nothing}=nothing) where {T}
+    stat in (:mean, :median) ||
+        throw(ArgumentError("stat must be :mean or :median, got :$stat"))
     H = f.horizon
     n_vars = length(f.variables)
     n_shocks = length(f.shocks)
+
+    qidx = 0
+    if stat == :median
+        qidx = something(findfirst(x -> isapprox(x, 0.5; atol=1e-8), f.quantile_levels), 0)
+        qidx == 0 && throw(ArgumentError(
+            "stat=:median requires the 0.5 quantile; available levels: $(f.quantile_levels)"))
+    end
 
     vars_to_plot = var === nothing ? (1:n_vars) : [_resolve_var(var, f.variables)]
 
@@ -78,8 +90,8 @@ function plot_result(f::BayesianFEVD{T};
         id = _next_plot_id("bfevd")
         ptitle = f.variables[vi]
 
-        # f.point_estimate is H × n_vars × n_shocks → extract H × n_shocks for variable vi
-        props = f.point_estimate[1:H, vi, :]  # H × n_shocks
+        # Extract H × n_shocks for variable vi from the chosen posterior summary.
+        props = stat == :median ? f.quantiles[1:H, vi, :, qidx] : f.point_estimate[1:H, vi, :]
         # Normalize rows to sum to 1
         row_sums = sum(props, dims=2)
         props = props ./ max.(row_sums, eps(T))
@@ -94,7 +106,8 @@ function plot_result(f::BayesianFEVD{T};
     end
 
     if isempty(title)
-        title = "Bayesian FEVD (posterior mean)"
+        title = stat == :median ? "Bayesian FEVD (posterior median)" :
+                                  "Bayesian FEVD (posterior mean)"
     end
 
     p = _make_plot(panels; title=title, ncols=ncols)

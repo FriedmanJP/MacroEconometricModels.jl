@@ -84,35 +84,51 @@ end
 """
     plot_result(hd::BayesianHistoricalDecomposition; var=nothing, stat=:mean, ncols=0, title="", save_path=nothing)
 
-Plot Bayesian historical decomposition (uses posterior mean by default).
+Plot Bayesian historical decomposition. `stat` selects the posterior summary:
+- `:mean` (default) — `hd.point_estimate` / `hd.initial_point_estimate`;
+- `:median` — the 0.5 quantile from `hd.quantiles` / `hd.initial_quantiles`
+  (requires that level in `hd.quantile_levels`, else an `ArgumentError`).
+
+The figure title and panel subtitles state which summary was used.
 """
 function plot_result(hd::BayesianHistoricalDecomposition{T};
                      var::Union{Int,String,Nothing}=nothing,
                      stat::Symbol=:mean, ncols::Int=0, title::String="",
                      save_path::Union{String,Nothing}=nothing) where {T}
+    stat in (:mean, :median) ||
+        throw(ArgumentError("stat must be :mean or :median, got :$stat"))
     T_eff = hd.T_eff
     n_vars = length(hd.variables)
     n_shocks = length(hd.shock_names)
+
+    qidx = 0
+    if stat == :median
+        qidx = something(findfirst(x -> isapprox(x, 0.5; atol=1e-8), hd.quantile_levels), 0)
+        qidx == 0 && throw(ArgumentError(
+            "stat=:median requires the 0.5 quantile; available levels: $(hd.quantile_levels)"))
+    end
+    stat_label = stat == :median ? "Posterior Median" : "Posterior Mean"
 
     vars_to_plot = var === nothing ? (1:n_vars) : [_resolve_var(var, hd.variables)]
 
     panels = _PanelSpec[]
     for vi in vars_to_plot
-        # Stacked bar from posterior mean
+        # Stacked bar from the chosen posterior summary
         id_bar = _next_plot_id("bhd_bar")
-        contributions = hd.point_estimate[:, vi, :]  # T_eff × n_shocks
+        contributions = stat == :median ? hd.quantiles[:, vi, :, qidx] : hd.point_estimate[:, vi, :]  # T_eff × n_shocks
         data_bar = _hd_data_json(contributions, hd.shock_names, T_eff)
         s_bar = _series_json(hd.shock_names, _PLOT_COLORS[1:n_shocks];
                              keys=["s$j" for j in 1:n_shocks])
         js_bar = _render_bar_js(id_bar, data_bar, s_bar;
                                 mode="stacked", xlabel="Period",
                                 ylabel="Contribution")
-        push!(panels, _PanelSpec(id_bar, "$(hd.variables[vi]) — Posterior Mean Contributions", js_bar))
+        push!(panels, _PanelSpec(id_bar, "$(hd.variables[vi]) — $(stat_label) Contributions", js_bar))
 
         # Actual vs decomposition
         id_line = _next_plot_id("bhd_line")
         actual = hd.actual[:, vi]
-        total = vec(sum(contributions, dims=2)) .+ hd.initial_point_estimate[:, vi]
+        initial = stat == :median ? hd.initial_quantiles[:, vi, qidx] : hd.initial_point_estimate[:, vi]
+        total = vec(sum(contributions, dims=2)) .+ initial
 
         rows = Vector{Pair{String,String}}[]
         for t in 1:T_eff
@@ -133,7 +149,8 @@ function plot_result(hd::BayesianHistoricalDecomposition{T};
     end
 
     if isempty(title)
-        title = "Bayesian Historical Decomposition ($(hd.method))"
+        summary_word = stat == :median ? "posterior median" : "posterior mean"
+        title = "Bayesian Historical Decomposition ($(hd.method), $(summary_word))"
     end
     if ncols <= 0
         ncols = 1

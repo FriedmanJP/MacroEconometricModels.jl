@@ -100,18 +100,31 @@ end
 # Filter Data
 # =============================================================================
 
-"""Convert filter trend/cycle to JSON data array."""
+"""
+Convert filter trend/cycle to JSON data array.
+
+The x value of drawn point `i` is its **calendar position** `i + offset` (filters
+like Hamilton/BK drop the first `offset` observations). When `original` is supplied
+it must cover that calendar range — `length(original) >= n + offset` — otherwise an
+`ArgumentError` is thrown naming the expected length; the auxiliary series is never
+silently shifted or truncated (plotrule Robustness "Misaligned auxiliary series",
+Anti-Pattern #5). The reading `original[i + offset]` then aligns each drawn point to
+its true calendar observation.
+"""
 function _filter_data_json(trend::AbstractVector, cyc::AbstractVector;
                            original::Union{AbstractVector,Nothing}=nothing,
                            offset::Int=0)
     n = length(trend)
+    if original !== nothing && length(original) < n + offset
+        throw(ArgumentError("original has length $(length(original)); expected at least " *
+            "$(n + offset) to cover the filter's calendar range (offset=$offset, n=$n)"))
+    end
     rows = Vector{Pair{String,String}}[]
     for i in 1:n
         row = Pair{String,String}["x" => _json(i + offset)]
-        row_push = true
         push!(row, "trend" => _json(trend[i]))
         push!(row, "cycle" => _json(cyc[i]))
-        if original !== nothing && i + offset <= length(original)
+        if original !== nothing
             push!(row, "orig" => _json(original[i + offset]))
         end
         push!(row, "zero" => "0")
@@ -221,4 +234,61 @@ function _timeseries_data_json(data::AbstractMatrix, varnames::Vector{String};
         push!(rows, row)
     end
     _json_array_of_objects(rows)
+end
+
+# =============================================================================
+# Date / calendar axis helpers (PLT-08)
+# =============================================================================
+
+"""
+    _x_ticks_json(xvals, labels) -> String
+
+Build the renderer `x_ticks_json` payload: `"null"` when `labels === nothing`
+(renderer falls back to integer/auto ticks), otherwise a JSON array of
+`{"v":<number>,"label":<string>}` with `labels` parallel to `xvals`. `v` is the
+numeric data x-position each label attaches to; the renderer draws ticks only at
+these positions (no fractional/date-less ticks).
+"""
+function _x_ticks_json(xvals::AbstractVector, labels::Union{AbstractVector,Nothing})
+    labels === nothing && return "null"
+    length(labels) == length(xvals) || throw(ArgumentError(
+        "x_ticks labels length ($(length(labels))) must match xvals length ($(length(xvals)))"))
+    rows = Vector{Pair{String,String}}[]
+    for (v, lab) in zip(xvals, labels)
+        push!(rows, ["v" => _json(v), "label" => _json(string(lab))])
+    end
+    _json_array_of_objects(rows)
+end
+
+"""
+    _fmt_period(freq::Frequency, k::Integer) -> String
+
+Format a bare period index `k` (1-based) under a known frequency as a compact
+label when no calendar dates are stored. Without a calendar anchor this yields a
+frequency-flavoured position label (e.g. quarterly `"Q3"`, monthly `"M07"`), used
+only as a fallback; when real `dates` exist they take precedence.
+"""
+function _fmt_period(freq::Frequency, k::Integer)
+    if freq == Quarterly
+        return "Q$(mod1(k, 4))"
+    elseif freq == Monthly
+        return "M$(lpad(mod1(k, 12), 2, '0'))"
+    elseif freq == Yearly
+        return string(k)
+    else
+        return string(k)
+    end
+end
+
+"""
+    _date_axis_labels(d::TimeSeriesData) -> Union{Vector{String},Nothing}
+
+Return one calendar label per observation for the x-axis, or `nothing` (integer
+fallback). Uses `d.dates` when populated (via `set_dates!`); otherwise `nothing`
+— without a calendar anchor the integer `time_index` cannot be turned into real
+dates, so the axis stays numeric rather than fabricating one.
+"""
+function _date_axis_labels(d::TimeSeriesData)
+    dts = dates(d)
+    isempty(dts) ? nothing : dts
 end

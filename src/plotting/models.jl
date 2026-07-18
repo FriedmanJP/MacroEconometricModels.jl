@@ -405,118 +405,9 @@ function plot_result(fm::DynamicFactorModel{T};
     p
 end
 
-# =============================================================================
-# TimeSeriesData
-# =============================================================================
-
-"""
-    plot_result(d::TimeSeriesData; vars=nothing, ncols=0, title="", save_path=nothing)
-
-Plot time series data: one panel per variable (capped at 12).
-
-- `vars`: Variable indices or names to plot. `nothing` = all (up to 12).
-"""
-function plot_result(d::TimeSeriesData{T};
-                     vars::Union{Vector,Nothing}=nothing,
-                     ncols::Int=0, title::String="",
-                     save_path::Union{String,Nothing}=nothing) where {T}
-    if vars === nothing
-        idxs = collect(1:min(d.n_vars, 12))
-    else
-        idxs = [v isa String ? _resolve_var(v, d.varnames) : v for v in vars]
-    end
-
-    panels = _PanelSpec[]
-    for vi in idxs
-        id = _next_plot_id("ts")
-        ptitle = d.varnames[vi]
-
-        rows = Vector{Pair{String,String}}[]
-        for t in 1:d.T_obs
-            push!(rows, [
-                "x" => _json(d.time_index[t]),
-                "v1" => _json(d.data[t, vi])
-            ])
-        end
-        data_json = _json_array_of_objects(rows)
-        s_json = _series_json([d.varnames[vi]], [_PLOT_COLORS[mod1(vi, length(_PLOT_COLORS))]];
-                              keys=["v1"])
-
-        js = _render_line_js(id, data_json, s_json; xlabel="Time", ylabel="")
-        push!(panels, _PanelSpec(id, ptitle, js))
-    end
-
-    if isempty(title)
-        title = isempty(desc(d)) ? "Time Series Data" : desc(d)
-    end
-
-    p = _make_plot(panels; title=title, ncols=ncols)
-    save_path !== nothing && save_plot(p, save_path)
-    p
-end
-
-# =============================================================================
-# PanelData
-# =============================================================================
-
-"""
-    plot_result(d::PanelData; vars=nothing, ncols=0, title="", save_path=nothing)
-
-Plot panel data: one panel per variable, with lines for each group.
-"""
-function plot_result(d::PanelData{T};
-                     vars::Union{Vector,Nothing}=nothing,
-                     ncols::Int=0, title::String="",
-                     save_path::Union{String,Nothing}=nothing) where {T}
-    if vars === nothing
-        var_idxs = collect(1:min(d.n_vars, 6))
-    else
-        var_idxs = [v isa String ? _resolve_var(v, d.varnames) : v for v in vars]
-    end
-
-    # Group data by group_id
-    unique_groups = sort(unique(d.group_id))
-    n_groups_plot = min(length(unique_groups), 10)
-    groups_to_plot = unique_groups[1:n_groups_plot]
-
-    panels = _PanelSpec[]
-    for vi in var_idxs
-        id = _next_plot_id("pd")
-        ptitle = d.varnames[vi]
-
-        # Build data with one column per group
-        # Get unique time points
-        unique_times = sort(unique(d.time_id))
-        rows = Vector{Pair{String,String}}[]
-        for t in unique_times
-            row = Pair{String,String}["x" => _json(t)]
-            for (gi, gid) in enumerate(groups_to_plot)
-                mask = (d.group_id .== gid) .& (d.time_id .== t)
-                idx = findfirst(mask)
-                val = idx !== nothing ? d.data[idx, vi] : NaN
-                push!(row, "g$gi" => _json(val))
-            end
-            push!(rows, row)
-        end
-        data_json = _json_array_of_objects(rows)
-
-        group_names = [gi <= length(d.group_names) ? d.group_names[gi] : "Group $gid"
-                       for (gi, gid) in enumerate(groups_to_plot)]
-        s_json = _series_json(group_names, _PLOT_COLORS[1:n_groups_plot];
-                              keys=["g$i" for i in 1:n_groups_plot])
-
-        js = _render_line_js(id, data_json, s_json; xlabel="Time", ylabel="")
-        push!(panels, _PanelSpec(id, ptitle, js))
-    end
-
-    if isempty(title)
-        title = isempty(desc(d)) ? "Panel Data" : desc(d)
-    end
-
-    p = _make_plot(panels; title=title, ncols=ncols)
-    save_path !== nothing && save_plot(p, save_path)
-    p
-end
+# NOTE: plot_result(::TimeSeriesData) relocated to plotting/timeseries.jl and
+# plot_result(::PanelData) relocated to plotting/panel.jl (PLT plotting overhaul,
+# Wave-2 data-view lanes). See those files.
 
 # =============================================================================
 # OccBinIRF
@@ -748,97 +639,8 @@ $(_axis_labels_js(xlabel, ylabel; g="g_$(id)", w="w_$(id)", h="h_$(id)"))
 """
 end
 
-# =============================================================================
-# BayesianDSGE — Prior vs Posterior Density Plots
-# =============================================================================
-
-"""
-    plot_result(result::BayesianDSGE; title="", save_path=nothing, ncols=0)
-
-Plot prior vs posterior density for each estimated parameter. Each panel shows
-the prior density curve (dashed) and a kernel density estimate of the posterior
-draws (solid), with a vertical line at the posterior mean.
-"""
-function plot_result(result::BayesianDSGE{T};
-                     title::String="", ncols::Int=0,
-                     save_path::Union{String,Nothing}=nothing) where {T}
-    n_params = length(result.param_names)
-    panels = _PanelSpec[]
-
-    for i in 1:n_params
-        pn = string(result.param_names[i])
-        draws = result.theta_draws[:, i]
-        d = result.priors.distributions[i]
-        post_mean = mean(draws)
-
-        # Compute KDE of posterior draws
-        lo_draw = minimum(draws)
-        hi_draw = maximum(draws)
-        bw = 1.06 * std(draws) * length(draws)^(-0.2)  # Silverman bandwidth
-        bw = max(bw, T(1e-10))
-        margin_range = 3 * bw
-        grid_lo = lo_draw - margin_range
-        grid_hi = hi_draw + margin_range
-        n_grid = 200
-        xs = range(grid_lo, grid_hi; length=n_grid)
-
-        # KDE density
-        kde_vals = zeros(T, n_grid)
-        n_draws_total = length(draws)
-        for (gi, xg) in enumerate(xs)
-            s = zero(T)
-            for dv in draws
-                z = (xg - dv) / bw
-                s += exp(-z * z / 2)
-            end
-            kde_vals[gi] = s / (n_draws_total * bw * sqrt(2 * T(pi)))
-        end
-
-        # Prior density at same grid points
-        prior_vals = zeros(T, n_grid)
-        for (gi, xg) in enumerate(xs)
-            try
-                pv = pdf(d, xg)
-                prior_vals[gi] = isfinite(pv) ? pv : zero(T)
-            catch
-                prior_vals[gi] = zero(T)
-            end
-        end
-
-        # Build data JSON
-        rows = Vector{Pair{String,String}}[]
-        for gi in 1:n_grid
-            push!(rows, [
-                "x" => _json(xs[gi]),
-                "post" => _json(kde_vals[gi]),
-                "prior" => _json(prior_vals[gi])
-            ])
-        end
-        data_json = _json_array_of_objects(rows)
-
-        id = _next_plot_id("bayes")
-
-        # Use line chart with prior (dashed) and posterior (solid)
-        s_json = "[{\"name\":\"Posterior\",\"color\":\"$(_PLOT_COLORS[1])\",\"key\":\"post\",\"dash\":\"\"}," *
-                 "{\"name\":\"Prior\",\"color\":\"$(_PLOT_COLORS[2])\",\"key\":\"prior\",\"dash\":\"6,3\"}]"
-
-        # Reference line at posterior mean
-        refs_json = "[{\"value\":0,\"color\":\"#999\",\"dash\":\"4,3\"}]"
-
-        js = _render_line_js(id, data_json, s_json;
-                             ref_lines_json="[]", xlabel=pn, ylabel="Density")
-
-        push!(panels, _PanelSpec(id, pn, js))
-    end
-
-    if isempty(title)
-        title = "Bayesian DSGE — Prior vs Posterior"
-    end
-
-    p = _make_plot(panels; title=title, ncols=ncols)
-    save_path !== nothing && save_plot(p, save_path)
-    p
-end
+# NOTE: plot_result(::BayesianDSGE) relocated to plotting/mcmc.jl (PLT plotting
+# overhaul, Wave-2 MCMC lane; PLT-05 posterior-mean vline applied there).
 
 # =============================================================================
 # FAVARModel
@@ -996,31 +798,40 @@ function _plot_ha_distribution(ss::HASteadyState{T}; title::String="") where {T}
         d_asset ./= total_mass
     end
 
-    # Subsample grid for bar chart readability (cap at 60 bars)
+    # Aggregate the marginal mass into (at most 60) contiguous bins so NO grid
+    # node's mass is dropped — bar heights are probability mass per bin and sum to
+    # the total distribution mass (≈1). Point-sampling one node per bin would
+    # discard the mass on skipped nodes (plotrule Anti-Pattern #7 / mass must be
+    # conserved). When n_a ≤ 60 each bin holds one node, so heights equal the
+    # per-node masses (values unchanged from the old path, now provably conserving).
     max_bars = min(n_a, 60)
-    step = max(1, div(n_a, max_bars))
-    idxs = 1:step:n_a
-    if last(idxs) != n_a
-        idxs = vcat(collect(idxs), n_a)
-    end
+    nbins = max_bars
+    bin_edges = round.(Int, range(0, n_a; length=nbins + 1))
 
-    # For subsampled bars, aggregate density within each bin
     rows = Vector{Pair{String,String}}[]
-    for (bi, idx) in enumerate(idxs)
-        # Use the grid value as label
-        label = _fmt_grid_label(a_grid[idx])
+    for b in 1:nbins
+        lo = bin_edges[b] + 1
+        hi = bin_edges[b + 1]
+        hi < lo && continue
+        bin_mass = sum(@view d_asset[lo:hi])
+        # Label the bin by its right-edge asset value.
+        label = _fmt_grid_label(a_grid[hi])
         push!(rows, [
             "x" => _json(label),
-            "dens" => _json(d_asset[idx])
+            "mass" => _json(bin_mass)
         ])
     end
     data_json = _json_array_of_objects(rows)
 
     id = _next_plot_id("ha_dist")
-    s_json = _series_json(["Density"], [_PLOT_COLORS[1]]; keys=["dens"])
+    s_json = _series_json(["Probability mass"], [_PLOT_COLORS[1]]; keys=["mass"])
     js = _render_bar_js(id, data_json, s_json;
-                        mode="grouped", xlabel="Assets", ylabel="Density")
-    p1 = _PanelSpec(id, "Marginal Wealth Distribution", js)
+                        mode="grouped", xlabel="Assets", ylabel="Probability mass")
+    binned = nbins < n_a
+    ptitle = binned ?
+        "Marginal Wealth Distribution ($(n_a) grid nodes in $(nbins) bins)" :
+        "Marginal Wealth Distribution"
+    p1 = _PanelSpec(id, ptitle, js)
 
     if isempty(title)
         gini = _gini_coefficient(vec(ss.distribution), ss.grid)

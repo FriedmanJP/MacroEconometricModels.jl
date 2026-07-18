@@ -4,7 +4,7 @@
 # Testing Rules ("Renderer changes additionally require one test per option").
 # =============================================================================
 
-using Test, Random
+using Test, Random, Dates
 include(joinpath(@__DIR__, "plot_test_helpers.jl"))
 
 const M = MacroEconometricModels
@@ -173,5 +173,173 @@ const M = MacroEconometricModels
         @test v == Any[1.0, 2.0, nothing]
         o, _ = _tj_parse_value("{\"k\":\"v\\u003cx\"}", firstindex("{\"k\":\"v\\u003cx\"}"))
         @test o["k"] == "v<x"                                   # < decodes back to '<'
+    end
+end
+
+# =============================================================================
+# Renderer-option + dispatch tests for PLT-04..08 (plotrule Testing Rules:
+# "Renderer changes additionally require one test per option").
+# =============================================================================
+@testset "Plotting renderer options + dispatch (PLT-04..08)" begin
+
+    _line_sj() = "[" * M._json_obj(["name" => M._json("s"), "color" => M._json("#1f77b4"),
+                                    "key" => M._json("y"), "dash" => M._json("")]) * "]"
+    _line_dj(xs) = M._json_array_of_objects([["x" => M._json(x), "y" => M._json(float(x))] for x in xs])
+
+    # -------------------------------------------------------------------------
+    # PLT-05 — vertical (axis:"x") reference line on the line renderer
+    # -------------------------------------------------------------------------
+    @testset "PLT-05 line renderer axis:x vertical ref" begin
+        dj = _line_dj(0:5); sj = _line_sj()
+        jsx = M._render_line_js("p_vx", dj, sj;
+                    ref_lines_json="[{\"value\":2,\"axis\":\"x\",\"color\":\"#d62728\"}]")
+        @test occursin("(r.axis||'y') === 'x'", jsx)                       # branch present
+        @test occursin(".attr('x1',x(r.value)).attr('x2',x(r.value))", jsx) # vertical draw
+        @test occursin("if((r.axis||'y') !== 'x') allYVals.push(r.value)", jsx)  # x-ref not in y-domain
+        # default (axis:"y") still draws a HORIZONTAL line
+        jsy = M._render_line_js("p_vy", dj, sj; ref_lines_json="[{\"value\":0.5}]")
+        @test occursin(".attr('y1',y(r.value)).attr('y2',y(r.value))", jsy)
+        for (_, lit) in extract_json_blocks(jsx); assert_strict_json(lit); end
+    end
+
+    # -------------------------------------------------------------------------
+    # PLT-05 — Bayesian FEVD/HD `stat` is a live kwarg (:mean/:median), title tracks it
+    # -------------------------------------------------------------------------
+    @testset "PLT-05 Bayesian FEVD/HD stat kwarg" begin
+        H = 4; nv = 2; ns = 2; levels = [0.16, 0.5, 0.84]; nq = 3
+        pe = zeros(H, nv, ns); pe[:, :, 1] .= 0.8; pe[:, :, 2] .= 0.2
+        q  = zeros(H, nv, ns, nq); q[:, :, 1, :] .= 0.2; q[:, :, 2, :] .= 0.8
+        f  = M.BayesianFEVD{Float64}(q, pe, H, ["a", "b"], ["s1", "s2"], levels)
+        pm  = plot_result(f; stat=:mean)
+        pmd = plot_result(f; stat=:median)
+        @test occursin("posterior mean", pm.html)
+        @test occursin("posterior median", pmd.html)
+        @test pm.html != pmd.html                                    # statistic really switched
+        @test_throws ArgumentError plot_result(f; stat=:bogus)
+        f2 = M.BayesianFEVD{Float64}(q, pe, H, ["a", "b"], ["s1", "s2"], [0.16, 0.84, 0.9])
+        @test_throws ArgumentError plot_result(f2; stat=:median)     # no 0.5 level
+
+        Te = 5
+        hq  = zeros(Te, nv, ns, nq); hq[:, :, 1, :] .= 0.3; hq[:, :, 2, :] .= 0.7
+        hpe = zeros(Te, nv, ns); hpe[:, :, 1] .= 0.9; hpe[:, :, 2] .= 0.1
+        iq  = zeros(Te, nv, nq); ipe = zeros(Te, nv); spe = zeros(Te, ns); act = zeros(Te, nv)
+        hd  = M.BayesianHistoricalDecomposition{Float64}(hq, hpe, iq, ipe, spe, act,
+                Te, ["a", "b"], ["s1", "s2"], levels, :cholesky)
+        hm  = plot_result(hd; stat=:mean)
+        hmd = plot_result(hd; stat=:median)
+        @test occursin("posterior mean", hm.html)
+        @test occursin("posterior median", hmd.html)
+        @test hm.html != hmd.html
+        @test_throws ArgumentError plot_result(hd; stat=:bogus)
+    end
+
+    # -------------------------------------------------------------------------
+    # PLT-06 — horizontal bar orientation + log-scale option
+    # -------------------------------------------------------------------------
+    @testset "PLT-06 bar orientation=h + logscale" begin
+        dj = M._json_array_of_objects([["x" => M._json("Alpha"), "impact" => M._json(1.2)],
+                                       ["x" => M._json("Beta"),  "impact" => M._json(-0.6)]])
+        sj = M._series_json(["Impact"], ["#1f77b4"]; keys=["impact"])
+        jh = M._render_bar_js("p_h", dj, sj; mode="grouped", orientation="h", xlabel="Impact")
+        @test occursin("d3.scaleBand().domain(data.map(d=>d.x)).range([0,h])", jh)  # y = band(names)
+        @test occursin("d3.axisLeft(y)", jh)                                        # names on y-axis
+        @test occursin("orientation = 'h'", jh)
+        # default vertical: categories on the x-band (unchanged)
+        jv = M._render_bar_js("p_v", dj, sj; mode="grouped")
+        @test occursin("d3.scaleBand().domain(data.map(d=>d.x)).range([0,w])", jv)  # x = band(names)
+        @test occursin("orientation = 'v'", jv)                                     # default vertical
+        # log-scale value axis (for singular-value bars)
+        jl = M._render_bar_js("p_l", dj, sj; mode="grouped", orientation="h", logscale=true)
+        @test occursin("d3.scaleLog()", jl)
+        for (_, lit) in extract_json_blocks(jh); assert_strict_json(lit); end
+    end
+
+    # -------------------------------------------------------------------------
+    # PLT-04 — filter Original-line alignment (offset → calendar)
+    # -------------------------------------------------------------------------
+    @testset "PLT-04 filter Original alignment" begin
+        tr = collect(1.0:5.0); cyc = fill(0.1, 5)
+        orig = collect(10.0:16.0)                          # length 7 = n(5)+offset(2)
+        dj = M._filter_data_json(tr, cyc; original=orig, offset=2)
+        val, _ = _tj_parse_value(dj, firstindex(dj))
+        @test val[1]["x"] == 3.0                            # first drawn x = offset+1
+        @test val[1]["orig"] == orig[3]                     # aligned to calendar position 3
+        # too-short original → ArgumentError (never silently shift/truncate)
+        @test_throws ArgumentError M._filter_data_json(tr, cyc; original=collect(1.0:5.0), offset=2)
+
+        # Hamilton with offset>0 and no original ⇒ Original omitted + note, no "orig" key
+        y = cumsum(randn(200)); r = hamilton_filter(y)
+        p = plot_result(r)
+        @test occursin("original not supplied", p.html)
+        for (nm, lit) in extract_json_blocks(p.html)
+            nm == "data" && @test !occursin("\"orig\"", lit)
+        end
+        # correct-length original still renders fine
+        check_plot(plot_result(r; original=y))
+    end
+
+    # -------------------------------------------------------------------------
+    # PLT-08 — Date serializer + x_ticks/regions renderer options + dated dispatch
+    # -------------------------------------------------------------------------
+    @testset "PLT-08 _json(Date) + x_ticks/regions options" begin
+        @test M._json(Date(2020, 3, 31)) == "\"2020-03-31\""
+        @test occursin("2020-03-31T", M._json(DateTime(2020, 3, 31, 12)))
+
+        dj = _line_dj(1:4); sj = _line_sj()
+        # null path: integer-tick fallback (byte-identical axis line, no tickValues)
+        jnull = M._render_line_js("p_tn", dj, sj)
+        @test occursin("d3.axisBottom(x).ticks(Math.min(xVals.length,8))", jnull)
+        @test !occursin("tickValues", jnull)
+        # provided: ticks drawn only at data x-values, with supplied labels
+        xt = M._x_ticks_json([1, 2, 3, 4], ["2020Q1", "2020Q2", "2020Q3", "2020Q4"])
+        jt = M._render_line_js("p_tt", dj, sj; x_ticks_json=xt)
+        @test occursin("tickValues", jt)
+        @test occursin("2020Q1", jt)
+        @test !occursin("d3.axisBottom(x).ticks(Math.min(xVals.length,8))", jt)
+        @test M._x_ticks_json([1, 2, 3], nothing) == "null"
+        @test_throws ArgumentError M._x_ticks_json([1, 2, 3], ["a", "b"])
+
+        # regions_json shade option (recession bands; PLT-20 dependency)
+        jr = M._render_line_js("p_rg", dj, sj;
+                    regions_json="[{\"x0\":2,\"x1\":3,\"color\":\"#888\",\"alpha\":0.12}]")
+        @test occursin("regions.forEach", jr)
+        @test occursin("x(rg.x0)", jr)
+    end
+
+    @testset "PLT-08 dated TimeSeriesData shows dates not integers" begin
+        # (the tickValues/null-axis toggle is asserted at the renderer level above;
+        # here we check the DISPATCH picks up d.dates. "tickValues" cannot be scanned
+        # in the full html — the inlined D3 source legitimately contains that token.)
+        d = TimeSeriesData(cumsum(randn(6)); varname="gdp")
+        p0 = plot_result(d)                                   # undated → integer "Time" axis
+        @test occursin(".text(\"Time\")", p0.html)
+        @test !occursin(".text(\"Date\")", p0.html)
+        @test !occursin("2019Q1", p0.html)
+        set_dates!(d, ["2019Q1", "2019Q2", "2019Q3", "2019Q4", "2020Q1", "2020Q2"])
+        p1 = plot_result(d)                                   # dated → date-string axis
+        @test occursin(".text(\"Date\")", p1.html)
+        @test !occursin(".text(\"Time\")", p1.html)           # x-label switched
+        @test occursin("2019Q1", p1.html)                     # date label present
+    end
+
+    # -------------------------------------------------------------------------
+    # PLT-07 — HA wealth distribution conserves mass (bin-aggregate, not point-sample)
+    # -------------------------------------------------------------------------
+    @testset "PLT-07 HA wealth mass conservation" begin
+        ss = compute_steady_state(load_ha_example(:krusell_smith))
+        n_a = ss.grid.n_points[1]
+        @test n_a > 60                                        # binning path exercised
+        p = plot_result(ss)                                   # view=:distribution
+        total = sum(ss.distribution)
+        masssum = 0.0; found = false
+        for (nm, lit) in extract_json_blocks(p.html)
+            nm == "data" || continue
+            v, _ = _tj_parse_value(lit, firstindex(lit))
+            for o in v; masssum += o["mass"]; end
+            found = true
+        end
+        @test found
+        @test isapprox(masssum, total; atol=1e-8)             # displayed mass == distribution mass
+        @test occursin("grid nodes in", p.html)               # binning note visible (C7)
     end
 end

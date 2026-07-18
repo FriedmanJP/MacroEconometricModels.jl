@@ -13,35 +13,82 @@ plot_result methods for filter types: HPFilter, Hamilton, BN, BK, BoostedHP.
 # =============================================================================
 
 """
-Generate 2-panel Figure for a filter result: (1) Original + Trend, (2) Cycle.
+Generate a 2-panel figure for a filter result: (1) Original + Trend, (2) Cycle.
 
 - `tr`: trend component
 - `cyc`: cycle component
 - `filter_name`: display name
-- `original`: original series (optional, reconstructed from trend+cycle if nil)
+- `original`: original series (optional). When absent and `offset > 0` (Hamilton/BK
+  drop leading observations) the pre-trim original **cannot** be recovered from the
+  trimmed trend/cycle, so the Original line is **omitted** rather than fabricated
+  (plotrule Anti-Pattern #5); a subtitle notes it. When absent and `offset == 0` it
+  is reconstructed as `trend + cycle` and labelled "Original (reconstructed)".
 - `offset`: index offset for shorter filters (Hamilton, BK)
 - `T_obs`: original series length
+- `dates`: optional calendar labels (length ≥ `offset + n`) aligned to the *full*
+  series so each drawn point shows its calendar position (PLT-08).
 """
 function _plot_filter_panels(tr::AbstractVector, cyc::AbstractVector,
                              filter_name::String;
                              original::Union{AbstractVector,Nothing}=nothing,
-                             offset::Int=0, T_obs::Int=0)
-    orig = original !== nothing ? original : tr .+ cyc
+                             offset::Int=0, T_obs::Int=0,
+                             dates::Union{AbstractVector,Nothing}=nothing)
+    n = length(tr)
+    reconstructed = false
+    if original !== nothing
+        orig = original
+        has_original = true
+    elseif offset == 0
+        orig = tr .+ cyc
+        has_original = true
+        reconstructed = true
+    else
+        orig = nothing
+        has_original = false
+    end
+
     data_json = _filter_data_json(tr, cyc; original=orig, offset=offset)
 
-    # Panel 1: Original + Trend
+    # Date axis: label calendar positions offset+1 .. offset+n with dates.
+    xlabel = "Period"
+    x_ticks_json = "null"
+    if dates !== nothing
+        if length(dates) < offset + n
+            throw(ArgumentError("dates has length $(length(dates)); expected at least " *
+                "$(offset + n) to cover the filter's calendar range (offset=$offset, n=$n)"))
+        end
+        xvals = collect((1:n) .+ offset)
+        x_ticks_json = _x_ticks_json(xvals, dates[(1:n) .+ offset])
+        xlabel = "Date"
+    end
+
+    # Panel 1: Original (or reconstructed) + Trend
     id1 = _next_plot_id("filt_tc")
-    s1 = _series_json(["Original", "Trend"], [_PLOT_COLORS[1], _PLOT_COLORS[2]];
-                       keys=["orig", "trend"], dash=["", "6,3"])
-    js1 = _render_line_js(id1, data_json, s1; xlabel="Period", ylabel="Value")
-    p1 = _PanelSpec(id1, "Trend-Cycle Decomposition", js1)
+    if has_original
+        orig_label = reconstructed ? "Original (reconstructed)" : "Original"
+        s1 = _series_json([orig_label, "Trend"], [_PLOT_COLORS[1], _PLOT_COLORS[2]];
+                          keys=["orig", "trend"], dash=["", "6,3"])
+    else
+        s1 = _series_json(["Trend"], [_PLOT_COLORS[2]]; keys=["trend"], dash=["6,3"])
+    end
+    js1 = _render_line_js(id1, data_json, s1; xlabel=xlabel, ylabel="Value",
+                          x_ticks_json=x_ticks_json)
+    subtitle1 = if !has_original
+        "Trend-Cycle Decomposition (original not supplied; pass original= to overlay it)"
+    elseif reconstructed
+        "Trend-Cycle Decomposition (original = trend + cycle)"
+    else
+        "Trend-Cycle Decomposition"
+    end
+    p1 = _PanelSpec(id1, subtitle1, js1)
 
     # Panel 2: Cycle + zero line
     id2 = _next_plot_id("filt_cy")
     s2 = _series_json(["Cycle"], [_PLOT_COLORS[3]]; keys=["cycle"])
     refs = "[{\"value\":0,\"color\":\"#999\",\"dash\":\"4,3\"}]"
     js2 = _render_line_js(id2, data_json, s2;
-                          ref_lines_json=refs, xlabel="Period", ylabel="Cycle")
+                          ref_lines_json=refs, xlabel=xlabel, ylabel="Cycle",
+                          x_ticks_json=x_ticks_json)
     p2 = _PanelSpec(id2, "Cyclical Component", js2)
 
     [p1, p2]
@@ -57,9 +104,10 @@ end
 Plot HP filter: original+trend and cycle.
 """
 function plot_result(r::HPFilterResult{T};
+                     dates::Union{Vector{String},Nothing}=nothing,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
     panels = _plot_filter_panels(r.trend, r.cycle, "HP Filter";
-                                 original=r.trend .+ r.cycle)
+                                 original=r.trend .+ r.cycle, dates=dates)
     if isempty(title)
         title = "Hodrick-Prescott Filter (λ=$(round(r.lambda, sigdigits=4)))"
     end
@@ -82,11 +130,12 @@ doesn't store it.
 """
 function plot_result(r::HamiltonFilterResult{T};
                      original::Union{AbstractVector,Nothing}=nothing,
+                     dates::Union{Vector{String},Nothing}=nothing,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
     offset = r.valid_range.start - 1
     panels = _plot_filter_panels(r.trend, r.cycle, "Hamilton Filter";
                                  original=original, offset=offset,
-                                 T_obs=r.T_obs)
+                                 T_obs=r.T_obs, dates=dates)
     if isempty(title)
         title = "Hamilton (2018) Filter (h=$(r.h), p=$(r.p))"
     end
@@ -105,9 +154,10 @@ end
 Plot BN decomposition: permanent+original and transitory.
 """
 function plot_result(r::BeveridgeNelsonResult{T};
+                     dates::Union{Vector{String},Nothing}=nothing,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
     panels = _plot_filter_panels(r.permanent, r.transitory, "BN Decomposition";
-                                 original=r.permanent .+ r.transitory)
+                                 original=r.permanent .+ r.transitory, dates=dates)
     if isempty(title)
         p, d, q = r.arima_order
         title = "Beveridge-Nelson Decomposition (ARIMA($p,$d,$q))"
@@ -128,11 +178,12 @@ Plot BK band-pass filter.
 """
 function plot_result(r::BaxterKingResult{T};
                      original::Union{AbstractVector,Nothing}=nothing,
+                     dates::Union{Vector{String},Nothing}=nothing,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
     offset = r.valid_range.start - 1
     panels = _plot_filter_panels(r.trend, r.cycle, "BK Filter";
                                  original=original, offset=offset,
-                                 T_obs=r.T_obs)
+                                 T_obs=r.T_obs, dates=dates)
     if isempty(title)
         title = "Baxter-King Band-Pass Filter ([$(r.pl), $(r.pu)], K=$(r.K))"
     end
@@ -151,9 +202,10 @@ end
 Plot boosted HP filter.
 """
 function plot_result(r::BoostedHPResult{T};
+                     dates::Union{Vector{String},Nothing}=nothing,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
     panels = _plot_filter_panels(r.trend, r.cycle, "Boosted HP";
-                                 original=r.trend .+ r.cycle)
+                                 original=r.trend .+ r.cycle, dates=dates)
     if isempty(title)
         title = "Boosted HP Filter ($(r.stopping), $(r.iterations) iter)"
     end
