@@ -1001,6 +1001,8 @@ export estimate_pvar, estimate_pvar_feols
 
 # Analysis
 export pvar_oirf, pvar_girf, pvar_fevd, pvar_stability
+# Name-carrying wrappers for plotting (PLT-29)
+export pvar_irf, pvar_fevd_result
 
 # Bootstrap
 export pvar_bootstrap_irf
