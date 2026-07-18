@@ -14,97 +14,28 @@ ProbitModel, MarginalEffects.
 # =============================================================================
 
 """
-    plot_result(m::RegModel{T}; title="", save_path=nothing)
+    plot_result(m::RegModel{T}; view=:diagnostics, acf_lags=0, title="", save_path=nothing)
 
-Plot OLS/WLS/IV regression diagnostics: residuals vs fitted, residual histogram,
-and Q-Q plot.
+Plot OLS/WLS/IV regression residual diagnostics as the shared four-panel figure
+(PLT-24): residual-vs-fitted scatter, residual histogram + fitted-normal overlay,
+Normal Q-Q (with an A4 45° `line_overlays_json` reference line — no scale-clone), and
+the residual ACF. All panels come from the single `_residual_diagnostics_panels`
+converter reused across every `residuals`-bearing family (A6).
 """
-function plot_result(m::RegModel{T};
+function plot_result(m::RegModel{T}; view::Symbol=:diagnostics, acf_lags::Int=0,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
-    resid = m.residuals
-    fitted_vals = m.fitted
-    n = length(resid)
-
-    # Panel 1: Residuals vs Fitted (scatter)
-    id1 = _next_plot_id("reg_rvf")
-    scatter_rows = String[]
-    for i in 1:n
-        push!(scatter_rows, "{\"x\":$(_json(fitted_vals[i])),\"y\":$(_json(resid[i])),\"group\":\"Residuals\"}")
-    end
-    data1 = "[" * join(scatter_rows, ",\n") * "]"
-    groups1 = "[{\"name\":\"Residuals\",\"color\":\"$(_PLOT_COLORS[1])\"}]"
-    refs1 = "[{\"value\":0,\"color\":\"#999\",\"dash\":\"4,3\"}]"
-    js1 = _render_scatter_js(id1, data1, groups1;
-                             ref_lines_json=refs1,
-                             xlabel="Fitted Values", ylabel="Residuals")
-    p1 = _PanelSpec(id1, "Residuals vs Fitted", js1)
-
-    # Panel 2: Residual Histogram (bar)
-    id2 = _next_plot_id("reg_hist")
-    n_bins = 20
-    rmin = minimum(resid)
-    rmax = maximum(resid)
-    bin_width = (rmax - rmin) / n_bins
-    if bin_width <= zero(T)
-        bin_width = one(T)
-    end
-    bin_counts = zeros(Int, n_bins)
-    for r in resid
-        idx = clamp(floor(Int, (r - rmin) / bin_width) + 1, 1, n_bins)
-        bin_counts[idx] += 1
-    end
-    hist_rows = Vector{Pair{String,String}}[]
-    for i in 1:n_bins
-        lo = rmin + (i - 1) * bin_width
-        hi = rmin + i * bin_width
-        label = string(round((lo + hi) / 2; digits=2))
-        push!(hist_rows, ["x" => _json(label), "s1" => _json(bin_counts[i])])
-    end
-    data2 = _json_array_of_objects(hist_rows)
-    s2 = _series_json(["Count"], [_PLOT_COLORS[2]]; keys=["s1"])
-    js2 = _render_bar_js(id2, data2, s2; mode="stacked", ylabel="Frequency")
-    p2 = _PanelSpec(id2, "Residual Histogram", js2)
-
-    # Panel 3: Q-Q Plot (scatter)
-    id3 = _next_plot_id("reg_qq")
-    sorted_resid = sort(resid)
-    qq_rows = String[]
-    for i in 1:n
-        theoretical = quantile(Normal(), (i - T(0.5)) / n)
-        push!(qq_rows, "{\"x\":$(_json(theoretical)),\"y\":$(_json(sorted_resid[i])),\"group\":\"Q-Q\"}")
-    end
-    data3 = "[" * join(qq_rows, ",\n") * "]"
-    groups3 = "[{\"name\":\"Q-Q\",\"color\":\"$(_PLOT_COLORS[3])\"}]"
-
-    # 45-degree reference line: from min to max of theoretical quantiles
-    q_min = quantile(Normal(), T(0.5) / n)
-    q_max = quantile(Normal(), (n - T(0.5)) / n)
-    refs3 = "[{\"value\":0,\"color\":\"#999\",\"dash\":\"4,3\"}]"
-
-    # 45-degree reference line as a data-coordinate `line_overlays_json` segment on
-    # the scatter renderer (plotrule A4 — no scale re-derivation / scale-clone). The
-    # sample quantile is mean + std·theoretical, so the line runs from
-    # (q_min, mean+std·q_min) to (q_max, mean+std·q_max).
-    resid_std = std(resid)
-    resid_mean = mean(resid)
-    qq_y1 = resid_mean + resid_std * q_min
-    qq_y2 = resid_mean + resid_std * q_max
-    overlay3 = "[{\"x1\":$(_json(q_min)),\"y1\":$(_json(qq_y1))," *
-               "\"x2\":$(_json(q_max)),\"y2\":$(_json(qq_y2))," *
-               "\"color\":\"#d62728\",\"dash\":\"6,3\"}]"
-    js3 = _render_scatter_js(id3, data3, groups3;
-                             ref_lines_json=refs3,
-                             line_overlays_json=overlay3,
-                             xlabel="Theoretical Quantiles",
-                             ylabel="Sample Quantiles")
-    p3 = _PanelSpec(id3, "Normal Q-Q Plot", js3)
+    view === :diagnostics ||
+        throw(ArgumentError("Unknown view :$view for RegModel; use :diagnostics."))
+    resid = Float64[Float64(v) for v in m.residuals]
+    fitted = Float64[Float64(v) for v in m.fitted]
+    panels = _residual_diagnostics_panels(resid, fitted; acf_lags=acf_lags)
 
     if isempty(title)
         method_str = m.method == :ols ? "OLS" : m.method == :wls ? "WLS" : "IV/2SLS"
         title = "$method_str Regression Diagnostics"
     end
 
-    p = _make_plot([p1, p2, p3]; title=title, ncols=1)
+    p = _make_plot(panels; title=title, ncols=2)
     save_path !== nothing && save_plot(p, save_path)
     p
 end

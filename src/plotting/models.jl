@@ -57,18 +57,73 @@ function _plot_volatility_diagnostics(y::AbstractVector, cond_var::AbstractVecto
 end
 
 # =============================================================================
+# Volatility-model view helpers (lane-local, A5) — the standardized-residual
+# diagnostics figure (PLT-24) and the news-impact curve (PLT-37). Both compose the
+# frozen render/converter primitives; no renderer is defined here (A1).
+# =============================================================================
+
+# Standardized-residual four-panel diagnostics for a GARCH-family model (PLT-24). Every
+# GARCH-family struct carries `standardized_residuals`; `fitted` is the mean equation
+# (a constant μ for GARCH-MIDAS, which has no `fitted` field). Routed through the shared
+# `_residual_diagnostics_panels` converter (A6).
+function _vol_diag_plot(m, model_name::String; title::String="",
+                        save_path::Union{String,Nothing}=nothing)
+    sr = Float64[Float64(v) for v in m.standardized_residuals]
+    ft = hasproperty(m, :fitted) ? Float64[Float64(v) for v in m.fitted] :
+                                   fill(Float64(m.mu), length(sr))
+    n = min(length(sr), length(ft))
+    panels = _residual_diagnostics_panels(sr[end-n+1:end], ft[end-n+1:end]; standardized=true)
+    isempty(title) && (title = "$model_name — Residual Diagnostics")
+    p = _make_plot(panels; title=title, ncols=2)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+# News-impact curve figure (PLT-37): the conditional variance σ²ₜ as a function of the
+# previous shock εₜ₋₁, with a vertical reference line at ε=0. Asymmetric families
+# (GJR/EGARCH/APARCH) show a steeper negative-shock branch (C6 — the docstring's
+# "asymmetric parabola" becomes visible). `news_impact_curve` returns `(shocks, variance)`.
+function _news_impact_plot(m, model_name::String; title::String="",
+                           save_path::Union{String,Nothing}=nothing)
+    nic = news_impact_curve(m)
+    id = _next_plot_id("nic")
+    rows = Vector{Pair{String,String}}[]
+    for i in eachindex(nic.shocks)
+        push!(rows, ["x" => _json(nic.shocks[i]), "niv" => _json(nic.variance[i])])
+    end
+    data = _json_array_of_objects(rows)
+    s = _series_json(["News impact σ²"], [_PLOT_COLORS[1]]; keys=["niv"])
+    refs = "[{\"value\":0,\"color\":\"$(_PLOT_ALERT)\",\"dash\":\"5,3\",\"axis\":\"x\"}]"
+    js = _render_line_js(id, data, s; ref_lines_json=refs,
+                         xlabel="Shock εₜ₋₁", ylabel="Conditional variance σ²ₜ")
+    isempty(title) && (title = "$model_name — News Impact Curve")
+    p = _make_plot([_PanelSpec(id, title, js)]; title=title)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+# =============================================================================
 # ARCHModel
 # =============================================================================
 
 """
-    plot_result(m::ARCHModel; title="", save_path=nothing)
+    plot_result(m::ARCHModel; view=:default, title="", save_path=nothing)
 
-Plot ARCH model diagnostics: returns, conditional volatility, standardized residuals.
+Plot ARCH model diagnostics.
+
+- `view=:default` — returns, conditional volatility, standardized residuals (3 panels).
+- `view=:diagnostics` — the shared four-panel residual diagnostics on the standardized
+  residuals (PLT-24).
 """
-function plot_result(m::ARCHModel{T};
+function plot_result(m::ARCHModel{T}; view::Symbol=:default,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
-    _plot_volatility_diagnostics(m.y, m.conditional_variance, "ARCH($(m.q))";
-                                  title=title, save_path=save_path)
+    if view === :default
+        return _plot_volatility_diagnostics(m.y, m.conditional_variance, "ARCH($(m.q))";
+                                            title=title, save_path=save_path)
+    elseif view === :diagnostics
+        return _vol_diag_plot(m, "ARCH($(m.q))"; title=title, save_path=save_path)
+    end
+    throw(ArgumentError("unknown view :$view for ARCHModel — use :default or :diagnostics"))
 end
 
 # =============================================================================
@@ -76,14 +131,25 @@ end
 # =============================================================================
 
 """
-    plot_result(m::GARCHModel; title="", save_path=nothing)
+    plot_result(m::GARCHModel; view=:default, title="", save_path=nothing)
 
 Plot GARCH model diagnostics.
+
+- `view=:default` — returns, conditional volatility, standardized residuals.
+- `view=:diagnostics` — four-panel standardized-residual diagnostics (PLT-24).
+- `view=:news_impact` — the news-impact curve σ²ₜ(εₜ₋₁) with a vline at ε=0 (PLT-37).
 """
-function plot_result(m::GARCHModel{T};
+function plot_result(m::GARCHModel{T}; view::Symbol=:default,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
-    _plot_volatility_diagnostics(m.y, m.conditional_variance, "GARCH($(m.p),$(m.q))";
-                                  title=title, save_path=save_path)
+    if view === :default
+        return _plot_volatility_diagnostics(m.y, m.conditional_variance, "GARCH($(m.p),$(m.q))";
+                                            title=title, save_path=save_path)
+    elseif view === :diagnostics
+        return _vol_diag_plot(m, "GARCH($(m.p),$(m.q))"; title=title, save_path=save_path)
+    elseif view === :news_impact
+        return _news_impact_plot(m, "GARCH($(m.p),$(m.q))"; title=title, save_path=save_path)
+    end
+    throw(ArgumentError("unknown view :$view for GARCHModel — use :default, :diagnostics, or :news_impact"))
 end
 
 # =============================================================================
@@ -91,14 +157,23 @@ end
 # =============================================================================
 
 """
-    plot_result(m::EGARCHModel; title="", save_path=nothing)
+    plot_result(m::EGARCHModel; view=:default, title="", save_path=nothing)
 
-Plot EGARCH model diagnostics.
+Plot EGARCH model diagnostics. `view` ∈ (`:default`, `:diagnostics`, `:news_impact`) —
+the asymmetric news-impact curve (steeper negative-shock branch) is drawn by
+`view=:news_impact` (PLT-24/PLT-37).
 """
-function plot_result(m::EGARCHModel{T};
+function plot_result(m::EGARCHModel{T}; view::Symbol=:default,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
-    _plot_volatility_diagnostics(m.y, m.conditional_variance, "EGARCH($(m.p),$(m.q))";
-                                  title=title, save_path=save_path)
+    if view === :default
+        return _plot_volatility_diagnostics(m.y, m.conditional_variance, "EGARCH($(m.p),$(m.q))";
+                                            title=title, save_path=save_path)
+    elseif view === :diagnostics
+        return _vol_diag_plot(m, "EGARCH($(m.p),$(m.q))"; title=title, save_path=save_path)
+    elseif view === :news_impact
+        return _news_impact_plot(m, "EGARCH($(m.p),$(m.q))"; title=title, save_path=save_path)
+    end
+    throw(ArgumentError("unknown view :$view for EGARCHModel — use :default, :diagnostics, or :news_impact"))
 end
 
 # =============================================================================
@@ -106,14 +181,22 @@ end
 # =============================================================================
 
 """
-    plot_result(m::GJRGARCHModel; title="", save_path=nothing)
+    plot_result(m::GJRGARCHModel; view=:default, title="", save_path=nothing)
 
-Plot GJR-GARCH model diagnostics.
+Plot GJR-GARCH model diagnostics. `view` ∈ (`:default`, `:diagnostics`, `:news_impact`)
+— the leverage asymmetry is visible in `view=:news_impact` (PLT-24/PLT-37).
 """
-function plot_result(m::GJRGARCHModel{T};
+function plot_result(m::GJRGARCHModel{T}; view::Symbol=:default,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
-    _plot_volatility_diagnostics(m.y, m.conditional_variance, "GJR-GARCH($(m.p),$(m.q))";
-                                  title=title, save_path=save_path)
+    if view === :default
+        return _plot_volatility_diagnostics(m.y, m.conditional_variance, "GJR-GARCH($(m.p),$(m.q))";
+                                            title=title, save_path=save_path)
+    elseif view === :diagnostics
+        return _vol_diag_plot(m, "GJR-GARCH($(m.p),$(m.q))"; title=title, save_path=save_path)
+    elseif view === :news_impact
+        return _news_impact_plot(m, "GJR-GARCH($(m.p),$(m.q))"; title=title, save_path=save_path)
+    end
+    throw(ArgumentError("unknown view :$view for GJRGARCHModel — use :default, :diagnostics, or :news_impact"))
 end
 
 # =============================================================================
@@ -121,25 +204,35 @@ end
 # =============================================================================
 
 """
-    plot_result(m::FIGARCHModel; title="", save_path=nothing)
+    plot_result(m::FIGARCHModel; view=:default, title="", save_path=nothing)
 
-Plot FIGARCH conditional-volatility diagnostics (returns + fitted σ²).
+Plot FIGARCH conditional-volatility diagnostics. `view` ∈ (`:default`, `:diagnostics`).
 """
-function plot_result(m::FIGARCHModel{T};
+function plot_result(m::FIGARCHModel{T}; view::Symbol=:default,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
-    _plot_volatility_diagnostics(m.y, m.conditional_variance, "FIGARCH($(m.p),d,$(m.q))";
-                                  title=title, save_path=save_path)
+    if view === :default
+        return _plot_volatility_diagnostics(m.y, m.conditional_variance, "FIGARCH($(m.p),d,$(m.q))";
+                                            title=title, save_path=save_path)
+    elseif view === :diagnostics
+        return _vol_diag_plot(m, "FIGARCH($(m.p),d,$(m.q))"; title=title, save_path=save_path)
+    end
+    throw(ArgumentError("unknown view :$view for FIGARCHModel — use :default or :diagnostics"))
 end
 
 """
-    plot_result(m::FIEGARCHModel; title="", save_path=nothing)
+    plot_result(m::FIEGARCHModel; view=:default, title="", save_path=nothing)
 
-Plot FIEGARCH conditional-volatility diagnostics (returns + fitted σ²).
+Plot FIEGARCH conditional-volatility diagnostics. `view` ∈ (`:default`, `:diagnostics`).
 """
-function plot_result(m::FIEGARCHModel{T};
+function plot_result(m::FIEGARCHModel{T}; view::Symbol=:default,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
-    _plot_volatility_diagnostics(m.y, m.conditional_variance, "FIEGARCH($(m.p),d,$(m.q))";
-                                  title=title, save_path=save_path)
+    if view === :default
+        return _plot_volatility_diagnostics(m.y, m.conditional_variance, "FIEGARCH($(m.p),d,$(m.q))";
+                                            title=title, save_path=save_path)
+    elseif view === :diagnostics
+        return _vol_diag_plot(m, "FIEGARCH($(m.p),d,$(m.q))"; title=title, save_path=save_path)
+    end
+    throw(ArgumentError("unknown view :$view for FIEGARCHModel — use :default or :diagnostics"))
 end
 
 # =============================================================================
@@ -147,25 +240,42 @@ end
 # =============================================================================
 
 """
-    plot_result(m::IGARCHModel; title="", save_path=nothing)
+    plot_result(m::IGARCHModel; view=:default, title="", save_path=nothing)
 
-Plot IGARCH conditional-volatility diagnostics (returns + fitted σ²).
+Plot IGARCH conditional-volatility diagnostics. `view` ∈ (`:default`, `:diagnostics`,
+`:news_impact`) (PLT-24/PLT-37).
 """
-function plot_result(m::IGARCHModel{T};
+function plot_result(m::IGARCHModel{T}; view::Symbol=:default,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
-    _plot_volatility_diagnostics(m.y, m.conditional_variance, "IGARCH($(m.p),$(m.q))";
-                                  title=title, save_path=save_path)
+    if view === :default
+        return _plot_volatility_diagnostics(m.y, m.conditional_variance, "IGARCH($(m.p),$(m.q))";
+                                            title=title, save_path=save_path)
+    elseif view === :diagnostics
+        return _vol_diag_plot(m, "IGARCH($(m.p),$(m.q))"; title=title, save_path=save_path)
+    elseif view === :news_impact
+        return _news_impact_plot(m, "IGARCH($(m.p),$(m.q))"; title=title, save_path=save_path)
+    end
+    throw(ArgumentError("unknown view :$view for IGARCHModel — use :default, :diagnostics, or :news_impact"))
 end
 
 """
-    plot_result(m::APARCHModel; title="", save_path=nothing)
+    plot_result(m::APARCHModel; view=:default, title="", save_path=nothing)
 
-Plot APARCH conditional-volatility diagnostics (returns + fitted σ²).
+Plot APARCH conditional-volatility diagnostics. `view` ∈ (`:default`, `:diagnostics`,
+`:news_impact`) — the power/asymmetry shape is visible in `view=:news_impact`
+(PLT-24/PLT-37).
 """
-function plot_result(m::APARCHModel{T};
+function plot_result(m::APARCHModel{T}; view::Symbol=:default,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
-    _plot_volatility_diagnostics(m.y, m.conditional_variance, "APARCH($(m.p),$(m.q))";
-                                  title=title, save_path=save_path)
+    if view === :default
+        return _plot_volatility_diagnostics(m.y, m.conditional_variance, "APARCH($(m.p),$(m.q))";
+                                            title=title, save_path=save_path)
+    elseif view === :diagnostics
+        return _vol_diag_plot(m, "APARCH($(m.p),$(m.q))"; title=title, save_path=save_path)
+    elseif view === :news_impact
+        return _news_impact_plot(m, "APARCH($(m.p),$(m.q))"; title=title, save_path=save_path)
+    end
+    throw(ArgumentError("unknown view :$view for APARCHModel — use :default, :diagnostics, or :news_impact"))
 end
 
 """
@@ -176,6 +286,8 @@ Plot a Component-GARCH(1,1) fit.
 - `view=:components` — stacked-area decomposition of the permanent (`√q`) and
   transitory (`√max(σ²−q,0)`) volatility contributions over the sample.
 - `view=:default` — the standard 3-panel volatility diagnostic figure.
+- `view=:diagnostics` — four-panel standardized-residual diagnostics (PLT-24).
+- `view=:news_impact` — the news-impact curve σ²ₜ(εₜ₋₁) (PLT-37).
 """
 function plot_result(m::CGARCHModel{T}; view::Symbol=:components,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
@@ -184,8 +296,12 @@ function plot_result(m::CGARCHModel{T}; view::Symbol=:components,
     elseif view === :default
         return _plot_volatility_diagnostics(m.y, m.conditional_variance, "Component-GARCH(1,1)";
                                              title=title, save_path=save_path)
+    elseif view === :diagnostics
+        return _vol_diag_plot(m, "Component-GARCH(1,1)"; title=title, save_path=save_path)
+    elseif view === :news_impact
+        return _news_impact_plot(m, "Component-GARCH(1,1)"; title=title, save_path=save_path)
     else
-        throw(ArgumentError("unknown view $view — use :components or :default"))
+        throw(ArgumentError("unknown view $view — use :components, :default, :diagnostics, or :news_impact"))
     end
     save_path !== nothing && save_plot(p, save_path)
     p
@@ -221,6 +337,7 @@ Plot a GARCH-MIDAS fit.
 - `view=:components` — overlay total conditional volatility `√σ²` and the
   long-run component `√τ` over the retained sample.
 - `view=:weights` — the fitted Beta MIDAS weight curve `φ_k` versus lag `k`.
+- `view=:diagnostics` — four-panel standardized-residual diagnostics (PLT-24).
 """
 function plot_result(m::GarchMidasModel{T}; view::Symbol=:components,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
@@ -228,8 +345,10 @@ function plot_result(m::GarchMidasModel{T}; view::Symbol=:components,
         p = _garch_midas_components_plot(m, title)
     elseif view === :weights
         p = _garch_midas_weight_plot(m, title)
+    elseif view === :diagnostics
+        return _vol_diag_plot(m, "GARCH-MIDAS"; title=title, save_path=save_path)
     else
-        throw(ArgumentError("unknown view $view — use :components or :weights"))
+        throw(ArgumentError("unknown view $view — use :components, :weights, or :diagnostics"))
     end
     save_path !== nothing && save_plot(p, save_path)
     p
@@ -276,12 +395,29 @@ end
 # =============================================================================
 
 """
-    plot_result(m::SVModel; title="", save_path=nothing)
+    plot_result(m::SVModel; view=:default, title="", save_path=nothing)
 
-Plot SV model diagnostics with posterior quantile bands on volatility.
+Plot SV model diagnostics.
+
+- `view=:default` — returns, posterior volatility with credible band, standardized
+  residuals (3 panels).
+- `view=:diagnostics` — four-panel residual diagnostics on the already-standardized
+  residuals `zₜ = yₜ/√σ̄²ₜ` (PLT-24).
 """
-function plot_result(m::SVModel{T};
+function plot_result(m::SVModel{T}; view::Symbol=:default,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
+    if view === :diagnostics
+        sr = Float64[Float64(m.y[i]) / sqrt(max(Float64(m.volatility_mean[i]), 1e-12))
+                     for i in eachindex(m.y)]
+        ft = zeros(Float64, length(sr))   # SV assumes a zero conditional mean
+        panels = _residual_diagnostics_panels(sr, ft; standardized=true)
+        isempty(title) && (title = "Stochastic Volatility — Residual Diagnostics")
+        p = _make_plot(panels; title=title, ncols=2)
+        save_path !== nothing && save_plot(p, save_path)
+        return p
+    elseif view !== :default
+        throw(ArgumentError("unknown view :$view for SVModel — use :default or :diagnostics"))
+    end
     data_json = _sv_data_json(m.y, m.volatility_mean, m.volatility_quantiles,
                                m.quantile_levels)
     nq = length(m.quantile_levels)

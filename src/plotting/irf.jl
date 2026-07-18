@@ -77,58 +77,64 @@ end
 # =============================================================================
 
 """
-    plot_result(r::BayesianImpulseResponse; var=nothing, shock=nothing, ncols=0, title="", save_path=nothing)
+    plot_result(r::BayesianImpulseResponse; var=nothing, shock=nothing, stat=:median,
+                draws=0, ncols=0, title="", save_path=nothing)
 
-Plot Bayesian IRF with posterior mean and quantile bands.
+Plot a Bayesian IRF as nested posterior credible fans (PLT-28). **All** quantile bands
+in `r.quantile_levels` render — one legend-labelled band per symmetric quantile pair —
+rather than only the outermost pair (audit M23). `stat` selects the central line
+(`:median` = `r.point_estimate`, `:mean` = mean of `r._draws` when available); `draws>0`
+overlays up to 200 subsampled posterior IRF paths from `r._draws` (C7).
 """
 function plot_result(r::BayesianImpulseResponse{T};
                      var::Union{Int,String,Nothing}=nothing,
                      shock::Union{Int,String,Nothing}=nothing,
+                     stat::Symbol=:median, draws::Int=0,
                      ncols::Int=0, title::String="",
                      save_path::Union{String,Nothing}=nothing) where {T}
+    stat in (:median, :mean) ||
+        throw(ArgumentError("stat must be :median or :mean, got :$stat"))
     H = r.horizon
     n_vars = length(r.variables)
     n_shocks = length(r.shocks)
-    nq = length(r.quantile_levels)
+    levels = r.quantile_levels
+    xs = collect(0:H-1)
 
     vars_to_plot = var === nothing ? (1:n_vars) : [_resolve_var(var, r.variables)]
     shocks_to_plot = shock === nothing ? (1:n_shocks) : [_resolve_var(shock, r.shocks)]
+    central_label = stat === :mean ? "Mean" : "Median"
+    has_draws = r._draws !== nothing
 
     panels = _PanelSpec[]
+    note = ""
     for si in shocks_to_plot
         for vi in vars_to_plot
-            id = _next_plot_id("birf")
             ptitle = "$(r.variables[vi]) ← $(r.shocks[si])"
-
-            # Use central tendency as main line; widest quantile pair as band
-            vals = r.point_estimate[1:H, vi, si]
-            ci_lo = r.quantiles[1:H, vi, si, 1]      # lowest quantile
-            ci_hi = r.quantiles[1:H, vi, si, nq]      # highest quantile
-            data_json = _irf_data_json(vals, ci_lo, ci_hi, H)
-
-            lo_q = round(Int, 100 * r.quantile_levels[1])
-            hi_q = round(Int, 100 * r.quantile_levels[nq])
-            s_json = _series_json(["Posterior median"], [_PLOT_COLORS[1]]; keys=["irf"])
-            bands = "[{\"lo_key\":\"ci_lo\",\"hi_key\":\"ci_hi\",\"color\":\"$(_PLOT_COLORS[1])\",\"alpha\":$(_PLOT_CI_ALPHA)}]"
-            refs = "[{\"value\":0,\"color\":\"#999\",\"dash\":\"4,3\"}]"
-
-            js = _render_line_js(id, data_json, s_json;
-                                 bands_json=bands, ref_lines_json=refs, integer_x=true,
-                                 xlabel="Horizon", ylabel="Response")
-            push!(panels, _PanelSpec(id, ptitle, js))
+            qmat = r.quantiles[1:H, vi, si, :]                 # H×nq
+            central = if stat === :mean && has_draws
+                vec(sum(@view(r._draws[:, 1:H, vi, si]), dims=1)) ./ max(size(r._draws, 1), 1)
+            else
+                _median_from_quantiles(qmat, levels, r.point_estimate[1:H, vi, si])
+            end
+            draw_paths = (draws > 0 && has_draws) ? r._draws[:, 1:H, vi, si] : nothing
+            panel, n = _bayes_fan_panel("birf", ptitle, xs, qmat, levels,
+                                        central, central_label, draw_paths, draws;
+                                        xlabel="Horizon", ylabel="Response")
+            push!(panels, panel)
+            isempty(note) && (note = n)
         end
     end
 
     if isempty(title)
-        lo_q = round(Int, 100 * r.quantile_levels[1])
-        hi_q = round(Int, 100 * r.quantile_levels[nq])
-        title = "Bayesian IRF ($(lo_q)%–$(hi_q)% posterior band)"
+        lo_q = round(Int, 100 * levels[1])
+        hi_q = round(Int, 100 * levels[end])
+        title = "Bayesian IRF ($(central_label), $(lo_q)%–$(hi_q)% posterior bands)"
     end
     if ncols <= 0
         ncols = length(shocks_to_plot)
     end
 
-    p = _make_plot(panels; title=title, ncols=ncols)
+    p = _make_plot(panels; title=title, ncols=ncols, note=note)
     save_path !== nothing && save_plot(p, save_path)
     p
 end

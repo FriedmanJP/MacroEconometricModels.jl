@@ -412,33 +412,8 @@ function plot_result(fc::LPForecast{T};
 end
 
 # =============================================================================
-# ForecastEvaluation (EV-39, #447) — ranked accuracy bar chart
+# ForecastEvaluation — the `plot_result` dispatch moved to plotting/fceval.jl (PLT-38),
+# where it gained the `view=:metrics/:theil` API alongside the other forecast-evaluation
+# and Local-Projection plots. Keeping a single method there avoids a same-type dispatch
+# collision that would silently override on include.
 # =============================================================================
-
-"""
-    plot_result(ev::ForecastEvaluation; metric="RMSE", title="", save_path=nothing)
-
-Bar chart of a chosen accuracy metric across the evaluated models, ranked best
-(smallest) to worst. `metric` must be one of the columns in `ev.metrics`
-(default `"RMSE"`).
-"""
-function plot_result(ev::ForecastEvaluation{T};
-                     metric::String="RMSE", title::String="",
-                     save_path::Union{String,Nothing}=nothing) where {T}
-    k = findfirst(==(metric), ev.metrics)
-    k === nothing && throw(ArgumentError("metric must be one of $(ev.metrics); got \"$metric\""))
-    M = length(ev.models)
-    ord = sortperm(ev.values[:, k])
-    id = _next_plot_id("fceval_bar")
-    rows = Vector{Pair{String,String}}[]
-    for j in ord
-        push!(rows, ["x" => _json(ev.models[j]), "s1" => _json(ev.values[j, k])])
-    end
-    data = _json_array_of_objects(rows)
-    s = _series_json([metric], [_PLOT_COLORS[2]]; keys = ["s1"])
-    js = _render_bar_js(id, data, s; mode = "stacked", xlabel = "Model", ylabel = metric)
-    isempty(title) && (title = "Forecast Accuracy — $metric (n=$(ev.n))")
-    p = _make_plot([_PanelSpec(id, title, js)]; title = title)
-    save_path !== nothing && save_plot(p, save_path)
-    p
-end

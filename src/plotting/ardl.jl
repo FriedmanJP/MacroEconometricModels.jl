@@ -75,12 +75,25 @@ end
 Convenience: compute the cumulative dynamic multipliers of a fitted
 [`NARDLModel`](@ref) out to horizon `H` and plot them. Defaults to `bootstrap=false`
 for a fast preview; pass `bootstrap=true` (and an `rng`) for percentile bands.
+
+- `view=:multipliers` (default) — the cumulative dynamic multipliers.
+- `view=:diagnostics` — the shared four-panel residual diagnostics of the underlying
+  ARDL fit (PLT-24).
 """
 function plot_result(m::NARDLModel{T}; view::Symbol=:multipliers, H::Int=24,
-                     bootstrap::Bool=false, title::String="",
+                     bootstrap::Bool=false, acf_lags::Int=0, title::String="",
                      save_path::Union{String,Nothing}=nothing, kwargs...) where {T}
+    if view === :diagnostics
+        resid = Float64[Float64(v) for v in residuals(m.ardl)]
+        fitted = Float64[Float64(v) for v in m.ardl.fitted]
+        panels = _residual_diagnostics_panels(resid, fitted; varname=m.yname, acf_lags=acf_lags)
+        isempty(title) && (title = "NARDL Residual Diagnostics")
+        p = _make_plot(panels; title=title, ncols=2)
+        save_path !== nothing && save_plot(p, save_path)
+        return p
+    end
     view == :multipliers ||
-        throw(ArgumentError("view must be :multipliers for NARDLModel; got :$view"))
+        throw(ArgumentError("view must be :multipliers or :diagnostics for NARDLModel; got :$view"))
     mm = dynamic_multipliers(m, H; bootstrap=bootstrap, kwargs...)
     plot_result(mm; view=:multipliers, title=title, save_path=save_path)
 end
