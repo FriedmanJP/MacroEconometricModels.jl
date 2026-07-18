@@ -20,12 +20,13 @@ Plot forecast error variance decomposition as stacked area charts.
 `f.proportions` is n_vars × n_shocks × H.
 """
 function plot_result(f::FEVD{T};
-                     var::Union{Int,Nothing}=nothing,
+                     var::Union{Int,String,Nothing}=nothing,
                      ncols::Int=0, title::String="",
                      save_path::Union{String,Nothing}=nothing) where {T}
     n_vars, n_shocks, H = size(f.proportions)
 
-    vars_to_plot = var === nothing ? (1:n_vars) : [var]
+    # C3: var accepts Int or variable name, bounds-checked via _resolve_var.
+    vars_to_plot = var === nothing ? (1:n_vars) : [_resolve_var(var, f.variables)]
 
     panels = _PanelSpec[]
     for vi in vars_to_plot
@@ -128,13 +129,14 @@ Plot LP-FEVD (Gorodnichenko & Lee 2019).
 `f.proportions` and `f.bias_corrected` are n_vars × n_shocks × H.
 """
 function plot_result(f::LPFEVD{T};
-                     var::Union{Int,Nothing}=nothing,
+                     var::Union{Int,String,Nothing}=nothing,
                      bias_corrected::Bool=true, ncols::Int=0, title::String="",
                      save_path::Union{String,Nothing}=nothing) where {T}
     source = bias_corrected && f.bias_correction ? f.bias_corrected : f.proportions
     n_vars, n_shocks, H = size(source)
 
-    vars_to_plot = var === nothing ? (1:n_vars) : [var]
+    # C3: var accepts Int or variable name, bounds-checked via _resolve_var.
+    vars_to_plot = var === nothing ? (1:n_vars) : [_resolve_var(var, f.variables)]
 
     panels = _PanelSpec[]
     for vi in vars_to_plot

@@ -87,9 +87,13 @@ isdefined(@__MODULE__, :check_plot) || include(joinpath(@__DIR__, "plot_test_hel
         p = plot_result(f)
         check_plot(p); assert_all_json_valid(p)
         @test occursin("FEVD", p.html) || occursin("Variance", p.html)
-        # FEVD selects a variable by Int (its signature is Int-only, unlike IRF).
+        # C3: select a variable by Int or by name, bounds-checked.
         check_plot(plot_result(f; var=1))
         @test length(panel_titles(plot_result(f; var=1).html)) == 1
+        @test panel_titles(plot_result(f; var=2).html) ==
+              panel_titles(plot_result(f; var=f.variables[2]).html)
+        @test_throws ArgumentError plot_result(f; var="nope")
+        @test_throws ArgumentError plot_result(f; var=99)
     end
 
     @testset "BayesianFEVD" begin
@@ -105,6 +109,12 @@ isdefined(@__MODULE__, :check_plot) || include(joinpath(@__DIR__, "plot_test_hel
         f = lp_fevd(slp, 10)
         p = plot_result(f)
         check_plot(p); assert_all_json_valid(p)
+        # C3: Int or name selection, bounds-checked.
+        @test length(panel_titles(plot_result(f; var=1).html)) == 1
+        @test panel_titles(plot_result(f; var=1).html) ==
+              panel_titles(plot_result(f; var=f.variables[1]).html)
+        @test_throws ArgumentError plot_result(f; var="nope")
+        @test_throws ArgumentError plot_result(f; var=99)
     end
 
     # =========================================================================
