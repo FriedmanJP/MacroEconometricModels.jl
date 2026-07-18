@@ -1894,7 +1894,8 @@ end
 # Panel Body Rendering
 # =============================================================================
 
-function _render_body_single(panel::_PanelSpec; title::String="")
+function _render_body_single(panel::_PanelSpec; title::String="",
+                             source::String="", note::String="")
     html = ""
     if !isempty(title)
         html *= "<div class=\"figure-title\">$(_esc_html(title))</div>\n"
@@ -1903,6 +1904,15 @@ function _render_body_single(panel::_PanelSpec; title::String="")
 <div class="panel-title">$(_esc_html(panel.title))</div>
 <div id="$(panel.id)"></div>
 </div>"""
+    # C7: a cap/figure note must stay visible even on a single-panel figure —
+    # _render_body_figure already appends it; the single-panel path must too, or
+    # any "showing k of N" truncation note silently vanishes.
+    if !isempty(source)
+        html *= "\n<div class=\"figure-source\">$(_esc_html(source))</div>"
+    end
+    if !isempty(note)
+        html *= "\n<div class=\"figure-source\">$(_esc_html(note))</div>"
+    end
     html
 end
 
@@ -1945,7 +1955,7 @@ function _make_plot(panels::Vector{_PanelSpec}; title::String="",
 
     css = _render_css(ncols)
     if length(panels) == 1
-        body = _render_body_single(panels[1]; title=title)
+        body = _render_body_single(panels[1]; title=title, source=source, note=note)
     else
         body = _render_body_figure(panels; title=title, source=source, note=note)
     end

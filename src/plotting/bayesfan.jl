@@ -139,16 +139,18 @@ end
 
 """
     plot_result(sim::BayesianDSGESimulation; var=nothing, stat=:median, draws=0,
-                ncols=0, title="", save_path=nothing)
+                max_panels=12, ncols=0, title="", save_path=nothing)
 
 Plot a Bayesian DSGE posterior simulation as nested credible fans, one panel per
 variable. All quantile bands in `sim.quantile_levels` render (PLT-28). `stat` selects
 the central line (`:median` = `sim.point_estimate`, `:mean` = mean of `sim.all_paths`);
-`draws>0` overlays up to 200 subsampled posterior paths from `all_paths`.
+`draws>0` overlays up to 200 subsampled posterior paths from `all_paths`. `var` selects
+one variable by `Int` or name (`sim.variables`); otherwise up to `max_panels` variables
+are drawn, with any cap surfaced in a figure note (plotrule C7).
 """
 function plot_result(sim::BayesianDSGESimulation{T};
                      var::Union{Int,String,Nothing}=nothing,
-                     stat::Symbol=:median, draws::Int=0, ncols::Int=0,
+                     stat::Symbol=:median, draws::Int=0, max_panels::Int=12, ncols::Int=0,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
     stat in (:median, :mean) ||
         throw(ArgumentError("stat must be :median or :mean, got :$stat"))
@@ -156,11 +158,19 @@ function plot_result(sim::BayesianDSGESimulation{T};
     n_vars = length(sim.variables)
     levels = sim.quantile_levels
     xs = collect(1:Tn)
-    vars_to_plot = var === nothing ? (1:n_vars) : [_resolve_var(var, sim.variables)]
     central_label = stat === :mean ? "Mean" : "Median"
 
+    if var === nothing
+        shown = min(n_vars, max_panels)
+        vars_to_plot = collect(1:shown)
+        cap_note = _cap_note("variables", shown, n_vars, "max_panels")
+    else
+        vars_to_plot = [_resolve_var(var, sim.variables)]
+        cap_note = ""
+    end
+
     panels = _PanelSpec[]
-    note = ""
+    draw_note = ""
     for vi in vars_to_plot
         qmat = sim.quantiles[1:Tn, vi, :]                    # T×nq
         central = if stat === :mean
@@ -173,9 +183,11 @@ function plot_result(sim::BayesianDSGESimulation{T};
                                     central, central_label, draw_paths, draws;
                                     xlabel="Period", ylabel="Value")
         push!(panels, panel)
-        isempty(note) && (note = n)
+        isempty(draw_note) && (draw_note = n)
     end
 
+    note = isempty(cap_note) ? draw_note :
+           (isempty(draw_note) ? cap_note : cap_note * " " * draw_note)
     if isempty(title)
         title = "Bayesian DSGE Simulation ($(central_label))"
     end

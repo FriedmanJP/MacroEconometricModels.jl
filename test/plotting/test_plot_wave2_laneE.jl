@@ -71,17 +71,9 @@ end
             check_plot(plot_result(vec_; view=:diagnostics))
         end
 
-        @testset "PanelRegModel / PanelIVModel" begin
-            df = DataFrame(g=repeat(1:20, inner=10), t=repeat(1:10, 20),
-                           y=randn(200), x=randn(200), z=randn(200))
-            pd = xtset(df, :g, :t)
-            pr = estimate_xtreg(pd, :y, [:x])
-            p = plot_result(pr; view=:diagnostics)
-            check_plot(p); assert_all_json_valid(p)
-            @test_throws ArgumentError plot_result(pr; view=:bogus)
-            piv = estimate_xtiv(pd, :y, Symbol[], [:x]; instruments=[:z])
-            check_plot(plot_result(piv; view=:diagnostics))
-        end
+        # NOTE: PanelRegModel/PanelIVModel `view=:diagnostics` is exercised alongside the
+        # reconciled coef default in the Lane D file (test_plot_wave2_laneD.jl), which owns
+        # the panel-regression `plot_result` dispatch (micro_coef.jl).
 
         @testset "GARCH family (standardized) + default unchanged" begin
             g = estimate_garch(randn(200), 1, 1)
@@ -186,10 +178,21 @@ end
                                                        [HOSTILE_NAME, "b"], levels, ap)
             p = plot_result(sim)
             check_plot(p); assert_all_json_valid(p)
+            @test length(panel_titles(p.html)) == 2                   # one panel per variable
             fanlit = _extract_fan_block(p.html)
             @test fanlit !== nothing && count("lo_key", fanlit) == 3   # 3 pairs → 3 bands
             assert_escapes(p)                                          # hostile var name (A8)
             @test_throws ArgumentError plot_result(sim; stat=:bogus)
+
+            # var selection Int + label, and a bad selector throws
+            @test length(panel_titles(plot_result(sim; var=1).html)) == 1
+            @test length(panel_titles(plot_result(sim; var="b").html)) == 1
+            @test_throws ArgumentError plot_result(sim; var="nope")
+
+            # panel cap (C7): max_panels truncates with a visible figure note
+            pc = plot_result(sim; max_panels=1)
+            @test length(panel_titles(pc.html)) == 1
+            @test occursin("Showing 1 of 2 variables", pc.html)
 
             # draws cap ≤200 with note
             pdr = plot_result(sim; stat=:mean, draws=500)

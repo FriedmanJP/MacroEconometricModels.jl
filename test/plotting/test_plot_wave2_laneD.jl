@@ -100,18 +100,6 @@ function _laneD_ks(; ns=2, Tn=6, nancov=false)
         states, covs, states, covs, -123.0)
 end
 
-function _laneD_bsim(; nv=2, nanq=false)
-    Tp, nq = 8, 4
-    qs = zeros(Tp, nv, nq)
-    for t in 1:Tp, v in 1:nv
-        qs[t, v, :] = sort(randn(MersenneTwister(t + v), nq)) .+ v
-    end
-    nanq && (qs[1, 1, 1] = NaN)
-    pe = randn(MersenneTwister(9), Tp, nv)
-    _MEM.BayesianDSGESimulation(qs, pe, Tp, ["y$i" for i in 1:nv],
-        [0.05, 0.16, 0.84, 0.95], randn(MersenneTwister(10), 20, Tp, nv))
-end
-
 # DSGEEstimation needs a real solution object for its Union-typed field.
 function _laneD_est(; hostile=false)
     spec = @dsge begin
@@ -275,27 +263,8 @@ end
             # hostile param name survives every sink
             assert_escapes(plot_result(_laneD_est(hostile=true)))
         end
-
-        @testset "BayesianDSGESimulation fan + var select + caps" begin
-            sim = _laneD_bsim(nv=2)
-            p = plot_result(sim)
-            check_plot(p); assert_all_json_valid(p)
-            @test length(panel_titles(p.html)) == 2
-            @test occursin("Posterior-Predictive", p.html)
-            @test occursin("\"lo_key\"", p.html)                 # nested quantile bands
-            @test length(panel_titles(plot_result(sim; var=1).html)) == 1
-            @test length(panel_titles(plot_result(sim; var="y2").html)) == 1
-            @test_throws ArgumentError plot_result(sim; var="nope")
-            # hostile variable name
-            simh = _laneD_bsim(nv=1)
-            simh2 = _MEM.BayesianDSGESimulation(simh.quantiles, simh.point_estimate,
-                simh.T_periods, [HOSTILE_NAME], simh.quantile_levels, simh.all_paths)
-            assert_escapes(plot_result(simh2))
-            assert_nan_becomes_null(plot_result(_laneD_bsim(nanq=true)))
-            # cap note
-            pc = plot_result(_laneD_bsim(nv=4); max_panels=2)
-            @test occursin("Showing 2 of 4 variables", pc.html)
-        end
+        # NOTE: BayesianDSGESimulation is plotted by the bayesfan.jl dispatch (PLT-28);
+        # its authoritative test lives in the Lane E file (test_plot_wave2_laneE.jl).
     end
 
     # =========================================================================
@@ -307,13 +276,19 @@ end
         X = randn(rng, n, 2)
         xb = X * [0.8, -0.5]
 
-        @testset "PanelReg / PanelIV coef plots" begin
+        @testset "PanelReg / PanelIV coef (default) + diagnostics view" begin
             pd = _laneD_panel()
             preg = estimate_xtreg(pd, :y, [:x1, :x2])
-            p = plot_result(preg)
+            p = plot_result(preg)                                # view=:coef is the default
             check_plot(p); assert_all_json_valid(p)
             @test occursin("Panel Regression Coefficients", p.html)
             @test occursin("ci_lo", p.html)                      # dot-and-whisker rows
+            # reconciled view=:diagnostics routes to the shared 4-panel resid figure
+            pdg = plot_result(preg; view=:diagnostics)
+            check_plot(pdg); assert_all_json_valid(pdg)
+            @test occursin("Residual Diagnostics", pdg.html)
+            @test occursin("Residual ACF", pdg.html)
+            @test_throws ArgumentError plot_result(preg; view=:bogus)
             # hostile varname round-trips through the coef data literal
             pdh = _laneD_panel(varnames=(HOSTILE_NAME, "x2"))
             assert_escapes(plot_result(estimate_xtreg(pdh, :y, [Symbol(HOSTILE_NAME), :x2])))
@@ -325,7 +300,9 @@ end
             dfi.x2 = 0.7 .* dfi.z .+ randn(rng2, Np * Tt)
             dfi.y = 0.5 .* dfi.x1 .+ 0.4 .* dfi.x2 .+ randn(rng2, Np * Tt)
             piv = estimate_xtiv(xtset(dfi, :id, :time), :y, [:x1], [:x2]; instruments=[:z])
-            check_plot(plot_result(piv))
+            check_plot(plot_result(piv))                         # view=:coef default
+            check_plot(plot_result(piv; view=:diagnostics))
+            @test_throws ArgumentError plot_result(piv; view=:bogus)
         end
 
         @testset "Ordered logit coef + cutpoint note" begin

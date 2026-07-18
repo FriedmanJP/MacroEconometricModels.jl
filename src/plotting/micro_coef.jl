@@ -81,32 +81,56 @@ _resolve_category(category, nonbase_labels::Vector{String}) =
 # =============================================================================
 
 """
-    plot_result(m::PanelRegModel; title="", save_path=nothing)
+    plot_result(m::PanelRegModel; view=:coef, acf_lags=0, title="", save_path=nothing)
 
-Horizontal coefficient plot of the panel-regression slopes `β ± 1.96·SE` (SE from
-`diag(vcov_mat)`), with a zero reference line; intercept omitted.
+`view=:coef` (default) draws a horizontal coefficient plot of the panel-regression
+slopes `β ± 1.96·SE` (SE from `diag(vcov_mat)`), with a zero reference line; intercept
+omitted. `view=:diagnostics` draws the shared four-panel residual diagnostics
+(residual-vs-fitted, histogram + fitted normal, Normal Q-Q, residual ACF) from the
+model's stored `residuals`/`fitted` (PLT-24). Unknown `view` throws an `ArgumentError`.
 """
 function plot_result(m::PanelRegModel{T};
-                     title::String="", save_path::Union{String,Nothing}=nothing) where {T}
-    panel = _coef_panel("preg_coef", m.varnames, m.beta, _diag_se(m.vcov_mat);
-                        ptitle="Coefficients ($(m.method), 95% CI)")
-    ftitle = isempty(title) ? "Panel Regression Coefficients" : title
-    p = _make_plot([panel]; title=ftitle, ncols=1)
+                     view::Symbol=:coef, acf_lags::Int=0, title::String="",
+                     save_path::Union{String,Nothing}=nothing) where {T}
+    if view === :coef
+        panel = _coef_panel("preg_coef", m.varnames, m.beta, _diag_se(m.vcov_mat);
+                            ptitle="Coefficients ($(m.method), 95% CI)")
+        ftitle = isempty(title) ? "Panel Regression Coefficients" : title
+        p = _make_plot([panel]; title=ftitle, ncols=1)
+    elseif view === :diagnostics
+        panels = _residual_diagnostics_panels(m.residuals, m.fitted; acf_lags=acf_lags)
+        ftitle = isempty(title) ? "Panel Regression Residual Diagnostics ($(m.method))" : title
+        p = _make_plot(panels; title=ftitle, ncols=2)
+    else
+        throw(ArgumentError("Unknown view :$view. Valid views: :coef, :diagnostics"))
+    end
     save_path !== nothing && save_plot(p, save_path)
     p
 end
 
 """
-    plot_result(m::PanelIVModel; title="", save_path=nothing)
+    plot_result(m::PanelIVModel; view=:coef, acf_lags=0, title="", save_path=nothing)
 
-Horizontal coefficient plot of the panel-IV slopes `β ± 1.96·SE`; intercept omitted.
+`view=:coef` (default) draws a horizontal coefficient plot of the panel-IV slopes
+`β ± 1.96·SE`; intercept omitted. `view=:diagnostics` draws the shared four-panel
+residual diagnostics from the model's stored `residuals`/`fitted` (PLT-24). Unknown
+`view` throws an `ArgumentError`.
 """
 function plot_result(m::PanelIVModel{T};
-                     title::String="", save_path::Union{String,Nothing}=nothing) where {T}
-    panel = _coef_panel("piv_coef", m.varnames, m.beta, _diag_se(m.vcov_mat);
-                        ptitle="Coefficients ($(m.method), 95% CI)")
-    ftitle = isempty(title) ? "Panel IV Coefficients" : title
-    p = _make_plot([panel]; title=ftitle, ncols=1)
+                     view::Symbol=:coef, acf_lags::Int=0, title::String="",
+                     save_path::Union{String,Nothing}=nothing) where {T}
+    if view === :coef
+        panel = _coef_panel("piv_coef", m.varnames, m.beta, _diag_se(m.vcov_mat);
+                            ptitle="Coefficients ($(m.method), 95% CI)")
+        ftitle = isempty(title) ? "Panel IV Coefficients" : title
+        p = _make_plot([panel]; title=ftitle, ncols=1)
+    elseif view === :diagnostics
+        panels = _residual_diagnostics_panels(m.residuals, m.fitted; acf_lags=acf_lags)
+        ftitle = isempty(title) ? "Panel IV Residual Diagnostics ($(m.method))" : title
+        p = _make_plot(panels; title=ftitle, ncols=2)
+    else
+        throw(ArgumentError("Unknown view :$view. Valid views: :coef, :diagnostics"))
+    end
     save_path !== nothing && save_plot(p, save_path)
     p
 end

@@ -167,11 +167,8 @@ Multi-panel figures keep the note in the figure footer as usual.
 """
 function _noted_plot(panels::Vector{_PanelSpec}, title::String, ncols::Int,
                      note::String, save_path::Union{String,Nothing})
-    if !isempty(note) && length(panels) == 1
-        pn = panels[1]
-        folded = isempty(pn.title) ? note : "$(pn.title) — $note"
-        panels = _PanelSpec[_PanelSpec(pn.id, folded, pn.js)]
-    end
+    # _make_plot now renders the figure note on single- and multi-panel figures
+    # alike (C7), so no title-folding workaround is needed here.
     p = _make_plot(panels; title=title, ncols=ncols, note=note)
     save_path !== nothing && save_plot(p, save_path)
     p

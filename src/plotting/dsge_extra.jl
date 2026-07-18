@@ -6,7 +6,7 @@
 
 """
 plot_result methods for additional DSGE outputs (PLT-33). The existing DSGE plots
-(`BayesianDSGE`, models) stay in `models.jl`; these four dispatches are additive and
+(`BayesianDSGE`, models) stay in `models.jl`; these dispatches are additive and
 live here for parallel-lane file isolation:
 
 - `PerfectForesightPath` — per-variable transition lines (`view=:levels` from `path`,
@@ -17,8 +17,9 @@ live here for parallel-lane file isolation:
   is a **required** keyword.
 - `DSGEEstimation` — a parameter dot-and-whisker (`θ ± 1.96·stderror`) with a J-test
   annotation (an honest parameter plot; the struct stores no moments, plotrule C6).
-- `BayesianDSGESimulation` — a per-variable posterior-predictive fan of nested
-  quantile bands around the point estimate.
+
+(`BayesianDSGESimulation` is plotted by the Bayesian nested-fan dispatch in
+`bayesfan.jl` (PLT-28), which owns the Bayesian-fan family.)
 
 All rendering reuses the frozen line / coef / quantile-fan renderers (A1).
 """
@@ -83,19 +84,6 @@ function _dsge_coef_json(names::AbstractVector, est::AbstractVector,
                      "ci_hi" => _json(est[i] + z * se[i])])
     end
     _json_array_of_objects(rows)
-end
-
-"""
-    _bayes_sim_fan_json(sim, j) -> String
-
-Quantile-fan `data_json` for variable `j` of a `BayesianDSGESimulation`: slices
-`quantiles[:, j, :]` (T×n_q) and the median `point_estimate[:, j]`, then delegates
-row assembly (and the ascending-level re-keying) to the frozen `_fan_data_json`.
-"""
-function _bayes_sim_fan_json(sim::BayesianDSGESimulation, j::Int)
-    Qj = sim.quantiles[:, j, :]
-    central = sim.point_estimate[:, j]
-    _fan_data_json(Qj, sim.quantile_levels, central; xvals=collect(1:size(Qj, 1)))
 end
 
 # Which variable indices to draw, honoring an optional `var` selector and a panel cap
@@ -241,40 +229,6 @@ function plot_result(est::DSGEEstimation{T};
     panel = _PanelSpec(id, ptitle, js)
     ftitle = isempty(title) ? "DSGE-GMM Parameter Estimates" : title
     p = _make_plot([panel]; title=ftitle, ncols=1)
-    save_path !== nothing && save_plot(p, save_path)
-    p
-end
-
-# =============================================================================
-# BayesianDSGESimulation
-# =============================================================================
-
-"""
-    plot_result(sim::BayesianDSGESimulation; var=nothing, max_panels=12, ncols=0,
-                title="", save_path=nothing)
-
-Per-variable posterior-predictive fan chart: the point estimate (posterior median)
-line plus nested `quantiles` bands (labelled by each symmetric quantile pair), from
-the frozen quantile-fan renderer. `var` selects one variable by `Int` or name
-(`sim.variables`); otherwise up to `max_panels` variables are drawn (cap noted, C7).
-"""
-function plot_result(sim::BayesianDSGESimulation{T};
-                     var::Union{Int,String,Nothing}=nothing, max_panels::Int=12,
-                     ncols::Int=0, title::String="",
-                     save_path::Union{String,Nothing}=nothing) where {T}
-    names = sim.variables
-    idx, note = _dsge_extra_indices(var, names, max_panels)
-    fan_json = _fan_bands_json(sim.quantile_levels; color=_PLOT_SERIES[1])
-    panels = _PanelSpec[]
-    for j in idx
-        id = _next_plot_id("bsim_fan")
-        data_json = _bayes_sim_fan_json(sim, j)
-        js = _render_fan_js(id, data_json, fan_json; median_key="med",
-                            central_label="Median", xlabel="Period", ylabel=names[j])
-        push!(panels, _PanelSpec(id, names[j], js))
-    end
-    ftitle = isempty(title) ? "Posterior-Predictive Simulation (credible bands)" : title
-    p = _make_plot(panels; title=ftitle, ncols=ncols, note=note)
     save_path !== nothing && save_plot(p, save_path)
     p
 end

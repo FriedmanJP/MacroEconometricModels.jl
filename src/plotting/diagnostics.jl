@@ -6,13 +6,14 @@
 
 """
 PLT-24 — generic residual-diagnostics view. NEW `plot_result(m; view=:diagnostics)`
-dispatches for the multi-equation / panel families that previously had no residual
-figure: `VARModel`/`VECMModel` (with an `eq=` equation selector) and
-`PanelRegModel`/`PanelIVModel`. Every dispatch routes through the single frozen
-`_residual_diagnostics_panels` converter (A6), so the resid-vs-fitted scatter, the
-histogram + fitted-normal overlay, the Normal Q-Q (with its A4 45° `line_overlays_json`
-line, not a scale-clone), and the residual-ACF panel all share one implementation with
-`RegModel` and the ARIMA/GARCH families.
+dispatches for the multi-equation families that previously had no residual figure:
+`VARModel`/`VECMModel` (with an `eq=` equation selector). Every dispatch routes through
+the single frozen `_residual_diagnostics_panels` converter (A6), so the resid-vs-fitted
+scatter, the histogram + fitted-normal overlay, the Normal Q-Q (with its A4 45°
+`line_overlays_json` line, not a scale-clone), and the residual-ACF panel all share one
+implementation with `RegModel` and the ARIMA/GARCH families. (The panel-regression
+families `PanelRegModel`/`PanelIVModel` expose the same `view=:diagnostics` view from
+their coefficient dispatch in `micro_coef.jl`.)
 """
 
 # =============================================================================
@@ -78,47 +79,6 @@ function plot_result(m::VECMModel{T}; view::Symbol=:diagnostics,
     note = eq === nothing ? _cap_note("equations", 1, n, "eq") : ""
     isempty(title) && (title = "VECM Residual Diagnostics — $(m.varnames[eqi])")
     p = _make_plot(panels; title=title, ncols=2, note=note)
-    save_path !== nothing && save_plot(p, save_path)
-    p
-end
-
-# =============================================================================
-# PanelRegModel / PanelIVModel
-# =============================================================================
-
-"""
-    plot_result(m::PanelRegModel; view=:diagnostics, acf_lags=0, title="", save_path=nothing)
-
-Four-panel residual diagnostics for a panel regression (PLT-24), using the model's
-stored `residuals`/`fitted`.
-"""
-function plot_result(m::PanelRegModel{T}; view::Symbol=:diagnostics, acf_lags::Int=0,
-                     title::String="", save_path::Union{String,Nothing}=nothing) where {T}
-    view === :diagnostics ||
-        throw(ArgumentError("Unknown view :$view for PanelRegModel; use :diagnostics."))
-    resid = Float64[Float64(v) for v in m.residuals]
-    fitted = Float64[Float64(v) for v in m.fitted]
-    panels = _residual_diagnostics_panels(resid, fitted; acf_lags=acf_lags)
-    isempty(title) && (title = "Panel Regression Residual Diagnostics ($(m.method))")
-    p = _make_plot(panels; title=title, ncols=2)
-    save_path !== nothing && save_plot(p, save_path)
-    p
-end
-
-"""
-    plot_result(m::PanelIVModel; view=:diagnostics, acf_lags=0, title="", save_path=nothing)
-
-Four-panel residual diagnostics for a panel IV/2SLS regression (PLT-24).
-"""
-function plot_result(m::PanelIVModel{T}; view::Symbol=:diagnostics, acf_lags::Int=0,
-                     title::String="", save_path::Union{String,Nothing}=nothing) where {T}
-    view === :diagnostics ||
-        throw(ArgumentError("Unknown view :$view for PanelIVModel; use :diagnostics."))
-    resid = Float64[Float64(v) for v in m.residuals]
-    fitted = Float64[Float64(v) for v in m.fitted]
-    panels = _residual_diagnostics_panels(resid, fitted; acf_lags=acf_lags)
-    isempty(title) && (title = "Panel IV Residual Diagnostics ($(m.method))")
-    p = _make_plot(panels; title=title, ncols=2)
     save_path !== nothing && save_plot(p, save_path)
     p
 end
